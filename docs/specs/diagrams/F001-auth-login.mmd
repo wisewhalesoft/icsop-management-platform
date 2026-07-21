@@ -1,0 +1,66 @@
+%% F001 雙軌驗證登入 — Azure AD (Entra ID) OIDC 登入與管理員帳密登入（sequenceDiagram）
+%% v1.3（2026-07-20）：途徑 A 由「上游 POST + 自訂簽章」改為 Azure AD OIDC authorization code flow + PKCE，見 architecture-spec.md §5.3、upstream-hr-source-contract.md §12
+sequenceDiagram
+    autonumber
+    participant U as 使用者瀏覽器
+    participant AAD as Azure AD (Entra ID)
+    participant API as NestJS API
+    participant DB as MSSQL 應用DB
+
+    rect rgb(235, 245, 255)
+    note over U,DB: 途徑 A — Azure AD OIDC 登入（authorization code flow + PKCE）
+    U->>API: GET /auth/oidc/login
+    API->>API: 產生 state / nonce / PKCE code_verifier，存入短效 httpOnly 簽章 cookie
+    API-->>U: 302 導向 Azure AD authorize endpoint（帶 state / nonce / code_challenge）
+    U->>AAD: 導向 Azure AD 認證
+    alt 使用者已有 AD session
+        AAD-->>U: 靜默 SSO，直接核發 code
+    else 尚未登入
+        AAD->>U: 顯示 Azure AD 登入頁（含 MFA / Conditional Access，依公司既有政策）
+        AAD-->>U: 使用者完成認證，核發 code
+    end
+    AAD-->>U: 302 回呼 redirect_uri?code=...&state=...
+    U->>API: GET /auth/oidc/callback?code&state
+    alt state 不符或 cookie 缺失/過期
+        API-->>U: 401 AUTH_OIDC_STATE_MISMATCH（記錄失敗事件，不執行 code 交換，疑似 CSRF/重放）
+    else state 通過
+        API->>AAD: 後端直連 token endpoint（code + code_verifier + client 認證）
+        alt code 交換失敗
+            API-->>U: 401 AUTH_OIDC_EXCHANGE_FAILED（不回傳 Azure AD 原始錯誤內容）
+        else 取得 id_token
+            API->>AAD: 取得 JWKS 公鑰（動態快取，kid 未命中時限流強制刷新）
+            API->>API: 驗證 id_token：簽章 + iss/aud/exp/nbf/nonce
+            alt 驗證失敗
+                API-->>U: 401 AUTH_OIDC_TOKEN_INVALID（不洩漏是哪一項檢查未通過，記錄失敗事件）
+            else 驗證通過
+                API->>API: 取出 email claim
+                alt email claim 缺漏或為空
+                    API-->>U: 401 AUTH_EMAIL_CLAIM_MISSING（提示洽系統管理員，嚴禁 fallback 至 HREMAILADDR）
+                else email 存在
+                    API->>DB: 依 email（完整含網域、不分大小寫）查 ACCOUNT，限 EMPSTS='A' 在職帳號
+                    alt 查無帳號 或 命中多筆（ACCOUNT.email 非唯一鍵）
+                        API-->>U: 401 AUTH_ACCOUNT_NOT_FOUND（對外訊息一致、不可列舉；命中多筆另觸發系統管理員告警，架構禁止任選一筆核發登入）
+                    else 帳號已停用
+                        API-->>U: 401 AUTH_ACCOUNT_DISABLED
+                    else 恰好命中一筆且啟用
+                        API->>DB: 記錄登入事件 / 更新 lastActivityAt
+                        API-->>U: 核發 ICSOP JWT，導向 F002 角色分流
+                    end
+                end
+            end
+        end
+    end
+    end
+
+    rect rgb(240, 255, 240)
+    note over U,DB: 途徑 B — 管理員帳密登入（不變）
+    U->>API: POST /auth/login（帳號 + 密碼）
+    API->>DB: 查帳號並比對 bcrypt/argon2 雜湊
+    alt 帳密錯誤或帳號不存在
+        API-->>U: 401 AUTH_INVALID_CREDENTIALS（統一訊息，記錄失敗）
+    else 帳號已停用
+        API-->>U: 401 AUTH_ACCOUNT_DISABLED
+    else 驗證通過
+        API-->>U: 核發 JWT，導向 F002 角色分流
+    end
+    end

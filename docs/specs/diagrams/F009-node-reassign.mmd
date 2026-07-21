@@ -1,0 +1,25 @@
+%% F009 節點抽屜掛載/改派 — 文件「所屬節點」唯一權威寫入路徑（sequenceDiagram）
+sequenceDiagram
+    autonumber
+    participant A as ICSOP 管理員
+    participant FE as 後台畫布/抽屜
+    participant API as NestJS API
+    participant DB as MSSQL 應用DB
+
+    A->>FE: 點擊節點 N1 開啟抽屜
+    FE->>API: GET /lifecycles/:id/nodes/N1（節點詳情 + 候選文件）
+    API->>DB: 查詢 lifecycleId = 當前循環 之文件
+    API-->>FE: 節點名稱 + 僅同循環候選清單
+    A->>FE: 選取文件 Y 掛載
+    alt 文件 Y 已掛載於其他節點 N2
+        API-->>FE: 附帶 N2 名稱，回警示 NODE_DOC_ALREADY_ASSIGNED
+        A->>FE: 二次確認改派
+    end
+    A->>FE: 關閉抽屜（送出變更）
+    FE->>API: PATCH /lifecycles/:id/nodes/N1（名稱 + 掛載文件）
+    API->>DB: 開啟交易
+    API->>DB: 解除 Y 與原節點 N2 掛載
+    API->>DB: 綁定 Y 的所屬節點 = N1
+    API->>DB: 更新節點名稱 + 提交交易
+    API->>DB: 寫入稽核（操作者/時間）
+    API-->>FE: 成功，畫布即時更新

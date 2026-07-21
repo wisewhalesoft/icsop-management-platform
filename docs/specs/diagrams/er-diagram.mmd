@@ -1,0 +1,268 @@
+%% ICSOP 文件管理平台 — 概念實體關聯圖（Entity Relationship）
+erDiagram
+    ORG_UNIT ||--o{ ORG_UNIT : "parent 之下層級"
+    ORG_UNIT ||--o{ PERSON : "所屬處室"
+    PERSON ||--o| ACCOUNT : "對應帳號（上游）"
+    ROLE ||--o{ ACCOUNT : "指派角色"
+
+    LIFECYCLE ||--o{ LIFECYCLE_NODE : "包含節點"
+    LIFECYCLE ||--o{ LIFECYCLE_EDGE : "包含有向邊"
+    LIFECYCLE_NODE ||--o{ LIFECYCLE_EDGE : "source 節點"
+    LIFECYCLE_NODE ||--o{ LIFECYCLE_EDGE : "target 節點"
+
+    LIFECYCLE ||--o{ ICSOP_DOCUMENT : "所屬循環"
+    LIFECYCLE_NODE ||--o{ ICSOP_DOCUMENT : "所屬節點（唯一，可空）"
+    ORG_UNIT ||--o{ ICSOP_DOCUMENT : "制定公司/部門/室別"
+    PERSON ||--o{ ICSOP_DOCUMENT : "當責室長-主要"
+    ICSOP_DOCUMENT ||--o{ DOC_SECONDARY_CHIEF : "當責室長-次要"
+    PERSON ||--o{ DOC_SECONDARY_CHIEF : "被指派"
+    ICSOP_DOCUMENT ||--o{ DOC_USING_DEPT : "文件使用部門"
+    ORG_UNIT ||--o{ DOC_USING_DEPT : "被使用"
+    ICSOP_DOCUMENT ||--o{ DOCUMENT_LINK : "來源連結點"
+    ICSOP_DOCUMENT ||--o{ DOCUMENT_ATTACHMENT : "附件"
+    ICSOP_DOCUMENT ||--o{ ORG_CHANGE_ALERT : "組織異動提示"
+    ICSOP_DOCUMENT ||--o{ AUDIT_LOG : "被調閱"
+
+    ACCOUNT ||--o{ AUDIT_LOG : "操作者"
+    SYNC_RUN ||--o{ ORG_CHANGE_ALERT : "產生自同步"
+
+    ICSOP_DOCUMENT ||--o{ DOCUMENT_CHANGE_LOG : "欄位層變更事件（F037，append-only）"
+    LIFECYCLE ||--o{ AUDIT_LOG : "被調閱（targetType=LIFECYCLE，F036）"
+    LIFECYCLE ||--o{ LIFECYCLE_CHANGE_LOG : "結構變更事件（F038，append-only）"
+    LIFECYCLE_CHANGE_LOG ||--|| LIFECYCLE_SNAPSHOT : "1:1，同交易產生"
+
+    ICSOP_DOCUMENT ||--o| DOC_SOURCE_XLS : ".xls 原件（1:1 覆蓋）"
+    ICSOP_DOCUMENT ||--o| DOCUMENT_ATTACHMENT : "呈現用 ICSOP PDF（獨立手動上傳，非由 .xls 衍生）"
+    ICSOP_DOCUMENT ||--o{ DOCUMENT_CHUNK : "抽取產生 chunk"
+    ICSOP_DOCUMENT ||--o{ INDEX_RUN : "索引執行紀錄"
+    INDEX_RUN ||--o{ DOCUMENT_CHUNK : "本次產生"
+    DOCUMENT_CHUNK ||--|| VECTOR_EMBEDDING : "chunk 向量"
+    ACCOUNT ||--o{ QA_LOG : "提問者"
+    DOCUMENT_CHUNK ||--o{ QA_LOG : "被引用為來源"
+    QA_LOG ||--o{ AUDIT_LOG : "AI 導引之調閱（source=AI_QA）"
+
+    ORG_UNIT {
+        uuid id PK
+        string tier "ROOT/DIVISION 本部/DEPARTMENT 部/SECTION 處室/SUBSECTION 課（5 層）"
+        string orgCode "5 碼上游部門代碼，需建索引"
+        string codePrefix "去尾端 0 之有效前綴，供子樹 LIKE 比對"
+        string companyCode "上游 COMPID，本輪限 AS"
+        string name
+        uuid parentId FK "self-ref, nullable；由代碼前綴推導，非取自上游欄位"
+        string managerEmpNo "部門主管員編，F014 當責室長來源"
+        string externalId UK "來源鍵"
+        string status "active/inactive（CLOSE_DATE 哨兵 9999-12-31）"
+    }
+    PERSON {
+        uuid id PK
+        string employeeNo UK "員工編號"
+        string name
+        uuid orgUnitId FK
+        string jobLevel "職級"
+        string employmentStatus "active/departed"
+        string externalId UK
+    }
+    ROLE {
+        string code PK "SysAdmin/ICSOPAdmin/Supervisor/DeptContact/User 固定列舉"
+        string name
+    }
+    ACCOUNT {
+        uuid id PK
+        uuid personId FK "nullable, 手動帳號為 null"
+        string companyCode "與 loginId 併為業務唯一鍵"
+        string loginId UK "上游 USERID；實測 100%% 唯一"
+        string employeeNo "非唯一，不可作鍵（一人可多帳號）"
+        string orgCode FK "對應 ORG_UNIT.orgCode"
+        string passwordHash "nullable, 僅手動帳號；嚴禁由上游寫入"
+        string source "manual/upstream"
+        string roleCode FK
+        string status "active/disabled（上游 EMPSTS=A 為在職）"
+        string disableReason "manual/departed, nullable"
+        datetime disabledAt "nullable"
+        datetime upstreamModifiedAt "上游 MTDT，增量同步依據"
+    }
+    LIFECYCLE {
+        uuid id PK
+        string name
+        string description
+        string status "active/inactive"
+    }
+    LIFECYCLE_NODE {
+        uuid id PK
+        uuid lifecycleId FK
+        string name
+        float positionX
+        float positionY
+    }
+    LIFECYCLE_EDGE {
+        uuid id PK
+        uuid lifecycleId FK
+        uuid sourceNodeId FK
+        uuid targetNodeId FK
+    }
+    ICSOP_DOCUMENT {
+        uuid id PK "系統 UUID"
+        string status "有效/失效/作廢"
+        uuid draftingCompanyId FK "制定公司"
+        uuid draftingDeptId FK "制定部門"
+        uuid draftingSectionId FK "制定室別"
+        string documentNumber UK "程序書編號, 唯一"
+        string documentName "程序書書名"
+        uuid primaryChiefId FK "當責室長-主要"
+        string edition "版次"
+        uuid lifecycleId FK "所屬循環, 必填"
+        uuid nodeId FK "所屬節點, nullable"
+        date announcedDate "公告日期"
+        string contentSummary "內容摘要"
+    }
+    DOC_SECONDARY_CHIEF {
+        uuid documentId FK
+        uuid personId FK
+    }
+    DOC_USING_DEPT {
+        uuid documentId FK
+        uuid orgUnitId FK
+    }
+    DOCUMENT_LINK {
+        uuid id PK
+        uuid sourceDocumentId FK
+        uuid targetDocumentId FK
+    }
+    DOCUMENT_ATTACHMENT {
+        uuid id PK
+        uuid documentId FK
+        string type "ICSOP_PDF/OJT_SIGNIN/USAGE_FORM"
+        string fileName
+        string blobPath
+        string contentType
+        long size
+    }
+    SYNC_RUN {
+        uuid id PK
+        string triggerType "scheduled/manual"
+        datetime startedAt
+        datetime endedAt "nullable"
+        string status "running/success/failed"
+        int changeCount
+        string errorMessage "nullable"
+    }
+    ORG_CHANGE_ALERT {
+        uuid id PK
+        uuid documentId FK
+        string changeType
+        string affectedField
+        string status "pending/resolved"
+        datetime resolvedAt "nullable"
+    }
+    AUDIT_LOG {
+        uuid id PK "append-only"
+        uuid accountId FK
+        string employeeNo
+        string name
+        string department
+        string section
+        uuid documentId FK "nullable, 條件必填見 targetType"
+        string documentNumber "nullable"
+        uuid lifecycleId FK "nullable, 條件必填, 新增(v1.2)"
+        string lifecycleName "nullable, 新增(v1.2)"
+        string targetType "DOCUMENT/USAGE_FORM/LIFECYCLE/DOCUMENT_CHANGE_LOG/LIFECYCLE_CHANGE_LOG"
+        string actionType "VIEW/DOWNLOAD/PRINT/CHANGE_LOG_VIEW/LIFECYCLE_*/LIFECYCLE_CHANGELOG_*"
+        string watermarkSnapshot
+        datetime occurredAt
+        string source "DIRECT/AI_QA, 預設 DIRECT"
+        uuid qaLogId FK "nullable, source=AI_QA 時"
+    }
+    DOCUMENT_CHANGE_LOG {
+        uuid id PK "append-only"
+        uuid documentId FK
+        string documentNumber "快照"
+        string batchId "同次儲存分組鍵"
+        string fieldName
+        string oldValue "nullable"
+        string newValue "nullable"
+        uuid changedByAccountId FK
+        string employeeNo
+        string name
+        datetime changedAt
+        string sourceFeature "F011/F012/F014/F016"
+    }
+    LIFECYCLE_CHANGE_LOG {
+        uuid id PK "append-only"
+        uuid lifecycleId FK
+        string lifecycleName "快照"
+        string changeType "NODE_ADDED/NODE_REMOVED/EDGE_ADDED/EDGE_REMOVED/NODE_RENAMED/DOCUMENT_MOUNTED/DOCUMENT_REASSIGNED/DOCUMENT_UNMOUNTED"
+        string entityType "NODE/EDGE/MOUNT"
+        uuid entityId
+        string beforeValue "nullable"
+        string afterValue "nullable"
+        uuid changedByAccountId FK
+        string employeeNo
+        string name
+        datetime changedAt
+        uuid snapshotId FK "1:1"
+    }
+    LIFECYCLE_SNAPSHOT {
+        uuid id PK "append-only"
+        uuid lifecycleId FK
+        uuid changeLogId FK "1:1 回指"
+        string nodesJson
+        string edgesJson
+        datetime capturedAt
+    }
+    DOC_SOURCE_XLS {
+        uuid id PK
+        uuid documentId FK "1:1, 覆蓋式"
+        string blobPath
+        string fileName
+        string contentType
+        long size
+        string edition "版次快照, 改版判斷"
+        string uploadedBy "上傳者"
+    }
+    DOCUMENT_CHUNK {
+        uuid id PK
+        uuid documentId FK
+        uuid indexRunId FK
+        string content "清洗接合後內文"
+        int chunkSeq
+        string documentNumber "metadata 快照"
+        uuid lifecycleId FK "所屬循環 metadata"
+        string chapterSection "章/節 metadata"
+        int pageNumber "頁次 metadata"
+        string usingDeptIds "使用部門(多), 權限過濾用"
+        string status "有效/失效/作廢, 權限過濾用"
+        string edition "版次 metadata"
+    }
+    VECTOR_EMBEDDING {
+        uuid id PK
+        uuid chunkId FK "1:1"
+        string embeddingModel "模型+版本"
+        blob vector "向量值"
+        int dimension
+    }
+    INDEX_RUN {
+        uuid id PK
+        uuid documentId FK
+        string triggerType "manual/document_edit/xls_update/status_change/batch"
+        string status "running/success/failed"
+        string stage "extract/chunk/embed"
+        int chunkCount "nullable"
+        string errorStage "nullable"
+        string errorMessage "nullable"
+        datetime startedAt
+        datetime endedAt "nullable"
+    }
+    QA_LOG {
+        uuid id PK "append-only"
+        uuid accountId FK "提問者"
+        string employeeNo
+        string name
+        string department
+        string section
+        string question
+        string answerSummary "nullable"
+        string resultType "answered/low_confidence/no_result"
+        string citedChunkIds "引用 chunk(多), nullable"
+        string citedDocumentNumbers "引用文件編號(多), nullable"
+        datetime occurredAt
+    }

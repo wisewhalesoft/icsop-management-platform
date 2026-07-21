@@ -1,0 +1,13 @@
+%% F019 前台清單排序管線 — 使用部門置頂 + 編號降冪，後端權威排序（flowchart LR）
+flowchart LR
+    IN(["前台清單請求\n含使用者部門 + 搜尋/篩選條件"]) --> FILTER["套用篩選\n部門 / 狀態 / 循環（AND）"]
+    FILTER --> SEARCH["套用關鍵字\n文件編號 或 文件名稱（AND, 跳脫萬用字元）"]
+    SEARCH --> SPLIT{"文件使用部門\n是否含使用者部門?"}
+    SPLIT -->|"是"| TOP["置頂區塊"]
+    SPLIT -->|"否"| REST["其餘區塊"]
+    TOP --> SORT1["置頂區依編號降冪"]
+    REST --> SORT2["其餘區依編號降冪"]
+    SORT1 --> MERGE["合併：置頂區在前，其餘在後"]
+    SORT2 --> MERGE
+    MERGE --> PAGE["分頁（後端權威，跨頁排序一致）"]
+    PAGE --> OUT(["回傳清單"])

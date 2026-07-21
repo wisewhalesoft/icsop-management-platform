@@ -1,0 +1,18 @@
+%% F004 組織資料同步 — 每日排程/手動觸發之流程與異動分類（flowchart TD）
+flowchart TD
+    START(["觸發同步\nscheduled 或 manual"]) --> LOCK{"取得同步互斥鎖?"}
+    LOCK -->|"否，已有同步進行中"| BUSY["拒絕：SYNC_IN_PROGRESS\n提示同步進行中"]
+    LOCK -->|"是"| REC["建立 SYNC_RUN 紀錄\nstatus = running"]
+    REC --> READ{"連線並讀取\nMSSQL View?"}
+    READ -->|"逾時/連線失敗/格式異常"| FAIL["中止本次同步\n保留既有資料不變\nstatus = failed + 錯誤訊息\n重試（遞增間隔，最終失敗通知）"]
+    READ -->|"成功"| TXN["開啟資料庫交易"]
+    TXN --> DIFF["逐筆比對來源與本地\n分類：新增 / 更新 / 離職停用"]
+    DIFF --> APPLY["套用組織/人員/職級異動\n冪等寫入"]
+    APPLY --> DEPART["離職/停用類型\n觸發 F005 帳號停用"]
+    APPLY --> ALERT["當責相關異動\n產生 F006 待確認提示"]
+    DEPART --> COMMIT["提交交易"]
+    ALERT --> COMMIT
+    COMMIT --> DONE["更新 SYNC_RUN\nstatus = success + 異動筆數"]
+    FAIL --> END(["結束並釋放鎖"])
+    BUSY --> END
+    DONE --> END

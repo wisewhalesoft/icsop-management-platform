@@ -1,0 +1,25 @@
+%% F020/F023 浮水印與稽核 — 查看/下載/列印之伺服器端浮水印與稽核一致性（sequenceDiagram）
+sequenceDiagram
+    autonumber
+    participant U as 使用者瀏覽器
+    participant API as NestJS API
+    participant PDF as PDF 處理服務
+    participant BLOB as Azure Blob
+    participant AUD as 稽核服務（append-only）
+
+    U->>API: 開啟檢視器 / 下載 / 列印（帶 JWT）
+    API->>API: 讀取當下身分 + 伺服器時間，組裝浮水印快照
+    note over API: 浮水印＝員工編號-姓名-公司名稱-部門-處/室-機密聲明-當下時間（機密聲明為固定字串，見 NFR-007）
+    alt 網頁檢視（VIEW）
+        API-->>U: 回傳疊加浮水印圖層之預覽（不提供無浮水印原檔）
+    else 下載 / 列印（DOWNLOAD / PRINT）
+        API->>BLOB: 取得原始 ICSOP PDF（短效期憑證）
+        API->>PDF: 伺服器端燒錄浮水印文字圖層
+        PDF-->>API: 已燒錄浮水印之 PDF
+        API-->>U: 回傳檔案（浮水印內嵌於內容層）
+    end
+    API->>AUD: 以同一份身分/時間快照寫入稽核（VIEW/DOWNLOAD/PRINT）
+    alt 稽核寫入暫時失敗
+        AUD-->>API: 失敗
+        API->>API: 加入補償佇列，稍後重試（不阻斷使用者）
+    end

@@ -1,0 +1,13 @@
+%% F008 DAG 防環驗證 — 新增邊 (source -> target) 前的權威成環檢查（flowchart TD）
+flowchart TD
+    START(["使用者送出新增邊\nsource 到 target"]) --> FE["前端即時基本防環提示\n（UX 用途，非權威）"]
+    FE --> API["後端 API：開啟交易內權威驗證"]
+    API --> SELF{"source 等於 target?"}
+    SELF -->|"是（self-loop）"| REJECT["拒絕：DAG_SELF_LOOP"]
+    SELF -->|"否"| REACH["由 target 出發做可達性搜尋\nBFS / DFS 走訪既有有向邊"]
+    REACH --> CHECK{"可從 target 到達 source?"}
+    CHECK -->|"是，會成環"| CYCLE["拒絕：DAG_CYCLE_DETECTED\n提示重新確認流程方向"]
+    CHECK -->|"否，合法"| WRITE["寫入 LIFECYCLE_EDGE\n提交交易"]
+    WRITE --> OK(["成功建立有向邊"])
+    REJECT --> END(["回滾/結束"])
+    CYCLE --> END

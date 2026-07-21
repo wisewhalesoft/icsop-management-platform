@@ -1,0 +1,37 @@
+%% ICSOP 文件管理平台 — 系統架構與外部整合脈絡（System Context）
+flowchart TB
+    subgraph client["使用者裝置（RWD 瀏覽器）"]
+        U1["一般使用者 / 公司同仁"]
+        U2["管理類角色\n系統管理員 / ICSOP管理員 / 主管 / 部門窗口"]
+    end
+
+    subgraph app["ICSOP 文件管理平台（Docker Compose）"]
+        FE_PUB["前台瀏覽 SPA\nReact + TypeScript"]
+        FE_ADM["後台管理 SPA\nReact + TypeScript + DAG 畫布"]
+        API["應用 API 後端\nNestJS + TypeORM"]
+        JOB["排程 / 背景工作\n每日組織同步 + 稽核補償重試"]
+    end
+
+    subgraph store["資料儲存"]
+        DB[("應用資料庫\nMSSQL")]
+        BLOB[("檔案儲存\nAzure Blob Storage\nstorage 介面抽象化")]
+    end
+
+    subgraph ext["外部相依系統"]
+        AAD["Azure AD (Entra ID)\nOIDC IdP（唯一身分來源，v1.3）"]
+        VIEW[("上游組織來源\nMSSQL View 唯讀")]
+    end
+
+    U1 --> FE_PUB
+    U2 --> FE_ADM
+    U2 --> FE_PUB
+    FE_PUB -->|"HTTPS / JWT"| API
+    FE_ADM -->|"HTTPS / JWT"| API
+    FE_PUB -.->|"瀏覽器導向\n(state/nonce/PKCE)"| AAD
+    AAD -->|"302 回呼 code"| API
+    API -->|"code 交換 id_token + JWKS\n（後端直連）"| AAD
+    API -->|"讀寫"| DB
+    API -->|"短效期存取憑證\nSAS Token"| BLOB
+    JOB -->|"讀取組織/人員/職級"| VIEW
+    JOB -->|"交易寫入"| DB
+    API -.->|"共用同步服務"| JOB

@@ -1,0 +1,31 @@
+%% E09 RAG 雙軌 Ingestion 管線（F027–F031）：.xls 保存（軌道A 內容來源）→ 抽取清洗 → 切 chunk/metadata/向量索引（軌道B）→ 改版重抽/狀態排除（flowchart TD）
+%% OQ-E09-10 定案（2026-07-17）：取消 .xls→PDF 自動轉檔；呈現用 PDF 改由 F016 手動上傳，與 .xls 各自獨立、互不觸發
+flowchart TD
+    UP(["ICSOP 管理員上傳/更新 .xls 原件（F027）"]) --> VALID{"符合 ICSOP 標準五表模板?"}
+    VALID -->|"否"| REJECT["阻擋此次上傳：XLS_TEMPLATE_INVALID<br/>既有 .xls 與既有 ICSOP PDF 皆不受影響"]
+    VALID -->|"是"| SAVE["保存 DOC_SOURCE_XLS（覆蓋，不留歷史）<br/>【軌道A 內容來源：僅供 RAG 抽取，不產出 PDF】"]
+
+    PDFUP(["ICSOP 管理員另行手動上傳呈現用 PDF（F016）"]) --> PDFOK["寫 DOCUMENT_ATTACHMENT type=ICSOP_PDF<br/>【供前台檢視/下載＋浮水印 F020】"]
+    PDFOK -.->|"與 .xls 各自獨立、互不觸發<br/>內容一致性由 ICSOPAdmin 人工負責"| SAVE
+
+    SAVE --> EXTRACT["F028 模板感知抽取：依五表抽有效內文"]
+    EXTRACT --> CLEAN["清洗：去頁首頁尾/簽核區/合併空白/繪製格<br/>接合跨列合併儲存格"]
+    CLEAN --> EXOK{"抽取成功?"}
+    EXOK -->|"否"| EXFAIL["INDEX_RUN failed（stage=extract）<br/>EXTRACTION_FAILED，不進索引"]
+    EXOK -->|"是"| CHUNK["F029 依「節」切 chunk：每 chunk＝一完整作業步驟"]
+    CHUNK --> META["掛 metadata：ICSOP 編號/循環/章節/使用部門/狀態/公告日期/版次/頁次"]
+    META --> EMBED["產生 VECTOR_EMBEDDING → 寫向量索引（可 metadata 過濾）"]
+    EMBED --> IDXOK{"索引成功?"}
+    IDXOK -->|"否"| IDXFAIL["INDEX_RUN failed（stage=chunk/embed）<br/>不留部分索引"]
+    IDXOK -->|"是"| DONE["INDEX_RUN success<br/>【軌道B 檢索內文就緒，供 F033 檢索】"]
+    DONE --> VIEW["F031 管理端：chunk 預覽＋索引狀態（進行中/成功/失敗）"]
+
+    NOXLS(["僅有 PDF、無 .xls"]) -.-> NOIDX["無 RAG 內容來源 → 不進索引<br/>F031 呈現「尚未建立索引」（非錯誤）"]
+    NOIDX -.-> VIEW
+
+    EDIT(["內容改版：換 .xls 或編輯（F011）"]) --> EXTRACT
+    STATUS(["狀態切換 有效/失效/作廢（F012）"]) --> SMETA["F030 僅更新 chunk.status metadata（不重抽內文）"]
+    SMETA --> VIEW
+    IDXFAIL -.-> REINDEX["F030 重抽/重建失敗 → REINDEX_FAILED<br/>保留舊索引繼續可用（不落入完全無索引）"]
+    EXFAIL -.-> REINDEX
+    REINDEX -.-> VIEW

@@ -1,0 +1,39 @@
+%% F032/F033/F035 前台智慧問答查詢流程：檢索層權限過濾＋防幻覺護欄＋稽核（sequenceDiagram）
+sequenceDiagram
+    autonumber
+    participant U as 一般使用者
+    participant API as 前台問答 API（F032）
+    participant EMB as Embedding 服務
+    participant VEC as 向量庫檢索（F033）
+    participant RR as Reranker
+    participant LLM as 本地 LLM 生成（F035 護欄）
+    participant AUD as 稽核（QA_LOG / AUDIT_LOG, F034）
+    participant VW as 文件檢視器（F020 浮水印）
+
+    U->>API: 自然語言提問（帶 JWT 身分＋所屬使用部門）
+    alt 問題為空
+        API-->>U: RAG_QUERY_EMPTY
+    else 正常提問
+        API->>EMB: 問題轉查詢向量
+        EMB-->>API: query embedding
+        API->>VEC: 檢索（帶 metadata 條件：status=有效 AND usingDept∩使用者部門≠空集）
+        note over VEC: 權限過濾發生在檢索層<br/>受限 chunk 從不進入上下文（防 prompt injection）
+        VEC-->>API: 過濾後 top-K chunk（僅授權範圍）
+        alt 無任何可用 chunk
+            API->>AUD: 寫 QA_LOG（resultType=no_result）
+            API-->>U: 明確告知「找不到相關文件內容」（F035）
+        else 有候選 chunk
+            API->>RR: 重排候選
+            RR-->>API: 排序後 chunk
+            API->>LLM: 僅依 context 生成（限定引用 context）
+            note over LLM: 護欄：僅依檢索內容作答<br/>低相關→低信心提示；一律附引用
+            LLM-->>API: 答案＋引用（ICSOP 編號＋章節）
+            API->>AUD: 寫 QA_LOG（answered/low_confidence＋引用來源）
+            API-->>U: 顯示答案＋可跳轉引用
+            opt 使用者點擊引用檢視/下載
+                U->>VW: 開啟引用之文件
+                VW->>AUD: AUDIT_LOG（source=AI_QA, qaLogId）＋浮水印燒錄
+                VW-->>U: 檢視/下載（F020 浮水印）
+            end
+        end
+    end
