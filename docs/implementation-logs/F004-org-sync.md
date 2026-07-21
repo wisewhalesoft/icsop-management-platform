@@ -162,10 +162,67 @@ last_updated: 2026-07-21
 - `database/migrations/1721692800000-datetime2-dates.ts` — new（ALTER COLUMN datetime→datetime2；未改已套用之 baseline/org-sync migration）
 - `normalization.spec.ts` / `org-sync.service.spec.ts` — 調整如上
 
+## 收尾增量（US-011 同步紀錄查詢端點 ＋ 每日排程 cron）— 2026-07-21
+
+> 純後端收尾兩項，嚴格 TDD（red → green）。不碰前端。
+> 全套 `npx jest`：**20 suites / 229 tests 全綠**（原 205 ＋ 新增 24）；`npx tsc --noEmit` 乾淨。
+
+### 測試結果（red → green）
+| 情境 | 對應測試 | 狀態 |
+|---|---|---|
+| listRecentRuns 以 `startedAt DESC` + `take=limit` 查詢 SYNC_RUN、投影為 8 欄 SyncRunSummary（不含 watermark/triggeredBy）、保留 failed 之 errorCode | `typeorm-org-sync.store.spec.ts`（+4） | PASS |
+| service.recentRuns 正規化 limit（預設 20／上限 100／小數向下取整／非法回預設）並透傳 store 結果 | `org-sync.service.spec.ts`（+9） | PASS |
+| controller.recentRuns 解析 limit 字串→數字並委派；路由為 `GET runs`（不與 `POST run` 衝突）；RBAC read＝SysAdmin/ICSOPAdmin 放行、Supervisor/DeptContact/User 403 | `org-sync.controller.spec.ts`（+8） | PASS |
+| ScheduledOrgSyncService.runScheduled 以 `('scheduled', null)` 呼叫引擎；svc 拋一般例外／`SYNC_IN_PROGRESS` 均被吞掉不外拋 | `scheduled-org-sync.service.spec.ts`（+3，new） | PASS |
+
+### 1. US-011 同步紀錄查詢端點（供前端輪詢）
+- 端點：`GET /admin/org-sync/runs?limit=N`。
+  - `limit` 預設 20、上限 100；非法值（缺省/NaN/<1）回預設 20；小數向下取整。正規化由 `OrgSyncService.recentRuns` 之純函式 `clampRunsLimit` 統一負責（單一 choke point，任何呼叫端一致）。
+  - 依 `startedAt` 由新到舊取 N 筆。
+- 保護：`@UseGuards(SessionGuard, RolePermissionGuard)` + `@RequirePermission(FunctionKey.ORG_SYNC_MANAGEMENT, 'read')`。矩陣 read → **SysAdmin 與 ICSOPAdmin 皆可讀**；主管/部門窗口/使用者 403 `PERMISSION_DENIED`（與手動觸發 `POST run` 之 `write`＝僅 SysAdmin 有別）。
+- 分層：`OrgSyncStore.listRecentRuns(limit)` 介面新增（TypeOrmOrgSyncStore 以 `find({ order:{startedAt:'DESC'}, take:limit })` 實作，投影為 `SyncRunSummary`）；`OrgSyncService.recentRuns(limit?)` 薄封裝（clamp 後下推）；controller 解析查詢字串後委派。
+- **端點回傳契約（前端對接）**：HTTP 200，body 為 `SyncRunSummary[]`（新到舊）。單筆形狀：
+  ```json
+  {
+    "id": "uuid 字串",
+    "triggerType": "scheduled | manual",
+    "status": "running | success | failed",
+    "startedAt": "ISO8601 字串（Date 序列化）",
+    "endedAt": "ISO8601 字串 | null",
+    "changeCount": 0,
+    "errorCode": "字串 | null",
+    "errorMessage": "字串 | null"
+  }
+  ```
+  - `status='running'` 表示同步進行中（前端「執行中→輪詢」據此判定）；`failed` + `errorCode='DISAPPEARED_RATIO_EXCEEDED'` 供前端區分「已中止」與一般失敗（US-011 AC4）。
+  - **刻意不外洩**：`watermark`（MTDT 水位）與 `triggeredBy`（觸發者 loginId）為內部欄位，不列入摘要。
+
+### 2. 每日排程 cron（OQ-E02-02：02:00 UTC+8）
+- 新依賴 `@nestjs/schedule`（`^6.1.3`）；`AppModule` 加 `ScheduleModule.forRoot()`（以 discovery 掃描全 app 之 `@Cron` metadata）。
+- 新 provider `ScheduledOrgSyncService`（掛於 `OrgSyncModule`）：`@Cron('0 2 * * *', { name:'org-sync-daily', timeZone:'Asia/Taipei' })` 之 `runScheduled()` 呼叫 `OrgSyncService.run('scheduled', null)`，全程 try/catch — 失敗（含互斥 `SYNC_IN_PROGRESS`、`hasRunningSyncRun` 之 DB 例外）僅記 log，不讓未捕捉例外自 cron 回呼外拋而中斷程序。
+- **啟動安全**：`ScheduleModule.forRoot()` 與 `@Cron` 註冊僅排定下一次觸發時間，**不連線** DB/上游；reader/store 之連線維持延遲（`ensureInit`/`getPool` 於實際 `run()` 才連）。故 `npm run start:dev` 啟動不因 DB/上游而崩潰（cron 僅於 02:00 台北時間才實跑）。
+- **測試策略**：不測 `@Cron` decorator 之時間觸發（難確定性驗證），改直接測 `runScheduled()` 之委派與吞例外行為（mock svc）。
+
+### 檔案異動（收尾增量）
+| 檔案 | 類型 | 說明 |
+|---|---|---|
+| `backend/src/org-sync/org-sync.types.ts` | modified | 新增 `SyncRunSummary` 型別；`OrgSyncStore` 介面加 `listRecentRuns(limit)` |
+| `backend/src/org-sync/typeorm-org-sync.store.ts`(+spec) | modified | 實作 `listRecentRuns`（startedAt DESC/take/投影）；spec +4 |
+| `backend/src/org-sync/org-sync.service.ts`(+spec) | modified | `recentRuns` 薄封裝 + 匯出 `clampRunsLimit`/`DEFAULT_RUNS_LIMIT`/`MAX_RUNS_LIMIT`；spec +9（FakeStore 補 `listRecentRuns`） |
+| `backend/src/org-sync/org-sync.controller.ts`(+spec) | modified | 新增 `@Get('runs')` + read 權限；spec +8（委派＋路由＋RBAC 契約） |
+| `backend/src/org-sync/scheduled-org-sync.service.ts`(+spec) | new | `@Cron` 每日 02:00 台北；spec +3 |
+| `backend/src/org-sync/org-sync.module.ts` | modified | 掛 `ScheduledOrgSyncService` provider |
+| `backend/src/app.module.ts` | modified | 加 `ScheduleModule.forRoot()` |
+| `backend/package.json` / `package-lock.json` | modified | 新增依賴 `@nestjs/schedule` |
+
+### 收尾增量之待裁決/待辦（flag）
+- **排程重試未實作**：OQ-E02-02 定案含「失敗 3 次遞增間隔重試」。本增量依任務範圍僅實作「try/catch 記 log」，**尚未**實作遞增間隔重試與失敗通知（NFR-006）。屬下一增量；非本次範圍，故未阻斷。
+- 上述皆不改既有 auth/RBAC/F004 引擎行為，`docs/specs/` 維持唯讀（未編輯）。
+
 ## 已知限制 / 待辦
 
-- **前端頁**：prototype `prototypes/09-org-sync-management.html` 待移植（下一增量）；US-011 AC3「執行中→輪詢結果」之前端呈現，及對應之 GET 狀態端點待補（本 pass 手動 API 為同步執行並回傳結果）。
-- **排程 cron**：未掛載 `@nestjs/schedule`（避免引入新依賴）；引擎已可被 cron/API 直接呼叫。OQ-E02-02 定案為 02:00 UTC+8、失敗 3 次遞增間隔重試——重試/通知（NFR-006）待下一增量。
+- **前端頁**：prototype `prototypes/09-org-sync-management.html` 待移植（下一增量）。US-011 之查詢端點 **`GET /admin/org-sync/runs`（read 權限）已就緒**，前端「執行中→輪詢結果」可直接輪詢此端點（依 `status` 由 running→success/failed 收斂）。手動觸發 `POST run` 仍為同步執行並回傳結果。
+- **排程 cron**：已掛載 `@nestjs/schedule`（`ScheduleModule.forRoot()` + `ScheduledOrgSyncService @Cron 02:00 Asia/Taipei`，見「收尾增量」）。OQ-E02-02 之「失敗 3 次遞增間隔重試」與通知（NFR-006）**尚未**實作，待下一增量。
 - **公司主檔 VW_HRCOMF**：本 pass 未同步（無 COMPANY 實體、無對應可測 AC；浮水印公司名為 F020 範圍）。已於範圍註明，待需要時補 COMPANY 實體。
 - **F025 guard**：`SysAdminGuard` 為佔位（硬編 SysAdmin）；F025 角色×功能矩陣就緒後應改由矩陣統一判定並移除硬編角色檢查。
 - **AD/AJ 孤兒處理**：本輪僅 AS（孤兒率 0.0%）；AD 22.1%／AJ 84.9% 於多公司擴充前必須先處理（契約 §7.3/§10.1）。引擎已對孤兒「保留+警告」，未來多公司時之孤兒策略（是否阻擋擴充）待定。
