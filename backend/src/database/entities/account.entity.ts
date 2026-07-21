@@ -42,4 +42,26 @@ export class Account {
 
   @Column({ type: 'varchar', length: 10, default: 'upstream' })
   source!: string; // manual / upstream
+
+  // --- F004 組織同步新增（← VW_HPMUSER 白名單欄位 + 停用軌跡） ---
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  managerEmpNo!: string | null; // ← DIRECTOR（直屬主管員編）
+
+  // 承載上游日期：改用 datetime2（範圍 0001–9999），涵蓋所有合法日期，避免 datetime（1753–9999）
+  // 之「Out of range」（2026-07-21 實跑抓到）。另於 mapper 以 normalizeUpstreamDate 收斂哨兵/異常值。
+  @Column({ type: 'datetime2', nullable: true })
+  resignDate!: Date | null; // ← RESIGNDT（哨兵 9999-12-31 → null）
+
+  @Column({ type: 'datetime2', nullable: true })
+  hireDate!: Date | null; // ← HIREDT
+
+  @Column({ type: 'datetime2', nullable: true })
+  upstreamModifiedAt!: Date | null; // ← MTDT，增量同步水位依據
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  disableReason!: string | null; // manual / departed
+
+  @Column({ type: 'datetime', nullable: true })
+  disabledAt!: Date | null;
 }

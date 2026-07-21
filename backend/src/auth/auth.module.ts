@@ -17,5 +17,7 @@ import { sessionSecret } from './session.config';
     { provide: ACCOUNT_REPOSITORY, useClass: SeedAccountRepository },
     SessionGuard,
   ],
+  // SessionGuard / SessionTokenService 匯出供其他模組（如 OrgSyncModule）之受保護路由重用。
+  exports: [SessionGuard, SessionTokenService],
 })
 export class AuthModule {}

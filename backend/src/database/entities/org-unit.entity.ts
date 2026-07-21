@@ -22,6 +22,9 @@ export class OrgUnit {
   @Column({ type: 'varchar', length: 10 })
   codePrefix!: string; // 去尾端 0 之有效前綴，供子樹 LIKE 比對
 
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  parentCode!: string | null; // 由代碼前綴推導之上層代碼（Root 為 null），F004 新增
+
   @Column({ type: 'varchar', length: 20 })
   tier!: string; // ROOT / DIVISION / DEPARTMENT / SECTION / SUBSECTION
 

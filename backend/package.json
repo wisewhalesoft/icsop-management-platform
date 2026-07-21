@@ -14,6 +14,7 @@
     "migration:revert": "npm run typeorm -- -d src/database/data-source.ts migration:revert",
     "migration:generate": "npm run typeorm -- -d src/database/data-source.ts migration:generate",
     "seed": "ts-node src/database/seed.ts",
+    "sync:once": "ts-node src/org-sync/sync-once.ts",
     "migration:run:prod": "typeorm -d dist/database/data-source.js migration:run",
     "seed:prod": "node dist/database/seed.js"
   },
@@ -36,6 +37,7 @@
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
+    "@types/mssql": "^12.3.0",
     "@types/node": "^26.1.1",
     "jest": "^30.4.2",
     "ts-jest": "^29.4.11",
