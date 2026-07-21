@@ -1,31 +1,94 @@
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { AuthProvider, useAuth } from './auth/useAuth';
+import { visibleMenu } from './domain/menu';
+import { Icon } from './components/Icon';
+import { AppShell } from './components/AppShell';
+import { LoginPage } from './pages/LoginPage';
+import { RoleLanding } from './pages/RoleLanding';
+import { DashboardHome } from './pages/DashboardHome';
+import { ModulePlaceholder } from './pages/ModulePlaceholder';
+import { PublicPlaceholder } from './pages/PublicPlaceholder';
+
+/** 全頁載入狀態（等待 /auth/me）。 */
+function FullPageLoading(): JSX.Element {
+  return (
+    <div
+      role="status"
+      className="min-h-screen flex flex-col items-center justify-center gap-3 bg-white text-slate-500"
+    >
+      <Icon name="loader-2" className="w-8 h-8 text-primary-600 animate-spin" />
+      <p className="text-sm">載入中…</p>
+    </div>
+  );
+}
+
+/** 全頁錯誤（非 401，如網路）。 */
+function FullPageError({ message, onRetry }: { message: string | null; onRetry: () => void }): JSX.Element {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-white text-slate-600 px-4 text-center">
+      <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+        <Icon name="alert-circle" className="w-6 h-6 text-red-600" />
+      </div>
+      <p className="text-sm font-medium text-slate-900">無法連線至伺服器</p>
+      {message && <p className="text-xs mono text-slate-400">{message}</p>}
+      <button
+        onClick={onRetry}
+        className="mt-2 px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700"
+      >
+        重試
+      </button>
+    </div>
+  );
+}
+
+/** 後台守衛：無任何後台功能權限（如一般使用者）→ 導回角色分流頁。 */
+function AdminGuard(): JSX.Element {
+  const { user } = useAuth();
+  if (visibleMenu(user?.roleCode).length === 0) {
+    return <Navigate to="/" replace />;
+  }
+  return <Outlet />;
+}
+
 /**
- * ⚠️ Scaffold 佔位頁。
- * 實際畫面一律依 `prototypes/` 之設計系統（Tailwind＋設計 tokens，見 prototypes/00-design-system.html）
- * 移植，**不自創樣式**。此處僅以最小 inline 樣式提供可讀入口，待 /tdd 逐頁替換。
+ * 路由與 auth gating（F001/F002）。與 App 分離以便單測（注入 MemoryRouter）。
  */
-const BACKEND =
-  (import.meta.env.VITE_BACKEND_ORIGIN as string | undefined) ??
-  'http://localhost:3000';
+export function AppRoutes(): JSX.Element {
+  const { status, error, refresh } = useAuth();
+
+  if (status === 'loading') return <FullPageLoading />;
+  if (status === 'error') return <FullPageError message={error} onRetry={() => void refresh()} />;
+  if (status === 'unauthenticated') {
+    return (
+      <Routes>
+        <Route path="*" element={<LoginPage />} />
+      </Routes>
+    );
+  }
+
+  // authenticated
+  return (
+    <Routes>
+      <Route path="/" element={<RoleLanding />} />
+      <Route path="/public" element={<PublicPlaceholder />} />
+      <Route element={<AdminGuard />}>
+        <Route path="/admin" element={<AppShell />}>
+          <Route index element={<DashboardHome />} />
+          {/* A5/A6 及後續功能增量將以實頁取代下列佔位 */}
+          <Route path="*" element={<ModulePlaceholder />} />
+        </Route>
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
 
 export function App(): JSX.Element {
   return (
-    <main
-      style={{
-        maxWidth: 640,
-        margin: '48px auto',
-        fontFamily: "system-ui,'Noto Sans TC',sans-serif",
-        color: '#0f172a',
-        lineHeight: 1.6,
-      }}
-    >
-      <h1 style={{ fontSize: 22 }}>ICSOP 文件管理平台</h1>
-      <p style={{ color: '#64748b' }}>
-        前端 scaffold（React + TypeScript + Vite）。實際畫面將依{' '}
-        <code>prototypes/</code> 之設計系統移植，不另創樣式。
-      </p>
-      <p>
-        <a href={`${BACKEND}/auth/login`}>以公司帳號登入（Azure AD）→</a>
-      </p>
-    </main>
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
