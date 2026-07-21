@@ -90,6 +90,56 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
     );
   });
 
+  it('編輯手動帳號：改姓名送出 → 呼叫 updateAccount', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.updateAccount).mockResolvedValue(ROWS[0]);
+    render(<AccountManagementPage />);
+    await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
+
+    const row = screen.getByText('李慧玲').closest('tr')!;
+    await userEvent.click(within(row).getByRole('button', { name: '編輯' }));
+    const dialog = screen.getByRole('dialog', { name: /編輯帳號/ });
+    const nameInput = within(dialog).getByLabelText(/姓名/);
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, '李慧玲改');
+    await userEvent.click(within(dialog).getByRole('button', { name: '儲存' }));
+
+    await waitFor(() =>
+      expect(endpoints.updateAccount).toHaveBeenCalledWith(
+        'a1',
+        expect.objectContaining({ name: '李慧玲改' }),
+      ),
+    );
+  });
+
+  it('編輯上游帳號：姓名唯讀、顯示上游維護說明', async () => {
+    mockAuth('SysAdmin');
+    render(<AccountManagementPage />);
+    await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
+
+    const row = screen.getByText('王小明').closest('tr')!;
+    await userEvent.click(within(row).getByRole('button', { name: '編輯' }));
+    const dialog = screen.getByRole('dialog', { name: /編輯帳號/ });
+    expect(within(dialog).getByLabelText(/姓名/)).toHaveAttribute('readonly');
+    expect(within(dialog).getByText(/由上游系統維護/)).toBeInTheDocument();
+  });
+
+  it('分頁：每頁 50 筆、可翻頁', async () => {
+    mockAuth('SysAdmin');
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      ...ROWS[1], id: `p${i}`, loginId: `U${1000 + i}`, name: `用戶${i}`,
+    }));
+    vi.mocked(endpoints.getAccounts).mockResolvedValue(many);
+    render(<AccountManagementPage />);
+    await waitFor(() => expect(screen.getByText('用戶0')).toBeInTheDocument());
+    // 第 1 頁：前 50 筆（用戶0..49），用戶50 不在
+    expect(screen.queryByText('用戶50')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /下一頁/ }));
+    expect(screen.getByText('用戶50')).toBeInTheDocument();
+    expect(screen.queryByText('用戶0')).not.toBeInTheDocument();
+  });
+
   it('停用帳號：確認後 → 呼叫 setAccountStatus(disabled)', async () => {
     mockAuth('SysAdmin');
     vi.mocked(endpoints.setAccountStatus).mockResolvedValue({ ...ROWS[1], status: 'disabled' });

@@ -48,7 +48,9 @@ export class TypeOrmAccountStore implements AccountStore {
         kw: `%${f.keyword}%`,
       });
     }
-    qb.orderBy('a.status', 'ASC').addOrderBy('a.loginId', 'ASC').take(500);
+    // 安全上限：前端以客端分頁（每頁 50）呈現，需一次取得符合篩選之全部列。
+    // 5000 覆蓋現行規模（AS 約 1,114 帳號）；若日後單公司帳號超過此數，需改為後端分頁（skip/take + total）。
+    qb.orderBy('a.status', 'ASC').addOrderBy('a.loginId', 'ASC').take(5000);
     const rows = await qb.getMany();
     return rows.map(TypeOrmAccountStore.toView);
   }

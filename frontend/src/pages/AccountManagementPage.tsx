@@ -3,6 +3,7 @@ import { useAuth } from '../auth/useAuth';
 import {
   getAccounts,
   createAccount,
+  updateAccount,
   assignAccountRole,
   setAccountStatus,
 } from '../api/endpoints';
@@ -31,6 +32,7 @@ const msgOf = (e: unknown) =>
   e instanceof ApiError ? (ERROR_MSG[e.code] ?? e.code) : '操作失敗';
 
 const MGMT_ROLES = ['SysAdmin', 'ICSOPAdmin', 'Supervisor', 'DeptContact'];
+const PAGE_SIZE = 50;
 
 function SourceBadge({ source }: { source: string }): JSX.Element {
   return source === 'manual' ? (
@@ -95,8 +97,10 @@ export function AccountManagementPage(): JSX.Element {
   const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<AccountView | null>(null);
   const [roleTarget, setRoleTarget] = useState<AccountView | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,6 +131,12 @@ export function AccountManagementPage(): JSX.Element {
         (a.name ?? '').toLowerCase().includes(kw),
     );
   }, [accounts, keyword]);
+
+  // 篩選/關鍵字改變 → 回第 1 頁
+  useEffect(() => setPage(1), [keyword, fSource, fRole, fStatus]);
+  const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const paged = shown.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   if (!canRead) {
     return (
@@ -226,7 +236,7 @@ export function AccountManagementPage(): JSX.Element {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {shown.map((a) => (
+              {paged.map((a) => (
                 <tr key={a.id} className="hover:bg-slate-50">
                   <td className="px-3 py-2.5 font-medium text-slate-800">{a.name ?? '—'}</td>
                   <td className="px-3 py-2.5 mono text-slate-600">{a.loginId}</td>
@@ -236,6 +246,12 @@ export function AccountManagementPage(): JSX.Element {
                   {canWrite && (
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setEditTarget(a)}
+                          className="px-2 py-1 rounded border border-slate-200 text-xs hover:bg-slate-50"
+                        >
+                          編輯
+                        </button>
                         {canAssign && (
                           <button
                             onClick={() => setRoleTarget(a)}
@@ -284,6 +300,30 @@ export function AccountManagementPage(): JSX.Element {
             <div className="h-3 bg-slate-200 rounded w-1/2" />
           </div>
         )}
+        {!loading && shown.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 text-sm text-slate-500">
+            <span>共 {shown.length} 筆 · 每頁 {PAGE_SIZE} 筆</span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+                aria-label="上一頁"
+                className="w-8 h-8 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                ‹
+              </button>
+              <span className="px-2 text-slate-600 mono">{safePage} / {pageCount}</span>
+              <button
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                disabled={safePage >= pageCount}
+                aria-label="下一頁"
+                className="w-8 h-8 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {createOpen && (
@@ -292,6 +332,19 @@ export function AccountManagementPage(): JSX.Element {
           onCreated={async () => {
             setCreateOpen(false);
             setNotice({ tone: 'ok', text: '已建立帳號（密碼加鹽雜湊儲存）' });
+            await load();
+          }}
+          onError={(e) => setNotice({ tone: 'err', text: msgOf(e) })}
+        />
+      )}
+
+      {editTarget && (
+        <EditModal
+          target={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={async () => {
+            setEditTarget(null);
+            setNotice({ tone: 'ok', text: '已更新帳號' });
             await load();
           }}
           onError={(e) => setNotice({ tone: 'err', text: msgOf(e) })}
@@ -406,6 +459,80 @@ function CreateModal({
           <button onClick={onClose} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
           <button onClick={() => void submit()} disabled={busy || !loginId.trim() || !password}
             className="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700 disabled:opacity-50">建立</button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+function EditModal({
+  target,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  target: AccountView;
+  onClose: () => void;
+  onSaved: () => void;
+  onError: (e: unknown) => void;
+}): JSX.Element {
+  const upstream = target.source === 'upstream';
+  const [name, setName] = useState(target.name ?? '');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(): Promise<void> {
+    // 上游帳號姓名/密碼唯讀 → 無可儲存欄位，直接關閉。
+    if (upstream) {
+      onClose();
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateAccount(target.id, {
+        name: name.trim(),
+        password: password || undefined,
+      });
+      onSaved();
+    } catch (e) {
+      onError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Overlay>
+      <div role="dialog" aria-labelledby="editTitle" className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <h3 id="editTitle" className="font-semibold text-slate-900 mb-1">編輯帳號</h3>
+        <p className="text-xs text-slate-400 mb-4">帳號：<span className="mono text-slate-600">{target.loginId}</span></p>
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="eName" className="block text-sm font-medium text-slate-700 mb-1">姓名</label>
+            <input id="eName" value={name} onChange={(e) => setName(e.target.value)} readOnly={upstream}
+              className={`w-full px-3 py-2 rounded-md border border-slate-300 text-sm ${upstream ? 'bg-slate-50' : ''}`} />
+            {upstream && (
+              <p className="text-[10px] text-slate-400 mt-1">上游同步帳號，姓名由上游系統維護。</p>
+            )}
+          </div>
+          {upstream ? (
+            <div className="flex items-start gap-1.5 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-2">
+              <Icon name="info" className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>上游同步帳號以公司帳號（Azure AD 單一登入）驗證，本系統不保存其密碼，無法於此重設。</span>
+            </div>
+          ) : (
+            <div>
+              <label htmlFor="ePassword" className="block text-sm font-medium text-slate-700 mb-1">重設密碼</label>
+              <input id="ePassword" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                placeholder="輸入新密碼以重設" className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" />
+              <p className="text-[10px] text-slate-400 mt-1">留空則不變更；重設後以加鹽雜湊儲存。</p>
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 mt-6">
+          <button onClick={onClose} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+          <button onClick={() => void submit()} disabled={busy}
+            className="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700 disabled:opacity-50">儲存</button>
         </div>
       </div>
     </Overlay>

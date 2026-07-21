@@ -55,6 +55,18 @@ export function createAccount(body: {
   });
 }
 
+/** PATCH /admin/accounts/:id（編輯：手動帳號姓名/重設密碼；上游 ACCOUNT_UPSTREAM_READONLY）。 */
+export function updateAccount(
+  id: string,
+  body: { name?: string | null; password?: string },
+): Promise<AccountView> {
+  return apiFetch<AccountView>(`/admin/accounts/${id}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
 /** PATCH /admin/accounts/:id/role（指派角色，僅 SysAdmin；ROLE_INVALID/ROLE_SELF_DOWNGRADE_BLOCKED）。 */
 export function assignAccountRole(id: string, roleCode: string): Promise<AccountView> {
   return apiFetch<AccountView>(`/admin/accounts/${id}/role`, {
