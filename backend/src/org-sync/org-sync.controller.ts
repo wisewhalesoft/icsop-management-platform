@@ -1,6 +1,6 @@
-import { Controller, Post, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { OrgSyncService } from './org-sync.service';
-import { SyncResult } from './org-sync.types';
+import { SyncResult, SyncRunSummary } from './org-sync.types';
 import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { RequirePermission } from '../rbac/require-permission.decorator';
@@ -25,5 +25,17 @@ export class OrgSyncController {
   trigger(@Req() req: RequestWithSession): Promise<SyncResult> {
     const triggeredBy = req.sessionUser?.loginId ?? null;
     return this.svc.run('manual', triggeredBy);
+  }
+
+  /**
+   * 同步紀錄查詢（US-011）：供前端「執行中→輪詢結果」與歷程呈現。
+   *  - read 權限（矩陣：SysAdmin 與 ICSOPAdmin 皆可讀；主管/窗口/使用者 403）。
+   *  - limit 由字串解析後交 service 正規化（預設 20、上限 100）。
+   */
+  @Get('runs')
+  @RequirePermission(FunctionKey.ORG_SYNC_MANAGEMENT, 'read')
+  recentRuns(@Query('limit') limit?: string): Promise<SyncRunSummary[]> {
+    const parsed = limit === undefined ? undefined : Number(limit);
+    return this.svc.recentRuns(parsed);
   }
 }

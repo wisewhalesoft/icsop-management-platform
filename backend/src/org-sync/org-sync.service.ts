@@ -7,6 +7,7 @@ import {
   SyncStats,
   TriggerType,
   AccountDisableWrite,
+  SyncRunSummary,
 } from './org-sync.types';
 import {
   normalizeDept,
@@ -262,6 +263,14 @@ export class OrgSyncService {
     }
   }
 
+  /**
+   * 最近 N 筆同步紀錄（US-011 查詢端點 / 前端輪詢）。
+   * limit 經 clampRunsLimit 正規化（預設 20、上限 100、非法值回預設）後下推 store。
+   */
+  async recentRuns(limit?: number): Promise<SyncRunSummary[]> {
+    return this.store.listRecentRuns(clampRunsLimit(limit));
+  }
+
   private async safeFinishFailed(
     runId: string,
     errorCode: string,
@@ -279,6 +288,24 @@ export class OrgSyncService {
       // 收尾寫入失敗不再拋出（避免掩蓋原始錯誤）；鎖之釋放由 store 實作保證。
     }
   }
+}
+
+/** US-011 查詢筆數之預設與上限（前端輪詢；上限防過量取回）。 */
+export const DEFAULT_RUNS_LIMIT = 20;
+export const MAX_RUNS_LIMIT = 100;
+
+/**
+ * 正規化 recentRuns 之 limit：
+ *  - undefined / NaN / 非有限 → 預設 20
+ *  - 小數 → 向下取整
+ *  - < 1 → 預設 20
+ *  - > 100 → 夾為 100
+ */
+export function clampRunsLimit(limit?: number): number {
+  if (limit === undefined || !Number.isFinite(limit)) return DEFAULT_RUNS_LIMIT;
+  const n = Math.floor(limit);
+  if (n < 1) return DEFAULT_RUNS_LIMIT;
+  return Math.min(n, MAX_RUNS_LIMIT);
 }
 
 /** 將例外映射為錯誤碼（error-handling.md#sync）。 */

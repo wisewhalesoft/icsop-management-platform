@@ -6,6 +6,7 @@ import {
   SyncPlan,
   FinishSyncRunPatch,
   TriggerType,
+  SyncRunSummary,
 } from './org-sync.types';
 import { ExistingOrgUnit, ExistingAccount } from './change-classification';
 import { OrgUnit } from '../database/entities/org-unit.entity';
@@ -121,6 +122,24 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
       });
     }
     return m;
+  }
+
+  async listRecentRuns(limit: number): Promise<SyncRunSummary[]> {
+    const ds = await this.ensureInit();
+    const rows = await ds.getRepository(SyncRun).find({
+      order: { startedAt: 'DESC' },
+      take: limit,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      triggerType: r.triggerType as SyncRunSummary['triggerType'],
+      status: r.status as SyncRunSummary['status'],
+      startedAt: r.startedAt,
+      endedAt: r.endedAt,
+      changeCount: r.changeCount,
+      errorCode: r.errorCode,
+      errorMessage: r.errorMessage,
+    }));
   }
 
   async applySync(compid: string, plan: SyncPlan): Promise<void> {

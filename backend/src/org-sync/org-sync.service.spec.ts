@@ -6,6 +6,7 @@ import {
   SyncPlan,
   FinishSyncRunPatch,
   TriggerType,
+  SyncRunSummary,
 } from './org-sync.types';
 import { RawDept, RawAccount } from './normalization';
 import { ExistingOrgUnit, ExistingAccount } from './change-classification';
@@ -163,6 +164,24 @@ class FakeStore implements OrgSyncStore {
       if (a) a.status = 'disabled';
     }
     return Promise.resolve();
+  }
+  lastListLimit?: number;
+  listRecentRuns(limit: number): Promise<SyncRunSummary[]> {
+    this.lastListLimit = limit;
+    const summaries = [...this.runs]
+      .reverse() // runs 依建立順序 push（新在後）→ reverse 得新到舊
+      .slice(0, limit)
+      .map((r) => ({
+        id: r.id,
+        triggerType: r.triggerType,
+        status: (r.patch?.status ?? r.status) as SyncRunSummary['status'],
+        startedAt: r.startedAt,
+        endedAt: r.patch?.endedAt ?? null,
+        changeCount: r.patch?.changeCount ?? 0,
+        errorCode: r.patch?.errorCode ?? null,
+        errorMessage: r.patch?.errorMessage ?? null,
+      }));
+    return Promise.resolve(summaries);
   }
 }
 
@@ -448,5 +467,73 @@ describe('OrgSyncService.run', () => {
     expect(store.runs[0].status).toBe('failed');
     expect(store.runs[0].patch?.errorCode).toBe('SYNC_WRITE_FAILED');
     expect(store.running).toBe(false); // 鎖已釋放
+  });
+});
+
+/**
+ * US-011 recentRuns：service 為薄封裝，職責＝將 limit 正規化（預設 20、上限 100、非法回預設）
+ * 後下推 store.listRecentRuns，並原樣回傳其結果。以 spy store 驗下推之 limit 值與回傳透傳。
+ */
+describe('OrgSyncService.recentRuns', () => {
+  const SAMPLE: SyncRunSummary[] = [
+    {
+      id: 'run-1',
+      triggerType: 'scheduled',
+      status: 'success',
+      startedAt: new Date('2026-07-21T02:00:00Z'),
+      endedAt: new Date('2026-07-21T02:01:00Z'),
+      changeCount: 3,
+      errorCode: null,
+      errorMessage: null,
+    },
+  ];
+
+  function makeSvc(): { svc: OrgSyncService; listRecentRuns: jest.Mock } {
+    const listRecentRuns = jest.fn().mockResolvedValue(SAMPLE);
+    const store = { listRecentRuns } as unknown as OrgSyncStore;
+    const svc = new OrgSyncService({} as UpstreamOrgReader, store, { compid: 'AS' });
+    return { svc, listRecentRuns };
+  }
+
+  it('未給 limit → 預設 20 並回傳 store 結果', async () => {
+    const { svc, listRecentRuns } = makeSvc();
+    const res = await svc.recentRuns();
+    expect(listRecentRuns).toHaveBeenCalledWith(20);
+    expect(res).toBe(SAMPLE);
+  });
+
+  it('合法範圍內 limit 原樣下推', async () => {
+    const { svc, listRecentRuns } = makeSvc();
+    await svc.recentRuns(5);
+    expect(listRecentRuns).toHaveBeenCalledWith(5);
+  });
+
+  it('超過上限 → 夾為 100', async () => {
+    const { svc, listRecentRuns } = makeSvc();
+    await svc.recentRuns(500);
+    expect(listRecentRuns).toHaveBeenCalledWith(100);
+  });
+
+  it.each([0, -1, NaN, 20.5])(
+    '非法/邊界 limit（%p）→ 回預設 20（小數向下取整後仍 <1 亦回預設）',
+    async (bad) => {
+      const { svc, listRecentRuns } = makeSvc();
+      await svc.recentRuns(bad as number);
+      // 0/-1/NaN → 20；20.5 → floor 20（仍在範圍）
+      const expected = bad === 20.5 ? 20 : 20;
+      expect(listRecentRuns).toHaveBeenCalledWith(expected);
+    },
+  );
+
+  it('小數 limit 向下取整（50.9 → 50）', async () => {
+    const { svc, listRecentRuns } = makeSvc();
+    await svc.recentRuns(50.9);
+    expect(listRecentRuns).toHaveBeenCalledWith(50);
+  });
+
+  it('恰為上限 100 → 100', async () => {
+    const { svc, listRecentRuns } = makeSvc();
+    await svc.recentRuns(100);
+    expect(listRecentRuns).toHaveBeenCalledWith(100);
   });
 });

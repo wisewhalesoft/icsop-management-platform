@@ -11,6 +11,21 @@ import { ExistingOrgUnit, ExistingAccount } from './change-classification';
 export type TriggerType = 'scheduled' | 'manual';
 export type SyncRunStatus = 'running' | 'success' | 'failed';
 
+/**
+ * 同步紀錄摘要（US-011 查詢端點 / 前端輪詢用）。
+ * 僅暴露前端所需欄位；水位（watermark）與觸發者（triggeredBy）不對外。
+ */
+export interface SyncRunSummary {
+  id: string;
+  triggerType: TriggerType;
+  status: SyncRunStatus;
+  startedAt: Date;
+  endedAt: Date | null;
+  changeCount: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+}
+
 /** 上游唯讀來源（一律 OPENQUERY 下推）。 */
 export interface UpstreamOrgReader {
   /** VW_DEPT_SQL 全量（非增量）。 */
@@ -69,6 +84,11 @@ export interface OrgSyncStore {
   findExistingAccounts(compid: string): Promise<Map<string, ExistingAccount>>;
   /** 於單一交易套用 plan（失敗須整批回滾，AC3）。 */
   applySync(compid: string, plan: SyncPlan): Promise<void>;
+  /**
+   * 最近 N 筆同步紀錄（依 startedAt 由新到舊，取 limit 筆）。供 US-011 查詢端點/前端輪詢。
+   * limit 之預設與上限由呼叫端（OrgSyncService.recentRuns）正規化，本層僅忠實下推。
+   */
+  listRecentRuns(limit: number): Promise<SyncRunSummary[]>;
 }
 
 export interface SyncStats {
