@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { OrgSyncModule } from './org-sync/org-sync.module';
+import { AccountsModule } from './accounts/accounts.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { OrgSyncModule } from './org-sync/org-sync.module';
     ScheduleModule.forRoot(),
     AuthModule,
     OrgSyncModule,
+    AccountsModule,
   ],
   controllers: [AppController],
 })
