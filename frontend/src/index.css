@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * 設計 tokens — 權威值來源：prototypes/00-design-system.html。
+ * 狀態色（有效/失效/作廢）與語意色（success/warning/danger/info）以 CSS 變數提供，
+ * 供狀態徽章與回饋元件沿用；勿在元件中另創色值。
+ */
+:root {
+  --status-active-t: #047857;
+  --status-active-b: #d1fae5;
+  --status-inactive-t: #b45309;
+  --status-inactive-b: #fef3c7;
+  --status-void-t: #b91c1c;
+  --status-void-b: #fee2e2;
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #365c97;
+}
+
+@layer base {
+  body {
+    font-family: 'Inter', 'Noto Sans TC', sans-serif;
+    color: #334155; /* slate-700 */
+    background: #ffffff;
+  }
+}
+
+@layer utilities {
+  .mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
