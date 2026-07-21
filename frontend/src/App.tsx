@@ -6,6 +6,7 @@ import { AppShell } from './components/AppShell';
 import { LoginPage } from './pages/LoginPage';
 import { RoleLanding } from './pages/RoleLanding';
 import { DashboardHome } from './pages/DashboardHome';
+import { OrgSyncPage } from './pages/OrgSyncPage';
 import { ModulePlaceholder } from './pages/ModulePlaceholder';
 import { PublicPlaceholder } from './pages/PublicPlaceholder';
 
@@ -74,7 +75,8 @@ export function AppRoutes(): JSX.Element {
       <Route element={<AdminGuard />}>
         <Route path="/admin" element={<AppShell />}>
           <Route index element={<DashboardHome />} />
-          {/* A5/A6 及後續功能增量將以實頁取代下列佔位 */}
+          <Route path="org-sync" element={<OrgSyncPage />} />
+          {/* A6 及後續功能增量將以實頁取代下列佔位 */}
           <Route path="*" element={<ModulePlaceholder />} />
         </Route>
       </Route>
