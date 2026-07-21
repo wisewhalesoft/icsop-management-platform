@@ -1,0 +1,36 @@
+# === 機密：絕不進版控 ===
+.env
+.env.*
+!.env.sample
+*.pfx
+*.key
+*.pem
+
+# === 相依與建置產物 ===
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+*.tsbuildinfo
+coverage/
+**/coverage/
+
+# === 真實來源檔（含真實個資，見 icsop-template-analysis.md）===
+reference/
+
+# === 盤點/暫存產出 ===
+/scratchpad/
+*.local.md
+
+# === 日誌 ===
+*.log
+npm-debug.log*
+
+# === OS / 編輯器 ===
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
