@@ -32,6 +32,8 @@ status: Draft
 | `SYNC_IN_PROGRESS` | 409 | 同步進行中，請稍候 | F004 |
 | `SYNC_SOURCE_UNAVAILABLE` | 5xx | 組織來源暫時無法連線 | F004 |
 | `SYNC_DATA_FORMAT_ERROR` | 5xx | 來源資料格式異常 | F004 |
+| `SYNC_WRITE_FAILED` | 5xx | 同步寫入失敗（交易已回滾，資料未變） | F004 |
+| `DISAPPEARED_RATIO_EXCEEDED` | 5xx | 在職帳號消失比例超過閾值，已中止同步、未執行任何停用 | F004 |
 | `LIFECYCLE_NAME_REQUIRED` | 400 | 循環名稱不可為空 | F007 |
 | `LIFECYCLE_HAS_DOCUMENTS` | 409 | 循環仍有文件掛載，**需先解除全部掛載才能刪除**（可改為停用） | F007 |
 | `DAG_SELF_LOOP` | 409 | 節點不可連向自己 | F008 |
@@ -98,9 +100,10 @@ status: Draft
 
 - **來源不可連線/逾時/格式異常**：中止本次同步、**保留同步前既有資料不變**、寫 `failed` 紀錄與錯誤訊息（F004 AC3）。
 - **重試**：自動重試（草案 3 次、間隔遞增），最終失敗通知系統管理員（[NFR-006](nfr.md#integration)；通知管道為 open-questions）。
-- **交易性**：同步中途失敗須回滾，不得處於部分更新的不一致狀態。
+- **交易性**：同步之組織＋帳號寫入於**單一交易**內套用；中途失敗**整批回滾**、寫 `failed` 紀錄（`SYNC_WRITE_FAILED`，本地寫入/交易失敗，與來源不可用 `SYNC_SOURCE_UNAVAILABLE` 區分），不得處於部分更新之不一致狀態（F004 Postconditions／AC3）。
 - **互斥**：已有同步進行中時，再次觸發回 `SYNC_IN_PROGRESS`，不啟動第二個並行程序。
-- **髒資料**：單筆型別不符時中止該筆寫入並記警告，不影響其他正常筆數。
+- **消失筆數保護**：在職帳號自來源消失之比例超過閾值（草案 5%）→ 中止同步、**不執行任何停用**、記 `failed`＋`DISAPPEARED_RATIO_EXCEEDED`、告警系統管理員（F004 Edge Cases，防上游 INNER JOIN 靜默吞人導致誤停用）。
+- **髒資料**：單筆型別不符時中止該筆寫入並記警告，不影響其他正常筆數。上游日期值（如哨兵 `9999-12-31`／異常值）於寫入前正規化：哨兵與不可儲存值轉 null。
 
 ## 循環與 DAG {#dag}
 
