@@ -5,7 +5,8 @@ import { RequestWithSession } from '../auth/session.guard';
 import { SessionUser } from '../auth/session-token.service';
 
 /**
- * 手動觸發 API（US-011）。權限（SysAdmin）由 SysAdminGuard 於路由層強制，
+ * 手動觸發 API（US-011）。權限（僅系統管理員）由 RolePermissionGuard + @RequirePermission
+ * ('組織人員異動管理','write') 於路由層強制（見 rbac/role-permission.guard.spec.ts）；
  * 本測試聚焦控制器行為：以觸發者 loginId 呼叫引擎、回傳結果、SYNC_IN_PROGRESS 傳遞。
  */
 

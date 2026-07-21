@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { AppDataSource } from '../database/data-source';
 import { AuthModule } from '../auth/auth.module';
+import { RbacModule } from '../rbac/rbac.module';
 import { OrgSyncController } from './org-sync.controller';
 import { OrgSyncService } from './org-sync.service';
-import { SysAdminGuard } from './sys-admin.guard';
 import { MssqlUpstreamOrgReader } from './mssql-upstream-reader';
 import { TypeOrmOrgSyncStore } from './typeorm-org-sync.store';
 import { UpstreamOrgReader, OrgSyncStore } from './org-sync.types';
@@ -15,14 +15,13 @@ export const ORG_SYNC_STORE = Symbol('ORG_SYNC_STORE');
 /**
  * 組織同步模組。
  *  - reader/store 以 useFactory 建構（延遲連線：不於 app 啟動即連 DB/上游）。
- *  - 匯入 AuthModule 以取得 SessionGuard（需其匯出）。
+ *  - 匯入 AuthModule 取得 SessionGuard（認證）、RbacModule 取得 RolePermissionGuard（F025 授權）。
  *  - 排程 cron 掛載（@nestjs/schedule）與前端頁為下一增量，本模組僅提供可被呼叫之引擎與手動 API。
  */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, RbacModule],
   controllers: [OrgSyncController],
   providers: [
-    SysAdminGuard,
     {
       provide: UPSTREAM_READER,
       useFactory: (): UpstreamOrgReader =>
