@@ -27,7 +27,9 @@ async function seed(): Promise<void> {
     // eslint-disable-next-line no-console
     console.log(`[seed] ROLE：${ROLES.length} 筆已就緒`);
 
-    // Dev 管理員 bootstrap：將 DEV_ADMIN_EMAIL 對應之帳號升為 ICSOPAdmin（若存在且唯一）。
+    // Dev 管理員 bootstrap：將 DEV_ADMIN_EMAIL 對應之帳號升為 SysAdmin（若存在且唯一）。
+    // ⚠ 升 SysAdmin（非 ICSOPAdmin）：F003 之角色指派端點僅 SysAdmin 可呼叫，需有一個 SysAdmin
+    //   作為系統起點，之後由其在 UI 指派其他人角色（＝以 F003 取代種子式角色 bootstrap，OQ 定案）。
     // ⚠ 不再建立 manual 測試帳號——會與 F004 同步進來的真實帳號同 email 撞成 MultipleMatch
     //   （2026-07-21 實測踩到：manual peter 與同步之 AS22455 皆為 peter@… → 登入被拒）。
     //   帳號本身由 F004 同步寫入；正式環境之角色指派由 F003 處理，不靠種子。
@@ -39,9 +41,9 @@ async function seed(): Promise<void> {
         .where('LOWER(a.email) = :email', { email: devAdmin })
         .getMany();
       if (matches.length === 1) {
-        await accRepo.update({ id: matches[0].id }, { roleCode: 'ICSOPAdmin' });
+        await accRepo.update({ id: matches[0].id }, { roleCode: 'SysAdmin' });
         // eslint-disable-next-line no-console
-        console.log(`[seed] dev 管理員 ${matches[0].loginId} 已升為 ICSOPAdmin`);
+        console.log(`[seed] dev 管理員 ${matches[0].loginId} 已升為 SysAdmin`);
       } else if (matches.length === 0) {
         // eslint-disable-next-line no-console
         console.log('[seed] DEV_ADMIN_EMAIL 尚無對應帳號（請先執行 F004 同步）');

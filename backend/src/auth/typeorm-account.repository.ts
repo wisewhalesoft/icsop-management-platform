@@ -1,5 +1,5 @@
 import { DataSource } from 'typeorm';
-import { AccountRepository } from './account-repository';
+import { AccountRepository, CurrentAccount } from './account-repository';
 import { normalizeEmail, ResolvableAccount } from './account-resolver';
 import { Account } from '../database/entities/account.entity';
 
@@ -34,5 +34,16 @@ export class TypeOrmAccountRepository implements AccountRepository {
       status: a.status === 'disabled' ? 'disabled' : 'active',
       roleCode: a.roleCode,
     }));
+  }
+
+  async findCurrentByLogin(
+    companyCode: string,
+    loginId: string,
+  ): Promise<CurrentAccount | null> {
+    const ds = await this.ensureInit();
+    const a = await ds
+      .getRepository(Account)
+      .findOne({ where: { companyCode, loginId } });
+    return a ? { status: a.status, roleCode: a.roleCode } : null;
   }
 }
