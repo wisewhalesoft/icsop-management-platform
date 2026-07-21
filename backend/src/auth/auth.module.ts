@@ -23,7 +23,8 @@ import { sessionSecret } from './session.config';
     },
     SessionGuard,
   ],
-  // SessionGuard / SessionTokenService 匯出供其他模組（如 OrgSyncModule）之受保護路由重用。
-  exports: [SessionGuard, SessionTokenService],
+  // SessionGuard / SessionTokenService 匯出供其他模組（如 OrgSync/Accounts）之受保護路由重用。
+  // ACCOUNT_REPOSITORY 亦匯出：SessionGuard 於各消費模組實例化時需解析此依賴（每請求查 DB 即時把關）。
+  exports: [SessionGuard, SessionTokenService, ACCOUNT_REPOSITORY],
 })
 export class AuthModule {}
