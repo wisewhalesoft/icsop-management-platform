@@ -1,0 +1,46 @@
+import {
+  FunctionKey,
+  canPerform,
+  type FunctionKeyValue,
+} from './function-matrix';
+
+/**
+ * 後台側選單定義與角色過濾（F002 步驟 4）。
+ * 結構（順序、label、icon）權威來源：prototypes/07-admin-shell.html 之 MENU。
+ * 每項對映一個 F025 功能鍵，權限值由 FUNCTION_MATRIX 推導（單一真實來源，勿另建權限表）。
+ */
+export interface MenuItem {
+  id: string;
+  label: string;
+  /** Lucide 圖示名稱（kebab-case），由 UI 層解析。 */
+  icon: string;
+  functionKey: FunctionKeyValue;
+  route: string;
+}
+
+export const MENU: readonly MenuItem[] = [
+  { id: 'account', label: '帳號管理', icon: 'users', functionKey: FunctionKey.ACCOUNT_MANAGEMENT, route: '/admin/accounts' },
+  { id: 'lifecycle', label: '循環管理', icon: 'workflow', functionKey: FunctionKey.LIFECYCLE_MANAGEMENT, route: '/admin/lifecycles' },
+  { id: 'document', label: 'ICSOP 文件管理', icon: 'file-text', functionKey: FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, route: '/admin/documents' },
+  { id: 'usageform', label: '使用表單管理', icon: 'files', functionKey: FunctionKey.USAGE_FORM_MANAGEMENT, route: '/admin/usage-forms' },
+  { id: 'docindex', label: '文件索引管理', icon: 'database', functionKey: FunctionKey.DOCUMENT_INDEX_MANAGEMENT, route: '/admin/doc-index' },
+  { id: 'audit', label: '文件調閱歷程', icon: 'history', functionKey: FunctionKey.DOCUMENT_ACCESS_HISTORY, route: '/admin/access-history' },
+  { id: 'changehistory', label: '文件變更歷程', icon: 'git-compare', functionKey: FunctionKey.DOCUMENT_CHANGE_HISTORY, route: '/admin/change-history' },
+  { id: 'orgsync', label: '組織人員異動管理', icon: 'refresh-cw', functionKey: FunctionKey.ORG_SYNC_MANAGEMENT, route: '/admin/org-sync' },
+  { id: 'settings', label: '系統參數設定', icon: 'settings', functionKey: FunctionKey.SYSTEM_PARAMETER, route: '/admin/settings' },
+];
+
+/** 該角色可見的後台選單（有 read 權限者顯示；無權者隱藏）。 */
+export function visibleMenu(roleCode: string | undefined): MenuItem[] {
+  return MENU.filter((m) => canPerform(roleCode, m.functionKey, 'read'));
+}
+
+/** 側欄/卡片存取徽章：可寫→'CRUD'、僅讀→'唯讀'、無權→null。 */
+export function accessLabelFor(
+  roleCode: string | undefined,
+  functionKey: string,
+): 'CRUD' | '唯讀' | null {
+  if (canPerform(roleCode, functionKey, 'write')) return 'CRUD';
+  if (canPerform(roleCode, functionKey, 'read')) return '唯讀';
+  return null;
+}
