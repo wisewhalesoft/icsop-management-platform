@@ -13,6 +13,27 @@ export interface SessionUser {
   roleCode?: string;
 }
 
+/** 帳號管理檢視（GET/POST/PATCH /admin/accounts；鏡射後端 accounts.store AccountView）。 */
+export interface AccountView {
+  id: string;
+  loginId: string;
+  employeeNo: string | null;
+  name: string | null;
+  email: string | null;
+  orgCode: string | null;
+  roleCode: string;
+  status: string;
+  source: string;
+  disableReason: string | null;
+}
+
+export interface AccountFilters {
+  source?: string;
+  roleCode?: string;
+  status?: string;
+  keyword?: string;
+}
+
 export type TriggerType = 'scheduled' | 'manual';
 export type SyncRunStatus = 'running' | 'success' | 'failed';
 

@@ -1,0 +1,515 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../auth/useAuth';
+import {
+  getAccounts,
+  createAccount,
+  assignAccountRole,
+  setAccountStatus,
+} from '../api/endpoints';
+import { ApiError } from '../api/client';
+import { canPerform, FunctionKey, ROLE_CODES } from '../domain/function-matrix';
+import { ROLE_META } from '../domain/roles';
+import { RoleBadge } from '../components/RoleBadge';
+import { Icon } from '../components/Icon';
+import type { AccountView } from '../api/types';
+
+/**
+ * 帳號與角色管理（F003 / US-005+US-006）。版面/樣式權威來源：prototypes/08-account-management.html。
+ * 接真實端點；RBAC：帳號管理 write（建立/停用/編輯）＝SysAdmin、角色指派＝SysAdmin only、
+ * ICSOPAdmin 唯讀。停用/角色即時生效由後端 SessionGuard 依 DB 把關。
+ * 註：原型之「編輯姓名/重設密碼」modal 為次要（後端 updateAccount 已具），本增量先具備
+ *     清單/篩選/建立/指派角色/停用；編輯 modal 待後續增量。
+ */
+const ERROR_MSG: Record<string, string> = {
+  ACCOUNT_USERNAME_EXISTS: '帳號名稱已存在',
+  ROLE_INVALID: '角色不合法',
+  ROLE_SELF_DOWNGRADE_BLOCKED: '不可將系統管理員降級自身',
+  ACCOUNT_UPSTREAM_READONLY: '上游同步帳號此欄位唯讀',
+  VALIDATION_ERROR: '必要欄位缺漏',
+};
+const msgOf = (e: unknown) =>
+  e instanceof ApiError ? (ERROR_MSG[e.code] ?? e.code) : '操作失敗';
+
+const MGMT_ROLES = ['SysAdmin', 'ICSOPAdmin', 'Supervisor', 'DeptContact'];
+
+function SourceBadge({ source }: { source: string }): JSX.Element {
+  return source === 'manual' ? (
+    <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+      手動
+    </span>
+  ) : (
+    <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
+      上游同步
+    </span>
+  );
+}
+
+function StatusBadge({ a }: { a: AccountView }): JSX.Element {
+  if (a.status === 'active') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-emerald-700 bg-emerald-50 border border-emerald-100">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        啟用
+      </span>
+    );
+  }
+  if (a.disableReason === 'departed') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
+        style={{ color: '#B45309', background: '#FEF3C7' }}
+      >
+        <Icon name="user-cog" className="w-3 h-3" />
+        離職自動停用
+      </span>
+    );
+  }
+  return (
+    <span className="px-2 py-0.5 rounded-full text-xs text-red-700 bg-red-50 border border-red-100">
+      停用
+    </span>
+  );
+}
+
+interface Confirm {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  danger?: boolean;
+  onConfirm: () => void;
+}
+
+export function AccountManagementPage(): JSX.Element {
+  const { user } = useAuth();
+  const role = user?.roleCode;
+  const canRead = canPerform(role, FunctionKey.ACCOUNT_MANAGEMENT, 'read');
+  const canWrite = canPerform(role, FunctionKey.ACCOUNT_MANAGEMENT, 'write');
+  const canAssign = canPerform(role, FunctionKey.ROLE_ASSIGNMENT, 'write');
+
+  const [accounts, setAccounts] = useState<AccountView[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [keyword, setKeyword] = useState('');
+  const [fSource, setFSource] = useState('');
+  const [fRole, setFRole] = useState('');
+  const [fStatus, setFStatus] = useState('');
+  const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [roleTarget, setRoleTarget] = useState<AccountView | null>(null);
+  const [confirm, setConfirm] = useState<Confirm | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getAccounts({
+        source: fSource || undefined,
+        roleCode: fRole || undefined,
+        status: fStatus || undefined,
+      });
+      setAccounts(data);
+    } catch (e) {
+      setNotice({ tone: 'err', text: msgOf(e) });
+    } finally {
+      setLoading(false);
+    }
+  }, [fSource, fRole, fStatus]);
+
+  useEffect(() => {
+    if (canRead) void load();
+  }, [canRead, load]);
+
+  const shown = useMemo(() => {
+    const kw = keyword.trim().toLowerCase();
+    if (!kw) return accounts;
+    return accounts.filter(
+      (a) =>
+        a.loginId.toLowerCase().includes(kw) ||
+        (a.name ?? '').toLowerCase().includes(kw),
+    );
+  }, [accounts, keyword]);
+
+  if (!canRead) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl px-6 py-16 text-center">
+        <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3">
+          <Icon name="alert-circle" className="w-7 h-7 text-red-500" />
+        </div>
+        <h1 className="font-semibold text-slate-900">無帳號管理權限</h1>
+        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">帳號與角色管理</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            區分手動建立與上游同步；停用為軟刪除、可恢復。
+          </p>
+        </div>
+        {canWrite && (
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
+          >
+            <Icon name="plus" className="w-4 h-4" />
+            建立帳號
+          </button>
+        )}
+      </div>
+
+      {canRead && !canWrite && (
+        <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2">
+          <Icon name="user-circle" className="w-4 h-4 shrink-0" />
+          唯讀模式 · ICSOP 管理員可查詢帳號，但不可建立/停用/指派角色。
+        </div>
+      )}
+
+      {notice && (
+        <div
+          role="status"
+          className={`text-sm border rounded-md px-3 py-2 ${
+            notice.tone === 'ok'
+              ? 'text-emerald-700 bg-emerald-50 border-emerald-100'
+              : 'text-red-700 bg-red-50 border-red-100'
+          }`}
+        >
+          {notice.text}
+        </div>
+      )}
+
+      {/* filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative">
+          <Icon name="search" className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="搜尋帳號 / 姓名…"
+            aria-label="搜尋帳號或姓名"
+            className="pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-sm bg-white w-56 focus:outline-none focus:ring-2 focus:ring-primary-600"
+          />
+        </div>
+        <select value={fSource} onChange={(e) => setFSource(e.target.value)} aria-label="來源篩選" className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
+          <option value="">所有來源</option>
+          <option value="manual">手動建立</option>
+          <option value="upstream">上游同步</option>
+        </select>
+        <select value={fRole} onChange={(e) => setFRole(e.target.value)} aria-label="角色篩選" className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
+          <option value="">所有角色</option>
+          {ROLE_CODES.map((rc) => (
+            <option key={rc} value={rc}>{ROLE_META[rc].label}</option>
+          ))}
+        </select>
+        <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="狀態篩選" className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
+          <option value="">所有狀態</option>
+          <option value="active">啟用</option>
+          <option value="disabled">停用</option>
+        </select>
+        <span className="ml-auto text-sm text-slate-500">顯示 {shown.length} 筆</span>
+      </div>
+
+      {/* table */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[820px]">
+            <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+              <tr>
+                <th className="text-left font-medium px-3 py-2.5">姓名</th>
+                <th className="text-left font-medium px-3 py-2.5">帳號</th>
+                <th className="text-left font-medium px-3 py-2.5">來源</th>
+                <th className="text-left font-medium px-3 py-2.5">角色</th>
+                <th className="text-left font-medium px-3 py-2.5">狀態</th>
+                {canWrite && <th className="text-left font-medium px-3 py-2.5">操作</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {shown.map((a) => (
+                <tr key={a.id} className="hover:bg-slate-50">
+                  <td className="px-3 py-2.5 font-medium text-slate-800">{a.name ?? '—'}</td>
+                  <td className="px-3 py-2.5 mono text-slate-600">{a.loginId}</td>
+                  <td className="px-3 py-2.5"><SourceBadge source={a.source} /></td>
+                  <td className="px-3 py-2.5"><RoleBadge roleCode={a.roleCode} /></td>
+                  <td className="px-3 py-2.5"><StatusBadge a={a} /></td>
+                  {canWrite && (
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-1">
+                        {canAssign && (
+                          <button
+                            onClick={() => setRoleTarget(a)}
+                            className="px-2 py-1 rounded border border-slate-200 text-xs hover:bg-slate-50"
+                          >
+                            指派角色
+                          </button>
+                        )}
+                        {a.status === 'active' ? (
+                          <button
+                            onClick={() =>
+                              setConfirm({
+                                title: '停用帳號？',
+                                body: `停用「${a.loginId}」後將立即無法登入、既有登入狀態即時失效（軟刪除，可恢復）。`,
+                                confirmLabel: '確認停用',
+                                danger: true,
+                                onConfirm: () => void act(() => setAccountStatus(a.id, 'disabled'), '已停用'),
+                              })
+                            }
+                            className="px-2 py-1 rounded border border-red-200 text-red-600 text-xs hover:bg-red-50"
+                          >
+                            停用
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => void act(() => setAccountStatus(a.id, 'active'), '已恢復啟用')}
+                            className="px-2 py-1 rounded border border-emerald-200 text-emerald-700 text-xs hover:bg-emerald-50"
+                          >
+                            恢復啟用
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!loading && shown.length === 0 && (
+          <div className="text-center py-12 text-sm text-slate-500">查無符合結果</div>
+        )}
+        {loading && (
+          <div className="p-6 animate-pulse space-y-3">
+            <div className="h-3 bg-slate-200 rounded w-3/4" />
+            <div className="h-3 bg-slate-200 rounded w-1/2" />
+          </div>
+        )}
+      </div>
+
+      {createOpen && (
+        <CreateModal
+          onClose={() => setCreateOpen(false)}
+          onCreated={async () => {
+            setCreateOpen(false);
+            setNotice({ tone: 'ok', text: '已建立帳號（密碼加鹽雜湊儲存）' });
+            await load();
+          }}
+          onError={(e) => setNotice({ tone: 'err', text: msgOf(e) })}
+        />
+      )}
+
+      {roleTarget && (
+        <RoleModal
+          target={roleTarget}
+          onClose={() => setRoleTarget(null)}
+          onAssigned={async () => {
+            setRoleTarget(null);
+            setNotice({ tone: 'ok', text: '角色已更新（下次請求即生效）' });
+            await load();
+          }}
+          onError={(e) => setNotice({ tone: 'err', text: msgOf(e) })}
+          requestConfirm={setConfirm}
+        />
+      )}
+
+      {confirm && (
+        <ConfirmModal
+          data={confirm}
+          onClose={() => setConfirm(null)}
+        />
+      )}
+    </div>
+  );
+
+  async function act(fn: () => Promise<unknown>, okText: string): Promise<void> {
+    setConfirm(null);
+    try {
+      await fn();
+      setNotice({ tone: 'ok', text: okText });
+      await load();
+    } catch (e) {
+      setNotice({ tone: 'err', text: msgOf(e) });
+    }
+  }
+}
+
+// ===== modals =====
+
+function Overlay({ children }: { children: React.ReactNode }): JSX.Element {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      {children}
+    </div>
+  );
+}
+
+function CreateModal({
+  onClose,
+  onCreated,
+  onError,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  onError: (e: unknown) => void;
+}): JSX.Element {
+  const [loginId, setLoginId] = useState('');
+  const [password, setPassword] = useState('');
+  const [roleCode, setRoleCode] = useState('ICSOPAdmin');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(): Promise<void> {
+    setBusy(true);
+    try {
+      await createAccount({ loginId: loginId.trim(), password, roleCode });
+      onCreated();
+    } catch (e) {
+      onError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Overlay>
+      <div role="dialog" aria-labelledby="createTitle" className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <h3 id="createTitle" className="font-semibold text-slate-900 mb-1">建立手動帳號</h3>
+        <p className="text-xs text-slate-400 mb-4">密碼將以加鹽雜湊儲存（source=manual）。</p>
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="cLoginId" className="block text-sm font-medium text-slate-700 mb-1">
+              帳號 <span className="text-red-500">*</span>
+            </label>
+            <input id="cLoginId" value={loginId} onChange={(e) => setLoginId(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="例：20500" />
+          </div>
+          <div>
+            <label htmlFor="cPassword" className="block text-sm font-medium text-slate-700 mb-1">
+              初始密碼 <span className="text-red-500">*</span>
+            </label>
+            <input id="cPassword" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" />
+          </div>
+          <div>
+            <label htmlFor="cRole" className="block text-sm font-medium text-slate-700 mb-1">
+              指派角色 <span className="text-red-500">*</span>
+            </label>
+            <select id="cRole" value={roleCode} onChange={(e) => setRoleCode(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white">
+              {ROLE_CODES.map((rc) => (
+                <option key={rc} value={rc}>{ROLE_META[rc].label}</option>
+              ))}
+            </select>
+            <p className="text-[10px] text-slate-400 mt-1">僅 5 種固定角色，不可新增/刪除。</p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-6">
+          <button onClick={onClose} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+          <button onClick={() => void submit()} disabled={busy || !loginId.trim() || !password}
+            className="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700 disabled:opacity-50">建立</button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+function RoleModal({
+  target,
+  onClose,
+  onAssigned,
+  onError,
+  requestConfirm,
+}: {
+  target: AccountView;
+  onClose: () => void;
+  onAssigned: () => void;
+  onError: (e: unknown) => void;
+  requestConfirm: (c: Confirm) => void;
+}): JSX.Element {
+  const [selected, setSelected] = useState(target.roleCode);
+
+  async function doAssign(roleCode: string): Promise<void> {
+    try {
+      await assignAccountRole(target.id, roleCode);
+      onAssigned();
+    } catch (e) {
+      onError(e);
+    }
+  }
+
+  function submit(): void {
+    if (selected === target.roleCode) {
+      onClose();
+      return;
+    }
+    // 由管理類角色降級為一般使用者 → 二次確認（US-006 AC2）
+    if (MGMT_ROLES.includes(target.roleCode) && selected === 'User') {
+      onClose();
+      requestConfirm({
+        title: '降級為一般使用者？',
+        body: `帳號「${target.loginId}」將由「${ROLE_META[target.roleCode as keyof typeof ROLE_META]?.label ?? target.roleCode}」降級為一般使用者，將失去所有後台權限。`,
+        confirmLabel: '確認降級',
+        danger: true,
+        onConfirm: () => void doAssign('User'),
+      });
+      return;
+    }
+    void doAssign(selected);
+  }
+
+  return (
+    <Overlay>
+      <div role="dialog" aria-labelledby="roleTitle" className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <h3 id="roleTitle" className="font-semibold text-slate-900 mb-1">指派角色</h3>
+        <p className="text-xs text-slate-400 mb-4">帳號：<span className="mono text-slate-600">{target.loginId}</span></p>
+        <div className="space-y-2">
+          {ROLE_CODES.map((rc) => (
+            <label
+              key={rc}
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-md border cursor-pointer hover:bg-slate-50 ${
+                rc === selected ? 'border-primary-300 bg-primary-50' : 'border-slate-200'
+              }`}
+            >
+              <input type="radio" name="role" value={rc} checked={rc === selected}
+                onChange={() => setSelected(rc)} className="text-primary-600" />
+              <RoleBadge roleCode={rc} />
+              {rc === target.roleCode && <span className="ml-auto text-[10px] text-primary-600">目前</span>}
+            </label>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2 mt-6">
+          <button onClick={onClose} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+          <button onClick={submit} className="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">儲存</button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+function ConfirmModal({ data, onClose }: { data: Confirm; onClose: () => void }): JSX.Element {
+  return (
+    <Overlay>
+      <div role="dialog" aria-labelledby="confirmTitle" className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+            <Icon name="alert-triangle" className="w-5 h-5 text-amber-600" />
+          </div>
+          <div>
+            <h3 id="confirmTitle" className="font-semibold text-slate-900">{data.title}</h3>
+            <p className="text-sm text-slate-500 mt-1">{data.body}</p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-6">
+          <button onClick={onClose} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+          <button
+            onClick={data.onConfirm}
+            className={`px-4 py-2 rounded-md text-white text-sm ${
+              data.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-primary-600 hover:bg-primary-700'
+            }`}
+          >
+            {data.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
