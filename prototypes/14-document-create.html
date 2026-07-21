@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>建立 ICSOP 文件 · 後台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;color:#334155;background:#FFFFFF;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  input:disabled,select:disabled{background:#F8FAFC;color:#64748B;cursor:not-allowed;}
+  .gated{opacity:.5;pointer-events:none;}
+  /* admin shell sidebar */
+  #sidebar{width:240px;transition:width .2s ease;}
+  body{padding-left:240px;transition:padding-left .2s ease;}
+  body.sb-collapsed{padding-left:60px;}
+  body.sb-collapsed #sidebar{width:60px;}
+  body.sb-collapsed .sb-label{display:none;}
+  body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
+</style>
+</head>
+<body data-role="icsop_admin" class="min-h-screen">
+
+<!-- ===== Admin shell sidebar ===== -->
+<aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-50 bg-white border-r border-slate-200 flex flex-col">
+  <div class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
+  </div>
+  <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
+  <div class="border-t border-slate-200 p-2 shrink-0">
+    <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
+      <i data-lucide="external-link" class="w-4 h-4 shrink-0"></i><span class="sb-label truncate">瀏覽文件網頁</span></button>
+  </div>
+</aside>
+
+<!-- Top bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="h-14 px-4 flex items-center gap-3">
+    <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
+    <div class="leading-tight min-w-0">
+      <div class="text-xs text-slate-400 flex items-center gap-1"><span>ICSOP 文件管理</span><i data-lucide="chevron-right" class="w-3 h-3"></i><span>建立</span></div>
+      <div class="font-semibold text-slate-900 text-sm truncate">建立 ICSOP 文件</div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <button onclick="location.reload()" class="px-3 py-1.5 rounded-md border border-slate-300 text-sm hover:bg-slate-50">重設</button>
+      <button onclick="submitDoc()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="save" class="w-4 h-4"></i>建立</button>
+      <div class="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+        <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+        <select id="roleSel" onchange="setRole(this.value)" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
+          <option value="icsop_admin">ICSOP 管理員</option>
+          <option value="supervisor">主管</option>
+          <option value="deptcontact">部門窗口</option>
+          <option value="sysadmin">系統管理員</option>
+          <option value="user">一般使用者</option>
+        </select>
+      </div>
+      <div class="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200"><i data-lucide="user-circle" class="w-4 h-4"></i><span>李慧玲</span></div>
+      <button title="登出" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+</header>
+
+<!-- blocked overlay -->
+<div id="blockOverlay" class="hidden fixed inset-0 z-40 bg-slate-50/90 backdrop-blur-sm flex items-center justify-center">
+  <div class="text-center max-w-xs">
+    <div class="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="lock" class="w-7 h-7 text-red-500"></i></div>
+    <h3 class="font-semibold text-slate-900">無建立文件權限</h3>
+    <p class="text-sm text-slate-500 mt-1" id="blockMsg"></p>
+    <p class="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+  </div>
+</div>
+
+<main class="max-w-4xl mx-auto px-4 py-6 space-y-5">
+
+  <!-- STEP 1 · 循環與節點歸屬（先填，決定編號前綴並開放後續欄位）-->
+  <section class="bg-white border border-slate-200 rounded-xl p-5">
+    <div class="flex items-center gap-2 mb-4">
+      <span class="w-5 h-5 rounded-full bg-primary-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">1</span>
+      <i data-lucide="workflow" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">循環與節點歸屬</h2>
+    </div>
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">所屬循環 <span class="text-red-500">*</span></label>
+        <select id="f_cycle" onchange="onCycle()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"></select>
+        <p id="cycErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i><span>必填欄位未填寫</span></p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-600 mb-1">所屬節點</label>
+        <div class="flex items-center gap-2 px-3 py-2 rounded-md border border-slate-200 bg-slate-50 text-sm text-slate-500">
+          <i data-lucide="git-commit-vertical" class="w-4 h-4 text-slate-400"></i>建立時為「未指派」
+        </div>
+      </div>
+    </div>
+    <p class="text-xs text-slate-400 mt-3 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5"></i>「所屬節點」不在建立表單設定；稍後於 DAG 節點抽屜（F009）掛載/指派，為唯一權威寫入路徑。</p>
+  </section>
+
+  <!-- gate hint（未選循環前顯示）-->
+  <div id="gateHint" class="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
+    <i data-lucide="lock" class="w-4 h-4 shrink-0"></i>請先選擇「所屬循環」，以下欄位將於選定後開放填寫；文件編號前綴亦依循環自動帶入。
+  </div>
+
+  <!-- STEP 2 · 基本資訊（選定循環後開放）-->
+  <section id="secBasic" class="bg-white border border-slate-200 rounded-xl p-5 gated">
+    <div class="flex items-center gap-2 mb-4">
+      <span class="step-badge w-5 h-5 rounded-full bg-slate-300 text-white text-[11px] font-bold flex items-center justify-center shrink-0">2</span>
+      <i data-lucide="file-plus-2" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">基本資訊</h2>
+    </div>
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-600 mb-1">系統 UUID</label>
+        <input disabled placeholder="儲存後由系統產生（唯讀）" class="w-full px-3 py-2 rounded-md border border-slate-200 text-sm mono" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">文件狀態 <span class="text-red-500">*</span></label>
+        <select id="f_status" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600">
+          <option value="有效" selected>有效</option>
+          <option value="失效">失效</option>
+          <option value="作廢">作廢</option>
+        </select>
+        <p class="text-[10px] text-slate-400 mt-1">預設「有效」；有效文件依公告日期於清單顯示為已公告/進度中。</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">ICSOP 文件編號 <span class="text-red-500">*</span></label>
+        <div class="flex items-stretch rounded-md border border-slate-300 focus-within:ring-2 focus-within:ring-primary-600 overflow-hidden">
+          <span id="numPrefix" class="px-3 py-2 bg-slate-50 text-slate-500 text-sm mono border-r border-slate-200 whitespace-nowrap select-none">ICSOP-—-</span>
+          <input id="f_number" oninput="checkUnique()" type="text" placeholder="101-1-XX" class="flex-1 min-w-0 px-3 py-2 text-sm mono focus:outline-none" />
+        </div>
+        <p class="text-[10px] text-slate-400 mt-1">前綴「ICSOP-<span id="numCode">—</span>-」依所屬循環自動帶入、不可修改；僅需填寫後段序號。唯一性比對「有效」＋「作廢」文件（佔用中）；<strong class="text-slate-500">「失效」文件之編號已釋出、可重用</strong>。</p>
+        <p id="numErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i><span></span></p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">文件名稱 <span class="text-red-500">*</span></label>
+        <input id="f_name" type="text" placeholder="例：車輛分期進件作業" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <p id="nameErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i><span>必填欄位未填寫</span></p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">版次 <span class="text-xs font-normal text-slate-400">（選填）</span></label>
+        <div class="flex items-center gap-2">
+          <div class="flex items-stretch rounded-md border border-slate-300 focus-within:ring-2 focus-within:ring-primary-600 overflow-hidden">
+            <input id="f_edYear" oninput="onEdition()" type="text" inputmode="numeric" maxlength="2" placeholder="YY" class="w-16 px-3 py-2 text-sm mono text-center focus:outline-none" />
+            <span class="px-1.5 py-2 bg-slate-50 text-slate-500 text-sm mono border-x border-slate-200 select-none">'</span>
+            <input id="f_edSeq" oninput="onEdition()" type="text" inputmode="numeric" maxlength="2" placeholder="NN" class="w-16 px-3 py-2 text-sm mono text-center focus:outline-none" />
+          </div>
+          <span class="text-sm text-slate-400">顯示：<span id="edPreview" class="mono text-slate-700 font-medium">—</span></span>
+        </div>
+        <p class="text-[10px] text-slate-400 mt-1">格式「年度＇序號」＝<span class="mono">{YY}'{NN}</span>（例：<span class="mono">26'01</span>）。</p>
+        <p id="edErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i><span>必填欄位未填寫</span></p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">公告日期 <span class="text-xs font-normal text-slate-400">（選填）</span></label>
+        <input id="f_date" type="date" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <p class="text-[10px] text-slate-400 mt-1">公告日期已到＝清單顯示「已公告」；未到或未填＝「進度中」（未公告）。</p>
+        <p id="dateErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i><span>必填欄位未填寫</span></p>
+      </div>
+    </div>
+    <!-- 內容摘要 -->
+    <div class="mt-4">
+      <label class="block text-sm font-medium text-slate-700 mb-1">內容摘要 <span class="text-xs font-normal text-slate-400">（選填）</span></label>
+      <textarea id="f_summary" rows="3" placeholder="以一至二句摘述本程序書之目的與涵蓋範圍…" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 resize-y"></textarea>
+      <p id="sumErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i><span>必填欄位未填寫</span></p>
+    </div>
+  </section>
+
+  <!-- STEP 3 · 當責與使用部門（可搜尋）-->
+  <section id="secAcc" class="bg-white border border-slate-200 rounded-xl p-5 gated">
+    <div class="flex items-center gap-2 mb-4">
+      <span class="step-badge w-5 h-5 rounded-full bg-slate-300 text-white text-[11px] font-bold flex items-center justify-center shrink-0">3</span>
+      <i data-lucide="building-2" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">制定組織與當責室長</h2>
+    </div>
+    <!-- 制定組織（三級相依：公司 → 部 → 室別，由上而下；不含本部層）-->
+    <div class="space-y-4 sm:max-w-md">
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1"><span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-200 text-slate-500 text-[10px] font-bold mr-1">1</span>制定公司 <span class="text-xs font-normal text-slate-400">（選填）</span></label>
+        <div class="relative">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+          <input id="company_input" oninput="comboFilter('company')" onfocus="comboFilter('company')" onblur="comboClose('company')" autocomplete="off" placeholder="搜尋制定公司…" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
+          <div id="company_list" class="hidden absolute z-20 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1"><span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-200 text-slate-500 text-[10px] font-bold mr-1">2</span>制定部門</label>
+        <div class="relative">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+          <input id="mkdept_input" oninput="comboFilter('mkdept')" onfocus="comboFilter('mkdept')" onblur="comboClose('mkdept')" autocomplete="off" disabled placeholder="請先選擇制定公司" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
+          <div id="mkdept_list" class="hidden absolute z-20 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1"><span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-200 text-slate-500 text-[10px] font-bold mr-1">3</span>制定室別</label>
+        <div class="relative">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+          <input id="section_input" oninput="comboFilter('section')" onfocus="comboFilter('section')" onblur="comboClose('section')" autocomplete="off" disabled placeholder="請先選擇制定部門" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
+          <div id="section_list" class="hidden absolute z-20 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
+        </div>
+      </div>
+    </div>
+    <p class="text-[10px] text-slate-400 mt-1.5 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-px"></i>三級相依（由上而下）：選「制定公司」後方可選其下「制定部門」，再選其下「制定室別」；變更上層將清空下層。本輪公司恆為「和潤企業股份有限公司」；部之下無處/室者（如稽核部、財會部）該欄留空。來源：最新同步之組織資料（不含離職）。</p>
+    <div class="grid sm:grid-cols-2 gap-4 mt-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">當責室長-主要 <span class="text-xs font-normal text-slate-400">（選填）</span></label>
+        <div class="relative">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+          <input id="chief_input" oninput="comboFilter('chief')" onfocus="comboFilter('chief')" onblur="comboClose('chief')" autocomplete="off" placeholder="搜尋室長姓名/部門…" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
+          <div id="chief_list" class="hidden absolute z-20 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
+        </div>
+      </div>
+    </div>
+    <div class="mt-4">
+      <label class="block text-sm font-medium text-slate-700 mb-2">當責室長-次要（可多位，允許為空）</label>
+      <div id="sec_chips" class="flex flex-wrap gap-2 mb-2"></div>
+      <div class="relative">
+        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        <input id="sec_input" oninput="comboFilter('sec')" onfocus="comboFilter('sec')" onblur="comboClose('sec')" autocomplete="off" placeholder="搜尋並新增次要室長…" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <div id="sec_list" class="hidden absolute z-20 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
+      </div>
+    </div>
+    <div class="mt-4">
+      <label class="block text-sm font-medium text-slate-700 mb-1">文件使用部門 <span class="text-xs font-normal text-slate-400">（選填，可多個）</span></label>
+      <p class="text-xs text-slate-500 mb-2 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-600"></i><span>可指定任意層級（本部／部／處室／課）；清單以「本部 / 部 / 處室 / 課」路徑呈現層級關係，<strong class="text-slate-700">選擇上層將自動涵蓋其下所有單位</strong>（權限判定時自動展開子樹）。</span></p>
+      <div id="use_chips" class="flex flex-wrap gap-2 mb-2"></div>
+      <div class="relative">
+        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        <input id="use_input" oninput="comboFilter('use')" onfocus="comboFilter('use')" onblur="comboClose('use')" autocomplete="off" placeholder="搜尋並新增使用部門…" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <div id="use_list" class="hidden absolute z-20 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
+      </div>
+      <p id="useErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i><span>至少需選 1 個使用部門</span></p>
+    </div>
+  </section>
+
+  <!-- STEP 4 · 附件與關聯文件 -->
+  <section id="secAtt" class="bg-white border border-slate-200 rounded-xl p-5 gated">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="step-badge w-5 h-5 rounded-full bg-slate-300 text-white text-[11px] font-bold flex items-center justify-center shrink-0">4</span>
+      <i data-lucide="paperclip" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">附件與關聯文件</h2>
+    </div>
+    <p class="text-xs text-slate-400 mb-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i>允許格式：ICSOP PDF／OJT＝.pdf/.jpg/.png、ICSOP 原始檔＝.xls、使用表單＝.xlsx/.xls/.pdf；單檔上限 50MB（OQ-E04-06 定案）。</p>
+    <!-- OQ-E09-10 定案：ICSOP PDF（呈現用）與 .xls 原件（AI 檢索來源）＝兩個各自獨立的手動上傳，系統不自動轉檔 -->
+    <div class="flex items-start gap-2 rounded-lg border border-primary-200 bg-primary-50/40 px-3 py-2.5 mb-4 text-[11px] text-slate-600">
+      <i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0 text-primary-600"></i>
+      <span><strong class="text-slate-800">ICSOP PDF（呈現／下載用）與 ICSOP 原始檔 .xls（AI 智慧問答檢索來源）為兩個各自獨立的上傳</strong>，系統<strong class="text-slate-800">不自動轉檔</strong>（OQ-E09-10 定案）；兩者內容一致性由 ICSOP 管理員負責維護。</span>
+    </div>
+    <div class="grid sm:grid-cols-3 gap-4">
+      <button onclick="fakeUpload('ICSOP PDF')" class="border border-dashed border-slate-300 rounded-lg p-4 text-center hover:bg-slate-50">
+        <i data-lucide="file-text" class="w-6 h-6 text-red-500 mx-auto mb-1.5"></i>
+        <div class="text-sm font-medium text-slate-700">上傳 ICSOP PDF（呈現用，1 份）</div>
+        <div id="pdfName" class="text-xs text-slate-400 mt-1">尚未選擇 · .pdf/.jpg/.png</div>
+      </button>
+      <button onclick="fakeUpload('ICSOP .xls')" class="border border-dashed border-primary-300 rounded-lg p-4 text-center hover:bg-primary-50/40">
+        <i data-lucide="file-spreadsheet" class="w-6 h-6 text-primary-500 mx-auto mb-1.5"></i>
+        <div class="text-sm font-medium text-slate-700">上傳 ICSOP 原始檔（.xls，1 份）</div>
+        <div id="xlsName" class="text-xs text-slate-400 mt-1">尚未選擇 · .xls（AI 檢索來源）</div>
+      </button>
+      <button onclick="fakeUpload('OJT 簽到表')" class="border border-dashed border-slate-300 rounded-lg p-4 text-center hover:bg-slate-50">
+        <i data-lucide="upload" class="w-6 h-6 text-slate-400 mx-auto mb-1.5"></i>
+        <div class="text-sm font-medium text-slate-600">上傳 OJT 簽到表（1 份）</div>
+        <div id="ojtName" class="text-xs text-slate-400 mt-1">尚未選擇 · .pdf/.jpg/.png</div>
+      </button>
+    </div>
+    <p class="text-[11px] text-slate-500 mt-2 flex items-start gap-1.5"><i data-lucide="sparkles" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-500"></i>.xls 供 AI <strong>chunk 提取／索引</strong>（F028/F029）；不符 ICSOP 標準五表模板將於抽取階段阻擋並提示（<span class="mono">XLS_TEMPLATE_INVALID</span>）。</p>
+    <!-- 使用表單（自「使用表單管理」表單池選取，可搜尋多選）-->
+    <div class="mt-4">
+      <label class="block text-sm font-medium text-slate-700 mb-2">使用表單（自「使用表單管理」選取，可多個、允許為空）</label>
+      <div id="forms_chips" class="flex flex-wrap gap-2 mb-2"></div>
+      <div class="relative">
+        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        <input id="forms_input" oninput="comboFilter('forms')" onfocus="comboFilter('forms')" onblur="comboClose('forms')" autocomplete="off" placeholder="搜尋使用表單（excel/pdf）…" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <div id="forms_list" class="hidden absolute z-20 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
+      </div>
+      <p class="text-[10px] text-slate-400 mt-1">來源：「使用表單管理」表單池；如需新增新表單請至該功能上傳。</p>
+    </div>
+    <!-- 文件連結點（可搜尋，連結其他 ICSOP 文件）-->
+    <div class="mt-4">
+      <label class="block text-sm font-medium text-slate-700 mb-2">文件連結點（連結其他 ICSOP 文件，可多個、允許為空）</label>
+      <div id="links_chips" class="flex flex-wrap gap-2 mb-2"></div>
+      <div class="relative">
+        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        <input id="links_input" oninput="comboFilter('links')" onfocus="comboFilter('links')" onblur="comboClose('links')" autocomplete="off" placeholder="搜尋要連結的 ICSOP 文件（編號/名稱）…" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <div id="links_list" class="hidden absolute z-20 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
+      </div>
+    </div>
+  </section>
+  <div class="h-4"></div>
+</main>
+
+<div id="toastWrap" class="fixed top-16 right-4 z-[60] space-y-2"></div>
+
+<script>
+  /* ===== admin shell sidebar ===== */
+  const MENU=[
+    {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
+    {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
+  ];
+  const CURRENT_MODULE='document';
+  function renderSidebar(){
+    const role=document.body.dataset.role;
+    const items=MENU.filter(m=>m.roles[role]);
+    document.getElementById('sidebarNav').innerHTML = items.length? items.map(m=>{
+      const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
+      return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`;
+    lucide.createIcons();
+  }
+  function navTo(id,label){ if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;} shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型本輪未含此頁）')); return false; }
+  function toggleSidebar(){ document.body.classList.toggle('sb-collapsed'); }
+  function openPublic(){ shellToast('已於新視窗開啟前台瀏覽頁（03-public-list）'); }
+  function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
+
+  /* ===== data ===== */
+  // ICSOP 編號第 2 段＝循環代碼
+  const CYCLE_CODE={'銷售及收款循環':'SRC','採購及付款循環':'PUC','產品企劃循環':'PPC','薪工循環':'LWC','融資循環':'FC','不動產、廠房及設備循環':'FAC','投資循環':'IC','電腦化資訊系統控制作業':'CIPS','管理性控制作業':'GCA'};
+  const CYCLES=Object.keys(CYCLE_CODE);
+  // 上游人資實測組織階層（本部 > 部 > 處/室）＝upstream-hr-source-contract §8.1
+  // 用途僅限「文件使用部門」四層級清單推導（§9.1 任意層級皆可指定，含本部層）
+  const HQ_ORG={
+    '經營企劃管理本部':{'管理部':['人力資源室','總務室'],'經企公關部':['法遵及公司治理室'],'企劃部':['車輛行銷室'],'稽核部':[]},
+    '營業一本部':{'車輛分期營業一部':['北一','桃園'],'車輛分期營業二部':['台中','高雄'],'電話行銷部':['北一處','南區處'],'供應商金融部':['北區綜合處']},
+    '營業二本部':{'營運管理部':['審查室'],'消費分期營業部':['商品北一處'],'機車分期營業部':['機車北區處']},
+    '風險管理服務本部':{'債權管理部':['法催一室','車催室','法催二室'],'信用審查部':['企金室'],'作業服務部':['文管室','客服室']},
+    '財務資訊本部':{'資訊部':['應用發展室'],'財會部':[]}
+  };
+  // 制定組織三級連動＝公司 > 部 > 室別（spec F026/F014/US-071：制定公司／制定部門／制定室別）
+  // 刻意不含「本部」層：本輪僅單一公司（和潤企業股份有限公司，AS），部直接平列於公司之下
+  const COMPANY_NAME='和潤企業股份有限公司';
+  const ORG={[COMPANY_NAME]:Object.assign({},...Object.values(HQ_ORG))};
+  // 課層（第 5 層）：處/室 → 課；僅供「文件使用部門」層級清單使用（制定組織三級連動不含課層）
+  const SUBUNITS={'北區綜合處':['醫療一課'],'商品北一處':['一課'],'機車北區處':['機車一課']};
+  // 文件使用部門選項（§9.1 定案）：可指定任意層級（本部／部／處室／課），以「 / 」路徑呈現層級；
+  // 選上層＝自動涵蓋其下所有單位（後端以部門代碼前綴比對展開子樹，§9.2）
+  const DEPTS=(()=>{const out=[];Object.keys(HQ_ORG).forEach(hq=>{out.push(hq);Object.keys(HQ_ORG[hq]).forEach(dp=>{out.push(hq+' / '+dp);(HQ_ORG[hq][dp]||[]).forEach(sec=>{out.push(hq+' / '+dp+' / '+sec);(SUBUNITS[sec]||[]).forEach(u=>out.push(hq+' / '+dp+' / '+sec+' / '+u));});});});return out;})();
+  const SECTION_MAP={}, SECTIONS=[];
+  Object.keys(ORG).forEach(co=>Object.keys(ORG[co]).forEach(dp=>ORG[co][dp].forEach(sec=>{SECTION_MAP[sec]={dept:dp,company:co};SECTIONS.push(sec);})));
+  // 室長清單（實務可能數十位，故採可搜尋）
+  const PERSONS=['陳彥廷（企劃部 車輛行銷室 室長）','林建宏（信用審查部 企金室 室長）','黃雅琪（消費分期營業部 商品北一處 室長）','吳宗翰（車輛分期營業二部 台中 室長）','張家豪（作業服務部 文管室 室長）','李慧玲（債權管理部 法催一室 室長）','吳佩珊（財會部 室長）','王志文（電話行銷部 北一處 室長）','周淑芬（管理部 人力資源室 室長）','鄭建國（債權管理部 法催二室 室長）','劉家瑋（經企公關部 法遵及公司治理室 室長）','蔡怡君（電話行銷部 南區處 室長）','許志偉（資訊部 應用發展室 室長）','蔡明哲（管理部 總務室 室長）'];
+  // OQ-E04-01b 定案：編號唯一性比對範圍＝「有效」＋「作廢」（佔用中）；「失效」文件之編號視為已釋出、可重用
+  const EXISTING_DOCS=[
+    {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',status:'有效'},
+    {n:'ICSOP-SRC-101-2-00',name:'消金審核作業',status:'有效'},
+    {n:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',status:'有效'},
+    {n:'ICSOP-LWC-101-1-02',name:'招募管理作業',status:'有效'},
+    {n:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',status:'有效'},
+    {n:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',status:'作廢'},            // 佔用中 → 不可重用
+    {n:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',status:'失效'}  // 已釋出 → 可重用
+  ];
+  // 僅「有效」＋「作廢」佔用編號；「失效」不參與比對
+  const occupiedDoc = v => EXISTING_DOCS.find(d => d.n===v && (d.status==='有效' || d.status==='作廢'));
+  // 可連結之現有 ICSOP 文件（編號 + 名稱，供文件連結點搜尋）
+  const DOC_OPTIONS=['ICSOP-SRC-101-1-01 車輛分期進件作業','ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-102-1-01 車輛分期對保作業','ICSOP-SRC-101-1-06 消費分期特約通路作業','ICSOP-PPC-101-2-02 消費分期產品政策及規範作業','ICSOP-LWC-101-1-02 招募管理作業','ICSOP-IC-102-1-00 短期投資買賣、保管及會計作業','ICSOP-GCA-100-2-00 法遵作業','ICSOP-FC-101-1-00 銀行融資作業'];
+  // 使用表單池（來源：使用表單管理 F018）
+  const FORM_POOL=['進件申請書.xlsx','支票託收登記表.xlsx','徵信照會表.xlsx','審查建議書.pdf','對保確認單.xlsx','撥款申請單.xlsx','本票確認檢核表.xlsx','OJT 訓練紀錄表.xlsx'];
+
+  function fillSel(id,arr,placeholder){const s=document.getElementById(id);s.innerHTML=(placeholder?`<option value="">${placeholder}</option>`:'')+arr.map(v=>`<option>${v}</option>`).join('');}
+  fillSel('f_cycle',CYCLES,'請選擇循環');
+
+  /* ===== searchable combobox（單選 dept/chief、多選 sec/use）===== */
+  const COMBO={
+    company:{options:Object.keys(ORG),multi:false,value:''},
+    mkdept:{options:[],multi:false,value:''},
+    section:{options:[],multi:false,value:''},
+    chief:{options:PERSONS,multi:false,value:''},
+    sec:{options:PERSONS,multi:true,value:[]},
+    use:{options:DEPTS,multi:true,value:[]},
+    links:{options:DOC_OPTIONS,multi:true,value:[]},
+    forms:{options:FORM_POOL,multi:true,value:[]}
+  };
+  function comboFilter(key){ const f=document.getElementById(key+'_input').value; const list=document.getElementById(key+'_list'); list.classList.remove('hidden'); comboRender(key,f); }
+  function comboClose(key){ setTimeout(()=>document.getElementById(key+'_list').classList.add('hidden'),150); }
+  function comboRender(key,filter){
+    const c=COMBO[key]; const f=(filter||'').trim().toLowerCase();
+    const list=document.getElementById(key+'_list');
+    const items=c.options.map((o,i)=>({o,i})).filter(x=>x.o.toLowerCase().includes(f));
+    list.innerHTML = items.length ? items.map(x=>{
+      const sel=c.multi?c.value.includes(x.o):c.value===x.o;
+      return `<div data-i="${x.i}" class="combo-opt px-3 py-2 cursor-pointer hover:bg-primary-50 ${sel?'bg-primary-50 text-primary-700 font-medium':''}">${x.o}${sel&&c.multi?' ✓':''}</div>`;
+    }).join('') : `<div class="px-3 py-2 text-slate-400">查無符合結果</div>`;
+    list.querySelectorAll('.combo-opt').forEach(el=>el.addEventListener('mousedown',e=>{e.preventDefault();comboPick(key,parseInt(el.dataset.i));}));
+  }
+  function comboPick(key,i){
+    const c=COMBO[key]; const o=c.options[i];
+    if(c.multi){
+      if(!c.value.includes(o)) c.value.push(o);
+      document.getElementById(key+'_input').value='';
+      comboChips(key); comboRender(key,'');
+      if(key==='use') document.getElementById('useErr').classList.add('hidden');
+    } else {
+      c.value=o;
+      document.getElementById(key+'_input').value=o;
+      document.getElementById(key+'_list').classList.add('hidden');
+      if(key==='company'||key==='mkdept') cascadeOrg(key);
+    }
+  }
+  // 三級相依（由上而下）：公司→部→室別；選上層填充下層選項並清空更下層
+  function cascadeOrg(changed){
+    if(changed==='company'){
+      COMBO.mkdept.options=Object.keys(ORG[COMBO.company.value]||{}); COMBO.mkdept.value='';
+      const md=document.getElementById('mkdept_input'); md.value=''; md.disabled=false; md.placeholder='搜尋制定部門…';
+      COMBO.section.options=[]; COMBO.section.value='';
+      const sc=document.getElementById('section_input'); sc.value=''; sc.disabled=true; sc.placeholder='請先選擇制定部門';
+    }else if(changed==='mkdept'){
+      const co=COMBO.company.value;
+      COMBO.section.options=(ORG[co]&&ORG[co][COMBO.mkdept.value])?ORG[co][COMBO.mkdept.value]:[]; COMBO.section.value='';
+      const sc=document.getElementById('section_input'); sc.value='';
+      // §8.4：部層之下無處/室者（如 稽核部／財會部）→ 停用並提示，浮水印該欄留空並收合分隔符
+      const none=COMBO.section.options.length===0;
+      sc.disabled=none; sc.placeholder=none?'此部之下無處/室（留空）':'搜尋制定室別…';
+    }
+  }
+  function onEdition(){
+    const yEl=document.getElementById('f_edYear'), nEl=document.getElementById('f_edSeq');
+    yEl.value=yEl.value.replace(/\D/g,'').slice(0,2);
+    nEl.value=nEl.value.replace(/\D/g,'').slice(0,2);
+    const y=yEl.value, n=nEl.value;
+    document.getElementById('edPreview').textContent=(y&&n)?`${y}'${n.padStart(2,'0')}`:'—';
+    if(y&&n) document.getElementById('edErr').classList.add('hidden');
+  }
+  function comboChips(key){
+    const c=COMBO[key]; const wrap=document.getElementById(key+'_chips');
+    wrap.innerHTML=c.value.length? c.value.map((o,idx)=>`<span class="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full bg-slate-100 text-slate-700 text-xs">${o}<button data-idx="${idx}" class="chip-rm w-4 h-4 rounded-full hover:bg-slate-300 flex items-center justify-center"><i data-lucide="x" class="w-3 h-3"></i></button></span>`).join('') : `<span class="text-xs text-slate-400">（${key==='use'?'尚未選擇':'可留空'}）</span>`;
+    wrap.querySelectorAll('.chip-rm').forEach(b=>b.addEventListener('click',()=>{c.value.splice(parseInt(b.dataset.idx),1);comboChips(key);}));
+    lucide.createIcons();
+  }
+
+  /* ===== gating：選定循環後開放後續、帶入編號前綴 ===== */
+  function onCycle(){
+    const cyc=document.getElementById('f_cycle').value;
+    const code=CYCLE_CODE[cyc]||'';
+    const gated=!cyc;
+    document.getElementById('numPrefix').textContent = code?`ICSOP-${code}-`:'ICSOP-—-';
+    document.getElementById('numCode').textContent = code||'—';
+    ['secBasic','secAcc','secAtt'].forEach(id=>document.getElementById(id).classList.toggle('gated',gated));
+    document.querySelectorAll('.step-badge').forEach(b=>{b.classList.toggle('bg-primary-600',!gated);b.classList.toggle('bg-slate-300',gated);});
+    document.getElementById('gateHint').classList.toggle('hidden',!gated);
+    document.getElementById('cycErr').classList.add('hidden');
+    if(!gated) checkUnique();
+  }
+  function fullNumber(){ const code=CYCLE_CODE[document.getElementById('f_cycle').value]||''; const suf=document.getElementById('f_number').value.trim(); return code&&suf?('ICSOP-'+code+'-'+suf):''; }
+  // 唯一性：僅比對「有效」＋「作廢」；命中「失效」編號視為可重用、不報重複（OQ-E04-01b）
+  function checkUnique(){
+    const v=fullNumber(); const hit=v?occupiedDoc(v):null; const dup=!!hit;
+    const err=document.getElementById('numErr'), inp=document.getElementById('f_number');
+    inp.classList.toggle('border-red-500',dup);
+    err.classList.toggle('hidden',!dup); err.classList.toggle('flex',dup);
+    if(dup) err.querySelector('span').textContent='此編號已被「'+hit.status+'」文件（'+hit.name+'）佔用（DOCUMENT_NUMBER_DUPLICATE）';
+    lucide.createIcons();
+    return !dup;
+  }
+
+  // OQ-E09-10：.xls 與 ICSOP PDF 各自獨立上傳，不自動轉檔
+  function fakeUpload(kind){
+    if(kind==='ICSOP .xls'){
+      const x=document.getElementById('xlsName'); x.textContent='已選擇：車輛分期進件作業.xls（標準模板）'; x.classList.add('text-emerald-600');
+      toast('success','已選擇 ICSOP 原始檔 .xls；儲存時保存原件並觸發 AI chunk 提取／索引（與 ICSOP PDF 各自獨立、不自動轉檔）');
+      return;
+    }
+    const map={'ICSOP PDF':['pdfName','車輛分期進件作業_v1.3.pdf'],'OJT 簽到表':['ojtName','車輛分期進件作業_OJT簽到表.pdf']};
+    const [el,name]=map[kind]||['ojtName','檔案.pdf'];
+    document.getElementById(el).textContent='已選擇：'+name;
+    document.getElementById(el).classList.add('text-emerald-600');
+    toast('success','已選擇「'+kind+'」（儲存時存 Blob）');
+  }
+  function showErr(id,show){const e=document.getElementById(id);e.classList.toggle('hidden',!show);e.classList.toggle('flex',show);}
+
+  function submitDoc(){
+    if(document.body.dataset.role!=='icsop_admin')return;
+    // 建立時必填僅 4 欄：循環別 / 文件狀態 / 程序書編號 / 程序書書名
+    const cyc=document.getElementById('f_cycle').value;
+    if(!cyc){ showErr('cycErr',true); toast('error','請先選擇所屬循環','DOCUMENT_REQUIRED_FIELD_MISSING'); return; }
+    const suf=document.getElementById('f_number').value.trim();
+    const name=document.getElementById('f_name').value.trim();
+    const status=document.getElementById('f_status').value;
+    let ok=true;
+    if(!checkUnique()) ok=false;
+    if(!suf){showErr('numErr',true);document.getElementById('numErr').querySelector('span').textContent='必填欄位未填寫（DOCUMENT_REQUIRED_FIELD_MISSING）';document.getElementById('f_number').classList.add('border-red-500');ok=false;}
+    showErr('nameErr',!name); if(!name){document.getElementById('f_name').classList.add('border-red-500');ok=false;} else document.getElementById('f_name').classList.remove('border-red-500');
+    if(!status) ok=false;
+    lucide.createIcons();
+    if(!ok){ toast('error','必填欄位未填寫或編號重複（僅 循環別／文件狀態／程序書編號／程序書書名 為必填）','DOCUMENT_REQUIRED_FIELD_MISSING'); return; }
+    const edY=document.getElementById('f_edYear').value.trim(), edN=document.getElementById('f_edSeq').value.trim();
+    const edTxt=(edY&&edN)?('、版次 '+edY+'\''+edN.padStart(2,'0')):'';
+    const org=[COMBO.company.value,COMBO.mkdept.value,COMBO.section.value].filter(Boolean).join('/');
+    toast('success','建立成功（'+fullNumber()+edTxt+'）：狀態「'+status+'」'+(org?('、制定 '+org):'')+'；產生系統 UUID、所屬節點未指派');
+  }
+
+  function setRole(r){
+    document.body.dataset.role=r;
+    const blocked=(r!=='icsop_admin');
+    document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
+    if(blocked)document.getElementById('blockMsg').textContent={
+      supervisor:'主管對 ICSOP 文件為唯讀，無法建立文件（僅 ICSOP 管理員可建立）。',
+      deptcontact:'部門窗口對 ICSOP 文件為唯讀，無法建立文件（僅 ICSOP 管理員可建立）。',
+      sysadmin:'系統管理員對 ICSOP 文件為唯讀，無法建立文件（僅 ICSOP 管理員可建立）。',
+      user:'一般使用者無後台存取權。'}[r];
+    renderSidebar(); lucide.createIcons();
+  }
+
+  function toast(type,msg,code){
+    const map={success:['check-circle-2','#059669'],error:['alert-circle','#DC2626'],info:['info','#365C97']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><div><span class="text-slate-700">${msg}</span>${code?`<div class="text-[10px] mono text-slate-400 mt-0.5">${code}</div>`:''}</div>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4200);
+  }
+
+  // init
+  comboChips('sec'); comboChips('use'); comboChips('links'); comboChips('forms'); onCycle(); renderSidebar(); lucide.createIcons();
+</script>
+</body>
+</html>

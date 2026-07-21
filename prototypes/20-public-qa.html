@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>智慧問答（RAG）· ICSOP 前台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;background:#FFFFFF;color:#334155;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  @keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+  .dot{animation:blink 1.2s infinite}.dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .fade-up{animation:fadeUp .28s ease}
+</style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+<!-- App bar (前台頂部導覽) -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="max-w-4xl mx-auto px-4 h-14 flex items-center gap-3">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="font-bold text-slate-900 truncate">ICSOP 文件瀏覽</span>
+    <div class="ml-auto flex items-center gap-3">
+      <div class="hidden sm:flex items-center gap-2 text-sm text-slate-500">
+        <i data-lucide="user" class="w-4 h-4"></i><span>王小明</span>
+        <span class="text-slate-300">·</span><span>營運管理部 / 審查室</span>
+      </div>
+      <button class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+  <!-- 前台導覽列 -->
+  <nav class="max-w-4xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-slate-100">
+    <a href="03-public-list.html" class="px-3 py-2.5 text-slate-500 hover:text-primary-700 border-b-2 border-transparent flex items-center gap-1.5"><i data-lucide="folder-search" class="w-4 h-4"></i>文件瀏覽</a>
+    <a href="20-public-qa.html" class="px-3 py-2.5 text-primary-700 font-medium border-b-2 border-primary-600 flex items-center gap-1.5"><i data-lucide="sparkles" class="w-4 h-4"></i>智慧問答</a>
+    <span class="ml-auto hidden sm:inline-flex items-center gap-1 text-[11px] px-2 py-0.5 my-1.5 rounded-full bg-primary-50 text-primary-700 border border-primary-100"><i data-lucide="bot" class="w-3 h-3"></i>AI · RAG 檢索生成</span>
+  </nav>
+</header>
+
+<main class="flex-1 w-full max-w-4xl mx-auto px-4 py-5 flex flex-col">
+
+  <!-- Hero -->
+  <div class="mb-4">
+    <h1 class="text-xl font-bold text-slate-900 flex items-center gap-2"><i data-lucide="sparkles" class="w-5 h-5 text-primary-600"></i>ICSOP 智慧問答</h1>
+    <p class="text-sm text-slate-500 mt-1">以自然語言詢問 ICSOP 作業程序內容，系統依權限檢索相關章節並生成附引用來源的答案。</p>
+  </div>
+
+  <!-- Permission + guardrail note -->
+  <div class="grid sm:grid-cols-2 gap-2 mb-4">
+    <div class="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-xs text-primary-700">
+      <i data-lucide="shield-check" class="w-4 h-4 shrink-0 mt-0.5"></i>
+      <span><strong>權限感知檢索</strong>：僅檢索您可見（<strong>已公告</strong>＝狀態有效且公告日期已過 且 <strong>使用部門相符</strong>）之文件；他部門/進度中/失效/作廢內容不會被檢索或引用。</span>
+    </div>
+    <div class="flex items-start gap-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500">
+      <i data-lucide="history" class="w-4 h-4 shrink-0 mt-0.5"></i>
+      <span><strong>稽核與浮水印</strong>：每次提問均寫入稽核（QA_LOG）；經引用進入檢視/下載仍套浮水印並記錄稽核（來源＝AI 智慧問答）。</span>
+    </div>
+  </div>
+
+  <!-- Ask box -->
+  <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-3 mb-3">
+    <div class="flex items-end gap-2">
+      <div class="flex-1">
+        <label for="qInput" class="sr-only">輸入問題</label>
+        <textarea id="qInput" rows="1" oninput="autoGrow(this);clearQErr()" onkeydown="onKey(event)" placeholder="例如：車輛分期進件要準備哪些文件？"
+          class="w-full resize-none px-3 py-2.5 rounded-lg border border-slate-300 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600 max-h-40"></textarea>
+        <p id="qErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i><span>請先輸入問題再送出。</span><span class="mono text-[10px] text-red-400">RAG_QUERY_EMPTY</span></p>
+      </div>
+      <button id="askBtn" onclick="ask()" class="shrink-0 inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 transition min-h-[44px] disabled:opacity-50"><i data-lucide="send" class="w-4 h-4"></i><span class="hidden sm:inline">送出</span></button>
+    </div>
+    <!-- suggested chips -->
+    <div class="flex flex-wrap items-center gap-1.5 mt-2.5">
+      <span class="text-[11px] text-slate-400 mr-0.5">試試：</span>
+      <button onclick="ask('q_docs')" class="text-xs px-2.5 py-1 rounded-full border border-slate-200 text-slate-600 hover:border-primary-300 hover:bg-primary-50">車輛分期進件要準備哪些文件？</button>
+      <button onclick="ask('q_review')" class="text-xs px-2.5 py-1 rounded-full border border-slate-200 text-slate-600 hover:border-primary-300 hover:bg-primary-50">系統設計文件審查會議由誰召開？</button>
+      <button onclick="ask('q_lowconf')" class="text-xs px-2.5 py-1 rounded-full border border-slate-200 text-slate-600 hover:border-primary-300 hover:bg-primary-50">初步可行性分析要評估什麼？</button>
+      <button onclick="ask('q_noresult')" class="text-xs px-2.5 py-1 rounded-full border border-slate-200 text-slate-600 hover:border-primary-300 hover:bg-primary-50">公司的年終獎金如何計算？</button>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between mb-3">
+    <p class="text-xs text-slate-400 flex items-center gap-1"><i data-lucide="messages-square" class="w-3.5 h-3.5"></i>本次瀏覽問答歷程（僅本次階段保留）</p>
+    <button id="clearBtn" onclick="clearAll()" class="text-xs text-slate-400 hover:text-slate-600 inline-flex items-center gap-1"><i data-lucide="eraser" class="w-3.5 h-3.5"></i>清除對話</button>
+  </div>
+
+  <!-- Conversation -->
+  <div id="thread" class="space-y-5"></div>
+
+  <!-- Empty state -->
+  <div id="emptyState" class="hidden text-center py-14">
+    <div class="w-14 h-14 rounded-2xl bg-primary-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="sparkles" class="w-7 h-7 text-primary-400"></i></div>
+    <p class="text-slate-500 text-sm">尚無問答紀錄</p>
+    <p class="text-xs text-slate-400 mt-1">在上方輸入問題，或點選建議問題開始。</p>
+  </div>
+
+</main>
+
+<!-- toast -->
+<div id="toastWrap" class="fixed top-16 right-4 z-50 space-y-2"></div>
+
+<script>
+  /* ============ 前台使用者身分（王小明·營業二本部 / 營運管理部 / 審查室）============ */
+  const USER = { name:'王小明', hq:'營業二本部', dept:'營運管理部', room:'審查室' };
+
+  /* ============ 罐頭問答庫（示範真實 ICSOP 文件/編號/章節）============
+     type: answer（有依據）/ low_confidence（低信心）/ no_result（查無足夠依據拒答）
+     每筆實質答案至少一筆引用；no_result 無引用（不虛構）。 */
+  const QA = {
+    q_docs: {
+      q:'車輛分期進件要準備哪些文件？',
+      type:'answer',
+      body:'依「車輛分期進件作業」規範，進件受理階段須先核對<strong>申請書與證件完整性</strong>，接著於「資料徵提」階段徵提並建檔下列資料：① 車輛分期<strong>申請書</strong>；② <strong>財力證明</strong>文件；③ <strong>車輛資料</strong>（車籍、車價等）；④ 身分證明與 KYC 檢核所需文件。徵提完成後進行聯徵查詢與初步審核，通過後移交簽約對保作業。相關案件覆核依「消金審核作業」辦理。',
+      cites:[
+        {n:'ICSOP-SRC-101-1-01', name:'車輛分期進件作業', sec:'第三章 作業流程 · 第2節 資料徵提', status:'有效'},
+        {n:'ICSOP-SRC-101-2-00', name:'消金審核作業', sec:'第三章 作業流程 · 第1節 案件覆核', status:'有效'}
+      ]
+    },
+    q_review: {
+      q:'系統設計文件審查會議由誰召開、依據哪一節？',
+      type:'answer',
+      body:'依「系統需求與系統設計作業程序書」，於系統設計完成後，應由<strong>應用發展室（主辦單位）召開設計文件審查會議</strong>，邀集需求單位與資訊主管與會，就系統架構、資料庫設計與介面設計進行審查，會議結論與待辦事項須留存紀錄並追蹤結案。',
+      cites:[
+        {n:'ICSOP-CIPS-102-1-01', name:'系統需求與系統設計作業程序書', sec:'第二章 作業流程 · 第6節 召開設計文件審查會議', status:'有效'}
+      ]
+    },
+    q_lowconf: {
+      q:'初步可行性分析要評估什麼？',
+      type:'low_confidence',
+      body:'依「系統需求與系統設計作業程序書」第二章第1節，初步可行性分析階段會就需求提出單位之申請，評估<strong>技術可行性、作業效益與資源需求</strong>等面向，作為是否進入後續需求訪談的依據。<em>惟檢索到的段落與您的提問僅部分吻合，實際評估項目請以原文件內容為準。</em>',
+      cites:[
+        {n:'ICSOP-CIPS-102-1-01', name:'系統需求與系統設計作業程序書', sec:'第二章 作業流程 · 第1節 初步可行性分析', status:'有效'}
+      ]
+    },
+    q_noresult: {
+      q:'公司的年終獎金如何計算？',
+      type:'no_result'
+    }
+  };
+
+  /* 關鍵字比對（供自由輸入時挑選最接近的罐頭回答） */
+  const MATCH = [
+    ['q_docs', ['進件','準備','文件','徵提','分期','申請書','財力']],
+    ['q_review', ['審查會議','設計文件','審查','召開','誰','系統設計']],
+    ['q_lowconf', ['可行性','初步','評估','需求分析','風險']],
+  ];
+
+  let thread = [];   // {id?, q, state:'gen'|'done', ...answer}
+  let busy = false;
+
+  /* ---------- helpers ---------- */
+  function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function statusPill(s){const m={'有效':['#047857','#D1FAE5'],'失效':['#B45309','#FEF3C7'],'作廢':['#B91C1C','#FEE2E2']};const[t,b]=m[s]||m['有效'];return `<span class="px-1.5 py-0.5 rounded-full text-[10px] font-medium" style="color:${t};background:${b}">${s}</span>`;}
+  function autoGrow(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,160)+'px';}
+  function onKey(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); ask(); } }
+  function clearQErr(){const e=document.getElementById('qErr');e.classList.add('hidden');e.classList.remove('flex');document.getElementById('qInput').classList.remove('border-red-500');}
+
+  /* ---------- citation card ---------- */
+  function citeCard(c){
+    return `<div class="rounded-lg border border-slate-200 bg-white p-3 hover:border-primary-300 transition">
+      <div class="flex items-center gap-2 flex-wrap">
+        <i data-lucide="file-text" class="w-4 h-4 text-primary-600 shrink-0"></i>
+        <span class="mono text-xs text-slate-500">${c.n}</span>${statusPill(c.status)}
+      </div>
+      <div class="text-sm font-medium text-slate-800 mt-1">${esc(c.name)}</div>
+      <div class="text-xs text-slate-500 mt-0.5 flex items-center gap-1"><i data-lucide="bookmark" class="w-3 h-3 text-slate-400"></i>${esc(c.sec)}</div>
+      <div class="flex items-center gap-2 mt-2.5">
+        <a href="05-public-viewer-watermark.html" onclick="citeNav(event,'檢視器','${c.n}','${esc(c.sec)}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-primary-600 text-white text-xs font-medium hover:bg-primary-700 min-h-[36px]"><i data-lucide="eye" class="w-3.5 h-3.5"></i>檢視段落</a>
+        <a href="04-public-document-detail.html" onclick="citeNav(event,'詳情','${c.n}','')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-slate-300 text-slate-700 text-xs hover:bg-slate-50 min-h-[36px]"><i data-lucide="info" class="w-3.5 h-3.5"></i>文件詳情</a>
+      </div>
+    </div>`;
+  }
+
+  /* ---------- render one turn ---------- */
+  function answerBlock(t){
+    if(t.state==='gen'){
+      return `<div class="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+        <div class="flex items-center gap-2 text-sm text-slate-500">
+          <span class="w-6 h-6 rounded-full bg-primary-100 flex items-center justify-center"><i data-lucide="sparkles" class="w-3.5 h-3.5 text-primary-600"></i></span>
+          <span>檢索中並生成答案</span>
+          <span class="ml-1"><span class="dot inline-block w-1.5 h-1.5 rounded-full bg-primary-500 mx-px"></span><span class="dot inline-block w-1.5 h-1.5 rounded-full bg-primary-500 mx-px"></span><span class="dot inline-block w-1.5 h-1.5 rounded-full bg-primary-500 mx-px"></span></span>
+        </div>
+        <div class="mt-3 space-y-2 animate-pulse"><div class="h-3 bg-slate-200 rounded w-11/12"></div><div class="h-3 bg-slate-200 rounded w-4/5"></div><div class="h-3 bg-slate-200 rounded w-2/3"></div></div>
+      </div>`;
+    }
+    if(t.type==='no_result'){
+      return `<div class="rounded-xl border p-4 fade-up" style="border-color:#FDE68A;background:#FFFBEB">
+        <div class="flex items-start gap-2.5">
+          <span class="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style="background:#FEF3C7"><i data-lucide="shield-alert" class="w-4 h-4" style="color:#B45309"></i></span>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold text-slate-900">查無足夠依據，無法作答</div>
+            <p class="text-sm text-slate-600 mt-1 leading-6">在您<strong>有權檢視</strong>的 ICSOP 文件中找不到能回答此問題的內容。為避免提供未經查證的資訊，系統<strong>不虛構答案</strong>。建議您：改用<strong>關鍵字搜尋</strong>文件、或<strong>聯繫窗口</strong>確認。</p>
+            <div class="flex flex-wrap gap-2 mt-3">
+              <a href="03-public-list.html" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-slate-300 text-slate-700 text-xs hover:bg-white min-h-[36px]"><i data-lucide="search" class="w-3.5 h-3.5"></i>前往關鍵字搜尋</a>
+              <button onclick="toast('info','已為您記錄窗口諮詢需求（原型示意）')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-slate-300 text-slate-700 text-xs hover:bg-white min-h-[36px]"><i data-lucide="contact" class="w-3.5 h-3.5"></i>聯繫窗口</button>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-2.5 mono">resultType = no_result · 已寫入 QA_LOG（誰於何時問了什麼、系統無依據）</p>
+          </div>
+        </div>
+      </div>`;
+    }
+    const low = t.type==='low_confidence';
+    return `<div class="rounded-xl border border-slate-200 bg-white p-4 fade-up">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="w-7 h-7 rounded-full bg-primary-100 flex items-center justify-center shrink-0"><i data-lucide="sparkles" class="w-4 h-4 text-primary-600"></i></span>
+        <span class="text-sm font-semibold text-slate-900">AI 生成答案</span>
+        ${low?`<span class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" style="color:#B45309;background:#FEF3C7"><i data-lucide="alert-triangle" class="w-3 h-3"></i>信心不足</span>`:`<span class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" style="color:#047857;background:#D1FAE5"><i data-lucide="badge-check" class="w-3 h-3"></i>已附引用</span>`}
+      </div>
+      ${low?`<div class="flex items-start gap-2 rounded-md px-3 py-2 mb-2 text-xs" style="color:#92400E;background:#FEF3C7"><i data-lucide="alert-triangle" class="w-3.5 h-3.5 shrink-0 mt-0.5"></i><span>以下內容可能<strong>非完全對應</strong>您的問題，僅列出最接近的來源，請自行核對原文件。</span></div>`:''}
+      <p class="text-sm text-slate-700 leading-7">${t.body}</p>
+      <div class="mt-3">
+        <div class="text-xs font-medium text-slate-500 mb-1.5 flex items-center gap-1"><i data-lucide="quote" class="w-3.5 h-3.5"></i>引用來源（${t.cites.length}）· 可點擊跳轉檢視位置</div>
+        <div class="grid sm:grid-cols-2 gap-2">${t.cites.map(citeCard).join('')}</div>
+      </div>
+      <p class="text-[11px] text-slate-400 mt-3 flex items-center gap-1"><i data-lucide="lock" class="w-3 h-3"></i>經此引用進入檢視/下載將套<strong>浮水印</strong>並記錄稽核（來源＝AI 智慧問答 · source=AI_QA）。</p>
+    </div>`;
+  }
+
+  function render(){
+    const wrap=document.getElementById('thread');
+    document.getElementById('emptyState').classList.toggle('hidden', thread.length>0);
+    document.getElementById('clearBtn').style.display = thread.length? '' : 'none';
+    wrap.innerHTML = thread.map(t=>`
+      <div class="space-y-2">
+        <div class="flex justify-end">
+          <div class="max-w-[85%] rounded-2xl rounded-br-sm bg-primary-600 text-white px-3.5 py-2 text-sm shadow-sm">
+            <div class="flex items-center gap-1.5 text-[11px] text-primary-100 mb-0.5"><i data-lucide="user" class="w-3 h-3"></i>${USER.name}·${USER.dept}</div>
+            ${esc(t.q)}
+          </div>
+        </div>
+        ${answerBlock(t)}
+      </div>`).join('');
+    lucide.createIcons();
+  }
+
+  /* ---------- ask flow ---------- */
+  function ask(presetId){
+    if(busy) return;
+    let q, id=presetId;
+    if(presetId && QA[presetId]){ q = QA[presetId].q; }
+    else {
+      q = document.getElementById('qInput').value.trim();
+      if(!q){ const e=document.getElementById('qErr');e.classList.remove('hidden');e.classList.add('flex');document.getElementById('qInput').classList.add('border-red-500');toast('error','問題不可為空','RAG_QUERY_EMPTY');return; }
+      id = pickCanned(q);
+    }
+    document.getElementById('qInput').value=''; autoGrow(document.getElementById('qInput')); clearQErr();
+    busy=true; document.getElementById('askBtn').disabled=true;
+    const turn={ q, state:'gen' };
+    thread.push(turn); render();
+    // scroll to newest
+    setTimeout(()=>window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}),30);
+    // simulate retrieval + generation latency
+    setTimeout(()=>{
+      const ans = id ? QA[id] : null;
+      if(ans){ turn.type=ans.type; turn.body=ans.body; turn.cites=ans.cites||[]; }
+      else { turn.type='no_result'; }
+      turn.state='done';
+      busy=false; document.getElementById('askBtn').disabled=false;
+      render();
+      setTimeout(()=>window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}),30);
+    }, 950);
+  }
+
+  function pickCanned(text){
+    const s=text.toLowerCase();
+    for(const [id,keys] of MATCH){ if(keys.some(k=>s.includes(k.toLowerCase()))) return id; }
+    return null; // → no_result（防幻覺：無依據不虛構）
+  }
+
+  function citeNav(e,kind,n,sec){
+    // 阻擋預設導覽以先提示稽核/浮水印（原型）；示範文件 SRC-101-1-01 對應 04/05
+    e.preventDefault();
+    toast('info','經 AI 導引開啟'+kind+'：'+n+(sec?('　'+sec):'')+' — 檢視/下載將套浮水印並寫入稽核（source=AI_QA）');
+    const href=e.currentTarget.getAttribute('href');
+    setTimeout(()=>{ window.location.href=href; }, 650);
+  }
+
+  function clearAll(){ thread=[]; render(); toast('info','已清除本次問答歷程'); }
+
+  /* ---------- toast ---------- */
+  function toast(type,msg,code){
+    const map={success:['check-circle-2','#059669'],error:['alert-circle','#DC2626'],info:['info','#365C97']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><div><span class="text-slate-700">${msg}</span>${code?`<div class="text-[10px] mono text-slate-400 mt-0.5">${code}</div>`:''}</div>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4000);
+  }
+
+  /* ---------- seed demo（載入即見兩組示範：多來源答案 + 低信心）---------- */
+  function seed(){
+    thread=[
+      { q:QA.q_docs.q, state:'done', type:QA.q_docs.type, body:QA.q_docs.body, cites:QA.q_docs.cites },
+      { q:QA.q_lowconf.q, state:'done', type:QA.q_lowconf.type, body:QA.q_lowconf.body, cites:QA.q_lowconf.cites }
+    ];
+    render();
+  }
+  seed();
+  lucide.createIcons();
+</script>
+</body>
+</html>

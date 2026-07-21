@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ICSOP 程序書清單 · 後台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;color:#334155;background:#FFFFFF;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  body:not([data-role="icsop_admin"]) .write-only{display:none !important;}
+  /* admin shell sidebar */
+  #sidebar{width:240px;transition:width .2s ease;}
+  body{padding-left:240px;transition:padding-left .2s ease;}
+  body.sb-collapsed{padding-left:60px;}
+  body.sb-collapsed #sidebar{width:60px;}
+  body.sb-collapsed .sb-label{display:none;}
+  body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
+  /* table */
+  .doctbl th,.doctbl td{white-space:nowrap;}
+  /* mini DAG */
+  .dagnode{border:1px solid #CFDFF3;background:#F8FAFC;color:#475569;}
+  .dagnode.active{border-color:#365C97;background:#EAF1FA;color:#2A4A7E;box-shadow:0 0 0 3px rgba(152,182,228,.45);font-weight:600;}
+</style>
+</head>
+<body data-role="icsop_admin" class="min-h-screen">
+
+<!-- ===== Admin shell sidebar ===== -->
+<aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-50 bg-white border-r border-slate-200 flex flex-col">
+  <div class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
+  </div>
+  <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
+  <div class="border-t border-slate-200 p-2 shrink-0">
+    <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
+      <i data-lucide="external-link" class="w-4 h-4 shrink-0"></i><span class="sb-label truncate">瀏覽文件網頁</span></button>
+  </div>
+</aside>
+
+<!-- Top bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="h-14 px-4 flex items-center gap-3">
+    <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
+    <div class="leading-tight min-w-0">
+      <div class="text-xs text-slate-400 flex items-center gap-1"><span>ICSOP 文件管理</span><i data-lucide="chevron-right" class="w-3 h-3"></i><span>程序書清單</span></div>
+      <div class="font-semibold text-slate-900 text-sm truncate">後台程序書清單</div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <button onclick="createDoc()" class="write-only inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="plus" class="w-4 h-4"></i>建立程序書</button>
+      <div class="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+        <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+        <select id="roleSel" onchange="setRole(this.value)" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
+          <option value="icsop_admin">ICSOP 管理員</option>
+          <option value="supervisor">主管（唯讀）</option>
+          <option value="deptcontact">部門窗口（唯讀）</option>
+          <option value="sysadmin">系統管理員（唯讀）</option>
+          <option value="user">一般使用者</option>
+        </select>
+      </div>
+      <div class="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200"><i data-lucide="user-circle" class="w-4 h-4"></i><span>李慧玲</span></div>
+      <button title="登出" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+  <div id="roBanner" class="hidden bg-cyan-50 border-t border-cyan-200 text-cyan-800 text-sm px-4 py-2 items-center gap-2">
+    <i data-lucide="eye" class="w-4 h-4"></i>唯讀模式 · 此角色對 ICSOP 程序書僅可檢視/下載，無法建立或編輯（FIELD_WRITE_FORBIDDEN）。
+  </div>
+</header>
+
+<!-- blocked overlay -->
+<div id="blockOverlay" class="hidden fixed inset-0 z-40 bg-slate-50/90 backdrop-blur-sm flex items-center justify-center">
+  <div class="text-center max-w-xs">
+    <div class="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="lock" class="w-7 h-7 text-red-500"></i></div>
+    <h3 class="font-semibold text-slate-900">無程序書管理權限</h3>
+    <p class="text-sm text-slate-500 mt-1" id="blockMsg"></p>
+    <p class="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+  </div>
+</div>
+
+<main class="px-4 py-6">
+
+  <!-- ===== 統計卡片（衍生數） ===== -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+    <div class="bg-white border border-slate-200 rounded-xl px-4 py-3.5 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center shrink-0"><i data-lucide="library" class="w-5 h-5 text-primary-600"></i></div>
+      <div><div class="text-2xl font-bold text-slate-900 leading-none" id="statTotal">0</div><div class="text-xs text-slate-500 mt-1">程序書數量（總數）</div></div>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-xl px-4 py-3.5 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0"><i data-lucide="megaphone" class="w-5 h-5 text-emerald-600"></i></div>
+      <div><div class="text-2xl font-bold text-emerald-700 leading-none" id="statPub">0</div><div class="text-xs text-slate-500 mt-1">已公告（公告日期已到）</div></div>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-xl px-4 py-3.5 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center shrink-0"><i data-lucide="clock" class="w-5 h-5 text-primary-600"></i></div>
+      <div><div class="text-2xl font-bold text-primary-700 leading-none" id="statPending">0</div><div class="text-xs text-slate-500 mt-1">進度中（公告日期未到）</div></div>
+    </div>
+  </div>
+
+  <!-- ===== 9 個可搜尋下拉篩選 ===== -->
+  <div class="bg-white border border-slate-200 rounded-xl p-4 mb-4">
+    <div class="flex items-center gap-2 mb-3">
+      <i data-lucide="filter" class="w-4 h-4 text-slate-400"></i>
+      <span class="text-sm font-medium text-slate-600">篩選條件</span>
+      <span class="text-xs text-slate-400">（可輸入關鍵字過濾）</span>
+      <button id="clearBtn" onclick="clearFilters()" class="hidden ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-primary-600 hover:bg-primary-50"><i data-lucide="x" class="w-3.5 h-3.5"></i>清除全部</button>
+      <span id="countText" class="ml-auto text-sm text-slate-500"></span>
+    </div>
+    <div id="filterBar" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3"></div>
+  </div>
+
+  <!-- ===== 表格 ===== -->
+  <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="doctbl w-full text-sm min-w-[1560px]">
+        <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[152px]">制定公司</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[88px]">制定部門</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[104px]">制定室別</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[118px]">當責室長</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[90px]">狀態</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[60px]">檔案</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[62px]">樹狀圖</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[152px]">程序書編號</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[176px]">程序書書名</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[74px]">版次</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[210px]">內容摘要</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[108px]">連結點程序書</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[112px]">公告日期</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[140px]">循環別</th>
+          </tr>
+        </thead>
+        <tbody id="tbody" class="divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+    <div id="emptyState" class="hidden text-center py-14">
+      <i data-lucide="inbox" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+      <p class="text-slate-500 text-sm">查無符合結果</p>
+    </div>
+    <div id="pager" class="flex items-center justify-between px-4 py-3 border-t border-slate-100 text-sm text-slate-500">
+      <span id="pageInfo"></span>
+      <div class="flex items-center gap-1">
+        <button class="w-8 h-8 rounded border border-slate-200 hover:bg-slate-50">‹</button>
+        <button class="w-8 h-8 rounded bg-primary-600 text-white">1</button>
+        <button class="w-8 h-8 rounded border border-slate-200 hover:bg-slate-50">›</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ===== 樹狀圖（循環預覽）modal ===== -->
+<div id="treeModal" class="fixed inset-0 z-[55] hidden items-center justify-center bg-slate-900/40 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl">
+    <div class="flex items-start gap-3 px-5 py-4 border-b border-slate-100">
+      <div class="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center shrink-0"><i data-lucide="workflow" class="w-5 h-5 text-primary-600"></i></div>
+      <div class="min-w-0 flex-1">
+        <h3 class="font-semibold text-slate-900 text-sm">所屬節點循環預覽</h3>
+        <p class="text-xs text-slate-500 mt-0.5"><span id="tmNum" class="mono"></span> · <span id="tmName"></span></p>
+      </div>
+      <button onclick="closeTree()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="px-5 py-4">
+      <div class="flex items-center gap-2 text-sm mb-3">
+        <span class="text-slate-400">循環別：</span><span id="tmCycle" class="font-medium text-slate-700"></span>
+      </div>
+      <div id="tmDag" class="rounded-lg border border-slate-200 bg-slate-50 p-4 overflow-x-auto"></div>
+      <p class="text-xs text-slate-400 mt-3 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>此為該程序書「所屬節點」於循環中的位置示意（節點以由左至右流向排列，highlight 為本程序書所屬節點）。完整 DAG 與掛載維護請至循環畫布。</p>
+    </div>
+    <div class="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
+      <button onclick="closeTree()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">關閉</button>
+      <button onclick="gotoCanvas()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="external-link" class="w-4 h-4"></i>前往循環畫布（11）</button>
+    </div>
+  </div>
+</div>
+
+<div id="toastWrap" class="fixed top-16 right-4 z-[60] space-y-2"></div>
+
+<script>
+  /* ===== admin shell sidebar ===== */
+  const MENU=[
+    {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
+    {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
+  ];
+  const CURRENT_MODULE='document';
+  function renderSidebar(){
+    const role=document.body.dataset.role;
+    const items=MENU.filter(m=>m.roles[role]);
+    document.getElementById('sidebarNav').innerHTML = items.length? items.map(m=>{
+      const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
+      return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`;
+    lucide.createIcons();
+  }
+  function navTo(id,label){ if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;} shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型本輪未含此頁）')); return false; }
+  function toggleSidebar(){ document.body.classList.toggle('sb-collapsed'); }
+  function openPublic(){ shellToast('已於新視窗開啟前台瀏覽頁（03-public-list）'); }
+  function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
+
+  /* ===== 常數 ===== */
+  const TODAY='2026-07-17'; // 用於衍生狀態：有效＋公告日期≤今日＝已公告；有效＋公告日期>今日＝進度中
+  // ICSOP 編號第 2 段＝循環代碼
+  const CYCLES=['銷售及收款循環','採購及付款循環','產品企劃循環','薪工循環','融資循環','不動產、廠房及設備循環','投資循環','電腦化資訊系統控制作業','管理性控制作業'];
+  // 循環節點示意（由左至右流向，供樹狀圖預覽 highlight 所屬節點）
+  const NODES={
+    '銷售及收款循環':['進件作業','簽約對保','撥款核准','案件執行','案件結束'],
+    '產品企劃循環':['市場分析','產品規劃','目標制定作業','政策發布'],
+    '採購及付款循環':['請購申請','費用請款作業','付款核准'],
+    '薪工循環':['任用與異動管理','出勤管理','薪資計算','給付作業'],
+    '投資循環':['投資評估','短期投資作業','保管作業','會計入帳'],
+    '管理性控制作業':['法遵作業','法規更新','內部稽核','風險評估'],
+    '融資循環':['額度申請','銀行融資作業','動撥作業','還款作業'],
+    '不動產、廠房及設備循環':['資產需求','資產管理作業','驗收作業','折舊管理'],
+    '電腦化資訊系統控制作業':['系統開發','程式及資料存取','使用者權限管理','變更管理']
+  };
+
+  /* ===== 程序書資料（14 欄 + 樹狀圖所需 node）=====
+     company 制定公司 / dept 制定部門 / section 制定室別（可留空＝掛於部層） / chief 當責室長-主要 / sec 次要[] /
+     status 儲存狀態(有效/失效/作廢) / pdf 檔案 / node 所屬節點 / num 程序書編號 / name 程序書書名 /
+     edition 版次 / summary 內容摘要 / links 連結點程序書[] / date 公告日期 / cyc 循環別 */
+  const DOCS=[
+    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'消金審核作業_v2.0.pdf',node:'進件作業',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業'],date:'2025-12-01',cyc:'銷售及收款循環'},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期特約通路作業_v1.2.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',edition:"25'10",summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。',links:[],date:'2025-10-01',cyc:'銷售及收款循環'},
+    {company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],status:'有效',pdf:'車輛分期進件作業_v1.3.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',links:['ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-102-1-01 車輛分期對保作業'],date:'2026-01-01',cyc:'銷售及收款循環'},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期產品政策及規範作業_v1.0.pdf',node:null,num:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',edition:"26'03",summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。',links:[],date:'2026-09-01',cyc:'產品企劃循環'},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期月目標設定作業_v1.1.pdf',node:'目標制定作業',num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',edition:"26'04",summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。',links:[],date:'2026-08-15',cyc:'產品企劃循環'},
+    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'費用請款作業_v2.1.pdf',node:'費用請款作業',num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。',links:[],date:'2026-05-01',cyc:'採購及付款循環'},
+    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'有效',pdf:'招募管理作業_v1.4.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-02',name:'招募管理作業',edition:"25'09",summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。',links:[],date:'2025-10-01',cyc:'薪工循環'},
+    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'短期投資買賣保管及會計作業_v1.0.pdf',node:'短期投資作業',num:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',edition:"26'05",summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。',links:[],date:'2026-10-01',cyc:'投資循環'},
+    {company:'和潤企業股份有限公司',dept:'經企公關部',section:'法遵及公司治理室',chief:'劉家瑋（經企公關部 法遵及公司治理室 室長）',sec:[],status:'有效',pdf:'法遵作業_v1.2.pdf',node:'法遵作業',num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。',links:[],date:'2026-03-01',cyc:'管理性控制作業'},
+    {company:'和潤企業股份有限公司',dept:'管理部',section:'總務室',chief:'蔡明哲（管理部 總務室 室長）',sec:[],status:'有效',pdf:'不動產請購採購驗收作業_v1.0.pdf',node:'資產管理作業',num:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',edition:"25'08",summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。',links:[],date:'2025-10-01',cyc:'不動產、廠房及設備循環'},
+    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'銀行融資作業_v1.1.pdf',node:'銀行融資作業',num:'ICSOP-FC-101-1-00',name:'銀行融資作業',edition:"26'01",summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。',links:[],date:'2026-02-01',cyc:'融資循環'},
+    {company:'和潤企業股份有限公司',dept:'資訊部',section:'應用發展室',chief:'許志偉（資訊部 應用發展室 室長）',sec:[],status:'有效',pdf:'使用者權限管理與覆核_v1.3.pdf',node:'使用者權限管理',num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',edition:"26'01",summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。',links:[],date:'2026-04-01',cyc:'電腦化資訊系統控制作業'},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'失效',pdf:'消費分期進件作業_舊版.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',edition:"24'03",summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。',links:[],date:'2025-05-01',cyc:'銷售及收款循環'},
+    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'作廢',pdf:'任用管理作業_作廢.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',edition:"24'01",summary:'（作廢）任用管理作業，因組織調整不再適用。',links:[],date:'2025-04-01',cyc:'薪工循環'}
+  ];
+
+  /* ===== 衍生狀態 ===== */
+  function derived(d){ if(d.status!=='有效') return d.status; return d.date<=TODAY?'已公告':'進度中'; }
+  function shortName(s){ return (s||'').split('（')[0]; }
+  function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+  function statusPill(s){
+    const map={'已公告':['#047857','#D1FAE5','megaphone'],'進度中':['#365C97','#EAF1FA','clock'],'失效':['#B45309','#FEF3C7','pause-circle'],'作廢':['#B91C1C','#FEE2E2','x-circle']};
+    const [t,b,ic]=map[s]||map['失效'];
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style="color:${t};background:${b}"><i data-lucide="${ic}" class="w-3 h-3"></i>${s}</span>`;
+  }
+
+  /* ===== 9 個可搜尋下拉篩選 ===== */
+  const uniq=a=>[...new Set(a)];
+  const FILTER={cycle:'',status:'',num:'',name:'',dept:'',section:'',chief:'',company:'',link:''};
+  const FILTERS=[
+    {key:'cycle',   label:'循環別',      opts:()=>CYCLES},
+    {key:'status',  label:'狀態',        opts:()=>['已公告','進度中','失效','作廢']},
+    {key:'num',     label:'程序書編號',  opts:()=>DOCS.map(d=>d.num)},
+    {key:'name',    label:'程序書書名',  opts:()=>DOCS.map(d=>d.name)},
+    {key:'dept',    label:'制定部門',    opts:()=>uniq(DOCS.map(d=>d.dept))},
+    {key:'section', label:'制定室別',   opts:()=>uniq(DOCS.map(d=>d.section).filter(Boolean))},
+    {key:'chief',   label:'當責室長',    opts:()=>uniq(DOCS.map(d=>shortName(d.chief)))},
+    {key:'company', label:'制定公司',    opts:()=>uniq(DOCS.map(d=>d.company))},
+    {key:'link',    label:'連結點程序書',opts:()=>uniq([].concat(...DOCS.map(d=>d.links)))}
+  ];
+  const cbCfg=k=>FILTERS.find(f=>f.key===k);
+
+  function buildFilters(){
+    document.getElementById('filterBar').innerHTML = FILTERS.map(f=>`
+      <div>
+        <label class="block text-[11px] font-medium text-slate-500 mb-1">${f.label}</label>
+        <div class="relative">
+          <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+          <input id="cb_${f.key}_input" oninput="comboFilter('${f.key}')" onfocus="comboFilter('${f.key}')" onblur="comboClose('${f.key}')" autocomplete="off" placeholder="全部"
+                 class="w-full pl-8 pr-7 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
+          <button id="cb_${f.key}_clear" onclick="clearOne('${f.key}')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400"><i data-lucide="x" class="w-3 h-3"></i></button>
+          <div id="cb_${f.key}_list" class="hidden absolute z-30 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
+        </div>
+      </div>`).join('');
+    lucide.createIcons();
+  }
+  function comboFilter(key){ const list=document.getElementById('cb_'+key+'_list'); list.classList.remove('hidden'); comboRender(key,document.getElementById('cb_'+key+'_input').value); }
+  function comboClose(key){ setTimeout(()=>{const l=document.getElementById('cb_'+key+'_list'); if(l)l.classList.add('hidden');},150); }
+  function comboRender(key,filter){
+    const f=(filter||'').trim().toLowerCase();
+    const list=document.getElementById('cb_'+key+'_list');
+    const opts=cbCfg(key).opts();
+    const items=opts.filter(o=>o.toLowerCase().includes(f));
+    list.innerHTML = items.length ? items.map(o=>{
+      const sel=FILTER[key]===o;
+      return `<div class="combo-opt px-3 py-2 cursor-pointer hover:bg-primary-50 ${sel?'bg-primary-50 text-primary-700 font-medium':''}" data-v="${esc(o)}">${o}${sel?' ✓':''}</div>`;
+    }).join('') : `<div class="px-3 py-2 text-slate-400">查無符合結果</div>`;
+    list.querySelectorAll('.combo-opt').forEach(el=>el.addEventListener('mousedown',e=>{e.preventDefault();comboPick(key,el.dataset.v);}));
+  }
+  function comboPick(key,v){
+    FILTER[key]=v;
+    const inp=document.getElementById('cb_'+key+'_input'); inp.value=v;
+    document.getElementById('cb_'+key+'_list').classList.add('hidden');
+    document.getElementById('cb_'+key+'_clear').classList.remove('hidden');
+    renderTable();
+  }
+  function clearOne(key){
+    FILTER[key]=''; document.getElementById('cb_'+key+'_input').value='';
+    document.getElementById('cb_'+key+'_clear').classList.add('hidden');
+    renderTable();
+  }
+  function clearFilters(){ Object.keys(FILTER).forEach(k=>{FILTER[k]='';const i=document.getElementById('cb_'+k+'_input');if(i)i.value='';const c=document.getElementById('cb_'+k+'_clear');if(c)c.classList.add('hidden');}); renderTable(); }
+
+  /* ===== 表格 ===== */
+  function fileBtn(name,wm){
+    return `<button onclick="dl('${esc(name)}',${wm?'true':'false'})" title="下載 ${esc(name)}" class="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"><i data-lucide="file-down" class="w-4 h-4"></i></button>`;
+  }
+  function linkCell(links){
+    if(!links.length) return '<span class="text-slate-300">—</span>';
+    return `<div class="flex flex-wrap items-center gap-1">`+links.map(l=>`<button onclick="dl('${esc(l)}',false)" title="下載連結點程序書：${esc(l)}" class="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px]"><i data-lucide="download" class="w-3 h-3"></i>${esc(l.split(' ')[0])}</button>`).join('')+`</div>`;
+  }
+  function chiefCell(d){
+    const sec = d.sec.length? `<span title="次要：${esc(d.sec.map(shortName).join('、'))}" class="ml-1 inline-flex items-center px-1 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]">+${d.sec.length}</span>` : '';
+    return `<span title="${esc(d.chief)}" class="text-slate-700">${esc(shortName(d.chief))}</span>${sec}`;
+  }
+
+  function renderTable(){
+    const rows=DOCS.filter(d=>{
+      const ds=derived(d);
+      if(FILTER.cycle && d.cyc!==FILTER.cycle) return false;
+      if(FILTER.status && ds!==FILTER.status) return false;
+      if(FILTER.num && d.num!==FILTER.num) return false;
+      if(FILTER.name && d.name!==FILTER.name) return false;
+      if(FILTER.dept && d.dept!==FILTER.dept) return false;
+      if(FILTER.section && d.section!==FILTER.section) return false;
+      if(FILTER.chief && shortName(d.chief)!==FILTER.chief) return false;
+      if(FILTER.company && d.company!==FILTER.company) return false;
+      if(FILTER.link && !d.links.includes(FILTER.link)) return false;
+      return true;
+    });
+    // 統計卡片（衍生數，依目前篩選結果）
+    document.getElementById('statTotal').textContent=rows.length;
+    document.getElementById('statPub').textContent=rows.filter(d=>derived(d)==='已公告').length;
+    document.getElementById('statPending').textContent=rows.filter(d=>derived(d)==='進度中').length;
+
+    document.getElementById('countText').textContent=`共 ${rows.length} 筆`;
+    document.getElementById('pageInfo').textContent=`共 ${rows.length} 筆 · 每頁 50 筆`;
+    document.getElementById('emptyState').classList.toggle('hidden',rows.length>0);
+    document.getElementById('pager').style.display=rows.length>0?'flex':'none';
+    const anyFilter=Object.values(FILTER).some(v=>v);
+    document.getElementById('clearBtn').classList.toggle('hidden',!anyFilter);
+
+    document.getElementById('tbody').innerHTML=rows.map((d,i)=>{
+      const nodeWarn = d.node?'':`<span title="尚未指派節點" class="inline-flex items-center"><i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-amber-500"></i></span>`;
+      return `<tr class="hover:bg-slate-50 align-top">
+        <td class="px-3 py-3 text-slate-600">${esc(d.company)}</td>
+        <td class="px-3 py-3 text-slate-600">${esc(d.dept)}</td>
+        <td class="px-3 py-3 text-slate-600">${d.section?esc(d.section):`<span class="text-slate-300" title="此部之下無處/室，制定組織掛於部層">—</span>`}</td>
+        <td class="px-3 py-3">${chiefCell(d)}</td>
+        <td class="px-3 py-3">${statusPill(derived(d))}</td>
+        <td class="px-3 py-3">${fileBtn(d.pdf,true)}</td>
+        <td class="px-3 py-3"><button onclick="openTreePage(${i})" title="開啟循環樹狀圖預覽（22）" class="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"><i data-lucide="workflow" class="w-4 h-4"></i></button></td>
+        <td class="px-3 py-3"><div class="flex items-center gap-1.5"><span class="mono text-xs text-slate-600">${esc(d.num)}</span>${nodeWarn}</div></td>
+        <td class="px-3 py-3">
+          <div class="flex items-center gap-1.5">
+            <button onclick="viewDoc('${esc(d.num)}')" class="text-left text-slate-800 hover:text-primary-700 hover:underline">${esc(d.name)}</button>
+            <button onclick="editDoc('${esc(d.num)}')" title="編輯" class="write-only w-6 h-6 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+          </div>
+        </td>
+        <td class="px-3 py-3"><span class="mono text-xs text-slate-700">${esc(d.edition)}</span></td>
+        <td class="px-3 py-3"><span class="block max-w-[280px] truncate text-slate-600" title="${esc(d.summary)}">${esc(d.summary)}</span></td>
+        <td class="px-3 py-3">${linkCell(d.links)}</td>
+        <td class="px-3 py-3 text-slate-500 mono text-xs">${esc(d.date)}</td>
+        <td class="px-3 py-3 text-slate-600">${esc(d.cyc)}</td>
+      </tr>`;
+    }).join('');
+    lucide.createIcons();
+  }
+
+  // 樹狀圖圖示 → 直接開啟循環樹狀圖預覽頁（22），帶入該程序書之循環別
+  const CYC_CODE={'銷售及收款循環':'SRC','採購及付款循環':'PUC','產品企劃循環':'PPC','薪工循環':'LWC','融資循環':'FC','不動產、廠房及設備循環':'FAC','投資循環':'IC','電腦化資訊系統控制作業':'CIPS','管理性控制作業':'GCA'};
+  function openTreePage(i){ const d=DOCS[i]; const code=CYC_CODE[d.cyc]||''; window.open('22-lifecycle-tree-preview.html?cycle='+encodeURIComponent(code), '_blank'); }
+
+  /* ===== 樹狀圖 modal（已停用：改由 openTreePage 直接開啟 22）===== */
+  let treeIdx=null;
+  function openTree(i){
+    const d=DOCS[i]; treeIdx=i;
+    document.getElementById('tmNum').textContent=d.num;
+    document.getElementById('tmName').textContent=d.name;
+    document.getElementById('tmCycle').textContent=d.cyc;
+    const chain=NODES[d.cyc]||[];
+    let html;
+    if(!d.node){
+      html=`<div class="flex items-center gap-2 text-sm text-amber-700"><i data-lucide="alert-triangle" class="w-4 h-4"></i>此程序書尚未指派所屬節點；請至循環畫布（11 / 12）以節點抽屜掛載。</div>
+        <div class="flex flex-wrap items-center gap-2 mt-3 opacity-60">${chain.map((n,idx)=>`<span class="dagnode px-3 py-1.5 rounded-lg text-xs">${esc(n)}</span>${idx<chain.length-1?'<i data-lucide=\"arrow-right\" class=\"w-4 h-4 text-slate-300\"></i>':''}`).join('')}</div>`;
+    }else{
+      html=`<div class="flex flex-wrap items-center gap-2">${chain.map((n,idx)=>{
+        const active=n===d.node;
+        return `<span class="dagnode ${active?'active':''} px-3 py-1.5 rounded-lg text-xs">${esc(n)}${active?' ●':''}</span>${idx<chain.length-1?'<i data-lucide=\"arrow-right\" class=\"w-4 h-4 text-slate-300\"></i>':''}`;
+      }).join('')}</div>
+      <div class="mt-3 text-xs text-slate-500 flex items-center gap-1.5"><span class="dagnode active px-2 py-0.5 rounded text-[10px]">本程序書節點</span>所屬節點：<span class="font-medium text-slate-700">${esc(d.node)}</span></div>`;
+    }
+    document.getElementById('tmDag').innerHTML=html;
+    const m=document.getElementById('treeModal'); m.classList.remove('hidden'); m.classList.add('flex');
+    lucide.createIcons();
+  }
+  function closeTree(){ const m=document.getElementById('treeModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+  function gotoCanvas(){ const d=treeIdx!=null?DOCS[treeIdx]:null; shellToast('前往循環畫布（11-dag-canvas）'+(d?('，定位「'+d.cyc+'」'+(d.node?('／節點「'+d.node+'」'):'')):'')); }
+
+  function dl(name,wm){ toast('success','下載「'+name+'」'+(wm?'（伺服器端已燒錄浮水印並寫入稽核 DOWNLOAD）':'（已寫入稽核 DOWNLOAD）')); }
+  function viewDoc(n){ shellToast('檢視程序書 '+n+'（16-document-readonly）'); }
+  function editDoc(n){ shellToast('編輯程序書 '+n+'（15-document-edit）'); }
+  function createDoc(){ shellToast('建立新程序書（14-document-create）'); }
+
+  function setRole(r){
+    document.body.dataset.role=r;
+    const blocked=(r==='user');
+    const ro=(r==='supervisor'||r==='deptcontact'||r==='sysadmin');
+    document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
+    document.getElementById('roBanner').classList.toggle('hidden',!ro);
+    document.getElementById('roBanner').classList.toggle('flex',ro);
+    if(blocked)document.getElementById('blockMsg').textContent={user:'一般使用者無後台存取權。'}[r];
+    renderSidebar(); lucide.createIcons();
+  }
+
+  function toast(type,msg,code){
+    const map={success:['check-circle-2','#059669'],error:['alert-circle','#DC2626'],info:['info','#365C97']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><div><span class="text-slate-700">${msg}</span>${code?`<div class="text-[10px] mono text-slate-400 mt-0.5">${code}</div>`:''}</div>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4200);
+  }
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeTree();});
+
+  // init
+  buildFilters(); renderTable(); renderSidebar(); lucide.createIcons();
+</script>
+</body>
+</html>

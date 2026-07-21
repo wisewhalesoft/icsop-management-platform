@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RWD 三斷點展示 · ICSOP</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;background:#FFFFFF;color:#334155;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .device{border:1px solid #E2E8F0;border-radius:14px;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.06);overflow:hidden;}
+  .device iframe{border:0;display:block;background:#fff;}
+  .callout{background:#F3F7FC;border:1px solid #CFDFF3;color:#2A4A7E;}
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- Top bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="smartphone" class="w-5 h-5"></i></div>
+    <div class="leading-tight">
+      <div class="font-bold text-slate-900 text-sm">RWD 響應式版面展示</div>
+      <div class="text-xs text-slate-400">F021 · 三斷點（桌機 / 平板 / 手機）</div>
+    </div>
+    <a href="03-public-list.html" class="ml-auto text-sm text-primary-600 hover:underline flex items-center gap-1"><i data-lucide="external-link" class="w-4 h-4"></i>單開前台清單</a>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 py-6">
+
+  <!-- breakpoint legend -->
+  <div class="flex flex-wrap items-center gap-3 mb-6 text-sm">
+    <span class="text-slate-500">斷點（NFR-005）：</span>
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700"><i data-lucide="monitor" class="w-4 h-4"></i>桌機 ≥1024px</span>
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700"><i data-lucide="tablet-smartphone" class="w-4 h-4"></i>平板 768–1023px</span>
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700"><i data-lucide="smartphone" class="w-4 h-4"></i>手機 &lt;768px（最小 360）</span>
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary-50 text-primary-700 border border-primary-100"><i data-lucide="hand" class="w-4 h-4"></i>觸控目標 ≥44×44px</span>
+  </div>
+
+  <!-- annotations -->
+  <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+    <div class="callout rounded-lg px-3 py-2 text-xs flex items-start gap-2"><i data-lucide="layout-list" class="w-4 h-4 shrink-0 mt-0.5"></i><span>清單於手機改<strong>單欄卡片式</strong>，功能皆可觸及</span></div>
+    <div class="callout rounded-lg px-3 py-2 text-xs flex items-start gap-2"><i data-lucide="pointer" class="w-4 h-4 shrink-0 mt-0.5"></i><span>互動元件<strong>觸控目標 ≥44×44px</strong></span></div>
+    <div class="callout rounded-lg px-3 py-2 text-xs flex items-start gap-2"><i data-lucide="move-horizontal" class="w-4 h-4 shrink-0 mt-0.5"></i><span>手機最小 <strong>360px 無水平捲動</strong>或內容截斷</span></div>
+    <div class="callout rounded-lg px-3 py-2 text-xs flex items-start gap-2"><i data-lucide="rotate-cw" class="w-4 h-4 shrink-0 mt-0.5"></i><span>平板橫/直向切換<strong>保留搜尋/篩選條件</strong></span></div>
+  </div>
+
+  <!-- Row 1: public list at 3 breakpoints -->
+  <h2 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2"><i data-lucide="list" class="w-4 h-4 text-primary-600"></i>前台清單（03-public-list）</h2>
+  <div class="overflow-x-auto pb-4 mb-8">
+    <div class="flex items-start gap-6" style="min-width:min-content">
+      <figure class="shrink-0">
+        <figcaption class="flex items-center gap-1.5 text-sm font-medium text-slate-700 mb-2"><i data-lucide="monitor" class="w-4 h-4 text-slate-400"></i>桌機 · <span class="mono text-xs text-slate-400">1440px</span></figcaption>
+        <div class="device" style="width:1200px"><iframe src="03-public-list.html" style="width:1440px;height:840px;transform:scale(0.833);transform-origin:top left"></iframe></div>
+      </figure>
+      <figure class="shrink-0">
+        <figcaption class="flex items-center gap-1.5 text-sm font-medium text-slate-700 mb-2"><i data-lucide="tablet-smartphone" class="w-4 h-4 text-slate-400"></i>平板 · <span class="mono text-xs text-slate-400">768px</span></figcaption>
+        <div class="device" style="width:768px"><iframe src="03-public-list.html" style="width:768px;height:840px"></iframe></div>
+      </figure>
+      <figure class="shrink-0">
+        <figcaption class="flex items-center gap-1.5 text-sm font-medium text-slate-700 mb-2"><i data-lucide="smartphone" class="w-4 h-4 text-slate-400"></i>手機 · <span class="mono text-xs text-slate-400">375px</span></figcaption>
+        <div class="device" style="width:375px;border-radius:22px"><iframe src="03-public-list.html" style="width:375px;height:812px"></iframe></div>
+      </figure>
+    </div>
+  </div>
+
+  <!-- Row 2: viewer at 3 breakpoints -->
+  <h2 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2"><i data-lucide="eye" class="w-4 h-4 text-primary-600"></i>浮水印檢視器（05-public-viewer-watermark）</h2>
+  <div class="overflow-x-auto pb-4">
+    <div class="flex items-start gap-6" style="min-width:min-content">
+      <figure class="shrink-0">
+        <figcaption class="flex items-center gap-1.5 text-sm font-medium text-slate-700 mb-2"><i data-lucide="monitor" class="w-4 h-4 text-slate-400"></i>桌機 · <span class="mono text-xs text-slate-400">1440px</span></figcaption>
+        <div class="device" style="width:1200px"><iframe src="05-public-viewer-watermark.html" style="width:1440px;height:840px;transform:scale(0.833);transform-origin:top left"></iframe></div>
+      </figure>
+      <figure class="shrink-0">
+        <figcaption class="flex items-center gap-1.5 text-sm font-medium text-slate-700 mb-2"><i data-lucide="tablet-smartphone" class="w-4 h-4 text-slate-400"></i>平板 · <span class="mono text-xs text-slate-400">768px</span></figcaption>
+        <div class="device" style="width:768px"><iframe src="05-public-viewer-watermark.html" style="width:768px;height:840px"></iframe></div>
+      </figure>
+      <figure class="shrink-0">
+        <figcaption class="flex items-center gap-1.5 text-sm font-medium text-slate-700 mb-2"><i data-lucide="smartphone" class="w-4 h-4 text-slate-400"></i>手機 · <span class="mono text-xs text-slate-400">375px</span></figcaption>
+        <div class="device" style="width:375px;border-radius:22px"><iframe src="05-public-viewer-watermark.html" style="width:375px;height:812px"></iframe></div>
+      </figure>
+    </div>
+  </div>
+
+  <p class="text-xs text-slate-400 mt-6">說明：桌機框以 0.833 縮放呈現 1440px 完整版面；平板/手機為 1:1 實際像素。手機檢視器內容可縮放/捲動，浮水印仍清晰可辨。極小寬度（如 280px）不強制支援但不崩壞（降級）。</p>
+</main>
+
+<script>lucide.createIcons();</script>
+</body>
+</html>

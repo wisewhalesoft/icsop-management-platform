@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ICSOP 文件瀏覽 · 前台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;background:#FFFFFF;color:#334155;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .sheet{transition:transform .3s ease;}
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- App bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="font-bold text-slate-900 truncate">ICSOP 文件瀏覽</span>
+    <div class="ml-auto flex items-center gap-3">
+      <div class="hidden sm:flex items-center gap-2 text-sm text-slate-500">
+        <i data-lucide="user" class="w-4 h-4"></i><span>王小明</span>
+        <span class="text-slate-300">·</span><span>營運管理部 / 審查室</span>
+      </div>
+      <button class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-4 py-5">
+
+  <!-- Search + filter trigger -->
+  <div class="flex items-center gap-2 mb-3">
+    <div class="relative flex-1">
+      <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+      <input id="kw" oninput="render()" type="search" placeholder="搜尋文件編號或名稱…"
+             class="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600" />
+    </div>
+    <button onclick="openSheet()" class="lg:hidden relative px-3 py-2.5 rounded-lg border border-slate-300 bg-white text-sm flex items-center gap-1.5">
+      <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>篩選<span id="filterDot" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary-600"></span>
+    </button>
+  </div>
+
+  <!-- Desktop filter bar -->
+  <div class="hidden lg:flex items-center gap-3 mb-4">
+    <select id="fDept" onchange="render()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
+      <option value="">所有使用部門</option>
+    </select>
+    <select id="fStatus" onchange="render()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
+      <option value="有效">狀態：有效</option>
+    </select>
+    <select id="fCycle" onchange="render()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
+      <option value="">所有循環</option>
+    </select>
+    <button id="clearBtnD" onclick="clearFilters()" class="hidden px-3 py-2 rounded-lg text-sm text-primary-600 hover:bg-primary-50">清除篩選</button>
+    <span class="ml-auto text-sm text-slate-500" id="countText"></span>
+  </div>
+
+  <!-- info note -->
+  <div class="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-xs text-primary-700 mb-4">
+    <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
+    <span>一般使用者僅顯示「已公告」文件（進度中/失效/作廢由後端過濾隱藏）；您所屬部門相關文件會自動置頂。</span>
+  </div>
+
+  <!-- Pinned section -->
+  <section id="pinnedWrap" class="mb-6">
+    <div class="flex items-center gap-2 mb-2">
+      <i data-lucide="pin" class="w-4 h-4 text-primary-600"></i>
+      <h2 class="text-sm font-semibold text-slate-700">您部門相關文件 · <span class="text-slate-400 font-normal">營運管理部 / 審查室</span></h2>
+    </div>
+    <div id="pinnedList" class="space-y-2.5"></div>
+  </section>
+
+  <!-- Rest section -->
+  <section>
+    <div class="flex items-center gap-2 mb-2">
+      <i data-lucide="list" class="w-4 h-4 text-slate-400"></i>
+      <h2 class="text-sm font-semibold text-slate-700">其他文件 · <span class="text-slate-400 font-normal">依編號降冪</span></h2>
+    </div>
+    <div id="restList" class="space-y-2.5"></div>
+  </section>
+
+  <!-- Empty -->
+  <div id="emptyState" class="hidden text-center py-16">
+    <i data-lucide="inbox" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+    <p class="text-slate-500">查無符合結果</p>
+    <p class="text-sm text-slate-400 mt-1">請調整搜尋關鍵字或篩選條件</p>
+    <button onclick="clearFilters()" class="mt-4 px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">清除篩選</button>
+  </div>
+
+  <!-- pagination -->
+  <div id="pager" class="flex items-center justify-between mt-6 text-sm text-slate-500">
+    <span id="hiddenNote" class="text-xs text-slate-400"></span>
+    <div class="flex items-center gap-1">
+      <button class="w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50">‹</button>
+      <button class="w-8 h-8 rounded bg-primary-600 text-white">1</button>
+      <button class="w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50">2</button>
+      <button class="w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50">›</button>
+    </div>
+  </div>
+</main>
+
+<!-- Mobile filter bottom sheet -->
+<div id="sheetOverlay" class="fixed inset-0 z-40 hidden bg-slate-900/40" onclick="closeSheet()"></div>
+<div id="sheet" class="sheet fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl translate-y-full max-h-[80vh] overflow-auto">
+  <div class="flex items-center justify-between px-4 h-14 border-b border-slate-100 sticky top-0 bg-white">
+    <h3 class="font-semibold text-slate-900">篩選</h3>
+    <button onclick="closeSheet()" class="text-slate-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+  </div>
+  <div class="p-4 space-y-4">
+    <div><label class="block text-sm font-medium text-slate-700 mb-1.5">使用部門</label>
+      <select id="fDeptM" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"><option value="">所有使用部門</option></select></div>
+    <div><label class="block text-sm font-medium text-slate-700 mb-1.5">狀態</label>
+      <select id="fStatusM" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"><option value="有效">有效</option></select></div>
+    <div><label class="block text-sm font-medium text-slate-700 mb-1.5">循環</label>
+      <select id="fCycleM" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"><option value="">所有循環</option></select></div>
+    <div class="flex gap-2 pt-2">
+      <button onclick="clearFilters();closeSheet()" class="flex-1 py-2.5 rounded-lg border border-slate-300 text-sm">清除</button>
+      <button onclick="applyMobile()" class="flex-1 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium">套用</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 登入者組織路徑（王小明 · 營業二本部 / 營運管理部 / 審查室；部門代碼 JAC00）
+  const USER_DEPT = '營運管理部 / 審查室';
+  // §9.1/§9.2 定案：文件使用部門可指定任意層級，選上層自動涵蓋其下所有單位
+  // → 「您部門相關」＝文件使用部門命中登入者組織路徑上任一層級（含全公司）
+  const USER_SCOPE = ['全公司','營業二本部','營業二本部 / 營運管理部','營業二本部 / 營運管理部 / 審查室'];
+  const inScope = use => use.some(u => USER_SCOPE.includes(u));
+  // 所屬循環＝ICSOP 編號第 2 段代碼對應（SRC=銷售及收款循環, PUC=採購及付款循環, PPC=產品企劃循環,
+  // LWC=薪工循環, FC=融資循環, FAC=不動產、廠房及設備循環, IC=投資循環, CIPS=電腦化資訊系統控制作業, GCA=管理性控制作業）
+  const CYCLES = ['銷售及收款循環','採購及付款循環','產品企劃循環','薪工循環','融資循環','不動產、廠房及設備循環','投資循環','電腦化資訊系統控制作業','管理性控制作業'];
+  const DOCS = [
+    // 使用部門刻意涵蓋不同層級（全公司／本部／部／處室／課），示範「任意層級皆可指定」
+    {n:'ICSOP-SRC-101-2-00',name:'消金審核作業',acc:'信用審查部',use:['營業二本部'],status:'有效',cyc:'銷售及收款循環',date:'2025-12-01',summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。'},
+    {n:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',acc:'消費分期營業部',use:['營業二本部 / 營運管理部'],status:'有效',cyc:'銷售及收款循環',date:'2025-10-01',summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。'},
+    {n:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',acc:'消費分期營業部',use:['營業二本部 / 營運管理部 / 審查室','營業二本部 / 消費分期營業部'],status:'有效',cyc:'產品企劃循環',date:'2026-03-01',summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。'},
+    {n:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',acc:'消費分期營業部',use:['營業二本部 / 消費分期營業部 / 商品北一處'],status:'有效',cyc:'產品企劃循環',date:'2026-04-01',summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。'},
+    {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',acc:'企劃部',use:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部','營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課'],status:'有效',cyc:'銷售及收款循環',date:'2026-01-01',summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。'},
+    {n:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',acc:'財會部',use:['全公司'],status:'有效',cyc:'採購及付款循環',date:'2026-05-01',summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。'},
+    {n:'ICSOP-LWC-101-1-02',name:'招募管理作業',acc:'管理部',use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'有效',cyc:'薪工循環',date:'2025-10-01',summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。'},
+    {n:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',acc:'財會部',use:['財務資訊本部 / 財會部'],status:'有效',cyc:'投資循環',date:'2026-05-01',summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。'},
+    {n:'ICSOP-GCA-100-2-00',name:'法遵作業',acc:'經企公關部',use:['經營企劃管理本部 / 經企公關部 / 法遵及公司治理室'],status:'有效',cyc:'管理性控制作業',date:'2026-03-01',summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。'},
+    {n:'ICSOP-FC-101-1-00',name:'銀行融資作業',acc:'財會部',use:['財務資訊本部 / 財會部'],status:'有效',cyc:'融資循環',date:'2026-02-01',summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。'},
+    {n:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',acc:'管理部',use:['經營企劃管理本部 / 管理部 / 總務室'],status:'有效',cyc:'不動產、廠房及設備循環',date:'2025-10-01',summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。'},
+    {n:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',acc:'資訊部',use:['財務資訊本部 / 資訊部 / 應用發展室'],status:'有效',cyc:'電腦化資訊系統控制作業',date:'2026-04-01',summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。'},
+    // 進度中（有效但公告日期未到 today）→ 前台隱藏、僅後台可見
+    {n:'ICSOP-SRC-102-1-00',name:'車輛分期對保作業（新制）',acc:'企劃部',use:['營業二本部 / 營運管理部 / 審查室'],status:'有效',cyc:'銷售及收款循環',date:'2026-09-01',summary:'（將於 2026-09-01 公告生效）規範車輛分期對保程序之新制作業。'},
+    // 以下為失效/作廢，將由「後端」強制過濾，不顯示於前台
+    {n:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',acc:'消費分期營業部',use:['營業二本部 / 消費分期營業部'],status:'失效',cyc:'銷售及收款循環',date:'2025-05-01',summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。'},
+    {n:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',acc:'管理部',use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'作廢',cyc:'薪工循環',date:'2025-04-01',summary:'（作廢）任用管理作業，因組織調整不再適用。'}
+  ];
+  // 使用部門篩選選項＝實際出現之使用部門（含全公司／本部／部／處室／課四層＋全域）
+  const DEPTS = [...new Set(DOCS.flatMap(d => d.use))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+
+  // populate selects
+  function fillOpts(id,arr,val){const s=document.getElementById(id);arr.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;s.appendChild(o);});}
+  ['fDept','fDeptM'].forEach(id=>fillOpts(id,DEPTS));
+  ['fCycle','fCycleM'].forEach(id=>fillOpts(id,CYCLES));
+
+  function statusPill(s){
+    const map={'有效':['#047857','#D1FAE5'],'失效':['#B45309','#FEF3C7'],'作廢':['#B91C1C','#FEE2E2']};
+    const [t,b]=map[s];return `<span class="px-2 py-0.5 rounded-full text-xs font-medium" style="color:${t};background:${b}">${s}</span>`;
+  }
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+
+  function card(d){
+    const pinnedUse = d.use.map(u=>USER_SCOPE.includes(u)?`<span class="text-primary-700 font-medium">${u}</span>`:u).join('、');
+    return `<article tabindex="0" onclick="openDoc('${d.n}')" class="bg-white border border-slate-200 rounded-xl p-4 hover:border-primary-300 hover:shadow-sm transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-600">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="mono text-xs text-slate-500">${d.n}</span>${statusPill(d.status)}
+          </div>
+          <h3 class="font-semibold text-slate-900 mt-1 leading-snug">${esc(d.name)}</h3>
+        </div>
+        <i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 shrink-0"></i>
+      </div>
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 text-xs">
+        <div><dt class="text-slate-400 inline">制定部門：</dt><dd class="text-slate-600 inline">${d.acc}</dd></div>
+        <div><dt class="text-slate-400 inline">公告日期：</dt><dd class="text-slate-600 inline mono">${d.date}</dd></div>
+        <div class="col-span-2"><dt class="text-slate-400 inline">使用部門：</dt><dd class="text-slate-600 inline">${pinnedUse}</dd></div>
+        <div class="col-span-2"><dt class="text-slate-400 inline">循環別：</dt><dd class="text-slate-600 inline">${d.cyc}</dd></div>
+        ${d.summary?`<div class="col-span-2"><dt class="text-slate-400 inline">內容摘要：</dt><dd class="text-slate-500 inline">${esc(d.summary)}</dd></div>`:''}
+      </dl>
+    </article>`;
+  }
+
+  function currentFilters(){
+    return { kw:document.getElementById('kw').value.trim().toLowerCase(),
+             dept:document.getElementById('fDept').value, status:'有效', cyc:document.getElementById('fCycle').value };
+  }
+
+  function render(){
+    const f=currentFilters();
+    // 後端強制：一般使用者僅「已公告」＝有效且公告日期已過（進度中/失效/作廢隱藏）
+    const TODAY='2026-07-17';
+    const visible = DOCS.filter(d=>d.status==='有效' && d.date <= TODAY);
+    const hiddenCount = DOCS.length - visible.length;
+    let rows = visible.filter(d=>{
+      if(f.dept && !d.use.includes(f.dept)) return false;
+      if(f.cyc && d.cyc!==f.cyc) return false;
+      if(f.kw && !(d.n.toLowerCase().includes(f.kw) || d.name.toLowerCase().includes(f.kw))) return false;
+      return true;
+    });
+    // sort by number desc
+    const byNumDesc=(a,b)=> a.n<b.n?1:a.n>b.n?-1:0;
+    const pinned = rows.filter(d=>inScope(d.use)).sort(byNumDesc);
+    const rest = rows.filter(d=>!inScope(d.use)).sort(byNumDesc);
+
+    document.getElementById('pinnedList').innerHTML = pinned.map(card).join('');
+    document.getElementById('restList').innerHTML = rest.map(card).join('');
+    document.getElementById('pinnedWrap').style.display = pinned.length? '' : 'none';
+    document.querySelector('#restList').parentElement.style.display = rest.length? '' : 'none';
+
+    const total=rows.length;
+    document.getElementById('emptyState').classList.toggle('hidden', total>0);
+    document.getElementById('pager').style.display = total>0? 'flex':'none';
+    document.getElementById('countText').textContent = `共 ${total} 筆`;
+    document.getElementById('hiddenNote').textContent = hiddenCount? `另有 ${hiddenCount} 筆（進度中/失效/作廢）文件已由後端隱藏` : '';
+
+    const active = f.kw||f.dept||f.cyc;
+    document.getElementById('clearBtnD').classList.toggle('hidden', !active);
+    document.getElementById('filterDot').classList.toggle('hidden', !(f.dept||f.cyc));
+    lucide.createIcons();
+  }
+
+  function clearFilters(){document.getElementById('kw').value='';document.getElementById('fDept').value='';document.getElementById('fCycle').value='';document.getElementById('fDeptM').value='';document.getElementById('fCycleM').value='';render();}
+  function applyMobile(){document.getElementById('fDept').value=document.getElementById('fDeptM').value;document.getElementById('fCycle').value=document.getElementById('fCycleM').value;closeSheet();render();}
+  function openSheet(){document.getElementById('sheetOverlay').classList.remove('hidden');document.getElementById('sheet').classList.remove('translate-y-full');}
+  function closeSheet(){document.getElementById('sheetOverlay').classList.add('hidden');document.getElementById('sheet').classList.add('translate-y-full');}
+  function openDoc(n){alert('進入文件詳情 / 檢視器（04 / 05）：'+n+'\n（本輪未產出，僅示意導向）');}
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
+
+  render();
+</script>
+</body>
+</html>

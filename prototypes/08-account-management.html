@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>帳號與角色管理 · 後台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;color:#334155;background:#F8FAFC;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  body:not([data-role="sysadmin"]) .write-only{display:none !important;}
+  /* admin shell sidebar */
+  #sidebar{width:240px;transition:width .2s ease;}
+  body{padding-left:240px;transition:padding-left .2s ease;}
+  body.sb-collapsed{padding-left:60px;}
+  body.sb-collapsed #sidebar{width:60px;}
+  body.sb-collapsed .sb-label{display:none;}
+  body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
+  /* accounts table: keep badges / mono / actions on one line; free-text columns truncate via inner div */
+  #acctTable th,#acctTable td{white-space:nowrap;}
+</style>
+</head>
+<body data-role="sysadmin" class="min-h-screen">
+
+<!-- ===== Admin shell sidebar ===== -->
+<aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-50 bg-white border-r border-slate-200 flex flex-col">
+  <div class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
+  </div>
+  <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
+  <div class="border-t border-slate-200 p-2 shrink-0">
+    <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
+      <i data-lucide="external-link" class="w-4 h-4 shrink-0"></i><span class="sb-label truncate">瀏覽文件網頁</span></button>
+  </div>
+</aside>
+
+<!-- Top bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="h-14 px-4 flex items-center gap-3">
+    <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
+    <div class="leading-tight min-w-0">
+      <div class="text-xs text-slate-400 flex items-center gap-1"><span>帳號管理</span><i data-lucide="chevron-right" class="w-3 h-3"></i><span>帳號與角色指派</span></div>
+      <div class="font-semibold text-slate-900 text-sm truncate">帳號與角色管理</div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <button onclick="openCreate()" class="write-only inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="user-plus" class="w-4 h-4"></i>建立帳號</button>
+      <div class="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+        <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+        <select id="roleSel" onchange="setRole(this.value)" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
+          <option value="sysadmin">系統管理員</option>
+          <option value="icsop_admin">ICSOP 管理員（唯讀）</option>
+          <option value="supervisor">主管</option>
+          <option value="deptcontact">部門窗口</option>
+          <option value="user">一般使用者</option>
+        </select>
+      </div>
+      <div class="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200"><i data-lucide="user-circle" class="w-4 h-4"></i><span>李慧玲</span></div>
+      <button title="登出" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+  <div id="roBanner" class="hidden bg-cyan-50 border-t border-cyan-200 text-cyan-800 text-sm px-4 py-2 items-center gap-2">
+    <i data-lucide="eye" class="w-4 h-4"></i>唯讀模式 · ICSOP 管理員對帳號管理為唯讀，可查詢但不可建立/停用/指派角色。
+  </div>
+</header>
+
+<!-- blocked overlay -->
+<div id="blockOverlay" class="hidden fixed inset-0 z-40 bg-slate-50/95 backdrop-blur-sm flex items-center justify-center">
+  <div class="text-center max-w-xs">
+    <div class="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="lock" class="w-7 h-7 text-red-500"></i></div>
+    <h3 class="font-semibold text-slate-900">無帳號管理權限</h3>
+    <p class="text-sm text-slate-500 mt-1" id="blockMsg"></p>
+    <p class="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+  </div>
+</div>
+
+<main class="px-5 py-6">
+  <!-- filters -->
+  <div class="flex flex-wrap items-center gap-3 mb-4">
+    <div class="relative">
+      <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+      <input id="kw" oninput="render()" placeholder="搜尋帳號 / 姓名…" class="pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-sm bg-white w-56 focus:outline-none focus:ring-2 focus:ring-primary-600" />
+    </div>
+    <select id="fSrc" onchange="render()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm"><option value="">所有來源</option><option value="manual">手動建立</option><option value="upstream">上游同步</option></select>
+    <select id="fRole" onchange="render()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm"><option value="">所有角色</option><option value="sysadmin">系統管理員</option><option value="icsop_admin">ICSOP 管理員</option><option value="supervisor">主管</option><option value="deptcontact">部門窗口</option><option value="user">一般使用者</option></select>
+    <select id="fStatus" onchange="render()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm"><option value="">所有狀態</option><option value="active">啟用</option><option value="disabled">停用</option></select>
+    <span id="countText" class="ml-auto text-sm text-slate-500"></span>
+  </div>
+
+  <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div class="overflow-x-auto">
+      <table id="acctTable" class="w-full text-sm min-w-[960px]">
+        <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="text-left font-medium px-3 py-2.5">姓名</th>
+            <th class="text-left font-medium px-3 py-2.5">帳號</th>
+            <th class="text-left font-medium px-3 py-2.5">公司</th>
+            <th class="text-left font-medium px-3 py-2.5">部門</th>
+            <th class="text-left font-medium px-3 py-2.5">職位</th>
+            <th class="text-left font-medium px-3 py-2.5">來源</th>
+            <th class="text-left font-medium px-3 py-2.5">角色</th>
+            <th class="text-left font-medium px-3 py-2.5">狀態</th>
+            <th class="text-left font-medium px-3 py-2.5">最後活動</th>
+            <th class="text-left font-medium px-3 py-2.5 write-only">操作</th>
+          </tr>
+        </thead>
+        <tbody id="rows" class="divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+    <div id="emptyState" class="hidden text-center py-12"><i data-lucide="inbox" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i><p class="text-sm text-slate-500">查無符合結果</p></div>
+    <div class="flex items-center justify-between px-4 py-3 border-t border-slate-100 text-sm text-slate-500">
+      <span>共 <span id="totalN">0</span> 筆（軟刪除，停用帳號保留）</span>
+      <div class="flex items-center gap-1">
+        <button class="w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50">‹</button>
+        <button class="w-8 h-8 rounded bg-primary-600 text-white">1</button>
+        <button class="w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50">›</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Create modal -->
+<div id="createModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <h3 class="font-semibold text-slate-900 mb-1">建立手動帳號</h3>
+    <p class="text-xs text-slate-400 mb-4">手動帳號密碼將以加鹽雜湊儲存（source=manual）。</p>
+    <div class="space-y-3">
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">帳號 <span class="text-red-500">*</span></label>
+        <input id="cUser" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="例：20500（5 位數帳號）" />
+        <p id="cUserErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i><span></span></p></div>
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">初始密碼 <span class="text-red-500">*</span></label>
+        <div class="relative"><input id="cPw" type="password" value="Init@2026" class="w-full px-3 py-2 pr-10 rounded-md border border-slate-300 text-sm" />
+          <button onclick="togglePw()" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><i id="pwIcon" data-lucide="eye" class="w-4 h-4"></i></button></div></div>
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">指派角色 <span class="text-red-500">*</span></label>
+        <select id="cRole" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white">
+          <option value="icsop_admin">ICSOP 管理員</option><option value="sysadmin">系統管理員</option><option value="supervisor">主管</option><option value="deptcontact">部門窗口</option><option value="user">一般使用者</option>
+        </select>
+        <p class="text-[10px] text-slate-400 mt-1">僅 5 種固定角色，不可新增/刪除角色種類。</p></div>
+    </div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeCreate()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button onclick="submitCreate()" class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">建立</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit account modal -->
+<div id="editModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <h3 class="font-semibold text-slate-900 mb-1">編輯帳號</h3>
+    <p class="text-xs text-slate-400 mb-4">帳號：<span id="eUser" class="mono text-slate-600"></span></p>
+    <div class="space-y-3">
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">姓名</label>
+        <input id="eName" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" />
+        <p id="eNameHint" class="hidden text-[10px] text-slate-400 mt-1">上游同步帳號，姓名由上游系統維護。</p></div>
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">目前角色</label>
+        <div id="eRole"></div>
+        <p class="text-[10px] text-slate-400 mt-1">如需變更角色，請使用清單的「指派角色」。</p></div>
+      <div id="ePwWrap"><label class="block text-sm font-medium text-slate-700 mb-1">重設密碼</label>
+        <div class="relative"><input id="ePw" type="password" placeholder="輸入新密碼以重設" class="w-full px-3 py-2 pr-10 rounded-md border border-slate-300 text-sm" />
+          <button onclick="toggleEPw()" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><i id="ePwIcon" data-lucide="eye" class="w-4 h-4"></i></button></div>
+        <p class="text-[10px] text-slate-400 mt-1">重設後以加鹽雜湊儲存，使用者須以新密碼登入；留空則不變更。</p></div>
+      <div id="ePwUpstream" class="hidden items-start gap-1.5 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-2">
+        <i data-lucide="info" class="w-3.5 h-3.5 shrink-0 mt-0.5"></i><span>上游同步帳號以公司帳號（Azure AD 單一登入）驗證，本系統不保存其密碼，無法於此重設。</span></div>
+    </div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeEdit()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button onclick="submitEdit()" class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign role dialog -->
+<div id="roleModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <h3 class="font-semibold text-slate-900 mb-1">指派角色</h3>
+    <p class="text-xs text-slate-400 mb-4">帳號：<span id="rTarget" class="mono text-slate-600"></span></p>
+    <div id="roleRadios" class="space-y-2"></div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeRole()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button onclick="submitRole()" class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm dialog -->
+<div id="confirmModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <div class="flex items-start gap-3">
+      <div class="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0"><i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600"></i></div>
+      <div><h3 class="font-semibold text-slate-900" id="cfTitle"></h3><p class="text-sm text-slate-500 mt-1" id="cfBody"></p></div>
+    </div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeConfirm()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button id="cfOk" class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">確認</button>
+    </div>
+  </div>
+</div>
+
+<div id="toastWrap" class="fixed top-16 right-4 z-[60] space-y-2"></div>
+
+<script>
+  /* ===== admin shell sidebar ===== */
+  const MENU=[
+    {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
+    {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
+  ];
+  const CURRENT_MODULE='account';
+  function renderSidebar(){
+    const role=document.body.dataset.role;
+    const items=MENU.filter(m=>m.roles[role]);
+    document.getElementById('sidebarNav').innerHTML = items.length? items.map(m=>{
+      const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
+      return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`;
+    lucide.createIcons();
+  }
+  function navTo(id,label){ if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;} shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型：對應頁面）')); return false; }
+  function toggleSidebar(){ document.body.classList.toggle('sb-collapsed'); }
+  function openPublic(){ shellToast('已於新視窗開啟前台瀏覽頁（03-public-list）'); }
+  function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
+
+  /* ===== accounts ===== */
+  const ROLE_META={sysadmin:['系統管理員','#4338CA'],icsop_admin:['ICSOP 管理員','#7C3AED'],supervisor:['主管','#0891B2'],deptcontact:['部門窗口','#475569'],user:['一般使用者','#64748B']};
+  const MGMT=['sysadmin','icsop_admin','supervisor','deptcontact'];
+  let accounts=[
+    // dept 顯示格式＝「部 / 處室」（同浮水印取值：部門欄＝部層、處/室欄＝最細單位）；
+    // 無處/室者（如 吳佩珊 財會部）僅顯示部層，對應 §8.4 分隔符收合規則
+    {u:'20001',name:'黃俊傑',co:'和潤企業股份有限公司',dept:'資訊部 / 應用發展室',title:'系統管理師',src:'manual',role:'sysadmin',status:'active',last:'2026-07-16 09:12'},
+    {u:'20233',name:'李慧玲',co:'和潤企業股份有限公司',dept:'債權管理部 / 法催一室',title:'內控管理師',src:'manual',role:'icsop_admin',status:'active',last:'2026-07-16 08:40'},
+    {u:'22345',name:'王小明',co:'和潤企業股份有限公司',dept:'營運管理部 / 審查室',title:'業務專員',src:'upstream',role:'user',status:'active',last:'2026-07-16 10:02'},
+    {u:'20088',name:'陳彥廷',co:'和潤企業股份有限公司',dept:'企劃部 / 車輛行銷室',title:'室長',src:'upstream',role:'supervisor',status:'active',last:'2026-07-15 17:20'},
+    {u:'20877',name:'張家豪',co:'和潤企業股份有限公司',dept:'作業服務部 / 文管室',title:'室長',src:'upstream',role:'supervisor',status:'active',last:'2026-07-15 16:30'},
+    {u:'20521',name:'林建宏',co:'和潤企業股份有限公司',dept:'信用審查部 / 企金室',title:'資深專員',src:'upstream',role:'deptcontact',status:'active',last:'2026-07-15 14:05'},
+    {u:'21002',name:'吳佩珊',co:'和潤企業股份有限公司',dept:'財會部',title:'專員',src:'upstream',role:'deptcontact',status:'active',last:'2026-07-15 11:22'},
+    {u:'20321',name:'周立群',co:'和潤企業股份有限公司',dept:'作業服務部 / 客服室',title:'專員',src:'upstream',role:'user',status:'disabled',reason:'departed',last:'2026-06-30 22:14'}
+  ];
+
+  function roleBadge(code){const [l,c]=ROLE_META[code];return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-white" style="background:${c}">${l}</span>`;}
+  function srcBadge(s){return s==='manual'
+    ? `<span class="px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">手動</span>`
+    : `<span class="px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">上游同步</span>`;}
+  function statusBadge(a){
+    if(a.status==='active') return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-emerald-700 bg-emerald-50 border border-emerald-100"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>啟用</span>`;
+    if(a.reason==='departed') return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs" style="color:#B45309;background:#FEF3C7"><i data-lucide="user-x" class="w-3 h-3"></i>離職自動停用</span>`;
+    return `<span class="px-2 py-0.5 rounded-full text-xs text-red-700 bg-red-50 border border-red-100">停用</span>`;
+  }
+
+  function render(){
+    const kw=document.getElementById('kw').value.trim().toLowerCase();
+    const fs=document.getElementById('fSrc').value, fr=document.getElementById('fRole').value, ft=document.getElementById('fStatus').value;
+    const list=accounts.filter(a=>(!kw||a.u.toLowerCase().includes(kw)||a.name.toLowerCase().includes(kw))&&(!fs||a.src===fs)&&(!fr||a.role===fr)&&(!ft||a.status===ft));
+    document.getElementById('rows').innerHTML=list.map((a)=>{
+      const gi=accounts.indexOf(a);
+      const actions=a.status==='active'
+        ? `<div class="flex items-center gap-1">
+            <button onclick="openEdit(${gi})" class="px-2 py-1 rounded border border-slate-200 text-xs hover:bg-slate-50">編輯</button>
+            <button onclick="openRole(${gi})" class="px-2 py-1 rounded border border-slate-200 text-xs hover:bg-slate-50">指派角色</button>
+            <button onclick="doDisable(${gi})" class="px-2 py-1 rounded border border-red-200 text-red-600 text-xs hover:bg-red-50">停用</button>
+          </div>`
+        : `<div class="flex items-center gap-1">
+            <button onclick="openEdit(${gi})" class="px-2 py-1 rounded border border-slate-200 text-xs hover:bg-slate-50">編輯</button>
+            <button onclick="doEnable(${gi})" class="px-2 py-1 rounded border border-emerald-200 text-emerald-700 text-xs hover:bg-emerald-50">恢復啟用</button>
+          </div>`;
+      return `<tr class="hover:bg-slate-50">
+        <td class="px-3 py-2.5 font-medium text-slate-800"><div class="truncate max-w-[220px]" title="${a.name}">${a.name}</div></td>
+        <td class="px-3 py-2.5 mono text-slate-600">${a.u}</td>
+        <td class="px-3 py-2.5 text-slate-600"><div class="truncate max-w-[200px]" title="${a.co||'—'}">${a.co||'—'}</div></td>
+        <td class="px-3 py-2.5 text-slate-500"><div class="truncate max-w-[200px]" title="${a.dept||'—'}">${a.dept||'—'}</div></td>
+        <td class="px-3 py-2.5 text-slate-500"><div class="truncate max-w-[200px]" title="${a.title||'—'}">${a.title||'—'}</div></td>
+        <td class="px-3 py-2.5">${srcBadge(a.src)}</td>
+        <td class="px-3 py-2.5">${roleBadge(a.role)}</td>
+        <td class="px-3 py-2.5">${statusBadge(a)}</td>
+        <td class="px-3 py-2.5 mono text-xs text-slate-400">${a.last}</td>
+        <td class="px-3 py-2.5 write-only">${actions}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('emptyState').classList.toggle('hidden',list.length>0);
+    document.getElementById('countText').textContent=`顯示 ${list.length} 筆`;
+    document.getElementById('totalN').textContent=accounts.length;
+    lucide.createIcons();
+  }
+
+  /* create */
+  function openCreate(){document.getElementById('cUser').value='';document.getElementById('cUserErr').classList.add('hidden');show('createModal');}
+  function closeCreate(){hide('createModal');}
+  function togglePw(){const i=document.getElementById('cPw'),ic=document.getElementById('pwIcon');const s=i.type==='password';i.type=s?'text':'password';ic.setAttribute('data-lucide',s?'eye-off':'eye');lucide.createIcons();}
+  function submitCreate(){
+    const u=document.getElementById('cUser').value.trim(); const err=document.getElementById('cUserErr');
+    if(!u){err.querySelector('span').textContent='必要欄位缺漏';err.classList.remove('hidden');err.classList.add('flex');return;}
+    if(accounts.some(a=>a.u===u)){err.querySelector('span').textContent='帳號名稱已存在（ACCOUNT_USERNAME_EXISTS）';err.classList.remove('hidden');err.classList.add('flex');return;}
+    accounts.unshift({u,name:'（待同步姓名）',co:'和潤企業股份有限公司',dept:'（待同步）',title:'（待同步）',src:'manual',role:document.getElementById('cRole').value,status:'active',last:'剛剛'});
+    closeCreate();render();toast('success','已建立帳號 '+u+'（密碼加鹽雜湊儲存）');
+  }
+
+  /* edit account */
+  let editTarget=-1;
+  function openEdit(i){editTarget=i;const a=accounts[i];const upstream=a.src==='upstream';
+    document.getElementById('eUser').textContent=a.u;
+    const nm=document.getElementById('eName');nm.value=a.name;nm.readOnly=upstream;nm.classList.toggle('bg-slate-50',upstream);
+    document.getElementById('eNameHint').classList.toggle('hidden',!upstream);
+    document.getElementById('eRole').innerHTML=roleBadge(a.role);
+    document.getElementById('ePwWrap').classList.toggle('hidden',upstream);
+    const up=document.getElementById('ePwUpstream');up.classList.toggle('hidden',!upstream);up.classList.toggle('flex',upstream);
+    document.getElementById('ePw').value='';
+    show('editModal');lucide.createIcons();}
+  function closeEdit(){hide('editModal');}
+  function toggleEPw(){const i=document.getElementById('ePw'),ic=document.getElementById('ePwIcon');const s=i.type==='password';i.type=s?'text':'password';ic.setAttribute('data-lucide',s?'eye-off':'eye');lucide.createIcons();}
+  function submitEdit(){const a=accounts[editTarget];
+    if(a.src!=='upstream'&&document.getElementById('eName').value.trim())a.name=document.getElementById('eName').value.trim();
+    const pw=document.getElementById('ePw').value.trim();
+    closeEdit();render();
+    toast('success','已更新帳號 '+a.u+(pw&&a.src!=='upstream'?'（密碼已重設，加鹽雜湊儲存）':''));}
+
+  /* assign role */
+  let roleTarget=-1;
+  function openRole(i){roleTarget=i;const a=accounts[i];document.getElementById('rTarget').textContent=a.u;
+    document.getElementById('roleRadios').innerHTML=Object.keys(ROLE_META).map(code=>`
+      <label class="flex items-center gap-2.5 px-3 py-2 rounded-md border ${code===a.role?'border-primary-300 bg-primary-50':'border-slate-200'} cursor-pointer hover:bg-slate-50">
+        <input type="radio" name="rrole" value="${code}" ${code===a.role?'checked':''} class="text-primary-600"/>
+        ${roleBadge(code)}${code===a.role?'<span class="ml-auto text-[10px] text-primary-600">目前</span>':''}</label>`).join('');
+    show('roleModal');}
+  function closeRole(){hide('roleModal');}
+  function submitRole(){
+    const val=document.querySelector('input[name="rrole"]:checked').value; const a=accounts[roleTarget];
+    if(val===a.role){closeRole();return;}
+    if(MGMT.includes(a.role)&&val==='user'){
+      closeRole();
+      openConfirm('降級為一般使用者？','帳號「'+a.u+'」將由「'+ROLE_META[a.role][0]+'」降級為一般使用者，'+'將失去所有後台權限。',()=>{a.role=val;render();toast('success','角色已更新（下次請求即生效）');});
+      return;
+    }
+    a.role=val;closeRole();render();toast('success','角色已更新（下次請求即生效）');
+  }
+
+  function doDisable(i){const a=accounts[i];openConfirm('停用帳號？','停用「'+a.u+'」後將立即無法登入，既有登入狀態強制失效（軟刪除，可恢復）。',()=>{a.status='disabled';a.reason='manual';render();toast('info','已停用 '+a.u+'（既有登入狀態已撤銷）');});}
+  function doEnable(i){const a=accounts[i];a.status='active';delete a.reason;render();toast('success','已恢復啟用 '+a.u);}
+
+  /* role gate */
+  function setRole(r){
+    document.body.dataset.role=r;
+    const blocked=['supervisor','deptcontact','user'].includes(r);
+    const ro=(r==='icsop_admin');
+    document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
+    document.getElementById('roBanner').classList.toggle('hidden',!ro);
+    document.getElementById('roBanner').classList.toggle('flex',ro);
+    if(blocked)document.getElementById('blockMsg').textContent={supervisor:'主管對「帳號管理」為「無」。',deptcontact:'部門窗口對「帳號管理」為「無」。',user:'一般使用者無後台存取權。'}[r];
+    renderSidebar();render();lucide.createIcons();
+  }
+
+  /* confirm + toast + modal helpers */
+  function show(id){const m=document.getElementById(id);m.classList.remove('hidden');m.classList.add('flex');}
+  function hide(id){const m=document.getElementById(id);m.classList.add('hidden');m.classList.remove('flex');}
+  function openConfirm(title,body,onOk){document.getElementById('cfTitle').textContent=title;document.getElementById('cfBody').textContent=body;show('confirmModal');
+    const ok=document.getElementById('cfOk');const clone=ok.cloneNode(true);ok.parentNode.replaceChild(clone,ok);clone.addEventListener('click',()=>{hide('confirmModal');onOk();});}
+  function closeConfirm(){hide('confirmModal');}
+  function toast(type,msg,code){
+    const map={success:['check-circle-2','#059669'],error:['alert-circle','#DC2626'],info:['info','#365C97']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><div><span class="text-slate-700">${msg}</span>${code?`<div class="text-[10px] mono text-slate-400 mt-0.5">${code}</div>`:''}</div>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4000);
+  }
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeConfirm();hide('createModal');hide('roleModal');hide('editModal');}});
+
+  renderSidebar(); render(); lucide.createIcons();
+</script>
+</body>
+</html>

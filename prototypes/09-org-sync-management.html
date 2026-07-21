@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>組織人員異動管理 · 後台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;color:#334155;background:#F8FAFC;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  body:not([data-role="sysadmin"]) .write-only{display:none !important;}
+  .pulse-soft{animation:pulseSoft 1.3s ease-in-out infinite;}
+  @keyframes pulseSoft{0%,100%{opacity:1}50%{opacity:.35}}
+  /* admin shell sidebar */
+  #sidebar{width:240px;transition:width .2s ease;}
+  body{padding-left:240px;transition:padding-left .2s ease;}
+  body.sb-collapsed{padding-left:60px;}
+  body.sb-collapsed #sidebar{width:60px;}
+  body.sb-collapsed .sb-label{display:none;}
+  body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
+</style>
+</head>
+<body data-role="sysadmin" class="min-h-screen">
+
+<!-- ===== Admin shell sidebar ===== -->
+<aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-50 bg-white border-r border-slate-200 flex flex-col">
+  <div class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
+  </div>
+  <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
+  <div class="border-t border-slate-200 p-2 shrink-0">
+    <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
+      <i data-lucide="external-link" class="w-4 h-4 shrink-0"></i><span class="sb-label truncate">瀏覽文件網頁</span></button>
+  </div>
+</aside>
+
+<!-- Top bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="h-14 px-4 flex items-center gap-3">
+    <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
+    <div class="leading-tight min-w-0">
+      <div class="text-xs text-slate-400 flex items-center gap-1"><span>組織人員異動管理</span><i data-lucide="chevron-right" class="w-3 h-3"></i><span>同步與異動</span></div>
+      <div class="font-semibold text-slate-900 text-sm truncate">組織人員異動管理</div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <div class="flex items-center gap-1.5">
+        <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+        <select id="roleSel" onchange="setRole(this.value)" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
+          <option value="sysadmin">系統管理員</option>
+          <option value="icsop_admin">ICSOP 管理員（唯讀）</option>
+          <option value="supervisor">主管</option>
+          <option value="deptcontact">部門窗口</option>
+          <option value="user">一般使用者</option>
+        </select>
+      </div>
+      <div class="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200"><i data-lucide="user-circle" class="w-4 h-4"></i><span>李慧玲</span></div>
+      <button title="登出" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+  <div id="roBanner" class="hidden bg-cyan-50 border-t border-cyan-200 text-cyan-800 text-sm px-4 py-2 items-center gap-2">
+    <i data-lucide="eye" class="w-4 h-4"></i>唯讀模式 · ICSOP 管理員可查看同步狀態與待確認異動，但無法觸發「立即同步」。
+  </div>
+</header>
+
+<!-- blocked overlay -->
+<div id="blockOverlay" class="hidden fixed inset-0 z-40 bg-slate-50/95 backdrop-blur-sm flex items-center justify-center">
+  <div class="text-center max-w-xs">
+    <div class="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="lock" class="w-7 h-7 text-red-500"></i></div>
+    <h3 class="font-semibold text-slate-900">無組織同步管理權限</h3>
+    <p class="text-sm text-slate-500 mt-1" id="blockMsg"></p>
+    <p class="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+  </div>
+</div>
+
+<main class="px-5 py-6 space-y-5">
+
+  <!-- Sync status overview card -->
+  <section class="bg-white border border-slate-200 rounded-xl p-5">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-4 flex-wrap">
+        <div class="w-11 h-11 rounded-lg bg-primary-50 flex items-center justify-center"><i data-lucide="refresh-cw" class="w-6 h-6 text-primary-600"></i></div>
+        <div id="syncInfo"></div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div id="syncStateChip"></div>
+        <button id="syncBtn" onclick="runSync()" class="write-only inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="refresh-cw" class="w-4 h-4"></i>立即同步</button>
+      </div>
+    </div>
+    <p class="text-xs text-slate-400 mt-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i>來源＝外部 MSSQL View（唯讀）；每日排程並可手動觸發。手動觸發後本頁自動更新結果，無需重新整理。</p>
+  </section>
+
+  <!-- Tabs -->
+  <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div class="flex border-b border-slate-200 text-sm">
+      <button data-tab="overview" onclick="switchTab('overview')" class="tabbtn px-4 py-3 font-medium border-b-2 border-primary-600 text-primary-700">總覽</button>
+      <button data-tab="history" onclick="switchTab('history')" class="tabbtn px-4 py-3 font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">同步歷史</button>
+      <button data-tab="alerts" onclick="switchTab('alerts')" class="tabbtn px-4 py-3 font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-1.5">待確認異動 <span id="alertBadge" class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700"></span></button>
+    </div>
+
+    <!-- overview -->
+    <div id="panel-overview" class="p-5">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" id="kpiRow"></div>
+      <p class="text-xs text-slate-400 mt-4">本月（2026-07）累計異動分類統計。離職類異動已連動自動停用對應帳號（F005）。</p>
+    </div>
+
+    <!-- history -->
+    <div id="panel-history" class="hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm min-w-[720px]">
+          <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+            <tr><th class="text-left font-medium px-4 py-2.5">開始時間</th><th class="text-left font-medium px-4 py-2.5">結束時間</th><th class="text-left font-medium px-4 py-2.5">觸發方式</th><th class="text-left font-medium px-4 py-2.5">結果</th><th class="text-left font-medium px-4 py-2.5">異動筆數</th><th class="px-4 py-2.5"></th></tr>
+          </thead>
+          <tbody id="histRows" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- alerts -->
+    <div id="panel-alerts" class="hidden p-5">
+      <div id="alertList" class="space-y-3"></div>
+    </div>
+  </div>
+</main>
+
+<!-- toast -->
+<div id="toastWrap" class="fixed top-16 right-4 z-[60] space-y-2"></div>
+
+<script>
+  /* ===== admin shell sidebar ===== */
+  const MENU=[
+    {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
+    {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
+  ];
+  const CURRENT_MODULE='orgsync';
+  function renderSidebar(){
+    const role=document.body.dataset.role;
+    const items=MENU.filter(m=>m.roles[role]);
+    document.getElementById('sidebarNav').innerHTML = items.length? items.map(m=>{
+      const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
+      return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`;
+    lucide.createIcons();
+  }
+  function navTo(id,label){ if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;} shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型：對應頁面）')); return false; }
+  function toggleSidebar(){ document.body.classList.toggle('sb-collapsed'); }
+  function openPublic(){ shellToast('已於新視窗開啟前台瀏覽頁（03-public-list）'); }
+  function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
+
+  /* ===== org sync ===== */
+  let syncing=false;
+  let lastSync={time:'2026-07-16 06:00:12',trigger:'scheduled',result:'success',count:12};
+  let history=[
+    {start:'2026-07-16 06:00:00',end:'2026-07-16 06:00:12',trigger:'scheduled',result:'success',count:12},
+    {start:'2026-07-15 06:00:00',end:'2026-07-15 06:00:09',trigger:'scheduled',result:'success',count:5},
+    {start:'2026-07-14 14:22:03',end:'2026-07-14 14:22:03',trigger:'manual',result:'failed',count:0,error:'SYNC_SOURCE_UNAVAILABLE：組織來源 View 連線逾時（重試 3 次後失敗），已保留同步前既有資料不變。'},
+    {start:'2026-07-14 06:00:00',end:'2026-07-14 06:00:07',trigger:'scheduled',result:'success',count:0},
+    {start:'2026-07-13 06:00:00',end:'2026-07-13 06:00:15',trigger:'scheduled',result:'success',count:23}
+  ];
+  const KPI=[['新增人員','user-plus',18,'#047857','#D1FAE5'],['更新（部門/職級）','user-cog',31,'#365C97','#EAF1FA'],['離職停用','user-x',4,'#B91C1C','#FEE2E2'],['當責待確認','alert-triangle',3,'#B45309','#FEF3C7']];
+  let alerts=[
+    {doc:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',field:'當責室長-主要',before:'陳彥廷（企劃部 車輛行銷室 室長）',after:'（職級異動：升任協理，待確認是否續任當責）',status:'pending'},
+    {doc:'ICSOP-SRC-101-2-00',name:'消金審核作業',field:'制定室別',before:'信用審查部 企金室',after:'信用審查部 企業金融室（單位更名）',status:'pending'},
+    {doc:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',field:'當責室長-主要',before:'張家豪（作業服務部 文管室 室長）',after:'（已轉調 作業服務部 客服室）',status:'pending'}
+  ];
+
+  function nowStr(){const d=new Date();const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;}
+  const trigLabel=t=>t==='manual'?'手動':'排程';
+
+  function renderOverview(){
+    document.getElementById('syncInfo').innerHTML = syncing
+      ? `<div class="font-semibold text-slate-900">同步進行中…</div><div class="text-xs text-slate-500 mt-0.5">正在讀取組織來源並比對異動</div>`
+      : `<div class="font-semibold text-slate-900">最近同步：<span class="mono">${lastSync.time}</span></div>
+         <div class="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+           <span>觸發方式：${trigLabel(lastSync.trigger)}</span><span class="text-slate-300">·</span>
+           <span>結果：<span class="text-emerald-700 font-medium">成功</span></span><span class="text-slate-300">·</span>
+           <span>異動筆數：<span class="font-medium text-slate-700">${lastSync.count}</span></span></div>`;
+    document.getElementById('syncStateChip').innerHTML = syncing
+      ? `<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm text-blue-700 bg-blue-50 border border-blue-100"><span class="w-2 h-2 rounded-full bg-blue-500 pulse-soft"></span>執行中</span>`
+      : '';
+    const btn=document.getElementById('syncBtn');
+    if(btn){ btn.disabled=syncing; btn.classList.toggle('opacity-50',syncing); btn.classList.toggle('cursor-not-allowed',syncing);
+      btn.innerHTML=syncing?`<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>同步中`:`<i data-lucide="refresh-cw" class="w-4 h-4"></i>立即同步`; }
+    document.getElementById('kpiRow').innerHTML=KPI.map(([l,ic,n,c,bg])=>`
+      <div class="border border-slate-200 rounded-lg p-3.5">
+        <div class="flex items-center gap-2"><span class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:${bg}"><i data-lucide="${ic}" class="w-4 h-4" style="color:${c}"></i></span><span class="text-2xl font-bold text-slate-900">${n}</span></div>
+        <div class="text-xs text-slate-500 mt-1.5">${l}</div></div>`).join('');
+    lucide.createIcons();
+  }
+
+  function runSync(){
+    if(document.body.dataset.role!=='sysadmin') return;
+    if(syncing){ toast('info','同步進行中，請稍候','SYNC_IN_PROGRESS'); return; }
+    syncing=true; renderOverview(); toast('info','已啟動手動同步…（互斥鎖已取得）');
+    setTimeout(()=>{
+      syncing=false;
+      const count=Math.floor(Math.random()*18)+3;
+      lastSync={time:nowStr(),trigger:'manual',result:'success',count};
+      history.unshift({start:lastSync.time,end:nowStr(),trigger:'manual',result:'success',count});
+      renderOverview(); renderHistory();
+      toast('success','同步完成，異動 '+count+' 筆（頁面已自動更新，無需重新整理）');
+    },1600);
+  }
+
+  function renderHistory(){
+    document.getElementById('histRows').innerHTML=history.map((h,i)=>{
+      const resultCell=h.result==='success'
+        ? `<span class="px-2 py-0.5 rounded-full text-xs text-emerald-700 bg-emerald-50 border border-emerald-100">成功</span>`
+        : `<span class="px-2 py-0.5 rounded-full text-xs text-red-700 bg-red-50 border border-red-100">失敗</span>`;
+      const expandBtn=h.result==='failed'?`<button onclick="toggleErr(${i})" class="text-xs text-primary-600 hover:underline">展開錯誤</button>`:'';
+      let row=`<tr class="hover:bg-slate-50">
+        <td class="px-4 py-2.5 mono text-xs text-slate-600">${h.start}</td>
+        <td class="px-4 py-2.5 mono text-xs text-slate-600">${h.end}</td>
+        <td class="px-4 py-2.5">${trigLabel(h.trigger)}</td>
+        <td class="px-4 py-2.5">${resultCell}</td>
+        <td class="px-4 py-2.5 text-left font-medium">${h.count}</td>
+        <td class="px-4 py-2.5 text-left">${expandBtn}</td></tr>`;
+      if(h.result==='failed') row+=`<tr id="err-${i}" class="hidden"><td colspan="6" class="px-4 pb-3 pt-0"><div class="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2 flex items-start gap-1.5"><i data-lucide="alert-octagon" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>${h.error}</span></div></td></tr>`;
+      return row;
+    }).join('');
+    lucide.createIcons();
+  }
+  function toggleErr(i){document.getElementById('err-'+i).classList.toggle('hidden');}
+
+  function renderAlerts(){
+    const pend=alerts.filter(a=>a.status==='pending');
+    document.getElementById('alertBadge').textContent=pend.length;
+    document.getElementById('alertBadge').style.display=pend.length?'':'none';
+    document.getElementById('alertList').innerHTML = pend.length? pend.map(a=>{
+      const gi=alerts.indexOf(a);
+      return `<div class="border border-amber-200 bg-amber-50/40 rounded-lg p-4">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="mono text-xs text-slate-500">${a.doc}</span>
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px]" style="color:#B45309;background:#FEF3C7"><i data-lucide="clock" class="w-3 h-3"></i>待確認</span>
+            </div>
+            <div class="text-sm font-medium text-slate-900 mt-0.5">${a.name}</div>
+            <div class="text-xs text-slate-600 mt-2">受影響欄位：<span class="font-medium">${a.field}</span></div>
+            <div class="flex items-center gap-2 text-xs mt-1">
+              <span class="px-2 py-1 rounded bg-white border border-slate-200 text-slate-500 line-through">${a.before}</span>
+              <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-400"></i>
+              <span class="px-2 py-1 rounded bg-white border border-amber-200 text-amber-800">${a.after}</span>
+            </div>
+          </div>
+          <div class="flex flex-col gap-2 shrink-0">
+            <button onclick="gotoAccountable('${a.doc}')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-xs font-medium hover:bg-primary-700 write-only"><i data-lucide="external-link" class="w-3.5 h-3.5"></i>前往當責設定</button>
+            <button onclick="resolveAlert(${gi})" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-xs hover:bg-slate-50 write-only"><i data-lucide="check" class="w-3.5 h-3.5"></i>標記無需變更</button>
+          </div>
+        </div>
+        <p class="text-[10px] text-slate-400 mt-2">提示為非強制，文件狀態與當責設定在人工處理前維持不變。</p>
+      </div>`;
+    }).join('') : `<div class="text-center py-10"><i data-lucide="check-circle-2" class="w-10 h-10 text-emerald-400 mx-auto mb-2"></i><p class="text-sm text-slate-500">目前無待確認組織異動</p></div>`;
+    lucide.createIcons();
+  }
+  function gotoAccountable(doc){ if(document.body.dataset.role!=='sysadmin')return; shellToast('前往文件「'+doc+'」當責設定（15-document-edit）'); }
+  function resolveAlert(i){ if(document.body.dataset.role!=='sysadmin')return; alerts[i].status='resolved'; renderAlerts(); toast('success','已標記處理完成（記錄處理者/時間）'); }
+
+  function switchTab(t){
+    ['overview','history','alerts'].forEach(x=>{
+      document.getElementById('panel-'+x).classList.toggle('hidden',x!==t);
+      const b=document.querySelector(`.tabbtn[data-tab="${x}"]`);
+      const on=x===t; b.classList.toggle('border-primary-600',on); b.classList.toggle('text-primary-700',on);
+      b.classList.toggle('border-transparent',!on); b.classList.toggle('text-slate-500',!on);
+    });
+  }
+
+  function setRole(r){
+    document.body.dataset.role=r;
+    const blocked=['supervisor','deptcontact','user'].includes(r);
+    const ro=(r==='icsop_admin');
+    document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
+    document.getElementById('roBanner').classList.toggle('hidden',!ro);
+    document.getElementById('roBanner').classList.toggle('flex',ro);
+    if(blocked)document.getElementById('blockMsg').textContent={supervisor:'主管對「組織人員異動管理」為「無」。',deptcontact:'部門窗口對「組織人員異動管理」為「無」。',user:'一般使用者無後台存取權。'}[r];
+    renderSidebar(); renderOverview(); lucide.createIcons();
+  }
+
+  function toast(type,msg,code){
+    const map={success:['check-circle-2','#059669'],error:['alert-circle','#DC2626'],info:['info','#365C97']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><div><span class="text-slate-700">${msg}</span>${code?`<div class="text-[10px] mono text-slate-400 mt-0.5">${code}</div>`:''}</div>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4200);
+  }
+
+  renderSidebar(); renderOverview(); renderHistory(); renderAlerts(); lucide.createIcons();
+</script>
+</body>
+</html>

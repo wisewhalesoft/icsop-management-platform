@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>登入 · ICSOP 文件管理平台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .brand-bg{background:linear-gradient(135deg,#2A4A7E 0%,#365C97 50%,#6E96D4 100%);}
+</style>
+</head>
+<body class="min-h-screen bg-white text-slate-700">
+
+<div class="min-h-screen grid lg:grid-cols-2">
+  <!-- Brand panel (hidden on mobile) -->
+  <div class="brand-bg hidden lg:flex flex-col justify-between p-12 text-white relative overflow-hidden">
+    <div class="relative z-10">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-lg bg-white/15 flex items-center justify-center"><i data-lucide="file-text" class="w-6 h-6"></i></div>
+        <span class="font-bold text-xl">ICSOP 文件管理平台</span>
+      </div>
+    </div>
+    <div class="relative z-10 space-y-4">
+      <h1 class="text-3xl font-bold leading-snug">統一、可追溯的<br/>ICSOP 文件治理</h1>
+      <ul class="space-y-2.5 text-white/85 text-sm">
+        <li class="flex items-center gap-2"><i data-lucide="search" class="w-4 h-4"></i>RWD 瀏覽 / 搜尋 / 下載 / 列印</li>
+        <li class="flex items-center gap-2"><i data-lucide="shield-check" class="w-4 h-4"></i>身分浮水印與稽核追蹤</li>
+        <li class="flex items-center gap-2"><i data-lucide="workflow" class="w-4 h-4"></i>循環 DAG 工作流程結構化管理</li>
+      </ul>
+    </div>
+    <p class="relative z-10 text-white/60 text-xs">© 2026 和潤企業股份有限公司 · 內部系統</p>
+    <div class="absolute -right-20 -bottom-20 w-80 h-80 rounded-full bg-white/5"></div>
+    <div class="absolute right-24 top-24 w-40 h-40 rounded-full bg-white/5"></div>
+  </div>
+
+  <!-- Login panel -->
+  <div class="flex items-center justify-center p-6">
+    <div class="w-full max-w-sm">
+      <!-- mobile brand -->
+      <div class="lg:hidden flex items-center gap-2 mb-8 justify-center">
+        <div class="w-9 h-9 rounded-lg brand-bg flex items-center justify-center text-white"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+        <span class="font-bold text-lg text-slate-900">ICSOP 文件管理平台</span>
+      </div>
+
+      <h2 class="text-2xl font-bold text-slate-900 mb-1">登入</h2>
+      <p class="text-sm text-slate-500 mb-6">請使用公司帳號（Azure AD 單一登入）進入系統。</p>
+
+      <!-- error banner -->
+      <div id="errBanner" class="hidden mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 items-start gap-2" role="alert">
+        <i data-lucide="alert-circle" class="w-4 h-4 shrink-0 mt-0.5"></i>
+        <div>
+          <p id="errText">帳號或密碼錯誤</p>
+          <p id="errCode" class="hidden mt-1 text-xs mono text-red-500"></p>
+        </div>
+      </div>
+
+      <!-- 途徑 A：公司帳號單一登入（主要路徑） -->
+      <button id="ssoBtn" type="button" onclick="ssoLogin()"
+              class="w-full py-3 rounded-md bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:ring-offset-2 disabled:opacity-70">
+        <i id="ssoIcon" data-lucide="building-2" class="w-4 h-4"></i>
+        <span id="ssoBtnText">使用公司帳號登入</span>
+      </button>
+      <p class="mt-3 text-xs text-slate-500 leading-relaxed flex items-start gap-1.5">
+        <i data-lucide="info" class="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-400"></i>
+        <span>已登入公司帳號者將自動完成驗證（靜默 SSO），無需再次輸入帳號密碼。</span>
+      </p>
+
+      <!-- 分隔線：以下為次要通道 -->
+      <div class="my-6 flex items-center gap-3 text-xs text-slate-400">
+        <span class="h-px flex-1 bg-slate-200"></span><span>或</span><span class="h-px flex-1 bg-slate-200"></span>
+      </div>
+
+      <!-- 途徑 B：管理員帳密（備援／維運通道，版面次於 SSO） -->
+      <button type="button" id="admToggle" onclick="toggleAdmin()" aria-expanded="false" aria-controls="admPanel"
+              class="w-full flex items-center justify-between px-3 py-2.5 rounded-md border border-slate-300 text-sm text-slate-600 hover:bg-slate-50 transition focus:outline-none focus:ring-2 focus:ring-primary-600">
+        <span class="flex items-center gap-2"><i data-lucide="key-round" class="w-4 h-4 text-slate-400"></i>使用管理員帳號登入</span>
+        <i id="admChev" data-lucide="chevron-down" class="w-4 h-4 text-slate-400"></i>
+      </button>
+
+      <div id="admPanel" class="hidden mt-4">
+      <p class="text-xs text-slate-400 mb-3">備援／維運通道：供系統管理員於公司帳號無法使用時登入。</p>
+      <form onsubmit="return doLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">帳號 <span class="text-red-500">*</span></label>
+          <div class="relative">
+            <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+            <input id="username" type="text" autocomplete="username" placeholder="管理員帳號"
+                   class="w-full pl-9 pr-3 py-2.5 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">密碼 <span class="text-red-500">*</span></label>
+          <div class="relative">
+            <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+            <input id="password" type="password" autocomplete="current-password" placeholder="請輸入密碼"
+                   class="w-full pl-9 pr-10 py-2.5 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600" />
+            <button type="button" onclick="togglePw()" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <i id="pwIcon" data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-sm">
+          <label class="flex items-center gap-2 text-slate-500"><input type="checkbox" class="rounded border-slate-300" />記住我</label>
+          <a href="#" class="text-primary-600 hover:underline">忘記密碼？</a>
+        </div>
+
+        <button type="submit" class="w-full py-2.5 rounded-md bg-slate-700 text-white text-sm font-semibold hover:bg-slate-800 transition">以管理員帳號登入</button>
+      </form>
+      </div>
+
+      <!-- Demo helper -->
+      <div class="mt-8 pt-4 border-t border-dashed border-slate-200">
+        <p class="text-xs text-slate-400 mb-2">原型示範：</p>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="demoSsoOk()" class="text-xs px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-50">模擬單一登入成功</button>
+          <button onclick="demoNotFound()" class="text-xs px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-50">模擬查無有效帳號</button>
+          <button onclick="fill('icsop_admin')" class="text-xs px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-50">帶入正確帳密</button>
+          <button onclick="triggerError()" class="text-xs px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-50">模擬帳密錯誤</button>
+          <button onclick="openTimeout()" class="text-xs px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-50">模擬 Session 逾時</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SSO redirect overlay（模擬轉址至 Azure AD） -->
+<div id="ssoOverlay" class="fixed inset-0 z-50 hidden items-center justify-center bg-white/85 p-4" role="status" aria-live="polite">
+  <div class="text-center">
+    <i data-lucide="loader-2" class="w-8 h-8 text-primary-600 animate-spin mx-auto"></i>
+    <p class="mt-4 text-sm font-medium text-slate-700">正在轉址至公司帳號登入頁（Azure AD）…</p>
+    <p class="mt-1 text-xs text-slate-400">若您已登入公司帳號，將直接完成驗證並返回本系統。</p>
+  </div>
+</div>
+
+<!-- Session timeout modal -->
+<div id="timeoutModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 p-4">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
+    <div class="w-14 h-14 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-4">
+      <i data-lucide="clock-alert" class="w-7 h-7 text-amber-600"></i>
+    </div>
+    <h3 class="font-bold text-lg text-slate-900">工作階段已逾時</h3>
+    <p class="text-sm text-slate-500 mt-2">因閒置逾 30 分鐘，為保護資料安全，請重新登入。</p>
+    <p class="mt-3 text-xs mono text-slate-400">AUTH_SESSION_EXPIRED</p>
+    <button onclick="closeTimeout()" class="mt-5 w-full py-2.5 rounded-md bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700">重新登入</button>
+  </div>
+</div>
+
+<!-- success toast -->
+<div id="toastWrap" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+<script>
+  function togglePw(){const i=document.getElementById('password');const ic=document.getElementById('pwIcon');const show=i.type==='password';i.type=show?'text':'password';ic.setAttribute('data-lucide',show?'eye-off':'eye');lucide.createIcons();}
+  function showErr(msg,code){
+    const b=document.getElementById('errBanner');const c=document.getElementById('errCode');
+    document.getElementById('errText').textContent=msg;
+    if(code){c.textContent=code;c.classList.remove('hidden');}else{c.classList.add('hidden');}
+    b.classList.remove('hidden');b.classList.add('flex');
+  }
+  function hideErr(){const b=document.getElementById('errBanner');b.classList.add('hidden');b.classList.remove('flex');}
+
+  // 途徑 B：管理員帳密（收合，次於 SSO）
+  function toggleAdmin(open){
+    const p=document.getElementById('admPanel'),t=document.getElementById('admToggle'),ch=document.getElementById('admChev');
+    const show=(open===true)?true:p.classList.contains('hidden');
+    p.classList.toggle('hidden',!show);
+    t.setAttribute('aria-expanded',String(show));
+    ch.setAttribute('data-lucide',show?'chevron-up':'chevron-down');
+    lucide.createIcons();
+  }
+  function fill(){toggleAdmin(true);document.getElementById('username').value='icsop_admin';document.getElementById('password').value='Passw0rd!';hideErr();}
+  function triggerError(){toggleAdmin(true);document.getElementById('username').value='someone';document.getElementById('password').value='wrong';showErr('帳號或密碼錯誤','AUTH_INVALID_CREDENTIALS');}
+
+  // 途徑 A：公司帳號單一登入（Azure AD OIDC）
+  var ssoOutcome='ok';
+  function ssoLogin(){
+    hideErr();
+    const btn=document.getElementById('ssoBtn'),ov=document.getElementById('ssoOverlay');
+    btn.disabled=true;document.getElementById('ssoBtnText').textContent='轉址中…';
+    ov.classList.remove('hidden');ov.classList.add('flex');
+    setTimeout(function(){
+      ov.classList.add('hidden');ov.classList.remove('flex');
+      btn.disabled=false;document.getElementById('ssoBtnText').textContent='使用公司帳號登入';
+      if(ssoOutcome==='notfound'){
+        // AD 驗證成功，但系統查無對應在職帳號
+        showErr('查無有效帳號，請洽系統管理員','AUTH_ACCOUNT_NOT_FOUND');
+      }else{
+        toast('公司帳號驗證成功，導向角色分流頁（02-role-landing.html）');
+      }
+      ssoOutcome='ok';
+    },1400);
+  }
+  function demoSsoOk(){ssoOutcome='ok';ssoLogin();}
+  function demoNotFound(){ssoOutcome='notfound';ssoLogin();}
+
+  function doLogin(e){
+    e.preventDefault();
+    const u=document.getElementById('username').value.trim();
+    const p=document.getElementById('password').value.trim();
+    if(!u||!p){showErr('必要欄位缺漏');return false;}
+    // 原型：任何非空帳密以「錯誤」示意統一訊息；示範帳號則成功
+    if(u==='icsop_admin'){hideErr();toast('登入成功，導向角色分流頁（02-role-landing.html）');return false;}
+    showErr('帳號或密碼錯誤','AUTH_INVALID_CREDENTIALS');
+    return false;
+  }
+  function openTimeout(){const m=document.getElementById('timeoutModal');m.classList.remove('hidden');m.classList.add('flex');}
+  function closeTimeout(){const m=document.getElementById('timeoutModal');m.classList.add('hidden');m.classList.remove('flex');}
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeTimeout();});
+
+  function toast(msg){
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-xs';
+    el.style.borderLeft='4px solid #059669';
+    el.innerHTML='<i data-lucide="check-circle-2" class="w-4 h-4 mt-0.5 text-emerald-600"></i><span class="text-slate-700">'+msg+'</span>';
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4500);
+  }
+
+  lucide.createIcons();
+</script>
+</body>
+</html>

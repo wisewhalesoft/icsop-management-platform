@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>文件檢視器（浮水印）· ICSOP 前台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;background:#F8FAFC;color:#334155;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  /* viewer stage */
+  #stage{background:#E2E8F0;}
+  #page{background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.08);position:relative;overflow:hidden;transform-origin:top center;transition:transform .15s ease;}
+  /* diagonal tiled watermark overlay (F020: 45deg, opacity .12, slate-500, 14px) */
+  .wm-layer{position:absolute;inset:-40%;pointer-events:none;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;transform:rotate(-45deg);opacity:.12;user-select:none;}
+  .wm-layer span{color:#64748B;font-size:14px;white-space:nowrap;padding:22px 30px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.6;}
+</style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+<!-- App bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200 shrink-0">
+  <div class="px-4 h-14 flex items-center gap-3">
+    <a href="04-public-document-detail.html" class="text-slate-400 hover:text-slate-600 flex items-center"><i data-lucide="arrow-left" class="w-5 h-5"></i></a>
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <div class="leading-tight min-w-0">
+      <div class="text-xs text-slate-400">文件檢視器</div>
+      <div class="font-semibold text-slate-900 text-sm truncate">車輛分期進件作業 · <span class="mono text-slate-500">ICSOP-SRC-101-1-01</span></div>
+    </div>
+    <div class="ml-auto hidden sm:flex items-center gap-2 text-sm text-slate-500">
+      <i data-lucide="user" class="w-4 h-4"></i><span>王小明</span><span class="text-slate-300">·</span><span>營運管理部 / 審查室</span>
+    </div>
+  </div>
+
+  <!-- toolbar -->
+  <div class="px-4 h-11 border-t border-slate-100 flex items-center gap-2 text-sm overflow-x-auto">
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-primary-50 text-primary-700 font-medium shrink-0"><i data-lucide="eye" class="w-4 h-4"></i>檢視</span>
+    <button onclick="doAction('DOWNLOAD')" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="download" class="w-4 h-4"></i>下載</button>
+    <button onclick="doAction('PRINT')" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="printer" class="w-4 h-4"></i>列印</button>
+    <div class="w-px h-5 bg-slate-200 mx-1 shrink-0"></div>
+    <button onclick="zoom(-0.1)" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="zoom-out" class="w-4 h-4"></i></button>
+    <span id="zoomLabel" class="mono text-xs text-slate-500 w-10 text-center shrink-0">100%</span>
+    <button onclick="zoom(0.1)" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="zoom-in" class="w-4 h-4"></i></button>
+  </div>
+</header>
+
+<!-- info note -->
+<div class="px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700 flex items-start gap-2">
+  <i data-lucide="shield-check" class="w-4 h-4 shrink-0 mt-0.5"></i>
+  <span>浮水印由<strong>伺服器端</strong>依當下登入身分與時間動態產生；下載/列印時將<strong>燒錄進 PDF 內容層</strong>（非僅前端疊加），脫離系統仍存在。未登入存取本檢視器將被拒並導回登入頁。</span>
+</div>
+
+<!-- viewer stage -->
+<main id="stage" class="flex-1 overflow-auto p-4 sm:p-8 flex justify-center">
+  <div id="page" style="width:min(760px,94vw);min-height:1000px;padding:56px 60px;">
+    <!-- watermark overlay -->
+    <div class="wm-layer" id="wmLayer"></div>
+    <!-- simulated document content -->
+    <div class="relative" style="z-index:1">
+      <div class="text-center border-b-2 border-slate-800 pb-4 mb-6">
+        <div class="text-xs tracking-widest text-slate-400 mono">ICSOP-SRC-101-1-01 · 26'01</div>
+        <h1 class="text-2xl font-bold text-slate-900 mt-2">車輛分期進件作業</h1>
+        <div class="text-xs text-slate-500 mt-2">制定部門：企劃部　｜　循環別：銷售及收款循環　｜　公告日期：2026-01-01</div>
+      </div>
+      <h2 class="font-bold text-slate-800 mt-6 mb-2">一、目的</h2>
+      <p class="text-sm text-slate-600 leading-7">為規範車輛分期案件之進件受理、資料徵提與初步審核作業，確保案件品質、風險控管與資料留存符合內部控制與法規要求，特訂定本作業程序。</p>
+      <h2 class="font-bold text-slate-800 mt-6 mb-2">二、適用範圍</h2>
+      <p class="text-sm text-slate-600 leading-7">適用於營運管理部審查室、信用審查部與供應商金融部北區綜合處醫療一課辦理之車輛分期進件業務，涵蓋經銷通路與直營據點受理之案件。</p>
+      <h2 class="font-bold text-slate-800 mt-6 mb-2">三、作業流程</h2>
+      <ol class="text-sm text-slate-600 leading-7 list-decimal pl-5 space-y-1">
+        <li>案件受理：受理客戶車輛分期申請，核對申請書與證件完整性。</li>
+        <li>資料徵提：徵提財力證明、車輛資料與相關文件並建檔。</li>
+        <li>徵信查核：進行聯徵查詢與 KYC 檢核，評估案件風險。</li>
+        <li>初步審核：依進件審核標準核對條件，提送信用審查部覆核。</li>
+        <li>案件建立：完成進件建檔，移交後續簽約對保作業。</li>
+      </ol>
+      <p class="text-xs text-slate-400 leading-6 mt-8 border-t border-slate-100 pt-3">（本頁內容為原型示意；實際檢視器將載入伺服器回傳之已疊加浮水印預覽。）</p>
+    </div>
+  </div>
+</main>
+
+<!-- watermark format caption -->
+<footer class="shrink-0 bg-white border-t border-slate-200 px-4 py-2.5">
+  <div class="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+    <span class="text-xs text-slate-400 shrink-0">浮水印格式（與稽核快照一致）：</span>
+    <code class="mono text-xs text-slate-600 truncate" id="wmString"></code>
+  </div>
+</footer>
+
+<!-- toast -->
+<div id="toastWrap" class="fixed top-20 right-4 z-50 space-y-2"></div>
+
+<script>
+  // F020 watermark: {員工編號}-{姓名}-{公司名稱}-{部門}-{處/室}-{機密聲明(固定)}-YYYY-MM-DD HH:mm:ss (UTC+8)
+  // 視覺呈現：固定機密聲明「另起一行」獨立一行；線性格式字串順序不變（與稽核快照一致）
+  // 公司名稱＝VW_HRCOMF.COMPFULLNM 全稱；部門＝部層完整名稱；處/室＝最細單位名稱
+  const WM_DATA   = '22345-王小明-和潤企業股份有限公司-營運管理部-審查室';
+  const WM_NOTICE = '僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現';
+  const WM_TIME   = '2026-07-16 14:32:08';
+  const WM = `${WM_DATA}-${WM_NOTICE}-${WM_TIME}`;
+  document.getElementById('wmLayer').innerHTML = Array.from({length:60}).map(()=>`<span>${WM_DATA}<br>${WM_NOTICE}<br>${WM_TIME}</span>`).join('');
+  document.getElementById('wmString').textContent = WM + '  （時區 UTC+8）';
+
+  let z = 1;
+  function zoom(d){ z=Math.max(0.6,Math.min(2,+(z+d).toFixed(2))); document.getElementById('page').style.transform='scale('+z+')'; document.getElementById('zoomLabel').textContent=Math.round(z*100)+'%'; }
+
+  function toast(type,msg){
+    const map={success:['check-circle-2','#059669'],info:['info','#365C97'],error:['alert-circle','#DC2626']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><span class="text-slate-700">${msg}</span>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4500);
+  }
+  function doAction(kind){
+    const label={DOWNLOAD:'下載',PRINT:'列印'}[kind];
+    toast('success',`已${label}：伺服器端已將浮水印燒錄進 PDF 內容層（非僅前端疊加），並寫入 ${kind} 稽核紀錄`);
+  }
+
+  lucide.createIcons();
+</script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>文件詳情 · ICSOP 前台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;background:#FFFFFF;color:#334155;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- App bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="max-w-4xl mx-auto px-4 h-14 flex items-center gap-3">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="font-bold text-slate-900 truncate">ICSOP 文件瀏覽</span>
+    <div class="ml-auto flex items-center gap-3">
+      <div class="hidden sm:flex items-center gap-2 text-sm text-slate-500">
+        <i data-lucide="user" class="w-4 h-4"></i><span>王小明</span>
+        <span class="text-slate-300">·</span><span>營運管理部 / 審查室</span>
+      </div>
+      <button class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-4xl mx-auto px-4 py-5">
+
+  <!-- breadcrumb -->
+  <div class="flex items-center gap-1.5 text-sm text-slate-400 mb-4">
+    <a href="03-public-list.html" class="hover:text-primary-600 flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i>文件瀏覽</a>
+    <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+    <span class="text-slate-600">詳情</span>
+  </div>
+
+  <!-- title + actions -->
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
+    <div class="min-w-0">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="mono text-sm text-slate-500">ICSOP-SRC-101-1-01</span>
+        <span class="px-2 py-0.5 rounded-full text-xs font-medium" style="color:#047857;background:#D1FAE5">有效</span>
+      </div>
+      <h1 class="text-xl font-bold text-slate-900 mt-1">車輛分期進件作業</h1>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      <a href="05-public-viewer-watermark.html" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 transition min-h-[44px]"><i data-lucide="eye" class="w-4 h-4"></i>檢視</a>
+      <button onclick="doAction('DOWNLOAD','文件')" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50 transition min-h-[44px]"><i data-lucide="download" class="w-4 h-4"></i>下載</button>
+      <button onclick="doAction('PRINT','文件')" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50 transition min-h-[44px]"><i data-lucide="printer" class="w-4 h-4"></i>列印</button>
+    </div>
+  </div>
+
+  <!-- 16 fields (read-only) -->
+  <section class="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
+    <div class="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+      <i data-lucide="file-text" class="w-4 h-4 text-primary-600"></i>
+      <h2 class="font-semibold text-slate-900 text-sm">文件資訊</h2>
+      <span class="ml-auto text-xs text-slate-400">唯讀</span>
+    </div>
+    <dl id="fields" class="divide-y divide-slate-100"></dl>
+  </section>
+
+  <!-- attachments -->
+  <section class="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
+    <div class="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+      <i data-lucide="paperclip" class="w-4 h-4 text-primary-600"></i>
+      <h2 class="font-semibold text-slate-900 text-sm">附件</h2>
+    </div>
+    <div class="p-4 grid sm:grid-cols-2 gap-3">
+      <div class="flex items-center gap-3 border border-slate-200 rounded-lg p-3">
+        <i data-lucide="file-text" class="w-6 h-6 text-red-500 shrink-0"></i>
+        <div class="min-w-0 flex-1"><div class="text-sm text-slate-800 truncate">車輛分期進件作業_v1.3.pdf</div><div class="text-xs text-slate-400">ICSOP PDF · 檢視/下載將燒錄浮水印</div></div>
+        <button onclick="doAction('DOWNLOAD','ICSOP PDF')" class="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-xs hover:bg-slate-50 min-h-[44px]"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
+      </div>
+      <div class="flex items-center gap-3 border border-slate-200 rounded-lg p-3">
+        <i data-lucide="file-text" class="w-6 h-6 text-red-500 shrink-0"></i>
+        <div class="min-w-0 flex-1"><div class="text-sm text-slate-800 truncate">車輛分期進件作業_OJT簽到表.pdf</div><div class="text-xs text-slate-400">OJT 實體簽到表</div></div>
+        <button onclick="doAction('DOWNLOAD','OJT 簽到表')" class="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-xs hover:bg-slate-50 min-h-[44px]"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- usage forms -->
+  <section class="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
+    <div class="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+      <i data-lucide="files" class="w-4 h-4 text-primary-600"></i>
+      <h2 class="font-semibold text-slate-900 text-sm">使用表單</h2>
+      <span class="ml-auto text-xs text-slate-400">下載將寫入稽核</span>
+    </div>
+    <div id="usageForms" class="divide-y divide-slate-100"></div>
+  </section>
+
+  <!-- cross links -->
+  <section class="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
+    <div class="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+      <i data-lucide="link" class="w-4 h-4 text-primary-600"></i>
+      <h2 class="font-semibold text-slate-900 text-sm">文件連結點</h2>
+    </div>
+    <div id="links" class="divide-y divide-slate-100"></div>
+  </section>
+
+  <p class="text-center text-xs text-slate-400 mb-4">查看/下載/列印皆留下稽核軌跡，內容與檢視器浮水印一致。</p>
+</main>
+
+<!-- toast -->
+<div id="toastWrap" class="fixed top-16 right-4 z-50 space-y-2"></div>
+
+<script>
+  // ICSOP 編號第 2 段＝循環代碼（SRC＝銷售及收款循環）
+  const FIELDS = [
+    ['系統 UUID', '<span class="mono text-slate-500">a3f81c22-9e04-4b7a-8f2d-e2c9d1748e2f</span>'],
+    ['文件狀態', '<span class="px-2 py-0.5 rounded-full text-xs font-medium" style="color:#047857;background:#D1FAE5">有效</span>'],
+    ['制定公司', '和潤企業股份有限公司'],
+    ['制定部門', '企劃部'],
+    ['制定室別', '車輛行銷室'],
+    ['程序書編號', '<span class="mono">ICSOP-SRC-101-1-01</span>'],
+    ['程序書書名', '車輛分期進件作業'],
+    ['當責室長-主要', '陳彥廷（企劃部 車輛行銷室 室長）'],
+    ['當責室長-次要', '<span class="inline-flex flex-wrap gap-1.5"><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">林建宏（信用審查部 企金室 室長）</span></span>'],
+    ['文件使用部門', '<span class="inline-flex flex-wrap gap-1.5"><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">營業二本部 / 營運管理部 / 審查室</span><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">風險管理服務本部 / 信用審查部</span><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課</span></span> <span class="text-[10px] text-slate-400">（處/室層＋部層＋課層；選上層自動涵蓋其下所有單位）</span>'],
+    ['版次', '<span class="mono">26\'01</span>'],
+    ['循環別', '銷售及收款循環'],
+    ['所屬節點', '<span class="inline-flex items-center gap-1"><i data-lucide="git-commit-vertical" class="w-3.5 h-3.5 text-slate-400"></i>進件作業</span>'],
+    ['內容摘要', '規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。'],
+    ['公告日期', '<span class="mono">2026-01-01</span>'],
+    ['檔案（ICSOP PDF）', '車輛分期進件作業_v1.3.pdf <span class="text-slate-400 text-xs">（見附件）</span>'],
+    ['使用表單', '2 份 <span class="text-slate-400 text-xs">（見下方）</span>'],
+    ['OJT 實體簽到表', '車輛分期進件作業_OJT簽到表.pdf <span class="text-slate-400 text-xs">（見附件）</span>'],
+    ['連結點程序書', '2 筆 <span class="text-slate-400 text-xs">（見下方）</span>']
+  ];
+  document.getElementById('fields').innerHTML = FIELDS.map(([k,v])=>`
+    <div class="px-5 py-3 grid grid-cols-1 sm:grid-cols-3 gap-1 sm:gap-4">
+      <dt class="text-sm text-slate-400">${k}</dt>
+      <dd class="sm:col-span-2 text-sm text-slate-800">${v}</dd>
+    </div>`).join('');
+
+  const FORMS = [
+    {name:'進件申請書.xlsx', type:'excel'},
+    {name:'支票託收登記表.xlsx', type:'excel'}
+  ];
+  document.getElementById('usageForms').innerHTML = FORMS.map(f=>`
+    <div class="px-5 py-3 flex items-center gap-3">
+      <i data-lucide="${f.type==='excel'?'sheet':'file-text'}" class="w-5 h-5 ${f.type==='excel'?'text-emerald-600':'text-red-500'} shrink-0"></i>
+      <span class="text-sm text-slate-800 flex-1 truncate">${f.name}</span>
+      <button onclick="doAction('DOWNLOAD','使用表單')" class="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-xs hover:bg-slate-50 min-h-[44px]"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
+    </div>`).join('');
+
+  // F015: link targets show status; 作廢 目標仍保留辨識標記邏輯（本例兩目標皆有效）
+  const LINKS = [
+    {n:'ICSOP-SRC-101-2-00', name:'消金審核作業', status:'有效'},
+    {n:'ICSOP-SRC-102-1-01', name:'車輛分期對保作業', status:'有效'}
+  ];
+  function pill(s){const m={'有效':['#047857','#D1FAE5'],'失效':['#B45309','#FEF3C7'],'作廢':['#B91C1C','#FEE2E2']};const[t,b]=m[s];return `<span class="px-2 py-0.5 rounded-full text-xs font-medium" style="color:${t};background:${b}">${s}</span>`;}
+  document.getElementById('links').innerHTML = LINKS.map(l=>`
+    <a href="#" onclick="return openLink('${l.n}')" class="px-5 py-3 flex items-center gap-3 hover:bg-slate-50 transition">
+      <i data-lucide="link" class="w-5 h-5 text-slate-400 shrink-0"></i>
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 flex-wrap"><span class="mono text-xs text-slate-500">${l.n}</span>${pill(l.status)}${l.status==='作廢'?'<span class="text-[10px] text-slate-400">目標作廢，僅供辨識</span>':''}</div>
+        <div class="text-sm text-slate-800 truncate mt-0.5">${l.name}</div>
+      </div>
+      <i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 shrink-0"></i>
+    </a>`).join('');
+
+  function toast(type,msg){
+    const map={success:['check-circle-2','#059669'],info:['info','#365C97'],error:['alert-circle','#DC2626']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><span class="text-slate-700">${msg}</span>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4000);
+  }
+  function doAction(kind,target){
+    const label={DOWNLOAD:'下載',PRINT:'列印'}[kind];
+    toast('success',`已${label}「${target}」，並寫入 ${kind} 稽核（浮水印已於伺服器端燒錄）`);
+  }
+  function openLink(n){ toast('info','跳轉至連結文件：'+n); return false; }
+
+  lucide.createIcons();
+</script>
+</body>
+</html>

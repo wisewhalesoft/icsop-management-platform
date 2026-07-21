@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>循環樹狀圖預覽 · ICSOP</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;background:#F8FAFC;color:#334155;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  #stage{background:#E2E8F0;}
+  /* board = the "document" being viewed */
+  #board{background:#fff;background-image:radial-gradient(#EEF2F7 1px,transparent 1px);background-size:22px 22px;
+         box-shadow:0 4px 24px rgba(0,0,0,.08);position:relative;transform-origin:top center;transition:transform .15s ease;border-radius:12px;overflow:hidden;}
+  /* diagonal tiled watermark overlay — 格式與 05-public-viewer-watermark 完全一致（45°, opacity .12, slate-500, 14px, 機密聲明另起一行）*/
+  .wm-layer{position:absolute;inset:-40%;pointer-events:none;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;transform:rotate(-45deg);opacity:.12;user-select:none;z-index:5;}
+  .wm-layer span{color:#64748B;font-size:14px;white-space:nowrap;padding:22px 30px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.6;}
+  /* DAG nodes */
+  .node{position:absolute;cursor:pointer;transition:opacity .15s;}
+  .node .nbody{background:#fff;border:1.5px solid #E2E8F0;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.05);padding:8px 11px;transition:border-color .15s,box-shadow .15s,background .15s;}
+  .node.hasdocs .nbody{border-left:4px solid #059669;}
+  .node.hl .nbody{border-color:#365C97;background:#EAF1FA;box-shadow:0 0 0 3px #CFDFF3;}
+  .node.sel .nbody{border-color:#2A4A7E;background:#EAF1FA;box-shadow:0 0 0 3px #98B6E4, 0 0 0 7px rgba(152,182,228,.28);}
+  .node.dim{opacity:.3;}
+  path.edge{stroke:#94A3B8;stroke-width:2;fill:none;transition:stroke .15s,stroke-width .15s,opacity .15s;}
+  path.edge.hl{stroke:#365C97;stroke-width:3;}
+  path.edge.dim{opacity:.18;}
+</style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+<!-- ===== App bar (viewer 樣式，不套後台側選單) ===== -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200 shrink-0">
+  <div class="px-4 h-14 flex items-center gap-3">
+    <button onclick="goBack()" title="返回循環池" aria-label="返回循環池" class="text-slate-400 hover:text-slate-600 flex items-center"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="git-fork" class="w-5 h-5"></i></div>
+    <div class="leading-tight min-w-0">
+      <div class="text-xs text-slate-400">循環樹狀圖預覽</div>
+      <div class="font-semibold text-slate-900 text-sm truncate"><span id="titleName">銷售及收款循環</span> · <span class="mono text-slate-500" id="titleCode">SRC</span></div>
+    </div>
+    <div class="ml-auto hidden sm:flex items-center gap-2 text-sm text-slate-500">
+      <i data-lucide="user" class="w-4 h-4"></i><span>李慧玲</span><span class="text-slate-300">·</span><span>ICSOP 管理員</span>
+    </div>
+  </div>
+
+  <!-- toolbar：循環切換 + 縮放 -->
+  <div class="px-4 h-12 border-t border-slate-100 flex items-center gap-2 text-sm overflow-x-auto">
+    <label class="inline-flex items-center gap-1.5 text-slate-500 shrink-0"><i data-lucide="workflow" class="w-4 h-4"></i>循環別</label>
+    <select id="cycleSel" onchange="loadCycle(this.value)" class="shrink-0 px-2.5 py-1.5 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"></select>
+    <div class="w-px h-5 bg-slate-200 mx-1 shrink-0"></div>
+    <button onclick="zoomBy(-0.1)" title="縮小" aria-label="縮小" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="zoom-out" class="w-4 h-4"></i></button>
+    <span id="zoomLabel" class="mono text-xs text-slate-500 w-10 text-center shrink-0">100%</span>
+    <button onclick="zoomBy(0.1)" title="放大" aria-label="放大" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="zoom-in" class="w-4 h-4"></i></button>
+    <button onclick="resetView()" title="重設縮放" aria-label="重設縮放" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="maximize" class="w-4 h-4"></i></button>
+    <div class="w-px h-5 bg-slate-200 mx-1 shrink-0"></div>
+    <button onclick="doAction('DOWNLOAD')" title="下載此循環樹狀圖（PDF，燒錄浮水印）" aria-label="下載" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="download" class="w-4 h-4"></i>下載</button>
+    <button onclick="doAction('PRINT')" title="列印此循環樹狀圖（燒錄浮水印）" aria-label="列印" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="printer" class="w-4 h-4"></i>列印</button>
+    <div class="w-px h-5 bg-slate-200 mx-1 shrink-0"></div>
+    <span class="text-xs text-slate-400 shrink-0 hidden md:inline">點節點＝醒目標示其所有下游節點；點空白處取消</span>
+  </div>
+</header>
+
+<!-- info note（比照 05：檢視已記錄稽核）-->
+<div class="px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700 flex items-start gap-2 shrink-0">
+  <i data-lucide="shield-check" class="w-4 h-4 shrink-0 mt-0.5"></i>
+  <span>本預覽已<strong>寫入調閱稽核（VIEW）</strong>；畫面疊加之浮水印由<strong>伺服器端</strong>依當下登入身分與時間動態產生，格式與稽核快照一致。<strong>下載／列印</strong>時將把浮水印<strong>燒錄進 PDF 內容層</strong>並各自記錄稽核。</span>
+</div>
+
+<!-- viewer stage -->
+<main id="stage" class="flex-1 overflow-auto p-4 sm:p-8 flex justify-center items-start">
+  <div id="board">
+    <svg id="edges" style="position:absolute;inset:0;pointer-events:none;z-index:1;">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#94A3B8"></path></marker>
+        <marker id="arrowHl" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#365C97"></path></marker>
+      </defs>
+    </svg>
+    <div id="nodesLayer" style="position:absolute;inset:0;z-index:2;"></div>
+    <!-- watermark overlay（疊於樹狀圖之上，pointer-events:none 不擋點擊）-->
+    <div class="wm-layer" id="wmLayer"></div>
+  </div>
+</main>
+
+<!-- selection chip -->
+<div id="selChip" class="hidden fixed left-1/2 -translate-x-1/2 bottom-5 z-40 items-center gap-2 px-4 py-2 rounded-full bg-slate-900 text-white text-sm shadow-lg">
+  <i data-lucide="git-fork" class="w-4 h-4 text-primary-300"></i>
+  <span id="selText"></span>
+  <button onclick="clearSel()" class="ml-1 inline-flex items-center gap-1 text-slate-300 hover:text-white"><i data-lucide="x" class="w-3.5 h-3.5"></i>取消</button>
+</div>
+
+<!-- watermark format caption（比照 05）-->
+<footer class="shrink-0 bg-white border-t border-slate-200 px-4 py-2.5">
+  <div class="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+    <span class="text-xs text-slate-400 shrink-0">浮水印格式（與稽核快照一致）：</span>
+    <code class="mono text-xs text-slate-600 truncate" id="wmString"></code>
+  </div>
+</footer>
+
+<div id="toastWrap" class="fixed top-20 right-4 z-50 space-y-2"></div>
+
+<script>
+  /* ===== 浮水印（格式與 05-public-viewer-watermark 完全一致）=====
+     {員工編號}-{姓名}-{公司名稱}-{部門}-{處/室}-{固定機密聲明}-{時間}
+     視覺：固定機密聲明「另起一行」；線性格式字串順序不變（與稽核快照一致）。
+     身分＝當下登入之管理者（李慧玲／債權管理部 法催一室）；時間沿用示範值。
+     公司名稱＝VW_HRCOMF.COMPFULLNM 全稱；部門＝部層完整名稱；處/室＝最細單位名稱。 */
+  const WM_DATA   = '20233-李慧玲-和潤企業股份有限公司-債權管理部-法催一室';
+  const WM_NOTICE = '僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現';
+  const WM_TIME   = '2026-07-16 14:32:08';
+  const WM = `${WM_DATA}-${WM_NOTICE}-${WM_TIME}`;
+  document.getElementById('wmString').textContent = WM + '  （時區 UTC+8）';
+  function fillWatermark(){
+    const b=document.getElementById('board');
+    const area=(b.clientWidth||760)*(b.clientHeight||1000);
+    const count=Math.min(220,Math.max(60,Math.round(area/14000)));
+    document.getElementById('wmLayer').innerHTML = Array.from({length:count}).map(()=>`<span>${WM_DATA}<br>${WM_NOTICE}<br>${WM_TIME}</span>`).join('');
+  }
+
+  /* ===== 各循環節點與連線（沿用 11-dag-canvas 之節點視覺與 DAG 資料結構）=====
+     每循環：nodes[{id,name,docs}] + edges[[s,t]]；皆含 multi-parent 或 multi-child 以示意上到下 DAG。 */
+  const CYCLES={
+    SRC:{name:'銷售及收款循環', nodes:[
+      {id:'a1',name:'進件作業',docs:2},{id:'a2',name:'簽約對保作業',docs:1},{id:'a3',name:'擔保設定作業',docs:1},
+      {id:'a4',name:'撥款核准作業',docs:1},{id:'a5',name:'案件執行作業',docs:1},{id:'a6',name:'案件催收作業',docs:1},{id:'a7',name:'案件結束作業',docs:1}],
+      edges:[['a1','a2'],['a1','a3'],['a2','a4'],['a3','a4'],['a4','a5'],['a5','a6'],['a5','a7'],['a6','a7']]},
+    PUC:{name:'採購及付款循環', nodes:[
+      {id:'b1',name:'請購申請作業',docs:1},{id:'b2',name:'採購比議價作業',docs:1},{id:'b3',name:'驗收入庫作業',docs:1},
+      {id:'b4',name:'費用請款作業',docs:2},{id:'b5',name:'付款核准作業',docs:1},{id:'b6',name:'付款執行作業',docs:1}],
+      edges:[['b1','b2'],['b2','b3'],['b3','b5'],['b1','b4'],['b4','b5'],['b5','b6']]},
+    PPC:{name:'產品企劃循環', nodes:[
+      {id:'c1',name:'市場分析作業',docs:1},{id:'c2',name:'產品規劃作業',docs:1},{id:'c3',name:'目標制定作業',docs:1},{id:'c4',name:'政策發布作業',docs:1}],
+      edges:[['c1','c2'],['c2','c3'],['c1','c3'],['c3','c4']]},
+    LWC:{name:'薪工循環', nodes:[
+      {id:'d1',name:'任用與異動管理',docs:1},{id:'d2',name:'出勤管理作業',docs:1},{id:'d3',name:'薪資計算作業',docs:2},{id:'d4',name:'給付作業',docs:1}],
+      edges:[['d1','d2'],['d2','d3'],['d1','d3'],['d3','d4']]},
+    FC:{name:'融資循環', nodes:[
+      {id:'e1',name:'額度申請作業',docs:1},{id:'e2',name:'銀行融資作業',docs:1},{id:'e3',name:'動撥作業',docs:1},{id:'e4',name:'還款作業',docs:1}],
+      edges:[['e1','e2'],['e2','e3'],['e3','e4'],['e2','e4']]},
+    FAC:{name:'不動產、廠房及設備循環', nodes:[
+      {id:'f1',name:'資產需求作業',docs:1},{id:'f2',name:'資產請購作業',docs:1},{id:'f3',name:'驗收作業',docs:1},{id:'f4',name:'資產管理作業',docs:1},{id:'f5',name:'折舊管理作業',docs:1}],
+      edges:[['f1','f2'],['f2','f3'],['f3','f4'],['f4','f5'],['f3','f5']]},
+    IC:{name:'投資循環', nodes:[
+      {id:'g1',name:'投資評估作業',docs:1},{id:'g2',name:'短期投資作業',docs:1},{id:'g3',name:'保管作業',docs:1},{id:'g4',name:'會計入帳作業',docs:1}],
+      edges:[['g1','g2'],['g2','g3'],['g2','g4'],['g3','g4']]},
+    CIPS:{name:'電腦化資訊系統控制作業', nodes:[
+      {id:'h1',name:'系統開發作業',docs:1},{id:'h2',name:'程式及資料存取',docs:1},{id:'h3',name:'使用者權限管理',docs:1},{id:'h4',name:'變更管理作業',docs:1}],
+      edges:[['h1','h2'],['h1','h3'],['h2','h4'],['h3','h4']]},
+    GCA:{name:'管理性控制作業', nodes:[
+      {id:'i1',name:'法遵作業',docs:1},{id:'i2',name:'法規更新作業',docs:1},{id:'i3',name:'內部稽核作業',docs:1},{id:'i4',name:'風險評估作業',docs:1}],
+      edges:[['i1','i2'],['i2','i3'],['i1','i3'],['i3','i4']]}
+  };
+  const ORDER=['SRC','PUC','PPC','LWC','FC','FAC','IC','CIPS','GCA'];
+
+  const NODE_W=176, NODE_H=62, HGAP=210, VGAP=132, MARGIN=48;
+  const board=document.getElementById('board'), svg=document.getElementById('edges'), nodesLayer=document.getElementById('nodesLayer');
+  let CUR='SRC', selected=null, zoom=1, cur=null;
+
+  // 建立循環選單
+  document.getElementById('cycleSel').innerHTML = ORDER.map(c=>`<option value="${c}">${CYCLES[c].name}（${c}）</option>`).join('');
+
+  /* ---- 由上而下分層佈局（最長路徑分層；支援多 parent/多 child）---- */
+  function buildGraph(code){
+    const cy=CYCLES[code]; const nodes=cy.nodes, edges=cy.edges;
+    const adj={},indeg={}; nodes.forEach(n=>{adj[n.id]=[];indeg[n.id]=0;});
+    edges.forEach(([s,t])=>{adj[s].push(t);indeg[t]++;});
+    const level={},deg={}; nodes.forEach(n=>{level[n.id]=0;deg[n.id]=indeg[n.id];});
+    const q=nodes.filter(n=>indeg[n.id]===0).map(n=>n.id);
+    while(q.length){const u=q.shift(); adj[u].forEach(v=>{level[v]=Math.max(level[v],level[u]+1); if(--deg[v]===0)q.push(v);});}
+    const levels={}; nodes.forEach(n=>{(levels[level[n.id]]=levels[level[n.id]]||[]).push(n.id);});
+    const numLv=Math.max(...nodes.map(n=>level[n.id]))+1;
+    const maxCols=Math.max(...Object.keys(levels).map(k=>levels[k].length));
+    const pos={};
+    Object.keys(levels).forEach(lv=>{const row=levels[lv];const count=row.length;const rowW=count*HGAP;const startX=MARGIN+(maxCols*HGAP-rowW)/2;
+      row.forEach((id,i)=>{pos[id]={x:startX+i*HGAP+(HGAP-NODE_W)/2, y:MARGIN+(+lv)*VGAP};});});
+    const boardW=MARGIN*2+maxCols*HGAP, boardH=MARGIN*2+(numLv-1)*VGAP+NODE_H;
+    return {nodes,edges,adj,pos,boardW,boardH};
+  }
+
+  function descendants(id){ // id 及其所有下游（沿 child 邊遞移）
+    const set=new Set([id]); const stack=[id];
+    while(stack.length){const u=stack.pop(); (cur.adj[u]||[]).forEach(v=>{if(!set.has(v)){set.add(v);stack.push(v);}});}
+    return set;
+  }
+
+  function edgeD(s,t){ // 直角（elbow / orthogonal）：垂直→水平→垂直，child 端帶箭頭
+    const sx=cur.pos[s].x+NODE_W/2, sy=cur.pos[s].y+NODE_H;
+    const tx=cur.pos[t].x+NODE_W/2, ty=cur.pos[t].y;
+    const midY=sy+(ty-sy)/2;
+    return `M ${sx} ${sy} L ${sx} ${midY} L ${tx} ${midY} L ${tx} ${ty}`;
+  }
+
+  function renderCycle(){
+    // board size
+    board.style.width=cur.boardW+'px'; board.style.height=cur.boardH+'px';
+    svg.setAttribute('width',cur.boardW); svg.setAttribute('height',cur.boardH);
+    svg.setAttribute('viewBox',`0 0 ${cur.boardW} ${cur.boardH}`);
+    // edges
+    [...svg.querySelectorAll('path.edge')].forEach(p=>p.remove());
+    cur.edges.forEach(([s,t])=>{
+      const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('class','edge'); p.dataset.s=s; p.dataset.t=t;
+      p.setAttribute('d',edgeD(s,t)); p.setAttribute('marker-end','url(#arrow)');
+      svg.appendChild(p);
+    });
+    // nodes
+    nodesLayer.innerHTML=cur.nodes.map(n=>{
+      const p=cur.pos[n.id];
+      return `<div class="node${n.docs?' hasdocs':''}" data-id="${n.id}" style="left:${p.x}px;top:${p.y}px;width:${NODE_W}px" onclick="onNodeClick(event,'${n.id}')" role="button" tabindex="0" aria-label="節點 ${n.name}">
+        <div class="nbody">
+          <div class="flex items-center gap-1.5">
+            <i data-lucide="git-commit-vertical" class="w-3.5 h-3.5 text-slate-300 shrink-0"></i>
+            <span class="font-medium text-slate-800 text-sm truncate">${n.name}</span>
+          </div>
+          <div class="mt-1 flex items-center gap-1 text-[11px] ${n.docs?'text-emerald-600':'text-slate-400'}">
+            <i data-lucide="${n.docs?'file-check-2':'file-x-2'}" class="w-3.5 h-3.5"></i>${n.docs?('掛載 '+n.docs+' 份程序書'):'尚未掛載程序書'}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    lucide.createIcons();
+    fillWatermark();
+    applyHighlight();
+  }
+
+  function loadCycle(code){
+    if(!CYCLES[code]) code='SRC';
+    CUR=code; selected=null;
+    cur=buildGraph(code);
+    document.getElementById('cycleSel').value=code;
+    document.getElementById('titleName').textContent=CYCLES[code].name;
+    document.getElementById('titleCode').textContent=code;
+    renderCycle();
+    // 置中捲動
+    const st=document.getElementById('stage'); st.scrollLeft=Math.max(0,(board.offsetWidth-st.clientWidth)/2);
+  }
+
+  /* ---- 點節點：醒目標示其及所有下游；其餘淡化；再點同節點/空白取消 ---- */
+  function onNodeClick(ev,id){ ev.stopPropagation(); if(selected===id){ clearSel(); } else { selected=id; applyHighlight(); } }
+  function clearSel(){ selected=null; applyHighlight(); }
+  function applyHighlight(){
+    const set = selected? descendants(selected) : null;
+    nodesLayer.querySelectorAll('.node').forEach(el=>{
+      const id=el.dataset.id;
+      el.classList.toggle('hl', !!set && set.has(id));
+      el.classList.toggle('sel', id===selected);
+      el.classList.toggle('dim', !!set && !set.has(id));
+    });
+    svg.querySelectorAll('path.edge').forEach(p=>{
+      const on = !!set && set.has(p.dataset.s) && set.has(p.dataset.t);
+      p.classList.toggle('hl', on); p.classList.toggle('dim', !!set && !on);
+      p.setAttribute('marker-end', on?'url(#arrowHl)':'url(#arrow)');
+    });
+    const chip=document.getElementById('selChip');
+    if(set){
+      const n=cur.nodes.find(x=>x.id===selected);
+      document.getElementById('selText').textContent=`已標示「${n.name}」及其 ${set.size-1} 個下游節點`;
+      chip.classList.remove('hidden'); chip.classList.add('flex');
+    }else{ chip.classList.add('hidden'); chip.classList.remove('flex'); }
+  }
+  // 點空白處取消
+  document.getElementById('stage').addEventListener('click',()=>{ if(selected)clearSel(); });
+
+  /* ---- zoom ---- */
+  function applyZoom(){ board.style.transform='scale('+zoom+')'; document.getElementById('zoomLabel').textContent=Math.round(zoom*100)+'%'; }
+  function zoomBy(d){ zoom=Math.max(0.5,Math.min(1.8,+(zoom+d).toFixed(2))); applyZoom(); }
+  function resetView(){ zoom=1; applyZoom(); }
+
+  function goBack(){ if(document.referrer){ history.back(); } else { location.href='10-lifecycle-list.html'; } }
+
+  function doAction(kind){
+    const label={DOWNLOAD:'下載',PRINT:'列印'}[kind]||kind;
+    const cyc=document.getElementById('titleName')?.textContent||'';
+    toast('success',`已${label}「${cyc}」循環樹狀圖：伺服器端已將浮水印燒錄進 PDF 內容層（非僅前端疊加），並寫入 ${kind} 稽核紀錄`);
+  }
+
+  function toast(type,msg){
+    const map={success:['check-circle-2','#059669'],info:['info','#365C97'],error:['alert-circle','#DC2626']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><span class="text-slate-700">${msg}</span>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4000);
+  }
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&selected)clearSel();});
+
+  // init：由 10 帶入的 ?cycle=CODE 為預設選中
+  const qCode=(new URLSearchParams(location.search).get('cycle')||'SRC').toUpperCase();
+  loadCycle(CYCLES[qCode]?qCode:'SRC');
+  window.addEventListener('resize',()=>{ const st=document.getElementById('stage'); st.scrollLeft=Math.max(0,(board.offsetWidth-st.clientWidth)/2); });
+</script>
+</body>
+</html>

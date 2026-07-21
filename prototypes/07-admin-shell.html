@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>後台首頁 · ICSOP 管理後台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;color:#334155;background:#F8FAFC;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  /* admin shell sidebar */
+  #sidebar{width:240px;transition:width .2s ease;}
+  body{padding-left:240px;transition:padding-left .2s ease;}
+  body.sb-collapsed{padding-left:60px;}
+  body.sb-collapsed #sidebar{width:60px;}
+  body.sb-collapsed .sb-label{display:none;}
+  body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
+</style>
+</head>
+<body data-role="icsop_admin" class="min-h-screen">
+
+<!-- ===== Admin shell sidebar ===== -->
+<aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-50 bg-white border-r border-slate-200 flex flex-col">
+  <div class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
+  </div>
+  <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
+  <div class="border-t border-slate-200 p-2 shrink-0">
+    <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
+      <i data-lucide="external-link" class="w-4 h-4 shrink-0"></i><span class="sb-label truncate">瀏覽文件網頁</span></button>
+  </div>
+</aside>
+
+<!-- Top bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="h-14 px-4 flex items-center gap-3">
+    <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
+    <div class="leading-tight min-w-0">
+      <div class="text-xs text-slate-400 flex items-center gap-1"><span>ICSOP 管理後台</span><i data-lucide="chevron-right" class="w-3 h-3"></i><span>首頁</span></div>
+      <div class="font-semibold text-slate-900 text-sm truncate">後台首頁 / 儀表板</div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <div class="flex items-center gap-1.5 mr-1">
+        <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+        <select id="roleSel" onchange="setRole(this.value)" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
+          <option value="icsop_admin">ICSOP 管理員</option>
+          <option value="sysadmin">系統管理員</option>
+          <option value="supervisor">主管</option>
+          <option value="deptcontact">部門窗口</option>
+          <option value="user">一般使用者</option>
+        </select>
+      </div>
+      <div class="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200"><i data-lucide="user-circle" class="w-4 h-4"></i><span id="userName">李慧玲</span></div>
+      <button title="登出" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+</header>
+
+<!-- blocked overlay (User has no backend) -->
+<div id="blockOverlay" class="hidden fixed inset-0 z-40 bg-slate-50/95 backdrop-blur-sm flex items-center justify-center">
+  <div class="text-center max-w-sm">
+    <div class="w-14 h-14 rounded-full bg-primary-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="external-link" class="w-7 h-7 text-primary-600"></i></div>
+    <h3 class="font-semibold text-slate-900">一般使用者無後台</h3>
+    <p class="text-sm text-slate-500 mt-1">依角色分流（F002），一般使用者登入後直接導向前台瀏覽頁，不顯示管理後台。</p>
+    <button onclick="openPublic()" class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700"><i data-lucide="arrow-right" class="w-4 h-4"></i>前往前台瀏覽</button>
+  </div>
+</div>
+
+<main class="max-w-6xl mx-auto px-5 py-6">
+  <!-- welcome -->
+  <div class="flex items-start justify-between flex-wrap gap-3 mb-5">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">歡迎回來，李慧玲</h1>
+      <p class="text-sm text-slate-500 mt-1">目前角色：<span id="roleBadge"></span> · <span class="mono">2026-07-16（週四）</span></p>
+    </div>
+  </div>
+
+  <!-- todo badges -->
+  <div id="todoRow" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6"></div>
+
+  <!-- quick access cards -->
+  <h2 class="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5"><i data-lucide="layout-grid" class="w-4 h-4 text-slate-400"></i>快速進入功能區</h2>
+  <div id="cardGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8"></div>
+
+  <!-- recent activity -->
+  <h2 class="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5"><i data-lucide="activity" class="w-4 h-4 text-slate-400"></i>最近活動</h2>
+  <div class="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100" id="activityList"></div>
+</main>
+
+<div id="toastWrap" class="fixed top-16 right-4 z-[60] space-y-2"></div>
+
+<script>
+  /* ===== admin shell sidebar ===== */
+  const MENU=[
+    {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
+    {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
+  ];
+  const CURRENT_MODULE='home';
+  function renderSidebar(){
+    const role=document.body.dataset.role;
+    const items=MENU.filter(m=>m.roles[role]);
+    document.getElementById('sidebarNav').innerHTML = items.length? items.map(m=>{
+      const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
+      return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`;
+    lucide.createIcons();
+  }
+  function navTo(id,label){ if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;} shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型：對應頁面）')); return false; }
+  function toggleSidebar(){ document.body.classList.toggle('sb-collapsed'); }
+  function openPublic(){ shellToast('已於新視窗開啟前台瀏覽頁（03-public-list）'); }
+  function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
+
+  /* ===== dashboard ===== */
+  const ROLE_META={
+    sysadmin:['系統管理員','#4338CA','shield-check'], icsop_admin:['ICSOP 管理員','#7C3AED','file-cog'],
+    supervisor:['主管','#0891B2','user-cog'], deptcontact:['部門窗口','#475569','contact'], user:['一般使用者','#64748B','user']
+  };
+  const CARDS=[
+    {id:'lifecycle',label:'循環管理',desc:'循環池與節點連線維護',icon:'workflow',href:'10-lifecycle-list.html',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    {id:'document',label:'ICSOP 文件管理',desc:'文件新增與維護、狀態、附件、連結點',icon:'file-text',href:'13-document-list.html',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
+    {id:'usageform',label:'使用表單管理',desc:'excel/pdf 表單上傳與文件關聯',icon:'files',href:'19-usage-form-management.html',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'docindex',label:'文件索引管理',desc:'AI 提取結果預覽、索引狀態與重新索引',icon:'database',href:'21-document-index-management.html',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'audit',label:'文件調閱歷程',desc:'查看/下載/列印稽核查詢',icon:'history',href:'17-access-history.html',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'changehistory',label:'文件變更歷程',desc:'欄位 before/after diff、循環樹狀圖新舊對照',icon:'git-compare',href:'23-change-history.html',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'account',label:'帳號管理',desc:'建立/停用帳號、指派角色',icon:'users',href:'08-account-management.html',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'orgsync',label:'組織人員異動管理',desc:'每日組織同步、異動待確認',icon:'refresh-cw',href:'09-org-sync-management.html',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'settings',label:'系統參數 / 權限矩陣',desc:'角色×功能 / 角色×欄位矩陣',icon:'settings',href:'18-permission-matrix.html',roles:{sysadmin:'CRUD'}}
+  ];
+  const TODOS=[
+    {label:'待確認組織異動',n:3,icon:'alert-triangle',color:'#B45309',bg:'#FEF3C7',roles:['sysadmin','icsop_admin']},
+    {label:'未指派節點文件',n:1,icon:'git-commit-vertical',color:'#B45309',bg:'#FEF3C7',roles:['icsop_admin']},
+    {label:'停用帳號待覆核',n:1,icon:'user-x',color:'#B91C1C',bg:'#FEE2E2',roles:['sysadmin']},
+    {label:'調閱紀錄（近7日）',n:48,icon:'history',color:'#365C97',bg:'#EAF1FA',roles:['sysadmin','icsop_admin']},
+    {label:'待公布的文件',n:2,icon:'file-clock',color:'#047857',bg:'#D1FAE5',roles:['icsop_admin','supervisor']}
+  ];
+  const ACTIVITY=[
+    ['file-plus','ICSOP-SRC-101-1-01 車輛分期進件作業 已建立','2 小時前','#365C97'],
+    ['refresh-cw','每日組織同步完成，異動 12 筆','今日 06:00','#047857'],
+    ['user-x','帳號 20321（周立群·離職）自動停用','昨日 22:14','#B91C1C'],
+    ['git-branch','循環「銷售及收款循環」新增節點「案件結束作業」','昨日 15:02','#365C97'],
+    ['download','ICSOP-SRC-101-1-01 車輛分期進件作業 被下載（王小明）','昨日 11:40','#475569']
+  ];
+
+  function renderDash(){
+    const role=document.body.dataset.role;
+    const [label,color,icon]=ROLE_META[role];
+    document.getElementById('roleBadge').innerHTML=`<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white" style="background:${color}"><i data-lucide="${icon}" class="w-3 h-3"></i>${label}</span>`;
+    // todos
+    document.getElementById('todoRow').innerHTML=TODOS.filter(t=>t.roles.includes(role)).map(t=>`
+      <div class="bg-white border border-slate-200 rounded-xl p-3.5">
+        <div class="flex items-center gap-2"><span class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:${t.bg}"><i data-lucide="${t.icon}" class="w-4 h-4" style="color:${t.color}"></i></span>
+          <span class="text-2xl font-bold text-slate-900">${t.n}</span></div>
+        <div class="text-xs text-slate-500 mt-1.5">${t.label}</div>
+      </div>`).join('') || `<div class="col-span-full text-sm text-slate-400 bg-white border border-dashed border-slate-200 rounded-xl px-4 py-4 text-center">此角色無待辦提示</div>`;
+    // cards
+    const cards=CARDS.filter(c=>c.roles[role]);
+    document.getElementById('cardGrid').innerHTML=cards.length? cards.map(c=>{
+      const acc=c.roles[role], ro=acc!=='CRUD';
+      return `<a href="${c.href}" class="group bg-white border border-slate-200 rounded-xl p-4 hover:border-primary-300 hover:shadow-sm transition block">
+        <div class="flex items-start justify-between">
+          <span class="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center"><i data-lucide="${c.icon}" class="w-5 h-5 text-primary-600"></i></span>
+          ${ro?`<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:`<span class="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">可編輯</span>`}
+        </div>
+        <h3 class="font-semibold text-slate-900 mt-3 group-hover:text-primary-700">${c.label}</h3>
+        <p class="text-xs text-slate-500 mt-1">${c.desc}</p>
+        <div class="mt-3 text-xs text-primary-600 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">進入<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></div>
+      </a>`;
+    }).join('') : `<div class="col-span-full text-sm text-slate-400 bg-white border border-dashed border-slate-200 rounded-xl px-4 py-8 text-center">此角色無可用功能區</div>`;
+    // activity
+    document.getElementById('activityList').innerHTML=ACTIVITY.map(([ic,txt,time,col])=>`
+      <div class="flex items-center gap-3 px-4 py-3">
+        <span class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center shrink-0"><i data-lucide="${ic}" class="w-4 h-4" style="color:${col}"></i></span>
+        <span class="text-sm text-slate-700 flex-1">${txt}</span>
+        <span class="text-xs text-slate-400 mono shrink-0">${time}</span>
+      </div>`).join('');
+    lucide.createIcons();
+  }
+
+  function setRole(r){
+    document.body.dataset.role=r;
+    document.getElementById('blockOverlay').classList.toggle('hidden',r!=='user');
+    renderSidebar();
+    if(r!=='user') renderDash();
+    lucide.createIcons();
+  }
+
+  function toast(type,msg,code){
+    const map={success:['check-circle-2','#059669'],error:['alert-circle','#DC2626'],info:['info','#365C97']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><div><span class="text-slate-700">${msg}</span>${code?`<div class="text-[10px] mono text-slate-400 mt-0.5">${code}</div>`:''}</div>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4000);
+  }
+
+  renderSidebar(); renderDash(); lucide.createIcons();
+</script>
+</body>
+</html>

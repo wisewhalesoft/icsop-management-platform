@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ICSOP 設計系統 · Design System</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      fontFamily: { sans: ['Inter', 'Noto Sans TC', 'sans-serif'] },
+      colors: {
+        primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' }
+      }
+    }}
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  :root{
+    --primary-600:#365C97; --primary-700:#2A4A7E;
+    --status-active-t:#047857; --status-active-b:#D1FAE5;
+    --status-inactive-t:#B45309; --status-inactive-b:#FEF3C7;
+    --status-void-t:#B91C1C; --status-void-b:#FEE2E2;
+    --success:#059669; --warning:#D97706; --danger:#DC2626; --info:#365C97;
+  }
+  body{font-family:'Inter','Noto Sans TC',sans-serif;color:#334155;background:#FFFFFF;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  h2{scroll-margin-top:1rem;}
+  .wm-demo{position:relative;overflow:hidden;}
+  .wm-layer{position:absolute;inset:0;pointer-events:none;display:flex;flex-wrap:wrap;transform:rotate(-45deg) scale(1.6);transform-origin:center;opacity:.12;}
+  .wm-layer span{color:#64748B;font-size:14px;white-space:nowrap;padding:22px 30px;font-weight:500;text-align:center;line-height:1.5;}
+</style>
+</head>
+<body class="text-slate-700">
+
+<!-- Top bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="max-w-6xl mx-auto px-6 h-14 flex items-center gap-3">
+    <i data-lucide="palette" class="w-5 h-5 text-primary-600"></i>
+    <h1 class="font-bold text-slate-900 text-lg">ICSOP 文件管理平台 · 設計系統</h1>
+    <span class="ml-2 text-xs px-2 py-0.5 rounded bg-primary-50 text-primary-700 border border-primary-100">v1.0</span>
+    <span class="ml-auto text-sm text-slate-500">跨切基礎 · Light mode · WCAG 2.1 AA</span>
+  </div>
+</header>
+
+<div class="max-w-6xl mx-auto px-6 py-8 flex gap-8">
+  <!-- side nav -->
+  <nav class="hidden lg:block w-48 shrink-0 sticky top-20 self-start text-sm space-y-1">
+    <a href="#colors" class="block px-3 py-1.5 rounded hover:bg-slate-100">色彩</a>
+    <a href="#status" class="block px-3 py-1.5 rounded hover:bg-slate-100">狀態與角色</a>
+    <a href="#type" class="block px-3 py-1.5 rounded hover:bg-slate-100">字體與字級</a>
+    <a href="#buttons" class="block px-3 py-1.5 rounded hover:bg-slate-100">按鈕</a>
+    <a href="#forms" class="block px-3 py-1.5 rounded hover:bg-slate-100">表單元件</a>
+    <a href="#badges" class="block px-3 py-1.5 rounded hover:bg-slate-100">徽章</a>
+    <a href="#table" class="block px-3 py-1.5 rounded hover:bg-slate-100">表格與分頁</a>
+    <a href="#feedback" class="block px-3 py-1.5 rounded hover:bg-slate-100">Toast / 對話框</a>
+    <a href="#states" class="block px-3 py-1.5 rounded hover:bg-slate-100">空 / 載入狀態</a>
+    <a href="#watermark" class="block px-3 py-1.5 rounded hover:bg-slate-100">浮水印</a>
+    <a href="#icons" class="block px-3 py-1.5 rounded hover:bg-slate-100">圖示</a>
+  </nav>
+
+  <main class="flex-1 min-w-0 space-y-12">
+
+    <!-- COLORS -->
+    <section id="colors">
+      <h2 class="text-xl font-bold text-slate-900 mb-1">色彩系統</h2>
+      <p class="text-sm text-slate-500 mb-4">所有前景/背景組合以 WCAG 2.1 AA（正文 ≥4.5:1）為底線。</p>
+      <h3 class="font-semibold text-slate-800 mb-2 mt-4">品牌與中性</h3>
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3" id="brandSwatches"></div>
+    </section>
+
+    <!-- STATUS / ROLES -->
+    <section id="status">
+      <h3 class="font-semibold text-slate-800 mb-2">文件狀態（F012）</h3>
+      <div class="flex flex-wrap gap-3 mb-6">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium" style="color:var(--status-active-t);background:var(--status-active-b)">● 有效</span>
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium" style="color:var(--status-inactive-t);background:var(--status-inactive-b)">● 失效</span>
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium" style="color:var(--status-void-t);background:var(--status-void-b)">● 作廢</span>
+        <span class="text-xs text-slate-500 self-center">前台一般使用者僅顯示「有效」（後端強制過濾）</span>
+      </div>
+
+      <h3 class="font-semibold text-slate-800 mb-2">語意色（回饋）</h3>
+      <div class="flex flex-wrap gap-3 mb-6">
+        <span class="px-3 py-1.5 rounded text-white text-sm" style="background:var(--success)">success · 同步成功</span>
+        <span class="px-3 py-1.5 rounded text-white text-sm" style="background:var(--warning)">warning · 未指派節點</span>
+        <span class="px-3 py-1.5 rounded text-white text-sm" style="background:var(--danger)">danger · 成環拒絕</span>
+        <span class="px-3 py-1.5 rounded text-white text-sm" style="background:var(--info)">info · 進行中</span>
+      </div>
+
+      <h3 class="font-semibold text-slate-800 mb-2">5 固定角色徽章（RBAC 模擬器）</h3>
+      <div class="flex flex-wrap gap-3" id="roleBadges"></div>
+    </section>
+
+    <!-- TYPOGRAPHY -->
+    <section id="type">
+      <h2 class="text-xl font-bold text-slate-900 mb-4">字體與字級</h2>
+      <p class="text-sm text-slate-500 mb-4">Inter（拉丁/數字）+ Noto Sans TC（中文）；編號採 JetBrains Mono。</p>
+      <div class="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
+        <div class="p-4 flex items-baseline gap-4"><span class="w-24 text-xs text-slate-400 mono">30 / bold</span><span class="text-3xl font-bold text-slate-900">頁面主標題 Heading</span></div>
+        <div class="p-4 flex items-baseline gap-4"><span class="w-24 text-xs text-slate-400 mono">20 / bold</span><span class="text-xl font-bold text-slate-900">區塊標題 Section</span></div>
+        <div class="p-4 flex items-baseline gap-4"><span class="w-24 text-xs text-slate-400 mono">16 / semibold</span><span class="text-base font-semibold text-slate-800">子標題 Subtitle</span></div>
+        <div class="p-4 flex items-baseline gap-4"><span class="w-24 text-xs text-slate-400 mono">14 / regular</span><span class="text-sm">正文 Body — ICSOP 文件管理平台。</span></div>
+        <div class="p-4 flex items-baseline gap-4"><span class="w-24 text-xs text-slate-400 mono">14 / mono</span><span class="text-sm mono text-slate-700">ICSOP-SRC-101-1-01 · 22345</span></div>
+        <div class="p-4 flex items-baseline gap-4"><span class="w-24 text-xs text-slate-400 mono">12 / regular</span><span class="text-xs text-slate-500">輔助說明 Caption</span></div>
+      </div>
+    </section>
+
+    <!-- BUTTONS -->
+    <section id="buttons">
+      <h2 class="text-xl font-bold text-slate-900 mb-4">按鈕</h2>
+      <div class="flex flex-wrap items-center gap-3 bg-white border border-slate-200 rounded-lg p-5">
+        <button class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 transition">主要動作</button>
+        <button class="px-4 py-2 rounded-md bg-white border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition">次要</button>
+        <button class="px-4 py-2 rounded-md text-primary-600 text-sm font-medium hover:bg-primary-50 transition">文字按鈕</button>
+        <button class="px-4 py-2 rounded-md text-white text-sm font-medium hover:opacity-90 transition" style="background:var(--danger)">危險 · 刪除</button>
+        <button class="px-4 py-2 rounded-md bg-slate-100 text-slate-400 text-sm font-medium cursor-not-allowed" disabled>停用</button>
+        <button class="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="plus" class="w-4 h-4"></i>含圖示</button>
+      </div>
+    </section>
+
+    <!-- FORMS -->
+    <section id="forms">
+      <h2 class="text-xl font-bold text-slate-900 mb-4">表單元件</h2>
+      <div class="grid sm:grid-cols-2 gap-5 bg-white border border-slate-200 rounded-lg p-5">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">文字輸入 <span class="text-red-500">*</span></label>
+          <input type="text" placeholder="請輸入" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">錯誤狀態</label>
+          <input type="text" value="ICSOP-SRC-101-1-01" class="w-full px-3 py-2 rounded-md border-2 text-sm mono" style="border-color:var(--danger)" />
+          <p class="mt-1 text-xs flex items-center gap-1" style="color:var(--danger)"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>文件編號已存在</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">密碼欄（顯示切換）</label>
+          <div class="relative">
+            <input id="pwDemo" type="password" value="secret123" class="w-full px-3 py-2 pr-10 rounded-md border border-slate-300 text-sm" />
+            <button onclick="togglePw()" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><i id="pwIcon" data-lucide="eye" class="w-4 h-4"></i></button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">下拉選單</label>
+          <select class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white">
+            <option>有效</option><option>失效</option><option>作廢</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- BADGES -->
+    <section id="badges">
+      <h2 class="text-xl font-bold text-slate-900 mb-4">徽章 / Pills</h2>
+      <div class="bg-white border border-slate-200 rounded-lg p-5 space-y-3">
+        <div class="flex flex-wrap gap-2 items-center"><span class="text-xs text-slate-400 w-28">帳號來源</span>
+          <span class="px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">手動</span>
+          <span class="px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">上游同步</span></div>
+        <div class="flex flex-wrap gap-2 items-center"><span class="text-xs text-slate-400 w-28">同步狀態</span>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs text-blue-700 bg-blue-50 border border-blue-100"><span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>進行中</span>
+          <span class="px-2 py-0.5 rounded text-xs text-emerald-700 bg-emerald-50 border border-emerald-100">成功</span>
+          <span class="px-2 py-0.5 rounded text-xs text-red-700 bg-red-50 border border-red-100">失敗</span></div>
+        <div class="flex flex-wrap gap-2 items-center"><span class="text-xs text-slate-400 w-28">組織異動</span>
+          <span class="px-2 py-0.5 rounded text-xs" style="color:var(--status-inactive-t);background:var(--status-inactive-b)">待確認</span>
+          <span class="px-2 py-0.5 rounded text-xs" style="color:var(--status-active-t);background:var(--status-active-b)">已處理</span></div>
+        <div class="flex flex-wrap gap-2 items-center"><span class="text-xs text-slate-400 w-28">未指派節點</span>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs" style="color:var(--warning)"><i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>未指派節點</span></div>
+      </div>
+    </section>
+
+    <!-- TABLE -->
+    <section id="table">
+      <h2 class="text-xl font-bold text-slate-900 mb-4">表格與分頁</h2>
+      <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+            <tr><th class="text-left font-medium px-4 py-2.5">文件編號</th><th class="text-left font-medium px-4 py-2.5">名稱</th><th class="text-left font-medium px-4 py-2.5">制定部門</th><th class="text-left font-medium px-4 py-2.5">狀態</th></tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr class="hover:bg-slate-50"><td class="px-4 py-2.5 mono">ICSOP-SRC-101-1-01</td><td class="px-4 py-2.5">車輛分期進件作業</td><td class="px-4 py-2.5">企劃部</td><td class="px-4 py-2.5"><span class="px-2 py-0.5 rounded-full text-xs" style="color:var(--status-active-t);background:var(--status-active-b)">有效</span></td></tr>
+            <tr class="hover:bg-slate-50"><td class="px-4 py-2.5 mono">ICSOP-LWC-101-1-03</td><td class="px-4 py-2.5">任用管理作業</td><td class="px-4 py-2.5">管理部</td><td class="px-4 py-2.5"><span class="px-2 py-0.5 rounded-full text-xs" style="color:var(--status-inactive-t);background:var(--status-inactive-b)">失效</span></td></tr>
+          </tbody>
+        </table>
+        <div class="flex items-center justify-between px-4 py-3 border-t border-slate-100 text-sm text-slate-500">
+          <span>共 128 筆 · 每頁 50 筆</span>
+          <div class="flex items-center gap-1">
+            <button class="w-8 h-8 rounded border border-slate-200 hover:bg-slate-50">‹</button>
+            <button class="w-8 h-8 rounded bg-primary-600 text-white">1</button>
+            <button class="w-8 h-8 rounded border border-slate-200 hover:bg-slate-50">2</button>
+            <button class="w-8 h-8 rounded border border-slate-200 hover:bg-slate-50">3</button>
+            <button class="w-8 h-8 rounded border border-slate-200 hover:bg-slate-50">›</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEEDBACK -->
+    <section id="feedback">
+      <h2 class="text-xl font-bold text-slate-900 mb-4">Toast / 對話框 / 抽屜</h2>
+      <div class="flex flex-wrap gap-3">
+        <button onclick="showToast('success','已成功儲存')" class="px-4 py-2 rounded-md bg-white border border-slate-300 text-sm hover:bg-slate-50">觸發成功 Toast</button>
+        <button onclick="showToast('error','此連線會造成循環結構成環，請重新確認流程方向')" class="px-4 py-2 rounded-md bg-white border border-slate-300 text-sm hover:bg-slate-50">觸發錯誤 Toast</button>
+        <button onclick="openConfirm()" class="px-4 py-2 rounded-md bg-white border border-slate-300 text-sm hover:bg-slate-50">開啟確認對話</button>
+        <button onclick="openDrawer()" class="px-4 py-2 rounded-md bg-white border border-slate-300 text-sm hover:bg-slate-50">開啟右側抽屜</button>
+      </div>
+    </section>
+
+    <!-- STATES -->
+    <section id="states">
+      <h2 class="text-xl font-bold text-slate-900 mb-4">空狀態 / 載入狀態</h2>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div class="bg-white border border-slate-200 rounded-lg p-8 text-center">
+          <i data-lucide="inbox" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+          <p class="text-sm text-slate-500">查無符合結果</p>
+          <p class="text-xs text-slate-400 mt-1">請調整搜尋或篩選條件</p>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-lg p-6">
+          <div class="animate-pulse space-y-3">
+            <div class="h-3 bg-slate-200 rounded w-3/4"></div>
+            <div class="h-3 bg-slate-200 rounded w-1/2"></div>
+            <div class="h-3 bg-slate-200 rounded w-5/6"></div>
+          </div>
+          <p class="text-xs text-slate-400 mt-4 text-center">骨架屏 · 清單首屏載入</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- WATERMARK -->
+    <section id="watermark">
+      <h2 class="text-xl font-bold text-slate-900 mb-1">浮水印呈現（F020 · 已定案）</h2>
+      <p class="text-sm text-slate-500 mb-4">對角 45° 平鋪重複、opacity 0.12、slate-500、14px；格式與稽核快照一字不差一致。</p>
+      <div class="wm-demo bg-white border border-slate-200 rounded-lg h-64 flex items-center justify-center">
+        <div class="wm-layer" id="wmLayer"></div>
+        <div class="text-center relative z-10">
+          <i data-lucide="file-text" class="w-8 h-8 text-slate-300 mx-auto mb-2"></i>
+          <p class="text-sm text-slate-400">PDF 檢視器內容區（示意）</p>
+        </div>
+      </div>
+      <p class="mt-2 text-xs mono text-slate-500">格式：{員工編號}-{姓名}-{公司名稱}-{部門}-{處/室}-{僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現}-YYYY-MM-DD HH:mm:ss (UTC+8)</p>
+
+      <!-- 對照示範：有處/室 vs 無處/室（分隔符自動收合，upstream-hr-source-contract §8.4） -->
+      <div class="mt-4 bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-sm font-semibold text-slate-700">字串對照：有處/室 vs 無處/室</div>
+        <dl class="divide-y divide-slate-200 text-xs">
+          <div class="px-4 py-3">
+            <dt class="text-slate-500 mb-1">一般：掛於處/室層或課層（實測約 91.6%）</dt>
+            <dd class="mono text-slate-700 break-all" id="wmSampleFull"></dd>
+          </div>
+          <div class="px-4 py-3">
+            <dt class="text-slate-500 mb-1">無處/室：掛於部層以上（實測約 8.4%）—「處/室」欄留空並<strong class="text-slate-700">自動收合分隔符</strong>，不得出現連續分隔符 <code class="mono text-red-600">--</code></dt>
+            <dd class="mono text-slate-700 break-all" id="wmSampleNoSection"></dd>
+          </div>
+        </dl>
+      </div>
+      <p class="mt-2 text-xs text-slate-500 flex items-start gap-1.5"><i data-lucide="shield-check" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-600"></i><span>此收合規則於<strong class="text-slate-700">檢視器疊加</strong>、<strong class="text-slate-700">下載／列印 PDF 燒錄</strong>、<strong class="text-slate-700">稽核快照</strong>三者套用同一份組字邏輯，字串必須一字不差一致。</span></p>
+    </section>
+
+    <!-- ICONS -->
+    <section id="icons">
+      <h2 class="text-xl font-bold text-slate-900 mb-4">常用圖示（Lucide）</h2>
+      <div class="grid grid-cols-4 sm:grid-cols-8 gap-3 bg-white border border-slate-200 rounded-lg p-5" id="iconGrid"></div>
+    </section>
+
+    <div class="h-8"></div>
+  </main>
+</div>
+
+<!-- Toast container -->
+<div id="toastWrap" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+<!-- Confirm dialog -->
+<div id="confirmModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <div class="flex items-start gap-3">
+      <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style="background:var(--status-void-b)"><i data-lucide="alert-triangle" class="w-5 h-5" style="color:var(--danger)"></i></div>
+      <div><h3 class="font-semibold text-slate-900">確認切換為「作廢」？</h3><p class="text-sm text-slate-500 mt-1">作廢後前台將立即隱藏此文件。此動作可再切回其他狀態。</p></div>
+    </div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeConfirm()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button onclick="closeConfirm();showToast('success','狀態已更新為作廢')" class="px-4 py-2 rounded-md text-white text-sm" style="background:var(--danger)">確認作廢</button>
+    </div>
+  </div>
+</div>
+
+<!-- Drawer -->
+<div id="drawerOverlay" class="fixed inset-0 z-40 hidden bg-slate-900/40" onclick="closeDrawer()"></div>
+<aside id="drawer" class="fixed top-0 right-0 z-50 h-full w-[420px] max-w-full bg-white shadow-2xl translate-x-full transition-transform duration-300">
+  <div class="h-14 border-b border-slate-200 flex items-center justify-between px-4">
+    <h3 class="font-semibold text-slate-900">右側抽屜（節點抽屜示意）</h3>
+    <button onclick="closeDrawer()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+  </div>
+  <div class="p-4 text-sm text-slate-500">寬度桌機 420px；由右滑入、遮罩、ESC/點遮罩關閉、關閉即送出。<br/>實際內容見 <span class="mono">12-node-drawer.html</span>。</div>
+</aside>
+
+<script>
+  const brand = [
+    ['primary-50','#F3F7FC','#2A4A7E'],['primary-100','#EAF1FA','#2A4A7E'],['primary-200','#CFDFF3','#2A4A7E'],['primary-300 · anchor','#98B6E4','#1E293B'],
+    ['primary-400','#6E96D4','#12233F'],['primary-500','#4A72AE','#fff'],['primary-600 · 按鈕','#365C97','#fff'],['primary-700 · hover','#2A4A7E','#fff'],
+    ['surface 白','#FFFFFF','#334155'],['slate-50 · 分隔/表頭','#F8FAFC','#334155'],['slate-100','#F1F5F9','#334155'],['slate-200','#E2E8F0','#334155'],['slate-500','#64748B','#fff'],['slate-700','#334155','#fff'],['slate-900','#0F172A','#fff']
+  ];
+  document.getElementById('brandSwatches').innerHTML = brand.map(([n,hex,fg])=>`
+    <div class="rounded-lg border border-slate-200 overflow-hidden">
+      <div class="h-16 flex items-end p-2" style="background:${hex};color:${fg}"><span class="text-xs mono">${hex}</span></div>
+      <div class="px-2 py-1.5 text-xs text-slate-600">${n}</div>
+    </div>`).join('');
+
+  const roles = [
+    ['系統管理員 SysAdmin','#4338CA','shield-check'],['ICSOP 管理員 ICSOPAdmin','#7C3AED','file-cog'],
+    ['主管 Supervisor','#0891B2','user-cog'],['部門窗口 DeptContact','#475569','contact'],['一般使用者 User','#64748B','user']
+  ];
+  document.getElementById('roleBadges').innerHTML = roles.map(([n,c,ic])=>`
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium text-white" style="background:${c}">
+      <i data-lucide="${ic}" class="w-3.5 h-3.5"></i>${n}</span>`).join('');
+
+  const icons = ['file-text','file-cog','folder','search','filter','plus','pencil','trash-2','download','printer','shield-check','user-cog','contact','user','alert-triangle','alert-circle','check-circle-2','x','chevron-right','git-branch','workflow','panel-right','link','upload','clock','history','layout-dashboard','refresh-cw','eye','log-out'];
+  document.getElementById('iconGrid').innerHTML = icons.map(ic=>`
+    <div class="flex flex-col items-center gap-1 text-slate-500">
+      <i data-lucide="${ic}" class="w-5 h-5"></i><span class="text-[10px] mono text-slate-400">${ic}</span></div>`).join('');
+
+  // 浮水印權威格式（與 05/17/22/23 疊加寫法一致）：{員編}-{姓名}-{公司}-{部門}-{處/室}-{機密聲明}-{時間}，機密聲明自成一行
+  // 公司名稱＝VW_HRCOMF.COMPFULLNM 全稱；部門＝部層完整名稱；處/室＝最細單位名稱（§8.2／§8.3）
+  const WM_DATA   = '22345-王小明-和潤企業股份有限公司-營運管理部-審查室';
+  const WM_NOTICE = '僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現';
+  const WM_TIME   = '2026-07-16 14:32:08';
+  document.getElementById('wmLayer').innerHTML = Array.from({length:18}).map(()=>`<span>${WM_DATA}<br>${WM_NOTICE}<br>${WM_TIME}</span>`).join('');
+
+  // §8.4 無處/室者（掛於部層以上）：「處/室」欄留空並自動收合分隔符，不得出現連續分隔符 '--'
+  const wmJoin = (...parts)=>parts.filter(p=>p!==''&&p!=null).join('-');
+  document.getElementById('wmSampleFull').textContent      = wmJoin('22345','王小明','和潤企業股份有限公司','營運管理部','審查室',WM_NOTICE,WM_TIME)+' (UTC+8)';
+  // 示範 persona＝吳佩珊 21002（財務資訊本部／財會部，該部之下無處/室；同 08 帳號管理、17 稽核快照）
+  document.getElementById('wmSampleNoSection').textContent = wmJoin('21002','吳佩珊','和潤企業股份有限公司','財會部','',WM_NOTICE,WM_TIME)+' (UTC+8)';
+
+  function togglePw(){const i=document.getElementById('pwDemo');const ic=document.getElementById('pwIcon');const show=i.type==='password';i.type=show?'text':'password';ic.setAttribute('data-lucide',show?'eye-off':'eye');lucide.createIcons();}
+
+  function showToast(type,msg){
+    const map={success:['check-circle-2','#059669'],error:['alert-circle','#DC2626'],info:['info','#365C97']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><span class="text-slate-700">${msg}</span>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4000);
+  }
+  function openConfirm(){const m=document.getElementById('confirmModal');m.classList.remove('hidden');m.classList.add('flex');}
+  function closeConfirm(){const m=document.getElementById('confirmModal');m.classList.add('hidden');m.classList.remove('flex');}
+  function openDrawer(){document.getElementById('drawerOverlay').classList.remove('hidden');document.getElementById('drawer').classList.remove('translate-x-full');}
+  function closeDrawer(){document.getElementById('drawerOverlay').classList.add('hidden');document.getElementById('drawer').classList.add('translate-x-full');}
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeConfirm();closeDrawer();}});
+
+  lucide.createIcons();
+</script>
+</body>
+</html>

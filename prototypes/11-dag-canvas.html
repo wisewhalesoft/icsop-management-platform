@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>循環 DAG 畫布 · 後台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;color:#334155;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  #viewport{background:#F8FAFC;background-image:radial-gradient(#E2E8F0 1px,transparent 1px);background-size:22px 22px;}
+  .node{position:absolute;width:164px;user-select:none;}
+  .node .body{background:#fff;border:1.5px solid #E2E8F0;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:border-color .15s,box-shadow .15s;}
+  .node.selected .body{border-color:#365C97;box-shadow:0 0 0 3px #CFDFF3;}
+  .node.unnamed .body{border-style:dashed;}
+  .node.has-docs .body{border-left:4px solid #059669;}
+  .connector{position:absolute;left:50%;transform:translateX(-50%);bottom:-7px;width:14px;height:14px;border-radius:9999px;background:#fff;border:2px solid #94A3B8;cursor:crosshair;}
+  .connector:hover{border-color:#365C97;background:#CFDFF3;}
+  body[data-role="supervisor"] .connector,body:not([data-role="icsop_admin"]) .connector{display:none;}
+  .edit-only{display:inline-flex;}
+  body:not([data-role="icsop_admin"]) .edit-only{display:none !important;}
+  .drag-handle{cursor:grab;}
+  body:not([data-role="icsop_admin"]) .drag-handle{cursor:default;}
+  /* admin shell sidebar */
+  #sidebar{width:240px;transition:width .2s ease;}
+  body{padding-left:240px;transition:padding-left .2s ease;}
+  body.sb-collapsed{padding-left:60px;}
+  body.sb-collapsed #sidebar{width:60px;}
+  body.sb-collapsed .sb-label{display:none;}
+  body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
+</style>
+</head>
+<body data-role="icsop_admin" class="h-screen flex flex-col bg-white overflow-hidden sb-collapsed">
+
+<!-- ===== Admin shell sidebar ===== -->
+<aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-40 bg-white border-r border-slate-200 flex flex-col">
+  <div class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
+  </div>
+  <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
+  <div class="border-t border-slate-200 p-2 shrink-0">
+    <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
+      <i data-lucide="external-link" class="w-4 h-4 shrink-0"></i><span class="sb-label truncate">瀏覽文件網頁</span></button>
+  </div>
+</aside>
+
+<!-- ===== Topbar ===== -->
+<header class="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-3 shrink-0 z-20">
+  <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600 shrink-0"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
+  <div class="leading-tight min-w-0">
+    <div class="text-xs text-slate-400 flex items-center gap-1"><span>循環管理</span><i data-lucide="chevron-right" class="w-3 h-3"></i><span>DAG 畫布</span></div>
+    <div class="font-semibold text-slate-900 text-sm truncate">銷售及收款循環 · DAG 畫布</div>
+  </div>
+
+  <div class="ml-auto flex items-center gap-2">
+    <button onclick="addNode()" class="edit-only items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="plus" class="w-4 h-4"></i>新增節點</button>
+    <button id="delBtn" onclick="deleteSelected()" disabled class="edit-only items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-400 cursor-not-allowed"><i data-lucide="trash-2" class="w-4 h-4"></i>刪除節點</button>
+    <button onclick="save()" class="edit-only items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"><i data-lucide="save" class="w-4 h-4"></i>儲存</button>
+    <div class="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+      <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+      <select id="roleSel" onchange="setRole(this.value)" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
+        <option value="icsop_admin">ICSOP 管理員</option>
+        <option value="supervisor">主管（唯讀）</option>
+        <option value="sysadmin">系統管理員（唯讀）</option>
+        <option value="deptcontact">部門窗口</option>
+        <option value="user">一般使用者</option>
+      </select>
+    </div>
+    <div class="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200"><i data-lucide="user-circle" class="w-4 h-4"></i><span>陳管理</span></div>
+    <button title="登出" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+  </div>
+</header>
+
+<!-- readonly / blocked banners -->
+<div id="roBanner" class="hidden bg-cyan-50 border-b border-cyan-200 text-cyan-800 text-sm px-4 py-2 items-center gap-2">
+  <i data-lucide="eye" class="w-4 h-4"></i>唯讀模式 · 此角色僅可檢視循環節點與連線，無法編輯。
+</div>
+
+<!-- Canvas region -->
+<div class="flex-1 relative overflow-hidden">
+  <div id="viewport" class="absolute inset-0 overflow-auto">
+    <div id="world" style="position:relative;width:1300px;height:820px;transform-origin:0 0;">
+      <svg id="edges" width="1300" height="820" style="position:absolute;inset:0;pointer-events:none;">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#94A3B8"></path>
+          </marker>
+        </defs>
+        <path id="tempEdge" style="display:none" fill="none" stroke="#98B6E4" stroke-width="2" stroke-dasharray="5 4"></path>
+      </svg>
+      <!-- nodes injected here -->
+    </div>
+  </div>
+
+  <!-- blocked overlay -->
+  <div id="blockOverlay" class="hidden absolute inset-0 z-30 bg-slate-50/90 backdrop-blur-sm flex items-center justify-center">
+    <div class="text-center max-w-xs">
+      <div class="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="lock" class="w-7 h-7 text-red-500"></i></div>
+      <h3 class="font-semibold text-slate-900">無循環管理權限</h3>
+      <p class="text-sm text-slate-500 mt-1" id="blockMsg">此角色對「循環管理（DAG）」為「無」，無法存取此頁。</p>
+      <p class="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+    </div>
+  </div>
+
+  <!-- zoom controls -->
+  <div class="absolute left-4 bottom-4 z-20 flex flex-col rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+    <button onclick="zoomBy(0.1)" class="w-9 h-9 hover:bg-slate-50 flex items-center justify-center"><i data-lucide="plus" class="w-4 h-4"></i></button>
+    <div class="h-px bg-slate-200"></div>
+    <button onclick="zoomBy(-0.1)" class="w-9 h-9 hover:bg-slate-50 flex items-center justify-center"><i data-lucide="minus" class="w-4 h-4"></i></button>
+    <div class="h-px bg-slate-200"></div>
+    <button onclick="fitView()" class="w-9 h-9 hover:bg-slate-50 flex items-center justify-center" title="重設縮放"><i data-lucide="maximize" class="w-4 h-4"></i></button>
+  </div>
+  <div class="absolute left-16 bottom-4 z-20 px-2 h-9 flex items-center rounded-lg border border-slate-200 bg-white shadow-sm text-xs mono text-slate-500" id="zoomLabel">100%</div>
+
+  <!-- mini-map -->
+  <div class="absolute right-4 bottom-4 z-20 rounded-lg border border-slate-200 bg-white shadow-sm p-1.5">
+    <div class="text-[10px] text-slate-400 px-1 pb-1 flex items-center gap-1"><i data-lucide="map" class="w-3 h-3"></i>Mini-map</div>
+    <svg id="minimap" width="150" height="96" class="rounded bg-slate-50 border border-slate-100"></svg>
+  </div>
+
+  <!-- hint -->
+  <div class="edit-only absolute right-4 top-4 z-20 items-center gap-2 px-3 py-2 rounded-lg bg-white/90 border border-slate-200 shadow-sm text-xs text-slate-500 max-w-[220px]">
+    <i data-lucide="info" class="w-4 h-4 shrink-0 text-primary-600"></i>
+    <span>拖曳節點底部圓點可建立「上到下」有向連線；系統會即時阻擋成環。</span>
+  </div>
+</div>
+
+<!-- confirm dialog -->
+<div id="confirmModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <div class="flex items-start gap-3">
+      <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center shrink-0"><i data-lucide="alert-triangle" class="w-5 h-5 text-red-500"></i></div>
+      <div><h3 class="font-semibold text-slate-900" id="cfTitle">刪除節點？</h3><p class="text-sm text-slate-500 mt-1" id="cfBody"></p></div>
+    </div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeConfirm()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button id="cfOk" class="px-4 py-2 rounded-md bg-red-600 text-white text-sm hover:bg-red-700">確認刪除</button>
+    </div>
+  </div>
+</div>
+
+<div id="toastWrap" class="fixed top-16 right-4 z-50 space-y-2"></div>
+
+<script>
+  /* ===== admin shell sidebar ===== */
+  const MENU=[
+    {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
+    {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
+  ];
+  const CURRENT_MODULE='lifecycle';
+  function renderSidebar(){
+    const role=document.body.dataset.role;
+    const items=MENU.filter(m=>m.roles[role]);
+    document.getElementById('sidebarNav').innerHTML = items.length? items.map(m=>{
+      const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
+      return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`;
+    lucide.createIcons();
+  }
+  function navTo(id,label){ if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;} shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型本輪未含此頁）')); return false; }
+  function toggleSidebar(){ document.body.classList.toggle('sb-collapsed'); }
+  function openPublic(){ shellToast('已於新視窗開啟前台瀏覽頁（03-public-list）'); }
+  function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
+
+  const NODE_W=164, NODE_H=64;
+  let seq=8;
+  // 銷售及收款循環（SRC）作業群組節點：進件多 child、撥款多 parent、結束多 parent
+  let nodes=[
+    {id:'n1',name:'進件作業',x:568,y:30,docs:['ICSOP-SRC-101-1-01','ICSOP-SRC-101-2-00']},
+    {id:'n2',name:'簽約對保作業',x:360,y:166,docs:['ICSOP-SRC-102-1-01']},
+    {id:'n3',name:'擔保設定作業',x:776,y:166,docs:['ICSOP-SRC-103-1-01']},
+    {id:'n4',name:'撥款核准作業',x:568,y:302,docs:['ICSOP-SRC-104-1-01']},
+    {id:'n5',name:'案件執行作業',x:568,y:438,docs:['ICSOP-SRC-105-1-01']},
+    {id:'n6',name:'案件催收作業',x:360,y:574,docs:['ICSOP-SRC-106-1-01']},
+    {id:'n7',name:'案件結束作業',x:568,y:710,docs:['ICSOP-SRC-107-1-01']}
+  ];
+  let edges=[
+    {id:'e1',s:'n1',t:'n2'},{id:'e2',s:'n1',t:'n3'},
+    {id:'e3',s:'n2',t:'n4'},{id:'e4',s:'n3',t:'n4'},{id:'e5',s:'n4',t:'n5'},
+    {id:'e6',s:'n5',t:'n6'},{id:'e7',s:'n5',t:'n7'},{id:'e8',s:'n6',t:'n7'}
+  ];
+  let selected=null, zoom=1;
+  const world=document.getElementById('world'), svg=document.getElementById('edges');
+
+  function nodeById(id){return nodes.find(n=>n.id===id);}
+  function reachable(from,to){ // path from->...->to following edges s->t
+    const seen=new Set(); const stack=[from];
+    while(stack.length){const cur=stack.pop(); if(cur===to) return true;
+      edges.filter(e=>e.s===cur).forEach(e=>{if(!seen.has(e.t)){seen.add(e.t);stack.push(e.t);}});}
+    return false;
+  }
+
+  function renderNodes(){
+    // remove old node divs
+    world.querySelectorAll('.node').forEach(n=>n.remove());
+    nodes.forEach(n=>{
+      const el=document.createElement('div');
+      el.className='node'+(selected===n.id?' selected':'')+(n.docs.length?' has-docs':'')+(!n.name?' unnamed':'');
+      el.style.left=n.x+'px'; el.style.top=n.y+'px'; el.dataset.id=n.id;
+      el.innerHTML=`
+        <div class="body p-2.5 relative">
+          <div class="drag-handle flex items-center gap-1.5">
+            <i data-lucide="circle-dot" class="w-3.5 h-3.5 text-slate-300"></i>
+            <span class="font-medium text-slate-800 text-sm truncate">${n.name||'未命名節點'}</span>
+          </div>
+          <div class="mt-1.5 flex items-center gap-1 text-[11px] ${n.docs.length?'text-emerald-600':'text-slate-400'}">
+            <i data-lucide="${n.docs.length?'file-check-2':'file-x-2'}" class="w-3.5 h-3.5"></i>
+            ${n.docs.length? '掛載 '+n.docs.length+' 份文件' : '尚未掛載文件'}
+          </div>
+          <div class="connector" data-node="${n.id}" title="拖曳以建立連線"></div>
+        </div>`;
+      world.appendChild(el);
+    });
+    bindNodeEvents();
+    lucide.createIcons();
+  }
+
+  // 直角 elbow（垂直→水平→垂直），全站 DAG 一致（比照 22/23；OQ-E03-09 定案）
+  function edgePath(s,t){
+    const sx=s.x+NODE_W/2, sy=s.y+NODE_H, tx=t.x+NODE_W/2, ty=t.y;
+    const my=sy+(ty-sy)/2;
+    return `M ${sx} ${sy} L ${sx} ${my} L ${tx} ${my} L ${tx} ${ty}`;
+  }
+  function renderEdges(){
+    // clear all path except temp/defs
+    [...svg.querySelectorAll('path.edge')].forEach(p=>p.remove());
+    edges.forEach(e=>{
+      const s=nodeById(e.s),t=nodeById(e.t); if(!s||!t)return;
+      const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('class','edge'); p.setAttribute('d',edgePath(s,t));
+      p.setAttribute('fill','none'); p.setAttribute('stroke','#94A3B8'); p.setAttribute('stroke-width','2');
+      p.setAttribute('marker-end','url(#arrow)');
+      svg.appendChild(p);
+    });
+  }
+
+  function renderMini(){
+    const mm=document.getElementById('minimap'); const W=1300,H=820, mw=150,mh=96;
+    const sx=mw/W, sy=mh/H;
+    let s='';
+    edges.forEach(e=>{const a=nodeById(e.s),b=nodeById(e.t);if(!a||!b)return;
+      s+=`<line x1="${(a.x+NODE_W/2)*sx}" y1="${(a.y+NODE_H)*sy}" x2="${(b.x+NODE_W/2)*sx}" y2="${b.y*sy}" stroke="#CBD5E1" stroke-width="1"/>`;});
+    nodes.forEach(n=>{const c=n.docs.length?'#059669':'#94A3B8';
+      s+=`<rect x="${n.x*sx}" y="${n.y*sy}" width="${NODE_W*sx}" height="${NODE_H*sy}" rx="2" fill="${c}" opacity="${selected===n.id?1:.55}"/>`;});
+    mm.innerHTML=s;
+  }
+
+  function renderAll(){renderEdges();renderNodes();renderMini();}
+
+  /* ---- drag node & create edge ---- */
+  let drag=null, edgeDrag=null;
+  const isAdmin=()=>document.body.dataset.role==='icsop_admin';
+
+  function worldPoint(clientX,clientY){
+    const r=world.getBoundingClientRect();
+    return {x:(clientX-r.left)/zoom, y:(clientY-r.top)/zoom};
+  }
+
+  function bindNodeEvents(){
+    world.querySelectorAll('.node').forEach(el=>{
+      const id=el.dataset.id;
+      el.addEventListener('mousedown',ev=>{
+        if(ev.target.classList.contains('connector')) return; // handled below
+        select(id);
+        if(!isAdmin()) return;
+        const n=nodeById(id); const p=worldPoint(ev.clientX,ev.clientY);
+        drag={id, offx:p.x-n.x, offy:p.y-n.y};
+        ev.preventDefault();
+      });
+      const c=el.querySelector('.connector');
+      if(c) c.addEventListener('mousedown',ev=>{
+        if(!isAdmin())return;
+        ev.stopPropagation(); ev.preventDefault();
+        edgeDrag={source:id};
+      });
+    });
+  }
+
+  document.addEventListener('mousemove',ev=>{
+    if(drag){
+      const p=worldPoint(ev.clientX,ev.clientY); const n=nodeById(drag.id);
+      n.x=Math.max(0,Math.min(1300-NODE_W, p.x-drag.offx));
+      n.y=Math.max(0,Math.min(820-NODE_H, p.y-drag.offy));
+      // update just this node position + edges + mini
+      const el=world.querySelector(`.node[data-id="${drag.id}"]`); el.style.left=n.x+'px'; el.style.top=n.y+'px';
+      renderEdges(); renderMini();
+    } else if(edgeDrag){
+      const s=nodeById(edgeDrag.source); const p=worldPoint(ev.clientX,ev.clientY);
+      const sx=s.x+NODE_W/2, sy=s.y+NODE_H;
+      const tp=document.getElementById('tempEdge');
+      const my=sy+(p.y-sy)/2; // 拖曳中的暫時連線亦為直角 elbow
+      tp.style.display=''; tp.setAttribute('d',`M ${sx} ${sy} L ${sx} ${my} L ${p.x} ${my} L ${p.x} ${p.y}`);
+    }
+  });
+
+  document.addEventListener('mouseup',ev=>{
+    if(edgeDrag){
+      document.getElementById('tempEdge').style.display='none';
+      const targetEl=ev.target.closest('.node');
+      if(targetEl){ attemptEdge(edgeDrag.source, targetEl.dataset.id); }
+      edgeDrag=null;
+    }
+    if(drag){drag=null;}
+  });
+
+  function attemptEdge(s,t){
+    if(s===t){ toast('error','節點不可連向自己','DAG_SELF_LOOP'); return; }
+    if(edges.some(e=>e.s===s&&e.t===t)){ toast('info','此連線已存在'); return; }
+    // adding s->t creates cycle if t can already reach s
+    if(reachable(t,s)){ toast('error','此連線會造成循環結構成環，請重新確認流程方向','DAG_CYCLE_DETECTED'); return; }
+    edges.push({id:'e'+(++seq), s, t});
+    renderAll();
+    toast('success','已建立連線：'+(nodeById(s).name)+' → '+(nodeById(t).name));
+  }
+
+  /* ---- node ops ---- */
+  function addNode(){
+    if(!isAdmin())return;
+    const id='n'+(++seq);
+    nodes.push({id, name:'', x:80+Math.random()*120, y:60+Math.random()*80, docs:[]});
+    renderAll(); select(id);
+    toast('success','已新增未命名節點，可拖曳調整位置');
+  }
+  function select(id){
+    selected=id;
+    world.querySelectorAll('.node').forEach(el=>el.classList.toggle('selected',el.dataset.id===id));
+    const del=document.getElementById('delBtn');
+    if(isAdmin()){del.disabled=false;del.classList.remove('text-slate-400','cursor-not-allowed');del.classList.add('text-slate-700','hover:bg-slate-50');}
+    renderMini();
+  }
+  function deleteSelected(){
+    if(!isAdmin()||!selected)return;
+    const n=nodeById(selected);
+    const hasDocs=n.docs.length>0;
+    openConfirm('刪除節點「'+(n.name||'未命名節點')+'」？',
+      hasDocs? `此節點已掛載 ${n.docs.length} 份文件，刪除後將一併移除掛載關係，且相關連線會被移除。` : '刪除後相關連線將一併移除。',
+      ()=>{ nodes=nodes.filter(x=>x.id!==selected); edges=edges.filter(e=>e.s!==selected&&e.t!==selected); selected=null; document.getElementById('delBtn').disabled=true; renderAll(); toast('success','節點已刪除'); });
+  }
+  function save(){ if(!isAdmin())return; toast('success','DAG 已儲存（節點座標與連線已持久化）'); }
+
+  /* ---- zoom ---- */
+  function applyZoom(){world.style.transform='scale('+zoom+')';document.getElementById('zoomLabel').textContent=Math.round(zoom*100)+'%';}
+  function zoomBy(d){zoom=Math.max(0.5,Math.min(1.6,+(zoom+d).toFixed(2)));applyZoom();}
+  function fitView(){zoom=1;applyZoom();document.getElementById('viewport').scrollTo({left:120,top:0,behavior:'smooth'});}
+
+  /* ---- role ---- */
+  function setRole(r){
+    document.body.dataset.role=r;
+    const blocked=(r==='deptcontact'||r==='user');
+    const ro=(r==='supervisor'||r==='sysadmin');
+    document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
+    document.getElementById('roBanner').classList.toggle('hidden',!ro);
+    document.getElementById('roBanner').classList.toggle('flex',ro);
+    if(blocked){
+      const msg={
+                 deptcontact:'部門窗口對「循環管理（DAG）」為「無」，無法存取此頁。',
+                 user:'一般使用者無後台存取權。'}[r];
+      document.getElementById('blockMsg').textContent=msg;
+    }
+    renderSidebar();
+    lucide.createIcons();
+  }
+
+  /* ---- confirm & toast ---- */
+  function openConfirm(title,body,onOk){document.getElementById('cfTitle').textContent=title;document.getElementById('cfBody').textContent=body;
+    const m=document.getElementById('confirmModal');m.classList.remove('hidden');m.classList.add('flex');
+    const ok=document.getElementById('cfOk');const clone=ok.cloneNode(true);ok.parentNode.replaceChild(clone,ok);
+    clone.addEventListener('click',()=>{closeConfirm();onOk();});}
+  function closeConfirm(){const m=document.getElementById('confirmModal');m.classList.add('hidden');m.classList.remove('flex');}
+
+  function toast(type,msg,code){
+    const map={success:['check-circle-2','#059669'],error:['alert-circle','#DC2626'],info:['info','#365C97']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><div><span class="text-slate-700">${msg}</span>${code?`<div class="text-[10px] mono text-slate-400 mt-0.5">${code}</div>`:''}</div>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4200);
+  }
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeConfirm();});
+
+  applyZoom(); renderAll(); renderSidebar();
+</script>
+</body>
+</html>

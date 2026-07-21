@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>文件變更歷程 · 後台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;color:#334155;background:#FFFFFF;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  /* admin shell sidebar */
+  #sidebar{width:240px;transition:width .2s ease;}
+  body{padding-left:240px;transition:padding-left .2s ease;}
+  body.sb-collapsed{padding-left:60px;}
+  body.sb-collapsed #sidebar{width:60px;}
+  body.sb-collapsed .sb-label{display:none;}
+  body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
+  /* diagonal tiled watermark（格式同 05／22：45°, opacity .12, slate-500, 14px, 機密聲明另起一行）*/
+  .wm-layer{position:absolute;inset:-40%;pointer-events:none;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;transform:rotate(-45deg);opacity:.12;user-select:none;z-index:5;}
+  .wm-layer span{color:#64748B;font-size:14px;white-space:nowrap;padding:20px 26px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.6;}
+  /* mini DAG（沿用 22 節點視覺 + 直角箭頭）*/
+  .dagboard{position:relative;background:#F8FAFC;background-image:radial-gradient(#E7EDF5 1px,transparent 1px);background-size:20px 20px;border-radius:10px;}
+  .mnode{position:absolute;z-index:2;}
+  .mnode .mbody{background:#fff;border:1.5px solid #E2E8F0;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.05);padding:6px 9px;}
+  .mnode.n-add .mbody{border-color:#059669;background:#ECFDF5;}
+  .mnode.n-rm .mbody{border-color:#DC2626;background:#FEF2F2;border-style:dashed;}
+  .mnode.n-rm .mbody .nm{text-decoration:line-through;color:#B91C1C;}
+  .mnode.n-amber .mbody{border-color:#D97706;background:#FFFBEB;}
+  .mtag{font-size:9px;padding:0 5px;border-radius:4px;background:#EAF1FA;color:#2A4A7E;white-space:nowrap;}
+  .mnode.n-add .mtag{background:#D1FAE5;color:#047857;}
+  .mnode.n-rm .mtag{background:#FEE2E2;color:#B91C1C;}
+  .mnode.n-amber .mtag{background:#FEF3C7;color:#B45309;}
+  path.dedge{stroke:#94A3B8;stroke-width:2;fill:none;}
+  path.dedge.e-add{stroke:#059669;stroke-width:3;}
+  path.dedge.e-rm{stroke:#DC2626;stroke-width:2;stroke-dasharray:5 4;}
+  .oldv{background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA;text-decoration:line-through;}
+  .newv{background:#ECFDF5;color:#047857;border:1px solid #A7F3D0;}
+</style>
+</head>
+<body data-role="sysadmin" class="min-h-screen">
+
+<!-- global SVG markers（供 mini DAG 直角箭頭引用）-->
+<svg width="0" height="0" style="position:absolute"><defs>
+  <marker id="mArr" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#94A3B8"></path></marker>
+  <marker id="mAddArr" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#059669"></path></marker>
+  <marker id="mRmArr" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#DC2626"></path></marker>
+</defs></svg>
+
+<!-- ===== Admin shell sidebar ===== -->
+<aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-50 bg-white border-r border-slate-200 flex flex-col">
+  <div class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
+  </div>
+  <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
+  <div class="border-t border-slate-200 p-2 shrink-0">
+    <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
+      <i data-lucide="external-link" class="w-4 h-4 shrink-0"></i><span class="sb-label truncate">瀏覽文件網頁</span></button>
+  </div>
+</aside>
+
+<!-- Top bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="h-14 px-4 flex items-center gap-3">
+    <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
+    <div class="leading-tight min-w-0">
+      <div class="text-xs text-slate-400 flex items-center gap-1"><span>稽核追溯</span><i data-lucide="chevron-right" class="w-3 h-3"></i><span>文件變更歷程</span></div>
+      <div class="font-semibold text-slate-900 text-sm truncate">文件變更歷程</div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <div class="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+        <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+        <select id="roleSel" onchange="setRole(this.value)" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
+          <option value="sysadmin">系統管理員</option>
+          <option value="icsop_admin">ICSOP 管理員</option>
+          <option value="supervisor">主管（無）</option>
+          <option value="deptcontact">部門窗口（無）</option>
+          <option value="user">一般使用者</option>
+        </select>
+      </div>
+      <div class="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200"><i data-lucide="user-circle" class="w-4 h-4"></i><span id="topUser">黃俊傑</span></div>
+      <button title="登出" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+</header>
+
+<!-- blocked overlay（比照 17：主管/部門窗口/一般使用者 403）-->
+<div id="blockOverlay" class="hidden fixed inset-0 z-40 bg-white/90 backdrop-blur-sm flex items-center justify-center" style="left:240px">
+  <div class="text-center max-w-xs">
+    <div class="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="lock" class="w-7 h-7 text-red-500"></i></div>
+    <h3 class="font-semibold text-slate-900">無變更歷程查詢權限</h3>
+    <p class="text-sm text-slate-500 mt-1" id="blockMsg"></p>
+    <p class="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+  </div>
+</div>
+
+<main class="p-5">
+
+  <!-- scope note -->
+  <div class="mb-4 flex items-start gap-2 rounded-lg px-3 py-2 text-sm border bg-primary-50 border-primary-100 text-primary-700">
+    <i data-lucide="globe" class="w-4 h-4 mt-0.5 shrink-0"></i>
+    <span>查詢範圍：<b>全公司</b>（僅系統管理員 / ICSOP 管理員可查；主管／部門窗口／一般使用者無權，OQ-E07-04 定案）。查詢/展開/預覽/下載均寫入 <span class="mono">CHANGE_LOG_VIEW</span> / <span class="mono">LIFECYCLE_CHANGELOG_*</span> 稽核。</span>
+  </div>
+
+  <!-- 次分頁：ICSOP 程序書 ｜ 循環樹狀圖 -->
+  <div class="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50 mb-4">
+    <button id="stab-doc" onclick="switchSub('doc')" class="px-3.5 py-1.5 rounded-md text-sm font-medium inline-flex items-center gap-1.5"><i data-lucide="file-diff" class="w-4 h-4"></i>ICSOP 程序書</button>
+    <button id="stab-tree" onclick="switchSub('tree')" class="px-3.5 py-1.5 rounded-md text-sm font-medium inline-flex items-center gap-1.5"><i data-lucide="git-fork" class="w-4 h-4"></i>循環樹狀圖</button>
+  </div>
+
+  <!-- ============ Tab 1：ICSOP 程序書（欄位 before/after diff）============ -->
+  <section id="pane-doc">
+    <div class="bg-white border border-slate-200 rounded-xl p-4 mb-4">
+      <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div><label class="block text-xs font-medium text-slate-500 mb-1">程序書（編號／書名）</label>
+          <input id="dqDoc" oninput="renderDoc()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="ICSOP-SRC-101-1-01 / 進件" /></div>
+        <div><label class="block text-xs font-medium text-slate-500 mb-1">變更欄位</label>
+          <input id="dqField" oninput="renderDoc()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="制定部門 / 狀態 / 版次…" /></div>
+        <div><label class="block text-xs font-medium text-slate-500 mb-1">操作人</label>
+          <input id="dqPerson" oninput="renderDoc()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="李慧玲 / 20233" /></div>
+        <div><label class="block text-xs font-medium text-slate-500 mb-1">起始日期</label>
+          <input id="dqFrom" type="date" oninput="renderDoc()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" /></div>
+        <div><label class="block text-xs font-medium text-slate-500 mb-1">結束日期</label>
+          <input id="dqTo" type="date" oninput="renderDoc()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" /></div>
+      </div>
+      <div class="flex items-center gap-2 mt-3">
+        <button onclick="renderDoc()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="search" class="w-4 h-4"></i>查詢</button>
+        <button onclick="clearDoc()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">清除條件</button>
+        <span class="ml-1 inline-flex items-center gap-1 text-xs text-slate-400"><i data-lucide="layers" class="w-3.5 h-3.5"></i>同操作者／同程序書／60 秒內連續變更聚合為一組</span>
+        <span id="docCount" class="ml-auto text-sm text-slate-500"></span>
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm min-w-[980px]">
+          <thead class="bg-slate-50 text-slate-500 text-xs">
+            <tr>
+              <th class="text-left font-medium px-4 py-2.5">程序書</th>
+              <th class="text-left font-medium px-4 py-2.5">變更摘要</th>
+              <th class="text-left font-medium px-4 py-2.5">來源</th>
+              <th class="text-left font-medium px-4 py-2.5">操作人</th>
+              <th class="text-left font-medium px-4 py-2.5">時間（新→舊）</th>
+              <th class="px-2 py-2.5"></th>
+            </tr>
+          </thead>
+          <tbody id="docBody" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+      <div id="docEmpty" class="hidden text-center py-14"><i data-lucide="inbox" class="w-12 h-12 text-slate-300 mx-auto mb-2"></i><p class="text-slate-500">查無符合結果</p></div>
+    </div>
+    <p class="mt-3 text-xs text-slate-400 flex items-start gap-1.5"><i data-lucide="shield-check" class="w-3.5 h-3.5 mt-0.5"></i>變更歷程為 append-only 欄位層事件日誌（僅記變動欄位之舊/新值），非整份歷史版本檔；附件僅記「已替換」事件、不保留舊檔（F037）。</p>
+  </section>
+
+  <!-- ============ Tab 2：循環樹狀圖（新舊並列 + 下載）============ -->
+  <section id="pane-tree" class="hidden">
+    <div class="bg-white border border-slate-200 rounded-xl p-4 mb-4">
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div><label class="block text-xs font-medium text-slate-500 mb-1">循環別</label>
+          <select id="tqCyc" onchange="renderTree()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"></select></div>
+        <div><label class="block text-xs font-medium text-slate-500 mb-1">變更類型</label>
+          <select id="tqType" onchange="renderTree()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white">
+            <option value="">全部類型</option><option>新增節點</option><option>移除節點</option><option>新增連線</option><option>移除連線</option><option>節點改名</option><option>文件掛載變更</option></select></div>
+        <div><label class="block text-xs font-medium text-slate-500 mb-1">操作人</label>
+          <input id="tqPerson" oninput="renderTree()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="李慧玲 / 20233" /></div>
+        <div><label class="block text-xs font-medium text-slate-500 mb-1">起始日期</label>
+          <input id="tqFrom" type="date" oninput="renderTree()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" /></div>
+      </div>
+      <div class="flex items-center gap-2 mt-3">
+        <button onclick="renderTree()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="search" class="w-4 h-4"></i>查詢</button>
+        <button onclick="clearTree()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">清除條件</button>
+        <span id="treeCount" class="ml-auto text-sm text-slate-500"></span>
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm min-w-[880px]">
+          <thead class="bg-slate-50 text-slate-500 text-xs">
+            <tr>
+              <th class="text-left font-medium px-4 py-2.5">循環別</th>
+              <th class="text-left font-medium px-4 py-2.5">變更類型</th>
+              <th class="text-left font-medium px-4 py-2.5">變更摘要</th>
+              <th class="text-left font-medium px-4 py-2.5">操作人</th>
+              <th class="text-left font-medium px-4 py-2.5">時間（新→舊）</th>
+              <th class="text-left font-medium px-4 py-2.5">預覽 / 下載</th>
+            </tr>
+          </thead>
+          <tbody id="treeBody" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+      <div id="treeEmpty" class="hidden text-center py-14"><i data-lucide="git-fork" class="w-12 h-12 text-slate-300 mx-auto mb-2"></i><p class="text-slate-500">此循環尚無結構變更事件</p></div>
+    </div>
+    <p class="mt-3 text-xs text-slate-400 flex items-start gap-1.5"><i data-lucide="shield-check" class="w-3.5 h-3.5 mt-0.5"></i>「變更後 DAG＝本筆完整快照、變更前＝前一筆快照」（架構決策）；預覽/下載疊加或燒錄浮水印並寫入稽核（F038）。</p>
+  </section>
+</main>
+
+<!-- ===== 新舊樹狀圖並列預覽 modal ===== -->
+<div id="lcModal" class="fixed inset-0 z-[55] hidden items-center justify-center bg-slate-900/45 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[92vh] flex flex-col">
+    <div class="flex items-start gap-3 px-5 py-4 border-b border-slate-100">
+      <div class="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center shrink-0"><i data-lucide="git-compare" class="w-5 h-5 text-primary-600"></i></div>
+      <div class="min-w-0 flex-1">
+        <h3 class="font-semibold text-slate-900 text-sm">新舊樹狀圖對照預覽</h3>
+        <p class="text-xs text-slate-500 mt-0.5"><span id="pvCyc"></span> · <span id="pvSummary"></span></p>
+      </div>
+      <button onclick="closePreview()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <!-- legend + audit note -->
+    <div class="px-5 py-2.5 border-b border-slate-100 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+      <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded border-2 border-emerald-500 bg-emerald-50"></span>新增</span>
+      <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded border-2 border-dashed border-red-500 bg-red-50"></span>移除</span>
+      <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded border-2 border-amber-500 bg-amber-50"></span>改名／掛載變更</span>
+      <span class="ml-auto inline-flex items-center gap-1 text-primary-600"><i data-lucide="shield-check" class="w-3.5 h-3.5"></i>本預覽已寫入 <span class="mono">LIFECYCLE_CHANGELOG_VIEW</span> 稽核</span>
+    </div>
+    <div class="p-4 overflow-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <div class="flex items-center gap-1.5 text-xs font-medium text-slate-500 mb-2"><i data-lucide="clock" class="w-3.5 h-3.5"></i>變更前</div>
+        <div class="border border-slate-200 rounded-lg overflow-auto" style="max-height:52vh"><div id="dagBefore" class="dagboard"></div></div>
+      </div>
+      <div>
+        <div class="flex items-center gap-1.5 text-xs font-medium text-primary-700 mb-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>變更後（本筆快照）</div>
+        <div class="border border-primary-200 rounded-lg overflow-auto" style="max-height:52vh"><div id="dagAfter" class="dagboard"></div></div>
+      </div>
+    </div>
+    <div class="flex flex-col sm:flex-row sm:items-center gap-2 px-5 py-4 border-t border-slate-100">
+      <code class="mono text-[11px] text-slate-500 truncate flex-1" id="pvWm"></code>
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="closePreview()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">關閉</button>
+        <button onclick="downloadFromModal()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="download" class="w-4 h-4"></i>下載新舊對照 PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toastWrap" class="fixed top-16 right-4 z-[60] space-y-2"></div>
+
+<script>
+  /* ===== admin shell sidebar（沿用 07/17）===== */
+  const MENU=[
+    {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
+    {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
+  ];
+  const CURRENT_MODULE='changehistory';
+  function renderSidebar(){
+    const role=document.body.dataset.role;
+    const items=MENU.filter(m=>m.roles[role]);
+    document.getElementById('sidebarNav').innerHTML = items.length? items.map(m=>{
+      const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
+      return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`;
+    lucide.createIcons();
+  }
+  function navTo(id,label){ if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;} if(id==='audit'){location.href='17-access-history.html';return false;} shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型本輪未含此頁）')); return false; }
+  function toggleSidebar(){ document.body.classList.toggle('sb-collapsed'); }
+  function openPublic(){ shellToast('已於新視窗開啟前台瀏覽頁（03-public-list）'); }
+  function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
+
+  /* ===== 浮水印（格式同 05／22；身分＝當下登入管理者 李慧玲／債權管理部 法催一室）
+     公司名稱＝VW_HRCOMF.COMPFULLNM 全稱；部門＝部層完整名稱；處/室＝最細單位名稱。 ===== */
+  const WM_DATA='20233-李慧玲-和潤企業股份有限公司-債權管理部-法催一室';
+  const WM_NOTICE='僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現';
+  const WM_TIME='2026-07-16 14:32:08';
+  const WM_STR=`${WM_DATA}-${WM_NOTICE}-${WM_TIME}`;
+  function wmSpans(area){ const n=Math.min(140,Math.max(24,Math.round(area/15000))); return Array.from({length:n}).map(()=>`<span>${WM_DATA}<br>${WM_NOTICE}<br>${WM_TIME}</span>`).join(''); }
+
+  /* ================= Tab 1：ICSOP 程序書 欄位變更（原子事件）================= */
+  // operator 一律 ICSOP 管理員（僅其可寫文件欄位，F026）
+  const DOC_EVENTS=[
+    {num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',operator:'李慧玲',emp:'20233',time:'2026-07-16 14:30:05',source:'制定組織',field:'制定部門',oldV:'企劃部',newV:'消費分期營業部'},
+    {num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',operator:'李慧玲',emp:'20233',time:'2026-07-16 14:30:20',source:'制定組織',field:'制定室別',oldV:'車輛行銷室',newV:'商品北一處'},
+    {num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',operator:'李慧玲',emp:'20233',time:'2026-07-16 14:30:42',source:'當責室長',field:'當責室長-主要',oldV:'陳彥廷（企劃部 車輛行銷室 室長）',newV:'黃雅琪（消費分期營業部 商品北一處 室長）'},
+    {num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',operator:'李慧玲',emp:'20233',time:'2026-07-15 09:10:00',source:'編輯',field:'版次',oldV:"26'01",newV:"26'02"},
+    {num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',operator:'李慧玲',emp:'20233',time:'2026-07-15 09:10:00',source:'編輯',field:'內容摘要',oldV:'規範車輛分期案件之進件收件、資格初審與建檔流程。',newV:'規範車輛分期案件之進件收件、資格初審、建檔與初步覆核流程，明確各關卡負責人與檢核事項。'},
+    {num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',operator:'李慧玲',emp:'20233',time:'2026-07-14 16:20:00',source:'公告日期',field:'公告日期',oldV:'2026-08-15',newV:'2026-07-10'},
+    {num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',operator:'李慧玲',emp:'20233',time:'2026-07-14 16:20:00',source:'狀態',field:'文件狀態（衍生顯示）',oldV:'進度中',newV:'已公告'},
+    {num:'ICSOP-LWC-101-1-02',name:'招募管理作業',operator:'李慧玲',emp:'20233',time:'2026-07-13 10:00:00',source:'狀態切換',field:'文件狀態',oldV:'有效',newV:'失效'},
+    {num:'ICSOP-SRC-101-2-00',name:'消金審核作業',operator:'李慧玲',emp:'20233',time:'2026-07-12 11:05:00',source:'附件',field:'檔案（ICSOP PDF）',kind:'attachment'},
+    {num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',operator:'李慧玲',emp:'20233',time:'2026-07-11 15:30:00',source:'編輯',field:'程序書書名',oldV:'和潤-費用請款作業',newV:'和潤企業-費用請款作業'},
+    {num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',operator:'李慧玲',emp:'20233',time:'2026-07-11 15:30:00',source:'使用部門',field:'文件使用部門',oldV:'全公司',newV:'全公司、財務資訊本部 / 財會部'}
+  ];
+  const SRC_STYLE={'編輯':'slate','狀態切換':'violet','狀態':'violet','公告日期':'blue','制定組織':'primary','當責室長':'primary','使用部門':'blue','附件':'amber'};
+  function esc(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
+  function tsec(t){return Date.parse(t.replace(' ','T')+'+08:00')/1000;}
+
+  let docExpanded=-1;
+  function groupDoc(events){
+    const sorted=events.slice().sort((a,b)=>a.time<b.time?1:a.time>b.time?-1:0);
+    const groups=[];
+    sorted.forEach(ev=>{
+      const g=groups[groups.length-1];
+      if(g && g.operator===ev.operator && g.num===ev.num && (tsec(g.time)-tsec(ev.time))<=60){ g.events.push(ev); }
+      else groups.push({num:ev.num,name:ev.name,operator:ev.operator,emp:ev.emp,time:ev.time,events:[ev]});
+    });
+    return groups;
+  }
+  function diffText(ev){ return ev.kind==='attachment' ? `${ev.field}：已替換` : `${ev.field}：${ev.oldV} → ${ev.newV}`; }
+  function srcBadge(s){ const c=SRC_STYLE[s]||'slate'; return `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] bg-${c}-50 text-${c}-700 border border-${c}-100">${esc(s)}</span>`; }
+
+  function filteredDocGroups(){
+    const d=document.getElementById('dqDoc').value.trim().toLowerCase();
+    const f=document.getElementById('dqField').value.trim().toLowerCase();
+    const p=document.getElementById('dqPerson').value.trim().toLowerCase();
+    const from=document.getElementById('dqFrom').value, to=document.getElementById('dqTo').value;
+    const evs=DOC_EVENTS.filter(ev=>{
+      if(d && !(ev.num.toLowerCase().includes(d)||ev.name.toLowerCase().includes(d))) return false;
+      if(f && !ev.field.toLowerCase().includes(f)) return false;
+      if(p && !(ev.operator.toLowerCase().includes(p)||ev.emp.toLowerCase().includes(p))) return false;
+      if(from && ev.time.slice(0,10) < from) return false;
+      if(to && ev.time.slice(0,10) > to) return false;
+      return true;
+    });
+    return groupDoc(evs);
+  }
+  function renderDoc(){
+    if(!allowed())return;
+    const groups=filteredDocGroups();
+    document.getElementById('docCount').textContent=`共 ${groups.length} 組變更`;
+    document.getElementById('docEmpty').classList.toggle('hidden',groups.length>0);
+    document.getElementById('docBody').innerHTML=groups.map((g,i)=>{
+      const sources=[...new Set(g.events.map(e=>e.source))];
+      const summary = g.events.length===1 ? esc(diffText(g.events[0]))
+        : `<span class="inline-flex items-center gap-1"><span class="px-1.5 py-0.5 rounded bg-primary-100 text-primary-700 text-[10px] font-medium">聚合 ${g.events.length} 筆</span>${g.events.length} 項欄位變更：${esc(g.events.map(e=>e.field).slice(0,3).join('、'))}${g.events.length>3?'…':''}</span>`;
+      const open=i===docExpanded;
+      let html=`<tr class="hover:bg-slate-50 cursor-pointer align-top" onclick="toggleDoc(${i})">
+        <td class="px-4 py-2.5"><div class="mono text-xs text-slate-600">${esc(g.num)}</div><div class="text-slate-800">${esc(g.name)}</div></td>
+        <td class="px-4 py-2.5 text-slate-700">${summary}</td>
+        <td class="px-4 py-2.5"><div class="flex flex-wrap gap-1">${sources.map(srcBadge).join('')}</div></td>
+        <td class="px-4 py-2.5 text-slate-700">${esc(g.operator)}<span class="text-slate-400 mono text-xs">（${esc(g.emp)}）</span></td>
+        <td class="px-4 py-2.5 mono text-xs text-slate-500">${esc(g.time)}${g.events.length>1?'<div class="text-[10px] text-slate-400">同儲存/60 秒內</div>':''}</td>
+        <td class="px-2 py-2.5 text-slate-400"><i data-lucide="chevron-${open?'down':'right'}" class="w-4 h-4"></i></td></tr>`;
+      if(open){
+        html+=`<tr class="bg-slate-50/70"><td colspan="6" class="px-4 py-4">
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <div class="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5"><i data-lucide="file-diff" class="w-4 h-4 text-primary-600"></i>欄位 Before / After（逐筆；一次儲存可改多欄）</div>
+            <div class="space-y-1">${g.events.map(ev=>`
+              <div class="grid grid-cols-1 sm:grid-cols-[160px,1fr] gap-2 py-2 border-b border-slate-100 last:border-0">
+                <div class="text-xs text-slate-500 flex items-center gap-1.5">${srcBadge(ev.source)}<span class="font-medium text-slate-700">${esc(ev.field)}</span></div>
+                <div class="flex items-center gap-2 flex-wrap text-sm">${ev.kind==='attachment'
+                  ? `<span class="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100 text-xs inline-flex items-center gap-1"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>已替換（覆蓋式，不保留、不提供舊檔下載）</span>`
+                  : `<span class="oldv px-2 py-0.5 rounded text-xs max-w-full break-all">${esc(ev.oldV)}</span><i data-lucide="arrow-right" class="w-4 h-4 text-slate-400 shrink-0"></i><span class="newv px-2 py-0.5 rounded text-xs font-medium max-w-full break-all">${esc(ev.newV)}</span>`}
+                </div>
+              </div>`).join('')}</div>
+            <p class="text-[11px] text-slate-400 mt-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i>展開檢視已寫入 <span class="mono">CHANGE_LOG_VIEW</span> 稽核；僅呈現舊/新值對照，非還原或下載整份舊文件。</p>
+          </div></td></tr>`;
+      }
+      return html;
+    }).join('');
+    lucide.createIcons();
+  }
+  function toggleDoc(i){ docExpanded = docExpanded===i?-1:i; renderDoc(); }
+  function clearDoc(){ ['dqDoc','dqField','dqPerson','dqFrom','dqTo'].forEach(id=>document.getElementById(id).value=''); docExpanded=-1; renderDoc(); }
+
+  /* ================= Tab 2：循環樹狀圖 結構變更（新舊快照 + diff）================= */
+  const CYC_NAMES={SRC:'銷售及收款循環',PUC:'採購及付款循環',PPC:'產品企劃循環',LWC:'薪工循環',FC:'融資循環',FAC:'不動產、廠房及設備循環',IC:'投資循環',CIPS:'電腦化資訊系統控制作業',GCA:'管理性控制作業'};
+  // 各事件內嵌 before / after 完整結構快照 + diff（沿用 22 循環/節點延伸）
+  const N=(id,name,docs)=>({id,name,docs:docs||0});
+  const SRC_FULL={nodes:[N('a1','進件作業',2),N('a2','簽約對保作業',1),N('a3','擔保設定作業',1),N('a4','撥款核准作業',1),N('a5','案件執行作業',1)],
+                  edges:[['a1','a2'],['a1','a3'],['a2','a4'],['a3','a4'],['a4','a5']]};
+  const LC_EVENTS=[
+    { id:'lc1', cyc:'SRC', type:'新增節點', summary:'新增節點『撥款核准作業』並改接連線', operator:'李慧玲', emp:'20233', time:'2026-07-16 15:12:04',
+      before:{nodes:[N('a1','進件作業',2),N('a2','簽約對保作業',1),N('a3','擔保設定作業',1),N('a5','案件執行作業',1)], edges:[['a1','a2'],['a1','a3'],['a2','a5'],['a3','a5']]},
+      after:SRC_FULL, diff:{addNodes:['a4'], addEdges:[['a2','a4'],['a3','a4'],['a4','a5']], rmEdges:[['a2','a5'],['a3','a5']]} },
+    { id:'lc2', cyc:'SRC', type:'新增連線', summary:'新增連線 進件作業 → 擔保設定作業', operator:'李慧玲', emp:'20233', time:'2026-07-15 11:48:30',
+      before:{nodes:SRC_FULL.nodes, edges:[['a1','a2'],['a2','a4'],['a3','a4'],['a4','a5']]},
+      after:SRC_FULL, diff:{addEdges:[['a1','a3']]} },
+    { id:'lc3', cyc:'SRC', type:'節點改名', summary:'節點改名『撥款核准』→『撥款核准作業』', operator:'李慧玲', emp:'20233', time:'2026-07-14 09:22:15',
+      before:{nodes:[N('a1','進件作業',2),N('a2','簽約對保作業',1),N('a3','擔保設定作業',1),N('a4','撥款核准',1),N('a5','案件執行作業',1)], edges:SRC_FULL.edges},
+      after:SRC_FULL, diff:{amberNodes:['a4']} },
+    { id:'lc4', cyc:'PUC', type:'文件掛載變更', summary:'文件掛載變更：費用請款作業（掛載 1 → 2 份）', operator:'李慧玲', emp:'20233', time:'2026-07-13 14:03:52',
+      before:{nodes:[N('b1','請購申請作業',1),N('b2','採購比議價作業',1),N('b3','驗收入庫作業',1),N('b4','費用請款作業',1),N('b5','付款核准作業',1)], edges:[['b1','b2'],['b2','b3'],['b3','b5'],['b1','b4'],['b4','b5']]},
+      after:{nodes:[N('b1','請購申請作業',1),N('b2','採購比議價作業',1),N('b3','驗收入庫作業',1),N('b4','費用請款作業',2),N('b5','付款核准作業',1)], edges:[['b1','b2'],['b2','b3'],['b3','b5'],['b1','b4'],['b4','b5']]},
+      diff:{amberNodes:['b4']} },
+    { id:'lc5', cyc:'PUC', type:'移除節點', summary:'移除節點『付款執行作業』（含其連線）', operator:'李慧玲', emp:'20233', time:'2026-07-12 10:41:09',
+      before:{nodes:[N('b1','請購申請作業',1),N('b2','採購比議價作業',1),N('b3','驗收入庫作業',1),N('b4','費用請款作業',2),N('b5','付款核准作業',1),N('b6','付款執行作業',1)], edges:[['b1','b2'],['b2','b3'],['b3','b5'],['b1','b4'],['b4','b5'],['b5','b6']]},
+      after:{nodes:[N('b1','請購申請作業',1),N('b2','採購比議價作業',1),N('b3','驗收入庫作業',1),N('b4','費用請款作業',2),N('b5','付款核准作業',1)], edges:[['b1','b2'],['b2','b3'],['b3','b5'],['b1','b4'],['b4','b5']]},
+      diff:{rmNodes:['b6'], rmEdges:[['b5','b6']]} }
+  ];
+  const TYPE_STYLE={'新增節點':['emerald','plus-circle'],'移除節點':['red','minus-circle'],'新增連線':['emerald','spline'],'移除連線':['red','spline'],'節點改名':['amber','pencil'],'文件掛載變更':['amber','file-stack']};
+
+  function fillCycSel(){ document.getElementById('tqCyc').innerHTML='<option value="">全部循環</option>'+Object.keys(CYC_NAMES).map(c=>`<option value="${c}">${CYC_NAMES[c]}（${c}）</option>`).join(''); }
+
+  function renderTree(){
+    if(!allowed())return;
+    const cy=document.getElementById('tqCyc').value, ty=document.getElementById('tqType').value;
+    const p=document.getElementById('tqPerson').value.trim().toLowerCase(), from=document.getElementById('tqFrom').value;
+    let rows=LC_EVENTS.filter(e=>{
+      if(cy && e.cyc!==cy) return false;
+      if(ty && e.type!==ty) return false;
+      if(p && !(e.operator.toLowerCase().includes(p)||e.emp.toLowerCase().includes(p))) return false;
+      if(from && e.time.slice(0,10) < from) return false;
+      return true;
+    }).sort((a,b)=>a.time<b.time?1:a.time>b.time?-1:0);
+    document.getElementById('treeCount').textContent=`共 ${rows.length} 筆結構變更`;
+    document.getElementById('treeEmpty').classList.toggle('hidden',rows.length>0);
+    document.getElementById('treeBody').innerHTML=rows.map(e=>{
+      const [c,ic]=TYPE_STYLE[e.type]||['slate','git-commit-vertical'];
+      return `<tr class="hover:bg-slate-50 align-top">
+        <td class="px-4 py-3 text-slate-700">${esc(CYC_NAMES[e.cyc])}<div class="mono text-[10px] text-slate-400">${e.cyc}</div></td>
+        <td class="px-4 py-3"><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-${c}-50 text-${c}-700 border border-${c}-100"><i data-lucide="${ic}" class="w-3.5 h-3.5"></i>${esc(e.type)}</span></td>
+        <td class="px-4 py-3 text-slate-700">${esc(e.summary)}</td>
+        <td class="px-4 py-3 text-slate-700">${esc(e.operator)}<span class="text-slate-400 mono text-xs">（${esc(e.emp)}）</span></td>
+        <td class="px-4 py-3 mono text-xs text-slate-500">${esc(e.time)}</td>
+        <td class="px-4 py-3">
+          <div class="flex items-center gap-3 text-sm whitespace-nowrap">
+            <button onclick="openPreview('${e.id}')" class="text-primary-600 hover:text-primary-700 hover:underline font-medium inline-flex items-center gap-1"><i data-lucide="eye" class="w-4 h-4"></i>預覽</button>
+            <button onclick="lcDownload('${e.id}')" class="text-slate-600 hover:text-primary-700 hover:underline inline-flex items-center gap-1"><i data-lucide="download" class="w-4 h-4"></i>下載</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+    lucide.createIcons();
+  }
+  function clearTree(){ document.getElementById('tqCyc').value=''; document.getElementById('tqType').value=''; document.getElementById('tqPerson').value=''; document.getElementById('tqFrom').value=''; renderTree(); }
+
+  /* ---- mini DAG 佈局（由上而下）+ 直角箭頭 + diff 標示 ---- */
+  const NW=142, NH=54, HGAP=176, VGAP=104, MARGIN=30;
+  function layoutGraph(nodes, edges){
+    const adj={},indeg={}; nodes.forEach(n=>{adj[n.id]=[];indeg[n.id]=0;});
+    edges.forEach(([s,t])=>{ if(adj[s])adj[s].push(t); if(t in indeg)indeg[t]++; });
+    const level={},deg={}; nodes.forEach(n=>{level[n.id]=0;deg[n.id]=indeg[n.id];});
+    const q=nodes.filter(n=>indeg[n.id]===0).map(n=>n.id);
+    while(q.length){const u=q.shift(); adj[u].forEach(v=>{level[v]=Math.max(level[v],level[u]+1); if(--deg[v]===0)q.push(v);});}
+    const levels={}; nodes.forEach(n=>{(levels[level[n.id]]=levels[level[n.id]]||[]).push(n.id);});
+    const numLv=Math.max(0,...nodes.map(n=>level[n.id]))+1;
+    const maxCols=Math.max(1,...Object.keys(levels).map(k=>levels[k].length));
+    const pos={};
+    Object.keys(levels).forEach(lv=>{const row=levels[lv];const cnt=row.length;const rowW=cnt*HGAP;const startX=MARGIN+(maxCols*HGAP-rowW)/2;
+      row.forEach((id,i)=>{pos[id]={x:startX+i*HGAP+(HGAP-NW)/2, y:MARGIN+(+lv)*VGAP};});});
+    return {pos, w:MARGIN*2+maxCols*HGAP, h:MARGIN*2+(numLv-1)*VGAP+NH};
+  }
+  function edgeD(pa,pb){ const sx=pa.x+NW/2,sy=pa.y+NH,tx=pb.x+NW/2,ty=pb.y,my=sy+(ty-sy)/2; return `M ${sx} ${sy} L ${sx} ${my} L ${tx} ${my} L ${tx} ${ty}`; }
+  function renderMiniDag(host, graph, side, diff){
+    const lay=layoutGraph(graph.nodes, graph.edges);
+    host.style.width=lay.w+'px'; host.style.height=lay.h+'px';
+    const add=new Set(diff.addNodes||[]), rm=new Set(diff.rmNodes||[]), amber=new Set(diff.amberNodes||[]);
+    const addE=new Set((diff.addEdges||[]).map(e=>e[0]+'>'+e[1])), rmE=new Set((diff.rmEdges||[]).map(e=>e[0]+'>'+e[1]));
+    let svg=`<svg width="${lay.w}" height="${lay.h}" style="position:absolute;inset:0;pointer-events:none;z-index:1">`;
+    graph.edges.forEach(([s,t])=>{
+      const k=s+'>'+t; let cls='dedge', mk='url(#mArr)';
+      if(side==='before'&&rmE.has(k)){cls+=' e-rm'; mk='url(#mRmArr)';}
+      if(side==='after'&&addE.has(k)){cls+=' e-add'; mk='url(#mAddArr)';}
+      svg+=`<path class="${cls}" d="${edgeD(lay.pos[s],lay.pos[t])}" marker-end="${mk}"/>`;
+    });
+    svg+=`</svg>`;
+    let nh='';
+    graph.nodes.forEach(n=>{
+      let cls='mnode', tag='';
+      if(side==='before'&&rm.has(n.id)){cls+=' n-rm'; tag='將移除';}
+      else if(side==='after'&&add.has(n.id)){cls+=' n-add'; tag='新增';}
+      else if(amber.has(n.id)){cls+=' n-amber'; tag=side==='after'?'變更後':'變更前';}
+      nh+=`<div class="${cls}" style="left:${lay.pos[n.id].x}px;top:${lay.pos[n.id].y}px;width:${NW}px">
+        <div class="mbody"><div class="flex items-center gap-1 justify-between"><span class="nm font-medium text-slate-800 text-xs truncate">${esc(n.name)}</span>${tag?`<span class="mtag">${tag}</span>`:''}</div>
+        <div class="mt-0.5 text-[10px] ${n.docs?'text-emerald-600':'text-slate-400'}">${n.docs?('掛載 '+n.docs+' 份'):'未掛載'}</div></div></div>`;
+    });
+    host.innerHTML = svg + `<div style="position:absolute;inset:0;z-index:2">${nh}</div><div class="wm-layer">${wmSpans(lay.w*lay.h)}</div>`;
+    lucide.createIcons();
+  }
+
+  let curEvent=null;
+  function openPreview(id){
+    const e=LC_EVENTS.find(x=>x.id===id); if(!e)return; curEvent=e;
+    document.getElementById('pvCyc').textContent=CYC_NAMES[e.cyc];
+    document.getElementById('pvSummary').textContent=e.summary;
+    document.getElementById('pvWm').textContent='浮水印：'+WM_STR+'（UTC+8）';
+    renderMiniDag(document.getElementById('dagBefore'), e.before, 'before', e.diff);
+    renderMiniDag(document.getElementById('dagAfter'), e.after, 'after', e.diff);
+    const m=document.getElementById('lcModal'); m.classList.remove('hidden'); m.classList.add('flex');
+    toast('info','已開啟新舊樹狀圖預覽（已寫入 LIFECYCLE_CHANGELOG_VIEW 稽核）');
+  }
+  function closePreview(){ const m=document.getElementById('lcModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+  function lcDownload(id){ const e=LC_EVENTS.find(x=>x.id===id); toast('success','已下載「'+CYC_NAMES[e.cyc]+'／'+e.summary+'」新舊對照 PDF（單一 PDF 兩頁）：伺服器端已將浮水印燒錄進 PDF 內容層（非僅前端疊加），並寫入 LIFECYCLE_CHANGELOG_DOWNLOAD 稽核'); }
+  function downloadFromModal(){ if(curEvent) lcDownload(curEvent.id); }
+
+  /* ===== 次分頁切換 ===== */
+  let SUB='doc';
+  function switchSub(s){
+    SUB=s;
+    document.getElementById('pane-doc').classList.toggle('hidden',s!=='doc');
+    document.getElementById('pane-tree').classList.toggle('hidden',s!=='tree');
+    ['doc','tree'].forEach(k=>{ const b=document.getElementById('stab-'+k); const on=k===s;
+      b.className='px-3.5 py-1.5 rounded-md text-sm font-medium inline-flex items-center gap-1.5 '+(on?'bg-white text-primary-700 shadow-sm':'text-slate-500 hover:text-slate-700'); });
+    if(s==='doc') renderDoc(); else renderTree();
+    lucide.createIcons();
+  }
+
+  /* ===== 角色 gating（僅 SysAdmin／ICSOPAdmin）===== */
+  function allowed(){ return ['sysadmin','icsop_admin'].includes(document.body.dataset.role); }
+  function setRole(r){
+    document.body.dataset.role=r;
+    const blocked=!allowed();
+    document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
+    if(blocked) document.getElementById('blockMsg').textContent={
+      supervisor:'主管對「變更歷程」為「無」，無法存取（比照文件調閱歷程，OQ-E07-04 定案）。',
+      deptcontact:'部門窗口對「變更歷程」為「無」，無法存取。',
+      user:'一般使用者無後台存取權。'}[r];
+    document.getElementById('topUser').textContent={sysadmin:'黃俊傑',icsop_admin:'李慧玲',supervisor:'陳彥廷',deptcontact:'林建宏',user:'王小明'}[r];
+    if(!blocked){ if(SUB==='doc')renderDoc(); else renderTree(); }
+    renderSidebar(); lucide.createIcons();
+  }
+
+  function toast(type,msg,code){
+    const map={success:['check-circle-2','#059669'],error:['alert-circle','#DC2626'],info:['info','#365C97']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-md';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5 shrink-0" style="color:${color}"></i><div><span class="text-slate-700">${msg}</span>${code?`<div class="text-[10px] mono text-slate-400 mt-0.5">${code}</div>`:''}</div>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4600);
+  }
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closePreview();});
+
+  // safelist dynamic colors: bg-slate-50 text-slate-700 border-slate-100 bg-blue-50 text-blue-700 border-blue-100 bg-violet-50 text-violet-700 border-violet-100 bg-emerald-50 text-emerald-700 border-emerald-100 bg-red-50 text-red-700 border-red-100 bg-amber-50 text-amber-700 border-amber-100 bg-primary-50 text-primary-700 border-primary-100
+  // init
+  fillCycSel(); switchSub('doc'); setRole('sysadmin'); renderSidebar(); lucide.createIcons();
+</script>
+</body>
+</html>

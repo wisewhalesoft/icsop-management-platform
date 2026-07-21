@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>文件調閱歷程 · 後台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;color:#334155;background:#FFFFFF;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  /* admin shell sidebar */
+  #sidebar{width:240px;transition:width .2s ease;}
+  body{padding-left:240px;transition:padding-left .2s ease;}
+  body.sb-collapsed{padding-left:60px;}
+  body.sb-collapsed #sidebar{width:60px;}
+  body.sb-collapsed .sb-label{display:none;}
+  body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
+</style>
+</head>
+<body data-role="sysadmin" class="min-h-screen">
+
+<!-- ===== Admin shell sidebar ===== -->
+<aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-50 bg-white border-r border-slate-200 flex flex-col">
+  <div class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
+  </div>
+  <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
+  <div class="border-t border-slate-200 p-2 shrink-0">
+    <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
+      <i data-lucide="external-link" class="w-4 h-4 shrink-0"></i><span class="sb-label truncate">瀏覽文件網頁</span></button>
+  </div>
+</aside>
+
+<!-- Top bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="h-14 px-4 flex items-center gap-3">
+    <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
+    <div class="leading-tight min-w-0">
+      <div class="text-xs text-slate-400 flex items-center gap-1"><span>稽核與調閱歷程</span><i data-lucide="chevron-right" class="w-3 h-3"></i><span>查詢</span></div>
+      <div class="font-semibold text-slate-900 text-sm truncate">文件調閱歷程查詢</div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <button onclick="doExport()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"><i data-lucide="download" class="w-4 h-4"></i>匯出</button>
+      <div class="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+        <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+        <select id="roleSel" onchange="setRole(this.value)" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
+          <option value="sysadmin">系統管理員</option>
+          <option value="icsop_admin">ICSOP 管理員</option>
+          <option value="supervisor">主管（無）</option>
+          <option value="deptcontact">部門窗口</option>
+          <option value="user">一般使用者</option>
+        </select>
+      </div>
+      <div class="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200"><i data-lucide="user-circle" class="w-4 h-4"></i><span id="topUser">黃俊傑</span></div>
+      <button title="登出" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+</header>
+
+<!-- blocked overlay -->
+<div id="blockOverlay" class="hidden fixed inset-0 z-40 bg-white/90 backdrop-blur-sm flex items-center justify-center" style="left:240px">
+  <div class="text-center max-w-xs">
+    <div class="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="lock" class="w-7 h-7 text-red-500"></i></div>
+    <h3 class="font-semibold text-slate-900">無調閱歷程查詢權限</h3>
+    <p class="text-sm text-slate-500 mt-1" id="blockMsg"></p>
+    <p class="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+  </div>
+</div>
+
+<main class="p-5">
+
+  <!-- scope note -->
+  <div id="scopeNote" class="mb-4 flex items-start gap-2 rounded-lg px-3 py-2 text-sm border"></div>
+
+  <!-- query bar -->
+  <section class="bg-white border border-slate-200 rounded-xl p-4 mb-4">
+    <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">類型</label>
+        <select id="qKind" onchange="runQuery()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white">
+          <option value="">全部類型</option>
+          <option value="文件">文件</option>
+          <option value="循環">循環</option>
+          <option value="變更">變更</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">人員（姓名／員工編號）</label>
+        <div class="relative"><i data-lucide="user-search" class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+          <input id="qPerson" class="w-full pl-8 pr-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="王小明 / 22345" /></div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">文件（編號／名稱）</label>
+        <div class="relative"><i data-lucide="file-search" class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+          <input id="qDoc" class="w-full pl-8 pr-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="ICSOP-SRC-101-1-01 / 進件" /></div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">起始日期</label>
+        <input id="qFrom" type="date" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">結束日期</label>
+        <input id="qTo" type="date" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" />
+      </div>
+    </div>
+    <div class="flex items-center gap-2 mt-3">
+      <button onclick="runQuery()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="search" class="w-4 h-4"></i>查詢</button>
+      <button onclick="clearQuery()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">清除條件</button>
+      <span id="defaultNote" class="hidden ml-1 items-center gap-1 text-xs text-amber-700"><i data-lucide="info" class="w-3.5 h-3.5"></i>未輸入條件，已套用近 30 天預設範圍</span>
+      <span id="resultCount" class="ml-auto text-sm text-slate-500"></span>
+    </div>
+  </section>
+
+  <!-- results -->
+  <section class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm min-w-[1220px]">
+        <thead class="bg-slate-50 text-slate-500 text-xs">
+          <tr>
+            <th class="text-left font-medium px-4 py-2.5">操作人員</th>
+            <th class="text-left font-medium px-4 py-2.5">員工編號</th>
+            <th class="text-left font-medium px-4 py-2.5">公司</th>
+            <th class="text-left font-medium px-4 py-2.5">部門</th>
+            <th class="text-left font-medium px-4 py-2.5">處/室</th>
+            <th class="text-left font-medium px-4 py-2.5">角色</th>
+            <th class="text-left font-medium px-4 py-2.5">類型</th>
+            <th class="text-left font-medium px-4 py-2.5">對象（文件／循環）</th>
+            <th class="text-left font-medium px-4 py-2.5">操作類型</th>
+            <th class="text-left font-medium px-4 py-2.5">操作時間（新→舊）</th>
+            <th class="px-2 py-2.5"></th>
+          </tr>
+        </thead>
+        <tbody id="resultBody" class="divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+    <!-- empty -->
+    <div id="emptyState" class="hidden text-center py-14">
+      <i data-lucide="inbox" class="w-12 h-12 text-slate-300 mx-auto mb-2"></i>
+      <p class="text-slate-500">查無符合結果</p>
+      <p class="text-sm text-slate-400 mt-1">請調整人員／文件／時間條件</p>
+    </div>
+    <!-- pager -->
+    <div id="pager" class="flex items-center justify-between px-4 py-3 border-t border-slate-100 text-sm text-slate-500">
+      <span id="pagerText"></span>
+      <div class="flex items-center gap-1">
+        <button class="w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50">‹</button>
+        <button class="w-8 h-8 rounded bg-primary-600 text-white">1</button>
+        <button class="w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50">›</button>
+      </div>
+    </div>
+  </section>
+
+  <p class="mt-3 text-xs text-slate-400 flex items-start gap-1.5"><i data-lucide="shield-check" class="w-3.5 h-3.5 mt-0.5"></i>稽核紀錄為 append-only、不可竄改（AUDIT_IMMUTABLE）；每筆之身分/時間快照與該次浮水印完全一致（F023）。</p>
+</main>
+
+<div id="toastWrap" class="fixed top-16 right-4 z-[60] space-y-2"></div>
+
+<script>
+  /* ===== admin shell sidebar ===== */
+  const MENU=[
+    {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
+    {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
+  ];
+  const CURRENT_MODULE='audit';
+  function renderSidebar(){
+    const role=document.body.dataset.role;
+    const items=MENU.filter(m=>m.roles[role]);
+    document.getElementById('sidebarNav').innerHTML = items.length? items.map(m=>{
+      const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
+      return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`;
+    lucide.createIcons();
+  }
+  function navTo(id,label){ if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;} shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型本輪未含此頁）')); return false; }
+  function toggleSidebar(){ document.body.classList.toggle('sb-collapsed'); }
+  function openPublic(){ shellToast('已於新視窗開啟前台瀏覽頁（03-public-list）'); }
+  function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
+
+  /* ===== audit data ===== */
+  // 公司名稱＝VW_HRCOMF.COMPFULLNM 全稱；dept＝部層完整名稱、section＝最細單位名稱
+  const COMPANY='和潤企業股份有限公司';
+  // kind：文件／循環／變更（AUDIT_LOG.targetType 已支援，OQ-E07-03 定案納入本查詢）
+  const RECORDS=[
+    {kind:'文件',name:'王小明',emp:'22345',company:'和潤企業股份有限公司',dept:'營運管理部',section:'審查室',role:'一般使用者',num:'ICSOP-SRC-101-1-01',doc:'車輛分期進件作業',act:'VIEW',time:'2026-07-16 14:32:08'},
+    {kind:'文件',name:'林建宏',emp:'20521',company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',role:'部門窗口',num:'ICSOP-SRC-101-1-01',doc:'車輛分期進件作業',act:'PRINT',time:'2026-07-16 10:05:12'},
+    {kind:'文件',name:'陳彥廷',emp:'20088',company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',role:'主管',num:'ICSOP-SRC-101-2-00',doc:'消金審核作業',act:'DOWNLOAD',time:'2026-07-16 11:20:33'},
+    {kind:'文件',name:'張家豪',emp:'20877',company:'和潤企業股份有限公司',dept:'作業服務部',section:'文管室',role:'主管',num:'ICSOP-SRC-101-1-06',doc:'消費分期特約通路作業',act:'VIEW',time:'2026-07-15 16:48:21'},
+    {kind:'文件',name:'吳佩珊',emp:'21002',company:'和潤企業股份有限公司',dept:'財會部',section:'',role:'部門窗口',num:'ICSOP-PUC-101-1-01',doc:'和潤-費用請款作業',act:'DOWNLOAD',time:'2026-07-15 09:15:40'},
+    {kind:'文件',name:'王小明',emp:'22345',company:'和潤企業股份有限公司',dept:'營運管理部',section:'審查室',role:'一般使用者',num:'ICSOP-SRC-101-1-01',doc:'車輛分期進件作業',act:'DOWNLOAD',time:'2026-07-15 14:35:12'},
+    {kind:'文件',name:'陳彥廷',emp:'20088',company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',role:'主管',num:'ICSOP-PPC-101-1-03',doc:'消費分期-月目標設定作業',act:'VIEW',time:'2026-07-14 13:55:02'},
+    {kind:'文件',name:'李慧玲',emp:'20233',company:'和潤企業股份有限公司',dept:'債權管理部',section:'法催一室',role:'ICSOP 管理員',num:'ICSOP-CIPS-104-1-01',doc:'使用者權限管理與覆核',act:'VIEW',time:'2026-07-14 09:03:17'},
+    {kind:'文件',name:'林建宏',emp:'20521',company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',role:'部門窗口',num:'ICSOP-SRC-101-2-00',doc:'消金審核作業',act:'VIEW',time:'2026-07-13 15:12:40'},
+    // 循環（樹狀圖預覽／下載，F036）
+    {kind:'循環',name:'李慧玲',emp:'20233',company:'和潤企業股份有限公司',dept:'債權管理部',section:'法催一室',role:'ICSOP 管理員',num:'銷售及收款循環',doc:'循環樹狀圖預覽（SRC）',act:'LIFECYCLE_VIEW',time:'2026-07-16 15:40:26'},
+    {kind:'循環',name:'黃俊傑',emp:'20001',company:'和潤企業股份有限公司',dept:'資訊部',section:'應用發展室',role:'系統管理員',num:'投資循環',doc:'循環樹狀圖預覽（IC）',act:'LIFECYCLE_VIEW',time:'2026-07-15 10:22:58'},
+    {kind:'循環',name:'李慧玲',emp:'20233',company:'和潤企業股份有限公司',dept:'債權管理部',section:'法催一室',role:'ICSOP 管理員',num:'採購及付款循環',doc:'循環樹狀圖下載（PUC）',act:'LIFECYCLE_DOWNLOAD',time:'2026-07-15 08:51:03'},
+    {kind:'循環',name:'李慧玲',emp:'20233',company:'和潤企業股份有限公司',dept:'債權管理部',section:'法催一室',role:'ICSOP 管理員',num:'銷售及收款循環',doc:'循環樹狀圖列印（SRC）',act:'LIFECYCLE_PRINT',time:'2026-07-16 15:41:10'},
+    // 變更（文件欄位變更歷程 F037／循環結構變更歷程 F038）
+    {kind:'變更',name:'黃俊傑',emp:'20001',company:'和潤企業股份有限公司',dept:'資訊部',section:'應用發展室',role:'系統管理員',num:'採購及付款循環',doc:'循環結構變更歷程檢視（PUC）',act:'LIFECYCLE_CHANGELOG_VIEW',time:'2026-07-16 16:12:44'},
+    {kind:'變更',name:'李慧玲',emp:'20233',company:'和潤企業股份有限公司',dept:'債權管理部',section:'法催一室',role:'ICSOP 管理員',num:'ICSOP-SRC-101-1-01',doc:'文件欄位變更歷程檢視',act:'CHANGE_LOG_VIEW',time:'2026-07-16 15:05:19'},
+    {kind:'變更',name:'李慧玲',emp:'20233',company:'和潤企業股份有限公司',dept:'債權管理部',section:'法催一室',role:'ICSOP 管理員',num:'銷售及收款循環',doc:'新舊樹狀圖對照 PDF 下載（SRC）',act:'LIFECYCLE_CHANGELOG_DOWNLOAD',time:'2026-07-14 11:33:07'}
+  ];
+  const ACT_STYLE={
+    VIEW:['slate','檢視'],DOWNLOAD:['blue','下載'],PRINT:['violet','列印'],
+    LIFECYCLE_VIEW:['emerald','循環樹狀圖檢視'],LIFECYCLE_DOWNLOAD:['emerald','循環樹狀圖下載'],LIFECYCLE_PRINT:['emerald','循環樹狀圖列印'],
+    CHANGE_LOG_VIEW:['amber','文件變更歷程檢視'],LIFECYCLE_CHANGELOG_VIEW:['amber','循環變更歷程檢視'],
+    LIFECYCLE_CHANGELOG_DOWNLOAD:['amber','新舊樹狀圖下載']
+  };
+  const KIND_STYLE={'文件':'slate','循環':'emerald','變更':'amber'};
+  // §8.4：無處/室者 section 留空，分隔符自動收合（不得出現 '--'）；與檢視器疊加／PDF 燒錄同一組字邏輯
+  function wm(r){return [r.emp,r.name,r.company,r.dept,r.section,'僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現',r.time].filter(p=>p!==''&&p!=null).join('-');}
+  let expandedIdx=-1;
+
+  function scopeRecords(){
+    // 僅 sysadmin / icsop_admin 可達此處（其餘角色已於 setRole 封鎖），皆為全公司範圍
+    return RECORDS.slice();
+  }
+
+  function runQuery(){
+    const role=document.body.dataset.role;
+    if(role==='deptcontact'||role==='user') return;
+    const k=document.getElementById('qKind').value;
+    const p=document.getElementById('qPerson').value.trim().toLowerCase();
+    const d=document.getElementById('qDoc').value.trim().toLowerCase();
+    const from=document.getElementById('qFrom').value, to=document.getElementById('qTo').value;
+    const noCond=!k&&!p&&!d&&!from&&!to;
+    document.getElementById('defaultNote').classList.toggle('hidden',!noCond);
+    document.getElementById('defaultNote').classList.toggle('flex',noCond);
+    if(noCond) toast('info','請至少提供一項查詢條件（未輸入，已套用近 30 天預設）','QUERY_CONDITION_REQUIRED');
+
+    let rows=scopeRecords().filter(r=>{
+      if(k && r.kind!==k) return false;
+      if(p && !((r.name.toLowerCase().includes(p))||(r.emp.toLowerCase().includes(p)))) return false;
+      if(d && !((r.num.toLowerCase().includes(d))||(r.doc.toLowerCase().includes(d)))) return false;
+      if(from && r.time.slice(0,10) < from) return false;
+      if(to && r.time.slice(0,10) > to) return false;
+      return true;
+    });
+    rows.sort((a,b)=> a.time<b.time?1:a.time>b.time?-1:0); // 新到舊
+    expandedIdx=-1;
+    renderRows(rows);
+  }
+
+  function renderRows(rows){
+    const tb=document.getElementById('resultBody');
+    document.getElementById('emptyState').classList.toggle('hidden',rows.length>0);
+    document.getElementById('pager').style.display=rows.length>0?'flex':'none';
+    document.getElementById('resultCount').textContent=`共 ${rows.length} 筆`;
+    document.getElementById('pagerText').textContent=`顯示 1–${rows.length} 筆 · 每頁 50 筆`;
+    tb.innerHTML=rows.map((r,i)=>{
+      const [c,lbl]=ACT_STYLE[r.act];
+      const pill=`<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-${c}-50 text-${c}-700 border border-${c}-100">${r.act} · ${lbl}</span>`;
+      const open=i===expandedIdx;
+      let html=`<tr class="hover:bg-slate-50 cursor-pointer" onclick="toggleDetail(${i})">
+        <td class="px-4 py-2.5 font-medium text-slate-800">${r.name}</td>
+        <td class="px-4 py-2.5 mono text-slate-500">${r.emp}</td>
+        <td class="px-4 py-2.5 text-slate-600">${r.company}</td>
+        <td class="px-4 py-2.5 text-slate-600">${r.dept}</td>
+        <td class="px-4 py-2.5 text-slate-600">${r.section||`<span class="text-slate-300">—</span>`}</td>
+        <td class="px-4 py-2.5 text-slate-600">${r.role}</td>
+        <td class="px-4 py-2.5"><span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-${KIND_STYLE[r.kind]}-50 text-${KIND_STYLE[r.kind]}-700 border border-${KIND_STYLE[r.kind]}-100">${r.kind}</span></td>
+        <td class="px-4 py-2.5 mono text-slate-600">${r.num}</td>
+        <td class="px-4 py-2.5">${pill}</td>
+        <td class="px-4 py-2.5 mono text-slate-500">${r.time}</td>
+        <td class="px-2 py-2.5 text-slate-400"><i data-lucide="chevron-${open?'down':'right'}" class="w-4 h-4"></i></td></tr>`;
+      if(open){
+        html+=`<tr class="bg-slate-50/70"><td colspan="11" class="px-4 py-4">
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <div class="text-xs font-semibold text-slate-500 mb-2 flex items-center gap-1.5"><i data-lucide="file-badge" class="w-4 h-4 text-primary-600"></i>調閱明細</div>
+            <dl class="grid sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
+              <div><dt class="text-slate-400 text-xs">操作人員</dt><dd class="text-slate-700">${r.name}（${r.emp}）</dd></div>
+              <div><dt class="text-slate-400 text-xs">公司</dt><dd class="text-slate-700">${r.company}</dd></div>
+              <div><dt class="text-slate-400 text-xs">部門</dt><dd class="text-slate-700">${r.dept}</dd></div>
+              <div><dt class="text-slate-400 text-xs">處/室</dt><dd class="text-slate-700">${r.section||`<span class="text-slate-400">（無，浮水印自動收合分隔符）</span>`}</dd></div>
+              <div><dt class="text-slate-400 text-xs">角色</dt><dd class="text-slate-700">${r.role}</dd></div>
+              <div><dt class="text-slate-400 text-xs">操作類型</dt><dd class="text-slate-700">${r.act} · ${lbl}</dd></div>
+              <div><dt class="text-slate-400 text-xs">類型</dt><dd class="text-slate-700">${r.kind}</dd></div>
+              <div><dt class="text-slate-400 text-xs">對象（文件／循環）</dt><dd class="mono text-slate-700">${r.num}</dd></div>
+              <div class="sm:col-span-2"><dt class="text-slate-400 text-xs">對象名稱／說明</dt><dd class="text-slate-700">${r.doc}</dd></div>
+              <div class="sm:col-span-3"><dt class="text-slate-400 text-xs">操作時間（伺服器時間 UTC+8）</dt><dd class="mono text-slate-700">${r.time}</dd></div>
+            </dl>
+            <div class="mt-3 pt-3 border-t border-slate-100">
+              <div class="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-1.5"><i data-lucide="stamp" class="w-4 h-4 text-primary-600"></i>當次浮水印快照（與稽核內容完全一致）</div>
+              <div class="mono text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded px-3 py-2 break-all">${wm(r)}</div>
+            </div>
+          </div></td></tr>`;
+      }
+      return html;
+    }).join('');
+    lucide.createIcons();
+  }
+  function toggleDetail(i){ expandedIdx = expandedIdx===i? -1 : i; runQueryKeep(); }
+  let _lastRows=null;
+  function runQueryKeep(){ // re-render using current filters but keep expanded
+    const role=document.body.dataset.role; if(role==='deptcontact'||role==='user')return;
+    const k=document.getElementById('qKind').value;
+    const p=document.getElementById('qPerson').value.trim().toLowerCase();
+    const d=document.getElementById('qDoc').value.trim().toLowerCase();
+    const from=document.getElementById('qFrom').value, to=document.getElementById('qTo').value;
+    let rows=scopeRecords().filter(r=>{
+      if(k && r.kind!==k) return false;
+      if(p && !((r.name.toLowerCase().includes(p))||(r.emp.toLowerCase().includes(p)))) return false;
+      if(d && !((r.num.toLowerCase().includes(d))||(r.doc.toLowerCase().includes(d)))) return false;
+      if(from && r.time.slice(0,10) < from) return false;
+      if(to && r.time.slice(0,10) > to) return false;
+      return true;
+    });
+    rows.sort((a,b)=> a.time<b.time?1:a.time>b.time?-1:0);
+    renderRows(rows);
+  }
+  function clearQuery(){ ['qKind','qPerson','qDoc','qFrom','qTo'].forEach(id=>document.getElementById(id).value=''); document.getElementById('defaultNote').classList.add('hidden'); expandedIdx=-1; renderRows(scopeRecords().slice().sort((a,b)=>a.time<b.time?1:-1)); }
+  function doExport(){ if(['deptcontact','user'].includes(document.body.dataset.role))return; toast('success','已匯出查詢結果（CSV，草案格式）'); }
+
+  function setRole(r){
+    document.body.dataset.role=r;
+    const blocked=(r==='deptcontact'||r==='user'||r==='supervisor');
+    document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
+    if(blocked) document.getElementById('blockMsg').textContent={supervisor:'主管對「文件調閱歷程查詢」為「無」，無法存取。',deptcontact:'部門窗口對「文件調閱歷程查詢」為「無」，無法存取。',user:'一般使用者無後台存取權。'}[r];
+    // scope note
+    const note=document.getElementById('scopeNote');
+    if(!blocked){ note.className='mb-4 flex items-start gap-2 rounded-lg px-3 py-2 text-sm border bg-primary-50 border-primary-100 text-primary-700';
+      note.innerHTML='<i data-lucide="globe" class="w-4 h-4 mt-0.5"></i><span>查詢範圍：<b>全公司</b>（系統管理員 / ICSOP 管理員）。</span>'; }
+    document.getElementById('topUser').textContent={sysadmin:'黃俊傑',icsop_admin:'李慧玲',supervisor:'陳彥廷',deptcontact:'林建宏',user:'王小明'}[r];
+    if(!blocked){ expandedIdx=-1; renderRows(scopeRecords().slice().sort((a,b)=>a.time<b.time?1:-1)); }
+    renderSidebar();
+    lucide.createIcons();
+  }
+
+  function toast(type,msg,code){
+    const map={success:['check-circle-2','#059669'],error:['alert-circle','#DC2626'],info:['info','#365C97']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><div><span class="text-slate-700">${msg}</span>${code?`<div class="text-[10px] mono text-slate-400 mt-0.5">${code}</div>`:''}</div>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4200);
+  }
+
+  // safelist dynamic pill colors: bg-slate-50 text-slate-700 border-slate-100 bg-blue-50 text-blue-700 border-blue-100 bg-violet-50 text-violet-700 border-violet-100 bg-emerald-50 text-emerald-700 border-emerald-100 bg-amber-50 text-amber-700 border-amber-100
+  setRole('sysadmin');
+</script>
+</body>
+</html>
