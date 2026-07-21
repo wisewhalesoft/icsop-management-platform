@@ -1,0 +1,55 @@
+/**
+ * 後端 API 傳輸型別（over-the-wire）。
+ * 權威來源：backend/src/auth/session-token.service.ts（SessionUser）、
+ * backend/src/org-sync/org-sync.types.ts（SyncRunSummary / SyncResult / SyncStats）。
+ * ⚠ JSON 序列化後 Date → ISO 字串，故時間欄位型別為 string。
+ */
+
+/** GET /auth/me 回傳。 */
+export interface SessionUser {
+  loginId: string;
+  email: string;
+  companyCode: string;
+  roleCode?: string;
+}
+
+export type TriggerType = 'scheduled' | 'manual';
+export type SyncRunStatus = 'running' | 'success' | 'failed';
+
+/** GET /admin/org-sync/runs 之單筆。 */
+export interface SyncRunSummary {
+  id: string;
+  triggerType: TriggerType;
+  status: SyncRunStatus;
+  startedAt: string;
+  endedAt: string | null;
+  changeCount: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+}
+
+export interface SyncStats {
+  departmentsRead: number;
+  orgCreated: number;
+  orgUpdated: number;
+  accountsRead: number;
+  accountsCreated: number;
+  accountsUpdated: number;
+  accountsDisabled: number;
+  orphanWarnings: number;
+  dirtyRows: number;
+  disappearedCount: number;
+  disappearedRatio: number;
+}
+
+/** POST /admin/org-sync/run 回傳。 */
+export interface SyncResult {
+  runId: string;
+  triggerType: TriggerType;
+  status: Exclude<SyncRunStatus, 'running'>;
+  changeCount: number;
+  errorCode?: string;
+  errorMessage?: string;
+  stats: SyncStats;
+  warnings: string[];
+}
