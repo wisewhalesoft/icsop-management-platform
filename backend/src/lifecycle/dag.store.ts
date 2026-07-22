@@ -1,0 +1,44 @@
+/** DAG 節點/邊資料存取邊界（F008）。 */
+export const DAG_STORE = Symbol('DAG_STORE');
+
+export interface NodeView {
+  id: string;
+  lifecycleId: string;
+  name: string | null;
+  positionX: number;
+  positionY: number;
+}
+
+export interface EdgeRow {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+}
+
+export interface DagGraph {
+  nodes: NodeView[];
+  edges: EdgeRow[];
+}
+
+export interface CreateNodeInput {
+  name: string | null;
+  positionX: number;
+  positionY: number;
+}
+
+export interface DagStore {
+  lifecycleExists(lifecycleId: string): Promise<boolean>;
+  listNodes(lifecycleId: string): Promise<NodeView[]>;
+  listEdges(lifecycleId: string): Promise<EdgeRow[]>;
+  nodeExists(lifecycleId: string, nodeId: string): Promise<boolean>;
+  createNode(lifecycleId: string, input: CreateNodeInput): Promise<NodeView>;
+  updateNode(
+    nodeId: string,
+    patch: { name?: string | null; positionX?: number; positionY?: number },
+  ): Promise<NodeView>;
+  /** 刪除節點並連動刪除觸及該節點之所有邊（單一交易）。 */
+  deleteNodeWithEdges(nodeId: string): Promise<void>;
+  /** 建立邊（TypeORM 實作於交易內再驗成環，防跨請求競態）。 */
+  createEdge(lifecycleId: string, source: string, target: string): Promise<EdgeRow>;
+  deleteEdge(edgeId: string): Promise<void>;
+}
