@@ -11,6 +11,7 @@ import { AccountManagementPage } from './pages/AccountManagementPage';
 import { LifecycleListPage } from './pages/LifecycleListPage';
 import { DagCanvasPage } from './pages/DagCanvasPage';
 import { DocumentListPage } from './pages/DocumentListPage';
+import { DocumentCreatePage } from './pages/DocumentCreatePage';
 import { PermissionMatrixPage } from './pages/PermissionMatrixPage';
 import { ModulePlaceholder } from './pages/ModulePlaceholder';
 import { PublicPlaceholder } from './pages/PublicPlaceholder';
@@ -84,6 +85,7 @@ export function AppRoutes(): JSX.Element {
           <Route path="lifecycles" element={<LifecycleListPage />} />
           <Route path="lifecycles/:lifecycleId/canvas" element={<DagCanvasPage />} />
           <Route path="documents" element={<DocumentListPage />} />
+          <Route path="documents/new" element={<DocumentCreatePage />} />
           <Route path="org-sync" element={<OrgSyncPage />} />
           <Route path="settings" element={<PermissionMatrixPage />} />
           {/* 後續功能增量將以實頁取代下列佔位 */}
