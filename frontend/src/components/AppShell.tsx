@@ -4,6 +4,7 @@ import { useAuth } from '../auth/useAuth';
 import { visibleMenu, accessLabelFor } from '../domain/menu';
 import { Icon } from './Icon';
 import { RoleBadge } from './RoleBadge';
+import { TopbarSlotsContext } from './PageHeader';
 
 /**
  * 後台外殼（sidebar＋topbar＋Outlet）。版面、收合行為、側欄結構權威來源：
@@ -13,6 +14,9 @@ import { RoleBadge } from './RoleBadge';
 export function AppShell(): JSX.Element {
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  // topbar 之 per-page 掛載節點（breadcrumb+title / 動作按鈕）；PageHeader 以 portal 注入。
+  const [titleEl, setTitleEl] = useState<HTMLElement | null>(null);
+  const [actionsEl, setActionsEl] = useState<HTMLElement | null>(null);
   const role = user?.roleCode;
   const items = visibleMenu(role);
   const sidebarW = collapsed ? 60 : 240;
@@ -108,16 +112,12 @@ export function AppShell(): JSX.Element {
             >
               <Icon name="panel-left" className="w-5 h-5" />
             </button>
-            <div className="leading-tight min-w-0">
-              <div className="text-xs text-slate-400 flex items-center gap-1">
-                <span>ICSOP 管理後台</span>
-              </div>
-              <div className="font-semibold text-slate-900 text-sm truncate">
-                管理後台
-              </div>
-            </div>
+            {/* per-page breadcrumb + title（PageHeader portal 注入） */}
+            <div ref={setTitleEl} className="min-w-0" />
             <div className="ml-auto flex items-center gap-3">
-              <span className="hidden sm:flex items-center gap-1.5 text-sm text-slate-500">
+              {/* per-page 動作按鈕（PageHeader portal 注入） */}
+              <div ref={setActionsEl} className="flex items-center gap-2" />
+              <span className="hidden sm:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200">
                 <Icon name="user-circle" className="w-4 h-4" />
                 <span className="mono">{user?.loginId}</span>
               </span>
@@ -134,8 +134,10 @@ export function AppShell(): JSX.Element {
           </div>
         </header>
 
-        <main className="max-w-6xl mx-auto px-5 py-6">
-          <Outlet />
+        <main className="px-4 py-6">
+          <TopbarSlotsContext.Provider value={{ titleEl, actionsEl }}>
+            <Outlet />
+          </TopbarSlotsContext.Provider>
         </main>
       </div>
     </div>

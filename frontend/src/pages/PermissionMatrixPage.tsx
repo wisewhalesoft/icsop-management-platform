@@ -10,6 +10,7 @@ import {
 import { FIELD_MATRIX, type FieldWriteOutcome } from '../domain/field-matrix';
 import { RoleBadge } from '../components/RoleBadge';
 import { Icon } from '../components/Icon';
+import { PageHeader } from '../components/PageHeader';
 
 /**
  * 角色權限矩陣唯讀顯示（F025 功能面 / F026 欄位面）。
@@ -106,13 +107,8 @@ export function PermissionMatrixPage(): JSX.Element {
     }`;
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">角色權限矩陣（RBAC）</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          系統參數設定 · 角色 × 功能 / 欄位權限唯讀參照。
-        </p>
-      </div>
+    <div className="space-y-4 max-w-6xl">
+      <PageHeader breadcrumb={['系統參數設定', '權限矩陣']} title="角色權限矩陣（RBAC）" />
 
       {/* 定案 / 草案 banner */}
       <div className="grid sm:grid-cols-2 gap-3">

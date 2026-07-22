@@ -5,6 +5,7 @@ import { getDocuments, setDocumentStatus } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
+import { PageHeader } from '../components/PageHeader';
 import { formatDateTime } from './org-sync-view';
 import { deriveDisplayStatus, DISPLAY_LABEL, statusCounts, type DisplayStatus } from './document-display';
 import type { DocumentListItem, DocumentStatus } from '../api/types';
@@ -98,21 +99,17 @@ export function DocumentListPage(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">ICSOP 文件管理</h1>
-          <p className="text-sm text-slate-500 mt-0.5">後台文件清單；狀態依公告日期衍生顯示。</p>
-        </div>
+      <PageHeader breadcrumb={['ICSOP 文件管理', '程序書清單']} title="後台程序書清單">
         {canWrite && (
           <button
             onClick={() => navigate('/admin/documents/new')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
           >
             <Icon name="plus" className="w-4 h-4" />
             建立文件
           </button>
         )}
-      </div>
+      </PageHeader>
 
       {/* 統計卡 */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

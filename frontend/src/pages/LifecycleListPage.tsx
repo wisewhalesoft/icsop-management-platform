@@ -11,6 +11,7 @@ import {
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
+import { PageHeader } from '../components/PageHeader';
 import { formatDateTime } from './org-sync-view';
 import type { LifecycleView } from '../api/types';
 
@@ -101,23 +102,17 @@ export function LifecycleListPage(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">循環（Life Cycle）池管理</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            循環為 DAG 結構與 ICSOP 文件掛載之容器。
-          </p>
-        </div>
+      <PageHeader breadcrumb={['循環管理', '循環池']} title="循環（Life Cycle）池管理">
         {canWrite && (
           <button
             onClick={() => setEditTarget('new')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
           >
             <Icon name="plus" className="w-4 h-4" />
             新增循環
           </button>
         )}
-      </div>
+      </PageHeader>
 
       {canRead && !canWrite && (
         <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2">

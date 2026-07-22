@@ -12,6 +12,7 @@ import { canPerform, FunctionKey, ROLE_CODES } from '../domain/function-matrix';
 import { ROLE_META } from '../domain/roles';
 import { RoleBadge } from '../components/RoleBadge';
 import { Icon } from '../components/Icon';
+import { PageHeader } from '../components/PageHeader';
 import type { AccountView } from '../api/types';
 
 /**
@@ -152,23 +153,17 @@ export function AccountManagementPage(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">帳號與角色管理</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            區分手動建立與上游同步；停用為軟刪除、可恢復。
-          </p>
-        </div>
+      <PageHeader breadcrumb={['帳號管理', '帳號與角色指派']} title="帳號與角色管理">
         {canWrite && (
           <button
             onClick={() => setCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
           >
             <Icon name="plus" className="w-4 h-4" />
             建立帳號
           </button>
         )}
-      </div>
+      </PageHeader>
 
       {canRead && !canWrite && (
         <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2">

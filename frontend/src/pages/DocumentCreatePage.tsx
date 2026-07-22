@@ -5,6 +5,7 @@ import { getLifecycles, createDocument } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
+import { PageHeader } from '../components/PageHeader';
 import type { LifecycleView } from '../api/types';
 
 /**
@@ -95,14 +96,7 @@ export function DocumentCreatePage(): JSX.Element {
 
   return (
     <div className="max-w-2xl space-y-4">
-      <div className="flex items-center gap-2">
-        <button onClick={() => navigate('/admin/documents')} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
-          <Icon name="arrow-left" className="w-4 h-4" />
-          文件清單
-        </button>
-        <span className="text-slate-300">/</span>
-        <h1 className="font-semibold text-slate-900">建立 ICSOP 文件</h1>
-      </div>
+      <PageHeader breadcrumb={['ICSOP 文件管理', '建立文件']} title="建立 ICSOP 文件" />
 
       <p className="text-sm text-slate-500">
         建立時 4 項必填：循環別、文件狀態、程序書編號、程序書書名；其餘可日後編輯補齊。

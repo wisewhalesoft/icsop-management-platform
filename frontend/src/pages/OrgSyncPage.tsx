@@ -4,6 +4,7 @@ import { getOrgSyncRuns, triggerOrgSync } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
+import { PageHeader } from '../components/PageHeader';
 import type { SyncRunSummary } from '../api/types';
 import {
   trigLabel,
@@ -109,6 +110,7 @@ export function OrgSyncPage(): JSX.Element {
 
   return (
     <div className="space-y-5">
+      <PageHeader breadcrumb={['組織人員異動管理', '同步與異動']} title="組織人員異動管理" />
       {/* 唯讀橫幅（ICSOPAdmin） */}
       {canRead && !canTrigger && (
         <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2">

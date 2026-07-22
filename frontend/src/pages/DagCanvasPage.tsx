@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
   ReactFlow,
   Background,
@@ -27,6 +27,7 @@ import {
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
+import { PageHeader } from '../components/PageHeader';
 import { graphToFlow, dagErrorMessage, type FlowNodeData } from './dag-flow';
 
 /**
@@ -62,7 +63,6 @@ const nodeTypes = { dagNode: DagNodeCard };
 
 export function DagCanvasPage(): JSX.Element {
   const { lifecycleId = '' } = useParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
   const role = user?.roleCode;
   const canRead = canPerform(role, FunctionKey.LIFECYCLE_MANAGEMENT, 'read');
@@ -156,20 +156,9 @@ export function DagCanvasPage(): JSX.Element {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate('/admin/lifecycles')}
-            className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700"
-          >
-            <Icon name="arrow-left" className="w-4 h-4" />
-            循環清單
-          </button>
-          <span className="text-slate-300">/</span>
-          <h1 className="font-semibold text-slate-900">DAG 畫布</h1>
-        </div>
+      <PageHeader breadcrumb={['循環管理', 'DAG 畫布']} title="DAG 畫布">
         {canWrite && (
-          <div className="flex items-center gap-2">
+          <>
             <button
               onClick={() => void onAddNode()}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
@@ -185,9 +174,9 @@ export function DagCanvasPage(): JSX.Element {
               <Icon name="trash-2" className="w-4 h-4" />
               刪除節點
             </button>
-          </div>
+          </>
         )}
-      </div>
+      </PageHeader>
 
       {canRead && !canWrite && (
         <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2">
