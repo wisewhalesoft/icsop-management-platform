@@ -7,6 +7,7 @@ import type { DagGraph } from '../api/types';
 export interface FlowNodeData {
   label: string;
   hasName: boolean;
+  docCount: number;
   // React Flow 之 Node data 需符合 Record<string, unknown> 約束。
   [key: string]: unknown;
 }
@@ -32,7 +33,7 @@ export function graphToFlow(graph: DagGraph): {
       id: n.id,
       type: 'dagNode',
       position: { x: n.positionX, y: n.positionY },
-      data: { label: n.name ?? '未命名節點', hasName: !!n.name },
+      data: { label: n.name ?? '未命名節點', hasName: !!n.name, docCount: n.docCount ?? 0 },
     })),
     edges: graph.edges.map((e) => ({
       id: e.id,

@@ -12,6 +12,7 @@ import type {
   DocumentListItem,
   DocumentFilters,
   DocumentStatus,
+  NodeDrawerData,
 } from './types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -219,5 +220,33 @@ export function setDocumentStatus(id: string, status: DocumentStatus): Promise<v
     method: 'PATCH',
     headers: JSON_HEADERS,
     body: JSON.stringify({ status }),
+  });
+}
+
+// ===== F009 節點抽屜（文件掛載） =====
+
+/** GET 節點抽屜資料（節點名＋已掛載＋候選文件，候選過濾為當前循環）。 */
+export function getNodeDrawer(lifecycleId: string, nodeId: string): Promise<NodeDrawerData> {
+  return apiFetch<NodeDrawerData>(`/admin/lifecycles/${lifecycleId}/nodes/${nodeId}/drawer`);
+}
+
+/** 掛載文件至節點；confirm=true 允許自他節點改派（否則 409 NODE_DOC_ALREADY_ASSIGNED）。 */
+export function mountNodeDoc(
+  lifecycleId: string,
+  nodeId: string,
+  documentId: string,
+  confirm = false,
+): Promise<void> {
+  return apiFetch<void>(`/admin/lifecycles/${lifecycleId}/nodes/${nodeId}/documents`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ documentId, confirm }),
+  });
+}
+
+/** 移除節點之文件掛載。 */
+export function unmountNodeDoc(lifecycleId: string, nodeId: string, docId: string): Promise<void> {
+  return apiFetch<void>(`/admin/lifecycles/${lifecycleId}/nodes/${nodeId}/documents/${docId}`, {
+    method: 'DELETE',
   });
 }

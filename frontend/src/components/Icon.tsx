@@ -4,7 +4,8 @@ import {
   ChevronRight, UserCircle, LogOut, ExternalLink, ArrowRight, ArrowLeft,
   LayoutGrid, Activity, Building2, Info, AlertCircle, AlertTriangle, Loader2,
   Search, PanelsTopLeft, LayoutDashboard, CheckCircle2, X, Plus, Inbox,
-  RotateCw, type LucideIcon,
+  RotateCw, GitBranch, CircleDot, FileCheck2, FileX2, GitCommitVertical,
+  PlusCircle, Filter, type LucideIcon,
 } from 'lucide-react';
 
 /**
@@ -49,6 +50,13 @@ const REGISTRY: Record<string, LucideIcon> = {
   plus: Plus,
   inbox: Inbox,
   'rotate-cw': RotateCw,
+  'git-branch': GitBranch,
+  'circle-dot': CircleDot,
+  'file-check-2': FileCheck2,
+  'file-x-2': FileX2,
+  'git-commit-vertical': GitCommitVertical,
+  'plus-circle': PlusCircle,
+  filter: Filter,
 };
 
 export interface IconProps {

@@ -51,6 +51,7 @@ export interface DagNode {
   name: string | null;
   positionX: number;
   positionY: number;
+  docCount?: number;
 }
 export interface DagEdge {
   id: string;
@@ -60,6 +61,21 @@ export interface DagEdge {
 export interface DagGraph {
   nodes: DagNode[];
   edges: DagEdge[];
+}
+
+/** F009 節點抽屜資料。 */
+export interface DrawerDoc {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+}
+export interface DrawerCandidate extends DrawerDoc {
+  assignedNode: { id: string; name: string | null } | null;
+}
+export interface NodeDrawerData {
+  node: { id: string; name: string | null };
+  mounted: DrawerDoc[];
+  candidates: DrawerCandidate[];
 }
 
 /** ICSOP 文件（E04）。狀態為儲存值（active/inactive/void）；衍生已公告/進度中由前端計算。 */

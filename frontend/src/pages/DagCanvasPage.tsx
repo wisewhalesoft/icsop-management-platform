@@ -28,6 +28,7 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
+import { NodeDrawer } from './NodeDrawer';
 import { graphToFlow, dagErrorMessage, type FlowNodeData } from './dag-flow';
 
 /**
@@ -37,22 +38,23 @@ import { graphToFlow, dagErrorMessage, type FlowNodeData } from './dag-flow';
  * 節點座標於拖曳結束持久化（updateDagNode）。
  */
 function DagNodeCard({ data, selected }: NodeProps<Node<FlowNodeData>>): JSX.Element {
+  const hasDocs = data.docCount > 0;
   return (
     <div
       className={`w-40 rounded-[10px] border bg-white shadow-sm px-2.5 py-2 ${
         selected ? 'border-primary-600 ring-2 ring-primary-200' : 'border-slate-200'
-      } ${data.hasName ? '' : 'border-dashed'}`}
+      } ${data.hasName ? '' : 'border-dashed'} ${hasDocs ? 'border-l-4 border-l-emerald-500' : ''}`}
     >
       <Handle type="target" position={Position.Top} className="!bg-slate-400" />
       <div className="flex items-center gap-1.5">
-        <Icon name="git-branch" className="w-3.5 h-3.5 text-slate-300" />
+        <Icon name="circle-dot" className="w-3.5 h-3.5 text-slate-300" />
         <span className={`font-medium text-sm truncate ${data.hasName ? 'text-slate-800' : 'text-slate-400'}`}>
           {data.label}
         </span>
       </div>
-      <div className="mt-1.5 flex items-center gap-1 text-[11px] text-slate-400">
-        <Icon name="file-text" className="w-3.5 h-3.5" />
-        尚未掛載文件
+      <div className={`mt-1.5 flex items-center gap-1 text-[11px] ${hasDocs ? 'text-emerald-600' : 'text-slate-400'}`}>
+        <Icon name={hasDocs ? 'file-check-2' : 'file-x-2'} className="w-3.5 h-3.5" />
+        {hasDocs ? `掛載 ${data.docCount} 份文件` : '尚未掛載文件'}
       </div>
       <Handle type="source" position={Position.Bottom} className="!bg-slate-400" />
     </div>
@@ -72,6 +74,7 @@ export function DagCanvasPage(): JSX.Element {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [drawerNodeId, setDrawerNodeId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -216,6 +219,7 @@ export function DagCanvasPage(): JSX.Element {
             onEdgesChange={onEdgesChange}
             onConnect={(c) => void onConnect(c)}
             onNodeDragStop={onNodeDragStop}
+            onNodeClick={(_e, node) => setDrawerNodeId(node.id)}
             onSelectionChange={({ nodes: sel }) => setSelectedId(sel[0]?.id ?? null)}
             nodeTypes={nodeTypes}
             nodesDraggable={canWrite}
@@ -230,6 +234,25 @@ export function DagCanvasPage(): JSX.Element {
           </ReactFlow>
         )}
       </div>
+
+      {drawerNodeId && (
+        <NodeDrawer
+          lifecycleId={lifecycleId}
+          nodeId={drawerNodeId}
+          canWrite={canWrite}
+          onClose={() => setDrawerNodeId(null)}
+          onNodeRenamed={(id, nm) =>
+            setNodes((nds) =>
+              nds.map((n) =>
+                n.id === id
+                  ? { ...n, data: { ...n.data, label: nm, hasName: nm !== '未命名節點' } }
+                  : n,
+              ),
+            )
+          }
+          onChanged={() => void load()}
+        />
+      )}
     </div>
   );
 }

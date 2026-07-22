@@ -10,6 +10,10 @@ import { DagController } from './dag.controller';
 import { DagService } from './dag.service';
 import { DAG_STORE, DagStore } from './dag.store';
 import { TypeOrmDagStore } from './typeorm-dag.store';
+import { NodeDocsController } from './node-docs.controller';
+import { NodeDocsService } from './node-docs.service';
+import { NODE_DOCS_STORE, NodeDocsStore } from './node-docs.store';
+import { TypeOrmNodeDocsStore } from './typeorm-node-docs.store';
 
 /**
  * 循環管理模組（E03 / F007＋F008）。匯入 AuthModule（SessionGuard）、RbacModule（RolePermissionGuard）。
@@ -17,7 +21,7 @@ import { TypeOrmDagStore } from './typeorm-dag.store';
  */
 @Module({
   imports: [AuthModule, RbacModule],
-  controllers: [LifecycleController, DagController],
+  controllers: [LifecycleController, DagController, NodeDocsController],
   providers: [
     {
       provide: LIFECYCLE_STORE,
@@ -29,6 +33,11 @@ import { TypeOrmDagStore } from './typeorm-dag.store';
       useFactory: (): DagStore => new TypeOrmDagStore(AppDataSource),
     },
     DagService,
+    {
+      provide: NODE_DOCS_STORE,
+      useFactory: (): NodeDocsStore => new TypeOrmNodeDocsStore(AppDataSource),
+    },
+    NodeDocsService,
   ],
 })
 export class LifecycleModule {}

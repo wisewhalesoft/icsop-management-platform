@@ -38,7 +38,30 @@ export class TypeOrmDagStore implements DagStore {
   async listNodes(lifecycleId: string): Promise<NodeView[]> {
     const ds = await this.init();
     const rows = await ds.getRepository(LifecycleNode).find({ where: { lifecycleId } });
-    return rows.map(TypeOrmDagStore.toNode);
+    // 各節點掛載文件數（F009；ICSOP_DOCUMENT 未建時容錯回空）。
+    const counts = await this.docCountsByNode(ds, lifecycleId);
+    return rows.map((n) => ({
+      ...TypeOrmDagStore.toNode(n),
+      docCount: counts.get(n.id) ?? 0,
+    }));
+  }
+
+  private async docCountsByNode(
+    ds: DataSource,
+    lifecycleId: string,
+  ): Promise<Map<string, number>> {
+    try {
+      const raw = await ds.query(
+        `SELECT [nodeId] AS nodeId, COUNT(*) AS cnt FROM [ICSOP_DOCUMENT]
+         WHERE [lifecycleId] = @0 AND [nodeId] IS NOT NULL GROUP BY [nodeId]`,
+        [lifecycleId],
+      );
+      return new Map(
+        (raw as { nodeId: string; cnt: string | number }[]).map((r) => [r.nodeId, Number(r.cnt)]),
+      );
+    } catch {
+      return new Map();
+    }
   }
 
   async listEdges(lifecycleId: string): Promise<EdgeRow[]> {

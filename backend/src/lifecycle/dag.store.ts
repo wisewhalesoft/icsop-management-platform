@@ -7,6 +7,8 @@ export interface NodeView {
   name: string | null;
   positionX: number;
   positionY: number;
+  /** 掛載於此節點之文件數（F009；listNodes 填入，其餘情境省略）。 */
+  docCount?: number;
 }
 
 export interface EdgeRow {
