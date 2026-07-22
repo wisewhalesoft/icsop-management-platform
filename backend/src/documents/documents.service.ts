@@ -4,12 +4,15 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   DOCUMENT_STORE,
   DocumentStore,
   CreateDocumentInput,
   DocumentView,
+  DocumentListFilters,
+  DocumentListItem,
 } from './documents.store';
 import { missingRequired, isNumberAvailable } from './document-rules';
 import { isValidStatus, DocumentStatus } from './document-status';
@@ -64,5 +67,30 @@ export class DocumentsService {
       documentNumber,
     };
     return this.store.create(input);
+  }
+
+  /** 後台文件清單（F017）。 */
+  listDocuments(filters: DocumentListFilters): Promise<DocumentListItem[]> {
+    return this.store.list(filters);
+  }
+
+  /**
+   * 切換狀態（F012）。狀態合法 → 存在 → 切回「有效」時重驗編號唯一性（F013，排除自身）→ 更新。
+   * 功能面（僅 ICSOPAdmin）由 controller guard 落實。
+   */
+  async setStatus(id: string, status: string): Promise<void> {
+    if (!isValidStatus(status)) {
+      throw new BadRequestException('DOCUMENT_STATUS_INVALID');
+    }
+    const doc = await this.store.findById(id);
+    if (!doc) throw new NotFoundException('DOCUMENT_NOT_FOUND');
+
+    if (status === 'active') {
+      const holders = await this.store.findNumberHolders(doc.documentNumber);
+      if (!isNumberAvailable(doc.documentNumber, holders, doc.id)) {
+        throw new ConflictException('DOCUMENT_NUMBER_DUPLICATE');
+      }
+    }
+    await this.store.updateStatus(id, status);
   }
 }
