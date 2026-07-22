@@ -73,3 +73,12 @@ services:
 
 volumes:
   pgvector-data:
+
+# ⚠ 固定 dev 網段為 172.30.0.0/16，避開遠端 app MSSQL 所在網段（172.20.x）。
+# 否則 compose 預設可能分到 172.20.0.0/16 → 容器誤把 DB IP（172.20.202.212）視為 on-link
+# → EHOSTUNREACH（實測踩到；隔壁 cdmp-mvp 分到 172.18.x 故無此問題）。
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
