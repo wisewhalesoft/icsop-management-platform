@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { OrgSyncModule } from './org-sync/org-sync.module';
 import { AccountsModule } from './accounts/accounts.module';
+import { LifecycleModule } from './lifecycle/lifecycle.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AccountsModule } from './accounts/accounts.module';
     AuthModule,
     OrgSyncModule,
     AccountsModule,
+    LifecycleModule,
   ],
   controllers: [AppController],
 })
