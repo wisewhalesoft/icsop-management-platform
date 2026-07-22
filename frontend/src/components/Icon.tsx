@@ -5,7 +5,7 @@ import {
   LayoutGrid, Activity, Building2, Info, AlertCircle, AlertTriangle, Loader2,
   Search, PanelsTopLeft, LayoutDashboard, CheckCircle2, X, Plus, Inbox,
   RotateCw, GitBranch, CircleDot, FileCheck2, FileX2, GitCommitVertical,
-  PlusCircle, Filter, type LucideIcon,
+  PlusCircle, Filter, FilePlus2, Paperclip, Save, Lock, type LucideIcon,
 } from 'lucide-react';
 
 /**
@@ -57,6 +57,10 @@ const REGISTRY: Record<string, LucideIcon> = {
   'git-commit-vertical': GitCommitVertical,
   'plus-circle': PlusCircle,
   filter: Filter,
+  'file-plus-2': FilePlus2,
+  paperclip: Paperclip,
+  save: Save,
+  lock: Lock,
 };
 
 export interface IconProps {
