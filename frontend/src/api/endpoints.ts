@@ -5,6 +5,10 @@ import type {
   SyncResult,
   AccountView,
   AccountFilters,
+  LifecycleView,
+  DagGraph,
+  DagNode,
+  DagEdge,
 } from './types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -85,5 +89,102 @@ export function setAccountStatus(
     method: 'PATCH',
     headers: JSON_HEADERS,
     body: JSON.stringify({ status }),
+  });
+}
+
+// ===== E03 循環 DAG（F007/F008） =====
+
+/** GET /admin/lifecycles（循環管理 read：SysAdmin/ICSOPAdmin/Supervisor）。 */
+export function getLifecycles(): Promise<LifecycleView[]> {
+  return apiFetch<LifecycleView[]>('/admin/lifecycles');
+}
+
+/** POST /admin/lifecycles（建立，ICSOPAdmin；LIFECYCLE_NAME_REQUIRED）。 */
+export function createLifecycle(body: {
+  name: string;
+  description?: string | null;
+}): Promise<LifecycleView> {
+  return apiFetch<LifecycleView>('/admin/lifecycles', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
+/** PATCH /admin/lifecycles/:id（改名稱/說明）。 */
+export function updateLifecycle(
+  id: string,
+  body: { name?: string; description?: string | null },
+): Promise<LifecycleView> {
+  return apiFetch<LifecycleView>(`/admin/lifecycles/${id}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
+/** PATCH /admin/lifecycles/:id/status（啟用/停用）。 */
+export function setLifecycleStatus(
+  id: string,
+  status: 'active' | 'inactive',
+): Promise<LifecycleView> {
+  return apiFetch<LifecycleView>(`/admin/lifecycles/${id}/status`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ status }),
+  });
+}
+
+/** DELETE /admin/lifecycles/:id（刪除；仍有掛載 → 409 LIFECYCLE_HAS_DOCUMENTS）。 */
+export function deleteLifecycle(id: string): Promise<void> {
+  return apiFetch<void>(`/admin/lifecycles/${id}`, { method: 'DELETE' });
+}
+
+// ===== DAG 節點/邊（F008） =====
+
+export function getDagGraph(lifecycleId: string): Promise<DagGraph> {
+  return apiFetch<DagGraph>(`/admin/lifecycles/${lifecycleId}/graph`);
+}
+export function addDagNode(
+  lifecycleId: string,
+  body: { name?: string | null; positionX?: number; positionY?: number },
+): Promise<DagNode> {
+  return apiFetch<DagNode>(`/admin/lifecycles/${lifecycleId}/nodes`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+export function updateDagNode(
+  lifecycleId: string,
+  nodeId: string,
+  body: { name?: string | null; positionX?: number; positionY?: number },
+): Promise<DagNode> {
+  return apiFetch<DagNode>(`/admin/lifecycles/${lifecycleId}/nodes/${nodeId}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+export function deleteDagNode(lifecycleId: string, nodeId: string): Promise<void> {
+  return apiFetch<void>(`/admin/lifecycles/${lifecycleId}/nodes/${nodeId}`, {
+    method: 'DELETE',
+  });
+}
+/** 新增邊；409 DAG_SELF_LOOP / DAG_CYCLE_DETECTED。 */
+export function addDagEdge(
+  lifecycleId: string,
+  source: string,
+  target: string,
+): Promise<DagEdge> {
+  return apiFetch<DagEdge>(`/admin/lifecycles/${lifecycleId}/edges`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ source, target }),
+  });
+}
+export function deleteDagEdge(lifecycleId: string, edgeId: string): Promise<void> {
+  return apiFetch<void>(`/admin/lifecycles/${lifecycleId}/edges/${edgeId}`, {
+    method: 'DELETE',
   });
 }

@@ -34,6 +34,34 @@ export interface AccountFilters {
   keyword?: string;
 }
 
+/** 循環（F007）。updatedAt 為 ISO 字串。 */
+export interface LifecycleView {
+  id: string;
+  name: string;
+  description: string | null;
+  status: 'active' | 'inactive';
+  nodeCount: number;
+  updatedAt: string;
+}
+
+/** DAG 圖（F008）。 */
+export interface DagNode {
+  id: string;
+  lifecycleId: string;
+  name: string | null;
+  positionX: number;
+  positionY: number;
+}
+export interface DagEdge {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+}
+export interface DagGraph {
+  nodes: DagNode[];
+  edges: DagEdge[];
+}
+
 export type TriggerType = 'scheduled' | 'manual';
 export type SyncRunStatus = 'running' | 'success' | 'failed';
 
