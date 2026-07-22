@@ -178,7 +178,10 @@ export class AuthController {
       roleCode: outcome.account.roleCode,
     };
     res.cookie(SESSION_COOKIE, this.tokens.issue(su), sessionCookieOptions());
-    return this.renderSuccess(res, su);
+    // 登入成功 → 導回前端 SPA（session cookie 已核發，SPA 之 /auth/me 即認得）。
+    // POST_LOGIN_REDIRECT_URL：正式（同源反代）用 '/'；dev（redirect_uri 在 :3000、SPA 在 :5173）
+    // 設為 http://localhost:5173/ 以跨埠導回 SPA（cookie 為 localhost host-only、跨埠共用）。
+    return res.redirect(postLoginRedirect());
   }
 
   /** 受保護：回傳當前 session 使用者。同時驗證 guard 之 sliding 刷新。 */
@@ -197,23 +200,6 @@ export class AuthController {
       .send(page('已登出', '<p>已清除 session。</p><p><a href="/auth/login">重新登入</a></p>'));
   }
 
-  private renderSuccess(res: Response, su: SessionUser): void {
-    res.type('html').send(
-      page(
-        '登入成功',
-        `<p style="color:#16a34a;font-size:18px;font-weight:700">✅ 已登入</p>
-         <table style="border-collapse:collapse;margin:12px 0">
-           <tr><td style="padding:4px 12px;color:#64748b">loginId</td><td style="font-family:monospace">${esc(su.loginId)}</td></tr>
-           <tr><td style="padding:4px 12px;color:#64748b">email</td><td style="font-family:monospace">${esc(su.email)}</td></tr>
-           <tr><td style="padding:4px 12px;color:#64748b">公司</td><td style="font-family:monospace">${esc(su.companyCode)}</td></tr>
-           <tr><td style="padding:4px 12px;color:#64748b">角色</td><td style="font-family:monospace">${esc(su.roleCode ?? '—')}</td></tr>
-         </table>
-         <p>session 已建立（httpOnly，30 分鐘閒置逾時）。</p>
-         <p><a href="/auth/me">檢視 /auth/me（受保護）</a> ｜ <a href="/auth/logout">登出</a></p>`,
-      ),
-    );
-  }
-
   private renderError(res: Response, code: string, detail?: string): void {
     res
       .status(401)
@@ -228,6 +214,11 @@ export class AuthController {
         ),
       );
   }
+}
+
+/** 登入成功後導向目標。正式（同源反代）預設 '/'；dev 以 POST_LOGIN_REDIRECT_URL 指向 SPA 埠。 */
+function postLoginRedirect(): string {
+  return process.env.POST_LOGIN_REDIRECT_URL?.trim() || '/';
 }
 
 function page(title: string, body: string): string {
