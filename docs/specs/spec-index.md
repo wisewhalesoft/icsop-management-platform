@@ -49,6 +49,7 @@ Last Updated: 2026-07-17
 ## Supporting Documents
 | Document | File | Relevant For |
 |----------|------|--------------|
+| **Feature Status Tracker（完成度彙總＋DoD）** | **feature-status.md** | **All agents — 開工前先看功能真實狀態與缺口** |
 | Overview | overview.md | All agents |
 | Scope | scope.md | Architect, Product |
 | NFR | nfr.md | Architect, DevOps |
