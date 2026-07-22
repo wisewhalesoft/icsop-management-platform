@@ -9,6 +9,9 @@ import type {
   DagGraph,
   DagNode,
   DagEdge,
+  DocumentListItem,
+  DocumentFilters,
+  DocumentStatus,
 } from './types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -186,5 +189,35 @@ export function addDagEdge(
 export function deleteDagEdge(lifecycleId: string, edgeId: string): Promise<void> {
   return apiFetch<void>(`/admin/lifecycles/${lifecycleId}/edges/${edgeId}`, {
     method: 'DELETE',
+  });
+}
+
+// ===== E04 ICSOP 文件（F010/F012/F017） =====
+
+/** GET /admin/documents（ICSOP文件管理 read）。 */
+export function getDocuments(f: DocumentFilters = {}): Promise<DocumentListItem[]> {
+  const qs = new URLSearchParams();
+  if (f.lifecycleId) qs.set('lifecycleId', f.lifecycleId);
+  if (f.status) qs.set('status', f.status);
+  if (f.keyword) qs.set('keyword', f.keyword);
+  const q = qs.toString();
+  return apiFetch<DocumentListItem[]>(`/admin/documents${q ? `?${q}` : ''}`);
+}
+
+/** POST /admin/documents（建立，ICSOPAdmin；DOCUMENT_REQUIRED_FIELD_MISSING/NUMBER_DUPLICATE）。 */
+export function createDocument(body: Record<string, unknown>): Promise<DocumentListItem> {
+  return apiFetch<DocumentListItem>('/admin/documents', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
+/** PATCH /admin/documents/:id/status（切換狀態，ICSOPAdmin；切回有效重驗編號唯一性）。 */
+export function setDocumentStatus(id: string, status: DocumentStatus): Promise<void> {
+  return apiFetch<void>(`/admin/documents/${id}/status`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ status }),
   });
 }

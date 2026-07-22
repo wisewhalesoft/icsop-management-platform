@@ -62,6 +62,32 @@ export interface DagGraph {
   edges: DagEdge[];
 }
 
+/** ICSOP 文件（E04）。狀態為儲存值（active/inactive/void）；衍生已公告/進度中由前端計算。 */
+export type DocumentStatus = 'active' | 'inactive' | 'void';
+
+export interface DocumentListItem {
+  id: string;
+  status: DocumentStatus;
+  documentNumber: string;
+  documentName: string;
+  lifecycleId: string;
+  lifecycleName: string | null;
+  nodeId: string | null;
+  draftingCompanyId: string | null;
+  draftingDeptId: string | null;
+  draftingSectionId: string | null;
+  primaryChiefId: string | null;
+  edition: string | null;
+  announcedDate: string | null;
+  contentSummary: string | null;
+}
+
+export interface DocumentFilters {
+  lifecycleId?: string;
+  status?: string;
+  keyword?: string;
+}
+
 export type TriggerType = 'scheduled' | 'manual';
 export type SyncRunStatus = 'running' | 'success' | 'failed';
 
