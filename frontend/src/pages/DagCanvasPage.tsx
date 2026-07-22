@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   ReactFlow,
@@ -14,6 +14,7 @@ import {
   type Edge,
   type Node,
   type NodeProps,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useAuth } from '../auth/useAuth';
@@ -29,7 +30,8 @@ import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { NodeDrawer } from './NodeDrawer';
-import { graphToFlow, dagErrorMessage, type FlowNodeData } from './dag-flow';
+import { graphToFlow, layoutDag, dagErrorMessage, type FlowNodeData } from './dag-flow';
+import type { DagGraph } from '../api/types';
 
 /**
  * 循環 DAG 畫布（F008）。以 React Flow（@xyflow/react）呈現節點/直角 elbow 邊。
@@ -41,14 +43,15 @@ function DagNodeCard({ data, selected }: NodeProps<Node<FlowNodeData>>): JSX.Ele
   const hasDocs = data.docCount > 0;
   return (
     <div
-      className={`w-40 rounded-[10px] border bg-white shadow-sm px-2.5 py-2 ${
+      title={data.label}
+      className={`min-w-[10rem] max-w-[16rem] rounded-[10px] border bg-white shadow-sm px-2.5 py-2 ${
         selected ? 'border-primary-600 ring-2 ring-primary-200' : 'border-slate-200'
       } ${data.hasName ? '' : 'border-dashed'} ${hasDocs ? 'border-l-4 border-l-emerald-500' : ''}`}
     >
       <Handle type="target" position={Position.Top} className="!bg-slate-400" />
-      <div className="flex items-center gap-1.5">
-        <Icon name="circle-dot" className="w-3.5 h-3.5 text-slate-300" />
-        <span className={`font-medium text-sm truncate ${data.hasName ? 'text-slate-800' : 'text-slate-400'}`}>
+      <div className="flex items-start gap-1.5">
+        <Icon name="circle-dot" className="w-3.5 h-3.5 text-slate-300 mt-0.5 shrink-0" />
+        <span className={`font-medium text-sm leading-snug break-words ${data.hasName ? 'text-slate-800' : 'text-slate-400'}`}>
           {data.label}
         </span>
       </div>
@@ -76,20 +79,38 @@ export function DagCanvasPage(): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerNodeId, setDrawerNodeId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  const rfRef = useRef<ReactFlowInstance<Node<FlowNodeData>, Edge> | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const graph = await getDagGraph(lifecycleId);
+  const applyGraph = useCallback(
+    (graph: DagGraph) => {
       const flow = graphToFlow(graph);
       setNodes(flow.nodes as unknown as Node<FlowNodeData>[]);
       setEdges(flow.edges as unknown as Edge[]);
+    },
+    [setNodes, setEdges],
+  );
+
+  // 初次載入（切換 loading 會重掛 ReactFlow → 觸發 fitView，僅用於首次）。
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      applyGraph(await getDagGraph(lifecycleId));
     } catch (e) {
       setNotice({ tone: 'err', text: e instanceof ApiError ? dagErrorMessage(e.code) : '載入失敗' });
     } finally {
       setLoading(false);
     }
-  }, [lifecycleId, setNodes, setEdges]);
+  }, [lifecycleId, applyGraph]);
+
+  // 靜默刷新（不切 loading → 不重掛畫布 → 不重置視窗），用於掛載變更後更新 docCount。
+  const silentReload = useCallback(async () => {
+    try {
+      applyGraph(await getDagGraph(lifecycleId));
+    } catch {
+      /* 靜默：刷新失敗不打斷操作 */
+    }
+  }, [lifecycleId, applyGraph]);
 
   useEffect(() => {
     if (canRead) void load();
@@ -125,25 +146,65 @@ export function DagCanvasPage(): JSX.Element {
 
   const onAddNode = useCallback(async () => {
     try {
-      await addDagNode(lifecycleId, { positionX: 80 + nodes.length * 24, positionY: 60 + nodes.length * 16 });
-      await load();
-      setNotice({ tone: 'ok', text: '已新增未命名節點' });
+      // 於當前視窗中央放置新節點，避免整個畫布重新定位（維持使用者當前視角）。
+      let pos = { x: 80 + nodes.length * 24, y: 60 + nodes.length * 16 };
+      const inst = rfRef.current, wrap = wrapRef.current;
+      if (inst && wrap) {
+        const r = wrap.getBoundingClientRect();
+        const c = inst.screenToFlowPosition({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+        pos = { x: Math.round(c.x - 92), y: Math.round(c.y - 38) }; // 置中（節點約 184×76）
+      }
+      const created = await addDagNode(lifecycleId, { positionX: pos.x, positionY: pos.y });
+      if (!created) return;
+      setNodes((nds) => [
+        ...nds,
+        {
+          id: created.id,
+          type: 'dagNode',
+          position: { x: created.positionX, y: created.positionY },
+          data: { label: created.name ?? '未命名節點', hasName: !!created.name, docCount: created.docCount ?? 0 },
+        } as unknown as Node<FlowNodeData>,
+      ]);
+      setNotice({ tone: 'ok', text: '已於畫布中央新增未命名節點' });
     } catch {
       setNotice({ tone: 'err', text: '新增節點失敗' });
     }
-  }, [lifecycleId, nodes.length, load]);
+  }, [lifecycleId, nodes.length, setNodes]);
 
   const onDeleteSelected = useCallback(async () => {
     if (!selectedId) return;
     try {
       await deleteDagNode(lifecycleId, selectedId);
+      // 就地移除節點與其相關連線（後端亦連動刪邊），不重掛畫布以維持視角。
+      setNodes((nds) => nds.filter((n) => n.id !== selectedId));
+      setEdges((eds) => eds.filter((e) => e.source !== selectedId && e.target !== selectedId));
       setSelectedId(null);
-      await load();
       setNotice({ tone: 'ok', text: '節點已刪除（連動移除相關連線）' });
     } catch {
       setNotice({ tone: 'err', text: '刪除節點失敗' });
     }
-  }, [lifecycleId, selectedId, load]);
+  }, [lifecycleId, selectedId, setNodes, setEdges]);
+
+  // 整理連結線：dagre 上到下分層排列，套用並持久化座標，再框選全圖。
+  const onTidy = useCallback(async () => {
+    if (!nodes.length) return;
+    const laid = layoutDag(nodes, edges.map((e) => ({ source: e.source, target: e.target })));
+    setNodes(laid);
+    requestAnimationFrame(() => rfRef.current?.fitView({ padding: 0.2, duration: 300 }));
+    try {
+      await Promise.all(
+        laid.map((n) =>
+          updateDagNode(lifecycleId, n.id, {
+            positionX: Math.round(n.position.x),
+            positionY: Math.round(n.position.y),
+          }),
+        ),
+      );
+      setNotice({ tone: 'ok', text: '已重新整理節點排列（上到下分層）並儲存座標' });
+    } catch {
+      setNotice({ tone: 'err', text: '排列已套用，但座標儲存失敗（重新整理後可能還原）' });
+    }
+  }, [nodes, edges, lifecycleId, setNodes]);
 
   if (!canRead) {
     return (
@@ -177,6 +238,15 @@ export function DagCanvasPage(): JSX.Element {
               <Icon name="trash-2" className="w-4 h-4" />
               刪除節點
             </button>
+            <button
+              onClick={() => void onTidy()}
+              disabled={!nodes.length}
+              title="以上到下分層自動排列，整理凌亂的連結線"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Icon name="layout-grid" className="w-4 h-4" />
+              整理連結線
+            </button>
           </>
         )}
       </PageHeader>
@@ -208,13 +278,14 @@ export function DagCanvasPage(): JSX.Element {
         </p>
       )}
 
-      <div className="border border-slate-200 rounded-xl overflow-hidden" style={{ height: '68vh', background: '#F8FAFC' }}>
+      <div ref={wrapRef} className="border border-slate-200 rounded-xl overflow-hidden" style={{ height: '68vh', background: '#F8FAFC' }}>
         {loading ? (
           <div className="h-full flex items-center justify-center text-sm text-slate-400">載入中…</div>
         ) : (
           <ReactFlow
             nodes={nodes}
             edges={edges}
+            onInit={(inst) => (rfRef.current = inst)}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={(c) => void onConnect(c)}
@@ -250,7 +321,7 @@ export function DagCanvasPage(): JSX.Element {
               ),
             )
           }
-          onChanged={() => void load()}
+          onChanged={() => void silentReload()}
         />
       )}
     </div>

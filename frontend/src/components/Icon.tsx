@@ -5,7 +5,7 @@ import {
   LayoutGrid, Activity, Building2, Info, AlertCircle, AlertTriangle, Loader2,
   Search, PanelsTopLeft, LayoutDashboard, CheckCircle2, X, Plus, Inbox,
   RotateCw, GitBranch, CircleDot, FileCheck2, FileX2, GitCommitVertical,
-  PlusCircle, Filter, FilePlus2, Paperclip, Save, Lock, type LucideIcon,
+  PlusCircle, Filter, FilePlus2, Paperclip, Save, Lock, Trash2, type LucideIcon,
 } from 'lucide-react';
 
 /**
@@ -61,6 +61,7 @@ const REGISTRY: Record<string, LucideIcon> = {
   paperclip: Paperclip,
   save: Save,
   lock: Lock,
+  'trash-2': Trash2,
 };
 
 export interface IconProps {
