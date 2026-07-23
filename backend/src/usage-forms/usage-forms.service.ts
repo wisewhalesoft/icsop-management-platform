@@ -1,0 +1,235 @@
+import {
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import {
+  BLOB_STORE,
+  BlobStore,
+  DOWNLOAD_URL_TTL_SECONDS,
+} from '../storage/blob-store';
+import {
+  assertFormatAllowed,
+  assertSizeWithinLimit,
+  extensionOf,
+} from '../storage/file-rules';
+import { assertCanWriteDocumentAsset } from '../storage/document-asset-authz';
+import { canPerform, FunctionKey } from '../rbac/function-matrix';
+import { FieldKey } from '../rbac/field-matrix';
+import { SessionContext, UploadFile } from '../attachments/attachments.service';
+import {
+  AUDIT_RECORDER,
+  AuditRecorder,
+  FORM_POOL_STORE,
+  FormPoolStore,
+  UsageFormRecord,
+} from './usage-forms.store';
+
+/** 覆蓋共用警示門檻：被 ≥2 份文件引用時觸發 USAGE_FORM_OVERWRITE_SHARED（prototype 19 定案）。 */
+export const SHARED_OVERWRITE_MIN_REFS = 2;
+
+export interface DownloadGrant {
+  url: string;
+  expiresInSeconds: number;
+}
+
+/** 表單 blob key（穩定；覆蓋一律新 key，舊 key 於 DB 參照更新後回收）。 */
+export function buildFormBlobPath(fileName: string): string {
+  const ext = extensionOf(fileName);
+  return `usage-forms/${randomUUID()}${ext ? '.' + ext : ''}`;
+}
+
+/**
+ * F018 使用表單管理（表單池 + 文件多對多）。
+ *
+ * 授權（G 定案）：
+ *   - 寫入類（上傳/覆蓋/刪除/關聯）→ 兩道閘門（USAGE_FORM_MANAGEMENT read → USAGE_FORMS 欄位 write）。
+ *     系統管理員（READ）卡欄位層 → FIELD_WRITE_FORBIDDEN；主管/部門窗口/一般使用者（無）→ PERMISSION_DENIED。
+ *   - 後台查詢類（表單池清單）→ 功能 read gate（USAGE_FORM_MANAGEMENT）。
+ *   - 前台下載/詳情表單清單 → 屬文件瀏覽/下載列印（全角色 READ），僅需 session 存在，不受表單池功能限制。
+ */
+@Injectable()
+export class UsageFormsService {
+  constructor(
+    @Inject(BLOB_STORE) private readonly blob: BlobStore,
+    @Inject(FORM_POOL_STORE) private readonly store: FormPoolStore,
+    @Inject(AUDIT_RECORDER) private readonly audit: AuditRecorder,
+  ) {}
+
+  /** 上傳單一表單至表單池（建立，初始關聯數 0）。 */
+  async uploadForm(
+    session: SessionContext | undefined,
+    file: UploadFile,
+  ): Promise<UsageFormRecord> {
+    this.assertCanWrite(session?.roleCode);
+    assertFormatAllowed('USAGE_FORM', file);
+    assertSizeWithinLimit(file.size);
+    return this.createFromFile(session, file);
+  }
+
+  /** 批次上傳（先驗證全部格式/大小，再全部建立，避免部分寫入）。 */
+  async uploadForms(
+    session: SessionContext | undefined,
+    files: UploadFile[],
+  ): Promise<UsageFormRecord[]> {
+    this.assertCanWrite(session?.roleCode);
+    for (const f of files) {
+      assertFormatAllowed('USAGE_FORM', f);
+      assertSizeWithinLimit(f.size);
+    }
+    const out: UsageFormRecord[] = [];
+    for (const f of files) out.push(await this.createFromFile(session, f));
+    return out;
+  }
+
+  private async createFromFile(
+    session: SessionContext | undefined,
+    file: UploadFile,
+  ): Promise<UsageFormRecord> {
+    const blobPath = buildFormBlobPath(file.fileName);
+    await this.blob.put(blobPath, file.buffer ?? Buffer.alloc(0), file.contentType);
+    return this.store.create({
+      name: file.fileName,
+      blobPath,
+      format: extensionOf(file.fileName),
+      size: file.size,
+      uploadedBy: session?.accountId ?? 'unknown',
+      uploadedAt: new Date(),
+    });
+  }
+
+  /**
+   * 覆蓋上傳新檔。格式/大小驗證優先於引用數判斷（TS-020）。
+   * 被 ≥2 份文件引用且未二次確認 → USAGE_FORM_OVERWRITE_SHARED（409，附 N），不寫入。
+   */
+  async overwriteForm(
+    session: SessionContext | undefined,
+    formId: string,
+    file: UploadFile,
+    opts: { confirmed?: boolean } = {},
+  ): Promise<UsageFormRecord> {
+    this.assertCanWrite(session?.roleCode);
+    assertFormatAllowed('USAGE_FORM', file);
+    assertSizeWithinLimit(file.size);
+
+    const form = await this.requireForm(formId);
+    const refs = await this.store.countLinks(formId);
+    if (refs >= SHARED_OVERWRITE_MIN_REFS && !opts.confirmed) {
+      throw new ConflictException(
+        `USAGE_FORM_OVERWRITE_SHARED: 此表單另被 ${refs} 份文件引用，覆蓋將同時更新全部`,
+      );
+    }
+
+    const oldBlobPath = form.blobPath;
+    const blobPath = buildFormBlobPath(file.fileName);
+    await this.blob.put(blobPath, file.buffer ?? Buffer.alloc(0), file.contentType);
+    const updated = await this.store.updateFile(formId, {
+      blobPath,
+      format: extensionOf(file.fileName),
+      size: file.size,
+      uploadedBy: session?.accountId ?? 'unknown',
+      uploadedAt: new Date(),
+    });
+    if (oldBlobPath !== blobPath) await this.blob.delete(oldBlobPath);
+    return updated;
+  }
+
+  /**
+   * 自表單池刪除。被 ≥1 份文件引用且未二次確認 → USAGE_FORM_IN_USE（附 N）。
+   * 確認後（或無引用）→ 解除全部關聯 + 刪除表單池記錄 + 回收 blob。
+   */
+  async deleteForm(
+    session: SessionContext | undefined,
+    formId: string,
+    opts: { confirmed?: boolean } = {},
+  ): Promise<void> {
+    this.assertCanWrite(session?.roleCode);
+    const form = await this.requireForm(formId);
+    const refs = await this.store.countLinks(formId);
+    if (refs >= 1 && !opts.confirmed) {
+      throw new ConflictException(
+        `USAGE_FORM_IN_USE: 已被 ${refs} 份文件使用，移除將一併解除全部關聯`,
+      );
+    }
+    await this.store.unlinkAll(formId);
+    await this.store.delete(formId);
+    await this.blob.delete(form.blobPath);
+  }
+
+  /** 文件建立/編輯時自表單池多選關聯（多對多）。 */
+  async linkForms(
+    session: SessionContext | undefined,
+    documentId: string,
+    formIds: string[],
+  ): Promise<void> {
+    this.assertCanWrite(session?.roleCode);
+    for (const formId of formIds) {
+      await this.requireForm(formId);
+      await this.store.link(documentId, formId);
+    }
+  }
+
+  /** 文件編輯時解除單一表單關聯（表單仍留於池中）。 */
+  async unlinkForm(
+    session: SessionContext | undefined,
+    documentId: string,
+    formId: string,
+  ): Promise<void> {
+    this.assertCanWrite(session?.roleCode);
+    await this.store.unlink(documentId, formId);
+  }
+
+  /** 後台表單池清單（功能 read gate）。 */
+  async listPool(session: SessionContext | undefined): Promise<UsageFormRecord[]> {
+    if (!canPerform(session?.roleCode, FunctionKey.USAGE_FORM_MANAGEMENT, 'read')) {
+      throw new ForbiddenException('PERMISSION_DENIED');
+    }
+    return this.store.list();
+  }
+
+  /** 文件詳情頁之關聯表單清單（前後台共用；屬文件瀏覽，不受表單池功能限制）。 */
+  listFormsByDocument(documentId: string): Promise<UsageFormRecord[]> {
+    return this.store.listByDocument(documentId);
+  }
+
+  /**
+   * 前台下載表單：未登入 → FILE_ACCESS_DENIED（不核發、不稽核）；
+   * 通過 → 核發短效期 URL + 同步寫入調閱稽核。
+   */
+  async downloadForm(
+    session: SessionContext | undefined,
+    documentId: string,
+    formId: string,
+  ): Promise<DownloadGrant> {
+    if (!session?.accountId) {
+      throw new ForbiddenException('FILE_ACCESS_DENIED');
+    }
+    const form = await this.requireForm(formId);
+    const url = await this.blob.getDownloadUrl(form.blobPath, DOWNLOAD_URL_TTL_SECONDS);
+    await this.audit.record({
+      targetType: 'USAGE_FORM',
+      actionType: 'DOWNLOAD',
+      formId,
+      documentId,
+      accountId: session.accountId,
+    });
+    return { url, expiresInSeconds: DOWNLOAD_URL_TTL_SECONDS };
+  }
+
+  private assertCanWrite(roleCode: string | undefined): void {
+    assertCanWriteDocumentAsset(
+      roleCode,
+      FunctionKey.USAGE_FORM_MANAGEMENT,
+      FieldKey.USAGE_FORMS,
+    );
+  }
+
+  private async requireForm(formId: string): Promise<UsageFormRecord> {
+    const form = await this.store.findById(formId);
+    if (!form) throw new NotFoundException('USAGE_FORM_NOT_FOUND');
+    return form;
+  }
+}
