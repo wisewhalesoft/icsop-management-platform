@@ -45,6 +45,7 @@ export interface IndexOverviewRow {
   documentId: string;
   state: IndexStatusState;
   triggerType: IndexRunTrigger | null;
+  chunkCount: number | null;
   lastIndexedAt: string | null;
   errorStage: IndexRunStage | null;
   errorMessage: string | null;
@@ -147,6 +148,7 @@ export class IndexVisibilityService {
       documentId: run.documentId,
       state: run.status,
       triggerType: run.triggerType,
+      chunkCount: run.status === 'success' ? run.chunkCount : null,
       lastIndexedAt: run.status === 'success' ? run.endedAt?.toISOString() ?? null : null,
       errorStage: run.status === 'failed' ? run.errorStage : null,
       errorMessage: run.status === 'failed' ? run.errorMessage : null,
