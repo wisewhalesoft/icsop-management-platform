@@ -4,7 +4,7 @@
 > 每個 Fxxx 在此有一列，狀態以嚴格 Definition of Done 判定。功能規格散在 `features/Fxxx-*.md`，
 > 各檔 `Status:` 行是局部狀態；**本檔負責把它們攤在一頁、並以「端到端可達」把關**，避免「有 commit、有按鈕就當作完成」。
 >
-> Product: ICSOP 文件管理平台 · 稽核基準：**2026-07-22, main @ `e6045d9`** · 對照 [spec-index.md](spec-index.md)
+> Product: ICSOP 文件管理平台 · 稽核基準：**2026-07-22**（初審 @ `e6045d9`；平行 worktree 一輪推進後 @ `4af5a02`）· 對照 [spec-index.md](spec-index.md)
 
 ---
 
@@ -37,10 +37,12 @@
 | 狀態 | 數量 | 功能 |
 |---|---|---|
 | ✅ 已完成-已驗證 | **5** | F002 F004 F008 F009 F025 |
-| 🟡 部分 | **9** | F001 F003 F005 F007 F010 F012 F013 F017 F026 |
+| 🟡 部分 | **14** | F001 F003 F005 F007 F010 F012 F013 F016 F017 F018 F023 F024 F026 F027 |
 | 🔵 進行中 | **1** | F014 |
-| ⬜ 未開始 | **23** | F006 F011 F015 F016 F018 F019 F020 F021 F022 F023 F024 F036 F037 F038 F027 F028 F029 F030 F031 F032 F033 F034 F035 |
+| ⬜ 未開始 | **18** | F006 F011 F015 F019 F020 F021 F022 F036 F037 F038 F028 F029 F030 F031 F032 F033 F034 F035 |
 | | **38** | |
+
+> **2026-07-22 平行 worktree 一輪推進**（3 分支已併回 main、全 unit-green）：F023/F024（audit）、F016/F018/F027（storage backend）自 ⬜→🟡；F001 途徑B＋F003 閉環自「死鏈」推進至 unit-green。**皆停在 🟡**：DoD 要求端到端可達，而這批的關鍵路徑（build→login 真 DB 往返、AUDIT_LOG 持久化/REVOKE、Blob/上傳）屬 `[integration]`、待序列化 DB 階段才可升 ✅。backend 500 測、frontend 119 測、tsc 全淨。
 
 **P0-MVP 尚未完成者（優先盯）**：F001 F003 F005 F007 F010 F012 F013 F016 F017 F019 F020 F023 F024 F026 F027 F028 F029 F030 F036，以及 Phase 3 之 F032 F033 F034 F035。
 
@@ -51,9 +53,9 @@
 ### E01 驗證與帳號
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F001 | 雙軌驗證登入與 Session | P0 | 1 | 🟡 部分 | 途徑 A（Azure OIDC）已端到端；**途徑 B 帳密登入完全缺**（無端點、`verifyPassword` 未接線、`AUTH_INVALID_CREDENTIALS` 未實作）；登出非「即時撤銷」（無狀態 JWT 僅清 cookie，副本活到 exp≤30min） |
+| F001 | 雙軌驗證登入與 Session | P0 | 1 | 🟡 部分 | 途徑 A（OIDC）已端到端；**途徑 B 帳密登入已補**（`POST /auth/login` by loginId、統一 `AUTH_INVALID_CREDENTIALS`、unit-green）；剩：登出非「即時撤銷」（無狀態 JWT，需 denylist infra）＋帳密登入節流未做（本輪外） |
 | F002 | 登入後角色分流導向 | P0 | 1 | ✅ 已完成-已驗證 | 邊界：session 有效但 roleCode=undefined 不會導回登入頁（低風險） |
-| F003 | 帳號與角色指派管理 | P0 | 1 | 🟡 部分 | **端到端斷鏈**：`createManual`/store 從不寫 `email`＋F001 無帳密登入 → 手動帳號永無登入入口（`passwordHash` 無驗證出口）。CRUD 本身可達且測試充分 |
+| F003 | 帳號與角色指派管理 | P0 | 1 | 🟡 部分 | **死鏈已於讀取端閉合**（決策：登入識別鍵＝loginId；帳密登入路徑驗 `createManual` 寫入的 `passwordHash`，無需寫 email）。剩：build→login→`/auth/me` 真 MSSQL 往返＝`[integration]` 待驗，通過後可升 ✅ |
 
 ### E02 組織同步
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
@@ -79,13 +81,13 @@
 | F013 | 文件編號唯一性管理 | P0 | 1 | 🟡 部分 | 建立/狀態切換路徑可達且測試；編輯側排除自身**不可達**（依賴未建之 F011）；併發衝突 DB 會丟 `QueryFailedError` 未捕捉映射 → 恐回 500 而非 409 |
 | F014 | 制定組織與當責室長設定 | P0 | 1 | 🔵 進行中 | 僅 scalar 欄位骨架（3 組織 ID＋主要室長可存）；**無組織/人員讀取端點**、無三級級聯下拉、無次要室長/使用部門關聯表、無 managerEmpNo 預設候選；UI 為 disabled 佔位 |
 | F015 | 文件連結點管理 | P1 | 1 | ⬜ 未開始 | 僅欄位鍵佔位（送出即被丟棄）；無 `DOCUMENT_LINK` 表/端點/目標存在性驗證/UI |
-| F016 | PDF 與 OJT 附件上傳 | P0 | 1 | ⬜ 未開始 | **全站無 Azure Blob/multipart/storage 抽象**；無附件表、格式白名單、大小上限、受控下載 |
+| F016 | PDF 與 OJT 附件上傳 | P0 | 1 | 🟡 部分 | backend unit-green：Blob 抽象（`BlobStore`＋FakeBlobStore）、`DOCUMENT_ATTACHMENT`、兩層授權、格式白名單≤50MB、單份覆蓋、受控下載。剩：**前端上傳 UI**、真 Azure Blob＋migration＝`[integration]` |
 | F017 | 後台文件清單與搜尋 | P0 | 1 | 🟡 部分 | 統計卡＋關鍵字/狀態篩選＋衍生狀態＋未指派警示可用；14 欄只做 ~7、9 篩選只做 2（缺循環別/編號/書名/制定/室長/連結 combobox）；**無分頁**（後端 take 2000） |
 
 ### E05 使用表單
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F018 | 使用表單管理 | P1 | 1 | ⬜ 未開始 | 僅欄位鍵佔位；無表單池表/CRUD 畫面、Blob 上傳、多對多關聯、覆蓋/移除二次確認、下載稽核 |
+| F018 | 使用表單管理 | P1 | 1 | 🟡 部分 | backend unit-green：`USAGE_FORM_POOL`＋`DOC_USAGE_FORM` 多對多、上傳/覆蓋（引用≥2 警示）/移除（`USAGE_FORM_IN_USE`）、下載稽核（佔位）。剩：**前端管理頁**、真 Blob/DB、稽核接真 AuditWriter＝`[integration]` |
 
 ### E06 前台瀏覽
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
@@ -98,8 +100,8 @@
 ### E07 稽核與變更歷程
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F023 | 稽核軌跡記錄 | P0 | 1 | ⬜ 未開始 | **無 `AUDIT_LOG` 實體/模組**（baseline migration 明言延後）；無 append-only 寫入、不可竄改守衛、失敗補償佇列。**多個功能的「記錄稽核」皆卡此** |
-| F024 | 文件調閱歷程查詢後台 | P0 | 1 | ⬜ 未開始 | 路由落 `ModulePlaceholder`；無查詢 API/頁面；依賴 F023（無稽核資料） |
+| F023 | 稽核軌跡記錄 | P0 | 1 | 🟡 部分 | unit-green：`AuditWriter` 共用契約（5 targetType 判別聯合，**下游 F020/F034/F037/F038 直接 import**）、AUDIT_LOG append-only 不可變 store、outbox 重試。剩：DB `REVOKE UPDATE/DELETE` 不可變強制＋migration＋usage-forms 佔位改接＝`[integration]` |
+| F024 | 文件調閱歷程查詢後台 | P0 | 1 | 🟡 部分 | unit-green：查詢頁（取代 ModulePlaceholder）＋篩選/RBAC/30天預設/匯出/展開。剩：真 AUDIT_LOG 資料（依 F023 整合）、P95 索引效能＝`[integration]` |
 | F037 | 程序書變更歷程（欄位 Diff） | P1 | 1 | ⬜ 未開始 | 無 `DOCUMENT_CHANGE_LOG`；來源交易（F011/F012/F014/F016）未發變更事件；無 diff 頁；依賴 F023/F024 |
 | F038 | 循環樹狀圖變更歷程 | P1 | 1 | ⬜ 未開始 | 無 `LIFECYCLE_CHANGE_LOG`/快照；F008/F009 未發結構事件；無新舊樹重建/燒錄；依賴 F036/F023 |
 
@@ -112,7 +114,7 @@
 ### E09 RAG／AI 問答
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F027 | .xls 原件保存（RAG 來源） | P0 | 1 | ⬜ 未開始 | 無 .xls 上傳端點、Blob、`DOC_SOURCE_XLS` 表、模板驗證（XLS_TEMPLATE_INVALID） |
+| F027 | .xls 原件保存（RAG 來源） | P0 | 1 | 🟡 部分 | backend unit-green：`DOC_SOURCE_XLS`、.xls 上傳（覆蓋不留版本）、模板驗證 v1（5 表名集合＋每表旗標→`XLS_TEMPLATE_INVALID`，OQ-E09-04 待更多樣本校準）。剩：真 Blob/DB、.xls 二進位解析＝`[integration]` |
 | F028 | .xls 模板感知抽取與清洗 | P0 | 1 | ⬜ 未開始 | 無五表模板 parser、清洗、合併儲存格重組、`INDEX_RUN`；依賴 F027 |
 | F029 | 章/節 chunking、metadata、向量索引 | P0 | 1 | ⬜ 未開始 | 僅 pgvector 容器＋`CREATE EXTENSION vector`（無表）；無 chunker、8 項 metadata、embedding、`VECTOR_EMBEDDING` 寫入 |
 | F030 | 改版重抽與重建索引、舊版排除 | P0 | 1 | ⬜ 未開始 | 無變更偵測事件接線、重抽分支、狀態變更輕量分支、失敗保舊索引 |
@@ -128,11 +130,11 @@
 
 這些是「多個功能卡在同一塊未建地基」的根因，優先處理 CP 值最高：
 
-1. **`AUDIT_LOG` 稽核基礎（F023）** — 阻擋 F005 稽核完整性、F007 刪除稽核、F012 狀態稽核、F020/F024/F036/F037/F038、F034。應先定 schema（append-only＋不可竄改）並提供共用寫入服務。
-2. **Azure Blob／檔案上傳層（F016 前置）** — 阻擋 F016、F018、F020 燒錄、F027 .xls 保存。無 multipart/storage 抽象。
-3. **組織／人員讀取端點（F014 前置）** — 阻擋 F014 制定組織三級與當責室長、F006 異動提示、F026 使用部門子樹判定。需 `PERSON` 實體＋ORG_UNIT 讀取 API＋級聯查詢＋離職過濾。
-4. **帳密登入途徑 B ＋ 帳號 email 寫入（F001/F003 閉環）** — 讓手動建立的管理帳號真能登入。最小修法：`createManual` 寫入 email（或 loginId 對映）＋新增帳密登入端點接 `verifyPassword`。
-5. **RAG 管線（F027→F028→F029）** — E09 除 pgvector 容器外皆為 greenfield，需整條抽取→chunk→embed→index 才有任何 AC 可達。
+1. ✅→🟡 **`AUDIT_LOG` 稽核基礎（F023）** — **共用 `AuditWriter` 契約與不可變 store 已 unit-green 併入 main**；下游 F005/F007/F012/F020/F034/F037/F038 可直接 import。剩 DB REVOKE 強制＋migration＋usage-forms 佔位改接（整合階段）。
+2. 🟡 **Blob／檔案上傳層** — **`BlobStore` 抽象＋FakeBlobStore＋附件/表單/來源實體已 unit-green 併入 main**（F016/F018/F027 backend）。剩真 Azure Blob 接線＋前端 UI＋migration:run（整合階段）。
+3. **組織／人員讀取端點（F014 前置）** — 阻擋 F014 制定組織三級與當責室長、F006 異動提示、F026 使用部門子樹判定。需 `PERSON` 實體＋ORG_UNIT 讀取 API＋級聯查詢＋離職過濾。**（尚未動工）**
+4. 🟡 **帳密登入途徑 B（F001/F003 閉環）** — **已 unit-green 併入 main**。定案：登入識別鍵＝**loginId**（非 email）；`POST /auth/login` 驗 `createManual` 寫入的 `passwordHash`。剩 build→login 真 DB 往返驗證（整合階段）。
+5. **RAG 管線（F027→F028→F029）** — F027 .xls 原件保存 backend 已 unit-green；F028/F029 抽取→chunk→embed→index 仍 greenfield。
 
 ---
 

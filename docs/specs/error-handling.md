@@ -48,11 +48,14 @@ status: Draft
 | `FILE_FORMAT_NOT_ALLOWED` | 400 | 檔案格式不允許 | F016, F018 |
 | `FILE_SIZE_EXCEEDED` | 400 | 檔案超過大小上限 | F016, F018 |
 | `FILE_ACCESS_DENIED` | 403 | 無權存取此檔案 | F016, F018, F020 |
-| `USAGE_FORM_OVERWRITE_SHARED` | 409（需二次確認） | 此表單另被 {N} 份文件引用，覆蓋將同時更新全部，是否繼續？ | F018 |
+| `USAGE_FORM_OVERWRITE_SHARED` | 409（需二次確認） | 此表單另被 {N} 份文件引用，覆蓋將同時更新全部，是否繼續？（門檻：引用 ≥2） | F018 |
+| `USAGE_FORM_IN_USE` | 409（需二次確認） | 此表單仍被 {N} 份文件引用，移除將自所有引用解除，是否繼續？ | F018 |
+| `USAGE_FORM_NOT_FOUND` | 404 | 找不到此使用表單 | F018 |
 | `PERMISSION_DENIED` | 403 | 權限不足 | F025 |
 | `FIELD_WRITE_FORBIDDEN` | 403 | 無權修改此欄位 | F026 |
 | `AUDIT_IMMUTABLE` | 403 | 稽核紀錄不可修改或刪除 | F023 |
-| `QUERY_CONDITION_REQUIRED` | 400 | 請至少提供一項查詢條件 | F024 |
+| `AUDIT_TARGET_REF_REQUIRED` | 400 | 稽核事件缺少此類型必要之對象參照（targetId） | F023 |
+| ~~`QUERY_CONDITION_REQUIRED`~~ | — | **F024 改為非阻擋**（定案 2026-07-22）：空查詢條件不報錯，改套用近 30 天預設範圍並回 `appliedDefaultRange`（見下方查詢空條件）。代碼保留供他處。 | ~~F024~~ |
 | `XLS_TEMPLATE_INVALID` | 400 | 檔案不符合 ICSOP 標準模板 | F027, F028 |
 | ~~`XLS_PDF_CONVERSION_FAILED`~~ | — | **已移除**（OQ-E09-10 定案：取消 .xls→PDF 自動轉檔，.xls 與呈現用 PDF 分開手動上傳，無轉檔行為） | ~~F027~~ |
 | `EXTRACTION_FAILED` | 400/5xx | 內文抽取失敗（模板不符 400；解析工具錯誤 5xx） | F028 |
@@ -142,7 +145,7 @@ status: Draft
 
 - **記錄失敗不阻斷瀏覽**：稽核寫入暫時性失敗時，使用者仍可正常查看文件；失敗事件進**補償佇列**（outbox 類），服務恢復後重試補寫（F023 AC3、[NFR-003](nfr.md#audit-retention)）。
 - **不可竄改**：任何角色經一般介面/API 修改或刪除稽核紀錄回 `AUDIT_IMMUTABLE`（403/405），資料表 append-only。
-- **查詢空條件**：F024 查詢未帶任何條件時回 `QUERY_CONDITION_REQUIRED` 或套用預設近 30 天範圍，避免全表掃描。
+- **查詢空條件**：F024 查詢未帶任何條件時**非阻擋**（定案 2026-07-22）——自動套用預設近 30 天範圍並於回應標記 `appliedDefaultRange`，避免全表掃描（不回 `QUERY_CONDITION_REQUIRED`）。
 
 ## 前台瀏覽與檢視 {#public}
 
