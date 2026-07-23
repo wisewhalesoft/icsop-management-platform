@@ -40,10 +40,27 @@ export class DocumentsController {
     });
   }
 
+  @Get(':id')
+  @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
+  getOne(@Param('id') id: string) {
+    return this.svc.getDocument(id);
+  }
+
   @Post()
   @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'write')
   create(@Req() req: RequestWithSession, @Body() body: Record<string, unknown>) {
     return this.svc.create(req.sessionUser?.roleCode, body ?? {});
+  }
+
+  /** F011 編輯：以新值覆蓋（不留歷史、UUID 不變）。欄位面/必填/狀態/編號唯一於 service 落實。 */
+  @Patch(':id')
+  @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'write')
+  update(
+    @Req() req: RequestWithSession,
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.svc.update(req.sessionUser?.roleCode, id, body ?? {});
   }
 
   @Patch(':id/status')

@@ -24,6 +24,22 @@ export interface DocumentView extends CreateDocumentInput {
   nodeId: string | null;
 }
 
+/** F011 編輯：可覆寫之業務欄位子集（部分更新；nodeId 不在此，節點寫入僅經 F009 抽屜）。 */
+export type DocumentPatch = Partial<Omit<CreateDocumentInput, never>>;
+
+/** F011 版本對照：單一欄位之新舊值快照，供編輯頁確認 diff。 */
+export interface DocumentFieldChange {
+  field: string;
+  before: unknown;
+  after: unknown;
+}
+
+/** F011 update() 回傳：覆寫後之文件 + 本次異動之新舊值對照。 */
+export interface DocumentUpdateResult {
+  document: DocumentView;
+  changes: DocumentFieldChange[];
+}
+
 /** F017 清單篩選。 */
 export interface DocumentListFilters {
   lifecycleId?: string;
@@ -56,4 +72,6 @@ export interface DocumentStore {
   list(filters: DocumentListFilters): Promise<DocumentListItem[]>;
   findById(id: string): Promise<DocumentView | null>;
   updateStatus(id: string, status: DocumentStatus): Promise<void>;
+  /** F011 編輯：以 patch 覆寫（不留歷史、UUID 不變）；回傳覆寫後之完整檢視。 */
+  update(id: string, patch: DocumentPatch): Promise<DocumentView>;
 }

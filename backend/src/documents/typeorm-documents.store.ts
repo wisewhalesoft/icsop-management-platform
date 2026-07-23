@@ -6,6 +6,7 @@ import { DocumentStatus } from './document-status';
 import {
   DocumentStore,
   CreateDocumentInput,
+  DocumentPatch,
   DocumentView,
   DocumentListFilters,
   DocumentListItem,
@@ -130,5 +131,34 @@ export class TypeOrmDocumentStore implements DocumentStore {
     await ds
       .getRepository(IcsopDocument)
       .update({ id }, { status, updatedAt: new Date() });
+  }
+
+  async update(id: string, patch: DocumentPatch): Promise<DocumentView> {
+    const ds = await this.init();
+    const repo = ds.getRepository(IcsopDocument);
+    // 僅覆寫 patch 觸及之欄位（部分更新）；日期字串強制轉 Date；恆更新 updatedAt。
+    const set: Record<string, unknown> = { updatedAt: new Date() };
+    const assign = (k: keyof DocumentPatch) => {
+      if (k in patch) set[k] = patch[k];
+    };
+    (
+      [
+        'lifecycleId',
+        'status',
+        'documentNumber',
+        'documentName',
+        'draftingCompanyId',
+        'draftingDeptId',
+        'draftingSectionId',
+        'primaryChiefId',
+        'edition',
+        'contentSummary',
+      ] as (keyof DocumentPatch)[]
+    ).forEach(assign);
+    if ('announcedDate' in patch) set.announcedDate = coerceDate(patch.announcedDate);
+    await repo.update({ id }, set);
+    const row = await repo.findOne({ where: { id } });
+    if (!row) throw new Error('DOCUMENT_NOT_FOUND');
+    return TypeOrmDocumentStore.toView(row);
   }
 }
