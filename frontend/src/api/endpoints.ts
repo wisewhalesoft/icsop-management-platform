@@ -23,6 +23,22 @@ export function getMe(): Promise<SessionUser> {
 }
 
 /**
+ * POST /auth/login（途徑 B 帳密登入，F001 定案 A/B/C）。
+ * 成功 → 後端核發 icsop_session cookie 並回 SessionUser；失敗 → 401 AUTH_INVALID_CREDENTIALS、
+ * 400 AUTH_MISSING_FIELD（由 ApiError.code 承載）。識別鍵＝loginId。
+ */
+export function passwordLogin(body: {
+  loginId: string;
+  password: string;
+}): Promise<SessionUser> {
+  return apiFetch<SessionUser>('/auth/login', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
+/**
  * GET /admin/org-sync/runs?limit=N（US-011 輪詢/歷程）。
  * limit 省略時不帶 query，交後端預設（20，上限 100）。
  */
