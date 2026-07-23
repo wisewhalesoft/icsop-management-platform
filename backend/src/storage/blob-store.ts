@@ -26,6 +26,7 @@ export interface BlobStore {
 
 /**
  * 下載憑證預設 TTL（秒）。NFR-002「短效期憑證」未給定具體秒數（見 OQ-F016-05），
- * 此處採 5 分鐘作為保守預設；正式數值待 architect 定案後於此集中調整。
+ * 此處採 5 分鐘作為保守預設；可經 env `DOWNLOAD_URL_TTL_SECONDS` 覆寫（正式數值待 architect 定案）。
  */
-export const DOWNLOAD_URL_TTL_SECONDS = 300;
+export const DOWNLOAD_URL_TTL_SECONDS =
+  Number(process.env.DOWNLOAD_URL_TTL_SECONDS) || 300;
