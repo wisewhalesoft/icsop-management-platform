@@ -14,12 +14,17 @@ describe('[int] audit 查詢/不可竄改 (F023/F024) vs SOP', () => {
     expect(r.status).toBe(200);
   });
 
-  // 已知 gap（整合實測 2026-07-23）：migration 之 best-effort `REVOKE UPDATE,DELETE ON AUDIT_LOG`
-  // 對「經 role 授權」之 app 登入無效 → AUDIT_LOG 目前**非 append-only 強制**（UPDATE 可成功）。
-  // 修法：改 `DENY UPDATE, DELETE`（或觸發器/唯讀 role）。加上後本測會轉為真綠 → 屆時移除 `.failing`。
-  it.failing('AUDIT_LOG UPDATE 應被 DB 阻擋（append-only；目前未強制，此為已知 gap）', async () => {
+  // F023 append-only 強制：INSTEAD OF UPDATE,DELETE 觸發器（migration 1722470400000）對所有主體
+  // （含 owner/sysadmin）阻擋 → UPDATE/DELETE 皆 THROW AUDIT_IMMUTABLE。（DENY 曾被 owner 繞過，改觸發器。）
+  it('AUDIT_LOG UPDATE 被 DB 觸發器阻擋（append-only／AUDIT_IMMUTABLE）', async () => {
     await expect(
       AppDataSource.query(`UPDATE [AUDIT_LOG] SET [id] = [id] WHERE 1 = 0`),
-    ).rejects.toBeTruthy();
+    ).rejects.toThrow(/AUDIT_IMMUTABLE|append-only/i);
+  });
+
+  it('AUDIT_LOG DELETE 亦被阻擋（append-only）', async () => {
+    await expect(
+      AppDataSource.query(`DELETE FROM [AUDIT_LOG] WHERE 1 = 0`),
+    ).rejects.toThrow(/AUDIT_IMMUTABLE|append-only/i);
   });
 });
