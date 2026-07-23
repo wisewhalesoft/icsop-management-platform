@@ -12,6 +12,7 @@ import { AuditModule } from './audit/audit.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { XlsSourceModule } from './xls-source/xls-source.module';
 import { UsageFormsModule } from './usage-forms/usage-forms.module';
+import { IngestionModule } from './ingestion/ingestion.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { UsageFormsModule } from './usage-forms/usage-forms.module';
     AttachmentsModule,
     XlsSourceModule,
     UsageFormsModule,
+    IngestionModule,
   ],
   controllers: [AppController],
 })
