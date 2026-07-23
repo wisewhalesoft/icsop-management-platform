@@ -29,7 +29,12 @@ export class OrgUnit {
   tier!: string; // ROOT / DIVISION / DEPARTMENT / SECTION / SUBSECTION
 
   @Column({ type: 'nvarchar', length: 100 })
-  name!: string;
+  name!: string; // ← DESC_CHI 簡稱
+
+  // 部門全名（← DESC_FULL），供 F020 浮水印「部門」欄。上游可能為 null（OQ-DESCFULL-2）；
+  // 既有列於加欄後為 null，下次全量同步經 classifyOrgUnit（已納 descFull 比對）自動回填。
+  @Column({ type: 'nvarchar', length: 200, nullable: true })
+  descFull!: string | null;
 
   @Column({ type: 'varchar', length: 10, nullable: true })
   managerEmpNo!: string | null; // 部門主管員編（F014 當責室長候選）
