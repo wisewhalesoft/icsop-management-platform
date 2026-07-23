@@ -19,6 +19,7 @@ export interface ExistingOrgUnit {
   tier: string;
   parentCode: string | null;
   name: string;
+  descFull: string | null;
   managerEmpNo: string | null;
   isActive: boolean;
 }
@@ -53,6 +54,9 @@ export function classifyOrgUnit(
     source.codePrefix !== local.codePrefix ||
     source.parentCode !== local.parentCode ||
     source.name !== local.name ||
+    // descFull 納入比對：否則既有列（descFull=null）之回填永遠不觸發（誤判 noop，OQ-DESCFULL-1）。
+    // (?? null) 使 undefined 與 null 視為相等，避免既有測試替身省略此欄時誤觸 update。
+    (source.descFull ?? null) !== (local.descFull ?? null) ||
     source.managerEmpNo !== local.managerEmpNo ||
     source.isActive !== local.isActive;
   return changed ? 'update' : 'noop';
