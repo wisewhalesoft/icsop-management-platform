@@ -29,7 +29,7 @@ import {
 /** 呼叫者 session 上下文（roleCode 授權判定；accountId 記錄 uploadedBy）。 */
 export interface SessionContext {
   roleCode?: string;
-  accountId?: string;
+  accountId?: string | null; // ← SessionUser.accountId（UUID，可能為 null 於未帶身分之邊界）
 }
 
 /** 上傳檔案描述（size 為權威中繼資料，不必等於 buffer.length，供大檔邊界測試）。 */

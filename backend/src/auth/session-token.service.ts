@@ -18,6 +18,7 @@ export interface SessionUser {
   orgCode?: string | null;
   name?: string | null;
   employeeNo?: string | null;
+  accountId?: string | null; // ← ACCOUNT.id（UUID）；request-context（SessionGuard 每請求填入，不進 JWT）；稽核操作者鍵
 }
 
 /**

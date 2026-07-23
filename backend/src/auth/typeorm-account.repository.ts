@@ -50,6 +50,7 @@ export class TypeOrmAccountRepository implements AccountRepository {
       .findOne({ where: { companyCode, loginId } });
     return a
       ? {
+          id: a.id, // 稽核操作者鍵（accountId=uniqueidentifier）
           status: a.status,
           roleCode: a.roleCode,
           // org-foundation：身分快照欄位（每請求由 SessionGuard 填入 request-context）。

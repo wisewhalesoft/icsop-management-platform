@@ -7,10 +7,10 @@ import { RequirePermission } from '../rbac/require-permission.decorator';
 import { FunctionKey } from '../rbac/function-matrix';
 import type { SessionUser } from '../auth/session-token.service';
 
-/** SessionUser（request context）→ 浮水印身分。actorId＝loginId（session 未攜帶帳號 UUID）。 */
+/** SessionUser（request context）→ 浮水印身分。accountId＝ACCOUNT.id（UUID，稽核用；SessionGuard 每請求填入）。 */
 export function toWatermarkSession(u: SessionUser): WatermarkSession {
   return {
-    accountId: u.loginId,
+    accountId: u.accountId ?? '',
     employeeNo: u.employeeNo ?? null,
     name: u.name ?? null,
     companyCode: u.companyCode,

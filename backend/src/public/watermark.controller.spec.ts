@@ -45,6 +45,7 @@ const SESSION: SessionUser = {
   orgCode: 'JAC00',
   name: '王小明',
   employeeNo: 'E001',
+  accountId: 'acc-uuid-1',
 };
 
 describe('WatermarkController — 守門鏈與 RBAC（F020）', () => {
@@ -111,9 +112,9 @@ describe('WatermarkController — 委派與回應', () => {
     expect((res.send as jest.Mock).mock.calls[0][0].toString()).toBe('ORIG');
   });
 
-  it('toWatermarkSession：actorId=loginId、身分快照映射', () => {
+  it('toWatermarkSession：accountId=ACCOUNT.id（UUID）、身分快照映射', () => {
     expect(toWatermarkSession(SESSION)).toEqual({
-      accountId: 'AS22455',
+      accountId: 'acc-uuid-1',
       employeeNo: 'E001',
       name: '王小明',
       companyCode: 'AS',

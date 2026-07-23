@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { bootIntApp, shutdownIntApp, IntCtx } from './harness';
+import { AppDataSource } from '../../src/database/data-source';
 import { BLOB_STORE, BlobStore } from '../../src/storage/blob-store';
 import { AuditWriterService } from '../../src/audit/audit-writer.service';
 import { AuditWriterRecorder } from '../../src/usage-forms/audit-writer-recorder.adapter';
@@ -64,12 +65,14 @@ describe('[int] storage — 真實 Blob roundtrip + 使用表單下載稽核 vs 
     // recordAccess 經 Outbox 非阻斷入列；補償重試搬遷 pending → AUDIT_LOG（平時由 @Cron 掃描）。
     await writer.processOutboxRetry();
 
-    // 查詢（空條件套近 30 天預設）→ 應含剛落地之 USAGE_FORM/DOWNLOAD 列（formId 相符）。
-    const page = await writer.queryHistory({ company: 'ALL' }, { pageSize: 200 });
-    const row = page.items.find((r) => r.formId === formId);
-    expect(row).toBeDefined();
-    expect(row?.targetType).toBe('USAGE_FORM');
-    expect(row?.actionType).toBe('DOWNLOAD');
-    expect(row?.accountId).toBe(accountId);
+    // 直查 AUDIT_LOG（依 formId；append-only，本列殘留屬既知）驗證整合接線落地。
+    const rows: Array<{ targetType: string; actionType: string; accountId: string }> =
+      await AppDataSource.query(
+        `SELECT [targetType], [actionType], [accountId] FROM [AUDIT_LOG] WHERE [formId] = '${formId}'`,
+      );
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect(rows[0].targetType).toBe('USAGE_FORM');
+    expect(rows[0].actionType).toBe('DOWNLOAD');
+    expect(rows[0].accountId.toUpperCase()).toBe(accountId.toUpperCase());
   });
 });

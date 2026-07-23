@@ -18,10 +18,10 @@ import { RequirePermission } from '../rbac/require-permission.decorator';
 import { FunctionKey } from '../rbac/function-matrix';
 import type { SessionUser } from '../auth/session-token.service';
 
-/** SessionUser（request context）→ 刪除稽核操作者身分快照。actorId＝loginId（session 未帶帳號 UUID）。 */
+/** SessionUser（request context）→ 刪除稽核操作者身分快照。actorId＝ACCOUNT.id（UUID；SessionGuard 每請求填入）。 */
 export function toLifecycleAuditActor(u: SessionUser): LifecycleAuditActor {
   return {
-    actorId: u.loginId,
+    actorId: u.accountId ?? '',
     actorName: u.name ?? null,
     employeeNo: u.employeeNo ?? null,
     roleCode: u.roleCode ?? null,

@@ -6,6 +6,7 @@ import { normalizeEmail, ResolvableAccount } from './account-resolver';
  * SessionUser（F019 置頂／F020 身分快照）。刻意選填（`?`）以相容既有測試替身（只回 status/roleCode）。
  */
 export interface CurrentAccount {
+  id?: string; // ← ACCOUNT.id（UUID）：稽核操作者鍵（AUDIT_LOG.accountId 為 uniqueidentifier）
   status: string; // active / disabled
   roleCode?: string;
   orgCode?: string | null; // ← ACCOUNT.orgCode（對應 ORG_UNIT.orgCode）
