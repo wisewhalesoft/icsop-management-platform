@@ -1,5 +1,5 @@
 # F037: ICSOP 程序書變更歷程（欄位層 Before/After Diff）
-Priority: P1 | Status: Draft | Last Updated: 2026-07-17
+Priority: P1 | Status: 🟡 實作（單元綠；整合已寫未跑；見 implementation-log/F037-impl.md） | Last Updated: 2026-07-23
 Epic/Story: E07 / US-062
 
 > **獨立後台功能「文件變更歷程」**（獨立側選單項，非「文件調閱歷程」子頁；prototype `23-change-history.html`）之 **ICSOP 程序書 tab**（與循環樹狀圖 tab [F038](F038-lifecycle-tree-change-history.md) 併存，共兩 tab）。以 **append-only 欄位層變更日誌**追溯文件內容異動，**不保留整份歷史版本檔**（與「僅保存當前版本」定案調和）。權限依 [F025](F025-role-function-matrix.md) 獨立功能列「文件變更歷程」。

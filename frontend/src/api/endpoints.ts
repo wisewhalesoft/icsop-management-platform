@@ -330,6 +330,58 @@ export function exportAccessHistory(
   );
 }
 
+// ===== E07 文件變更歷程（F037 程序書 / F038 循環樹狀圖） =====
+
+import type {
+  DocumentChangeView,
+  DocumentChangeFilters,
+  LifecycleChangeView,
+  LifecycleChangeFilters,
+} from './types';
+
+/** GET /admin/change-history/documents（F037 程序書變更清單；文件變更歷程 read）。 */
+export function getDocumentChanges(
+  f: DocumentChangeFilters = {},
+): Promise<{ items: DocumentChangeView[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (f.doc) qs.set('doc', f.doc);
+  if (f.field) qs.set('field', f.field);
+  if (f.person) qs.set('person', f.person);
+  if (f.from) qs.set('from', f.from);
+  if (f.to) qs.set('to', f.to);
+  const q = qs.toString();
+  return apiFetch(`/admin/change-history/documents${q ? `?${q}` : ''}`);
+}
+
+/** GET /admin/change-history/documents/:documentId（F037 展開某文件 before/after ＋記 CHANGE_LOG_VIEW 稽核）。 */
+export function viewDocumentChanges(
+  documentId: string,
+): Promise<{ items: DocumentChangeView[] }> {
+  return apiFetch(`/admin/change-history/documents/${encodeURIComponent(documentId)}`);
+}
+
+/** GET /admin/change-history/lifecycles（F038 循環結構變更清單；read）。 */
+export function getLifecycleChanges(
+  f: LifecycleChangeFilters = {},
+): Promise<{ items: LifecycleChangeView[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (f.lifecycleId) qs.set('lifecycleId', f.lifecycleId);
+  if (f.changeType) qs.set('changeType', f.changeType);
+  if (f.person) qs.set('person', f.person);
+  if (f.from) qs.set('from', f.from);
+  const q = qs.toString();
+  return apiFetch(`/admin/change-history/lifecycles${q ? `?${q}` : ''}`);
+}
+
+/** GET /admin/change-history/lifecycles/:lifecycleId（F038 某循環結構變更 ＋記 LIFECYCLE_CHANGELOG_VIEW 稽核）。 */
+export function viewLifecycleChanges(
+  lifecycleId: string,
+  name?: string,
+): Promise<{ items: LifecycleChangeView[] }> {
+  const q = name ? `?name=${encodeURIComponent(name)}` : '';
+  return apiFetch(`/admin/change-history/lifecycles/${encodeURIComponent(lifecycleId)}${q}`);
+}
+
 // ===== E06 前台瀏覽（F019） =====
 
 /**
