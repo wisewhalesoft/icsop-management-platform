@@ -195,3 +195,56 @@ export interface SyncResult {
   stats: SyncStats;
   warnings: string[];
 }
+
+// ===== E09 F031 文件索引管理（AI 提取/索引） =====
+
+export type IndexStatusState = 'running' | 'success' | 'failed' | 'not_built';
+
+/** GET /admin/doc-index/overview 之單筆（文件層級 metadata join 為 [integration]，placeholder 省略）。 */
+export interface DocIndexOverviewRow {
+  documentId: string;
+  state: IndexStatusState;
+  triggerType: string | null;
+  chunkCount: number | null;
+  lastIndexedAt: string | null;
+  errorStage: string | null;
+  errorMessage: string | null;
+  // 以下為 [integration] 之 ICSOP_DOCUMENT/DOC_SOURCE_XLS join（前端優雅降級，缺時以 documentId 呈現）
+  documentNumber?: string;
+  documentName?: string;
+  hasXls?: boolean;
+}
+
+export interface DocIndexOverview {
+  successCount: number;
+  failedCount: number;
+  runningCount: number;
+  items: DocIndexOverviewRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+/** GET /admin/doc-index/:documentId（單文件三態 + 失敗詳情）。 */
+export interface DocIndexStatus {
+  state: IndexStatusState;
+  triggerType: string | null;
+  lastIndexedAt: string | null;
+  errorStage: string | null;
+  stageLabel: string | null;
+  errorMessage: string | null;
+}
+
+/** GET /admin/doc-index/:documentId/chunks（chunk 預覽 + 8 項 metadata）。 */
+export interface DocIndexChunk {
+  chunkSeq: number;
+  content: string;
+  documentNumber: string;
+  lifecycleId: string;
+  chapterSection: string;
+  usingDeptIds: string[];
+  status: string;
+  announcedDate: string | null;
+  edition: string;
+  pageNumber: number;
+}

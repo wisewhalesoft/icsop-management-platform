@@ -14,6 +14,7 @@ import { DocumentListPage } from './pages/DocumentListPage';
 import { DocumentCreatePage } from './pages/DocumentCreatePage';
 import { PermissionMatrixPage } from './pages/PermissionMatrixPage';
 import { AccessHistoryPage } from './pages/AccessHistoryPage';
+import { DocIndexPage } from './pages/DocIndexPage';
 import { ModulePlaceholder } from './pages/ModulePlaceholder';
 import { PublicPlaceholder } from './pages/PublicPlaceholder';
 
@@ -89,6 +90,7 @@ export function AppRoutes(): JSX.Element {
           <Route path="documents/new" element={<DocumentCreatePage />} />
           <Route path="org-sync" element={<OrgSyncPage />} />
           <Route path="access-history" element={<AccessHistoryPage />} />
+          <Route path="doc-index" element={<DocIndexPage />} />
           <Route path="settings" element={<PermissionMatrixPage />} />
           {/* 後續功能增量將以實頁取代下列佔位 */}
           <Route path="*" element={<ModulePlaceholder />} />
