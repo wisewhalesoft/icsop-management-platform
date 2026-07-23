@@ -1,5 +1,5 @@
 # F030: 改版重抽與重建索引、舊版排除
-Priority: P0-MVP | Status: Draft | Phase: 1 | Last Updated: 2026-07-16
+Priority: P0-MVP | Status: Implemented(unit) | Phase: 1 | Last Updated: 2026-07-23
 Epic/Story: E09 / US-093
 
 > 兩種不同機制須明確區分：**(1) 內容改版**（換 .xls 或編輯內容）→ 需重跑 [F028](F028-template-aware-extraction.md)/[F029](F029-chunking-metadata-index.md) 產生新版索引；**(2) 純狀態切換**（有效↔失效↔作廢）→ 僅更新 chunk 的 `status` metadata，不需重抽內文，效能較輕量。

@@ -1,5 +1,5 @@
 # F029: 章/節 chunking、metadata 標註與向量索引建立
-Priority: P0-MVP | Status: Draft | Phase: 1 | Last Updated: 2026-07-17
+Priority: P0-MVP | Status: Implemented(unit) | Phase: 1 | Last Updated: 2026-07-23
 Epic/Story: E09 / US-092
 
 > 雙軌 ingestion 之**軌道 B（檢索內文）第二階段**：將抽取清洗後之內文依「節」切 chunk、掛結構化 metadata、產生 embedding 並寫入向量索引。metadata 中的「使用部門」「文件狀態」「公告日期」為 Phase 3 權限感知檢索（[F033](F033-permission-aware-retrieval.md)）之過濾依據（可見基底＝已公告＝有效且公告日期≤今日＋使用部門），**務必於索引時即正確寫入，不可於檢索後才過濾**（[NFR-009](../nfr.md#rag-security)）。
