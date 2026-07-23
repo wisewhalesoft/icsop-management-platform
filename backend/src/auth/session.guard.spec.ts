@@ -3,7 +3,11 @@ import { JwtService } from '@nestjs/jwt';
 import { SessionGuard, RequestWithSession } from './session.guard';
 import { SessionTokenService, SessionUser } from './session-token.service';
 import { SESSION_COOKIE } from './session.config';
-import { AccountRepository, CurrentAccount } from './account-repository';
+import {
+  AccountRepository,
+  CurrentAccount,
+  PasswordAuthAccount,
+} from './account-repository';
 import { ResolvableAccount } from './account-resolver';
 
 const user: SessionUser = {
@@ -21,6 +25,9 @@ class FakeRepo implements AccountRepository {
   }
   findCurrentByLogin(): Promise<CurrentAccount | null> {
     return Promise.resolve(this.current);
+  }
+  findByLoginId(): Promise<PasswordAuthAccount | null> {
+    return Promise.resolve(null);
   }
 }
 

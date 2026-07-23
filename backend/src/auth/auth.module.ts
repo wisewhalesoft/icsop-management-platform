@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { SessionTokenService } from './session-token.service';
 import { SessionGuard } from './session.guard';
+import { PasswordLoginService } from './password-login.service';
 import { ACCOUNT_REPOSITORY } from './account-repository';
 import { TypeOrmAccountRepository } from './typeorm-account.repository';
 import { AppDataSource } from '../database/data-source';
@@ -20,6 +21,11 @@ import { sessionSecret } from './session.config';
     {
       provide: ACCOUNT_REPOSITORY,
       useFactory: () => new TypeOrmAccountRepository(AppDataSource),
+    },
+    {
+      provide: PasswordLoginService,
+      useFactory: (repo, tokens) => new PasswordLoginService(repo, tokens),
+      inject: [ACCOUNT_REPOSITORY, SessionTokenService],
     },
     SessionGuard,
   ],
