@@ -1,5 +1,5 @@
 # F022: 後台開啟前台瀏覽頁
-Priority: P2 | Status: Draft | Last Updated: 2026-07-15
+Priority: P2 | Status: 已實作（unit 綠；新視窗入口＋封鎖 fallback，真瀏覽器分頁行為＝[integration]，見 implementation-logs/public-F019-F022-impl.md） | Last Updated: 2026-07-23
 Epic/Story: E06 / US-056（Phase 2）
 
 ## Description

@@ -5,12 +5,18 @@
  * ⚠ JSON 序列化後 Date → ISO 字串，故時間欄位型別為 string。
  */
 
-/** GET /auth/me 回傳。 */
+/**
+ * GET /auth/me 回傳。orgCode/name/employeeNo 由 SessionGuard 每請求以 DB 現行值填入
+ * （PII 不進 JWT），供前台置頂（依部門）與浮水印身分快照；未經 guard 時可能缺，故選填。
+ */
 export interface SessionUser {
   loginId: string;
   email: string;
   companyCode: string;
   roleCode?: string;
+  orgCode?: string | null;
+  name?: string | null;
+  employeeNo?: string | null;
 }
 
 /** 帳號管理檢視（GET/POST/PATCH /admin/accounts；鏡射後端 accounts.store AccountView）。 */
@@ -153,6 +159,63 @@ export interface AccessHistoryFilters {
   from?: string;
   to?: string;
   page?: number;
+}
+
+// ===== E06 前台瀏覽（F019/F020/F021） =====
+
+/** 前台清單顯示狀態（前台恆為 announced）。 */
+export type PublicDisplayStatus = 'announced' | 'in_progress' | 'inactive' | 'void';
+
+/** 前台清單項（GET /public/documents；鏡射後端 PublicListItemDto）。 */
+export interface PublicListItem {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+  lifecycleId: string;
+  lifecycleName: string | null;
+  draftingDeptId: string | null;
+  draftingDeptName: string | null;
+  usingDeptIds: string[];
+  usingDeptNames: string[];
+  status: DocumentStatus;
+  displayStatus: PublicDisplayStatus;
+  announcedDate: string | null;
+  contentSummary: string | null;
+  /** 是否屬使用者部門相關（置頂區）。 */
+  pinned: boolean;
+}
+
+/** 前台清單分頁結果。 */
+export interface PublicListPage {
+  items: PublicListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasNext: boolean;
+}
+
+/** 前台清單篩選（皆選填）。 */
+export interface PublicListFilters {
+  keyword?: string;
+  /** 選定組織單位 orgCode（任意層級，後端自動展開子樹）。 */
+  deptCode?: string;
+  lifecycleId?: string;
+  status?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** 組織單位（GET /org-units；鏡射後端 OrgUnitRecord，供前台部門篩選下拉）。 */
+export interface OrgUnitRecord {
+  companyCode: string;
+  orgCode: string;
+  codePrefix: string;
+  parentCode: string | null;
+  tier: string;
+  name: string;
+  descFull: string | null;
+  managerEmpNo: string | null;
+  isActive: boolean;
 }
 
 export type TriggerType = 'scheduled' | 'manual';

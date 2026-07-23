@@ -17,6 +17,11 @@ export interface BlobStore {
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
   getDownloadUrl(key: string, ttlSeconds: number): Promise<string>;
+  /**
+   * 讀取 blob 位元組（後端代理／伺服器端浮水印燒錄之來源，F020）。查無 → null。
+   * ICSOP_PDF 走代理模式（架構 §5.2，不核發 SAS）故需伺服器端讀取原始位元組。
+   */
+  getBytes(key: string): Promise<Buffer | null>;
 }
 
 /**

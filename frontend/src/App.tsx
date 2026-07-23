@@ -15,7 +15,8 @@ import { DocumentCreatePage } from './pages/DocumentCreatePage';
 import { PermissionMatrixPage } from './pages/PermissionMatrixPage';
 import { AccessHistoryPage } from './pages/AccessHistoryPage';
 import { ModulePlaceholder } from './pages/ModulePlaceholder';
-import { PublicPlaceholder } from './pages/PublicPlaceholder';
+import { PublicListPage } from './pages/PublicListPage';
+import { PublicViewerPage } from './pages/PublicViewerPage';
 
 /** 全頁載入狀態（等待 /auth/me）。 */
 function FullPageLoading(): JSX.Element {
@@ -78,7 +79,8 @@ export function AppRoutes(): JSX.Element {
   return (
     <Routes>
       <Route path="/" element={<RoleLanding />} />
-      <Route path="/public" element={<PublicPlaceholder />} />
+      <Route path="/public" element={<PublicListPage />} />
+      <Route path="/public/documents/:id" element={<PublicViewerPage />} />
       <Route element={<AdminGuard />}>
         <Route path="/admin" element={<AppShell />}>
           <Route index element={<DashboardHome />} />

@@ -1,5 +1,5 @@
 # F020: 文件浮水印（網頁疊加＋下載/列印燒錄）
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-20
+Priority: P0-MVP | Status: 部分（unit 綠；快照/稽核/端點完成，真實 CJK PDF 燒錄待 [integration]，見 implementation-logs/public-F019-F022-impl.md） | Last Updated: 2026-07-23
 Epic/Story: E06 / US-053, US-054
 
 > 合併理由：網頁檢視器疊加（US-053）與下載/列印 PDF 燒錄（US-054）共用同一浮水印內容產生邏輯與稽核觸發，須格式完全一致。
