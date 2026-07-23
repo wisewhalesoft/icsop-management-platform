@@ -81,6 +81,8 @@ class FakeStore implements DocumentStore {
       status: 'active',
       documentNumber: 'N-1',
       documentName: '文件',
+      secondaryChiefIds: [],
+      usingDeptIds: [],
       ...over,
     };
     this.docs.push(d);
@@ -93,7 +95,13 @@ class FakeStore implements DocumentStore {
   create(input: CreateDocumentInput): Promise<DocumentView> {
     if (this.createError) return Promise.reject(this.createError);
     this.created.push(input);
-    const d = { id: `doc-${this.seq++}`, nodeId: null, ...input };
+    const d: DocumentView = {
+      id: `doc-${this.seq++}`,
+      nodeId: null,
+      ...input,
+      secondaryChiefIds: input.secondaryChiefIds ?? [],
+      usingDeptIds: input.usingDeptIds ?? [],
+    };
     this.docs.push(d);
     return Promise.resolve(d);
   }
@@ -224,6 +232,92 @@ describe('DocumentsService.create（F010＋F013＋F026）', () => {
       expect(page.items).toHaveLength(1);
       expect(page.items[0].status).toBe('active');
     });
+  });
+});
+
+describe('DocumentsService.create 制定組織/當責室長/使用部門（F014 create-side）', () => {
+  let store: FakeStore;
+  let svc: DocumentsService;
+  beforeEach(() => {
+    store = new FakeStore();
+    svc = new DocumentsService(store);
+  });
+
+  it('F014-C1 ICSOPAdmin 建立含制定三級＋主要室長＋2 次要＋2 使用部門 → 全部落地並回傳', async () => {
+    const view = await svc.create('ICSOPAdmin', {
+      ...CORE,
+      draftingCompanyId: '00000',
+      draftingDeptId: 'A2000',
+      draftingSectionId: 'A2100',
+      primaryChiefId: '20050',
+      secondaryChiefIds: ['20053', '20541'],
+      usingDeptIds: ['A2000', 'B0000'],
+    });
+    // 純量制定組織/主要室長
+    expect(store.created[0].draftingCompanyId).toBe('00000');
+    expect(store.created[0].draftingDeptId).toBe('A2000');
+    expect(store.created[0].draftingSectionId).toBe('A2100');
+    expect(store.created[0].primaryChiefId).toBe('20050');
+    // 多值傳入 store
+    expect(store.created[0].secondaryChiefIds).toEqual(['20053', '20541']);
+    expect(store.created[0].usingDeptIds).toEqual(['A2000', 'B0000']);
+    // 回傳檢視含多值
+    expect(view.secondaryChiefIds).toEqual(['20053', '20541']);
+    expect(view.usingDeptIds).toEqual(['A2000', 'B0000']);
+  });
+
+  it('F014-C2 多值正規化：去空白/去空字串/去重（保留順序）後才落地', async () => {
+    await svc.create('ICSOPAdmin', {
+      ...CORE,
+      secondaryChiefIds: ['20053', ' 20053 ', '', '20541'],
+      usingDeptIds: ['A2000', 'A2000', '  '],
+    });
+    expect(store.created[0].secondaryChiefIds).toEqual(['20053', '20541']);
+    expect(store.created[0].usingDeptIds).toEqual(['A2000']);
+  });
+
+  it('F014-C3 未提供多值欄位 → 回傳空集合（次要室長/使用部門允許為空）', async () => {
+    const view = await svc.create('ICSOPAdmin', { ...CORE });
+    expect(view.secondaryChiefIds).toEqual([]);
+    expect(view.usingDeptIds).toEqual([]);
+    expect(store.created[0].secondaryChiefIds).toEqual([]);
+    expect(store.created[0].usingDeptIds).toEqual([]);
+  });
+
+  it('F014-C4 非 ICSOPAdmin 寫次要室長 → FIELD_WRITE_FORBIDDEN、未落地（F026）', async () => {
+    await expect(
+      svc.create('SysAdmin', { ...CORE, secondaryChiefIds: ['20053'] }),
+    ).rejects.toThrow('FIELD_WRITE_FORBIDDEN');
+    expect(store.created).toHaveLength(0);
+  });
+
+  it('F014-C5 非 ICSOPAdmin 寫使用部門 → FIELD_WRITE_FORBIDDEN（F026）', async () => {
+    await expect(
+      svc.create('Supervisor', { ...CORE, usingDeptIds: ['A2000'] }),
+    ).rejects.toThrow('FIELD_WRITE_FORBIDDEN');
+  });
+
+  it('F014-C6 建立後 getDocument 回傳制定組織＋次要室長＋使用部門（供編輯頁載入）', async () => {
+    const created = await svc.create('ICSOPAdmin', {
+      ...CORE,
+      draftingCompanyId: '00000',
+      draftingDeptId: 'A2000',
+      secondaryChiefIds: ['20053'],
+      usingDeptIds: ['A2000', 'B0000'],
+    });
+    const view = await svc.getDocument(created.id);
+    expect(view.draftingCompanyId).toBe('00000');
+    expect(view.draftingDeptId).toBe('A2000');
+    expect(view.secondaryChiefIds).toEqual(['20053']);
+    expect(view.usingDeptIds).toEqual(['A2000', 'B0000']);
+  });
+
+  it('F014-C7 編輯路徑不持久化多值（create-side only）：patch 之次要室長被剔除、不進 store.update', async () => {
+    const d = store.seedDoc({ documentName: '舊', secondaryChiefIds: ['20053'] });
+    await svc.update('ICSOPAdmin', d.id, { documentName: '新', secondaryChiefIds: ['99999'], usingDeptIds: ['X'] });
+    expect(store.updated).toHaveLength(1);
+    expect(store.updated[0].patch).not.toHaveProperty('secondaryChiefIds');
+    expect(store.updated[0].patch).not.toHaveProperty('usingDeptIds');
   });
 });
 

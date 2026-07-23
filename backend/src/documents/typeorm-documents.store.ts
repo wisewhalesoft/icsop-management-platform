@@ -1,6 +1,9 @@
-import { DataSource, In, SelectQueryBuilder } from 'typeorm';
+import { DataSource, EntityManager, In, SelectQueryBuilder } from 'typeorm';
 import { IcsopDocument } from '../database/entities/icsop-document.entity';
+import { DocSecondaryChief } from '../database/entities/doc-secondary-chief.entity';
+import { DocUsingDept } from '../database/entities/doc-using-dept.entity';
 import { Lifecycle } from '../database/entities/lifecycle.entity';
+import { normalizeIdList } from './document-org-fields';
 import { NumberHolder } from './document-rules';
 import { DocumentStatus, isValidStatus } from './document-status';
 import { DEFAULT_PAGE_SIZE } from './document-list-query';
@@ -67,7 +70,11 @@ export class TypeOrmDocumentStore implements DocumentStore {
     return this.ds;
   }
 
-  private static toView(d: IcsopDocument): DocumentView {
+  private static toView(
+    d: IcsopDocument,
+    secondaryChiefIds: string[],
+    usingDeptIds: string[],
+  ): DocumentView {
     return {
       id: d.id,
       status: d.status as DocumentStatus,
@@ -79,9 +86,28 @@ export class TypeOrmDocumentStore implements DocumentStore {
       draftingDeptId: d.draftingDeptId,
       draftingSectionId: d.draftingSectionId,
       primaryChiefId: d.primaryChiefId,
+      secondaryChiefIds,
+      usingDeptIds,
       edition: d.edition,
       announcedDate: d.announcedDate,
       contentSummary: d.contentSummary,
+    };
+  }
+
+  /** 載入某文件之多值集合（F014）；以插入序回傳（id 為 NEWSEQUENTIALID，近似插入序）。 */
+  private static async loadMultiValue(
+    m: DataSource | EntityManager,
+    documentId: string,
+  ): Promise<{ secondaryChiefIds: string[]; usingDeptIds: string[] }> {
+    const chiefs = await m
+      .getRepository(DocSecondaryChief)
+      .find({ where: { documentId }, order: { id: 'ASC' } });
+    const depts = await m
+      .getRepository(DocUsingDept)
+      .find({ where: { documentId }, order: { id: 'ASC' } });
+    return {
+      secondaryChiefIds: chiefs.map((c) => c.employeeNo),
+      usingDeptIds: depts.map((d) => d.orgCode),
     };
   }
 
@@ -99,27 +125,49 @@ export class TypeOrmDocumentStore implements DocumentStore {
 
   async create(input: CreateDocumentInput): Promise<DocumentView> {
     const ds = await this.init();
-    const repo = ds.getRepository(IcsopDocument);
     const now = new Date();
-    const saved = await repo.save(
-      repo.create({
-        status: input.status,
-        documentNumber: input.documentNumber,
-        documentName: input.documentName,
-        lifecycleId: input.lifecycleId,
-        draftingCompanyId: input.draftingCompanyId ?? null,
-        draftingDeptId: input.draftingDeptId ?? null,
-        draftingSectionId: input.draftingSectionId ?? null,
-        primaryChiefId: input.primaryChiefId ?? null,
-        edition: input.edition ?? null,
-        announcedDate: coerceDate(input.announcedDate),
-        contentSummary: input.contentSummary ?? null,
-        nodeId: null,
-        createdAt: now,
-        updatedAt: now,
-      }),
-    );
-    return TypeOrmDocumentStore.toView(saved);
+    // F014 多值正規化（防禦性；service 已正規化，直呼此 store 亦安全）。
+    const secondaryChiefIds = normalizeIdList(input.secondaryChiefIds);
+    const usingDeptIds = normalizeIdList(input.usingDeptIds);
+
+    // 文件本體 + 多值列於同一交易寫入（多值列數為個位數，無 2100 參數上限風險）。
+    const saved = await ds.transaction(async (m) => {
+      const repo = m.getRepository(IcsopDocument);
+      const doc = await repo.save(
+        repo.create({
+          status: input.status,
+          documentNumber: input.documentNumber,
+          documentName: input.documentName,
+          lifecycleId: input.lifecycleId,
+          draftingCompanyId: input.draftingCompanyId ?? null,
+          draftingDeptId: input.draftingDeptId ?? null,
+          draftingSectionId: input.draftingSectionId ?? null,
+          primaryChiefId: input.primaryChiefId ?? null,
+          edition: input.edition ?? null,
+          announcedDate: coerceDate(input.announcedDate),
+          contentSummary: input.contentSummary ?? null,
+          nodeId: null,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      );
+      if (secondaryChiefIds.length > 0) {
+        await m.getRepository(DocSecondaryChief).save(
+          secondaryChiefIds.map((employeeNo) =>
+            m.getRepository(DocSecondaryChief).create({ documentId: doc.id, employeeNo }),
+          ),
+        );
+      }
+      if (usingDeptIds.length > 0) {
+        await m.getRepository(DocUsingDept).save(
+          usingDeptIds.map((orgCode) =>
+            m.getRepository(DocUsingDept).create({ documentId: doc.id, orgCode }),
+          ),
+        );
+      }
+      return doc;
+    });
+    return TypeOrmDocumentStore.toView(saved, secondaryChiefIds, usingDeptIds);
   }
 
   /**
@@ -198,7 +246,9 @@ export class TypeOrmDocumentStore implements DocumentStore {
   async findById(id: string): Promise<DocumentView | null> {
     const ds = await this.init();
     const d = await ds.getRepository(IcsopDocument).findOne({ where: { id } });
-    return d ? TypeOrmDocumentStore.toView(d) : null;
+    if (!d) return null;
+    const mv = await TypeOrmDocumentStore.loadMultiValue(ds, id);
+    return TypeOrmDocumentStore.toView(d, mv.secondaryChiefIds, mv.usingDeptIds);
   }
 
   async updateStatus(id: string, status: DocumentStatus): Promise<void> {
@@ -234,6 +284,8 @@ export class TypeOrmDocumentStore implements DocumentStore {
     await repo.update({ id }, set);
     const row = await repo.findOne({ where: { id } });
     if (!row) throw new Error('DOCUMENT_NOT_FOUND');
-    return TypeOrmDocumentStore.toView(row);
+    // F014 多值於編輯路徑不變更（create-side only）；讀回現有集合以回傳完整檢視。
+    const mv = await TypeOrmDocumentStore.loadMultiValue(ds, id);
+    return TypeOrmDocumentStore.toView(row, mv.secondaryChiefIds, mv.usingDeptIds);
   }
 }

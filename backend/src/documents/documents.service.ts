@@ -23,6 +23,7 @@ import { NameResolutionService } from '../org-directory/name-resolution.service'
 import { missingRequired, isNumberAvailable } from './document-rules';
 import { isValidStatus, DocumentStatus } from './document-status';
 import { classifyFields } from './document-field-write';
+import { normalizeIdList } from './document-org-fields';
 import { isUniqueConstraintViolation } from './db-error';
 import { normalizeReason } from './status-reason';
 import {
@@ -98,10 +99,13 @@ export class DocumentsService {
       throw new ConflictException('DOCUMENT_NUMBER_DUPLICATE');
     }
 
+    // F014 多值欄位（次要室長 employeeNo／使用部門 orgCode）：正規化為明確集合（可空）後落地。
     const input: CreateDocumentInput = {
       ...(clean as Omit<CreateDocumentInput, 'status'>),
       status: status as DocumentStatus,
       documentNumber,
+      secondaryChiefIds: normalizeIdList(clean.secondaryChiefIds),
+      usingDeptIds: normalizeIdList(clean.usingDeptIds),
     };
     // F013 併發第二保險：DB filtered unique index 違反 → 映射 409（不洩漏原始 DB 訊息）。
     try {
@@ -189,6 +193,11 @@ export class DocumentsService {
       if (EDIT_READONLY_PROPS.has(k)) continue; // 編輯端唯讀（nodeId）
       if (!ignored.includes(k)) clean[k] = v;
     }
+
+    // 1a) F014 多值欄位（次要室長／使用部門）之編輯端持久化屬 F014 編輯頁範圍（本輪 create-side only）：
+    //     此處自 clean 剔除，避免以純量覆寫路徑誤寫或產生偽 diff（功能面 FORBIDDEN 已於上方 classifyFields 攔截）。
+    delete clean.secondaryChiefIds;
+    delete clean.usingDeptIds;
 
     // 1b) F015 連結點（決策：隨 PATCH 整批送出）：自 clean 抽出 links（非純量欄，另走連結 store）。
     let linkTargetIds: string[] | undefined;

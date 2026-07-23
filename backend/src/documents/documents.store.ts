@@ -10,10 +10,16 @@ export interface CreateDocumentInput {
   status: DocumentStatus;
   documentNumber: string;
   documentName: string;
+  /** 制定公司/部門/室別＝ORG_UNIT.orgCode（業務鍵，非 UUID；與名稱解析 findByOrgCode 一致，F014）。 */
   draftingCompanyId?: string | null;
   draftingDeptId?: string | null;
   draftingSectionId?: string | null;
+  /** 當責室長-主要＝員工編號（employeeNo）。 */
   primaryChiefId?: string | null;
+  /** F014 多值：當責室長-次要（employeeNo 集合，DOC_SECONDARY_CHIEF；允許為空）。 */
+  secondaryChiefIds?: string[] | null;
+  /** F014 多值：文件使用部門（ORG_UNIT.orgCode 集合，DOC_USING_DEPT；允許為空）。 */
+  usingDeptIds?: string[] | null;
   edition?: string | null;
   announcedDate?: Date | null;
   contentSummary?: string | null;
@@ -22,6 +28,9 @@ export interface CreateDocumentInput {
 export interface DocumentView extends CreateDocumentInput {
   id: string;
   nodeId: string | null;
+  /** F014：單筆讀取一律回明確集合（可為空陣列），供編輯頁載入次要室長/使用部門。 */
+  secondaryChiefIds: string[];
+  usingDeptIds: string[];
 }
 
 /** F011 編輯：可覆寫之業務欄位子集（部分更新；nodeId 不在此，節點寫入僅經 F009 抽屜）。 */
