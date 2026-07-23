@@ -1,5 +1,5 @@
 # F016: PDF 與 OJT 附件上傳
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-15
+Priority: P0-MVP | Status: Backend Implemented（unit-green；Azure Blob/multipart 為 [integration] 延後） | Last Updated: 2026-07-23
 Epic/Story: E04 / US-036
 
 ## Description

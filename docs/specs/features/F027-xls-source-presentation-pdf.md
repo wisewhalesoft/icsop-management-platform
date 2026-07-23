@@ -1,5 +1,5 @@
 # F027: .xls 原件保存（RAG 內容來源）
-Priority: P0-MVP | Status: Draft | Phase: 1 | Last Updated: 2026-07-17
+Priority: P0-MVP | Status: Backend Implemented（unit-green；.xls 二進位解析/Azure Blob 為 [integration] 延後） | Phase: 1 | Last Updated: 2026-07-23
 Epic/Story: E09 / US-090
 
 > 雙軌 ingestion 之**軌道 A（權威原件）**入口：保存可再編輯的 .xls 原始檔，作為抽取管線（[F028](F028-template-aware-extraction.md)）之內容來源。

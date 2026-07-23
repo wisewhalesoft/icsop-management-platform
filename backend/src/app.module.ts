@@ -8,6 +8,9 @@ import { AccountsModule } from './accounts/accounts.module';
 import { LifecycleModule } from './lifecycle/lifecycle.module';
 import { DocumentsModule } from './documents/documents.module';
 import { AuditModule } from './audit/audit.module';
+import { AttachmentsModule } from './attachments/attachments.module';
+import { XlsSourceModule } from './xls-source/xls-source.module';
+import { UsageFormsModule } from './usage-forms/usage-forms.module';
 
 @Module({
   imports: [
@@ -22,6 +25,9 @@ import { AuditModule } from './audit/audit.module';
     LifecycleModule,
     DocumentsModule,
     AuditModule,
+    AttachmentsModule,
+    XlsSourceModule,
+    UsageFormsModule,
   ],
   controllers: [AppController],
 })
