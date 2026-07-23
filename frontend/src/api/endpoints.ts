@@ -16,6 +16,9 @@ import type {
   AccessHistoryFilters,
   AccessHistoryPage,
   AccessHistoryRow,
+  PublicListFilters,
+  PublicListPage,
+  OrgUnitRecord,
 } from './types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -296,4 +299,27 @@ export function exportAccessHistory(
   return apiFetch<{ rows: AccessHistoryRow[]; total: number }>(
     `/admin/access-history/export${accessHistoryQuery(f)}`,
   );
+}
+
+// ===== E06 前台瀏覽（F019） =====
+
+/**
+ * GET /public/documents（前台清單，全 5 角色 READ；排序/篩選/分頁皆後端權威）。
+ * 401 → 未登入（SPA 全域 gating 導回登入）。
+ */
+export function getPublicDocuments(f: PublicListFilters = {}): Promise<PublicListPage> {
+  const qs = new URLSearchParams();
+  if (f.keyword) qs.set('keyword', f.keyword);
+  if (f.deptCode) qs.set('deptCode', f.deptCode);
+  if (f.lifecycleId) qs.set('lifecycleId', f.lifecycleId);
+  if (f.status) qs.set('status', f.status);
+  if (f.page) qs.set('page', String(f.page));
+  if (f.pageSize) qs.set('pageSize', String(f.pageSize));
+  const q = qs.toString();
+  return apiFetch<PublicListPage>(`/public/documents${q ? `?${q}` : ''}`);
+}
+
+/** GET /org-units（組織單位清單，全 5 角色 READ；供前台部門篩選下拉之 5 層樹來源）。 */
+export function getOrgUnits(): Promise<OrgUnitRecord[]> {
+  return apiFetch<OrgUnitRecord[]>('/org-units');
 }
