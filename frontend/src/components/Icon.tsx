@@ -6,7 +6,8 @@ import {
   Search, PanelsTopLeft, LayoutDashboard, CheckCircle2, X, Plus, Inbox,
   RotateCw, GitBranch, CircleDot, FileCheck2, FileX2, GitCommitVertical,
   PlusCircle, Filter, FilePlus2, Paperclip, Save, Lock, Trash2,
-  Download, Globe, UserSearch, FileSearch, FileBadge, Stamp, type LucideIcon,
+  Download, Globe, UserSearch, FileSearch, FileBadge, Stamp,
+  GitFork, ZoomIn, ZoomOut, Maximize, Printer, type LucideIcon,
 } from 'lucide-react';
 
 /**
@@ -69,6 +70,11 @@ const REGISTRY: Record<string, LucideIcon> = {
   'file-search': FileSearch,
   'file-badge': FileBadge,
   stamp: Stamp,
+  'git-fork': GitFork,
+  'zoom-in': ZoomIn,
+  'zoom-out': ZoomOut,
+  maximize: Maximize,
+  printer: Printer,
 };
 
 export interface IconProps {

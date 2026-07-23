@@ -1,10 +1,33 @@
-import { LifecycleService } from './lifecycle.service';
+import { LifecycleService, LifecycleAuditActor } from './lifecycle.service';
 import {
   LifecycleStore,
   LifecycleView,
   CreateLifecycleInput,
   UpdateLifecyclePatch,
 } from './lifecycle.store';
+import { AuditAccessEvent, AuditWriter } from '../audit/audit.types';
+
+class FakeAudit implements AuditWriter {
+  events: AuditAccessEvent[] = [];
+  shouldThrow = false;
+  recordAccess(event: AuditAccessEvent): Promise<void> {
+    this.events.push(event);
+    return this.shouldThrow ? Promise.reject(new Error('AUDIT_IO')) : Promise.resolve();
+  }
+  queryHistory(): never {
+    throw new Error('n/a');
+  }
+  processOutboxRetry(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+const ACTOR: LifecycleAuditActor = {
+  actorId: 'AS22455',
+  actorName: '李慧玲',
+  employeeNo: 'E001',
+  roleCode: 'ICSOPAdmin',
+};
 
 class FakeStore implements LifecycleStore {
   seq = 1;
@@ -112,6 +135,57 @@ describe('LifecycleService（F007）', () => {
     });
     it('不存在 → LIFECYCLE_NOT_FOUND', async () => {
       await expect(svc.deleteLifecycle('nope')).rejects.toThrow('LIFECYCLE_NOT_FOUND');
+    });
+  });
+
+  describe('deleteLifecycle 稽核（F007 Main Flow 4「刪除並記錄稽核」）', () => {
+    const T0 = new Date('2026-07-23T02:00:00Z');
+    let audit: FakeAudit;
+    let auditSvc: LifecycleService;
+    beforeEach(() => {
+      audit = new FakeAudit();
+      auditSvc = new LifecycleService(store, audit, () => T0);
+    });
+
+    it('成功刪除（無掛載）→ 記一筆 LIFECYCLE_DELETE：targetType=LIFECYCLE、targetId=id、名稱快照、操作者', async () => {
+      const lc = store.seed({ name: '待刪循環' });
+      await auditSvc.deleteLifecycle(lc.id, ACTOR);
+      expect(store.deleted).toContain(lc.id);
+      expect(audit.events).toHaveLength(1);
+      const ev = audit.events[0];
+      expect(ev.targetType).toBe('LIFECYCLE');
+      expect(ev.actionType).toBe('LIFECYCLE_DELETE');
+      expect(ev.targetId).toBe(lc.id);
+      expect(ev.targetNumber).toBe('待刪循環');
+      expect(ev.actorId).toBe('AS22455');
+      expect(ev.occurredAt).toBe(T0);
+    });
+
+    it('仍有掛載被拒 → 不刪除、不記稽核', async () => {
+      const lc = store.seed({});
+      store.docCounts[lc.id] = 2;
+      await expect(auditSvc.deleteLifecycle(lc.id, ACTOR)).rejects.toThrow('LIFECYCLE_HAS_DOCUMENTS');
+      expect(audit.events).toHaveLength(0);
+    });
+
+    it('稽核寫入失敗 → 不阻斷刪除（刪除仍成功）', async () => {
+      audit.shouldThrow = true;
+      const lc = store.seed({});
+      await expect(auditSvc.deleteLifecycle(lc.id, ACTOR)).resolves.toBeUndefined();
+      expect(store.deleted).toContain(lc.id);
+    });
+
+    it('未提供 actor → 不記稽核（無法歸屬），刪除仍成功', async () => {
+      const lc = store.seed({});
+      await auditSvc.deleteLifecycle(lc.id);
+      expect(store.deleted).toContain(lc.id);
+      expect(audit.events).toHaveLength(0);
+    });
+
+    it('無 AuditWriter（既有 new LifecycleService(store)）→ 刪除不受影響', async () => {
+      const lc = store.seed({});
+      await svc.deleteLifecycle(lc.id, ACTOR);
+      expect(store.deleted).toContain(lc.id);
     });
   });
 });

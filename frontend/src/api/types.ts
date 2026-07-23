@@ -69,6 +69,14 @@ export interface DagGraph {
   edges: DagEdge[];
 }
 
+/** F036 循環樹狀圖預覽（GET /admin/lifecycles/:id/tree-preview）。 */
+export interface LifecycleTreePreview {
+  lifecycle: { id: string; name: string };
+  graph: DagGraph;
+  /** 伺服器端組裝之浮水印快照（與稽核、下載/列印燒錄一致；前端不可自組）。 */
+  watermark: string;
+}
+
 /** F009 節點抽屜資料。 */
 export interface DrawerDoc {
   id: string;

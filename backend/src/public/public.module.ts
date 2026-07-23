@@ -95,5 +95,7 @@ import { AttachmentPdfSource, TypeOrmDocMeta } from './typeorm-watermark.sources
       ],
     },
   ],
+  // F036 循環樹狀圖預覽逐字重用浮水印快照組裝（LifecycleModule imports PublicModule）。
+  exports: [WatermarkService],
 })
 export class PublicModule {}

@@ -1,5 +1,5 @@
 # F007: 循環池 CRUD
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-17
+Priority: P0-MVP | Status: 🟡 Implemented (unit-green; 建立→畫布導向＋刪除稽核收尾完成) | Last Updated: 2026-07-23
 Epic/Story: E03 / US-020
 
 ## Description

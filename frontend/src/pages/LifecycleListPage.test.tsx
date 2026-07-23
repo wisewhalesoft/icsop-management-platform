@@ -1,12 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { LifecycleListPage } from './LifecycleListPage';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import { ApiError } from '../api/client';
 import type { SessionUser, LifecycleView } from '../api/types';
+
+function LocationProbe() {
+  const loc = useLocation();
+  return <div data-testid="loc">{loc.pathname}</div>;
+}
+const renderWithLoc = () =>
+  render(
+    <MemoryRouter>
+      <LifecycleListPage />
+      <LocationProbe />
+    </MemoryRouter>,
+  );
 
 vi.mock('../api/endpoints');
 vi.mock('../auth/useAuth');
@@ -110,5 +122,49 @@ describe('LifecycleListPage — F007 循環池', () => {
     const row = screen.getByText('銷售及收款循環').closest('tr')!;
     await userEvent.click(within(row).getByRole('button', { name: '停用' }));
     await waitFor(() => expect(endpoints.setLifecycleStatus).toHaveBeenCalledWith('lc1', 'inactive'));
+  });
+
+  // ===== F007 收尾（a）新增 → 導向 DAG 畫布編輯頁 =====
+  it('新增循環成功 → 導向該循環 DAG 畫布（F007 AC）', async () => {
+    mockAuth('ICSOPAdmin');
+    vi.mocked(endpoints.createLifecycle).mockResolvedValue({
+      id: 'lcNew', name: '融資循環', description: null, status: 'active', nodeCount: 0, updatedAt: '2026-07-23T00:00:00.000Z',
+    });
+    renderWithLoc();
+    await waitFor(() => expect(screen.getByText('銷售及收款循環')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /新增循環/ }));
+    const dialog = screen.getByRole('dialog', { name: /新增循環/ });
+    await userEvent.type(within(dialog).getByLabelText(/循環名稱/), '融資循環');
+    await userEvent.click(within(dialog).getByRole('button', { name: '儲存' }));
+
+    await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/admin/lifecycles/lcNew/canvas'));
+  });
+
+  it('編輯循環成功 → 不導向（留在清單並重載）', async () => {
+    mockAuth('ICSOPAdmin');
+    vi.mocked(endpoints.updateLifecycle).mockResolvedValue({ ...LCS[0], name: '銷售及收款循環（改）' });
+    renderWithLoc();
+    await waitFor(() => expect(screen.getByText('銷售及收款循環')).toBeInTheDocument());
+
+    const row = screen.getByText('銷售及收款循環').closest('tr')!;
+    await userEvent.click(within(row).getByRole('button', { name: '編輯' }));
+    const dialog = screen.getByRole('dialog', { name: /編輯循環/ });
+    await userEvent.click(within(dialog).getByRole('button', { name: '儲存' }));
+
+    await waitFor(() => expect(endpoints.updateLifecycle).toHaveBeenCalled());
+    expect(screen.getByTestId('loc').textContent).toBe('/');
+  });
+
+  // ===== F036 入口（1）循環清單樹狀圖圖示 =====
+  it('每列樹狀圖圖示 → 開新分頁至 viewer 路由（唯讀，讀權即可見）', async () => {
+    mockAuth('Supervisor'); // 唯讀角色亦可見樹狀圖入口
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('銷售及收款循環')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /檢視「銷售及收款循環」樹狀圖預覽/ }));
+    expect(openSpy).toHaveBeenCalledWith('/lifecycles/lc1/tree', '_blank', 'noopener,noreferrer');
+    openSpy.mockRestore();
   });
 });

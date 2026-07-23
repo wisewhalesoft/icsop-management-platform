@@ -30,6 +30,10 @@ export type AuditActionType =
   | 'LIFECYCLE_VIEW'
   | 'LIFECYCLE_DOWNLOAD'
   | 'LIFECYCLE_PRINT'
+  // 循環刪除稽核（F007 Main Flow 4「刪除並記錄稽核」）。additive：僅新增字面值，不改既有變體，
+  // buildAuditRow 依 targetType 對映（LIFECYCLE→lifecycleId）故無需改邏輯。見 F007 impl log flag：
+  // OQ-E03-05 將「結構變更歷程」歸 F038，此處為 AUDIT_LOG 存取層之刪除紀錄（互補、非取代 F038）。
+  | 'LIFECYCLE_DELETE'
   | 'CHANGE_LOG_VIEW'
   | 'LIFECYCLE_CHANGELOG_VIEW'
   | 'LIFECYCLE_CHANGELOG_DOWNLOAD';
@@ -76,10 +80,17 @@ export interface UsageFormAuditEvent extends AuditEventBase {
   targetType: 'USAGE_FORM';
   actionType: 'VIEW' | 'DOWNLOAD' | 'PRINT';
 }
-/** 循環樹狀圖預覽（F036，浮水印動作）。targetId＝lifecycleId。 */
+/**
+ * 循環動作（F036 樹狀圖預覽之浮水印動作 VIEW/DOWNLOAD/PRINT，watermarkSnapshot 攜帶；
+ * 另 F007 之 LIFECYCLE_DELETE 為非浮水印之刪除紀錄，watermarkSnapshot 省略）。targetId＝lifecycleId。
+ */
 export interface LifecycleAuditEvent extends AuditEventBase {
   targetType: 'LIFECYCLE';
-  actionType: 'LIFECYCLE_VIEW' | 'LIFECYCLE_DOWNLOAD' | 'LIFECYCLE_PRINT';
+  actionType:
+    | 'LIFECYCLE_VIEW'
+    | 'LIFECYCLE_DOWNLOAD'
+    | 'LIFECYCLE_PRINT'
+    | 'LIFECYCLE_DELETE';
 }
 /** 文件變更歷程檢視（F037，無浮水印）。targetId＝documentId。 */
 export interface DocumentChangeLogAuditEvent extends AuditEventBase {

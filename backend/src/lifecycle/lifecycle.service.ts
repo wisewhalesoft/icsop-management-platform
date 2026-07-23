@@ -3,8 +3,11 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { AuditWriter } from '../audit/audit.types';
 import {
   LIFECYCLE_STORE,
   LifecycleStore,
@@ -12,13 +15,29 @@ import {
   LifecycleStatus,
 } from './lifecycle.store';
 
+/** 刪除稽核之操作者身分快照（來自 request context SessionUser；F007 Main Flow 4）。 */
+export interface LifecycleAuditActor {
+  actorId: string;
+  actorName?: string | null;
+  employeeNo?: string | null;
+  roleCode?: string | null;
+}
+
 /**
  * 循環池 CRUD（F007）。功能面 RBAC 由 controller guard（循環管理 write＝ICSOPAdmin）落實。
  * 刪除保護（OQ-E03-03）：仍有文件掛載 → LIFECYCLE_HAS_DOCUMENTS；停用不受此限。
+ * 刪除稽核（Main Flow 4）：成功刪除後記一筆 LIFECYCLE_DELETE（非阻斷；AuditWriter 為 @Optional，
+ * 未注入時靜默略過，保留既有 `new LifecycleService(store)` 單元建構）。
  */
 @Injectable()
 export class LifecycleService {
-  constructor(@Inject(LIFECYCLE_STORE) private readonly store: LifecycleStore) {}
+  private readonly logger = new Logger(LifecycleService.name);
+
+  constructor(
+    @Inject(LIFECYCLE_STORE) private readonly store: LifecycleStore,
+    @Optional() private readonly auditWriter?: AuditWriter,
+    @Optional() private readonly clock: () => Date = () => new Date(),
+  ) {}
 
   listLifecycles(): Promise<LifecycleView[]> {
     return this.store.list();
@@ -57,11 +76,43 @@ export class LifecycleService {
     return this.store.update(id, { status: status as LifecycleStatus });
   }
 
-  async deleteLifecycle(id: string): Promise<void> {
+  async deleteLifecycle(id: string, actor?: LifecycleAuditActor): Promise<void> {
     const existing = await this.store.findById(id);
     if (!existing) throw new NotFoundException('LIFECYCLE_NOT_FOUND');
     const mounted = await this.store.countMountedDocuments(id);
     if (mounted > 0) throw new ConflictException('LIFECYCLE_HAS_DOCUMENTS');
     await this.store.delete(id);
+    await this.auditDelete(existing, actor);
+  }
+
+  /**
+   * 記錄一筆循環刪除稽核（LIFECYCLE_DELETE）。非阻斷：稽核寫入失敗不使刪除回退（刪除已完成）。
+   * 無 AuditWriter（未注入）或無 actor（無法歸屬）時靜默略過。
+   */
+  private async auditDelete(
+    deleted: LifecycleView,
+    actor?: LifecycleAuditActor,
+  ): Promise<void> {
+    if (!this.auditWriter || !actor) return;
+    try {
+      await this.auditWriter.recordAccess({
+        targetType: 'LIFECYCLE',
+        actionType: 'LIFECYCLE_DELETE',
+        targetId: deleted.id,
+        actorId: actor.actorId,
+        actorName: actor.actorName ?? null,
+        employeeNo: actor.employeeNo ?? null,
+        roleCode: actor.roleCode ?? null,
+        targetNumber: deleted.name,
+        targetName: deleted.name,
+        occurredAt: this.clock(),
+      });
+    } catch (err) {
+      this.logger.error(
+        `循環刪除稽核記錄失敗（已吞，不阻斷刪除）lifecycle=${deleted.id}: ${
+          (err as Error)?.message
+        }`,
+      );
+    }
   }
 }
