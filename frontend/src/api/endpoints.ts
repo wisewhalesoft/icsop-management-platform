@@ -370,6 +370,14 @@ export function unlinkUsageForm(documentId: string, formId: string): Promise<voi
   });
 }
 
+/** GET /documents/:documentId/usage-forms/:formId/download（前後台共用；核發短效期 URL＋寫入稽核）。 */
+export function downloadUsageForm(
+  documentId: string,
+  formId: string,
+): Promise<{ url: string; expiresInSeconds: number }> {
+  return apiFetch(`/documents/${documentId}/usage-forms/${formId}/download`);
+}
+
 // ===== F009 節點抽屜（文件掛載） =====
 
 /** GET 節點抽屜資料（節點名＋已掛載＋候選文件，候選過濾為當前循環）。 */

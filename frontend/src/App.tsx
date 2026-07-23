@@ -12,6 +12,8 @@ import { LifecycleListPage } from './pages/LifecycleListPage';
 import { DagCanvasPage } from './pages/DagCanvasPage';
 import { DocumentListPage } from './pages/DocumentListPage';
 import { DocumentCreatePage } from './pages/DocumentCreatePage';
+import { DocumentEditPage } from './pages/DocumentEditPage';
+import { DocumentReadonlyPage } from './pages/DocumentReadonlyPage';
 import { PermissionMatrixPage } from './pages/PermissionMatrixPage';
 import { AccessHistoryPage } from './pages/AccessHistoryPage';
 import { DocIndexPage } from './pages/DocIndexPage';
@@ -93,6 +95,8 @@ export function AppRoutes(): JSX.Element {
           <Route path="lifecycles/:lifecycleId/canvas" element={<DagCanvasPage />} />
           <Route path="documents" element={<DocumentListPage />} />
           <Route path="documents/new" element={<DocumentCreatePage />} />
+          <Route path="documents/:id" element={<DocumentReadonlyPage />} />
+          <Route path="documents/:id/edit" element={<DocumentEditPage />} />
           <Route path="org-sync" element={<OrgSyncPage />} />
           <Route path="access-history" element={<AccessHistoryPage />} />
           <Route path="doc-index" element={<DocIndexPage />} />
