@@ -36,16 +36,18 @@
 
 | 狀態 | 數量 | 功能 |
 |---|---|---|
-| ✅ 已完成-已驗證 | **7** | F002 F003 F004 F008 F009 F013 F025 |
-| 🟡 部分 | **22** | F001 F005 F007 F010 F011 F012 F015 F016 F017 F018 F019 F020 F021 F022 F023 F024 F026 F027 F028 F029 F030 F031 |
-| 🔵 進行中 | **1** | F014 |
-| ⬜ 未開始 | **8** | F006 F036 F037 F038 F032 F033 F034 F035 |
+| ✅ 已完成-已驗證 | **9** | F002 F003 F004 F007 F008 F009 F013 F023 F025 |
+| 🟡 部分 | **22** | F001 F005 F010 F011 F012 F014 F015 F016 F017 F018 F019 F020 F021 F022 F024 F026 F027 F028 F029 F030 F031 F036 |
+| 🔵 進行中 | **0** | — |
+| ⬜ 未開始 | **7** | F006 F037 F038 F032 F033 F034 F035 |
 | | **38** | |
 
 > **2026-07-22 Wave 1 平行 worktree**（3 分支併回 main、unit-green）：F023/F024（audit）、F016/F018/F027（storage）⬜→🟡；F001 途徑B＋F003 閉環推進。backend 500／frontend 119。
 > **2026-07-22 Wave 2 平行 worktree**（org-foundation ＋ doc-edit/public/rag，4 分支併回 main、unit-green）：**org-foundation**（ACCOUNT 即在職員工目錄→名稱解析、ORG 讀取端點、DESC_FULL、session 擴充；權威來源 [upstream-person-org-source.md]，參考 portalapp-sp）解鎖名稱/身分。**10 功能 ⬜→🟡**：F011 F015（doc-edit）、F019 F020 F021 F022（public）、F028 F029 F030 F031（rag）；F012/F013/F017 補強。backend **816** 測、frontend **143** 測、tsc 全淨。
 >
 > **2026-07-22 整合階段 ②（真 SOP 自動化整合測試 `npm run test:int`）**：載具啟動完整 AppModule 接真 SOP、鑄 session、marker 清理。**5 場景綠**——**F003 死鏈閉合經真往返驗證**（建立手動帳號→`POST /auth/login`→`/auth/me`）＋錯誤密碼 401；F010 建立→F011 `GET/PATCH /:id` 編輯→F017 清單→**F013 重複編號 409（真 filtered unique index）**；F024 查詢 200。**→ F003、F013 升 ✅**（其餘 F001途徑B/F010/F011/F017/F024 後端流程 int-verified，但仍有 logout/STEP3-4/前端/匯出 等缺口留 🟡）。**🔴 整合實測發現**：F023 `AUDIT_LOG` best-effort `REVOKE` 對 role 授權之 app 登入**無效** → **目前非 append-only 強制**（UPDATE 可成功），需改 `DENY UPDATE,DELETE`／觸發器；已以 `it.failing` 記錄。
+>
+> **2026-07-23 地基三線平行 worktree（F014 org／storage Blob／lifecycle-e03）併回 main、int-verified**：**F023 append-only 改觸發器強制**（DENY 被 owner 繞過 → INSTEAD OF UPDATE,DELETE，int-verified）；**F014 制定組織/當責室長 create-side**（DOC_SECONDARY_CHIEF/DOC_USING_DEPT 表＋STEP3 表單，migration 落 SOP，int-verified）；**真 AzureBlobStore**（SAS＋multipart，真 dev Blob roundtrip int-verified）＋usage-forms→真 AuditWriter；**F036 樹狀圖預覽＋浮水印＋稽核**＋**F007 收尾**（導向畫布/刪除稽核）。**🔴 整合又揪一 bug**：`AUDIT_LOG.accountId` 為 uniqueidentifier 但 session 只帶 loginId → **所有稽核寫入 Invalid GUID 失敗**（unit 假 store 測不到）；修法 ACCOUNT.id 貫穿 session（→SessionUser.accountId）。**→ F007、F023 升 ✅；F014 🔵→🟡（create-side done）；F036 ⬜→🟡**。backend **864** 單元＋**test:int 6 suites/13 綠**、frontend 171、tsc 全淨。
 >
 > **2026-07-22 整合階段 ①（app-DB 落地＋啟動驗證）**：**12 個 migration 全數對真 SOP app DB 執行成功**（含 AUDIT_LOG/附件/DOC_SOURCE_XLS/USAGE_FORM/DOCUMENT_LINK/ORG_DESCFULL/INDEX_RUN/DOCUMENT_CHUNK＋F013 篩選唯一索引）。**整個 Wave 1+2 合併系統成功對 SOP 啟動**（`Nest application successfully started`；所有路由掛載；**real TypeORM stores** 皆接真庫：audit/documents+links/attachments(meta)/usage-forms/xls-source(meta)/org-directory/public）；HTTP smoke：守門 401、OIDC 登入 302（含 PKCE）。**仍為 fake**：ingestion/rag（FakeChunk/IndexRun/VectorStore，待 pgvector＋embedding 選型 OQ-E09-02）、Blob（FakeBlobStore，待 Azure 憑證）。**升 ✅ 尚缺**：各 feature AC 之逐流程 e2e（真人 UI 登入或自動化整合測試）——本階段已證「系統可對真庫啟動且路由/守門/DB store 皆接真」，個別流程驗證為下一步。
 
@@ -72,10 +74,10 @@
 ### E03 循環與 DAG
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F007 | 循環池 CRUD | P0 | 1 | 🟡 部分 | 核心 CRUD＋刪除保護已測；AC「建立後導向 DAG 畫布」未做（Modal 只關閉重載）；AC「刪除記錄稽核」未做（無 AUDIT_LOG） |
+| F007 | 循環池 CRUD | P0 | 1 | ✅ 已完成-已驗證 | 核心 CRUD＋刪除保護；**建立後導向 DAG 畫布**＋**刪除記錄稽核**（AuditWriter LIFECYCLE_DELETE）已補；建立/刪除 int-verified vs SOP |
 | F008 | DAG 節點與連線維護（含防環） | P0 | 1 | ✅ 已完成-已驗證 | 交易內成環再驗＝權威；僅服務層假 store 測、無整合測（碼正確） |
 | F009 | 節點抽屜維護與文件過濾警示 | P0 | 1 | ✅ 已完成-已驗證 | 邊界：雙管理員同時掛載無樂觀鎖（last-write-wins）；前端多筆存檔為非交易連續 API |
-| F036 | 循環樹狀圖預覽（唯讀＋浮水印） | P0 | 1 | ⬜ 未開始 | 整個唯讀檢視器、伺服端浮水印、角色可見性、循環切換、下游高亮、下載/列印燒錄 PDF 全缺（prototype 22 未移植） |
+| F036 | 循環樹狀圖預覽（唯讀＋浮水印） | P0 | 1 | 🟡 部分 | unit＋int-verified：唯讀檢視器（移植 prototype 22）＋伺服端浮水印（複用 F020）＋角色可見性＋循環切換＋下游高亮＋VIEW/DOWNLOAD/PRINT 稽核（LIFECYCLE_VIEW int-verified）。剩：**CJK 燒錄字型**（真中文，＝`[integration]`）、F017 詳情入口 |
 
 ### E04 ICSOP 文件
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
@@ -84,7 +86,7 @@
 | F011 | 編輯 ICSOP 文件與版本對照 | P0 | 1 | 🟡 部分 | backend unit-green：`GET`/`PATCH /:id`、編輯排除 nodeId、版本 diff、覆蓋不留歷史、編輯側唯一性排除自身、`DocumentChangedEvent` 種子。剩：**前端編輯頁**、真 DB＝`[integration]` |
 | F012 | 文件狀態切換 | P0 | 1 | 🟡 部分 | 切換＋切回有效重驗編號已測；OQ-E04-02「切換原因」欄未做；變更歷程 F037 事件＋操作者稽核未做 |
 | F013 | 文件編號唯一性管理 | P0 | 1 | ✅ 已完成-已驗證 | 建立唯一性經**真 filtered unique index int-verified vs SOP**（dup→409）；編輯側排除自身＋mssql 2601/2627→409 於 F011 路徑 unit-covered |
-| F014 | 制定組織與當責室長設定 | P0 | 1 | 🔵 進行中 | scalar 欄位骨架已存；**org-foundation 已備**（`OrgDirectoryService` 級聯樹＋`NameResolutionService` 室長名）→ 前置解鎖。剩：制定組織三級下拉接線、次要室長/使用部門關聯表、managerEmpNo 預設候選、UI（現 disabled 佔位） |
+| F014 | 制定組織與當責室長設定 | P0 | 1 | 🟡 部分 | **create-side 完成＋int-verified**：三級下拉（`OrgDirectoryService`）＋當責室長主/次（`NameResolution`＋managerEmpNo 預設）＋使用部門，`DOC_SECONDARY_CHIEF`/`DOC_USING_DEPT` 表（migration 落 SOP）。剩：edit-side（隨 F011 前端編輯頁） |
 | F015 | 文件連結點管理 | P1 | 1 | 🟡 部分 | backend unit-green：`DOCUMENT_LINK` 表、批次入 PATCH、`GET :id/links`、`DOCUMENT_LINK_TARGET_NOT_FOUND`。剩：**前端連結 UI**、FK/唯一併發＝`[integration]` |
 | F016 | PDF 與 OJT 附件上傳 | P0 | 1 | 🟡 部分 | backend unit-green：Blob 抽象（`BlobStore`＋FakeBlobStore）、`DOCUMENT_ATTACHMENT`、兩層授權、格式白名單≤50MB、單份覆蓋、受控下載。剩：**前端上傳 UI**、真 Azure Blob＋migration＝`[integration]` |
 | F017 | 後台文件清單與搜尋 | P0 | 1 | 🟡 部分 | backend 補強 unit-green：多篩選/排序/**真分頁**（回傳 `{items,total,…}`）＋**室長/組織名稱解析**（org-foundation）＋衍生狀態篩選。剩：**前端分頁/combobox/欄位 UI 接線**（後端契約已備）、真 join 效能＝`[integration]` |
@@ -105,7 +107,7 @@
 ### E07 稽核與變更歷程
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F023 | 稽核軌跡記錄 | P0 | 1 | 🟡 部分 | unit-green：`AuditWriter` 契約（5 targetType，下游 import）、outbox。migration 落 SOP。**✅ append-only 真強制＋int-verified**（INSTEAD OF 觸發器阻擋 UPDATE/DELETE，對 owner/sysadmin 亦生效；REVOKE/DENY 曾被 owner 繞過）。剩：view/download→audit row 寫入路徑 e2e（隨 F020）、usage-forms 佔位改接真 AuditWriter |
+| F023 | 稽核軌跡記錄 | P0 | 1 | ✅ 已完成-已驗證 | `AuditWriter` 契約（5 targetType，下游 import）＋outbox 補償；**append-only 觸發器強制＋int-verified**（INSTEAD OF UPDATE/DELETE 阻擋，對 owner 亦生效）；**寫入路徑 int-verified**（usage-form DOWNLOAD／lifecycle VIEW 稽核落地）；usage-forms 已接真 AuditWriter；accountId 貫穿 session 修正（int 揪出） |
 | F024 | 文件調閱歷程查詢後台 | P0 | 1 | 🟡 部分 | unit-green：查詢頁（取代 ModulePlaceholder）＋篩選/RBAC/30天預設/匯出/展開。剩：真 AUDIT_LOG 資料（依 F023 整合）、P95 索引效能＝`[integration]` |
 | F037 | 程序書變更歷程（欄位 Diff） | P1 | 1 | ⬜ 未開始 | **F011/F012 已發 `DocumentChangedEvent`**（種子就緒）；仍缺 `DOCUMENT_CHANGE_LOG` 持久化（綁真 publisher＋before/after/欄位 diff 落地）＋ diff 頁；依賴 F023/F024 |
 | F038 | 循環樹狀圖變更歷程 | P1 | 1 | ⬜ 未開始 | 無 `LIFECYCLE_CHANGE_LOG`/快照；F008/F009 未發結構事件；無新舊樹重建/燒錄；依賴 F036/F023 |
