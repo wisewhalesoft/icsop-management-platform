@@ -105,7 +105,7 @@
 ### E07 稽核與變更歷程
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F023 | 稽核軌跡記錄 | P0 | 1 | 🟡 部分 | unit-green：`AuditWriter` 契約（5 targetType，下游 import）、outbox。migration 已落 SOP。**🔴 整合實測：best-effort `REVOKE` 對 role 授權無效 → AUDIT_LOG 非 append-only 強制**（UPDATE 可成功，需改 `DENY`/觸發器；`it.failing` 記錄）。usage-forms 佔位改接真 AuditWriter 待接 |
+| F023 | 稽核軌跡記錄 | P0 | 1 | 🟡 部分 | unit-green：`AuditWriter` 契約（5 targetType，下游 import）、outbox。migration 落 SOP。**✅ append-only 真強制＋int-verified**（INSTEAD OF 觸發器阻擋 UPDATE/DELETE，對 owner/sysadmin 亦生效；REVOKE/DENY 曾被 owner 繞過）。剩：view/download→audit row 寫入路徑 e2e（隨 F020）、usage-forms 佔位改接真 AuditWriter |
 | F024 | 文件調閱歷程查詢後台 | P0 | 1 | 🟡 部分 | unit-green：查詢頁（取代 ModulePlaceholder）＋篩選/RBAC/30天預設/匯出/展開。剩：真 AUDIT_LOG 資料（依 F023 整合）、P95 索引效能＝`[integration]` |
 | F037 | 程序書變更歷程（欄位 Diff） | P1 | 1 | ⬜ 未開始 | **F011/F012 已發 `DocumentChangedEvent`**（種子就緒）；仍缺 `DOCUMENT_CHANGE_LOG` 持久化（綁真 publisher＋before/after/欄位 diff 落地）＋ diff 頁；依賴 F023/F024 |
 | F038 | 循環樹狀圖變更歷程 | P1 | 1 | ⬜ 未開始 | 無 `LIFECYCLE_CHANGE_LOG`/快照；F008/F009 未發結構事件；無新舊樹重建/燒錄；依賴 F036/F023 |
