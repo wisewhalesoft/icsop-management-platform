@@ -50,3 +50,28 @@ last_updated: 2026-07-23
 - `.env` 已含 `AZURE_BLOB_CONNECTION_STRING`＋`AZURE_BLOB_CONTAINER`；如需自訂下載憑證效期可加 `DOWNLOAD_URL_TTL_SECONDS`（預設 300）。
 - 新錯誤碼 `FILE_REQUIRED`（multipart 缺檔）——建議補入 error-handling.md。
 - DOCUMENT_ATTACHMENT migration 既存（1721955600000），本輪無新增 migration。
+
+---
+
+## 前端整併（doc-frontend worktree · 2026-07-23）
+
+補齊「剩前端上傳 UI」——消費既有 multipart 附件端點與使用表單下載，完成 F016 前端面。
+
+### 本輪實作（前端）
+- 端點：`uploadIcsopPdf(documentId, file)`／`uploadOjtAttachment(documentId, file)`（`FormData` multipart，欄位名 `file`，
+  不手動設 Content-Type 交瀏覽器帶 boundary）；`downloadUsageForm(documentId, formId)` → `{url, expiresInSeconds}`（前台下載用）。
+- **建立頁 STEP4**（F010）：ICSOP PDF／OJT 選檔，建立取得 UUID 後上傳。
+- **編輯頁**（F011）：ICSOP PDF／OJT「取代」上傳（覆蓋式，即時上傳）；唯讀角色停用（欄位面 FIELD_WRITE_FORBIDDEN 由後端把關）。
+- **唯讀頁**（F016 檢視）：附件區列出關聯之**使用表單**並提供下載（核發短效期 URL→開新視窗），標示浮水印/稽核說明。
+
+### 已知後端缺口（前端回報，未改後端）
+- **無附件列表端點**：ICSOP PDF／OJT 現有檔名/連結無法列示（後端僅 upload + `getAttachmentRef` service seam，未暴露 GET）。
+  → 編輯頁附件僅提供上傳/取代（不顯示現檔）；唯讀頁附件區僅列使用表單。建議補 `GET /admin/documents/:id/attachments`
+  回單份 ICSOP PDF/OJT 之 metadata（fileName/blobPath/uploadedAt）供編輯/唯讀/清單「檔案」欄呈現與下載。
+
+### 需回報之 Status 變更
+- `docs/specs/features/F016-pdf-ojt-attachment.md` Status：由「Backend Implemented（…前端上傳 UI 延後至整併）」→
+  建議「Implemented（真 Azure Blob；前端 ICSOP PDF/OJT 上傳/取代＋使用表單下載已接線；唯讀檢視完成）」。
+
+### 前端測試 / 建置
+- 唯讀頁 6 例、編輯頁 8 例、建立 STEP4 3 例；全前端套件 194 綠、tsc 0 err、vite build 通過。

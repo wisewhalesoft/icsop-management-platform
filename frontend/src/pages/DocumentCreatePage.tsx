@@ -5,8 +5,13 @@ import {
   getLifecycles,
   getDocuments,
   createDocument,
+  updateDocument,
   getOrgUnits,
   searchPersons,
+  getUsageFormPool,
+  linkUsageForms,
+  uploadIcsopPdf,
+  uploadOjtAttachment,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
@@ -20,6 +25,7 @@ import type {
   DocumentStatus,
   OrgUnitRecord,
   PersonRecord,
+  UsageFormRecord,
 } from '../api/types';
 
 /** 人員 → 下拉選項（label＝姓名（部門碼），value＝員工編號）。 */
@@ -78,13 +84,20 @@ export function DocumentCreatePage(): JSX.Element {
   const [usingDepts, setUsingDepts] = useState<ComboOption[]>([]);
   const [personResults, setPersonResults] = useState<ComboOption[]>([]);
 
+  // STEP4 附件與關聯文件（F010/F016/F015/F018）。
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [ojtFile, setOjtFile] = useState<File | null>(null);
+  const [formPool, setFormPool] = useState<UsageFormRecord[]>([]);
+  const [selectedForms, setSelectedForms] = useState<ComboOption[]>([]);
+  const [selectedLinks, setSelectedLinks] = useState<ComboOption[]>([]);
+
   useEffect(() => {
     if (!canWrite) return;
     void getLifecycles()
       .then((lcs) => setLifecycles(lcs.filter((l) => l.status === 'active')))
       .catch(() => setNotice('無法載入循環清單'));
     void getDocuments()
-      .then(setExisting)
+      .then((p) => setExisting(p.items))
       .catch(() => {
         /* 唯一性即時檢查為輔助；載入失敗不阻擋（後端 F013 為權威把關） */
       });
@@ -92,6 +105,12 @@ export function DocumentCreatePage(): JSX.Element {
     void getOrgUnits()
       .then(setOrgUnits)
       .catch(() => setNotice('無法載入組織資料'));
+    // F018：使用表單池（自「使用表單管理」選取關聯，非於此上傳）。
+    void getUsageFormPool()
+      .then(setFormPool)
+      .catch(() => {
+        /* 表單池載入失敗不阻擋建立（選填關聯） */
+      });
   }, [canWrite]);
 
   const selectedLc = lifecycles.find((l) => l.id === lifecycleId);
@@ -195,6 +214,16 @@ export function DocumentCreatePage(): JSX.Element {
     return personResults;
   }, [primaryChief, personResults]);
 
+  // STEP4：文件連結點選項（既有 ICSOP 文件，value=id、label=編號+書名）與使用表單池選項。
+  const linkOptions = useMemo<ComboOption[]>(
+    () => existing.map((d) => ({ value: d.id, label: `${d.documentNumber} ${d.documentName}` })),
+    [existing],
+  );
+  const formOptions = useMemo<ComboOption[]>(
+    () => formPool.map((f) => ({ value: f.id, label: f.name })),
+    [formPool],
+  );
+
   const reset = useCallback(() => {
     setLifecycleId('');
     setStatus('active');
@@ -211,6 +240,10 @@ export function DocumentCreatePage(): JSX.Element {
     setSecondaryChiefs([]);
     setUsingDepts([]);
     setPersonResults([]);
+    setPdfFile(null);
+    setOjtFile(null);
+    setSelectedForms([]);
+    setSelectedLinks([]);
     setErrors({});
     setNotice(null);
   }, []);
@@ -229,7 +262,7 @@ export function DocumentCreatePage(): JSX.Element {
     setBusy(true);
     setNotice(null);
     try {
-      await createDocument({
+      const created = await createDocument({
         lifecycleId,
         status,
         documentNumber: fullNumber,
@@ -245,6 +278,14 @@ export function DocumentCreatePage(): JSX.Element {
         ...(secondaryChiefs.length ? { secondaryChiefIds: secondaryChiefs.map((c) => c.value) } : {}),
         ...(usingDepts.length ? { usingDeptIds: usingDepts.map((d) => d.value) } : {}),
       });
+      // STEP4 後續步驟：文件建立後方有 UUID，依序上傳附件、關聯使用表單、建立連結點（F016/F018/F015）。
+      const newId = created?.id;
+      if (newId) {
+        if (pdfFile) await uploadIcsopPdf(newId, pdfFile);
+        if (ojtFile) await uploadOjtAttachment(newId, ojtFile);
+        if (selectedForms.length) await linkUsageForms(newId, selectedForms.map((f) => f.value));
+        if (selectedLinks.length) await updateDocument(newId, { links: selectedLinks.map((l) => l.value) });
+      }
       navigate('/admin/documents');
     } catch (e) {
       setNotice(msgOf(e));
@@ -267,6 +308,10 @@ export function DocumentCreatePage(): JSX.Element {
     primaryChief,
     secondaryChiefs,
     usingDepts,
+    pdfFile,
+    ojtFile,
+    selectedForms,
+    selectedLinks,
     navigate,
   ]);
 
@@ -601,18 +646,122 @@ export function DocumentCreatePage(): JSX.Element {
         </div>
       </section>
 
-      {/* STEP 4 · 附件與關聯文件（待各自後端 F015/F016/F018） */}
-      <section className="bg-white border border-dashed border-slate-300 rounded-xl p-5 opacity-70">
-        <div className="flex items-center gap-2 mb-2">
-          {badge(4, false)}
-          <Icon name="paperclip" className="w-4 h-4 text-slate-400" />
-          <h2 className="font-semibold text-slate-500">附件與關聯文件</h2>
+      {/* STEP 4 · 附件與關聯文件（F016 附件／F018 使用表單／F015 連結點；選定循環後開放） */}
+      <section className={`bg-white border border-slate-200 rounded-xl p-5 ${gatedCls}`}>
+        <div className="flex items-center gap-2 mb-1">
+          {badge(4, !gated)}
+          <Icon name="paperclip" className="w-4 h-4 text-primary-600" />
+          <h2 className="font-semibold text-slate-900">附件與關聯文件</h2>
         </div>
-        <p className="text-xs text-slate-400 flex items-start gap-1.5">
-          <Icon name="info" className="w-3.5 h-3.5 mt-0.5" />
-          附件（F016）、使用表單（F018）、文件連結（F015）為後續步驟，將於各自後端就緒時開放；建立後可於編輯頁補齊。
+        <p className="text-xs text-slate-400 mb-3 flex items-center gap-1.5">
+          <Icon name="info" className="w-3.5 h-3.5" />
+          允許格式：ICSOP PDF／OJT＝.pdf/.jpg/.png、ICSOP 原始檔＝.xls、使用表單＝.xlsx/.xls/.pdf；單檔上限 50MB（OQ-E04-06 定案）。
         </p>
+        <div className="flex items-start gap-2 rounded-lg border border-primary-200 bg-primary-50/40 px-3 py-2.5 mb-4 text-[11px] text-slate-600">
+          <Icon name="info" className="w-4 h-4 mt-0.5 shrink-0 text-primary-600" />
+          <span>
+            <strong className="text-slate-800">ICSOP PDF（呈現／下載用）與 ICSOP 原始檔 .xls（AI 智慧問答檢索來源）為兩個各自獨立的上傳</strong>，系統
+            <strong className="text-slate-800">不自動轉檔</strong>（OQ-E09-10 定案）；兩者內容一致性由 ICSOP 管理員負責維護。
+          </span>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-4">
+          <UploadCard
+            iconName="file-text"
+            iconClass="text-red-500"
+            title="上傳 ICSOP PDF（呈現用，1 份）"
+            accept=".pdf,.jpg,.jpeg,.png"
+            hint="尚未選擇 · .pdf/.jpg/.png"
+            file={pdfFile}
+            onSelect={setPdfFile}
+          />
+          {/* ICSOP 原始檔 .xls：保存需 AI 索引管線之模板解析（F027/F029，[integration]），非單純 multipart；本頁暫不提供。 */}
+          <div
+            className="border border-dashed border-primary-200 rounded-lg p-4 text-center bg-primary-50/20 opacity-60"
+            title="ICSOP 原始檔 .xls 之保存待 AI 索引管線（F027/F029）就緒"
+          >
+            <Icon name="file-spreadsheet" className="w-6 h-6 text-primary-400 mx-auto mb-1.5" />
+            <div className="text-sm font-medium text-slate-500">上傳 ICSOP 原始檔（.xls，1 份）</div>
+            <div className="text-xs text-slate-400 mt-1">待 AI 索引管線就緒（F027/F029）</div>
+          </div>
+          <UploadCard
+            iconName="upload"
+            iconClass="text-slate-400"
+            title="上傳 OJT 簽到表（1 份）"
+            accept=".pdf,.jpg,.jpeg,.png"
+            hint="尚未選擇 · .pdf/.jpg/.png"
+            file={ojtFile}
+            onSelect={setOjtFile}
+          />
+        </div>
+        <p className="text-[11px] text-slate-500 mt-2 flex items-start gap-1.5">
+          <Icon name="sparkles" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-500" />
+          .xls 供 AI <strong>chunk 提取／索引</strong>（F028/F029）；不符 ICSOP 標準五表模板將於抽取階段阻擋並提示（
+          <span className="mono">XLS_TEMPLATE_INVALID</span>）。
+        </p>
+
+        {/* 使用表單（自「使用表單管理」表單池選取，可搜尋多選） */}
+        <div className="mt-4">
+          <MultiSearchCombobox
+            id="dForms"
+            label="使用表單（自「使用表單管理」選取，可多個、允許為空）"
+            options={formOptions}
+            values={selectedForms}
+            onAdd={(opt) => setSelectedForms((prev) => [...prev, opt])}
+            onRemove={(v) => setSelectedForms((prev) => prev.filter((o) => o.value !== v))}
+            placeholder="搜尋使用表單（excel/pdf）…"
+          />
+          <p className="text-[10px] text-slate-400 mt-1">來源：「使用表單管理」表單池；如需新增新表單請至該功能上傳。</p>
+        </div>
+
+        {/* 文件連結點（可搜尋，連結其他 ICSOP 文件） */}
+        <div className="mt-4">
+          <MultiSearchCombobox
+            id="dLinks"
+            label="文件連結點（連結其他 ICSOP 文件，可多個、允許為空）"
+            options={linkOptions}
+            values={selectedLinks}
+            onAdd={(opt) => setSelectedLinks((prev) => [...prev, opt])}
+            onRemove={(v) => setSelectedLinks((prev) => prev.filter((o) => o.value !== v))}
+            placeholder="搜尋要連結的 ICSOP 文件（編號/名稱）…"
+          />
+        </div>
       </section>
     </div>
+  );
+}
+
+/** STEP4 附件上傳卡（點擊選檔，顯示已選檔名；實際上傳於文件建立取得 UUID 後執行）。 */
+function UploadCard({
+  iconName,
+  iconClass,
+  title,
+  accept,
+  hint,
+  file,
+  onSelect,
+}: {
+  iconName: string;
+  iconClass: string;
+  title: string;
+  accept: string;
+  hint: string;
+  file: File | null;
+  onSelect: (f: File | null) => void;
+}): JSX.Element {
+  return (
+    <label className="border border-dashed border-slate-300 rounded-lg p-4 text-center hover:bg-slate-50 cursor-pointer block">
+      <Icon name={iconName} className={`w-6 h-6 mx-auto mb-1.5 ${iconClass}`} />
+      <div className="text-sm font-medium text-slate-700">{title}</div>
+      <div className={`text-xs mt-1 ${file ? 'text-emerald-600' : 'text-slate-400'}`}>
+        {file ? `已選擇：${file.name}` : hint}
+      </div>
+      <input
+        type="file"
+        accept={accept}
+        aria-label={title}
+        className="hidden"
+        onChange={(e) => onSelect(e.target.files?.[0] ?? null)}
+      />
+    </label>
   );
 }

@@ -9,9 +9,14 @@ import type {
   DagGraph,
   DagNode,
   DagEdge,
-  DocumentListItem,
+  DocumentListPage,
   DocumentFilters,
   DocumentStatus,
+  DocumentView,
+  DocumentUpdateResult,
+  DocumentLinkView,
+  DocumentAttachmentRecord,
+  UsageFormRecord,
   NodeDrawerData,
   AccessHistoryFilters,
   AccessHistoryPage,
@@ -241,28 +246,61 @@ export function lifecycleTreePrintUrl(lifecycleId: string): string {
 // ===== E04 ICSOP 文件（F010/F012/F017） =====
 
 /**
- * GET /admin/documents（ICSOP文件管理 read）。
- * F017 起後端回傳分頁物件 `{items,total,page,pageSize}`；此處先解出 items 維持既有清單頁，
- * 完整分頁 UI 併入 doc-edit 前端接線（後續）。
+ * GET /admin/documents（ICSOP文件管理 read）。F017 起後端回傳分頁物件
+ * `{items,total,page,pageSize,hasNext}`；清單頁讀 items＋分頁，建立頁之唯一性即時檢查讀 items。
  */
-export function getDocuments(f: DocumentFilters = {}): Promise<DocumentListItem[]> {
+export function getDocuments(f: DocumentFilters = {}): Promise<DocumentListPage> {
   const qs = new URLSearchParams();
   if (f.lifecycleId) qs.set('lifecycleId', f.lifecycleId);
   if (f.status) qs.set('status', f.status);
   if (f.keyword) qs.set('keyword', f.keyword);
+  if (f.documentNumber) qs.set('documentNumber', f.documentNumber);
+  if (f.documentName) qs.set('documentName', f.documentName);
+  if (f.draftingCompanyId) qs.set('draftingCompanyId', f.draftingCompanyId);
+  if (f.draftingDeptId) qs.set('draftingDeptId', f.draftingDeptId);
+  if (f.draftingSectionId) qs.set('draftingSectionId', f.draftingSectionId);
+  if (f.primaryChiefId) qs.set('primaryChiefId', f.primaryChiefId);
+  if (f.linkTargetId) qs.set('linkTargetId', f.linkTargetId);
+  if (f.sortBy) qs.set('sortBy', f.sortBy);
+  if (f.sortDir) qs.set('sortDir', f.sortDir);
+  if (f.page) qs.set('page', String(f.page));
+  if (f.pageSize) qs.set('pageSize', String(f.pageSize));
   const q = qs.toString();
-  return apiFetch<{ items: DocumentListItem[] }>(`/admin/documents${q ? `?${q}` : ''}`).then(
-    (r) => r.items,
-  );
+  return apiFetch<DocumentListPage>(`/admin/documents${q ? `?${q}` : ''}`);
 }
 
-/** POST /admin/documents（建立，ICSOPAdmin；DOCUMENT_REQUIRED_FIELD_MISSING/NUMBER_DUPLICATE）。 */
-export function createDocument(body: Record<string, unknown>): Promise<DocumentListItem> {
-  return apiFetch<DocumentListItem>('/admin/documents', {
+/** POST /admin/documents（建立，ICSOPAdmin；DOCUMENT_REQUIRED_FIELD_MISSING/NUMBER_DUPLICATE）。回傳含 id 之單筆檢視。 */
+export function createDocument(body: Record<string, unknown>): Promise<DocumentView> {
+  return apiFetch<DocumentView>('/admin/documents', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
+}
+
+/** GET /admin/documents/:id（單筆文件，F011 編輯對照/F016 檢視；查無→404 DOCUMENT_NOT_FOUND）。 */
+export function getDocument(id: string): Promise<DocumentView> {
+  return apiFetch<DocumentView>(`/admin/documents/${id}`);
+}
+
+/**
+ * PATCH /admin/documents/:id（F011 編輯：以新值覆蓋，UUID 不變、不留歷史）。
+ * links[]（F015）隨此 PATCH 整批送出；回傳覆寫後之文件＋新舊值對照。
+ */
+export function updateDocument(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<DocumentUpdateResult> {
+  return apiFetch<DocumentUpdateResult>(`/admin/documents/${id}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
+/** GET /admin/documents/:id/links（F015 連結點清單，附目標編號/書名/狀態）。 */
+export function getDocumentLinks(id: string): Promise<DocumentLinkView[]> {
+  return apiFetch<DocumentLinkView[]>(`/admin/documents/${id}/links`);
 }
 
 /** PATCH /admin/documents/:id/status（切換狀態，ICSOPAdmin；切回有效重驗編號唯一性）。 */
@@ -272,6 +310,72 @@ export function setDocumentStatus(id: string, status: DocumentStatus): Promise<v
     headers: JSON_HEADERS,
     body: JSON.stringify({ status }),
   });
+}
+
+// ===== E04/E05 附件與使用表單（F016/F018） =====
+
+/** multipart 上傳單一檔案（欄位名 file），回傳型別 T。 */
+function uploadFile<T>(path: string, file: File): Promise<T> {
+  const form = new FormData();
+  form.append('file', file);
+  // 不設 Content-Type，交瀏覽器帶 multipart boundary。
+  return apiFetch<T>(path, { method: 'POST', body: form });
+}
+
+/** POST /admin/documents/:documentId/attachments/icsop-pdf（F016 ICSOP PDF 覆蓋式上傳）。 */
+export function uploadIcsopPdf(
+  documentId: string,
+  file: File,
+): Promise<DocumentAttachmentRecord> {
+  return uploadFile<DocumentAttachmentRecord>(
+    `/admin/documents/${documentId}/attachments/icsop-pdf`,
+    file,
+  );
+}
+
+/** POST /admin/documents/:documentId/attachments/ojt（F016 OJT 簽到表覆蓋式上傳）。 */
+export function uploadOjtAttachment(
+  documentId: string,
+  file: File,
+): Promise<DocumentAttachmentRecord> {
+  return uploadFile<DocumentAttachmentRecord>(
+    `/admin/documents/${documentId}/attachments/ojt`,
+    file,
+  );
+}
+
+/** GET /admin/usage-forms（F018 表單池清單，USAGE_FORM_MANAGEMENT read）。 */
+export function getUsageFormPool(): Promise<UsageFormRecord[]> {
+  return apiFetch<UsageFormRecord[]>('/admin/usage-forms');
+}
+
+/** GET /documents/:documentId/usage-forms（某文件之關聯表單，前後台共用 READ）。 */
+export function getDocumentForms(documentId: string): Promise<UsageFormRecord[]> {
+  return apiFetch<UsageFormRecord[]>(`/documents/${documentId}/usage-forms`);
+}
+
+/** POST /admin/documents/:documentId/usage-forms（F018 建立/編輯時多選關聯表單）。 */
+export function linkUsageForms(documentId: string, formIds: string[]): Promise<void> {
+  return apiFetch<void>(`/admin/documents/${documentId}/usage-forms`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ formIds }),
+  });
+}
+
+/** DELETE /admin/documents/:documentId/usage-forms/:formId（解除單一表單關聯）。 */
+export function unlinkUsageForm(documentId: string, formId: string): Promise<void> {
+  return apiFetch<void>(`/admin/documents/${documentId}/usage-forms/${formId}`, {
+    method: 'DELETE',
+  });
+}
+
+/** GET /documents/:documentId/usage-forms/:formId/download（前後台共用；核發短效期 URL＋寫入稽核）。 */
+export function downloadUsageForm(
+  documentId: string,
+  formId: string,
+): Promise<{ url: string; expiresInSeconds: number }> {
+  return apiFetch(`/documents/${documentId}/usage-forms/${formId}/download`);
 }
 
 // ===== F009 節點抽屜（文件掛載） =====

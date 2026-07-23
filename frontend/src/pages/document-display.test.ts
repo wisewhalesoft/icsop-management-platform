@@ -6,8 +6,9 @@ const today = new Date('2026-07-22T10:00:00Z');
 const doc = (over: Partial<DocumentListItem>): DocumentListItem => ({
   id: 'd', status: 'active', documentNumber: 'N', documentName: '名', lifecycleId: 'lc',
   lifecycleName: null, nodeId: null, draftingCompanyId: null, draftingDeptId: null,
-  draftingSectionId: null, primaryChiefId: null, edition: null, announcedDate: null,
-  contentSummary: null, ...over,
+  draftingSectionId: null, draftingCompanyName: null, draftingDeptName: null,
+  draftingSectionName: null, primaryChiefId: null, primaryChiefName: null,
+  edition: null, announcedDate: null, contentSummary: null, ...over,
 });
 
 describe('document-display（前端衍生狀態，mirror 後端）', () => {
