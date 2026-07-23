@@ -4,6 +4,7 @@ import { AppDataSource } from '../../src/database/data-source';
 import { UsageFormPool } from '../../src/database/entities/usage-form-pool.entity';
 import { DocUsageForm } from '../../src/database/entities/doc-usage-form.entity';
 import { IcsopDocument } from '../../src/database/entities/icsop-document.entity';
+import { Lifecycle } from '../../src/database/entities/lifecycle.entity';
 
 /**
  * [int] 使用表單池總覽 GET /admin/usage-forms/overview（F018 → 管理頁 prototype 19）。
@@ -32,6 +33,12 @@ describe('[int] usage-form pool overview — join vs SOP', () => {
     ctx = await bootIntApp();
     await cleanupFormMarkers();
 
+    // marker 循環（FK：ICSOP_DOCUMENT.lifecycleId → LIFECYCLE.id；cleanupMarkers 清 ZZINT_LC_）。
+    const lcRepo = AppDataSource.getRepository(Lifecycle);
+    const lc = await lcRepo.save(
+      lcRepo.create({ name: `${MARK.lc}UF`, status: 'active' } as Partial<Lifecycle>),
+    );
+
     // marker 文件（沿用 harness ZZINT- 前綴，afterAll 由 cleanupMarkers 清除）。
     const docRepo = AppDataSource.getRepository(IcsopDocument);
     const doc = await docRepo.save(
@@ -39,7 +46,7 @@ describe('[int] usage-form pool overview — join vs SOP', () => {
         status: 'active',
         documentNumber: `${MARK.doc}UF-001`,
         documentName: 'ZZINT 使用表單關聯測試文件',
-        lifecycleId: randomUUID(),
+        lifecycleId: lc.id,
         announcedDate: null,
         contentSummary: null,
         createdAt: new Date(),
