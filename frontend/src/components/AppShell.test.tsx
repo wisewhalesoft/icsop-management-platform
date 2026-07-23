@@ -73,3 +73,37 @@ describe('AppShell — 後台外殼側欄角色過濾（F002）', () => {
     expect(logout).toHaveBeenCalledOnce();
   });
 });
+
+describe('AppShell — 瀏覽文件網頁入口以新視窗開啟（F022）', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('TS-F022-001/003 點入口 → window.open("/public","_blank")，URL 不夾帶 token', async () => {
+    mockAuth('SysAdmin');
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    renderShell();
+    await userEvent.click(screen.getByRole('button', { name: /瀏覽文件網頁/ }));
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    const [url, target] = openSpy.mock.calls[0];
+    expect(url).toBe('/public');
+    expect(target).toBe('_blank');
+    expect(String(url)).not.toMatch(/token|session|\?/);
+    openSpy.mockRestore();
+  });
+
+  it('TS-F022-002 入口為 button（非 <a href="/public">）→ 不觸發同分頁 SPA 導覽', () => {
+    mockAuth('SysAdmin');
+    renderShell();
+    const entry = screen.getByRole('button', { name: /瀏覽文件網頁/ });
+    expect(entry.tagName).toBe('BUTTON');
+    expect(entry).not.toHaveAttribute('href');
+  });
+
+  it('TS-F022-004 window.open 回傳 null（被封鎖）→ 顯示替代提示', async () => {
+    mockAuth('SysAdmin');
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    renderShell();
+    await userEvent.click(screen.getByRole('button', { name: /瀏覽文件網頁/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('請允許彈出視窗');
+    openSpy.mockRestore();
+  });
+});

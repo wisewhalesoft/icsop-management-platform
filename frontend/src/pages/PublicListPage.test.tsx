@@ -170,4 +170,14 @@ describe('PublicListPage RWD（F021 · unit 可驗證範圍）', () => {
     expect(bar.className).toMatch(/flex-col/);
     expect(bar.className).toMatch(/sm:flex-row/);
   });
+
+  it('TS-F021-003 斷點切換時分頁頁碼不遺失（防禦性延伸）', async () => {
+    vi.mocked(api.getPublicDocuments).mockResolvedValue(pageOf([docItem({})], { total: 60, hasNext: true }));
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    await userEvent.click(screen.getByLabelText('下一頁'));
+    await waitFor(() => expect(api.getPublicDocuments).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 })));
+    window.dispatchEvent(new Event('resize'));
+    expect(screen.getByText('第 2 頁')).toBeInTheDocument(); // 頁碼狀態不因 resize 重置
+  });
 });

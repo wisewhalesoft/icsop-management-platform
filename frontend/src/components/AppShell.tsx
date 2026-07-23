@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { useCallback, useState } from 'react';
+import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { visibleMenu, accessLabelFor } from '../domain/menu';
 import { Icon } from './Icon';
@@ -20,6 +20,13 @@ export function AppShell(): JSX.Element {
   const role = user?.roleCode;
   const items = visibleMenu(role);
   const sidebarW = collapsed ? 60 : 240;
+  // F022：瀏覽文件網頁以「新視窗/分頁」開啟（後台分頁維持原狀）；被封鎖 → 顯示替代提示。
+  const [popupBlocked, setPopupBlocked] = useState(false);
+  const openPublic = useCallback(() => {
+    // 相對路徑（同源 cookie 自動攜帶，不夾帶 token 於網址，NFR-002）。
+    const win = window.open('/public', '_blank', 'noopener,noreferrer');
+    setPopupBlocked(win === null); // 多數瀏覽器封鎖時回傳 null（非拋例外）
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-700">
@@ -88,16 +95,22 @@ export function AppShell(): JSX.Element {
         </nav>
 
         <div className="border-t border-slate-200 p-2 shrink-0">
-          <Link
-            to="/public"
-            title="瀏覽文件網頁"
+          <button
+            type="button"
+            onClick={openPublic}
+            title="瀏覽文件網頁（新視窗開啟）"
             className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50 ${
               collapsed ? 'justify-center px-0' : ''
             }`}
           >
             <Icon name="external-link" className="w-4 h-4 shrink-0" />
             {!collapsed && <span className="truncate">瀏覽文件網頁</span>}
-          </Link>
+          </button>
+          {popupBlocked && !collapsed && (
+            <div role="alert" className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-2.5 py-2">
+              新視窗被瀏覽器封鎖，請允許彈出視窗後再試。
+            </div>
+          )}
         </div>
       </aside>
 
