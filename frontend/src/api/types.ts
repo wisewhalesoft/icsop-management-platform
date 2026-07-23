@@ -104,6 +104,57 @@ export interface DocumentFilters {
   keyword?: string;
 }
 
+// ===== E07 文件調閱歷程（F024） =====
+
+/** 類型篩選前端顯示值（↔ 後端 targetType 集合）。 */
+export type AuditKind = '文件' | '循環' | '變更';
+
+/**
+ * 稽核調閱列（GET /admin/access-history）。鏡射後端 audit.types AuditRow；
+ * ⚠ occurredAt 經 JSON 序列化為 ISO 字串。
+ */
+export interface AccessHistoryRow {
+  id: string;
+  accountId: string;
+  employeeNo: string | null;
+  name: string | null;
+  company: string | null;
+  department: string | null;
+  section: string | null;
+  roleCode: string | null;
+  targetType: string;
+  actionType: string;
+  documentId: string | null;
+  documentNumber: string | null;
+  lifecycleId: string | null;
+  lifecycleName: string | null;
+  formId: string | null;
+  targetName: string | null;
+  watermarkSnapshot: string | null;
+  occurredAt: string;
+  source: string;
+}
+
+/** 查詢分頁結果。appliedDefaultRange＝伺服器因空條件套用近 30 天預設。 */
+export interface AccessHistoryPage {
+  items: AccessHistoryRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasNext: boolean;
+  appliedDefaultRange: boolean;
+}
+
+/** 查詢篩選（任意組合；空條件套用近 30 天預設，非阻斷）。 */
+export interface AccessHistoryFilters {
+  kind?: AuditKind | '';
+  person?: string;
+  target?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+}
+
 export type TriggerType = 'scheduled' | 'manual';
 export type SyncRunStatus = 'running' | 'success' | 'failed';
 

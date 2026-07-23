@@ -1,0 +1,219 @@
+/**
+ * F023 稽核軌跡 · 共用契約（下游 worktree F005/F007/F012/F020/F034/F037/F038 皆呼叫本介面，
+ * 型別視為與 migration 同等優先之交付物，見 F023-test.md 開放問題#1）。
+ *
+ * 設計定案（audit worktree，2026-07-23，覆蓋 spec 草案文字）：
+ *  - D. AuditWriter 契約鎖定：recordAccess / queryHistory / processOutboxRetry。
+ *  - AuditAccessEvent＝以 targetType 判別之聯集，攜帶 actorId／actorName?／actionType／
+ *    targetId（依 targetType 必填）／watermarkSnapshot?（條件必填，僅浮水印動作攜帶）／occurredAt。
+ *  - E. 不可竄改：store 介面「結構上不暴露」任何 update/delete 方法；DB 層 REVOKE 為 [integration]。
+ *  - F. 空條件非阻斷：套用近 30 天預設（見 access-history-filter），不硬擋 QUERY_CONDITION_REQUIRED。
+ *  - targetId 缺漏（依 targetType 必填卻未帶）→ 錯誤碼 AUDIT_TARGET_REF_REQUIRED。
+ *
+ * data-model 對照：AUDIT_LOG（#auditlog-entity）之 5 種 targetType／對應 actionType／條件必填欄位。
+ */
+import { BadRequestException } from '@nestjs/common';
+
+/** 被存取對象類型（data-model AUDIT_LOG.targetType，OQ-E07-02 定案 5 值）。 */
+export type AuditTargetType =
+  | 'DOCUMENT'
+  | 'USAGE_FORM'
+  | 'LIFECYCLE'
+  | 'DOCUMENT_CHANGE_LOG'
+  | 'LIFECYCLE_CHANGE_LOG';
+
+/** 操作類型（data-model AUDIT_LOG.actionType，逐字沿用 F036/F037/F038 spec 命名）。 */
+export type AuditActionType =
+  | 'VIEW'
+  | 'DOWNLOAD'
+  | 'PRINT'
+  | 'LIFECYCLE_VIEW'
+  | 'LIFECYCLE_DOWNLOAD'
+  | 'LIFECYCLE_PRINT'
+  | 'CHANGE_LOG_VIEW'
+  | 'LIFECYCLE_CHANGELOG_VIEW'
+  | 'LIFECYCLE_CHANGELOG_DOWNLOAD';
+
+/** 調閱來源（E09 US-097），預設 DIRECT。 */
+export type AuditSource = 'DIRECT' | 'AI_QA';
+
+/**
+ * 事件共用欄位。actorId/actorName 為 D 契約之核心；其餘身分快照欄（employeeNo/company/
+ * department/section/roleCode）為 data-model AUDIT_LOG「操作者身分快照（與浮水印同一來源）」之落地，
+ * 呼叫端（F020）於浮水印組字當下已握有，故一併攜入。targetId 為依 targetType 必填之對象參照。
+ */
+interface AuditEventBase {
+  /** 操作者帳號（= AUDIT_LOG.accountId）。 */
+  actorId: string;
+  /** 姓名快照。 */
+  actorName?: string | null;
+  employeeNo?: string | null;
+  company?: string | null;
+  department?: string | null;
+  section?: string | null;
+  roleCode?: string | null;
+  /** 依 targetType 必填之對象參照（DOCUMENT→documentId／LIFECYCLE→lifecycleId／USAGE_FORM→formId…）。 */
+  targetId: string;
+  /** 對象顯示編號快照（文件編號／循環名稱），供 F024「對象」欄呈現與篩選。 */
+  targetNumber?: string | null;
+  /** 對象名稱／說明快照（文件名稱／循環說明），供 F024 明細呈現。 */
+  targetName?: string | null;
+  /** 當次浮水印完整字串快照（條件必填：僅浮水印動作攜帶，逐字保存不再推導，AC3）。 */
+  watermarkSnapshot?: string | null;
+  /** 伺服器時間戳記。 */
+  occurredAt: Date;
+  /** 調閱來源；未提供時 recordAccess 預設 DIRECT。 */
+  source?: AuditSource;
+}
+
+/** 文件調閱（F020，浮水印動作）。 */
+export interface DocumentAuditEvent extends AuditEventBase {
+  targetType: 'DOCUMENT';
+  actionType: 'VIEW' | 'DOWNLOAD' | 'PRINT';
+}
+/** 使用表單下載（F018，浮水印動作）。targetId＝使用表單附件 id。 */
+export interface UsageFormAuditEvent extends AuditEventBase {
+  targetType: 'USAGE_FORM';
+  actionType: 'VIEW' | 'DOWNLOAD' | 'PRINT';
+}
+/** 循環樹狀圖預覽（F036，浮水印動作）。targetId＝lifecycleId。 */
+export interface LifecycleAuditEvent extends AuditEventBase {
+  targetType: 'LIFECYCLE';
+  actionType: 'LIFECYCLE_VIEW' | 'LIFECYCLE_DOWNLOAD' | 'LIFECYCLE_PRINT';
+}
+/** 文件變更歷程檢視（F037，無浮水印）。targetId＝documentId。 */
+export interface DocumentChangeLogAuditEvent extends AuditEventBase {
+  targetType: 'DOCUMENT_CHANGE_LOG';
+  actionType: 'CHANGE_LOG_VIEW';
+}
+/** 循環變更歷程檢視／下載（F038，無浮水印）。targetId＝lifecycleId。 */
+export interface LifecycleChangeLogAuditEvent extends AuditEventBase {
+  targetType: 'LIFECYCLE_CHANGE_LOG';
+  actionType: 'LIFECYCLE_CHANGELOG_VIEW' | 'LIFECYCLE_CHANGELOG_DOWNLOAD';
+}
+
+/** 稽核調閱事件（以 targetType 判別之聯集）——D 契約鎖定形狀。 */
+export type AuditAccessEvent =
+  | DocumentAuditEvent
+  | UsageFormAuditEvent
+  | LifecycleAuditEvent
+  | DocumentChangeLogAuditEvent
+  | LifecycleChangeLogAuditEvent;
+
+/**
+ * 已物化之稽核列（append-only）。同時作為 AUDIT_LOG 落地列與 F024 查詢結果列。
+ * 條件必填欄（documentId/lifecycleId/formId…）依 targetType 由 recordAccess 對映填入，其餘為 null。
+ */
+export interface AuditRow {
+  id: string;
+  accountId: string;
+  employeeNo: string | null;
+  name: string | null;
+  company: string | null;
+  department: string | null;
+  section: string | null;
+  roleCode: string | null;
+  targetType: AuditTargetType;
+  actionType: AuditActionType;
+  documentId: string | null;
+  documentNumber: string | null;
+  lifecycleId: string | null;
+  lifecycleName: string | null;
+  formId: string | null;
+  /** 對象名稱／說明快照（供 F024 明細；非 data-model 現有欄，見 impl log flag）。 */
+  targetName: string | null;
+  watermarkSnapshot: string | null;
+  occurredAt: Date;
+  source: AuditSource;
+}
+
+/** F024 類型篩選（前端顯示值）↔ targetType 集合（見 access-history-filter.kindToTargetTypes）。 */
+export type AuditKind = '文件' | '循環' | '變更';
+
+/** F024 查詢篩選（任意組合；空條件套用近 30 天預設，非阻斷）。 */
+export interface AuditQueryFilters {
+  kind?: AuditKind | '';
+  /** 人員：姓名或員工編號子字串（不分大小寫）。 */
+  person?: string;
+  /** 對象：文件編號／名稱、循環名稱／說明子字串（不分大小寫）。 */
+  target?: string;
+  /** 起始日期（YYYY-MM-DD，含當日）。 */
+  from?: string;
+  /** 結束日期（YYYY-MM-DD，含當日）。 */
+  to?: string;
+  /** 1-based 頁碼，預設 1。 */
+  page?: number;
+  /** 每頁筆數，預設 50（prototype 17）。 */
+  pageSize?: number;
+}
+
+/** 查詢範圍（SysAdmin/ICSOPAdmin 皆全公司；保留參數以利日後多公司分權，開放問題#6）。 */
+export interface AuditQueryScope {
+  company?: string | 'ALL';
+}
+
+/** 分頁結果。appliedDefaultRange＝伺服器因空條件套用近 30 天預設（供前端提示）。 */
+export interface Page<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasNext: boolean;
+  appliedDefaultRange: boolean;
+}
+
+/**
+ * 稽核最終儲存（AUDIT_LOG）。⚠ 結構上不暴露任何 update/delete/remove 方法（decision E，AC5 第一層）；
+ * DB 層 REVOKE UPDATE/DELETE 為第二層（[integration]）。
+ */
+export interface AuditStore {
+  /** append-only 寫入；以 row.id 冪等（已存在則 no-op，供 outbox 重試重疊，AC4/§5.6）。 */
+  append(row: AuditRow): Promise<void>;
+  findById(id: string): Promise<AuditRow | null>;
+  /** 取回 scope 內全部列（篩選/排序/分頁於服務層純函式完成，見 access-history-filter）。 */
+  listAll(scope: AuditQueryScope): Promise<AuditRow[]>;
+}
+
+/** Outbox 暫存列（內部表；非對外實體，data-model 未列 schema）。 */
+export interface AuditOutboxRecord {
+  /** 冪等鍵＝對應 AuditRow.id。 */
+  id: string;
+  row: AuditRow;
+  status: 'pending' | 'done';
+  attempts: number;
+}
+
+/** 補償佇列（Outbox）。recordAccess 先入此表（非阻斷），processOutboxRetry 搬遷至 AuditStore。 */
+export interface AuditOutboxStore {
+  enqueue(row: AuditRow): Promise<void>;
+  listPending(): Promise<AuditOutboxRecord[]>;
+  /** 搬遷成功後標記完成／移除（以 outbox id）。 */
+  markDone(id: string): Promise<void>;
+}
+
+/** AuditWriter 共用契約（D，lock this）。 */
+export interface AuditWriter {
+  /** 記錄一次調閱（append-only，經 outbox 非阻斷入列）。 */
+  recordAccess(event: AuditAccessEvent): Promise<void>;
+  /** F024 查詢（篩選/排序/分頁/近 30 天預設）。 */
+  queryHistory(
+    scope: AuditQueryScope,
+    filters: AuditQueryFilters,
+  ): Promise<Page<AuditRow>>;
+  /** Outbox 補償重試（搬遷 pending → AuditStore，冪等、部分失敗不中斷整批）。 */
+  processOutboxRetry(): Promise<void>;
+}
+
+/**
+ * targetId 依 targetType 必填卻未帶 → 400 AUDIT_TARGET_REF_REQUIRED（audit worktree 定案，
+ * 覆蓋 F023-test.md 暫定名 AUDIT_TARGET_FIELD_REQUIRED；需 architect 補入 error-handling.md）。
+ */
+export class AuditTargetRefRequiredError extends BadRequestException {
+  constructor() {
+    super('AUDIT_TARGET_REF_REQUIRED');
+  }
+}
+
+/** DI symbols。 */
+export const AUDIT_STORE = Symbol('AUDIT_STORE');
+export const AUDIT_OUTBOX_STORE = Symbol('AUDIT_OUTBOX_STORE');

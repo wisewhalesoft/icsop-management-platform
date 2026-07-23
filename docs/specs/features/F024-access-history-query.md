@@ -1,5 +1,5 @@
 # F024: 文件調閱歷程查詢後台
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-17
+Priority: P0-MVP | Status: Implemented (unit) — audit worktree 2026-07-23；效能/跨年度整合待（[integration] TS-017/018）| Last Updated: 2026-07-23
 Epic/Story: E07 / US-061
 
 ## Description

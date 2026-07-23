@@ -13,6 +13,9 @@ import type {
   DocumentFilters,
   DocumentStatus,
   NodeDrawerData,
+  AccessHistoryFilters,
+  AccessHistoryPage,
+  AccessHistoryRow,
 } from './types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -249,4 +252,32 @@ export function unmountNodeDoc(lifecycleId: string, nodeId: string, docId: strin
   return apiFetch<void>(`/admin/lifecycles/${lifecycleId}/nodes/${nodeId}/documents/${docId}`, {
     method: 'DELETE',
   });
+}
+
+// ===== E07 文件調閱歷程查詢（F024） =====
+
+function accessHistoryQuery(f: AccessHistoryFilters): string {
+  const qs = new URLSearchParams();
+  if (f.kind) qs.set('kind', f.kind);
+  if (f.person) qs.set('person', f.person);
+  if (f.target) qs.set('target', f.target);
+  if (f.from) qs.set('from', f.from);
+  if (f.to) qs.set('to', f.to);
+  if (f.page) qs.set('page', String(f.page));
+  const q = qs.toString();
+  return q ? `?${q}` : '';
+}
+
+/** GET /admin/access-history（文件調閱歷程查詢 read：SysAdmin/ICSOPAdmin）。 */
+export function getAccessHistory(f: AccessHistoryFilters = {}): Promise<AccessHistoryPage> {
+  return apiFetch<AccessHistoryPage>(`/admin/access-history${accessHistoryQuery(f)}`);
+}
+
+/** GET /admin/access-history/export（匯出，遵循當前查詢條件與角色範圍）。 */
+export function exportAccessHistory(
+  f: AccessHistoryFilters = {},
+): Promise<{ rows: AccessHistoryRow[]; total: number }> {
+  return apiFetch<{ rows: AccessHistoryRow[]; total: number }>(
+    `/admin/access-history/export${accessHistoryQuery(f)}`,
+  );
 }
