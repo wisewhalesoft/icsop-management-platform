@@ -1,13 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
-import { getLifecycles, getDocuments, createDocument } from '../api/endpoints';
+import {
+  getLifecycles,
+  getDocuments,
+  createDocument,
+  getOrgUnits,
+  searchPersons,
+} from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { cycleCodeOf } from '../domain/cycle-codes';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
-import type { LifecycleView, DocumentListItem, DocumentStatus } from '../api/types';
+import { SearchCombobox, MultiSearchCombobox, type ComboOption } from '../components/SearchCombobox';
+import type {
+  LifecycleView,
+  DocumentListItem,
+  DocumentStatus,
+  OrgUnitRecord,
+  PersonRecord,
+} from '../api/types';
+
+/** 人員 → 下拉選項（label＝姓名（部門碼），value＝員工編號）。 */
+function personOpt(p: PersonRecord): ComboOption {
+  return {
+    value: p.employeeNo,
+    label: p.name ? `${p.name}（${p.orgCode ?? '—'}）` : p.employeeNo,
+  };
+}
 
 /**
  * 建立 ICSOP 文件（F010）。版面權威來源：prototypes/14-document-create.html。
@@ -47,6 +68,16 @@ export function DocumentCreatePage(): JSX.Element {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // STEP3 制定組織與當責室長（F014）。
+  const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
+  const [draftingCompanyId, setDraftingCompanyId] = useState('');
+  const [draftingDeptId, setDraftingDeptId] = useState('');
+  const [draftingSectionId, setDraftingSectionId] = useState('');
+  const [primaryChief, setPrimaryChief] = useState<ComboOption | null>(null);
+  const [secondaryChiefs, setSecondaryChiefs] = useState<ComboOption[]>([]);
+  const [usingDepts, setUsingDepts] = useState<ComboOption[]>([]);
+  const [personResults, setPersonResults] = useState<ComboOption[]>([]);
+
   useEffect(() => {
     if (!canWrite) return;
     void getLifecycles()
@@ -57,6 +88,10 @@ export function DocumentCreatePage(): JSX.Element {
       .catch(() => {
         /* 唯一性即時檢查為輔助；載入失敗不阻擋（後端 F013 為權威把關） */
       });
+    // F014：制定組織三級與使用部門之來源（最新同步組織資料）。
+    void getOrgUnits()
+      .then(setOrgUnits)
+      .catch(() => setNotice('無法載入組織資料'));
   }, [canWrite]);
 
   const selectedLc = lifecycles.find((l) => l.id === lifecycleId);
@@ -73,6 +108,93 @@ export function DocumentCreatePage(): JSX.Element {
     [fullNumber, existing],
   );
 
+  // ===== F014 制定組織三級（公司 ROOT → 部 DEPARTMENT → 室 SECTION）與使用部門選項 =====
+  const orgByCode = useMemo(() => {
+    const m = new Map<string, OrgUnitRecord>();
+    for (const u of orgUnits) m.set(u.orgCode, u);
+    return m;
+  }, [orgUnits]);
+  const orgPath = useCallback(
+    (u: OrgUnitRecord): string => {
+      const parts: string[] = [];
+      const seen = new Set<string>();
+      let cur: OrgUnitRecord | undefined = u;
+      while (cur && !seen.has(cur.orgCode)) {
+        seen.add(cur.orgCode);
+        parts.unshift(cur.name);
+        cur = cur.parentCode ? orgByCode.get(cur.parentCode) : undefined;
+      }
+      return parts.join(' / ');
+    },
+    [orgByCode],
+  );
+  const companyOptions = useMemo<ComboOption[]>(
+    () => orgUnits.filter((u) => u.tier === 'ROOT').map((u) => ({ value: u.orgCode, label: u.name })),
+    [orgUnits],
+  );
+  const deptOptions = useMemo<ComboOption[]>(
+    () => orgUnits.filter((u) => u.tier === 'DEPARTMENT').map((u) => ({ value: u.orgCode, label: u.name })),
+    [orgUnits],
+  );
+  const sectionOptions = useMemo<ComboOption[]>(
+    () =>
+      orgUnits
+        .filter((u) => u.tier === 'SECTION' && u.parentCode === draftingDeptId)
+        .map((u) => ({ value: u.orgCode, label: u.name })),
+    [orgUnits, draftingDeptId],
+  );
+  const usingDeptOptions = useMemo<ComboOption[]>(
+    () => orgUnits.map((u) => ({ value: u.orgCode, label: orgPath(u) })),
+    [orgUnits, orgPath],
+  );
+
+  // 制定公司 label（供使用部門/室別 disabled 提示）與 section 有無。
+  const deptHasNoSection = !!draftingDeptId && sectionOptions.length === 0;
+
+  // 三級由上而下相依：變更上層即清空下層已選值（AC「變更上層時清空下層」）。
+  const onCompanyChange = useCallback((v: string) => {
+    setDraftingCompanyId(v);
+    setDraftingDeptId('');
+    setDraftingSectionId('');
+  }, []);
+  const onDeptChange = useCallback((v: string) => {
+    setDraftingDeptId(v);
+    setDraftingSectionId('');
+  }, []);
+
+  // 人員搜尋（當責室長候選；後端 /persons/search 僅回在職）。
+  const runPersonSearch = useCallback((q: string) => {
+    void searchPersons(q)
+      .then((rs) => setPersonResults(rs.map(personOpt)))
+      .catch(() => setPersonResults([]));
+  }, []);
+
+  // AC：選定制定室別後，以該單位 managerEmpNo 帶入「當責室長-主要」預設候選；
+  // 離職者不在 searchActive 結果 → 不帶入（欄位維持空白）。僅在使用者尚未選擇時帶入。
+  const onSectionChange = useCallback(
+    (v: string) => {
+      setDraftingSectionId(v);
+      const sec = orgByCode.get(v);
+      if (!v || !sec?.managerEmpNo) return;
+      const empNo = sec.managerEmpNo;
+      void searchPersons(empNo, 5)
+        .then((rs) => {
+          const match = rs.find((p) => p.employeeNo === empNo);
+          if (match) setPrimaryChief((cur) => cur ?? personOpt(match));
+        })
+        .catch(() => undefined);
+    },
+    [orgByCode],
+  );
+
+  // 主要室長之候選需含目前已選（避免搜尋結果替換後 label 消失）。
+  const primaryOptions = useMemo<ComboOption[]>(() => {
+    if (primaryChief && !personResults.some((o) => o.value === primaryChief.value)) {
+      return [primaryChief, ...personResults];
+    }
+    return personResults;
+  }, [primaryChief, personResults]);
+
   const reset = useCallback(() => {
     setLifecycleId('');
     setStatus('active');
@@ -82,6 +204,13 @@ export function DocumentCreatePage(): JSX.Element {
     setEdSeq('');
     setAnnouncedDate('');
     setContentSummary('');
+    setDraftingCompanyId('');
+    setDraftingDeptId('');
+    setDraftingSectionId('');
+    setPrimaryChief(null);
+    setSecondaryChiefs([]);
+    setUsingDepts([]);
+    setPersonResults([]);
     setErrors({});
     setNotice(null);
   }, []);
@@ -108,6 +237,13 @@ export function DocumentCreatePage(): JSX.Element {
         ...(edition ? { edition } : {}),
         ...(announcedDate ? { announcedDate } : {}),
         ...(contentSummary.trim() ? { contentSummary: contentSummary.trim() } : {}),
+        // F014 制定組織/當責室長/使用部門（皆選填；空值不送出，由後端正規化為空集合）。
+        ...(draftingCompanyId ? { draftingCompanyId } : {}),
+        ...(draftingDeptId ? { draftingDeptId } : {}),
+        ...(draftingSectionId ? { draftingSectionId } : {}),
+        ...(primaryChief ? { primaryChiefId: primaryChief.value } : {}),
+        ...(secondaryChiefs.length ? { secondaryChiefIds: secondaryChiefs.map((c) => c.value) } : {}),
+        ...(usingDepts.length ? { usingDeptIds: usingDepts.map((d) => d.value) } : {}),
       });
       navigate('/admin/documents');
     } catch (e) {
@@ -115,7 +251,24 @@ export function DocumentCreatePage(): JSX.Element {
     } finally {
       setBusy(false);
     }
-  }, [lifecycleId, suffix, documentName, dupHit, status, fullNumber, edition, announcedDate, contentSummary, navigate]);
+  }, [
+    lifecycleId,
+    suffix,
+    documentName,
+    dupHit,
+    status,
+    fullNumber,
+    edition,
+    announcedDate,
+    contentSummary,
+    draftingCompanyId,
+    draftingDeptId,
+    draftingSectionId,
+    primaryChief,
+    secondaryChiefs,
+    usingDepts,
+    navigate,
+  ]);
 
   if (!canWrite) {
     return (
@@ -342,21 +495,122 @@ export function DocumentCreatePage(): JSX.Element {
         </div>
       </section>
 
-      {/* STEP 3/4 · 後續步驟（待各自後端） */}
+      {/* STEP 3 · 制定組織與當責室長（F014；選定循環後開放） */}
+      <section className={`bg-white border border-slate-200 rounded-xl p-5 ${gatedCls}`}>
+        <div className="flex items-center gap-2 mb-4">
+          {badge(3, !gated)}
+          <Icon name="building-2" className="w-4 h-4 text-primary-600" />
+          <h2 className="font-semibold text-slate-900">制定組織與當責室長</h2>
+        </div>
+
+        {/* 制定組織三級相依（公司 → 部 → 室別，由上而下） */}
+        <div className="space-y-4 sm:max-w-md">
+          <SearchCombobox
+            id="dCompany"
+            label={
+              <>
+                制定公司 <span className="text-xs font-normal text-slate-400">（選填）</span>
+              </>
+            }
+            options={companyOptions}
+            value={draftingCompanyId}
+            onChange={onCompanyChange}
+            placeholder="搜尋制定公司…"
+          />
+          <SearchCombobox
+            id="dDept"
+            label="制定部門"
+            options={deptOptions}
+            value={draftingDeptId}
+            onChange={onDeptChange}
+            disabled={!draftingCompanyId}
+            placeholder={draftingCompanyId ? '搜尋制定部門…' : '請先選擇制定公司'}
+          />
+          <SearchCombobox
+            id="dSection"
+            label="制定室別"
+            options={sectionOptions}
+            value={draftingSectionId}
+            onChange={onSectionChange}
+            disabled={!draftingDeptId || deptHasNoSection}
+            placeholder={
+              !draftingDeptId
+                ? '請先選擇制定部門'
+                : deptHasNoSection
+                  ? '此部之下無處/室（留空）'
+                  : '搜尋制定室別…'
+            }
+          />
+        </div>
+        <p className="text-[10px] text-slate-400 mt-1.5 flex items-start gap-1.5">
+          <Icon name="info" className="w-3.5 h-3.5 mt-px" />
+          三級相依（由上而下）：選「制定公司」後方可選其下「制定部門」，再選其下「制定室別」；變更上層將清空下層。部之下無處/室者該欄留空。來源：最新同步之組織資料（不含離職）。
+        </p>
+
+        {/* 當責室長-主要（可搜尋人員，選定制定室別後帶入該室主管為預設候選） */}
+        <div className="grid sm:grid-cols-2 gap-4 mt-4">
+          <SearchCombobox
+            id="dPrimaryChief"
+            label={
+              <>
+                當責室長-主要 <span className="text-xs font-normal text-slate-400">（選填）</span>
+              </>
+            }
+            options={primaryOptions}
+            value={primaryChief?.value ?? ''}
+            onChange={(v) => setPrimaryChief(primaryOptions.find((o) => o.value === v) ?? null)}
+            onQueryChange={runPersonSearch}
+            placeholder="搜尋室長姓名/員編…"
+          />
+        </div>
+
+        {/* 當責室長-次要（可多位，允許為空） */}
+        <div className="mt-4">
+          <MultiSearchCombobox
+            id="dSecondaryChiefs"
+            label="當責室長-次要（可多位，允許為空）"
+            options={personResults}
+            values={secondaryChiefs}
+            onAdd={(opt) => setSecondaryChiefs((prev) => [...prev, opt])}
+            onRemove={(v) => setSecondaryChiefs((prev) => prev.filter((o) => o.value !== v))}
+            onQueryChange={runPersonSearch}
+            placeholder="搜尋並新增次要室長…"
+          />
+        </div>
+
+        {/* 文件使用部門（可多個，允許為空；任意層級） */}
+        <div className="mt-4">
+          <MultiSearchCombobox
+            id="dUsingDepts"
+            label={
+              <>
+                文件使用部門 <span className="text-xs font-normal text-slate-400">（選填，可多個）</span>
+              </>
+            }
+            options={usingDeptOptions}
+            values={usingDepts}
+            onAdd={(opt) => setUsingDepts((prev) => [...prev, opt])}
+            onRemove={(v) => setUsingDepts((prev) => prev.filter((o) => o.value !== v))}
+            placeholder="搜尋並新增使用部門…"
+            emptyChipText="（尚未選擇）"
+          />
+          <p className="text-[10px] text-slate-400 mt-1 flex items-start gap-1.5">
+            <Icon name="info" className="w-3.5 h-3.5 mt-px" />
+            可指定任意層級（本部／部／處室／課）；選擇上層將於權限判定時自動涵蓋其下所有單位（子樹展開）。
+          </p>
+        </div>
+      </section>
+
+      {/* STEP 4 · 附件與關聯文件（待各自後端 F015/F016/F018） */}
       <section className="bg-white border border-dashed border-slate-300 rounded-xl p-5 opacity-70">
         <div className="flex items-center gap-2 mb-2">
-          {badge(3, false)}
-          <Icon name="building-2" className="w-4 h-4 text-slate-400" />
-          <h2 className="font-semibold text-slate-500">制定組織與當責室長</h2>
-        </div>
-        <div className="flex items-center gap-2 mb-4">
           {badge(4, false)}
           <Icon name="paperclip" className="w-4 h-4 text-slate-400" />
           <h2 className="font-semibold text-slate-500">附件與關聯文件</h2>
         </div>
         <p className="text-xs text-slate-400 flex items-start gap-1.5">
           <Icon name="info" className="w-3.5 h-3.5 mt-0.5" />
-          制定組織三級／當責室長（F014）、使用部門、附件（F016）、使用表單（F018）、文件連結（F015）為後續步驟，將於各自後端就緒時開放；建立後可於編輯頁補齊。
+          附件（F016）、使用表單（F018）、文件連結（F015）為後續步驟，將於各自後端就緒時開放；建立後可於編輯頁補齊。
         </p>
       </section>
     </div>

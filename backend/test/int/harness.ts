@@ -34,16 +34,22 @@ export interface IntCtx {
   cookieFor: (loginId: string, companyCode?: string, roleCode?: string) => string;
 }
 
-/** 精準刪除本測試套件建立之 marker 資料（FK 順序：links → documents → lifecycle → account）。 */
+/** 精準刪除本測試套件建立之 marker 資料（FK 順序：links/多值 → documents → lifecycle → account）。 */
 export async function cleanupMarkers(): Promise<void> {
   const q = AppDataSource.query.bind(AppDataSource);
+  const markerDocs = `(SELECT [id] FROM [ICSOP_DOCUMENT] WHERE [documentNumber] LIKE '${MARK.doc}%')`;
   // 連結（若存在）先刪，避免 FK 擋住文件刪除。
   await q(
-    `DELETE FROM [DOCUMENT_LINK] WHERE [sourceDocumentId] IN
-       (SELECT [id] FROM [ICSOP_DOCUMENT] WHERE [documentNumber] LIKE '${MARK.doc}%')
-     OR [targetDocumentId] IN
-       (SELECT [id] FROM [ICSOP_DOCUMENT] WHERE [documentNumber] LIKE '${MARK.doc}%')`,
+    `DELETE FROM [DOCUMENT_LINK] WHERE [sourceDocumentId] IN ${markerDocs}
+       OR [targetDocumentId] IN ${markerDocs}`,
   ).catch(() => undefined);
+  // F014 多值關聯（FK ON DELETE CASCADE 亦會連帶清除；此處顯式刪除以防萬一）。
+  await q(`DELETE FROM [DOC_SECONDARY_CHIEF] WHERE [documentId] IN ${markerDocs}`).catch(
+    () => undefined,
+  );
+  await q(`DELETE FROM [DOC_USING_DEPT] WHERE [documentId] IN ${markerDocs}`).catch(
+    () => undefined,
+  );
   await q(`DELETE FROM [ICSOP_DOCUMENT] WHERE [documentNumber] LIKE '${MARK.doc}%'`).catch(
     () => undefined,
   );

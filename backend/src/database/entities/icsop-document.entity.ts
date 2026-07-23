@@ -27,14 +27,15 @@ export class IcsopDocument {
   @Column({ type: 'uniqueidentifier', nullable: true })
   nodeId!: string | null; // → LIFECYCLE_NODE（唯一權威寫入＝節點抽屜 F009）
 
-  @Column({ type: 'uniqueidentifier', nullable: true })
-  draftingCompanyId!: string | null; // → ORG_UNIT（公司）
+  // 制定公司/部門/室別＝ORG_UNIT.orgCode（業務鍵，非 UUID；對齊讀取端 findByOrgCode 與前端下拉，F014）。
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  draftingCompanyId!: string | null; // → ORG_UNIT.orgCode（公司/ROOT）
 
-  @Column({ type: 'uniqueidentifier', nullable: true })
-  draftingDeptId!: string | null; // → ORG_UNIT（部）
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  draftingDeptId!: string | null; // → ORG_UNIT.orgCode（部）
 
-  @Column({ type: 'uniqueidentifier', nullable: true })
-  draftingSectionId!: string | null; // → ORG_UNIT（處/室）
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  draftingSectionId!: string | null; // → ORG_UNIT.orgCode（處/室）
 
   @Column({ type: 'varchar', length: 20, nullable: true })
   primaryChiefId!: string | null; // 當責室長-主要（員編；PERSON 表待建）

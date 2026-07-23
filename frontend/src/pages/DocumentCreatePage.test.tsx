@@ -6,7 +6,13 @@ import { DocumentCreatePage } from './DocumentCreatePage';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import { ApiError } from '../api/client';
-import type { SessionUser, LifecycleView, DocumentListItem } from '../api/types';
+import type {
+  SessionUser,
+  LifecycleView,
+  DocumentListItem,
+  OrgUnitRecord,
+  PersonRecord,
+} from '../api/types';
 
 vi.mock('../api/endpoints');
 vi.mock('../auth/useAuth');
@@ -35,11 +41,44 @@ function doc(over: Partial<DocumentListItem>): DocumentListItem {
 
 const renderPage = () => render(<MemoryRouter><DocumentCreatePage /></MemoryRouter>);
 
+function org(over: Partial<OrgUnitRecord>): OrgUnitRecord {
+  return {
+    companyCode: 'AS', orgCode: '', codePrefix: '', parentCode: null, tier: 'SECTION',
+    name: '', descFull: null, managerEmpNo: null, isActive: true, ...over,
+  };
+}
+// 迷你組織樹：ROOT 和潤本部 → DIVISION 經企本部 → 部（企劃部/資訊部/稽核部）→ 室
+const ORG: OrgUnitRecord[] = [
+  org({ orgCode: '00000', parentCode: null, tier: 'ROOT', name: '和潤本部' }),
+  org({ orgCode: 'A0000', parentCode: '00000', tier: 'DIVISION', name: '經營企劃管理本部' }),
+  org({ orgCode: 'A2000', parentCode: 'A0000', tier: 'DEPARTMENT', name: '企劃部' }),
+  org({ orgCode: 'A3000', parentCode: 'A0000', tier: 'DEPARTMENT', name: '資訊部' }),
+  org({ orgCode: 'B2000', parentCode: 'A0000', tier: 'DEPARTMENT', name: '稽核部' }), // 無室
+  org({ orgCode: 'A2100', parentCode: 'A2000', tier: 'SECTION', name: '車輛行銷室', managerEmpNo: '20050' }),
+  org({ orgCode: 'A2200', parentCode: 'A2000', tier: 'SECTION', name: '數位行銷室', managerEmpNo: '99999' }),
+  org({ orgCode: 'A3100', parentCode: 'A3000', tier: 'SECTION', name: '應用發展室' }),
+];
+const PERSONS: PersonRecord[] = [
+  { employeeNo: '20050', name: '陳彥廷', orgCode: 'A2100', employmentStatus: 'active' },
+  { employeeNo: '20053', name: '林建宏', orgCode: 'A2200', employmentStatus: 'active' },
+];
+
+/** 依序選定 循環→制定公司→制定部門，回傳到「可選室別」的狀態。 */
+async function selectToDept(): Promise<void> {
+  await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+  await userEvent.click(screen.getByLabelText(/制定公司/));
+  await userEvent.click(await screen.findByRole('option', { name: '和潤本部' }));
+  await userEvent.click(screen.getByLabelText('制定部門'));
+  await userEvent.click(await screen.findByRole('option', { name: '企劃部' }));
+}
+
 describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getLifecycles).mockResolvedValue(LCS);
     vi.mocked(endpoints.getDocuments).mockResolvedValue([]);
+    vi.mocked(endpoints.getOrgUnits).mockResolvedValue([]);
+    vi.mocked(endpoints.searchPersons).mockResolvedValue([]);
   });
 
   it('ICSOPAdmin 渲染分步表單並載入循環下拉', async () => {
@@ -141,5 +180,120 @@ describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', ()
     await userEvent.click(screen.getByRole('button', { name: '建立' }));
 
     await waitFor(() => expect(screen.getByText(/編號已存在/)).toBeInTheDocument());
+  });
+});
+
+describe('DocumentCreatePage — STEP3 制定組織與當責室長（F014，移植 prototype 14 STEP3）', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(endpoints.getLifecycles).mockResolvedValue(LCS);
+    vi.mocked(endpoints.getDocuments).mockResolvedValue([]);
+    vi.mocked(endpoints.getOrgUnits).mockResolvedValue(ORG);
+    vi.mocked(endpoints.searchPersons).mockResolvedValue(PERSONS);
+    vi.mocked(endpoints.createDocument).mockResolvedValue({} as never);
+    mockAuth('ICSOPAdmin');
+  });
+
+  it('渲染 STEP3 真實表單（制定公司/部門/室別、當責室長主/次、使用部門）', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    expect(screen.getByLabelText(/制定公司/)).toBeInTheDocument();
+    expect(screen.getByLabelText('制定部門')).toBeInTheDocument();
+    expect(screen.getByLabelText('制定室別')).toBeInTheDocument();
+    expect(screen.getByLabelText(/當責室長-主要/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/當責室長-次要/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/文件使用部門/)).toBeInTheDocument();
+  });
+
+  it('三級由上而下：制定部門於未選公司時停用；選定公司後開放', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    expect(screen.getByLabelText('制定部門')).toBeDisabled();
+    await userEvent.click(screen.getByLabelText(/制定公司/));
+    await userEvent.click(await screen.findByRole('option', { name: '和潤本部' }));
+    expect(screen.getByLabelText('制定部門')).not.toBeDisabled();
+  });
+
+  it('制定室別僅顯示所選部門底下之室別（不含他部之室）', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await selectToDept();
+    await userEvent.click(screen.getByLabelText('制定室別'));
+    expect(await screen.findByRole('option', { name: '車輛行銷室' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '數位行銷室' })).toBeInTheDocument();
+    // 應用發展室屬「資訊部」，不應出現在「企劃部」之室別
+    expect(screen.queryByRole('option', { name: '應用發展室' })).not.toBeInTheDocument();
+  });
+
+  it('變更制定部門清空已選制定室別', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await selectToDept();
+    await userEvent.click(screen.getByLabelText('制定室別'));
+    await userEvent.click(await screen.findByRole('option', { name: '車輛行銷室' }));
+    await waitFor(() => expect(screen.getByLabelText('制定室別')).toHaveValue('車輛行銷室'));
+    // 改選他部 → 室別清空
+    await userEvent.click(screen.getByLabelText('制定部門'));
+    await userEvent.click(await screen.findByRole('option', { name: '資訊部' }));
+    await waitFor(() => expect(screen.getByLabelText('制定室別')).toHaveValue(''));
+  });
+
+  it('選定制定室別後帶入該室 managerEmpNo 對應之在職者為主要室長預設候選', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await selectToDept();
+    await userEvent.click(screen.getByLabelText('制定室別'));
+    await userEvent.click(await screen.findByRole('option', { name: '車輛行銷室' }));
+    // managerEmpNo 20050 → 在職者 陳彥廷 帶入主要室長
+    await waitFor(() =>
+      expect(screen.getByLabelText(/當責室長-主要/)).toHaveValue('陳彥廷（A2100）'),
+    );
+  });
+
+  it('制定室別 managerEmpNo 無對應在職者（離職/查無）→ 主要室長維持空白', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await selectToDept();
+    await userEvent.click(screen.getByLabelText('制定室別'));
+    // 數位行銷室 managerEmpNo=99999，不在 searchPersons 結果 → 不帶入
+    await userEvent.click(await screen.findByRole('option', { name: '數位行銷室' }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByLabelText(/當責室長-主要/)).toHaveValue('');
+  });
+
+  it('完整送出：制定三級＋主要室長（預設候選）＋1 次要＋1 使用部門隨 createDocument 落地', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await selectToDept();
+    // 制定室別（帶入主要室長 20050）
+    await userEvent.click(screen.getByLabelText('制定室別'));
+    await userEvent.click(await screen.findByRole('option', { name: '車輛行銷室' }));
+    await waitFor(() =>
+      expect(screen.getByLabelText(/當責室長-主要/)).toHaveValue('陳彥廷（A2100）'),
+    );
+    // 次要室長：輸入關鍵字後選 林建宏
+    await userEvent.type(screen.getByLabelText(/當責室長-次要/), '林');
+    await userEvent.click(await screen.findByRole('option', { name: /林建宏/ }));
+    // 使用部門：搜尋車輛行銷室路徑並加入
+    await userEvent.type(screen.getByLabelText(/文件使用部門/), '車輛行銷室');
+    await userEvent.click(await screen.findByRole('option', { name: /車輛行銷室/ }));
+    // 必填
+    await userEvent.type(screen.getByLabelText(/ICSOP 文件編號/), '101-1-01');
+    await userEvent.type(screen.getByLabelText(/文件名稱/), '車輛分期進件作業');
+    await userEvent.click(screen.getByRole('button', { name: '建立' }));
+
+    await waitFor(() =>
+      expect(endpoints.createDocument).toHaveBeenCalledWith(
+        expect.objectContaining({
+          draftingCompanyId: '00000',
+          draftingDeptId: 'A2000',
+          draftingSectionId: 'A2100',
+          primaryChiefId: '20050',
+          secondaryChiefIds: ['20053'],
+          usingDeptIds: ['A2100'],
+        }),
+      ),
+    );
   });
 });
