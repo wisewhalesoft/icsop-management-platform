@@ -106,16 +106,123 @@ export interface DocumentListItem {
   draftingCompanyId: string | null;
   draftingDeptId: string | null;
   draftingSectionId: string | null;
+  /** F017 名稱解析（org-foundation NameResolutionService；查無→null，前端顯示「—」）。 */
+  draftingCompanyName: string | null;
+  draftingDeptName: string | null;
+  draftingSectionName: string | null;
   primaryChiefId: string | null;
+  /** F017 當責室長姓名（查無→null，前端 fallback 顯示員編）。 */
+  primaryChiefName: string | null;
   edition: string | null;
   announcedDate: string | null;
   contentSummary: string | null;
 }
 
+/** F017 後端分頁結果（GET /admin/documents 回傳）。 */
+export interface DocumentListPage {
+  items: DocumentListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasNext: boolean;
+}
+
+/** F017 清單排序鍵（後端支援 documentNumber/announcedDate）。 */
+export type DocumentSortBy = 'documentNumber' | 'announcedDate';
+export type SortDir = 'asc' | 'desc';
+
 export interface DocumentFilters {
   lifecycleId?: string;
+  /** 狀態：接受原始儲存值（active/inactive/void）或衍生顯示值（已公告/進度中/失效/作廢）。 */
   status?: string;
   keyword?: string;
+  documentNumber?: string;
+  documentName?: string;
+  draftingCompanyId?: string;
+  draftingDeptId?: string;
+  draftingSectionId?: string;
+  primaryChiefId?: string;
+  /** 連結點程序書篩選（擁有指向此目標之連結者）。 */
+  linkTargetId?: string;
+  sortBy?: DocumentSortBy;
+  sortDir?: SortDir;
+  /** 1-based 頁碼（預設 1）。 */
+  page?: number;
+  /** 每頁筆數（預設 50）。 */
+  pageSize?: number;
+}
+
+/**
+ * 單筆文件檢視（GET /admin/documents/:id；鏡射後端 DocumentView）。
+ * ⚠ announcedDate 經 JSON 序列化為 ISO 字串（或 null）。制定組織欄為 ORG_UNIT.orgCode；
+ * 當責室長欄為 employeeNo；名稱解析由前端另以 /org-units、/persons 補齊（單筆讀取不附名稱）。
+ */
+export interface DocumentView {
+  id: string;
+  status: DocumentStatus;
+  documentNumber: string;
+  documentName: string;
+  lifecycleId: string;
+  nodeId: string | null;
+  draftingCompanyId: string | null;
+  draftingDeptId: string | null;
+  draftingSectionId: string | null;
+  primaryChiefId: string | null;
+  /** F014 多值：一律回明確集合（可為空陣列）。 */
+  secondaryChiefIds: string[];
+  usingDeptIds: string[];
+  edition: string | null;
+  announcedDate: string | null;
+  contentSummary: string | null;
+}
+
+/** F011 版本對照：單一欄位之新舊值快照。 */
+export interface DocumentFieldChange {
+  field: string;
+  before: unknown;
+  after: unknown;
+}
+
+/** F011 PATCH /admin/documents/:id 回傳：覆寫後之文件 + 本次異動之新舊值對照。 */
+export interface DocumentUpdateResult {
+  document: DocumentView;
+  changes: DocumentFieldChange[];
+}
+
+/** F015 連結點列（GET /admin/documents/:id/links；附目標編號/書名/目前狀態）。 */
+export interface DocumentLinkView {
+  linkId: string;
+  targetDocumentId: string;
+  targetNumber: string | null;
+  targetName: string | null;
+  targetStatus: DocumentStatus | null;
+}
+
+/** F016 單份附件類型（覆蓋式，各文件各 1 份）。 */
+export type SingleAttachmentType = 'ICSOP_PDF' | 'OJT_SIGNIN';
+
+/** F016 附件記錄（上傳端點回傳；鏡射後端 DocumentAttachmentRecord）。 */
+export interface DocumentAttachmentRecord {
+  id: string;
+  documentId: string;
+  type: SingleAttachmentType;
+  fileName: string;
+  blobPath: string;
+  contentType: string;
+  size: number;
+  uploadedBy: string;
+  uploadedAt: string;
+}
+
+/** F018 使用表單記錄（表單池 / 文件關聯；鏡射後端 UsageFormRecord）。 */
+export interface UsageFormRecord {
+  id: string;
+  name: string;
+  blobPath: string;
+  format: string;
+  size: number;
+  uploadedBy: string;
+  uploadedAt: string;
 }
 
 // ===== E07 文件調閱歷程（F024） =====

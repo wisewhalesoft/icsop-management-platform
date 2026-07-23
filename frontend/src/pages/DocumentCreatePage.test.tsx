@@ -10,6 +10,7 @@ import type {
   SessionUser,
   LifecycleView,
   DocumentListItem,
+  DocumentListPage,
   OrgUnitRecord,
   PersonRecord,
 } from '../api/types';
@@ -34,10 +35,16 @@ function doc(over: Partial<DocumentListItem>): DocumentListItem {
     id: 'd0', status: 'active', documentNumber: '', documentName: '',
     lifecycleId: 'lc1', lifecycleName: '銷售及收款循環', nodeId: null,
     draftingCompanyId: null, draftingDeptId: null, draftingSectionId: null,
-    primaryChiefId: null, edition: null, announcedDate: null, contentSummary: null,
+    draftingCompanyName: null, draftingDeptName: null, draftingSectionName: null,
+    primaryChiefId: null, primaryChiefName: null,
+    edition: null, announcedDate: null, contentSummary: null,
     ...over,
   };
 }
+
+const page = (items: DocumentListItem[] = []): DocumentListPage => ({
+  items, total: items.length, page: 1, pageSize: 50, hasNext: false,
+});
 
 const renderPage = () => render(<MemoryRouter><DocumentCreatePage /></MemoryRouter>);
 
@@ -76,9 +83,10 @@ describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', ()
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getLifecycles).mockResolvedValue(LCS);
-    vi.mocked(endpoints.getDocuments).mockResolvedValue([]);
+    vi.mocked(endpoints.getDocuments).mockResolvedValue(page([]));
     vi.mocked(endpoints.getOrgUnits).mockResolvedValue([]);
     vi.mocked(endpoints.searchPersons).mockResolvedValue([]);
+    vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([]);
   });
 
   it('ICSOPAdmin 渲染分步表單並載入循環下拉', async () => {
@@ -154,9 +162,9 @@ describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', ()
 
   it('即時唯一性：編號命中佔用（有效）文件 → 顯示 DUPLICATE 並擋下送出', async () => {
     mockAuth('ICSOPAdmin');
-    vi.mocked(endpoints.getDocuments).mockResolvedValue([
+    vi.mocked(endpoints.getDocuments).mockResolvedValue(page([
       doc({ id: 'x', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業', status: 'active' }),
-    ]);
+    ]));
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
 
@@ -187,9 +195,10 @@ describe('DocumentCreatePage — STEP3 制定組織與當責室長（F014，移�
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getLifecycles).mockResolvedValue(LCS);
-    vi.mocked(endpoints.getDocuments).mockResolvedValue([]);
+    vi.mocked(endpoints.getDocuments).mockResolvedValue(page([]));
     vi.mocked(endpoints.getOrgUnits).mockResolvedValue(ORG);
     vi.mocked(endpoints.searchPersons).mockResolvedValue(PERSONS);
+    vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([]);
     vi.mocked(endpoints.createDocument).mockResolvedValue({} as never);
     mockAuth('ICSOPAdmin');
   });
@@ -295,5 +304,70 @@ describe('DocumentCreatePage — STEP3 制定組織與當責室長（F014，移�
         }),
       ),
     );
+  });
+});
+
+describe('DocumentCreatePage — STEP4 附件與關聯文件（F016/F018/F015，移植 prototype 14 STEP4）', () => {
+  const EXISTING = doc({ id: 'docB', documentNumber: 'ICSOP-SRC-101-2-00', documentName: '消金審核作業', status: 'active' });
+  const FORM = {
+    id: 'form1', name: '進件申請書.xlsx', blobPath: 'usage-forms/x.xlsx',
+    format: 'xlsx', size: 1024, uploadedBy: 'u', uploadedAt: '2026-06-01T00:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(endpoints.getLifecycles).mockResolvedValue(LCS);
+    vi.mocked(endpoints.getDocuments).mockResolvedValue(page([EXISTING]));
+    vi.mocked(endpoints.getOrgUnits).mockResolvedValue([]);
+    vi.mocked(endpoints.searchPersons).mockResolvedValue([]);
+    vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([FORM]);
+    vi.mocked(endpoints.createDocument).mockResolvedValue({ id: 'new1' } as never);
+    vi.mocked(endpoints.uploadIcsopPdf).mockResolvedValue({} as never);
+    vi.mocked(endpoints.linkUsageForms).mockResolvedValue(undefined);
+    vi.mocked(endpoints.updateDocument).mockResolvedValue({} as never);
+    mockAuth('ICSOPAdmin');
+  });
+
+  it('渲染 STEP4：附件上傳卡、使用表單、文件連結點', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    expect(screen.getByText('附件與關聯文件')).toBeInTheDocument();
+    expect(screen.getByLabelText(/上傳 ICSOP PDF/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/上傳 OJT 簽到表/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/使用表單/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/文件連結點/)).toBeInTheDocument();
+  });
+
+  it('選取使用表單與連結點 → 建立後以新文件 id 關聯表單並整批送出連結', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    await userEvent.type(screen.getByLabelText(/ICSOP 文件編號/), '101-1-09');
+    await userEvent.type(screen.getByLabelText(/文件名稱/), '車輛分期進件作業');
+    // 使用表單
+    await userEvent.type(screen.getByLabelText(/使用表單/), '進件');
+    await userEvent.click(await screen.findByRole('option', { name: /進件申請書/ }));
+    // 連結點
+    await userEvent.type(screen.getByLabelText(/文件連結點/), '消金');
+    await userEvent.click(await screen.findByRole('option', { name: /消金審核作業/ }));
+    await userEvent.click(screen.getByRole('button', { name: '建立' }));
+
+    await waitFor(() => expect(endpoints.createDocument).toHaveBeenCalled());
+    await waitFor(() => expect(endpoints.linkUsageForms).toHaveBeenCalledWith('new1', ['form1']));
+    await waitFor(() => expect(endpoints.updateDocument).toHaveBeenCalledWith('new1', { links: ['docB'] }));
+  });
+
+  it('選取 ICSOP PDF 檔 → 建立後以新文件 id 上傳附件', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    await userEvent.type(screen.getByLabelText(/ICSOP 文件編號/), '101-1-10');
+    await userEvent.type(screen.getByLabelText(/文件名稱/), '名');
+    const file = new File(['%PDF-1.4'], 'proc.pdf', { type: 'application/pdf' });
+    await userEvent.upload(screen.getByLabelText(/上傳 ICSOP PDF/), file);
+    expect(screen.getByText(/已選擇：proc.pdf/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '建立' }));
+
+    await waitFor(() => expect(endpoints.uploadIcsopPdf).toHaveBeenCalledWith('new1', file));
   });
 });
