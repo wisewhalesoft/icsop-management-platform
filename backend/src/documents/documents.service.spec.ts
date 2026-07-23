@@ -362,6 +362,59 @@ describe('DocumentsService.update（F011 編輯＋版本對照＋F013 編輯側�
   });
 });
 
+describe('DocumentsService.setStatus 切換原因＋STATUS 事件（F012）', () => {
+  let store: FakeStore;
+  let pub: FakePublisher;
+  let svc: DocumentsService;
+  beforeEach(() => {
+    store = new FakeStore();
+    pub = new FakePublisher();
+    svc = new DocumentsService(store, pub);
+  });
+
+  it('TS-F012-001 切換並填原因 → 狀態更新成功（reason 被接收）', async () => {
+    const d = store.seedDoc({ status: 'active', documentNumber: 'N-9' });
+    await svc.setStatus(d.id, 'inactive', '內容已過時');
+    expect(store.statusUpdates).toContainEqual({ id: d.id, status: 'inactive' });
+  });
+
+  it('TS-F012-002 未填原因 → 切換仍成功', async () => {
+    const d = store.seedDoc({ status: 'active', documentNumber: 'N-9' });
+    await svc.setStatus(d.id, 'inactive');
+    expect(store.statusUpdates).toContainEqual({ id: d.id, status: 'inactive' });
+  });
+
+  it('TS-F012-003/004 原因為空字串/純空白 → 切換仍成功（視同未填）', async () => {
+    const d1 = store.seedDoc({ status: 'active', documentNumber: 'N-A' });
+    const d2 = store.seedDoc({ status: 'active', documentNumber: 'N-B' });
+    await svc.setStatus(d1.id, 'inactive', '');
+    await svc.setStatus(d2.id, 'inactive', '   ');
+    expect(store.statusUpdates).toContainEqual({ id: d1.id, status: 'inactive' });
+    expect(store.statusUpdates).toContainEqual({ id: d2.id, status: 'inactive' });
+  });
+
+  it('TS-F012-008 切換成功後發出 DocumentChangedEvent{STATUS}（決策 A 契約，不承載 reason）', async () => {
+    const d = store.seedDoc({ status: 'active', documentNumber: 'N-9' });
+    await svc.setStatus(d.id, 'inactive', '依法規更新');
+    expect(pub.events).toHaveLength(1);
+    expect(pub.events[0]).toEqual(
+      expect.objectContaining({
+        documentId: d.id,
+        changeType: 'STATUS',
+        changedFields: ['status'],
+      }),
+    );
+    expect(pub.events[0].occurredAt).toBeInstanceOf(Date);
+    // 契約鎖定：STATUS 事件不含 reason/前後狀態（屬 F037，deferred）。
+    expect(pub.events[0]).not.toHaveProperty('reason');
+  });
+
+  it('切換失敗（不存在）時不發出事件', async () => {
+    await expect(svc.setStatus('nope', 'inactive')).rejects.toThrow();
+    expect(pub.events).toHaveLength(0);
+  });
+});
+
 describe('DB 唯一鍵違反映射（F013 併發第二保險）', () => {
   const CORE2 = {
     lifecycleId: 'lc1',

@@ -65,8 +65,12 @@ export class DocumentsController {
 
   @Patch(':id/status')
   @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'write')
-  setStatus(@Param('id') id: string, @Body() body: { status?: string }) {
+  setStatus(
+    @Param('id') id: string,
+    @Body() body: { status?: string; reason?: string },
+  ) {
     if (!body?.status) throw new BadRequestException('VALIDATION_ERROR');
-    return this.svc.setStatus(id, body.status);
+    // F012：切換原因（選填）一併傳遞；缺鍵→undefined（不阻擋）。
+    return this.svc.setStatus(id, body.status, body.reason);
   }
 }

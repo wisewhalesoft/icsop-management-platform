@@ -22,6 +22,7 @@ import { missingRequired, isNumberAvailable } from './document-rules';
 import { isValidStatus, DocumentStatus } from './document-status';
 import { classifyFields } from './document-field-write';
 import { isUniqueConstraintViolation } from './db-error';
+import { normalizeReason } from './status-reason';
 import {
   DOCUMENT_CHANGE_PUBLISHER,
   DocumentChangePublisher,
@@ -196,8 +197,16 @@ export class DocumentsService {
   /**
    * 切換狀態（F012）。狀態合法 → 存在 → 切回「有效」時重驗編號唯一性（F013，排除自身）→ 更新。
    * 功能面（僅 ICSOPAdmin）由 controller guard 落實。
+   *
+   * reason（OQ-E04-02，選填）：切換原因。經 normalizeReason 正規化（空白視同未填）。
+   * ⚠ 決策 A：本 wave 之 DocumentChangedEvent 契約不承載 reason/前後狀態（屬 F037 變更歷程，deferred）；
+   * 故 reason 目前僅被接收/正規化、供未來記錄使用，尚無持久化 sink。成功後發 STATUS 事件。
    */
-  async setStatus(id: string, status: string): Promise<void> {
+  async setStatus(
+    id: string,
+    status: string,
+    reason?: string,
+  ): Promise<void> {
     if (!isValidStatus(status)) {
       throw new BadRequestException('DOCUMENT_STATUS_INVALID');
     }
@@ -210,6 +219,16 @@ export class DocumentsService {
         throw new ConflictException('DOCUMENT_NUMBER_DUPLICATE');
       }
     }
+    // reason 正規化（空白視同未填）；目前無持久化 sink（F037 deferred），保留供未來記錄。
+    void normalizeReason(reason);
     await this.store.updateStatus(id, status);
+
+    // 決策 A seam：狀態切換成功後發 STATUS 事件（不承載 reason，契約鎖定）。
+    await this.publisher.publish({
+      documentId: id,
+      changeType: 'STATUS',
+      changedFields: ['status'],
+      occurredAt: new Date(),
+    });
   }
 }
