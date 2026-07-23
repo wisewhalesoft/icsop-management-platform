@@ -13,8 +13,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * status metadata 以英文內部碼（active/inactive/void）快照，對齊 document-status.ts（見 F029 impl log）。
  * usingDeptIds 以 JSON 陣列快照（nvarchar(max)）；權威過濾發生於向量庫 payload，本欄為反正規化快照。
  */
-export class RagIndex1722297600000 implements MigrationInterface {
-  name = 'RagIndex1722297600000';
+export class RagIndex1722384000000 implements MigrationInterface {
+  name = 'RagIndex1722384000000';
 
   public async up(q: QueryRunner): Promise<void> {
     await q.query(`

@@ -217,14 +217,20 @@ export function deleteDagEdge(lifecycleId: string, edgeId: string): Promise<void
 
 // ===== E04 ICSOP 文件（F010/F012/F017） =====
 
-/** GET /admin/documents（ICSOP文件管理 read）。 */
+/**
+ * GET /admin/documents（ICSOP文件管理 read）。
+ * F017 起後端回傳分頁物件 `{items,total,page,pageSize}`；此處先解出 items 維持既有清單頁，
+ * 完整分頁 UI 併入 doc-edit 前端接線（後續）。
+ */
 export function getDocuments(f: DocumentFilters = {}): Promise<DocumentListItem[]> {
   const qs = new URLSearchParams();
   if (f.lifecycleId) qs.set('lifecycleId', f.lifecycleId);
   if (f.status) qs.set('status', f.status);
   if (f.keyword) qs.set('keyword', f.keyword);
   const q = qs.toString();
-  return apiFetch<DocumentListItem[]>(`/admin/documents${q ? `?${q}` : ''}`);
+  return apiFetch<{ items: DocumentListItem[] }>(`/admin/documents${q ? `?${q}` : ''}`).then(
+    (r) => r.items,
+  );
 }
 
 /** POST /admin/documents（建立，ICSOPAdmin；DOCUMENT_REQUIRED_FIELD_MISSING/NUMBER_DUPLICATE）。 */
