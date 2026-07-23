@@ -1,5 +1,7 @@
 # F014: 制定組織與當責室長設定
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-20
+Priority: P0-MVP | Status: 🟡 進行中（create-side 已實作＋整合驗證；edit-side 待 F011 前端） | Last Updated: 2026-07-23
+
+> **實作進度（2026-07-23，create-side）**：制定公司/部門/室別＋當責室長-主要（scalar）＋次要（DOC_SECONDARY_CHIEF）＋使用部門（DOC_USING_DEPT）已於建立端持久化；`GET /admin/documents/:id` 回傳全部；前端 STEP3 真實表單（三級相依可搜尋下拉、次要/使用部門 chips、室別 managerEmpNo 預設候選）。migration `1722556800000` 已對 SOP 執行。unit＋int 綠。詳見 [implementation-logs/F014-impl.md](../../implementation-logs/F014-impl.md)。**edit-side（編輯頁載入/改寫多值）屬 F011 前端範圍，未含本輪。**
 Epic/Story: E04 / US-034
 
 ## Description
