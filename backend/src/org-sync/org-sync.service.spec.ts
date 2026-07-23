@@ -141,6 +141,7 @@ class FakeStore implements OrgSyncStore {
         tier: o.tier,
         parentCode: o.parentCode,
         name: o.name,
+        descFull: o.descFull,
         managerEmpNo: o.managerEmpNo,
         isActive: o.isActive,
       });
@@ -282,6 +283,8 @@ describe('OrgSyncService.run', () => {
       tier: 'SECTION',
       parentCode: 'JA000',
       name: 'dept-JAC00',
+      // rawDept 工廠未設 DESC_FULL → normalizeDept 產出 descFull=null；此處須一致方為 noop。
+      descFull: null,
       managerEmpNo: null,
       isActive: true,
     });
@@ -297,6 +300,36 @@ describe('OrgSyncService.run', () => {
         plan.accountUpdates.length +
         plan.accountDisables.length,
     ).toBe(0);
+  });
+
+  it('TS-DESCFULL-006 既有列 descFull=null → 下次全量同步自動回填（分類為 update）', async () => {
+    const reader = new FakeReader();
+    // 來源部門帶 DESC_FULL 全名；其餘欄位與既有列一致。
+    reader.depts = [
+      rawDept({ CODE: 'JAC00', DESC_CHI: 'dept-JAC00', DESC_FULL: '營運管理部審查室' }),
+    ];
+    reader.activeIds = ['peter'];
+    reader.changes = [rawAcc({ USERID: 'peter' })];
+    const store = new FakeStore();
+    // 既有列為加欄前建立（descFull=null），其餘欄位皆與來源相同 → 若 classifyOrgUnit 未納 descFull
+    // 比對即誤判 noop、永不回填。
+    store.orgUnits.set('JAC00', {
+      orgCode: 'JAC00',
+      codePrefix: 'JAC',
+      tier: 'SECTION',
+      parentCode: 'JA000',
+      name: 'dept-JAC00',
+      descFull: null,
+      managerEmpNo: null,
+      isActive: true,
+    });
+    seedActiveAccount(store, { loginId: 'peter', name: 'name-peter' });
+
+    const res = await makeService(reader, store).run('scheduled');
+    expect(res.status).toBe('success');
+    // 回填是全量同步的副作用：該筆被分類為 update 並寫入非 null descFull（不需獨立 backfill script）。
+    expect(res.stats.orgUpdated).toBe(1);
+    expect(store.orgUnits.get('JAC00')?.descFull).toBe('營運管理部審查室');
   });
 
   it('閾值中止：消失 6% → failed + DISAPPEARED_RATIO_EXCEEDED，不停用任何帳號、不套用任何異動', async () => {
