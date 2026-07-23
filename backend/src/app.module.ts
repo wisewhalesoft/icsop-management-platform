@@ -8,6 +8,7 @@ import { AccountsModule } from './accounts/accounts.module';
 import { LifecycleModule } from './lifecycle/lifecycle.module';
 import { DocumentsModule } from './documents/documents.module';
 import { AttachmentsModule } from './attachments/attachments.module';
+import { XlsSourceModule } from './xls-source/xls-source.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AttachmentsModule } from './attachments/attachments.module';
     LifecycleModule,
     DocumentsModule,
     AttachmentsModule,
+    XlsSourceModule,
   ],
   controllers: [AppController],
 })

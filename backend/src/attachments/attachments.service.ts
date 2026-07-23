@@ -16,8 +16,9 @@ import {
   extensionOf,
   FileCategory,
 } from '../storage/file-rules';
-import { canPerform, FunctionKey } from '../rbac/function-matrix';
-import { canWriteField, FieldKey } from '../rbac/field-matrix';
+import { FunctionKey } from '../rbac/function-matrix';
+import { FieldKey } from '../rbac/field-matrix';
+import { assertCanWriteDocumentAsset } from '../storage/document-asset-authz';
 import {
   ATTACHMENT_STORE,
   AttachmentStore,
@@ -91,7 +92,11 @@ export class AttachmentsService {
     file: UploadFile,
   ): Promise<DocumentAttachmentRecord> {
     // 1) 授權：功能面（read gate）→ 欄位面（write gate）。
-    this.assertCanWrite(session?.roleCode, FIELD_KEY_BY_TYPE[type]);
+    assertCanWriteDocumentAsset(
+      session?.roleCode,
+      FunctionKey.ICSOP_DOCUMENT_MANAGEMENT,
+      FIELD_KEY_BY_TYPE[type],
+    );
 
     // 2) 格式白名單（category 名同 type）→ 3) 大小上限。
     assertFormatAllowed(type as FileCategory, file);
@@ -153,15 +158,5 @@ export class AttachmentsService {
     type: SingleAttachmentType,
   ): Promise<DocumentAttachmentRecord | null> {
     return this.store.findSingle(documentId, type);
-  }
-
-  /** 兩道授權閘門（功能 read → 欄位 write），錯誤碼分流見 class doc。 */
-  private assertCanWrite(roleCode: string | undefined, fieldKey: string): void {
-    if (!canPerform(roleCode, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')) {
-      throw new ForbiddenException('PERMISSION_DENIED');
-    }
-    if (canWriteField(roleCode, fieldKey) !== 'WRITABLE') {
-      throw new ForbiddenException('FIELD_WRITE_FORBIDDEN');
-    }
   }
 }
