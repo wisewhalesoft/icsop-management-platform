@@ -1,9 +1,16 @@
 import { normalizeEmail, ResolvableAccount } from './account-resolver';
 
-/** SessionGuard 每請求即時把關所需之現行帳號狀態（來源真相＝DB）。 */
+/**
+ * SessionGuard 每請求即時把關所需之現行帳號狀態（來源真相＝DB）。
+ * orgCode/name/employeeNo（org-foundation 擴充）：供 SessionGuard 填入 request-context 之
+ * SessionUser（F019 置頂／F020 身分快照）。刻意選填（`?`）以相容既有測試替身（只回 status/roleCode）。
+ */
 export interface CurrentAccount {
   status: string; // active / disabled
   roleCode?: string;
+  orgCode?: string | null; // ← ACCOUNT.orgCode（對應 ORG_UNIT.orgCode）
+  name?: string | null; // ← ACCOUNT.name（USERNM）
+  employeeNo?: string | null; // ← ACCOUNT.employeeNo（EMPNO）
 }
 
 /**
