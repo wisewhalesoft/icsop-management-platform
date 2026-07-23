@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getMe, getOrgSyncRuns, triggerOrgSync } from './endpoints';
+import {
+  getMe,
+  getOrgSyncRuns,
+  triggerOrgSync,
+  getUsageFormOverview,
+  uploadUsageForms,
+  overwriteUsageForm,
+  deleteUsageForm,
+  downloadPoolForm,
+  linkUsageForms,
+} from './endpoints';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -40,5 +50,68 @@ describe('endpoints — 端點契約對映', () => {
     const [url, init] = vi.mocked(fetch).mock.calls[0];
     expect(url).toBe('/admin/org-sync/run');
     expect(init?.method).toBe('POST');
+  });
+
+  // ===== F018 使用表單管理 =====
+
+  it('getUsageFormOverview → GET /admin/usage-forms/overview', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse([]));
+    await getUsageFormOverview();
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe('/admin/usage-forms/overview');
+    expect(init?.method ?? 'GET').toBe('GET');
+  });
+
+  it('uploadUsageForms → POST /admin/usage-forms（multipart FormData，欄位 files，無 Content-Type）', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({}));
+    const file = new File(['x'], 'a.xlsx');
+    await uploadUsageForms([file]);
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe('/admin/usage-forms');
+    expect(init?.method).toBe('POST');
+    expect(init?.body).toBeInstanceOf(FormData);
+    expect((init?.body as FormData).getAll('files')).toHaveLength(1);
+    // FormData 不可夾帶 Content-Type（瀏覽器自帶 boundary）
+    expect((init?.headers as Record<string, string> | undefined)?.['Content-Type']).toBeUndefined();
+  });
+
+  it('overwriteUsageForm(confirmed) → PUT /admin/usage-forms/:id?confirmed=true（欄位 file）', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({}));
+    const file = new File(['x'], 'v2.pdf');
+    await overwriteUsageForm('uf1', file, true);
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe('/admin/usage-forms/uf1?confirmed=true');
+    expect(init?.method).toBe('PUT');
+    expect((init?.body as FormData).get('file')).toBeInstanceOf(File);
+  });
+
+  it('overwriteUsageForm() 未確認 → 不帶 confirmed query', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({}));
+    await overwriteUsageForm('uf1', new File(['x'], 'v2.pdf'));
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/admin/usage-forms/uf1');
+  });
+
+  it('deleteUsageForm(confirmed) → DELETE /admin/usage-forms/:id?confirmed=true', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }));
+    await deleteUsageForm('uf1', true);
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe('/admin/usage-forms/uf1?confirmed=true');
+    expect(init?.method).toBe('DELETE');
+  });
+
+  it('downloadPoolForm → GET /admin/usage-forms/:id/download', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ url: 'blob:z', expiresInSeconds: 300 }));
+    const g = await downloadPoolForm('uf1');
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/admin/usage-forms/uf1/download');
+    expect(g.url).toBe('blob:z');
+  });
+
+  it('linkUsageForms → POST /admin/documents/:docId/usage-forms（JSON formIds）', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }));
+    await linkUsageForms('doc-1', ['uf1', 'uf2']);
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe('/admin/documents/doc-1/usage-forms');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body as string)).toEqual({ formIds: ['uf1', 'uf2'] });
   });
 });

@@ -10,6 +10,7 @@ import {
   GitFork, ZoomIn, ZoomOut, Maximize, Printer,
   Library, Megaphone, PauseCircle, XCircle, FileDown, Link as LinkIcon,
   Eye, Upload, FileSpreadsheet, Sheet, Shield, Pencil, Sparkles,
+  UploadCloud, Link2Off, ChevronDown, ChevronUp, CornerDownRight, HardDrive,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -91,6 +92,12 @@ const REGISTRY: Record<string, LucideIcon> = {
   shield: Shield,
   pencil: Pencil,
   sparkles: Sparkles,
+  'upload-cloud': UploadCloud,
+  'link-2-off': Link2Off,
+  'chevron-down': ChevronDown,
+  'chevron-up': ChevronUp,
+  'corner-down-right': CornerDownRight,
+  'hard-drive': HardDrive,
 };
 
 export interface IconProps {

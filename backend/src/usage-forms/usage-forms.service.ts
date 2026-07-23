@@ -25,6 +25,7 @@ import {
   AuditRecorder,
   FORM_POOL_STORE,
   FormPoolStore,
+  UsageFormPoolItem,
   UsageFormRecord,
 } from './usage-forms.store';
 
@@ -184,15 +185,39 @@ export class UsageFormsService {
 
   /** 後台表單池清單（功能 read gate）。 */
   async listPool(session: SessionContext | undefined): Promise<UsageFormRecord[]> {
-    if (!canPerform(session?.roleCode, FunctionKey.USAGE_FORM_MANAGEMENT, 'read')) {
-      throw new ForbiddenException('PERMISSION_DENIED');
-    }
+    this.assertCanRead(session?.roleCode);
     return this.store.list();
+  }
+
+  /**
+   * 後台表單池總覽（功能 read gate）：每筆附關聯文件數 + 關聯文件精簡清單，
+   * 供管理頁清單「關聯文件數」欄與展開檢視（prototype 19）。
+   */
+  async listPoolOverview(
+    session: SessionContext | undefined,
+  ): Promise<UsageFormPoolItem[]> {
+    this.assertCanRead(session?.roleCode);
+    return this.store.listPoolOverview();
   }
 
   /** 文件詳情頁之關聯表單清單（前後台共用；屬文件瀏覽，不受表單池功能限制）。 */
   listFormsByDocument(documentId: string): Promise<UsageFormRecord[]> {
     return this.store.listByDocument(documentId);
+  }
+
+  /**
+   * 後台表單池個別下載（管理頁 prototype 19 之下載鈕；功能 read gate → SysAdmin 唯讀亦可下載，
+   * 主管/部門窗口/一般使用者=無 → PERMISSION_DENIED）。核發短效 URL。
+   * ⚠ 管理端下載之稽核義務未定（OQ-F018-06；spec 僅明文「前台下載→稽核」）→ 暫不記錄，於 summary flag。
+   */
+  async downloadFromPool(
+    session: SessionContext | undefined,
+    formId: string,
+  ): Promise<DownloadGrant> {
+    this.assertCanRead(session?.roleCode);
+    const form = await this.requireForm(formId);
+    const url = await this.blob.getDownloadUrl(form.blobPath, DOWNLOAD_URL_TTL_SECONDS);
+    return { url, expiresInSeconds: DOWNLOAD_URL_TTL_SECONDS };
   }
 
   /**
@@ -217,6 +242,12 @@ export class UsageFormsService {
       accountId: session.accountId,
     });
     return { url, expiresInSeconds: DOWNLOAD_URL_TTL_SECONDS };
+  }
+
+  private assertCanRead(roleCode: string | undefined): void {
+    if (!canPerform(roleCode, FunctionKey.USAGE_FORM_MANAGEMENT, 'read')) {
+      throw new ForbiddenException('PERMISSION_DENIED');
+    }
   }
 
   private assertCanWrite(roleCode: string | undefined): void {

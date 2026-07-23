@@ -1,5 +1,5 @@
 # F036: 循環樹狀圖預覽（唯讀＋浮水印）
-Priority: P0-MVP | Status: 🟡 Implemented (unit-green; CJK 燒錄字型＋第二入口＋真實 PDF/幾何＝[integration]) | Last Updated: 2026-07-23
+Priority: P0-MVP | Status: 🟡 Implemented (unit-green; **CJK 燒錄字型已補**（@pdf-lib/fontkit + Noto Sans TC，樹圖 renderer + F020 burner 共用，見 implementation-log/F036-impl.md）; 第二入口＋真實 PDF/幾何/效能＝[integration]) | Last Updated: 2026-07-23
 Epic/Story: E03 / US-025
 
 > 由**兩個後台入口**開啟新頁（viewer 風格，`22-lifecycle-tree-preview.html`）以唯讀檢視某循環之 DAG 結構：(1)「循環管理」清單（`10-lifecycle-list`）每列「狀態」欄右側之樹狀圖圖示；(2)「ICSOP 文件（程序書）清單」（`13-document-list`，[F017](F017-backend-document-list.md)）每列之樹狀圖圖示，以 `?cycle=<該文件所屬循環代碼>` 帶入該文件所屬循環為預選。屬「循環管理」之**唯讀子能力**：可視角色與範圍**沿用 F025「循環管理」唯讀列**（不新增權限矩陣列）。

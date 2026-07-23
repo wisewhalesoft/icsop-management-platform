@@ -46,6 +46,13 @@ export class UsageFormsController {
     return this.svc.listPool(req.sessionUser);
   }
 
+  /** 表單池總覽（每筆附關聯文件數 + 關聯文件精簡清單；供管理頁 prototype 19）。 */
+  @Get('admin/usage-forms/overview')
+  @RequirePermission(FunctionKey.USAGE_FORM_MANAGEMENT, 'read')
+  listPoolOverview(@Req() req: RequestWithSession) {
+    return this.svc.listPoolOverview(req.sessionUser);
+  }
+
   @Post('admin/usage-forms')
   @RequirePermission(FunctionKey.USAGE_FORM_MANAGEMENT, 'read')
   @UseInterceptors(FilesInterceptor('files', 20, MULTIPART_OPTIONS))
@@ -72,6 +79,16 @@ export class UsageFormsController {
     return this.svc.overwriteForm(req.sessionUser, formId, toUploadFile(file), {
       confirmed: isTrue(confirmed),
     });
+  }
+
+  /** 後台表單池個別下載（read gate；核發短效 URL）。 */
+  @Get('admin/usage-forms/:formId/download')
+  @RequirePermission(FunctionKey.USAGE_FORM_MANAGEMENT, 'read')
+  downloadFromPool(
+    @Req() req: RequestWithSession,
+    @Param('formId') formId: string,
+  ) {
+    return this.svc.downloadFromPool(req.sessionUser, formId);
   }
 
   @Delete('admin/usage-forms/:formId')

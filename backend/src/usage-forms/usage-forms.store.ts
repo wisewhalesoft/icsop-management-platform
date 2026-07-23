@@ -32,10 +32,28 @@ export interface UpdateFormFileInput {
   uploadedAt: Date;
 }
 
+/** 表單所關聯之文件精簡參照（供表單池頁展開檢視「使用此表單的文件」）。 */
+export interface UsageFormDocumentRef {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+}
+
+/**
+ * 表單池總覽項（後台管理頁 prototype 19 所需）：表單記錄 + 關聯文件數 + 關聯文件精簡清單。
+ * `docCount` 驅動覆蓋（≥2）／移除（≥1）門檻之顯示；`documents` 供展開列與跳轉。
+ */
+export interface UsageFormPoolItem extends UsageFormRecord {
+  docCount: number;
+  documents: UsageFormDocumentRef[];
+}
+
 export interface FormPoolStore {
   create(input: CreateFormInput): Promise<UsageFormRecord>;
   findById(formId: string): Promise<UsageFormRecord | null>;
   list(): Promise<UsageFormRecord[]>;
+  /** 表單池總覽（每筆附關聯文件數 + 關聯文件精簡清單）。單次載入組裝，避免逐筆 N+1。 */
+  listPoolOverview(): Promise<UsageFormPoolItem[]>;
   /** 覆蓋上傳：更新檔案參照（保留 id/name），回傳最終列。 */
   updateFile(
     formId: string,

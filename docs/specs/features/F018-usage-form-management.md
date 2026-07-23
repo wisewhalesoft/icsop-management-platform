@@ -1,5 +1,5 @@
 # F018: 使用表單管理
-Priority: P1 | Status: Backend Implemented（unit-green；真 Azure Blob＋ multipart 端點已接線；下載稽核已接真 AuditWriter（AUDIT_LOG）；int 測試已備未跑；前端管理頁延後至整併） | Last Updated: 2026-07-23
+Priority: P1 | Status: Implemented（unit-green；真 Azure Blob＋multipart＋下載稽核接真 AuditWriter；**前端管理頁已實作**（prototype 19 移植，vitest 12 綠）；新增表單池總覽/個別下載端點（int 已備未跑）；剩真 Azure 私有容器直存拒絕＝[integration]） | Last Updated: 2026-07-23
 Epic/Story: E05 / US-040, US-041, US-042
 
 > 合併理由：表單池管理（US-042）、上傳/移除（US-040）與前/後台關聯清單呈現與下載（US-041）為同一表單生命週期，共用同一組 API。

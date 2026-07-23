@@ -389,6 +389,36 @@ export interface PersonRecord {
   employmentStatus: 'active' | 'departed';
 }
 
+// ===== E05 F018 使用表單管理（表單池） =====
+
+/** 表單所關聯之文件精簡參照（表單池頁展開檢視「使用此表單的文件」）。 */
+export interface UsageFormDocumentRef {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+}
+
+/**
+ * 表單池總覽項（GET /admin/usage-forms/overview）。
+ * ⚠ uploadedAt 經 JSON 序列化為 ISO 字串。format＝xlsx/xls/pdf（前端歸類 excel/pdf 兩顯示類）。
+ */
+export interface UsageFormPoolItem {
+  id: string;
+  name: string;
+  format: string;
+  size: number;
+  uploadedBy: string;
+  uploadedAt: string;
+  docCount: number;
+  documents: UsageFormDocumentRef[];
+}
+
+/** 下載憑證（GET /admin/usage-forms/:formId/download；短效期 URL）。 */
+export interface UsageFormDownloadGrant {
+  url: string;
+  expiresInSeconds: number;
+}
+
 export type TriggerType = 'scheduled' | 'manual';
 export type SyncRunStatus = 'running' | 'success' | 'failed';
 

@@ -42,3 +42,56 @@ last_updated: 2026-07-23
 ## 需回報之 spec-doc 變更（未自行編輯共用 doc）
 - `docs/specs/feature-status.md` F018 列：「下載稽核（佔位）…稽核接真 AuditWriter＝[integration]」更新為「下載稽核已接真 AuditWriter（AUDIT_LOG，經 Outbox）；int 已備未跑；剩前端管理頁」。
 - USAGE_FORM_POOL / DOC_USAGE_FORM migration 既存（1722124800000）；AUDIT_LOG（1721952000000）＋append-only 觸發器（1722470400000）既存，本輪無新增 migration。
+
+---
+
+# 本輪（usageform worktree, 2026-07-23）— 前端管理頁 + 表單池總覽/個別下載端點
+
+本輪範圍＝實作 F018 **前端使用表單管理頁**（prototype 19 逐項移植）並補齊其所需之**唯讀讀取端點**。服務層寫入/覆蓋/移除/下載稽核（前輪已完成）**未改動**，既有 31 項服務測試全綠。
+
+## 本輪實作
+1. **前端頁 `frontend/src/pages/UsageFormManagementPage.tsx`**（route `/admin/usage-forms`；menu 既有 `usageform` 項）：PageHeader topbar 動作（上傳表單，write-only）＋全寬清單；欄位＝表單名稱/格式(excel·pdf 徽章)/大小/上傳者·時間/**關聯文件數(可展開檢視使用文件)**/操作（下載·展開·覆蓋·移除）。上傳 modal（拖放式選檔＋名稱＋50MB 上限提示）、覆蓋二次確認（docCount≥2 → USAGE_FORM_OVERWRITE_SHARED 附引用文件清單）、移除二次確認（docCount≥1 → USAGE_FORM_IN_USE 解除全部關聯）、搜尋/格式篩選/清除/計數。RBAC 自我守門：ICSOPAdmin CRUD、SysAdmin 唯讀（唯讀提示、無寫入鈕、可下載）、主管/部門窗口/一般使用者 → 封鎖畫面（PERMISSION_DENIED）。
+2. **表單池總覽端點 `GET /admin/usage-forms/overview`**（新）：回每筆表單 + `docCount` + `documents[{id,documentNumber,documentName}]`（供清單欄與展開）。store 新增 `listPoolOverview()`（TypeORM 單次載入 USAGE_FORM_POOL ⋈ DOC_USAGE_FORM ⋈ ICSOP_DOCUMENT，避免 N+1）；service `listPoolOverview()` 沿用 read gate。
+3. **個別下載端點 `GET /admin/usage-forms/:formId/download`**（新）：read gate（SysAdmin 唯讀亦可下載），核發短效 URL。⚠ 管理端下載稽核義務未定（OQ-F018-06）→ 暫不記錄，flag。
+4. **前端 endpoints.ts**：`getUsageFormPool`/`uploadUsageForms`(multipart files)/`overwriteUsageForm`(multipart file,confirmed)/`deleteUsageForm`(confirmed)/`downloadUsageForm`/`linkUsageForms`/`unlinkUsageForm`。multipart 以 FormData（不夾 Content-Type，瀏覽器自帶 boundary）。
+5. **Icon 註冊表補圖**（`frontend/src/components/Icon.tsx`）：`upload/upload-cloud/file-spreadsheet/link/link-2-off/chevron-down/chevron-up/corner-down-right/hard-drive/eye`（先前未註冊→render null，補齊以還原 prototype 圖示，additive）。
+
+## 🔴 Prototype 對齊註記（prototype 19 為權威）
+- **關聯編輯不在本頁**：prototype 19 導言明訂「文件於建立/編輯時由此表單池選取關聯」，本頁對關聯僅**唯讀展開檢視**（非可搜尋多選編輯）。任務敘述之「文件多對多可搜尋多選關聯」屬**文件建立/編輯側（F014 DocumentCreatePage）**之能力；本輪已備 `linkUsageForms/unlinkUsageForm` 端點供該側消費，未於本頁加入關聯編輯 UI（忠實 prototype）。
+- **檔案大小上限顯示 50MB**（非 prototype 之「20MB 示範值」）：後端 file-rules `MAX_FILE_SIZE_BYTES=50MB` 為真實裁決值，採真實值。
+- **上傳自訂表單名稱未落地**：prototype 上傳 modal 有可編輯「表單名稱」欄，但既有 multipart 上傳端點以**檔名**為表單 name（不接受自訂 name 參數）→ 名稱欄目前僅自動帶入檔名、自訂改名不持久化。若需自訂命名，須後端 upload 端點加 name 欄位（flag，OQ）。
+- **展開之關聯文件為資訊列（不可跳轉）**：prototype 有「跳轉至文件」按鈕；因文件詳情路由未定，本輪僅呈現文件編號＋名稱（flag，待文件詳情路由就緒再接）。
+
+## Test Results Summary（本輪）
+| Scenario / 測項 | 說明 | Status |
+|---|---|---|
+| UsageFormManagementPage.test（12） | 封鎖/清單/唯讀/搜尋/篩選/展開/上傳(合法·格式拒)/覆蓋共用/移除in-use/移除無關聯/下載 | PASS（12） |
+| endpoints.test（+7） | usage-form 7 端點契約（URL/method/FormData/JSON） | PASS |
+| usage-forms.service.spec（TS-031~033） | listPoolOverview read gate + docCount/documents；downloadFromPool read gate | PASS |
+| 全前端套件 | 無回歸 | PASS（30 files / 190 tests） |
+| 全後端套件 | 無回歸 | PASS（76 suites / 873 tests） |
+| frontend tsc / backend tsc（src+test） | 型別乾淨 | PASS |
+
+> `GET /admin/usage-forms/overview`（join）與 `:formId/download` 端到端（真 DB）由 `backend/test/int/usage-form-pool.itest.ts` 涵蓋（**已備、本輪未跑**）。
+
+## Files Changed（本輪）
+| File Path | Change | Description |
+|---|---|---|
+| frontend/src/pages/UsageFormManagementPage.tsx | new | F018 管理頁（prototype 19 移植） |
+| frontend/src/pages/UsageFormManagementPage.test.tsx | new | 頁面 vitest（12） |
+| frontend/src/App.tsx | modified | route `/admin/usage-forms` → 實頁 |
+| frontend/src/api/endpoints.ts | modified | 7 個 usage-form 端點函式 |
+| frontend/src/api/endpoints.test.ts | modified | 端點契約測試（+7） |
+| frontend/src/api/types.ts | modified | UsageFormPoolItem/DocumentRef/DownloadGrant 型別 |
+| frontend/src/components/Icon.tsx | modified | 補 10 個 lucide 圖示註冊 |
+| backend/src/usage-forms/usage-forms.store.ts | modified | UsageFormPoolItem 型別 + FormPoolStore.listPoolOverview |
+| backend/src/usage-forms/typeorm-usage-forms.store.ts | modified | listPoolOverview（三表 join，防 N+1） |
+| backend/src/usage-forms/usage-forms.service.ts | modified | listPoolOverview/downloadFromPool + assertCanRead 抽出 |
+| backend/src/usage-forms/usage-forms.controller.ts | modified | GET overview / GET :formId/download |
+| backend/src/usage-forms/usage-forms.service.spec.ts | modified | FakeStore.listPoolOverview + TS-031~033 |
+| backend/test/int/usage-form-pool.itest.ts | new | 總覽 join + 下載端點 int（未跑） |
+
+## 需回報之 spec-doc 變更（未自行編輯共用 doc）
+- `docs/specs/feature-status.md` F018 列：可更新為「前端管理頁已實作（prototype 19，vitest 綠）；新增表單池總覽/個別下載端點（int 已備未跑）；剩真 Azure 私有容器直存拒絕＝[integration]」。
+- `docs/specs/data-model.md`：仍建議補 `USAGE_FORM_POOL`＋`DOC_USAGE_FORM`（OQ-F018-07）；本輪未動 schema（表既存）。
+- OQ-F018-06（管理端下載是否稽核）本輪暫**不稽核**管理端個別下載，待 architect 定案。

@@ -1,5 +1,6 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, rgb } from 'pdf-lib';
 import { TreeLayout } from './lifecycle-tree-layout';
+import { asciiSafe, embedWatermarkFont, loadCjkFontBytes } from '../public/fonts/cjk-font';
 
 /**
  * F036 循環樹狀圖 → 基底 PDF 匯出邊界（下載/列印之伺服器端產生）。
@@ -19,28 +20,20 @@ export interface LifecycleTreePdfRenderer {
 }
 
 /**
- * 退化為可列印 ASCII（無 CJK 字型時避免 StandardFonts 編碼崩潰）。以 '?' 取代非 ASCII，
- * '?' 屬 WinAnsi 可編碼（'□' U+25A1 本身不可編碼，故不採用）。真實中文渲染＝[integration]（fontkit+CJK TTF）。
- */
-function asciiSafe(s: string): string {
-  // eslint-disable-next-line no-control-regex
-  return s.replace(/[^\x20-\x7E]/g, '?');
-}
-
-/**
  * pdf-lib 實作：單頁繪出上到下之節點卡與直角（orthogonal）連線。
  *
- * ⚠ [integration] 落差：StandardFonts（Helvetica）無法編碼 CJK；正確中文節點名需以 fontkit 嵌入
- *    CJK TTF（數 MB 資產）。未提供時退化 asciiSafe（□），使匯出不崩潰但中文不可讀——真實中文
- *    渲染與位元組驗證於 [integration] 補齊（與 F020 pdf-burner 同一限制）。
+ * CJK 節點名：預設經 `loadCjkFontBytes()` 載入 Noto Sans TC（fontkit 子集化嵌入）→ 中文可正確渲染。
+ * 字型資產缺檔（constructor 傳 `null` 或未部署）時退化 `StandardFonts.Helvetica` + asciiSafe（中文以
+ * '?' 佔位、不拋例外）。真實中文位元組層視覺驗證屬 [integration]（與 F020 pdf-burner 同一機制）。
  */
 export class PdfLibTreeRenderer implements LifecycleTreePdfRenderer {
-  constructor(private readonly fontBytes?: Buffer) {}
+  constructor(private readonly fontBytes: Buffer | null = loadCjkFontBytes()) {}
 
   async render(input: LifecycleTreePdfInput): Promise<Buffer> {
     const { layout } = input;
     const pdf = await PDFDocument.create();
-    const font = await pdf.embedFont(StandardFonts.Helvetica); // TODO: fontkit + CJK TTF（[integration]）
+    const { font, cjk } = await embedWatermarkFont(pdf, this.fontBytes);
+    const safe = cjk ? (s: string): string => s : asciiSafe;
 
     const pad = 40;
     const titleH = 36;
@@ -52,7 +45,7 @@ export class PdfLibTreeRenderer implements LifecycleTreePdfRenderer {
     const top = H - pad;
     const toPageY = (layoutY: number): number => top - titleH - layoutY;
 
-    page.drawText(asciiSafe(`${input.lifecycleName} - 循環樹狀圖`), {
+    page.drawText(safe(`${input.lifecycleName} - 循環樹狀圖`), {
       x: pad,
       y: top - 18,
       size: 14,
@@ -93,7 +86,7 @@ export class PdfLibTreeRenderer implements LifecycleTreePdfRenderer {
         borderColor: n.docCount > 0 ? rgb(0.02, 0.59, 0.41) : rgb(0.89, 0.91, 0.94),
         borderWidth: 1.5,
       });
-      page.drawText(asciiSafe(n.name ?? '未命名節點'), {
+      page.drawText(safe(n.name ?? '未命名節點'), {
         x: x + 10,
         y: yTop - 22,
         size: 10,
@@ -101,7 +94,7 @@ export class PdfLibTreeRenderer implements LifecycleTreePdfRenderer {
         color: rgb(0.2, 0.25, 0.33),
       });
       page.drawText(
-        asciiSafe(n.docCount > 0 ? `掛載 ${n.docCount} 份程序書` : '尚未掛載程序書'),
+        safe(n.docCount > 0 ? `掛載 ${n.docCount} 份程序書` : '尚未掛載程序書'),
         { x: x + 10, y: yTop - 40, size: 8, font, color: rgb(0.45, 0.5, 0.58) },
       );
     }

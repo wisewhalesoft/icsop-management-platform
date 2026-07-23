@@ -27,6 +27,19 @@ class FakeFormPoolStore implements FormPoolStore {
   list() {
     return Promise.resolve([...this.forms]);
   }
+  listPoolOverview() {
+    // 假體：documents 精簡欄以 documentId 充填（無 ICSOP_DOCUMENT 中繼；真實 join 於 TypeOrm store）。
+    return Promise.resolve(
+      this.forms.map((f) => {
+        const docIds = this.links.filter((l) => l.formId === f.id).map((l) => l.documentId);
+        return {
+          ...f,
+          docCount: docIds.length,
+          documents: docIds.map((id) => ({ id, documentNumber: id, documentName: id })),
+        };
+      }),
+    );
+  }
   updateFile(formId: string, patch: UpdateFormFileInput) {
     const idx = this.forms.findIndex((f) => f.id === formId);
     const rec: UsageFormRecord = { ...this.forms[idx], ...patch };
@@ -293,6 +306,37 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
       await expect(svc.deleteForm(ICSOP_ADMIN, f.id)).rejects.toThrow('USAGE_FORM_IN_USE');
       expect(await store.findById(f.id)).not.toBeNull();
       expect(await store.countLinks(f.id)).toBe(2);
+    });
+  });
+
+  describe('表單池總覽（管理頁 prototype 19）', () => {
+    it('TS-031 listPoolOverview → 每筆附 docCount 與關聯文件清單（read gate）', async () => {
+      const f1 = await svc.uploadForm(ICSOP_ADMIN, xlsx({ fileName: 'a.xlsx' }));
+      const f2 = await svc.uploadForm(ICSOP_ADMIN, xlsx({ fileName: 'b.xlsx' }));
+      await svc.linkForms(ICSOP_ADMIN, 'doc-1', [f1.id]);
+      await svc.linkForms(ICSOP_ADMIN, 'doc-2', [f1.id]);
+      const overview = await svc.listPoolOverview(ICSOP_ADMIN);
+      const o1 = overview.find((o) => o.id === f1.id)!;
+      const o2 = overview.find((o) => o.id === f2.id)!;
+      expect(o1.docCount).toBe(2);
+      expect(o1.documents.map((d) => d.id).sort()).toEqual(['doc-1', 'doc-2']);
+      expect(o2.docCount).toBe(0);
+      expect(o2.documents).toEqual([]);
+    });
+    it('TS-032 主管（功能=無）呼叫總覽 → PERMISSION_DENIED', async () => {
+      const sup: SessionContext = { roleCode: 'Supervisor', accountId: 'x' };
+      await expect(svc.listPoolOverview(sup)).rejects.toThrow('PERMISSION_DENIED');
+    });
+    it('TS-033 後台個別下載：ICSOPAdmin/SysAdmin 核發 URL、主管 PERMISSION_DENIED', async () => {
+      const f = await svc.uploadForm(ICSOP_ADMIN, xlsx());
+      const sys: SessionContext = { roleCode: 'SysAdmin', accountId: 's1' };
+      const g1 = await svc.downloadFromPool(ICSOP_ADMIN, f.id);
+      expect(g1.url).toContain(f.blobPath);
+      const g2 = await svc.downloadFromPool(sys, f.id); // 唯讀角色亦可下載
+      expect(g2.url).toContain(f.blobPath);
+      await expect(
+        svc.downloadFromPool({ roleCode: 'Supervisor', accountId: 'x' }, f.id),
+      ).rejects.toThrow('PERMISSION_DENIED');
     });
   });
 
