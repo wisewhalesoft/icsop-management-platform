@@ -7,7 +7,9 @@ import {
   RotateCw, GitBranch, CircleDot, FileCheck2, FileX2, GitCommitVertical,
   PlusCircle, Filter, FilePlus2, Paperclip, Save, Lock, Trash2,
   Download, Globe, UserSearch, FileSearch, FileBadge, Stamp,
-  GitFork, ZoomIn, ZoomOut, Maximize, Printer, type LucideIcon,
+  GitFork, ZoomIn, ZoomOut, Maximize, Printer,
+  Upload, UploadCloud, FileSpreadsheet, Link, Link2Off, ChevronDown,
+  ChevronUp, CornerDownRight, HardDrive, Eye, type LucideIcon,
 } from 'lucide-react';
 
 /**
@@ -75,6 +77,16 @@ const REGISTRY: Record<string, LucideIcon> = {
   'zoom-out': ZoomOut,
   maximize: Maximize,
   printer: Printer,
+  upload: Upload,
+  'upload-cloud': UploadCloud,
+  'file-spreadsheet': FileSpreadsheet,
+  link: Link,
+  'link-2-off': Link2Off,
+  'chevron-down': ChevronDown,
+  'chevron-up': ChevronUp,
+  'corner-down-right': CornerDownRight,
+  'hard-drive': HardDrive,
+  eye: Eye,
 };
 
 export interface IconProps {

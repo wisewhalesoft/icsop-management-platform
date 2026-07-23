@@ -15,6 +15,7 @@ import { DocumentCreatePage } from './pages/DocumentCreatePage';
 import { PermissionMatrixPage } from './pages/PermissionMatrixPage';
 import { AccessHistoryPage } from './pages/AccessHistoryPage';
 import { DocIndexPage } from './pages/DocIndexPage';
+import { UsageFormManagementPage } from './pages/UsageFormManagementPage';
 import { ModulePlaceholder } from './pages/ModulePlaceholder';
 import { PublicListPage } from './pages/PublicListPage';
 import { PublicViewerPage } from './pages/PublicViewerPage';
@@ -93,6 +94,7 @@ export function AppRoutes(): JSX.Element {
           <Route path="lifecycles/:lifecycleId/canvas" element={<DagCanvasPage />} />
           <Route path="documents" element={<DocumentListPage />} />
           <Route path="documents/new" element={<DocumentCreatePage />} />
+          <Route path="usage-forms" element={<UsageFormManagementPage />} />
           <Route path="org-sync" element={<OrgSyncPage />} />
           <Route path="access-history" element={<AccessHistoryPage />} />
           <Route path="doc-index" element={<DocIndexPage />} />

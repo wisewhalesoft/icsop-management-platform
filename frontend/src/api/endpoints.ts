@@ -386,6 +386,80 @@ export function documentPrintUrl(documentId: string): string {
   return `/public/documents/${documentId}/print`;
 }
 
+// ===== E05 F018 使用表單管理（表單池） =====
+
+/**
+ * GET /admin/usage-forms/overview（表單池總覽，read：SysAdmin 唯讀+ICSOPAdmin CRUD）。
+ * 每筆附關聯文件數（docCount）與關聯文件精簡清單（documents），供清單欄與展開檢視。
+ */
+export function getUsageFormPool(): Promise<import('./types').UsageFormPoolItem[]> {
+  return apiFetch('/admin/usage-forms/overview');
+}
+
+/**
+ * POST /admin/usage-forms（multipart 上傳，欄位名 `files`；單/多檔皆可）。
+ * 格式 FILE_FORMAT_NOT_ALLOWED（僅 xlsx/xls/pdf）、大小 FILE_SIZE_EXCEEDED（50MB）由後端裁決。
+ * ⚠ FormData 不可設 Content-Type（瀏覽器需自帶 multipart boundary）。
+ */
+export function uploadUsageForms(files: File[]): Promise<unknown> {
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+  return apiFetch('/admin/usage-forms', { method: 'POST', body: fd });
+}
+
+/**
+ * PUT /admin/usage-forms/:formId（覆蓋上傳單檔，欄位名 `file`）。
+ * 被 ≥2 份文件引用且未確認 → 409 USAGE_FORM_OVERWRITE_SHARED；confirmed=true 放行。
+ */
+export function overwriteUsageForm(
+  formId: string,
+  file: File,
+  confirmed = false,
+): Promise<unknown> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const q = confirmed ? '?confirmed=true' : '';
+  return apiFetch(`/admin/usage-forms/${formId}${q}`, {
+    method: 'PUT',
+    body: fd,
+  });
+}
+
+/**
+ * DELETE /admin/usage-forms/:formId（自表單池移除）。
+ * 被 ≥1 份文件引用且未確認 → 409 USAGE_FORM_IN_USE；confirmed=true → 解除全部關聯後刪除。
+ */
+export function deleteUsageForm(formId: string, confirmed = false): Promise<void> {
+  const q = confirmed ? '?confirmed=true' : '';
+  return apiFetch<void>(`/admin/usage-forms/${formId}${q}`, { method: 'DELETE' });
+}
+
+/** GET /admin/usage-forms/:formId/download（後台個別下載，核發短效 URL）。 */
+export function downloadUsageForm(
+  formId: string,
+): Promise<import('./types').UsageFormDownloadGrant> {
+  return apiFetch(`/admin/usage-forms/${formId}/download`);
+}
+
+/**
+ * POST /admin/documents/:documentId/usage-forms（文件端多選關聯表單池，多對多）。
+ * 供文件建立/編輯側（F014）消費；表單池管理頁本身之關聯為唯讀展開檢視。
+ */
+export function linkUsageForms(documentId: string, formIds: string[]): Promise<void> {
+  return apiFetch<void>(`/admin/documents/${documentId}/usage-forms`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ formIds }),
+  });
+}
+
+/** DELETE /admin/documents/:documentId/usage-forms/:formId（文件端解除單一關聯，表單仍留池中）。 */
+export function unlinkUsageForm(documentId: string, formId: string): Promise<void> {
+  return apiFetch<void>(`/admin/documents/${documentId}/usage-forms/${formId}`, {
+    method: 'DELETE',
+  });
+}
+
 // ===== E09 F031 文件索引管理 =====
 
 /** GET /admin/doc-index/overview（總覽：彙總計數 + 分頁 + 狀態篩選；read）。 */
