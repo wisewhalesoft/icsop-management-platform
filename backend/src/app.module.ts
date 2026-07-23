@@ -14,6 +14,7 @@ import { XlsSourceModule } from './xls-source/xls-source.module';
 import { UsageFormsModule } from './usage-forms/usage-forms.module';
 import { PublicModule } from './public/public.module';
 import { IngestionModule } from './ingestion/ingestion.module';
+import { ChangeHistoryModule } from './change-history/change-history.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { IngestionModule } from './ingestion/ingestion.module';
     UsageFormsModule,
     PublicModule,
     IngestionModule,
+    ChangeHistoryModule,
   ],
   controllers: [AppController],
 })
