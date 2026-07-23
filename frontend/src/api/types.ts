@@ -276,6 +276,51 @@ export interface AccessHistoryFilters {
   page?: number;
 }
 
+// ===== E07 文件變更歷程（F037 程序書 / F038 循環樹狀圖） =====
+
+/** F037 程序書欄位層變更列（GET /admin/change-history/documents[/:id]）。occurredAt 為 ISO 字串。 */
+export interface DocumentChangeView {
+  id: string;
+  documentId: string;
+  documentNumber: string | null;
+  changeType: string;
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  actorId: string | null;
+  actorName: string | null;
+  actorEmployeeNo: string | null;
+  occurredAt: string;
+}
+export interface DocumentChangeFilters {
+  doc?: string;
+  field?: string;
+  person?: string;
+  from?: string;
+  to?: string;
+}
+
+/** F038 循環結構變更列（GET /admin/change-history/lifecycles[/:id]）。 */
+export interface LifecycleChangeView {
+  id: string;
+  lifecycleId: string;
+  changeType: string;
+  summary: string;
+  oldValue: string | null;
+  newValue: string | null;
+  nodeId: string | null;
+  actorId: string | null;
+  actorName: string | null;
+  actorEmployeeNo: string | null;
+  occurredAt: string;
+}
+export interface LifecycleChangeFilters {
+  lifecycleId?: string;
+  changeType?: string;
+  person?: string;
+  from?: string;
+}
+
 // ===== E06 前台瀏覽（F019/F020/F021） =====
 
 /** 前台清單顯示狀態（前台恆為 announced）。 */

@@ -16,6 +16,7 @@ import { DocumentEditPage } from './pages/DocumentEditPage';
 import { DocumentReadonlyPage } from './pages/DocumentReadonlyPage';
 import { PermissionMatrixPage } from './pages/PermissionMatrixPage';
 import { AccessHistoryPage } from './pages/AccessHistoryPage';
+import { ChangeHistoryPage } from './pages/ChangeHistoryPage';
 import { DocIndexPage } from './pages/DocIndexPage';
 import { ModulePlaceholder } from './pages/ModulePlaceholder';
 import { PublicListPage } from './pages/PublicListPage';
@@ -99,6 +100,7 @@ export function AppRoutes(): JSX.Element {
           <Route path="documents/:id/edit" element={<DocumentEditPage />} />
           <Route path="org-sync" element={<OrgSyncPage />} />
           <Route path="access-history" element={<AccessHistoryPage />} />
+          <Route path="change-history" element={<ChangeHistoryPage />} />
           <Route path="doc-index" element={<DocIndexPage />} />
           <Route path="settings" element={<PermissionMatrixPage />} />
           {/* 後續功能增量將以實頁取代下列佔位 */}

@@ -34,11 +34,23 @@ import {
 import {
   DOCUMENT_CHANGE_PUBLISHER,
   DocumentChangePublisher,
+  DocumentFieldDelta,
   NoopDocumentChangePublisher,
+  toFieldValueString,
 } from './document-change-event';
 
 /** 編輯端一律唯讀之欄位（節點寫入僅經 F009 節點抽屜，F026）。 */
 const EDIT_READONLY_PROPS = new Set(['nodeId']);
+
+/**
+ * 變更事件之操作者身分快照（F037）。由 controller 自 SessionUser 帶入；
+ * 選填以免破壞既有 `svc.update(role,id,payload)` 手建呼叫（無 actor → 變更日誌 actor 欄落 null）。
+ */
+export interface DocumentActor {
+  accountId?: string | null;
+  name?: string | null;
+  employeeNo?: string | null;
+}
 
 /**
  * ICSOP 文件服務（E04）。RBAC 功能面由 controller guard（ICSOP文件管理 write＝ICSOPAdmin）落實；
@@ -177,6 +189,7 @@ export class DocumentsService {
     roleCode: string | undefined,
     id: string,
     payload: Record<string, unknown>,
+    actor?: DocumentActor,
   ): Promise<DocumentUpdateResult> {
     // 0) 載入現值（供對照 + not-found）。
     const current = await this.store.findById(id);
@@ -259,13 +272,24 @@ export class DocumentsService {
       }
     }
 
-    // 7) 發出變更事件（CONTENT，決策 A seam）。
+    // 7) 發出變更事件（CONTENT）。決策 B：承載欄位層 before/after diff ＋操作者/編號快照，
+    //    真實 publisher（DocumentChangeLogPublisher）將其持久化為 DOCUMENT_CHANGE_LOG（F037）。
     const changedFields = Object.keys(clean);
     if (linkTargetIds !== undefined) changedFields.push('links');
+    const deltas: DocumentFieldDelta[] = changes.map((c) => ({
+      field: c.field,
+      oldValue: toFieldValueString(c.before),
+      newValue: toFieldValueString(c.after),
+    }));
     await this.publisher.publish({
       documentId: id,
       changeType: 'CONTENT',
       changedFields,
+      changes: deltas,
+      documentNumber: updated.documentNumber,
+      actorId: actor?.accountId ?? null,
+      actorName: actor?.name ?? null,
+      actorEmployeeNo: actor?.employeeNo ?? null,
       occurredAt: new Date(),
     });
 
@@ -331,6 +355,7 @@ export class DocumentsService {
     id: string,
     status: string,
     reason?: string,
+    actor?: DocumentActor,
   ): Promise<void> {
     if (!isValidStatus(status)) {
       throw new BadRequestException('DOCUMENT_STATUS_INVALID');
@@ -344,15 +369,26 @@ export class DocumentsService {
         throw new ConflictException('DOCUMENT_NUMBER_DUPLICATE');
       }
     }
-    // reason 正規化（空白視同未填）；目前無持久化 sink（F037 deferred），保留供未來記錄。
+    // reason 正規化（空白視同未填）；reason 目前無持久化 sink（OQ-E04-02），保留供未來記錄。
     void normalizeReason(reason);
+    const oldStatus = doc.status;
     await this.store.updateStatus(id, status);
 
-    // 決策 A seam：狀態切換成功後發 STATUS 事件（不承載 reason，契約鎖定）。
+    // 決策 B：狀態切換成功後發 STATUS 事件，承載 status 欄位之 old/new ＋操作者/編號快照，
+    // 由真實 publisher 落地為 DOCUMENT_CHANGE_LOG（F037）。狀態相同時不產生 delta（無日誌）。
+    const deltas: DocumentFieldDelta[] =
+      oldStatus === status
+        ? []
+        : [{ field: 'status', oldValue: oldStatus, newValue: status }];
     await this.publisher.publish({
       documentId: id,
       changeType: 'STATUS',
       changedFields: ['status'],
+      changes: deltas,
+      documentNumber: doc.documentNumber,
+      actorId: actor?.accountId ?? null,
+      actorName: actor?.name ?? null,
+      actorEmployeeNo: actor?.employeeNo ?? null,
       occurredAt: new Date(),
     });
   }

@@ -30,6 +30,12 @@ import {
   LifecycleTreePdfRenderer,
   PdfLibTreeRenderer,
 } from './lifecycle-tree-pdf';
+import {
+  LIFECYCLE_CHANGE_PUBLISHER,
+  LifecycleChangePublisher,
+} from './lifecycle-change-event';
+import { ChangeHistoryModule } from '../change-history/change-history.module';
+import { LifecycleChangeLogPublisher } from '../change-history/lifecycle-change-log-publisher';
 
 /**
  * 循環管理模組（E03 / F007 CRUD＋F008 DAG＋F009 節點抽屜＋F036 樹狀圖預覽）。
@@ -40,7 +46,7 @@ import {
  *  - store 以 useFactory 走 AppDataSource 單例（延遲連線）。
  */
 @Module({
-  imports: [AuthModule, RbacModule, AuditModule, PublicModule],
+  imports: [AuthModule, RbacModule, AuditModule, PublicModule, ChangeHistoryModule],
   controllers: [
     LifecycleController,
     DagController,
@@ -62,12 +68,24 @@ import {
       provide: DAG_STORE,
       useFactory: (): DagStore => new TypeOrmDagStore(AppDataSource),
     },
-    DagService,
+    // F038：DagService 注入真實 LifecycleChangePublisher（ChangeHistoryModule 匯出）→ 結構事件落地。
+    { provide: LIFECYCLE_CHANGE_PUBLISHER, useExisting: LifecycleChangeLogPublisher },
+    {
+      provide: DagService,
+      useFactory: (store: DagStore, pub: LifecycleChangePublisher): DagService =>
+        new DagService(store, pub, () => new Date()),
+      inject: [DAG_STORE, LIFECYCLE_CHANGE_PUBLISHER],
+    },
     {
       provide: NODE_DOCS_STORE,
       useFactory: (): NodeDocsStore => new TypeOrmNodeDocsStore(AppDataSource),
     },
-    NodeDocsService,
+    {
+      provide: NodeDocsService,
+      useFactory: (store: NodeDocsStore, pub: LifecycleChangePublisher): NodeDocsService =>
+        new NodeDocsService(store, pub, () => new Date()),
+      inject: [NODE_DOCS_STORE, LIFECYCLE_CHANGE_PUBLISHER],
+    },
     // ── F036 樹狀圖預覽 ──
     { provide: LIFECYCLE_WATERMARK_BUILDER, useExisting: WatermarkService },
     { provide: PDF_BURNER, useFactory: (): PdfBurner => new PdfLibBurner() },

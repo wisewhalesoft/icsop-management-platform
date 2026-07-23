@@ -496,6 +496,30 @@ describe('DocumentsService.update（F011 編輯＋版本對照＋F013 編輯側�
     ).rejects.toThrow();
     expect(pub.events).toHaveLength(0);
   });
+
+  it('F037 事件承載欄位層 before/after diff＋操作者/編號快照', async () => {
+    const d = store.seedDoc({ documentName: '舊名', documentNumber: 'ICSOP-X-1' });
+    await svc.update('ICSOPAdmin', d.id, { documentName: '新名' }, {
+      accountId: 'acc-1',
+      name: '李慧玲',
+      employeeNo: '20233',
+    });
+    const ev = pub.events[0];
+    expect(ev.documentNumber).toBe('ICSOP-X-1');
+    expect(ev.actorId).toBe('acc-1');
+    expect(ev.actorName).toBe('李慧玲');
+    expect(ev.actorEmployeeNo).toBe('20233');
+    expect(ev.changes).toEqual([
+      { field: 'documentName', oldValue: '舊名', newValue: '新名' },
+    ]);
+  });
+
+  it('F037 開啟編輯未實際變更任何欄位即儲存 → 事件 changes 空（不落地任何日誌）', async () => {
+    const d = store.seedDoc({ documentName: '同名' });
+    await svc.update('ICSOPAdmin', d.id, { documentName: '同名' });
+    expect(pub.events).toHaveLength(1);
+    expect(pub.events[0].changes).toEqual([]);
+  });
 });
 
 describe('DocumentsService.listDocuments 名稱解析＋分頁（F017）', () => {
@@ -598,19 +622,31 @@ describe('DocumentsService.setStatus 切換原因＋STATUS 事件（F012）', ()
     expect(store.statusUpdates).toContainEqual({ id: d2.id, status: 'inactive' });
   });
 
-  it('TS-F012-008 切換成功後發出 DocumentChangedEvent{STATUS}（決策 A 契約，不承載 reason）', async () => {
+  it('TS-F012-008 切換成功後發出 DocumentChangedEvent{STATUS}，承載 status 前後值＋操作者快照（決策 B/F037）', async () => {
     const d = store.seedDoc({ status: 'active', documentNumber: 'N-9' });
-    await svc.setStatus(d.id, 'inactive', '依法規更新');
+    await svc.setStatus(d.id, 'inactive', '依法規更新', {
+      accountId: 'acc-1',
+      name: '李慧玲',
+      employeeNo: '20233',
+    });
     expect(pub.events).toHaveLength(1);
     expect(pub.events[0]).toEqual(
       expect.objectContaining({
         documentId: d.id,
         changeType: 'STATUS',
         changedFields: ['status'],
+        documentNumber: 'N-9',
+        actorId: 'acc-1',
+        actorName: '李慧玲',
+        actorEmployeeNo: '20233',
       }),
     );
+    // 決策 B：STATUS 事件承載 status 欄位之 old/new（供 F037 變更日誌）。
+    expect(pub.events[0].changes).toEqual([
+      { field: 'status', oldValue: 'active', newValue: 'inactive' },
+    ]);
     expect(pub.events[0].occurredAt).toBeInstanceOf(Date);
-    // 契約鎖定：STATUS 事件不含 reason/前後狀態（屬 F037，deferred）。
+    // reason 仍不承載（無持久化 sink，OQ-E04-02）。
     expect(pub.events[0]).not.toHaveProperty('reason');
   });
 
