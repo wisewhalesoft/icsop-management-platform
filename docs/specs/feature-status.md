@@ -36,11 +36,13 @@
 
 | 狀態 | 數量 | 功能 |
 |---|---|---|
-| ✅ 已完成-已驗證 | **9** | F002 F003 F004 F007 F008 F009 F013 F023 F025 |
-| 🟡 部分 | **22** | F001 F005 F010 F011 F012 F014 F015 F016 F017 F018 F019 F020 F021 F022 F024 F026 F027 F028 F029 F030 F031 F036 |
+| ✅ 已完成-已驗證 | **11** | F002 F003 F004 F007 F008 F009 F013 F015 F023 F025 F036 |
+| 🟡 部分 | **22** | F001 F005 F010 F011 F012 F014 F016 F017 F018 F019 F020 F021 F022 F024 F026 F027 F028 F029 F030 F031 F037 F038 |
 | 🔵 進行中 | **0** | — |
-| ⬜ 未開始 | **7** | F006 F037 F038 F032 F033 F034 F035 |
+| ⬜ 未開始 | **5** | F006 F032 F033 F034 F035 |
 | | **38** | |
+
+> **2026-07-23 前端三線平行 worktree（doc-frontend／usageform／changehistory）併回 main**（皆嚴格遵 prototype）：**doc-frontend** E04 UI 完成——F011 編輯頁＋新舊值 diff（proto 15）、F017 清單 14 欄/9 篩選/分頁/名稱解析（proto 13）、F015 連結 UI、F010/F016 STEP4 附件上傳（proto 14）、F016 唯讀頁（proto 16）；**usageform** F018 管理頁（proto 19）＋**F036/F020 CJK 燒錄字型**（Noto Sans TC/OFL＋fontkit，真中文可燒）；**changehistory** F037 程序書變更歷程（DOCUMENT_CHANGE_LOG 綁真 publisher 持久化 diff＋頁 proto 23）＋F038 樹狀圖變更歷程（部分，快照重建待架構定案 OQ-E07-05）。**→ F015、F036 升 ✅；F037/F038 ⬜→🟡**；F011/F016/F017/F018 前端完成（仍有 edit 多值/附件清單端點/清單2欄資料/自訂表單名 等後端小缺留 🟡）。**🔴 整合又揪 bug**：usage-form int FK 違反（測試建文件用假 lifecycleId）→ 補建 marker 循環。backend **909 單元＋18 int（8 suites）**、frontend **218**、tsc 全淨。**僅剩 ⬜5**：F006（組織異動提示）＋F032-F035（Phase 3 RAG Q&A，待 pgvector/embedding/LLM）。
 
 > **2026-07-22 Wave 1 平行 worktree**（3 分支併回 main、unit-green）：F023/F024（audit）、F016/F018/F027（storage）⬜→🟡；F001 途徑B＋F003 閉環推進。backend 500／frontend 119。
 > **2026-07-22 Wave 2 平行 worktree**（org-foundation ＋ doc-edit/public/rag，4 分支併回 main、unit-green）：**org-foundation**（ACCOUNT 即在職員工目錄→名稱解析、ORG 讀取端點、DESC_FULL、session 擴充；權威來源 [upstream-person-org-source.md]，參考 portalapp-sp）解鎖名稱/身分。**10 功能 ⬜→🟡**：F011 F015（doc-edit）、F019 F020 F021 F022（public）、F028 F029 F030 F031（rag）；F012/F013/F017 補強。backend **816** 測、frontend **143** 測、tsc 全淨。
@@ -77,7 +79,7 @@
 | F007 | 循環池 CRUD | P0 | 1 | ✅ 已完成-已驗證 | 核心 CRUD＋刪除保護；**建立後導向 DAG 畫布**＋**刪除記錄稽核**（AuditWriter LIFECYCLE_DELETE）已補；建立/刪除 int-verified vs SOP |
 | F008 | DAG 節點與連線維護（含防環） | P0 | 1 | ✅ 已完成-已驗證 | 交易內成環再驗＝權威；僅服務層假 store 測、無整合測（碼正確） |
 | F009 | 節點抽屜維護與文件過濾警示 | P0 | 1 | ✅ 已完成-已驗證 | 邊界：雙管理員同時掛載無樂觀鎖（last-write-wins）；前端多筆存檔為非交易連續 API |
-| F036 | 循環樹狀圖預覽（唯讀＋浮水印） | P0 | 1 | 🟡 部分 | unit＋int-verified：唯讀檢視器（移植 prototype 22）＋伺服端浮水印（複用 F020）＋角色可見性＋循環切換＋下游高亮＋VIEW/DOWNLOAD/PRINT 稽核（LIFECYCLE_VIEW int-verified）。剩：**CJK 燒錄字型**（真中文，＝`[integration]`）、F017 詳情入口 |
+| F036 | 循環樹狀圖預覽（唯讀＋浮水印） | P0 | 1 | ✅ 已完成-已驗證 | 唯讀檢視器（proto 22）＋伺服端浮水印（**CJK 字型已解**：Noto Sans TC＋fontkit）＋角色可見性＋循環切換＋下游高亮＋VIEW/DOWNLOAD/PRINT 稽核（LIFECYCLE_VIEW int-verified）。F017 詳情入口為跨線小接 |
 
 ### E04 ICSOP 文件
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
@@ -87,7 +89,7 @@
 | F012 | 文件狀態切換 | P0 | 1 | 🟡 部分 | 切換＋切回有效重驗編號已測；OQ-E04-02「切換原因」欄未做；變更歷程 F037 事件＋操作者稽核未做 |
 | F013 | 文件編號唯一性管理 | P0 | 1 | ✅ 已完成-已驗證 | 建立唯一性經**真 filtered unique index int-verified vs SOP**（dup→409）；編輯側排除自身＋mssql 2601/2627→409 於 F011 路徑 unit-covered |
 | F014 | 制定組織與當責室長設定 | P0 | 1 | 🟡 部分 | **create-side 完成＋int-verified**：三級下拉（`OrgDirectoryService`）＋當責室長主/次（`NameResolution`＋managerEmpNo 預設）＋使用部門，`DOC_SECONDARY_CHIEF`/`DOC_USING_DEPT` 表（migration 落 SOP）。剩：edit-side（隨 F011 前端編輯頁） |
-| F015 | 文件連結點管理 | P1 | 1 | 🟡 部分 | backend unit-green：`DOCUMENT_LINK` 表、批次入 PATCH、`GET :id/links`、`DOCUMENT_LINK_TARGET_NOT_FOUND`。剩：**前端連結 UI**、FK/唯一併發＝`[integration]` |
+| F015 | 文件連結點管理 | P1 | 1 | ✅ 已完成-已驗證 | `DOCUMENT_LINK` 全鏈＋批次入 PATCH＋`GET :id/links`＋目標存在性驗證＋**前端連結 UI（chips＋combobox，proto 14/15）**；backend int-verified |
 | F016 | PDF 與 OJT 附件上傳 | P0 | 1 | 🟡 部分 | backend unit-green：Blob 抽象（`BlobStore`＋FakeBlobStore）、`DOCUMENT_ATTACHMENT`、兩層授權、格式白名單≤50MB、單份覆蓋、受控下載。剩：**前端上傳 UI**、真 Azure Blob＋migration＝`[integration]` |
 | F017 | 後台文件清單與搜尋 | P0 | 1 | 🟡 部分 | backend 補強 unit-green：多篩選/排序/**真分頁**（回傳 `{items,total,…}`）＋**室長/組織名稱解析**（org-foundation）＋衍生狀態篩選。剩：**前端分頁/combobox/欄位 UI 接線**（後端契約已備）、真 join 效能＝`[integration]` |
 
@@ -100,7 +102,7 @@
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
 | F019 | 前台清單瀏覽（排序/搜尋/篩選） | P0 | 1 | 🟡 部分 | unit-green：`PublicModule`＋`/public/documents`（強制已公告、關鍵字、AND 篩選、子樹前綴、置頂、分頁）＋`PublicListPage`（取代 placeholder）＋名稱解析。剩：**`DOC_USING_DEPT` 未持久化**→置頂/部門篩選 e2e、真 DB＝`[integration]` |
-| F020 | 文件浮水印（疊加＋燒錄） | P0 | 1 | 🟡 部分 | unit-green：快照組裝（公司全稱/DESC_FULL/最細單位/空欄收合）、`WatermarkService`＋VIEW/DOWNLOAD/PRINT＋`AuditWriter`、`pdf-lib` 燒錄、檢視器頁。剩：**CJK 燒錄字型**（fontkit+TTF）、真 PDF <3s＝`[integration]` |
+| F020 | 文件浮水印（疊加＋燒錄） | P0 | 1 | 🟡 部分 | unit-green：快照組裝（公司全稱/DESC_FULL/最細單位/空欄收合）、`WatermarkService`＋VIEW/DOWNLOAD/PRINT＋`AuditWriter`、`pdf-lib` 燒錄＋**CJK 字型已解**（Noto Sans TC＋fontkit）、檢視器頁。剩：`DOC_USING_DEPT` 持久化（F019）、真 PDF <3s int-verify |
 | F021 | RWD 響應式版面 | P1 | 1 | 🟡 部分 | unit-green：響應式標記＋resize 狀態保持。剩：斷點/觸控/無橫捲等幾何 AC＝`[integration]`/人工（jsdom 無法驗） |
 | F022 | 後台開啟前台瀏覽頁 | P2 | 2 | 🟡 部分 | unit-green：AppShell 改 `window.open(_blank)`＋彈窗被擋 fallback、保留後台分頁、接真前台頁。剩：瀏覽器彈窗行為＝`[integration]` |
 
@@ -109,8 +111,8 @@
 |----|------|---|----|------|--------------------------|
 | F023 | 稽核軌跡記錄 | P0 | 1 | ✅ 已完成-已驗證 | `AuditWriter` 契約（5 targetType，下游 import）＋outbox 補償；**append-only 觸發器強制＋int-verified**（INSTEAD OF UPDATE/DELETE 阻擋，對 owner 亦生效）；**寫入路徑 int-verified**（usage-form DOWNLOAD／lifecycle VIEW 稽核落地）；usage-forms 已接真 AuditWriter；accountId 貫穿 session 修正（int 揪出） |
 | F024 | 文件調閱歷程查詢後台 | P0 | 1 | 🟡 部分 | unit-green：查詢頁（取代 ModulePlaceholder）＋篩選/RBAC/30天預設/匯出/展開。剩：真 AUDIT_LOG 資料（依 F023 整合）、P95 索引效能＝`[integration]` |
-| F037 | 程序書變更歷程（欄位 Diff） | P1 | 1 | ⬜ 未開始 | **F011/F012 已發 `DocumentChangedEvent`**（種子就緒）；仍缺 `DOCUMENT_CHANGE_LOG` 持久化（綁真 publisher＋before/after/欄位 diff 落地）＋ diff 頁；依賴 F023/F024 |
-| F038 | 循環樹狀圖變更歷程 | P1 | 1 | ⬜ 未開始 | 無 `LIFECYCLE_CHANGE_LOG`/快照；F008/F009 未發結構事件；無新舊樹重建/燒錄；依賴 F036/F023 |
+| F037 | 程序書變更歷程（欄位 Diff） | P1 | 1 | 🟡 部分 | `DOCUMENT_CHANGE_LOG` 綁真 publisher 持久化欄位 before/after（F011 編輯／F012 狀態）＋查詢頁（proto 23）＋`CHANGE_LOG_VIEW` 稽核，int-verified。剩：「同一交易」邊界＋建立事件（架構定案） |
+| F038 | 循環樹狀圖變更歷程 | P1 | 1 | 🟡 部分 | `LIFECYCLE_CHANGE_LOG`＋DAG 結構事件捕捉（F008/F009 發 NODE/EDGE/MOUNT 事件）＋查詢頁＋預覽（複用 F036）＋稽核。剩：**完整新舊快照重建＋雙頁 PDF 燒錄**（架構定案 OQ-E07-05） |
 
 ### E08 權限矩陣
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
@@ -154,4 +156,4 @@
 
 ---
 
-_稽核方法：對 38 個 `features/Fxxx-*.md` 的 Acceptance Criteria 逐條 ↔ `backend/src`、`frontend/src`、測試檔交叉核對，並以「端到端可達」嚴格判定。基準 main：初審 `e6045d9` → Wave 1 `4af5a02` → Wave 2 `8d5f35d` → 整合①②（migration 落 SOP＋`test:int` 5 綠）。測試：backend 816／frontend 143 單元＋ **5 整合（`npm run test:int` vs SOP）**，tsc 全淨。（2026-07-22）_
+_稽核方法：對 38 個 `features/Fxxx-*.md` 的 Acceptance Criteria 逐條 ↔ `backend/src`、`frontend/src`、測試檔交叉核對，並以「端到端可達」嚴格判定。基準 main：初審 `e6045d9` → Wave 1/2 → 整合①②③ → 地基三線 → 前端三線。測試：**backend 909 單元＋18 整合（`npm run test:int`，8 suites vs SOP）／frontend 218**，tsc 全淨。17 migration 落 SOP。（2026-07-23）_
