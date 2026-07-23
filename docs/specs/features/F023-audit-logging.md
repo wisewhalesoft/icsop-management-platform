@@ -1,5 +1,5 @@
 # F023: 稽核軌跡記錄
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-15
+Priority: P0-MVP | Status: Implemented (unit) — audit worktree 2026-07-23；DB/整合待（[integration] TS-013/014/015）| Last Updated: 2026-07-23
 Epic/Story: E07 / US-060
 
 ## Description
