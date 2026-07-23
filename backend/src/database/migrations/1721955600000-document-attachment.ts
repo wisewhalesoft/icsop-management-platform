@@ -7,8 +7,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *  - size 以 bigint（bytes，最多 50MB，但保留彈性）。
  * 註：本檔僅撰寫、未於 storage worktree 執行（unit-only；migration:run 待整合階段）。
  */
-export class DocumentAttachment1721952000000 implements MigrationInterface {
-  name = 'DocumentAttachment1721952000000';
+export class DocumentAttachment1721955600000 implements MigrationInterface {
+  name = 'DocumentAttachment1721955600000';
 
   public async up(q: QueryRunner): Promise<void> {
     await q.query(`
