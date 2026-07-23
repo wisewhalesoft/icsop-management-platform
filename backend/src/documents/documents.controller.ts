@@ -61,6 +61,13 @@ export class DocumentsController {
     return this.svc.getDocument(id);
   }
 
+  /** F015：某文件之連結點清單（附目標編號/書名/目前狀態）。 */
+  @Get(':id/links')
+  @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
+  getLinks(@Param('id') id: string) {
+    return this.svc.getDocumentLinks(id);
+  }
+
   @Post()
   @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'write')
   create(@Req() req: RequestWithSession, @Body() body: Record<string, unknown>) {

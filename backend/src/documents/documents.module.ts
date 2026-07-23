@@ -7,6 +7,8 @@ import { DocumentsController } from './documents.controller';
 import { DocumentsService } from './documents.service';
 import { DOCUMENT_STORE, DocumentStore } from './documents.store';
 import { TypeOrmDocumentStore } from './typeorm-documents.store';
+import { DOCUMENT_LINK_STORE, DocumentLinkStore } from './document-link.store';
+import { TypeOrmDocumentLinkStore } from './typeorm-document-link.store';
 import {
   DOCUMENT_CHANGE_PUBLISHER,
   NoopDocumentChangePublisher,
@@ -24,6 +26,10 @@ import {
     {
       provide: DOCUMENT_STORE,
       useFactory: (): DocumentStore => new TypeOrmDocumentStore(AppDataSource),
+    },
+    {
+      provide: DOCUMENT_LINK_STORE,
+      useFactory: (): DocumentLinkStore => new TypeOrmDocumentLinkStore(AppDataSource),
     },
     // 決策 A：預設 no-op 綁定；rag/F037 併回後可覆寫為真實變更事件消費者。
     { provide: DOCUMENT_CHANGE_PUBLISHER, useClass: NoopDocumentChangePublisher },

@@ -26,6 +26,11 @@ import { classifyFields } from './document-field-write';
 import { isUniqueConstraintViolation } from './db-error';
 import { normalizeReason } from './status-reason';
 import {
+  DOCUMENT_LINK_STORE,
+  DocumentLinkStore,
+  DocumentLinkView,
+} from './document-link.store';
+import {
   DOCUMENT_CHANGE_PUBLISHER,
   DocumentChangePublisher,
   NoopDocumentChangePublisher,
@@ -50,6 +55,10 @@ export class DocumentsService {
     publisher?: DocumentChangePublisher,
     // F017 名稱解析（org-foundation 共用）；選填以免破壞既有純 store 單測（無 resolver → 名稱留 null）。
     @Optional() private readonly nameResolver?: NameResolutionService,
+    // F015 連結點 store；選填（無則 payload 之 links 不落地）。
+    @Optional()
+    @Inject(DOCUMENT_LINK_STORE)
+    private readonly linkStore?: DocumentLinkStore,
   ) {
     // 預設 no-op 綁定（決策 A）：seam 存在但不落地，rag/F037 併回後覆寫。
     this.publisher = publisher ?? new NoopDocumentChangePublisher();
@@ -181,6 +190,14 @@ export class DocumentsService {
       if (!ignored.includes(k)) clean[k] = v;
     }
 
+    // 1b) F015 連結點（決策：隨 PATCH 整批送出）：自 clean 抽出 links（非純量欄，另走連結 store）。
+    let linkTargetIds: string[] | undefined;
+    if ('links' in clean) {
+      const raw = clean.links;
+      linkTargetIds = Array.isArray(raw) ? (raw as string[]) : [];
+      delete clean.links;
+    }
+
     // 2) F010 必填：合併現值後檢核（partial patch 只影響被觸及之必填欄）。
     const merged = { ...current, ...clean } as Record<string, unknown>;
     if (missingRequired(merged).length > 0) {
@@ -202,6 +219,11 @@ export class DocumentsService {
       }
     }
 
+    // 4b) F015 連結點目標存在性預查（於任何寫入前；缺目標 → 400，不建立任何連結列）。
+    if (linkTargetIds !== undefined && this.linkStore) {
+      await this.validateLinkTargets(id, linkTargetIds);
+    }
+
     // 5) 覆寫（不留歷史）；併發 DB 唯一鍵違反 → 映射 409。
     let updated: DocumentView;
     try {
@@ -211,6 +233,11 @@ export class DocumentsService {
         throw new ConflictException('DOCUMENT_NUMBER_DUPLICATE');
       }
       throw e;
+    }
+
+    // 5b) F015 連結點差集同步（新增/移除；單向 source=id）。
+    if (linkTargetIds !== undefined && this.linkStore) {
+      await this.syncLinks(id, linkTargetIds);
     }
 
     // 6) 版本對照 diff（新舊值快照，供編輯頁確認）。
@@ -224,14 +251,63 @@ export class DocumentsService {
     }
 
     // 7) 發出變更事件（CONTENT，決策 A seam）。
+    const changedFields = Object.keys(clean);
+    if (linkTargetIds !== undefined) changedFields.push('links');
     await this.publisher.publish({
       documentId: id,
       changeType: 'CONTENT',
-      changedFields: Object.keys(clean),
+      changedFields,
       occurredAt: new Date(),
     });
 
     return { document: updated, changes };
+  }
+
+  /** F015：查詢某文件之連結點清單（單向；附目標編號/書名/目前狀態）。無 linkStore → 空陣列。 */
+  async getDocumentLinks(sourceId: string): Promise<DocumentLinkView[]> {
+    if (!this.linkStore) return [];
+    const links = await this.linkStore.findBySource(sourceId);
+    return Promise.all(
+      links.map(async (l) => {
+        const target = await this.store.findById(l.targetDocumentId);
+        return {
+          linkId: l.id,
+          targetDocumentId: l.targetDocumentId,
+          targetNumber: target?.documentNumber ?? null,
+          targetName: target?.documentName ?? null,
+          targetStatus: target?.status ?? null,
+        };
+      }),
+    );
+  }
+
+  /** F015：驗證即將新增之連結目標皆存在（作廢/失效仍允許）；缺 → 400 DOCUMENT_LINK_TARGET_NOT_FOUND。 */
+  private async validateLinkTargets(
+    sourceId: string,
+    targetIds: string[],
+  ): Promise<void> {
+    const existing = await this.linkStore!.findBySource(sourceId);
+    const existingTargets = new Set(existing.map((l) => l.targetDocumentId));
+    const toAdd = targetIds.filter((t) => !existingTargets.has(t));
+    for (const t of toAdd) {
+      const target = await this.store.findById(t);
+      if (!target) throw new BadRequestException('DOCUMENT_LINK_TARGET_NOT_FOUND');
+    }
+  }
+
+  /** F015：以差集同步連結點（新增缺少者、移除多餘者）。單向：僅動 sourceId 之列。 */
+  private async syncLinks(sourceId: string, targetIds: string[]): Promise<void> {
+    const existing = await this.linkStore!.findBySource(sourceId);
+    const existingTargets = new Set(existing.map((l) => l.targetDocumentId));
+    const incoming = new Set(targetIds);
+    for (const t of targetIds) {
+      if (!existingTargets.has(t)) await this.linkStore!.add(sourceId, t);
+    }
+    for (const l of existing) {
+      if (!incoming.has(l.targetDocumentId)) {
+        await this.linkStore!.remove(sourceId, l.targetDocumentId);
+      }
+    }
   }
 
   /**

@@ -16,6 +16,26 @@ import {
   DocumentChangedEvent,
 } from './document-change-event';
 import { NameResolutionService } from '../org-directory/name-resolution.service';
+import { DocumentLink, DocumentLinkStore } from './document-link.store';
+
+class FakeLinkStore implements DocumentLinkStore {
+  seq = 1;
+  links: DocumentLink[] = [];
+  findBySource(sourceId: string): Promise<DocumentLink[]> {
+    return Promise.resolve(this.links.filter((l) => l.sourceDocumentId === sourceId));
+  }
+  add(sourceId: string, targetId: string): Promise<DocumentLink> {
+    const l = { id: `link-${this.seq++}`, sourceDocumentId: sourceId, targetDocumentId: targetId };
+    this.links.push(l);
+    return Promise.resolve(l);
+  }
+  remove(sourceId: string, targetId: string): Promise<void> {
+    this.links = this.links.filter(
+      (l) => !(l.sourceDocumentId === sourceId && l.targetDocumentId === targetId),
+    );
+    return Promise.resolve();
+  }
+}
 
 /** F017：最小 NameResolutionService 替身（僅實作 service 所用之解析方法）。 */
 class FakeNameResolver {
@@ -503,6 +523,111 @@ describe('DocumentsService.setStatus 切換原因＋STATUS 事件（F012）', ()
   it('切換失敗（不存在）時不發出事件', async () => {
     await expect(svc.setStatus('nope', 'inactive')).rejects.toThrow();
     expect(pub.events).toHaveLength(0);
+  });
+});
+
+describe('DocumentsService 連結點（F015，隨 PATCH 整批送出）', () => {
+  let store: FakeStore;
+  let links: FakeLinkStore;
+  let svc: DocumentsService;
+  beforeEach(() => {
+    store = new FakeStore();
+    links = new FakeLinkStore();
+    svc = new DocumentsService(store, undefined, undefined, links);
+  });
+
+  it('TS-F015-001 對既存文件新增連結點指向另一既存文件 → 成功建立', async () => {
+    const a = store.seedDoc({ documentNumber: 'A' });
+    const b = store.seedDoc({ documentNumber: 'B' });
+    await svc.update('ICSOPAdmin', a.id, { links: [b.id] });
+    expect(links.links).toHaveLength(1);
+    expect(links.links[0]).toMatchObject({ sourceDocumentId: a.id, targetDocumentId: b.id });
+  });
+
+  it('TS-F015-002 重複新增多個不同目標 → 各自獨立列', async () => {
+    const a = store.seedDoc({ documentNumber: 'A' });
+    const b = store.seedDoc({ documentNumber: 'B' });
+    const c = store.seedDoc({ documentNumber: 'C' });
+    await svc.update('ICSOPAdmin', a.id, { links: [b.id] });
+    await svc.update('ICSOPAdmin', a.id, { links: [b.id, c.id] });
+    const view = await svc.getDocumentLinks(a.id);
+    expect(view.map((v) => v.targetDocumentId).sort()).toEqual([b.id, c.id].sort());
+  });
+
+  it('TS-F015-003 目標文件 id 不存在 → 400 DOCUMENT_LINK_TARGET_NOT_FOUND、不建立列', async () => {
+    const a = store.seedDoc({ documentNumber: 'A' });
+    await expect(
+      svc.update('ICSOPAdmin', a.id, { links: ['not-exist'] }),
+    ).rejects.toThrow('DOCUMENT_LINK_TARGET_NOT_FOUND');
+    expect(links.links).toHaveLength(0);
+  });
+
+  it('TS-F015-004 目標曾存在後被移除（現查無）→ 同 003 阻擋', async () => {
+    const a = store.seedDoc({ documentNumber: 'A' });
+    // 目標從未在 store（等價於已被刪除）
+    await expect(
+      svc.update('ICSOPAdmin', a.id, { links: ['deleted-doc'] }),
+    ).rejects.toThrow('DOCUMENT_LINK_TARGET_NOT_FOUND');
+    expect(links.links).toHaveLength(0);
+  });
+
+  it('TS-F015-005/006 目標為作廢/失效 → 允許新增', async () => {
+    const a = store.seedDoc({ documentNumber: 'A' });
+    const voided = store.seedDoc({ documentNumber: 'V', status: 'void' });
+    const inactive = store.seedDoc({ documentNumber: 'I', status: 'inactive' });
+    await svc.update('ICSOPAdmin', a.id, { links: [voided.id, inactive.id] });
+    expect(links.links).toHaveLength(2);
+  });
+
+  it('TS-F015-007 查詢連結點清單 → 一併回傳各目標之目前狀態', async () => {
+    const a = store.seedDoc({ documentNumber: 'A' });
+    const act = store.seedDoc({ documentNumber: 'ACT', status: 'active' });
+    const ina = store.seedDoc({ documentNumber: 'INA', status: 'inactive' });
+    const voi = store.seedDoc({ documentNumber: 'VOI', status: 'void' });
+    await svc.update('ICSOPAdmin', a.id, { links: [act.id, ina.id, voi.id] });
+    const view = await svc.getDocumentLinks(a.id);
+    const byTarget = new Map(view.map((v) => [v.targetDocumentId, v.targetStatus]));
+    expect(byTarget.get(act.id)).toBe('active');
+    expect(byTarget.get(ina.id)).toBe('inactive');
+    expect(byTarget.get(voi.id)).toBe('void');
+  });
+
+  it('TS-F015-008 移除其一 → 僅該筆被移除、其餘不受影響', async () => {
+    const a = store.seedDoc({ documentNumber: 'A' });
+    const b = store.seedDoc({ documentNumber: 'B' });
+    const c = store.seedDoc({ documentNumber: 'C' });
+    await svc.update('ICSOPAdmin', a.id, { links: [b.id, c.id] });
+    await svc.update('ICSOPAdmin', a.id, { links: [c.id] }); // 移除 B
+    const view = await svc.getDocumentLinks(a.id);
+    expect(view.map((v) => v.targetDocumentId)).toEqual([c.id]);
+  });
+
+  it('TS-F015-010 單向：A→B 不使 B 之連結清單含 A', async () => {
+    const a = store.seedDoc({ documentNumber: 'A' });
+    const b = store.seedDoc({ documentNumber: 'B' });
+    await svc.update('ICSOPAdmin', a.id, { links: [b.id] });
+    const bView = await svc.getDocumentLinks(b.id);
+    expect(bView).toEqual([]);
+  });
+
+  it('TS-F015-011 移除 A→B 不影響 B→C', async () => {
+    const a = store.seedDoc({ documentNumber: 'A' });
+    const b = store.seedDoc({ documentNumber: 'B' });
+    const c = store.seedDoc({ documentNumber: 'C' });
+    await svc.update('ICSOPAdmin', a.id, { links: [b.id] });
+    await svc.update('ICSOPAdmin', b.id, { links: [c.id] });
+    await svc.update('ICSOPAdmin', a.id, { links: [] }); // 移除 A→B
+    const bView = await svc.getDocumentLinks(b.id);
+    expect(bView.map((v) => v.targetDocumentId)).toEqual([c.id]);
+  });
+
+  it('TS-F015-013 非 ICSOPAdmin（Supervisor）→ 拒絕、不建立任何連結列', async () => {
+    const a = store.seedDoc({ documentNumber: 'A' });
+    const b = store.seedDoc({ documentNumber: 'B' });
+    await expect(
+      svc.update('Supervisor', a.id, { links: [b.id] }),
+    ).rejects.toThrow('FIELD_WRITE_FORBIDDEN');
+    expect(links.links).toHaveLength(0);
   });
 });
 
