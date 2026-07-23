@@ -51,7 +51,15 @@ export class SessionGuard implements CanActivate {
       throw new UnauthorizedException('AUTH_ACCOUNT_DISABLED');
     }
 
-    const fresh: SessionUser = { ...user, roleCode: current.roleCode };
+    // orgCode/name/employeeNo 以 DB 現行值填入（不取自 JWT — 定案：PII 不進 token）。
+    // 達成組織轉調/改名於 session 存續期間即時反映（與 roleCode 之即時生效一致）。
+    const fresh: SessionUser = {
+      ...user,
+      roleCode: current.roleCode,
+      orgCode: current.orgCode ?? null,
+      name: current.name ?? null,
+      employeeNo: current.employeeNo ?? null,
+    };
     req.sessionUser = fresh;
     // 每次有效請求刷新逾時視窗（採 DB 現行角色重簽，使角色變更於 token 內亦收斂）
     res.cookie(SESSION_COOKIE, this.tokens.issue(fresh), sessionCookieOptions());

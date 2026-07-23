@@ -48,7 +48,16 @@ export class TypeOrmAccountRepository implements AccountRepository {
     const a = await ds
       .getRepository(Account)
       .findOne({ where: { companyCode, loginId } });
-    return a ? { status: a.status, roleCode: a.roleCode } : null;
+    return a
+      ? {
+          status: a.status,
+          roleCode: a.roleCode,
+          // org-foundation：身分快照欄位（每請求由 SessionGuard 填入 request-context）。
+          orgCode: a.orgCode,
+          name: a.name,
+          employeeNo: a.employeeNo,
+        }
+      : null;
   }
 
   /**

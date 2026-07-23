@@ -92,6 +92,7 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
         tier: o.tier,
         parentCode: o.parentCode,
         name: o.name,
+        descFull: o.descFull,
         managerEmpNo: o.managerEmpNo,
         isActive: o.isActive,
       });
@@ -154,6 +155,7 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
         parentCode: o.parentCode,
         tier: o.tier,
         name: o.name,
+        descFull: o.descFull,
         managerEmpNo: o.managerEmpNo,
         isActive: o.isActive,
       }));
@@ -174,6 +176,7 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
             parentCode: o.parentCode,
             tier: o.tier,
             name: o.name,
+            descFull: o.descFull,
             managerEmpNo: o.managerEmpNo,
             isActive: o.isActive,
           },

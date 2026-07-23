@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { OrgSyncModule } from './org-sync/org-sync.module';
+import { OrgDirectoryModule } from './org-directory/org-directory.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { LifecycleModule } from './lifecycle/lifecycle.module';
 import { DocumentsModule } from './documents/documents.module';
@@ -21,6 +22,7 @@ import { UsageFormsModule } from './usage-forms/usage-forms.module';
     ScheduleModule.forRoot(),
     AuthModule,
     OrgSyncModule,
+    OrgDirectoryModule,
     AccountsModule,
     LifecycleModule,
     DocumentsModule,

@@ -59,6 +59,9 @@ export interface NormalizedOrgUnit {
   tier: OrgTier;
   parentCode: string | null;
   name: string;
+  // 部門全名（← DESC_FULL，供 F020 浮水印「部門」欄）；上游可能為 null（見 OQ-DESCFULL-2）。
+  // 僅忠實保存上游原始值，不做「無部層 fallback 取本部層」之組裝（屬 F020 責任）。
+  descFull: string | null;
   managerEmpNo: string | null;
   isActive: boolean;
 }
@@ -122,6 +125,7 @@ export function normalizeDept(raw: RawDept, now: Date): NormalizedOrgUnit {
     tier,
     parentCode,
     name,
+    descFull: nullableStr(raw.DESC_FULL),
     managerEmpNo: nullableStr(raw.JOB_CODE),
     isActive,
   };
