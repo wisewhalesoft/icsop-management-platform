@@ -18,6 +18,7 @@ import { DocIndexPage } from './pages/DocIndexPage';
 import { ModulePlaceholder } from './pages/ModulePlaceholder';
 import { PublicListPage } from './pages/PublicListPage';
 import { PublicViewerPage } from './pages/PublicViewerPage';
+import { LifecycleTreePreviewPage } from './pages/LifecycleTreePreviewPage';
 
 /** 全頁載入狀態（等待 /auth/me）。 */
 function FullPageLoading(): JSX.Element {
@@ -82,6 +83,8 @@ export function AppRoutes(): JSX.Element {
       <Route path="/" element={<RoleLanding />} />
       <Route path="/public" element={<PublicListPage />} />
       <Route path="/public/documents/:id" element={<PublicViewerPage />} />
+      {/* F036 循環樹狀圖預覽（viewer 風格，不套後台側選單；:id＝循環 UUID）。雙入口皆導向此路由。 */}
+      <Route path="/lifecycles/:id/tree" element={<LifecycleTreePreviewPage />} />
       <Route element={<AdminGuard />}>
         <Route path="/admin" element={<AppShell />}>
           <Route index element={<DashboardHome />} />

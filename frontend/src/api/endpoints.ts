@@ -215,6 +215,28 @@ export function deleteDagEdge(lifecycleId: string, edgeId: string): Promise<void
   });
 }
 
+// ===== F036 循環樹狀圖預覽（唯讀＋浮水印） =====
+
+/**
+ * GET /admin/lifecycles/:id/tree-preview（唯讀圖資＋伺服器端浮水印快照；記錄 LIFECYCLE_VIEW 稽核）。
+ * 循環管理 read：SysAdmin/ICSOPAdmin/Supervisor；DeptContact/User → 403 PERMISSION_DENIED。
+ */
+export function getLifecycleTreePreview(
+  lifecycleId: string,
+): Promise<import('./types').LifecycleTreePreview> {
+  return apiFetch(`/admin/lifecycles/${lifecycleId}/tree-preview`);
+}
+
+/** 下載 URL（樹狀圖 PDF，內容層已燒錄浮水印；記錄 LIFECYCLE_DOWNLOAD）。 */
+export function lifecycleTreeDownloadUrl(lifecycleId: string): string {
+  return `/admin/lifecycles/${lifecycleId}/tree-preview/download`;
+}
+
+/** 列印用 URL（樹狀圖 PDF，內容層已燒錄浮水印；記錄 LIFECYCLE_PRINT）。 */
+export function lifecycleTreePrintUrl(lifecycleId: string): string {
+  return `/admin/lifecycles/${lifecycleId}/tree-preview/print`;
+}
+
 // ===== E04 ICSOP 文件（F010/F012/F017） =====
 
 /**

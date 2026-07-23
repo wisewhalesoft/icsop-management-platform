@@ -173,11 +173,22 @@ export function LifecycleListPage(): JSX.Element {
                 <tr key={l.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-800">{l.name}</td>
                   <td className="px-4 py-3">
-                    {l.status === 'active' ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ color: '#047857', background: '#D1FAE5' }}>● 啟用</span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">● 停用</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {l.status === 'active' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ color: '#047857', background: '#D1FAE5' }}>● 啟用</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">● 停用</span>
+                      )}
+                      {/* F036 循環樹狀圖預覽入口（唯讀，讀權即可見）；開新分頁至 viewer 路由。 */}
+                      <button
+                        onClick={() => window.open(`/lifecycles/${l.id}/tree`, '_blank', 'noopener,noreferrer')}
+                        title="檢視樹狀圖預覽（開新分頁）"
+                        aria-label={`檢視「${l.name}」樹狀圖預覽`}
+                        className="w-7 h-7 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"
+                      >
+                        <Icon name="git-fork" className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-slate-600">{l.nodeCount}</td>
                   <td className="px-4 py-3 text-slate-400">—</td>
@@ -240,8 +251,13 @@ export function LifecycleListPage(): JSX.Element {
         <LifecycleModal
           target={editTarget}
           onClose={() => setEditTarget(null)}
-          onSaved={async () => {
+          onSaved={async (created) => {
             setEditTarget(null);
+            // F007 Main Flow 1／AC：新增循環成功 → 導向該循環 DAG 畫布編輯頁（F008）。
+            if (created) {
+              navigate(`/admin/lifecycles/${created.id}/canvas`);
+              return;
+            }
             setNotice({ tone: 'ok', text: '已儲存循環' });
             await load();
           }}
@@ -272,7 +288,8 @@ function LifecycleModal({
 }: {
   target: LifecycleView | 'new';
   onClose: () => void;
-  onSaved: () => void;
+  /** created＝新建之循環（觸發導向 DAG 畫布）；undefined＝編輯（僅重載清單）。 */
+  onSaved: (created?: LifecycleView) => void;
   onError: (e: unknown) => void;
 }): JSX.Element {
   const isNew = target === 'new';
@@ -289,11 +306,12 @@ function LifecycleModal({
     setBusy(true);
     try {
       if (isNew) {
-        await createLifecycle({ name: name.trim(), description: description.trim() || null });
+        const created = await createLifecycle({ name: name.trim(), description: description.trim() || null });
+        onSaved(created);
       } else {
         await updateLifecycle(target.id, { name: name.trim(), description: description.trim() || null });
+        onSaved();
       }
-      onSaved();
     } catch (e) {
       onError(e);
     } finally {
