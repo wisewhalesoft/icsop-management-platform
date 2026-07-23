@@ -1,8 +1,9 @@
-import { DataSource, In } from 'typeorm';
+import { DataSource, In, SelectQueryBuilder } from 'typeorm';
 import { IcsopDocument } from '../database/entities/icsop-document.entity';
 import { Lifecycle } from '../database/entities/lifecycle.entity';
 import { NumberHolder } from './document-rules';
-import { DocumentStatus } from './document-status';
+import { DocumentStatus, isValidStatus } from './document-status';
+import { DEFAULT_PAGE_SIZE } from './document-list-query';
 import {
   DocumentStore,
   CreateDocumentInput,
@@ -10,7 +11,46 @@ import {
   DocumentView,
   DocumentListFilters,
   DocumentListItem,
+  DocumentListPage,
 } from './documents.store';
+
+/**
+ * F017 狀態篩選之 SQL 下推：原始值直接比對；衍生顯示值（已公告/進度中）以 today 比較公告日期。
+ * ⚠ today 比較與 tie-breaker 正確性屬 [integration]（未於 unit 驗證）。
+ */
+function applyStatusFilter(
+  qb: SelectQueryBuilder<IcsopDocument>,
+  status: string | undefined,
+): void {
+  if (!status) return;
+  if (isValidStatus(status)) {
+    qb.andWhere('d.status = :status', { status });
+    return;
+  }
+  const today = new Date();
+  switch (status) {
+    case '已公告':
+      qb.andWhere('d.status = :st AND d.announcedDate IS NOT NULL AND d.announcedDate <= :today', {
+        st: 'active',
+        today,
+      });
+      break;
+    case '進度中':
+      qb.andWhere('d.status = :st AND (d.announcedDate IS NULL OR d.announcedDate > :today)', {
+        st: 'active',
+        today,
+      });
+      break;
+    case '失效':
+      qb.andWhere('d.status = :st', { st: 'inactive' });
+      break;
+    case '作廢':
+      qb.andWhere('d.status = :st', { st: 'void' });
+      break;
+    default:
+      qb.andWhere('1 = 0'); // 未知狀態值 → 無結果（非錯誤）
+  }
+}
 
 /** JSON 傳入之日期可能為 ISO 字串 → 強制轉 Date（供 datetime2 寫入）。 */
 function coerceDate(v: Date | string | null | undefined): Date | null {
@@ -82,18 +122,46 @@ export class TypeOrmDocumentStore implements DocumentStore {
     return TypeOrmDocumentStore.toView(saved);
   }
 
-  async list(filters: DocumentListFilters): Promise<DocumentListItem[]> {
+  /**
+   * F017 清單：filter/sort/paginate 一律下推 SQL（real pagination，取代既有 take(2000)）。
+   * 組織/當責室長之名稱解析由 DocumentsService（NameResolutionService）補上；此處僅 join 循環名稱。
+   * ⚠ 衍生狀態（已公告/進度中）之 today 比較與分頁 tie-breaker 之正確性屬 [integration]（未於 unit 驗證）。
+   */
+  async list(filters: DocumentListFilters): Promise<DocumentListPage> {
     const ds = await this.init();
     const qb = ds.getRepository(IcsopDocument).createQueryBuilder('d');
-    if (filters.status) qb.andWhere('d.status = :status', { status: filters.status });
+    applyStatusFilter(qb, filters.status);
     if (filters.lifecycleId) qb.andWhere('d.lifecycleId = :lc', { lc: filters.lifecycleId });
+    if (filters.documentNumber) qb.andWhere('d.documentNumber = :dn', { dn: filters.documentNumber });
+    if (filters.documentName) qb.andWhere('d.documentName = :dname', { dname: filters.documentName });
+    if (filters.draftingCompanyId) qb.andWhere('d.draftingCompanyId = :co', { co: filters.draftingCompanyId });
+    if (filters.draftingDeptId) qb.andWhere('d.draftingDeptId = :dept', { dept: filters.draftingDeptId });
+    if (filters.draftingSectionId) qb.andWhere('d.draftingSectionId = :sec', { sec: filters.draftingSectionId });
+    if (filters.primaryChiefId) qb.andWhere('d.primaryChiefId = :chief', { chief: filters.primaryChiefId });
+    if (filters.linkTargetId) {
+      qb.andWhere(
+        'EXISTS (SELECT 1 FROM DOCUMENT_LINK dl WHERE dl.sourceDocumentId = d.id AND dl.targetDocumentId = :lt)',
+        { lt: filters.linkTargetId },
+      );
+    }
     if (filters.keyword) {
       qb.andWhere('(d.documentNumber LIKE :kw OR d.documentName LIKE :kw)', {
         kw: `%${filters.keyword}%`,
       });
     }
-    qb.orderBy('d.updatedAt', 'DESC').take(2000);
-    const docs = await qb.getMany();
+
+    // 排序：指定 documentNumber/announcedDate（NULLS 由 DB 預設處理），否則既有 updatedAt DESC。
+    const dir: 'ASC' | 'DESC' = filters.sortDir === 'desc' ? 'DESC' : 'ASC';
+    if (filters.sortBy === 'documentNumber') qb.orderBy('d.documentNumber', dir);
+    else if (filters.sortBy === 'announcedDate') qb.orderBy('d.announcedDate', dir);
+    else qb.orderBy('d.updatedAt', 'DESC');
+
+    // 分頁（1-based；OFFSET-FETCH）。
+    const pageSize = filters.pageSize && filters.pageSize > 0 ? filters.pageSize : DEFAULT_PAGE_SIZE;
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    qb.skip((page - 1) * pageSize).take(pageSize);
+
+    const [docs, total] = await qb.getManyAndCount();
 
     // 循環名稱（單獨查詢並以 Map 併入，避免 N+1）
     const lcIds = [...new Set(docs.map((d) => d.lifecycleId))];
@@ -102,7 +170,7 @@ export class TypeOrmDocumentStore implements DocumentStore {
       : [];
     const nameMap = new Map(lcs.map((l) => [l.id, l.name]));
 
-    return docs.map((d) => ({
+    const items: DocumentListItem[] = docs.map((d) => ({
       id: d.id,
       status: d.status as DocumentStatus,
       documentNumber: d.documentNumber,
@@ -113,11 +181,18 @@ export class TypeOrmDocumentStore implements DocumentStore {
       draftingCompanyId: d.draftingCompanyId,
       draftingDeptId: d.draftingDeptId,
       draftingSectionId: d.draftingSectionId,
+      draftingCompanyName: null,
+      draftingDeptName: null,
+      draftingSectionName: null,
       primaryChiefId: d.primaryChiefId,
+      primaryChiefName: null,
       edition: d.edition,
       announcedDate: d.announcedDate ? d.announcedDate.toISOString() : null,
       contentSummary: d.contentSummary,
     }));
+
+    const hasNext = (page - 1) * pageSize + items.length < total;
+    return { items, total, page, pageSize, hasNext };
   }
 
   async findById(id: string): Promise<DocumentView | null> {

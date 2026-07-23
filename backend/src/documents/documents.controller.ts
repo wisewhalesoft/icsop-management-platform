@@ -28,15 +28,30 @@ export class DocumentsController {
 
   @Get()
   @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
-  list(
-    @Query('lifecycleId') lifecycleId?: string,
-    @Query('status') status?: string,
-    @Query('keyword') keyword?: string,
-  ) {
+  list(@Query() q: Record<string, string | undefined>) {
+    const num = (v: string | undefined): number | undefined => {
+      if (v === undefined || v.trim() === '') return undefined;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : undefined;
+    };
     return this.svc.listDocuments({
-      lifecycleId: lifecycleId || undefined,
-      status: status || undefined,
-      keyword: keyword?.trim() || undefined,
+      lifecycleId: q.lifecycleId || undefined,
+      status: q.status || undefined,
+      keyword: q.keyword?.trim() || undefined,
+      documentNumber: q.documentNumber || undefined,
+      documentName: q.documentName || undefined,
+      draftingCompanyId: q.draftingCompanyId || undefined,
+      draftingDeptId: q.draftingDeptId || undefined,
+      draftingSectionId: q.draftingSectionId || undefined,
+      primaryChiefId: q.primaryChiefId || undefined,
+      linkTargetId: q.linkTargetId || undefined,
+      sortBy:
+        q.sortBy === 'documentNumber' || q.sortBy === 'announcedDate'
+          ? q.sortBy
+          : undefined,
+      sortDir: q.sortDir === 'asc' || q.sortDir === 'desc' ? q.sortDir : undefined,
+      page: num(q.page),
+      pageSize: num(q.pageSize),
     });
   }
 

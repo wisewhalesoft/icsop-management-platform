@@ -6,13 +6,33 @@ import {
   DocumentView,
   DocumentListFilters,
   DocumentListItem,
+  DocumentListPage,
 } from './documents.store';
+import { applyDocumentQuery } from './document-list-query';
 import { NumberHolder } from './document-rules';
 import { DocumentStatus } from './document-status';
 import {
   DocumentChangePublisher,
   DocumentChangedEvent,
 } from './document-change-event';
+import { NameResolutionService } from '../org-directory/name-resolution.service';
+
+/** F017：最小 NameResolutionService 替身（僅實作 service 所用之解析方法）。 */
+class FakeNameResolver {
+  orgNames = new Map<string, string>();
+  personNames = new Map<string, string>();
+  resolveOrgUnitName(code: string): Promise<string | null> {
+    return Promise.resolve(this.orgNames.get(code) ?? null);
+  }
+  resolvePersonNames(empNos: string[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    for (const e of empNos) {
+      const n = this.personNames.get(e);
+      if (n) out.set(e, n);
+    }
+    return Promise.resolve(out);
+  }
+}
 
 class FakePublisher implements DocumentChangePublisher {
   events: DocumentChangedEvent[] = [];
@@ -67,17 +87,19 @@ class FakeStore implements DocumentStore {
     this.docs[idx] = next;
     return Promise.resolve(next);
   }
-  list(f: DocumentListFilters): Promise<DocumentListItem[]> {
-    return Promise.resolve(
-      this.docs
-        .filter((d) => (!f.status || d.status === f.status) && (!f.lifecycleId || d.lifecycleId === f.lifecycleId))
-        .map((d) => ({
-          id: d.id, status: d.status, documentNumber: d.documentNumber, documentName: d.documentName,
-          lifecycleId: d.lifecycleId, lifecycleName: null, nodeId: d.nodeId,
-          draftingCompanyId: null, draftingDeptId: null, draftingSectionId: null,
-          primaryChiefId: null, edition: null, announcedDate: null, contentSummary: null,
-        })),
-    );
+  list(f: DocumentListFilters): Promise<DocumentListPage> {
+    const rows: DocumentListItem[] = this.docs.map((d) => ({
+      id: d.id, status: d.status, documentNumber: d.documentNumber, documentName: d.documentName,
+      lifecycleId: d.lifecycleId, lifecycleName: null, nodeId: d.nodeId,
+      draftingCompanyId: d.draftingCompanyId ?? null, draftingDeptId: d.draftingDeptId ?? null,
+      draftingSectionId: d.draftingSectionId ?? null,
+      draftingCompanyName: null, draftingDeptName: null, draftingSectionName: null,
+      primaryChiefId: d.primaryChiefId ?? null, primaryChiefName: null,
+      edition: d.edition ?? null,
+      announcedDate: d.announcedDate ? new Date(d.announcedDate as unknown as string).toISOString() : null,
+      contentSummary: d.contentSummary ?? null,
+    }));
+    return Promise.resolve(applyDocumentQuery(rows, f, new Date()));
   }
   findById(id: string): Promise<DocumentView | null> {
     return Promise.resolve(this.docs.find((d) => d.id === id) ?? null);
@@ -178,9 +200,9 @@ describe('DocumentsService.create（F010＋F013＋F026）', () => {
     it('傳遞篩選並回傳清單', async () => {
       store.seedDoc({ status: 'active', lifecycleId: 'lcA' });
       store.seedDoc({ status: 'inactive', lifecycleId: 'lcA' });
-      const items = await svc.listDocuments({ status: 'active' });
-      expect(items).toHaveLength(1);
-      expect(items[0].status).toBe('active');
+      const page = await svc.listDocuments({ status: 'active' });
+      expect(page.items).toHaveLength(1);
+      expect(page.items[0].status).toBe('active');
     });
   });
 });
@@ -252,8 +274,8 @@ describe('DocumentsService.update（F011 編輯＋版本對照＋F013 編輯側�
   it('TS-F011-006 改版次後清單反映新版次、UUID 不變', async () => {
     const d = store.seedDoc({ edition: "26'01" });
     await svc.update('ICSOPAdmin', d.id, { edition: "26'02" });
-    const items = await svc.listDocuments({});
-    const item = items.find((x) => x.id === d.id)!;
+    const page = await svc.listDocuments({});
+    const item = page.items.find((x) => x.id === d.id)!;
     expect(item.id).toBe(d.id);
     expect(store.docs.find((x) => x.id === d.id)!.edition).toBe("26'02");
   });
@@ -359,6 +381,75 @@ describe('DocumentsService.update（F011 編輯＋版本對照＋F013 編輯側�
       svc.update('Supervisor', d.id, { documentName: '新名' }),
     ).rejects.toThrow();
     expect(pub.events).toHaveLength(0);
+  });
+});
+
+describe('DocumentsService.listDocuments 名稱解析＋分頁（F017）', () => {
+  let store: FakeStore;
+  let resolver: FakeNameResolver;
+  let svc: DocumentsService;
+  beforeEach(() => {
+    store = new FakeStore();
+    resolver = new FakeNameResolver();
+    svc = new DocumentsService(
+      store,
+      undefined,
+      resolver as unknown as NameResolutionService,
+    );
+  });
+
+  it('TS-F017-001 制定公司/部門/室別 id → 解析為顯示名稱', async () => {
+    resolver.orgNames.set('org-co', '和潤企業');
+    resolver.orgNames.set('org-dept', '企劃部');
+    resolver.orgNames.set('org-sec', '車輛行銷室');
+    store.seedDoc({
+      draftingCompanyId: 'org-co',
+      draftingDeptId: 'org-dept',
+      draftingSectionId: 'org-sec',
+    });
+    const page = await svc.listDocuments({});
+    expect(page.items[0].draftingCompanyName).toBe('和潤企業');
+    expect(page.items[0].draftingDeptName).toBe('企劃部');
+    expect(page.items[0].draftingSectionName).toBe('車輛行銷室');
+  });
+
+  it('TS-F017-002 制定室別為空 → 名稱 null（前端顯示「—」）', async () => {
+    store.seedDoc({ draftingSectionId: null });
+    const page = await svc.listDocuments({});
+    expect(page.items[0].draftingSectionName).toBeNull();
+  });
+
+  it('TS-F017-003 當責室長 → 以 resolvePersonName 解析姓名（org-foundation 已就緒）', async () => {
+    resolver.personNames.set('E12345', '陳彥廷');
+    store.seedDoc({ primaryChiefId: 'E12345' });
+    const page = await svc.listDocuments({});
+    expect(page.items[0].primaryChiefId).toBe('E12345');
+    expect(page.items[0].primaryChiefName).toBe('陳彥廷');
+  });
+
+  it('當責室長解析不到 → 姓名 null（前端 fallback 員編）', async () => {
+    store.seedDoc({ primaryChiefId: 'E-unknown' });
+    const page = await svc.listDocuments({});
+    expect(page.items[0].primaryChiefName).toBeNull();
+    expect(page.items[0].primaryChiefId).toBe('E-unknown');
+  });
+
+  it('分頁欄位（total/page/pageSize/hasNext）貫穿至 service 回傳', async () => {
+    for (let i = 0; i < 5; i++) store.seedDoc({ documentNumber: `N-${i}` });
+    const page = await svc.listDocuments({ page: 1, pageSize: 2 });
+    expect(page.total).toBe(5);
+    expect(page.page).toBe(1);
+    expect(page.pageSize).toBe(2);
+    expect(page.hasNext).toBe(true);
+    expect(page.items).toHaveLength(2);
+  });
+
+  it('無 resolver 時（純 store 建構）名稱保持 null（graceful）', async () => {
+    const bare = new DocumentsService(store);
+    store.seedDoc({ draftingCompanyId: 'org-co', primaryChiefId: 'E1' });
+    const page = await bare.listDocuments({});
+    expect(page.items[0].draftingCompanyName).toBeNull();
+    expect(page.items[0].primaryChiefName).toBeNull();
   });
 });
 

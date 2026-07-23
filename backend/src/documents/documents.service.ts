@@ -17,7 +17,9 @@ import {
   DocumentFieldChange,
   DocumentListFilters,
   DocumentListItem,
+  DocumentListPage,
 } from './documents.store';
+import { NameResolutionService } from '../org-directory/name-resolution.service';
 import { missingRequired, isNumberAvailable } from './document-rules';
 import { isValidStatus, DocumentStatus } from './document-status';
 import { classifyFields } from './document-field-write';
@@ -46,6 +48,8 @@ export class DocumentsService {
     @Optional()
     @Inject(DOCUMENT_CHANGE_PUBLISHER)
     publisher?: DocumentChangePublisher,
+    // F017 名稱解析（org-foundation 共用）；選填以免破壞既有純 store 單測（無 resolver → 名稱留 null）。
+    @Optional() private readonly nameResolver?: NameResolutionService,
   ) {
     // 預設 no-op 綁定（決策 A）：seam 存在但不落地，rag/F037 併回後覆寫。
     this.publisher = publisher ?? new NoopDocumentChangePublisher();
@@ -101,9 +105,45 @@ export class DocumentsService {
     }
   }
 
-  /** 後台文件清單（F017）。 */
-  listDocuments(filters: DocumentListFilters): Promise<DocumentListItem[]> {
-    return this.store.list(filters);
+  /**
+   * 後台文件清單（F017）。store 負責篩選/排序/分頁；service 補上組織/當責室長之名稱解析
+   * （org-foundation NameResolutionService；查無→null，前端 fallback）。
+   */
+  async listDocuments(filters: DocumentListFilters): Promise<DocumentListPage> {
+    const page = await this.store.list(filters);
+    await this.enrichNames(page.items);
+    return page;
+  }
+
+  /** 以 NameResolutionService 補上組織/室長顯示名稱（去重、批次，避免 N+1）。無 resolver → 保持 null。 */
+  private async enrichNames(items: DocumentListItem[]): Promise<void> {
+    const resolver = this.nameResolver;
+    if (!resolver || items.length === 0) return;
+
+    const orgCodes = new Set<string>();
+    for (const it of items) {
+      for (const c of [it.draftingCompanyId, it.draftingDeptId, it.draftingSectionId]) {
+        if (c) orgCodes.add(c);
+      }
+    }
+    const orgNames = new Map<string, string | null>();
+    await Promise.all(
+      [...orgCodes].map(async (c) => orgNames.set(c, await resolver.resolveOrgUnitName(c))),
+    );
+
+    const chiefIds = [
+      ...new Set(items.map((i) => i.primaryChiefId).filter((x): x is string => !!x)),
+    ];
+    const chiefNames = chiefIds.length
+      ? await resolver.resolvePersonNames(chiefIds)
+      : new Map<string, string>();
+
+    for (const it of items) {
+      it.draftingCompanyName = it.draftingCompanyId ? orgNames.get(it.draftingCompanyId) ?? null : null;
+      it.draftingDeptName = it.draftingDeptId ? orgNames.get(it.draftingDeptId) ?? null : null;
+      it.draftingSectionName = it.draftingSectionId ? orgNames.get(it.draftingSectionId) ?? null : null;
+      it.primaryChiefName = it.primaryChiefId ? chiefNames.get(it.primaryChiefId) ?? null : null;
+    }
   }
 
   /** 單筆文件讀取（F011 編輯對照；public/rag 重用）。查無 → 404。 */
