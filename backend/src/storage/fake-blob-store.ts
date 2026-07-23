@@ -37,4 +37,9 @@ export class FakeBlobStore implements BlobStore {
     this.urlCalls.push({ key, ttlSeconds });
     return Promise.resolve(`https://fake.blob/${key}?sig=fake&ttl=${ttlSeconds}`);
   }
+
+  getBytes(key: string): Promise<Buffer | null> {
+    const b = this.blobs.get(key);
+    return Promise.resolve(b ? b.content : null);
+  }
 }

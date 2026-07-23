@@ -323,3 +323,25 @@ export function getPublicDocuments(f: PublicListFilters = {}): Promise<PublicLis
 export function getOrgUnits(): Promise<OrgUnitRecord[]> {
   return apiFetch<OrgUnitRecord[]>('/org-units');
 }
+
+// ===== E06 文件浮水印檢視器（F020） =====
+
+/** GET /public/documents/:id/view（檢視器疊加用浮水印字串；記錄 VIEW 稽核）。 */
+export function getDocumentWatermark(documentId: string): Promise<{ watermark: string }> {
+  return apiFetch<{ watermark: string }>(`/public/documents/${documentId}/view`);
+}
+
+/** 原始 PDF 代理串流 URL（檢視器 <iframe> 預覽；後端代理，不核發 SAS）。 */
+export function documentPdfUrl(documentId: string): string {
+  return `/public/documents/${documentId}/pdf`;
+}
+
+/** 下載 URL（內容層已燒錄浮水印）。 */
+export function documentDownloadUrl(documentId: string): string {
+  return `/public/documents/${documentId}/download`;
+}
+
+/** 列印用 URL（內容層已燒錄浮水印）。 */
+export function documentPrintUrl(documentId: string): string {
+  return `/public/documents/${documentId}/print`;
+}

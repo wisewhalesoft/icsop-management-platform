@@ -22,5 +22,7 @@ import { TypeOrmAttachmentStore } from './typeorm-attachments.store';
     },
     AttachmentsService,
   ],
+  // AttachmentsService 匯出：F020 浮水印模組經 getAttachmentRef seam 讀原始 ICSOP_PDF 來源。
+  exports: [AttachmentsService],
 })
 export class AttachmentsModule {}
