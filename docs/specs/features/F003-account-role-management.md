@@ -1,5 +1,5 @@
 # F003: 帳號與角色指派管理
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-15
+Priority: P0-MVP | Status: Draft（帳號 CRUD／角色指派已實作；建立→登入死鏈已於 authfix 閉合，識別鍵＝loginId） | Last Updated: 2026-07-23
 Epic/Story: E01 / US-005, US-006
 
 > 合併理由：帳號 CRUD 與角色指派為同一後台管理畫面之連續操作，共用帳號實體與稽核。
