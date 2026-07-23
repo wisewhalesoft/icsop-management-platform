@@ -1,5 +1,5 @@
 # F021: RWD 響應式版面
-Priority: P1 | Status: Draft | Last Updated: 2026-07-15
+Priority: P1 | Status: 部分（responsive 版面已建 + unit 狀態保留綠；幾何/觸控/斷點視覺＝[integration]，見 implementation-logs/public-F019-F022-impl.md） | Last Updated: 2026-07-23
 Epic/Story: E06 / US-055
 
 ## Description

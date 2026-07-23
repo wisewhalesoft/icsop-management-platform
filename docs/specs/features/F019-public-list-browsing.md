@@ -1,5 +1,5 @@
 # F019: 前台清單瀏覽（排序/搜尋/篩選）
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-20
+Priority: P0-MVP | Status: 部分（unit 綠；端到端待 DOC_USING_DEPT 持久化，見 implementation-logs/public-F019-F022-impl.md） | Last Updated: 2026-07-23
 Epic/Story: E06 / US-050, US-051, US-052
 
 > 合併理由：排序（US-050）、關鍵字搜尋（US-051）、篩選（US-052）為同一前台清單畫面之組合行為，合為單一 feature。排序管線見 [F019-public-list-sorting.mmd](../diagrams/F019-public-list-sorting.mmd)。
