@@ -36,14 +36,16 @@
 
 | 狀態 | 數量 | 功能 |
 |---|---|---|
-| ✅ 已完成-已驗證 | **5** | F002 F004 F008 F009 F025 |
-| 🟡 部分 | **24** | F001 F003 F005 F007 F010 F011 F012 F013 F015 F016 F017 F018 F019 F020 F021 F022 F023 F024 F026 F027 F028 F029 F030 F031 |
+| ✅ 已完成-已驗證 | **7** | F002 F003 F004 F008 F009 F013 F025 |
+| 🟡 部分 | **22** | F001 F005 F007 F010 F011 F012 F015 F016 F017 F018 F019 F020 F021 F022 F023 F024 F026 F027 F028 F029 F030 F031 |
 | 🔵 進行中 | **1** | F014 |
 | ⬜ 未開始 | **8** | F006 F036 F037 F038 F032 F033 F034 F035 |
 | | **38** | |
 
 > **2026-07-22 Wave 1 平行 worktree**（3 分支併回 main、unit-green）：F023/F024（audit）、F016/F018/F027（storage）⬜→🟡；F001 途徑B＋F003 閉環推進。backend 500／frontend 119。
 > **2026-07-22 Wave 2 平行 worktree**（org-foundation ＋ doc-edit/public/rag，4 分支併回 main、unit-green）：**org-foundation**（ACCOUNT 即在職員工目錄→名稱解析、ORG 讀取端點、DESC_FULL、session 擴充；權威來源 [upstream-person-org-source.md]，參考 portalapp-sp）解鎖名稱/身分。**10 功能 ⬜→🟡**：F011 F015（doc-edit）、F019 F020 F021 F022（public）、F028 F029 F030 F031（rag）；F012/F013/F017 補強。backend **816** 測、frontend **143** 測、tsc 全淨。
+>
+> **2026-07-22 整合階段 ②（真 SOP 自動化整合測試 `npm run test:int`）**：載具啟動完整 AppModule 接真 SOP、鑄 session、marker 清理。**5 場景綠**——**F003 死鏈閉合經真往返驗證**（建立手動帳號→`POST /auth/login`→`/auth/me`）＋錯誤密碼 401；F010 建立→F011 `GET/PATCH /:id` 編輯→F017 清單→**F013 重複編號 409（真 filtered unique index）**；F024 查詢 200。**→ F003、F013 升 ✅**（其餘 F001途徑B/F010/F011/F017/F024 後端流程 int-verified，但仍有 logout/STEP3-4/前端/匯出 等缺口留 🟡）。**🔴 整合實測發現**：F023 `AUDIT_LOG` best-effort `REVOKE` 對 role 授權之 app 登入**無效** → **目前非 append-only 強制**（UPDATE 可成功），需改 `DENY UPDATE,DELETE`／觸發器；已以 `it.failing` 記錄。
 >
 > **2026-07-22 整合階段 ①（app-DB 落地＋啟動驗證）**：**12 個 migration 全數對真 SOP app DB 執行成功**（含 AUDIT_LOG/附件/DOC_SOURCE_XLS/USAGE_FORM/DOCUMENT_LINK/ORG_DESCFULL/INDEX_RUN/DOCUMENT_CHUNK＋F013 篩選唯一索引）。**整個 Wave 1+2 合併系統成功對 SOP 啟動**（`Nest application successfully started`；所有路由掛載；**real TypeORM stores** 皆接真庫：audit/documents+links/attachments(meta)/usage-forms/xls-source(meta)/org-directory/public）；HTTP smoke：守門 401、OIDC 登入 302（含 PKCE）。**仍為 fake**：ingestion/rag（FakeChunk/IndexRun/VectorStore，待 pgvector＋embedding 選型 OQ-E09-02）、Blob（FakeBlobStore，待 Azure 憑證）。**升 ✅ 尚缺**：各 feature AC 之逐流程 e2e（真人 UI 登入或自動化整合測試）——本階段已證「系統可對真庫啟動且路由/守門/DB store 皆接真」，個別流程驗證為下一步。
 
@@ -56,9 +58,9 @@
 ### E01 驗證與帳號
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F001 | 雙軌驗證登入與 Session | P0 | 1 | 🟡 部分 | 途徑 A（OIDC）已端到端；**途徑 B 帳密登入已補**（`POST /auth/login` by loginId、統一 `AUTH_INVALID_CREDENTIALS`、unit-green）；剩：登出非「即時撤銷」（無狀態 JWT，需 denylist infra）＋帳密登入節流未做（本輪外） |
+| F001 | 雙軌驗證登入與 Session | P0 | 1 | 🟡 部分 | 途徑 A（OIDC）已端到端；**途徑 B 帳密登入已補＋int-verified vs SOP**（`POST /auth/login` by loginId、統一 `AUTH_INVALID_CREDENTIALS`、build→login→`/auth/me` 真往返過）；剩：登出非「即時撤銷」（無狀態 JWT，需 denylist infra）＋帳密登入節流未做（本輪外） |
 | F002 | 登入後角色分流導向 | P0 | 1 | ✅ 已完成-已驗證 | 邊界：session 有效但 roleCode=undefined 不會導回登入頁（低風險） |
-| F003 | 帳號與角色指派管理 | P0 | 1 | 🟡 部分 | **死鏈已於讀取端閉合**（決策：登入識別鍵＝loginId；帳密登入路徑驗 `createManual` 寫入的 `passwordHash`，無需寫 email）。剩：build→login→`/auth/me` 真 MSSQL 往返＝`[integration]` 待驗，通過後可升 ✅ |
+| F003 | 帳號與角色指派管理 | P0 | 1 | ✅ 已完成-已驗證 | 死鏈閉合＋**int-verified vs SOP**（建立手動帳號→`POST /auth/login`→`/auth/me` 真往返過；錯誤密碼 401）；CRUD/角色指派 unit-covered＋AccountManagementPage |
 
 ### E02 組織同步
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
@@ -81,7 +83,7 @@
 | F010 | 建立 ICSOP 文件 | P0 | 1 | 🟡 部分 | STEP1/2 可端到端建立；STEP3/4（次要室長/使用部門/制定三級/附件/連結）延後、`CreateDocumentInput` 未含；建立稽核（Main Flow 7）未做 |
 | F011 | 編輯 ICSOP 文件與版本對照 | P0 | 1 | 🟡 部分 | backend unit-green：`GET`/`PATCH /:id`、編輯排除 nodeId、版本 diff、覆蓋不留歷史、編輯側唯一性排除自身、`DocumentChangedEvent` 種子。剩：**前端編輯頁**、真 DB＝`[integration]` |
 | F012 | 文件狀態切換 | P0 | 1 | 🟡 部分 | 切換＋切回有效重驗編號已測；OQ-E04-02「切換原因」欄未做；變更歷程 F037 事件＋操作者稽核未做 |
-| F013 | 文件編號唯一性管理 | P0 | 1 | 🟡 部分 | 建立/狀態切換路徑可達且測試；編輯側排除自身**不可達**（依賴未建之 F011）；併發衝突 DB 會丟 `QueryFailedError` 未捕捉映射 → 恐回 500 而非 409 |
+| F013 | 文件編號唯一性管理 | P0 | 1 | ✅ 已完成-已驗證 | 建立唯一性經**真 filtered unique index int-verified vs SOP**（dup→409）；編輯側排除自身＋mssql 2601/2627→409 於 F011 路徑 unit-covered |
 | F014 | 制定組織與當責室長設定 | P0 | 1 | 🔵 進行中 | scalar 欄位骨架已存；**org-foundation 已備**（`OrgDirectoryService` 級聯樹＋`NameResolutionService` 室長名）→ 前置解鎖。剩：制定組織三級下拉接線、次要室長/使用部門關聯表、managerEmpNo 預設候選、UI（現 disabled 佔位） |
 | F015 | 文件連結點管理 | P1 | 1 | 🟡 部分 | backend unit-green：`DOCUMENT_LINK` 表、批次入 PATCH、`GET :id/links`、`DOCUMENT_LINK_TARGET_NOT_FOUND`。剩：**前端連結 UI**、FK/唯一併發＝`[integration]` |
 | F016 | PDF 與 OJT 附件上傳 | P0 | 1 | 🟡 部分 | backend unit-green：Blob 抽象（`BlobStore`＋FakeBlobStore）、`DOCUMENT_ATTACHMENT`、兩層授權、格式白名單≤50MB、單份覆蓋、受控下載。剩：**前端上傳 UI**、真 Azure Blob＋migration＝`[integration]` |
@@ -103,7 +105,7 @@
 ### E07 稽核與變更歷程
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F023 | 稽核軌跡記錄 | P0 | 1 | 🟡 部分 | unit-green：`AuditWriter` 共用契約（5 targetType 判別聯合，**下游 F020/F034/F037/F038 直接 import**）、AUDIT_LOG append-only 不可變 store、outbox 重試。剩：DB `REVOKE UPDATE/DELETE` 不可變強制＋migration＋usage-forms 佔位改接＝`[integration]` |
+| F023 | 稽核軌跡記錄 | P0 | 1 | 🟡 部分 | unit-green：`AuditWriter` 契約（5 targetType，下游 import）、outbox。migration 已落 SOP。**🔴 整合實測：best-effort `REVOKE` 對 role 授權無效 → AUDIT_LOG 非 append-only 強制**（UPDATE 可成功，需改 `DENY`/觸發器；`it.failing` 記錄）。usage-forms 佔位改接真 AuditWriter 待接 |
 | F024 | 文件調閱歷程查詢後台 | P0 | 1 | 🟡 部分 | unit-green：查詢頁（取代 ModulePlaceholder）＋篩選/RBAC/30天預設/匯出/展開。剩：真 AUDIT_LOG 資料（依 F023 整合）、P95 索引效能＝`[integration]` |
 | F037 | 程序書變更歷程（欄位 Diff） | P1 | 1 | ⬜ 未開始 | **F011/F012 已發 `DocumentChangedEvent`**（種子就緒）；仍缺 `DOCUMENT_CHANGE_LOG` 持久化（綁真 publisher＋before/after/欄位 diff 落地）＋ diff 頁；依賴 F023/F024 |
 | F038 | 循環樹狀圖變更歷程 | P1 | 1 | ⬜ 未開始 | 無 `LIFECYCLE_CHANGE_LOG`/快照；F008/F009 未發結構事件；無新舊樹重建/燒錄；依賴 F036/F023 |
@@ -150,4 +152,4 @@
 
 ---
 
-_稽核方法：對 38 個 `features/Fxxx-*.md` 的 Acceptance Criteria 逐條 ↔ `backend/src`、`frontend/src`、測試檔交叉核對，並以「端到端可達」嚴格判定。基準 main：初審 `e6045d9` → Wave 1 `4af5a02` → Wave 2 `8d5f35d`（2026-07-22）。測試：backend 816／frontend 143，tsc 全淨。_
+_稽核方法：對 38 個 `features/Fxxx-*.md` 的 Acceptance Criteria 逐條 ↔ `backend/src`、`frontend/src`、測試檔交叉核對，並以「端到端可達」嚴格判定。基準 main：初審 `e6045d9` → Wave 1 `4af5a02` → Wave 2 `8d5f35d` → 整合①②（migration 落 SOP＋`test:int` 5 綠）。測試：backend 816／frontend 143 單元＋ **5 整合（`npm run test:int` vs SOP）**，tsc 全淨。（2026-07-22）_
