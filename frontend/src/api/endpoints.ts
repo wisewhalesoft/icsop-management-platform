@@ -19,6 +19,7 @@ import type {
   PublicListFilters,
   PublicListPage,
   OrgUnitRecord,
+  PersonRecord,
 } from './types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -328,6 +329,17 @@ export function getPublicDocuments(f: PublicListFilters = {}): Promise<PublicLis
 /** GET /org-units（組織單位清單，全 5 角色 READ；供前台部門篩選下拉之 5 層樹來源）。 */
 export function getOrgUnits(): Promise<OrgUnitRecord[]> {
   return apiFetch<OrgUnitRecord[]>('/org-units');
+}
+
+/**
+ * GET /persons/search（當責室長候選，全 5 角色 READ；僅回在職者）。
+ * F014：當責室長-主要/次要之可搜尋來源。空關鍵字＝回預設候選（後端限制筆數）。
+ */
+export function searchPersons(q: string, limit = 20): Promise<PersonRecord[]> {
+  const qs = new URLSearchParams();
+  if (q.trim()) qs.set('q', q.trim());
+  qs.set('limit', String(limit));
+  return apiFetch<PersonRecord[]>(`/persons/search?${qs.toString()}`);
 }
 
 // ===== E06 文件浮水印檢視器（F020） =====

@@ -218,6 +218,17 @@ export interface OrgUnitRecord {
   isActive: boolean;
 }
 
+/** 組織層級碼（ORG_UNIT.tier）。 */
+export type OrgTier = 'ROOT' | 'DIVISION' | 'DEPARTMENT' | 'SECTION' | 'SUBSECTION';
+
+/** 人員（GET /persons/search；鏡射後端 PersonRecord，供 F014 當責室長候選；搜尋僅回在職）。 */
+export interface PersonRecord {
+  employeeNo: string;
+  name: string | null;
+  orgCode: string | null;
+  employmentStatus: 'active' | 'departed';
+}
+
 export type TriggerType = 'scheduled' | 'manual';
 export type SyncRunStatus = 'running' | 'success' | 'failed';
 
