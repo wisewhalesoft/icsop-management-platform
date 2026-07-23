@@ -1,5 +1,5 @@
 # F028: ICSOP .xls 模板感知內文抽取與清洗
-Priority: P0-MVP | Status: Draft | Phase: 1 | Last Updated: 2026-07-16
+Priority: P0-MVP | Status: Implemented(unit) | Phase: 1 | Last Updated: 2026-07-23
 Epic/Story: E09 / US-091
 
 > 雙軌 ingestion 之**軌道 B（檢索內文）第一階段**：以「模板感知」parser 抽取 .xls 真正內文並清洗雜訊。因 ICSOP 皆為固定五表標準模板，採規則式/模板式 parser（不必靠 LLM 逐份猜版面），品質穩定、成本低。本 feature 僅處理「抽取＋清洗」，不含切 chunk/掛 metadata（見 [F029](F029-chunking-metadata-index.md)）。

@@ -345,3 +345,39 @@ export function documentDownloadUrl(documentId: string): string {
 export function documentPrintUrl(documentId: string): string {
   return `/public/documents/${documentId}/print`;
 }
+
+// ===== E09 F031 文件索引管理 =====
+
+/** GET /admin/doc-index/overview（總覽：彙總計數 + 分頁 + 狀態篩選；read）。 */
+export function getDocIndexOverview(
+  f: { state?: string; page?: number } = {},
+): Promise<import('./types').DocIndexOverview> {
+  const qs = new URLSearchParams();
+  if (f.state) qs.set('state', f.state);
+  if (f.page) qs.set('page', String(f.page));
+  const q = qs.toString();
+  return apiFetch(`/admin/doc-index/overview${q ? `?${q}` : ''}`);
+}
+
+/** GET /admin/doc-index/:documentId（單文件索引狀態三態 + 失敗詳情；read）。 */
+export function getDocIndexStatus(
+  documentId: string,
+): Promise<import('./types').DocIndexStatus> {
+  return apiFetch(`/admin/doc-index/${encodeURIComponent(documentId)}`);
+}
+
+/** GET /admin/doc-index/:documentId/chunks（chunk 預覽 + 8 項 metadata；read）。 */
+export function getDocIndexChunks(
+  documentId: string,
+): Promise<import('./types').DocIndexChunk[]> {
+  return apiFetch(`/admin/doc-index/${encodeURIComponent(documentId)}/chunks`);
+}
+
+/** POST /admin/doc-index/:documentId/reindex（手動重新索引；write，SysAdmin→403）。 */
+export function reindexDocument(
+  documentId: string,
+): Promise<{ accepted: true }> {
+  return apiFetch(`/admin/doc-index/${encodeURIComponent(documentId)}/reindex`, {
+    method: 'POST',
+  });
+}

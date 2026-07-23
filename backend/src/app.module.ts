@@ -13,6 +13,7 @@ import { AttachmentsModule } from './attachments/attachments.module';
 import { XlsSourceModule } from './xls-source/xls-source.module';
 import { UsageFormsModule } from './usage-forms/usage-forms.module';
 import { PublicModule } from './public/public.module';
+import { IngestionModule } from './ingestion/ingestion.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { PublicModule } from './public/public.module';
     XlsSourceModule,
     UsageFormsModule,
     PublicModule,
+    IngestionModule,
   ],
   controllers: [AppController],
 })

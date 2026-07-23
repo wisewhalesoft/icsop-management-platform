@@ -1,5 +1,5 @@
 # F031: 管理端提取結果預覽與重新索引狀態
-Priority: P1 | Status: Draft | Phase: 1 | Last Updated: 2026-07-16
+Priority: P1 | Status: Implemented(unit) | Phase: 1 | Last Updated: 2026-07-23
 Epic/Story: E09 / US-094
 
 > Phase 1「管理端可視性」定案項目：讓管理員在 Phase 3 前台問答上線前，獨立驗證 ingestion 管線品質，並在索引失敗時即時察覺排查。P1（非 P0）：管線本身（F027–F030）為核心必要，本 feature 為輔助驗證工具，時程緊迫時可暫以 DB 查詢/日誌替代，但上線前建議補齊。
