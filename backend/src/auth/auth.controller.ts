@@ -1,7 +1,9 @@
 import {
+  Body,
   Controller,
   Get,
   Inject,
+  Post,
   Query,
   Req,
   Res,
@@ -21,6 +23,7 @@ import {
 } from './account-repository';
 import { SessionTokenService, SessionUser } from './session-token.service';
 import { SessionGuard, RequestWithSession } from './session.guard';
+import { PasswordLoginService } from './password-login.service';
 import {
   SESSION_COOKIE,
   OIDC_TX_COOKIE,
@@ -31,6 +34,13 @@ interface OidcTx {
   state: string;
   nonce: string;
   verifier: string;
+}
+
+/** POST /auth/login（途徑 B）之請求 body。識別鍵＝loginId（見 F001 定案 A）。 */
+interface PasswordLoginBody {
+  loginId?: string;
+  password?: string;
+  companyCode?: string;
 }
 
 function maskEmail(email: string): string {
@@ -48,7 +58,24 @@ export class AuthController {
   constructor(
     @Inject(ACCOUNT_REPOSITORY) private readonly accounts: AccountRepository,
     private readonly tokens: SessionTokenService,
+    private readonly passwordLoginSvc: PasswordLoginService,
   ) {}
+
+  /**
+   * 途徑 B：帳密登入（SPA JSON）。以 (companyCode, loginId)＋密碼比對手動帳號（F001 定案 A/B/C）。
+   *  - 成功 → 核發 icsop_session cookie（與途徑 A 同一 issue()／sessionCookieOptions()），回 SessionUser。
+   *  - 失敗 → 統一 401 AUTH_INVALID_CREDENTIALS；缺漏 → 400 AUTH_MISSING_FIELD（由 service 拋出，Nest 例外過濾器格式化）。
+   * GET /auth/login（OIDC 起點）不受影響。
+   */
+  @Post('login')
+  async passwordLogin(
+    @Body() body: PasswordLoginBody,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<SessionUser> {
+    const { user, token } = await this.passwordLoginSvc.login(body ?? {});
+    res.cookie(SESSION_COOKIE, token, sessionCookieOptions());
+    return user;
+  }
 
   /** 途徑 A 起點：導向 Azure AD（帶 state / nonce / PKCE）。tx 存於簽章 cookie。 */
   @Get('login')

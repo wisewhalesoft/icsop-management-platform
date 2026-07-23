@@ -1,5 +1,9 @@
 import { DataSource } from 'typeorm';
-import { AccountRepository, CurrentAccount } from './account-repository';
+import {
+  AccountRepository,
+  CurrentAccount,
+  PasswordAuthAccount,
+} from './account-repository';
 import { normalizeEmail, ResolvableAccount } from './account-resolver';
 import { Account } from '../database/entities/account.entity';
 
@@ -45,5 +49,29 @@ export class TypeOrmAccountRepository implements AccountRepository {
       .getRepository(Account)
       .findOne({ where: { companyCode, loginId } });
     return a ? { status: a.status, roleCode: a.roleCode } : null;
+  }
+
+  /**
+   * 途徑 B（帳密）登入解析：以 (companyCode, loginId) 取含 passwordHash 之單一帳號快照。
+   * PK 唯一（UQ_ACCOUNT_company_login）故至多一筆。source/passwordHash 供「僅手動帳號可帳密登入」判定。
+   */
+  async findByLoginId(
+    companyCode: string,
+    loginId: string,
+  ): Promise<PasswordAuthAccount | null> {
+    const ds = await this.ensureInit();
+    const a = await ds
+      .getRepository(Account)
+      .findOne({ where: { companyCode, loginId } });
+    if (!a) return null;
+    return {
+      loginId: a.loginId,
+      email: a.email,
+      companyCode: a.companyCode,
+      status: a.status === 'disabled' ? 'disabled' : 'active',
+      roleCode: a.roleCode,
+      source: a.source === 'manual' ? 'manual' : 'upstream',
+      passwordHash: a.passwordHash,
+    };
   }
 }

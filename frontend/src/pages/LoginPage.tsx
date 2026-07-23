@@ -1,13 +1,53 @@
+import { useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/useAuth';
 import { Icon } from '../components/Icon';
+import { passwordLogin } from '../api/endpoints';
+import { ApiError } from '../api/client';
 
 /**
  * 登入頁。版面與品牌面板權威來源：prototypes/01-login.html。
- * 僅保留途徑 A（公司帳號 Azure AD 單一登入，真實 /auth/login）；
- * 途徑 B（管理員帳密）後端尚未實作、原型 demo helper 為模擬，故略去。
+ *  - 途徑 A（公司帳號 Azure AD 單一登入）：主要路徑，整頁導向 /auth/login。
+ *  - 途徑 B（管理員帳密）：備援／維運通道，SPA JSON（POST /auth/login），次於 SSO。
+ *    成功後以 refresh() 重新解析 session（cookie 已由後端核發），交由 AppRoutes 導向角色分流頁。
  */
+
+/** 後端穩定錯誤碼 → 使用者訊息（統一訊息不洩漏帳號是否存在）。 */
+function loginErrorMessage(code: string): string {
+  switch (code) {
+    case 'AUTH_INVALID_CREDENTIALS':
+      return '帳號或密碼錯誤';
+    case 'AUTH_MISSING_FIELD':
+      return '請輸入帳號與密碼';
+    default:
+      return '登入失敗，請稍後再試';
+  }
+}
+
 export function LoginPage(): JSX.Element {
-  const { login } = useAuth();
+  const { login, refresh } = useAuth();
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [loginId, setLoginId] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const canSubmit = loginId.trim() !== '' && password !== '' && !submitting;
+
+  async function onSubmit(e: FormEvent): Promise<void> {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await passwordLogin({ loginId: loginId.trim(), password });
+      // cookie 已核發 → 重新解析 session；成功則 AppRoutes 轉入已登入路由。
+      await refresh();
+    } catch (err) {
+      const code = err instanceof ApiError ? err.code : 'UNKNOWN';
+      setError(loginErrorMessage(code));
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-white text-slate-700">
@@ -79,6 +119,7 @@ export function LoginPage(): JSX.Element {
               請使用公司帳號（Azure AD 單一登入）進入系統。
             </p>
 
+            {/* 途徑 A：公司帳號單一登入（主要路徑） */}
             <button
               type="button"
               onClick={login}
@@ -93,6 +134,86 @@ export function LoginPage(): JSX.Element {
                 已登入公司帳號者將自動完成驗證（靜默 SSO），無需再次輸入帳號密碼。
               </span>
             </p>
+
+            {/* 分隔線 */}
+            <div className="flex items-center gap-3 my-6">
+              <div className="flex-1 h-px bg-slate-200" />
+              <span className="text-xs text-slate-400">或</span>
+              <div className="flex-1 h-px bg-slate-200" />
+            </div>
+
+            {/* 途徑 B：管理員帳密（備援／維運通道，版面次於 SSO） */}
+            <button
+              type="button"
+              onClick={() => setShowAdmin((v) => !v)}
+              aria-expanded={showAdmin}
+              className="w-full py-2.5 rounded-md border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition flex items-center justify-center gap-2"
+            >
+              <Icon name="key-round" className="w-4 h-4 text-slate-400" />
+              <span>使用管理員帳號登入</span>
+            </button>
+
+            {showAdmin && (
+              <div className="mt-4">
+                <p className="text-xs text-slate-400 mb-3">
+                  備援／維運通道：供系統管理員於公司帳號無法使用時登入。
+                </p>
+
+                {error && (
+                  <div
+                    role="alert"
+                    className="mb-4 flex items-center gap-2 rounded-md bg-red-50 border border-red-100 px-3 py-2 text-sm text-red-600"
+                  >
+                    <Icon name="alert-circle" className="w-4 h-4 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <form onSubmit={onSubmit} className="space-y-4">
+                  <div>
+                    <label
+                      htmlFor="admin-login-id"
+                      className="block text-sm font-medium text-slate-700 mb-1"
+                    >
+                      帳號 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="admin-login-id"
+                      type="text"
+                      autoComplete="username"
+                      placeholder="管理員帳號"
+                      value={loginId}
+                      onChange={(e) => setLoginId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="admin-password"
+                      className="block text-sm font-medium text-slate-700 mb-1"
+                    >
+                      密碼 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="admin-password"
+                      type="password"
+                      autoComplete="current-password"
+                      placeholder="請輸入密碼"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!canSubmit}
+                    className="w-full py-2.5 rounded-md bg-slate-700 text-white text-sm font-semibold hover:bg-slate-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {submitting ? '登入中…' : '以管理員帳號登入'}
+                  </button>
+                </form>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -1,10 +1,10 @@
 # F001: 雙軌驗證登入與 Session 管理
-Priority: P0-MVP | Status: Draft（途徑 A 垂直切片已實作＋端到端驗證） | Last Updated: 2026-07-21
+Priority: P0-MVP | Status: Draft（途徑 A 端到端驗證；途徑 B 帳密登入已實作＋單元驗證，識別鍵＝loginId） | Last Updated: 2026-07-23
 Epic/Story: E01 / US-001, US-002, US-004
 
 > ✅ **實作狀態（2026-07-21，垂直切片）**：途徑 A（Azure AD OIDC）已於 `backend/`（NestJS 11＋`@azure/msal-node`）實作並**真人端到端驗證通過**——登入→靜默 SSO→回呼驗簽→`email` 比對帳號→核發我方 session（httpOnly JWT）→受保護路由 `/auth/me`→登出→再存取回 401。
 > **已實作**：`/auth/login`（state＋nonce＋PKCE、簽章 tx cookie）／`/auth/callback`（state 驗證、code 交換、**nonce 強制驗證**、`email` claim 缺漏→`AUTH_EMAIL_CLAIM_MISSING`、三態分類）／三態導向（SingleActive→核發 session；NotFound→`AUTH_ACCOUNT_NOT_FOUND`；Disabled→`AUTH_ACCOUNT_DISABLED`；MultipleActive→拒絕＋告警＋對外仍回 NOT_FOUND 不可列舉）／30 分鐘 sliding 閒置逾時（guard 每次請求刷新，OQ-E01-04）／`/auth/logout`。帳號來源抽象為 `AccountRepository` 介面。單元測試 33 個（帳號分類、三態決策、session token、guard）。
-> **已知 gap（非本切片範圍，待後續）**：① **登出非「即時」撤銷被竊 token**——無狀態設計下清 cookie 僅撤銷該瀏覽器，token 副本活到 exp（≤30 分）；即時撤銷需 server 端 denylist（待 Redis/DB infra），與下方 AC「登出立即撤銷」之「即時」語意有落差。② **帳號來源為種子**（`SeedAccountRepository`），待 [F004](F004-org-sync.md) 組織同步寫入真實 `ACCOUNT` 表後改接。③ 途徑 B 帳密登入、密碼雜湊等尚未實作。
+> **已知 gap（非本切片範圍，待後續）**：① **登出非「即時」撤銷被竊 token**——無狀態設計下清 cookie 僅撤銷該瀏覽器，token 副本活到 exp（≤30 分）；即時撤銷需 server 端 denylist（待 Redis/DB infra），與下方 AC「登出立即撤銷」之「即時」語意有落差。② **帳號來源為種子**（`SeedAccountRepository`），待 [F004](F004-org-sync.md) 組織同步寫入真實 `ACCOUNT` 表後改接。③ ~~途徑 B 帳密登入尚未實作~~ **途徑 B 帳密登入已於 authfix 實作**（`POST /auth/login`，識別鍵＝loginId，統一 `AUTH_INVALID_CREDENTIALS`；`PasswordLoginService`＋純函式 `resolvePasswordLogin`＋`AccountRepository.findByLoginId`；密碼雜湊 `accounts/password.ts` 早已就緒）。單元測試覆蓋 TS-F001-001〜007/009/010/013；`[integration]` 情境（008/011/012、真實 DB 端到端）待整合階段。密碼路徑節流／暴力破解防護本輪仍不做（OQ-F001-B-04，列上線前 security review 待辦）。
 > 對應設定文件：[docs/setup/azure-ad-app-registration.md](../../setup/azure-ad-app-registration.md)。
 
 > 合併理由：Azure AD OIDC 登入、管理員帳密登入、Session 逾時/登出共享同一 session/JWT 生命週期，合為單一自足 feature。兩種登入為**雙軌並存、不互斥**（定案）。
