@@ -27,4 +27,14 @@ describe('PdfLibTreeRenderer（F036 基底樹圖）', () => {
     const pdf = await new PdfLibTreeRenderer().render({ lifecycleName: '空循環', layout });
     expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
   });
+
+  it('ASCII 退化路徑（無 CJK 字型）：中文節點名仍渲染不拋（U+25A1 佔位 bug 迴歸守門）', async () => {
+    const layout = buildTreeLayout(
+      [{ id: 'a1', name: '進件作業', docCount: 1 }],
+      [],
+    );
+    // 強制退化 Helvetica + asciiSafe（'□' bug 下此路徑會拋 WinAnsi cannot encode）。
+    const pdf = await new PdfLibTreeRenderer(null).render({ lifecycleName: '銷售循環', layout });
+    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+  });
 });

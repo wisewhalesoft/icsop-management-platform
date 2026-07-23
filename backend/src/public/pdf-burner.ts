@@ -1,5 +1,6 @@
-import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
+import { PDFDocument, degrees, rgb } from 'pdf-lib';
 import { WATERMARK_CONFIDENTIALITY } from './watermark';
+import { asciiSafe, embedWatermarkFont, loadCjkFontBytes } from './fonts/cjk-font';
 
 /**
  * PDF 浮水印燒錄邊界（F020 下載/列印之內容層燒錄）。
@@ -22,25 +23,20 @@ export function toDisplayLines(snapshot: string): string[] {
   return [before, WATERMARK_CONFIDENTIALITY, after].filter((s) => s.trim() !== '');
 }
 
-/** 僅保留可被 WinAnsi 編碼之字元（無 CJK 字型時之退化路徑，避免燒錄崩潰）。 */
-function asciiSafe(s: string): string {
-  // eslint-disable-next-line no-control-regex
-  return s.replace(/[^\x00-\xFF]/g, '□');
-}
-
 /**
  * pdf-lib 實作：於每頁對角平鋪燒錄浮水印文字（內容層）。
  *
- * ⚠ [integration] 落差：pdf-lib StandardFonts（Helvetica）無法編碼 CJK；正確中文燒錄需以 fontkit
- *    嵌入 CJK TTF 字型（數 MB 資產，經 constructor fontBytes 提供）。未提供時退化為 asciiSafe（□
- *    佔位），使下載不崩潰但中文不可讀——真實中文燒錄與位元組驗證於 [integration] 補齊。
+ * CJK 燒錄：預設經 `loadCjkFontBytes()` 載入 Noto Sans TC（fontkit 子集化嵌入）→ 中文可正確燒錄。
+ * 字型資產缺檔（constructor 傳 `null` 或資產未部署）時退化 `StandardFonts.Helvetica` + asciiSafe
+ * （中文以 '?' 佔位、不拋例外）。真實中文位元組層視覺／效能驗證仍屬 [integration]。
  */
 export class PdfLibBurner implements PdfBurner {
-  constructor(private readonly fontBytes?: Buffer) {}
+  constructor(private readonly fontBytes: Buffer | null = loadCjkFontBytes()) {}
 
   async burnPdf(originalBuffer: Buffer, snapshot: string): Promise<Buffer> {
     const pdf = await PDFDocument.load(originalBuffer);
-    const font = await pdf.embedFont(StandardFonts.Helvetica); // TODO: fontkit + CJK TTF（[integration]）
+    const { font, cjk } = await embedWatermarkFont(pdf, this.fontBytes);
+    const render = cjk ? (s: string): string => s : asciiSafe;
     const lines = toDisplayLines(snapshot);
     const size = 12;
     const opacity = 0.12;
@@ -52,7 +48,7 @@ export class PdfLibBurner implements PdfBurner {
       for (let y = 0; y < height + stepY; y += stepY) {
         for (let x = -100; x < width; x += stepX) {
           lines.forEach((line, i) => {
-            page.drawText(asciiSafe(line), {
+            page.drawText(render(line), {
               x,
               y: y - i * (size + 3),
               size,
