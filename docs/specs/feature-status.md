@@ -43,7 +43,9 @@
 | | **38** | |
 
 > **2026-07-22 Wave 1 平行 worktree**（3 分支併回 main、unit-green）：F023/F024（audit）、F016/F018/F027（storage）⬜→🟡；F001 途徑B＋F003 閉環推進。backend 500／frontend 119。
-> **2026-07-22 Wave 2 平行 worktree**（org-foundation ＋ doc-edit/public/rag，4 分支併回 main、unit-green）：**org-foundation**（ACCOUNT 即在職員工目錄→名稱解析、ORG 讀取端點、DESC_FULL、session 擴充；權威來源 [upstream-person-org-source.md]，參考 portalapp-sp）解鎖名稱/身分。**10 功能 ⬜→🟡**：F011 F015（doc-edit）、F019 F020 F021 F022（public）、F028 F029 F030 F031（rag）；F012/F013/F017 補強。**皆停 🟡**：端到端可達需 `[integration]`（真 DB migration:run、build→login、AUDIT_LOG REVOKE、Blob/CJK 燒錄、真 embedding/pgvector），且部分需前端接線（doc-edit 頁）與跨線接線（DocumentChangePublisher→ReindexService、DOC_USING_DEPT 持久化）。backend **816** 測、frontend **143** 測、tsc 全淨。
+> **2026-07-22 Wave 2 平行 worktree**（org-foundation ＋ doc-edit/public/rag，4 分支併回 main、unit-green）：**org-foundation**（ACCOUNT 即在職員工目錄→名稱解析、ORG 讀取端點、DESC_FULL、session 擴充；權威來源 [upstream-person-org-source.md]，參考 portalapp-sp）解鎖名稱/身分。**10 功能 ⬜→🟡**：F011 F015（doc-edit）、F019 F020 F021 F022（public）、F028 F029 F030 F031（rag）；F012/F013/F017 補強。backend **816** 測、frontend **143** 測、tsc 全淨。
+>
+> **2026-07-22 整合階段 ①（app-DB 落地＋啟動驗證）**：**12 個 migration 全數對真 SOP app DB 執行成功**（含 AUDIT_LOG/附件/DOC_SOURCE_XLS/USAGE_FORM/DOCUMENT_LINK/ORG_DESCFULL/INDEX_RUN/DOCUMENT_CHUNK＋F013 篩選唯一索引）。**整個 Wave 1+2 合併系統成功對 SOP 啟動**（`Nest application successfully started`；所有路由掛載；**real TypeORM stores** 皆接真庫：audit/documents+links/attachments(meta)/usage-forms/xls-source(meta)/org-directory/public）；HTTP smoke：守門 401、OIDC 登入 302（含 PKCE）。**仍為 fake**：ingestion/rag（FakeChunk/IndexRun/VectorStore，待 pgvector＋embedding 選型 OQ-E09-02）、Blob（FakeBlobStore，待 Azure 憑證）。**升 ✅ 尚缺**：各 feature AC 之逐流程 e2e（真人 UI 登入或自動化整合測試）——本階段已證「系統可對真庫啟動且路由/守門/DB store 皆接真」，個別流程驗證為下一步。
 
 **P0-MVP 尚未完成者（優先盯）**：F001 F003 F005 F007 F010 F012 F013 F016 F017 F019 F020 F023 F024 F026 F027 F028 F029 F030 F036，以及 Phase 3 之 F032 F033 F034 F035。
 
