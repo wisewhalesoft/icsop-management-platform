@@ -5,6 +5,8 @@ import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { RequirePermission } from '../rbac/require-permission.decorator';
 import { FunctionKey } from '../rbac/function-matrix';
+import { OrgChangeAlertService } from '../org-change-alert/org-change-alert.service';
+import { MonthlySummary } from '../org-change-alert/org-change-alert.types';
 
 /**
  * 手動觸發組織同步（US-011）。
@@ -18,7 +20,10 @@ import { FunctionKey } from '../rbac/function-matrix';
 @Controller('admin/org-sync')
 @UseGuards(SessionGuard, RolePermissionGuard)
 export class OrgSyncController {
-  constructor(private readonly svc: OrgSyncService) {}
+  constructor(
+    private readonly svc: OrgSyncService,
+    private readonly alerts: OrgChangeAlertService,
+  ) {}
 
   @Post('run')
   @RequirePermission(FunctionKey.ORG_SYNC_MANAGEMENT, 'write')
@@ -37,5 +42,15 @@ export class OrgSyncController {
   recentRuns(@Query('limit') limit?: string): Promise<SyncRunSummary[]> {
     const parsed = limit === undefined ? undefined : Number(limit);
     return this.svc.recentRuns(parsed);
+  }
+
+  /**
+   * 後台總覽 4 張 KPI 卡（F006 D7）：本月（Asia/Taipei）新增人員／更新／離職停用 ＋ 當責待確認。
+   * 同一功能鍵之 read 權限（SysAdmin 與 ICSOPAdmin 皆可讀）。
+   */
+  @Get('monthly-summary')
+  @RequirePermission(FunctionKey.ORG_SYNC_MANAGEMENT, 'read')
+  monthlySummary(): Promise<MonthlySummary> {
+    return this.alerts.monthlySummary();
   }
 }

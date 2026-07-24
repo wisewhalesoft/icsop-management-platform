@@ -9,6 +9,9 @@ import {
   deleteUsageForm,
   downloadPoolForm,
   linkUsageForms,
+  getOrgChangeAlerts,
+  resolveOrgChangeAlert,
+  getOrgSyncMonthlySummary,
 } from './endpoints';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -113,5 +116,50 @@ describe('endpoints — 端點契約對映', () => {
     expect(url).toBe('/admin/documents/doc-1/usage-forms');
     expect(init?.method).toBe('POST');
     expect(JSON.parse(init?.body as string)).toEqual({ formIds: ['uf1', 'uf2'] });
+  });
+
+  // ===== F006 組織異動待確認提示 =====
+
+  it('getOrgChangeAlerts() → GET /admin/org-change-alerts?status=pending（預設）', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse([]));
+    await getOrgChangeAlerts();
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/admin/org-change-alerts?status=pending');
+  });
+
+  it("getOrgChangeAlerts('resolved') → GET ?status=resolved", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse([]));
+    await getOrgChangeAlerts('resolved');
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/admin/org-change-alerts?status=resolved');
+  });
+
+  it('resolveOrgChangeAlert → PATCH /admin/org-change-alerts/:id/resolve（預設無 body 內容）', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ id: 'a1', status: 'resolved' }));
+    await resolveOrgChangeAlert('a1');
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe('/admin/org-change-alerts/a1/resolve');
+    expect(init?.method).toBe('PATCH');
+    expect(JSON.parse(init?.body as string)).toEqual({});
+  });
+
+  it('resolveOrgChangeAlert(id, FIELD_UPDATED) → body 帶 resolutionKind', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ id: 'a1', status: 'resolved' }));
+    await resolveOrgChangeAlert('a1', 'FIELD_UPDATED');
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect(JSON.parse(init?.body as string)).toEqual({ resolutionKind: 'FIELD_UPDATED' });
+  });
+
+  it('getOrgSyncMonthlySummary → GET /admin/org-sync/monthly-summary', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({
+        month: '2026-07',
+        newPersonCount: 18,
+        updatedCount: 31,
+        departedDisabledCount: 4,
+        pendingChiefAlertCount: 3,
+      }),
+    );
+    const s = await getOrgSyncMonthlySummary();
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/admin/org-sync/monthly-summary');
+    expect(s.newPersonCount).toBe(18);
   });
 });

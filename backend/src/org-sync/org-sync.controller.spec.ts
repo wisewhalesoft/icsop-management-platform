@@ -12,6 +12,12 @@ import { SyncResult, SyncRunSummary } from './org-sync.types';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { RequestWithSession } from '../auth/session.guard';
 import { SessionUser } from '../auth/session-token.service';
+import { OrgChangeAlertService } from '../org-change-alert/org-change-alert.service';
+import { MonthlySummary } from '../org-change-alert/org-change-alert.types';
+
+/** F006 KPI 服務替身（本檔多數場景不使用，僅為建構子相依）。 */
+const alertsStub = (monthlySummary = jest.fn()): OrgChangeAlertService =>
+  ({ monthlySummary }) as unknown as OrgChangeAlertService;
 
 /**
  * 手動觸發 API（US-011）。權限（僅系統管理員）由 RolePermissionGuard + @RequirePermission
@@ -53,7 +59,7 @@ describe('OrgSyncController.trigger', () => {
   it('以 manual + 觸發者 loginId 呼叫引擎並回傳結果', async () => {
     const run = jest.fn().mockResolvedValue(okResult);
     const svc = { run } as unknown as OrgSyncService;
-    const controller = new OrgSyncController(svc);
+    const controller = new OrgSyncController(svc, alertsStub());
 
     const res = await controller.trigger(req);
     expect(run).toHaveBeenCalledWith('manual', 'sysadmin1');
@@ -63,7 +69,7 @@ describe('OrgSyncController.trigger', () => {
   it('已有進行中 → 傳遞 SyncInProgressError（Nest 映射為 409）', async () => {
     const run = jest.fn().mockRejectedValue(new SyncInProgressError());
     const svc = { run } as unknown as OrgSyncService;
-    const controller = new OrgSyncController(svc);
+    const controller = new OrgSyncController(svc, alertsStub());
 
     await expect(controller.trigger(req)).rejects.toThrow(SyncInProgressError);
     await expect(controller.trigger(req)).rejects.toThrow('SYNC_IN_PROGRESS');
@@ -92,7 +98,7 @@ describe('OrgSyncController.recentRuns（委派）', () => {
   it('未帶 limit → 以 undefined 委派 service.recentRuns 並回傳結果', async () => {
     const recentRuns = jest.fn().mockResolvedValue(SAMPLE_RUNS);
     const svc = { recentRuns } as unknown as OrgSyncService;
-    const controller = new OrgSyncController(svc);
+    const controller = new OrgSyncController(svc, alertsStub());
 
     const res = await controller.recentRuns(undefined);
     expect(recentRuns).toHaveBeenCalledWith(undefined);
@@ -102,7 +108,7 @@ describe('OrgSyncController.recentRuns（委派）', () => {
   it('limit=50（字串）→ 以數字 50 委派（正規化/夾取交由 service）', async () => {
     const recentRuns = jest.fn().mockResolvedValue(SAMPLE_RUNS);
     const svc = { recentRuns } as unknown as OrgSyncService;
-    const controller = new OrgSyncController(svc);
+    const controller = new OrgSyncController(svc, alertsStub());
 
     await controller.recentRuns('50');
     expect(recentRuns).toHaveBeenCalledWith(50);
@@ -157,4 +163,67 @@ describe('OrgSyncController.recentRuns（路由與 RBAC 契約）', () => {
       expect(() => guard.canActivate(ctxFor(role))).toThrow('PERMISSION_DENIED');
     },
   );
+});
+
+/**
+ * F006 D7 後台總覽 KPI：GET /admin/org-sync/monthly-summary（同一功能鍵之 read 權限）。
+ * 「本月」判定與加總屬服務層；控制器僅委派並保證路由/權限契約。
+ */
+const SUMMARY: MonthlySummary = {
+  month: '2026-07',
+  newPersonCount: 18,
+  updatedCount: 31,
+  departedDisabledCount: 4,
+  pendingChiefAlertCount: 3,
+};
+
+describe('OrgSyncController.monthlySummary', () => {
+  it('委派 OrgChangeAlertService.monthlySummary 並回傳 4 項 KPI', async () => {
+    const monthlySummary = jest.fn().mockResolvedValue(SUMMARY);
+    const controller = new OrgSyncController(
+      {} as unknown as OrgSyncService,
+      alertsStub(monthlySummary),
+    );
+
+    const res = await controller.monthlySummary();
+
+    expect(monthlySummary).toHaveBeenCalledTimes(1);
+    expect(res).toEqual(SUMMARY);
+  });
+
+  it('宣告為 GET /monthly-summary（與 GET /runs 不衝突）', () => {
+    expect(
+      Reflect.getMetadata(PATH_METADATA, OrgSyncController.prototype.monthlySummary),
+    ).toBe('monthly-summary');
+    expect(
+      Reflect.getMetadata(METHOD_METADATA, OrgSyncController.prototype.monthlySummary),
+    ).toBe(RequestMethod.GET);
+  });
+
+  it('TS-F006-052 RBAC：SysAdmin/ICSOPAdmin 放行；主管/窗口/使用者 403', () => {
+    const guard = new RolePermissionGuard(new Reflector());
+    const ctxFor = (roleCode: string): ExecutionContext =>
+      ({
+        getHandler: () => OrgSyncController.prototype.monthlySummary,
+        getClass: () => OrgSyncController,
+        switchToHttp: () => ({
+          getRequest: () =>
+            ({
+              sessionUser: {
+                loginId: 'x',
+                email: 'x@y',
+                companyCode: 'AS',
+                roleCode,
+              } as SessionUser,
+            }) as RequestWithSession,
+        }),
+      }) as unknown as ExecutionContext;
+
+    for (const role of ['SysAdmin', 'ICSOPAdmin']) {
+      expect(guard.canActivate(ctxFor(role))).toBe(true);
+    }
+    for (const role of ['Supervisor', 'DeptContact', 'User']) {
+      expect(() => guard.canActivate(ctxFor(role))).toThrow('PERMISSION_DENIED');
+    }
+  });
 });

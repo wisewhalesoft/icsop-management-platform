@@ -64,6 +64,12 @@ export interface NormalizedOrgUnit {
   descFull: string | null;
   managerEmpNo: string | null;
   isActive: boolean;
+  /**
+   * 真實部門關閉日（← CLOSE_DATE）；哨兵 9999-12-31／不可儲存之日期經 normalizeUpstreamDate 收斂為 null。
+   * F006 §7.3 之提示需呈現「部門關閉日期」（AC8），故於此保留原始日期。
+   * ⚠ 選填（不參與 classifyOrgUnit 比對、不落地 ORG_UNIT）：既有測試替身之物件字面值無需補此欄。
+   */
+  closeDate?: Date | null;
 }
 
 export interface NormalizedAccount {
@@ -128,6 +134,8 @@ export function normalizeDept(raw: RawDept, now: Date): NormalizedOrgUnit {
     descFull: nullableStr(raw.DESC_FULL),
     managerEmpNo: nullableStr(raw.JOB_CODE),
     isActive,
+    // 哨兵/超範圍/Invalid → null（同帳號日期欄之收斂慣例）；供 F006 §7.3 提示顯示關閉日期。
+    closeDate: normalizeUpstreamDate(raw.CLOSE_DATE),
   };
 }
 

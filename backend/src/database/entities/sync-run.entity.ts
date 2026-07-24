@@ -39,4 +39,16 @@ export class SyncRun {
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   triggeredBy!: string | null; // 觸發者 loginId（手動時）
+
+  // --- F006 D7：帳號異動細分（後台總覽 KPI「新增人員／更新（部門/職級）／離職停用」之來源）。
+  //     changeCount 為組織＋帳號之混合總數，無法還原三張卡；此三欄僅多落地引擎已算出之數字。
+  //     nullable：本次 migration 之前的歷史列為 NULL，KPI 加總以 COALESCE 視為 0（優雅降級）。
+  @Column({ type: 'int', nullable: true })
+  accountsCreated!: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  accountsUpdated!: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  accountsDisabled!: number | null;
 }

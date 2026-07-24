@@ -20,7 +20,10 @@ export type AuditTargetType =
   | 'USAGE_FORM'
   | 'LIFECYCLE'
   | 'DOCUMENT_CHANGE_LOG'
-  | 'LIFECYCLE_CHANGE_LOG';
+  | 'LIFECYCLE_CHANGE_LOG'
+  // F006 組織異動待確認提示之狀態變更（additive：僅新增字面值，不改既有變體語意；
+  // 比照 F007 LIFECYCLE_DELETE 先例）。targetId＝ORG_CHANGE_ALERT.id。
+  | 'ORG_CHANGE_ALERT';
 
 /** 操作類型（data-model AUDIT_LOG.actionType，逐字沿用 F036/F037/F038 spec 命名）。 */
 export type AuditActionType =
@@ -36,7 +39,9 @@ export type AuditActionType =
   | 'LIFECYCLE_DELETE'
   | 'CHANGE_LOG_VIEW'
   | 'LIFECYCLE_CHANGELOG_VIEW'
-  | 'LIFECYCLE_CHANGELOG_DOWNLOAD';
+  | 'LIFECYCLE_CHANGELOG_DOWNLOAD'
+  // F006：組織異動待確認提示被處理（Route A 自動／Route B 手動皆記錄）。
+  | 'ALERT_RESOLVED';
 
 /** 調閱來源（E09 US-097），預設 DIRECT。 */
 export type AuditSource = 'DIRECT' | 'AI_QA';
@@ -103,13 +108,24 @@ export interface LifecycleChangeLogAuditEvent extends AuditEventBase {
   actionType: 'LIFECYCLE_CHANGELOG_VIEW' | 'LIFECYCLE_CHANGELOG_DOWNLOAD';
 }
 
+/**
+ * 組織異動待確認提示之處理（F006，無浮水印）。targetId＝ORG_CHANGE_ALERT.id；
+ * targetNumber＝文件編號（DOCUMENT_FIELD）或員編（CLOSED_DEPT_PERSON）；targetName＝受影響欄位說明。
+ * ⚠ AUDIT_LOG 現無 alertId 欄，故 targetId 於落地列不對映任何參照欄（見 F006 impl log flag）。
+ */
+export interface OrgChangeAlertAuditEvent extends AuditEventBase {
+  targetType: 'ORG_CHANGE_ALERT';
+  actionType: 'ALERT_RESOLVED';
+}
+
 /** 稽核調閱事件（以 targetType 判別之聯集）——D 契約鎖定形狀。 */
 export type AuditAccessEvent =
   | DocumentAuditEvent
   | UsageFormAuditEvent
   | LifecycleAuditEvent
   | DocumentChangeLogAuditEvent
-  | LifecycleChangeLogAuditEvent;
+  | LifecycleChangeLogAuditEvent
+  | OrgChangeAlertAuditEvent;
 
 /**
  * 已物化之稽核列（append-only）。同時作為 AUDIT_LOG 落地列與 F024 查詢結果列。

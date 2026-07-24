@@ -74,6 +74,18 @@ describe('normalizeDept', () => {
     const d = normalizeDept(rawDept({ JOB_CODE: null }), now);
     expect(d.managerEmpNo).toBeNull();
   });
+
+  it('F006：真實 CLOSE_DATE 一併保留為 closeDate（提示需呈現「部門關閉日期」，AC8）', () => {
+    const d = normalizeDept(rawDept({ CLOSE_DATE: '2026-03-31' }), now);
+    expect(d.isActive).toBe(false);
+    expect(d.closeDate?.toISOString().slice(0, 10)).toBe('2026-03-31');
+  });
+
+  it('F006：哨兵 9999-12-31 之 CLOSE_DATE → closeDate=null（非真實關閉日）', () => {
+    const d = normalizeDept(rawDept(), now); // 預設 CLOSE_DATE=9999-12-31
+    expect(d.isActive).toBe(true);
+    expect(d.closeDate).toBeNull();
+  });
 });
 
 describe('normalizeAccount', () => {

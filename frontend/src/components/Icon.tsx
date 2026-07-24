@@ -11,6 +11,7 @@ import {
   Library, Megaphone, PauseCircle, XCircle, FileDown, Link as LinkIcon,
   Eye, Upload, FileSpreadsheet, Sheet, Shield, Pencil, Sparkles,
   UploadCloud, Link2Off, ChevronDown, ChevronUp, CornerDownRight, HardDrive,
+  UserPlus, UserX, Clock, Check,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -98,6 +99,11 @@ const REGISTRY: Record<string, LucideIcon> = {
   'chevron-up': ChevronUp,
   'corner-down-right': CornerDownRight,
   'hard-drive': HardDrive,
+  // F006 組織人員異動管理（prototype 09 之 KPI 卡與提示卡圖示）
+  'user-plus': UserPlus,
+  'user-x': UserX,
+  clock: Clock,
+  check: Check,
 };
 
 export interface IconProps {
