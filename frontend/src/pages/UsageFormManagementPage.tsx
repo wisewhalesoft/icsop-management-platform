@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import {
   getUsageFormOverview,
@@ -11,6 +12,7 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
+import { useToast } from '../components/useToast';
 import type { UsageFormPoolItem } from '../api/types';
 
 /**
@@ -51,17 +53,6 @@ function formatDate(iso: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('sv-SE');
 }
 
-interface Notice {
-  tone: 'success' | 'danger' | 'info';
-  text: string;
-  code?: string;
-}
-const TONE_BADGE: Record<string, string> = {
-  success: 'text-emerald-700 bg-emerald-50 border-emerald-100',
-  danger: 'text-red-700 bg-red-50 border-red-100',
-  info: 'text-blue-700 bg-blue-50 border-blue-100',
-};
-
 interface ConfirmState {
   title: string;
   body: string;
@@ -93,6 +84,8 @@ function FormatBadge({ fmt }: { fmt: FmtClass }): JSX.Element {
 
 export function UsageFormManagementPage(): JSX.Element {
   const { user } = useAuth();
+  const toast = useToast();
+  const navigate = useNavigate();
   const role = user?.roleCode;
   const canRead = canPerform(role, FunctionKey.USAGE_FORM_MANAGEMENT, 'read');
   const canWrite = canPerform(role, FunctionKey.USAGE_FORM_MANAGEMENT, 'write');
@@ -102,7 +95,6 @@ export function UsageFormManagementPage(): JSX.Element {
   const [keyword, setKeyword] = useState('');
   const [fmtFilter, setFmtFilter] = useState<'' | FmtClass>('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [notice, setNotice] = useState<Notice | null>(null);
 
   // 上傳 modal
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -125,11 +117,11 @@ export function UsageFormManagementPage(): JSX.Element {
     try {
       setItems(await getUsageFormOverview());
     } catch (e) {
-      setNotice({ tone: 'danger', text: e instanceof ApiError ? e.code : '載入表單池失敗' });
+      toast.error(e instanceof ApiError ? e.code : '載入表單池失敗');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (canRead) void load();
@@ -159,15 +151,18 @@ export function UsageFormManagementPage(): JSX.Element {
   };
 
   // ── 下載 ──
-  const onDownload = useCallback(async (form: UsageFormPoolItem) => {
-    try {
-      const grant = await downloadPoolForm(form.id);
-      window.open(grant.url, '_blank', 'noopener,noreferrer');
-      setNotice({ tone: 'success', text: `已下載表單「${form.name}」` });
-    } catch (e) {
-      setNotice({ tone: 'danger', text: e instanceof ApiError ? `下載失敗：${e.code}` : '下載失敗' });
-    }
-  }, []);
+  const onDownload = useCallback(
+    async (form: UsageFormPoolItem) => {
+      try {
+        const grant = await downloadPoolForm(form.id);
+        window.open(grant.url, '_blank', 'noopener,noreferrer');
+        toast.success(`已下載表單「${form.name}」`);
+      } catch (e) {
+        toast.error(e instanceof ApiError ? `下載失敗：${e.code}` : '下載失敗');
+      }
+    },
+    [toast],
+  );
 
   // ── 上傳 ──
   const openUpload = (): void => {
@@ -204,14 +199,10 @@ export function UsageFormManagementPage(): JSX.Element {
       // 表單名稱隨 multipart 一併送出（prototype 19 submitUpload 以 upName.trim() 為記錄名稱）。
       await uploadUsageForms([uploadFile], uploadName.trim());
       setUploadOpen(false);
-      setNotice({ tone: 'success', text: `已上傳表單「${uploadName.trim()}」（初始關聯 0 份）` });
+      toast.success(`已上傳表單「${uploadName.trim()}」（初始關聯 0 份）`);
       await load();
     } catch (e) {
-      setNotice({
-        tone: 'danger',
-        text: e instanceof ApiError ? `上傳失敗：${e.code}` : '上傳失敗',
-        code: e instanceof ApiError ? e.code : undefined,
-      });
+      toast.error(e instanceof ApiError ? `上傳失敗：${e.code}` : '上傳失敗');
     } finally {
       setSubmitting(false);
     }
@@ -228,23 +219,17 @@ export function UsageFormManagementPage(): JSX.Element {
     const form = overwriteTarget;
     if (!file || !form) return;
     if (!detectAllowedFmt(file.name)) {
-      setNotice({
-        tone: 'danger',
-        text: '檔案格式不支援，僅允許 excel（.xlsx / .xls）與 pdf',
-        code: 'FILE_FORMAT_NOT_ALLOWED',
-      });
+      toast.error('檔案格式不支援，僅允許 excel（.xlsx / .xls）與 pdf（FILE_FORMAT_NOT_ALLOWED）');
       setOverwriteTarget(null);
       return;
     }
     const doOverwrite = async (): Promise<void> => {
       await overwriteUsageForm(form.id, file, true);
-      setNotice({
-        tone: 'success',
-        text:
-          form.docCount >= 2
-            ? `已覆蓋，${form.docCount} 份引用文件所見同步更新`
-            : `已覆蓋表單「${form.name}」`,
-      });
+      toast.success(
+        form.docCount >= 2
+          ? `已覆蓋，${form.docCount} 份引用文件所見同步更新`
+          : `已覆蓋表單「${form.name}」`,
+      );
       setOverwriteTarget(null);
       await load();
     };
@@ -280,21 +265,15 @@ export function UsageFormManagementPage(): JSX.Element {
         next.delete(form.id);
         return next;
       });
-      setNotice({
-        tone: 'success',
-        text:
-          form.docCount >= 1
-            ? `表單已移除，並解除 ${form.docCount} 份文件關聯`
-            : '表單已移除',
-      });
+      toast.success(
+        form.docCount >= 1
+          ? `表單已移除，並解除 ${form.docCount} 份文件關聯`
+          : '表單已移除',
+      );
       await load();
     };
     if (form.docCount >= 1) {
-      setNotice({
-        tone: 'danger',
-        text: `此表單已被 ${form.docCount} 份文件使用，無法直接移除`,
-        code: 'USAGE_FORM_IN_USE',
-      });
+      toast.error(`此表單已被 ${form.docCount} 份文件使用，無法直接移除（USAGE_FORM_IN_USE）`);
       setConfirm({
         title: `確認移除「${form.name}」？`,
         body: `此表單已被 ${form.docCount} 份文件使用，移除將一併解除這 ${form.docCount} 份文件的關聯，且無法復原。此操作將記錄稽核。`,
@@ -320,11 +299,7 @@ export function UsageFormManagementPage(): JSX.Element {
       await confirm.onConfirm();
       setConfirm(null);
     } catch (e) {
-      setNotice({
-        tone: 'danger',
-        text: e instanceof ApiError ? `操作失敗：${e.code}` : '操作失敗',
-        code: e instanceof ApiError ? e.code : undefined,
-      });
+      toast.error(e instanceof ApiError ? `操作失敗：${e.code}` : '操作失敗');
       setConfirm(null);
     } finally {
       setConfirmBusy(false);
@@ -379,13 +354,6 @@ export function UsageFormManagementPage(): JSX.Element {
           本頁負責上傳、下載、檢視關聯與移除。
         </p>
       </div>
-
-      {notice && (
-        <div role="status" className={`text-sm border rounded-md px-3 py-2 ${TONE_BADGE[notice.tone]}`}>
-          {notice.text}
-          {notice.code && <span className="ml-2 text-[10px] mono opacity-70">{notice.code}</span>}
-        </div>
-      )}
 
       {/* 工具列 */}
       <div className="flex flex-wrap items-center gap-2">
@@ -452,6 +420,7 @@ export function UsageFormManagementPage(): JSX.Element {
                     onDownload={() => void onDownload(f)}
                     onOverwrite={() => onOverwriteClick(f)}
                     onRemove={() => onRemoveClick(f)}
+                    onJump={(documentId) => navigate(`/admin/documents/${documentId}`)}
                   />
                 );
               })}
@@ -629,6 +598,7 @@ function FormRow({
   onDownload,
   onOverwrite,
   onRemove,
+  onJump,
 }: {
   form: UsageFormPoolItem;
   fmt: FmtClass;
@@ -639,6 +609,7 @@ function FormRow({
   onDownload: () => void;
   onOverwrite: () => void;
   onRemove: () => void;
+  onJump: (documentId: string) => void;
 }): JSX.Element {
   return (
     <>
@@ -654,7 +625,12 @@ function FormRow({
         </td>
         <td className="px-4 py-3 text-slate-500 mono text-xs">{formatSize(form.size)}</td>
         <td className="px-4 py-3">
-          <div className="text-slate-700">{form.uploadedBy}</div>
+          <div className="text-slate-700">
+            {form.uploadedByName ?? form.uploadedBy}
+            {form.uploadedByDept && (
+              <span className="text-slate-400 text-xs ml-1">{form.uploadedByDept}</span>
+            )}
+          </div>
           <div className="text-slate-400 mono text-xs">{formatDate(form.uploadedAt)}</div>
         </td>
         <td className="px-4 py-3">
@@ -723,13 +699,15 @@ function FormRow({
             </div>
             <div className="flex flex-col gap-1">
               {form.documents.map((d) => (
-                <div
+                <button
                   key={d.id}
-                  className="flex items-center gap-2 rounded-md px-2.5 py-1.5 border border-transparent"
+                  onClick={() => onJump(d.id)}
+                  className="group flex items-center gap-2 text-left rounded-md px-2.5 py-1.5 hover:bg-white border border-transparent hover:border-slate-200"
                 >
                   <span className="mono text-xs text-slate-600">{d.documentNumber}</span>
                   <span className="text-sm text-slate-800">{d.documentName}</span>
-                </div>
+                  <Icon name="external-link" className="w-3.5 h-3.5 text-slate-300 group-hover:text-primary-500 ml-auto" />
+                </button>
               ))}
             </div>
           </td>

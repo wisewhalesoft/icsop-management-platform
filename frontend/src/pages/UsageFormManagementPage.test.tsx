@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { UsageFormManagementPage } from './UsageFormManagementPage';
+import { ToastProvider } from '../components/useToast';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import type { SessionUser, UsageFormPoolItem } from '../api/types';
@@ -12,6 +14,22 @@ import type { SessionUser, UsageFormPoolItem } from '../api/types';
  */
 vi.mock('../api/endpoints');
 vi.mock('../auth/useAuth');
+
+const navigateMock = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => navigateMock };
+});
+
+/** 頁面改用全域 toast（SYS-1）＋ useNavigate（G-ADM-025）；渲染需包 ToastProvider + Router。 */
+const renderPage = () =>
+  render(
+    <ToastProvider>
+      <MemoryRouter>
+        <UsageFormManagementPage />
+      </MemoryRouter>
+    </ToastProvider>,
+  );
 
 function mockAuth(roleCode: string) {
   const user: SessionUser = { loginId: 'AS20001', email: 'x@y', companyCode: 'AS', roleCode };
@@ -24,7 +42,8 @@ function mockAuth(roleCode: string) {
 const POOL: UsageFormPoolItem[] = [
   {
     id: 'uf1', name: '進件申請書.xlsx', format: 'xlsx', size: 49152,
-    uploadedBy: '李慧玲', uploadedAt: '2026-06-10T00:00:00Z', docCount: 2,
+    uploadedBy: 'acct-uuid-1', uploadedByName: '李慧玲', uploadedByDept: '債權管理部 / 法催一室',
+    uploadedAt: '2026-06-10T00:00:00Z', docCount: 2,
     documents: [
       { id: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業' },
       { id: 'd2', documentNumber: 'ICSOP-SRC-101-1-06', documentName: '消費分期特約通路作業' },
@@ -58,7 +77,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('TS-F018-026 主管無權 → 顯示封鎖畫面、不呼叫查詢端點', () => {
     mockAuth('Supervisor');
-    render(<UsageFormManagementPage />);
+    renderPage();
     expect(screen.getByText('無使用表單管理權限')).toBeInTheDocument();
     expect(screen.getByText(/PERMISSION_DENIED/)).toBeInTheDocument();
     expect(endpoints.getUsageFormOverview).not.toHaveBeenCalled();
@@ -66,7 +85,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('TS-F018-024 ICSOPAdmin → 清單渲染 + 上傳按鈕 + 覆蓋/移除按鈕', async () => {
     mockAuth('ICSOPAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     expect(screen.getByText('徵信照會表.pdf')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /上傳表單/ })).toBeInTheDocument();
@@ -78,7 +97,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('TS-F018-025 SysAdmin → 唯讀提示、無上傳/覆蓋/移除', async () => {
     mockAuth('SysAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     expect(screen.getByText(/唯讀模式/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /上傳表單/ })).toBeNull();
@@ -90,7 +109,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('搜尋表單名稱 → 過濾清單', async () => {
     mockAuth('ICSOPAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     await userEvent.type(screen.getByLabelText('搜尋表單名稱'), '徵信');
     expect(screen.queryByText('進件申請書.xlsx')).toBeNull();
@@ -100,7 +119,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('格式篩選 pdf → 僅顯示 pdf 表單', async () => {
     mockAuth('ICSOPAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     await userEvent.selectOptions(screen.getByLabelText('格式篩選'), 'pdf');
     expect(screen.queryByText('進件申請書.xlsx')).toBeNull();
@@ -109,7 +128,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('TS-F018-010 展開關聯文件數 → 顯示使用此表單的文件', async () => {
     mockAuth('ICSOPAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     // uf1 之關聯 pill（2 份）
     await userEvent.click(screen.getByRole('button', { name: /2 份/ }));
@@ -124,7 +143,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
    */
   it('TS-PS-F018-FE-001 上傳合法 xlsx → 名稱自動帶入檔名 → uploadUsageForms 攜帶名稱參數', async () => {
     mockAuth('ICSOPAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
     const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
@@ -140,7 +159,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('TS-PS-F018-FE-002 使用者改寫名稱為自訂文字 → 以自訂名稱呼叫，成功訊息含自訂名稱', async () => {
     mockAuth('ICSOPAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
     const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
@@ -158,7 +177,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('TS-PS-F018-FE-003 已手動輸入名稱後才選檔 → 不覆蓋既有輸入值（prototype 第 333 行同語意）', async () => {
     mockAuth('ICSOPAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
     const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
@@ -174,7 +193,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('TS-PS-F018-FE-004 名稱欄留空送出 → 顯示「表單名稱不可為空。」且不呼叫上傳', async () => {
     mockAuth('ICSOPAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
     const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
@@ -187,7 +206,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('TS-F018-005 上傳 .docx → 顯示 FILE_FORMAT_NOT_ALLOWED，不呼叫上傳', async () => {
     mockAuth('ICSOPAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
     const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
@@ -202,7 +221,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('TS-F018-017/018 覆蓋共用表單（docCount≥2）→ USAGE_FORM_OVERWRITE_SHARED 二次確認後覆蓋', async () => {
     mockAuth('ICSOPAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     // uf1（docCount 2）之覆蓋鈕（第一列）
     await userEvent.click(screen.getAllByRole('button', { name: '更新／覆蓋上傳' })[0]);
@@ -218,7 +237,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('TS-F018-022 移除 in-use 表單（docCount≥1）→ USAGE_FORM_IN_USE 二次確認後刪除', async () => {
     mockAuth('ICSOPAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole('button', { name: '移除' })[0]); // uf1
     const dialog = await screen.findByRole('dialog', { name: '操作確認' });
@@ -229,7 +248,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('TS-F018-021 移除無關聯表單（docCount=0）→ 一般確認、confirmed=false', async () => {
     mockAuth('ICSOPAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('本票確認檢核表.xlsx')).toBeInTheDocument());
     // uf7 為第三列（docCount 0）
     await userEvent.click(screen.getAllByRole('button', { name: '移除' })[2]);
@@ -241,10 +260,33 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
 
   it('TS-F018-013 個別下載 → 呼叫 downloadPoolForm(formId) 並開啟 URL', async () => {
     mockAuth('ICSOPAdmin');
-    render(<UsageFormManagementPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole('button', { name: '下載' })[0]);
     await waitFor(() => expect(endpoints.downloadPoolForm).toHaveBeenCalledWith('uf1'));
     expect(window.open).toHaveBeenCalledWith('blob:zzz', '_blank', 'noopener,noreferrer');
+  });
+
+  it('G-ADM-024 上傳者：顯示姓名 + 部門（不顯示原始 accountId）', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
+    const row = screen.getByText('進件申請書.xlsx').closest('tr')!;
+    expect(within(row).getByText('李慧玲')).toBeInTheDocument();
+    expect(within(row).getByText('債權管理部 / 法催一室')).toBeInTheDocument();
+    // 不得洩漏原始 accountId
+    expect(within(row).queryByText('acct-uuid-1')).toBeNull();
+  });
+
+  it('G-ADM-025 展開關聯文件 → 可點擊跳轉文件（external-link）', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /2 份/ }));
+    // 關聯列為可點擊 button（前往文件）
+    const jump = screen.getByRole('button', { name: /車輛分期進件作業/ });
+    expect(jump.querySelector('.lucide-external-link')).not.toBeNull();
+    await userEvent.click(jump);
+    expect(navigateMock).toHaveBeenCalledWith('/admin/documents/d1');
   });
 });

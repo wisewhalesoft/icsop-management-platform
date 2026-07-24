@@ -13,6 +13,7 @@ import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { roleMeta } from '../domain/roles';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
+import { useToast } from '../components/useToast';
 import type {
   SyncRunSummary,
   OrgChangeAlertView,
@@ -54,11 +55,6 @@ const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'alerts', label: '待確認異動' },
 ];
 
-interface Notice {
-  tone: 'success' | 'danger' | 'info';
-  text: string;
-}
-
 /** 無權限畫面之角色別說明（逐字沿用 prototype 09 之 blockMsg）。 */
 function blockedMessage(roleCode: string | undefined): string {
   if (roleCode === 'User') return '一般使用者無後台存取權。';
@@ -68,6 +64,7 @@ function blockedMessage(roleCode: string | undefined): string {
 export function OrgSyncPage(): JSX.Element {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
   const role = user?.roleCode;
   const canRead = canPerform(role, FunctionKey.ORG_SYNC_MANAGEMENT, 'read');
   const canWrite = canPerform(role, FunctionKey.ORG_SYNC_MANAGEMENT, 'write');
@@ -79,7 +76,6 @@ export function OrgSyncPage(): JSX.Element {
   const [summaryFailed, setSummaryFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
-  const [notice, setNotice] = useState<Notice | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
@@ -87,14 +83,11 @@ export function OrgSyncPage(): JSX.Element {
       const data = await getOrgSyncRuns();
       setRuns(data);
     } catch (e) {
-      setNotice({
-        tone: 'danger',
-        text: e instanceof ApiError ? e.code : '載入同步紀錄失敗',
-      });
+      toast.error(e instanceof ApiError ? e.code : '載入同步紀錄失敗');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   /** 待確認提示（頁籤徽章需其總數，故與頁面同時載入，不延遲至切換頁籤）。 */
   const loadAlerts = useCallback(async () => {
@@ -132,21 +125,15 @@ export function OrgSyncPage(): JSX.Element {
 
   const onTrigger = useCallback(async () => {
     setTriggering(true);
-    setNotice({ tone: 'info', text: '已啟動手動同步…（互斥鎖已取得）' });
+    toast.info('已啟動手動同步…（互斥鎖已取得）');
     try {
       const res = await triggerOrgSync();
-      setNotice({
-        tone: 'success',
-        text: `同步完成，異動 ${res.changeCount} 筆（頁面已自動更新，無需重新整理）`,
-      });
+      toast.success(`同步完成，異動 ${res.changeCount} 筆（頁面已自動更新，無需重新整理）`);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'SYNC_IN_PROGRESS') {
-        setNotice({ tone: 'info', text: '同步進行中，請稍候（SYNC_IN_PROGRESS）' });
+        toast.info('同步進行中，請稍候（SYNC_IN_PROGRESS）');
       } else {
-        setNotice({
-          tone: 'danger',
-          text: e instanceof ApiError ? `同步失敗：${e.code}` : '同步失敗',
-        });
+        toast.error(e instanceof ApiError ? `同步失敗：${e.code}` : '同步失敗');
       }
     } finally {
       setTriggering(false);
@@ -154,20 +141,20 @@ export function OrgSyncPage(): JSX.Element {
       await loadAlerts();
       await loadSummary();
     }
-  }, [load, loadAlerts, loadSummary]);
+  }, [load, loadAlerts, loadSummary, toast]);
 
-  const onResolve = useCallback(async (id: string) => {
-    try {
-      await resolveOrgChangeAlert(id);
-      setAlerts((list) => list.filter((a) => a.id !== id));
-      setNotice({ tone: 'success', text: '已標記處理完成（記錄處理者/時間）' });
-    } catch (e) {
-      setNotice({
-        tone: 'danger',
-        text: e instanceof ApiError ? `處理失敗：${e.code}` : '處理失敗',
-      });
-    }
-  }, []);
+  const onResolve = useCallback(
+    async (id: string) => {
+      try {
+        await resolveOrgChangeAlert(id);
+        setAlerts((list) => list.filter((a) => a.id !== id));
+        toast.success('已標記處理完成（記錄處理者/時間）');
+      } catch (e) {
+        toast.error(e instanceof ApiError ? `處理失敗：${e.code}` : '處理失敗');
+      }
+    },
+    [toast],
+  );
 
   if (!canRead) {
     return (
@@ -270,14 +257,6 @@ export function OrgSyncPage(): JSX.Element {
           <Icon name="info" className="w-3.5 h-3.5" />
           來源＝外部 MSSQL View（唯讀）；每日排程並可手動觸發。手動觸發後本頁自動更新結果，無需重新整理。
         </p>
-        {notice && (
-          <div
-            role="status"
-            className={`mt-3 text-sm border rounded-md px-3 py-2 ${TONE_BADGE[notice.tone]}`}
-          >
-            {notice.text}
-          </div>
-        )}
       </section>
 
       {/* 頁籤（總覽／同步歷史／待確認異動） */}
@@ -416,7 +395,7 @@ export function OrgSyncPage(): JSX.Element {
                               <td colSpan={6} className="px-4 pb-3 pt-0">
                                 <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2 flex items-start gap-1.5">
                                   <Icon
-                                    name="alert-circle"
+                                    name="alert-octagon"
                                     className="w-3.5 h-3.5 mt-0.5 shrink-0"
                                   />
                                   <span>

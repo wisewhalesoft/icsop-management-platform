@@ -9,18 +9,17 @@ import {
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey, ROLE_CODES } from '../domain/function-matrix';
-import { ROLE_META } from '../domain/roles';
+import { ROLE_META, roleMeta } from '../domain/roles';
 import { RoleBadge } from '../components/RoleBadge';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
+import { useToast } from '../components/useToast';
 import type { AccountView } from '../api/types';
 
 /**
  * 帳號與角色管理（F003 / US-005+US-006）。版面/樣式權威來源：prototypes/08-account-management.html。
  * 接真實端點；RBAC：帳號管理 write（建立/停用/編輯）＝SysAdmin、角色指派＝SysAdmin only、
  * ICSOPAdmin 唯讀。停用/角色即時生效由後端 SessionGuard 依 DB 把關。
- * 註：原型之「編輯姓名/重設密碼」modal 為次要（後端 updateAccount 已具），本增量先具備
- *     清單/篩選/建立/指派角色/停用；編輯 modal 待後續增量。
  */
 const ERROR_MSG: Record<string, string> = {
   ACCOUNT_USERNAME_EXISTS: '帳號名稱已存在',
@@ -34,6 +33,19 @@ const msgOf = (e: unknown) =>
 
 const MGMT_ROLES = ['SysAdmin', 'ICSOPAdmin', 'Supervisor', 'DeptContact'];
 const PAGE_SIZE = 50;
+
+/** 無權限畫面之角色別說明（逐字沿用 prototype 08 之 blockMsg）。 */
+function blockedMessage(roleCode: string | undefined): string {
+  if (roleCode === 'User') return '一般使用者無後台存取權。';
+  return `${roleMeta(roleCode)?.label ?? '此角色'}對「帳號管理」為「無」。`;
+}
+
+/** 最後登入時間（ISO → 本地 YYYY-MM-DD HH:MM；查無→「—」）。 */
+function formatLastLogin(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('sv-SE').slice(0, 16);
+}
 
 function SourceBadge({ source }: { source: string }): JSX.Element {
   return source === 'manual' ? (
@@ -62,7 +74,7 @@ function StatusBadge({ a }: { a: AccountView }): JSX.Element {
         className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
         style={{ color: '#B45309', background: '#FEF3C7' }}
       >
-        <Icon name="user-cog" className="w-3 h-3" />
+        <Icon name="user-x" className="w-3 h-3" />
         離職自動停用
       </span>
     );
@@ -71,6 +83,53 @@ function StatusBadge({ a }: { a: AccountView }): JSX.Element {
     <span className="px-2 py-0.5 rounded-full text-xs text-red-700 bg-red-50 border border-red-100">
       停用
     </span>
+  );
+}
+
+/** 密碼欄（含顯示/隱藏切換；prototype 08 之 eye ↔ eye-off）。 */
+function PasswordField({
+  id,
+  label,
+  required,
+  value,
+  onChange,
+  placeholder,
+  helper,
+}: {
+  id: string;
+  label: string;
+  required?: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  helper?: string;
+}): JSX.Element {
+  const [show, setShow] = useState(false);
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-slate-700 mb-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      <div className="relative">
+        <input
+          id={id}
+          type={show ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full px-3 py-2 pr-10 rounded-md border border-slate-300 text-sm"
+        />
+        <button
+          type="button"
+          onClick={() => setShow((s) => !s)}
+          aria-label={show ? '隱藏密碼' : '顯示密碼'}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+        >
+          <Icon name={show ? 'eye-off' : 'eye'} className="w-4 h-4" />
+        </button>
+      </div>
+      {helper && <p className="text-[10px] text-slate-400 mt-1">{helper}</p>}
+    </div>
   );
 }
 
@@ -84,6 +143,7 @@ interface Confirm {
 
 export function AccountManagementPage(): JSX.Element {
   const { user } = useAuth();
+  const toast = useToast();
   const role = user?.roleCode;
   const canRead = canPerform(role, FunctionKey.ACCOUNT_MANAGEMENT, 'read');
   const canWrite = canPerform(role, FunctionKey.ACCOUNT_MANAGEMENT, 'write');
@@ -95,7 +155,6 @@ export function AccountManagementPage(): JSX.Element {
   const [fSource, setFSource] = useState('');
   const [fRole, setFRole] = useState('');
   const [fStatus, setFStatus] = useState('');
-  const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<AccountView | null>(null);
@@ -113,11 +172,11 @@ export function AccountManagementPage(): JSX.Element {
       });
       setAccounts(data);
     } catch (e) {
-      setNotice({ tone: 'err', text: msgOf(e) });
+      toast.error(msgOf(e));
     } finally {
       setLoading(false);
     }
-  }, [fSource, fRole, fStatus]);
+  }, [fSource, fRole, fStatus, toast]);
 
   useEffect(() => {
     if (canRead) void load();
@@ -143,9 +202,10 @@ export function AccountManagementPage(): JSX.Element {
     return (
       <div className="bg-white border border-slate-200 rounded-xl px-6 py-16 text-center">
         <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3">
-          <Icon name="alert-circle" className="w-7 h-7 text-red-500" />
+          <Icon name="lock" className="w-7 h-7 text-red-500" />
         </div>
         <h1 className="font-semibold text-slate-900">無帳號管理權限</h1>
+        <p className="text-sm text-slate-500 mt-1">{blockedMessage(role)}</p>
         <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
       </div>
     );
@@ -159,7 +219,7 @@ export function AccountManagementPage(): JSX.Element {
             onClick={() => setCreateOpen(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
           >
-            <Icon name="plus" className="w-4 h-4" />
+            <Icon name="user-plus" className="w-4 h-4" />
             建立帳號
           </button>
         )}
@@ -167,21 +227,8 @@ export function AccountManagementPage(): JSX.Element {
 
       {canRead && !canWrite && (
         <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2">
-          <Icon name="user-circle" className="w-4 h-4 shrink-0" />
-          唯讀模式 · ICSOP 管理員可查詢帳號，但不可建立/停用/指派角色。
-        </div>
-      )}
-
-      {notice && (
-        <div
-          role="status"
-          className={`text-sm border rounded-md px-3 py-2 ${
-            notice.tone === 'ok'
-              ? 'text-emerald-700 bg-emerald-50 border-emerald-100'
-              : 'text-red-700 bg-red-50 border-red-100'
-          }`}
-        >
-          {notice.text}
+          <Icon name="eye" className="w-4 h-4 shrink-0" />
+          唯讀模式 · ICSOP 管理員對帳號管理為唯讀，可查詢但不可建立/停用/指派角色。
         </div>
       )}
 
@@ -219,25 +266,37 @@ export function AccountManagementPage(): JSX.Element {
       {/* table */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[820px]">
+          <table className="w-full text-sm min-w-[960px]">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
               <tr>
                 <th className="text-left font-medium px-3 py-2.5">姓名</th>
                 <th className="text-left font-medium px-3 py-2.5">帳號</th>
+                <th className="text-left font-medium px-3 py-2.5">公司</th>
+                <th className="text-left font-medium px-3 py-2.5">部門</th>
                 <th className="text-left font-medium px-3 py-2.5">來源</th>
                 <th className="text-left font-medium px-3 py-2.5">角色</th>
                 <th className="text-left font-medium px-3 py-2.5">狀態</th>
+                <th className="text-left font-medium px-3 py-2.5">最後登入</th>
                 {canWrite && <th className="text-left font-medium px-3 py-2.5">操作</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {paged.map((a) => (
                 <tr key={a.id} className="hover:bg-slate-50">
-                  <td className="px-3 py-2.5 font-medium text-slate-800">{a.name ?? '—'}</td>
+                  <td className="px-3 py-2.5 font-medium text-slate-800">
+                    <div className="truncate max-w-[220px]" title={a.name ?? '—'}>{a.name ?? '—'}</div>
+                  </td>
                   <td className="px-3 py-2.5 mono text-slate-600">{a.loginId}</td>
+                  <td className="px-3 py-2.5 text-slate-600">
+                    <div className="truncate max-w-[200px]" title={a.company ?? '—'}>{a.company ?? '—'}</div>
+                  </td>
+                  <td className="px-3 py-2.5 text-slate-500">
+                    <div className="truncate max-w-[200px]" title={a.department ?? '—'}>{a.department ?? '—'}</div>
+                  </td>
                   <td className="px-3 py-2.5"><SourceBadge source={a.source} /></td>
                   <td className="px-3 py-2.5"><RoleBadge roleCode={a.roleCode} /></td>
                   <td className="px-3 py-2.5"><StatusBadge a={a} /></td>
+                  <td className="px-3 py-2.5 mono text-xs text-slate-400">{formatLastLogin(a.lastLoginAt)}</td>
                   {canWrite && (
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1">
@@ -297,7 +356,7 @@ export function AccountManagementPage(): JSX.Element {
         )}
         {!loading && shown.length > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 text-sm text-slate-500">
-            <span>共 {shown.length} 筆 · 每頁 {PAGE_SIZE} 筆</span>
+            <span>共 {shown.length} 筆（軟刪除，停用帳號保留）</span>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -326,10 +385,10 @@ export function AccountManagementPage(): JSX.Element {
           onClose={() => setCreateOpen(false)}
           onCreated={async () => {
             setCreateOpen(false);
-            setNotice({ tone: 'ok', text: '已建立帳號（密碼加鹽雜湊儲存）' });
+            toast.success('已建立帳號（密碼加鹽雜湊儲存）');
             await load();
           }}
-          onError={(e) => setNotice({ tone: 'err', text: msgOf(e) })}
+          onError={(e) => toast.error(msgOf(e))}
         />
       )}
 
@@ -339,10 +398,10 @@ export function AccountManagementPage(): JSX.Element {
           onClose={() => setEditTarget(null)}
           onSaved={async () => {
             setEditTarget(null);
-            setNotice({ tone: 'ok', text: '已更新帳號' });
+            toast.success('已更新帳號');
             await load();
           }}
-          onError={(e) => setNotice({ tone: 'err', text: msgOf(e) })}
+          onError={(e) => toast.error(msgOf(e))}
         />
       )}
 
@@ -352,10 +411,10 @@ export function AccountManagementPage(): JSX.Element {
           onClose={() => setRoleTarget(null)}
           onAssigned={async () => {
             setRoleTarget(null);
-            setNotice({ tone: 'ok', text: '角色已更新（下次請求即生效）' });
+            toast.success('角色已更新（下次請求即生效）');
             await load();
           }}
-          onError={(e) => setNotice({ tone: 'err', text: msgOf(e) })}
+          onError={(e) => toast.error(msgOf(e))}
           requestConfirm={setConfirm}
         />
       )}
@@ -373,10 +432,10 @@ export function AccountManagementPage(): JSX.Element {
     setConfirm(null);
     try {
       await fn();
-      setNotice({ tone: 'ok', text: okText });
+      toast.success(okText);
       await load();
     } catch (e) {
-      setNotice({ tone: 'err', text: msgOf(e) });
+      toast.error(msgOf(e));
     }
   }
 }
@@ -421,22 +480,22 @@ function CreateModal({
     <Overlay>
       <div role="dialog" aria-labelledby="createTitle" className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
         <h3 id="createTitle" className="font-semibold text-slate-900 mb-1">建立手動帳號</h3>
-        <p className="text-xs text-slate-400 mb-4">密碼將以加鹽雜湊儲存（source=manual）。</p>
+        <p className="text-xs text-slate-400 mb-4">手動帳號密碼將以加鹽雜湊儲存（source=manual）。</p>
         <div className="space-y-3">
           <div>
             <label htmlFor="cLoginId" className="block text-sm font-medium text-slate-700 mb-1">
               帳號 <span className="text-red-500">*</span>
             </label>
             <input id="cLoginId" value={loginId} onChange={(e) => setLoginId(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="例：20500" />
+              className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="例：20500（5 位數帳號）" />
           </div>
-          <div>
-            <label htmlFor="cPassword" className="block text-sm font-medium text-slate-700 mb-1">
-              初始密碼 <span className="text-red-500">*</span>
-            </label>
-            <input id="cPassword" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" />
-          </div>
+          <PasswordField
+            id="cPassword"
+            label="初始密碼"
+            required
+            value={password}
+            onChange={setPassword}
+          />
           <div>
             <label htmlFor="cRole" className="block text-sm font-medium text-slate-700 mb-1">
               指派角色 <span className="text-red-500">*</span>
@@ -447,7 +506,7 @@ function CreateModal({
                 <option key={rc} value={rc}>{ROLE_META[rc].label}</option>
               ))}
             </select>
-            <p className="text-[10px] text-slate-400 mt-1">僅 5 種固定角色，不可新增/刪除。</p>
+            <p className="text-[10px] text-slate-400 mt-1">僅 5 種固定角色，不可新增/刪除角色種類。</p>
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-6">
@@ -510,18 +569,25 @@ function EditModal({
               <p className="text-[10px] text-slate-400 mt-1">上游同步帳號，姓名由上游系統維護。</p>
             )}
           </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">目前角色</label>
+            <div><RoleBadge roleCode={target.roleCode} /></div>
+            <p className="text-[10px] text-slate-400 mt-1">如需變更角色，請使用清單的「指派角色」。</p>
+          </div>
           {upstream ? (
             <div className="flex items-start gap-1.5 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-2">
               <Icon name="info" className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               <span>上游同步帳號以公司帳號（Azure AD 單一登入）驗證，本系統不保存其密碼，無法於此重設。</span>
             </div>
           ) : (
-            <div>
-              <label htmlFor="ePassword" className="block text-sm font-medium text-slate-700 mb-1">重設密碼</label>
-              <input id="ePassword" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="輸入新密碼以重設" className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" />
-              <p className="text-[10px] text-slate-400 mt-1">留空則不變更；重設後以加鹽雜湊儲存。</p>
-            </div>
+            <PasswordField
+              id="ePassword"
+              label="重設密碼"
+              value={password}
+              onChange={setPassword}
+              placeholder="輸入新密碼以重設"
+              helper="重設後以加鹽雜湊儲存，使用者須以新密碼登入；留空則不變更。"
+            />
           )}
         </div>
         <div className="flex justify-end gap-2 mt-6">

@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { OrgSyncPage } from './OrgSyncPage';
+import { ToastProvider } from '../components/useToast';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import { ApiError } from '../api/client';
@@ -146,7 +147,14 @@ const THREE_ALERTS = [
   personAlert(),
 ];
 
-const renderPage = () => render(<MemoryRouter><OrgSyncPage /></MemoryRouter>);
+const renderPage = () =>
+  render(
+    <ToastProvider>
+      <MemoryRouter>
+        <OrgSyncPage />
+      </MemoryRouter>
+    </ToastProvider>,
+  );
 
 /** 切至指定頁籤（頁籤列為 prototype 之三分頁結構）。 */
 async function switchTab(name: RegExp | string): Promise<void> {
@@ -234,6 +242,19 @@ describe('OrgSyncPage — 同步狀態/歷史（US-011 回歸，移入頁籤後�
     expect(screen.getByText(/最近同步：/)).toBeInTheDocument();
     await switchTab('同步歷史');
     expect(screen.getByText(/最近同步：/)).toBeInTheDocument();
+  });
+
+  it('G-ADM-012 同步歷史失敗列展開錯誤 → 使用 alert-octagon 圖示', async () => {
+    mockAuth('SysAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '同步歷史' })).toBeInTheDocument());
+    await switchTab('同步歷史');
+    await userEvent.click(screen.getByRole('button', { name: '展開錯誤' }));
+    const detail = await screen.findByText(/連線逾時/);
+    const box = detail.closest('div')!;
+    // lucide-react 已將 AlertOctagon/AlertCircle 更名 → 渲染 class 為 octagon-alert / circle-alert。
+    expect(box.querySelector('.lucide-octagon-alert')).not.toBeNull();
+    expect(box.querySelector('.lucide-circle-alert')).toBeNull();
   });
 });
 

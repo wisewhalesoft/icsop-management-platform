@@ -10,6 +10,7 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
+import { useToast } from '../components/useToast';
 import type {
   DocIndexChunk,
   DocIndexOverview,
@@ -24,6 +25,8 @@ import type {
  * RBAC：ICSOPAdmin CRUD、SysAdmin 唯讀（重新索引按鈕不顯示）、主管/部門窗口/一般使用者無（自我守門封鎖）。
  * 後端 RBAC 為權威，前端另做自我守門封鎖（比照 OrgSyncPage/AccessHistoryPage 雙層模式）。
  */
+
+type StateFilter = '' | 'success' | 'running' | 'failed' | 'not_built';
 
 const STATE_META: Record<
   IndexStatusState,
@@ -51,27 +54,17 @@ function formatDateTime(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('sv-SE');
 }
 
-interface Notice {
-  tone: 'success' | 'danger' | 'info';
-  text: string;
-}
-const TONE_BADGE: Record<string, string> = {
-  success: 'text-emerald-700 bg-emerald-50 border-emerald-100',
-  danger: 'text-red-700 bg-red-50 border-red-100',
-  info: 'text-blue-700 bg-blue-50 border-blue-100',
-};
-
 export function DocIndexPage(): JSX.Element {
   const { user } = useAuth();
+  const toast = useToast();
   const role = user?.roleCode;
   const canRead = canPerform(role, FunctionKey.DOCUMENT_INDEX_MANAGEMENT, 'read');
   const canWrite = canPerform(role, FunctionKey.DOCUMENT_INDEX_MANAGEMENT, 'write');
 
   const [overview, setOverview] = useState<DocIndexOverview | null>(null);
   const [loading, setLoading] = useState(true);
-  const [stateFilter, setStateFilter] = useState<'' | 'success' | 'running' | 'failed'>('');
+  const [stateFilter, setStateFilter] = useState<StateFilter>('');
   const [keyword, setKeyword] = useState('');
-  const [notice, setNotice] = useState<Notice | null>(null);
 
   // 提取結果／失敗詳情 modal
   const [previewRow, setPreviewRow] = useState<DocIndexOverviewRow | null>(null);
@@ -83,24 +76,27 @@ export function DocIndexPage(): JSX.Element {
   const [confirmRow, setConfirmRow] = useState<DocIndexOverviewRow | null>(null);
   const [reindexing, setReindexing] = useState(false);
 
-  const load = useCallback(async (state: '' | 'success' | 'running' | 'failed') => {
-    setLoading(true);
-    try {
-      const res = await getDocIndexOverview(state ? { state } : {});
-      setOverview(res);
-    } catch (e) {
-      setNotice({ tone: 'danger', text: e instanceof ApiError ? e.code : '載入索引總覽失敗' });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (state: StateFilter) => {
+      setLoading(true);
+      try {
+        const res = await getDocIndexOverview(state ? { state } : {});
+        setOverview(res);
+      } catch (e) {
+        toast.error(e instanceof ApiError ? e.code : '載入索引總覽失敗');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [toast],
+  );
 
   useEffect(() => {
     if (canRead) void load('');
   }, [canRead, load]);
 
   const onFilter = (v: string) => {
-    const next = v as '' | 'success' | 'running' | 'failed';
+    const next = v as StateFilter;
     setStateFilter(next);
     void load(next);
   };
@@ -116,23 +112,26 @@ export function DocIndexPage(): JSX.Element {
     );
   }, [overview, keyword]);
 
-  const openPreview = useCallback(async (r: DocIndexOverviewRow) => {
-    setPreviewRow(r);
-    setPreviewChunks(null);
-    setPreviewStatus(null);
-    setPreviewLoading(true);
-    try {
-      const status = await getDocIndexStatus(r.documentId);
-      setPreviewStatus(status);
-      if (status.state === 'success') {
-        setPreviewChunks(await getDocIndexChunks(r.documentId));
+  const openPreview = useCallback(
+    async (r: DocIndexOverviewRow) => {
+      setPreviewRow(r);
+      setPreviewChunks(null);
+      setPreviewStatus(null);
+      setPreviewLoading(true);
+      try {
+        const status = await getDocIndexStatus(r.documentId);
+        setPreviewStatus(status);
+        if (status.state === 'success') {
+          setPreviewChunks(await getDocIndexChunks(r.documentId));
+        }
+      } catch (e) {
+        toast.error(e instanceof ApiError ? e.code : '載入提取結果失敗');
+      } finally {
+        setPreviewLoading(false);
       }
-    } catch (e) {
-      setNotice({ tone: 'danger', text: e instanceof ApiError ? e.code : '載入提取結果失敗' });
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, []);
+    },
+    [toast],
+  );
 
   const closePreview = () => {
     setPreviewRow(null);
@@ -145,15 +144,15 @@ export function DocIndexPage(): JSX.Element {
     setReindexing(true);
     try {
       await reindexDocument(confirmRow.documentId);
-      setNotice({ tone: 'success', text: `已建立重新索引（INDEX_RUN，triggerType=manual）：${rowLabel(confirmRow)}` });
+      toast.success(`已建立重新索引（INDEX_RUN，triggerType=manual）：${rowLabel(confirmRow)}`);
       setConfirmRow(null);
       await load(stateFilter);
     } catch (e) {
-      setNotice({ tone: 'danger', text: e instanceof ApiError ? `重新索引失敗：${e.code}` : '重新索引失敗' });
+      toast.error(e instanceof ApiError ? `重新索引失敗：${e.code}` : '重新索引失敗');
     } finally {
       setReindexing(false);
     }
-  }, [confirmRow, load, stateFilter]);
+  }, [confirmRow, load, stateFilter, toast]);
 
   if (!canRead) {
     return (
@@ -170,10 +169,11 @@ export function DocIndexPage(): JSX.Element {
     );
   }
 
-  const summaryCards: { key: 'success' | 'running' | 'failed'; label: string; count: number }[] = [
+  const summaryCards: { key: 'success' | 'running' | 'failed' | 'not_built'; label: string; count: number }[] = [
     { key: 'success', label: '成功', count: overview?.successCount ?? 0 },
     { key: 'running', label: '建置中', count: overview?.runningCount ?? 0 },
     { key: 'failed', label: '失敗', count: overview?.failedCount ?? 0 },
+    { key: 'not_built', label: '尚未建立', count: overview?.notBuiltCount ?? 0 },
   ];
 
   return (
@@ -184,26 +184,23 @@ export function DocIndexPage(): JSX.Element {
       {canRead && !canWrite && (
         <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm border bg-cyan-50 border-cyan-200 text-cyan-800">
           <Icon name="eye" className="w-4 h-4" />
-          唯讀模式 · 系統管理員僅可檢視索引狀態與提取結果，無法觸發重新索引。
+          唯讀模式 · 系統管理員僅可檢視索引狀態與提取結果，無法觸發重新索引（FIELD_WRITE_FORBIDDEN）。
         </div>
       )}
 
       <div className="flex items-start gap-2 text-sm text-slate-500">
         <Icon name="info" className="w-4 h-4 mt-0.5 text-slate-400 shrink-0" />
         <p>
-          管理端獨立驗證 ingestion 管線品質：由 <strong>.xls 原件</strong> 經模板感知抽取／清洗，依「章／節」切為 chunk
-          並掛 metadata 建立向量索引。每個 chunk 的使用部門／狀態／公告日期 metadata 驅動前台權限感知檢索（F033）。
+          管理端獨立驗證 ingestion 管線品質：由 <strong>.xls 原件</strong>（AI 檢索內容來源；與呈現／下載用
+          ICSOP PDF <strong>各自獨立手動上傳、系統不自動轉檔</strong>，OQ-E09-10 定案）經模板感知抽取／清洗，
+          依「章／節」切為 chunk 並掛 metadata 建立向量索引。每個 chunk 的{' '}
+          <strong>使用部門／狀態／公告日期</strong> metadata 驅動前台{' '}
+          <strong>權限感知檢索</strong>（F033，過濾於檢索層而非生成後）。
         </p>
       </div>
 
-      {notice && (
-        <div role="status" className={`text-sm border rounded-md px-3 py-2 ${TONE_BADGE[notice.tone]}`}>
-          {notice.text}
-        </div>
-      )}
-
       {/* 彙總卡 */}
-      <div role="group" aria-label="索引狀態彙總" className="grid grid-cols-3 gap-3">
+      <div role="group" aria-label="索引狀態彙總" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {summaryCards.map((c) => (
           <button
             key={c.key}
@@ -244,6 +241,7 @@ export function DocIndexPage(): JSX.Element {
           <option value="success">成功</option>
           <option value="running">建置中</option>
           <option value="failed">失敗</option>
+          <option value="not_built">尚未建立</option>
         </select>
         <span className="ml-auto text-sm text-slate-500">{overview ? `共 ${overview.total} 份文件` : ''}</span>
       </div>
@@ -251,10 +249,11 @@ export function DocIndexPage(): JSX.Element {
       {/* 清單 */}
       <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[820px]">
+          <table className="w-full text-sm min-w-[920px]">
             <thead className="bg-slate-50 text-slate-500 text-xs">
               <tr>
                 <th className="text-left font-medium px-4 py-2.5">文件編號 / 名稱</th>
+                <th className="text-left font-medium px-4 py-2.5">.xls 原件</th>
                 <th className="text-left font-medium px-4 py-2.5">索引狀態</th>
                 <th className="text-left font-medium px-4 py-2.5">chunk 數</th>
                 <th className="text-left font-medium px-4 py-2.5">最後索引時間</th>
@@ -271,12 +270,27 @@ export function DocIndexPage(): JSX.Element {
                       {r.documentName && <div className="font-medium text-slate-800">{r.documentName}</div>}
                     </td>
                     <td className="px-4 py-3">
+                      {r.hasXls === true ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+                          <Icon name="file-spreadsheet" className="w-3.5 h-3.5" />有
+                        </span>
+                      ) : r.hasXls === false ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-slate-400">
+                          <Icon name="file-x" className="w-3.5 h-3.5" />無
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border ${meta.tone}`}>
                         <Icon name={meta.icon} className="w-3 h-3" />
                         {meta.label}
                       </span>
-                      {r.state === 'failed' && r.errorStage && (
-                        <div className="text-[10px] mono text-red-400 mt-1">{STAGE_LABEL[r.errorStage] ?? r.errorStage}</div>
+                      {r.state === 'failed' && (r.errorCode || r.errorStage) && (
+                        <div className="text-[10px] mono text-red-400 mt-1">
+                          {r.errorCode ?? STAGE_LABEL[r.errorStage as string] ?? r.errorStage}
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-3 mono text-slate-700">
@@ -285,6 +299,11 @@ export function DocIndexPage(): JSX.Element {
                     <td className="px-4 py-3 mono text-xs text-slate-500">{formatDateTime(r.lastIndexedAt)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
+                        {r.state === 'not_built' && (
+                          <span className="text-xs text-slate-400 mr-1">
+                            {r.hasXls === false ? '請先上傳 .xls' : '待建立索引'}
+                          </span>
+                        )}
                         {(r.state === 'success' || r.state === 'failed') && (
                           <button
                             onClick={() => void openPreview(r)}
@@ -294,15 +313,25 @@ export function DocIndexPage(): JSX.Element {
                             {r.state === 'failed' ? '查看失敗詳情' : '檢視提取結果'}
                           </button>
                         )}
-                        {canWrite && r.state !== 'running' && (
-                          <button
-                            onClick={() => setConfirmRow(r)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-primary-600 text-white text-xs hover:bg-primary-700"
-                          >
-                            <Icon name="refresh-cw" className="w-3.5 h-3.5" />
-                            重新索引
-                          </button>
-                        )}
+                        {canWrite &&
+                          r.hasXls !== false &&
+                          (r.state === 'running' ? (
+                            <button
+                              disabled
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-slate-200 text-xs text-slate-400"
+                            >
+                              <Icon name="loader" className="w-3.5 h-3.5 animate-spin" />
+                              建置中
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmRow(r)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-primary-600 text-white text-xs hover:bg-primary-700"
+                            >
+                              <Icon name="refresh-cw" className="w-3.5 h-3.5" />
+                              重新索引
+                            </button>
+                          ))}
                       </div>
                     </td>
                   </tr>
@@ -361,6 +390,8 @@ export function DocIndexPage(): JSX.Element {
                   <dl className="mt-3 text-sm grid grid-cols-1 sm:grid-cols-3 gap-y-2">
                     <dt className="text-slate-400">失敗階段</dt>
                     <dd className="sm:col-span-2 text-slate-700">{previewStatus.stageLabel ?? previewStatus.errorStage ?? '—'}</dd>
+                    <dt className="text-slate-400">錯誤碼</dt>
+                    <dd className="sm:col-span-2 mono text-red-600">{previewStatus.errorCode ?? '—'}</dd>
                     <dt className="text-slate-400">錯誤訊息</dt>
                     <dd className="sm:col-span-2 text-slate-700 leading-6">{previewStatus.errorMessage ?? '—'}</dd>
                   </dl>
@@ -389,7 +420,7 @@ export function DocIndexPage(): JSX.Element {
                   <div className="flex items-start gap-2 rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500">
                     <Icon name="sparkles" className="w-3.5 h-3.5 mt-0.5 text-primary-500 shrink-0" />
                     <span>
-                      共 <strong className="text-slate-700">{previewChunks?.length ?? 0}</strong> 個 chunk（依「節」切分，每 chunk 對應一個完整作業步驟）。
+                      共 <strong className="text-slate-700">{previewChunks?.length ?? 0}</strong> 個 chunk（依「節」切分，每 chunk 對應一個完整作業步驟）。已清洗頁首頁尾／簽核區／合併儲存格空白／流程圖繪製格；「作業內容」跨列合併已接合為完整段落。
                     </span>
                   </div>
                   {(previewChunks ?? []).map((ck) => (
@@ -402,7 +433,7 @@ export function DocIndexPage(): JSX.Element {
                       <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t border-slate-100 text-[10px]">
                         <span className="text-slate-400">metadata：</span>
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">狀態 {ck.status}</span>
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 mono">{ck.documentNumber}</span>
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">{ck.lifecycleName ?? ck.documentNumber}</span>
                         <span className="text-slate-400">使用部門</span>
                         {ck.usingDeptIds.map((u) => (
                           <span key={u} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{u}</span>
@@ -410,6 +441,9 @@ export function DocIndexPage(): JSX.Element {
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 mono">版次 {ck.edition}</span>
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 mono">公告 {ck.announcedDate ?? '—'}</span>
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 mono">頁次 p.{ck.pageNumber}</span>
+                        {ck.chunkId && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 mono">{ck.chunkId}</span>
+                        )}
                       </div>
                     </div>
                   ))}
