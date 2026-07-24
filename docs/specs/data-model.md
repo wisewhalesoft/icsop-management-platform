@@ -283,11 +283,13 @@ status: Draft
 | triggerType | `scheduled` / `manual` | 是 |
 | startedAt / endedAt | 開始/結束時間 | startedAt 是 |
 | status | `running` / `success` / `failed` | 是 |
-| changeCount | 異動筆數 | 是 |
+| changeCount | 異動筆數（綜合） | 是 |
+| createdCount / updatedCount / disabledCount | 新增/更新（部門·職級）/離職停用 三分類統計（F006 KPI；nullable，遷移前歷史以 0 計） | 否 |
 | errorMessage | 失敗訊息（nullable） | 否 |
 | triggeredBy | 觸發者帳號（手動時） | 否 |
 
 - 同一時間至多一筆 `running`（互斥鎖，F004）。
+- 三分類統計欄由 migration `1722902400000-sync-run-account-stats` 追加（皆 nullable int）；`GET /admin/org-sync/monthly-summary` 以 `COALESCE(SUM(COALESCE(col,0)),0)` 聚合，全 NULL 歷史回 0。
 - **相關功能**：F004、F006。
 
 ## 組織異動待確認提示 ORG_CHANGE_ALERT {#orgchangealert-entity}
@@ -295,15 +297,22 @@ status: Draft
 | 屬性 | 說明 | 必填 |
 |------|------|------|
 | id | 系統 UUID | 是 |
-| documentId | 受影響文件 | 是 |
-| changeType | 異動類型（部門異動/職級異動/轉調…） | 是 |
-| affectedField | 受影響欄位（制定公司/制定部門/制定室別/當責室長-主要/次要/使用部門） | 是 |
+| alertKind | 判別：`DOCUMENT_FIELD`（文件欄位受影響）/ `CLOSED_DEPT_PERSON`（在職者掛已關閉部門，契約 §7.3） | 是 |
+| documentId | 受影響文件 | **條件必填**（`DOCUMENT_FIELD` 必填；`CLOSED_DEPT_PERSON` 為 null，該類無對應文件） |
+| documentName | 文件名稱快照（供卡片顯示，免二次 join） | 否 |
+| changeType | 異動類型（部門異動/轉調/不再任該單位室長…） | 否 |
+| affectedField | 受影響欄位（制定公司/制定部門/制定室別/當責室長-主要/次要/使用部門） | 條件必填（同 documentId） |
 | beforeValue / afterValue | 異動前後差異 | 否 |
+| personEmployeeNo / personName | 人員（`CLOSED_DEPT_PERSON` 類） | 條件必填 |
+| deptOrgCode / deptName / deptCloseDate | 所掛已關閉部門代碼/名稱/關閉日（`CLOSED_DEPT_PERSON` 類） | 條件必填 |
 | status | `pending` / `resolved` | 是 |
 | createdAt | 產生時間 | 是 |
+| sourceSyncRunId | 產生此提示之同步執行 | 否 |
 | resolvedBy / resolvedAt | 處理者/時間 | 否 |
 
-- 提示為**非強制**，不自動覆寫文件當責設定（F006 AC2）。
+- 單表＋`alertKind` 判別，兩類共用同一生命週期（status/resolvedBy/resolvedAt）並於待確認清單交錯呈現。
+- **dedup**：未處理之 `pending` 不因後續同步重複產生。dedup key＝`DOCUMENT_FIELD` 為 `(documentId, affectedField)`、`CLOSED_DEPT_PERSON` 為 `personEmployeeNo`；服務層查詢先擋＋DB filtered unique index 二線（比照 F013，int-verified）。
+- 提示為**非強制**，不自動覆寫文件當責設定、不停用帳號（F006 AC2/AC9）。
 - **相關功能**：F006、F014。
 
 ## 稽核紀錄 AUDIT_LOG {#auditlog-entity}
@@ -317,15 +326,16 @@ status: Draft
 | employeeNo / name / department / section | 操作者身分快照（與浮水印同一來源） | 是 |
 | documentId / documentNumber | 被調閱文件（**條件必填**：`targetType∈{DOCUMENT, USAGE_FORM, DOCUMENT_CHANGE_LOG}` 時必填，其餘為 null） | 否 |
 | lifecycleId / lifecycleName | 被調閱循環（**新增**；**條件必填**：`targetType∈{LIFECYCLE, LIFECYCLE_CHANGE_LOG}` 時必填，其餘為 null） | 否 |
-| targetType | `DOCUMENT` / `USAGE_FORM` / `LIFECYCLE`（**新增**，F036 循環樹狀圖）/ `DOCUMENT_CHANGE_LOG`（**新增**，F037 變更歷程）/ `LIFECYCLE_CHANGE_LOG`（**新增**，F038 循環變更歷程） | 是 |
+| targetType | `DOCUMENT` / `USAGE_FORM` / `LIFECYCLE`（F036 循環樹狀圖）/ `DOCUMENT_CHANGE_LOG`（F037 變更歷程）/ `LIFECYCLE_CHANGE_LOG`（F038 循環變更歷程）/ `ORG_CHANGE_ALERT`（**新增**，F006 組織異動提示處理） | 是 |
 | formId | 使用表單附件（targetType=USAGE_FORM 時） | 否 |
-| actionType | `VIEW` / `DOWNLOAD` / `PRINT`（既有，`targetType=DOCUMENT/USAGE_FORM` 適用）／`LIFECYCLE_VIEW` / `LIFECYCLE_DOWNLOAD` / `LIFECYCLE_PRINT`（**新增**，`targetType=LIFECYCLE`，F036）／`CHANGE_LOG_VIEW`（**新增**，`targetType=DOCUMENT_CHANGE_LOG`，F037）／`LIFECYCLE_CHANGELOG_VIEW` / `LIFECYCLE_CHANGELOG_DOWNLOAD`（**新增**，`targetType=LIFECYCLE_CHANGE_LOG`，F038） | 是 |
+| actionType | `VIEW` / `DOWNLOAD` / `PRINT`（既有，`targetType=DOCUMENT/USAGE_FORM` 適用）／`LIFECYCLE_VIEW` / `LIFECYCLE_DOWNLOAD` / `LIFECYCLE_PRINT`（`targetType=LIFECYCLE`，F036）／`CHANGE_LOG_VIEW`（`targetType=DOCUMENT_CHANGE_LOG`，F037）／`LIFECYCLE_CHANGELOG_VIEW` / `LIFECYCLE_CHANGELOG_DOWNLOAD`（`targetType=LIFECYCLE_CHANGE_LOG`，F038）／`ALERT_RESOLVED`（**新增**，`targetType=ORG_CHANGE_ALERT`，F006 提示解除） | 是 |
 | watermarkSnapshot | 當次浮水印完整字串快照（`DOWNLOAD`/`PRINT` 系列動作皆須填；純 `VIEW` 系列亦填，與檢視器疊加一致） | 是 |
 | occurredAt | 伺服器時間戳記 | 是 |
 | source | `DIRECT`(一般前台路徑) / `AI_QA`(經 AI 智慧問答導引)，預設 `DIRECT`（E09 US-097） | 是 |
 | qaLogId | 觸發此次調閱之問答事件（→ QA_LOG，`source=AI_QA` 時有值） | 否 |
 
 - 身分/時間快照須與該次浮水印內容**完全一致**（F020、F023）。
+- **`ORG_CHANGE_ALERT` 之限制（F006）**：本表無 `alertId` 外鍵欄，`targetType=ORG_CHANGE_ALERT` 之解除稽核僅落 `targetNumber`/`targetName`（文件編號/名稱或人員資訊），未落 alert 主鍵。刻意不 ALTER 共用 AUDIT_LOG schema；如需以 alertId 反查稽核，屬後續 schema 決策。
 - **問答事件本身**（提問→回答）記於 [QA_LOG](#qalog-entity)，非以 `actionType` 表示；經 AI 問答導引之檢視/下載仍寫本表，並以 `source=AI_QA`＋`qaLogId` 標示來源（F034）。
 - **[OQ-E07-02 已定案 ✅，system-architect 2026-07-17]** 循環樹狀圖預覽（[F036](features/F036-lifecycle-tree-preview.md)）之檢視/下載/列印、變更歷程（[F037](features/F037-document-change-history.md)／[F038](features/F038-lifecycle-tree-change-history.md)）之查詢檢視/下載，皆屬「**調閱/存取事件**」（誰在何時存取了什麼），與既有 VIEW/DOWNLOAD/PRINT 語意一致，**擴充本表**（`targetType`＋`actionType` 各新增列舉值，見上）而非另建稽核表；三個 feature（F036/F037/F038）共用同一組決策，家族一致。決策理由：(1) 這些動作的資料形狀（操作者/時間/被存取對象/浮水印快照）與既有 VIEW/DOWNLOAD/PRINT 完全同構，另建表僅為重複 schema；(2) `documentId`/`lifecycleId` 皆改為條件必填（依 `targetType` 二擇一），不強迫每列填滿兩組外鍵；(3) `actionType` 沿用 feature spec 既有文字定義之草案動作名（`CHANGE_LOG_VIEW` 等）逐字落地，不重新發明命名以維持與已核准 spec 文件（F036/F037/F038 AC、US-062/US-063 AC）之字面一致性，降低下游 test-designer/tdd-developer 之轉譯落差風險。
 - **[OQ-E07-02 已定案 ✅]** 變更歷程記錄的是「**資料異動事件**」本體（欄位/結構層 old→new diff），與上述「調閱事件」性質不同（前者是「什麼被改了」，後者是「誰看了什麼」），**不併入本表**，另建獨立實體 [DOCUMENT_CHANGE_LOG](#documentchangelog-entity)、[LIFECYCLE_CHANGE_LOG](#lifecyclechangelog-entity)、[LIFECYCLE_SNAPSHOT](#lifecyclesnapshot-entity)（詳見下方「變更歷程相關實體」）。不併表理由：(1) 欄位形狀截然不同（`fieldName`/`oldValue`/`newValue` 或 `changeType`/`entityType`/`beforeValue`/`afterValue` vs 本表之 `actionType`/`watermarkSnapshot`），併表將產生大量依 `targetType` 才有意義的稀疏可空欄位（polymorphic 反樣式），複雜化本表既有查詢；(2) 一致性模型不同——本表為 Outbox 非阻斷寫入（§5.5），變更歷程須與來源交易強一致（見 architecture-spec.md §5.9，遺失即等同稽核造假，不可退化為 best-effort）；(3) 獨立表使 [OQ-NFR003](open-questions.md) 之「變更歷程是否需獨立保留政策」在不修改本表結構前提下即可彈性套用不同歸檔策略。
