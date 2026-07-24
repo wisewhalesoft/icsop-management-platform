@@ -1,5 +1,5 @@
 # F020: 文件浮水印（網頁疊加＋下載/列印燒錄）
-Priority: P0-MVP | Status: 部分（unit 綠；快照/稽核/端點完成；**CJK 燒錄字型已補**（@pdf-lib/fontkit + Noto Sans TC 嵌入，asciiSafe '□'→'?' bug 修正，見 implementation-log/F036-impl.md）；真實中文 PDF 視覺/位元組/效能驗證仍 [integration]） | Last Updated: 2026-07-23
+Priority: P0-MVP | Status: 部分（unit 綠；快照/稽核/端點完成；**CJK 燒錄字型已補**（@pdf-lib/fontkit + Noto Sans TC 嵌入，asciiSafe '□'→'?' bug 修正，見 implementation-log/F036-impl.md）；**<3s 燒錄計時已補 int 迴歸測試**（`test/int/watermark-burn-timing.itest.ts`，TS-HD-WM-001/002 取代 TS-F020-028 佔位；暖機後 10 頁 CJK 燒錄本機實測 ≈250ms ≪ 3s NFR，門檻設 8000ms 迴歸警戒線）；真實中文 PDF 視覺/位元組驗證仍 [integration]） | Last Updated: 2026-07-24
 Epic/Story: E06 / US-053, US-054
 
 > 合併理由：網頁檢視器疊加（US-053）與下載/列印 PDF 燒錄（US-054）共用同一浮水印內容產生邏輯與稽核觸發，須格式完全一致。

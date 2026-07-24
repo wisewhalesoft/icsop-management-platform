@@ -79,6 +79,23 @@ describe('LoginPage — 途徑 B 帳密登入（F001）', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  it('登入嘗試過多（429 AUTH_TOO_MANY_ATTEMPTS）→ 顯示節流訊息，不刷新 session', async () => {
+    vi.mocked(endpoints.passwordLogin).mockRejectedValue(
+      new ApiError(429, 'AUTH_TOO_MANY_ATTEMPTS'),
+    );
+    render(<LoginPage />);
+
+    await userEvent.click(screen.getByRole('button', { name: /使用管理員帳號登入/ }));
+    await userEvent.type(screen.getByLabelText(/帳號/), 'mgr01');
+    await userEvent.type(screen.getByLabelText(/密碼/), 'S3cret!');
+    await userEvent.click(screen.getByRole('button', { name: /以管理員帳號登入/ }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/嘗試次數過多/)).toBeInTheDocument(),
+    );
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   it('帳號或密碼未填 → 送出鈕停用（不呼叫後端）', async () => {
     render(<LoginPage />);
     await userEvent.click(screen.getByRole('button', { name: /使用管理員帳號登入/ }));
