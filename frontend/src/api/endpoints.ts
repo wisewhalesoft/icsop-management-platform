@@ -344,6 +344,30 @@ export function uploadOjtAttachment(
   );
 }
 
+/**
+ * GET /admin/documents/:documentId/attachments（F016 附件清單，ICSOP文件管理 read）。
+ * 固定序 ICSOP_PDF→OJT_SIGNIN，缺者不列；查無文件→404 DOCUMENT_NOT_FOUND。
+ */
+export function getDocumentAttachments(
+  documentId: string,
+): Promise<DocumentAttachmentRecord[]> {
+  return apiFetch<DocumentAttachmentRecord[]>(
+    `/admin/documents/${documentId}/attachments`,
+  );
+}
+
+/**
+ * GET /documents/attachments/download?blobPath=（F016 受控下載；核發短效期 URL＋寫入稽核）。
+ * 失效/非現存參照 → FILE_ACCESS_DENIED。
+ */
+export function downloadAttachment(
+  blobPath: string,
+): Promise<{ url: string; expiresInSeconds: number }> {
+  return apiFetch(
+    `/documents/attachments/download?blobPath=${encodeURIComponent(blobPath)}`,
+  );
+}
+
 /** GET /admin/usage-forms（F018 表單池清單，USAGE_FORM_MANAGEMENT read）。 */
 export function getUsageFormPool(): Promise<UsageFormRecord[]> {
   return apiFetch<UsageFormRecord[]>('/admin/usage-forms');

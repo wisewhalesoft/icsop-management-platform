@@ -3,6 +3,7 @@ import { IcsopDocument } from '../database/entities/icsop-document.entity';
 import { DocSecondaryChief } from '../database/entities/doc-secondary-chief.entity';
 import { DocUsingDept } from '../database/entities/doc-using-dept.entity';
 import { Lifecycle } from '../database/entities/lifecycle.entity';
+import { chunkByParamBudget } from '../org-sync/param-batching';
 import { normalizeIdList } from './document-org-fields';
 import { NumberHolder } from './document-rules';
 import { DocumentStatus, isValidStatus } from './document-status';
@@ -15,6 +16,7 @@ import {
   DocumentListFilters,
   DocumentListItem,
   DocumentListPage,
+  DocumentSummary,
 } from './documents.store';
 
 /**
@@ -237,6 +239,10 @@ export class TypeOrmDocumentStore implements DocumentStore {
       edition: d.edition,
       announcedDate: d.announcedDate ? d.announcedDate.toISOString() : null,
       contentSummary: d.contentSummary,
+      // F017 富化欄之基線（無附件/無連結）；由 DocumentsService 以批次注入覆寫。
+      icsopPdfBlobPath: null,
+      icsopPdfFileName: null,
+      links: [],
     }));
 
     const hasNext = (page - 1) * pageSize + items.length < total;
@@ -251,6 +257,30 @@ export class TypeOrmDocumentStore implements DocumentStore {
     return TypeOrmDocumentStore.toView(d, mv.secondaryChiefIds, mv.usingDeptIds);
   }
 
+  /** F017 清單富化：批次取連結目標之摘要。⚠ MSSQL 2100 參數上限 → 單欄 IN 切批（每批 ≤1000）。 */
+  async findSummaries(ids: string[]): Promise<DocumentSummary[]> {
+    const keys = [...new Set(ids.filter(Boolean))];
+    if (keys.length === 0) return [];
+    const ds = await this.init();
+    const repo = ds.getRepository(IcsopDocument);
+    const out: DocumentSummary[] = [];
+    for (const batch of chunkByParamBudget(keys, 1, 1000)) {
+      const rows = await repo.find({
+        where: { id: In(batch) },
+        select: { id: true, documentNumber: true, documentName: true, status: true },
+      });
+      out.push(
+        ...rows.map((r) => ({
+          id: r.id,
+          documentNumber: r.documentNumber,
+          documentName: r.documentName,
+          status: r.status as DocumentStatus,
+        })),
+      );
+    }
+    return out;
+  }
+
   async updateStatus(id: string, status: DocumentStatus): Promise<void> {
     const ds = await this.init();
     await ds
@@ -260,7 +290,6 @@ export class TypeOrmDocumentStore implements DocumentStore {
 
   async update(id: string, patch: DocumentPatch): Promise<DocumentView> {
     const ds = await this.init();
-    const repo = ds.getRepository(IcsopDocument);
     // 僅覆寫 patch 觸及之欄位（部分更新）；日期字串強制轉 Date；恆更新 updatedAt。
     const set: Record<string, unknown> = { updatedAt: new Date() };
     const assign = (k: keyof DocumentPatch) => {
@@ -281,11 +310,40 @@ export class TypeOrmDocumentStore implements DocumentStore {
       ] as (keyof DocumentPatch)[]
     ).forEach(assign);
     if ('announcedDate' in patch) set.announcedDate = coerceDate(patch.announcedDate);
-    await repo.update({ id }, set);
-    const row = await repo.findOne({ where: { id } });
-    if (!row) throw new Error('DOCUMENT_NOT_FOUND');
-    // F014 多值於編輯路徑不變更（create-side only）；讀回現有集合以回傳完整檢視。
-    const mv = await TypeOrmDocumentStore.loadMultiValue(ds, id);
-    return TypeOrmDocumentStore.toView(row, mv.secondaryChiefIds, mv.usingDeptIds);
+
+    // 純量覆寫 ＋ F014 多值 replace-set 於同一交易（比照 create()），確保兩者同進退。
+    return ds.transaction(async (m) => {
+      const repo = m.getRepository(IcsopDocument);
+      await repo.update({ id }, set);
+
+      // F014 編輯側多值持久化：帶鍵才動（未帶鍵＝不觸碰既有集合）。
+      // 採 delete-then-insert 全量取代（非差集）：關聯列 id 為代理鍵、無下游 FK 參照，
+      // 且前端隨 PATCH 整批送出，全量取代最單純、無邊界遺漏。
+      if ('secondaryChiefIds' in patch) {
+        const chiefRepo = m.getRepository(DocSecondaryChief);
+        await chiefRepo.delete({ documentId: id });
+        const chiefs = normalizeIdList(patch.secondaryChiefIds);
+        if (chiefs.length > 0) {
+          await chiefRepo.save(
+            chiefs.map((employeeNo) => chiefRepo.create({ documentId: id, employeeNo })),
+          );
+        }
+      }
+      if ('usingDeptIds' in patch) {
+        const deptRepo = m.getRepository(DocUsingDept);
+        await deptRepo.delete({ documentId: id });
+        const depts = normalizeIdList(patch.usingDeptIds);
+        if (depts.length > 0) {
+          await deptRepo.save(
+            depts.map((orgCode) => deptRepo.create({ documentId: id, orgCode })),
+          );
+        }
+      }
+
+      const row = await repo.findOne({ where: { id } });
+      if (!row) throw new Error('DOCUMENT_NOT_FOUND');
+      const mv = await TypeOrmDocumentStore.loadMultiValue(m, id);
+      return TypeOrmDocumentStore.toView(row, mv.secondaryChiefIds, mv.usingDeptIds);
+    });
   }
 }

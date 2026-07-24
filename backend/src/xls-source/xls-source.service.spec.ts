@@ -60,6 +60,12 @@ class FakeAttachmentStore implements AttachmentStore {
       this.rows.find((r) => r.documentId === documentId && r.type === type) ?? null,
     );
   }
+  findManyByType(documentIds: string[], type: SingleAttachmentType) {
+    const set = new Set(documentIds);
+    return Promise.resolve(
+      this.rows.filter((r) => r.type === type && set.has(r.documentId)),
+    );
+  }
   upsertSingle(input: UpsertAttachmentInput) {
     const idx = this.rows.findIndex(
       (r) => r.documentId === input.documentId && r.type === input.type,

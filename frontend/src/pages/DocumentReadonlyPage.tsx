@@ -7,8 +7,10 @@ import {
   getLifecycles,
   getOrgUnits,
   getDocumentForms,
+  getDocumentAttachments,
   searchPersons,
   downloadUsageForm,
+  downloadAttachment,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
@@ -21,6 +23,7 @@ import type {
   LifecycleView,
   OrgUnitRecord,
   UsageFormRecord,
+  DocumentAttachmentRecord,
 } from '../api/types';
 
 /**
@@ -28,7 +31,8 @@ import type {
  * 16 欄位唯讀呈現＋附件（使用表單）僅下載（伺服器端燒錄浮水印並寫入稽核）。
  * RBAC：ICSOP文件管理 read（SysAdmin/ICSOPAdmin/Supervisor/DeptContact）可檢視；ICSOPAdmin 另顯示
  * 「前往編輯」；User→403。名稱解析：組織經 /org-units、當責室長經 /persons（best-effort，查無回員編）。
- * 已知後端缺口：ICSOP PDF／OJT 附件無列表端點 → 僅列出使用表單（getDocumentForms）之下載。
+ * 附件清單＝ICSOP PDF → OJT 實體簽到表 → 使用表單（合併同一清單，缺者不列）；僅 ICSOP PDF 標示
+ * 「下載燒錄浮水印」。ICSOP PDF／OJT 走受控下載端點（blobPath），使用表單走 F018 既有下載端點。
  */
 const STATUS_META: Record<DocumentStatus, { label: string; cls: string }> = {
   active: { label: '有效', cls: 'text-emerald-700 bg-emerald-50' },
@@ -37,6 +41,16 @@ const STATUS_META: Record<DocumentStatus, { label: string; cls: string }> = {
 };
 const msgOf = (e: unknown) =>
   e instanceof ApiError && e.code === 'DOCUMENT_NOT_FOUND' ? '找不到文件' : '載入失敗';
+
+/** 附件合併清單之標籤與排序（prototype 16 renderAttach）。 */
+const ATTACH_LABEL: Record<DocumentAttachmentRecord['type'], string> = {
+  ICSOP_PDF: '檔案（ICSOP PDF）',
+  OJT_SIGNIN: 'OJT 實體簽到表',
+};
+const ATTACH_ORDER: Record<DocumentAttachmentRecord['type'], number> = {
+  ICSOP_PDF: 0,
+  OJT_SIGNIN: 1,
+};
 
 export function DocumentReadonlyPage(): JSX.Element {
   const { id = '' } = useParams();
@@ -53,6 +67,7 @@ export function DocumentReadonlyPage(): JSX.Element {
   const [lifecycles, setLifecycles] = useState<LifecycleView[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
   const [forms, setForms] = useState<UsageFormRecord[]>([]);
+  const [attachments, setAttachments] = useState<DocumentAttachmentRecord[]>([]);
   const [personNames, setPersonNames] = useState<Map<string, string>>(new Map());
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -66,6 +81,7 @@ export function DocumentReadonlyPage(): JSX.Element {
       void getLifecycles().then(setLifecycles).catch(() => undefined);
       void getOrgUnits().then(setOrgUnits).catch(() => undefined);
       void getDocumentForms(id).then(setForms).catch(() => undefined);
+      void getDocumentAttachments(id).then(setAttachments).catch(() => undefined);
       // 當責室長姓名 best-effort 解析（單筆讀取僅回員編；PERSON 表為已知限制，查無回員編）。
       const chiefIds = [...new Set([v.primaryChiefId, ...v.secondaryChiefIds].filter((x): x is string => !!x))];
       if (chiefIds.length) {
@@ -127,6 +143,17 @@ export function DocumentReadonlyPage(): JSX.Element {
     [id],
   );
 
+  /** ICSOP PDF／OJT：走受控下載端點（blobPath）；浮水印與否由伺服器端依 F020 決定。 */
+  const onDownloadAttachment = useCallback(async (blobPath: string, name: string) => {
+    try {
+      const grant = await downloadAttachment(blobPath);
+      window.open(grant.url, '_blank', 'noopener,noreferrer');
+      setNotice(`下載「${name}」（已寫入稽核 DOWNLOAD）`);
+    } catch {
+      setNotice(`無法下載「${name}」`);
+    }
+  }, []);
+
   if (!canRead) {
     return (
       <div className="max-w-4xl mx-auto bg-white border border-slate-200 rounded-xl px-6 py-16 text-center">
@@ -163,6 +190,37 @@ export function DocumentReadonlyPage(): JSX.Element {
   const statusPill = (s: DocumentStatus) => (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_META[s].cls}`}>{STATUS_META[s].label}</span>
   );
+
+  /**
+   * 附件合併清單（prototype 16 renderAttach 之 items 順序與 wm 旗標）：
+   * 檔案（ICSOP PDF）→ OJT 實體簽到表 → 使用表單 ×N；缺者不列。
+   * 「下載燒錄浮水印」徽章僅標示於 ICSOP PDF（伺服器端燒錄，前端不帶旗標）。
+   */
+  const attachItems: {
+    key: string; label: string; name: string; icon: string; iconClass: string;
+    watermark: boolean; onDownload: () => void;
+  }[] = [
+    ...[...attachments]
+      .sort((a, b) => ATTACH_ORDER[a.type] - ATTACH_ORDER[b.type])
+      .map((a) => ({
+        key: a.id,
+        label: ATTACH_LABEL[a.type],
+        name: a.fileName,
+        icon: 'file-text',
+        iconClass: 'text-red-500',
+        watermark: a.type === 'ICSOP_PDF',
+        onDownload: () => void onDownloadAttachment(a.blobPath, a.fileName),
+      })),
+    ...forms.map((f) => ({
+      key: f.id,
+      label: '使用表單',
+      name: f.name,
+      icon: 'sheet',
+      iconClass: 'text-emerald-600',
+      watermark: false,
+      onDownload: () => void onDownloadForm(f.id, f.name),
+    })),
+  ];
 
   const ROWS: { label: string; note?: string; value: React.ReactNode }[] = [
     { label: '系統 UUID', note: '系統產生', value: <span className="mono text-slate-500">{view.id}</span> },
@@ -250,7 +308,7 @@ export function DocumentReadonlyPage(): JSX.Element {
         </dl>
       </section>
 
-      {/* 附件（僅下載） — 使用表單 */}
+      {/* 附件（僅下載） — ICSOP PDF ／ OJT 實體簽到表 ／ 使用表單（合併清單，prototype 16 renderAttach） */}
       <section className="bg-white border border-slate-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-1">
           <Icon name="paperclip" className="w-4 h-4 text-primary-600" />
@@ -261,24 +319,21 @@ export function DocumentReadonlyPage(): JSX.Element {
           下載/列印時伺服器端<strong className="text-slate-500">燒錄浮水印</strong>並寫入稽核；無上傳/取代入口。
         </p>
         <div className="space-y-2">
-          {forms.length ? forms.map((f) => (
-            <div key={f.id} className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5">
-              <Icon name="sheet" className="w-5 h-5 text-emerald-600 shrink-0" />
+          {attachItems.map((a) => (
+            <div key={a.key} className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5">
+              <Icon name={a.icon} className={`w-5 h-5 ${a.iconClass} shrink-0`} />
               <div className="min-w-0 flex-1">
-                <div className="text-xs text-slate-400">使用表單</div>
-                <div className="text-sm text-slate-700 truncate">{f.name}</div>
+                <div className="text-xs text-slate-400">{a.label}</div>
+                <div className="text-sm text-slate-700 truncate">{a.name}</div>
               </div>
-              <button onClick={() => void onDownloadForm(f.id, f.name)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0">
+              {a.watermark && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">下載燒錄浮水印</span>
+              )}
+              <button onClick={a.onDownload} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0">
                 <Icon name="download" className="w-3.5 h-3.5" />下載
               </button>
             </div>
-          )) : (
-            <p className="text-sm text-slate-400">尚無關聯使用表單。</p>
-          )}
-          <p className="text-[10px] text-slate-400 flex items-start gap-1.5 pt-1">
-            <Icon name="info" className="w-3.5 h-3.5 mt-px" />
-            <span>ICSOP PDF／OJT 簽到表附件之列示待附件列表端點就緒；目前僅列出關聯之使用表單。</span>
-          </p>
+          ))}
         </div>
       </section>
       <div className="h-4" />

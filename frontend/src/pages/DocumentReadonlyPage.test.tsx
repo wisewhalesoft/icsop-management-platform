@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { DocumentReadonlyPage } from './DocumentReadonlyPage';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import type {
-  SessionUser, DocumentView, DocumentLinkView, LifecycleView, OrgUnitRecord, PersonRecord, UsageFormRecord,
+  SessionUser, DocumentView, DocumentLinkView, LifecycleView, OrgUnitRecord, PersonRecord,
+  UsageFormRecord, DocumentAttachmentRecord,
 } from '../api/types';
 
 const navigateMock = vi.fn();
@@ -52,6 +53,22 @@ const PERSONS: PersonRecord[] = [{ employeeNo: '20050', name: '陳彥廷', orgCo
 const FORMS: UsageFormRecord[] = [
   { id: 'f1', name: '進件申請書.xlsx', blobPath: 'usage-forms/f1.xlsx', format: 'xlsx', size: 1024, uploadedBy: 'u', uploadedAt: '2026-06-01T00:00:00.000Z' },
 ];
+const FORMS2: UsageFormRecord[] = [
+  ...FORMS,
+  { id: 'f2', name: '支票託收登記表.xlsx', blobPath: 'usage-forms/f2.xlsx', format: 'xlsx', size: 2048, uploadedBy: 'u', uploadedAt: '2026-06-01T00:00:00.000Z' },
+];
+const att = (over: Partial<DocumentAttachmentRecord>): DocumentAttachmentRecord => ({
+  id: 'a1', documentId: 'd1', type: 'ICSOP_PDF', fileName: '車輛分期進件作業_v1.3.pdf',
+  blobPath: 'documents/d1/icsop_pdf/abc.pdf', contentType: 'application/pdf', size: 1024,
+  uploadedBy: 'admin', uploadedAt: '2026-06-01T00:00:00.000Z', ...over,
+});
+const ATTACHMENTS: DocumentAttachmentRecord[] = [
+  att({}),
+  att({ id: 'a2', type: 'OJT_SIGNIN', fileName: '車輛分期進件作業_OJT簽到表.pdf', blobPath: 'documents/d1/ojt_signin/ojt.pdf' }),
+];
+/** 附件列（prototype 16 renderAttach 之單列）：自檔名往上找該列容器。 */
+const attachRow = (fileName: string) =>
+  screen.getByText(fileName).closest('div.rounded-lg') as HTMLElement;
 
 const renderPage = () => render(<MemoryRouter><DocumentReadonlyPage /></MemoryRouter>);
 
@@ -63,6 +80,8 @@ function setupMocks() {
   vi.mocked(endpoints.getDocumentForms).mockResolvedValue(FORMS);
   vi.mocked(endpoints.searchPersons).mockResolvedValue(PERSONS);
   vi.mocked(endpoints.downloadUsageForm).mockResolvedValue({ url: 'https://blob/x', expiresInSeconds: 300 });
+  vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([]);
+  vi.mocked(endpoints.downloadAttachment).mockResolvedValue({ url: 'https://blob/a', expiresInSeconds: 300 });
 }
 
 describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', () => {
@@ -120,5 +139,75 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
     await userEvent.click(screen.getByRole('button', { name: /下載/ }));
     await waitFor(() => expect(endpoints.downloadUsageForm).toHaveBeenCalledWith('d1', 'f1'));
     expect(openMock).toHaveBeenCalledWith('https://blob/x', '_blank', 'noopener,noreferrer');
+  });
+
+  describe('附件（僅下載）三類合併清單（prototype 16 renderAttach）', () => {
+    it('TS-D-011 ICSOP PDF／OJT／使用表單依序渲染，僅 ICSOP PDF 有「下載燒錄浮水印」徽章', async () => {
+      mockAuth('Supervisor');
+      vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue(ATTACHMENTS);
+      vi.mocked(endpoints.getDocumentForms).mockResolvedValue(FORMS2);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+
+      const labels = screen
+        .getAllByText(/^(檔案（ICSOP PDF）|OJT 實體簽到表|使用表單)$/)
+        .map((e) => e.textContent);
+      expect(labels).toEqual(['檔案（ICSOP PDF）', 'OJT 實體簽到表', '使用表單', '使用表單']);
+
+      expect(screen.getByText('車輛分期進件作業_OJT簽到表.pdf')).toBeInTheDocument();
+      expect(screen.getByText('支票託收登記表.xlsx')).toBeInTheDocument();
+
+      // 徽章僅出現於 ICSOP PDF 那列。
+      expect(screen.getAllByText('下載燒錄浮水印')).toHaveLength(1);
+      expect(
+        within(attachRow('車輛分期進件作業_v1.3.pdf')).getByText('下載燒錄浮水印'),
+      ).toBeInTheDocument();
+      expect(
+        within(attachRow('車輛分期進件作業_OJT簽到表.pdf')).queryByText('下載燒錄浮水印'),
+      ).not.toBeInTheDocument();
+
+      // 每列皆有下載鈕。
+      for (const n of ['車輛分期進件作業_v1.3.pdf', '車輛分期進件作業_OJT簽到表.pdf', '進件申請書.xlsx', '支票託收登記表.xlsx']) {
+        expect(within(attachRow(n)).getByRole('button', { name: /下載/ })).toBeInTheDocument();
+      }
+    });
+
+    it('TS-D-012 僅部分附件存在（僅 ICSOP PDF）→ 清單僅顯示存在者', async () => {
+      mockAuth('Supervisor');
+      vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([att({})]);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+      expect(screen.queryByText('OJT 實體簽到表')).not.toBeInTheDocument();
+      expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument();
+    });
+
+    it('TS-D-013 三類附件與使用表單皆無 → 不拋錯、不顯示任何附件列', async () => {
+      mockAuth('Supervisor');
+      vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([]);
+      vi.mocked(endpoints.getDocumentForms).mockResolvedValue([]);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('附件（僅下載）')).toBeInTheDocument());
+      expect(screen.queryByText('檔案（ICSOP PDF）')).not.toBeInTheDocument();
+      expect(screen.queryByText('OJT 實體簽到表')).not.toBeInTheDocument();
+      expect(screen.queryByText('使用表單')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /下載/ })).not.toBeInTheDocument();
+    });
+
+    it('TS-D-014 點擊附件下載 → 走既有受控下載端點、開新分頁並顯示稽核提示', async () => {
+      mockAuth('Supervisor');
+      vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue(ATTACHMENTS);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+      await userEvent.click(
+        within(attachRow('車輛分期進件作業_v1.3.pdf')).getByRole('button', { name: /下載/ }),
+      );
+      await waitFor(() =>
+        expect(endpoints.downloadAttachment).toHaveBeenCalledWith('documents/d1/icsop_pdf/abc.pdf'),
+      );
+      expect(openMock).toHaveBeenCalledWith('https://blob/a', '_blank', 'noopener,noreferrer');
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        '下載「車輛分期進件作業_v1.3.pdf」（已寫入稽核 DOWNLOAD）',
+      );
+    });
   });
 });

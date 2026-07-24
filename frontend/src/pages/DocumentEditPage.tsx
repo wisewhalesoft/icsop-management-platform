@@ -10,11 +10,13 @@ import {
   searchPersons,
   getUsageFormPool,
   getDocumentForms,
+  getDocumentAttachments,
   updateDocument,
   linkUsageForms,
   unlinkUsageForm,
   uploadIcsopPdf,
   uploadOjtAttachment,
+  downloadAttachment,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
@@ -30,6 +32,7 @@ import type {
   OrgUnitRecord,
   PersonRecord,
   UsageFormRecord,
+  DocumentAttachmentRecord,
 } from '../api/types';
 
 /**
@@ -39,9 +42,9 @@ import type {
  * RBAC：ICSOP文件管理 write=ICSOPAdmin（可編輯）；read（Supervisor/DeptContact/SysAdmin）唯讀；User→403。
  *
  * 後端契約：GET :id（DocumentView，含 org 欄＋secondaryChiefIds[]＋usingDeptIds[]）、GET :id/links、
- * PATCH :id（scalar 覆寫＋links[] 整批同步）。已知後端缺口：update() 剔除多值（次要室長／使用部門
- * 之編輯端持久化為 F014 create-side only，deferred）→ 此二欄於本頁以唯讀呈現；附件無列表端點 →
- * 僅提供上傳/取代（不顯示現有檔名）。
+ * GET :id/attachments（既有 ICSOP PDF／OJT 檔名與 blobPath）、PATCH :id（scalar 覆寫＋links[]／
+ * secondaryChiefIds[]／usingDeptIds[] 整批同步；未帶鍵＝不觸碰）。
+ * 次要室長／使用部門與連結點/使用表單同採可搜尋多選（chips）；唯讀角色僅見 chips（無搜尋框/移除鈕）。
  */
 const STATUS_LABEL: Record<DocumentStatus, string> = { active: '有效', inactive: '失效', void: '作廢' };
 const STATUS_ORDER: DocumentStatus[] = ['active', 'inactive', 'void'];
@@ -70,6 +73,10 @@ interface Draft {
   primaryChiefId: string;
   lifecycleId: string;
   links: string[];
+  /** F014 多值：當責室長-次要（employeeNo 集合，允許為空）。 */
+  secondaryChiefIds: string[];
+  /** F014 多值：文件使用部門（ORG_UNIT.orgCode 集合，允許為空）。 */
+  usingDeptIds: string[];
 }
 
 function draftOf(v: DocumentView, links: string[]): Draft {
@@ -86,8 +93,18 @@ function draftOf(v: DocumentView, links: string[]): Draft {
     primaryChiefId: v.primaryChiefId ?? '',
     lifecycleId: v.lifecycleId,
     links,
+    secondaryChiefIds: [...v.secondaryChiefIds],
+    usingDeptIds: [...v.usingDeptIds],
   };
 }
+/** draft 之陣列欄（比對與複製皆需逐一處理）。 */
+const LIST_KEYS = ['links', 'secondaryChiefIds', 'usingDeptIds'] as const;
+const copyDraft = (d: Draft): Draft => ({
+  ...d,
+  links: [...d.links],
+  secondaryChiefIds: [...d.secondaryChiefIds],
+  usingDeptIds: [...d.usingDeptIds],
+});
 const personOpt = (p: PersonRecord): ComboOption => ({
   value: p.employeeNo,
   label: p.name ? `${p.name}（${p.orgCode ?? '—'}）` : p.employeeNo,
@@ -112,6 +129,8 @@ export function DocumentEditPage(): JSX.Element {
   const [existing, setExisting] = useState<DocumentListItem[]>([]);
   const [personResults, setPersonResults] = useState<ComboOption[]>([]);
   const [primaryChiefOrig, setPrimaryChiefOrig] = useState<ComboOption | null>(null);
+  const [secondaryChiefOrig, setSecondaryChiefOrig] = useState<ComboOption[]>([]);
+  const [attachments, setAttachments] = useState<DocumentAttachmentRecord[]>([]);
   const [formPool, setFormPool] = useState<UsageFormRecord[]>([]);
   const [origForms, setOrigForms] = useState<ComboOption[]>([]);
   const [draftForms, setDraftForms] = useState<ComboOption[]>([]);
@@ -126,7 +145,7 @@ export function DocumentEditPage(): JSX.Element {
       setView(v);
       const d = draftOf(v, links.map((l) => l.targetDocumentId));
       setOrig(d);
-      setDraft({ ...d, links: [...d.links] });
+      setDraft(copyDraft(d));
       // 輔助資料（失敗不阻擋主體）。
       void getLifecycles().then(setLifecycles).catch(() => undefined);
       void getOrgUnits().then(setOrgUnits).catch(() => undefined);
@@ -139,6 +158,7 @@ export function DocumentEditPage(): JSX.Element {
           setDraftForms(opts);
         })
         .catch(() => undefined);
+      void getDocumentAttachments(id).then(setAttachments).catch(() => undefined);
       // 解析當責室長-主要之顯示名稱（單筆讀取僅回員編）。
       if (v.primaryChiefId) {
         void searchPersons(v.primaryChiefId, 5)
@@ -147,6 +167,20 @@ export function DocumentEditPage(): JSX.Element {
             if (m) setPrimaryChiefOrig(personOpt(m));
           })
           .catch(() => undefined);
+      }
+      // 解析已載入之次要室長顯示名稱（best-effort，查無→顯示員編）。
+      if (v.secondaryChiefIds.length) {
+        void Promise.all(
+          v.secondaryChiefIds.map(async (empNo): Promise<ComboOption> => {
+            try {
+              const rs = await searchPersons(empNo, 5);
+              const m = rs.find((p) => p.employeeNo === empNo);
+              return m ? personOpt(m) : { value: empNo, label: empNo };
+            } catch {
+              return { value: empNo, label: empNo };
+            }
+          }),
+        ).then(setSecondaryChiefOrig);
       }
     } catch (e) {
       setLoadError(msgOf(e));
@@ -209,6 +243,18 @@ export function DocumentEditPage(): JSX.Element {
     }
     return personResults;
   }, [primaryChiefOrig, personResults]);
+  /** 次要室長候選＝人員搜尋結果；已載入者之標籤自 secondaryChiefOrig 補齊。 */
+  const secondaryOptions = useMemo<ComboOption[]>(() => {
+    const seen = new Set(personResults.map((o) => o.value));
+    return [...personResults, ...secondaryChiefOrig.filter((o) => !seen.has(o.value))];
+  }, [personResults, secondaryChiefOrig]);
+  /** 使用部門候選＝全部組織單位（任意層級），以「本部 / 部 / 處室 / 課」路徑呈現層級。 */
+  const usingDeptOptions = useMemo<ComboOption[]>(
+    () => orgUnits.map((u) => ({ value: u.orgCode, label: orgPath(u.orgCode) })),
+    [orgUnits, orgPath],
+  );
+  const optionOf = (opts: ComboOption[], v: string): ComboOption =>
+    opts.find((o) => o.value === v) ?? { value: v, label: v };
 
   const runPersonSearch = useCallback((q: string) => {
     void searchPersons(q).then((rs) => setPersonResults(rs.map(personOpt))).catch(() => setPersonResults([]));
@@ -248,7 +294,10 @@ export function DocumentEditPage(): JSX.Element {
   const changed = useCallback(
     <K extends keyof Draft>(key: K): boolean => {
       if (!draft || !orig) return false;
-      if (key === 'links') return JSON.stringify(draft.links) !== JSON.stringify(orig.links);
+      // 陣列欄（links／多值）以內容比對（順序敏感），純量欄以值比對。
+      if ((LIST_KEYS as readonly string[]).includes(key as string)) {
+        return JSON.stringify(draft[key]) !== JSON.stringify(orig[key]);
+      }
       return draft[key] !== orig[key];
     },
     [draft, orig],
@@ -267,7 +316,7 @@ export function DocumentEditPage(): JSX.Element {
 
   const cancelAll = useCallback(() => {
     if (!orig) return;
-    setDraft({ ...orig, links: [...orig.links] });
+    setDraft(copyDraft(orig));
     setDraftForms(origForms);
     setNotice({ tone: 'ok', text: '已取消變更，欄位回復為編輯前原值' });
   }, [orig, origForms]);
@@ -296,6 +345,9 @@ export function DocumentEditPage(): JSX.Element {
     if (changed('primaryChiefId')) patch.primaryChiefId = draft.primaryChiefId || null;
     if (changed('lifecycleId')) patch.lifecycleId = draft.lifecycleId;
     if (changed('links')) patch.links = draft.links;
+    // F014 多值：僅實際變更時才帶鍵（未帶鍵＝後端不觸碰既有集合；空陣列＝顯式清空）。
+    if (changed('secondaryChiefIds')) patch.secondaryChiefIds = draft.secondaryChiefIds;
+    if (changed('usingDeptIds')) patch.usingDeptIds = draft.usingDeptIds;
 
     setBusy(true);
     setNotice(null);
@@ -306,7 +358,7 @@ export function DocumentEditPage(): JSX.Element {
         const nd = draftOf(res.document, draft.links);
         setView(res.document);
         setOrig(nd);
-        setDraft({ ...nd, links: [...nd.links] });
+        setDraft(copyDraft(nd));
       }
       // F018 使用表單關聯差集（獨立端點，非 PATCH 範圍）。
       if (formsChanged) {
@@ -329,8 +381,9 @@ export function DocumentEditPage(): JSX.Element {
     async (kind: 'pdf' | 'ojt', file: File | null) => {
       if (!file) return;
       try {
-        if (kind === 'pdf') await uploadIcsopPdf(id, file);
-        else await uploadOjtAttachment(id, file);
+        const rec = kind === 'pdf' ? await uploadIcsopPdf(id, file) : await uploadOjtAttachment(id, file);
+        // 覆蓋式：以新列取代同型別之舊列（維持卡片顯示最新檔名/blobPath）。
+        setAttachments((prev) => [...prev.filter((a) => a.type !== rec.type), rec]);
         setNotice({ tone: 'ok', text: `已上傳「${file.name}」（覆蓋式；舊檔不再可存取）` });
       } catch (e) {
         setNotice({ tone: 'err', text: msgOf(e) });
@@ -338,6 +391,16 @@ export function DocumentEditPage(): JSX.Element {
     },
     [id],
   );
+
+  /** 附件受控下載（核發短效期 URL → 開新分頁；浮水印與否由伺服器端依 F020 決定）。 */
+  const onDownloadAttachment = useCallback(async (a: DocumentAttachmentRecord) => {
+    try {
+      const grant = await downloadAttachment(a.blobPath);
+      window.open(grant.url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      setNotice({ tone: 'err', text: msgOf(e) });
+    }
+  }, []);
 
   if (!canRead) {
     return <Blocked message="您無 ICSOP 文件管理權限。" />;
@@ -520,26 +583,62 @@ export function DocumentEditPage(): JSX.Element {
           </ComboDiff>
         </div>
 
-        {/* 次要室長 / 使用部門：後端 update 剔除多值（F014 edit-side deferred）→ 唯讀呈現 */}
+        {/* 當責室長-次要（F014 多值，可搜尋多選；唯讀角色僅見 chips） */}
         <div className="mt-4 py-3 border-t border-slate-100">
-          <label className="text-sm font-medium text-slate-700 block mb-2">當責室長-次要（唯讀）</label>
-          <div className="flex flex-wrap gap-2">
-            {view.secondaryChiefIds.length ? view.secondaryChiefIds.map((c) => (
-              <span key={c} className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs mono">{c}</span>
-            )) : <span className="text-xs text-slate-400">（無次要室長）</span>}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-slate-700">當責室長-次要（可多位，允許為空）</span>
+            {changed('secondaryChiefIds') && <ChangedPill />}
           </div>
+          {canWrite ? (
+            <MultiSearchCombobox
+              id="edSecondaryChiefs"
+              label={<span className="sr-only">當責室長-次要（可多位，允許為空）</span>}
+              options={secondaryOptions}
+              values={draft.secondaryChiefIds.map((v) => optionOf(secondaryOptions, v))}
+              onAdd={(opt) => set('secondaryChiefIds', [...draft.secondaryChiefIds, opt.value])}
+              onRemove={(v) => set('secondaryChiefIds', draft.secondaryChiefIds.filter((x) => x !== v))}
+              onQueryChange={runPersonSearch}
+              placeholder="搜尋並新增次要室長…"
+              emptyChipText="（無次要室長，允許為空）"
+            />
+          ) : (
+            <ReadonlyChips
+              values={draft.secondaryChiefIds.map((v) => optionOf(secondaryOptions, v))}
+              emptyText="（無次要室長，允許為空）"
+            />
+          )}
         </div>
-        <div className="mt-2 py-3">
-          <label className="text-sm font-medium text-slate-700 block mb-2">文件使用部門（唯讀）</label>
-          <div className="flex flex-wrap gap-2">
-            {view.usingDeptIds.length ? view.usingDeptIds.map((c) => (
-              <span key={c} className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs">{orgPath(c)}</span>
-            )) : <span className="text-xs text-slate-400">（未指定使用部門）</span>}
+
+        {/* 文件使用部門（F014 多值，任意層級） */}
+        <div className="py-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm font-medium text-slate-700">文件使用部門（0..*）</span>
+            {changed('usingDeptIds') && <ChangedPill />}
           </div>
-          <p className="text-[10px] text-slate-400 mt-1.5 flex items-start gap-1.5">
-            <Icon name="info" className="w-3.5 h-3.5 mt-px" />
-            次要室長／使用部門之編輯將於後續開放（F014 編輯端持久化 deferred）；目前顯示載入值。
+          <p className="text-xs text-slate-500 mb-2 flex items-start gap-1.5">
+            <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-600" />
+            <span>
+              可指定任意層級（本部／部／處室／課）；清單以「本部 / 部 / 處室 / 課」路徑呈現層級關係，
+              <strong className="text-slate-700">選擇上層將自動涵蓋其下所有單位</strong>（權限判定時自動展開子樹）。
+            </span>
           </p>
+          {canWrite ? (
+            <MultiSearchCombobox
+              id="edUsingDepts"
+              label={<span className="sr-only">文件使用部門（0..*）</span>}
+              options={usingDeptOptions}
+              values={draft.usingDeptIds.map((v) => optionOf(usingDeptOptions, v))}
+              onAdd={(opt) => set('usingDeptIds', [...draft.usingDeptIds, opt.value])}
+              onRemove={(v) => set('usingDeptIds', draft.usingDeptIds.filter((x) => x !== v))}
+              placeholder="搜尋並新增使用部門…"
+              emptyChipText="（未指定使用部門）"
+            />
+          ) : (
+            <ReadonlyChips
+              values={draft.usingDeptIds.map((v) => optionOf(usingDeptOptions, v))}
+              emptyText="（未指定使用部門）"
+            />
+          )}
         </div>
       </section>
 
@@ -608,8 +707,22 @@ export function DocumentEditPage(): JSX.Element {
           <Icon name="info" className="w-3.5 h-3.5" />允許格式：ICSOP PDF／OJT＝.pdf/.jpg/.png；單檔上限 50MB。上傳為覆蓋式（舊檔不再可存取）。
         </p>
         <div className="grid sm:grid-cols-2 gap-4">
-          <ReplaceCard title="ICSOP PDF（呈現用，1 份，覆蓋式）" accept=".pdf,.jpg,.jpeg,.png" disabled={ro} onSelect={(f) => void onUpload('pdf', f)} />
-          <ReplaceCard title="OJT 實體簽到表（1 份，覆蓋式）" accept=".pdf,.jpg,.jpeg,.png" disabled={ro} onSelect={(f) => void onUpload('ojt', f)} />
+          <ReplaceCard
+            title="ICSOP PDF（呈現用，1 份，覆蓋式）"
+            accept=".pdf,.jpg,.jpeg,.png"
+            disabled={ro}
+            existing={attachments.find((a) => a.type === 'ICSOP_PDF') ?? null}
+            onDownload={onDownloadAttachment}
+            onSelect={(f) => void onUpload('pdf', f)}
+          />
+          <ReplaceCard
+            title="OJT 實體簽到表（1 份，覆蓋式）"
+            accept=".pdf,.jpg,.jpeg,.png"
+            disabled={ro}
+            existing={attachments.find((a) => a.type === 'OJT_SIGNIN') ?? null}
+            onDownload={onDownloadAttachment}
+            onSelect={(f) => void onUpload('ojt', f)}
+          />
         </div>
       </section>
 
@@ -696,16 +809,60 @@ function ChangedPill(): JSX.Element {
   return <span className="ml-1 inline-block text-[10px] px-1.5 py-0.5 rounded bg-primary-100 text-primary-700">已變更</span>;
 }
 
-function ReplaceCard({ title, accept, disabled, onSelect }: {
-  title: string; accept: string; disabled?: boolean; onSelect: (f: File | null) => void;
+/** 唯讀多值 chips（唯讀角色：prototype 15 之 write-only 入口不顯示，僅保留 chips）。 */
+function ReadonlyChips({ values, emptyText }: {
+  values: ComboOption[]; emptyText: string;
+}): JSX.Element {
+  return (
+    <div className="flex flex-wrap gap-2 mb-2">
+      {values.length ? (
+        values.map((v) => (
+          <span key={v.value} className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full bg-slate-100 text-slate-700 text-xs">
+            {v.label}
+          </span>
+        ))
+      ) : (
+        <span className="text-xs text-slate-400">{emptyText}</span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 附件卡（prototype 15）：現有檔名 ＋「下載」＋「取代」。
+ * 尚未上傳 → 無檔名列與下載鈕；唯讀角色 → 無「取代」入口（write-only）。
+ */
+function ReplaceCard({ title, accept, disabled, existing, onDownload, onSelect }: {
+  title: string; accept: string; disabled?: boolean;
+  existing: DocumentAttachmentRecord | null;
+  onDownload: (a: DocumentAttachmentRecord) => void;
+  onSelect: (f: File | null) => void;
 }): JSX.Element {
   return (
     <div className="border border-slate-200 rounded-lg p-3">
       <div className="text-xs font-medium text-slate-500 mb-2">{title}</div>
-      <label className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded border text-xs ${disabled ? 'border-slate-200 text-slate-300 cursor-not-allowed' : 'border-slate-300 hover:bg-slate-50 cursor-pointer'}`}>
-        <Icon name="upload" className="w-3.5 h-3.5" />取代
-        <input type="file" accept={accept} aria-label={`上傳取代 ${title}`} disabled={disabled} className="hidden" onChange={(e) => onSelect(e.target.files?.[0] ?? null)} />
-      </label>
+      {existing && (
+        <div className="flex items-center gap-2">
+          <Icon name="file-text" className="w-5 h-5 text-red-500" />
+          <span className="text-sm text-slate-700 truncate flex-1">{existing.fileName}</span>
+        </div>
+      )}
+      <div className="flex gap-2 mt-3">
+        {existing && (
+          <button
+            onClick={() => onDownload(existing)}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50"
+          >
+            <Icon name="download" className="w-3.5 h-3.5" />下載
+          </button>
+        )}
+        {!disabled && (
+          <label className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 cursor-pointer">
+            <Icon name="upload" className="w-3.5 h-3.5" />取代
+            <input type="file" accept={accept} aria-label={`上傳取代 ${title}`} className="hidden" onChange={(e) => onSelect(e.target.files?.[0] ?? null)} />
+          </label>
+        )}
+      </div>
     </div>
   );
 }

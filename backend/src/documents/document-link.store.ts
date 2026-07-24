@@ -22,6 +22,8 @@ export interface DocumentLinkView {
 export interface DocumentLinkStore {
   /** 某來源文件之全部連結點（單向：僅 sourceDocumentId=source，不含反向）。 */
   findBySource(sourceId: string): Promise<DocumentLink[]>;
+  /** F017 清單富化：批次取多筆來源文件之連結點（一次查詢，避免逐列 N+1）。 */
+  findBySources(sourceIds: string[]): Promise<DocumentLink[]>;
   add(sourceId: string, targetId: string): Promise<DocumentLink>;
   /** 依 (source,target) 移除；不存在為 no-op（批次 diff 用）。 */
   remove(sourceId: string, targetId: string): Promise<void>;

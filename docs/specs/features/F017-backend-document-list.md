@@ -1,5 +1,5 @@
 # F017: 後台文件清單與搜尋
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-17
+Priority: P0-MVP | Status: 🟡 實作（unit 綠；14 欄清單＋9 篩選＋排序分頁；**「檔案」與「連結點程序書」兩欄之後端富化與前端渲染已補**（doc-seams，批次注入不 N+1）；int 已寫未跑，見 implementation-logs/doc-seams-impl.md） | Last Updated: 2026-07-24
 Epic/Story: E04 / US-037
 
 ## Description

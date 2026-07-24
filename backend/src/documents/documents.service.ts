@@ -31,6 +31,7 @@ import {
   DocumentLinkStore,
   DocumentLinkView,
 } from './document-link.store';
+import { ATTACHMENT_STORE, AttachmentStore } from '../attachments/attachments.store';
 import {
   DOCUMENT_CHANGE_PUBLISHER,
   DocumentChangePublisher,
@@ -72,6 +73,11 @@ export class DocumentsService {
     @Optional()
     @Inject(DOCUMENT_LINK_STORE)
     private readonly linkStore?: DocumentLinkStore,
+    // F017 清單「檔案」欄之附件 store（批次富化；store-token 對 store-token，非 Service 對 Service，
+    // 避免 DocumentsService ↔ AttachmentsService 循環相依）。選填以免破壞既有純 store 單測。
+    @Optional()
+    @Inject(ATTACHMENT_STORE)
+    private readonly attachmentStore?: AttachmentStore,
   ) {
     // 預設 no-op 綁定（決策 A）：seam 存在但不落地，rag/F037 併回後覆寫。
     this.publisher = publisher ?? new NoopDocumentChangePublisher();
@@ -137,7 +143,57 @@ export class DocumentsService {
   async listDocuments(filters: DocumentListFilters): Promise<DocumentListPage> {
     const page = await this.store.list(filters);
     await this.enrichNames(page.items);
+    await this.enrichIcsopPdf(page.items);
+    await this.enrichLinks(page.items);
     return page;
+  }
+
+  /**
+   * F017「檔案」欄：批次補上各列自身之 ICSOP PDF（blobPath/fileName），供受控下載端點。
+   * 單次批次查詢（非逐列 N+1）；無 attachmentStore → 保持 null（優雅降級）。
+   * OJT 不落此欄（prototype 13 之「檔案」欄僅呈現 ICSOP PDF）。
+   */
+  private async enrichIcsopPdf(items: DocumentListItem[]): Promise<void> {
+    if (!this.attachmentStore || items.length === 0) return;
+    const recs = await this.attachmentStore.findManyByType(
+      items.map((i) => i.id),
+      'ICSOP_PDF',
+    );
+    const byDoc = new Map(recs.map((r) => [r.documentId, r]));
+    for (const it of items) {
+      const rec = byDoc.get(it.id);
+      it.icsopPdfBlobPath = rec?.blobPath ?? null;
+      it.icsopPdfFileName = rec?.fileName ?? null;
+    }
+  }
+
+  /**
+   * F017「連結點程序書」欄：批次補上各列之連結點摘要（目標編號/書名/目前狀態）。
+   * 兩次批次查詢（連結列＋目標摘要），與列數無關；無 linkStore → 保持空陣列。
+   * 目標狀態為即時查詢（非連結建立當下之快照），與 getDocumentLinks 一致。
+   */
+  private async enrichLinks(items: DocumentListItem[]): Promise<void> {
+    if (!this.linkStore || items.length === 0) return;
+    const links = await this.linkStore.findBySources(items.map((i) => i.id));
+    if (links.length === 0) return;
+    const targetIds = [...new Set(links.map((l) => l.targetDocumentId))];
+    const summaries = await this.store.findSummaries(targetIds);
+    const byId = new Map(summaries.map((s) => [s.id, s]));
+    const bySource = new Map<string, DocumentLinkView[]>();
+    for (const l of links) {
+      const t = byId.get(l.targetDocumentId);
+      const view: DocumentLinkView = {
+        linkId: l.id,
+        targetDocumentId: l.targetDocumentId,
+        targetNumber: t?.documentNumber ?? null,
+        targetName: t?.documentName ?? null,
+        targetStatus: t?.status ?? null,
+      };
+      const bucket = bySource.get(l.sourceDocumentId);
+      if (bucket) bucket.push(view);
+      else bySource.set(l.sourceDocumentId, [view]);
+    }
+    for (const it of items) it.links = bySource.get(it.id) ?? [];
   }
 
   /** 以 NameResolutionService 補上組織/室長顯示名稱（去重、批次，避免 N+1）。無 resolver → 保持 null。 */
@@ -207,10 +263,16 @@ export class DocumentsService {
       if (!ignored.includes(k)) clean[k] = v;
     }
 
-    // 1a) F014 多值欄位（次要室長／使用部門）之編輯端持久化屬 F014 編輯頁範圍（本輪 create-side only）：
-    //     此處自 clean 剔除，避免以純量覆寫路徑誤寫或產生偽 diff（功能面 FORBIDDEN 已於上方 classifyFields 攔截）。
-    delete clean.secondaryChiefIds;
-    delete clean.usingDeptIds;
+    // 1a) F014 多值欄位（次要室長／使用部門）編輯端持久化：帶鍵才處理（partial patch 語意）。
+    //     顯式 [] ＝清空既有集合；未帶鍵 ＝ 不觸碰（避免只改書名卻意外清空次要室長）。
+    //     正規化與 create 路徑共用 normalizeIdList（trim／去空字串／去重／保留順序）。
+    //     非 ICSOPAdmin 寫此二欄已於上方 classifyFields 攔截（FIELD_WRITE_FORBIDDEN）。
+    if ('secondaryChiefIds' in clean) {
+      clean.secondaryChiefIds = normalizeIdList(clean.secondaryChiefIds);
+    }
+    if ('usingDeptIds' in clean) {
+      clean.usingDeptIds = normalizeIdList(clean.usingDeptIds);
+    }
 
     // 1b) F015 連結點（決策：隨 PATCH 整批送出）：自 clean 抽出 links（非純量欄，另走連結 store）。
     let linkTargetIds: string[] | undefined;

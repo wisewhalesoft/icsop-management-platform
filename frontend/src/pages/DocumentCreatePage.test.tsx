@@ -38,6 +38,7 @@ function doc(over: Partial<DocumentListItem>): DocumentListItem {
     draftingCompanyName: null, draftingDeptName: null, draftingSectionName: null,
     primaryChiefId: null, primaryChiefName: null,
     edition: null, announcedDate: null, contentSummary: null,
+    icsopPdfBlobPath: null, icsopPdfFileName: null, links: [],
     ...over,
   };
 }

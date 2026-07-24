@@ -107,6 +107,99 @@ describe('[int] F014 制定組織/當責室長/使用部門 create-side vs SOP',
     expect(g.body.draftingCompanyId).toBe('00000');
   });
 
+  /**
+   * B 節：編輯側多值持久化（replace-set）之真表驗證。
+   * 每案獨立建立 marker 文件，避免案例間互相污染多值集合。
+   */
+  describe('編輯側多值 replace-set（B）', () => {
+    let seq = 0;
+    const create = async (body: Record<string, unknown>): Promise<string> => {
+      seq += 1;
+      const r = await ctx
+        .http()
+        .post('/admin/documents')
+        .set('Cookie', ctx.adminCookie)
+        .send({
+          lifecycleId,
+          status: 'active',
+          documentNumber: `${num}-edit-${seq}`,
+          documentName: `ZZINT F014 編輯側 ${seq}`,
+          ...body,
+        });
+      expect([200, 201]).toContain(r.status);
+      return r.body.id as string;
+    };
+    const chiefsOf = (id: string) =>
+      AppDataSource.query(
+        `SELECT [employeeNo] FROM [DOC_SECONDARY_CHIEF] WHERE [documentId]=@0 ORDER BY [employeeNo]`,
+        [id],
+      );
+    const deptsOf = (id: string) =>
+      AppDataSource.query(
+        `SELECT [orgCode] FROM [DOC_USING_DEPT] WHERE [documentId]=@0 ORDER BY [orgCode]`,
+        [id],
+      );
+
+    it('TS-E-B-001 PATCH 次要室長 → 真表被「取代」而非疊加', async () => {
+      const id = await create({ secondaryChiefIds: ['20053', '20541'] });
+      const p = await ctx
+        .http()
+        .patch(`/admin/documents/${id}`)
+        .set('Cookie', ctx.adminCookie)
+        .send({ secondaryChiefIds: ['10001'] });
+      expect([200, 204]).toContain(p.status);
+
+      const g = await ctx.http().get(`/admin/documents/${id}`).set('Cookie', ctx.adminCookie);
+      expect(g.body.secondaryChiefIds).toEqual(['10001']);
+      const rows = await chiefsOf(id);
+      expect(rows.map((r: { employeeNo: string }) => r.employeeNo)).toEqual(['10001']);
+    });
+
+    it('TS-E-B-002 PATCH 使用部門為空陣列 → 真表列全數刪除', async () => {
+      const id = await create({ usingDeptIds: ['A2000', 'B0000'] });
+      const p = await ctx
+        .http()
+        .patch(`/admin/documents/${id}`)
+        .set('Cookie', ctx.adminCookie)
+        .send({ usingDeptIds: [] });
+      expect([200, 204]).toContain(p.status);
+
+      const g = await ctx.http().get(`/admin/documents/${id}`).set('Cookie', ctx.adminCookie);
+      expect(g.body.usingDeptIds).toEqual([]);
+      expect(await deptsOf(id)).toHaveLength(0);
+    });
+
+    it('TS-E-B-003 PATCH 未帶多值鍵 → 真表列不受影響', async () => {
+      const id = await create({ secondaryChiefIds: ['20053'], usingDeptIds: ['A2000'] });
+      const p = await ctx
+        .http()
+        .patch(`/admin/documents/${id}`)
+        .set('Cookie', ctx.adminCookie)
+        .send({ documentName: 'ZZINT F014 改名' });
+      expect([200, 204]).toContain(p.status);
+
+      const g = await ctx.http().get(`/admin/documents/${id}`).set('Cookie', ctx.adminCookie);
+      expect(g.body.documentName).toBe('ZZINT F014 改名');
+      expect(g.body.secondaryChiefIds).toEqual(['20053']);
+      expect(g.body.usingDeptIds).toEqual(['A2000']);
+      expect(await chiefsOf(id)).toHaveLength(1);
+      expect(await deptsOf(id)).toHaveLength(1);
+    });
+
+    it('TS-E-B-004 非 ICSOPAdmin（SysAdmin）PATCH 多值 → 403、真表不受影響', async () => {
+      const id = await create({ secondaryChiefIds: ['20053'] });
+      const sysCookie = ctx.cookieFor(sysLogin, 'AS', 'SysAdmin');
+      const p = await ctx
+        .http()
+        .patch(`/admin/documents/${id}`)
+        .set('Cookie', sysCookie)
+        .send({ secondaryChiefIds: ['99999'] });
+      expect(p.status).toBe(403);
+      const rows = await chiefsOf(id);
+      expect(rows.map((r: { employeeNo: string }) => r.employeeNo)).toEqual(['20053']);
+    });
+  });
+
   it('非 ICSOPAdmin（SysAdmin）建立文件 → 403（功能面 PERMISSION_DENIED 先於欄位面把關）、未落地', async () => {
     // 註：create 路由的功能面 guard（ICSOP文件管理 write＝僅 ICSOPAdmin）先擋下 SysAdmin，
     // 故 HTTP 層回 PERMISSION_DENIED；F026 欄位面 FIELD_WRITE_FORBIDDEN 之單元防線於 service 另測。

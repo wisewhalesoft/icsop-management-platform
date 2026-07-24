@@ -1,5 +1,5 @@
 # F026: 角色×欄位權限矩陣
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-20
+Priority: P0-MVP | Status: 🟡 實作（unit 綠；欄位面矩陣＋建立/編輯兩路徑 all-or-nothing enforcement（含多值欄 CHIEF_SECONDARY/USING_DEPTS 編輯路徑回歸，doc-seams）；見 implementation-logs/doc-seams-impl.md） | Last Updated: 2026-07-24
 Epic/Story: E08 / US-071
 
 > **定案**：主管、部門窗口、**系統管理員**對所有文件欄位**皆唯讀**（僅 ICSOP 管理員可寫）。系統管理員比照主管為唯讀（可查、附件可下載、不可寫），與功能矩陣 F025 一致（OQ-E08-01 已收斂）。「所屬節點」雖列 ICSOPAdmin 可寫，但維護入口為節點抽屜（F009），非文件編輯表單。共 19 欄位（詳見 [data-model](../data-model.md#document-entity)；2026-07-17 移除「當責部門」、新增 制定公司/制定部門/制定室別/內容摘要，發布日期→公告日期、人為版本號→版次）。

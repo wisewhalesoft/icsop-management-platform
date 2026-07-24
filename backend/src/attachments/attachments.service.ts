@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import {
@@ -25,6 +26,10 @@ import {
   DocumentAttachmentRecord,
   SingleAttachmentType,
 } from './attachments.store';
+import { DOCUMENT_STORE, DocumentStore } from '../documents/documents.store';
+
+/** 列表之固定回傳順序（供前端渲染順序穩定、避免依賴 store 插入序）。 */
+const LIST_ORDER: SingleAttachmentType[] = ['ICSOP_PDF', 'OJT_SIGNIN'];
 
 /** 呼叫者 session 上下文（roleCode 授權判定；accountId 記錄 uploadedBy）。 */
 export interface SessionContext {
@@ -82,7 +87,31 @@ export class AttachmentsService {
   constructor(
     @Inject(BLOB_STORE) private readonly blob: BlobStore,
     @Inject(ATTACHMENT_STORE) private readonly store: AttachmentStore,
+    // 附件列表之資源存在性防線（查無文件→404）。選填以免破壞既有以 new AttachmentsService(blob, store)
+    // 建構之單元測試；未注入 → 略過存在性檢查（僅測試替身彈性，非正式部署之預期狀態）。
+    @Optional()
+    @Inject(DOCUMENT_STORE)
+    private readonly documentStore?: DocumentStore,
   ) {}
+
+  /**
+   * 某文件之單份附件清單（ICSOP PDF／OJT 簽到表），供後台編輯頁/唯讀頁呈現既有檔名與下載。
+   * 兩層防線：路由層功能面 read gate（AttachmentsController @RequirePermission）＋此處資源存在性。
+   * 「列出」屬讀取操作，不受 F026 欄位面寫入矩陣管轄（唯讀角色可查看已有哪些附件）。
+   */
+  async listForDocument(
+    _session: SessionContext | undefined,
+    documentId: string,
+  ): Promise<DocumentAttachmentRecord[]> {
+    if (this.documentStore) {
+      const doc = await this.documentStore.findById(documentId);
+      if (!doc) throw new NotFoundException('DOCUMENT_NOT_FOUND');
+    }
+    const found = await Promise.all(
+      LIST_ORDER.map((type) => this.store.findSingle(documentId, type)),
+    );
+    return found.filter((r): r is DocumentAttachmentRecord => r !== null);
+  }
 
   /** 上傳/覆蓋單份附件（ICSOP PDF 或 OJT 簽到表）。 */
   async uploadSingle(

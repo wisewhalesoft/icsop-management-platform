@@ -8,6 +8,8 @@ import {
 import { FakeBlobStore } from '../storage/fake-blob-store';
 import { DOWNLOAD_URL_TTL_SECONDS } from '../storage/blob-store';
 import { MAX_FILE_SIZE_BYTES } from '../storage/file-rules';
+import { DocumentStore, DocumentView } from '../documents/documents.store';
+import { canPerform, FunctionKey } from '../rbac/function-matrix';
 
 /** 比照 documents.service.spec 之 FakeStore 風格：記憶體維護 DOCUMENT_ATTACHMENT 單份列。 */
 class FakeAttachmentStore implements AttachmentStore {
@@ -17,6 +19,12 @@ class FakeAttachmentStore implements AttachmentStore {
   findSingle(documentId: string, type: SingleAttachmentType) {
     return Promise.resolve(
       this.rows.find((r) => r.documentId === documentId && r.type === type) ?? null,
+    );
+  }
+  findManyByType(documentIds: string[], type: SingleAttachmentType) {
+    const set = new Set(documentIds);
+    return Promise.resolve(
+      this.rows.filter((r) => r.type === type && set.has(r.documentId)),
     );
   }
   upsertSingle(input: UpsertAttachmentInput) {
@@ -35,6 +43,17 @@ class FakeAttachmentStore implements AttachmentStore {
   }
   findByBlobPath(blobPath: string) {
     return Promise.resolve(this.rows.find((r) => r.blobPath === blobPath) ?? null);
+  }
+}
+
+/**
+ * A 節（附件列表）之最小文件存在性替身：僅實作 `findById`（服務層僅用此方法判資源存在性），
+ * 以 `as unknown as DocumentStore` 注入，避免為存在性檢查實作整組 DocumentStore 介面。
+ */
+class FakeDocumentExistence {
+  ids = new Set<string>();
+  findById(id: string): Promise<DocumentView | null> {
+    return Promise.resolve(this.ids.has(id) ? ({ id } as DocumentView) : null);
   }
 }
 
@@ -231,5 +250,93 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
       const ref = await svc.getAttachmentRef(DOC, 'ICSOP_PDF');
       expect(ref?.blobPath).toBe(r2.blobPath); // 指向最新
     });
+  });
+});
+
+/**
+ * A 節：`GET /admin/documents/:documentId/attachments` 之服務層（listForDocument）。
+ * 兩層防線：路由層功能面 read gate（見 attachments-controller-routes.spec）＋服務層資源存在性（404）。
+ * 「列出」屬讀取操作，不受 F026 欄位面寫入矩陣管轄（唯讀角色可查）。
+ */
+describe('AttachmentsService.listForDocument（附件列表，A）', () => {
+  let blob: FakeBlobStore;
+  let store: FakeAttachmentStore;
+  let docs: FakeDocumentExistence;
+  let svc: AttachmentsService;
+
+  beforeEach(() => {
+    blob = new FakeBlobStore();
+    store = new FakeAttachmentStore();
+    docs = new FakeDocumentExistence();
+    docs.ids.add('doc-1');
+    docs.ids.add('doc-2');
+    svc = new AttachmentsService(blob, store, docs as unknown as DocumentStore);
+  });
+
+  /** 直接置列（略過上傳路徑），以控制底層插入順序。 */
+  const seed = (documentId: string, type: SingleAttachmentType, fileName: string) =>
+    store.upsertSingle({
+      documentId,
+      type,
+      fileName,
+      blobPath: `documents/${documentId}/${type.toLowerCase()}/x.pdf`,
+      contentType: 'application/pdf',
+      size: 1024,
+      uploadedBy: 'admin1',
+      uploadedAt: new Date(),
+    });
+
+  it('TS-A-001 兩類附件皆已上傳 → 依固定順序（ICSOP_PDF→OJT_SIGNIN）回傳兩筆', async () => {
+    // 底層插入序刻意相反，驗證回傳順序由服務層固定、非取決於 store。
+    await seed('doc-1', 'OJT_SIGNIN', 'ojt.pdf');
+    await seed('doc-1', 'ICSOP_PDF', 'sop.pdf');
+    const list = await svc.listForDocument(ICSOP_ADMIN, 'doc-1');
+    expect(list).toHaveLength(2);
+    expect(list.map((r) => r.type)).toEqual(['ICSOP_PDF', 'OJT_SIGNIN']);
+    expect(list.map((r) => r.fileName)).toEqual(['sop.pdf', 'ojt.pdf']);
+  });
+
+  it('TS-A-002 僅上傳其中一類 → 僅回傳該筆', async () => {
+    await seed('doc-1', 'ICSOP_PDF', 'sop.pdf');
+    const list = await svc.listForDocument(ICSOP_ADMIN, 'doc-1');
+    expect(list).toHaveLength(1);
+    expect(list[0].type).toBe('ICSOP_PDF');
+  });
+
+  it('TS-A-003 文件存在但兩類皆未上傳 → 空陣列（非拋錯）', async () => {
+    await expect(svc.listForDocument(ICSOP_ADMIN, 'doc-2')).resolves.toEqual([]);
+  });
+
+  it('TS-A-004 非存在文件 → DOCUMENT_NOT_FOUND', async () => {
+    await expect(svc.listForDocument(ICSOP_ADMIN, 'ghost')).rejects.toThrow(
+      'DOCUMENT_NOT_FOUND',
+    );
+  });
+
+  it('TS-A-005 未注入 documentStore → 略過存在性檢查、正常回傳附件（防禦性降級）', async () => {
+    await seed('doc-1', 'ICSOP_PDF', 'sop.pdf');
+    const bare = new AttachmentsService(blob, store);
+    const list = await bare.listForDocument(ICSOP_ADMIN, 'doc-1');
+    expect(list).toHaveLength(1);
+    expect(list[0].fileName).toBe('sop.pdf');
+  });
+
+  it.each([
+    ['TS-A-006a 系統管理員', 'SysAdmin'],
+    ['TS-A-006b 主管', 'Supervisor'],
+    ['TS-A-006c 部門窗口', 'DeptContact'],
+  ])('%s 列出附件 → 允許（列表為讀取，不受欄位面寫入矩陣管轄）', async (_label, roleCode) => {
+    await seed('doc-1', 'ICSOP_PDF', 'sop.pdf');
+    const list = await svc.listForDocument({ roleCode, accountId: 'u' }, 'doc-1');
+    expect(list).toHaveLength(1);
+  });
+
+  it('TS-A-007 一般使用者於功能面即無存取（路由層回 403 PERMISSION_DENIED 之判定源頭）', () => {
+    expect(
+      canPerform('User', FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read'),
+    ).toBe(false);
+    expect(
+      canPerform('Supervisor', FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read'),
+    ).toBe(true);
   });
 });

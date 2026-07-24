@@ -12,6 +12,8 @@ import { TypeOrmDocumentLinkStore } from './typeorm-document-link.store';
 import { DOCUMENT_CHANGE_PUBLISHER } from './document-change-event';
 import { ChangeHistoryModule } from '../change-history/change-history.module';
 import { DocumentChangeLogPublisher } from '../change-history/document-change-log-publisher';
+import { ATTACHMENT_STORE, AttachmentStore } from '../attachments/attachments.store';
+import { TypeOrmAttachmentStore } from '../attachments/typeorm-attachments.store';
 
 /**
  * ICSOP 文件模組（E04）。匯入 AuthModule（SessionGuard）、RbacModule（RolePermissionGuard）。
@@ -29,6 +31,12 @@ import { DocumentChangeLogPublisher } from '../change-history/document-change-lo
     {
       provide: DOCUMENT_LINK_STORE,
       useFactory: (): DocumentLinkStore => new TypeOrmDocumentLinkStore(AppDataSource),
+    },
+    // F017 清單「檔案」欄之富化來源。以 store-token 於本模組自行建立（同 AppDataSource 單例），
+    // 不匯入 AttachmentsModule，避免與附件列表（AttachmentsModule 需 DOCUMENT_STORE）形成循環相依。
+    {
+      provide: ATTACHMENT_STORE,
+      useFactory: (): AttachmentStore => new TypeOrmAttachmentStore(AppDataSource),
     },
     // 決策 B（F037）：以真實 publisher 覆寫 seam，將 DocumentChangedEvent 持久化為 DOCUMENT_CHANGE_LOG。
     { provide: DOCUMENT_CHANGE_PUBLISHER, useExisting: DocumentChangeLogPublisher },

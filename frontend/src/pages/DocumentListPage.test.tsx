@@ -5,9 +5,13 @@ import { MemoryRouter } from 'react-router-dom';
 import { DocumentListPage } from './DocumentListPage';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
-import type { SessionUser, DocumentListItem, DocumentListPage as DocPage } from '../api/types';
+import type {
+  SessionUser, DocumentListItem, DocumentListPage as DocPage,
+  DocumentLinkView, DocumentAttachmentRecord,
+} from '../api/types';
 
 const navigateMock = vi.fn();
+const openMock = vi.fn();
 vi.mock('react-router-dom', async (orig) => {
   const actual = await orig<typeof import('react-router-dom')>();
   return { ...actual, useNavigate: () => navigateMock };
@@ -29,15 +33,26 @@ const doc = (over: Partial<DocumentListItem>): DocumentListItem => ({
   draftingCompanyId: '00000', draftingDeptId: 'A2000', draftingSectionId: 'A2100',
   draftingCompanyName: '和潤企業股份有限公司', draftingDeptName: '企劃部', draftingSectionName: '車輛行銷室',
   primaryChiefId: '20050', primaryChiefName: '陳彥廷',
-  edition: "26'01", announcedDate: '2020-01-01T00:00:00.000Z', contentSummary: '摘要', ...over,
+  edition: "26'01", announcedDate: '2020-01-01T00:00:00.000Z', contentSummary: '摘要',
+  icsopPdfBlobPath: null, icsopPdfFileName: null, links: [], ...over,
 });
 
 const page = (items: DocumentListItem[]): DocPage => ({
   items, total: items.length, page: 1, pageSize: 2000, hasNext: false,
 });
 
+const LINK_TO_D2: DocumentLinkView = {
+  linkId: 'l1', targetDocumentId: 'd2', targetNumber: 'ICSOP-PPC-101-2-02',
+  targetName: '消費分期產品政策及規範作業', targetStatus: 'active',
+};
+
 const DOCS: DocumentListItem[] = [
-  doc({ id: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業', lifecycleName: '銷售及收款循環', status: 'active', announcedDate: '2020-01-01T00:00:00.000Z' }),
+  doc({
+    id: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業',
+    lifecycleName: '銷售及收款循環', status: 'active', announcedDate: '2020-01-01T00:00:00.000Z',
+    icsopPdfBlobPath: 'documents/d1/icsop_pdf/abc.pdf', icsopPdfFileName: '車輛分期進件作業_v1.3.pdf',
+    links: [LINK_TO_D2],
+  }),
   doc({
     id: 'd2', documentNumber: 'ICSOP-PPC-101-2-02', documentName: '消費分期產品政策及規範作業',
     lifecycleName: '產品企劃循環', draftingDeptName: '消費分期營業部', draftingSectionName: null,
@@ -45,12 +60,22 @@ const DOCS: DocumentListItem[] = [
   }),
 ];
 
+const rowOf = (name: string) => screen.getByText(name).closest('tr')!;
+const attachment = (over: Partial<DocumentAttachmentRecord>): DocumentAttachmentRecord => ({
+  id: 'a1', documentId: 'd2', type: 'ICSOP_PDF', fileName: '消費分期產品政策及規範作業_v1.0.pdf',
+  blobPath: 'documents/d2/icsop_pdf/zzz.pdf', contentType: 'application/pdf', size: 1024,
+  uploadedBy: 'admin', uploadedAt: '2026-06-01T00:00:00.000Z', ...over,
+});
+
 const renderPage = () => render(<MemoryRouter><DocumentListPage /></MemoryRouter>);
 
 describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13）', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getDocuments).mockResolvedValue(page(DOCS));
+    vi.mocked(endpoints.downloadAttachment).mockResolvedValue({ url: 'https://blob/x', expiresInSeconds: 300 });
+    vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([attachment({})]);
+    vi.stubGlobal('open', openMock);
   });
 
   it('載入後渲染文件列（編號、書名、制定公司/室長名稱）', async () => {
@@ -144,5 +169,109 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
     const rows = screen.getAllByRole('row');
     const firstDataRow = rows[1];
     expect(within(firstDataRow).getByText('車輛分期進件作業')).toBeInTheDocument();
+  });
+
+  describe('「檔案」欄（prototype 13 fileBtn）', () => {
+    it('TS-D-015 有 ICSOP PDF 之列顯示下載鈕，title＝下載 {檔名}', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      const btn = within(rowOf('車輛分期進件作業')).getByTitle('下載 車輛分期進件作業_v1.3.pdf');
+      expect(btn.tagName).toBe('BUTTON');
+    });
+
+    it('TS-D-016 無 ICSOP PDF 之列顯示「—」（非按鈕）', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('消費分期產品政策及規範作業')).toBeInTheDocument());
+      const row = rowOf('消費分期產品政策及規範作業');
+      expect(within(row).queryByTitle(/^下載 /)).not.toBeInTheDocument();
+      // 檔案欄（第 6 欄，index 5）為「—」
+      expect(row.querySelectorAll('td')[5].textContent).toBe('—');
+    });
+
+    it('TS-D-017 點擊檔案下載鈕 → 以該 blobPath 呼叫既有受控下載端點並開新分頁', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      await userEvent.click(within(rowOf('車輛分期進件作業')).getByTitle('下載 車輛分期進件作業_v1.3.pdf'));
+      await waitFor(() =>
+        expect(endpoints.downloadAttachment).toHaveBeenCalledWith('documents/d1/icsop_pdf/abc.pdf'),
+      );
+      expect(openMock).toHaveBeenCalledWith('https://blob/x', '_blank', 'noopener,noreferrer');
+    });
+  });
+
+  describe('「連結點程序書」欄（prototype 13 linkCell）', () => {
+    it('TS-D-018 有連結之列顯示編號 pill，title 含完整「編號 書名」', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      const pill = within(rowOf('車輛分期進件作業')).getByTitle(
+        '下載連結點程序書：ICSOP-PPC-101-2-02 消費分期產品政策及規範作業',
+      );
+      expect(pill).toHaveTextContent('ICSOP-PPC-101-2-02');
+      expect(pill).not.toHaveTextContent('消費分期產品政策及規範作業');
+    });
+
+    it('TS-D-019 無連結之列顯示「—」', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('消費分期產品政策及規範作業')).toBeInTheDocument());
+      // 連結點程序書欄（第 12 欄，index 11）
+      expect(rowOf('消費分期產品政策及規範作業').querySelectorAll('td')[11].textContent).toBe('—');
+    });
+
+    it('TS-D-020 一列多個連結 → 顯示多個 pill', async () => {
+      mockAuth('ICSOPAdmin');
+      vi.mocked(endpoints.getDocuments).mockResolvedValue(
+        page([
+          doc({
+            id: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業',
+            links: [
+              LINK_TO_D2,
+              { linkId: 'l2', targetDocumentId: 'd5', targetNumber: 'ICSOP-SRC-102-1-01', targetName: '車輛分期對保作業', targetStatus: 'active' },
+            ],
+          }),
+        ]),
+      );
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      const cell = rowOf('車輛分期進件作業').querySelectorAll('td')[11];
+      expect(cell.querySelectorAll('button')).toHaveLength(2);
+    });
+
+    it('TS-D-021 點擊 pill → 以既有受控下載路徑下載「目標文件」之 ICSOP PDF（非導覽）', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      await userEvent.click(
+        within(rowOf('車輛分期進件作業')).getByTitle(
+          '下載連結點程序書：ICSOP-PPC-101-2-02 消費分期產品政策及規範作業',
+        ),
+      );
+      // 針對「目標文件」取其附件 → 走同一支受控下載端點（不新增第二條下載路由）
+      await waitFor(() => expect(endpoints.getDocumentAttachments).toHaveBeenCalledWith('d2'));
+      await waitFor(() =>
+        expect(endpoints.downloadAttachment).toHaveBeenCalledWith('documents/d2/icsop_pdf/zzz.pdf'),
+      );
+      expect(openMock).toHaveBeenCalledWith('https://blob/x', '_blank', 'noopener,noreferrer');
+      expect(navigateMock).not.toHaveBeenCalled();
+    });
+
+    it('TS-D-021b 目標文件無 ICSOP PDF → 以既有錯誤提示呈現，不崩潰', async () => {
+      mockAuth('ICSOPAdmin');
+      vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([]);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      await userEvent.click(
+        within(rowOf('車輛分期進件作業')).getByTitle(
+          '下載連結點程序書：ICSOP-PPC-101-2-02 消費分期產品政策及規範作業',
+        ),
+      );
+      expect(await screen.findByRole('alert')).toHaveTextContent('無法下載');
+      expect(endpoints.downloadAttachment).not.toHaveBeenCalled();
+      expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument();
+    });
   });
 });
