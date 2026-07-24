@@ -1,5 +1,6 @@
 import { NumberHolder } from './document-rules';
 import { DocumentStatus } from './document-status';
+import { DocumentLinkView } from './document-link.store';
 
 /** 文件資料存取邊界（可注入 mock/TypeORM）。E04-1 僅需建立與編號唯一性查詢。 */
 export const DOCUMENT_STORE = Symbol('DOCUMENT_STORE');
@@ -99,6 +100,20 @@ export interface DocumentListItem {
   edition: string | null;
   announcedDate: string | null;
   contentSummary: string | null;
+  /** F017「檔案」欄：該文件自身之 ICSOP PDF（供受控下載端點）；無附件→null。OJT 不落此欄。 */
+  icsopPdfBlobPath: string | null;
+  /** F017「檔案」欄：下載鈕 title「下載 {fileName}」之來源；無附件→null。 */
+  icsopPdfFileName: string | null;
+  /** F017「連結點程序書」欄：本文件之連結點摘要（0..*，目標編號/書名/目前狀態）。 */
+  links: DocumentLinkView[];
+}
+
+/** F017 清單富化：連結目標之精簡摘要（批次查詢，避免逐列 N+1）。 */
+export interface DocumentSummary {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+  status: DocumentStatus;
 }
 
 /** F017 分頁結果（real pagination，取代既有 take(2000)）。 */
@@ -116,6 +131,8 @@ export interface DocumentStore {
   create(input: CreateDocumentInput): Promise<DocumentView>;
   list(filters: DocumentListFilters): Promise<DocumentListPage>;
   findById(id: string): Promise<DocumentView | null>;
+  /** F017 清單富化：批次取多筆文件之精簡摘要（連結點目標；查無者不列）。 */
+  findSummaries(ids: string[]): Promise<DocumentSummary[]>;
   updateStatus(id: string, status: DocumentStatus): Promise<void>;
   /** F011 編輯：以 patch 覆寫（不留歷史、UUID 不變）；回傳覆寫後之完整檢視。 */
   update(id: string, patch: DocumentPatch): Promise<DocumentView>;

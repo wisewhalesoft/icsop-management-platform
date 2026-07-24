@@ -1,5 +1,5 @@
 # F026: 角色×欄位權限矩陣
-Priority: P0-MVP | Status: 部分（欄位可寫/唯讀矩陣＋`FIELD_WRITE_FORBIDDEN` 已實作；**「使用部門子樹前綴判定」已落地為共用純函式** `org-sync/org-hierarchy.isWithinSubtree`，F019 置頂/部門篩選共用同一 predicate（public-seams），AC「部層 JA000 ⊃ JAC00 相符／同部兄弟處室不相符」已由 TS-PS-ORG-002/004 覆蓋；剩附件/浮水印相關 AC。見 implementation-logs/public-seams-impl.md） | Last Updated: 2026-07-24
+Priority: P0-MVP | Status: 🟡 實作（unit 綠）。① 欄位可寫/唯讀矩陣＋`FIELD_WRITE_FORBIDDEN`，**建立＋編輯兩路徑皆行使 all-or-nothing**（含多值欄 `CHIEF_SECONDARY`/`USING_DEPTS` 編輯路徑回歸，doc-seams）；② **「使用部門子樹前綴判定」已落地為共用純函式** `org-sync/org-hierarchy.isWithinSubtree`，與 F019 置頂/部門篩選共用同一 predicate（public-seams），AC「部層 `JA000` ⊃ `JAC00` 相符／同部兄弟處室不相符」由 TS-PS-ORG-002/004 覆蓋。剩：AC5-9 之附件/浮水印相關判定。見 implementation-logs/doc-seams-impl.md、public-seams-impl.md | Last Updated: 2026-07-24
 Epic/Story: E08 / US-071
 
 > **定案**：主管、部門窗口、**系統管理員**對所有文件欄位**皆唯讀**（僅 ICSOP 管理員可寫）。系統管理員比照主管為唯讀（可查、附件可下載、不可寫），與功能矩陣 F025 一致（OQ-E08-01 已收斂）。「所屬節點」雖列 ICSOPAdmin 可寫，但維護入口為節點抽屜（F009），非文件編輯表單。共 19 欄位（詳見 [data-model](../data-model.md#document-entity)；2026-07-17 移除「當責部門」、新增 制定公司/制定部門/制定室別/內容摘要，發布日期→公告日期、人為版本號→版次）。

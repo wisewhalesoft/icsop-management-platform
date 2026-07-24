@@ -38,6 +38,15 @@ export interface AttachmentStore {
     type: SingleAttachmentType,
   ): Promise<DocumentAttachmentRecord | null>;
 
+  /**
+   * F017 清單富化：批次取多筆文件之某類型附件（一次查詢，避免逐列 N+1）。
+   * 空 documentIds → 空陣列（不查庫）。
+   */
+  findManyByType(
+    documentIds: string[],
+    type: SingleAttachmentType,
+  ): Promise<DocumentAttachmentRecord[]>;
+
   /** upsert（依 documentId+type 覆蓋，保留穩定 id）；回傳最終列。 */
   upsertSingle(input: UpsertAttachmentInput): Promise<DocumentAttachmentRecord>;
 

@@ -23,6 +23,9 @@ function item(over: Partial<DocumentListItem>): DocumentListItem {
     edition: null,
     announcedDate: null,
     contentSummary: null,
+    icsopPdfBlobPath: null,
+    icsopPdfFileName: null,
+    links: [],
     ...over,
   };
 }

@@ -36,6 +36,21 @@ import {
 export class AttachmentsController {
   constructor(private readonly svc: AttachmentsService) {}
 
+  /**
+   * 某文件之附件清單（ICSOP PDF／OJT 簽到表；固定序，缺者不列）。
+   * 服務對象為後台編輯頁/唯讀頁，故功能面採與同檔上傳端點相同之 ICSOP文件管理 read
+   * （一般使用者＝無 → 403 PERMISSION_DENIED）；未登入由 SessionGuard 擋（401）。
+   * 查無此文件 → 404 DOCUMENT_NOT_FOUND（區別於「文件存在但無附件」之 200 空陣列）。
+   */
+  @Get('admin/documents/:documentId/attachments')
+  @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
+  listAttachments(
+    @Req() req: RequestWithSession,
+    @Param('documentId') documentId: string,
+  ) {
+    return this.svc.listForDocument(req.sessionUser, documentId);
+  }
+
   @Post('admin/documents/:documentId/attachments/icsop-pdf')
   @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
   @UseInterceptors(FileInterceptor('file', MULTIPART_OPTIONS))

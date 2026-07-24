@@ -1,5 +1,6 @@
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { randomUUID } from 'crypto';
+import { chunkByParamBudget } from '../org-sync/param-batching';
 import { DocumentAttachment } from '../database/entities/document-attachment.entity';
 import {
   AttachmentStore,
@@ -40,6 +41,23 @@ export class TypeOrmAttachmentStore implements AttachmentStore {
       .getRepository(DocumentAttachment)
       .findOne({ where: { documentId, type } });
     return d ? TypeOrmAttachmentStore.toRecord(d) : null;
+  }
+
+  /** ⚠ MSSQL 2100 參數上限：單欄 IN 以 chunkByParamBudget 切批（每批 ≤1000）。 */
+  async findManyByType(
+    documentIds: string[],
+    type: SingleAttachmentType,
+  ): Promise<DocumentAttachmentRecord[]> {
+    const keys = [...new Set(documentIds.filter(Boolean))];
+    if (keys.length === 0) return [];
+    const ds = await this.init();
+    const repo = ds.getRepository(DocumentAttachment);
+    const out: DocumentAttachmentRecord[] = [];
+    for (const batch of chunkByParamBudget(keys, 1, 1000)) {
+      const rows = await repo.find({ where: { documentId: In(batch), type } });
+      out.push(...rows.map(TypeOrmAttachmentStore.toRecord));
+    }
+    return out;
   }
 
   async upsertSingle(

@@ -1,5 +1,5 @@
 # F016: PDF 與 OJT 附件上傳
-Priority: P0-MVP | Status: Backend Implemented（unit-green；真 Azure Blob（私有容器＋短效期 SAS 下載）＋ multipart 上傳端點已接線；int 測試已備未跑；前端上傳 UI 延後至整併） | Last Updated: 2026-07-23
+Priority: P0-MVP | Status: 🟡 實作（unit 綠；真 Azure Blob＋multipart 上傳＋受控下載；**附件列表端點 GET :id/attachments 與編輯頁/唯讀頁既有檔名＋下載已補**（doc-seams）；int 已寫未跑，見 implementation-logs/doc-seams-impl.md） | Last Updated: 2026-07-24
 Epic/Story: E04 / US-036
 
 ## Description

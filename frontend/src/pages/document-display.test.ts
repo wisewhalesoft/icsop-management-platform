@@ -8,7 +8,8 @@ const doc = (over: Partial<DocumentListItem>): DocumentListItem => ({
   lifecycleName: null, nodeId: null, draftingCompanyId: null, draftingDeptId: null,
   draftingSectionId: null, draftingCompanyName: null, draftingDeptName: null,
   draftingSectionName: null, primaryChiefId: null, primaryChiefName: null,
-  edition: null, announcedDate: null, contentSummary: null, ...over,
+  edition: null, announcedDate: null, contentSummary: null,
+  icsopPdfBlobPath: null, icsopPdfFileName: null, links: [], ...over,
 });
 
 describe('document-display（前端衍生狀態，mirror 後端）', () => {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
-import { getDocuments } from '../api/endpoints';
+import { getDocuments, getDocumentAttachments, downloadAttachment } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
@@ -9,7 +9,7 @@ import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, type ComboOption } from '../components/SearchCombobox';
 import { formatDateTime } from './org-sync-view';
 import { deriveDisplayStatus, DISPLAY_LABEL, type DisplayStatus } from './document-display';
-import type { DocumentListItem } from '../api/types';
+import type { DocumentListItem, DocumentLinkView } from '../api/types';
 
 /**
  * 後台 ICSOP 程序書清單（F017）。版面權威來源：prototypes/13-document-list.html。
@@ -20,8 +20,12 @@ import type { DocumentListItem } from '../api/types';
  *
  * 資料策略：一次載入完整工作集（getDocuments pageSize 大），前端衍生 9 篩選之選項、
  * 客端篩選/排序/分頁與統計（比照 prototype 之 client-side 模型）。連結點篩選（linkTargetId）
- * 因清單項不含連結資料，改以後端查詢取得指向目標之文件 id 集合後於客端交集。
- * 已知後端缺口：清單項未含「檔案（附件 blobPath）」與「連結點程序書」明細，該二欄以「—」呈現。
+ * 改以後端查詢取得指向目標之文件 id 集合後於客端交集。
+ *
+ * 「檔案」欄＝該列自身之 ICSOP PDF 下載鈕（清單項已帶 icsopPdfBlobPath/FileName）；
+ * 「連結點程序書」欄＝每個連結一個 pill，點擊＝下載「目標文件」之 ICSOP PDF
+ * （先取目標之附件清單，再走同一支受控（稽核）下載端點；不新增第二條下載路徑）。
+ * 浮水印與否由伺服器端依 F020 決定，前端不帶任何浮水印旗標。
  */
 const PAGE_SIZE = 50;
 const LOAD_SIZE = 2000;
@@ -112,6 +116,39 @@ export function DocumentListPage(): JSX.Element {
       alive = false;
     };
   }, [filters.link]);
+
+  /** 受控下載：核發短效期 URL → 開新分頁（伺服器端寫入稽核 DOWNLOAD）。 */
+  const openBlob = useCallback(async (blobPath: string, label: string) => {
+    try {
+      const grant = await downloadAttachment(blobPath);
+      window.open(grant.url, '_blank', 'noopener,noreferrer');
+    } catch {
+      setNotice(`無法下載「${label}」`);
+    }
+  }, []);
+
+  /**
+   * 連結點 pill：下載「目標文件」之 ICSOP PDF。
+   * 先取目標文件之附件清單（同一 documentId 維度之既有端點），再走與「檔案」欄相同之受控下載。
+   * 目標無 ICSOP PDF／取用失敗 → 以既有錯誤提示呈現，不崩潰。
+   */
+  const onDownloadLink = useCallback(
+    async (l: DocumentLinkView) => {
+      const label = `${l.targetNumber ?? l.targetDocumentId}${l.targetName ? ` ${l.targetName}` : ''}`;
+      try {
+        const atts = await getDocumentAttachments(l.targetDocumentId);
+        const pdf = atts.find((a) => a.type === 'ICSOP_PDF');
+        if (!pdf) {
+          setNotice(`無法下載「${label}」`);
+          return;
+        }
+        await openBlob(pdf.blobPath, label);
+      } catch {
+        setNotice(`無法下載「${label}」`);
+      }
+    },
+    [openBlob],
+  );
 
   const chiefValue = useCallback(
     (d: DocumentListItem): string | null => d.primaryChiefName ?? d.primaryChiefId,
@@ -325,7 +362,19 @@ export function DocumentListPage(): JSX.Element {
                         {DISPLAY_LABEL[disp]}
                       </span>
                     </td>
-                    <td className="px-3 py-3"><span className="text-slate-300" title="附件下載需附件資料（清單未提供）">—</span></td>
+                    <td className="px-3 py-3">
+                      {d.icsopPdfBlobPath ? (
+                        <button
+                          onClick={() => void openBlob(d.icsopPdfBlobPath!, d.icsopPdfFileName ?? d.documentNumber)}
+                          title={`下載 ${d.icsopPdfFileName ?? d.documentNumber}`}
+                          className="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"
+                        >
+                          <Icon name="file-down" className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
                     <td className="px-3 py-3">
                       <button
                         onClick={() => window.open(`/lifecycles/${d.lifecycleId}/tree`, '_blank', 'noopener,noreferrer')}
@@ -369,7 +418,25 @@ export function DocumentListPage(): JSX.Element {
                         {d.contentSummary ?? '—'}
                       </span>
                     </td>
-                    <td className="px-3 py-3"><span className="text-slate-300">—</span></td>
+                    <td className="px-3 py-3">
+                      {d.links.length ? (
+                        <div className="flex flex-wrap items-center gap-1">
+                          {d.links.map((l) => (
+                            <button
+                              key={l.linkId}
+                              onClick={() => void onDownloadLink(l)}
+                              title={`下載連結點程序書：${l.targetNumber ?? l.targetDocumentId}${l.targetName ? ` ${l.targetName}` : ''}`}
+                              className="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px]"
+                            >
+                              <Icon name="download" className="w-3 h-3" />
+                              {l.targetNumber ?? l.targetDocumentId}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
                     <td className="px-3 py-3 text-slate-500 mono text-xs whitespace-nowrap">
                       {d.announcedDate ? formatDateTime(d.announcedDate).slice(0, 10) : '—'}
                     </td>

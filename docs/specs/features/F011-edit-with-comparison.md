@@ -1,5 +1,5 @@
 # F011: 編輯 ICSOP 文件與版本對照
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-17
+Priority: P0-MVP | Status: 🟡 實作（unit 綠；編輯頁欄位對照/取消/儲存＋F014 多值編輯側持久化（doc-seams）；int 已寫未跑，見 implementation-logs/doc-seams-impl.md） | Last Updated: 2026-07-24
 Epic/Story: E04 / US-031
 
 ## Description

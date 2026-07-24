@@ -7,6 +7,7 @@ import {
   DocumentListFilters,
   DocumentListItem,
   DocumentListPage,
+  DocumentSummary,
 } from './documents.store';
 import { applyDocumentQuery } from './document-list-query';
 import { NumberHolder } from './document-rules';
@@ -17,12 +18,22 @@ import {
 } from './document-change-event';
 import { NameResolutionService } from '../org-directory/name-resolution.service';
 import { DocumentLink, DocumentLinkStore } from './document-link.store';
+import {
+  AttachmentStore,
+  DocumentAttachmentRecord,
+  SingleAttachmentType,
+  UpsertAttachmentInput,
+} from '../attachments/attachments.store';
 
 class FakeLinkStore implements DocumentLinkStore {
   seq = 1;
   links: DocumentLink[] = [];
   findBySource(sourceId: string): Promise<DocumentLink[]> {
     return Promise.resolve(this.links.filter((l) => l.sourceDocumentId === sourceId));
+  }
+  findBySources(sourceIds: string[]): Promise<DocumentLink[]> {
+    const set = new Set(sourceIds);
+    return Promise.resolve(this.links.filter((l) => set.has(l.sourceDocumentId)));
   }
   add(sourceId: string, targetId: string): Promise<DocumentLink> {
     const l = { id: `link-${this.seq++}`, sourceDocumentId: sourceId, targetDocumentId: targetId };
@@ -51,6 +62,45 @@ class FakeNameResolver {
       if (n) out.set(e, n);
     }
     return Promise.resolve(out);
+  }
+}
+
+/** C 節：清單富化之附件 store 替身（僅需批次查詢與最小 CRUD 以滿足介面）。 */
+class FakeAttachmentStore implements AttachmentStore {
+  seq = 1;
+  rows: DocumentAttachmentRecord[] = [];
+  seed(documentId: string, type: SingleAttachmentType, over: Partial<DocumentAttachmentRecord> = {}) {
+    const rec: DocumentAttachmentRecord = {
+      id: `att-${this.seq++}`,
+      documentId,
+      type,
+      fileName: 'sop.pdf',
+      blobPath: `documents/${documentId}/${type.toLowerCase()}/abc.pdf`,
+      contentType: 'application/pdf',
+      size: 1024,
+      uploadedBy: 'admin1',
+      uploadedAt: new Date(),
+      ...over,
+    };
+    this.rows.push(rec);
+    return rec;
+  }
+  findSingle(documentId: string, type: SingleAttachmentType) {
+    return Promise.resolve(
+      this.rows.find((r) => r.documentId === documentId && r.type === type) ?? null,
+    );
+  }
+  findManyByType(documentIds: string[], type: SingleAttachmentType) {
+    const set = new Set(documentIds);
+    return Promise.resolve(this.rows.filter((r) => r.type === type && set.has(r.documentId)));
+  }
+  upsertSingle(input: UpsertAttachmentInput) {
+    const rec: DocumentAttachmentRecord = { id: `att-${this.seq++}`, ...input };
+    this.rows.push(rec);
+    return Promise.resolve(rec);
+  }
+  findByBlobPath(blobPath: string) {
+    return Promise.resolve(this.rows.find((r) => r.blobPath === blobPath) ?? null);
   }
 }
 
@@ -126,11 +176,26 @@ class FakeStore implements DocumentStore {
       edition: d.edition ?? null,
       announcedDate: d.announcedDate ? new Date(d.announcedDate as unknown as string).toISOString() : null,
       contentSummary: d.contentSummary ?? null,
+      // F017 富化欄之基線值（無附件/無連結）；由 service 依注入之 store 覆寫。
+      icsopPdfBlobPath: null, icsopPdfFileName: null, links: [],
     }));
     return Promise.resolve(applyDocumentQuery(rows, f, new Date()));
   }
   findById(id: string): Promise<DocumentView | null> {
     return Promise.resolve(this.docs.find((d) => d.id === id) ?? null);
+  }
+  findSummaries(ids: string[]): Promise<DocumentSummary[]> {
+    const set = new Set(ids);
+    return Promise.resolve(
+      this.docs
+        .filter((d) => set.has(d.id))
+        .map((d) => ({
+          id: d.id,
+          documentNumber: d.documentNumber,
+          documentName: d.documentName,
+          status: d.status,
+        })),
+    );
   }
   updateStatus(id: string, status: DocumentStatus): Promise<void> {
     this.statusUpdates.push({ id, status });
@@ -312,12 +377,114 @@ describe('DocumentsService.create 制定組織/當責室長/使用部門（F014 
     expect(view.usingDeptIds).toEqual(['A2000', 'B0000']);
   });
 
-  it('F014-C7 編輯路徑不持久化多值（create-side only）：patch 之次要室長被剔除、不進 store.update', async () => {
-    const d = store.seedDoc({ documentName: '舊', secondaryChiefIds: ['20053'] });
-    await svc.update('ICSOPAdmin', d.id, { documentName: '新', secondaryChiefIds: ['99999'], usingDeptIds: ['X'] });
+});
+
+/**
+ * B 節：編輯側多值持久化（取代舊 F014-C7「編輯路徑不持久化多值」契約）＋F026 編輯路徑欄位面回歸。
+ * 語意：帶鍵才處理（partial patch）；顯式 [] ＝清空；未帶鍵＝不觸碰既有集合。
+ */
+describe('DocumentsService.update — F014 多值編輯側持久化（B）', () => {
+  let store: FakeStore;
+  let pub: FakePublisher;
+  let svc: DocumentsService;
+  beforeEach(() => {
+    store = new FakeStore();
+    pub = new FakePublisher();
+    svc = new DocumentsService(store, pub);
+  });
+
+  it('TS-B-001 ICSOPAdmin 修改次要室長與使用部門 → 實際落地於 store.update 之 patch', async () => {
+    const d = store.seedDoc({ secondaryChiefIds: ['20053'], usingDeptIds: ['A2000'] });
+    const res = await svc.update('ICSOPAdmin', d.id, {
+      secondaryChiefIds: ['99999'],
+      usingDeptIds: ['X'],
+    });
     expect(store.updated).toHaveLength(1);
-    expect(store.updated[0].patch).not.toHaveProperty('secondaryChiefIds');
-    expect(store.updated[0].patch).not.toHaveProperty('usingDeptIds');
+    expect(store.updated[0].patch.secondaryChiefIds).toEqual(['99999']);
+    expect(store.updated[0].patch.usingDeptIds).toEqual(['X']);
+    expect(res.document.secondaryChiefIds).toEqual(['99999']);
+    expect(res.document.usingDeptIds).toEqual(['X']);
+  });
+
+  it('TS-B-002 正規化與 create 路徑一致：去空白/去空字串/去重', async () => {
+    const d = store.seedDoc({});
+    await svc.update('ICSOPAdmin', d.id, {
+      secondaryChiefIds: ['20053', ' 20053 ', '', '20541'],
+    });
+    expect(store.updated[0].patch.secondaryChiefIds).toEqual(['20053', '20541']);
+  });
+
+  it('TS-B-003 空陣列顯式送入 → 清空既有集合（鍵存在、值為空陣列）', async () => {
+    const d = store.seedDoc({ secondaryChiefIds: ['20053'] });
+    const res = await svc.update('ICSOPAdmin', d.id, { secondaryChiefIds: [] });
+    expect(store.updated[0].patch).toHaveProperty('secondaryChiefIds');
+    expect(store.updated[0].patch.secondaryChiefIds).toEqual([]);
+    expect(res.document.secondaryChiefIds).toEqual([]);
+  });
+
+  it('TS-B-004 省略鍵（payload 未帶多值）→ 不觸及既有集合', async () => {
+    const d = store.seedDoc({
+      documentName: '舊名',
+      secondaryChiefIds: ['20053'],
+      usingDeptIds: ['A2000'],
+    });
+    const res = await svc.update('ICSOPAdmin', d.id, { documentName: '新名' });
+    expect(
+      Object.prototype.hasOwnProperty.call(store.updated[0].patch, 'secondaryChiefIds'),
+    ).toBe(false);
+    expect(
+      Object.prototype.hasOwnProperty.call(store.updated[0].patch, 'usingDeptIds'),
+    ).toBe(false);
+    expect(res.document.secondaryChiefIds).toEqual(['20053']);
+    expect(res.document.usingDeptIds).toEqual(['A2000']);
+  });
+
+  it('TS-B-005 非 ICSOPAdmin（SysAdmin）寫次要室長 → FIELD_WRITE_FORBIDDEN、未落地', async () => {
+    const d = store.seedDoc({});
+    await expect(
+      svc.update('SysAdmin', d.id, { secondaryChiefIds: ['99999'] }),
+    ).rejects.toThrow('FIELD_WRITE_FORBIDDEN');
+    expect(store.updated).toHaveLength(0);
+  });
+
+  it('TS-B-006 非 ICSOPAdmin（Supervisor）寫使用部門 → FIELD_WRITE_FORBIDDEN、未落地', async () => {
+    const d = store.seedDoc({});
+    await expect(
+      svc.update('Supervisor', d.id, { usingDeptIds: ['A2000'] }),
+    ).rejects.toThrow('FIELD_WRITE_FORBIDDEN');
+    expect(store.updated).toHaveLength(0);
+  });
+
+  it('TS-B-007 混合 payload（可寫欄位＋禁寫多值）→ 整體拒絕，可寫欄位亦不落地', async () => {
+    const d = store.seedDoc({ documentName: '舊名' });
+    await expect(
+      svc.update('DeptContact', d.id, { documentName: '新名', secondaryChiefIds: ['1'] }),
+    ).rejects.toThrow('FIELD_WRITE_FORBIDDEN');
+    expect(store.updated).toHaveLength(0);
+    expect(store.docs.find((x) => x.id === d.id)!.documentName).toBe('舊名');
+  });
+
+  it('TS-B-008 版本對照 diff（changes）含多值欄位之變更', async () => {
+    const d = store.seedDoc({ secondaryChiefIds: ['20053'] });
+    const res = await svc.update('ICSOPAdmin', d.id, { secondaryChiefIds: ['99999'] });
+    expect(res.changes).toContainEqual({
+      field: 'secondaryChiefIds',
+      before: ['20053'],
+      after: ['99999'],
+    });
+  });
+
+  it('TS-B-009 changedFields 含 usingDeptIds（供 F037 變更事件 payload）', async () => {
+    const d = store.seedDoc({ usingDeptIds: ['A2000'] });
+    await svc.update('ICSOPAdmin', d.id, { usingDeptIds: ['B0000'] });
+    expect(pub.events[0].changedFields).toContain('usingDeptIds');
+  });
+
+  it('TS-B-010 使用部門全為空白字串 → 正規化為空陣列（等同顯式清空）', async () => {
+    const d = store.seedDoc({ usingDeptIds: ['A2000'] });
+    const res = await svc.update('ICSOPAdmin', d.id, { usingDeptIds: ['  ', '  '] });
+    expect(store.updated[0].patch.usingDeptIds).toEqual([]);
+    expect(res.document.usingDeptIds).toEqual([]);
   });
 });
 
@@ -588,6 +755,117 @@ describe('DocumentsService.listDocuments 名稱解析＋分頁（F017）', () =>
     const page = await bare.listDocuments({});
     expect(page.items[0].draftingCompanyName).toBeNull();
     expect(page.items[0].primaryChiefName).toBeNull();
+  });
+});
+
+/**
+ * C 節：清單「檔案」（自身 ICSOP PDF）＋「連結點程序書」（目標摘要）之富化。
+ * 皆為批次注入（store-token 對 store-token），不得退化為逐列 N+1 查詢。
+ */
+describe('DocumentsService.listDocuments 富化：檔案＋連結點（C）', () => {
+  let store: FakeStore;
+  let links: FakeLinkStore;
+  let attachments: FakeAttachmentStore;
+  let svc: DocumentsService;
+  beforeEach(() => {
+    store = new FakeStore();
+    links = new FakeLinkStore();
+    attachments = new FakeAttachmentStore();
+    svc = new DocumentsService(store, undefined, undefined, links, attachments);
+  });
+  const itemOf = (page: DocumentListPage, id: string) => page.items.find((i) => i.id === id)!;
+
+  it('TS-C-001 清單項含自身 ICSOP PDF 之 blobPath/fileName', async () => {
+    const d1 = store.seedDoc({ documentNumber: 'D1' });
+    attachments.seed(d1.id, 'ICSOP_PDF', {
+      fileName: 'sop.pdf',
+      blobPath: 'documents/d1/icsop_pdf/abc.pdf',
+    });
+    const page = await svc.listDocuments({});
+    expect(itemOf(page, d1.id).icsopPdfBlobPath).toBe('documents/d1/icsop_pdf/abc.pdf');
+    expect(itemOf(page, d1.id).icsopPdfFileName).toBe('sop.pdf');
+  });
+
+  it('TS-C-002 無附件之文件 → icsopPdfBlobPath/FileName 為 null', async () => {
+    const d2 = store.seedDoc({ documentNumber: 'D2' });
+    const page = await svc.listDocuments({});
+    expect(itemOf(page, d2.id).icsopPdfBlobPath).toBeNull();
+    expect(itemOf(page, d2.id).icsopPdfFileName).toBeNull();
+  });
+
+  it('TS-C-003 僅有 OJT 附件 → 不落入「檔案」欄（該欄僅承載 ICSOP PDF）', async () => {
+    const d3 = store.seedDoc({ documentNumber: 'D3' });
+    attachments.seed(d3.id, 'OJT_SIGNIN', { fileName: 'ojt.pdf' });
+    const page = await svc.listDocuments({});
+    expect(itemOf(page, d3.id).icsopPdfBlobPath).toBeNull();
+    expect(itemOf(page, d3.id).icsopPdfFileName).toBeNull();
+  });
+
+  it('TS-C-004 清單項含連結點摘要（目標編號/書名/目前狀態）', async () => {
+    const d1 = store.seedDoc({ documentNumber: 'D1' });
+    const d2 = store.seedDoc({
+      documentNumber: 'ICSOP-SRC-101-2-00',
+      documentName: '消金審核作業',
+      status: 'active',
+    });
+    await links.add(d1.id, d2.id);
+    const page = await svc.listDocuments({});
+    const l = itemOf(page, d1.id).links;
+    expect(l).toHaveLength(1);
+    expect(l[0]).toMatchObject({
+      targetDocumentId: d2.id,
+      targetNumber: 'ICSOP-SRC-101-2-00',
+      targetName: '消金審核作業',
+      targetStatus: 'active',
+    });
+  });
+
+  it('TS-C-005 無連結點文件 → links 為空陣列（前端渲染「—」）', async () => {
+    const d4 = store.seedDoc({ documentNumber: 'D4' });
+    const page = await svc.listDocuments({});
+    expect(itemOf(page, d4.id).links).toEqual([]);
+  });
+
+  it('TS-C-006 一文件有多個連結點 → links 含全部', async () => {
+    const d1 = store.seedDoc({ documentNumber: 'D1' });
+    const d2 = store.seedDoc({ documentNumber: 'D2' });
+    const d5 = store.seedDoc({ documentNumber: 'D5' });
+    await links.add(d1.id, d2.id);
+    await links.add(d1.id, d5.id);
+    const page = await svc.listDocuments({});
+    const targets = itemOf(page, d1.id).links.map((l) => l.targetDocumentId).sort();
+    expect(targets).toEqual([d2.id, d5.id].sort());
+  });
+
+  it('TS-C-007 連結目標已作廢 → targetStatus 反映最新狀態（非建立當下快照）', async () => {
+    const d1 = store.seedDoc({ documentNumber: 'D1' });
+    const d6 = store.seedDoc({ documentNumber: 'D6', status: 'active' });
+    await links.add(d1.id, d6.id);
+    await svc.setStatus(d6.id, 'void');
+    const page = await svc.listDocuments({});
+    expect(itemOf(page, d1.id).links[0].targetStatus).toBe('void');
+  });
+
+  it('TS-C-008 未注入 attachmentStore／linkStore → 優雅降級（null／[]），不拋錯', async () => {
+    const bare = new DocumentsService(store);
+    const d1 = store.seedDoc({ documentNumber: 'D1' });
+    const page = await bare.listDocuments({});
+    expect(itemOf(page, d1.id).icsopPdfBlobPath).toBeNull();
+    expect(itemOf(page, d1.id).icsopPdfFileName).toBeNull();
+    expect(itemOf(page, d1.id).links).toEqual([]);
+  });
+
+  it('富化為批次查詢（不隨列數退化為 N+1）', async () => {
+    for (let i = 0; i < 5; i++) store.seedDoc({ documentNumber: `N-${i}` });
+    const batchSpy = jest.spyOn(attachments, 'findManyByType');
+    const linkSpy = jest.spyOn(links, 'findBySources');
+    const singleSpy = jest.spyOn(attachments, 'findSingle');
+    const bySourceSpy = jest.spyOn(links, 'findBySource');
+    await svc.listDocuments({});
+    expect(batchSpy).toHaveBeenCalledTimes(1);
+    expect(linkSpy).toHaveBeenCalledTimes(1);
+    expect(singleSpy).not.toHaveBeenCalled();
+    expect(bySourceSpy).not.toHaveBeenCalled();
   });
 });
 

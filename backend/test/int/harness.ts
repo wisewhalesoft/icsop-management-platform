@@ -34,7 +34,7 @@ export interface IntCtx {
   cookieFor: (loginId: string, companyCode?: string, roleCode?: string) => string;
 }
 
-/** 精準刪除本測試套件建立之 marker 資料（FK 順序：links/多值 → documents → lifecycle → account）。 */
+/** 精準刪除本測試套件建立之 marker 資料（FK 順序：links/多值/附件 → documents → lifecycle → account）。 */
 export async function cleanupMarkers(): Promise<void> {
   const q = AppDataSource.query.bind(AppDataSource);
   const markerDocs = `(SELECT [id] FROM [ICSOP_DOCUMENT] WHERE [documentNumber] LIKE '${MARK.doc}%')`;
@@ -48,6 +48,12 @@ export async function cleanupMarkers(): Promise<void> {
     () => undefined,
   );
   await q(`DELETE FROM [DOC_USING_DEPT] WHERE [documentId] IN ${markerDocs}`).catch(
+    () => undefined,
+  );
+  // F016 附件：DOCUMENT_ATTACHMENT.documentId 之 FK 為 NO ACTION（無 CASCADE，刪文件之連帶清理由
+  // app 層處理）；不先刪會使下方 DELETE ICSOP_DOCUMENT 因 FK 違反而失敗（且被 .catch 吞掉），
+  // 導致 marker 文件殘留、下次執行編號碰撞。故置於多值之後、文件之前。
+  await q(`DELETE FROM [DOCUMENT_ATTACHMENT] WHERE [documentId] IN ${markerDocs}`).catch(
     () => undefined,
   );
   await q(`DELETE FROM [ICSOP_DOCUMENT] WHERE [documentNumber] LIKE '${MARK.doc}%'`).catch(

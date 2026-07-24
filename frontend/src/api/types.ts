@@ -116,6 +116,12 @@ export interface DocumentListItem {
   edition: string | null;
   announcedDate: string | null;
   contentSummary: string | null;
+  /** F017「檔案」欄：該文件自身之 ICSOP PDF blobPath（供受控下載端點）；無附件→null。 */
+  icsopPdfBlobPath: string | null;
+  /** F017「檔案」欄：下載鈕 title「下載 {檔名}」之來源；無附件→null。 */
+  icsopPdfFileName: string | null;
+  /** F017「連結點程序書」欄：連結點摘要（0..*；空陣列→顯示「—」）。 */
+  links: DocumentLinkView[];
 }
 
 /** F017 後端分頁結果（GET /admin/documents 回傳）。 */
