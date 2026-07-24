@@ -45,6 +45,7 @@ export class TypeOrmOrgChangeAlertStore implements OrgChangeAlertStore {
       afterValue: e.afterValue,
       personEmployeeNo: e.personEmployeeNo,
       personName: e.personName,
+      accountLoginId: e.accountLoginId,
       deptOrgCode: e.deptOrgCode,
       deptName: e.deptName,
       deptCloseDate: e.deptCloseDate,
@@ -97,6 +98,7 @@ export class TypeOrmOrgChangeAlertStore implements OrgChangeAlertStore {
         afterValue: c.afterValue,
         personEmployeeNo: c.personEmployeeNo,
         personName: c.personName,
+        accountLoginId: c.accountLoginId,
         deptOrgCode: c.deptOrgCode,
         deptName: c.deptName,
         deptCloseDate: c.deptCloseDate,
@@ -157,16 +159,26 @@ export class TypeOrmOrgChangeAlertStore implements OrgChangeAlertStore {
 
   async listActiveAccounts(companyCode: string): Promise<ActiveAccountRef[]> {
     const ds = await this.init();
-    // 白名單欄位（絕不 SELECT *）：§7.3 掃描僅需員編/姓名/部門/狀態。
+    // 白名單欄位（絕不 SELECT *）：§7.3 掃描僅需員編/姓名/部門/狀態；
+    // F005 資料不一致偵測另需 loginId（去重鍵）與 resignDate（矛盾判定）——同一查詢多列 2 欄，非新查詢。
     const rows = await ds.getRepository(Account).find({
       where: { companyCode, source: 'upstream', status: 'active' },
-      select: { employeeNo: true, name: true, orgCode: true, status: true },
+      select: {
+        loginId: true,
+        employeeNo: true,
+        name: true,
+        orgCode: true,
+        status: true,
+        resignDate: true,
+      },
     });
     return rows.map((a) => ({
+      loginId: a.loginId,
       employeeNo: a.employeeNo,
       name: a.name,
       orgCode: a.orgCode,
       status: a.status === 'disabled' ? 'disabled' : 'active',
+      resignDate: a.resignDate,
     }));
   }
 

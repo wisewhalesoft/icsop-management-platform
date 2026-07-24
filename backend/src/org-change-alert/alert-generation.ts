@@ -111,6 +111,7 @@ export function generateDocumentFieldAlerts(
       afterValue,
       personEmployeeNo: null,
       personName: null,
+      accountLoginId: null,
       deptOrgCode: null,
       deptName: null,
       deptCloseDate: null,

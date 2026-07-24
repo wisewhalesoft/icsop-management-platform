@@ -27,6 +27,7 @@ function row(over: Partial<AlertRow> = {}): AlertRow {
     afterValue: '（已轉調 客服室）',
     personEmployeeNo: null,
     personName: null,
+    accountLoginId: null,
     deptOrgCode: null,
     deptName: null,
     deptCloseDate: null,
@@ -76,6 +77,52 @@ describe('OrgChangeAlertController.list', () => {
       'DOCUMENT_FIELD',
       'CLOSED_DEPT_PERSON',
     ]);
+  });
+
+  it('TS-ORGALERT-020 status=pending → 回傳混合四種 alertKind，含 accountLoginId 欄位', async () => {
+    const rows = [
+      row({ id: 'a1' }),
+      row({
+        id: 'a3',
+        alertKind: 'CLOSED_DEPT_PERSON',
+        documentId: null,
+        affectedField: null,
+        personEmployeeNo: 'E777',
+      }),
+      row({
+        id: 'a4',
+        alertKind: 'DATA_INCONSISTENCY',
+        documentId: null,
+        affectedField: null,
+        personEmployeeNo: 'E001',
+        accountLoginId: 'u1',
+      }),
+      row({
+        id: 'a5',
+        alertKind: 'ACCOUNT_DISAPPEARED',
+        documentId: null,
+        affectedField: null,
+        personEmployeeNo: 'E002',
+        accountLoginId: 'u2',
+      }),
+    ];
+    const listByStatus = jest.fn().mockResolvedValue(rows);
+    const c = new OrgChangeAlertController({ listByStatus } as unknown as OrgChangeAlertService);
+
+    const res = await c.list('pending');
+
+    expect(res.map((r) => r.alertKind)).toEqual([
+      'DOCUMENT_FIELD',
+      'CLOSED_DEPT_PERSON',
+      'DATA_INCONSISTENCY',
+      'ACCOUNT_DISAPPEARED',
+    ]);
+    // F005 兩類之 accountLoginId 非 null，其餘兩類為 null。
+    const byId = new Map(res.map((r) => [r.id, r.accountLoginId]));
+    expect(byId.get('a4')).toBe('u1');
+    expect(byId.get('a5')).toBe('u2');
+    expect(byId.get('a1')).toBeNull();
+    expect(byId.get('a3')).toBeNull();
   });
 
   it('未帶 status → 預設 pending', async () => {

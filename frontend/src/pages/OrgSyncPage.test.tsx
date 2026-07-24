@@ -62,6 +62,7 @@ function docAlert(over: Partial<OrgChangeAlertView> = {}): OrgChangeAlertView {
     afterValue: '（已轉調 作業服務部 客服室）',
     personEmployeeNo: null,
     personName: null,
+    accountLoginId: null,
     deptOrgCode: null,
     deptName: null,
     deptCloseDate: null,
@@ -91,6 +92,50 @@ function personAlert(over: Partial<OrgChangeAlertView> = {}): OrgChangeAlertView
     deptOrgCode: 'JAD00',
     deptName: '已裁撤室',
     deptCloseDate: '2026-03-31T00:00:00.000Z',
+    ...over,
+  };
+}
+
+/** F005 資料不一致告警（DATA_INCONSISTENCY）。 */
+function inconAlert(over: Partial<OrgChangeAlertView> = {}): OrgChangeAlertView {
+  return {
+    ...docAlert(),
+    id: 'a4',
+    alertKind: 'DATA_INCONSISTENCY',
+    documentId: null,
+    documentNumber: null,
+    documentName: null,
+    affectedField: null,
+    beforeValue: 'EMPSTS=A（在職）',
+    afterValue: 'RESIGNDT=2024-12-31（過去日期，與在職狀態矛盾）',
+    personEmployeeNo: 'E001',
+    personName: '王小明',
+    accountLoginId: 'AS0001',
+    deptOrgCode: null,
+    deptName: null,
+    deptCloseDate: null,
+    ...over,
+  };
+}
+
+/** F005 逐帳號消失告警（ACCOUNT_DISAPPEARED）。 */
+function vanishAlert(over: Partial<OrgChangeAlertView> = {}): OrgChangeAlertView {
+  return {
+    ...docAlert(),
+    id: 'a5',
+    alertKind: 'ACCOUNT_DISAPPEARED',
+    documentId: null,
+    documentNumber: null,
+    documentName: null,
+    affectedField: null,
+    beforeValue: '上次同步：在職',
+    afterValue: '本次同步來源查無此帳號（消失）',
+    personEmployeeNo: 'E002',
+    personName: '林大同',
+    accountLoginId: 'AS0002',
+    deptOrgCode: 'JAC00',
+    deptName: '客服室',
+    deptCloseDate: null,
     ...over,
   };
 }
@@ -429,4 +474,110 @@ describe('OrgSyncPage — RBAC 前端守門（F006）', () => {
       expect(endpoints.getOrgSyncRuns).not.toHaveBeenCalled();
     },
   );
+});
+
+describe('OrgSyncPage — 待確認異動 F005 兩類告警卡（DATA_INCONSISTENCY／ACCOUNT_DISAPPEARED）', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    navigateMock.mockReset();
+    vi.mocked(endpoints.getOrgSyncRuns).mockResolvedValue(RUNS);
+    vi.mocked(endpoints.getOrgSyncMonthlySummary).mockResolvedValue(SUMMARY);
+  });
+
+  it('TS-ORGALERT-060 DATA_INCONSISTENCY 卡片渲染專屬內容，且不誤用 CLOSED_DEPT_PERSON 版式', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getOrgChangeAlerts).mockResolvedValue([inconAlert()]);
+    renderPage();
+    await switchTab(/待確認異動/);
+
+    expect(await screen.findByText('AS0001')).toBeInTheDocument(); // accountLoginId
+    expect(screen.getByText('資料不一致')).toBeInTheDocument();
+    const before = screen.getByText('EMPSTS=A（在職）');
+    expect(before.className).toContain('line-through');
+    const after = screen.getByText('RESIGNDT=2024-12-31（過去日期，與在職狀態矛盾）');
+    expect(after.className).toContain('border-amber-200');
+    // 防退化：不得被誤判為 CLOSED_DEPT_PERSON 版式。
+    expect(screen.queryByText('掛於已關閉部門')).not.toBeInTheDocument();
+  });
+
+  it('TS-ORGALERT-061 ACCOUNT_DISAPPEARED 卡片渲染專屬內容（含消失前部門）', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getOrgChangeAlerts).mockResolvedValue([vanishAlert()]);
+    renderPage();
+    await switchTab(/待確認異動/);
+
+    expect(await screen.findByText('AS0002')).toBeInTheDocument();
+    expect(screen.getByText('帳號消失')).toBeInTheDocument();
+    expect(screen.getByText('上次同步：在職')).toBeInTheDocument();
+    expect(screen.getByText('本次同步來源查無此帳號（消失）')).toBeInTheDocument();
+    expect(screen.getByText(/客服室/)).toBeInTheDocument();
+    expect(screen.getByText(/JAC00/)).toBeInTheDocument();
+    expect(screen.queryByText('掛於已關閉部門')).not.toBeInTheDocument();
+  });
+
+  it('TS-ORGALERT-062 兩類卡片皆不提供「前往當責設定」按鈕（無 documentId）', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getOrgChangeAlerts).mockResolvedValue([inconAlert(), vanishAlert()]);
+    renderPage();
+    await switchTab(/待確認異動/);
+
+    expect(await screen.findByText('AS0001')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /前往當責設定/ })).not.toBeInTheDocument();
+  });
+
+  it('TS-ORGALERT-063 兩類卡片提供「標記無需變更」（SysAdmin）；ICSOPAdmin 唯讀時不存在於 DOM', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getOrgChangeAlerts).mockResolvedValue([inconAlert(), vanishAlert()]);
+    const { unmount } = renderPage();
+    await switchTab(/待確認異動/);
+
+    expect(await screen.findByText('AS0001')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /標記無需變更/ })).toHaveLength(2);
+    unmount();
+
+    vi.mocked(endpoints.getOrgChangeAlerts).mockResolvedValue([inconAlert(), vanishAlert()]);
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await switchTab(/待確認異動/);
+
+    expect(await screen.findByText('AS0001')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /標記無需變更/ })).not.toBeInTheDocument();
+  });
+
+  it('TS-ORGALERT-064 待確認頁籤徽章計數含新兩類（四種混合 → 徽章＝4）', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getOrgChangeAlerts).mockResolvedValue([
+      docAlert(),
+      personAlert(),
+      inconAlert(),
+      vanishAlert(),
+    ]);
+    renderPage();
+
+    const tab = await screen.findByRole('button', { name: /待確認異動/ });
+    const badge = await within(tab).findByText('4');
+    expect(badge.className).toContain('bg-amber-100');
+  });
+
+  it('TS-ORGALERT-065 四種 alertKind 混合清單同時渲染 → 各自對應正確版式、互不誤判', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getOrgChangeAlerts).mockResolvedValue([
+      docAlert(),
+      personAlert(),
+      inconAlert(),
+      vanishAlert(),
+    ]);
+    renderPage();
+    await switchTab(/待確認異動/);
+
+    // 各類專屬識別/情境同時存在。
+    expect(await screen.findByText('ICSOP-SRC-101-1-01')).toBeInTheDocument(); // DOCUMENT_FIELD
+    expect(screen.getByText('掛於已關閉部門')).toBeInTheDocument(); // CLOSED_DEPT_PERSON（僅此類）
+    expect(screen.getByText('資料不一致')).toBeInTheDocument(); // DATA_INCONSISTENCY
+    expect(screen.getByText('帳號消失')).toBeInTheDocument(); // ACCOUNT_DISAPPEARED
+    expect(screen.getByText('AS0001')).toBeInTheDocument();
+    expect(screen.getByText('AS0002')).toBeInTheDocument();
+    // 「掛於已關閉部門」只出現一次（新兩類未被誤判為 CLOSED_DEPT_PERSON 版式）。
+    expect(screen.getAllByText('掛於已關閉部門')).toHaveLength(1);
+  });
 });

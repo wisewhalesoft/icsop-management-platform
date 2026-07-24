@@ -465,11 +465,36 @@ export function OrgSyncPage(): JSX.Element {
   );
 }
 
+/** before → after 事實快照（line-through 舊值 → amber 新值）；DOCUMENT_FIELD 與 F005 兩類共用。 */
+function BeforeAfterDiff({
+  before,
+  after,
+}: {
+  before: string | null;
+  after: string | null;
+}): JSX.Element {
+  return (
+    <div className="flex items-center gap-2 text-xs mt-1 flex-wrap">
+      <span className="px-2 py-1 rounded bg-white border border-slate-200 text-slate-500 line-through">
+        {before}
+      </span>
+      <Icon name="arrow-right" className="w-3.5 h-3.5 text-slate-400" />
+      <span className="px-2 py-1 rounded bg-white border border-amber-200 text-amber-800">
+        {after}
+      </span>
+    </div>
+  );
+}
+
 /**
- * 提示卡（prototype `renderAlerts()` 之卡片結構）。
- * DOCUMENT_FIELD：文件編號＋before/after 差異區塊＋「前往當責設定」。
- * CLOSED_DEPT_PERSON：員編/姓名/已關閉部門/關閉日期；無 before-after、無導頁對象（prototype 未涵蓋
- * 此類卡片之現成標記，依 AC8 之必要資訊分流呈現，見 impl log R-4）。
+ * 提示卡（prototype 09 `renderAlerts()` 之 amber 卡片骨架）。依 alertKind **四路完整分流**渲染
+ * （非二元 isDoc）——防止 F005 兩類被誤判為 CLOSED_DEPT_PERSON 版式（顯示錯誤情境文案／讀取不存在欄位）：
+ *  - DOCUMENT_FIELD：文件編號＋受影響欄位＋before/after＋「前往當責設定」。
+ *  - CLOSED_DEPT_PERSON：員編/姓名/已關閉部門/關閉日期；無 before-after、無導頁。
+ *  - DATA_INCONSISTENCY（F005）：accountLoginId/姓名＋情境「資料不一致」＋before/after；無導頁。
+ *  - ACCOUNT_DISAPPEARED（F005）：accountLoginId/姓名＋情境「帳號消失」＋before/after＋消失前部門；無導頁。
+ * prototype 09 對 F005 兩類無現成草稿（設計確認之缺口）：沿用既有 amber 卡骨架＋待確認 pill＋resolve 動作，
+ * 依 AC 之必要資訊最小且一致呈現（見 impl log 之 prototype-09 落差註記）。
  */
 function AlertCard({
   alert,
@@ -482,15 +507,29 @@ function AlertCard({
   onGoto: (documentId: string) => void;
   onResolve: (id: string) => void;
 }): JSX.Element {
-  const isDoc = alert.alertKind === 'DOCUMENT_FIELD';
+  const kind = alert.alertKind;
+  const isDoc = kind === 'DOCUMENT_FIELD';
+  // 主要識別（mono 小字）：文件類＝文件編號；人員類＝員編；F005 兩類＝帳號 loginId。
+  const idText =
+    kind === 'DOCUMENT_FIELD'
+      ? alert.documentNumber
+      : kind === 'CLOSED_DEPT_PERSON'
+        ? alert.personEmployeeNo
+        : alert.accountLoginId;
+  // 標題（名稱行）。
+  const titleText =
+    kind === 'DOCUMENT_FIELD'
+      ? alert.documentName
+      : kind === 'CLOSED_DEPT_PERSON'
+        ? `${alert.personName ?? ''}（在職）`
+        : (alert.personName ?? alert.accountLoginId ?? '');
+
   return (
     <div className="border border-amber-200 bg-amber-50/40 rounded-lg p-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="mono text-xs text-slate-500">
-              {isDoc ? alert.documentNumber : alert.personEmployeeNo}
-            </span>
+            <span className="mono text-xs text-slate-500">{idText}</span>
             <span
               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px]"
               style={{ color: '#B45309', background: '#FEF3C7' }}
@@ -499,25 +538,18 @@ function AlertCard({
               待確認
             </span>
           </div>
-          <div className="text-sm font-medium text-slate-900 mt-0.5">
-            {isDoc ? alert.documentName : `${alert.personName ?? ''}（在職）`}
-          </div>
-          {isDoc ? (
+          <div className="text-sm font-medium text-slate-900 mt-0.5">{titleText}</div>
+
+          {kind === 'DOCUMENT_FIELD' && (
             <>
               <div className="text-xs text-slate-600 mt-2">
                 受影響欄位：<span className="font-medium">{alert.affectedField}</span>
               </div>
-              <div className="flex items-center gap-2 text-xs mt-1">
-                <span className="px-2 py-1 rounded bg-white border border-slate-200 text-slate-500 line-through">
-                  {alert.beforeValue}
-                </span>
-                <Icon name="arrow-right" className="w-3.5 h-3.5 text-slate-400" />
-                <span className="px-2 py-1 rounded bg-white border border-amber-200 text-amber-800">
-                  {alert.afterValue}
-                </span>
-              </div>
+              <BeforeAfterDiff before={alert.beforeValue} after={alert.afterValue} />
             </>
-          ) : (
+          )}
+
+          {kind === 'CLOSED_DEPT_PERSON' && (
             <>
               <div className="text-xs text-slate-600 mt-2">
                 受影響情境：<span className="font-medium">掛於已關閉部門</span>
@@ -531,6 +563,33 @@ function AlertCard({
                   關閉日期：{formatDateOnly(alert.deptCloseDate)}
                 </span>
               </div>
+            </>
+          )}
+
+          {kind === 'DATA_INCONSISTENCY' && (
+            <>
+              <div className="text-xs text-slate-600 mt-2">
+                受影響情境：<span className="font-medium">資料不一致</span>
+              </div>
+              <BeforeAfterDiff before={alert.beforeValue} after={alert.afterValue} />
+            </>
+          )}
+
+          {kind === 'ACCOUNT_DISAPPEARED' && (
+            <>
+              <div className="text-xs text-slate-600 mt-2">
+                受影響情境：<span className="font-medium">帳號消失</span>
+              </div>
+              <BeforeAfterDiff before={alert.beforeValue} after={alert.afterValue} />
+              {alert.deptName && (
+                <div className="flex items-center gap-2 text-xs mt-1 flex-wrap">
+                  <span className="px-2 py-1 rounded bg-white border border-slate-200 text-slate-600">
+                    {alert.deptName}
+                    <span className="mono text-slate-500">（{alert.deptOrgCode}）</span>
+                  </span>
+                  <span className="text-slate-500">消失前最後已知部門</span>
+                </div>
+              )}
             </>
           )}
         </div>

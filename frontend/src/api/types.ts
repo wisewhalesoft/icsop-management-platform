@@ -470,14 +470,20 @@ export interface SyncResult {
 
 // ===== F006 組織異動待確認提示（後台頁「總覽」KPI 與「待確認異動」頁籤） =====
 
-export type AlertKind = 'DOCUMENT_FIELD' | 'CLOSED_DEPT_PERSON';
+export type AlertKind =
+  | 'DOCUMENT_FIELD'
+  | 'CLOSED_DEPT_PERSON'
+  | 'DATA_INCONSISTENCY'
+  | 'ACCOUNT_DISAPPEARED';
 export type AlertStatus = 'pending' | 'resolved';
 export type ResolutionKind = 'FIELD_UPDATED' | 'NO_CHANGE_NEEDED';
 
 /**
  * GET /admin/org-change-alerts 之單筆（後端 AlertRow）。
  * DOCUMENT_FIELD 使用 document*／affectedField／before-after；
- * CLOSED_DEPT_PERSON 使用 person 與 dept 系列欄位（documentId 為 null，無導頁對象）。
+ * CLOSED_DEPT_PERSON 使用 person 與 dept 系列欄位（documentId 為 null，無導頁對象）；
+ * DATA_INCONSISTENCY／ACCOUNT_DISAPPEARED（F005）以 accountLoginId 為主要識別＋before-after 事實快照
+ * （ACCOUNT_DISAPPEARED 另帶消失前部門 dept*）。
  */
 export interface OrgChangeAlertView {
   id: string;
@@ -490,6 +496,8 @@ export interface OrgChangeAlertView {
   afterValue: string | null;
   personEmployeeNo: string | null;
   personName: string | null;
+  /** F005 兩類之主要識別（帳號 loginId）；既有兩類為 null。 */
+  accountLoginId: string | null;
   deptOrgCode: string | null;
   deptName: string | null;
   deptCloseDate: string | null;

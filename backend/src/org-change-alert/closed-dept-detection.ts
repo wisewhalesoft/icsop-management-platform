@@ -37,6 +37,7 @@ export function detectClosedDeptAlerts(
       afterValue: null,
       personEmployeeNo: emp,
       personName: acc.name,
+      accountLoginId: null,
       deptOrgCode: org.orgCode,
       deptName: org.name,
       deptCloseDate: org.closeDate,

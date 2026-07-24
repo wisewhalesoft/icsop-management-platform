@@ -11,8 +11,17 @@
 import { NormalizedOrgUnit, NormalizedAccount } from '../org-sync/normalization';
 import { ExistingOrgUnit, ExistingAccount } from '../org-sync/change-classification';
 
-/** 提示種類（判別欄）。 */
-export type AlertKind = 'DOCUMENT_FIELD' | 'CLOSED_DEPT_PERSON';
+/**
+ * 提示種類（判別欄）。
+ *  - DOCUMENT_FIELD／CLOSED_DEPT_PERSON：F006 既有兩類。
+ *  - DATA_INCONSISTENCY（F005）：EMPSTS='A' 但 RESIGNDT 為過去日期之上游資料矛盾（不停用，僅告警）。
+ *  - ACCOUNT_DISAPPEARED（F005）：本地在職之單一帳號其來源列消失（低於整批中止閾值；不停用，僅告警）。
+ */
+export type AlertKind =
+  | 'DOCUMENT_FIELD'
+  | 'CLOSED_DEPT_PERSON'
+  | 'DATA_INCONSISTENCY'
+  | 'ACCOUNT_DISAPPEARED';
 
 /** 提示生命週期狀態。 */
 export type AlertStatus = 'pending' | 'resolved';
@@ -36,6 +45,11 @@ export interface AlertRow {
   afterValue: string | null;
   personEmployeeNo: string | null;
   personName: string | null;
+  /**
+   * F005 兩類（DATA_INCONSISTENCY／ACCOUNT_DISAPPEARED）之精確去重鍵＝帳號 loginId（`ACCOUNT.loginId`）。
+   * ⚠ 刻意不以 EMPNO 去重（一人多帳號，F005 spec 明文「不以 EMPNO 連坐」）。既有兩類恆為 null。
+   */
+  accountLoginId: string | null;
   deptOrgCode: string | null;
   deptName: string | null;
   deptCloseDate: Date | null;
@@ -76,12 +90,20 @@ export interface OrgUnitSnapshot {
   closeDate: Date | null;
 }
 
-/** 在職帳號快照（§7.3 全量掃描對象）。 */
+/**
+ * 在職帳號快照（§7.3 全量掃描對象；F005 資料不一致偵測亦沿用同一來源）。
+ * loginId／resignDate 為 F005 資料不一致偵測所需（`listActiveAccounts()` 之 select 白名單多列 2 欄，
+ * 底層 ACCOUNT 表本已有此二欄，非新查詢）。
+ */
 export interface ActiveAccountRef {
   employeeNo: string | null;
   name: string | null;
   orgCode: string | null;
   status: 'active' | 'disabled';
+  /** 帳號穩定鍵（F005 兩類之去重鍵；不以 EMPNO 連坐）。 */
+  loginId: string;
+  /** 上游 RESIGNDT 正規化後之值（哨兵/超範圍 → null，由 normalization 收斂）。 */
+  resignDate: Date | null;
 }
 
 /** DOCUMENT_FIELD 提示產生之輸入（全部來自同步引擎已算出之物件，不重新查庫）。 */
@@ -110,6 +132,35 @@ export interface ClosedDeptDetectionInput {
   orgUnits: Map<string, OrgUnitSnapshot>;
   /** 既有 pending 之員編集合（去重第一道防線，AC10）。 */
   existingPendingEmployeeNos: Set<string>;
+  createdAt: Date;
+  sourceSyncRunId: string | null;
+}
+
+/**
+ * DATA_INCONSISTENCY（F005）偵測之輸入 —— 全量掃描同步後在職帳號，找 EMPSTS='A' 但 RESIGNDT 過去日者。
+ * 與儲存方案無關（純中介資料結構；若改採方案 (B) 亦可沿用）。
+ */
+export interface DataInconsistencyDetectionInput {
+  activeAccounts: ActiveAccountRef[];
+  /** 既有 pending 之 DATA_INCONSISTENCY loginId 集合（去重第一道防線）。 */
+  existingPendingLoginIds: Set<string>;
+  createdAt: Date;
+  sourceSyncRunId: string | null;
+}
+
+/**
+ * ACCOUNT_DISAPPEARED（F005）偵測之輸入 —— 消費 computeDisappeared().missingIds（本次「本地在職、來源查無」）。
+ * 與儲存方案無關（純中介資料結構）。
+ */
+export interface AccountDisappearedDetectionInput {
+  /** 本次同步「先前在職、本次來源查無」之 loginId 清單（來自 disappeared.missingIds）。 */
+  disappearedLoginIds: string[];
+  /** 同步前帳號快照（key=loginId），供解析消失前之員編/姓名/部門。 */
+  existingAcc: Map<string, ExistingAccount>;
+  /** 同步後全量組織單位（key=orgCode），供解析消失前最後已知部門名稱。 */
+  orgUnits: Map<string, OrgUnitSnapshot>;
+  /** 既有 pending 之 ACCOUNT_DISAPPEARED loginId 集合（去重第一道防線）。 */
+  existingPendingLoginIds: Set<string>;
   createdAt: Date;
   sourceSyncRunId: string | null;
 }

@@ -62,6 +62,7 @@ class FakeStore implements OrgSyncStore {
   orgUnits = new Map<string, ExistingOrgUnit>();
   accounts = new Map<string, ExistingAccount>();
   patches: FinishSyncRunPatch[] = [];
+  plans: SyncPlan[] = [];
   private seq = 0;
   async hasRunningSyncRun(): Promise<boolean> {
     return false;
@@ -84,8 +85,9 @@ class FakeStore implements OrgSyncStore {
   async findExistingAccounts(): Promise<Map<string, ExistingAccount>> {
     return new Map(this.accounts);
   }
-  async applySync(_c: string, _plan: SyncPlan): Promise<void> {
-    // 本測試聚焦提示整合點，落地細節見 org-sync.service.spec。
+  async applySync(_c: string, plan: SyncPlan): Promise<void> {
+    // 本測試聚焦提示整合點，落地細節見 org-sync.service.spec；此處僅記錄 plan 供斷言。
+    this.plans.push(plan);
   }
   async listRecentRuns(): Promise<SyncRunSummary[]> {
     return [];
@@ -227,7 +229,7 @@ describe('OrgSyncService × F006 提示產生整合點', () => {
     expect(alerts.calls).toEqual([]);
   });
 
-  it('消失閾值中止 → 不產生提示（未套用任何異動）', async () => {
+  it('TS-ORGALERT-014 消失閾值中止 → 不產生提示（未套用任何異動）', async () => {
     const reader = new FakeReader();
     const store = new FakeStore();
     const alerts = recorder();
@@ -239,6 +241,53 @@ describe('OrgSyncService × F006 提示產生整合點', () => {
 
     expect(res.errorCode).toBe('DISAPPEARED_RATIO_EXCEEDED');
     expect(alerts.calls).toEqual([]);
+  });
+
+  it('TS-ORGALERT-015 提示產生失敗（含新兩類邏輯拋錯）不使同步失敗，僅記警告', async () => {
+    const reader = new FakeReader();
+    const store = new FakeStore();
+    reader.depts = [rawDept({ CODE: 'JAC00' })];
+
+    const res = await makeService(reader, store, recorder(true)).run('manual');
+
+    expect(res.status).toBe('success');
+    expect(res.warnings.some((w) => w.includes('提示'))).toBe(true);
+  });
+});
+
+describe('OrgSyncService × F005 逐帳號消失告警接線（disappearedLoginIds）', () => {
+  it('TS-ORGALERT-013 syncInput.disappearedLoginIds 恰等於 disappeared.missingIds（閾值下方放行）', async () => {
+    const reader = new FakeReader();
+    const store = new FakeStore();
+    const alerts = recorder();
+    reader.depts = [rawDept({ CODE: 'JAC00' })];
+    // 21 名在職，來源僅回報 20 名在職（u20 消失）→ 1/21 ≈ 4.8% 低於 5% 安全閘，放行。
+    for (let i = 0; i < 21; i++) seedAcc(store, { loginId: `u${i}` });
+    reader.activeIds = Array.from({ length: 20 }, (_, i) => `u${i}`);
+
+    const res = await makeService(reader, store, alerts).run('manual');
+
+    expect(res.status).toBe('success');
+    expect(alerts.calls).toHaveLength(1);
+    // 逐帳號消失清單正確接線至提示產生器（此欄位第一個生產消費者，見 D3/6.6）。
+    expect(alerts.calls[0].disappearedLoginIds).toEqual(['u20']);
+  });
+
+  it('TS-ORGALERT-017 消失帳號於同步後 status 維持 active（消失≠離職，不停用）', async () => {
+    const reader = new FakeReader();
+    const store = new FakeStore();
+    const alerts = recorder();
+    reader.depts = [rawDept({ CODE: 'JAC00' })];
+    for (let i = 0; i < 21; i++) seedAcc(store, { loginId: `u${i}` });
+    reader.activeIds = Array.from({ length: 20 }, (_, i) => `u${i}`);
+    // u20 未出現於 readAccountChanges（消失），故從不被 classifyAccount 判定。
+    reader.changes = [];
+
+    await makeService(reader, store, alerts).run('manual');
+
+    // 套用之 plan 不含任何停用（消失者結構上不可能進入 disable 判定）。
+    expect(store.plans[0].accountDisables).toEqual([]);
+    expect(alerts.calls[0].disappearedLoginIds).toContain('u20');
   });
 });
 

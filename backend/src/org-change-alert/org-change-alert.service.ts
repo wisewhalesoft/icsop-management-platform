@@ -18,6 +18,8 @@ import {
 } from './org-change-alert.types';
 import { generateDocumentFieldAlerts, docFieldKey } from './alert-generation';
 import { detectClosedDeptAlerts } from './closed-dept-detection';
+import { detectDataInconsistencyAlerts } from './data-inconsistency-detection';
+import { detectAccountDisappearedAlerts } from './account-disappeared-detection';
 import { taipeiMonthRange } from './monthly-range';
 import {
   OrgChangeAlertGenerator,
@@ -71,11 +73,18 @@ export class OrgChangeAlertService implements OrgChangeAlertGenerator {
     const pending = await this.store.listByStatus('pending');
     const existingPendingKeys = new Set<string>();
     const existingPendingEmployeeNos = new Set<string>();
+    // F005 兩類各自獨立之 pending loginId 去重集合（依 alertKind 分流，互不污染，D2/D4）。
+    const existingPendingInconLoginIds = new Set<string>();
+    const existingPendingVanishLoginIds = new Set<string>();
     for (const p of pending) {
       if (p.alertKind === 'DOCUMENT_FIELD' && p.documentId && p.affectedField) {
         existingPendingKeys.add(docFieldKey(p.documentId, p.affectedField));
       } else if (p.alertKind === 'CLOSED_DEPT_PERSON' && p.personEmployeeNo) {
         existingPendingEmployeeNos.add(p.personEmployeeNo);
+      } else if (p.alertKind === 'DATA_INCONSISTENCY' && p.accountLoginId) {
+        existingPendingInconLoginIds.add(p.accountLoginId);
+      } else if (p.alertKind === 'ACCOUNT_DISAPPEARED' && p.accountLoginId) {
+        existingPendingVanishLoginIds.add(p.accountLoginId);
       }
     }
 
@@ -95,6 +104,7 @@ export class OrgChangeAlertService implements OrgChangeAlertGenerator {
       sourceSyncRunId: input.runId,
     });
 
+    // §7.3 全量掃描來源（在職上游帳號）；同一份亦供 F005 資料不一致偵測（不另查庫）。
     const activeAccounts = await this.store.listActiveAccounts(input.companyCode);
     const personAlerts = detectClosedDeptAlerts({
       activeAccounts,
@@ -104,7 +114,30 @@ export class OrgChangeAlertService implements OrgChangeAlertGenerator {
       sourceSyncRunId: input.runId,
     });
 
-    const all: AlertCreateCommand[] = [...docAlerts, ...personAlerts];
+    // F005：EMPSTS='A' 但 RESIGNDT 過去日之資料不一致告警（不停用，僅告警）。
+    const inconAlerts = detectDataInconsistencyAlerts({
+      activeAccounts,
+      existingPendingLoginIds: existingPendingInconLoginIds,
+      createdAt,
+      sourceSyncRunId: input.runId,
+    });
+
+    // F005：逐帳號「消失」告警（消費 disappeared.missingIds；消失≠離職，不停用）。
+    const vanishAlerts = detectAccountDisappearedAlerts({
+      disappearedLoginIds: input.disappearedLoginIds,
+      existingAcc: input.existingAcc,
+      orgUnits: orgAfter,
+      existingPendingLoginIds: existingPendingVanishLoginIds,
+      createdAt,
+      sourceSyncRunId: input.runId,
+    });
+
+    const all: AlertCreateCommand[] = [
+      ...docAlerts,
+      ...personAlerts,
+      ...inconAlerts,
+      ...vanishAlerts,
+    ];
     if (all.length > 0) await this.store.insertMany(all);
   }
 
@@ -174,14 +207,13 @@ export class OrgChangeAlertService implements OrgChangeAlertGenerator {
     occurredAt: Date,
   ): Promise<void> {
     if (!this.audit || !actor.accountId) return;
+    const { targetNumber, targetName } = auditTarget(row);
     const event: OrgChangeAlertAuditEvent = {
       targetType: 'ORG_CHANGE_ALERT',
       actionType: 'ALERT_RESOLVED',
       targetId: row.id,
-      targetNumber:
-        row.alertKind === 'DOCUMENT_FIELD' ? row.documentNumber : row.personEmployeeNo,
-      targetName:
-        row.alertKind === 'DOCUMENT_FIELD' ? row.affectedField : '掛於已關閉部門',
+      targetNumber,
+      targetName,
       actorId: actor.accountId,
       actorName: actor.name ?? null,
       employeeNo: actor.employeeNo ?? null,
@@ -200,6 +232,34 @@ export class OrgChangeAlertService implements OrgChangeAlertGenerator {
         }`,
       );
     }
+  }
+}
+
+/**
+ * 稽核「對象」欄（targetNumber／targetName）依 alertKind 完整分流（D6）。
+ * ⚠ 刻意以查表/switch 取代二元運算子鏈：僅有兩種 alertKind 時二元式尚正確，新增第三、四種後
+ *   會將 F005 兩類之稽核事件誤植文字「掛於已關閉部門」——屬本次擴充揭露之既有缺陷，一併修正。
+ * ⚠ F005 兩類之 targetNumber＝accountLoginId（精確定位；不以 EMPNO 連坐，D2），與 CLOSED_DEPT_PERSON
+ *   沿用 personEmployeeNo 之既有先例刻意不同。
+ */
+export function auditTarget(row: AlertRow): {
+  targetNumber: string | null;
+  targetName: string | null;
+} {
+  switch (row.alertKind) {
+    case 'DOCUMENT_FIELD':
+      return { targetNumber: row.documentNumber, targetName: row.affectedField };
+    case 'CLOSED_DEPT_PERSON':
+      return { targetNumber: row.personEmployeeNo, targetName: '掛於已關閉部門' };
+    case 'DATA_INCONSISTENCY':
+      return {
+        targetNumber: row.accountLoginId,
+        targetName: '資料不一致（EMPSTS/RESIGNDT）',
+      };
+    case 'ACCOUNT_DISAPPEARED':
+      return { targetNumber: row.accountLoginId, targetName: '帳號消失（來源查無）' };
+    default:
+      return { targetNumber: null, targetName: null };
   }
 }
 
