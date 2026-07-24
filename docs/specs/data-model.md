@@ -241,8 +241,8 @@ status: Draft
 
 ### 附屬關聯表
 
-- **DOC_SECONDARY_CHIEF** {#doc-secondary-chief}：(documentId, personId)，多對多，當責室長-次要。
-- **DOC_USING_DEPT** {#doc-using-dept}：(documentId, orgUnitId)，多對多，文件使用部門。
+- **DOC_SECONDARY_CHIEF** {#doc-secondary-chief}：(id, documentId, **employeeNo**)，多對多，當責室長-次要。以員工編號（`VW_HPMUSER.EMPNO`）為人員參照，非代理鍵。
+- **DOC_USING_DEPT** {#doc-using-dept}：(id, documentId, **orgCode**)，多對多，文件使用部門。以組織代碼（`VW_DEPT_SQL.CODE`，5 碼前綴階層）為單位參照，非代理鍵；可指定任意層級，權限/置頂判定時以前綴展開子樹（契約 §9.1/§9.2）。
 
 ## 文件連結點 DOCUMENT_LINK {#documentlink-entity}
 

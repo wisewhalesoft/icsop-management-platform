@@ -48,6 +48,7 @@ status: Draft
 | `FILE_FORMAT_NOT_ALLOWED` | 400 | 檔案格式不允許 | F016, F018 |
 | `FILE_SIZE_EXCEEDED` | 400 | 檔案超過大小上限 | F016, F018 |
 | `FILE_ACCESS_DENIED` | 403 | 無權存取此檔案 | F016, F018, F020 |
+| `USAGE_FORM_NAME_TOO_LONG` | 400 | 使用表單名稱超過長度上限（去空白後 400 字元，對齊 `USAGE_FORM_POOL.name` nvarchar(400)） | F018 |
 | `USAGE_FORM_OVERWRITE_SHARED` | 409（需二次確認） | 此表單另被 {N} 份文件引用，覆蓋將同時更新全部，是否繼續？（門檻：引用 ≥2） | F018 |
 | `USAGE_FORM_IN_USE` | 409（需二次確認） | 此表單仍被 {N} 份文件引用，移除將自所有引用解除，是否繼續？ | F018 |
 | `USAGE_FORM_NOT_FOUND` | 404 | 找不到此使用表單 | F018 |

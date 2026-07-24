@@ -55,7 +55,7 @@ Epic/Story: E02 / US-013（Phase 2）, US-014（Phase 1）
 
 ## Error Scenarios
 - 權限不足：見 [error-handling.md#permission](../error-handling.md#permission)。
-- 提示是否需比文件狀態切換更嚴謹之處理流程：未定案（OQ-E02-03b）。
+- 提示之處理流程嚴謹度：**已定案（OQ-E02-03b）** — 非強制提示（比照無簽核精神），不阻擋文件續編。
 
 ## Related
 - **來源契約: [upstream-hr-source-contract.md](../upstream-hr-source-contract.md)**（§4 `CLOSE_DATE` 哨兵、§7.3 AS 實測 11 名在職者掛於已關閉部門）
