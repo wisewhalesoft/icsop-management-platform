@@ -251,6 +251,42 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
       expect(ref?.blobPath).toBe(r2.blobPath); // 指向最新
     });
   });
+
+  /**
+   * F026 AC6 Edge Case × OQ-FM-01 —— 後台附件下載為 **RAW（不燒錄）** 之既定管理存取行為。
+   *
+   * 人類裁決（2026-07-24，field-matrix track）：後台（主管/部門窗口/ICSOPAdmin 經
+   * DocumentReadonlyPage/DocumentEditPage）下載 ICSOP PDF，一律核發指向**原始 blob** 之短效期 SAS URL，
+   * 伺服器端**不經手位元組**、故**不燒錄浮水印**；浮水印燒錄與調閱稽核僅發生於前台檢視器路徑
+   * （F020 WatermarkController）。理由：後台為管理存取（原件），前台為消費存取（可追溯燒錄件）；
+   * 且使用表單常為 .xlsx（無法燒錄 PDF 浮水印）。F026 spec 之 AC6 Edge Case 舊措辭（暗示後台會燒錄）
+   * 已依裁決更正為「後台提供原始檔案」。
+   *
+   * 本區塊測試因此為**永久之既定行為測試（非暫時性 characterization）**：作為「後台不接線 PdfBurner」
+   * 之回歸防線。
+   */
+  describe('後台原始下載（RAW，不燒錄）為既定管理存取行為（OQ-FM-01 人類裁決）', () => {
+    it('TS-FM-001 後台受控下載（getDownloadUrl）核發原始 blob SAS URL，且不呼叫任何燒錄函式', async () => {
+      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());
+      blob.urlCalls.length = 0; // 僅觀察下載階段之核發呼叫（上傳不呼叫 getDownloadUrl，保守清零）
+      const sup: SessionContext = { roleCode: 'Supervisor', accountId: 'sup1' };
+
+      const grant = await svc.getDownloadUrl(sup, rec.blobPath);
+
+      // 回傳 url 即 FakeBlobStore.getDownloadUrl 之原始輸出（未經任何燒錄轉換／未含燒錄後綴）——
+      // 燒錄需伺服器取位元組、轉換、再服務，根本無從產出一個原始 blob SAS URL。
+      expect(grant.url).toBe(
+        `https://fake.blob/${rec.blobPath}?sig=fake&ttl=${DOWNLOAD_URL_TTL_SECONDS}`,
+      );
+      expect(grant.expiresInSeconds).toBe(DOWNLOAD_URL_TTL_SECONDS);
+      // 恰一次 getDownloadUrl（核發 SAS），未寫入任何新 blob（無 put → 非重建燒錄件後另存）。
+      expect(blob.urlCalls).toEqual([{ key: rec.blobPath, ttlSeconds: DOWNLOAD_URL_TTL_SECONDS }]);
+      expect(blob.putCalls).toHaveLength(1); // 僅上傳原件那一次；下載未再寫入燒錄件
+      // 結構回歸防線：AttachmentsService 建構子僅 blob/store/documentStore? 三參數，無 burner
+      // → 服務層天生不具燒錄能力（若日後有人接上 PdfBurner，此斷言將破而示警）。
+      expect(AttachmentsService.length).toBe(3);
+    });
+  });
 });
 
 /**
