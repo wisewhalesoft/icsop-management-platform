@@ -63,7 +63,26 @@ The pure-`bug` set + rollup-B items analyst confirmed as FIX. Fastest wins, incl
 - **G-DOC-102/201 → mirror Create's disabled placeholder onto Edit** (cheap FE parity; real .xls upload stays backend-`[integration]`-blocked, separate item). Keep copy "not yet enabled", identical on both pages.
 - **G-ADM-001 職位 (title) → DEFER** (upstream `VW_HPMUSER`/`VW_PERSONAL_JOB.JTITLE_NM` not ingested; OQ-E02-07 待上游). Ship 5 of 6 account columns now; add 職位 when upstream delivers.
 
-## Bucket 5 — ⚖️ ESCALATE (3 human decisions — the GATE)
+## ✅ GATE DECISIONS (2026-07-24, human)
+1. **SYS-1 → BUILD a global toast system** (design-system §6.5: 右上角, success/error/info, 3–5s auto-dismiss). Migrate ~7+ pages off inline-notice.
+2. **最後活動 → `lastLoginAt`, written once per login** (not per-request). Display column relabeled "最後登入". Cheap, honest; no per-request write amplification, no AUDIT undercount.
+3. **Cycle CODE → DROP this pass** (G-LC-019/020/029). No `code` column, no upstream values; display gap accepted. Can be scheduled separately if real AS codes are ever supplied.
+4. **Sequencing → one pass, all of it** (FE bugs + backend batch + public detail page), via per-page-group teammates, each under plan-approval.
+
+## Fix-phase decomposition (disjoint file ownership → no teammate collisions)
+**Wave 1 — Foundation (must land first; page waves depend on it):**
+- **fe-infra**: build global `Toast` provider/hook + wire app root; register icons `alert-octagon`/`badge-check`/`square-pen`; fix shared `SearchCombobox` label sizing (G-DOC-005). Files: new toast files, `Icon.tsx`, `SearchCombobox.tsx`, app root — disjoint from page files.
+- **backend-batch**: the ~14 NEEDS-BACKEND items (Bucket 3) — DTO/service/store/migration changes + the new fields in `frontend/src/api/types.ts` + the `lastLoginAt` write path + the public-detail endpoint (for G-PUB-020) + the 附件-publish F037 fix. Owns backend + `types.ts` (page waves only READ types). Excludes `.xls` real upload (stays `[integration]`).
+
+**Wave 2 — Per-page-group FE fixes (parallel, disjoint page files; consume Wave-1 foundation):**
+- **fix-documents**: DocumentList/Create/Edit/Readonly — FE bugs + toast migration + FE-now + consume secondary-chief/nodeName + mirror .xls placeholder onto Edit.
+- **fix-lifecycle**: LifecycleList/DagCanvas/NodeDrawer/TreePreview/ChangeHistory — incl. G-LC-022 5/6 field→category badge swap, drawer/canvas design-system fixes.
+- **fix-public**: Login/RoleLanding/PublicList/PublicViewer/AppShell **+ build `PublicDocumentDetailPage` + route** (G-PUB-020) + toast migration.
+- **fix-admin**: Account/OrgSync/PermissionMatrix/UsageForm/DocIndex — incl. `.xls 原件` column, matrix icons/notes, account 5/6 columns, uploader-name.
+
+Every teammate: TDD (failing test first), quote prototype labels, keep baseline green (fe 410, be 1243, tsc). Plan-approval before any code change.
+
+## Bucket 5 — ⚖️ ESCALATE (RESOLVED at the gate — see GATE DECISIONS above)
 1. **SYS-1 toast.** design-system §2/§6.5 *mandates* a toast system; inline-notice is documented stopgap debt (F006-impl.md:139), never ratified. **Build a minimal global toast (~7+ pages migrate) or formally ratify inline-notice (amend the design doc)?** Team leans build.
 2. **G-ADM-001 最後活動 (lastActivityAt).** Architected (architecture-spec §5.3) but never built — stateless sliding-JWT means no activity timestamp exists anywhere. Options: **(a)** add a DB column + write path (reopens the write-amplification tradeoff the arch spec chose to avoid); **(b)** `lastLoginAt` written once per login (cheap, honest — analyst's recommendation); **(c)** approximate via `MAX(AUDIT_LOG.occurredAt)` (undercounts login-only / admin-CRUD → *misleading* dormancy — team advises against); **(d)** drop the column from this pass. Real new-feature scope, not a restoration.
 3. **Cycle CODE (G-LC-019/020/029).** `Lifecycle` has no `code` column and no upstream value source; prototype's SRC/PUC/… are demo placeholders. **Add a `code` column + assign the real AS lifecycle codes (someone must supply the values), or drop cycle-code display from scope?**
