@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -32,6 +33,24 @@ import {
 /** 覆蓋共用警示門檻：被 ≥2 份文件引用時觸發 USAGE_FORM_OVERWRITE_SHARED（prototype 19 定案）。 */
 export const SHARED_OVERWRITE_MIN_REFS = 2;
 
+/** 表單名稱長度上限＝`USAGE_FORM_POOL.name` 之 nvarchar(400)（entity 權威）。 */
+export const USAGE_FORM_NAME_MAX_LENGTH = 400;
+
+/**
+ * 解析欲儲存之表單名稱（純函式）：trim 後採用；未提供／空字串／純空白 → fallback 檔名。
+ * 超出欄寬 → USAGE_FORM_NAME_TOO_LONG（400）。刻意於 **trim 後**量測，前後空白不佔配額；
+ * fallback 之檔名同樣受檢，避免超長檔名繞過驗證後於 MSSQL driver 拋未分類例外。
+ */
+export function resolveUsageFormName(name: string | undefined | null, fileName: string): string {
+  const resolved = (name ?? '').trim() || fileName;
+  if (resolved.length > USAGE_FORM_NAME_MAX_LENGTH) {
+    throw new BadRequestException(
+      `USAGE_FORM_NAME_TOO_LONG: 表單名稱長度上限為 ${USAGE_FORM_NAME_MAX_LENGTH} 字元`,
+    );
+  }
+  return resolved;
+}
+
 export interface DownloadGrant {
   url: string;
   expiresInSeconds: number;
@@ -60,18 +79,27 @@ export class UsageFormsService {
     @Inject(AUDIT_RECORDER) private readonly audit: AuditRecorder,
   ) {}
 
-  /** 上傳單一表單至表單池（建立，初始關聯數 0）。 */
+  /**
+   * 上傳單一表單至表單池（建立，初始關聯數 0）。
+   * `name`＝使用者於上傳 modal 輸入之自訂表單名稱（prototype 19「表單名稱 *」欄）；
+   * 未提供 → 沿用檔名（與 modal 之自動帶入行為一致）。
+   */
   async uploadForm(
     session: SessionContext | undefined,
     file: UploadFile,
+    name?: string,
   ): Promise<UsageFormRecord> {
     this.assertCanWrite(session?.roleCode);
     assertFormatAllowed('USAGE_FORM', file);
     assertSizeWithinLimit(file.size);
-    return this.createFromFile(session, file);
+    return this.createFromFile(session, file, resolveUsageFormName(name, file.fileName));
   }
 
-  /** 批次上傳（先驗證全部格式/大小，再全部建立，避免部分寫入）。 */
+  /**
+   * 批次上傳（先驗證全部格式/大小，再全部建立，避免部分寫入）。
+   * **刻意不接受自訂名稱**：prototype 19 之檔案選取無 `multiple`，UI 無逐檔命名之驗收依據；
+   * 各記錄一律沿用各自檔名。
+   */
   async uploadForms(
     session: SessionContext | undefined,
     files: UploadFile[],
@@ -82,18 +110,21 @@ export class UsageFormsService {
       assertSizeWithinLimit(f.size);
     }
     const out: UsageFormRecord[] = [];
-    for (const f of files) out.push(await this.createFromFile(session, f));
+    for (const f of files) {
+      out.push(await this.createFromFile(session, f, resolveUsageFormName(undefined, f.fileName)));
+    }
     return out;
   }
 
   private async createFromFile(
     session: SessionContext | undefined,
     file: UploadFile,
+    name: string,
   ): Promise<UsageFormRecord> {
     const blobPath = buildFormBlobPath(file.fileName);
     await this.blob.put(blobPath, file.buffer ?? Buffer.alloc(0), file.contentType);
     return this.store.create({
-      name: file.fileName,
+      name,
       blobPath,
       format: extensionOf(file.fileName),
       size: file.size,
@@ -105,6 +136,8 @@ export class UsageFormsService {
   /**
    * 覆蓋上傳新檔。格式/大小驗證優先於引用數判斷（TS-020）。
    * 被 ≥2 份文件引用且未二次確認 → USAGE_FORM_OVERWRITE_SHARED（409，附 N），不寫入。
+   * **刻意不接受自訂名稱**：覆蓋僅取代檔案內容，表單名稱維持原值（prototype 19 之
+   * doOverwrite/overwriteForm 均無改名欄位）。
    */
   async overwriteForm(
     session: SessionContext | undefined,

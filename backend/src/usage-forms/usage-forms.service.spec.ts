@@ -1,4 +1,4 @@
-import { UsageFormsService } from './usage-forms.service';
+import { UsageFormsService, USAGE_FORM_NAME_MAX_LENGTH } from './usage-forms.service';
 import {
   AuditRecorder,
   CreateFormInput,
@@ -134,6 +134,92 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
       expect(recs).toHaveLength(3);
       expect(new Set(recs.map((r) => r.id)).size).toBe(3);
       expect(store.forms).toHaveLength(3);
+    });
+  });
+
+  /**
+   * F018 使用表單自訂名稱（public-seams）：上傳時可帶 multipart 文字欄位 `name`。
+   * 未提供／空字串／純空白 → fallback 檔名；有值 → trim 後採用。
+   * 上限＝USAGE_FORM_POOL.name 之 nvarchar(400)，超出 → USAGE_FORM_NAME_TOO_LONG（400）。
+   * 批次上傳與覆蓋上傳**刻意不接受** name（prototype 19 無對應 UI）。
+   */
+  describe('自訂表單名稱（name）', () => {
+    it('TS-PS-F018-001 提供自訂名稱（不同於檔名）→ 以自訂名稱建立記錄', async () => {
+      const rec = await svc.uploadForm(
+        ICSOP_ADMIN,
+        xlsx({ fileName: '放款覆核表.xlsx' }),
+        '貸款覆核申請表',
+      );
+      expect(rec.name).toBe('貸款覆核申請表');
+    });
+
+    it('TS-PS-F018-002 未提供 name（undefined）→ fallback 檔名（既有行為回歸）', async () => {
+      const rec = await svc.uploadForm(ICSOP_ADMIN, xlsx({ fileName: '放款覆核表.xlsx' }));
+      expect(rec.name).toBe('放款覆核表.xlsx');
+    });
+
+    it('TS-PS-F018-003 name 為空字串 → 視為未提供，fallback 檔名', async () => {
+      const rec = await svc.uploadForm(ICSOP_ADMIN, xlsx({ fileName: '放款覆核表.xlsx' }), '');
+      expect(rec.name).toBe('放款覆核表.xlsx');
+    });
+
+    it('TS-PS-F018-004 name 為純空白 → trim 後為空 → fallback 檔名', async () => {
+      const rec = await svc.uploadForm(ICSOP_ADMIN, xlsx({ fileName: '放款覆核表.xlsx' }), '   ');
+      expect(rec.name).toBe('放款覆核表.xlsx');
+    });
+
+    it('TS-PS-F018-005 name 前後含空白 → 儲存值已 trim', async () => {
+      const rec = await svc.uploadForm(ICSOP_ADMIN, xlsx(), ' 貸款覆核申請表 ');
+      expect(rec.name).toBe('貸款覆核申請表');
+    });
+
+    it('TS-PS-F018-006 name 長度恰為 400（nvarchar(400) 邊界）→ 成功且完整保留', async () => {
+      const name = 'あ'.repeat(USAGE_FORM_NAME_MAX_LENGTH);
+      const rec = await svc.uploadForm(ICSOP_ADMIN, xlsx(), name);
+      expect(rec.name).toBe(name);
+      expect(rec.name).toHaveLength(400);
+    });
+
+    it('TS-PS-F018-007 name 長度為 401 → USAGE_FORM_NAME_TOO_LONG（400），不建立、不寫 blob', async () => {
+      blob.putCalls.length = 0;
+      await expect(
+        svc.uploadForm(ICSOP_ADMIN, xlsx(), 'あ'.repeat(USAGE_FORM_NAME_MAX_LENGTH + 1)),
+      ).rejects.toThrow('USAGE_FORM_NAME_TOO_LONG');
+      expect(store.forms).toHaveLength(0);
+      expect(blob.putCalls).toHaveLength(0);
+    });
+
+    it('TS-PS-F018-007b 長度以 trim 後計算：前後空白不計入上限', async () => {
+      const rec = await svc.uploadForm(
+        ICSOP_ADMIN,
+        xlsx(),
+        `   ${'あ'.repeat(USAGE_FORM_NAME_MAX_LENGTH)}   `,
+      );
+      expect(rec.name).toHaveLength(400);
+    });
+
+    it('TS-PS-F018-008 批次上傳 → 不接受 name，各記錄沿用各自檔名', async () => {
+      const recs = await svc.uploadForms(ICSOP_ADMIN, [
+        xlsx({ fileName: 'a.xlsx' }),
+        xlsx({ fileName: 'b.pdf' }),
+        xlsx({ fileName: 'c.xls' }),
+      ]);
+      expect(recs.map((r) => r.name)).toEqual(['a.xlsx', 'b.pdf', 'c.xls']);
+    });
+
+    it('TS-PS-F018-009 覆蓋上傳不接受 name → 覆蓋後表單名稱維持原值', async () => {
+      const f = await svc.uploadForm(ICSOP_ADMIN, xlsx({ fileName: '進件申請書.xlsx' }));
+      const updated = await svc.overwriteForm(
+        ICSOP_ADMIN,
+        f.id,
+        xlsx({ fileName: '進件申請書_v2.xlsx' }),
+      );
+      expect(updated.name).toBe('進件申請書.xlsx'); // 檔名已換、表單名稱不變
+      expect(updated.blobPath).not.toBe(f.blobPath);
+    });
+
+    it('TS-PS-F018-009b 名稱驗證不繞過 RBAC：無寫入權角色仍先卡權限', async () => {
+      await expect(svc.uploadForm(USER, xlsx(), '合法名稱')).rejects.toThrow('PERMISSION_DENIED');
     });
   });
 

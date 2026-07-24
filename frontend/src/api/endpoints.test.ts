@@ -75,6 +75,32 @@ describe('endpoints — 端點契約對映', () => {
     expect((init?.headers as Record<string, string> | undefined)?.['Content-Type']).toBeUndefined();
   });
 
+  it('TS-PS-F018-FE-005 uploadUsageForms 單檔帶 name → multipart 附 name 欄位（trim 後）', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({}));
+    await uploadUsageForms([new File(['x'], 'a.xlsx')], '  貸款覆核申請表  ');
+    const body = vi.mocked(fetch).mock.calls[0][1]?.body as FormData;
+    expect(body.get('name')).toBe('貸款覆核申請表');
+  });
+
+  it('TS-PS-F018-FE-006 uploadUsageForms 未帶 / 純空白 name → 不附 name（後端 fallback 檔名）', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({}));
+    await uploadUsageForms([new File(['x'], 'a.xlsx')]);
+    expect((vi.mocked(fetch).mock.calls[0][1]?.body as FormData).get('name')).toBeNull();
+
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({})); // 新 Response（Body 僅能讀一次）
+    await uploadUsageForms([new File(['x'], 'a.xlsx')], '   ');
+    expect((vi.mocked(fetch).mock.calls[0][1]?.body as FormData).get('name')).toBeNull();
+  });
+
+  it('TS-PS-F018-FE-007 uploadUsageForms 多檔 → 不附 name（批次各檔沿用檔名）', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({}));
+    await uploadUsageForms([new File(['x'], 'a.xlsx'), new File(['y'], 'b.pdf')], '不應被採用');
+    const body = vi.mocked(fetch).mock.calls[0][1]?.body as FormData;
+    expect(body.getAll('files')).toHaveLength(2);
+    expect(body.get('name')).toBeNull();
+  });
+
   it('overwriteUsageForm(confirmed) → PUT /admin/usage-forms/:id?confirmed=true（欄位 file）', async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({}));
     const file = new File(['x'], 'v2.pdf');

@@ -50,10 +50,11 @@ function pageOf(items: PublicListItem[], over: Partial<PublicPage> = {}): Public
   return { items, total: over.total ?? items.length, page: over.page ?? 1, pageSize: 50, hasNext: over.hasNext ?? false };
 }
 
+// descFull＝上游 DESC_FULL（部層供「使用者部門路徑」顯示，見 domain/org-path.ts）。
 const ORG_UNITS: OrgUnitRecord[] = [
-  { companyCode: 'AS', orgCode: 'J0000', codePrefix: 'J', parentCode: '00000', tier: 'DIVISION', name: '營業二本部', descFull: null, managerEmpNo: null, isActive: true },
-  { companyCode: 'AS', orgCode: 'JA000', codePrefix: 'JA', parentCode: 'J0000', tier: 'DEPARTMENT', name: '營運管理部', descFull: null, managerEmpNo: null, isActive: true },
-  { companyCode: 'AS', orgCode: 'JAC00', codePrefix: 'JAC', parentCode: 'JA000', tier: 'SECTION', name: '審查室', descFull: null, managerEmpNo: null, isActive: true },
+  { companyCode: 'AS', orgCode: 'J0000', codePrefix: 'J', parentCode: '00000', tier: 'DIVISION', name: '營業二本部', descFull: '營業二本部', managerEmpNo: null, isActive: true },
+  { companyCode: 'AS', orgCode: 'JA000', codePrefix: 'JA', parentCode: 'J0000', tier: 'DEPARTMENT', name: '營運管理部', descFull: '營運管理部', managerEmpNo: null, isActive: true },
+  { companyCode: 'AS', orgCode: 'JAC00', codePrefix: 'JAC', parentCode: 'JA000', tier: 'SECTION', name: '審查室', descFull: '營運管理部審查室', managerEmpNo: null, isActive: true },
   { companyCode: 'AS', orgCode: 'JCHA0', codePrefix: 'JCHA', parentCode: 'JCH00', tier: 'SUBSECTION', name: '醫療一課', descFull: null, managerEmpNo: null, isActive: true },
 ];
 
@@ -132,6 +133,56 @@ describe('PublicListPage（F019 前台清單）', () => {
     const title = await screen.findByText('車輛分期進件作業');
     await userEvent.click(title);
     expect(navigateMock).toHaveBeenCalledWith('/public/documents/d1');
+  });
+
+  /**
+   * prototype 03 第 79 行：您部門相關文件 · <span>營運管理部 / 審查室</span>
+   * prototype 03 第 32-33 行：王小明 · 營運管理部 / 審查室
+   * 兩處共用同一 buildOrgPath 計算（descFull 為來源，見 domain/org-path.ts）。
+   */
+  it('TS-PS-FE-001 置頂區標題含使用者部門路徑後綴（逐字比對 prototype 第 79 行）', async () => {
+    vi.mocked(api.getPublicDocuments).mockResolvedValue(
+      pageOf([docItem({ id: 'p', documentName: '置頂文件', pinned: true })]),
+    );
+    renderPage();
+    await screen.findByText('置頂文件');
+    const heading = screen.getByRole('heading', { name: '您部門相關文件 · 營運管理部 / 審查室' });
+    expect(heading).toBeInTheDocument();
+    expect(within(heading).getByText('營運管理部 / 審查室')).toBeInTheDocument();
+  });
+
+  it('TS-PS-FE-002 頁首列使用者部門顯示完整路徑，非僅葉節點名稱', async () => {
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    const bar = screen.getByTestId('topbar-user');
+    expect(within(bar).getByText('王小明')).toBeInTheDocument();
+    expect(within(bar).getByText('營運管理部 / 審查室')).toBeInTheDocument();
+    expect(within(bar).queryByText('審查室')).toBeNull(); // 舊行為（僅葉節點）不得殘留
+  });
+
+  it('TS-PS-FE-003 orgUnits 載入失敗回退空陣列 → fallback 顯示代碼，不崩潰/不顯示 undefined', async () => {
+    vi.mocked(api.getOrgUnits).mockRejectedValue(new Error('boom'));
+    vi.mocked(api.getPublicDocuments).mockResolvedValue(
+      pageOf([docItem({ id: 'p', documentName: '置頂文件', pinned: true })]),
+    );
+    renderPage();
+    await screen.findByText('置頂文件');
+    expect(
+      screen.getByRole('heading', { name: '您部門相關文件 · JAC00' }),
+    ).toBeInTheDocument();
+    expect(within(screen.getByTestId('topbar-user')).getByText('JAC00')).toBeInTheDocument();
+    expect(screen.queryByText(/undefined/)).toBeNull();
+  });
+
+  it('TS-PS-FE-004 使用者無部門（orgCode null）→ 頁首不顯示部門段、置頂標題無後綴', async () => {
+    mockAuth(null);
+    vi.mocked(api.getPublicDocuments).mockResolvedValue(
+      pageOf([docItem({ id: 'p', documentName: '置頂文件', pinned: true })]),
+    );
+    renderPage();
+    await screen.findByText('置頂文件');
+    expect(screen.getByRole('heading', { name: '您部門相關文件' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('topbar-user')).getByText('王小明')).toBeInTheDocument();
   });
 
   it('搜尋以後端為權威：關鍵字經 API 傳遞（非前端過濾）', async () => {

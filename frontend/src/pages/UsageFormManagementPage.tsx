@@ -201,7 +201,8 @@ export function UsageFormManagementPage(): JSX.Element {
     }
     setSubmitting(true);
     try {
-      await uploadUsageForms([uploadFile]);
+      // 表單名稱隨 multipart 一併送出（prototype 19 submitUpload 以 upName.trim() 為記錄名稱）。
+      await uploadUsageForms([uploadFile], uploadName.trim());
       setUploadOpen(false);
       setNotice({ tone: 'success', text: `已上傳表單「${uploadName.trim()}」（初始關聯 0 份）` });
       await load();

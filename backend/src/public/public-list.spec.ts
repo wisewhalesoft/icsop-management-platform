@@ -60,16 +60,43 @@ describe('F019 排序：使用部門置頂 + 編號降冪', () => {
     expect(out[0].id).toBe('D1'); // 置頂優先於編號較大之非置頂
   });
 
-  it('TS-F019-005 置頂採精確集合成員比對（非子樹展開，OQ-F019-03）', () => {
-    // 使用者掛處室 JAC00；文件使用部門為其上層部層 JA000 → 不列入置頂
+  /**
+   * ⚠ 取代原 `TS-F019-005`（原斷言「精確集合成員比對」＝ OQ-F019-03 之暫定假設，期望值為 false）。
+   * 人類已裁定改採「子樹祖先鏈」：文件使用部門若為使用者部門之祖先（含自身）即置頂。
+   * 證據：prototypes/03-public-list.html 第 137-140 行 USER_SCOPE 祖先鏈；
+   *       F026-role-field-matrix.md AC「部層 JA000 + 使用者 JAC00 → 相符（子樹自動展開）」。
+   */
+  it('TS-PS-F019-001 文件使用部門為使用者部門之上層（部層 JA000）→ 置頂', () => {
     const d1 = doc({ id: 'D1', usingDeptIds: ['JA000'] });
-    expect(isPinned(d1, 'JAC00')).toBe(false);
+    expect(isPinned(d1, 'JAC00')).toBe(true);
+  });
+
+  it('TS-PS-F019-002 使用者部門與文件使用部門完全相符（自身層級）→ 置頂', () => {
     expect(isPinned(doc({ usingDeptIds: ['JAC00'] }), 'JAC00')).toBe(true);
   });
 
-  it('使用者無部門（orgCode 空）→ 一律非置頂', () => {
+  it('TS-PS-F019-003 文件使用部門為使用者所屬部門之下層（更細單位）→ 不置頂', () => {
+    // 使用者掛部層 JA000；文件使用部門為其下處室 JAC00 → 不涵蓋使用者
+    expect(isPinned(doc({ usingDeptIds: ['JAC00'] }), 'JA000')).toBe(false);
+  });
+
+  it('TS-PS-F019-004 多筆使用部門其一為使用者之上層 → 仍置頂（OR 語意不變）', () => {
+    expect(isPinned(doc({ usingDeptIds: ['JCHA0', 'JA000'] }), 'JAC00')).toBe(true);
+  });
+
+  it('TS-PS-F019-005 使用者無部門（orgCode 空）→ 一律非置頂', () => {
     expect(isPinned(doc({ usingDeptIds: ['JAC00'] }), null)).toBe(false);
+    expect(isPinned(doc({ usingDeptIds: ['JAC00'] }), undefined)).toBe(false);
     expect(isPinned(doc({ usingDeptIds: ['JAC00'] }), '')).toBe(false);
+  });
+
+  it('TS-PS-F019-006 全公司（Root 00000）使用部門 → 對任何使用者皆置頂', () => {
+    expect(isPinned(doc({ usingDeptIds: ['00000'] }), 'JCHA0')).toBe(true);
+    expect(isPinned(doc({ usingDeptIds: ['00000'] }), 'JAC00')).toBe(true);
+  });
+
+  it('TS-PS-F019-007 兄弟處室之使用部門 → 不置頂（回歸：子樹展開不放寬至兄弟）', () => {
+    expect(isPinned(doc({ usingDeptIds: ['JAD00'] }), 'JAC00')).toBe(false);
   });
 });
 

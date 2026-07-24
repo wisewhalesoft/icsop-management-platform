@@ -4,6 +4,7 @@ import { useAuth } from '../auth/useAuth';
 import { getPublicDocuments, getOrgUnits } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
+import { buildOrgPath } from '../domain/org-path';
 import type { PublicListItem, PublicListPage as PublicPage, OrgUnitRecord } from '../api/types';
 
 /**
@@ -109,10 +110,8 @@ export function PublicListPage(): JSX.Element {
     setPage(1);
   }, []);
 
-  const orgLabel = useMemo(() => {
-    if (!user?.orgCode) return null;
-    return orgUnits.find((u) => u.orgCode === user.orgCode)?.name ?? user.orgCode;
-  }, [orgUnits, user?.orgCode]);
+  // 使用者部門路徑（部 / 處室，捨本部層）：頁首列與置頂區標題共用同一計算，避免兩處格式不一致。
+  const orgPath = useMemo(() => buildOrgPath(orgUnits, user?.orgCode), [orgUnits, user?.orgCode]);
 
   return (
     <div className="min-h-screen bg-white text-slate-700">
@@ -124,13 +123,16 @@ export function PublicListPage(): JSX.Element {
           </div>
           <span className="font-bold text-slate-900 truncate">ICSOP 文件瀏覽</span>
           <div className="ml-auto flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 text-sm text-slate-500">
+            <div
+              className="hidden sm:flex items-center gap-2 text-sm text-slate-500"
+              data-testid="topbar-user"
+            >
               <Icon name="user" className="w-4 h-4" />
               <span>{user?.name ?? user?.loginId}</span>
-              {orgLabel && (
+              {orgPath && (
                 <>
                   <span className="text-slate-300">·</span>
-                  <span>{orgLabel}</span>
+                  <span>{orgPath}</span>
                 </>
               )}
             </div>
@@ -251,7 +253,16 @@ export function PublicListPage(): JSX.Element {
               <section className="mb-6" aria-label="您部門相關文件">
                 <div className="flex items-center gap-2 mb-2">
                   <Icon name="pin" className="w-4 h-4 text-primary-600" />
-                  <h2 className="text-sm font-semibold text-slate-700">您部門相關文件</h2>
+                  {/* prototype 03 第 79 行：您部門相關文件 · <span>營運管理部 / 審查室</span> */}
+                  <h2 className="text-sm font-semibold text-slate-700">
+                    您部門相關文件
+                    {orgPath && (
+                      <>
+                        {' · '}
+                        <span className="text-slate-400 font-normal">{orgPath}</span>
+                      </>
+                    )}
+                  </h2>
                 </div>
                 <div className="space-y-2.5" data-testid="pinned-list">
                   {pinned.map((d) => (

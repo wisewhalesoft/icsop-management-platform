@@ -59,11 +59,13 @@ export class UsageFormsController {
   upload(
     @Req() req: RequestWithSession,
     @UploadedFiles() files: MulterUploadedFile[],
+    @Body('name') name?: string,
   ) {
     const uploads = (files ?? []).map(toUploadFile);
-    // 單檔 → uploadForm；多檔 → uploadForms（先全部驗證再全部建立，避免部分寫入）。
+    // 單檔 → uploadForm（可帶自訂表單名稱 `name`，未帶則沿用檔名）；
+    // 多檔 → uploadForms（先全部驗證再全部建立，避免部分寫入；不接受 name，各檔沿用檔名）。
     return uploads.length === 1
-      ? this.svc.uploadForm(req.sessionUser, uploads[0])
+      ? this.svc.uploadForm(req.sessionUser, uploads[0], name)
       : this.svc.uploadForms(req.sessionUser, uploads);
   }
 

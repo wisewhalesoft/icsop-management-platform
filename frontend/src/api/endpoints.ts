@@ -554,12 +554,17 @@ export function getUsageFormOverview(): Promise<import('./types').UsageFormPoolI
 
 /**
  * POST /admin/usage-forms（multipart 上傳，欄位名 `files`；單/多檔皆可）。
- * 格式 FILE_FORMAT_NOT_ALLOWED（僅 xlsx/xls/pdf）、大小 FILE_SIZE_EXCEEDED（50MB）由後端裁決。
+ * 格式 FILE_FORMAT_NOT_ALLOWED（僅 xlsx/xls/pdf）、大小 FILE_SIZE_EXCEEDED（50MB）、
+ * 名稱長度 USAGE_FORM_NAME_TOO_LONG（400 字元）由後端裁決。
+ * `name`＝自訂表單名稱（選填，trim 後送出）：**僅單檔路徑**附加——批次上傳無逐檔命名之 UI
+ * （prototype 19 之 fileInput 無 multiple），各檔由後端沿用各自檔名。
  * ⚠ FormData 不可設 Content-Type（瀏覽器需自帶 multipart boundary）。
  */
-export function uploadUsageForms(files: File[]): Promise<unknown> {
+export function uploadUsageForms(files: File[], name?: string): Promise<unknown> {
   const fd = new FormData();
   for (const f of files) fd.append('files', f);
+  const trimmed = (name ?? '').trim();
+  if (files.length === 1 && trimmed !== '') fd.append('name', trimmed);
   return apiFetch('/admin/usage-forms', { method: 'POST', body: fd });
 }
 
