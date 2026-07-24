@@ -22,6 +22,8 @@ export const MARK = {
   acct: 'zzint-',
   doc: 'ZZINT-',
   lc: 'ZZINT_LC_',
+  /** F006 組織異動提示：人員層提示不綁文件，故以員編前綴標記（org-change-alert.itest）。 */
+  emp: 'ZZINTE',
 };
 
 export const ADMIN_LOGIN = `${MARK.acct}adm`;
@@ -38,6 +40,14 @@ export interface IntCtx {
 export async function cleanupMarkers(): Promise<void> {
   const q = AppDataSource.query.bind(AppDataSource);
   const markerDocs = `(SELECT [id] FROM [ICSOP_DOCUMENT] WHERE [documentNumber] LIKE '${MARK.doc}%')`;
+  // F006 組織異動提示：FK → ICSOP_DOCUMENT（CASCADE）／SYNC_RUN（SET NULL）。
+  // 於文件刪除前先清（顯式，不依賴 CASCADE）；人員層提示無文件關聯，另依員編前綴清除。
+  await q(`DELETE FROM [ORG_CHANGE_ALERT] WHERE [documentId] IN ${markerDocs}`).catch(
+    () => undefined,
+  );
+  await q(
+    `DELETE FROM [ORG_CHANGE_ALERT] WHERE [personEmployeeNo] LIKE '${MARK.emp}%'`,
+  ).catch(() => undefined);
   // 連結（若存在）先刪，避免 FK 擋住文件刪除。
   await q(
     `DELETE FROM [DOCUMENT_LINK] WHERE [sourceDocumentId] IN ${markerDocs}
@@ -61,6 +71,11 @@ export async function cleanupMarkers(): Promise<void> {
   );
   await q(`DELETE FROM [LIFECYCLE] WHERE [name] LIKE '${MARK.lc}%'`).catch(() => undefined);
   await q(`DELETE FROM [ACCOUNT] WHERE [loginId] LIKE '${MARK.acct}%'`).catch(() => undefined);
+  // marker 同步批次（F006 KPI／sourceSyncRunId 來源）：須於提示刪除之後（FK SET NULL 亦允許先刪，
+  // 但顯式順序使清理與 FK 方向一致）。
+  await q(`DELETE FROM [SYNC_RUN] WHERE [triggeredBy] LIKE '${MARK.acct}%'`).catch(
+    () => undefined,
+  );
 }
 
 export async function bootIntApp(): Promise<IntCtx> {

@@ -466,6 +466,50 @@ export interface SyncResult {
   warnings: string[];
 }
 
+// ===== F006 組織異動待確認提示（後台頁「總覽」KPI 與「待確認異動」頁籤） =====
+
+export type AlertKind = 'DOCUMENT_FIELD' | 'CLOSED_DEPT_PERSON';
+export type AlertStatus = 'pending' | 'resolved';
+export type ResolutionKind = 'FIELD_UPDATED' | 'NO_CHANGE_NEEDED';
+
+/**
+ * GET /admin/org-change-alerts 之單筆（後端 AlertRow）。
+ * DOCUMENT_FIELD 使用 document*／affectedField／before-after；
+ * CLOSED_DEPT_PERSON 使用 person 與 dept 系列欄位（documentId 為 null，無導頁對象）。
+ */
+export interface OrgChangeAlertView {
+  id: string;
+  alertKind: AlertKind;
+  documentId: string | null;
+  documentNumber: string | null;
+  documentName: string | null;
+  affectedField: string | null;
+  beforeValue: string | null;
+  afterValue: string | null;
+  personEmployeeNo: string | null;
+  personName: string | null;
+  deptOrgCode: string | null;
+  deptName: string | null;
+  deptCloseDate: string | null;
+  status: AlertStatus;
+  resolutionKind: ResolutionKind | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  sourceSyncRunId: string | null;
+}
+
+/** GET /admin/org-sync/monthly-summary（總覽 4 張 KPI 卡）。 */
+export interface OrgSyncMonthlySummary {
+  /** YYYY-MM（Asia/Taipei 當月）。 */
+  month: string;
+  newPersonCount: number;
+  updatedCount: number;
+  departedDisabledCount: number;
+  /** 待確認之當責室長類提示筆數（窄口徑；與頁籤 badge 之全部 pending 不同）。 */
+  pendingChiefAlertCount: number;
+}
+
 // ===== E09 F031 文件索引管理（AI 提取/索引） =====
 
 export type IndexStatusState = 'running' | 'success' | 'failed' | 'not_built';

@@ -8,6 +8,7 @@ import {
   TriggerType,
   AccountDisableWrite,
   SyncRunSummary,
+  OrgChangeAlertGenerator,
 } from './org-sync.types';
 import {
   normalizeDept,
@@ -65,6 +66,11 @@ export class OrgSyncService {
     private readonly reader: UpstreamOrgReader,
     private readonly store: OrgSyncStore,
     options: OrgSyncOptions = {},
+    /**
+     * F006 提示產生器（選填）。同步成功收尾後呼叫；未注入時同步照常運作（向後相容既有手建呼叫）。
+     * 失敗不阻斷同步（提示為附加價值，不得使已成功之同步被標記為失敗）。
+     */
+    private readonly alerts?: OrgChangeAlertGenerator,
   ) {
     this.compid = options.compid ?? 'AS';
     this.threshold = options.disappearedThreshold ?? DEFAULT_DISAPPEARED_THRESHOLD;
@@ -235,7 +241,32 @@ export class OrgSyncService {
         changeCount,
         endedAt: this.now(),
         watermark: newWatermark,
+        // F006 KPI 細分（D7）：僅多落地已算出之數字，不新增計算。
+        accountsCreated: stats.accountsCreated,
+        accountsUpdated: stats.accountsUpdated,
+        accountsDisabled: stats.accountsDisabled,
       });
+
+      // --- 7. F006 組織異動待確認提示（非阻斷；失敗僅記警告，同步結果維持 success） ---
+      if (this.alerts) {
+        try {
+          await this.alerts.generateFromSyncPlan({
+            runId,
+            companyCode: this.compid,
+            orgUpdates,
+            orgBefore: existingOrg,
+            orgUnits: normDepts,
+            accountUpdates,
+            existingAcc,
+          });
+        } catch (e) {
+          warnings.push(
+            `組織異動提示產生失敗（不影響本次同步結果）：${
+              e instanceof Error ? e.message : String(e)
+            }`,
+          );
+        }
+      }
 
       return {
         runId,

@@ -59,6 +59,11 @@ export interface FinishSyncRunPatch {
   watermark?: Date | null;
   errorCode?: string | null;
   errorMessage?: string | null;
+  // --- F006 KPI 細分（D7）：changeCount 為組織＋帳號之混合總數，無法組出「新增人員／更新／離職停用」
+  //     三張卡。此三欄僅將 run() 已算出之 stats 多落地，不新增任何計算邏輯。選填以相容既有呼叫端。
+  accountsCreated?: number;
+  accountsUpdated?: number;
+  accountsDisabled?: number;
 }
 
 /** 本地寫入端（含互斥鎖：以「進行中之 SYNC_RUN」實現）。 */
@@ -89,6 +94,35 @@ export interface OrgSyncStore {
    * limit 之預設與上限由呼叫端（OrgSyncService.recentRuns）正規化，本層僅忠實下推。
    */
   listRecentRuns(limit: number): Promise<SyncRunSummary[]>;
+}
+
+/**
+ * F006 提示產生之輸入（同步引擎 → org-change-alert 之單向 seam）。
+ * 刻意定義於 org-sync 層：使 org-change-alert 單向相依 org-sync，避免模組互相 import。
+ * 全部欄位皆為 run() 已算出之物件，提示產生端不重新查上游。
+ */
+export interface SyncAlertInput {
+  /** 本次 SYNC_RUN.id（提示之 sourceSyncRunId）。 */
+  runId: string;
+  companyCode: string;
+  /** 本次判定為 update 之組織單位（同步後值）。 */
+  orgUpdates: NormalizedOrgUnit[];
+  /** 同步前組織單位快照（key=orgCode）。 */
+  orgBefore: Map<string, ExistingOrgUnit>;
+  /** 同步後之全量組織單位（上游全量取回，含 closeDate）。 */
+  orgUnits: NormalizedOrgUnit[];
+  /** 本次判定為 update 之帳號（同步後值）。 */
+  accountUpdates: NormalizedAccount[];
+  /** 同步前帳號快照（key=loginId）。 */
+  existingAcc: Map<string, ExistingAccount>;
+}
+
+/**
+ * F006 提示產生器（由 OrgChangeAlertService 實作）。同步成功收尾後呼叫；
+ * 手動觸發與每日排程共用 run() 同一路徑，故兩種觸發方式自動一致生效。
+ */
+export interface OrgChangeAlertGenerator {
+  generateFromSyncPlan(input: SyncAlertInput): Promise<void>;
 }
 
 export interface SyncStats {

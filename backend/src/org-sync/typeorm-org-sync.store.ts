@@ -58,6 +58,10 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
       endedAt: patch.endedAt,
       errorCode: patch.errorCode ?? null,
       errorMessage: patch.errorMessage ?? null,
+      // F006 KPI 細分（D7）；未帶（失敗收尾）→ 落 0，使 KPI 加總不必處理 NULL 語意分歧。
+      accountsCreated: patch.accountsCreated ?? 0,
+      accountsUpdated: patch.accountsUpdated ?? 0,
+      accountsDisabled: patch.accountsDisabled ?? 0,
     };
     if (patch.watermark !== undefined) update.watermark = patch.watermark;
     await ds.getRepository(SyncRun).update({ id }, update);

@@ -162,3 +162,59 @@ describe('TypeOrmOrgSyncStore.listRecentRuns', () => {
     expect(summary.status).toBe('failed');
   });
 });
+
+/**
+ * F006 D7：SYNC_RUN 新增帳號異動細分三欄（KPI「新增人員／更新／離職停用」之來源）。
+ * 既有 changeCount 為組織＋帳號之混合總數，無法還原三張卡。
+ */
+describe('TypeOrmOrgSyncStore.finishSyncRun — 帳號異動細分落地', () => {
+  function makeStore(): {
+    store: TypeOrmOrgSyncStore;
+    updates: () => Array<Record<string, unknown>>;
+  } {
+    const updates: Array<Record<string, unknown>> = [];
+    const fakeRepo = {
+      update: (_where: unknown, patch: Record<string, unknown>) => {
+        updates.push(patch);
+        return Promise.resolve();
+      },
+    };
+    const fakeDs = {
+      isInitialized: true,
+      getRepository: () => fakeRepo,
+    } as unknown as DataSource;
+    return { store: new TypeOrmOrgSyncStore(fakeDs), updates: () => updates };
+  }
+
+  it('帶入三欄時一併寫入 SYNC_RUN', async () => {
+    const { store, updates } = makeStore();
+    await store.finishSyncRun('run-1', {
+      status: 'success',
+      changeCount: 9,
+      endedAt: new Date('2026-07-21T02:03:00Z'),
+      accountsCreated: 3,
+      accountsUpdated: 5,
+      accountsDisabled: 1,
+    });
+    expect(updates()[0]).toMatchObject({
+      accountsCreated: 3,
+      accountsUpdated: 5,
+      accountsDisabled: 1,
+    });
+  });
+
+  it('未帶三欄（失敗收尾）→ 以 0 落地，避免 KPI 讀到 NULL', async () => {
+    const { store, updates } = makeStore();
+    await store.finishSyncRun('run-2', {
+      status: 'failed',
+      changeCount: 0,
+      endedAt: new Date('2026-07-21T02:03:00Z'),
+      errorCode: 'SYNC_SOURCE_UNAVAILABLE',
+    });
+    expect(updates()[0]).toMatchObject({
+      accountsCreated: 0,
+      accountsUpdated: 0,
+      accountsDisabled: 0,
+    });
+  });
+});

@@ -1,5 +1,5 @@
 # F006: 組織異動影響提示與異動管理後台
-Priority: P1 | Status: Draft | Last Updated: 2026-07-20
+Priority: P1 | Status: Implemented (Phase 1) | Last Updated: 2026-07-24
 Epic/Story: E02 / US-013（Phase 2）, US-014（Phase 1）
 
 > 合併理由：異動提示（US-013）與整合後台頁（US-014）為同一管理情境；提示清單即後台頁主要內容之一。Phase 1 先以後台清單呈現，Phase 2 強化主動通知。

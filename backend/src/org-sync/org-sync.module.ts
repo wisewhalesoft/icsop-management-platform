@@ -9,6 +9,8 @@ import { MssqlUpstreamOrgReader } from './mssql-upstream-reader';
 import { TypeOrmOrgSyncStore } from './typeorm-org-sync.store';
 import { UpstreamOrgReader, OrgSyncStore } from './org-sync.types';
 import { loadUpstreamConfig, SYNC_COMPID } from './org-sync.config';
+import { OrgChangeAlertModule } from '../org-change-alert/org-change-alert.module';
+import { OrgChangeAlertService } from '../org-change-alert/org-change-alert.service';
 
 export const UPSTREAM_READER = Symbol('UPSTREAM_READER');
 export const ORG_SYNC_STORE = Symbol('ORG_SYNC_STORE');
@@ -22,7 +24,7 @@ export const ORG_SYNC_STORE = Symbol('ORG_SYNC_STORE');
  *  - 前端頁（prototype 09 移植）為下一增量。
  */
 @Module({
-  imports: [AuthModule, RbacModule],
+  imports: [AuthModule, RbacModule, OrgChangeAlertModule],
   controllers: [OrgSyncController],
   providers: [
     {
@@ -36,9 +38,13 @@ export const ORG_SYNC_STORE = Symbol('ORG_SYNC_STORE');
     },
     {
       provide: OrgSyncService,
-      useFactory: (reader: UpstreamOrgReader, store: OrgSyncStore): OrgSyncService =>
-        new OrgSyncService(reader, store, { compid: SYNC_COMPID }),
-      inject: [UPSTREAM_READER, ORG_SYNC_STORE],
+      useFactory: (
+        reader: UpstreamOrgReader,
+        store: OrgSyncStore,
+        alerts: OrgChangeAlertService,
+      ): OrgSyncService =>
+        new OrgSyncService(reader, store, { compid: SYNC_COMPID }, alerts),
+      inject: [UPSTREAM_READER, ORG_SYNC_STORE, OrgChangeAlertService],
     },
     // 每日排程觸發（02:00 UTC+8）。@Cron metadata 由 AppModule 之 ScheduleModule.forRoot() 掃描。
     ScheduledOrgSyncService,

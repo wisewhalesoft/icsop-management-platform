@@ -25,6 +25,10 @@ import type {
   PublicListPage,
   OrgUnitRecord,
   PersonRecord,
+  AlertStatus,
+  ResolutionKind,
+  OrgChangeAlertView,
+  OrgSyncMonthlySummary,
 } from './types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -62,6 +66,39 @@ export function getOrgSyncRuns(limit?: number): Promise<SyncRunSummary[]> {
 /** POST /admin/org-sync/run（手動同步，僅 SysAdmin；409 SYNC_IN_PROGRESS）。 */
 export function triggerOrgSync(): Promise<SyncResult> {
   return apiFetch<SyncResult>('/admin/org-sync/run', { method: 'POST' });
+}
+
+// ===== F006 組織異動待確認提示 =====
+
+/**
+ * GET /admin/org-change-alerts?status=（組織人員異動管理 read：SysAdmin+ICSOPAdmin）。
+ * 回傳兩種 alertKind 之混合清單（依 createdAt）。
+ */
+export function getOrgChangeAlerts(
+  status: AlertStatus = 'pending',
+): Promise<OrgChangeAlertView[]> {
+  return apiFetch<OrgChangeAlertView[]>(`/admin/org-change-alerts?status=${status}`);
+}
+
+/**
+ * PATCH /admin/org-change-alerts/:id/resolve（處理提示；write，僅 SysAdmin）。
+ * 未指定 resolutionKind → 後端預設 NO_CHANGE_NEEDED（「已確認無需變更」）。
+ * 404 ALERT_NOT_FOUND／409 ALERT_ALREADY_RESOLVED 由 ApiError.code 承載。
+ */
+export function resolveOrgChangeAlert(
+  id: string,
+  resolutionKind?: ResolutionKind,
+): Promise<OrgChangeAlertView> {
+  return apiFetch<OrgChangeAlertView>(`/admin/org-change-alerts/${id}/resolve`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(resolutionKind ? { resolutionKind } : {}),
+  });
+}
+
+/** GET /admin/org-sync/monthly-summary（總覽 4 張 KPI 卡；read）。 */
+export function getOrgSyncMonthlySummary(): Promise<OrgSyncMonthlySummary> {
+  return apiFetch<OrgSyncMonthlySummary>('/admin/org-sync/monthly-summary');
 }
 
 // ===== F003 帳號與角色管理 =====

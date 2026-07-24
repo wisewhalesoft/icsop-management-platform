@@ -15,6 +15,7 @@ import { UsageFormsModule } from './usage-forms/usage-forms.module';
 import { PublicModule } from './public/public.module';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { ChangeHistoryModule } from './change-history/change-history.module';
+import { OrgChangeAlertModule } from './org-change-alert/org-change-alert.module';
 
 @Module({
   imports: [
@@ -36,6 +37,8 @@ import { ChangeHistoryModule } from './change-history/change-history.module';
     PublicModule,
     IngestionModule,
     ChangeHistoryModule,
+    // F006 組織異動待確認提示（提示產生整合點由 OrgSyncModule 注入；Route A 訂閱者由 DocumentsModule 掛入）。
+    OrgChangeAlertModule,
   ],
   controllers: [AppController],
 })

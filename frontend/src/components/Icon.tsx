@@ -14,6 +14,7 @@ import {
   Pin, List,
   Clock, FileDiff, FileStack, FileWarning, KeyRound, Layers, Loader,
   MinusCircle, ScanText, Spline,
+  UserPlus, UserX, Check,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -106,7 +107,7 @@ const REGISTRY: Record<string, LucideIcon> = {
   list: List,
   // 以下 10 枚由 Icon.registry.test.tsx 守門測試揪出：頁面已使用但漏註冊，
   // 先前於測試與正式環境皆靜默渲染為 null。
-  clock: Clock, // DocumentListPage
+  clock: Clock, // DocumentListPage；F006 提示卡「待確認」pill 亦用
   'file-diff': FileDiff, // ChangeHistoryPage
   'file-stack': FileStack, // ChangeHistoryPage
   'file-warning': FileWarning, // DocIndexPage
@@ -116,6 +117,10 @@ const REGISTRY: Record<string, LucideIcon> = {
   'minus-circle': MinusCircle, // ChangeHistoryPage、DocIndexPage
   'scan-text': ScanText, // DocIndexPage
   spline: Spline, // ChangeHistoryPage
+  // F006 組織人員異動管理（prototype 09 之 KPI 卡與提示卡圖示）
+  'user-plus': UserPlus,
+  'user-x': UserX,
+  check: Check,
 };
 
 export interface IconProps {
