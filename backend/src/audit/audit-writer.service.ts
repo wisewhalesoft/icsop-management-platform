@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { buildAuditRow } from './audit-event';
-import { resolveAuditQuery } from './access-history-filter';
 import {
   AUDIT_OUTBOX_STORE,
   AUDIT_STORE,
@@ -20,7 +19,8 @@ import {
  *    Outbox IO 失敗一律吞掉（不阻斷瀏覽，AC4／NFR-003；比照 scheduled-org-sync 之靜音吞例外）。
  *  - processOutboxRetry：搬遷 pending → AuditStore（append 以 row.id 冪等，§5.6），逐筆 try/catch，
  *    失敗筆維持 pending 供下次重試，整批不外拋（AC4 後半）。
- *  - queryHistory：取回 scope 全部列後以純函式 resolveAuditQuery 篩選/排序/分頁（F024）。
+ *  - queryHistory：委派 store.queryPage 之 SQL 下推（WHERE/ORDER/OFFSET-FETCH 於 DB 完成，
+ *    僅回當頁列；不再全表載回 Node 記憶體，OQ-AQ-01 / NFR-001）。
  *
  * ⚠ AuditStore 結構上不暴露 update/delete（decision E，AC5 App 層）；此處亦無任何竄改路徑。
  */
@@ -71,7 +71,7 @@ export class AuditWriterService implements AuditWriter {
     scope: AuditQueryScope,
     filters: AuditQueryFilters,
   ): Promise<Page<AuditRow>> {
-    const rows = await this.store.listAll(scope);
-    return resolveAuditQuery(rows, filters, scope);
+    // 下推查詢：篩選/排序/分頁於 SQL 完成（避免全表載回，OQ-AQ-01）。
+    return this.store.queryPage(scope, filters);
   }
 }

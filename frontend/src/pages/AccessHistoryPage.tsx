@@ -46,6 +46,27 @@ const KIND_TONE: Record<AuditKind, string> = {
   變更: 'bg-amber-50 text-amber-700 border-amber-100',
 };
 
+/**
+ * 操作類型 pill 色調（逐字對映 prototype 17 ACT_STYLE）：
+ * VIEW=slate、DOWNLOAD=blue、PRINT=violet、LIFECYCLE 系列=emerald、變更歷程系列（CHANGELOG）=amber。
+ * 未知 actionType 回退 slate（不拋錯）。完整 class 字面（Tailwind JIT 掃描需要）。
+ */
+const ACT_TONE_SLATE = 'bg-slate-50 text-slate-700 border-slate-100';
+const ACT_TONE: Record<string, string> = {
+  VIEW: ACT_TONE_SLATE,
+  DOWNLOAD: 'bg-blue-50 text-blue-700 border-blue-100',
+  PRINT: 'bg-violet-50 text-violet-700 border-violet-100',
+  LIFECYCLE_VIEW: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  LIFECYCLE_DOWNLOAD: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  LIFECYCLE_PRINT: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  CHANGE_LOG_VIEW: 'bg-amber-50 text-amber-700 border-amber-100',
+  LIFECYCLE_CHANGELOG_VIEW: 'bg-amber-50 text-amber-700 border-amber-100',
+  LIFECYCLE_CHANGELOG_DOWNLOAD: 'bg-amber-50 text-amber-700 border-amber-100',
+};
+function actTone(actionType: string): string {
+  return ACT_TONE[actionType] ?? ACT_TONE_SLATE;
+}
+
 /** 對象欄主識別：文件編號 → 循環名稱 → 使用表單 id。 */
 function targetPrimary(r: AccessHistoryRow): string {
   return r.documentNumber || r.lifecycleName || r.formId || '—';
@@ -141,6 +162,16 @@ export function AccessHistoryPage(): JSX.Element {
     void load({});
   };
 
+  // 換頁：以目前輸入條件＋指定頁碼重查（page=1 省略參數，比照後端預設；頁碼權威來源為 result.page）。
+  const goToPage = useCallback(
+    (p: number) => {
+      if (p < 1) return;
+      const f = buildFilters();
+      void load(p > 1 ? { ...f, page: p } : f);
+    },
+    [buildFilters, load],
+  );
+
   const onExport = useCallback(async () => {
     setExporting(true);
     try {
@@ -172,6 +203,9 @@ export function AccessHistoryPage(): JSX.Element {
   }
 
   const rows = result?.items ?? [];
+  const curPage = result?.page ?? 1;
+  const pageSize = result?.pageSize ?? 50;
+  const startIdx = (curPage - 1) * pageSize;
 
   return (
     <div className="space-y-4">
@@ -357,7 +391,9 @@ export function AccessHistoryPage(): JSX.Element {
                       </td>
                       <td className="px-4 py-2.5 mono text-slate-600">{targetPrimary(r)}</td>
                       <td className="px-4 py-2.5">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-slate-50 text-slate-700 border border-slate-100">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs border ${actTone(r.actionType)}`}
+                        >
                           {r.actionType} · {ACT_LABEL[r.actionType] ?? r.actionType}
                         </span>
                       </td>
@@ -365,7 +401,7 @@ export function AccessHistoryPage(): JSX.Element {
                         {formatDateTime(r.occurredAt)}
                       </td>
                       <td className="px-2 py-2.5 text-slate-400">
-                        <Icon name={open ? 'chevron-right' : 'chevron-right'} className="w-4 h-4" />
+                        <Icon name={open ? 'chevron-down' : 'chevron-right'} className="w-4 h-4" />
                       </td>
                     </tr>
                     {open && (
@@ -472,8 +508,31 @@ export function AccessHistoryPage(): JSX.Element {
         ) : (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 text-sm text-slate-500">
             <span>
-              顯示 1–{rows.length} 筆 · 每頁 {result?.pageSize ?? 50} 筆
+              顯示 {startIdx + 1}–{startIdx + rows.length} 筆 · 每頁 {pageSize} 筆
             </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-label="上一頁"
+                onClick={() => goToPage(curPage - 1)}
+                disabled={curPage <= 1}
+                className="w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                ‹
+              </button>
+              <span className="w-8 h-8 rounded bg-primary-600 text-white inline-flex items-center justify-center">
+                {curPage}
+              </span>
+              <button
+                type="button"
+                aria-label="下一頁"
+                onClick={() => goToPage(curPage + 1)}
+                disabled={!result?.hasNext}
+                className="w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                ›
+              </button>
+            </div>
           </div>
         )}
       </section>

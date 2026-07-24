@@ -5,6 +5,7 @@ import {
   AuditRow,
   AuditTargetType,
   Page,
+  ResolvedAuditQuery,
 } from './audit.types';
 
 /** F024 每頁預設筆數（prototype 17「每頁 50 筆」）。 */
@@ -37,18 +38,18 @@ function includesCI(haystack: string | null, needle: string): boolean {
 }
 
 /**
- * F024 查詢：篩選（類型/人員/對象/時間 AND）→ 依 occurredAt 新到舊排序 → 分頁。
- * 空條件（無任何 kind/person/target/from/to）→ 套用近 30 天預設 from（decision F，非阻斷）。
- *
- * ⚠ 純函式；scope 目前恆全公司（開放問題#6），保留參數以利日後多公司分權。
- * now 參數供測試注入固定時間（預設 new Date()）。
+ * 將 F024 查詢篩選正規化為下推查詢規格（純函式；SQL 下推與記憶體版共用，確保結果一致）。
+ *  - kind → targetTypes（null＝全類型）；
+ *  - 空條件（無 kind/person/target/from/to）→ 套用近 30 天預設 from（decision F，非阻斷），
+ *    並標記 appliedDefaultRange=true 供前端提示；
+ *  - person/target → trim + 轉小寫（供 includesCI／SQL LOWER(...) LIKE）；
+ *  - page/pageSize → 套預設（1 / 50，非正值回退預設）。
+ * now 供測試注入固定時間（預設 new Date()）。
  */
-export function resolveAuditQuery(
-  rows: AuditRow[],
+export function resolveAuditQuerySpec(
   filters: AuditQueryFilters,
-  _scope: AuditQueryScope,
   now: Date = new Date(),
-): Page<AuditRow> {
+): ResolvedAuditQuery {
   const kind = filters.kind || undefined;
   const person = filters.person?.trim().toLowerCase() || undefined;
   const target = filters.target?.trim().toLowerCase() || undefined;
@@ -64,41 +65,94 @@ export function resolveAuditQuery(
   }
 
   const targetTypes = kind ? kindToTargetTypes(kind) : null;
-
-  const filtered = rows.filter((r) => {
-    if (targetTypes && !targetTypes.includes(r.targetType)) return false;
-    if (person && !(includesCI(r.name, person) || includesCI(r.employeeNo, person)))
-      return false;
-    if (
-      target &&
-      !(
-        includesCI(r.documentNumber, target) ||
-        includesCI(r.lifecycleName, target) ||
-        includesCI(r.targetName, target)
-      )
-    )
-      return false;
-    const day = ymd(r.occurredAt);
-    if (from && day < from) return false;
-    if (to && day > to) return false;
-    return true;
-  });
-
-  // 新到舊（stable：JS Array.sort 於現代引擎為穩定排序）。
-  filtered.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
-
-  const total = filtered.length;
   const pageSize = filters.pageSize && filters.pageSize > 0 ? filters.pageSize : DEFAULT_PAGE_SIZE;
   const page = filters.page && filters.page > 0 ? filters.page : 1;
-  const start = (page - 1) * pageSize;
-  const items = filtered.slice(start, start + pageSize);
 
+  return { targetTypes, person, target, from, to, page, pageSize, appliedDefaultRange };
+}
+
+/** 單列是否符合已正規化之查詢規格（記憶體版；與 SQL WHERE 語意等價）。 */
+function matchesSpec(r: AuditRow, spec: ResolvedAuditQuery): boolean {
+  if (spec.targetTypes && !spec.targetTypes.includes(r.targetType)) return false;
+  if (spec.person && !(includesCI(r.name, spec.person) || includesCI(r.employeeNo, spec.person)))
+    return false;
+  if (
+    spec.target &&
+    !(
+      includesCI(r.documentNumber, spec.target) ||
+      includesCI(r.lifecycleName, spec.target) ||
+      includesCI(r.targetName, spec.target)
+    )
+  )
+    return false;
+  const day = ymd(r.occurredAt);
+  if (spec.from && day < spec.from) return false;
+  if (spec.to && day > spec.to) return false;
+  return true;
+}
+
+/**
+ * 由已正規化規格與已篩選/排序之列組裝分頁結果（下推與記憶體版共用之末段組裝）。
+ * total 為符合條件之全量筆數；items 為當頁切片；hasNext 依偏移＋當頁筆數 < total。
+ */
+export function buildAuditPage(
+  items: AuditRow[],
+  total: number,
+  spec: ResolvedAuditQuery,
+): Page<AuditRow> {
+  const start = (spec.page - 1) * spec.pageSize;
   return {
     items,
     total,
-    page,
-    pageSize,
+    page: spec.page,
+    pageSize: spec.pageSize,
     hasNext: start + items.length < total,
-    appliedDefaultRange,
+    appliedDefaultRange: spec.appliedDefaultRange,
   };
+}
+
+/**
+ * SQL LIKE 子字串樣式（前後 %）＋轉義 LIKE 萬用字元（\ % _ [）。
+ * 與 ESCAPE '\' 搭配，使 person/target 之比對語意與記憶體版 String.includes（字面子字串）一致，
+ * 不因輸入含萬用字元而擴大命中範圍。
+ */
+export function likeContains(value: string): string {
+  const escaped = value.replace(/[\\%_[]/g, (c) => `\\${c}`);
+  return `%${escaped}%`;
+}
+
+/** 本地日 00:00:00（含當日下界）。回本地時區 Date；SQL 綁定為參數後與 occurredAt 之 datetime2 同尺度比對。 */
+export function localDayStart(day: string): Date {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(y, m - 1, d, 0, 0, 0, 0);
+}
+
+/** 隔日本地 00:00:00（排他上界＝「含當日整天」）。自動處理跨月/跨年進位。 */
+export function localDayEndExclusive(day: string): Date {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(y, m - 1, d + 1, 0, 0, 0, 0);
+}
+
+/**
+ * F024 查詢（記憶體版）：篩選（類型/人員/對象/時間 AND）→ 依 occurredAt 新到舊排序 → 分頁。
+ * 空條件 → 套用近 30 天預設（decision F，非阻斷）。
+ *
+ * ⚠ 純函式；供 FakeAuditStore 及 unit 測試使用。生產查詢路徑為 TypeOrmAuditStore.queryPage（下推 SQL）。
+ * 兩者共用 resolveAuditQuerySpec，故對相同 filters 結果一致（OQ-AQ-01）。
+ * scope 目前恆全公司（開放問題#6），保留參數以利日後多公司分權。now 供測試注入固定時間。
+ */
+export function resolveAuditQuery(
+  rows: AuditRow[],
+  filters: AuditQueryFilters,
+  _scope: AuditQueryScope,
+  now: Date = new Date(),
+): Page<AuditRow> {
+  const spec = resolveAuditQuerySpec(filters, now);
+  const filtered = rows.filter((r) => matchesSpec(r, spec));
+  // 新到舊（stable：JS Array.sort 於現代引擎為穩定排序）。
+  filtered.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+  const total = filtered.length;
+  const start = (spec.page - 1) * spec.pageSize;
+  const items = filtered.slice(start, start + spec.pageSize);
+  return buildAuditPage(items, total, spec);
 }

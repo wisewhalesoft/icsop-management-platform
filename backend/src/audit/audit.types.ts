@@ -157,6 +157,26 @@ export interface AuditRow {
 /** F024 類型篩選（前端顯示值）↔ targetType 集合（見 access-history-filter.kindToTargetTypes）。 */
 export type AuditKind = '文件' | '循環' | '變更';
 
+/**
+ * 已正規化之查詢規格（OQ-AQ-01）。將 AuditQueryFilters 收斂為「可下推至 SQL WHERE/ORDER/OFFSET」之形狀：
+ *  - kind → targetTypes（IN 清單，null＝全類型）；
+ *  - 空條件 → from 為近 30 天前本地日字串、appliedDefaultRange=true；
+ *  - person/target 已 trim＋轉小寫（供 LOWER(...) LIKE 比對）；
+ *  - page/pageSize 已套預設（1 / 50）。
+ * SQL 下推（TypeOrmAuditStore.queryPage）與記憶體版（resolveAuditQuery）共用同一 resolveAuditQuerySpec，
+ * 確保兩路徑對相同 filters 產生一致結果。
+ */
+export interface ResolvedAuditQuery {
+  targetTypes: AuditTargetType[] | null;
+  person?: string;
+  target?: string;
+  from?: string;
+  to?: string;
+  page: number;
+  pageSize: number;
+  appliedDefaultRange: boolean;
+}
+
 /** F024 查詢篩選（任意組合；空條件套用近 30 天預設，非阻斷）。 */
 export interface AuditQueryFilters {
   kind?: AuditKind | '';
@@ -197,8 +217,17 @@ export interface AuditStore {
   /** append-only 寫入；以 row.id 冪等（已存在則 no-op，供 outbox 重試重疊，AC4/§5.6）。 */
   append(row: AuditRow): Promise<void>;
   findById(id: string): Promise<AuditRow | null>;
-  /** 取回 scope 內全部列（篩選/排序/分頁於服務層純函式完成，見 access-history-filter）。 */
+  /**
+   * ⚠ 全表載回（無 WHERE）——僅供不可竄改結構性防禦之對照與相容保留；**非 F024 查詢路徑**。
+   * F024 查詢一律走 queryPage（下推），避免隨 NFR-003（保留 ≥3 年）累積而 OOM／全表掃描（OQ-AQ-01）。
+   */
   listAll(scope: AuditQueryScope): Promise<AuditRow[]>;
+  /**
+   * F024 查詢（OQ-AQ-01 下推）：kind→targetType IN、occurredAt 範圍、person/target 之 LIKE、
+   * ORDER BY occurredAt DESC、OFFSET/FETCH 分頁與 total 皆於 SQL 完成，僅回傳當頁列。
+   * 正規化（近 30 天預設、kind 對映、分頁預設）由 resolveAuditQuerySpec 共用（見 access-history-filter）。
+   */
+  queryPage(scope: AuditQueryScope, filters: AuditQueryFilters): Promise<Page<AuditRow>>;
 }
 
 /** Outbox 暫存列（內部表；非對外實體，data-model 未列 schema）。 */

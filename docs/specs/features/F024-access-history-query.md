@@ -1,5 +1,5 @@
 # F024: 文件調閱歷程查詢後台
-Priority: P0-MVP | Status: Implemented (unit) — audit worktree 2026-07-23；效能/跨年度整合待（[integration] TS-017/018）| Last Updated: 2026-07-23
+Priority: P0-MVP | Status: Implemented — audit-query worktree 2026-07-24：畢業（OQ-AQ-01 WHERE/ORDER/OFFSET 下推 + IX_AUDIT_LOG_targetType_occurredAt 索引 + 12 int（TS-AQ-INT-001~012）+ TS-017/018 + 前端保真三修）；索引已對真 SOP migration:run 驗證 | Last Updated: 2026-07-24
 Epic/Story: E07 / US-061
 
 ## Description

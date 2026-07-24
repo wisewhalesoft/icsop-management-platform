@@ -2,12 +2,16 @@ import { Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AuditWriterService } from './audit-writer.service';
 import { TypeOrmAuditStore } from './typeorm-audit.store';
+import { resolveAuditQuery } from './access-history-filter';
 import {
   AuditAccessEvent,
   AuditOutboxRecord,
   AuditOutboxStore,
+  AuditQueryFilters,
+  AuditQueryScope,
   AuditRow,
   AuditStore,
+  Page,
 } from './audit.types';
 
 /**
@@ -64,6 +68,10 @@ class FakeAuditStore implements AuditStore {
   }
   listAll(): Promise<AuditRow[]> {
     return Promise.resolve([...this.rows.values()]);
+  }
+  // F024 查詢路徑：以記憶體版 resolveAuditQuery 對已存列做篩選/排序/分頁（與 SQL 下推同源正規化）。
+  queryPage(scope: AuditQueryScope, filters: AuditQueryFilters): Promise<Page<AuditRow>> {
+    return Promise.resolve(resolveAuditQuery([...this.rows.values()], filters, scope));
   }
 }
 
@@ -174,7 +182,7 @@ describe('AuditWriterService.processOutboxRetry', () => {
 });
 
 describe('AuditStore 不可竄改（TS-012，App 層結構性防禦／decision E）', () => {
-  it('TypeOrmAuditStore 介面只暴露 append/findById/listAll，無 update/delete/remove/save', () => {
+  it('TypeOrmAuditStore 介面只暴露 append/findById/listAll/queryPage，無 update/delete/remove/save', () => {
     const store = new TypeOrmAuditStore({} as DataSource) as unknown as Record<
       string,
       unknown
@@ -182,6 +190,7 @@ describe('AuditStore 不可竄改（TS-012，App 層結構性防禦／decision E
     expect(typeof store.append).toBe('function');
     expect(typeof store.findById).toBe('function');
     expect(typeof store.listAll).toBe('function');
+    expect(typeof store.queryPage).toBe('function'); // F024 下推查詢（OQ-AQ-01）
     for (const forbidden of ['update', 'delete', 'remove', 'save', 'upsert']) {
       expect(store[forbidden]).toBeUndefined();
     }

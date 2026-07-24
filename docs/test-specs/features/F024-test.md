@@ -104,15 +104,15 @@
 - **When** `Supervisor`／`DeptContact`／`User` 呼叫匯出端點
 - **Then** 403 `PERMISSION_DENIED`（匯出不得成為繞過查詢頁角色限制的旁路）
 
-### TS-F024-017 [integration] 查詢效能與索引使用（NFR-001, P95<2秒）
-- **Given** 真實 MSSQL、`AUDIT_LOG` 已建立 F023 TS-015 所列組合索引、資料量達代表性規模（草案值待 OQ-NFR001 定案）
-- **When** 以常見篩選組合（人員+時間區間、文件編號單條件）執行查詢
-- **Then** 查詢計畫使用索引而非全表掃描；實際 P95 延遲量測需 k6/JMeter 負載測試（非本測試設計自動化範圍），此處僅驗證「索引存在且被查詢優化器採用」之前提條件
-
-### TS-F024-018 [integration] 跨年度資料下之排序/篩選正確性（≥3年保留）
-- **Given** 真實 MSSQL，`AUDIT_LOG` 內有橫跨多個年度之紀錄（模擬長期累積後之保留資料）
-- **When** 以時間區間查詢橫跨年度邊界
-- **Then** 排序/篩選結果正確，不因資料量/年度邊界（如跨年時區換算）出現遺漏或重複；此項須真實 DB 排序索引行為驗證，假 store 之記憶體排序無法完全模擬
+### TS-F024-017 / TS-F024-018 [integration] → 已具體化，見 audit-query 畢業設計
+> 原 TS-017（NFR-001 索引效能）與 TS-018（≥3 年保留跨年度排序/篩選正確性）之抽象敘述，已由 audit-query
+> worktree 具體化為可執行之整合測試，落地於 `backend/test/int/access-history.itest.ts`（TS-017 粗粒度迴歸
+> 警戒 + TS-018 跨年度 datetime2 往返），並補上 OQ-AQ-01（`AuditStore` WHERE/ORDER/OFFSET 下推）與
+> `IX_AUDIT_LOG_targetType_occurredAt` 索引（migration 1723075200000）。
+>
+> **權威定義單一來源**：`docs/specs/test-design/audit-query-test-design.md`（§2.3 TS-017、§2.4 TS-018、
+> §2.5 TS-AQ-PERF-001）。本處不再維護第二份分歧敘述，避免與畢業設計不一致；本檔上方之 TS-F024-001~016
+> unit 案例仍為權威。
 
 ## AC → TS 覆蓋對照表
 
