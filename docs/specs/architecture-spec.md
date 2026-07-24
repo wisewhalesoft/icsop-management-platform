@@ -1071,6 +1071,10 @@ sequenceDiagram
 | 理由 | 稽核記錄的是「觀察」，遺失一筆不影響資料本身的正確性，可稍後補寫 | 記錄的是「資料被改成了什麼」本體，遺失即等同**該次異動未被追溯**，對內控稽核功能而言等同資料完整性缺陷，不可退化為 best-effort（呼應 [data-model.md](data-model.md) 對 OQ-E07-02 併表理由第 2 點） |
 | 對應 API 行為 | 檔案/頁面正常回應，稽核狀態對使用者不可見 | 若寫入失敗，來源功能（F011/F012/F014/F016/F008/F009）之 API 回應**必須反映失敗**（5xx 或明確錯誤），不得回報「儲存成功」但實際未留下變更紀錄 |
 
+> **⚠ 修訂（2026-07-24，人類定案）：F037（`DOCUMENT_CHANGE_LOG`）刻意採 best-effort，為上表之明訂例外；F038（`LIFECYCLE_CHANGE_LOG`／`LIFECYCLE_SNAPSHOT`）維持上表之 Strong/ACID 同交易。**
+> 理由不對稱：F037 文件欄位變更日誌為**被動記錄**——遺失一列僅為變更歷程少一筆，不影響文件資料本體正確性；實作以 `CompositeDocumentChangePublisher`（逐訂閱者 try/catch、不阻斷文件儲存）落地，已 int-verified 併入 main。F038 之 `LIFECYCLE_SNAPSHOT` 為**重建的主動輸入**——若 DAG 結構寫入成功但快照寫入失敗，`reconstructBeforeAfter` 將讀到與實際結構不一致之快照而重建出**錯誤**的新舊樹，屬資料完整性缺陷，故 F038 之結構寫入＋事件＋快照**必須同一交易**（`recordStructuralChange(manager, …)`，失敗整筆回滾）。
+> 即：本節上表對「變更事件本體」之 Strong 要求，於 F037 放寬、於 F038 維持；此不對稱為刻意設計，非疏漏。（來源：本 session F037 邊界決策採 best-effort、F038 交易一致性決策確認採 §5.9 原子。）
+
 **與 CHANGE_LOG_VIEW／LIFECYCLE_CHANGELOG_VIEW／LIFECYCLE_CHANGELOG_DOWNLOAD 之區分**：上表僅涵蓋「變更事件本體」之寫入；「誰查詢/檢視/下載了變更歷程」之調閱事件（併入 AUDIT_LOG，見 §4.8／data-model.md OQ-E07-02）**仍沿用既有 §5.5 Outbox 模式**（非阻斷、失敗進補償佇列），與 F037/F038 AC 文字「稽核寫入失敗不阻斷瀏覽，進補償佇列重試」完全一致——即同一份 F037/F038 spec 中，「變更本體」與「變更之調閱」兩種寫入採不同一致性策略，架構已明確區分，不可混淆。
 
 **渲染管線（F038 新舊樹狀圖下載）**：

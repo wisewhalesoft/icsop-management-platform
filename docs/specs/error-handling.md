@@ -9,7 +9,7 @@ status: Draft
 # 錯誤處理（Error Handling）
 
 > 定義使用者可見錯誤、系統失敗、重試/回退與不可恢復情境，供 TDD/QA 撰寫測試。錯誤碼採 `DOMAIN_REASON`（SCREAMING_SNAKE）慣例；實際常數字串以實作為準，本文件定義語意契約。
-> **HTTP 狀態碼慣例**：400 輸入驗證/格式錯誤、401 驗證失敗、403 授權不足、404 找不到、409 衝突（唯一性/成環/同步互斥/刪除保護）、5xx 系統錯誤。
+> **HTTP 狀態碼慣例**：400 輸入驗證/格式錯誤、401 驗證失敗、403 授權不足、404 找不到、409 衝突（唯一性/成環/同步互斥/刪除保護）、**429 請求過於頻繁（節流）**、5xx 系統錯誤。
 
 ## 錯誤碼一覽
 
@@ -24,6 +24,7 @@ status: Draft
 | `AUTH_INVALID_CREDENTIALS` | 401 | 帳號或密碼錯誤 | F001 |
 | `AUTH_ACCOUNT_DISABLED` | 401 | 帳號已停用 | F001, F005 |
 | `AUTH_MISSING_FIELD` | 400 | 必要欄位缺漏 | F001 |
+| `AUTH_TOO_MANY_ATTEMPTS` | 429 | 帳密登入嘗試過於頻繁（節流，60 秒視窗；同帳號 5 次／同來源 IP 20 次失敗）；不洩漏帳號是否存在 | F001 |
 | `AUTH_SESSION_EXPIRED` | 401 | 工作階段已逾時，請重新登入 | F001 |
 | `ACCOUNT_USERNAME_EXISTS` | 409 | 帳號名稱已存在（比對 `ACCOUNT.loginId`；錯誤碼名稱沿用不改，避免跨層識別碼churn） | F003 |
 | `ACCOUNT_UPSTREAM_READONLY` | 403 | 上游同步帳號資料請透過組織同步更新 | F003 |
@@ -39,6 +40,7 @@ status: Draft
 | `DAG_SELF_LOOP` | 409 | 節點不可連向自己 | F008 |
 | `DAG_CYCLE_DETECTED` | 409 | 此連線會造成循環結構成環，請重新確認流程方向 | F008 |
 | `NODE_NOT_FOUND` | 404 | 找不到節點 | F009 |
+| `LIFECYCLE_CHANGE_LOG_NOT_FOUND` | 404 | 找不到指定之循環結構變更事件（重建新舊樹狀圖／下載時） | F038 |
 | `NODE_DOC_LIFECYCLE_MISMATCH` | 400 | 文件不屬於此循環 | F009 |
 | `NODE_DOC_ALREADY_ASSIGNED` | 409（需二次確認） | 文件已掛載於節點 {name}，是否改派？ | F009 |
 | `DOCUMENT_REQUIRED_FIELD_MISSING` | 400 | 必填欄位未填寫 | F010 |
