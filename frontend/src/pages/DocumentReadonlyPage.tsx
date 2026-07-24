@@ -16,6 +16,7 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
+import { useToast } from '../components/useToast';
 import type {
   DocumentView,
   DocumentStatus,
@@ -59,6 +60,7 @@ export function DocumentReadonlyPage(): JSX.Element {
   const role = user?.roleCode;
   const canRead = canPerform(role, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read');
   const canWrite = canPerform(role, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'write');
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -69,7 +71,6 @@ export function DocumentReadonlyPage(): JSX.Element {
   const [forms, setForms] = useState<UsageFormRecord[]>([]);
   const [attachments, setAttachments] = useState<DocumentAttachmentRecord[]>([]);
   const [personNames, setPersonNames] = useState<Map<string, string>>(new Map());
-  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -135,24 +136,27 @@ export function DocumentReadonlyPage(): JSX.Element {
       try {
         const grant = await downloadUsageForm(id, formId);
         window.open(grant.url, '_blank', 'noopener,noreferrer');
-        setNotice(`下載「${name}」（已寫入稽核 DOWNLOAD）`);
+        toast.success(`下載「${name}」（已寫入稽核 DOWNLOAD）`);
       } catch {
-        setNotice(`無法下載「${name}」`);
+        toast.error(`無法下載「${name}」`);
       }
     },
-    [id],
+    [id, toast],
   );
 
   /** ICSOP PDF／OJT：走受控下載端點（blobPath）；浮水印與否由伺服器端依 F020 決定。 */
-  const onDownloadAttachment = useCallback(async (blobPath: string, name: string) => {
-    try {
-      const grant = await downloadAttachment(blobPath);
-      window.open(grant.url, '_blank', 'noopener,noreferrer');
-      setNotice(`下載「${name}」（已寫入稽核 DOWNLOAD）`);
-    } catch {
-      setNotice(`無法下載「${name}」`);
-    }
-  }, []);
+  const onDownloadAttachment = useCallback(
+    async (blobPath: string, name: string) => {
+      try {
+        const grant = await downloadAttachment(blobPath);
+        window.open(grant.url, '_blank', 'noopener,noreferrer');
+        toast.success(`下載「${name}」（已寫入稽核 DOWNLOAD）`);
+      } catch {
+        toast.error(`無法下載「${name}」`);
+      }
+    },
+    [toast],
+  );
 
   if (!canRead) {
     return (
@@ -240,7 +244,7 @@ export function DocumentReadonlyPage(): JSX.Element {
       label: '所屬節點', note: '唯讀 · 由節點抽屜維護',
       value: (
         <span className="inline-flex items-center gap-2">
-          {view.nodeId ? <span className="mono">{view.nodeId}</span> : '未指派'}
+          {view.nodeName ? view.nodeName : view.nodeId ? <span className="mono">{view.nodeId}</span> : '未指派'}
           <button onClick={() => navigate(`/admin/lifecycles/${view.lifecycleId}/canvas`)} className="inline-flex items-center gap-1 text-primary-600 hover:underline text-xs">
             <Icon name="external-link" className="w-3.5 h-3.5" />跳轉檢視畫布
           </button>
@@ -255,7 +259,7 @@ export function DocumentReadonlyPage(): JSX.Element {
             <button key={l.linkId} onClick={() => navigate(`/admin/documents/${l.targetDocumentId}`)} className="inline-flex items-center gap-1 text-primary-600 hover:underline text-sm">
               <Icon name="link" className="w-3.5 h-3.5" />
               {l.targetNumber ?? l.targetDocumentId}
-              {l.targetName ? ` · ${l.targetName}` : ''}
+              {l.targetName ? ` ${l.targetName}` : ''}
               {l.targetStatus ? <> · {statusPill(l.targetStatus)}</> : null}
             </button>
           ))}
@@ -284,9 +288,6 @@ export function DocumentReadonlyPage(): JSX.Element {
           <Icon name="eye" className="w-4 h-4" />
           <span>唯讀模式 · <strong>此角色對 ICSOP 文件全欄位皆唯讀</strong>；附件可下載（燒錄浮水印），但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。</span>
         </div>
-      )}
-      {notice && (
-        <div role="status" className="text-sm border rounded-md px-3 py-2 text-emerald-700 bg-emerald-50 border-emerald-100">{notice}</div>
       )}
 
       {/* 16 欄位唯讀 */}

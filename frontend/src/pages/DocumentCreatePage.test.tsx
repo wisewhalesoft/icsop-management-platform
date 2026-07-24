@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { DocumentCreatePage } from './DocumentCreatePage';
+import { ToastProvider } from '../components/useToast';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import { ApiError } from '../api/client';
@@ -47,7 +48,14 @@ const page = (items: DocumentListItem[] = []): DocumentListPage => ({
   items, total: items.length, page: 1, pageSize: 50, hasNext: false,
 });
 
-const renderPage = () => render(<MemoryRouter><DocumentCreatePage /></MemoryRouter>);
+const renderPage = () =>
+  render(
+    <ToastProvider>
+      <MemoryRouter>
+        <DocumentCreatePage />
+      </MemoryRouter>
+    </ToastProvider>,
+  );
 
 function org(over: Partial<OrgUnitRecord>): OrgUnitRecord {
   return {
@@ -76,7 +84,7 @@ async function selectToDept(): Promise<void> {
   await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
   await userEvent.click(screen.getByLabelText(/制定公司/));
   await userEvent.click(await screen.findByRole('option', { name: '和潤本部' }));
-  await userEvent.click(screen.getByLabelText('制定部門'));
+  await userEvent.click(screen.getByLabelText(/制定部門/));
   await userEvent.click(await screen.findByRole('option', { name: '企劃部' }));
 }
 
@@ -152,13 +160,24 @@ describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', ()
     );
   });
 
+  it("G-DOC-107 版次範例採直式撇號 26'01（比照 stored YY'NN），非彎引號", async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    // 直式撇號範例存在；彎引號版本不存在。
+    expect(screen.getByText("26'01")).toBeInTheDocument();
+    expect(screen.queryByText('26’01')).not.toBeInTheDocument();
+  });
+
   it('缺必填 → 前端擋下、不呼叫 createDocument', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: '建立' }));
     expect(endpoints.createDocument).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent(/必填/);
+    // SYS-1：必填總結改以 toast 呈現（不再是內嵌 role=alert）。
+    expect(await screen.findByText(/僅 循環別/)).toBeInTheDocument();
   });
 
   it('即時唯一性：編號命中佔用（有效）文件 → 顯示 DUPLICATE 並擋下送出', async () => {
@@ -208,28 +227,47 @@ describe('DocumentCreatePage — STEP3 制定組織與當責室長（F014，移�
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
     expect(screen.getByLabelText(/制定公司/)).toBeInTheDocument();
-    expect(screen.getByLabelText('制定部門')).toBeInTheDocument();
-    expect(screen.getByLabelText('制定室別')).toBeInTheDocument();
+    expect(screen.getByLabelText(/制定部門/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/制定室別/)).toBeInTheDocument();
     expect(screen.getByLabelText(/當責室長-主要/)).toBeInTheDocument();
     expect(screen.getByLabelText(/當責室長-次要/)).toBeInTheDocument();
     expect(screen.getByLabelText(/文件使用部門/)).toBeInTheDocument();
+  });
+
+  it('G-DOC-101 制定公司/部門/室別 label 帶 1/2/3 編號徽章（由上而下相依）', async () => {
+    const { container } = renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    // 徽章為各 label 之首字元（編碼由上而下：公司=1、部門=2、室別=3）。
+    expect(container.querySelector('label[for="dCompany"]')?.textContent).toMatch(/^1/);
+    expect(container.querySelector('label[for="dDept"]')?.textContent).toMatch(/^2/);
+    expect(container.querySelector('label[for="dSection"]')?.textContent).toMatch(/^3/);
+  });
+
+  it('G-DOC-104/106 文件使用部門說明含「路徑呈現層級關係」且置於欄位之前', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    const helper = screen.getByText(/路徑呈現層級關係/);
+    expect(helper).toBeInTheDocument();
+    const input = screen.getByLabelText(/文件使用部門/);
+    // 說明置於輸入欄位之前（DOM 先後）。
+    expect(helper.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('三級由上而下：制定部門於未選公司時停用；選定公司後開放', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
     await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
-    expect(screen.getByLabelText('制定部門')).toBeDisabled();
+    expect(screen.getByLabelText(/制定部門/)).toBeDisabled();
     await userEvent.click(screen.getByLabelText(/制定公司/));
     await userEvent.click(await screen.findByRole('option', { name: '和潤本部' }));
-    expect(screen.getByLabelText('制定部門')).not.toBeDisabled();
+    expect(screen.getByLabelText(/制定部門/)).not.toBeDisabled();
   });
 
   it('制定室別僅顯示所選部門底下之室別（不含他部之室）', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
     await selectToDept();
-    await userEvent.click(screen.getByLabelText('制定室別'));
+    await userEvent.click(screen.getByLabelText(/制定室別/));
     expect(await screen.findByRole('option', { name: '車輛行銷室' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: '數位行銷室' })).toBeInTheDocument();
     // 應用發展室屬「資訊部」，不應出現在「企劃部」之室別
@@ -240,20 +278,20 @@ describe('DocumentCreatePage — STEP3 制定組織與當責室長（F014，移�
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
     await selectToDept();
-    await userEvent.click(screen.getByLabelText('制定室別'));
+    await userEvent.click(screen.getByLabelText(/制定室別/));
     await userEvent.click(await screen.findByRole('option', { name: '車輛行銷室' }));
-    await waitFor(() => expect(screen.getByLabelText('制定室別')).toHaveValue('車輛行銷室'));
+    await waitFor(() => expect(screen.getByLabelText(/制定室別/)).toHaveValue('車輛行銷室'));
     // 改選他部 → 室別清空
-    await userEvent.click(screen.getByLabelText('制定部門'));
+    await userEvent.click(screen.getByLabelText(/制定部門/));
     await userEvent.click(await screen.findByRole('option', { name: '資訊部' }));
-    await waitFor(() => expect(screen.getByLabelText('制定室別')).toHaveValue(''));
+    await waitFor(() => expect(screen.getByLabelText(/制定室別/)).toHaveValue(''));
   });
 
   it('選定制定室別後帶入該室 managerEmpNo 對應之在職者為主要室長預設候選', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
     await selectToDept();
-    await userEvent.click(screen.getByLabelText('制定室別'));
+    await userEvent.click(screen.getByLabelText(/制定室別/));
     await userEvent.click(await screen.findByRole('option', { name: '車輛行銷室' }));
     // managerEmpNo 20050 → 在職者 陳彥廷 帶入主要室長
     await waitFor(() =>
@@ -265,7 +303,7 @@ describe('DocumentCreatePage — STEP3 制定組織與當責室長（F014，移�
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
     await selectToDept();
-    await userEvent.click(screen.getByLabelText('制定室別'));
+    await userEvent.click(screen.getByLabelText(/制定室別/));
     // 數位行銷室 managerEmpNo=99999，不在 searchPersons 結果 → 不帶入
     await userEvent.click(await screen.findByRole('option', { name: '數位行銷室' }));
     await new Promise((r) => setTimeout(r, 0));
@@ -277,7 +315,7 @@ describe('DocumentCreatePage — STEP3 制定組織與當責室長（F014，移�
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
     await selectToDept();
     // 制定室別（帶入主要室長 20050）
-    await userEvent.click(screen.getByLabelText('制定室別'));
+    await userEvent.click(screen.getByLabelText(/制定室別/));
     await userEvent.click(await screen.findByRole('option', { name: '車輛行銷室' }));
     await waitFor(() =>
       expect(screen.getByLabelText(/當責室長-主要/)).toHaveValue('陳彥廷（A2100）'),

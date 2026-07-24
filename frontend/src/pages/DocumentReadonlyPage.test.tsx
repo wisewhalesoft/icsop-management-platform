@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { DocumentReadonlyPage } from './DocumentReadonlyPage';
+import { ToastProvider } from '../components/useToast';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import type {
@@ -29,7 +30,7 @@ function mockAuth(roleCode: string) {
 
 const VIEW: DocumentView = {
   id: 'd1', status: 'active', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業',
-  lifecycleId: 'lc1', nodeId: 'node1',
+  lifecycleId: 'lc1', nodeId: 'node1', nodeName: '進件作業',
   draftingCompanyId: '00000', draftingDeptId: 'A2000', draftingSectionId: 'A2100',
   primaryChiefId: '20050', secondaryChiefIds: ['20053'], usingDeptIds: ['A2100'],
   edition: "26'01", announcedDate: '2026-01-01T00:00:00.000Z', contentSummary: '規範車輛分期案件之進件收件流程。',
@@ -70,7 +71,14 @@ const ATTACHMENTS: DocumentAttachmentRecord[] = [
 const attachRow = (fileName: string) =>
   screen.getByText(fileName).closest('div.rounded-lg') as HTMLElement;
 
-const renderPage = () => render(<MemoryRouter><DocumentReadonlyPage /></MemoryRouter>);
+const renderPage = () =>
+  render(
+    <ToastProvider>
+      <MemoryRouter>
+        <DocumentReadonlyPage />
+      </MemoryRouter>
+    </ToastProvider>,
+  );
 
 function setupMocks() {
   vi.mocked(endpoints.getDocument).mockResolvedValue(VIEW);
@@ -205,9 +213,28 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
         expect(endpoints.downloadAttachment).toHaveBeenCalledWith('documents/d1/icsop_pdf/abc.pdf'),
       );
       expect(openMock).toHaveBeenCalledWith('https://blob/a', '_blank', 'noopener,noreferrer');
-      expect(await screen.findByRole('status')).toHaveTextContent(
-        '下載「車輛分期進件作業_v1.3.pdf」（已寫入稽核 DOWNLOAD）',
-      );
+      // SYS-1：下載回饋改以 toast 呈現（不再是內嵌 notice）。
+      expect(
+        await screen.findByText('下載「車輛分期進件作業_v1.3.pdf」（已寫入稽核 DOWNLOAD）'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('所屬節點與連結點呈現（prototype 16 renderFields）', () => {
+    it('G-DOC-301 所屬節點顯示節點名稱（nodeName），非原始 nodeId', async () => {
+      mockAuth('Supervisor');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      expect(screen.getByText('進件作業')).toBeInTheDocument();
+      expect(screen.queryByText('node1')).not.toBeInTheDocument();
+    });
+
+    it('G-DOC-302 連結點以「編號 書名」（空白分隔）呈現，非「編號 · 書名」', async () => {
+      mockAuth('Supervisor');
+      renderPage();
+      const link = await screen.findByRole('button', { name: /消金審核作業/ });
+      // 編號與書名以空白相隔（prototype 16：l.n＝「編號 書名」單一字串）；· 僅用於狀態 pill 前。
+      expect(link).toHaveTextContent(/ICSOP-SRC-101-2-00 消金審核作業/);
     });
   });
 });

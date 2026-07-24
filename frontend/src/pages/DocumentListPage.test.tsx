@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { DocumentListPage } from './DocumentListPage';
+import { ToastProvider } from '../components/useToast';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import type {
@@ -67,7 +68,14 @@ const attachment = (over: Partial<DocumentAttachmentRecord>): DocumentAttachment
   uploadedBy: 'admin', uploadedAt: '2026-06-01T00:00:00.000Z', ...over,
 });
 
-const renderPage = () => render(<MemoryRouter><DocumentListPage /></MemoryRouter>);
+const renderPage = () =>
+  render(
+    <ToastProvider>
+      <MemoryRouter>
+        <DocumentListPage />
+      </MemoryRouter>
+    </ToastProvider>,
+  );
 
 describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13）', () => {
   beforeEach(() => {
@@ -269,9 +277,44 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
           '下載連結點程序書：ICSOP-PPC-101-2-02 消費分期產品政策及規範作業',
         ),
       );
-      expect(await screen.findByRole('alert')).toHaveTextContent('無法下載');
+      // SYS-1：下載失敗回饋改以 toast 呈現（不再是內嵌 role=alert）。
+      expect(await screen.findByText(/無法下載/)).toBeInTheDocument();
       expect(endpoints.downloadAttachment).not.toHaveBeenCalled();
       expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument();
+    });
+  });
+
+  describe('當責室長「+N」次要室長徽章（prototype 13 chiefCell）', () => {
+    it('G-DOC-001 有次要室長之列顯示 +N 徽章，title＝次要姓名清單', async () => {
+      mockAuth('ICSOPAdmin');
+      vi.mocked(endpoints.getDocuments).mockResolvedValue(
+        page([
+          doc({
+            id: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業',
+            primaryChiefName: '陳彥廷', secondaryChiefCount: 2, secondaryChiefNames: ['林建宏', '王志文'],
+          }),
+          doc({
+            id: 'd2', documentNumber: 'ICSOP-PPC-101-2-02', documentName: '消費分期產品政策及規範作業',
+            primaryChiefName: '黃雅琪', secondaryChiefCount: 0, secondaryChiefNames: [],
+          }),
+        ]),
+      );
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      const badge = within(rowOf('車輛分期進件作業')).getByTitle('次要：林建宏、王志文');
+      expect(badge).toHaveTextContent('+2');
+      // 無次要室長之列不顯示徽章。
+      expect(within(rowOf('消費分期產品政策及規範作業')).queryByTitle(/^次要：/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('篩選格緊湊密度（G-DOC-005 density=filter）', () => {
+    it('篩選 label 採 text-[11px]（清單篩選密度，非表單密度）', async () => {
+      mockAuth('ICSOPAdmin');
+      const { container } = renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      const label = container.querySelector('label[for="filter-cycle"]');
+      expect(label?.className).toContain('text-[11px]');
     });
   });
 });

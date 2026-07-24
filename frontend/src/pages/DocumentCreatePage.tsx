@@ -19,6 +19,7 @@ import { cycleCodeOf } from '../domain/cycle-codes';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, MultiSearchCombobox, type ComboOption } from '../components/SearchCombobox';
+import { useToast } from '../components/useToast';
 import type {
   LifecycleView,
   DocumentListItem,
@@ -58,6 +59,7 @@ const occupiesNumber = (s: DocumentStatus) => s === 'active' || s === 'void';
 export function DocumentCreatePage(): JSX.Element {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
   const canWrite = canPerform(user?.roleCode, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'write');
 
   const [lifecycles, setLifecycles] = useState<LifecycleView[]>([]);
@@ -71,7 +73,6 @@ export function DocumentCreatePage(): JSX.Element {
   const [announcedDate, setAnnouncedDate] = useState('');
   const [contentSummary, setContentSummary] = useState('');
   const [errors, setErrors] = useState<Record<string, boolean>>({});
-  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   // STEP3 制定組織與當責室長（F014）。
@@ -95,7 +96,7 @@ export function DocumentCreatePage(): JSX.Element {
     if (!canWrite) return;
     void getLifecycles()
       .then((lcs) => setLifecycles(lcs.filter((l) => l.status === 'active')))
-      .catch(() => setNotice('無法載入循環清單'));
+      .catch(() => toast.error('無法載入循環清單'));
     void getDocuments()
       .then((p) => setExisting(p.items))
       .catch(() => {
@@ -104,14 +105,14 @@ export function DocumentCreatePage(): JSX.Element {
     // F014：制定組織三級與使用部門之來源（最新同步組織資料）。
     void getOrgUnits()
       .then(setOrgUnits)
-      .catch(() => setNotice('無法載入組織資料'));
+      .catch(() => toast.error('無法載入組織資料'));
     // F018：使用表單池（自「使用表單管理」選取關聯，非於此上傳）。
     void getUsageFormPool()
       .then(setFormPool)
       .catch(() => {
         /* 表單池載入失敗不阻擋建立（選填關聯） */
       });
-  }, [canWrite]);
+  }, [canWrite, toast]);
 
   const selectedLc = lifecycles.find((l) => l.id === lifecycleId);
   const code = cycleCodeOf(selectedLc?.name);
@@ -245,22 +246,20 @@ export function DocumentCreatePage(): JSX.Element {
     setSelectedForms([]);
     setSelectedLinks([]);
     setErrors({});
-    setNotice(null);
   }, []);
 
   const submit = useCallback(async () => {
     const req = { lifecycleId: !lifecycleId, documentNumber: !suffix, documentName: !documentName.trim() };
     setErrors(req);
     if (req.lifecycleId || req.documentNumber || req.documentName) {
-      setNotice('必填欄位未填寫（僅 循環別／文件狀態／文件編號／文件名稱 為必填）');
+      toast.error('必填欄位未填寫（僅 循環別／文件狀態／文件編號／文件名稱 為必填）');
       return;
     }
     if (dupHit) {
-      setNotice(`此編號已被「${STATUS_ZH[dupHit.status]}」文件（${dupHit.documentName}）佔用（DOCUMENT_NUMBER_DUPLICATE）`);
+      toast.error(`此編號已被「${STATUS_ZH[dupHit.status]}」文件（${dupHit.documentName}）佔用（DOCUMENT_NUMBER_DUPLICATE）`);
       return;
     }
     setBusy(true);
-    setNotice(null);
     try {
       const created = await createDocument({
         lifecycleId,
@@ -288,7 +287,7 @@ export function DocumentCreatePage(): JSX.Element {
       }
       navigate('/admin/documents');
     } catch (e) {
-      setNotice(msgOf(e));
+      toast.error(msgOf(e));
     } finally {
       setBusy(false);
     }
@@ -313,6 +312,7 @@ export function DocumentCreatePage(): JSX.Element {
     selectedForms,
     selectedLinks,
     navigate,
+    toast,
   ]);
 
   if (!canWrite) {
@@ -333,6 +333,18 @@ export function DocumentCreatePage(): JSX.Element {
       {n}
     </span>
   );
+  /**
+   * G-DOC-101：制定組織三級 label 前之編號徽章（1/2/3，編碼由上而下相依）。
+   * aria-hidden：純視覺裝飾，不併入 label 可及名稱（維持 getByLabelText('制定部門') 精確比對）。
+   */
+  const orgNumBadge = (n: number) => (
+    <span
+      aria-hidden
+      className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-200 text-slate-500 text-[10px] font-bold mr-1"
+    >
+      {n}
+    </span>
+  );
   const gatedCls = gated ? 'opacity-50 pointer-events-none' : '';
 
   return (
@@ -350,12 +362,6 @@ export function DocumentCreatePage(): JSX.Element {
           建立
         </button>
       </PageHeader>
-
-      {notice && (
-        <div role="alert" className="text-sm border rounded-md px-3 py-2 text-red-700 bg-red-50 border-red-100">
-          {notice}
-        </div>
-      )}
 
       {/* STEP 1 · 循環與節點歸屬 */}
       <section className="bg-white border border-slate-200 rounded-xl p-5">
@@ -496,7 +502,7 @@ export function DocumentCreatePage(): JSX.Element {
                   placeholder="YY"
                   className="w-16 px-3 py-2 text-sm mono text-center focus:outline-none"
                 />
-                <span className="px-1.5 py-2 bg-slate-50 text-slate-500 text-sm mono border-x border-slate-200 select-none">&rsquo;</span>
+                <span className="px-1.5 py-2 bg-slate-50 text-slate-500 text-sm mono border-x border-slate-200 select-none">'</span>
                 <input
                   aria-label="版次序號"
                   value={edSeq}
@@ -509,7 +515,7 @@ export function DocumentCreatePage(): JSX.Element {
               </div>
               <span className="text-sm text-slate-400">顯示：<span className="mono text-slate-700 font-medium">{edPreview}</span></span>
             </div>
-            <p className="text-[10px] text-slate-400 mt-1">格式「年度&rsquo;序號」＝<span className="mono">{'{YY}'}&rsquo;{'{NN}'}</span>（例：<span className="mono">26&rsquo;01</span>）。</p>
+            <p className="text-[10px] text-slate-400 mt-1">格式「年度＇序號」＝<span className="mono">{'{YY}'}'{'{NN}'}</span>（例：<span className="mono">26'01</span>）。</p>
           </div>
           <div>
             <label htmlFor="dAnnounced" className="block text-sm font-medium text-slate-700 mb-1">
@@ -554,7 +560,7 @@ export function DocumentCreatePage(): JSX.Element {
             id="dCompany"
             label={
               <>
-                制定公司 <span className="text-xs font-normal text-slate-400">（選填）</span>
+                {orgNumBadge(1)}制定公司 <span className="text-xs font-normal text-slate-400">（選填）</span>
               </>
             }
             options={companyOptions}
@@ -564,7 +570,7 @@ export function DocumentCreatePage(): JSX.Element {
           />
           <SearchCombobox
             id="dDept"
-            label="制定部門"
+            label={<>{orgNumBadge(2)}制定部門</>}
             options={deptOptions}
             value={draftingDeptId}
             onChange={onDeptChange}
@@ -573,7 +579,7 @@ export function DocumentCreatePage(): JSX.Element {
           />
           <SearchCombobox
             id="dSection"
-            label="制定室別"
+            label={<>{orgNumBadge(3)}制定室別</>}
             options={sectionOptions}
             value={draftingSectionId}
             onChange={onSectionChange}
@@ -624,14 +630,21 @@ export function DocumentCreatePage(): JSX.Element {
         </div>
 
         {/* 文件使用部門（可多個，允許為空；任意層級） */}
+        {/* 文件使用部門：說明置於欄位「之上」（比照編輯頁 / prototype 14），含「路徑呈現層級關係」語意（G-DOC-104/106）。 */}
         <div className="mt-4">
+          <span className="block text-sm font-medium text-slate-700 mb-1">
+            文件使用部門 <span className="text-xs font-normal text-slate-400">（選填，可多個）</span>
+          </span>
+          <p className="text-xs text-slate-500 mb-2 flex items-start gap-1.5">
+            <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-600" />
+            <span>
+              可指定任意層級（本部／部／處室／課）；清單以「本部 / 部 / 處室 / 課」路徑呈現層級關係，
+              <strong className="text-slate-700">選擇上層將自動涵蓋其下所有單位</strong>（權限判定時自動展開子樹）。
+            </span>
+          </p>
           <MultiSearchCombobox
             id="dUsingDepts"
-            label={
-              <>
-                文件使用部門 <span className="text-xs font-normal text-slate-400">（選填，可多個）</span>
-              </>
-            }
+            label={<span className="sr-only">文件使用部門（選填，可多個）</span>}
             options={usingDeptOptions}
             values={usingDepts}
             onAdd={(opt) => setUsingDepts((prev) => [...prev, opt])}
@@ -639,10 +652,6 @@ export function DocumentCreatePage(): JSX.Element {
             placeholder="搜尋並新增使用部門…"
             emptyChipText="（尚未選擇）"
           />
-          <p className="text-[10px] text-slate-400 mt-1 flex items-start gap-1.5">
-            <Icon name="info" className="w-3.5 h-3.5 mt-px" />
-            可指定任意層級（本部／部／處室／課）；選擇上層將於權限判定時自動涵蓋其下所有單位（子樹展開）。
-          </p>
         </div>
       </section>
 

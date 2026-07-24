@@ -7,6 +7,7 @@ import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, type ComboOption } from '../components/SearchCombobox';
+import { useToast } from '../components/useToast';
 import { formatDateTime } from './org-sync-view';
 import { deriveDisplayStatus, DISPLAY_LABEL, type DisplayStatus } from './document-display';
 import type { DocumentListItem, DocumentLinkView } from '../api/types';
@@ -69,11 +70,11 @@ export function DocumentListPage(): JSX.Element {
   const role = user?.roleCode;
   const canRead = canPerform(role, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read');
   const canWrite = canPerform(role, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'write');
+  const toast = useToast();
   const today = useMemo(() => new Date(), []);
 
   const [all, setAll] = useState<DocumentListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [notice, setNotice] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<FilterKey, string>>({
     cycle: '', status: '', num: '', name: '', dept: '', section: '', chief: '', company: '', link: '',
   });
@@ -88,11 +89,11 @@ export function DocumentListPage(): JSX.Element {
       const res = await getDocuments({ pageSize: LOAD_SIZE });
       setAll(res.items);
     } catch (e) {
-      setNotice(msgOf(e));
+      toast.error(msgOf(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (canRead) void load();
@@ -123,9 +124,9 @@ export function DocumentListPage(): JSX.Element {
       const grant = await downloadAttachment(blobPath);
       window.open(grant.url, '_blank', 'noopener,noreferrer');
     } catch {
-      setNotice(`無法下載「${label}」`);
+      toast.error(`無法下載「${label}」`);
     }
-  }, []);
+  }, [toast]);
 
   /**
    * 連結點 pill：下載「目標文件」之 ICSOP PDF。
@@ -139,15 +140,15 @@ export function DocumentListPage(): JSX.Element {
         const atts = await getDocumentAttachments(l.targetDocumentId);
         const pdf = atts.find((a) => a.type === 'ICSOP_PDF');
         if (!pdf) {
-          setNotice(`無法下載「${label}」`);
+          toast.error(`無法下載「${label}」`);
           return;
         }
         await openBlob(pdf.blobPath, label);
       } catch {
-        setNotice(`無法下載「${label}」`);
+        toast.error(`無法下載「${label}」`);
       }
     },
-    [openBlob],
+    [openBlob, toast],
   );
 
   const chiefValue = useCallback(
@@ -287,12 +288,6 @@ export function DocumentListPage(): JSX.Element {
         </div>
       )}
 
-      {notice && (
-        <div role="alert" className="text-sm border rounded-md px-3 py-2 text-red-700 bg-red-50 border-red-100">
-          {notice}
-        </div>
-      )}
-
       {/* 9 個可搜尋下拉篩選 */}
       <div className="bg-white border border-slate-200 rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
@@ -313,6 +308,7 @@ export function DocumentListPage(): JSX.Element {
               key={f.key}
               id={`filter-${f.key}`}
               label={f.label}
+              density="filter"
               options={filterOptions[f.key]}
               value={filters[f.key]}
               onChange={(v) => setFilter(f.key, v)}
@@ -355,7 +351,17 @@ export function DocumentListPage(): JSX.Element {
                     <td className="px-3 py-3 text-slate-600 whitespace-nowrap">
                       {d.draftingSectionName ?? <span className="text-slate-300" title="此部之下無處/室，制定組織掛於部層">—</span>}
                     </td>
-                    <td className="px-3 py-3 text-slate-700 whitespace-nowrap">{d.primaryChiefName ?? d.primaryChiefId ?? '—'}</td>
+                    <td className="px-3 py-3 text-slate-700 whitespace-nowrap">
+                      {d.primaryChiefName ?? d.primaryChiefId ?? '—'}
+                      {(d.secondaryChiefCount ?? 0) > 0 && (
+                        <span
+                          title={`次要：${(d.secondaryChiefNames ?? []).join('、')}`}
+                          className="ml-1 inline-flex items-center px-1 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]"
+                        >
+                          +{d.secondaryChiefCount}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${meta.cls}`}>
                         <Icon name={meta.icon} className="w-3 h-3" />

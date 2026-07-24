@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { DocumentEditPage } from './DocumentEditPage';
+import { ToastProvider } from '../components/useToast';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import type {
@@ -29,7 +30,7 @@ function mockAuth(roleCode: string) {
 
 const VIEW: DocumentView = {
   id: 'd1', status: 'active', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業',
-  lifecycleId: 'lc1', nodeId: 'node1',
+  lifecycleId: 'lc1', nodeId: 'node1', nodeName: '進件作業',
   draftingCompanyId: '00000', draftingDeptId: 'A2000', draftingSectionId: 'A2100',
   primaryChiefId: '20050', secondaryChiefIds: ['20053'], usingDeptIds: ['A2100'],
   edition: "26'01", announcedDate: '2026-01-01T00:00:00.000Z', contentSummary: '摘要',
@@ -79,7 +80,14 @@ const USE_LABEL = '文件使用部門（0..*）';
 /** A2100 車輛行銷室之完整層級路徑（orgPath）。 */
 const A2100_PATH = '和潤本部 / 經營企劃管理本部 / 企劃部 / 車輛行銷室';
 
-const renderPage = () => render(<MemoryRouter><DocumentEditPage /></MemoryRouter>);
+const renderPage = () =>
+  render(
+    <ToastProvider>
+      <MemoryRouter>
+        <DocumentEditPage />
+      </MemoryRouter>
+    </ToastProvider>,
+  );
 
 function setupMocks() {
   vi.mocked(endpoints.getDocument).mockResolvedValue(VIEW);
@@ -151,10 +159,12 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
     expect(endpoints.updateDocument).not.toHaveBeenCalled();
   });
 
-  it('所屬節點唯讀＋前往畫布改派導向 DAG 畫布', async () => {
+  it('所屬節點唯讀（顯示節點名稱 nodeName）＋前往畫布改派導向 DAG 畫布', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
-    await waitFor(() => expect(screen.getByText('node1')).toBeInTheDocument());
+    // G-DOC-205：顯示 nodeName（進件作業），非原始 nodeId（node1）。
+    await waitFor(() => expect(screen.getByText('進件作業')).toBeInTheDocument());
+    expect(screen.queryByText('node1')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /前往畫布改派/ }));
     expect(navigateMock).toHaveBeenCalledWith('/admin/lifecycles/lc1/canvas');
   });
@@ -261,7 +271,8 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
       await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
       await userEvent.click(await screen.findByRole('button', { name: /移除 20053/ }));
       await userEvent.click(screen.getByRole('button', { name: '儲存' }));
-      expect(await screen.findByRole('alert')).toHaveTextContent('無權修改此欄位');
+      // SYS-1：錯誤回饋改以 toast 呈現（不再是內嵌 role=alert）。
+      expect(await screen.findByText('無權修改此欄位')).toBeInTheDocument();
     });
   });
 
@@ -417,6 +428,108 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
       const card = attachCard('ICSOP PDF（呈現用，1 份，覆蓋式）');
       expect(within(card).getByRole('button', { name: /下載/ })).toBeInTheDocument();
       expect(within(card).queryByText('取代')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('prototype-alignment 修復（G-DOC-201..212）', () => {
+    it('G-DOC-202 切換為作廢先跳確認 modal；取消不變、確認才套用', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: '作廢' }));
+      // 確認 modal 出現（逐字比對 prototype 15 copy）；狀態尚未變更。
+      expect(screen.getByText('切換為「作廢」？')).toBeInTheDocument();
+      expect(
+        screen.getByText('作廢後前台將立即隱藏此文件。此動作可再切回其他狀態。'),
+      ).toBeInTheDocument();
+      const modal = screen.getByText('切換為「作廢」？').closest('div.rounded-xl') as HTMLElement;
+      await userEvent.click(within(modal).getByRole('button', { name: '取消' }));
+      expect(screen.queryByText('切換為「作廢」？')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '作廢' })).toHaveAttribute('aria-pressed', 'false');
+      // 再次作廢 → 確認 → 套用。
+      await userEvent.click(screen.getByRole('button', { name: '作廢' }));
+      await userEvent.click(screen.getByRole('button', { name: '確認' }));
+      expect(screen.queryByText('切換為「作廢」？')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '作廢' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('G-DOC-203 制定組織以全寬「目前值 / 新值」對照列呈現', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      // 制定公司目前值＝orgName('00000')＝'和潤本部'，位於全寬對照列（grid-cols-12）中。
+      const cur = await screen.findByText('和潤本部');
+      const field = cur.closest('.grid.grid-cols-12') as HTMLElement;
+      expect(field).not.toBeNull();
+      expect(within(field).getByText('目前值')).toBeInTheDocument();
+      expect(within(field).getByText('新值')).toBeInTheDocument();
+    });
+
+    it('G-DOC-204 唯讀角色：連結點/使用表單改唯讀 chips，無搜尋輸入框', async () => {
+      mockAuth('Supervisor');
+      vi.mocked(endpoints.getDocumentLinks).mockResolvedValue([
+        { linkId: 'l1', targetDocumentId: 'd2', targetNumber: 'ICSOP-SRC-101-2-00', targetName: '消金審核作業', targetStatus: 'active' },
+      ]);
+      vi.mocked(endpoints.getDocumentForms).mockResolvedValue([
+        { id: 'f1', name: '進件申請書.xlsx', blobPath: 'u/f1.xlsx', format: 'xlsx', size: 1, uploadedBy: 'u', uploadedAt: '2026-06-01T00:00:00.000Z' },
+      ]);
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      // 無 combobox 輸入框（sr-only label 已隨 MultiSearchCombobox 一併移除）。
+      expect(screen.queryByLabelText('文件連結點')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('使用表單')).not.toBeInTheDocument();
+      // 現值仍以唯讀 chip 呈現。
+      expect(await screen.findByText(/消金審核作業/)).toBeInTheDocument();
+      expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument();
+    });
+
+    it('G-DOC-206 編號與版次還原輔助說明段落', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      expect(screen.getByText('「失效」文件之編號已釋出、可重用')).toBeInTheDocument();
+      expect(screen.getByText("{YY}'{NN}")).toBeInTheDocument();
+    });
+
+    it('G-DOC-207/208 基本資訊/制定組織說明還原完整文案', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      expect(screen.getByText(/含數十個選項之欄位/)).toBeInTheDocument();
+      expect(screen.getByText(/當責室長保留。/)).toBeInTheDocument();
+    });
+
+    it('G-DOC-212 連結點/使用表單區塊說明還原完整文案', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      expect(screen.getByText(/選項可能達數十筆，故以可搜尋下拉選取/)).toBeInTheDocument();
+      expect(screen.getByText(/表單本體於「使用表單管理」維護/)).toBeInTheDocument();
+    });
+
+    it('G-DOC-211 變更循環 → stored documentNumber 前綴同步重建後送出', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      // 改選 lc2（產品企劃循環 → PPC）。
+      await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc2');
+      await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+      await waitFor(() =>
+        expect(endpoints.updateDocument).toHaveBeenCalledWith(
+          'd1',
+          expect.objectContaining({ lifecycleId: 'lc2', documentNumber: 'ICSOP-PPC-101-1-01' }),
+        ),
+      );
+    });
+
+    it('G-DOC-201 附件區含停用 .xls 佔位卡與含 .xls/OQ-E04-06 之格式說明', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      expect(screen.getByText('上傳 ICSOP 原始檔（.xls，1 份）')).toBeInTheDocument();
+      expect(screen.getByText('待 AI 索引管線就緒（F027/F029）')).toBeInTheDocument();
+      expect(screen.getByText(/ICSOP 原始檔＝\.xls/)).toBeInTheDocument();
+      expect(screen.getByText(/OQ-E04-06 定案/)).toBeInTheDocument();
     });
   });
 });
