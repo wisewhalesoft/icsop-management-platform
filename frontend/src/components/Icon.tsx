@@ -11,6 +11,7 @@ import {
   Library, Megaphone, PauseCircle, XCircle, FileDown, Link as LinkIcon,
   Eye, Upload, FileSpreadsheet, Sheet, Shield, Pencil, Sparkles,
   UploadCloud, Link2Off, ChevronDown, ChevronUp, CornerDownRight, HardDrive,
+  Pin, List,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -98,6 +99,9 @@ const REGISTRY: Record<string, LucideIcon> = {
   'chevron-up': ChevronUp,
   'corner-down-right': CornerDownRight,
   'hard-drive': HardDrive,
+  // prototype 03（前台清單）之置頂區/其他文件區標題圖示。
+  pin: Pin,
+  list: List,
 };
 
 export interface IconProps {

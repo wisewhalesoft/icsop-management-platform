@@ -56,3 +56,23 @@ export function deriveParentCode(orgCode: string): string | null {
   const parentPrefix = prefix.slice(0, -1);
   return parentPrefix.padEnd(5, '0');
 }
+
+/**
+ * targetCode 是否位於 scopeCode 所定義子樹（含自身）內
+ * ＝ scopeCode 之有效前綴為 targetCode 之前綴。
+ *   Root（有效前綴為空字串）⇒ 對任何 targetCode 皆 true（全公司涵蓋）。
+ *
+ * 三處消費同一 predicate（僅參數角色互換，見 F026 spec §9.1 末段「三者不得各自訂定不同展開規則」）：
+ *   F019 部門篩選 ：isWithinSubtree(選定篩選單位, 文件使用部門)
+ *   F019 置頂     ：isWithinSubtree(文件使用部門, 使用者部門)
+ *   F026 使用部門相符性／F033（未來）：同置頂。
+ *
+ * 防呆不對稱為刻意（OQ-PS-04 定案）：僅 scopeCode（外部輸入之篩選條件）經 assertOrgCode；
+ * targetCode 為已落 DB 之內部資料，比照既有 matchesDeptFilter 對 usingDeptIds 之信任慣例，
+ * 不拋錯、純字面前綴比對（%/_ 不作萬用字元）。
+ */
+export function isWithinSubtree(scopeCode: string, targetCode: string): boolean {
+  const prefix = deriveCodePrefix(scopeCode);
+  if (prefix === '') return true;
+  return targetCode.startsWith(prefix);
+}

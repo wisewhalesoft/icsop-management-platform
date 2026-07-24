@@ -118,7 +118,11 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
     expect(screen.getByText('消費分期特約通路作業')).toBeInTheDocument();
   });
 
-  it('TS-F018-001 上傳合法 xlsx → 呼叫 uploadUsageForms([file])', async () => {
+  /**
+   * ⚠ 取代原 `TS-F018-001` 之斷言 `toHaveBeenCalledWith([file])`——該斷言逐字鎖定本次要修的 bug
+   * （表單名稱已於 UI 輸入/驗證，卻未隨 multipart 送出）。修復後名稱必須攜帶。
+   */
+  it('TS-PS-F018-FE-001 上傳合法 xlsx → 名稱自動帶入檔名 → uploadUsageForms 攜帶名稱參數', async () => {
     mockAuth('ICSOPAdmin');
     render(<UsageFormManagementPage />);
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
@@ -129,7 +133,56 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
     // 名稱自動帶入檔名（限縮於 modal，避免與搜尋框 aria-label 撞名）
     expect((within(dialog).getByLabelText(/表單名稱/) as HTMLInputElement).value).toBe('放款覆核表.xlsx');
     await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
-    await waitFor(() => expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file]));
+    await waitFor(() =>
+      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '放款覆核表.xlsx'),
+    );
+  });
+
+  it('TS-PS-F018-FE-002 使用者改寫名稱為自訂文字 → 以自訂名稱呼叫，成功訊息含自訂名稱', async () => {
+    mockAuth('ICSOPAdmin');
+    render(<UsageFormManagementPage />);
+    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
+    const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
+    const file = xlsxFile('放款覆核表.xlsx');
+    await userEvent.upload(within(dialog).getByLabelText('選擇檔案'), file);
+    const nameInput = within(dialog).getByLabelText(/表單名稱/);
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, '貸款覆核申請表');
+    await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
+    await waitFor(() =>
+      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '貸款覆核申請表'),
+    );
+    expect(await screen.findByText(/已上傳表單「貸款覆核申請表」/)).toBeInTheDocument();
+  });
+
+  it('TS-PS-F018-FE-003 已手動輸入名稱後才選檔 → 不覆蓋既有輸入值（prototype 第 333 行同語意）', async () => {
+    mockAuth('ICSOPAdmin');
+    render(<UsageFormManagementPage />);
+    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
+    const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
+    await userEvent.type(within(dialog).getByLabelText(/表單名稱/), '自訂表單名');
+    const file = xlsxFile('放款覆核表.xlsx');
+    await userEvent.upload(within(dialog).getByLabelText('選擇檔案'), file);
+    expect((within(dialog).getByLabelText(/表單名稱/) as HTMLInputElement).value).toBe('自訂表單名');
+    await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
+    await waitFor(() =>
+      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '自訂表單名'),
+    );
+  });
+
+  it('TS-PS-F018-FE-004 名稱欄留空送出 → 顯示「表單名稱不可為空。」且不呼叫上傳', async () => {
+    mockAuth('ICSOPAdmin');
+    render(<UsageFormManagementPage />);
+    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
+    const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
+    await userEvent.upload(within(dialog).getByLabelText('選擇檔案'), xlsxFile('放款覆核表.xlsx'));
+    await userEvent.clear(within(dialog).getByLabelText(/表單名稱/));
+    await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
+    expect(within(dialog).getByText('表單名稱不可為空。')).toBeInTheDocument();
+    expect(endpoints.uploadUsageForms).not.toHaveBeenCalled();
   });
 
   it('TS-F018-005 上傳 .docx → 顯示 FILE_FORMAT_NOT_ALLOWED，不呼叫上傳', async () => {

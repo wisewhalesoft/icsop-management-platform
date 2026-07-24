@@ -4,13 +4,14 @@
  * 權威來源：docs/specs/features/F019-public-list-browsing.md、docs/test-specs/features/F019-test.md。
  * 設計：所有規則為純函式，服務層（public-documents.service）以 FakeStore/TypeOrmStore 提供資料後套用。
  *  - 強制基底條件：僅「已公告」（status=有效 AND 公告日期≤今日），不可由呼叫端傳入條件繞過（AC9）。
- *  - 置頂：文件使用部門集合**精確**含使用者部門（OQ-F019-03 採 spec 字面之集合成員比對，非子樹展開）。
- *  - 部門篩選：子樹前綴展開（deriveCodePrefix + startsWith，天然免注入；SQL 下推見 escapeLike*）。
+ *  - 置頂：文件使用部門為使用者部門之**祖先或自身**（子樹涵蓋，含全公司 Root；2026-07-24 定案，
+ *    取代 OQ-F019-03 之精確比對暫定假設，見 isPinned 註解）。
+ *  - 部門篩選：子樹前綴展開（isWithinSubtree，天然免注入；SQL 下推見 escapeLike*）。
  *  - 關鍵字：編號＋名稱子字串（字面比對）。三種篩選與關鍵字以 AND 組合。
  */
 import { DocumentStatus } from '../documents/document-status';
 import { deriveDisplayStatus } from '../documents/display-status';
-import { deriveCodePrefix } from '../org-sync/org-hierarchy';
+import { isWithinSubtree } from '../org-sync/org-hierarchy';
 
 /** 前台清單項（含使用部門代碼集合，供置頂/部門篩選）。名稱解析由服務層另補。 */
 export interface PublicDocItem {
@@ -55,10 +56,19 @@ export function isAnnounced(item: PublicDocItem, today: Date): boolean {
   return deriveDisplayStatus(item.status, item.announcedDate, today) === 'announced';
 }
 
-/** 置頂判定：文件使用部門集合精確含使用者部門（非子樹）。無部門 → 一律非置頂。 */
+/**
+ * 置頂判定：文件之任一使用部門為使用者所屬部門之**祖先或自身**（子樹涵蓋）。無部門 → 一律非置頂。
+ *
+ * 定案（2026-07-24，取代 OQ-F019-03 之「精確集合成員比對」暫定假設）：
+ * 使用部門可指定任意層級，選上層自動涵蓋其下所有單位——文件掛部層 `JA000` 者，
+ * 對掛處室 `JAC00` 之使用者亦屬「您部門相關」；掛 Root `00000`（全公司）者對所有人置頂。
+ * 權威：prototypes/03-public-list.html 第 137-140 行 USER_SCOPE 祖先鏈；
+ *       F026-role-field-matrix.md AC（JA000 + JAC00 → 相符；同部兄弟處室 → 不相符）。
+ * 呼叫方向與 matchesDeptFilter 相反（此處 scope＝文件使用部門、target＝使用者部門）。
+ */
 export function isPinned(item: PublicDocItem, userOrgCode: string | null | undefined): boolean {
   if (!userOrgCode) return false;
-  return item.usingDeptIds.includes(userOrgCode);
+  return item.usingDeptIds.some((code) => isWithinSubtree(code, userOrgCode));
 }
 
 /** 文件編號降冪比較（字串字面）。 */
@@ -88,9 +98,8 @@ export function matchesDeptFilter(
   deptCode: string | null | undefined,
 ): boolean {
   if (!deptCode) return true;
-  const prefix = deriveCodePrefix(deptCode);
-  if (prefix === '') return true;
-  return item.usingDeptIds.some((code) => code.startsWith(prefix));
+  // scope＝使用者選定之篩選單位、target＝文件使用部門（與置頂之呼叫方向相反）。
+  return item.usingDeptIds.some((code) => isWithinSubtree(deptCode, code));
 }
 
 /** 關鍵字（編號＋名稱子字串，字面比對，不分大小寫）。空 → 全通過。 */
