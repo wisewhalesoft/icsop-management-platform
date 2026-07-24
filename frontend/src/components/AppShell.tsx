@@ -130,9 +130,10 @@ export function AppShell(): JSX.Element {
             <div className="ml-auto flex items-center gap-3">
               {/* per-page 動作按鈕（PageHeader portal 注入） */}
               <div ref={setActionsEl} className="flex items-center gap-2" />
-              <span className="hidden sm:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200">
+              {/* G-PUB-040：頂欄顯示登入者姓名（非 loginId）；xl 斷點與 prototype 07 一致。 */}
+              <span className="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200">
                 <Icon name="user-circle" className="w-4 h-4" />
-                <span className="mono">{user?.loginId}</span>
+                <span>{user?.name ?? user?.loginId}</span>
               </span>
               <RoleBadge roleCode={role} />
               <button

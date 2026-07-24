@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { getPublicDocuments, getOrgUnits } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
 import { buildOrgPath } from '../domain/org-path';
+import { isAncestorOrSelf } from '../domain/org-scope';
 import type { PublicListItem, PublicListPage as PublicPage, OrgUnitRecord } from '../api/types';
 
 /**
- * 前台文件清單（E06 / F019；取代 PublicPlaceholder）。版面權威來源：prototypes/03-public-list.html。
+ * 前台文件清單（E06 / F019）。版面權威來源：prototypes/03-public-list.html。
  * 排序（使用部門置頂＋編號降冪）、篩選（部門子樹/循環/關鍵字 AND）、分頁皆後端權威；本頁僅呈現。
- * RWD（F021）：以 Tailwind responsive utility 達成單欄卡片式版面；幾何/觸控目標之真實驗證屬 [integration]。
- * 註（DOC_USING_DEPT 落差）：使用部門資料落地前，後端 pinned 恆 false、部門篩選不命中；UI 結構完整。
+ * RWD（F021）：桌機篩選列（lg 顯示）＋手機底部彈出篩選面板（設計系統 §6.1）。
  */
 const msgOf = (e: unknown): string =>
   e instanceof ApiError ? e.code : e instanceof Error ? e.message : '載入失敗';
@@ -33,6 +33,7 @@ export function PublicListPage(): JSX.Element {
   const [deptCode, setDeptCode] = useState('');
   const [lifecycleId, setLifecycleId] = useState('');
   const [page, setPage] = useState(1);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const [data, setData] = useState<PublicPage | null>(null);
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
@@ -77,7 +78,9 @@ export function PublicListPage(): JSX.Element {
   const pinned = items.filter((i) => i.pinned);
   const rest = items.filter((i) => !i.pinned);
   const total = data?.total ?? 0;
+  const hiddenCount = data?.hiddenCount ?? 0;
   const hasFilters = Boolean(keyword || deptCode || lifecycleId);
+  const hasSelectFilters = Boolean(deptCode || lifecycleId);
 
   // 循環選項：由已載入文件之 (lifecycleId, lifecycleName) 去重（前台公開安全來源）。
   const cycleOptions = useMemo(() => {
@@ -112,6 +115,18 @@ export function PublicListPage(): JSX.Element {
 
   // 使用者部門路徑（部 / 處室，捨本部層）：頁首列與置頂區標題共用同一計算，避免兩處格式不一致。
   const orgPath = useMemo(() => buildOrgPath(orgUnits, user?.orgCode), [orgUnits, user?.orgCode]);
+
+  const deptOptionEls = deptOptions.map((u) => (
+    <option key={u.orgCode} value={u.orgCode}>
+      {'　'.repeat(TIER_DEPTH[u.tier] ?? 0)}
+      {u.name}
+    </option>
+  ));
+  const cycleOptionEls = cycleOptions.map(([id, name]) => (
+    <option key={id} value={id}>
+      {name}
+    </option>
+  ));
 
   return (
     <div className="min-h-screen bg-white text-slate-700">
@@ -148,8 +163,8 @@ export function PublicListPage(): JSX.Element {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-5">
-        {/* Search + filters（RWD：手機直排、桌機橫排） */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3" data-testid="filter-bar">
+        {/* 搜尋 + 手機篩選觸發（lg 以下顯示觸發鈕，開啟底部面板） */}
+        <div className="flex items-center gap-2 mb-3" data-testid="search-row">
           <div className="relative flex-1">
             <Icon
               name="search"
@@ -161,53 +176,63 @@ export function PublicListPage(): JSX.Element {
               onChange={(e) => onKeyword(e.target.value)}
               aria-label="搜尋文件編號或名稱"
               placeholder="搜尋文件編號或名稱…"
-              className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
+              className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
             />
           </div>
+          <button
+            onClick={() => setSheetOpen(true)}
+            aria-label="開啟篩選"
+            data-testid="mobile-filter-trigger"
+            className="lg:hidden relative px-3 py-2.5 rounded-lg border border-slate-300 bg-white text-sm flex items-center gap-1.5"
+          >
+            <Icon name="sliders-horizontal" className="w-4 h-4" />
+            篩選
+            {hasSelectFilters && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary-600" />
+            )}
+          </button>
+        </div>
+
+        {/* 桌機篩選列（lg 顯示）：部門/狀態/循環 + 清除 + 共 N 筆（右對齊） */}
+        <div className="hidden lg:flex items-center gap-3 mb-4" data-testid="filter-bar">
           <select
             value={deptCode}
             onChange={(e) => onDept(e.target.value)}
             aria-label="使用部門篩選"
-            className="px-3 py-2.5 rounded-lg border border-slate-300 bg-white text-sm"
+            className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm"
           >
             <option value="">所有使用部門</option>
-            {deptOptions.map((u) => (
-              <option key={u.orgCode} value={u.orgCode}>
-                {'　'.repeat(TIER_DEPTH[u.tier] ?? 0)}
-                {u.name}
-              </option>
-            ))}
+            {deptOptionEls}
           </select>
           <select
             value={lifecycleId}
             onChange={(e) => onCycle(e.target.value)}
             aria-label="循環篩選"
-            className="px-3 py-2.5 rounded-lg border border-slate-300 bg-white text-sm"
+            className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm"
           >
             <option value="">所有循環</option>
-            {cycleOptions.map(([id, name]) => (
-              <option key={id} value={id}>
-                {name}
-              </option>
-            ))}
+            {cycleOptionEls}
           </select>
           <select
             value="已公告"
             disabled
             aria-label="狀態篩選"
             title="前台僅顯示已公告文件"
-            className="px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-400"
+            className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-400"
           >
             <option value="已公告">狀態：已公告</option>
           </select>
           {hasFilters && (
             <button
               onClick={clearFilters}
-              className="px-3 py-2 rounded-lg text-sm text-primary-600 hover:bg-primary-50 shrink-0"
+              className="px-3 py-2 rounded-lg text-sm text-primary-600 hover:bg-primary-50"
             >
               清除篩選
             </button>
           )}
+          <span className="ml-auto text-sm text-slate-500" data-testid="count-text">
+            共 {total} 筆
+          </span>
         </div>
 
         {/* info note */}
@@ -266,7 +291,12 @@ export function PublicListPage(): JSX.Element {
                 </div>
                 <div className="space-y-2.5" data-testid="pinned-list">
                   {pinned.map((d) => (
-                    <DocCard key={d.id} doc={d} onOpen={() => navigate(`/public/documents/${d.id}`)} />
+                    <DocCard
+                      key={d.id}
+                      doc={d}
+                      userOrgCode={user?.orgCode}
+                      onOpen={() => navigate(`/public/documents/${d.id}`)}
+                    />
                   ))}
                 </div>
               </section>
@@ -281,15 +311,24 @@ export function PublicListPage(): JSX.Element {
                 </div>
                 <div className="space-y-2.5" data-testid="rest-list">
                   {rest.map((d) => (
-                    <DocCard key={d.id} doc={d} onOpen={() => navigate(`/public/documents/${d.id}`)} />
+                    <DocCard
+                      key={d.id}
+                      doc={d}
+                      userOrgCode={user?.orgCode}
+                      onOpen={() => navigate(`/public/documents/${d.id}`)}
+                    />
                   ))}
                 </div>
               </section>
             )}
 
-            {/* pagination */}
+            {/* pagination：左＝後端隱藏筆數提示（G-PUB-012/014），右＝頁碼 */}
             <div className="flex items-center justify-between mt-6 text-sm text-slate-500">
-              <span>共 {total} 筆</span>
+              <span data-testid="hidden-note" className="text-xs text-slate-400">
+                {hiddenCount > 0
+                  ? `另有 ${hiddenCount} 筆（進度中／失效／作廢）文件已由後端隱藏`
+                  : ''}
+              </span>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -315,6 +354,85 @@ export function PublicListPage(): JSX.Element {
           </>
         )}
       </main>
+
+      {/* 手機底部篩選面板（設計系統 §6.1；lg 以下使用）。 */}
+      {sheetOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden"
+          onClick={() => setSheetOpen(false)}
+          data-testid="sheet-overlay"
+        />
+      )}
+      <div
+        role="dialog"
+        aria-label="篩選"
+        aria-hidden={!sheetOpen}
+        data-testid="filter-sheet"
+        className={`fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl max-h-[80vh] overflow-auto lg:hidden transition-transform duration-300 ${
+          sheetOpen ? 'translate-y-0' : 'translate-y-full'
+        }`}
+      >
+        <div className="flex items-center justify-between px-4 h-14 border-b border-slate-100 sticky top-0 bg-white">
+          <h3 className="font-semibold text-slate-900">篩選</h3>
+          <button onClick={() => setSheetOpen(false)} aria-label="關閉篩選" className="text-slate-400">
+            <Icon name="x" className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-4 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">使用部門</label>
+            <select
+              value={deptCode}
+              onChange={(e) => onDept(e.target.value)}
+              aria-label="使用部門篩選（行動）"
+              className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"
+            >
+              <option value="">所有使用部門</option>
+              {deptOptionEls}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">狀態</label>
+            <select
+              value="已公告"
+              disabled
+              aria-label="狀態篩選（行動）"
+              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm bg-slate-50 text-slate-400"
+            >
+              <option value="已公告">已公告</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">循環</label>
+            <select
+              value={lifecycleId}
+              onChange={(e) => onCycle(e.target.value)}
+              aria-label="循環篩選（行動）"
+              className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"
+            >
+              <option value="">所有循環</option>
+              {cycleOptionEls}
+            </select>
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => {
+                clearFilters();
+                setSheetOpen(false);
+              }}
+              className="flex-1 py-2.5 rounded-lg border border-slate-300 text-sm"
+            >
+              清除
+            </button>
+            <button
+              onClick={() => setSheetOpen(false)}
+              className="flex-1 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium"
+            >
+              套用
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -326,7 +444,15 @@ const STATUS_LABEL: Record<string, string> = {
   void: '作廢',
 };
 
-function DocCard({ doc, onOpen }: { doc: PublicListItem; onOpen: () => void }): JSX.Element {
+function DocCard({
+  doc,
+  userOrgCode,
+  onOpen,
+}: {
+  doc: PublicListItem;
+  userOrgCode: string | null | undefined;
+  onOpen: () => void;
+}): JSX.Element {
   return (
     <article
       tabIndex={0}
@@ -363,7 +489,7 @@ function DocCard({ doc, onOpen }: { doc: PublicListItem; onOpen: () => void }): 
         <div className="col-span-2">
           <dt className="text-slate-400 inline">使用部門：</dt>
           <dd className="text-slate-600 inline">
-            {doc.usingDeptNames.length > 0 ? doc.usingDeptNames.join('、') : '—'}
+            <UsingDepts doc={doc} userOrgCode={userOrgCode} />
           </dd>
         </div>
         <div className="col-span-2">
@@ -378,5 +504,33 @@ function DocCard({ doc, onOpen }: { doc: PublicListItem; onOpen: () => void }): 
         )}
       </dl>
     </article>
+  );
+}
+
+/**
+ * 使用部門逐段呈現（G-PUB-016）：命中使用者組織路徑（in-scope）之段以 primary-700 高亮。
+ * 以 usingDeptIds/usingDeptNames 同序配對；命中＝該使用部門為使用者部門之祖先或自身。
+ */
+function UsingDepts({
+  doc,
+  userOrgCode,
+}: {
+  doc: PublicListItem;
+  userOrgCode: string | null | undefined;
+}): JSX.Element {
+  if (doc.usingDeptNames.length === 0) return <>—</>;
+  return (
+    <>
+      {doc.usingDeptNames.map((name, i) => {
+        const code = doc.usingDeptIds[i];
+        const inScope = isAncestorOrSelf(code, userOrgCode);
+        return (
+          <Fragment key={`${code ?? i}-${i}`}>
+            {i > 0 && '、'}
+            <span className={inScope ? 'text-primary-700 font-medium' : undefined}>{name}</span>
+          </Fragment>
+        );
+      })}
+    </>
   );
 }

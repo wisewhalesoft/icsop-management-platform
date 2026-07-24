@@ -24,6 +24,47 @@ export type AuthStatus =
   | 'unauthenticated'
   | 'error';
 
+/**
+ * 逾時偵測旗標（G-PUB-006 工作階段逾時模態）。以 sessionStorage（單一分頁、重整仍在、關閉即清）
+ * 記錄「本分頁曾成功登入」；其後 /auth/me 再遇 401 即判定為 session 逾時（而非從未登入），
+ * 供登入頁顯示逾時模態。純附加：不改動 status 狀態機或任何既有導覽行為。
+ */
+const WAS_AUTHED_KEY = 'icsop.wasAuthed';
+const SESSION_EXPIRED_KEY = 'icsop.sessionExpired';
+
+function safeSession(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    // SSR / 隱私模式停用 storage → 優雅降級（不影響認證流程）。
+    return null;
+  }
+}
+function markAuthed(): void {
+  safeSession()?.setItem(WAS_AUTHED_KEY, '1');
+}
+function clearAuthMarkers(): void {
+  const s = safeSession();
+  s?.removeItem(WAS_AUTHED_KEY);
+  s?.removeItem(SESSION_EXPIRED_KEY);
+}
+/** 曾登入過（wasAuthed）後再遇 401 → 標記逾時（且清 wasAuthed 避免重複觸發）。 */
+function markExpiredIfWasAuthed(): void {
+  const s = safeSession();
+  if (s?.getItem(WAS_AUTHED_KEY) === '1') {
+    s.setItem(SESSION_EXPIRED_KEY, '1');
+    s.removeItem(WAS_AUTHED_KEY);
+  }
+}
+/** 讀取並清除逾時旗標（登入頁掛載時呼叫一次；true＝因逾時被導回登入）。 */
+export function consumeSessionExpired(): boolean {
+  const s = safeSession();
+  if (!s) return false;
+  const expired = s.getItem(SESSION_EXPIRED_KEY) === '1';
+  if (expired) s.removeItem(SESSION_EXPIRED_KEY);
+  return expired;
+}
+
 interface AuthContextValue {
   status: AuthStatus;
   user: SessionUser | null;
@@ -47,11 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(me);
       setError(null);
       setStatus('authenticated');
+      markAuthed();
     } catch (e) {
       setUser(null);
       if (isUnauthorized(e)) {
         setError(null);
         setStatus('unauthenticated');
+        markExpiredIfWasAuthed();
       } else {
         setError(e instanceof Error ? e.message : String(e));
         setStatus('error');
@@ -67,6 +110,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = '/auth/login';
   }, []);
   const logout = useCallback(() => {
+    // 主動登出非逾時：清旗標，避免登出後導回登入頁誤顯逾時模態。
+    clearAuthMarkers();
     window.location.href = '/auth/logout';
   }, []);
 

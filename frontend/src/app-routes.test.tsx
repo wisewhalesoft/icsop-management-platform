@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AppRoutes } from './App';
+import { ToastProvider } from './components/useToast';
 import * as authHook from './auth/useAuth';
 import type { AuthStatus } from './auth/useAuth';
 import type { SessionUser } from './api/types';
@@ -20,9 +21,11 @@ function mockAuth(status: AuthStatus, roleCode?: string) {
 
 const renderAt = (path: string) =>
   render(
-    <MemoryRouter initialEntries={[path]}>
-      <AppRoutes />
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <AppRoutes />
+      </MemoryRouter>
+    </ToastProvider>,
   );
 
 describe('AppRoutes — auth gating 與角色分流（F001/F002）', () => {

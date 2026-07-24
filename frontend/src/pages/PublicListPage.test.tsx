@@ -47,7 +47,14 @@ function docItem(over: Partial<PublicListItem>): PublicListItem {
 }
 
 function pageOf(items: PublicListItem[], over: Partial<PublicPage> = {}): PublicPage {
-  return { items, total: over.total ?? items.length, page: over.page ?? 1, pageSize: 50, hasNext: over.hasNext ?? false };
+  return {
+    items,
+    total: over.total ?? items.length,
+    page: over.page ?? 1,
+    pageSize: 50,
+    hasNext: over.hasNext ?? false,
+    hiddenCount: over.hiddenCount,
+  };
 }
 
 // descFull＝上游 DESC_FULL（部層供「使用者部門路徑」顯示，見 domain/org-path.ts）。
@@ -193,6 +200,68 @@ describe('PublicListPage（F019 前台清單）', () => {
       expect(api.getPublicDocuments).toHaveBeenCalledWith(expect.objectContaining({ keyword: '2026' })),
     );
   });
+
+  it('G-PUB-014 共 N 筆呈現於篩選列（桌機右對齊 count-text）', async () => {
+    vi.mocked(api.getPublicDocuments).mockResolvedValue(pageOf([docItem({})], { total: 12 }));
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    expect(screen.getByTestId('count-text')).toHaveTextContent('共 12 筆');
+  });
+
+  it('G-PUB-012 後端隱藏筆數提示（分頁左側「另有 N 筆…已由後端隱藏」）', async () => {
+    vi.mocked(api.getPublicDocuments).mockResolvedValue(
+      pageOf([docItem({})], { total: 1, hiddenCount: 3 }),
+    );
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    const note = screen.getByTestId('hidden-note');
+    expect(note).toHaveTextContent('另有 3 筆');
+    expect(note).toHaveTextContent('已由後端隱藏');
+  });
+
+  it('G-PUB-012 無隱藏筆數 → 提示為空', async () => {
+    vi.mocked(api.getPublicDocuments).mockResolvedValue(
+      pageOf([docItem({})], { total: 1, hiddenCount: 0 }),
+    );
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    expect(screen.getByTestId('hidden-note')).toHaveTextContent('');
+  });
+
+  it('G-PUB-016 使用部門命中使用者組織路徑之段以 primary-700 高亮，旁系不高亮', async () => {
+    // 使用者 JAC00；文件使用部門 JA000（部層，為使用者祖先→高亮）＋ JB000（旁系→不高亮）。
+    vi.mocked(api.getPublicDocuments).mockResolvedValue(
+      pageOf([
+        docItem({
+          draftingDeptName: '企劃部', // 避免與 in-scope 使用部門名同字串
+          usingDeptIds: ['JA000', 'JB000'],
+          usingDeptNames: ['營運管理部', '其他部門'],
+        }),
+      ]),
+    );
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    const card = within(screen.getByTestId('rest-list'));
+    expect(card.getByText('營運管理部').className).toMatch(/text-primary-700/); // in-scope 高亮
+    expect(card.getByText('其他部門').className).not.toMatch(/text-primary-700/); // 旁系不高亮
+  });
+
+  it('G-PUB-011 手機篩選底部面板：點觸發鈕開啟、選部門後套用關閉', async () => {
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    // 開啟前 dialog 為 aria-hidden（getByRole 不回傳）
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await userEvent.click(screen.getByTestId('mobile-filter-trigger'));
+    const sheet = screen.getByRole('dialog', { name: '篩選' });
+    expect(sheet).toBeInTheDocument();
+    // 行動下拉具獨立 aria-label（避免與桌機同名衝突）
+    await userEvent.selectOptions(screen.getByLabelText('使用部門篩選（行動）'), 'JA000');
+    await waitFor(() =>
+      expect(api.getPublicDocuments).toHaveBeenCalledWith(expect.objectContaining({ deptCode: 'JA000' })),
+    );
+    await userEvent.click(within(sheet).getByRole('button', { name: '套用' }));
+    expect(screen.queryByRole('dialog')).toBeNull(); // 套用後關閉
+  });
 });
 
 describe('PublicListPage RWD（F021 · unit 可驗證範圍）', () => {
@@ -213,13 +282,15 @@ describe('PublicListPage RWD（F021 · unit 可驗證範圍）', () => {
     expect(search.value).toBe('審查'); // 狀態保留（React state 不因 resize 卸載）
   });
 
-  it('TS-F021-008 篩選列具響應式版面 class（弱代理，防改版誤刪 responsive utility）', async () => {
+  it('TS-F021-008 響應式版面：桌機篩選列 lg 顯示、手機篩選觸發 lg 隱藏（弱代理，防誤刪 utility）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
+    // 桌機篩選列：hidden（手機隱藏）→ lg:flex（桌機顯示）
     const bar = screen.getByTestId('filter-bar');
-    // flex-col（手機直排）→ sm:flex-row（桌機橫排）之響應式切換
-    expect(bar.className).toMatch(/flex-col/);
-    expect(bar.className).toMatch(/sm:flex-row/);
+    expect(bar.className).toMatch(/hidden/);
+    expect(bar.className).toMatch(/lg:flex/);
+    // 手機篩選觸發鈕：lg:hidden（桌機隱藏）
+    expect(screen.getByTestId('mobile-filter-trigger').className).toMatch(/lg:hidden/);
   });
 
   it('TS-F021-003 斷點切換時分頁頁碼不遺失（防禦性延伸）', async () => {

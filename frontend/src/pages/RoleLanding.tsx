@@ -17,7 +17,7 @@ const ADMIN_DESC: Record<RoleCode, string> = {
 };
 
 export function RoleLanding(): JSX.Element {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const role = user?.roleCode;
   const isUser = role === 'User';
   const adminDesc = (role && ADMIN_DESC[role as RoleCode]) || '';
@@ -34,6 +34,15 @@ export function RoleLanding(): JSX.Element {
           </span>
           <div className="ml-auto flex items-center gap-2">
             <span className="mono text-sm text-slate-500">{user?.loginId}</span>
+            {/* G-PUB-010：登入分流頁頂欄提供登出（prototype 02 頂欄右側）。 */}
+            <button
+              onClick={logout}
+              aria-label="登出"
+              title="登出"
+              className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"
+            >
+              <Icon name="log-out" className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </header>

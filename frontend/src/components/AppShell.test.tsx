@@ -66,6 +66,26 @@ describe('AppShell — 後台外殼側欄角色過濾（F002）', () => {
     expect(screen.getByText('ICSOP 管理員')).toBeInTheDocument();
   });
 
+  it('G-PUB-040 頂欄有 name 時顯示姓名（非 loginId）', () => {
+    vi.mocked(authHook.useAuth).mockReturnValue({
+      status: 'authenticated',
+      user: {
+        loginId: 'AS22455',
+        email: 'peter@hfcfinance.com.tw',
+        companyCode: 'AS',
+        roleCode: 'SysAdmin',
+        name: '李慧玲',
+      },
+      error: null,
+      refresh: vi.fn(),
+      login: vi.fn(),
+      logout: vi.fn(),
+    });
+    renderShell();
+    expect(screen.getByText('李慧玲')).toBeInTheDocument();
+    expect(screen.queryByText('AS22455')).not.toBeInTheDocument();
+  });
+
   it('點登出呼叫 logout', async () => {
     const { logout } = mockAuth('SysAdmin');
     renderShell();
