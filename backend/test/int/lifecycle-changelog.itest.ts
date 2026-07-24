@@ -1,6 +1,7 @@
 import { PDFDocument } from 'pdf-lib';
 import { bootIntApp, shutdownIntApp, MARK, IntCtx } from './harness';
 import { AppDataSource } from '../../src/database/data-source';
+import { Account } from '../../src/database/entities/account.entity';
 import { AuditWriterService } from '../../src/audit/audit-writer.service';
 
 /**
@@ -28,6 +29,20 @@ describe('[int] lifecycle-changelog F038 新舊對照 vs SOP', () => {
 
   beforeAll(async () => {
     ctx = await bootIntApp();
+    // TS-LCC-E-006 §C.4 需以「已驗證但無權」之 Supervisor 打出 403（非 401）。
+    // SessionGuard 每請求對 ACCOUNT 重驗，僅鑄 cookie 而無對應帳號列 → 401（測不到 RBAC 層）。
+    // 故插入 marker Supervisor 帳號（loginId zzint-sup，cleanupMarkers 以 zzint- 前綴清除）。
+    await AppDataSource.getRepository(Account).save(
+      AppDataSource.getRepository(Account).create({
+        companyCode: 'AS',
+        loginId: `${MARK.acct}sup`,
+        roleCode: 'Supervisor',
+        status: 'active',
+        source: 'manual',
+        name: 'ZZINT 主管',
+        email: `${MARK.acct}sup@zzint.local`,
+      } as Partial<Account>),
+    );
     const r = await ctx
       .http()
       .post('/admin/lifecycles')
