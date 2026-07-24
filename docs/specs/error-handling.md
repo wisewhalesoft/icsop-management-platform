@@ -43,6 +43,7 @@ status: Draft
 | `NODE_DOC_ALREADY_ASSIGNED` | 409（需二次確認） | 文件已掛載於節點 {name}，是否改派？ | F009 |
 | `DOCUMENT_REQUIRED_FIELD_MISSING` | 400 | 必填欄位未填寫 | F010 |
 | `DOCUMENT_NOT_FOUND` | 404 | 找不到文件 | F011, F016 |
+| `DOCUMENT_PDF_NOT_FOUND` | 404 | 前台檢視器 VIEW/DOWNLOAD/PRINT 或 `getOriginalPdf` 查無文件之原始 PDF | F020 |
 | `ALERT_NOT_FOUND` | 404 | 找不到組織異動待確認提示 | F006 |
 | `ALERT_ALREADY_RESOLVED` | 409 | 此提示已處理，無法重複解除 | F006 |
 | `DOCUMENT_NUMBER_DUPLICATE` | 409 | 文件編號已存在（**比對「有效＋作廢」**；「失效」編號已釋出不觸發） | F013 |
