@@ -12,6 +12,8 @@ import {
   Eye, Upload, FileSpreadsheet, Sheet, Shield, Pencil, Sparkles,
   UploadCloud, Link2Off, ChevronDown, ChevronUp, CornerDownRight, HardDrive,
   Pin, List,
+  Clock, FileDiff, FileStack, FileWarning, KeyRound, Layers, Loader,
+  MinusCircle, ScanText, Spline,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -102,6 +104,18 @@ const REGISTRY: Record<string, LucideIcon> = {
   // prototype 03（前台清單）之置頂區/其他文件區標題圖示。
   pin: Pin,
   list: List,
+  // 以下 10 枚由 Icon.registry.test.tsx 守門測試揪出：頁面已使用但漏註冊，
+  // 先前於測試與正式環境皆靜默渲染為 null。
+  clock: Clock, // DocumentListPage
+  'file-diff': FileDiff, // ChangeHistoryPage
+  'file-stack': FileStack, // ChangeHistoryPage
+  'file-warning': FileWarning, // DocIndexPage
+  'key-round': KeyRound, // LoginPage
+  layers: Layers, // ChangeHistoryPage
+  loader: Loader, // DocIndexPage（建置中狀態；與既有 loader-2 為不同圖示）
+  'minus-circle': MinusCircle, // ChangeHistoryPage、DocIndexPage
+  'scan-text': ScanText, // DocIndexPage
+  spline: Spline, // ChangeHistoryPage
 };
 
 export interface IconProps {
