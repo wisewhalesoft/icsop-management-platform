@@ -8,6 +8,7 @@ import {
   UpdateAccountPatch,
 } from './accounts.store';
 import { verifyPassword } from './password';
+import { OrgUnitReadStore, OrgUnitRecord } from '../org-directory/org-unit-read';
 
 /** 記憶體假 store（測服務業務規則，不碰 DB）。 */
 class FakeStore implements AccountStore {
@@ -27,6 +28,7 @@ class FakeStore implements AccountStore {
       status: 'active',
       source: 'upstream',
       disableReason: null,
+      lastLoginAt: null,
       passwordHash: null,
       ...over,
     };
@@ -66,12 +68,64 @@ class FakeStore implements AccountStore {
 
 const ACTOR = { companyCode: 'AS', loginId: 'AS22455' };
 
+/** 記憶體假 ORG_UNIT 讀取 store（測部門名解析，不碰 DB）。 */
+function fakeOrgUnits(units: OrgUnitRecord[]): OrgUnitReadStore {
+  const byCode = new Map(units.map((u) => [u.orgCode, u]));
+  return {
+    findByOrgCode: (orgCode: string) => Promise.resolve(byCode.get(orgCode) ?? null),
+    listByCompany: (companyCode: string) =>
+      Promise.resolve(units.filter((u) => u.companyCode === companyCode)),
+  };
+}
+
+const orgUnit = (over: Partial<OrgUnitRecord>): OrgUnitRecord => ({
+  companyCode: 'AS',
+  orgCode: 'ASA00',
+  codePrefix: 'ASA00',
+  parentCode: 'AS000',
+  tier: 'SECTION',
+  name: '審查室',
+  descFull: '營運管理部審查室',
+  managerEmpNo: null,
+  isActive: true,
+  ...over,
+});
+
 describe('AccountsService', () => {
   let store: FakeStore;
   let svc: AccountsService;
   beforeEach(() => {
     store = new FakeStore();
     svc = new AccountsService(store);
+  });
+
+  describe('listAccounts 富化（G-ADM-001 公司/部門 + 最後登入）', () => {
+    it('解析 company（公司全稱）、department（orgCode→ORG_UNIT 名），並帶出 lastLoginAt', async () => {
+      store.seed({ loginId: 'u1', orgCode: 'ASA00', lastLoginAt: '2026-07-20T01:02:03.000Z' });
+      const svc2 = new AccountsService(
+        store,
+        fakeOrgUnits([orgUnit({ orgCode: 'ASA00', name: '審查室' })]),
+      );
+      const [item] = await svc2.listAccounts('AS', {});
+      expect(item.company).toBe('和潤企業股份有限公司');
+      expect(item.department).toBe('審查室');
+      expect(item.lastLoginAt).toBe('2026-07-20T01:02:03.000Z');
+    });
+
+    it('未命中 orgCode → department 為 null（不拋錯）；company 仍解析', async () => {
+      store.seed({ loginId: 'u2', orgCode: 'ZZZ99' });
+      const svc2 = new AccountsService(store, fakeOrgUnits([orgUnit({ orgCode: 'ASA00' })]));
+      const [item] = await svc2.listAccounts('AS', {});
+      expect(item.company).toBe('和潤企業股份有限公司');
+      expect(item.department).toBeNull();
+    });
+
+    it('無解析器（graceful）→ department 為 null、不查詢；company 仍解析', async () => {
+      store.seed({ loginId: 'u3', orgCode: 'ASA00' });
+      const [item] = await svc.listAccounts('AS', {});
+      expect(item.company).toBe('和潤企業股份有限公司');
+      expect(item.department).toBeNull();
+    });
   });
 
   describe('createManual', () => {

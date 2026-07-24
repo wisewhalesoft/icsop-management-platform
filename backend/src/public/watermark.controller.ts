@@ -32,10 +32,13 @@ export function toWatermarkSession(u: SessionUser): WatermarkSession {
 export class WatermarkController {
   constructor(private readonly svc: WatermarkService) {}
 
-  /** 檢視器疊加用浮水印字串（JSON）；記錄 VIEW 稽核。 */
+  /** 檢視器疊加用浮水印字串＋開啟中文件之編號/書名（G-PUB-032，JSON）；記錄 VIEW 稽核。 */
   @Get(':id/view')
   @RequirePermission(FunctionKey.PUBLIC_BROWSING, 'read')
-  view(@Req() req: RequestWithSession, @Param('id') id: string): Promise<{ watermark: string }> {
+  view(
+    @Req() req: RequestWithSession,
+    @Param('id') id: string,
+  ): Promise<{ watermark: string; documentNumber: string | null; documentName: string | null }> {
     return this.svc.view(toWatermarkSession(req.sessionUser as SessionUser), id);
   }
 

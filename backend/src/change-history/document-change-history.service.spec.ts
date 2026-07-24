@@ -5,6 +5,7 @@ import {
   DocumentChangeLogRow,
   DocumentChangeLogStore,
 } from './document-change-log.store';
+import { DocumentNameLookup } from './document-name-lookup';
 
 class FakeStore implements DocumentChangeLogStore {
   constructor(public rows: DocumentChangeLogRow[] = []) {}
@@ -79,6 +80,25 @@ describe('DocumentChangeHistoryService.queryChanges (F037)', () => {
     const svc = new DocumentChangeHistoryService(new FakeStore([row({})]), audit as unknown as AuditWriterService);
     await svc.queryChanges({});
     expect(audit.events).toHaveLength(0);
+  });
+
+  it('G-LC-023 併入現行書名 documentName（依 documentId 批次解析；無 lookup→null）', async () => {
+    const names: DocumentNameLookup = {
+      findNamesByIds: (ids) =>
+        Promise.resolve(new Map(ids.filter((id) => id === 'doc-1').map((id) => [id, '車輛分期進件作業']))),
+    };
+    const store = new FakeStore([row({ documentId: 'doc-1' }), row({ documentId: 'doc-x' })]);
+    const svc = new DocumentChangeHistoryService(store, undefined, undefined, names);
+    const res = await svc.queryChanges({});
+    const d1 = res.items.find((r) => r.documentId === 'doc-1')!;
+    const dx = res.items.find((r) => r.documentId === 'doc-x')!;
+    expect(d1.documentName).toBe('車輛分期進件作業');
+    expect(dx.documentName).toBeNull(); // 未命中→null
+
+    // 無 lookup（既有 2-arg 建構）→ documentName 恆 null
+    const bare = new DocumentChangeHistoryService(store);
+    const bres = await bare.queryChanges({});
+    expect(bres.items.every((r) => r.documentName === null)).toBe(true);
   });
 });
 

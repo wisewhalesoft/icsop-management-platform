@@ -65,6 +65,9 @@ class FakeStore implements LifecycleStore {
   countMountedDocuments(id: string): Promise<number> {
     return Promise.resolve(this.docCounts[id] ?? 0);
   }
+  countMountedByLifecycle(): Promise<Map<string, number>> {
+    return Promise.resolve(new Map(Object.entries(this.docCounts)));
+  }
   delete(id: string): Promise<void> {
     this.deleted.push(id);
     this.rows = this.rows.filter((r) => r.id !== id);
@@ -78,6 +81,19 @@ describe('LifecycleService（F007）', () => {
   beforeEach(() => {
     store = new FakeStore();
     svc = new LifecycleService(store);
+  });
+
+  describe('listLifecycles（G-LC-002 掛載文件數）', () => {
+    it('每列富化 mountedDocCount（該循環之掛載文件數）；無掛載→0', async () => {
+      const a = store.seed({ name: '循環A' });
+      const b = store.seed({ name: '循環B' });
+      store.docCounts[a.id] = 7;
+      // b 無掛載 → 0
+      const list = await svc.listLifecycles();
+      const byId = new Map(list.map((l) => [l.id, l.mountedDocCount]));
+      expect(byId.get(a.id)).toBe(7);
+      expect(byId.get(b.id)).toBe(0);
+    });
   });
 
   describe('createLifecycle', () => {

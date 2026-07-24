@@ -24,6 +24,8 @@ import { DocumentChangeLogPublisher } from './document-change-log-publisher';
 import { LifecycleChangeLogPublisher } from './lifecycle-change-log-publisher';
 import { DocumentChangeHistoryService } from './document-change-history.service';
 import { LifecycleChangeHistoryService } from './lifecycle-change-history.service';
+import { DOCUMENT_NAME_LOOKUP, DocumentNameLookup } from './document-name-lookup';
+import { TypeOrmDocumentNameLookup } from './typeorm-document-name-lookup';
 
 /**
  * F037/F038 文件變更歷程模組（獨立後台功能，共用 prototype 23-change-history）。
@@ -55,13 +57,19 @@ import { LifecycleChangeHistoryService } from './lifecycle-change-history.servic
     DocumentChangeLogPublisher,
     LifecycleChangeLogPublisher,
     {
+      provide: DOCUMENT_NAME_LOOKUP,
+      useFactory: (): DocumentNameLookup =>
+        new TypeOrmDocumentNameLookup(AppDataSource),
+    },
+    {
       provide: DocumentChangeHistoryService,
       useFactory: (
         store: DocumentChangeLogStore,
         audit: AuditWriterService,
+        docNames: DocumentNameLookup,
       ): DocumentChangeHistoryService =>
-        new DocumentChangeHistoryService(store, audit, () => new Date()),
-      inject: [DOCUMENT_CHANGE_LOG_STORE, AuditWriterService],
+        new DocumentChangeHistoryService(store, audit, () => new Date(), docNames),
+      inject: [DOCUMENT_CHANGE_LOG_STORE, AuditWriterService, DOCUMENT_NAME_LOOKUP],
     },
     {
       provide: LifecycleChangeHistoryService,

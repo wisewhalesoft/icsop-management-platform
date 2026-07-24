@@ -13,12 +13,14 @@ import {
   CreateDocumentInput,
   DocumentPatch,
   DocumentView,
+  DocumentDetailView,
   DocumentUpdateResult,
   DocumentFieldChange,
   DocumentListFilters,
   DocumentListItem,
   DocumentListPage,
 } from './documents.store';
+import { NODE_NAME_STORE, NodeNameStore } from './node-name.store';
 import { NameResolutionService } from '../org-directory/name-resolution.service';
 import { missingRequired, isNumberAvailable } from './document-rules';
 import { isValidStatus, DocumentStatus } from './document-status';
@@ -79,6 +81,10 @@ export class DocumentsService {
     @Optional()
     @Inject(ATTACHMENT_STORE)
     private readonly attachmentStore?: AttachmentStore,
+    // G-DOC-205/301 單筆檢視之節點名解析 store（反循環自建 TypeOrm adapter）。選填→無則 nodeName 留 null。
+    @Optional()
+    @Inject(NODE_NAME_STORE)
+    private readonly nodeNameStore?: NodeNameStore,
   ) {
     // 預設 no-op 綁定（決策 A）：seam 存在但不落地，rag/F037 併回後覆寫。
     this.publisher = publisher ?? new NoopDocumentChangePublisher();
@@ -213,9 +219,37 @@ export class DocumentsService {
   async listDocuments(filters: DocumentListFilters): Promise<DocumentListPage> {
     const page = await this.store.list(filters);
     await this.enrichNames(page.items);
+    await this.enrichSecondaryChiefs(page.items);
     await this.enrichIcsopPdf(page.items);
     await this.enrichLinks(page.items);
     return page;
+  }
+
+  /**
+   * G-DOC-001「+N」次要室長：批次取次要室長參照（單次查詢），計數並解析姓名（fallback 員編）。
+   * count 不依賴 nameResolver（恆可得）；names 於無 resolver 時退化為員編字串。
+   */
+  private async enrichSecondaryChiefs(items: DocumentListItem[]): Promise<void> {
+    if (items.length === 0) return;
+    const refs = await this.store.findSecondaryChiefsByDocumentIds(
+      items.map((i) => i.id),
+    );
+    const byDoc = new Map<string, string[]>();
+    for (const r of refs) {
+      const bucket = byDoc.get(r.documentId);
+      if (bucket) bucket.push(r.employeeNo);
+      else byDoc.set(r.documentId, [r.employeeNo]);
+    }
+    const empNos = [...new Set(refs.map((r) => r.employeeNo))];
+    const nameMap =
+      this.nameResolver && empNos.length
+        ? await this.nameResolver.resolvePersonNames(empNos)
+        : new Map<string, string>();
+    for (const it of items) {
+      const list = byDoc.get(it.id) ?? [];
+      it.secondaryChiefCount = list.length;
+      it.secondaryChiefNames = list.map((e) => nameMap.get(e) ?? e);
+    }
   }
 
   /**
@@ -297,11 +331,19 @@ export class DocumentsService {
     }
   }
 
-  /** 單筆文件讀取（F011 編輯對照；public/rag 重用）。查無 → 404。 */
-  async getDocument(id: string): Promise<DocumentView> {
+  /**
+   * 單筆文件讀取（F011 編輯對照；public/rag 重用）。查無 → 404。
+   * G-DOC-205/301：以 NODE_NAME_STORE 將 nodeId 解析為所屬節點名（無 store／無 nodeId／查無→null）。
+   * 回傳 DocumentDetailView（DocumentView 超集），既有期望 DocumentView 之呼叫端不受影響。
+   */
+  async getDocument(id: string): Promise<DocumentDetailView> {
     const doc = await this.store.findById(id);
     if (!doc) throw new NotFoundException('DOCUMENT_NOT_FOUND');
-    return doc;
+    const nodeName =
+      doc.nodeId && this.nodeNameStore
+        ? await this.nodeNameStore.findNameById(doc.nodeId)
+        : null;
+    return { ...doc, nodeName };
   }
 
   /**

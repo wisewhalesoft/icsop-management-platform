@@ -2,6 +2,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
@@ -27,6 +28,10 @@ import {
   SingleAttachmentType,
 } from './attachments.store';
 import { DOCUMENT_STORE, DocumentStore } from '../documents/documents.store';
+import {
+  DOCUMENT_CHANGE_PUBLISHER,
+  DocumentChangePublisher,
+} from '../documents/document-change-event';
 
 /** 列表之固定回傳順序（供前端渲染順序穩定、避免依賴 store 插入序）。 */
 const LIST_ORDER: SingleAttachmentType[] = ['ICSOP_PDF', 'OJT_SIGNIN'];
@@ -84,6 +89,8 @@ export function buildAttachmentBlobPath(
  */
 @Injectable()
 export class AttachmentsService {
+  private readonly logger = new Logger(AttachmentsService.name);
+
   constructor(
     @Inject(BLOB_STORE) private readonly blob: BlobStore,
     @Inject(ATTACHMENT_STORE) private readonly store: AttachmentStore,
@@ -92,6 +99,10 @@ export class AttachmentsService {
     @Optional()
     @Inject(DOCUMENT_STORE)
     private readonly documentStore?: DocumentStore,
+    // F037（G-LC-022 附件類別）：覆蓋既有附件時發「附件已替換」變更事件。選填以免破壞既有純 blob/store 單測。
+    @Optional()
+    @Inject(DOCUMENT_CHANGE_PUBLISHER)
+    private readonly changePublisher?: DocumentChangePublisher,
   ) {}
 
   /**
@@ -154,6 +165,36 @@ export class AttachmentsService {
     // 7) 回收舊 blob（覆蓋），確保舊檔不再可存取。
     if (oldBlobPath && oldBlobPath !== blobPath) {
       await this.blob.delete(oldBlobPath);
+    }
+
+    // 8) F037（G-LC-022 附件類別）：**覆蓋既有附件**（existing 存在）→ 發「附件已替換」變更事件
+    //    （changeType='CONTENT'、field='attachment'，供變更歷程 DocTab 之 附件 來源徽章）。
+    //    首次上傳（無 existing）不發。非阻斷：發布失敗不影響已成功之上傳（附件已落地）。
+    if (existing && this.changePublisher) {
+      try {
+        const doc = this.documentStore
+          ? await this.documentStore.findById(documentId)
+          : null;
+        await this.changePublisher.publish({
+          documentId,
+          changeType: 'CONTENT',
+          changedFields: ['attachment'],
+          changes: [
+            { field: 'attachment', oldValue: existing.fileName, newValue: file.fileName },
+          ],
+          documentNumber: doc?.documentNumber ?? null,
+          actorId: session?.accountId ?? null,
+          actorName: null,
+          actorEmployeeNo: null,
+          occurredAt: new Date(),
+        });
+      } catch (err) {
+        this.logger.error(
+          `附件變更事件發布失敗（已吞，不阻斷上傳）doc=${documentId} type=${type}: ${
+            (err as Error)?.message
+          }`,
+        );
+      }
     }
     return record;
   }

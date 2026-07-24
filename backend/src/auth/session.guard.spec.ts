@@ -29,6 +29,9 @@ class FakeRepo implements AccountRepository {
   findByLoginId(): Promise<PasswordAuthAccount | null> {
     return Promise.resolve(null);
   }
+  markLoggedIn(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 function ctxWith(cookie: string | undefined): {

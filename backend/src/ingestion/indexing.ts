@@ -112,6 +112,7 @@ export async function runIndexing(deps: IndexingDeps): Promise<IndexingResult> {
       stage: 'chunk',
       errorStage: 'chunk',
       errorMessage: err.message,
+      errorCode: err.code,
     });
     return { status: 'failed', chunks: [], embeddings: [], errorStage: 'chunk', errorCode: err.code };
   }
@@ -136,6 +137,7 @@ export async function runIndexing(deps: IndexingDeps): Promise<IndexingResult> {
       stage: 'embed',
       errorStage: 'embed',
       errorMessage: (e as Error).message || 'EMBEDDING_FAILED',
+      errorCode: 'EMBEDDING_FAILED',
     });
     return { status: 'failed', chunks: [], embeddings: [], errorStage: 'embed', errorCode: 'EMBEDDING_FAILED' };
   }
@@ -156,6 +158,7 @@ export async function runIndexing(deps: IndexingDeps): Promise<IndexingResult> {
       stage: 'embed',
       errorStage: 'embed',
       errorMessage: (e as Error).message || 'INDEX_BUILD_FAILED',
+      errorCode: 'INDEX_BUILD_FAILED',
     });
     return { status: 'failed', chunks: [], embeddings: [], errorStage: 'embed', errorCode: 'INDEX_BUILD_FAILED' };
   }

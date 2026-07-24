@@ -17,6 +17,7 @@ import {
   DocumentListItem,
   DocumentListPage,
   DocumentSummary,
+  DocSecondaryChiefRef,
 } from './documents.store';
 
 /**
@@ -236,10 +237,12 @@ export class TypeOrmDocumentStore implements DocumentStore {
       draftingSectionName: null,
       primaryChiefId: d.primaryChiefId,
       primaryChiefName: null,
+      secondaryChiefCount: 0,
+      secondaryChiefNames: [],
       edition: d.edition,
       announcedDate: d.announcedDate ? d.announcedDate.toISOString() : null,
       contentSummary: d.contentSummary,
-      // F017 富化欄之基線（無附件/無連結）；由 DocumentsService 以批次注入覆寫。
+      // F017 富化欄之基線（無附件/無連結/無次要室長）；由 DocumentsService 以批次注入覆寫。
       icsopPdfBlobPath: null,
       icsopPdfFileName: null,
       links: [],
@@ -277,6 +280,25 @@ export class TypeOrmDocumentStore implements DocumentStore {
           status: r.status as DocumentStatus,
         })),
       );
+    }
+    return out;
+  }
+
+  /** G-DOC-001 清單富化：批次取多筆文件之次要室長參照。⚠ MSSQL 2100 參數上限 → 單欄 IN 切批（每批 ≤1000）。 */
+  async findSecondaryChiefsByDocumentIds(
+    documentIds: string[],
+  ): Promise<DocSecondaryChiefRef[]> {
+    const keys = [...new Set(documentIds.filter(Boolean))];
+    if (keys.length === 0) return [];
+    const ds = await this.init();
+    const repo = ds.getRepository(DocSecondaryChief);
+    const out: DocSecondaryChiefRef[] = [];
+    for (const batch of chunkByParamBudget(keys, 1, 1000)) {
+      const rows = await repo.find({
+        where: { documentId: In(batch) },
+        order: { id: 'ASC' },
+      });
+      out.push(...rows.map((r) => ({ documentId: r.documentId, employeeNo: r.employeeNo })));
     }
     return out;
   }

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppDataSource } from '../database/data-source';
 import { AuthModule } from '../auth/auth.module';
 import { RbacModule } from '../rbac/rbac.module';
+import { OrgDirectoryModule } from '../org-directory/org-directory.module';
 import { AccountsController } from './accounts.controller';
 import { AccountsService } from './accounts.service';
 import { ACCOUNT_STORE, AccountStore } from './accounts.store';
@@ -13,7 +14,7 @@ import { TypeOrmAccountStore } from './typeorm-account.store';
  *  - store 以 useFactory 走 AppDataSource 單例（延遲連線，app 啟動不因 DB 崩潰）。
  */
 @Module({
-  imports: [AuthModule, RbacModule],
+  imports: [AuthModule, RbacModule, OrgDirectoryModule],
   controllers: [AccountsController],
   providers: [
     {

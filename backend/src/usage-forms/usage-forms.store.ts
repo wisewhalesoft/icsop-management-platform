@@ -42,10 +42,34 @@ export interface UsageFormDocumentRef {
 /**
  * 表單池總覽項（後台管理頁 prototype 19 所需）：表單記錄 + 關聯文件數 + 關聯文件精簡清單。
  * `docCount` 驅動覆蓋（≥2）／移除（≥1）門檻之顯示；`documents` 供展開列與跳轉。
+ * uploadedByName/Dept（G-ADM-024）：由服務層以 uploadedBy(accountId) 解析（選填；缺→null，前端 fallback）。
  */
 export interface UsageFormPoolItem extends UsageFormRecord {
   docCount: number;
   documents: UsageFormDocumentRef[];
+  /** G-ADM-024 上傳者姓名（uploadedBy=accountId → ACCOUNT.name）；未解析→null。 */
+  uploadedByName?: string | null;
+  /** G-ADM-024 上傳者部門名（accountId → orgCode → ORG_UNIT.name）；未解析→null。 */
+  uploadedByDept?: string | null;
+}
+
+/**
+ * G-ADM-024 上傳者名冊：accountId(UUID) → 姓名 + orgCode。反循環自建 TypeOrm adapter（讀 ACCOUNT）。
+ * uploadedBy 存的是 accountId 而非員編，故需獨立的 by-accountId 解析路徑（非 resolvePersonNames 之員編路徑）。
+ */
+export const UPLOADER_DIRECTORY = Symbol('UPLOADER_DIRECTORY');
+export interface UploaderInfo {
+  name: string | null;
+  orgCode: string | null;
+}
+export interface UploaderDirectory {
+  resolveUploaders(accountIds: string[]): Promise<Map<string, UploaderInfo>>;
+}
+
+/** G-ADM-024 部門名解析（結構相容 NameResolutionService.resolveOrgUnitName）。 */
+export const UPLOADER_ORG_RESOLVER = Symbol('UPLOADER_ORG_RESOLVER');
+export interface UploaderOrgResolver {
+  resolveOrgUnitName(orgCode: string): Promise<string | null>;
 }
 
 export interface FormPoolStore {

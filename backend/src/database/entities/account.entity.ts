@@ -64,4 +64,9 @@ export class Account {
 
   @Column({ type: 'datetime', nullable: true })
   disabledAt!: Date | null;
+
+  // 最後登入時間戳：每次成功登入（途徑 A OIDC／途徑 B 帳密）各寫入一次，非每請求（避免寫入放大、
+  // 亦避免以 AUDIT 近似造成 login-only/admin-CRUD 低估）。供帳號管理清單「最後登入」欄。datetime2 範圍充足。
+  @Column({ type: 'datetime2', nullable: true })
+  lastLoginAt!: Date | null;
 }

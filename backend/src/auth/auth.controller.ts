@@ -211,6 +211,12 @@ export class AuthController {
       companyCode: outcome.account.companyCode,
       roleCode: outcome.account.roleCode,
     };
+    // GATE#2：記錄最後登入時間戳（途徑 A OIDC 成功一次）。與途徑 B 一致，try/catch 保證不阻斷登入。
+    try {
+      await this.accounts.markLoggedIn(su.companyCode, su.loginId, new Date());
+    } catch {
+      // 靜默：登入已成功；時間戳為輔助資料。
+    }
     res.cookie(SESSION_COOKIE, this.tokens.issue(su), sessionCookieOptions());
     // 登入成功 → 導回前端 SPA（session cookie 已核發，SPA 之 /auth/me 即認得）。
     // POST_LOGIN_REDIRECT_URL：正式（同源反代）用 '/'；dev（redirect_uri 在 :3000、SPA 在 :5173）

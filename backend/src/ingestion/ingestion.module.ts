@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
+import { AppDataSource } from '../database/data-source';
 import { AuthModule } from '../auth/auth.module';
 import { RbacModule } from '../rbac/rbac.module';
+import { listAllDocumentIds, resolveLifecycleNames } from './typeorm-index-meta';
 import { CHUNK_STORE, ChunkStore, FakeChunkStore } from './chunk-store';
 import {
   INDEX_RUN_STORE,
@@ -97,7 +99,14 @@ class PlaceholderDocumentExists implements DocumentExistsPort {
         runStore: IndexRunStore,
         manualReindex: ManualReindexTrigger,
       ): IndexVisibilityService =>
-        new IndexVisibilityService({ chunkStore, runStore, manualReindex }),
+        new IndexVisibilityService({
+          chunkStore,
+          runStore,
+          manualReindex,
+          // G-ADM-028/034 唯讀真實文件層讀取（未建表→try/catch 降級空集合）。
+          documentIds: () => listAllDocumentIds(AppDataSource),
+          lifecycleNames: (ids) => resolveLifecycleNames(AppDataSource, ids),
+        }),
       inject: [CHUNK_STORE, INDEX_RUN_STORE, MANUAL_REINDEX_TRIGGER],
     },
   ],

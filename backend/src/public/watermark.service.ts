@@ -95,11 +95,22 @@ export class WatermarkService {
     return null;
   }
 
-  /** VIEW：回疊加用浮水印字串（不燒錄）；記錄 VIEW 稽核。 */
-  async view(session: WatermarkSession, documentId: string): Promise<{ watermark: string }> {
+  /**
+   * VIEW：回疊加用浮水印字串（不燒錄）＋開啟中文件之編號/書名（G-PUB-032，供檢視器標題列）；記錄 VIEW 稽核。
+   * 文件中繼一次取得（docMeta），同時供回傳與稽核快照（避免重複查詢）。
+   */
+  async view(
+    session: WatermarkSession,
+    documentId: string,
+  ): Promise<{ watermark: string; documentNumber: string | null; documentName: string | null }> {
     const { snapshot, fields } = await this.buildSnapshot(session);
-    await this.audit(session, documentId, 'VIEW', snapshot, fields);
-    return { watermark: snapshot };
+    const meta = this.docMeta ? await this.docMeta.getDocMeta(documentId) : null;
+    await this.audit(session, documentId, 'VIEW', snapshot, fields, meta);
+    return {
+      watermark: snapshot,
+      documentNumber: meta?.documentNumber ?? null,
+      documentName: meta?.documentName ?? null,
+    };
   }
 
   /** 代理原始 PDF 位元組（供檢視器疊加預覽；不核發 SAS）。查無 → 404。 */
@@ -138,16 +149,25 @@ export class WatermarkService {
     return { pdf, snapshot };
   }
 
-  /** 稽核記錄（非阻斷：寫入失敗不阻擋檔案取得，error-handling#audit）。 */
+  /**
+   * 稽核記錄（非阻斷：寫入失敗不阻擋檔案取得，error-handling#audit）。
+   * metaArg：呼叫端已取得之文件中繼（如 view 已查過）→ 傳入以免重複查詢；未傳（undefined）則內部自查。
+   */
   private async audit(
     session: WatermarkSession,
     documentId: string,
     actionType: DocumentAction,
     snapshot: string,
     fields: WatermarkIdentity,
+    metaArg?: { documentNumber: string | null; documentName: string | null } | null,
   ): Promise<void> {
     try {
-      const meta = this.docMeta ? await this.docMeta.getDocMeta(documentId) : null;
+      const meta =
+        metaArg !== undefined
+          ? metaArg
+          : this.docMeta
+            ? await this.docMeta.getDocMeta(documentId)
+            : null;
       await this.auditWriter.recordAccess({
         targetType: 'DOCUMENT',
         actionType,

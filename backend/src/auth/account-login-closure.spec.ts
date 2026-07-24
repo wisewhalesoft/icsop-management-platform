@@ -58,6 +58,7 @@ class CapturingStore implements AccountStore {
       status: 'active',
       source: 'manual',
       disableReason: null,
+      lastLoginAt: null,
     });
   }
   updateById(_id: string, _p: UpdateAccountPatch): Promise<AccountView> {
@@ -78,6 +79,9 @@ class ClosureRepo implements AccountRepository {
   }
   findCurrentByLogin(): Promise<CurrentAccount | null> {
     return Promise.resolve(null);
+  }
+  markLoggedIn(): Promise<void> {
+    return Promise.resolve();
   }
 }
 

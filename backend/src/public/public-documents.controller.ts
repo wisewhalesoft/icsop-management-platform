@@ -1,5 +1,6 @@
-import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
 import { PublicDocumentsService } from './public-documents.service';
+import { PublicDocumentDetailService } from './public-document-detail.service';
 import { DEFAULT_PAGE_SIZE, PublicListFilters } from './public-list';
 import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
@@ -17,7 +18,10 @@ import { FunctionKey } from '../rbac/function-matrix';
 @UseGuards(SessionGuard, RolePermissionGuard)
 @RequirePermission(FunctionKey.PUBLIC_BROWSING, 'read')
 export class PublicDocumentsController {
-  constructor(private readonly svc: PublicDocumentsService) {}
+  constructor(
+    private readonly svc: PublicDocumentsService,
+    private readonly detailSvc: PublicDocumentDetailService,
+  ) {}
 
   @Get()
   list(
@@ -42,6 +46,16 @@ export class PublicDocumentsController {
       parsePositiveInt(page, 1),
       parsePositiveInt(pageSize, DEFAULT_PAGE_SIZE),
     );
+  }
+
+  /**
+   * G-PUB-020 前台文件詳情（登入員工可讀；19 欄 + 附件/使用表單/連結）。
+   * 非「已公告」文件 → 404 DOCUMENT_NOT_FOUND（視同不存在）；未登入 → 401（守門鏈）。
+   * 註：`:id` 為單段路徑，與 WatermarkController 之 `:id/view` 等（雙段）不衝突。
+   */
+  @Get(':id')
+  detail(@Param('id') id: string) {
+    return this.detailSvc.detail(id);
   }
 }
 

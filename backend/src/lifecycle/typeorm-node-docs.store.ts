@@ -82,6 +82,18 @@ export class TypeOrmNodeDocsStore implements NodeDocsStore {
     return new Map(rows.map((n) => [n.id, n.name]));
   }
 
+  /** G-LC-015：掛載於其他循環（nodeId 非空且 lifecycleId≠本循環）之文件數。 */
+  async countDocsMountedInOtherLifecycles(lifecycleId: string): Promise<number> {
+    const ds = await this.init();
+    const cnt = await ds
+      .getRepository(IcsopDocument)
+      .createQueryBuilder('d')
+      .where('d.nodeId IS NOT NULL')
+      .andWhere('d.lifecycleId <> :lc', { lc: lifecycleId })
+      .getCount();
+    return cnt;
+  }
+
   /**
    * F038 交易一致性：於單一 DB 交易內執行掛載/改派/移除 ＋ recordStructuralChange（LIFECYCLE_CHANGE_LOG
    * ＋ LIFECYCLE_SNAPSHOT）。work 拋錯 → 交易回滾（ICSOP_DOCUMENT.nodeId 變更亦不留）。

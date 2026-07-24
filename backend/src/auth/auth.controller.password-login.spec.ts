@@ -49,6 +49,9 @@ class FakeRepo implements AccountRepository {
   findCurrentByLogin(): Promise<CurrentAccount | null> {
     return Promise.resolve(null);
   }
+  markLoggedIn(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 function makeController(account: PasswordAuthAccount | null): {

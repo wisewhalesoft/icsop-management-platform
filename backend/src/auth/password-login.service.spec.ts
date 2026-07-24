@@ -37,6 +37,9 @@ class FakeRepo implements AccountRepository {
   findByLoginId = jest.fn<Promise<PasswordAuthAccount | null>, [string, string]>(
     () => Promise.resolve(null),
   );
+  markLoggedIn = jest.fn<Promise<void>, [string, string, Date]>(
+    () => Promise.resolve(),
+  );
   findByEmail(): Promise<ResolvableAccount[]> {
     return Promise.resolve([]);
   }
@@ -77,6 +80,36 @@ describe('PasswordLoginService.login', () => {
     // 與途徑 A 同一 issue()／verify() 生命週期。
     expect(tokens.verify(token)).toEqual(user);
     expect(repo.findByLoginId).toHaveBeenCalledWith('AS', 'mgr01');
+  });
+
+  it('GATE#2 成功登入 → 以 (companyCode, loginId, Date) 呼叫 markLoggedIn 一次（最後登入時間戳）', async () => {
+    const { svc, repo } = make();
+    repo.findByLoginId.mockResolvedValue(manual({ companyCode: 'AS' }));
+
+    await svc.login({ loginId: 'mgr01', password: PW }, IP);
+
+    expect(repo.markLoggedIn).toHaveBeenCalledTimes(1);
+    const [cc, loginId, at] = repo.markLoggedIn.mock.calls[0];
+    expect(cc).toBe('AS');
+    expect(loginId).toBe('mgr01');
+    expect(at).toBeInstanceOf(Date);
+  });
+
+  it('GATE#2 登入拒絕（密碼錯誤）→ 不寫入 markLoggedIn', async () => {
+    const { svc, repo } = make();
+    repo.findByLoginId.mockResolvedValue(manual());
+    await expect(svc.login({ loginId: 'mgr01', password: 'wrong' }, IP)).rejects.toThrow(
+      UnauthorizedException,
+    );
+    expect(repo.markLoggedIn).not.toHaveBeenCalled();
+  });
+
+  it('GATE#2 markLoggedIn 寫入失敗不阻斷登入（try/catch 吞掉）', async () => {
+    const { svc, repo } = make();
+    repo.findByLoginId.mockResolvedValue(manual());
+    repo.markLoggedIn.mockRejectedValue(new Error('db down'));
+    const { user } = await svc.login({ loginId: 'mgr01', password: PW }, IP);
+    expect(user.loginId).toBe('mgr01'); // 仍成功回傳
   });
 
   it('TS-F001-002 密碼錯誤 → 401 AUTH_INVALID_CREDENTIALS', async () => {

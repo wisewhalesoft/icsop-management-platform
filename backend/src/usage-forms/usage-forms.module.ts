@@ -4,10 +4,18 @@ import { AuthModule } from '../auth/auth.module';
 import { RbacModule } from '../rbac/rbac.module';
 import { StorageModule } from '../storage/storage.module';
 import { AuditModule } from '../audit/audit.module';
+import { OrgDirectoryModule } from '../org-directory/org-directory.module';
+import { NameResolutionService } from '../org-directory/name-resolution.service';
 import { UsageFormsController } from './usage-forms.controller';
 import { UsageFormsService } from './usage-forms.service';
-import { AUDIT_RECORDER, FORM_POOL_STORE } from './usage-forms.store';
+import {
+  AUDIT_RECORDER,
+  FORM_POOL_STORE,
+  UPLOADER_DIRECTORY,
+  UPLOADER_ORG_RESOLVER,
+} from './usage-forms.store';
 import { TypeOrmFormPoolStore } from './typeorm-usage-forms.store';
+import { TypeOrmUploaderDirectory } from './typeorm-uploader-directory';
 import { AuditWriterRecorder } from './audit-writer-recorder.adapter';
 
 /**
@@ -15,7 +23,7 @@ import { AuditWriterRecorder } from './audit-writer-recorder.adapter';
  * 調閱稽核收集器＝AuditWriterRecorder（轉接真實 AuditWriterService，落地 AUDIT_LOG，經 Outbox 非阻斷）。
  */
 @Module({
-  imports: [AuthModule, RbacModule, StorageModule, AuditModule],
+  imports: [AuthModule, RbacModule, StorageModule, AuditModule, OrgDirectoryModule],
   controllers: [UsageFormsController],
   providers: [
     {
@@ -26,6 +34,12 @@ import { AuditWriterRecorder } from './audit-writer-recorder.adapter';
       provide: AUDIT_RECORDER,
       useClass: AuditWriterRecorder,
     },
+    // G-ADM-024 上傳者名冊（accountId→姓名/orgCode）＋部門名解析（reuse NameResolutionService）。
+    {
+      provide: UPLOADER_DIRECTORY,
+      useFactory: () => new TypeOrmUploaderDirectory(AppDataSource),
+    },
+    { provide: UPLOADER_ORG_RESOLVER, useExisting: NameResolutionService },
     UsageFormsService,
   ],
 })

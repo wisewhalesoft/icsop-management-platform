@@ -202,6 +202,21 @@ describe('F019 強制基底條件（不可繞過）', () => {
     expect(page.items.map((d) => d.id)).toEqual(['ann']);
   });
 
+  it('G-PUB-012 hiddenCount＝被基底條件隱藏之候選數（進度中/失效/作廢），與使用者篩選無關', () => {
+    const announced = doc({ id: 'ann', status: 'active', announcedDate: '2026-01-01' });
+    const inProgress = doc({ id: 'ip', status: 'active', announcedDate: '2026-12-31' });
+    const inactive = doc({ id: 'ina', status: 'inactive', announcedDate: '2026-01-01' });
+    const voided = doc({ id: 'void', status: 'void', announcedDate: '2026-01-01' });
+    // 即使套用關鍵字篩選（縮小 items），hiddenCount 仍反映全候選中之非公告數（3）。
+    const page = buildPublicList(
+      [announced, inProgress, inactive, voided],
+      null,
+      { keyword: '找不到的關鍵字' },
+      TODAY,
+    );
+    expect(page.hiddenCount).toBe(3);
+  });
+
   it('TS-F019-021 呼叫端夾帶 status 參數企圖繞過 → 後端強制忽略', () => {
     const inactive = doc({ id: 'ina', status: 'inactive', announcedDate: '2026-01-01' });
     // 前端傳入 status=失效 亦不放寬：基底條件恆鎖已公告

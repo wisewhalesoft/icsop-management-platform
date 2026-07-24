@@ -5,6 +5,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import {
@@ -26,6 +27,10 @@ import {
   AuditRecorder,
   FORM_POOL_STORE,
   FormPoolStore,
+  UPLOADER_DIRECTORY,
+  UPLOADER_ORG_RESOLVER,
+  UploaderDirectory,
+  UploaderOrgResolver,
   UsageFormPoolItem,
   UsageFormRecord,
 } from './usage-forms.store';
@@ -77,6 +82,14 @@ export class UsageFormsService {
     @Inject(BLOB_STORE) private readonly blob: BlobStore,
     @Inject(FORM_POOL_STORE) private readonly store: FormPoolStore,
     @Inject(AUDIT_RECORDER) private readonly audit: AuditRecorder,
+    // G-ADM-024 上傳者名冊（accountId→姓名/orgCode）。選填以免破壞既有純 store 單測（無→uploadedByName/Dept 留 null）。
+    @Optional()
+    @Inject(UPLOADER_DIRECTORY)
+    private readonly uploaderDir?: UploaderDirectory,
+    // G-ADM-024 部門名解析（orgCode→ORG_UNIT 名）。選填。
+    @Optional()
+    @Inject(UPLOADER_ORG_RESOLVER)
+    private readonly orgResolver?: UploaderOrgResolver,
   ) {}
 
   /**
@@ -230,7 +243,37 @@ export class UsageFormsService {
     session: SessionContext | undefined,
   ): Promise<UsageFormPoolItem[]> {
     this.assertCanRead(session?.roleCode);
-    return this.store.listPoolOverview();
+    const items = await this.store.listPoolOverview();
+    await this.enrichUploaders(items);
+    return items;
+  }
+
+  /**
+   * G-ADM-024：以 uploadedBy(accountId) 批次解析上傳者姓名 + 部門名（單次名冊查詢 + 去重部門解析，無 N+1）。
+   * 無名冊（uploaderDir 未注入）→ 略過（uploadedByName/Dept 留 undefined，前端 fallback 顯示 accountId 或空）。
+   */
+  private async enrichUploaders(items: UsageFormPoolItem[]): Promise<void> {
+    if (!this.uploaderDir || items.length === 0) return;
+    const accountIds = [
+      ...new Set(items.map((i) => i.uploadedBy).filter((x) => !!x && x !== 'unknown')),
+    ];
+    const uploaders =
+      accountIds.length > 0
+        ? await this.uploaderDir.resolveUploaders(accountIds)
+        : new Map<string, { name: string | null; orgCode: string | null }>();
+
+    const orgCodes = new Set<string>();
+    for (const u of uploaders.values()) if (u.orgCode) orgCodes.add(u.orgCode);
+    const deptNames = new Map<string, string | null>();
+    if (this.orgResolver) {
+      for (const c of orgCodes) deptNames.set(c, await this.orgResolver.resolveOrgUnitName(c));
+    }
+
+    for (const it of items) {
+      const u = uploaders.get(it.uploadedBy);
+      it.uploadedByName = u?.name ?? null;
+      it.uploadedByDept = u?.orgCode ? (deptNames.get(u.orgCode) ?? null) : null;
+    }
   }
 
   /** 文件詳情頁之關聯表單清單（前後台共用；屬文件瀏覽，不受表單池功能限制）。 */

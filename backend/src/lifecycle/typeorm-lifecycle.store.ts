@@ -96,6 +96,24 @@ export class TypeOrmLifecycleStore implements LifecycleStore {
     }
   }
 
+  /** G-LC-002：單次 GROUP BY 取全循環之掛載文件數（比照 countMountedDocuments 之 lifecycleId 口徑）。 */
+  async countMountedByLifecycle(): Promise<Map<string, number>> {
+    const ds = await this.init();
+    try {
+      const rows = await ds.query(
+        `SELECT [lifecycleId] AS lifecycleId, COUNT(*) AS cnt FROM [ICSOP_DOCUMENT] GROUP BY [lifecycleId]`,
+      );
+      return new Map(
+        (rows ?? []).map((r: { lifecycleId: string; cnt: string | number }) => [
+          r.lifecycleId,
+          Number(r.cnt),
+        ]),
+      );
+    } catch {
+      return new Map();
+    }
+  }
+
   async delete(id: string): Promise<void> {
     const ds = await this.init();
     // LIFECYCLE_NODE / LIFECYCLE_EDGE 之 lifecycleId FK 為 ON DELETE CASCADE，一併移除。

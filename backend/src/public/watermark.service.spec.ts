@@ -111,6 +111,13 @@ describe('WatermarkService（F020）', () => {
     expect(burner.calls).toHaveLength(0);
   });
 
+  it('G-PUB-032 VIEW 另回開啟中文件之編號/書名（供檢視器標題列）', async () => {
+    const { svc } = makeService({});
+    const res = await svc.view(sessionOf(), 'doc-1');
+    expect(res.documentNumber).toBe('ICSOP-1');
+    expect(res.documentName).toBe('車輛分期進件');
+  });
+
   it('TS-F020-017 DOWNLOAD 呼叫 burnPdf(原始, snapshot) 一次，回燒錄後 buffer（非原始）', async () => {
     const { svc, burner } = makeService({ pdf: Buffer.from('ORIGINAL') });
     const res = await svc.download(sessionOf(), 'doc-1');

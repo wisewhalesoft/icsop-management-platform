@@ -82,6 +82,81 @@ describe('F031 chunk 預覽 + 8 項 metadata（AC1）', () => {
     const items = await svc.previewChunks('DOC-1');
     expect(items.map((i) => i.chunkSeq)).toEqual([1, 2, 3]);
   });
+
+  it('G-ADM-034 chunk 預覽帶 chunkId + 循環名（lifecycleNames 解析；無 resolver→null）', async () => {
+    const chunkStore = new FakeChunkStore();
+    await chunkStore.insertBatch([chunk({ id: 'c9', indexRunId: 'RUN-1', chunkSeq: 1, lifecycleId: 'LC-01' })]);
+    const svc = new IndexVisibilityService({
+      chunkStore,
+      runStore: new FakeIndexRunStore(),
+      manualReindex: noopTrigger,
+      lifecycleNames: (ids) => Promise.resolve(new Map(ids.map((id) => [id, '車貸循環']))),
+    });
+    const [item] = await svc.previewChunks('DOC-1');
+    expect(item.chunkId).toBe('c9');
+    expect(item.lifecycleName).toBe('車貸循環');
+
+    // 無 resolver → lifecycleName null（chunkId 仍帶出）
+    const { svc: bare } = makeSvc(chunkStore);
+    const [b] = await bare.previewChunks('DOC-1');
+    expect(b.chunkId).toBe('c9');
+    expect(b.lifecycleName).toBeNull();
+  });
+});
+
+describe('F031 doc-index 補強（G-ADM-028/030/031）', () => {
+  it('G-ADM-030/031 失敗 → 錯誤碼落地並於單文件狀態 + 總覽列顯示', async () => {
+    const runStore = new FakeIndexRunStore();
+    const run = await runStore.create({ documentId: 'DOC-1', triggerType: 'xls_update', stage: 'chunk' });
+    await runStore.markFailed(run.id, {
+      stage: 'chunk',
+      errorStage: 'chunk',
+      errorMessage: '切 chunk 失敗',
+      errorCode: 'CHUNKING_FAILED',
+    });
+    const { svc } = makeSvc(new FakeChunkStore(), runStore);
+    const status = await svc.getIndexStatus('DOC-1');
+    expect(status.errorCode).toBe('CHUNKING_FAILED');
+    const overview = await svc.getOverview({});
+    expect(overview.items[0].errorCode).toBe('CHUNKING_FAILED');
+  });
+
+  it('G-ADM-030 非失敗（成功/進行中）→ errorCode 恆 null', async () => {
+    const runStore = new FakeIndexRunStore();
+    const run = await runStore.create({ documentId: 'DOC-1', triggerType: 'xls_update', stage: 'extract' });
+    await runStore.markSuccess(run.id, 2);
+    const { svc } = makeSvc(new FakeChunkStore(), runStore);
+    expect((await svc.getIndexStatus('DOC-1')).errorCode).toBeNull();
+    expect((await svc.getOverview({})).items[0].errorCode).toBeNull();
+  });
+
+  it('G-ADM-028 notBuiltCount＝有文件但無任何 INDEX_RUN 者；not_built 篩選回合成列', async () => {
+    const runStore = new FakeIndexRunStore();
+    const r = await runStore.create({ documentId: 'DOC-built', triggerType: 'xls_update', stage: 'extract' });
+    await runStore.markSuccess(r.id, 1);
+    const svc = new IndexVisibilityService({
+      chunkStore: new FakeChunkStore(),
+      runStore,
+      manualReindex: noopTrigger,
+      documentIds: () => Promise.resolve(['DOC-built', 'DOC-new-1', 'DOC-new-2']),
+    });
+    const overview = await svc.getOverview({});
+    expect(overview.notBuiltCount).toBe(2);
+    expect(overview.successCount).toBe(1);
+    const notBuilt = await svc.getOverview({ state: 'not_built' });
+    expect(notBuilt.items.map((i) => i.documentId).sort()).toEqual(['DOC-new-1', 'DOC-new-2']);
+    expect(notBuilt.items.every((i) => i.state === 'not_built')).toBe(true);
+  });
+
+  it('G-ADM-028 無 documentIds 來源（graceful）→ notBuiltCount 0、無 not_built 列', async () => {
+    const runStore = new FakeIndexRunStore();
+    const r = await runStore.create({ documentId: 'DOC-1', triggerType: 'xls_update', stage: 'extract' });
+    await runStore.markSuccess(r.id, 1);
+    const { svc } = makeSvc(new FakeChunkStore(), runStore);
+    const overview = await svc.getOverview({});
+    expect(overview.notBuiltCount).toBe(0);
+    expect(overview.items).toHaveLength(1);
+  });
 });
 
 describe('F031 三態顯示（AC2/AC3）', () => {

@@ -76,6 +76,7 @@ export class ReindexService implements ReindexTriggerPort {
         stage,
         errorStage: stage,
         errorMessage: 'REINDEX_FAILED: 重抽/重建索引失敗，保留舊版索引繼續可用',
+        errorCode: 'REINDEX_FAILED',
       });
       return; // 保留舊版：不 swap
     }

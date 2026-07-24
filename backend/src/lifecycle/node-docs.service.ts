@@ -28,6 +28,8 @@ export interface DrawerData {
   node: { id: string; name: string | null };
   mounted: DrawerDoc[];
   candidates: DrawerCandidate[];
+  /** G-LC-015 掛載於其他循環而排除於候選之文件數（候選過濾註記）。 */
+  excludedCount: number;
 }
 
 /** 掛載/改派/移除之最小操作面（NodeDocsStore 與交易內 NodeDocsStructuralTx 皆滿足）。 */
@@ -102,6 +104,11 @@ export class NodeDocsService {
     const otherNodeIds = [...new Set(candDocs.map((d) => d.nodeId).filter((v): v is string => !!v))];
     const names = await this.store.nodeNames(otherNodeIds);
 
+    // G-LC-015：掛載於其他循環而排除之文件數（選填能力；未提供之 fake → 0）。
+    const excludedCount = this.store.countDocsMountedInOtherLifecycles
+      ? await this.store.countDocsMountedInOtherLifecycles(lifecycleId)
+      : 0;
+
     return {
       node: { id: node.id, name: node.name },
       mounted: mounted.map((d) => ({ id: d.id, documentNumber: d.documentNumber, documentName: d.documentName })),
@@ -111,6 +118,7 @@ export class NodeDocsService {
         documentName: d.documentName,
         assignedNode: d.nodeId ? { id: d.nodeId, name: names.get(d.nodeId) ?? null } : null,
       })),
+      excludedCount,
     };
   }
 

@@ -47,6 +47,12 @@ export interface PublicListPage<T> {
   page: number;
   pageSize: number;
   hasNext: boolean;
+  /**
+   * G-PUB-012：被強制基底條件（僅「已公告」）隱藏之候選數（進度中/失效/作廢）。
+   * 與使用者篩選無關——反映後端一律隱藏之非公告文件數，供前台呈現「另有 N 筆…已由後端隱藏」。
+   * paginate 單獨使用時不設（undefined）；buildPublicList 一律設值。
+   */
+  hiddenCount?: number;
 }
 
 export const DEFAULT_PAGE_SIZE = 50;
@@ -154,5 +160,7 @@ export function buildPublicList(
       matchesKeyword(i, filters.keyword),
   );
   const sorted = splitAndSort(filtered, userOrgCode);
-  return paginate(sorted, page, pageSize);
+  // G-PUB-012：被基底條件隱藏之候選數＝全候選 − 已公告候選（與使用者篩選無關）。
+  const hiddenCount = items.length - base.length;
+  return { ...paginate(sorted, page, pageSize), hiddenCount };
 }

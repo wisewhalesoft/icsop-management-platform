@@ -34,6 +34,21 @@ export interface DocumentView extends CreateDocumentInput {
   usingDeptIds: string[];
 }
 
+/**
+ * 單筆文件檢視 + 所屬節點名（G-DOC-205/301）。GET /admin/documents/:id 回此超集；
+ * store 仍回 DocumentView（不知節點名），service 於 getDocument 以 NODE_NAME_STORE 解析 nodeId→名。
+ * 為超集故任何期望 DocumentView 之呼叫端不受影響。
+ */
+export interface DocumentDetailView extends DocumentView {
+  nodeName: string | null;
+}
+
+/** F017 清單富化：某文件之單筆次要室長參照（documentId + employeeNo）。 */
+export interface DocSecondaryChiefRef {
+  documentId: string;
+  employeeNo: string;
+}
+
 /** F011 編輯：可覆寫之業務欄位子集（部分更新；nodeId 不在此，節點寫入僅經 F009 抽屜）。 */
 export type DocumentPatch = Partial<Omit<CreateDocumentInput, never>>;
 
@@ -97,6 +112,10 @@ export interface DocumentListItem {
   primaryChiefId: string | null;
   /** F017 當責室長姓名（resolvePersonName；查無→null，前端 fallback 顯示員編）。 */
   primaryChiefName: string | null;
+  /** G-DOC-001 當責室長「+N」次要室長數（0＝無次要室長；不含主要室長）。 */
+  secondaryChiefCount: number;
+  /** G-DOC-001「+N」tooltip 內容：次要室長姓名（查無→fallback 員編），與 count 同序。 */
+  secondaryChiefNames: string[];
   edition: string | null;
   announcedDate: string | null;
   contentSummary: string | null;
@@ -133,6 +152,8 @@ export interface DocumentStore {
   findById(id: string): Promise<DocumentView | null>;
   /** F017 清單富化：批次取多筆文件之精簡摘要（連結點目標；查無者不列）。 */
   findSummaries(ids: string[]): Promise<DocumentSummary[]>;
+  /** G-DOC-001 清單富化：批次取多筆文件之次要室長參照（一次查詢；空 ids → 空陣列）。 */
+  findSecondaryChiefsByDocumentIds(documentIds: string[]): Promise<DocSecondaryChiefRef[]>;
   updateStatus(id: string, status: DocumentStatus): Promise<void>;
   /** F011 編輯：以 patch 覆寫（不留歷史、UUID 不變）；回傳覆寫後之完整檢視。 */
   update(id: string, patch: DocumentPatch): Promise<DocumentView>;

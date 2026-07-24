@@ -7,6 +7,8 @@ import { DocumentsController } from './documents.controller';
 import { DocumentsService } from './documents.service';
 import { DOCUMENT_STORE, DocumentStore } from './documents.store';
 import { TypeOrmDocumentStore } from './typeorm-documents.store';
+import { NODE_NAME_STORE, NodeNameStore } from './node-name.store';
+import { TypeOrmNodeNameStore } from './typeorm-node-name.store';
 import { DOCUMENT_LINK_STORE, DocumentLinkStore } from './document-link.store';
 import { TypeOrmDocumentLinkStore } from './typeorm-document-link.store';
 import { DOCUMENT_CHANGE_PUBLISHER, DocumentChangePublisher } from './document-change-event';
@@ -46,6 +48,12 @@ import { OrgChangeAlertAutoResolveSubscriber } from '../org-change-alert/documen
     {
       provide: ATTACHMENT_STORE,
       useFactory: (): AttachmentStore => new TypeOrmAttachmentStore(AppDataSource),
+    },
+    // G-DOC-205/301 單筆檢視之節點名解析。反循環：於本模組自建 TypeOrm adapter（讀 LIFECYCLE_NODE），
+    // 不匯入 LifecycleModule。
+    {
+      provide: NODE_NAME_STORE,
+      useFactory: (): NodeNameStore => new TypeOrmNodeNameStore(AppDataSource),
     },
     // 決策 B（F037）＋F006：seam 由單一綁定改為 fan-out（Composite）——
     //  1) DocumentChangeLogPublisher：持久化為 DOCUMENT_CHANGE_LOG（變更歷程）。

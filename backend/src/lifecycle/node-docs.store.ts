@@ -32,6 +32,11 @@ export interface NodeDocsStore {
   /** 節點 id → 名稱（供候選文件顯示「已掛載於 {節點}」）。 */
   nodeNames(nodeIds: string[]): Promise<Map<string, string | null>>;
   /**
+   * G-LC-015：掛載於**其他循環**（nodeId 非空且 lifecycleId≠本循環）之文件數。
+   * 供抽屜候選過濾註記「另有 N 份掛載於其他循環（已排除）」。選填能力——未提供之 fake → excludedCount=0。
+   */
+  countDocsMountedInOtherLifecycles?(lifecycleId: string): Promise<number>;
+  /**
    * F038 交易一致性（選填能力，architecture-spec §5.9）：於**同一 DB 交易**內執行掛載/改派/移除 ＋
    * `tx.recordStructuralChange(event)`（LIFECYCLE_CHANGE_LOG ＋ LIFECYCLE_SNAPSHOT），任一失敗整批回滾。
    */

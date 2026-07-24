@@ -39,6 +39,10 @@ class FakeStore implements NodeDocsStore {
   nodeNames(ids: string[]): Promise<Map<string, string | null>> {
     return Promise.resolve(new Map(this.nodes.filter((n) => ids.includes(n.id)).map((n) => [n.id, n.name])));
   }
+  mountedElsewhere = 0;
+  countDocsMountedInOtherLifecycles(): Promise<number> {
+    return Promise.resolve(this.mountedElsewhere);
+  }
 }
 
 describe('NodeDocsService（F009 節點抽屜）', () => {
@@ -68,6 +72,13 @@ describe('NodeDocsService（F009 節點抽屜）', () => {
     });
     it('節點不存在 → NODE_NOT_FOUND', async () => {
       await expect(svc.getDrawer('lc1', 'ghost')).rejects.toThrow('NODE_NOT_FOUND');
+    });
+
+    it('G-LC-015 excludedCount＝掛載於其他循環之文件數（候選過濾註記）', async () => {
+      store.doc('D1', { nodeId: 'n1' });
+      store.mountedElsewhere = 4;
+      const drawer = await svc.getDrawer('lc1', 'n1');
+      expect(drawer.excludedCount).toBe(4);
     });
   });
 

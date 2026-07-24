@@ -6,9 +6,21 @@ import {
   DocumentChangeLogStore,
 } from './document-change-log.store';
 import {
+  DOCUMENT_NAME_LOOKUP,
+  DocumentNameLookup,
+} from './document-name-lookup';
+import {
   DocumentChangeFilters,
   filterDocumentChanges,
 } from './document-change-query';
+
+/**
+ * G-LC-023 程序書變更列 + 現行書名（documentName，自 ICSOP_DOCUMENT 併入）。
+ * DocumentChangeLogRow 之超集，故既有期望 row 之呼叫端不受影響。
+ */
+export interface DocumentChangeView extends DocumentChangeLogRow {
+  documentName: string | null;
+}
 
 /** 檢視稽核所需之操作者身分快照（與浮水印/稽核同一來源；由 controller 自 SessionUser 帶入）。 */
 export interface ChangeHistoryActor {
@@ -35,25 +47,46 @@ export class DocumentChangeHistoryService {
     private readonly store: DocumentChangeLogStore,
     @Optional() private readonly audit?: AuditWriterService,
     @Optional() private readonly clock: () => Date = () => new Date(),
+    // G-LC-023 現行書名併入。選填以免破壞既有 new DocumentChangeHistoryService(store[, audit]) 單測（無→書名 null）。
+    @Optional()
+    @Inject(DOCUMENT_NAME_LOOKUP)
+    private readonly docNames?: DocumentNameLookup,
   ) {}
 
   async queryChanges(
     filters: DocumentChangeFilters,
-  ): Promise<{ items: DocumentChangeLogRow[]; total: number }> {
+  ): Promise<{ items: DocumentChangeView[]; total: number }> {
     const all = await this.store.listAll();
-    const items = filterDocumentChanges(all, filters);
+    const filtered = filterDocumentChanges(all, filters);
+    const items = await this.enrichNames(filtered);
     return { items, total: items.length };
+  }
+
+  /**
+   * G-LC-023：以現行 ICSOP_DOCUMENT.documentName 併入變更列（去重批次；無 lookup→書名 null）。
+   * documentName 為**現行值**（非快照）——程序書 cell 顯示「書名」行需即時書名。
+   */
+  private async enrichNames(
+    rows: DocumentChangeLogRow[],
+  ): Promise<DocumentChangeView[]> {
+    if (!this.docNames || rows.length === 0) {
+      return rows.map((r) => ({ ...r, documentName: null }));
+    }
+    const ids = [...new Set(rows.map((r) => r.documentId).filter(Boolean))];
+    const nameMap = await this.docNames.findNamesByIds(ids);
+    return rows.map((r) => ({ ...r, documentName: nameMap.get(r.documentId) ?? null }));
   }
 
   /** 展開某文件之欄位層 before/after ＋ 記 CHANGE_LOG_VIEW 稽核。 */
   async viewDocument(
     documentId: string,
     actor?: ChangeHistoryActor,
-  ): Promise<{ items: DocumentChangeLogRow[] }> {
+  ): Promise<{ items: DocumentChangeView[] }> {
     const rows = await this.store.listByDocument(documentId);
-    const items = rows
+    const sorted = rows
       .slice()
       .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+    const items = await this.enrichNames(sorted);
 
     if (this.audit && actor) {
       const latest = items[0];

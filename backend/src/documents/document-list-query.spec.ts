@@ -20,6 +20,8 @@ function item(over: Partial<DocumentListItem>): DocumentListItem {
     draftingSectionName: null,
     primaryChiefId: null,
     primaryChiefName: null,
+    secondaryChiefCount: 0,
+    secondaryChiefNames: [],
     edition: null,
     announcedDate: null,
     contentSummary: null,

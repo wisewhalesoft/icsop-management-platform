@@ -8,7 +8,9 @@ import {
   DocumentListItem,
   DocumentListPage,
   DocumentSummary,
+  DocSecondaryChiefRef,
 } from './documents.store';
+import { NodeNameStore } from './node-name.store';
 import { applyDocumentQuery } from './document-list-query';
 import { NumberHolder } from './document-rules';
 import { DocumentStatus } from './document-status';
@@ -123,6 +125,14 @@ class FakePublisher implements DocumentChangePublisher {
   }
 }
 
+/** G-DOC-205/301：最小 NodeNameStore 替身。 */
+class FakeNodeNameStore implements NodeNameStore {
+  names = new Map<string, string | null>();
+  findNameById(nodeId: string): Promise<string | null> {
+    return Promise.resolve(this.names.get(nodeId) ?? null);
+  }
+}
+
 class FakeStore implements DocumentStore {
   seq = 1;
   holders: NumberHolder[] = [];
@@ -184,13 +194,25 @@ class FakeStore implements DocumentStore {
       draftingSectionId: d.draftingSectionId ?? null,
       draftingCompanyName: null, draftingDeptName: null, draftingSectionName: null,
       primaryChiefId: d.primaryChiefId ?? null, primaryChiefName: null,
+      secondaryChiefCount: 0, secondaryChiefNames: [],
       edition: d.edition ?? null,
       announcedDate: d.announcedDate ? new Date(d.announcedDate as unknown as string).toISOString() : null,
       contentSummary: d.contentSummary ?? null,
-      // F017 富化欄之基線值（無附件/無連結）；由 service 依注入之 store 覆寫。
+      // F017 富化欄之基線值（無附件/無連結/無次要室長）；由 service 依注入之 store 覆寫。
       icsopPdfBlobPath: null, icsopPdfFileName: null, links: [],
     }));
     return Promise.resolve(applyDocumentQuery(rows, f, new Date()));
+  }
+  findSecondaryChiefsByDocumentIds(ids: string[]): Promise<DocSecondaryChiefRef[]> {
+    const set = new Set(ids);
+    // 由 seedDoc/create 寫入之 secondaryChiefIds 推導（模擬 DOC_SECONDARY_CHIEF 批次查詢）。
+    return Promise.resolve(
+      this.docs
+        .filter((d) => set.has(d.id))
+        .flatMap((d) =>
+          (d.secondaryChiefIds ?? []).map((employeeNo) => ({ documentId: d.id, employeeNo })),
+        ),
+    );
   }
   findById(id: string): Promise<DocumentView | null> {
     return Promise.resolve(this.docs.find((d) => d.id === id) ?? null);
@@ -542,6 +564,29 @@ describe('DocumentsService.getDocument（F011 單筆讀取，供編輯對照/pub
   it('TS-F011-002 讀取不存在 id → DOCUMENT_NOT_FOUND', async () => {
     await expect(svc.getDocument('nope')).rejects.toThrow('DOCUMENT_NOT_FOUND');
   });
+
+  it('G-DOC-205/301 nodeId → 解析所屬節點名（nodeName）', async () => {
+    const nodeStore = new FakeNodeNameStore();
+    nodeStore.names.set('node-1', '審查節點');
+    const svc2 = new DocumentsService(store, undefined, undefined, undefined, undefined, nodeStore);
+    const d = store.seedDoc({ nodeId: 'node-1' });
+    const view = await svc2.getDocument(d.id);
+    expect(view.nodeName).toBe('審查節點');
+  });
+
+  it('G-DOC-205/301 無 nodeId → nodeName 為 null（不查詢）', async () => {
+    const nodeStore = new FakeNodeNameStore();
+    const svc2 = new DocumentsService(store, undefined, undefined, undefined, undefined, nodeStore);
+    const d = store.seedDoc({ nodeId: null });
+    const view = await svc2.getDocument(d.id);
+    expect(view.nodeName).toBeNull();
+  });
+
+  it('G-DOC-205/301 無 nodeNameStore（graceful）→ nodeName 為 null', async () => {
+    const d = store.seedDoc({ nodeId: 'node-x' });
+    const view = await svc.getDocument(d.id); // svc 無 nodeNameStore
+    expect(view.nodeName).toBeNull();
+  });
 });
 
 describe('DocumentsService.update（F011 編輯＋版本對照＋F013 編輯側編號）', () => {
@@ -783,6 +828,21 @@ describe('DocumentsService.listDocuments 名稱解析＋分頁（F017）', () =>
     expect(page.pageSize).toBe(2);
     expect(page.hasNext).toBe(true);
     expect(page.items).toHaveLength(2);
+  });
+
+  it('G-DOC-001 次要室長 → secondaryChiefCount + secondaryChiefNames（解析姓名，fallback 員編）', async () => {
+    resolver.personNames.set('20053', '王小明');
+    store.seedDoc({ secondaryChiefIds: ['20053', '20541'] }); // 20541 未命中 → fallback 員編
+    const page = await svc.listDocuments({});
+    expect(page.items[0].secondaryChiefCount).toBe(2);
+    expect(page.items[0].secondaryChiefNames).toEqual(['王小明', '20541']);
+  });
+
+  it('G-DOC-001 無次要室長 → count 0、names 空陣列', async () => {
+    store.seedDoc({ secondaryChiefIds: [] });
+    const page = await svc.listDocuments({});
+    expect(page.items[0].secondaryChiefCount).toBe(0);
+    expect(page.items[0].secondaryChiefNames).toEqual([]);
   });
 
   it('無 resolver 時（純 store 建構）名稱保持 null（graceful）', async () => {

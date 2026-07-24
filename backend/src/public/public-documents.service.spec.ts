@@ -1,11 +1,14 @@
 import { PublicDocumentsService, OrgNameResolver } from './public-documents.service';
-import { PublicDocumentStore } from './public-documents.store';
+import { PublicDocDetail, PublicDocumentStore } from './public-documents.store';
 import { PublicDocItem } from './public-list';
 
 class FakeStore implements PublicDocumentStore {
   constructor(private readonly items: PublicDocItem[]) {}
   listCandidates(): Promise<PublicDocItem[]> {
     return Promise.resolve(this.items);
+  }
+  findDetailById(): Promise<PublicDocDetail | null> {
+    return Promise.resolve(null);
   }
 }
 

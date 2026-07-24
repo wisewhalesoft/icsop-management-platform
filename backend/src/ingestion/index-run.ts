@@ -23,6 +23,8 @@ export interface IndexRun {
   chunkCount: number | null;
   errorStage: IndexRunStage | null;
   errorMessage: string | null;
+  /** G-ADM-030/031 失敗錯誤碼（XLS_TEMPLATE_INVALID/CHUNKING_FAILED/EMBEDDING_FAILED…）；非失敗恆 null。 */
+  errorCode: string | null;
   startedAt: Date;
   endedAt: Date | null;
   triggeredBy: string | null;
@@ -40,6 +42,8 @@ export interface IndexRunFailure {
   stage: IndexRunStage;
   errorStage: IndexRunStage;
   errorMessage: string;
+  /** G-ADM-030/031 錯誤碼（選填；呼叫端於失敗時提供，如 EXTRACTION_FAILED/EMBEDDING_FAILED）。 */
+  errorCode?: string;
 }
 
 export interface IndexRunStore {
@@ -71,6 +75,7 @@ export class FakeIndexRunStore implements IndexRunStore {
       chunkCount: null,
       errorStage: null,
       errorMessage: null,
+      errorCode: null,
       startedAt: this.now(),
       endedAt: null,
       triggeredBy: input.triggeredBy ?? null,
@@ -109,6 +114,7 @@ export class FakeIndexRunStore implements IndexRunStore {
       stage: failure.stage,
       errorStage: failure.errorStage,
       errorMessage: failure.errorMessage,
+      errorCode: failure.errorCode ?? null,
       endedAt: this.now(),
     });
     return Promise.resolve();

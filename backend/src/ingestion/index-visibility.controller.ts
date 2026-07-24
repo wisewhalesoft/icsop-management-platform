@@ -44,7 +44,10 @@ export class IndexVisibilityController {
     const parsedPage = page ? Number(page) : undefined;
     return this.svc.getOverview({
       state:
-        state === 'success' || state === 'failed' || state === 'running'
+        state === 'success' ||
+        state === 'failed' ||
+        state === 'running' ||
+        state === 'not_built'
           ? (state as OverviewStateFilter)
           : undefined,
       page:

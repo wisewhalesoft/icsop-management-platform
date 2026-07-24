@@ -105,6 +105,17 @@ export class PasswordLoginService {
     // 4b) 成功 → 僅重置 loginId 軸（不重置共享 IP 軸）；成功本身不計入任何節流計數。
     this.throttle.reset(loginKey);
 
+    // GATE#2：記錄最後登入時間戳（每次成功登入一次）。以 try/catch 包覆——時間戳寫入失敗絕不阻斷登入。
+    try {
+      await this.accounts.markLoggedIn(
+        outcome.account.companyCode,
+        outcome.account.loginId,
+        new Date(),
+      );
+    } catch {
+      // 靜默：登入本身已成功；時間戳為輔助資料。
+    }
+
     const user: SessionUser = {
       loginId: outcome.account.loginId,
       email: outcome.account.email ?? '',

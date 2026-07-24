@@ -19,7 +19,7 @@ export interface SessionUser {
   employeeNo?: string | null;
 }
 
-/** 帳號管理檢視（GET/POST/PATCH /admin/accounts；鏡射後端 accounts.store AccountView）。 */
+/** 帳號管理檢視（GET/POST/PATCH /admin/accounts；鏡射後端 accounts.store AccountView / AccountListItem）。 */
 export interface AccountView {
   id: string;
   loginId: string;
@@ -31,6 +31,12 @@ export interface AccountView {
   status: string;
   source: string;
   disableReason: string | null;
+  /** 最後登入時間戳（ISO；每次成功登入寫入一次）。清單「最後登入」欄。查無→null。 */
+  lastLoginAt?: string | null;
+  /** 公司全稱（GET /admin/accounts 清單富化；resolveCompanyName）。單筆建立/編輯回傳不含 → undefined。 */
+  company?: string | null;
+  /** 部門名（GET /admin/accounts 清單富化；orgCode→ORG_UNIT 名）。職位 DEFERRED（OQ-E02-07）。 */
+  department?: string | null;
 }
 
 export interface AccountFilters {
@@ -48,6 +54,8 @@ export interface LifecycleView {
   status: 'active' | 'inactive';
   nodeCount: number;
   updatedAt: string;
+  /** G-LC-002 掛載文件數（清單「掛載文件」欄；後端富化，缺→前端顯示 0）。 */
+  mountedDocCount?: number;
 }
 
 /** DAG 圖（F008）。 */
@@ -113,6 +121,8 @@ export interface NodeDrawerData {
   node: { id: string; name: string | null };
   mounted: DrawerDoc[];
   candidates: DrawerCandidate[];
+  /** G-LC-015 掛載於其他循環而排除於候選之文件數（候選過濾註記）。缺→前端顯示 0。 */
+  excludedCount?: number;
 }
 
 /** ICSOP 文件（E04）。狀態為儲存值（active/inactive/void）；衍生已公告/進度中由前端計算。 */
@@ -136,6 +146,10 @@ export interface DocumentListItem {
   primaryChiefId: string | null;
   /** F017 當責室長姓名（查無→null，前端 fallback 顯示員編）。 */
   primaryChiefName: string | null;
+  /** G-DOC-001 當責室長「+N」次要室長數（0＝無）。 */
+  secondaryChiefCount?: number;
+  /** G-DOC-001「+N」badge tooltip：次要室長姓名（查無→員編），與 count 同序。 */
+  secondaryChiefNames?: string[];
   edition: string | null;
   announcedDate: string | null;
   contentSummary: string | null;
@@ -193,6 +207,8 @@ export interface DocumentView {
   documentName: string;
   lifecycleId: string;
   nodeId: string | null;
+  /** G-DOC-205/301 所屬節點名（GET /admin/documents/:id 回；nodeId→LIFECYCLE_NODE.name；無→null）。 */
+  nodeName?: string | null;
   draftingCompanyId: string | null;
   draftingDeptId: string | null;
   draftingSectionId: string | null;
@@ -312,6 +328,8 @@ export interface DocumentChangeView {
   id: string;
   documentId: string;
   documentNumber: string | null;
+  /** G-LC-023 現行書名（自 ICSOP_DOCUMENT 併入；程序書 cell「書名」行）。查無→null。 */
+  documentName?: string | null;
   changeType: string;
   field: string;
   oldValue: string | null;
@@ -383,6 +401,66 @@ export interface PublicListPage {
   page: number;
   pageSize: number;
   hasNext: boolean;
+  /** G-PUB-012：被基底條件隱藏之候選數（進度中/失效/作廢）。供「另有 N 筆…已由後端隱藏」。 */
+  hiddenCount?: number;
+}
+
+// ===== E06 F019 前台文件詳情（G-PUB-020） =====
+
+/** 前台詳情之附件（唯讀；下載走既有受控端點 downloadAttachment(blobPath)）。 */
+export interface PublicDetailAttachment {
+  type: string;
+  fileName: string;
+  blobPath: string;
+}
+
+/** 前台詳情之使用表單（精簡）。 */
+export interface PublicDetailUsageForm {
+  id: string;
+  name: string;
+  format: string;
+}
+
+/** 前台詳情之連結點（單向 source→target）。 */
+export interface PublicDetailLink {
+  targetDocumentId: string;
+  targetNumber: string | null;
+  targetName: string | null;
+  targetStatus: DocumentStatus | null;
+}
+
+/**
+ * 前台文件詳情（GET /public/documents/:id；鏡射後端 PublicDocumentDetailDto）。
+ * 登入員工可讀；非「已公告」文件 → 404（視同不存在）。
+ */
+export interface PublicDocumentDetail {
+  id: string;
+  status: DocumentStatus;
+  displayStatus: PublicDisplayStatus;
+  documentNumber: string;
+  documentName: string;
+  lifecycleId: string;
+  lifecycleName: string | null;
+  nodeId: string | null;
+  nodeName: string | null;
+  draftingCompanyId: string | null;
+  draftingCompanyName: string | null;
+  draftingDeptId: string | null;
+  draftingDeptName: string | null;
+  draftingSectionId: string | null;
+  draftingSectionName: string | null;
+  primaryChiefId: string | null;
+  primaryChiefName: string | null;
+  secondaryChiefIds: string[];
+  secondaryChiefNames: string[];
+  usingDeptIds: string[];
+  usingDeptNames: string[];
+  edition: string | null;
+  announcedDate: string | null;
+  contentSummary: string | null;
+  attachments: PublicDetailAttachment[];
+  usageForms: PublicDetailUsageForm[];
+  links: PublicDetailLink[];
 }
 
 /** 前台清單篩選（皆選填）。 */
@@ -442,6 +520,10 @@ export interface UsageFormPoolItem {
   uploadedAt: string;
   docCount: number;
   documents: UsageFormDocumentRef[];
+  /** G-ADM-024 上傳者姓名（uploadedBy=accountId → ACCOUNT.name；未解析→null）。 */
+  uploadedByName?: string | null;
+  /** G-ADM-024 上傳者部門名（accountId→orgCode→ORG_UNIT.name；未解析→null）。 */
+  uploadedByDept?: string | null;
 }
 
 /** 下載憑證（GET /admin/usage-forms/:formId/download；短效期 URL）。 */
@@ -556,16 +638,24 @@ export interface DocIndexOverviewRow {
   lastIndexedAt: string | null;
   errorStage: string | null;
   errorMessage: string | null;
+  /** G-ADM-030 失敗錯誤碼（失敗列顯示錯誤碼而非階段標籤）；非失敗→null。 */
+  errorCode?: string | null;
   // 以下為 [integration] 之 ICSOP_DOCUMENT/DOC_SOURCE_XLS join（前端優雅降級，缺時以 documentId 呈現）
   documentNumber?: string;
   documentName?: string;
   hasXls?: boolean;
+  // G-ADM-029「循環 · 版次 · 使用部門」子行（[integration] 文件層 join，後端尚未落地；前端優雅降級）
+  lifecycleName?: string;
+  edition?: string;
+  usingDeptNames?: string[];
 }
 
 export interface DocIndexOverview {
   successCount: number;
   failedCount: number;
   runningCount: number;
+  /** G-ADM-028「尚未建立」計數（有文件但無 INDEX_RUN）。 */
+  notBuiltCount?: number;
   items: DocIndexOverviewRow[];
   page: number;
   pageSize: number;
@@ -580,14 +670,20 @@ export interface DocIndexStatus {
   errorStage: string | null;
   stageLabel: string | null;
   errorMessage: string | null;
+  /** G-ADM-031 失敗錯誤碼（失敗詳情 modal「錯誤碼」列）；非失敗→null。 */
+  errorCode?: string | null;
 }
 
-/** GET /admin/doc-index/:documentId/chunks（chunk 預覽 + 8 項 metadata）。 */
+/** GET /admin/doc-index/:documentId/chunks（chunk 預覽 + 8 項 metadata + chunk id + 循環名）。 */
 export interface DocIndexChunk {
+  /** G-ADM-034 chunk 唯一 id（預覽 chip）。 */
+  chunkId?: string;
   chunkSeq: number;
   content: string;
   documentNumber: string;
   lifecycleId: string;
+  /** G-ADM-034 循環名（lifecycleId→LIFECYCLE.name；無→null）。 */
+  lifecycleName?: string | null;
   chapterSection: string;
   usingDeptIds: string[];
   status: string;

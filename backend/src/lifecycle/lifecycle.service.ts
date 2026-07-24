@@ -39,8 +39,12 @@ export class LifecycleService {
     @Optional() private readonly clock: () => Date = () => new Date(),
   ) {}
 
-  listLifecycles(): Promise<LifecycleView[]> {
-    return this.store.list();
+  /** 循環清單（F007）＋G-LC-002 掛載文件數（單次 GROUP BY 富化，無 N+1）。 */
+  async listLifecycles(): Promise<LifecycleView[]> {
+    const items = await this.store.list();
+    const counts = await this.store.countMountedByLifecycle();
+    for (const it of items) it.mountedDocCount = counts.get(it.id) ?? 0;
+    return items;
   }
 
   async createLifecycle(input: {

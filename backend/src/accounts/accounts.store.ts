@@ -27,6 +27,18 @@ export interface AccountView {
   status: string;
   source: string;
   disableReason: string | null;
+  /** 最後登入時間戳（ISO 字串；每次成功登入寫入一次，見 GATE 決策 #2）。查無→null。 */
+  lastLoginAt: string | null;
+}
+
+/**
+ * 清單列（GET /admin/accounts）：AccountView 疊加服務層解析之 公司/部門 名稱
+ * （company＝resolveCompanyName(companyCode)；department＝orgCode 對應之 ORG_UNIT 名稱）。
+ * 職位（title）待上游 VW_PERSONAL_JOB.JTITLE_NM 攝入後補（OQ-E02-07 DEFERRED）。
+ */
+export interface AccountListItem extends AccountView {
+  company: string | null;
+  department: string | null;
 }
 
 /** findById 回傳之核心欄位（含判定所需之 companyCode/source/現行角色）。 */

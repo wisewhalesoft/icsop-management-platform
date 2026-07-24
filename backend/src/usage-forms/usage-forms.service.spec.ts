@@ -4,6 +4,9 @@ import {
   CreateFormInput,
   FormPoolStore,
   UpdateFormFileInput,
+  UploaderDirectory,
+  UploaderInfo,
+  UploaderOrgResolver,
   UsageFormAuditEvent,
   UsageFormRecord,
 } from './usage-forms.store';
@@ -108,6 +111,44 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
     store = new FakeFormPoolStore();
     audit = new FakeAuditRecorder();
     svc = new UsageFormsService(blob, store, audit);
+  });
+
+  describe('表單池總覽上傳者解析（G-ADM-024）', () => {
+    const uploaderDir = (map: Record<string, UploaderInfo>): UploaderDirectory => ({
+      resolveUploaders: (ids) =>
+        Promise.resolve(new Map(ids.filter((id) => map[id]).map((id) => [id, map[id]]))),
+    });
+    const orgResolver = (map: Record<string, string>): UploaderOrgResolver => ({
+      resolveOrgUnitName: (c) => Promise.resolve(map[c] ?? null),
+    });
+
+    it('uploadedBy(accountId) → 解析 uploadedByName + uploadedByDept', async () => {
+      const svc2 = new UsageFormsService(
+        blob,
+        store,
+        audit,
+        uploaderDir({ admin1: { name: '王小明', orgCode: 'JAC00' } }),
+        orgResolver({ JAC00: '審查室' }),
+      );
+      await svc2.uploadForm(ICSOP_ADMIN, xlsx()); // uploadedBy = 'admin1'
+      const [item] = await svc2.listPoolOverview(ICSOP_ADMIN);
+      expect(item.uploadedByName).toBe('王小明');
+      expect(item.uploadedByDept).toBe('審查室');
+    });
+
+    it('accountId 未命中名冊 → name/dept 為 null（不拋錯）', async () => {
+      const svc2 = new UsageFormsService(blob, store, audit, uploaderDir({}), orgResolver({}));
+      await svc2.uploadForm(ICSOP_ADMIN, xlsx());
+      const [item] = await svc2.listPoolOverview(ICSOP_ADMIN);
+      expect(item.uploadedByName).toBeNull();
+      expect(item.uploadedByDept).toBeNull();
+    });
+
+    it('無 uploaderDir（graceful）→ 不解析（uploadedByName 維持未設）', async () => {
+      await svc.uploadForm(ICSOP_ADMIN, xlsx());
+      const [item] = await svc.listPoolOverview(ICSOP_ADMIN);
+      expect(item.uploadedByName ?? null).toBeNull();
+    });
   });
 
   describe('表單池上傳（建立）', () => {
@@ -488,8 +529,10 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
       expect(g2.url).toBe(raw);
       // 上傳原件寫入一次；兩次下載皆未再 put（非重建燒錄件另存）。
       expect(blob.putCalls).toHaveLength(1);
-      // 結構回歸防線：UsageFormsService 建構子僅 blob/store/audit 三相依，無 burner → 天生不具燒錄能力。
-      expect(UsageFormsService.length).toBe(3);
+      // 結構回歸防線：UsageFormsService 建構子＝blob/store/audit/uploaderDir?/orgResolver?
+      //（後二者為 G-ADM-024 上傳者姓名/部門解析，非燒錄相依）——**無 burner**，天生不具燒錄能力
+      //（接上 PdfBurner 則此斷言破而示警）。arity 隨 G-ADM-024 相依由 3→5。
+      expect(UsageFormsService.length).toBe(5);
     });
   });
 

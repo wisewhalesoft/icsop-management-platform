@@ -84,4 +84,19 @@ export class TypeOrmAccountRepository implements AccountRepository {
       passwordHash: a.passwordHash,
     };
   }
+
+  /**
+   * 成功登入時間戳（GATE 決策 #2）：以 (companyCode, loginId) 更新 lastLoginAt。
+   * 查無帳號 → update 影響 0 列（no-op），不拋錯。
+   */
+  async markLoggedIn(
+    companyCode: string,
+    loginId: string,
+    at: Date,
+  ): Promise<void> {
+    const ds = await this.ensureInit();
+    await ds
+      .getRepository(Account)
+      .update({ companyCode, loginId }, { lastLoginAt: at });
+  }
 }

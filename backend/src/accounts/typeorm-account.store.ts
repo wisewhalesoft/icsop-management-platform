@@ -33,6 +33,7 @@ export class TypeOrmAccountStore implements AccountStore {
       status: a.status,
       source: a.source,
       disableReason: a.disableReason,
+      lastLoginAt: a.lastLoginAt ? a.lastLoginAt.toISOString() : null,
     };
   }
 

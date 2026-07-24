@@ -9,6 +9,10 @@ import { FakeBlobStore } from '../storage/fake-blob-store';
 import { DOWNLOAD_URL_TTL_SECONDS } from '../storage/blob-store';
 import { MAX_FILE_SIZE_BYTES } from '../storage/file-rules';
 import { DocumentStore, DocumentView } from '../documents/documents.store';
+import {
+  DocumentChangePublisher,
+  DocumentChangedEvent,
+} from '../documents/document-change-event';
 import { canPerform, FunctionKey } from '../rbac/function-matrix';
 
 /** 比照 documents.service.spec 之 FakeStore 風格：記憶體維護 DOCUMENT_ATTACHMENT 單份列。 */
@@ -54,6 +58,25 @@ class FakeDocumentExistence {
   ids = new Set<string>();
   findById(id: string): Promise<DocumentView | null> {
     return Promise.resolve(this.ids.has(id) ? ({ id } as DocumentView) : null);
+  }
+}
+
+/** F037：記錄變更事件之假 publisher。 */
+class FakePublisher implements DocumentChangePublisher {
+  events: DocumentChangedEvent[] = [];
+  shouldThrow = false;
+  publish(e: DocumentChangedEvent): Promise<void> {
+    this.events.push(e);
+    if (this.shouldThrow) return Promise.reject(new Error('LOG_IO'));
+    return Promise.resolve();
+  }
+}
+
+/** F037：回傳 documentNumber 之最小文件 store 替身。 */
+class FakeDocForNumber {
+  constructor(private readonly number: string | null) {}
+  findById(id: string): Promise<DocumentView | null> {
+    return Promise.resolve({ id, documentNumber: this.number } as DocumentView);
   }
 }
 
@@ -115,6 +138,50 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
     it('TS-004 pdf 作為 OJT → 成功（OJT 格式雙軌）', async () => {
       const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' }));
       expect(rec.type).toBe('OJT_SIGNIN');
+    });
+  });
+
+  describe('F037 附件替換變更事件（G-LC-022 附件類別）', () => {
+    it('覆蓋既有附件 → 發 changeType=CONTENT、field=attachment、old/new 檔名之變更事件（含編號）', async () => {
+      const pub = new FakePublisher();
+      const docStore = new FakeDocForNumber('ICSOP-SRC-101-1-01') as unknown as DocumentStore;
+      const svc2 = new AttachmentsService(blob, store, docStore, pub);
+      // 首次上傳（不發）
+      await svc2.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf({ fileName: 'v1.pdf' }));
+      expect(pub.events).toHaveLength(0);
+      // 覆蓋（發一筆）
+      await svc2.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf({ fileName: 'v2.pdf' }));
+      expect(pub.events).toHaveLength(1);
+      const e = pub.events[0];
+      expect(e.changeType).toBe('CONTENT');
+      expect(e.documentId).toBe(DOC);
+      expect(e.documentNumber).toBe('ICSOP-SRC-101-1-01');
+      expect(e.changes).toEqual([
+        { field: 'attachment', oldValue: 'v1.pdf', newValue: 'v2.pdf' },
+      ]);
+      expect(e.actorId).toBe('admin1');
+    });
+
+    it('首次上傳（無既有附件）→ 不發變更事件', async () => {
+      const pub = new FakePublisher();
+      const svc2 = new AttachmentsService(blob, store, undefined, pub);
+      await svc2.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());
+      expect(pub.events).toHaveLength(0);
+    });
+
+    it('變更事件發布失敗 → 不阻斷上傳（附件仍成功落地）', async () => {
+      const pub = new FakePublisher();
+      pub.shouldThrow = true;
+      const svc2 = new AttachmentsService(blob, store, undefined, pub);
+      await svc2.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf({ fileName: 'v1.pdf' }));
+      const rec = await svc2.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf({ fileName: 'v2.pdf' }));
+      expect(rec.fileName).toBe('v2.pdf'); // 上傳成功回傳
+    });
+
+    it('無 publisher（graceful）→ 覆蓋不發事件、不報錯', async () => {
+      await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf({ fileName: 'v1.pdf' }));
+      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf({ fileName: 'v2.pdf' }));
+      expect(rec.fileName).toBe('v2.pdf');
     });
   });
 
@@ -282,9 +349,10 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
       // 恰一次 getDownloadUrl（核發 SAS），未寫入任何新 blob（無 put → 非重建燒錄件後另存）。
       expect(blob.urlCalls).toEqual([{ key: rec.blobPath, ttlSeconds: DOWNLOAD_URL_TTL_SECONDS }]);
       expect(blob.putCalls).toHaveLength(1); // 僅上傳原件那一次；下載未再寫入燒錄件
-      // 結構回歸防線：AttachmentsService 建構子僅 blob/store/documentStore? 三參數，無 burner
-      // → 服務層天生不具燒錄能力（若日後有人接上 PdfBurner，此斷言將破而示警）。
-      expect(AttachmentsService.length).toBe(3);
+      // 結構回歸防線：AttachmentsService 建構子＝blob/store/documentStore?/changePublisher?
+      // （後者為 F037 附件替換變更事件，非燒錄相依）——**無 burner**，服務層天生不具燒錄能力
+      //（若日後有人接上 PdfBurner，此斷言將破而示警）。arity 隨 F037 相依由 3→4。
+      expect(AttachmentsService.length).toBe(4);
     });
   });
 });

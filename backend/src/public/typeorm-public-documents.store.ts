@@ -1,10 +1,16 @@
 import { DataSource, In } from 'typeorm';
 import { IcsopDocument } from '../database/entities/icsop-document.entity';
 import { Lifecycle } from '../database/entities/lifecycle.entity';
+import { LifecycleNode } from '../database/entities/lifecycle-node.entity';
 import { DocUsingDept } from '../database/entities/doc-using-dept.entity';
+import { DocSecondaryChief } from '../database/entities/doc-secondary-chief.entity';
+import { DocumentAttachment } from '../database/entities/document-attachment.entity';
+import { DocUsageForm } from '../database/entities/doc-usage-form.entity';
+import { UsageFormPool } from '../database/entities/usage-form-pool.entity';
+import { DocumentLinkEntity } from '../database/entities/document-link.entity';
 import { DocumentStatus } from '../documents/document-status';
 import { PublicDocItem } from './public-list';
-import { PublicDocumentStore } from './public-documents.store';
+import { PublicDocDetail, PublicDocumentStore } from './public-documents.store';
 
 /** DOC_USING_DEPT 之最小讀取形狀（分組純函式不依賴 entity 全欄）。 */
 export interface UsingDeptRow {
@@ -84,5 +90,90 @@ export class TypeOrmPublicDocumentStore implements PublicDocumentStore {
       announcedDate: d.announcedDate ? d.announcedDate.toISOString() : null,
       contentSummary: d.contentSummary,
     }));
+  }
+
+  /**
+   * G-PUB-020 單筆詳情組合。不預過濾狀態（基底條件由服務層套用）。各附屬集合以分離查詢取得
+   * （附件/使用表單/連結/多值），避免 1:N JOIN 膨脹。真實 SQL 與資料正確性屬 [integration]。
+   */
+  async findDetailById(documentId: string): Promise<PublicDocDetail | null> {
+    const ds = await this.init();
+    const d = await ds.getRepository(IcsopDocument).findOne({ where: { id: documentId } });
+    if (!d) return null;
+
+    const lc = await ds
+      .getRepository(Lifecycle)
+      .findOne({ where: { id: d.lifecycleId }, select: { id: true, name: true } });
+    const node = d.nodeId
+      ? await ds
+          .getRepository(LifecycleNode)
+          .findOne({ where: { id: d.nodeId }, select: { id: true, name: true } })
+      : null;
+
+    const chiefRows = await ds
+      .getRepository(DocSecondaryChief)
+      .find({ where: { documentId }, order: { id: 'ASC' } });
+    const deptRows = await ds
+      .getRepository(DocUsingDept)
+      .find({ where: { documentId }, order: { id: 'ASC' } });
+
+    const attRows = await ds
+      .getRepository(DocumentAttachment)
+      .find({ where: { documentId }, order: { type: 'ASC' } });
+
+    const formLinks = await ds
+      .getRepository(DocUsageForm)
+      .find({ where: { documentId } });
+    const formIds = formLinks.map((f) => f.formId);
+    const forms = formIds.length
+      ? await ds.getRepository(UsageFormPool).find({ where: { id: In(formIds) } })
+      : [];
+
+    const linkRows = await ds
+      .getRepository(DocumentLinkEntity)
+      .find({ where: { sourceDocumentId: documentId } });
+    const targetIds = [...new Set(linkRows.map((l) => l.targetDocumentId))];
+    const targets = targetIds.length
+      ? await ds.getRepository(IcsopDocument).find({
+          where: { id: In(targetIds) },
+          select: { id: true, documentNumber: true, documentName: true, status: true },
+        })
+      : [];
+    const targetById = new Map(targets.map((t) => [t.id, t]));
+
+    return {
+      id: d.id,
+      status: d.status as DocumentStatus,
+      documentNumber: d.documentNumber,
+      documentName: d.documentName,
+      lifecycleId: d.lifecycleId,
+      lifecycleName: lc?.name ?? null,
+      nodeId: d.nodeId,
+      nodeName: node?.name ?? null,
+      draftingCompanyId: d.draftingCompanyId,
+      draftingDeptId: d.draftingDeptId,
+      draftingSectionId: d.draftingSectionId,
+      primaryChiefId: d.primaryChiefId,
+      secondaryChiefIds: chiefRows.map((c) => c.employeeNo),
+      usingDeptIds: deptRows.map((r) => r.orgCode),
+      edition: d.edition,
+      announcedDate: d.announcedDate ? d.announcedDate.toISOString() : null,
+      contentSummary: d.contentSummary,
+      attachments: attRows.map((a) => ({
+        type: a.type,
+        fileName: a.fileName,
+        blobPath: a.blobPath,
+      })),
+      usageForms: forms.map((f) => ({ id: f.id, name: f.name, format: f.format })),
+      links: linkRows.map((l) => {
+        const t = targetById.get(l.targetDocumentId);
+        return {
+          targetDocumentId: l.targetDocumentId,
+          targetNumber: t?.documentNumber ?? null,
+          targetName: t?.documentName ?? null,
+          targetStatus: (t?.status as DocumentStatus | undefined) ?? null,
+        };
+      }),
+    };
   }
 }

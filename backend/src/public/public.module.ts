@@ -18,6 +18,11 @@ import {
   OrgNameResolver,
   PublicDocumentsService,
 } from './public-documents.service';
+import {
+  DETAIL_NAME_RESOLVER,
+  DetailNameResolver,
+  PublicDocumentDetailService,
+} from './public-document-detail.service';
 import { PublicDocumentsController } from './public-documents.controller';
 import {
   WATERMARK_DOC_META,
@@ -63,6 +68,14 @@ import { AttachmentPdfSource, TypeOrmDocMeta } from './typeorm-watermark.sources
       useFactory: (store: PublicDocumentStore, names: OrgNameResolver) =>
         new PublicDocumentsService(store, names, () => new Date()),
       inject: [PUBLIC_DOCUMENT_STORE, ORG_NAME_RESOLVER],
+    },
+    // ── G-PUB-020 前台文件詳情 ──（名稱解析重用 NameResolutionService：org + person）。
+    { provide: DETAIL_NAME_RESOLVER, useExisting: NameResolutionService },
+    {
+      provide: PublicDocumentDetailService,
+      useFactory: (store: PublicDocumentStore, names: DetailNameResolver) =>
+        new PublicDocumentDetailService(store, names, () => new Date()),
+      inject: [PUBLIC_DOCUMENT_STORE, DETAIL_NAME_RESOLVER],
     },
     // ── F020 浮水印 ──
     { provide: WATERMARK_ORG_LOOKUP, useExisting: ORG_UNIT_READ_STORE },

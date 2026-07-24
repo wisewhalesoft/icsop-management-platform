@@ -3,6 +3,7 @@ import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PublicDocumentsController } from './public-documents.controller';
 import { PublicDocumentsService } from './public-documents.service';
+import { PublicDocumentDetailService } from './public-document-detail.service';
 import { SessionGuard } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { ROLE_CODES } from '../rbac/function-matrix';
@@ -11,6 +12,12 @@ function fakeSvc(): PublicDocumentsService {
   return {
     list: jest.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50, hasNext: false }),
   } as unknown as PublicDocumentsService;
+}
+
+function fakeDetailSvc(): PublicDocumentDetailService {
+  return {
+    detail: jest.fn().mockResolvedValue({ id: 'doc-1' }),
+  } as unknown as PublicDocumentDetailService;
 }
 
 function ctxFor(method: string, sessionUser: unknown): ExecutionContext {
@@ -45,7 +52,7 @@ describe('PublicDocumentsController — 守門鏈與委派（F019）', () => {
   it('list：置頂所依 userOrgCode 取自 session；篩選/分頁委派服務', async () => {
     const svc = fakeSvc();
     const req = { sessionUser: { roleCode: 'User', orgCode: 'JAC00' } } as never;
-    await new PublicDocumentsController(svc).list(req, '審查', 'JA000', 'lc1', '有效', '2', '25');
+    await new PublicDocumentsController(svc, fakeDetailSvc()).list(req, '審查', 'JA000', 'lc1', '有效', '2', '25');
     expect(svc.list).toHaveBeenCalledWith(
       'JAC00',
       { keyword: '審查', deptCode: 'JA000', lifecycleId: 'lc1', status: '有效' },
@@ -57,12 +64,18 @@ describe('PublicDocumentsController — 守門鏈與委派（F019）', () => {
   it('list：無 orgCode → 傳 null（排序退回純編號降冪）；空 query → 預設頁碼/篩選 undefined', async () => {
     const svc = fakeSvc();
     const req = { sessionUser: { roleCode: 'SysAdmin' } } as never;
-    await new PublicDocumentsController(svc).list(req);
+    await new PublicDocumentsController(svc, fakeDetailSvc()).list(req);
     expect(svc.list).toHaveBeenCalledWith(
       null,
       { keyword: undefined, deptCode: undefined, lifecycleId: undefined, status: undefined },
       1,
       50,
     );
+  });
+
+  it('G-PUB-020 detail：委派 detailService.detail(id)', async () => {
+    const detailSvc = fakeDetailSvc();
+    await new PublicDocumentsController(fakeSvc(), detailSvc).detail('doc-9');
+    expect(detailSvc.detail).toHaveBeenCalledWith('doc-9');
   });
 });

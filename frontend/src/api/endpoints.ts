@@ -583,6 +583,16 @@ export function getPublicDocuments(f: PublicListFilters = {}): Promise<PublicLis
   return apiFetch<PublicListPage>(`/public/documents${q ? `?${q}` : ''}`);
 }
 
+/**
+ * GET /public/documents/:id（G-PUB-020 前台文件詳情，全 5 角色 READ）。
+ * 非「已公告」文件 → 404 DOCUMENT_NOT_FOUND（視同不存在）；未登入 → 401。
+ */
+export function getPublicDocumentDetail(
+  id: string,
+): Promise<import('./types').PublicDocumentDetail> {
+  return apiFetch(`/public/documents/${encodeURIComponent(id)}`);
+}
+
 /** GET /org-units（組織單位清單，全 5 角色 READ；供前台部門篩選下拉之 5 層樹來源）。 */
 export function getOrgUnits(): Promise<OrgUnitRecord[]> {
   return apiFetch<OrgUnitRecord[]>('/org-units');
@@ -601,9 +611,14 @@ export function searchPersons(q: string, limit = 20): Promise<PersonRecord[]> {
 
 // ===== E06 文件浮水印檢視器（F020） =====
 
-/** GET /public/documents/:id/view（檢視器疊加用浮水印字串；記錄 VIEW 稽核）。 */
-export function getDocumentWatermark(documentId: string): Promise<{ watermark: string }> {
-  return apiFetch<{ watermark: string }>(`/public/documents/${documentId}/view`);
+/**
+ * GET /public/documents/:id/view（檢視器疊加用浮水印字串；記錄 VIEW 稽核）。
+ * G-PUB-032：另回開啟中文件之 documentNumber/documentName（供檢視器標題列）。
+ */
+export function getDocumentWatermark(
+  documentId: string,
+): Promise<{ watermark: string; documentNumber?: string | null; documentName?: string | null }> {
+  return apiFetch(`/public/documents/${documentId}/view`);
 }
 
 /** 原始 PDF 代理串流 URL（檢視器 <iframe> 預覽；後端代理，不核發 SAS）。 */

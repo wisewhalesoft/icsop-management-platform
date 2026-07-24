@@ -48,6 +48,12 @@ export interface AccountRepository {
     companyCode: string,
     loginId: string,
   ): Promise<PasswordAuthAccount | null>;
+  /**
+   * 記錄成功登入時間戳（GATE 決策 #2）。以 (companyCode, loginId) 命中並更新 ACCOUNT.lastLoginAt。
+   * **僅於登入成功時呼叫一次**（途徑 A/B 皆然），非每請求。查無帳號＝no-op（不拋錯）。
+   * 呼叫端須以 try/catch 包覆，使時間戳寫入失敗永不阻斷登入。
+   */
+  markLoggedIn(companyCode: string, loginId: string, at: Date): Promise<void>;
 }
 
 export const ACCOUNT_REPOSITORY = Symbol('ACCOUNT_REPOSITORY');
@@ -105,5 +111,10 @@ export class SeedAccountRepository implements AccountRepository {
           }
         : null,
     );
+  }
+
+  // 種子實作不保存時間戳（無 lastLoginAt 欄）；no-op 以符合介面。
+  markLoggedIn(): Promise<void> {
+    return Promise.resolve();
   }
 }

@@ -28,6 +28,7 @@ export async function runExtractStage(
       stage: 'extract',
       errorStage: 'extract',
       errorMessage: result.failureReason ?? 'EXTRACTION_FAILED',
+      errorCode: 'EXTRACTION_FAILED',
     });
     return result;
   }
