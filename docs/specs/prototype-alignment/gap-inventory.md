@@ -4,7 +4,7 @@
 >
 > **Prototype is authoritative** for visual/structural/copy. A difference is a **gap** unless there is concrete evidence it was an intentional decision (marked `possibly-intentional`).
 >
-> **Totals: 118 gaps** — High **9** / Med **35** / Low **74** — plus 2 systemic patterns. Breakdown by group: Public/Shell/Auth 24 · Lifecycle/History 32 · Documents 28 · Admin-data 34.
+> **Totals: 118 gaps** — High **7** / Med **37** / Low **74** — plus 2 systemic patterns. (HIGH = G-PUB-020, G-LC-022, G-DOC-001, G-DOC-201, G-DOC-202, G-ADM-001, G-ADM-027.) Breakdown by group: Public/Shell/Auth 24 · Lifecycle/History 32 · Documents 28 · Admin-data 34.
 
 ## How to read a gap record
 `ID · SEVERITY · category · flag — region — what the prototype specifies vs. what the impl does. → route`

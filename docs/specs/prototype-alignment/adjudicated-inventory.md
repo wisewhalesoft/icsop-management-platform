@@ -17,7 +17,7 @@ No backend change; safe to fix immediately.
 - **G-PUB-040** (shell shows `loginId`; should use `SessionUser.name` — same object, wrong field)
 - **G-LC-007** (DAG title — fetch existing `GET /admin/lifecycles/:id`.name)
 - **G-LC-015** (drawer note cycle-name part — prop from DagCanvasPage once G-LC-007 done; excluded-count part is backend, see B)
-- **G-LC-022/025** (5 of 6 source categories — swap `changeType`→`field` lookup)
+- **G-LC-022/025** (7 of 8 source categories — swap `changeType`→`field` lookup; categories 制定組織/當責室長/公告日期/使用部門/狀態切換/編輯-catch-all + 附件; only 附件 is backend, below)
 
 ## Bucket 2 — FIX (confirmed real drift; frontend-only, no ruling needed)
 The pure-`bug` set + rollup-B items analyst confirmed as FIX. Fastest wins, incl. the two HIGH:
