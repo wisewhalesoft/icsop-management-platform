@@ -39,6 +39,22 @@ const CHANGELOG_ROW = {
   watermarkSnapshot: null,
   occurredAt: '2026-07-16T15:05:19.000Z', source: 'DIRECT',
 };
+const DOWNLOAD_ROW = {
+  id: 'r3', accountId: 'a3', employeeNo: '20088', name: '陳彥廷',
+  company: '和潤企業股份有限公司', department: '企劃部', section: '車輛行銷室', roleCode: 'Supervisor',
+  targetType: 'DOCUMENT', actionType: 'DOWNLOAD',
+  documentId: 'd2', documentNumber: 'ICSOP-SRC-101-2-00',
+  lifecycleId: null, lifecycleName: null, formId: null, targetName: '消金審核作業',
+  watermarkSnapshot: 'wm', occurredAt: '2026-07-16T11:20:33.000Z', source: 'DIRECT',
+};
+const LIFECYCLE_ROW = {
+  id: 'r4', accountId: 'a4', employeeNo: '20233', name: '李慧玲',
+  company: '和潤企業股份有限公司', department: '債權管理部', section: '法催一室', roleCode: 'ICSOPAdmin',
+  targetType: 'LIFECYCLE', actionType: 'LIFECYCLE_VIEW',
+  documentId: null, documentNumber: null,
+  lifecycleId: 'l1', lifecycleName: '銷售及收款循環', formId: null, targetName: null,
+  watermarkSnapshot: 'wm', occurredAt: '2026-07-16T15:40:26.000Z', source: 'DIRECT',
+};
 
 function pageOf(items: object[], over: Partial<AccessHistoryPageResult> = {}): AccessHistoryPageResult {
   return {
@@ -149,5 +165,65 @@ describe('AccessHistoryPage — 文件調閱歷程查詢（F024）', () => {
     // 用 within 限縮避免多重匹配
     const table = screen.getByRole('table');
     expect(within(table).getByText('王小明')).toBeInTheDocument();
+  });
+
+  it('TS-AQ-FE-001 操作類型 pill 顏色依 actionType 對映（逐字比對 prototype ACT_STYLE）', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([DOWNLOAD_ROW, LIFECYCLE_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('陳彥廷')).toBeInTheDocument());
+
+    // DOWNLOAD → blue（非現況 slate）；LIFECYCLE_VIEW → emerald。
+    const dlPill = screen.getByText('DOWNLOAD · 下載');
+    expect(dlPill.className).toContain('bg-blue-50');
+    expect(dlPill.className).not.toContain('bg-slate-50');
+    const lcPill = screen.getByText('LIFECYCLE_VIEW · 循環樹狀圖檢視');
+    expect(lcPill.className).toContain('bg-emerald-50');
+  });
+
+  it('TS-AQ-FE-002 展開後箭頭圖示由 chevron-right 變為 chevron-down', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([DOC_ROW]));
+    const { container } = render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
+
+    // 初始未展開：僅 chevron-right、無 chevron-down。
+    expect(container.querySelector('.lucide-chevron-down')).toBeNull();
+    expect(container.querySelector('.lucide-chevron-right')).not.toBeNull();
+
+    await userEvent.click(screen.getByText('王小明'));
+
+    // 展開後：出現 chevron-down。
+    await waitFor(() =>
+      expect(container.querySelector('.lucide-chevron-down')).not.toBeNull(),
+    );
+  });
+
+  it('TS-AQ-FE-003 結果超過一頁 → 顯示換頁控制項；下一頁以 page+1 重新查詢；末頁停用下一頁', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(
+      pageOf([DOC_ROW], { total: 75, page: 1, pageSize: 50, hasNext: true }),
+    );
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
+
+    // (1) 換頁控制項存在，「下一頁」可點擊。
+    const next = screen.getByRole('button', { name: '下一頁' });
+    expect(next).toBeEnabled();
+
+    // (2) 點「下一頁」→ 以 page:2 重新查詢。
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(
+      pageOf([DOC_ROW], { total: 75, page: 2, pageSize: 50, hasNext: false }),
+    );
+    await userEvent.click(next);
+    await waitFor(() =>
+      expect(endpoints.getAccessHistory).toHaveBeenCalledWith(
+        expect.objectContaining({ page: 2 }),
+      ),
+    );
+
+    // (3) 第 2 頁（末頁）：上一頁可點、下一頁停用。
+    await waitFor(() => expect(screen.getByRole('button', { name: '上一頁' })).toBeEnabled());
+    expect(screen.getByRole('button', { name: '下一頁' })).toBeDisabled();
   });
 });

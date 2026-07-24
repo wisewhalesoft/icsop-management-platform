@@ -16,6 +16,8 @@ import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 @Index('IX_AUDIT_LOG_occurredAt', ['occurredAt'])
 @Index('IX_AUDIT_LOG_document_occurredAt', ['documentId', 'occurredAt'])
 @Index('IX_AUDIT_LOG_account_occurredAt', ['accountId', 'occurredAt'])
+// F024 kind 篩選（targetType IN）＋ occurredAt 範圍/排序（migration 1723075200000，OQ-AQ-01/NFR-001）。
+@Index('IX_AUDIT_LOG_targetType_occurredAt', ['targetType', 'occurredAt'])
 export class AuditLog {
   @PrimaryColumn({ type: 'uniqueidentifier' })
   id!: string;
