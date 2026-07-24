@@ -1,5 +1,9 @@
 # Prototype-Alignment — Adjudicated Inventory
 
+> **✅ STATUS 2026-07-25 — COMPLETE.** Wave 1 (foundation: global toast, 5 icons, `SearchCombobox` density prop, ~14 backend DTO/endpoint enrichments, `lastLoginAt`, public-detail endpoint, F037 attachment-event, 2 migrations on SOP) + Wave 2 (all 4 page-groups: documents/lifecycle/public+new-detail-page/admin) merged to `main`. **Frontend 532 tests / 40 files, backend 1277 / 106, `test:int` 15 suites / 88 vs SOP, tsc clean.** Toast system live + pages migrated (transient action feedback → toast; persistent error/loading state cards stay inline). Gate decisions all realized: toast built, `最後登入` via per-login write, cycle-codes dropped, 職位 deferred, public detail page built. **Deferred (recorded, not forgotten):** G-DOC-002 (org-path tooltip, Low), G-ADM-029 (doc-index cycle·edition·dept sub-line — no backend join, [integration]), G-ADM-023 (matrix header badge size, Low cosmetic), 職位 column (upstream OQ-E02-07). **Own tickets raised & done here:** F037 attachment-replace event (was an unmet AC — now published as `changeType:'CONTENT', field:'attachment'`); `lastActivityAt` shipped as `lastLoginAt`.
+
+
+
 > Produced 2026-07-24 by the alignment agent-team (analyst = product rulings, architect = FE-vs-backend, designer = prototype-intent ground truth), adjudicating the 118 gaps in `gap-inventory.md`. Every disposition was verified against actual code/specs, not the inventory's stated root causes. **This is the fix-phase input.** Human gate decisions are marked ⚖️ PENDING.
 
 ## Two corrections the team made to the original inventory

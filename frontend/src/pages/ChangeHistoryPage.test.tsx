@@ -338,8 +338,8 @@ describe('ChangeHistoryPage — F037/F038', () => {
       expect(screen.getByText(/程序書書名：（空） → 車輛分期進件作業/)).toBeInTheDocument(),
     );
     await userEvent.click(screen.getByText(/程序書書名：（空） → 車輛分期進件作業/));
-    // 來源欄與展開明細皆渲染「建立」→ 用 findAllByText 容忍兩處出現（意圖仍為 CREATE→建立）。
-    expect((await screen.findAllByText('建立')).length).toBeGreaterThan(0);
+    // 來源欄（清單）＋展開明細各一枚「建立」＝恰 2 處（意圖仍為 CREATE→建立）。
+    await waitFor(() => expect(screen.getAllByText('建立')).toHaveLength(2));
   });
 
   it('TS-DCL-D-012 同文件同時間多筆 CREATE → 沿用 60 秒聚合顯示「N 項欄位變更」', async () => {
