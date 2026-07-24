@@ -3,6 +3,13 @@ import { Account } from '../database/entities/account.entity';
 import { UploaderDirectory, UploaderInfo } from './usage-forms.store';
 
 /**
+ * `ACCOUNT.id` 為 MSSQL `uniqueidentifier`：以非 GUID 值（舊資料之 'unknown' 字面、marker/legacy
+ * 上傳者）餵入 `IN` 查詢會拋「Validation failed for parameter: Invalid GUID」→ 整頁 overview 500
+ * （int 揪出）。故於查詢前濾除非 GUID 值——其對應 uploadedByName/Dept 自然留 null，端點恆 200。
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
  * G-ADM-024 上傳者名冊之 TypeORM 實作：以 accountId 批次讀 ACCOUNT（name + orgCode）。
  * 反循環：不匯入 accounts 模組，自建 adapter 讀 ACCOUNT 實體（AppDataSource 單例、延遲初始化）。
  */
@@ -15,7 +22,7 @@ export class TypeOrmUploaderDirectory implements UploaderDirectory {
   }
 
   async resolveUploaders(accountIds: string[]): Promise<Map<string, UploaderInfo>> {
-    const ids = [...new Set(accountIds.filter(Boolean))];
+    const ids = [...new Set(accountIds.filter((x) => !!x && UUID_RE.test(x)))];
     if (ids.length === 0) return new Map();
     const ds = await this.init();
     const rows = await ds
