@@ -21,12 +21,25 @@ export interface LifecycleChangeLogRow {
   actorName: string | null;
   actorEmployeeNo: string | null;
   occurredAt: Date;
+  /**
+   * F038：1:1 回指之 LIFECYCLE_SNAPSHOT.id（同一交易內產生）。DB 層為 NULLable（既有表 ALTER ADD，
+   * 無回填正式資料）；應用層每筆新寫入之列於交易提交前恆補上（見 §A.4 交易一致性）。migration 前之
+   * 遺留舊列（若有）為 null → §B 重建視為「無可用快照的更早紀錄」，優雅降級為空圖。
+   */
+  snapshotId?: string | null;
 }
 
 export interface LifecycleChangeLogStore {
   append(row: LifecycleChangeLogRow): Promise<void>;
   listAll(): Promise<LifecycleChangeLogRow[]>;
   listByLifecycle(lifecycleId: string): Promise<LifecycleChangeLogRow[]>;
+  /** F038 §B 重建：依 id 取單筆變更日誌列；查無回 null。 */
+  findById(id: string): Promise<LifecycleChangeLogRow | null>;
+  /**
+   * F038 §B 重建：取同 lifecycleId、occurredAt 嚴格早於 before 之最近一筆（「變更前」端點錨定）；
+   * 無更早紀錄回 null（循環第一筆事件 → 重建視為空 DAG）。
+   */
+  findPredecessor(lifecycleId: string, before: Date): Promise<LifecycleChangeLogRow | null>;
 }
 
 export const LIFECYCLE_CHANGE_LOG_STORE = Symbol('LIFECYCLE_CHANGE_LOG_STORE');

@@ -1,7 +1,9 @@
-import { DataSource, In } from 'typeorm';
+import { DataSource, EntityManager, In } from 'typeorm';
 import { IcsopDocument } from '../database/entities/icsop-document.entity';
 import { LifecycleNode } from '../database/entities/lifecycle-node.entity';
 import { NodeDocsStore, NodeInfo, DocRef, DocLite } from './node-docs.store';
+import { NodeDocsStructuralTx } from './lifecycle-structural-change';
+import { recordStructuralChange } from './lifecycle-structural-recorder';
 
 /** F009 節點抽屜 store 之 TypeORM 實作（跨 LIFECYCLE_NODE / ICSOP_DOCUMENT）。 */
 export class TypeOrmNodeDocsStore implements NodeDocsStore {
@@ -12,17 +14,22 @@ export class TypeOrmNodeDocsStore implements NodeDocsStore {
     return this.ds;
   }
 
-  async getNode(lifecycleId: string, nodeId: string): Promise<NodeInfo | null> {
-    const ds = await this.init();
-    const n = await ds
-      .getRepository(LifecycleNode)
-      .findOne({ where: { id: nodeId, lifecycleId } });
+  private async getNodeWith(
+    m: EntityManager,
+    lifecycleId: string,
+    nodeId: string,
+  ): Promise<NodeInfo | null> {
+    const n = await m.getRepository(LifecycleNode).findOne({ where: { id: nodeId, lifecycleId } });
     return n ? { id: n.id, lifecycleId: n.lifecycleId, name: n.name } : null;
   }
 
-  async listLifecycleDocs(lifecycleId: string): Promise<DocRef[]> {
+  async getNode(lifecycleId: string, nodeId: string): Promise<NodeInfo | null> {
     const ds = await this.init();
-    const rows = await ds.getRepository(IcsopDocument).find({
+    return this.getNodeWith(ds.manager, lifecycleId, nodeId);
+  }
+
+  private async listLifecycleDocsWith(m: EntityManager, lifecycleId: string): Promise<DocRef[]> {
+    const rows = await m.getRepository(IcsopDocument).find({
       where: { lifecycleId },
       select: { id: true, documentNumber: true, documentName: true, nodeId: true },
       order: { documentNumber: 'ASC' },
@@ -35,20 +42,35 @@ export class TypeOrmNodeDocsStore implements NodeDocsStore {
     }));
   }
 
-  async getDoc(docId: string): Promise<DocLite | null> {
+  async listLifecycleDocs(lifecycleId: string): Promise<DocRef[]> {
     const ds = await this.init();
-    const d = await ds.getRepository(IcsopDocument).findOne({
+    return this.listLifecycleDocsWith(ds.manager, lifecycleId);
+  }
+
+  private async getDocWith(m: EntityManager, docId: string): Promise<DocLite | null> {
+    const d = await m.getRepository(IcsopDocument).findOne({
       where: { id: docId },
       select: { id: true, lifecycleId: true, nodeId: true },
     });
     return d ? { id: d.id, lifecycleId: d.lifecycleId, nodeId: d.nodeId } : null;
   }
 
+  async getDoc(docId: string): Promise<DocLite | null> {
+    const ds = await this.init();
+    return this.getDocWith(ds.manager, docId);
+  }
+
+  private async setDocNodeWith(
+    m: EntityManager,
+    docId: string,
+    nodeId: string | null,
+  ): Promise<void> {
+    await m.getRepository(IcsopDocument).update({ id: docId }, { nodeId, updatedAt: new Date() });
+  }
+
   async setDocNode(docId: string, nodeId: string | null): Promise<void> {
     const ds = await this.init();
-    await ds
-      .getRepository(IcsopDocument)
-      .update({ id: docId }, { nodeId, updatedAt: new Date() });
+    await this.setDocNodeWith(ds.manager, docId, nodeId);
   }
 
   async nodeNames(nodeIds: string[]): Promise<Map<string, string | null>> {
@@ -58,5 +80,23 @@ export class TypeOrmNodeDocsStore implements NodeDocsStore {
       .getRepository(LifecycleNode)
       .find({ where: { id: In(nodeIds) }, select: { id: true, name: true } });
     return new Map(rows.map((n) => [n.id, n.name]));
+  }
+
+  /**
+   * F038 交易一致性：於單一 DB 交易內執行掛載/改派/移除 ＋ recordStructuralChange（LIFECYCLE_CHANGE_LOG
+   * ＋ LIFECYCLE_SNAPSHOT）。work 拋錯 → 交易回滾（ICSOP_DOCUMENT.nodeId 變更亦不留）。
+   */
+  async runStructuralChange<T>(work: (tx: NodeDocsStructuralTx) => Promise<T>): Promise<T> {
+    const ds = await this.init();
+    return ds.transaction(async (m) => {
+      const tx: NodeDocsStructuralTx = {
+        getNode: (lc, id) => this.getNodeWith(m, lc, id),
+        getDoc: (id) => this.getDocWith(m, id),
+        listLifecycleDocs: (lc) => this.listLifecycleDocsWith(m, lc),
+        setDocNode: (id, nodeId) => this.setDocNodeWith(m, id, nodeId),
+        recordStructuralChange: (event) => recordStructuralChange(m, event),
+      };
+      return work(tx);
+    });
   }
 }

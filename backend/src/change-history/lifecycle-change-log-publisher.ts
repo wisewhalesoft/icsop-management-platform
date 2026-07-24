@@ -26,6 +26,8 @@ export function buildLifecycleChangeLogRow(
     actorName: event.actorName ?? null,
     actorEmployeeNo: event.actorEmployeeNo ?? null,
     occurredAt: event.occurredAt,
+    // 循序（非交易）路徑不產生快照 → snapshotId 為 null；原子路徑（recordStructuralChange）另行覆寫。
+    snapshotId: null,
   };
 }
 

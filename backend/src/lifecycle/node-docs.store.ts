@@ -31,4 +31,11 @@ export interface NodeDocsStore {
   setDocNode(docId: string, nodeId: string | null): Promise<void>;
   /** 節點 id → 名稱（供候選文件顯示「已掛載於 {節點}」）。 */
   nodeNames(nodeIds: string[]): Promise<Map<string, string | null>>;
+  /**
+   * F038 交易一致性（選填能力，architecture-spec §5.9）：於**同一 DB 交易**內執行掛載/改派/移除 ＋
+   * `tx.recordStructuralChange(event)`（LIFECYCLE_CHANGE_LOG ＋ LIFECYCLE_SNAPSHOT），任一失敗整批回滾。
+   */
+  runStructuralChange?<T>(
+    work: (tx: import('./lifecycle-structural-change').NodeDocsStructuralTx) => Promise<T>,
+  ): Promise<T>;
 }

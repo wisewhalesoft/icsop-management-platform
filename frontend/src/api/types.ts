@@ -77,6 +77,29 @@ export interface LifecycleTreePreview {
   watermark: string;
 }
 
+/** F038 新舊快照 diff（後-前＝新增；前-後＝刪除；改名/掛載變更＝amber）。 */
+export interface LifecycleDiff {
+  addNodes: string[];
+  rmNodes: string[];
+  amberNodes: string[];
+  addEdges: Array<[string, string]>;
+  rmEdges: Array<[string, string]>;
+}
+
+/**
+ * F038 循環樹狀圖變更歷程 · 單筆事件之新舊對照
+ * （GET /admin/change-history/lifecycles/:lifecycleId/changes/:changeLogId/tree-diff）。
+ * before＝前一筆事件之完整快照（或空 DAG）；after＝本筆事件自身快照。
+ */
+export interface LifecycleTreeDiff {
+  lifecycle: { id: string; name: string };
+  before: DagGraph;
+  after: DagGraph;
+  diff: LifecycleDiff;
+  /** 伺服器端組裝之浮水印快照（前端不可自組）。 */
+  watermark: string;
+}
+
 /** F009 節點抽屜資料。 */
 export interface DrawerDoc {
   id: string;

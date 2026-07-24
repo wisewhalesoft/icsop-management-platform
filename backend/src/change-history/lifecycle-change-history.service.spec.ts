@@ -22,6 +22,19 @@ class FakeStore implements LifecycleChangeLogStore {
   async listByLifecycle(id: string): Promise<LifecycleChangeLogRow[]> {
     return this.rows.filter((r) => r.lifecycleId === id);
   }
+  async findById(id: string): Promise<LifecycleChangeLogRow | null> {
+    return this.rows.find((r) => r.id === id) ?? null;
+  }
+  async findPredecessor(
+    lifecycleId: string,
+    before: Date,
+  ): Promise<LifecycleChangeLogRow | null> {
+    return (
+      this.rows
+        .filter((r) => r.lifecycleId === lifecycleId && r.occurredAt.getTime() < before.getTime())
+        .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())[0] ?? null
+    );
+  }
 }
 
 class FakeAudit implements AuditWriter {

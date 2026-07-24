@@ -547,6 +547,24 @@ export function viewLifecycleChanges(
   return apiFetch(`/admin/change-history/lifecycles/${encodeURIComponent(lifecycleId)}${q}`);
 }
 
+/**
+ * GET .../lifecycles/:lifecycleId/changes/:changeLogId/tree-diff（F038 單筆事件之新舊結構 + diff + 浮水印）。
+ * 本端點純資料、不記稽核（VIEW 稽核仍由 viewLifecycleChanges 記錄）；404 LIFECYCLE_CHANGE_LOG_NOT_FOUND。
+ */
+export function getLifecycleTreeDiff(
+  lifecycleId: string,
+  changeLogId: string,
+): Promise<import('./types').LifecycleTreeDiff> {
+  return apiFetch(
+    `/admin/change-history/lifecycles/${encodeURIComponent(lifecycleId)}/changes/${encodeURIComponent(changeLogId)}/tree-diff`,
+  );
+}
+
+/** 下載 URL（雙頁新舊對照 PDF，內容層已燒錄浮水印；記錄 LIFECYCLE_CHANGELOG_DOWNLOAD）。 */
+export function lifecycleTreeDiffDownloadUrl(lifecycleId: string, changeLogId: string): string {
+  return `/admin/change-history/lifecycles/${encodeURIComponent(lifecycleId)}/changes/${encodeURIComponent(changeLogId)}/tree-diff/download`;
+}
+
 // ===== E06 前台瀏覽（F019） =====
 
 /**

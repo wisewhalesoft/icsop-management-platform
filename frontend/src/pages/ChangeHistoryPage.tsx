@@ -6,8 +6,8 @@ import {
   getLifecycleChanges,
   viewLifecycleChanges,
   getLifecycles,
-  getLifecycleTreePreview,
-  lifecycleTreeDownloadUrl,
+  getLifecycleTreeDiff,
+  lifecycleTreeDiffDownloadUrl,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
@@ -18,7 +18,9 @@ import type {
   DocumentChangeView,
   LifecycleChangeView,
   LifecycleView,
-  LifecycleTreePreview,
+  LifecycleTreeDiff,
+  LifecycleDiff,
+  DagGraph,
 } from '../api/types';
 
 /**
@@ -388,7 +390,7 @@ function DocTab(): JSX.Element {
   );
 }
 
-// ==================== Tab 2：循環樹狀圖 ====================
+// ==================== Tab 2：循環樹狀圖（新舊並列） ====================
 function TreeTab(): JSX.Element {
   const [cyc, setCyc] = useState('');
   const [type, setType] = useState('');
@@ -397,7 +399,7 @@ function TreeTab(): JSX.Element {
   const [rows, setRows] = useState<LifecycleChangeView[]>([]);
   const [cycles, setCycles] = useState<LifecycleView[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ event: LifecycleChangeView; data: LifecycleTreePreview } | null>(null);
+  const [preview, setPreview] = useState<{ event: LifecycleChangeView; data: LifecycleTreeDiff } | null>(null);
 
   const cycName = useCallback(
     (id: string) => cycles.find((c) => c.id === id)?.name ?? id,
@@ -428,9 +430,9 @@ function TreeTab(): JSX.Element {
   const openPreview = useCallback(
     async (ev: LifecycleChangeView) => {
       try {
-        // 記 LIFECYCLE_CHANGELOG_VIEW 稽核（F038）＋ 取樹圖與伺服器浮水印（重用 F036）。
+        // 記 LIFECYCLE_CHANGELOG_VIEW 稽核（沿用既有稽核呼叫點）＋ 取新舊快照對照（F038 §D.0）。
         await viewLifecycleChanges(ev.lifecycleId, cycName(ev.lifecycleId));
-        const data = await getLifecycleTreePreview(ev.lifecycleId);
+        const data = await getLifecycleTreeDiff(ev.lifecycleId, ev.id);
         setPreview({ event: ev, data });
       } catch (e) {
         setError(msgOf(e));
@@ -525,7 +527,7 @@ function TreeTab(): JSX.Element {
                           <Icon name="eye" className="w-4 h-4" />
                           預覽
                         </button>
-                        <a href={lifecycleTreeDownloadUrl(e.lifecycleId)} className="text-slate-600 hover:text-primary-700 hover:underline inline-flex items-center gap-1">
+                        <a href={lifecycleTreeDiffDownloadUrl(e.lifecycleId, e.id)} className="text-slate-600 hover:text-primary-700 hover:underline inline-flex items-center gap-1">
                           <Icon name="download" className="w-4 h-4" />
                           下載
                         </a>
@@ -546,24 +548,159 @@ function TreeTab(): JSX.Element {
       </div>
       <p className="mt-3 text-xs text-slate-400 flex items-start gap-1.5">
         <Icon name="shield-check" className="w-3.5 h-3.5 mt-0.5" />
-        結構變更為 append-only 事件日誌；預覽/下載重用 F036 樹狀圖渲染與伺服器浮水印，並寫入稽核（F038）。
+        「變更後 DAG＝本筆完整快照、變更前＝前一筆快照」（架構決策）；預覽/下載疊加或燒錄浮水印並寫入稽核（F038）。
       </p>
 
       {preview && (
-        <TreePreviewModal
+        <TreeDiffModal
           title={cycName(preview.event.lifecycleId)}
           event={preview.event}
           data={preview.data}
           onClose={() => setPreview(null)}
-          downloadHref={lifecycleTreeDownloadUrl(preview.event.lifecycleId)}
+          downloadHref={lifecycleTreeDiffDownloadUrl(preview.event.lifecycleId, preview.event.id)}
         />
       )}
     </section>
   );
 }
 
-/** 樹狀圖預覽 modal：重用 F036 buildTreeLayout 渲染當前樹，事件節點醒目標示 + 伺服器浮水印。 */
-function TreePreviewModal({
+/** 某節點於某側（before/after）之 diff 分類（新增/移除/改名·掛載變更）。 */
+function nodeDiffOf(side: 'before' | 'after', nodeId: string, diff: LifecycleDiff): 'add' | 'remove' | 'amber' | null {
+  if (side === 'before' && diff.rmNodes.includes(nodeId)) return 'remove';
+  if (side === 'after' && diff.addNodes.includes(nodeId)) return 'add';
+  if (diff.amberNodes.includes(nodeId)) return 'amber';
+  return null;
+}
+function edgeDiffOf(side: 'before' | 'after', e: { sourceNodeId: string; targetNodeId: string }, diff: LifecycleDiff): 'add' | 'remove' | null {
+  const match = (pairs: Array<[string, string]>) =>
+    pairs.some(([s, t]) => s === e.sourceNodeId && t === e.targetNodeId);
+  if (side === 'before' && match(diff.rmEdges)) return 'remove';
+  if (side === 'after' && match(diff.addEdges)) return 'add';
+  return null;
+}
+const NODE_STYLE: Record<'add' | 'remove' | 'amber' | 'normal', { border: string; bg: string; dashed?: boolean; strike?: boolean }> = {
+  add: { border: '#059669', bg: '#ECFDF5' },
+  remove: { border: '#DC2626', bg: '#FEF2F2', dashed: true, strike: true },
+  amber: { border: '#D97706', bg: '#FFFBEB' },
+  normal: { border: '#E2E8F0', bg: '#fff' },
+};
+
+/** 單側樹狀圖板（各自佈局、各自 diff 標示、各自浮水印）。 */
+function DiffBoard({
+  side,
+  graph,
+  diff,
+  watermark,
+  testId,
+}: {
+  side: 'before' | 'after';
+  graph: DagGraph;
+  diff: LifecycleDiff;
+  watermark: string;
+  testId: string;
+}): JSX.Element {
+  const layout = useMemo(() => buildTreeLayout(graph.nodes, graph.edges), [graph]);
+  const posById = useMemo(() => new Map(layout.nodes.map((n) => [n.id, n])), [layout]);
+  const wmCount = Math.min(120, Math.max(24, Math.round((layout.boardWidth * layout.boardHeight) / 16000)));
+
+  if (graph.nodes.length === 0) {
+    return (
+      <div
+        data-testid={testId}
+        className="relative bg-white rounded-lg border border-slate-200 flex items-center justify-center text-center"
+        style={{ minHeight: 160, backgroundImage: 'radial-gradient(#EEF2F7 1px, transparent 1px)', backgroundSize: '22px 22px' }}
+      >
+        <div className="text-slate-400 text-xs px-4 py-8">
+          <Icon name="git-fork" className="w-8 h-8 mx-auto mb-1.5 text-slate-300" />
+          {side === 'before' ? '變更前為空 DAG（循環第一筆結構事件）' : '變更後為空 DAG'}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-testid={testId}
+      className="relative bg-white rounded-lg border border-slate-200 mx-auto"
+      style={{ width: layout.boardWidth, height: layout.boardHeight, backgroundImage: 'radial-gradient(#EEF2F7 1px, transparent 1px)', backgroundSize: '22px 22px' }}
+    >
+      <svg width={layout.boardWidth} height={layout.boardHeight} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}>
+        <defs>
+          <marker id={`chArr-${side}`} markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#94A3B8" />
+          </marker>
+        </defs>
+        {layout.edges.map((e) => {
+          const s = posById.get(e.sourceNodeId);
+          const t = posById.get(e.targetNodeId);
+          if (!s || !t) return null;
+          const ed = edgeDiffOf(side, e, diff);
+          const stroke = ed === 'add' ? '#059669' : ed === 'remove' ? '#DC2626' : '#94A3B8';
+          const width = ed === 'add' ? 3 : 2;
+          const dash = ed === 'remove' ? '5 4' : undefined;
+          return (
+            <path
+              key={e.id}
+              data-testid={`edge-${e.id}`}
+              data-diff={ed ?? undefined}
+              d={edgePath(s, t)}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={width}
+              strokeDasharray={dash}
+              markerEnd={ed ? undefined : `url(#chArr-${side})`}
+            />
+          );
+        })}
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
+        {layout.nodes.map((n) => {
+          const d = nodeDiffOf(side, n.id, diff);
+          const st = NODE_STYLE[d ?? 'normal'];
+          const tag = d === 'remove' ? '將移除' : d === 'add' ? '新增' : d === 'amber' ? (side === 'after' ? '變更後' : '變更前') : null;
+          return (
+            <div
+              key={n.id}
+              data-testid={`tree-node-${side}-${n.id}`}
+              data-diff={d ?? undefined}
+              style={{ position: 'absolute', left: n.x, top: n.y, width: NODE_W }}
+            >
+              <div style={{ background: st.bg, border: `1.5px ${st.dashed ? 'dashed' : 'solid'} ${st.border}`, borderRadius: 10, padding: '8px 11px', boxShadow: '0 1px 2px rgba(0,0,0,.05)' }}>
+                <div className="flex items-center gap-1.5 justify-between">
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <Icon name="git-commit-vertical" className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                    <span className={`font-medium text-sm truncate ${st.strike ? 'line-through text-red-700' : 'text-slate-800'}`}>{n.name ?? '未命名節點'}</span>
+                  </span>
+                  {tag && <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0" style={{ background: '#EAF1FA', color: '#2A4A7E' }}>{tag}</span>}
+                </div>
+                <div className={`mt-1 text-[11px] ${n.docCount > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                  {n.docCount > 0 ? `掛載 ${n.docCount} 份` : '未掛載'}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div
+        data-testid={`watermark-overlay-${side}`}
+        aria-hidden="true"
+        style={{ position: 'absolute', inset: '-40%', pointerEvents: 'none', display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', transform: 'rotate(-45deg)', opacity: 0.12, zIndex: 5 }}
+      >
+        {Array.from({ length: wmCount }).map((_, i) => (
+          <span key={i} className="mono" style={{ color: '#64748B', fontSize: 14, whiteSpace: 'nowrap', padding: '20px 26px' }}>
+            {watermark}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 新舊樹狀圖並列預覽 modal（prototype 23 權威版面）：左「變更前」／右「變更後（本筆快照）」各自渲染
+ * 該時點自身樹狀圖；差異三色標示（新增 emerald 實線／移除 red 虛線／改名·掛載變更 amber）；每欄各自浮水印。
+ */
+function TreeDiffModal({
   title,
   event,
   data,
@@ -572,14 +709,10 @@ function TreePreviewModal({
 }: {
   title: string;
   event: LifecycleChangeView;
-  data: LifecycleTreePreview;
+  data: LifecycleTreeDiff;
   onClose: () => void;
   downloadHref: string;
 }): JSX.Element {
-  const layout = useMemo(() => buildTreeLayout(data.graph.nodes, data.graph.edges), [data]);
-  const posById = useMemo(() => new Map(layout.nodes.map((n) => [n.id, n])), [layout]);
-  const wmCount = Math.min(120, Math.max(24, Math.round((layout.boardWidth * layout.boardHeight) / 16000)));
-
   return (
     <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-900/45 p-4" role="dialog" aria-label="新舊樹狀圖對照預覽">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[92vh] flex flex-col">
@@ -588,16 +721,24 @@ function TreePreviewModal({
             <Icon name="git-compare" className="w-5 h-5 text-primary-600" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-slate-900 text-sm">樹狀圖對照預覽</h3>
+            <h3 className="font-semibold text-slate-900 text-sm">新舊樹狀圖對照預覽</h3>
             <p className="text-xs text-slate-500 mt-0.5">{title} · {event.summary}</p>
           </div>
           <button onClick={onClose} aria-label="關閉" className="text-slate-400 hover:text-slate-600">
             <Icon name="x" className="w-5 h-5" />
           </button>
         </div>
+
+        {/* 三色圖例 + 稽核 badge */}
         <div className="px-5 py-2.5 border-b border-slate-100 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
           <span className="inline-flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded border-2 border-amber-500 bg-amber-50" />本次異動節點
+            <span className="w-3 h-3 rounded border-2 border-emerald-500 bg-emerald-50" />新增
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded border-2 border-dashed border-red-500 bg-red-50" />移除
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded border-2 border-amber-500 bg-amber-50" />改名／掛載變更
           </span>
           <span className="ml-auto inline-flex items-center gap-1 text-primary-600">
             <Icon name="shield-check" className="w-3.5 h-3.5" />
@@ -605,58 +746,22 @@ function TreePreviewModal({
           </span>
         </div>
 
-        <div className="p-4 overflow-auto">
-          <div
-            data-testid="tree-board"
-            className="relative bg-white rounded-lg border border-slate-200 mx-auto"
-            style={{ width: layout.boardWidth, height: layout.boardHeight, backgroundImage: 'radial-gradient(#EEF2F7 1px, transparent 1px)', backgroundSize: '22px 22px' }}
-          >
-            <svg width={layout.boardWidth} height={layout.boardHeight} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}>
-              <defs>
-                <marker id="chArr" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
-                  <path d="M0,0 L8,3 L0,6 Z" fill="#94A3B8" />
-                </marker>
-              </defs>
-              {layout.edges.map((e) => {
-                const s = posById.get(e.sourceNodeId);
-                const t = posById.get(e.targetNodeId);
-                if (!s || !t) return null;
-                return <path key={e.id} d={edgePath(s, t)} fill="none" stroke="#94A3B8" strokeWidth={2} markerEnd="url(#chArr)" />;
-              })}
-            </svg>
-            <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
-              {layout.nodes.map((n) => {
-                const hit = event.nodeId === n.id;
-                return (
-                  <div
-                    key={n.id}
-                    data-testid={`tree-node-${n.id}`}
-                    data-highlighted={hit}
-                    style={{ position: 'absolute', left: n.x, top: n.y, width: NODE_W }}
-                  >
-                    <div style={{ background: hit ? '#FFFBEB' : '#fff', border: `1.5px solid ${hit ? '#D97706' : '#E2E8F0'}`, borderRadius: 10, padding: '8px 11px', boxShadow: '0 1px 2px rgba(0,0,0,.05)' }}>
-                      <div className="flex items-center gap-1.5">
-                        <Icon name="git-commit-vertical" className="w-3.5 h-3.5 text-slate-300 shrink-0" />
-                        <span className="font-medium text-slate-800 text-sm truncate">{n.name ?? '未命名節點'}</span>
-                      </div>
-                      <div className={`mt-1 text-[11px] ${n.docCount > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
-                        {n.docCount > 0 ? `掛載 ${n.docCount} 份` : '未掛載'}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+        {/* 雙欄並列 */}
+        <div className="p-4 overflow-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 mb-2">
+              <Icon name="clock" className="w-3.5 h-3.5" />變更前
             </div>
-            <div
-              data-testid="watermark-overlay"
-              aria-hidden="true"
-              style={{ position: 'absolute', inset: '-40%', pointerEvents: 'none', display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', transform: 'rotate(-45deg)', opacity: 0.12, zIndex: 5 }}
-            >
-              {Array.from({ length: wmCount }).map((_, i) => (
-                <span key={i} className="mono" style={{ color: '#64748B', fontSize: 14, whiteSpace: 'nowrap', padding: '20px 26px' }}>
-                  {data.watermark}
-                </span>
-              ))}
+            <div className="border border-slate-200 rounded-lg overflow-auto" style={{ maxHeight: '52vh' }}>
+              <DiffBoard side="before" graph={data.before} diff={data.diff} watermark={data.watermark} testId="tree-board-before" />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5 text-xs font-medium text-primary-700 mb-2">
+              <Icon name="check-circle-2" className="w-3.5 h-3.5" />變更後（本筆快照）
+            </div>
+            <div className="border border-primary-200 rounded-lg overflow-auto" style={{ maxHeight: '52vh' }}>
+              <DiffBoard side="after" graph={data.after} diff={data.diff} watermark={data.watermark} testId="tree-board-after" />
             </div>
           </div>
         </div>
@@ -667,7 +772,7 @@ function TreePreviewModal({
             <button onClick={onClose} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">關閉</button>
             <a href={downloadHref} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700">
               <Icon name="download" className="w-4 h-4" />
-              下載樹狀圖 PDF
+              下載新舊對照 PDF
             </a>
           </div>
         </div>

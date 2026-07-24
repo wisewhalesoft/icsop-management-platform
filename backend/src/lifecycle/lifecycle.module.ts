@@ -36,6 +36,21 @@ import {
 } from './lifecycle-change-event';
 import { ChangeHistoryModule } from '../change-history/change-history.module';
 import { LifecycleChangeLogPublisher } from '../change-history/lifecycle-change-log-publisher';
+import {
+  LIFECYCLE_CHANGE_LOG_STORE,
+  LifecycleChangeLogStore,
+} from '../change-history/lifecycle-change-log.store';
+import {
+  LIFECYCLE_SNAPSHOT_STORE,
+  LifecycleSnapshotStore,
+} from '../change-history/lifecycle-snapshot.store';
+import { LifecycleChangeDiffController } from './lifecycle-change-diff.controller';
+import { LifecycleChangeDiffService } from './lifecycle-change-diff.service';
+import {
+  LIFECYCLE_CHANGE_HISTORY_PDF_RENDERER,
+  LifecycleChangeHistoryPdfRenderer,
+  PdfLibChangeHistoryTreeRenderer,
+} from './lifecycle-change-history-pdf';
 
 /**
  * 循環管理模組（E03 / F007 CRUD＋F008 DAG＋F009 節點抽屜＋F036 樹狀圖預覽）。
@@ -52,6 +67,7 @@ import { LifecycleChangeLogPublisher } from '../change-history/lifecycle-change-
     DagController,
     NodeDocsController,
     LifecyclePreviewController,
+    LifecycleChangeDiffController,
   ],
   providers: [
     {
@@ -117,6 +133,43 @@ import { LifecycleChangeLogPublisher } from '../change-history/lifecycle-change-
         LIFECYCLE_STORE,
         LIFECYCLE_WATERMARK_BUILDER,
         LIFECYCLE_TREE_PDF_RENDERER,
+        PDF_BURNER,
+        AuditWriterService,
+      ],
+    },
+    // ── F038 循環樹狀圖變更歷程 · 新舊對照（重建 + 雙頁下載燒錄）──
+    {
+      provide: LIFECYCLE_CHANGE_HISTORY_PDF_RENDERER,
+      useFactory: (): LifecycleChangeHistoryPdfRenderer =>
+        new PdfLibChangeHistoryTreeRenderer(),
+    },
+    {
+      provide: LifecycleChangeDiffService,
+      useFactory: (
+        logStore: LifecycleChangeLogStore,
+        snapStore: LifecycleSnapshotStore,
+        lifecycles: LifecycleStore,
+        watermark: LifecycleWatermarkBuilder,
+        renderer: LifecycleChangeHistoryPdfRenderer,
+        burner: PdfBurner,
+        audit: AuditWriterService,
+      ): LifecycleChangeDiffService =>
+        new LifecycleChangeDiffService(
+          logStore,
+          snapStore,
+          lifecycles,
+          watermark,
+          renderer,
+          burner,
+          audit,
+          () => new Date(),
+        ),
+      inject: [
+        LIFECYCLE_CHANGE_LOG_STORE,
+        LIFECYCLE_SNAPSHOT_STORE,
+        LIFECYCLE_STORE,
+        LIFECYCLE_WATERMARK_BUILDER,
+        LIFECYCLE_CHANGE_HISTORY_PDF_RENDERER,
         PDF_BURNER,
         AuditWriterService,
       ],

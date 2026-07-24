@@ -15,6 +15,11 @@ import {
   LifecycleChangeLogStore,
 } from './lifecycle-change-log.store';
 import { TypeOrmLifecycleChangeLogStore } from './typeorm-lifecycle-change-log.store';
+import {
+  LIFECYCLE_SNAPSHOT_STORE,
+  LifecycleSnapshotStore,
+} from './lifecycle-snapshot.store';
+import { TypeOrmLifecycleSnapshotStore } from './typeorm-lifecycle-snapshot.store';
 import { DocumentChangeLogPublisher } from './document-change-log-publisher';
 import { LifecycleChangeLogPublisher } from './lifecycle-change-log-publisher';
 import { DocumentChangeHistoryService } from './document-change-history.service';
@@ -42,6 +47,11 @@ import { LifecycleChangeHistoryService } from './lifecycle-change-history.servic
       useFactory: (): LifecycleChangeLogStore =>
         new TypeOrmLifecycleChangeLogStore(AppDataSource),
     },
+    {
+      provide: LIFECYCLE_SNAPSHOT_STORE,
+      useFactory: (): LifecycleSnapshotStore =>
+        new TypeOrmLifecycleSnapshotStore(AppDataSource),
+    },
     DocumentChangeLogPublisher,
     LifecycleChangeLogPublisher,
     {
@@ -63,6 +73,12 @@ import { LifecycleChangeHistoryService } from './lifecycle-change-history.servic
       inject: [LIFECYCLE_CHANGE_LOG_STORE, AuditWriterService],
     },
   ],
-  exports: [DocumentChangeLogPublisher, LifecycleChangeLogPublisher],
+  // F038 新舊對照：LifecycleModule 之 LifecycleChangeDiffService 注入下列兩 store（單向依賴，避免循環）。
+  exports: [
+    DocumentChangeLogPublisher,
+    LifecycleChangeLogPublisher,
+    LIFECYCLE_CHANGE_LOG_STORE,
+    LIFECYCLE_SNAPSHOT_STORE,
+  ],
 })
 export class ChangeHistoryModule {}
