@@ -325,11 +325,15 @@ export class DocumentsService {
     }
 
     // 6) 版本對照 diff（新舊值快照，供編輯頁確認）。
+    //    以 toFieldValueString 的正規化字面比對（Date→ISO、陣列/物件→JSON、純量→String），
+    //    而非參考比對：多值欄（次要室長／使用部門）新舊為不同陣列實例，參考比對會令內容相同
+    //    之重送恆判為變更，於 DOCUMENT_CHANGE_LOG 落幽靈記錄並可能經 Route A 誤自動解除提示。
+    //    序異即內容異（normalizeIdList 保留順序，序具語意），JSON 字面天然涵蓋此語意。
     const changes: DocumentFieldChange[] = [];
     const beforeRec = current as unknown as Record<string, unknown>;
     const afterRec = updated as unknown as Record<string, unknown>;
     for (const k of Object.keys(clean)) {
-      if (beforeRec[k] !== afterRec[k]) {
+      if (toFieldValueString(beforeRec[k]) !== toFieldValueString(afterRec[k])) {
         changes.push({ field: k, before: beforeRec[k], after: afterRec[k] });
       }
     }

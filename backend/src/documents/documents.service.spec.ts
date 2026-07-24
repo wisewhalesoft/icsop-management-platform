@@ -486,6 +486,31 @@ describe('DocumentsService.update — F014 多值編輯側持久化（B）', () 
     expect(store.updated[0].patch.usingDeptIds).toEqual([]);
     expect(res.document.usingDeptIds).toEqual([]);
   });
+
+  it('TS-B-011 重送內容相同之多值欄位 → 不記為變更（避免 F037 幽靈日誌／F006 誤自動解除）', async () => {
+    // 多值欄自 create-strip 移除後真正流經 update()，其新舊值為不同陣列實例；
+    // 原以參考比對（!==）判定變更，內容相同之重送會恆判為變更 → 於 DOCUMENT_CHANGE_LOG
+    // 落一筆 old==new 幽靈記錄，並可能透過 Route A 誤把對應組織異動提示自動解除。
+    const d = store.seedDoc({ secondaryChiefIds: ['20053'], usingDeptIds: ['A2000'] });
+    const res = await svc.update('ICSOPAdmin', d.id, {
+      secondaryChiefIds: ['20053'],
+      usingDeptIds: ['A2000'],
+    });
+    expect(res.changes.find((c) => c.field === 'secondaryChiefIds')).toBeUndefined();
+    expect(res.changes.find((c) => c.field === 'usingDeptIds')).toBeUndefined();
+    expect(pub.events[0].changes).toEqual([]);
+  });
+
+  it('TS-B-012 重送順序不同但集合相同之多值欄位 → 視為變更（順序具語意，保留順序）', async () => {
+    // normalizeIdList 保留順序（次要室長主/次序、使用部門排列具語意），故序異即內容異。
+    const d = store.seedDoc({ secondaryChiefIds: ['20053', '20541'] });
+    const res = await svc.update('ICSOPAdmin', d.id, { secondaryChiefIds: ['20541', '20053'] });
+    expect(res.changes).toContainEqual({
+      field: 'secondaryChiefIds',
+      before: ['20053', '20541'],
+      after: ['20541', '20053'],
+    });
+  });
 });
 
 describe('DocumentsService.getDocument（F011 單筆讀取，供編輯對照/public/rag）', () => {
