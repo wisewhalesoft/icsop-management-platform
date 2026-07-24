@@ -36,11 +36,13 @@
 
 | 狀態 | 數量 | 功能 |
 |---|---|---|
-| ✅ 已完成-已驗證 | **18** | F002 F003 F004 F006 F007 F008 F009 F011 F013 F014 F015 F016 F017 F018 F019 F023 F025 F036 |
-| 🟡 部分 | **16** | F001 F005 F010 F012 F020 F021 F022 F024 F026 F027 F028 F029 F030 F031 F037 F038 |
+| ✅ 已完成-已驗證 | **23** | F002 F003 F004 F006 F007 F008 F009 F010 F011 F012 F013 F014 F015 F016 F017 F018 F019 F023 F024 F025 F026 F036 F037 |
+| 🟡 部分 | **11** | F001 F005 F020 F021 F022 F027 F028 F029 F030 F031 F038 |
 | 🔵 進行中 | **0** | — |
 | ⬜ 未開始 | **4** | F032 F033 F034 F035 |
 | | **38** | |
+
+> **2026-07-24 獨立 🟡 收尾三線平行 worktree（doc-changelog／audit-query／field-matrix）併回 main、int-verified**（test-spec 先＋審核閘門定案 3 決策）：① doc-changelog — F010 建立事件（`changeType='CREATE'`＋actor 貫穿）、F012 切換原因 reason（migration 落 SOP）折入 `update()` 共用 `applyStatusTransition`（切回有效一律重驗 F013、與 setStatus 不分歧）、F037 交易邊界＝best-effort（**人類定案**）、AC36 reason 顯示（補 proto 23 缺口）、targetName 填充；② audit-query — F024 查詢下推 SQL（`queryPage` 取代全表載入 JS 過濾之潛在 OOM）＋`IX_AUDIT_LOG_targetType_occurredAt`（落 SOP）＋前端分頁/pill/chevron 修；③ field-matrix — F026 AC5-9 覆蓋＋**後台下載 RAW 不燒錄（人類定案 OQ-FM-01）**、修正 AC6 誤述。**審核閘門 3 決策**：F037 邊界=best-effort、F012 折入 update()、後台下載維持 RAW。**合流**：Icon 守門測試持續把關、targetName 跨線耦合（doc-changelog 寫、audit-query 讀 int 驗）如期解。**→ F010 F012 F024 F026 F037 🟡→✅（5 升）**。backend **1131 單元＋68 int（12 suites vs SOP）**、frontend **390**、tsc 淨、20 migration 落 SOP。**tally ✅23 🟡11 🔵0 ⬜4**。非 RAG 🟡 僅剩 F001（登出即撤/節流，需 infra）、F005（資料不一致告警）、F020（PDF<3s 計時）、F021/F022（RWD/彈窗＝瀏覽器人工）、F038（快照架構 OQ-E07-05）。
 
 > **2026-07-24 縫隙收斂三線平行 worktree（doc-seams／public-seams／f006-alerts）併回 main**（皆嚴格遵 prototype，test-spec 先）：**doc-seams** 附件列表端點＋編輯側多值持久化（delete-then-insert replace-set 單一交易）＋清單「檔案/連結」兩欄後端富化（批次注入不 N+1）＋harness FK 清理補洞；**public-seams** F019 真讀 `DOC_USING_DEPT`＋**置頂語義定案改子樹祖先鏈**（`isWithinSubtree` 共用；推翻 OQ-F019-03 精確比對，改寫既有綠測）＋F018 自訂表單名（`USAGE_FORM_NAME_TOO_LONG`）＋prototype 03 標籤修復；**f006-alerts** 最後一個非 RAG 功能——`ORG_CHANGE_ALERT`＋三訊號提示產生＋§7.3 掛已關閉部門＋dedup＋Route A/B＋KPI＋prototype 09 三頁籤（2 migration 落 SOP、DDL 對真庫驗證）。**合流集中修正**：F026 兩線各推進一半（編輯路徑 enforcement＋子樹判定）合併、documents.module composite publisher fan-out 手動調和、Icon 守門測試揪 10 枚靜默失效圖示、**編輯 diff 改正規化字面比對杜絕多值幽靈變更**（F037 幽靈日誌／F006 誤自動解除）。**→ F006 ⬜→✅；F011 F014 F016 F017 F018 F019 🟡→✅（6 升）；F020/F026 縮小缺口留 🟡**。backend **1080 單元＋47 int（11 suites vs SOP＋真 Blob）**、frontend **374**、tsc 全淨。19 migration 落 SOP。**僅剩 ⬜4：F032-F035（Phase 3 RAG Q&A，待 pgvector/embedding/LLM）**——非 RAG 功能全數 ✅ 或 🟡（無 ⬜）。
 >
@@ -86,9 +88,9 @@
 ### E04 ICSOP 文件
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F010 | 建立 ICSOP 文件 | P0 | 1 | 🟡 部分 | STEP1–4 前端完成（proto 14）＋int-verified 建立；STEP3 制定三級/當責室長/使用部門、STEP4 附件與連結皆已入 `CreateDocumentInput`。剩：**建立稽核（Main Flow 7）未做**、`.xls` 原件掛載（F027 面） |
+| F010 | 建立 ICSOP 文件 | P0 | 1 | ✅ 已完成-已驗證 | STEP1–4 前端（proto 14）＋int-verified 建立；STEP3/4 多值/附件/連結入 `CreateDocumentInput`；**建立稽核（Main Flow 7）落地**：`changeType='CREATE'` 逐填寫欄一列（`buildCreateChangeDeltas`，oldValue=null）＋actor 貫穿，於 409/欄位權限閘門後才發，int-verified（`changehistory.itest`）。`.xls` 原件掛載屬 F027 面（RAG） |
 | F011 | 編輯 ICSOP 文件與版本對照 | P0 | 1 | ✅ 已完成-已驗證 | backend `GET`/`PATCH /:id`、編輯排除 nodeId、版本 diff（正規化字面比對，無多值幽靈變更）、覆蓋不留歷史、編輯側唯一性排除自身、`DocumentChangedEvent`；**前端編輯頁（proto 15，逐欄 目前值/新值 diff＋revert）＋編輯側多值持久化**，**int-verified vs SOP** |
-| F012 | 文件狀態切換 | P0 | 1 | 🟡 部分 | 切換＋切回有效重驗編號已測；OQ-E04-02「切換原因」欄未做；變更歷程 F037 事件＋操作者稽核未做 |
+| F012 | 文件狀態切換 | P0 | 1 | ✅ 已完成-已驗證 | 切換＋**切回有效一律重驗編號唯一性**（結果狀態=有效即驗，補原 update() 僅 patch 含 documentNumber 才驗之缺口）；**OQ-E04-02「切換原因」端到端持久化**（reason nvarchar(500)，migration 落 SOP）＋STATUS 變更事件＋操作者快照；狀態經共用 `applyStatusTransition` 折入 `update()`（與 setStatus 不分歧），int-verified |
 | F013 | 文件編號唯一性管理 | P0 | 1 | ✅ 已完成-已驗證 | 建立唯一性經**真 filtered unique index int-verified vs SOP**（dup→409）；編輯側排除自身＋mssql 2601/2627→409 於 F011 路徑 unit-covered |
 | F014 | 制定組織與當責室長設定 | P0 | 1 | ✅ 已完成-已驗證 | create-side＋**edit-side 皆 int-verified vs SOP**：三級下拉（`OrgDirectoryService`）＋當責室長主/次（`NameResolution`＋managerEmpNo 預設）＋使用部門；編輯側 `'key' in clean` 三態（未帶=不動／`[]`=清空／有值=取代）＋store delete-then-insert replace-set（單一交易），`DOC_SECONDARY_CHIEF`/`DOC_USING_DEPT` 真實列替換（`f014.itest`） |
 | F015 | 文件連結點管理 | P1 | 1 | ✅ 已完成-已驗證 | `DOCUMENT_LINK` 全鏈＋批次入 PATCH＋`GET :id/links`＋目標存在性驗證＋**前端連結 UI（chips＋combobox，proto 14/15）**；backend int-verified |
@@ -112,15 +114,15 @@
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
 | F023 | 稽核軌跡記錄 | P0 | 1 | ✅ 已完成-已驗證 | `AuditWriter` 契約（5 targetType，下游 import）＋outbox 補償；**append-only 觸發器強制＋int-verified**（INSTEAD OF UPDATE/DELETE 阻擋，對 owner 亦生效）；**寫入路徑 int-verified**（usage-form DOWNLOAD／lifecycle VIEW 稽核落地）；usage-forms 已接真 AuditWriter；accountId 貫穿 session 修正（int 揪出） |
-| F024 | 文件調閱歷程查詢後台 | P0 | 1 | 🟡 部分 | unit-green：查詢頁（取代 ModulePlaceholder）＋篩選/RBAC/30天預設/匯出/展開。剩：真 AUDIT_LOG 資料（依 F023 整合）、P95 索引效能＝`[integration]` |
-| F037 | 程序書變更歷程（欄位 Diff） | P1 | 1 | 🟡 部分 | `DOCUMENT_CHANGE_LOG` 綁真 publisher 持久化欄位 before/after（F011 編輯／F012 狀態）＋查詢頁（proto 23）＋`CHANGE_LOG_VIEW` 稽核，int-verified。剩：「同一交易」邊界＋建立事件（架構定案） |
+| F024 | 文件調閱歷程查詢後台 | P0 | 1 | ✅ 已完成-已驗證 | 查詢頁＋篩選/RBAC/30天預設/匯出/展開；**查詢下推 SQL**（`AuditStore.queryPage`：targetType IN＋occurredAt 半開區間＋LIKE ESCAPE＋ORDER＋OFFSET/FETCH＋COUNT，取代原全表載入 JS 過濾之潛在 OOM）＋**`IX_AUDIT_LOG_targetType_occurredAt`**（migration 落 SOP）；前端補分頁/pill 上色/chevron 修；**12 int 案 vs 真 AUDIT_LOG（含跨年 datetime2、targetName 顯示）**。P95 正式壓測（k6/JMeter 代表量）仍為後續 NFR 驗收 |
+| F037 | 程序書變更歷程（欄位 Diff） | P1 | 1 | ✅ 已完成-已驗證 | `DOCUMENT_CHANGE_LOG` 綁真 publisher 持久化 before/after（F011 編輯／F012 狀態／**F010 建立 CREATE 事件**）＋查詢頁（proto 23，含「切換原因」顯示）＋`CHANGE_LOG_VIEW` 稽核＋`targetName` 填充；**「同一交易」邊界＝best-effort（人類定案，非缺口）**、建立事件已實作，int-verified |
 | F038 | 循環樹狀圖變更歷程 | P1 | 1 | 🟡 部分 | `LIFECYCLE_CHANGE_LOG`＋DAG 結構事件捕捉（F008/F009 發 NODE/EDGE/MOUNT 事件）＋查詢頁＋預覽（複用 F036）＋稽核。剩：**完整新舊快照重建＋雙頁 PDF 燒錄**（架構定案 OQ-E07-05） |
 
 ### E08 權限矩陣
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
 | F025 | 角色×功能權限矩陣 | P0 | 1 | ✅ 已完成-已驗證 | 機制完整並掛於實端點；數列對應功能尚無實體端點（使用表單/文件索引/調閱歷程/變更歷程/系統參數），該列 enforcement 未於實路由行使 |
-| F026 | 角色×欄位權限矩陣 | P0 | 1 | 🟡 部分 | 欄位寫入拒絕**建立＋編輯兩路徑皆行使**（含多值欄 `CHIEF_SECONDARY`/`USING_DEPTS` 編輯路徑 all-or-nothing 回歸）；**使用部門子樹前綴判定已落地**（共用純函式 `isWithinSubtree`，與 F019 共用）。剩：AC5-9 之**附件/浮水印欄位**權限判定未實作 |
+| F026 | 角色×欄位權限矩陣 | P0 | 1 | ✅ 已完成-已驗證 | 欄位寫入拒絕**建立＋編輯兩路徑**（含多值欄 all-or-nothing）；**使用部門子樹前綴判定**（共用 `isWithinSubtree`，與 F019 共用，AC8/9 覆蓋）；**附件/使用表單下載權限**（AC6 角色×動作覆蓋：主管/部門窗口可下載、取代被拒 `PERMISSION_DENIED`）。**AC5-6 浮水印釐清（人類定案 OQ-FM-01）**：後台下載＝原始檔（管理存取 SAS，不燒錄），燒錄/稽核僅前台檢視器路徑（F020）；.xlsx 無 PDF 浮水印可燒 |
 
 ### E09 RAG／AI 問答
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
@@ -158,4 +160,4 @@
 
 ---
 
-_稽核方法：對 38 個 `features/Fxxx-*.md` 的 Acceptance Criteria 逐條 ↔ `backend/src`、`frontend/src`、測試檔交叉核對，並以「端到端可達」嚴格判定。基準 main：初審 `e6045d9` → Wave 1/2 → 整合①②③ → 地基三線 → 前端三線 → 縫隙收斂三線。測試：**backend 1080 單元＋47 整合（`npm run test:int`，11 suites vs SOP＋真 Blob）／frontend 374**，tsc 全淨。19 migration 落 SOP。狀態：**✅18 🟡16 🔵0 ⬜4**（⬜ 僅剩 Phase 3 RAG F032-F035）。（2026-07-24）_
+_稽核方法：對 38 個 `features/Fxxx-*.md` 的 Acceptance Criteria 逐條 ↔ `backend/src`、`frontend/src`、測試檔交叉核對，並以「端到端可達」嚴格判定。基準 main：初審 `e6045d9` → Wave 1/2 → 整合①②③ → 地基三線 → 前端三線 → 縫隙收斂三線。測試：**backend 1131 單元＋68 整合（`npm run test:int`，12 suites vs SOP＋真 Blob）／frontend 390**，tsc 全淨。20 migration 落 SOP。狀態：**✅23 🟡11 🔵0 ⬜4**（⬜ 僅剩 Phase 3 RAG F032-F035；非 RAG 功能全 ✅ 或 🟡）。（2026-07-24）_
