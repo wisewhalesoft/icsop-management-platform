@@ -16,6 +16,13 @@ interface SingleProps {
   onQueryChange?: (query: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  /**
+   * 版面密度（G-DOC-005）：
+   *  `form`（預設）＝表單欄位樣式（prototype 14：label text-sm/slate-700、icon w-4、input pl-9）。
+   *  `filter`＝清單篩選格緊湊樣式（prototype 13：label text-[11px]/slate-500、icon w-3.5、input pl-8）。
+   * 預設 form 使既有表單呼叫端零回歸；清單篩選（DocumentListPage）由頁面端改傳 filter。
+   */
+  density?: 'form' | 'filter';
 }
 
 /**
@@ -32,6 +39,7 @@ export function SearchCombobox({
   onQueryChange,
   placeholder,
   disabled,
+  density = 'form',
 }: SingleProps): JSX.Element {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -43,13 +51,22 @@ export function SearchCombobox({
     return q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
   }, [dirty, query, options]);
 
+  const filter = density === 'filter';
+  const labelCls = filter
+    ? 'block text-[11px] font-medium text-slate-500 mb-1'
+    : 'block text-sm font-medium text-slate-700 mb-1';
+  const iconCls = filter
+    ? 'w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2'
+    : 'w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2';
+  const inputPad = filter ? 'pl-8 pr-3' : 'pl-9 pr-3';
+
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-slate-700 mb-1">
+      <label htmlFor={id} className={labelCls}>
         {label}
       </label>
       <div className="relative">
-        <Icon name="search" className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <Icon name="search" className={iconCls} />
         <input
           id={id}
           role="combobox"
@@ -71,7 +88,7 @@ export function SearchCombobox({
             setDirty(false);
             setQuery('');
           }}
-          className="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 disabled:bg-slate-50 disabled:text-slate-400"
+          className={`w-full ${inputPad} py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 disabled:bg-slate-50 disabled:text-slate-400`}
         />
         {open && !disabled && (
           <div

@@ -15,6 +15,7 @@ import {
   Clock, FileDiff, FileStack, FileWarning, KeyRound, Layers, Loader,
   MinusCircle, ScanText, Spline,
   UserPlus, UserX, Check,
+  AlertOctagon, BadgeCheck, SquarePen,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -121,6 +122,10 @@ const REGISTRY: Record<string, LucideIcon> = {
   'user-plus': UserPlus,
   'user-x': UserX,
   check: Check,
+  // Wave-1（prototype-alignment）：頁面 Wave-2 落地前先行註冊，避免靜默渲染為 null。
+  'alert-octagon': AlertOctagon,
+  'badge-check': BadgeCheck,
+  'square-pen': SquarePen,
 };
 
 export interface IconProps {

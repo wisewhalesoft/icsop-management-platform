@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './auth/useAuth';
 import { visibleMenu } from './domain/menu';
 import { Icon } from './components/Icon';
 import { AppShell } from './components/AppShell';
+import { ToastProvider } from './components/useToast';
 import { LoginPage } from './pages/LoginPage';
 import { RoleLanding } from './pages/RoleLanding';
 import { DashboardHome } from './pages/DashboardHome';
@@ -117,11 +118,14 @@ export function AppRoutes(): JSX.Element {
 export function App(): JSX.Element {
   return (
     <AuthProvider>
-      <BrowserRouter
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-      >
-        <AppRoutes />
-      </BrowserRouter>
+      {/* 全域 Toast（設計系統 §6.5）掛於 app root，供所有頁面 useToast() 取用。 */}
+      <ToastProvider>
+        <BrowserRouter
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <AppRoutes />
+        </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 }
