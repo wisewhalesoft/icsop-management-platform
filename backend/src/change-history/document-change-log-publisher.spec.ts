@@ -89,6 +89,52 @@ describe('buildDocumentChangeLogRows (F037 pure diff → 落地列)', () => {
     });
     expect(rows[0]).toMatchObject({ actorId: null, actorName: null, actorEmployeeNo: null, documentNumber: null });
   });
+
+  it('TS-DCL-B-001 STATUS 事件含 reason → 產生列之 reason 正確落地', () => {
+    const rows = buildDocumentChangeLogRows({
+      documentId: 'doc-2',
+      changeType: 'STATUS',
+      documentNumber: 'N-9',
+      changes: [{ field: 'status', oldValue: 'active', newValue: 'void' }],
+      reason: '依法規更新',
+      occurredAt: at,
+    });
+    expect(rows[0].reason).toBe('依法規更新');
+  });
+
+  it('TS-DCL-B-002 事件未帶 reason（undefined）→ 產生列之 reason 為 null', () => {
+    const rows = buildDocumentChangeLogRows(contentEvent());
+    expect(rows[0].reason).toBeNull();
+    expect(rows[1].reason).toBeNull();
+  });
+
+  it('TS-DCL-B-003 STATUS 事件 reason 顯式為 null → 落地為 null（非字串 "null"）', () => {
+    const rows = buildDocumentChangeLogRows({
+      documentId: 'd',
+      changeType: 'STATUS',
+      changes: [{ field: 'status', oldValue: 'active', newValue: 'inactive' }],
+      reason: null,
+      occurredAt: at,
+    });
+    expect(rows[0].reason).toBeNull();
+  });
+
+  it('CREATE 事件通過（changeType=CREATE 逐欄位列、reason 恆 null）', () => {
+    const rows = buildDocumentChangeLogRows({
+      documentId: 'd',
+      changeType: 'CREATE',
+      documentNumber: 'N-1',
+      changes: [
+        { field: 'documentName', oldValue: null, newValue: '書名' },
+        { field: 'status', oldValue: null, newValue: 'active' },
+      ],
+      occurredAt: at,
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.changeType === 'CREATE')).toBe(true);
+    expect(rows.every((r) => r.oldValue === null)).toBe(true);
+    expect(rows.every((r) => r.reason === null)).toBe(true);
+  });
 });
 
 describe('DocumentChangeLogPublisher (真實綁定，決策 B)', () => {

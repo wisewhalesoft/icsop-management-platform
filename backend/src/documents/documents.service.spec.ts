@@ -16,6 +16,17 @@ import {
   DocumentChangePublisher,
   DocumentChangedEvent,
 } from './document-change-event';
+import { CompositeDocumentChangePublisher } from './composite-document-change-publisher';
+import { DocumentChangeLogPublisher } from '../change-history/document-change-log-publisher';
+import {
+  DocumentChangeLogRow,
+  DocumentChangeLogStore,
+} from '../change-history/document-change-log.store';
+import { OrgChangeAlertAutoResolveSubscriber } from '../org-change-alert/document-change-subscriber';
+import {
+  OrgChangeAlertService,
+  AutoResolveInput,
+} from '../org-change-alert/org-change-alert.service';
 import { NameResolutionService } from '../org-directory/name-resolution.service';
 import { DocumentLink, DocumentLinkStore } from './document-link.store';
 import {
@@ -949,8 +960,9 @@ describe('DocumentsService.setStatus 切換原因＋STATUS 事件（F012）', ()
       { field: 'status', oldValue: 'active', newValue: 'inactive' },
     ]);
     expect(pub.events[0].occurredAt).toBeInstanceOf(Date);
-    // reason 仍不承載（無持久化 sink，OQ-E04-02）。
-    expect(pub.events[0]).not.toHaveProperty('reason');
+    // 決策取代（doc-changelog §2.4）：reason 已有持久化 sink（DOCUMENT_CHANGE_LOG.reason），
+    // STATUS 事件承載正規化後之切換原因（取代舊 not.toHaveProperty('reason') 斷言）。
+    expect(pub.events[0].reason).toBe('依法規更新');
   });
 
   it('切換失敗（不存在）時不發出事件', async () => {
@@ -1099,4 +1111,296 @@ describe('DB 唯一鍵違反映射（F013 併發第二保險）', () => {
     );
     expect(store.created).toHaveLength(0);
   });
+});
+
+/**
+ * A：F010 建立稽核事件（changeType='CREATE'）。建立成功後發出逐欄位 CREATE 事件；
+ * 失敗（重複編號/欄位禁寫）不發事件；操作者快照貫穿。
+ */
+describe('DocumentsService.create 建立稽核事件（A）', () => {
+  let store: FakeStore;
+  let pub: FakePublisher;
+  let svc: DocumentsService;
+  const actor = { accountId: 'acc-1', name: '李慧玲', employeeNo: '20233' };
+  beforeEach(() => {
+    store = new FakeStore();
+    pub = new FakePublisher();
+    svc = new DocumentsService(store, pub);
+  });
+
+  it('TS-DCL-A-006 建立成功 → 發出 changeType=CREATE 事件，documentId 為新建 UUID', async () => {
+    const doc = await svc.create('ICSOPAdmin', { ...CORE }, actor);
+    expect(pub.events).toHaveLength(1);
+    const ev = pub.events[0];
+    expect(ev.documentId).toBe(doc.id);
+    expect(ev.changeType).toBe('CREATE');
+    expect(ev.documentNumber).toBe(doc.documentNumber);
+    expect(ev.actorId).toBe('acc-1');
+    expect(ev.actorName).toBe('李慧玲');
+    expect(ev.actorEmployeeNo).toBe('20233');
+    expect(ev.occurredAt).toBeInstanceOf(Date);
+  });
+
+  it('TS-DCL-A-007 事件 changes 內容與 4 必填一致（逐欄位 new-value，oldValue null）', async () => {
+    await svc.create('ICSOPAdmin', { ...CORE }, actor);
+    const changes = pub.events[0].changes!;
+    expect(changes).toHaveLength(4);
+    expect(changes).toEqual(
+      expect.arrayContaining([
+        { field: 'lifecycleId', oldValue: null, newValue: 'lc1' },
+        { field: 'status', oldValue: null, newValue: 'active' },
+        { field: 'documentNumber', oldValue: null, newValue: CORE.documentNumber },
+        { field: 'documentName', oldValue: null, newValue: '車輛分期進件作業' },
+      ]),
+    );
+  });
+
+  it('TS-DCL-A-008 建立含選填制定組織/室長/使用部門 → 事件涵蓋全部已填欄位', async () => {
+    await svc.create(
+      'ICSOPAdmin',
+      {
+        ...CORE,
+        draftingCompanyId: 'org-co',
+        primaryChiefId: '20053',
+        secondaryChiefIds: ['20541'],
+        usingDeptIds: ['A2000'],
+      },
+      actor,
+    );
+    const changes = pub.events[0].changes!;
+    expect(changes).toHaveLength(8);
+    expect(changes).toContainEqual({
+      field: 'secondaryChiefIds',
+      oldValue: null,
+      newValue: '["20541"]',
+    });
+  });
+
+  it('TS-DCL-A-009 建立失敗（重複編號 409）→ 不發出事件', async () => {
+    store.holders = [{ id: 'x', documentNumber: CORE.documentNumber, status: 'active' }];
+    await expect(svc.create('ICSOPAdmin', { ...CORE }, actor)).rejects.toThrow(
+      'DOCUMENT_NUMBER_DUPLICATE',
+    );
+    expect(pub.events).toHaveLength(0);
+  });
+
+  it('TS-DCL-A-010 建立失敗（FIELD_WRITE_FORBIDDEN）→ 不發出事件', async () => {
+    await expect(
+      svc.create('Supervisor', { ...CORE, draftingCompanyId: 'x' }, actor),
+    ).rejects.toThrow('FIELD_WRITE_FORBIDDEN');
+    expect(pub.events).toHaveLength(0);
+  });
+
+  it('TS-DCL-A-011 未提供 actor → 事件 actor 欄皆 null，不拋錯', async () => {
+    await svc.create('ICSOPAdmin', { ...CORE });
+    expect(pub.events[0].actorId).toBeNull();
+    expect(pub.events[0].actorName).toBeNull();
+    expect(pub.events[0].actorEmployeeNo).toBeNull();
+  });
+
+  it('空陣列多值欄不落噪音列（服務層整合，僅 4 必填時 changes=4）', async () => {
+    await svc.create('ICSOPAdmin', { ...CORE, secondaryChiefIds: [], usingDeptIds: [] }, actor);
+    expect(pub.events[0].changes).toHaveLength(4);
+  });
+});
+
+/**
+ * B：F012 切換原因持久化。setStatus 收到 reason 後不再丟棄，正規化後承載於 STATUS 事件（reason 欄）。
+ */
+describe('DocumentsService.setStatus reason 持久化（B）', () => {
+  let store: FakeStore;
+  let pub: FakePublisher;
+  let svc: DocumentsService;
+  const actor = { accountId: 'acc-1', name: '李慧玲', employeeNo: '20233' };
+  beforeEach(() => {
+    store = new FakeStore();
+    pub = new FakePublisher();
+    svc = new DocumentsService(store, pub);
+  });
+
+  it('TS-DCL-B-004 切換並填原因 → 事件 reason 承載正規化後之值（trim）', async () => {
+    const d = store.seedDoc({ status: 'active', documentNumber: 'N-9' });
+    await svc.setStatus(d.id, 'inactive', '  依法規更新  ', actor);
+    expect(pub.events[0].reason).toBe('依法規更新');
+    expect(pub.events[0].changeType).toBe('STATUS');
+    expect(pub.events[0].changes).toEqual([
+      { field: 'status', oldValue: 'active', newValue: 'inactive' },
+    ]);
+  });
+
+  it('TS-DCL-B-005 未填原因 → 事件 reason 為 undefined（未帶鍵）', async () => {
+    const d = store.seedDoc({ status: 'active', documentNumber: 'N-9' });
+    await svc.setStatus(d.id, 'inactive');
+    expect(pub.events[0].reason).toBeUndefined();
+  });
+
+  it('TS-DCL-B-006 原因為空白字串 → 視同未填（reason undefined）', async () => {
+    const d = store.seedDoc({ status: 'active', documentNumber: 'N-9' });
+    await svc.setStatus(d.id, 'inactive', '   ');
+    expect(pub.events[0].reason).toBeUndefined();
+  });
+
+  it('TS-DCL-B-007 狀態未實際改變且填原因 → changes 空（reason 隨之捨棄、無日誌列）', async () => {
+    const d = store.seedDoc({ status: 'active' });
+    await svc.setStatus(d.id, 'active', '這個原因不會被記錄', actor);
+    expect(pub.events).toHaveLength(1);
+    expect(pub.events[0].changes).toEqual([]);
+  });
+});
+
+/**
+ * Ruling 2（Option B）：狀態切換折入 update()。update() 於「切換後狀態為有效」時重驗編號唯一性（F013），
+ * 並將 reason 貫穿至 STATUS 事件；狀態與其他欄位共用同一次 PATCH。狀態核心與 setStatus 共用（不分歧）。
+ */
+describe('DocumentsService.update 狀態切換折入 + reason（ruling 2）', () => {
+  let store: FakeStore;
+  let pub: FakePublisher;
+  let svc: DocumentsService;
+  const actor = { accountId: 'acc-1', name: '李慧玲', employeeNo: '20233' };
+  const statusEvent = (): DocumentChangedEvent | undefined =>
+    pub.events.find((e) => e.changeType === 'STATUS');
+  beforeEach(() => {
+    store = new FakeStore();
+    pub = new FakePublisher();
+    svc = new DocumentsService(store, pub);
+  });
+
+  it('TS-DCL-B-101 update 含 status 變更 → 發出 STATUS 事件（承載 status old/new）', async () => {
+    const d = store.seedDoc({ status: 'active', documentNumber: 'N-9' });
+    await svc.update('ICSOPAdmin', d.id, { status: 'inactive' }, actor);
+    const ev = statusEvent();
+    expect(ev).toBeDefined();
+    expect(ev!.changes).toEqual([{ field: 'status', oldValue: 'active', newValue: 'inactive' }]);
+    expect(ev!.actorId).toBe('acc-1');
+    expect(store.docs.find((x) => x.id === d.id)!.status).toBe('inactive');
+  });
+
+  it('TS-DCL-B-102 update 含 status 變更 + reason → STATUS 事件承載 reason（正規化）', async () => {
+    const d = store.seedDoc({ status: 'active', documentNumber: 'N-9' });
+    await svc.update('ICSOPAdmin', d.id, { status: 'void', reason: '  由新版取代  ' }, actor);
+    expect(statusEvent()!.reason).toBe('由新版取代');
+  });
+
+  it('TS-DCL-B-103 切回「有效」（未同時改編號）→ 觸發 F013 重驗；他筆有效占用 → 409', async () => {
+    const d = store.seedDoc({ status: 'inactive', documentNumber: 'N-DUP' });
+    store.holders = [
+      { id: 'other', documentNumber: 'N-DUP', status: 'active' },
+      { id: d.id, documentNumber: 'N-DUP', status: 'inactive' },
+    ];
+    await expect(
+      svc.update('ICSOPAdmin', d.id, { status: 'active' }, actor),
+    ).rejects.toThrow('DOCUMENT_NUMBER_DUPLICATE');
+    // 重驗失敗 → 不落地、不發 STATUS 事件
+    expect(store.docs.find((x) => x.id === d.id)!.status).toBe('inactive');
+  });
+
+  it('TS-DCL-B-104 切回「有效」且編號未被占用 → 成功', async () => {
+    const d = store.seedDoc({ status: 'inactive', documentNumber: 'N-FREE' });
+    store.holders = [{ id: d.id, documentNumber: 'N-FREE', status: 'inactive' }];
+    await svc.update('ICSOPAdmin', d.id, { status: 'active' }, actor);
+    expect(store.docs.find((x) => x.id === d.id)!.status).toBe('active');
+    expect(statusEvent()).toBeDefined();
+  });
+
+  it('TS-DCL-B-105 同時改書名與狀態 → CONTENT 事件（不含 status）＋ STATUS 事件（含 status）', async () => {
+    const d = store.seedDoc({ status: 'active', documentName: '舊名', documentNumber: 'N-9' });
+    await svc.update('ICSOPAdmin', d.id, { documentName: '新名', status: 'inactive' }, actor);
+    const content = pub.events.find((e) => e.changeType === 'CONTENT');
+    const status = statusEvent();
+    expect(content).toBeDefined();
+    expect(content!.changes).toEqual([{ field: 'documentName', oldValue: '舊名', newValue: '新名' }]);
+    expect(content!.changes!.some((c) => c.field === 'status')).toBe(false);
+    expect(status!.changes).toEqual([{ field: 'status', oldValue: 'active', newValue: 'inactive' }]);
+    // 版本對照（回傳 changes）仍涵蓋 status（供編輯頁並列呈現）
+    // （不強制順序；status 與 documentName 皆應在 res.changes 內）
+  });
+
+  it('TS-DCL-B-106 reason 非文件欄位 → 不落入 store.update 之 patch（僅供 STATUS 事件）', async () => {
+    const d = store.seedDoc({ status: 'active', documentNumber: 'N-9' });
+    await svc.update('ICSOPAdmin', d.id, { status: 'inactive', reason: '內容已過時' }, actor);
+    expect(store.updated[0].patch).not.toHaveProperty('reason');
+  });
+
+  it('TS-DCL-B-107 版本對照 res.changes 仍含 status（編輯頁並列用）', async () => {
+    const d = store.seedDoc({ status: 'active', documentNumber: 'N-9' });
+    const res = await svc.update('ICSOPAdmin', d.id, { status: 'inactive' }, actor);
+    expect(res.changes).toContainEqual({ field: 'status', before: 'active', after: 'inactive' });
+  });
+});
+
+/**
+ * 變更事件 fan-out 安全性（A-012 / C-001）：CREATE/STATUS 事件經 CompositeDocumentChangePublisher 廣播，
+ * 任一訂閱者失敗不影響主流程；CREATE 事件抵達 F006 自動解除訂閱者時只能指向剛建立之文件（無既存提示）→ 安全 no-op。
+ */
+describe('文件變更事件 fan-out 安全性（A-012 / C-001）', () => {
+  class FakeLogStore implements DocumentChangeLogStore {
+    rows: DocumentChangeLogRow[] = [];
+    async append(rows: DocumentChangeLogRow[]): Promise<void> {
+      this.rows.push(...rows);
+    }
+    async listAll(): Promise<DocumentChangeLogRow[]> {
+      return this.rows;
+    }
+    async listByDocument(documentId: string): Promise<DocumentChangeLogRow[]> {
+      return this.rows.filter((r) => r.documentId === documentId);
+    }
+  }
+
+  it('TS-DCL-A-012 建立事件抵達 OrgChangeAlertAutoResolveSubscriber → 安全 no-op（只指向新文件、不拋錯，日誌正常落地）', async () => {
+    const store = new FakeStore();
+    const logStore = new FakeLogStore();
+    const alertCalls: AutoResolveInput[] = [];
+    const fakeAlertSvc = {
+      // 剛建立之文件不可能有指向它的既存 ORG_CHANGE_ALERT → 服務層 findPendingByDocument 必為空 → 不解除任何列。
+      autoResolveFromDocumentChange: async (input: AutoResolveInput): Promise<void> => {
+        alertCalls.push(input);
+      },
+    } as unknown as OrgChangeAlertService;
+    const composite = new CompositeDocumentChangePublisher([
+      new DocumentChangeLogPublisher(logStore),
+      new OrgChangeAlertAutoResolveSubscriber(fakeAlertSvc),
+    ]);
+    const svc = new DocumentsService(store, composite);
+
+    const doc = await svc.create('ICSOPAdmin', { ...CORE, draftingCompanyId: 'org-co' });
+
+    // 日誌正常落地（含 draftingCompanyId 建立列）
+    expect(logStore.rows.length).toBeGreaterThanOrEqual(5);
+    expect(logStore.rows.every((r) => r.changeType === 'CREATE')).toBe(true);
+    // fan-out 抵達自動解除訂閱者，但只能指向剛建立之文件（無既存提示）→ 安全
+    if (alertCalls.length > 0) {
+      expect(alertCalls.every((c) => c.documentId === doc.id)).toBe(true);
+    }
+  });
+
+  it('TS-DCL-C-001 DocumentChangeLog 訂閱者拋錯 → 不影響 create() 回傳，其他訂閱者仍被呼叫', async () => {
+    const store = new FakeStore();
+    const throwingLog: DocumentChangePublisher = {
+      publish: async () => {
+        throw new Error('LOG_IO');
+      },
+    };
+    const alertEvents: DocumentChangedEvent[] = [];
+    const recorder: DocumentChangePublisher = {
+      publish: async (e) => {
+        alertEvents.push(e);
+      },
+    };
+    const composite = new CompositeDocumentChangePublisher([throwingLog, recorder]);
+    const svc = new DocumentsService(store, composite);
+
+    const doc = await svc.create('ICSOPAdmin', { ...CORE }, actorC());
+    expect(doc.id).toMatch(/^doc-/);
+    expect(alertEvents).toHaveLength(1);
+    expect(alertEvents[0].changeType).toBe('CREATE');
+
+    // setStatus 之 STATUS 事件亦受相同容錯保護
+    alertEvents.length = 0;
+    await expect(svc.setStatus(doc.id, 'inactive', '原因', actorC())).resolves.toBeUndefined();
+    expect(alertEvents.some((e) => e.changeType === 'STATUS')).toBe(true);
+  });
+
+  function actorC() {
+    return { accountId: 'acc-1', name: '李慧玲', employeeNo: '20233' };
+  }
 });

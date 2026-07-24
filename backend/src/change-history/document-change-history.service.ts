@@ -69,6 +69,9 @@ export class DocumentChangeHistoryService {
         roleCode: actor.roleCode ?? null,
         targetId: documentId,
         targetNumber: latest?.documentNumber ?? null,
+        // OQ-AQ-04：填入 targetName（F024「對象名稱」欄，變更-kind 稽核列先前恆顯示「—」）。
+        // 變更日誌列僅有文件編號快照（無 documentName），故以編號作為描述性文字（比照 F036 lc.name 之 number=name 慣例）。
+        targetName: latest?.documentNumber ?? null,
         occurredAt: this.clock(),
       });
     }

@@ -30,6 +30,7 @@ export class TypeOrmDocumentChangeLogStore implements DocumentChangeLogStore {
       actorId: e.actorId,
       actorName: e.actorName,
       actorEmployeeNo: e.actorEmployeeNo,
+      reason: e.reason,
       occurredAt: e.occurredAt,
     };
   }

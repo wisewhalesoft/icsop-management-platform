@@ -120,4 +120,154 @@ describe('[int] change-history F037/F038 vs SOP', () => {
     expect(q.status).toBe(200);
     expect(q.body.items.some((i: { changeType: string }) => i.changeType === 'NODE_ADDED')).toBe(true);
   });
+
+  // ── doc-changelog（A：F010 建立事件 ｜ B：F012 切換原因）真 SOP DB 落地 ──
+
+  const createDoc = async (
+    documentNumber: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<string> => {
+    const c = await ctx
+      .http()
+      .post('/admin/documents')
+      .set('Cookie', ctx.adminCookie)
+      .send({ lifecycleId, status: 'active', documentNumber, documentName: 'ZZINT doc', ...extra });
+    expect([200, 201]).toContain(c.status);
+    return c.body.id as string;
+  };
+
+  it('TS-DCL-E-001 建立文件（4 必填＋部分選填）→ DOCUMENT_CHANGE_LOG 落數列 CREATE（oldValue 皆 NULL、含操作者）', async () => {
+    const n = `${MARK.doc}${Date.now()}-E1`;
+    const id = await createDoc(n, {
+      documentName: 'ZZINT 建立稽核',
+      contentSummary: '測試摘要',
+      edition: "26'01",
+    });
+    const rows = await AppDataSource.query(
+      `SELECT [field],[oldValue],[newValue],[changeType],[actorId]
+         FROM [DOCUMENT_CHANGE_LOG] WHERE [documentId] = @0 AND [changeType] = 'CREATE'`,
+      [id],
+    );
+    // 至少 6 列（lifecycleId/status/documentNumber/documentName ＋ contentSummary ＋ edition）
+    expect(rows.length).toBeGreaterThanOrEqual(6);
+    expect(rows.every((r: { oldValue: string | null }) => r.oldValue === null)).toBe(true);
+    const nameRow = rows.find((r: { field: string }) => r.field === 'documentName');
+    expect(nameRow.newValue).toBe('ZZINT 建立稽核');
+    expect(rows.every((r: { actorId: string | null }) => !!r.actorId)).toBe(true);
+  });
+
+  it('TS-DCL-E-002 建立僅 4 必填（無任何選填）→ 恰 4 列，無空值噪音列', async () => {
+    const n = `${MARK.doc}${Date.now()}-E2`;
+    const id = await createDoc(n, { documentName: 'ZZINT 僅必填' });
+    const rows = await AppDataSource.query(
+      `SELECT [field] FROM [DOCUMENT_CHANGE_LOG] WHERE [documentId] = @0 AND [changeType] = 'CREATE'`,
+      [id],
+    );
+    expect(rows.length).toBe(4);
+    const fields = rows.map((r: { field: string }) => r.field).sort();
+    expect(fields).toEqual(['documentName', 'documentNumber', 'lifecycleId', 'status'].sort());
+  });
+
+  it('TS-DCL-E-003 建立事件可經 GET /admin/change-history/documents?doc= 查得', async () => {
+    const n = `${MARK.doc}${Date.now()}-E3`;
+    await createDoc(n, { documentName: 'ZZINT 建立查詢' });
+    const q = await ctx
+      .http()
+      .get(`/admin/change-history/documents?doc=${encodeURIComponent(n)}`)
+      .set('Cookie', ctx.adminCookie);
+    expect(q.status).toBe(200);
+    expect(
+      q.body.items.some(
+        (i: { changeType: string; field: string }) =>
+          i.changeType === 'CREATE' && i.field === 'documentName',
+      ),
+    ).toBe(true);
+  });
+
+  it('TS-DCL-E-004 狀態切換（專用端點，帶 reason）→ reason 真實落地於 DOCUMENT_CHANGE_LOG', async () => {
+    const n = `${MARK.doc}${Date.now()}-E4`;
+    const id = await createDoc(n, { documentName: 'ZZINT 狀態原因' });
+    const p = await ctx
+      .http()
+      .patch(`/admin/documents/${id}/status`)
+      .set('Cookie', ctx.adminCookie)
+      .send({ status: 'inactive', reason: '內容已過時，改用新版' });
+    expect([200, 204]).toContain(p.status);
+    const rows = await AppDataSource.query(
+      `SELECT [oldValue],[newValue],[reason],[changeType] FROM [DOCUMENT_CHANGE_LOG]
+         WHERE [documentId] = @0 AND [field] = 'status' AND [changeType] = 'STATUS'
+         ORDER BY [occurredAt] DESC`,
+      [id],
+    );
+    expect(rows[0].oldValue).toBe('active');
+    expect(rows[0].newValue).toBe('inactive');
+    expect(rows[0].reason).toBe('內容已過時，改用新版');
+  });
+
+  it('TS-DCL-E-004b 狀態切換（一般 PATCH＝ruling 2 前端路徑，帶 reason）→ reason 落地、changeType=STATUS', async () => {
+    const n = `${MARK.doc}${Date.now()}-E4b`;
+    const id = await createDoc(n, { documentName: 'ZZINT 一般PATCH原因' });
+    // 前端編輯頁實際走一般 PATCH（status 折入），reason 併入同一次 PATCH。
+    const p = await ctx
+      .http()
+      .patch(`/admin/documents/${id}`)
+      .set('Cookie', ctx.adminCookie)
+      .send({ status: 'inactive', reason: '由新版取代' });
+    expect([200, 204]).toContain(p.status);
+    const rows = await AppDataSource.query(
+      `SELECT [newValue],[reason],[changeType] FROM [DOCUMENT_CHANGE_LOG]
+         WHERE [documentId] = @0 AND [field] = 'status' AND [changeType] = 'STATUS'
+         ORDER BY [occurredAt] DESC`,
+      [id],
+    );
+    expect(rows[0].newValue).toBe('inactive');
+    expect(rows[0].reason).toBe('由新版取代');
+  });
+
+  it('TS-DCL-E-005 狀態切換未帶 reason → DOCUMENT_CHANGE_LOG.reason 為 NULL', async () => {
+    const n = `${MARK.doc}${Date.now()}-E5`;
+    const id = await createDoc(n, { documentName: 'ZZINT 無原因' });
+    const p = await ctx
+      .http()
+      .patch(`/admin/documents/${id}/status`)
+      .set('Cookie', ctx.adminCookie)
+      .send({ status: 'void' });
+    expect([200, 204]).toContain(p.status);
+    const rows = await AppDataSource.query(
+      `SELECT [reason] FROM [DOCUMENT_CHANGE_LOG]
+         WHERE [documentId] = @0 AND [field] = 'status' AND [changeType] = 'STATUS'
+         ORDER BY [occurredAt] DESC`,
+      [id],
+    );
+    expect(rows[0].reason).toBeNull();
+  });
+
+  it('TS-DCL-E-006 展開檢視（GET :documentId）回應含 reason 欄位', async () => {
+    const n = `${MARK.doc}${Date.now()}-E6`;
+    const id = await createDoc(n, { documentName: 'ZZINT 展開原因' });
+    await ctx
+      .http()
+      .patch(`/admin/documents/${id}/status`)
+      .set('Cookie', ctx.adminCookie)
+      .send({ status: 'inactive', reason: '依法規更新' });
+    const v = await ctx
+      .http()
+      .get(`/admin/change-history/documents/${id}`)
+      .set('Cookie', ctx.adminCookie);
+    expect(v.status).toBe(200);
+    const statusRow = v.body.items.find(
+      (i: { field: string; changeType: string }) => i.field === 'status' && i.changeType === 'STATUS',
+    );
+    expect(statusRow.reason).toBe('依法規更新');
+  });
+
+  it('TS-DCL-E-007 建立含制定公司 → 不誤生成/解除任何 ORG_CHANGE_ALERT（fan-out 安全性）', async () => {
+    const n = `${MARK.doc}${Date.now()}-E7`;
+    const id = await createDoc(n, { documentName: 'ZZINT 制定公司', draftingCompanyId: '00000' });
+    const rows = await AppDataSource.query(
+      `SELECT COUNT(*) AS n FROM [ORG_CHANGE_ALERT] WHERE [documentId] = @0`,
+      [id],
+    );
+    expect(Number(rows[0].n)).toBe(0);
+  });
 });

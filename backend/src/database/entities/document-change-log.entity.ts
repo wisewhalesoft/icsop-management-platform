@@ -44,6 +44,10 @@ export class DocumentChangeLog {
   @Column({ type: 'varchar', length: 10, nullable: true })
   actorEmployeeNo!: string | null;
 
+  /** F012 切換原因（僅 STATUS 事件承載；其餘 changeType 恆為 null）。nvarchar(500)（設計預設，spec 未定上限）。 */
+  @Column({ type: 'nvarchar', length: 500, nullable: true })
+  reason!: string | null;
+
   @Column({ type: 'datetime2' })
   occurredAt!: Date;
 }

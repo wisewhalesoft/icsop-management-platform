@@ -38,6 +38,7 @@ import {
   DocumentFieldDelta,
   NoopDocumentChangePublisher,
   toFieldValueString,
+  buildCreateChangeDeltas,
 } from './document-change-event';
 
 /** 編輯端一律唯讀之欄位（節點寫入僅經 F009 節點抽屜，F026）。 */
@@ -83,10 +84,15 @@ export class DocumentsService {
     this.publisher = publisher ?? new NoopDocumentChangePublisher();
   }
 
-  /** 建立文件（F010）。payload 為原始酬載；經欄位面清洗與驗證後寫入。 */
+  /**
+   * 建立文件（F010）。payload 為原始酬載；經欄位面清洗與驗證後寫入。
+   * 成功後發出 CREATE 變更事件（逐已填欄位一列，oldValue=null，F010 Main Flow 第 7 步）。
+   * actor（操作者身分快照，選填）由 controller 自 SessionUser 帶入；無 → 事件 actor 欄落 null。
+   */
   async create(
     roleCode: string | undefined,
     payload: Record<string, unknown>,
+    actor?: DocumentActor,
   ): Promise<DocumentView> {
     // 1) F026 欄位面：唯讀欄被寫 → 403；系統/未知欄靜默丟棄。
     const { forbidden, ignored } = classifyFields(roleCode, Object.keys(payload));
@@ -126,14 +132,78 @@ export class DocumentsService {
       usingDeptIds: normalizeIdList(clean.usingDeptIds),
     };
     // F013 併發第二保險：DB filtered unique index 違反 → 映射 409（不洩漏原始 DB 訊息）。
+    let created: DocumentView;
     try {
-      return await this.store.create(input);
+      created = await this.store.create(input);
     } catch (e) {
       if (isUniqueConstraintViolation(e)) {
         throw new ConflictException('DOCUMENT_NUMBER_DUPLICATE');
       }
       throw e;
     }
+
+    // F010 建立稽核事件（CREATE）。刻意置於 409/欄位權限攔截之後——建立失敗不應產生任何變更事件
+    // （比照 update()/setStatus() 之「失敗不發事件」慣例）。逐已填欄位一列（oldValue=null）。
+    // publish 為 fan-out（CompositeDocumentChangePublisher）之附加副作用，已逐訂閱者 try/catch，此處不重複包裹。
+    const deltas = buildCreateChangeDeltas(input as unknown as Record<string, unknown>);
+    await this.publisher.publish({
+      documentId: created.id,
+      changeType: 'CREATE',
+      changedFields: deltas.map((d) => d.field),
+      changes: deltas,
+      documentNumber: created.documentNumber,
+      actorId: actor?.accountId ?? null,
+      actorName: actor?.name ?? null,
+      actorEmployeeNo: actor?.employeeNo ?? null,
+      occurredAt: new Date(),
+    });
+    return created;
+  }
+
+  /**
+   * F012/F013 狀態切換核心（update() 與 setStatus() 共用，杜絕分歧）：
+   *  1. 切回「有效」時重驗編號唯一性（排除自身；比對有效＋作廢，失效釋出）。
+   *  2. 執行 persist（呼叫端提供：setStatus→updateStatus；update→整批 store.update）。
+   *  3. 發 STATUS 變更事件，承載 status 之 old/new ＋ reason（normalizeReason，空白視同未填）＋操作者/編號快照。
+   * 狀態未實際改變（oldStatus===newStatus）→ 空 delta（不落地任何日誌，reason 隨之捨棄）。
+   * ⚠ 重驗於 persist 之前（失敗則不落地、不發事件）；事件於 persist 之後。
+   */
+  private async applyStatusTransition(params: {
+    docId: string;
+    oldStatus: string;
+    /** 重驗與事件快照所用之「結果編號」（setStatus＝現值；update＝patch 新值或現值）。 */
+    resultingNumber: string;
+    newStatus: string;
+    reason?: string;
+    actor?: DocumentActor;
+    persist: () => Promise<void>;
+  }): Promise<void> {
+    const { docId, oldStatus, resultingNumber, newStatus, reason, actor, persist } = params;
+    if (newStatus === 'active') {
+      const holders = await this.store.findNumberHolders(resultingNumber);
+      if (!isNumberAvailable(resultingNumber, holders, docId)) {
+        throw new ConflictException('DOCUMENT_NUMBER_DUPLICATE');
+      }
+    }
+    await persist();
+    const normalizedReason = normalizeReason(reason);
+    const deltas: DocumentFieldDelta[] =
+      oldStatus === newStatus
+        ? []
+        : [{ field: 'status', oldValue: oldStatus, newValue: newStatus }];
+    await this.publisher.publish({
+      documentId: docId,
+      changeType: 'STATUS',
+      changedFields: ['status'],
+      changes: deltas,
+      documentNumber: resultingNumber,
+      actorId: actor?.accountId ?? null,
+      actorName: actor?.name ?? null,
+      actorEmployeeNo: actor?.employeeNo ?? null,
+      // 未填/純空白 → normalizeReason 回 undefined（事件層級不帶值）；publisher 落地時 `?? null` → DB NULL。
+      reason: normalizedReason,
+      occurredAt: new Date(),
+    });
   }
 
   /**
@@ -282,6 +352,11 @@ export class DocumentsService {
       delete clean.links;
     }
 
+    // 1c) F012 切換原因（ruling 2，Option B）：非文件欄位（classifyFields 視為 ignored、不落入 clean），
+    //     自原始 payload 讀取，僅於本次含狀態變更時貫穿至 STATUS 事件（見 applyStatusTransition）。
+    const reason =
+      typeof payload.reason === 'string' ? (payload.reason as string) : undefined;
+
     // 2) F010 必填：合併現值後檢核（partial patch 只影響被觸及之必填欄）。
     const merged = { ...current, ...clean } as Record<string, unknown>;
     if (missingRequired(merged).length > 0) {
@@ -309,14 +384,28 @@ export class DocumentsService {
     }
 
     // 5) 覆寫（不留歷史）；併發 DB 唯一鍵違反 → 映射 409。
+    //    ruling 2（Option B）：patch 含狀態變更時走共用狀態核心——切回「有效」重驗編號唯一性（F013，
+    //    即使未同時改編號），並發 STATUS 事件（承載 reason）。持久化仍為整批 store.update（同一次 PATCH）。
     let updated: DocumentView;
-    try {
-      updated = await this.store.update(id, clean as DocumentPatch);
-    } catch (e) {
-      if (isUniqueConstraintViolation(e)) {
-        throw new ConflictException('DOCUMENT_NUMBER_DUPLICATE');
-      }
-      throw e;
+    if ('status' in clean) {
+      const resultingNumber = (
+        'documentNumber' in clean ? clean.documentNumber : current.documentNumber
+      ) as string;
+      let persisted: DocumentView | undefined;
+      await this.applyStatusTransition({
+        docId: id,
+        oldStatus: current.status,
+        resultingNumber,
+        newStatus: clean.status as string,
+        reason,
+        actor,
+        persist: async () => {
+          persisted = await this.persistUpdate(id, clean as DocumentPatch);
+        },
+      });
+      updated = persisted!;
+    } else {
+      updated = await this.persistUpdate(id, clean as DocumentPatch);
     }
 
     // 5b) F015 連結點差集同步（新增/移除；單向 source=id）。
@@ -340,13 +429,17 @@ export class DocumentsService {
 
     // 7) 發出變更事件（CONTENT）。決策 B：承載欄位層 before/after diff ＋操作者/編號快照，
     //    真實 publisher（DocumentChangeLogPublisher）將其持久化為 DOCUMENT_CHANGE_LOG（F037）。
-    const changedFields = Object.keys(clean);
+    //    ⚠ ruling 2：排除 status——狀態變更已由 applyStatusTransition 發獨立 STATUS 事件，
+    //    此處若再帶 status 會於變更日誌重複記錄。回傳之 changes（版本對照）仍含 status（供編輯頁並列）。
+    const changedFields = Object.keys(clean).filter((k) => k !== 'status');
     if (linkTargetIds !== undefined) changedFields.push('links');
-    const deltas: DocumentFieldDelta[] = changes.map((c) => ({
-      field: c.field,
-      oldValue: toFieldValueString(c.before),
-      newValue: toFieldValueString(c.after),
-    }));
+    const deltas: DocumentFieldDelta[] = changes
+      .filter((c) => c.field !== 'status')
+      .map((c) => ({
+        field: c.field,
+        oldValue: toFieldValueString(c.before),
+        newValue: toFieldValueString(c.after),
+      }));
     await this.publisher.publish({
       documentId: id,
       changeType: 'CONTENT',
@@ -360,6 +453,21 @@ export class DocumentsService {
     });
 
     return { document: updated, changes };
+  }
+
+  /** 覆寫式持久化（不留歷史）＋併發 DB 唯一鍵違反 → 映射 409（不洩漏原始 DB 訊息）。 */
+  private async persistUpdate(
+    id: string,
+    clean: DocumentPatch,
+  ): Promise<DocumentView> {
+    try {
+      return await this.store.update(id, clean);
+    } catch (e) {
+      if (isUniqueConstraintViolation(e)) {
+        throw new ConflictException('DOCUMENT_NUMBER_DUPLICATE');
+      }
+      throw e;
+    }
   }
 
   /** F015：查詢某文件之連結點清單（單向；附目標編號/書名/目前狀態）。無 linkStore → 空陣列。 */
@@ -410,12 +518,14 @@ export class DocumentsService {
   }
 
   /**
-   * 切換狀態（F012）。狀態合法 → 存在 → 切回「有效」時重驗編號唯一性（F013，排除自身）→ 更新。
+   * 切換狀態（F012，專用端點路徑）。狀態合法 → 存在 → 委派共用狀態核心（applyStatusTransition）：
+   * 切回「有效」重驗編號唯一性（F013，排除自身）→ 更新 → 發 STATUS 事件（承載 reason）。
    * 功能面（僅 ICSOPAdmin）由 controller guard 落實。
    *
-   * reason（OQ-E04-02，選填）：切換原因。經 normalizeReason 正規化（空白視同未填）。
-   * ⚠ 決策 A：本 wave 之 DocumentChangedEvent 契約不承載 reason/前後狀態（屬 F037 變更歷程，deferred）；
-   * 故 reason 目前僅被接收/正規化、供未來記錄使用，尚無持久化 sink。成功後發 STATUS 事件。
+   * ruling 2：前端編輯頁改由一般 update() 驅動狀態切換（含 reason）；本端點與 update() 共用同一狀態核心，
+   * 兩路徑之 F013 重驗與 STATUS 事件語意不可能分歧。本端點保留供 API 完整性與其他呼叫方。
+   *
+   * reason（F012 切換原因，選填）：經 normalizeReason 正規化（空白視同未填），落地至 DOCUMENT_CHANGE_LOG.reason。
    */
   async setStatus(
     id: string,
@@ -429,33 +539,14 @@ export class DocumentsService {
     const doc = await this.store.findById(id);
     if (!doc) throw new NotFoundException('DOCUMENT_NOT_FOUND');
 
-    if (status === 'active') {
-      const holders = await this.store.findNumberHolders(doc.documentNumber);
-      if (!isNumberAvailable(doc.documentNumber, holders, doc.id)) {
-        throw new ConflictException('DOCUMENT_NUMBER_DUPLICATE');
-      }
-    }
-    // reason 正規化（空白視同未填）；reason 目前無持久化 sink（OQ-E04-02），保留供未來記錄。
-    void normalizeReason(reason);
-    const oldStatus = doc.status;
-    await this.store.updateStatus(id, status);
-
-    // 決策 B：狀態切換成功後發 STATUS 事件，承載 status 欄位之 old/new ＋操作者/編號快照，
-    // 由真實 publisher 落地為 DOCUMENT_CHANGE_LOG（F037）。狀態相同時不產生 delta（無日誌）。
-    const deltas: DocumentFieldDelta[] =
-      oldStatus === status
-        ? []
-        : [{ field: 'status', oldValue: oldStatus, newValue: status }];
-    await this.publisher.publish({
-      documentId: id,
-      changeType: 'STATUS',
-      changedFields: ['status'],
-      changes: deltas,
-      documentNumber: doc.documentNumber,
-      actorId: actor?.accountId ?? null,
-      actorName: actor?.name ?? null,
-      actorEmployeeNo: actor?.employeeNo ?? null,
-      occurredAt: new Date(),
+    await this.applyStatusTransition({
+      docId: doc.id,
+      oldStatus: doc.status,
+      resultingNumber: doc.documentNumber,
+      newStatus: status,
+      reason,
+      actor,
+      persist: () => this.store.updateStatus(id, status as DocumentStatus),
     });
   }
 }

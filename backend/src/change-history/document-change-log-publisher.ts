@@ -32,6 +32,8 @@ export function buildDocumentChangeLogRows(
     actorId: event.actorId ?? null,
     actorName: event.actorName ?? null,
     actorEmployeeNo: event.actorEmployeeNo ?? null,
+    // F012 切換原因：套用至該事件產生之所有列（STATUS 事件現況恆 1 列；CONTENT/CREATE 之 reason 恆 undefined → null）。
+    reason: event.reason ?? null,
     occurredAt: event.occurredAt,
   }));
 }

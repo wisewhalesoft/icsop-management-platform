@@ -62,6 +62,8 @@ export class LifecycleChangeHistoryService {
         roleCode: actor.roleCode ?? null,
         targetId: lifecycleId,
         targetNumber: lifecycleName ?? null,
+        // OQ-AQ-04：填入 targetName（F024「對象名稱」欄，變更-kind 稽核列先前恆顯示「—」）＝循環名稱。
+        targetName: lifecycleName ?? null,
         occurredAt: this.clock(),
       });
     }

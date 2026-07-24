@@ -9,7 +9,7 @@ import { RequestWithSession } from '../auth/session.guard';
  * 含 F037 操作者身分快照（accountId/name/employeeNo）之貫穿。
  */
 describe('DocumentsController body 貫穿', () => {
-  let svc: { setStatus: jest.Mock; update: jest.Mock };
+  let svc: { setStatus: jest.Mock; update: jest.Mock; create: jest.Mock };
   let ctrl: DocumentsController;
   const req = {
     sessionUser: {
@@ -22,8 +22,17 @@ describe('DocumentsController body 貫穿', () => {
   const actor = { accountId: 'acc-1', name: '李慧玲', employeeNo: '20233' };
 
   beforeEach(() => {
-    svc = { setStatus: jest.fn(), update: jest.fn() };
+    svc = { setStatus: jest.fn(), update: jest.fn(), create: jest.fn() };
     ctrl = new DocumentsController(svc as unknown as DocumentsService);
+  });
+
+  it('TS-DCL-A-013 create 貫穿：svc.create(roleCode, body, actor)（F010 建立稽核操作者快照）', () => {
+    ctrl.create(req, { lifecycleId: 'lc1', status: 'active', documentNumber: 'N-1', documentName: '書' });
+    expect(svc.create).toHaveBeenCalledWith(
+      'ICSOPAdmin',
+      { lifecycleId: 'lc1', status: 'active', documentNumber: 'N-1', documentName: '書' },
+      actor,
+    );
   });
 
   it('TS-F012-006 body 含 reason → svc.setStatus(id, status, reason, actor)', () => {

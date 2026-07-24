@@ -26,6 +26,8 @@ export interface DocumentChangeLogRow {
   actorName: string | null;
   /** 操作者員工編號快照。 */
   actorEmployeeNo: string | null;
+  /** F012 切換原因（僅 STATUS 事件承載；CONTENT/CREATE/META 恆為 null）。 */
+  reason: string | null;
   occurredAt: Date;
 }
 
