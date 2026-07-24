@@ -84,25 +84,25 @@
 ### E04 ICSOP 文件
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F010 | 建立 ICSOP 文件 | P0 | 1 | 🟡 部分 | STEP1/2 可端到端建立；STEP3/4（次要室長/使用部門/制定三級/附件/連結）延後、`CreateDocumentInput` 未含；建立稽核（Main Flow 7）未做 |
-| F011 | 編輯 ICSOP 文件與版本對照 | P0 | 1 | 🟡 部分 | backend unit-green：`GET`/`PATCH /:id`、編輯排除 nodeId、版本 diff、覆蓋不留歷史、編輯側唯一性排除自身、`DocumentChangedEvent` 種子。剩：**前端編輯頁**、真 DB＝`[integration]` |
+| F010 | 建立 ICSOP 文件 | P0 | 1 | 🟡 部分 | STEP1–4 前端完成（proto 14）＋int-verified 建立；STEP3 制定三級/當責室長/使用部門、STEP4 附件與連結皆已入 `CreateDocumentInput`。剩：**建立稽核（Main Flow 7）未做**、`.xls` 原件掛載（F027 面） |
+| F011 | 編輯 ICSOP 文件與版本對照 | P0 | 1 | 🟡 部分 | backend `GET`/`PATCH /:id`、編輯排除 nodeId、版本 diff、覆蓋不留歷史、編輯側唯一性排除自身、`DocumentChangedEvent`；**前端編輯頁完成（proto 15，逐欄 目前值/新值 diff＋revert）**、int-verified。剩：**編輯側多值（次要室長/使用部門）目前被 `update()` 剝除**→唯讀呈現 |
 | F012 | 文件狀態切換 | P0 | 1 | 🟡 部分 | 切換＋切回有效重驗編號已測；OQ-E04-02「切換原因」欄未做；變更歷程 F037 事件＋操作者稽核未做 |
 | F013 | 文件編號唯一性管理 | P0 | 1 | ✅ 已完成-已驗證 | 建立唯一性經**真 filtered unique index int-verified vs SOP**（dup→409）；編輯側排除自身＋mssql 2601/2627→409 於 F011 路徑 unit-covered |
-| F014 | 制定組織與當責室長設定 | P0 | 1 | 🟡 部分 | **create-side 完成＋int-verified**：三級下拉（`OrgDirectoryService`）＋當責室長主/次（`NameResolution`＋managerEmpNo 預設）＋使用部門，`DOC_SECONDARY_CHIEF`/`DOC_USING_DEPT` 表（migration 落 SOP）。剩：edit-side（隨 F011 前端編輯頁） |
+| F014 | 制定組織與當責室長設定 | P0 | 1 | 🟡 部分 | **create-side 完成＋int-verified**：三級下拉（`OrgDirectoryService`）＋當責室長主/次（`NameResolution`＋managerEmpNo 預設）＋使用部門，`DOC_SECONDARY_CHIEF`/`DOC_USING_DEPT` 表（migration 落 SOP）。剩：**edit-side 持久化**（`documents.service.update()` 剝除多值欄，前端僅能唯讀顯示） |
 | F015 | 文件連結點管理 | P1 | 1 | ✅ 已完成-已驗證 | `DOCUMENT_LINK` 全鏈＋批次入 PATCH＋`GET :id/links`＋目標存在性驗證＋**前端連結 UI（chips＋combobox，proto 14/15）**；backend int-verified |
-| F016 | PDF 與 OJT 附件上傳 | P0 | 1 | 🟡 部分 | backend unit-green：Blob 抽象（`BlobStore`＋FakeBlobStore）、`DOCUMENT_ATTACHMENT`、兩層授權、格式白名單≤50MB、單份覆蓋、受控下載。剩：**前端上傳 UI**、真 Azure Blob＋migration＝`[integration]` |
-| F017 | 後台文件清單與搜尋 | P0 | 1 | 🟡 部分 | backend 補強 unit-green：多篩選/排序/**真分頁**（回傳 `{items,total,…}`）＋**室長/組織名稱解析**（org-foundation）＋衍生狀態篩選。剩：**前端分頁/combobox/欄位 UI 接線**（後端契約已備）、真 join 效能＝`[integration]` |
+| F016 | PDF 與 OJT 附件上傳 | P0 | 1 | 🟡 部分 | Blob 抽象＋**真 Azure Blob（SAS，int-verified）**、`DOCUMENT_ATTACHMENT`、兩層授權、格式白名單≤50MB、單份覆蓋、受控下載；**前端上傳 UI（proto 14 STEP4）＋唯讀頁（proto 16）完成**。剩：**無「列出既有附件」端點**→編輯/唯讀/清單無法顯示已上傳檔 |
+| F017 | 後台文件清單與搜尋 | P0 | 1 | 🟡 部分 | backend 多篩選/排序/**真分頁**（`{items,total,…}`）＋**室長/組織名稱解析**＋衍生狀態篩選；**前端清單頁完成（proto 13，14 欄／9 combobox 篩選／排序／分頁）**、int-verified。剩：**`DocumentListItem` 未帶連結資料**→「連結點程序書」欄空、檔案欄依賴 F016 列表端點 |
 
 ### E05 使用表單
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F018 | 使用表單管理 | P1 | 1 | 🟡 部分 | backend unit-green：`USAGE_FORM_POOL`＋`DOC_USAGE_FORM` 多對多、上傳/覆蓋（引用≥2 警示）/移除（`USAGE_FORM_IN_USE`）、下載稽核（佔位）。剩：**前端管理頁**、真 Blob/DB、稽核接真 AuditWriter＝`[integration]` |
+| F018 | 使用表單管理 | P1 | 1 | 🟡 部分 | `USAGE_FORM_POOL`＋`DOC_USAGE_FORM` 多對多、上傳/覆蓋（引用≥2 警示）/移除（`USAGE_FORM_IN_USE`）、**真 AuditWriter 下載稽核**、**管理頁完成（proto 19）＋`/admin/usage-forms/overview` int-verified**。剩：**自訂表單名稱未持久化**（上傳端點無 `name` 參數，退回檔名） |
 
 ### E06 前台瀏覽
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F019 | 前台清單瀏覽（排序/搜尋/篩選） | P0 | 1 | 🟡 部分 | unit-green：`PublicModule`＋`/public/documents`（強制已公告、關鍵字、AND 篩選、子樹前綴、置頂、分頁）＋`PublicListPage`（取代 placeholder）＋名稱解析。剩：**`DOC_USING_DEPT` 未持久化**→置頂/部門篩選 e2e、真 DB＝`[integration]` |
-| F020 | 文件浮水印（疊加＋燒錄） | P0 | 1 | 🟡 部分 | unit-green：快照組裝（公司全稱/DESC_FULL/最細單位/空欄收合）、`WatermarkService`＋VIEW/DOWNLOAD/PRINT＋`AuditWriter`、`pdf-lib` 燒錄＋**CJK 字型已解**（Noto Sans TC＋fontkit）、檢視器頁。剩：`DOC_USING_DEPT` 持久化（F019）、真 PDF <3s int-verify |
+| F019 | 前台清單瀏覽（排序/搜尋/篩選） | P0 | 1 | 🟡 部分 | unit-green：`PublicModule`＋`/public/documents`（強制已公告、關鍵字、AND 篩選、子樹前綴、置頂、分頁）＋`PublicListPage`（取代 placeholder）＋名稱解析。剩：**TypeORM store 未 join `DOC_USING_DEPT`**（表已由 F014 建立並寫入）→置頂/部門篩選未 e2e |
+| F020 | 文件浮水印（疊加＋燒錄） | P0 | 1 | 🟡 部分 | unit-green：快照組裝（公司全稱/DESC_FULL/最細單位/空欄收合）、`WatermarkService`＋VIEW/DOWNLOAD/PRINT＋`AuditWriter`、`pdf-lib` 燒錄＋**CJK 字型已解**（Noto Sans TC＋fontkit）、檢視器頁。剩：`DOC_USING_DEPT` 讀取接線（隨 F019）、真 PDF <3s int-verify |
 | F021 | RWD 響應式版面 | P1 | 1 | 🟡 部分 | unit-green：響應式標記＋resize 狀態保持。剩：斷點/觸控/無橫捲等幾何 AC＝`[integration]`/人工（jsdom 無法驗） |
 | F022 | 後台開啟前台瀏覽頁 | P2 | 2 | 🟡 部分 | unit-green：AppShell 改 `window.open(_blank)`＋彈窗被擋 fallback、保留後台分頁、接真前台頁。剩：瀏覽器彈窗行為＝`[integration]` |
 
