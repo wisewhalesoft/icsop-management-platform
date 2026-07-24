@@ -36,11 +36,13 @@
 
 | 狀態 | 數量 | 功能 |
 |---|---|---|
-| ✅ 已完成-已驗證 | **23** | F002 F003 F004 F006 F007 F008 F009 F010 F011 F012 F013 F014 F015 F016 F017 F018 F019 F023 F024 F025 F026 F036 F037 |
-| 🟡 部分 | **11** | F001 F005 F020 F021 F022 F027 F028 F029 F030 F031 F038 |
+| ✅ 已完成-已驗證 | **27** | F001 F002 F003 F004 F005 F006 F007 F008 F009 F010 F011 F012 F013 F014 F015 F016 F017 F018 F019 F020 F023 F024 F025 F026 F036 F037 F038 |
+| 🟡 部分 | **7** | F021 F022 F027 F028 F029 F030 F031 |
 | 🔵 進行中 | **0** | — |
 | ⬜ 未開始 | **4** | F032 F033 F034 F035 |
 | | **38** | |
+
+> **2026-07-24 可建功能三線平行 worktree（lifecycle-changelog／orgsync-alerts／hardening）併回 main、int-verified**（test-spec 先＋審核閘門定案 2 決策＋瀏覽器煙霧測試先行）：先以真 SOP 啟動全系統＋瀏覽器實走（登入→建立→編輯→狀態切換含原因→前台檢視→組織異動→調閱歷程，零 JS 錯誤、RBAC 徽章正確、F024 分頁/上色修正實見效），再開三線。① **lifecycle-changelog（F038）** — `LIFECYCLE_SNAPSHOT` 交易一致快照（§5.9 原子，人類定案；F008/F009 DAG 結構寫入＋事件＋快照同交易、以選填 `runStructuralChange` capability 使既有 fake 零改動、rollback 單測把關）＋完整新舊重建＋diff＋雙頁 PDF 燒錄＋前端新舊並列 modal（proto 23，取代舊「複用 F036 單頁」）；② **orgsync-alerts（F005）** — 兩類警示沿用 `ORG_CHANGE_ALERT`（人類定案 OQ-E02-08b，dedup 以 loginId 不以 EMPNO、資料不一致不停用）＋修二值 alertKind 缺陷；③ **hardening** — F001 帳密登入節流（`AUTH_TOO_MANY_ATTEMPTS` 429，自動過期非鎖定）＋F020 燒錄計時 int（warm≈249ms≪3s）＋確認 login 預填為瀏覽器 autofill 非缺陷。**審核閘門 2 決策**：F038 原子/F037 記為 §5.9 例外、F005 沿用 ORG_CHANGE_ALERT。**合流**：§5.9 補 F037 best-effort 例外、錯誤碼 AUTH_TOO_MANY_ATTEMPTS/LIFECYCLE_CHANGE_LOG_NOT_FOUND 集中補入；int 揪出 F038 itest 未插 Supervisor 帳號（401 vs 403）已修。**→ F001 F005 F020 F038 🟡→✅（4 升）**。backend **1243 單元＋88 int（15 suites vs SOP）**、frontend **410**、tsc 淨、22 migration 落 SOP。**tally ✅27 🟡7 🔵0 ⬜4**。🟡 僅剩 F021/F022（RWD/彈窗＝瀏覽器人工）＋F027-F031（RAG 管線 backend）；非 RAG、非瀏覽器人工功能全數 ✅。
 
 > **2026-07-24 獨立 🟡 收尾三線平行 worktree（doc-changelog／audit-query／field-matrix）併回 main、int-verified**（test-spec 先＋審核閘門定案 3 決策）：① doc-changelog — F010 建立事件（`changeType='CREATE'`＋actor 貫穿）、F012 切換原因 reason（migration 落 SOP）折入 `update()` 共用 `applyStatusTransition`（切回有效一律重驗 F013、與 setStatus 不分歧）、F037 交易邊界＝best-effort（**人類定案**）、AC36 reason 顯示（補 proto 23 缺口）、targetName 填充；② audit-query — F024 查詢下推 SQL（`queryPage` 取代全表載入 JS 過濾之潛在 OOM）＋`IX_AUDIT_LOG_targetType_occurredAt`（落 SOP）＋前端分頁/pill/chevron 修；③ field-matrix — F026 AC5-9 覆蓋＋**後台下載 RAW 不燒錄（人類定案 OQ-FM-01）**、修正 AC6 誤述。**審核閘門 3 決策**：F037 邊界=best-effort、F012 折入 update()、後台下載維持 RAW。**合流**：Icon 守門測試持續把關、targetName 跨線耦合（doc-changelog 寫、audit-query 讀 int 驗）如期解。**→ F010 F012 F024 F026 F037 🟡→✅（5 升）**。backend **1131 單元＋68 int（12 suites vs SOP）**、frontend **390**、tsc 淨、20 migration 落 SOP。**tally ✅23 🟡11 🔵0 ⬜4**。非 RAG 🟡 僅剩 F001（登出即撤/節流，需 infra）、F005（資料不一致告警）、F020（PDF<3s 計時）、F021/F022（RWD/彈窗＝瀏覽器人工）、F038（快照架構 OQ-E07-05）。
 
@@ -66,7 +68,7 @@
 ### E01 驗證與帳號
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F001 | 雙軌驗證登入與 Session | P0 | 1 | 🟡 部分 | 途徑 A（OIDC）已端到端；**途徑 B 帳密登入已補＋int-verified vs SOP**（`POST /auth/login` by loginId、統一 `AUTH_INVALID_CREDENTIALS`、build→login→`/auth/me` 真往返過）；剩：登出非「即時撤銷」（無狀態 JWT，需 denylist infra）＋帳密登入節流未做（本輪外） |
+| F001 | 雙軌驗證登入與 Session | P0 | 1 | ✅ 已完成-已驗證 | 途徑 A（OIDC）端到端＋途徑 B 帳密登入 int-verified vs SOP（`POST /auth/login` by loginId、統一 `AUTH_INVALID_CREDENTIALS`、build→login→`/auth/me` 真往返，瀏覽器實測登入成功）；**帳密登入節流已補**（`LoginThrottleService` 60s 視窗、同帳號 5／同 IP 20 → 429 `AUTH_TOO_MANY_ATTEMPTS`，自動過期非持久鎖定、不洩漏帳號存在性）。殘留：登出非「即時撤銷」（無狀態 JWT，需 denylist infra，OQ 待資安政策）＋部署需設 `trust proxy`（IP 軸） |
 | F002 | 登入後角色分流導向 | P0 | 1 | ✅ 已完成-已驗證 | 邊界：session 有效但 roleCode=undefined 不會導回登入頁（低風險） |
 | F003 | 帳號與角色指派管理 | P0 | 1 | ✅ 已完成-已驗證 | 死鏈閉合＋**int-verified vs SOP**（建立手動帳號→`POST /auth/login`→`/auth/me` 真往返過；錯誤密碼 401）；CRUD/角色指派 unit-covered＋AccountManagementPage |
 
@@ -74,7 +76,7 @@
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
 | F004 | 組織資料同步（排程＋手動） | P0 | 1 | ✅ 已完成-已驗證 | OQ-E02-02 失敗重試＋通知刻意延後（cron 僅 try/catch 記 log）；公司主檔 VW_HRCOMF 未同步 |
-| F005 | 離職者自動停用帳號 | P0 | 1 | 🟡 部分 | 停用→即時撤銷已達成；缺「EMPSTS='A' 但 RESIGNDT 過去日」資料不一致**告警**、逐帳號「消失」警告；稽核完整性依賴未建之 F023 |
+| F005 | 離職者自動停用帳號 | P0 | 1 | ✅ 已完成-已驗證 | 停用→即時撤銷＋消失比例中止保護；**兩類警示沿用 `ORG_CHANGE_ALERT`（人類定案 OQ-E02-08b）**：`DATA_INCONSISTENCY`（EMPSTS='A' 但 RESIGNDT 過去日，**不自動停用**）＋`ACCOUNT_DISAPPEARED`（單帳號消失低於閾值）；純函式偵測＋產生器接線＋dedup 以 loginId（migration `accountLoginId` 落 SOP）；修二值 alertKind 缺陷（writeAudit／AlertCard），int-verified |
 | F006 | 組織異動影響提示與異動後台 | P1 | 1/2 | ✅ 已完成-已驗證 | `ORG_CHANGE_ALERT` 單表＋alertKind 判別（2 migration 落 SOP）；提示產生三訊號＋§7.3 掛已關閉部門＋dedup（服務層＋filtered unique index，**int-verified**：重複 key→UQ 違反、resolved 後同 key 可再插）；Route A 自動解除／Route B 手動；`monthly-summary` KPI；prototype 09 三頁籤重建＋導向 F014 編輯；不覆寫文件/不停用帳號（有 AC）。殘：CLOSED_DEPT_PERSON 卡無 prototype 變體（沿用同殼渲染）、KPI 計數 vs 徽章 OQ-F006-04 待產品確認、上游無職級欄以 managerEmpNo 換手為替身（OQ-E02-07 待上游） |
 
 ### E03 循環與 DAG
@@ -106,7 +108,7 @@
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
 | F019 | 前台清單瀏覽（排序/搜尋/篩選） | P0 | 1 | ✅ 已完成-已驗證 | `/public/documents`（強制已公告、關鍵字、AND 篩選、置頂、分頁）＋`PublicListPage`＋名稱解析；**TypeORM store 真讀 `DOC_USING_DEPT`**（分離查詢＋JS 分組不膨脹）；**置頂語義定案改子樹祖先鏈**（`isWithinSubtree`，與 F026 共用；OQ-F019-03 定案，推翻精確比對）；置頂/部門子樹篩選 **int-verified vs SOP**（`public-documents.itest`） |
-| F020 | 文件浮水印（疊加＋燒錄） | P0 | 1 | 🟡 部分 | unit-green：快照組裝（公司全稱/DESC_FULL/最細單位/空欄收合）、`WatermarkService`＋VIEW/DOWNLOAD/PRINT＋`AuditWriter`、`pdf-lib` 燒錄＋**CJK 字型已解**（Noto Sans TC＋fontkit）、檢視器頁；`DOC_USING_DEPT` 讀取接線已隨 F019 落地。剩：**真 PDF 燒錄 <3s 之專屬 int-verify**（storage.itest 尚未涵蓋計時斷言） |
+| F020 | 文件浮水印（疊加＋燒錄） | P0 | 1 | ✅ 已完成-已驗證 | 快照組裝（公司全稱/DESC_FULL/最細單位/空欄收合）、`WatermarkService`＋VIEW/DOWNLOAD/PRINT＋`AuditWriter`、`pdf-lib` 燒錄＋**CJK 字型**（Noto Sans TC＋fontkit）、檢視器頁、`DOC_USING_DEPT` 讀取；**真 PDF 燒錄計時 int-verified**（`watermark-burn-timing.itest`：暖機後 warm≈249ms／cold≈131ms，遠低於 3s NFR；門檻 8s 回歸絆線）。正式代表量 P95 壓測仍後續 NFR 驗收 |
 | F021 | RWD 響應式版面 | P1 | 1 | 🟡 部分 | unit-green：響應式標記＋resize 狀態保持。剩：斷點/觸控/無橫捲等幾何 AC＝`[integration]`/人工（jsdom 無法驗） |
 | F022 | 後台開啟前台瀏覽頁 | P2 | 2 | 🟡 部分 | unit-green：AppShell 改 `window.open(_blank)`＋彈窗被擋 fallback、保留後台分頁、接真前台頁。剩：瀏覽器彈窗行為＝`[integration]` |
 
@@ -116,7 +118,7 @@
 | F023 | 稽核軌跡記錄 | P0 | 1 | ✅ 已完成-已驗證 | `AuditWriter` 契約（5 targetType，下游 import）＋outbox 補償；**append-only 觸發器強制＋int-verified**（INSTEAD OF UPDATE/DELETE 阻擋，對 owner 亦生效）；**寫入路徑 int-verified**（usage-form DOWNLOAD／lifecycle VIEW 稽核落地）；usage-forms 已接真 AuditWriter；accountId 貫穿 session 修正（int 揪出） |
 | F024 | 文件調閱歷程查詢後台 | P0 | 1 | ✅ 已完成-已驗證 | 查詢頁＋篩選/RBAC/30天預設/匯出/展開；**查詢下推 SQL**（`AuditStore.queryPage`：targetType IN＋occurredAt 半開區間＋LIKE ESCAPE＋ORDER＋OFFSET/FETCH＋COUNT，取代原全表載入 JS 過濾之潛在 OOM）＋**`IX_AUDIT_LOG_targetType_occurredAt`**（migration 落 SOP）；前端補分頁/pill 上色/chevron 修；**12 int 案 vs 真 AUDIT_LOG（含跨年 datetime2、targetName 顯示）**。P95 正式壓測（k6/JMeter 代表量）仍為後續 NFR 驗收 |
 | F037 | 程序書變更歷程（欄位 Diff） | P1 | 1 | ✅ 已完成-已驗證 | `DOCUMENT_CHANGE_LOG` 綁真 publisher 持久化 before/after（F011 編輯／F012 狀態／**F010 建立 CREATE 事件**）＋查詢頁（proto 23，含「切換原因」顯示）＋`CHANGE_LOG_VIEW` 稽核＋`targetName` 填充；**「同一交易」邊界＝best-effort（人類定案，非缺口）**、建立事件已實作，int-verified |
-| F038 | 循環樹狀圖變更歷程 | P1 | 1 | 🟡 部分 | `LIFECYCLE_CHANGE_LOG`＋DAG 結構事件捕捉（F008/F009 發 NODE/EDGE/MOUNT 事件）＋查詢頁＋預覽（複用 F036）＋稽核。剩：**完整新舊快照重建＋雙頁 PDF 燒錄**（架構定案 OQ-E07-05） |
+| F038 | 循環樹狀圖變更歷程 | P1 | 1 | ✅ 已完成-已驗證 | `LIFECYCLE_CHANGE_LOG`＋DAG 結構事件＋查詢＋稽核；**`LIFECYCLE_SNAPSHOT` 交易一致快照（§5.9 原子，人類定案；F008/F009 結構寫入＋事件＋快照同交易、rollback 單測把關）＋完整新舊重建＋diff（add/rm/amber）＋雙頁 PDF 燒錄下載＋前端新舊並列 modal（proto 23）**；migration `1723161600000` 落 SOP，int-verified vs SOP。§C.4 RBAC 不對稱以專測鎖定 |
 
 ### E08 權限矩陣
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
@@ -160,4 +162,4 @@
 
 ---
 
-_稽核方法：對 38 個 `features/Fxxx-*.md` 的 Acceptance Criteria 逐條 ↔ `backend/src`、`frontend/src`、測試檔交叉核對，並以「端到端可達」嚴格判定。基準 main：初審 `e6045d9` → Wave 1/2 → 整合①②③ → 地基三線 → 前端三線 → 縫隙收斂三線。測試：**backend 1131 單元＋68 整合（`npm run test:int`，12 suites vs SOP＋真 Blob）／frontend 390**，tsc 全淨。20 migration 落 SOP。狀態：**✅23 🟡11 🔵0 ⬜4**（⬜ 僅剩 Phase 3 RAG F032-F035；非 RAG 功能全 ✅ 或 🟡）。（2026-07-24）_
+_稽核方法：對 38 個 `features/Fxxx-*.md` 的 Acceptance Criteria 逐條 ↔ `backend/src`、`frontend/src`、測試檔交叉核對，並以「端到端可達」嚴格判定。基準 main：初審 `e6045d9` → Wave 1/2 → 整合①②③ → 地基三線 → 前端三線 → 縫隙收斂三線 → 獨立🟡收尾三線 → 可建功能三線。測試：**backend 1243 單元＋88 整合（`npm run test:int`，15 suites vs SOP＋真 Blob）／frontend 410**，tsc 全淨。22 migration 落 SOP。狀態：**✅27 🟡7 🔵0 ⬜4**（⬜ 僅剩 Phase 3 RAG F032-F035；🟡 僅剩 F021/F022（RWD/彈窗＝瀏覽器人工驗）＋F027-F031（RAG 管線 backend，卡 pgvector/embedding/LLM）；**非 RAG、非瀏覽器人工之功能已全數 ✅**）。（2026-07-24）_
