@@ -16,7 +16,7 @@ import {
   MinusCircle, ScanText, Spline,
   UserPlus, UserX, Check,
   AlertOctagon, BadgeCheck, SquarePen,
-  EyeOff, SlidersHorizontal,
+  EyeOff, SlidersHorizontal, FileX,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -131,6 +131,7 @@ const REGISTRY: Record<string, LucideIcon> = {
   // sliders-horizontal＝前台手機篩選觸發（fix-public，prototype 03）。
   'eye-off': EyeOff,
   'sliders-horizontal': SlidersHorizontal,
+  'file-x': FileX, // fix-admin G-ADM-027：文件索引「.xls 原件」無 cell（與既有 file-x-2 不同）
 };
 
 export interface IconProps {
