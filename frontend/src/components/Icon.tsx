@@ -16,6 +16,7 @@ import {
   MinusCircle, ScanText, Spline,
   UserPlus, UserX, Check,
   AlertOctagon, BadgeCheck, SquarePen,
+  EyeOff, SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -126,6 +127,10 @@ const REGISTRY: Record<string, LucideIcon> = {
   'alert-octagon': AlertOctagon,
   'badge-check': BadgeCheck,
   'square-pen': SquarePen,
+  // Wave-2 頁組請求（team lead 集中註冊）：eye-off＝密碼顯示切換（fix-public/fix-admin）、
+  // sliders-horizontal＝前台手機篩選觸發（fix-public，prototype 03）。
+  'eye-off': EyeOff,
+  'sliders-horizontal': SlidersHorizontal,
 };
 
 export interface IconProps {
