@@ -23,7 +23,12 @@ export interface DocumentFieldDelta {
 
 export interface DocumentChangedEvent {
   documentId: string;
-  changeType: 'CONTENT' | 'STATUS' | 'META';
+  /**
+   * changeType：CONTENT（欄位內容異動，F011）／STATUS（狀態切換，F012）／META（保留）／
+   * CREATE（建立，F010——逐欄位 new-value 列，oldValue 恆 null）。
+   * DB 欄位 `changeType varchar(20)` 已容納 'CREATE'（6 字元），無需 migration。
+   */
+  changeType: 'CONTENT' | 'STATUS' | 'META' | 'CREATE';
   changedFields?: string[];
   /** F037：逐欄位 before/after（空陣列或未提供＝無實際欄位變更，不落地任何變更日誌）。 */
   changes?: DocumentFieldDelta[];
@@ -35,6 +40,11 @@ export interface DocumentChangedEvent {
   actorName?: string | null;
   /** 操作者員工編號快照。 */
   actorEmployeeNo?: string | null;
+  /**
+   * F012 切換原因（選填，事件層級；語意上僅 changeType==='STATUS' 時有意義，其餘 changeType 恆 undefined）。
+   * 真實 publisher 將其落地至 DOCUMENT_CHANGE_LOG.reason（供變更歷程檢視，F012 AC36）。
+   */
+  reason?: string | null;
   occurredAt: Date;
 }
 
@@ -65,4 +75,25 @@ export function toFieldValueString(v: unknown): string | null {
   if (v instanceof Date) return v.toISOString();
   if (typeof v === 'object') return JSON.stringify(v);
   return String(v);
+}
+
+/**
+ * F010 建立事件之逐欄位 delta（純函式，無 IO）。建立＝「由無到有」，故每列 oldValue 恆為 null。
+ *  - null/undefined → 略過（欄位未填，非「變更」）。
+ *  - 空陣列（secondaryChiefIds:[]／usingDeptIds:[]）→ 略過（「未提供」不是一個值得記錄的新值，杜絕噪音列）。
+ *  - 其餘 → `{ field, oldValue:null, newValue: toFieldValueString(v) }`（重用既有字串化：Date→ISO、陣列→JSON）。
+ *
+ * 呼叫端固定傳入 create() 中已正規化完成之 input（CreateDocumentInput；系統欄如 UUID 早於 classifyFields
+ * 歸為 ignored 並自 clean 剔除，不會流入此處）。
+ */
+export function buildCreateChangeDeltas(
+  fields: Record<string, unknown>,
+): DocumentFieldDelta[] {
+  const deltas: DocumentFieldDelta[] = [];
+  for (const [field, v] of Object.entries(fields)) {
+    if (v === null || v === undefined) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    deltas.push({ field, oldValue: null, newValue: toFieldValueString(v) });
+  }
+  return deltas;
 }

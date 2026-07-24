@@ -124,6 +124,8 @@ describe('LifecycleChangeHistoryService.viewLifecycle (F038 預覽 + 稽核)', (
       actorId: 'acc-9',
       targetId: 'SRC',
       targetNumber: '銷售及收款循環',
+      // OQ-AQ-04：targetName 亦填入（供 F024「對象名稱」欄；循環變更-kind 之描述性文字＝循環名稱）。
+      targetName: '銷售及收款循環',
     });
   });
 });

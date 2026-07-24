@@ -1,5 +1,5 @@
 # F012: 文件狀態切換
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-17
+Priority: P0-MVP | Status: 🟡 實作（狀態切換＋切換原因 reason 持久化；狀態折入 update() 共用核心；單元綠；整合已寫未跑；見 implementation-logs/doc-changelog-impl.md） | Last Updated: 2026-07-24
 Epic/Story: E04 / US-032
 
 ## Description

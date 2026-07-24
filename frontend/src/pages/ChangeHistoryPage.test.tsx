@@ -145,4 +145,84 @@ describe('ChangeHistoryPage — F037/F038', () => {
     expect(node.getAttribute('data-highlighted')).toBe('true');
     expect(within(screen.getByRole('dialog')).getByText(/LIFECYCLE_CHANGELOG_VIEW/)).toBeInTheDocument();
   });
+
+  it('TS-DCL-D-011 changeType=CREATE 事件 → 來源標籤顯示「建立」', async () => {
+    mockAuth('SysAdmin');
+    const CREATE_ROW: DocumentChangeView = {
+      ...DOC_CHANGE,
+      id: 'cr1',
+      changeType: 'CREATE',
+      field: 'documentName',
+      oldValue: null,
+      newValue: '車輛分期進件作業',
+      occurredAt: '2026-07-10T09:00:00.000Z',
+    };
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [CREATE_ROW], total: 1 });
+    render(<ChangeHistoryPage />);
+    await waitFor(() =>
+      expect(screen.getByText(/程序書書名：（空） → 車輛分期進件作業/)).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByText(/程序書書名：（空） → 車輛分期進件作業/));
+    expect(await screen.findByText('建立')).toBeInTheDocument();
+  });
+
+  it('TS-DCL-D-012 同文件同時間多筆 CREATE → 沿用 60 秒聚合顯示「N 項欄位變更」', async () => {
+    mockAuth('SysAdmin');
+    const t = '2026-07-10T09:00:00.000Z';
+    const mk = (id: string, field: string, newValue: string): DocumentChangeView => ({
+      ...DOC_CHANGE,
+      id,
+      changeType: 'CREATE',
+      field,
+      oldValue: null,
+      newValue,
+      occurredAt: t,
+    });
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({
+      items: [
+        mk('a', 'lifecycleId', 'lc1'),
+        mk('b', 'status', 'active'),
+        mk('c', 'documentNumber', 'ICSOP-SRC-101-1-01'),
+        mk('d', 'documentName', '車輛分期進件作業'),
+      ],
+      total: 4,
+    });
+    render(<ChangeHistoryPage />);
+    await waitFor(() => expect(screen.getByText(/4 項欄位變更/)).toBeInTheDocument());
+  });
+
+  it('TS-DCL-D-013 STATUS 事件含 reason → 展開顯示「切換原因：{reason}」', async () => {
+    mockAuth('SysAdmin');
+    const STATUS_WITH_REASON: DocumentChangeView = {
+      ...STATUS_CHANGE,
+      id: 'sr1',
+      oldValue: 'active',
+      newValue: 'inactive',
+      reason: '依法規更新',
+    };
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [STATUS_WITH_REASON], total: 1 });
+    vi.mocked(endpoints.viewDocumentChanges).mockResolvedValue({ items: [STATUS_WITH_REASON] });
+    render(<ChangeHistoryPage />);
+    await waitFor(() => expect(screen.getByText(/文件狀態：有效 → 失效/)).toBeInTheDocument());
+    await userEvent.click(screen.getByText(/文件狀態：有效 → 失效/));
+    expect(await screen.findByText(/切換原因：依法規更新/)).toBeInTheDocument();
+  });
+
+  it('TS-DCL-D-014 reason 為 null → 不顯示原因列（非「（空）」）', async () => {
+    mockAuth('SysAdmin');
+    const STATUS_NO_REASON: DocumentChangeView = {
+      ...STATUS_CHANGE,
+      id: 'sr2',
+      oldValue: 'active',
+      newValue: 'inactive',
+      reason: null,
+    };
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [STATUS_NO_REASON], total: 1 });
+    vi.mocked(endpoints.viewDocumentChanges).mockResolvedValue({ items: [STATUS_NO_REASON] });
+    render(<ChangeHistoryPage />);
+    await waitFor(() => expect(screen.getByText(/文件狀態：有效 → 失效/)).toBeInTheDocument());
+    await userEvent.click(screen.getByText(/文件狀態：有效 → 失效/));
+    expect(await screen.findByText(/展開檢視已寫入/)).toBeInTheDocument();
+    expect(screen.queryByText(/切換原因：/)).not.toBeInTheDocument();
+  });
 });

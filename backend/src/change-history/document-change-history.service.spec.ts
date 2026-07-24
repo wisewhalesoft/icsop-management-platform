@@ -42,6 +42,7 @@ function row(p: Partial<DocumentChangeLogRow>): DocumentChangeLogRow {
     actorId: 'acc-1',
     actorName: '李慧玲',
     actorEmployeeNo: '20233',
+    reason: null,
     occurredAt: new Date('2026-07-16T10:00:00Z'),
     ...p,
   };
@@ -107,6 +108,8 @@ describe('DocumentChangeHistoryService.viewDocument (F037 展開 + 稽核)', () 
       actorId: 'acc-9',
       targetId: 'doc-1',
       targetNumber: 'ICSOP-SRC-101-1-01',
+      // OQ-AQ-04：targetName 亦填入（供 F024「對象名稱」欄；變更-kind 唯一可用之描述性文字＝文件編號快照）。
+      targetName: 'ICSOP-SRC-101-1-01',
     });
   });
 

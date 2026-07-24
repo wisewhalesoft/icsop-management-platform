@@ -1,5 +1,5 @@
 # F010: 建立 ICSOP 文件
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-17
+Priority: P0-MVP | Status: 🟡 實作（建立端點＋F010 建立稽核事件 CREATE 逐欄位落地；單元綠；整合已寫未跑；見 implementation-logs/doc-changelog-impl.md） | Last Updated: 2026-07-24
 Epic/Story: E04 / US-030
 
 ## Description

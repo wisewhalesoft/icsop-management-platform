@@ -265,6 +265,114 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
     });
   });
 
+  describe('F012 切換原因 UI（prototype 15 statusReasonWrap；ruling 2＝折入一般 PATCH）', () => {
+    it('TS-DCL-D-001 狀態未變更時 → 不顯示原因輸入框', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      expect(screen.queryByLabelText(/切換原因/)).not.toBeInTheDocument();
+    });
+
+    it('TS-DCL-D-002 點選不同狀態 → 顯示原因輸入框（label／placeholder 比照 prototype）', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: '失效' }));
+      const reason = await screen.findByLabelText(/切換原因/);
+      expect(reason).toBeInTheDocument();
+      expect(screen.getByText(/（選填）/)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/內容已過時/)).toBeInTheDocument();
+    });
+
+    it('TS-DCL-D-003 選回原狀態 → 原因框重新隱藏且清空（再切換為空）', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: '失效' }));
+      await userEvent.type(await screen.findByLabelText(/切換原因/), '暫時輸入');
+      await userEvent.click(screen.getByRole('button', { name: '有效' })); // 回原狀態
+      expect(screen.queryByLabelText(/切換原因/)).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: '失效' })); // 再切
+      expect(await screen.findByLabelText(/切換原因/)).toHaveValue('');
+    });
+
+    it('TS-DCL-D-004 僅狀態變更 + 填原因 → updateDocument 帶 status＋reason；不呼叫 setDocumentStatus', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: '失效' }));
+      await userEvent.type(await screen.findByLabelText(/切換原因/), '依法規更新');
+      await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+      await waitFor(() =>
+        expect(endpoints.updateDocument).toHaveBeenCalledWith(
+          'd1',
+          expect.objectContaining({ status: 'inactive', reason: '依法規更新' }),
+        ),
+      );
+      expect(endpoints.setDocumentStatus).not.toHaveBeenCalled();
+    });
+
+    it('TS-DCL-D-005 狀態變更未填原因 → updateDocument 帶 status、不帶 reason 鍵', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: '失效' }));
+      await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+      await waitFor(() => expect(endpoints.updateDocument).toHaveBeenCalled());
+      const patch = vi.mocked(endpoints.updateDocument).mock.calls[0][1];
+      expect(patch).toMatchObject({ status: 'inactive' });
+      expect(patch).not.toHaveProperty('reason');
+    });
+
+    it('TS-DCL-D-006 儲存成功後 → 原因框清空（狀態已同步、框隱藏）', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: '失效' }));
+      await userEvent.type(await screen.findByLabelText(/切換原因/), '依法規更新');
+      await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+      await waitFor(() => expect(endpoints.updateDocument).toHaveBeenCalled());
+      await waitFor(() => expect(screen.queryByLabelText(/切換原因/)).not.toBeInTheDocument());
+    });
+
+    it('TS-DCL-D-007 取消變更 → 原因框清空', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: '失效' }));
+      await userEvent.type(await screen.findByLabelText(/切換原因/), '依法規更新');
+      await userEvent.click(screen.getByRole('button', { name: '取消' }));
+      expect(screen.queryByLabelText(/切換原因/)).not.toBeInTheDocument();
+    });
+
+    it('TS-DCL-D-008 唯讀角色（Supervisor）→ 狀態按鈕 disabled、不顯示原因輸入框', async () => {
+      mockAuth('Supervisor');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      expect(screen.getByRole('button', { name: '失效' })).toBeDisabled();
+      expect(screen.queryByLabelText(/切換原因/)).not.toBeInTheDocument();
+    });
+
+    it('TS-DCL-D-009 同時改書名與狀態＋原因 → 單一 updateDocument 帶全部（status/reason/documentName）', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toHaveValue('車輛分期進件作業'));
+      const name = screen.getByLabelText(/文件名稱/);
+      await userEvent.clear(name);
+      await userEvent.type(name, '新書名');
+      await userEvent.click(screen.getByRole('button', { name: '失效' }));
+      await userEvent.type(await screen.findByLabelText(/切換原因/), '依法規更新');
+      await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+      await waitFor(() =>
+        expect(endpoints.updateDocument).toHaveBeenCalledWith(
+          'd1',
+          expect.objectContaining({ documentName: '新書名', status: 'inactive', reason: '依法規更新' }),
+        ),
+      );
+      expect(endpoints.setDocumentStatus).not.toHaveBeenCalled();
+    });
+  });
+
   describe('F016 附件卡片顯示既有檔名與下載（prototype 15）', () => {
     it('TS-D-007 已上傳 ICSOP PDF → 卡片顯示檔名與「下載」鈕（與「取代」並存）', async () => {
       mockAuth('ICSOPAdmin');

@@ -34,12 +34,17 @@ const FIELD_LABEL: Record<string, string> = {
   status: '文件狀態',
   documentName: '程序書書名',
   documentNumber: '文件編號',
+  lifecycleId: '所屬循環',
   draftingCompanyId: '制定公司',
   draftingDeptId: '制定部門',
   draftingSectionId: '制定室別',
   primaryChiefId: '當責室長-主要',
+  secondaryChiefIds: '當責室長-次要',
+  usingDeptIds: '文件使用部門',
+  edition: '版次',
   announcedDate: '公告日期',
   version: '版次',
+  contentSummary: '內容摘要',
   summary: '內容摘要',
 };
 const STATUS_LABEL: Record<string, string> = {
@@ -47,7 +52,7 @@ const STATUS_LABEL: Record<string, string> = {
   inactive: '失效',
   void: '作廢',
 };
-const CHANGE_SOURCE: Record<string, string> = { CONTENT: '編輯', STATUS: '狀態切換', META: '中繼' };
+const CHANGE_SOURCE: Record<string, string> = { CREATE: '建立', CONTENT: '編輯', STATUS: '狀態切換', META: '中繼' };
 
 function fieldLabel(f: string): string {
   return FIELD_LABEL[f] ?? f;
@@ -343,6 +348,13 @@ function DocTab(): JSX.Element {
                                     <span className="px-2 py-0.5 rounded text-xs font-medium max-w-full break-all" style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0' }}>
                                       {valLabel(ev.field, ev.newValue)}
                                     </span>
+                                    {/* F012 AC36：切換原因（僅 STATUS 事件承載；未填＝不顯示此列，非「（空）」）。
+                                        填補 prototype 23 缺口（原型無此顯示元素）——見 doc-changelog impl-log ruling 3。 */}
+                                    {ev.reason && (
+                                      <span className="basis-full text-[11px] text-slate-500 mt-0.5">
+                                        切換原因：{ev.reason}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               ))}

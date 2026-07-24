@@ -296,6 +296,8 @@ export interface DocumentChangeView {
   actorId: string | null;
   actorName: string | null;
   actorEmployeeNo: string | null;
+  /** F012 切換原因（僅 STATUS 事件承載；其餘 changeType 為 null；供變更歷程檢視，F012 AC36）。 */
+  reason?: string | null;
   occurredAt: string;
 }
 export interface DocumentChangeFilters {

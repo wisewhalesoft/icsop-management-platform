@@ -136,6 +136,8 @@ export function DocumentEditPage(): JSX.Element {
   const [draftForms, setDraftForms] = useState<ComboOption[]>([]);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  /** F012 切換原因（選填；僅於狀態實際變更時顯示，儲存/取消/回原狀態時清空）。prototype 15 statusReasonWrap。 */
+  const [statusReason, setStatusReason] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -269,6 +271,14 @@ export function DocumentEditPage(): JSX.Element {
   const onDeptChange = useCallback((v: string) => {
     setDraft((d) => (d ? { ...d, draftingDeptId: v, draftingSectionId: '' } : d));
   }, []);
+  /** 切換狀態：回到原狀態（未變更）時清空切換原因，避免殘留先前輸入（prototype 15 paintStatus 語意）。 */
+  const onStatusPick = useCallback(
+    (s: DocumentStatus) => {
+      setDraft((d) => (d ? { ...d, status: s } : d));
+      if (orig && s === orig.status) setStatusReason('');
+    },
+    [orig],
+  );
 
   // ===== 編號：前綴（依循環代碼）＋後段序號；編輯側唯一性排除自身 =====
   const cycleName = useMemo(
@@ -318,6 +328,7 @@ export function DocumentEditPage(): JSX.Element {
     if (!orig) return;
     setDraft(copyDraft(orig));
     setDraftForms(origForms);
+    setStatusReason(''); // 比照 prototype 15 cancelAll 之 reasonEl.value=''。
     setNotice({ tone: 'ok', text: '已取消變更，欄位回復為編輯前原值' });
   }, [orig, origForms]);
 
@@ -333,7 +344,12 @@ export function DocumentEditPage(): JSX.Element {
       return;
     }
     const patch: Record<string, unknown> = {};
-    if (changed('status')) patch.status = draft.status;
+    if (changed('status')) {
+      patch.status = draft.status;
+      // F012 切換原因（ruling 2）：折入同一次 PATCH；未填則不帶 reason 鍵（後端視同未填）。
+      const r = statusReason.trim();
+      if (r) patch.reason = r;
+    }
     if (changed('documentNumber')) patch.documentNumber = draft.documentNumber;
     if (changed('documentName')) patch.documentName = draft.documentName.trim();
     if (changed('edition')) patch.edition = draft.edition || null;
@@ -369,13 +385,15 @@ export function DocumentEditPage(): JSX.Element {
         for (const f of origForms) if (!draftIds.has(f.value)) await unlinkUsageForm(id, f.value);
         setOrigForms(draftForms);
       }
+      // 切換原因已隨 PATCH 送出並記入變更歷程 → 清空（比照 prototype 15 saveAll 之 reasonEl.value=''）。
+      setStatusReason('');
       setNotice({ tone: 'ok', text: '已儲存：以新值覆蓋，UUID 不變、不留歷史版本' });
     } catch (e) {
       setNotice({ tone: 'err', text: msgOf(e) });
     } finally {
       setBusy(false);
     }
-  }, [draft, orig, canWrite, suffix, dupHit, changed, formsChanged, origForms, draftForms, id]);
+  }, [draft, orig, canWrite, suffix, dupHit, changed, formsChanged, origForms, draftForms, id, statusReason]);
 
   const onUpload = useCallback(
     async (kind: 'pdf' | 'ojt', file: File | null) => {
@@ -504,7 +522,7 @@ export function DocumentEditPage(): JSX.Element {
                   <button
                     key={s}
                     disabled={ro}
-                    onClick={() => set('status', s)}
+                    onClick={() => onStatusPick(s)}
                     aria-pressed={draft.status === s}
                     className={`px-3 py-1.5 border-r border-slate-300 last:border-r-0 ${draft.status === s ? 'bg-primary-600 text-white font-medium' : 'bg-white text-slate-700'} disabled:opacity-60`}
                   >
@@ -513,6 +531,23 @@ export function DocumentEditPage(): JSX.Element {
                 ))}
               </div>
             </div>
+            {/* 切換原因（選填）：僅於狀態實際變更且可寫時顯示（prototype 15 statusReasonWrap；F012 AC）。 */}
+            {canWrite && changed('status') && (
+              <div className="mt-2.5">
+                <label htmlFor="edStatusReason" className="block text-[11px] font-medium text-slate-500 mb-1">
+                  切換原因 <span className="font-normal text-slate-400">（選填）</span>
+                </label>
+                <input
+                  id="edStatusReason"
+                  type="text"
+                  value={statusReason}
+                  onChange={(e) => setStatusReason(e.target.value)}
+                  placeholder="例：內容已過時、依法規更新、由新版取代…"
+                  className="w-full sm:max-w-md px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">非必填；若填寫將一併記入變更歷程（F037「文件狀態」事件）。</p>
+              </div>
+            )}
           </div>
         </div>
 

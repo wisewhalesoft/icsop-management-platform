@@ -81,7 +81,8 @@ export class DocumentsController {
   @Post()
   @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'write')
   create(@Req() req: RequestWithSession, @Body() body: Record<string, unknown>) {
-    return this.svc.create(req.sessionUser?.roleCode, body ?? {});
+    // F037/F010：操作者身分快照（accountId/name/employeeNo）帶入 → 建立稽核事件記操作者。
+    return this.svc.create(req.sessionUser?.roleCode, body ?? {}, actorOf(req));
   }
 
   /** F011 編輯：以新值覆蓋（不留歷史、UUID 不變）。欄位面/必填/狀態/編號唯一於 service 落實。 */
