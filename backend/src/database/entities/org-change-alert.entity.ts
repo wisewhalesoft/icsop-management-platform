@@ -22,7 +22,7 @@ export class OrgChangeAlert {
   id!: string;
 
   @Column({ type: 'varchar', length: 30 })
-  alertKind!: string; // DOCUMENT_FIELD / CLOSED_DEPT_PERSON
+  alertKind!: string; // DOCUMENT_FIELD / CLOSED_DEPT_PERSON / DATA_INCONSISTENCY / ACCOUNT_DISAPPEARED
 
   @Index('IX_ORG_CHANGE_ALERT_documentId')
   @Column({ type: 'uniqueidentifier', nullable: true })
@@ -48,6 +48,12 @@ export class OrgChangeAlert {
 
   @Column({ type: 'nvarchar', length: 30, nullable: true })
   personName!: string | null;
+
+  // F005 兩類（DATA_INCONSISTENCY／ACCOUNT_DISAPPEARED）之精確去重鍵＝帳號 loginId（比照 ACCOUNT.loginId
+  // 之 varchar(20)）；既有兩類恆為 null。去重之 DB 層第二道防線＝兩個 filtered unique index（見 migration
+  // 1723248000000）。⚠ 不以 EMPNO 去重（F005：一人多帳號，不以 EMPNO 連坐）。
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  accountLoginId!: string | null;
 
   @Column({ type: 'varchar', length: 10, nullable: true })
   deptOrgCode!: string | null;

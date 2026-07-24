@@ -14,6 +14,7 @@ import { SyncAlertInput } from '../org-sync/org-sync.types';
 import { AuditAccessEvent, AuditWriter, AuditQueryScope, AuditQueryFilters, AuditRow, Page } from '../audit/audit.types';
 import { FieldKey } from '../rbac/field-matrix';
 import { NormalizedOrgUnit } from '../org-sync/normalization';
+import { ExistingAccount } from '../org-sync/change-classification';
 
 const NOW = new Date('2026-07-24T02:00:00.000Z');
 
@@ -97,6 +98,7 @@ function pending(over: Partial<AlertRow> = {}): AlertRow {
     afterValue: '（已轉調 客服室）',
     personEmployeeNo: null,
     personName: null,
+    accountLoginId: null,
     deptOrgCode: null,
     deptName: null,
     deptCloseDate: null,
@@ -135,6 +137,7 @@ function syncInput(over: Partial<SyncAlertInput> = {}): SyncAlertInput {
     orgUnits: [],
     accountUpdates: [],
     existingAcc: new Map(),
+    disappearedLoginIds: [],
     ...over,
   };
 }
@@ -147,7 +150,7 @@ describe('OrgChangeAlertService.generateFromSyncPlan', () => {
   it('TS-F006-025／AC9 掛已關閉部門者：僅寫入提示，不停用帳號、不改派部門', async () => {
     const store = new FakeAlertStore();
     store.accounts = [
-      { employeeNo: 'E777', name: '林小美', orgCode: 'JAD00', status: 'active' },
+      { loginId: 'AS777', employeeNo: 'E777', name: '林小美', orgCode: 'JAD00', status: 'active', resignDate: null },
     ];
     const audit = new FakeAudit();
 
@@ -164,7 +167,7 @@ describe('OrgChangeAlertService.generateFromSyncPlan', () => {
   it('TS-F006-026 掛已關閉部門者同時為某文件當責室長 → 兩類提示各自獨立產生', async () => {
     const store = new FakeAlertStore();
     store.accounts = [
-      { employeeNo: 'E777', name: '林小美', orgCode: 'JAD00', status: 'active' },
+      { loginId: 'AS777', employeeNo: 'E777', name: '林小美', orgCode: 'JAD00', status: 'active', resignDate: null },
     ];
     store.documents = [
       {
@@ -211,7 +214,7 @@ describe('OrgChangeAlertService.generateFromSyncPlan', () => {
   it('TS-F006-057 提示產生全程不寫入 AUDIT_LOG（產生非調閱事件）', async () => {
     const store = new FakeAlertStore();
     store.accounts = [
-      { employeeNo: 'E777', name: '林小美', orgCode: 'JAD00', status: 'active' },
+      { loginId: 'AS777', employeeNo: 'E777', name: '林小美', orgCode: 'JAD00', status: 'active', resignDate: null },
     ];
     const audit = new FakeAudit();
 
@@ -234,7 +237,7 @@ describe('OrgChangeAlertService.generateFromSyncPlan', () => {
       }),
     ];
     store.accounts = [
-      { employeeNo: 'E777', name: '林小美', orgCode: 'JAD00', status: 'active' },
+      { loginId: 'AS777', employeeNo: 'E777', name: '林小美', orgCode: 'JAD00', status: 'active', resignDate: null },
     ];
     store.documents = [
       {
@@ -291,6 +294,298 @@ describe('OrgChangeAlertService.generateFromSyncPlan', () => {
     // 兩類皆已有 pending → 不新增任何列。
     expect(store.rows).toHaveLength(2);
     expect(store.inserted).toEqual([]);
+  });
+});
+
+describe('OrgChangeAlertService.generateFromSyncPlan × F005 兩類新告警', () => {
+  const PAST = new Date('2024-12-31T00:00:00.000Z');
+
+  function activeAcc(over: Partial<ActiveAccountRef> & Pick<ActiveAccountRef, 'loginId'>): ActiveAccountRef {
+    return {
+      employeeNo: `E-${over.loginId}`,
+      name: `name-${over.loginId}`,
+      orgCode: 'JAC00',
+      status: 'active',
+      resignDate: null,
+      ...over,
+    };
+  }
+
+  function existingAcc(loginId: string, orgCode: string | null): ExistingAccount {
+    return {
+      companyCode: 'AS',
+      loginId,
+      employeeNo: `E-${loginId}`,
+      name: `name-${loginId}`,
+      email: null,
+      orgCode,
+      status: 'active',
+      resignDate: null,
+      hireDate: null,
+      managerEmpNo: null,
+    };
+  }
+
+  it('TS-ORGALERT-010 一次呼叫同時產生四類提示，互不排擠', async () => {
+    const store = new FakeAlertStore();
+    // CLOSED_DEPT_PERSON（掛已關閉 JAD00）＋ DATA_INCONSISTENCY（在職但過去 RESIGNDT）。
+    store.accounts = [
+      activeAcc({ loginId: 'closed1', orgCode: 'JAD00', resignDate: null }),
+      activeAcc({ loginId: 'incon1', orgCode: 'JAC00', resignDate: PAST }),
+    ];
+    // DOCUMENT_FIELD（當責室長本人部門異動）。
+    store.documents = [
+      {
+        documentId: 'D1',
+        documentNumber: 'ICSOP-SRC-101-1-01',
+        documentName: '車輛分期進件作業',
+        draftingCompanyId: null,
+        draftingDeptId: null,
+        draftingSectionId: null,
+        primaryChiefId: 'E-doc1',
+        secondaryChiefIds: [],
+        usingDeptIds: [],
+      },
+    ];
+
+    await svc(store).generateFromSyncPlan(
+      syncInput({
+        orgUnits: [orgUnit()], // JAD00 已關閉
+        accountUpdates: [
+          {
+            companyCode: 'AS',
+            loginId: 'doc1',
+            employeeNo: 'E-doc1',
+            name: '陳彥廷',
+            email: null,
+            orgCode: 'JAC00',
+            empActive: true,
+            resignDate: null,
+            hireDate: null,
+            managerEmpNo: null,
+            upstreamModifiedAt: NOW,
+          },
+        ],
+        existingAcc: new Map([
+          ['doc1', existingAcc('doc1', 'JAB00')], // 部門異動 → DOCUMENT_FIELD
+          ['gone1', existingAcc('gone1', 'JAC00')],
+        ]),
+        disappearedLoginIds: ['gone1'], // ACCOUNT_DISAPPEARED
+      }),
+    );
+
+    const kinds = new Set(store.rows.map((r) => r.alertKind));
+    expect(kinds).toEqual(
+      new Set([
+        'DOCUMENT_FIELD',
+        'CLOSED_DEPT_PERSON',
+        'DATA_INCONSISTENCY',
+        'ACCOUNT_DISAPPEARED',
+      ]),
+    );
+  });
+
+  it('TS-ORGALERT-011 existingPendingLoginIds 兩獨立集合依 alertKind 分流、互不污染', async () => {
+    const store = new FakeAlertStore();
+    // 既有 pending：u1 為 DATA_INCONSISTENCY、u2 為 ACCOUNT_DISAPPEARED。
+    store.rows = [
+      pending({
+        id: 'p1',
+        alertKind: 'DATA_INCONSISTENCY',
+        documentId: null,
+        affectedField: null,
+        accountLoginId: 'u1',
+      }),
+      pending({
+        id: 'p2',
+        alertKind: 'ACCOUNT_DISAPPEARED',
+        documentId: null,
+        affectedField: null,
+        accountLoginId: 'u2',
+      }),
+    ];
+    // 本次 u1、u2 皆同時符合兩偵測條件（在職＋過去 RESIGNDT，且皆在 disappearedLoginIds）。
+    store.accounts = [
+      activeAcc({ loginId: 'u1', resignDate: PAST }),
+      activeAcc({ loginId: 'u2', resignDate: PAST }),
+    ];
+
+    await svc(store).generateFromSyncPlan(
+      syncInput({
+        existingAcc: new Map([
+          ['u1', existingAcc('u1', 'JAC00')],
+          ['u2', existingAcc('u2', 'JAC00')],
+        ]),
+        disappearedLoginIds: ['u1', 'u2'],
+      }),
+    );
+
+    const inserted = store.inserted.flat();
+    const incon = inserted.filter((c) => c.alertKind === 'DATA_INCONSISTENCY');
+    const vanish = inserted.filter((c) => c.alertKind === 'ACCOUNT_DISAPPEARED');
+    // DATA_INCONSISTENCY：u1 已 pending 被去重、u2 未 pending（其 pending 屬另一 alertKind）→ 產生 u2。
+    expect(incon.map((c) => c.accountLoginId)).toEqual(['u2']);
+    // ACCOUNT_DISAPPEARED：u2 已 pending 被去重、u1 未 pending → 產生 u1。
+    expect(vanish.map((c) => c.accountLoginId)).toEqual(['u1']);
+  });
+
+  it('TS-ORGALERT-012 disappearedLoginIds 為空陣列 → 無 ACCOUNT_DISAPPEARED，其餘三類不受影響', async () => {
+    const store = new FakeAlertStore();
+    store.accounts = [activeAcc({ loginId: 'incon1', orgCode: 'JAC00', resignDate: PAST })];
+
+    await svc(store).generateFromSyncPlan(
+      syncInput({ disappearedLoginIds: [] }),
+    );
+
+    expect(store.rows.map((r) => r.alertKind)).toEqual(['DATA_INCONSISTENCY']);
+  });
+
+  it('TS-INCON-012 同帳號同時掛已關閉部門且過去 RESIGNDT → 兩類各自獨立產生', async () => {
+    const store = new FakeAlertStore();
+    // 單一帳號 u1：orgCode=JAD00（已關閉）且 resignDate 過去 → CLOSED_DEPT_PERSON ＋ DATA_INCONSISTENCY。
+    store.accounts = [activeAcc({ loginId: 'u1', orgCode: 'JAD00', resignDate: PAST })];
+
+    await svc(store).generateFromSyncPlan(syncInput({ orgUnits: [orgUnit()] }));
+
+    const kinds = store.rows.map((r) => r.alertKind).sort();
+    expect(kinds).toEqual(['CLOSED_DEPT_PERSON', 'DATA_INCONSISTENCY']);
+  });
+
+  it('TS-ORGALERT-043 兩類提示「產生」全程不寫入 AUDIT_LOG', async () => {
+    const store = new FakeAlertStore();
+    store.accounts = [activeAcc({ loginId: 'incon1', resignDate: PAST })];
+    const audit = new FakeAudit();
+
+    await svc(store, audit).generateFromSyncPlan(
+      syncInput({
+        existingAcc: new Map([['gone1', existingAcc('gone1', 'JAC00')]]),
+        disappearedLoginIds: ['gone1'],
+      }),
+    );
+
+    expect(store.rows.map((r) => r.alertKind).sort()).toEqual([
+      'ACCOUNT_DISAPPEARED',
+      'DATA_INCONSISTENCY',
+    ]);
+    expect(audit.events).toEqual([]);
+  });
+});
+
+describe('OrgChangeAlertService.resolve × F005 兩類（Route B）', () => {
+  it('TS-ORGALERT-030 DATA_INCONSISTENCY 提示可經 resolve 轉為 resolved', async () => {
+    const store = new FakeAlertStore();
+    store.rows = [
+      pending({
+        alertKind: 'DATA_INCONSISTENCY',
+        documentId: null,
+        affectedField: null,
+        accountLoginId: 'u1',
+      }),
+    ];
+
+    const res = await svc(store).resolve('a1', { accountId: 'acc-1' });
+
+    expect(res.status).toBe('resolved');
+    expect(res.resolutionKind).toBe('NO_CHANGE_NEEDED');
+    expect(res.resolvedBy).toBe('acc-1');
+    expect(res.resolvedAt).toEqual(NOW);
+  });
+
+  it('TS-ORGALERT-031 ACCOUNT_DISAPPEARED 提示可經 resolve 轉為 resolved', async () => {
+    const store = new FakeAlertStore();
+    store.rows = [
+      pending({
+        alertKind: 'ACCOUNT_DISAPPEARED',
+        documentId: null,
+        affectedField: null,
+        accountLoginId: 'u2',
+      }),
+    ];
+
+    const res = await svc(store).resolve('a1', { accountId: 'acc-1' });
+
+    expect(res.status).toBe('resolved');
+    expect(res.resolutionKind).toBe('NO_CHANGE_NEEDED');
+  });
+
+  it('TS-ORGALERT-033 已 resolved 之 DATA_INCONSISTENCY 再次 resolve → 409', async () => {
+    const store = new FakeAlertStore();
+    store.rows = [
+      pending({
+        alertKind: 'DATA_INCONSISTENCY',
+        documentId: null,
+        affectedField: null,
+        accountLoginId: 'u1',
+        status: 'resolved',
+        resolutionKind: 'NO_CHANGE_NEEDED',
+        resolvedBy: 'acc-first',
+      }),
+    ];
+
+    await expect(svc(store).resolve('a1', { accountId: 'acc-2' })).rejects.toThrow(
+      'ALERT_ALREADY_RESOLVED',
+    );
+  });
+
+  it('TS-ORGALERT-040 稽核 targetName 為「資料不一致（EMPSTS/RESIGNDT）」，非「掛於已關閉部門」', async () => {
+    const store = new FakeAlertStore();
+    store.rows = [
+      pending({
+        alertKind: 'DATA_INCONSISTENCY',
+        documentId: null,
+        documentNumber: null,
+        affectedField: null,
+        personEmployeeNo: 'E001',
+        accountLoginId: 'u1',
+      }),
+    ];
+    const audit = new FakeAudit();
+
+    await svc(store, audit).resolve('a1', { accountId: 'acc-1' });
+
+    expect(audit.events[0]).toMatchObject({
+      targetType: 'ORG_CHANGE_ALERT',
+      targetName: '資料不一致（EMPSTS/RESIGNDT）',
+    });
+    expect(audit.events[0].targetName).not.toBe('掛於已關閉部門');
+  });
+
+  it('TS-ORGALERT-041 稽核 targetName 為「帳號消失（來源查無）」', async () => {
+    const store = new FakeAlertStore();
+    store.rows = [
+      pending({
+        alertKind: 'ACCOUNT_DISAPPEARED',
+        documentId: null,
+        documentNumber: null,
+        affectedField: null,
+        personEmployeeNo: 'E002',
+        accountLoginId: 'u2',
+      }),
+    ];
+    const audit = new FakeAudit();
+
+    await svc(store, audit).resolve('a1', { accountId: 'acc-1' });
+
+    expect(audit.events[0].targetName).toBe('帳號消失（來源查無）');
+  });
+
+  it('TS-ORGALERT-042 兩類稽核 targetNumber 皆為 accountLoginId，非 personEmployeeNo', async () => {
+    const store = new FakeAlertStore();
+    store.rows = [
+      pending({
+        alertKind: 'DATA_INCONSISTENCY',
+        documentId: null,
+        documentNumber: null,
+        affectedField: null,
+        personEmployeeNo: 'E001',
+        accountLoginId: 'u1',
+      }),
+    ];
+    const audit = new FakeAudit();
+
+    await svc(store, audit).resolve('a1', { accountId: 'acc-1' });
+
+    expect(audit.events[0].targetNumber).toBe('u1');
   });
 });
 
@@ -462,6 +757,36 @@ describe('OrgChangeAlertService.autoResolveFromDocumentChange（Route A 服務�
 
     expect(store.rows[0].resolvedBy).toBe('acc-old');
     expect(audit.events).toEqual([]);
+  });
+
+  it('TS-ORGALERT-032 DATA_INCONSISTENCY／ACCOUNT_DISAPPEARED 無 Route A：文件事件不影響其狀態', async () => {
+    const store = new FakeAlertStore();
+    store.rows = [
+      pending({
+        id: 'incon1',
+        alertKind: 'DATA_INCONSISTENCY',
+        documentId: null,
+        affectedField: null,
+        accountLoginId: 'u1',
+      }),
+      pending({
+        id: 'vanish1',
+        alertKind: 'ACCOUNT_DISAPPEARED',
+        documentId: null,
+        affectedField: null,
+        accountLoginId: 'u2',
+      }),
+    ];
+
+    // 任意文件欄位變更事件 → 兩類（documentId=null）結構上不可能被 (documentId,affectedField) 命中。
+    await svc(store).autoResolveFromDocumentChange({
+      documentId: 'D1',
+      affectedFields: [FieldKey.CHIEF_PRIMARY],
+      actor: { accountId: 'acc-2' },
+      occurredAt: NOW,
+    });
+
+    expect(store.rows.every((r) => r.status === 'pending')).toBe(true);
   });
 });
 

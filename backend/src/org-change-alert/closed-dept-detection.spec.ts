@@ -16,10 +16,12 @@ const RUN = 'run-1';
 
 function person(over: Partial<ActiveAccountRef> = {}): ActiveAccountRef {
   return {
+    loginId: 'AS777',
     employeeNo: 'E777',
     name: '林小美',
     orgCode: 'JAD00',
     status: 'active',
+    resignDate: null,
     ...over,
   };
 }

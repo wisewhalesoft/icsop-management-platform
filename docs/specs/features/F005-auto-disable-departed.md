@@ -1,5 +1,5 @@
 # F005: 離職者自動停用帳號
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-20
+Priority: P0-MVP | Status: Implemented（告警縫隙補齊：DATA_INCONSISTENCY／ACCOUNT_DISAPPEARED；unit＋int 就緒、migration 落 SOP） | Last Updated: 2026-07-24
 Epic/Story: E02 / US-012
 
 ## Description

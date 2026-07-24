@@ -67,6 +67,7 @@ describe('[int] F006 組織異動待確認提示 vs SOP', () => {
       orgUnits: [closedUnit()],
       accountUpdates: [],
       existingAcc: new Map(),
+      disappearedLoginIds: [],
     };
   }
 

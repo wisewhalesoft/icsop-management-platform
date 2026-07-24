@@ -115,6 +115,12 @@ export interface SyncAlertInput {
   accountUpdates: NormalizedAccount[];
   /** 同步前帳號快照（key=loginId）。 */
   existingAcc: Map<string, ExistingAccount>;
+  /**
+   * F005 逐帳號「消失」告警之來源：本次同步「先前在職、本次來源查無」之 loginId 清單
+   * （＝`computeDisappeared().missingIds`，run() 中既有變數，非新查詢）。低於整批中止閾值時放行，
+   * 對每個消失帳號產生 ACCOUNT_DISAPPEARED 告警但不停用（消失≠離職，US-010 AC4）。
+   */
+  disappearedLoginIds: string[];
 }
 
 /**

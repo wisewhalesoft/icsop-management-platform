@@ -128,4 +128,16 @@ describe('classifyAccount', () => {
     const s = srcAcc({ upstreamModifiedAt: new Date('2030-01-01T00:00:00Z') });
     expect(classifyAccount(s, localAcc())).toBe('noop');
   });
+
+  it('TS-ORGALERT-016 EMPSTS=A 但 RESIGNDT 過去日（資料不一致）→ 絕不停用（F005 AC）', () => {
+    // EMPSTS='A' 權威優於 RESIGNDT：過去離職日只是資料矛盾（另由 DATA_INCONSISTENCY 告警），
+    // classifyAccount 對 empActive=true 之帳號結構上不可能回傳 disable。
+    const past = new Date('2024-12-31T00:00:00Z');
+    expect(classifyAccount(srcAcc({ empActive: true, resignDate: past }), localAcc())).not.toBe(
+      'disable',
+    );
+    expect(
+      classifyAccount(srcAcc({ empActive: true, resignDate: past }), localAcc({ resignDate: past })),
+    ).toBe('noop');
+  });
 });

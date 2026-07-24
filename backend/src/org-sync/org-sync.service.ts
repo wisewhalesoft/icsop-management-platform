@@ -258,6 +258,9 @@ export class OrgSyncService {
             orgUnits: normDepts,
             accountUpdates,
             existingAcc,
+            // F005：本次消失（本地在職、來源查無）之 loginId；閾值放行時逐帳號產生 ACCOUNT_DISAPPEARED
+            //       告警但不停用（消失≠離職）。閾值中止路徑不會走到此處（提前 return）。
+            disappearedLoginIds: disappeared.missingIds,
           });
         } catch (e) {
           warnings.push(

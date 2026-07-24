@@ -500,6 +500,7 @@ describe('generateDocumentFieldAlerts — 去重（§3.5）與不覆寫（§3.6�
     expect(out).toHaveLength(1);
     expect(Object.keys(out[0]).sort()).toEqual(
       [
+        'accountLoginId',
         'affectedField',
         'afterValue',
         'alertKind',
