@@ -1,4 +1,4 @@
-import { DataSource } from 'typeorm';
+import { DataSource, LessThan } from 'typeorm';
 import { LifecycleChangeLog } from '../database/entities/lifecycle-change-log.entity';
 import {
   LifecycleChangeLogRow,
@@ -30,6 +30,7 @@ export class TypeOrmLifecycleChangeLogStore implements LifecycleChangeLogStore {
       actorName: e.actorName,
       actorEmployeeNo: e.actorEmployeeNo,
       occurredAt: e.occurredAt,
+      snapshotId: e.snapshotId ?? null,
     };
   }
 
@@ -52,5 +53,24 @@ export class TypeOrmLifecycleChangeLogStore implements LifecycleChangeLogStore {
       .getRepository(LifecycleChangeLog)
       .find({ where: { lifecycleId }, order: { occurredAt: 'DESC' } });
     return rows.map(TypeOrmLifecycleChangeLogStore.toRow);
+  }
+
+  async findById(id: string): Promise<LifecycleChangeLogRow | null> {
+    const ds = await this.init();
+    const e = await ds.getRepository(LifecycleChangeLog).findOne({ where: { id } });
+    return e ? TypeOrmLifecycleChangeLogStore.toRow(e) : null;
+  }
+
+  /** 取同 lifecycleId、occurredAt 嚴格早於 before 之最近一筆（§B 重建之「變更前」錨定）。 */
+  async findPredecessor(
+    lifecycleId: string,
+    before: Date,
+  ): Promise<LifecycleChangeLogRow | null> {
+    const ds = await this.init();
+    const e = await ds.getRepository(LifecycleChangeLog).findOne({
+      where: { lifecycleId, occurredAt: LessThan(before) },
+      order: { occurredAt: 'DESC' },
+    });
+    return e ? TypeOrmLifecycleChangeLogStore.toRow(e) : null;
   }
 }

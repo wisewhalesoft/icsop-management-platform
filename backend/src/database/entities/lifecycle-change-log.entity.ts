@@ -44,4 +44,9 @@ export class LifecycleChangeLog {
 
   @Column({ type: 'datetime2' })
   occurredAt!: Date;
+
+  /** F038：1:1 回指之 LIFECYCLE_SNAPSHOT.id（同一交易內產生；ALTER ADD，NULLable，無 DB FK）。 */
+  @Index('IX_LC_CHANGE_LOG_snapshotId', ['snapshotId'])
+  @Column({ type: 'uniqueidentifier', nullable: true })
+  snapshotId!: string | null;
 }

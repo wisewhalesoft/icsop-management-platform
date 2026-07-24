@@ -11,8 +11,10 @@ import {
   LifecycleActor,
   LifecycleChangePublisher,
   LifecycleChangeType,
+  LifecycleChangedEvent,
   NoopLifecycleChangePublisher,
 } from './lifecycle-change-event';
+import { NodeDocsStructuralTx } from './lifecycle-structural-change';
 
 export interface DrawerDoc {
   id: string;
@@ -28,13 +30,17 @@ export interface DrawerData {
   candidates: DrawerCandidate[];
 }
 
+/** 掛載/改派/移除之最小操作面（NodeDocsStore 與交易內 NodeDocsStructuralTx 皆滿足）。 */
+type NodeDocsMutationOps = Omit<NodeDocsStructuralTx, 'recordStructuralChange'>;
+
 /**
  * F009 節點抽屜：文件掛載至節點（＝設 ICSOP_DOCUMENT.nodeId；一份文件僅屬一節點）。
  * 候選文件過濾為當前循環（後端）；已掛他節點須二次確認改派（NODE_DOC_ALREADY_ASSIGNED）。
  * 功能面 RBAC（循環管理 write＝ICSOPAdmin）由 controller guard 落實。
  *
- * F038：掛載/改派/移除文件於持久化後發出結構變更事件（DOCUMENT_MOUNTED／DOCUMENT_REASSIGNED／
- * DOCUMENT_UNMOUNTED）；預設 no-op（seam），changehistory 併回後落地為 LIFECYCLE_CHANGE_LOG。
+ * F038 交易一致性（architecture-spec §5.9）：掛載/改派/移除文件與其結構變更事件（DOCUMENT_MOUNTED／
+ * DOCUMENT_REASSIGNED／DOCUMENT_UNMOUNTED）＋ LIFECYCLE_SNAPSHOT 於**同一 DB 交易**內提交（store 提供
+ * runStructuralChange 時）；未提供之 fake → 退化循序路徑（行為不變、無快照）。
  */
 @Injectable()
 export class NodeDocsService {
@@ -50,14 +56,14 @@ export class NodeDocsService {
     this.publisher = publisher ?? new NoopLifecycleChangePublisher();
   }
 
-  private async emit(
+  private buildEvent(
     lifecycleId: string,
     changeType: LifecycleChangeType,
     summary: string,
     nodeId: string | null,
     actor?: LifecycleActor,
-  ): Promise<void> {
-    await this.publisher.publish({
+  ): LifecycleChangedEvent {
+    return {
       lifecycleId,
       changeType,
       summary,
@@ -66,7 +72,23 @@ export class NodeDocsService {
       actorName: actor?.name ?? null,
       actorEmployeeNo: actor?.employeeNo ?? null,
       occurredAt: this.clock(),
-    });
+    };
+  }
+
+  /** 見 DagService.runChange：原子（交易＋快照）或循序（publisher）二選一。 */
+  private async runChange<T>(
+    op: (m: NodeDocsMutationOps) => Promise<{ result: T; event: LifecycleChangedEvent | null }>,
+  ): Promise<T> {
+    if (this.store.runStructuralChange) {
+      return this.store.runStructuralChange(async (tx) => {
+        const { result, event } = await op(tx);
+        if (event) await tx.recordStructuralChange(event);
+        return result;
+      });
+    }
+    const { result, event } = await op(this.store);
+    if (event) await this.publisher.publish(event);
+    return result;
   }
 
   async getDrawer(lifecycleId: string, nodeId: string): Promise<DrawerData> {
@@ -100,38 +122,39 @@ export class NodeDocsService {
     confirm: boolean,
     actor?: LifecycleActor,
   ): Promise<void> {
-    const node = await this.store.getNode(lifecycleId, nodeId);
-    if (!node) throw new NotFoundException('NODE_NOT_FOUND');
-    const doc = await this.store.getDoc(docId);
-    if (!doc) throw new NotFoundException('DOCUMENT_NOT_FOUND');
-    if (doc.lifecycleId !== lifecycleId) {
-      throw new ConflictException('NODE_DOC_LIFECYCLE_MISMATCH');
-    }
-    if (doc.nodeId === nodeId) return; // 已在本節點，no-op
-    const reassigned = !!doc.nodeId;
-    if (reassigned && !confirm) {
-      throw new ConflictException('NODE_DOC_ALREADY_ASSIGNED');
-    }
-    await this.store.setDocNode(docId, nodeId);
+    await this.runChange<void>(async (m) => {
+      const node = await m.getNode(lifecycleId, nodeId);
+      if (!node) throw new NotFoundException('NODE_NOT_FOUND');
+      const doc = await m.getDoc(docId);
+      if (!doc) throw new NotFoundException('DOCUMENT_NOT_FOUND');
+      if (doc.lifecycleId !== lifecycleId) {
+        throw new ConflictException('NODE_DOC_LIFECYCLE_MISMATCH');
+      }
+      if (doc.nodeId === nodeId) return { result: undefined, event: null }; // 已在本節點，no-op
+      const reassigned = !!doc.nodeId;
+      if (reassigned && !confirm) {
+        throw new ConflictException('NODE_DOC_ALREADY_ASSIGNED');
+      }
+      await m.setDocNode(docId, nodeId);
 
-    const label = await this.docLabel(lifecycleId, docId);
-    if (reassigned) {
-      await this.emit(
-        lifecycleId,
-        'DOCUMENT_REASSIGNED',
-        `文件改派至節點『${node.name ?? '未命名節點'}』：${label}`,
-        nodeId,
-        actor,
-      );
-    } else {
-      await this.emit(
-        lifecycleId,
-        'DOCUMENT_MOUNTED',
-        `文件掛載至節點『${node.name ?? '未命名節點'}』：${label}`,
-        nodeId,
-        actor,
-      );
-    }
+      const label = await this.docLabel(m, lifecycleId, docId);
+      const event = reassigned
+        ? this.buildEvent(
+            lifecycleId,
+            'DOCUMENT_REASSIGNED',
+            `文件改派至節點『${node.name ?? '未命名節點'}』：${label}`,
+            nodeId,
+            actor,
+          )
+        : this.buildEvent(
+            lifecycleId,
+            'DOCUMENT_MOUNTED',
+            `文件掛載至節點『${node.name ?? '未命名節點'}』：${label}`,
+            nodeId,
+            actor,
+          );
+      return { result: undefined, event };
+    });
   }
 
   /** 移除掛載（該文件 nodeId 設為 null）。 */
@@ -141,22 +164,29 @@ export class NodeDocsService {
     docId: string,
     actor?: LifecycleActor,
   ): Promise<void> {
-    const node = await this.store.getNode(lifecycleId, nodeId);
-    if (!node) throw new NotFoundException('NODE_NOT_FOUND');
-    const label = await this.docLabel(lifecycleId, docId);
-    await this.store.setDocNode(docId, null);
-    await this.emit(
-      lifecycleId,
-      'DOCUMENT_UNMOUNTED',
-      `文件自節點『${node.name ?? '未命名節點'}』移除掛載：${label}`,
-      nodeId,
-      actor,
-    );
+    await this.runChange<void>(async (m) => {
+      const node = await m.getNode(lifecycleId, nodeId);
+      if (!node) throw new NotFoundException('NODE_NOT_FOUND');
+      const label = await this.docLabel(m, lifecycleId, docId);
+      await m.setDocNode(docId, null);
+      const event = this.buildEvent(
+        lifecycleId,
+        'DOCUMENT_UNMOUNTED',
+        `文件自節點『${node.name ?? '未命名節點'}』移除掛載：${label}`,
+        nodeId,
+        actor,
+      );
+      return { result: undefined, event };
+    });
   }
 
   /** 文件顯示標籤（編號 書名）；查無則回文件 id（不阻斷主流程）。 */
-  private async docLabel(lifecycleId: string, docId: string): Promise<string> {
-    const d = (await this.store.listLifecycleDocs(lifecycleId)).find((x) => x.id === docId);
+  private async docLabel(
+    m: NodeDocsMutationOps,
+    lifecycleId: string,
+    docId: string,
+  ): Promise<string> {
+    const d = (await m.listLifecycleDocs(lifecycleId)).find((x) => x.id === docId);
     return d ? `${d.documentNumber} ${d.documentName}` : docId;
   }
 }

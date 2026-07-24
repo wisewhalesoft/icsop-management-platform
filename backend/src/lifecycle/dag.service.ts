@@ -12,18 +12,25 @@ import {
   LifecycleActor,
   LifecycleChangePublisher,
   LifecycleChangeType,
+  LifecycleChangedEvent,
   LifecycleEmitContext,
   NoopLifecycleChangePublisher,
 } from './lifecycle-change-event';
+import { DagStructuralTx } from './lifecycle-structural-change';
 
 const NODE_LABEL = (name: string | null): string => name ?? '未命名節點';
+
+/** DAG 結構寫入/查詢之最小操作面（DagStore 與交易內 DagStructuralTx 皆滿足）。 */
+type DagMutationOps = Omit<DagStructuralTx, 'recordStructuralChange'>;
 
 /**
  * 循環 DAG 節點/邊維護（F008）。成環防止於後端權威驗證（classifyEdge）。
  * 功能面 RBAC 由 controller guard（循環管理 write＝ICSOPAdmin）落實。
  *
- * F038：每次成功之結構變更（新增/刪除節點、改名、新增/刪除連線）於持久化後發出 LifecycleChangedEvent；
- * 預設 no-op（seam），changehistory 併回後由真實 publisher 落地為 LIFECYCLE_CHANGE_LOG。
+ * F038 交易一致性（architecture-spec §5.9）：每次成功之結構變更（新增/刪除節點、改名、新增/刪除連線）
+ * 與其 LIFECYCLE_CHANGE_LOG 事件 ＋ LIFECYCLE_SNAPSHOT 快照於**同一 DB 交易**內提交（store 提供
+ * `runStructuralChange` 時）；任一失敗整批回滾——不留與結構不同步之快照/日誌（保護新舊樹重建正確性）。
+ * store 未提供交易能力（純單元 fake）→ 退化為「結構寫入 + publisher.publish」循序路徑（行為不變、無快照）。
  */
 @Injectable()
 export class DagService {
@@ -39,7 +46,7 @@ export class DagService {
     this.publisher = publisher ?? new NoopLifecycleChangePublisher();
   }
 
-  private async emit(
+  private buildEvent(
     lifecycleId: string,
     changeType: LifecycleChangeType,
     summary: string,
@@ -49,8 +56,8 @@ export class DagService {
       nodeId?: string | null;
       actor?: LifecycleActor;
     } = {},
-  ): Promise<void> {
-    await this.publisher.publish({
+  ): LifecycleChangedEvent {
+    return {
       lifecycleId,
       changeType,
       summary,
@@ -61,7 +68,37 @@ export class DagService {
       actorName: extra.actor?.name ?? null,
       actorEmployeeNo: extra.actor?.employeeNo ?? null,
       occurredAt: this.clock(),
-    });
+    };
+  }
+
+  /**
+   * 結構變更之統一執行框架。`op` 執行結構寫入並回傳結果＋（選填）變更事件；框架依 store 能力二選一：
+   *  - 原子路徑（store.runStructuralChange 存在）：op 於交易內執行，事件經 tx.recordStructuralChange
+   *    與結構寫入同交易落地（含快照）；
+   *  - 循序路徑（fallback）：op 於 store 直接執行，事件經 publisher.publish 落地（無快照）。
+   * op 中途拋錯（如成環驗證）→ 原子路徑整批回滾、循序路徑不 publish（皆不留半套變更）。
+   */
+  private async runChange<T>(
+    op: (m: DagMutationOps) => Promise<{ result: T; event: LifecycleChangedEvent | null }>,
+  ): Promise<T> {
+    if (this.store.runStructuralChange) {
+      return this.store.runStructuralChange(async (tx) => {
+        const { result, event } = await op(tx);
+        if (event) await tx.recordStructuralChange(event);
+        return result;
+      });
+    }
+    const { result, event } = await op(this.store);
+    if (event) await this.publisher.publish(event);
+    return result;
+  }
+
+  private async namesOf(
+    m: DagMutationOps,
+    lifecycleId: string,
+  ): Promise<Map<string, string | null>> {
+    const nodes = await m.listNodes(lifecycleId);
+    return new Map(nodes.map((n) => [n.id, n.name]));
   }
 
   async getGraph(lifecycleId: string): Promise<DagGraph> {
@@ -80,17 +117,21 @@ export class DagService {
     input: { name?: string | null; positionX?: number; positionY?: number },
     actor?: LifecycleActor,
   ): Promise<NodeView> {
-    const node = await this.store.createNode(lifecycleId, {
-      name: input.name ?? null,
-      positionX: input.positionX ?? 0,
-      positionY: input.positionY ?? 0,
+    return this.runChange(async (m) => {
+      const node = await m.createNode(lifecycleId, {
+        name: input.name ?? null,
+        positionX: input.positionX ?? 0,
+        positionY: input.positionY ?? 0,
+      });
+      return {
+        result: node,
+        event: this.buildEvent(lifecycleId, 'NODE_ADDED', `新增節點『${NODE_LABEL(node.name)}』`, {
+          newValue: node.name,
+          nodeId: node.id,
+          actor,
+        }),
+      };
     });
-    await this.emit(lifecycleId, 'NODE_ADDED', `新增節點『${NODE_LABEL(node.name)}』`, {
-      newValue: node.name,
-      nodeId: node.id,
-      actor,
-    });
-    return node;
   }
 
   async updateNode(
@@ -98,42 +139,42 @@ export class DagService {
     patch: { name?: string | null; positionX?: number; positionY?: number },
     ctx: LifecycleEmitContext = {},
   ): Promise<NodeView> {
-    // 改名偵測：僅當 patch 觸及 name 時預讀舊名（位置拖曳＝佈局，非結構變更，不記事件）。
-    let oldName: string | null = null;
-    if (patch.name !== undefined && ctx.lifecycleId) {
-      const before = (await this.store.listNodes(ctx.lifecycleId)).find(
-        (n) => n.id === nodeId,
-      );
-      oldName = before?.name ?? null;
-    }
-    const updated = await this.store.updateNode(nodeId, patch);
-    if (patch.name !== undefined && oldName !== updated.name) {
-      await this.emit(
-        updated.lifecycleId,
-        'NODE_RENAMED',
-        `節點改名『${NODE_LABEL(oldName)}』→『${NODE_LABEL(updated.name)}』`,
-        { oldValue: oldName, newValue: updated.name, nodeId, actor: ctx.actor },
-      );
-    }
-    return updated;
+    return this.runChange(async (m) => {
+      // 改名偵測：僅當 patch 觸及 name 時預讀舊名（位置拖曳＝佈局，非結構變更，不記事件/不記快照）。
+      let oldName: string | null = null;
+      if (patch.name !== undefined && ctx.lifecycleId) {
+        oldName = (await m.listNodes(ctx.lifecycleId)).find((n) => n.id === nodeId)?.name ?? null;
+      }
+      const updated = await m.updateNode(nodeId, patch);
+      const event =
+        patch.name !== undefined && oldName !== updated.name
+          ? this.buildEvent(
+              updated.lifecycleId,
+              'NODE_RENAMED',
+              `節點改名『${NODE_LABEL(oldName)}』→『${NODE_LABEL(updated.name)}』`,
+              { oldValue: oldName, newValue: updated.name, nodeId, actor: ctx.actor },
+            )
+          : null;
+      return { result: updated, event };
+    });
   }
 
   async deleteNode(nodeId: string, ctx: LifecycleEmitContext = {}): Promise<void> {
-    let name: string | null = null;
-    if (ctx.lifecycleId) {
-      name =
-        (await this.store.listNodes(ctx.lifecycleId)).find((n) => n.id === nodeId)
-          ?.name ?? null;
-    }
-    await this.store.deleteNodeWithEdges(nodeId);
-    if (ctx.lifecycleId) {
-      await this.emit(
-        ctx.lifecycleId,
-        'NODE_REMOVED',
-        `移除節點『${NODE_LABEL(name)}』（含其連線）`,
-        { oldValue: name, nodeId, actor: ctx.actor },
-      );
-    }
+    await this.runChange<void>(async (m) => {
+      let name: string | null = null;
+      if (ctx.lifecycleId) {
+        name = (await m.listNodes(ctx.lifecycleId)).find((n) => n.id === nodeId)?.name ?? null;
+      }
+      await m.deleteNodeWithEdges(nodeId);
+      const event = ctx.lifecycleId
+        ? this.buildEvent(ctx.lifecycleId, 'NODE_REMOVED', `移除節點『${NODE_LABEL(name)}』（含其連線）`, {
+            oldValue: name,
+            nodeId,
+            actor: ctx.actor,
+          })
+        : null;
+      return { result: undefined, event };
+    });
   }
 
   /** 新增有向邊 source→target（F008 防環）。 */
@@ -143,50 +184,52 @@ export class DagService {
     target: string,
     actor?: LifecycleActor,
   ): Promise<EdgeRow> {
-    const [srcOk, tgtOk] = await Promise.all([
-      this.store.nodeExists(lifecycleId, source),
-      this.store.nodeExists(lifecycleId, target),
-    ]);
-    if (!srcOk || !tgtOk) throw new NotFoundException('NODE_NOT_FOUND');
+    return this.runChange(async (m) => {
+      const [srcOk, tgtOk] = await Promise.all([
+        m.nodeExists(lifecycleId, source),
+        m.nodeExists(lifecycleId, target),
+      ]);
+      if (!srcOk || !tgtOk) throw new NotFoundException('NODE_NOT_FOUND');
 
-    const edges = await this.store.listEdges(lifecycleId);
-    const verdict = classifyEdge(edges, source, target);
-    if (verdict === 'self-loop') throw new ConflictException('DAG_SELF_LOOP');
-    if (verdict === 'cycle') throw new ConflictException('DAG_CYCLE_DETECTED');
+      const edges = await m.listEdges(lifecycleId);
+      const verdict = classifyEdge(edges, source, target);
+      if (verdict === 'self-loop') throw new ConflictException('DAG_SELF_LOOP');
+      if (verdict === 'cycle') throw new ConflictException('DAG_CYCLE_DETECTED');
 
-    const edge = await this.store.createEdge(lifecycleId, source, target);
-    const names = await this.nodeNameMap(lifecycleId);
-    await this.emit(
-      lifecycleId,
-      'EDGE_ADDED',
-      `新增連線 ${NODE_LABEL(names.get(source) ?? null)} → ${NODE_LABEL(names.get(target) ?? null)}`,
-      { newValue: `${source}→${target}`, actor },
-    );
-    return edge;
+      const edge = await m.createEdge(lifecycleId, source, target);
+      const names = await this.namesOf(m, lifecycleId);
+      return {
+        result: edge,
+        event: this.buildEvent(
+          lifecycleId,
+          'EDGE_ADDED',
+          `新增連線 ${NODE_LABEL(names.get(source) ?? null)} → ${NODE_LABEL(names.get(target) ?? null)}`,
+          { newValue: `${source}→${target}`, actor },
+        ),
+      };
+    });
   }
 
   async deleteEdge(edgeId: string, ctx: LifecycleEmitContext = {}): Promise<void> {
-    let summary = '移除連線';
-    let removed: EdgeRow | undefined;
-    if (ctx.lifecycleId) {
-      const edges = await this.store.listEdges(ctx.lifecycleId);
-      removed = edges.find((e) => e.id === edgeId);
-      if (removed) {
-        const names = await this.nodeNameMap(ctx.lifecycleId);
-        summary = `移除連線 ${NODE_LABEL(names.get(removed.sourceNodeId) ?? null)} → ${NODE_LABEL(names.get(removed.targetNodeId) ?? null)}`;
+    await this.runChange<void>(async (m) => {
+      let summary = '移除連線';
+      let removed: EdgeRow | undefined;
+      if (ctx.lifecycleId) {
+        const edges = await m.listEdges(ctx.lifecycleId);
+        removed = edges.find((e) => e.id === edgeId);
+        if (removed) {
+          const names = await this.namesOf(m, ctx.lifecycleId);
+          summary = `移除連線 ${NODE_LABEL(names.get(removed.sourceNodeId) ?? null)} → ${NODE_LABEL(names.get(removed.targetNodeId) ?? null)}`;
+        }
       }
-    }
-    await this.store.deleteEdge(edgeId);
-    if (ctx.lifecycleId) {
-      await this.emit(ctx.lifecycleId, 'EDGE_REMOVED', summary, {
-        oldValue: removed ? `${removed.sourceNodeId}→${removed.targetNodeId}` : null,
-        actor: ctx.actor,
-      });
-    }
-  }
-
-  private async nodeNameMap(lifecycleId: string): Promise<Map<string, string | null>> {
-    const nodes = await this.store.listNodes(lifecycleId);
-    return new Map(nodes.map((n) => [n.id, n.name]));
+      await m.deleteEdge(edgeId);
+      const event = ctx.lifecycleId
+        ? this.buildEvent(ctx.lifecycleId, 'EDGE_REMOVED', summary, {
+            oldValue: removed ? `${removed.sourceNodeId}→${removed.targetNodeId}` : null,
+            actor: ctx.actor,
+          })
+        : null;
+      return { result: undefined, event };
+    });
   }
 }

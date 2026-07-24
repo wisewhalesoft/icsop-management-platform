@@ -1,5 +1,5 @@
 # F038: 循環樹狀圖變更歷程（新舊版預覽／下載燒錄浮水印）
-Priority: P1 | Status: 🟡 部分（結構事件日誌＋查詢＋預覽單元綠；新舊快照並列/燒錄下載待架構 OQ-E07-05；見 implementation-log/F038-impl.md） | Last Updated: 2026-07-23
+Priority: P1 | Status: ✅ 完成（結構事件日誌＋查詢＋LIFECYCLE_SNAPSHOT 交易一致快照＋新舊重建＋diff＋雙頁燒錄下載＋前端新舊並列 modal；migration 1723161600000 已對 SOP 跑通；見 implementation-log/lifecycle-changelog-impl.md） | Last Updated: 2026-07-24
 Epic/Story: E07 / US-063
 
 > **獨立後台功能「文件變更歷程」**（獨立側選單項，非「文件調閱歷程」子頁；prototype `23-change-history.html`）之 **循環樹狀圖 tab**（與 ICSOP 程序書 tab [F037](F037-document-change-history.md) 併存，共兩 tab）。以 **append-only 結構變更事件日誌**追溯循環 DAG 結構異動，並可預覽/下載變更前後兩版本樹狀圖（燒錄浮水印）。權限依 [F025](F025-role-function-matrix.md) 獨立功能列「文件變更歷程」。稽核動作屬 [F036](F036-lifecycle-tree-preview.md)「循環」`LIFECYCLE_*` 家族之延伸。
