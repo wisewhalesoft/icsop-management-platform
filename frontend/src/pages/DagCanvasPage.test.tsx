@@ -20,6 +20,7 @@ vi.mock('../api/endpoints');
 vi.mock('../auth/useAuth');
 
 import { DagCanvasPage } from './DagCanvasPage';
+import { ToastProvider } from '../components/useToast';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 
@@ -33,17 +34,22 @@ function mockAuth(roleCode: string) {
 
 const renderCanvas = () =>
   render(
-    <MemoryRouter initialEntries={['/admin/lifecycles/lc1/canvas']}>
-      <Routes>
-        <Route path="/admin/lifecycles/:lifecycleId/canvas" element={<DagCanvasPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/admin/lifecycles/lc1/canvas']}>
+        <Routes>
+          <Route path="/admin/lifecycles/:lifecycleId/canvas" element={<DagCanvasPage />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   );
 
 describe('DagCanvasPage — F008 DAG 畫布', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getDagGraph).mockResolvedValue({ nodes: [], edges: [] });
+    vi.mocked(endpoints.getLifecycles).mockResolvedValue([
+      { id: 'lc1', name: '銷售及收款循環', description: null, status: 'active', nodeCount: 0, updatedAt: '2026-07-01T00:00:00.000Z' },
+    ]);
   });
 
   it('載入時以路由 lifecycleId 取圖', async () => {
@@ -70,5 +76,33 @@ describe('DagCanvasPage — F008 DAG 畫布', () => {
     mockAuth('DeptContact');
     renderCanvas();
     expect(screen.getByText(/無循環管理權限/)).toBeInTheDocument();
+  });
+
+  // ===== prototype-alignment G-LC-007/010/013/014（prototypes/11-dag-canvas.html）=====
+  it('G-LC-007 標題含循環名稱：「«name» · DAG 畫布」', async () => {
+    mockAuth('ICSOPAdmin');
+    renderCanvas();
+    await waitFor(() => expect(screen.getByText('銷售及收款循環 · DAG 畫布')).toBeInTheDocument());
+  });
+
+  it('G-LC-010 畫布容器最大化（height 使用 calc viewport）', async () => {
+    mockAuth('ICSOPAdmin');
+    renderCanvas();
+    const vp = await screen.findByTestId('dag-canvas-viewport');
+    expect(vp.style.height).toContain('calc(100vh');
+  });
+
+  it('G-LC-013 連線提示採 prototype 文案「系統會即時阻擋成環」（非後端＋錯誤碼）', async () => {
+    mockAuth('ICSOPAdmin');
+    renderCanvas();
+    await waitFor(() => expect(screen.getByText(/系統會即時阻擋成環/)).toBeInTheDocument());
+    expect(screen.queryByText(/DAG_CYCLE_DETECTED）/)).not.toBeInTheDocument();
+  });
+
+  it('G-LC-014 唯讀 banner 使用 eye 圖示', async () => {
+    mockAuth('Supervisor');
+    const { container } = renderCanvas();
+    await waitFor(() => expect(screen.getByText(/唯讀模式/)).toBeInTheDocument());
+    expect(container.querySelector('.lucide-eye')).toBeTruthy();
   });
 });

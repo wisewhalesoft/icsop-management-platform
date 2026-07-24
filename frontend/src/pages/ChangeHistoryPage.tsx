@@ -13,7 +13,6 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
-import { buildTreeLayout, edgePath, NODE_W } from './lifecycle-tree-layout';
 import type {
   DocumentChangeView,
   LifecycleChangeView,
@@ -21,6 +20,8 @@ import type {
   LifecycleTreeDiff,
   LifecycleDiff,
   DagGraph,
+  DagNode,
+  DagEdge,
 } from '../api/types';
 
 /**
@@ -54,8 +55,6 @@ const STATUS_LABEL: Record<string, string> = {
   inactive: '失效',
   void: '作廢',
 };
-const CHANGE_SOURCE: Record<string, string> = { CREATE: '建立', CONTENT: '編輯', STATUS: '狀態切換', META: '中繼' };
-
 function fieldLabel(f: string): string {
   return FIELD_LABEL[f] ?? f;
 }
@@ -64,6 +63,135 @@ function valLabel(field: string, v: string | null): string {
   if (field === 'status') return STATUS_LABEL[v] ?? v;
   return v;
 }
+
+// ── 來源分類（prototypes/23 SRC_STYLE）：由 per-row `field` 推導（G-LC-022/025）。──
+//    附件由 backend-batch 以 field='attachment' 發佈（F037）。CREATE 事件為 F010 加項，
+//    原型無此概念 → hybrid：changeType='CREATE' 顯示「建立」（additive 超集），其餘依 field。
+const SOURCE_OF_FIELD: Record<string, string> = {
+  draftingCompanyId: '制定組織',
+  draftingDeptId: '制定組織',
+  draftingSectionId: '制定組織',
+  primaryChiefId: '當責室長',
+  secondaryChiefIds: '當責室長',
+  announcedDate: '公告日期',
+  usingDeptIds: '使用部門',
+  status: '狀態切換',
+  attachment: '附件',
+};
+function sourceOf(changeType: string, field: string): string {
+  if (changeType === 'CREATE') return '建立';
+  return SOURCE_OF_FIELD[field] ?? '編輯'; // 編輯＝catch-all（版次/摘要/書名/編號…）
+}
+// 來源 → 靜態全類名（Tailwind content 掃描需字面字串；勿用 `bg-${x}` 動態拼接，否則不生成）。
+const SRC_BADGE_CLASS: Record<string, string> = {
+  建立: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  制定組織: 'bg-primary-50 text-primary-700 border-primary-100',
+  當責室長: 'bg-primary-50 text-primary-700 border-primary-100',
+  公告日期: 'bg-blue-50 text-blue-700 border-blue-100',
+  使用部門: 'bg-blue-50 text-blue-700 border-blue-100',
+  狀態切換: 'bg-violet-50 text-violet-700 border-violet-100',
+  附件: 'bg-amber-50 text-amber-700 border-amber-100',
+  編輯: 'bg-slate-50 text-slate-700 border-slate-100',
+};
+function SrcBadge({ src }: { src: string }): JSX.Element {
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] border ${SRC_BADGE_CLASS[src] ?? SRC_BADGE_CLASS['編輯']}`}>
+      {src}
+    </span>
+  );
+}
+
+// ── prototype-23 mini DAG 佈局（獨立於 F036 viewer 之 176 尺度；逐值移植 layoutGraph/edgeD）。──
+const MINI = { NW: 142, NH: 54, HGAP: 176, VGAP: 104, MARGIN: 30 };
+interface MiniPos {
+  id: string;
+  name: string | null;
+  docCount: number;
+  x: number;
+  y: number;
+}
+function miniLayout(
+  nodes: DagNode[],
+  edges: DagEdge[],
+): { nodes: MiniPos[]; edges: DagEdge[]; w: number; h: number } {
+  const ids = nodes.map((n) => n.id);
+  const idSet = new Set(ids);
+  const adj = new Map<string, string[]>();
+  const indeg = new Map<string, number>();
+  ids.forEach((id) => {
+    adj.set(id, []);
+    indeg.set(id, 0);
+  });
+  for (const e of edges) {
+    if (!idSet.has(e.sourceNodeId) || !idSet.has(e.targetNodeId)) continue;
+    adj.get(e.sourceNodeId)!.push(e.targetNodeId);
+    indeg.set(e.targetNodeId, (indeg.get(e.targetNodeId) ?? 0) + 1);
+  }
+  const level = new Map<string, number>();
+  const deg = new Map<string, number>();
+  ids.forEach((id) => {
+    level.set(id, 0);
+    deg.set(id, indeg.get(id) ?? 0);
+  });
+  const queue = ids.filter((id) => (indeg.get(id) ?? 0) === 0);
+  const seen = new Set(queue);
+  while (queue.length) {
+    const u = queue.shift() as string;
+    for (const v of adj.get(u) ?? []) {
+      level.set(v, Math.max(level.get(v) ?? 0, (level.get(u) ?? 0) + 1));
+      deg.set(v, (deg.get(v) ?? 0) - 1);
+      if ((deg.get(v) ?? 0) === 0 && !seen.has(v)) {
+        seen.add(v);
+        queue.push(v);
+      }
+    }
+  }
+  const levels = new Map<number, string[]>();
+  ids.forEach((id) => {
+    const lv = level.get(id) ?? 0;
+    (levels.get(lv) ?? levels.set(lv, []).get(lv)!).push(id);
+  });
+  const numLv = ids.length ? Math.max(...ids.map((id) => level.get(id) ?? 0)) + 1 : 0;
+  const maxCols = levels.size ? Math.max(...[...levels.values()].map((r) => r.length)) : 1;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const positioned: MiniPos[] = [];
+  for (const [lv, rowIds] of levels) {
+    const rowW = rowIds.length * MINI.HGAP;
+    const startX = MINI.MARGIN + (maxCols * MINI.HGAP - rowW) / 2;
+    rowIds.forEach((id, i) => {
+      const n = byId.get(id)!;
+      positioned.push({
+        id,
+        name: n.name,
+        docCount: n.docCount ?? 0,
+        x: startX + i * MINI.HGAP + (MINI.HGAP - MINI.NW) / 2,
+        y: MINI.MARGIN + lv * MINI.VGAP,
+      });
+    });
+  }
+  positioned.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+  return {
+    nodes: positioned,
+    edges: edges.filter((e) => idSet.has(e.sourceNodeId) && idSet.has(e.targetNodeId)),
+    w: ids.length ? MINI.MARGIN * 2 + maxCols * MINI.HGAP : MINI.MARGIN * 2,
+    h: ids.length ? MINI.MARGIN * 2 + (numLv - 1) * MINI.VGAP + MINI.NH : MINI.MARGIN * 2,
+  };
+}
+function miniEdgePath(s: MiniPos, t: MiniPos): string {
+  const sx = s.x + MINI.NW / 2;
+  const sy = s.y + MINI.NH;
+  const tx = t.x + MINI.NW / 2;
+  const ty = t.y;
+  const my = sy + (ty - sy) / 2;
+  return `M ${sx} ${sy} L ${sx} ${my} L ${tx} ${my} L ${tx} ${ty}`;
+}
+// diff 標籤色碼（prototype-23 .mtag 變體；G-LC-031）。
+const MINI_TAG_STYLE: Record<'add' | 'remove' | 'amber' | 'normal', { bg: string; color: string }> = {
+  add: { bg: '#D1FAE5', color: '#047857' },
+  remove: { bg: '#FEE2E2', color: '#B91C1C' },
+  amber: { bg: '#FEF3C7', color: '#B45309' },
+  normal: { bg: '#EAF1FA', color: '#2A4A7E' },
+};
 
 // ── 循環結構變更類型顯示 + 樣式 ──
 const LC_TYPE: Record<string, { label: string; tone: string; icon: string }> = {
@@ -95,6 +223,7 @@ function fmt(iso: string): string {
 interface DocGroup {
   documentId: string;
   documentNumber: string | null;
+  documentName: string | null;
   actorName: string | null;
   actorEmployeeNo: string | null;
   occurredAt: string;
@@ -112,6 +241,7 @@ function groupDoc(rows: DocumentChangeView[]): DocGroup[] {
       groups.push({
         documentId: ev.documentId,
         documentNumber: ev.documentNumber,
+        documentName: ev.documentName ?? null,
         actorName: ev.actorName,
         actorEmployeeNo: ev.actorEmployeeNo,
         occurredAt: ev.occurredAt,
@@ -153,8 +283,8 @@ export function ChangeHistoryPage(): JSX.Element {
       <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-sm border bg-primary-50 border-primary-100 text-primary-700">
         <Icon name="globe" className="w-4 h-4 mt-0.5 shrink-0" />
         <span>
-          查詢範圍：<b>全公司</b>（僅系統管理員 / ICSOP 管理員可查）。查詢/展開/預覽均寫入{' '}
-          <span className="mono">CHANGE_LOG_VIEW</span> / <span className="mono">LIFECYCLE_CHANGELOG_VIEW</span> 稽核。
+          查詢範圍：<b>全公司</b>（僅系統管理員 / ICSOP 管理員可查；主管／部門窗口／一般使用者無權，OQ-E07-04 定案）。查詢/展開/預覽/下載均寫入{' '}
+          <span className="mono">CHANGE_LOG_VIEW</span> / <span className="mono">LIFECYCLE_CHANGELOG_*</span> 稽核。
         </span>
       </div>
 
@@ -198,7 +328,6 @@ function DocTab(): JSX.Element {
     try {
       const res = await getDocumentChanges({
         doc: doc.trim() || undefined,
-        field: field.trim() || undefined,
         person: person.trim() || undefined,
         from: from || undefined,
         to: to || undefined,
@@ -208,7 +337,7 @@ function DocTab(): JSX.Element {
     } catch (e) {
       setError(msgOf(e));
     }
-  }, [doc, field, person, from, to]);
+  }, [doc, person, from, to]);
 
   useEffect(() => {
     void load();
@@ -216,7 +345,18 @@ function DocTab(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const groups = useMemo(() => groupDoc(rows), [rows]);
+  // 變更欄位為前端即時過濾（G-LC-024）：接受中文標籤（fieldLabel）或屬性名。
+  const groups = useMemo(() => {
+    const q = field.trim().toLowerCase();
+    const evs = q
+      ? rows.filter(
+          (ev) =>
+            fieldLabel(ev.field).toLowerCase().includes(q) ||
+            ev.field.toLowerCase().includes(q),
+        )
+      : rows;
+    return groupDoc(evs);
+  }, [rows, field]);
 
   const toggle = useCallback(
     async (groupKey: string, documentId: string) => {
@@ -254,7 +394,7 @@ function DocTab(): JSX.Element {
       <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4">
         <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <Field label="程序書（編號／書名）" id="dqDoc" value={doc} onChange={setDoc} placeholder="ICSOP-SRC-101-1-01 / 進件" />
-          <Field label="變更欄位" id="dqField" value={field} onChange={setField} placeholder="status / documentName…" />
+          <Field label="變更欄位" id="dqField" value={field} onChange={setField} placeholder="制定部門 / 狀態 / 版次…" />
           <Field label="操作人" id="dqPerson" value={person} onChange={setPerson} placeholder="李慧玲 / 20233" />
           <DateField label="起始日期" id="dqFrom" value={from} onChange={setFrom} />
           <DateField label="結束日期" id="dqTo" value={to} onChange={setTo} />
@@ -288,6 +428,7 @@ function DocTab(): JSX.Element {
               <tr>
                 <th className="text-left font-medium px-4 py-2.5">程序書</th>
                 <th className="text-left font-medium px-4 py-2.5">變更摘要</th>
+                <th className="text-left font-medium px-4 py-2.5">來源</th>
                 <th className="text-left font-medium px-4 py-2.5">操作人</th>
                 <th className="text-left font-medium px-4 py-2.5">時間（新→舊）</th>
                 <th className="px-2 py-2.5" />
@@ -307,6 +448,7 @@ function DocTab(): JSX.Element {
                     <tr className="hover:bg-slate-50 cursor-pointer align-top" onClick={() => void toggle(groupKey, g.documentId)}>
                       <td className="px-4 py-2.5">
                         <div className="mono text-xs text-slate-600">{g.documentNumber ?? '—'}</div>
+                        {g.documentName && <div className="text-slate-800">{g.documentName}</div>}
                       </td>
                       <td className="px-4 py-2.5 text-slate-700">
                         {g.events.length > 1 && (
@@ -316,18 +458,28 @@ function DocTab(): JSX.Element {
                         )}
                         {summary}
                       </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex flex-wrap gap-1">
+                          {[...new Set(g.events.map((e) => sourceOf(e.changeType, e.field)))].map((s) => (
+                            <SrcBadge key={s} src={s} />
+                          ))}
+                        </div>
+                      </td>
                       <td className="px-4 py-2.5 text-slate-700">
                         {g.actorName ?? '—'}
                         <span className="text-slate-400 mono text-xs">（{g.actorEmployeeNo ?? '—'}）</span>
                       </td>
-                      <td className="px-4 py-2.5 mono text-xs text-slate-500">{fmt(g.occurredAt)}</td>
+                      <td className="px-4 py-2.5 mono text-xs text-slate-500">
+                        {fmt(g.occurredAt)}
+                        {g.events.length > 1 && <div className="text-[10px] text-slate-400">同儲存/60 秒內</div>}
+                      </td>
                       <td className="px-2 py-2.5 text-slate-400">
                         <Icon name={open ? 'chevron-down' : 'chevron-right'} className="w-4 h-4" />
                       </td>
                     </tr>
                     {open && (
                       <tr className="bg-slate-50/70">
-                        <td colSpan={5} className="px-4 py-4">
+                        <td colSpan={6} className="px-4 py-4">
                           <div className="rounded-lg border border-slate-200 bg-white p-4">
                             <div className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
                               <Icon name="file-diff" className="w-4 h-4 text-primary-600" />
@@ -335,11 +487,9 @@ function DocTab(): JSX.Element {
                             </div>
                             <div className="space-y-1">
                               {rowsForDetail.map((ev) => (
-                                <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-[180px,1fr] gap-2 py-2 border-b border-slate-100 last:border-0">
+                                <div key={ev.id} data-testid={`change-field-row-${ev.id}`} className="grid grid-cols-1 sm:grid-cols-[160px,1fr] gap-2 py-2 border-b border-slate-100 last:border-0">
                                   <div className="text-xs text-slate-500 flex items-center gap-1.5">
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] bg-slate-50 text-slate-600 border border-slate-100">
-                                      {CHANGE_SOURCE[ev.changeType] ?? ev.changeType}
-                                    </span>
+                                    <SrcBadge src={sourceOf(ev.changeType, ev.field)} />
                                     <span className="font-medium text-slate-700">{fieldLabel(ev.field)}</span>
                                   </div>
                                   <div className="flex items-center gap-2 flex-wrap text-sm">
@@ -384,7 +534,7 @@ function DocTab(): JSX.Element {
       </div>
       <p className="mt-3 text-xs text-slate-400 flex items-start gap-1.5">
         <Icon name="shield-check" className="w-3.5 h-3.5 mt-0.5" />
-        變更歷程為 append-only 欄位層事件日誌（僅記變動欄位之舊/新值），非整份歷史版本檔（F037）。
+        變更歷程為 append-only 欄位層事件日誌（僅記變動欄位之舊/新值），非整份歷史版本檔；附件僅記「已替換」事件、不保留舊檔（F037）。
       </p>
     </section>
   );
@@ -599,9 +749,9 @@ function DiffBoard({
   watermark: string;
   testId: string;
 }): JSX.Element {
-  const layout = useMemo(() => buildTreeLayout(graph.nodes, graph.edges), [graph]);
+  const layout = useMemo(() => miniLayout(graph.nodes, graph.edges), [graph]);
   const posById = useMemo(() => new Map(layout.nodes.map((n) => [n.id, n])), [layout]);
-  const wmCount = Math.min(120, Math.max(24, Math.round((layout.boardWidth * layout.boardHeight) / 16000)));
+  const wmCount = Math.min(120, Math.max(24, Math.round((layout.w * layout.h) / 16000)));
 
   if (graph.nodes.length === 0) {
     return (
@@ -622,9 +772,9 @@ function DiffBoard({
     <div
       data-testid={testId}
       className="relative bg-white rounded-lg border border-slate-200 mx-auto"
-      style={{ width: layout.boardWidth, height: layout.boardHeight, backgroundImage: 'radial-gradient(#EEF2F7 1px, transparent 1px)', backgroundSize: '22px 22px' }}
+      style={{ width: layout.w, height: layout.h, backgroundImage: 'radial-gradient(#EEF2F7 1px, transparent 1px)', backgroundSize: '20px 20px' }}
     >
-      <svg width={layout.boardWidth} height={layout.boardHeight} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}>
+      <svg width={layout.w} height={layout.h} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}>
         <defs>
           <marker id={`chArr-${side}`} markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
             <path d="M0,0 L8,3 L0,6 Z" fill="#94A3B8" />
@@ -643,7 +793,7 @@ function DiffBoard({
               key={e.id}
               data-testid={`edge-${e.id}`}
               data-diff={ed ?? undefined}
-              d={edgePath(s, t)}
+              d={miniEdgePath(s, t)}
               fill="none"
               stroke={stroke}
               strokeWidth={width}
@@ -663,17 +813,23 @@ function DiffBoard({
               key={n.id}
               data-testid={`tree-node-${side}-${n.id}`}
               data-diff={d ?? undefined}
-              style={{ position: 'absolute', left: n.x, top: n.y, width: NODE_W }}
+              style={{ position: 'absolute', left: n.x, top: n.y, width: MINI.NW }}
             >
-              <div style={{ background: st.bg, border: `1.5px ${st.dashed ? 'dashed' : 'solid'} ${st.border}`, borderRadius: 10, padding: '8px 11px', boxShadow: '0 1px 2px rgba(0,0,0,.05)' }}>
-                <div className="flex items-center gap-1.5 justify-between">
-                  <span className="flex items-center gap-1.5 min-w-0">
-                    <Icon name="git-commit-vertical" className="w-3.5 h-3.5 text-slate-300 shrink-0" />
-                    <span className={`font-medium text-sm truncate ${st.strike ? 'line-through text-red-700' : 'text-slate-800'}`}>{n.name ?? '未命名節點'}</span>
-                  </span>
-                  {tag && <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0" style={{ background: '#EAF1FA', color: '#2A4A7E' }}>{tag}</span>}
+              <div style={{ background: st.bg, border: `1.5px ${st.dashed ? 'dashed' : 'solid'} ${st.border}`, borderRadius: 8, padding: '6px 9px', boxShadow: '0 1px 2px rgba(0,0,0,.05)' }}>
+                <div className="flex items-center gap-1 justify-between">
+                  <span className={`font-medium text-xs truncate ${st.strike ? 'line-through text-red-700' : 'text-slate-800'}`}>{n.name ?? '未命名節點'}</span>
+                  {tag && (
+                    <span
+                      data-testid={`tree-tag-${side}-${n.id}`}
+                      data-tag-diff={d ?? undefined}
+                      className="shrink-0"
+                      style={{ fontSize: 9, padding: '0 5px', borderRadius: 4, whiteSpace: 'nowrap', backgroundColor: MINI_TAG_STYLE[d ?? 'normal'].bg, color: MINI_TAG_STYLE[d ?? 'normal'].color }}
+                    >
+                      {tag}
+                    </span>
+                  )}
                 </div>
-                <div className={`mt-1 text-[11px] ${n.docCount > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                <div className={`mt-0.5 text-[10px] ${n.docCount > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
                   {n.docCount > 0 ? `掛載 ${n.docCount} 份` : '未掛載'}
                 </div>
               </div>

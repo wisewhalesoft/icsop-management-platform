@@ -20,6 +20,7 @@ import '@xyflow/react/dist/style.css';
 import { useAuth } from '../auth/useAuth';
 import {
   getDagGraph,
+  getLifecycles,
   addDagNode,
   updateDagNode,
   deleteDagNode,
@@ -29,6 +30,7 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
+import { useToast } from '../components/useToast';
 import { NodeDrawer } from './NodeDrawer';
 import { graphToFlow, layoutDag, dagErrorMessage, type FlowNodeData } from './dag-flow';
 import type { DagGraph } from '../api/types';
@@ -69,6 +71,7 @@ const nodeTypes = { dagNode: DagNodeCard };
 export function DagCanvasPage(): JSX.Element {
   const { lifecycleId = '' } = useParams();
   const { user } = useAuth();
+  const toast = useToast();
   const role = user?.roleCode;
   const canRead = canPerform(role, FunctionKey.LIFECYCLE_MANAGEMENT, 'read');
   const canWrite = canPerform(role, FunctionKey.LIFECYCLE_MANAGEMENT, 'write');
@@ -78,7 +81,8 @@ export function DagCanvasPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerNodeId, setDrawerNodeId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  // G-LC-007 循環名稱（頂欄標題「«name» · DAG 畫布」＋抽屜候選註記）；沿用清單端點反查。
+  const [cycleName, setCycleName] = useState<string | null>(null);
   const rfRef = useRef<ReactFlowInstance<Node<FlowNodeData>, Edge> | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -97,11 +101,11 @@ export function DagCanvasPage(): JSX.Element {
     try {
       applyGraph(await getDagGraph(lifecycleId));
     } catch (e) {
-      setNotice({ tone: 'err', text: e instanceof ApiError ? dagErrorMessage(e.code) : '載入失敗' });
+      toast.error(e instanceof ApiError ? dagErrorMessage(e.code) : '載入失敗');
     } finally {
       setLoading(false);
     }
-  }, [lifecycleId, applyGraph]);
+  }, [lifecycleId, applyGraph, toast]);
 
   // 靜默刷新（不切 loading → 不重掛畫布 → 不重置視窗），用於掛載變更後更新 docCount。
   const silentReload = useCallback(async () => {
@@ -116,22 +120,30 @@ export function DagCanvasPage(): JSX.Element {
     if (canRead) void load();
   }, [canRead, load]);
 
+  // 反查循環名稱（清單端點；失敗不阻斷畫布）。
+  useEffect(() => {
+    if (!canRead) return;
+    getLifecycles()
+      .then((ls) => setCycleName(ls.find((l) => l.id === lifecycleId)?.name ?? null))
+      .catch(() => undefined);
+  }, [canRead, lifecycleId]);
+
   const onConnect = useCallback(
     async (conn: Connection) => {
       if (!conn.source || !conn.target) return;
       if (conn.source === conn.target) {
-        setNotice({ tone: 'err', text: dagErrorMessage('DAG_SELF_LOOP') });
+        toast.error(dagErrorMessage('DAG_SELF_LOOP'));
         return;
       }
       try {
         const edge = await addDagEdge(lifecycleId, conn.source, conn.target);
         setEdges((eds) => addEdge({ id: edge.id, source: edge.sourceNodeId, target: edge.targetNodeId, type: 'step' }, eds));
-        setNotice({ tone: 'ok', text: '已建立連線' });
+        toast.success('已建立連線');
       } catch (e) {
-        setNotice({ tone: 'err', text: e instanceof ApiError ? dagErrorMessage(e.code) : '建立連線失敗' });
+        toast.error(e instanceof ApiError ? dagErrorMessage(e.code) : '建立連線失敗');
       }
     },
-    [lifecycleId, setEdges],
+    [lifecycleId, setEdges, toast],
   );
 
   const onNodeDragStop = useCallback(
@@ -139,9 +151,9 @@ export function DagCanvasPage(): JSX.Element {
       void updateDagNode(lifecycleId, node.id, {
         positionX: Math.round(node.position.x),
         positionY: Math.round(node.position.y),
-      }).catch(() => setNotice({ tone: 'err', text: '座標儲存失敗' }));
+      }).catch(() => toast.error('座標儲存失敗'));
     },
-    [lifecycleId],
+    [lifecycleId, toast],
   );
 
   const onAddNode = useCallback(async () => {
@@ -165,11 +177,11 @@ export function DagCanvasPage(): JSX.Element {
           data: { label: created.name ?? '未命名節點', hasName: !!created.name, docCount: created.docCount ?? 0 },
         } as unknown as Node<FlowNodeData>,
       ]);
-      setNotice({ tone: 'ok', text: '已於畫布中央新增未命名節點' });
+      toast.success('已於畫布中央新增未命名節點');
     } catch {
-      setNotice({ tone: 'err', text: '新增節點失敗' });
+      toast.error('新增節點失敗');
     }
-  }, [lifecycleId, nodes.length, setNodes]);
+  }, [lifecycleId, nodes.length, setNodes, toast]);
 
   const onDeleteSelected = useCallback(async () => {
     if (!selectedId) return;
@@ -179,11 +191,11 @@ export function DagCanvasPage(): JSX.Element {
       setNodes((nds) => nds.filter((n) => n.id !== selectedId));
       setEdges((eds) => eds.filter((e) => e.source !== selectedId && e.target !== selectedId));
       setSelectedId(null);
-      setNotice({ tone: 'ok', text: '節點已刪除（連動移除相關連線）' });
+      toast.success('節點已刪除（連動移除相關連線）');
     } catch {
-      setNotice({ tone: 'err', text: '刪除節點失敗' });
+      toast.error('刪除節點失敗');
     }
-  }, [lifecycleId, selectedId, setNodes, setEdges]);
+  }, [lifecycleId, selectedId, setNodes, setEdges, toast]);
 
   // 整理連結線：dagre 上到下分層排列，套用並持久化座標，再框選全圖。
   const onTidy = useCallback(async () => {
@@ -200,11 +212,11 @@ export function DagCanvasPage(): JSX.Element {
           }),
         ),
       );
-      setNotice({ tone: 'ok', text: '已重新整理節點排列（上到下分層）並儲存座標' });
+      toast.success('已重新整理節點排列（上到下分層）並儲存座標');
     } catch {
-      setNotice({ tone: 'err', text: '排列已套用，但座標儲存失敗（重新整理後可能還原）' });
+      toast.error('排列已套用，但座標儲存失敗（重新整理後可能還原）');
     }
-  }, [nodes, edges, lifecycleId, setNodes]);
+  }, [nodes, edges, lifecycleId, setNodes, toast]);
 
   if (!canRead) {
     return (
@@ -220,7 +232,7 @@ export function DagCanvasPage(): JSX.Element {
 
   return (
     <div className="space-y-3">
-      <PageHeader breadcrumb={['循環管理', 'DAG 畫布']} title="DAG 畫布">
+      <PageHeader breadcrumb={['循環管理', 'DAG 畫布']} title={cycleName ? `${cycleName} · DAG 畫布` : 'DAG 畫布'}>
         {canWrite && (
           <>
             <button
@@ -253,32 +265,20 @@ export function DagCanvasPage(): JSX.Element {
 
       {canRead && !canWrite && (
         <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2">
-          <Icon name="user-circle" className="w-4 h-4 shrink-0" />
+          <Icon name="eye" className="w-4 h-4 shrink-0" />
           唯讀模式 · 此角色僅可檢視循環節點與連線，無法編輯。
         </div>
       )}
 
-      {notice && (
-        <div
-          role="status"
-          className={`text-sm border rounded-md px-3 py-2 ${
-            notice.tone === 'ok'
-              ? 'text-emerald-700 bg-emerald-50 border-emerald-100'
-              : 'text-red-700 bg-red-50 border-red-100'
-          }`}
-        >
-          {notice.text}
-        </div>
-      )}
-
-      {canWrite && (
-        <p className="text-xs text-slate-400 flex items-center gap-1.5">
-          <Icon name="info" className="w-3.5 h-3.5 text-primary-600" />
-          拖曳節點底部圓點建立「上到下」有向連線；後端會即時阻擋成環（DAG_CYCLE_DETECTED）。
-        </p>
-      )}
-
-      <div ref={wrapRef} className="border border-slate-200 rounded-xl overflow-hidden" style={{ height: '68vh', background: '#F8FAFC' }}>
+      {/* G-LC-010 畫布最大化（於 admin shell 內以 viewport 計算高度；full-bleed 需 AppShell 重構，另議）。 */}
+      <div ref={wrapRef} data-testid="dag-canvas-viewport" className="relative border border-slate-200 rounded-xl overflow-hidden" style={{ height: 'calc(100vh - 180px)', minHeight: 520, background: '#F8FAFC' }}>
+        {/* G-LC-013 連線提示：畫布右上浮動卡（prototype 11 文案）。 */}
+        {canWrite && (
+          <div className="absolute right-4 top-4 z-20 flex items-center gap-2 px-3 py-2 rounded-lg bg-white/90 border border-slate-200 shadow-sm text-xs text-slate-500 max-w-[220px]">
+            <Icon name="info" className="w-4 h-4 shrink-0 text-primary-600" />
+            <span>拖曳節點底部圓點可建立「上到下」有向連線；系統會即時阻擋成環。</span>
+          </div>
+        )}
         {loading ? (
           <div className="h-full flex items-center justify-center text-sm text-slate-400">載入中…</div>
         ) : (
@@ -311,6 +311,7 @@ export function DagCanvasPage(): JSX.Element {
           lifecycleId={lifecycleId}
           nodeId={drawerNodeId}
           canWrite={canWrite}
+          cycleName={cycleName ?? undefined}
           onClose={() => setDrawerNodeId(null)}
           onNodeRenamed={(id, nm) =>
             setNodes((nds) =>

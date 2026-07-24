@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { LifecycleListPage } from './LifecycleListPage';
+import { ToastProvider } from '../components/useToast';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import { ApiError } from '../api/client';
@@ -14,10 +15,12 @@ function LocationProbe() {
 }
 const renderWithLoc = () =>
   render(
-    <MemoryRouter>
-      <LifecycleListPage />
-      <LocationProbe />
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter>
+        <LifecycleListPage />
+        <LocationProbe />
+      </MemoryRouter>
+    </ToastProvider>,
   );
 
 vi.mock('../api/endpoints');
@@ -37,7 +40,11 @@ const LCS: LifecycleView[] = [
 ];
 
 const renderPage = () =>
-  render(<MemoryRouter><LifecycleListPage /></MemoryRouter>);
+  render(
+    <ToastProvider>
+      <MemoryRouter><LifecycleListPage /></MemoryRouter>
+    </ToastProvider>,
+  );
 
 describe('LifecycleListPage — F007 循環池', () => {
   beforeEach(() => {
@@ -166,5 +173,80 @@ describe('LifecycleListPage — F007 循環池', () => {
     await userEvent.click(screen.getByRole('button', { name: /檢視「銷售及收款循環」樹狀圖預覽/ }));
     expect(openSpy).toHaveBeenCalledWith('/lifecycles/lc1/tree', '_blank', 'noopener,noreferrer');
     openSpy.mockRestore();
+  });
+
+  // ===== prototype-alignment G-LC-001..006 + SYS-1 toast（prototypes/10-lifecycle-list.html）=====
+  it('G-LC-001 唯讀 banner 使用 eye 圖示（非 user-circle）', async () => {
+    mockAuth('Supervisor');
+    const { container } = renderPage();
+    await waitFor(() => expect(screen.getByText('銷售及收款循環')).toBeInTheDocument());
+    expect(screen.getByText(/唯讀模式/)).toBeInTheDocument();
+    expect(container.querySelector('.lucide-eye')).toBeTruthy();
+    // lucide 1.25：user-circle 別名渲染為 circle-user；確認已非該圖示。
+    expect(container.querySelector('.lucide-circle-user')).toBeNull();
+  });
+
+  it('G-LC-002 掛載文件欄消費 mountedDocCount（N 份 / —）', async () => {
+    mockAuth('ICSOPAdmin');
+    vi.mocked(endpoints.getLifecycles).mockResolvedValue([
+      { ...LCS[0], mountedDocCount: 8 },
+      { ...LCS[1], mountedDocCount: 0 },
+    ]);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('8 份')).toBeInTheDocument());
+    const row = screen.getByText('採購及付款循環').closest('tr')!;
+    expect(within(row).getByText('—')).toBeInTheDocument();
+  });
+
+  it('G-LC-003 空狀態顯示 inbox 圖示', async () => {
+    mockAuth('ICSOPAdmin');
+    vi.mocked(endpoints.getLifecycles).mockResolvedValue([]);
+    const { container } = renderPage();
+    await waitFor(() => expect(screen.getByText('查無符合結果')).toBeInTheDocument());
+    expect(container.querySelector('.lucide-inbox')).toBeTruthy();
+  });
+
+  it('G-LC-004 搜尋框為 flex-1（非固定 w-56）', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('銷售及收款循環')).toBeInTheDocument());
+    const wrap = screen.getByLabelText('搜尋循環名稱').closest('div')!;
+    expect(wrap.className).toContain('flex-1');
+    expect(screen.getByLabelText('搜尋循環名稱').className).not.toContain('w-56');
+  });
+
+  it('G-LC-005 名稱必填錯誤顯示 alert-circle 圖示', async () => {
+    mockAuth('ICSOPAdmin');
+    const { container } = renderPage();
+    await waitFor(() => expect(screen.getByText('銷售及收款循環')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /新增循環/ }));
+    const dialog = screen.getByRole('dialog', { name: /新增循環/ });
+    await userEvent.click(within(dialog).getByRole('button', { name: '儲存' }));
+    expect(within(dialog).getByText(/名稱不可為空/)).toBeInTheDocument();
+    // lucide 1.25：alert-circle 別名渲染為 circle-alert。
+    expect(container.querySelector('.lucide-circle-alert')).toBeTruthy();
+  });
+
+  it('G-LC-006 刪除確認（無掛載）文案對齊 F007', async () => {
+    mockAuth('ICSOPAdmin');
+    vi.mocked(endpoints.getLifecycles).mockResolvedValue([{ ...LCS[0], mountedDocCount: 0 }]);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('銷售及收款循環')).toBeInTheDocument());
+    const row = screen.getByText('銷售及收款循環').closest('tr')!;
+    await userEvent.click(within(row).getByRole('button', { name: '刪除' }));
+    const dialog = screen.getByRole('dialog', { name: /刪除循環/ });
+    expect(within(dialog).getByText(/此循環已無文件掛載，刪除後將記錄稽核（不可復原）。/)).toBeInTheDocument();
+  });
+
+  it('SYS-1 編輯成功 → 顯示成功 toast（非 inline banner）', async () => {
+    mockAuth('ICSOPAdmin');
+    vi.mocked(endpoints.updateLifecycle).mockResolvedValue({ ...LCS[0] });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('銷售及收款循環')).toBeInTheDocument());
+    const row = screen.getByText('銷售及收款循環').closest('tr')!;
+    await userEvent.click(within(row).getByRole('button', { name: '編輯' }));
+    const dialog = screen.getByRole('dialog', { name: /編輯循環/ });
+    await userEvent.click(within(dialog).getByRole('button', { name: '儲存' }));
+    await waitFor(() => expect(screen.getByText('已儲存循環')).toBeInTheDocument());
   });
 });

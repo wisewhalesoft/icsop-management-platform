@@ -7,6 +7,7 @@ import {
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
+import { useToast } from '../components/useToast';
 import type { NodeDrawerData } from '../api/types';
 
 /** 抽屜內單筆文件草稿狀態（node=草稿指派、originNode=載入時伺服端指派、otherName=所在他節點名）。 */
@@ -28,6 +29,7 @@ export function NodeDrawer({
   lifecycleId,
   nodeId,
   canWrite,
+  cycleName,
   onClose,
   onNodeRenamed,
   onChanged,
@@ -35,17 +37,25 @@ export function NodeDrawer({
   lifecycleId: string;
   nodeId: string;
   canWrite: boolean;
+  /** G-LC-015 當前循環名稱（候選過濾註記顯示；來自 DagCanvasPage 之 getLifecycles 反查）。 */
+  cycleName?: string;
   onClose: () => void;
   onNodeRenamed: (nodeId: string, name: string) => void;
   onChanged: () => void;
 }): JSX.Element {
+  const toast = useToast();
   const [name, setName] = useState('');
   const [originalName, setOriginalName] = useState('');
   const [kw, setKw] = useState('');
   const [docs, setDocs] = useState<DDoc[]>([]);
   const [unresolved, setUnresolved] = useState<Set<string>>(new Set());
-  const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string; code?: string } | null>(null);
+  const [excludedCount, setExcludedCount] = useState(0);
   const [saving, setSaving] = useState(false);
+  // G-LC-018 滑入動畫：掛載後由 translate-x-full 過渡至 translate-x-0。
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    setEntered(true);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -55,6 +65,7 @@ export function NodeDrawer({
         if (!alive) return;
         setName(d.node.name ?? '');
         setOriginalName(d.node.name ?? '');
+        setExcludedCount(d.excludedCount ?? 0);
         const mounted: DDoc[] = d.mounted.map((m) => ({
           id: m.id,
           number: m.documentNumber,
@@ -73,7 +84,7 @@ export function NodeDrawer({
         }));
         setDocs([...mounted, ...cands]);
       } catch (e) {
-        if (alive) setNotice({ tone: 'err', text: e instanceof ApiError ? e.code : '載入失敗' });
+        if (alive) toast.error(e instanceof ApiError ? e.code : '載入失敗');
       }
     })();
     return () => {
@@ -107,12 +118,12 @@ export function NodeDrawer({
       if (!canWrite) return;
       if (d.node && d.node !== nodeId) {
         setUnresolved((s) => new Set(s).add(d.id)); // 已掛他節點 → 改派待確認
-        setNotice({ tone: 'err', text: '此文件已掛載於其他節點，請確認是否改派' });
+        toast.info('此文件已掛載於其他節點，請確認是否改派');
         return;
       }
       setDocs((ds) => ds.map((x) => (x.id === d.id ? { ...x, node: nodeId } : x)));
     },
-    [canWrite, nodeId],
+    [canWrite, nodeId, toast],
   );
 
   const confirmReassign = useCallback(
@@ -142,7 +153,7 @@ export function NodeDrawer({
   const save = useCallback(async () => {
     if (!canWrite) return;
     if (unresolved.size > 0) {
-      setNotice({ tone: 'err', text: '請先確認或取消改派警示後再儲存', code: 'NODE_DOC_ALREADY_ASSIGNED' });
+      toast.error('請先確認或取消改派警示後再儲存');
       return;
     }
     const toUnmount = docs.filter((d) => d.originNode === nodeId && d.node !== nodeId);
@@ -157,10 +168,10 @@ export function NodeDrawer({
       onChanged();
       onClose();
     } catch (e) {
-      setNotice({ tone: 'err', text: e instanceof ApiError ? e.code : '儲存失敗' });
+      toast.error(e instanceof ApiError ? e.code : '儲存失敗');
       setSaving(false);
     }
-  }, [canWrite, unresolved, docs, nodeId, name, originalName, lifecycleId, onChanged, onClose]);
+  }, [canWrite, unresolved, docs, nodeId, name, originalName, lifecycleId, onChanged, onClose, toast]);
 
   const mounted = useMemo(() => docs.filter((d) => d.node === nodeId), [docs, nodeId]);
   const candidates = useMemo(() => {
@@ -178,7 +189,7 @@ export function NodeDrawer({
       <aside
         role="dialog"
         aria-label="節點維護"
-        className="fixed top-0 right-0 z-50 h-full w-[420px] max-w-full bg-white shadow-2xl flex flex-col"
+        className={`fixed top-0 right-0 z-50 h-full w-[420px] max-w-full bg-white shadow-2xl flex flex-col transition-transform duration-300 ${entered ? 'translate-x-0' : 'translate-x-full'}`}
       >
         <div className="h-14 border-b border-slate-200 flex items-center justify-between px-4 shrink-0">
           <div className="flex items-center gap-2">
@@ -191,13 +202,6 @@ export function NodeDrawer({
         </div>
 
         <div className="flex-1 overflow-auto p-4 space-y-5">
-          {notice && (
-            <div role="status" className={`text-sm border rounded-md px-3 py-2 ${notice.tone === 'ok' ? 'text-emerald-700 bg-emerald-50 border-emerald-100' : 'text-red-700 bg-red-50 border-red-100'}`}>
-              {notice.text}
-              {notice.code && <div className="text-[10px] mono text-red-400 mt-0.5">{notice.code}</div>}
-            </div>
-          )}
-
           {/* 節點名稱 */}
           <div>
             <label htmlFor="ndName" className="block text-sm font-medium text-slate-700 mb-1">節點名稱</label>
@@ -248,7 +252,9 @@ export function NodeDrawer({
             <label className="text-sm font-medium text-slate-700 mb-1.5 block">候選文件</label>
             <div className="flex items-start gap-1.5 text-xs text-slate-400 mb-2">
               <Icon name="filter" className="w-3.5 h-3.5 mt-0.5" />
-              <span>僅顯示所屬循環＝當前循環之文件（後端過濾，已排除其他循環之文件）。</span>
+              <span>
+                僅顯示所屬循環＝<span className="text-slate-600">{cycleName ?? '當前循環'}</span> 之文件（後端過濾，已排除其他循環 {excludedCount} 筆）。
+              </span>
             </div>
             <div className="relative mb-2">
               <Icon name="search" className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -315,7 +321,7 @@ export function NodeDrawer({
 
         <div className="border-t border-slate-200 p-3 flex items-center justify-between shrink-0 bg-white">
           <span className="text-xs text-slate-400">
-            {unresolved.size > 0 ? `${unresolved.size} 項改派待確認` : canWrite ? '儲存後送出變更' : '唯讀模式'}
+            {unresolved.size > 0 ? `${unresolved.size} 項改派待確認` : canWrite ? '關閉即送出變更' : '唯讀模式'}
           </span>
           <div className="flex gap-2">
             <button onClick={cancel} className="px-3 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">

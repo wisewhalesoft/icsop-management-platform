@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NodeDrawer } from './NodeDrawer';
+import { ToastProvider } from '../components/useToast';
 import * as endpoints from '../api/endpoints';
 import type { NodeDrawerData } from '../api/types';
 
@@ -21,19 +22,22 @@ const DRAWER: NodeDrawerData = {
   ],
 };
 
-function renderDrawer(canWrite = true) {
+function renderDrawer(canWrite = true, cycleName?: string) {
   const onClose = vi.fn();
   const onChanged = vi.fn();
   const onNodeRenamed = vi.fn();
   render(
-    <NodeDrawer
-      lifecycleId="lc1"
-      nodeId="n1"
-      canWrite={canWrite}
-      onClose={onClose}
-      onChanged={onChanged}
-      onNodeRenamed={onNodeRenamed}
-    />,
+    <ToastProvider>
+      <NodeDrawer
+        lifecycleId="lc1"
+        nodeId="n1"
+        canWrite={canWrite}
+        cycleName={cycleName}
+        onClose={onClose}
+        onChanged={onChanged}
+        onNodeRenamed={onNodeRenamed}
+      />
+    </ToastProvider>,
   );
   return { onClose, onChanged, onNodeRenamed };
 }
@@ -117,5 +121,26 @@ describe('NodeDrawer — F009 節點抽屜（文件掛載）', () => {
     renderDrawer(false);
     await waitFor(() => expect(screen.getByLabelText('節點名稱')).toHaveAttribute('readonly'));
     expect(screen.queryByRole('button', { name: '儲存並關閉' })).not.toBeInTheDocument();
+  });
+
+  // ===== prototype-alignment G-LC-015/016/018（prototypes/12-node-drawer.html）=====
+  it('G-LC-015 候選過濾註記顯示循環名稱與 excludedCount', async () => {
+    vi.mocked(endpoints.getNodeDrawer).mockResolvedValue({ ...DRAWER, excludedCount: 3 });
+    renderDrawer(true, '銷售及收款循環');
+    await waitFor(() => expect(screen.getByText(/已排除其他循環 3 筆/)).toBeInTheDocument());
+    expect(screen.getByText('銷售及收款循環')).toBeInTheDocument();
+  });
+
+  it('G-LC-016 footer 提示為「關閉即送出變更」', async () => {
+    renderDrawer(true);
+    await waitFor(() => expect(screen.getByLabelText('節點名稱')).toHaveValue('進件作業'));
+    expect(screen.getByText('關閉即送出變更')).toBeInTheDocument();
+  });
+
+  it('G-LC-018 抽屜具滑入動畫（transition-transform，掛載後 translate-x-0）', async () => {
+    renderDrawer(true);
+    const aside = screen.getByRole('dialog', { name: '節點維護' });
+    expect(aside.className).toContain('transition-transform');
+    await waitFor(() => expect(aside.className).toContain('translate-x-0'));
   });
 });

@@ -338,7 +338,8 @@ describe('ChangeHistoryPage — F037/F038', () => {
       expect(screen.getByText(/程序書書名：（空） → 車輛分期進件作業/)).toBeInTheDocument(),
     );
     await userEvent.click(screen.getByText(/程序書書名：（空） → 車輛分期進件作業/));
-    expect(await screen.findByText('建立')).toBeInTheDocument();
+    // 來源欄與展開明細皆渲染「建立」→ 用 findAllByText 容忍兩處出現（意圖仍為 CREATE→建立）。
+    expect((await screen.findAllByText('建立')).length).toBeGreaterThan(0);
   });
 
   it('TS-DCL-D-012 同文件同時間多筆 CREATE → 沿用 60 秒聚合顯示「N 項欄位變更」', async () => {
@@ -399,5 +400,140 @@ describe('ChangeHistoryPage — F037/F038', () => {
     await userEvent.click(screen.getByText(/文件狀態：有效 → 失效/));
     expect(await screen.findByText(/展開檢視已寫入/)).toBeInTheDocument();
     expect(screen.queryByText(/切換原因：/)).not.toBeInTheDocument();
+  });
+});
+
+// ============================================================================
+// prototype-alignment G-LC-022..032（來源欄位化＋色碼、書名、中文欄位過濾、聚合子標、
+// 版面文案、mini 佈局 diff 板、色碼標籤、160px 標籤欄）— prototypes/23-change-history.html
+// ============================================================================
+describe('ChangeHistoryPage — prototype-alignment G-LC-022..032', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(endpoints.getLifecycles).mockResolvedValue([CYCLE]);
+    vi.mocked(endpoints.getLifecycleChanges).mockResolvedValue({ items: [LC_CHANGE], total: 1 });
+    vi.mocked(endpoints.viewDocumentChanges).mockResolvedValue({ items: [] });
+    vi.mocked(endpoints.viewLifecycleChanges).mockResolvedValue({ items: [LC_CHANGE] });
+    vi.mocked(endpoints.getLifecycleTreeDiff).mockResolvedValue(TREE_DIFF);
+    vi.mocked(endpoints.lifecycleTreeDiffDownloadUrl).mockImplementation(
+      (l: string, c: string) =>
+        `/admin/change-history/lifecycles/${l}/changes/${c}/tree-diff/download`,
+    );
+  });
+
+  async function openTree(): Promise<void> {
+    render(<ChangeHistoryPage />);
+    await userEvent.click(screen.getByRole('button', { name: /循環樹狀圖/ }));
+    await waitFor(() => expect(screen.getByText('新增節點『撥款核准作業』')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /預覽/ }));
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+  }
+
+  it('G-LC-022 程序書 tab 具「來源」欄；來源由 field 推導（draftingDeptId→制定組織、status→狀態切換）', async () => {
+    mockAuth('SysAdmin');
+    const ORG: DocumentChangeView = {
+      ...DOC_CHANGE, id: 'o1', changeType: 'CONTENT', field: 'draftingDeptId',
+      oldValue: '企劃部', newValue: '消費分期營業部', occurredAt: '2026-07-16T14:31:00.000Z',
+    };
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [ORG, STATUS_CHANGE], total: 2 });
+    render(<ChangeHistoryPage />);
+    await waitFor(() => expect(screen.getByRole('columnheader', { name: '來源' })).toBeInTheDocument());
+    expect(screen.getAllByText('制定組織').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('狀態切換').length).toBeGreaterThan(0);
+  });
+
+  it('G-LC-022 來源徽章使用靜態色碼類（狀態切換＝violet；非動態拼接）', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [STATUS_CHANGE], total: 1 });
+    render(<ChangeHistoryPage />);
+    const badge = await screen.findByText('狀態切換');
+    expect(badge.className).toContain('bg-violet-50');
+    expect(badge.className).toContain('text-violet-700');
+  });
+
+  it('G-LC-022 hybrid：changeType=CREATE → 來源欄顯示「建立」（非 field 推導之編輯）', async () => {
+    mockAuth('SysAdmin');
+    const CREATE_ROW: DocumentChangeView = {
+      ...DOC_CHANGE, id: 'cr1', changeType: 'CREATE', field: 'documentName',
+      oldValue: null, newValue: '車輛分期進件作業', occurredAt: '2026-07-10T09:00:00.000Z',
+    };
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [CREATE_ROW], total: 1 });
+    render(<ChangeHistoryPage />);
+    await waitFor(() => expect(screen.getAllByText('建立').length).toBeGreaterThan(0));
+    expect(screen.queryByText('編輯')).not.toBeInTheDocument();
+  });
+
+  it('G-LC-023 程序書 cell 顯示書名行（documentName）', async () => {
+    mockAuth('SysAdmin');
+    const ROW: DocumentChangeView = { ...DOC_CHANGE, documentName: '車輛分期進件作業' };
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [ROW], total: 1 });
+    render(<ChangeHistoryPage />);
+    await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+  });
+
+  it('G-LC-024 變更欄位過濾接受中文標籤（輸入「文件狀態」→ 僅留狀態列）＋中文 placeholder', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [DOC_CHANGE, STATUS_CHANGE], total: 2 });
+    render(<ChangeHistoryPage />);
+    await waitFor(() => expect(screen.getByText(/程序書書名：舊書名 → 新書名/)).toBeInTheDocument());
+    expect(screen.getByPlaceholderText(/制定部門/)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('變更欄位'), '文件狀態');
+    await waitFor(() => expect(screen.queryByText(/程序書書名：舊書名 → 新書名/)).not.toBeInTheDocument());
+    expect(screen.getByText(/文件狀態：有效 → 作廢/)).toBeInTheDocument();
+  });
+
+  it('G-LC-026 聚合組時間欄顯示「同儲存/60 秒內」子標', async () => {
+    mockAuth('SysAdmin');
+    const t = '2026-07-10T09:00:00.000Z';
+    const mk = (id: string, field: string, nv: string): DocumentChangeView => ({
+      ...DOC_CHANGE, id, changeType: 'CREATE', field, oldValue: null, newValue: nv, occurredAt: t,
+    });
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({
+      items: [mk('a', 'documentName', 'X'), mk('b', 'status', 'active')], total: 2,
+    });
+    render(<ChangeHistoryPage />);
+    await waitFor(() => expect(screen.getByText('同儲存/60 秒內')).toBeInTheDocument());
+  });
+
+  it('G-LC-027 scope note 含 OQ-E07-04 定案、下載、LIFECYCLE_CHANGELOG_*', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [DOC_CHANGE], total: 1 });
+    render(<ChangeHistoryPage />);
+    expect(screen.getByText(/OQ-E07-04 定案/)).toBeInTheDocument();
+    expect(screen.getByText(/查詢\/展開\/預覽\/下載均寫入/)).toBeInTheDocument();
+    expect(screen.getByText('LIFECYCLE_CHANGELOG_*')).toBeInTheDocument();
+  });
+
+  it('G-LC-028 DocTab 頁尾含附件「已替換」不保留舊檔說明', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [DOC_CHANGE], total: 1 });
+    render(<ChangeHistoryPage />);
+    expect(screen.getByText(/附件僅記「已替換」事件、不保留舊檔/)).toBeInTheDocument();
+  });
+
+  it('G-LC-030 diff 板採 mini 佈局（節點寬 142px）', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [DOC_CHANGE], total: 1 });
+    await openTree();
+    expect(screen.getByTestId('tree-node-after-n4')).toHaveStyle({ width: '142px' });
+  });
+
+  it('G-LC-031 diff 標籤色碼：新增節點標籤為綠（非全藍）', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [DOC_CHANGE], total: 1 });
+    await openTree();
+    const tag = screen.getByTestId('tree-tag-after-n4');
+    expect(tag.getAttribute('data-tag-diff')).toBe('add');
+    expect(tag).toHaveStyle({ backgroundColor: '#D1FAE5' });
+  });
+
+  it('G-LC-032 展開明細標籤欄寬 160px（prototype 對齊）', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [DOC_CHANGE], total: 1 });
+    render(<ChangeHistoryPage />);
+    await waitFor(() => expect(screen.getByText(/程序書書名：舊書名 → 新書名/)).toBeInTheDocument());
+    await userEvent.click(screen.getByText(/程序書書名：舊書名 → 新書名/));
+    const row = await screen.findByTestId('change-field-row-c1');
+    expect(row.className).toContain('160px');
   });
 });

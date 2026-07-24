@@ -12,6 +12,7 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
+import { useToast } from '../components/useToast';
 import { formatDateTime } from './org-sync-view';
 import type { LifecycleView } from '../api/types';
 
@@ -38,6 +39,7 @@ interface Confirm {
 export function LifecycleListPage(): JSX.Element {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
   const role = user?.roleCode;
   const canRead = canPerform(role, FunctionKey.LIFECYCLE_MANAGEMENT, 'read');
   const canWrite = canPerform(role, FunctionKey.LIFECYCLE_MANAGEMENT, 'write');
@@ -46,7 +48,6 @@ export function LifecycleListPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
   const [fStatus, setFStatus] = useState('');
-  const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
   const [editTarget, setEditTarget] = useState<LifecycleView | 'new' | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
 
@@ -55,11 +56,11 @@ export function LifecycleListPage(): JSX.Element {
     try {
       setRows(await getLifecycles());
     } catch (e) {
-      setNotice({ tone: 'err', text: msgOf(e) });
+      toast.error(msgOf(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (canRead) void load();
@@ -79,13 +80,13 @@ export function LifecycleListPage(): JSX.Element {
       setConfirm(null);
       try {
         await fn();
-        setNotice({ tone: 'ok', text: okText });
+        toast.success(okText);
         await load();
       } catch (e) {
-        setNotice({ tone: 'err', text: msgOf(e) });
+        toast.error(msgOf(e));
       }
     },
-    [load],
+    [load, toast],
   );
 
   if (!canRead) {
@@ -116,34 +117,21 @@ export function LifecycleListPage(): JSX.Element {
 
       {canRead && !canWrite && (
         <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2">
-          <Icon name="user-circle" className="w-4 h-4 shrink-0" />
+          <Icon name="eye" className="w-4 h-4 shrink-0" />
           唯讀模式 · 此角色僅可檢視循環與節點，無法新增/編輯/刪除。
-        </div>
-      )}
-
-      {notice && (
-        <div
-          role="status"
-          className={`text-sm border rounded-md px-3 py-2 ${
-            notice.tone === 'ok'
-              ? 'text-emerald-700 bg-emerald-50 border-emerald-100'
-              : 'text-red-700 bg-red-50 border-red-100'
-          }`}
-        >
-          {notice.text}
         </div>
       )}
 
       {/* filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative">
+        <div className="relative flex-1 min-w-[200px]">
           <Icon name="search" className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="搜尋循環名稱…"
             aria-label="搜尋循環名稱"
-            className="pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-sm bg-white w-56 focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
           />
         </div>
         <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="狀態篩選" className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
@@ -191,7 +179,13 @@ export function LifecycleListPage(): JSX.Element {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-slate-600">{l.nodeCount}</td>
-                  <td className="px-4 py-3 text-slate-400">—</td>
+                  <td className="px-4 py-3">
+                    {(l.mountedDocCount ?? 0) > 0 ? (
+                      <span className="text-slate-600">{l.mountedDocCount} 份</span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-500 mono text-xs">{formatDateTime(l.updatedAt)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3 text-sm whitespace-nowrap">
@@ -216,13 +210,17 @@ export function LifecycleListPage(): JSX.Element {
                             {l.status === 'active' ? '停用' : '啟用'}
                           </button>
                           <button
-                            onClick={() =>
+                            onClick={() => {
+                              const mounted = l.mountedDocCount ?? 0;
                               setConfirm({
                                 title: `刪除循環「${l.name}」？`,
-                                body: '刪除後將一併移除其節點/連線並記錄稽核（不可復原）。若仍有文件掛載則需先解除。',
+                                body:
+                                  mounted > 0
+                                    ? `此循環仍有 ${mounted} 份文件掛載，需先解除全部掛載才能刪除（LIFECYCLE_HAS_DOCUMENTS）；亦可改用「停用」保留此循環。`
+                                    : '此循環已無文件掛載，刪除後將記錄稽核（不可復原）。',
                                 onConfirm: () => void act(() => deleteLifecycle(l.id), '循環已刪除'),
-                              })
-                            }
+                              });
+                            }}
                             className="text-red-600 hover:text-red-700 hover:underline"
                           >
                             刪除
@@ -237,7 +235,10 @@ export function LifecycleListPage(): JSX.Element {
           </table>
         </div>
         {!loading && shown.length === 0 && (
-          <div className="text-center py-14 text-sm text-slate-500">查無符合結果</div>
+          <div className="text-center py-14">
+            <Icon name="inbox" className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+            <p className="text-slate-500 text-sm">查無符合結果</p>
+          </div>
         )}
         {loading && (
           <div className="p-6 animate-pulse space-y-3">
@@ -258,10 +259,10 @@ export function LifecycleListPage(): JSX.Element {
               navigate(`/admin/lifecycles/${created.id}/canvas`);
               return;
             }
-            setNotice({ tone: 'ok', text: '已儲存循環' });
+            toast.success('已儲存循環');
             await load();
           }}
-          onError={(e) => setNotice({ tone: 'err', text: msgOf(e) })}
+          onError={(e) => toast.error(msgOf(e))}
         />
       )}
 
@@ -336,7 +337,10 @@ function LifecycleModal({
               className={`w-full px-3 py-2 rounded-md border text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 ${nameErr ? 'border-red-500' : 'border-slate-300'}`}
             />
             {nameErr && (
-              <p className="mt-1 text-xs text-red-600">循環名稱不可為空（LIFECYCLE_NAME_REQUIRED）</p>
+              <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                <Icon name="alert-circle" className="w-3.5 h-3.5 shrink-0" />
+                循環名稱不可為空（LIFECYCLE_NAME_REQUIRED）
+              </p>
             )}
           </div>
           <div>
