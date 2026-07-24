@@ -18,6 +18,9 @@ function loginErrorMessage(code: string): string {
       return '帳號或密碼錯誤';
     case 'AUTH_MISSING_FIELD':
       return '請輸入帳號與密碼';
+    case 'AUTH_TOO_MANY_ATTEMPTS':
+      // 帳密登入節流（brute-force 防護，429）；時窗過後自動恢復。
+      return '登入嘗試次數過多，請稍後再試';
     default:
       return '登入失敗，請稍後再試';
   }

@@ -70,9 +70,16 @@ export class AuthController {
   @Post('login')
   async passwordLogin(
     @Body() body: PasswordLoginBody,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<SessionUser> {
-    const { user, token } = await this.passwordLoginSvc.login(body ?? {});
+    // req.ip 交 service 之 IP 軸節流（brute-force 防護）。
+    // ⚠ 部署於反向代理（nginx）之後時，需於 main.ts 設定 `trust proxy`，否則 req.ip 恆為反代位址，
+    //    使所有使用者共用同一 IP 節流額度（見 hardening 實作日誌之部署待辦）。
+    const { user, token } = await this.passwordLoginSvc.login(
+      body ?? {},
+      req.ip ?? '',
+    );
     res.cookie(SESSION_COOKIE, token, sessionCookieOptions());
     return user;
   }

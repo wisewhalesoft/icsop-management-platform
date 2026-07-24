@@ -12,6 +12,7 @@ import {
 import { verifyPassword } from '../accounts/password';
 import { PasswordLoginService } from './password-login.service';
 import { SessionTokenService } from './session-token.service';
+import { LoginThrottleService } from './login-throttle';
 import { resolvePasswordLogin } from './password-login';
 import {
   AccountRepository,
@@ -114,17 +115,20 @@ describe('F003 建立→登入閉環', () => {
       },
     ]);
     const tokens = new SessionTokenService(new JwtService({ secret: 'closure-secret' }));
-    const login = new PasswordLoginService(repo, tokens);
+    const login = new PasswordLoginService(repo, tokens, new LoginThrottleService());
 
     // 3) 以建立時之帳密登入 → 成功、角色一致、token 可解回。
-    const { user, token } = await login.login({ loginId: 'mgr01', password: 'S3cret!' });
+    const { user, token } = await login.login(
+      { loginId: 'mgr01', password: 'S3cret!' },
+      '1.1.1.1',
+    );
     expect(user).toMatchObject({ loginId: 'mgr01', companyCode: 'AS', roleCode: 'User' });
     expect(tokens.verify(token)).toEqual(user);
 
     // 4) 錯誤密碼 → 統一失敗。
-    await expect(login.login({ loginId: 'mgr01', password: 'nope' })).rejects.toThrow(
-      new UnauthorizedException('AUTH_INVALID_CREDENTIALS'),
-    );
+    await expect(
+      login.login({ loginId: 'mgr01', password: 'nope' }, '1.1.1.1'),
+    ).rejects.toThrow(new UnauthorizedException('AUTH_INVALID_CREDENTIALS'));
   });
 
   it('TS-F003-008 回歸：上游帳號途徑 A（email 分類）不受影響，且不得被途徑 B 帳密登入', () => {

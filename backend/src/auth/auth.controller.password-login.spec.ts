@@ -1,9 +1,14 @@
-import { UnauthorizedException, BadRequestException } from '@nestjs/common';
-import type { Response } from 'express';
+import {
+  UnauthorizedException,
+  BadRequestException,
+  HttpException,
+} from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { PasswordLoginService } from './password-login.service';
 import { SessionTokenService } from './session-token.service';
+import { LoginThrottleService } from './login-throttle';
 import { SESSION_COOKIE, sessionCookieOptions } from './session.config';
 import {
   AccountRepository,
@@ -49,12 +54,14 @@ class FakeRepo implements AccountRepository {
 function makeController(account: PasswordAuthAccount | null): {
   ctrl: AuthController;
   tokens: SessionTokenService;
+  svc: PasswordLoginService;
 } {
   const repo = new FakeRepo(account);
   const tokens = new SessionTokenService(new JwtService({ secret: 'ctrl-secret' }));
-  const svc = new PasswordLoginService(repo, tokens);
+  const throttle = new LoginThrottleService();
+  const svc = new PasswordLoginService(repo, tokens, throttle);
   const ctrl = new AuthController(repo, tokens, svc);
-  return { ctrl, tokens };
+  return { ctrl, tokens, svc };
 }
 
 function fakeRes(): Response & { cookie: jest.Mock; clearCookie: jest.Mock } {
@@ -62,6 +69,11 @@ function fakeRes(): Response & { cookie: jest.Mock; clearCookie: jest.Mock } {
     cookie: jest.fn(),
     clearCookie: jest.fn(),
   } as unknown as Response & { cookie: jest.Mock; clearCookie: jest.Mock };
+}
+
+/** 比照 fakeRes()：僅承載節流所需之 req.ip。 */
+function fakeReq(ip: string): Request {
+  return { ip } as unknown as Request;
 }
 
 describe('AuthController POST /auth/login（途徑 B）', () => {
@@ -77,7 +89,11 @@ describe('AuthController POST /auth/login（途徑 B）', () => {
     const { ctrl, tokens } = makeController(manual({ roleCode: 'ICSOPAdmin' }));
     const res = fakeRes();
 
-    const user = await ctrl.passwordLogin({ loginId: 'mgr01', password: PW }, res);
+    const user = await ctrl.passwordLogin(
+      { loginId: 'mgr01', password: PW },
+      fakeReq('1.2.3.4'),
+      res,
+    );
 
     expect(user).toEqual({
       loginId: 'mgr01',
@@ -97,7 +113,7 @@ describe('AuthController POST /auth/login（途徑 B）', () => {
   it('TS-F001-013 成功時只設 SESSION_COOKIE、不清除其他 cookie（不干擾 oidc_tx/既有 session）', async () => {
     const { ctrl } = makeController(manual());
     const res = fakeRes();
-    await ctrl.passwordLogin({ loginId: 'mgr01', password: PW }, res);
+    await ctrl.passwordLogin({ loginId: 'mgr01', password: PW }, fakeReq('1.2.3.4'), res);
     expect(res.clearCookie).not.toHaveBeenCalled();
     expect(res.cookie).toHaveBeenCalledTimes(1);
     expect(res.cookie.mock.calls[0][0]).toBe(SESSION_COOKIE);
@@ -107,7 +123,7 @@ describe('AuthController POST /auth/login（途徑 B）', () => {
     const { ctrl } = makeController(manual());
     const res = fakeRes();
     await expect(
-      ctrl.passwordLogin({ loginId: 'mgr01', password: 'wrong' }, res),
+      ctrl.passwordLogin({ loginId: 'mgr01', password: 'wrong' }, fakeReq('1.2.3.4'), res),
     ).rejects.toThrow(new UnauthorizedException('AUTH_INVALID_CREDENTIALS'));
     expect(res.cookie).not.toHaveBeenCalled();
     expect(res.clearCookie).not.toHaveBeenCalled();
@@ -117,8 +133,65 @@ describe('AuthController POST /auth/login（途徑 B）', () => {
     const { ctrl } = makeController(manual());
     const res = fakeRes();
     await expect(
-      ctrl.passwordLogin({ loginId: 'mgr01', password: '' }, res),
+      ctrl.passwordLogin({ loginId: 'mgr01', password: '' }, fakeReq('1.2.3.4'), res),
     ).rejects.toThrow(new BadRequestException('AUTH_MISSING_FIELD'));
     expect(res.cookie).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 節流邊界（hardening-test-design.md §2.7 TS-HD-CTRL-001〜003）。
+   * 重點：鎖定 429 之「物件形狀」body（防退化為裸字串破壞前端 extractError），
+   * 並驗證 controller 確實把 req.ip 傳遞給 service。
+   */
+  describe('節流 429 邊界', () => {
+    it('TS-HD-CTRL-001 第 6 次失敗 → 拋出例外 getResponse() 深比對等於物件 body（非裸字串）', async () => {
+      const { ctrl } = makeController(manual());
+      const req = fakeReq('1.2.3.4');
+      for (let i = 0; i < 5; i++) {
+        await expect(
+          ctrl.passwordLogin({ loginId: 'mgr01', password: 'wrong' }, req, fakeRes()),
+        ).rejects.toThrow(UnauthorizedException);
+      }
+      let err: unknown;
+      try {
+        await ctrl.passwordLogin({ loginId: 'mgr01', password: 'wrong' }, req, fakeRes());
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(HttpException);
+      expect((err as HttpException).getStatus()).toBe(429);
+      expect((err as HttpException).getResponse()).toEqual({
+        statusCode: 429,
+        message: 'AUTH_TOO_MANY_ATTEMPTS',
+        error: 'Too Many Requests',
+      });
+    });
+
+    it('TS-HD-CTRL-002 429 情境不設定任何 cookie', async () => {
+      const { ctrl } = makeController(manual());
+      const req = fakeReq('1.2.3.4');
+      for (let i = 0; i < 5; i++) {
+        await ctrl
+          .passwordLogin({ loginId: 'mgr01', password: 'wrong' }, req, fakeRes())
+          .catch(() => undefined);
+      }
+      const res = fakeRes();
+      await expect(
+        ctrl.passwordLogin({ loginId: 'mgr01', password: 'wrong' }, req, res),
+      ).rejects.toThrow(HttpException);
+      expect(res.cookie).not.toHaveBeenCalled();
+    });
+
+    it('TS-HD-CTRL-003 controller 將 req.ip 作為第二參數傳遞給 service', async () => {
+      const { ctrl, svc } = makeController(manual());
+      const spy = jest
+        .spyOn(svc, 'login')
+        .mockResolvedValue({
+          user: { loginId: 'mgr01', email: '', companyCode: 'AS', roleCode: 'ICSOPAdmin' },
+          token: 'tok',
+        });
+      await ctrl.passwordLogin({ loginId: 'mgr01', password: 'x' }, fakeReq('9.8.7.6'), fakeRes());
+      expect(spy).toHaveBeenCalledWith({ loginId: 'mgr01', password: 'x' }, '9.8.7.6');
+    });
   });
 });
