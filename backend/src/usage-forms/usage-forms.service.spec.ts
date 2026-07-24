@@ -8,6 +8,7 @@ import {
   UsageFormRecord,
 } from './usage-forms.store';
 import { FakeBlobStore } from '../storage/fake-blob-store';
+import { DOWNLOAD_URL_TTL_SECONDS } from '../storage/blob-store';
 import { MAX_FILE_SIZE_BYTES } from '../storage/file-rules';
 import { SessionContext, UploadFile } from '../attachments/attachments.service';
 
@@ -462,5 +463,83 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
       expect(u.uploadedBy).toBe('admin2');
       expect(u.uploadedAt).toBeInstanceOf(Date);
     });
+  });
+
+  /**
+   * F026 AC6 Edge Case × OQ-FM-01 —— 使用表單下載為 **RAW（不燒錄）** 之既定行為。
+   *
+   * 人類裁決（2026-07-24）：前台 downloadForm 與後台 downloadFromPool 皆核發指向**原始 blob** 之短效期
+   * SAS URL，伺服器端不燒錄浮水印（使用表單常為 .xlsx，本無 PDF 浮水印可燒）；浮水印/追溯僅存於前台
+   * 檢視器路徑（F020）。本測試為**永久之既定行為測試**，作為「UsageFormsService 不接線 PdfBurner」之
+   * 回歸防線（見 attachments.service.spec.ts 同名區塊）。
+   */
+  describe('下載皆 RAW（不燒錄）為既定行為（OQ-FM-01 人類裁決）', () => {
+    it('TS-FM-002 downloadForm（前台）與 downloadFromPool（後台）皆核發原始 blob SAS URL，未燒錄', async () => {
+      const f = await svc.uploadForm(ICSOP_ADMIN, xlsx());
+      await svc.linkForms(ICSOP_ADMIN, 'doc-1', [f.id]);
+      const sup: SessionContext = { roleCode: 'Supervisor', accountId: 'sup1' };
+      const sys: SessionContext = { roleCode: 'SysAdmin', accountId: 's1' };
+
+      const g1 = await svc.downloadForm(sup, 'doc-1', f.id); // 前台（僅需 session 存在）
+      const g2 = await svc.downloadFromPool(sys, f.id); // 後台（USAGE_FORM_MANAGEMENT read gate，SysAdmin 唯讀亦可）
+
+      const raw = `https://fake.blob/${f.blobPath}?sig=fake&ttl=${DOWNLOAD_URL_TTL_SECONDS}`;
+      expect(g1.url).toBe(raw); // 原始輸出，未含燒錄後綴／未經轉換
+      expect(g2.url).toBe(raw);
+      // 上傳原件寫入一次；兩次下載皆未再 put（非重建燒錄件另存）。
+      expect(blob.putCalls).toHaveLength(1);
+      // 結構回歸防線：UsageFormsService 建構子僅 blob/store/audit 三相依，無 burner → 天生不具燒錄能力。
+      expect(UsageFormsService.length).toBe(3);
+    });
+  });
+
+  /**
+   * F026 AC6 逐字組合（launching 指名）：主管/部門窗口「下載使用表單→允許」、「上傳/取代該附件→被拒」。
+   * 既有 TS-025~028 僅覆蓋 listPool/uploadForm；此區塊補上 AC6 逐字之「下載」與「取代（overwriteForm）」
+   * 兩個精確動作 ×（主管、部門窗口）兩個逐字指名角色（house DoD：於真實呼叫方法上斷言，不以共用 guard 代替）。
+   */
+  describe('RBAC — AC6 主管/部門窗口下載允許、取代被拒（F026 精確組合）', () => {
+    it.each([
+      ['TS-FM-003 主管', 'Supervisor', 'sup1'],
+      ['TS-FM-004 部門窗口', 'DeptContact', 'dc1'],
+    ])('%s 下載使用表單 → 允許，核發憑證＋稽核', async (_label, roleCode, accountId) => {
+      const f = await svc.uploadForm(ICSOP_ADMIN, xlsx());
+      await svc.linkForms(ICSOP_ADMIN, 'doc-1', [f.id]);
+      const s: SessionContext = { roleCode, accountId };
+
+      const grant = await svc.downloadForm(s, 'doc-1', f.id);
+
+      expect(grant.url).toContain(f.blobPath);
+      expect(grant.expiresInSeconds).toBe(DOWNLOAD_URL_TTL_SECONDS);
+      expect(audit.events).toEqual([
+        {
+          targetType: 'USAGE_FORM',
+          actionType: 'DOWNLOAD',
+          formId: f.id,
+          documentId: 'doc-1',
+          accountId,
+        },
+      ]);
+    });
+
+    it.each([
+      ['TS-FM-005 主管', 'Supervisor', 'sup1'],
+      ['TS-FM-006 部門窗口', 'DeptContact', 'dc1'],
+    ])(
+      '%s 嘗試取代使用表單（overwriteForm）→ PERMISSION_DENIED，未寫入、原檔不變',
+      async (_label, roleCode, accountId) => {
+        // 0 份引用：排除 USAGE_FORM_OVERWRITE_SHARED 干擾，證明係 RBAC（功能面「無」）於檔案寫入前即擋下。
+        const f = await svc.uploadForm(ICSOP_ADMIN, xlsx({ fileName: 'v1.xlsx' }));
+        blob.putCalls.length = 0;
+        const s: SessionContext = { roleCode, accountId };
+
+        await expect(
+          svc.overwriteForm(s, f.id, xlsx({ fileName: 'v2.xlsx' })),
+        ).rejects.toThrow('PERMISSION_DENIED');
+
+        expect(blob.putCalls).toHaveLength(0); // 未寫入新檔
+        expect((await store.findById(f.id))?.blobPath).toBe(f.blobPath); // 原 blobPath 不變
+      },
+    );
   });
 });
