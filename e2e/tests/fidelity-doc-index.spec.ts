@@ -12,9 +12,14 @@ test('文件索引清單 — 列以文件編號呈現，非裸 UUID（GAP-21-1�
   const table = page.locator('table');
   await expect(table).toBeVisible();
 
+  // 等待非同步總覽載入「落定」：直到出現資料列或空狀態，避免載入中把 0 列誤判為「無資料」而 skip。
+  await expect(
+    table.locator('tbody tr').first().or(page.getByText('查無符合的文件')),
+  ).toBeVisible({ timeout: 15000 });
+
   const bodyRows = table.locator('tbody tr');
   const count = await bodyRows.count();
-  test.skip(count === 0, '環境無文件索引列，略過（非漂移）');
+  test.skip(count === 0, '環境確為空狀態（查無符合的文件），略過（非漂移）');
 
   // 至少一列以 ICSOP- 編號呈現。
   await expect(table.getByText(/ICSOP-/).first()).toBeVisible();
