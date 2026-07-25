@@ -17,6 +17,7 @@ import {
   UserPlus, UserX, Check,
   AlertOctagon, BadgeCheck, SquarePen,
   EyeOff, SlidersHorizontal, FileX,
+  FileClock,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -132,6 +133,7 @@ const REGISTRY: Record<string, LucideIcon> = {
   'eye-off': EyeOff,
   'sliders-horizontal': SlidersHorizontal,
   'file-x': FileX, // fix-admin G-ADM-027：文件索引「.xls 原件」無 cell（與既有 file-x-2 不同）
+  'file-clock': FileClock, // GAP-07-1 儀表板「待公布的文件」KPI 卡（prototype 07 TODOS）
 };
 
 export interface IconProps {

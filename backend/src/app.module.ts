@@ -16,6 +16,7 @@ import { PublicModule } from './public/public.module';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { ChangeHistoryModule } from './change-history/change-history.module';
 import { OrgChangeAlertModule } from './org-change-alert/org-change-alert.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -39,6 +40,8 @@ import { OrgChangeAlertModule } from './org-change-alert/org-change-alert.module
     ChangeHistoryModule,
     // F006 組織異動待確認提示（提示產生整合點由 OrgSyncModule 注入；Route A 訂閱者由 DocumentsModule 掛入）。
     OrgChangeAlertModule,
+    // GAP-07-1 後台儀表板 KPI 彙總（唯讀 COUNT；反循環自建 provider）。
+    DashboardModule,
   ],
   controllers: [AppController],
 })

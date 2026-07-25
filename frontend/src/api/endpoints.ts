@@ -699,6 +699,11 @@ export function downloadPoolForm(
 // ===== E09 F031 文件索引管理 =====
 
 /** GET /admin/doc-index/overview（總覽：彙總計數 + 分頁 + 狀態篩選；read）。 */
+/** GAP-07-1 後台儀表板 KPI 彙總（待確認組織異動/未指派節點文件/停用帳號/調閱近7日/待公布）。 */
+export function getDashboardSummary(): Promise<import('./types').DashboardSummary> {
+  return apiFetch('/admin/dashboard/summary');
+}
+
 export function getDocIndexOverview(
   f: { state?: string; page?: number } = {},
 ): Promise<import('./types').DocIndexOverview> {

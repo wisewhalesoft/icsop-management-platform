@@ -1,15 +1,18 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { RoleBadge } from '../components/RoleBadge';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { visibleMenu, accessLabelFor } from '../domain/menu';
+import { getDashboardSummary } from '../api/endpoints';
+import type { DashboardSummary } from '../api/types';
 
 /**
  * 後台首頁 / 儀表板。版面與卡片樣式權威來源：prototypes/07-admin-shell.html。
  * 「快速進入功能區」卡片依角色過濾（等同側欄）並連往各功能路由。
- * 註：原型之待辦徽章與最近活動為示範資料，需各自對應功能之後端端點；
- * 待該等功能實作後再接真實資料，避免於正式頁呈現虛構資料。
+ * KPI「待辦提示」列（GAP-07-1）依角色過濾，計數接真實端點 GET /admin/dashboard/summary
+ * （原註記之示範資料已汰換為真實計數；失敗則顯 0，不阻斷儀表板）。「最近活動」仍待對應端點，暫不呈現。
  */
 const CARD_DESC: Record<string, string> = {
   account: '建立/停用帳號、指派角色',
@@ -23,10 +26,45 @@ const CARD_DESC: Record<string, string> = {
   settings: '角色×功能 / 角色×欄位矩陣',
 };
 
+/**
+ * KPI 待辦提示卡（prototype 07 之 TODOS），依角色過濾。color/bg 沿用原型（inline style，避開 Tailwind 動態類）；
+ * span 設 color → 內部 lucide 圖示以 currentColor 繼承。key 對映 GET /admin/dashboard/summary 之計數欄。
+ */
+const KPI_CARDS: {
+  key: keyof DashboardSummary;
+  label: string;
+  icon: string;
+  color: string;
+  bg: string;
+  roles: string[];
+}[] = [
+  { key: 'pendingOrgChanges', label: '待確認組織異動', icon: 'alert-triangle', color: '#B45309', bg: '#FEF3C7', roles: ['SysAdmin', 'ICSOPAdmin'] },
+  { key: 'unassignedDocs', label: '未指派節點文件', icon: 'git-commit-vertical', color: '#B45309', bg: '#FEF3C7', roles: ['ICSOPAdmin'] },
+  { key: 'disabledAccounts', label: '停用帳號待覆核', icon: 'user-x', color: '#B91C1C', bg: '#FEE2E2', roles: ['SysAdmin'] },
+  { key: 'accessLast7Days', label: '調閱紀錄（近7日）', icon: 'history', color: '#365C97', bg: '#EAF1FA', roles: ['SysAdmin', 'ICSOPAdmin'] },
+  { key: 'pendingPublish', label: '待公布的文件', icon: 'file-clock', color: '#047857', bg: '#D1FAE5', roles: ['ICSOPAdmin', 'Supervisor'] },
+];
+
 export function DashboardHome(): JSX.Element {
   const { user } = useAuth();
   const role = user?.roleCode;
   const cards = visibleMenu(role);
+  const kpis = KPI_CARDS.filter((k) => !!role && k.roles.includes(role));
+
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void getDashboardSummary()
+      .then((s) => {
+        if (alive) setSummary(s);
+      })
+      .catch(() => {
+        // 靜默：KPI 為輔助資訊，失敗顯 0，不阻斷儀表板。
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -43,6 +81,32 @@ export function DashboardHome(): JSX.Element {
           </p>
         </div>
       </div>
+
+      {/* KPI 待辦提示（GAP-07-1，prototype 07 TODOS；角色過濾、真實計數 GET /admin/dashboard/summary） */}
+      {kpis.length > 0 && (
+        <div
+          role="group"
+          aria-label="待辦提示"
+          className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6"
+        >
+          {kpis.map((k) => (
+            <div key={k.key} className="bg-white border border-slate-200 rounded-xl p-3.5">
+              <div className="flex items-center gap-2">
+                <span
+                  className="w-8 h-8 rounded-lg flex items-center justify-center"
+                  style={{ background: k.bg, color: k.color }}
+                >
+                  <Icon name={k.icon} className="w-4 h-4" />
+                </span>
+                <span className="text-2xl font-bold text-slate-900">
+                  {summary?.[k.key] ?? 0}
+                </span>
+              </div>
+              <div className="text-xs text-slate-500 mt-1.5">{k.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <h2 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
         <Icon name="layout-grid" className="w-4 h-4 text-slate-400" />

@@ -691,3 +691,17 @@ export interface DocIndexChunk {
   edition: string;
   pageNumber: number;
 }
+
+/** GAP-07-1 後台儀表板 KPI 彙總（GET /admin/dashboard/summary）。全欄 optional（缺→前端顯 0）。 */
+export interface DashboardSummary {
+  /** 待確認組織異動（ORG_CHANGE_ALERT pending）。 */
+  pendingOrgChanges?: number;
+  /** 未指派節點文件（有效文件且 nodeId null）。 */
+  unassignedDocs?: number;
+  /** 停用帳號待覆核（ACCOUNT disabled）。 */
+  disabledAccounts?: number;
+  /** 調閱紀錄（近7日）。 */
+  accessLast7Days?: number;
+  /** 待公布的文件（有效且進度中）。 */
+  pendingPublish?: number;
+}
