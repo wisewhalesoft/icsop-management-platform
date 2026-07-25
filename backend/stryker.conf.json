@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Uncle Bob 約束 #3：mutation testing — 驗證單元測試「真的」抓得到缺陷。漸進導入：先鎖定 dashboard 純邏輯模組；後續逐步擴大 mutate 範圍。",
+  "packageManager": "npm",
+  "testRunner": "jest",
+  "jest": {
+    "projectType": "custom",
+    "configFile": "package.json"
+  },
+  "coverageAnalysis": "perTest",
+  "mutate": ["src/dashboard/dashboard-summary.service.ts"],
+  "reporters": ["clear-text", "progress"],
+  "thresholds": { "high": 85, "low": 70, "break": 60 },
+  "timeoutMS": 60000,
+  "concurrency": 2
+}

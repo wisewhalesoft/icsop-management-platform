@@ -34,3 +34,7 @@ desktop.ini
 .DS_Store
 .vscode/
 .idea/
+
+# Stryker mutation testing
+.stryker-tmp/
+reports/mutation/

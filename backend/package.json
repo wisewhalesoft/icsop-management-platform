@@ -11,6 +11,7 @@
     "test:watch": "jest --watch",
     "test:int": "jest --config test/jest-int.json",
     "deps:check": "depcruise src --config .dependency-cruiser.cjs",
+    "test:mutation": "stryker run",
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:run": "npm run typeorm -- -d src/database/data-source.ts migration:run",
     "migration:revert": "npm run typeorm -- -d src/database/data-source.ts migration:revert",
@@ -36,6 +37,8 @@
   "devDependencies": {
     "@nestjs/cli": "^11.0.24",
     "@nestjs/testing": "^11.1.28",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/jest-runner": "^9.6.1",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
