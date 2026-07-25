@@ -159,6 +159,57 @@ describe('F031 doc-index 補強（G-ADM-028/030/031）', () => {
   });
 });
 
+describe('GAP-21-1/21-2 總覽列文件層 join（documentNumber/name/hasXls）', () => {
+  it('documentInfo 提供時 → 總覽列填入文件編號/書名/hasXls（取代裸 UUID）', async () => {
+    const runStore = new FakeIndexRunStore();
+    const r = await runStore.create({ documentId: 'DOC-1', triggerType: 'xls_update', stage: 'extract' });
+    await runStore.markSuccess(r.id, 3);
+    const svc = new IndexVisibilityService({
+      chunkStore: new FakeChunkStore(),
+      runStore,
+      manualReindex: noopTrigger,
+      documentIds: () => Promise.resolve(['DOC-1', 'DOC-2']),
+      documentInfo: (ids) =>
+        Promise.resolve(
+          new Map(
+            ids.map((id) => [
+              id,
+              id === 'DOC-1'
+                ? {
+                    documentNumber: 'ICSOP-CIPS-102-1-01',
+                    documentName: '系統需求與系統設計作業程序書',
+                    hasXls: true,
+                  }
+                : {
+                    documentNumber: 'ICSOP-SRC-101-1-01',
+                    documentName: '車輛分期進件作業',
+                    hasXls: false,
+                  },
+            ]),
+          ),
+        ),
+    });
+    const overview = await svc.getOverview({});
+    const d1 = overview.items.find((i) => i.documentId === 'DOC-1');
+    const d2 = overview.items.find((i) => i.documentId === 'DOC-2');
+    expect(d1?.documentNumber).toBe('ICSOP-CIPS-102-1-01');
+    expect(d1?.documentName).toBe('系統需求與系統設計作業程序書');
+    expect(d1?.hasXls).toBe(true);
+    expect(d2?.documentNumber).toBe('ICSOP-SRC-101-1-01');
+    expect(d2?.hasXls).toBe(false);
+  });
+
+  it('無 documentInfo（graceful）→ 列不含 documentNumber（前端以 documentId 降級）', async () => {
+    const runStore = new FakeIndexRunStore();
+    const r = await runStore.create({ documentId: 'DOC-1', triggerType: 'xls_update', stage: 'extract' });
+    await runStore.markSuccess(r.id, 1);
+    const { svc } = makeSvc(new FakeChunkStore(), runStore);
+    const overview = await svc.getOverview({});
+    expect(overview.items[0].documentNumber).toBeUndefined();
+    expect(overview.items[0].hasXls).toBeUndefined();
+  });
+});
+
 describe('F031 三態顯示（AC2/AC3）', () => {
   it('TS-F031-004 進行中 → running，無最後索引時間', async () => {
     const runStore = new FakeIndexRunStore();

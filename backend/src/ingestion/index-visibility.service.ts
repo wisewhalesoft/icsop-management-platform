@@ -57,6 +57,12 @@ export interface IndexOverviewRow {
   errorMessage: string | null;
   /** G-ADM-030 失敗錯誤碼（清單失敗列顯示錯誤碼而非階段標籤）；非失敗恆 null。 */
   errorCode: string | null;
+  /** GAP-21-1 文件編號（自 ICSOP_DOCUMENT join）。缺 documentInfo→undefined，前端以 documentId 降級。 */
+  documentNumber?: string;
+  /** GAP-21-1 程序書書名（自 ICSOP_DOCUMENT join）。 */
+  documentName?: string;
+  /** GAP-21-2 是否有 .xls 原件（DOC_SOURCE_XLS 存在）；缺→undefined（前端顯「—」）。 */
+  hasXls?: boolean;
 }
 
 export interface IndexOverviewResult {
@@ -137,6 +143,15 @@ export class IndexVisibilityService {
       documentIds?: () => Promise<string[]>;
       /** G-ADM-034 循環名解析（lifecycleId→name）。缺→lifecycleName null。 */
       lifecycleNames?: (lifecycleIds: string[]) => Promise<Map<string, string>>;
+      /**
+       * GAP-21-1/21-2 文件層資訊解析（documentId→編號/書名/hasXls）。缺→總覽列不含該三欄
+       * （前端以 documentId 降級呈現）。僅對「本頁」列解析（效率）。
+       */
+      documentInfo?: (
+        documentIds: string[],
+      ) => Promise<
+        Map<string, { documentNumber: string; documentName: string; hasXls: boolean }>
+      >;
     },
   ) {}
 
@@ -203,7 +218,20 @@ export class IndexVisibilityService {
     const filtered = query.state ? rows.filter((r) => r.state === query.state) : rows;
     const page = query.page && query.page > 0 ? query.page : 1;
     const start = (page - 1) * DEFAULT_PAGE_SIZE;
-    const items = filtered.slice(start, start + DEFAULT_PAGE_SIZE);
+    const pageRows = filtered.slice(start, start + DEFAULT_PAGE_SIZE);
+
+    // GAP-21-1/21-2：僅對「本頁」列 join 文件層資訊（文件編號/書名/hasXls），避免清單顯示裸 UUID。
+    // 缺 documentInfo（未接線環境）→ 列不含該三欄，前端以 documentId 優雅降級。
+    let items = pageRows;
+    if (this.deps.documentInfo && pageRows.length > 0) {
+      const info = await this.deps.documentInfo(pageRows.map((r) => r.documentId));
+      items = pageRows.map((r) => {
+        const d = info.get(r.documentId);
+        return d
+          ? { ...r, documentNumber: d.documentNumber, documentName: d.documentName, hasXls: d.hasXls }
+          : r;
+      });
+    }
 
     return {
       successCount,
