@@ -1,0 +1,6 @@
+node_modules/
+storage/
+test-results/
+playwright-report/
+blob-report/
+.last-run.json
