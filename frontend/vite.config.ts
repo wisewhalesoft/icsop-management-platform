@@ -16,8 +16,12 @@ import react from '@vitejs/plugin-react';
 const BACKEND_TARGET =
   process.env.VITE_BACKEND_ORIGIN ?? 'http://localhost:3000';
 
-const spaBypass = (req: { method?: string; headers: Record<string, unknown> }) => {
+const spaBypass = (req: { method?: string; url?: string; headers: Record<string, unknown> }) => {
   const accept = String(req.headers['accept'] ?? '');
+  const url = String(req.url ?? '');
+  // 前台檔案端點（pdf/download/print）即使 Accept: text/html（檢視器 iframe 導覽）亦須代理至後端，
+  // 勿回 SPA index.html（否則 iframe 顯示 app shell）。:id/view 仍為 SPA 檢視器路由，不排除。
+  if (/^\/public\/documents\/[^/]+\/(pdf|download|print)(\?|$)/.test(url)) return undefined;
   if (req.method === 'GET' && accept.includes('text/html')) {
     return '/index.html';
   }
@@ -32,6 +36,10 @@ export default defineConfig({
     proxy: {
       '/auth': { target: BACKEND_TARGET, changeOrigin: true },
       '/admin': { target: BACKEND_TARGET, changeOrigin: true, bypass: spaBypass },
+      // /public/*（清單/詳情/檢視器）與 /admin 同：整頁導覽回 SPA、API fetch（Accept: json）代理至後端。
+      '/public': { target: BACKEND_TARGET, changeOrigin: true, bypass: spaBypass },
+      // /org-units 純後端 API（無同名 SPA 路由）→ 直接代理。前台部門篩選與文件建立/編輯 org 下拉來源。
+      '/org-units': { target: BACKEND_TARGET, changeOrigin: true },
     },
   },
   preview: { port: 5173, host: true },
