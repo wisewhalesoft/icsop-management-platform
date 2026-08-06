@@ -11,6 +11,8 @@ import {
   searchPersons,
   downloadUsageForm,
   downloadAttachment,
+  getDocumentAppendices,
+  downloadAppendixFromPool,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
@@ -25,6 +27,7 @@ import type {
   OrgUnitRecord,
   UsageFormRecord,
   DocumentAttachmentRecord,
+  DocumentAppendixRecord,
 } from '../api/types';
 
 /**
@@ -70,6 +73,8 @@ export function DocumentReadonlyPage(): JSX.Element {
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
   const [forms, setForms] = useState<UsageFormRecord[]>([]);
   const [attachments, setAttachments] = useState<DocumentAttachmentRecord[]>([]);
+  // F039 附錄：後端已依 sortOrder 遞增回傳（唯一排序權威），前端不再排序。
+  const [appendices, setAppendices] = useState<DocumentAppendixRecord[]>([]);
   const [personNames, setPersonNames] = useState<Map<string, string>>(new Map());
 
   const load = useCallback(async () => {
@@ -83,6 +88,7 @@ export function DocumentReadonlyPage(): JSX.Element {
       void getOrgUnits().then(setOrgUnits).catch(() => undefined);
       void getDocumentForms(id).then(setForms).catch(() => undefined);
       void getDocumentAttachments(id).then(setAttachments).catch(() => undefined);
+      void getDocumentAppendices(id).then(setAppendices).catch(() => undefined);
       // 當責室長姓名 best-effort 解析（單筆讀取僅回員編；PERSON 表為已知限制，查無回員編）。
       const chiefIds = [...new Set([v.primaryChiefId, ...v.secondaryChiefIds].filter((x): x is string => !!x))];
       if (chiefIds.length) {
@@ -144,6 +150,23 @@ export function DocumentReadonlyPage(): JSX.Element {
     [id, toast],
   );
 
+  /**
+   * 附錄下載（後台管理端存取）：走附錄池下載端點核發短效 URL；
+   * **不燒錄浮水印、不寫前台調閱稽核**（F039／F026 OQ-FM-01 既有裁決）。
+   */
+  const onDownloadAppendix = useCallback(
+    async (appendixId: string, name: string) => {
+      try {
+        const grant = await downloadAppendixFromPool(appendixId);
+        window.open(grant.url, '_blank', 'noopener,noreferrer');
+        toast.success(`下載附錄「${name}」（不燒錄浮水印；後台管理端存取不寫調閱稽核）`);
+      } catch {
+        toast.error(`無法下載「${name}」`);
+      }
+    },
+    [toast],
+  );
+
   /** ICSOP PDF／OJT：走受控下載端點（blobPath）；浮水印與否由伺服器端依 F020 決定。 */
   const onDownloadAttachment = useCallback(
     async (blobPath: string, name: string) => {
@@ -203,6 +226,8 @@ export function DocumentReadonlyPage(): JSX.Element {
   const attachItems: {
     key: string; label: string; name: string; icon: string; iconClass: string;
     watermark: boolean; onDownload: () => void;
+    /** F039：附錄專屬之顯示序號（1..N）；非附錄項為 undefined。 */
+    order?: number;
   }[] = [
     ...[...attachments]
       .sort((a, b) => ATTACH_ORDER[a.type] - ATTACH_ORDER[b.type])
@@ -223,6 +248,17 @@ export function DocumentReadonlyPage(): JSX.Element {
       iconClass: 'text-emerald-600',
       watermark: false,
       onDownload: () => void onDownloadForm(f.id, f.name),
+    })),
+    // F039：附錄依 sortOrder 遞增列於清單末段（與前台詳情 04 之順序完全一致）。
+    ...appendices.map((a, i) => ({
+      key: a.id,
+      label: '附錄',
+      name: a.name,
+      icon: /xls/i.test(a.format) ? 'sheet' : 'file-text',
+      iconClass: /xls/i.test(a.format) ? 'text-emerald-600' : 'text-red-500',
+      watermark: false,
+      onDownload: () => void onDownloadAppendix(a.id, a.name),
+      order: i + 1,
     })),
   ];
 
@@ -321,11 +357,25 @@ export function DocumentReadonlyPage(): JSX.Element {
         </p>
         <div className="space-y-2">
           {attachItems.map((a) => (
-            <div key={a.key} className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5">
+            <div
+              key={a.key}
+              {...(a.order ? { 'data-appendix-item': '', 'data-appendix-order': a.order } : {})}
+              className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5"
+            >
+              {a.order && (
+                <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+                  {a.order}
+                </span>
+              )}
               <Icon name={a.icon} className={`w-5 h-5 ${a.iconClass} shrink-0`} />
               <div className="min-w-0 flex-1">
                 <div className="text-xs text-slate-400">{a.label}</div>
-                <div className="text-sm text-slate-700 truncate">{a.name}</div>
+                <div
+                  {...(a.order ? { 'data-appendix-name': '' } : {})}
+                  className="text-sm text-slate-700 truncate"
+                >
+                  {a.name}
+                </div>
               </div>
               {a.watermark && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">下載燒錄浮水印</span>
@@ -335,6 +385,15 @@ export function DocumentReadonlyPage(): JSX.Element {
               </button>
             </div>
           ))}
+          {/* F039 AC-26：無關聯附錄 → 顯示提示（非錯誤、非空白區塊）。 */}
+          {appendices.length === 0 && (
+            <div
+              data-appendix-empty=""
+              className="flex items-center gap-2 rounded-lg border border-dashed border-slate-200 px-3 py-2.5 text-sm text-slate-400"
+            >
+              <Icon name="paperclip" className="w-4 h-4 shrink-0" />無附錄
+            </div>
+          )}
         </div>
       </section>
       <div className="h-4" />

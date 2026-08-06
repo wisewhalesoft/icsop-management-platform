@@ -91,10 +91,10 @@ describe('PermissionMatrixPage — RBAC 矩陣唯讀顯示（F025/F026）', () =
     expect(screen.getByText('經帳號管理 modal 執行、非獨立側選單頁')).toBeInTheDocument();
   });
 
-  it('G-ADM-017/018 banner：已定案（badge-check + 共 19 欄）＋草案待審（clock + 分析師草案）', () => {
+  it('G-ADM-017/018 banner：已定案（badge-check + 共 20 欄，F039 附錄（多）併入已定案）＋草案待審（clock + 分析師草案）', () => {
     mockAuth('SysAdmin');
     const { container } = renderPage();
-    expect(screen.getByText(/共 19 欄/)).toBeInTheDocument();
+    expect(screen.getByText(/共 20 欄/)).toBeInTheDocument();
     expect(screen.getByText(/分析師草案/)).toBeInTheDocument();
     expect(container.querySelector('.lucide-badge-check')).not.toBeNull();
     expect(container.querySelector('.lucide-clock')).not.toBeNull();

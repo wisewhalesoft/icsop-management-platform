@@ -1,20 +1,22 @@
 ---
 type: architecture-spec
-version: 1.3
+version: 1.4
 status: draft
-last_updated: 2026-07-20
-covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038]
+last_updated: 2026-08-06
+covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038, F039]
 ---
 
 # System Architecture Specification — ICSOP 文件管理平台
 
-> 本文件基於 `spec-index.md`、`overview.md`、`scope.md`、`nfr.md`（v1.1，含 `#rag-security`/`#rag-quality`）、`data-model.md`（v1.2，含 E09 RAG 實體與 E07 變更歷程實體）、`error-handling.md`、`open-questions.md`（含 OQ-E09-01~15、OQ-E07-*）及全部 feature 檔（F001–F038）與 `diagrams/*.mmd` 產出。所有「已定案技術決策」直接落地為架構決策，不再重列為待決；未定案事項（open-questions.md）凡影響架構落地者，於第 9 章列出並標註對應 OQ ID。
+> 本文件基於 `spec-index.md`、`overview.md`、`scope.md`、`nfr.md`（v1.1，含 `#rag-security`/`#rag-quality`）、`data-model.md`（v1.2，含 E09 RAG 實體與 E07 變更歷程實體，並含 §appendix-entity／§doc-appendix）、`error-handling.md`、`open-questions.md`（含 OQ-E09-01~15、OQ-E07-*、OQ-E10-*）及全部 feature 檔（F001–F039）與 `diagrams/*.mmd` 產出。所有「已定案技術決策」直接落地為架構決策，不再重列為待決；未定案事項（open-questions.md）凡影響架構落地者，於第 9 章列出並標註對應 OQ ID。
 >
 > **v1.1（2026-07-16）新增 E09 智慧問答（本地開源 LLM＋RAG）架構**：依據 `AI-RAG-評估報告.md`（定案依據）與 spec-index v1.1 之「關鍵定案」，新增 IngestionModule（F027–F031，Phase 1）、RagQueryModule（F032–F035，Phase 3）兩個模組，以及 vLLM 生成服務／Embedding-Reranker 服務／向量資料庫三項新的 AI 推論與檢索層外部相依。RAG 相關內容以「E09 RAG 架構擴充」標示分散於第 1、2、3、4、5、6、7、8、9 章對應小節，不另立獨立章節，以維持與既有模組邊界之銜接一致性。
 >
 > **v1.2（2026-07-17）新增 F036 模組歸屬修正＋E07 變更歷程（F037/F038）架構**：(1) 修正既有缺漏——F036（循環樹狀圖預覽）先前未指派模組擁有者，本版納入 `LifecycleModule`；(2) 新增 `ChangeHistoryModule`（F037 ICSOP 程序書變更歷程、F038 循環樹狀圖變更歷程），定案 OQ-E07-02（變更事件獨立建表、調閱事件併入 AUDIT_LOG）與 OQ-E07-05（DAG 變更儲存粒度＝逐動作完整快照＋查詢層編輯階段聚合）兩項 BLOCKING 決策。E07 相關內容以「E07 變更歷程架構擴充」標示分散於第 3、4、5、6、8、9 章對應小節。
 >
 > **v1.3（2026-07-20）身分驗證模型改版：上游簽章 POST → Azure AD (Entra ID) OIDC**：依 [upstream-hr-source-contract.md](upstream-hr-source-contract.md) §12（2026-07-20 部分定案）——ICSOP **不是** Portal 之 iframe 子站台，Portal 僅新增一個連結入口、不參與身分傳遞；ICSOP 改為自行註冊 Azure AD 應用、走標準 OIDC authorization code flow（`state`＋`nonce`＋PKCE，取代原「時間戳＋nonce 自訂簽章」防重放，**無共享密鑰**）。此變更影響 §1.3／§1.4／§2.1–2.3／§3.2 AuthModule／§5.3／§6／§7.1／§7.3／§7.5／§8.2／§9（OQ-NFR002），原 `AUTH_NONCE` 表、`verifyUpstreamSignature()`、`SignatureVerifierStrategy` 介面自本版起**移除**（不再需要）。上游組織來源（`OrgSourceDataSource`／§4.1／F004 組織同步）**不受影響**——該相依為獨立的人員/組織資料鏡射管道，與本次身分驗證改版之 IdP 切換無關。
+>
+> **v1.4（2026-08-06）新增 E10 附錄管理（F039）架構**：新增 `AppendicesModule`（`APPENDIX_POOL`／`DOC_APPENDIX` 之唯一寫入路徑），與既有 F018（使用表單，`AttachmentModule`）在池模型／覆蓋式更新／權限守門鏈上高度同構，但附錄多出「文件內顯示順序 `sortOrder`」此一結構性差異。本版裁定 OQ-E10-02（`(documentId, sortOrder)` 不建唯一索引，服務層 replace-set 保證）、排序權威寫入路徑（文件建立/編輯頁一律走 `PUT` replace-set，`POST` 附加端點不接入 UI）、模組邊界（複製獨立模組，不抽出泛型化 pool 抽象）、Migration 拆分、`AUDIT_LOG` additive 擴充（新增 `targetType=APPENDIX`／`appendixId` 欄）、RBAC 接線（`FunctionKey.APPENDIX_MANAGEMENT`／`FieldKey.APPENDICES`）與前端架構（新頁、選單、`MultiSearchCombobox` 選填 `orderable` 擴充）共 7 項決策。E10 相關內容以「E10 附錄管理架構擴充」標示分散於第 3（§3.2／§3.6）、4（§4.9）、5（§5.10）、6、8、9 章對應小節。
 
 ## Agent Loading Guide
 
@@ -22,11 +24,12 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 |------------|--------------------|
 | Test Designer | 2. System Context, 3. Logical Architecture, 5. Integration & Communication |
 | TDD Developer | 3. Logical Architecture, 4. Data Architecture, 5. Integration & Communication |
-| UI/UX Designer | 2. System Context, 3. Logical Architecture（Frontend SPA 部分，含 §3.3 F032 智慧問答入口、§3.5 變更歷程兩 tab 入口） |
+| UI/UX Designer | 2. System Context, 3. Logical Architecture（Frontend SPA 部分，含 §3.3 F032 智慧問答入口、§3.5 變更歷程兩 tab 入口、§3.6 決策五附錄管理新頁/選單/排序元件） |
 | DevOps / CI/CD | 7. Deployment & Runtime View（含 §7 GPU 推論節點／向量資料庫擴充；E07 變更歷程無新增部署單元） |
 | Product Analyst | 8. Risks, Trade-offs & Alternatives, 9. Open Decisions |
 | RAG / AI Ingestion 工程 | §1.5、§2.4、§3.3–3.4、§4.7、§5.7–5.8、§6（NFR-009/010 列）、§7（GPU/向量庫拓撲）、§8（RAG 風險列）、§9（OQ-E09-*） |
 | 變更歷程（E07）工程 | §3.5（ChangeHistoryModule）、§4.8（資料落地／OQ-E07-05 決策）、§5.9（交易一致性／渲染管線）、§6（稽核與資料保留擴充列）、§8（E07 風險列）、§9（OQ-E07-02/05/06、OQ-NFR003） |
+| 附錄管理（E10）工程 | §3.2（AppendicesModule 元件卡片）、§3.6（模組邊界／排序權威寫入路徑／稽核 additive 擴充／RBAC／前端架構等 5 項決策）、§4.9（資料落地／OQ-E10-02 決策／Migration）、§5.10（排序寫入與下載稽核之交易/併發邊界）、§6（NFR 對應擴充列）、§8（Auto-Challenge 新增列／拒絕替代方案）、§9（OQ-E10-02） |
 
 ## Table of Contents
 
@@ -288,12 +291,14 @@ graph TD
     PUB["PublicBrowseModule\nF019/F021/F022"]
     AUD["AuditModule\nF023/F024"]
     CH["ChangeHistoryModule\nF037/F038"]
+    APP["AppendicesModule\nF039"]
 
     FE --> AUTH
     FE --> PUB
     FE --> DOC
     FE --> LC
     FE --> CH
+    FE --> APP
 
     AUTH -.被攔截.-> RBAC
     DOC -.被攔截.-> RBAC
@@ -302,6 +307,7 @@ graph TD
     SYNC -.被攔截.-> RBAC
     AUD -.被攔截.-> RBAC
     CH -.被攔截.-> RBAC
+    APP -.被攔截.-> RBAC
 
     ACC --> AUTH
     SYNC --> ACC
@@ -325,13 +331,18 @@ graph TD
     CH -.唯讀 join.-> DOC
     CH -.append-only.-> CHDB[("DOCUMENT_CHANGE_LOG /\nLIFECYCLE_CHANGE_LOG /\nLIFECYCLE_SNAPSHOT")]
 
+    APP --> STORAGE
+    APP --> AUD
+    APP -.唯讀 join（documentId 存在性驗證）.-> DOC
+    APP -.append-only.-> APPDB[("APPENDIX_POOL /\nDOC_APPENDIX")]
+
     classDef crosscut fill:#e0e7ff,stroke:#3730a3
     classDef newmod fill:#ede9fe,stroke:#5b21b6
     class RBAC,STORAGE crosscut
-    class CH newmod
+    class CH,APP newmod
 ```
 
-> 圖例：實線＝資料/呼叫依賴；虛線＝跨切關注點攔截（Guard/Interceptor）或唯讀查詢 join。**新增於 v1.2**：`LC --> WM`（LifecycleModule 依賴 WatermarkModule 產生 F036 樹狀圖下載/列印之燒錄 PDF，修正原圖缺漏之相依關係）；`ChangeHistoryModule`（`CH`，紫色標示）為 F037/F038 新模組，寫入路徑為單向（DocumentModule／AttachmentModule／LifecycleModule → ChangeHistoryModule），避免與來源模組形成循環依賴，詳見 §3.5。
+> 圖例：實線＝資料/呼叫依賴；虛線＝跨切關注點攔截（Guard/Interceptor）或唯讀查詢 join。**新增於 v1.2**：`LC --> WM`（LifecycleModule 依賴 WatermarkModule 產生 F036 樹狀圖下載/列印之燒錄 PDF，修正原圖缺漏之相依關係）；`ChangeHistoryModule`（`CH`，紫色標示）為 F037/F038 新模組，寫入路徑為單向（DocumentModule／AttachmentModule／LifecycleModule → ChangeHistoryModule），避免與來源模組形成循環依賴，詳見 §3.5。**新增於 v1.4**：`AppendicesModule`（`APP`，紫色標示）為 F039 新模組，**刻意不與 `DocumentModule` 互相呼叫**——`FE --> APP` 而非 `DOC --> APP`，因文件建立/編輯頁對附錄之排序寫入是由前端於文件主體寫入成功後**獨立呼叫**之子資源端點，非同一交易、非模組間直接依賴（見 §3.6 決策二）；`APP -.唯讀 join.-> DOC` 僅用於驗證 `documentId` 存在性與組裝池總覽之關聯文件精簡清單，不構成循環依賴（同 §3.1 既有判準：資料擁有權而非是否互相呼叫）。
 
 ### 3.2 元件明細
 
@@ -409,6 +420,15 @@ graph TD
 | 擁有資料 | `DOCUMENT_ATTACHMENT`（Blob 路徑僅本模組寫入） |
 | 依賴 | StorageAbstraction、DocumentModule、RbacModule（僅 ICSOPAdmin 可寫，其餘角色可下載）；**（v1.2 新增）**ChangeHistoryModule（單向：`uploadAttachment(type=ICSOP_PDF/OJT_SIGNIN)` 覆蓋成功後，於自身交易內呼叫寫入「附件已替換」事件，`USAGE_FORM` 不觸發，見 F037 範圍） |
 
+#### AppendicesModule（F039，v1.4 新增）
+| 項目 | 內容 |
+|------|------|
+| 責任 | 附錄池（集中共用資產）之上傳/覆蓋/移除/查詢管理；文件↔附錄多對多關聯與**文件內顯示順序（`sortOrder`）**維護；前台個別下載觸發稽核。與 AttachmentModule（F016/F018）同構但**刻意獨立**（見 §3.6 決策一），僅共用 StorageAbstraction／檔案規則／稽核契約等跨切基礎設施 |
+| 關鍵函式 | `uploadAppendix()`/`uploadAppendices()`（批次先驗證後建立）、`overwriteAppendix()`（≥2 引用需二次確認）、`deleteAppendix()`（≥1 引用需二次確認）、`replaceDocumentAppendices(documentId, orderedIds)`（**排序權威寫入**，delete-then-insert 單一交易，見 §3.6 決策二／§5.10）、`appendDocumentAppendices(documentId, ids)`（接續末位，非建立/編輯頁使用路徑）、`unlinkDocumentAppendix()`（解除單一關聯＋重新編號）、`listByDocument(documentId)`（`ORDER BY sortOrder ASC`） |
+| 輸入/輸出 | 輸入：檔案二進位（multipart）、文件建立/編輯頁送出之有序 `appendixIds`；輸出：`APPENDIX_POOL`/`DOC_APPENDIX` 讀寫結果、下載憑證、`APPENDIX_NOT_FOUND`/`APPENDIX_IN_USE`/`APPENDIX_OVERWRITE_SHARED` 等錯誤碼 |
+| 擁有資料 | `APPENDIX_POOL`（Blob 路徑僅本模組寫入）、`DOC_APPENDIX`（含 `sortOrder`，唯一寫入路徑） |
+| 依賴 | StorageAbstraction、DocumentModule（唯讀：關聯/覆蓋/移除/詳情端點之 `documentId` 存在性驗證＋池總覽之關聯文件精簡清單。**F039 明訂 `DOCUMENT_NOT_FOUND` 錯誤場景，須主動查詢驗證，非僅信任外鍵**——與 F018 現行實作有落差，見 §3.6 決策二末段）、AuditModule（前台下載，經 Outbox 非阻斷）、RbacModule（僅 ICSOPAdmin 可寫；SysAdmin 唯讀；其餘無存取，見 §3.6 決策四） |
+
 #### WatermarkModule（F020）
 | 項目 | 內容 |
 |------|------|
@@ -430,9 +450,9 @@ graph TD
 #### AuditModule（F023, F024）
 | 項目 | 內容 |
 |------|------|
-| 責任 | Append-only 稽核寫入（`targetType`＝`DOCUMENT`/`USAGE_FORM`/`LIFECYCLE`/`DOCUMENT_CHANGE_LOG`/`LIFECYCLE_CHANGE_LOG` 之 VIEW/DOWNLOAD/PRINT 家族動作，**v1.2 擴充涵蓋 F036/F037/F038 調閱事件，見 §4.8／data-model.md OQ-E07-02**）、Outbox 補償重試、調閱歷程查詢（角色範圍限縮） |
+| 責任 | Append-only 稽核寫入（`targetType`＝`DOCUMENT`/`USAGE_FORM`/`LIFECYCLE`/`DOCUMENT_CHANGE_LOG`/`LIFECYCLE_CHANGE_LOG`/`ORG_CHANGE_ALERT` 之 VIEW/DOWNLOAD/PRINT 家族動作，**v1.2 擴充涵蓋 F036/F037/F038 調閱事件，見 §4.8／data-model.md OQ-E07-02**；**v1.4 擴充涵蓋 F039 附錄下載事件，`targetType=APPENDIX`，additive，見 §3.6 決策三／§4.9**）、Outbox 補償重試、調閱歷程查詢（角色範圍限縮） |
 | 關鍵函式 | `recordAccess(event)`（非阻斷）、`processOutboxRetry()`（背景排程）、`queryHistory(scope, filters)` |
-| 輸入/輸出 | 輸入：WatermarkModule/AttachmentModule/LifecycleModule/ChangeHistoryModule 之操作事件；輸出：`AUDIT_LOG` 寫入結果（不阻斷呼叫端）、查詢結果 |
+| 輸入/輸出 | 輸入：WatermarkModule/AttachmentModule/LifecycleModule/ChangeHistoryModule/AppendicesModule 之操作事件；輸出：`AUDIT_LOG` 寫入結果（不阻斷呼叫端）、查詢結果 |
 | 擁有資料 | `AUDIT_LOG`（Append-only，DB 層級撤銷 UPDATE/DELETE 權限）、`AUDIT_LOG_OUTBOX`（內部暫存表，非對外實體） |
 | 依賴 | RbacModule（僅 SysAdmin/ICSOPAdmin 全公司唯讀；主管/部門窗口/一般使用者無存取權） |
 
@@ -564,6 +584,125 @@ graph TD
 **寫入路徑（單向，避免循環依賴）**：DocumentModule／AttachmentModule／LifecycleModule 各自在完成欄位對照或結構持久化後，於**自身既有的資料庫交易內**呼叫 `ChangeHistoryModule` 之寫入函式（傳入交易用之 `EntityManager`/`QueryRunner`，TypeORM 標準模式），使變更事件寫入與業務資料寫入落在同一 ACID 交易——`ChangeHistoryModule` 因此不需要、也不應該反向依賴這三個模組的寫入介面。
 
 **讀取/渲染路徑（單向，同樣避免循環依賴）**：F038 新舊樹狀圖重建僅讀取 `ChangeHistoryModule` 自身擁有之 `LIFECYCLE_SNAPSHOT`（自我完備之結構化 JSON，見 §4.8），**不需回頭查詢 LifecycleModule 的即時 `LIFECYCLE_NODE`/`LIFECYCLE_EDGE` 表**；渲染本身委派 `LifecycleModule.renderTreeToPdf()`（一個無狀態工具函式，接受 nodes/edges JSON 作為輸入參數，非讀取 LifecycleModule 之持久資料），因此 `ChangeHistoryModule → LifecycleModule` 僅為**呼叫無狀態渲染工具**，與 `LifecycleModule → ChangeHistoryModule`（寫入通知）方向不同、目的不同，不構成循環依賴。與 DocumentModule 之唯讀 join（依文件名稱搜尋）比照 F024（文件調閱歷程查詢）既有「顯示欄位由 ORG_UNIT／ACCOUNT join 衍生供顯示/篩選」之慣例（見 F024 spec Alternative Flows），同理不構成循環依賴——判斷基準是「資料擁有權」而非「是否互相呼叫」：模組間讀取彼此唯讀資料屬正常查詢組合，唯獨**寫入路徑**才是 §3.1「模組邊界哲學」所要求之單向 DAG。
+
+---
+
+### 3.6 E10 附錄管理架構擴充：AppendicesModule 設計決策
+
+`AppendicesModule` 為 `APPENDIX_POOL`／`DOC_APPENDIX`（含 `sortOrder`）之唯一寫入路徑。F039 與既有 F018（使用表單）在「池模型＋文件多對多關聯＋覆蓋式更新＋權限守門鏈」上高度同構，但附錄多出「文件內顯示順序」此一結構性差異。[F039 Interface Contract](features/F039-appendix-management.md) 明文將「文件建立/編輯之整合方式」「模組邊界」等決策留給 system-architect 裁定，以下逐一記錄。
+
+```mermaid
+graph TD
+    subgraph FE_FLOW["文件建立/編輯頁（Frontend SPA，單一送出流程）"]
+        CREATE["建立/編輯文件表單\n（含「已選附錄＋上移/下移」元件）"]
+    end
+    subgraph APPMOD["AppendicesModule（新增，F039）"]
+        POOL["附錄池 CRUD\nuploadAppendix()/overwriteAppendix()/deleteAppendix()"]
+        SORT["排序權威寫入路徑\nreplaceDocumentAppendices()"]
+        APPEND["appendDocumentAppendices()\n（API 完整性保留，UI 不呼叫）"]
+    end
+    subgraph SHARED["共用跨切基礎設施（沿用既有，非重造）"]
+        FR["file-rules.ts\n＋ APPENDIX FileCategory"]
+        BLOB["StorageAbstraction"]
+        AUTHZ["document-asset-authz.ts\nassertCanWriteDocumentAsset()"]
+    end
+    DOC["DocumentModule（唯讀）"]
+    RBAC["RbacModule"]
+    AUD["AuditModule（僅前台下載，經 Outbox）"]
+
+    CREATE -->|"文件建立/編輯成功取得 documentId 後\n獨立呼叫（非同一交易，見決策二）"| SORT
+    POOL --> FR
+    POOL --> BLOB
+    POOL --> AUTHZ
+    SORT --> AUTHZ
+    SORT -.唯讀驗證 documentId 存在.-> DOC
+    POOL -.被攔截.-> RBAC
+    SORT -.被攔截.-> RBAC
+    APPEND -.被攔截.-> RBAC
+    POOL --> AUD
+
+    classDef newmod fill:#ede9fe,stroke:#5b21b6
+    classDef crosscut fill:#e0e7ff,stroke:#3730a3
+    class POOL,SORT,APPEND newmod
+    class FR,BLOB,AUTHZ,RBAC crosscut
+```
+
+#### 決策一：模組邊界——複製獨立模組，不抽出泛型化 pool 抽象
+
+**裁定**：`AppendicesModule` 採**獨立複製**（新建 `backend/src/appendices/`，結構對位 `backend/src/usage-forms/`：`appendices.store.ts`／`typeorm-appendices.store.ts`／`appendices.service.ts`／`appendices.controller.ts`／`appendices.module.ts`），**不**將 `UsageFormsService`／`FormPoolStore` 泛型化為共用 `<T>PoolService`/`<T>PoolStore` 抽象。僅共用**已存在、與業務語意無關之跨切基礎設施**。
+
+**理由**：
+1. **排序非兩者共通行為**：`DOC_APPENDIX` 之 `sortOrder`／replace-set／末位接續／解除後重新編號等邏輯（決策二）在 `DOC_USAGE_FORM` 完全不存在；若抽出共用 pool 抽象，勢必產生「泛型基底＋附錄專屬子類覆寫排序」或「基底介面新增可選排序方法、由使用表單忽略」兩種設計，皆非乾淨的共通抽象，只是把差異搬到另一層。
+2. **N=2 尚不足以攤銷抽象成本**：目前僅使用表單／附錄兩個具體使用案例；泛型化增加的間接層（型別參數、共用基底之修改需同時驗證兩個下游）成本高於重複約 200 行結構相似但語意獨立之程式碼的成本。
+3. **迴歸風險不對稱**：`usage-forms` 模組已上線且測試覆蓋完整（`usage-forms.service.spec.ts`／`usage-forms.controller.spec.ts` 等，屬 backend 既有單元測試之一部分）。將其重構為泛型抽象之共用基底，任何介面調整都同時牽動兩個模組的既有測試與生產路徑；獨立複製把新功能的風險完全侷限在新模組內，不觸碰已驗證穩定的既有程式碼。
+4. **命名空間本就各自獨立**：錯誤碼（`APPENDIX_*` vs `USAGE_FORM_*`）、`FunctionKey`／`FieldKey`、`FileCategory`、稽核 `targetType` 皆為個別字面值常數，即便抽出泛型型別參數，呼叫端仍須逐一提供這些字串——共用抽象並不能消除這部分重複，只能消除 CRUD 骨架的重複，效益有限。
+
+**明確共用範圍**（收斂在通用基礎設施層，與 F016/F018/F027 既有分工一致，見 §3.2 AttachmentModule 卡片「透過 StorageAbstraction 存取 Blob」）：
+
+| 共用項目 | 共用方式 |
+|---|---|
+| `storage/file-rules.ts` | 新增 `FileCategory.APPENDIX`，`ALLOWED_FORMATS.APPENDIX = ['xlsx','xls','pdf']`，沿用既有 `MAX_FILE_SIZE_BYTES` |
+| `storage/blob-store.ts` | 介面不變，直接注入 |
+| `storage/document-asset-authz.ts` | `assertCanWriteDocumentAsset(roleCode, FunctionKey.APPENDIX_MANAGEMENT, FieldKey.APPENDICES)` 直接複用既有函式，僅換參數 |
+| `rbac/function-matrix.ts`／`field-matrix.ts` | 新增鍵值於同一檔案（見決策四），不另立矩陣檔 |
+| `audit/*` | additive 擴充既有型別/switch/store（見決策三），不另立稽核子系統 |
+| 上傳者名冊（G-ADM-024 類需求，若附錄池清單頁亦需顯示「上傳者姓名/部門」） | **建議複製** `typeorm-uploader-directory.ts`（純 `accountId→姓名/orgCode` 解析、無 F018 專屬邏輯）至 `appendices/`，而非跨模組匯入 `usage-forms/` 內部檔案（維持 §3.1「模組間不互相匯入業務模組內部檔案」原則）；若未來出現第三個消費者，可再評估收斂至 `OrgDirectoryModule`，N=2 現況不需立即收斂 |
+
+#### 決策二：排序之權威寫入路徑——文件建立/編輯頁一律呼叫 `PUT`（replace-set），不使用 `POST`（附加）
+
+**裁定**：`DocumentCreatePage`／`DocumentEditPage`（F010/F011）之「已選附錄＋上移/下移」送出邏輯**一律**呼叫 `PUT /admin/documents/:documentId/appendices`（body＝依畫面最終順序排列之 `appendixIds` 陣列），**不**呼叫 `POST /admin/documents/:documentId/appendices`（附加）。`POST` 端點保留於 API（F039 Interface Contract 已定義之通用能力），但**刻意不接入**文件建立/編輯之 UI 呼叫路徑。
+
+**理由**：F039 規格明文「兩路徑不得產生不同的排序語意」——若建立頁用 `POST`（僅接續末位，無法表達使用者於同一次送出中「移除已選」或「上移/下移調整」的最終狀態）、編輯頁用 `PUT`，將產生「新增走一種語意、修改走另一種語意」的實質分裂。`PUT`（replace-set，依陣列索引重寫 `sortOrder`）能同時完整表達「新增＋移除＋重排」三種操作的最終結果，讓 UI 只走這一條路徑即可**結構性消除**兩路徑產生不同語意的可能——不是「靠人工紀律保證兩路徑行為一致」，而是「只有一條路徑會被 UI 呼叫」。
+
+**交易邊界（與既有 `DocumentCreatePage` 流程相容）**：沿用該頁既有「文件建立取得 UUID 後，依序呼叫附件/表單/連結端點」之既定模式（`frontend/src/pages/DocumentCreatePage.tsx` `submit()`：`createDocument()` 成功後才依序 `uploadIcsopPdf()`／`uploadOjtAttachment()`／`linkUsageForms()`／`updateDocument({links})`）——**附錄比照辦理**：於 `createDocument()` 成功取得 `documentId` 後，新增一次獨立呼叫 `replaceDocumentAppendices(documentId, orderedIds)`，**非**與文件建立同一 DB 交易、**非**內嵌於 `createDocument()` payload。編輯頁（F011）同理：`updateDocument(id, patch)` 成功後另呼叫一次 `replaceDocumentAppendices()`（`DocumentEditPage.tsx` 現行對使用表單即採此「主更新成功後才呼叫子資源端點」模式，見該頁 `linkUsageForms`/`unlinkUsageForm` 呼叫序列，惟附錄因排序需整組覆蓋而改用 `PUT` 而非該頁使用表單現行之 diff-based link/unlink）。
+
+此設計**繼承既有架構已接受之風險**（非本次新增）：若文件主體建立/更新成功但後續的附錄子呼叫失敗（如網路中斷），會產生「文件已存在但附錄未關聯」的部分完成狀態，需使用者重新編輯補救——此風險與現行 `pdfFile`／`ojtFile`／`selectedForms`／`selectedLinks` 完全相同，非附錄獨有，架構未對此另立補償機制（跨步驟 Saga／補償交易屬 MVP 範疇外）。
+
+**`replaceDocumentAppendices()` 內部交易**：單一 DB 交易內「刪除該 `documentId` 現有全部 `DOC_APPENDIX` 列 → 依陣列索引批次插入新列（`sortOrder = index + 1`）」（delete-then-insert，比照 F014 多值欄位既有模式）。整組刪除與整組插入在同一未提交交易內完成，其他交易在此交易提交前既看不到「已刪除」的中間態、也看不到「部分插入」的中間態——這正是 §4.9 選擇不建 `(documentId, sortOrder)` 唯一索引（OQ-E10-02）的前提。
+
+**並發情境（兩人同時編輯同一文件之附錄順序）**：F011（編輯與比對）現行送出流程本身**未**採用樂觀鎖（`rowVersion`）保護整體送出（已檢索 F011 spec 全文確認未提及並發保護；`rowVersion` 樂觀鎖僅用於 §5.4 之 DAG 節點改派此一情境）。`replaceDocumentAppendices()` 遵循同一既有架構立場：**不**引入 `sp_getapplock` 或版本檢查，兩個管理員對同一文件並發送出時，**後提交者完全覆蓋先提交者**（delete-then-insert 為整組替換，非合併），屬 last-write-wins；先送出者的畫面會顯示「已儲存成功」但實際被後續送出覆蓋，使用者需重新整理編輯頁方能察覺。此為**與既有文件編輯流程一致之既定風險**，非附錄新增之缺口；若未來需更嚴謹保護，列為 §9 Open Decision 可追加項目。
+
+**`POST`（附加）與 `DELETE`（解除單一）之併發保護（與 `PUT` 不同，需個別處理）**：`POST` 之「接續現有最大 `sortOrder` 之後」與 `DELETE`（解除單一）之「剩餘關聯重新編號為連續 1..N」皆為「先讀（`MAX(sortOrder)` 或現有清單）→ 依讀取結果寫入」模式，與 `PUT` 之整組覆蓋不同，存在 TOCTOU 競態。比照 §5.4 DAG 邊寫入之既有解法，`POST`／`DELETE` 應於交易內以 `sp_getapplock('doc-appendix-' + documentId)` 取得**文件層級**應用鎖，序列化同一文件的附加/解除操作；不同文件之間不互相阻塞。`PUT`（replace-set）因單一交易內即完成整組替換，不需要額外鎖。
+
+> ⚠ **發現（`DOCUMENT_NOT_FOUND` 為 F039 新增要求，非複製既有 F018 行為）**：F039 Error Scenarios 明列 `DOCUMENT_NOT_FOUND`（404，「關聯／詳情查詢之 `documentId` 不存在」），但現行 `usage-forms.service.ts` 的 `linkForms()`／`unlinkForm()` **並未**驗證 `documentId` 是否存在（僅驗證 `formId`）——F018 並無對應之 `DOCUMENT_NOT_FOUND` 錯誤場景。`AppendicesService` 之 `appendDocumentAppendices()`／`replaceDocumentAppendices()`／`unlinkDocumentAppendix()`／`listByDocument()` 等端點**必須**主動查詢 `ICSOP_DOCUMENT` 驗證 `documentId` 存在性（唯讀 join DocumentModule 所擁有之資料，不構成循環依賴，同 §3.1 判準），**不可**沿用 F018 之既有實作模式（信任外鍵、不主動驗證）。此為僅套用「照抄 F018 pattern」時最容易漏掉的一項規格差異。
+
+#### 決策三：稽核鏈 Additive 擴充——逐檔案落點
+
+**裁定**：全部變更皆為 additive（僅新增 union 成員／switch 分支／欄位，不修改任何既有分支邏輯），逐檔案落點如下：
+
+| 檔案 | 變更 |
+|---|---|
+| `backend/src/audit/audit.types.ts` | `AuditTargetType` 新增 `'APPENDIX'`；新增 `AppendixAuditEvent extends AuditEventBase { targetType: 'APPENDIX'; actionType: 'DOWNLOAD'; documentId: string; }`（`actionType` 沿用既有 `'DOWNLOAD'` 字面值，**不**新增 actionType 列舉——附錄下載非浮水印動作家族，僅此單一動作類型；`documentId` 為此變體專屬之**必填**新增欄位，見下方說明）；`AuditAccessEvent` 聯集新增 `AppendixAuditEvent`；`AuditRow` 新增 `appendixId: string \| null` |
+| `backend/src/audit/audit-event.ts`（`buildAuditRow`） | switch 新增 `case 'APPENDIX': appendixId = event.targetId; documentId = event.documentId; documentNumber = event.targetNumber ?? null; break;`（新增區域變數 `appendixId`，其餘既有 5 個 case 分支**逐字不動**） |
+| `backend/src/database/entities/audit-log.entity.ts` | 新增 `@Column({ type: 'uniqueidentifier', nullable: true }) appendixId!: string \| null;`（比照 `formId` 定義） |
+| `backend/src/audit/typeorm-audit.store.ts` | `toRow()` 新增 `appendixId: e.appendixId`；`append()` 之 `insert()` 新增 `appendixId: row.appendixId`；`queryPage()` **不需修改**（`target` 篩選已涵蓋 `documentNumber` LIKE，APPENDIX 列之 `documentNumber` 由 `buildAuditRow` 對映填入後自動可被既有查詢命中） |
+| `backend/src/audit/access-history-filter.ts`（`kindToTargetTypes`） | `'文件'` 分支由 `['DOCUMENT', 'USAGE_FORM']` 擴充為 `['DOCUMENT', 'USAGE_FORM', 'APPENDIX']`（AC-30 要求） |
+| `backend/src/database/migrations/` | 新增 `1723593600000-audit-log-appendix-id.ts`（見 §4.9） |
+
+**`documentId` 雙欄位落地（AC-27 要求，與既有 `USAGE_FORM` 分支之落差）**：AC-27 要求附錄下載之稽核列同時落地 `appendixId`**與** `documentId`（該文件 id）。然而檢視現行 `buildAuditRow` 的 `USAGE_FORM` 分支，僅將 `event.targetId` 對映至 `formId`，`documentId` 欄位維持 `null`——呼叫端（`usage-forms.service.ts` `downloadForm()`）確實握有 `documentId` 並傳給模組內部的 `UsageFormAuditEvent`，但轉接至全域 `AuditWriter` 契約的 `AuditWriterRecorder`（`usage-forms/audit-writer-recorder.adapter.ts`）呼叫 `recordAccess()` 時**未轉送** `documentId`，故現行 F018 稽核列之 `documentId` 實為 `null`。**這是既有實作與規格意圖的落差，非本次新增**（見本次交付回報第 (d) 項）。
+
+為滿足 AC-27，`AppendixAuditEvent` **不**沿用 `USAGE_FORM` 分支之「單一 `targetId`」模式，而是新增變體專屬之**必填** `documentId` 欄位（TypeScript 判別聯集允許個別變體攜帶額外欄位），`buildAuditRow` 之 `APPENDIX` case 同時對映 `appendixId`（來自 `targetId`）與 `documentId`（來自新增欄位）。`AppendicesModule` 內部的稽核轉接器（比照 `AuditWriterRecorder` 但為 `appendices/` 獨立複製，見決策一）**正確轉送** `documentId`——即決策一之獨立複製選擇，於此處帶來額外好處：新模組可修正舊模組已知的轉送落差，而不需回頭修改已上線之 `usage-forms` 程式碼與其既有測試。
+
+**既有 6 種 `targetType` 語意不變之驗證方式**：(1) 結構性——新增為聯集新增成員與 switch 新增分支，不修改任何既有分支之程式碼字元；(2) 測試性——`audit-event.spec.ts`／`typeorm-audit.store` 相關測試／`access-history-filter.spec.ts` 之**既有測試案例（斷言 DOCUMENT/USAGE_FORM/LIFECYCLE/DOCUMENT_CHANGE_LOG/LIFECYCLE_CHANGE_LOG/ORG_CHANGE_ALERT 六種既有行為）須逐字保持不變、全數通過**，僅新增 `APPENDIX` 之新測試案例；test-generator／tdd-implementation **不得修改**既有六種變體之任何既有斷言作為本次任務之一部分——若既有測試因本次變更而失敗，代表 additive 保證已被破壞，須回頭檢查是否誤觸既有分支。
+
+#### 決策四：RBAC 接線
+
+**裁定**：
+- `rbac/function-matrix.ts`：`FunctionKey.APPENDIX_MANAGEMENT = '附錄管理'`；`FUNCTION_MATRIX` 新增列 `row('READ', 'CRUD', 'NONE', 'NONE', 'NONE')`（SysAdmin 唯讀／ICSOPAdmin CRUD／其餘無，數值與 `USAGE_FORM_MANAGEMENT` 列完全相同，對應 AC-31/32/33）。
+- `rbac/field-matrix.ts`：`FieldKey.APPENDICES = '附錄'`；`FIELD_MATRIX` 新增列**直接重用既有 `ICSOP_WRITABLE` 常數**（不新建常數）——現行 18 個業務欄位共用同一列值（ICSOPAdmin 可寫、其餘唯讀），附錄欄位語意與其完全一致。
+
+**對既有測試之影響面**（明確列出，供 test-generator 判斷何為授權範圍內之機械式更新）：
+- `function-matrix.spec.ts`：第 47-50 行 `Object.keys(FUNCTION_MATRIX).sort()).toEqual(Object.keys(expected).sort())` 與 `toHaveLength(12)` 之 `expected` fixture 與筆數斷言，須因新增一列而更新為 `toHaveLength(13)`（連同 `expected` 物件新增一筆）——此為新增矩陣列**必然伴隨**之機械式更新，非「修改既有測試邏輯」，應視為本次任務範圍內之預期變更。
+- `field-matrix.spec.ts`：第 42 行 `toHaveLength(19)` 須更新為 `toHaveLength(20)`，理由同上。
+- 兩檔案之**其餘既有斷言**（`canPerform()`／`canWriteField()` 純函式對既有角色×功能/欄位組合之判定）皆不受影響、不應變動。
+
+#### 決策五：前端架構
+
+- **新頁與路由**：`AppendixManagementPage`（後台管理頁），路由 `/admin/appendices`；比照現行使用表單管理頁結構（清單＋搜尋＋格式篩選＋展開關聯文件＋上傳/覆蓋/移除 modal）。
+- **選單項**：`frontend/src/domain/menu.ts` 新增 `{ id: 'appendix', label: '附錄管理', icon: 'paperclip', functionKey: FunctionKey.APPENDIX_MANAGEMENT, route: '/admin/appendices' }`，插入於既有 `usageform`（第 25 行）之後、`docindex`（第 26 行）之前。**Icon 確認無衝突**：現行選單已用 icon 為 `users／workflow／file-text／files／database／history／git-compare／refresh-cw／settings`，`paperclip` 未被使用；`paperclip` 另於 `DocumentCreatePage.tsx` STEP4 區塊標題已作為「附件與關聯文件」之視覺圖示使用（非選單命名空間，語意亦一致——附錄屬廣義附件家族），非衝突、反而呼應。
+- **`api/endpoints.ts`／`api/types.ts`**：比照現行 `getUsageFormPool()`／`linkUsageForms()`／`UsageFormRecord` 等既有 wrapper 之命名慣例，新增 `getAppendixPool()`／`getAppendixPoolOverview()`／`uploadAppendix()`／`overwriteAppendix()`／`deleteAppendix()`／`downloadAppendixFromPool()`／`replaceDocumentAppendices()`（**唯一接入文件建立/編輯頁之寫入呼叫**，見決策二）／`appendDocumentAppendices()`（API 完整性保留，UI 不呼叫）／`unlinkDocumentAppendix()`／`getDocumentAppendices()`／`downloadDocumentAppendix()`；型別新增 `AppendixRecord`／`AppendixPoolItem`／`AppendixDocumentRef`（結構比照 `UsageFormRecord`／`UsageFormPoolItem`／`UsageFormDocumentRef`，`GET /documents/:documentId/appendices` 回應項另含 `sortOrder`）。
+- **「已選附錄＋上移/下移」元件**：**擴充既有 `MultiSearchCombobox`**（`frontend/src/components/SearchCombobox.tsx`），新增**選填** `orderable?: boolean` prop（預設 `undefined`/`false`，**完全不影響**現行全部呼叫端——`usingDepts`／`secondaryChiefs`／使用表單／文件連結點選取器之既有行為與既有測試逐字不變）。`orderable=true` 時，chip 清單改為有序列表呈現，每個 chip 額外提供「上移／下移」兩個圖示按鈕（呼叫新增之 `onMoveUp(index)`／`onMoveDown(index)` callback prop；首項停用上移、末項停用下移，對應 AC-20 邊界行為），**不**提供拖曳（draggable）屬性或事件處理（對應 AC-21「僅上移/下移，無拖曳排序」之明確斷言——測試可直接驗證 DOM 無 `draggable` 屬性/無拖曳相關事件監聽）。理由：不新建平行元件（如 `OrderableMultiSearchCombobox`）以避免既有「新增/移除候選」搜尋邏輯被複製一份；擴充既有元件之選填 prop 是影響面最小、迴歸風險最低的做法。
+- **文件詳情頁附錄區塊**：`GET /documents/:documentId/appendices` 之回應已由後端依 `sortOrder ASC` 排序（見 §3.2 AppendicesModule 卡片），前端**不需**、也**不應**於接收後再次排序（維持後端為唯一排序權威）。視覺呈現屬 ui-ux-designer 職責範圍，F039 spec 已註記 prototype 14/15/16/04 之附錄區塊「尚未於 prototype 呈現，待傳播」，本節僅界定資料契約。
 
 ---
 
@@ -804,6 +943,63 @@ erDiagram
 
 ---
 
+### 4.9 E10 附錄管理架構擴充：資料落地與 OQ-E10-02 決策
+
+```mermaid
+erDiagram
+    APPENDIX_POOL ||--o{ DOC_APPENDIX : "AppendicesModule 擁有"
+    ICSOP_DOCUMENT ||--o{ DOC_APPENDIX : "多對多關聯（含 sortOrder）"
+
+    APPENDIX_POOL {
+        uuid id PK
+        string name "nvarchar(400)，trim 後量測，fallback 檔名"
+        string blobPath "不綁定單一文件（多對多共用）"
+        string format "xlsx/xls/pdf"
+        bigint size "bytes，上限 50MB"
+        string uploadedBy
+        datetime2 uploadedAt
+    }
+    DOC_APPENDIX {
+        uuid documentId FK
+        uuid appendixId FK
+        int sortOrder "1-based，文件內連續唯一（服務層保證，見下方決策）"
+    }
+```
+
+> 完整屬性定義見 [data-model.md「附錄池 APPENDIX_POOL」](data-model.md#appendix-entity)／[「文件↔附錄關聯 DOC_APPENDIX」](data-model.md#doc-appendix)。
+
+#### OQ-E10-02 決策（已定案 ✅）：不建 `(documentId, sortOrder)` 唯一索引，由服務層 replace-set 交易保證
+
+**決策**：採 data-model.md 建議之選項 **(a)**——`DOC_APPENDIX` **不**建立 `(documentId, sortOrder)` 唯一索引；`sortOrder` 之「同一文件內連續且互異」不變式**完全由服務層之 `replaceDocumentAppendices()`（delete-then-insert 單一交易）保證**，比照 [F014](features/F014-accountable-dept-chief.md) 多值欄位既有模式（`DOC_USING_DEPT`／`DOC_SECONDARY_CHIEF` 等既有多值關聯表皆未見以唯一索引強制序位邏輯）。
+
+**理由（逐一排除選項 (b)／(c)）**：
+1. **選項 (b)（建唯一索引＋一律先刪後插）與選項 (a) 之實際落地程式碼完全相同**——若寫入路徑本就保證「同一交易內先刪後插」，該交易內部從無「同時存在兩筆相同 `(documentId, sortOrder)`」的已提交狀態需要 DB 層攔截；唯一索引在此設計下**不會被觸發**，只多一層維護成本（migration、後續若有例外寫入路徑忘記走 replace-set，唯一索引反而會讓那條例外路徑直接 500，而非在服務層得到更清楚的錯誤語意）而無實質防禦效益。
+2. **選項 (c)（暫時位移法：先寫負值再回填）**：MSSQL 無 deferred constraint，若要用唯一索引又要避免中間態衝突，需先將全部列更新為負數暫存值、再回填正式值——這是為了繞過「選項 (a) 其實不需要的限制」而額外設計的兩階段寫入，徒增複雜度與出錯面（例如批次更新中途失敗，負值殘留），且效益與 (a) 相同（皆保證最終一致），不採用。
+3. **`POST`／`DELETE` 路徑已以 `sp_getapplock` 序列化**（見 §3.6 決策二末段），不依賴 DB 唯一索引作為併發防線；`PUT`（replace-set）路徑因整組覆蓋、單一交易，本就不會產生「同文件同 `sortOrder`」的已提交衝突列。唯一索引原本用意（防止應用層 bug 寫入重複序位）在此改由「兩條寫入路徑皆有明確的併發控制機制」取代，且更容易在單元測試中直接驗證服務層邏輯，而非依賴 DB 例外訊息判讀。
+
+**併發情境**：見 §3.6 決策二「並發情境」段——`PUT` 為 last-write-wins（無鎖，繼承既有文件編輯流程之既定立場）；`POST`／`DELETE` 以 `sp_getapplock('doc-appendix-' + documentId)` 序列化。
+
+**索引建議（補充 §4.6）**：
+
+| 資料表 | 索引 | 目的 |
+|---|---|---|
+| `APPENDIX_POOL` | 無額外索引（清單依 `uploadedAt` 排序，資料量級無需索引；名稱關鍵字搜尋為 `LIKE`，比照 `USAGE_FORM_POOL` 現行未建索引之作法） | — |
+| `DOC_APPENDIX` | 複合 PK (`documentId`, `appendixId`)（比照 `DOC_USAGE_FORM`），另建 `IX_DOC_APPENDIX_appendixId` | 唯一性（同一附錄於同一文件至多一筆）＋覆蓋/移除門檻判定（`docCount`）查詢效能 |
+| `AUDIT_LOG` | 新增 `appendixId uniqueidentifier NULL`（不建索引，比照現行 `formId` 亦無專屬索引） | 見 §3.6 決策三（additive 落地欄位） |
+
+**Migration 落地**：新增兩支 migration，時間戳晚於現行最新之 `1723420800000-index-run-error-code.ts`：
+
+| 檔名 | 內容 | `down()` |
+|---|---|---|
+| `1723507200000-appendix.ts` | `CREATE TABLE APPENDIX_POOL`＋`CREATE TABLE DOC_APPENDIX`（複合 PK＋`IX_DOC_APPENDIX_appendixId`），結構比照 `1722124800000-usage-form.ts` | `DROP TABLE DOC_APPENDIX` → `DROP TABLE APPENDIX_POOL`（子表先於父表，比照既有 usage-form migration 順序） |
+| `1723593600000-audit-log-appendix-id.ts` | `ALTER TABLE [AUDIT_LOG] ADD [appendixId] uniqueidentifier NULL`，比照 `1723420800000-index-run-error-code.ts`（`INDEX_RUN.errorCode`）之單欄位 additive ALTER 模式 | `ALTER TABLE [AUDIT_LOG] DROP COLUMN [appendixId]` |
+
+**拆為兩支而非併入一支之理由**：`APPENDIX_POOL`／`DOC_APPENDIX` 屬「新功能自身資料表」，`AUDIT_LOG.appendixId` 屬「既有稽核基礎設施之 additive 擴充」，兩者關注點不同（前者是 F039 領域模型、後者是跨功能稽核契約擴充）；比照現有兩種既有先例分別對應——`usage-form.ts`（單一功能之多表一次建立）與 `index-run-error-code.ts`（既有表之單欄位擴充）——各自維持單一關注點，且兩者之間**無 FK 相依**（`AUDIT_LOG.appendixId` 比照現行 `formId`／`lifecycleId`／`documentId` 皆為無 FK 約束之純參照欄，見 `1721952000000-audit-log.ts`），順序上無論先後執行皆不影響正確性，僅為敘事清晰而讓附錄兩表遷移在前。
+
+**`AUDIT_LOG` 加欄對既有資料之影響**：`appendixId` 為 `NULLable`、**無 backfill**——既有列（`targetType≠APPENDIX`）該欄一律為 `NULL`，與現行 `formId`／`lifecycleId` 對非對應 `targetType` 列恆 `NULL` 之既有欄位語意完全一致，零遷移風險（比照 `1723420800000-index-run-error-code.ts` 之 `INDEX_RUN.errorCode` 先例）。
+
+---
+
 ## 5. Integration & Communication
 
 ### 5.1 同步 vs 非同步總覽
@@ -973,6 +1169,8 @@ sequenceDiagram
 | 文件編號唯一性檢查 | DB Unique Constraint 為最終真相來源，應用層檢查僅為 UX 優化（快速失敗），兩者皆存在以應對併發（F013） |
 | （E09）Ingestion job 認領 | 同一文件之 job 以 `sp_getapplock('ingestion-' + documentId)` 原子認領，避免 `ingestion-worker` 多實例重複處理同一文件（模式同 §4.5/§5.4） |
 | （E09）QA_LOG 寫入 | 每筆問答具唯一 `id`；補償重試以該 id 為冪等鍵，避免重複補寫同一問答事件兩次進最終 QA_LOG（比照 §5.6 稽核 Outbox 冪等策略） |
+| （E10）`DOC_APPENDIX` 排序寫入（`PUT` replace-set） | **不需**額外冪等鍵——delete-then-insert 為單一交易之整組覆蓋，重複送出相同請求會得到相同最終狀態（自然冪等，非設計出來的冪等鍵機制），見 §3.6 決策二／§5.10 |
+| （E10）`DOC_APPENDIX` 附加/解除（`POST`／`DELETE`） | 以 `sp_getapplock('doc-appendix-' + documentId)` 序列化（非冪等鍵機制，見 §3.6 決策二末段／§5.10），比照 §5.4 DAG 邊寫入之既有互斥模式 |
 
 ### 5.7 E09 RAG 架構擴充：Ingestion 非同步管線（架構重點）
 
@@ -1113,6 +1311,55 @@ sequenceDiagram
 
 ---
 
+### 5.10 E10 附錄管理架構擴充：排序寫入與下載稽核之交易/併發邊界
+
+本節以循序圖具現 §3.6 決策二之交易邊界；交易一致性與併發控制之完整理由已於 §3.6 決策二／§4.9 OQ-E10-02 決策記錄，本節不重複，僅提供整合視角。
+
+**文件建立/編輯含附錄之送出流程**（`PUT` replace-set，唯一接入 UI 的排序寫入路徑）：
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as ICSOPAdmin
+    participant FE as Frontend SPA（DocumentCreatePage/EditPage）
+    participant DOC as DocumentModule
+    participant APP as AppendicesModule
+
+    U->>FE: 送出「建立/編輯文件」（含已選＋排序附錄）
+    FE->>DOC: createDocument() / updateDocument()
+    DOC-->>FE: 成功（documentId）
+    FE->>APP: replaceDocumentAppendices(documentId, orderedIds)（獨立呼叫，非同一交易）
+    APP->>APP: 驗證 documentId 存在（唯讀 join DocumentModule）
+    APP->>APP: 單一交易：DELETE 現有 DOC_APPENDIX WHERE documentId=? → INSERT 依陣列索引之新列
+    APP-->>FE: 成功
+    FE-->>U: 顯示已儲存
+```
+
+**前台文件詳情頁附錄下載**（稽核寫入完全沿用 §5.5 既有 Transactional Outbox 模式，非本節新增決策）：
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 已登入使用者（前台）
+    participant PUB as PublicBrowseModule / 文件詳情頁
+    participant APP as AppendicesModule
+    participant AUD as AuditModule（Outbox，§5.5）
+
+    U->>PUB: 開啟文件詳情頁
+    PUB->>APP: GET /documents/:documentId/appendices
+    APP-->>PUB: 依 sortOrder 遞增排序之附錄清單
+    U->>APP: 下載某附錄
+    APP->>APP: session 存在性檢查（未登入 → FILE_ACCESS_DENIED，不核發、不稽核）
+    APP->>APP: 核發短效期 URL（不燒錄浮水印，OQ-E05-03 定案沿用）
+    APP->>AUD: 同步嘗試 recordAccess(targetType=APPENDIX, actionType=DOWNLOAD, appendixId, documentId)
+    AUD-->>APP: 非阻斷（失敗進 Outbox，§5.5 沿用不變）
+    APP-->>U: 回傳下載 URL
+```
+
+**與既有一致性模式之對照**：附錄之「排序事件本體」（`DOC_APPENDIX` 寫入）與 F037/F038（§5.9）「變更事件本體」不同，**不**採 Strong/ACID 同交易跨模組傳播設計——因為附錄排序寫入本就侷限於 `AppendicesModule` 自身交易內完成（無需與 `DocumentModule` 之交易協調，見 §3.6 決策二「交易邊界」），不存在 F037/F038 那種「來源模組交易失敗需連動變更歷程回滾」的跨模組交易一致性問題。附錄下載之調閱稽核則與既有 `DOCUMENT`／`USAGE_FORM` 完全一致，沿用 §5.5 Outbox，無新設計。
+
+---
+
 ## 6. Non-Functional Architecture Mapping
 
 | NFR 分類 | 具體要求 | 架構對應 |
@@ -1128,6 +1375,7 @@ sequenceDiagram
 | **容器化部署** | 一鍵部署、機密管理、環境區分、健康檢查 | 見第 7 章 |
 | **（E09）RAG 資料落地與存取安全** [NFR-009](nfr.md#rag-security) | AC1 on-prem；AC2 檢索層過濾強制；AC3 prompt injection 防護；AC4 QA_LOG 存取控管 | §2.4 信任邊界擴充（AI 推論層僅內部呼叫，無對外路徑，AC1）；§3.3 `RagQueryModule.buildRetrievalFilter()` 於向量查詢條件層套用過濾，非生成後過濾，架構已結構性排除繞過可能性（AC2，見 §5.8 sequence diagram note）；prompt injection 之輸入/輸出過濾機制為 OQ-E09-07（AC3）；QA_LOG 存取比照既有 AuditModule，經 RbacModule 授權範圍限縮（AC4） |
 | **（E09）RAG 檢索與生成品質** [NFR-010](nfr.md#rag-quality) | AC1 命中率≥85%；AC2 引用正確率≥95%；AC3 延遲 P95<10s；AC4 拒答正確率≥90%；AC5 索引吞吐<24h（全數草案值） | §3.4 embedding/reranker/LLM 選型以自建評測集 PoC 驗證（OQ-E09-01/02/14，AC1/AC2/AC4）；§5.8 同步查詢鏈路（embedding→檢索→rerank→生成）之延遲預算須於 PoC 逐段量測，確保總和達標（AC3，OQ-E09-06）；索引吞吐依 §5.7 `ingestion-worker` 批次處理能力驗證（AC5） |
+| **（v1.4）附錄管理資料完整性與存取安全**［F039］ | `sortOrder` 不變式（同一文件內連續且互異）不可被併發寫入破壞；附錄檔案存取須經授權＋短效期憑證；下載調閱須完整落地稽核 | §3.6 決策二／§4.9：`sortOrder` 不變式由 `replaceDocumentAppendices()` 單一交易（delete-then-insert）結構性保證，不依賴 DB 唯一索引（OQ-E10-02）；`POST`／`DELETE` 以 `sp_getapplock` 序列化避免 TOCTOU；檔案存取沿用 §5.2 既有 SAS/代理雙模式（附錄無浮水印燒錄需求，全走短效 SAS）；下載稽核為 additive 擴充既有 `AUDIT_LOG`（§3.6 決策三），沿用 §5.5 Outbox，不降低既有 6 種 `targetType` 之保障 |
 
 ---
 
@@ -1285,6 +1533,9 @@ graph TB
 | 12 | **（E07）逐動作快照假設「DAG 編輯為低頻操作」未經規模驗證** | §4.8 決策依賴「單一循環節點<200、全系統約 600 文件、DAG 編輯屬低頻管理操作」等草案假設（OQ-NFR001 尚未校準）；若實際使用模式含大量批次建置（如初期一次建立數十至上百節點/連線），逐動作快照筆數可能短時間內暴增 | (A) 保持逐動作快照，待 OQ-NFR001 規模數字校準後以實測驗證儲存/查詢效能；(B) 若證實存在大量批次建置情境，可為該類 API 額外設計「僅記首尾兩筆」之快照旁路，一般互動式編輯仍維持逐動作，見 §4.8 | 待 OQ-NFR001 後以負載測試驗證；MVP 先以草案假設進行，架構已預留（B）擴充點，不阻塞開發 |
 | 13 | **（E07）查詢層編輯階段聚合視窗（草案 60 秒）為經驗值** | §4.8「查詢層動態分組」依賴一個時間視窗參數判斷「同一次編輯」；視窗過短則同次操作被拆成多個清單項目（雜訊未消除），視窗過長則不相關操作被誤合併（喪失精細度） | 提供可設定參數（環境變數/設定表，比照 OQ-E09-08 相關性閾值之既有做法），MVP 先以 60 秒為預設，待 UI/UX 與使用者測試後校準 | 不影響底層資料正確性（僅呈現層分組），上線後可隨時調整，屬低風險保留項 |
 | 14 | **（E07）AUDIT_LOG.documentId 由必填改為條件必填，影響既有 F024 查詢頁之欄位假設** | data-model.md v1.2 為容納 F036/F038 之 `lifecycleId`，將 `AUDIT_LOG.documentId`/`documentNumber` 由必填改為依 `targetType` 條件必填（見 §4.8／data-model.md OQ-E07-02）；F024（既有調閱歷程查詢，先於本次擴充定義）之查詢結果表格/匯出範本原先假設每筆紀錄皆有 documentId | 純資料庫層變更不阻塞後端開發；前端查詢結果表格需依 `targetType` 切換顯示「文件」或「循環」欄位（如合併欄或動態欄位標籤），匯出範本同需調整 | 需 UI/UX Designer／test-designer 於下一階段確認 F024 查詢結果呈現與匯出範本是否已涵蓋新 `targetType` 系列，已於 §9 Open Decisions 新增追蹤列 |
+| 15 | **（E10）是否應將 AppendicesModule 與既有 AttachmentModule 泛型化為共用 pool 抽象**（MVP 是否過度架構之自我挑戰） | F039 與 F018（使用表單）除排序外幾乎同構，直覺上「應該」共用；但排序邏輯（`sortOrder`／replace-set）為結構性差異，且 `usage-forms` 已上線並有完整測試覆蓋，重構為共用基底存在不對稱的迴歸風險 | (A)（已採用）獨立複製模組，僅共用通用基礎設施層（`file-rules`/`blob-store`/`document-asset-authz`/RBAC 矩陣/稽核契約），見 §3.6 決策一；(B) 抽出 `<T>PoolService`/`<T>PoolStore` 泛型基底，兩模組皆改為該基底之具體實例 | 選 (A)：N=2 使用案例不足以攤銷 (B) 之抽象/型別參數/共用基底修改需雙重驗證的成本，且 (B) 會將既有 1282 個單元測試中屬 `usage-forms` 的部分一併納入本次變更的迴歸驗證範圍，risk/benefit 不對稱；若未來出現第三個「池模型＋文件多對多」使用案例，屆時應重新評估收斂 |
+| 16 | **（E10）AUDIT_LOG 對 USAGE_FORM 下載事件的 `documentId` 轉送落差**（本次交付附帶發現，非本次任務範圍） | 現行 `usage-forms/audit-writer-recorder.adapter.ts` 之 `AuditWriterRecorder.record()` 呼叫 `AuditWriterService.recordAccess()` 時，僅轉送 `targetType`/`actionType`/`targetId`/`actorId`/`occurredAt`，**未轉送**呼叫端（`downloadForm()`）實際握有之 `documentId`——導致現行 F018 使用表單下載之稽核列 `AUDIT_LOG.documentId` 恆為 `null`，與 F018 spec/F024「文件」類篩選之呈現意圖（可能）有落差 | (A) 維持現狀，僅於本次交付回報，留待 F018 擁有者或後續 sprint 評估是否修補（不修改既有已上線模組，降低本次變更風險）；(B) 一併修補 `AuditWriterRecorder`（新增 `targetNumber`/`documentId` 轉送） | 已採 (A)：本次任務僅授權變更 `docs/specs/architecture-spec.md`，不得觸碰 `backend/usage-forms/**`；`AppendicesModule` 之對應轉接器已於設計時修正此落差（§3.6 決策三），不會延續此問題至附錄。是否回補 F018 由人類/product-analyst 決定，已於 §9 新增追蹤列 |
+| 17 | **（E10）`PUT` replace-set 之 last-write-wins 併發行為是否足夠**（自我挑戰：是否應為附錄排序加樂觀鎖） | 兩位 ICSOPAdmin 同時編輯同一文件之附錄順序時，後送出者會靜默覆蓋先送出者，先送出者不會收到衝突提示 | (A)（已採用）維持現狀，因 F011 文件編輯整體送出流程本身即無 `rowVersion` 保護，附錄排序比照既有立場一致，不引入本次範疇外的新並發原語；(B) 為 `DOC_APPENDIX` 引入版本欄位／ETag，`PUT` 帶入前次讀取版本，衝突則 409 | 選 (A)：ICSOPAdmin 角色人數少、同一文件同時被兩人編輯之機率低（低頻管理操作），且若要導入 (B) 應是「整份文件編輯」層級的統一並發保護（涵蓋所有欄位，非僅附錄），屬 F011 範疇的架構決策而非 F039 局部範疇，不應由附錄率先引入不一致的保護粒度；已於 §9 新增追蹤列供未來若需全面導入時一併考慮 |
 
 ### 8.2 拒絕之替代方案
 
@@ -1304,6 +1555,9 @@ graph TB
 | （E07）變更事件本體併入 AUDIT_LOG（單表容納「調閱事件」與「異動事件」兩種語意） | 欄位形狀截然不同（`fieldName`/`oldValue`/`newValue` 或 `changeType`/`beforeValue`/`afterValue` vs `actionType`/`watermarkSnapshot`），併表將產生大量依 `targetType` 才有意義的稀疏可空欄位（polymorphic 反樣式）；且一致性模型不同（強一致 vs Outbox best-effort，見 §5.9），無法在同一張表上同時滿足兩種寫入語意，見 §4.8／data-model.md OQ-E07-02 |
 | （E07）DAG 變更採「結構化 diff 重放」（OQ-E07-05 選項 a） | 重放引擎正確性難以窮盡測試（尤其節點刪除之級聯規則需精確重現歷史當下邏輯），查詢延遲隨變更次數增加而上升；規模（節點<200、低頻管理操作）不足以攤銷 diff 重放相對完整快照的儲存優勢，見 §4.8 |
 | （E07）DAG 變更於儲存層引入「編輯階段」聚合實體（session 狀態機＋背景收斂 job） | 與 F008/F009 現行「逐動作持久化、無總送出邊界」之互動模式不自然契合；背景收斂使快照寫入從「與來源交易強一致」退化為「近同步」，與 §5.9 交易一致性設計原則衝突；改採查詢層動態分組達成同等呈現效果且不引入新狀態機，見 §4.8 |
+| （E10）泛型化 `AttachmentModule`／`AppendicesModule` 為共用 `<T>PoolService`/`<T>PoolStore` 抽象 | N=2 具體使用案例不足以攤銷抽象成本；`sortOrder` 為附錄獨有之結構性差異，無法乾淨地泛型化；重構已上線且測試覆蓋完整的 `usage-forms` 存在不對稱迴歸風險，見 §3.6 決策一／§8.1 #15 |
+| （E10）`DOC_APPENDIX` 建 `(documentId, sortOrder)` 唯一索引（含暫時位移法變體） | 與服務層 replace-set（單一交易 delete-then-insert）保證之不變式重複、不會被觸發；暫時位移法（先寫負值再回填）為繞過「其實不需要的限制」而額外設計的兩階段寫入，徒增複雜度，見 §4.9 OQ-E10-02 決策 |
+| （E10）文件建立/編輯頁對附錄改採 `POST`（附加）＋前端計算 diff（比照現行 `usage-forms` link/unlink 模式） | 使用表單無排序概念，diff-based add/remove 已足夠；附錄需表達「移除＋重排」之最終狀態，`POST` 僅能接續末位、無法處理純重排（無新增/移除）之送出情境，會產生「兩路徑不同排序語意」之規格明文禁止情形，見 §3.6 決策二 |
 
 ### 8.3 需驗證/待 Spike 之項目
 
@@ -1322,6 +1576,9 @@ graph TB
 
 | OQ ID | 議題 | 架構影響 | 目前架構預設/因應 | 狀態 |
 |-------|------|----------|-------------------|------|
+| OQ-E10-02 | `DOC_APPENDIX` 之 `(documentId, sortOrder)` 是否建唯一索引 | Migration 是否含唯一索引 DDL；`replaceDocumentAppendices()` 之交易設計 | **已定案（system-architect，§4.9）**：不建唯一索引，服務層 replace-set（單一交易 delete-then-insert）保證；`POST`/`DELETE` 以 `sp_getapplock` 序列化 | ✅ 已定案 |
+| （新增） | （E10）`USAGE_FORM` 下載稽核之 `documentId` 轉送落差（§8.1 #16）是否回補 F018 | `usage-forms/audit-writer-recorder.adapter.ts` 是否修補，及既有已上線資料是否需回溯補值 | 本次僅發現並記錄，未修改既有 `usage-forms` 程式碼（授權範圍外）；`AppendicesModule` 已於新模組正確實作，不延續此問題 | 待 F018 擁有者／product-analyst 決定是否回補 |
+| （新增） | （E10）文件編輯（F011）整體送出流程是否需引入樂觀鎖（`rowVersion`），附錄排序之 last-write-wins（§8.1 #17）是否足夠 | 若需引入，應為 F011 整份文件編輯之統一並發保護（非僅附錄局部），影響 `updateDocument()` 端點與 `DocumentEditPage.tsx` 送出流程 | 本輪維持現狀（無鎖，繼承 F011 既有立場），附錄排序不率先引入不一致的保護粒度 | 待確認，非 Blocking（低頻管理操作，風險可接受） |
 | OQ-E01-04 | Session「操作」判定基準 | AuthModule/RbacModule 之活動時間更新機制 | **架構師已決策**（§5.3）：以每次已授權 API 請求為活動訊號，節流寫入 `lastActivityAt`；節流門檻值與未來是否遷移 Redis session store 待效能測試校準 | 機制已定，參數待校準 |
 | OQ-E01-01 | Azure AD 驗證通過但查無對應在職帳號時拒絕/自動建立/待審 | AuthModule 登入流程分支（§5.3） | **已定案**：拒絕並回 `AUTH_ACCOUNT_NOT_FOUND`，提示洽系統管理員，**不自動建立帳號**（[error-handling.md#auth](error-handling.md#auth)） | ✅ 已定案 |
 | OQ-E01-02 | 帳密登入是否需失敗鎖定 | AuthModule 是否需失敗計數/鎖定儲存 | 本輪未實作，架構預留 `ACCOUNT` 層級失敗計數欄位擴充點 | 待資安政策 |

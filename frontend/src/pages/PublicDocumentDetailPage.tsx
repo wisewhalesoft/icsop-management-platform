@@ -9,6 +9,8 @@ import {
   downloadUsageForm,
   documentDownloadUrl,
   documentPrintUrl,
+  getDocumentAppendices,
+  downloadDocumentAppendix,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
@@ -18,6 +20,7 @@ import type {
   PublicDetailAttachment,
   DocumentStatus,
   OrgUnitRecord,
+  DocumentAppendixRecord,
 } from '../api/types';
 
 /**
@@ -77,6 +80,8 @@ export function PublicDocumentDetailPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  // F039 附錄：後端已依 sortOrder 遞增回傳（唯一排序權威），前端不再排序。
+  const [appendices, setAppendices] = useState<DocumentAppendixRecord[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -107,6 +112,13 @@ export function PublicDocumentDetailPage(): JSX.Element {
       .then(setOrgUnits)
       .catch(() => setOrgUnits([]));
   }, []);
+
+  // F039：附錄清單（前後台共用同一端點，故順序與後台詳情完全一致，AC-25）。
+  useEffect(() => {
+    getDocumentAppendices(id)
+      .then(setAppendices)
+      .catch(() => setAppendices([]));
+  }, [id]);
   const orgPath = useMemo(
     () => buildOrgPath(orgUnits, user?.orgCode),
     [orgUnits, user?.orgCode],
@@ -209,6 +221,10 @@ export function PublicDocumentDetailPage(): JSX.Element {
             onDownloadUsageForm={(formId, name) =>
               void runDownload(() => downloadUsageForm(detail.id, formId), name)
             }
+            appendices={appendices}
+            onDownloadAppendix={(appendixId, name) =>
+              void runDownload(() => downloadDocumentAppendix(detail.id, appendixId), name)
+            }
           />
         )}
       </main>
@@ -232,11 +248,15 @@ function DetailBody({
   onOpenLink,
   onDownloadAttachment,
   onDownloadUsageForm,
+  appendices,
+  onDownloadAppendix,
 }: {
   detail: PublicDocumentDetail;
   onOpenLink: (targetDocumentId: string) => void;
   onDownloadAttachment: (att: PublicDetailAttachment) => void;
   onDownloadUsageForm: (formId: string, name: string) => void;
+  appendices: DocumentAppendixRecord[];
+  onDownloadAppendix: (appendixId: string, name: string) => void;
 }): JSX.Element {
   const icsopPdf = findAttachment(detail.attachments, 'ICSOP_PDF');
   const ojt = findAttachment(detail.attachments, 'OJT_SIGNIN');
@@ -363,6 +383,10 @@ function DetailBody({
             {detail.usageForms.length} 份{' '}
             <span className="text-slate-400 text-xs">（見下方）</span>
           </Field>
+          <Field label="附錄">
+            {appendices.length} 份{' '}
+            <span className="text-slate-400 text-xs">（見下方）</span>
+          </Field>
           <Field label="OJT 實體簽到表">
             {ojt ? (
               <>
@@ -448,6 +472,56 @@ function DetailBody({
           </div>
         ) : (
           <p className="px-5 py-4 text-sm text-slate-400">無關聯使用表單</p>
+        )}
+      </section>
+
+      {/* 附錄（F039）：依 sortOrder 遞增，與後台詳情/編輯畫面順序一致（AC-25） */}
+      <section className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
+        <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+          <Icon name="paperclip" className="w-4 h-4 text-primary-600" />
+          <h2 className="font-semibold text-slate-900 text-sm">附錄</h2>
+          <span className="ml-auto text-xs text-slate-400">下載將寫入稽核</span>
+        </div>
+        {appendices.length > 0 ? (
+          <div className="divide-y divide-slate-100" data-testid="appendix-list">
+            {appendices.map((a, i) => {
+              const isExcel = /xls/i.test(a.format);
+              return (
+                <div
+                  key={a.id}
+                  data-appendix-item=""
+                  data-appendix-order={i + 1}
+                  className="px-5 py-3 flex items-center gap-3"
+                >
+                  <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+                    {i + 1}
+                  </span>
+                  <Icon
+                    name={isExcel ? 'sheet' : 'file-text'}
+                    className={`w-5 h-5 shrink-0 ${isExcel ? 'text-emerald-600' : 'text-red-500'}`}
+                  />
+                  <span data-appendix-name className="text-sm text-slate-800 flex-1 truncate">
+                    {a.name}
+                  </span>
+                  <button
+                    onClick={() => onDownloadAppendix(a.id, a.name)}
+                    aria-label={`下載 ${a.name}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-xs hover:bg-slate-50 min-h-[44px]"
+                  >
+                    <Icon name="download" className="w-3.5 h-3.5" />
+                    下載
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div
+            data-appendix-empty=""
+            className="px-5 py-6 flex items-center justify-center gap-2 text-sm text-slate-400"
+          >
+            <Icon name="paperclip" className="w-4 h-4" />無附錄
+          </div>
         )}
       </section>
 

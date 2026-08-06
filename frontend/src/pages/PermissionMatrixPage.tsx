@@ -36,6 +36,7 @@ export const FUNC_DISPLAY: MatrixDisplayRow[] = [
   { label: '循環管理（DAG）', cells: ['唯讀', 'CRUD', '唯讀', '無', '無'] },
   { label: 'ICSOP 文件管理', cells: ['唯讀', 'CRUD', '唯讀', '唯讀', '無'] },
   { label: '文件使用表單管理', cells: ['唯讀', 'CRUD', '無', '無', '無'] },
+  { label: '附錄管理', cells: ['唯讀', 'CRUD', '無', '無', '無'] },
   { label: '文件索引管理', cells: ['唯讀', 'CRUD', '無', '無', '無'] },
   { label: '文件調閱歷程查詢', cells: ['全部唯讀', '全部唯讀', '無', '無', '無'] },
   { label: '文件變更歷程', cells: ['唯讀', '唯讀', '無', '無', '無'] },
@@ -62,6 +63,7 @@ export const FIELD_DISPLAY: MatrixDisplayRow[] = [
   { label: '文件連結點（連結點程序書，多）', cells: ['唯讀', '可寫', '唯讀', '唯讀', '唯讀'] },
   { label: 'ICSOP PDF（檔案）', cells: ['唯讀·可下載', '可寫', '唯讀·可下載', '唯讀·可下載', '唯讀·可下載'] },
   { label: '使用表單（多）', cells: ['唯讀·可下載', '可寫', '唯讀·可下載', '唯讀·可下載', '唯讀·可下載'] },
+  { label: '附錄（多）', cells: ['唯讀·可下載', '可寫', '唯讀·可下載', '唯讀·可下載', '唯讀·可下載'] },
   { label: '公告日期', cells: ['唯讀', '可寫', '唯讀', '唯讀', '唯讀'] },
   { label: 'OJT 實體簽到表', cells: ['唯讀', '可寫', '唯讀', '唯讀', '唯讀'] },
   { label: '文件名稱（程序書書名）', cells: ['唯讀', '可寫', '唯讀', '唯讀', '唯讀'] },
@@ -188,7 +190,7 @@ export function PermissionMatrixPage(): JSX.Element {
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 flex items-start gap-2">
           <Icon name="badge-check" className="w-4 h-4 mt-0.5 shrink-0" />
           <div>
-            <b>已定案</b>：系統管理員、主管、部門窗口對 ICSOP 文件全欄位皆<b>唯讀</b>（可檢視、無寫入，與功能矩陣一致）。共 19 欄，含新增之「制定公司／制定部門／制定室別／內容摘要」（制定組織三級＝公司／部／處室，由上而下相依連動）。
+            <b>已定案</b>：系統管理員、主管、部門窗口對 ICSOP 文件全欄位皆<b>唯讀</b>（可檢視、無寫入，與功能矩陣一致）。共 20 欄，含新增之「制定公司／制定部門／制定室別／內容摘要」（制定組織三級＝公司／部／處室，由上而下相依連動）與「附錄（多）」（F039，比照「使用表單（多）」）。
           </div>
         </div>
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 flex items-start gap-2">

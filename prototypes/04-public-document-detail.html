@@ -61,7 +61,7 @@
     </div>
   </div>
 
-  <!-- 16 fields (read-only) -->
+  <!-- 20 fields (read-only) -->
   <section class="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
     <div class="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
       <i data-lucide="file-text" class="w-4 h-4 text-primary-600"></i>
@@ -101,6 +101,17 @@
     <div id="usageForms" class="divide-y divide-slate-100"></div>
   </section>
 
+  <!-- appendices (F039) — 依 sortOrder 遞增，與後台詳情/編輯畫面順序一致 -->
+  <section class="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
+    <div class="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+      <i data-lucide="paperclip" class="w-4 h-4 text-primary-600"></i>
+      <h2 class="font-semibold text-slate-900 text-sm">附錄</h2>
+      <button onclick="toggleAppendixDemo()" class="ml-auto text-xs text-slate-400 hover:text-primary-600 underline decoration-dotted underline-offset-2">示範：切換有／無附錄</button>
+      <span class="text-xs text-slate-400">下載將寫入稽核</span>
+    </div>
+    <div id="appendices" class="divide-y divide-slate-100"></div>
+  </section>
+
   <!-- cross links -->
   <section class="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
     <div class="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
@@ -136,6 +147,7 @@
     ['公告日期', '<span class="mono">2026-01-01</span>'],
     ['檔案（ICSOP PDF）', '車輛分期進件作業_v1.3.pdf <span class="text-slate-400 text-xs">（見附件）</span>'],
     ['使用表單', '2 份 <span class="text-slate-400 text-xs">（見下方）</span>'],
+    ['附錄', '<span id="fieldAppendix">3 份 <span class="text-slate-400 text-xs">（見下方）</span></span>'],
     ['OJT 實體簽到表', '車輛分期進件作業_OJT簽到表.pdf <span class="text-slate-400 text-xs">（見附件）</span>'],
     ['連結點程序書', '2 筆 <span class="text-slate-400 text-xs">（見下方）</span>']
   ];
@@ -155,6 +167,31 @@
       <span class="text-sm text-slate-800 flex-1 truncate">${f.name}</span>
       <button onclick="doAction('DOWNLOAD','使用表單')" class="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-xs hover:bg-slate-50 min-h-[44px]"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
     </div>`).join('');
+
+  // F039: 附錄依 sortOrder 遞增列出（1..N），與後台唯讀詳情（16）、編輯畫面（15）之順序完全一致
+  const APPENDIX_DEMO = [
+    {name:'作業流程對照表.xlsx', type:'excel'},
+    {name:'名詞定義說明.pdf', type:'pdf'},
+    {name:'共用名詞附錄.xlsx', type:'excel'}
+  ];
+  let APPENDICES = APPENDIX_DEMO.slice();
+  function renderAppendices(){
+    document.getElementById('appendices').innerHTML = APPENDICES.length ? APPENDICES.map((a,i)=>`
+      <div data-appendix-item data-appendix-order="${i+1}" class="px-5 py-3 flex items-center gap-3">
+        <span class="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">${i+1}</span>
+        <i data-lucide="${a.type==='excel'?'sheet':'file-text'}" class="w-5 h-5 ${a.type==='excel'?'text-emerald-600':'text-red-500'} shrink-0"></i>
+        <span data-appendix-name class="text-sm text-slate-800 flex-1 truncate">${a.name}</span>
+        <button onclick="downloadAppendix('${a.name}')" class="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-xs hover:bg-slate-50 min-h-[44px]"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
+      </div>`).join('')
+      : `<div data-appendix-empty class="px-5 py-6 flex items-center justify-center gap-2 text-sm text-slate-400"><i data-lucide="paperclip" class="w-4 h-4"></i>無附錄</div>`;
+    const cell=document.getElementById('fieldAppendix');
+    if(cell) cell.innerHTML = APPENDICES.length ? (APPENDICES.length+' 份 <span class="text-slate-400 text-xs">（見下方）</span>') : '無附錄';
+    lucide.createIcons();
+  }
+  function toggleAppendixDemo(){ APPENDICES = APPENDICES.length ? [] : APPENDIX_DEMO.slice(); renderAppendices(); }
+  // 附錄下載：寫入稽核（targetType=APPENDIX），但不燒錄浮水印（F039 已定案）
+  function downloadAppendix(name){ toast('success','已下載附錄「'+name+'」，並寫入 DOWNLOAD 稽核（targetType=APPENDIX；附錄不燒錄浮水印）'); }
+  renderAppendices();
 
   // F015: link targets show status; 作廢 目標仍保留辨識標記邏輯（本例兩目標皆有效）
   const LINKS = [

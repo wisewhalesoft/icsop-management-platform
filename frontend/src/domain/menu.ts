@@ -23,6 +23,7 @@ export const MENU: readonly MenuItem[] = [
   { id: 'lifecycle', label: '循環管理', icon: 'workflow', functionKey: FunctionKey.LIFECYCLE_MANAGEMENT, route: '/admin/lifecycles' },
   { id: 'document', label: 'ICSOP 文件管理', icon: 'file-text', functionKey: FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, route: '/admin/documents' },
   { id: 'usageform', label: '使用表單管理', icon: 'files', functionKey: FunctionKey.USAGE_FORM_MANAGEMENT, route: '/admin/usage-forms' },
+  { id: 'appendix', label: '附錄管理', icon: 'paperclip', functionKey: FunctionKey.APPENDIX_MANAGEMENT, route: '/admin/appendices' },
   { id: 'docindex', label: '文件索引管理', icon: 'database', functionKey: FunctionKey.DOCUMENT_INDEX_MANAGEMENT, route: '/admin/doc-index' },
   { id: 'audit', label: '文件調閱歷程', icon: 'history', functionKey: FunctionKey.DOCUMENT_ACCESS_HISTORY, route: '/admin/access-history' },
   { id: 'changehistory', label: '文件變更歷程', icon: 'git-compare', functionKey: FunctionKey.DOCUMENT_CHANGE_HISTORY, route: '/admin/change-history' },

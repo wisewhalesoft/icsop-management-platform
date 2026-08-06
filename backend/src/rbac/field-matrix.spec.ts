@@ -35,12 +35,17 @@ const BUSINESS_FIELDS: FieldKeyValue[] = [
   FieldKey.OJT_SIGNIN,
   FieldKey.DOCUMENT_NAME,
   FieldKey.CONTENT_SUMMARY,
+  FieldKey.APPENDICES,
 ];
 
 describe('F026 FIELD_MATRIX 逐格對照 spec', () => {
-  it('矩陣恰含 19 欄位（1 系統欄位 + 18 業務欄位）', () => {
-    expect(Object.keys(FIELD_MATRIX)).toHaveLength(19);
-    expect(BUSINESS_FIELDS).toHaveLength(18);
+  it('矩陣恰含 20 欄位（1 系統欄位 + 19 業務欄位，F039 新增「附錄」）', () => {
+    expect(Object.keys(FIELD_MATRIX)).toHaveLength(20);
+    expect(BUSINESS_FIELDS).toHaveLength(19);
+  });
+
+  it('F039 附錄：欄位鍵字面值鎖定為「附錄」（矩陣列名顯示「附錄（多）」，鍵值去括號補述，比照「使用表單」慣例）', () => {
+    expect(FieldKey.APPENDICES).toBe('附錄');
   });
 
   it('系統 UUID：五角色皆 IGNORE（系統產生、一律忽略傳入值）', () => {

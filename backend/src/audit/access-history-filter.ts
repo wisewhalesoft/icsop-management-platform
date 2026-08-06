@@ -17,7 +17,8 @@ export const DEFAULT_RANGE_DAYS = 30;
 export function kindToTargetTypes(kind: AuditKind): AuditTargetType[] {
   switch (kind) {
     case '文件':
-      return ['DOCUMENT', 'USAGE_FORM'];
+      // F039 AC-30：「文件」類＝DOCUMENT ∪ USAGE_FORM ∪ APPENDIX（additive）。
+      return ['DOCUMENT', 'USAGE_FORM', 'APPENDIX'];
     case '循環':
       return ['LIFECYCLE'];
     case '變更':

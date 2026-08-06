@@ -90,7 +90,7 @@
   <div class="mb-4 grid sm:grid-cols-2 gap-3">
     <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 flex items-start gap-2">
       <i data-lucide="badge-check" class="w-4 h-4 mt-0.5 shrink-0"></i>
-      <div><b>已定案</b>：系統管理員、主管、部門窗口對 ICSOP 文件全欄位皆<b>唯讀</b>（可檢視、無寫入，與功能矩陣一致）。共 19 欄，含新增之「制定公司／制定部門／制定室別／內容摘要」（制定組織三級＝公司／部／處室，由上而下相依連動）。</div>
+      <div><b>已定案</b>：系統管理員、主管、部門窗口對 ICSOP 文件全欄位皆<b>唯讀</b>（可檢視、無寫入，與功能矩陣一致）。共 20 欄，含新增之「制定公司／制定部門／制定室別／內容摘要」（制定組織三級＝公司／部／處室，由上而下相依連動）與 F039 新增之「附錄（多）」。</div>
     </div>
     <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 flex items-start gap-2">
       <i data-lucide="clock" class="w-4 h-4 mt-0.5 shrink-0"></i>
@@ -139,6 +139,7 @@
     {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
     {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
     {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
     {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
@@ -168,6 +169,7 @@
     ['循環管理（DAG）',['唯讀','CRUD','唯讀','無','無']],
     ['ICSOP 文件管理',['唯讀','CRUD','唯讀','唯讀','無']],
     ['文件使用表單管理',['唯讀','CRUD','無','無','無']],
+    ['附錄管理',['唯讀','CRUD','無','無','無']],
     ['文件索引管理',['唯讀','CRUD','無','無','無']],
     ['文件調閱歷程查詢',['全部唯讀','全部唯讀','無','無','無']],
     ['文件變更歷程',['唯讀','唯讀','無','無','無']],
@@ -192,6 +194,7 @@
     ['文件連結點（連結點程序書，多）',['唯讀','可寫','唯讀','唯讀','唯讀']],
     ['ICSOP PDF（檔案）',['唯讀·可下載','可寫','唯讀·可下載','唯讀·可下載','唯讀·可下載']],
     ['使用表單（多）',['唯讀·可下載','可寫','唯讀·可下載','唯讀·可下載','唯讀·可下載']],
+    ['附錄（多）',['唯讀·可下載','可寫','唯讀·可下載','唯讀·可下載','唯讀·可下載'],'文件內順序 sortOrder 由建立/編輯頁上移／下移排定'],
     ['公告日期',['唯讀','可寫','唯讀','唯讀','唯讀']],
     ['OJT 實體簽到表',['唯讀','可寫','唯讀','唯讀','唯讀']],
     ['文件名稱（程序書書名）',['唯讀','可寫','唯讀','唯讀','唯讀']],

@@ -1,6 +1,6 @@
 # Spec Index
-Product: ICSOP 文件管理平台 | Version: 1.3 | Status: Draft
-Last Updated: 2026-07-17
+Product: ICSOP 文件管理平台 | Version: 1.4 | Status: Draft
+Last Updated: 2026-08-06
 
 > 進入點：所有下游 agent 先讀本檔，再依 Agent Loading Guide 選擇性載入所需檔案。定案決策見各 feature；未定案見 [open-questions.md](open-questions.md)。
 
@@ -45,6 +45,7 @@ Last Updated: 2026-07-17
 | F036 | 循環樹狀圖預覽（唯讀＋浮水印） | P0 | 1 | E03 US-025 | features/F036-lifecycle-tree-preview.md |
 | F037 | ICSOP 程序書變更歷程（欄位 Before/After Diff） | P1 | 1 | E07 US-062 | features/F037-document-change-history.md |
 | F038 | 循環樹狀圖變更歷程（新舊版預覽／下載燒錄浮水印） | P1 | 1 | E07 US-063 | features/F038-lifecycle-tree-change-history.md |
+| F039 | 附錄管理（附錄池／多對多關聯＋自訂排序） | P1 | 1 | E10 US-100/101/102 | features/F039-appendix-management.md |
 
 ## Supporting Documents
 | Document | File | Relevant For |
@@ -76,7 +77,8 @@ Last Updated: 2026-07-17
 
 ## 關鍵定案（貫穿全 spec）
 - 雙軌登入（**Azure AD OIDC**＋管理員帳密）並存；Azure AD 僅負責初次認證，其後由我方核發 JWT，Session 閒置 30 分鐘逾時（2026-07-20 由「上游簽章」改版，見 [upstream-hr-source-contract.md](upstream-hr-source-contract.md) §12）。
-- 5 種固定角色；主管/部門窗口/**系統管理員**對 ICSOP 文件（及循環/使用表單）**皆唯讀**，僅 ICSOP 管理員可寫；**主管無使用表單管理/調閱歷程權限**。
+- 5 種固定角色；主管/部門窗口/**系統管理員**對 ICSOP 文件（及循環/使用表單/**附錄**）**皆唯讀**，僅 ICSOP 管理員可寫；**主管無使用表單管理/附錄管理/調閱歷程權限**。
+- **附錄（E10/F039，2026-08-06）**：與使用表單同構之**附錄池**（多對多共用、覆蓋不留版本、下載不燒錄浮水印、覆蓋警示門檻＝引用 ≥2），差異在**每份文件內帶自訂顯示順序** `DOC_APPENDIX.sortOrder`（建立/編輯以上移/下移調整，非拖曳）；前台下載寫稽核（`targetType=APPENDIX`，F024 歸「文件」類）。
 - 文件僅保存當前版本（覆蓋儲存、UUID 不變）；狀態（有效/失效/作廢）管理員手動切換、無簽核。
 - 循環＝DAG（有向無環、禁止成環，多 parent/多 child、上到下）。
 - 文件「所屬循環」建立時必填；「所屬節點」以節點抽屜（F009）為**唯一權威寫入路徑**。

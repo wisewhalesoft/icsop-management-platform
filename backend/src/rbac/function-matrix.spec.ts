@@ -34,6 +34,7 @@ describe('F025 FUNCTION_MATRIX 逐格對照 spec', () => {
     [FunctionKey.LIFECYCLE_MANAGEMENT]: R('READ', 'CRUD', 'READ', 'NONE', 'NONE'),
     [FunctionKey.ICSOP_DOCUMENT_MANAGEMENT]: R('READ', 'CRUD', 'READ', 'READ', 'NONE'),
     [FunctionKey.USAGE_FORM_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.APPENDIX_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
     [FunctionKey.DOCUMENT_INDEX_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
     [FunctionKey.DOCUMENT_ACCESS_HISTORY]: R('READ', 'READ', 'NONE', 'NONE', 'NONE'),
     [FunctionKey.DOCUMENT_CHANGE_HISTORY]: R('READ', 'READ', 'NONE', 'NONE', 'NONE'),
@@ -43,11 +44,15 @@ describe('F025 FUNCTION_MATRIX 逐格對照 spec', () => {
     [FunctionKey.SYSTEM_PARAMETER]: R('CRUD', 'NONE', 'NONE', 'NONE', 'NONE'),
   };
 
-  it('矩陣恰含 12 個功能列，且鍵集合與 spec 一致', () => {
+  it('矩陣恰含 13 個功能列，且鍵集合與 spec 一致（F039 新增「附錄管理」）', () => {
     expect(Object.keys(FUNCTION_MATRIX).sort()).toEqual(
       Object.keys(expected).sort(),
     );
-    expect(Object.keys(FUNCTION_MATRIX)).toHaveLength(12);
+    expect(Object.keys(FUNCTION_MATRIX)).toHaveLength(13);
+  });
+
+  it('F039 附錄管理：功能鍵字面值鎖定為「附錄管理」（spec 命名鎖定表，逐字不得改寫）', () => {
+    expect(FunctionKey.APPENDIX_MANAGEMENT).toBe('附錄管理');
   });
 
   it.each(Object.keys(expected))('功能列 %s 之五角色權限值與 spec 完全一致', (fn) => {

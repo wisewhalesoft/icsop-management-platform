@@ -6,8 +6,8 @@ import { FunctionKey } from './function-matrix';
  * 結構權威＝prototypes/07-admin-shell.html 之 MENU；權限值來自鏡射 FUNCTION_MATRIX。
  */
 describe('menu — 後台選單角色過濾', () => {
-  it('MENU 9 項，每項對映一個功能鍵與路由', () => {
-    expect(MENU).toHaveLength(9);
+  it('MENU 10 項，每項對映一個功能鍵與路由（F039 新增「附錄管理」）', () => {
+    expect(MENU).toHaveLength(10);
     for (const item of MENU) {
       expect(item.functionKey).toBeTruthy();
       expect(item.route).toMatch(/^\/admin\//);
@@ -15,19 +15,20 @@ describe('menu — 後台選單角色過濾', () => {
     }
   });
 
-  it('SysAdmin 見全部 9 項', () => {
+  it('SysAdmin 見全部 10 項（含插於 usageform 之後、docindex 之前的 appendix）', () => {
     expect(visibleMenu('SysAdmin').map((m) => m.id)).toEqual([
-      'account', 'lifecycle', 'document', 'usageform', 'docindex',
+      'account', 'lifecycle', 'document', 'usageform', 'appendix', 'docindex',
       'audit', 'changehistory', 'orgsync', 'settings',
     ]);
   });
 
-  it('ICSOPAdmin 見 8 項（無系統參數設定）', () => {
+  it('ICSOPAdmin 見 9 項（無系統參數設定）', () => {
     const ids = visibleMenu('ICSOPAdmin').map((m) => m.id);
     expect(ids).toContain('lifecycle');
     expect(ids).toContain('orgsync');
+    expect(ids).toContain('appendix');
     expect(ids).not.toContain('settings');
-    expect(ids).toHaveLength(8);
+    expect(ids).toHaveLength(9);
   });
 
   it('Supervisor 僅見循環管理與 ICSOP 文件管理', () => {

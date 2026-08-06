@@ -96,7 +96,7 @@
   <!-- Section: 基本資訊 (diff fields) -->
   <section class="bg-white border border-slate-200 rounded-xl p-5">
     <div class="flex items-center gap-2 mb-1"><i data-lucide="file-text" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">基本資訊</h2></div>
-    <p class="text-xs text-slate-400 mb-4">每個可編輯欄位並列「目前值 / 新值」；變更欄位會標示。含數十個選項之欄位（制定室別、室長、連結點、使用表單）改為可搜尋下拉；版次採兩段輸入（年度＇序號）。</p>
+    <p class="text-xs text-slate-400 mb-4">每個可編輯欄位並列「目前值 / 新值」；變更欄位會標示。含數十個選項之欄位（制定室別、室長、連結點、使用表單、附錄）改為可搜尋下拉；版次採兩段輸入（年度＇序號）。</p>
 
     <!-- UUID readonly -->
     <div class="grid grid-cols-12 gap-3 items-center py-3 border-b border-slate-100">
@@ -238,6 +238,18 @@
     </div>
   </section>
 
+  <!-- Section: 附錄 (F039) — 自附錄池選取，可搜尋多選；已選清單以上移／下移排序 -->
+  <section class="bg-white border border-slate-200 rounded-xl p-5">
+    <div class="flex items-center gap-2 mb-1"><i data-lucide="paperclip" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">附錄</h2><span class="text-xs text-slate-400">（自「附錄管理」附錄池選取）</span><span id="appxChanged" class="hidden text-[10px] px-1.5 py-0.5 rounded bg-primary-100 text-primary-700">已變更</span></div>
+    <p class="text-xs text-slate-400 mb-3 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>此處為「選取關聯」而非上傳；附錄本體於「附錄管理」維護。可多選、允許為空；<strong class="text-slate-500">新選取者一律加入末位</strong>，以「上移／下移」調整顯示順序（<strong class="text-slate-500">不支援拖曳</strong>），解除其中一筆後其餘相對順序不變、重新編號為連續 1..N；前台與後台詳情頁一律依此順序呈現，可個別下載（下載寫入稽核）。</span></p>
+    <div id="appxChips" class="flex flex-col gap-1.5 mb-2"></div>
+    <div class="write-only relative">
+      <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+      <input id="appx_input" oninput="comboFilter('appx')" onfocus="comboFilter('appx')" onblur="comboClose('appx')" autocomplete="off" placeholder="搜尋並選取附錄（自附錄池）…" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
+      <div id="appx_list" class="hidden absolute z-20 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
+    </div>
+  </section>
+
   <div class="h-4"></div>
 </main>
 
@@ -264,6 +276,7 @@
     {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
     {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
     {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
     {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
@@ -329,6 +342,8 @@
   const LINK_OPTIONS=DOC_OPTIONS.filter(o=>!o.startsWith(SELF_NUMBER+' ')); // 連結點不含自身
   // 使用表單池（來自「使用表單管理」；此處為選取關聯而非上傳）
   const FORM_POOL=['進件申請書.xlsx','支票託收登記表.xlsx','徵信照會表.xlsx','審查建議書.pdf','對保確認單.xlsx','撥款申請單.xlsx','本票確認檢核表.xlsx','OJT 訓練紀錄表.xlsx'];
+  // 附錄池（來自「附錄管理」；此處為選取關聯而非上傳）；與使用表單之差異＝每份文件內另有顯示順序 sortOrder
+  const APPENDIX_POOL=['作業流程對照表.xlsx','名詞定義說明.pdf','風險等級對照附表.xlsx','徵審評分範例.pdf','對保作業附註.pdf','撥款時程附表.xlsx','法規引用清單.pdf','共用名詞附錄.xlsx'];
 
   const current={
     status:'有效', number:'ICSOP-SRC-101-1-01', name:'車輛分期進件作業',
@@ -339,7 +354,9 @@
     // 使用部門刻意涵蓋不同層級：處/室層＋部層＋課層（§9.1 任意層級皆可指定）
     using:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部','營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課'],
     links:['ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-102-1-01 車輛分期對保作業'],
-    forms:['進件申請書.xlsx','支票託收登記表.xlsx']
+    forms:['進件申請書.xlsx','支票託收登記表.xlsx'],
+    // 依 sortOrder 1..3 之既有關聯順序（與 04 前台詳情、16 後台唯讀詳情一致）
+    appendices:['作業流程對照表.xlsx','名詞定義說明.pdf','共用名詞附錄.xlsx']
   };
   let draft=JSON.parse(JSON.stringify(current));
 
@@ -540,7 +557,8 @@
     sec:{options:PERSONS,multi:true,arr:()=>draft.secondary,render:()=>renderSec()},
     use:{options:DEPTS,multi:true,arr:()=>draft.using,render:()=>renderUse()},
     links:{options:LINK_OPTIONS,multi:true,arr:()=>draft.links,render:()=>renderLinks()},
-    forms:{options:FORM_POOL,multi:true,arr:()=>draft.forms,render:()=>renderForms()}
+    forms:{options:FORM_POOL,multi:true,arr:()=>draft.forms,render:()=>renderForms()},
+    appx:{options:APPENDIX_POOL,multi:true,arr:()=>draft.appendices,render:()=>renderAppx()}
   };
   function comboFilter(key){ const list=document.getElementById(key+'_list'); list.classList.remove('hidden'); comboRender(key,document.getElementById(key+'_input').value); }
   function comboClose(key){ setTimeout(()=>{const l=document.getElementById(key+'_list'); if(l)l.classList.add('hidden');},150); }
@@ -634,6 +652,37 @@
   }
   function rmForm(i){draft.forms.splice(i,1);renderForms();updateChangeBar();}
 
+  /* ----- 附錄：有序清單（上移／下移；F039 AC-21 明訂不支援拖曳）-----
+     新選取者由 comboPick 之 push 加入末位（AC-18）；解除其中一筆後其餘相對順序不變（AC-24） */
+  const appxBtn='w-6 h-6 rounded flex items-center justify-center shrink-0 text-slate-500 hover:bg-white hover:text-primary-600 disabled:text-slate-300 disabled:hover:bg-transparent disabled:hover:text-slate-300 disabled:cursor-not-allowed';
+  function appxIcon(name){ return (name.split('.').pop()||'').toLowerCase()==='pdf'?'file-text':'file-spreadsheet'; }
+  function renderAppx(){
+    const arr=draft.appendices, wrap=document.getElementById('appxChips');
+    wrap.innerHTML = arr.length ? arr.map((o,i)=>`
+      <div data-appendix-item data-appendix-order="${i+1}" class="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+        <span class="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">${i+1}</span>
+        <i data-lucide="${appxIcon(o)}" class="w-4 h-4 text-slate-400 shrink-0"></i>
+        <span data-appendix-name class="text-sm text-slate-700 flex-1 truncate">${o}</span>
+        <button type="button" data-appendix-up onclick="appxMove(${i},-1)" title="上移" ${i===0?'disabled':''} class="write-only ${appxBtn}"><i data-lucide="chevron-up" class="w-4 h-4"></i></button>
+        <button type="button" data-appendix-down onclick="appxMove(${i},1)" title="下移" ${i===arr.length-1?'disabled':''} class="write-only ${appxBtn}"><i data-lucide="chevron-down" class="w-4 h-4"></i></button>
+        <button type="button" data-appendix-remove onclick="appxRemove(${i})" title="解除此附錄關聯" class="write-only w-6 h-6 rounded flex items-center justify-center shrink-0 text-slate-400 hover:bg-white hover:text-red-500"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>`).join('') : `<span class="text-xs text-slate-400">（尚無附錄，允許為空）</span>`;
+    document.getElementById('appxChanged').classList.toggle('hidden',JSON.stringify(draft.appendices)===JSON.stringify(current.appendices));
+    lucide.createIcons();
+  }
+  // 首筆「上移」與末筆「下移」：順序不變且不產生錯誤（AC-20）
+  function appxMove(i,d){
+    if(document.body.dataset.role!=='icsop_admin')return;
+    const arr=draft.appendices, j=i+d;
+    if(j<0||j>=arr.length) return;
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+    renderAppx(); updateChangeBar();
+  }
+  function appxRemove(i){
+    if(document.body.dataset.role!=='icsop_admin')return;
+    draft.appendices.splice(i,1); renderAppx(); updateChangeBar();
+  }
+
   // ----- change bar -----
   function countChanges(){
     let c=0;
@@ -643,6 +692,7 @@
     if(JSON.stringify(draft.using)!==JSON.stringify(current.using))c++;
     if(JSON.stringify(draft.links)!==JSON.stringify(current.links))c++;
     if(JSON.stringify(draft.forms)!==JSON.stringify(current.forms))c++;
+    if(JSON.stringify(draft.appendices)!==JSON.stringify(current.appendices))c++;
     return c;
   }
   function updateChangeBar(){
@@ -659,13 +709,16 @@
     // 必填僅 4 核心：循環別／文件狀態／程序書編號／書名；其餘（內容摘要／版次／公告日期／文件使用部門／制定室別／當責室長-主要）皆選填，可留白日後補齊
     if(!suf||!draft.name.trim()||!draft.lifecycle||!draft.status){toast('error','必填欄位未填寫（循環別／文件狀態／程序書編號／書名）','DOCUMENT_REQUIRED_FIELD_MISSING');return;}
     const statusChanged = draft.status!==current.status;
+    const appxChanged = JSON.stringify(draft.appendices)!==JSON.stringify(current.appendices);
+    const appxCount = draft.appendices.length;
     const reasonEl=document.getElementById('statusReason');
     const reason = reasonEl? reasonEl.value.trim() : '';
     Object.assign(current,JSON.parse(JSON.stringify(draft)));
     rerenderAll();
     if(reasonEl) reasonEl.value='';
     toast('success','已儲存：以新值覆蓋，UUID 不變、不留歷史版本'
-      + (statusChanged ? ('；狀態切換' + (reason ? ('原因「'+reason+'」') : '（未填切換原因）') + '已記入變更歷程') : ''));
+      + (statusChanged ? ('；狀態切換' + (reason ? ('原因「'+reason+'」') : '（未填切換原因）') + '已記入變更歷程') : '')
+      + (appxChanged ? ('；附錄關聯以畫面最終順序整組覆寫，sortOrder 重編為 1–'+appxCount) : ''));
   }
   function cancelAll(){
     draft=JSON.parse(JSON.stringify(current));
@@ -673,7 +726,7 @@
     rerenderAll();
     toast('info','已取消變更，欄位回復為編輯前原值');
   }
-  function rerenderAll(){mountFields();mountStatus();renderSec();renderUse();renderLinks();renderForms();syncNumberPrefix();updateChangeBar();applyRoleDisable();lucide.createIcons();}
+  function rerenderAll(){mountFields();mountStatus();renderSec();renderUse();renderLinks();renderForms();renderAppx();syncNumberPrefix();updateChangeBar();applyRoleDisable();lucide.createIcons();}
 
   function jumpNode(){toast('info','開新視窗前往 DAG 畫布（11 / 12）以節點抽屜改派所屬節點');}
   // OQ-E09-10：.xls 與 ICSOP PDF 各自獨立，不自動轉檔
@@ -727,7 +780,7 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeConfirm();});
 
   // init
-  mountFields();mountStatus();renderSec();renderUse();renderLinks();renderForms();syncNumberPrefix();updateChangeBar();
+  mountFields();mountStatus();renderSec();renderUse();renderLinks();renderForms();renderAppx();syncNumberPrefix();updateChangeBar();
   applyRoleDisable();
   renderSidebar();
   lucide.createIcons();

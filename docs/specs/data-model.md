@@ -1,8 +1,8 @@
 ---
 spec-id: data-model
 title: 資料模型（概念層）
-version: 1.2
-date: 2026-07-17
+version: 1.3
+date: 2026-08-06
 status: Draft
 ---
 
@@ -14,6 +14,7 @@ status: Draft
 > **上游來源之權威定義（欄位對應、階層規則、在職判定、穩定鍵、資料品質實測值）見 [upstream-hr-source-contract.md](upstream-hr-source-contract.md)（2026-07-20 dev 環境唯讀實測定案；資料已遮罩，值層級統計待正式環境覆核）。`ORG_UNIT`／`PERSON`／`ACCOUNT` 三實體之上游對應以該契約為準。**
 > **v1.1（2026-07-16）新增 E09 智慧問答（RAG）相關實體**：DOC_SOURCE_XLS、DOCUMENT_CHUNK、VECTOR_EMBEDDING、INDEX_RUN、QA_LOG；並擴充 AUDIT_LOG（`source` / `qaLogId`）以區分「經 AI 問答導引」之調閱。向量之物理儲存（pgvector / Qdrant / Milvus / MSSQL 2025 向量）由 Architect 選型（見 [open-questions.md](open-questions.md) OQ-E09-03），本文件僅定義概念層實體與其 metadata。
 > **v1.2（2026-07-17）新增 E07 變更歷程（F037/F038）相關實體**：`DOCUMENT_CHANGE_LOG`（文件欄位層變更事件）、`LIFECYCLE_CHANGE_LOG`＋`LIFECYCLE_SNAPSHOT`（循環 DAG 結構變更事件＋快照）；併同定案 `AUDIT_LOG` 之 `targetType`/`actionType` 擴充（涵蓋 F036/F037/F038 調閱事件，OQ-E07-02 已定案 ✅）。完整理由見 architecture-spec.md §4.8。
+> **v1.3（2026-08-06）新增 E10 附錄管理（F039）相關實體**：`APPENDIX_POOL`（附錄池）＋`DOC_APPENDIX`（文件↔附錄多對多關聯，**帶 `sortOrder`**）；併同 `AUDIT_LOG` 之 **additive 擴充**（`targetType` 新增 `APPENDIX`、新增 `appendixId` 參照欄）與 `ICSOP_DOCUMENT` 新增第 20 欄「附錄」。權威規格見 [F039](features/F039-appendix-management.md)。
 
 ## 實體總覽
 
@@ -26,9 +27,11 @@ status: Draft
 | LIFECYCLE | 循環（Life Cycle）池 | 本系統 |
 | LIFECYCLE_NODE | 循環內 DAG 節點 | 本系統 |
 | LIFECYCLE_EDGE | 循環內 DAG 有向邊 | 本系統 |
-| ICSOP_DOCUMENT | ICSOP 文件（19 欄位主體） | 本系統 |
+| ICSOP_DOCUMENT | ICSOP 文件（19 欄位主體＋F039 新增第 20 欄「附錄」） | 本系統 |
 | DOCUMENT_LINK | 文件連結點（文件間關聯） | 本系統 |
 | DOCUMENT_ATTACHMENT | 附件（ICSOP PDF / OJT / 使用表單） | 本系統（檔案於 Azure Blob） |
+| APPENDIX_POOL | 附錄池（跨文件共用之補充說明/對照表/範例，F039） | 本系統（檔案於 Azure Blob） |
+| DOC_APPENDIX | 文件↔附錄多對多關聯（帶每份文件內之顯示序位 `sortOrder`，F039） | 本系統 |
 | SYNC_RUN | 同步執行紀錄 | 本系統 |
 | ORG_CHANGE_ALERT | 組織異動待確認提示 | 本系統 |
 | AUDIT_LOG | 稽核紀錄（append-only） | 本系統 |
@@ -207,7 +210,7 @@ status: Draft
 
 ## ICSOP 文件 ICSOP_DOCUMENT {#document-entity}
 
-19 欄位權威定義（來源：E04 epic-brief）。**唯一權威欄位清單**，其他文件皆引用此表。UI 顯示標籤（實體名維持「ICSOP 文件」）：文件編號＝「程序書編號」、文件名稱＝「程序書書名」、文件連結點＝「連結點程序書」、所屬循環＝「循環別」、ICSOP PDF＝「檔案」。
+欄位權威定義（來源：E04 epic-brief；1–19 欄為 2026-07-17 定案之 19 欄制，第 20 欄「附錄」由 [F039](features/F039-appendix-management.md) 於 2026-08-06 新增）。**唯一權威欄位清單**，其他文件皆引用此表。UI 顯示標籤（實體名維持「ICSOP 文件」）：文件編號＝「程序書編號」、文件名稱＝「程序書書名」、文件連結點＝「連結點程序書」、所屬循環＝「循環別」、ICSOP PDF＝「檔案」。
 
 | # | 欄位 | 屬性名 | 基數 | 說明 | 可寫角色 |
 |---|------|--------|------|------|----------|
@@ -230,7 +233,9 @@ status: Draft
 | 17 | OJT 實體簽到表 | attachment(OJT_SIGNIN) | 1 | pdf 或圖片，覆蓋式 | ICSOPAdmin |
 | 18 | 文件名稱（程序書書名） | documentName | 1 | 人為定義之可讀標題，與編號分離；前台清單顯示、關鍵字搜尋涵蓋（OQ-DATA-01） | ICSOPAdmin |
 | 19 | 內容摘要 | contentSummary | 1 | 程序書內容摘要（可讀文字）**新增** | ICSOPAdmin |
+| 20 | 附錄 | appendixIds | 0..* | → APPENDIX_POOL（經 [DOC_APPENDIX](#doc-appendix)，**有序**，`sortOrder` 1..N）；excel/pdf，Azure Blob，跨文件共用**（F039 新增，2026-08-06）** | ICSOPAdmin |
 
+- **第 20 欄「附錄」（2026-08-06，[F039](features/F039-appendix-management.md)）**：與第 15 欄「使用表單」同性質（皆為池模型之多對多共用檔案），差異在**附錄帶每份文件內之顯示順序** `DOC_APPENDIX.sortOrder`。⚠ **既有落差（不逕改他人 spec）**：多份文件／stories 之散文仍以「19 欄」指涉本表（F010／F011／F017／F026／F037／architecture-spec／E04 epic-brief），**既有 1–19 之欄位序號與屬性名一律不變動**（下游 `fieldName` 字串不受影響），僅新增第 20 列；「19 欄」措辭之全域同步已登錄 [open-questions.md](open-questions.md) OQ-E10-03。
 - **欄位調整（2026-07-17 定案）**：移除「當責部門 accountableDeptId」（由制定公司/部門/室別承接組織歸屬；**當責室長保留**）；新增 制定公司/制定部門/制定室別/內容摘要；「發布日期」改名「公告日期 announcedDate」；「人為版本號」改名「版次 edition」（格式 `{YY}'{NN}`）。
 - **狀態顯示**：儲存維持 有效/失效/作廢（F012 手動切換）；清單/統計卡以公告日期把「有效」衍生顯示為 已公告（已過）/進度中（未到）。
 - **建立時必填（F010，2026-07-17 定案）**：新增文件僅強制 4 項核心必填——所屬循環（循環別）、文件狀態、文件編號、文件名稱；表中其餘欄位之基數代表「完整/目標狀態」，建立時可留白、日後經編輯（F011/F014）補齊（未填公告日期者狀態顯示為進度中）。制定三級於表單以**由上而下**（公司→部門→室別）相依選取。
@@ -274,6 +279,41 @@ status: Draft
 - 存取須經權限驗證＋短效期憑證（SAS Token），禁止直接猜測網址存取（[NFR-002](nfr.md#security)）。
 - 檔案大小上限與允許格式清單為 open-questions。
 - **相關功能**：F016、F018、F020。
+
+## 附錄池 APPENDIX_POOL {#appendix-entity}
+
+跨文件共用之附錄（補充說明、對照表、範例文件），採**池模型**：一份附錄可被 0..* 份 ICSOP 文件引用（關聯見 [DOC_APPENDIX](#doc-appendix)）。**覆蓋式，不保留歷史版本**（比照全域「僅保存當前版本」原則）。權威規格：[F039](features/F039-appendix-management.md)。
+
+| 屬性 | 說明 | 必填 |
+|------|------|------|
+| id | 系統 UUID | 是 |
+| name | 附錄名稱（建議 nvarchar(400)）；上傳時可自訂，trim 後量測；空白／未提供 → fallback 原始檔名；> 400 字元 → `APPENDIX_NAME_TOO_LONG` | 是 |
+| blobPath | Azure Blob 參照路徑（**不綁定單一文件**，因附錄為多對多共用） | 是 |
+| format | 副檔名（`xlsx` / `xls` / `pdf`），供清單「格式」欄與格式篩選（`excel` 篩選 ＝ `xlsx` ∪ `xls`） | 是 |
+| size | 檔案大小（bytes），上限 50MB（含邊界） | 是 |
+| uploadedBy / uploadedAt | 上傳（或最後覆蓋）者帳號與時間；**管理端操作記錄，非前台調閱稽核** | 是 |
+
+- 欄位形狀刻意與既有 `USAGE_FORM_POOL`（F018 實作）同構，以共用上傳／覆蓋／移除之驗證與 Blob 存取機制。
+- 存取須經權限驗證＋短效期憑證（SAS Token），禁止直接猜測網址存取（[NFR-002](nfr.md#security)）。
+- **覆蓋語意**：新檔寫入後更新 `blobPath`/`format`/`size`/`uploadedBy`/`uploadedAt` 並回收舊 blob；**名稱不隨覆蓋改變**。關聯文件數 ≥ 2 且未二次確認 → `APPENDIX_OVERWRITE_SHARED`（409）。
+- **移除**：關聯文件數 ≥ 1 且未二次確認 → `APPENDIX_IN_USE`（409）；確認後解除全部關聯＋刪除記錄＋回收 blob。
+- ⚠ **既有落差**：`USAGE_FORM_POOL`／`DOC_USAGE_FORM`（F018 已實作）尚未登錄於本文件，屬既有文件缺口，見 [open-questions.md](open-questions.md) OQ-E10-05。
+- **相關功能**：F039、F023（下載稽核）、F026（欄位權限）。
+
+### 文件↔附錄關聯 DOC_APPENDIX {#doc-appendix}
+
+| 屬性 | 說明 | 必填 |
+|------|------|------|
+| documentId | → ICSOP_DOCUMENT | 是 |
+| appendixId | → APPENDIX_POOL | 是 |
+| sortOrder | **該文件內之顯示序位**，1-based 整數 | 是 |
+
+- **唯一性**：`(documentId, appendixId)` 唯一（同一附錄於同一文件至多一筆）；建議複合主鍵，比照 `DOC_USAGE_FORM`。`appendixId` 另建索引供「關聯文件數」查詢。
+- **不變式（invariant）**：同一 `documentId` 之 `sortOrder` 集合恆為 **{1, 2, …, N} 之連續整數且互異**——新選取者取 `max(sortOrder)+1`（末位）；上移／下移為相鄰互換；解除關聯後剩餘列依原相對順序重新編號為 1..N（不留缺口）。
+- **排序之權威寫入路徑**：建立／編輯畫面送出「已選＋排序」最終狀態，以 delete-then-insert **replace-set（單一交易）** 依陣列索引重寫 `sortOrder`（比照 [F014](features/F014-accountable-dept-chief.md) 多值欄位既有模式）。
+- ⚠ **給 system-architect**：`(documentId, sortOrder)` 是否加唯一索引須權衡——重排期間之中間態會暫時違反唯一性（MSSQL 無 deferred constraint），可行解為「同一交易內先刪後插」或不加該唯一索引而以服務層保證。此為實作決策，見 [open-questions.md](open-questions.md) OQ-E10-02。
+- **前後台呈現**：`GET /documents/:documentId/appendices` 一律 `ORDER BY sortOrder ASC`，前後台共用（F039 AC-25）。
+- **相關功能**：F039、F010、F011、F019。
 
 ## 同步執行紀錄 SYNC_RUN {#syncrun-entity}
 
@@ -324,11 +364,12 @@ status: Draft
 | id | 系統 UUID | 是 |
 | accountId | 操作者帳號 | 是 |
 | employeeNo / name / department / section | 操作者身分快照（與浮水印同一來源） | 是 |
-| documentId / documentNumber | 被調閱文件（**條件必填**：`targetType∈{DOCUMENT, USAGE_FORM, DOCUMENT_CHANGE_LOG}` 時必填，其餘為 null） | 否 |
+| documentId / documentNumber | 被調閱文件（**條件必填**：`targetType∈{DOCUMENT, USAGE_FORM, APPENDIX, DOCUMENT_CHANGE_LOG}` 時必填，其餘為 null） | 否 |
 | lifecycleId / lifecycleName | 被調閱循環（**新增**；**條件必填**：`targetType∈{LIFECYCLE, LIFECYCLE_CHANGE_LOG}` 時必填，其餘為 null） | 否 |
-| targetType | `DOCUMENT` / `USAGE_FORM` / `LIFECYCLE`（F036 循環樹狀圖）/ `DOCUMENT_CHANGE_LOG`（F037 變更歷程）/ `LIFECYCLE_CHANGE_LOG`（F038 循環變更歷程）/ `ORG_CHANGE_ALERT`（**新增**，F006 組織異動提示處理） | 是 |
+| targetType | `DOCUMENT` / `USAGE_FORM` / `APPENDIX`（**新增**，F039 附錄下載）/ `LIFECYCLE`（F036 循環樹狀圖）/ `DOCUMENT_CHANGE_LOG`（F037 變更歷程）/ `LIFECYCLE_CHANGE_LOG`（F038 循環變更歷程）/ `ORG_CHANGE_ALERT`（F006 組織異動提示處理） | 是 |
 | formId | 使用表單附件（targetType=USAGE_FORM 時） | 否 |
-| actionType | `VIEW` / `DOWNLOAD` / `PRINT`（既有，`targetType=DOCUMENT/USAGE_FORM` 適用）／`LIFECYCLE_VIEW` / `LIFECYCLE_DOWNLOAD` / `LIFECYCLE_PRINT`（`targetType=LIFECYCLE`，F036）／`CHANGE_LOG_VIEW`（`targetType=DOCUMENT_CHANGE_LOG`，F037）／`LIFECYCLE_CHANGELOG_VIEW` / `LIFECYCLE_CHANGELOG_DOWNLOAD`（`targetType=LIFECYCLE_CHANGE_LOG`，F038）／`ALERT_RESOLVED`（**新增**，`targetType=ORG_CHANGE_ALERT`，F006 提示解除） | 是 |
+| appendixId | 附錄池記錄（**新增**，→ APPENDIX_POOL；**條件必填**：`targetType=APPENDIX` 時必填，其餘為 null） | 否 |
+| actionType | `VIEW` / `DOWNLOAD` / `PRINT`（既有，`targetType=DOCUMENT/USAGE_FORM` 適用）／`DOWNLOAD`（**`targetType=APPENDIX` 之唯一合法動作**，F039）／`LIFECYCLE_VIEW` / `LIFECYCLE_DOWNLOAD` / `LIFECYCLE_PRINT`（`targetType=LIFECYCLE`，F036）／`CHANGE_LOG_VIEW`（`targetType=DOCUMENT_CHANGE_LOG`，F037）／`LIFECYCLE_CHANGELOG_VIEW` / `LIFECYCLE_CHANGELOG_DOWNLOAD`（`targetType=LIFECYCLE_CHANGE_LOG`，F038）／`ALERT_RESOLVED`（**新增**，`targetType=ORG_CHANGE_ALERT`，F006 提示解除） | 是 |
 | watermarkSnapshot | 當次浮水印完整字串快照（`DOWNLOAD`/`PRINT` 系列動作皆須填；純 `VIEW` 系列亦填，與檢視器疊加一致） | 是 |
 | occurredAt | 伺服器時間戳記 | 是 |
 | source | `DIRECT`(一般前台路徑) / `AI_QA`(經 AI 智慧問答導引)，預設 `DIRECT`（E09 US-097） | 是 |
@@ -339,8 +380,11 @@ status: Draft
 - **問答事件本身**（提問→回答）記於 [QA_LOG](#qalog-entity)，非以 `actionType` 表示；經 AI 問答導引之檢視/下載仍寫本表，並以 `source=AI_QA`＋`qaLogId` 標示來源（F034）。
 - **[OQ-E07-02 已定案 ✅，system-architect 2026-07-17]** 循環樹狀圖預覽（[F036](features/F036-lifecycle-tree-preview.md)）之檢視/下載/列印、變更歷程（[F037](features/F037-document-change-history.md)／[F038](features/F038-lifecycle-tree-change-history.md)）之查詢檢視/下載，皆屬「**調閱/存取事件**」（誰在何時存取了什麼），與既有 VIEW/DOWNLOAD/PRINT 語意一致，**擴充本表**（`targetType`＋`actionType` 各新增列舉值，見上）而非另建稽核表；三個 feature（F036/F037/F038）共用同一組決策，家族一致。決策理由：(1) 這些動作的資料形狀（操作者/時間/被存取對象/浮水印快照）與既有 VIEW/DOWNLOAD/PRINT 完全同構，另建表僅為重複 schema；(2) `documentId`/`lifecycleId` 皆改為條件必填（依 `targetType` 二擇一），不強迫每列填滿兩組外鍵；(3) `actionType` 沿用 feature spec 既有文字定義之草案動作名（`CHANGE_LOG_VIEW` 等）逐字落地，不重新發明命名以維持與已核准 spec 文件（F036/F037/F038 AC、US-062/US-063 AC）之字面一致性，降低下游 test-designer/tdd-developer 之轉譯落差風險。
 - **[OQ-E07-02 已定案 ✅]** 變更歷程記錄的是「**資料異動事件**」本體（欄位/結構層 old→new diff），與上述「調閱事件」性質不同（前者是「什麼被改了」，後者是「誰看了什麼」），**不併入本表**，另建獨立實體 [DOCUMENT_CHANGE_LOG](#documentchangelog-entity)、[LIFECYCLE_CHANGE_LOG](#lifecyclechangelog-entity)、[LIFECYCLE_SNAPSHOT](#lifecyclesnapshot-entity)（詳見下方「變更歷程相關實體」）。不併表理由：(1) 欄位形狀截然不同（`fieldName`/`oldValue`/`newValue` 或 `changeType`/`entityType`/`beforeValue`/`afterValue` vs 本表之 `actionType`/`watermarkSnapshot`），併表將產生大量依 `targetType` 才有意義的稀疏可空欄位（polymorphic 反樣式），複雜化本表既有查詢；(2) 一致性模型不同——本表為 Outbox 非阻斷寫入（§5.5），變更歷程須與來源交易強一致（見 architecture-spec.md §5.9，遺失即等同稽核造假，不可退化為 best-effort）；(3) 獨立表使 [OQ-NFR003](open-questions.md) 之「變更歷程是否需獨立保留政策」在不修改本表結構前提下即可彈性套用不同歸檔策略。
+- **`APPENDIX` 擴充（F039，2026-08-06，additive）**：前台下載附錄須寫本表。變更為**純新增**——`targetType` 聯集新增字面值 `APPENDIX`、新增參照欄 `appendixId`（nullable），**既有 6 種 targetType 之語意與既有欄位皆不變**（比照 `ORG_CHANGE_ALERT`／`LIFECYCLE_DELETE` 之先例）。落列規則：`targetType='APPENDIX'` 時 `appendixId`＋`documentId` 皆必填（附錄下載恆發生於某份文件之詳情頁脈絡），`formId`／`lifecycleId` 為 null，`actionType` 恆為 `DOWNLOAD`，`watermarkSnapshot` 為 null（附錄**不燒錄浮水印**，OQ-E05-03 定案沿用）。
+  - **`buildAuditRow` 之 switch 對映**須新增 `APPENDIX → appendixId` 分支（既有分支 `DOCUMENT→documentId`／`USAGE_FORM→formId`／`LIFECYCLE→lifecycleId` 不動）。
+  - **[F024](features/F024-access-history-query.md) 類型篩選歸屬（定案）**：`APPENDIX` 歸入既有「**文件**」類，即 `kindToTargetTypes('文件') = ['DOCUMENT', 'USAGE_FORM', 'APPENDIX']`。理由：附錄下載與使用表單下載同為「對某份文件之附屬檔案之調閱」，語意同群；**不新增第四種類型篩選值**，F024 之 UI 篩選選項與匯出範本皆不需變更。
 - 保留年限草案 ≥ 3 年（[NFR-003](nfr.md#audit-retention)，待確認）。
-- **相關功能**：F020、F023、F024、F034、F036、F037、F038。
+- **相關功能**：F020、F023、F024、F034、F036、F037、F038、F039。
 
 ---
 

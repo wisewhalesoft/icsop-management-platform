@@ -15,7 +15,9 @@ export type FileCategory =
   | 'ICSOP_PDF'
   | 'OJT_SIGNIN'
   | 'USAGE_FORM'
-  | 'XLS_SOURCE';
+  | 'XLS_SOURCE'
+  // F039 附錄池（additive：僅新增類別，既有四類之白名單逐字不動）。
+  | 'APPENDIX';
 
 /** 各類別允許之副檔名（小寫，不含點）。 */
 export const ALLOWED_FORMATS: Record<FileCategory, readonly string[]> = {
@@ -23,6 +25,8 @@ export const ALLOWED_FORMATS: Record<FileCategory, readonly string[]> = {
   OJT_SIGNIN: ['pdf', 'jpg', 'jpeg', 'png'],
   USAGE_FORM: ['xlsx', 'xls', 'pdf'],
   XLS_SOURCE: ['xls'],
+  // F039：附錄＝xlsx／xls／pdf（與使用表單同白名單，大小上限沿用 MAX_FILE_SIZE_BYTES）。
+  APPENDIX: ['xlsx', 'xls', 'pdf'],
 };
 
 export interface FileDescriptor {

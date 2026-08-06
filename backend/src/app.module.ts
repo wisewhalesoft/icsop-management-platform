@@ -12,6 +12,7 @@ import { AuditModule } from './audit/audit.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { XlsSourceModule } from './xls-source/xls-source.module';
 import { UsageFormsModule } from './usage-forms/usage-forms.module';
+import { AppendicesModule } from './appendices/appendices.module';
 import { PublicModule } from './public/public.module';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { ChangeHistoryModule } from './change-history/change-history.module';
@@ -35,6 +36,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
     AttachmentsModule,
     XlsSourceModule,
     UsageFormsModule,
+    // F039 附錄管理（附錄池 CRUD ＋ 文件多對多關聯與 sortOrder ＋ 前台下載稽核）。
+    AppendicesModule,
     PublicModule,
     IngestionModule,
     ChangeHistoryModule,

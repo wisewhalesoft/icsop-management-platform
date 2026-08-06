@@ -91,6 +91,7 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
     vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(detailOf());
     vi.mocked(api.documentDownloadUrl).mockImplementation((id) => `/public/documents/${id}/download`);
     vi.mocked(api.documentPrintUrl).mockImplementation((id) => `/public/documents/${id}/print`);
+    vi.mocked(api.getDocumentAppendices).mockResolvedValue([]); // F039：預設無關聯附錄，個別測試覆寫
   });
 
   it('以路由 id 呼叫 getPublicDocumentDetail 並顯示標題（編號＋書名＋狀態）', async () => {
@@ -202,5 +203,55 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
     );
     renderDetail();
     expect(await screen.findByRole('alert')).toHaveTextContent('NETWORK_ERROR');
+  });
+
+  describe('F039 附錄依 sortOrder 遞增呈現（prototype 04；前後台順序一致，AC-25）', () => {
+    const APPX = [
+      { id: 'ax1', name: '作業流程對照表.xlsx', format: 'xlsx' as const, sortOrder: 1 },
+      { id: 'ax2', name: '名詞定義說明.pdf', format: 'pdf' as const, sortOrder: 2 },
+      { id: 'ax8', name: '共用名詞附錄.xlsx', format: 'xlsx' as const, sortOrder: 3 },
+    ];
+
+    it('AC-25 三筆附錄依 sortOrder 遞增列出，各自提供下載', async () => {
+      vi.mocked(api.getDocumentAppendices).mockResolvedValue(APPX);
+      renderDetail();
+      await screen.findByRole('heading', { name: '車輛分期進件作業' });
+      const names = screen
+        .getAllByText(/^(作業流程對照表\.xlsx|名詞定義說明\.pdf|共用名詞附錄\.xlsx)$/)
+        .map((e) => e.textContent);
+      expect(names).toEqual(['作業流程對照表.xlsx', '名詞定義說明.pdf', '共用名詞附錄.xlsx']);
+    });
+
+    it('AC-27 前台下載附錄 → 呼叫 downloadDocumentAppendix(documentId, appendixId)（寫入稽核，與後台管理端下載不同）', async () => {
+      vi.mocked(api.getDocumentAppendices).mockResolvedValue(APPX);
+      vi.mocked(api.downloadDocumentAppendix).mockResolvedValue({ url: 'https://x/appendix', expiresInSeconds: 60 });
+      const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+      renderDetail();
+      await screen.findByRole('heading', { name: '車輛分期進件作業' });
+      await userEvent.click(screen.getByRole('button', { name: /下載.*作業流程對照表\.xlsx/ }));
+      await waitFor(() =>
+        expect(api.downloadDocumentAppendix).toHaveBeenCalledWith(
+          'a3f81c22-9e04-4b7a-8f2d-e2c9d1748e2f',
+          'ax1',
+        ),
+      );
+      expect(openSpy).toHaveBeenCalled();
+      openSpy.mockRestore();
+    });
+
+    it('AC-26 無關聯附錄 → 顯示「無附錄」，非錯誤、非空白區塊', async () => {
+      vi.mocked(api.getDocumentAppendices).mockResolvedValue([]);
+      renderDetail();
+      await screen.findByRole('heading', { name: '車輛分期進件作業' });
+      expect(await screen.findByText('無附錄')).toBeInTheDocument();
+    });
+
+    it('AC-29 附錄下載內容為原始位元組，呈現層不含浮水印徽章（不同於 ICSOP PDF 附件）', async () => {
+      vi.mocked(api.getDocumentAppendices).mockResolvedValue(APPX);
+      renderDetail();
+      await screen.findByRole('heading', { name: '車輛分期進件作業' });
+      const appendixSection = screen.getByText('作業流程對照表.xlsx').closest('div')!;
+      expect(within(appendixSection).queryByText(/燒錄浮水印/)).toBeNull();
+    });
   });
 });

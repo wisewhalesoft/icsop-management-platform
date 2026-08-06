@@ -10,6 +10,9 @@ import {
   searchPersons,
   getUsageFormPool,
   getDocumentForms,
+  getAppendixPool,
+  getDocumentAppendices,
+  replaceDocumentAppendices,
   getDocumentAttachments,
   updateDocument,
   linkUsageForms,
@@ -136,6 +139,10 @@ export function DocumentEditPage(): JSX.Element {
   const [formPool, setFormPool] = useState<UsageFormRecord[]>([]);
   const [origForms, setOrigForms] = useState<ComboOption[]>([]);
   const [draftForms, setDraftForms] = useState<ComboOption[]>([]);
+  // F039 附錄：**有序**清單（載入即為後端依 sortOrder 遞增之順序；前端不再排序）。
+  const [appendixPool, setAppendixPool] = useState<{ id: string; name: string }[]>([]);
+  const [origAppendices, setOrigAppendices] = useState<ComboOption[]>([]);
+  const [draftAppendices, setDraftAppendices] = useState<ComboOption[]>([]);
   const [busy, setBusy] = useState(false);
   /** F012 切換原因（選填；僅於狀態實際變更時顯示，儲存/取消/回原狀態時清空）。prototype 15 statusReasonWrap。 */
   const [statusReason, setStatusReason] = useState('');
@@ -161,6 +168,15 @@ export function DocumentEditPage(): JSX.Element {
           const opts = fs.map((f) => ({ value: f.id, label: f.name }));
           setOrigForms(opts);
           setDraftForms(opts);
+        })
+        .catch(() => undefined);
+      void getAppendixPool().then(setAppendixPool).catch(() => undefined);
+      void getDocumentAppendices(id)
+        .then((axs) => {
+          // 後端已依 sortOrder 遞增回傳（唯一排序權威）→ 直接沿用，不於前端再排序。
+          const opts = axs.map((a) => ({ value: a.id, label: a.name }));
+          setOrigAppendices(opts);
+          setDraftAppendices(opts);
         })
         .catch(() => undefined);
       void getDocumentAttachments(id).then(setAttachments).catch(() => undefined);
@@ -241,6 +257,10 @@ export function DocumentEditPage(): JSX.Element {
   const formOptions = useMemo<ComboOption[]>(
     () => formPool.map((f) => ({ value: f.id, label: f.name })),
     [formPool],
+  );
+  const appendixOptions = useMemo<ComboOption[]>(
+    () => appendixPool.map((a) => ({ value: a.id, label: a.name })),
+    [appendixPool],
   );
   const primaryOptions = useMemo<ComboOption[]>(() => {
     if (primaryChiefOrig && !personResults.some((o) => o.value === primaryChiefOrig.value)) {
@@ -346,21 +366,41 @@ export function DocumentEditPage(): JSX.Element {
     () => JSON.stringify(draftForms.map((f) => f.value).sort()) !== JSON.stringify(origForms.map((f) => f.value).sort()),
     [draftForms, origForms],
   );
+  /** ⚠ 附錄之比對**順序敏感**（純重排亦屬變更，AC-20/AC-23）；使用表單則為集合比對（無序）。 */
+  const appendicesChanged = useMemo(
+    () =>
+      JSON.stringify(draftAppendices.map((a) => a.value)) !==
+      JSON.stringify(origAppendices.map((a) => a.value)),
+    [draftAppendices, origAppendices],
+  );
   const changeCount = useMemo(() => {
     if (!draft || !orig) return 0;
     let c = 0;
     for (const k of Object.keys(orig) as (keyof Draft)[]) if (changed(k)) c++;
     if (formsChanged) c++;
+    if (appendicesChanged) c++;
     return c;
-  }, [draft, orig, changed, formsChanged]);
+  }, [draft, orig, changed, formsChanged, appendicesChanged]);
+
+  /** 附錄上移／下移（AC-20）：首項上移、末項下移皆為 no-op，順序不變且不產生錯誤。 */
+  const moveAppendix = useCallback((index: number, delta: number) => {
+    setDraftAppendices((prev) => {
+      const to = index + delta;
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[to]] = [next[to], next[index]];
+      return next;
+    });
+  }, []);
 
   const cancelAll = useCallback(() => {
     if (!orig) return;
     setDraft(copyDraft(orig));
     setDraftForms(origForms);
+    setDraftAppendices(origAppendices);
     setStatusReason(''); // 比照 prototype 15 cancelAll 之 reasonEl.value=''。
     toast.info('已取消變更，欄位回復為編輯前原值');
-  }, [orig, origForms, toast]);
+  }, [orig, origForms, origAppendices, toast]);
 
   const save = useCallback(async () => {
     if (!draft || !orig || !canWrite) return;
@@ -414,6 +454,12 @@ export function DocumentEditPage(): JSX.Element {
         for (const f of origForms) if (!draftIds.has(f.value)) await unlinkUsageForm(id, f.value);
         setOrigForms(draftForms);
       }
+      // F039（architecture-spec §3.6 決策二）：附錄以畫面最終順序**整組覆寫**（PUT replace-set），
+      // 刻意**不**採使用表單之 diff-based link/unlink——後者無法表達「純重排」之最終狀態。
+      if (appendicesChanged) {
+        await replaceDocumentAppendices(id, draftAppendices.map((a) => a.value));
+        setOrigAppendices(draftAppendices);
+      }
       // 切換原因已隨 PATCH 送出並記入變更歷程 → 清空（比照 prototype 15 saveAll 之 reasonEl.value=''）。
       setStatusReason('');
       toast.success('已儲存：以新值覆蓋，UUID 不變、不留歷史版本');
@@ -422,7 +468,7 @@ export function DocumentEditPage(): JSX.Element {
     } finally {
       setBusy(false);
     }
-  }, [draft, orig, canWrite, suffix, dupHit, changed, formsChanged, origForms, draftForms, id, statusReason, toast]);
+  }, [draft, orig, canWrite, suffix, dupHit, changed, formsChanged, origForms, draftForms, appendicesChanged, draftAppendices, id, statusReason, toast]);
 
   const onUpload = useCallback(
     async (kind: 'pdf' | 'ojt', file: File | null) => {
@@ -840,6 +886,48 @@ export function DocumentEditPage(): JSX.Element {
         )}
       </section>
 
+      {/* 附錄（F039；prototype 15「附錄」section） */}
+      <section className="bg-white border border-slate-200 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <Icon name="paperclip" className="w-4 h-4 text-primary-600" />
+          <h2 className="font-semibold text-slate-900">附錄</h2>
+          <span className="text-xs text-slate-400">（自「附錄管理」附錄池選取）</span>
+          {appendicesChanged && <ChangedPill />}
+        </div>
+        <p className="text-xs text-slate-400 mb-3 flex items-start gap-1.5">
+          <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span>
+            此處為「選取關聯」而非上傳；附錄本體於「附錄管理」維護。可多選、允許為空；
+            <strong className="text-slate-500">新選取者一律加入末位</strong>
+            ，以「上移／下移」調整顯示順序（<strong className="text-slate-500">不支援拖曳</strong>
+            ），解除其中一筆後其餘相對順序不變、重新編號為連續 1..N；前台與後台詳情頁一律依此順序呈現，
+            可個別下載（下載寫入稽核）。
+          </span>
+        </p>
+        {canWrite ? (
+          <MultiSearchCombobox
+            id="edAppendices"
+            label={<span className="sr-only">附錄</span>}
+            options={appendixOptions.filter((o) => !draftAppendices.some((a) => a.value === o.value))}
+            values={draftAppendices}
+            onAdd={(opt) => setDraftAppendices((prev) => [...prev, opt])}
+            onRemove={(v) => setDraftAppendices((prev) => prev.filter((o) => o.value !== v))}
+            placeholder="搜尋並選取附錄（自附錄池）…"
+            emptyChipText="（尚無附錄，允許為空）"
+            orderable
+            onMoveUp={(i) => moveAppendix(i, -1)}
+            onMoveDown={(i) => moveAppendix(i, 1)}
+            removeTitle="解除此附錄關聯"
+            itemIcon={(o) => (/\.pdf$/i.test(o.label) ? 'file-text' : 'file-spreadsheet')}
+          />
+        ) : (
+          <ReadonlyOrderedAppendices
+            values={draftAppendices}
+            emptyText="（尚無附錄，允許為空）"
+          />
+        )}
+      </section>
+
       <div className="h-4" />
 
       {/* G-DOC-202：切換為「作廢」之確認 modal（破壞性動作二次確認；逐字比對 prototype 15 confirmModal）。 */}
@@ -937,6 +1025,41 @@ function ComboDiff({ label, changed, currentText, children }: {
 
 function ChangedPill(): JSX.Element {
   return <span className="ml-1 inline-block text-[10px] px-1.5 py-0.5 rounded bg-primary-100 text-primary-700">已變更</span>;
+}
+
+/**
+ * 唯讀有序附錄清單（F039）：唯讀角色僅見序號＋名稱，無搜尋框、無上移／下移／解除入口。
+ * DOM 標記沿用 prototype 15 之 data-appendix-* 契約（與 e2e fidelity 斷言一致）。
+ */
+function ReadonlyOrderedAppendices({ values, emptyText }: {
+  values: ComboOption[]; emptyText: string;
+}): JSX.Element {
+  if (values.length === 0) {
+    return <span className="text-xs text-slate-400">{emptyText}</span>;
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      {values.map((v, i) => (
+        <div
+          key={v.value}
+          data-appendix-item=""
+          data-appendix-order={i + 1}
+          className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5"
+        >
+          <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+            {i + 1}
+          </span>
+          <Icon
+            name={/\.pdf$/i.test(v.label) ? 'file-text' : 'file-spreadsheet'}
+            className="w-4 h-4 text-slate-400 shrink-0"
+          />
+          <span data-appendix-name className="text-sm text-slate-700 flex-1 truncate">
+            {v.label}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** 唯讀多值 chips（唯讀角色：prototype 15 之 write-only 入口不顯示，僅保留 chips）。 */
