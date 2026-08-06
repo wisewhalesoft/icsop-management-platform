@@ -165,13 +165,12 @@ export interface AuditRow {
   lifecycleName: string | null;
   formId: string | null;
   /**
-   * F039 附錄 id（僅 targetType='APPENDIX' 之列非 null，比照 formId 之條件必填語意）。
-   * ⚠ 宣告為**選填**（非 architecture-spec §3.6 決策三字面之必填）：既有列建構點（如
-   * access-history-filter 之測試夾具、外部 Outbox 反序列化之舊列）不帶此鍵，宣告為必填會使
-   * 既有 6 種 targetType 之呼叫端全面破裂——違反該決策自身「additive、既有語意不變」之要求。
-   * 生產路徑（buildAuditRow／TypeOrmAuditStore.toRow）一律顯式填入（非 APPENDIX 列為 null）。
+   * F039 附錄 id（僅 targetType='APPENDIX' 之列非 null）。
+   * **必填**（architecture-spec §3.6 決策三／§4.9「比照現行 formId／lifecycleId／documentId」）：
+   * 該三個既有條件必填欄於各建構點皆顯式帶 null，非可省略；appendixId 走同一慣例，
+   * 不另開選填先例。所有建構點（buildAuditRow／TypeOrmAuditStore.toRow）皆顯式填值。
    */
-  appendixId?: string | null;
+  appendixId: string | null;
   /** 對象名稱／說明快照（供 F024 明細；非 data-model 現有欄，見 impl log flag）。 */
   targetName: string | null;
   watermarkSnapshot: string | null;

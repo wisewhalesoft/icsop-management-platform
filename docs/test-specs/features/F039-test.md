@@ -219,12 +219,24 @@ status: draft
 
 ## 開放設計問題 / risks-and-gaps
 
-- **R-F039-01（前台詳情頁附錄資料來源之整合彈性）**：`PublicDocumentDetailPage` 現行 `usageForms`／`attachments`／`links` 皆內嵌於單一 `getPublicDocumentDetail()` 回應（見既有 `PublicDocumentDetailPage.test.tsx`），而附錄依 architecture-spec §3.6 決策五明訂之獨立 `getDocumentAppendices()` 呼叫方式撰寫本次測試（與後台 `DocumentReadonlyPage` 共用同一介面函式，呼應 spec「前後台共用同一 API」之明文要求）。若 tdd-implementation 選擇改為將附錄陣列一併內嵌進 `PublicDocumentDetail` 型別（而非獨立呼叫），前端測試需對應調整 mock 方式；此為合理的實作彈性落差，不影響後端契約本身（後端仍是單一 `GET /documents/:documentId/appendices` 端點），故非阻塞性歧義，若實作端有此需求應知會 test-generator 調整。
+- **R-F039-01（前台詳情頁附錄資料來源之整合彈性）— 已解除**：原記錄「`PublicDocumentDetailPage` 現行 usageForms/attachments/links 皆內嵌於單一回應，附錄改採獨立 `getDocumentAppendices()` 呼叫」之實作彈性風險。tdd-implementation 實作後 `PublicDocumentDetailPage.test.tsx`（含 AC-25/27/29 三個附錄測試）全數綠燈、未對此提出申訴或調整，確認實作採用與本測試假設一致之獨立呼叫方式。無需後續動作。
 
-- **R-F039-02（Playwright 導覽路徑之未確認慣例）**：`DocumentCreatePage`／文件詳情頁之確切前端路由（如 `/admin/documents/new`）與清單列的導覽方式（`<a href>` vs `onClick`）未見於任何本次授權讀取之來源（僅 `AppendixManagementPage` 路由 `/admin/appendices` 由 architecture-spec §3.6 決策五明文授權）。`fidelity-document-appendix-ordering.spec.ts`／`fidelity-document-appendix-detail.spec.ts` 已改採「尋找符合 href pattern 之連結，找不到則優雅略過」之防禦性寫法，避免因猜錯導覽慣例而產生假紅；惟若實際導覽慣例確為此 href pattern 之外的其他形式，這兩支測試將恆為 skip 而非提供真實保護。建議 tdd-implementation 完成後由後續 pass 依實際路由回頭補強（非本輪阻塞項）。
+- **R-F039-02（Playwright 導覽路徑之未確認慣例）— 已解除**：原記錄 `DocumentCreatePage` 之 `/admin/documents/new` 路由未經授權來源證實之風險。經 tdd-implementation 於 2026-08-07 確認：`/admin/documents/new` 為 `App.tsx` 既有路由（F010 既有功能，本次未變更），本次唯一新增路由為 architecture-spec 明文授權之 `/admin/appendices`。`fidelity-document-appendix-ordering.spec.ts` 之防禦性 href-pattern 導覽與實際路由一致，不會誤觸 skip 分支，可提供真實保護，無需回頭補強。
 
 - **R-F039-03（Playwright 執行狀態）**：本環境之 docker 堆疊實際在執行中（frontend :5173、backend :3000 皆有回應），但 `.env`／環境變數未設定 `E2E_LOGIN_ID`／`E2E_PASSWORD`／`E2E_COMPANY`（`e2e/global-setup.ts` 之必要登入憑證），故本次未能實際執行 Playwright 對真實堆疊之驗證，僅以 `npx playwright test --list` 做靜態可解析性確認。此非測試設計之缺陷，屬環境認證缺口，如實回報於交付訊息，不宣稱已通過。
 
 - **R-F039-04（appendDocumentAppendices 之 UI 不可達性）**：architecture-spec §3.6 決策二明文「`POST`（附加）端點保留於 API...但**刻意不接入**文件建立/編輯之 UI 呼叫路徑」。故 `appendDocumentAppendices()` 僅於 backend 單元測試（`appendices.document-association.service.spec.ts`）直接呼叫驗證，前端測試不會、也不應斷言任何 UI 觸發 `appendDocumentAppendices` 之呼叫——若後續實作或測試出現此類斷言，即為誤解架構決策，應予拒絕。
 
 - **R-F039-05（覆蓋/移除之前端二次確認「取消」路徑之無副作用證明方式）**：AC-09／AC-14 之「取消」為純前端 UI 責任（不發出請求），backend 單元測試僅能證明「未呼叫 = 無副作用」，無法對「使用者按下取消鈕」本身做斷言；此類前端互動層之取消行為已於既有 F018 `UsageFormManagementPage.test.tsx` 建立慣例（modal 顯示後不點確認鈕即視為驗證取消路徑），本次比照辦理，未見於本檔重複列出所有取消情境之獨立 it，屬合理精簡，非覆蓋缺口。
+
+### 實作階段申訴處理紀錄（2026-08-07）
+
+tdd-implementation 於實作期間提出 6 項測試申訴＋1 項報備，全數由 test-generator 核實後修改測試檔／裁定：
+
+1-3. `frontend/src/domain/function-matrix.test.ts`／`field-matrix.test.ts`／`menu.test.ts`：F025/F026 矩陣之前端鏡射檔未隨後端矩陣新增列同步更新（原始任務白名單僅列後端兩檔，未涵蓋前端鏡射，屬 test-generator 原始掃描缺口，非 tdd-implementation 誤植）。
+4. `frontend/src/pages/PermissionMatrixPage.test.tsx`：「共 19→20 欄」banner 文案，依 `prototypes/18-permission-matrix.html`（原掃描清單外之 prototype）之明文「共 20 欄...與 F039 新增之「附錄（多）」」裁定。
+5. `frontend/src/pages/DocumentCreatePage.test.tsx`：漏 `within` import，純測試檔缺陷。
+6. `frontend/src/pages/PublicDocumentDetailPage.test.tsx`：`.closest('section, div')` 觸發 TS2345（複合選擇器落入泛型多載回傳 `Element` 非 `HTMLElement`），改為 `.closest('div')`。
+7.（報備，非申訴）`backend/src/audit/audit.types.ts` 之 `AuditRow.appendixId` 依 test-generator 裁定收緊為必填 `string | null`（比照既有 `formId`/`lifecycleId`/`documentId` 慣例），tdd-implementation 確認除既有兩處生產建構點（`buildAuditRow()`／`typeorm-audit.store.ts toRow()`）外無其他遺漏建構點。
+
+最終驗證（test-generator 自行實跑，非引用對方數字）：backend `npm test` 111/111 suites、1361/1361 tests 全綠；frontend `npx vitest run` 42/42 files、574/574 tests 全綠；`npx tsc --noEmit` 兩端皆乾淨。

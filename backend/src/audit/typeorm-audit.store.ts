@@ -78,7 +78,7 @@ export class TypeOrmAuditStore implements AuditStore {
       lifecycleId: row.lifecycleId,
       lifecycleName: row.lifecycleName,
       formId: row.formId,
-      appendixId: row.appendixId ?? null,
+      appendixId: row.appendixId,
       targetName: row.targetName,
       watermarkSnapshot: row.watermarkSnapshot,
       occurredAt: row.occurredAt,
