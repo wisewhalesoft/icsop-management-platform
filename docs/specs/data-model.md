@@ -1,9 +1,9 @@
 ---
 spec-id: data-model
 title: 資料模型（概念層）
-version: 1.3
-date: 2026-08-06
-status: Draft
+version: 1.4
+date: 2026-08-07
+status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 人類閘門通過）
 ---
 
 # 資料模型（Data Model）
@@ -14,6 +14,7 @@ status: Draft
 > **上游來源之權威定義（欄位對應、階層規則、在職判定、穩定鍵、資料品質實測值）見 [upstream-hr-source-contract.md](upstream-hr-source-contract.md)（2026-07-20 dev 環境唯讀實測定案；資料已遮罩，值層級統計待正式環境覆核）。`ORG_UNIT`／`PERSON`／`ACCOUNT` 三實體之上游對應以該契約為準。**
 > **v1.1（2026-07-16）新增 E09 智慧問答（RAG）相關實體**：DOC_SOURCE_XLS、DOCUMENT_CHUNK、VECTOR_EMBEDDING、INDEX_RUN、QA_LOG；並擴充 AUDIT_LOG（`source` / `qaLogId`）以區分「經 AI 問答導引」之調閱。向量之物理儲存（pgvector / Qdrant / Milvus / MSSQL 2025 向量）由 Architect 選型（見 [open-questions.md](open-questions.md) OQ-E09-03），本文件僅定義概念層實體與其 metadata。
 > **v1.2（2026-07-17）新增 E07 變更歷程（F037/F038）相關實體**：`DOCUMENT_CHANGE_LOG`（文件欄位層變更事件）、`LIFECYCLE_CHANGE_LOG`＋`LIFECYCLE_SNAPSHOT`（循環 DAG 結構變更事件＋快照）；併同定案 `AUDIT_LOG` 之 `targetType`/`actionType` 擴充（涵蓋 F036/F037/F038 調閱事件，OQ-E07-02 已定案 ✅）。完整理由見 architecture-spec.md §4.8。
+> **v1.4（2026-08-07）🟢 APPROVED（2026-08-07 人類閘門通過）**：[LIFECYCLE](#lifecycle-entity) **新增非必填 `subcategory`（子分類）欄位**，循環之業務身分改為 `(name, subcategory)` 組合（**additive**：既有列全數落在 `subcategory = null`，語意與行為向後相容、不需回填）；併同新增唯一性不變式 INV-1／INV-2／INV-3 與 [MSSQL 唯一索引之實作前置檢查](#lifecycle-unique-index-precheck)。權威規格見 [F040](features/F040-lifecycle-subcategory.md)。**既有欄位、既有實體與 ICSOP 文件編號規則皆不變**。
 > **v1.3（2026-08-06）新增 E10 附錄管理（F039）相關實體**：`APPENDIX_POOL`（附錄池）＋`DOC_APPENDIX`（文件↔附錄多對多關聯，**帶 `sortOrder`**）；併同 `AUDIT_LOG` 之 **additive 擴充**（`targetType` 新增 `APPENDIX`、新增 `appendixId` 參照欄）與 `ICSOP_DOCUMENT` 新增第 20 欄「附錄」。權威規格見 [F039](features/F039-appendix-management.md)。
 
 ## 實體總覽
@@ -170,18 +171,48 @@ status: Draft
 
 ## 循環 LIFECYCLE {#lifecycle-entity}
 
+> **🟢 APPROVED（2026-08-07 人類閘門通過，含 4 項裁決）**：本節之 `subcategory` 欄位與不變式 INV-1～INV-3 為 [F040](features/F040-lifecycle-subcategory.md) 新增，待人類審核。其餘內容不變。
+
+**循環之業務身分＝`(name, subcategory)` 組合**（雙主鍵概念，[F040](features/F040-lifecycle-subcategory.md) 定案 2026-08-07）：同一名稱下之不同子分類視為**彼此獨立的循環**，各自擁有獨立 UUID、獨立 DAG 結構與獨立文件掛載。
+
 | 屬性 | 說明 | 必填 |
 |------|------|------|
 | id | 系統 UUID | 是 |
-| name | 循環名稱 | 是 |
+| name | 循環名稱（建議 `nvarchar(100)`，現行實作值）；儲存前 trim | 是 |
+| subcategory | **子分類**（建議 `nvarchar(100)`，同 `name`）；與 `name` 併為業務身分。**無子分類時恆為 `null`，不得以空字串表示**；輸入之空白／空字串一律正規化為 `null`（`normalizeSubcategory`）**（F040 新增，2026-08-07）** | 否 |
 | description | 說明 | 否 |
 | status | `active`(啟用) / `inactive`(停用) | 是 |
 | createdAt / updatedAt | 建立/更新時間 | 是 |
 
+### 唯一性不變式（F040，2026-08-07） {#lifecycle-uniqueness}
+
+| ID | 不變式 | 違反時 |
+|---|---|---|
+| **INV-1** | `(name, subcategory)` 組合於全表唯一；`subcategory = null` 視為單一具體值參與比對（同名之「無子分類」列至多一筆） | `LIFECYCLE_DUPLICATE`（409） |
+| **INV-2** | 對任一 `name`，其列集合**要麼恰為一筆 `subcategory = null`，要麼全部 `subcategory ≠ null`**，兩者不得並存（雙向禁止） | `LIFECYCLE_SUBCATEGORY_CONFLICT`（409） |
+| **INV-3** | `subcategory` 持久化值恆為 `null` 或非空之 trim 後字串 | 由服務層入口之 `normalizeSubcategory` 保證 |
+
+- **比對範圍（已定案 ✅，2026-08-07 使用者裁定，OQ-E03-10）**：涵蓋**全部列、不分 `status`**（`active` 與 `inactive` 皆納入）。停用之循環仍存在於池中並被既有文件之 `lifecycleId` 參照，排除比對將產生兩筆語意相同之列；此語意與 DB 唯一索引一致，**不需篩選索引**。
+- 子分類值**可跨名稱重複**（`A（甲）` 與 `B（甲）` 併存合法）——唯一性是「組合」而非「子分類本身」。
+- **顯示名稱**一律由純函式 `lifecycleDisplayName({ name, subcategory })` 組合：有子分類 → `名稱（子分類）`（**全形括號、前後無空白**）；無 → `名稱`。清單、下拉、頁面標題、`LIFECYCLE_CHANGE_LOG.lifecycleName`／`AUDIT_LOG.lifecycleName` 之快照值皆用此輸出（F040 AC-30／AC-34／AC-35）。
+- **文件編號不受影響**：ICSOP 文件編號第 2 段之循環代碼（`SRC`／`PUC`／…）**僅依 `name` 查表推導**，`subcategory` 不參與、不改變既有九大循環代碼與任何既有文件編號（F040 AC-28／AC-29，已定案）。
+
+#### MSSQL 唯一索引與 NULL 之處理（實作前置檢查，非開放問題） {#lifecycle-unique-index-precheck}
+
+**MSSQL 之 `UNIQUE INDEX` 視多個 `NULL` 為相等**（與 ANSI 標準相反）。此語意對本需求**恰好正確**：`UNIQUE (name, subcategory)` 使同名之「無子分類」列只能存在一筆，正是 INV-1 所欲，**不需**篩選索引或哨兵值代換。但也因此，**既有同名重複列會使建立索引之 migration 直接失敗**——現行 `LIFECYCLE.name` **無任何唯一鍵**（見 `backend/src/database/entities/lifecycle.entity.ts`），故必須前置檢查：
+
+1. **盤點**：`SELECT name, COUNT(*) AS c FROM LIFECYCLE GROUP BY name HAVING COUNT(*) > 1`。
+2. **清理**（有結果時）：由 ICSOP 管理員**逐筆裁定**——為重複列補上相異 `subcategory`、更名、或刪除（刪除須先依 [F007](features/F007-lifecycle-pool-crud.md) 清空全部文件掛載）。**嚴禁自動合併**（會改變既有文件之 `lifecycleId` 參照與 DAG 歸屬）。
+3. **加欄**：`ALTER TABLE LIFECYCLE ADD subcategory nvarchar(100) NULL`；既有列全數落在 `NULL`（＝無子分類），語意向後相容、不需回填。
+4. **建索引**：於 `(name, subcategory)` 建立唯一索引；若因殘留重複失敗，migration **必須中止並回報**，不得靜默略過（略過將使 INV-1 僅剩服務層單保險）。
+5. **驗證**：對真實 app DB（SOP）實跑 migration，並以 `GROUP BY name, subcategory HAVING COUNT(*) > 1` 覆核為 0 筆。
+
+> **INV-2 無法由單一唯一索引表達**（它是「同一 `name` 之列集合形狀」之約束，非列層唯一性）。本模型定義 INV-2 由**服務層權威保證**；DB 層是否另以 indexed view／trigger 二線強制屬實作選擇，不阻塞。
+
 - **[OQ-E03-03 已定案 ✅，2026-07-17]** **允許刪除循環，但需先清空所有文件掛載**；仍有掛載時回 `LIFECYCLE_HAS_DOCUMENTS`（語意＝需先解除全部掛載才能刪除，非「永不可刪」）。清空後刪除將一併移除其節點/連線。**停用（`inactive`）不受此限制**，可隨時執行（F007）。
 - **[OQ-E03-01／OQ-E03-02 已定案 ✅]** 循環**不需**「擁有部門」等欄位；循環狀態（啟用/停用）與文件狀態**不聯動**。
 - **[OQ-E03-05 已定案 ✅]** 循環/節點之結構變更歷程**予以保留**，採 [F038](features/F038-lifecycle-tree-change-history.md)（append-only 事件＋快照，見 [LIFECYCLE_CHANGE_LOG](#lifecyclechangelog-entity)／[LIFECYCLE_SNAPSHOT](#lifecyclesnapshot-entity)）；循環本體仍僅保存當前狀態。
-- **相關功能**：F007、F008、F009、F010。
+- **相關功能**：F007、F008、F009、F010、**F040**（子分類與唯一性不變式之權威規格）。
 
 ## 循環節點 LIFECYCLE_NODE {#node-entity}
 

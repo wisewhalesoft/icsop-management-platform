@@ -1,9 +1,9 @@
 ---
 spec-id: error-handling
 title: 錯誤處理與失敗模式
-version: 1.1
-date: 2026-08-06
-status: Draft
+version: 1.2
+date: 2026-08-07
+status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落與 3 個 `LIFECYCLE_*` 錯誤碼為 🟢 APPROVED 2026-08-07 人類閘門通過）
 ---
 
 # 錯誤處理（Error Handling）
@@ -37,6 +37,9 @@ status: Draft
 | `DISAPPEARED_RATIO_EXCEEDED` | 5xx | 在職帳號消失比例超過閾值，已中止同步、未執行任何停用 | F004 |
 | `LIFECYCLE_NAME_REQUIRED` | 400 | 循環名稱不可為空 | F007 |
 | `LIFECYCLE_HAS_DOCUMENTS` | 409 | 循環仍有文件掛載，**需先解除全部掛載才能刪除**（可改為停用） | F007 |
+| `LIFECYCLE_DUPLICATE` | 409 | 此循環名稱與子分類之組合已存在（`subcategory` 為 null 之「無子分類」亦視為一種具體組合） | F040, F007 |
+| `LIFECYCLE_SUBCATEGORY_CONFLICT` | 409 | 同一循環名稱不可同時存在「無子分類」與「有子分類」之設定（雙向皆適用）；請先處理既有該筆 | F040, F007 |
+| `LIFECYCLE_SUBCATEGORY_REQUIRED` | 400 | 此循環名稱底下設有子分類，請選擇具體子分類後再送出。**後端唯一觸發＝所帶 `lifecycleId` 在其名稱下非合法唯一解**（INV-2 髒資料）；`lifecycleId` **缺漏**歸 `DOCUMENT_REQUIRED_FIELD_MISSING`，不在本碼範圍 | F040, F010, F011 |
 | `DAG_SELF_LOOP` | 409 | 節點不可連向自己 | F008 |
 | `DAG_CYCLE_DETECTED` | 409 | 此連線會造成循環結構成環，請重新確認流程方向 | F008 |
 | `NODE_NOT_FOUND` | 404 | 找不到節點 | F009 |
@@ -124,6 +127,22 @@ status: Draft
 - **刪除保護（OQ-E03-03 定案）**：仍有文件掛載之循環回 `LIFECYCLE_HAS_DOCUMENTS`（409），語意＝**需先解除全部文件掛載才能刪除**（非「永不可刪」）；清空掛載後即可刪除（含其節點/連線）。**停用（inactive）不受此限制**，可隨時執行（F007）。
 - **成環**：`DAG_SELF_LOOP`（自我連線）與 `DAG_CYCLE_DETECTED`（直接/間接成環）皆於**後端交易內權威驗證**，即使前端已預覽亦以後端為準（F008）。
 - **刪除節點**：連動移除相關邊；若節點已掛載文件，提示掛載關係將被移除並要求確認。
+
+## 循環子分類（唯一性與選取有效性） {#lifecycle-subcategory}
+
+> **🟢 APPROVED（2026-08-07 人類閘門通過，含 4 項裁決）**。對應 [F040](features/F040-lifecycle-subcategory.md)（循環子分類）。循環之業務身分＝`(name, subcategory)` 組合；`subcategory` 非必填，無值時恆為 `null`。
+
+- **輸入正規化（先於一切驗證）**：`name` 與 `subcategory` 一律 trim；`subcategory` 於 trim 後為空字串、純空白或未提供者，一律收斂為 `null`（`normalizeSubcategory`）。**空字串不得落地**（[data-model.md INV-3](data-model.md#lifecycle-uniqueness)）。
+- **驗證順序（固定，先後不可調換）**：① `LIFECYCLE_NAME_REQUIRED`（名稱 trim 後為空，400）→ ② `LIFECYCLE_DUPLICATE`（INV-1，409）→ ③ `LIFECYCLE_SUBCATEGORY_CONFLICT`（INV-2，409）。名稱為空時**不得**先回任何唯一性錯誤（F040 AC-14）。
+- **`LIFECYCLE_DUPLICATE`（409）**：`(name, subcategory)` 組合已存在。`subcategory = null` 之「無子分類」亦視為單一具體值參與比對（同名之無子分類列至多一筆）。**比對範圍涵蓋全部列、不分 `status`**（停用之循環仍參與比對；**已定案 ✅** 2026-08-07 使用者裁定，OQ-E03-10）；**編輯時排除自身列**（維持原值不視為衝突，比照 [#document](#document) 之編號唯一性慣例）。並發下以 DB 唯一索引（MSSQL 視多個 NULL 為相等，恰符本語意）＋應用層驗證雙保險，僅一筆成功、另一筆回本碼。
+- **`LIFECYCLE_SUBCATEGORY_CONFLICT`（409）**：違反 INV-2——同一名稱之「無子分類」列與「有子分類」列將並存。**雙向皆適用**：① 已存在 `A(無子分類)` 時新增／改成 `A(甲)`；② 已存在 `A(甲)` 時新增／改成 `A(無子分類)`。訊息須提示「請先處理既有該筆」（更名、補子分類或刪除），**不得**自動更動既有列。此不變式使「有子分類就必須選子分類」不自相矛盾。
+- **`LIFECYCLE_SUBCATEGORY_REQUIRED`（400，人類閘門 2026-08-07 裁決 1 已收斂）**：**後端唯一觸發情境**＝文件建立／編輯（[F010](features/F010-create-document.md)／[F011](features/F011-edit-with-comparison.md)）payload **帶有** `lifecycleId`，但該列在其名稱下**非合法唯一解**——判定式：所指列 `subcategory = null` **且**池中存在同 `name`、`subcategory ≠ null` 之其他列（過渡期違反 INV-2 之髒資料）。**不產生／不更動任何文件記錄**。
+  - **`lifecycleId` 缺漏（`null`／空字串／未帶）之情形歸 [`DOCUMENT_REQUIRED_FIELD_MISSING`](#document)，不在本碼範圍**——既有 [F010](features/F010-create-document.md) 行為，本次**不變更**。
+  - **本次不新增 `lifecycleName` payload 欄位**：建立／編輯之「所屬循環」在 API 契約中恆僅 `lifecycleId` 一欄；名稱→子分類之兩段式選取純屬**前端 UI 狀態**，送出前已解析為單一 `lifecycleId`，故「payload 只帶名稱層」在後端非可達之請求形狀。
+  - **前端**仍以純函式 `resolveLifecycleSelection` 於「僅選名稱層」時回本碼並阻擋送出（[F040](features/F040-lifecycle-subcategory.md) AC-21，行為不變）；後端之上述權威再驗獨立於前端，不可僅信任前端。
+- **名稱底下無子分類時不得誤擋**：該名稱僅有一筆 `subcategory = null` 之列時，只選名稱即為完整選取，**不要求**亦不呈現子分類層（向後相容，F040 AC-23／AC-33）。
+- **顯示一致性**：錯誤訊息、清單、下拉、標題與快照中之循環名稱一律使用 `lifecycleDisplayName`（有子分類 → `名稱（子分類）`，全形括號無空白；無 → `名稱`），避免使用者無法分辨衝突對象。
+- **不影響文件編號**：子分類**不參與** ICSOP 文件編號第 2 段之循環代碼推導；本節任何錯誤情境皆不觸發編號重算（見 [#document](#document)）。
 
 ## 節點掛載/改派 {#node-assign}
 

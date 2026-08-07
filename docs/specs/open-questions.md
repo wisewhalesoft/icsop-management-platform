@@ -1,8 +1,8 @@
 ---
 spec-id: open-questions
 title: 待釐清事項、風險與假設
-version: 1.2
-date: 2026-08-06
+version: 1.3
+date: 2026-08-07
 status: Draft
 ---
 
@@ -11,6 +11,10 @@ status: Draft
 > 本文件為**決策紀錄＋待辦清單**：多數項目已於 **2026-07-17 逐輪定案**（標 `[已定案 ✅]`／`[已收斂 ✅]`，保留於此供追溯，決策已落入對應 spec）；**仍待辦者餘 9 項**（標 `[BLOCKING]`／`[部分收斂]`，**全數需外部單位／PoC／corpus**，已無純內部可決項）：`OQ-NFR001`〔已部分收斂〕、**`OQ-NFR002`〔已部分收斂 — 2026-07-20 登入驗證改採 Azure AD OIDC，簽章演算法與共享密鑰輪替兩項消解；僅餘 Blob 金鑰輪替與公司資安框架〕**、`OQ-E09-01/02/06/07/08/14`、**`OQ-E09-04`〔已部分收斂 — 2026-07-21 標準五表模板已確認，僅餘全 corpus 變體率待抽樣，見 icsop-template-analysis.md〕**（以上 E09 各項皆需外部單位提供 corpus 或 PoC 實測後始能定）。已由訪談定案者（雙軌登入、組織架構、DAG 防環、浮水印內容、Session 30 分鐘、5 角色、節點抽屜為所屬節點唯一權威寫入路徑、主管/部門窗口對文件管理皆唯讀、無簽核流程、僅保存當前版本、技術棧…）**不列於此**。
 > **E09 智慧問答（RAG）已定案項目（不列於此，直接落入 spec）**：採「本地開源 LLM＋RAG」非微調本地模型；雙軌 ingestion（軌道 A 權威原件 .xls ＋**另行手動上傳之呈現用 PDF**〔OQ-E09-10 定案：**取消 .xls→PDF 自動轉檔**，兩者各自獨立上傳〕、軌道 B 檢索內文 chunk）；模板感知（規則式）parser 抽取；**權限感知過濾必須在檢索層**（非生成後丟棄）；硬體 **L40S×4（192GB VRAM）**；分期（Phase 1 管理端 ingestion＝F027–F031；Phase 3 前台問答＝F032–F035）；經 AI 導引之檢視/下載沿用既有浮水印＋稽核。
 > **2026-08-06 新增 E10 附錄管理（[F039](features/F039-appendix-management.md)）5 項 `[CLARIFY]`**：`OQ-E10-01`（prototype 24 單檔/名稱必填 vs US-100 多檔/名稱選填）、`OQ-E10-02`（`DOC_APPENDIX` 排序唯一索引之架構決策）、`OQ-E10-03`（「19 欄」措辭全域同步）、`OQ-E10-04`（**F018 覆蓋門檻散文 ≥1 vs 實作 ≥2 之既有落差**）、`OQ-E10-05`（`USAGE_FORM_POOL` 未登錄 data-model）。**五項皆不阻塞 F039 實作**（後端契約已於 F039 明確定義）。
+> **2026-08-07 E03 循環子分類（[F040](features/F040-lifecycle-subcategory.md)）**：`OQ-E03-10`（唯一性比對是否涵蓋停用循環）**已於同日人類閘門定案 ✅＝涵蓋全部列、不分 `status`**；僅餘 `OQ-E03-11`（`subcategory` 長度上限與是否需專屬錯誤碼，現採 `nvarchar(100)` 同 `name`）為 `[CLARIFY]`，**不阻塞實作**。
+> **⚠ 以下由使用者於 2026-08-07 直接裁定，為已定案事項、不列為開放問題**：① `(name, subcategory)` 組合唯一 ＋ 同名之「無子分類 ↔ 有子分類」不得並存（雙向）；② ICSOP 文件編號第 2 段循環代碼**仍僅依循環名稱**推導、子分類不參與、既有九大循環代碼與既有文件編號不變；③ 影響範圍＝F007／F010／F011／F017／F019／F008／F009／F036／F038；④ 本輪設計深度＝spec-writer ＋ ui-ux-designer（additive 欄位，不跑 system-architect）。
+> **⚠ 人類閘門（2026-08-07）追加 4 項裁決，皆已落入 spec、不列為開放問題**：**裁決 1**＝**不新增 `lifecycleName` API payload 欄位**；缺 `lifecycleId` 維持既有 `DOCUMENT_REQUIRED_FIELD_MISSING`（不動 F010 既有行為與測試），`LIFECYCLE_SUBCATEGORY_REQUIRED` 之**後端唯一觸發**收斂為「所帶 `lifecycleId` 在其名稱下非合法唯一解」（INV-2 髒資料）。**裁決 2**＝OQ-E03-10 升為定案（見下表）。**裁決 3**＝示範子分類統一為 `消金`／`企金`／`子公司`，與 prototype 逐字一致。**裁決 4**＝F010 AC-S4 補字，明示 `lifecycleDisplayName` 選項屬**第二段**選擇器。
+> 另，`LIFECYCLE` 既有同名重複列之盤點與清理**為「實作前置檢查」**（見 [data-model.md](data-model.md#lifecycle-unique-index-precheck)），非未決問題。
 > 每項標註分類：**[BLOCKING]** 進入精確估點/實作前須答；**[CLARIFY]** 可先以草案假設實作、待確認微調；**[RISK]** 風險與緩解。狀態未定者於 spec 中以 `[ASSUMPTION]` 標記草案值。
 
 ## 最高優先：規格內部矛盾
@@ -62,6 +66,8 @@ status: Draft
 | OQ-E03-07 | 循環切換器可視清單之 API 契約（`visibleOnly` 過濾、分頁、排序、是否含狀態篩選）？ | [已定案 ✅] | F036 | **定案**：後端依角色過濾（`visibleOnly`，例 `GET /lifecycles?visibleOnly=true`），不可僅前端隱藏；確切契約細節（分頁/排序/狀態篩選）待架構師補充，不阻塞 spec |
 | OQ-E03-08 | 循環樹狀圖預覽是否開放前台（一般使用者/部門窗口）？ | [已定案 ✅] | F036 | **定案**：**後台限定**（本輪不開放前台）。未來若開放，可視範圍/稽核動作類型須另行定義，不可直接沿用後台版本規則 |
 | OQ-E03-09 | 唯讀預覽（F036）直角箭頭與 F008 編輯畫布連線樣式一致性（F008 未明訂曲線/直角）？ | [已定案 ✅] | F036, F008, F038 | **定案（材質變更）**：**F008 編輯畫布連線樣式統一為直角 elbow**（比照 F036/F038 唯讀預覽），全系統 DAG 連線樣式一致 |
+| OQ-E03-10 | **循環子分類之唯一性比對是否涵蓋停用（`inactive`）之循環？** | **[已定案 ✅]**（2026-08-07 使用者裁定，人類閘門裁決 2） | F040, F007, data-model#lifecycle-uniqueness | **定案（採選項 a）**：唯一性（INV-1／INV-2）比對**涵蓋全部列、不分 `status`**（`active` 與 `inactive` 皆納入）。理由：停用之循環仍存在於池中並被既有文件之 `lifecycleId` 參照，若排除比對則「停用後可再建同名同子分類」，將產生兩筆語意相同之列；且此語意與 MSSQL 唯一索引一致，**不需篩選索引**、實作最單純。已落入 [F040](features/F040-lifecycle-subcategory.md) INV-1 比對範圍與 AC-20、[data-model](data-model.md#lifecycle-uniqueness)，各處之 `[ASSUMPTION]` 標記已移除。<br>（被否決之選項 b：比照 [F013](features/F013-document-number-uniqueness.md) 文件編號之「部分狀態比對」僅比對 `active`——需改用篩選索引並額外定義「停用列被同名同子分類之新列取代後如何再啟用」之規則，複雜度不成比例。） |
+| OQ-E03-11 | **`LIFECYCLE.subcategory` 之長度上限，以及超長是否需要專屬錯誤碼？** | [CLARIFY]（不阻塞實作） | F040, F007, data-model#lifecycle-entity | **spec 現行處置＝`nvarchar(100)`，與既有 `LIFECYCLE.name` 一致**；超長沿用 `name` 之既有處置機制，**本次不新增 `LIFECYCLE_SUBCATEGORY_TOO_LONG` 之類的專屬錯誤碼**（現況 `name` 亦無專屬長度錯誤碼，新增將造成同一實體內兩欄行為不對稱）。**替代選項**：(a) 維持現行（推薦）；(b) 為 `name` 與 `subcategory` 一併補上 `LIFECYCLE_NAME_TOO_LONG`／`LIFECYCLE_SUBCATEGORY_TOO_LONG`（比照 `USAGE_FORM_NAME_TOO_LONG`／`APPENDIX_NAME_TOO_LONG` 之既有慣例，行為一致但屬 F007 既有規格之擴充）；(c) 放寬 `subcategory` 至 `nvarchar(400)`（比照附錄/表單名稱）。⚠ 選 (b)/(c) 皆需連帶調整 F007 與 error-handling |
 
 ## E04 ICSOP 文件管理
 

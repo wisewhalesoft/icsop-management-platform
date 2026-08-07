@@ -1,0 +1,39 @@
+%% F040 循環子分類：建立／編輯之唯一性判定決策流（INV-1 組合唯一、INV-2 同名共存禁止）
+%% 對應 features/F040-lifecycle-subcategory.md AC-07～AC-20、AC-21～AC-27
+flowchart TD
+    START(["建立或編輯循環請求"]) --> NORM["正規化\nname = trim(name)\nsubcategory = normalizeSubcategory(subcategory)\n空白／空字串／未提供 → null"]
+
+    NORM --> NAME{"name 非空？"}
+    NAME -->|"否"| E_NAME["400 LIFECYCLE_NAME_REQUIRED"]
+    NAME -->|"是"| SCOPE["取比對範圍：全部 LIFECYCLE 列\n不分 status；編輯時排除自身列"]
+
+    SCOPE --> INV1{"已存在同一 (name, subcategory) 組合？\nnull 視為單一具體值"}
+    INV1 -->|"是"| E_DUP["409 LIFECYCLE_DUPLICATE"]
+    INV1 -->|"否"| HASSUB{"本次 subcategory 為 null？"}
+
+    HASSUB -->|"是：欲成為「無子分類」列"| C1{"該 name 底下\n已存在任何有子分類之列？"}
+    C1 -->|"是"| E_CONF["409 LIFECYCLE_SUBCATEGORY_CONFLICT\n提示先處理既有該筆"]
+    C1 -->|"否"| OK
+
+    HASSUB -->|"否：欲成為「有子分類」列"| C2{"該 name 底下\n已存在無子分類之列？"}
+    C2 -->|"是"| E_CONF
+    C2 -->|"否"| OK["寫入 LIFECYCLE\n建立：配發 UUID → 導向 DAG 畫布\n編輯：更新 updatedAt"]
+
+    OK --> DISP["全站顯示一律經 lifecycleDisplayName\n有子分類 → 名稱（子分類）｜無 → 名稱"]
+
+    subgraph SEL["文件建立／編輯之「所屬循環」選取（F010／F011）"]
+        S1(["選取所屬循環"]) --> S2{"所選 name 底下\n存在子分類？"}
+        S2 -->|"否"| S_OK["以該唯一列之 lifecycleId 通過"]
+        S2 -->|"是"| S3{"已選到具體子分類？"}
+        S3 -->|"否"| S_ERR["400 LIFECYCLE_SUBCATEGORY_REQUIRED\n前端純函式先擋＋後端權威再驗"]
+        S3 -->|"是"| S_OK
+    end
+
+    DISP -.->|"循環池成為選取來源"| S1
+
+    style E_NAME fill:#fee2e2,stroke:#dc2626
+    style E_DUP fill:#fee2e2,stroke:#dc2626
+    style E_CONF fill:#fee2e2,stroke:#dc2626
+    style S_ERR fill:#fee2e2,stroke:#dc2626
+    style OK fill:#dcfce7,stroke:#16a34a
+    style S_OK fill:#dcfce7,stroke:#16a34a
