@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
+     本檔已套用：建立/編輯之「子分類」非必填欄位、(name,subcategory) 組合唯一（INV-1）、
+     同名「無子分類 ↔ 有子分類」不得並存（INV-2）、清單與搜尋改用 lifecycleDisplayName。
+     規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -87,7 +91,7 @@
   <div class="flex flex-wrap items-center gap-2 mb-4">
     <div class="relative flex-1 min-w-[200px]">
       <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
-      <input id="kw" oninput="renderTable()" type="search" placeholder="搜尋循環名稱…" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600" />
+      <input id="kw" oninput="renderTable()" type="search" placeholder="搜尋循環名稱／子分類…" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600" />
     </div>
     <select id="fStatus" onchange="renderTable()" class="px-3 py-2 rounded-md border border-slate-300 text-sm bg-white">
       <option value="">所有狀態</option><option value="active">啟用</option><option value="inactive">停用</option>
@@ -127,6 +131,13 @@
         <label class="block text-sm font-medium text-slate-700 mb-1">循環名稱 <span class="text-red-500">*</span></label>
         <input id="lcName" type="text" placeholder="請輸入循環名稱" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600" />
         <p id="lcNameErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>循環名稱不可為空（LIFECYCLE_NAME_REQUIRED）</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">子分類 <span class="text-xs font-normal text-slate-400">（非必填）</span></label>
+        <input id="lcSub" type="text" placeholder="例：消金；留白代表此循環無子分類" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <p class="text-[10px] text-slate-400 mt-1">循環之身分＝<span class="mono">名稱＋子分類</span>之組合：同名之不同子分類為<strong class="text-slate-500">彼此獨立的循環</strong>（各有 UUID／DAG／文件掛載）。同一名稱不可同時存在「無子分類」與「有子分類」。留白（或僅空白）一律存為<span class="mono">null</span>。</p>
+        <p id="lcDupErr" class="hidden mt-1 text-xs text-red-600 items-start gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>此循環名稱與子分類之組合已存在（<span class="mono">subcategory</span> 為 null 之「無子分類」亦視為一種具體組合）（LIFECYCLE_DUPLICATE）</span></p>
+        <p id="lcConflictErr" class="hidden mt-1 text-xs text-red-600 items-start gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>同一循環名稱不可同時存在「無子分類」與「有子分類」之設定（雙向皆適用）；請先處理既有該筆（LIFECYCLE_SUBCATEGORY_CONFLICT）</span></p>
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">說明</label>
@@ -185,18 +196,29 @@
   function openPublic(){ shellToast('已於新視窗開啟前台瀏覽頁（03-public-list）'); }
   function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
 
-  /* ===== lifecycle data ===== */
-  let seq=9;
+  /* ===== F040 循環子分類：純函式（全站同一實作）=====
+     normalizeSubcategory：trim；空字串／純空白／未提供 → null（不得落地空字串，INV-3）
+     lifecycleDisplayName：有子分類 → 名稱（子分類）（全形括號、前後無空白）；無 → 名稱 */
+  function normalizeSubcategory(v){ const s=(v==null?'':String(v)).trim(); return s?s:null; }
+  function lifecycleDisplayName(lc){ if(!lc) return ''; const s=normalizeSubcategory(lc.subcategory); return s?`${lc.name}（${s}）`:lc.name; }
+
+  /* ===== lifecycle data =====
+     循環之業務身分＝(name, subcategory) 組合；subcategory 非必填、無值恆為 null。
+     示範：「銷售及收款循環」底下有「消金」「企金」「子公司」三個彼此獨立的循環（各有 UUID／DAG／文件）；
+           其餘八個循環皆無子分類（＝本次變更前之現況，向後相容示範）。 */
+  let seq=11;
   let LIFECYCLES=[
-    {id:'lc1',name:'銷售及收款循環',status:'active',nodes:7,updated:'2026-06-18 15:02',docs:8},
-    {id:'lc2',name:'採購及付款循環',status:'active',nodes:1,updated:'2026-05-05 10:20',docs:3},
-    {id:'lc3',name:'產品企劃循環',status:'active',nodes:3,updated:'2026-06-01 09:15',docs:5},
-    {id:'lc4',name:'薪工循環',status:'active',nodes:3,updated:'2026-04-28 16:40',docs:4},
-    {id:'lc5',name:'融資循環',status:'active',nodes:4,updated:'2026-05-20 11:00',docs:2},
-    {id:'lc6',name:'不動產、廠房及設備循環',status:'active',nodes:1,updated:'2026-03-30 14:12',docs:2},
-    {id:'lc7',name:'投資循環',status:'active',nodes:4,updated:'2026-05-14 08:30',docs:3},
-    {id:'lc8',name:'電腦化資訊系統控制作業',status:'active',nodes:4,updated:'2026-06-10 13:44',docs:4},
-    {id:'lc9',name:'管理性控制作業',status:'active',nodes:4,updated:'2026-06-25 09:50',docs:3}
+    {id:'lc1',name:'銷售及收款循環',subcategory:'消金',status:'active',nodes:7,updated:'2026-06-18 15:02',docs:8},
+    {id:'lc10',name:'銷售及收款循環',subcategory:'企金',status:'active',nodes:5,updated:'2026-08-04 11:26',docs:1},
+    {id:'lc11',name:'銷售及收款循環',subcategory:'子公司',status:'active',nodes:4,updated:'2026-08-06 09:40',docs:0},
+    {id:'lc2',name:'採購及付款循環',subcategory:null,status:'active',nodes:1,updated:'2026-05-05 10:20',docs:3},
+    {id:'lc3',name:'產品企劃循環',subcategory:null,status:'active',nodes:3,updated:'2026-06-01 09:15',docs:5},
+    {id:'lc4',name:'薪工循環',subcategory:null,status:'active',nodes:3,updated:'2026-04-28 16:40',docs:4},
+    {id:'lc5',name:'融資循環',subcategory:null,status:'active',nodes:4,updated:'2026-05-20 11:00',docs:2},
+    {id:'lc6',name:'不動產、廠房及設備循環',subcategory:null,status:'active',nodes:1,updated:'2026-03-30 14:12',docs:2},
+    {id:'lc7',name:'投資循環',subcategory:null,status:'active',nodes:4,updated:'2026-05-14 08:30',docs:3},
+    {id:'lc8',name:'電腦化資訊系統控制作業',subcategory:null,status:'active',nodes:4,updated:'2026-06-10 13:44',docs:4},
+    {id:'lc9',name:'管理性控制作業',subcategory:null,status:'active',nodes:4,updated:'2026-06-25 09:50',docs:3}
   ];
   let editingId=null;
 
@@ -209,16 +231,17 @@
   function renderTable(){
     const kw=(document.getElementById('kw').value||'').trim().toLowerCase();
     const st=document.getElementById('fStatus').value;
-    const rows=LIFECYCLES.filter(l=> (!kw||l.name.toLowerCase().includes(kw)) && (!st||l.status===st));
+    // AC-S8：關鍵字比對對象＝顯示名稱（名稱＋子分類），非僅 name
+    const rows=LIFECYCLES.filter(l=> (!kw||lifecycleDisplayName(l).toLowerCase().includes(kw)) && (!st||l.status===st));
     document.getElementById('countText').textContent=`共 ${rows.length} 個循環`;
     document.getElementById('emptyState').classList.toggle('hidden',rows.length>0);
     document.getElementById('tbody').innerHTML=rows.map(l=>`
-      <tr class="hover:bg-slate-50">
-        <td class="px-4 py-3"><div class="font-medium text-slate-800">${l.name}</div></td>
+      <tr class="hover:bg-slate-50" data-lifecycle-id="${l.id}">
+        <td class="px-4 py-3"><div class="font-medium text-slate-800" data-lifecycle-name>${lifecycleDisplayName(l)}</div></td>
         <td class="px-4 py-3">
           <div class="flex items-center gap-2">
             ${statusPill(l.status)}
-            <button onclick="openTree('${l.name}')" title="檢視樹狀圖預覽（開新分頁）" aria-label="檢視「${l.name}」樹狀圖預覽" class="w-7 h-7 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"><i data-lucide="git-fork" class="w-4 h-4"></i></button>
+            <button onclick="openTree('${l.id}')" title="檢視樹狀圖預覽（開新分頁）" aria-label="檢視「${lifecycleDisplayName(l)}」樹狀圖預覽" class="w-7 h-7 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"><i data-lucide="git-fork" class="w-4 h-4"></i></button>
           </div>
         </td>
         <td class="px-4 py-3 text-slate-600">${l.nodes}</td>
@@ -236,39 +259,61 @@
     lucide.createIcons();
   }
 
-  function enterCanvas(id){ shellToast('進入循環「'+LIFECYCLES.find(l=>l.id===id).name+'」的 DAG 畫布編輯頁（11-dag-canvas）'); }
+  function enterCanvas(id){ shellToast('進入循環「'+lifecycleDisplayName(LIFECYCLES.find(l=>l.id===id))+'」的 DAG 畫布編輯頁（11-dag-canvas）'); }
 
-  // 循環名稱 → 代碼（第 2 段），供樹狀圖預覽頁帶入
-  const CYC_CODE={'銷售及收款循環':'SRC','採購及付款循環':'PUC','產品企劃循環':'PPC','薪工循環':'LWC','融資循環':'FC','不動產、廠房及設備循環':'FAC','投資循環':'IC','電腦化資訊系統控制作業':'CIPS','管理性控制作業':'GCA'};
-  function openTree(name){ const code=CYC_CODE[name]||''; window.open('22-lifecycle-tree-preview.html'+(code?('?cycle='+code):''),'_blank'); }
+  /* 循環代碼（ICSOP 編號第 2 段）僅依「名稱」查表推導，子分類不參與（F040 定案②／AC-28）
+     ⇒ 同名不同子分類之代碼相同（消金／企金／子公司皆為 SRC），代碼已不足以唯一定位；
+     故樹狀圖預覽頁（22）之 ?lifecycleId= 參數必須帶 lifecycleId（F036 AC-S3）。 */
+  function openTree(id){ window.open('22-lifecycle-tree-preview.html?lifecycleId='+encodeURIComponent(id),'_blank'); }
 
-  function openCreate(){ editingId=null; document.getElementById('lcTitle').textContent='新增循環'; document.getElementById('lcName').value=''; document.getElementById('lcDesc').value=''; hideNameErr(); showLc(); }
-  function openEdit(id){ const l=LIFECYCLES.find(x=>x.id===id); editingId=id; document.getElementById('lcTitle').textContent='編輯循環'; document.getElementById('lcName').value=l.name; document.getElementById('lcDesc').value=''; hideNameErr(); showLc(); }
+  function openCreate(){ editingId=null; document.getElementById('lcTitle').textContent='新增循環'; document.getElementById('lcName').value=''; document.getElementById('lcSub').value=''; document.getElementById('lcDesc').value=''; hideLcErrs(); showLc(); }
+  function openEdit(id){ const l=LIFECYCLES.find(x=>x.id===id); editingId=id; document.getElementById('lcTitle').textContent='編輯循環'; document.getElementById('lcName').value=l.name; document.getElementById('lcSub').value=l.subcategory||''; document.getElementById('lcDesc').value=''; hideLcErrs(); showLc(); }
   function showLc(){const m=document.getElementById('lcModal');m.classList.remove('hidden');m.classList.add('flex');lucide.createIcons();}
   function closeLc(){const m=document.getElementById('lcModal');m.classList.add('hidden');m.classList.remove('flex');}
-  function hideNameErr(){const e=document.getElementById('lcNameErr');e.classList.add('hidden');e.classList.remove('flex');document.getElementById('lcName').classList.remove('border-red-500');}
+  function hideLcErrs(){
+    ['lcNameErr','lcDupErr','lcConflictErr'].forEach(id=>{const e=document.getElementById(id);e.classList.add('hidden');e.classList.remove('flex');});
+    document.getElementById('lcName').classList.remove('border-red-500');
+    document.getElementById('lcSub').classList.remove('border-red-500');
+  }
+  function showLcErr(errId,inputId){ const e=document.getElementById(errId);e.classList.remove('hidden');e.classList.add('flex');document.getElementById(inputId).classList.add('border-red-500');lucide.createIcons(); }
+
+  /* F040 建立/編輯之驗證順序【固定，先後不可調換】：
+     ① LIFECYCLE_NAME_REQUIRED（400）→ ② LIFECYCLE_DUPLICATE（INV-1，409）→ ③ LIFECYCLE_SUBCATEGORY_CONFLICT（INV-2，409）
+     比對範圍涵蓋全部列、不分 status（停用列亦參與）；編輯時排除自身列。 */
   function submitLc(){
     const name=document.getElementById('lcName').value.trim();
-    if(!name){const e=document.getElementById('lcNameErr');e.classList.remove('hidden');e.classList.add('flex');document.getElementById('lcName').classList.add('border-red-500');return;}
+    const subcategory=normalizeSubcategory(document.getElementById('lcSub').value);
+    hideLcErrs();
+    if(!name){ showLcErr('lcNameErr','lcName'); return; }
+    const others=LIFECYCLES.filter(l=>l.id!==editingId);            // 排除自身列
+    const sameName=others.filter(l=>l.name===name);                 // 含 inactive（AC-20）
+    if(sameName.some(l=>normalizeSubcategory(l.subcategory)===subcategory)){
+      showLcErr('lcDupErr','lcSub');
+      toast('error','此循環名稱與子分類之組合已存在','LIFECYCLE_DUPLICATE · 409'); return;
+    }
+    if(sameName.some(l=>(normalizeSubcategory(l.subcategory)===null)!==(subcategory===null))){
+      showLcErr('lcConflictErr','lcSub');
+      toast('error','同一循環名稱不可同時存在「無子分類」與「有子分類」之設定；請先處理既有該筆','LIFECYCLE_SUBCATEGORY_CONFLICT · 409'); return;
+    }
     const now='2026-07-15 '+new Date().toTimeString().slice(0,5);
-    if(editingId){ const l=LIFECYCLES.find(x=>x.id===editingId); l.name=name; l.updated=now; closeLc(); renderTable(); toast('success','已更新循環，updatedAt 已更新'); }
-    else { LIFECYCLES.unshift({id:'lc'+(++seq),name,status:'active',nodes:0,updated:now,docs:0}); closeLc(); renderTable(); toast('success','已建立循環（配發 UUID），導向 DAG 畫布編輯頁'); }
+    if(editingId){ const l=LIFECYCLES.find(x=>x.id===editingId); l.name=name; l.subcategory=subcategory; l.updated=now; closeLc(); renderTable(); toast('success','已更新循環「'+lifecycleDisplayName(l)+'」，updatedAt 已更新'); }
+    else { const nl={id:'lc'+(++seq),name,subcategory,status:'active',nodes:0,updated:now,docs:0}; LIFECYCLES.unshift(nl); closeLc(); renderTable(); toast('success','已建立循環「'+lifecycleDisplayName(nl)+'」（配發 UUID），導向 DAG 畫布編輯頁'); }
   }
 
-  function toggleStatus(id){ const l=LIFECYCLES.find(x=>x.id===id); l.status=l.status==='active'?'inactive':'active'; renderTable(); toast('info','循環狀態已切為「'+(l.status==='active'?'啟用':'停用')+'」；既有掛載關係不受影響'); }
+  function toggleStatus(id){ const l=LIFECYCLES.find(x=>x.id===id); l.status=l.status==='active'?'inactive':'active'; renderTable(); toast('info','循環「'+lifecycleDisplayName(l)+'」狀態已切為「'+(l.status==='active'?'啟用':'停用')+'」；既有掛載關係不受影響'); }
 
   // OQ-E03-03 定案：允許刪除循環，但需先解除全部文件掛載（非「僅能停用」）；停用選項仍保留於列上操作
   function delLc(id){
     const l=LIFECYCLES.find(x=>x.id===id);
     if(l.docs>0){
       toast('error','此循環仍有 '+l.docs+' 份文件掛載，需先解除全部掛載才能刪除','LIFECYCLE_HAS_DOCUMENTS');
-      openConfirm('「'+l.name+'」仍有 '+l.docs+' 份文件掛載',
+      openConfirm('「'+lifecycleDisplayName(l)+'」仍有 '+l.docs+' 份文件掛載',
         '需先解除全部掛載才能刪除（LIFECYCLE_HAS_DOCUMENTS · 409）。請至「ICSOP 文件管理」將這些文件改掛其他循環，或於此示範一鍵解除全部掛載；亦可改用列上的「停用」保留此循環。',
-        ()=>{ l.docs=0; l.updated='2026-07-17 '+new Date().toTimeString().slice(0,5); renderTable(); toast('success','已解除「'+l.name+'」全部文件掛載，現在可刪除此循環'); });
+        ()=>{ l.docs=0; l.updated='2026-07-17 '+new Date().toTimeString().slice(0,5); renderTable(); toast('success','已解除「'+lifecycleDisplayName(l)+'」全部文件掛載，現在可刪除此循環'); });
       document.getElementById('cfOk').textContent='示範：解除全部掛載';
       return;
     }
-    openConfirm('刪除循環「'+l.name+'」？','此循環已無文件掛載，刪除後將記錄稽核（不可復原）。',()=>{LIFECYCLES=LIFECYCLES.filter(x=>x.id!==id);renderTable();toast('success','循環已刪除');});
+    openConfirm('刪除循環「'+lifecycleDisplayName(l)+'」？','此循環已無文件掛載，刪除後將記錄稽核（不可復原）。刪除以 id 為操作對象，不影響同名之其他子分類循環。',()=>{LIFECYCLES=LIFECYCLES.filter(x=>x.id!==id);renderTable();toast('success','循環已刪除');});
     document.getElementById('cfOk').textContent='確認刪除';
   }
 
