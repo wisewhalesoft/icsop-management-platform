@@ -39,8 +39,10 @@
 | ✅ 已完成-已驗證 | **27** | F001 F002 F003 F004 F005 F006 F007 F008 F009 F010 F011 F012 F013 F014 F015 F016 F017 F018 F019 F020 F023 F024 F025 F026 F036 F037 F038 |
 | 🟡 部分 | **7** | F021 F022 F027 F028 F029 F030 F031 |
 | 🔵 進行中 | **0** | — |
-| ⬜ 未開始 | **5** | F032 F033 F034 F035 **F039** |
-| | **39** | |
+| ⬜ 未開始 | **6** | F032 F033 F034 F035 **F039 F040** |
+| | **40** | |
+
+> **2026-08-07 新增 F040 循環子分類（E03，橫切）** 🟢 **APPROVED（2026-08-07 人類閘門通過）**：規格層完成（[F040](features/F040-lifecycle-subcategory.md) AC-01～AC-36 ＋ data-model v1.4 `LIFECYCLE.subcategory`＋INV-1/2/3＋MSSQL 唯一索引實作前置檢查 ＋ error-handling v1.2 三錯誤碼 ＋ F007/F010/F011/F017/F019/F008/F009/F036/F038 之 28 條 AC delta），**規格已於 2026-08-07 通過人類閘門（含 4 項裁決：不新增 `lifecycleName` payload 欄位／OQ-E03-10 定案／示範子分類統一為 消金·企金·子公司／F010 AC-S4 兩段式補字），可進入實作**；**實作本身仍為 ⬜ 未開始**。tally 由 ✅27 🟡7 🔵0 ⬜5（39）改為 **✅27 🟡7 🔵0 ⬜6（40）**。⚠ 本需求為 **additive 欄位**，既有 9 個 ✅ 功能（F007–F011、F017、F019、F036、F038）之狀態**維持 ✅**，惟其子分類 delta 未實作前，各檔之 `### 循環子分類 delta` 段落 AC 尚未覆蓋；實作落地時須連同該 9 檔一併重驗，未重驗前不得將 F040 標 ✅。
 
 > **2026-08-06 新增 F039 附錄管理（E10）**：規格層完成（stories → [F039](features/F039-appendix-management.md) AC-01～AC-34 ＋ data-model `APPENDIX_POOL`/`DOC_APPENDIX` ＋ error-handling 4 錯誤碼 ＋ F025「附錄管理」功能列／F026「附錄（多）」欄位列），**實作為 ⬜ 未開始**。tally 由 ✅27 🟡7 🔵0 ⬜4（38）改為 **✅27 🟡7 🔵0 ⬜5（39）**。⬜ 現含 Phase 3 RAG F032–F035 ＋ Phase 1 之 F039。
 
@@ -87,7 +89,8 @@
 | F007 | 循環池 CRUD | P0 | 1 | ✅ 已完成-已驗證 | 核心 CRUD＋刪除保護；**建立後導向 DAG 畫布**＋**刪除記錄稽核**（AuditWriter LIFECYCLE_DELETE）已補；建立/刪除 int-verified vs SOP |
 | F008 | DAG 節點與連線維護（含防環） | P0 | 1 | ✅ 已完成-已驗證 | 交易內成環再驗＝權威；僅服務層假 store 測、無整合測（碼正確） |
 | F009 | 節點抽屜維護與文件過濾警示 | P0 | 1 | ✅ 已完成-已驗證 | 邊界：雙管理員同時掛載無樂觀鎖（last-write-wins）；前端多筆存檔為非交易連續 API |
-| F036 | 循環樹狀圖預覽（唯讀＋浮水印） | P0 | 1 | ✅ 已完成-已驗證 | 唯讀檢視器（proto 22）＋伺服端浮水印（**CJK 字型已解**：Noto Sans TC＋fontkit）＋角色可見性＋循環切換＋下游高亮＋VIEW/DOWNLOAD/PRINT 稽核（LIFECYCLE_VIEW int-verified）。F017 詳情入口為跨線小接 |
+| F036 | 循環樹狀圖預覽（唯讀＋浮水印） | P0 | 1 | ✅ 已完成-已驗證 | 唯讀檢視器（proto 22）＋伺服端浮水印（**CJK 字型已解**：Noto Sans TC＋fontkit）＋角色可見性＋循環切換＋下游高亮＋VIEW/DOWNLOAD/PRINT 稽核（LIFECYCLE_VIEW int-verified）。F017 詳情入口為跨線小接。**🟢 2026-08-07 人類閘門通過之子分類 delta AC-S1～S3 尚未實作**（標題/切換器顯示、稽核名稱快照、`?cycle` 收斂為 `lifecycleId`），見 [F040](features/F040-lifecycle-subcategory.md) |
+| F040 | **循環子分類（橫切）** | P0 | 1 | ⬜ 未開始（規格 🟢 APPROVED 2026-08-07） | 規格已通過人類閘門（[F040](features/F040-lifecycle-subcategory.md) AC-01～AC-36，含 4 項裁決），**無任何實作**：`LIFECYCLE.subcategory` 未建欄、`(name, subcategory)` 唯一索引未建（且 **`name` 現況無任何唯一鍵**，migration 前須執行 [data-model 實作前置檢查](data-model.md#lifecycle-unique-index-precheck)）、`normalizeSubcategory`／`lifecycleDisplayName`／`resolveLifecycleSelection` 三純函式未建、三錯誤碼未加、9 個關聯 feature 之顯示/選取/篩選 delta 未接。prototype 全數待 ui-ux-designer 傳播 |
 
 ### E04 ICSOP 文件
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
@@ -172,3 +175,5 @@
 _稽核方法：對 38 個 `features/Fxxx-*.md` 的 Acceptance Criteria 逐條 ↔ `backend/src`、`frontend/src`、測試檔交叉核對，並以「端到端可達」嚴格判定。基準 main：初審 `e6045d9` → Wave 1/2 → 整合①②③ → 地基三線 → 前端三線 → 縫隙收斂三線 → 獨立🟡收尾三線 → 可建功能三線。測試：**backend 1243 單元＋88 整合（`npm run test:int`，15 suites vs SOP＋真 Blob）／frontend 410**，tsc 全淨。22 migration 落 SOP。狀態：**✅27 🟡7 🔵0 ⬜4**（⬜ 僅剩 Phase 3 RAG F032-F035；🟡 僅剩 F021/F022（RWD/彈窗＝瀏覽器人工驗）＋F027-F031（RAG 管線 backend，卡 pgvector/embedding/LLM）；**非 RAG、非瀏覽器人工之功能已全數 ✅**）。（2026-07-24）_
 
 _2026-08-06 增修：新增 **F039 附錄管理**（E10，規格層完成、實作 ⬜ 未開始），功能總數 38 → **39**，狀態 **✅27 🟡7 🔵0 ⬜5**。上表其餘各列之狀態與缺口未重新稽核，仍以 2026-07-24 基準為準。_
+
+_2026-08-07 增修：新增 **F040 循環子分類**（E03 橫切，規格 **🟢 APPROVED — 2026-08-07 人類閘門通過含 4 項裁決**、實作 ⬜ 未開始），功能總數 39 → **40**，狀態 **✅27 🟡7 🔵0 ⬜6**。本需求為 `LIFECYCLE` 之 **additive 欄位**，不改既有欄位、不改既有 ICSOP 文件編號規則；F007／F010／F011／F017／F019／F008／F009／F036／F038 之既有 AC 全數未動，各檔僅新增 `### 循環子分類 delta` 段落（共 28 條 AC）。上表其餘各列之狀態與缺口未重新稽核，仍以 2026-07-24 基準為準。_

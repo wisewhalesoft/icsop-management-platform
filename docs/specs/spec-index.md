@@ -1,8 +1,9 @@
 # Spec Index
-Product: ICSOP 文件管理平台 | Version: 1.4 | Status: Draft
-Last Updated: 2026-08-06
+Product: ICSOP 文件管理平台 | Version: 1.5 | Status: Draft
+Last Updated: 2026-08-07
 
 > 進入點：所有下游 agent 先讀本檔，再依 Agent Loading Guide 選擇性載入所需檔案。定案決策見各 feature；未定案見 [open-questions.md](open-questions.md)。
+> **🟢 2026-08-07 人類閘門已通過（含 4 項裁決）**：[F040 循環子分類](features/F040-lifecycle-subcategory.md) 及其於 F007／F010／F011／F017／F019／F008／F009／F036／F038 之 AC delta、data-model v1.4（`LIFECYCLE.subcategory`）、error-handling v1.2（3 個 `LIFECYCLE_*` 錯誤碼）**皆已核准，可進入實作**。四項裁決：① **不新增 `lifecycleName` API payload 欄位**——缺 `lifecycleId` 維持既有 `DOCUMENT_REQUIRED_FIELD_MISSING`，`LIFECYCLE_SUBCATEGORY_REQUIRED` 之後端唯一觸發收斂為「所帶 `lifecycleId` 在其名稱下非合法唯一解」；② OQ-E03-10 定案＝唯一性比對涵蓋全部列不分 `status`；③ 示範子分類統一為 `消金`／`企金`／`子公司`；④ F010 AC-S4 明示 `lifecycleDisplayName` 選項屬**第二段**選擇器。
 
 ## Features
 | ID | Name | Priority | Phase | Epic/Story | File |
@@ -46,6 +47,7 @@ Last Updated: 2026-08-06
 | F037 | ICSOP 程序書變更歷程（欄位 Before/After Diff） | P1 | 1 | E07 US-062 | features/F037-document-change-history.md |
 | F038 | 循環樹狀圖變更歷程（新舊版預覽／下載燒錄浮水印） | P1 | 1 | E07 US-063 | features/F038-lifecycle-tree-change-history.md |
 | F039 | 附錄管理（附錄池／多對多關聯＋自訂排序） | P1 | 1 | E10 US-100/101/102 | features/F039-appendix-management.md |
+| F040 | **循環子分類（橫切：唯一性／顯示／選取有效性）** 🟢 APPROVED | P0 | 1 | E03（需求來源＝口述，無 US） | features/F040-lifecycle-subcategory.md |
 
 ## Supporting Documents
 | Document | File | Relevant For |
@@ -74,6 +76,7 @@ Last Updated: 2026-08-06
 | F020 浮水印與稽核 | diagrams/F020-watermark-audit.mmd | F020, F023, F034 |
 | E09 RAG Ingestion 管線 | diagrams/F028-rag-ingestion-pipeline.mmd | F027–F031 |
 | E09 權限感知問答查詢 | diagrams/F033-permission-aware-query.mmd | F032, F033, F034, F035 |
+| F040 循環子分類唯一性判定 | diagrams/F040-lifecycle-subcategory.mmd | F040 |
 
 ## 關鍵定案（貫穿全 spec）
 - 雙軌登入（**Azure AD OIDC**＋管理員帳密）並存；Azure AD 僅負責初次認證，其後由我方核發 JWT，Session 閒置 30 分鐘逾時（2026-07-20 由「上游簽章」改版，見 [upstream-hr-source-contract.md](upstream-hr-source-contract.md) §12）。
@@ -81,6 +84,7 @@ Last Updated: 2026-08-06
 - **附錄（E10/F039，2026-08-06）**：與使用表單同構之**附錄池**（多對多共用、覆蓋不留版本、下載不燒錄浮水印、覆蓋警示門檻＝引用 ≥2），差異在**每份文件內帶自訂顯示順序** `DOC_APPENDIX.sortOrder`（建立/編輯以上移/下移調整，非拖曳）；前台下載寫稽核（`targetType=APPENDIX`，F024 歸「文件」類）。
 - 文件僅保存當前版本（覆蓋儲存、UUID 不變）；狀態（有效/失效/作廢）管理員手動切換、無簽核。
 - 循環＝DAG（有向無環、禁止成環，多 parent/多 child、上到下）。
+- **循環子分類（E03/F040，2026-08-07，🟢 APPROVED）**：`LIFECYCLE` 新增非必填 `subcategory`；**循環業務身分＝`(name, subcategory)` 組合**（同名不同子分類＝彼此獨立的循環）。兩條不變式：`(name, subcategory)` 唯一（INV-1）＋同一名稱之「無子分類」與「有子分類」不得並存（INV-2，雙向）。凡用到循環池之選取（文件建立/編輯），名稱底下有子分類時**必須選到具體子分類**才算有效。顯示一律 `名稱（子分類）`／`名稱`（`lifecycleDisplayName`）。**ICSOP 文件編號第 2 段循環代碼仍僅依名稱推導，子分類不參與、既有編號不變。**
 - 文件「所屬循環」建立時必填；「所屬節點」以節點抽屜（F009）為**唯一權威寫入路徑**。
 - 浮水印＝伺服器端動態：`{員工編號}-{姓名}-{公司名稱}-{部門}-{處/室}-{僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現}-{當下時間}`（含固定機密聲明）；下載/列印於 server 端燒錄。
 - 技術棧：React+TS 前端、NestJS+TypeORM 後端、React Flow 類 DAG、Docker Compose、應用 DB=MSSQL、檔案存 Azure Blob（storage 介面抽象化）。

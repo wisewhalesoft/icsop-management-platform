@@ -1,6 +1,8 @@
 # F017: 後台文件清單與搜尋
-Priority: P0-MVP | Status: 🟡 實作（unit 綠；14 欄清單＋9 篩選＋排序分頁；**「檔案」與「連結點程序書」兩欄之後端富化與前端渲染已補**（doc-seams，批次注入不 N+1）；int 已寫未跑，見 implementation-logs/doc-seams-impl.md） | Last Updated: 2026-07-24
+Priority: P0-MVP | Status: 🟡 實作（unit 綠；14 欄清單＋9 篩選＋排序分頁；**「檔案」與「連結點程序書」兩欄之後端富化與前端渲染已補**（doc-seams，批次注入不 N+1）；int 已寫未跑，見 implementation-logs/doc-seams-impl.md）｜**循環子分類顯示 delta：🟢 APPROVED（2026-08-07 人類閘門通過，含 4 項裁決）** | Last Updated: 2026-08-07
 Epic/Story: E04 / US-037
+
+> **2026-08-07 additive delta**：第 14 欄「循環別」之顯示與其可搜尋下拉之選項，須反映循環子分類。規則權威＝[F040](F040-lifecycle-subcategory.md)；欄位數、篩選數與既有條款皆不變。
 
 ## Description
 後台以分頁清單檢視所有 ICSOP 文件，頂部呈現 3 張統計卡，提供 9 個可搜尋下拉篩選與依編號/公告日期排序。清單顯示 14 欄（UI 顯示標籤，實體名維持「ICSOP 文件」）。狀態欄依「公告日期」衍生顯示（已公告/進度中/失效/作廢，見 F012）。與前台清單邏輯不同：**後台不套用「使用部門置頂」規則**，預設依最後更新時間或編號排序。未指派節點文件明顯標示。19 欄位權威定義見 [data-model.md](../data-model.md#document-entity)。
@@ -53,11 +55,17 @@ Epic/Story: E04 / US-037
 - Given 查詢無符合關鍵字, When 查詢, Then 顯示空狀態而非錯誤。
 - Given 清單含未指派節點文件, When 呈現, Then 正確顯示警示標示。
 
+### 循環子分類 delta（🟢 APPROVED 2026-08-07；規則權威＝[F040](F040-lifecycle-subcategory.md)）
+
+- **AC-S1**：Given 某文件所屬循環為「銷售及收款循環（消金）」, When 清單第 14 欄「循環別」呈現, Then 顯示字串恰為 `銷售及收款循環（消金）`（由 `lifecycleDisplayName` 產生，全形括號無空白）；Given 所屬循環無子分類, Then 顯示恰為 `銷售及收款循環`（不含括號）。
+- **AC-S2**：Given 池中有「銷售及收款循環（消金）」與「銷售及收款循環（企金）」, When 展開「循環別」可搜尋下拉, Then 呈現**兩個相異選項**（各以 `lifecycleDisplayName` 顯示），選項值為各自 `lifecycleId`（**非** `name` 字串）；When 選定其中一項, Then 清單僅回傳該具體循環之文件，不含同名另一子分類之文件。
+
 ## Error Scenarios
 - 空結果/搜尋跳脫：見 [error-handling.md#public](../error-handling.md#public)。分頁效能見 [NFR-001](../nfr.md#performance)。
 
 ## Related
 - Data: [ICSOP_DOCUMENT（19 欄位）](../data-model.md#document-entity)
 - Depends on: [F010](F010-create-document.md), [F012](F012-document-status-toggle.md)（狀態衍生）, [F014](F014-accountable-dept-chief.md)（制定組織/當責室長）, [F016](F016-pdf-ojt-attachment.md)（檔案下載）
+- **循環子分類規則權威**: [F040](F040-lifecycle-subcategory.md)（`lifecycleDisplayName` 顯示規則、篩選值＝`lifecycleId`）
 - Related: 樹狀圖預覽（第二入口）見 [F036](F036-lifecycle-tree-preview.md)；DAG 資料見 [F008](F008-dag-node-edge.md)/[F009](F009-node-drawer-maintenance.md)；連結點見 [F015](F015-document-cross-link.md)
 - 對比前台: [F019](F019-public-list-browsing.md)（後台不套用部門置頂）

@@ -2,6 +2,8 @@
 Priority: P0-MVP | Status: 🟡 Implemented (unit-green; **CJK 燒錄字型已補**（@pdf-lib/fontkit + Noto Sans TC，樹圖 renderer + F020 burner 共用，見 implementation-log/F036-impl.md）; 第二入口＋真實 PDF/幾何/效能＝[integration]) | Last Updated: 2026-07-23
 Epic/Story: E03 / US-025
 
+> **2026-08-07 additive delta（🟢 APPROVED（2026-08-07 人類閘門通過））**：頁首標題、循環切換器選項與 `AUDIT_LOG.lifecycleName` 快照須含子分類；第二入口之查詢參數須由業務代碼收斂為 `lifecycleId`。規則權威＝[F040](F040-lifecycle-subcategory.md)；唯讀性、浮水印、權限與其餘既有條款皆不變。
+
 > 由**兩個後台入口**開啟新頁（viewer 風格，`22-lifecycle-tree-preview.html`）以唯讀檢視某循環之 DAG 結構：(1)「循環管理」清單（`10-lifecycle-list`）每列「狀態」欄右側之樹狀圖圖示；(2)「ICSOP 文件（程序書）清單」（`13-document-list`，[F017](F017-backend-document-list.md)）每列之樹狀圖圖示，以 `?cycle=<該文件所屬循環代碼>` 帶入該文件所屬循環為預選。屬「循環管理」之**唯讀子能力**：可視角色與範圍**沿用 F025「循環管理」唯讀列**（不新增權限矩陣列）。
 
 ## Description
@@ -62,6 +64,12 @@ Epic/Story: E03 / US-025
 - Given 無可視權限角色（部門窗口／一般使用者）略過 UI 直接呼叫下載/列印 API, When 請求, Then 回 403（`PERMISSION_DENIED`），**不產生檔案、不燒錄浮水印、不記錄稽核**（操作即被拒，非稽核失敗情境）。
 - Given 循環無任何節點, When 開啟預覽, Then 顯示空狀態提示而非錯誤。
 
+### 循環子分類 delta（🟢 APPROVED 2026-08-07；規則權威＝[F040](F040-lifecycle-subcategory.md)）
+
+- **AC-S1**：Given 開啟一個有子分類之循環的樹狀圖預覽頁, When 渲染頁首標題與頂部循環切換器之選項, Then 循環名稱一律為 `lifecycleDisplayName` 之輸出（如 `銷售及收款循環（消金）`）；切換器對同名不同子分類之循環呈現**兩個相異選項**，選項值為各自 `lifecycleId`（**非**名稱字串，亦非循環代碼——同名兩者代碼相同、無法區分），確保可分別開啟。
+- **AC-S2**：Given 對一個有子分類之循環執行檢視／下載／列印, When 寫入 `AUDIT_LOG`, Then 其 `lifecycleName` 快照值為 `lifecycleDisplayName` 之輸出（含子分類），與當次浮水印及頁面標題所示之循環一致（[F040](F040-lifecycle-subcategory.md) AC-35）。
+- **AC-S3**：Given 由 [F017](F017-backend-document-list.md) 文件清單之第二入口開啟某文件之樹狀圖, When 該文件所屬循環為「銷售及收款循環（消金）」而池中另有「銷售及收款循環（企金）」, Then 開啟之預覽為**該文件實際所屬之具體循環**（消金），不得誤開同名之另一子分類。<br>⚠ **對 OQ-E03-07 之收斂**：因同名不同子分類之**循環代碼相同**（皆為 `SRC`，見 [F040](F040-lifecycle-subcategory.md) AC-28），`?cycle=<業務代碼>` **已不足以唯一定位**；本入口之查詢參數必須攜帶 `lifecycleId`（UUID）。此為子分類需求之衍生必然，非新產品決策。
+
 ## Error Scenarios
 - **權限不足**：部門窗口／一般使用者（無循環管理權）開啟預覽或直接呼叫 API（含第二入口由文件清單觸發）→ 回 403 `PERMISSION_DENIED`；見 [error-handling.md#permission](../error-handling.md#permission)。（主管對循環管理為全公司唯讀，無「主管非本部門→403」情境。）
 - **下載/列印未授權**：無可視權限角色略過 UI 直接呼叫下載/列印 API → 回 403 `PERMISSION_DENIED`，**不產生檔案、不燒錄浮水印、不記錄稽核**（操作即被拒，非稽核失敗情境）；見 [error-handling.md#permission](../error-handling.md#permission)。
@@ -69,6 +77,7 @@ Epic/Story: E03 / US-025
 - **未登入存取預覽網址**：拒絕並導回登入頁；見 [error-handling.md#public](../error-handling.md#public)。
 
 ## Related
+- **循環子分類規則權威**: [F040](F040-lifecycle-subcategory.md)（標題／切換器顯示、稽核名稱快照、`?cycle` 收斂為 `lifecycleId`）
 - Data: [LIFECYCLE](../data-model.md#lifecycle-entity)、[LIFECYCLE_NODE](../data-model.md#node-entity)、[LIFECYCLE_EDGE](../data-model.md#edge-entity)（唯讀複用）、[ICSOP_DOCUMENT](../data-model.md#document-entity)（節點掛載文件數；第二入口之所屬循環來源）、[AUDIT_LOG](../data-model.md#auditlog-entity)（`LIFECYCLE_VIEW`／`LIFECYCLE_DOWNLOAD`／`LIFECYCLE_PRINT` 歸屬待架構師定案，見 OQ-E07-02）
 - Depends on: [F007](F007-lifecycle-pool-crud.md)（循環資料/清單）、[F008](F008-dag-node-edge.md)（節點/邊模型與上到下佈局）、[F009](F009-node-drawer-maintenance.md)（節點名稱/掛載文件數）、[F017](F017-backend-document-list.md)（第二入口：文件清單樹狀圖圖示，帶入該文件所屬循環）、[F020](F020-watermark.md)（浮水印產生邏輯＋下載/列印燒錄手法）、[F023](F023-audit-logging.md)（調閱稽核機制）、[F025](F025-role-function-matrix.md)（「循環管理」唯讀可視範圍，不新增矩陣列）、[F001](F001-auth-login-session.md)、[F004](F004-org-sync.md)
 - Related: [F024](F024-access-history-query.md)（三動作稽核是否納入調閱歷程查詢待定，見 OQ-E07-03）；編輯入口 [F008](F008-dag-node-edge.md)／[F009](F009-node-drawer-maintenance.md)；下載/列印燒錄手法參考 US-054（E06）

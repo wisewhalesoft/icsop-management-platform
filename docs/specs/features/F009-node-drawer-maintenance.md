@@ -1,6 +1,8 @@
 # F009: 節點抽屜維護與文件過濾警示
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-15
+Priority: P0-MVP | Status: Draft｜**循環子分類顯示 delta：🟢 APPROVED（2026-08-07 人類閘門通過，含 4 項裁決）** | Last Updated: 2026-08-07
 Epic/Story: E03 / US-023, US-024
+
+> **2026-08-07 additive delta**：抽屜頁首與候選過濾提示之循環名稱須含子分類。規則權威＝[F040](F040-lifecycle-subcategory.md)；候選過濾以 `lifecycleId` 為準之既有機制與其餘條款皆不變。
 
 > 合併理由：抽屜維護（US-023）與候選過濾/重複掛載警示（US-024）共用同一 API 與交易。**本 feature 為文件「所屬節點」的唯一權威寫入路徑（定案）。**
 
@@ -41,11 +43,16 @@ Epic/Story: E03 / US-023, US-024
 - Given 確認改派, When 執行, Then 原節點掛載被移除、新節點正確顯示該文件。
 - Given 候選清單為空, When 開啟, Then 顯示空狀態提示而非錯誤。
 
+### 循環子分類 delta（🟢 APPROVED 2026-08-07；規則權威＝[F040](F040-lifecycle-subcategory.md)）
+
+- **AC-S1**：Given 於一個有子分類之循環開啟節點抽屜, When 渲染頁首與「僅顯示所屬循環＝… 之文件」之過濾提示, Then 循環名稱一律為 `lifecycleDisplayName` 之輸出（如 `銷售及收款循環（消金）`）；候選過濾之比對鍵仍為 `lifecycleId`（**非**名稱字串），故同名不同子分類之文件**不會**互相出現在對方候選清單中；掛載／改派事件寫入 `LIFECYCLE_CHANGE_LOG` 時，`lifecycleName` 快照同為該輸出（[F040](F040-lifecycle-subcategory.md) AC-34）。
+
 ## Error Scenarios
 - 過濾/重複掛載/改派原子性：見 [error-handling.md#node-assign](../error-handling.md#node-assign)（`NODE_DOC_LIFECYCLE_MISMATCH`, `NODE_DOC_ALREADY_ASSIGNED`）。
 
 ## Related
 - Diagram: [../diagrams/F009-node-reassign.mmd](../diagrams/F009-node-reassign.mmd)
 - Data: [LIFECYCLE_NODE](../data-model.md#node-entity), [ICSOP_DOCUMENT 所屬節點](../data-model.md#document-entity)
+- **循環子分類規則權威**: [F040](F040-lifecycle-subcategory.md)（抽屜標題／過濾提示之顯示、事件名稱快照）
 - Depends on: [F008](F008-dag-node-edge.md), [F010](F010-create-document.md)
 - Related: [F011 編輯（節點欄位唯讀顯示＋跳轉）](F011-edit-with-comparison.md)

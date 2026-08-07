@@ -2,6 +2,8 @@
 Priority: P1 | Status: ✅ 完成（結構事件日誌＋查詢＋LIFECYCLE_SNAPSHOT 交易一致快照＋新舊重建＋diff＋雙頁燒錄下載＋前端新舊並列 modal；migration 1723161600000 已對 SOP 跑通；見 implementation-log/lifecycle-changelog-impl.md） | Last Updated: 2026-07-24
 Epic/Story: E07 / US-063
 
+> **2026-08-07 additive delta（🟢 APPROVED（2026-08-07 人類閘門通過））**：本 tab 之「循環別」查詢下拉與事件清單/預覽標題須反映循環子分類（以快照值呈現）。規則權威＝[F040](F040-lifecycle-subcategory.md)；查詢、diff、燒錄下載、權限與其餘既有條款皆不變。
+
 > **獨立後台功能「文件變更歷程」**（獨立側選單項，非「文件調閱歷程」子頁；prototype `23-change-history.html`）之 **循環樹狀圖 tab**（與 ICSOP 程序書 tab [F037](F037-document-change-history.md) 併存，共兩 tab）。以 **append-only 結構變更事件日誌**追溯循環 DAG 結構異動，並可預覽/下載變更前後兩版本樹狀圖（燒錄浮水印）。權限依 [F025](F025-role-function-matrix.md) 獨立功能列「文件變更歷程」。稽核動作屬 [F036](F036-lifecycle-tree-preview.md)「循環」`LIFECYCLE_*` 家族之延伸。
 
 ## Description
@@ -47,12 +49,18 @@ Epic/Story: E07 / US-063
 - Given 登入角色為主管／部門窗口／一般使用者, When 查詢或開啟循環變更歷程（或直接呼叫 API）, Then 回 403（`PERMISSION_DENIED`）；本功能兩 tab 統一僅 SysAdmin／ICSOPAdmin 全公司唯讀（OQ-E07-04 定案，F025 獨立功能列「文件變更歷程」；**主管對本『循環樹狀圖變更』tab 亦無權**）。
 - Given 循環無任何歷史結構變更事件, When 開啟本 tab, Then 顯示空狀態提示而非錯誤。
 
+### 循環子分類 delta（🟢 APPROVED 2026-08-07；規則權威＝[F040](F040-lifecycle-subcategory.md)）
+
+- **AC-S1**：Given 池中有「銷售及收款循環（消金）」與「銷售及收款循環（企金）」, When 展開本 tab 之「循環別」查詢下拉, Then 呈現**兩個相異選項**（各以 `lifecycleDisplayName` 顯示），查詢值為各自 `lifecycleId`（**非**名稱字串，亦非循環代碼——同名兩者代碼相同）；When 選定其一送出, Then 事件清單僅含該具體循環之事件，不含同名另一子分類之事件。
+- **AC-S2**：Given 事件清單與新舊樹狀圖預覽/下載 PDF 之「循環別」欄與標題, When 呈現, Then 顯示字串取自該事件之 `LIFECYCLE_CHANGE_LOG.lifecycleName` **快照值**（寫入當下之 `lifecycleDisplayName` 輸出，含子分類）；Given 該循環之 `subcategory` 於事件寫入後才被修改, Then 既有事件之顯示維持快照值不變、不隨之改寫（[F040](F040-lifecycle-subcategory.md) AC-36）。
+
 ## Error Scenarios
 - **權限限縮**：主管／部門窗口／一般使用者→403（僅 SysAdmin／ICSOPAdmin，OQ-E07-04 定案）。見 [error-handling.md#permission](../error-handling.md#permission)。
 - **下載未授權**：無可視權限角色略過 UI 直接呼叫下載 API→403，不產檔、不燒錄、不留稽核（操作即被拒）。見 [error-handling.md#permission](../error-handling.md#permission)。
 - **稽核寫入失敗不阻斷**：`LIFECYCLE_CHANGELOG_*` 寫入異常時不阻擋瀏覽，進補償佇列重試；稽核不可竄改（`AUDIT_IMMUTABLE`）見 [error-handling.md#audit](../error-handling.md#audit)。
 
 ## Related
+- **循環子分類規則權威**: [F040](F040-lifecycle-subcategory.md)（查詢下拉選項與 `lifecycleName` 快照顯示）
 - Data: [LIFECYCLE](../data-model.md#lifecycle-entity)、[LIFECYCLE_NODE](../data-model.md#node-entity)、[LIFECYCLE_EDGE](../data-model.md#edge-entity)、[ICSOP_DOCUMENT](../data-model.md#document-entity)（掛載）、[AUDIT_LOG](../data-model.md#auditlog-entity)（`LIFECYCLE_CHANGELOG_*` 歸屬待架構師，見 OQ-E07-02）；**變更/快照實體（草案 `LIFECYCLE_CHANGE_LOG`、選採快照時另 `LIFECYCLE_SNAPSHOT`）為新實體、schema 待 system-architect（data-model 僅加指涉性註記，見 OQ-E07-05）**
 - Depends on: [F008](F008-dag-node-edge.md)、[F009](F009-node-drawer-maintenance.md)（結構變更事件來源）、[F036](F036-lifecycle-tree-preview.md)（viewer/浮水印/`LIFECYCLE_*` 稽核家族基礎）、[F020](F020-watermark.md)（燒錄手法）、[F023](F023-audit-logging.md)（稽核機制）、[F024](F024-access-history-query.md)（查詢頁模式重用）、[F025](F025-role-function-matrix.md)（權限＝獨立功能列「文件變更歷程」，SysAdmin／ICSOPAdmin 唯讀、其餘無；OQ-E07-04 定案）、[F001](F001-auth-login-session.md)
 - Related: 同區塊另一 tab [F037](F037-document-change-history.md)；下載燒錄手法參考 US-054（E06）

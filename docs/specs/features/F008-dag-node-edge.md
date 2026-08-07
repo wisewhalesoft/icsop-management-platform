@@ -1,6 +1,8 @@
 # F008: DAG 節點與連線維護（含防環）
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-17
+Priority: P0-MVP | Status: Draft｜**循環子分類顯示 delta：🟢 APPROVED（2026-08-07 人類閘門通過，含 4 項裁決）** | Last Updated: 2026-08-07
 Epic/Story: E03 / US-021, US-022
+
+> **2026-08-07 additive delta**：畫布頁首之循環標題與結構事件之名稱快照須含子分類。規則權威＝[F040](F040-lifecycle-subcategory.md)；DAG 模型、防環邏輯與既有條款皆不變。
 
 > 合併理由：防環驗證（US-022）內嵌於連線建立流程（US-021），合為單一 feature。畫布採 React Flow 類套件、top-down（TB）佈局。
 
@@ -37,12 +39,18 @@ ICSOP 管理員在循環 DAG 畫布上新增/刪除節點、以箭頭建立父�
 - Given 合法不成環連線, When 送出, Then 成功建立，不受驗證阻擋。
 - Given 前端已預覽連線, When 送出, Then 後端仍做權威驗證，不僅信任前端。
 
+### 循環子分類 delta（🟢 APPROVED 2026-08-07；規則權威＝[F040](F040-lifecycle-subcategory.md)）
+
+- **AC-S1**：Given 進入一個有子分類之循環的 DAG 畫布編輯頁, When 渲染頁首標題與麵包屑, Then 循環名稱顯示為 `lifecycleDisplayName` 之輸出（如 `銷售及收款循環（消金）· DAG 畫布`）；Given 該循環無子分類, Then 顯示為 `銷售及收款循環 · DAG 畫布`（不含括號）。畫布之節點/邊資料與防環邏輯**完全不受子分類影響**（DAG 恆屬單一 `lifecycleId`）。
+- **AC-S2**：Given 於該循環新增／刪除節點或連線, When 事件寫入 `LIFECYCLE_CHANGE_LOG`, Then 其 `lifecycleName` 快照值為 `lifecycleDisplayName` 之輸出（含子分類），使歷史事件可唯一辨識所屬循環（[F040](F040-lifecycle-subcategory.md) AC-34）。
+
 ## Error Scenarios
 - 成環/自環：見 [error-handling.md#dag](../error-handling.md#dag)（`DAG_CYCLE_DETECTED`, `DAG_SELF_LOOP`）。
 
 ## Related
 - Diagram: [../diagrams/F008-dag-cycle-prevention.mmd](../diagrams/F008-dag-cycle-prevention.mmd)
 - Data: [LIFECYCLE_NODE](../data-model.md#node-entity), [LIFECYCLE_EDGE](../data-model.md#edge-entity)
+- **循環子分類規則權威**: [F040](F040-lifecycle-subcategory.md)（標題顯示與 `LIFECYCLE_CHANGE_LOG.lifecycleName` 快照）
 - Depends on: [F007](F007-lifecycle-pool-crud.md); Blocks: [F009](F009-node-drawer-maintenance.md), [F038](F038-lifecycle-tree-change-history.md)（結構變更事件來源）
 - Related: 連線樣式與 [F036](F036-lifecycle-tree-preview.md)／[F038](F038-lifecycle-tree-change-history.md) 一致（直角 elbow）
 - NFR: [效能（畫布 <200 節點）](../nfr.md#performance), [瀏覽器（桌機為主，平板不強制編輯）](../nfr.md#browser-rwd)

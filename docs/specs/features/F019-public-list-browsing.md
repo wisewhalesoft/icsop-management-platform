@@ -3,6 +3,7 @@ Priority: P0-MVP | Status: 部分（unit 綠；**`DOC_USING_DEPT` 讀取端已�
 Epic/Story: E06 / US-050, US-051, US-052
 
 > 合併理由：排序（US-050）、關鍵字搜尋（US-051）、篩選（US-052）為同一前台清單畫面之組合行為，合為單一 feature。排序管線見 [F019-public-list-sorting.mmd](../diagrams/F019-public-list-sorting.mmd)。
+> **2026-08-07 additive delta（🟢 APPROVED（2026-08-07 人類閘門通過））**：「循環」篩選與循環別顯示須反映循環子分類。規則權威＝[F040](F040-lifecycle-subcategory.md)；排序、置頂、可見性與既有條款皆不變。
 
 ## Description
 前台 RWD 清單以固定邏輯排序：文件使用部門與登入使用者所屬部門相符者「置頂」，其餘依 ICSOP 文件編號「降冪」。**一般使用者僅可見「已公告」文件（＝儲存狀態＝有效 且 公告日期 ≤ 今日；「進度中」＝有效但公告日期未到，與 失效/作廢，一律由後端過濾隱藏，定案）。** 「已公告」為顯示/可見衍生，**儲存狀態欄位仍為 有效/失效/作廢**（不新增儲存狀態值）。提供關鍵字搜尋（文件編號＋文件名稱）與部門/狀態/循環三種篩選；部門篩選以「使用部門」比對，**可選任意層級（本部／部／處室／課），判定時自動展開子樹**；搜尋與篩選以 AND 組合。排序/搜尋/篩選皆於後端實作（分頁一致）。
@@ -65,6 +66,11 @@ Epic/Story: E06 / US-050, US-051, US-052
 - Given 部門篩選選定處室層 `JAC00`, When 套用, Then 僅列入 `orgCode LIKE 'JAC%'` 之使用部門文件，不含其他處室。
 - Given 部門篩選之子樹展開, When 後端執行查詢, Then 以 `orgCode LIKE '<有效前綴>%'` 之前綴比對實作，不使用遞迴 CTE 或 closure table。
 
+### 循環子分類 delta（🟢 APPROVED 2026-08-07；規則權威＝[F040](F040-lifecycle-subcategory.md)）
+
+- **AC-S1**：Given 前台清單／詳情呈現某文件之「循環別」, When 渲染, Then 顯示字串由 `lifecycleDisplayName` 產生——有子分類 → `名稱（子分類）`（全形括號無空白）、無子分類 → `名稱`；前台與後台（[F017](F017-backend-document-list.md)）之顯示字串完全一致。
+- **AC-S2**：Given 池中有「銷售及收款循環（消金）」與「銷售及收款循環（企金）」, When 展開前台「循環」篩選, Then 呈現**兩個相異選項**（各以 `lifecycleDisplayName` 顯示），篩選值為各自 `lifecycleId`（**非** `name` 字串）；When 選定「消金」, Then 結果僅含該具體循環之文件，不含同名「企金」之文件，且與部門／狀態篩選之 AND 組合語意不變。
+
 ## Error Scenarios
 - 空結果/萬用字元跳脫：見 [error-handling.md#public](../error-handling.md#public)。效能見 [NFR-001](../nfr.md#performance)。
 
@@ -72,5 +78,6 @@ Epic/Story: E06 / US-050, US-051, US-052
 - **來源契約: [upstream-hr-source-contract.md](../upstream-hr-source-contract.md)**（§3.5 5 層代碼前綴編碼、§9.1 任意層級指定、§9.2 子樹前綴展開）
 - Diagram: [../diagrams/F019-public-list-sorting.mmd](../diagrams/F019-public-list-sorting.mmd)
 - Data: [ICSOP_DOCUMENT](../data-model.md#document-entity), [DOC_USING_DEPT](../data-model.md#doc-using-dept)
+- **循環子分類規則權威**: [F040](F040-lifecycle-subcategory.md)（`lifecycleDisplayName` 顯示規則、篩選值＝`lifecycleId`）
 - Depends on: [F001](F001-auth-login-session.md), [F004](F004-org-sync.md), [F017](F017-backend-document-list.md); 詳情含 [F015](F015-document-cross-link.md), [F018](F018-usage-form-management.md)
 - 定案: OQ-DATA-01（文件名稱為正式可讀標題欄位）、OQ-E06-01（搜尋＝編號＋名稱）、OQ-E06-02（前台僅顯示「已公告」＝有效且公告日期已過、部門篩選以使用部門）。
