@@ -155,3 +155,45 @@ describe('buildAuditRow — TS-F023-016 targetType 全集（5 種皆可寫入）
     expect(row.watermarkSnapshot).toBeNull();
   });
 });
+
+/**
+ * F039 附錄管理 — architecture-spec.md §3.6 決策三：additive 擴充，
+ * 新增 targetType='APPENDIX' 聯集成員與 switch 分支。**不修改**上方既有 5 種既有案例
+ * 之任何斷言或 it.each 測試主體（該迴圈之型別分支邏輯僅覆蓋既有型別，刻意不納入 APPENDIX，
+ * 避免動到既有斷言字元）——本區塊獨立驗證 APPENDIX 分支，purely additive。
+ *
+ * ⚠ 高風險點（decision 三，與 USAGE_FORM 既有落差不同）：AC-27 要求 APPENDIX 稽核列
+ * **同時**落地 appendixId 與 documentId，不可沿用 USAGE_FORM 分支之單一 targetId 對映模式
+ * （USAGE_FORM 分支現行 documentId 恆為 null，屬既有落差、非本次修正範圍）。
+ */
+describe('buildAuditRow — TS-F039-001 附錄（APPENDIX）下載事件', () => {
+  const APPENDIX_DOWNLOAD: AuditAccessEvent = {
+    targetType: 'APPENDIX',
+    actionType: 'DOWNLOAD',
+    actorId: 'acc-1',
+    actorName: '王小明',
+    employeeNo: '22345',
+    company: '和潤企業股份有限公司',
+    department: '債權管理部',
+    section: '法催一室',
+    roleCode: 'User',
+    targetId: 'ax-42',
+    documentId: 'doc-7',
+    occurredAt: OCCURRED,
+  } as AuditAccessEvent;
+
+  it('appendixId 記錄為 targetId，且 documentId 亦一併落地（AC-27，不同於 USAGE_FORM 分支）', () => {
+    const row = buildAuditRow(APPENDIX_DOWNLOAD);
+    expect(row.targetType).toBe('APPENDIX');
+    expect(row.actionType).toBe('DOWNLOAD');
+    expect(row.appendixId).toBe('ax-42');
+    expect(row.documentId).toBe('doc-7');
+    expect(row.lifecycleId).toBeNull();
+    expect(row.formId).toBeNull();
+  });
+
+  it('watermarkSnapshot 未提供 → 收斂為 null（附錄下載不燒錄浮水印，AC-29）', () => {
+    const row = buildAuditRow(APPENDIX_DOWNLOAD);
+    expect(row.watermarkSnapshot).toBeNull();
+  });
+});

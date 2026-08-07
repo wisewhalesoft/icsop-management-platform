@@ -20,9 +20,9 @@ describe('function-matrix（前端鏡射）', () => {
     ]);
   });
 
-  it('矩陣含 12 功能，每列涵蓋全部 5 角色', () => {
+  it('矩陣含 13 功能，每列涵蓋全部 5 角色（F039 新增「附錄管理」）', () => {
     const keys = Object.keys(FUNCTION_MATRIX);
-    expect(keys).toHaveLength(12);
+    expect(keys).toHaveLength(13);
     for (const key of keys) {
       expect(Object.keys(FUNCTION_MATRIX[key]).sort()).toEqual(
         [...ROLE_CODES].sort(),

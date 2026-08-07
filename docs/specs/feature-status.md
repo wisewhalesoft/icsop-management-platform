@@ -39,8 +39,10 @@
 | ✅ 已完成-已驗證 | **27** | F001 F002 F003 F004 F005 F006 F007 F008 F009 F010 F011 F012 F013 F014 F015 F016 F017 F018 F019 F020 F023 F024 F025 F026 F036 F037 F038 |
 | 🟡 部分 | **7** | F021 F022 F027 F028 F029 F030 F031 |
 | 🔵 進行中 | **0** | — |
-| ⬜ 未開始 | **4** | F032 F033 F034 F035 |
-| | **38** | |
+| ⬜ 未開始 | **5** | F032 F033 F034 F035 **F039** |
+| | **39** | |
+
+> **2026-08-06 新增 F039 附錄管理（E10）**：規格層完成（stories → [F039](features/F039-appendix-management.md) AC-01～AC-34 ＋ data-model `APPENDIX_POOL`/`DOC_APPENDIX` ＋ error-handling 4 錯誤碼 ＋ F025「附錄管理」功能列／F026「附錄（多）」欄位列），**實作為 ⬜ 未開始**。tally 由 ✅27 🟡7 🔵0 ⬜4（38）改為 **✅27 🟡7 🔵0 ⬜5（39）**。⬜ 現含 Phase 3 RAG F032–F035 ＋ Phase 1 之 F039。
 
 > **2026-07-24 可建功能三線平行 worktree（lifecycle-changelog／orgsync-alerts／hardening）併回 main、int-verified**（test-spec 先＋審核閘門定案 2 決策＋瀏覽器煙霧測試先行）：先以真 SOP 啟動全系統＋瀏覽器實走（登入→建立→編輯→狀態切換含原因→前台檢視→組織異動→調閱歷程，零 JS 錯誤、RBAC 徽章正確、F024 分頁/上色修正實見效），再開三線。① **lifecycle-changelog（F038）** — `LIFECYCLE_SNAPSHOT` 交易一致快照（§5.9 原子，人類定案；F008/F009 DAG 結構寫入＋事件＋快照同交易、以選填 `runStructuralChange` capability 使既有 fake 零改動、rollback 單測把關）＋完整新舊重建＋diff＋雙頁 PDF 燒錄＋前端新舊並列 modal（proto 23，取代舊「複用 F036 單頁」）；② **orgsync-alerts（F005）** — 兩類警示沿用 `ORG_CHANGE_ALERT`（人類定案 OQ-E02-08b，dedup 以 loginId 不以 EMPNO、資料不一致不停用）＋修二值 alertKind 缺陷；③ **hardening** — F001 帳密登入節流（`AUTH_TOO_MANY_ATTEMPTS` 429，自動過期非鎖定）＋F020 燒錄計時 int（warm≈249ms≪3s）＋確認 login 預填為瀏覽器 autofill 非缺陷。**審核閘門 2 決策**：F038 原子/F037 記為 §5.9 例外、F005 沿用 ORG_CHANGE_ALERT。**合流**：§5.9 補 F037 best-effort 例外、錯誤碼 AUTH_TOO_MANY_ATTEMPTS/LIFECYCLE_CHANGE_LOG_NOT_FOUND 集中補入；int 揪出 F038 itest 未插 Supervisor 帳號（401 vs 403）已修。**→ F001 F005 F020 F038 🟡→✅（4 升）**。backend **1243 單元＋88 int（15 suites vs SOP）**、frontend **410**、tsc 淨、22 migration 落 SOP。**tally ✅27 🟡7 🔵0 ⬜4**。🟡 僅剩 F021/F022（RWD/彈窗＝瀏覽器人工）＋F027-F031（RAG 管線 backend）；非 RAG、非瀏覽器人工功能全數 ✅。
 
@@ -139,6 +141,11 @@
 | F034 | 問答稽核與 AI 導引浮水印/稽核 | P0 | 3 | ⬜ 未開始 | 無 `QA_LOG`；依賴 F032 及 F020/F023/F024；Phase 3 |
 | F035 | 防幻覺護欄與無結果處理 | P0 | 3 | ⬜ 未開始 | 無生成層/LLM 整合/引用強制/拒答；Phase 3 |
 
+### E10 附錄管理
+| ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
+|----|------|---|----|------|--------------------------|
+| F039 | 附錄管理（附錄池＋關聯排序） | P1 | 1 | ⬜ 未開始 | 規格已定稿（[F039](features/F039-appendix-management.md)，AC-01～AC-34 涵蓋 US-100/101/102 全部 AC）；**無任何實作**：`APPENDIX_POOL`／`DOC_APPENDIX` 未建表、`FileCategory='APPENDIX'` 未加、功能鍵「附錄管理」與欄位鍵「附錄」未入 RBAC 矩陣、`AUDIT_LOG` 之 `APPENDIX` targetType＋`appendixId` 欄未擴充、端點與前端頁面皆未建。prototype 僅有 24（管理頁），建立/編輯/唯讀/前台詳情之附錄區塊待 ui-ux-designer 傳播 |
+
 ---
 
 ## 跨功能缺失的地基（一建、多功能解鎖）
@@ -163,3 +170,5 @@
 ---
 
 _稽核方法：對 38 個 `features/Fxxx-*.md` 的 Acceptance Criteria 逐條 ↔ `backend/src`、`frontend/src`、測試檔交叉核對，並以「端到端可達」嚴格判定。基準 main：初審 `e6045d9` → Wave 1/2 → 整合①②③ → 地基三線 → 前端三線 → 縫隙收斂三線 → 獨立🟡收尾三線 → 可建功能三線。測試：**backend 1243 單元＋88 整合（`npm run test:int`，15 suites vs SOP＋真 Blob）／frontend 410**，tsc 全淨。22 migration 落 SOP。狀態：**✅27 🟡7 🔵0 ⬜4**（⬜ 僅剩 Phase 3 RAG F032-F035；🟡 僅剩 F021/F022（RWD/彈窗＝瀏覽器人工驗）＋F027-F031（RAG 管線 backend，卡 pgvector/embedding/LLM）；**非 RAG、非瀏覽器人工之功能已全數 ✅**）。（2026-07-24）_
+
+_2026-08-06 增修：新增 **F039 附錄管理**（E10，規格層完成、實作 ⬜ 未開始），功能總數 38 → **39**，狀態 **✅27 🟡7 🔵0 ⬜5**。上表其餘各列之狀態與缺口未重新稽核，仍以 2026-07-24 基準為準。_

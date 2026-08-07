@@ -23,7 +23,9 @@ export type AuditTargetType =
   | 'LIFECYCLE_CHANGE_LOG'
   // F006 組織異動待確認提示之狀態變更（additive：僅新增字面值，不改既有變體語意；
   // 比照 F007 LIFECYCLE_DELETE 先例）。targetId＝ORG_CHANGE_ALERT.id。
-  | 'ORG_CHANGE_ALERT';
+  | 'ORG_CHANGE_ALERT'
+  // F039 附錄下載（architecture-spec §3.6 決策三，additive）。targetId＝APPENDIX_POOL.id。
+  | 'APPENDIX';
 
 /** 操作類型（data-model AUDIT_LOG.actionType，逐字沿用 F036/F037/F038 spec 命名）。 */
 export type AuditActionType =
@@ -118,6 +120,20 @@ export interface OrgChangeAlertAuditEvent extends AuditEventBase {
   actionType: 'ALERT_RESOLVED';
 }
 
+/**
+ * 附錄下載（F039，無浮水印／不燒錄，AC-29）。targetId＝APPENDIX_POOL.id。
+ *
+ * ⚠ 本變體**刻意攜帶必填 `documentId`**（不同於既有 USAGE_FORM 變體之「單一 targetId」模式）：
+ * AC-27 要求附錄下載之稽核列**同時**落地 `appendixId` 與 `documentId`（該附錄係經哪一份文件被下載）。
+ * TypeScript 判別聯集允許個別變體攜帶額外欄位；既有 6 種變體之形狀逐字不動。
+ */
+export interface AppendixAuditEvent extends AuditEventBase {
+  targetType: 'APPENDIX';
+  actionType: 'DOWNLOAD';
+  /** 下載來源之文件 id（必填；buildAuditRow 之 APPENDIX 分支直接落至 AUDIT_LOG.documentId）。 */
+  documentId: string;
+}
+
 /** 稽核調閱事件（以 targetType 判別之聯集）——D 契約鎖定形狀。 */
 export type AuditAccessEvent =
   | DocumentAuditEvent
@@ -125,7 +141,8 @@ export type AuditAccessEvent =
   | LifecycleAuditEvent
   | DocumentChangeLogAuditEvent
   | LifecycleChangeLogAuditEvent
-  | OrgChangeAlertAuditEvent;
+  | OrgChangeAlertAuditEvent
+  | AppendixAuditEvent;
 
 /**
  * 已物化之稽核列（append-only）。同時作為 AUDIT_LOG 落地列與 F024 查詢結果列。
@@ -147,6 +164,13 @@ export interface AuditRow {
   lifecycleId: string | null;
   lifecycleName: string | null;
   formId: string | null;
+  /**
+   * F039 附錄 id（僅 targetType='APPENDIX' 之列非 null）。
+   * **必填**（architecture-spec §3.6 決策三／§4.9「比照現行 formId／lifecycleId／documentId」）：
+   * 該三個既有條件必填欄於各建構點皆顯式帶 null，非可省略；appendixId 走同一慣例，
+   * 不另開選填先例。所有建構點（buildAuditRow／TypeOrmAuditStore.toRow）皆顯式填值。
+   */
+  appendixId: string | null;
   /** 對象名稱／說明快照（供 F024 明細；非 data-model 現有欄，見 impl log flag）。 */
   targetName: string | null;
   watermarkSnapshot: string | null;

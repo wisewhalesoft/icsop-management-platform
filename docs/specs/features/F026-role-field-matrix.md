@@ -1,11 +1,12 @@
 # F026: 角色×欄位權限矩陣
-Priority: P0-MVP | Status: 🟡 實作（unit 綠）。① 欄位可寫/唯讀矩陣＋`FIELD_WRITE_FORBIDDEN`，**建立＋編輯兩路徑皆行使 all-or-nothing**（含多值欄 `CHIEF_SECONDARY`/`USING_DEPTS` 編輯路徑回歸，doc-seams）；② **「使用部門子樹前綴判定」已落地為共用純函式** `org-sync/org-hierarchy.isWithinSubtree`，與 F019 置頂/部門篩選共用同一 predicate（public-seams），AC「部層 `JA000` ⊃ `JAC00` 相符／同部兄弟處室不相符」由 TS-PS-ORG-002/004 覆蓋。剩：AC5-9 之附件/浮水印相關判定。見 implementation-logs/doc-seams-impl.md、public-seams-impl.md | Last Updated: 2026-07-24
-Epic/Story: E08 / US-071
+Priority: P0-MVP | Status: 🟡 實作（unit 綠）。① 欄位可寫/唯讀矩陣＋`FIELD_WRITE_FORBIDDEN`，**建立＋編輯兩路徑皆行使 all-or-nothing**（含多值欄 `CHIEF_SECONDARY`/`USING_DEPTS` 編輯路徑回歸，doc-seams）；② **「使用部門子樹前綴判定」已落地為共用純函式** `org-sync/org-hierarchy.isWithinSubtree`，與 F019 置頂/部門篩選共用同一 predicate（public-seams），AC「部層 `JA000` ⊃ `JAC00` 相符／同部兄弟處室不相符」由 TS-PS-ORG-002/004 覆蓋。剩：AC5-9 之附件/浮水印相關判定。見 implementation-logs/doc-seams-impl.md、public-seams-impl.md。**2026-08-06 新增第 20 欄「附錄（多）」（F039），該列尚未實作** | Last Updated: 2026-08-06
+Epic/Story: E08 / US-071（附錄（多）列：E10 / US-101、US-102）
 
-> **定案**：主管、部門窗口、**系統管理員**對所有文件欄位**皆唯讀**（僅 ICSOP 管理員可寫）。系統管理員比照主管為唯讀（可查、附件可下載、不可寫），與功能矩陣 F025 一致（OQ-E08-01 已收斂）。「所屬節點」雖列 ICSOPAdmin 可寫，但維護入口為節點抽屜（F009），非文件編輯表單。共 19 欄位（詳見 [data-model](../data-model.md#document-entity)；2026-07-17 移除「當責部門」、新增 制定公司/制定部門/制定室別/內容摘要，發布日期→公告日期、人為版本號→版次）。
+> **定案**：主管、部門窗口、**系統管理員**對所有文件欄位**皆唯讀**（僅 ICSOP 管理員可寫）。系統管理員比照主管為唯讀（可查、附件可下載、不可寫），與功能矩陣 F025 一致（OQ-E08-01 已收斂）。「所屬節點」雖列 ICSOPAdmin 可寫，但維護入口為節點抽屜（F009），非文件編輯表單。共 **20 欄位**（原 19 欄 ＋ **2026-08-06 新增「附錄（多）」**；詳見 [data-model](../data-model.md#document-entity)；2026-07-17 移除「當責部門」、新增 制定公司/制定部門/制定室別/內容摘要，發布日期→公告日期、人為版本號→版次）。
+> **新增「附錄（多）」欄位列（[F039](F039-appendix-management.md) / [US-071](../../stories/epics/E08-permission-matrix/US-071-role-field-matrix.md)）**：權限值與「使用表單（多）」列**完全比照**——ICSOPAdmin 可寫、其餘四角色唯讀（可下載）。**欄位鍵字串定案為「附錄」**（矩陣列名顯示「附錄（多）」，鍵值去括號補述，比照既有「使用表單（多）」→ 鍵值 `使用表單`；建議常數 `FieldKey.APPENDICES`）。⚠ 其他 spec 之散文仍以「19 欄」指涉，屬既有措辭落差，見 [open-questions.md](../open-questions.md) OQ-E10-03。
 
 ## Description
-於欄位層級（非僅功能層級）定義各角色對 ICSOP 文件 19 欄位的可寫/唯讀，避免非授權角色修改關鍵欄位。與 F025 採同一套 RBAC 中介層，欄位權限以 DTO 層白名單/黑名單過濾。
+於欄位層級（非僅功能層級）定義各角色對 ICSOP 文件 20 欄位的可寫/唯讀，避免非授權角色修改關鍵欄位。與 F025 採同一套 RBAC 中介層，欄位權限以 DTO 層白名單/黑名單過濾。
 
 ## 角色×欄位矩陣
 
@@ -26,6 +27,7 @@ Epic/Story: E08 / US-071
 | 文件連結點（連結點程序書，多） | 唯讀 | 可寫 | 唯讀 | 唯讀 | 唯讀 |
 | ICSOP PDF（檔案） | 唯讀（可下載） | 可寫 | 唯讀（可下載） | 唯讀（可下載） | 唯讀（可下載） |
 | 使用表單（多） | 唯讀（可下載） | 可寫 | 唯讀（可下載） | 唯讀（可下載） | 唯讀（可下載） |
+| 附錄（多） | 唯讀（可下載） | 可寫 | 唯讀（可下載） | 唯讀（可下載） | 唯讀（可下載） |
 | 公告日期 | 唯讀 | 可寫 | 唯讀 | 唯讀 | 唯讀 |
 | OJT 簽到表 | 唯讀 | 可寫 | 唯讀 | 唯讀 | 唯讀 |
 | 文件名稱（程序書書名） | 唯讀 | 可寫 | 唯讀 | 唯讀 | 唯讀 |
@@ -49,7 +51,7 @@ Epic/Story: E08 / US-071
 3. 系統產生欄位（UUID）：一律忽略傳入值，由系統邏輯產生。
 
 ## Edge Cases
-- 主管/部門窗口可下載 ICSOP PDF/使用表單：**後台下載提供原始檔案**（管理存取，經短效期 SAS URL 核發，伺服器不經手位元組故不燒錄浮水印），但上傳/取代該附件被拒。**浮水印燒錄與調閱稽核僅發生於前台檢視器路徑（F020）**；後台原始下載與前台燒錄下載係「管理存取 vs 消費存取」之刻意區分（且使用表單常為 .xlsx，無 PDF 浮水印可燒）。（OQ-FM-01 人類裁決，2026-07-24：後台維持 RAW、不接線 PdfBurner。）
+- 主管/部門窗口可下載 ICSOP PDF/使用表單/**附錄**（[F039](F039-appendix-management.md)，同一原則）：**後台下載提供原始檔案**（管理存取，經短效期 SAS URL 核發，伺服器不經手位元組故不燒錄浮水印），但上傳/取代該附件被拒。**浮水印燒錄與調閱稽核僅發生於前台檢視器路徑（F020）**；後台原始下載與前台燒錄下載係「管理存取 vs 消費存取」之刻意區分（且使用表單常為 .xlsx，無 PDF 浮水印可燒）。（OQ-FM-01 人類裁決，2026-07-24：後台維持 RAW、不接線 PdfBurner。）
 - 組織異動需重設制定組織／當責室長：由 ICSOPAdmin 依 F006 提示處理；系統管理員對文件欄位為唯讀、無寫入權（比照主管，OQ-E08-01 已收斂）。
 
 ## Postconditions
@@ -62,6 +64,8 @@ Epic/Story: E08 / US-071
 - Given API 夾帶系統 UUID 欲覆寫, When 送出, Then 忽略該欄位，以原 UUID 為準。
 - Given 一般使用者前台下載 ICSOP PDF, When 下載, Then 允許並燒錄浮水印，但無法存取後台編輯介面。
 - Given 主管下載使用表單, When 下載, Then 允許；同角色嘗試上傳/取代該附件則被拒。
+- Given 主管／部門窗口／一般使用者／系統管理員下載**附錄**, When 下載, Then 允許（欄位「附錄（多）」＝唯讀可下載）；同角色嘗試上傳／覆蓋／關聯附錄則回 `FIELD_WRITE_FORBIDDEN`（403）。
+- Given ICSOP 管理員上傳／覆蓋／關聯附錄, When 送出, Then 允許寫入（欄位「附錄（多）」＝可寫）。
 - Given ICSOP 管理員編輯「文件使用部門」, When 開啟選單, Then 可選擇本部／部／處室／課任一層級之單位並儲存成功。
 - Given 文件使用部門設為部層 `JA000`、使用者所屬部門為 `JAC00`, When 判定使用部門相符性, Then 判定為相符（子樹自動展開）。
 - Given 文件使用部門設為處室層 `JAC00`、使用者所屬部門為同部之另一處室, When 判定, Then 判定為不相符。
@@ -71,7 +75,7 @@ Epic/Story: E08 / US-071
 
 ## Related
 - **來源契約: [upstream-hr-source-contract.md](../upstream-hr-source-contract.md)**（§3.5 5 層代碼前綴編碼、§9.1 文件使用部門可指定任意層級、§9.2 子樹前綴展開）
-- Data: [ICSOP_DOCUMENT（19 欄位）](../data-model.md#document-entity), [DOC_USING_DEPT](../data-model.md#doc-using-dept)
-- Depends on: [F025](F025-role-function-matrix.md), [F010](F010-create-document.md), [F004](F004-org-sync.md); 影響 [F011](F011-edit-with-comparison.md), [F014](F014-accountable-dept-chief.md), [F019](F019-public-list-browsing.md), [F033](F033-permission-aware-retrieval.md)
+- Data: [ICSOP_DOCUMENT（20 欄位）](../data-model.md#document-entity), [DOC_USING_DEPT](../data-model.md#doc-using-dept), [APPENDIX_POOL／DOC_APPENDIX](../data-model.md#appendix-entity)
+- Depends on: [F025](F025-role-function-matrix.md), [F010](F010-create-document.md), [F004](F004-org-sync.md); 影響 [F011](F011-edit-with-comparison.md), [F014](F014-accountable-dept-chief.md), [F019](F019-public-list-browsing.md), [F033](F033-permission-aware-retrieval.md), [F039](F039-appendix-management.md)
 - 節點寫入路徑: [F009](F009-node-drawer-maintenance.md)
 - 定案: OQ-E08-01（SysAdmin 對文件欄位比照主管為唯讀、無寫入權）。OQ: OQ-E08-02（矩陣其餘部分審核）。

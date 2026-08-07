@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>附錄（附錄池）管理 · 後台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;color:#334155;background:#FFFFFF;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  body:not([data-role="icsop_admin"]) .write-only{display:none !important;}
+  /* admin shell sidebar */
+  #sidebar{width:240px;transition:width .2s ease;}
+  body{padding-left:240px;transition:padding-left .2s ease;}
+  body.sb-collapsed{padding-left:60px;}
+  body.sb-collapsed #sidebar{width:60px;}
+  body.sb-collapsed .sb-label{display:none;}
+  body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
+</style>
+</head>
+<body data-role="icsop_admin" class="min-h-screen">
+
+<!-- ===== Admin shell sidebar ===== -->
+<aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-50 bg-white border-r border-slate-200 flex flex-col">
+  <div class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
+  </div>
+  <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
+  <div class="border-t border-slate-200 p-2 shrink-0">
+    <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
+      <i data-lucide="external-link" class="w-4 h-4 shrink-0"></i><span class="sb-label truncate">瀏覽文件網頁</span></button>
+  </div>
+</aside>
+
+<!-- Top bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="h-14 px-4 flex items-center gap-3">
+    <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
+    <div class="leading-tight min-w-0">
+      <div class="text-xs text-slate-400 flex items-center gap-1"><span>附錄管理</span><i data-lucide="chevron-right" class="w-3 h-3"></i><span>附錄池</span></div>
+      <div class="font-semibold text-slate-900 text-sm truncate">附錄（附錄池）管理</div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <button onclick="openUpload()" class="write-only inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="upload" class="w-4 h-4"></i>上傳附錄</button>
+      <div class="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+        <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+        <select id="roleSel" onchange="setRole(this.value)" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
+          <option value="icsop_admin">ICSOP 管理員</option>
+          <option value="supervisor">主管（無）</option>
+          <option value="sysadmin">系統管理員（唯讀）</option>
+          <option value="deptcontact">部門窗口</option>
+          <option value="user">一般使用者</option>
+        </select>
+      </div>
+      <div class="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200"><i data-lucide="user-circle" class="w-4 h-4"></i><span>李慧玲</span></div>
+      <button title="登出" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+  <!-- readonly banner -->
+  <div id="roBanner" class="hidden bg-cyan-50 border-t border-cyan-200 text-cyan-800 text-sm px-4 py-2 items-center gap-2">
+    <i data-lucide="eye" class="w-4 h-4"></i>唯讀模式 · 系統管理員僅可查詢與下載附錄、檢視關聯文件，無法上傳、更新或移除（FIELD_WRITE_FORBIDDEN）。
+  </div>
+</header>
+
+<!-- blocked overlay -->
+<div id="blockOverlay" class="hidden fixed inset-0 z-40 bg-slate-50/90 backdrop-blur-sm flex items-center justify-center">
+  <div class="text-center max-w-xs">
+    <div class="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="lock" class="w-7 h-7 text-red-500"></i></div>
+    <h3 class="font-semibold text-slate-900">無附錄管理權限</h3>
+    <p class="text-sm text-slate-500 mt-1" id="blockMsg"></p>
+    <p class="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+  </div>
+</div>
+
+<main class="px-4 py-6">
+  <!-- intro -->
+  <div class="flex items-start gap-2 mb-4 text-sm text-slate-500">
+    <i data-lucide="info" class="w-4 h-4 mt-0.5 text-slate-400 shrink-0"></i>
+    <p>附錄池集中管理各 ICSOP 文件所引用的 excel / pdf 附錄。本頁負責上傳、下載、更新（覆蓋）、檢視關聯與移除；<strong class="text-slate-600">文件與附錄之關聯與顯示順序</strong>於「ICSOP 文件管理」建立／編輯畫面以上移／下移排定。</p>
+  </div>
+
+  <!-- toolbar -->
+  <div class="flex flex-wrap items-center gap-2 mb-4">
+    <div class="relative flex-1 min-w-[200px]">
+      <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+      <input id="kw" oninput="renderTable()" type="search" placeholder="搜尋附錄名稱…" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600" />
+    </div>
+    <select id="fFmt" onchange="renderTable()" class="px-3 py-2 rounded-md border border-slate-300 text-sm bg-white">
+      <option value="">所有格式</option><option value="excel">excel</option><option value="pdf">pdf</option>
+    </select>
+    <button id="clearBtn" onclick="clearFilters()" class="hidden px-3 py-2 rounded-md text-sm text-primary-600 hover:bg-primary-50">清除</button>
+    <span id="countText" class="ml-auto text-sm text-slate-500"></span>
+  </div>
+
+  <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm min-w-[760px]">
+        <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="text-left font-medium px-4 py-2.5">附錄名稱</th>
+            <th class="text-left font-medium px-4 py-2.5">格式</th>
+            <th class="text-left font-medium px-4 py-2.5">大小</th>
+            <th class="text-left font-medium px-4 py-2.5">上傳者 / 上傳時間</th>
+            <th class="text-left font-medium px-4 py-2.5">關聯文件數</th>
+            <th class="text-left font-medium px-4 py-2.5">操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody" class="divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+    <div id="emptyState" class="hidden text-center py-14">
+      <i data-lucide="inbox" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+      <p class="text-slate-500 text-sm">查無符合的附錄</p>
+    </div>
+  </div>
+</main>
+
+<!-- upload modal -->
+<div id="upModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-semibold text-slate-900">上傳附錄</h3>
+      <button onclick="closeUpload()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">選擇檔案 <span class="text-red-500">*</span> <span class="text-xs font-normal text-slate-400">（可一次選取多個）</span></label>
+        <input id="fileInput" type="file" accept=".xlsx,.xls,.pdf" multiple class="hidden" onchange="onFileInput(this)" />
+        <button type="button" onclick="document.getElementById('fileInput').click()" class="w-full border border-dashed border-slate-300 rounded-lg px-4 py-5 flex flex-col items-center gap-1 text-slate-500 hover:border-primary-400 hover:bg-primary-50/40">
+          <i data-lucide="upload-cloud" class="w-6 h-6 text-slate-400"></i>
+          <span class="text-sm">點此選擇檔案（可多選）</span>
+          <span class="text-xs text-slate-400">支援格式：excel（.xlsx / .xls）、pdf；單檔上限 50 MB</span>
+        </button>
+        <!-- demo pickers (無需真實檔案即可示範驗證) -->
+        <div class="flex flex-wrap gap-1.5 mt-2">
+          <span class="text-xs text-slate-400">示範選檔：</span>
+          <button type="button" onclick="pickDemo('single')" class="text-xs px-2 py-0.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50">單檔 · 作業流程對照表.xlsx</button>
+          <button type="button" onclick="pickDemo('multi')" class="text-xs px-2 py-0.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50">多檔 · 3 個合法檔</button>
+          <button type="button" onclick="pickDemo('exact50')" class="text-xs px-2 py-0.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50">恰 50 MB（通過）</button>
+          <button type="button" onclick="pickDemo('badfmt')" class="text-xs px-2 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50">多檔含 .docx（整批擋下）</button>
+          <button type="button" onclick="pickDemo('oversize')" class="text-xs px-2 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50">51 MB（超過上限）</button>
+        </div>
+        <!-- selected file list -->
+        <div id="filePreview" class="hidden mt-2 rounded-md border border-slate-200 bg-slate-50 divide-y divide-slate-100 max-h-40 overflow-y-auto"></div>
+        <!-- validation error -->
+        <p id="fileErr" class="hidden mt-2 text-xs text-red-600 items-start gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>檔案格式不支援，僅允許 excel（.xlsx / .xls）與 pdf（FILE_FORMAT_NOT_ALLOWED）。</span></p>
+        <p id="batchNote" class="hidden mt-2 text-[11px] text-slate-500 items-start gap-1"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-400"></i><span>多檔一次送出採「<strong class="text-slate-600">先全部驗證、再全部建立</strong>」；任一檔格式或大小不合法，整批皆不建立。</span></p>
+      </div>
+      <!-- 名稱：僅單檔路徑提供（選填，留空 fallback 檔名） -->
+      <div id="nameBlock">
+        <label class="block text-sm font-medium text-slate-700 mb-1">附錄名稱 <span class="text-xs font-normal text-slate-400">（選填；留空自動採用檔名）</span></label>
+        <input id="upName" type="text" maxlength="500" oninput="onNameInput()" placeholder="留空則以原始檔名建檔" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <p class="mt-1 text-[10px] text-slate-400">選檔後自動帶入檔名，可自行改寫；前後空白會自動去除，上限 400 字元。</p>
+        <p id="upNameErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i><span>附錄名稱超過 400 字元上限（APPENDIX_NAME_TOO_LONG）。</span></p>
+      </div>
+      <div id="multiNameNote" class="hidden items-start gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
+        <i data-lucide="files" class="w-3.5 h-3.5 mt-0.5 text-slate-400 shrink-0"></i>
+        <span>多檔上傳<strong class="text-slate-600">不提供自訂名稱</strong>，各檔一律以其原始檔名建檔。如需自訂名稱請改為單檔上傳。</span>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
+        <i data-lucide="hard-drive" class="w-3.5 h-3.5 text-slate-400"></i>
+        檔案大小上限 <span class="font-medium text-slate-600">50&nbsp;MB</span> · 允許格式 <span class="font-medium text-slate-600">xlsx / xls / pdf</span>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeUpload()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button onclick="submitUpload()" class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">上傳</button>
+    </div>
+  </div>
+</div>
+
+<!-- overwrite (update) modal -->
+<div id="ovModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-semibold text-slate-900">更新附錄（覆蓋上傳）</h3>
+      <button onclick="closeOverwrite()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p id="ovTarget" class="text-xs text-slate-500 mb-4"></p>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">選擇新檔 <span class="text-red-500">*</span></label>
+        <input id="ovFileInput" type="file" accept=".xlsx,.xls,.pdf" class="hidden" onchange="onOvFileInput(this)" />
+        <button type="button" onclick="document.getElementById('ovFileInput').click()" class="w-full border border-dashed border-slate-300 rounded-lg px-4 py-5 flex flex-col items-center gap-1 text-slate-500 hover:border-amber-400 hover:bg-amber-50/40">
+          <i data-lucide="upload-cloud" class="w-6 h-6 text-slate-400"></i>
+          <span class="text-sm">點此選擇取代用的新檔</span>
+          <span class="text-xs text-slate-400">支援格式：excel（.xlsx / .xls）、pdf；單檔上限 50 MB</span>
+        </button>
+        <div class="flex flex-wrap gap-1.5 mt-2">
+          <span class="text-xs text-slate-400">示範選檔：</span>
+          <button type="button" onclick="pickOvDemo('ok')" class="text-xs px-2 py-0.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50">作業流程對照表_修訂.xlsx</button>
+          <button type="button" onclick="pickOvDemo('badfmt')" class="text-xs px-2 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50">修訂說明.docx（不支援）</button>
+          <button type="button" onclick="pickOvDemo('oversize')" class="text-xs px-2 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50">51 MB（超過上限）</button>
+        </div>
+        <div id="ovPreview" class="hidden mt-2 flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+          <i id="ovPreviewIcon" data-lucide="file" class="w-4 h-4 text-slate-500"></i>
+          <span id="ovPreviewName" class="text-slate-700 truncate"></span>
+          <span id="ovPreviewSize" class="text-xs text-slate-400 mono shrink-0"></span>
+          <span id="ovPreviewFmt" class="ml-auto shrink-0"></span>
+        </div>
+        <p id="ovErr" class="hidden mt-2 text-xs text-red-600 items-start gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span></span></p>
+      </div>
+      <div class="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
+        <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 text-slate-400 shrink-0"></i>
+        <span>覆蓋以新檔取代原檔、<strong class="text-slate-600">不保留歷史版本／版本對照</strong>，且<strong class="text-slate-600">不變更附錄名稱</strong>。格式與大小先於共用引用檢查。</span>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeOverwrite()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button onclick="submitOverwrite()" class="px-4 py-2 rounded-md bg-amber-600 text-white text-sm hover:bg-amber-700">送出覆蓋</button>
+    </div>
+  </div>
+</div>
+
+<!-- confirm modal -->
+<div id="confirmModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <div class="flex items-start gap-3">
+      <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center shrink-0"><i data-lucide="alert-triangle" class="w-5 h-5 text-red-500"></i></div>
+      <div class="min-w-0"><h3 class="font-semibold text-slate-900" id="cfTitle"></h3><p class="text-sm text-slate-500 mt-1" id="cfBody"></p><p id="cfCode" class="hidden text-[10px] mono text-red-500 mt-1.5"></p></div>
+    </div>
+    <div id="cfList" class="hidden mt-3 max-h-40 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 divide-y divide-slate-100"></div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeConfirm()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button id="cfOk" class="px-4 py-2 rounded-md bg-red-600 text-white text-sm hover:bg-red-700">確認</button>
+    </div>
+  </div>
+</div>
+
+<div id="toastWrap" class="fixed top-16 right-4 z-[60] space-y-2"></div>
+
+<script>
+  /* ===== admin shell sidebar ===== */
+  const MENU=[
+    {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
+    {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
+  ];
+  const CURRENT_MODULE='appendix';
+  function renderSidebar(){
+    const role=document.body.dataset.role;
+    const items=MENU.filter(m=>m.roles[role]);
+    document.getElementById('sidebarNav').innerHTML = items.length? items.map(m=>{
+      const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
+      return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`;
+    lucide.createIcons();
+  }
+  function navTo(id,label){ if(id==='usageform'&&CURRENT_MODULE!=='usageform'){location.href='19-usage-form-management.html';return false;} if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;} shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型：對應頁面）')); return false; }
+  function toggleSidebar(){ document.body.classList.toggle('sb-collapsed'); }
+  function openPublic(){ shellToast('已於新視窗開啟前台瀏覽頁（03-public-list）'); }
+  function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
+
+  /* ===== 檔案規則（F039：xlsx／xls／pdf、單檔 ≤ 50MB、名稱 ≤ 400 字元）===== */
+  const MAX_BYTES=52428800;   // 50 MB，恰 50MB 通過
+  const NAME_MAX=400;
+
+  /* ===== appendix pool data ===== */
+  let seq=8;
+  let APPENDICES=[
+    {id:'ax1',name:'作業流程對照表.xlsx',fmt:'excel',size:'56 KB',by:'李慧玲',dept:'債權管理部 / 法催一室',at:'2026-06-10',docs:[
+      {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業'},
+      {n:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業'}]},
+    {id:'ax2',name:'名詞定義說明.pdf',fmt:'pdf',size:'96 KB',by:'李慧玲',dept:'債權管理部 / 法催一室',at:'2026-06-10',docs:[
+      {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業'}]},
+    {id:'ax3',name:'風險等級對照附表.xlsx',fmt:'excel',size:'44 KB',by:'陳彥廷',dept:'企劃部 / 車輛行銷室',at:'2026-05-22',docs:[
+      {n:'ICSOP-SRC-101-2-00',name:'消金審核作業'}]},
+    {id:'ax4',name:'徵審評分範例.pdf',fmt:'pdf',size:'132 KB',by:'陳彥廷',dept:'企劃部 / 車輛行銷室',at:'2026-05-22',docs:[
+      {n:'ICSOP-SRC-101-2-00',name:'消金審核作業'}]},
+    {id:'ax5',name:'對保作業附註.pdf',fmt:'pdf',size:'72 KB',by:'張家豪',dept:'作業服務部 / 文管室',at:'2026-04-18',docs:[
+      {n:'ICSOP-SRC-102-1-01',name:'車輛分期對保作業'}]},
+    {id:'ax6',name:'撥款時程附表.xlsx',fmt:'excel',size:'38 KB',by:'張家豪',dept:'作業服務部 / 文管室',at:'2026-04-18',docs:[
+      {n:'ICSOP-SRC-104-1-05',name:'作服撥款作業（車輛）'}]},
+    {id:'ax7',name:'法規引用清單.pdf',fmt:'pdf',size:'64 KB',by:'張家豪',dept:'作業服務部 / 文管室',at:'2026-04-18',docs:[]},
+    {id:'ax8',name:'共用名詞附錄.xlsx',fmt:'excel',size:'30 KB',by:'李慧玲',dept:'債權管理部 / 法催一室',at:'2026-03-30',docs:[
+      {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業'},
+      {n:'ICSOP-SRC-101-2-00',name:'消金審核作業'},
+      {n:'ICSOP-SRC-104-1-05',name:'作服撥款作業（車輛）'}]}
+  ];
+  const expanded=new Set();
+  let picked=[];        // 上傳：已通過驗證之檔案清單（多檔）
+  let nameAuto=true;    // 名稱欄目前值是否為系統自動帶入之檔名（使用者一經手動編輯即為 false，不再被換檔覆寫）
+  let ovTargetId=null;  // 覆蓋：目標附錄 id
+  let ovPicked=null;    // 覆蓋：已選新檔
+
+  function fmtBadge(fmt){
+    return fmt==='excel'
+      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style="color:#047857;background:#D1FAE5"><i data-lucide="file-spreadsheet" class="w-3 h-3"></i>excel</span>`
+      : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style="color:#B91C1C;background:#FEE2E2"><i data-lucide="file-text" class="w-3 h-3"></i>pdf</span>`;
+  }
+  function detectFmt(filename){
+    const ext=(filename.split('.').pop()||'').toLowerCase();
+    if(ext==='xlsx'||ext==='xls') return 'excel';
+    if(ext==='pdf') return 'pdf';
+    return null;
+  }
+  function fmtSize(bytes){ return bytes>=1048576 ? (bytes/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(bytes/1024))+' KB'; }
+  // 先全部驗證：回傳每檔之違規碼（null＝合法）
+  function validateFile(f){
+    if(!detectFmt(f.name)) return 'FILE_FORMAT_NOT_ALLOWED';
+    if(f.bytes>MAX_BYTES) return 'FILE_SIZE_EXCEEDED';
+    return null;
+  }
+  function findAppendix(id){ return APPENDICES.find(x=>x.id===id)||null; }
+  // 目標不存在（例如清單過期、他人已移除）→ 404
+  function notFound(){ toast('error','找不到指定的附錄（可能已被其他管理員移除），請重新整理清單','APPENDIX_NOT_FOUND · 404'); }
+
+  function renderTable(){
+    const kw=(document.getElementById('kw').value||'').trim().toLowerCase();
+    const fmt=document.getElementById('fFmt').value;
+    const rows=APPENDICES.filter(f=> (!kw||f.name.toLowerCase().includes(kw)) && (!fmt||f.fmt===fmt));
+    document.getElementById('countText').textContent=`共 ${rows.length} 個附錄`;
+    document.getElementById('emptyState').classList.toggle('hidden',rows.length>0);
+    document.getElementById('clearBtn').classList.toggle('hidden',!(kw||fmt));
+    document.getElementById('tbody').innerHTML=rows.map(f=>{
+      const n=f.docs.length, isOpen=expanded.has(f.id);
+      const countCell = n>0
+        ? `<button onclick="toggleExpand('${f.id}')" data-appendix-action="expand" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary-50 text-primary-700 hover:bg-primary-100" title="展開檢視關聯文件"><i data-lucide="link" class="w-3 h-3"></i>${n} 份<i data-lucide="chevron-${isOpen?'up':'down'}" class="w-3 h-3"></i></button>`
+        : `<span class="inline-flex items-center gap-1 text-xs text-slate-400"><i data-lucide="link-2-off" class="w-3 h-3"></i>未關聯</span>`;
+      const detail = isOpen && n>0 ? `
+        <tr class="bg-slate-50/70" data-appendix-detail="${f.id}">
+          <td colspan="6" class="px-4 py-3">
+            <div class="text-xs text-slate-500 mb-2 flex items-center gap-1"><i data-lucide="corner-down-right" class="w-3.5 h-3.5"></i>使用此附錄的 ICSOP 文件（${n}）</div>
+            <div class="flex flex-col gap-1">
+              ${f.docs.map(d=>`<button onclick="jumpDoc('${d.n}')" class="group flex items-center gap-2 text-left rounded-md px-2.5 py-1.5 hover:bg-white border border-transparent hover:border-slate-200">
+                <span class="mono text-xs text-slate-600">${d.n}</span>
+                <span class="text-sm text-slate-800">${d.name}</span>
+                <i data-lucide="external-link" class="w-3.5 h-3.5 text-slate-300 group-hover:text-primary-500 ml-auto"></i></button>`).join('')}
+            </div>
+          </td>
+        </tr>` : '';
+      return `
+      <tr class="hover:bg-slate-50" data-appendix-row="${f.id}">
+        <td class="px-4 py-3"><div class="flex items-center gap-2"><i data-lucide="${f.fmt==='excel'?'file-spreadsheet':'file-text'}" class="w-4 h-4 text-slate-400 shrink-0"></i><span data-appendix-name class="font-medium text-slate-800">${f.name}</span></div></td>
+        <td class="px-4 py-3">${fmtBadge(f.fmt)}</td>
+        <td class="px-4 py-3 text-slate-500 mono text-xs">${f.size}</td>
+        <td class="px-4 py-3"><div class="text-slate-700">${f.by}<span class="text-slate-400 text-xs ml-1">${f.dept}</span></div><div class="text-slate-400 mono text-xs">${f.at}</div></td>
+        <td class="px-4 py-3" data-appendix-doccount="${n}">${countCell}</td>
+        <td class="px-4 py-3">
+          <div class="flex items-center justify-start gap-1">
+            <button onclick="downloadAppendix('${f.id}')" data-appendix-action="download" title="下載" class="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"><i data-lucide="download" class="w-4 h-4"></i></button>
+            ${n>0?`<button onclick="toggleExpand('${f.id}')" title="${isOpen?'收合關聯':'展開檢視關聯'}" class="w-8 h-8 rounded hover:bg-slate-100 text-slate-500 flex items-center justify-center"><i data-lucide="chevron-${isOpen?'up':'down'}" class="w-4 h-4"></i></button>`:''}
+            <button onclick="openOverwrite('${f.id}')" data-appendix-action="overwrite" title="更新／覆蓋上傳" class="write-only w-8 h-8 rounded hover:bg-amber-50 text-amber-600 flex items-center justify-center"><i data-lucide="upload" class="w-4 h-4"></i></button>
+            <button onclick="delAppendix('${f.id}')" data-appendix-action="delete" title="移除" class="write-only w-8 h-8 rounded hover:bg-red-50 text-red-500 flex items-center justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+          </div>
+        </td>
+      </tr>${detail}`;
+    }).join('');
+    lucide.createIcons();
+  }
+  function clearFilters(){document.getElementById('kw').value='';document.getElementById('fFmt').value='';renderTable();}
+  function toggleExpand(id){ if(expanded.has(id))expanded.delete(id); else expanded.add(id); renderTable(); }
+  function jumpDoc(n){ shellToast('前往文件 '+n+'（13-document-list / 16-document-readonly）'); }
+  function downloadAppendix(id){
+    const f=findAppendix(id); if(!f){ notFound(); return; }
+    toast('success','已下載附錄「'+f.name+'」（管理端存取，不寫稽核、不燒錄浮水印）');
+  }
+
+  /* ===== upload modal（US-100：一次一個或多個檔案；名稱選填、留空 fallback 檔名）===== */
+  const UPLOAD_DEMO={
+    single:[{name:'作業流程對照表.xlsx',bytes:57344}],
+    multi:[{name:'作業流程對照表.xlsx',bytes:57344},{name:'名詞定義說明.pdf',bytes:98304},{name:'風險等級對照附表.xlsx',bytes:45056}],
+    exact50:[{name:'全年度風險對照大表.xlsx',bytes:52428800}],
+    badfmt:[{name:'作業流程對照表.xlsx',bytes:57344},{name:'補充說明.docx',bytes:20480},{name:'名詞定義說明.pdf',bytes:98304}],
+    oversize:[{name:'全年度風險對照大表.xlsx',bytes:53477376}]
+  };
+  function onNameInput(){ nameAuto=false; hideNameErr(); }
+  function openUpload(){
+    picked=[]; nameAuto=true; document.getElementById('upName').value=''; hideNameErr(); resetFilePreview(); syncNameBlock();
+    const m=document.getElementById('upModal');m.classList.remove('hidden');m.classList.add('flex');lucide.createIcons();
+  }
+  function closeUpload(){const m=document.getElementById('upModal');m.classList.add('hidden');m.classList.remove('flex');}
+  function hideNameErr(){const e=document.getElementById('upNameErr');e.classList.add('hidden');e.classList.remove('flex');document.getElementById('upName').classList.remove('border-red-500');}
+  function showNameErr(){const e=document.getElementById('upNameErr');e.classList.remove('hidden');e.classList.add('flex');document.getElementById('upName').classList.add('border-red-500');lucide.createIcons();}
+  function resetFilePreview(){
+    const pv=document.getElementById('filePreview'); pv.classList.add('hidden'); pv.innerHTML='';
+    const e=document.getElementById('fileErr'); e.classList.add('hidden'); e.classList.remove('flex');
+  }
+  function showFileErr(msg){
+    const e=document.getElementById('fileErr'); e.classList.remove('hidden'); e.classList.add('flex');
+    e.querySelector('span').textContent=msg; lucide.createIcons();
+  }
+  // 名稱欄：單檔（或尚未選檔）顯示；多檔隱藏並顯示「以檔名建檔」說明
+  function syncNameBlock(){
+    const multi=picked.length>1;
+    document.getElementById('nameBlock').classList.toggle('hidden',multi);
+    const mn=document.getElementById('multiNameNote');
+    mn.classList.toggle('hidden',!multi); mn.classList.toggle('flex',multi);
+    const bn=document.getElementById('batchNote');
+    bn.classList.toggle('hidden',!multi); bn.classList.toggle('flex',multi);
+    lucide.createIcons();
+  }
+  function onFileInput(input){
+    const files=Array.from(input.files||[]); input.value='';
+    if(!files.length) return;
+    applyPick(files.map(f=>({name:f.name,bytes:f.size})));
+  }
+  function pickDemo(kind){ applyPick(UPLOAD_DEMO[kind].map(f=>({name:f.name,bytes:f.bytes}))); }
+  function applyPick(files){
+    resetFilePreview();
+    const rows=files.map(f=>({name:f.name,bytes:f.bytes,size:fmtSize(f.bytes),fmt:detectFmt(f.name),bad:validateFile(f)}));
+    const pv=document.getElementById('filePreview'); pv.classList.remove('hidden');
+    pv.innerHTML=rows.map(r=>`<div data-upload-file class="flex items-center gap-2 px-3 py-2 text-sm">
+      <i data-lucide="${r.fmt==='excel'?'file-spreadsheet':(r.fmt==='pdf'?'file-text':'file-x')}" class="w-4 h-4 ${r.bad?'text-red-500':'text-slate-500'} shrink-0"></i>
+      <span class="${r.bad?'text-red-600':'text-slate-700'} truncate flex-1">${r.name}</span>
+      <span class="text-xs mono ${r.bad==='FILE_SIZE_EXCEEDED'?'text-red-600':'text-slate-400'} shrink-0">${r.size}</span>
+      ${r.bad?`<span class="text-[10px] mono text-red-500 shrink-0">${r.bad}</span>`:fmtBadge(r.fmt)}
+    </div>`).join('');
+    // AC-02：先全部驗證，任一違規則整批不採用（不部分建立）
+    const bad=rows.find(r=>r.bad);
+    if(bad){
+      picked=[];
+      showFileErr(bad.bad==='FILE_FORMAT_NOT_ALLOWED'
+        ? '「'+bad.name+'」格式不支援，僅允許 excel（.xlsx / .xls）與 pdf；本批次不建立任何附錄（FILE_FORMAT_NOT_ALLOWED）。'
+        : '「'+bad.name+'」為 '+bad.size+'，超過單檔上限 50 MB；本批次不建立任何附錄（FILE_SIZE_EXCEEDED）。');
+      toast('error',bad.bad==='FILE_FORMAT_NOT_ALLOWED'?'檔案格式不支援，僅允許 excel / pdf':'檔案超過單檔上限 50 MB',bad.bad+' · 400');
+      syncNameBlock(); lucide.createIcons(); return;
+    }
+    picked=rows;
+    // OQ-E10-01 裁定：單檔選檔後自動預填檔名（仍為選填，可清空 → fallback 檔名）；
+    // 使用者已手動改寫過名稱者不覆寫（nameAuto=false）
+    const nameEl=document.getElementById('upName');
+    if(picked.length===1 && nameAuto) nameEl.value=picked[0].name;
+    if(picked.length>1){ nameEl.value=''; nameAuto=true; }
+    hideNameErr(); syncNameBlock(); lucide.createIcons();
+  }
+  function addAppendix(name,file){
+    APPENDICES.unshift({id:'ax'+(++seq),name,fmt:file.fmt,size:file.size,by:'李慧玲',dept:'債權管理部 / 法催一室',at:'2026-08-06',docs:[]});
+  }
+  function submitUpload(){
+    if(!picked.length){ showFileErr('請先選擇檔案（excel / pdf，可一次選取多個）。'); return; }
+    if(picked.length===1){
+      // 單檔：名稱選填，trim 後為空 → fallback 原始檔名
+      const name=(document.getElementById('upName').value||'').trim() || picked[0].name;
+      if(name.length>NAME_MAX){ showNameErr(); toast('error','附錄名稱（trim 後 '+name.length+' 字元）超過 400 字元上限','APPENDIX_NAME_TOO_LONG · 400'); return; }
+      addAppendix(name,picked[0]);
+      closeUpload(); renderTable();
+      toast('success','已上傳附錄「'+name+'」（配發 UUID，初始關聯 0 份）');
+      return;
+    }
+    // 多檔：各以檔名建檔，不接受自訂名稱；任一檔名超長則整批不建立
+    const tooLong=picked.find(p=>p.name.length>NAME_MAX);
+    if(tooLong){ toast('error','檔名長度超過 400 字元上限，本批次不建立任何附錄','APPENDIX_NAME_TOO_LONG · 400'); return; }
+    const n=picked.length;
+    picked.forEach(p=>addAppendix(p.name,p));
+    closeUpload(); renderTable();
+    toast('success','已上傳 '+n+' 個附錄（各以原始檔名建檔、配發 UUID，初始關聯 0 份）');
+  }
+
+  /* ===== remove protection（AC-10：≥1 份引用需二次確認）===== */
+  function delAppendix(id){
+    const f=findAppendix(id); if(!f){ notFound(); return; }
+    const n=f.docs.length;
+    if(n>0){
+      toast('error','此附錄已被 '+n+' 份文件使用，無法直接移除','APPENDIX_IN_USE · 409');
+      openConfirm(
+        '確認移除「'+f.name+'」？',
+        '此附錄已被 '+n+' 份文件使用，移除將一併解除這 '+n+' 份文件的關聯，且無法復原。其餘附錄於各文件內之順序將重新編號為連續 1..N。',
+        ()=>{APPENDICES=APPENDICES.filter(x=>x.id!==id);expanded.delete(id);renderTable();toast('success','附錄已移除，並解除 '+n+' 份文件關聯');},
+        'APPENDIX_IN_USE · 409', '仍要移除並解除關聯', f.docs
+      );
+    } else {
+      openConfirm(
+        '移除附錄「'+f.name+'」？',
+        '此附錄目前無任何文件關聯，可安全移除。移除後不可再被任何文件搜尋或關聯。',
+        ()=>{APPENDICES=APPENDICES.filter(x=>x.id!==id);expanded.delete(id);renderTable();toast('success','附錄已移除');},
+        null, '確認移除'
+      );
+    }
+  }
+
+  /* ===== overwrite / update upload（AC-11～AC-15）=====
+     驗證順序：格式／大小（400）優先於共用引用數判斷（409）— AC-15 */
+  const OV_DEMO={
+    ok:{name:'作業流程對照表_修訂.xlsx',bytes:61440},
+    badfmt:{name:'修訂說明.docx',bytes:20480},
+    oversize:{name:'作業流程對照表_修訂.xlsx',bytes:53477376}
+  };
+  function openOverwrite(id){
+    const f=findAppendix(id); if(!f){ notFound(); return; }
+    ovTargetId=id; ovPicked=null; resetOvPreview();
+    document.getElementById('ovTarget').innerHTML=`目標附錄：<span class="text-slate-700 font-medium">${f.name}</span> · 目前關聯 <span class="mono">${f.docs.length}</span> 份文件`;
+    const m=document.getElementById('ovModal');m.classList.remove('hidden');m.classList.add('flex');lucide.createIcons();
+  }
+  function closeOverwrite(){const m=document.getElementById('ovModal');m.classList.add('hidden');m.classList.remove('flex');}
+  function resetOvPreview(){
+    document.getElementById('ovPreview').classList.add('hidden');
+    const e=document.getElementById('ovErr'); e.classList.add('hidden'); e.classList.remove('flex');
+  }
+  function showOvErr(msg){
+    const e=document.getElementById('ovErr'); e.classList.remove('hidden'); e.classList.add('flex');
+    e.querySelector('span').textContent=msg; lucide.createIcons();
+  }
+  function onOvFileInput(input){ const f=input.files&&input.files[0]; input.value=''; if(!f)return; applyOvPick({name:f.name,bytes:f.size}); }
+  function pickOvDemo(kind){ const d=OV_DEMO[kind]; applyOvPick({name:d.name,bytes:d.bytes}); }
+  function applyOvPick(file){
+    resetOvPreview();
+    const bad=validateFile(file), fmt=detectFmt(file.name), size=fmtSize(file.bytes);
+    const pv=document.getElementById('ovPreview'); pv.classList.remove('hidden');
+    document.getElementById('ovPreviewIcon').setAttribute('data-lucide', fmt==='excel'?'file-spreadsheet':(fmt==='pdf'?'file-text':'file-x'));
+    document.getElementById('ovPreviewName').textContent=file.name;
+    document.getElementById('ovPreviewSize').textContent=size;
+    document.getElementById('ovPreviewFmt').innerHTML= bad?`<span class="text-[10px] mono text-red-500">${bad}</span>`:fmtBadge(fmt);
+    if(bad){
+      ovPicked=null;
+      showOvErr(bad==='FILE_FORMAT_NOT_ALLOWED'
+        ? '「'+file.name+'」格式不支援，僅允許 excel（.xlsx / .xls）與 pdf；原檔不變（FILE_FORMAT_NOT_ALLOWED）。'
+        : '「'+file.name+'」為 '+size+'，超過單檔上限 50 MB；原檔不變（FILE_SIZE_EXCEEDED）。');
+      toast('error',bad==='FILE_FORMAT_NOT_ALLOWED'?'檔案格式不支援，僅允許 excel / pdf':'檔案超過單檔上限 50 MB',bad+' · 400');
+    } else {
+      ovPicked={name:file.name,fmt,size,bytes:file.bytes};
+    }
+    lucide.createIcons();
+  }
+  function submitOverwrite(){
+    const f=findAppendix(ovTargetId); if(!f){ closeOverwrite(); notFound(); return; }
+    if(!ovPicked){ showOvErr('請先選擇合法的取代用新檔（excel / pdf、單檔 ≤ 50 MB）。'); return; }
+    const n=f.docs.length, nf=ovPicked;
+    closeOverwrite();
+    if(n>=2){
+      // 共用附錄（引用 ≥2）：先警示、二次確認後才覆蓋
+      openConfirm(
+        '覆蓋共用附錄「'+f.name+'」？',
+        '此附錄另被 '+n+' 份文件引用，覆蓋將同時更新全部引用文件所見內容。此為覆蓋上傳、不保留版本，且不變更附錄名稱；取消則原檔與全部既有關聯不變。',
+        ()=>{ applyOverwrite(f,nf); toast('success','已覆蓋，'+n+' 份引用文件所見同步更新（舊檔即時失效、不留歷史版本）'); },
+        'APPENDIX_OVERWRITE_SHARED · 409', '確認覆蓋', f.docs
+      );
+    } else {
+      // 引用 ≤1：不出現跨文件警示，僅一般覆蓋確認
+      openConfirm(
+        '更新附錄「'+f.name+'」？',
+        (n===1?'此附錄目前僅被 1 份文件引用，':'此附錄目前尚無文件引用，')+'覆蓋上傳將以新檔「'+nf.name+'」取代原檔（不保留版本、不變更附錄名稱），不影響其他文件。',
+        ()=>{ applyOverwrite(f,nf); toast('success','已覆蓋附錄「'+f.name+'」'); },
+        null, '確認覆蓋'
+      );
+    }
+  }
+  // 覆蓋只換檔案本體（格式／大小／上傳者／時間），不改附錄名稱
+  function applyOverwrite(f,nf){ f.fmt=nf.fmt; f.size=nf.size; f.at='2026-08-06'; f.by='李慧玲'; renderTable(); }
+
+  function setRole(r){
+    document.body.dataset.role=r;
+    const blocked=!['icsop_admin','sysadmin'].includes(r);
+    const ro=(r==='sysadmin');
+    document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
+    document.getElementById('roBanner').classList.toggle('hidden',!ro);
+    document.getElementById('roBanner').classList.toggle('flex',ro);
+    if(blocked)document.getElementById('blockMsg').textContent={
+      supervisor:'主管對「附錄管理」為「無」，無法存取附錄池。',
+      deptcontact:'部門窗口對「附錄管理」為「無」。',
+      user:'一般使用者無後台存取權。'
+    }[r];
+    if(blocked){closeUpload();closeOverwrite();closeConfirm();}
+    renderTable(); renderSidebar(); lucide.createIcons();
+  }
+
+  /* ===== confirm & toast (shared) ===== */
+  function openConfirm(title,body,onOk,code,okLabel,listItems){
+    document.getElementById('cfTitle').textContent=title;
+    document.getElementById('cfBody').textContent=body;
+    const cc=document.getElementById('cfCode');
+    if(code){cc.textContent=code;cc.classList.remove('hidden');} else {cc.classList.add('hidden');}
+    const lw=document.getElementById('cfList');
+    if(listItems&&listItems.length){
+      lw.innerHTML=listItems.map(d=>`<div class="flex items-center gap-2 px-3 py-1.5"><i data-lucide="file-text" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i><span class="mono text-xs text-slate-600 shrink-0">${d.n}</span><span class="text-sm text-slate-700 truncate">${d.name}</span></div>`).join('');
+      lw.classList.remove('hidden');
+    } else { lw.classList.add('hidden'); lw.innerHTML=''; }
+    const m=document.getElementById('confirmModal');m.classList.remove('hidden');m.classList.add('flex');
+    const ok=document.getElementById('cfOk');const clone=ok.cloneNode(true);ok.parentNode.replaceChild(clone,ok);
+    clone.textContent=okLabel||'確認';
+    clone.addEventListener('click',()=>{closeConfirm();onOk();});lucide.createIcons();
+  }
+  function closeConfirm(){const m=document.getElementById('confirmModal');m.classList.add('hidden');m.classList.remove('flex');}
+  function toast(type,msg,code){
+    const map={success:['check-circle-2','#059669'],error:['alert-circle','#DC2626'],info:['info','#365C97']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><div><span class="text-slate-700">${msg}</span>${code?`<div class="text-[10px] mono text-slate-400 mt-0.5">${code}</div>`:''}</div>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4200);
+  }
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeConfirm();closeUpload();closeOverwrite();}});
+
+  // init
+  renderTable(); renderSidebar(); lucide.createIcons();
+</script>
+</body>
+</html>

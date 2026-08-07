@@ -101,6 +101,8 @@ function setupMocks() {
   vi.mocked(endpoints.updateDocument).mockResolvedValue({ document: VIEW, changes: [] });
   vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([]);
   vi.mocked(endpoints.downloadAttachment).mockResolvedValue({ url: 'https://blob/a', expiresInSeconds: 300 });
+  vi.mocked(endpoints.getAppendixPool).mockResolvedValue([]); // F039：預設空池，個別測試覆寫
+  vi.mocked(endpoints.getDocumentAppendices).mockResolvedValue([]); // F039：預設無關聯附錄，個別測試覆寫
 }
 
 describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15）', () => {
@@ -531,5 +533,93 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
       expect(screen.getByText(/ICSOP 原始檔＝\.xls/)).toBeInTheDocument();
       expect(screen.getByText(/OQ-E04-06 定案/)).toBeInTheDocument();
     });
+  });
+});
+
+describe('DocumentEditPage — F039 附錄關聯與排序（移植 prototype 15）', () => {
+  const APPX_LINKED = [
+    { id: 'ax1', name: '作業流程對照表.xlsx', format: 'xlsx', size: 57344, uploadedBy: 'u', uploadedAt: '2026-06-10T00:00:00.000Z', sortOrder: 1 },
+    { id: 'ax2', name: '名詞定義說明.pdf', format: 'pdf', size: 98304, uploadedBy: 'u', uploadedAt: '2026-06-10T00:00:00.000Z', sortOrder: 2 },
+    { id: 'ax8', name: '共用名詞附錄.xlsx', format: 'xlsx', size: 30720, uploadedBy: 'u', uploadedAt: '2026-03-30T00:00:00.000Z', sortOrder: 3 },
+  ];
+  const APPX_POOL = APPX_LINKED.map(({ sortOrder: _s, ...rest }) => ({ ...rest, docCount: 1, documents: [] }));
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    setupMocks();
+    vi.mocked(endpoints.getAppendixPool).mockResolvedValue(APPX_POOL);
+    vi.mocked(endpoints.getDocumentAppendices).mockResolvedValue(APPX_LINKED);
+    vi.mocked(endpoints.replaceDocumentAppendices).mockResolvedValue(undefined);
+  });
+
+  it('AC-23 載入既有文件 → 已關聯附錄依 sortOrder 呈現為 A、B、C（與上次儲存順序一致）', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
+    const names = screen
+      .getAllByText(/^(作業流程對照表\.xlsx|名詞定義說明\.pdf|共用名詞附錄\.xlsx)$/)
+      .map((e) => e.textContent);
+    expect(names).toEqual(['作業流程對照表.xlsx', '名詞定義說明.pdf', '共用名詞附錄.xlsx']);
+  });
+
+  it('⚠ 高風險 #4：儲存時以「整組覆寫」呼叫 replaceDocumentAppendices，而非逐一 link/unlink（與現行使用表單 diff-based 模式不同）', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
+    // 對 C（共用名詞附錄）點擊上移兩次 → 最終順序 C、A、B。
+    const upButtons = screen.getAllByRole('button', { name: '上移' });
+    await userEvent.click(upButtons[upButtons.length - 1]);
+    await userEvent.click(screen.getAllByRole('button', { name: '上移' })[1]);
+    await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+    await waitFor(() =>
+      expect(endpoints.replaceDocumentAppendices).toHaveBeenCalledWith('d1', ['ax8', 'ax1', 'ax2']),
+    );
+  });
+
+  it('AC-24 解除 B 之關聯並送出 → replaceDocumentAppendices 攜帶剩餘清單 [A, C]（相對順序不變、無缺口）', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('名詞定義說明.pdf')).toBeInTheDocument());
+    const bRow = screen.getByText('名詞定義說明.pdf').closest('div')!;
+    await userEvent.click(within(bRow).getByRole('button', { name: /解除此附錄關聯|移除/ }));
+    await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+    await waitFor(() =>
+      expect(endpoints.replaceDocumentAppendices).toHaveBeenCalledWith('d1', ['ax1', 'ax8']),
+    );
+  });
+
+  it('未變更附錄關聯 → 儲存不呼叫 replaceDocumentAppendices（僅變更欄位才送出對應子資源）', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toHaveValue('車輛分期進件作業'));
+    const name = screen.getByLabelText(/文件名稱/);
+    await userEvent.clear(name);
+    await userEvent.type(name, '新書名');
+    await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+    await waitFor(() => expect(endpoints.updateDocument).toHaveBeenCalled());
+    expect(endpoints.replaceDocumentAppendices).not.toHaveBeenCalled();
+  });
+
+  it('AC-21 排序操作元件僅提供上移／下移按鈕，無拖曳屬性', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
+    const item = screen.getByText('作業流程對照表.xlsx').closest('div')!;
+    expect(item.hasAttribute('draggable')).toBe(false);
+    expect(item.querySelector('[draggable="true"]')).toBeNull();
+  });
+
+  it('Supervisor（唯讀）→ 附錄以唯讀有序清單呈現，無搜尋框與上移/下移/解除按鈕', async () => {
+    mockAuth('Supervisor');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
+    expect(screen.queryByLabelText(/附錄/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '上移' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '下移' })).not.toBeInTheDocument();
+    // 順序仍依 sortOrder 呈現
+    const names = screen
+      .getAllByText(/^(作業流程對照表\.xlsx|名詞定義說明\.pdf|共用名詞附錄\.xlsx)$/)
+      .map((e) => e.textContent);
+    expect(names).toEqual(['作業流程對照表.xlsx', '名詞定義說明.pdf', '共用名詞附錄.xlsx']);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { DocumentCreatePage } from './DocumentCreatePage';
@@ -96,6 +96,7 @@ describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', ()
     vi.mocked(endpoints.getOrgUnits).mockResolvedValue([]);
     vi.mocked(endpoints.searchPersons).mockResolvedValue([]);
     vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([]);
+    vi.mocked(endpoints.getAppendixPool).mockResolvedValue([]); // F039：預設空池，個別測試覆寫
   });
 
   it('ICSOPAdmin 渲染分步表單並載入循環下拉', async () => {
@@ -219,6 +220,7 @@ describe('DocumentCreatePage — STEP3 制定組織與當責室長（F014，移�
     vi.mocked(endpoints.getOrgUnits).mockResolvedValue(ORG);
     vi.mocked(endpoints.searchPersons).mockResolvedValue(PERSONS);
     vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([]);
+    vi.mocked(endpoints.getAppendixPool).mockResolvedValue([]); // F039：預設空池，個別測試覆寫
     vi.mocked(endpoints.createDocument).mockResolvedValue({} as never);
     mockAuth('ICSOPAdmin');
   });
@@ -360,6 +362,7 @@ describe('DocumentCreatePage — STEP4 附件與關聯文件（F016/F018/F015，
     vi.mocked(endpoints.getOrgUnits).mockResolvedValue([]);
     vi.mocked(endpoints.searchPersons).mockResolvedValue([]);
     vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([FORM]);
+    vi.mocked(endpoints.getAppendixPool).mockResolvedValue([]); // F039：本區塊聚焦附件/使用表單，附錄池預設空
     vi.mocked(endpoints.createDocument).mockResolvedValue({ id: 'new1' } as never);
     vi.mocked(endpoints.uploadIcsopPdf).mockResolvedValue({} as never);
     vi.mocked(endpoints.linkUsageForms).mockResolvedValue(undefined);
@@ -408,5 +411,138 @@ describe('DocumentCreatePage — STEP4 附件與關聯文件（F016/F018/F015，
     await userEvent.click(screen.getByRole('button', { name: '建立' }));
 
     await waitFor(() => expect(endpoints.uploadIcsopPdf).toHaveBeenCalledWith('new1', file));
+  });
+});
+
+describe('DocumentCreatePage — STEP4 附錄選取與排序（F039，移植 prototype 14）', () => {
+  const APPX = [
+    { id: 'ax1', name: '作業流程對照表.xlsx', format: 'xlsx', size: 57344, uploadedBy: 'u', uploadedAt: '2026-06-10T00:00:00.000Z', docCount: 0, documents: [] },
+    { id: 'ax2', name: '名詞定義說明.pdf', format: 'pdf', size: 98304, uploadedBy: 'u', uploadedAt: '2026-06-10T00:00:00.000Z', docCount: 0, documents: [] },
+    { id: 'ax8', name: '共用名詞附錄.xlsx', format: 'xlsx', size: 30720, uploadedBy: 'u', uploadedAt: '2026-03-30T00:00:00.000Z', docCount: 0, documents: [] },
+  ];
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(endpoints.getLifecycles).mockResolvedValue(LCS);
+    vi.mocked(endpoints.getDocuments).mockResolvedValue(page([]));
+    vi.mocked(endpoints.getOrgUnits).mockResolvedValue([]);
+    vi.mocked(endpoints.searchPersons).mockResolvedValue([]);
+    vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([]);
+    vi.mocked(endpoints.getAppendixPool).mockResolvedValue(APPX);
+    vi.mocked(endpoints.createDocument).mockResolvedValue({ id: 'new1' } as never);
+    vi.mocked(endpoints.replaceDocumentAppendices).mockResolvedValue(undefined);
+    mockAuth('ICSOPAdmin');
+  });
+
+  async function fillRequired(numberSuffix: string, name: string) {
+    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    await userEvent.type(screen.getByLabelText(/ICSOP 文件編號/), numberSuffix);
+    await userEvent.type(screen.getByLabelText(/文件名稱/), name);
+  }
+
+  it('渲染附錄搜尋選取區（可多個、允許為空、可排序）', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    expect(screen.getByLabelText(/附錄/)).toBeInTheDocument();
+  });
+
+  it('AC-19 依序勾選 A、B、C 並送出 → replaceDocumentAppendices 以該順序呼叫（sortOrder 1/2/3）', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await fillRequired('101-1-11', '名');
+    const appx = screen.getByLabelText(/附錄/);
+    await userEvent.type(appx, '作業流程');
+    await userEvent.click(await screen.findByRole('option', { name: /作業流程對照表/ }));
+    await userEvent.type(appx, '名詞定義');
+    await userEvent.click(await screen.findByRole('option', { name: /名詞定義說明/ }));
+    await userEvent.type(appx, '共用名詞');
+    await userEvent.click(await screen.findByRole('option', { name: /共用名詞附錄/ }));
+    await userEvent.click(screen.getByRole('button', { name: '建立' }));
+    await waitFor(() => expect(endpoints.createDocument).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(endpoints.replaceDocumentAppendices).toHaveBeenCalledWith('new1', ['ax1', 'ax2', 'ax8']),
+    );
+  });
+
+  it('AC-18 新選取者一律加入末位（接續現有最大 sortOrder）', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await fillRequired('101-1-12', '名');
+    const appx = screen.getByLabelText(/附錄/);
+    await userEvent.type(appx, '名詞定義');
+    await userEvent.click(await screen.findByRole('option', { name: /名詞定義說明/ }));
+    await userEvent.type(appx, '作業流程');
+    await userEvent.click(await screen.findByRole('option', { name: /作業流程對照表/ }));
+    await userEvent.click(screen.getByRole('button', { name: '建立' }));
+    await waitFor(() =>
+      expect(endpoints.replaceDocumentAppendices).toHaveBeenCalledWith('new1', ['ax2', 'ax1']),
+    );
+  });
+
+  it('AC-20 對末筆點擊上移兩次 → 畫面順序即時反映；首筆上移／末筆下移不變且不出錯', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    const appx = screen.getByLabelText(/附錄/);
+    for (const kw of ['作業流程', '名詞定義', '共用名詞']) {
+      await userEvent.type(appx, kw);
+      await userEvent.click(await screen.findByRole('option', { name: new RegExp(kw) }));
+    }
+    // 以名稱文字順序驗證（不依賴特定 test-id 命名，容錯於實作細節）。
+    const orderedNames = () =>
+      screen.getAllByText(/^(作業流程對照表\.xlsx|名詞定義說明\.pdf|共用名詞附錄\.xlsx)$/).map((e) => e.textContent);
+    expect(orderedNames()).toEqual(['作業流程對照表.xlsx', '名詞定義說明.pdf', '共用名詞附錄.xlsx']);
+
+    const upButtons = screen.getAllByRole('button', { name: '上移' });
+    await userEvent.click(upButtons[upButtons.length - 1]); // 對末筆（共用名詞附錄）上移
+    await userEvent.click(screen.getAllByRole('button', { name: '上移' })[1]); // 再上移一次（此時它在中間）
+    expect(orderedNames()).toEqual(['共用名詞附錄.xlsx', '作業流程對照表.xlsx', '名詞定義說明.pdf']);
+
+    // 首筆上移不變、不出錯
+    await userEvent.click(screen.getAllByRole('button', { name: '上移' })[0]);
+    expect(orderedNames()).toEqual(['共用名詞附錄.xlsx', '作業流程對照表.xlsx', '名詞定義說明.pdf']);
+    // 末筆下移不變、不出錯
+    const downButtons = screen.getAllByRole('button', { name: '下移' });
+    await userEvent.click(downButtons[downButtons.length - 1]);
+    expect(orderedNames()).toEqual(['共用名詞附錄.xlsx', '作業流程對照表.xlsx', '名詞定義說明.pdf']);
+  });
+
+  it('AC-21 排序操作元件僅提供上移／下移按鈕，DOM 上不存在 draggable 屬性', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    const appx = screen.getByLabelText(/附錄/);
+    await userEvent.type(appx, '作業流程');
+    await userEvent.click(await screen.findByRole('option', { name: /作業流程對照表/ }));
+    const chip = screen.getByText('作業流程對照表.xlsx').closest('[data-appendix-item], div') as HTMLElement;
+    expect(chip.querySelector('[draggable="true"]')).toBeNull();
+    expect(chip.hasAttribute('draggable')).toBe(false);
+    expect(screen.getByRole('button', { name: '上移' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '下移' })).toBeInTheDocument();
+  });
+
+  it('AC-22 送出前取消勾選 B → 本次送出之關聯清單為 A、C（不含 B），A 在 C 之前', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await fillRequired('101-1-13', '名');
+    const appx = screen.getByLabelText(/附錄/);
+    for (const kw of ['作業流程', '名詞定義', '共用名詞']) {
+      await userEvent.type(appx, kw);
+      await userEvent.click(await screen.findByRole('option', { name: new RegExp(kw) }));
+    }
+    // 取消勾選 B（名詞定義說明.pdf）：於已選清單移除該項。
+    const bRow = screen.getByText('名詞定義說明.pdf').closest('div')!;
+    await userEvent.click(within(bRow).getByRole('button', { name: /取消選取|移除/ }));
+    await userEvent.click(screen.getByRole('button', { name: '建立' }));
+    await waitFor(() =>
+      expect(endpoints.replaceDocumentAppendices).toHaveBeenCalledWith('new1', ['ax1', 'ax8']),
+    );
+  });
+
+  it('未選任何附錄 → 允許為空，不呼叫 replaceDocumentAppendices', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await fillRequired('101-1-14', '名');
+    await userEvent.click(screen.getByRole('button', { name: '建立' }));
+    await waitFor(() => expect(endpoints.createDocument).toHaveBeenCalled());
+    expect(endpoints.replaceDocumentAppendices).not.toHaveBeenCalled();
   });
 });

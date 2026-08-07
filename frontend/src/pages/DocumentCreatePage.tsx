@@ -10,6 +10,8 @@ import {
   searchPersons,
   getUsageFormPool,
   linkUsageForms,
+  getAppendixPool,
+  replaceDocumentAppendices,
   uploadIcsopPdf,
   uploadOjtAttachment,
 } from '../api/endpoints';
@@ -27,6 +29,7 @@ import type {
   OrgUnitRecord,
   PersonRecord,
   UsageFormRecord,
+  AppendixRecord,
 } from '../api/types';
 
 /** 人員 → 下拉選項（label＝姓名（部門碼），value＝員工編號）。 */
@@ -90,6 +93,9 @@ export function DocumentCreatePage(): JSX.Element {
   const [ojtFile, setOjtFile] = useState<File | null>(null);
   const [formPool, setFormPool] = useState<UsageFormRecord[]>([]);
   const [selectedForms, setSelectedForms] = useState<ComboOption[]>([]);
+  // F039 附錄：已選清單為**有序**清單（新選取者加入末位，以上移／下移調整；不支援拖曳）。
+  const [appendixPool, setAppendixPool] = useState<AppendixRecord[]>([]);
+  const [selectedAppendices, setSelectedAppendices] = useState<ComboOption[]>([]);
   const [selectedLinks, setSelectedLinks] = useState<ComboOption[]>([]);
 
   useEffect(() => {
@@ -111,6 +117,12 @@ export function DocumentCreatePage(): JSX.Element {
       .then(setFormPool)
       .catch(() => {
         /* 表單池載入失敗不阻擋建立（選填關聯） */
+      });
+    // F039：附錄池（自「附錄管理」選取關聯，非於此上傳）。
+    void getAppendixPool()
+      .then(setAppendixPool)
+      .catch(() => {
+        /* 附錄池載入失敗不阻擋建立（選填關聯） */
       });
   }, [canWrite, toast]);
 
@@ -224,6 +236,21 @@ export function DocumentCreatePage(): JSX.Element {
     () => formPool.map((f) => ({ value: f.id, label: f.name })),
     [formPool],
   );
+  const appendixOptions = useMemo<ComboOption[]>(
+    () => appendixPool.map((a) => ({ value: a.id, label: a.name })),
+    [appendixPool],
+  );
+
+  /** 附錄上移／下移（AC-20）：首項上移、末項下移皆為 no-op，順序不變且不產生錯誤。 */
+  const moveAppendix = useCallback((index: number, delta: number) => {
+    setSelectedAppendices((prev) => {
+      const to = index + delta;
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[to]] = [next[to], next[index]];
+      return next;
+    });
+  }, []);
 
   const reset = useCallback(() => {
     setLifecycleId('');
@@ -244,6 +271,7 @@ export function DocumentCreatePage(): JSX.Element {
     setPdfFile(null);
     setOjtFile(null);
     setSelectedForms([]);
+    setSelectedAppendices([]);
     setSelectedLinks([]);
     setErrors({});
   }, []);
@@ -283,6 +311,11 @@ export function DocumentCreatePage(): JSX.Element {
         if (pdfFile) await uploadIcsopPdf(newId, pdfFile);
         if (ojtFile) await uploadOjtAttachment(newId, ojtFile);
         if (selectedForms.length) await linkUsageForms(newId, selectedForms.map((f) => f.value));
+        // F039（architecture-spec §3.6 決策二）：以畫面最終順序**整組覆寫**（PUT replace-set），
+        // sortOrder 由後端依陣列索引重寫為 1..N；刻意不走 POST 附加端點。
+        if (selectedAppendices.length) {
+          await replaceDocumentAppendices(newId, selectedAppendices.map((a) => a.value));
+        }
         if (selectedLinks.length) await updateDocument(newId, { links: selectedLinks.map((l) => l.value) });
       }
       navigate('/admin/documents');
@@ -310,6 +343,7 @@ export function DocumentCreatePage(): JSX.Element {
     pdfFile,
     ojtFile,
     selectedForms,
+    selectedAppendices,
     selectedLinks,
     navigate,
     toast,
@@ -720,6 +754,31 @@ export function DocumentCreatePage(): JSX.Element {
             placeholder="搜尋使用表單（excel/pdf）…"
           />
           <p className="text-[10px] text-slate-400 mt-1">來源：「使用表單管理」表單池；如需新增新表單請至該功能上傳。</p>
+        </div>
+
+        {/* 附錄（自「附錄管理」附錄池選取，可搜尋多選；已選清單以上移／下移排序，F039） */}
+        <div className="mt-4">
+          <MultiSearchCombobox
+            id="dAppendices"
+            label="附錄（自「附錄管理」選取，可多個、允許為空、可排序）"
+            options={appendixOptions}
+            values={selectedAppendices}
+            onAdd={(opt) => setSelectedAppendices((prev) => [...prev, opt])}
+            onRemove={(v) => setSelectedAppendices((prev) => prev.filter((o) => o.value !== v))}
+            placeholder="搜尋附錄（excel/pdf）…"
+            emptyChipText="（尚無附錄，允許為空）"
+            orderable
+            onMoveUp={(i) => moveAppendix(i, -1)}
+            onMoveDown={(i) => moveAppendix(i, 1)}
+            removeTitle="取消選取"
+            itemIcon={(o) => (/\.pdf$/i.test(o.label) ? 'file-text' : 'file-spreadsheet')}
+          />
+          <p className="text-[10px] text-slate-400 mt-1">
+            來源：「附錄管理」附錄池；如需新增請至該功能上傳。
+            <strong className="text-slate-500">新選取者一律加入末位</strong>
+            ，以「上移／下移」調整顯示順序（<strong className="text-slate-500">不支援拖曳</strong>
+            ）；前台與後台文件詳情頁一律依此順序呈現。
+          </p>
         </div>
 
         {/* 文件連結點（可搜尋，連結其他 ICSOP 文件） */}

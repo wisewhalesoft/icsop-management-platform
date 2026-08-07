@@ -110,6 +110,7 @@
     {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
     {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
     {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
     {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
@@ -139,7 +140,13 @@
     using:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部','營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課'], edition:"26'01", cycle:'銷售及收款循環', node:'進件作業',
     links:[{n:'ICSOP-SRC-101-2-00 消金審核作業',status:'有效'},{n:'ICSOP-SRC-102-1-01 車輛分期對保作業',status:'有效'}],
     date:'2026-01-01', name:'車輛分期進件作業',
-    summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。'
+    summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',
+    // 附錄（F039）：陣列順序＝sortOrder 1..N，與 15 編輯畫面排定之順序、04 前台詳情完全一致
+    appendices:[
+      {name:'作業流程對照表.xlsx',fmt:'excel'},
+      {name:'名詞定義說明.pdf',fmt:'pdf'},
+      {name:'共用名詞附錄.xlsx',fmt:'excel'}
+    ]
   };
   function statusPill(s){const map={'有效':['#047857','#D1FAE5'],'失效':['#B45309','#FEF3C7'],'作廢':['#B91C1C','#FEE2E2']};const [t,b]=map[s]||map['有效'];return `<span class="px-2 py-0.5 rounded-full text-xs font-medium" style="color:${t};background:${b}">${s}</span>`;}
 
@@ -178,16 +185,27 @@
       {ic:'sheet',c:'text-emerald-600',label:'使用表單',name:'進件申請書.xlsx',wm:false},
       {ic:'sheet',c:'text-emerald-600',label:'使用表單',name:'支票託收登記表.xlsx',wm:false}
     ];
+    // 附錄（F039）：依 sortOrder 遞增列出，與前台詳情（04）順序完全一致
+    doc.appendices.forEach((a,i)=>items.push({
+      ic:a.fmt==='excel'?'sheet':'file-text', c:a.fmt==='excel'?'text-emerald-600':'text-red-500',
+      label:'附錄', name:a.name, wm:false, ord:i+1
+    }));
     document.getElementById('attachList').innerHTML=items.map(f=>`
-      <div class="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5">
+      <div class="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5"${f.ord?` data-appendix-item data-appendix-order="${f.ord}"`:''}>
+        ${f.ord?`<span class="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">${f.ord}</span>`:''}
         <i data-lucide="${f.ic}" class="w-5 h-5 ${f.c} shrink-0"></i>
-        <div class="min-w-0 flex-1"><div class="text-xs text-slate-400">${f.label}</div><div class="text-sm text-slate-700 truncate">${f.name}</div></div>
+        <div class="min-w-0 flex-1"><div class="text-xs text-slate-400">${f.label}</div><div class="text-sm text-slate-700 truncate"${f.ord?' data-appendix-name':''}>${f.name}</div></div>
         ${f.wm?'<span class="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">下載燒錄浮水印</span>':''}
-        <button onclick="download('${f.name}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
-      </div>`).join('');
+        <button onclick="download('${f.name}','${f.label}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
+      </div>`).join('')
+      + (doc.appendices.length?'':`<div data-appendix-empty class="flex items-center gap-2 rounded-lg border border-dashed border-slate-200 px-3 py-2.5 text-sm text-slate-400"><i data-lucide="paperclip" class="w-4 h-4 shrink-0"></i>無附錄</div>`);
     lucide.createIcons();
   }
-  function download(n){toast('success','下載「'+n+'」（伺服器端已燒錄浮水印並寫入稽核 DOWNLOAD）');}
+  // 附錄下載：後台管理端存取，不燒錄浮水印（F039 已定案）、不寫前台調閱稽核
+  function download(n,kind){
+    if(kind==='附錄'){toast('success','下載附錄「'+n+'」（不燒錄浮水印；後台管理端存取不寫調閱稽核）');return;}
+    toast('success','下載「'+n+'」（伺服器端已燒錄浮水印並寫入稽核 DOWNLOAD）');
+  }
   function jumpNode(){shellToast('跳轉至 DAG 畫布檢視所屬節點（11 / 12）');}
   function jumpLink(){shellToast('跳轉至連結目標文件詳情');}
   function gotoEdit(){shellToast('前往編輯頁（15-document-edit）');}

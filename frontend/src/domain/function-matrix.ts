@@ -36,6 +36,8 @@ export const FunctionKey = {
   LIFECYCLE_MANAGEMENT: '循環管理',
   ICSOP_DOCUMENT_MANAGEMENT: 'ICSOP文件管理',
   USAGE_FORM_MANAGEMENT: '文件使用表單管理',
+  // F039 附錄管理（E10 / US-102 AC5）；逐字採 F025 矩陣列名，刻意不沿用使用表單之句型。
+  APPENDIX_MANAGEMENT: '附錄管理',
   DOCUMENT_INDEX_MANAGEMENT: '文件索引管理',
   DOCUMENT_ACCESS_HISTORY: '文件調閱歷程查詢',
   DOCUMENT_CHANGE_HISTORY: '文件變更歷程',
@@ -71,6 +73,7 @@ export const FUNCTION_MATRIX: Record<string, Row> = {
   [FunctionKey.LIFECYCLE_MANAGEMENT]: row('READ', 'CRUD', 'READ', 'NONE', 'NONE'),
   [FunctionKey.ICSOP_DOCUMENT_MANAGEMENT]: row('READ', 'CRUD', 'READ', 'READ', 'NONE'),
   [FunctionKey.USAGE_FORM_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
+  [FunctionKey.APPENDIX_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.DOCUMENT_INDEX_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.DOCUMENT_ACCESS_HISTORY]: row('READ', 'READ', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.DOCUMENT_CHANGE_HISTORY]: row('READ', 'READ', 'NONE', 'NONE', 'NONE'),

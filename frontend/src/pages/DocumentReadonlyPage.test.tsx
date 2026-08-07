@@ -90,6 +90,7 @@ function setupMocks() {
   vi.mocked(endpoints.downloadUsageForm).mockResolvedValue({ url: 'https://blob/x', expiresInSeconds: 300 });
   vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([]);
   vi.mocked(endpoints.downloadAttachment).mockResolvedValue({ url: 'https://blob/a', expiresInSeconds: 300 });
+  vi.mocked(endpoints.getDocumentAppendices).mockResolvedValue([]); // F039：預設無關聯附錄，個別測試覆寫
 }
 
 describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', () => {
@@ -235,6 +236,49 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
       const link = await screen.findByRole('button', { name: /消金審核作業/ });
       // 編號與書名以空白相隔（prototype 16：l.n＝「編號 書名」單一字串）；· 僅用於狀態 pill 前。
       expect(link).toHaveTextContent(/ICSOP-SRC-101-2-00 消金審核作業/);
+    });
+  });
+
+  describe('F039 附錄依 sortOrder 遞增呈現（prototype 16）', () => {
+    const APPX = [
+      { id: 'ax1', name: '作業流程對照表.xlsx', format: 'xlsx', size: 57344, uploadedBy: 'u', uploadedAt: '2026-06-10T00:00:00.000Z', sortOrder: 1 },
+      { id: 'ax2', name: '名詞定義說明.pdf', format: 'pdf', size: 98304, uploadedBy: 'u', uploadedAt: '2026-06-10T00:00:00.000Z', sortOrder: 2 },
+      { id: 'ax8', name: '共用名詞附錄.xlsx', format: 'xlsx', size: 30720, uploadedBy: 'u', uploadedAt: '2026-03-30T00:00:00.000Z', sortOrder: 3 },
+    ];
+
+    it('AC-25 三筆附錄依 sortOrder 遞增列出名稱與格式，各自提供下載連結', async () => {
+      mockAuth('Supervisor');
+      vi.mocked(endpoints.getDocumentAppendices).mockResolvedValue(APPX);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
+      const names = screen
+        .getAllByText(/^(作業流程對照表\.xlsx|名詞定義說明\.pdf|共用名詞附錄\.xlsx)$/)
+        .map((e) => e.textContent);
+      expect(names).toEqual(['作業流程對照表.xlsx', '名詞定義說明.pdf', '共用名詞附錄.xlsx']);
+      for (const n of names) {
+        expect(within(attachRow(n as string)).getByRole('button', { name: /下載/ })).toBeInTheDocument();
+      }
+    });
+
+    it('後台個別下載附錄 → 呼叫 downloadAppendixFromPool（後台管理端存取，不寫稽核）', async () => {
+      mockAuth('Supervisor');
+      vi.mocked(endpoints.getDocumentAppendices).mockResolvedValue(APPX);
+      vi.mocked(endpoints.downloadAppendixFromPool).mockResolvedValue({ url: 'https://blob/appendix', expiresInSeconds: 300 });
+      renderPage();
+      await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
+      await userEvent.click(
+        within(attachRow('作業流程對照表.xlsx')).getByRole('button', { name: /下載/ }),
+      );
+      await waitFor(() => expect(endpoints.downloadAppendixFromPool).toHaveBeenCalledWith('ax1'));
+      expect(openMock).toHaveBeenCalledWith('https://blob/appendix', '_blank', 'noopener,noreferrer');
+    });
+
+    it('AC-26 無關聯附錄 → 顯示「無附錄」，非錯誤、非空白區塊', async () => {
+      mockAuth('Supervisor');
+      vi.mocked(endpoints.getDocumentAppendices).mockResolvedValue([]);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      expect(screen.getByText('無附錄')).toBeInTheDocument();
     });
   });
 });

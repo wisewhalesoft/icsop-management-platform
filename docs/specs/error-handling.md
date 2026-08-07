@@ -1,8 +1,8 @@
 ---
 spec-id: error-handling
 title: 錯誤處理與失敗模式
-version: 1.0
-date: 2026-07-15
+version: 1.1
+date: 2026-08-06
 status: Draft
 ---
 
@@ -51,13 +51,17 @@ status: Draft
 | `DOCUMENT_NUMBER_DUPLICATE` | 409 | 文件編號已存在（**比對「有效＋作廢」**；「失效」編號已釋出不觸發） | F013 |
 | `DOCUMENT_STATUS_INVALID` | 400 | 文件狀態值不合法 | F012 |
 | `DOCUMENT_LINK_TARGET_NOT_FOUND` | 400 | 連結目標文件不存在 | F015 |
-| `FILE_FORMAT_NOT_ALLOWED` | 400 | 檔案格式不允許 | F016, F018 |
-| `FILE_SIZE_EXCEEDED` | 400 | 檔案超過大小上限 | F016, F018 |
-| `FILE_ACCESS_DENIED` | 403 | 無權存取此檔案 | F016, F018, F020 |
+| `FILE_FORMAT_NOT_ALLOWED` | 400 | 檔案格式不允許 | F016, F018, F039 |
+| `FILE_SIZE_EXCEEDED` | 400 | 檔案超過大小上限 | F016, F018, F039 |
+| `FILE_ACCESS_DENIED` | 403 | 無權存取此檔案 | F016, F018, F020, F039 |
 | `USAGE_FORM_NAME_TOO_LONG` | 400 | 使用表單名稱超過長度上限（去空白後 400 字元，對齊 `USAGE_FORM_POOL.name` nvarchar(400)） | F018 |
 | `USAGE_FORM_OVERWRITE_SHARED` | 409（需二次確認） | 此表單另被 {N} 份文件引用，覆蓋將同時更新全部，是否繼續？（門檻：引用 ≥2） | F018 |
 | `USAGE_FORM_IN_USE` | 409（需二次確認） | 此表單仍被 {N} 份文件引用，移除將自所有引用解除，是否繼續？ | F018 |
 | `USAGE_FORM_NOT_FOUND` | 404 | 找不到此使用表單 | F018 |
+| `APPENDIX_NAME_TOO_LONG` | 400 | 附錄名稱超過長度上限（去空白後 400 字元，對齊 `APPENDIX_POOL.name` nvarchar(400)） | F039 |
+| `APPENDIX_OVERWRITE_SHARED` | 409（需二次確認） | 此附錄另被 {N} 份文件引用，覆蓋將同時更新全部，是否繼續？（門檻：引用 ≥2） | F039 |
+| `APPENDIX_IN_USE` | 409（需二次確認） | 此附錄仍被 {N} 份文件引用，移除將自所有引用解除，是否繼續？（門檻：引用 ≥1） | F039 |
+| `APPENDIX_NOT_FOUND` | 404 | 找不到此附錄 | F039 |
 | `PERMISSION_DENIED` | 403 | 權限不足 | F025 |
 | `FIELD_WRITE_FORBIDDEN` | 403 | 無權修改此欄位 | F026 |
 | `AUDIT_IMMUTABLE` | 403 | 稽核紀錄不可修改或刪除 | F023 |
@@ -141,7 +145,21 @@ status: Draft
 - **覆蓋上傳**：ICSOP PDF / OJT 重新上傳覆蓋舊檔，舊檔不再可經文件記錄存取。
 - **未授權存取**：以直接 Blob URL 存取回 `FILE_ACCESS_DENIED`；一律經後端核發短效期憑證。
 - **移除表單**：需二次確認以避免誤刪（F018）。
-- **覆蓋共用表單（OQ-E05-05）**：更新被 ≥1 份其他文件引用之表單時，回 `USAGE_FORM_OVERWRITE_SHARED`（409，需二次確認，附引用文件數 N）；確認後覆蓋、舊檔不再可存取、不保留歷史版本；取消則原檔不變。僅當前文件引用或無其他引用時免跨文件警示（F018）。
+- **覆蓋共用表單（OQ-E05-05）**：更新被 ≥1 份其他文件引用之表單時，回 `USAGE_FORM_OVERWRITE_SHARED`（409，需二次確認，附引用文件數 N）；確認後覆蓋、舊檔不再可存取、不保留歷史版本；取消則原檔不變。僅當前文件引用或無其他引用時免跨文件警示（F018）。<br>⚠ 本段散文之「≥1」與 [US-042](../stories/epics/E05-usage-form/US-042-usage-form-pool-management.md) AC6／實作常數 `SHARED_OVERWRITE_MIN_REFS = 2` 不一致，見 [open-questions.md](open-questions.md) OQ-E10-04（**附錄 F039 一律以 ≥2 為準**）。
+
+## 附錄（附錄池與文件關聯） {#appendix}
+
+> 對應 [F039](features/F039-appendix-management.md)（E10 / US-100、US-101、US-102）。格式／大小／未授權存取沿用 [#file](#file) 之共用規則（類別 `APPENDIX` ＝ xlsx／xls／pdf、單檔 ≤ 50MB）。
+
+- **名稱長度**：`name` 於 **trim 後**量測，> 400 字元回 `APPENDIX_NAME_TOO_LONG`（400）；未提供／空白時 fallback 採原始檔名，**fallback 值亦受同一長度檢查**。
+- **驗證優先序（定案）**：覆蓋上傳一律**先驗格式／大小，後判引用數**——格式或大小不合法時回 `FILE_FORMAT_NOT_ALLOWED`／`FILE_SIZE_EXCEEDED`（400），**不得**先回 `APPENDIX_OVERWRITE_SHARED`。
+- **覆蓋共用附錄**：關聯文件數 **N ≥ 2** 且未二次確認 → `APPENDIX_OVERWRITE_SHARED`（409，訊息含 N），**不寫入任何 blob 或記錄**；確認後覆蓋、舊 blob 回收且不再可經任何引用文件存取、不保留歷史版本；取消則原檔與全部關聯（含 `sortOrder`）不變。**N ≤ 1（0 或 1）時直接覆蓋，不出現跨文件警示**。
+- **移除附錄**：關聯文件數 **N ≥ 1** 且未二次確認 → `APPENDIX_IN_USE`（409，訊息含 N）；確認後一併解除全部關聯＋刪除池記錄＋回收 blob。N＝0 時直接移除（二次確認屬前端 UI 責任）。
+- **找不到附錄**：關聯／覆蓋／移除／下載時 `appendixId` 不存在 → `APPENDIX_NOT_FOUND`（404）。
+- **關聯排序之錯誤面**：關聯清單含重複 `appendixId` 時去重處理（非錯誤）；解除關聯後剩餘列重新編號為連續 1..N，不得留下順位缺口。
+- **未授權存取**：未登入或無權限者組合下載網址 → `FILE_ACCESS_DENIED`（403），**不核發短效期憑證、不寫稽核**。
+- **權限層**：無「附錄管理」功能權限之角色（Supervisor／DeptContact／User）呼叫後台端點 → `PERMISSION_DENIED`（403，路由層）；SysAdmin 之寫入類動作 → `FIELD_WRITE_FORBIDDEN`（403，欄位層），與 F018 守門鏈一致。
+- **稽核**：前台下載成功須寫入 `targetType=APPENDIX`／`actionType=DOWNLOAD`；寫入暫時失敗**不阻斷下載**，進補償佇列重試（見 [#audit](#audit)）。
 
 ## 權限（功能面 / 欄位面） {#permission}
 

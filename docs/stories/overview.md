@@ -19,10 +19,10 @@
 
 | Metric | Count |
 |--------|-------|
-| Total Epics | 9 |
-| Total Stories | 50 |
+| Total Epics | 10 |
+| Total Stories | 53 |
 | Total NFRs | 10 |
-| Phase 1（優先交付） | 44 |
+| Phase 1（優先交付） | 47 |
 | Phase 2（次階段強化） | 2 |
 | Phase 3（智慧化） | 4（E09 智慧問答／RAG 前台功能，見下方） |
 
@@ -31,6 +31,8 @@
 > **2026-07-17 增量**：E03 新增 US-025「循環樹狀圖預覽（唯讀＋浮水印）」，Total Stories 47→48，Phase 1 由 41→42（P1 story，仍屬 Phase 1 優先交付範圍）。
 >
 > **2026-07-17 增量（二）**：E07 新增 US-062「ICSOP 程序書變更歷程」與 US-063「循環樹狀圖變更歷程」，Total Stories 48→50，Phase 1 由 42→44（皆為 P1 story，仍屬 Phase 1 優先交付範圍）。
+>
+> **2026-08-06 增量**：新增 **E10 附錄管理**（US-100 附錄上傳管理／US-101 附錄與文件關聯維護／US-102 附錄池管理，共 3 個 P1 story），模型/權限/稽核義務比照 [E05 文件使用表單管理](epics/E05-usage-form/epic-brief.md)。Total Epics 9→10，Total Stories 50→53，Phase 1 由 44→47（皆為 P1 story，仍屬 Phase 1 優先交付範圍）。
 
 ## Epic Index
 
@@ -45,11 +47,12 @@
 | E07 | 稽核與文件調閱歷程 | 1 | 4 | [epic-brief.md](epics/E07-audit-trail/epic-brief.md) |
 | E08 | 權限矩陣 | 1 | 2 | [epic-brief.md](epics/E08-permission-matrix/epic-brief.md) |
 | E09 | 智慧問答（本地開源 LLM + RAG） | 1/3 | 9 | [epic-brief.md](epics/E09-rag-qa/epic-brief.md) |
+| E10 | 附錄管理 | 1 | 3 | [epic-brief.md](epics/E10-appendix/epic-brief.md) |
 
 ## Phase Breakdown
 
-### Phase 1（優先交付，44 stories）
-涵蓋原始需求 a–r 的絕大部分：雙驗證登入與角色分流、Session 逾時、帳號/角色管理、組織每日同步與離職停用、循環池與 DAG 畫布（含防環驗證）、節點抽屜維護、ICSOP 文件完整 CRUD（含版本對照、連結點、附件）、使用表單管理、前台清單/搜尋/篩選/排序、浮水印疊加與燒錄、稽核軌跡記錄與查詢、角色權限矩陣（功能面 + 欄位面）。**新增**：E09 智慧問答（RAG）管理端 ingestion（US-090～US-094）——保存 ICSOP .xls 原始檔並產出呈現用 PDF、模板感知抽取與清洗、依章/節切 chunk 並掛 metadata 建向量索引、文件改版重抽重建索引、管理端提取結果與索引狀態可視性。此批屬 Phase 1 是因其為前台智慧問答（Phase 3）之知識庫準備工作，本身不對一般使用者開放任何新介面。
+### Phase 1（優先交付，47 stories）
+涵蓋原始需求 a–r 的絕大部分：雙驗證登入與角色分流、Session 逾時、帳號/角色管理、組織每日同步與離職停用、循環池與 DAG 畫布（含防環驗證）、節點抽屜維護、ICSOP 文件完整 CRUD（含版本對照、連結點、附件）、使用表單管理、**附錄管理（E10，比照使用表單）**、前台清單/搜尋/篩選/排序、浮水印疊加與燒錄、稽核軌跡記錄與查詢、角色權限矩陣（功能面 + 欄位面）。**新增**：E09 智慧問答（RAG）管理端 ingestion（US-090～US-094）——保存 ICSOP .xls 原始檔並產出呈現用 PDF、模板感知抽取與清洗、依章/節切 chunk 並掛 metadata 建向量索引、文件改版重抽重建索引、管理端提取結果與索引狀態可視性。此批屬 Phase 1 是因其為前台智慧問答（Phase 3）之知識庫準備工作，本身不對一般使用者開放任何新介面。
 
 ### Phase 2（次階段強化，2 stories）
 - E02 / US-013：組織異動對 ICSOP 文件當責設定的**主動提示/通知**強化（Phase 1 已有基礎異動管理，Phase 2 強化提示時機與通知管道）
@@ -105,6 +108,8 @@ Phase 3 之啟動時機取決於 Phase 1（E09 ingestion 管線）驗收結果�
 12. **（E09）.xls 模板變體與附件檢索範圍未定案**：ICSOP .xls 標準模板之變體數量未盤點；使用表單／OJT 簽到表等附件是否納入 RAG 檢索範圍（涉及 OCR）本輪預設不含，待確認。（見 E09 US-091、epic-brief）
 13. **（E09）RAG 品質與延遲量化目標、prompt injection 驗收標準為草案值**：檢索命中率、引用正確率、拒答正確率、回答延遲 P95 等數值皆待 PoC 實測校準；prompt injection 防護之具體技術方案未定案。（見 NFR-009、NFR-010）
 14. **（本次一併校正）E05 stories 數量**：先前版本 Quick Stats／Epic Index 將 E05 誤記為 2 個 stories，實際為 3 個（US-040/041/042），已於本次更新校正，不影響需求內容本身。
+15. **（2026-08-06 已定案，E10）附錄顯示順序**：使用者裁定**支援自訂排序**——`DOC_APPENDIX` 關聯帶 `sortOrder`，文件編輯畫面提供上移/下移調整，新附錄預設接末位，前後台詳情頁依序顯示，使其對得上 SOP 正文之「附錄一/附錄二」引用。已落入 [E10 US-101](epics/E10-appendix/US-101-appendix-document-association.md) AC1～AC6，不再視為開放問題。
+16. **（2026-08-06 已解決，E10 依賴）E08 權限矩陣「附錄管理」功能列與「附錄（多）」欄位列**：已物理補上 [E08 US-070](epics/E08-permission-matrix/US-070-role-function-matrix.md)、[US-071](epics/E08-permission-matrix/US-071-role-field-matrix.md) 對應列（權限值比照「文件使用表單管理」／「使用表單（多）」），不再視為待辦。
 
 ## For AI Agents
 

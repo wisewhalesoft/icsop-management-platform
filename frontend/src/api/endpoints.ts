@@ -696,6 +696,124 @@ export function downloadPoolForm(
   return apiFetch(`/admin/usage-forms/${formId}/download`);
 }
 
+// ===== E10 F039 附錄管理（附錄池 ＋ 文件關聯與 sortOrder） =====
+
+/** GET /admin/appendices（附錄池清單，APPENDIX_MANAGEMENT read；供建立/編輯畫面之候選）。 */
+export function getAppendixPool(): Promise<import('./types').AppendixRecord[]> {
+  return apiFetch('/admin/appendices');
+}
+
+/**
+ * GET /admin/appendices/overview（附錄池總覽，read：SysAdmin 唯讀＋ICSOPAdmin CRUD）。
+ * 每筆附關聯文件數（docCount）與關聯文件精簡清單（documents），供清單欄與展開檢視（AC-16/17）。
+ */
+export function getAppendixPoolOverview(): Promise<import('./types').AppendixPoolItem[]> {
+  return apiFetch('/admin/appendices/overview');
+}
+
+/**
+ * POST /admin/appendices（multipart 上傳，欄位名 `files`；單/多檔皆可）。
+ * 格式 FILE_FORMAT_NOT_ALLOWED（僅 xlsx/xls/pdf）、大小 FILE_SIZE_EXCEEDED（50MB）、
+ * 名稱長度 APPENDIX_NAME_TOO_LONG（400 字元）由後端裁決。
+ * `name`＝自訂附錄名稱（選填，trim 後送出）：**僅單檔路徑**附加——多檔不接受自訂名稱
+ * （F039 Alt Flow／prototype 24 multiNameNote），各檔由後端沿用各自檔名。
+ * ⚠ FormData 不可設 Content-Type（瀏覽器需自帶 multipart boundary）。
+ */
+export function uploadAppendix(files: File[], name?: string): Promise<unknown> {
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+  const trimmed = (name ?? '').trim();
+  if (files.length === 1 && trimmed !== '') fd.append('name', trimmed);
+  return apiFetch('/admin/appendices', { method: 'POST', body: fd });
+}
+
+/**
+ * PUT /admin/appendices/:appendixId（覆蓋上傳單檔，欄位名 `file`）。
+ * 被 ≥2 份文件引用且未確認 → 409 APPENDIX_OVERWRITE_SHARED；confirmed=true 放行。**不改名稱**。
+ */
+export function overwriteAppendix(
+  appendixId: string,
+  file: File,
+  confirmed = false,
+): Promise<unknown> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const q = confirmed ? '?confirmed=true' : '';
+  return apiFetch(`/admin/appendices/${appendixId}${q}`, { method: 'PUT', body: fd });
+}
+
+/**
+ * DELETE /admin/appendices/:appendixId（自附錄池移除）。
+ * 被 ≥1 份文件引用且未確認 → 409 APPENDIX_IN_USE；confirmed=true → 解除全部關聯後刪除。
+ */
+export function deleteAppendix(appendixId: string, confirmed = false): Promise<void> {
+  const q = confirmed ? '?confirmed=true' : '';
+  return apiFetch<void>(`/admin/appendices/${appendixId}${q}`, { method: 'DELETE' });
+}
+
+/** GET /admin/appendices/:appendixId/download（後台個別下載；管理端存取，不寫稽核、不燒錄浮水印）。 */
+export function downloadAppendixFromPool(
+  appendixId: string,
+): Promise<import('./types').AppendixDownloadGrant> {
+  return apiFetch(`/admin/appendices/${appendixId}/download`);
+}
+
+/** GET /documents/:documentId/appendices（前後台共用；**已依 sortOrder 遞增**，前端不得再排序）。 */
+export function getDocumentAppendices(
+  documentId: string,
+): Promise<import('./types').DocumentAppendixRecord[]> {
+  return apiFetch(`/documents/${documentId}/appendices`);
+}
+
+/**
+ * PUT /admin/documents/:documentId/appendices（**排序權威寫入**：整組覆寫並依陣列索引重寫
+ * sortOrder 1..N）。architecture-spec §3.6 決策二：文件建立/編輯頁**唯一**接入之附錄寫入呼叫，
+ * 刻意不採 F018 使用表單之 diff-based link/unlink（無法表達純重排）。
+ */
+export function replaceDocumentAppendices(
+  documentId: string,
+  appendixIds: string[],
+): Promise<void> {
+  return apiFetch<void>(`/admin/documents/${documentId}/appendices`, {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ appendixIds }),
+  });
+}
+
+/**
+ * POST /admin/documents/:documentId/appendices（附加關聯，接續現有最大 sortOrder 之後）。
+ * API 完整性保留；**建立/編輯 UI 刻意不呼叫**（見 replaceDocumentAppendices 之決策二說明）。
+ */
+export function appendDocumentAppendices(
+  documentId: string,
+  appendixIds: string[],
+): Promise<void> {
+  return apiFetch<void>(`/admin/documents/${documentId}/appendices`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ appendixIds }),
+  });
+}
+
+/** DELETE /admin/documents/:documentId/appendices/:appendixId（解除單一關聯，剩餘重編為 1..N）。 */
+export function unlinkDocumentAppendix(
+  documentId: string,
+  appendixId: string,
+): Promise<void> {
+  return apiFetch<void>(`/admin/documents/${documentId}/appendices/${appendixId}`, {
+    method: 'DELETE',
+  });
+}
+
+/** GET /documents/:documentId/appendices/:appendixId/download（前台下載＋**寫入稽核**，不燒錄浮水印）。 */
+export function downloadDocumentAppendix(
+  documentId: string,
+  appendixId: string,
+): Promise<import('./types').AppendixDownloadGrant> {
+  return apiFetch(`/documents/${documentId}/appendices/${appendixId}/download`);
+}
+
 // ===== E09 F031 文件索引管理 =====
 
 /** GET /admin/doc-index/overview（總覽：彙總計數 + 分頁 + 狀態篩選；read）。 */

@@ -1,8 +1,8 @@
 ---
 spec-id: open-questions
 title: 待釐清事項、風險與假設
-version: 1.1
-date: 2026-07-16
+version: 1.2
+date: 2026-08-06
 status: Draft
 ---
 
@@ -10,6 +10,7 @@ status: Draft
 
 > 本文件為**決策紀錄＋待辦清單**：多數項目已於 **2026-07-17 逐輪定案**（標 `[已定案 ✅]`／`[已收斂 ✅]`，保留於此供追溯，決策已落入對應 spec）；**仍待辦者餘 9 項**（標 `[BLOCKING]`／`[部分收斂]`，**全數需外部單位／PoC／corpus**，已無純內部可決項）：`OQ-NFR001`〔已部分收斂〕、**`OQ-NFR002`〔已部分收斂 — 2026-07-20 登入驗證改採 Azure AD OIDC，簽章演算法與共享密鑰輪替兩項消解；僅餘 Blob 金鑰輪替與公司資安框架〕**、`OQ-E09-01/02/06/07/08/14`、**`OQ-E09-04`〔已部分收斂 — 2026-07-21 標準五表模板已確認，僅餘全 corpus 變體率待抽樣，見 icsop-template-analysis.md〕**（以上 E09 各項皆需外部單位提供 corpus 或 PoC 實測後始能定）。已由訪談定案者（雙軌登入、組織架構、DAG 防環、浮水印內容、Session 30 分鐘、5 角色、節點抽屜為所屬節點唯一權威寫入路徑、主管/部門窗口對文件管理皆唯讀、無簽核流程、僅保存當前版本、技術棧…）**不列於此**。
 > **E09 智慧問答（RAG）已定案項目（不列於此，直接落入 spec）**：採「本地開源 LLM＋RAG」非微調本地模型；雙軌 ingestion（軌道 A 權威原件 .xls ＋**另行手動上傳之呈現用 PDF**〔OQ-E09-10 定案：**取消 .xls→PDF 自動轉檔**，兩者各自獨立上傳〕、軌道 B 檢索內文 chunk）；模板感知（規則式）parser 抽取；**權限感知過濾必須在檢索層**（非生成後丟棄）；硬體 **L40S×4（192GB VRAM）**；分期（Phase 1 管理端 ingestion＝F027–F031；Phase 3 前台問答＝F032–F035）；經 AI 導引之檢視/下載沿用既有浮水印＋稽核。
+> **2026-08-06 新增 E10 附錄管理（[F039](features/F039-appendix-management.md)）5 項 `[CLARIFY]`**：`OQ-E10-01`（prototype 24 單檔/名稱必填 vs US-100 多檔/名稱選填）、`OQ-E10-02`（`DOC_APPENDIX` 排序唯一索引之架構決策）、`OQ-E10-03`（「19 欄」措辭全域同步）、`OQ-E10-04`（**F018 覆蓋門檻散文 ≥1 vs 實作 ≥2 之既有落差**）、`OQ-E10-05`（`USAGE_FORM_POOL` 未登錄 data-model）。**五項皆不阻塞 F039 實作**（後端契約已於 F039 明確定義）。
 > 每項標註分類：**[BLOCKING]** 進入精確估點/實作前須答；**[CLARIFY]** 可先以草案假設實作、待確認微調；**[RISK]** 風險與緩解。狀態未定者於 spec 中以 `[ASSUMPTION]` 標記草案值。
 
 ## 最高優先：規格內部矛盾
@@ -134,6 +135,18 @@ status: Draft
 | OQ-E09-13 | Phase 1 與 Phase 3 之間排程/優先序（Phase 3 明確啟動時間點） | [已定案 ✅] | E09 | **定案**：依 **Phase 1 驗收＋PoC 進度**決定啟動時點（不預設固定日期） |
 | OQ-E09-14 | 自建 ICSOP 問答評測集尚未建立 | [BLOCKING] | nfr#rag-quality | 需業務單位提供代表性問題與標準答案/來源 |
 | OQ-E09-15 | 混合式微調（RAG 主幹＋輕量 LoRA 生成層）未來延伸方向 | [已定案 ✅] | E09 | **定案**：**非本輪範疇**（不納入；未來是否評估另案處理） |
+
+## E10 附錄管理（F039，2026-08-06 新增）
+
+> **已定案、不列為開放問題者**（由使用者於 2026-08-06 直接裁定，直接落入 [F039](features/F039-appendix-management.md)）：格式＝xlsx／xls／pdf 且單檔 ≤ 50MB（沿用 OQ-E04-06／OQ-E05-02）；全切面比照使用表單（管理頁＋建立/編輯多選＋後台唯讀詳情＋前台詳情下載＋前台下載寫稽核）；**支援自訂排序**（`DOC_APPENDIX.sortOrder`＋上移/下移，非拖曳）；**分類/標籤延後 Phase 2**；**下載不燒錄浮水印**（沿用 OQ-E05-03，**已定案，非未決**）；覆蓋共用警示門檻＝**引用 ≥2**。
+
+| ID | 問題 | 分類 | 相關 | 草案/選項 |
+|----|------|------|------|-----------|
+| OQ-E10-01 | **prototype 24 與 US-100 之上傳互動落差**：prototype 之上傳 modal 為**單檔選取且「附錄名稱」必填**（空值即擋，`upNameErr`），但 [US-100](../stories/epics/E10-appendix/US-100-appendix-upload.md) AC1 為「一個或多個檔案」、AC4 為「名稱可留空 → fallback 檔名」。兩者不一致，需 UI 決定 | [CLARIFY]（不阻塞後端） | F039, prototype 24 | **spec 現行處置**：後端 contract 以 stories 為權威——支援多檔上傳、`name` 為選填且空值 fallback 檔名（F039 AC-02／AC-06）。**建議解**（供 ui-ux-designer）：(a) UI 於選檔後**自動預填檔名**至名稱欄，使「必填」與「fallback」不矛盾（推薦，改動最小、與 prototype 版面一致）；(b) UI 補上多檔選取（`multiple`）並改為逐檔沿用檔名、隱藏名稱欄；(c) 維持單檔＋必填，並回頭收窄 US-100 AC1/AC4（需 product-analyst 與使用者同意）。**未解不阻塞實作**：後端依 (a)/(b) 皆可運作 |
+| OQ-E10-02 | `DOC_APPENDIX` 之 `(documentId, sortOrder)` 是否建立唯一索引？重排（上移/下移送出）期間之中間態會暫時違反唯一性，MSSQL 無 deferred constraint | [CLARIFY]（架構決策） | F039, data-model#doc-appendix | 選項：(a) **不建該唯一索引**，由服務層之 replace-set（單一交易內先全刪後全插）保證連續唯一（推薦，與 [F014](features/F014-accountable-dept-chief.md) 既有多值欄位模式一致）；(b) 建唯一索引並確保寫入一律走「先刪後插」；(c) 建唯一索引＋暫時位移法（先寫負值再回填）。由 system-architect 裁定 |
+| OQ-E10-03 | **「19 欄」措辭全域落後**：[data-model.md#document-entity](data-model.md#document-entity) 已因 F039 新增第 20 欄「附錄」，但 F010／F011／F017／F037／architecture-spec §4／E04 epic-brief／US-062 之散文仍寫「19 欄」 | [CLARIFY]（措辭同步，非語意衝突） | F039, F010, F011, F017, F026, F037 | **本次刻意不逕改他人 spec**（各檔另有擁有者，且既有 1–19 欄之序號與屬性名一律未動、下游 `fieldName` 字串不受影響）。建議由各 feature 擁有者於下次觸及該檔時一併改為「20 欄」；在此之前以 data-model 表格為唯一權威 |
+| OQ-E10-04 | **[F018](features/F018-usage-form-management.md) 覆蓋警示門檻散文與實作不一致**（上游 spec-writer 回報）：F018 之 Main Flow 1／Edge Cases／AC 三處寫「另被 **≥1** 份文件引用」須警示，但 [US-042](../stories/epics/E05-usage-form/US-042-usage-form-pool-management.md) AC6／AC7 與實作常數 `SHARED_OVERWRITE_MIN_REFS = 2` 皆為 **≥2**（[error-handling.md#file](error-handling.md#file) 亦已寫「門檻：引用 ≥2」但同段散文仍留「≥1」） | [CLARIFY]（已知落差，**未修改 F018 規範性文字**） | F018, F039, error-handling#file | **判定**：實作與 US-042 為準（**≥2**），F018 散文為未同步之殘留。**本次不修改 F018**（該檔屬另一 feature 之規格，需另行核可）。**建議修正**：將 F018 三處「≥1」改為「≥2」並補註「僅被 0 或 1 份文件引用時直接覆蓋、無跨文件警示」。⚠ **附錄（F039）一律以 ≥2 為準**，不受 F018 散文影響 |
+| OQ-E10-05 | **`USAGE_FORM_POOL`／`DOC_USAGE_FORM` 未登錄於 data-model.md**：F018 表單池模型已實作（含 migration `1722124800000-usage-form`），但 [data-model.md](data-model.md) 仍僅以 `DOCUMENT_ATTACHMENT.type=USAGE_FORM` 描述使用表單 | [CLARIFY]（既有文件缺口） | F018, data-model | 本次新增 [APPENDIX_POOL／DOC_APPENDIX](data-model.md#appendix-entity) 時併同標記此落差，但**未代 F018 補寫其實體定義**（避免以附錄之形狀反推另一 feature 之權威 schema）。建議由 F018 擁有者或 system-architect 依實際 entity／migration 補齊 |
 
 ## 非功能相關
 

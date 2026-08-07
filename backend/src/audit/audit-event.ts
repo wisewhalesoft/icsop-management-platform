@@ -24,6 +24,7 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
   let lifecycleId: string | null = null;
   let lifecycleName: string | null = null;
   let formId: string | null = null;
+  let appendixId: string | null = null;
 
   switch (event.targetType) {
     case 'DOCUMENT':
@@ -38,6 +39,13 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
       break;
     case 'USAGE_FORM':
       formId = event.targetId;
+      documentNumber = event.targetNumber ?? null;
+      break;
+    // F039：附錄下載**同時**落地 appendixId 與 documentId（AC-27）——刻意不沿用
+    // USAGE_FORM 分支之「單一 targetId」模式（該分支 documentId 恆 null 為既有落差）。
+    case 'APPENDIX':
+      appendixId = event.targetId;
+      documentId = event.documentId;
       documentNumber = event.targetNumber ?? null;
       break;
   }
@@ -58,6 +66,7 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
     lifecycleId,
     lifecycleName,
     formId,
+    appendixId,
     targetName: event.targetName ?? null,
     watermarkSnapshot: event.watermarkSnapshot ?? null,
     occurredAt: event.occurredAt,

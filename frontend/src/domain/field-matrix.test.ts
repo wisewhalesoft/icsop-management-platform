@@ -6,9 +6,9 @@ import { ROLE_CODES } from './function-matrix';
  * 權威值＝backend/src/rbac/field-matrix.ts（逐格一致；後端更新時同步）。
  */
 describe('field-matrix（前端鏡射）', () => {
-  it('19 欄位，每列涵蓋全部 5 角色', () => {
+  it('20 欄位，每列涵蓋全部 5 角色（F039 新增「附錄」）', () => {
     const keys = Object.keys(FIELD_MATRIX);
-    expect(keys).toHaveLength(19);
+    expect(keys).toHaveLength(20);
     for (const key of keys) {
       expect(Object.keys(FIELD_MATRIX[key]).sort()).toEqual([...ROLE_CODES].sort());
     }

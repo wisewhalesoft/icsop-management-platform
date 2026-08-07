@@ -20,6 +20,7 @@ import { AccessHistoryPage } from './pages/AccessHistoryPage';
 import { ChangeHistoryPage } from './pages/ChangeHistoryPage';
 import { DocIndexPage } from './pages/DocIndexPage';
 import { UsageFormManagementPage } from './pages/UsageFormManagementPage';
+import { AppendixManagementPage } from './pages/AppendixManagementPage';
 import { ModulePlaceholder } from './pages/ModulePlaceholder';
 import { PublicListPage } from './pages/PublicListPage';
 import { PublicDocumentDetailPage } from './pages/PublicDocumentDetailPage';
@@ -104,6 +105,7 @@ export function AppRoutes(): JSX.Element {
           <Route path="documents/:id" element={<DocumentReadonlyPage />} />
           <Route path="documents/:id/edit" element={<DocumentEditPage />} />
           <Route path="usage-forms" element={<UsageFormManagementPage />} />
+          <Route path="appendices" element={<AppendixManagementPage />} />
           <Route path="org-sync" element={<OrgSyncPage />} />
           <Route path="access-history" element={<AccessHistoryPage />} />
           <Route path="change-history" element={<ChangeHistoryPage />} />

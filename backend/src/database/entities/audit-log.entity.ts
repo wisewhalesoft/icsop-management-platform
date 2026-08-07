@@ -64,6 +64,10 @@ export class AuditLog {
   @Column({ type: 'uniqueidentifier', nullable: true })
   formId!: string | null;
 
+  // F039 附錄下載（targetType='APPENDIX'）之對象參照；比照 formId 定義，不建專屬索引。
+  @Column({ type: 'uniqueidentifier', nullable: true })
+  appendixId!: string | null;
+
   @Column({ type: 'nvarchar', length: 200, nullable: true })
   targetName!: string | null;
 

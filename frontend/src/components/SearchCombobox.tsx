@@ -136,6 +136,115 @@ interface MultiProps {
   onQueryChange?: (query: string) => void;
   placeholder?: string;
   emptyChipText?: string;
+  /**
+   * F039：已選清單改以**有序清單**呈現（序號徽章＋上移／下移）。
+   * 選填、預設 `undefined`/`false`＝維持既有 chip 行為，**現行全部呼叫端零影響**
+   * （usingDepts／secondaryChiefs／使用表單／文件連結點之行為與既有測試逐字不變）。
+   * 刻意**不提供拖曳**（無 `draggable` 屬性、無拖曳事件監聽）——F039 AC-21 明訂。
+   */
+  orderable?: boolean;
+  /** orderable：將第 index 項上移一位（首項應由呼叫端忽略；本元件已停用首項按鈕）。 */
+  onMoveUp?: (index: number) => void;
+  /** orderable：將第 index 項下移一位（末項應由呼叫端忽略；本元件已停用末項按鈕）。 */
+  onMoveDown?: (index: number) => void;
+  /** orderable：移除鈕之 title（prototype 14＝「取消選取」、prototype 15＝「解除此附錄關聯」）。 */
+  removeTitle?: string;
+  /** orderable：每列前置圖示解析（如依附錄副檔名區分 excel／pdf）。 */
+  itemIcon?: (opt: ComboOption) => string;
+}
+
+/** orderable 之上移／下移鈕樣式（逐字對照 prototype 14／15 之 appxBtn）。 */
+const ORDER_BTN =
+  'w-6 h-6 rounded flex items-center justify-center shrink-0 text-slate-500 hover:bg-white ' +
+  'hover:text-primary-600 disabled:text-slate-300 disabled:hover:bg-transparent ' +
+  'disabled:hover:text-slate-300 disabled:cursor-not-allowed';
+
+/**
+ * 有序已選清單（F039 附錄選取區；prototypes/14-document-create.html `renderAppx()`、
+ * prototypes/15-document-edit.html 同名函式之逐字移植）。
+ *
+ * DOM 標記 `data-appendix-item` / `data-appendix-order` / `data-appendix-name` 為 prototype
+ * 14／15 之逐字契約（亦為 e2e fidelity 斷言依據）；`orderable` 目前之唯一消費者即附錄選取區。
+ */
+function OrderedSelectionList({
+  id,
+  values,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+  removeTitle,
+  itemIcon,
+  emptyChipText,
+}: {
+  id: string;
+  values: ComboOption[];
+  onRemove: (value: string) => void;
+  onMoveUp?: (index: number) => void;
+  onMoveDown?: (index: number) => void;
+  removeTitle?: string;
+  itemIcon?: (opt: ComboOption) => string;
+  emptyChipText: string;
+}): JSX.Element {
+  if (values.length === 0) {
+    return (
+      <div className="flex flex-col gap-1.5 mb-2" data-testid={`${id}-chips`}>
+        <span className="text-xs text-slate-400">{emptyChipText}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1.5 mb-2" data-testid={`${id}-chips`}>
+      {values.map((v, i) => (
+        <div
+          key={v.value}
+          data-appendix-item=""
+          data-appendix-order={i + 1}
+          className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5"
+        >
+          <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+            {i + 1}
+          </span>
+          <Icon
+            name={itemIcon ? itemIcon(v) : 'file-spreadsheet'}
+            className="w-4 h-4 text-slate-400 shrink-0"
+          />
+          <span data-appendix-name className="text-sm text-slate-700 flex-1 truncate">
+            {v.label}
+          </span>
+          {/* 首項停用上移、末項停用下移：順序不變且不產生錯誤（AC-20 邊界）。 */}
+          <button
+            type="button"
+            aria-label="上移"
+            title="上移"
+            disabled={i === 0}
+            onClick={() => onMoveUp?.(i)}
+            className={ORDER_BTN}
+          >
+            <Icon name="chevron-up" className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            aria-label="下移"
+            title="下移"
+            disabled={i === values.length - 1}
+            onClick={() => onMoveDown?.(i)}
+            className={ORDER_BTN}
+          >
+            <Icon name="chevron-down" className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            aria-label={`移除 ${v.label}`}
+            title={removeTitle ?? '取消選取'}
+            onClick={() => onRemove(v.value)}
+            className="w-6 h-6 rounded flex items-center justify-center shrink-0 text-slate-400 hover:bg-white hover:text-red-500"
+          >
+            <Icon name="x" className="w-4 h-4" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -152,6 +261,11 @@ export function MultiSearchCombobox({
   onQueryChange,
   placeholder,
   emptyChipText = '（可留空）',
+  orderable,
+  onMoveUp,
+  onMoveDown,
+  removeTitle,
+  itemIcon,
 }: MultiProps): JSX.Element {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -169,6 +283,18 @@ export function MultiSearchCombobox({
       <label htmlFor={id} className="block text-sm font-medium text-slate-700 mb-2">
         {label}
       </label>
+      {orderable ? (
+        <OrderedSelectionList
+          id={id}
+          values={values}
+          onRemove={onRemove}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          removeTitle={removeTitle}
+          itemIcon={itemIcon}
+          emptyChipText={emptyChipText}
+        />
+      ) : (
       <div className="flex flex-wrap gap-2 mb-2" data-testid={`${id}-chips`}>
         {values.length ? (
           values.map((v) => (
@@ -191,6 +317,7 @@ export function MultiSearchCombobox({
           <span className="text-xs text-slate-400">{emptyChipText}</span>
         )}
       </div>
+      )}
       <div className="relative">
         <Icon name="search" className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
         <input

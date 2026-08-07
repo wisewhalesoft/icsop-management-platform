@@ -25,6 +25,7 @@ function row(over: Partial<AuditRow>): AuditRow {
     lifecycleId: null,
     lifecycleName: null,
     formId: null,
+    appendixId: null, // F039：比照既有 formId/lifecycleId/documentId 之慣例，顯式必填 null 預設
     targetName: null,
     watermarkSnapshot: null,
     occurredAt: new Date('2026-07-16T12:00:00'),
@@ -36,13 +37,32 @@ function row(over: Partial<AuditRow>): AuditRow {
 const SCOPE = { company: 'ALL' as const };
 
 describe('kindToTargetTypes', () => {
-  it('文件→DOCUMENT/USAGE_FORM、循環→LIFECYCLE、變更→兩種 CHANGE_LOG', () => {
-    expect(kindToTargetTypes('文件')).toEqual(['DOCUMENT', 'USAGE_FORM']);
+  /**
+   * F039 附錄管理 — architecture-spec.md §3.6 決策三／AC-30：「文件」分支由
+   * ['DOCUMENT','USAGE_FORM'] 擴充為 ['DOCUMENT','USAGE_FORM','APPENDIX']（additive，
+   * 僅擴充陣列成員，'循環'／'變更' 分支逐字不變）。
+   */
+  it('文件→DOCUMENT/USAGE_FORM/APPENDIX、循環→LIFECYCLE、變更→兩種 CHANGE_LOG', () => {
+    expect(kindToTargetTypes('文件')).toEqual(['DOCUMENT', 'USAGE_FORM', 'APPENDIX']);
     expect(kindToTargetTypes('循環')).toEqual(['LIFECYCLE']);
     expect(kindToTargetTypes('變更')).toEqual([
       'DOCUMENT_CHANGE_LOG',
       'LIFECYCLE_CHANGE_LOG',
     ]);
+  });
+});
+
+describe('TS-F039-002（AC-30）類型＝文件 篩選 → APPENDIX 紀錄納入結果', () => {
+  it('APPENDIX/DOWNLOAD 列與 DOCUMENT/USAGE_FORM 列皆命中「文件」篩選；LIFECYCLE 不命中', () => {
+    const rows = [
+      row({ targetType: 'DOCUMENT', actionType: 'VIEW', documentNumber: 'ICSOP-A' }),
+      row({ targetType: 'USAGE_FORM', actionType: 'DOWNLOAD', formId: 'form-1' }),
+      row({ targetType: 'APPENDIX', actionType: 'DOWNLOAD', documentId: 'doc-1' }),
+      row({ targetType: 'LIFECYCLE', actionType: 'LIFECYCLE_VIEW', lifecycleName: '銷售及收款循環' }),
+    ];
+    const page = resolveAuditQuery(rows, { kind: '文件' }, SCOPE);
+    expect(page.total).toBe(3);
+    expect(page.items.map((r) => r.targetType).sort()).toEqual(['APPENDIX', 'DOCUMENT', 'USAGE_FORM']);
   });
 });
 

@@ -532,6 +532,60 @@ export interface UsageFormDownloadGrant {
   expiresInSeconds: number;
 }
 
+// ===== E10 F039 附錄管理（附錄池 ＋ 文件關聯與 sortOrder） =====
+
+/** 附錄所關聯之文件精簡參照（附錄池頁展開檢視「使用此附錄的文件」，AC-17）。 */
+export interface AppendixDocumentRef {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+}
+
+/**
+ * 附錄池記錄（GET /admin/appendices；鏡射後端 AppendixRecord 之呈現子集）。
+ * ⚠ uploadedAt 經 JSON 序列化為 ISO 字串。format＝xlsx/xls/pdf（前端歸類 excel/pdf 兩顯示類）。
+ * 刻意不含 blobPath：前端一律經受控下載端點取短效 URL，不直接組合 blob 位址。
+ */
+export interface AppendixRecord {
+  id: string;
+  name: string;
+  format: string;
+  size: number;
+  uploadedBy: string;
+  uploadedAt: string;
+}
+
+/** 附錄池總覽項（GET /admin/appendices/overview）：附 docCount ＋ 關聯文件精簡清單。 */
+export interface AppendixPoolItem extends AppendixRecord {
+  docCount: number;
+  documents: AppendixDocumentRef[];
+  /** 上傳者姓名（uploadedBy=accountId → ACCOUNT.name；未解析→null）。 */
+  uploadedByName?: string | null;
+  /** 上傳者部門名（accountId→orgCode→ORG_UNIT.name；未解析→null）。 */
+  uploadedByDept?: string | null;
+}
+
+/**
+ * 某文件之關聯附錄（GET /documents/:documentId/appendices；**已由後端依 sortOrder 遞增排序**，
+ * 前端不得再排序，維持後端為唯一排序權威）。
+ * 前台詳情僅需 id/name/format/sortOrder，故其餘欄位為選填。
+ */
+export interface DocumentAppendixRecord {
+  id: string;
+  name: string;
+  format: string;
+  sortOrder: number;
+  size?: number;
+  uploadedBy?: string;
+  uploadedAt?: string;
+}
+
+/** 附錄下載憑證（後台池下載／前台文件內下載；短效期 URL）。 */
+export interface AppendixDownloadGrant {
+  url: string;
+  expiresInSeconds: number;
+}
+
 export type TriggerType = 'scheduled' | 'manual';
 export type SyncRunStatus = 'running' | 'success' | 'failed';
 

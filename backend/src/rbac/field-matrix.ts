@@ -40,6 +40,8 @@ export const FieldKey = {
   LINKED_DOCS: '文件連結點',
   ICSOP_PDF: 'ICSOP PDF',
   USAGE_FORMS: '使用表單',
+  // F039 附錄（矩陣列名顯示「附錄（多）」，鍵值去括號補述，比照「使用表單（多）」→『使用表單』）。
+  APPENDICES: '附錄',
   ANNOUNCE_DATE: '公告日期',
   OJT_SIGNIN: 'OJT簽到表',
   DOCUMENT_NAME: '文件名稱',
@@ -73,7 +75,8 @@ const SYSTEM_GENERATED: Row = {
 };
 
 /**
- * 角色×欄位矩陣（19 欄位）。逐列對照 F026 spec「角色×欄位矩陣」表格：
+ * 角色×欄位矩陣（20 欄位＝1 系統欄位 ＋ 19 業務欄位，2026-08-06 新增「附錄（多）」／F039）。
+ * 逐列對照 F026 spec「角色×欄位矩陣」表格：
  *   - 系統 UUID：唯讀（系統產生）× 全角色 → SYSTEM_GENERATED（IGNORE）
  *   - 其餘 18 業務欄位：ICSOP管理員 可寫、其餘角色 唯讀 → ICSOP_WRITABLE
  *     （含「所屬節點」＝可寫但入口限 F009 節點抽屜；「ICSOP PDF／使用表單」＝可寫，非 ICSOPAdmin 可下載但不可寫）
@@ -94,6 +97,8 @@ export const FIELD_MATRIX: Record<string, Row> = {
   [FieldKey.LINKED_DOCS]: ICSOP_WRITABLE,
   [FieldKey.ICSOP_PDF]: ICSOP_WRITABLE,
   [FieldKey.USAGE_FORMS]: ICSOP_WRITABLE,
+  // F039：附錄（多）與使用表單（多）完全比照——ICSOPAdmin 可寫、其餘四角色唯讀（可下載）。
+  [FieldKey.APPENDICES]: ICSOP_WRITABLE,
   [FieldKey.ANNOUNCE_DATE]: ICSOP_WRITABLE,
   [FieldKey.OJT_SIGNIN]: ICSOP_WRITABLE,
   [FieldKey.DOCUMENT_NAME]: ICSOP_WRITABLE,
