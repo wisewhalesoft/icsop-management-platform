@@ -231,13 +231,16 @@ export class AuthController {
     return req.sessionUser as SessionUser;
   }
 
-  /** 登出：清除 session cookie。 */
+  /**
+   * 登出：清除 session cookie 後轉址回登入頁。
+   * 前端 topbar「登出」是整頁導覽（useAuth 之 window.location.href = '/auth/logout'），
+   * 故此處必須轉址；若回 HTML 會把使用者留在後端頁面而非 SPA 登入畫面。
+   */
   @Get('logout')
   logout(@Res() res: Response): void {
+    // 順序固定：先清 cookie 再轉址，否則使用者被導回後仍持有有效 session。
     res.clearCookie(SESSION_COOKIE, { path: '/' });
-    res
-      .type('html')
-      .send(page('已登出', '<p>已清除 session。</p><p><a href="/auth/login">重新登入</a></p>'));
+    return res.redirect(postLogoutRedirect());
   }
 
   private renderError(res: Response, code: string, detail?: string): void {
@@ -259,6 +262,17 @@ export class AuthController {
 /** 登入成功後導向目標。正式（同源反代）預設 '/'；dev 以 POST_LOGIN_REDIRECT_URL 指向 SPA 埠。 */
 function postLoginRedirect(): string {
   return process.env.POST_LOGIN_REDIRECT_URL?.trim() || '/';
+}
+
+/**
+ * 登出後導向目標。與 postLoginRedirect() 對稱，但預設維持【相對路徑】'/'：
+ * 登出是由 SPA 同源發起（dev 經 Vite proxy :5173、正式經 nginx），相對轉址會落回 SPA，
+ * 而 SPA 在 status==='unauthenticated' 時任一路由皆渲染登入頁。
+ * 用相對路徑亦避開絕對轉址掉 port 的雷（見 frontend/nginx.conf 之 absolute_redirect off）。
+ * POST_LOGOUT_REDIRECT_URL 僅供例外部署（登出入口非同源）覆寫。
+ */
+function postLogoutRedirect(): string {
+  return process.env.POST_LOGOUT_REDIRECT_URL?.trim() || '/';
 }
 
 function page(title: string, body: string): string {
