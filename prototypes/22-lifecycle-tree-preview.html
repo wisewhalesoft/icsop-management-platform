@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
+     本檔已套用：頁首標題與切換器改用 lifecycleDisplayName；切換器選項值與 ?lifecycleId= 參數
+     由「循環代碼」收斂為 lifecycleId（同名不同子分類代碼相同，代碼無法區分，F036 AC-S3）。
+     規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -125,51 +129,69 @@
     document.getElementById('wmLayer').innerHTML = Array.from({length:count}).map(()=>`<span>${WM_DATA}<br>${WM_NOTICE}<br>${WM_TIME}</span>`).join('');
   }
 
+  /* ===== F040 顯示名稱純函式（全站同一實作）===== */
+  function normalizeSubcategory(v){ const s=(v==null?'':String(v)).trim(); return s?s:null; }
+  function lifecycleDisplayName(lc){ if(!lc) return ''; const s=normalizeSubcategory(lc.subcategory); return s?`${lc.name}（${s}）`:lc.name; }
+
   /* ===== 各循環節點與連線（沿用 11-dag-canvas 之節點視覺與 DAG 資料結構）=====
-     每循環：nodes[{id,name,docs}] + edges[[s,t]]；皆含 multi-parent 或 multi-child 以示意上到下 DAG。 */
+     每循環：nodes[{id,name,docs}] + edges[[s,t]]；皆含 multi-parent 或 multi-child 以示意上到下 DAG。
+     ⚠ F036 AC-S3：本表以 **lifecycleId 為鍵**（非循環代碼）——「銷售及收款循環」之
+       消金／企金／子公司三者代碼皆為 SRC，代碼無法區分彼此。
+       code 欄僅供頁首顯示 ICSOP 編號第 2 段之循環代碼（僅依 name 推導，AC-28）。 */
   const CYCLES={
-    SRC:{name:'銷售及收款循環', nodes:[
+    lc1:{name:'銷售及收款循環', subcategory:'消金', code:'SRC', nodes:[
       {id:'a1',name:'進件作業',docs:2},{id:'a2',name:'簽約對保作業',docs:1},{id:'a3',name:'擔保設定作業',docs:1},
       {id:'a4',name:'撥款核准作業',docs:1},{id:'a5',name:'案件執行作業',docs:1},{id:'a6',name:'案件催收作業',docs:1},{id:'a7',name:'案件結束作業',docs:1}],
       edges:[['a1','a2'],['a1','a3'],['a2','a4'],['a3','a4'],['a4','a5'],['a5','a6'],['a5','a7'],['a6','a7']]},
-    PUC:{name:'採購及付款循環', nodes:[
+    // 同名不同子分類＝彼此獨立的循環：獨立 UUID、獨立 DAG 結構、獨立文件掛載
+    lc10:{name:'銷售及收款循環', subcategory:'企金', code:'SRC', nodes:[
+      {id:'j1',name:'企金案件受理作業',docs:1},{id:'j2',name:'企業徵信作業',docs:0},{id:'j3',name:'擔保品估價作業',docs:0},
+      {id:'j4',name:'授信核准作業',docs:0},{id:'j5',name:'額度撥貸作業',docs:0}],
+      edges:[['j1','j2'],['j1','j3'],['j2','j4'],['j3','j4'],['j4','j5']]},
+    lc11:{name:'銷售及收款循環', subcategory:'子公司', code:'SRC', nodes:[
+      {id:'k1',name:'子公司案件受理作業',docs:0},{id:'k2',name:'子公司徵信作業',docs:0},
+      {id:'k3',name:'子公司核准作業',docs:0},{id:'k4',name:'子公司撥款作業',docs:0}],
+      edges:[['k1','k2'],['k1','k3'],['k2','k4'],['k3','k4']]},
+    lc2:{name:'採購及付款循環', subcategory:null, code:'PUC', nodes:[
       {id:'b1',name:'請購申請作業',docs:1},{id:'b2',name:'採購比議價作業',docs:1},{id:'b3',name:'驗收入庫作業',docs:1},
       {id:'b4',name:'費用請款作業',docs:2},{id:'b5',name:'付款核准作業',docs:1},{id:'b6',name:'付款執行作業',docs:1}],
       edges:[['b1','b2'],['b2','b3'],['b3','b5'],['b1','b4'],['b4','b5'],['b5','b6']]},
-    PPC:{name:'產品企劃循環', nodes:[
+    lc3:{name:'產品企劃循環', subcategory:null, code:'PPC', nodes:[
       {id:'c1',name:'市場分析作業',docs:1},{id:'c2',name:'產品規劃作業',docs:1},{id:'c3',name:'目標制定作業',docs:1},{id:'c4',name:'政策發布作業',docs:1}],
       edges:[['c1','c2'],['c2','c3'],['c1','c3'],['c3','c4']]},
-    LWC:{name:'薪工循環', nodes:[
+    lc4:{name:'薪工循環', subcategory:null, code:'LWC', nodes:[
       {id:'d1',name:'任用與異動管理',docs:1},{id:'d2',name:'出勤管理作業',docs:1},{id:'d3',name:'薪資計算作業',docs:2},{id:'d4',name:'給付作業',docs:1}],
       edges:[['d1','d2'],['d2','d3'],['d1','d3'],['d3','d4']]},
-    FC:{name:'融資循環', nodes:[
+    lc5:{name:'融資循環', subcategory:null, code:'FC', nodes:[
       {id:'e1',name:'額度申請作業',docs:1},{id:'e2',name:'銀行融資作業',docs:1},{id:'e3',name:'動撥作業',docs:1},{id:'e4',name:'還款作業',docs:1}],
       edges:[['e1','e2'],['e2','e3'],['e3','e4'],['e2','e4']]},
-    FAC:{name:'不動產、廠房及設備循環', nodes:[
+    lc6:{name:'不動產、廠房及設備循環', subcategory:null, code:'FAC', nodes:[
       {id:'f1',name:'資產需求作業',docs:1},{id:'f2',name:'資產請購作業',docs:1},{id:'f3',name:'驗收作業',docs:1},{id:'f4',name:'資產管理作業',docs:1},{id:'f5',name:'折舊管理作業',docs:1}],
       edges:[['f1','f2'],['f2','f3'],['f3','f4'],['f4','f5'],['f3','f5']]},
-    IC:{name:'投資循環', nodes:[
+    lc7:{name:'投資循環', subcategory:null, code:'IC', nodes:[
       {id:'g1',name:'投資評估作業',docs:1},{id:'g2',name:'短期投資作業',docs:1},{id:'g3',name:'保管作業',docs:1},{id:'g4',name:'會計入帳作業',docs:1}],
       edges:[['g1','g2'],['g2','g3'],['g2','g4'],['g3','g4']]},
-    CIPS:{name:'電腦化資訊系統控制作業', nodes:[
+    lc8:{name:'電腦化資訊系統控制作業', subcategory:null, code:'CIPS', nodes:[
       {id:'h1',name:'系統開發作業',docs:1},{id:'h2',name:'程式及資料存取',docs:1},{id:'h3',name:'使用者權限管理',docs:1},{id:'h4',name:'變更管理作業',docs:1}],
       edges:[['h1','h2'],['h1','h3'],['h2','h4'],['h3','h4']]},
-    GCA:{name:'管理性控制作業', nodes:[
+    lc9:{name:'管理性控制作業', subcategory:null, code:'GCA', nodes:[
       {id:'i1',name:'法遵作業',docs:1},{id:'i2',name:'法規更新作業',docs:1},{id:'i3',name:'內部稽核作業',docs:1},{id:'i4',name:'風險評估作業',docs:1}],
       edges:[['i1','i2'],['i2','i3'],['i1','i3'],['i3','i4']]}
   };
-  const ORDER=['SRC','PUC','PPC','LWC','FC','FAC','IC','CIPS','GCA'];
+  const ORDER=['lc1','lc10','lc11','lc2','lc3','lc4','lc5','lc6','lc7','lc8','lc9'];
+  const DEFAULT_ID='lc1';
 
   const NODE_W=176, NODE_H=62, HGAP=210, VGAP=132, MARGIN=48;
   const board=document.getElementById('board'), svg=document.getElementById('edges'), nodesLayer=document.getElementById('nodesLayer');
-  let CUR='SRC', selected=null, zoom=1, cur=null;
+  let CUR=DEFAULT_ID, selected=null, zoom=1, cur=null;
 
-  // 建立循環選單
-  document.getElementById('cycleSel').innerHTML = ORDER.map(c=>`<option value="${c}">${CYCLES[c].name}（${c}）</option>`).join('');
+  /* 建立循環切換器：顯示＝lifecycleDisplayName（含子分類）、選項值＝lifecycleId（F036 AC-S1）。
+     「銷售及收款循環」之消金／企金／子公司為三個相異選項，可分別開啟。 */
+  document.getElementById('cycleSel').innerHTML = ORDER.map(id=>`<option value="${id}">${lifecycleDisplayName(CYCLES[id])}（${CYCLES[id].code}）</option>`).join('');
 
   /* ---- 由上而下分層佈局（最長路徑分層；支援多 parent/多 child）---- */
-  function buildGraph(code){
-    const cy=CYCLES[code]; const nodes=cy.nodes, edges=cy.edges;
+  function buildGraph(lcId){
+    const cy=CYCLES[lcId]; const nodes=cy.nodes, edges=cy.edges;
     const adj={},indeg={}; nodes.forEach(n=>{adj[n.id]=[];indeg[n.id]=0;});
     edges.forEach(([s,t])=>{adj[s].push(t);indeg[t]++;});
     const level={},deg={}; nodes.forEach(n=>{level[n.id]=0;deg[n.id]=indeg[n.id];});
@@ -231,13 +253,14 @@
     applyHighlight();
   }
 
-  function loadCycle(code){
-    if(!CYCLES[code]) code='SRC';
-    CUR=code; selected=null;
-    cur=buildGraph(code);
-    document.getElementById('cycleSel').value=code;
-    document.getElementById('titleName').textContent=CYCLES[code].name;
-    document.getElementById('titleCode').textContent=code;
+  function loadCycle(lcId){
+    if(!CYCLES[lcId]) lcId=DEFAULT_ID;
+    CUR=lcId; selected=null;
+    cur=buildGraph(lcId);
+    document.getElementById('cycleSel').value=lcId;
+    // 頁首標題＝lifecycleDisplayName（含子分類）；代碼僅依名稱推導，子分類不參與（AC-28）
+    document.getElementById('titleName').textContent=lifecycleDisplayName(CYCLES[lcId]);
+    document.getElementById('titleCode').textContent=CYCLES[lcId].code;
     renderCycle();
     // 置中捲動
     const st=document.getElementById('stage'); st.scrollLeft=Math.max(0,(board.offsetWidth-st.clientWidth)/2);
@@ -294,9 +317,11 @@
   }
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&selected)clearSel();});
 
-  // init：由 10 帶入的 ?cycle=CODE 為預設選中
-  const qCode=(new URLSearchParams(location.search).get('cycle')||'SRC').toUpperCase();
-  loadCycle(CYCLES[qCode]?qCode:'SRC');
+  /* init：由 10（循環池）或 13（文件清單第二入口）帶入的 ?lifecycleId=<lifecycleId> 為預設選中。
+     F036 AC-S3：參數為 lifecycleId 而非循環代碼——同名不同子分類之代碼相同，
+     以代碼帶入將無法區分「消金」「企金」「子公司」，可能誤開另一子分類之循環。 */
+  const qId=new URLSearchParams(location.search).get('lifecycleId')||DEFAULT_ID;
+  loadCycle(CYCLES[qId]?qId:DEFAULT_ID);
   window.addEventListener('resize',()=>{ const st=document.getElementById('stage'); st.scrollLeft=Math.max(0,(board.offsetWidth-st.clientWidth)/2); });
 </script>
 </body>

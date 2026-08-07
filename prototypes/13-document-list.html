@@ -1,4 +1,7 @@
 <!DOCTYPE html>
+<!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
+     本檔已套用：第 14 欄「循環別」改以 lifecycleDisplayName 呈現；循環別 combobox 之選項值由名稱字串改為 lifecycleId；樹狀圖第二入口之 ?lifecycleId= 改帶 lifecycleId。
+     規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -214,40 +217,65 @@
 
   /* ===== 常數 ===== */
   const TODAY='2026-07-17'; // 用於衍生狀態：有效＋公告日期≤今日＝已公告；有效＋公告日期>今日＝進度中
-  // ICSOP 編號第 2 段＝循環代碼
-  const CYCLES=['銷售及收款循環','採購及付款循環','產品企劃循環','薪工循環','融資循環','不動產、廠房及設備循環','投資循環','電腦化資訊系統控制作業','管理性控制作業'];
+  /* ===== F040 循環子分類：循環池與純函式（全站同一實作）=====
+     循環之業務身分＝(name, subcategory) 組合；同名不同子分類＝彼此獨立的循環（獨立 UUID／DAG／文件）。
+     示範：「銷售及收款循環」有「消金」「企金」「子公司」三個子分類；其餘八個循環無子分類。 */
+  const LIFECYCLE_POOL=[
+    {id:'lc1', name:'銷售及收款循環',      subcategory:'消金'},
+    {id:'lc10',name:'銷售及收款循環',      subcategory:'企金'},
+    {id:'lc11',name:'銷售及收款循環',      subcategory:'子公司'},
+    {id:'lc2', name:'採購及付款循環',      subcategory:null},
+    {id:'lc3', name:'產品企劃循環',        subcategory:null},
+    {id:'lc4', name:'薪工循環',            subcategory:null},
+    {id:'lc5', name:'融資循環',            subcategory:null},
+    {id:'lc6', name:'不動產、廠房及設備循環',subcategory:null},
+    {id:'lc7', name:'投資循環',            subcategory:null},
+    {id:'lc8', name:'電腦化資訊系統控制作業',subcategory:null},
+    {id:'lc9', name:'管理性控制作業',       subcategory:null}
+  ];
+  function normalizeSubcategory(v){ const s=(v==null?'':String(v)).trim(); return s?s:null; }
+  function lifecycleDisplayName(lc){ if(!lc) return ''; const s=normalizeSubcategory(lc.subcategory); return s?`${lc.name}（${s}）`:lc.name; }
+  const lcById=id=>LIFECYCLE_POOL.find(l=>l.id===id)||null;
+  const lcName=id=>lifecycleDisplayName(lcById(id));
+  // ICSOP 編號第 2 段＝循環代碼；查表鍵維持「循環名稱」，子分類不參與（F040 AC-28）
+  const CYCLE_CODE={'銷售及收款循環':'SRC','採購及付款循環':'PUC','產品企劃循環':'PPC','薪工循環':'LWC','融資循環':'FC','不動產、廠房及設備循環':'FAC','投資循環':'IC','電腦化資訊系統控制作業':'CIPS','管理性控制作業':'GCA'};
   // 循環節點示意（由左至右流向，供樹狀圖預覽 highlight 所屬節點）
+  // 以 lifecycleId 為鍵：同名不同子分類之循環各有獨立 DAG，不可再以名稱字串為鍵
   const NODES={
-    '銷售及收款循環':['進件作業','簽約對保','撥款核准','案件執行','案件結束'],
-    '產品企劃循環':['市場分析','產品規劃','目標制定作業','政策發布'],
-    '採購及付款循環':['請購申請','費用請款作業','付款核准'],
-    '薪工循環':['任用與異動管理','出勤管理','薪資計算','給付作業'],
-    '投資循環':['投資評估','短期投資作業','保管作業','會計入帳'],
-    '管理性控制作業':['法遵作業','法規更新','內部稽核','風險評估'],
-    '融資循環':['額度申請','銀行融資作業','動撥作業','還款作業'],
-    '不動產、廠房及設備循環':['資產需求','資產管理作業','驗收作業','折舊管理'],
-    '電腦化資訊系統控制作業':['系統開發','程式及資料存取','使用者權限管理','變更管理']
+    lc1:['進件作業','簽約對保','撥款核准','案件執行','案件結束'],
+    lc10:['企金案件受理作業','企業徵信作業','授信核准作業','額度撥貸作業'],
+    lc11:['子公司案件受理作業','子公司徵信作業','子公司核准作業','子公司撥款作業'],
+    lc3:['市場分析','產品規劃','目標制定作業','政策發布'],
+    lc2:['請購申請','費用請款作業','付款核准'],
+    lc4:['任用與異動管理','出勤管理','薪資計算','給付作業'],
+    lc7:['投資評估','短期投資作業','保管作業','會計入帳'],
+    lc9:['法遵作業','法規更新','內部稽核','風險評估'],
+    lc5:['額度申請','銀行融資作業','動撥作業','還款作業'],
+    lc6:['資產需求','資產管理作業','驗收作業','折舊管理'],
+    lc8:['系統開發','程式及資料存取','使用者權限管理','變更管理']
   };
 
   /* ===== 程序書資料（14 欄 + 樹狀圖所需 node）=====
      company 制定公司 / dept 制定部門 / section 制定室別（可留空＝掛於部層） / chief 當責室長-主要 / sec 次要[] /
      status 儲存狀態(有效/失效/作廢) / pdf 檔案 / node 所屬節點 / num 程序書編號 / name 程序書書名 /
-     edition 版次 / summary 內容摘要 / links 連結點程序書[] / date 公告日期 / cyc 循環別 */
+     edition 版次 / summary 內容摘要 / links 連結點程序書[] / date 公告日期 /
+     lcId 循環別（＝lifecycleId；顯示字串一律由 lifecycleDisplayName 產生，F040 AC-S1） */
   const DOCS=[
-    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'消金審核作業_v2.0.pdf',node:'進件作業',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業'],date:'2025-12-01',cyc:'銷售及收款循環'},
-    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期特約通路作業_v1.2.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',edition:"25'10",summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。',links:[],date:'2025-10-01',cyc:'銷售及收款循環'},
-    {company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],status:'有效',pdf:'車輛分期進件作業_v1.3.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',links:['ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-102-1-01 車輛分期對保作業'],date:'2026-01-01',cyc:'銷售及收款循環'},
-    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期產品政策及規範作業_v1.0.pdf',node:null,num:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',edition:"26'03",summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。',links:[],date:'2026-09-01',cyc:'產品企劃循環'},
-    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期月目標設定作業_v1.1.pdf',node:'目標制定作業',num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',edition:"26'04",summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。',links:[],date:'2026-08-15',cyc:'產品企劃循環'},
-    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'費用請款作業_v2.1.pdf',node:'費用請款作業',num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。',links:[],date:'2026-05-01',cyc:'採購及付款循環'},
-    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'有效',pdf:'招募管理作業_v1.4.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-02',name:'招募管理作業',edition:"25'09",summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。',links:[],date:'2025-10-01',cyc:'薪工循環'},
-    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'短期投資買賣保管及會計作業_v1.0.pdf',node:'短期投資作業',num:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',edition:"26'05",summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。',links:[],date:'2026-10-01',cyc:'投資循環'},
-    {company:'和潤企業股份有限公司',dept:'經企公關部',section:'法遵及公司治理室',chief:'劉家瑋（經企公關部 法遵及公司治理室 室長）',sec:[],status:'有效',pdf:'法遵作業_v1.2.pdf',node:'法遵作業',num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。',links:[],date:'2026-03-01',cyc:'管理性控制作業'},
-    {company:'和潤企業股份有限公司',dept:'管理部',section:'總務室',chief:'蔡明哲（管理部 總務室 室長）',sec:[],status:'有效',pdf:'不動產請購採購驗收作業_v1.0.pdf',node:'資產管理作業',num:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',edition:"25'08",summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。',links:[],date:'2025-10-01',cyc:'不動產、廠房及設備循環'},
-    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'銀行融資作業_v1.1.pdf',node:'銀行融資作業',num:'ICSOP-FC-101-1-00',name:'銀行融資作業',edition:"26'01",summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。',links:[],date:'2026-02-01',cyc:'融資循環'},
-    {company:'和潤企業股份有限公司',dept:'資訊部',section:'應用發展室',chief:'許志偉（資訊部 應用發展室 室長）',sec:[],status:'有效',pdf:'使用者權限管理與覆核_v1.3.pdf',node:'使用者權限管理',num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',edition:"26'01",summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。',links:[],date:'2026-04-01',cyc:'電腦化資訊系統控制作業'},
-    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'失效',pdf:'消費分期進件作業_舊版.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',edition:"24'03",summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。',links:[],date:'2025-05-01',cyc:'銷售及收款循環'},
-    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'作廢',pdf:'任用管理作業_作廢.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',edition:"24'01",summary:'（作廢）任用管理作業，因組織調整不再適用。',links:[],date:'2025-04-01',cyc:'薪工循環'}
+    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'消金審核作業_v2.0.pdf',node:'進件作業',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業'],date:'2025-12-01',lcId:'lc1'},
+    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'企業金融授信作業_v1.0.pdf',node:'企金案件受理作業',num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。',links:[],date:'2026-06-01',lcId:'lc10'},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期特約通路作業_v1.2.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',edition:"25'10",summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。',links:[],date:'2025-10-01',lcId:'lc1'},
+    {company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],status:'有效',pdf:'車輛分期進件作業_v1.3.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',links:['ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-102-1-01 車輛分期對保作業'],date:'2026-01-01',lcId:'lc1'},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期產品政策及規範作業_v1.0.pdf',node:null,num:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',edition:"26'03",summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。',links:[],date:'2026-09-01',lcId:'lc3'},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期月目標設定作業_v1.1.pdf',node:'目標制定作業',num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',edition:"26'04",summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。',links:[],date:'2026-08-15',lcId:'lc3'},
+    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'費用請款作業_v2.1.pdf',node:'費用請款作業',num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。',links:[],date:'2026-05-01',lcId:'lc2'},
+    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'有效',pdf:'招募管理作業_v1.4.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-02',name:'招募管理作業',edition:"25'09",summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。',links:[],date:'2025-10-01',lcId:'lc4'},
+    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'短期投資買賣保管及會計作業_v1.0.pdf',node:'短期投資作業',num:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',edition:"26'05",summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。',links:[],date:'2026-10-01',lcId:'lc7'},
+    {company:'和潤企業股份有限公司',dept:'經企公關部',section:'法遵及公司治理室',chief:'劉家瑋（經企公關部 法遵及公司治理室 室長）',sec:[],status:'有效',pdf:'法遵作業_v1.2.pdf',node:'法遵作業',num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。',links:[],date:'2026-03-01',lcId:'lc9'},
+    {company:'和潤企業股份有限公司',dept:'管理部',section:'總務室',chief:'蔡明哲（管理部 總務室 室長）',sec:[],status:'有效',pdf:'不動產請購採購驗收作業_v1.0.pdf',node:'資產管理作業',num:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',edition:"25'08",summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。',links:[],date:'2025-10-01',lcId:'lc6'},
+    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'銀行融資作業_v1.1.pdf',node:'銀行融資作業',num:'ICSOP-FC-101-1-00',name:'銀行融資作業',edition:"26'01",summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。',links:[],date:'2026-02-01',lcId:'lc5'},
+    {company:'和潤企業股份有限公司',dept:'資訊部',section:'應用發展室',chief:'許志偉（資訊部 應用發展室 室長）',sec:[],status:'有效',pdf:'使用者權限管理與覆核_v1.3.pdf',node:'使用者權限管理',num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',edition:"26'01",summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。',links:[],date:'2026-04-01',lcId:'lc8'},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'失效',pdf:'消費分期進件作業_舊版.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',edition:"24'03",summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。',links:[],date:'2025-05-01',lcId:'lc1'},
+    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'作廢',pdf:'任用管理作業_作廢.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',edition:"24'01",summary:'（作廢）任用管理作業，因組織調整不再適用。',links:[],date:'2025-04-01',lcId:'lc4'}
   ];
 
   /* ===== 衍生狀態 ===== */
@@ -265,7 +293,9 @@
   const uniq=a=>[...new Set(a)];
   const FILTER={cycle:'',status:'',num:'',name:'',dept:'',section:'',chief:'',company:'',link:''};
   const FILTERS=[
-    {key:'cycle',   label:'循環別',      opts:()=>CYCLES},
+    // 循環別：選項值＝lifecycleId、顯示＝lifecycleDisplayName（F040 AC-31／F017 AC-S2）
+    // 「銷售及收款循環（消金／企金／子公司）」為三個相異選項，選定其一僅回傳該具體循環之文件
+    {key:'cycle',   label:'循環別',      opts:()=>LIFECYCLE_POOL.map(l=>l.id), optLabel:id=>lcName(id)},
     {key:'status',  label:'狀態',        opts:()=>['已公告','進度中','失效','作廢']},
     {key:'num',     label:'程序書編號',  opts:()=>DOCS.map(d=>d.num)},
     {key:'name',    label:'程序書書名',  opts:()=>DOCS.map(d=>d.name)},
@@ -293,20 +323,22 @@
   }
   function comboFilter(key){ const list=document.getElementById('cb_'+key+'_list'); list.classList.remove('hidden'); comboRender(key,document.getElementById('cb_'+key+'_input').value); }
   function comboClose(key){ setTimeout(()=>{const l=document.getElementById('cb_'+key+'_list'); if(l)l.classList.add('hidden');},150); }
+  // 選項「值」與「顯示字串」分離：循環別之值＝lifecycleId、顯示＝lifecycleDisplayName；其餘篩選兩者同一
+  const optText=(key,v)=>{const c=cbCfg(key);return c.optLabel?c.optLabel(v):v;};
   function comboRender(key,filter){
     const f=(filter||'').trim().toLowerCase();
     const list=document.getElementById('cb_'+key+'_list');
     const opts=cbCfg(key).opts();
-    const items=opts.filter(o=>o.toLowerCase().includes(f));
+    const items=opts.filter(o=>optText(key,o).toLowerCase().includes(f));
     list.innerHTML = items.length ? items.map(o=>{
-      const sel=FILTER[key]===o;
-      return `<div class="combo-opt px-3 py-2 cursor-pointer hover:bg-primary-50 ${sel?'bg-primary-50 text-primary-700 font-medium':''}" data-v="${esc(o)}">${o}${sel?' ✓':''}</div>`;
+      const sel=FILTER[key]===o, label=optText(key,o);
+      return `<div class="combo-opt px-3 py-2 cursor-pointer hover:bg-primary-50 ${sel?'bg-primary-50 text-primary-700 font-medium':''}" data-v="${esc(o)}">${esc(label)}${sel?' ✓':''}</div>`;
     }).join('') : `<div class="px-3 py-2 text-slate-400">查無符合結果</div>`;
     list.querySelectorAll('.combo-opt').forEach(el=>el.addEventListener('mousedown',e=>{e.preventDefault();comboPick(key,el.dataset.v);}));
   }
   function comboPick(key,v){
     FILTER[key]=v;
-    const inp=document.getElementById('cb_'+key+'_input'); inp.value=v;
+    const inp=document.getElementById('cb_'+key+'_input'); inp.value=optText(key,v);
     document.getElementById('cb_'+key+'_list').classList.add('hidden');
     document.getElementById('cb_'+key+'_clear').classList.remove('hidden');
     renderTable();
@@ -334,7 +366,7 @@
   function renderTable(){
     const rows=DOCS.filter(d=>{
       const ds=derived(d);
-      if(FILTER.cycle && d.cyc!==FILTER.cycle) return false;
+      if(FILTER.cycle && d.lcId!==FILTER.cycle) return false;   // 以 lifecycleId 比對：同名另一子分類之文件不納入
       if(FILTER.status && ds!==FILTER.status) return false;
       if(FILTER.num && d.num!==FILTER.num) return false;
       if(FILTER.name && d.name!==FILTER.name) return false;
@@ -378,15 +410,16 @@
         <td class="px-3 py-3"><span class="block max-w-[280px] truncate text-slate-600" title="${esc(d.summary)}">${esc(d.summary)}</span></td>
         <td class="px-3 py-3">${linkCell(d.links)}</td>
         <td class="px-3 py-3 text-slate-500 mono text-xs">${esc(d.date)}</td>
-        <td class="px-3 py-3 text-slate-600">${esc(d.cyc)}</td>
+        <td class="px-3 py-3 text-slate-600" data-cycle-cell>${esc(lcName(d.lcId))}</td>
       </tr>`;
     }).join('');
     lucide.createIcons();
   }
 
-  // 樹狀圖圖示 → 直接開啟循環樹狀圖預覽頁（22），帶入該程序書之循環別
-  const CYC_CODE={'銷售及收款循環':'SRC','採購及付款循環':'PUC','產品企劃循環':'PPC','薪工循環':'LWC','融資循環':'FC','不動產、廠房及設備循環':'FAC','投資循環':'IC','電腦化資訊系統控制作業':'CIPS','管理性控制作業':'GCA'};
-  function openTreePage(i){ const d=DOCS[i]; const code=CYC_CODE[d.cyc]||''; window.open('22-lifecycle-tree-preview.html?cycle='+encodeURIComponent(code), '_blank'); }
+  /* 樹狀圖圖示 → 直接開啟循環樹狀圖預覽頁（22），帶入該程序書之**具體**循環。
+     F036 AC-S3：參數必須是 lifecycleId——同名不同子分類之代碼相同（皆 SRC），
+     以代碼帶入會誤開同名之另一子分類。 */
+  function openTreePage(i){ const d=DOCS[i]; window.open('22-lifecycle-tree-preview.html?lifecycleId='+encodeURIComponent(d.lcId), '_blank'); }
 
   /* ===== 樹狀圖 modal（已停用：改由 openTreePage 直接開啟 22）===== */
   let treeIdx=null;
@@ -394,8 +427,8 @@
     const d=DOCS[i]; treeIdx=i;
     document.getElementById('tmNum').textContent=d.num;
     document.getElementById('tmName').textContent=d.name;
-    document.getElementById('tmCycle').textContent=d.cyc;
-    const chain=NODES[d.cyc]||[];
+    document.getElementById('tmCycle').textContent=lcName(d.lcId);
+    const chain=NODES[d.lcId]||[];
     let html;
     if(!d.node){
       html=`<div class="flex items-center gap-2 text-sm text-amber-700"><i data-lucide="alert-triangle" class="w-4 h-4"></i>此程序書尚未指派所屬節點；請至循環畫布（11 / 12）以節點抽屜掛載。</div>
@@ -412,7 +445,7 @@
     lucide.createIcons();
   }
   function closeTree(){ const m=document.getElementById('treeModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
-  function gotoCanvas(){ const d=treeIdx!=null?DOCS[treeIdx]:null; shellToast('前往循環畫布（11-dag-canvas）'+(d?('，定位「'+d.cyc+'」'+(d.node?('／節點「'+d.node+'」'):'')):'')); }
+  function gotoCanvas(){ const d=treeIdx!=null?DOCS[treeIdx]:null; shellToast('前往循環畫布（11-dag-canvas）'+(d?('，定位「'+lcName(d.lcId)+'」'+(d.node?('／節點「'+d.node+'」'):'')):'')); }
 
   function dl(name,wm){ toast('success','下載「'+name+'」'+(wm?'（伺服器端已燒錄浮水印並寫入稽核 DOWNLOAD）':'（已寫入稽核 DOWNLOAD）')); }
   function viewDoc(n){ shellToast('檢視程序書 '+n+'（16-document-readonly）'); }

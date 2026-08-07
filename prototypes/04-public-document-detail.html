@@ -1,4 +1,7 @@
 <!DOCTYPE html>
+<!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
+     本檔已套用：「循環別」列改以 lifecycleDisplayName 呈現（銷售及收款循環（消金））。
+     規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -128,7 +131,12 @@
 <div id="toastWrap" class="fixed top-16 right-4 z-50 space-y-2"></div>
 
 <script>
-  // ICSOP 編號第 2 段＝循環代碼（SRC＝銷售及收款循環）
+  // ICSOP 編號第 2 段＝循環代碼（SRC＝銷售及收款循環）；F040 定案②：代碼僅依名稱推導，子分類不參與
+  /* F040 顯示名稱純函式（全站同一實作）：有子分類 → 名稱（子分類）；無 → 名稱 */
+  function normalizeSubcategory(v){ const s=(v==null?'':String(v)).trim(); return s?s:null; }
+  function lifecycleDisplayName(lc){ if(!lc) return ''; const s=normalizeSubcategory(lc.subcategory); return s?`${lc.name}（${s}）`:lc.name; }
+  // 本文件所屬之具體循環（lifecycleId lc1）＝「銷售及收款循環（消金）」
+  const LIFECYCLE = {id:'lc1', name:'銷售及收款循環', subcategory:'消金'};
   const FIELDS = [
     ['系統 UUID', '<span class="mono text-slate-500">a3f81c22-9e04-4b7a-8f2d-e2c9d1748e2f</span>'],
     ['文件狀態', '<span class="px-2 py-0.5 rounded-full text-xs font-medium" style="color:#047857;background:#D1FAE5">有效</span>'],
@@ -141,7 +149,7 @@
     ['當責室長-次要', '<span class="inline-flex flex-wrap gap-1.5"><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">林建宏（信用審查部 企金室 室長）</span></span>'],
     ['文件使用部門', '<span class="inline-flex flex-wrap gap-1.5"><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">營業二本部 / 營運管理部 / 審查室</span><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">風險管理服務本部 / 信用審查部</span><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課</span></span> <span class="text-[10px] text-slate-400">（處/室層＋部層＋課層；選上層自動涵蓋其下所有單位）</span>'],
     ['版次', '<span class="mono">26\'01</span>'],
-    ['循環別', '銷售及收款循環'],
+    ['循環別', lifecycleDisplayName(LIFECYCLE)],
     ['所屬節點', '<span class="inline-flex items-center gap-1"><i data-lucide="git-commit-vertical" class="w-3.5 h-3.5 text-slate-400"></i>進件作業</span>'],
     ['內容摘要', '規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。'],
     ['公告日期', '<span class="mono">2026-01-01</span>'],

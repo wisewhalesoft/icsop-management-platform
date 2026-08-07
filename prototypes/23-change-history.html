@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
+     本檔已套用：循環樹狀圖 tab 之「循環別」查詢下拉選項值改為 lifecycleId、顯示改以 lifecycleDisplayName；
+     事件清單與預覽標題改顯示 LIFECYCLE_CHANGE_LOG.lifecycleName 快照值（含寫入當下之子分類，事後不改寫）。
+     規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -369,40 +373,67 @@
   function clearDoc(){ ['dqDoc','dqField','dqPerson','dqFrom','dqTo'].forEach(id=>document.getElementById(id).value=''); docExpanded=-1; renderDoc(); }
 
   /* ================= Tab 2：循環樹狀圖 結構變更（新舊快照 + diff）================= */
-  const CYC_NAMES={SRC:'銷售及收款循環',PUC:'採購及付款循環',PPC:'產品企劃循環',LWC:'薪工循環',FC:'融資循環',FAC:'不動產、廠房及設備循環',IC:'投資循環',CIPS:'電腦化資訊系統控制作業',GCA:'管理性控制作業'};
+  /* ===== F040 循環子分類（全站同一實作）=====
+     查詢下拉之選項值＝lifecycleId（**非**名稱字串，亦非循環代碼——同名兩者代碼相同，F038 AC-S1）。
+     事件清單／預覽標題之顯示字串取自事件之 LIFECYCLE_CHANGE_LOG.lifecycleName **快照值**，
+     快照於寫入當下產生、事後不隨循環改名或改子分類而改寫（F038 AC-S2／F040 AC-36）。 */
+  function normalizeSubcategory(v){ const s=(v==null?'':String(v)).trim(); return s?s:null; }
+  function lifecycleDisplayName(lc){ if(!lc) return ''; const s=normalizeSubcategory(lc.subcategory); return s?`${lc.name}（${s}）`:lc.name; }
+  const LIFECYCLE_POOL=[
+    {id:'lc1', name:'銷售及收款循環',      subcategory:'消金', code:'SRC'},
+    {id:'lc10',name:'銷售及收款循環',      subcategory:'企金', code:'SRC'},
+    {id:'lc11',name:'銷售及收款循環',      subcategory:'子公司', code:'SRC'},
+    {id:'lc2', name:'採購及付款循環',      subcategory:null,  code:'PUC'},
+    {id:'lc3', name:'產品企劃循環',        subcategory:null,  code:'PPC'},
+    {id:'lc4', name:'薪工循環',            subcategory:null,  code:'LWC'},
+    {id:'lc5', name:'融資循環',            subcategory:null,  code:'FC'},
+    {id:'lc6', name:'不動產、廠房及設備循環',subcategory:null,  code:'FAC'},
+    {id:'lc7', name:'投資循環',            subcategory:null,  code:'IC'},
+    {id:'lc8', name:'電腦化資訊系統控制作業',subcategory:null,  code:'CIPS'},
+    {id:'lc9', name:'管理性控制作業',       subcategory:null,  code:'GCA'}
+  ];
+  const lcById=id=>LIFECYCLE_POOL.find(l=>l.id===id)||null;
+  const lcCode=id=>{const l=lcById(id);return l?l.code:'';};
   // 各事件內嵌 before / after 完整結構快照 + diff（沿用 22 循環/節點延伸）
   const N=(id,name,docs)=>({id,name,docs:docs||0});
   const SRC_FULL={nodes:[N('a1','進件作業',2),N('a2','簽約對保作業',1),N('a3','擔保設定作業',1),N('a4','撥款核准作業',1),N('a5','案件執行作業',1)],
                   edges:[['a1','a2'],['a1','a3'],['a2','a4'],['a3','a4'],['a4','a5']]};
+  const HL_FULL={nodes:[N('j1','企金案件受理作業',1),N('j2','企業徵信作業',0),N('j3','擔保品估價作業',0),N('j4','授信核准作業',0)],
+                 edges:[['j1','j2'],['j1','j3'],['j2','j4'],['j3','j4']]};
   const LC_EVENTS=[
-    { id:'lc1', cyc:'SRC', type:'新增節點', summary:'新增節點『撥款核准作業』並改接連線', operator:'李慧玲', emp:'20233', time:'2026-07-16 15:12:04',
+    // 「銷售及收款循環（企金）」＝與（消金）同名但彼此獨立之循環；查詢選定其一不含另一者之事件
+    { id:'ev6', lcId:'lc10', lcName:'銷售及收款循環（企金）', type:'新增節點', summary:'新增節點『擔保品估價作業』', operator:'李慧玲', emp:'20233', time:'2026-08-04 11:26:10',
+      before:{nodes:[N('j1','企金案件受理作業',1),N('j2','企業徵信作業',0),N('j4','授信核准作業',0)], edges:[['j1','j2'],['j2','j4']]},
+      after:HL_FULL, diff:{addNodes:['j3'], addEdges:[['j1','j3'],['j3','j4']]} },
+    { id:'ev1', lcId:'lc1', lcName:'銷售及收款循環（消金）', type:'新增節點', summary:'新增節點『撥款核准作業』並改接連線', operator:'李慧玲', emp:'20233', time:'2026-07-16 15:12:04',
       before:{nodes:[N('a1','進件作業',2),N('a2','簽約對保作業',1),N('a3','擔保設定作業',1),N('a5','案件執行作業',1)], edges:[['a1','a2'],['a1','a3'],['a2','a5'],['a3','a5']]},
       after:SRC_FULL, diff:{addNodes:['a4'], addEdges:[['a2','a4'],['a3','a4'],['a4','a5']], rmEdges:[['a2','a5'],['a3','a5']]} },
-    { id:'lc2', cyc:'SRC', type:'新增連線', summary:'新增連線 進件作業 → 擔保設定作業', operator:'李慧玲', emp:'20233', time:'2026-07-15 11:48:30',
+    { id:'ev2', lcId:'lc1', lcName:'銷售及收款循環（消金）', type:'新增連線', summary:'新增連線 進件作業 → 擔保設定作業', operator:'李慧玲', emp:'20233', time:'2026-07-15 11:48:30',
       before:{nodes:SRC_FULL.nodes, edges:[['a1','a2'],['a2','a4'],['a3','a4'],['a4','a5']]},
       after:SRC_FULL, diff:{addEdges:[['a1','a3']]} },
-    { id:'lc3', cyc:'SRC', type:'節點改名', summary:'節點改名『撥款核准』→『撥款核准作業』', operator:'李慧玲', emp:'20233', time:'2026-07-14 09:22:15',
+    { id:'ev3', lcId:'lc1', lcName:'銷售及收款循環', type:'節點改名', summary:'節點改名『撥款核准』→『撥款核准作業』', operator:'李慧玲', emp:'20233', time:'2026-07-14 09:22:15',
       before:{nodes:[N('a1','進件作業',2),N('a2','簽約對保作業',1),N('a3','擔保設定作業',1),N('a4','撥款核准',1),N('a5','案件執行作業',1)], edges:SRC_FULL.edges},
       after:SRC_FULL, diff:{amberNodes:['a4']} },
-    { id:'lc4', cyc:'PUC', type:'文件掛載變更', summary:'文件掛載變更：費用請款作業（掛載 1 → 2 份）', operator:'李慧玲', emp:'20233', time:'2026-07-13 14:03:52',
+    { id:'ev4', lcId:'lc2', lcName:'採購及付款循環', type:'文件掛載變更', summary:'文件掛載變更：費用請款作業（掛載 1 → 2 份）', operator:'李慧玲', emp:'20233', time:'2026-07-13 14:03:52',
       before:{nodes:[N('b1','請購申請作業',1),N('b2','採購比議價作業',1),N('b3','驗收入庫作業',1),N('b4','費用請款作業',1),N('b5','付款核准作業',1)], edges:[['b1','b2'],['b2','b3'],['b3','b5'],['b1','b4'],['b4','b5']]},
       after:{nodes:[N('b1','請購申請作業',1),N('b2','採購比議價作業',1),N('b3','驗收入庫作業',1),N('b4','費用請款作業',2),N('b5','付款核准作業',1)], edges:[['b1','b2'],['b2','b3'],['b3','b5'],['b1','b4'],['b4','b5']]},
       diff:{amberNodes:['b4']} },
-    { id:'lc5', cyc:'PUC', type:'移除節點', summary:'移除節點『付款執行作業』（含其連線）', operator:'李慧玲', emp:'20233', time:'2026-07-12 10:41:09',
+    { id:'ev5', lcId:'lc2', lcName:'採購及付款循環', type:'移除節點', summary:'移除節點『付款執行作業』（含其連線）', operator:'李慧玲', emp:'20233', time:'2026-07-12 10:41:09',
       before:{nodes:[N('b1','請購申請作業',1),N('b2','採購比議價作業',1),N('b3','驗收入庫作業',1),N('b4','費用請款作業',2),N('b5','付款核准作業',1),N('b6','付款執行作業',1)], edges:[['b1','b2'],['b2','b3'],['b3','b5'],['b1','b4'],['b4','b5'],['b5','b6']]},
       after:{nodes:[N('b1','請購申請作業',1),N('b2','採購比議價作業',1),N('b3','驗收入庫作業',1),N('b4','費用請款作業',2),N('b5','付款核准作業',1)], edges:[['b1','b2'],['b2','b3'],['b3','b5'],['b1','b4'],['b4','b5']]},
       diff:{rmNodes:['b6'], rmEdges:[['b5','b6']]} }
   ];
   const TYPE_STYLE={'新增節點':['emerald','plus-circle'],'移除節點':['red','minus-circle'],'新增連線':['emerald','spline'],'移除連線':['red','spline'],'節點改名':['amber','pencil'],'文件掛載變更':['amber','file-stack']};
 
-  function fillCycSel(){ document.getElementById('tqCyc').innerHTML='<option value="">全部循環</option>'+Object.keys(CYC_NAMES).map(c=>`<option value="${c}">${CYC_NAMES[c]}（${c}）</option>`).join(''); }
+  // 選項值＝lifecycleId、顯示＝lifecycleDisplayName（F038 AC-S1）：消金／企金／子公司為三個相異選項
+  function fillCycSel(){ document.getElementById('tqCyc').innerHTML='<option value="">全部循環</option>'+LIFECYCLE_POOL.map(l=>`<option value="${l.id}">${lifecycleDisplayName(l)}（${l.code}）</option>`).join(''); }
 
   function renderTree(){
     if(!allowed())return;
     const cy=document.getElementById('tqCyc').value, ty=document.getElementById('tqType').value;
     const p=document.getElementById('tqPerson').value.trim().toLowerCase(), from=document.getElementById('tqFrom').value;
     let rows=LC_EVENTS.filter(e=>{
-      if(cy && e.cyc!==cy) return false;
+      if(cy && e.lcId!==cy) return false;   // 以 lifecycleId 比對：同名另一子分類之事件不納入
       if(ty && e.type!==ty) return false;
       if(p && !(e.operator.toLowerCase().includes(p)||e.emp.toLowerCase().includes(p))) return false;
       if(from && e.time.slice(0,10) < from) return false;
@@ -413,7 +444,7 @@
     document.getElementById('treeBody').innerHTML=rows.map(e=>{
       const [c,ic]=TYPE_STYLE[e.type]||['slate','git-commit-vertical'];
       return `<tr class="hover:bg-slate-50 align-top">
-        <td class="px-4 py-3 text-slate-700">${esc(CYC_NAMES[e.cyc])}<div class="mono text-[10px] text-slate-400">${e.cyc}</div></td>
+        <td class="px-4 py-3 text-slate-700" data-cycle-cell>${esc(e.lcName)}<div class="mono text-[10px] text-slate-400">${lcCode(e.lcId)} · 快照值</div></td>
         <td class="px-4 py-3"><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-${c}-50 text-${c}-700 border border-${c}-100"><i data-lucide="${ic}" class="w-3.5 h-3.5"></i>${esc(e.type)}</span></td>
         <td class="px-4 py-3 text-slate-700">${esc(e.summary)}</td>
         <td class="px-4 py-3 text-slate-700">${esc(e.operator)}<span class="text-slate-400 mono text-xs">（${esc(e.emp)}）</span></td>
@@ -477,7 +508,7 @@
   let curEvent=null;
   function openPreview(id){
     const e=LC_EVENTS.find(x=>x.id===id); if(!e)return; curEvent=e;
-    document.getElementById('pvCyc').textContent=CYC_NAMES[e.cyc];
+    document.getElementById('pvCyc').textContent=e.lcName;   // 快照值（含寫入當下之子分類）
     document.getElementById('pvSummary').textContent=e.summary;
     document.getElementById('pvWm').textContent='浮水印：'+WM_STR+'（UTC+8）';
     renderMiniDag(document.getElementById('dagBefore'), e.before, 'before', e.diff);
@@ -486,7 +517,7 @@
     toast('info','已開啟新舊樹狀圖預覽（已寫入 LIFECYCLE_CHANGELOG_VIEW 稽核）');
   }
   function closePreview(){ const m=document.getElementById('lcModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
-  function lcDownload(id){ const e=LC_EVENTS.find(x=>x.id===id); toast('success','已下載「'+CYC_NAMES[e.cyc]+'／'+e.summary+'」新舊對照 PDF（單一 PDF 兩頁）：伺服器端已將浮水印燒錄進 PDF 內容層（非僅前端疊加），並寫入 LIFECYCLE_CHANGELOG_DOWNLOAD 稽核'); }
+  function lcDownload(id){ const e=LC_EVENTS.find(x=>x.id===id); toast('success','已下載「'+e.lcName+'／'+e.summary+'」新舊對照 PDF（單一 PDF 兩頁）：伺服器端已將浮水印燒錄進 PDF 內容層（非僅前端疊加），並寫入 LIFECYCLE_CHANGELOG_DOWNLOAD 稽核'); }
   function downloadFromModal(){ if(curEvent) lcDownload(curEvent.id); }
 
   /* ===== 次分頁切換 ===== */

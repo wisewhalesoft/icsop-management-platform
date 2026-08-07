@@ -1,4 +1,7 @@
 <!DOCTYPE html>
+<!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
+     本檔已套用：「循環」篩選之選項值由名稱字串改為 lifecycleId、顯示改以 lifecycleDisplayName 呈現；詳情之「循環別」同步。
+     規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -140,26 +143,46 @@
   const inScope = use => use.some(u => USER_SCOPE.includes(u));
   // 所屬循環＝ICSOP 編號第 2 段代碼對應（SRC=銷售及收款循環, PUC=採購及付款循環, PPC=產品企劃循環,
   // LWC=薪工循環, FC=融資循環, FAC=不動產、廠房及設備循環, IC=投資循環, CIPS=電腦化資訊系統控制作業, GCA=管理性控制作業）
-  const CYCLES = ['銷售及收款循環','採購及付款循環','產品企劃循環','薪工循環','融資循環','不動產、廠房及設備循環','投資循環','電腦化資訊系統控制作業','管理性控制作業'];
+  /* ===== F040 循環子分類：循環池與純函式（全站同一實作）=====
+     循環之業務身分＝(name, subcategory) 組合；同名不同子分類＝彼此獨立的循環。
+     顯示字串一律由 lifecycleDisplayName 產生，前台與後台（13）完全一致（F019 AC-S1）。 */
+  const LIFECYCLE_POOL=[
+    {id:'lc1', name:'銷售及收款循環',      subcategory:'消金'},
+    {id:'lc10',name:'銷售及收款循環',      subcategory:'企金'},
+    {id:'lc11',name:'銷售及收款循環',      subcategory:'子公司'},
+    {id:'lc2', name:'採購及付款循環',      subcategory:null},
+    {id:'lc3', name:'產品企劃循環',        subcategory:null},
+    {id:'lc4', name:'薪工循環',            subcategory:null},
+    {id:'lc5', name:'融資循環',            subcategory:null},
+    {id:'lc6', name:'不動產、廠房及設備循環',subcategory:null},
+    {id:'lc7', name:'投資循環',            subcategory:null},
+    {id:'lc8', name:'電腦化資訊系統控制作業',subcategory:null},
+    {id:'lc9', name:'管理性控制作業',       subcategory:null}
+  ];
+  function normalizeSubcategory(v){ const s=(v==null?'':String(v)).trim(); return s?s:null; }
+  function lifecycleDisplayName(lc){ if(!lc) return ''; const s=normalizeSubcategory(lc.subcategory); return s?`${lc.name}（${s}）`:lc.name; }
+  const lcById=id=>LIFECYCLE_POOL.find(l=>l.id===id)||null;
+  const lcName=id=>lifecycleDisplayName(lcById(id));
   const DOCS = [
     // 使用部門刻意涵蓋不同層級（全公司／本部／部／處室／課），示範「任意層級皆可指定」
-    {n:'ICSOP-SRC-101-2-00',name:'消金審核作業',acc:'信用審查部',use:['營業二本部'],status:'有效',cyc:'銷售及收款循環',date:'2025-12-01',summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。'},
-    {n:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',acc:'消費分期營業部',use:['營業二本部 / 營運管理部'],status:'有效',cyc:'銷售及收款循環',date:'2025-10-01',summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。'},
-    {n:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',acc:'消費分期營業部',use:['營業二本部 / 營運管理部 / 審查室','營業二本部 / 消費分期營業部'],status:'有效',cyc:'產品企劃循環',date:'2026-03-01',summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。'},
-    {n:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',acc:'消費分期營業部',use:['營業二本部 / 消費分期營業部 / 商品北一處'],status:'有效',cyc:'產品企劃循環',date:'2026-04-01',summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。'},
-    {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',acc:'企劃部',use:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部','營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課'],status:'有效',cyc:'銷售及收款循環',date:'2026-01-01',summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。'},
-    {n:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',acc:'財會部',use:['全公司'],status:'有效',cyc:'採購及付款循環',date:'2026-05-01',summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。'},
-    {n:'ICSOP-LWC-101-1-02',name:'招募管理作業',acc:'管理部',use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'有效',cyc:'薪工循環',date:'2025-10-01',summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。'},
-    {n:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',acc:'財會部',use:['財務資訊本部 / 財會部'],status:'有效',cyc:'投資循環',date:'2026-05-01',summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。'},
-    {n:'ICSOP-GCA-100-2-00',name:'法遵作業',acc:'經企公關部',use:['經營企劃管理本部 / 經企公關部 / 法遵及公司治理室'],status:'有效',cyc:'管理性控制作業',date:'2026-03-01',summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。'},
-    {n:'ICSOP-FC-101-1-00',name:'銀行融資作業',acc:'財會部',use:['財務資訊本部 / 財會部'],status:'有效',cyc:'融資循環',date:'2026-02-01',summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。'},
-    {n:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',acc:'管理部',use:['經營企劃管理本部 / 管理部 / 總務室'],status:'有效',cyc:'不動產、廠房及設備循環',date:'2025-10-01',summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。'},
-    {n:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',acc:'資訊部',use:['財務資訊本部 / 資訊部 / 應用發展室'],status:'有效',cyc:'電腦化資訊系統控制作業',date:'2026-04-01',summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。'},
+    {n:'ICSOP-SRC-101-2-00',name:'消金審核作業',acc:'信用審查部',use:['營業二本部'],status:'有效',lcId:'lc1',date:'2025-12-01',summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。'},
+    {n:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',acc:'信用審查部',use:['風險管理服務本部 / 信用審查部'],status:'有效',lcId:'lc10',date:'2026-06-01',summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。'},
+    {n:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',acc:'消費分期營業部',use:['營業二本部 / 營運管理部'],status:'有效',lcId:'lc1',date:'2025-10-01',summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。'},
+    {n:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',acc:'消費分期營業部',use:['營業二本部 / 營運管理部 / 審查室','營業二本部 / 消費分期營業部'],status:'有效',lcId:'lc3',date:'2026-03-01',summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。'},
+    {n:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',acc:'消費分期營業部',use:['營業二本部 / 消費分期營業部 / 商品北一處'],status:'有效',lcId:'lc3',date:'2026-04-01',summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。'},
+    {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',acc:'企劃部',use:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部','營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課'],status:'有效',lcId:'lc1',date:'2026-01-01',summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。'},
+    {n:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',acc:'財會部',use:['全公司'],status:'有效',lcId:'lc2',date:'2026-05-01',summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。'},
+    {n:'ICSOP-LWC-101-1-02',name:'招募管理作業',acc:'管理部',use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'有效',lcId:'lc4',date:'2025-10-01',summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。'},
+    {n:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',acc:'財會部',use:['財務資訊本部 / 財會部'],status:'有效',lcId:'lc7',date:'2026-05-01',summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。'},
+    {n:'ICSOP-GCA-100-2-00',name:'法遵作業',acc:'經企公關部',use:['經營企劃管理本部 / 經企公關部 / 法遵及公司治理室'],status:'有效',lcId:'lc9',date:'2026-03-01',summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。'},
+    {n:'ICSOP-FC-101-1-00',name:'銀行融資作業',acc:'財會部',use:['財務資訊本部 / 財會部'],status:'有效',lcId:'lc5',date:'2026-02-01',summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。'},
+    {n:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',acc:'管理部',use:['經營企劃管理本部 / 管理部 / 總務室'],status:'有效',lcId:'lc6',date:'2025-10-01',summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。'},
+    {n:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',acc:'資訊部',use:['財務資訊本部 / 資訊部 / 應用發展室'],status:'有效',lcId:'lc8',date:'2026-04-01',summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。'},
     // 進度中（有效但公告日期未到 today）→ 前台隱藏、僅後台可見
-    {n:'ICSOP-SRC-102-1-00',name:'車輛分期對保作業（新制）',acc:'企劃部',use:['營業二本部 / 營運管理部 / 審查室'],status:'有效',cyc:'銷售及收款循環',date:'2026-09-01',summary:'（將於 2026-09-01 公告生效）規範車輛分期對保程序之新制作業。'},
+    {n:'ICSOP-SRC-102-1-00',name:'車輛分期對保作業（新制）',acc:'企劃部',use:['營業二本部 / 營運管理部 / 審查室'],status:'有效',lcId:'lc1',date:'2026-09-01',summary:'（將於 2026-09-01 公告生效）規範車輛分期對保程序之新制作業。'},
     // 以下為失效/作廢，將由「後端」強制過濾，不顯示於前台
-    {n:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',acc:'消費分期營業部',use:['營業二本部 / 消費分期營業部'],status:'失效',cyc:'銷售及收款循環',date:'2025-05-01',summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。'},
-    {n:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',acc:'管理部',use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'作廢',cyc:'薪工循環',date:'2025-04-01',summary:'（作廢）任用管理作業，因組織調整不再適用。'}
+    {n:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',acc:'消費分期營業部',use:['營業二本部 / 消費分期營業部'],status:'失效',lcId:'lc1',date:'2025-05-01',summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。'},
+    {n:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',acc:'管理部',use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'作廢',lcId:'lc4',date:'2025-04-01',summary:'（作廢）任用管理作業，因組織調整不再適用。'}
   ];
   // 使用部門篩選選項＝實際出現之使用部門（含全公司／本部／部／處室／課四層＋全域）
   const DEPTS = [...new Set(DOCS.flatMap(d => d.use))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
@@ -167,7 +190,10 @@
   // populate selects
   function fillOpts(id,arr,val){const s=document.getElementById(id);arr.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;s.appendChild(o);});}
   ['fDept','fDeptM'].forEach(id=>fillOpts(id,DEPTS));
-  ['fCycle','fCycleM'].forEach(id=>fillOpts(id,CYCLES));
+  // 循環篩選：選項值＝lifecycleId、顯示＝lifecycleDisplayName（F019 AC-S2）
+  // 「銷售及收款循環（消金／企金／子公司）」為三個相異選項，選定其一不含同名其他子分類之文件
+  function fillCycleOpts(id){const s=document.getElementById(id);LIFECYCLE_POOL.forEach(l=>{const o=document.createElement('option');o.value=l.id;o.textContent=lifecycleDisplayName(l);s.appendChild(o);});}
+  ['fCycle','fCycleM'].forEach(fillCycleOpts);
 
   function statusPill(s){
     const map={'有效':['#047857','#D1FAE5'],'失效':['#B45309','#FEF3C7'],'作廢':['#B91C1C','#FEE2E2']};
@@ -191,7 +217,7 @@
         <div><dt class="text-slate-400 inline">制定部門：</dt><dd class="text-slate-600 inline">${d.acc}</dd></div>
         <div><dt class="text-slate-400 inline">公告日期：</dt><dd class="text-slate-600 inline mono">${d.date}</dd></div>
         <div class="col-span-2"><dt class="text-slate-400 inline">使用部門：</dt><dd class="text-slate-600 inline">${pinnedUse}</dd></div>
-        <div class="col-span-2"><dt class="text-slate-400 inline">循環別：</dt><dd class="text-slate-600 inline">${d.cyc}</dd></div>
+        <div class="col-span-2"><dt class="text-slate-400 inline">循環別：</dt><dd class="text-slate-600 inline">${lcName(d.lcId)}</dd></div>
         ${d.summary?`<div class="col-span-2"><dt class="text-slate-400 inline">內容摘要：</dt><dd class="text-slate-500 inline">${esc(d.summary)}</dd></div>`:''}
       </dl>
     </article>`;
@@ -210,7 +236,7 @@
     const hiddenCount = DOCS.length - visible.length;
     let rows = visible.filter(d=>{
       if(f.dept && !d.use.includes(f.dept)) return false;
-      if(f.cyc && d.cyc!==f.cyc) return false;
+      if(f.cyc && d.lcId!==f.cyc) return false;   // 以 lifecycleId 比對：同名另一子分類之文件不納入
       if(f.kw && !(d.n.toLowerCase().includes(f.kw) || d.name.toLowerCase().includes(f.kw))) return false;
       return true;
     });

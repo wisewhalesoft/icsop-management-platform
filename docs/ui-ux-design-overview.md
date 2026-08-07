@@ -1,11 +1,11 @@
 ---
 title: ICSOP 文件管理平台 — UI/UX 設計總覽
 project: ICSOP Document Management Platform
-version: 1.1 (Phase 0 — 設計總覽；2026-08-06 併入 E10 附錄管理)
-date: 2026-08-06
+version: 1.2 (Phase 0 — 設計總覽；2026-08-07 併入 F040 循環子分類)
+date: 2026-08-07
 author: UI/UX Designer (Claude)
-status: Draft — 待使用者確認後始進入 prototype 產出
-covers: F001–F039 (E01–E10)
+status: 🟢 APPROVED（2026-08-07 人類閘門通過）
+covers: F001–F040 (E01–E10 ＋ F040 橫切)
 ---
 
 # ICSOP 文件管理平台 — UI/UX 設計總覽
@@ -14,6 +14,8 @@ covers: F001–F039 (E01–E10)
 > 本輪**僅**產出本檔；`/prototypes/*.html` 與 `/design/*` 於使用者確認本總覽後之下一輪才建立。
 >
 > **v1.1（2026-08-06）併入 E10 附錄管理（F039）**：新增 Phase H 與 `24-appendix-management.html`（合計 25 檔）；附錄傳播至 `14`／`15`（可搜尋多選＋**上移／下移**有序清單，見 §6.17）、`16`／`04`（依 `sortOrder` 呈現＋「無附錄」空狀態）、`18`（功能列「附錄管理」＋欄位列「附錄（多）」，欄位數 19→**20**）、`07`（sidebar ＋儀表板卡）、`02`（角色職掌文案）；後台側選單「附錄管理」已同步至**全部 16 個內嵌 `const MENU` 之 prototype**（§9 驗證項 8）。OQ-E10-01 之 UI 裁定見 §附錄 A.1。
+>
+> **v1.2（2026-08-07）併入 F040 循環子分類（🟢 APPROVED — 2026-08-07 人類閘門通過）**：循環新增**非必填** `subcategory`，循環之業務身分改為 `(name, subcategory)` 組合。**不新增檔案**（共維持 25 檔），以最小增量傳播至 11 個既有 prototype：結構性變更＝`10`（子分類欄位＋兩個新錯誤提示）、`14`／`15`（「所屬循環」改**兩段式**選取）；顯示/取值變更＝`13`／`03`／`04`／`16`／`11`／`12`／`22`／`23`（一律經 `lifecycleDisplayName`；所有循環下拉之選項值由名稱字串改為 `lifecycleId`）。共用規則見 **§6.19**；驗證見 §9 第 10 項。**ICSOP 文件編號不受影響**——第 2 段循環代碼仍僅依循環名稱查表（同名不同子分類代碼相同）。
 
 ---
 
@@ -27,15 +29,15 @@ covers: F001–F039 (E01–E10)
 |--------|------|------|
 | Spec 索引 | `docs/specs/spec-index.md` | Draft v1.0 |
 | 產品總覽 / 使用者故事總覽 | `docs/specs/overview.md`、`docs/stories/overview.md` | Draft |
-| 39 份 Feature 規格 | `docs/specs/features/F001–F039-*.md` | Draft（`F039` 附錄管理為 2026-08-06 新增） |
-| 資料模型（20 欄位權威定義；含 F039 新增之「附錄」） | `docs/specs/data-model.md` | Draft |
+| 40 份 Feature 規格 | `docs/specs/features/F001–F040-*.md` | Draft（`F039` 附錄管理 2026-08-06；`F040` **循環子分類** 2026-08-07，🟢 APPROVED（2026-08-07 人類閘門通過）） |
+| 資料模型（20 欄位權威定義；含 F039「附錄」、F040 `LIFECYCLE.subcategory` 與 INV-1～INV-3） | `docs/specs/data-model.md` | Draft |
 | 非功能需求（RWD 斷點、浮水印格式） | `docs/specs/nfr.md` | Draft |
 | 錯誤處理（錯誤碼 ↔ 訊息契約） | `docs/specs/error-handling.md` | Draft |
 | 系統架構（路由/RBAC/浮水印管線） | `docs/specs/architecture-spec.md` | Draft |
 | 流程圖 | `docs/specs/diagrams/*.mmd` | Draft |
 
 ### 1.3 本設計目的
-1. 將 39 個 feature 的互動需求轉為**可於瀏覽器直接預覽**的高擬真互動原型。
+1. 將 40 個 feature 的互動需求轉為**可於瀏覽器直接預覽**的高擬真互動原型。
 2. 建立一套涵蓋**前台 RWD（行動優先）**與**管理後台（桌機優先）**的一致設計系統與 token。
 3. 對 spec 中標示「待 UI/UX 定義」之開放問題（尤其浮水印視覺樣式 OQ-NFR007a/b）提出可驗證的設計提案。
 4. 讓前端工程（React + TS）能以原型為視覺與互動契約落地。
@@ -208,16 +210,16 @@ prototypes/
 ### Phase D — 循環池與 DAG 畫布（核心互動）
 | 檔案 | 涵蓋 Feature / Story | 關鍵 UI 元素 |
 |------|----------------------|--------------|
-| `10-lifecycle-list.html` | F007（US-020） | 循環清單（名稱/狀態/節點數/最後更新）、新增/編輯（名稱必填 `LIFECYCLE_NAME_REQUIRED`）、停用切換、**刪除保護**（有文件掛載→`LIFECYCLE_HAS_DOCUMENTS` 僅允停用）、進入畫布連結 |
+| `10-lifecycle-list.html` | F007（US-020）、**F040** | 循環清單（名稱/狀態/節點數/最後更新）、新增/編輯（名稱必填 `LIFECYCLE_NAME_REQUIRED`）、停用切換、**刪除保護**（有文件掛載→`LIFECYCLE_HAS_DOCUMENTS` 僅允停用）、進入畫布連結、**子分類（非必填）欄位**＋清單以 `lifecycleDisplayName` 呈現＋搜尋比對顯示名稱＋`LIFECYCLE_DUPLICATE`／`LIFECYCLE_SUBCATEGORY_CONFLICT` 兩錯誤提示（見 §6.19） |
 | `11-dag-canvas.html` | F008（US-021/022） | **上到下 DAG 畫布**：節點卡（可拖曳、持久化座標）、箭頭有向邊（parent→child）、新增/刪除節點（刪除→連動移除邊+已掛文件二次確認）、拖曳連線、**防環**：即時提示 + 送出後 `DAG_CYCLE_DETECTED`/`DAG_SELF_LOOP` toast、多 parent/多 child 呈現、mini-map/縮放、平板/手機降級提示 |
 | `12-node-drawer.html` | F009（US-023/024） | 點節點 → **右側 drawer**：節點名稱編輯（即時更新畫布）、目前掛載文件清單、候選清單（**僅本循環**過濾）、選未掛載→直接掛載、選**已掛他節點**→警示（附原節點名）+ `NODE_DOC_ALREADY_ASSIGNED` 二次確認改派、**空候選空狀態**、未確認即存擋下、關閉送出 |
 
 ### Phase E — ICSOP 文件管理
 | 檔案 | 涵蓋 Feature / Story | 關鍵 UI 元素 |
 |------|----------------------|--------------|
-| `13-document-list.html` | F017（US-037） | **14 欄清單**（制定公司/制定部門/制定室別/當責室長/狀態/檔案/樹狀圖圖示/程序書編號/程序書書名/版次/內容摘要/連結點程序書/公告日期/循環別）、**頂部 3 統計卡**（程序書數量/已公告/進度中）、**9 個可搜尋下拉篩選**（循環別/狀態/程序書編號/程序書書名/制定部門/制定室別/當責室長/制定公司/連結點程序書）、**樹狀圖圖示**點擊開所屬節點循環預覽、**狀態衍生**（已公告/進度中/失效/作廢徽章）、**未指派節點警示圖示**、依編號/公告日期排序、查無結果空狀態、（後台**不**套用部門置頂） |
-| `14-document-create.html` | F010（US-030）、F013、F014、F016 | 必填表單（編號/名稱/制定公司/制定部門/制定室別/主要室長/使用部門/版次/內容摘要/公告日期/所屬循環）、UUID 唯讀、預設狀態「有效」、**編號唯一性即時驗證** `DOCUMENT_NUMBER_DUPLICATE`、**制定三級聯動**（選室別帶入部門/公司）、當責次要室長多選、使用部門多選（組織階層下拉、排除離職）、附件上傳（ICSOP PDF 1 / OJT 1）、`所屬節點=未指派` 提示、**使用表單**可搜尋多選、**附錄**可搜尋多選＋**有序已選清單（上移／下移，無拖曳）**（F039；新選取者加末位、送出時依畫面順序寫入 `sortOrder` 1..N） |
-| `15-document-edit.html` | F011（US-031）、F012、F014、F015、F016、F018、F026、F039 | **附錄 section**（自附錄池可搜尋多選；已選清單為**有序清單＋上移／下移**、首筆停用上移／末筆停用下移、無拖曳；解除其中一筆後其餘相對順序不變並重編為連續 1..N；「已變更」pill 併入變更計數；唯讀角色僅見順序、控制項隱藏）、**目前值 / 新值 並列對照**（變更欄位 diff highlight）、覆蓋儲存（UUID 不變）、**狀態切換**（有效/失效/作廢，作廢二次確認）、**所屬節點唯讀 + 跳畫布**、連結點增刪、附件覆蓋、**使用表單管理面板**（多檔上傳/移除二次確認、格式 `FILE_FORMAT_NOT_ALLOWED`）、依 F026 欄位唯讀、取消不污染原值 |
+| `13-document-list.html` | F017（US-037） | **14 欄清單**（制定公司/制定部門/制定室別/當責室長/狀態/檔案/樹狀圖圖示/程序書編號/程序書書名/版次/內容摘要/連結點程序書/公告日期/循環別）、**頂部 3 統計卡**（程序書數量/已公告/進度中）、**9 個可搜尋下拉篩選**（循環別/狀態/程序書編號/程序書書名/制定部門/制定室別/當責室長/制定公司/連結點程序書）、**樹狀圖圖示**點擊開所屬節點循環預覽、**狀態衍生**（已公告/進度中/失效/作廢徽章）、**未指派節點警示圖示**、依編號/公告日期排序、查無結果空狀態、（後台**不**套用部門置頂）、**「循環別」欄與其下拉以 `lifecycleDisplayName` 呈現、選項值＝`lifecycleId`**（F040，見 §6.19） |
+| `14-document-create.html` | F010（US-030）、F013、F014、F016 | 必填表單（編號/名稱/制定公司/制定部門/制定室別/主要室長/使用部門/版次/內容摘要/公告日期/所屬循環）、UUID 唯讀、預設狀態「有效」、**編號唯一性即時驗證** `DOCUMENT_NUMBER_DUPLICATE`、**制定三級聯動**（選室別帶入部門/公司）、當責次要室長多選、使用部門多選（組織階層下拉、排除離職）、附件上傳（ICSOP PDF 1 / OJT 1）、**「所屬循環」兩段式選取（名稱 → 子分類）**（F040，見 §6.19）、`所屬節點=未指派` 提示、**使用表單**可搜尋多選、**附錄**可搜尋多選＋**有序已選清單（上移／下移，無拖曳）**（F039；新選取者加末位、送出時依畫面順序寫入 `sortOrder` 1..N） |
+| `15-document-edit.html` | F011（US-031）、F012、F014、F015、F016、F018、F026、F039 | **附錄 section**（自附錄池可搜尋多選；已選清單為**有序清單＋上移／下移**、首筆停用上移／末筆停用下移、無拖曳；解除其中一筆後其餘相對順序不變並重編為連續 1..N；「已變更」pill 併入變更計數；唯讀角色僅見順序、控制項隱藏）、**目前值 / 新值 並列對照**（變更欄位 diff highlight；「所屬循環」為**兩段式選取**且新舊值兩側皆含子分類，F040 見 §6.19）、覆蓋儲存（UUID 不變）、**狀態切換**（有效/失效/作廢，作廢二次確認）、**所屬節點唯讀 + 跳畫布**、連結點增刪、附件覆蓋、**使用表單管理面板**（多檔上傳/移除二次確認、格式 `FILE_FORMAT_NOT_ALLOWED`）、依 F026 欄位唯讀、取消不污染原值 |
 | `16-document-readonly.html` | F026（US-071）、F025、F039 | 主管/部門窗口視角：全 20 欄位唯讀呈現、附件「僅下載」（ICSOP PDF 燒錄浮水印）、**附錄列**（比照使用表單列，依 `sortOrder` 遞增並帶 1..N 序號徽章；無附錄時顯示「無附錄」；下載 toast 明示不燒錄浮水印、後台管理端存取不寫調閱稽核）、上傳/編輯入口不顯示、所屬節點可跳轉檢視、寫入 API 被拒之 `FIELD_WRITE_FORBIDDEN` 說明 |
 
 ### Phase F — 稽核與權限矩陣
@@ -261,10 +263,11 @@ prototypes/
 | 6.16 | **進行中 / 載入狀態** | 同步進行中（pulse + 輪詢）、DAG 儲存、附件上傳、浮水印下載處理皆顯示 loading；骨架屏用於清單首屏。 |
 | 6.17 | **有序多選（上移／下移）** | 僅用於**附錄**（F039，`14`/`15`）——使用表單／使用部門／連結點等既有多選**維持無序 chip**，不得一併改為有序。已選項改為每列一行：`1..N` 序號徽章 + 格式 icon + 名稱 + 「上移」「下移」「移除」三顆圖示鈕。新選取者一律加**末位**；**首筆之上移與末筆之下移以 `disabled` 停用**（點擊不改變順序、不報錯）；**一律不提供拖曳排序**（無 `draggable` 屬性、無 drag 事件；F039 AC-21 會直接斷言）。移除中間一筆後其餘相對順序不變並重編為連續 `1..N`。DOM 測試掛鉤：`[data-appendix-item][data-appendix-order]`、`[data-appendix-name]`、`[data-appendix-up]`／`[data-appendix-down]`／`[data-appendix-remove]`。 |
 | 6.18 | **多檔上傳之批次驗證** | 附錄上傳（`24`）支援多檔：選檔後**先全部驗證再全部建立**，任一檔格式或大小違規即整批擋下（不部分建立），並於清單逐檔標示違規碼。**單檔**才顯示「名稱」欄（選填、選檔自動預填檔名、使用者改寫後不再被換檔覆寫、trim 後空值 fallback 檔名、上限 400 字元）；**多檔**隱藏名稱欄並明示「各檔一律以其檔名建檔」。 |
+| 6.19 | **循環子分類：顯示名稱與兩段式選取**（F040，🟢 APPROVED（2026-08-07 人類閘門通過）） | **(a) 顯示**：全站任何呈現循環名稱之處（清單列、下拉選項、頁面標題、快照欄位）一律經純函式 `lifecycleDisplayName({name,subcategory})`——有子分類 → `名稱（子分類）`（**全形括號、前後無空白**）、無 → `名稱`；髒資料（空字串／純空白）防禦性視同無子分類，**不得**輸出 `名稱（）`。不得於各處自行以 `name` 串接。**(b) 下拉選項值**：任何循環下拉／篩選之選項值一律為 `lifecycleId`（**非** `name` 字串、**亦非**循環代碼——同名不同子分類之代碼相同，無法區分）；`22` 之查詢參數同步改名並收斂為 `?lifecycleId=<lifecycleId>`。**(c) 兩段式選取**（`14`／`15` 之「所屬循環」）：第一段選名稱、第二段選子分類；**該名稱底下無子分類時不呈現第二段**（向後相容）；名稱一選定即帶入編號前綴並開放後續欄位（前綴**僅依名稱**推導，子分類不參與）；名稱清空時收起並清空第二段、後續欄位重新上鎖；有子分類而未選具體子分類即送出 → 前端純函式 `resolveLifecycleSelection` 擋下並顯示 `LIFECYCLE_SUBCATEGORY_REQUIRED`（400），後端仍權威再驗。**(d) 建立/編輯循環之驗證順序固定不可調換**：① `LIFECYCLE_NAME_REQUIRED`（400）→ ② `LIFECYCLE_DUPLICATE`（409）→ ③ `LIFECYCLE_SUBCATEGORY_CONFLICT`（409，訊息須含「請先處理既有該筆」）；比對涵蓋停用列、編輯時排除自身。DOM 測試掛鉤：`#lcSub`／`#lcDupErr`／`#lcConflictErr`（`10`）、`#f_cycleName`／`#f_cycleSub`／`#subWrap`／`#subErr`（`14`）、`#lc_name`／`#lc_sub`／`#lc_subWrap`（`15`）、`[data-lifecycle-name]`（`10`）、`[data-cycle-cell]`（`13`／`23`）、`[data-lifecycle-title]`（`11`／`12`）。 |
 
 ---
 
-## 7. Feature → 檔案對照表（可追溯 F001–F039）
+## 7. Feature → 檔案對照表（可追溯 F001–F040）
 
 | Feature | 名稱 | 主要檔案 | 次要出現 |
 |---------|------|----------|----------|
@@ -274,19 +277,19 @@ prototypes/
 | F004 | 組織資料同步 | `09-org-sync-management.html` | `07`（sidebar 組織異動管理） |
 | F005 | 離職自動停用 | `08-account-management.html` | `09`（同步歷史離職筆數） |
 | F006 | 組織異動提示與後台 | `09-org-sync-management.html` | `15`（當責欄位旁提示標記） |
-| F007 | 循環池 CRUD | `10-lifecycle-list.html` | `11`（畫布入口） |
-| F008 | DAG 節點與連線防環 | `11-dag-canvas.html` | `10`（進入畫布）、`12`（畫布底層） |
-| F009 | 節點抽屜維護與過濾警示 | `12-node-drawer.html` | `11`（點節點開抽屜）、`15`（所屬節點跳轉） |
-| F010 | 建立 ICSOP 文件 | `14-document-create.html` | `13`（建立入口） |
-| F011 | 編輯文件與版本對照 | `15-document-edit.html` | `13`（編輯入口） |
+| F007 | 循環池 CRUD（含 F040 子分類 delta） | `10-lifecycle-list.html`（＋非必填「子分類」欄、`lifecycleDisplayName` 清單/搜尋、`LIFECYCLE_DUPLICATE`／`LIFECYCLE_SUBCATEGORY_CONFLICT`） | `11`（畫布入口）、`22`（樹狀圖預覽以 `lifecycleId` 開啟） |
+| F008 | DAG 節點與連線防環（含 F040 子分類 delta） | `11-dag-canvas.html`（頁首標題含子分類；DAG 資料與防環邏輯不受子分類影響） | `10`（進入畫布）、`12`（畫布底層） |
+| F009 | 節點抽屜維護與過濾警示（含 F040 子分類 delta） | `12-node-drawer.html`（頁首與候選過濾提示含子分類；過濾鍵仍為 `lifecycleId`，同名另一子分類之文件不入候選） | `11`（點節點開抽屜）、`15`（所屬節點跳轉） |
+| F010 | 建立 ICSOP 文件（含 F040 子分類 delta） | `14-document-create.html`（「所屬循環」兩段式選取；未選子分類 → `LIFECYCLE_SUBCATEGORY_REQUIRED`） | `13`（建立入口） |
+| F011 | 編輯文件與版本對照（含 F040 子分類 delta） | `15-document-edit.html`（「所屬循環」兩段式選取；新舊值對照兩側皆含子分類） | `13`（編輯入口） |
 | F012 | 文件狀態切換 | `15-document-edit.html` | `13`（清單狀態徽章）、`03`（前台反映） |
 | F013 | 文件編號唯一性 | `14-document-create.html` | `15`（編輯排除自身） |
 | F014 | 制定組織與當責室長設定 | `14`、`15` | `09`（異動提示跳入） |
 | F015 | 文件連結點管理 | `15-document-edit.html` | `04`（前台詳情顯示連結點） |
 | F016 | PDF 與 OJT 附件上傳 | `14`、`15` | `05`（浮水印來源檔） |
-| F017 | 後台文件清單與搜尋 | `13-document-list.html` | `07`（sidebar 文件管理） |
+| F017 | 後台文件清單與搜尋（含 F040 子分類 delta） | `13-document-list.html`（第 14 欄「循環別」含子分類；下拉選項值＝`lifecycleId`） | `07`（sidebar 文件管理）、`22`（樹狀圖第二入口帶 `lifecycleId`） |
 | F018 | 使用表單管理 | `19-usage-form-management.html`（表單池） | `15`/`14`（文件關聯選取）、`04`（前台下載）、`07`（sidebar） |
-| F019 | 前台清單瀏覽 | `03-public-list.html` | `04`（詳情）、`06`（RWD） |
+| F019 | 前台清單瀏覽（含 F040 子分類 delta） | `03-public-list.html`（「循環」篩選值＝`lifecycleId`、顯示含子分類） | `04`（詳情之「循環別」）、`16`（後台唯讀詳情同字串）、`06`（RWD） |
 | F020 | 文件浮水印（疊加+燒錄） | `05-public-viewer-watermark.html` | `04`（下載/列印入口）、`17`（浮水印快照） |
 | F021 | RWD 響應式版面 | `06-rwd-showcase.html` | `03`、`04`、`05`（三斷點落實） |
 | F022 | 後台開啟前台瀏覽頁 | `07-admin-shell.html`（開新視窗入口） | `03`（被開啟目標頁） |
@@ -303,10 +306,11 @@ prototypes/
 | F033 | 權限感知檢索（已公告＋使用部門） | `20-public-qa.html`（權限提示、無權→查無依據） | `21`（chunk metadata 為過濾依據） |
 | F034 | 問答稽核與 AI 導引浮水印 | `20-public-qa.html`（QA_LOG、source=AI_QA 提示） | `05`（經引用檢視/下載仍套浮水印）、`17`（稽核查詢） |
 | F035 | 防幻覺護欄與無結果處理 | `20-public-qa.html`（拒答/低信心/必附引用） | — |
-| F036 | 循環樹狀圖預覽（唯讀＋浮水印） | `22-lifecycle-tree-preview.html`（viewer + 45° 浮水印 + 循環切換 + 直角箭頭 + 點節點標示所有下游） | `10`（狀態欄樹狀圖圖示開啟）、`13`（文件清單樹狀圖圖示，帶入所屬循環）、`11`（DAG 編輯對照）、`05`（浮水印手法） |
+| F036 | 循環樹狀圖預覽（唯讀＋浮水印）（含 F040 子分類 delta） | `22-lifecycle-tree-preview.html`（viewer + 45° 浮水印 + 循環切換 + 直角箭頭 + 點節點標示所有下游；**標題與切換器含子分類、切換器值與 `?lifecycleId=` 皆為 lifecycleId**——同名兩者代碼皆 SRC 無法區分，AC-S3） | `10`（狀態欄樹狀圖圖示，帶 `lifecycleId`）、`13`（文件清單樹狀圖圖示，帶該文件之具體 `lifecycleId`）、`11`（DAG 編輯對照）、`05`（浮水印手法） |
 | F037 | ICSOP 程序書變更歷程 | `23-change-history.html`（**獨立功能**；ICSOP 程序書 tab：欄位 before/after diff） | `15`（編輯/狀態/組織變更來源）、`07`（sidebar 獨立項「文件變更歷程」） |
-| F038 | 循環樹狀圖變更歷程 | `23-change-history.html`（**獨立功能**；循環樹狀圖 tab：新舊 DAG 並列預覽 + 下載燒錄浮水印） | `11`/`12`（DAG 結構變更來源）、`22`（viewer 手法）、`05`（浮水印燒錄） |
+| F038 | 循環樹狀圖變更歷程（含 F040 子分類 delta） | `23-change-history.html`（**獨立功能**；循環樹狀圖 tab：新舊 DAG 並列預覽 + 下載燒錄浮水印；**查詢下拉值＝`lifecycleId`、清單/預覽顯示 `lifecycleName` 快照值**——事後改子分類不改寫既有事件，AC-36） | `11`/`12`（DAG 結構變更來源）、`22`（viewer 手法）、`05`（浮水印燒錄） |
 | F039 | 附錄管理（附錄池 + 文件內排序） | `24-appendix-management.html`（附錄池：多檔上傳／覆蓋警示／移除保護／關聯文件展開） | `14`／`15`（文件關聯選取 + **上移／下移排序**，§6.17）、`16`（後台唯讀詳情依 `sortOrder` 列出）、`04`（前台詳情「附錄」section + 欄位摘要列 + 下載寫稽核）、`18`（功能列「附錄管理」＋欄位列「附錄（多）」）、`07`（sidebar + 儀表板卡）、`02`（ICSOP 管理員/主管之後台職掌說明） |
+| **F040** | **循環子分類（橫切；規則權威）** | 無專屬畫面——規則落在 `10`（子分類 CRUD 與唯一性）、`14`／`15`（兩段式選取） | `13`／`03`（下拉值＝`lifecycleId`、顯示含子分類）、`04`／`16`（循環別列）、`11`／`12`（標題與過濾提示）、`22`（切換器＋`?lifecycleId=`）、`23`（查詢下拉＋快照顯示）｜共用規則見 §6.19 |
 
 ### 7.1 後台側邊選單 × 角色顯示（依 F025 推導，供 `07` 落實）
 | 功能區 | SysAdmin | ICSOPAdmin | Supervisor | DeptContact | User |
@@ -335,13 +339,14 @@ prototypes/
 | Spec 索引 | `docs/specs/spec-index.md` | Agent Loading Guide、定案決策、feature 索引 |
 | 產品/故事總覽 | `docs/specs/overview.md`、`docs/stories/overview.md` | 角色、目標、Phase、使用者流程分組 |
 | 指派 Feature（重點） | `docs/specs/features/F008、F009、F019、F020、F021` | DAG 畫布、節點抽屜、前台清單、浮水印、RWD |
-| 全套 Feature | `docs/specs/features/F001–F039-*.md` | 各畫面 Main Flow / AC / Error Scenarios |
-| 資料模型 | `docs/specs/data-model.md#document-entity`、`#appendix-entity`、`#doc-appendix` | **20 欄位權威定義**、狀態集合、關聯表、`APPENDIX_POOL`／`DOC_APPENDIX(sortOrder)` |
+| 全套 Feature | `docs/specs/features/F001–F040-*.md` | 各畫面 Main Flow / AC / Error Scenarios |
+| 資料模型 | `docs/specs/data-model.md#document-entity`、`#appendix-entity`、`#doc-appendix`、**`#lifecycle-uniqueness`** | **20 欄位權威定義**、狀態集合、關聯表、`APPENDIX_POOL`／`DOC_APPENDIX(sortOrder)`、**`LIFECYCLE.subcategory` 與 INV-1／INV-2／INV-3** |
 | NFR | `docs/specs/nfr.md#browser-rwd`、`#watermark` | RWD 三斷點/觸控、浮水印格式與防竄改 |
-| 錯誤處理 | `docs/specs/error-handling.md` | **錯誤碼 ↔ zh-TW 使用者訊息契約**（表單/toast 文案來源） |
+| 錯誤處理 | `docs/specs/error-handling.md`（含 **`#lifecycle-subcategory`**） | **錯誤碼 ↔ zh-TW 使用者訊息契約**（表單/toast 文案來源）；子分類三碼之語意與**固定驗證順序** |
 | 架構 | `docs/specs/architecture-spec.md` §2/§3/§5.2/§5.3 | 前後台單一 SPA、RBAC guard、浮水印代理串流、Session 逾時、路由分流 |
 | 附錄（E10） | `docs/specs/features/F039-appendix-management.md`（34 條 AC ＋端點契約）、`docs/stories/epics/E10-appendix/US-100/101/102` | 附錄池 CRUD、多檔上傳、覆蓋／移除門檻、文件內 `sortOrder` 與上移／下移互動、下載稽核 |
 | 附錄架構裁定 | `docs/specs/architecture-spec.md` §3.6 決策二／決策五、§4.9 | 排序權威寫入路徑（建立/編輯頁一律 `PUT` replace-set）、新頁與選單插入位置、`MultiSearchCombobox` 之選填 `orderable`（首項停用上移、末項停用下移、無拖曳） |
+| 循環子分類（F040） | `docs/specs/features/F040-lifecycle-subcategory.md`（**橫切權威、36 條 AC**）＋ F007／F010／F011／F017／F019／F008／F009／F036／F038 各自之「循環子分類 delta」段 | `normalizeSubcategory`／`lifecycleDisplayName`／`resolveLifecycleSelection` 三純函式契約、INV-1～INV-4、兩段式選取、下拉值＝`lifecycleId`、編號代碼不受影響 |
 | 流程圖 | `docs/specs/diagrams/F008-*.mmd、F009-*.mmd、F019-*.mmd、F020-*.mmd、document-status-lifecycle.mmd` | 防環、節點改派、排序管線、浮水印稽核、狀態機 |
 
 ---
@@ -351,7 +356,7 @@ prototypes/
 prototype 產出後，逐檔以下列方式驗證：
 
 1. **瀏覽器開啟測試** — 每個 HTML 於 Chrome/Edge 獨立開啟，無 build step、0 console error；以本機 static server（Node `http.createServer`）服務 `prototypes/` 目錄（`file://` 會被瀏覽器自動化拒絕）。
-2. **Feature 覆蓋檢查** — 對照 §7 對照表，逐 F001–F039 確認主要檔案已呈現其 Main Flow 與關鍵 AC；未指派節點、防環、改派警示、部門置頂等定案行為須可實際觸發演示。
+2. **Feature 覆蓋檢查** — 對照 §7 對照表，逐 F001–F040 確認主要檔案已呈現其 Main Flow 與關鍵 AC；未指派節點、防環、改派警示、部門置頂等定案行為須可實際觸發演示。
 3. **互動狀態驗證** — 以 `claude-in-chrome` + `javascript_tool` 直呼頁面函式斷言狀態：角色模擬器切換（5 角色選單/欄位變化）、DAG 增刪節點/連線/防環 toast、drawer 三態（正常掛載/已掛他節點警示/空候選）、同步進行中→完成、diff 對照、分頁/篩選/搜尋、空狀態。
 4. **RWD 斷點驗證** — `06` 及前台各頁於 360 / 375 / 768 / 1024 / 1440 寬度檢查：手機無水平捲動、清單改單欄卡片、觸控目標 ≥44px、篩選 sheet、檢視器可縮放且浮水印清晰。
 5. **文案校對** — 全 zh-TW；錯誤/確認/空狀態文案與 `error-handling.md` 契約一致；無簡體、無殘留佔位字。
@@ -359,6 +364,7 @@ prototype 產出後，逐檔以下列方式驗證：
 7. **RBAC 一致性驗證** — 後台選單裁切與欄位唯讀符合 §7.1 與 F025/F026 矩陣；無權限角色顯示封鎖/403 說明，前端隱藏不作為唯一防線（僅視覺呈現）。
 8. **選單一致性驗證（E10 新增）** — 以 `grep -l "const MENU" prototypes/*.html` 列出全部內嵌選單之檔案，逐檔確認「附錄管理」項存在且緊接於「使用表單管理」之後；同一 shell 在任一頁之選單項目必須完全相同（漏改任一檔即為缺陷）。
 9. **附錄排序驗證（E10 新增）** — `14`/`15`：依序勾選 3 筆 → 序號 1/2/3；新勾選者落末位；對末筆連按兩次「上移」→ 順序變為 C、A、B；首筆「上移」與末筆「下移」為 `disabled` 且順序不變；DOM 內 `[draggable]` 與 drag 事件數皆為 **0**；解除中間一筆後其餘相對順序不變並重編 1..N。`16`/`04`：所列順序與 `15` 排定者逐筆一致；`04` 之欄位摘要「附錄」列與下方 section 筆數同步；清空後兩處皆顯示「無附錄」。
+10. **循環子分類驗證（F040 新增）** — (a) `10`：同名三列顯示為「銷售及收款循環（消金）」「（企金）」「（子公司）」、無子分類列不含括號；搜尋「企金」命中顯示名稱；建立同名同子分類 → `LIFECYCLE_DUPLICATE`、對無子分類之名稱補子分類（或反向）→ `LIFECYCLE_SUBCATEGORY_CONFLICT`、名稱留白 → `LIFECYCLE_NAME_REQUIRED` **優先於**兩者；編輯維持原值不報衝突；停用列仍參與比對。(b) `14`／`15`：選「銷售及收款循環」→ 出現子分類層（三選項、值為 `lc1`／`lc10`／`lc11`）、選「採購及付款循環」→ **不出現**子分類層、清空名稱 → 收起且欄位重新上鎖；未選子分類送出 → `LIFECYCLE_SUBCATEGORY_REQUIRED`；編號前綴恆為 `ICSOP-SRC-`（消金／企金／子公司相同）。(c) `13`／`03`／`23`：下拉 `option.value` 為 `lifecycleId`（非名稱字串）、選其一之結果不含同名另一子分類。(d) `22`：`?lifecycleId=lc10` 開啟「（企金）」而非「（消金）」。(e) `04`／`16`／`11`／`12`：循環別／標題字串與 `13` 完全一致。**本輪已於 headless Chromium（Playwright）實跑 51 條斷言全數通過、11 檔 0 console error。**
 
 ---
 
@@ -368,7 +374,7 @@ prototype 產出後，逐檔以下列方式驗證：
 
 1. **浮水印視覺樣式與時間格式（OQ-NFR007a / OQ-NFR007b）— 已確認 ✅** — 使用者採納：對角 45°、平鋪重複、opacity 0.12、字級 14px、`slate-500`；時間 `YYYY-MM-DD HH:mm:ss (UTC+8)`。稽核快照字串（F023）依此一致。
 2. **DeptContact（部門窗口）後台內容極少** — 依 F025 其後台僅「ICSOP 文件管理唯讀」一項。請確認是否仍於分流頁（F002）提供「後台」選項，或部門窗口實務上等同一般前台使用者。設計預設：保留後台選項，但只顯示唯讀文件檢視（沿用 `16`）。
-3. **「系統參數設定」無對應 feature 規格** — F025 列 SysAdmin 對「系統參數設定」為 CRUD，但 F001–F039 無此功能之細部 spec。設計預設：`07` sidebar 顯示此項但本輪**不產出**其內部畫面（標示為未來項），待補 feature 後再設計。
+3. **「系統參數設定」無對應 feature 規格** — F025 列 SysAdmin 對「系統參數設定」為 CRUD，但 F001–F040 無此功能之細部 spec。設計預設：`07` sidebar 顯示此項但本輪**不產出**其內部畫面（標示為未來項），待補 feature 後再設計。
 4. **附件格式/大小上限未定（OQ-E04-06 / OQ-E05-02，Blocking）** — 上傳元件（`14/15`）需顯示允許格式與大小上限。設計預設以佔位值（如 ICSOP PDF 僅 `.pdf`、使用表單 `.xlsx/.xls/.pdf`、上限 20MB）呈現並標「示範值，待確認」。
 5. **循環（Lifecycle）欄位（OQ-E03-01）** — 是否需「擁有部門」等欄位未定。設計預設僅呈現 data-model 已定義之 名稱/說明/狀態；若需擁有部門，`10` 表單可擴充。
 6. **使用表單下載是否需浮水印（OQ-E05-03）** — 影響 `04` 前台表單下載之呈現。設計預設：使用表單下載**不**燒錄浮水印（比照 architecture §5.2 之 SAS 直下模式），僅 ICSOP PDF 燒錄；待確認。
@@ -393,6 +399,43 @@ prototype 產出後，逐檔以下列方式驗證：
 5. 「必填」改「選填」是**放寬**而非收緊，不會使既有可通過之操作被擋下。
 
 **連帶落實**：`50MB` 上限（`FILE_SIZE_EXCEEDED`，恰 50MB 通過）與 `400` 字元名稱上限（`APPENDIX_NAME_TOO_LONG`）兩項驗證原草稿完全缺漏，一併補上；多檔採「先全部驗證再全部建立」，任一檔違規整批擋下（AC-02）。
+
+### A.2 F040 循環子分類 — UI 設計裁量與人類閘門裁決（2026-08-07，🟢 APPROVED）
+
+**使用者定案（不再討論）**：子分類非必填；`(name, subcategory)` 組合唯一；同名不得並存「無子分類」與「有子分類」；文件編號循環代碼僅依名稱；顯示字串 `名稱（子分類）`（全形括號無空白）。
+
+#### A.2.1 人類閘門裁決（2026-08-07 通過，已落實）
+
+| 裁決 | 內容 | 落實 |
+|---|---|---|
+| **A** | 樹狀圖預覽頁查詢參數由 `?cycle=` **改名為 `?lifecycleId=`**（值本即 lifecycleId，行為不變） | 讀取端 `22`；產生端 `10`（`openTree`）、`13`（`openTreePage`）。全站 grep 無殘留 `?cycle=` |
+| **B** | 示範子分類改為業務貼切名稱：**消金／企金／子公司**（取代原「車貸／房貸」） | `LIFECYCLE_POOL` 由 2 個 SRC 子分類擴為 **3 個**（`lc1` 消金／`lc10` 企金／`lc11` 子公司），7 檔＋硬寫字串處全部改齊 |
+| **C** | F010 AC-S4 字面歧義由 spec-writer 補字，prototype 兩段式實作**維持不變** | 未改動 |
+| — | 後端錯誤碼收斂（缺 `lifecycleId` → `DOCUMENT_REQUIRED_FIELD_MISSING`；`LIFECYCLE_SUBCATEGORY_REQUIRED` 僅用於 INV-2 髒資料） | **不影響前端**；`14`／`15` 之「選了名稱但未選子分類 → 前端 `resolveLifecycleSelection` 擋下並顯示 `LIFECYCLE_SUBCATEGORY_REQUIRED`」（AC-21）照舊 |
+
+#### A.2.2 裁決 B 之連帶調整（本 agent 判斷，需知悉）
+
+換成業務貼切名稱後，原本的示範資料歸屬產生**語意矛盾**，故一併調整：
+
+| # | 調整 | 理由 |
+|---|------|------|
+| 1 | **`ICSOP-SRC-101-2-00 消金審核作業` 由（企金）改掛（消金）** | 換名後該文件掛在「企金」之下是直接矛盾（文件名稱即「消金」）。原本掛在「房貸」僅是不相關，換名後變成互斥。 |
+| 2 | **新增 1 筆真正屬於企金之示範文件**：`ICSOP-SRC-103-1-01 企業金融授信作業`（`13`／`03` 各一列） | 若不補，(企金) 與 (子公司) 皆為 0 筆，F017 AC-S2／F019 AC-S2 之「選定其一不含同名其他子分類之文件」將退化為空狀態、失去示範力。制定組織用既有 roster：信用審查部／企金室／林建宏（企金室 室長），不新增人員或組織。 |
+| 3 | **（子公司）刻意維持 0 份文件掛載** | 示範「新設立、尚未掛載文件之子分類」；同時使 `10` 的「無掛載可直接刪除」分支有真實可點的對象。 |
+
+#### A.2.3 本 agent 之設計裁量（保留紀錄）
+
+| # | 裁量 | 取捨理由 |
+|---|------|----------|
+| 1 | **兩段式第二段之選項顯示完整 `lifecycleDisplayName`**（`銷售及收款循環（消金）`）而非僅子分類字串（`消金`） | F010 AC-S4 逐字要求「顯示字串由 `lifecycleDisplayName` 產生」。裁決 C 已確認此判讀，規格由 spec-writer 補字。 |
+| 2 | **選定「名稱」即開放後續欄位並帶入編號前綴**（不等到選完子分類） | 前綴僅依名稱推導；且 F010 AC-S1「僅選名稱即送出應被擋下」必須可達——若名稱層不解鎖後續欄位，使用者根本無法填完其餘必填欄位而觸發該情境。 |
+| 3 | **清單不依名稱分組、子分類不另用 badge**，一律以單一顯示名稱字串呈現 | AC-30 要求全站顯示字串同源；分組或 badge 會使「清單列的可見文字」不再等於 `lifecycleDisplayName` 輸出，讓下游 fidelity 測試無從斷言。 |
+| 4 | **`10` 之搜尋框 placeholder 由「搜尋循環名稱…」改為「搜尋循環名稱／子分類…」** | 行為已依 F007 AC-S8 改為比對顯示名稱；不改文案會使提示與實際行為不符。 |
+
+#### A.2.4 仍需下游知悉（非阻塞）
+
+1. **INV-2 之髒資料在前端無法「示範」** — AC-25（同名同時存在 `null` 與非 `null` 列）依規格不應存在於正常池中，本輪僅於 `resolveLifecycleSelection` 實作防禦分支（同名列數 > 1 且含 `null` 列 → 一律回 `LIFECYCLE_SUBCATEGORY_REQUIRED`），**未**在示範資料中製造違反 INV-2 的髒列（會使 `10` 的清單自相矛盾）。下游單元測試請直接對純函式餵入髒池驗證。
+2. **`10` 的「掛載文件數」與 `13` 的實際列數本就不對帳**（既存狀況，非本輪造成）；三個 SRC 子分類之 `docs` 已與實際掛載一致：消金 8（示範彙總值）、企金 1、子公司 0。
 
 ---
 

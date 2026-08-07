@@ -1,4 +1,7 @@
 <!DOCTYPE html>
+<!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
+     本檔已套用：第 13 列「循環別」改以 lifecycleDisplayName 呈現（銷售及收款循環（消金））。
+     規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -133,11 +136,14 @@
   function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
 
   /* ===== document (ICSOP-SRC-101-1-01) ===== 編號第 2 段 SRC＝銷售及收款循環 */
+  /* F040 顯示名稱純函式（全站同一實作）：有子分類 → 名稱（子分類）（全形括號、前後無空白）；無 → 名稱 */
+  function normalizeSubcategory(v){ const s=(v==null?'':String(v)).trim(); return s?s:null; }
+  function lifecycleDisplayName(lc){ if(!lc) return ''; const s=normalizeSubcategory(lc.subcategory); return s?`${lc.name}（${s}）`:lc.name; }
   const doc={
     uuid:'a3f81c22-9e04-4b7a-8f2d-e2c9d1748e2f', status:'有效', number:'ICSOP-SRC-101-1-01',
     company:'和潤企業股份有限公司', dept:'企劃部', section:'車輛行銷室',
     primaryChief:'陳彥廷（企劃部 車輛行銷室 室長）', secondary:['林建宏（信用審查部 企金室 室長）'],
-    using:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部','營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課'], edition:"26'01", cycle:'銷售及收款循環', node:'進件作業',
+    using:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部','營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課'], edition:"26'01", lifecycle:{id:'lc1',name:'銷售及收款循環',subcategory:'消金'}, node:'進件作業',
     links:[{n:'ICSOP-SRC-101-2-00 消金審核作業',status:'有效'},{n:'ICSOP-SRC-102-1-01 車輛分期對保作業',status:'有效'}],
     date:'2026-01-01', name:'車輛分期進件作業',
     summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',
@@ -171,7 +177,7 @@
       row(10,'當責室長-主要',doc.primaryChief),
       row(11,'當責室長-次要',doc.secondary.join('、')||'—'),
       row(12,'文件使用部門',doc.using.join('、')),
-      row(13,'循環別',doc.cycle),
+      row(13,'循環別',lifecycleDisplayName(doc.lifecycle)),
       row(14,'所屬節點',nodeHtml,'唯讀 · 由節點抽屜維護'),
       row(15,'連結點程序書',linksHtml||'—'),
       row(16,'公告日期',`<span class="mono">${doc.date}</span>`)
