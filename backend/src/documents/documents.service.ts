@@ -28,6 +28,7 @@ import { classifyFields } from './document-field-write';
 import { normalizeIdList } from './document-org-fields';
 import { isUniqueConstraintViolation } from './db-error';
 import { normalizeReason } from './status-reason';
+import { assertLifecycleSelectable } from './lifecycle-selection';
 import {
   DOCUMENT_LINK_STORE,
   DocumentLinkStore,
@@ -115,6 +116,10 @@ export class DocumentsService {
     if (missing.length > 0) {
       throw new BadRequestException('DOCUMENT_REQUIRED_FIELD_MISSING');
     }
+
+    // 2b) F040 循環選取有效性（INV-4）。刻意置於既有必填檢查**之後**——`lifecycleId` 缺漏歸
+    //     DOCUMENT_REQUIRED_FIELD_MISSING（AC-24，既有行為不變更），非本碼。
+    await this.assertLifecycleSelection(clean.lifecycleId);
 
     // 3) F012 狀態合法。
     const status = clean.status as string;
@@ -405,6 +410,12 @@ export class DocumentsService {
       throw new BadRequestException('DOCUMENT_REQUIRED_FIELD_MISSING');
     }
 
+    // 2b) F040 循環選取有效性（AC-26）。三態語意：patch 未帶 lifecycleId ＝不修改該欄位 → **跳過**本判定
+    //     （既有文件即使指向髒資料之 null 列，只要本次未動該欄位就不得被擋）。
+    if ('lifecycleId' in clean) {
+      await this.assertLifecycleSelection(clean.lifecycleId);
+    }
+
     // 3) F012 狀態合法（僅當 patch 含 status）。
     if ('status' in clean && !isValidStatus(clean.status as string)) {
       throw new BadRequestException('DOCUMENT_STATUS_INVALID');
@@ -495,6 +506,18 @@ export class DocumentsService {
     });
 
     return { document: updated, changes };
+  }
+
+  /**
+   * F040 循環選取有效性守門（INV-4／AC-25）。
+   * 空值／非字串 → 交由既有必填檢查處置（AC-24），本處不裁決；
+   * store 未提供 listLifecycleIdentities（選用 seam）→ 視為無池資料而略過，不誤擋既有流程。
+   */
+  private async assertLifecycleSelection(lifecycleId: unknown): Promise<void> {
+    if (typeof lifecycleId !== 'string' || lifecycleId === '') return;
+    const pool = await this.store.listLifecycleIdentities?.();
+    if (!pool) return;
+    assertLifecycleSelectable(lifecycleId, pool);
   }
 
   /** 覆寫式持久化（不留歷史）＋併發 DB 唯一鍵違反 → 映射 409（不洩漏原始 DB 訊息）。 */

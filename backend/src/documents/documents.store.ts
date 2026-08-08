@@ -1,6 +1,7 @@
 import { NumberHolder } from './document-rules';
 import { DocumentStatus } from './document-status';
 import { DocumentLinkView } from './document-link.store';
+import { LifecycleIdentity } from '../lifecycle/lifecycle-subcategory';
 
 /** 文件資料存取邊界（可注入 mock/TypeORM）。E04-1 僅需建立與編號唯一性查詢。 */
 export const DOCUMENT_STORE = Symbol('DOCUMENT_STORE');
@@ -157,4 +158,10 @@ export interface DocumentStore {
   updateStatus(id: string, status: DocumentStatus): Promise<void>;
   /** F011 編輯：以 patch 覆寫（不留歷史、UUID 不變）；回傳覆寫後之完整檢視。 */
   update(id: string, patch: DocumentPatch): Promise<DocumentView>;
+  /**
+   * F040 循環選取有效性（INV-4）之池來源：全部 LIFECYCLE 列之最小身分（不分 status）。
+   * **選用成員**——既有 store 實作／測試 fake 不受影響；未提供時服務層視為無池資料而略過判定，
+   * 不得因此誤擋既有流程。
+   */
+  listLifecycleIdentities?(): Promise<LifecycleIdentity[]>;
 }

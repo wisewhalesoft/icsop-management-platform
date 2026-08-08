@@ -9,6 +9,7 @@ import { DocUsageForm } from '../database/entities/doc-usage-form.entity';
 import { UsageFormPool } from '../database/entities/usage-form-pool.entity';
 import { DocumentLinkEntity } from '../database/entities/document-link.entity';
 import { DocumentStatus } from '../documents/document-status';
+import { lifecycleDisplayName } from '../lifecycle/lifecycle-subcategory';
 import { PublicDocItem } from './public-list';
 import { PublicDocDetail, PublicDocumentStore } from './public-documents.store';
 
@@ -63,11 +64,13 @@ export class TypeOrmPublicDocumentStore implements PublicDocumentStore {
 
     const lcIds = [...new Set(docs.map((d) => d.lifecycleId))];
     const lcs = lcIds.length
-      ? await ds
-          .getRepository(Lifecycle)
-          .find({ where: { id: In(lcIds) }, select: { id: true, name: true } })
+      ? await ds.getRepository(Lifecycle).find({
+          where: { id: In(lcIds) },
+          select: { id: true, name: true, subcategory: true },
+        })
       : [];
-    const nameMap = new Map(lcs.map((l) => [l.id, l.name]));
+    // F040 AC-S1（F019）：前台顯示字串與後台完全一致，一律經 lifecycleDisplayName。
+    const nameMap = new Map(lcs.map((l) => [l.id, lifecycleDisplayName(l)]));
 
     const docIds = docs.map((d) => d.id);
     const deptRows = docIds.length
@@ -103,7 +106,10 @@ export class TypeOrmPublicDocumentStore implements PublicDocumentStore {
 
     const lc = await ds
       .getRepository(Lifecycle)
-      .findOne({ where: { id: d.lifecycleId }, select: { id: true, name: true } });
+      .findOne({
+        where: { id: d.lifecycleId },
+        select: { id: true, name: true, subcategory: true },
+      });
     const node = d.nodeId
       ? await ds
           .getRepository(LifecycleNode)
@@ -147,7 +153,8 @@ export class TypeOrmPublicDocumentStore implements PublicDocumentStore {
       documentNumber: d.documentNumber,
       documentName: d.documentName,
       lifecycleId: d.lifecycleId,
-      lifecycleName: lc?.name ?? null,
+      // F040 AC-S1（F019）：詳情之循環別亦為顯示名稱（含子分類）。
+      lifecycleName: lc ? lifecycleDisplayName(lc) : null,
       nodeId: d.nodeId,
       nodeName: node?.name ?? null,
       draftingCompanyId: d.draftingCompanyId,

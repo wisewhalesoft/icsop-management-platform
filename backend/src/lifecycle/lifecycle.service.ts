@@ -14,6 +14,13 @@ import {
   LifecycleView,
   LifecycleStatus,
 } from './lifecycle.store';
+import {
+  LifecycleIdentity,
+  LifecycleUniquenessViolation,
+  checkLifecycleUniqueness,
+  lifecycleDisplayName,
+  normalizeSubcategory,
+} from './lifecycle-subcategory';
 
 /** 刪除稽核之操作者身分快照（來自 request context SessionUser；F007 Main Flow 4）。 */
 export interface LifecycleAuditActor {
@@ -47,26 +54,70 @@ export class LifecycleService {
     return items;
   }
 
+  /**
+   * F040 唯一性守門：以全池（含 `inactive`，AC-20）判定 INV-1／INV-2，違反即拋出對應 HttpException，
+   * **不呼叫 store.create／store.update**（池筆數不變）。驗證順序固定 ①②③（見 lifecycle-subcategory.ts）。
+   */
+  private async assertUniqueness(candidate: {
+    id?: string | null;
+    name: string;
+    subcategory?: string | null;
+  }): Promise<void> {
+    const pool: LifecycleIdentity[] = (await this.store.list()).map((l) => ({
+      id: l.id,
+      name: l.name,
+      subcategory: l.subcategory ?? null,
+    }));
+    const violation = checkLifecycleUniqueness(candidate, pool);
+    if (violation) throw LifecycleService.toHttpError(violation);
+  }
+
+  /** 違反碼 → Nest 例外（400 BadRequest／409 Conflict）。 */
+  private static toHttpError(v: LifecycleUniquenessViolation): Error {
+    return v.status === 400
+      ? new BadRequestException(v.code)
+      : new ConflictException(v.code);
+  }
+
   async createLifecycle(input: {
     name: string;
+    subcategory?: string | null;
     description?: string | null;
   }): Promise<LifecycleView> {
     const name = (input.name ?? '').trim();
+    // ① 名稱必填（既有行為；提前擋下可免去對池之查詢）。
     if (name === '') throw new BadRequestException('LIFECYCLE_NAME_REQUIRED');
-    return this.store.create({ name, description: input.description ?? null });
+    const subcategory = normalizeSubcategory(input.subcategory);
+    // ②③ F040 唯一性（INV-1／INV-2）。
+    await this.assertUniqueness({ name, subcategory });
+    return this.store.create({ name, subcategory, description: input.description ?? null });
   }
 
   async updateLifecycle(
     id: string,
-    patch: { name?: string; description?: string | null },
+    patch: { name?: string; subcategory?: string | null; description?: string | null },
   ): Promise<LifecycleView> {
     const existing = await this.store.findById(id);
     if (!existing) throw new NotFoundException('LIFECYCLE_NOT_FOUND');
     if (patch.name !== undefined && patch.name.trim() === '') {
       throw new BadRequestException('LIFECYCLE_NAME_REQUIRED');
     }
+    // F040：僅當 patch 觸及身分欄位（名稱／子分類）時重驗唯一性；比對「套用 patch 後之結果」並排除自身列。
+    const subcategoryTouched = patch.subcategory !== undefined;
+    const nextSubcategory = subcategoryTouched
+      ? normalizeSubcategory(patch.subcategory)
+      : normalizeSubcategory(existing.subcategory);
+    if (patch.name !== undefined || subcategoryTouched) {
+      await this.assertUniqueness({
+        id,
+        name: patch.name !== undefined ? patch.name.trim() : existing.name,
+        subcategory: nextSubcategory,
+      });
+    }
     return this.store.update(id, {
       ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+      // 三態：未帶鍵＝不修改；帶鍵（含 null／空白字串）＝設定為正規化後之值。
+      ...(subcategoryTouched ? { subcategory: nextSubcategory } : {}),
       ...(patch.description !== undefined ? { description: patch.description } : {}),
     });
   }
@@ -98,6 +149,8 @@ export class LifecycleService {
     actor?: LifecycleAuditActor,
   ): Promise<void> {
     if (!this.auditWriter || !actor) return;
+    // F040 AC-30／AC-35：名稱快照一律經 lifecycleDisplayName（含子分類），使歷史事件可唯一辨識所屬循環。
+    const displayName = lifecycleDisplayName(deleted);
     try {
       await this.auditWriter.recordAccess({
         targetType: 'LIFECYCLE',
@@ -107,8 +160,8 @@ export class LifecycleService {
         actorName: actor.actorName ?? null,
         employeeNo: actor.employeeNo ?? null,
         roleCode: actor.roleCode ?? null,
-        targetNumber: deleted.name,
-        targetName: deleted.name,
+        targetNumber: displayName,
+        targetName: displayName,
         occurredAt: this.clock(),
       });
     } catch (err) {

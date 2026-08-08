@@ -2,6 +2,7 @@ import { DataSource, In } from 'typeorm';
 import { IcsopDocument } from '../database/entities/icsop-document.entity';
 import { Lifecycle } from '../database/entities/lifecycle.entity';
 import { DocSourceXls } from '../database/entities/doc-source-xls.entity';
+import { lifecycleDisplayName } from '../lifecycle/lifecycle-subcategory';
 
 /**
  * G-ADM-028/034 索引總覽/預覽之文件層讀取（唯讀）。ingestion 模組其餘為 Fake/unit-only，此二函式
@@ -29,10 +30,12 @@ export async function resolveLifecycleNames(
   if (keys.length === 0) return new Map();
   try {
     if (!ds.isInitialized) await ds.initialize();
-    const rows = await ds
-      .getRepository(Lifecycle)
-      .find({ where: { id: In(keys) }, select: { id: true, name: true } });
-    return new Map(rows.map((r) => [r.id, r.name]));
+    const rows = await ds.getRepository(Lifecycle).find({
+      where: { id: In(keys) },
+      select: { id: true, name: true, subcategory: true },
+    });
+    // F040 AC-30：呈現循環名稱之路徑一律經 lifecycleDisplayName（含子分類）。
+    return new Map(rows.map((r) => [r.id, lifecycleDisplayName(r)]));
   } catch {
     return new Map();
   }

@@ -22,6 +22,8 @@ export class TypeOrmLifecycleStore implements LifecycleStore {
     return {
       id: l.id,
       name: l.name,
+      // F040：欄位未加前之既有列讀出為 undefined → 一律收斂為 null（INV-3 之讀取端保險）。
+      subcategory: l.subcategory ?? null,
       description: l.description,
       status: l.status as LifecycleStatus,
       nodeCount,
@@ -64,6 +66,7 @@ export class TypeOrmLifecycleStore implements LifecycleStore {
     const saved = await repo.save(
       repo.create({
         name: input.name,
+        subcategory: input.subcategory ?? null,
         description: input.description,
         status: 'active',
         createdAt: now,

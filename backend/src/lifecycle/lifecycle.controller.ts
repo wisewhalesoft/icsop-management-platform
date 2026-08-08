@@ -45,9 +45,13 @@ export class LifecycleController {
 
   @Post()
   @RequirePermission(FunctionKey.LIFECYCLE_MANAGEMENT, 'write')
-  create(@Body() body: { name?: string; description?: string | null }) {
+  create(
+    @Body() body: { name?: string; subcategory?: string | null; description?: string | null },
+  ) {
     return this.svc.createLifecycle({
       name: body?.name ?? '',
+      // F040：未帶鍵／空白 → 服務層 normalizeSubcategory 收斂為 null。
+      subcategory: body?.subcategory,
       description: body?.description ?? null,
     });
   }
@@ -56,8 +60,9 @@ export class LifecycleController {
   @RequirePermission(FunctionKey.LIFECYCLE_MANAGEMENT, 'write')
   update(
     @Param('id') id: string,
-    @Body() body: { name?: string; description?: string | null },
+    @Body() body: { name?: string; subcategory?: string | null; description?: string | null },
   ) {
+    // F040 三態：body 未帶 subcategory 鍵＝不修改；帶 null／空白＝清空。
     return this.svc.updateLifecycle(id, body ?? {});
   }
 

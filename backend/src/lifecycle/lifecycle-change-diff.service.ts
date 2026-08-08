@@ -4,6 +4,7 @@ import { WatermarkSession } from '../public/watermark.service';
 import { PdfBurner } from '../public/pdf-burner';
 import { DagGraph } from './dag.store';
 import { LifecycleStore } from './lifecycle.store';
+import { lifecycleDisplayName } from './lifecycle-subcategory';
 import { LifecycleWatermarkBuilder } from './lifecycle-watermark';
 import { LifecycleChangeHistoryPdfRenderer } from './lifecycle-change-history-pdf';
 import { buildTreeLayout, TreeLayout } from './lifecycle-tree-layout';
@@ -115,7 +116,8 @@ export class LifecycleChangeDiffService {
 
   private async resolveLifecycle(lifecycleId: string): Promise<{ id: string; name: string }> {
     const lc = await this.lifecycles.findById(lifecycleId);
-    return { id: lifecycleId, name: lc?.name ?? DELETED_LIFECYCLE_NAME };
+    // F040 AC-S2（F038）：標題與稽核快照皆為顯示名稱（含子分類）；循環已刪除者維持既有佔位字串。
+    return { id: lifecycleId, name: lc ? lifecycleDisplayName(lc) : DELETED_LIFECYCLE_NAME };
   }
 
   private async audit(

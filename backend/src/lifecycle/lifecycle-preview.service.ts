@@ -4,6 +4,7 @@ import { WatermarkSession } from '../public/watermark.service';
 import { PdfBurner } from '../public/pdf-burner';
 import { DagStore, DagGraph, NodeView, EdgeRow } from './dag.store';
 import { LifecycleStore } from './lifecycle.store';
+import { lifecycleDisplayName } from './lifecycle-subcategory';
 import { LifecycleWatermarkBuilder } from './lifecycle-watermark';
 import { LifecycleTreePdfRenderer } from './lifecycle-tree-pdf';
 import { buildTreeLayout } from './lifecycle-tree-layout';
@@ -96,7 +97,8 @@ export class LifecycleTreePreviewService {
   ): Promise<{ id: string; name: string }> {
     const lc = await this.lifecycles.findById(lifecycleId);
     if (!lc) throw new NotFoundException('LIFECYCLE_NOT_FOUND');
-    return { id: lc.id, name: lc.name };
+    // F040 AC-S1／AC-S2（F036）：頁首標題與 AUDIT_LOG.lifecycleName 快照皆為顯示名稱（含子分類）。
+    return { id: lc.id, name: lifecycleDisplayName(lc) };
   }
 
   private async loadGraph(lifecycleId: string): Promise<DagGraph> {

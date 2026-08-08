@@ -9,6 +9,10 @@ import { NumberHolder } from './document-rules';
 import { DocumentStatus, isValidStatus } from './document-status';
 import { DEFAULT_PAGE_SIZE } from './document-list-query';
 import {
+  LifecycleIdentity,
+  lifecycleDisplayName,
+} from '../lifecycle/lifecycle-subcategory';
+import {
   DocumentStore,
   CreateDocumentInput,
   DocumentPatch,
@@ -214,12 +218,16 @@ export class TypeOrmDocumentStore implements DocumentStore {
 
     const [docs, total] = await qb.getManyAndCount();
 
-    // 循環名稱（單獨查詢並以 Map 併入，避免 N+1）
+    // 循環名稱（單獨查詢並以 Map 併入，避免 N+1）。
+    // F040 AC-S1／AC-30：顯示字串一律經 lifecycleDisplayName 組合（含子分類），前端不再自行串接。
     const lcIds = [...new Set(docs.map((d) => d.lifecycleId))];
     const lcs = lcIds.length
-      ? await ds.getRepository(Lifecycle).find({ where: { id: In(lcIds) }, select: { id: true, name: true } })
+      ? await ds.getRepository(Lifecycle).find({
+          where: { id: In(lcIds) },
+          select: { id: true, name: true, subcategory: true },
+        })
       : [];
-    const nameMap = new Map(lcs.map((l) => [l.id, l.name]));
+    const nameMap = new Map(lcs.map((l) => [l.id, lifecycleDisplayName(l)]));
 
     const items: DocumentListItem[] = docs.map((d) => ({
       id: d.id,
@@ -258,6 +266,18 @@ export class TypeOrmDocumentStore implements DocumentStore {
     if (!d) return null;
     const mv = await TypeOrmDocumentStore.loadMultiValue(ds, id);
     return TypeOrmDocumentStore.toView(d, mv.secondaryChiefIds, mv.usingDeptIds);
+  }
+
+  /**
+   * F040 循環選取有效性（INV-4）之池來源：全部 LIFECYCLE 列（**不分 status**，AC-20／AC-25）。
+   * 僅取三欄（id/name/subcategory），列數為循環池規模（十數列），無分頁必要。
+   */
+  async listLifecycleIdentities(): Promise<LifecycleIdentity[]> {
+    const ds = await this.init();
+    const rows = await ds
+      .getRepository(Lifecycle)
+      .find({ select: { id: true, name: true, subcategory: true } });
+    return rows.map((l) => ({ id: l.id, name: l.name, subcategory: l.subcategory ?? null }));
   }
 
   /** F017 清單富化：批次取連結目標之摘要。⚠ MSSQL 2100 參數上限 → 單欄 IN 切批（每批 ≤1000）。 */

@@ -6,6 +6,12 @@ export type LifecycleStatus = 'active' | 'inactive';
 export interface LifecycleView {
   id: string;
   name: string;
+  /**
+   * F040 子分類（非必填）。無值恆為 `null`（不得為空字串，INV-3）。
+   * 循環之業務身分＝`(name, subcategory)` 組合；顯示一律經 `lifecycleDisplayName`。
+   * 選填宣告以免既有 fixture／呼叫端需大改（缺鍵＝無子分類）。
+   */
+  subcategory?: string | null;
   description: string | null;
   status: LifecycleStatus;
   nodeCount: number;
@@ -16,11 +22,18 @@ export interface LifecycleView {
 
 export interface CreateLifecycleInput {
   name: string;
+  /** F040 子分類；服務層以 normalizeSubcategory 正規化後傳入（無值＝`null`）。 */
+  subcategory?: string | null;
   description: string | null;
 }
 
 export interface UpdateLifecyclePatch {
   name?: string;
+  /**
+   * F040 子分類（**三態**）：`undefined`＝不修改該欄位、`null`＝清空、字串＝設定。
+   * 服務層已於此前正規化（空白字串 → `null`）。
+   */
+  subcategory?: string | null;
   description?: string | null;
   status?: LifecycleStatus;
 }
