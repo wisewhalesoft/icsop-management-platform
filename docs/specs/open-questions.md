@@ -1,8 +1,8 @@
 ---
 spec-id: open-questions
 title: 待釐清事項、風險與假設
-version: 1.3
-date: 2026-08-07
+version: 1.4
+date: 2026-08-08
 status: Draft
 ---
 
@@ -14,6 +14,7 @@ status: Draft
 > **2026-08-07 E03 循環子分類（[F040](features/F040-lifecycle-subcategory.md)）**：`OQ-E03-10`（唯一性比對是否涵蓋停用循環）**已於同日人類閘門定案 ✅＝涵蓋全部列、不分 `status`**；僅餘 `OQ-E03-11`（`subcategory` 長度上限與是否需專屬錯誤碼，現採 `nvarchar(100)` 同 `name`）為 `[CLARIFY]`，**不阻塞實作**。
 > **⚠ 以下由使用者於 2026-08-07 直接裁定，為已定案事項、不列為開放問題**：① `(name, subcategory)` 組合唯一 ＋ 同名之「無子分類 ↔ 有子分類」不得並存（雙向）；② ICSOP 文件編號第 2 段循環代碼**仍僅依循環名稱**推導、子分類不參與、既有九大循環代碼與既有文件編號不變；③ 影響範圍＝F007／F010／F011／F017／F019／F008／F009／F036／F038；④ 本輪設計深度＝spec-writer ＋ ui-ux-designer（additive 欄位，不跑 system-architect）。
 > **⚠ 人類閘門（2026-08-07）追加 4 項裁決，皆已落入 spec、不列為開放問題**：**裁決 1**＝**不新增 `lifecycleName` API payload 欄位**；缺 `lifecycleId` 維持既有 `DOCUMENT_REQUIRED_FIELD_MISSING`（不動 F010 既有行為與測試），`LIFECYCLE_SUBCATEGORY_REQUIRED` 之**後端唯一觸發**收斂為「所帶 `lifecycleId` 在其名稱下非合法唯一解」（INV-2 髒資料）。**裁決 2**＝OQ-E03-10 升為定案（見下表）。**裁決 3**＝示範子分類統一為 `消金`／`企金`／`子公司`，與 prototype 逐字一致。**裁決 4**＝F010 AC-S4 補字，明示 `lifecycleDisplayName` 選項屬**第二段**選擇器。
+> **⚠ 使用者 2026-08-08 追加裁決 5（規格↔schema 矛盾之收斂）**：實作階段揪出 F040 AC-34／F008 AC-S2／F038 AC-S2 所規範之 `LIFECYCLE_CHANGE_LOG.lifecycleName` **快照欄於 schema 中不存在**。裁定＝**修規格、不修 schema**：該表不存循環名稱，顯示時以 `lifecycleId` join `LIFECYCLE` 取**當前值**；**不新增欄位、不新增 migration**。**明確接受之代價＝循環改名／改子分類後舊事件將顯示新名稱、失去名稱快照語意**（與 F038 原意有落差）。已落入 F040 AC-34／AC-36、F008 AC-S2、F038 AC-S2、data-model 與 er-diagram；日後是否補欄之追溯見下表 **OQ-E07-11**（本輪否決，保留紀錄）。
 > 另，`LIFECYCLE` 既有同名重複列之盤點與清理**為「實作前置檢查」**（見 [data-model.md](data-model.md#lifecycle-unique-index-precheck)），非未決問題。
 > 每項標註分類：**[BLOCKING]** 進入精確估點/實作前須答；**[CLARIFY]** 可先以草案假設實作、待確認微調；**[RISK]** 風險與緩解。狀態未定者於 spec 中以 `[ASSUMPTION]` 標記草案值。
 
@@ -113,6 +114,7 @@ status: Draft
 | OQ-E07-08 | 「所屬節點」文件掛載/改派異動應呈現於 F037（ICSOP 程序書 tab）或 F038（循環樹狀圖 tab），或兩者交叉引用？ | [已定案 ✅] | F037, F038 | **定案**：**歸 F038（循環樹狀圖 tab）**（節點掛載脈絡更貼近循環結構）。**架構補充**：掛載/改派事件已定位於 `LIFECYCLE_CHANGE_LOG`（`entityType=MOUNT`），若日後決定於 F037 tab 交叉呈現，僅為 `ChangeHistoryModule` 查詢 API 之額外條件組合（`WHERE lifecycleId IN (該文件所屬循環) AND entityType=MOUNT AND entityId=該文件`），不需 schema 變更，純產品/UX 決策，不阻塞架構落地 |
 | OQ-E07-09 | 稽核紀錄寫入失敗時之補償/重試機制細節（佇列形式、重試次數/間隔、冪等保證） | [已定案 ✅] | F023, F034 | **定案（system-architect，已落入 architecture-spec §5.5「稽核寫入之失敗處理」）**：採 **DB-based Transactional Outbox**——同步嘗試寫入，失敗事件進 outbox，由背景排程（`@nestjs/schedule`）補償重試；**冪等鍵＝每筆 outbox 紀錄之唯一 `id`**，避免重複補寫。稽核寫入失敗**不阻斷**使用者瀏覽（NFR-003 AC）。明確**不引入** RabbitMQ/Kafka（architecture-spec §8.2：現有規模下 DB-based Outbox 已足夠，過早引入徒增維運面）。**2026-07-20 補列**（原僅存在於 E07 epic-brief，未被本紀錄追蹤） |
 | OQ-E07-10 | 是否需對「查詢稽核紀錄」這個行為本身也留下紀錄（meta-audit，稽核的稽核）？ | [已定案 ✅] | F024 | **定案**：**本輪不納入**（訪談未提出此需求；F024 調閱歷程查詢之存取已受 F025 角色矩陣限縮為僅 SysAdmin／ICSOPAdmin）。僅記錄供未來考量；若日後納入，屬 `AUDIT_LOG` 新增 `actionType`，不需 schema 變更。**2026-07-20 補列**（原僅存在於 E07 epic-brief，未被本紀錄追蹤） |
+| OQ-E07-11 | **是否要為 `LIFECYCLE_CHANGE_LOG` 補 `lifecycleName` 快照欄？**（原 spec 之 F040 AC-34／F008 AC-S2／F038 AC-S2 曾規範此欄之快照值，但實作 schema 從未有此欄——`backend/src/database/entities/lifecycle-change-log.entity.ts` 僅有 `lifecycleId`；2026-08-08 實作階段揪出此規格↔schema 矛盾） | **[本輪否決 ✅，保留追溯]**（2026-08-08 使用者裁定） | F040, F038, F008, F009, data-model#lifecyclechangelog-entity | **裁定：修規格、不修 schema——不新增欄位、不新增 migration。** `LIFECYCLE_CHANGE_LOG` 不存循環名稱，顯示時一律以 `lifecycleId` join `LIFECYCLE` 取**當前**之 `{ name, subcategory }` 再經 `lifecycleDisplayName` 組合。已落入 [F040](features/F040-lifecycle-subcategory.md) AC-34（改寫）／AC-36（適用範圍收斂為 `AUDIT_LOG`）、[F008](features/F008-dag-node-edge.md) AC-S2、[F038](features/F038-lifecycle-tree-change-history.md) AC-S2、[data-model](data-model.md#lifecyclechangelog-entity)（移除 `lifecycleName` 欄列並補說明）與 [er-diagram](diagrams/er-diagram.mmd)。<br>⚠ **明確接受之代價（不得隱藏）**：循環改名或改子分類後，**舊事件將顯示新名稱、失去名稱快照語意**，與 F038 原意之「歷史事件可唯一辨識所屬循環」有落差（`lifecycleId` 仍唯一辨識，人類可讀之歷史名稱不保證）；且與 `AUDIT_LOG.lifecycleName`（維持快照）語意不對稱。<br>**否決之理由**：本輪不為此付出新增欄位＋migration（該表為 append-only 且已對真 SOP DB 落地）之成本。<br>**日後若要改採快照語意之選項**：(a) `ALTER TABLE LIFECYCLE_CHANGE_LOG ADD lifecycleName nvarchar(200) NULL`＋寫入路徑（`LifecycleModule`）填 `lifecycleDisplayName`，既有列回填為當前值（回填值本身仍非真實歷史快照，須明示）；(b) 僅於**查詢層**保留現狀，改由 `LIFECYCLE_SNAPSHOT` 之 `nodesJson`／`edgesJson` 併存循環名稱；(c) 維持現狀，於 F038 UI 明示「循環名稱為當前值」。三者皆屬 additive，不阻塞現有實作 |
 
 ## E08 權限矩陣
 

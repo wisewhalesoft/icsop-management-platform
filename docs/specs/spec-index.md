@@ -1,9 +1,10 @@
 # Spec Index
 Product: ICSOP 文件管理平台 | Version: 1.5 | Status: Draft
-Last Updated: 2026-08-07
+Last Updated: 2026-08-08
 
 > 進入點：所有下游 agent 先讀本檔，再依 Agent Loading Guide 選擇性載入所需檔案。定案決策見各 feature；未定案見 [open-questions.md](open-questions.md)。
 > **🟢 2026-08-07 人類閘門已通過（含 4 項裁決）**：[F040 循環子分類](features/F040-lifecycle-subcategory.md) 及其於 F007／F010／F011／F017／F019／F008／F009／F036／F038 之 AC delta、data-model v1.4（`LIFECYCLE.subcategory`）、error-handling v1.2（3 個 `LIFECYCLE_*` 錯誤碼）**皆已核准，可進入實作**。四項裁決：① **不新增 `lifecycleName` API payload 欄位**——缺 `lifecycleId` 維持既有 `DOCUMENT_REQUIRED_FIELD_MISSING`，`LIFECYCLE_SUBCATEGORY_REQUIRED` 之後端唯一觸發收斂為「所帶 `lifecycleId` 在其名稱下非合法唯一解」；② OQ-E03-10 定案＝唯一性比對涵蓋全部列不分 `status`；③ 示範子分類統一為 `消金`／`企金`／`子公司`；④ F010 AC-S4 明示 `lifecycleDisplayName` 選項屬**第二段**選擇器。
+> **⚠ 2026-08-08 追加裁決 5（規格↔schema 矛盾收斂）**：`LIFECYCLE_CHANGE_LOG` **不新增** `lifecycleName` 快照欄、**不新增 migration**；該表之循環名稱改以 `lifecycleId` **join `LIFECYCLE` 取當前值**再經 `lifecycleDisplayName` 組合。已改寫 [F040](features/F040-lifecycle-subcategory.md) AC-34、收斂 AC-36 適用範圍為 `AUDIT_LOG`、同步 [F008](features/F008-dag-node-edge.md) AC-S2 與 [F038](features/F038-lifecycle-tree-change-history.md) AC-S2、[data-model](data-model.md#lifecyclechangelog-entity)（移除該欄列）與 [er-diagram](diagrams/er-diagram.mmd)。**明確接受之代價＝循環改名／改子分類後舊事件顯示新名稱、失去名稱快照語意**（`AUDIT_LOG.lifecycleName` 仍為快照）；追溯見 [open-questions.md](open-questions.md) OQ-E07-11。
 
 ## Features
 | ID | Name | Priority | Phase | Epic/Story | File |

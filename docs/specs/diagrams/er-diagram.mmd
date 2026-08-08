@@ -188,8 +188,7 @@ erDiagram
     }
     LIFECYCLE_CHANGE_LOG {
         uuid id PK "append-only"
-        uuid lifecycleId FK
-        string lifecycleName "快照"
+        uuid lifecycleId FK "不存名稱快照; 顯示時 join LIFECYCLE 取當前值(F040 AC-34)"
         string changeType "NODE_ADDED/NODE_REMOVED/EDGE_ADDED/EDGE_REMOVED/NODE_RENAMED/DOCUMENT_MOUNTED/DOCUMENT_REASSIGNED/DOCUMENT_UNMOUNTED"
         string entityType "NODE/EDGE/MOUNT"
         uuid entityId

@@ -42,7 +42,7 @@ ICSOP 管理員在循環 DAG 畫布上新增/刪除節點、以箭頭建立父�
 ### 循環子分類 delta（🟢 APPROVED 2026-08-07；規則權威＝[F040](F040-lifecycle-subcategory.md)）
 
 - **AC-S1**：Given 進入一個有子分類之循環的 DAG 畫布編輯頁, When 渲染頁首標題與麵包屑, Then 循環名稱顯示為 `lifecycleDisplayName` 之輸出（如 `銷售及收款循環（消金）· DAG 畫布`）；Given 該循環無子分類, Then 顯示為 `銷售及收款循環 · DAG 畫布`（不含括號）。畫布之節點/邊資料與防環邏輯**完全不受子分類影響**（DAG 恆屬單一 `lifecycleId`）。
-- **AC-S2**：Given 於該循環新增／刪除節點或連線, When 事件寫入 `LIFECYCLE_CHANGE_LOG`, Then 其 `lifecycleName` 快照值為 `lifecycleDisplayName` 之輸出（含子分類），使歷史事件可唯一辨識所屬循環（[F040](F040-lifecycle-subcategory.md) AC-34）。
+- **AC-S2**（**2026-08-08 使用者裁決 5 改寫**；原條文所指之 `LIFECYCLE_CHANGE_LOG.lifecycleName` 快照欄於 schema 中不存在）：Given 於該循環新增／刪除節點或連線, When 事件寫入 `LIFECYCLE_CHANGE_LOG`, Then **僅落 `lifecycleId`、不寫入任何循環名稱欄位**（本表無 `lifecycleName` 欄，**不新增欄位與 migration**）；When 於 [F038](F038-lifecycle-tree-change-history.md) 查詢或呈現該事件之循環名稱, Then 以 `lifecycleId` join `LIFECYCLE` 取**當前**之 `{ name, subcategory }` 並經 `lifecycleDisplayName` 組合（含子分類）（[F040](F040-lifecycle-subcategory.md) AC-34）。<br>⚠ **已接受之代價**：此為當前值而非快照——循環事後改名／改子分類，既有事件將顯示新名稱，不具名稱快照語意（`lifecycleId` 仍唯一辨識）。
 
 ## Error Scenarios
 - 成環/自環：見 [error-handling.md#dag](../error-handling.md#dag)（`DAG_CYCLE_DETECTED`, `DAG_SELF_LOOP`）。
@@ -50,7 +50,7 @@ ICSOP 管理員在循環 DAG 畫布上新增/刪除節點、以箭頭建立父�
 ## Related
 - Diagram: [../diagrams/F008-dag-cycle-prevention.mmd](../diagrams/F008-dag-cycle-prevention.mmd)
 - Data: [LIFECYCLE_NODE](../data-model.md#node-entity), [LIFECYCLE_EDGE](../data-model.md#edge-entity)
-- **循環子分類規則權威**: [F040](F040-lifecycle-subcategory.md)（標題顯示與 `LIFECYCLE_CHANGE_LOG.lifecycleName` 快照）
+- **循環子分類規則權威**: [F040](F040-lifecycle-subcategory.md)（標題顯示；`LIFECYCLE_CHANGE_LOG` 之循環名稱＝查詢時 join 取當前值，非快照，見 F040 AC-34）
 - Depends on: [F007](F007-lifecycle-pool-crud.md); Blocks: [F009](F009-node-drawer-maintenance.md), [F038](F038-lifecycle-tree-change-history.md)（結構變更事件來源）
 - Related: 連線樣式與 [F036](F036-lifecycle-tree-preview.md)／[F038](F038-lifecycle-tree-change-history.md) 一致（直角 elbow）
 - NFR: [效能（畫布 <200 節點）](../nfr.md#performance), [瀏覽器（桌機為主，平板不強制編輯）](../nfr.md#browser-rwd)

@@ -194,7 +194,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 
 - **比對範圍（已定案 ✅，2026-08-07 使用者裁定，OQ-E03-10）**：涵蓋**全部列、不分 `status`**（`active` 與 `inactive` 皆納入）。停用之循環仍存在於池中並被既有文件之 `lifecycleId` 參照，排除比對將產生兩筆語意相同之列；此語意與 DB 唯一索引一致，**不需篩選索引**。
 - 子分類值**可跨名稱重複**（`A（甲）` 與 `B（甲）` 併存合法）——唯一性是「組合」而非「子分類本身」。
-- **顯示名稱**一律由純函式 `lifecycleDisplayName({ name, subcategory })` 組合：有子分類 → `名稱（子分類）`（**全形括號、前後無空白**）；無 → `名稱`。清單、下拉、頁面標題、`LIFECYCLE_CHANGE_LOG.lifecycleName`／`AUDIT_LOG.lifecycleName` 之快照值皆用此輸出（F040 AC-30／AC-34／AC-35）。
+- **顯示名稱**一律由純函式 `lifecycleDisplayName({ name, subcategory })` 組合：有子分類 → `名稱（子分類）`（**全形括號、前後無空白**）；無 → `名稱`。清單、下拉、頁面標題、`AUDIT_LOG.lifecycleName` 之快照值皆用此輸出（F040 AC-30／AC-35）；[LIFECYCLE_CHANGE_LOG](#lifecyclechangelog-entity) **不存**循環名稱，其顯示為查詢時 join 本表取**當前值**後再經此函式組合（**非快照**，F040 AC-34）。
 - **文件編號不受影響**：ICSOP 文件編號第 2 段之循環代碼（`SRC`／`PUC`／…）**僅依 `name` 查表推導**，`subcategory` 不參與、不改變既有九大循環代碼與任何既有文件編號（F040 AC-28／AC-29，已定案）。
 
 #### MSSQL 唯一索引與 NULL 之處理（實作前置檢查，非開放問題） {#lifecycle-unique-index-precheck}
@@ -453,8 +453,7 @@ ICSOP 文件欄位層變更事件，一次儲存中每個實際變更之欄位�
 | 屬性 | 說明 | 必填 |
 |------|------|------|
 | id | 系統 UUID | 是 |
-| lifecycleId | 所屬循環（→ LIFECYCLE） | 是 |
-| lifecycleName | 循環名稱快照 | 是 |
+| lifecycleId | 所屬循環（→ LIFECYCLE）。**本表不存循環名稱**，顯示時 join 取當前值（見下方說明） | 是 |
 | changeType | `NODE_ADDED` / `NODE_REMOVED` / `EDGE_ADDED` / `EDGE_REMOVED` / `NODE_RENAMED` / `DOCUMENT_MOUNTED` / `DOCUMENT_REASSIGNED` / `DOCUMENT_UNMOUNTED` | 是 |
 | entityType | `NODE` / `EDGE` / `MOUNT` | 是 |
 | entityId | 受影響節點/邊 ID，或掛載關係之文件 ID（`entityType=MOUNT`） | 是 |
@@ -466,6 +465,9 @@ ICSOP 文件欄位層變更事件，一次儲存中每個實際變更之欄位�
 
 - **唯一寫入路徑**：`LifecycleModule`（F008 新增/刪除節點/邊、F009 節點改名/掛載改派），於自身既有交易內同步寫入本表＋對應快照，不經 Outbox（見 architecture-spec.md §5.9 交易一致性）。
 - **重建「變更前」狀態**：取同 `lifecycleId`、`changedAt` 早於本筆之最近一筆本表紀錄之 `snapshotId`；若無更早紀錄（該循環第一筆事件），視為空 DAG。
+- **循環名稱不落本表（2026-08-08 使用者裁定之取捨）**：本表**不存**任何循環名稱欄位（無 `lifecycleName`），僅存 `lifecycleId`；[F038](features/F038-lifecycle-tree-change-history.md) 事件清單、新舊樹狀圖標題與下載 PDF 之「循環別」一律以 `lifecycleId` **join [LIFECYCLE](#lifecycle-entity) 取當前之 `{ name, subcategory }`**，再經 `lifecycleDisplayName` 組合（含子分類，[F040](features/F040-lifecycle-subcategory.md) AC-34）。
+  - **已知代價（明列，非缺陷）**：此為**當前值**而非快照——循環於事件寫入後改名或改子分類，既有事件將顯示**新名稱**，**不具名稱快照語意**；與 F038 原意之「歷史事件可唯一辨識所屬循環」有落差（`lifecycleId` 仍唯一辨識，人類可讀名稱不保證）。使用者於 2026-08-08 裁定**不為此新增欄位與 migration**（原 spec 曾列 `lifecycleName` 欄，實作 schema 從未有此欄，本次以修規格收斂）。日後是否補快照欄，追溯見 [open-questions.md](open-questions.md) OQ-E07-11。
+  - **對照**：[AUDIT_LOG](#auditlog-entity) 之 `lifecycleName` **仍為快照**（寫入當下值，F040 AC-35／AC-36）；兩表語意不同，不得互相套用。
 - **相關功能**：F008、F009、F038。
 
 ### 循環結構快照 LIFECYCLE_SNAPSHOT {#lifecyclesnapshot-entity}

@@ -1,6 +1,17 @@
 # F040: 循環子分類（Lifecycle Subcategory）
-Priority: P0-MVP | Status: 🟢 APPROVED（2026-08-07 人類閘門通過，含 4 項裁決） | Last Updated: 2026-08-07
+Priority: P0-MVP | Status: 規格 🟢 APPROVED（2026-08-07 人類閘門通過含 4 項裁決；2026-08-08 追加裁決 5） · 實作 🟡 部分（2026-08-08） | Last Updated: 2026-08-08
+
 Epic/Story: E03 / 需求來源＝使用者口述（2026-08-07），尚無對應 US 檔
+
+> **實作狀態（2026-08-08）**：核心全數落地並經四道機器閘門驗證（backend 116 suites／1440 tests、frontend 48 files／664 tests、兩側 tsc exit 0），
+> migration `LifecycleSubcategory1723680000000` 已對真 SOP DB 實跑 COMMIT（前置盤點重複列 0 筆、唯一索引語意實測通過）。
+> **標 🟡 而非 ✅**：本輪採簡易版 ring（僅 jest/vitest，跳過 Playwright fidelity／Stryker／dep-cruiser），
+> 6 條 AC-S delta 無測試覆蓋（F008-S1、F009-S1、F019-S1/S2、F036-S1/S3、F038-S1），
+> 且其中 4 條經查核為**尚未實作**（F008-S1、F009-S1、F036-S1 之切換器選項、F038-S1）；
+> 另 AC-34／F008-S2／F038-S2 原所指之 `LIFECYCLE_CHANGE_LOG.lifecycleName` 快照欄於現行 schema **不存在**（規格↔schema 落差），
+> 已由**使用者 2026-08-08 裁決 5** 定案：**修規格、不修 schema**——該表不存循環名稱，顯示時以 `lifecycleId` join `LIFECYCLE` 取當前值；
+> 已明確接受之代價＝**舊事件失去名稱快照語意**（見 AC-34 與 [open-questions.md](../open-questions.md) OQ-E07-11）。
+> 詳見 [feature-status.md](../feature-status.md) F040 列與 [implementation-log/F040-impl.md](../implementation-log/F040-impl.md)。
 
 > **本檔為「循環子分類」之單一權威來源（single source of truth）。**
 > 凡涉及子分類之正規化、唯一性不變式、顯示名稱組合、選取有效性之規則，一律以本檔為準；
@@ -108,12 +119,14 @@ Epic/Story: E03 / 需求來源＝使用者口述（2026-08-07），尚無對應 
 | 建立／編輯文件之 payload 未帶 `lifecycleId` | 維持既有 400 `DOCUMENT_REQUIRED_FIELD_MISSING`（[F010](F010-create-document.md) 既有行為，**本次不變更**）；**不**回 `LIFECYCLE_SUBCATEGORY_REQUIRED`（AC-24） |
 | 子分類長度超過欄位上限 | 沿用 `name` 之既有處置機制，**本次不新增專屬錯誤碼**（見 OQ-E03-11） |
 | 既有文件之 `lifecycleId` 指向無子分類循環 | 完全有效，不需任何資料回填（AC-35） |
+| 循環於 DAG 結構變更事件寫入**之後**才改名或改子分類 | `LIFECYCLE_CHANGE_LOG` 之既有事件於 [F038](F038-lifecycle-tree-change-history.md) 顯示為**新名稱**（join 當前值，**非**快照，AC-34）；`AUDIT_LOG` 之既有調閱紀錄則維持舊快照值不變（AC-36）。此不一致為 2026-08-08 使用者裁定之已知取捨，非缺陷 |
 
 ## Postconditions
 
 - `LIFECYCLE` 表滿足 INV-1～INV-3；任一名稱之列集合形狀明確（單一無子分類列，或全為有子分類列）。
 - 任一 ICSOP 文件之「所屬循環」恆可唯一定位到一個具體循環（含子分類）。
 - 全站任何呈現循環名稱之處，字串皆由 `lifecycleDisplayName` 產生，前後台一致。
+- `LIFECYCLE_CHANGE_LOG` **不保存循環名稱**；其「循環別」之顯示為查詢時 join `LIFECYCLE` 之當前值（AC-34），**不具快照語意**——已明確接受之代價見 AC-34。`AUDIT_LOG.lifecycleName` 則維持快照語意（AC-35／AC-36）。
 - 既有循環（`subcategory = null`）與既有文件之行為與本次變更前**完全相同**。
 
 ## Acceptance Criteria
@@ -181,9 +194,12 @@ Epic/Story: E03 / 需求來源＝使用者口述（2026-08-07），尚無對應 
 
 ### I. 快照與稽核之可辨識性
 
-- **AC-34**：Given 對一個有子分類之循環執行 DAG 結構變更（[F008](F008-dag-node-edge.md)／[F009](F009-node-drawer-maintenance.md)），When 寫入 `LIFECYCLE_CHANGE_LOG`，Then 其 `lifecycleName` 快照值為 `lifecycleDisplayName` 之輸出（含子分類），使歷史事件可唯一辨識所屬循環。
+> **適用範圍之界線（2026-08-08 使用者裁決 5）**：**只有 `AUDIT_LOG` 具備循環名稱之快照語意**（AC-35／AC-36）。
+> `LIFECYCLE_CHANGE_LOG` **不存**循環名稱，其顯示為查詢時 join 所得之**當前值**（AC-34）。兩者不得混為一談。
+
+- **AC-34**（**2026-08-08 使用者裁決 5 改寫**；原條文所指之 `LIFECYCLE_CHANGE_LOG.lifecycleName` 欄位於 schema 中不存在）：Given 對一個有子分類之循環執行 DAG 結構變更（[F008](F008-dag-node-edge.md)／[F009](F009-node-drawer-maintenance.md)），When 寫入 `LIFECYCLE_CHANGE_LOG`，Then **僅落 `lifecycleId`，不寫入任何循環名稱欄位**（本表無 `lifecycleName` 欄，本次亦**不新增欄位、不新增 migration**）；When 查詢或呈現該事件之循環名稱，Then 以 `lifecycleId` join `LIFECYCLE` 取**當前**之 `{ name, subcategory }`，其顯示字串為 `lifecycleDisplayName` 之輸出（含子分類）。<br>⚠ **已明確接受之代價（不得隱藏）**：此為**當前值**而非快照值——循環於事件寫入後改名或改子分類，既有事件所顯示之循環名稱將**隨之變為新名稱**，**不具名稱快照語意**。此與 [F038](F038-lifecycle-tree-change-history.md) 原意之「歷史事件可唯一辨識所屬循環」有落差（`lifecycleId` 仍可唯一辨識該循環，但**人類可讀之歷史名稱不保證與事件發生當下相同**）。使用者於 2026-08-08 裁定**不為此新增欄位與 migration**；日後若要改採快照語意，見 [open-questions.md](../open-questions.md) OQ-E07-11。
 - **AC-35**：Given 對一個有子分類之循環執行 [F036](F036-lifecycle-tree-preview.md) 之檢視／下載／列印，When 寫入 `AUDIT_LOG`，Then 其 `lifecycleName` 快照值同為 `lifecycleDisplayName` 之輸出（含子分類）。
-- **AC-36**：Given 循環之 `subcategory` 於事件寫入後才被修改，When 查詢既有之 `LIFECYCLE_CHANGE_LOG`／`AUDIT_LOG` 紀錄，Then 其 `lifecycleName` 維持寫入當下之快照值不變（快照語意，比照既有 `documentNumber`／人員名稱快照慣例）。
+- **AC-36**（**2026-08-08 使用者裁決 5 收斂適用範圍**）：Given 循環之 `subcategory`（或 `name`）於事件寫入後才被修改，When 查詢既有之 **`AUDIT_LOG`** 紀錄，Then 其 `lifecycleName` 維持寫入當下之快照值不變（快照語意，比照既有 `documentNumber`／人員名稱快照慣例）。<br>⚠ **本條不適用於 `LIFECYCLE_CHANGE_LOG`**：該表不存循環名稱，其顯示恆為 join 所得之當前值（AC-34），故改名／改子分類後既有事件之顯示**會一併改變**。
 
 ## Error Scenarios
 
@@ -200,10 +216,10 @@ Epic/Story: E03 / 需求來源＝使用者口述（2026-08-07），尚無對應 
 ## Related
 
 - **Diagram**：[../diagrams/F040-lifecycle-subcategory.mmd](../diagrams/F040-lifecycle-subcategory.mmd)（建立／編輯之唯一性判定決策流）
-- **Data**：[LIFECYCLE](../data-model.md#lifecycle-entity)（`subcategory` 欄位與 INV-1～INV-3）、[ICSOP_DOCUMENT](../data-model.md#document-entity)（第 11 欄「所屬循環」）、[LIFECYCLE_CHANGE_LOG](../data-model.md#lifecyclechangelog-entity)、[AUDIT_LOG](../data-model.md#auditlog-entity)
+- **Data**：[LIFECYCLE](../data-model.md#lifecycle-entity)（`subcategory` 欄位與 INV-1～INV-3）、[ICSOP_DOCUMENT](../data-model.md#document-entity)（第 11 欄「所屬循環」）、[LIFECYCLE_CHANGE_LOG](../data-model.md#lifecyclechangelog-entity)（**不存**循環名稱，顯示時 join 取當前值，AC-34）、[AUDIT_LOG](../data-model.md#auditlog-entity)（`lifecycleName` 為快照，AC-35／AC-36）
 - **Owns（本檔為權威、以下僅加 delta）**：[F007](F007-lifecycle-pool-crud.md)、[F010](F010-create-document.md)、[F011](F011-edit-with-comparison.md)、[F017](F017-backend-document-list.md)、[F019](F019-public-list-browsing.md)、[F008](F008-dag-node-edge.md)、[F009](F009-node-drawer-maintenance.md)、[F036](F036-lifecycle-tree-preview.md)、[F038](F038-lifecycle-tree-change-history.md)
 - **不受影響（明確聲明）**：[F013](F013-document-number-uniqueness.md) 文件編號唯一性規則與比對範圍完全不變；`frontend/src/domain/cycle-codes.ts` 之查表鍵維持 `name`
 - **權限**：[F025](F025-role-function-matrix.md)「循環管理」列（不新增矩陣列，子分類為既有功能之欄位擴充）
 - **Prototype**：待 ui-ux-designer 傳播（10 循環清單／建立·編輯 modal、14／15 文件建立·編輯之兩段式循環選取、13／03 循環別篩選、11／12／22／23 標題顯示）
-- **已定案（使用者 2026-08-07 裁定，不再為開放問題）**：① `(name, subcategory)` 唯一 ＋ 同名「無子分類 ↔ 有子分類」不得並存（雙向）；② 文件編號循環代碼僅依名稱、不受子分類影響；③ 影響範圍＝上列 9 個 feature；④ 本輪設計深度＝spec-writer ＋ ui-ux-designer（additive 欄位，不跑 system-architect）
-- **未決（不阻塞實作）**：[open-questions.md](../open-questions.md) OQ-E03-10（唯一性比對是否涵蓋 `inactive`，現採「涵蓋」）、OQ-E03-11（`subcategory` 長度上限與是否需專屬錯誤碼，現採 `nvarchar(100)` 同 `name`）
+- **已定案（使用者裁定，不再為開放問題）**：① `(name, subcategory)` 唯一 ＋ 同名「無子分類 ↔ 有子分類」不得並存（雙向）；② 文件編號循環代碼僅依名稱、不受子分類影響；③ 影響範圍＝上列 9 個 feature；④ 本輪設計深度＝spec-writer ＋ ui-ux-designer（additive 欄位，不跑 system-architect）〔①～④ 為 2026-08-07 裁定〕；⑤ **（2026-08-08 裁定）`LIFECYCLE_CHANGE_LOG` 不新增 `lifecycleName` 快照欄、不新增 migration**——循環名稱改以 `lifecycleId` join `LIFECYCLE` 取當前值（AC-34 已改寫、AC-36 適用範圍收斂為 `AUDIT_LOG`、[F008](F008-dag-node-edge.md) AC-S2 與 [F038](F038-lifecycle-tree-change-history.md) AC-S2 同步改寫）；**明確接受之代價＝舊事件將顯示新名稱、失去名稱快照語意**
+- **未決（不阻塞實作）**：[open-questions.md](../open-questions.md) OQ-E03-10（唯一性比對是否涵蓋 `inactive`，現採「涵蓋」）、OQ-E03-11（`subcategory` 長度上限與是否需專屬錯誤碼，現採 `nvarchar(100)` 同 `name`）、**OQ-E07-11**（是否日後為 `LIFECYCLE_CHANGE_LOG` 補 `lifecycleName` 快照欄；本輪已否決，保留追溯）

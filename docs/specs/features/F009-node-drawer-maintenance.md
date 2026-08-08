@@ -45,7 +45,7 @@ Epic/Story: E03 / US-023, US-024
 
 ### 循環子分類 delta（🟢 APPROVED 2026-08-07；規則權威＝[F040](F040-lifecycle-subcategory.md)）
 
-- **AC-S1**：Given 於一個有子分類之循環開啟節點抽屜, When 渲染頁首與「僅顯示所屬循環＝… 之文件」之過濾提示, Then 循環名稱一律為 `lifecycleDisplayName` 之輸出（如 `銷售及收款循環（消金）`）；候選過濾之比對鍵仍為 `lifecycleId`（**非**名稱字串），故同名不同子分類之文件**不會**互相出現在對方候選清單中；掛載／改派事件寫入 `LIFECYCLE_CHANGE_LOG` 時，`lifecycleName` 快照同為該輸出（[F040](F040-lifecycle-subcategory.md) AC-34）。
+- **AC-S1**：Given 於一個有子分類之循環開啟節點抽屜, When 渲染頁首與「僅顯示所屬循環＝… 之文件」之過濾提示, Then 循環名稱一律為 `lifecycleDisplayName` 之輸出（如 `銷售及收款循環（消金）`）；候選過濾之比對鍵仍為 `lifecycleId`（**非**名稱字串），故同名不同子分類之文件**不會**互相出現在對方候選清單中；掛載／改派事件寫入 `LIFECYCLE_CHANGE_LOG` 時**僅落 `lifecycleId`**（本表不存循環名稱），其循環名稱於 [F038](F038-lifecycle-tree-change-history.md) 呈現時以 `lifecycleId` join `LIFECYCLE` 取**當前值**再經 `lifecycleDisplayName` 組合（**非快照**，[F040](F040-lifecycle-subcategory.md) AC-34，2026-08-08 使用者裁決 5）。
 
 ## Error Scenarios
 - 過濾/重複掛載/改派原子性：見 [error-handling.md#node-assign](../error-handling.md#node-assign)（`NODE_DOC_LIFECYCLE_MISMATCH`, `NODE_DOC_ALREADY_ASSIGNED`）。
