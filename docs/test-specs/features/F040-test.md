@@ -33,6 +33,18 @@
 | **FE-12** | `frontend/src/pages/PublicDocumentDetailPage.subcategory.test.tsx` | 元件 | prototype `04`：前台「循環別」列（F019 AC-S2） |
 | **BE-5** | `backend/test/int/f040-lifecycle-name.itest.ts` | **整合（真 SOP DB）** | 後端三處 `lifecycleName` 組裝：前台清單／前台詳情／後台清單（F019 AC-S1／AC-S2、F017 AC-S2、AC-30）。`npm run test:int` |
 
+| **BE-6** | `backend/test/int/f040-name-snapshot-vs-join.itest.ts` | **整合（真 SOP DB）** | 兩表**相反語意**：`AUDIT_LOG` 快照凍結（AC-35／AC-36）vs `LIFECYCLE_CHANGE_LOG` 無名稱欄、顯示 join 當前值（AC-34） |
+
+> **BE-6 為 2026-08-08 第四輪補入。** 它守的是一個**刻意的不一致**：同為歷史事件，
+> 一邊凍結、一邊跟著改名變動。正因刻意，日後極易被當成 bug「順手修正」，
+> 而純函式測不到跨時間之持久化行為。**兩個方向都斷言**——只驗 AUDIT_LOG 凍結的話，
+> 日後有人把 `LIFECYCLE_CHANGE_LOG` 也改成快照，本檔仍會綠，等於白寫。
+>
+> ⚠ 實作上踩到兩個坑，已寫入檔內註解：① `AUDIT_LOG.lifecycleId` 落庫為**大寫 GUID**，
+> 與建立端點回傳之 id 形態不同，以 id 比對會查不到而假紅 → 改以 `lifecycleName` 前綴比對；
+> ② 稽核為**非阻斷 outbox**，app 存活期間輪詢 60 秒仍查不到，**須先 `app.close()` 才落庫**，
+> 且順序不可調換（AC-36 之前提為「事件寫入**之後**才改名」）。
+>
 > **BE-5 為 2026-08-08 第三輪補入，用以真正閉合 G-F040-12。**
 > FE-6／FE-11／FE-12 之 `lifecycleName` fixture 由測試自行餵入，**等於把答案交給受測者**，
 > 故無法證明後端有以 `lifecycleDisplayName` 組合。BE-5 於**真庫**建立同名不同子分類之兩個循環，
@@ -135,7 +147,13 @@ F040 之選取語意改由 FE-4／FE-5 嚴格約束。
 | F038 | S1 | 變更歷程「循環別」查詢下拉值＝`lifecycleId`＋事件清單欄 | **FE-10** | ✅ |
 | F038 | S2 | 清單／預覽顯示取自快照值、事後改名不改寫 | BE-1（AC-36） | 🟡 |
 
-**合計：24 條 ✅、3 條 🟡 部分、1 條 ❌ 未覆蓋**（2026-08-08 第三輪，補入 int 測試後之數字；第一輪 17／4／7、第二輪 21／6／1）。
+**合計：27 條 ✅、0 條 🟡、1 條 ❌ 未覆蓋**（2026-08-08 第四輪；第一輪 17／4／7 → 第二輪 21／6／1 → 第三輪 24／3／1）。
+
+> 第四輪由 **BE-6** 補上 F008-S2／F036-S2／F038-S2：
+> - **F036-S2** ✅ 直接覆蓋（`AUDIT_LOG.lifecycleName` 快照值＝`lifecycleDisplayName` 輸出，且改子分類後不變）
+> - **F008-S2／F038-S2** ✅ 以**裁決後之修正語意**覆蓋——原文之「快照」clause 已由 2026-08-08 裁決 5 作廢；
+>   現行可驗內容＝`LIFECYCLE_CHANGE_LOG` 僅落 `lifecycleId`、無任何循環名稱欄（BE-6 結構守衛），
+>   顯示端 join 當前值（`ChangeHistoryPage.subcategory.test.tsx`）。
 
 明細：
 - ✅ 24＝F007 S1–S8（8）＋F010 S1–S5（5）＋F011 S1–S3（3）＋F017 S1（1）＋F008 S1＋F009 S1＋F036 S1＋F038 S1（4）＋**F017 S2＋F019 S1＋F019 S2（3，第三輪由 BE-5 int 測試閉合）**
