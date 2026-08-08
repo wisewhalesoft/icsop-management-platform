@@ -89,6 +89,20 @@ const renderPage = () =>
     </ToastProvider>,
   );
 
+/**
+ * F040：「所屬循環」第一段（名稱）之選項值為**名稱字串**、第二段（子分類）之值才是 lifecycleId
+ * （F011 AC-S1／F010 AC-S4）。本 helper 同時相容單段與兩段式兩種形狀；
+ * F040 之選取語意由 DocumentEditPage.subcategory.test.tsx 嚴格約束。
+ */
+async function selectLifecycle(lifecycleId: string): Promise<void> {
+  const sel = screen.getByLabelText(/所屬循環/) as HTMLSelectElement;
+  const values = Array.from(sel.options).map((o) => o.value);
+  const target = values.includes(lifecycleId)
+    ? lifecycleId
+    : LCS.find((l) => l.id === lifecycleId)!.name;
+  await userEvent.selectOptions(sel, target);
+}
+
 function setupMocks() {
   vi.mocked(endpoints.getDocument).mockResolvedValue(VIEW);
   vi.mocked(endpoints.getDocumentLinks).mockResolvedValue([]);
@@ -514,7 +528,7 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
       renderPage();
       await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
       // 改選 lc2（產品企劃循環 → PPC）。
-      await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc2');
+      await selectLifecycle('lc2');
       await userEvent.click(screen.getByRole('button', { name: '儲存' }));
       await waitFor(() =>
         expect(endpoints.updateDocument).toHaveBeenCalledWith(

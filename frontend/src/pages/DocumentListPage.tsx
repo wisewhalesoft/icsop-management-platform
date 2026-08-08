@@ -64,6 +64,21 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 const uniq = (a: (string | null)[]): string[] =>
   [...new Set(a.filter((x): x is string => !!x))];
 
+/**
+ * F017 AC-S2／F040 AC-31「循環別」篩選選項：value＝`lifecycleId`（**非**名稱字串，亦非循環代碼——
+ * 同名不同子分類之代碼相同、無法區分）、label＝後端已以 `lifecycleDisplayName` 組合之顯示名稱。
+ * 依列序去重，故同名不同子分類會產生兩個相異選項。
+ */
+const cycleFilterOptions = (rows: DocumentListItem[]): ComboOption[] => {
+  const byId = new Map<string, string>();
+  for (const d of rows) {
+    if (d.lifecycleId && !byId.has(d.lifecycleId)) {
+      byId.set(d.lifecycleId, d.lifecycleName ?? d.lifecycleId);
+    }
+  }
+  return [...byId].map(([value, label]) => ({ value, label }));
+};
+
 export function DocumentListPage(): JSX.Element {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -168,7 +183,7 @@ export function DocumentListPage(): JSX.Element {
       ...vals.map((v) => ({ value: v, label: v })),
     ];
     return {
-      cycle: opt(uniq(all.map((d) => d.lifecycleName))),
+      cycle: [{ value: '', label: '全部' }, ...cycleFilterOptions(all)],
       status: opt(['已公告', '進度中', '失效', '作廢']),
       num: opt(uniq(all.map((d) => d.documentNumber))),
       name: opt(uniq(all.map((d) => d.documentName))),
@@ -208,7 +223,8 @@ export function DocumentListPage(): JSX.Element {
   // 客端篩選 → 排序 → 分頁。
   const filtered = useMemo(() => {
     const rows = all.filter((d) => {
-      if (filters.cycle && d.lifecycleName !== filters.cycle) return false;
+      // F017 AC-S2：篩選鍵為 lifecycleId（非名稱），故同名不同子分類可分別篩選。
+      if (filters.cycle && d.lifecycleId !== filters.cycle) return false;
       if (filters.status && statusValue(d) !== filters.status) return false;
       if (filters.num && d.documentNumber !== filters.num) return false;
       if (filters.name && d.documentName !== filters.name) return false;
@@ -446,7 +462,10 @@ export function DocumentListPage(): JSX.Element {
                     <td className="px-3 py-3 text-slate-500 mono text-xs whitespace-nowrap">
                       {d.announcedDate ? formatDateTime(d.announcedDate).slice(0, 10) : '—'}
                     </td>
-                    <td className="px-3 py-3 text-slate-600 whitespace-nowrap">{d.lifecycleName ?? '—'}</td>
+                    {/* F017 AC-S1：lifecycleName 為後端已組合之顯示字串（含子分類），前端不再自行串接。 */}
+                    <td className="px-3 py-3 text-slate-600 whitespace-nowrap" data-cycle-cell="">
+                      {d.lifecycleName ?? '—'}
+                    </td>
                   </tr>
                 );
               })}

@@ -24,6 +24,14 @@ import {
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { cycleCodeOf } from '../domain/cycle-codes';
+import {
+  LifecycleIdentity,
+  lifecycleDisplayName,
+  lifecycleNameOptions,
+  normalizeSubcategory,
+  resolveLifecycleSelection,
+  subcategoriesOf,
+} from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, MultiSearchCombobox, type ComboOption } from '../components/SearchCombobox';
@@ -130,6 +138,10 @@ export function DocumentEditPage(): JSX.Element {
   const [orig, setOrig] = useState<Draft | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [lifecycles, setLifecycles] = useState<LifecycleView[]>([]);
+  // F040 兩段式選取之 UI 狀態：第一段＝循環名稱、第二段＝該子分類列之 lifecycleId。
+  const [lcNameSel, setLcNameSel] = useState('');
+  const [lcSubId, setLcSubId] = useState('');
+  const [subErr, setSubErr] = useState(false);
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
   const [existing, setExisting] = useState<DocumentListItem[]>([]);
   const [personResults, setPersonResults] = useState<ComboOption[]>([]);
@@ -317,11 +329,40 @@ export function DocumentEditPage(): JSX.Element {
     [draft, applyStatus],
   );
 
+  /**
+   * F040 兩段式「所屬循環」選取（F011 AC-S1～AC-S3；prototype 15 之 #lc_name／#lc_subWrap／#lc_sub）。
+   * 兩段皆為 UI 狀態；`draft.lifecycleId` 僅於解析出唯一循環時才更新，故「僅選名稱層」不會誤送出。
+   */
+  const lcPool = useMemo<LifecycleIdentity[]>(
+    () => lifecycles.map((l) => ({ id: l.id, name: l.name, subcategory: l.subcategory ?? null })),
+    [lifecycles],
+  );
+  const nameOptions = useMemo(() => lifecycleNameOptions(lcPool), [lcPool]);
+  const subOptions = useMemo(() => subcategoriesOf(lcNameSel, lcPool), [lcNameSel, lcPool]);
+  const selectedSub = useMemo(
+    () => normalizeSubcategory(lcPool.find((l) => l.id === lcSubId)?.subcategory),
+    [lcPool, lcSubId],
+  );
+  const lcSelection = useMemo(
+    () => resolveLifecycleSelection(lcNameSel, selectedSub, lcPool),
+    [lcNameSel, selectedSub, lcPool],
+  );
+
+  /** 載入（或儲存後重載）時由現值同步兩段式選取之初始狀態。 */
+  useEffect(() => {
+    const row = lcPool.find((l) => l.id === orig?.lifecycleId);
+    if (!row) return;
+    setLcNameSel(row.name);
+    setLcSubId(normalizeSubcategory(row.subcategory) !== null ? row.id : '');
+    setSubErr(false);
+  }, [lcPool, orig?.lifecycleId]);
+
   // ===== 編號：前綴（依循環代碼）＋後段序號；編輯側唯一性排除自身 =====
   const cycleName = useMemo(
     () => lifecycles.find((l) => l.id === draft?.lifecycleId)?.name,
     [lifecycles, draft?.lifecycleId],
   );
+  // AC-28：循環代碼僅依名稱推導，子分類不參與（同名三子分類代碼相同）。
   const code = cycleCodeOf(cycleName);
   const suffix = draft ? suffixOf(draft.documentNumber) : '';
   const onSuffixChange = useCallback(
@@ -343,6 +384,43 @@ export function DocumentEditPage(): JSX.Element {
       );
     },
     [lifecycles],
+  );
+
+  /**
+   * 第一段（名稱）變更：清空第二段；名稱底下無子分類者即刻解析為該筆 lifecycleId（AC-23），
+   * 有子分類者暫不更新 `draft.lifecycleId`（待選定第二段），故僅選名稱層無法送出（AC-S1）。
+   */
+  const onCycleNameChange = useCallback(
+    (name: string) => {
+      setLcNameSel(name);
+      setLcSubId('');
+      setSubErr(false);
+      const sel = resolveLifecycleSelection(name, null, lcPool);
+      if (sel.ok) onLifecycleChange(sel.lifecycleId);
+    },
+    [lcPool, onLifecycleChange],
+  );
+
+  /** 第二段（子分類）變更：值即為該具體循環之 lifecycleId（AC-31）。 */
+  const onCycleSubChange = useCallback(
+    (v: string) => {
+      setLcSubId(v);
+      setSubErr(false);
+      if (v) onLifecycleChange(v);
+    },
+    [onLifecycleChange],
+  );
+
+  /** 「還原」：連同兩段式選取狀態一併回到原值（否則名稱層會停在使用者改過的值）。 */
+  const revertLifecycle = useCallback(
+    (origId: string) => {
+      const row = lcPool.find((l) => l.id === origId);
+      setLcNameSel(row?.name ?? '');
+      setLcSubId(row && normalizeSubcategory(row.subcategory) !== null ? row.id : '');
+      setSubErr(false);
+      onLifecycleChange(origId);
+    },
+    [lcPool, onLifecycleChange],
   );
   const dupHit = useMemo(() => {
     if (!draft || !orig) return undefined;
@@ -405,8 +483,16 @@ export function DocumentEditPage(): JSX.Element {
   const save = useCallback(async () => {
     if (!draft || !orig || !canWrite) return;
     // 必填 4 核心。
+    setSubErr(false);
     if (!suffix.trim() || !draft.documentName.trim() || !draft.lifecycleId || !draft.status) {
       toast.error('必填欄位未填寫（循環別／文件狀態／程序書編號／書名）');
+      return;
+    }
+    // F011 AC-S1／AC-21：名稱底下設有子分類而未選到具體子分類 → 阻擋儲存，原文件資料完全不變。
+    if (!lcSelection.ok) {
+      setSubErr(true);
+      // prototype 15 之內嵌提示（行 519）與 toast（行 803）**共用同一句話**，為已裁決之設計，逐字保留。
+      toast.error('此循環名稱底下設有子分類，請選擇具體子分類後再送出');
       return;
     }
     if (dupHit) {
@@ -468,7 +554,7 @@ export function DocumentEditPage(): JSX.Element {
     } finally {
       setBusy(false);
     }
-  }, [draft, orig, canWrite, suffix, dupHit, changed, formsChanged, origForms, draftForms, appendicesChanged, draftAppendices, id, statusReason, toast]);
+  }, [draft, orig, canWrite, suffix, dupHit, lcSelection, changed, formsChanged, origForms, draftForms, appendicesChanged, draftAppendices, id, statusReason, toast]);
 
   const onUpload = useCallback(
     async (kind: 'pdf' | 'ojt', file: File | null) => {
@@ -757,11 +843,60 @@ export function DocumentEditPage(): JSX.Element {
           <Icon name="workflow" className="w-4 h-4 text-primary-600" />
           <h2 className="font-semibold text-slate-900">循環與節點歸屬</h2>
         </div>
-        <DiffRow inputId="edCycle" label="所屬循環（循環別）" required={canWrite} changed={changed('lifecycleId')} currentText={lifecycles.find((l) => l.id === orig.lifecycleId)?.name ?? orig.lifecycleId} onRevert={() => onLifecycleChange(orig.lifecycleId)} showRevert={canWrite && changed('lifecycleId')}>
-          <select id="edCycle" disabled={ro} value={draft.lifecycleId} onChange={(e) => onLifecycleChange(e.target.value)} className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white disabled:bg-slate-50">
-            {!lifecycles.some((l) => l.id === draft.lifecycleId) && <option value={draft.lifecycleId}>{draft.lifecycleId}</option>}
-            {lifecycles.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+        {/* F040 兩段式選取（prototype 15）：目前值與選項字串皆經 lifecycleDisplayName（AC-S2）。 */}
+        <DiffRow
+          inputId="lc_name"
+          label="所屬循環（循環別）"
+          required={canWrite}
+          changed={changed('lifecycleId')}
+          currentText={
+            lifecycleDisplayName(lifecycles.find((l) => l.id === orig.lifecycleId)) ||
+            orig.lifecycleId
+          }
+          onRevert={() => revertLifecycle(orig.lifecycleId)}
+          showRevert={canWrite && changed('lifecycleId')}
+        >
+          <select
+            id="lc_name"
+            aria-label="所屬循環－循環名稱"
+            disabled={ro}
+            value={lcNameSel}
+            onChange={(e) => onCycleNameChange(e.target.value)}
+            className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white disabled:bg-slate-50"
+          >
+            {!nameOptions.includes(lcNameSel) && <option value={lcNameSel}>{lcNameSel}</option>}
+            {nameOptions.map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
+          {/* 第二段採條件式渲染：名稱底下無子分類時不呈現（AC-23／AC-S3）。 */}
+          {subOptions.length > 0 && (
+            <div id="lc_subWrap" className="mt-2">
+              <select
+                id="lc_sub"
+                aria-label="所屬循環－子分類"
+                disabled={ro}
+                value={lcSubId}
+                onChange={(e) => onCycleSubChange(e.target.value)}
+                className={`w-full px-3 py-2 rounded-md border text-sm bg-white disabled:bg-slate-50 ${subErr ? 'border-red-500' : 'border-slate-300'}`}
+              >
+                <option value="">請選擇子分類</option>
+                {subOptions.map((l) => (
+                  <option key={l.id} value={l.id}>{lifecycleDisplayName(l)}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-400 mt-1">
+                此循環名稱底下設有子分類，須選到具體子分類才能定位唯一循環（各子分類為
+                <strong className="text-slate-500">彼此獨立的循環</strong>）。
+              </p>
+            </div>
+          )}
+          {subErr && (
+            <p id="lc_subErr" className="mt-1 text-xs text-red-600 flex items-start gap-1">
+              <Icon name="alert-circle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              <span>
+                此循環名稱底下設有子分類，請選擇具體子分類後再送出（LIFECYCLE_SUBCATEGORY_REQUIRED）
+              </span>
+            </p>
+          )}
         </DiffRow>
         {/* node readonly + jump */}
         <div className="grid grid-cols-12 gap-3 items-center py-3">

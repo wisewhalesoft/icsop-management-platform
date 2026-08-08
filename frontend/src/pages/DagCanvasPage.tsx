@@ -28,6 +28,7 @@ import {
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
+import { lifecycleDisplayName } from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
@@ -121,10 +122,15 @@ export function DagCanvasPage(): JSX.Element {
   }, [canRead, load]);
 
   // 反查循環名稱（清單端點；失敗不阻斷畫布）。
+  // F040 F008 AC-S1／F009 AC-S1：一律經 lifecycleDisplayName 組合（含子分類），
+  // 使同名不同子分類之畫布標題與節點抽屜過濾提示可彼此區分。本處亦為 NodeDrawer `cycleName` prop 之唯一來源。
   useEffect(() => {
     if (!canRead) return;
     getLifecycles()
-      .then((ls) => setCycleName(ls.find((l) => l.id === lifecycleId)?.name ?? null))
+      .then((ls) => {
+        const lc = ls.find((l) => l.id === lifecycleId);
+        setCycleName(lc ? lifecycleDisplayName(lc) : null);
+      })
       .catch(() => undefined);
   }, [canRead, lifecycleId]);
 
@@ -232,7 +238,12 @@ export function DagCanvasPage(): JSX.Element {
 
   return (
     <div className="space-y-3">
-      <PageHeader breadcrumb={['循環管理', 'DAG 畫布']} title={cycleName ? `${cycleName} · DAG 畫布` : 'DAG 畫布'}>
+      {/* prototype 11 行 65：標題節點掛 [data-lifecycle-title]，內容為「循環顯示名稱 · DAG 畫布」。 */}
+      <PageHeader
+        breadcrumb={['循環管理', 'DAG 畫布']}
+        title={cycleName ? `${cycleName} · DAG 畫布` : 'DAG 畫布'}
+        titleAttrs={{ 'data-lifecycle-title': '' }}
+      >
         {canWrite && (
           <>
             <button

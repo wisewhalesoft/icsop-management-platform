@@ -16,10 +16,17 @@ export const TopbarSlotsContext = createContext<TopbarSlots | null>(null);
 export function PageHeader({
   breadcrumb,
   title,
+  titleAttrs,
   children,
 }: {
   breadcrumb: string[];
   title: string;
+  /**
+   * 額外掛到**標題節點**之 data-* 屬性。
+   * F040：DAG 畫布以 `data-lifecycle-title` 標記「此標題含循環顯示名稱」（prototype 11 行 65）；
+   * 刻意採選用參數而非全頁一律加上——該掛鉤只對確實呈現循環名稱之頁面有意義。
+   */
+  titleAttrs?: Record<string, string>;
   children?: ReactNode;
 }): JSX.Element {
   const slots = useContext(TopbarSlotsContext);
@@ -34,7 +41,7 @@ export function PageHeader({
           </Fragment>
         ))}
       </div>
-      <div className="font-semibold text-slate-900 text-sm truncate">{title}</div>
+      <div className="font-semibold text-slate-900 text-sm truncate" {...titleAttrs}>{title}</div>
     </div>
   );
 

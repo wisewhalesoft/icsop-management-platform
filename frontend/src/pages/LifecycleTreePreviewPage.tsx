@@ -9,6 +9,7 @@ import {
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
+import { lifecycleDisplayName } from '../domain/lifecycle-subcategory';
 import { roleMeta } from '../domain/roles';
 import { Icon } from '../components/Icon';
 import {
@@ -186,9 +187,11 @@ export function LifecycleTreePreviewPage(): JSX.Element {
             {data && !cycles.some((c) => c.id === id) && (
               <option value={id}>{data.lifecycle.name}</option>
             )}
+            {/* F036 AC-S1：顯示＝lifecycleDisplayName（含子分類）、選項值維持 lifecycleId
+                （同名之消金／企金／子公司代碼皆為 SRC，代碼無法區分彼此）。 */}
             {cycles.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {lifecycleDisplayName(c)}
               </option>
             ))}
           </select>

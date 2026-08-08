@@ -253,7 +253,8 @@ export function NodeDrawer({
             <div className="flex items-start gap-1.5 text-xs text-slate-400 mb-2">
               <Icon name="filter" className="w-3.5 h-3.5 mt-0.5" />
               <span>
-                僅顯示所屬循環＝<span className="text-slate-600">{cycleName ?? '當前循環'}</span> 之文件（後端過濾，已排除其他循環 {excludedCount} 筆）。
+                {/* prototype 12 行 137：循環名稱掛 [data-lifecycle-title]，逐字呈現父層傳入之顯示名稱（含子分類），不自行截斷或改寫。 */}
+                僅顯示所屬循環＝<span className="text-slate-600" data-lifecycle-title="">{cycleName ?? '當前循環'}</span> 之文件（後端過濾，已排除其他循環 {excludedCount} 筆）。
               </span>
             </div>
             <div className="relative mb-2">

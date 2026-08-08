@@ -18,6 +18,14 @@ import {
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { cycleCodeOf } from '../domain/cycle-codes';
+import {
+  LifecycleIdentity,
+  lifecycleDisplayName,
+  lifecycleNameOptions,
+  normalizeSubcategory,
+  resolveLifecycleSelection,
+  subcategoriesOf,
+} from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, MultiSearchCombobox, type ComboOption } from '../components/SearchCombobox';
@@ -67,7 +75,14 @@ export function DocumentCreatePage(): JSX.Element {
 
   const [lifecycles, setLifecycles] = useState<LifecycleView[]>([]);
   const [existing, setExisting] = useState<DocumentListItem[]>([]);
-  const [lifecycleId, setLifecycleId] = useState('');
+  /**
+   * F040 兩段式「所屬循環」選取（純前端 UI 狀態；送出前解析為單一 lifecycleId）：
+   *  - cycleName＝第一段（名稱字串，不送往後端）
+   *  - cycleSubId＝第二段（該子分類列之 lifecycleId）
+   */
+  const [cycleName, setCycleName] = useState('');
+  const [cycleSubId, setCycleSubId] = useState('');
+  const [subErr, setSubErr] = useState(false);
   const [status, setStatus] = useState<DocumentStatus>('active');
   const [numberSuffix, setNumberSuffix] = useState('');
   const [documentName, setDocumentName] = useState('');
@@ -126,9 +141,26 @@ export function DocumentCreatePage(): JSX.Element {
       });
   }, [canWrite, toast]);
 
-  const selectedLc = lifecycles.find((l) => l.id === lifecycleId);
-  const code = cycleCodeOf(selectedLc?.name);
-  const gated = !lifecycleId;
+  // F040 選取池（LifecycleView → LifecycleIdentity；subcategory 缺鍵＝無子分類）。
+  const lcPool = useMemo<LifecycleIdentity[]>(
+    () => lifecycles.map((l) => ({ id: l.id, name: l.name, subcategory: l.subcategory ?? null })),
+    [lifecycles],
+  );
+  const nameOptions = useMemo(() => lifecycleNameOptions(lcPool), [lcPool]);
+  const subOptions = useMemo(() => subcategoriesOf(cycleName, lcPool), [cycleName, lcPool]);
+  // 目前選取之子分類字串（未選或無子分類層 → null）。
+  const selectedSub = useMemo(
+    () => normalizeSubcategory(lcPool.find((l) => l.id === cycleSubId)?.subcategory),
+    [lcPool, cycleSubId],
+  );
+  const selection = useMemo(
+    () => resolveLifecycleSelection(cycleName, selectedSub, lcPool),
+    [cycleName, selectedSub, lcPool],
+  );
+
+  // AC-28：循環代碼僅依**名稱**推導，子分類不參與；故名稱一選定即可帶入前綴並解除 gating。
+  const code = cycleCodeOf(cycleName);
+  const gated = !cycleName;
   const prefix = code ? `ICSOP-${code}-` : 'ICSOP-—-';
   const suffix = numberSuffix.trim();
   const fullNumber = suffix ? (code ? `ICSOP-${code}-${suffix}` : suffix) : '';
@@ -253,7 +285,10 @@ export function DocumentCreatePage(): JSX.Element {
   }, []);
 
   const reset = useCallback(() => {
-    setLifecycleId('');
+    // F040：兩段式選取一併清空（名稱層、子分類層與其錯誤提示）。
+    setCycleName('');
+    setCycleSubId('');
+    setSubErr(false);
     setStatus('active');
     setNumberSuffix('');
     setDocumentName('');
@@ -277,10 +312,19 @@ export function DocumentCreatePage(): JSX.Element {
   }, []);
 
   const submit = useCallback(async () => {
-    const req = { lifecycleId: !lifecycleId, documentNumber: !suffix, documentName: !documentName.trim() };
+    setSubErr(false);
+    const req = { lifecycleId: !cycleName, documentNumber: !suffix, documentName: !documentName.trim() };
     setErrors(req);
     if (req.lifecycleId || req.documentNumber || req.documentName) {
+      // AC-24：未選循環＝既有必填缺漏路徑（DOCUMENT_REQUIRED_FIELD_MISSING），**不**顯示 LIFECYCLE_SUBCATEGORY_REQUIRED。
       toast.error('必填欄位未填寫（僅 循環別／文件狀態／文件編號／文件名稱 為必填）');
+      return;
+    }
+    // F010 AC-S1／AC-21：名稱底下設有子分類而未選到具體子分類 → 阻擋送出（不發出請求）。
+    if (!selection.ok) {
+      setSubErr(true);
+      // prototype 14 之內嵌提示與 toast **共用同一句話**，為已裁決之設計，逐字保留。
+      toast.error('此循環名稱底下設有子分類，請選擇具體子分類後再送出');
       return;
     }
     if (dupHit) {
@@ -290,7 +334,8 @@ export function DocumentCreatePage(): JSX.Element {
     setBusy(true);
     try {
       const created = await createDocument({
-        lifecycleId,
+        // AC-24 裁決 1：payload 之「所屬循環」恆僅 lifecycleId 一欄（不新增 lifecycleName／subcategory）。
+        lifecycleId: selection.lifecycleId,
         status,
         documentNumber: fullNumber,
         documentName: documentName.trim(),
@@ -325,7 +370,8 @@ export function DocumentCreatePage(): JSX.Element {
       setBusy(false);
     }
   }, [
-    lifecycleId,
+    cycleName,
+    selection,
     suffix,
     documentName,
     dupHit,
@@ -406,24 +452,63 @@ export function DocumentCreatePage(): JSX.Element {
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="dLifecycle" className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               所屬循環 <span className="text-red-500">*</span>
             </label>
+            {/* F040：兩段式選取（循環名稱 → 子分類）。名稱底下無子分類時不呈現子分類層（向後相容） */}
             <select
-              id="dLifecycle"
-              value={lifecycleId}
-              onChange={(e) => setLifecycleId(e.target.value)}
+              id="f_cycleName"
+              aria-label="所屬循環－循環名稱"
+              value={cycleName}
+              onChange={(e) => {
+                setCycleName(e.target.value);
+                setCycleSubId('');
+                setSubErr(false);
+              }}
               className={`w-full px-3 py-2 rounded-md border text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 ${errors.lifecycleId ? 'border-red-500' : 'border-slate-300'}`}
             >
               <option value="">請選擇循環</option>
-              {lifecycles.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
+              {nameOptions.map((n) => (
+                <option key={n} value={n}>{n}</option>
               ))}
             </select>
+            {/* 第二段採**條件式渲染**（非 CSS class 隱藏），使「不呈現」可被客觀驗證。 */}
+            {subOptions.length > 0 && (
+              <div id="subWrap" className="mt-2">
+                <select
+                  id="f_cycleSub"
+                  aria-label="所屬循環－子分類"
+                  value={cycleSubId}
+                  onChange={(e) => {
+                    setCycleSubId(e.target.value);
+                    setSubErr(false);
+                  }}
+                  className={`w-full px-3 py-2 rounded-md border text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 ${subErr ? 'border-red-500' : 'border-slate-300'}`}
+                >
+                  <option value="">請選擇子分類</option>
+                  {/* AC-31：選項值＝各自 lifecycleId、顯示字串＝lifecycleDisplayName。 */}
+                  {subOptions.map((l) => (
+                    <option key={l.id} value={l.id}>{lifecycleDisplayName(l)}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  此循環名稱底下設有子分類，須選到具體子分類才能定位唯一循環（各子分類為
+                  <strong className="text-slate-500">彼此獨立的循環</strong>）。
+                </p>
+              </div>
+            )}
             {errors.lifecycleId && (
-              <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+              <p id="cycErr" className="mt-1 text-xs text-red-600 flex items-center gap-1">
                 <Icon name="alert-circle" className="w-3.5 h-3.5" />
                 <span>必填欄位未填寫</span>
+              </p>
+            )}
+            {subErr && (
+              <p id="subErr" className="mt-1 text-xs text-red-600 flex items-start gap-1">
+                <Icon name="alert-circle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>
+                  此循環名稱底下設有子分類，請選擇具體子分類後再送出（LIFECYCLE_SUBCATEGORY_REQUIRED）
+                </span>
               </p>
             )}
           </div>
@@ -482,7 +567,7 @@ export function DocumentCreatePage(): JSX.Element {
               ICSOP 文件編號 <span className="text-red-500">*</span>
             </label>
             <div className={`flex items-stretch rounded-md border focus-within:ring-2 focus-within:ring-primary-600 overflow-hidden ${errors.documentNumber || dupHit ? 'border-red-500' : 'border-slate-300'}`}>
-              <span className="px-3 py-2 bg-slate-50 text-slate-500 text-sm mono border-r border-slate-200 whitespace-nowrap select-none">{prefix}</span>
+              <span id="numPrefix" className="px-3 py-2 bg-slate-50 text-slate-500 text-sm mono border-r border-slate-200 whitespace-nowrap select-none">{prefix}</span>
               <input
                 id="dNumber"
                 value={numberSuffix}
@@ -492,7 +577,8 @@ export function DocumentCreatePage(): JSX.Element {
               />
             </div>
             <p className="text-[10px] text-slate-400 mt-1">
-              前綴「ICSOP-{code || '—'}-」依所屬循環自動帶入、不可修改；僅需填寫後段序號。唯一性比對「有效」＋「作廢」文件（佔用中）；
+              {/* prototype 14：代碼置於 <span id="numCode">，與前綴 span 分離（本段落自身不成為前綴字串之來源）。 */}
+              前綴「ICSOP-<span id="numCode">{code || '—'}</span>-」依所屬循環自動帶入、不可修改；僅需填寫後段序號。唯一性比對「有效」＋「作廢」文件（佔用中）；
               <strong className="text-slate-500">「失效」文件之編號已釋出、可重用</strong>。
             </p>
             {dupHit && (

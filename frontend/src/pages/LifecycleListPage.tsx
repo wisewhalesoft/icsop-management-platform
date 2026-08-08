@@ -10,6 +10,7 @@ import {
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
+import { lifecycleDisplayName, normalizeSubcategory } from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
@@ -24,6 +25,10 @@ import type { LifecycleView } from '../api/types';
  */
 const ERROR_MSG: Record<string, string> = {
   LIFECYCLE_NAME_REQUIRED: '循環名稱不可為空',
+  // F040 唯一性（INV-1／INV-2）；modal 內另以 #lcDupErr／#lcConflictErr 內嵌逐字說明。
+  LIFECYCLE_DUPLICATE: '此循環名稱與子分類之組合已存在',
+  LIFECYCLE_SUBCATEGORY_CONFLICT:
+    '同一循環名稱不可同時存在「無子分類」與「有子分類」之設定；請先處理既有該筆',
   LIFECYCLE_HAS_DOCUMENTS: '此循環仍有文件掛載，需先解除全部掛載才能刪除（可改為停用）',
   LIFECYCLE_NOT_FOUND: '找不到此循環',
 };
@@ -68,9 +73,10 @@ export function LifecycleListPage(): JSX.Element {
 
   const shown = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
+    // F007 AC-S8：關鍵字比對對象＝顯示名稱（名稱＋子分類），非僅 name。
     return rows.filter(
       (l) =>
-        (!kw || l.name.toLowerCase().includes(kw)) &&
+        (!kw || lifecycleDisplayName(l).toLowerCase().includes(kw)) &&
         (!fStatus || l.status === fStatus),
     );
   }, [rows, keyword, fStatus]);
@@ -129,7 +135,7 @@ export function LifecycleListPage(): JSX.Element {
           <input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="搜尋循環名稱…"
+            placeholder="搜尋循環名稱／子分類…"
             aria-label="搜尋循環名稱"
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
           />
@@ -159,7 +165,12 @@ export function LifecycleListPage(): JSX.Element {
             <tbody className="divide-y divide-slate-100">
               {shown.map((l) => (
                 <tr key={l.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-800">{l.name}</td>
+                  {/* F040 AC-30：顯示字串一律經 lifecycleDisplayName（含子分類）；[data-lifecycle-name] 為 prototype 10 之掛鉤。 */}
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-slate-800" data-lifecycle-name="">
+                      {lifecycleDisplayName(l)}
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       {l.status === 'active' ? (
@@ -171,7 +182,7 @@ export function LifecycleListPage(): JSX.Element {
                       <button
                         onClick={() => window.open(`/lifecycles/${l.id}/tree`, '_blank', 'noopener,noreferrer')}
                         title="檢視樹狀圖預覽（開新分頁）"
-                        aria-label={`檢視「${l.name}」樹狀圖預覽`}
+                        aria-label={`檢視「${lifecycleDisplayName(l)}」樹狀圖預覽`}
                         className="w-7 h-7 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"
                       >
                         <Icon name="git-fork" className="w-4 h-4" />
@@ -213,7 +224,7 @@ export function LifecycleListPage(): JSX.Element {
                             onClick={() => {
                               const mounted = l.mountedDocCount ?? 0;
                               setConfirm({
-                                title: `刪除循環「${l.name}」？`,
+                                title: `刪除循環「${lifecycleDisplayName(l)}」？`,
                                 body:
                                   mounted > 0
                                     ? `此循環仍有 ${mounted} 份文件掛載，需先解除全部掛載才能刪除（LIFECYCLE_HAS_DOCUMENTS）；亦可改用「停用」保留此循環。`
@@ -295,25 +306,52 @@ function LifecycleModal({
 }): JSX.Element {
   const isNew = target === 'new';
   const [name, setName] = useState(isNew ? '' : target.name);
+  // F040：編輯時預填該列現有子分類；無子分類 → 空字串（不得顯示 null 字樣）。
+  const [subcategory, setSubcategory] = useState(isNew ? '' : (target.subcategory ?? ''));
   const [description, setDescription] = useState(isNew ? '' : (target.description ?? ''));
   const [nameErr, setNameErr] = useState(false);
+  /**
+   * F040 唯一性錯誤（後端權威判定之回傳）。以**條件式渲染**呈現（非 CSS class 隱藏），
+   * 兩者互斥。刻意不做前端預先比對——唯一性比對範圍涵蓋停用列，唯後端持有全池權威。
+   */
+  const [uniqErr, setUniqErr] = useState<
+    'LIFECYCLE_DUPLICATE' | 'LIFECYCLE_SUBCATEGORY_CONFLICT' | null
+  >(null);
   const [busy, setBusy] = useState(false);
 
   async function submit(): Promise<void> {
+    setUniqErr(null);
+    // §6.19(d) 驗證順序 ①：名稱必填優先於任何唯一性錯誤之呈現。
     if (name.trim() === '') {
       setNameErr(true);
       return;
     }
     setBusy(true);
+    // trim 後空值送 null（INV-3：不得送空字串）。
+    const payloadSub = normalizeSubcategory(subcategory);
     try {
       if (isNew) {
-        const created = await createLifecycle({ name: name.trim(), description: description.trim() || null });
+        const created = await createLifecycle({
+          name: name.trim(),
+          subcategory: payloadSub,
+          description: description.trim() || null,
+        });
         onSaved(created);
       } else {
-        await updateLifecycle(target.id, { name: name.trim(), description: description.trim() || null });
+        await updateLifecycle(target.id, {
+          name: name.trim(),
+          subcategory: payloadSub,
+          description: description.trim() || null,
+        });
         onSaved();
       }
     } catch (e) {
+      if (
+        e instanceof ApiError &&
+        (e.code === 'LIFECYCLE_DUPLICATE' || e.code === 'LIFECYCLE_SUBCATEGORY_CONFLICT')
+      ) {
+        setUniqErr(e.code);
+      }
       onError(e);
     } finally {
       setBusy(false);
@@ -340,6 +378,42 @@ function LifecycleModal({
               <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
                 <Icon name="alert-circle" className="w-3.5 h-3.5 shrink-0" />
                 循環名稱不可為空（LIFECYCLE_NAME_REQUIRED）
+              </p>
+            )}
+          </div>
+          {/* F040 子分類（非必填）。版面/文案逐字移植 prototypes/10-lifecycle-list.html。 */}
+          <div>
+            <label htmlFor="lcSub" className="block text-sm font-medium text-slate-700 mb-1">
+              子分類 <span className="text-xs font-normal text-slate-400">（非必填）</span>
+            </label>
+            <input
+              id="lcSub"
+              value={subcategory}
+              onChange={(e) => { setSubcategory(e.target.value); setUniqErr(null); }}
+              placeholder="例：消金；留白代表此循環無子分類"
+              className={`w-full px-3 py-2 rounded-md border text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 ${uniqErr ? 'border-red-500' : 'border-slate-300'}`}
+            />
+            <p className="text-[10px] text-slate-400 mt-1">
+              循環之身分＝<span className="mono">名稱＋子分類</span>之組合：同名之不同子分類為
+              <strong className="text-slate-500">彼此獨立的循環</strong>
+              （各有 UUID／DAG／文件掛載）。同一名稱不可同時存在「無子分類」與「有子分類」。留白（或僅空白）一律存為
+              <span className="mono">null</span>。
+            </p>
+            {uniqErr === 'LIFECYCLE_DUPLICATE' && (
+              <p id="lcDupErr" className="mt-1 text-xs text-red-600 flex items-start gap-1">
+                <Icon name="alert-circle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>
+                  此循環名稱與子分類之組合已存在（<span className="mono">subcategory</span> 為 null
+                  之「無子分類」亦視為一種具體組合）（LIFECYCLE_DUPLICATE）
+                </span>
+              </p>
+            )}
+            {uniqErr === 'LIFECYCLE_SUBCATEGORY_CONFLICT' && (
+              <p id="lcConflictErr" className="mt-1 text-xs text-red-600 flex items-start gap-1">
+                <Icon name="alert-circle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>
+                  同一循環名稱不可同時存在「無子分類」與「有子分類」之設定（雙向皆適用）；請先處理既有該筆（LIFECYCLE_SUBCATEGORY_CONFLICT）
+                </span>
               </p>
             )}
           </div>

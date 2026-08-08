@@ -79,9 +79,24 @@ const PERSONS: PersonRecord[] = [
   { employeeNo: '20053', name: '林建宏', orgCode: 'A2200', employmentStatus: 'active' },
 ];
 
+/**
+ * F040：「所屬循環」第一段（名稱）之選項值為**名稱字串**、第二段（子分類）之值才是 lifecycleId
+ * （F010 AC-S4）。本 helper 同時相容單段（值＝lifecycleId）與兩段式（值＝名稱）兩種形狀，
+ * 使本檔既有測試維持聚焦於其原本標的（gating／必填／編號唯一性），
+ * F040 之選取語意由 DocumentCreatePage.subcategory.test.tsx 嚴格約束。
+ */
+async function selectLifecycle(lifecycleId: string): Promise<void> {
+  const sel = screen.getByLabelText(/所屬循環/) as HTMLSelectElement;
+  const values = Array.from(sel.options).map((o) => o.value);
+  const target = values.includes(lifecycleId)
+    ? lifecycleId
+    : LCS.find((l) => l.id === lifecycleId)!.name;
+  await userEvent.selectOptions(sel, target);
+}
+
 /** 依序選定 循環→制定公司→制定部門，回傳到「可選室別」的狀態。 */
 async function selectToDept(): Promise<void> {
-  await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+  await selectLifecycle('lc1');
   await userEvent.click(screen.getByLabelText(/制定公司/));
   await userEvent.click(await screen.findByRole('option', { name: '和潤本部' }));
   await userEvent.click(screen.getByLabelText(/制定部門/));
@@ -120,7 +135,7 @@ describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', ()
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
     expect(screen.getByText(/請先選擇「所屬循環」/)).toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    await selectLifecycle('lc1');
     expect(screen.queryByText(/請先選擇「所屬循環」/)).not.toBeInTheDocument();
   });
 
@@ -130,7 +145,7 @@ describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', ()
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
 
-    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    await selectLifecycle('lc1');
     expect(screen.getByText('ICSOP-SRC-')).toBeInTheDocument(); // 前綴
     await userEvent.type(screen.getByLabelText(/ICSOP 文件編號/), '101-1-01');
     await userEvent.type(screen.getByLabelText(/文件名稱/), '車輛分期進件作業');
@@ -149,7 +164,7 @@ describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', ()
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
 
-    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    await selectLifecycle('lc1');
     await userEvent.type(screen.getByLabelText(/ICSOP 文件編號/), '101-1-02');
     await userEvent.type(screen.getByLabelText(/文件名稱/), '名');
     await userEvent.type(screen.getByLabelText('版次年度'), '26');
@@ -165,7 +180,7 @@ describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', ()
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
-    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    await selectLifecycle('lc1');
     // 直式撇號範例存在；彎引號版本不存在。
     expect(screen.getByText("26'01")).toBeInTheDocument();
     expect(screen.queryByText('26’01')).not.toBeInTheDocument();
@@ -189,7 +204,7 @@ describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', ()
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
 
-    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    await selectLifecycle('lc1');
     await userEvent.type(screen.getByLabelText(/ICSOP 文件編號/), '101-1-01');
     await userEvent.type(screen.getByLabelText(/文件名稱/), '名');
     expect(screen.getByText(/DOCUMENT_NUMBER_DUPLICATE/)).toBeInTheDocument(); // 即時內嵌提示
@@ -203,7 +218,7 @@ describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', ()
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
 
-    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    await selectLifecycle('lc1');
     await userEvent.type(screen.getByLabelText(/ICSOP 文件編號/), '999-9-99');
     await userEvent.type(screen.getByLabelText(/文件名稱/), '名');
     await userEvent.click(screen.getByRole('button', { name: '建立' }));
@@ -258,7 +273,7 @@ describe('DocumentCreatePage — STEP3 制定組織與當責室長（F014，移�
   it('三級由上而下：制定部門於未選公司時停用；選定公司後開放', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
-    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    await selectLifecycle('lc1');
     expect(screen.getByLabelText(/制定部門/)).toBeDisabled();
     await userEvent.click(screen.getByLabelText(/制定公司/));
     await userEvent.click(await screen.findByRole('option', { name: '和潤本部' }));
@@ -383,7 +398,7 @@ describe('DocumentCreatePage — STEP4 附件與關聯文件（F016/F018/F015，
   it('選取使用表單與連結點 → 建立後以新文件 id 關聯表單並整批送出連結', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
-    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    await selectLifecycle('lc1');
     await userEvent.type(screen.getByLabelText(/ICSOP 文件編號/), '101-1-09');
     await userEvent.type(screen.getByLabelText(/文件名稱/), '車輛分期進件作業');
     // 使用表單
@@ -402,7 +417,7 @@ describe('DocumentCreatePage — STEP4 附件與關聯文件（F016/F018/F015，
   it('選取 ICSOP PDF 檔 → 建立後以新文件 id 上傳附件', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
-    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    await selectLifecycle('lc1');
     await userEvent.type(screen.getByLabelText(/ICSOP 文件編號/), '101-1-10');
     await userEvent.type(screen.getByLabelText(/文件名稱/), '名');
     const file = new File(['%PDF-1.4'], 'proc.pdf', { type: 'application/pdf' });
@@ -435,7 +450,7 @@ describe('DocumentCreatePage — STEP4 附錄選取與排序（F039，移植 pro
   });
 
   async function fillRequired(numberSuffix: string, name: string) {
-    await userEvent.selectOptions(screen.getByLabelText(/所屬循環/), 'lc1');
+    await selectLifecycle('lc1');
     await userEvent.type(screen.getByLabelText(/ICSOP 文件編號/), numberSuffix);
     await userEvent.type(screen.getByLabelText(/文件名稱/), name);
   }

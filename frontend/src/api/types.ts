@@ -50,6 +50,11 @@ export interface AccountFilters {
 export interface LifecycleView {
   id: string;
   name: string;
+  /**
+   * F040 子分類（非必填）。無值恆為 `null`（不得為空字串）。顯示一律經 `lifecycleDisplayName`。
+   * 選填宣告以免既有 fixture／呼叫端需大改（缺鍵＝無子分類）。
+   */
+  subcategory?: string | null;
   description: string | null;
   status: 'active' | 'inactive';
   nodeCount: number;

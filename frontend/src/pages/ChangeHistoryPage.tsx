@@ -11,6 +11,7 @@ import {
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
+import { lifecycleDisplayName } from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import type {
@@ -551,8 +552,16 @@ function TreeTab(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ event: LifecycleChangeView; data: LifecycleTreeDiff } | null>(null);
 
+  /**
+   * F038 AC-S1：循環顯示名稱一律經 `lifecycleDisplayName`（含子分類），使同名不同子分類可辨識。
+   * 查無該列時退回 `lifecycleId`（既有行為，循環已刪除之歷史事件仍可呈現）。
+   * 本 helper 同時供事件清單「循環別」欄、稽核呼叫與新舊對照 modal 標題使用，杜絕分歧。
+   */
   const cycName = useCallback(
-    (id: string) => cycles.find((c) => c.id === id)?.name ?? id,
+    (id: string) => {
+      const lc = cycles.find((c) => c.id === id);
+      return lc ? lifecycleDisplayName(lc) : id;
+    },
     [cycles],
   );
 
@@ -607,8 +616,9 @@ function TreeTab(): JSX.Element {
             <label htmlFor="tqCyc" className="block text-xs font-medium text-slate-500 mb-1">循環別</label>
             <select id="tqCyc" value={cyc} onChange={(e) => setCyc(e.target.value)} className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white">
               <option value="">全部循環</option>
+              {/* F038 AC-S1：顯示＝lifecycleDisplayName、查詢值維持 lifecycleId（代碼無法區分同名子分類）。 */}
               {cycles.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id}>{lifecycleDisplayName(c)}</option>
               ))}
             </select>
           </div>
@@ -658,7 +668,8 @@ function TreeTab(): JSX.Element {
                 const t = LC_TYPE[e.changeType] ?? { label: e.changeType, tone: 'slate', icon: 'git-commit-vertical' };
                 return (
                   <tr key={e.id} className="hover:bg-slate-50 align-top">
-                    <td className="px-4 py-3 text-slate-700">{cycName(e.lifecycleId)}</td>
+                    {/* prototype 23 行 447：事件清單「循環別」欄掛 [data-cycle-cell]。 */}
+                    <td className="px-4 py-3 text-slate-700" data-cycle-cell="">{cycName(e.lifecycleId)}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-${t.tone}-50 text-${t.tone}-700 border border-${t.tone}-100`}>
                         <Icon name={t.icon} className="w-3.5 h-3.5" />

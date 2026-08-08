@@ -168,9 +168,14 @@ export function getLifecycles(): Promise<LifecycleView[]> {
   return apiFetch<LifecycleView[]>('/admin/lifecycles');
 }
 
-/** POST /admin/lifecycles（建立，ICSOPAdmin；LIFECYCLE_NAME_REQUIRED）。 */
+/**
+ * POST /admin/lifecycles（建立，ICSOPAdmin；LIFECYCLE_NAME_REQUIRED）。
+ * F040：`subcategory` 為非必填，呼叫端 trim 後空值一律送 `null`（不得送空字串，INV-3）；
+ * 唯一性違反回 409 LIFECYCLE_DUPLICATE／LIFECYCLE_SUBCATEGORY_CONFLICT。
+ */
 export function createLifecycle(body: {
   name: string;
+  subcategory?: string | null;
   description?: string | null;
 }): Promise<LifecycleView> {
   return apiFetch<LifecycleView>('/admin/lifecycles', {
@@ -180,10 +185,13 @@ export function createLifecycle(body: {
   });
 }
 
-/** PATCH /admin/lifecycles/:id（改名稱/說明）。 */
+/**
+ * PATCH /admin/lifecycles/:id（改名稱/子分類/說明）。
+ * F040 三態：未帶 `subcategory` 鍵＝不修改；`null`＝清空；字串＝設定（呼叫端 trim 後空值送 `null`）。
+ */
 export function updateLifecycle(
   id: string,
-  body: { name?: string; description?: string | null },
+  body: { name?: string; subcategory?: string | null; description?: string | null },
 ): Promise<LifecycleView> {
   return apiFetch<LifecycleView>(`/admin/lifecycles/${id}`, {
     method: 'PATCH',
