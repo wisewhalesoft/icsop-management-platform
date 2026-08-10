@@ -17,6 +17,8 @@ export interface SessionUser {
   orgCode?: string | null;
   name?: string | null;
   employeeNo?: string | null;
+  /** F041 一般使用者子分類（'business' / 'other'）；僅 roleCode='User' 時具效力（INV-2）。 */
+  userSubtype?: string | null;
 }
 
 /** 帳號管理檢視（GET/POST/PATCH /admin/accounts；鏡射後端 accounts.store AccountView / AccountListItem）。 */
@@ -37,6 +39,11 @@ export interface AccountView {
   company?: string | null;
   /** 部門名（GET /admin/accounts 清單富化；orgCode→ORG_UNIT 名）。職位 DEFERRED（OQ-E02-07）。 */
   department?: string | null;
+  /**
+   * F041 一般使用者子分類（'business' / 'other'）。供角色指派 modal 預選現值；
+   * 非 User 角色亦可能保有此值（AC-36 休眠但保留），呈現與否由 isSubtypeApplicable 決定。
+   */
+  userSubtype?: string | null;
 }
 
 export interface AccountFilters {

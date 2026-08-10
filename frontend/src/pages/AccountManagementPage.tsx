@@ -10,6 +10,12 @@ import {
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey, ROLE_CODES } from '../domain/function-matrix';
 import { ROLE_META, roleMeta } from '../domain/roles';
+import {
+  isSubtypeApplicable,
+  normalizeUserSubtype,
+  userSubtypeLabel,
+  type UserSubtype,
+} from '../domain/user-subtype';
 import { RoleBadge } from '../components/RoleBadge';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
@@ -33,6 +39,29 @@ const msgOf = (e: unknown) =>
 
 const MGMT_ROLES = ['SysAdmin', 'ICSOPAdmin', 'Supervisor', 'DeptContact'];
 const PAGE_SIZE = 50;
+
+/** F041 子分類選項與說明（逐字沿用 prototype 08 之 SUBTYPE_DESC）。 */
+const SUBTYPE_CODES: readonly UserSubtype[] = ['business', 'other'];
+const SUBTYPE_DESC: Record<UserSubtype, string> = {
+  business: '前台僅顯示「使用部門相符」之已公告文件（含子樹）',
+  other: '前台瀏覽範圍不變',
+};
+
+/** F041 子分類徽章（顯示標籤；'業務'／'其他' 不得用於任何判定）。 */
+function SubtypeBadge({ value }: { value: UserSubtype }): JSX.Element {
+  const business = value === 'business';
+  return (
+    <span
+      className={`shrink-0 whitespace-nowrap px-2 py-0.5 rounded text-xs font-medium border ${
+        business
+          ? 'bg-primary-50 text-primary-700 border-primary-200'
+          : 'bg-slate-100 text-slate-600 border-slate-200'
+      }`}
+    >
+      {userSubtypeLabel(value)}
+    </span>
+  );
+}
 
 /** 無權限畫面之角色別說明（逐字沿用 prototype 08 之 blockMsg）。 */
 function blockedMessage(roleCode: string | undefined): string {
@@ -614,10 +643,16 @@ function RoleModal({
   requestConfirm: (c: Confirm) => void;
 }): JSX.Element {
   const [selected, setSelected] = useState(target.roleCode);
+  /**
+   * F041 AC-32／F003 AC-U1：子分類狀態。預選帳號現值（AC-36「舊設定沿用」之復活效果即由此達成——
+   * 非 User 角色亦保有 userSubtype，改回一般使用者時原樣預選並送出）。
+   */
+  const [subtype, setSubtype] = useState(() => normalizeUserSubtype(target.userSubtype));
+  const currentSubtype = normalizeUserSubtype(target.userSubtype);
 
-  async function doAssign(roleCode: string): Promise<void> {
+  async function doAssign(roleCode: string, userSubtype?: string): Promise<void> {
     try {
-      await assignAccountRole(target.id, roleCode);
+      await assignAccountRole(target.id, roleCode, userSubtype);
       onAssigned();
     } catch (e) {
       onError(e);
@@ -625,7 +660,10 @@ function RoleModal({
   }
 
   function submit(): void {
-    if (selected === target.roleCode) {
+    // F041：子分類僅在角色為「一般使用者」時送出（其餘角色一律 undefined，後端亦不寫入該鍵）。
+    const sub = isSubtypeApplicable(selected) ? subtype : undefined;
+    const subChanged = isSubtypeApplicable(selected) && subtype !== currentSubtype;
+    if (selected === target.roleCode && !subChanged) {
       onClose();
       return;
     }
@@ -637,11 +675,11 @@ function RoleModal({
         body: `帳號「${target.loginId}」將由「${ROLE_META[target.roleCode as keyof typeof ROLE_META]?.label ?? target.roleCode}」降級為一般使用者，將失去所有後台權限。`,
         confirmLabel: '確認降級',
         danger: true,
-        onConfirm: () => void doAssign('User'),
+        onConfirm: () => void doAssign('User', sub),
       });
       return;
     }
-    void doAssign(selected);
+    void doAssign(selected, sub);
   }
 
   return (
@@ -664,6 +702,37 @@ function RoleModal({
             </label>
           ))}
         </div>
+        {/* F041 AC-32／F003 AC-U1：子分類選擇器——僅當所選角色為「一般使用者」時呈現。
+            其餘 4 種角色一律**不呈現**（不是停用、不是隱藏文字，是整塊不呈現）。
+            版面權威＝prototypes/08-account-management.html #subtypeWrap／#subtypeRadios。 */}
+        {isSubtypeApplicable(selected) && (
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              子分類 <span className="text-red-500">*</span>
+            </label>
+            <div className="space-y-2">
+              {SUBTYPE_CODES.map((v) => (
+                <label
+                  key={v}
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-md border cursor-pointer hover:bg-slate-50 ${
+                    v === subtype ? 'border-primary-300 bg-primary-50' : 'border-slate-200'
+                  }`}
+                >
+                  <input type="radio" name="rsubtype" value={v} checked={v === subtype}
+                    onChange={() => setSubtype(v)} className="text-primary-600" />
+                  <SubtypeBadge value={v} />
+                  <span className="text-xs text-slate-500 flex-1 min-w-0">{SUBTYPE_DESC[v]}</span>
+                  {v === currentSubtype && (
+                    <span className="ml-auto text-[10px] text-primary-600 shrink-0">目前</span>
+                  )}
+                </label>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              子分類為帳號之獨立欄位，僅「一般使用者」適用，不新增第 6 種角色。變更後下次該帳號之請求即套用新的可見範圍。
+            </p>
+          </div>
+        )}
         <div className="flex justify-end gap-2 mt-6">
           <button onClick={onClose} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
           <button onClick={submit} className="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">儲存</button>

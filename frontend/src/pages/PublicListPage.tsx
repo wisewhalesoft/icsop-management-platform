@@ -6,6 +6,12 @@ import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
 import { buildOrgPath } from '../domain/org-path';
 import { isAncestorOrSelf } from '../domain/org-scope';
+import {
+  isSubtypeApplicable,
+  normalizeUserSubtype,
+  SCOPE_NOTICE_BUSINESS,
+  SCOPE_NOTICE_OTHER,
+} from '../domain/user-subtype';
 import type { PublicListItem, PublicListPage as PublicPage, OrgUnitRecord } from '../api/types';
 
 /**
@@ -115,6 +121,16 @@ export function PublicListPage(): JSX.Element {
 
   // 使用者部門路徑（部 / 處室，捨本部層）：頁首列與置頂區標題共用同一計算，避免兩處格式不一致。
   const orgPath = useMemo(() => buildOrgPath(orgUnits, user?.orgCode), [orgUnits, user?.orgCode]);
+
+  /**
+   * F041 AC-40：頂部範圍說明句依 viewer 分支。受限者＝`isDeptScopedViewer` 之語意
+   * （roleCode='User' 且子分類正規化後為 business）——與後端 `rbac/viewer-scope.ts` 同一判定，
+   * 不新增第二套規則。孤兒帳號（orgCode 為 null／''）刻意不特判，沿用 SCOPE_NOTICE_BUSINESS。
+   */
+  const scopeNotice =
+    isSubtypeApplicable(user?.roleCode) && normalizeUserSubtype(user?.userSubtype) === 'business'
+      ? SCOPE_NOTICE_BUSINESS
+      : SCOPE_NOTICE_OTHER;
 
   const deptOptionEls = deptOptions.map((u) => (
     <option key={u.orgCode} value={u.orgCode}>
@@ -235,12 +251,11 @@ export function PublicListPage(): JSX.Element {
           </span>
         </div>
 
-        {/* info note */}
+        {/* info note — F041 AC-40：頂部範圍說明句依 viewer 分支（容器/字級/色彩沿用既有樣式，未新增元件）。
+            ⚠ 與 AC-33 之空狀態文案「查無符合結果」為不同 DOM 位置之不同字串，業務使用者查無結果時兩者同時出現。 */}
         <div className="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-xs text-primary-700 mb-4">
           <Icon name="info" className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>
-            一般使用者僅顯示「已公告」文件（進度中／失效／作廢由後端過濾隱藏）；您所屬部門相關文件會自動置頂。
-          </span>
+          <span data-testid="scope-notice">{scopeNotice}</span>
         </div>
 
         {loading && (

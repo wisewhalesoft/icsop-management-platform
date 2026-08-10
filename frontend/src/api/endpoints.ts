@@ -141,11 +141,20 @@ export function updateAccount(
 }
 
 /** PATCH /admin/accounts/:id/role（指派角色，僅 SysAdmin；ROLE_INVALID/ROLE_SELF_DOWNGRADE_BLOCKED）。 */
-export function assignAccountRole(id: string, roleCode: string): Promise<AccountView> {
+/**
+ * F041（架構 §3.7 決策四）：新增第三個選填參數 `userSubtype`——僅角色為「一般使用者」時由呼叫端
+ * 傳入（`isSubtypeApplicable(selected) ? subtype : undefined`），故 PATCH body **條件式**納入該鍵。
+ * 非 User 角色時 body 不含此鍵，後端亦不寫入（AC-36：既有值保留、不清空）。
+ */
+export function assignAccountRole(
+  id: string,
+  roleCode: string,
+  userSubtype?: string,
+): Promise<AccountView> {
   return apiFetch<AccountView>(`/admin/accounts/${id}/role`, {
     method: 'PATCH',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ roleCode }),
+    body: JSON.stringify(userSubtype === undefined ? { roleCode } : { roleCode, userSubtype }),
   });
 }
 
