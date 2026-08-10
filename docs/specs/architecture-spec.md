@@ -1,9 +1,9 @@
 ---
 type: architecture-spec
-version: 1.4
-status: draft
-last_updated: 2026-08-06
-covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038, F039]
+version: 1.5
+status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；其餘章節仍有待決 OQ，見第 9 章）
+last_updated: 2026-08-11
+covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038, F039, F040, F041]
 ---
 
 # System Architecture Specification — ICSOP 文件管理平台
@@ -17,6 +17,8 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 > **v1.3（2026-07-20）身分驗證模型改版：上游簽章 POST → Azure AD (Entra ID) OIDC**：依 [upstream-hr-source-contract.md](upstream-hr-source-contract.md) §12（2026-07-20 部分定案）——ICSOP **不是** Portal 之 iframe 子站台，Portal 僅新增一個連結入口、不參與身分傳遞；ICSOP 改為自行註冊 Azure AD 應用、走標準 OIDC authorization code flow（`state`＋`nonce`＋PKCE，取代原「時間戳＋nonce 自訂簽章」防重放，**無共享密鑰**）。此變更影響 §1.3／§1.4／§2.1–2.3／§3.2 AuthModule／§5.3／§6／§7.1／§7.3／§7.5／§8.2／§9（OQ-NFR002），原 `AUTH_NONCE` 表、`verifyUpstreamSignature()`、`SignatureVerifierStrategy` 介面自本版起**移除**（不再需要）。上游組織來源（`OrgSourceDataSource`／§4.1／F004 組織同步）**不受影響**——該相依為獨立的人員/組織資料鏡射管道，與本次身分驗證改版之 IdP 切換無關。
 >
 > **v1.4（2026-08-06）新增 E10 附錄管理（F039）架構**：新增 `AppendicesModule`（`APPENDIX_POOL`／`DOC_APPENDIX` 之唯一寫入路徑），與既有 F018（使用表單，`AttachmentModule`）在池模型／覆蓋式更新／權限守門鏈上高度同構，但附錄多出「文件內顯示順序 `sortOrder`」此一結構性差異。本版裁定 OQ-E10-02（`(documentId, sortOrder)` 不建唯一索引，服務層 replace-set 保證）、排序權威寫入路徑（文件建立/編輯頁一律走 `PUT` replace-set，`POST` 附加端點不接入 UI）、模組邊界（複製獨立模組，不抽出泛型化 pool 抽象）、Migration 拆分、`AUDIT_LOG` additive 擴充（新增 `targetType=APPENDIX`／`appendixId` 欄）、RBAC 接線（`FunctionKey.APPENDIX_MANAGEMENT`／`FieldKey.APPENDICES`）與前端架構（新頁、選單、`MultiSearchCombobox` 選填 `orderable` 擴充）共 7 項決策。E10 相關內容以「E10 附錄管理架構擴充」標示分散於第 3（§3.2／§3.6）、4（§4.9）、5（§5.10）、6、8、9 章對應小節。
+>
+> **v1.5（2026-08-10 草擬／2026-08-11 🟢 APPROVED 人類閘門通過）新增 F041 一般使用者子分類（業務／其他）架構擴充**：10 題 OQ（`OQ-E08-04`～`OQ-E08-11`／`OQ-E06-03`／`OQ-E06-04`，其中 5 題 BLOCKING）已於 2026-08-11 人類閘門**全數依草案選項定案，本節架構決策無一需要重寫**——身分模型＝子分類旗標（OQ-E08-04 選項 B）、部門比對＝重用 `isWithinSubtree` 子樹展開（OQ-E08-05 選項 A）、deny-by-default 涵蓋清單/搜尋/篩選/詳情直連/檢視器/下載列印（OQ-E08-06 選項 C）、拒絕不記稽核（OQ-E08-10 選項 A，`AUDIT_LOG.actionType` 不擴充）、直連 URL 拒絕回 404（OQ-E06-03 選項 A）。新增 `ViewerScope`（`{roleCode,userSubtype,orgCode}`，每請求由 `SessionGuard` 之既有「查 DB 現行值覆寫」機制一併組出，不由呼叫端參數提供）與 `RbacModule` 之第三種授權維度——資料列層級可見性過濾（`backend/src/rbac/viewer-scope.ts`：`normalizeUserSubtype`／`isDeptScopedViewer`／`isUsingDeptMatched`／`isDocVisibleToViewer`，`isUsingDeptMatched` 唯一呼叫既有 `org-sync/org-hierarchy.ts` 之 `isWithinSubtree`，不新增第二套部門比對邏輯）。過濾接縫落於 F019 清單（`buildPublicList`）、F019 詳情（`PublicDocumentDetailService.detail`）、F020 檢視器/PDF代理/下載/列印（`WatermarkService` 四方法）共 4 處，皆為**必要參數**簽章變更（刻意不做選填，避免呼叫端遺漏參數而靜默繞過 deny-by-default）——**下游實作最容易漏的三點**：(1) `PublicDocumentsController.detail()` 現況完全未接收 `@Req()`，本次需從零新增；(2) `buildPublicList`／`PublicDocumentsService.list`／`PublicDocumentDetailService.detail` 三處為刻意的破壞性簽章變更，既有呼叫端／既有測試皆需機械式遷移為傳入 `viewer` 物件；(3) `WatermarkDocMeta.getDocMeta()` 由「純顯示用中繼資料」升級為業務子分類路徑之安全關鍵依賴，缺省時須 deny-by-default 而非放行（見 §3.7 決策三(c)）。`ACCOUNT.userSubtype`（`nvarchar(20) NOT NULL DEFAULT 'other'` + `CHECK`）為唯一新增欄位，F004 組織同步 upsert payload 之「不含 `userSubtype` 鍵」由既有明列欄位字面物件（非 spread）之程式碼結構保證。5 題原 BLOCKING OQ 之「若改選其他選項」分析改列為歷史紀錄保留於 §3.7 末段與第 9 章，供日後回溯，**不再阻擋 Phase B 動工**。E08/E06 相關內容以「F041 一般使用者子分類架構擴充」標示分散於第 3（§3.7）、4（§4.10）、5（§5.11）、6、8、9 章對應小節。
 
 ## Agent Loading Guide
 
@@ -30,6 +32,7 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 | RAG / AI Ingestion 工程 | §1.5、§2.4、§3.3–3.4、§4.7、§5.7–5.8、§6（NFR-009/010 列）、§7（GPU/向量庫拓撲）、§8（RAG 風險列）、§9（OQ-E09-*） |
 | 變更歷程（E07）工程 | §3.5（ChangeHistoryModule）、§4.8（資料落地／OQ-E07-05 決策）、§5.9（交易一致性／渲染管線）、§6（稽核與資料保留擴充列）、§8（E07 風險列）、§9（OQ-E07-02/05/06、OQ-NFR003） |
 | 附錄管理（E10）工程 | §3.2（AppendicesModule 元件卡片）、§3.6（模組邊界／排序權威寫入路徑／稽核 additive 擴充／RBAC／前端架構等 5 項決策）、§4.9（資料落地／OQ-E10-02 決策／Migration）、§5.10（排序寫入與下載稽核之交易/併發邊界）、§6（NFR 對應擴充列）、§8（Auto-Challenge 新增列／拒絕替代方案）、§9（OQ-E10-02） |
+| 一般使用者子分類（F041）工程 🟢 APPROVED | §3.7（`ViewerScope` 組出點／`rbac/viewer-scope.ts` 三純函式落點／四過濾接縫精確位置／前端接縫／10 題 OQ 裁決紀錄）、§4.10（`ACCOUNT.userSubtype` 資料落地／Migration／F004 upsert 鍵集合保證）、§5.11（清單／詳情／檢視器‑下載‑列印三條路徑之循序圖）、§6（NFR 對應擴充列）、§8（風險與拒絕替代方案）、§9（10 題 OQ 裁決紀錄）。**10 題 OQ 已於 2026-08-11 人類閘門全數依草案選項定案，可直接動工**；下游實作最容易漏的三處已於 §3.7 決策一/三(c) 明確標注（`@Req()` 新增、三處破壞性簽章遷移、`docMeta` 安全關鍵化） |
 
 ## Table of Contents
 
@@ -704,6 +707,143 @@ graph TD
 - **「已選附錄＋上移/下移」元件**：**擴充既有 `MultiSearchCombobox`**（`frontend/src/components/SearchCombobox.tsx`），新增**選填** `orderable?: boolean` prop（預設 `undefined`/`false`，**完全不影響**現行全部呼叫端——`usingDepts`／`secondaryChiefs`／使用表單／文件連結點選取器之既有行為與既有測試逐字不變）。`orderable=true` 時，chip 清單改為有序列表呈現，每個 chip 額外提供「上移／下移」兩個圖示按鈕（呼叫新增之 `onMoveUp(index)`／`onMoveDown(index)` callback prop；首項停用上移、末項停用下移，對應 AC-20 邊界行為），**不**提供拖曳（draggable）屬性或事件處理（對應 AC-21「僅上移/下移，無拖曳排序」之明確斷言——測試可直接驗證 DOM 無 `draggable` 屬性/無拖曳相關事件監聽）。理由：不新建平行元件（如 `OrderableMultiSearchCombobox`）以避免既有「新增/移除候選」搜尋邏輯被複製一份；擴充既有元件之選填 prop 是影響面最小、迴歸風險最低的做法。
 - **文件詳情頁附錄區塊**：`GET /documents/:documentId/appendices` 之回應已由後端依 `sortOrder ASC` 排序（見 §3.2 AppendicesModule 卡片），前端**不需**、也**不應**於接收後再次排序（維持後端為唯一排序權威）。視覺呈現屬 ui-ux-designer 職責範圍，F039 spec 已註記 prototype 14/15/16/04 之附錄區塊「尚未於 prototype 呈現，待傳播」，本節僅界定資料契約。
 
+### 3.7 F041 一般使用者子分類架構擴充：`ViewerScope` 與資料列層級可見性 🟢 APPROVED（2026-08-11 人類閘門通過，10 題 OQ 全數依草案選項定案，見末段裁決紀錄）
+
+> **定位**：F041 不新增 NestJS 模組。它為 `RbacModule` 既有元件卡片（§3.2）早已預留但**尚未啟用**之「組織範圍限縮（一般能力）」機制，補上第一個實際消費者——`FUNCTION_MATRIX`（功能面）／`FIELD_MATRIX`（欄位面）之外的**第三種授權維度：資料列層級可見性**（[error-handling.md#permission](error-handling.md#permission) 已將本需求定性為「既非功能面亦非欄位面」之資料列限縮）。過濾邏輯集中於一組新增純函式，四個既有服務入口（清單／詳情／檢視器‑代理／下載‑列印）各自於既定接縫呼叫，不新增任何 controller 層級或前端路由守衛判定（呼應 lead 指示：本輪 ring 簡化為僅 jest/vitest，關鍵判定必須落在服務層/純函式層可測範圍內）。
+
+```mermaid
+graph TD
+    subgraph AUTH["AuthModule（既有）"]
+        SG["SessionGuard\n每請求查 DB 現行值覆寫 roleCode/orgCode/name/employeeNo"]
+    end
+    subgraph RBAC["RbacModule（既有，本次擴充第三維度）"]
+        VS["viewer-scope.ts（新增）\nViewerScope／normalizeUserSubtype／\nisDeptScopedViewer／isUsingDeptMatched／\nisDocVisibleToViewer／toViewerScope()"]
+        FM["function-matrix.ts／field-matrix.ts（既有，不變）"]
+    end
+    subgraph ORGSYNC["OrgSyncModule（既有，純邏輯部分）"]
+        OH["org-hierarchy.ts\nisWithinSubtree（唯一部門比對邏輯，重用不新增）"]
+    end
+    subgraph PUB["PublicBrowseModule（既有，backend/src/public/）"]
+        PL["public-list.ts\nbuildPublicList()"]
+        PDS["public-documents.service.ts"]
+        PDDS["public-document-detail.service.ts"]
+    end
+    subgraph WM["WatermarkModule（既有，backend/src/public/watermark.service.ts）"]
+        WMS["WatermarkService\nview/getOriginalPdf/download/print"]
+    end
+    subgraph ACC["AccountModule（既有）"]
+        ACS["accounts.service.ts assignRole()"]
+    end
+
+    SG -->|"fresh.userSubtype = current.userSubtype ?? null"| VS
+    VS -->|"isUsingDeptMatched() 唯一呼叫"| OH
+    PDS --> PL
+    PL -->|"isDocVisibleToViewer(usingDeptIds, viewer)"| VS
+    PDDS -->|"isDocVisibleToViewer()"| VS
+    WMS -->|"isDocVisibleToViewer()"| VS
+    ACS -->|"normalizeUserSubtype()"| VS
+
+    classDef newmod fill:#ede9fe,stroke:#5b21b6
+    classDef crosscut fill:#e0e7ff,stroke:#3730a3
+    class VS newmod
+    class FM,OH crosscut
+```
+
+#### 決策一：`ViewerScope` 之組出點——延伸 `SessionGuard` 既有「每請求查 DB 現行值覆寫」機制，不另立新機制
+
+`SessionGuard.canActivate()`（`backend/src/auth/session.guard.ts` 第 45-64 行）現況已示範 F041 Main Flow 步驟 3 所需之確切模式：每請求以 `(companyCode, loginId)` 查 `AccountRepository.findCurrentByLogin()` 取得 DB 現行 `CurrentAccount`，並以其 `roleCode`/`orgCode`/`name`/`employeeNo` 覆寫 JWT 內舊值（PII 不進 token，角色變更/組織轉調即時生效）。`userSubtype` 之組出**沿用同一機制**，不新增第二套「查現行值」路徑：
+
+| 檔案 | 變更 |
+|---|---|
+| `backend/src/auth/account-repository.ts` | `CurrentAccount` interface 新增 `userSubtype?: string \| null`（比照既有 `orgCode`/`name`/`employeeNo` 選填慣例） |
+| `backend/src/auth/typeorm-account.repository.ts` | `findCurrentByLogin()` 現況以 `findOne({ where })` 取整列（未指定 `select`），`a.userSubtype` 已隨列一併取得，回傳物件新增 `userSubtype: a.userSubtype` 一行，**零額外查詢成本** |
+| `backend/src/auth/session-token.service.ts` | `SessionUser` interface 新增 `userSubtype?: string \| null`（**不**進 `SessionClaims`／JWT，比照 `orgCode` 之 PII-不進-token 定案） |
+| `backend/src/auth/session.guard.ts` | `canActivate()` 第 56-63 行 `fresh` 物件新增 `userSubtype: current.userSubtype ?? null`，與 `roleCode`/`orgCode` 同一組覆寫，繼承「下次請求即反映」特性（呼應 Edge Cases 表「使用者部門異動下次請求即反映」同一機制，不需額外設計） |
+| `backend/src/rbac/viewer-scope.ts`（新增，見決策二） | 匯出 `toViewerScope(u: SessionUser): ViewerScope`——**唯一**之 `SessionUser → ViewerScope` 轉接點，各 controller 呼叫服務層前以此轉接，比照 `WatermarkController` 既有 `toWatermarkSession()`（`watermark.controller.ts` 第 11-20 行）之同一慣例，非新發明 |
+
+**「不由呼叫端參數提供」之架構強制**：`ViewerScope` 三欄之唯一輸入來源為 `req.sessionUser`（`SessionGuard` 填入）。任何本次新增/修改之 controller 方法簽章**不得**新增對應 `roleCode`/`userSubtype`/`orgCode` 之 query/body 參數——這不是命名慣例，而是「`ViewerScope` 只能由 `toViewerScope(req.sessionUser)` 建構」的唯一合法建構路徑，code review 應確認未出現任何手動組裝 `ViewerScope` 字面量（測試替身除外）。
+
+**四入口之簽章變更（刻意的破壞性變更，非新增選填參數）**：
+
+| 入口 | 現有簽章 | 新簽章 | 呼叫端變更 |
+|---|---|---|---|
+| 清單純函式 | `buildPublicList(items, userOrgCode, filters, today, page?, pageSize?)`（`public-list.ts`） | `buildPublicList(items, viewer: ViewerScope, filters, today, page?, pageSize?)` | `PublicDocumentsService.list()` 改注入 `viewer`；`toDto()` 內 `isPinned(it, userOrgCode)` 呼叫改用 `viewer.orgCode`（`isPinned`/`splitAndSort` 自身簽章不變，見決策三） |
+| 清單服務 | `PublicDocumentsService.list(userOrgCode, filters, page?, pageSize?)` | `list(viewer: ViewerScope, filters, page?, pageSize?)` | `PublicDocumentsController.list()` 第 36 行 `const userOrgCode = req.sessionUser?.orgCode ?? null` 改為 `const viewer = toViewerScope(req.sessionUser)` |
+| 詳情服務 | `PublicDocumentDetailService.detail(documentId)` | `detail(documentId, viewer: ViewerScope)` | `PublicDocumentsController.detail(id)`（第 56-59 行，**現況完全未接收 `@Req()`**）新增 `@Req() req: RequestWithSession` 參數，呼叫改為 `this.detailSvc.detail(id, toViewerScope(req.sessionUser))`——此為本次唯一需要「從零新增請求物件存取」之既有端點 |
+| 檢視器/PDF代理/下載/列印 | `WatermarkService.view/getOriginalPdf/download/print(session: WatermarkSession, documentId)` | 簽章不變（`WatermarkSession` 擴充新增選填欄位，見下） | `toWatermarkSession()`（`watermark.controller.ts`）新增一行 `userSubtype: u.userSubtype ?? null`；`WatermarkSession` interface（`watermark.service.ts` 第 35-42 行）新增 `userSubtype?: string \| null` |
+
+**`WatermarkSession` 刻意不直接改用 `ViewerScope` 型別**：`WatermarkSession` 另攜帶 `accountId`/`employeeNo`/`name`/`companyCode` 等浮水印身分快照專屬欄位，與 `ViewerScope` 概念上是「同一份 session 資料的兩種不同投影」（可見性判定 vs 浮水印身分），非同一實體——`WatermarkService` 內部以 `{ roleCode: session.roleCode ?? null, userSubtype: session.userSubtype ?? null, orgCode: session.orgCode ?? null }` 就地投影出 `ViewerScope`（決策三(c)），不強行合併兩個型別，避免非必要耦合。
+
+**為何四入口簽章變更為必要參數而非選填**：若做成選填、預設 `undefined` 視為「不受限」，等同引入一個可被忘記傳遞而靜默繞過的安全檢查，與 INV-3「無法判定即不可見」（deny-by-default）之精神相反——deny-by-default 不能仰賴呼叫端「剛好記得傳參數」，必須由 TypeScript 型別系統強制呼叫端提供 `viewer`。
+
+#### 決策二：三個純函式與 `ViewerScope` 之落點——新增 `backend/src/rbac/viewer-scope.ts`，依賴方向單向 `rbac → org-sync`
+
+**裁定**：新檔案 `backend/src/rbac/viewer-scope.ts`，匯出 `ViewerScope`（F041 命名鎖定表逐字：`{ roleCode: string | null; userSubtype: string | null; orgCode: string | null }`）、`normalizeUserSubtype(v: unknown): 'business' | 'other'`、`isDeptScopedViewer(viewer): boolean`、`isUsingDeptMatched(usingDeptIds, orgCode): boolean`（内部**唯一呼叫**既有 `org-sync/org-hierarchy.ts` 之 `isWithinSubtree`，運算式 `usingDeptIds.some(code => isWithinSubtree(code, orgCode))` 與 `public-list.ts` 現行 `isPinned()` 之運算式**逐字相同**——此為 AC-10「兩者輸出逐案相等」之結構性保證來源，非巧合，而是刻意共用同一運算式使等價性由程式碼結構保證、不需額外測試堆疊來維持）、`isDocVisibleToViewer(usingDeptIds, viewer): boolean`（`return !isDeptScopedViewer(viewer) ? true : isUsingDeptMatched(usingDeptIds, viewer.orgCode)`）、`toViewerScope(u: SessionUser): ViewerScope`。
+
+**為何選 `rbac/` 而非 `public/` 或 `org-sync/`**：
+1. `RbacModule` 既有元件卡片（§3.2）之責任欄早已寫入「組織範圍限縮（一般能力；現行矩陣已無角色使用「本部門」範圍……機制保留備用）」——F041 是啟用此保留機制的第一個消費者，屬既有責任範圍之擴充，非新增責任，不需修改元件卡片之依賴/擁有資料兩欄。
+2. [error-handling.md#permission](error-handling.md#permission) 已明文本需求「既非功能面亦非欄位面」——`function-matrix.ts`／`field-matrix.ts` 之外，`viewer-scope.ts` 補齊 `RbacModule` 授權判定家族的第三個維度，供下游一次找齊三種判定純函式的實作位置，符合既有「純函式無 IO、程式碼即設定」慣例（與 `FUNCTION_MATRIX`/`FIELD_MATRIX` 同構）。
+3. **依賴方向零風險**：`org-sync/org-hierarchy.ts` 為零 import 之純字串運算模組（現況檔首無任何 import 語句），`rbac/viewer-scope.ts` 單向 import 它；`org-sync` 模組現況不曾、也無需 import `rbac`，不產生循環。
+4. **延續既有依賴方向**：`backend/src/public/*.ts` 現況已 import `rbac/function-matrix`（`FunctionKey`）與 `rbac/role-permission.guard`（見 `public-documents.controller.ts`／`watermark.controller.ts` 既有 import），`viewer-scope.ts` 延續同一方向（`public`/`watermark` → `rbac`），不新增新的依賴方向、不製造循環。
+5. **不放 `public/` 之理由**：`isDocVisibleToViewer` 同時被同目錄之 `public-list.ts`／`public-document-detail.service.ts`（清單/詳情）與 `watermark.service.ts`（檢視器/下載/列印）消費，若放 `public/` 內部亦不會產生循環（本就同一模組樹），但會使「誰能看什麼」的授權判定邏輯分散於業務模組內部而非集中於 `RbacModule`，違反 F041 spec 本身「為何獨立成一個 feature」章節之同一論證精神（規則分述即會分歧）——選 `rbac/` 以維持「授權判定邏輯集中一處」之既有慣例。
+
+本輪 ring 簡化未跑 dependency-cruiser（lead 已知會），但依賴圖 `public/watermark.service.ts → rbac/viewer-scope.ts → org-sync/org-hierarchy.ts`（單向、反向皆不存在）**仍須人工確認不違反既有規則**，不因本輪不跑機器檢查而放鬆設計標準。
+
+#### 決策三：四個過濾接縫之精確位置
+
+**(a) 清單（`buildPublicList`，`public-list.ts` 第 147-166 行）**——F041 Main Flow 步驟 5「已公告基底條件之後、其餘篩選之前」：
+
+```
+const base    = items.filter(i => isAnnounced(i, today));                         // 既有：基底條件
+const visible = base.filter(i => isDocVisibleToViewer(i.usingDeptIds, viewer));    // 新增：業務可見性
+const filtered = visible.filter(i => deptFilter && lifecycleFilter && keywordFilter); // 既有：其餘篩選
+const sorted  = splitAndSort(filtered, viewer.orgCode);                            // 既有：置頂+排序（僅來源改為 viewer.orgCode）
+const hiddenCount = items.length - base.length;                                    // 既有：計算式不變
+```
+
+`hiddenCount` 之計算式**保持 `items.length - base.length` 不動**——AC-18「`hiddenCount` 僅計基底條件隱藏者、不含業務限制過濾者」由此**零額外邏輯**達成：因為插入點在 `base` 之後，`hiddenCount` 的既有計算式從未參照新增的 `visible` 步驟，天然不會把業務限制過濾的文件計入。
+
+`isPinned`／`splitAndSort`（同檔）**簽章不變**，僅呼叫處由 `viewer.orgCode` 取代原本直接接收的 `userOrgCode` 字串。**AC-15「置頂區＝全部、其餘區恆空」是此設計的數學推論，不是需要另外撰寫的特判**：`isUsingDeptMatched(usingDeptIds, orgCode)` 與 `isPinned(item, userOrgCode)` 為刻意共用之同一運算式（決策二，AC-10 明文要求兩者逐案相等）——任何通過 `visible` 過濾而留存的項目，其 `usingDeptIds` 必然滿足 `isUsingDeptMatched(usingDeptIds, viewer.orgCode) === true`，而該條件與 `isPinned` 之判定條件相同，故該項目必然同時 `isPinned === true`。前端 `PublicListPage.tsx` 之置頂/其餘分區渲染邏輯完全不需改動（見決策四）。
+
+**(b) 詳情（`PublicDocumentDetailService.detail`，`public-document-detail.service.ts` 第 68-77 行）**——F041 Main Flow 步驟 6「非已公告→404 檢查之後、名稱解析之前」：
+
+於既有 `if (displayStatus !== 'announced') throw new NotFoundException('DOCUMENT_NOT_FOUND')` 之後、`orgCodes` 組裝與 `this.names.resolveOrgUnitName()` 迴圈**之前**插入：
+```
+if (!isDocVisibleToViewer(raw.usingDeptIds, viewer)) throw this.rejectDeptRestricted();
+```
+`raw.usingDeptIds` 已存在於 `store.findDetailById()` 既有回傳形狀（`PublicDocDetail`，見 `public-documents.store.ts`），零額外查詢。AC-20「未呼叫任何名稱解析」由插入點位置本身保證（該檢查早於名稱解析程式碼），非額外的 spy 隔離設計。
+
+`rejectDeptRestricted()` 為**單一私有方法**，今天回傳 `new NotFoundException('DOCUMENT_NOT_FOUND')`（OQ-E06-03 選項 A）——若人類改選選項 B，此方法為**唯一**需要修改之處（改為 `new ForbiddenException('PERMISSION_DENIED')`），呼應 F041 AC-21 註記「本條為唯一需改動處」；架構以「單一 throw 語句集中於一個具名方法」結構性實現此隔離，而非散落於多個字面 `throw new NotFoundException(...)`。
+
+**(c) 檢視器/PDF代理/下載/列印（`WatermarkService`，`watermark.service.ts`）**——F041 Main Flow 步驟 7「取得原始 PDF 之前」，AC-25 要求 `buildSnapshot()`（含組織查找）0 次呼叫，AC-26 要求 `PdfBurner.burnPdf`／`WatermarkPdfSource.getOriginalPdf` 皆 0 次呼叫：
+
+現況 `view()`（第 102-114 行）與 `burnAndAudit()`（供 `download`/`print`，第 139-150 行）皆**先**呼叫 `buildSnapshot()`——與 AC-25 直接衝突，故檢查必須插在 `buildSnapshot()` 之前；但可見性判定需要文件之 `usingDeptIds`，現行 `buildSnapshot()` 不提供、`WatermarkDocMeta.getDocMeta()`（第 27-32 行 interface）現況也只回傳 `documentNumber`/`documentName`。
+
+裁定：
+1. **`WatermarkDocMeta.getDocMeta()` additive 擴充**回傳形狀，新增 `usingDeptIds: string[]`。生產實作 `TypeOrmDocMeta`（`typeorm-watermark.sources.ts`）比照 `typeorm-public-documents.store.ts` 既有「分離查詢 `DocUsingDept.find({ where: { documentId } })` + JS 端映射」手法（同檔案第 75-91 行既有先例），不改用 JOIN，維持與既有 `usingDeptIds` 取得方式同一慣例。
+2. `view()`／`burnAndAudit()` 呼叫序**重排**：**先**呼叫 `docMeta.getDocMeta(documentId)`（同時取得 `usingDeptIds` 與編號/書名）→ 若 `!isDocVisibleToViewer(usingDeptIds, viewer)` 則直接 throw（`rejectDeptRestricted()`，比照決策三(b)同一隔離慣例），**不**呼叫 `buildSnapshot()`／`pdfSource.getOriginalPdf()`／`burner.burnPdf()`／`audit()`——AC-27「未寫入任何成功事件」由此自然滿足（`audit()` 呼叫點本就在通過檢查之後才會執行到，非額外設計）。通過檢查後，已取得之 `meta` 直接重用傳給既有 `audit()` 呼叫（沿用 `view()` 現行「`metaArg` 已取得則不重查」之既有節流設計，零額外查詢成本）。
+3. **`docMeta` 從「選填、生產必存在」轉為「業務子分類路徑之安全關鍵依賴」**：建構參數現況 `docMeta?: WatermarkDocMeta`（第 62 行）為選填，但生產環境經 `public.module.ts`（第 90-107 行）恆定注入，選填僅為既有單元測試之便利。F041 之下：若 `docMeta` 為 `undefined`（僅單元測試情境）且 `isDeptScopedViewer(viewer) === true`，因無法取得 `usingDeptIds` 故無法判定可見性，依 INV-3 deny-by-default **視同不可見並拒絕**（非放行、非拋型別錯誤）；非受限 viewer（`isDeptScopedViewer === false`）則不受影響，沿用現行「`docMeta` 缺省時 `meta` 為 `null`、不影響回應」之既有容錯行為。
+
+#### 決策四：前端接縫
+
+- **`userSubtypeLabel`／`isSubtypeApplicable`**：新增 `frontend/src/domain/user-subtype.ts`，比照 F040 之 `frontend/src/domain/lifecycle-subcategory.ts` 先例（該檔案首註解已明文「本專案無前後端共用 package，故與後端各自一份實作，語意須逐字一致」——此為既有專案慣例之延續，非本次新增風險）。後端 `normalizeUserSubtype`（決策二，`rbac/viewer-scope.ts`）與前端 `user-subtype.ts` 內部之正規化邏輯各自獨立實作，AC-02（9 種輸入案例）與 AC-31（5 種輸入案例）須交叉核對語意一致。
+- **帳號管理角色指派 modal**（`AccountManagementPage.tsx` 之 `RoleModal` 元件，第 603 行起）：現況 `useState(target.roleCode)` 追蹤 `selected`，呼叫 `assignAccountRole(target.id, roleCode)`（`api/endpoints.ts` 第 144 行 `PATCH /admin/accounts/:id/role`）送出。裁定：`RoleModal` 新增 `subtype` 狀態；當 `isSubtypeApplicable(selected)`（即 `selected === 'User'`）為真時渲染子分類選擇器，否則不渲染（AC-32）；`doAssign()` 呼叫改為 `assignAccountRole(target.id, selected, isSubtypeApplicable(selected) ? subtype : undefined)`——`assignAccountRole()` 簽章新增第三個選填參數，PATCH body **條件式**納入 `userSubtype` 鍵（僅角色為 `User` 時）。後端 `AccountsService.assignRole()`（`accounts.service.ts` 第 87-106 行）同步擴充第四參數 `userSubtype?: string`，經 `normalizeUserSubtype`（重用決策二之後端純函式，backend 內部不重複實作）正規化後，僅當 `newRole === 'User'` 時併入 `store.updateById(id, { roleCode: newRole, userSubtype: normalizeUserSubtype(userSubtype) })` 之 patch；`newRole !== 'User'` 時**不寫入** `userSubtype` 鍵，呼應 AC-36 草案（非 `User` 角色時該欄位值保留、不清空——見末段 OQ 對照，此為 `[ASSUMPTION]`，若人類改判需強制清空，此處為**唯一**需修改之處）。
+- **前台清單「置頂區＝全部、其餘區恆空」之退化（AC-15）**：**不需前端特判**——已於決策三(a)證明為後端純函式的數學推論，`PublicListPage.tsx` 之置頂/其餘分區渲染邏輯完全不變（現行必然依 `pinned` 欄位分組渲染，`pinned` 恆為 `true` 只是資料層面的自然結果，不觸發任何新程式碼路徑）。
+
+#### 5 題原 BLOCKING OQ 之裁決紀錄（2026-08-11 人類閘門通過，全數維持草案選項）
+
+> 完整 10 題 OQ 之裁決結果見 [F041 §OQ 依賴對照表](features/F041-user-subtype-business-scope.md#oq-dependency)（spec-writer 擁有，人類閘門通過後應已同步更新狀態）；本節僅記錄**架構決策**（非 spec AC 文字）受影響之範圍，兩份文件互補、不重複。**人類閘門結果：5 題 BLOCKING OQ 無一改判，本節 §3.7/§4.10/§5.11 之全部技術內容原封不動生效**，以下表格由「若改選其他選項」之風險評估**轉為歷史紀錄**，保留供日後回溯（例如未來若要新增第 6 種角色的可行性評估，可直接查此表得知變更範圍）。
+
+| OQ（原 BLOCKING） | 裁決結果 | 對本節架構之影響 | 歷史紀錄：若當初改選其他選項，架構需重寫的範圍 |
+|---|---|---|---|
+| **OQ-E08-04** 身分模型 | ✅ **B 子分類旗標**（維持草案） | 無——§3.7 決策一/二之 `CurrentAccount`/`SessionUser`/`ViewerScope`/`rbac/viewer-scope.ts` 全數依原設計生效，§4.10 migration 依原計畫執行 | 若當初改選 A（新增角色 `BusinessUser`）：決策一之三處 `userSubtype` 欄位將全數作廢，`isDeptScopedViewer` 改為 `viewer.roleCode === 'BusinessUser'`；§4.10 ACCOUNT migration 將不需要，但 `FUNCTION_MATRIX`/`FIELD_MATRIX` 需各新增一欄，§3.7 全節需重寫 |
+| **OQ-E08-05** 比對語意 | ✅ **A 子樹展開，重用 `isWithinSubtree`**（維持草案） | 無——決策二 `isUsingDeptMatched` 之 `isWithinSubtree` 呼叫、INV-4、AC-10 等價性、決策三(a)「置頂恆空為 AC-10 等價之數學推論」**全部成立**，此為 5 題中原評估架構衝擊最大者，現已確認不需變更 | 若當初改選 B（精確相等）：`isUsingDeptMatched` 將改為 `usingDeptIds.includes(orgCode)`，INV-4/AC-10 作廢，決策三(a) 之數學推論同時失效，AC-15 需改為顯式判斷 |
+| **OQ-E08-06** deny-by-default 涵蓋面 | ✅ **C 折衷**（清單+搜尋+篩選+詳情直連+檢視器+下載列印，維持草案） | 無——決策三(b)(詳情)與(c)(檢視器/下載/列印)之全部設計生效，`WatermarkDocMeta.getDocMeta()` 擴充 `usingDeptIds` 為必要變更 | 若當初改選 A（僅清單）：決策三(b)/(c) 將全數不需實作，變更面縮小但存在「文件編號直連繞過」之殘留風險 |
+| **OQ-E08-10** 拒絕稽核 | ✅ **A MVP 不記錄**（維持草案） | 無——決策三(b)/(c) 之 `rejectDeptRestricted()` **不**插入 `auditWriter.recordAccess()` 呼叫；`AUDIT_LOG.actionType` **不擴充**、F023/F024 **不動**、§4.10 migration **不需**追加稽核列舉相關內容 | 若當初改選 B：需於拒絕路徑額外插入一次非阻斷稽核呼叫，`AUDIT_LOG.actionType` 需擴充列舉值，F023/F024 各需一條 AC delta——此為 10 題中唯一會擴散到 schema/列舉之 OQ，確認未觸發 |
+| **OQ-E06-03** 404 vs 403 | ✅ **A 404 `DOCUMENT_NOT_FOUND`**（維持草案） | 無——決策三(b)/(c) 之 `rejectDeptRestricted()` 定稿回傳 `NotFoundException('DOCUMENT_NOT_FOUND')` | 若當初改選 B（403）：兩處 `rejectDeptRestricted()` 私有方法本會是唯一需修改之處，其餘程式碼零異動——刻意隔離的設計效益已確認不需動用，但隔離本身仍具備面對未來政策調整的彈性價值 |
+
+**非 BLOCKING 之 5 題（裁決結果與架構影響摘要，詳見 F041 spec 對照表）**：OQ-E08-07（4a/4b/4c 皆裁決為 A——置頂/其餘區塊保留、部門篩選下拉不限縮、空狀態文案不分支；純 UI 呈現層決策，不影響 §3.7 後端過濾接縫位置，前台清單頂部說明句對業務視角改用專屬文案為唯一與草案不同之處，屬純前端文案、不影響本節任何架構決策）、OQ-E08-08（裁決為孤兒 deny-by-default／多部門 Out of Scope／異動下次請求生效，與決策二 `isUsingDeptMatched` 對 `orgCode` 缺值回傳 `false` 之既有函式行為完全吻合，架構無需調整）、OQ-E08-09（裁決為 OR 語意，與決策二 `.some()` 運算式一致，架構無需調整）、OQ-E08-11（裁決為 C 維持現狀+補釐清句，Phase 3 未實作不影響本節）、OQ-E06-04（裁決為 A 後端服務層權威，決策一/三已將全部判定放在服務層而非 controller/前端，本題係既有原則之重申，架構無需調整）。F041 AC-36（角色降級/升級時 `userSubtype` 保留不清空）與 AC-02（未知值 fail-open 收斂為 `'other'`）之草案選項亦一併確認維持，見 §3.7 決策四前端接縫段落。
+
 ---
 
 ## 4. Data Architecture
@@ -997,6 +1137,41 @@ erDiagram
 **拆為兩支而非併入一支之理由**：`APPENDIX_POOL`／`DOC_APPENDIX` 屬「新功能自身資料表」，`AUDIT_LOG.appendixId` 屬「既有稽核基礎設施之 additive 擴充」，兩者關注點不同（前者是 F039 領域模型、後者是跨功能稽核契約擴充）；比照現有兩種既有先例分別對應——`usage-form.ts`（單一功能之多表一次建立）與 `index-run-error-code.ts`（既有表之單欄位擴充）——各自維持單一關注點，且兩者之間**無 FK 相依**（`AUDIT_LOG.appendixId` 比照現行 `formId`／`lifecycleId`／`documentId` 皆為無 FK 約束之純參照欄，見 `1721952000000-audit-log.ts`），順序上無論先後執行皆不影響正確性，僅為敘事清晰而讓附錄兩表遷移在前。
 
 **`AUDIT_LOG` 加欄對既有資料之影響**：`appendixId` 為 `NULLable`、**無 backfill**——既有列（`targetType≠APPENDIX`）該欄一律為 `NULL`，與現行 `formId`／`lifecycleId` 對非對應 `targetType` 列恆 `NULL` 之既有欄位語意完全一致，零遷移風險（比照 `1723420800000-index-run-error-code.ts` 之 `INDEX_RUN.errorCode` 先例）。
+
+### 4.10 F041 一般使用者子分類架構擴充：`ACCOUNT.userSubtype` 資料落地 🟢 APPROVED（2026-08-11 人類閘門通過）
+
+```mermaid
+erDiagram
+    ACCOUNT {
+        uuid id PK
+        string roleCode "既有，5 種固定角色"
+        string orgCode "既有"
+        string userSubtype "新增：nvarchar(20) NOT NULL DEFAULT 'other' + CHECK IN ('business','other')"
+    }
+```
+
+> 完整屬性定義見 [data-model.md「帳號 ACCOUNT」§userSubtype](data-model.md#account-user-subtype)（已定義型別/約束/預設值理由，本節僅記錄落地與 migration 策略，不重複）。
+
+**Migration**：新增單一支 `1723766400000-account-user-subtype.ts`（時間戳晚於現行最新之 `1723680000000-lifecycle-subcategory.ts`，延續既有逐日遞增慣例），單一 `ALTER TABLE` 兼顧新欄位與 `CHECK` 約束，比照 `1723420800000-index-run-error-code.ts` 之單欄位 additive 擴充先例（非 §4.9 式之「新表+既有表擴充」兩支拆分——本次僅涉單一既有表單一欄位，不適用該拆分理由）：
+
+```sql
+-- up()
+ALTER TABLE [ACCOUNT] ADD [userSubtype] nvarchar(20) NOT NULL
+  CONSTRAINT DF_ACCOUNT_userSubtype DEFAULT 'other';
+ALTER TABLE [ACCOUNT] ADD CONSTRAINT CK_ACCOUNT_userSubtype
+  CHECK ([userSubtype] IN ('business','other'));
+
+-- down()
+ALTER TABLE [ACCOUNT] DROP CONSTRAINT CK_ACCOUNT_userSubtype;
+ALTER TABLE [ACCOUNT] DROP CONSTRAINT DF_ACCOUNT_userSubtype;
+ALTER TABLE [ACCOUNT] DROP COLUMN [userSubtype];
+```
+
+**既有資料之影響**：`ADD ... NOT NULL ... DEFAULT 'other'` 於單一 `ALTER TABLE ADD` 陳述式內完成——MSSQL 對既有列自動套用該 `DEFAULT`（不需另寫 `UPDATE` backfill 陳述式，亦不需先加為 nullable 再收斂為 NOT NULL 兩階段寫法）。**陷阱提醒（供 tdd-implementation）**：若誤拆成「先 `ADD ... NULL`」+「後續 `UPDATE ... SET userSubtype='other'`」+「再 `ALTER COLUMN ... NOT NULL`」三段式寫法，功能上等價但多出可被中途失敗打斷的視窗，應避免；單一陳述式寫法無此風險。
+
+**F004 組織同步 upsert 之「不含 `userSubtype` 鍵」保證（AC-34）**：`backend/src/org-sync/typeorm-org-sync.store.ts` 現況之 `accRows`（第 190-205 行，新建帳號 `insert`）與 `plan.accountUpdates` 之 `manager.update()` payload（第 212-230 行，既有帳號更新）皆為**明列欄位之物件字面量**（如 `{ employeeNo: a.employeeNo, name: a.name, orgCode: a.orgCode, ... }`），**非** `{ ...a }` 展開寫法——AC-34 之保證方式是**結構性的**：只要沒有人在這兩個字面量物件新增一行 `userSubtype: a.userSubtype`，`userSubtype` 鍵就永遠不會出現在 upsert payload 中，新建帳號因此自然落在 DB `DEFAULT 'other'`（AC-35），既有帳號之 `userSubtype` 因未被此 `update()` 觸及而維持原值（AC-34）。這是一條**負向架構約束**（不要做什麼），而非需要新增的正向邏輯；test-generator 依 F041 AC-34 之建議（「以 fake store 斷言 payload 鍵集合」）撰寫測試時，斷言對象正是這兩處字面量物件的 key 集合不含 `userSubtype`，可直接作為防止未來誤觸此約束的回歸測試。
+
+**實跑要求**：比照本專案既有踩雷紀錄——單元測試全綠不證明資料表/欄位已存在於實際 DB；容器內僅有編譯後之 `dist`（無法直接執行 `.ts`），本地執行 migration 需 `MSYS_NO_PATHCONV=1` 前綴（Windows Git Bash 路徑轉譯問題）。本 migration 落地後**必須實際對開發環境 MSSQL 執行**（`npm run migration:run` 或等效指令）並以 `SELECT` 確認 `ACCOUNT.userSubtype` 欄位與 `CHECK` 約束皆已生效，不可僅憑 `*.entity.ts`／service 層單元測試綠燈判定完成。
 
 ---
 
@@ -1358,6 +1533,85 @@ sequenceDiagram
 
 **與既有一致性模式之對照**：附錄之「排序事件本體」（`DOC_APPENDIX` 寫入）與 F037/F038（§5.9）「變更事件本體」不同，**不**採 Strong/ACID 同交易跨模組傳播設計——因為附錄排序寫入本就侷限於 `AppendicesModule` 自身交易內完成（無需與 `DocumentModule` 之交易協調，見 §3.6 決策二「交易邊界」），不存在 F037/F038 那種「來源模組交易失敗需連動變更歷程回滾」的跨模組交易一致性問題。附錄下載之調閱稽核則與既有 `DOCUMENT`／`USAGE_FORM` 完全一致，沿用 §5.5 Outbox，無新設計。
 
+### 5.11 F041 一般使用者子分類架構擴充：三條路徑之可見性檢查時序 🟢 APPROVED（2026-08-11 人類閘門通過）
+
+本節以循序圖具現 §3.7 決策三之接縫位置；判定邏輯與拒絕理由已於 §3.7 記錄，本節僅提供整合視角，不重複。三圖共通前提：`viewer = toViewerScope(req.sessionUser)` 已於 controller 層組出（§3.7 決策一），下方省略此步驟之重複標註。
+
+**(a) 清單路徑**（`isDocVisibleToViewer` 為靜默過濾，非例外）：
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 已登入使用者（前台）
+    participant CTL as PublicDocumentsController
+    participant SVC as PublicDocumentsService
+    participant PL as public-list.ts（純函式）
+    participant VS as viewer-scope.ts
+
+    U->>CTL: GET /public/documents?filters
+    CTL->>CTL: viewer = toViewerScope(req.sessionUser)
+    CTL->>SVC: list(viewer, filters, page, pageSize)
+    SVC->>PL: buildPublicList(items, viewer, filters, today, ...)
+    PL->>PL: base = 已公告過濾（既有）
+    PL->>VS: visible = base.filter(isDocVisibleToViewer)
+    VS-->>PL: 業務子分類：僅使用部門相符者；其餘 viewer：恆 true
+    PL->>PL: filtered/sorted/paginate（既有，viewer.orgCode 供置頂）
+    PL-->>SVC: { items, total, hiddenCount }（hiddenCount 不含業務限制過濾者）
+    SVC-->>CTL: PublicListPage
+    CTL-->>U: 200（不相符文件不在 items、不計入 total，非錯誤）
+```
+
+**(b) 詳情直連路徑**（`isDocVisibleToViewer` 為拒絕分支，§3.7 決策三(b)）：
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 已登入使用者（直連 URL）
+    participant CTL as PublicDocumentsController
+    participant DDS as PublicDocumentDetailService
+    participant VS as viewer-scope.ts
+
+    U->>CTL: GET /public/documents/:id
+    CTL->>CTL: viewer = toViewerScope(req.sessionUser)
+    CTL->>DDS: detail(id, viewer)
+    DDS->>DDS: raw = store.findDetailById(id)；非已公告 → 404（既有，不變）
+    DDS->>VS: isDocVisibleToViewer(raw.usingDeptIds, viewer)
+    alt 不可見
+        DDS-->>CTL: throw rejectDeptRestricted()（今日＝404 DOCUMENT_NOT_FOUND，OQ-E06-03 待裁）
+        Note over DDS: 未執行任何 resolveOrgUnitName/resolvePersonNames（AC-20）
+    else 可見
+        DDS->>DDS: 名稱解析＋組裝 DTO（既有，不變）
+        DDS-->>CTL: PublicDocumentDetailDto
+    end
+```
+
+**(c) 檢視器/下載/列印路徑**（`WatermarkService`，§3.7 決策三(c)，`view` 與 `download`/`print` 共用同一檢查順序）：
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 已登入使用者
+    participant CTL as WatermarkController
+    participant WMS as WatermarkService
+    participant DM as WatermarkDocMeta（getDocMeta，已擴充 usingDeptIds）
+    participant VS as viewer-scope.ts
+    participant BLOB as 原始 PDF 來源／PdfBurner／AuditWriter
+
+    U->>CTL: GET /public/documents/:id/view|pdf|download|print
+    CTL->>WMS: view/getOriginalPdf/download/print(session, id)
+    WMS->>DM: getDocMeta(id) → { documentNumber, documentName, usingDeptIds }
+    WMS->>VS: isDocVisibleToViewer(usingDeptIds, session 投影為 ViewerScope)
+    alt 不可見
+        WMS-->>CTL: throw rejectDeptRestricted()
+        Note over WMS,BLOB: buildSnapshot()／pdfSource.getOriginalPdf()／burner.burnPdf()／audit() 皆 0 次呼叫（AC-25/26/27）
+    else 可見
+        WMS->>WMS: buildSnapshot()（既有，組織查找）
+        WMS->>BLOB: 讀原始 PDF →（DOWNLOAD/PRINT 燒錄）→ 回應
+        WMS->>BLOB: audit()（既有，非阻斷，§5.5 Outbox）
+        WMS-->>CTL: 回應內容（與變更前逐位元組相同，AC-29）
+    end
+```
+
 ---
 
 ## 6. Non-Functional Architecture Mapping
@@ -1376,6 +1630,7 @@ sequenceDiagram
 | **（E09）RAG 資料落地與存取安全** [NFR-009](nfr.md#rag-security) | AC1 on-prem；AC2 檢索層過濾強制；AC3 prompt injection 防護；AC4 QA_LOG 存取控管 | §2.4 信任邊界擴充（AI 推論層僅內部呼叫，無對外路徑，AC1）；§3.3 `RagQueryModule.buildRetrievalFilter()` 於向量查詢條件層套用過濾，非生成後過濾，架構已結構性排除繞過可能性（AC2，見 §5.8 sequence diagram note）；prompt injection 之輸入/輸出過濾機制為 OQ-E09-07（AC3）；QA_LOG 存取比照既有 AuditModule，經 RbacModule 授權範圍限縮（AC4） |
 | **（E09）RAG 檢索與生成品質** [NFR-010](nfr.md#rag-quality) | AC1 命中率≥85%；AC2 引用正確率≥95%；AC3 延遲 P95<10s；AC4 拒答正確率≥90%；AC5 索引吞吐<24h（全數草案值） | §3.4 embedding/reranker/LLM 選型以自建評測集 PoC 驗證（OQ-E09-01/02/14，AC1/AC2/AC4）；§5.8 同步查詢鏈路（embedding→檢索→rerank→生成）之延遲預算須於 PoC 逐段量測，確保總和達標（AC3，OQ-E09-06）；索引吞吐依 §5.7 `ingestion-worker` 批次處理能力驗證（AC5） |
 | **（v1.4）附錄管理資料完整性與存取安全**［F039］ | `sortOrder` 不變式（同一文件內連續且互異）不可被併發寫入破壞；附錄檔案存取須經授權＋短效期憑證；下載調閱須完整落地稽核 | §3.6 決策二／§4.9：`sortOrder` 不變式由 `replaceDocumentAppendices()` 單一交易（delete-then-insert）結構性保證，不依賴 DB 唯一索引（OQ-E10-02）；`POST`／`DELETE` 以 `sp_getapplock` 序列化避免 TOCTOU；檔案存取沿用 §5.2 既有 SAS/代理雙模式（附錄無浮水印燒錄需求，全走短效 SAS）；下載稽核為 additive 擴充既有 `AUDIT_LOG`（§3.6 決策三），沿用 §5.5 Outbox，不降低既有 6 種 `targetType` 之保障 |
+| **（v1.5 🟢 APPROVED）一般使用者子分類資料列層級存取安全**［F041］ | 業務子分類使用者任一路徑（清單/搜尋/篩選/詳情直連/檢視器/下載/列印）取得之內容須 100% 落在「已公告 AND 使用部門相符」交集內；deny-by-default（無法判定即不可見）；判定邏輯不得因走前端/controller 而可被繞過 | §3.7：`isDocVisibleToViewer` 為四入口共用之唯一判定式，`isUsingDeptMatched` 唯一呼叫既有 `isWithinSubtree`（INV-4，不新增第二套比對邏輯）；判定發生於服務層（`buildPublicList`／`PublicDocumentDetailService`／`WatermarkService`），非 controller decorator 或前端路由守衛（OQ-E06-04，AC-30 可由直接呼叫服務層繞過前端驗證）；孤兒帳號（`orgCode` 缺值）與 `docMeta` 不可用兩種「無法判定」情境皆收斂為拒絕，非放行（§3.7 決策三(c) 末段） |
 
 ---
 
@@ -1536,6 +1791,8 @@ graph TB
 | 15 | **（E10）是否應將 AppendicesModule 與既有 AttachmentModule 泛型化為共用 pool 抽象**（MVP 是否過度架構之自我挑戰） | F039 與 F018（使用表單）除排序外幾乎同構，直覺上「應該」共用；但排序邏輯（`sortOrder`／replace-set）為結構性差異，且 `usage-forms` 已上線並有完整測試覆蓋，重構為共用基底存在不對稱的迴歸風險 | (A)（已採用）獨立複製模組，僅共用通用基礎設施層（`file-rules`/`blob-store`/`document-asset-authz`/RBAC 矩陣/稽核契約），見 §3.6 決策一；(B) 抽出 `<T>PoolService`/`<T>PoolStore` 泛型基底，兩模組皆改為該基底之具體實例 | 選 (A)：N=2 使用案例不足以攤銷 (B) 之抽象/型別參數/共用基底修改需雙重驗證的成本，且 (B) 會將既有 1282 個單元測試中屬 `usage-forms` 的部分一併納入本次變更的迴歸驗證範圍，risk/benefit 不對稱；若未來出現第三個「池模型＋文件多對多」使用案例，屆時應重新評估收斂 |
 | 16 | **（E10）AUDIT_LOG 對 USAGE_FORM 下載事件的 `documentId` 轉送落差**（本次交付附帶發現，非本次任務範圍） | 現行 `usage-forms/audit-writer-recorder.adapter.ts` 之 `AuditWriterRecorder.record()` 呼叫 `AuditWriterService.recordAccess()` 時，僅轉送 `targetType`/`actionType`/`targetId`/`actorId`/`occurredAt`，**未轉送**呼叫端（`downloadForm()`）實際握有之 `documentId`——導致現行 F018 使用表單下載之稽核列 `AUDIT_LOG.documentId` 恆為 `null`，與 F018 spec/F024「文件」類篩選之呈現意圖（可能）有落差 | (A) 維持現狀，僅於本次交付回報，留待 F018 擁有者或後續 sprint 評估是否修補（不修改既有已上線模組，降低本次變更風險）；(B) 一併修補 `AuditWriterRecorder`（新增 `targetNumber`/`documentId` 轉送） | 已採 (A)：本次任務僅授權變更 `docs/specs/architecture-spec.md`，不得觸碰 `backend/usage-forms/**`；`AppendicesModule` 之對應轉接器已於設計時修正此落差（§3.6 決策三），不會延續此問題至附錄。是否回補 F018 由人類/product-analyst 決定，已於 §9 新增追蹤列 |
 | 17 | **（E10）`PUT` replace-set 之 last-write-wins 併發行為是否足夠**（自我挑戰：是否應為附錄排序加樂觀鎖） | 兩位 ICSOPAdmin 同時編輯同一文件之附錄順序時，後送出者會靜默覆蓋先送出者，先送出者不會收到衝突提示 | (A)（已採用）維持現狀，因 F011 文件編輯整體送出流程本身即無 `rowVersion` 保護，附錄排序比照既有立場一致，不引入本次範疇外的新並發原語；(B) 為 `DOC_APPENDIX` 引入版本欄位／ETag，`PUT` 帶入前次讀取版本，衝突則 409 | 選 (A)：ICSOPAdmin 角色人數少、同一文件同時被兩人編輯之機率低（低頻管理操作），且若要導入 (B) 應是「整份文件編輯」層級的統一並發保護（涵蓋所有欄位，非僅附錄），屬 F011 範疇的架構決策而非 F039 局部範疇，不應由附錄率先引入不一致的保護粒度；已於 §9 新增追蹤列供未來若需全面導入時一併考慮 |
+| 18 | **（F041 🟢 APPROVED）四入口簽章變更之破壞性——是否應以選填參數降低變更面** | `buildPublicList`／`PublicDocumentsService.list`／`PublicDocumentDetailService.detail` 三處新增之 `viewer` 參數若做成選填，可縮小本次 diff／降低既有呼叫端遷移成本 | (A)（已採用，§3.7 決策一）必要參數，型別系統強制呼叫端提供；(B) 選填參數，預設等同「不受限 viewer」 | 選 (A)：deny-by-default（INV-3）之保護不能仰賴「呼叫端記得傳參數」，(B) 會讓「忘記傳 `viewer`」與「viewer 為其他子分類」在型別層無法區分，兩者皆靜默不過濾——即使今天所有呼叫端都正確傳遞，(B) 也會讓未來新增的呼叫端有「忘記傳」而悄悄繞過的結構性風險，(A) 讓編譯期即擋下遺漏。**test-generator/tdd-implementation 注意**：既有呼叫端（`public-list.spec.ts`／`public-documents.service.spec.ts`／`public-document-detail.service.spec.ts` 等）之測試呼叫參數需機械式遷移為傳入 `ViewerScope` 物件，屬授權範圍內之預期變更，非「修改既有測試邏輯」 |
+| 19 | **（F041 🟢 APPROVED）`WatermarkDocMeta.getDocMeta()` 成為安全關鍵依賴後，若第三方未來新增呼叫端誤傳 fake docMeta** | `docMeta` 現況為選填建構參數，僅為既有單元測試便利；F041 後其回傳之 `usingDeptIds` 直接決定業務子分類使用者能否看到文件內容 | (A)（已採用，§3.7 決策三(c)）`docMeta` 缺省且 viewer 受限時 deny-by-default 拒絕；(B) 放寬為「`docMeta` 缺省時視同不受限、全部放行」 | 選 (A)：(B) 會讓任何忘記正確接線 `docMeta`（如未來新增的測試替身或簡化版 wiring）之呼叫路徑意外對業務子分類使用者全面開放，違反 INV-3「無法判定即不可見」；生產環境本就恆定注入 `docMeta`（`public.module.ts`），(A) 僅影響測試替身之邊界行為，不影響生產路徑。**test-generator 應優先鎖住此接縫**：`WatermarkService.spec.ts` 應新增「`docMeta` 未提供＋業務子分類 viewer」案例斷言拒絕，防止未來重構時被靜默弱化 |
 
 ### 8.2 拒絕之替代方案
 
@@ -1558,6 +1815,9 @@ graph TB
 | （E10）泛型化 `AttachmentModule`／`AppendicesModule` 為共用 `<T>PoolService`/`<T>PoolStore` 抽象 | N=2 具體使用案例不足以攤銷抽象成本；`sortOrder` 為附錄獨有之結構性差異，無法乾淨地泛型化；重構已上線且測試覆蓋完整的 `usage-forms` 存在不對稱迴歸風險，見 §3.6 決策一／§8.1 #15 |
 | （E10）`DOC_APPENDIX` 建 `(documentId, sortOrder)` 唯一索引（含暫時位移法變體） | 與服務層 replace-set（單一交易 delete-then-insert）保證之不變式重複、不會被觸發；暫時位移法（先寫負值再回填）為繞過「其實不需要的限制」而額外設計的兩階段寫入，徒增複雜度，見 §4.9 OQ-E10-02 決策 |
 | （E10）文件建立/編輯頁對附錄改採 `POST`（附加）＋前端計算 diff（比照現行 `usage-forms` link/unlink 模式） | 使用表單無排序概念，diff-based add/remove 已足夠；附錄需表達「移除＋重排」之最終狀態，`POST` 僅能接續末位、無法處理純重排（無新增/移除）之送出情境，會產生「兩路徑不同排序語意」之規格明文禁止情形，見 §3.6 決策二 |
+| （F041 🟢 APPROVED）新增第 6 種角色 `BusinessUser` 取代子分類旗標 | 屬 OQ-E08-04 選項 A；人類閘門已於 2026-08-11 裁決選項 B（子分類旗標，維持草案），本項於本輪**確認不採用**。歷史影響評估見 §3.7「5 題原 BLOCKING OQ 之裁決紀錄」表第一列 |
+| （F041 🟢 APPROVED）`isDocVisibleToViewer` 判定改置於 controller 層 `@RequirePermission`-類 decorator 或前端路由守衛 | 與既有 [error-handling.md#permission](error-handling.md#permission)「後端須獨立驗證，不可僅依賴前端隱藏」之既有原則衝突（OQ-E06-04 已定案 A）；decorator 層判定難以被 jest 服務層測試直接覆蓋，與 lead 明訂本輪 ring 簡化（僅 jest/vitest，無 e2e）之限制衝突——關鍵判定必須落在純函式/服務層可測範圍，見 §3.7 決策二/三 |
+| （F041 🟢 APPROVED）`viewer-scope.ts` 之三個純函式改置於 `public/` 模組內部（與消費端同目錄） | 不會製造循環依賴，但會使「誰能看什麼」之授權判定邏輯分散於業務模組內部而非集中於 `RbacModule`，違反 F041 spec「為何獨立成一個 feature」章節之同一論證精神（規則分述即會分歧），見 §3.7 決策二 |
 
 ### 8.3 需驗證/待 Spike 之項目
 
@@ -1619,4 +1879,14 @@ graph TB
 | OQ-E07-05 | DAG 變更歷程之儲存與事件粒度（coordinator 特別點名，BLOCKING） | `ChangeHistoryModule`／`LifecycleModule` 寫入路徑設計（§3.5）、`LIFECYCLE_CHANGE_LOG`/`LIFECYCLE_SNAPSHOT` schema（§4.8） | **架構師已決策（2026-07-17）**：完整快照（非結構化 diff 重放）＋逐原子操作各寫一筆（非儲存層編輯階段聚合）；「編輯階段」呈現需求以查詢層動態分組（時間視窗參數，草案 60 秒）滿足，不引入新持久化狀態機。完整理由（規模／正確性優先／與 F008-F009 持久化模式契合度）見 §4.8 | ✅ 已収斂（原 Blocking） |
 | OQ-E07-06 | 變更歷程呈現/匯出細節（附件 diff 範圍、匯出、F038 下載 PDF 排版） | `ChangeHistoryModule` 查詢/下載 API 設計（§3.5／§5.9） | **架構建議（非最終定案）**：F038 下載採**單一 PDF、兩頁**（非兩份獨立檔案），理由見 §5.9；F037 附件 diff 沿用草案「僅記已替換事件」（不做 metadata 層級 diff），因獨立建表使日後擴充無需重新設計 schema；匯出（CSV/Excel）本輪不列，架構上為既有查詢表之附加輸出格式，日後追加風險低 | [CLARIFY]，PDF 排版已有架構建議，附件 diff 範圍/匯出仍待產品確認 |
 | OQ-E07-08 | 「所屬節點」文件掛載/改派異動應呈現於 F037 或 F038（或兩者） | `ChangeHistoryModule` 查詢 API 是否需跨表 join（F037 tab 讀取 `LIFECYCLE_CHANGE_LOG WHERE entityType=MOUNT`） | 純產品/UX 決策，架構無論何種選擇皆相容：掛載/改派事件已定位於 `LIFECYCLE_CHANGE_LOG`（`entityType=MOUNT`，§4.8），F037 tab 如需交叉呈現僅為額外查詢條件組合，不需 schema 變更或新資料流 | 待使用者/UI-UX 確認，不阻塞架構落地 |
+| **OQ-E08-04** | 身分模型：子分類旗標／新角色／上游推導 | §3.7 全節之 `ViewerScope.userSubtype`／`CurrentAccount`/`SessionUser` 擴充／§4.10 migration | **✅ 已裁決（2026-08-11 人類閘門）：B 子分類旗標**（維持草案，未改判）；架構影響歷史紀錄見 §3.7「5 題原 BLOCKING OQ 之裁決紀錄」表首列 | ✅ 已定案，可動工 |
+| **OQ-E08-05** | 「自己部門」比對語意：子樹展開／精確相等 | §3.7 決策二 `isUsingDeptMatched` 之實作、INV-4、AC-10 等價性、決策三(a)「置頂恆空」之數學推論 | **✅ 已裁決：A 子樹展開，重用 `isWithinSubtree`**（維持草案，未改判）；本節原評估架構衝擊最大之 OQ，現已確認 INV-4/AC-10 等價性與決策三(a) 數學推論皆成立，§3.7 對照表第二列 | ✅ 已定案，可動工 |
+| **OQ-E08-06** | deny-by-default 涵蓋面：僅清單／含詳情/檢視器/下載列印 | §3.7 決策三(b)/(c)（`PublicDocumentDetailService.detail()`／`WatermarkService` 四方法簽章變更） | **✅ 已裁決：C 折衷**（清單+搜尋+篩選+詳情直連+檢視器+下載列印本輪收斂，維持草案）；決策三(b)/(c) 全部生效 | ✅ 已定案，可動工 |
+| OQ-E08-07（4a/4b/4c） | 置頂/其餘區塊保留、部門篩選下拉是否限縮、空狀態文案是否分支 | 純 UI 呈現層決策，不影響 §3.7 後端過濾接縫位置 | **✅ 已裁決：皆 A**（維持現行 UI 行為，未改判）；唯一與草案不同者為前台清單頂部說明句對業務視角改用專屬文案（純前端文案，不影響本節架構） | ✅ 已定案 |
+| OQ-E08-08 | 孤兒帳號 deny-by-default／多部門 Out of Scope／異動生效時機 | §3.7 決策二 `isDocVisibleToViewer` 對 `orgCode` 缺值之處理 | **✅ 已裁決：維持草案**（孤兒 deny-by-default／多部門 Out of Scope／異動下次請求生效），與 `isUsingDeptMatched` 對 `orgCode` 缺值回傳 `false` 之既有函式行為（AC-12）完全吻合 | ✅ 已定案，架構已相容 |
+| OQ-E08-09 | 多使用部門之 OR 推定 | §3.7 決策二 `isUsingDeptMatched`／`isDocVisibleToViewer` 之 `.some()` 語意 | **✅ 已裁決：OR 語意**（維持草案），與現行 `isPinned`/`matchesDeptFilter` 之 `.some()` 語意一致 | ✅ 已定案，架構已相容 |
+| **OQ-E08-10** | 是否記錄「因業務限制被拒」之稽核事件 | §3.7 決策三(b)/(c) 之 `rejectDeptRestricted()`；`AUDIT_LOG.actionType` 列舉 | **✅ 已裁決：A MVP 不記錄**（維持草案，未改判）；`AUDIT_LOG.actionType` **不擴充**、F023/F024 **不動**、§4.10 migration **不需**追加。10 題中唯一原本會擴散到 schema/列舉之 OQ，確認未觸發，§3.7 對照表第四列 | ✅ 已定案，可動工 |
+| OQ-E08-11 | F033 現行文字與 F019 現行行為之既存落差 | 不影響本節（Phase 3 未實作） | **✅ 已裁決：C 維持現狀+補釐清句**（維持草案），不影響 §3.7/§4.10/§5.11 落地 | ✅ 已定案 |
+| **OQ-E06-03** | 直連 URL 被拒之回應碼（404 vs 403，存在性洩漏） | §3.7 決策三(b)/(c) 之 `rejectDeptRestricted()` 私有方法回傳值 | **✅ 已裁決：A 404 `DOCUMENT_NOT_FOUND`**（維持草案，未改判）；`rejectDeptRestricted()` 定稿回傳 `NotFoundException`，§3.7 對照表末列 | ✅ 已定案，可動工 |
+| OQ-E06-04 | 授權檢查時機（後端服務層權威 vs 前端亦可） | §3.7 決策一/三已將判定放在服務層而非 controller/前端 | **✅ 已裁決：A 後端服務層權威**（維持草案），AC-30 可直接呼叫服務層繞過前端驗證以證明 | ✅ 已定案，既有原則之重申 |
 

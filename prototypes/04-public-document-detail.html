@@ -2,6 +2,16 @@
 <!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
      本檔已套用：「循環別」列改以 lifecycleDisplayName 呈現（銷售及收款循環（消金））。
      規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
+<!-- 🟢 F041 一般使用者子分類「業務／其他」（APPROVED — 2026-08-11 人類閘門通過）
+     本檔已套用：業務子分類使用者**直連不相符文件 URL** 之拒絕畫面（F041 AC-20／AC-21、F019 AC-U6）。
+     **OQ-E06-03 裁決 A：404 `DOCUMENT_NOT_FOUND`**（隱藏存在性，與既有「非已公告文件對前台視同不存在」
+       之慣例一致）。原並陳之選項 B（403 PERMISSION_DENIED）**已依裁決移除**，不再兩案並陳。
+     **OQ-E08-10 裁決 A**：拒絕路徑不寫入任何稽核（含不寫拒絕事件），`AUDIT_LOG` 不變、17 不需改檔。
+     共通要求（已落實）：畫面**不得出現任何文件欄位**（編號／書名／制定部門／使用部門／內容摘要），
+       故拒絕面板為**不透明**覆蓋、非既有 admin 頁之半透明 backdrop-blur；且文案不得因
+       「文件不存在」與「文件存在但不在你部門」而不同（否則以文案差異即可還原存在性）。
+     05 檢視器**不需改檔**：業務使用者根本無法到達 04，直連 05 之拒絕沿用同一面板、檢視器不開啟。
+     規格權威＝docs/specs/features/F041-user-subtype-business-scope.md ＋ docs/specs/error-handling.md#dept-restriction -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -46,6 +56,15 @@
     <a href="03-public-list.html" class="hover:text-primary-600 flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i>文件瀏覽</a>
     <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
     <span class="text-slate-600">詳情</span>
+  </div>
+
+  <!-- 🟢 F041 已定案 · 原型示範控制（非正式 UI；實作時不得移植此區塊） -->
+  <div data-prototype-demo="true" class="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 mb-4">
+    <i data-lucide="badge-check" class="w-4 h-4 shrink-0 mt-0.5"></i>
+    <div class="flex-1 min-w-0">
+      <div><b>🟢 已定案（F041 · 2026-08-11 人類閘門通過）</b>：業務子分類使用者直連「使用部門不相符」文件之拒絕回應碼＝<b>404 <span class="mono text-xs">DOCUMENT_NOT_FOUND</span></b>（OQ-E06-03 裁決 A）。</div>
+      <button onclick="openReject()" class="mt-2 inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-emerald-300 bg-white text-sm text-emerald-800 hover:bg-emerald-100"><i data-lucide="shield-alert" class="w-4 h-4"></i>示範：業務使用者直連不相符文件</button>
+    </div>
   </div>
 
   <!-- title + actions -->
@@ -126,6 +145,38 @@
 
   <p class="text-center text-xs text-slate-400 mb-4">查看/下載/列印皆留下稽核軌跡，內容與檢視器浮水印一致。</p>
 </main>
+
+<!-- 🟢 F041 已定案 · 拒絕面板（不透明覆蓋：AC-20 要求不得回傳/呈現任何文件欄位，故不採半透明 blur） -->
+<div id="rejectOverlay" class="hidden fixed inset-0 z-40 bg-white overflow-auto">
+  <div class="max-w-4xl mx-auto px-4 py-8">
+    <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 flex items-start gap-2 mb-6">
+      <i data-lucide="badge-check" class="w-4 h-4 mt-0.5 shrink-0"></i>
+      <div class="flex-1"><b>🟢 已定案（OQ-E06-03 裁決 A，2026-08-11 人類閘門通過）</b>：業務子分類使用者直連「使用部門不相符」文件時，
+        一律回 <b>404 <span class="mono text-xs">DOCUMENT_NOT_FOUND</span></b>（隱藏存在性）。<b>不新增錯誤碼</b>。
+        下方為定稿畫面與文案，為此情境之<b>唯一</b>回應。</div>
+    </div>
+    <div class="max-w-md mx-auto">
+      <div class="border border-slate-200 rounded-xl p-6">
+        <div class="text-center max-w-xs mx-auto py-4">
+          <div class="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="file-x" class="w-7 h-7 text-red-500"></i></div>
+          <h3 class="font-semibold text-slate-900">查無此文件</h3>
+          <p class="text-sm text-slate-500 mt-1">查無此文件，或該文件尚未公告。</p>
+          <p class="text-xs mono text-slate-400 mt-2">DOCUMENT_NOT_FOUND · 404</p>
+        </div>
+        <p class="text-xs text-slate-400 mt-2">與既有「非已公告文件對前台視同不存在 → 404」之慣例一致。<b>同一組文案同時用於「文件不存在」與「文件存在但不在你部門」兩種情境</b>——文案若分歧，以差異即可還原存在性，等同架空本裁決。</p>
+      </div>
+    </div>
+    <ul class="mt-6 text-xs text-slate-500 space-y-1.5 list-disc pl-5">
+      <li>拒絕路徑<b>不寫入任何 VIEW／DOWNLOAD／PRINT 成功稽核</b>（調閱事實未發生，AC-27）；<b>亦不寫「拒絕事件」</b>（OQ-E08-10 裁決 A：MVP 不記錄，<span class="mono text-xs">AUDIT_LOG</span> 列舉不變）。</li>
+      <li>檢視器（05）／PDF 代理／下載／列印四條路徑<b>同樣被擋於服務層</b>，不產生浮水印、不燒錄、不回傳任何位元組（AC-25／AC-26／AC-30）。</li>
+      <li>清單路徑<b>不套用本面板</b>——過濾屬正常查詢行為，空結果沿用既有「查無符合結果」空狀態（AC-33）。</li>
+      <li><b>孤兒帳號</b>（部門資料缺值）之業務使用者亦走同一拒絕路徑，<b>不</b>提示「您的部門資料異常」（避免以錯誤訊息區分「無文件」與「帳號異常」）。</li>
+    </ul>
+    <div class="mt-6 flex justify-center">
+      <button onclick="closeReject()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">關閉示範，返回文件詳情</button>
+    </div>
+  </div>
+</div>
 
 <!-- toast -->
 <div id="toastWrap" class="fixed top-16 right-4 z-50 space-y-2"></div>
@@ -232,6 +283,12 @@
     toast('success',`已${label}「${target}」，並寫入 ${kind} 稽核（浮水印已於伺服器端燒錄）`);
   }
   function openLink(n){ toast('info','跳轉至連結文件：'+n); return false; }
+
+  /* 🟢 F041（OQ-E06-03 裁決 A：404 DOCUMENT_NOT_FOUND）：業務子分類使用者直連不相符文件 URL 之拒絕面板。
+     覆蓋層為不透明（bg-white），確保畫面上不殘留任何文件欄位（AC-20）。 */
+  function openReject(){ document.getElementById('rejectOverlay').classList.remove('hidden'); lucide.createIcons(); }
+  function closeReject(){ document.getElementById('rejectOverlay').classList.add('hidden'); }
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeReject(); });
 
   lucide.createIcons();
 </script>

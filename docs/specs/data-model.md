@@ -1,9 +1,9 @@
 ---
 spec-id: data-model
 title: 資料模型（概念層）
-version: 1.4
-date: 2026-08-07
-status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 人類閘門通過）
+version: 1.5
+date: 2026-08-10
+status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.5 之 ACCOUNT.userSubtype 段落為 🟢 APPROVED 2026-08-11 人類閘門通過**）
 ---
 
 # 資料模型（Data Model）
@@ -15,6 +15,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 > **v1.1（2026-07-16）新增 E09 智慧問答（RAG）相關實體**：DOC_SOURCE_XLS、DOCUMENT_CHUNK、VECTOR_EMBEDDING、INDEX_RUN、QA_LOG；並擴充 AUDIT_LOG（`source` / `qaLogId`）以區分「經 AI 問答導引」之調閱。向量之物理儲存（pgvector / Qdrant / Milvus / MSSQL 2025 向量）由 Architect 選型（見 [open-questions.md](open-questions.md) OQ-E09-03），本文件僅定義概念層實體與其 metadata。
 > **v1.2（2026-07-17）新增 E07 變更歷程（F037/F038）相關實體**：`DOCUMENT_CHANGE_LOG`（文件欄位層變更事件）、`LIFECYCLE_CHANGE_LOG`＋`LIFECYCLE_SNAPSHOT`（循環 DAG 結構變更事件＋快照）；併同定案 `AUDIT_LOG` 之 `targetType`/`actionType` 擴充（涵蓋 F036/F037/F038 調閱事件，OQ-E07-02 已定案 ✅）。完整理由見 architecture-spec.md §4.8。
 > **v1.4（2026-08-07）🟢 APPROVED（2026-08-07 人類閘門通過）**：[LIFECYCLE](#lifecycle-entity) **新增非必填 `subcategory`（子分類）欄位**，循環之業務身分改為 `(name, subcategory)` 組合（**additive**：既有列全數落在 `subcategory = null`，語意與行為向後相容、不需回填）；併同新增唯一性不變式 INV-1／INV-2／INV-3 與 [MSSQL 唯一索引之實作前置檢查](#lifecycle-unique-index-precheck)。權威規格見 [F040](features/F040-lifecycle-subcategory.md)。**既有欄位、既有實體與 ICSOP 文件編號規則皆不變**。
+> **🟢 v1.5（2026-08-11）APPROVED（2026-08-11 人類閘門通過）**：[ACCOUNT](#account-entity) **新增 `userSubtype`（一般使用者子分類：`business`／`other`）欄位**（**additive**：`NOT NULL DEFAULT 'other'`，既有列一律落在 `'other'` ＝不限縮，行為向後相容、不需回填、無前置檢查）。權威規格見 [F041](features/F041-user-subtype-business-scope.md)。**[ROLE](#role-entity) 維持固定 5 種、不新增第 6 種角色**（`OQ-E08-04` 已定案為選項 B）。**既有欄位、既有實體與所有既有行為皆不變**；`AUDIT_LOG` 亦不受影響（`OQ-E08-10` 定案為「不記錄拒絕稽核」，本需求完全不觸及稽核子系統）。
 > **v1.3（2026-08-06）新增 E10 附錄管理（F039）相關實體**：`APPENDIX_POOL`（附錄池）＋`DOC_APPENDIX`（文件↔附錄多對多關聯，**帶 `sortOrder`**）；併同 `AUDIT_LOG` 之 **additive 擴充**（`targetType` 新增 `APPENDIX`、新增 `appendixId` 參照欄）與 `ICSOP_DOCUMENT` 新增第 20 欄「附錄」。權威規格見 [F039](features/F039-appendix-management.md)。
 
 ## 實體總覽
@@ -115,7 +116,8 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | `User` | 一般使用者 |
 
 - 權限依 F025（角色×功能）、F026（角色×欄位）判定。
-- **相關功能**：F002、F003、F025、F026。
+- 🟢 **2026-08-11 明確聲明（[F041](features/F041-user-subtype-business-scope.md)，人類閘門通過）**：「業務／其他」**非第 6 種角色**，而是 [ACCOUNT](#account-entity) 之獨立欄位 `userSubtype`（僅對 `User` 角色生效）。本表維持 **5 種固定列舉值不變**（`OQ-E08-04` 已定案為選項 B）。📝 追溯：若當初裁為選項 A（新增 `BusinessUser` 角色），本表須新增第 6 列，並須同步改寫本節「不可由前後台新增/刪除」之定案文字及 [US-006](../stories/epics/E01-account-auth/US-006-role-assignment.md) AC3、[F003](features/F003-account-role-management.md) AC。
+- **相關功能**：F002、F003、F025、F026、**F041**（🟢 APPROVED）。
 
 ## 帳號 ACCOUNT {#account-entity}
 
@@ -137,6 +139,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | passwordHash | bcrypt/argon2 加鹽雜湊（**僅手動帳號有值**；上游密碼欄嚴禁落地，見下） | 否 |
 | source | `manual`(手動建立) / `upstream`(上游同步) | 是 |
 | roleCode | 指派角色（→ ROLE） | 是 |
+| **userSubtype** | **一般使用者子分類**：`business`(業務) / `other`(其他)。**🟢 APPROVED（[F041](features/F041-user-subtype-business-scope.md)，2026-08-11 人類閘門通過）**；`NOT NULL DEFAULT 'other'`；**僅在 `roleCode = 'User'` 時具效力**（見下） | 是（有預設值） |
 | status | `active` / `disabled`（上游同步時 ← `EMPSTS = 'A'`） | 是 |
 | disableReason | `manual` / `departed`（nullable） | 否 |
 | disabledAt | 停用時間（nullable） | 否 |
@@ -157,6 +160,19 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - ⚠ **本欄非必填且實測有空值**（AS 76 筆）：`EMAILADDR` 從缺之在職者**將無法經 AD 登入**，屬 HR 資料面問題，應由 HR 補齊，系統不得以其他欄位補位。
 - ⚠ **唯一性未保證**：本欄未設唯一鍵（主鍵仍為 `(companyCode, loginId)`）。若同一 email 命中多筆在職帳號，視為上游資料異常，登入拒絕並告警（見 [error-handling.md#auth](error-handling.md#auth)）。email 唯一性須於正式環境覆核（契約 §11 #8）。
 
+### `userSubtype` 一般使用者子分類（🟢 APPROVED 2026-08-11 人類閘門通過） {#account-user-subtype}
+
+> **權威＝[F041](features/F041-user-subtype-business-scope.md)**（欄位語意、不變式、判定契約）。本節僅登錄資料模型面之定義，不重複規範行為。
+> ✅ **`OQ-E08-04` 已定案為選項 B（子分類旗標）**，故新增本欄。📝 追溯：若當初裁為選項 A（新增第 6 種角色 `BusinessUser`），本欄將不新增，改為擴充 [ROLE](#role-entity) 之列舉值（並須改寫該節「固定 5 種列舉值」之定案文字）。
+
+- **型別**：`nvarchar(20) NOT NULL DEFAULT 'other'`，並加 `CHECK (userSubtype IN ('business','other'))` 約束。
+  - 選 `nvarchar(20)` 而非 `bit`／`tinyint`：語意自明、日後若需第三種子分類為 additive 變更（比照 `source`／`status`／`disableReason` 等既有列舉欄之慣例）。
+- **預設 `'other'`（＝不限縮）之理由**：既有帳號（含上游同步之全部在職者）於 migration 後一律落在 `'other'`，**行為與變更前完全相同**，不會因欄位缺值而意外全數受限。
+- **非上游來源欄位**：`VW_HPMUSER` 11 欄白名單**不含**此欄；[F004](features/F004-org-sync.md) 組織同步之 upsert **不得**寫入本欄（[F041](features/F041-user-subtype-business-scope.md) AC-34）。指派入口僅有一處＝[F003](features/F003-account-role-management.md) 之角色指派 modal。
+- **僅對 `roleCode = 'User'` 生效**：其餘 4 種角色之本欄值恆被忽略（[F041](features/F041-user-subtype-business-scope.md) INV-2）。**刻意不以 DB 約束強制「非 User 角色必為 'other'」**——若如此約束，角色升降級將被迫連動改寫本欄，使 additive 欄位變成有狀態耦合；改由判定函式 `isDeptScopedViewer` 於讀取端保證（[F041](features/F041-user-subtype-business-scope.md) AC-03）。
+- **不新增索引**：本欄不用於任何查詢條件（判定發生於已取得 session 身分之後、以純函式進行），無索引需求。
+- **migration 前置檢查**：無（純 additive 欄位＋預設值，既有列不需盤點或清理，與 [F040](features/F040-lifecycle-subcategory.md) 之 `LIFECYCLE.subcategory` 需前置盤點之情形不同）。
+
 ### 上游欄位白名單與密碼欄禁令
 
 - 🔴 上游 `VW_HPMUSER` 定義為 `SELECT *`（57 欄），內含 **`USERPW`／`DEFAULTPW`／`PWCHANGEDT`／`PWERRCNT`** 及 `BIRTHDAY`／`ADDR`／`TELNO`／`MOBILNO`／`EDUCATIONLVL` 等非必要個資。
@@ -167,7 +183,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - 上游帳號的姓名/部門等以同步結果為準（見 [open-questions](open-questions.md)）。
 - 帳號停用為**軟刪除**，不可實體刪除（維持稽核外鍵完整性）。
 - 帳號狀態：`active → disabled`（手動或離職）；`disabled → active`（誤判恢復，處理方式見 open-questions）。
-- **相關功能**：F001、F002、F003、F005、F023。
+- **相關功能**：F001、F002、F003、F005、F023、**F041**（`userSubtype`，🔴 Draft）。
 
 ## 循環 LIFECYCLE {#lifecycle-entity}
 

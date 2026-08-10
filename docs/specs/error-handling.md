@@ -1,9 +1,9 @@
 ---
 spec-id: error-handling
 title: 錯誤處理與失敗模式
-version: 1.2
-date: 2026-08-07
-status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落與 3 個 `LIFECYCLE_*` 錯誤碼為 🟢 APPROVED 2026-08-07 人類閘門通過）
+version: 1.3
+date: 2026-08-10
+status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落與 3 個 `LIFECYCLE_*` 錯誤碼為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.3 之 [#dept-restriction](#dept-restriction) 段落為 🟢 APPROVED 2026-08-11 人類閘門通過——OQ-E06-03 定案為 404 `DOCUMENT_NOT_FOUND`、OQ-E08-10 定案為不記錄拒絕稽核，均沿用既有錯誤碼、不新增**）
 ---
 
 # 錯誤處理（Error Handling）
@@ -184,6 +184,33 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 
 - **功能面**：角色對功能為「無/唯讀」時，呼叫寫入型 API 回 `PERMISSION_DENIED`（403）。組織範圍限定須由**後端強制過濾**，不可信任前端傳入條件（F025）；**現行矩陣已無啟用之「本部門」範圍**（主管循環管理已放寬為全公司唯讀，OQ-E08-03 定案），範圍過濾機制保留備用。
 - **欄位面**：唯讀欄位被寫入時回 `FIELD_WRITE_FORBIDDEN`（**非靜默忽略**業務欄位變更），該更新不得寫入；惟系統產生欄位（UUID）一律**忽略傳入值**而非報錯（F026）。
+- **資料列面（🟢 APPROVED 2026-08-11）**：「業務」子分類之一般使用者對非其使用部門文件之存取，屬**資料列層級**之限縮，既非功能面亦非欄位面；其回應碼為 **404 `DOCUMENT_NOT_FOUND`（刻意隱藏存在性，非 403）**——本系統唯一之此類例外，不自動推廣至其他越權場景，見 [#dept-restriction](#dept-restriction)（F041）。
+
+## 業務子分類之使用部門限縮（🟢 APPROVED 2026-08-11 人類閘門通過） {#dept-restriction}
+
+> 對應 [F041](features/F041-user-subtype-business-scope.md)（E08 / [US-072](../stories/epics/E08-permission-matrix/US-072-user-subtype-business-dept-restriction.md)、E06 / [US-057](../stories/epics/E06-public-browsing/US-057-business-user-dept-scoped-browsing.md)）。
+> **本節不新增任何錯誤碼**——沿用既有 `DOCUMENT_NOT_FOUND`。
+
+**適用對象**：`roleCode = 'User'` 且 `userSubtype = 'business'` 之使用者，存取使用部門與其不相符之已公告文件時（清單以外之路徑：詳情直連 URL、檢視器、PDF 代理、下載、列印）。
+
+### ✅ 拒絕之回應碼：404 `DOCUMENT_NOT_FOUND`（`OQ-E06-03` → 選項 A，2026-08-11 定案）
+
+- **一律回 404 `DOCUMENT_NOT_FOUND`**（既有錯誤碼），**不得**回 403 `PERMISSION_DENIED`。
+- 理由：與本系統既有「非已公告文件對前台**視同不存在** → 404」之慣例一致（[F019](features/F019-public-list-browsing.md) 詳情路徑現行行為）；403 本身即透露「此文件確實存在、只是你無權」，屬**存在性洩漏**——使業務使用者得知某編號文件確實存在於系統中。
+- ⚠ **已明確接受之代價（不得隱藏）**：這是本系統**第一個刻意隱藏資源存在性**之例外，與其餘越權一律回 403 之全域慣例（見 [#permission](#permission)）不一致。日後若被要求推廣至其他越權場景（如部門窗口對非其唯讀範圍之操作），需另案評估——**本次裁決僅限業務子分類之前台文件存取路徑，不自動推廣**。
+- 📝 否決之選項 B（回 403，與 [F025](features/F025-role-function-matrix.md)／[F026](features/F026-role-field-matrix.md) 越權慣例一致、無特例）：其代價為洩漏「該編號之文件存在」此一事實（僅存在性、非內容）。保留於此供追溯。
+
+**強制要求**：
+- 回應**不得包含任何文件欄位**（`documentNumber`／`documentName`／`draftingDeptName`／`usingDeptNames`／`contentSummary` 等），亦不得回傳任何 PDF 位元組（[F041](features/F041-user-subtype-business-scope.md) AC-20／AC-25／AC-26）。
+- 錯誤訊息文案**不得**因「文件不存在」與「文件存在但不在你部門」而不同——否則以文案差異即可還原存在性，架空本裁決之目的（[F041](features/F041-user-subtype-business-scope.md) AC-21）。
+- **清單路徑不套用本節**——過濾屬正常查詢行為，回傳較少結果，**非錯誤**；空結果顯示既有「查無符合結果」空狀態（見 [#public](#public)）。
+- **孤兒帳號**（`orgCode` 缺值或查無）之業務使用者：清單為空、所有文件不可見（deny-by-default），**非錯誤**、不提示「您的部門資料異常」；**前台清單頂部說明句亦沿用業務子分類之同一句 `SCOPE_NOTICE_BUSINESS`、不另立第三句**（[F041](features/F041-user-subtype-business-scope.md) AC-40）——避免以錯誤訊息或文案差異區分「無文件」與「帳號異常」。
+
+### ✅ 不記錄拒絕稽核事件（`OQ-E08-10` → 選項 A，2026-08-11 定案）
+
+- 拒絕路徑**一律不得寫入 `VIEW`／`DOWNLOAD`／`PRINT` 成功事件**（調閱事實未發生，[F041](features/F041-user-subtype-business-scope.md) AC-27），且 **`AuditWriter` 完全未被呼叫**（AC-28）。
+- **直接後果：本需求完全不觸及稽核子系統**——`AUDIT_LOG` 不動、[F023](features/F023-audit-logging.md)／[F024](features/F024-access-history-query.md) 皆不需 AC delta、[nfr.md](nfr.md) 稽核保留規則不需覆核。
+- 📝 否決之選項 B（寫入 `actionType = 'ACCESS_DENIED_DEPT_RESTRICTION'` 供資安／外流意圖偵測）：曾是本需求**唯一會擴散到 schema** 者，需 `AUDIT_LOG` 列舉擴充 ＋ 上述三項連帶變更。保留於此供追溯；日後若組織將「業務人員嘗試繞過限制」視為需追蹤之風險訊號，此為 additive 變更、不阻塞現有實作。
 
 ## 稽核 {#audit}
 

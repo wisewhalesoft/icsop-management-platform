@@ -4,7 +4,7 @@
 > **Priority**: P0
 > **Phase**: 1/2
 > **Status**: Draft
-> **Stories**: 7 個
+> **Stories**: 8 個（US-057 為 2026-08-10 新增之 DRAFT story，從屬 [E08 US-072](../E08-permission-matrix/US-072-user-subtype-business-dept-restriction.md)，待人類裁決 Open Questions）
 
 ## Epic Goal
 
@@ -23,6 +23,7 @@
 | US-054 | 下載/列印 PDF 浮水印燒錄 | P0 | [US-054-download-print-watermark-burn.md](US-054-download-print-watermark-burn.md) |
 | US-055 | RWD 響應式版面 | P1 | [US-055-rwd-responsive-layout.md](US-055-rwd-responsive-layout.md) |
 | US-056 | 後台開啟前台瀏覽頁 | P2 | [US-056-backend-launch-public-page.md](US-056-backend-launch-public-page.md) |
+| US-057 | 業務使用者之前台使用部門限縮瀏覽 **DRAFT** | P0（建議） | [US-057-business-user-dept-scoped-browsing.md](US-057-business-user-dept-scoped-browsing.md) |
 
 ## Dependencies
 
@@ -48,3 +49,4 @@
 - [x] **關鍵字搜尋涵蓋欄位範圍**（OQ-E06-01 ✅）— **定案**：涵蓋「文件編號＋文件名稱」（可後續擴充）。
 - [x] 使用者是否可自訂排序（如切換依公告日期排序）？— **對應 open-questions.md「（備註）自訂排序、前台顯示 DAG 結構」列**：**本輪不納入**（見 [scope.md](../../../specs/scope.md) Out of Scope），如未來有需求另立為新 Story；此為範疇排除，非「是否需要」之是非定案，未使用 ✅ 標記。
 - [x] 前台頁面是否需要顯示文件的「所屬循環」DAG 結構？— **對應 open-questions.md「（備註）自訂排序、前台顯示 DAG 結構」列，並與 [E03 OQ-E03-08](../E03-lifecycle-dag/epic-brief.md) 一致**：循環樹狀圖預覽（US-025）已**定案為後台限定，本輪不開放前台**（OQ-E03-08 ✅：「後台限定，本輪不開放前台；未來若開放，可視範圍/稽核動作類型須另行定義，不可直接沿用後台版本規則」）；前台是否另以簡化形式呈現所屬循環，比照上一項為**本輪不納入範疇**（Out of Scope），未使用 ✅ 標記。
+- [ ] **（2026-08-10 新增，DRAFT，待人類裁決）業務子分類使用者之前台限縮瀏覽**：詳見 [US-057](US-057-business-user-dept-scoped-browsing.md)（從 story，前台行為 AC）與 [E08 US-072](../E08-permission-matrix/US-072-user-subtype-business-dept-restriction.md)（主 story，身分模型）。核心待裁決點：直連 URL 被拒絕時應回 404（隱藏存在性）或 403（現行慣例）（OQ-A）。

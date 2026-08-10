@@ -4,7 +4,7 @@
 > **Priority**: P0
 > **Phase**: 1
 > **Status**: Draft
-> **Stories**: 2 個
+> **Stories**: 3 個（US-072 為 2026-08-10 新增之 DRAFT story，待人類裁決 Open Questions，見下）
 
 ## Epic Goal
 
@@ -18,6 +18,7 @@
 |---|---|---|---|
 | US-070 | 角色×功能權限矩陣草案 | P0 | [US-070-role-function-matrix.md](US-070-role-function-matrix.md) |
 | US-071 | 角色×欄位權限矩陣草案 | P0 | [US-071-role-field-matrix.md](US-071-role-field-matrix.md) |
+| US-072 | 一般使用者子分類——業務／其他（業務限縮於使用部門瀏覽）**DRAFT** | P0（建議） | [US-072-user-subtype-business-dept-restriction.md](US-072-user-subtype-business-dept-restriction.md) |
 
 ## Dependencies
 
@@ -42,3 +43,4 @@
 - [x] （已定案 2026-07-16）**系統管理員**對循環管理／ICSOP 文件管理／文件使用表單管理及所有文件欄位**比照主管為唯讀**（可查不可改、無寫入權）；**主管無「文件使用表單管理」與「文件調閱歷程查詢」權限**。原「當責部門系統管理員例外」一併收斂為唯讀。
 - [x] （已定案 2026-07-17，OQ-E08-03）**主管「循環管理（DAG）」可視範圍由「唯讀（本部門相關）」改為「唯讀」（全公司）**，與主管對 ICSOP 文件管理之全公司唯讀範圍一致；主管對循環仍唯讀、不可編輯。詳見 [US-070](US-070-role-function-matrix.md)。
 - [x] **矩陣其餘部分是否需經正式審核後才能作為開發依據**（OQ-E08-02 ✅）— **定案**：**採現行草案作為開發依據**（不阻塞實作），待利害關係人正式簽核；簽核如有調整，再依 F025 AC「矩陣審核後更新版本」處理。**此決定不等於矩陣內容本身已完成利害關係人正式審核**，僅代表「開發不必等審核完成」，兩件事分開處理。
+- [ ] **（2026-08-10 新增，DRAFT，待人類裁決）「一般使用者」細分為「業務／其他」，業務使用者前台僅可瀏覽使用單位為自己部門之文件**：詳見 [US-072](US-072-user-subtype-business-dept-restriction.md)（主 story，身分模型與矩陣漣漪）與 [E06 US-057](../E06-public-browsing/US-057-business-user-dept-scoped-browsing.md)（從 story，前台瀏覽行為）。US-072 內含 8 題待裁決 Open Questions（候選編號 OQ-E08-04～OQ-E08-11），裁決前不得交付 spec-writer 定案。

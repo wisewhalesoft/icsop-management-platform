@@ -5,6 +5,8 @@ Epic/Story: E08 / US-071（附錄（多）列：E10 / US-101、US-102）
 > **定案**：主管、部門窗口、**系統管理員**對所有文件欄位**皆唯讀**（僅 ICSOP 管理員可寫）。系統管理員比照主管為唯讀（可查、附件可下載、不可寫），與功能矩陣 F025 一致（OQ-E08-01 已收斂）。「所屬節點」雖列 ICSOPAdmin 可寫，但維護入口為節點抽屜（F009），非文件編輯表單。共 **20 欄位**（原 19 欄 ＋ **2026-08-06 新增「附錄（多）」**；詳見 [data-model](../data-model.md#document-entity)；2026-07-17 移除「當責部門」、新增 制定公司/制定部門/制定室別/內容摘要，發布日期→公告日期、人為版本號→版次）。
 > **新增「附錄（多）」欄位列（[F039](F039-appendix-management.md) / [US-071](../../stories/epics/E08-permission-matrix/US-071-role-field-matrix.md)）**：權限值與「使用表單（多）」列**完全比照**——ICSOPAdmin 可寫、其餘四角色唯讀（可下載）。**欄位鍵字串定案為「附錄」**（矩陣列名顯示「附錄（多）」，鍵值去括號補述，比照既有「使用表單（多）」→ 鍵值 `使用表單`；建議常數 `FieldKey.APPENDICES`）。⚠ 其他 spec 之散文仍以「19 欄」指涉，屬既有措辭落差，見 [open-questions.md](../open-questions.md) OQ-E10-03。
 
+> **🟢 2026-08-11 delta（APPROVED，人類閘門通過）——一般使用者子分類（業務／其他）**：本矩陣**不新增欄位列、不新增角色欄、不改變任一格值**。規則權威＝[F041](F041-user-subtype-business-scope.md)；**本 delta 之 AC 編號採 `AC-U#`**。詳見下方 [§一般使用者子分類 delta](#user-subtype-delta)。⚠ 本檔 §9.1「子樹自動展開」之判定式（`isWithinSubtree`）為 [F041](F041-user-subtype-business-scope.md) 之**重用對象**，該函式本身**不得因本次需求而修改**。
+
 ## Description
 於欄位層級（非僅功能層級）定義各角色對 ICSOP 文件 20 欄位的可寫/唯讀，避免非授權角色修改關鍵欄位。與 F025 採同一套 RBAC 中介層，欄位權限以 DTO 層白名單/黑名單過濾。
 
@@ -70,12 +72,33 @@ Epic/Story: E08 / US-071（附錄（多）列：E10 / US-101、US-102）
 - Given 文件使用部門設為部層 `JA000`、使用者所屬部門為 `JAC00`, When 判定使用部門相符性, Then 判定為相符（子樹自動展開）。
 - Given 文件使用部門設為處室層 `JAC00`、使用者所屬部門為同部之另一處室, When 判定, Then 判定為不相符。
 
+### 一般使用者子分類 delta（🟢 APPROVED 2026-08-11 人類閘門通過；規則權威＝[F041](F041-user-subtype-business-scope.md)） {#user-subtype-delta}
+
+> **✅ OQ-E08-04 已定案為選項 B（子分類旗標）、OQ-E08-05 已定案為選項 A（子樹展開、重用 `isWithinSubtree`）**，2026-08-11 人類裁決。
+> 📝 追溯：若當初裁為選項 A（新增第 6 種角色 `BusinessUser`），本矩陣須新增一欄（其 20 列之值與「一般使用者」欄逐格相同——全數唯讀），並比照 [F025](F025-role-function-matrix.md) 同步改寫「5 種固定角色」既有定案文字。
+
+**結論：本矩陣不受業務／其他子分類影響。**
+
+理由：一般使用者對 ICSOP 文件之**全部 20 欄位本即全數唯讀**（無任一可寫格）。業務限制影響的是「**哪些文件對其可見**」（資料列層級之過濾），
+與「**某欄位是否可寫**」（欄位層級之權限）為正交之兩個維度。可見文件之欄位權限與不可見文件之欄位權限**皆為唯讀**，故限縮可見範圍不改變本矩陣任一格。
+
+**⚠ 對 §9.1 判定式之關係（重用，非修改）**：本檔 §9.1 定義之「使用部門相符性＝子樹自動展開」判定式已落地為共用純函式 `isWithinSubtree`
+（`backend/src/org-sync/org-hierarchy.ts`），現由三處消費（[F019](F019-public-list-browsing.md) 置頂／[F019](F019-public-list-browsing.md) 部門篩選／本檔欄位判定）。
+[F041](F041-user-subtype-business-scope.md) 將其擴為**第四處消費**（業務子分類之可見性過濾），**呼叫方向與置頂相同**（scope＝文件使用部門、target＝使用者部門）。
+`isWithinSubtree` 之簽章、語意、既有測試（`TS-PS-ORG-001`～`006`）**一律不得因本次需求而變動**（[F041](F041-user-subtype-business-scope.md) INV-4）。
+
+- **AC-U1**：Given `FIELD_MATRIX` 之全部欄位鍵 × 5 種角色, When 逐格取值, Then 與本 delta 導入前**逐格相同**；欄位鍵集合亦未增減。〔[F041](F041-user-subtype-business-scope.md) AC-38〕
+- **AC-U2**：Given 兩個帳號其 `roleCode` 皆為 `'User'`、`userSubtype` 分別為 `'business'` 與 `'other'`, When 對任一欄位鍵呼叫欄位權限解析函式, Then **兩者結果完全相同**；且該函式之簽章**不含** `userSubtype` 參數。〔[F041](F041-user-subtype-business-scope.md) AC-38〕
+- **AC-U3**（**判定式重用鎖定**）：Given `isWithinSubtree` 之既有測試輸入組合（`TS-PS-ORG-001`～`TS-PS-ORG-006`）, When 於本次需求實作後重跑, Then **全部維持綠燈且期望值未經修改**；且 [F041](F041-user-subtype-business-scope.md) 之 `isUsingDeptMatched` 對同一輸入組合之回傳值與既有 `isPinned` 逐案相等（證明無第二套比對邏輯）。〔[F041](F041-user-subtype-business-scope.md) AC-10〕
+
 ## Error Scenarios
 - 唯讀欄位寫入/系統欄位處理：見 [error-handling.md#permission](../error-handling.md#permission)（`FIELD_WRITE_FORBIDDEN`）。
+- **業務子分類之前台可見範圍限縮**（🟢 APPROVED）：屬**資料列層級過濾**，不觸發 `FIELD_WRITE_FORBIDDEN`；拒絕回 404 `DOCUMENT_NOT_FOUND`，見 [error-handling.md#dept-restriction](../error-handling.md#dept-restriction) 與 [F041](F041-user-subtype-business-scope.md)。
 
 ## Related
 - **來源契約: [upstream-hr-source-contract.md](../upstream-hr-source-contract.md)**（§3.5 5 層代碼前綴編碼、§9.1 文件使用部門可指定任意層級、§9.2 子樹前綴展開）
 - Data: [ICSOP_DOCUMENT（20 欄位）](../data-model.md#document-entity), [DOC_USING_DEPT](../data-model.md#doc-using-dept), [APPENDIX_POOL／DOC_APPENDIX](../data-model.md#appendix-entity)
 - Depends on: [F025](F025-role-function-matrix.md), [F010](F010-create-document.md), [F004](F004-org-sync.md); 影響 [F011](F011-edit-with-comparison.md), [F014](F014-accountable-dept-chief.md), [F019](F019-public-list-browsing.md), [F033](F033-permission-aware-retrieval.md), [F039](F039-appendix-management.md)
 - 節點寫入路徑: [F009](F009-node-drawer-maintenance.md)
+- **使用者子分類（業務／其他）規則權威**: [F041](F041-user-subtype-business-scope.md)（本矩陣不變之理由、`isWithinSubtree` 第四處消費之重用鎖定；🟢 APPROVED 2026-08-11，OQ-E08-04→B／OQ-E08-05→A 皆已定案）
 - 定案: OQ-E08-01（SysAdmin 對文件欄位比照主管為唯讀、無寫入權）。OQ: OQ-E08-02（矩陣其餘部分審核）。

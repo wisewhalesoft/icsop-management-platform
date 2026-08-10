@@ -1,4 +1,11 @@
 <!DOCTYPE html>
+<!-- 🟢 F041 一般使用者子分類「業務／其他」（APPROVED — 2026-08-11 人類閘門通過）
+     本檔**唯一**變更＝新增一則註記橫幅：說明子分類非第 6 種角色。
+     FUNC_ROWS／FIELD_ROWS **逐格未變、欄數維持 5**（F041 AC-37／AC-38），刻意不新增第 6 欄。
+     OQ-E08-04 裁決 B（子分類旗標）已確認此結論——若當初裁決 A（新增角色 BusinessUser），
+     兩份矩陣需各加第 6 欄且每列複核；現行裁決下**本頁矩陣永久維持 5 欄**。
+     ⚠ 本頁另有一則既有的「草案待審（OQ-E08-02）」橫幅，與 F041 無關、非本輪範圍，勿一併翻轉。
+     規格權威＝docs/specs/features/F041-user-subtype-business-scope.md -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -95,6 +102,14 @@
     <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 flex items-start gap-2">
       <i data-lucide="clock" class="w-4 h-4 mt-0.5 shrink-0"></i>
       <div><b>草案待審（OQ-E08-02）</b>：矩陣其餘部分為分析師草案，待利害關係人審核定案；矩陣以 RBAC 中介層於 API 層落實。</div>
+    </div>
+    <!-- 🟢 F041 註記：子分類非第 6 種角色，本矩陣逐格不變、不新增欄（AC-37／AC-38） -->
+    <div class="sm:col-span-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 flex items-start gap-2">
+      <i data-lucide="badge-check" class="w-4 h-4 mt-0.5 shrink-0"></i>
+      <div><b>🟢 已定案（F041 · OQ-E08-04 裁決 B，2026-08-11 人類閘門通過）</b>：一般使用者再細分之子分類「<b>業務</b>／<b>其他</b>」為 <span class="mono text-xs">ACCOUNT</span> 之獨立欄位，
+        <b>非第 6 種角色</b>——本頁兩份矩陣維持 <b>5 欄、逐格不變</b>（F041 AC-37／AC-38），權限解析函式亦不接受子分類參數。
+        子分類僅影響<b>前台可見之文件範圍</b>（資料列層級：業務者僅見「使用部門相符」之已公告文件），不參與功能授權與欄位授權判定；
+        指派入口見「帳號管理」之指派角色 modal（08）。</div>
     </div>
   </div>
 

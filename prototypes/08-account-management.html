@@ -1,4 +1,15 @@
 <!DOCTYPE html>
+<!-- 🟢 F041 一般使用者子分類「業務／其他」（APPROVED — 2026-08-11 人類閘門通過）
+     本檔已套用：①「指派角色」modal 內，**僅當所選角色為「一般使用者」時**呈現子分類選擇器（業務／其他），
+     其餘 4 種角色不呈現（F003 AC-U1、F041 AC-32）；②「角色」欄於一般使用者列附加子分類徽章
+     （INV-2：其餘 4 種角色之該欄值恆被忽略、不顯示）；③「編輯帳號」modal 之「目前角色」一併顯示子分類。
+     人類裁決結果（已落實）：
+       OQ-E08-04 → B 子分類旗標（`ACCOUNT.userSubtype`）；**角色種類維持 5 種、不新增第 6 種角色**
+       AC-35／F003 AC-U3 → 新帳號未指定子分類時預設 'other'（預設不限縮）
+       AC-36／F003 AC-U5 → **保留不清空**（原［ASSUMPTION］已定案）：角色改為非一般使用者時 userSubtype
+         維持原值、日後改回一般使用者即沿用——示範 persona（陳彥廷）見 accounts 註解
+       AC-02 → 未知 userSubtype 收斂為 'other'（fail-open，安全性由 DB NOT NULL + CHECK 保證）
+     規格權威＝docs/specs/features/F041-user-subtype-business-scope.md -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -98,7 +109,7 @@
 
   <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
-      <table id="acctTable" class="w-full text-sm min-w-[960px]">
+      <table id="acctTable" class="w-full text-sm min-w-[1020px]">
         <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
           <tr>
             <th class="text-left font-medium px-3 py-2.5">姓名</th>
@@ -185,6 +196,12 @@
     <h3 class="font-semibold text-slate-900 mb-1">指派角色</h3>
     <p class="text-xs text-slate-400 mb-4">帳號：<span id="rTarget" class="mono text-slate-600"></span></p>
     <div id="roleRadios" class="space-y-2"></div>
+    <!-- 🟢 F041 已定案 · 子分類選擇器：僅當所選角色為「一般使用者」時呈現（isSubtypeApplicable，AC-32／F003 AC-U1） -->
+    <div id="subtypeWrap" class="hidden mt-4 pt-4 border-t border-slate-100">
+      <label class="block text-sm font-medium text-slate-700 mb-1.5">子分類 <span class="text-red-500">*</span></label>
+      <div id="subtypeRadios" class="space-y-2"></div>
+      <p class="text-[10px] text-slate-400 mt-1">子分類為帳號之獨立欄位，僅「一般使用者」適用，不新增第 6 種角色。變更後下次該帳號之請求即套用新的可見範圍。</p>
+    </div>
     <div class="flex justify-end gap-2 mt-6">
       <button onclick="closeRole()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
       <button onclick="submitRole()" class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">儲存</button>
@@ -240,17 +257,34 @@
   /* ===== accounts ===== */
   const ROLE_META={sysadmin:['系統管理員','#4338CA'],icsop_admin:['ICSOP 管理員','#7C3AED'],supervisor:['主管','#0891B2'],deptcontact:['部門窗口','#475569'],user:['一般使用者','#64748B']};
   const MGMT=['sysadmin','icsop_admin','supervisor','deptcontact'];
+  /* ===== 🟢 F041（APPROVED — 2026-08-11 人類閘門通過）：一般使用者子分類「業務／其他」之純函式 =====
+     規格權威＝docs/specs/features/F041-user-subtype-business-scope.md（AC-31／AC-32／AC-35／AC-36）
+     ＋ F003 delta AC-U1～AC-U5。函式名稱逐字採規格「本規格鎖定之命名」表。
+     ⚠ 儲存值為小寫 'business'／'other'；'業務'／'其他' 僅為顯示標籤，不得用於任何判定。 */
+  function normalizeUserSubtype(v){ return v==='business' ? 'business' : 'other'; }                     // 未知值一律收斂為 other
+  function userSubtypeLabel(v){ return normalizeUserSubtype(v)==='business' ? '業務' : '其他'; }         // AC-31（顯示標籤逐字）
+  function isSubtypeApplicable(roleCode){ return roleCode==='user'; }                                   // AC-32（本原型角色代碼小寫 'user'＝後端 'User'）
+  const SUBTYPE_DESC={business:'前台僅顯示「使用部門相符」之已公告文件（含子樹）',other:'前台瀏覽範圍不變'};
+  function subtypeBadge(v){ return normalizeUserSubtype(v)==='business'
+    ? `<span class="shrink-0 whitespace-nowrap px-2 py-0.5 rounded text-xs font-medium bg-primary-50 text-primary-700 border border-primary-200">業務</span>`
+    : `<span class="shrink-0 whitespace-nowrap px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">其他</span>`; }
+
   let accounts=[
     // dept 顯示格式＝「部 / 處室」（同浮水印取值：部門欄＝部層、處/室欄＝最細單位）；
     // 無處/室者（如 吳佩珊 財會部）僅顯示部層，對應 §8.4 分隔符收合規則
-    {u:'20001',name:'黃俊傑',co:'和潤企業股份有限公司',dept:'資訊部 / 應用發展室',title:'系統管理師',src:'manual',role:'sysadmin',status:'active',last:'2026-07-16 09:12'},
-    {u:'20233',name:'李慧玲',co:'和潤企業股份有限公司',dept:'債權管理部 / 法催一室',title:'內控管理師',src:'manual',role:'icsop_admin',status:'active',last:'2026-07-16 08:40'},
-    {u:'22345',name:'王小明',co:'和潤企業股份有限公司',dept:'營運管理部 / 審查室',title:'業務專員',src:'upstream',role:'user',status:'active',last:'2026-07-16 10:02'},
-    {u:'20088',name:'陳彥廷',co:'和潤企業股份有限公司',dept:'企劃部 / 車輛行銷室',title:'室長',src:'upstream',role:'supervisor',status:'active',last:'2026-07-15 17:20'},
-    {u:'20877',name:'張家豪',co:'和潤企業股份有限公司',dept:'作業服務部 / 文管室',title:'室長',src:'upstream',role:'supervisor',status:'active',last:'2026-07-15 16:30'},
-    {u:'20521',name:'林建宏',co:'和潤企業股份有限公司',dept:'信用審查部 / 企金室',title:'資深專員',src:'upstream',role:'deptcontact',status:'active',last:'2026-07-15 14:05'},
-    {u:'21002',name:'吳佩珊',co:'和潤企業股份有限公司',dept:'財會部',title:'專員',src:'upstream',role:'deptcontact',status:'active',last:'2026-07-15 11:22'},
-    {u:'20321',name:'周立群',co:'和潤企業股份有限公司',dept:'作業服務部 / 客服室',title:'專員',src:'upstream',role:'user',status:'disabled',reason:'departed',last:'2026-06-30 22:14'}
+    // 🟢 F041：subtype 為 ACCOUNT 之新欄位（NOT NULL DEFAULT 'other'）；僅 role==='user' 時具效力（INV-2）
+    {u:'20001',name:'黃俊傑',co:'和潤企業股份有限公司',dept:'資訊部 / 應用發展室',title:'系統管理師',src:'manual',role:'sysadmin',status:'active',subtype:'other',last:'2026-07-16 09:12'},
+    {u:'20233',name:'李慧玲',co:'和潤企業股份有限公司',dept:'債權管理部 / 法催一室',title:'內控管理師',src:'manual',role:'icsop_admin',status:'active',subtype:'other',last:'2026-07-16 08:40'},
+    // 業務子分類之示範 persona（＝03 前台清單之登入者，兩檔一致）
+    {u:'22345',name:'王小明',co:'和潤企業股份有限公司',dept:'營運管理部 / 審查室',title:'業務專員',src:'upstream',role:'user',status:'active',subtype:'business',last:'2026-07-16 10:02'},
+    // 🟢 AC-36／F003 AC-U5 示範（2026-08-11 裁決：**保留不清空**）：此帳號為主管，但保有先前身為
+    // 一般使用者時所指派之 'business'。該值保留且不顯示（INV-2）；於「指派角色」改回一般使用者時
+    // 重新生效並預選「業務」——此即已定案之「舊設定沿用」行為，本 persona 為其唯一可操作示範，勿移除。
+    {u:'20088',name:'陳彥廷',co:'和潤企業股份有限公司',dept:'企劃部 / 車輛行銷室',title:'室長',src:'upstream',role:'supervisor',status:'active',subtype:'business',last:'2026-07-15 17:20'},
+    {u:'20877',name:'張家豪',co:'和潤企業股份有限公司',dept:'作業服務部 / 文管室',title:'室長',src:'upstream',role:'supervisor',status:'active',subtype:'other',last:'2026-07-15 16:30'},
+    {u:'20521',name:'林建宏',co:'和潤企業股份有限公司',dept:'信用審查部 / 企金室',title:'資深專員',src:'upstream',role:'deptcontact',status:'active',subtype:'other',last:'2026-07-15 14:05'},
+    {u:'21002',name:'吳佩珊',co:'和潤企業股份有限公司',dept:'財會部',title:'專員',src:'upstream',role:'deptcontact',status:'active',subtype:'other',last:'2026-07-15 11:22'},
+    {u:'20321',name:'周立群',co:'和潤企業股份有限公司',dept:'作業服務部 / 客服室',title:'專員',src:'upstream',role:'user',status:'disabled',reason:'departed',subtype:'other',last:'2026-06-30 22:14'}
   ];
 
   function roleBadge(code){const [l,c]=ROLE_META[code];return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-white" style="background:${c}">${l}</span>`;}
@@ -286,7 +320,7 @@
         <td class="px-3 py-2.5 text-slate-500"><div class="truncate max-w-[200px]" title="${a.dept||'—'}">${a.dept||'—'}</div></td>
         <td class="px-3 py-2.5 text-slate-500"><div class="truncate max-w-[200px]" title="${a.title||'—'}">${a.title||'—'}</div></td>
         <td class="px-3 py-2.5">${srcBadge(a.src)}</td>
-        <td class="px-3 py-2.5">${roleBadge(a.role)}</td>
+        <td class="px-3 py-2.5"><div class="flex items-center gap-1.5">${roleBadge(a.role)}${isSubtypeApplicable(a.role)?subtypeBadge(a.subtype):''}</div></td>
         <td class="px-3 py-2.5">${statusBadge(a)}</td>
         <td class="px-3 py-2.5 mono text-xs text-slate-400">${a.last}</td>
         <td class="px-3 py-2.5 write-only">${actions}</td>
@@ -306,7 +340,8 @@
     const u=document.getElementById('cUser').value.trim(); const err=document.getElementById('cUserErr');
     if(!u){err.querySelector('span').textContent='必要欄位缺漏';err.classList.remove('hidden');err.classList.add('flex');return;}
     if(accounts.some(a=>a.u===u)){err.querySelector('span').textContent='帳號名稱已存在（ACCOUNT_USERNAME_EXISTS）';err.classList.remove('hidden');err.classList.add('flex');return;}
-    accounts.unshift({u,name:'（待同步姓名）',co:'和潤企業股份有限公司',dept:'（待同步）',title:'（待同步）',src:'manual',role:document.getElementById('cRole').value,status:'active',last:'剛剛'});
+    // 🔴 F041 AC-35／F003 AC-U3：建立時未指定子分類 → 預設 'other'（預設不限縮）
+    accounts.unshift({u,name:'（待同步姓名）',co:'和潤企業股份有限公司',dept:'（待同步）',title:'（待同步）',src:'manual',role:document.getElementById('cRole').value,status:'active',subtype:'other',last:'剛剛'});
     closeCreate();render();toast('success','已建立帳號 '+u+'（密碼加鹽雜湊儲存）');
   }
 
@@ -316,7 +351,8 @@
     document.getElementById('eUser').textContent=a.u;
     const nm=document.getElementById('eName');nm.value=a.name;nm.readOnly=upstream;nm.classList.toggle('bg-slate-50',upstream);
     document.getElementById('eNameHint').classList.toggle('hidden',!upstream);
-    document.getElementById('eRole').innerHTML=roleBadge(a.role);
+    // 🔴 F041：一般使用者一併顯示目前子分類（INV-2：其餘 4 種角色不顯示）
+    document.getElementById('eRole').innerHTML=`<div class="flex items-center gap-1.5">${roleBadge(a.role)}${isSubtypeApplicable(a.role)?subtypeBadge(a.subtype):''}</div>`;
     document.getElementById('ePwWrap').classList.toggle('hidden',upstream);
     const up=document.getElementById('ePwUpstream');up.classList.toggle('hidden',!upstream);up.classList.toggle('flex',upstream);
     document.getElementById('ePw').value='';
@@ -334,19 +370,39 @@
   function openRole(i){roleTarget=i;const a=accounts[i];document.getElementById('rTarget').textContent=a.u;
     document.getElementById('roleRadios').innerHTML=Object.keys(ROLE_META).map(code=>`
       <label class="flex items-center gap-2.5 px-3 py-2 rounded-md border ${code===a.role?'border-primary-300 bg-primary-50':'border-slate-200'} cursor-pointer hover:bg-slate-50">
-        <input type="radio" name="rrole" value="${code}" ${code===a.role?'checked':''} class="text-primary-600"/>
+        <input type="radio" name="rrole" value="${code}" ${code===a.role?'checked':''} onchange="paintSubtype()" class="text-primary-600"/>
         ${roleBadge(code)}${code===a.role?'<span class="ml-auto text-[10px] text-primary-600">目前</span>':''}</label>`).join('');
+    renderSubtypeRadios(normalizeUserSubtype(a.subtype));
+    paintSubtype();
     show('roleModal');}
   function closeRole(){hide('roleModal');}
+  /* 🔴 F041 AC-32／F003 AC-U1：子分類選擇器之呈現條件＝isSubtypeApplicable(所選角色)。
+     其餘 4 種角色一律不呈現（不是停用、不是隱藏文字，是整塊不呈現）。 */
+  function selectedRole(){const el=document.querySelector('input[name="rrole"]:checked');return el?el.value:'';}
+  function renderSubtypeRadios(cur){
+    document.getElementById('subtypeRadios').innerHTML=['business','other'].map(v=>`
+      <label class="flex items-center gap-2.5 px-3 py-2 rounded-md border ${v===cur?'border-primary-300 bg-primary-50':'border-slate-200'} cursor-pointer hover:bg-slate-50">
+        <input type="radio" name="rsubtype" value="${v}" ${v===cur?'checked':''} class="text-primary-600"/>
+        ${subtypeBadge(v)}<span class="text-xs text-slate-500 flex-1 min-w-0">${SUBTYPE_DESC[v]}</span>
+        ${v===cur?'<span class="ml-auto text-[10px] text-primary-600 shrink-0">目前</span>':''}</label>`).join('');
+  }
+  function paintSubtype(){document.getElementById('subtypeWrap').classList.toggle('hidden',!isSubtypeApplicable(selectedRole()));}
   function submitRole(){
-    const val=document.querySelector('input[name="rrole"]:checked').value; const a=accounts[roleTarget];
-    if(val===a.role){closeRole();return;}
+    const val=selectedRole(); const a=accounts[roleTarget];
+    // 🟢 F041 AC-36／F003 AC-U5（2026-08-11 裁決）：角色改為非「一般使用者」時，userSubtype 保留原值、不清空
+    const selSub=document.querySelector('input[name="rsubtype"]:checked');
+    const sub=isSubtypeApplicable(val)&&selSub ? normalizeUserSubtype(selSub.value) : normalizeUserSubtype(a.subtype);
+    const subChanged=isSubtypeApplicable(val)&&sub!==normalizeUserSubtype(a.subtype);
+    if(val===a.role&&!subChanged){closeRole();return;}
+    // AC-U2：下次該帳號之請求即套用新的可見範圍（沿用既有「角色變更下次請求即生效」語意）
+    const apply=()=>{a.role=val;a.subtype=sub;render();
+      toast('success','角色已更新（下次請求即生效）'+(isSubtypeApplicable(val)?'　·　子分類：'+userSubtypeLabel(sub):''));};
     if(MGMT.includes(a.role)&&val==='user'){
       closeRole();
-      openConfirm('降級為一般使用者？','帳號「'+a.u+'」將由「'+ROLE_META[a.role][0]+'」降級為一般使用者，'+'將失去所有後台權限。',()=>{a.role=val;render();toast('success','角色已更新（下次請求即生效）');});
+      openConfirm('降級為一般使用者？','帳號「'+a.u+'」將由「'+ROLE_META[a.role][0]+'」降級為一般使用者，'+'將失去所有後台權限。',apply);
       return;
     }
-    a.role=val;closeRole();render();toast('success','角色已更新（下次請求即生效）');
+    closeRole();apply();
   }
 
   function doDisable(i){const a=accounts[i];openConfirm('停用帳號？','停用「'+a.u+'」後將立即無法登入，既有登入狀態強制失效（軟刪除，可恢復）。',()=>{a.status='disabled';a.reason='manual';render();toast('info','已停用 '+a.u+'（既有登入狀態已撤銷）');});}

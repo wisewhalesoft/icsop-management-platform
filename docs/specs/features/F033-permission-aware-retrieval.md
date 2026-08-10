@@ -7,6 +7,22 @@ Epic/Story: E09 / US-096
 ## Description
 智慧問答的檢索範圍**僅限「已公告」（狀態＝有效 且 公告日期 ≤ 今日）且「使用者所屬使用部門可見」的 chunk**，過濾於向量檢索當下即套用（帶入 `status`／`announcedDate`／`usingDeptIds` metadata 條件），確保使用者不因 AI 問答而取得原本在前台本無權查看之「進度中」（有效但公告日期未到）/失效/他部門內容，對齊既有前台可視範圍規則（[F019](F019-public-list-browsing.md) 已公告可見基底）。「已公告」為可見衍生，儲存狀態欄位仍為 有效/失效/作廢。
 
+> **🟢 釐清（APPROVED 2026-08-11 人類閘門通過；OQ-E08-11 定案為選項 C）——本 feature 之使用部門過濾對「全體」一般使用者一律套用，不分業務／其他子分類。**
+>
+> 理由：RAG 生成內容之外洩風險高於單純網頁瀏覽（AI 生成更難預期、更易被 prompt injection 誘導洩漏），
+> 故本 feature 自始即採較嚴之 deny-by-default，此為**刻意的設計差異**，非規格疏漏。
+>
+> **必須避免的兩種誤讀**：
+> ① 本 feature 之過濾規則 **≠** [F041](F041-user-subtype-business-scope.md) 之「業務」子分類限制——兩者判定式雖同（皆為 `isWithinSubtree` 子樹展開），但**適用對象不同**：
+> 本 feature 及於全體一般使用者，[F041](F041-user-subtype-business-scope.md) 僅及於業務子分類；
+> ② 本 feature **不需要**、也**不得**因 [F041](F041-user-subtype-business-scope.md) 而改為區分業務／其他兩種寬嚴（那將是**放寬**現行已定案之 AC）。
+>
+> ⚠ **既存落差之陳述（非本次引入）**：本 feature 現行文字對全體一般使用者採「可見性過濾」，而 [F019](F019-public-list-browsing.md) 現行行為對全體一般使用者僅採「置頂排序、不限制可見性」。
+> 兩者不一致係上述刻意差異之結果，**經 2026-08-11 人類裁決維持現狀**（OQ-E08-11 → 選項 C，[已定案 ✅]）。
+> 📝 追溯：選項 A（F019 才是需修正的一方）將使業務限制擴及全體一般使用者、[F041](F041-user-subtype-business-scope.md) 之子分類機制失去意義；選項 B（本 feature 文字係疏漏）屬**已定案 AC 之反向放寬**，需另行核可。兩者皆已否決。
+>
+> **未來若導入子分類區分**（Phase 3 實作時才需解決）：業務子分類使用者之檢索範圍**不得比本 feature 現行規則寬鬆**（[F041](F041-user-subtype-business-scope.md) AC-39 之下限保證）。
+
 ## Preconditions
 - 使用者身分與所屬使用部門可得（[F001](F001-auth-login-session.md)/[F004](F004-org-sync.md)）。
 - chunk 已於索引時正確寫入 `status`／`usingDeptIds`／`announcedDate` metadata（[F029](F029-chunking-metadata-index.md)），並隨狀態切換同步（[F030](F030-reindex-version-status.md)）；「已公告」以 `announcedDate ≤ 今日` 於查詢當下計算，chunk 僅需保存公告日期值（**依賴 DOCUMENT_CHUNK 帶入 `announcedDate`，見資料模型；若尚未具備需補**）。
@@ -61,4 +77,5 @@ Epic/Story: E09 / US-096
 - Data: [DOCUMENT_CHUNK](../data-model.md#documentchunk-entity), [VECTOR_EMBEDDING](../data-model.md#vectorembedding-entity), [DOC_USING_DEPT](../data-model.md#doc-using-dept)
 - Depends on: [F029](F029-chunking-metadata-index.md), [F030](F030-reindex-version-status.md), [F019](F019-public-list-browsing.md), [F025](F025-role-function-matrix.md), [F001](F001-auth-login-session.md), [F004](F004-org-sync.md); Blocks: [F032](F032-frontend-nl-qa.md), [F035](F035-hallucination-guardrail.md)
 - NFR: [RAG 資料落地與存取安全](../nfr.md#rag-security)
-- OQ: OQ-E09-02（embedding/reranker）, OQ-E09-07（prompt injection 驗收標準）
+- **使用者子分類（業務／其他）**: [F041](F041-user-subtype-business-scope.md)（AC-39 未來 ripple 之下限保證；本 feature 與其之適用對象差異見上方釐清段）
+- OQ: OQ-E09-02（embedding/reranker）, OQ-E09-07（prompt injection 驗收標準）。定案: **OQ-E08-11**（2026-08-11 人類裁決＝**選項 C 維持現狀＋補釐清句**；本 feature 之既有 AC 完全未動）

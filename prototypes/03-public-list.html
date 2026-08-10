@@ -2,6 +2,20 @@
 <!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
      本檔已套用：「循環」篩選之選項值由名稱字串改為 lifecycleId、顯示改以 lifecycleDisplayName 呈現；詳情之「循環別」同步。
      規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
+<!-- 🟢 F041 一般使用者子分類「業務／其他」（APPROVED — 2026-08-11 人類閘門通過）
+     本檔已套用：頁首「示範視角」切換器（原型示範用，非正式 UI）＋ 業務子分類之可見性過濾（F019 AC-U1～AC-U3）。
+     **預設視角＝「其他」＝本 delta 導入前之行為，逐欄不變**（F019 AC-U5 回歸鎖定）；切到「業務」才套用限縮。
+     人類裁決結果（已落實）：
+       OQ-E08-04 → B 子分類旗標（ACCOUNT.userSubtype，不新增第 6 種角色）
+       OQ-E08-05 → A 子樹展開（重用既有比對邏輯，INV-4）
+       OQ-E08-07 4a → A 保留置頂／其餘兩區塊（其餘區恆空＝預期退化，無前端特判）
+       OQ-E08-07 4b → A 使用部門篩選下拉不限縮（維持完整選項）
+       OQ-E08-07 4c → A 空狀態沿用既有「查無符合結果」逐字，**不因子分類分支**
+       OQ-E08-08 → 孤兒帳號 deny-by-default（清單為空、非錯誤、不提示帳號異常）
+       AC-02 → 未知 userSubtype 收斂為 'other'（fail-open）
+     **頂部說明句於業務視角換為專屬文案**（2026-08-11 人類裁決新增；逐字內容＝ SCOPE_NOTICE_BUSINESS，
+     下游 test-generator 會逐字斷言）——空狀態文案仍為「查無符合結果」逐字、不分支。
+     規格權威＝docs/specs/features/F041-user-subtype-business-scope.md（AC-12～AC-19、AC-33） -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -33,7 +47,7 @@
     <div class="ml-auto flex items-center gap-3">
       <div class="hidden sm:flex items-center gap-2 text-sm text-slate-500">
         <i data-lucide="user" class="w-4 h-4"></i><span>王小明</span>
-        <span class="text-slate-300">·</span><span>營運管理部 / 審查室</span>
+        <span class="text-slate-300">·</span><span id="hdrDept">營運管理部 / 審查室</span>
       </div>
       <button class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
     </div>
@@ -69,10 +83,28 @@
     <span class="ml-auto text-sm text-slate-500" id="countText"></span>
   </div>
 
-  <!-- info note -->
+  <!-- 🟢 F041 已定案 · 原型示範控制（非正式 UI；實作時不得移植此區塊） -->
+  <div data-prototype-demo="true" class="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 mb-3">
+    <i data-lucide="badge-check" class="w-4 h-4 shrink-0 mt-0.5"></i>
+    <div class="flex-1 min-w-0">
+      <div><b>🟢 已定案（F041 · 2026-08-11 人類閘門通過）</b>：一般使用者子分類「業務／其他」。下方切換器<b>僅供原型示範</b>不同子分類之視角，<b>非正式 UI</b>。</div>
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <label for="demoSubtype" class="text-xs shrink-0">示範視角</label>
+        <select id="demoSubtype" onchange="setViewer(this.value)" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-700">
+          <option value="other">一般使用者 · 其他（現行行為，預設）</option>
+          <option value="business">一般使用者 · 業務（限縮於使用部門）</option>
+          <option value="orphan">一般使用者 · 業務（孤兒帳號 · 無部門資料）</option>
+        </select>
+      </div>
+      <div id="viewerNote" class="mt-1.5 text-xs"></div>
+    </div>
+  </div>
+
+  <!-- info note — 🟢 F041：文案依子分類切換（容器/字級/色彩沿用既有樣式，未新增元件）
+       其他子分類＝既有文案逐字不變；業務子分類＝2026-08-11 人類裁決新增之專屬文案（見 SCOPE_NOTICE_*） -->
   <div class="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-xs text-primary-700 mb-4">
     <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
-    <span>一般使用者僅顯示「已公告」文件（進度中/失效/作廢由後端過濾隱藏）；您所屬部門相關文件會自動置頂。</span>
+    <span id="scopeNotice"></span>
   </div>
 
   <!-- Pinned section -->
@@ -140,7 +172,61 @@
   // §9.1/§9.2 定案：文件使用部門可指定任意層級，選上層自動涵蓋其下所有單位
   // → 「您部門相關」＝文件使用部門命中登入者組織路徑上任一層級（含全公司）
   const USER_SCOPE = ['全公司','營業二本部','營業二本部 / 營運管理部','營業二本部 / 營運管理部 / 審查室'];
-  const inScope = use => use.some(u => USER_SCOPE.includes(u));
+
+  /* ===== 🟢 F041（APPROVED — 2026-08-11 人類閘門通過）：一般使用者子分類「業務／其他」之純函式 =====
+     規格權威＝docs/specs/features/F041-user-subtype-business-scope.md（AC-01～AC-04、AC-12、AC-31～AC-33）
+     ＋ F019 delta AC-U1～AC-U6。OQ-E08-04 裁決 B（子分類旗標）、OQ-E08-05 裁決 A（子樹展開）。
+     函式名稱逐字採規格「本規格鎖定之命名」表，前後端語意須一致。
+
+     INV-4「全系統不得存在第二套部門比對邏輯」：本頁之 isUsingDeptMatched 即既有置頂判定
+     inScope 之唯一實作（inScope 改為委派呼叫），故 AC-10「isUsingDeptMatched 與 isPinned
+     逐案相等」在原型層面亦成立——「業務視角下其餘區恆空」（AC-15）由此自然成立，非特判。
+     原型以組織路徑字串代表 orgCode 之前綴子樹展開（本檔自 2026-07-20 起之既有慣例），
+     語意等同後端 org-hierarchy.ts 之 isWithinSubtree。 */
+  function normalizeUserSubtype(v){ return v === 'business' ? 'business' : 'other'; }                 // AC-01／AC-02：未知值一律收斂為 other
+  function userSubtypeLabel(v){ return normalizeUserSubtype(v) === 'business' ? '業務' : '其他'; }     // AC-31（顯示標籤逐字）
+  function isSubtypeApplicable(roleCode){ return roleCode === 'User'; }                               // AC-32：僅一般使用者適用
+  function isDeptScopedViewer(v){ return v.roleCode === 'User' && normalizeUserSubtype(v.userSubtype) === 'business'; } // AC-03／AC-04
+  function isUsingDeptMatched(usingDepts, scope){                                                     // AC-05～AC-12
+    return Array.isArray(scope) && scope.length > 0 && usingDepts.some(u => scope.includes(u));       // scope 缺值＝孤兒帳號 → false（deny-by-default）
+  }
+  function isDocVisibleToViewer(usingDepts, v){                                                       // AC-05～AC-13
+    return isDeptScopedViewer(v) ? isUsingDeptMatched(usingDepts, v.scope) : true;                    // AC-13：不受限者恆可見
+  }
+
+  // 目前示範之 viewer（預設＝其他子分類＝本 delta 導入前之行為，F019 AC-U5 回歸鎖定）
+  const VIEWER = { roleCode:'User', userSubtype:'other', scope: USER_SCOPE };
+  const inScope = use => isUsingDeptMatched(use, VIEWER.scope);   // 置頂判定＝與可見性判定同一份實作（AC-10）
+
+  /* ===== 🟢 頂部說明句（依子分類切換）——2026-08-11 人類閘門新增之裁決 =====
+     下列兩條字串為**逐字定稿之 UI 文案權威**（下游 test-generator 會逐字斷言），修改前須經人類再裁決。
+     · 其他子分類：沿用本 delta 導入前之既有文案，一字未改（F019 AC-U5 回歸鎖定）。
+     · 業務子分類：專屬文案，須讓使用者理解「這是受限範圍」而非「全公司就這些」，並給出後續動作。
+       孤兒帳號（部門資料缺值）之業務使用者**沿用同一條**——不得因帳號異常而換句，
+       否則以文案差異即可區分「無文件」與「帳號異常」（error-handling.md#dept-restriction 共通要求）。
+     ⚠ 空狀態文案不在本裁決範圍：仍為「查無符合結果」逐字、不因子分類分支（OQ-E08-07 4c 裁決 A）。 */
+  const SCOPE_NOTICE_OTHER   = '一般使用者僅顯示「已公告」文件（進度中/失效/作廢由後端過濾隱藏）；您所屬部門相關文件會自動置頂。';
+  const SCOPE_NOTICE_BUSINESS = '業務使用者僅顯示「已公告」且使用部門為您所屬部門（含其下所有單位）之文件（進度中/失效/作廢由後端過濾隱藏）；其餘部門之文件不在您的瀏覽範圍內，如需調閱請洽該部門窗口。';
+
+  /* 原型示範用：三種 viewer 視角（非正式 UI，實作時不得移植） */
+  const VIEWER_MODES = {
+    other:    { userSubtype:'other',    scope:USER_SCOPE, dept:'營運管理部 / 審查室', notice:SCOPE_NOTICE_OTHER,
+                note:'子分類「其他」＝本 delta 導入前之行為：使用部門僅影響置頂排序、不影響可見性（F041 AC-13／AC-19）。' },
+    business: { userSubtype:'business', scope:USER_SCOPE, dept:'營運管理部 / 審查室', notice:SCOPE_NOTICE_BUSINESS,
+                note:'子分類「業務」＝僅可見「使用部門相符（子樹展開）」之已公告文件；全部結果落在置頂區、其餘區恆空＝預期退化非缺陷（F041 AC-14／AC-15）。使用部門下拉不限縮（4b 裁決 A）；選到範圍外單位時交集為空、顯示既有空狀態、非錯誤。頂部說明句換為業務專屬文案（2026-08-11 裁決）。' },
+    orphan:   { userSubtype:'business', scope:[],         dept:'—',                   notice:SCOPE_NOTICE_BUSINESS,
+                note:'孤兒帳號（部門資料缺值）＝deny-by-default，清單為空且非錯誤，沿用既有「查無符合結果」空狀態、不提示帳號異常（F041 AC-12／AC-33）；頂部說明句亦與一般業務使用者相同，不另換句。' }
+  };
+  function setViewer(mode){
+    const m = VIEWER_MODES[mode] || VIEWER_MODES.other;
+    VIEWER.userSubtype = m.userSubtype;
+    VIEWER.scope = m.scope;
+    document.body.dataset.viewerSubtype = normalizeUserSubtype(VIEWER.userSubtype);
+    document.getElementById('hdrDept').textContent = m.dept;
+    document.getElementById('scopeNotice').textContent = m.notice;
+    document.getElementById('viewerNote').textContent = m.note;
+    render();
+  }
   // 所屬循環＝ICSOP 編號第 2 段代碼對應（SRC=銷售及收款循環, PUC=採購及付款循環, PPC=產品企劃循環,
   // LWC=薪工循環, FC=融資循環, FAC=不動產、廠房及設備循環, IC=投資循環, CIPS=電腦化資訊系統控制作業, GCA=管理性控制作業）
   /* ===== F040 循環子分類：循環池與純函式（全站同一實作）=====
@@ -185,6 +271,8 @@
     {n:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',acc:'管理部',use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'作廢',lcId:'lc4',date:'2025-04-01',summary:'（作廢）任用管理作業，因組織調整不再適用。'}
   ];
   // 使用部門篩選選項＝實際出現之使用部門（含全公司／本部／部／處室／課四層＋全域）
+  // 🔴 F041 AC-16／OQ-E08-07 4b 選項 A：業務子分類**不限縮**此下拉之選項（推導方式刻意不變）；
+  // 選到子樹範圍外之單位時交集為空、顯示既有空狀態，非錯誤。
   const DEPTS = [...new Set(DOCS.flatMap(d => d.use))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
 
   // populate selects
@@ -202,7 +290,7 @@
   function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
 
   function card(d){
-    const pinnedUse = d.use.map(u=>USER_SCOPE.includes(u)?`<span class="text-primary-700 font-medium">${u}</span>`:u).join('、');
+    const pinnedUse = d.use.map(u=>VIEWER.scope.includes(u)?`<span class="text-primary-700 font-medium">${u}</span>`:u).join('、');
     return `<article tabindex="0" onclick="openDoc('${d.n}')" class="bg-white border border-slate-200 rounded-xl p-4 hover:border-primary-300 hover:shadow-sm transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-600">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
@@ -233,14 +321,21 @@
     // 後端強制：一般使用者僅「已公告」＝有效且公告日期已過（進度中/失效/作廢隱藏）
     const TODAY='2026-07-17';
     const visible = DOCS.filter(d=>d.status==='有效' && d.date <= TODAY);
+    // AC-18／F019 AC-U4：hiddenCount 之計算式刻意不動——插入點在基底條件之後，
+    // 故「因業務限制被過濾者」天然不計入，不以計數洩漏他部門文件之存在數。
     const hiddenCount = DOCS.length - visible.length;
-    let rows = visible.filter(d=>{
+    // 🔴 F041 AC-14／F019 AC-U1：於「已公告」基底條件之後、其餘篩選之前套用可見性過濾。
+    // 不相符者不出現於清單、不計入總筆數；與部門／循環／關鍵字條件為 AND（AC-17／F019 AC-U3）。
+    const scoped = visible.filter(d=>isDocVisibleToViewer(d.use, VIEWER));
+    let rows = scoped.filter(d=>{
       if(f.dept && !d.use.includes(f.dept)) return false;
       if(f.cyc && d.lcId!==f.cyc) return false;   // 以 lifecycleId 比對：同名另一子分類之文件不納入
       if(f.kw && !(d.n.toLowerCase().includes(f.kw) || d.name.toLowerCase().includes(f.kw))) return false;
       return true;
     });
     // sort by number desc
+    // 🔴 OQ-E08-07 4a 選項 A：置頂／其餘兩區塊之拆分邏輯完全不變、無子分類特判。
+    // 業務視角下 rest 必為空（AC-10 等價之數學推論），空區塊由既有「空則隱藏」通則收合。
     const byNumDesc=(a,b)=> a.n<b.n?1:a.n>b.n?-1:0;
     const pinned = rows.filter(d=>inScope(d.use)).sort(byNumDesc);
     const rest = rows.filter(d=>!inScope(d.use)).sort(byNumDesc);
@@ -269,7 +364,7 @@
   function openDoc(n){alert('進入文件詳情 / 檢視器（04 / 05）：'+n+'\n（本輪未產出，僅示意導向）');}
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
 
-  render();
+  setViewer('other');   // 🔴 F041：預設＝其他子分類＝本 delta 導入前之行為（內部呼叫 render()）
 </script>
 </body>
 </html>

@@ -1,8 +1,9 @@
 # Spec Index
-Product: ICSOP 文件管理平台 | Version: 1.5 | Status: Draft
-Last Updated: 2026-08-08
+Product: ICSOP 文件管理平台 | Version: 1.6 | Status: Draft
+Last Updated: 2026-08-10
 
 > 進入點：所有下游 agent 先讀本檔，再依 Agent Loading Guide 選擇性載入所需檔案。定案決策見各 feature；未定案見 [open-questions.md](open-questions.md)。
+> **🟢 2026-08-11 人類閘門通過（12 項全數裁決）：[F041 一般使用者子分類——業務／其他](features/F041-user-subtype-business-scope.md) 及其全部 delta 皆已核准。實作同日落地為 🟡 部分**（backend 117 suites／1505 tests、frontend 56 files／722 tests、兩側 tsc exit 0、migration `29 AccountUserSubtype1723766400000` 已對真 SOP DB 執行；**尚未重建 image 部署、未做瀏覽器煙霧測試**，見 [feature-status.md §F041 升 ✅ 待辦](feature-status.md#f041-to-done)）。 「一般使用者」再細分為「業務」「其他」（`ACCOUNT.userSubtype`，**不新增第 6 種角色**）；業務子分類之前台可見範圍限縮於「使用部門與其所屬部門相符（子樹展開，**重用既有 `isWithinSubtree`**）」之已公告文件，deny-by-default 涵蓋清單／搜尋／篩選／詳情直連 URL／檢視器／PDF 代理／下載／列印；「其他」與其餘 4 種角色行為完全不變。**拒絕一律回 404 `DOCUMENT_NOT_FOUND`**（刻意隱藏存在性，非 403；本系統唯一之此類例外、不推廣）；**不記錄拒絕稽核**⇒ `AUDIT_LOG` 不動、F023／F024 不需 delta。同批 delta：[F019](features/F019-public-list-browsing.md) `AC-U1`～`AC-U7`（＋一處文字勘誤）、[F020](features/F020-watermark.md) `AC-U1`～`AC-U5`、[F025](features/F025-role-function-matrix.md)／[F026](features/F026-role-field-matrix.md) `AC-U1`～`AC-U3`（**兩份矩陣逐格不變**）、[F003](features/F003-account-role-management.md) `AC-U1`～`AC-U5`、[F033](features/F033-permission-aware-retrieval.md) 釐清段、[data-model v1.5](data-model.md#account-user-subtype)、[error-handling v1.3](error-handling.md#dept-restriction)（**不新增錯誤碼**）。**唯一實質新增＝F041 AC-40／F019 `AC-U7`**：前台清單頂部範圍說明句於業務視角換為專屬文案（孤兒帳號沿用同一句；**與「空狀態文案 `查無符合結果` 不分支」為兩件不同的字串**）。逐題裁決紀錄見 [F041 §OQ 裁決紀錄](features/F041-user-subtype-business-scope.md#oq-dependency)。
 > **🟢 2026-08-07 人類閘門已通過（含 4 項裁決）**：[F040 循環子分類](features/F040-lifecycle-subcategory.md) 及其於 F007／F010／F011／F017／F019／F008／F009／F036／F038 之 AC delta、data-model v1.4（`LIFECYCLE.subcategory`）、error-handling v1.2（3 個 `LIFECYCLE_*` 錯誤碼）**皆已核准，可進入實作**。四項裁決：① **不新增 `lifecycleName` API payload 欄位**——缺 `lifecycleId` 維持既有 `DOCUMENT_REQUIRED_FIELD_MISSING`，`LIFECYCLE_SUBCATEGORY_REQUIRED` 之後端唯一觸發收斂為「所帶 `lifecycleId` 在其名稱下非合法唯一解」；② OQ-E03-10 定案＝唯一性比對涵蓋全部列不分 `status`；③ 示範子分類統一為 `消金`／`企金`／`子公司`；④ F010 AC-S4 明示 `lifecycleDisplayName` 選項屬**第二段**選擇器。
 > **⚠ 2026-08-08 追加裁決 5（規格↔schema 矛盾收斂）**：`LIFECYCLE_CHANGE_LOG` **不新增** `lifecycleName` 快照欄、**不新增 migration**；該表之循環名稱改以 `lifecycleId` **join `LIFECYCLE` 取當前值**再經 `lifecycleDisplayName` 組合。已改寫 [F040](features/F040-lifecycle-subcategory.md) AC-34、收斂 AC-36 適用範圍為 `AUDIT_LOG`、同步 [F008](features/F008-dag-node-edge.md) AC-S2 與 [F038](features/F038-lifecycle-tree-change-history.md) AC-S2、[data-model](data-model.md#lifecyclechangelog-entity)（移除該欄列）與 [er-diagram](diagrams/er-diagram.mmd)。**明確接受之代價＝循環改名／改子分類後舊事件顯示新名稱、失去名稱快照語意**（`AUDIT_LOG.lifecycleName` 仍為快照）；追溯見 [open-questions.md](open-questions.md) OQ-E07-11。
 
@@ -49,6 +50,7 @@ Last Updated: 2026-08-08
 | F038 | 循環樹狀圖變更歷程（新舊版預覽／下載燒錄浮水印） | P1 | 1 | E07 US-063 | features/F038-lifecycle-tree-change-history.md |
 | F039 | 附錄管理（附錄池／多對多關聯＋自訂排序） | P1 | 1 | E10 US-100/101/102 | features/F039-appendix-management.md |
 | F040 | **循環子分類（橫切：唯一性／顯示／選取有效性）** 🟢 APPROVED | P0 | 1 | E03（需求來源＝口述，無 US） | features/F040-lifecycle-subcategory.md |
+| F041 | **一般使用者子分類——業務／其他（業務限縮於使用部門）** 🟢 APPROVED | P0 | 1 | E08 US-072（主）＋E06 US-057（從） | features/F041-user-subtype-business-scope.md |
 
 ## Supporting Documents
 | Document | File | Relevant For |
@@ -78,6 +80,7 @@ Last Updated: 2026-08-08
 | E09 RAG Ingestion 管線 | diagrams/F028-rag-ingestion-pipeline.mmd | F027–F031 |
 | E09 權限感知問答查詢 | diagrams/F033-permission-aware-query.mmd | F032, F033, F034, F035 |
 | F040 循環子分類唯一性判定 | diagrams/F040-lifecycle-subcategory.mmd | F040 |
+| F041 使用者子分類可見性判定 | diagrams/F041-user-subtype-visibility.mmd | F041 |
 
 ## 關鍵定案（貫穿全 spec）
 - 雙軌登入（**Azure AD OIDC**＋管理員帳密）並存；Azure AD 僅負責初次認證，其後由我方核發 JWT，Session 閒置 30 分鐘逾時（2026-07-20 由「上游簽章」改版，見 [upstream-hr-source-contract.md](upstream-hr-source-contract.md) §12）。
@@ -86,6 +89,7 @@ Last Updated: 2026-08-08
 - 文件僅保存當前版本（覆蓋儲存、UUID 不變）；狀態（有效/失效/作廢）管理員手動切換、無簽核。
 - 循環＝DAG（有向無環、禁止成環，多 parent/多 child、上到下）。
 - **循環子分類（E03/F040，2026-08-07，🟢 APPROVED）**：`LIFECYCLE` 新增非必填 `subcategory`；**循環業務身分＝`(name, subcategory)` 組合**（同名不同子分類＝彼此獨立的循環）。兩條不變式：`(name, subcategory)` 唯一（INV-1）＋同一名稱之「無子分類」與「有子分類」不得並存（INV-2，雙向）。凡用到循環池之選取（文件建立/編輯），名稱底下有子分類時**必須選到具體子分類**才算有效。顯示一律 `名稱（子分類）`／`名稱`（`lifecycleDisplayName`）。**ICSOP 文件編號第 2 段循環代碼仍僅依名稱推導，子分類不參與、既有編號不變。**
+- **一般使用者子分類（E08＋E06／F041，2026-08-11，🟢 APPROVED）**：`ACCOUNT` 新增 `userSubtype ∈ {business, other}`（`NOT NULL DEFAULT 'other'`，**僅對 `roleCode='User'` 生效**，**不新增第 6 種角色**）。**業務**子分類使用者之前台可見範圍限縮為「已公告 **AND** 使用部門相符」（相符判定**重用既有 `isWithinSubtree`**，不新增第二套邏輯），deny-by-default 涵蓋清單／搜尋／篩選／詳情直連 URL／檢視器／PDF 代理／下載／列印，**拒絕一律回 404 `DOCUMENT_NOT_FOUND`**（隱藏存在性）且**不寫任何稽核**；**其他**子分類與其餘 4 種角色**行為完全不變**（使用部門僅影響置頂排序）。前台清單頂部**範圍說明句**依 viewer 分支（`SCOPE_NOTICE_BUSINESS`／`SCOPE_NOTICE_OTHER`，孤兒帳號沿用業務句），惟**空狀態文案 `查無符合結果` 逐字不分支**。F025 功能矩陣與 F026 欄位矩陣**逐格不變**、`AUDIT_LOG` 不動。RAG（F033）本輪僅記錄未來下限保證。
 - 文件「所屬循環」建立時必填；「所屬節點」以節點抽屜（F009）為**唯一權威寫入路徑**。
 - 浮水印＝伺服器端動態：`{員工編號}-{姓名}-{公司名稱}-{部門}-{處/室}-{僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現}-{當下時間}`（含固定機密聲明）；下載/列印於 server 端燒錄。
 - 技術棧：React+TS 前端、NestJS+TypeORM 後端、React Flow 類 DAG、Docker Compose、應用 DB=MSSQL、檔案存 Azure Blob（storage 介面抽象化）。

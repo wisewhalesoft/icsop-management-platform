@@ -3,6 +3,7 @@ Priority: P0-MVP | Status: Draft（帳號 CRUD／角色指派已實作；建立�
 Epic/Story: E01 / US-005, US-006
 
 > 合併理由：帳號 CRUD 與角色指派為同一後台管理畫面之連續操作，共用帳號實體與稽核。
+> **🟢 2026-08-11 additive delta（APPROVED，人類閘門通過）——一般使用者子分類（業務／其他）指派入口**：角色指派 modal 於所選角色為「一般使用者」時，額外呈現子分類選擇器。規則權威＝[F041](F041-user-subtype-business-scope.md)；**本 delta 之 AC 編號採 `AC-U#`**。⚠ **角色種類仍為 5 種、不新增**（子分類為 `ACCOUNT` 之獨立欄位，非第 6 種角色）——本檔既有 AC「僅顯示 5 種固定角色」**不變**。
 
 ## Description
 系統管理員於後台建立/查詢/編輯/停用帳號，區分「手動建立」與「上游同步」兩來源；並將 5 種固定角色之一指派給帳號。
@@ -39,6 +40,17 @@ Epic/Story: E01 / US-005, US-006
 - Given API 傳入非法角色字串, When 寫入, Then 回 `ROLE_INVALID`（400），拒絕寫入。
 - Given 角色選擇下拉載入, When 開啟, Then 僅顯示 5 種固定角色，不可新增/刪除角色種類。
 
+### 一般使用者子分類指派 delta（🟢 APPROVED 2026-08-11 人類閘門通過；規則權威＝[F041](F041-user-subtype-business-scope.md)）
+
+> **✅ OQ-E08-04 已定案為選項 B（子分類旗標）**，2026-08-11 人類裁決。**本檔既有 AC「僅顯示 5 種固定角色」不變**——子分類為角色以外之獨立欄位，非第 6 個角色選項。
+> 📝 追溯：若當初裁為選項 A（新增第 6 種角色），本節將全數作廢、改為角色下拉新增第 6 個選項，且既有 AC 須改寫為「6 種」；若裁為選項 C（上游職務功能自動判定），本節亦全數作廢、管理端無指派入口（該路徑依賴之上游職務功能字典尚未定案，見 [upstream-hr-source-contract.md](../upstream-hr-source-contract.md) §5.4，屬否決之主要理由）。
+
+- **AC-U1**：Given 系統管理員於角色指派 modal 將某帳號之角色選為「一般使用者」, When 畫面更新, Then 額外呈現子分類選擇器（選項為「業務」「其他」，顯示字串由 `userSubtypeLabel` 產生）；Given 所選角色為其餘 4 種之任一, Then **不呈現**該選擇器（`isSubtypeApplicable` 回 `false`）。〔[F041](F041-user-subtype-business-scope.md) AC-31／AC-32〕
+- **AC-U2**：Given 系統管理員選定子分類並儲存, When 送出, Then 持久化 `ACCOUNT.userSubtype`（值為 `'business'` 或 `'other'`），下次該帳號之請求即套用新的可見範圍（比照本檔既有「角色變更下次請求即生效」之語意）。
+- **AC-U3**：Given 建立新手動帳號或上游同步新增帳號而未指定子分類, When 持久化, Then `userSubtype` 為 `'other'`（預設不限縮）。〔[F041](F041-user-subtype-business-scope.md) AC-35〕
+- **AC-U4**：Given [F004](F004-org-sync.md) 組織同步對既有帳號執行 upsert, When 同步完成, Then 該帳號之 `userSubtype` **不被覆寫**（該欄非上游來源欄位，同步 payload 不含此鍵）。〔[F041](F041-user-subtype-business-scope.md) AC-34〕
+- **AC-U5**（**✅ 已定案：保留不清空，2026-08-11 人類裁決**）：Given 帳號之角色由「一般使用者」改為其餘 4 種之任一, When 儲存, Then `userSubtype` **保留原值、不清空**（其僅在 `roleCode='User'` 時具效力，見 [F041](F041-user-subtype-business-scope.md) INV-2）；**不需**新增任何二次確認提示。<br>📝 已明確接受之代價：日後改回一般使用者時舊設定直接復活、不重新詢問（否決之替代案＝強制寫回 `'other'` ＋二次確認提示）。〔[F041](F041-user-subtype-business-scope.md) AC-36〕
+
 ## Error Scenarios
 - 帳號重複/上游唯讀/非法角色/自我降級：見 [error-handling.md#auth](../error-handling.md#auth)（`ACCOUNT_USERNAME_EXISTS`, `ACCOUNT_UPSTREAM_READONLY`, `ROLE_INVALID`, `ROLE_SELF_DOWNGRADE_BLOCKED`）。
 
@@ -46,4 +58,5 @@ Epic/Story: E01 / US-005, US-006
 - Data: [ACCOUNT](../data-model.md#account-entity), [ROLE](../data-model.md#role-entity)
 - Depends on: [F025 角色×功能矩陣](F025-role-function-matrix.md)
 - Related: [F005 離職停用](F005-auto-disable-departed.md)（session 撤銷機制共用）
-- OQ: OQ-E01-03/05
+- **使用者子分類（業務／其他）規則權威**: [F041](F041-user-subtype-business-scope.md)（`userSubtype` 欄位語意、指派入口 `AC-U1`～`AC-U5`；🟢 APPROVED 2026-08-11 人類閘門通過）
+- OQ: OQ-E01-03/05。定案: **OQ-E08-04**（2026-08-11 人類裁決＝**選項 B 子分類旗標**；角色維持固定 5 種，本檔既有「僅顯示 5 種固定角色」AC 不變）

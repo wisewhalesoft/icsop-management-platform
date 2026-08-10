@@ -1,0 +1,31 @@
+%% F041 一般使用者子分類——業務／其他：文件可見性判定決策流（deny-by-default）
+%% 權威：docs/specs/features/F041-user-subtype-business-scope.md（INV-2／INV-3／INV-5、AC-03～AC-13）
+%% 說明：本圖僅描述「單一文件對單一 viewer 是否可見」之判定。清單／詳情／檢視器／PDF 代理／
+%%       下載／列印六條路徑皆呼叫同一判定（INV-3），不得各自實作。
+%% 🔴 Draft：本圖以 OQ-E08-04 選項 B ＋ OQ-E08-05 選項 A ＋ OQ-E06-03 兩案並陳繪製，待人類裁決。
+flowchart TD
+    START(["請求：viewer 欲存取某文件"]) --> BASE{"文件為已公告？<br/>status＝有效 AND 公告日期 ≤ 今日"}
+    BASE -->|"否"| DENY_BASE["拒絕：視同不存在<br/>404 DOCUMENT_NOT_FOUND<br/>（既有規則，本次不變）"]
+    BASE -->|"是"| ROLE{"roleCode ＝ User ？"}
+
+    ROLE -->|"否（SysAdmin／ICSOPAdmin／<br/>Supervisor／DeptContact）"| ALLOW
+    ROLE -->|"是"| SUBTYPE{"normalizeUserSubtype<br/>＝ business ？"}
+
+    SUBTYPE -->|"否（other，未知值亦收斂於此）"| ALLOW
+    SUBTYPE -->|"是"| ORG{"viewer.orgCode 有值？"}
+
+    ORG -->|"否（null／空字串／孤兒帳號）"| DENY_SCOPE
+    ORG -->|"是"| MATCH{"usingDeptIds 之任一項<br/>經 isWithinSubtree 涵蓋 orgCode ？<br/>（OR 語意，重用既有 predicate）"}
+
+    MATCH -->|"是"| ALLOW
+    MATCH -->|"否"| DENY_SCOPE
+
+    ALLOW["可見<br/>行為與本次變更前完全一致"]
+    DENY_SCOPE["拒絕：使用部門不相符<br/>清單 → 不列入且不計入 total<br/>詳情／檢視器／下載列印 → 404 或 403<br/>（依 OQ-E06-03 裁決）<br/>不回傳任何欄位或位元組"]
+
+    classDef allow fill:#DCFCE7,stroke:#16A34A,color:#14532D
+    classDef deny fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D
+    classDef gate fill:#EFF6FF,stroke:#2563EB,color:#1E3A8A
+    class ALLOW allow
+    class DENY_BASE,DENY_SCOPE deny
+    class ROLE,SUBTYPE,ORG,MATCH gate
