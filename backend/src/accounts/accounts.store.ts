@@ -29,6 +29,11 @@ export interface AccountView {
   disableReason: string | null;
   /** 最後登入時間戳（ISO 字串；每次成功登入寫入一次，見 GATE 決策 #2）。查無→null。 */
   lastLoginAt: string | null;
+  /**
+   * F041 一般使用者子分類（'business' / 'other'）。僅 roleCode='User' 時具效力（INV-2）；
+   * 供帳號管理之角色指派 modal 預選現值。刻意選填（`?`）以相容既有測試替身與不回傳此欄之路徑。
+   */
+  userSubtype?: string | null;
 }
 
 /**
@@ -61,6 +66,11 @@ export interface UpdateAccountPatch {
   status?: string;
   disableReason?: string | null;
   disabledAt?: Date | null;
+  /**
+   * F041 一般使用者子分類。⚠ 僅於 `newRole === 'User'` 時由 `assignRole()` 併入 patch；
+   * 其餘角色**不寫入此鍵**（AC-36：既有值保留、不清空）。
+   */
+  userSubtype?: string;
 }
 
 export interface AccountStore {

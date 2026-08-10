@@ -19,6 +19,7 @@ import { hashPassword } from './password';
 import { isValidRole, isSelfRoleLockout, AccountIdentity } from './account-rules';
 import { ORG_UNIT_READ_STORE, OrgUnitReadStore } from '../org-directory/org-unit-read';
 import { resolveCompanyName } from '../org-directory/company-name';
+import { normalizeUserSubtype } from '../rbac/viewer-scope';
 
 export interface CreateManualInput {
   loginId: string;
@@ -83,11 +84,19 @@ export class AccountsService {
     });
   }
 
-  /** 指派角色（US-006）：角色驗證 → 帳號存在 → 阻擋系統管理員自我降級 → 更新。 */
+  /**
+   * 指派角色（US-006）：角色驗證 → 帳號存在 → 阻擋系統管理員自我降級 → 更新。
+   *
+   * F041（架構 §3.7 決策四）：新增第四參數 `userSubtype`。**僅當 `newRole === 'User'` 時**經
+   * `normalizeUserSubtype` 正規化後併入 patch；其餘角色縱使呼叫端夾帶該值亦**不寫入此鍵**
+   * ——是否寫入取決於 newRole 本身，與呼叫端是否傳參無關（AC-36／F003 AC-U5：休眠但保留，
+   * 日後改回一般使用者時舊設定直接復活）。
+   */
   async assignRole(
     id: string,
     actor: AccountIdentity,
     newRole: string,
+    userSubtype?: string,
   ): Promise<AccountView> {
     if (!isValidRole(newRole)) throw new BadRequestException('ROLE_INVALID');
     const acc = await this.store.findById(id);
@@ -102,7 +111,9 @@ export class AccountsService {
     ) {
       throw new ForbiddenException('ROLE_SELF_DOWNGRADE_BLOCKED');
     }
-    return this.store.updateById(id, { roleCode: newRole });
+    const patch: UpdateAccountPatch = { roleCode: newRole };
+    if (newRole === 'User') patch.userSubtype = normalizeUserSubtype(userSubtype);
+    return this.store.updateById(id, patch);
   }
 
   /** 停用/恢復（AC3）：停用記 disableReason=manual＋disabledAt；即時失效由 SessionGuard 依 DB 狀態把關。 */

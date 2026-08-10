@@ -60,6 +60,8 @@ export class SessionGuard implements CanActivate {
       name: current.name ?? null,
       employeeNo: current.employeeNo ?? null,
       accountId: current.id ?? null, // 稽核操作者 UUID（DB 現行值，不進 token）
+      // F041：一般使用者子分類（同 roleCode/orgCode 之覆寫機制 → 指派後「下次請求即生效」）。
+      userSubtype: current.userSubtype ?? null,
     };
     req.sessionUser = fresh;
     // 每次有效請求刷新逾時視窗（採 DB 現行角色重簽，使角色變更於 token 內亦收斂）

@@ -19,6 +19,8 @@ export interface SessionUser {
   name?: string | null;
   employeeNo?: string | null;
   accountId?: string | null; // ← ACCOUNT.id（UUID）；request-context（SessionGuard 每請求填入，不進 JWT）；稽核操作者鍵
+  /** F041 一般使用者子分類（← ACCOUNT.userSubtype）；同 orgCode 之定案：**不進 JWT**，每請求由 DB 現行值填入。 */
+  userSubtype?: string | null;
 }
 
 /**

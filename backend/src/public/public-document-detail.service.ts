@@ -8,6 +8,7 @@ import {
   PublicDetailUsageForm,
   PublicDetailLink,
 } from './public-documents.store';
+import { ViewerScope, isDocVisibleToViewer } from '../rbac/viewer-scope';
 
 /** 詳情名稱解析器（結構相容 NameResolutionService.resolveOrgUnitName / resolvePersonNames）。 */
 export interface DetailNameResolver {
@@ -65,7 +66,11 @@ export class PublicDocumentDetailService {
     private readonly clock: () => Date = () => new Date(),
   ) {}
 
-  async detail(documentId: string): Promise<PublicDocumentDetailDto> {
+  /**
+   * F041（架構 §3.7 決策一／決策三(b)）：新增**必要參數** `viewer`（刻意的破壞性變更，
+   * deny-by-default 不能仰賴呼叫端「剛好記得傳」）。
+   */
+  async detail(documentId: string, viewer: ViewerScope): Promise<PublicDocumentDetailDto> {
     const raw = await this.store.findDetailById(documentId);
     if (!raw) throw new NotFoundException('DOCUMENT_NOT_FOUND');
 
@@ -75,6 +80,10 @@ export class PublicDocumentDetailService {
       // 隱藏文件（進度中/失效/作廢）對前台視同不存在。
       throw new NotFoundException('DOCUMENT_NOT_FOUND');
     }
+
+    // F041 AC-20～AC-24：業務子分類之使用部門限縮（AND 疊加於既有基底條件之上，INV-5）。
+    // 插入點刻意早於下方任何名稱解析——AC-20「未呼叫任何名稱解析」由位置本身保證。
+    if (!isDocVisibleToViewer(raw.usingDeptIds, viewer)) throw this.rejectDeptRestricted();
 
     // 組織名稱（制定三級 + 使用部門；去重、單次批次解析）。fallback＝代碼（使用部門）/null（制定三級）。
     const orgCodes = new Set<string>();
@@ -131,5 +140,16 @@ export class PublicDocumentDetailService {
       usageForms: raw.usageForms,
       links: raw.links,
     };
+  }
+
+  /**
+   * F041 AC-21（OQ-E06-03 選項 A）：因使用部門不相符而拒絕時，一律回既有 404 `DOCUMENT_NOT_FOUND`
+   * ——刻意隱藏資源存在性，訊息文案須與「文件確實不存在」逐字相同（否則以文案差異即可還原存在性）。
+   *
+   * 集中於單一具名方法而非散落多處 `throw`：日後若政策改判為 403 `PERMISSION_DENIED`，
+   * 此處為**唯一**需修改之點（架構 §3.7 決策三(b) 之刻意隔離）。
+   */
+  private rejectDeptRestricted(): NotFoundException {
+    return new NotFoundException('DOCUMENT_NOT_FOUND');
   }
 }

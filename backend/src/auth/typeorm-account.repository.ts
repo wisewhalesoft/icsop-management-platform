@@ -57,6 +57,8 @@ export class TypeOrmAccountRepository implements AccountRepository {
           orgCode: a.orgCode,
           name: a.name,
           employeeNo: a.employeeNo,
+          // F041：一般使用者子分類（findOne 未指定 select，隨列一併取得，零額外查詢成本）。
+          userSubtype: a.userSubtype,
         }
       : null;
   }

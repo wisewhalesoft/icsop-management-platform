@@ -10,6 +10,7 @@ import {
   DEFAULT_PAGE_SIZE,
 } from './public-list';
 import { PUBLIC_DOCUMENT_STORE, PublicDocumentStore } from './public-documents.store';
+import { ViewerScope } from '../rbac/viewer-scope';
 
 /** 組織單位名稱解析器（結構相容 NameResolutionService.resolveOrgUnitName）。 */
 export interface OrgNameResolver {
@@ -52,15 +53,19 @@ export class PublicDocumentsService {
     private readonly clock: () => Date = () => new Date(),
   ) {}
 
+  /**
+   * F041（架構 §3.7 決策一）：第一參數由裸 `userOrgCode` 改為必要參數 `viewer: ViewerScope`，
+   * 原樣交給 `buildPublicList`（業務子分類之可見性過濾集中於純函式層，服務層不重複判定）。
+   */
   async list(
-    userOrgCode: string | null | undefined,
+    viewer: ViewerScope,
     filters: PublicListFilters,
     page = 1,
     pageSize = DEFAULT_PAGE_SIZE,
   ): Promise<PublicListPage<PublicListItemDto>> {
     const items = await this.store.listCandidates();
     const today = this.clock();
-    const result = buildPublicList(items, userOrgCode, filters, today, page, pageSize);
+    const result = buildPublicList(items, viewer, filters, today, page, pageSize);
 
     // 僅解析當頁項目之組織代碼（去重、單次查詢）。
     const codes = new Set<string>();
@@ -74,7 +79,7 @@ export class PublicDocumentsService {
     const resolve = (code: string): string => nameMap.get(code) ?? code; // fallback＝代碼
 
     const dtos: PublicListItemDto[] = result.items.map((it) =>
-      this.toDto(it, userOrgCode, resolve, today),
+      this.toDto(it, viewer.orgCode, resolve, today),
     );
     return { ...result, items: dtos };
   }

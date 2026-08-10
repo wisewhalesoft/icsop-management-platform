@@ -12,6 +12,7 @@
 import { DocumentStatus } from '../documents/document-status';
 import { deriveDisplayStatus } from '../documents/display-status';
 import { isWithinSubtree } from '../org-sync/org-hierarchy';
+import { ViewerScope, isDocVisibleToViewer } from '../rbac/viewer-scope';
 
 /** 前台清單項（含使用部門代碼集合，供置頂/部門篩選）。名稱解析由服務層另補。 */
 export interface PublicDocItem {
@@ -141,25 +142,35 @@ export function paginate<T>(
 }
 
 /**
- * 完整前台清單管線：強制基底條件 → AND 篩選（部門/循環/關鍵字） → 置頂+編號降冪排序 → 分頁。
+ * 完整前台清單管線：強制基底條件 → 業務子分類可見性（F041） → AND 篩選（部門/循環/關鍵字）
+ * → 置頂+編號降冪排序 → 分頁。
  * 狀態篩選（filters.status）刻意不套用——基底條件已鎖「已公告」，前台狀態為裝飾性（OQ-F019-04）。
+ *
+ * F041（架構 §3.7 決策三(a)）：第二參數由裸 `userOrgCode` 字串改為**必要參數** `viewer: ViewerScope`
+ * ——刻意的破壞性變更。若做成選填而以 `undefined` 視為「不受限」，等同引入一個可被忘記傳遞而靜默
+ * 繞過的安全檢查，與 INV-3 deny-by-default 精神相反。
+ *
+ * `hiddenCount` 之計算式維持 `items.length - base.length` **不動**：插入點在 `base` 之後，該式從未
+ * 參照新增之 `visible` 步驟，故 AC-18「僅計基底條件隱藏者、不含業務限制過濾者」零額外邏輯即達成。
  */
 export function buildPublicList(
   items: readonly PublicDocItem[],
-  userOrgCode: string | null | undefined,
+  viewer: ViewerScope,
   filters: PublicListFilters,
   today: Date,
   page = 1,
   pageSize = DEFAULT_PAGE_SIZE,
 ): PublicListPage<PublicDocItem> {
   const base = items.filter((i) => isAnnounced(i, today));
-  const filtered = base.filter(
+  // F041 AC-14～AC-17：業務子分類之資料列層級可見性（非受限 viewer 恆全數通過）。
+  const visible = base.filter((i) => isDocVisibleToViewer(i.usingDeptIds, viewer));
+  const filtered = visible.filter(
     (i) =>
       matchesDeptFilter(i, filters.deptCode) &&
       (!filters.lifecycleId || i.lifecycleId === filters.lifecycleId) &&
       matchesKeyword(i, filters.keyword),
   );
-  const sorted = splitAndSort(filtered, userOrgCode);
+  const sorted = splitAndSort(filtered, viewer.orgCode);
   // G-PUB-012：被基底條件隱藏之候選數＝全候選 − 已公告候選（與使用者篩選無關）。
   const hiddenCount = items.length - base.length;
   return { ...paginate(sorted, page, pageSize), hiddenCount };

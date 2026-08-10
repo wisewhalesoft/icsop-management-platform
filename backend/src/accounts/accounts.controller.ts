@@ -88,14 +88,17 @@ export class AccountsController {
   assignRole(
     @Req() req: RequestWithSession,
     @Param('id') id: string,
-    @Body() body: { roleCode?: string },
+    @Body() body: { roleCode?: string; userSubtype?: string },
   ) {
     if (!body?.roleCode) throw new BadRequestException('VALIDATION_ERROR');
     const su = req.sessionUser!;
+    // F041：userSubtype 為選填（僅角色為「一般使用者」時前端才送出）；正規化與「是否寫入」
+    // 之判定一律在服務層（AC-01／AC-02／AC-36），controller 不做任何子分類邏輯。
     return this.svc.assignRole(
       id,
       { companyCode: su.companyCode, loginId: su.loginId },
       body.roleCode,
+      body.userSubtype,
     );
   }
 }

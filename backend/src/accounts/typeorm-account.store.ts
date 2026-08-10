@@ -34,6 +34,8 @@ export class TypeOrmAccountStore implements AccountStore {
       source: a.source,
       disableReason: a.disableReason,
       lastLoginAt: a.lastLoginAt ? a.lastLoginAt.toISOString() : null,
+      // F041：供前端角色指派 modal 預選現值（僅 roleCode='User' 時呈現，INV-2）。
+      userSubtype: a.userSubtype,
     };
   }
 

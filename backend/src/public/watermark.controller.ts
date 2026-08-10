@@ -16,6 +16,8 @@ export function toWatermarkSession(u: SessionUser): WatermarkSession {
     companyCode: u.companyCode,
     orgCode: u.orgCode ?? null,
     roleCode: u.roleCode ?? null,
+    // F041：一般使用者子分類（可見性判定用；與 orgCode/roleCode 同為 SessionGuard 之 DB 現行值）。
+    userSubtype: u.userSubtype ?? null,
   };
 }
 

@@ -12,6 +12,7 @@ export interface CurrentAccount {
   orgCode?: string | null; // ← ACCOUNT.orgCode（對應 ORG_UNIT.orgCode）
   name?: string | null; // ← ACCOUNT.name（USERNM）
   employeeNo?: string | null; // ← ACCOUNT.employeeNo（EMPNO）
+  userSubtype?: string | null; // ← ACCOUNT.userSubtype（F041 一般使用者子分類；僅 roleCode='User' 時具效力）
 }
 
 /**

@@ -43,6 +43,15 @@ export class Account {
   @Column({ type: 'varchar', length: 10, default: 'upstream' })
   source!: string; // manual / upstream
 
+  /**
+   * F041 一般使用者子分類（'business' / 'other'）。NOT NULL DEFAULT 'other' ＋ CHECK 約束
+   * （migration 1723766400000-account-user-subtype）。
+   * ⚠ INV-2：僅 roleCode='User' 時具效力；其餘角色之值恆被忽略（角色升降級不清空，AC-36）。
+   * ⚠ 非上游來源欄位——F004 組織同步之 upsert payload 不得含此鍵（AC-34）。
+   */
+  @Column({ type: 'nvarchar', length: 20, default: 'other' })
+  userSubtype!: string;
+
   // --- F004 組織同步新增（← VW_HPMUSER 白名單欄位 + 停用軌跡） ---
 
   @Column({ type: 'varchar', length: 10, nullable: true })

@@ -1,5 +1,6 @@
 import { DataSource } from 'typeorm';
 import { IcsopDocument } from '../database/entities/icsop-document.entity';
+import { DocUsingDept } from '../database/entities/doc-using-dept.entity';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { BlobStore } from '../storage/blob-store';
 import { WatermarkDocMeta, WatermarkPdfSource } from './watermark.service';
@@ -21,7 +22,11 @@ export class AttachmentPdfSource implements WatermarkPdfSource {
   }
 }
 
-/** F020 稽核 target 顯示中繼（生產）：讀 ICSOP_DOCUMENT 之編號/名稱。 */
+/**
+ * F020 稽核 target 顯示中繼（生產）：讀 ICSOP_DOCUMENT 之編號/名稱。
+ * F041：additive 擴充 `usingDeptIds`（供業務子分類之可見性判定）——比照
+ * `typeorm-public-documents.store.ts` 既有「分離查詢 DOC_USING_DEPT + JS 端映射」手法，不改用 JOIN。
+ */
 export class TypeOrmDocMeta implements WatermarkDocMeta {
   constructor(private readonly ds: DataSource) {}
 
@@ -30,13 +35,23 @@ export class TypeOrmDocMeta implements WatermarkDocMeta {
     return this.ds;
   }
 
-  async getDocMeta(
-    documentId: string,
-  ): Promise<{ documentNumber: string | null; documentName: string | null } | null> {
+  async getDocMeta(documentId: string): Promise<{
+    documentNumber: string | null;
+    documentName: string | null;
+    usingDeptIds: string[];
+  } | null> {
     const ds = await this.init();
     const d = await ds
       .getRepository(IcsopDocument)
       .findOne({ where: { id: documentId }, select: { documentNumber: true, documentName: true } });
-    return d ? { documentNumber: d.documentNumber, documentName: d.documentName } : null;
+    if (!d) return null;
+    const deptRows = await ds
+      .getRepository(DocUsingDept)
+      .find({ where: { documentId }, select: { orgCode: true } });
+    return {
+      documentNumber: d.documentNumber,
+      documentName: d.documentName,
+      usingDeptIds: deptRows.map((r) => r.orgCode),
+    };
   }
 }
