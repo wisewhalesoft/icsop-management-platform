@@ -37,10 +37,17 @@
 | 狀態 | 數量 | 功能 |
 |---|---|---|
 | ✅ 已完成-已驗證 | **27** | F001 F002 F003 F004 F005 F006 F007 F008 F009 F010 F011 F012 F013 F014 F015 F016 F017 F018 F019 F020 F023 F024 F025 F026 F036 F037 F038 |
-| 🟡 部分 | **8** | F021 F022 F027 F028 F029 F030 F031 **F040** |
+| 🟡 部分 | **9** | F021 F022 F027 F028 F029 F030 F031 **F040 F041** |
 | 🔵 進行中 | **0** | — |
 | ⬜ 未開始 | **5** | F032 F033 F034 F035 **F039** |
-| | **40** | |
+| | **41** | |
+
+> **2026-08-11 F041 一般使用者子分類實作落地（Uncle-Bob 約束環模式，⬜→🟡）**：環由 `test-generator` 於實作前獨立撰寫、`tdd-implementation` 僅寫 production code。**四道機器閘門全綠（由 lead 親自實跑、非採信回報）**：backend `tsc --noEmit` exit 0、backend jest **117 suites／1505 tests**（基線 1440 ＋新增 65）、frontend `tsc --noEmit` exit 0、frontend vitest **56 files／722 tests**（基線 664 ＋新增 58）。**migration 已對真 SOP DB 實跑**：`migration:show` 顯示 `[X] 29 AccountUserSubtype1723766400000`；探針證據＝既有 **1119 列 backfill 為 `'other'`**、不帶欄位之 INSERT 落 `'other'`（DEFAULT 生效）、`'Business'`（大寫）被 `CHECK` 約束拒絕（INV-1 於 DB 層成立）。**契約遵循**：173 個測試檔於實作期間 **zero byte 變動**、無 `.skip`／`.only`；1 件測試爭議循 author↔runner 通道由 test-generator 裁決並自行修正（純新增 15 行，未弱化 `toEqual`）。tally 由 ✅27 🟡8 🔵0 ⬜6（41）改為 **✅27 🟡9 🔵0 ⬜5（41）**。
+> **⚠ 標 🟡 而非 ✅ 之理由（DoD 第 ② 條「端到端可達」未滿足）**：**尚未部署**——`icsop-management-platform-backend-1` 仍跑舊 dist，需重建 image 後 F041 才在瀏覽器生效（欄位為 additive ＋ 有 `DEFAULT 'other'`，舊碼不會炸，但**功能尚未生效**）。且本輪依使用者指示採**簡易版 ring**（僅 jest／vitest，**跳過 Playwright e2e／Stryker mutation／dependency-cruiser**），亦**未做瀏覽器煙霧測試**——依本 repo 反覆踩過的教訓（2026-07-25 Chrome MCP 煙霧測試曾揪出 3 個「只有真瀏覽器會踩」的部署／代理層 bug，單元全綠完全測不到），此缺口必須明講。另 AC-39（[F033](features/F033-permission-aware-retrieval.md) RAG）為 Phase 3 ripple、規格明文本輪不驗收。比照 [F040](features/F040-lifecycle-subcategory.md) 同樣情形標 🟡 之先例。實作細節見 [implementation-log/F041-impl.md](implementation-log/F041-impl.md)；升 ✅ 之可執行清單見 [§F041 升 ✅ 待辦](#f041-to-done)。
+> **🟢 2026-08-11 新增 F041 一般使用者子分類——業務／其他（E08 US-072 主＋E06 US-057 從），規格已通過人類閘門（12 項全數裁決）**：規格層完成（[F041](features/F041-user-subtype-business-scope.md) **AC-01～AC-40** ＋ data-model v1.5 `ACCOUNT.userSubtype` ＋ error-handling v1.3 `#dept-restriction`〔**不新增錯誤碼**，已收斂為 404 單案〕＋ F019／F020／F025／F026／F003 之 **23 條** `AC-U#` delta〔7/5/3/3/5〕＋ F033 釐清段 ＋ `prototypes/03-public-list.html` 三 persona 與 `#scopeNotice`）。**12 項中 11 項照草案；唯一實質新增＝AC-40／F019 `AC-U7`**（前台清單頂部範圍說明句於業務視角換專屬文案，孤兒帳號沿用同一句）。tally 由 ✅27 🟡8 🔵0 ⬜5（40）改為 **✅27 🟡8 🔵0 ⬜6（41）**。
+> ⚠ **本需求為本專案首個「限縮既有可見範圍」之變更**（既往皆為 additive）。既有 ✅ 之 F019／F020／F025／F026／F003 之**既有 AC 全數未動**，其狀態**維持 ✅**；`AC-U#` delta 之實況待實作後於各列更新。
+> **兩項最具後果之裁決**：① `OQ-E08-10` → **不記錄拒絕稽核** ⇒ 本需求**完全不觸及稽核子系統**（`AUDIT_LOG` 不動、F023／F024 不需 delta、nfr 不需覆核）；② `OQ-E06-03` → **拒絕回 404 `DOCUMENT_NOT_FOUND`**（非 403）⇒ **本系統首度出現「刻意隱藏資源存在性」之例外**，已明確接受其與「越權一律 403」全域慣例之不一致，且**不自動推廣**至其他越權場景。
+> ⚠ **AC-33 與 AC-40 是兩件不同的字串，實作與建環時不得混為一談**：AC-33＝查無結果之**空狀態**文案 `查無符合結果`（逐字、**不分支**）；AC-40＝清單頂部之**範圍說明句**（`#scopeNotice`，**依 viewer 分支**）。業務使用者查無結果時兩者同時出現。
 
 > **2026-08-08 F040 循環子分類實作落地（Uncle-Bob 約束環模式，⬜→🟡）**：環由 `test-generator` 於實作前獨立撰寫、`tdd-implementation` 僅寫 production code（**零測試碼**，4 次爭議全以申訴由環作者裁決）。**四道機器閘門全綠**：backend jest **116 suites／1440 tests**（基線 1365 ＋新增 75）、backend build exit 0、frontend vitest **48 files／664 tests**（基線 576 ＋新增 88）、frontend typecheck exit 0。**migration 已對真 SOP DB 實跑**：`LifecycleSubcategory1723680000000` 單一交易 COMMIT 成功，前置盤點同名重複列 **0 筆**（不需人工裁定）；真庫覆核 `subcategory` 欄、`IX_LIFECYCLE_name_subcategory`、`FK_ICSOP_DOCUMENT_lifecycle` 皆存在（**G-F040-01 結案**）。**唯一索引語意實測**（交易內實插後 ROLLBACK）：`(N,NULL)` 第二筆被拒（證實 MSSQL 視多 NULL 相等＝INV-1 於 DB 層成立）、`(N,消金)`／`(N,企金)` 皆成功、`(N,消金)` 重複被拒、ROLLBACK 後殘留 0 筆。tally 由 ✅27 🟡7 🔵0 ⬜6 改為 **✅27 🟡8 🔵0 ⬜5（40）**。
 > **⚠ 標 🟡 而非 ✅ 之理由（DoD 第 ① 條未滿足）**：本輪依使用者指示採**簡易版 ring**（僅 jest/vitest，跳過 Playwright fidelity／Stryker mutation／dependency-cruiser），故 **6 條 AC-S delta 未被任何測試覆蓋**：F008-S1、F009-S1、F019-S1／S2、F036-S1／S3、F038-S1。⚠ 進一步查核發現，這 6 條**並非全部「已實作但未驗證」**——其中 **4 條實際尚未實作**（見下方各列註記與 F040 列）。顯示規則本身（`lifecycleDisplayName`）已由純函式測試釘死，缺的是「該頁確實呼叫它」之機器證明。另見 [risks-and-gaps.md](../test-specs/risks-and-gaps.md) **G-F040-15**（頁 13 之 AC-31 斷言不具完全辨識性：INV-1 使 displayName 於池內單射，displayName-keying 與 id-keying 行為恆等，已列為補 Stryker 時之優先標的）。
@@ -66,7 +73,7 @@
 >
 > **2026-07-22 整合階段 ①（app-DB 落地＋啟動驗證）**：**12 個 migration 全數對真 SOP app DB 執行成功**（含 AUDIT_LOG/附件/DOC_SOURCE_XLS/USAGE_FORM/DOCUMENT_LINK/ORG_DESCFULL/INDEX_RUN/DOCUMENT_CHUNK＋F013 篩選唯一索引）。**整個 Wave 1+2 合併系統成功對 SOP 啟動**（`Nest application successfully started`；所有路由掛載；**real TypeORM stores** 皆接真庫：audit/documents+links/attachments(meta)/usage-forms/xls-source(meta)/org-directory/public）；HTTP smoke：守門 401、OIDC 登入 302（含 PKCE）。**仍為 fake**：ingestion/rag（FakeChunk/IndexRun/VectorStore，待 pgvector＋embedding 選型 OQ-E09-02）、Blob（FakeBlobStore，待 Azure 憑證）。**升 ✅ 尚缺**：各 feature AC 之逐流程 e2e（真人 UI 登入或自動化整合測試）——本階段已證「系統可對真庫啟動且路由/守門/DB store 皆接真」，個別流程驗證為下一步。
 
-**P0-MVP 尚未完成者（優先盯）**：F001 F003 F005 F007 F010 F012 F013 F016 F017 F019 F020 F023 F024 F026 F027 F028 F029 F030 F036，以及 Phase 3 之 F032 F033 F034 F035。
+**P0-MVP 尚未完成者（優先盯）**：F001 F003 F005 F007 F010 F012 F013 F016 F017 F019 F020 F023 F024 F026 F027 F028 F029 F030 F036，以及 Phase 3 之 F032 F033 F034 F035，**與 F041（規格 🟢 APPROVED、實作 🟡 unit-green＋migration 已落真庫，**待重建 image 部署＋瀏覽器實測**，見 [§F041 升 ✅ 待辦](#f041-to-done)）**。
 
 ---
 
@@ -133,6 +140,7 @@
 |----|------|---|----|------|--------------------------|
 | F025 | 角色×功能權限矩陣 | P0 | 1 | ✅ 已完成-已驗證 | 機制完整並掛於實端點；數列對應功能尚無實體端點（使用表單/文件索引/調閱歷程/變更歷程/系統參數），該列 enforcement 未於實路由行使 |
 | F026 | 角色×欄位權限矩陣 | P0 | 1 | ✅ 已完成-已驗證 | 欄位寫入拒絕**建立＋編輯兩路徑**（含多值欄 all-or-nothing）；**使用部門子樹前綴判定**（共用 `isWithinSubtree`，與 F019 共用，AC8/9 覆蓋）；**附件/使用表單下載權限**（AC6 角色×動作覆蓋：主管/部門窗口可下載、取代被拒 `PERMISSION_DENIED`）。**AC5-6 浮水印釐清（人類定案 OQ-FM-01）**：後台下載＝原始檔（管理存取 SAS，不燒錄），燒錄/稽核僅前台檢視器路徑（F020）；.xlsx 無 PDF 浮水印可燒 |
+| F041 | 一般使用者子分類——業務／其他 | P0 | 1 | 🟡 部分 | 規格 🟢 APPROVED（2026-08-11 人類閘門，12 項全數裁決）；**實作 unit-green 且 migration 已落真 SOP DB**：`ACCOUNT.userSubtype`（`NOT NULL DEFAULT 'other'`＋`CHECK`，migration `29 AccountUserSubtype1723766400000` 已 `[X]`，1119 列 backfill `'other'`）、四純函式（`normalizeUserSubtype`／`isDeptScopedViewer`／`isUsingDeptMatched`／`isDocVisibleToViewer`）、`buildPublicList`／`PublicDocumentDetailService`／`WatermarkService` 四入口接 viewer、前端 `userSubtypeLabel`／`isSubtypeApplicable`／`SCOPE_NOTICE_*`＋`#scopeNotice`＋帳號管理 modal 子分類選擇器。**重用既有 `isWithinSubtree`**（INV-4）；**不觸及稽核子系統**（OQ-E08-10）；**拒絕回 404 非 403**（OQ-E06-03）。<br>**🔴 未達 ✅ 之缺口（DoD ②「端到端可達」）**：① **未部署**——backend 容器仍跑舊 dist，功能在瀏覽器尚未生效；② **本輪簡易版 ring**——無 Playwright e2e／Stryker／dep-cruiser，**且未做瀏覽器煙霧測試**（本 repo 已有前例證明此層會漏掉部署/代理 bug）；③ AC-39（F033 RAG）為 Phase 3 ripple、規格明文不驗收；④ `findCurrentByLogin()`／`TypeOrmDocMeta.getDocMeta()` 兩個 DB-touching adapter 無 `.spec.ts`（**test-generator 掃描時提報之既有缺口，非本輪引入**）。<br>**→ 升 ✅ 的可執行清單見下方 [§F041 升 ✅ 待辦](#f041-to-done)** |
 
 ### E09 RAG／AI 問答
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
@@ -151,6 +159,26 @@
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
 | F039 | 附錄管理（附錄池＋關聯排序） | P1 | 1 | ⬜ 未開始 | 規格已定稿（[F039](features/F039-appendix-management.md)，AC-01～AC-34 涵蓋 US-100/101/102 全部 AC）；**無任何實作**：`APPENDIX_POOL`／`DOC_APPENDIX` 未建表、`FileCategory='APPENDIX'` 未加、功能鍵「附錄管理」與欄位鍵「附錄」未入 RBAC 矩陣、`AUDIT_LOG` 之 `APPENDIX` targetType＋`appendixId` 欄未擴充、端點與前端頁面皆未建。prototype 僅有 24（管理頁），建立/編輯/唯讀/前台詳情之附錄區塊待 ui-ux-designer 傳播 |
+
+---
+
+## F041 升 ✅ 待辦（可執行清單） {#f041-to-done}
+
+> F041 之 unit 層與 DB 層已完成（117/1505 backend、56/722 frontend、migration `[X] 29` 落真 SOP DB、173 測試檔 zero byte 變動）。
+> 以下四項為**升 ✅ 前必須完成者**，順序有依賴關係——①→② 為前置，③ 需在 ② 之後才有意義。
+
+| # | 動作 | 具體內容 | 為何必要 |
+|---|---|---|---|
+| **①** | **重建 backend image** | 容器 `icsop-management-platform-backend-1` 仍跑舊 dist。需重新 build 並取代（既有慣例：容器內只有 `dist`，比照 [F040](features/F040-lifecycle-subcategory.md) 落地前例）。⚠ 欄位為 additive ＋ `DEFAULT 'other'`，舊 dist **不會炸**，但 F041 全部行為**尚未生效** | DoD ②「端到端可達」——端點存在 ≠ 功能可用 |
+| **②** | **部署並確認服務起得來** | 重啟後確認 Nest 正常啟動、路由掛載、`/public/documents` 與 `/public/documents/:id/view` 等既有端點無回歸 | 部署本身即為本 repo 屢次踩雷之處 |
+| **③** | **瀏覽器實測兩種 persona（＋孤兒）** | 以真瀏覽器分別以 **業務**／**其他** 子分類帳號登入前台，逐項核對：<br>(a) 清單筆數與 `total` 差異（業務只見使用部門相符者）；<br>(b) 頂部 `#scopeNotice` 說明句逐字正確且**兩種 persona 不同**（AC-40）；<br>(c) 查無結果時**空狀態仍為 `查無符合結果`**、且**頂部說明句同時仍在**（AC-33 vs AC-40 不得互相取代）；<br>(d) 直連他部門文件之詳情 URL → **404、且畫面不洩漏文件編號/書名**（AC-21）；<br>(e) 檢視器／下載／列印他部門文件 → 拒絕、**無 PDF 位元組**（AC-25／AC-26）；<br>(f) **孤兒帳號**（`orgCode` 空）→ 清單為空、說明句沿用業務句、無「帳號異常」字樣（AC-12／AC-40）；<br>(g) 帳號管理 modal：角色選「一般使用者」才出現子分類選擇器（AC-32） | 本輪**簡易版 ring 無 Playwright、亦未做瀏覽器煙霧測試**。2026-07-25 之 Chrome MCP 煙霧測試曾揪出 3 個「只有真瀏覽器會踩」的部署／代理層 bug（nginx/vite 代理白名單、viewer PDF iframe 之 Accept 撞 SPA bypass、裸 `/admin` 絕對轉址掉 port），**單元全綠完全測不到** |
+| **④** | **補 e2e（Playwright）** | 將 ③ 之 (a)～(g) 固化為自動化 e2e，納入完整 ring | 人工實測一次無法防回歸；補齊後 F041 之 DoD ① 亦由「簡易版」升為完整覆蓋 |
+
+**不阻擋升 ✅ 者（明確排除）**：
+- **AC-39**（[F033](features/F033-permission-aware-retrieval.md) RAG 之未來下限保證）——Phase 3 ripple，[F041](features/F041-user-subtype-business-scope.md) 規格明文本輪不驗收。
+- **Stryker mutation／dependency-cruiser**——本輪由使用者指定跳過；屬全專案性的 ring 補強，非 F041 專屬缺口。
+
+**既有缺口（本輪提報、非 F041 引入，另案處理）**：`findCurrentByLogin()` 與 `TypeOrmDocMeta.getDocMeta()` 兩個 DB-touching adapter 無 `.spec.ts`（test-generator 建環掃描時發現）。建議併入下次 int 測試線一併補齊。
 
 ---
 
