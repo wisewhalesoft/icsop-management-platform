@@ -170,6 +170,59 @@ describe('AccountsService', () => {
     });
   });
 
+  /**
+   * F041 AC-U2／AC-U5（F003 delta，對應 F041 spec AC-01/AC-02/AC-34/AC-36）：
+   * assignRole 第四參數 userSubtype？— 僅當 newRole==='User' 時併入持久化 patch，
+   * 且送入前經 normalizeUserSubtype 正規化；非 User 角色時該鍵完全不寫入（不清空既有值）。
+   * 權威：docs/specs/architecture-spec.md §3.7 決策四（assignRole 擴充之精確條件）。
+   */
+  describe('assignRole — F041 一般使用者子分類（AC-U2／AC-U5）', () => {
+    it('AC-U2 newRole=User + userSubtype=business → 持久化該值', async () => {
+      const a = store.seed({ loginId: 'U1', roleCode: 'User' });
+      await svc.assignRole(a.id, ACTOR, 'User', 'business');
+      const rec = store.rows.find((r) => r.id === a.id)! as unknown as { userSubtype?: string };
+      expect(rec.userSubtype).toBe('business');
+    });
+
+    it('AC-U2（正規化）newRole=User + userSubtype 為髒值（大寫 BUSINESS）→ 收斂為 other（fail-open，AC-02）', async () => {
+      const a = store.seed({ loginId: 'U2', roleCode: 'User' });
+      await svc.assignRole(a.id, ACTOR, 'User', 'BUSINESS');
+      const rec = store.rows.find((r) => r.id === a.id)! as unknown as { userSubtype?: string };
+      expect(rec.userSubtype).toBe('other');
+    });
+
+    it('AC-36／AC-U5 newRole 非 User（Supervisor）→ 即使呼叫端夾帶 userSubtype，persist patch 之鍵集合不含 userSubtype，既有值保留不清空', async () => {
+      const a = store.seed({ loginId: 'U3', roleCode: 'User' });
+      (a as unknown as { userSubtype: string }).userSubtype = 'business'; // 帳號先前身為一般使用者時已指派
+
+      const captured: UpdateAccountPatch[] = [];
+      const origUpdateById = store.updateById.bind(store);
+      store.updateById = ((id: string, patch: UpdateAccountPatch) => {
+        captured.push(patch);
+        return origUpdateById(id, patch);
+      }) as typeof store.updateById;
+
+      await svc.assignRole(a.id, ACTOR, 'Supervisor', 'other');
+
+      expect(captured).toHaveLength(1);
+      expect(Object.keys(captured[0] as unknown as Record<string, unknown>)).not.toContain('userSubtype');
+      const rec = store.rows.find((r) => r.id === a.id)! as unknown as { userSubtype: string };
+      expect(rec.userSubtype).toBe('business'); // 保留原值，不清空
+    });
+
+    it('AC-U2 newRole=User 改回一般使用者時傳入先前之 business 值（比照前端 modal 預選現值）→ 持久化該值', async () => {
+      // 「日後改回 User 沿用舊值」之復活效果由前端 modal 預選現值後原樣送出達成（架構 §3.7 決策四：
+      // renderSubtypeRadios(normalizeUserSubtype(a.subtype)) 預選 → doAssign 原樣傳出），非後端在「未帶
+      // userSubtype 參數」時特判保留——後端契約僅為「newRole=User 時，持久化呼叫端提供之值」，見下。
+      const a = store.seed({ loginId: 'U4', roleCode: 'Supervisor' });
+      (a as unknown as { userSubtype: string }).userSubtype = 'business';
+      await svc.assignRole(a.id, ACTOR, 'User', 'business');
+      const rec = store.rows.find((r) => r.id === a.id)! as unknown as { userSubtype: string; roleCode: string };
+      expect(rec.roleCode).toBe('User');
+      expect(rec.userSubtype).toBe('business');
+    });
+  });
+
   describe('setStatus', () => {
     it('停用 → status=disabled、disableReason=manual、disabledAt 設定', async () => {
       const a = store.seed({ loginId: 'U1', status: 'active' });

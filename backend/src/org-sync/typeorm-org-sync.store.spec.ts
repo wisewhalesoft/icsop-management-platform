@@ -67,6 +67,88 @@ describe('TypeOrmOrgSyncStore.applySync — INSERT 批次參數上限', () => {
 });
 
 /**
+ * F041 AC-34（F003 delta AC-U4）：F004 組織同步 upsert 之 insert/update payload 不得含 `userSubtype` 鍵
+ * ——該欄非上游來源欄位（VW_HPMUSER 11 欄白名單不含），只要 applySync() 建構 payload 之物件字面量
+ * 不主動新增一行 `userSubtype: a.userSubtype`，此鍵就不會出現，即使輸入之 accountCreates/accountUpdates
+ * 物件意外夾帶該鍵（模擬呼叫端誤傳）。權威：docs/specs/architecture-spec.md §4.10。
+ *
+ * ⚠ 本測試在現行（F041 尚未實作）程式碼下即為綠燈（regression guard，非 RED 約束）——現行 applySync
+ * 根本不認識 userSubtype 這個欄位，天然不會複製它；其綠燈本身即驗證「不主動新增此鍵」之現況是安全的，
+ * 供未來任何人「順手」在 insert/update 物件字面量新增 userSubtype 一行時，充當回歸防線。
+ */
+describe('TypeOrmOrgSyncStore.applySync — F041 AC-34：userSubtype 不受組織同步 upsert 覆寫', () => {
+  it('accountCreates／accountUpdates 縱使夾帶 userSubtype 鍵，insert/update payload 皆不得含該鍵', async () => {
+    const insertCalls: Array<{ entity: unknown; batch: Array<Record<string, unknown>> }> = [];
+    const updateCalls: unknown[][] = [];
+    const fakeManager = {
+      insert: (entity: unknown, batch: Array<Record<string, unknown>>) => {
+        insertCalls.push({ entity, batch });
+        return Promise.resolve();
+      },
+      update: (...args: unknown[]) => {
+        updateCalls.push(args);
+        return Promise.resolve();
+      },
+    };
+    const fakeDs = {
+      isInitialized: true,
+      transaction: (cb: (m: typeof fakeManager) => Promise<void>) => cb(fakeManager),
+    } as unknown as DataSource;
+
+    const store = new TypeOrmOrgSyncStore(fakeDs);
+
+    const plan = {
+      orgCreates: [],
+      orgUpdates: [],
+      accountCreates: [
+        {
+          companyCode: 'AS',
+          loginId: 'zzint-u1',
+          employeeNo: '1',
+          name: 'n1',
+          email: 'u1@x',
+          orgCode: 'X0',
+          managerEmpNo: null,
+          resignDate: null,
+          hireDate: null,
+          upstreamModifiedAt: null,
+          userSubtype: 'business', // 模擬誤傳：非上游來源欄位，理應被忽略
+        },
+      ],
+      accountUpdates: [
+        {
+          id: 'acc-1',
+          employeeNo: '1',
+          name: 'n1改',
+          orgCode: 'X1',
+          managerEmpNo: null,
+          resignDate: null,
+          hireDate: null,
+          upstreamModifiedAt: null,
+          userSubtype: 'business', // 同上：模擬誤傳
+        },
+      ],
+      accountDisables: [],
+    } as unknown as SyncPlan;
+
+    await store.applySync('AS', plan);
+
+    expect(insertCalls.length).toBeGreaterThan(0);
+    for (const { batch } of insertCalls) {
+      for (const row of batch) {
+        expect(Object.keys(row)).not.toContain('userSubtype');
+      }
+    }
+    expect(updateCalls.length).toBeGreaterThan(0);
+    for (const args of updateCalls) {
+      // manager.update(target, criteria, partialEntity) — partialEntity 為最後一個參數
+      const partial = args[args.length - 1] as Record<string, unknown>;
+      expect(Object.keys(partial)).not.toContain('userSubtype');
+    }
+  });
+});
+
+/**
  * US-011 同步紀錄查詢：listRecentRuns 須以 startedAt 由新到舊、取 limit 筆下推 repo，
  * 並將 SYNC_RUN 實體投影為 SyncRunSummary（僅 8 個對外欄位；watermark/triggeredBy 不外洩）。
  */

@@ -32,3 +32,11 @@ describe('field-matrix（前端鏡射）', () => {
     expect(canWriteField(undefined, FieldKey.DOCUMENT_STATUS)).toBe('FORBIDDEN');
   });
 });
+
+/** F041 AC-38（前端鏡射，F026 delta AC-U2）：矩陣不新增列已由上方既有測試覆蓋（未新增列）；
+ * 本區塊補簽章鎖定。 */
+describe('F041 AC-38：canWriteField 前端鏡射不受一般使用者子分類影響', () => {
+  it('AC-U2 簽章不含 userSubtype 參數（arity=2）', () => {
+    expect(canWriteField.length).toBe(2);
+  });
+});

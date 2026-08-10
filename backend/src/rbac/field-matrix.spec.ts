@@ -109,3 +109,16 @@ describe('F026 canWriteField 純判定', () => {
     expect(canWriteField(undefined, FieldKey.DOCUMENT_STATUS)).toBe('FORBIDDEN');
   });
 });
+
+/**
+ * F041 AC-38（F026 delta AC-U1／AC-U2／AC-U3）：一般使用者子分類不新增欄位鍵、不改變任一格值，
+ * 欄位權限解析函式簽章不接受 userSubtype 參數。矩陣不變已由本檔既有「20 欄位」「逐格對照」測試
+ * 覆蓋（本次未新增任何列）。AC-U3（isWithinSubtree／isUsingDeptMatched 重用鎖定）之機器可驗證斷言
+ * 見 backend/src/org-sync/org-hierarchy.spec.ts（TS-PS-ORG-001～007，未經修改）＋
+ * backend/src/rbac/viewer-scope.spec.ts（AC-10：isUsingDeptMatched 與 isPinned 逐案相等），不於本檔重工。
+ */
+describe('F041 AC-38：canWriteField 不受一般使用者子分類影響', () => {
+  it('AC-U2 簽章不含 userSubtype 參數（arity=2：roleCode/fieldKey）——結構性保證兩子分類帳號結果必然相同', () => {
+    expect(canWriteField.length).toBe(2);
+  });
+});

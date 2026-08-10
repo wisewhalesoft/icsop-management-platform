@@ -1,6 +1,13 @@
 import { PublicDocumentsService, OrgNameResolver } from './public-documents.service';
 import { PublicDocDetail, PublicDocumentStore } from './public-documents.store';
 import { PublicDocItem } from './public-list';
+import { ViewerScope } from '../rbac/viewer-scope';
+
+/** F041 簽章遷移 shim（架構 §3.7 決策一）：list() 第一參數由 userOrgCode 字串改為 ViewerScope。
+ * 既有案例與業務子分類無關，一律以「其他」子分類包裝（不受限，行為與遷移前相同）。 */
+function viewerOf(orgCode: string | null): ViewerScope {
+  return { roleCode: 'User', userSubtype: 'other', orgCode };
+}
 
 class FakeStore implements PublicDocumentStore {
   constructor(private readonly items: PublicDocItem[]) {}
@@ -46,14 +53,14 @@ describe('PublicDocumentsService（F019）', () => {
       item({ id: 'void', status: 'void' }),
     ]);
     const svc = new PublicDocumentsService(store, fakeResolver(), clock);
-    const page = await svc.list(null, {}, 1, 50);
+    const page = await svc.list(viewerOf(null), {}, 1, 50);
     expect(page.items.map((d) => d.id)).toEqual(['ann']);
   });
 
   it('TS-F019-021 呼叫端夾帶 status 企圖繞過 → 仍僅已公告', async () => {
     const store = new FakeStore([item({ id: 'ina', status: 'inactive' })]);
     const svc = new PublicDocumentsService(store, fakeResolver(), clock);
-    const page = await svc.list(null, { status: 'inactive' }, 1, 50);
+    const page = await svc.list(viewerOf(null), { status: 'inactive' }, 1, 50);
     expect(page.items).toHaveLength(0);
   });
 
@@ -63,7 +70,7 @@ describe('PublicDocumentsService（F019）', () => {
       item({ id: 'D2', usingDeptIds: ['ZZ000'], documentNumber: 'A009' }),
     ]);
     const svc = new PublicDocumentsService(store, fakeResolver(), clock);
-    const page = await svc.list('JAC00', {}, 1, 50);
+    const page = await svc.list(viewerOf('JAC00'), {}, 1, 50);
     expect(page.items[0].id).toBe('D1');
     expect(page.items[0].pinned).toBe(true);
     expect(page.items[1].pinned).toBe(false);
@@ -78,7 +85,7 @@ describe('PublicDocumentsService（F019）', () => {
       fakeResolver({ JA000: '營運管理部', JAC00: '審查室' }),
       clock,
     );
-    const page = await svc.list(null, {}, 1, 50);
+    const page = await svc.list(viewerOf(null), {}, 1, 50);
     const dto = page.items[0];
     expect(dto.draftingDeptName).toBe('營運管理部');
     expect(dto.usingDeptNames).toEqual(['審查室', 'ZZ999']); // 未命中 fallback 為代碼
@@ -88,7 +95,7 @@ describe('PublicDocumentsService（F019）', () => {
   it('displayStatus 衍生為 announced（前台恆已公告）', async () => {
     const store = new FakeStore([item({ id: 'd', status: 'active', announcedDate: '2026-01-01' })]);
     const svc = new PublicDocumentsService(store, fakeResolver(), clock);
-    const page = await svc.list(null, {}, 1, 50);
+    const page = await svc.list(viewerOf(null), {}, 1, 50);
     expect(page.items[0].displayStatus).toBe('announced');
   });
 
@@ -97,9 +104,23 @@ describe('PublicDocumentsService（F019）', () => {
       item({ id: `d${i}`, documentNumber: `N-${String(i).padStart(3, '0')}`, usingDeptIds: ['ZZ000'] }),
     );
     const svc = new PublicDocumentsService(new FakeStore(items), fakeResolver(), clock);
-    const p3 = await svc.list(null, {}, 3, 50);
+    const p3 = await svc.list(viewerOf(null), {}, 3, 50);
     expect(p3.items).toHaveLength(5);
     expect(p3.total).toBe(105);
     expect(p3.hasNext).toBe(false);
+  });
+});
+
+/** F041 AC-14 pass-through：list() 將 viewer 完整交給 buildPublicList，業務子分類之過濾於服務層可觀測。 */
+describe('PublicDocumentsService（F041 AC-14 viewer pass-through）', () => {
+  it('業務子分類 viewer → 服務層輸出已排除不相符文件（非僅純函式層）', async () => {
+    const store = new FakeStore([
+      item({ id: 'match', usingDeptIds: ['JA000'] }),
+      item({ id: 'no-match', usingDeptIds: ['JAD00'] }),
+    ]);
+    const svc = new PublicDocumentsService(store, fakeResolver(), clock);
+    const page = await svc.list({ roleCode: 'User', userSubtype: 'business', orgCode: 'JAC00' }, {}, 1, 50);
+    expect(page.items.map((d) => d.id)).toEqual(['match']);
+    expect(page.total).toBe(1);
   });
 });

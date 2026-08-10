@@ -56,3 +56,23 @@
 | # | 現象 | 實測（4 次執行） | 結論 |
 |---|---|---|---|
 | G-F040-14 | `backend/src/public/pdf-burner.spec.ts`（~118s）與 `backend/src/lifecycle/lifecycle-change-diff.service.spec.ts`（~175s）曾於某次全量執行中各有 1 條測試失敗 | **A**　全量 116 suites（含本輪新增 4 spec）：1363 passed／**2 failed**<br>**B**　全量 112 suites（排除新增 4 spec）：**1365 passed／0 failed**<br>**C**　6 suites（那 2 檔＋新增 4 spec）：**13 passed／0 failed**<br>**D**　全量 116 suites（與 A **相同組態**，且 `impl-subcat` 同時佔用 CPU）：**1365 passed／0 failed** | **A 為不可重現之偶發失敗（flake）。**<br>D 與 A 組態相同卻全綠，且 D 的機器負載**更高**（另有 process 併行），故**無法**支持「新增 spec 之負載把它推過 timeout」之因果假說——該假說僅建立在 A 一次觀測上，已被 D 推翻。<br>⚠ **本輪未修改 `testTimeout`、`maxWorkers` 或這兩個檔案的任何內容。** 未取得實際錯誤文字（失敗不再重現），依「無實證不得調整」原則停手。<br>若日後重現，**先擷取錯誤文字再決定**：`Exceeded timeout of ...ms` → 調 `testTimeout`；worker crash／OOM → 調 `maxWorkers`；斷言或模組解析失敗 → 是真 bug，不得以逾時設定掩蓋。 |
+
+## F041 一般使用者子分類（業務／其他）（2026-08-11） {#f041}
+
+> 簡易版 ring（使用者明確指示）：僅 backend jest／frontend vitest。完整測試設計見
+> [features/F041-test.md](features/F041-test.md)（40 條 AC ↔ 約束對照、23 條 `AC-U#` delta 對照）。
+
+### A. 本輪無法以 jest/vitest 驗證（不得自行發明斷言）
+
+| # | 缺口 | 說明 | 現況處置 |
+|---|---|---|---|
+| ~~G-F041-01~~ | ~~AC-35／F003 AC-U3~~：新帳號未指定子分類 → `userSubtype` 預設 `'other'` | **已關閉（2026-08-11，tdd-implementation 對真實 SOP DB 實跑 migration 覆核）**：預設值由 DB 層 `NOT NULL DEFAULT 'other'`（architecture §4.10）保證，非應用層邏輯，jest 層本無可斷言標的（比照 [F040 G-F040-13](#f040) 同一類型缺口）。**實跑證據**：不帶 `userSubtype` 之 `INSERT` 落地為 `'other'`；`UPDATE ... SET userSubtype='Business'`（非法值）確實被 `CHECK` 約束拒絕（驗證 AC-02 fail-open 之安全前提）；既有 1119 列全數 backfill 為 `'other'`；探針列已清除。test-generator 未親自重跑，已核對描述方法與 §4.10 要求一致並採信，見 [F041-test.md](features/F041-test.md#ac-35-之覆蓋方式更新2026-08-11tdd-implementation-回報)。 |
+| G-F041-02 | **AC-39**：F033（RAG 問答）之過濾層須至少與 `isDocVisibleToViewer` 等價 | F033 Phase 3 尚未實作，規格本文明載「本輪不驗收」，無可執行之標的（現行 F033 spec 文字對全體一般使用者一律套用過濾，已較本 feature 嚴格，本條已滿足；本條僅為下限保證）。 | 不撰寫測試；待 F033 進入 Phase 3 實作時，由該輪 test-generator 依本條下限重新檢視。 |
+
+### B. 本輪刻意不覆蓋（使用者指示範圍縮減）
+
+同 [F040 §](#f040) 之 G-F040-04～06：本輪未建 Playwright e2e fidelity、Stryker mutation、dependency-cruiser metric gate。
+`WatermarkController`／`PublicDocumentsController` 之 controller 層本身除既有守門鏈（`SessionGuard`＋`RolePermissionGuard`）測試外，
+未新增 controller 層級之 F041 業務邏輯測試——業務判定發生於服務層（架構 §3.7 決策二/三），並已由 `AC-30`／`F020 AC-U5` 之
+「直接呼叫服務層仍被拒」證明該判定不依賴 controller，controller 層之 wiring 已由既有守門鏈測試 + BE-4／BE-6 之服務層直呼測試共同覆蓋，
+不視為缺口。

@@ -128,3 +128,24 @@ describe('F025 canPerform 純判定', () => {
     expect(canPerform('SysAdmin', '不存在的功能', 'read')).toBe(false);
   });
 });
+
+/**
+ * F041 AC-37（F025 delta AC-U1／AC-U2）：一般使用者子分類不新增功能鍵、不改變任一格值，
+ * 且權限解析函式簽章不接受 userSubtype 參數。矩陣不變已由本檔既有「13 功能列」「逐格對照」測試
+ * 覆蓋（本次未新增任何列，故上方既有測試即為 AC-U1 之回歸鎖定）；本區塊僅補簽章與行為兩條。
+ */
+describe('F041 AC-37：canPerform 不受一般使用者子分類影響', () => {
+  it('AC-U2 簽章不含 userSubtype 參數（arity=3：roleCode/functionKey/action）——結構性保證兩子分類帳號結果必然相同', () => {
+    expect(canPerform.length).toBe(3);
+  });
+
+  it('F025 AC-U3：業務子分類使用者呼叫任一後台管理功能 API → 與「其他」子分類完全一致（皆為 NONE，非放寬亦非加嚴）', () => {
+    const backendOnlyKeys = Object.keys(FUNCTION_MATRIX).filter(
+      (k) => k !== FunctionKey.PUBLIC_BROWSING && k !== FunctionKey.DOCUMENT_DOWNLOAD_PRINT,
+    );
+    for (const key of backendOnlyKeys) {
+      expect(canPerform('User', key, 'read')).toBe(false);
+      expect(canPerform('User', key, 'write')).toBe(false);
+    }
+  });
+});

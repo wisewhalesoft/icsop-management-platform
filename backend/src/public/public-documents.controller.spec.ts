@@ -49,33 +49,42 @@ describe('PublicDocumentsController — 守門鏈與委派（F019）', () => {
     expect(() => guard.canActivate(ctxFor('list', undefined))).toThrow(ForbiddenException);
   });
 
-  it('list：置頂所依 userOrgCode 取自 session；篩選/分頁委派服務', async () => {
+  it('list：viewer（含 orgCode）取自 session；篩選/分頁委派服務（F041 §3.7 決策一：viewer 取代裸 userOrgCode）', async () => {
     const svc = fakeSvc();
     const req = { sessionUser: { roleCode: 'User', orgCode: 'JAC00' } } as never;
     await new PublicDocumentsController(svc, fakeDetailSvc()).list(req, '審查', 'JA000', 'lc1', '有效', '2', '25');
     expect(svc.list).toHaveBeenCalledWith(
-      'JAC00',
+      expect.objectContaining({ roleCode: 'User', orgCode: 'JAC00' }),
       { keyword: '審查', deptCode: 'JA000', lifecycleId: 'lc1', status: '有效' },
       2,
       25,
     );
   });
 
-  it('list：無 orgCode → 傳 null（排序退回純編號降冪）；空 query → 預設頁碼/篩選 undefined', async () => {
+  it('list：無 orgCode → viewer.orgCode 為 null（排序退回純編號降冪）；空 query → 預設頁碼/篩選 undefined', async () => {
     const svc = fakeSvc();
     const req = { sessionUser: { roleCode: 'SysAdmin' } } as never;
     await new PublicDocumentsController(svc, fakeDetailSvc()).list(req);
     expect(svc.list).toHaveBeenCalledWith(
-      null,
+      expect.objectContaining({ roleCode: 'SysAdmin', orgCode: null }),
       { keyword: undefined, deptCode: undefined, lifecycleId: undefined, status: undefined },
       1,
       50,
     );
   });
 
-  it('G-PUB-020 detail：委派 detailService.detail(id)', async () => {
+  /**
+   * F041 架構 §3.7 決策一「下游實作最容易漏的三點」第 1 點：detail() 現況完全未接收 @Req()，
+   * 本次需從零新增。既有測試呼叫 `detail('doc-9')`（無 req）之呼叫慣例本身即代表舊簽章，
+   * 遷移為 `detail(id, req)` 屬刻意的破壞性簽章變更（deny-by-default 不能仰賴選填參數）。
+   */
+  it('G-PUB-020／F041：detail 委派 detailService.detail(id, viewer)，viewer 組自新增之 @Req()', async () => {
     const detailSvc = fakeDetailSvc();
-    await new PublicDocumentsController(fakeSvc(), detailSvc).detail('doc-9');
-    expect(detailSvc.detail).toHaveBeenCalledWith('doc-9');
+    const req = { sessionUser: { roleCode: 'User', orgCode: 'JAC00', userSubtype: 'business' } } as never;
+    await new PublicDocumentsController(fakeSvc(), detailSvc).detail('doc-9', req);
+    expect(detailSvc.detail).toHaveBeenCalledWith(
+      'doc-9',
+      expect.objectContaining({ roleCode: 'User', orgCode: 'JAC00' }),
+    );
   });
 });

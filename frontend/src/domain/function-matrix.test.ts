@@ -69,3 +69,11 @@ describe('function-matrix（前端鏡射）', () => {
     });
   });
 });
+
+/** F041 AC-37（前端鏡射，F025 delta AC-U2）：矩陣不新增列已由上方既有測試覆蓋（未新增列）；
+ * 本區塊補簽章鎖定。 */
+describe('F041 AC-37：canPerform 前端鏡射不受一般使用者子分類影響', () => {
+  it('AC-U2 簽章不含 userSubtype 參數（arity=3）', () => {
+    expect(canPerform.length).toBe(3);
+  });
+});

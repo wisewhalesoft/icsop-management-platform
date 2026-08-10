@@ -10,6 +10,18 @@ import {
   escapeLikeContains,
 } from './public-list';
 import { escapeLikePrefix } from '../org-directory/org-unit-read';
+import { ViewerScope } from '../rbac/viewer-scope';
+
+/**
+ * F041 簽章遷移 shim（架構 §3.7 決策一，刻意的破壞性變更）：`buildPublicList` 第二參數
+ * 由 `userOrgCode: string | null` 改為必要參數 `viewer: ViewerScope`。既有案例之測試標的與
+ * 業務子分類無關，一律以「其他」子分類包裝——`isDeptScopedViewer` 對此恆為 false，
+ * 故不施加任何額外過濾，行為與遷移前逐欄相同（AC-U5／F041 AC-19 回歸鎖定）。
+ * `isPinned`／`splitAndSort` 簽章不變（仍吃 orgCode 字串），不受本次遷移影響。
+ */
+function viewerOf(orgCode: string | null): ViewerScope {
+  return { roleCode: 'User', userSubtype: 'other', orgCode };
+}
 
 /** 測試用文件工廠（僅設定與斷言相關欄位）。 */
 function doc(over: Partial<PublicDocItem>): PublicDocItem {
@@ -148,7 +160,7 @@ describe('F019 狀態/循環篩選 + AND 組合', () => {
       doc({ id: 'a', lifecycleId: 'LC-A' }),
       doc({ id: 'b', lifecycleId: 'LC-B' }),
     ];
-    const page = buildPublicList(items, null, { lifecycleId: 'LC-A' }, TODAY);
+    const page = buildPublicList(items, viewerOf(null), { lifecycleId: 'LC-A' }, TODAY);
     expect(page.items.map((d) => d.id)).toEqual(['a']);
   });
 
@@ -158,7 +170,7 @@ describe('F019 狀態/循環篩選 + AND 組合', () => {
       doc({ id: 'deptOnly', usingDeptIds: ['JAC00'], lifecycleId: 'LC-B' }),
       doc({ id: 'cycOnly', usingDeptIds: ['ZZ000'], lifecycleId: 'LC-A' }),
     ];
-    const page = buildPublicList(items, null, { deptCode: 'JAC00', lifecycleId: 'LC-A' }, TODAY);
+    const page = buildPublicList(items, viewerOf(null), { deptCode: 'JAC00', lifecycleId: 'LC-A' }, TODAY);
     expect(page.items.map((d) => d.id)).toEqual(['hit']);
   });
 
@@ -167,7 +179,7 @@ describe('F019 狀態/循環篩選 + AND 組合', () => {
       doc({ id: 'hit', usingDeptIds: ['JAC00'], documentName: '審查作業' }),
       doc({ id: 'deptNoKw', usingDeptIds: ['JAC00'], documentName: '其他' }),
     ];
-    const page = buildPublicList(items, null, { deptCode: 'JAC00', keyword: '審查' }, TODAY);
+    const page = buildPublicList(items, viewerOf(null), { deptCode: 'JAC00', keyword: '審查' }, TODAY);
     expect(page.items.map((d) => d.id)).toEqual(['hit']);
   });
 });
@@ -198,7 +210,7 @@ describe('F019 強制基底條件（不可繞過）', () => {
     const inProgress = doc({ id: 'ip', status: 'active', announcedDate: '2026-12-31' });
     const inactive = doc({ id: 'ina', status: 'inactive', announcedDate: '2026-01-01' });
     const voided = doc({ id: 'void', status: 'void', announcedDate: '2026-01-01' });
-    const page = buildPublicList([announced, inProgress, inactive, voided], null, {}, TODAY);
+    const page = buildPublicList([announced, inProgress, inactive, voided], viewerOf(null), {}, TODAY);
     expect(page.items.map((d) => d.id)).toEqual(['ann']);
   });
 
@@ -210,7 +222,7 @@ describe('F019 強制基底條件（不可繞過）', () => {
     // 即使套用關鍵字篩選（縮小 items），hiddenCount 仍反映全候選中之非公告數（3）。
     const page = buildPublicList(
       [announced, inProgress, inactive, voided],
-      null,
+      viewerOf(null),
       { keyword: '找不到的關鍵字' },
       TODAY,
     );
@@ -220,7 +232,7 @@ describe('F019 強制基底條件（不可繞過）', () => {
   it('TS-F019-021 呼叫端夾帶 status 參數企圖繞過 → 後端強制忽略', () => {
     const inactive = doc({ id: 'ina', status: 'inactive', announcedDate: '2026-01-01' });
     // 前端傳入 status=失效 亦不放寬：基底條件恆鎖已公告
-    const page = buildPublicList([inactive], null, { status: 'inactive' }, TODAY);
+    const page = buildPublicList([inactive], viewerOf(null), { status: 'inactive' }, TODAY);
     expect(page.items).toHaveLength(0);
   });
 
@@ -253,5 +265,94 @@ describe('F019 分頁', () => {
     const ids = [...p1.items, ...p2.items, ...p3.items].map((d) => d.id);
     expect(new Set(ids).size).toBe(105);
     expect(ids).toEqual(sorted.map((d) => d.id));
+  });
+});
+
+/**
+ * F041 AC-14～AC-19（F019 delta AC-U1～AC-U5）：buildPublicList 於既有「已公告」基底條件之後、
+ * 其餘篩選之前，對業務子分類 viewer 追加「使用部門相符」可見性過濾（AND）。
+ * 權威：docs/specs/features/F041-user-subtype-business-scope.md §C；
+ * docs/specs/architecture-spec.md §3.7 決策三(a)（插入點在 base 之後，hiddenCount 計算式零額外邏輯）。
+ */
+function bizViewer(orgCode: string | null = 'JAC00'): ViewerScope {
+  return { roleCode: 'User', userSubtype: 'business', orgCode };
+}
+
+describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', () => {
+  it('AC-14 業務@JAC00：3 筆已公告文件中僅 2 筆相符（JA000 祖先 + 00000 Root）進入 items，total 同步收斂', () => {
+    const items = [
+      doc({ id: 'match-anc', usingDeptIds: ['JA000'] }),
+      doc({ id: 'no-match', usingDeptIds: ['JAD00'] }),
+      doc({ id: 'match-root', usingDeptIds: ['00000'] }),
+    ];
+    const page = buildPublicList(items, bizViewer('JAC00'), {}, TODAY);
+    expect(page.items.map((d) => d.id).sort()).toEqual(['match-anc', 'match-root']);
+    expect(page.total).toBe(2);
+  });
+
+  it('AC-15 業務子分類之結果全部項目皆滿足 isPinned（置頂區＝全部、其餘區恆空，OQ-E08-07 4a 之數學推論）', () => {
+    // buildPublicList 純函式層之 items 本身不攜帶 .pinned 旗標（該欄位於服務層 toDto() 才附加，
+    // 見 public-documents.service.spec.ts）；此處以「與置頂判定式同一函式」isPinned() 直接驗證
+    // 每一項目對業務 viewer 之 orgCode 皆滿足置頂條件——此即 AC-15「其餘區恆空」之數學推論本身。
+    const items = [
+      doc({ id: 'a', usingDeptIds: ['JA000'] }),
+      doc({ id: 'b', usingDeptIds: ['00000'] }),
+    ];
+    const page = buildPublicList(items, bizViewer('JAC00'), {}, TODAY);
+    expect(page.items).toHaveLength(2);
+    expect(page.items.every((d) => isPinned(d, 'JAC00'))).toBe(true);
+  });
+
+  it('AC-16 部門篩選選到業務子樹範圍外之單位 → items=[]、total=0，不拋錯（交集為空係正常查詢結果）', () => {
+    const items = [doc({ id: 'a', usingDeptIds: ['JA000'] })];
+    expect(() => {
+      const page = buildPublicList(items, bizViewer('JAC00'), { deptCode: 'JCHA0' }, TODAY);
+      expect(page.items).toEqual([]);
+      expect(page.total).toBe(0);
+    }).not.toThrow();
+  });
+
+  it('AC-17 不相符文件於「關鍵字／部門／循環」任何排列組合下皆不出現（業務限制與其餘條件 AND）', () => {
+    const mismatched = doc({
+      id: 'ICSOP-AD-001',
+      documentNumber: 'ICSOP-AD-001',
+      documentName: '審查作業',
+      usingDeptIds: ['JAD00'],
+      lifecycleId: 'L1',
+    });
+    const viewer = bizViewer('JAC00');
+    const combos: Array<Record<string, string>> = [
+      {},
+      { keyword: '審查' },
+      { deptCode: 'JAD00' },
+      { lifecycleId: 'L1' },
+      { keyword: '審查', deptCode: 'JAD00', lifecycleId: 'L1' },
+    ];
+    for (const filters of combos) {
+      const page = buildPublicList([mismatched], viewer, filters, TODAY);
+      expect(page.items.map((d) => d.id)).not.toContain('ICSOP-AD-001');
+    }
+  });
+
+  it('AC-18 hiddenCount 僅計「已公告基底條件」隱藏者（進度中/失效/作廢），不含被業務限制過濾者', () => {
+    const items = [
+      doc({ id: 'in-progress', status: 'active', announcedDate: '2099-01-01' }),
+      doc({ id: 'void', status: 'void' }),
+      doc({ id: 'announced-mismatch', status: 'active', usingDeptIds: ['JAD00'] }),
+    ];
+    const page = buildPublicList(items, bizViewer('JAC00'), {}, TODAY);
+    expect(page.items).toEqual([]);
+    expect(page.hiddenCount).toBe(2); // 僅 in-progress + void；announced-mismatch 不計入
+  });
+
+  it('AC-19（回歸鎖定）「其他」子分類 viewer → 輸出與遷移前逐欄相同（沿用既有 TS-F019-013/014/015 案例佐證）', () => {
+    const items = [
+      doc({ id: 'hit', usingDeptIds: ['JAC00'], lifecycleId: 'LC-A' }),
+      doc({ id: 'deptOnly', usingDeptIds: ['JAC00'], lifecycleId: 'LC-B' }),
+      doc({ id: 'cycOnly', usingDeptIds: ['ZZ000'], lifecycleId: 'LC-A' }),
+    ];
+    const other = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00' } as ViewerScope;
+    const page = buildPublicList(items, other, { deptCode: 'JAC00', lifecycleId: 'LC-A' }, TODAY);
+    expect(page.items.map((d) => d.id)).toEqual(['hit']); // 與遷移前 TS-F019-014 期望值一致，未受業務限制影響
   });
 });

@@ -120,6 +120,21 @@ describe('WatermarkController — 委派與回應', () => {
       companyCode: 'AS',
       orgCode: 'JAC00',
       roleCode: 'User',
+      userSubtype: null, // F041 架構 §3.7 決策一：新增 userSubtype: u.userSubtype ?? null；SESSION 未帶該欄 → null
+    });
+  });
+
+  /** F041 架構 §3.7 決策一：SessionUser.userSubtype 需完整映射進 WatermarkSession（非僅 undefined→null 之退化情形）。 */
+  it('toWatermarkSession（F041）：SessionUser 帶 userSubtype=business → 映射為 business', () => {
+    const bizUser: SessionUser = { ...SESSION, userSubtype: 'business' } as unknown as SessionUser;
+    expect(toWatermarkSession(bizUser)).toEqual({
+      accountId: 'acc-uuid-1',
+      employeeNo: 'E001',
+      name: '王小明',
+      companyCode: 'AS',
+      orgCode: 'JAC00',
+      roleCode: 'User',
+      userSubtype: 'business',
     });
   });
 });

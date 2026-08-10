@@ -55,20 +55,49 @@ function sessionOf(over: Partial<WatermarkSession> = {}): WatermarkSession {
   };
 }
 
+/** F041 AC-25：組織查找（buildSnapshot 依賴）呼叫次數 spy——包裝既有 fakeOrg 之 findByOrgCode。 */
+function countingOrg(map: Record<string, { tier: string; name: string; descFull: string | null }>) {
+  const counter = { calls: 0 };
+  const lookup: WatermarkOrgLookup = {
+    findByOrgCode: (code) => {
+      counter.calls += 1;
+      return Promise.resolve(map[code] ?? null);
+    },
+  };
+  return { lookup, counter };
+}
+
+/** F041 AC-26：WatermarkPdfSource.getOriginalPdf 呼叫次數 spy。 */
+function countingPdfSource(buf: Buffer | null) {
+  const counter = { calls: 0 };
+  const source = { getOriginalPdf: () => { counter.calls += 1; return Promise.resolve(buf); } };
+  return { source, counter };
+}
+
+/** F041 docMeta：additive 擴充 usingDeptIds（架構 §3.7 決策三(c)）。既有測試未指定時預設與 sessionOf() 之
+ * JAC00 相符，故不影響既有（皆為非受限 viewer）測試之綠燈。 */
+function docMetaOf(usingDeptIds: string[] = ['JAC00']) {
+  return {
+    getDocMeta: () =>
+      Promise.resolve({ documentNumber: 'ICSOP-1', documentName: '車輛分期進件', usingDeptIds }),
+  };
+}
+
 function makeService(opts: {
   org?: WatermarkOrgLookup;
   pdf?: Buffer | null;
   audit?: FakeAudit;
   burner?: FakeBurner;
   clock?: () => Date;
+  docMeta?: ReturnType<typeof docMetaOf>;
+  /** F041 架構 §3.7 決策三(c) 風險#19：docMeta 建構參數為 undefined（僅測試替身情境，生產環境恆定注入）。 */
+  omitDocMeta?: boolean;
 }) {
   const burner = opts.burner ?? new FakeBurner();
   const audit = opts.audit ?? new FakeAudit();
   const pdfBuf = 'pdf' in opts ? opts.pdf : Buffer.from('ORIG');
   const pdfSource = { getOriginalPdf: () => Promise.resolve(pdfBuf ?? null) };
-  const docMeta = {
-    getDocMeta: () => Promise.resolve({ documentNumber: 'ICSOP-1', documentName: '車輛分期進件' }),
-  };
+  const docMeta = opts.omitDocMeta ? undefined : opts.docMeta ?? docMetaOf();
   const svc = new WatermarkService(
     opts.org ?? fakeOrg(ORG),
     pdfSource,
@@ -186,5 +215,100 @@ describe('WatermarkService（F020）', () => {
     const { svc, burner } = makeService({ pdf: null });
     await expect(svc.download(sessionOf(), 'doc-x')).rejects.toThrow('DOCUMENT_PDF_NOT_FOUND');
     expect(burner.calls).toHaveLength(0);
+  });
+});
+
+/**
+ * F041 AC-25～AC-30（F020 delta AC-U1～AC-U5）：業務子分類使用者存取使用部門不相符之文件，
+ * 於取得原始 PDF 之前（buildSnapshot 之前）即拒絕。權威：F041 spec §E；架構 §3.7 決策三(c)。
+ * 業務子分類（新欄位）以 `sessionOf({ userSubtype: 'business', ... } as unknown as Partial<WatermarkSession>)`
+ * 注入——`WatermarkSession` 介面尚未加該欄，強制型別轉換屬既有專案慣例（見 org-sync 測試之 `as unknown as SyncPlan`）。
+ */
+describe('F041 AC-25～AC-30：業務子分類之部門限縮授權檢查', () => {
+  function bizSession(over: Partial<WatermarkSession> = {}) {
+    return sessionOf({ userSubtype: 'business', orgCode: 'JAC00', ...over } as unknown as Partial<WatermarkSession>);
+  }
+
+  it('AC-25 view：使用部門不相符（JAD00）→ 拒絕、不組裝浮水印快照（org 查找 spy 0 次）', async () => {
+    const { lookup, counter } = countingOrg(ORG);
+    const { svc } = makeService({ org: lookup, docMeta: docMetaOf(['JAD00']) });
+    await expect(svc.view(bizSession(), 'doc-1')).rejects.toThrow('DOCUMENT_NOT_FOUND');
+    expect(counter.calls).toBe(0); // buildSnapshot 未執行 → 未查找組織
+  });
+
+  it('AC-25 getOriginalPdf：使用部門不相符 → 拒絕、不回傳任何 PDF 位元組', async () => {
+    const { source, counter } = countingPdfSource(Buffer.from('ORIG'));
+    const svc = new WatermarkService(
+      fakeOrg(ORG),
+      source,
+      new FakeBurner(),
+      new FakeAudit(),
+      docMetaOf(['JAD00']),
+      () => T0,
+    );
+    await expect(svc.getOriginalPdf(bizSession(), 'doc-1')).rejects.toThrow('DOCUMENT_NOT_FOUND');
+    expect(counter.calls).toBe(0); // WatermarkPdfSource.getOriginalPdf 未被呼叫
+  });
+
+  it('AC-26 download／print：使用部門不相符 → 三者皆拒絕，PdfBurner.burnPdf 與 WatermarkPdfSource.getOriginalPdf 呼叫次數皆為 0', async () => {
+    const { source, counter: pdfCalls } = countingPdfSource(Buffer.from('ORIG'));
+    const burner = new FakeBurner();
+    const svc = new WatermarkService(
+      fakeOrg(ORG),
+      source,
+      burner,
+      new FakeAudit(),
+      docMetaOf(['JAD00']),
+      () => T0,
+    );
+    const viewer = bizSession();
+    await expect(svc.download(viewer, 'doc-1')).rejects.toThrow('DOCUMENT_NOT_FOUND');
+    await expect(svc.print(viewer, 'doc-1')).rejects.toThrow('DOCUMENT_NOT_FOUND');
+    await expect(svc.getOriginalPdf(viewer, 'doc-1')).rejects.toThrow('DOCUMENT_NOT_FOUND');
+    expect(burner.calls).toHaveLength(0);
+    expect(pdfCalls.calls).toBe(0);
+  });
+
+  it('AC-27／AC-28 拒絕路徑：AuditWriter 完全未被呼叫（不寫入任何 VIEW/DOWNLOAD/PRINT 成功事件）', async () => {
+    const audit = new FakeAudit();
+    const { svc } = makeService({ audit, docMeta: docMetaOf(['JAD00']) });
+    const viewer = bizSession();
+    await expect(svc.view(viewer, 'doc-1')).rejects.toThrow();
+    await expect(svc.download(viewer, 'doc-1')).rejects.toThrow();
+    await expect(svc.print(viewer, 'doc-1')).rejects.toThrow();
+    await expect(svc.getOriginalPdf(viewer, 'doc-1')).rejects.toThrow();
+    expect(audit.events).toHaveLength(0); // recordAccess 完全未被呼叫
+  });
+
+  it('AC-29（回歸對照組）業務子分類 viewer 存取使用部門相符之文件 → 與遷移前完全一致（燒錄產生、稽核各寫一筆）', async () => {
+    const audit = new FakeAudit();
+    const burner = new FakeBurner();
+    const { svc } = makeService({ audit, burner, docMeta: docMetaOf(['JAC00']) });
+    const viewer = bizSession({ orgCode: 'JAC00' });
+    const res = await svc.download(viewer, 'doc-1');
+    expect(res.pdf.toString()).toContain('BURNED:');
+    expect(burner.calls).toHaveLength(1);
+    expect(audit.events.map((e) => e.actionType)).toEqual(['DOWNLOAD']);
+  });
+
+  it('AC-30（後端權威）直接呼叫服務層四方法（繞過 controller/前端）、業務子分類且不相符 → 仍被拒絕', async () => {
+    const { svc } = makeService({ docMeta: docMetaOf(['JAD00']) });
+    const viewer = bizSession();
+    await expect(svc.view(viewer, 'doc-1')).rejects.toThrow('DOCUMENT_NOT_FOUND');
+    await expect(svc.getOriginalPdf(viewer, 'doc-1')).rejects.toThrow('DOCUMENT_NOT_FOUND');
+    await expect(svc.download(viewer, 'doc-1')).rejects.toThrow('DOCUMENT_NOT_FOUND');
+    await expect(svc.print(viewer, 'doc-1')).rejects.toThrow('DOCUMENT_NOT_FOUND');
+  });
+
+  it('架構風險#19：docMeta 建構參數為 undefined＋業務子分類 viewer → deny-by-default 拒絕（無法判定即不可見，非放行）', async () => {
+    const { svc, burner } = makeService({ omitDocMeta: true });
+    await expect(svc.view(bizSession(), 'doc-1')).rejects.toThrow('DOCUMENT_NOT_FOUND');
+    expect(burner.calls).toHaveLength(0);
+  });
+
+  it('架構風險#19（對照組）docMeta 為 undefined 但 viewer 非受限（其他子分類）→ 不受影響，沿用既有容錯（meta=null 不影響回應）', async () => {
+    const { svc } = makeService({ omitDocMeta: true });
+    const res = await svc.view(sessionOf(), 'doc-1'); // sessionOf() 預設無 userSubtype → other，不受限
+    expect(res.watermark).toContain('審查室');
   });
 });

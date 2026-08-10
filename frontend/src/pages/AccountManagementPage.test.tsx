@@ -90,8 +90,10 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
     await userEvent.click(within(dialog).getByRole('radio', { name: /主管/ }));
     await userEvent.click(within(dialog).getByRole('button', { name: '儲存' }));
 
+    // F041 簽章遷移 shim（架構 §3.7 決策四）：assignAccountRole 新增第三個選填參數 userSubtype；
+    // 呼叫端固定寫法 isSubtypeApplicable(selected) ? subtype : undefined——選「主管」（非 User）故為 undefined。
     await waitFor(() =>
-      expect(endpoints.assignAccountRole).toHaveBeenCalledWith('a2', 'Supervisor'),
+      expect(endpoints.assignAccountRole).toHaveBeenCalledWith('a2', 'Supervisor', undefined),
     );
   });
 
@@ -237,6 +239,64 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
     expect(pw.type).toBe('password');
     await userEvent.click(within(dialog).getByRole('button', { name: '顯示密碼' }));
     expect(pw.type).toBe('text');
+  });
+
+  /**
+   * F041 一般使用者子分類（F003 delta AC-U1／AC-U2；F041 AC-32）：指派角色 modal 於所選角色為
+   * 「一般使用者」時額外呈現子分類選擇器，其餘 4 種角色不呈現。權威：prototypes/08-account-management.html
+   * 行 199-204（#subtypeWrap／#subtypeRadios）；子分類徽章文字「業務」／「其他」為 subtype 單選之
+   * accessible name 前綴（label 內容＝badge 文字＋說明句，無分隔符）。
+   */
+  describe('指派角色 modal — F041 子分類選擇器（AC-32／F003 AC-U1／AC-U2）', () => {
+    it('選「一般使用者」→ 呈現子分類選擇器；切換為其他角色 → 選擇器消失；切回 → 重新出現', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
+
+      // 王小明（a2）現況角色即為一般使用者 → 開啟時應已呈現子分類選擇器
+      const row = screen.getByText('王小明').closest('tr')!;
+      await userEvent.click(within(row).getByRole('button', { name: /指派角色/ }));
+      const dialog = screen.getByRole('dialog', { name: /指派角色/ });
+      expect(within(dialog).getByRole('radio', { name: /^業務/ })).toBeInTheDocument();
+      expect(within(dialog).getByRole('radio', { name: /^其他/ })).toBeInTheDocument();
+
+      await userEvent.click(within(dialog).getByRole('radio', { name: /主管/ }));
+      expect(within(dialog).queryByRole('radio', { name: /^業務/ })).not.toBeInTheDocument();
+      expect(within(dialog).queryByRole('radio', { name: /^其他/ })).not.toBeInTheDocument();
+
+      await userEvent.click(within(dialog).getByRole('radio', { name: /一般使用者/ }));
+      expect(within(dialog).getByRole('radio', { name: /^業務/ })).toBeInTheDocument();
+    });
+
+    it('其餘 4 種角色（如「系統管理員」）之現有帳號開啟指派角色 modal → 一開始即不呈現子分類選擇器', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
+
+      // 李慧玲（a1）現況角色為 ICSOP 管理員（非一般使用者）
+      const row = screen.getByText('李慧玲').closest('tr')!;
+      await userEvent.click(within(row).getByRole('button', { name: /指派角色/ }));
+      const dialog = screen.getByRole('dialog', { name: /指派角色/ });
+      expect(within(dialog).queryByRole('radio', { name: /^業務/ })).not.toBeInTheDocument();
+    });
+
+    it('AC-U2：一般使用者選「業務」子分類並儲存 → assignAccountRole 第三參數為 business', async () => {
+      mockAuth('SysAdmin');
+      vi.mocked(endpoints.assignAccountRole).mockResolvedValue(ROWS[1]);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
+
+      const row = screen.getByText('王小明').closest('tr')!;
+      await userEvent.click(within(row).getByRole('button', { name: /指派角色/ }));
+      const dialog = screen.getByRole('dialog', { name: /指派角色/ });
+
+      await userEvent.click(within(dialog).getByRole('radio', { name: /^業務/ }));
+      await userEvent.click(within(dialog).getByRole('button', { name: '儲存' }));
+
+      await waitFor(() =>
+        expect(endpoints.assignAccountRole).toHaveBeenCalledWith('a2', 'User', 'business'),
+      );
+    });
   });
 
   it('G-ADM-009 編輯 modal：顯示目前角色 + 密碼顯示切換', async () => {

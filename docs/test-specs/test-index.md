@@ -33,6 +33,7 @@
 | F027–F031 RAG ingestion | [F027](features/F027-test.md)、[F028](features/F028-test.md)、[F029](features/F029-test.md)、[F030](features/F030-test.md)、[F031](features/F031-test.md) |
 | F039 附錄管理 | [features/F039-test.md](features/F039-test.md) |
 | **F040 循環子分類（橫切）** | **[features/F040-test.md](features/F040-test.md)** ← 2026-08-07 新增 |
+| **F041 一般使用者子分類（橫切，業務/其他）** | **[features/F041-test.md](features/F041-test.md)** ← 2026-08-11 新增 |
 | 組織同步與名稱解析 | [ORG-COMPANY](features/ORG-COMPANY-sync-test.md)、[ORG-PERSON](features/ORG-PERSON-sync-test.md)、[ORG-descfull](features/ORG-descfull-normalization-test.md)、[ORG-read-endpoints](features/ORG-read-endpoints-test.md)、[NAME-resolution](features/NAME-resolution-test.md) |
 | Session 延長 | [features/SESSION-extension-test.md](features/SESSION-extension-test.md) |
 
