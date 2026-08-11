@@ -40,6 +40,12 @@ export default defineConfig({
       '/public': { target: BACKEND_TARGET, changeOrigin: true, bypass: spaBypass },
       // /org-units 純後端 API（無同名 SPA 路由）→ 直接代理。前台部門篩選與文件建立/編輯 org 下拉來源。
       '/org-units': { target: BACKEND_TARGET, changeOrigin: true },
+      // /persons 純後端 API → 直接代理。F014 當責室長候選之唯一來源；漏代理時 fetch 收到 index.html，
+      // JSON 解析失敗被 .catch 收斂為空陣列 → 下拉「永遠查無人員」且無錯誤訊息（實測踩到）。
+      '/persons': { target: BACKEND_TARGET, changeOrigin: true },
+      // /documents 純後端 API（SPA 側為 /admin/documents、/public/documents）→ 直接代理。
+      // 涵蓋 :id/usage-forms、:id/appendices 及其 download、/documents/attachments/download。
+      '/documents': { target: BACKEND_TARGET, changeOrigin: true },
     },
   },
   preview: { port: 5173, host: true },
