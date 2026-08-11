@@ -50,6 +50,18 @@ services:
       - backend
 
   # --- 一次性初始化（對外部 app MSSQL），opt-in profile：--profile init ---
+  #
+  # 執行序（以 service_completed_successfully 串成單一鏈路，任一步失敗即中斷後續）：
+  #   migration → seed-roles → org-sync → bootstrap-admin → seed-lifecycle → seed-doc-catalog
+  #
+  # 順序由兩條硬相依決定，不可調換：
+  #   ① FK_ACCOUNT_role（ACCOUNT.roleCode → ROLE.code）：角色必須先於組織同步。
+  #   ② bootstrap-admin 需帳號已存在（帳號由組織同步自上游寫入），故必須後於同步。
+  #   ③ FK_ICSOP_DOCUMENT_lifecycle：循環必須先於程序書目錄匯入。
+  # 每一步皆冪等，整條鏈重跑安全。
+  #
+  # 一次跑完：docker compose --profile init up --build seed-doc-catalog
+  #   （depends_on 會自動帶起前面所有步驟；亦可只指定其中一步做局部重跑）
   migration:
     build: ./backend
     profiles: ['init']
@@ -59,15 +71,70 @@ services:
     command: ['npm', 'run', 'migration:run:prod']
     restart: 'no'
 
-  seed:
+  # ① 5 角色（參照資料）。必須先於 org-sync，否則帳號寫入撞 FK_ACCOUNT_role。
+  seed-roles:
     build: ./backend
     profiles: ['init']
     env_file: .env
     extra_hosts:
       - 'host.docker.internal:host-gateway'
-    command: ['npm', 'run', 'seed:prod']
+    command: ['npm', 'run', 'seed:roles:prod']
     depends_on:
       migration:
+        condition: service_completed_successfully
+    restart: 'no'
+
+  # ② 首次全量組織同步（ORG_UNIT / ACCOUNT）。app 內另有每日 02:00 排程，
+  #    但新環境不能等到隔天，且手動觸發端點需 SysAdmin——而此時尚無任何帳號，故以 CLI 起手。
+  org-sync:
+    build: ./backend
+    profiles: ['init']
+    env_file: .env
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    command: ['npm', 'run', 'sync:once:prod']
+    depends_on:
+      seed-roles:
+        condition: service_completed_successfully
+    restart: 'no'
+
+  # ③ 將 DEV_ADMIN_EMAIL 對應之帳號升為 SysAdmin（系統唯一的權限起點，之後由其在 UI 指派）。
+  #    未設該環境變數時本步驟直接跳過並回傳成功，不中斷鏈路。
+  bootstrap-admin:
+    build: ./backend
+    profiles: ['init']
+    env_file: .env
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    command: ['npm', 'run', 'seed:bootstrap-admin:prod']
+    depends_on:
+      org-sync:
+        condition: service_completed_successfully
+    restart: 'no'
+
+  # ④ 循環本體（14 種，自程序書目錄之循環別推導）。DAG 節點與邊不入種子，由使用者單位於 UI 建立。
+  seed-lifecycle:
+    build: ./backend
+    profiles: ['init']
+    env_file: .env
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    command: ['npm', 'run', 'seed:lifecycle:prod']
+    depends_on:
+      bootstrap-admin:
+        condition: service_completed_successfully
+    restart: 'no'
+
+  # ⑤ 程序書目錄匯入（591 筆）。組織對應表填補後可單獨重跑本步驟補寫。
+  seed-doc-catalog:
+    build: ./backend
+    profiles: ['init']
+    env_file: .env
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    command: ['npm', 'run', 'seed:doc-catalog:prod']
+    depends_on:
+      seed-lifecycle:
         condition: service_completed_successfully
     restart: 'no'
 

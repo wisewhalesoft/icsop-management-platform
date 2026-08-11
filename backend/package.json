@@ -16,10 +16,17 @@
     "migration:run": "npm run typeorm -- -d src/database/data-source.ts migration:run",
     "migration:revert": "npm run typeorm -- -d src/database/data-source.ts migration:revert",
     "migration:generate": "npm run typeorm -- -d src/database/data-source.ts migration:generate",
-    "seed": "ts-node src/database/seed.ts",
+    "seed:roles": "ts-node src/database/seed-roles.ts",
+    "seed:bootstrap-admin": "ts-node src/database/seed-bootstrap-admin.ts",
+    "seed:lifecycle": "ts-node src/database/seed-lifecycle.ts",
+    "seed:doc-catalog": "ts-node src/database/seed-document-catalog.ts",
     "sync:once": "ts-node src/org-sync/sync-once.ts",
     "migration:run:prod": "typeorm -d dist/database/data-source.js migration:run",
-    "seed:prod": "node dist/database/seed.js"
+    "seed:roles:prod": "node dist/database/seed-roles.js",
+    "seed:bootstrap-admin:prod": "node dist/database/seed-bootstrap-admin.js",
+    "seed:lifecycle:prod": "node dist/database/seed-lifecycle.js",
+    "seed:doc-catalog:prod": "node dist/database/seed-document-catalog.js",
+    "sync:once:prod": "node dist/org-sync/sync-once.js"
   },
   "jest": {
     "moduleFileExtensions": [
