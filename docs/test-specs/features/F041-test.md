@@ -3,8 +3,8 @@
 > **本輪為「簡易版 ring」**（使用者明確指示，2026-08-11）：**僅 backend jest／frontend vitest 單元與元件測試**；
 > 不含 Playwright e2e fidelity、Stryker mutation、dependency-cruiser metric gate。
 >
-> 規格權威＝[F041](../../specs/features/F041-user-subtype-business-scope.md)（🟢 APPROVED，AC-01～AC-40，40 條）
-> ＋ 5 個 feature 之 `AC-U#` delta（23 條：F019 ×7／F020 ×5／F025 ×3／F026 ×3／F003 ×5）
+> 規格權威＝[F041](../../specs/features/F041-user-subtype-business-scope.md)（🟢 APPROVED，AC-01～AC-40 ＋ §F2 缺口修補 AC-41～AC-46，共 46 條；後者為 2026-08-11 出貨後補訂）
+> ＋ 5 個 feature 之 `AC-U#` delta（23 條 AC-U1～U5 系 ＋ 6 條 §F2 對應 delta：F019 AC-U8、F025 AC-U4、F003 AC-U6～U9，共 29 條）
 > ＋ [architecture-spec.md §3.7／§4.10／§5.11](../../specs/architecture-spec.md)（🟢 APPROVED，`ViewerScope`／`rbac/viewer-scope.ts` 三純函式落點、四接縫精確位置）
 > ＋ [data-model.md#account-user-subtype](../../specs/data-model.md#account-user-subtype)、[error-handling.md#dept-restriction](../../specs/error-handling.md#dept-restriction)
 > ＋ `prototypes/03-public-list.html`（`#scopeNotice`、`SCOPE_NOTICE_OTHER`／`SCOPE_NOTICE_BUSINESS` 逐字定稿）、`prototypes/08-account-management.html`（`#subtypeWrap`／`#subtypeRadios`）
@@ -25,6 +25,28 @@
 **未讀取**：`backend/src/rbac/viewer-scope.ts`（不存在）、`backend/src/public/*.ts`（生產碼）、`backend/src/accounts/accounts.service.ts`、
 `backend/src/org-sync/typeorm-org-sync.store.ts`、`frontend/src/pages/PublicListPage.tsx`、`frontend/src/pages/AccountManagementPage.tsx`、
 `frontend/src/domain/function-matrix.ts`／`field-matrix.ts`（僅讀其 `.spec.ts`/`.test.ts`）。
+
+### 2026-08-11 續篇（AC-41～AC-46 缺口修補）之 blind 聲明
+
+**讀過之非測試檔**：`docs/specs/features/F041-user-subtype-business-scope.md`（§F2）、
+`docs/specs/features/F003-account-role-management.md`（AC-U6～U9）、`docs/specs/features/F019-public-list-browsing.md`（AC-U8）、
+`docs/specs/features/F025-role-function-matrix.md`（AC-U4）、`prototypes/08-account-management.html`（全檔，含 JS 純函式區塊
+`normalizeUserSubtype`／`userSubtypeLabel`／`isSubtypeApplicable`／`SUBTYPE_DESC`／`subtypeBadge`／accounts 假資料／`roleRadios`／
+`subtypeWrap`／`subtypeRadios` 之 markup 與繫結邏輯——此為 prototype 本身，非生產碼，依規格為版面文案之權威來源）、
+`prototypes/04-public-document-detail.html`（`#rejectOverlay` 全段）、`prototypes/18-permission-matrix.html`（banner 段落）。
+**讀過之既有測試檔**（僅供對齊 DI／accessible-name／`data-testid` 慣例，未用於決定任何業務斷言）：
+`AccountManagementPage.test.tsx`、`PermissionMatrixPage.test.tsx`、`user-subtype.test.ts`、`PublicDocumentDetailPage.test.tsx`、
+`PublicDocumentDetailPage.subcategory.test.tsx`。
+**未讀取任何生產碼**：`frontend/src/domain/user-subtype.ts`、`frontend/src/pages/AccountManagementPage.tsx`、
+`frontend/src/pages/PermissionMatrixPage.tsx`、`frontend/src/pages/PublicDocumentDetailPage.tsx`、`frontend/src/api/types.ts` 均**未開啟**。
+
+**欄位名／匯出路徑之對映裁決（非猜測實作，供 tdd-implementation 依循；如認為不適用請溝通，勿自行改測試）**，
+以「verify-by-running」而非讀源碼之方式核對（`vitest run` ＋ `tsc --noEmit` 對現行已部署之生產碼實跑，僅觀察編譯器／測試框架
+之錯誤訊息以確認命名，未開啟任何 `.tsx`/`.ts` 生產檔）：
+1. `AccountView`（`frontend/src/api/types.ts`）具 `userSubtype?: string | null` 欄位——`tsc --noEmit` 實跑**未報型別錯誤**，
+   確認此欄位名稱假設正確（比照既有 `roleCode`／`orgCode` 之逐字沿用慣例）。
+2. `SUBTYPE_DESC` 假定與 `normalizeUserSubtype`／`userSubtypeLabel`／`isSubtypeApplicable` 同檔（`frontend/src/domain/user-subtype.ts`）
+   具名匯出——`tsc --noEmit` 實跑報 `TS2305: Module "./user-subtype" has no exported member 'SUBTYPE_DESC'`，證實**此常數現行未以此名稱/路徑匯出**（AC-44 因此為 RED，非測試接縫猜錯——匯出路徑之假設本身無法進一步以盲測方式核實是否為「根本不存在」或「存在於他處」，此點回報 team-lead 覆核）。
 
 ## test-generator 之兩項對映裁決（非猜測實作，供 tdd-implementation 依循；如認為不適用請溝通，勿自行改測試）
 
@@ -53,6 +75,38 @@
 | **FE-3** | `frontend/src/pages/AccountManagementPage.test.tsx`（既有，遷移＋擴充） | 元件 | 指派角色 modal 子分類選擇器（AC-32／F003 AC-U1／U2）＋既有 `assignAccountRole` 呼叫之簽章 shim |
 | **FE-4** | `frontend/src/domain/function-matrix.test.ts`（既有，擴充） | 純函式 | 前端鏡射 arity 鎖定（F025 AC-U2） |
 | **FE-5** | `frontend/src/domain/field-matrix.test.ts`（既有，擴充） | 純函式 | 前端鏡射 arity 鎖定（F026 AC-U2） |
+| **FE-6** | `frontend/src/pages/PermissionMatrixPage.test.tsx`（既有，擴充） | 元件 | F041 定案橫幅逐字＋既有兩橫幅存廢與 DOM 順序（AC-45／F025 AC-U4） |
+| **FE-7** | `frontend/src/pages/PublicDocumentDetailPage.f041.test.tsx`（新增） | 元件 | 404 拒絕畫面逐字文案／圖示／錯誤碼列／不殘留文件欄位／殘留內容回歸鎖（AC-46／F019 AC-U8） |
+
+### §F2 缺口修補（2026-08-11，AC-41～AC-46）約束檔擴充
+
+> FE-3（`AccountManagementPage.test.tsx`）新增兩個 `describe` 區塊覆蓋 AC-41／AC-42（清單列與編輯 modal 之子分類徽章）
+> 與 AC-43（指派角色 modal 之預選值）；FE-1（`user-subtype.test.ts`）新增 `describe('SUBTYPE_DESC...')` 覆蓋 AC-44。
+> 新增 **FE-6**（`PermissionMatrixPage.test.tsx` 擴充）覆蓋 AC-45、**FE-7**（`PublicDocumentDetailPage.f041.test.tsx` 新檔）覆蓋 AC-46。
+> 本組全部條文權威＝prototype 原始碼逐行位置（見 F041 spec §F2 每條 AC 之引註），全部為 vitest 元件測試，無 Playwright。
+
+| AC | 內容摘要 | 約束檔 | RED 實跑結果（2026-08-11） |
+|---|---|---|---|
+| AC-41 | 帳號清單「角色」欄之子分類徽章（含 fail-open 未知值仍呈現、INV-2 反向排除） | FE-3 | 🔴 RED（2/3 案例；INV-2 反向案例綠，見下方說明） |
+| AC-42 | 編輯帳號 modal「目前角色」同組合，與 AC-41 共用元件 | FE-3 | 🔴 RED（1/2 案例；INV-2 反向案例綠） |
+| AC-43 | 指派角色 modal 子分類選擇器之預選值（含非 User 改選 User 之保留值復活） | FE-3 | 🟢 GREEN（4/4，已實作，回歸鎖） |
+| AC-44 | 子分類選項之說明文字，具名常數 `SUBTYPE_DESC` | FE-1 | 🔴 RED（2/2；**與 team-lead 原預期不符，見下方「與預期不符」說明**） |
+| AC-45 | 權限矩陣頁之 F041 定案橫幅（既有兩橫幅之下、分頁列之上） | FE-6 | 🔴 RED（1/1） |
+| AC-46 | 前台文件詳情 404 畫面之逐字文案／圖示／錯誤碼列 | FE-7 | 🔴 RED（1/4；其餘 3 案例綠，見下方說明） |
+
+**RED-for-right-reason 逐一核對**（實跑，非僅推理，見 SendMessage 回報之完整輸出）：
+- AC-41／AC-42：`TestingLibraryElementError: Unable to find an element with the text: 業務` — 角色徽章（`一般使用者`）確實渲染，子分類徽章完全缺席，非查詢寫錯。
+- AC-45：`expected undefined to be truthy` — 逐字比對的橫幅元素查無，既有兩橫幅（`共 20 欄`／`分析師草案`）仍在，非查詢寫錯。
+- AC-46：`Unable to find an element with the text: 查無此文件，或該文件尚未公告。` — 現行畫面之標題「查無此文件」已存在（綠），但說明句、`file-x` 圖示、錯誤碼列三者皆缺（現行為 `文件可能尚未公告或已下架。` ＋ `inbox` 圖示 ＋ 無錯誤碼列，與 spec 備註完全吻合）。
+- AC-44：`TypeError: Cannot read properties of undefined (reading 'business')` — `SUBTYPE_DESC` 未從 `frontend/src/domain/user-subtype.ts` 匯出（`tsc --noEmit` 亦報 `TS2305: has no exported member 'SUBTYPE_DESC'`）。
+
+**與 team-lead 原預期不符之處（AC-44）**：team-lead 交辦訊息預期 AC-43／AC-44 皆「已實作、測試應一寫即綠」。實跑結果 AC-43 確為綠，但 **AC-44 為紅**——`SUBTYPE_DESC` 常數尚未以此名稱從 `frontend/src/domain/user-subtype.ts` 匯出（或說明文字尚未整合為具名常數）。test-generator 依既有測試設計文件所載之匯出位置假定（同檔案，比照 `SCOPE_NOTICE_*`）撰寫，未讀取任何生產碼；此為實跑實測結果，非猜測。
+
+**AC-41／AC-42／AC-46 各有部分子案例為 GREEN（非 RED），理由**：
+- AC-41／AC-42 之 INV-2 反向案例（roleCode≠User 但 userSubtype='business' → 不得顯示徽章）現況本就不顯示任何徽章（因為徽章功能整體未實作），斷言「不出現」故天然為綠——**回歸鎖，非缺陷**；一旦 AC-41/AC-42 正向案例被實作，此案例才會真正發揮「INV-2 排除」的鎖定作用。
+- AC-46 之「不殘留文件欄位」「殘留內容回歸鎖（真實路由切換）」「返回文件瀏覽按鈕維持不動」三案例皆綠——現行 404 畫面本就不含任何文件欄位、真實跨文件路由切換亦未觀察到殘留（可能因元件於 id 變動時已正確清空 state，或路由層本身已 remount）、既有按鈕確實仍在。三者皆為合法的回歸鎖，非缺陷。
+
+**RED gate 完整實跑**：`npm --prefix frontend test`（全量 57 檔／738 案例）：**4 檔 7 案例紅、53 檔 731 案例綠**，紅的 7 案例逐一核對皆為上述 AC-41／AC-42／AC-44／AC-45／AC-46 之新增斷言，**零既有測試回歸**（722 條既有測試全數維持綠燈；`npm --prefix frontend run typecheck` 除 `SUBTYPE_DESC` 未匯出之預期錯誤外無其他型別錯誤，證實 `AccountView.userSubtype` 之欄位名假設正確）。
 
 ## F041 40 條 AC ↔ 約束對照
 

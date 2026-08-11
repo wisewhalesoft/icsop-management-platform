@@ -1,4 +1,4 @@
-import { normalizeUserSubtype, userSubtypeLabel, isSubtypeApplicable } from './user-subtype';
+import { normalizeUserSubtype, userSubtypeLabel, isSubtypeApplicable, SUBTYPE_DESC } from './user-subtype';
 import type { RoleCode } from './function-matrix';
 
 /**
@@ -49,5 +49,21 @@ describe('isSubtypeApplicable（AC-32，僅 User 適用）', () => {
     ['DeptContact', false],
   ])('roleCode=%s → %s', (roleCode, expected) => {
     expect(isSubtypeApplicable(roleCode)).toBe(expected);
+  });
+});
+
+/**
+ * F041 §F2 AC-44／F003 AC-U9——子分類選項之說明文字，須以具名常數 `SUBTYPE_DESC` 持有
+ * （供 vitest 直接 import 斷言，不得於 JSX 內散落字面字串，比照 `SCOPE_NOTICE_*` 之處置）。
+ * 逐字文案權威＝prototypes/08-account-management.html:267
+ * （`const SUBTYPE_DESC={business:'...',other:'...'};`）。
+ */
+describe('SUBTYPE_DESC（AC-44／F003 AC-U9，子分類選項之逐字說明文字）', () => {
+  it('business → 「前台僅顯示「使用部門相符」之已公告文件（含子樹）」', () => {
+    expect(SUBTYPE_DESC.business).toBe('前台僅顯示「使用部門相符」之已公告文件（含子樹）');
+  });
+
+  it('other → 「前台瀏覽範圍不變」', () => {
+    expect(SUBTYPE_DESC.other).toBe('前台瀏覽範圍不變');
   });
 });

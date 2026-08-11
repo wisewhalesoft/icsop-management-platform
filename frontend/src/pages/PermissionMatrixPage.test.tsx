@@ -144,6 +144,45 @@ describe('PermissionMatrixPage — RBAC 矩陣唯讀顯示（F025/F026）', () =
     });
   });
 
+  /**
+   * F041 §F2 AC-45／F025 AC-U4——權限矩陣頁之 F041 定案橫幅。權威：
+   * prototypes/18-permission-matrix.html:106-113（既有兩則橫幅之下、分頁列（tab-func/tab-field）
+   * 之上，跨兩欄之第三則定案橫幅）。文字須逐字相符（`textContent` 空白正規化後比對）；
+   * 既有兩則橫幅之文案／順序／存廢一律不變（G-ADM-017/018 已覆蓋，此處另外重申 DOM 順序）。
+   * ⚠ 「跨兩欄」之視覺版面（CSS grid col-span）非 jsdom 可驗證項目，未斷言，見 risks-and-gaps.md。
+   */
+  it('AC-45／F025 AC-U4：F041 定案橫幅逐字呈現於既有兩則橫幅之下、分頁列之上', () => {
+    mockAuth('SysAdmin');
+    const { container } = renderPage();
+
+    const EXPECTED =
+      '🟢 已定案（F041 · OQ-E08-04 裁決 B，2026-08-11 人類閘門通過）：一般使用者再細分之子分類「業務／其他」為 ACCOUNT 之獨立欄位，' +
+      '非第 6 種角色——本頁兩份矩陣維持 5 欄、逐格不變（F041 AC-37／AC-38），權限解析函式亦不接受子分類參數。' +
+      '子分類僅影響前台可見之文件範圍（資料列層級：業務者僅見「使用部門相符」之已公告文件），不參與功能授權與欄位授權判定；' +
+      '指派入口見「帳號管理」之指派角色 modal（08）。';
+    const normalize = (el: Element) => el.textContent!.replace(/\s+/g, ' ').trim();
+
+    const banner = Array.from(container.querySelectorAll<HTMLElement>('*')).find(
+      (el) => normalize(el) === EXPECTED,
+    );
+    expect(banner).toBeTruthy();
+
+    // 既有兩則橫幅仍在（文案不變、未被翻轉為已定案）
+    const settledBanner = screen.getByText(/共 20 欄/).closest('div')!;
+    const draftBanner = screen.getByText(/分析師草案/).closest('div')!;
+    expect(settledBanner).toBeInTheDocument();
+    expect(draftBanner).toBeInTheDocument();
+
+    // 順序：既有已定案橫幅 → 既有草案橫幅 → F041 新橫幅 → 分頁列
+    const tabBtn = screen.getByRole('button', { name: /角色 × 功能/ });
+    expect(
+      draftBanner.compareDocumentPosition(banner!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      banner!.compareDocumentPosition(tabBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it('anti-drift：FIELD_DISPLAY 與 FIELD_MATRIX 一致（可寫/系統產生/唯讀）', () => {
     const enumRows = Object.entries(FIELD_MATRIX);
     expect(FIELD_DISPLAY.length).toBe(enumRows.length);

@@ -315,4 +315,150 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: '顯示密碼' }));
     expect(pw.type).toBe('text');
   });
+
+  /**
+   * F041 §F2 AC 缺口修補（2026-08-11）——帳號清單「角色」欄之子分類徽章 ＋「編輯帳號」modal
+   * 之「目前角色」同步顯示子分類。權威：prototypes/08-account-management.html:323（清單列
+   * `roleBadge(a.role)}${isSubtypeApplicable(a.role)?subtypeBadge(a.subtype):''}`）／
+   * :355（編輯 modal `#eRole`，逐字相同運算式）。兩處為 prototype 逐字相同之運算式，實作應
+   * 共用同一呈現元件——本組測試分別驗證兩處，不得只驗其一而推定另一處成立。
+   *
+   * 反向案例之唯一活體樣本＝prototype persona「20088 陳彥廷」（roleCode='Supervisor'、
+   * userSubtype='business'，依 AC-36／F003 AC-U5 保留而未清空者）：INV-2 要求非 User 角色
+   * 即使 userSubtype='business'，該欄／該處亦不得出現「業務」或「其他」任一字串。
+   *
+   * ⚠ 測試接縫（非猜測實作，供 tdd-implementation 依循；如認為不適用請溝通，勿自行改測試）：
+   * 假定 `AccountView` 具 `userSubtype?: string | null` 欄位（比照 ACCOUNT 之欄位名逐字沿用，
+   * 與既有 `roleCode`／`orgCode` 同一慣例）。
+   */
+  describe('清單「角色」欄與編輯 modal「目前角色」之子分類徽章（AC-41／AC-42／F003 AC-U6／AC-U7）', () => {
+    const SUBTYPE_ROWS: AccountView[] = [
+      // roleCode='User' + userSubtype='business' → 徽章「業務」
+      { id: 'b1', loginId: '30001', employeeNo: null, name: '業務使用者', email: null, orgCode: 'JAC00', roleCode: 'User', status: 'active', source: 'upstream', disableReason: null, userSubtype: 'business' },
+      // roleCode='User' + userSubtype 為未知字串（髒資料）→ fail-open 收斂「其他」，徽章仍呈現（非「不渲染」）
+      { id: 'b2', loginId: '30002', employeeNo: null, name: '未知子分類使用者', email: null, orgCode: 'JAC00', roleCode: 'User', status: 'active', source: 'upstream', disableReason: null, userSubtype: 'unknown-value' as AccountView['userSubtype'] },
+      // 反向案例活體樣本：陳彥廷——roleCode='Supervisor'（非 User）但 userSubtype='business'（AC-36 保留未清空）
+      { id: 'b3', loginId: '20088', employeeNo: null, name: '陳彥廷', email: null, orgCode: 'JAC00', roleCode: 'Supervisor', status: 'active', source: 'upstream', disableReason: null, userSubtype: 'business' },
+    ];
+
+    beforeEach(() => {
+      vi.mocked(endpoints.getAccounts).mockResolvedValue(SUBTYPE_ROWS);
+    });
+
+    it('AC-41：roleCode=User＋business → 角色徽章右側追加「業務」子分類徽章，角色徽章在前', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('業務使用者')).toBeInTheDocument());
+      const row = screen.getByText('業務使用者').closest('tr')!;
+      const roleCell = within(row).getByText('一般使用者').closest('td')!;
+      expect(within(roleCell).getByText('業務')).toBeInTheDocument();
+      expect(roleCell.textContent!.indexOf('一般使用者')).toBeLessThan(roleCell.textContent!.indexOf('業務'));
+    });
+
+    it('AC-41：userSubtype 為未知字串（髒資料）→ 徽章仍呈現，文字收斂為「其他」（fail-open）', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('未知子分類使用者')).toBeInTheDocument());
+      const row = screen.getByText('未知子分類使用者').closest('tr')!;
+      const roleCell = within(row).getByText('一般使用者').closest('td')!;
+      expect(within(roleCell).getByText('其他')).toBeInTheDocument();
+    });
+
+    it('AC-41（INV-2 反向案例，樣本 20088 陳彥廷）：roleCode=Supervisor 即使 userSubtype=business → 該欄僅呈現角色徽章，不得出現「業務」或「其他」', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('陳彥廷')).toBeInTheDocument());
+      const row = screen.getByText('陳彥廷').closest('tr')!;
+      const roleCell = within(row).getByText('主管').closest('td')!;
+      expect(within(roleCell).queryByText('業務')).not.toBeInTheDocument();
+      expect(within(roleCell).queryByText('其他')).not.toBeInTheDocument();
+    });
+
+    it('AC-42：編輯帳號 modal「目前角色」與清單列徽章組合完全相同（roleCode=User＋business）', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('業務使用者')).toBeInTheDocument());
+      const row = screen.getByText('業務使用者').closest('tr')!;
+      await userEvent.click(within(row).getByRole('button', { name: '編輯' }));
+      const dialog = screen.getByRole('dialog', { name: /編輯帳號/ });
+      expect(within(dialog).getByText('一般使用者')).toBeInTheDocument();
+      expect(within(dialog).getByText('業務')).toBeInTheDocument();
+    });
+
+    it('AC-42（INV-2 反向案例，陳彥廷）：編輯 modal「目前角色」不得出現「業務」或「其他」', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('陳彥廷')).toBeInTheDocument());
+      const row = screen.getByText('陳彥廷').closest('tr')!;
+      await userEvent.click(within(row).getByRole('button', { name: '編輯' }));
+      const dialog = screen.getByRole('dialog', { name: /編輯帳號/ });
+      expect(within(dialog).queryByText('業務')).not.toBeInTheDocument();
+      expect(within(dialog).queryByText('其他')).not.toBeInTheDocument();
+    });
+  });
+
+  /**
+   * F041 §F2 AC-43／F003 AC-U8——指派角色 modal 子分類選擇器之預選值。權威：
+   * prototypes/08-account-management.html:375（`renderSubtypeRadios(normalizeUserSubtype(a.subtype))`）／
+   * :382-388（選項渲染，`checked` 屬性）。最後一項（非 User 帳號改選 User → 預選保留值）為
+   * AC-36／F003 AC-U5「舊設定直接復活、不重新詢問」在 UI 上的唯一可觀測面。
+   */
+  describe('指派角色 modal 子分類選擇器之預選值（AC-43／F003 AC-U8）', () => {
+    const PRESELECT_ROWS: AccountView[] = [
+      { id: 'c1', loginId: '30011', employeeNo: null, name: '業務預選使用者', email: null, orgCode: 'JAC00', roleCode: 'User', status: 'active', source: 'upstream', disableReason: null, userSubtype: 'business' },
+      { id: 'c2', loginId: '30012', employeeNo: null, name: '其他預選使用者', email: null, orgCode: 'JAC00', roleCode: 'User', status: 'active', source: 'upstream', disableReason: null, userSubtype: 'other' },
+      { id: 'c3', loginId: '30013', employeeNo: null, name: '未指定預選使用者', email: null, orgCode: 'JAC00', roleCode: 'User', status: 'active', source: 'upstream', disableReason: null },
+      // 陳彥廷（Supervisor＋business）：AC-36 保留值復活案例
+      { id: 'c4', loginId: '20088', employeeNo: null, name: '陳彥廷預選', email: null, orgCode: 'JAC00', roleCode: 'Supervisor', status: 'active', source: 'upstream', disableReason: null, userSubtype: 'business' },
+    ];
+
+    beforeEach(() => {
+      vi.mocked(endpoints.getAccounts).mockResolvedValue(PRESELECT_ROWS);
+    });
+
+    it('userSubtype=business → 選擇器預選「業務」', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('業務預選使用者')).toBeInTheDocument());
+      const row = screen.getByText('業務預選使用者').closest('tr')!;
+      await userEvent.click(within(row).getByRole('button', { name: /指派角色/ }));
+      const dialog = screen.getByRole('dialog', { name: /指派角色/ });
+      expect((within(dialog).getByRole('radio', { name: /^業務/ }) as HTMLInputElement).checked).toBe(true);
+      expect((within(dialog).getByRole('radio', { name: /^其他/ }) as HTMLInputElement).checked).toBe(false);
+    });
+
+    it('userSubtype=other → 選擇器預選「其他」', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('其他預選使用者')).toBeInTheDocument());
+      const row = screen.getByText('其他預選使用者').closest('tr')!;
+      await userEvent.click(within(row).getByRole('button', { name: /指派角色/ }));
+      const dialog = screen.getByRole('dialog', { name: /指派角色/ });
+      expect((within(dialog).getByRole('radio', { name: /^其他/ }) as HTMLInputElement).checked).toBe(true);
+      expect((within(dialog).getByRole('radio', { name: /^業務/ }) as HTMLInputElement).checked).toBe(false);
+    });
+
+    it('userSubtype 未指定（undefined）→ 選擇器預選「其他」（不得出現兩者皆未選之狀態）', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('未指定預選使用者')).toBeInTheDocument());
+      const row = screen.getByText('未指定預選使用者').closest('tr')!;
+      await userEvent.click(within(row).getByRole('button', { name: /指派角色/ }));
+      const dialog = screen.getByRole('dialog', { name: /指派角色/ });
+      expect((within(dialog).getByRole('radio', { name: /^其他/ }) as HTMLInputElement).checked).toBe(true);
+    });
+
+    it('AC-36 舊設定復活之唯一可觀測面：陳彥廷（Supervisor＋business）開啟 modal → 初始不呈現選擇器；改選「一般使用者」→ 選擇器出現且預選「業務」', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('陳彥廷預選')).toBeInTheDocument());
+      const row = screen.getByText('陳彥廷預選').closest('tr')!;
+      await userEvent.click(within(row).getByRole('button', { name: /指派角色/ }));
+      const dialog = screen.getByRole('dialog', { name: /指派角色/ });
+      expect(within(dialog).queryByRole('radio', { name: /^業務/ })).not.toBeInTheDocument();
+
+      await userEvent.click(within(dialog).getByRole('radio', { name: /一般使用者/ }));
+      expect((within(dialog).getByRole('radio', { name: /^業務/ }) as HTMLInputElement).checked).toBe(true);
+    });
+  });
 });

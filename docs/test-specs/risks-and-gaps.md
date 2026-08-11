@@ -76,3 +76,12 @@
 未新增 controller 層級之 F041 業務邏輯測試——業務判定發生於服務層（架構 §3.7 決策二/三），並已由 `AC-30`／`F020 AC-U5` 之
 「直接呼叫服務層仍被拒」證明該判定不依賴 controller，controller 層之 wiring 已由既有守門鏈測試 + BE-4／BE-6 之服務層直呼測試共同覆蓋，
 不視為缺口。
+
+### C. §F2 缺口修補（2026-08-11，AC-41～AC-46）新增之風險與發現
+
+| # | 缺口／發現 | 說明 | 現況處置 |
+|---|---|---|---|
+| G-F041-03 | **AC-45「跨兩欄」之視覺版面無法以 jsdom 驗證** | jsdom 不載入樣式表、不計算佈局（比照 [F040 §D](#f040) 之同類限制，亦見 test-generator 記憶 `red-gate-baseline-hygiene` §4「jsdom cannot see Tailwind」）；`grid col-span` 一類的 class 存在與否亦非可靠替代指標（class 存在不保證真的套用/生效，且會綁定未讀取之實作 class 命名，牴觸盲性原則）。 | 僅斷言橫幅之逐字文案與 DOM 順序（既有兩橫幅之下、分頁列之上），不斷言版面跨欄。若日後有 Playwright fidelity 層，可在該層以實際渲染寬度驗證。 |
+| G-F041-04 | **AC-44（`SUBTYPE_DESC`）實跑為 RED，與 team-lead 原先「AC-43／AC-44 已實作、應一寫即綠」之預期不符** | `tsc --noEmit` 實跑報 `TS2305: Module "./user-subtype" has no exported member 'SUBTYPE_DESC'`；AC-43（同一 modal 之選擇器預選）確認為綠。故兩條 AC 之實作進度並不一致，僅 AC-43 已完成。 | 已如實記錄並於 SendMessage 回報 team-lead 覆核；test-generator 未讀取 `frontend/src/domain/user-subtype.ts` 以判斷該常數是否存在於其他位置或尚未動工——依盲性原則，此判斷留給 team-lead／tdd-implementation。 |
+| G-F041-05 | AC-41／AC-42 之 INV-2 反向案例（非 User 角色但 `userSubtype='business'` → 不顯示徽章）現況為綠 | 現況本就不渲染任何子分類徽章（AC-41/42 正向案例尚未實作），故「不出現」之斷言天然成立。**回歸鎖，非缺陷**——待正向案例實作後，此案例才真正發揮 INV-2 排除的鎖定作用；已於 [F041-test.md](features/F041-test.md#f2-缺口修補2026-08-11ac-41ac-46約束檔擴充) 註明，避免被誤讀為「已覆蓋」。 |
+| G-F041-06 | AC-46 之「不殘留文件欄位」「殘留內容回歸鎖（真實路由切換）」兩案例現況為綠 | 現行 404 畫面本就不含任何文件欄位；以真實（未 mock `useNavigate`）路由切換由已載入文件 A 導向觸發 404 之文件 B，亦未觀察到 A 之欄位殘留於拒絕畫面下。**回歸鎖，非缺陷**——證明現行實作在這個面向是安全的，即使其文案／圖示／錯誤碼列三者仍缺（見 AC-46 主斷言之 RED）。 |
