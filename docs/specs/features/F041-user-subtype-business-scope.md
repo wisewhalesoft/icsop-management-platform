@@ -1,5 +1,5 @@
 # F041: 一般使用者子分類——業務／其他（業務限縮於使用部門）
-Priority: P0-MVP | Status: 規格 🟢 **APPROVED（2026-08-11 人類閘門通過，12 項全數裁決）** · 實作 ⬜ 未開始 | Last Updated: 2026-08-11
+Priority: P0-MVP | Status: 規格 🟢 **APPROVED（2026-08-11 人類閘門通過，12 項全數裁決）＋ AC-41～AC-46 缺口修補（2026-08-11）** · 實作 🟡 部分（AC-01～AC-40 已實作且 unit-green；**AC-41～AC-46 為新增條文、尚未實作**，見 [feature-status.md §F041 升 ✅ 待辦](../feature-status.md#f041-to-done)） | Last Updated: 2026-08-11
 
 Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user-subtype-business-dept-restriction.md)（主）＋ E06 / [US-057](../../stories/epics/E06-public-browsing/US-057-business-user-dept-scoped-browsing.md)（從）
 
@@ -9,6 +9,14 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
 > OQ-E06-04→A 後端服務層權威，兩條 `[ASSUMPTION]`（AC-02／AC-36）皆維持草案），
 > **唯一實質新增＝AC-40**（前台清單頂部說明句於業務視角換為專屬文案）。逐題裁決紀錄見 [§OQ 裁決紀錄](#oq-dependency)。
 > **本檔全部 AC 現為定案規格**，下游（test-generator／tdd-implementation）可據以建環與實作。
+
+> **🔴 2026-08-11 AC 缺口修補（AC-41～AC-46，見 [§F2](#f2-fidelity-gap)）——非新需求、非範圍擴張。**
+> 本次實作出貨後，使用者於實際環境發現「帳號管理清單之『角色』欄未顯示子分類徽章」。
+> **根因是本檔的 AC 缺口，不是實作粗心**：`prototypes/08-account-management.html` 檔頭明列**三項**已套用內容（①指派角色 modal 之選擇器 ②清單「角色」欄之子分類徽章 ③編輯帳號 modal「目前角色」一併顯示子分類），
+> 但本檔 §F 僅有 AC-31／AC-32／AC-33／AC-40、[F003](F003-account-role-management.md) 僅有 AC-U1～AC-U5——**②③ 從未被寫成任何一條 AC**。
+> test-generator 對實作全盲、只依 AC 建環，環裡因此沒有這兩項；本輪又採簡易 ring（僅 jest／vitest、無 Playwright fidelity 測試），
+> 而 fidelity 正是專抓 prototype↔實作漂移的那一環。**63 條 AC 全綠、1505＋722 測試全過，缺陷仍然出貨。**
+> §F2 為該缺口之修補，並含同類掃描（4 份 prototype 逐項比對）所發現之其餘 4 處未覆蓋項目。
 
 > **本檔為「一般使用者子分類」之單一權威來源（single source of truth）。**
 > 凡涉及子分類之正規化、適用性、可見性判定、deny-by-default 涵蓋面之規則，一律以本檔為準；
@@ -198,6 +206,60 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
 
   逐字文案之權威＝`prototypes/03-public-list.html` 之具名常數 `SCOPE_NOTICE_OTHER`／`SCOPE_NOTICE_BUSINESS`；前端實作**須以常數持有、不得於 JSX 內散落字面字串**（供 vitest 直接 import 斷言，避免測試複製一份字串而與 prototype 漂移）。
 
+### F2. 前端呈現面之 AC 缺口修補（2026-08-11 補訂，AC-41～AC-46） {#f2-fidelity-gap}
+
+> **本組之存在理由（必讀）**：AC-01～AC-40 完整涵蓋**判定契約**（後端純函式／服務層）與**兩條說明句文案**，
+> 但**未涵蓋 prototype 檔頭已明列之數項純呈現面要求**。下游 test-generator 對實作全盲、**只依 AC 建環**，
+> 故環中不存在這些項目；本輪又採簡易 ring（僅 jest／vitest、**無 Playwright fidelity 測試**），
+> 而 fidelity 正是專抓「prototype ↔ 實作漂移」的那一環。結果：63 條 AC 全綠、backend 1505 ＋ frontend 722 測試全過，
+> 仍有缺陷出貨（帳號清單「角色」欄未渲染子分類徽章，由使用者於實際環境肉眼發現）。
+> **本組即該缺口之修補**：把 prototype 已明列、但從未寫成 AC 的項目逐項補為可斷言條文。
+> **編號自 AC-41 起、不重編既有 AC**（重編會破壞 `docs/test-specs/features/F041-test.md` 既有之 AC↔測試對照）。
+> 本組全部條文**權威＝prototype 原始碼**（逐行位置已標註），全部可由 **vitest 元件測試**直接斷言，不需 Playwright。
+
+- **AC-41**（**帳號清單「角色」欄之子分類徽章**；權威＝`prototypes/08-account-management.html:323`）：
+  Given 帳號管理清單之某一列其 `roleCode === 'User'`，When 渲染「角色」欄，Then 該欄於**同一列內、角色徽章之右側**追加一枚子分類徽章，其文字逐字為 `userSubtypeLabel(userSubtype)` 之輸出（`業務` 或 `其他`）；兩枚徽章之順序恆為**角色徽章在前、子分類徽章在後**。
+  Given 該列之 `userSubtype` 為 `null`／`undefined`／未知字串，Then 子分類徽章**仍然呈現**且文字為 `其他`（AC-02 之 fail-open 在顯示層之直接後果——prototype 之 `subtypeBadge` 內部呼叫 `normalizeUserSubtype`，**不得**改為「缺值即不渲染徽章」）。
+  Given 該列之 `roleCode` 為其餘 4 種角色之任一（`SysAdmin`／`ICSOPAdmin`／`Supervisor`／`DeptContact`），**即使其 `userSubtype === 'business'`**，Then 該欄**僅**呈現角色徽章，該列之「角色」欄內**不得**出現 `業務` 或 `其他` 任一字串（INV-2）。<br>
+  📌 此分支之測試資料須採 prototype 既有之可操作示範 persona：`20088 陳彥廷`（`roleCode='Supervisor'` ＋ `userSubtype='business'`，係先前身為一般使用者時所指派、依 AC-36 保留而未清空者）——**該 persona 為本條反向案例之唯一活體樣本，不得以「不存在這種資料」為由略過**。
+  渲染條件式須逐字為 `isSubtypeApplicable(roleCode) ? <子分類徽章> : <不渲染>`，**不得另立第二套適用性判定**（AC-32 為唯一權威）。
+
+- **AC-42**（**「編輯帳號」modal 之「目前角色」一併顯示子分類**；權威＝`prototypes/08-account-management.html:355`，DOM 掛鉤 `#eRole`）：
+  Given 對 `roleCode === 'User'` 之帳號開啟「編輯帳號」modal，When 渲染「目前角色」欄位，Then 其內容為**與 AC-41 完全相同之徽章組合**（角色徽章 ＋ 子分類徽章，同序、同文字、同 `null`／未知值收斂規則）。
+  Given 該帳號之 `roleCode` 為其餘 4 種角色之任一，Then 僅呈現角色徽章、不出現 `業務`／`其他` 任一字串。<br>
+  📌 prototype 之 `:323`（清單列）與 `:355`（編輯 modal）為**逐字相同之運算式**；實作**應共用同一個呈現元件**，使兩處不可能各自漂移（測試須同時涵蓋兩處，不得只驗其一而推定另一處）。
+
+- **AC-43**（**「指派角色」modal 子分類選擇器之預選值**；權威＝`prototypes/08-account-management.html:375`／`:382`～`:388`，DOM 掛鉤 `#subtypeRadios`）：
+  Given 對 `roleCode === 'User'` 且 `userSubtype === 'business'` 之帳號開啟「指派角色」modal，When 子分類選擇器呈現，Then **預選「業務」**（且該選項標示為「目前」）。
+  Given 該帳號之 `userSubtype` 為 `'other'`／`null`／未知字串，Then 預選「其他」（預選值＝`normalizeUserSubtype(userSubtype)`，**不得**出現「兩者皆未選」之狀態）。
+  Given 對 `roleCode !== 'User'` 但 `userSubtype === 'business'` 之帳號（示範 persona `20088 陳彥廷`）開啟該 modal，Then 初始**不呈現**選擇器（AC-32）；When 於 modal 內改選「一般使用者」，Then 選擇器出現且**預選「業務」**。<br>
+  📌 **最後一項是 AC-36／[F003](F003-account-role-management.md) AC-U5「舊設定直接復活、不重新詢問」在 UI 上的唯一可觀測面**——AC-36 只規範持久化語意，若無本條，「復活」是否真的呈現在選擇器上完全不受任何測試保護。
+
+- **AC-44**（**子分類選項之說明文字**；權威＝`prototypes/08-account-management.html:267` 之 `SUBTYPE_DESC`）：
+  Given 子分類選擇器呈現，When 檢視兩個選項，Then 各自於徽章右側顯示逐字說明：
+  - `'business'` → `前台僅顯示「使用部門相符」之已公告文件（含子樹）`
+  - `'other'` → `前台瀏覽範圍不變`
+
+  前端須以**具名常數 `SUBTYPE_DESC` 持有**（比照 `SCOPE_NOTICE_*` 之處置），供 vitest 直接 import 斷言，**不得於 JSX 內散落字面字串**。
+
+- **AC-45**（**權限矩陣頁之 F041 註記橫幅**；權威＝`prototypes/18-permission-matrix.html:106`～`:112`）：
+  Given 以系統管理員開啟權限矩陣頁，When 渲染，Then 於既有兩則橫幅（「已定案…全欄位唯讀」／「草案待審（OQ-E08-02）」）**之下、分頁列（角色×功能／角色×欄位）之上**，呈現第三則**跨兩欄**之定案橫幅，其文字內容（`textContent` 經空白正規化後）逐字為：<br>
+  `🟢 已定案（F041 · OQ-E08-04 裁決 B，2026-08-11 人類閘門通過）：一般使用者再細分之子分類「業務／其他」為 ACCOUNT 之獨立欄位，非第 6 種角色——本頁兩份矩陣維持 5 欄、逐格不變（F041 AC-37／AC-38），權限解析函式亦不接受子分類參數。子分類僅影響前台可見之文件範圍（資料列層級：業務者僅見「使用部門相符」之已公告文件），不參與功能授權與欄位授權判定；指派入口見「帳號管理」之指派角色 modal（08）。`<br>
+  Then 既有兩則橫幅之文案、順序與存廢**一律不變**（prototype 檔頭明示：「草案待審（OQ-E08-02）」橫幅與 F041 無關，**不得**一併翻轉為已定案）；且本頁兩份矩陣仍為 **5 欄、逐格不變**（AC-37／AC-38 之既有斷言不得放寬）。<br>
+  📌 本橫幅為 prototype 18 檔頭所稱之「**本檔唯一變更**」。其功能意義＝在唯一會讓人誤以為「業務應該是第 6 個角色欄」的畫面上，把 OQ-E08-04 之裁決結果固定下來；缺此橫幅，日後讀矩陣者無從得知子分類的存在與其不參與授權判定之事實。
+
+- **AC-46**（**前台文件詳情之 404 畫面**；權威＝`prototypes/04-public-document-detail.html:161`～`:164`）：
+  Given 前台文件詳情頁自後端取得 **404 `DOCUMENT_NOT_FOUND`**，**無論其成因為**①文件確實不存在 ②文件存在但非已公告 ③業務子分類使用者之使用部門不相符（AC-20／AC-21），When 渲染，Then 三種成因渲染**完全相同之單一 not-found 畫面**——同一元件、同一文案，**該元件不得接受任何可區分成因之參數**（若可區分，即以呈現差異還原存在性，架空 OQ-E06-03 之裁決）。
+  Then 該畫面之逐字文案為：
+  - 圖示鍵 `file-x`（紅色，置於圓形淺紅底之中）
+  - 標題 `查無此文件`
+  - 說明 `查無此文件，或該文件尚未公告。`
+  - 錯誤碼列 `DOCUMENT_NOT_FOUND · 404`（等寬字體）
+
+  Then 該畫面之 DOM **不得出現任何文件欄位值**——以測試資料之 `documentNumber`／`documentName`／`draftingDeptName`／`usingDeptNames`／`contentSummary` 逐項 `queryByText(...) === null` 斷言；此涵蓋「先渲染部分內容、再以覆蓋層遮蔽」之實作方式（prototype 檔頭明示拒絕面板為**不透明**覆蓋、非半透明 `backdrop-blur`，即為此故）。<br>
+  ⚠ **本條會變更一個既有畫面之文案**：現行實作之說明句為 `文件可能尚未公告或已下架。`、圖示為 `inbox`、且無錯誤碼列——三者皆與 prototype 不符，且該文案**未見於任何 prototype**（全 repo 僅 `04-public-document-detail.html` 定義此畫面）。依「prototype 為版面與文案之權威」原則，以 prototype 為準。<br>
+  📌 **範圍界線**：現行畫面之「返回文件瀏覽」按鈕**不在** prototype 拒絕面板之定義範圍內（prototype 該處僅有示範用的「關閉示範」按鈕），**維持現狀、不得因本條而移除**。
+
 ### G. 帳號側之持久化與同步
 
 - **AC-34**：Given [F004](F004-org-sync.md) 組織同步對既有帳號執行 upsert，該帳號現有 `userSubtype = 'business'`，When 同步完成，Then 該值**維持 `'business'` 不變**——`userSubtype` 非上游來源欄位，同步之 upsert payload **不得包含該鍵**（以 fake store 斷言 payload 鍵集合）。
@@ -259,5 +321,11 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
 - **Owns（本檔為權威、以下僅加 `AC-U#` delta）**：[F019](F019-public-list-browsing.md)、[F020](F020-watermark.md)、[F025](F025-role-function-matrix.md)、[F026](F026-role-field-matrix.md)、[F003](F003-account-role-management.md)、[F033](F033-permission-aware-retrieval.md)
 - **不受影響（明確聲明）**：[F017](F017-backend-document-list.md) 後台清單（業務限制僅及於前台一般使用者路徑）、[F024](F024-access-history-query.md) 調閱歷程查詢（僅 SysAdmin／ICSOPAdmin 可查）、[F013](F013-document-number-uniqueness.md)、[F040](F040-lifecycle-subcategory.md)（循環子分類與本 feature 無交互，兩者之 `subcategory`／`userSubtype` 分屬不同實體，**不得混淆**）
 - **已定案（2026-08-11 人類閘門，12 項全數裁決，不再為開放問題）**：[open-questions.md](../open-questions.md) `OQ-E08-04`～`OQ-E08-11`、`OQ-E06-03`、`OQ-E06-04` 皆已標 `[已定案 ✅]`；逐題結果與未採選項之追溯見 [§OQ 裁決紀錄](#oq-dependency)
-- **Prototype**：`prototypes/03-public-list.html`（前台清單：三 persona 切換 other／business／orphan、`#scopeNotice` 頂部說明句、置頂區退化）、帳號管理之角色指派 modal 子分類選擇器（ui-ux-designer 已傳播完成）
-- **逐字文案權威**：`SCOPE_NOTICE_OTHER`／`SCOPE_NOTICE_BUSINESS` 定義於 `prototypes/03-public-list.html`（AC-40）
+- **Prototype（4 份，皆為版面／條件／文案之權威）**：
+  | 檔案 | F041 相關內容 | 對應 AC |
+  |---|---|---|
+  | `prototypes/03-public-list.html` | 三 persona 切換（other／business／orphan，**示範用非正式 UI、不得移植**）、`#scopeNotice` 頂部說明句、可見性過濾插入點、置頂區退化、`hiddenCount` 不變、下拉不限縮、空狀態不分支 | AC-14～AC-19、AC-33、AC-40 |
+  | `prototypes/04-public-document-detail.html` | 直連不相符 URL 之 404 拒絕畫面（不透明覆蓋、無任何文件欄位、文案不因成因而異）、不寫稽核、05 檢視器不需改檔 | AC-20／AC-21、AC-25～AC-28、**AC-46** |
+  | `prototypes/08-account-management.html` | ①指派角色 modal 子分類選擇器（含預選與說明文字）②清單「角色」欄子分類徽章 ③編輯帳號 modal「目前角色」顯示子分類；建立帳號預設 `'other'`；`20088 陳彥廷` 保留值 persona | AC-31／AC-32、AC-35／AC-36、**AC-41～AC-44** |
+  | `prototypes/18-permission-matrix.html` | F041 註記橫幅（子分類非第 6 種角色）；兩份矩陣 5 欄逐格不變 | AC-37／AC-38、**AC-45** |
+- **逐字文案權威**：`SCOPE_NOTICE_OTHER`／`SCOPE_NOTICE_BUSINESS` 定義於 `prototypes/03-public-list.html`（AC-40）；`SUBTYPE_DESC` 定義於 `prototypes/08-account-management.html`（AC-44）；404 畫面文案定義於 `prototypes/04-public-document-detail.html`（AC-46）

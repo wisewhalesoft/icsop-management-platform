@@ -43,7 +43,10 @@
 | | **41** | |
 
 > **2026-08-11 F041 一般使用者子分類實作落地（Uncle-Bob 約束環模式，⬜→🟡）**：環由 `test-generator` 於實作前獨立撰寫、`tdd-implementation` 僅寫 production code。**四道機器閘門全綠（由 lead 親自實跑、非採信回報）**：backend `tsc --noEmit` exit 0、backend jest **117 suites／1505 tests**（基線 1440 ＋新增 65）、frontend `tsc --noEmit` exit 0、frontend vitest **56 files／722 tests**（基線 664 ＋新增 58）。**migration 已對真 SOP DB 實跑**：`migration:show` 顯示 `[X] 29 AccountUserSubtype1723766400000`；探針證據＝既有 **1119 列 backfill 為 `'other'`**、不帶欄位之 INSERT 落 `'other'`（DEFAULT 生效）、`'Business'`（大寫）被 `CHECK` 約束拒絕（INV-1 於 DB 層成立）。**契約遵循**：173 個測試檔於實作期間 **zero byte 變動**、無 `.skip`／`.only`；1 件測試爭議循 author↔runner 通道由 test-generator 裁決並自行修正（純新增 15 行，未弱化 `toEqual`）。tally 由 ✅27 🟡8 🔵0 ⬜6（41）改為 **✅27 🟡9 🔵0 ⬜5（41）**。
-> **⚠ 標 🟡 而非 ✅ 之理由（DoD 第 ② 條「端到端可達」未滿足）**：**尚未部署**——`icsop-management-platform-backend-1` 仍跑舊 dist，需重建 image 後 F041 才在瀏覽器生效（欄位為 additive ＋ 有 `DEFAULT 'other'`，舊碼不會炸，但**功能尚未生效**）。且本輪依使用者指示採**簡易版 ring**（僅 jest／vitest，**跳過 Playwright e2e／Stryker mutation／dependency-cruiser**），亦**未做瀏覽器煙霧測試**——依本 repo 反覆踩過的教訓（2026-07-25 Chrome MCP 煙霧測試曾揪出 3 個「只有真瀏覽器會踩」的部署／代理層 bug，單元全綠完全測不到），此缺口必須明講。另 AC-39（[F033](features/F033-permission-aware-retrieval.md) RAG）為 Phase 3 ripple、規格明文本輪不驗收。比照 [F040](features/F040-lifecycle-subcategory.md) 同樣情形標 🟡 之先例。實作細節見 [implementation-log/F041-impl.md](implementation-log/F041-impl.md)；升 ✅ 之可執行清單見 [§F041 升 ✅ 待辦](#f041-to-done)。
+> **⚠ 標 🟡 而非 ✅ 之理由（DoD 第 ② 條「端到端可達」未滿足）**：**尚未部署**——`icsop-management-platform-backend-1` 仍跑舊 dist，需重建 image 後 F041 才在瀏覽器生效（欄位為 additive ＋ 有 `DEFAULT 'other'`，舊碼不會炸，但**功能尚未生效**）。且本輪依使用者指示採**簡易版 ring**（僅 jest／vitest，**跳過 Playwright e2e／Stryker mutation／dependency-cruiser**），亦**未做瀏覽器煙霧測試**——依本 repo 反覆踩過的教訓（2026-07-25 Chrome MCP 煙霧測試曾揪出 3 個「只有真瀏覽器會踩」的部署／代理層 bug，單元全綠完全測不到），此缺口必須明講。另 AC-39（[F033](features/F033-permission-aware-retrieval.md) RAG）為 Phase 3 ripple、規格明文本輪不驗收。比照 [F040](features/F040-lifecycle-subcategory.md) 同樣情形標 🟡 之先例。
+> **🔴 2026-08-11 後續：上述「簡易 ring 無 fidelity」之風險已實際兌現。** 使用者於實際環境發現帳號清單「角色」欄未渲染子分類徽章——**本輪第一個逃出約束環的真實缺陷**。
+> 根因為 **AC 未覆蓋 prototype 檔頭已明列之項目**（環只依 AC 建，AC 沒寫到就不存在）＋ **無 fidelity 測試**（唯一不依賴 AC 完整性的防線缺席）。
+> spec 層已補 [F041 §F2 AC-41～AC-46](features/F041-user-subtype-business-scope.md#f2-fidelity-gap) 並同步 4 條 delta；同類掃描另揪出 4 處同類缺口（含權限矩陣頁註記橫幅完全未實作）。完整教訓與可推廣結論見 [§F041 升 ✅ 待辦](#f041-to-done) 之「已知教訓」節。實作細節見 [implementation-log/F041-impl.md](implementation-log/F041-impl.md)；升 ✅ 之可執行清單見 [§F041 升 ✅ 待辦](#f041-to-done)。
 > **🟢 2026-08-11 新增 F041 一般使用者子分類——業務／其他（E08 US-072 主＋E06 US-057 從），規格已通過人類閘門（12 項全數裁決）**：規格層完成（[F041](features/F041-user-subtype-business-scope.md) **AC-01～AC-40** ＋ data-model v1.5 `ACCOUNT.userSubtype` ＋ error-handling v1.3 `#dept-restriction`〔**不新增錯誤碼**，已收斂為 404 單案〕＋ F019／F020／F025／F026／F003 之 **23 條** `AC-U#` delta〔7/5/3/3/5〕＋ F033 釐清段 ＋ `prototypes/03-public-list.html` 三 persona 與 `#scopeNotice`）。**12 項中 11 項照草案；唯一實質新增＝AC-40／F019 `AC-U7`**（前台清單頂部範圍說明句於業務視角換專屬文案，孤兒帳號沿用同一句）。tally 由 ✅27 🟡8 🔵0 ⬜5（40）改為 **✅27 🟡8 🔵0 ⬜6（41）**。
 > ⚠ **本需求為本專案首個「限縮既有可見範圍」之變更**（既往皆為 additive）。既有 ✅ 之 F019／F020／F025／F026／F003 之**既有 AC 全數未動**，其狀態**維持 ✅**；`AC-U#` delta 之實況待實作後於各列更新。
 > **兩項最具後果之裁決**：① `OQ-E08-10` → **不記錄拒絕稽核** ⇒ 本需求**完全不觸及稽核子系統**（`AUDIT_LOG` 不動、F023／F024 不需 delta、nfr 不需覆核）；② `OQ-E06-03` → **拒絕回 404 `DOCUMENT_NOT_FOUND`**（非 403）⇒ **本系統首度出現「刻意隱藏資源存在性」之例外**，已明確接受其與「越權一律 403」全域慣例之不一致，且**不自動推廣**至其他越權場景。
@@ -140,7 +143,7 @@
 |----|------|---|----|------|--------------------------|
 | F025 | 角色×功能權限矩陣 | P0 | 1 | ✅ 已完成-已驗證 | 機制完整並掛於實端點；數列對應功能尚無實體端點（使用表單/文件索引/調閱歷程/變更歷程/系統參數），該列 enforcement 未於實路由行使 |
 | F026 | 角色×欄位權限矩陣 | P0 | 1 | ✅ 已完成-已驗證 | 欄位寫入拒絕**建立＋編輯兩路徑**（含多值欄 all-or-nothing）；**使用部門子樹前綴判定**（共用 `isWithinSubtree`，與 F019 共用，AC8/9 覆蓋）；**附件/使用表單下載權限**（AC6 角色×動作覆蓋：主管/部門窗口可下載、取代被拒 `PERMISSION_DENIED`）。**AC5-6 浮水印釐清（人類定案 OQ-FM-01）**：後台下載＝原始檔（管理存取 SAS，不燒錄），燒錄/稽核僅前台檢視器路徑（F020）；.xlsx 無 PDF 浮水印可燒 |
-| F041 | 一般使用者子分類——業務／其他 | P0 | 1 | 🟡 部分 | 規格 🟢 APPROVED（2026-08-11 人類閘門，12 項全數裁決）；**實作 unit-green 且 migration 已落真 SOP DB**：`ACCOUNT.userSubtype`（`NOT NULL DEFAULT 'other'`＋`CHECK`，migration `29 AccountUserSubtype1723766400000` 已 `[X]`，1119 列 backfill `'other'`）、四純函式（`normalizeUserSubtype`／`isDeptScopedViewer`／`isUsingDeptMatched`／`isDocVisibleToViewer`）、`buildPublicList`／`PublicDocumentDetailService`／`WatermarkService` 四入口接 viewer、前端 `userSubtypeLabel`／`isSubtypeApplicable`／`SCOPE_NOTICE_*`＋`#scopeNotice`＋帳號管理 modal 子分類選擇器。**重用既有 `isWithinSubtree`**（INV-4）；**不觸及稽核子系統**（OQ-E08-10）；**拒絕回 404 非 403**（OQ-E06-03）。<br>**🔴 未達 ✅ 之缺口（DoD ②「端到端可達」）**：① **未部署**——backend 容器仍跑舊 dist，功能在瀏覽器尚未生效；② **本輪簡易版 ring**——無 Playwright e2e／Stryker／dep-cruiser，**且未做瀏覽器煙霧測試**（本 repo 已有前例證明此層會漏掉部署/代理 bug）；③ AC-39（F033 RAG）為 Phase 3 ripple、規格明文不驗收；④ `findCurrentByLogin()`／`TypeOrmDocMeta.getDocMeta()` 兩個 DB-touching adapter 無 `.spec.ts`（**test-generator 掃描時提報之既有缺口，非本輪引入**）。<br>**→ 升 ✅ 的可執行清單見下方 [§F041 升 ✅ 待辦](#f041-to-done)** |
+| F041 | 一般使用者子分類——業務／其他 | P0 | 1 | 🟡 部分 | 規格 🟢 APPROVED（2026-08-11 人類閘門，12 項全數裁決）；**實作 unit-green 且 migration 已落真 SOP DB**：`ACCOUNT.userSubtype`（`NOT NULL DEFAULT 'other'`＋`CHECK`，migration `29 AccountUserSubtype1723766400000` 已 `[X]`，1119 列 backfill `'other'`）、四純函式（`normalizeUserSubtype`／`isDeptScopedViewer`／`isUsingDeptMatched`／`isDocVisibleToViewer`）、`buildPublicList`／`PublicDocumentDetailService`／`WatermarkService` 四入口接 viewer、前端 `userSubtypeLabel`／`isSubtypeApplicable`／`SCOPE_NOTICE_*`＋`#scopeNotice`＋帳號管理 modal 子分類選擇器。**重用既有 `isWithinSubtree`**（INV-4）；**不觸及稽核子系統**（OQ-E08-10）；**拒絕回 404 非 403**（OQ-E06-03）。<br>**🔴 未達 ✅ 之缺口（DoD ②「端到端可達」）**：① **未部署**——backend 容器仍跑舊 dist，功能在瀏覽器尚未生效；② **本輪簡易版 ring**——無 Playwright e2e／Stryker／dep-cruiser，**且未做瀏覽器煙霧測試**（本 repo 已有前例證明此層會漏掉部署/代理 bug）；③ AC-39（F033 RAG）為 Phase 3 ripple、規格明文不驗收；④ `findCurrentByLogin()`／`TypeOrmDocMeta.getDocMeta()` 兩個 DB-touching adapter 無 `.spec.ts`（**test-generator 掃描時提報之既有缺口，非本輪引入**）；<br>⑤ **🔴 2026-08-11 已知缺陷（本輪第一個逃出約束環者）**：帳號清單「角色」欄與編輯 modal「目前角色」**未渲染子分類徽章**，由使用者於實際環境肉眼發現。**根因＝AC 未覆蓋 prototype 已明列之項目 ＋ 簡易 ring 無 fidelity 測試無法偵測漂移**（63 條 AC 全綠、1505＋722 測試全過仍出貨）。spec 層已補 [AC-41～AC-46](features/F041-user-subtype-business-scope.md#f2-fidelity-gap)＋4 條 delta；**實作與環尚未跟上**。<br>**→ 升 ✅ 的可執行清單與完整教訓見下方 [§F041 升 ✅ 待辦](#f041-to-done)** |
 
 ### E09 RAG／AI 問答
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
@@ -165,14 +168,37 @@
 ## F041 升 ✅ 待辦（可執行清單） {#f041-to-done}
 
 > F041 之 unit 層與 DB 層已完成（117/1505 backend、56/722 frontend、migration `[X] 29` 落真 SOP DB、173 測試檔 zero byte 變動）。
-> 以下四項為**升 ✅ 前必須完成者**，順序有依賴關係——①→② 為前置，③ 需在 ② 之後才有意義。
+> 以下五項為**升 ✅ 前必須完成者**，順序有依賴關係——①→② 為前置，③ 需在 ② 之後才有意義；**⓪ 為 2026-08-11 新增、可與 ①② 並行**。
+
+### 🔴 已知教訓：本輪第一個「逃出約束環」的真實缺陷（2026-08-11）
+
+> **缺陷**：帳號管理清單之「角色」欄對一般使用者**未渲染子分類徽章**（`AS30005` 於 DB 正確為 `roleCode='User'`／`userSubtype='business'`／`status='active'`，`AccountView` 亦已含 `userSubtype`，純屬前端漏渲染）。
+> 「編輯帳號」modal 之「目前角色」有**同一**漏渲染。由**使用者在實際環境肉眼發現**，非任何自動化關卡攔下。
+>
+> **根因（兩層，缺一不成災）**：
+> 1. **AC 未覆蓋 prototype 已明列之項目。** `prototypes/08-account-management.html` 檔頭明列**三項**已套用內容（①指派角色 modal 選擇器 ②清單「角色」欄子分類徽章 ③編輯 modal「目前角色」顯示子分類），
+>    但 [F041](features/F041-user-subtype-business-scope.md) §F 只有 AC-31／32／33／40、[F003](features/F003-account-role-management.md) 只有 AC-U1～AC-U5——**②③ 從未被寫成任何一條 AC**。
+>    test-generator 對實作全盲、**只依 AC 建環**，因此環裡根本沒有這兩項。**AC 沒寫到的東西，環不會長出來。**
+> 2. **簡易 ring 無 fidelity 測試，無法偵測 prototype↔實作漂移。** 本輪依使用者指示採簡易版（僅 jest／vitest），
+>    而 Playwright **fidelity 測試正是專抓這類漂移的那一環**——它比對的是「畫面 vs prototype」，不依賴 AC 是否寫全。
+>    兩層防線同時缺席，結果：**63 條 AC 全綠、backend 1505 ＋ frontend 722 測試全過，缺陷照樣出貨。**
+>
+> **已採行之修補（spec 層，2026-08-11）**：新增 [F041 §F2 AC-41～AC-46](features/F041-user-subtype-business-scope.md#f2-fidelity-gap)（不重編既有 AC，避免破壞 `docs/test-specs/features/F041-test.md` 之 AC↔測試對照），
+> 並同步立 delta：[F003](features/F003-account-role-management.md) `AC-U6`～`AC-U9`、[F025](features/F025-role-function-matrix.md) `AC-U4`、[F019](features/F019-public-list-browsing.md) `AC-U8`。
+> 同類掃描（4 份 prototype 逐項比對檔頭清單與內文 F041 區塊）另揪出 4 處同類缺口，一併補入——詳見 ⓪。
+>
+> **可推廣之結論（勿只當成 F041 個案）**：
+> - **prototype 檔頭的「本檔已套用」清單，是 AC 覆蓋率的檢查表。** 每一項都必須指得出一條 AC；指不出來就是缺口，且該缺口**不會**被任何全綠的測試數字反映出來。spec-writer 收尾時應逐項對帳。
+> - **AC 全綠 ≠ 規格被滿足**，只等於「被寫成 AC 的那部分被滿足」。測試數量（1505／722）對未覆蓋項目**零證據力**。
+> - **fidelity/e2e 不是「有餘力再補」的裝飾。** 它是唯一不依賴 AC 完整性的防線：AC 可能寫漏，prototype 比對不會。跳過它，等於把整條防線押在「spec-writer 沒寫漏」這個單點上——本次即為該單點失效之實例。
 
 | # | 動作 | 具體內容 | 為何必要 |
 |---|---|---|---|
+| **⓪** | **實作 AC-41～AC-46（2026-08-11 新增之 6 條）** | 皆為**前端呈現面**、皆可由 vitest 斷言：<br>**AC-41** 帳號清單「角色」欄之子分類徽章（`roleCode==='User'` 才附加；其餘 4 種角色即使 `userSubtype='business'` 也不顯示，樣本＝persona `20088 陳彥廷`）——**即本次外流缺陷本身**；<br>**AC-42** 「編輯帳號」modal 之「目前角色」同一組合（應與清單**共用同一元件**）；<br>**AC-43** 指派角色 modal 子分類選擇器之**預選值**（含「非 User 帳號改選 User 時預選其保留值」＝AC-36「舊設定復活」之唯一 UI 可觀測面）；<br>**AC-44** 子分類選項之 `SUBTYPE_DESC` 逐字說明（須以具名常數持有）；<br>**AC-45** 權限矩陣頁之 F041 註記橫幅（prototype 18 檔頭所稱「本檔唯一變更」，**目前完全未實作**）；<br>**AC-46** 前台詳情 404 畫面（單一 not-found 狀態、三種成因不可區分、逐字文案與 prototype 04 對齊、DOM 不得殘留任何文件欄位）⚠ 此條**會變更一個既有畫面之文案**（現行 `文件可能尚未公告或已下架。` ＋ `inbox` 圖示 ＋ 無錯誤碼列，皆與 prototype 不符） | AC-41／AC-42 是已出貨缺陷；AC-45 是同類掃描揪出之**第二個未實作項**；AC-43／AC-44／AC-46 目前部分實作、部分漂移，且**全部無測試保護** |
 | **①** | **重建 backend image** | 容器 `icsop-management-platform-backend-1` 仍跑舊 dist。需重新 build 並取代（既有慣例：容器內只有 `dist`，比照 [F040](features/F040-lifecycle-subcategory.md) 落地前例）。⚠ 欄位為 additive ＋ `DEFAULT 'other'`，舊 dist **不會炸**，但 F041 全部行為**尚未生效** | DoD ②「端到端可達」——端點存在 ≠ 功能可用 |
 | **②** | **部署並確認服務起得來** | 重啟後確認 Nest 正常啟動、路由掛載、`/public/documents` 與 `/public/documents/:id/view` 等既有端點無回歸 | 部署本身即為本 repo 屢次踩雷之處 |
 | **③** | **瀏覽器實測兩種 persona（＋孤兒）** | 以真瀏覽器分別以 **業務**／**其他** 子分類帳號登入前台，逐項核對：<br>(a) 清單筆數與 `total` 差異（業務只見使用部門相符者）；<br>(b) 頂部 `#scopeNotice` 說明句逐字正確且**兩種 persona 不同**（AC-40）；<br>(c) 查無結果時**空狀態仍為 `查無符合結果`**、且**頂部說明句同時仍在**（AC-33 vs AC-40 不得互相取代）；<br>(d) 直連他部門文件之詳情 URL → **404、且畫面不洩漏文件編號/書名**（AC-21）；<br>(e) 檢視器／下載／列印他部門文件 → 拒絕、**無 PDF 位元組**（AC-25／AC-26）；<br>(f) **孤兒帳號**（`orgCode` 空）→ 清單為空、說明句沿用業務句、無「帳號異常」字樣（AC-12／AC-40）；<br>(g) 帳號管理 modal：角色選「一般使用者」才出現子分類選擇器（AC-32） | 本輪**簡易版 ring 無 Playwright、亦未做瀏覽器煙霧測試**。2026-07-25 之 Chrome MCP 煙霧測試曾揪出 3 個「只有真瀏覽器會踩」的部署／代理層 bug（nginx/vite 代理白名單、viewer PDF iframe 之 Accept 撞 SPA bypass、裸 `/admin` 絕對轉址掉 port），**單元全綠完全測不到** |
-| **④** | **補 e2e（Playwright）** | 將 ③ 之 (a)～(g) 固化為自動化 e2e，納入完整 ring | 人工實測一次無法防回歸；補齊後 F041 之 DoD ① 亦由「簡易版」升為完整覆蓋 |
+| **④** | **補 e2e（Playwright）＋ fidelity 測試** | 將 ③ 之 (a)～(g) 固化為自動化 e2e；**另須補 fidelity 測試**（畫面 ↔ prototype 逐項比對），至少涵蓋 `03-public-list.html`／`04-public-document-detail.html`／`08-account-management.html`／`18-permission-matrix.html` 四頁之 F041 區塊。建環工具見 `ring-setup` skill | 人工實測一次無法防回歸。**更關鍵：fidelity 是唯一不依賴 AC 完整性的防線**——本輪之外流缺陷正是「AC 沒寫到 ⇒ 環裡沒有 ⇒ 全綠出貨」，⓪ 補 AC 只修好了**這一次**已知的 6 項，fidelity 才防得住**下一次**沒想到的那一項 |
 
 **不阻擋升 ✅ 者（明確排除）**：
 - **AC-39**（[F033](features/F033-permission-aware-retrieval.md) RAG 之未來下限保證）——Phase 3 ripple，[F041](features/F041-user-subtype-business-scope.md) 規格明文本輪不驗收。

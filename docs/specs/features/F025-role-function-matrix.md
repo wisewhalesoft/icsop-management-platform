@@ -70,6 +70,7 @@ Epic/Story: E08 / US-070（附錄管理列：E10 / US-102 AC5）
 - **AC-U1**：Given `FUNCTION_MATRIX` 之全部功能鍵 × 5 種角色, When 逐格取值, Then 與本 delta 導入前**逐格相同**；矩陣之鍵集合亦未增減（不新增功能鍵）。〔[F041](F041-user-subtype-business-scope.md) AC-37〕
 - **AC-U2**：Given 兩個帳號其 `roleCode` 皆為 `'User'`、`userSubtype` 分別為 `'business'` 與 `'other'`, When 對任一功能鍵呼叫權限解析函式, Then **兩者結果完全相同**；且該函式之簽章**不含** `userSubtype` 參數（子分類不參與功能授權判定）。〔[F041](F041-user-subtype-business-scope.md) AC-37〕
 - **AC-U3**：Given 業務子分類使用者呼叫任一後台功能 API（帳號管理／循環管理／ICSOP 文件管理／…）, When 請求送出, Then 回 403 `PERMISSION_DENIED`——與「其他」子分類之一般使用者**完全一致**，業務限制**不放寬亦不加嚴**後台功能權限。
+- **AC-U4**（**權限矩陣頁之 F041 註記橫幅**；2026-08-11 補訂，vitest 可斷言）：Given 以系統管理員開啟權限矩陣頁, When 渲染, Then 於既有兩則橫幅（「已定案…全欄位唯讀」／「草案待審（OQ-E08-02）」）**之下、分頁列之上**呈現第三則**跨兩欄**之定案橫幅，其 `textContent`（空白正規化後）逐字為：<br>`🟢 已定案（F041 · OQ-E08-04 裁決 B，2026-08-11 人類閘門通過）：一般使用者再細分之子分類「業務／其他」為 ACCOUNT 之獨立欄位，非第 6 種角色——本頁兩份矩陣維持 5 欄、逐格不變（F041 AC-37／AC-38），權限解析函式亦不接受子分類參數。子分類僅影響前台可見之文件範圍（資料列層級：業務者僅見「使用部門相符」之已公告文件），不參與功能授權與欄位授權判定；指派入口見「帳號管理」之指派角色 modal（08）。`<br>Then 既有兩則橫幅之文案、順序與存廢**一律不變**（`prototypes/18-permission-matrix.html` 檔頭明示：「草案待審（OQ-E08-02）」與 F041 無關，**不得**一併翻轉為已定案）；且兩份矩陣仍為 **5 欄、逐格不變**（AC-U1／[F026](F026-role-field-matrix.md) AC-U1 之既有斷言不得放寬）。<br>📌 本橫幅為 prototype 18 檔頭所稱之「**本檔唯一變更**」，位於**頁面層級、涵蓋兩個分頁**，故僅於本檔立 AC，[F026](F026-role-field-matrix.md) 不另立。〔[F041](F041-user-subtype-business-scope.md) AC-45〕
 
 ## Error Scenarios
 - 越權/範圍限縮：見 [error-handling.md#permission](../error-handling.md#permission)。

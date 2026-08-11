@@ -91,6 +91,9 @@ Epic/Story: E08 / US-071（附錄（多）列：E10 / US-101、US-102）
 - **AC-U2**：Given 兩個帳號其 `roleCode` 皆為 `'User'`、`userSubtype` 分別為 `'business'` 與 `'other'`, When 對任一欄位鍵呼叫欄位權限解析函式, Then **兩者結果完全相同**；且該函式之簽章**不含** `userSubtype` 參數。〔[F041](F041-user-subtype-business-scope.md) AC-38〕
 - **AC-U3**（**判定式重用鎖定**）：Given `isWithinSubtree` 之既有測試輸入組合（`TS-PS-ORG-001`～`TS-PS-ORG-006`）, When 於本次需求實作後重跑, Then **全部維持綠燈且期望值未經修改**；且 [F041](F041-user-subtype-business-scope.md) 之 `isUsingDeptMatched` 對同一輸入組合之回傳值與既有 `isPinned` 逐案相等（證明無第二套比對邏輯）。〔[F041](F041-user-subtype-business-scope.md) AC-10〕
 
+> **權限矩陣頁之 F041 註記橫幅（不在本檔立 AC）**：`prototypes/18-permission-matrix.html` 於兩份矩陣共用之頁面層級新增一則註記橫幅（子分類非第 6 種角色、兩份矩陣皆維持 5 欄）。
+> 因其位於**頁面層級、橫跨兩個分頁**，AC 僅立於 [F025 AC-U4](F025-role-function-matrix.md)（對應 [F041 AC-45](F041-user-subtype-business-scope.md#f2-fidelity-gap)），本檔不重複規範。本檔之欄數與格值斷言（AC-U1）不受該橫幅影響。
+
 ## Error Scenarios
 - 唯讀欄位寫入/系統欄位處理：見 [error-handling.md#permission](../error-handling.md#permission)（`FIELD_WRITE_FORBIDDEN`）。
 - **業務子分類之前台可見範圍限縮**（🟢 APPROVED）：屬**資料列層級過濾**，不觸發 `FIELD_WRITE_FORBIDDEN`；拒絕回 404 `DOCUMENT_NOT_FOUND`，見 [error-handling.md#dept-restriction](../error-handling.md#dept-restriction) 與 [F041](F041-user-subtype-business-scope.md)。
