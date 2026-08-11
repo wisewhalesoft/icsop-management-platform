@@ -22,6 +22,35 @@ import { useToast } from '../components/useToast';
  * 本頁唯讀；變更須改程式碼並經審核（OQ-E08-02）。存取限系統管理員（系統參數設定＝SysAdmin only）。
  */
 
+/**
+ * F041 AC-45／F025 AC-U4 之定案橫幅逐字文案（權威＝`prototypes/18-permission-matrix.html:106`-`:112`，
+ * 該檔自稱之「本檔唯一變更」）。以具名常數持有、不於 JSX 內散落字面字串。
+ *
+ * 分段之唯一目的＝還原 prototype 之粗體（`b`）與等寬（`mono`）樣式；
+ * ⚠ 串接後即為橫幅之 `textContent`，故段落之間**不得**出現任何額外空白字元
+ * （AC-45 以空白正規化後之 `textContent` 逐字比對）。
+ */
+const F041_NOTICE: readonly { text: string; style?: 'b' | 'mono' }[] = [
+  { text: '🟢 已定案（F041 · OQ-E08-04 裁決 B，2026-08-11 人類閘門通過）', style: 'b' },
+  { text: '：一般使用者再細分之子分類「' },
+  { text: '業務', style: 'b' },
+  { text: '／' },
+  { text: '其他', style: 'b' },
+  { text: '」為 ' },
+  { text: 'ACCOUNT', style: 'mono' },
+  { text: ' 之獨立欄位，' },
+  { text: '非第 6 種角色', style: 'b' },
+  { text: '——本頁兩份矩陣維持 ' },
+  { text: '5 欄、逐格不變', style: 'b' },
+  { text: '（F041 AC-37／AC-38），權限解析函式亦不接受子分類參數。子分類僅影響' },
+  { text: '前台可見之文件範圍', style: 'b' },
+  {
+    text:
+      '（資料列層級：業務者僅見「使用部門相符」之已公告文件），不參與功能授權與欄位授權判定；' +
+      '指派入口見「帳號管理」之指派角色 modal（08）。',
+  },
+];
+
 /** 顯示列：label（G-ADM-020 顯示標籤，與矩陣鍵解耦）＋選填列註記＋5 角色顯示字串（順序＝SysAdmin..User）。 */
 export interface MatrixDisplayRow {
   label: string;
@@ -197,6 +226,18 @@ export function PermissionMatrixPage(): JSX.Element {
           <Icon name="clock" className="w-4 h-4 mt-0.5 shrink-0" />
           <div>
             <b>草案待審（OQ-E08-02）</b>：矩陣其餘部分為分析師草案，待利害關係人審核定案；矩陣以 RBAC 中介層於 API 層落實。
+          </div>
+        </div>
+        {/* F041 AC-45／F025 AC-U4：子分類非第 6 種角色，兩份矩陣逐格不變、不新增欄（AC-37／AC-38）。
+            位置＝既有兩則橫幅之下、分頁列之上，跨兩欄；既有兩則橫幅之文案／順序／存廢一律不變。 */}
+        <div className="sm:col-span-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 flex items-start gap-2">
+          <Icon name="badge-check" className="w-4 h-4 mt-0.5 shrink-0" />
+          <div>
+            {F041_NOTICE.map((seg, i) => {
+              if (seg.style === 'b') return <b key={i}>{seg.text}</b>;
+              if (seg.style === 'mono') return <span key={i} className="mono text-xs">{seg.text}</span>;
+              return <span key={i}>{seg.text}</span>;
+            })}
           </div>
         </div>
       </div>

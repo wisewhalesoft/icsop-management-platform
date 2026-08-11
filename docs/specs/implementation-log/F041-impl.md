@@ -181,6 +181,24 @@ last_updated: 2026-08-11
 | AC-35 | 由 DB 層 `NOT NULL DEFAULT 'other'` 保證，in-memory fake 不模擬欄位預設值 → jest/vitest 無可斷言之標的。**已改以 migration 實跑之 `INSERT` 探針驗證**（見上表），非留白。 |
 | AC-39 | F033（RAG 問答）Phase 3 尚未實作，規格明載本輪不驗收。 |
 
+## 續篇：AC-41～AC-46 缺口修補（2026-08-11，第二輪）
+
+**缺口成因**：AC-01～AC-40 只涵蓋判定契約與兩條說明句，prototype 檔頭已明列之**純呈現面**項目從未寫成 AC；
+test-generator 對實作全盲、只依 AC 建環，本輪又採簡易 ring（無 Playwright fidelity——那正是專抓 prototype↔實作漂移的一環），
+故 63 條 AC 全綠仍出貨缺陷：真實環境帳號 `AS30005`（`roleCode='User'`／`userSubtype='business'`）之清單「角色」欄無「業務」徽章。
+spec-writer 補訂 AC-41～AC-46（＋F003 AC-U6～U9、F019 AC-U8、F025 AC-U4），test-generator 補環，本節為實作。
+
+| AC | 實作 | 生產檔 |
+|---|---|---|
+| AC-44／F003 AC-U9 | `SUBTYPE_DESC` 由頁面 local const **上移為 domain 具名匯出**（比照 `SCOPE_NOTICE_*`，供測試 import） | `frontend/src/domain/user-subtype.ts` |
+| AC-41／AC-42（F003 AC-U6／U7） | 新增共用元件 `RoleWithSubtype`（角色徽章＋`isSubtypeApplicable(roleCode) ? 子分類徽章 : null`），**清單「角色」欄與編輯帳號 modal「目前角色」共用同一元件**，兩處不可能各自漂移；未知值走 `normalizeUserSubtype` fail-open 顯示「其他」；非 `'User'` 角色不渲染任一字串（INV-2） | `frontend/src/pages/AccountManagementPage.tsx` |
+| AC-45／F025 AC-U4 | 具名常數 `F041_NOTICE`（分段僅為還原 `b`／`mono` 樣式，段間**不得有空白**）＋跨兩欄橫幅，置於既有兩則橫幅之下、分頁列之上；既有兩橫幅一字未動 | `frontend/src/pages/PermissionMatrixPage.tsx` |
+| AC-46／F019 AC-U8 | not-found 區塊改為 `NotFoundPanel`（**不接受任何可區分成因之參數**，僅 `onBack`）；`inbox`→`file-x`、補說明句與 `DOCUMENT_NOT_FOUND · 404` 錯誤碼列，文案以具名常數持有；「返回文件瀏覽」按鈕依 AC-46 範圍界線維持不動 | `frontend/src/pages/PublicDocumentDetailPage.tsx` |
+
+**後端未動**（`GET /admin/accounts` 之 `toView` 早已回傳 `userSubtype`，缺陷純在呈現層）。
+**驗證**：`npx tsc --noEmit` 無輸出；`npx vitest run --no-file-parallelism --pool=threads` → **57 檔／738 案全綠**
+（修補前 4 檔／7 案紅），零既有回歸。**本輪測試檔改動筆數：0**（未提出任何爭議）。
+
 ## Blocking Issues
 
 無。

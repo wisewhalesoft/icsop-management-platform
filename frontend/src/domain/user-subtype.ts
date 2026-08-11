@@ -35,6 +35,17 @@ export function isSubtypeApplicable(roleCode: string | null | undefined): boolea
 }
 
 /**
+ * 子分類選項之逐字說明文字（AC-44／[F003](../../docs/specs/features/F003-account-role-management.md) AC-U9）。
+ * 文案權威＝`prototypes/08-account-management.html:267` 之 `SUBTYPE_DESC`。
+ * 比照 `SCOPE_NOTICE_*` 之處置：以具名常數持有並自本檔匯出（供測試直接 import 斷言），
+ * **不得於 JSX 內散落字面字串**，避免呈現層與 prototype 各自漂移。
+ */
+export const SUBTYPE_DESC: Record<UserSubtype, string> = {
+  business: '前台僅顯示「使用部門相符」之已公告文件（含子樹）',
+  other: '前台瀏覽範圍不變',
+};
+
+/**
  * 前台清單頂部說明句——**非受限者**（「其他」子分類或任一非 `'User'` 角色）。
  * 既有文案，一字未改（AC-40）。
  */

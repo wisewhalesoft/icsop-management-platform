@@ -46,6 +46,41 @@ const LINK_STATUS: Record<DocumentStatus, { label: string; color: string; bg: st
   void: { label: '作廢', color: '#B91C1C', bg: '#FEE2E2' },
 };
 
+/**
+ * F041 AC-46／F019 AC-U8：404 拒絕畫面之逐字文案（權威＝`prototypes/04-public-document-detail.html:161`-`:164`）。
+ * 以具名常數持有、不於 JSX 內散落字面字串。
+ */
+const NOT_FOUND_TITLE = '查無此文件';
+const NOT_FOUND_DESC = '查無此文件，或該文件尚未公告。';
+const NOT_FOUND_CODE = 'DOCUMENT_NOT_FOUND · 404';
+
+/**
+ * F041 AC-46：404 `DOCUMENT_NOT_FOUND` 之唯一拒絕畫面。
+ *
+ * 三種成因——①文件確實不存在 ②文件存在但非已公告 ③業務子分類使用者之使用部門不相符
+ * （AC-20／AC-21）——渲染**完全相同**之畫面：本元件**刻意不接受任何可區分成因之參數**
+ * （`onBack` 僅為導覽回呼），若可區分即以呈現差異還原存在性，架空 OQ-E06-03 之裁決。
+ * 「返回文件瀏覽」按鈕不在 prototype 拒絕面板之定義範圍內，係既有行為，維持不動（AC-46 範圍界線）。
+ */
+function NotFoundPanel({ onBack }: { onBack: () => void }): JSX.Element {
+  return (
+    <div className="text-center max-w-xs mx-auto py-4">
+      <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3">
+        <Icon name="file-x" className="w-7 h-7 text-red-500" />
+      </div>
+      <h3 className="font-semibold text-slate-900">{NOT_FOUND_TITLE}</h3>
+      <p className="text-sm text-slate-500 mt-1">{NOT_FOUND_DESC}</p>
+      <p className="text-xs mono text-slate-400 mt-2">{NOT_FOUND_CODE}</p>
+      <button
+        onClick={onBack}
+        className="mt-4 px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50"
+      >
+        返回文件瀏覽
+      </button>
+    </div>
+  );
+}
+
 /** dt/dd 欄位列（prototype 04 第 143-146 行版面）。 */
 function Field({ label, children }: { label: string; children: ReactNode }): JSX.Element {
   return (
@@ -191,19 +226,7 @@ export function PublicDocumentDetailPage(): JSX.Element {
           </div>
         )}
 
-        {!loading && notFound && (
-          <div className="text-center py-16">
-            <Icon name="inbox" className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500">查無此文件</p>
-            <p className="text-sm text-slate-400 mt-1">文件可能尚未公告或已下架。</p>
-            <button
-              onClick={() => navigate('/public')}
-              className="mt-4 px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50"
-            >
-              返回文件瀏覽
-            </button>
-          </div>
-        )}
+        {!loading && notFound && <NotFoundPanel onBack={() => navigate('/public')} />}
 
         {!loading && error && !notFound && (
           <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">

@@ -14,6 +14,7 @@ import {
   isSubtypeApplicable,
   normalizeUserSubtype,
   userSubtypeLabel,
+  SUBTYPE_DESC,
   type UserSubtype,
 } from '../domain/user-subtype';
 import { RoleBadge } from '../components/RoleBadge';
@@ -40,12 +41,8 @@ const msgOf = (e: unknown) =>
 const MGMT_ROLES = ['SysAdmin', 'ICSOPAdmin', 'Supervisor', 'DeptContact'];
 const PAGE_SIZE = 50;
 
-/** F041 子分類選項與說明（逐字沿用 prototype 08 之 SUBTYPE_DESC）。 */
+/** F041 子分類選項（說明文字 SUBTYPE_DESC 由 domain/user-subtype 持有，AC-44）。 */
 const SUBTYPE_CODES: readonly UserSubtype[] = ['business', 'other'];
-const SUBTYPE_DESC: Record<UserSubtype, string> = {
-  business: '前台僅顯示「使用部門相符」之已公告文件（含子樹）',
-  other: '前台瀏覽範圍不變',
-};
 
 /** F041 子分類徽章（顯示標籤；'業務'／'其他' 不得用於任何判定）。 */
 function SubtypeBadge({ value }: { value: UserSubtype }): JSX.Element {
@@ -60,6 +57,31 @@ function SubtypeBadge({ value }: { value: UserSubtype }): JSX.Element {
     >
       {userSubtypeLabel(value)}
     </span>
+  );
+}
+
+/**
+ * F041 AC-41／AC-42：角色徽章 ＋ 子分類徽章之組合（角色在前、子分類在後）。
+ * 清單「角色」欄與「編輯帳號」modal 之「目前角色」**共用本元件**——prototype 兩處
+ * （`prototypes/08-account-management.html:323`／`:355`）為逐字相同之運算式，共用即不可能各自漂移。
+ * 適用性一律取 `isSubtypeApplicable(roleCode)`（AC-32 為唯一權威，不另立第二套判定）：
+ * 非「一般使用者」之 4 種角色即使 `userSubtype='business'` 亦不呈現任一子分類字串（INV-2）；
+ * 一般使用者之 `null`／未知值則仍呈現徽章、文字收斂為「其他」（AC-02 fail-open 於顯示層之後果）。
+ */
+function RoleWithSubtype({
+  roleCode,
+  userSubtype,
+}: {
+  roleCode: string;
+  userSubtype: string | null | undefined;
+}): JSX.Element {
+  return (
+    <div className="flex items-center gap-1.5">
+      <RoleBadge roleCode={roleCode} />
+      {isSubtypeApplicable(roleCode) ? (
+        <SubtypeBadge value={normalizeUserSubtype(userSubtype)} />
+      ) : null}
+    </div>
   );
 }
 
@@ -323,7 +345,9 @@ export function AccountManagementPage(): JSX.Element {
                     <div className="truncate max-w-[200px]" title={a.department ?? '—'}>{a.department ?? '—'}</div>
                   </td>
                   <td className="px-3 py-2.5"><SourceBadge source={a.source} /></td>
-                  <td className="px-3 py-2.5"><RoleBadge roleCode={a.roleCode} /></td>
+                  <td className="px-3 py-2.5">
+                    <RoleWithSubtype roleCode={a.roleCode} userSubtype={a.userSubtype} />
+                  </td>
                   <td className="px-3 py-2.5"><StatusBadge a={a} /></td>
                   <td className="px-3 py-2.5 mono text-xs text-slate-400">{formatLastLogin(a.lastLoginAt)}</td>
                   {canWrite && (
@@ -600,7 +624,7 @@ function EditModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">目前角色</label>
-            <div><RoleBadge roleCode={target.roleCode} /></div>
+            <RoleWithSubtype roleCode={target.roleCode} userSubtype={target.userSubtype} />
             <p className="text-[10px] text-slate-400 mt-1">如需變更角色，請使用清單的「指派角色」。</p>
           </div>
           {upstream ? (
