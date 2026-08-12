@@ -32,4 +32,39 @@
   .mono {
     font-family: 'JetBrains Mono', monospace;
   }
+
+  /*
+   * 觸控命中區擴大至 ≥44×44（ux-audit-frontstage A-1；WCAG 2.5.5 / UX-22、UX-66）。
+   * 刻意以覆蓋式偽元素擴大「命中區」而非放大元素本身：prototype 之視覺尺寸
+   * （如 w-8 h-8 圓形登出鈕）為版面權威，不得改動。僅供圖示按鈕等小目標使用；
+   * 相鄰目標之中心距須 >44px，否則命中區會互相重疊。
+   */
+  .tap-target {
+    position: relative;
+  }
+  .tap-target::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+}
+
+/*
+ * 尊重使用者的減少動態偏好（ux-audit-frontstage A-3；UX-9、UX-99）。
+ * 全域一次覆蓋，元件端不需逐一處理：skeleton 之 animate-pulse、
+ * 手機篩選面板之 transition-transform、檢視器縮放之 transform transition 皆納入。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
