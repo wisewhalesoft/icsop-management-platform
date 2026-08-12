@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, Fragment } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { getPublicDocuments, getOrgUnits } from '../api/endpoints';
 import { ApiError } from '../api/client';
@@ -35,10 +35,16 @@ export function PublicListPage(): JSX.Element {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [keyword, setKeyword] = useState('');
-  const [deptCode, setDeptCode] = useState('');
-  const [lifecycleId, setLifecycleId] = useState('');
-  const [page, setPage] = useState(1);
+  /**
+   * 查詢狀態一律以 URL query 為單一真相（ux-audit-frontstage B-1；UX-5）——
+   * 搜尋結果可分享／可加書籤、重新整理不歸零、瀏覽器上一頁回到前一組條件、
+   * 自詳情頁返回時保留原篩選與頁碼。元件內不另存一份 state 以免兩者失同步。
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const keyword = searchParams.get('q') ?? '';
+  const deptCode = searchParams.get('dept') ?? '';
+  const lifecycleId = searchParams.get('cycle') ?? '';
+  const page = Math.max(1, Number(searchParams.get('page')) || 1);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const [data, setData] = useState<PublicPage | null>(null);
@@ -100,24 +106,96 @@ export function PublicListPage(): JSX.Element {
     [orgUnits],
   );
 
-  const onKeyword = useCallback((v: string) => {
-    setKeyword(v);
-    setPage(1);
+  /**
+   * 局部更新 URL query。空字串＝自網址移除該參數（保持可分享網址簡潔）。
+   * `replace` 供關鍵字 debounce 使用，避免逐字輸入在瀏覽歷史堆疊大量條目。
+   */
+  const patchParams = useCallback(
+    (patch: Record<string, string>, opts?: { replace?: boolean }): void => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          for (const [k, v] of Object.entries(patch)) {
+            if (v) next.set(k, v);
+            else next.delete(k);
+          }
+          return next;
+        },
+        { replace: opts?.replace ?? false },
+      );
+    },
+    [setSearchParams],
+  );
+
+  // 搜尋框之即時輸入值（顯示用）；送出至 URL/後端者為 debounce 後之值。
+  const [kwInput, setKwInput] = useState(keyword);
+  // URL 之 q 由外部變更時（分享網址進入、瀏覽器上一頁）同步回輸入框。
+  useEffect(() => {
+    setKwInput(keyword);
+  }, [keyword]);
+
+  /**
+   * 關鍵字 debounce 300ms（ux-audit-frontstage B-2；UX-89）。
+   * 原實作於 onChange 直接更新查詢條件，逐字觸發一次後端查詢——
+   * 中文輸入法組字期間尤其浪費。篩選條件變更一律回到第 1 頁。
+   */
+  useEffect(() => {
+    if (kwInput === keyword) return;
+    const timer = setTimeout(() => {
+      patchParams({ q: kwInput.trim(), page: '' }, { replace: true });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [kwInput, keyword, patchParams]);
+
+  const onDept = useCallback((v: string) => patchParams({ dept: v, page: '' }), [patchParams]);
+  const onCycle = useCallback((v: string) => patchParams({ cycle: v, page: '' }), [patchParams]);
+  const goPage = useCallback(
+    (p: number) => patchParams({ page: p > 1 ? String(p) : '' }),
+    [patchParams],
+  );
+  const clearFilters = useCallback(
+    () => patchParams({ q: '', dept: '', cycle: '', page: '' }),
+    [patchParams],
+  );
+
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const sheetTriggerRef = useRef<HTMLButtonElement>(null);
+  const sheetCloseRef = useRef<HTMLButtonElement>(null);
+
+  const closeSheet = useCallback((): void => {
+    setSheetOpen(false);
+    sheetTriggerRef.current?.focus(); // 焦點還原至觸發鈕
   }, []);
-  const onDept = useCallback((v: string) => {
-    setDeptCode(v);
-    setPage(1);
-  }, []);
-  const onCycle = useCallback((v: string) => {
-    setLifecycleId(v);
-    setPage(1);
-  }, []);
-  const clearFilters = useCallback(() => {
-    setKeyword('');
-    setDeptCode('');
-    setLifecycleId('');
-    setPage(1);
-  }, []);
+
+  /**
+   * 手機篩選面板之焦點管理（ux-audit-frontstage A-4；UX-41）。
+   *
+   * 面板恆存在於 DOM（滑出動畫需要），關閉時僅以 translate 移出視窗。原實作僅設
+   * `aria-hidden`，但 **aria-hidden 不會阻止鍵盤焦點進入**——鍵盤使用者 Tab 到頁尾
+   * 仍會掉進看不見的面板（3 個下拉 + 2 個按鈕）。改以 `inert` 讓整個子樹同時退出
+   * 焦點序列與無障礙樹；開啟時焦點移入面板，關閉時由 closeSheet 還原。
+   * React 18 之型別未涵蓋 inert 屬性，故以 DOM API 設定。
+   */
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el) return;
+    if (sheetOpen) {
+      el.removeAttribute('inert');
+      sheetCloseRef.current?.focus();
+    } else {
+      el.setAttribute('inert', '');
+    }
+  }, [sheetOpen]);
+
+  // Esc 關閉面板（對話框慣例）。
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') closeSheet();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [sheetOpen, closeSheet]);
 
   // 使用者部門路徑（部 / 處室，捨本部層）：頁首列與置頂區標題共用同一計算，避免兩處格式不一致。
   const orgPath = useMemo(() => buildOrgPath(orgUnits, user?.orgCode), [orgUnits, user?.orgCode]);
@@ -170,7 +248,7 @@ export function PublicListPage(): JSX.Element {
             <button
               onClick={logout}
               aria-label="登出"
-              className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"
+              className="tap-target w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"
             >
               <Icon name="log-out" className="w-4 h-4" />
             </button>
@@ -188,16 +266,18 @@ export function PublicListPage(): JSX.Element {
             />
             <input
               type="search"
-              value={keyword}
-              onChange={(e) => onKeyword(e.target.value)}
+              value={kwInput}
+              onChange={(e) => setKwInput(e.target.value)}
               aria-label="搜尋文件編號或名稱"
               placeholder="搜尋文件編號或名稱…"
               className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
             />
           </div>
           <button
+            ref={sheetTriggerRef}
             onClick={() => setSheetOpen(true)}
             aria-label="開啟篩選"
+            aria-expanded={sheetOpen}
             data-testid="mobile-filter-trigger"
             className="lg:hidden relative px-3 py-2.5 rounded-lg border border-slate-300 bg-white text-sm flex items-center gap-1.5"
           >
@@ -258,10 +338,30 @@ export function PublicListPage(): JSX.Element {
           <span data-testid="scope-notice">{scopeNotice}</span>
         </div>
 
+        {/*
+          載入骨架（ux-audit-frontstage B-3；UX-19）：以三張與 DocCard 等高、同版面的
+          灰塊佔位。原為兩條細線（約 100px），而實際渲染為每張約 160px 的卡片，
+          每次翻頁/篩選都造成大幅版面位移。
+        */}
         {loading && (
-          <div role="status" className="p-6 animate-pulse space-y-3">
-            <div className="h-3 bg-slate-200 rounded w-3/4" />
-            <div className="h-3 bg-slate-200 rounded w-1/2" />
+          <div
+            role="status"
+            aria-label="文件清單載入中"
+            className="space-y-2.5 animate-pulse"
+            data-testid="list-skeleton"
+          >
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="bg-white border border-slate-200 rounded-xl p-4">
+                <div className="h-3 w-40 bg-slate-200 rounded" />
+                <div className="h-4 w-2/3 bg-slate-200 rounded mt-2" />
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3">
+                  <div className="h-2.5 bg-slate-100 rounded" />
+                  <div className="h-2.5 bg-slate-100 rounded" />
+                  <div className="h-2.5 bg-slate-100 rounded col-span-2" />
+                  <div className="h-2.5 w-1/2 bg-slate-100 rounded col-span-2" />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -346,10 +446,10 @@ export function PublicListPage(): JSX.Element {
               </span>
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  onClick={() => goPage(page - 1)}
                   disabled={page <= 1}
                   aria-label="上一頁"
-                  className="w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40"
+                  className="tap-target w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40"
                 >
                   ‹
                 </button>
@@ -357,10 +457,10 @@ export function PublicListPage(): JSX.Element {
                   第 {page} 頁
                 </span>
                 <button
-                  onClick={() => setPage((p) => p + 1)}
+                  onClick={() => goPage(page + 1)}
                   disabled={!data?.hasNext}
                   aria-label="下一頁"
-                  className="w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40"
+                  className="tap-target w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40"
                 >
                   ›
                 </button>
@@ -374,13 +474,15 @@ export function PublicListPage(): JSX.Element {
       {sheetOpen && (
         <div
           className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden"
-          onClick={() => setSheetOpen(false)}
+          onClick={closeSheet}
           data-testid="sheet-overlay"
         />
       )}
       <div
+        ref={sheetRef}
         role="dialog"
         aria-label="篩選"
+        aria-modal={sheetOpen || undefined}
         aria-hidden={!sheetOpen}
         data-testid="filter-sheet"
         className={`fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl max-h-[80vh] overflow-auto lg:hidden transition-transform duration-300 ${
@@ -389,7 +491,12 @@ export function PublicListPage(): JSX.Element {
       >
         <div className="flex items-center justify-between px-4 h-14 border-b border-slate-100 sticky top-0 bg-white">
           <h3 className="font-semibold text-slate-900">篩選</h3>
-          <button onClick={() => setSheetOpen(false)} aria-label="關閉篩選" className="text-slate-400">
+          <button
+            ref={sheetCloseRef}
+            onClick={closeSheet}
+            aria-label="關閉篩選"
+            className="tap-target text-slate-400"
+          >
             <Icon name="x" className="w-5 h-5" />
           </button>
         </div>
@@ -433,14 +540,14 @@ export function PublicListPage(): JSX.Element {
             <button
               onClick={() => {
                 clearFilters();
-                setSheetOpen(false);
+                closeSheet();
               }}
               className="flex-1 py-2.5 rounded-lg border border-slate-300 text-sm"
             >
               清除
             </button>
             <button
-              onClick={() => setSheetOpen(false)}
+              onClick={closeSheet}
               className="flex-1 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium"
             >
               套用
@@ -542,7 +649,15 @@ function UsingDepts({
         return (
           <Fragment key={`${code ?? i}-${i}`}>
             {i > 0 && '、'}
-            <span className={inScope ? 'text-primary-700 font-medium' : undefined}>{name}</span>
+            <span className={inScope ? 'text-primary-700 font-medium' : undefined}>
+              {name}
+              {/*
+                命中標示不可只靠顏色（ux-audit-frontstage A-5；UX-37）。字重（font-medium）
+                已提供一個非顏色線索，此處補上僅供輔助技術讀出的說明；
+                更強的視覺標記（圖示/底線）會變動版面，需先與 prototype 一併決策。
+              */}
+              {inScope && <span className="sr-only">（您所屬部門）</span>}
+            </span>
           </Fragment>
         );
       })}
