@@ -6,19 +6,31 @@
 #  - 上游 HR MSSQL、Azure Blob、Azure AD 皆為外部，不入 compose。
 #
 # 一鍵啟動（app 服務）：      docker compose up --build
-# DB schema + 種子（需先備妥外部 app MSSQL，並填好 .env 之 APP_MSSQL_*）：
-#                            docker compose --profile init up --build migration seed
+# DB schema + 種子（全新空庫；需先備妥外部 app MSSQL，並填好 .env 之 APP_MSSQL_*）：
+#                            docker compose --profile init up --build seed-doc-catalog
+#
+# 遠端部署（testicsop.hfcfinance.com.tw）：見 README「部署至遠端測試環境」與 .env.deploy.example。
+#   對外由 edge 反向代理（cdmp-mvp/edge，獨佔 80/443、終結 TLS）依 Host 分流進 icsop-frontend。
+#   *_PUBLISH 用於錯開共用主機上的既有 port（cdmp-api 已佔 3000）並限縮綁定位址，
+#   例：BACKEND_PUBLISH=127.0.0.1:3100 → 只有本機可直連後端，外部一律經 edge。
+
+# 固定 compose 專案名，不隨 clone 出來的目錄名浮動。
+# 網路因此恆為 icsop_default —— edge 前門以 external network 接入時吃的就是這個名字，
+# 部署主機把 repo clone 成別的資料夾名也不會讓 edge 連不到（502）。
+name: icsop
 
 services:
   # RAG 向量庫（Postgres + pgvector）
   pgvector:
     image: pgvector/pgvector:pg16
+    container_name: icsop-pgvector
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${PGVECTOR_DATABASE:-icsop_rag}
       POSTGRES_USER: ${PGVECTOR_USER:-icsop}
       POSTGRES_PASSWORD: ${PGVECTOR_PASSWORD:-change-me-pgvector}
     ports:
-      - '5432:5432'
+      - '${PGVECTOR_PUBLISH:-5432}:5432'
     volumes:
       - pgvector-data:/var/lib/postgresql/data
       - ./infra/pgvector-init:/docker-entrypoint-initdb.d:ro
@@ -32,22 +44,39 @@ services:
   # 後端 NestJS
   backend:
     build: ./backend
+    container_name: icsop-backend
+    restart: unless-stopped
     env_file: .env
     environment:
       PORT: '3000'
     ports:
-      - '3000:3000'
+      - '${BACKEND_PUBLISH:-3000}:3000'
     # 讓容器可連本機的外部 app MSSQL（APP_MSSQL_HOST=host.docker.internal）
     extra_hosts:
       - 'host.docker.internal:host-gateway'
+    # NFR-008 AC4：健康檢查供編排判斷存活。node:22-alpine 無 curl，用 busybox wget。
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:3000/health >/dev/null || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
-  # 前端 React（nginx 靜態伺服）
+  # 前端 React（nginx 靜態伺服 + 反代後端）
   frontend:
     build: ./frontend
+    container_name: icsop-frontend
+    restart: unless-stopped
     ports:
-      - '5173:80'
+      - '${FRONTEND_PUBLISH:-5173}:80'
     depends_on:
       - backend
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1/ >/dev/null || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # --- 一次性初始化（對外部 app MSSQL），opt-in profile：--profile init ---
   #
@@ -141,9 +170,10 @@ services:
 volumes:
   pgvector-data:
 
-# ⚠ 固定 dev 網段為 172.30.0.0/16，避開遠端 app MSSQL 所在網段（172.20.x）。
+# ⚠ 固定網段為 172.30.0.0/16，避開遠端 app MSSQL 所在網段（172.20.x）。
 # 否則 compose 預設可能分到 172.20.0.0/16 → 容器誤把 DB IP（172.20.202.212）視為 on-link
 # → EHOSTUNREACH（實測踩到；隔壁 cdmp-mvp 分到 172.18.x 故無此問題）。
+# 部署主機同時跑 cdmp 時亦不衝突（cdmp 172.18.x）；若該主機已有 172.30.x 網段，改設別的私有段。
 networks:
   default:
     ipam:
