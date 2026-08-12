@@ -22,9 +22,9 @@ function mockAuth(roleCode: string) {
 }
 
 const ROWS: AccountView[] = [
-  { id: 'a1', loginId: '20233', employeeNo: null, name: '李慧玲', email: null, orgCode: null, roleCode: 'ICSOPAdmin', status: 'active', source: 'manual', disableReason: null, company: '和潤企業股份有限公司', department: '債權管理部 / 法催一室', lastLoginAt: '2026-07-16T08:40:00Z' },
+  { id: 'a1', loginId: '20233', employeeNo: null, name: '李慧玲', email: null, orgCode: null, roleCode: 'ICSOPAdmin', status: 'active', source: 'manual', disableReason: null, company: '和潤企業股份有限公司', department: '債權管理部 / 法催一室', title: '內控管理師', lastLoginAt: '2026-07-16T08:40:00Z' },
   { id: 'a2', loginId: '22345', employeeNo: null, name: '王小明', email: null, orgCode: null, roleCode: 'User', status: 'active', source: 'upstream', disableReason: null },
-  { id: 'a3', loginId: '20321', employeeNo: null, name: '周立群', email: null, orgCode: null, roleCode: 'User', status: 'disabled', source: 'upstream', disableReason: 'departed', company: '和潤企業股份有限公司', department: '作業服務部 / 客服室', lastLoginAt: '2026-06-30T22:14:00Z' },
+  { id: 'a3', loginId: '20321', employeeNo: null, name: '周立群', email: null, orgCode: null, roleCode: 'User', status: 'disabled', source: 'upstream', disableReason: 'departed', company: '和潤企業股份有限公司', department: '作業服務部 / 客服室', title: null, lastLoginAt: '2026-06-30T22:14:00Z' },
 ];
 
 describe('AccountManagementPage — F003 帳號與角色管理', () => {
@@ -163,21 +163,31 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
     );
   });
 
-  it('G-ADM-001 清單還原 公司/部門/最後登入 欄（職位 DEFERRED 不顯示）', async () => {
+  it('G-ADM-001 清單還原 公司/部門/職位/最後登入 欄', async () => {
     mockAuth('SysAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
-    // 欄位標題
+    // 欄位標題（prototype 08 之 10 欄）
     expect(screen.getByText('公司')).toBeInTheDocument();
     expect(screen.getByText('部門')).toBeInTheDocument();
+    expect(screen.getByText('職位')).toBeInTheDocument();
     expect(screen.getByText('最後登入')).toBeInTheDocument();
-    // 職位 DEFERRED（OQ-E02-07）→ 不得出現
-    expect(screen.queryByText('職位')).not.toBeInTheDocument();
-    // 李慧玲列之公司/部門/最後登入值
+    // 李慧玲列之公司/部門/職位/最後登入值
     const row = screen.getByText('李慧玲').closest('tr')!;
     expect(within(row).getByText('債權管理部 / 法催一室')).toBeInTheDocument();
+    expect(within(row).getByText('內控管理師')).toBeInTheDocument();
     expect(within(row).getByText(/2026-07-16/)).toBeInTheDocument();
     expect(within(row).getAllByText('和潤企業股份有限公司').length).toBeGreaterThan(0);
+  });
+
+  it('職位為 null（上游對照查無）→ 顯示破折號，不顯示空白或 null', async () => {
+    mockAuth('SysAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('周立群')).toBeInTheDocument());
+    const row = screen.getByText('周立群').closest('tr')!;
+    // 該筆 fixture 之 title 為 null；破折號由 `a.title ?? '—'` 產生
+    expect(within(row).getAllByText('—').length).toBeGreaterThan(0);
+    expect(within(row).queryByText('null')).not.toBeInTheDocument();
   });
 
   it('G-ADM-002 離職自動停用 badge 使用 user-x 圖示', async () => {

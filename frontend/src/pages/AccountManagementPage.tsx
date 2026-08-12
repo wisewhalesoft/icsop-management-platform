@@ -317,13 +317,14 @@ export function AccountManagementPage(): JSX.Element {
       {/* table */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[960px]">
+          <table className="w-full text-sm min-w-[1020px]">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
               <tr>
                 <th className="text-left font-medium px-3 py-2.5">姓名</th>
                 <th className="text-left font-medium px-3 py-2.5">帳號</th>
                 <th className="text-left font-medium px-3 py-2.5">公司</th>
                 <th className="text-left font-medium px-3 py-2.5">部門</th>
+                <th className="text-left font-medium px-3 py-2.5">職位</th>
                 <th className="text-left font-medium px-3 py-2.5">來源</th>
                 <th className="text-left font-medium px-3 py-2.5">角色</th>
                 <th className="text-left font-medium px-3 py-2.5">狀態</th>
@@ -343,6 +344,9 @@ export function AccountManagementPage(): JSX.Element {
                   </td>
                   <td className="px-3 py-2.5 text-slate-500">
                     <div className="truncate max-w-[200px]" title={a.department ?? '—'}>{a.department ?? '—'}</div>
+                  </td>
+                  <td className="px-3 py-2.5 text-slate-500">
+                    <div className="truncate max-w-[200px]" title={a.title ?? '—'}>{a.title ?? '—'}</div>
                   </td>
                   <td className="px-3 py-2.5"><SourceBadge source={a.source} /></td>
                   <td className="px-3 py-2.5">

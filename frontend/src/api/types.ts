@@ -37,8 +37,13 @@ export interface AccountView {
   lastLoginAt?: string | null;
   /** 公司全稱（GET /admin/accounts 清單富化；resolveCompanyName）。單筆建立/編輯回傳不含 → undefined。 */
   company?: string | null;
-  /** 部門名（GET /admin/accounts 清單富化；orgCode→ORG_UNIT 名）。職位 DEFERRED（OQ-E02-07）。 */
+  /** 部門名（GET /admin/accounts 清單富化；orgCode→ORG_UNIT 名）。 */
   department?: string | null;
+  /**
+   * 職位名（清單富化；jobTitleCode→JOB_TITLE 名，見後端 job-title-directory 之兩段式解析）。
+   * 單筆建立/編輯回傳不含 → undefined；查無對照 → null（皆顯示「—」）。
+   */
+  title?: string | null;
   /**
    * F041 一般使用者子分類（'business' / 'other'）。供角色指派 modal 預選現值；
    * 非 User 角色亦可能保有此值（AC-36 休眠但保留），呈現與否由 isSubtypeApplicable 決定。
