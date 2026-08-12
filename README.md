@@ -125,6 +125,9 @@ cp infra/edge/testicsop.hfcfinance.com.tw.conf  "$EDGE/conf.d/"
 #        - icsop        ← 新增            external: true
 #                                          name: icsop_default   ← 新增
 docker compose -f "$EDGE/docker-compose.yml" up -d
+#    ⚠ 只複製 conf 而未改 compose 時，up -d 會判定容器 up-to-date 而【不重建】，
+#      nginx 也就不會重讀設定 → 站台等同不存在。故一律補一次 reload：
+docker exec edge-nginx nginx -t && docker exec edge-nginx nginx -s reload
 
 # 6) 主機層：Docker daemon 開機自啟（只需一次）
 systemctl is-enabled docker || sudo systemctl enable docker
@@ -135,6 +138,13 @@ systemctl is-enabled docker || sudo systemctl enable docker
 ```bash
 docker compose ps                    # backend/frontend/pgvector 皆 Up 且 healthy
 curl -sf http://127.0.0.1:3100/health # {"status":"ok",...}（BACKEND_PUBLISH 綁 127.0.0.1）
+
+# edge 到位確認（繞過 DNS 與瀏覽器快取，直接指定 Host）
+docker exec edge-nginx ls /etc/nginx/conf.d/    # 應有 testicsop.hfcfinance.com.tw.conf
+docker network inspect icsop_default --format '{{range .Containers}}{{.Name}} {{end}}'  # 應含 edge-nginx
+curl -sk -H 'Host: testicsop.hfcfinance.com.tw' https://127.0.0.1/ -o /dev/null -w '%{http_code}\n'
+#   200 = 正常；出現 Vite 的 "This host is not allowed" = 本站 server_name 沒被載入，
+#   Host 落到 conf.d 字母序第一個 server block（testcdmp → Vite）當預設站 → 補上方 reload
 docker inspect -f '{{.Name}} {{.HostConfig.RestartPolicy.Name}}' \
   icsop-backend icsop-frontend icsop-pgvector   # 每行應為 unless-stopped
 ```
@@ -184,6 +194,7 @@ pgvector 的 volume 亦隨之更名（RAG 為 Phase 3 未實作，內容僅為�
 | 起容器報 `Bind for 0.0.0.0:3000 failed: port is already allocated` | `.env` 少了 `BACKEND_PUBLISH` 等三行（多半是拿 `.env.sample` 或 dev 的 `.env` 改，而非 `.env.deploy.example`）→ 吃到預設 3000，撞上同機的 `cdmp-api`。補上 `BACKEND_PUBLISH=127.0.0.1:3100` / `FRONTEND_PUBLISH=127.0.0.1:5175` / `PGVECTOR_PUBLISH=127.0.0.1:5433` 後重跑 `docker compose up -d` |
 | 登入跳 `AADSTS50011` | Azure 未登記本站 redirect URI，或 `.env` 的 `AZURE_AD_REDIRECT_URI` 與登記值不逐字相同 |
 | 登入後仍是未登入狀態 | `SESSION_COOKIE_SECURE` 與實際 scheme 不符（HTTPS 站必須 `true`；若誤設於 http 環境則 cookie 完全不會送出） |
+| 畫面出現 Vite 的 `Blocked request. This host ... is not allowed` | 請求根本沒進 `icsop-frontend`（它是靜態 nginx，沒有 Vite）。edge 上找不到本站 `server_name` → 落到 conf.d 字母序第一個 server block（`testcdmp` → cdmp 的 Vite）當預設站。多半是 conf 沒複製進去，或複製了但 nginx 沒重讀（compose 判定容器 up-to-date 不重建）→ `docker exec edge-nginx nginx -t && docker exec edge-nginx nginx -s reload` |
 | edge 回 502 | ICSOP 網路名不是 `icsop_default`（`docker network ls` 確認），或 `edge` 未掛上該網路 |
 | 上傳大於 1MB 的檔案回 413 | edge 或 frontend 任一層的 `client_max_body_size` 未設（兩層都要 60m） |
 | 後端連 DB `EHOSTUNREACH` | compose 網段撞到 DB 所在的 `172.20.x`；本專案已釘 `172.30.0.0/16`，若主機已佔用需另換 |
