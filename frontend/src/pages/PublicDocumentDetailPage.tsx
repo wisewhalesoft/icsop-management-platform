@@ -117,6 +117,8 @@ export function PublicDocumentDetailPage(): JSX.Element {
   const [notFound, setNotFound] = useState(false);
   // F039 附錄：後端已依 sortOrder 遞增回傳（唯一排序權威），前端不再排序。
   const [appendices, setAppendices] = useState<DocumentAppendixRecord[]>([]);
+  // 進行中之下載鍵（null＝閒置）；見 runDownload。
+  const [downloadKey, setDownloadKey] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -159,18 +161,28 @@ export function PublicDocumentDetailPage(): JSX.Element {
     [orgUnits, user?.orgCode],
   );
 
-  // 受控下載（附件/使用表單）：核發短效 URL → 新視窗開啟；寫入稽核由後端負責。
+  /**
+   * 受控下載（附件/使用表單/附錄）：核發短效 URL → 新視窗開啟；寫入稽核由後端負責。
+   *
+   * `downloadKey` 於請求期間鎖定該列按鈕（ux-audit-frontstage A-2；UX-32／UX-61）。
+   * 後端**每次核發皆寫入一筆調閱稽核**，故重複點擊會產生重複稽核紀錄——此為稽核資料
+   * 正確性問題而非僅體感問題，因此採「任一下載進行中即不受理其他下載」之保守鎖。
+   */
   const runDownload = useCallback(
-    async (grant: () => Promise<{ url: string }>, label: string): Promise<void> => {
+    async (grant: () => Promise<{ url: string }>, label: string, key: string): Promise<void> => {
+      if (downloadKey) return;
+      setDownloadKey(key);
       try {
         const { url } = await grant();
         window.open(url, '_blank', 'noopener,noreferrer');
         toast.success(`已開始下載「${label}」，並寫入調閱稽核。`);
       } catch (e) {
         toast.error(`下載失敗：${msgOf(e)}`);
+      } finally {
+        setDownloadKey(null);
       }
     },
-    [toast],
+    [toast, downloadKey],
   );
 
   return (
@@ -199,7 +211,7 @@ export function PublicDocumentDetailPage(): JSX.Element {
             <button
               onClick={logout}
               aria-label="登出"
-              className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"
+              className="tap-target w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"
             >
               <Icon name="log-out" className="w-4 h-4" />
             </button>
@@ -239,15 +251,24 @@ export function PublicDocumentDetailPage(): JSX.Element {
             detail={detail}
             onOpenLink={(targetId) => navigate(`/public/documents/${targetId}`)}
             onDownloadAttachment={(att) =>
-              void runDownload(() => downloadAttachment(att.blobPath), att.fileName)
+              void runDownload(
+                () => downloadAttachment(att.blobPath),
+                att.fileName,
+                `att:${att.blobPath}`,
+              )
             }
             onDownloadUsageForm={(formId, name) =>
-              void runDownload(() => downloadUsageForm(detail.id, formId), name)
+              void runDownload(() => downloadUsageForm(detail.id, formId), name, `form:${formId}`)
             }
             appendices={appendices}
             onDownloadAppendix={(appendixId, name) =>
-              void runDownload(() => downloadDocumentAppendix(detail.id, appendixId), name)
+              void runDownload(
+                () => downloadDocumentAppendix(detail.id, appendixId),
+                name,
+                `appendix:${appendixId}`,
+              )
             }
+            downloadKey={downloadKey}
           />
         )}
       </main>
@@ -266,6 +287,37 @@ function StatusPill({ displayStatus }: { displayStatus: string }): JSX.Element {
   );
 }
 
+/**
+ * 列內下載按鈕（附件／使用表單／附錄共用）。
+ * busy 期間 disable 並改顯示轉圈圖示，避免重複核發造成重複調閱稽核（A-2）。
+ * 尺寸/邊框/字級沿用 prototype 04 之列內小按鈕，僅新增忙碌態樣式。
+ */
+function DownloadButton({
+  onClick,
+  label,
+  busy,
+}: {
+  onClick: () => void;
+  label: string;
+  busy: boolean;
+}): JSX.Element {
+  return (
+    <button
+      onClick={onClick}
+      disabled={busy}
+      aria-busy={busy}
+      aria-label={`下載 ${label}`}
+      className="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-xs hover:bg-slate-50 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+    >
+      <Icon
+        name={busy ? 'loader-2' : 'download'}
+        className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`}
+      />
+      下載
+    </button>
+  );
+}
+
 function DetailBody({
   detail,
   onOpenLink,
@@ -273,6 +325,7 @@ function DetailBody({
   onDownloadUsageForm,
   appendices,
   onDownloadAppendix,
+  downloadKey,
 }: {
   detail: PublicDocumentDetail;
   onOpenLink: (targetDocumentId: string) => void;
@@ -280,6 +333,7 @@ function DetailBody({
   onDownloadUsageForm: (formId: string, name: string) => void;
   appendices: DocumentAppendixRecord[];
   onDownloadAppendix: (appendixId: string, name: string) => void;
+  downloadKey: string | null;
 }): JSX.Element {
   const icsopPdf = findAttachment(detail.attachments, 'ICSOP_PDF');
   const ojt = findAttachment(detail.attachments, 'OJT_SIGNIN');
@@ -447,14 +501,11 @@ function DetailBody({
                         : '附件'}
                   </div>
                 </div>
-                <button
+                <DownloadButton
                   onClick={() => onDownloadAttachment(att)}
-                  aria-label={`下載 ${att.fileName}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-xs hover:bg-slate-50 min-h-[44px]"
-                >
-                  <Icon name="download" className="w-3.5 h-3.5" />
-                  下載
-                </button>
+                  label={att.fileName}
+                  busy={downloadKey === `att:${att.blobPath}`}
+                />
               </div>
             ))}
           </div>
@@ -481,14 +532,11 @@ function DetailBody({
                     className={`w-5 h-5 shrink-0 ${isExcel ? 'text-emerald-600' : 'text-red-500'}`}
                   />
                   <span className="text-sm text-slate-800 flex-1 truncate">{f.name}</span>
-                  <button
+                  <DownloadButton
                     onClick={() => onDownloadUsageForm(f.id, f.name)}
-                    aria-label={`下載 ${f.name}`}
-                    className="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-xs hover:bg-slate-50 min-h-[44px]"
-                  >
-                    <Icon name="download" className="w-3.5 h-3.5" />
-                    下載
-                  </button>
+                    label={f.name}
+                    busy={downloadKey === `form:${f.id}`}
+                  />
                 </div>
               );
             })}
@@ -526,14 +574,11 @@ function DetailBody({
                   <span data-appendix-name className="text-sm text-slate-800 flex-1 truncate">
                     {a.name}
                   </span>
-                  <button
+                  <DownloadButton
                     onClick={() => onDownloadAppendix(a.id, a.name)}
-                    aria-label={`下載 ${a.name}`}
-                    className="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-xs hover:bg-slate-50 min-h-[44px]"
-                  >
-                    <Icon name="download" className="w-3.5 h-3.5" />
-                    下載
-                  </button>
+                    label={a.name}
+                    busy={downloadKey === `appendix:${a.id}`}
+                  />
                 </div>
               );
             })}
