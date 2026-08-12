@@ -70,6 +70,125 @@ docker compose --profile init up --build seed-doc-catalog
 
 程序書目錄的組織欄對應表為 `backend/src/database/seeds/document-catalog-org-map.json`（人工維護，尚未對應者留 NULL）；補完後重跑 `seed-doc-catalog` 會就地補寫，不覆寫既有人工編輯。資料檔本身由 `python tools/build-document-catalog.py` 自 `reference/` 之 Excel 產生。
 
+## 部署至遠端測試環境（`https://testicsop.hfcfinance.com.tw`）
+
+部署於與 `testcdmp` **同一台**測試機，沿用該機既有的 edge 前門（獨佔 80/443、終結 TLS、
+共用同一張 `*.hfcfinance.com.tw` wildcard 憑證），ICSOP 為其中一站。
+
+請求路徑：
+
+```
+瀏覽器 ──https──▶ edge nginx ──http──▶ icsop-frontend ──http──▶ icsop-backend
+  (443)          (Host 分流)          (SPA + 反代)          (:3000)
+                                              │
+                                              └── 外部 MSSQL(SOP/HR)、Azure Blob、Azure AD
+```
+
+edge **只做 TLS 終結與 Host 分流**，全部路徑原樣交給 `icsop-frontend`；SPA fallback 與
+`/auth`、`/admin`、`/public`、`/org-units`、`/persons`、`/documents` 的後端反代
+（含 `Accept: text/html` 整頁導覽判斷）已在 `frontend/nginx.conf` 內完成，edge 不再重複分流。
+
+### 前置需求（缺任一項部署會失敗）
+
+| # | 項目 | 檢查方式 |
+|---|------|---------|
+| 1 | **Azure AD 已登記本站 redirect URI**：`https://testicsop.hfcfinance.com.tw/auth/callback` | Portal → 該 app registration → Authentication → Web。逐字一致（含大小寫、無結尾斜線），否則登入報 `AADSTS50011`。dev 的 `localhost` 那組保留不動 |
+| 2 | 主機可達外部 MSSQL：`172.20.202.212:1433`（app）與 `172.20.202.193:1433`（上游 HR） | `nc -vz 172.20.202.212 1433` |
+| 3 | 主機 80/443 由 edge 獨佔、憑證已就位 | `ss -tlnp \| grep -E ':80 \|:443 '`、`ls certs/2026/` |
+| 4 | Azure Blob 儲存體帳戶連線字串 | 未設會 fallback 記憶體儲存，容器一重啟上傳的檔案全消失 |
+| 5 | 主機無 `172.30.0.0/16` 網段佔用 | `docker network inspect $(docker network ls -q) \| grep 172.30` |
+
+### 部署步驟
+
+```bash
+# 1) 取得程式碼
+git clone https://github.com/wisewhalesoft/icsop-management-platform.git
+cd icsop-management-platform
+
+# 2) 建 .env（docker compose 自動讀同目錄 .env）
+cp .env.deploy.example .env
+#    編輯 .env：填 DB 帳密、Azure AD client id/secret、SESSION_JWT_SECRET、Blob 連線字串。
+#    其中 SESSION_COOKIE_SECURE=true、TRUST_PROXY_HOPS=2 為 HTTPS 部署必要值，勿刪。
+
+# 3) 起 app 服務（backend / frontend / pgvector）
+docker compose up -d --build
+
+# 4) 補跑 migration（連既有 SOP 庫，schema 可能落後於 main）
+docker compose exec backend npm run migration:run:prod
+
+# 5) 把站台設定放進 edge 前門，並讓 edge 連得到 ICSOP 的網路
+EDGE=<cdmp-mvp repo 路徑>/edge          # edge 前門與 testcdmp 共用，位於 cdmp-mvp repo
+cp infra/edge/testicsop.hfcfinance.com.tw.conf  "$EDGE/conf.d/"
+#    編輯 $EDGE/docker-compose.yml，兩處各加一段（該檔已預留註解位置）：
+#      services.edge.networks:        最下方 networks:
+#        - cdmp                         icsop:
+#        - icsop        ← 新增            external: true
+#                                          name: icsop_default   ← 新增
+docker compose -f "$EDGE/docker-compose.yml" up -d
+
+# 6) 主機層：Docker daemon 開機自啟（只需一次）
+systemctl is-enabled docker || sudo systemctl enable docker
+```
+
+驗證：
+
+```bash
+docker compose ps                    # backend/frontend/pgvector 皆 Up 且 healthy
+curl -sf http://127.0.0.1:3100/health # {"status":"ok",...}（BACKEND_PUBLISH 綁 127.0.0.1）
+docker inspect -f '{{.Name}} {{.HostConfig.RestartPolicy.Name}}' \
+  icsop-backend icsop-frontend icsop-pgvector   # 每行應為 unless-stopped
+```
+
+瀏覽器開 **https://testicsop.hfcfinance.com.tw/** → 公司帳號登入 → 落回 SPA。
+
+### ⚠ 本環境的資料是**與 dev 共用**的
+
+測試站連的 `172.20.202.212 / SOP` 就是 dev 用的同一個庫，**非隔離環境**：在測試站建的文件、
+改的角色，dev 端會看到同一份。故 **`--profile init` 初始化鏈在此環境不要跑**（該鏈是給全新空庫用的，
+雖然每步冪等，但沒有必要），只補跑步驟 4 的 migration。
+
+### 更新版本
+
+```bash
+git pull
+docker compose up -d --build                       # 重建並替換容器
+docker compose exec backend npm run migration:run:prod   # 如本次有新 migration
+```
+
+> 容器內只有編譯後的 `dist`——**改了程式碼但沒重建 image，功能就不會生效**（實測踩過）。
+
+### ⚠ 既有環境首次套用本設定（含本機 dev）
+
+compose 現已釘死專案名 `icsop`（容器＝`icsop-backend` / `icsop-frontend` / `icsop-pgvector`，
+網路＝`icsop_default`）。已在跑舊設定的機器需先以**舊專案名**收掉，否則新網路會與舊網段相衝
+（`Pool overlaps with other one on this address space`）：
+
+```bash
+docker compose -p icsop-management-platform down    # 舊專案名（＝資料夾名）
+docker compose up -d --build                        # 以新專案名重建
+```
+
+pgvector 的 volume 亦隨之更名（RAG 為 Phase 3 未實作，內容僅為空的初始化 DB，可忽略）；
+業務資料在外部 MSSQL，不受影響。
+
+### 服務常駐 / 重開機
+
+`backend` / `frontend` / `pgvector` 皆 `restart: unless-stopped`，主機或 Docker daemon 重啟後自動拉回；
+`--profile init` 的一次性服務刻意設 `restart: 'no'`。三者皆有 healthcheck（NFR-008 AC4）。
+業務資料存於**外部 MSSQL 與 Azure Blob**，容器重建不影響。
+
+### 疑難排解
+
+| 症狀 | 原因 / 處置 |
+|------|-----------|
+| 登入跳 `AADSTS50011` | Azure 未登記本站 redirect URI，或 `.env` 的 `AZURE_AD_REDIRECT_URI` 與登記值不逐字相同 |
+| 登入後仍是未登入狀態 | `SESSION_COOKIE_SECURE` 與實際 scheme 不符（HTTPS 站必須 `true`；若誤設於 http 環境則 cookie 完全不會送出） |
+| edge 回 502 | ICSOP 網路名不是 `icsop_default`（`docker network ls` 確認），或 `edge` 未掛上該網路 |
+| 上傳大於 1MB 的檔案回 413 | edge 或 frontend 任一層的 `client_max_body_size` 未設（兩層都要 60m） |
+| 後端連 DB `EHOSTUNREACH` | compose 網段撞到 DB 所在的 `172.20.x`；本專案已釘 `172.30.0.0/16`，若主機已佔用需另換 |
+| 一人登入失敗鎖到全體 | `TRUST_PROXY_HOPS` 未設 2 → `req.ip` 恆為反代位址，IP 節流額度全體共用 |
+| 上傳的檔案重啟後消失 | `AZURE_BLOB_CONNECTION_STRING` 未設，後端 fallback 到記憶體 FakeBlobStore |
+
 ## 本機開發（不經容器）
 
 ```bash
