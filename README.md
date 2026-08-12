@@ -181,6 +181,7 @@ pgvector 的 volume 亦隨之更名（RAG 為 Phase 3 未實作，內容僅為�
 
 | 症狀 | 原因 / 處置 |
 |------|-----------|
+| 起容器報 `Bind for 0.0.0.0:3000 failed: port is already allocated` | `.env` 少了 `BACKEND_PUBLISH` 等三行（多半是拿 `.env.sample` 或 dev 的 `.env` 改，而非 `.env.deploy.example`）→ 吃到預設 3000，撞上同機的 `cdmp-api`。補上 `BACKEND_PUBLISH=127.0.0.1:3100` / `FRONTEND_PUBLISH=127.0.0.1:5175` / `PGVECTOR_PUBLISH=127.0.0.1:5433` 後重跑 `docker compose up -d` |
 | 登入跳 `AADSTS50011` | Azure 未登記本站 redirect URI，或 `.env` 的 `AZURE_AD_REDIRECT_URI` 與登記值不逐字相同 |
 | 登入後仍是未登入狀態 | `SESSION_COOKIE_SECURE` 與實際 scheme 不符（HTTPS 站必須 `true`；若誤設於 http 環境則 cookie 完全不會送出） |
 | edge 回 502 | ICSOP 網路名不是 `icsop_default`（`docker network ls` 確認），或 `edge` 未掛上該網路 |
