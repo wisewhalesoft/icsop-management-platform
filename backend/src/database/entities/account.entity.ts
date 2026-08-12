@@ -57,6 +57,14 @@ export class Account {
   @Column({ type: 'varchar', length: 10, nullable: true })
   managerEmpNo!: string | null; // ← DIRECTOR（直屬主管員編）
 
+  /**
+   * 職稱代碼（← VW_HPMUSER.JOBTITLEID，白名單第 12 欄）。名稱不落此表，改由 JOB_TITLE
+   * 對照表解析（與 orgCode→ORG_UNIT.name 同一模式），避免上游職稱改名時需 backfill 全部帳號。
+   * 上游實測（2026-08-12，AS 在職 1,115 筆）：空值 0、36 種代碼、經兩段式解析 100% 命中。
+   */
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  jobTitleCode!: string | null;
+
   // 承載上游日期：改用 datetime2（範圍 0001–9999），涵蓋所有合法日期，避免 datetime（1753–9999）
   // 之「Out of range」（2026-07-21 實跑抓到）。另於 mapper 以 normalizeUpstreamDate 收斂哨兵/異常值。
   @Column({ type: 'datetime2', nullable: true })
