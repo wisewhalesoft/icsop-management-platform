@@ -5,8 +5,10 @@ import { RbacModule } from '../rbac/rbac.module';
 import { SYNC_COMPID } from '../org-sync/org-sync.config';
 import { PERSON_STORE, PersonStore } from './person-directory';
 import { ORG_UNIT_READ_STORE, OrgUnitReadStore } from './org-unit-read';
+import { JOB_TITLE_READ_STORE, JobTitleReadStore } from './job-title-directory';
 import { TypeOrmPersonStore } from './typeorm-person.store';
 import { TypeOrmOrgUnitReadStore } from './typeorm-org-unit-read.store';
+import { TypeOrmJobTitleStore } from './typeorm-job-title.store';
 import { NameResolutionService } from './name-resolution.service';
 import { OrgDirectoryService } from './org-directory.service';
 import {
@@ -38,6 +40,11 @@ import {
         new TypeOrmOrgUnitReadStore(AppDataSource, SYNC_COMPID),
     },
     {
+      // 職稱對照（G-ADM-001「職位」欄）。不帶 SYNC_COMPID：跨公司 fallback 需要全表。
+      provide: JOB_TITLE_READ_STORE,
+      useFactory: (): JobTitleReadStore => new TypeOrmJobTitleStore(AppDataSource),
+    },
+    {
       provide: NameResolutionService,
       useFactory: (persons: PersonStore, orgs: OrgUnitReadStore) =>
         new NameResolutionService(persons, orgs),
@@ -51,6 +58,12 @@ import {
     },
   ],
   // NameResolutionService 匯出：下游 worktree（public F019/F020、doc-edit F017）import 本模組後注入重用。
-  exports: [NameResolutionService, OrgDirectoryService, PERSON_STORE, ORG_UNIT_READ_STORE],
+  exports: [
+    NameResolutionService,
+    OrgDirectoryService,
+    PERSON_STORE,
+    ORG_UNIT_READ_STORE,
+    JOB_TITLE_READ_STORE,
+  ],
 })
 export class OrgDirectoryModule {}
