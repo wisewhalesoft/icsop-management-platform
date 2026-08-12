@@ -36,9 +36,12 @@ export function PublicViewerPage(): JSX.Element {
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  // 浮水印/文件識別載入中（ux-audit-frontstage A-6；UX-10／UX-78）——與清單、詳情兩頁一致。
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
     getDocumentWatermark(id)
       .then((r) => {
         if (active) {
@@ -50,6 +53,9 @@ export function PublicViewerPage(): JSX.Element {
       })
       .catch((e) => {
         if (active) setError(msgOf(e));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
     return () => {
       active = false;
@@ -78,7 +84,7 @@ export function PublicViewerPage(): JSX.Element {
           <button
             onClick={() => navigate(`/public/documents/${id}`)}
             aria-label="返回詳情"
-            className="text-slate-400 hover:text-slate-600 flex items-center"
+            className="tap-target text-slate-400 hover:text-slate-600 flex items-center"
           >
             <Icon name="arrow-left" className="w-5 h-5" />
           </button>
@@ -140,7 +146,7 @@ export function PublicViewerPage(): JSX.Element {
           <button
             onClick={() => changeZoom(-0.1)}
             aria-label="縮小"
-            className="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"
+            className="tap-target w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"
           >
             <Icon name="zoom-out" className="w-4 h-4" />
           </button>
@@ -150,7 +156,7 @@ export function PublicViewerPage(): JSX.Element {
           <button
             onClick={() => changeZoom(0.1)}
             aria-label="放大"
-            className="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"
+            className="tap-target w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"
           >
             <Icon name="zoom-in" className="w-4 h-4" />
           </button>
@@ -167,6 +173,18 @@ export function PublicViewerPage(): JSX.Element {
       </div>
 
       <main className="flex-1 overflow-auto p-4 sm:p-8 flex justify-center">
+        {/* 載入骨架：高度與實際預覽容器一致（75vh），避免載入完成時版面位移。 */}
+        {loading && !error && (
+          <div
+            role="status"
+            aria-label="文件載入中"
+            className="animate-pulse"
+            style={{ width: 'min(760px, 94vw)' }}
+          >
+            <div className="bg-slate-200 rounded-lg" style={{ height: '75vh' }} />
+          </div>
+        )}
+
         {error && (
           <div role="alert" className="self-start text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
             載入失敗 · <span className="mono">{error}</span>
@@ -174,7 +192,7 @@ export function PublicViewerPage(): JSX.Element {
         )}
 
         {/* PDF 預覽 + 疊加浮水印圖層（縮放作用於整個預覽頁面）。 */}
-        {!error && (
+        {!error && !loading && (
           <div
             className="relative bg-white border border-slate-200 rounded-lg overflow-hidden shadow-lg"
             style={{
