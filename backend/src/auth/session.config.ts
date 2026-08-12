@@ -15,11 +15,26 @@ export function sessionSecret(): string {
   return DEV_FALLBACK_SECRET;
 }
 
+/**
+ * cookie 是否加上 Secure 旗標（僅隨 HTTPS 送出）。
+ *
+ * 由 `SESSION_COOKIE_SECURE` 決定，**預設 false**：dev 走 `http://localhost`，
+ * 若寫死 true 則瀏覽器根本不會送出 cookie → 登入後每個請求皆 401。
+ * 正式／測試環境由 edge 反向代理終結 TLS、對外僅 HTTPS，部署時於 .env 設 `SESSION_COOKIE_SECURE=true`
+ * （見 .env.deploy.example）；此時中間任何一段明文 HTTP 都不會挾帶 session。
+ *
+ * ⚠ 後端容器本身收到的是 edge → frontend nginx 轉來的**明文 http**，故不能用 `req.secure`
+ *   推導（恆為 false）；以環境變數宣告部署形態才正確。
+ */
+export function cookieSecure(): boolean {
+  return process.env.SESSION_COOKIE_SECURE?.trim().toLowerCase() === 'true';
+}
+
 export function sessionCookieOptions(): CookieOptions {
   return {
     httpOnly: true,
     sameSite: 'lax',
-    secure: false, // localhost http；正式環境（HTTPS）應為 true
+    secure: cookieSecure(),
     maxAge: SESSION_TTL_SECONDS * 1000,
     path: '/',
   };

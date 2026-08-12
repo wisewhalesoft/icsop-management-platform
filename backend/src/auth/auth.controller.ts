@@ -28,6 +28,7 @@ import {
   SESSION_COOKIE,
   OIDC_TX_COOKIE,
   sessionCookieOptions,
+  cookieSecure,
 } from './session.config';
 
 interface OidcTx {
@@ -97,6 +98,7 @@ export class AuthController {
     res.cookie(OIDC_TX_COOKIE, JSON.stringify(tx), {
       httpOnly: true,
       sameSite: 'lax',
+      secure: cookieSecure(), // 與 session cookie 同策略：HTTPS 部署時設 SESSION_COOKIE_SECURE=true
       signed: true, // 以 cookie-parser 密鑰簽章，防竄改
       maxAge: 10 * 60 * 1000,
     });
