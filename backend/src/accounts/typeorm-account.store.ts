@@ -29,6 +29,7 @@ export class TypeOrmAccountStore implements AccountStore {
       name: a.name,
       email: a.email,
       orgCode: a.orgCode,
+      jobTitleCode: a.jobTitleCode,
       roleCode: a.roleCode,
       status: a.status,
       source: a.source,

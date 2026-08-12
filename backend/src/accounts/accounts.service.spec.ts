@@ -9,6 +9,10 @@ import {
 } from './accounts.store';
 import { verifyPassword } from './password';
 import { OrgUnitReadStore, OrgUnitRecord } from '../org-directory/org-unit-read';
+import {
+  JobTitleReadStore,
+  JobTitleRecord,
+} from '../org-directory/job-title-directory';
 
 /** 記憶體假 store（測服務業務規則，不碰 DB）。 */
 class FakeStore implements AccountStore {
@@ -125,6 +129,50 @@ describe('AccountsService', () => {
       const [item] = await svc.listAccounts('AS', {});
       expect(item.company).toBe('和潤企業股份有限公司');
       expect(item.department).toBeNull();
+    });
+  });
+
+  describe('listAccounts 富化 — 職位（G-ADM-001 第 5 欄）', () => {
+    const titles: JobTitleRecord[] = [
+      { companyCode: 'AS', code: 'J01', name: '業務專員' },
+      { companyCode: 'AR', code: 'I10', name: '資深專員' },
+    ];
+    const fakeJobTitles = (rows: JobTitleRecord[]): JobTitleReadStore => ({
+      listAll: () => Promise.resolve(rows),
+    });
+
+    it('解析 title（jobTitleCode→JOB_TITLE 名）', async () => {
+      store.seed({ loginId: 'u1', jobTitleCode: 'J01' });
+      const svc2 = new AccountsService(store, undefined, fakeJobTitles(titles));
+      const [item] = await svc2.listAccounts('AS', {});
+      expect(item.title).toBe('業務專員');
+    });
+
+    it('本公司對照缺漏 → 跨公司 fallback 補齊（實測 I10/G03 之情境）', async () => {
+      store.seed({ loginId: 'u2', jobTitleCode: 'I10' });
+      const svc2 = new AccountsService(store, undefined, fakeJobTitles(titles));
+      const [item] = await svc2.listAccounts('AS', {});
+      expect(item.title).toBe('資深專員');
+    });
+
+    it('jobTitleCode 為 null → title 為 null（前端顯示「—」）', async () => {
+      store.seed({ loginId: 'u3', jobTitleCode: null });
+      const svc2 = new AccountsService(store, undefined, fakeJobTitles(titles));
+      const [item] = await svc2.listAccounts('AS', {});
+      expect(item.title).toBeNull();
+    });
+
+    it('代碼查無對照 → title 為 null（不拋錯）', async () => {
+      store.seed({ loginId: 'u4', jobTitleCode: 'ZZZ' });
+      const svc2 = new AccountsService(store, undefined, fakeJobTitles(titles));
+      const [item] = await svc2.listAccounts('AS', {});
+      expect(item.title).toBeNull();
+    });
+
+    it('無對照 store（graceful）→ title 為 null、不查詢', async () => {
+      store.seed({ loginId: 'u5', jobTitleCode: 'J01' });
+      const [item] = await svc.listAccounts('AS', {});
+      expect(item.title).toBeNull();
     });
   });
 

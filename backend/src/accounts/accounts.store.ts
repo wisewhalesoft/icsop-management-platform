@@ -23,6 +23,11 @@ export interface AccountView {
   name: string | null;
   email: string | null;
   orgCode: string | null;
+  /**
+   * 職稱代碼（← VW_HPMUSER.JOBTITLEID）。名稱由服務層以 JOB_TITLE 對照解析為 `title`
+   * （與 orgCode→department 同一模式）。刻意選填以相容既有測試替身。
+   */
+  jobTitleCode?: string | null;
   roleCode: string;
   status: string;
   source: string;
@@ -37,13 +42,15 @@ export interface AccountView {
 }
 
 /**
- * 清單列（GET /admin/accounts）：AccountView 疊加服務層解析之 公司/部門 名稱
- * （company＝resolveCompanyName(companyCode)；department＝orgCode 對應之 ORG_UNIT 名稱）。
- * 職位（title）待上游 VW_PERSONAL_JOB.JTITLE_NM 攝入後補（OQ-E02-07 DEFERRED）。
+ * 清單列（GET /admin/accounts）：AccountView 疊加服務層解析之 公司/部門/職位 名稱
+ * （company＝resolveCompanyName(companyCode)；department＝orgCode 對應之 ORG_UNIT 名稱；
+ * title＝jobTitleCode 對應之 JOB_TITLE 名稱，見 job-title-directory 之兩段式解析）。
  */
 export interface AccountListItem extends AccountView {
   company: string | null;
   department: string | null;
+  /** 職位名稱（prototype 08 第 5 欄）。查無對照 → null（前端顯示「—」）。 */
+  title: string | null;
 }
 
 /** findById 回傳之核心欄位（含判定所需之 companyCode/source/現行角色）。 */

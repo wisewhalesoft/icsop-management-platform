@@ -18,6 +18,11 @@ import {
 import { hashPassword } from './password';
 import { isValidRole, isSelfRoleLockout, AccountIdentity } from './account-rules';
 import { ORG_UNIT_READ_STORE, OrgUnitReadStore } from '../org-directory/org-unit-read';
+import {
+  JOB_TITLE_READ_STORE,
+  JobTitleReadStore,
+  buildJobTitleResolver,
+} from '../org-directory/job-title-directory';
 import { resolveCompanyName } from '../org-directory/company-name';
 import { normalizeUserSubtype } from '../rbac/viewer-scope';
 
@@ -40,14 +45,18 @@ export class AccountsService {
     @Optional()
     @Inject(ORG_UNIT_READ_STORE)
     private readonly orgUnits?: OrgUnitReadStore,
+    // 選填：JOB_TITLE 對照 store，供清單解析 職位 名稱。缺（手建 spec）→ 優雅降級（title=null）。
+    @Optional()
+    @Inject(JOB_TITLE_READ_STORE)
+    private readonly jobTitles?: JobTitleReadStore,
   ) {}
 
   /**
-   * 清單（G-ADM-001）：於 store 列上疊加 公司/部門 名稱。
+   * 清單（G-ADM-001）：於 store 列上疊加 公司/部門/職位 名稱。
    *  - company＝resolveCompanyName(companyCode)（靜態全稱；全列相同）。
    *  - department＝orgCode 對應之 ORG_UNIT 名（單次 listByCompany 建 Map，無 N+1）。
+   *  - title＝jobTitleCode 對應之 JOB_TITLE 名（單次 listAll 建解析器，無 N+1）。
    *  - lastLoginAt 由 store 直接帶出。
-   * 職位（title）DEFERRED（OQ-E02-07 上游未攝入）。
    */
   async listAccounts(
     companyCode: string,
@@ -62,10 +71,14 @@ export class AccountsService {
       });
       deptByOrg = new Map(units.map((u) => [u.orgCode, u.name]));
     }
+    const resolveTitle = this.jobTitles
+      ? buildJobTitleResolver(await this.jobTitles.listAll())
+      : null;
     return rows.map((r) => ({
       ...r,
       company,
       department: r.orgCode ? (deptByOrg.get(r.orgCode) ?? null) : null,
+      title: resolveTitle ? resolveTitle(companyCode, r.jobTitleCode) : null,
     }));
   }
 
