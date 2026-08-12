@@ -8,8 +8,13 @@ import {
   TriggerType,
   SyncRunSummary,
 } from './org-sync.types';
-import { RawDept, RawAccount } from './normalization';
-import { ExistingOrgUnit, ExistingAccount } from './change-classification';
+import { RawDept, RawAccount, RawJobTitle } from './normalization';
+import {
+  ExistingOrgUnit,
+  ExistingAccount,
+  ExistingJobTitle,
+} from './change-classification';
+import { jobTitleKey } from '../org-directory/job-title-directory';
 
 /**
  * 同步引擎整合測試（mock reader / store）。
@@ -568,5 +573,188 @@ describe('OrgSyncService.recentRuns', () => {
     const { svc, listRecentRuns } = makeSvc();
     await svc.recentRuns(100);
     expect(listRecentRuns).toHaveBeenCalledWith(100);
+  });
+});
+
+
+/**
+ * 職稱對照主檔攝入（G-ADM-001「職位」欄）。契約 §5.4。
+ * 關鍵不變式：對照表為**顯示用**附屬資料，任何情況都不得使帳號同步失敗。
+ */
+describe('職稱對照主檔（planJobTitles）', () => {
+  /** 擴充 fake：實作 readJobTitles / findJobTitles。 */
+  class TitleReader extends FakeReader {
+    titles: RawJobTitle[] = [];
+    failTitles = false;
+    readJobTitles(): Promise<RawJobTitle[]> {
+      if (this.failTitles) return Promise.reject(new Error('OPENQUERY timeout'));
+      return Promise.resolve(this.titles);
+    }
+  }
+  class TitleStore extends FakeStore {
+    jobTitles = new Map<string, ExistingJobTitle>();
+    findJobTitles(): Promise<Map<string, ExistingJobTitle>> {
+      return Promise.resolve(new Map(this.jobTitles));
+    }
+  }
+
+  const rawTitle = (over: Partial<RawJobTitle> = {}): RawJobTitle => ({
+    COMPID: 'AS',
+    JTITLE_ID: 'J01',
+    JTITLE_NM: '業務專員',
+    ...over,
+  });
+
+  function setup(): { reader: TitleReader; store: TitleStore; svc: OrgSyncService } {
+    const reader = new TitleReader();
+    const store = new TitleStore();
+    reader.depts = [rawDept({ CODE: 'JAC00' })];
+    return { reader, store, svc: makeService(reader, store) };
+  }
+
+  it('本地無對照 → 全數進 jobTitleCreates', async () => {
+    const { reader, store, svc } = setup();
+    reader.titles = [rawTitle(), rawTitle({ JTITLE_ID: 'F01', JTITLE_NM: '課長' })];
+    const res = await svc.run('manual');
+    expect(res.status).toBe('success');
+    expect(store.applied[0].jobTitleCreates).toEqual([
+      { companyCode: 'AS', code: 'J01', name: '業務專員' },
+      { companyCode: 'AS', code: 'F01', name: '課長' },
+    ]);
+    expect(res.stats.jobTitlesUpserted).toBe(2);
+  });
+
+  it('上游改名 → 進 jobTitleUpdates；同名 → 皆不進計畫（noop）', async () => {
+    const { reader, store, svc } = setup();
+    store.jobTitles.set(jobTitleKey('AS', 'J01'), {
+      companyCode: 'AS',
+      code: 'J01',
+      name: '業務專員',
+    });
+    store.jobTitles.set(jobTitleKey('AS', 'F01'), {
+      companyCode: 'AS',
+      code: 'F01',
+      name: '課長',
+    });
+    reader.titles = [
+      rawTitle(), // 同名 → noop
+      rawTitle({ JTITLE_ID: 'F01', JTITLE_NM: '資深課長' }), // 改名 → update
+    ];
+    await svc.run('manual');
+    expect(store.applied[0].jobTitleCreates).toEqual([]);
+    expect(store.applied[0].jobTitleUpdates).toEqual([
+      { companyCode: 'AS', code: 'F01', name: '資深課長' },
+    ]);
+  });
+
+  it('🔴 同鍵重複列 → 去重取先到者（否則兩列皆 create 觸發 UQ 違反、整筆交易回滾）', async () => {
+    const { reader, store, svc } = setup();
+    reader.titles = [
+      rawTitle({ JTITLE_NM: '業務專員' }),
+      rawTitle({ JTITLE_NM: '高級業務專員' }), // 同 (COMPID, JTITLE_ID)
+    ];
+    const res = await svc.run('manual');
+    expect(res.status).toBe('success');
+    expect(store.applied[0].jobTitleCreates).toEqual([
+      { companyCode: 'AS', code: 'J01', name: '業務專員' },
+    ]);
+  });
+
+  it('髒列（缺名稱）跳過並記警告，其餘照常寫入', async () => {
+    const { reader, store, svc } = setup();
+    reader.titles = [rawTitle({ JTITLE_NM: null }), rawTitle({ JTITLE_ID: 'F01', JTITLE_NM: '課長' })];
+    const res = await svc.run('manual');
+    expect(res.status).toBe('success');
+    expect(store.applied[0].jobTitleCreates).toEqual([
+      { companyCode: 'AS', code: 'F01', name: '課長' },
+    ]);
+    expect(res.warnings.some((w) => w.includes('髒職稱對照資料'))).toBe(true);
+  });
+
+  it('🔴 對照主檔取回失敗 → 同步仍 success（非阻斷），僅記警告', async () => {
+    const { reader, store, svc } = setup();
+    reader.failTitles = true;
+    reader.changes = [rawAcc({ USERID: 'AS0001' })];
+    const res = await svc.run('manual');
+    expect(res.status).toBe('success');
+    expect(res.warnings.some((w) => w.includes('職稱對照主檔同步略過'))).toBe(true);
+    // 帳號本身仍正常寫入
+    expect(store.applied[0].accountCreates).toHaveLength(1);
+  });
+
+  it('reader/store 未實作對應方法（既有替身）→ 整段跳過，同步照常', async () => {
+    const reader = new FakeReader();
+    const store = new FakeStore();
+    reader.depts = [rawDept({ CODE: 'JAC00' })];
+    reader.changes = [rawAcc({ USERID: 'AS0001' })];
+    const res = await makeService(reader, store).run('manual');
+    expect(res.status).toBe('success');
+    expect(store.applied[0].jobTitleCreates).toEqual([]);
+    expect(res.stats.jobTitlesUpserted).toBeUndefined();
+  });
+
+  it('對照異動不計入 changeCount（主檔維護非組織/帳號異動，避免扭曲 F006 KPI）', async () => {
+    const { reader, svc } = setup();
+    reader.titles = [rawTitle(), rawTitle({ JTITLE_ID: 'F01', JTITLE_NM: '課長' })];
+    const res = await svc.run('manual');
+    expect(res.changeCount).toBe(1); // 僅 orgCreates 之 JAC00
+  });
+
+  it('帳號之 jobTitleCode 由 JOBTITLEID 帶入同步計畫', async () => {
+    const { reader, store, svc } = setup();
+    reader.changes = [rawAcc({ USERID: 'AS0001', JOBTITLEID: 'J01' })];
+    await svc.run('manual');
+    expect(store.applied[0].accountCreates[0].jobTitleCode).toBe('J01');
+  });
+});
+
+
+/**
+ * 全量重同步（fullResync）。存在理由：帳號同步為增量，新增上游欄位後既有帳號不會被取回，
+ * 回填不會自然發生（2026-08-12 加 jobTitleCode 時發現）。
+ */
+describe('fullResync（忽略 MTDT 水位）', () => {
+  function setup(): { reader: FakeReader; store: FakeStore; svc: OrgSyncService } {
+    const reader = new FakeReader();
+    const store = new FakeStore();
+    reader.depts = [rawDept({ CODE: 'JAC00' })];
+    store.watermark = new Date('2026-07-01T00:00:00Z');
+    return { reader, store, svc: makeService(reader, store) };
+  }
+
+  it('預設（增量）→ 以既有水位下推', async () => {
+    const { reader, svc } = setup();
+    await svc.run('manual');
+    expect(reader.lastSince).toEqual(new Date('2026-07-01T00:00:00Z'));
+  });
+
+  it('fullResync → sinceMtdt 為 null（取全量）', async () => {
+    const { reader, svc } = setup();
+    await svc.run('manual', 'cli', { fullResync: true });
+    expect(reader.lastSince).toBeNull();
+  });
+
+  it('🔴 加欄回填之情境：既有帳號 jobTitleCode 為 null、上游有值 → 全量時被判 update', async () => {
+    const { reader, store, svc } = setup();
+    seedActiveAccount(store, { loginId: 'AS0001' }); // 替身之 jobTitleCode 未設（undefined）
+    reader.activeIds = ['AS0001'];
+    reader.changes = [rawAcc({ USERID: 'AS0001', JOBTITLEID: 'J01' })];
+    await svc.run('manual', 'cli', { fullResync: true });
+    const updates = store.applied[0].accountUpdates;
+    expect(updates).toHaveLength(1);
+    expect(updates[0].jobTitleCode).toBe('J01');
+  });
+
+  it('fullResync 不改變水位推進語意（仍以來源 MTDT 最大值推進）', async () => {
+    const { reader, store, svc } = setup();
+    reader.changes = [rawAcc({ USERID: 'AS0001', MTDT: '2026-08-01T00:00:00Z' })];
+    await svc.run('manual', 'cli', { fullResync: true });
+    expect(store.watermark).toEqual(new Date('2026-08-01T00:00:00Z'));
+  });
+
+  it('fullResync 記錄警告（使 SYNC_RUN 可追溯本次為全量）', async () => {
+    const { svc } = setup();
+    const res = await svc.run('manual', 'cli', { fullResync: true });
+    expect(res.warnings.some((w) => w.includes('全量重同步'))).toBe(true);
   });
 });

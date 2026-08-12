@@ -1,12 +1,23 @@
 /**
  * 同步引擎之 IO 邊界介面（可注入 mock）。
- *  - UpstreamOrgReader：OPENQUERY 讀 VW_DEPT_SQL / VW_HPMUSER（唯讀上游）。
- *  - OrgSyncStore：本地 ACCOUNT / ORG_UNIT / SYNC_RUN 之交易性寫入 + 互斥鎖。
+ *  - UpstreamOrgReader：OPENQUERY 讀 VW_DEPT_SQL / VW_HPMUSER / VW_PERSONAL_JOB（唯讀上游）。
+ *  - OrgSyncStore：本地 ACCOUNT / ORG_UNIT / JOB_TITLE / SYNC_RUN 之交易性寫入 + 互斥鎖。
  * 純邏輯（推導/分類/閾值/正規化）不在此層，見同目錄各純模組。
  */
 
-import { RawDept, RawAccount, NormalizedOrgUnit, NormalizedAccount } from './normalization';
-import { ExistingOrgUnit, ExistingAccount } from './change-classification';
+import {
+  RawDept,
+  RawAccount,
+  RawJobTitle,
+  NormalizedOrgUnit,
+  NormalizedAccount,
+  NormalizedJobTitle,
+} from './normalization';
+import {
+  ExistingOrgUnit,
+  ExistingAccount,
+  ExistingJobTitle,
+} from './change-classification';
 
 export type TriggerType = 'scheduled' | 'manual';
 export type SyncRunStatus = 'running' | 'success' | 'failed';
@@ -32,8 +43,13 @@ export interface UpstreamOrgReader {
   readDepartments(compid: string): Promise<RawDept[]>;
   /** 消失閾值用：本次來源之在職 USERID 集合（EMPSTS='A'）。 */
   readActiveAccountLoginIds(compid: string): Promise<string[]>;
-  /** VW_HPMUSER 白名單 11 欄；sinceMtdt=null 為首次全量。 */
+  /** VW_HPMUSER 白名單 12 欄；sinceMtdt=null 為首次全量。 */
   readAccountChanges(compid: string, sinceMtdt: Date | null): Promise<RawAccount[]>;
+  /**
+   * 職稱對照主檔（VW_PERSONAL_JOB distinct 三欄，全公司範圍、非增量；實測 109 列）。
+   * ⚠ 選填：未實作此方法之既有替身（手建測試 reader）仍可運作，同步時視為「無對照可更新」。
+   */
+  readJobTitles?(): Promise<RawJobTitle[]>;
 }
 
 export interface AccountDisableWrite {
@@ -50,6 +66,12 @@ export interface SyncPlan {
   accountCreates: NormalizedAccount[];
   accountUpdates: NormalizedAccount[];
   accountDisables: AccountDisableWrite[];
+  /**
+   * 職稱對照主檔異動。⚠ 選填：既有測試替身之 plan 字面值無需補此二鍵；
+   * store 端一律以 `?? []` 收斂。
+   */
+  jobTitleCreates?: NormalizedJobTitle[];
+  jobTitleUpdates?: NormalizedJobTitle[];
 }
 
 export interface FinishSyncRunPatch {
@@ -87,6 +109,11 @@ export interface OrgSyncStore {
    * （AS 2771 帳號實跑爆掉）。存在性比對於服務層以記憶體 Map 完成，IO 為 O(1)（與筆數無關）。
    */
   findExistingAccounts(compid: string): Promise<Map<string, ExistingAccount>>;
+  /**
+   * 既有職稱對照列，key 由 jobTitleKey(companyCode, code) 產生（以 | 分隔；上游 COMPID／
+   * JTITLE_ID 皆為英數代碼，不含此字元，故無歧義）。⚠ 選填：未實作之替身視為「本地無對照」。
+   */
+  findJobTitles?(): Promise<Map<string, ExistingJobTitle>>;
   /** 於單一交易套用 plan（失敗須整批回滾，AC3）。 */
   applySync(compid: string, plan: SyncPlan): Promise<void>;
   /**
@@ -143,6 +170,11 @@ export interface SyncStats {
   dirtyRows: number;
   disappearedCount: number;
   disappearedRatio: number;
+  /**
+   * 本次寫入之職稱對照列數（create+update）。選填：刻意不計入 changeCount
+   * （主檔維護非組織/帳號異動，計入會扭曲 F006 KPI 語意），僅供可觀測性。
+   */
+  jobTitlesUpserted?: number;
 }
 
 export interface SyncResult {

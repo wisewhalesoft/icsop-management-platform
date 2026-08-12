@@ -8,10 +8,16 @@ import {
   TriggerType,
   SyncRunSummary,
 } from './org-sync.types';
-import { ExistingOrgUnit, ExistingAccount } from './change-classification';
+import {
+  ExistingOrgUnit,
+  ExistingAccount,
+  ExistingJobTitle,
+} from './change-classification';
 import { OrgUnit } from '../database/entities/org-unit.entity';
 import { Account } from '../database/entities/account.entity';
+import { JobTitle } from '../database/entities/job-title.entity';
 import { SyncRun } from '../database/entities/sync-run.entity';
+import { jobTitleKey } from '../org-directory/job-title-directory';
 
 /**
  * 本地寫入端（實際 IO，TypeORM/MSSQL）。
@@ -124,6 +130,24 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
         resignDate: a.resignDate,
         hireDate: a.hireDate,
         managerEmpNo: a.managerEmpNo,
+        // 必須帶出：classifyAccount 已納入 jobTitleCode 比對，缺此欄會使既有列（NULL）
+        // 每次同步都被判為 update（無謂寫入放大），且加欄後之回填無從驗證。
+        jobTitleCode: a.jobTitleCode,
+      });
+    }
+    return m;
+  }
+
+  async findJobTitles(): Promise<Map<string, ExistingJobTitle>> {
+    const ds = await this.ensureInit();
+    // 全公司範圍（跨公司 fallback 需要）；實測 109 列。
+    const rows = await ds.getRepository(JobTitle).find();
+    const m = new Map<string, ExistingJobTitle>();
+    for (const t of rows) {
+      m.set(jobTitleKey(t.companyCode, t.code), {
+        companyCode: t.companyCode,
+        code: t.code,
+        name: t.name,
       });
     }
     return m;
@@ -186,7 +210,29 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
           },
         );
       }
-      // ACCOUNT insert 為 13 欄；AS 首次同步可達 ~2771 列 → 必須切批（否則 36k 參數超限）。
+      // 職稱對照主檔（先於帳號寫入，使同批新帳號之 jobTitleCode 立即可解析）。
+      // 僅約 109 列，但仍走 chunkByParamBudget 以維持一致性。
+      const titleRows = (plan.jobTitleCreates ?? []).map((t) => ({
+        id: randomUUID(),
+        companyCode: t.companyCode,
+        code: t.code,
+        name: t.name,
+      }));
+      if (titleRows.length > 0) {
+        const titleFields = Object.keys(titleRows[0]).length;
+        for (const batch of chunkByParamBudget(titleRows, titleFields)) {
+          await manager.insert(JobTitle, batch);
+        }
+      }
+      for (const t of plan.jobTitleUpdates ?? []) {
+        await manager.update(
+          JobTitle,
+          { companyCode: t.companyCode, code: t.code },
+          { name: t.name },
+        );
+      }
+
+      // ACCOUNT insert 為 14 欄；AS 首次同步可達 ~2771 列 → 必須切批（否則 39k 參數超限）。
       const accRows = plan.accountCreates.map((a) => ({
         id: randomUUID(),
         companyCode: a.companyCode,
@@ -196,6 +242,7 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
         email: a.email,
         orgCode: a.orgCode,
         managerEmpNo: a.managerEmpNo,
+        jobTitleCode: a.jobTitleCode,
         resignDate: a.resignDate,
         hireDate: a.hireDate,
         upstreamModifiedAt: a.upstreamModifiedAt,
@@ -219,6 +266,7 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
             email: a.email,
             orgCode: a.orgCode,
             managerEmpNo: a.managerEmpNo,
+            jobTitleCode: a.jobTitleCode,
             resignDate: a.resignDate,
             hireDate: a.hireDate,
             upstreamModifiedAt: a.upstreamModifiedAt,

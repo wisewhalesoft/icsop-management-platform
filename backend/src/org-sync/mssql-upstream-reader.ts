@@ -1,11 +1,12 @@
 import * as sql from 'mssql';
 import { UpstreamOrgReader } from './org-sync.types';
-import { RawDept, RawAccount } from './normalization';
+import { RawDept, RawAccount, RawJobTitle } from './normalization';
 import {
   UpstreamRef,
   buildDeptQuery,
   buildHpmuserActiveIdsQuery,
   buildHpmuserIncrementalQuery,
+  buildJobTitleQuery,
   assertNoForbiddenColumns,
 } from './upstream-queries';
 
@@ -24,12 +25,12 @@ export interface UpstreamReaderConfig {
  * 上游唯讀讀取器（實際 IO）。
  *
  * 決策：以 `mssql` 套件建立獨立唯讀連線（非 TypeORM 第二 DataSource）。理由：
- *  - 上游僅四支固定 OPENQUERY 字串、無 entity/migration，ORM 映射無益且徒增中繼資料負擔；
+ *  - 上游僅五支固定 OPENQUERY 字串、無 entity/migration，ORM 映射無益且徒增中繼資料負擔；
  *  - 與應用自身 ORM（ACCOUNT/ORG_UNIT/SYNC_RUN 之寫入）完全隔離，杜絕誤寫上游之風險；
  *  - 沿用 auth 盤點（OQ-E02-01）之連線方式，維持操作一致性；
  *  - 直接掌控 pool、requestTimeout 與 TLS（linked server 主機常為內網自簽憑證）。
  *
- * 硬約束：所有彙總/過濾以 OPENQUERY 下推（見 upstream-queries）；VW_HPMUSER 僅白名單 11 欄，
+ * 硬約束：所有彙總/過濾以 OPENQUERY 下推（見 upstream-queries）；VW_HPMUSER 僅白名單 12 欄，
  * USERPW/DEFAULTPW 永不出現於查詢（每支查詢再經 assertNoForbiddenColumns 二次防禦）。
  */
 export class MssqlUpstreamOrgReader implements UpstreamOrgReader {
@@ -81,6 +82,11 @@ export class MssqlUpstreamOrgReader implements UpstreamOrgReader {
     return this.query<RawAccount>(
       buildHpmuserIncrementalQuery(this.cfg.ref, compid, sinceMtdt),
     );
+  }
+
+  /** 職稱對照主檔（全公司 distinct 三欄；非增量，實測 109 列）。 */
+  async readJobTitles(): Promise<RawJobTitle[]> {
+    return this.query<RawJobTitle>(buildJobTitleQuery(this.cfg.ref));
   }
 
   async close(): Promise<void> {

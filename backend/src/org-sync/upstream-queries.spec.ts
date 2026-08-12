@@ -4,7 +4,10 @@ import {
   buildHpmuserIncrementalQuery,
   buildHpmuserActiveIdsQuery,
   buildDeptQuery,
+  buildJobTitleQuery,
   assertNoForbiddenColumns,
+  FORBIDDEN_PERSONAL_JOB_COLUMNS,
+  JOB_TITLE_COLUMNS,
   UpstreamRef,
 } from './upstream-queries';
 
@@ -12,14 +15,14 @@ import {
  * OPENQUERY 下推查詢建構（upstream-hr-source-contract.md §1 下推、§3.4 密碼欄禁讀、§5 欄位對應）。
  * 硬約束：
  *  - 一律包在 OPENQUERY([linkedServer], '...')，不得整表拉回本地。
- *  - VW_HPMUSER 僅選白名單 11 欄；USERPW/DEFAULTPW 等禁欄不得出現於查詢字串。
+ *  - VW_HPMUSER 僅選白名單 12 欄；USERPW/DEFAULTPW 等禁欄不得出現於查詢字串。
  */
 
 const ref: UpstreamRef = { linkedServer: 'APYHFC23', remoteDb: 'HR2' };
 
 describe('白名單常數', () => {
-  it('恰為 11 欄', () => {
-    expect(WHITELIST_HPMUSER_COLUMNS).toHaveLength(11);
+  it('恰為 12 欄', () => {
+    expect(WHITELIST_HPMUSER_COLUMNS).toHaveLength(12);
   });
   it('包含穩定鍵與增量欄且不含任何禁欄', () => {
     expect(WHITELIST_HPMUSER_COLUMNS).toEqual(
@@ -35,6 +38,7 @@ describe('白名單常數', () => {
         'HIREDT',
         'DIRECTOR',
         'MTDT',
+        'JOBTITLEID',
       ]),
     );
     for (const forbidden of FORBIDDEN_HPMUSER_COLUMNS) {
@@ -50,7 +54,7 @@ describe('buildHpmuserIncrementalQuery', () => {
     expect(sql).toContain('[HR2].[dbo].[VW_HPMUSER]');
   });
 
-  it('只選白名單 11 欄、且無 SELECT *', () => {
+  it('只選白名單 12 欄、且無 SELECT *', () => {
     const sql = buildHpmuserIncrementalQuery(ref, 'AS', null);
     expect(sql).not.toMatch(/SELECT\s+\*/i);
     for (const col of WHITELIST_HPMUSER_COLUMNS) {
@@ -118,6 +122,50 @@ describe('assertNoForbiddenColumns', () => {
   it('偵測到密碼欄 → 拋錯（防禦性檢查）', () => {
     expect(() =>
       assertNoForbiddenColumns('SELECT USERID, USERPW FROM x'),
+    ).toThrow();
+  });
+});
+
+
+describe('buildJobTitleQuery（職稱對照主檔，契約 §5.4）', () => {
+  it('包在 OPENQUERY、存取 VW_PERSONAL_JOB、無 SELECT *', () => {
+    const sql = buildJobTitleQuery(ref);
+    expect(sql).toContain('OPENQUERY([APYHFC23]');
+    expect(sql).toContain('[HR2].[dbo].[VW_PERSONAL_JOB]');
+    expect(sql).not.toMatch(/SELECT\s+\*/i);
+  });
+
+  it('僅取 COMPID / JTITLE_ID / JTITLE_NM 三欄', () => {
+    const sql = buildJobTitleQuery(ref);
+    for (const col of JOB_TITLE_COLUMNS) expect(sql).toContain(col);
+    expect(JOB_TITLE_COLUMNS).toHaveLength(3);
+  });
+
+  it('🔴 絕不出現 ID_NUMBER（身分證字號）等該 view 之個資欄', () => {
+    const sql = buildJobTitleQuery(ref);
+    for (const forbidden of FORBIDDEN_PERSONAL_JOB_COLUMNS) {
+      expect(sql).not.toMatch(new RegExp(`\b${forbidden}\b`));
+    }
+    expect(() => assertNoForbiddenColumns(sql)).not.toThrow();
+  });
+
+  it('DISTINCT 於對端下推（該 view 逐「人」一列，不 DISTINCT 會整批拉回）', () => {
+    expect(buildJobTitleQuery(ref)).toMatch(/SELECT DISTINCT/);
+  });
+
+  it('刻意不以 COMPID 過濾（跨公司 fallback 需要其他公司之對照列）', () => {
+    expect(buildJobTitleQuery(ref)).not.toMatch(/COMPID=/);
+  });
+
+  it('排除名稱為 NULL 之列（正規化端會判為髒資料）', () => {
+    expect(buildJobTitleQuery(ref)).toContain('JTITLE_NM IS NOT NULL');
+  });
+});
+
+describe('assertNoForbiddenColumns — VW_PERSONAL_JOB 個資欄', () => {
+  it('偵測到 ID_NUMBER → 拋錯', () => {
+    expect(() =>
+      assertNoForbiddenColumns('SELECT JTITLE_ID, ID_NUMBER FROM x'),
     ).toThrow();
   });
 });

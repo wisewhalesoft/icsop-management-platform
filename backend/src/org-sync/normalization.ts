@@ -1,7 +1,7 @@
 /**
  * 上游原始列 → 正規化模型（純邏輯，無 IO）
  *
- * 欄位對應：upstream-hr-source-contract.md §5.1（VW_DEPT_SQL）／§5.2（VW_HPMUSER 白名單 11 欄）。
+ * 欄位對應：upstream-hr-source-contract.md §5.1（VW_DEPT_SQL）／§5.2（VW_HPMUSER 白名單 12 欄）。
  * 髒資料防禦（F004 Edge Cases / TC-010-03）：單筆型別/格式不符 → 拋 DirtyRowError，
  * 由同步服務跳過該筆並記警告，不影響其他正常筆數。
  */
@@ -37,7 +37,7 @@ export interface RawDept {
   ESTABLISHED_DATE?: Date | string | null;
 }
 
-/** VW_HPMUSER 白名單 11 欄原始列（絕不含 USERPW/DEFAULTPW 等禁欄）。 */
+/** VW_HPMUSER 白名單 12 欄原始列（絕不含 USERPW/DEFAULTPW 等禁欄）。 */
 export interface RawAccount {
   USERID: string;
   EMPNO?: string | null;
@@ -50,6 +50,20 @@ export interface RawAccount {
   HIREDT?: Date | string | null;
   DIRECTOR?: string | null;
   MTDT: Date | string;
+  JOBTITLEID?: string | null;
+}
+
+/** VW_PERSONAL_JOB 職稱對照原始列（僅三欄；絕不含 ID_NUMBER 等個資）。 */
+export interface RawJobTitle {
+  COMPID: string;
+  JTITLE_ID: string;
+  JTITLE_NM?: string | null;
+}
+
+export interface NormalizedJobTitle {
+  companyCode: string;
+  code: string;
+  name: string;
 }
 
 export interface NormalizedOrgUnit {
@@ -83,6 +97,8 @@ export interface NormalizedAccount {
   resignDate: Date | null;
   hireDate: Date | null;
   managerEmpNo: string | null;
+  // 職稱代碼（← JOBTITLEID）。名稱由 JOB_TITLE 對照表解析，不落於帳號列。
+  jobTitleCode: string | null;
   // 可為 null：哨兵/Invalid/超出 MSSQL 可儲存範圍之 MTDT 經 normalizeUpstreamDate 收斂為 null。
   upstreamModifiedAt: Date | null;
 }
@@ -158,6 +174,21 @@ export function normalizeAccount(raw: RawAccount): NormalizedAccount {
     resignDate: normalizeUpstreamDate(raw.RESIGNDT),
     hireDate: normalizeUpstreamDate(raw.HIREDT),
     managerEmpNo: nullableStr(raw.DIRECTOR),
+    jobTitleCode: nullableStr(raw.JOBTITLEID),
     upstreamModifiedAt: normalizeUpstreamDate(raw.MTDT),
   };
+}
+
+/**
+ * 職稱對照列正規化。缺 COMPID/JTITLE_ID/JTITLE_NM 任一 → DirtyRowError（該列跳過、記警告），
+ * 與部門/帳號之髒資料處置一致：對照表缺一列只會使少數帳號之職位顯示為「—」，不應中斷整批同步。
+ */
+export function normalizeJobTitle(raw: RawJobTitle): NormalizedJobTitle {
+  const code = nullableStr(raw.JTITLE_ID);
+  if (code === null) throw new DirtyRowError('JTITLE_ID 缺漏（對照鍵不可缺）');
+  const companyCode = nullableStr(raw.COMPID);
+  if (companyCode === null) throw new DirtyRowError('COMPID 缺漏', code);
+  const name = nullableStr(raw.JTITLE_NM);
+  if (name === null) throw new DirtyRowError('JTITLE_NM 缺漏', code);
+  return { companyCode, code, name };
 }

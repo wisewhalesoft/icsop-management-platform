@@ -13,11 +13,18 @@ import {
 import {
   normalizeDept,
   normalizeAccount,
+  normalizeJobTitle,
   NormalizedOrgUnit,
   NormalizedAccount,
+  NormalizedJobTitle,
   DirtyRowError,
 } from './normalization';
-import { classifyOrgUnit, classifyAccount } from './change-classification';
+import {
+  classifyOrgUnit,
+  classifyAccount,
+  classifyJobTitle,
+} from './change-classification';
+import { jobTitleKey } from '../org-directory/job-title-directory';
 import {
   computeDisappeared,
   DEFAULT_DISAPPEARED_THRESHOLD,
@@ -77,7 +84,23 @@ export class OrgSyncService {
     this.now = options.now ?? ((): Date => new Date());
   }
 
-  async run(triggerType: TriggerType, triggeredBy?: string | null): Promise<SyncResult> {
+  /**
+   * @param opts.fullResync 忽略 MTDT 水位，改為全量取回帳號（預設 false ＝增量）。
+   *
+   * **何時需要**：新增一個「來自上游、但既有列為 NULL」的帳號欄位時（如 2026-08-12 之
+   * `jobTitleCode`）。增量同步僅取 `MTDT > watermark` 之帳號，既有帳號**不會出現在結果中**，
+   * 因此 `classifyAccount` 的新欄位比對永遠沒有機會觸發——加欄後的回填**不會自然發生**。
+   * ⚠ 此為帳號路徑特有：組織（`VW_DEPT_SQL`）本就全量取回，故 `descFull` 之回填可自然完成，
+   *   不可據此類推帳號亦然。
+   *
+   * 本旗標不改變任何寫入語意（仍走同一 classify → applySync 路徑，仍冪等、仍單一交易），
+   * 僅放大本次取回範圍；跑完水位照常推進，後續排程自動回到增量。
+   */
+  async run(
+    triggerType: TriggerType,
+    triggeredBy?: string | null,
+    opts: { fullResync?: boolean } = {},
+  ): Promise<SyncResult> {
     if (await this.store.hasRunningSyncRun()) {
       throw new SyncInProgressError();
     }
@@ -119,6 +142,10 @@ export class OrgSyncService {
           }
         }
       }
+      // --- 3.5 職稱對照主檔（G-ADM-001「職位」欄） ---
+      const { creates: jobTitleCreates, updates: jobTitleUpdates } =
+        await this.planJobTitles(stats, warnings);
+
       const existingOrg = await this.store.findOrgUnits(this.compid);
       const orgCreates: NormalizedOrgUnit[] = [];
       const orgUpdates: NormalizedOrgUnit[] = [];
@@ -160,9 +187,13 @@ export class OrgSyncService {
         };
       }
 
-      // --- 5. 帳號增量 ---
+      // --- 5. 帳號增量（fullResync 時忽略水位取全量，見 run() 之說明） ---
       const watermark = await this.store.getAccountWatermark(this.compid);
-      const rawAccts = await this.reader.readAccountChanges(this.compid, watermark);
+      const since = opts.fullResync ? null : watermark;
+      if (opts.fullResync) {
+        warnings.push('已要求全量重同步：本次忽略 MTDT 水位，取回全部帳號。');
+      }
+      const rawAccts = await this.reader.readAccountChanges(this.compid, since);
       stats.accountsRead = rawAccts.length;
       const normAccts: NormalizedAccount[] = [];
       for (const raw of rawAccts) {
@@ -219,6 +250,8 @@ export class OrgSyncService {
         accountCreates,
         accountUpdates,
         accountDisables,
+        jobTitleCreates,
+        jobTitleUpdates,
       };
       try {
         await this.store.applySync(this.compid, plan);
@@ -295,6 +328,62 @@ export class OrgSyncService {
         warnings,
       };
     }
+  }
+
+  /**
+   * 職稱對照主檔（← VW_PERSONAL_JOB）之異動規劃。供帳號清單「職位」欄之代碼→名稱解析。
+   *
+   * 三項刻意設計：
+   *  - **非阻斷**：取回失敗僅記警告。職位純為顯示欄位，不涉授權/身分；且若為上游連線問題，
+   *    後續 readAccountChanges 必然一併失敗並走正常失敗路徑，故不致掩蓋真正的來源故障。
+   *  - **同鍵去重**：上游 DISTINCT 之三欄組合可能對同一 (COMPID, JTITLE_ID) 產生多列
+   *    （目前實測同公司內為 1:1，但這是資料現況而非上游保證）。不去重則兩列皆判 create，
+   *    觸發 UQ 違反而使整筆交易回滾——即帳號同步被一張顯示用對照表拖垮。取先到者（確定性）。
+   *  - **不計入 changeCount**：主檔維護非「組織/帳號異動」，計入會扭曲 F006 KPI 語意。
+   *    改以 stats.jobTitlesUpserted 提供可觀測性。
+   *
+   * reader/store 未實作對應方法（既有手建替身）→ 整段跳過，回空計畫。
+   */
+  private async planJobTitles(
+    stats: SyncStats,
+    warnings: string[],
+  ): Promise<{ creates: NormalizedJobTitle[]; updates: NormalizedJobTitle[] }> {
+    const creates: NormalizedJobTitle[] = [];
+    const updates: NormalizedJobTitle[] = [];
+    if (!this.reader.readJobTitles || !this.store.findJobTitles) {
+      return { creates, updates };
+    }
+    try {
+      const rawTitles = await this.reader.readJobTitles();
+      const existing = await this.store.findJobTitles();
+      const seen = new Set<string>();
+      for (const raw of rawTitles) {
+        try {
+          const t = normalizeJobTitle(raw);
+          const key = jobTitleKey(t.companyCode, t.code);
+          if (seen.has(key)) continue; // 同鍵去重（見上）
+          seen.add(key);
+          const kind = classifyJobTitle(t, existing.get(key) ?? null);
+          if (kind === 'create') creates.push(t);
+          else if (kind === 'update') updates.push(t);
+        } catch (e) {
+          if (e instanceof DirtyRowError) {
+            stats.dirtyRows++;
+            warnings.push(`髒職稱對照資料略過：${e.message}`);
+          } else {
+            throw e;
+          }
+        }
+      }
+      stats.jobTitlesUpserted = creates.length + updates.length;
+    } catch (e) {
+      warnings.push(
+        `職稱對照主檔同步略過（不影響本次同步結果）：${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
+    return { creates, updates };
   }
 
   /**

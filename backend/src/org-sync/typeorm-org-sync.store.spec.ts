@@ -68,7 +68,7 @@ describe('TypeOrmOrgSyncStore.applySync — INSERT 批次參數上限', () => {
 
 /**
  * F041 AC-34（F003 delta AC-U4）：F004 組織同步 upsert 之 insert/update payload 不得含 `userSubtype` 鍵
- * ——該欄非上游來源欄位（VW_HPMUSER 11 欄白名單不含），只要 applySync() 建構 payload 之物件字面量
+ * ——該欄非上游來源欄位（VW_HPMUSER 12 欄白名單不含），只要 applySync() 建構 payload 之物件字面量
  * 不主動新增一行 `userSubtype: a.userSubtype`，此鍵就不會出現，即使輸入之 accountCreates/accountUpdates
  * 物件意外夾帶該鍵（模擬呼叫端誤傳）。權威：docs/specs/architecture-spec.md §4.10。
  *

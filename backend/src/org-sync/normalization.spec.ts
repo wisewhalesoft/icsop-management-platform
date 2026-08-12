@@ -1,14 +1,16 @@
 import {
   normalizeDept,
   normalizeAccount,
+  normalizeJobTitle,
   DirtyRowError,
   RawDept,
   RawAccount,
+  RawJobTitle,
 } from './normalization';
 
 /**
  * 上游原始列 → 正規化模型（含髒資料防禦）。
- * 欄位對應：upstream-hr-source-contract.md §5.1（VW_DEPT_SQL）／§5.2（VW_HPMUSER 白名單 11 欄）。
+ * 欄位對應：upstream-hr-source-contract.md §5.1（VW_DEPT_SQL）／§5.2（VW_HPMUSER 白名單 12 欄）。
  * 髒資料（TC-010-03）：型別/格式不符之單筆 → 拋 DirtyRowError，由同步服務跳過該筆並記警告。
  */
 
@@ -139,5 +141,70 @@ describe('normalizeAccount', () => {
     const a = normalizeAccount(rawAccount({ HIREDT: '1600-01-01', RESIGNDT: '1600-01-01' }));
     expect(a.hireDate).toBeNull();
     expect(a.resignDate).toBeNull();
+  });
+});
+
+
+/**
+ * 職稱（G-ADM-001「職位」欄）。代碼取自 VW_HPMUSER.JOBTITLEID；名稱另由 VW_PERSONAL_JOB
+ * 對照主檔攝入（契約 §5.4）。
+ */
+describe('normalizeAccount — jobTitleCode（← JOBTITLEID）', () => {
+  const raw = (over: Partial<RawAccount> = {}): RawAccount => ({
+    USERID: 'AS0001',
+    COMPID: 'AS',
+    EMPSTS: 'A',
+    MTDT: '2026-07-09T00:00:00Z',
+    ...over,
+  });
+
+  it('帶出職稱代碼', () => {
+    expect(normalizeAccount(raw({ JOBTITLEID: 'J01' })).jobTitleCode).toBe('J01');
+  });
+
+  it('前後空白修剪', () => {
+    expect(normalizeAccount(raw({ JOBTITLEID: '  F01 ' })).jobTitleCode).toBe('F01');
+  });
+
+  it.each([
+    ['缺欄', undefined],
+    ['null', null],
+    ['空字串', ''],
+    ['僅空白', '   '],
+  ])('%s → null（不使該列成髒；職位僅為顯示欄位）', (_l, v) => {
+    expect(normalizeAccount(raw({ JOBTITLEID: v })).jobTitleCode).toBeNull();
+  });
+});
+
+describe('normalizeJobTitle（VW_PERSONAL_JOB → JOB_TITLE 對照列）', () => {
+  const raw = (over: Partial<RawJobTitle> = {}): RawJobTitle => ({
+    COMPID: 'AS',
+    JTITLE_ID: 'J01',
+    JTITLE_NM: '業務專員',
+    ...over,
+  });
+
+  it('三欄正規化', () => {
+    expect(normalizeJobTitle(raw())).toEqual({
+      companyCode: 'AS',
+      code: 'J01',
+      name: '業務專員',
+    });
+  });
+
+  it('修剪前後空白', () => {
+    expect(normalizeJobTitle(raw({ JTITLE_ID: ' J01 ', JTITLE_NM: ' 業務專員 ' }))).toEqual({
+      companyCode: 'AS',
+      code: 'J01',
+      name: '業務專員',
+    });
+  });
+
+  it.each([
+    ['JTITLE_ID 缺漏', { JTITLE_ID: '' }],
+    ['COMPID 缺漏', { COMPID: '  ' }],
+    ['JTITLE_NM 缺漏', { JTITLE_NM: null }],
+  ])('%s → DirtyRowError（該列跳過，不中斷整批）', (_l, over) => {
+    expect(() => normalizeJobTitle(raw(over as Partial<RawJobTitle>))).toThrow(DirtyRowError);
   });
 });

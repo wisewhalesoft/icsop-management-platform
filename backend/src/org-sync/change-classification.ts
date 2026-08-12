@@ -36,6 +36,18 @@ export interface ExistingAccount {
   resignDate: Date | null;
   hireDate: Date | null;
   managerEmpNo: string | null;
+  /**
+   * 職稱代碼。⚠ 選填（`?`）以相容既有測試替身之物件字面值；比對時以 `?? null` 收斂，
+   * 使 undefined 與 null 視為相等，不致讓省略此欄的替身誤觸 update。
+   */
+  jobTitleCode?: string | null;
+}
+
+/** 本地既有職稱對照列（僅上游擁有欄位）。 */
+export interface ExistingJobTitle {
+  companyCode: string;
+  code: string;
+  name: string;
 }
 
 function eqDate(a: Date | null, b: Date | null): boolean {
@@ -76,6 +88,9 @@ export function classifyAccount(
       source.email !== local.email ||
       source.orgCode !== local.orgCode ||
       source.managerEmpNo !== local.managerEmpNo ||
+      // jobTitleCode 納入比對：否則加欄後既有列（NULL）之回填永遠不觸發（誤判 noop），
+      // 與 descFull 於 classifyOrgUnit 之處置同理。
+      (source.jobTitleCode ?? null) !== (local.jobTitleCode ?? null) ||
       !eqDate(source.resignDate, local.resignDate) ||
       !eqDate(source.hireDate, local.hireDate);
     return changed ? 'update' : 'noop';
@@ -85,4 +100,16 @@ export function classifyAccount(
   if (local === null) return 'noop'; // 不建立離職帳號
   if (local.status === 'active') return 'disable';
   return 'noop'; // 已停用，不重複停用
+}
+
+/**
+ * 職稱對照列分類。對照主檔無「停用」語意（上游移除某代碼時，既有帳號仍可能引用它），
+ * 故僅 create/update/noop —— 刻意不刪除本地已無對應之列，避免歷史帳號之職位顯示驟失。
+ */
+export function classifyJobTitle(
+  source: { companyCode: string; code: string; name: string },
+  local: ExistingJobTitle | null,
+): OrgChangeKind {
+  if (local === null) return 'create';
+  return source.name !== local.name ? 'update' : 'noop';
 }

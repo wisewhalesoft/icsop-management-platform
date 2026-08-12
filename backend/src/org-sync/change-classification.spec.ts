@@ -1,8 +1,10 @@
 import {
   classifyOrgUnit,
   classifyAccount,
+  classifyJobTitle,
   ExistingOrgUnit,
   ExistingAccount,
+  ExistingJobTitle,
 } from './change-classification';
 import { NormalizedOrgUnit, NormalizedAccount } from './normalization';
 
@@ -48,6 +50,7 @@ const srcAcc = (over: Partial<NormalizedAccount> = {}): NormalizedAccount => ({
   resignDate: new Date('9999-12-31T00:00:00Z'),
   hireDate: new Date('2015-03-01T00:00:00Z'),
   managerEmpNo: 'E9999',
+  jobTitleCode: null,
   upstreamModifiedAt: new Date('2026-07-09T00:00:00Z'),
   ...over,
 });
@@ -139,5 +142,57 @@ describe('classifyAccount', () => {
     expect(
       classifyAccount(srcAcc({ empActive: true, resignDate: past }), localAcc({ resignDate: past })),
     ).toBe('noop');
+  });
+});
+
+
+/** 職稱（G-ADM-001）。代碼比對納入 classifyAccount；對照主檔本身以 classifyJobTitle 分類。 */
+describe('classifyAccount — jobTitleCode 納入比對', () => {
+  it('僅職稱代碼變動 → update（職位異動必須反映）', () => {
+    const kind = classifyAccount(
+      srcAcc({ jobTitleCode: 'F01' }),
+      localAcc({ jobTitleCode: 'J01' }),
+    );
+    expect(kind).toBe('update');
+  });
+
+  it('加欄後既有列為 null、上游有值 → update（使既有帳號自動回填，非誤判 noop）', () => {
+    expect(classifyAccount(srcAcc({ jobTitleCode: 'J01' }), localAcc({ jobTitleCode: null }))).toBe(
+      'update',
+    );
+  });
+
+  it('兩端同值 → noop（不造成無謂寫入放大）', () => {
+    expect(classifyAccount(srcAcc({ jobTitleCode: 'J01' }), localAcc({ jobTitleCode: 'J01' }))).toBe(
+      'noop',
+    );
+  });
+
+  it('本地替身省略此欄（undefined）且上游為 null → noop（undefined 與 null 視為相等）', () => {
+    const local = localAcc();
+    delete (local as { jobTitleCode?: string | null }).jobTitleCode;
+    expect(classifyAccount(srcAcc({ jobTitleCode: null }), local)).toBe('noop');
+  });
+});
+
+describe('classifyJobTitle（對照主檔）', () => {
+  const local = (over: Partial<ExistingJobTitle> = {}): ExistingJobTitle => ({
+    companyCode: 'AS',
+    code: 'J01',
+    name: '業務專員',
+    ...over,
+  });
+  const src = { companyCode: 'AS', code: 'J01', name: '業務專員' };
+
+  it('本地無 → create', () => {
+    expect(classifyJobTitle(src, null)).toBe('create');
+  });
+
+  it('名稱相同 → noop', () => {
+    expect(classifyJobTitle(src, local())).toBe('noop');
+  });
+
+  it('上游改名 → update', () => {
+    expect(classifyJobTitle({ ...src, name: '資深業務專員' }, local())).toBe('update');
   });
 });
