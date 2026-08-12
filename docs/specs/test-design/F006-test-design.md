@@ -100,7 +100,7 @@ Spec 步驟 7「管理員更新欄位**或**標記已確認無需變更」對映
 ### D5 — 「職級異動」資料缺口（開放問題，非本設計可解）
 
 Spec 原文（步驟 1）與 prototype 範例（「陳彥廷…職級異動：升任協理，待確認是否續任當責」）皆提及「職級」，但：
-- `ACCOUNT` 實體（`data-model.md#account-entity`）與上游白名單 11 欄（`upstream-person-org-source.md`）**均無**職級/職稱欄位。
+- `ACCOUNT` 實體（`data-model.md#account-entity`）與上游白名單 12 欄（`upstream-person-org-source.md`）**均無**職級/職稱欄位。
 - `VW_HPMUSER` 白名單僅 `USERID/EMPNO/USERNM/COMPID/DEPTID/EMPSTS/DIRECTOR`（+ `EMAILADDR/RESIGNDT/HIREDT/MTDT`），無職級。
 
 → 本設計**僅能偵測部門異動（orgCode 改變）**，**無法**偵測純粹的職級/頭銜升遷（部門不變、僅職稱變動）。此為現行資料模型的結構性缺口，不是測試設計可以繞過的實作疏漏；列為 **[需人類決策 · 高阻擋，OQ-F006-03]**，見第 6 節。

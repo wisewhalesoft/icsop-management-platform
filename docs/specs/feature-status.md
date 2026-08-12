@@ -92,9 +92,9 @@
 ### E02 組織同步
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |
 |----|------|---|----|------|--------------------------|
-| F004 | 組織資料同步（排程＋手動） | P0 | 1 | ✅ 已完成-已驗證 | OQ-E02-02 失敗重試＋通知刻意延後（cron 僅 try/catch 記 log）；公司主檔 VW_HRCOMF 未同步 |
+| F004 | 組織資料同步（排程＋手動） | P0 | 1 | ✅ 已完成-已驗證 | OQ-E02-02 失敗重試＋通知刻意延後（cron 僅 try/catch 記 log）；公司主檔 VW_HRCOMF 未同步。**2026-08-12 擴充**：新增第 4 來源 `VW_PERSONAL_JOB` → `JOB_TITLE` 對照主檔＋白名單 11→12 欄（`JOBTITLEID`），供帳號清單「職位」欄（migration `1723852800000` 落 SOP）；對照攝入為**非阻斷**（取回失敗僅記警告，不使帳號同步失敗）＋同鍵去重（防 UQ 違反拖垮整筆交易）；新增 `fullResync` 旗標（`SYNC_FULL_RESYNC=1 npm run sync:once`）——**加欄後回填不會自然發生**（帳號為增量同步，既有列不被取回；此為 `descFull` 可自然回填之反例）。**已實跑落地**：全量 2,772 筆 → 更新 1,113，職稱覆蓋 **1,115/1,115（100%）**，二次執行 0 異動（冪等） |
 | F005 | 離職者自動停用帳號 | P0 | 1 | ✅ 已完成-已驗證 | 停用→即時撤銷＋消失比例中止保護；**兩類警示沿用 `ORG_CHANGE_ALERT`（人類定案 OQ-E02-08b）**：`DATA_INCONSISTENCY`（EMPSTS='A' 但 RESIGNDT 過去日，**不自動停用**）＋`ACCOUNT_DISAPPEARED`（單帳號消失低於閾值）；純函式偵測＋產生器接線＋dedup 以 loginId（migration `accountLoginId` 落 SOP）；修二值 alertKind 缺陷（writeAudit／AlertCard），int-verified |
-| F006 | 組織異動影響提示與異動後台 | P1 | 1/2 | ✅ 已完成-已驗證 | `ORG_CHANGE_ALERT` 單表＋alertKind 判別（2 migration 落 SOP）；提示產生三訊號＋§7.3 掛已關閉部門＋dedup（服務層＋filtered unique index，**int-verified**：重複 key→UQ 違反、resolved 後同 key 可再插）；Route A 自動解除／Route B 手動；`monthly-summary` KPI；prototype 09 三頁籤重建＋導向 F014 編輯；不覆寫文件/不停用帳號（有 AC）。殘：CLOSED_DEPT_PERSON 卡無 prototype 變體（沿用同殼渲染）、KPI 計數 vs 徽章 OQ-F006-04 待產品確認、上游無職級欄以 managerEmpNo 換手為替身（OQ-E02-07 待上游） |
+| F006 | 組織異動影響提示與異動後台 | P1 | 1/2 | ✅ 已完成-已驗證 | `ORG_CHANGE_ALERT` 單表＋alertKind 判別（2 migration 落 SOP）；提示產生三訊號＋§7.3 掛已關閉部門＋dedup（服務層＋filtered unique index，**int-verified**：重複 key→UQ 違反、resolved 後同 key 可再插）；Route A 自動解除／Route B 手動；`monthly-summary` KPI；prototype 09 三頁籤重建＋導向 F014 編輯；不覆寫文件/不停用帳號（有 AC）。殘：CLOSED_DEPT_PERSON 卡無 prototype 變體（沿用同殼渲染）、KPI 計數 vs 徽章 OQ-F006-04 待產品確認、上游無**職級**欄以 managerEmpNo 換手為替身（OQ-E02-07 待上游；⚠ 該 OQ 已於 2026-08-12 拆分——**職稱**部分＝`OQ-E02-07b` 上游本就具備、已實作，本項僅餘職級） |
 
 ### E03 循環與 DAG
 | ID | 功能 | P | Ph | 狀態 | 關鍵缺口 / 為何未達 Done |

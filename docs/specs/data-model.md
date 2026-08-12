@@ -26,6 +26,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | PERSON | 人員（含員工編號、職級、在職狀態） | 上游 MSSQL View（唯讀來源），本系統僅鏡射 |
 | ROLE | 5 種固定角色列舉 | 程式碼層級固定值 |
 | ACCOUNT | 登入帳號（手動 / 上游兩來源） | 本系統 |
+| JOB_TITLE | 職稱代碼→名稱對照主檔（供帳號清單「職位」欄） | 上游 MSSQL View（唯讀來源），本系統僅鏡射 |
 | LIFECYCLE | 循環（Life Cycle）池 | 本系統 |
 | LIFECYCLE_NODE | 循環內 DAG 節點 | 本系統 |
 | LIFECYCLE_EDGE | 循環內 DAG 有向邊 | 本系統 |
@@ -121,7 +122,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 
 ## 帳號 ACCOUNT {#account-entity}
 
-**上游來源穩定鍵＝`(companyCode, loginId)`**（`loginId` ← `VW_HPMUSER.USERID`）。上游欄位對應之權威定義見 [upstream-hr-source-contract.md](upstream-hr-source-contract.md) §5.2（**11 欄白名單**）。
+**上游來源穩定鍵＝`(companyCode, loginId)`**（`loginId` ← `VW_HPMUSER.USERID`）。上游欄位對應之權威定義見 [upstream-hr-source-contract.md](upstream-hr-source-contract.md) §5.2（**12 欄白名單**）。
 
 | 屬性 | 說明 | 必填 |
 |------|------|------|
@@ -135,6 +136,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | resignDate | 離職日（← `RESIGNDT`；哨兵 `9999-12-31` ＝未離職） | 否 |
 | hireDate | 到職日（← `HIREDT`） | 否 |
 | managerEmpNo | 直屬主管員工編號（← `DIRECTOR`） | 否 |
+| jobTitleCode | **職稱代碼**（← `JOBTITLEID`）。⚠ 存代碼不存名稱——名稱由 [JOB_TITLE](#job-title-entity) 對照解析，避免上游改名時需 backfill 全部帳號（帳號增量以 `MTDT` 為水位，僅主檔改名不會觸發帳號重寫）。2026-08-12 實測：AS 在職 1,115 筆空值 0 | 否 |
 | upstreamModifiedAt | 上游最後異動時間（← `MTDT`），**增量同步依據** | 否 |
 | passwordHash | bcrypt/argon2 加鹽雜湊（**僅手動帳號有值**；上游密碼欄嚴禁落地，見下） | 否 |
 | source | `manual`(手動建立) / `upstream`(上游同步) | 是 |
@@ -168,7 +170,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - **型別**：`nvarchar(20) NOT NULL DEFAULT 'other'`，並加 `CHECK (userSubtype IN ('business','other'))` 約束。
   - 選 `nvarchar(20)` 而非 `bit`／`tinyint`：語意自明、日後若需第三種子分類為 additive 變更（比照 `source`／`status`／`disableReason` 等既有列舉欄之慣例）。
 - **預設 `'other'`（＝不限縮）之理由**：既有帳號（含上游同步之全部在職者）於 migration 後一律落在 `'other'`，**行為與變更前完全相同**，不會因欄位缺值而意外全數受限。
-- **非上游來源欄位**：`VW_HPMUSER` 11 欄白名單**不含**此欄；[F004](features/F004-org-sync.md) 組織同步之 upsert **不得**寫入本欄（[F041](features/F041-user-subtype-business-scope.md) AC-34）。指派入口僅有一處＝[F003](features/F003-account-role-management.md) 之角色指派 modal。
+- **非上游來源欄位**：`VW_HPMUSER` 12 欄白名單**不含**此欄；[F004](features/F004-org-sync.md) 組織同步之 upsert **不得**寫入本欄（[F041](features/F041-user-subtype-business-scope.md) AC-34）。指派入口僅有一處＝[F003](features/F003-account-role-management.md) 之角色指派 modal。
 - **僅對 `roleCode = 'User'` 生效**：其餘 4 種角色之本欄值恆被忽略（[F041](features/F041-user-subtype-business-scope.md) INV-2）。**刻意不以 DB 約束強制「非 User 角色必為 'other'」**——若如此約束，角色升降級將被迫連動改寫本欄，使 additive 欄位變成有狀態耦合；改由判定函式 `isDeptScopedViewer` 於讀取端保證（[F041](features/F041-user-subtype-business-scope.md) AC-03）。
 - **不新增索引**：本欄不用於任何查詢條件（判定發生於已取得 session 身分之後、以純函式進行），無索引需求。
 - **migration 前置檢查**：無（純 additive 欄位＋預設值，既有列不需盤點或清理，與 [F040](features/F040-lifecycle-subcategory.md) 之 `LIFECYCLE.subcategory` 需前置盤點之情形不同）。
@@ -176,7 +178,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 ### 上游欄位白名單與密碼欄禁令
 
 - 🔴 上游 `VW_HPMUSER` 定義為 `SELECT *`（57 欄），內含 **`USERPW`／`DEFAULTPW`／`PWCHANGEDT`／`PWERRCNT`** 及 `BIRTHDAY`／`ADDR`／`TELNO`／`MOBILNO`／`EDUCATIONLVL` 等非必要個資。
-- **同步作業絕對不得 `SELECT *`，必須逐欄白名單**（上表標註 ← 之 11 欄）。**`USERPW`／`DEFAULTPW` 永不讀取、永不落地、永不記錄於任何日誌**（見 [nfr.md#security](nfr.md#security)）。
+- **同步作業絕對不得 `SELECT *`，必須逐欄白名單**（上表標註 ← 之 12 欄）。**`USERPW`／`DEFAULTPW` 永不讀取、永不落地、永不記錄於任何日誌**（見 [nfr.md#security](nfr.md#security)）。
 - 本表 `passwordHash` **僅供手動建立之管理員帳號使用**，與上游密碼欄無任何關聯，不得由上游寫入。
 
 - 手動帳號與上游帳號**共用同一資料表**，以 `source` 區分（US-005）；手動帳號之 `companyCode`／`loginId` 由本系統自行指派，不與上游衝突。
@@ -184,6 +186,25 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - 帳號停用為**軟刪除**，不可實體刪除（維持稽核外鍵完整性）。
 - 帳號狀態：`active → disabled`（手動或離職）；`disabled → active`（誤判恢復，處理方式見 open-questions）。
 - **相關功能**：F001、F002、F003、F005、F023、**F041**（`userSubtype`，🔴 Draft）。
+
+## 職稱對照 JOB_TITLE {#job-title-entity}
+
+← `VW_PERSONAL_JOB` 之 `(COMPID, JTITLE_ID, JTITLE_NM)`（契約 [§5.4.1](upstream-hr-source-contract.md)）。
+供帳號管理清單「職位」欄（prototype 08 第 5 欄）之代碼→名稱解析。由 F004 組織同步一併攝入。
+
+| 屬性 | 說明 | 必填 |
+|------|------|------|
+| id | 系統 UUID（內部代理鍵） | 是 |
+| companyCode | 公司代碼（← `COMPID`） | 是 |
+| code | 職稱代碼（← `JTITLE_ID`），對應 `ACCOUNT.jobTitleCode` | 是 |
+| name | 職稱名稱（← `JTITLE_NM`；業務專員／課長／協理…） | 是 |
+
+- **唯一鍵＝`(companyCode, code)`**，⚠ **不得以 `code` 單獨為鍵**——上游跨公司存在一碼多名
+  （實測：全公司 71 組 pair／63 種代碼，8 種歧義，如 `C01` ＝協理｜高級協理）；限單一公司內則為 1:1
+  （AS：54／54，零歧義）。
+- **解析為兩段式**：本公司優先 → 查無再跨公司 fallback（固定取 `companyCode` 字典序最小者以保確定性）。
+  實測 AS 在職 1,115 筆命中率 100%（僅第一段為 99.10%）。
+- ⚠ **不刪除本地已無對應之列**：上游移除某代碼時，既有帳號仍可能引用它，刪除會使歷史帳號之職位顯示驟失。
 
 ## 循環 LIFECYCLE {#lifecycle-entity}
 

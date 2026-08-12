@@ -24,7 +24,7 @@ last_updated: 2026-07-21
 | JCHA0（第 4 碼有值）→ SUBSECTION（課），5 層不壓縮 | `org-hierarchy.spec.ts` | PASS |
 | 在職判定 EMPSTS='A'；部門有效 CLOSE_DATE>now（哨兵 9999-12-31） | `employment-status.spec.ts` | PASS |
 | 消失閾值 60/1000=6%→中止；20/1000=2%→放行；恰 5%→放行 | `disappeared-threshold.spec.ts` | PASS |
-| 白名單 11 欄、OPENQUERY 下推、USERPW/DEFAULTPW 不出現於查詢 | `upstream-queries.spec.ts` | PASS |
+| 白名單 12 欄、OPENQUERY 下推、USERPW/DEFAULTPW 不出現於查詢 | `upstream-queries.spec.ts` | PASS |
 | 正規化 + 髒資料 → DirtyRowError | `normalization.spec.ts` | PASS |
 | 異動分類 新增/更新/離職停用/無異動（EMPSTS 權威、誤判恢復） | `change-classification.spec.ts` | PASS |
 | 引擎：新增/更新/離職停用/無異動不寫/閾值中止不停用/閾值放行/孤兒保留/來源不可用/髒資料跳過/SYNC_IN_PROGRESS/增量水位 | `org-sync.service.spec.ts`（11 tests） | PASS |
@@ -62,7 +62,7 @@ last_updated: 2026-07-21
 ## 設計決策
 
 ### 1. PERSON vs ACCOUNT（依規指示明確 flag）
-- **決策：本 pass 不建立 PERSON 實體/資料表。** F004 之上游人員/在職資料一律經 `VW_HPMUSER` 白名單 11 欄寫入 **ACCOUNT**（契約 §5.2）。
+- **決策：本 pass 不建立 PERSON 實體/資料表。** F004 之上游人員/在職資料一律經 `VW_HPMUSER` 白名單 12 欄寫入 **ACCOUNT**（契約 §5.2）。
 - 理由（以契約為準，data-model PERSON 之上游對應由 data-model.md line 14 明定「以契約為準」）：
   1. 契約 §5.2 是唯一定義 VW_HPMUSER 之對應，且對應到 **ACCOUNT**；契約**未**定義任何 `VW_* → PERSON` 對應。
   2. PERSON 與 ACCOUNT 之欄位（employeeNo/name/orgCode/status）幾乎完全重疊；在 F004 範圍另建 PERSON 將重複資料且與契約單一對應牴觸 —— 符合本任務「不要自行臆造多餘實體」之指示。

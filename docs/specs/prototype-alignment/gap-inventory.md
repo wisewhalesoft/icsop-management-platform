@@ -151,7 +151,7 @@
 ## GROUP 4 — Admin Data Pages (34 gaps)
 
 ### 08 Account Management (`AccountManagementPage.tsx`) — **HEAVILY DRIFTED**
-- **G-ADM-001** · **HIGH** · missing-element · needs-backend-data — results table dropped **4 columns**: 公司 / 部門 / 職位 / 最後活動 (10→6 cols); 來源/角色/狀態 moved up (wrong order). Route: **system-architect** — `AccountView` lacks `company`/`department`/`title`/`lastActivityAt`; backend `GET /admin/accounts` must surface them. **Highest-impact — this is the column-drop the user flagged.**
+- **G-ADM-001** · **HIGH** · missing-element · needs-backend-data — **✅ CLOSED 2026-08-12**（公司/部門/最後登入 於 Wave 2 補齊；**職位於 2026-08-12 補齊**）. results table dropped **4 columns**: 公司 / 部門 / 職位 / 最後活動 (10→6 cols); 來源/角色/狀態 moved up (wrong order). Route: **system-architect** — `AccountView` lacks `company`/`department`/`title`/`lastActivityAt`; backend `GET /admin/accounts` must surface them. **Highest-impact — this is the column-drop the user flagged.**<br>職位之補齊：`ACCOUNT.jobTitleCode` ← `VW_HPMUSER.JOBTITLEID`＋`JOB_TITLE` 對照主檔 ← `VW_PERSONAL_JOB`（migration `1723852800000`）。⚠ 先前「上游無此欄」之 DEFER 理由經查不成立，見契約 §5.4.1 與 `OQ-E02-07b`。
 - **G-ADM-002** · Med · wrong-cell-render(icon) · bug — 離職自動停用 badge icon `user-cog` should be `user-x`. Route: FE.
 - **G-ADM-003** · Low · wrong-cell-render(icon) · bug — 建立帳號 button icon `plus` should be `user-plus`. Route: FE.
 - **G-ADM-004** · Med · wrong-label/icon · bug — read-only banner icon `user-circle`→`eye`; wording drift. Route: FE.

@@ -156,7 +156,7 @@ view 內註解明載（2013-12-27 應和潤需求）：
 | `effectiveFrom` | `ESTABLISHED_DATE` | |
 | `isActive` | `CLOSE_DATE > GETDATE()` | 見 §4 |
 
-### 5.2 `ACCOUNT` ← `VW_HPMUSER`（白名單，共 11 欄）
+### 5.2 `ACCOUNT` ← `VW_HPMUSER`（白名單，共 12 欄）
 
 | ICSOP | 上游 | 備註 |
 |---|---|---|
@@ -171,6 +171,7 @@ view 內註解明載（2013-12-27 應和潤需求）：
 | `hireDate` | `HIREDT` | |
 | `managerEmpNo` | `DIRECTOR` | |
 | `lastModifiedAt` | `MTDT` | 增量同步依據 |
+| `jobTitleCode` | `JOBTITLEID` | **職稱代碼**（非名稱）。名稱另由 §5.4 之對照主檔解析。2026-08-12 實測：AS 在職 1,115 筆**空值 0**、36 種代碼 |
 
 **明確排除（不得讀取）**：`USERPW`、`DEFAULTPW`、`PWCHANGEDT`、`PWERRCNT`、`BIRTHDAY`、`MARRITALSTS`、`ADDR`、`ZIPCODE1`、`ZIPCODE2`、`TELNO`、`TELAREA`、`MOBILNO`、`HRMOBILENO`、`EDUCATIONLVL`、`SCHNM`、`MAJOR` 及其餘未列於白名單之欄位。
 
@@ -188,6 +189,55 @@ view 內註解明載（2013-12-27 應和潤需求）：
 - 職稱名稱：`VW_PERSONAL_JOB.JTITLE_NM`（63 種，空值 0）
 - 職務功能：`VW_PERSONAL_JOB.JFUN_NM` / 定義主檔 `VW_JOB_FUN`（AS 23 種）
 - ⚠ **職級（`GRADECD` / `JOB_LEVEL_CODE`）之名稱對照主檔尚未定位**，見 §10。
+
+#### 5.4.1 `JOB_TITLE` ← `VW_PERSONAL_JOB`（職稱對照主檔，2026-08-12 定案並實作）
+
+> ⚠ **請勿將本節與 §11 #6「職級名稱主檔」混為一談。**「職稱」（`JTITLE_NM`，本節，**上游已具備**）
+> 與「職級」（`GRADECD`，§11 #6，**上游待交付**）是兩件事。二者曾一併掛在 `OQ-E02-07` 之下，
+> 導致「職位欄無法實作」的錯誤結論；該 OQ 已於 2026-08-12 拆分，見 [open-questions.md](open-questions.md)。
+
+| ICSOP | 上游 | 備註 |
+|---|---|---|
+| `companyCode` | `COMPID` | 對照鍵之一（見下方歧義說明） |
+| `code` | `JTITLE_ID` | 對應 `ACCOUNT.jobTitleCode` |
+| `name` | `JTITLE_NM` | 顯示名稱（業務專員／課長／協理…） |
+
+**明確排除（不得讀取）**：`ID_NUMBER`（身分證字號）、`EMPNM`、`BUSINESS_TYPE` 及其餘未列於上表之欄位。
+該 view 底層為 `HREMPMF` ＋ 3 表 join，含高敏感個資；本系統僅需上述三欄之對照關係。
+
+**為何以「代碼 + 對照主檔」而非直接取每個人的職稱名稱**：`VW_PERSONAL_JOB` 以「人」為粒度，
+其身分鍵為 `EMPNO`——而 `EMPNO` **非唯一**（§7.2）且存在一人多帳號，無法安全 join 至 `ACCOUNT`。
+改以 `VW_HPMUSER.JOBTITLEID`（帳號自身即帶職稱代碼）＋ 本對照主檔解析，即完全繞開該 join。
+
+**⚠ 一碼多名（跨公司）與鍵之選擇**：以 `JTITLE_ID` 單獨為鍵**不成立**——全公司範圍下
+71 組 `(JTITLE_ID, JTITLE_NM)` 對應 63 種代碼，其中 8 種歧義（如 `C01` ＝協理｜高級協理、
+`D00` ＝資深經理｜資深經理(主管職)）。**限單一公司內則為 1:1**（AS：54 組 pair／54 種代碼，零歧義），
+故對照主檔以 `(COMPID, JTITLE_ID)` 為唯一鍵。
+
+**解析規則（兩段式，讀寫端一致）**：
+1. **本公司優先** —— `(companyCode, code)` 精確命中；此段即保證 1:1、無歧義。
+2. **跨公司 fallback** —— 本公司對照缺該代碼時，取其他公司之同代碼，
+   固定選 `companyCode` 字典序最小者（**確定性**，避免同帳號在不同次同步解析出不同職稱）。
+
+**實測命中率（2026-08-12，AS 在職 1,115 筆）**：
+
+| 解析方式 | 命中 | 說明 |
+|---|---|---|
+| 僅第 1 段（本公司） | 1,105 / 1,115（99.10%） | `I10`(9 筆)／`G03`(1 筆) 不存在於 AS 之對照列 |
+| 兩段式（含 fallback） | **1,115 / 1,115（100%）** | `I10`／`G03` 皆不在上述 8 種歧義代碼之列，fallback 無歧義風險 |
+
+**⚠ 兩個易混淆的列數口徑**：`71` 組是 `DISTINCT (JTITLE_ID, JTITLE_NM)`（用以論證上述歧義）；
+攝入 `JOB_TITLE` 的則是 `DISTINCT (COMPID, JTITLE_ID, JTITLE_NM)`＝**109 列**（2026-08-12 實測，
+含 `JTITLE_NM IS NOT NULL` 過濾），其中 AS 佔 54 列。
+
+> 🔴 **加欄後之回填不會自然發生**：帳號同步為增量（`MTDT > watermark`），既有帳號不會被取回。
+> 新增任何上游帳號欄位後，**必須執行一次全量重同步**：`SYNC_FULL_RESYNC=1 npm run sync:once`。
+> ⚠ 不可類比 `ORG_UNIT.descFull`（組織來源本就全量取回，故其回填可自然完成）。
+> 2026-08-12 實跑：全量取回 2,772 筆 → 新增 1／更新 1,113，職稱覆蓋 1,115/1,115（100%）；
+> 再跑一次為 0 異動（冪等驗證通過）。
+
+實作對應：`ACCOUNT.jobTitleCode`／`JOB_TITLE` 表（migration `1723852800000-account-job-title`）、
+查詢建構 `buildJobTitleQuery`、解析 `backend/src/org-directory/job-title-directory.ts`。
 
 ---
 
@@ -356,7 +406,7 @@ AS 有效組織實測為 **5 層**（層級判定見 §3.5，一律由代碼前�
 
 | # | 事項 | 影響 | 優先 |
 |---|---|---|---|
-| 1 | **提供最小欄位專用 view**（僅 §5.2 白名單 11 欄，排除密碼與非必要個資） | 資料最小化、降低個資保管責任；同時解決 `SELECT *` 的 schema 漂移風險 | **高** |
+| 1 | **提供最小欄位專用 view**（僅 §5.2 白名單 12 欄，排除密碼與非必要個資） | 資料最小化、降低個資保管責任；同時解決 `SELECT *` 的 schema 漂移風險 | **高** |
 | 2 | 補齊 `VW_HRCOMF` 之 AD／AJ／ILS，並釐清 `AC`(test1) 測試資料是否應排除 | 多公司擴充前提 | 中 |
 | 3 | 補齊 AD／AJ 之部門主檔（現孤兒率 22.1%／84.9%） | 多公司擴充前提 | 中 |
 | 4 | `EMPSTS = 'C'`（25 筆）之正式語意 | 在職判定完整性 | 中 |

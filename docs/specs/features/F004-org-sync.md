@@ -13,7 +13,8 @@ Epic/Story: E02 / US-010, US-011
 | 用途 | 來源 view | 說明 |
 |---|---|---|
 | 組織階層 | `VW_DEPT_SQL` | AS 有效部門 114 筆；`isActive` ⇔ `CLOSE_DATE > GETDATE()`（哨兵 `9999-12-31`） |
-| 帳號／在職狀態 | `VW_HPMUSER` | **必須逐欄白名單（11 欄）**，絕不得 `SELECT *`；`USERPW`／`DEFAULTPW` 永不讀取、永不落地、永不記錄 |
+| 帳號／在職狀態 | `VW_HPMUSER` | **必須逐欄白名單（12 欄）**，絕不得 `SELECT *`；`USERPW`／`DEFAULTPW` 永不讀取、永不落地、永不記錄 |
+| 職稱對照 | `VW_PERSONAL_JOB` | **2026-08-12 新增**。僅取 `COMPID`／`JTITLE_ID`／`JTITLE_NM` 三欄之 DISTINCT → `JOB_TITLE` 對照主檔，供帳號清單「職位」欄；🔴 `ID_NUMBER`（身分證字號）等個資欄永不讀取。契約 §5.4.1 |
 | 公司主檔 | `VW_HRCOMF` | `companyName` 取 `COMPFULLNM`（全稱） |
 
 - 存取一律以 4 段式命名 `[APYHFC23].[HR2].[dbo].[<view>]` 經 linked server 進行。
@@ -36,7 +37,7 @@ Epic/Story: E02 / US-010, US-011
 1. 觸發（scheduled 或 manual）→ 取得同步互斥鎖；已有進行中則拒絕。
 2. 建立 `SYNC_RUN`（status=running）。
 3. **組織階層：以 `OPENQUERY` 全量取回 `VW_DEPT_SQL`（僅 114 筆，成本極低且免除階層增量的正確性風險）**，依代碼前綴推導 `tier`／`parentCode`／`codePrefix`。
-4. **帳號／人員：以 `OPENQUERY` 依 `VW_HPMUSER.MTDT > <上次同步時間>` 增量取回白名單 11 欄**；公司主檔 `VW_HRCOMF` 全量取回。
+4. **帳號／人員：以 `OPENQUERY` 依 `VW_HPMUSER.MTDT > <上次同步時間>` 增量取回白名單 12 欄**；公司主檔 `VW_HRCOMF` 全量取回。
 5. **消失筆數閾值檢查**（見 Edge Cases）：計算「上次存在、本次消失」之在職帳號比例，超過閾值即中止本次同步。
 6. 開啟資料庫交易，逐筆比對來源與本地，分類：新增 / 更新 / 離職停用（在職判定依 `EMPSTS='A'`，見 F005）。
 7. 冪等套用異動；離職/停用類型觸發 F005；當責相關異動與「在職者掛已關閉部門」產生 F006 提示。
@@ -77,7 +78,12 @@ Epic/Story: E02 / US-010, US-011
 - Given 本次同步有 20 筆（2% ≤ 5%）在職帳號消失, When 同步, Then 正常進行後續離職判定流程。
 - Given 帳號之 `DEPTID` 於 `VW_DEPT_SQL` 查無（孤兒）, When 同步, Then 保留該帳號、記錄警告，不停用亦不中止同步。
 - Given 同步查詢執行, When 對上游進行彙總或過濾, Then 該述詞以 `OPENQUERY` 下推至對端執行（不得整表拉回本地端比對）。
-- Given 同步讀取 `VW_HPMUSER`, When 組裝查詢, Then 僅選取白名單 11 欄，`USERPW`／`DEFAULTPW` 不出現於查詢、回應或任何日誌。
+- Given 同步讀取 `VW_HPMUSER`, When 組裝查詢, Then 僅選取白名單 12 欄，`USERPW`／`DEFAULTPW` 不出現於查詢、回應或任何日誌。
+- Given 同步讀取 `VW_PERSONAL_JOB`, When 組裝查詢, Then 僅選取 `COMPID`／`JTITLE_ID`／`JTITLE_NM` 三欄，`ID_NUMBER` 等個資欄不出現於查詢、回應或任何日誌。
+- Given 職稱對照主檔取回失敗, When 同步進行, Then **不使本次同步失敗**——僅記錄警告，帳號／組織異動照常套用（職位為顯示欄位，不涉授權或身分）。
+- Given 上游回傳同一 `(COMPID, JTITLE_ID)` 之多列, When 規劃對照異動, Then 去重僅取先到者（避免同鍵雙插違反唯一索引，致整筆交易回滾）。
+- Given 新增一個來自上游之帳號欄位（既有列為 NULL）, When 僅執行增量同步, Then 既有帳號**不會**被回填——增量只取 `MTDT > watermark` 之帳號，既有帳號不在結果中，`classifyAccount` 的新欄位比對無從觸發。**必須另行執行一次全量重同步**（`SYNC_FULL_RESYNC=1 npm run sync:once`）。
+- Given 執行全量重同步, When 完成, Then 水位照常依來源 `MTDT` 最大值推進，後續排程自動回到增量；且再次執行應為 0 異動（冪等）。
 - Given 組織階層同步, When 執行, Then `VW_DEPT_SQL` 為全量取回（非依 `MTDT` 增量）。
 
 ## Error Scenarios

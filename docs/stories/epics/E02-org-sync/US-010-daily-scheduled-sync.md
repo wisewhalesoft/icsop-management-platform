@@ -46,7 +46,7 @@ So that 本系統內的部門、人員、職級資訊能維持與外部人資系
 - 排程機制可採用 NestJS 內建 `@nestjs/schedule` 或系統層 cron，需可透過設定調整執行時間
 - 需與 [NFR-006 系統整合可靠性](../../non-functional/NFR-006-integration-reliability.md) 之重試/通知規則對齊
 - 外部資料來源為唯讀 MSSQL View，本系統僅為讀取方，不回寫外部系統
-- **權威來源物件**（2026-07-20 上游 dev 環境唯讀實測定案；資料已遮罩）：組織階層 `VW_DEPT_SQL`、帳號/在職狀態 `VW_HPMUSER`（僅取白名單 11 欄，禁讀密碼與非必要個資欄位）、公司主檔 `VW_HRCOMF`，皆經 linked server 以四段式命名存取（`[APYHFC23].[HR2].[dbo].[<view>]`）；因跨 server collation 不相容（`is_collation_compatible = False`），彙總/過濾邏輯須以 `OPENQUERY` 下推至對端執行，否則會整表拉回本地端比對，詳見[上游人資來源資料契約](../../../specs/upstream-hr-source-contract.md)
+- **權威來源物件**（2026-07-20 上游 dev 環境唯讀實測定案；資料已遮罩）：組織階層 `VW_DEPT_SQL`、帳號/在職狀態 `VW_HPMUSER`（僅取白名單 12 欄，禁讀密碼與非必要個資欄位）、公司主檔 `VW_HRCOMF`，皆經 linked server 以四段式命名存取（`[APYHFC23].[HR2].[dbo].[<view>]`）；因跨 server collation 不相容（`is_collation_compatible = False`），彙總/過濾邏輯須以 `OPENQUERY` 下推至對端執行，否則會整表拉回本地端比對，詳見[上游人資來源資料契約](../../../specs/upstream-hr-source-contract.md)
 - 組織階層之「層級」不可用 view 提供的 `TOP_DEPTID`／`DEPARTMENT`／`CAPITAL` 欄位判定（實測皆不可靠），須改以 5 碼部門代碼前綴推導層級與上層代碼（見上游人資來源資料契約 §3.5）
 
 ## Test Cases
