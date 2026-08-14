@@ -85,3 +85,30 @@
 | G-F041-04 | **AC-44（`SUBTYPE_DESC`）實跑為 RED，與 team-lead 原先「AC-43／AC-44 已實作、應一寫即綠」之預期不符** | `tsc --noEmit` 實跑報 `TS2305: Module "./user-subtype" has no exported member 'SUBTYPE_DESC'`；AC-43（同一 modal 之選擇器預選）確認為綠。故兩條 AC 之實作進度並不一致，僅 AC-43 已完成。 | 已如實記錄並於 SendMessage 回報 team-lead 覆核；test-generator 未讀取 `frontend/src/domain/user-subtype.ts` 以判斷該常數是否存在於其他位置或尚未動工——依盲性原則，此判斷留給 team-lead／tdd-implementation。 |
 | G-F041-05 | AC-41／AC-42 之 INV-2 反向案例（非 User 角色但 `userSubtype='business'` → 不顯示徽章）現況為綠 | 現況本就不渲染任何子分類徽章（AC-41/42 正向案例尚未實作），故「不出現」之斷言天然成立。**回歸鎖，非缺陷**——待正向案例實作後，此案例才真正發揮 INV-2 排除的鎖定作用；已於 [F041-test.md](features/F041-test.md#f2-缺口修補2026-08-11ac-41ac-46約束檔擴充) 註明，避免被誤讀為「已覆蓋」。 |
 | G-F041-06 | AC-46 之「不殘留文件欄位」「殘留內容回歸鎖（真實路由切換）」兩案例現況為綠 | 現行 404 畫面本就不含任何文件欄位；以真實（未 mock `useNavigate`）路由切換由已載入文件 A 導向觸發 404 之文件 B，亦未觀察到 A 之欄位殘留於拒絕畫面下。**回歸鎖，非缺陷**——證明現行實作在這個面向是安全的，即使其文案／圖示／錯誤碼列三者仍缺（見 AC-46 主斷言之 RED）。 |
+
+## F003 手動帳號基本資料 delta（2026-08-14，含同日第二次裁決－公司別可跨公司選擇） {#f003-profile}
+
+> 對應 [F003-test.md](features/F003-test.md) 之「手動帳號基本資料 delta」段落（`AC-P1`～`AC-P27`）。
+
+### A. 本輪刻意不覆蓋（範圍決定，理由詳見 [F003-test.md 範圍聲明](features/F003-test.md#本輪範圍聲明刻意不含見-risks-and-gapsmd-對應條目)）
+
+| # | 缺口 | 理由 |
+|---|---|---|
+| ~~G-F003P-01~~ | ~~AC-P23d（部門逐列解析，`(companyCode, orgCode)` 複合鍵）~~ | **已關閉（2026-08-14）**——真實 SOP DB 仍無「兩公司皆有同 `orgCode` 但不同單位」之資料組合，但改用 AC-P10a 已建立之「直接經 repository 種入既有/歷史資料」慣例：於真庫種一筆 `companyCode='AE'`、`orgCode='JAC00'`（真實存在但僅屬 AS 之部門代碼）之髒資料列——`AE` 本無任何 `ORG_UNIT`（AC-P26 前提），故正確（複合鍵）解析必為 `null`，錯誤（僅比 `orgCode`）會誤解析出 AS 之「審查室」，兩者可辨。見 `backend/test/int/account-profile.itest.ts` 之 `AC-P23d` 區塊，實跑為 RED。 |
+| ~~G-F003P-02~~ | ~~AC-P23e（職位逐列解析，`(companyCode, jobTitleCode)` 複合鍵）~~ | **已關閉（2026-08-14，team-lead 二度糾正）**——前次誤把「int 層真實 DB 缺乏爭議資料」之限制，錯誤延伸適用到 unit 層；team-lead 正確指出這是 service 之純邏輯，FakeStore 可任意種入合成資料，完全不受真實 SOP DB 現況限制。已於 `account-profile.spec.ts` 補上 `AC-P23d`／`AC-P23e` 兩案例（`MultiCompanyStore`，`list()` 忽略 companyCode 以取得跨公司列）：`AC-P23e` 之關鍵設計（亦由 team-lead 指出）＝讓 AS／AE **兩公司皆**有 `C01` 代碼（僅名稱不同，逐字取自 prototype 08 :409/:419），使精確命中恆先於跨公司 fallback 觸發，fallback 因此無從介入、無法掩蓋誤植——這正是前次評估遺漏的設計。實跑：兩案例皆 RED 且失敗原因正確（現況皆解析出 AS 之值，證實現行邏輯確實對全列套用同一公司）。同批亦補上 `AC-P6` 之公司交叉檢查缺口（先前只測過 orgCode 完全不存在，未測過「orgCode 存在但屬另一公司」）。 |
+| ~~G-F003P-03~~ | ~~AC-P25／[F001](features/F001-test.md) AC-C1～AC-C3（跨公司帳密登入解析）~~ | **已關閉（2026-08-14，team-lead 明確要求納入範圍）**——已於 `backend/test/int/auth.itest.ts` 新增 `[int] F001 跨公司帳密登入解析 delta（AC-C1～AC-C3）` 區塊（5 案例）＋ `frontend/src/pages/LoginPage.test.tsx` 新增 AC-C2 兩案例（回歸護欄，登入頁本就無公司欄位）。**AC-C1③（命中多筆→401）與 AC-C3（訊息揭露不變）現況為巧合綠燈**，見下方「已知混淆源」G-F003P-08。 |
+| G-F003P-04 | Playwright e2e fidelity／Stryker mutation／dependency-cruiser metric gate | 使用者明確指示本輪僅建 jest／vitest 單元與元件測試（見 team-lead 任務指派原文），比照 [F040 §B](#f040)／[F041](#f041) 同類範圍決定。 |
+
+### B. 已知混淆源（現況綠燈但尚未真正證明規則成立，實作/覆核者必讀）
+
+| # | 缺口 | 說明 | 現況處置 |
+|---|---|---|---|
+| G-F003P-05 | AC-P24（loginId 全域唯一）現況「綠燈」為巧合命中 | AC-P5（公司欄寫入）落地前，`POST /admin/accounts` 完全不處理 payload 之 `companyCode`（已以真實 DB diag 探測確認：回應 DTO 甚至未含此鍵）。故 `backend/test/int/account-profile.itest.ts` 內「AS 建一筆、AE 建同名一筆 → 409」測試，兩筆建立實際上都落在操作者自身 `companyCode`，回 409 只是既有「同公司重複」行為之巧合命中，尚未證明「全域」唯一性邏輯本身存在。 | 測試檔內已加註解警語（不可據此測試現在綠燈就回報 AC-P24 已滿足）。待 AC-P5 落地、companyCode 真正處理後，此測試才轉為對 AC-P24 之真實診斷；屆時無需改動測試本身，僅移除註解中的警語即可（實測值本身已是正確的驗收條件）。**升級對象**：無（自我提醒，供實作完成後之覆核者核對）。 |
+| G-F003P-06 | AC-P23a／AC-P23b（清單跨公司可見／篩選）已強化為嚴格斷言，現況正確為紅燈 | 與 G-F003P-05 同一混淆源，但這兩條測試已改為嚴格核對 `row.companyCode === 'AE'`（而非寬鬆之 `if defined` 略過），故 AC-P5 落地前 `companyCode` 缺席會使其正確地維持紅燈，不像 AC-P24 那樣被巧合命中掩蓋。列此純為記錄同一根因，非待辦。 | 已處置（測試本身已正確）。 |
+| G-F003P-08 | [F001](features/F001-test.md) `AC-C1③`（命中多筆→401）與 `AC-C3`（訊息揭露不變）現況「綠燈」為巧合命中 | 與 G-F003P-05 同一類型：`AC-C1②`（跨公司 fallback）落地前，現行登入僅查 `(DEFAULT_COMPANY_CODE ?? 'AS', loginId)`；這兩條測試之 loginId 皆只存在於 AS 以外之公司（AD／AE），現行程式碼在 AS 查無此帳號本就回 401——與兩測試預期之 401 巧合相同，尚未證明「多筆時不任選一筆」「訊息不區分」之新邏輯存在。 | `backend/test/int/auth.itest.ts` 對應兩測試已加註解警語。待 `AC-C1②` 落地後，`AC-C1③` 才轉為對「多筆拒絕」之真實診斷（若實作偷懶「找到第一筆就用」，401 會變成 200，屆時才真正發揮鑑別力）；`AC-C3` 待 stage②真正查到 AE 帳號後才開始驗證新邏輯下之訊息一致性。**升級對象**：無（自我提醒，供 `AC-C1②` 落地後之覆核者核對）。 |
+
+### C. 與本輪無關之既有紅燈（run 期間發現，供覆核，非本 delta 造成）
+
+| # | 缺口 | 說明 |
+|---|---|---|
+| G-F003P-07 | `backend/test/int/access-history.itest.ts` 之 `TS-AQ-INT-012`（合成 orgCode 之操作者 → department/section 應為 null）現況失敗 | 全量 `npm run test:int` 兩次獨立執行皆重現（非本次新增測試造成之連帶失敗）：期望 `null`，實得 `"和潤本部"`（ORG_UNIT 之 ROOT 列名稱）。`git status` 確認 test-generator 本輪未修改此檔；本 delta 之診斷查詢與新測試皆未寫入 `ORG_UNIT` 資料表。研判為真實 SOP DB 之 `ORG_UNIT` 資料內容自該測試上次驗證以來已產生變動（外部資料飄移），非程式碼回歸。**升級對象**：team-lead／負責 F024 之維護者——請核實真實 DB 現況是否確有變動，或該測試之判定邏輯是否需要更新。 |

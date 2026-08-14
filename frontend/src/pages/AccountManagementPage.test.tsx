@@ -5,7 +5,8 @@ import { AccountManagementPage } from './AccountManagementPage';
 import { ToastProvider } from '../components/useToast';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
-import type { SessionUser, AccountView } from '../api/types';
+import type { SessionUser, AccountView, OrgUnitRecord } from '../api/types';
+import { buildOrgPath } from '../domain/org-path';
 
 vi.mock('../api/endpoints');
 vi.mock('../auth/useAuth');
@@ -68,6 +69,9 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
     const dialog = screen.getByRole('dialog', { name: /建立手動帳號/ });
     await userEvent.type(within(dialog).getByLabelText(/帳號/), '20500');
     await userEvent.type(within(dialog).getByLabelText(/初始密碼/), 'Init@2026');
+    // 補填姓名（2026-08-14 dispute 裁決）：本測試早於 AC-P3（姓名必填）撰寫，待測命題（成功送出
+    // → 呼叫 createAccount）與姓名無關，僅需補齊新的必填欄位使斷言在新契約下仍測到原本要測的事。
+    await userEvent.type(within(dialog).getByLabelText(/姓名/), '陳美惠');
     await userEvent.click(within(dialog).getByRole('button', { name: '建立' }));
 
     await waitFor(() =>
@@ -128,7 +132,16 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
     await userEvent.click(within(row).getByRole('button', { name: '編輯' }));
     const dialog = screen.getByRole('dialog', { name: /編輯帳號/ });
     expect(within(dialog).getByLabelText(/姓名/)).toHaveAttribute('readonly');
-    expect(within(dialog).getByText(/由上游系統維護/)).toBeInTheDocument();
+    // 2026-08-14 dispute 裁決：prototype 08 之編輯 modal 有兩個獨立且於 upstream 時同時可見之
+    // 上游提示（:205 eNameHint／:215 eProfileHint，兩者皆由同一 upstream 布林值 toggle），故單一
+    // 寬鬆 regex 查詢會撞上「Found multiple elements」。改為逐字比對兩句，既避開多命中歧義，也比
+    // 原本的寬鬆比對更精確地釘住兩處文案本身（比照既有 AC-P23b 等已裁決之逐字文案處理慣例）。
+    expect(
+      within(dialog).getByText('上游同步帳號，姓名由上游系統維護。'),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('上游同步帳號，公司／部門／職位由上游系統維護。'),
+    ).toBeInTheDocument();
   });
 
   it('分頁：每頁 50 筆、可翻頁', async () => {
@@ -469,6 +482,226 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
 
       await userEvent.click(within(dialog).getByRole('radio', { name: /一般使用者/ }));
       expect((within(dialog).getByRole('radio', { name: /^業務/ }) as HTMLInputElement).checked).toBe(true);
+    });
+  });
+
+  /**
+   * F003 手動帳號基本資料 delta（姓名／公司／部門／職位；2026-08-14 使用者直接裁定，
+   * 同日第二次裁決＝公司別可跨公司選擇）。規格權威：
+   * docs/specs/features/F003-account-role-management.md#manual-account-profile（AC-P1～AC-P27）。
+   * 版面權威：prototypes/08-account-management.html（建立 modal :159、編輯 modal :197、
+   * 公司→部門/職位雙連動 syncProfileOptions :467、buildOrgPath 移植 :378）。
+   *
+   * getCompanies／getJobTitles 為本 delta 新增之 API（AC-P15／AC-P14），現行 `../api/endpoints`
+   * 尚無此匯出——`vi.mock('../api/endpoints')` 之自動 mock 只涵蓋既有匯出，故本區塊之
+   * `vi.mocked(endpoints.getCompanies)` 等呼叫在實作前會拋 TypeError，使本區塊全部案例
+   * 一起紅燈（而非個別案例各自之斷言失敗）——此為預期之「新端點尚未匯出」紅燈，非測試本身之
+   * fixture 錯誤，比照 verify-by-running 記憶「vi.mock 只涵蓋既有匯出」之慣例。
+   */
+  describe('F003 手動帳號基本資料 delta（AC-P16～AC-P19，含公司可跨公司選擇）', () => {
+    const AS_UNITS: OrgUnitRecord[] = [
+      { companyCode: 'AS', orgCode: 'JA000', codePrefix: 'JA000', parentCode: null, tier: 'DEPARTMENT', name: '營管部', descFull: '營運管理部', managerEmpNo: null, isActive: true },
+      { companyCode: 'AS', orgCode: 'JAC00', codePrefix: 'JAC00', parentCode: 'JA000', tier: 'SECTION', name: '營管部/審查室', descFull: '營運管理部審查室', managerEmpNo: null, isActive: true },
+    ];
+    const ORG_UNITS_MULTI: OrgUnitRecord[] = [...AS_UNITS]; // AE 刻意無 ORG_UNIT（AC-P26，資料現實）
+    const JOB_TITLES = [
+      { companyCode: 'AS', code: 'D01', name: '經理' },
+      { companyCode: 'AE', code: 'M01', name: '電能工程師' },
+    ];
+    const COMPANIES = [
+      { companyCode: 'AS', companyName: '和潤企業股份有限公司' },
+      { companyCode: 'AE', companyName: '和潤電能' },
+    ];
+
+    beforeEach(() => {
+      vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
+      vi.mocked(endpoints.getOrgUnits).mockResolvedValue(ORG_UNITS_MULTI);
+      vi.mocked(endpoints.getJobTitles).mockResolvedValue(JOB_TITLES);
+    });
+
+    it('AC-P16 建立 modal：切換公司後，已選部門與職位皆清空，候選重新以新公司計算', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: /建立帳號/ }));
+      const dialog = screen.getByRole('dialog', { name: /建立手動帳號/ });
+
+      const orgSel = within(dialog).getByLabelText(/部門/) as HTMLSelectElement;
+      await userEvent.selectOptions(orgSel, 'JAC00');
+      expect(orgSel.value).toBe('JAC00');
+      const jobSel = within(dialog).getByLabelText(/職位/) as HTMLSelectElement;
+      await userEvent.selectOptions(jobSel, 'D01');
+      expect(jobSel.value).toBe('D01');
+
+      const companySel = within(dialog).getByLabelText(/公司/) as HTMLSelectElement;
+      await userEvent.selectOptions(companySel, 'AE');
+
+      expect(orgSel.value).toBe('');
+      expect(jobSel.value).toBe('');
+      // AE 無 ORG_UNIT（AC-P26）→ 部門候選應重新計算為空，不得殘留 AS 之審查室選項
+      expect(within(orgSel).queryByText('營運管理部 / 審查室')).not.toBeInTheDocument();
+      // 職位候選重新以 AE 計算：AS 之「經理」不應出現，AE 之「電能工程師」應出現
+      expect(within(jobSel).queryByText('經理')).not.toBeInTheDocument();
+      expect(within(jobSel).getByText('電能工程師')).toBeInTheDocument();
+    });
+
+    it('AC-P17 部門選項文字＝buildOrgPath(該公司之 units, orgCode)（全站唯一組織路徑算法，不得另建第二套）', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: /建立帳號/ }));
+      const dialog = screen.getByRole('dialog', { name: /建立手動帳號/ });
+      const orgSel = within(dialog).getByLabelText(/部門/) as HTMLSelectElement;
+      const expected = buildOrgPath(AS_UNITS, 'JAC00');
+      expect(expected).toBe('營運管理部 / 審查室');
+      const optionTexts = Array.from(orgSel.options).map((o) => o.textContent);
+      expect(optionTexts).toContain(expected);
+    });
+
+    it('AC-P18 留空之清單顯示：姓名／公司／部門／職位皆為 null → 皆顯示「—」，且全頁不出現「（待同步）」字樣', async () => {
+      mockAuth('SysAdmin');
+      const blank = {
+        id: 'blank1', loginId: '99999', employeeNo: null, name: null, email: null,
+        orgCode: null, roleCode: 'User', status: 'active', source: 'manual', disableReason: null,
+        company: null, department: null, title: null,
+      } as unknown as AccountView;
+      vi.mocked(endpoints.getAccounts).mockResolvedValue([blank]);
+      const { container } = renderPage();
+      await waitFor(() => expect(screen.getByText('99999')).toBeInTheDocument());
+      const row = screen.getByText('99999').closest('tr')!;
+      // 姓名／公司／部門／職位 4 欄皆為 null → 4 個「—」
+      expect(within(row).getAllByText('—').length).toBeGreaterThanOrEqual(4);
+      expect(container.textContent).not.toMatch(/（待同步）|（待同步姓名）/);
+    });
+
+    /**
+     * AC-P19（跨公司樣本 AE）：公司／職位為「manual ⇒ 可編輯」之直接證據；部門欄則因本樣本之
+     * AE 公司無 ORG_UNIT（AC-P26 資料現實）而停用——2026-08-14 dispute 裁決：原斷言誤將 AC-P19
+     * 之「manual ⇒ 四欄皆可編輯」讀成「無條件皆為 enabled」，未考慮 AC-P26 對部門下拉是**額外、
+     * 正交**之停用規則（prototype 08:591 明文「upstream 只會『加上』停用，不會解除 AC-P26 造成
+     * 的停用」——即 AC-P26 之停用為基底，upstream 之停用疊加其上，兩者不互斥）。改以「未顯示上游
+     * 唯讀提示」＋「顯示 AC-P26 逐字空狀態說明」區分部門停用是因資料現實（本測試），非因
+     * source='upstream' 唯讀（見下一測試）——後者才是 AC-P19「manual ⇒ 可編輯」實際要保護的事。
+     */
+    it('AC-P19 編輯 manual 帳號（跨公司樣本 AE）：公司／部門／職位以現值預填，公司欄預選該帳號自身 companyCode（非操作者之 AS），公司/職位可編輯；部門因 AE 無 ORG_UNIT 而停用（AC-P26 資料現實，非因 source 唯讀）', async () => {
+      mockAuth('SysAdmin'); // 操作者 companyCode=AS（mockAuth 固定值）
+      const manualAE = {
+        id: 'm-ae', loginId: '30017', employeeNo: null, name: '蔡宗翰', email: null,
+        orgCode: null, roleCode: 'User', status: 'active', source: 'manual', disableReason: null,
+        company: '和潤電能', department: null, title: '電能工程師',
+        companyCode: 'AE', jobTitleCode: 'M01',
+      } as unknown as AccountView;
+      vi.mocked(endpoints.getAccounts).mockResolvedValue([manualAE]);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('蔡宗翰')).toBeInTheDocument());
+      const row = screen.getByText('蔡宗翰').closest('tr')!;
+      await userEvent.click(within(row).getByRole('button', { name: '編輯' }));
+      const dialog = screen.getByRole('dialog', { name: /編輯帳號/ });
+
+      const companySel = within(dialog).getByLabelText(/公司/) as HTMLSelectElement;
+      expect(companySel.value).toBe('AE'); // 該帳號自身之公司，非操作者之 AS
+      expect(companySel).not.toBeDisabled();
+      const jobSel = within(dialog).getByLabelText(/職位/) as HTMLSelectElement;
+      expect(jobSel.value).toBe('M01');
+      expect(jobSel).not.toBeDisabled();
+      // 部門欄之停用原因＝AC-P26 資料現實，不得顯示上游唯讀提示（該帳號為 manual，不應觸發）。
+      expect(within(dialog).queryByText(/由上游系統維護/)).not.toBeInTheDocument();
+      expect(
+        within(dialog).getByText(
+          '此公司尚未同步組織主檔，暫無部門可選；可留空建立，清單顯示「—」。',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * AC-P19（2026-08-14 team-lead 覆核後補：AE 樣本與 upstream 樣本皆斷言部門 disabled，
+     * 導致「manual ⇒ 部門可編輯」這件事完全沒有測項釘住——一個把編輯 modal 部門欄無條件停用的
+     * 實作會被整個 ring 放行，卻是真 bug（AS 的 manual 帳號將永遠改不了部門）。本測試補上
+     * 唯一會讓部門欄真正 enabled 的組合：manual 來源 ＋ 公司有 ORG_UNIT 資料（AS）。
+     */
+    it('AC-P19 編輯 manual 帳號（AS，有 ORG_UNIT）：部門欄可編輯且候選正確載入（AC-P26 停用僅限資料現實，不得無條件停用編輯 modal 之部門欄）', async () => {
+      mockAuth('SysAdmin');
+      const manualAS = {
+        id: 'm-as', loginId: '30018', employeeNo: null, name: '林小華', email: null,
+        orgCode: 'JAC00', roleCode: 'User', status: 'active', source: 'manual', disableReason: null,
+        company: '和潤企業股份有限公司', department: '營運管理部審查室', title: null,
+        companyCode: 'AS', jobTitleCode: null,
+      } as unknown as AccountView;
+      vi.mocked(endpoints.getAccounts).mockResolvedValue([manualAS]);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('林小華')).toBeInTheDocument());
+      const row = screen.getByText('林小華').closest('tr')!;
+      await userEvent.click(within(row).getByRole('button', { name: '編輯' }));
+      const dialog = screen.getByRole('dialog', { name: /編輯帳號/ });
+
+      const orgSel = within(dialog).getByLabelText(/部門/) as HTMLSelectElement;
+      expect(orgSel).not.toBeDisabled();
+      expect(orgSel.value).toBe('JAC00'); // 現值預填
+      // 候選正確以 AS 計算載入（非空、且非僅「未設定」一個選項）。
+      expect(orgSel.options.length).toBeGreaterThan(1);
+      expect(within(dialog).queryByText('此公司尚未同步組織主檔，暫無部門可選；可留空建立，清單顯示「—」。')).not.toBeInTheDocument();
+    });
+
+    it('AC-P19 編輯 upstream 帳號：公司／部門／職位（連同姓名／密碼）四欄皆唯讀', async () => {
+      mockAuth('SysAdmin');
+      renderPage(); // 預設 ROWS 之 a2（王小明）為 upstream
+      await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
+      const row = screen.getByText('王小明').closest('tr')!;
+      await userEvent.click(within(row).getByRole('button', { name: '編輯' }));
+      const dialog = screen.getByRole('dialog', { name: /編輯帳號/ });
+      expect(within(dialog).getByLabelText(/公司/)).toBeDisabled();
+      expect(within(dialog).getByLabelText(/部門/)).toBeDisabled();
+      expect(within(dialog).getByLabelText(/職位/)).toBeDisabled();
+    });
+
+    it('建立 modal：姓名留空送出 → 顯示行內錯誤「必要欄位缺漏」（沿用既有帳號留空之逐字錯誤文案），不呼叫 createAccount', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: /建立帳號/ }));
+      const dialog = screen.getByRole('dialog', { name: /建立手動帳號/ });
+      await userEvent.type(within(dialog).getByLabelText(/帳號/), '30099');
+      await userEvent.type(within(dialog).getByLabelText(/初始密碼/), 'Init@2026');
+      // 姓名故意留空
+      await userEvent.click(within(dialog).getByRole('button', { name: '建立' }));
+      expect(within(dialog).getByText('必要欄位缺漏')).toBeInTheDocument();
+      expect(endpoints.createAccount).not.toHaveBeenCalled();
+    });
+
+    /**
+     * AC-P23b（2026-08-14 team-lead 裁定）：清單新增之公司篩選器預設項逐字為「所有公司」——
+     * 對齊既有「所有來源／所有角色／所有狀態」句式。spec 初稿誤寫為「全部」，已裁定改採
+     * 「所有公司」；prototype 08 之 COMPANY_ALL_LABEL 已同步為「所有公司」（team-lead 已核對）。
+     */
+    it('AC-P23b 清單公司篩選器：預設項逐字為「所有公司」（非「全部」，對齊既有三個篩選器句式）', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
+      expect(screen.getByText('所有公司')).toBeInTheDocument();
+      expect(screen.queryByText('全部')).not.toBeInTheDocument();
+    });
+
+    /**
+     * AC-P26（部門候選為空之呈現）。逐字文案為 prototype 08 之具名常數 ORG_EMPTY_NOTICE
+     * （team-lead 2026-08-14 確認之逐字內容，非本檔自行杜撰）。
+     */
+    it('AC-P26 選擇無 ORG_UNIT 之公司（AE）→ 部門欄 disabled 並顯示逐字空狀態說明，不阻擋建立', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: /建立帳號/ }));
+      const dialog = screen.getByRole('dialog', { name: /建立手動帳號/ });
+
+      const companySel = within(dialog).getByLabelText(/公司/) as HTMLSelectElement;
+      await userEvent.selectOptions(companySel, 'AE');
+
+      const orgSel = within(dialog).getByLabelText(/部門/) as HTMLSelectElement;
+      expect(orgSel).toBeDisabled();
+      expect(
+        within(dialog).getByText(
+          '此公司尚未同步組織主檔，暫無部門可選；可留空建立，清單顯示「—」。',
+        ),
+      ).toBeInTheDocument();
     });
   });
 });

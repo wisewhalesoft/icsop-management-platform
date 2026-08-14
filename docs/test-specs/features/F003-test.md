@@ -1,10 +1,10 @@
 ---
 type: test-design-feature
 feature_id: F003
-feature_name: 帳號與角色指派管理 — 登入閉環缺口（createManual 未寫入登入識別鍵）
+feature_name: 帳號與角色指派管理 — 登入閉環缺口（createManual 未寫入登入識別鍵）＋ 手動帳號基本資料 delta
 priority: P0-MVP
 related_spec: docs/specs/features/F003-account-role-management.md
-last_updated: 2026-07-22
+last_updated: 2026-08-14
 status: draft
 ---
 
@@ -169,6 +169,103 @@ status: draft
 - 若手動輸入：需加輸入驗證（格式、必填與否），並決定該欄位是否顯示於 `08-account-management.html`
   建立/編輯 modal（現況兩者皆無此欄位）。
 - 此為 UI/UX 與資料語意決策，測試設計無法代答，僅先在 TS-F003-001／TS-F003-009 中以佔位保留。
+
+---
+
+# F003 手動帳號基本資料 delta（姓名／公司／部門／職位；2026-08-14）· Test Design
+
+> **範圍**：對應 [F003 spec #manual-account-profile](../../specs/features/F003-account-role-management.md#manual-account-profile)
+> 之 `AC-P1`～`AC-P27`（含 2026-08-14 同日第二次裁決「公司別可跨公司選擇」，AC-P5／AC-P10 反轉＋新增
+> AC-P23～AC-P27 漣漪）。與本檔前段（authfix 登入閉環）為**不同時期、不同範圍**之增量，互不覆蓋。
+> 本段落只登錄**測項清單與 AC↔約束對照**；每條 AC 的精確 Given/When/Then 文字以 spec 原文為準，不重抄。
+
+## 測試策略
+
+- **業務規則（AC-P1～P12）**：unit，`backend/src/accounts/account-profile.spec.ts`，比照既有
+  `accounts.service.spec.ts` 之 `FakeStore`／`fakeOrgUnits`／`fakeJobTitles` 手法，獨立成檔以隔離「本 delta
+  新增之 DTO 欄位尚未存在」造成的 ts-jest 整檔編譯失敗，不拖累既有 15+ 案例。
+- **端點存在性／權限／稽核靜默／HTTP 契約（AC-P14／P15／P20／P21，及 P1 passwordHash 排除、P11 HTTP 層
+  確認）**：integration，`backend/test/int/account-profile.itest.ts`，真 `AppModule`＋真 SOP DB＋真
+  `RolePermissionGuard`，比照既有 `test/int/*.itest.ts` 之 marker 前綴（`zzint-`）與 `res.status`-only
+  斷言慣例（不斷言 `res.body.message` 封裝形狀）。
+- **跨公司清單可見性／逐列解析（AC-P23a～c）與全域唯一性（AC-P24）**：integration，理由＝現行
+  `AccountStore.existsLoginId(companyCode, loginId)`／`list(companyCode, filters)` 之簽章以 companyCode
+  為必要範圍，「移除範圍限制」之新實作可能改變呼叫慣例，於 FakeStore 猜測介面形狀之風險高於待驗證業務
+  規則本身；且 AC-P23 需要「AS／AE 兩間公司皆有真實帳號」之情境，真 DB 較不易誤判（見下方已知混淆源）。
+- **前端行為（AC-P16～P19，含建立 modal 姓名必填之行內驗證）**：vitest + Testing Library，
+  `frontend/src/pages/AccountManagementPage.test.tsx` 新增 describe 區塊；`getCompanies`／`getJobTitles`
+  為本 delta 新增之 API，現行 `../api/endpoints` 尚無匯出，故該區塊全部案例現況一起以
+  `TypeError: Cannot read properties of undefined` 紅燈（而非逐案例斷言失敗）——比照
+  `verify-by-running.md` 記憶「`vi.mock` 只涵蓋既有匯出」之已知模式，非本檔 fixture 錯誤。
+
+## 已知混淆源（撰寫時以真實 DB 診斷查詢確認，記入供實作與覆核者知悉）
+
+- **AC-P24／AC-P23a／AC-P23b 現況「綠燈」不代表規則已成立**：AC-P5（公司欄寫入）落地前，
+  `POST /admin/accounts` 完全不處理 payload 之 `companyCode`（回應 DTO 甚至未含此鍵，已以 diag 探測
+  確認），故兩筆分別宣告 `companyCode='AS'`／`'AE'` 的建立實際上都落在操作者自身之 companyCode，
+  使 AC-P24 之 409 與「AE 帳號出現在 AS 操作者清單」之斷言目前為**巧合命中**，不是「全域唯一」／
+  「移除租戶過濾」邏輯本身已生效的證據。`account-profile.itest.ts` 對應測試已加註解說明；
+  AC-P23a／AC-P23b 已刻意將 `row.companyCode` 之核對改為嚴格相等（非 `if defined` 之寬鬆略過），
+  故這兩條現況為**紅燈**，只有 AC-P24 因無法用同一手法收斂而暫時維持「巧合綠燈＋加註警語」。
+- **AC-P23e（職位逐列解析）之驗證死角，✅ 已於 unit 層解法（2026-08-14，team-lead 二度糾正後）**：
+  真實 int 層仍受限（AS／AE 兩公司之 JOB_TITLE 無同碼異名重疊，見上）；但此為 service 純邏輯，改在
+  `account-profile.spec.ts`（FakeStore，不受真實 DB 現況限制）補齊——`fixture` 讓 AS／AE **兩公司皆**
+  有 `C01` 代碼（僅名稱不同，逐字取自 prototype 08 :409/:419），使精確命中恆先於跨公司 fallback 觸發，
+  fallback 因此無從介入。AC-P23d 同理於 unit 層另補一組（`X0000` 同代碼異名部門），與 int 層之
+  dirty-seed 版本互補（int 層驗證真實 HTTP／DB 路徑，unit 層驗證邏輯本身、不受真實資料限制）。
+
+## Test Scenarios（測項清單，精確斷言見對應測試檔）
+
+| TS | AC | 層級 | 檔案 |
+|---|---|---|---|
+| TS-F003-P01 | AC-P1 建立 payload 契約（passwordHash 排除） | unit＋int | account-profile.spec.ts／itest.ts |
+| TS-F003-P02 | AC-P2 輸入正規化（trim／空字串→null） | unit | account-profile.spec.ts |
+| TS-F003-P03 | AC-P3 姓名必填 | unit | account-profile.spec.ts |
+| TS-F003-P04 | AC-P4 四欄長度上限 | unit | account-profile.spec.ts |
+| TS-F003-P05 | AC-P5 公司欄（🔵 允許跨公司，限 SELECTABLE_COMPANIES） | unit | account-profile.spec.ts |
+| TS-F003-P06 | AC-P6 部門代碼有效性（不檢查 isActive） | unit | account-profile.spec.ts |
+| TS-F003-P07 | AC-P7 職位代碼有效性（不做跨公司 fallback） | unit | account-profile.spec.ts |
+| TS-F003-P08 | AC-P8 驗證順序（②③④⑤⑥全鏈） | unit | account-profile.spec.ts |
+| TS-F003-P09 | AC-P9 編輯 payload 契約 | unit | account-profile.spec.ts |
+| TS-F003-P10 | AC-P10／P10a／P10b 編輯可變更公司＋碰撞保護＋強制重給值 | unit | account-profile.spec.ts |
+| TS-F003-P11 | AC-P11 上游唯讀先於值驗證，role/status 不受限 | unit＋int | account-profile.spec.ts／itest.ts |
+| TS-F003-P12 | AC-P12 副作用邊界 | unit | account-profile.spec.ts |
+| TS-F003-P14 | AC-P14 GET /job-titles（端點契約＋權限） | int | account-profile.itest.ts |
+| TS-F003-P15 | AC-P15 GET /companies（端點契約＋權限） | int | account-profile.itest.ts |
+| TS-F003-P16 | AC-P16 公司→部門＋職位雙連動 | vitest | AccountManagementPage.test.tsx |
+| TS-F003-P17 | AC-P17 部門選項文字＝buildOrgPath | vitest | AccountManagementPage.test.tsx |
+| TS-F003-P18 | AC-P18 留空顯示「—」，禁「（待同步）」 | vitest | AccountManagementPage.test.tsx |
+| TS-F003-P19 | AC-P19 編輯 modal 預填／唯讀（manual 可改公司、upstream 全唯讀） | vitest | AccountManagementPage.test.tsx |
+| TS-F003-P20 | AC-P20 建立／編輯權限（write=SysAdmin） | int | account-profile.itest.ts |
+| TS-F003-P21 | AC-P21 稽核不寫入 | int | account-profile.itest.ts |
+| TS-F003-P23abc | AC-P23a／b／c 清單跨公司可見＋篩選＋公司名稱逐列解析（見上方已知混淆源 G-F003P-05） | int | account-profile.itest.ts |
+| TS-F003-P23d | AC-P23d 部門逐列解析（複合鍵；int＝dirty 資料種入真庫，unit＝FakeStore 合成資料） | int＋unit | account-profile.itest.ts／account-profile.spec.ts |
+| TS-F003-P23e | AC-P23e 職位逐列解析（複合鍵；unit 層，AS/AE 同碼異名使 fallback 不介入） | unit | account-profile.spec.ts |
+| TS-F003-P06b | AC-P6 公司交叉檢查（orgCode 存在但屬另一公司） | unit | account-profile.spec.ts |
+| TS-F003-P24 | AC-P24 loginId 全域唯一（見上方已知混淆源 G-F003P-05） | int | account-profile.itest.ts |
+| TS-F003-P26 | AC-P26 部門候選為空（AE 無 ORG_UNIT）不阻擋建立 | int＋vitest | account-profile.itest.ts／AccountManagementPage.test.tsx |
+| TS-F003-P15c | AC-P15 INV-C1（SELECTABLE_COMPANIES ≡ GET /companies，機器可驗證） | int | account-profile.itest.ts |
+| TS-F003-P27 | AC-P27 既有 AS 路徑回歸護欄 | int | account-profile.itest.ts |
+| TS-F003-P23f | AC-P23b 篩選器預設項逐字「所有公司」 | vitest | AccountManagementPage.test.tsx |
+| TS-F001-C1C3 | [F001](F001-test.md) AC-C1～AC-C3 跨公司帳密登入解析（見 F001-test.md 追加段落；AC-C1③／AC-C3 現況為已知混淆源 G-F003P-08） | int | auth.itest.ts |
+| TS-F001-C2 | [F001](F001-test.md) AC-C2 登入頁不新增公司欄位（回歸護欄） | vitest | LoginPage.test.tsx |
+| — | 建立 modal 姓名留空之行內驗證＋不送出請求 | vitest | AccountManagementPage.test.tsx |
+
+## AC → 約束對照表（本 delta）
+
+見上表「TS↔AC」欄；每條約束之精確斷言與其引用之 AC 條文，逐一以程式碼註解標註在對應測試檔內
+（`account-profile.spec.ts`／`account-profile.itest.ts`／`AccountManagementPage.test.tsx` 新增區塊），
+不在此重複轉錄，避免兩處漂移。
+
+## 本輪範圍聲明（刻意不含，見 risks-and-gaps.md 對應條目）
+
+- **AC-P13**：既有 `GET /org-units` 端點與權限之延伸，本 delta 無新規則，未新增測項（已由既有
+  `org-directory.controller.spec.ts` 覆蓋，本 delta 僅新增「不得限縮 tier」之文字提醒，非行為變更）。
+- **AC-P22**：無 schema 變更之聲明性條款，非可執行斷言目標（已憑既有 migration 檔案清單核實）。
+- ~~AC-P23d／AC-P23e／AC-P25／F001 AC-C1～AC-C3／AC-P27~~：**已於 2026-08-14 第二、三輪補齊**
+  （team-lead 兩度要求後重新評估，找到可行的測試構造方式；AC-P23e 之關鍵是 int／unit 兩層限制不同，
+  int 受真實 DB 資料現況限制，unit 用 FakeStore 不受此限），見上表 TS-F003-P23d／P23e／P06b／P15c／
+  P27／TS-F001-C1C3／C2。**本輪已無刻意排除之 AC**（僅 AC-P13／AC-P22 為聲明性條款，非缺口）。
 
 ### OQ-F003-CLOSE-03（🟢 提醒，非阻擋）本次修改是否需要資料庫遷移（migration）？
 - 若識別鍵決議為 email：`CreateAccountInput` 需新增欄位，但 `Account` entity 已有 `email` 欄位（供 F004

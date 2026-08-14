@@ -177,8 +177,16 @@ describe('AccountsService', () => {
   });
 
   describe('createManual', () => {
+    // 三處 payload 皆補 name:'X'（2026-08-14 dispute 裁決）：本 describe 早於 F003 手動帳號基本
+    // 資料 delta（AC-P3 姓名必填、AC-P8 驗證順序①先於②⑥）撰寫，待測命題（密碼雜湊/帳號重複/
+    // 非法角色）與姓名無關，僅需補齊新的必填欄位，使既有斷言在新驗證順序下仍測到原本要測的那一步。
     it('建立手動帳號：source=manual、密碼雜湊儲存（非明文）', async () => {
-      const v = await svc.createManual('AS', { loginId: '20500', password: 'Init@2026', roleCode: 'ICSOPAdmin' });
+      const v = await svc.createManual('AS', {
+        loginId: '20500',
+        password: 'Init@2026',
+        roleCode: 'ICSOPAdmin',
+        name: 'X',
+      } as unknown as Parameters<AccountsService['createManual']>[1]);
       expect(v.source).toBe('manual');
       expect(v.status).toBe('active');
       expect(v.roleCode).toBe('ICSOPAdmin');
@@ -189,12 +197,22 @@ describe('AccountsService', () => {
     it('帳號重複 → ACCOUNT_USERNAME_EXISTS', async () => {
       store.seed({ loginId: '20500', companyCode: 'AS' });
       await expect(
-        svc.createManual('AS', { loginId: '20500', password: 'x', roleCode: 'User' }),
+        svc.createManual('AS', {
+          loginId: '20500',
+          password: 'x',
+          roleCode: 'User',
+          name: 'X',
+        } as unknown as Parameters<AccountsService['createManual']>[1]),
       ).rejects.toThrow('ACCOUNT_USERNAME_EXISTS');
     });
     it('非法角色 → ROLE_INVALID', async () => {
       await expect(
-        svc.createManual('AS', { loginId: '20600', password: 'x', roleCode: 'Root' }),
+        svc.createManual('AS', {
+          loginId: '20600',
+          password: 'x',
+          roleCode: 'Root',
+          name: 'X',
+        } as unknown as Parameters<AccountsService['createManual']>[1]),
       ).rejects.toThrow('ROLE_INVALID');
     });
   });

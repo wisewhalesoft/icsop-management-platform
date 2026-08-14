@@ -144,6 +144,59 @@ status: draft
 - **對應 AC**：隱含於雙軌並存定案（"兩種登入為雙軌並存、不互斥"）
 - **錯誤碼**：無
 
+---
+
+# F001 跨公司帳密登入解析 delta（AC-C1～AC-C3；2026-08-14）· Test Design
+
+> **範圍**：[F001 spec](../../specs/features/F001-auth-login-session.md) 之「跨公司手動帳號之帳密登入
+> 解析 delta」段落，對應 [F003](F003-account-role-management.md) `AC-P5`（公司可跨公司選擇）之漣漪
+> `AC-P25`。**這是本裁決最嚴重之連帶效應**——不修訂則於 `AS` 以外公司建立之手動帳號將永遠無法登入，
+> 重演本檔既已閉合過一次之「建立→登入死鏈」（見本檔頭 2026-07 之修復狀態）。
+
+## 測試策略
+- integration，`backend/test/int/auth.itest.ts` 新增區塊，比照既有 `bootIntApp` 慣例；帳號以
+  `AppDataSource.getRepository(Account)` 直接種入（比照 F003 `AC-P10a` 之慣例），走真實
+  `POST /auth/login` 端點。
+- `AC-C1③`（命中多筆→401）之構造：現況 `SELECTABLE_COMPANIES` 僅 `AS`／`AE` 兩碼，第①段已排除
+  `AS`，故第②段殘餘搜尋空間最多僅 1 筆候選，數學上無法以「合法可建立之公司」構造「多筆」情境。改
+  種一筆 `companyCode='AD'`（真實存在於組織主檔但被 `F003 AC-P15` 排除於 `SELECTABLE_COMPANIES`
+  之公司，模擬合法之歷史/上游資料）＋一筆 `'AE'`。
+- `AC-C2`（登入頁不新增公司欄位）為前端關注點，於 `frontend/src/pages/LoginPage.test.tsx` 新增。
+
+## Test Scenarios
+
+### TS-F001-C01 AC-C1① 既有路徑不變：AS 帳號精確命中 [integration，回歸護欄]
+沿用既有 `ADMIN_LOGIN`／`ADMIN_PASSWORD` 之 round-trip，證明 stage①（`(DEFAULT_COMPANY_CODE, loginId)`
+精確查詢）不受本 delta 影響。
+
+### TS-F001-C02 AC-C1② 跨公司 fallback：AE-only 帳號登入成功 [integration]
+AS 無同 `loginId`，第①段未命中，第②段跨公司查詢恰命中 `AE` 一筆 → 登入成功，`SessionUser.companyCode`
+為 `AE`（非 `AS`）。**本場景為死鏈修復之直接證據，DoD 強制驗收項。**
+
+### TS-F001-C03 AC-C1（body 明確帶 companyCode）→ 僅精確查詢該公司 [integration]
+`loginId` 同時存在於 `AS`／`AE`；明確帶 `companyCode=AE` 應僅比對 `AE` 密碼成功，不進入第②段
+之跨公司模糊比對。
+
+### TS-F001-C04 AC-C1③ 命中多筆 → 401，不任選一筆 [integration，⚠ 現況巧合綠燈見 risks-and-gaps G-F003P-08]
+`AD`＋`AE` 皆有同 `loginId`（`AS` 無）→ 兩組密碼皆應回 401。
+
+### TS-F001-C05 AC-C3 節流／訊息揭露不變 [integration，⚠ 現況巧合綠燈見 risks-and-gaps G-F003P-08]
+跨公司帳號密碼錯誤與「查無此帳號」之回應狀態碼相同，不洩漏區分資訊。
+
+### TS-F001-C06 AC-C2 登入頁不新增公司欄位 [vitest，回歸護欄]
+管理員帳密表單現況只有帳號／密碼兩欄；`passwordLogin` 呼叫 payload 不含 `companyCode` 鍵。鎖住現況，
+防止未來因跨公司需求而誤加公司選擇器（違反 AC-C2 之明文禁止）。
+
+## AC → TS 覆蓋對照表（本 delta）
+
+| AC-C# | 覆蓋 TS |
+|---|---|
+| AC-C1 | TS-F001-C01, TS-F001-C02, TS-F001-C03, TS-F001-C04 |
+| AC-C2 | TS-F001-C02（登入成功之後果）, TS-F001-C06（表單本身） |
+| AC-C3 | TS-F001-C05 |
+
+---
+
 ## AC → TS 覆蓋對照表
 
 | F001 Acceptance Criterion（途徑 B／通用揭露原則） | 覆蓋 TS |

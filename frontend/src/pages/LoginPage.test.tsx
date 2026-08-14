@@ -160,6 +160,30 @@ describe('LoginPage — 途徑 B 帳密登入（F001）', () => {
     await userEvent.click(screen.getByRole('link', { name: '忘記密碼？' }));
     expect(await screen.findByText(/請洽系統管理員/)).toBeInTheDocument();
   });
+
+  /**
+   * F001 AC-C2（2026-08-14，F003 AC-P5「公司可跨公司選擇」之漣漪）：登入頁不得新增公司欄位或
+   * 選擇器——跨公司帳密登入之解析（AC-C1）全由後端完成，使用者不應被要求知道自己屬於哪個公司代碼。
+   * 現行管理員帳密表單本就只有帳號／密碼兩欄、無公司欄位，此為回歸護欄（防止未來不慎新增）。
+   */
+  it('AC-C2 管理員帳密表單不含「公司」欄位或選擇器（現況即成立，回歸護欄，防未來誤加）', async () => {
+    renderLogin();
+    await userEvent.click(screen.getByRole('button', { name: /使用管理員帳號登入/ }));
+    expect(screen.queryByLabelText(/公司/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  });
+
+  it('passwordLogin 呼叫不含 companyCode 欄位（既有契約不變，AC-C1 之解析責任在後端）', async () => {
+    vi.mocked(endpoints.passwordLogin).mockResolvedValue(USER);
+    renderLogin();
+    await userEvent.click(screen.getByRole('button', { name: /使用管理員帳號登入/ }));
+    await userEvent.type(screen.getByLabelText(/帳號/), 'mgr01');
+    await userEvent.type(passwordInput(), 'S3cret!');
+    await userEvent.click(screen.getByRole('button', { name: /以管理員帳號登入/ }));
+    await waitFor(() => expect(endpoints.passwordLogin).toHaveBeenCalled());
+    const payload = vi.mocked(endpoints.passwordLogin).mock.calls[0][0] as Record<string, unknown>;
+    expect(Object.keys(payload)).not.toContain('companyCode');
+  });
 });
 
 describe('LoginPage — 工作階段逾時模態（G-PUB-006）', () => {

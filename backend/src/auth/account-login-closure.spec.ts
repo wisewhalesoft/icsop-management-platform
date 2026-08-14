@@ -86,10 +86,18 @@ class ClosureRepo implements AccountRepository {
 }
 
 describe('F003 建立→登入閉環', () => {
+  // 兩處 createManual payload 皆補 name:'X'（2026-08-14 dispute 裁決）：本檔早於 F003 手動帳號
+  // 基本資料 delta（AC-P3 姓名必填）撰寫，待測命題（loginId/passwordHash 之建立→登入往返）與
+  // 姓名無關，僅需補齊新的必填欄位使既有斷言在新契約下維持成立，不弱化任何斷言。
   it('TS-F003-001 createManual 寫入登入識別鍵(loginId)＋可驗證之 passwordHash', async () => {
     const store = new CapturingStore();
     const svc = new AccountsService(store);
-    await svc.createManual('AS', { loginId: 'mgr01', password: 'S3cret!', roleCode: 'User' });
+    await svc.createManual('AS', {
+      loginId: 'mgr01',
+      password: 'S3cret!',
+      roleCode: 'User',
+      name: 'X',
+    } as unknown as Parameters<AccountsService['createManual']>[1]);
 
     expect(store.created).toHaveLength(1);
     const input = store.created[0];
@@ -103,7 +111,12 @@ describe('F003 建立→登入閉環', () => {
     // 1) 建立手動帳號（createManual 內部雜湊密碼並寫入 store）。
     const store = new CapturingStore();
     const svc = new AccountsService(store);
-    await svc.createManual('AS', { loginId: 'mgr01', password: 'S3cret!', roleCode: 'User' });
+    await svc.createManual('AS', {
+      loginId: 'mgr01',
+      password: 'S3cret!',
+      roleCode: 'User',
+      name: 'X',
+    } as unknown as Parameters<AccountsService['createManual']>[1]);
     const created = store.created[0];
 
     // 2) 以建立時實際寫入之值回填登入解析來源（關鍵：同一 passwordHash 必須能被登入路徑驗證）。
