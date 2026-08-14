@@ -24,6 +24,8 @@ import type {
   PublicListFilters,
   PublicListPage,
   OrgUnitRecord,
+  CompanyRecord,
+  JobTitleRecord,
   PersonRecord,
   AlertStatus,
   ResolutionKind,
@@ -103,23 +105,56 @@ export function getOrgSyncMonthlySummary(): Promise<OrgSyncMonthlySummary> {
 
 // ===== F003 帳號與角色管理 =====
 
-/** GET /admin/accounts（帳號管理 read：SysAdmin+ICSOPAdmin）。 */
+/**
+ * GET /companies（公司主檔，F003 delta AC-P15）。回全部有效公司（`SELECTABLE_COMPANIES`），
+ * **不以操作者所屬公司收斂**——建立/編輯帳號之公司欄為可跨公司改選之完整下拉，清單之公司
+ * 篩選器（AC-P23b）亦共用本來源。權限＝「帳號管理」read（SysAdmin／ICSOPAdmin）。
+ */
+export function getCompanies(): Promise<CompanyRecord[]> {
+  return apiFetch<CompanyRecord[]>('/companies');
+}
+
+/**
+ * GET /job-titles?companyCode=（職稱主檔，F003 delta AC-P14）。
+ * `companyCode` 選填，未帶時後端以操作者 session 之 companyCode 為預設；回應**依 companyCode 精確
+ * 過濾**（不做跨公司 fallback，與 AC-P7 之寫入驗證同一集合）且依 code 昇冪。
+ * 權限＝「帳號管理」read（SysAdmin／ICSOPAdmin）；其餘 3 角色 403 PERMISSION_DENIED。
+ */
+export function getJobTitles(companyCode?: string): Promise<JobTitleRecord[]> {
+  const cc = (companyCode ?? '').trim();
+  const q = cc ? `?companyCode=${encodeURIComponent(cc)}` : '';
+  return apiFetch<JobTitleRecord[]>(`/job-titles${q}`);
+}
+
+/**
+ * GET /admin/accounts（帳號管理 read：SysAdmin+ICSOPAdmin）。
+ * F003 delta AC-P23a：後端已移除租戶過濾（跨公司帳號皆可見）；AC-P23b 之公司收斂改以選填
+ * `companyCode` 參數表達（未帶＝全部公司）。
+ */
 export function getAccounts(f: AccountFilters = {}): Promise<AccountView[]> {
   const qs = new URLSearchParams();
   if (f.source) qs.set('source', f.source);
   if (f.roleCode) qs.set('roleCode', f.roleCode);
   if (f.status) qs.set('status', f.status);
   if (f.keyword) qs.set('keyword', f.keyword);
+  if (f.companyCode) qs.set('companyCode', f.companyCode);
   const q = qs.toString();
   return apiFetch<AccountView[]>(`/admin/accounts${q ? `?${q}` : ''}`);
 }
 
-/** POST /admin/accounts（建立手動帳號，SysAdmin；409 ACCOUNT_USERNAME_EXISTS、400 ROLE_INVALID）。 */
+/**
+ * POST /admin/accounts（建立手動帳號，SysAdmin；409 ACCOUNT_USERNAME_EXISTS、400 ROLE_INVALID）。
+ * F003 delta AC-P1：payload 加入 `name`（必填）與選填之 `companyCode`／`orgCode`／`jobTitleCode`；
+ * 後三者未提供時後端以操作者公司為預設（AC-P5）／寫入 `null`（AC-P2）。
+ */
 export function createAccount(body: {
   loginId: string;
   password: string;
   roleCode: string;
   name?: string | null;
+  companyCode?: string;
+  orgCode?: string | null;
+  jobTitleCode?: string | null;
 }): Promise<AccountView> {
   return apiFetch<AccountView>('/admin/accounts', {
     method: 'POST',
@@ -128,10 +163,21 @@ export function createAccount(body: {
   });
 }
 
-/** PATCH /admin/accounts/:id（編輯：手動帳號姓名/重設密碼；上游 ACCOUNT_UPSTREAM_READONLY）。 */
+/**
+ * PATCH /admin/accounts/:id（編輯：手動帳號姓名/公司/部門/職位/重設密碼；上游 ACCOUNT_UPSTREAM_READONLY）。
+ * F003 delta AC-P9：欄位缺席＝不變更；`orgCode`／`jobTitleCode` 明確傳 `null`＝清空。
+ * AC-P10b：變更 `companyCode` 時 `orgCode` 與 `jobTitleCode` **必須**同請求一併給值（呼叫端一律三者
+ * 同送，故恆滿足），嚴禁靜默沿用舊公司之代碼。
+ */
 export function updateAccount(
   id: string,
-  body: { name?: string | null; password?: string },
+  body: {
+    name?: string | null;
+    password?: string;
+    companyCode?: string;
+    orgCode?: string | null;
+    jobTitleCode?: string | null;
+  },
 ): Promise<AccountView> {
   return apiFetch<AccountView>(`/admin/accounts/${id}`, {
     method: 'PATCH',

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../auth/useAuth';
 import {
   getAccounts,
@@ -6,6 +6,9 @@ import {
   updateAccount,
   assignAccountRole,
   setAccountStatus,
+  getCompanies,
+  getOrgUnits,
+  getJobTitles,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey, ROLE_CODES } from '../domain/function-matrix';
@@ -17,11 +20,27 @@ import {
   SUBTYPE_DESC,
   type UserSubtype,
 } from '../domain/user-subtype';
+import {
+  COMPANY_ALL_LABEL,
+  ORG_EMPTY_NOTICE,
+  PROFILE_UNSET_LABEL,
+  jobOptionsFor,
+  mergeJobTitles,
+  normalizeProfileCode,
+  orgOptionsFor,
+  unitsOf,
+} from '../domain/account-profile';
+import { buildOrgPath } from '../domain/org-path';
 import { RoleBadge } from '../components/RoleBadge';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
-import type { AccountView } from '../api/types';
+import type {
+  AccountView,
+  CompanyRecord,
+  JobTitleRecord,
+  OrgUnitRecord,
+} from '../api/types';
 
 /**
  * 帳號與角色管理（F003 / US-005+US-006）。版面/樣式權威來源：prototypes/08-account-management.html。
@@ -192,6 +211,149 @@ interface Confirm {
   onConfirm: () => void;
 }
 
+/** 主檔載入失敗／尚未回應時一律當空集合處理（不得讓下拉渲染時炸開）。 */
+function asArray<T>(v: readonly T[] | null | undefined): T[] {
+  return Array.isArray(v) ? [...v] : [];
+}
+
+/** F003 delta：建立/編輯 modal 共用之基本資料三欄狀態（皆為**代碼**，空字串＝未設定）。 */
+interface ProfileValue {
+  companyCode: string;
+  orgCode: string;
+  jobTitleCode: string;
+}
+
+/** 三欄所需之主檔（由頁面層載入一次後往下傳，避免各 modal 各自重抓）。 */
+interface ProfileMaster {
+  companies: CompanyRecord[];
+  orgUnits: OrgUnitRecord[];
+  jobTitles: JobTitleRecord[];
+  /** 首次選到某公司時補抓該公司之職稱（AC-P14 之 `?companyCode=`）；已抓過即 no-op。 */
+  ensureJobTitles: (companyCode: string) => void;
+}
+
+/**
+ * 公司／部門／職位三欄（F003 delta AC-P13～AC-P17／AC-P19／AC-P26）。
+ * 建立與編輯 modal **共用本元件**——prototype 兩處為逐字相同之 `fillCompanySelect`／`fillOrgSelect`／
+ * `fillJobSelect` 呼叫（`prototypes/08-account-management.html:551-552`／`:588-590`），共用即不可能各自漂移。
+ *
+ * 🔵 AC-P16 雙連動：公司值一變更，部門與職位之**已選值皆清空**、候選皆以新公司重算
+ *    （對應後端 AC-P10b「變更公司須於同請求重新給值、嚴禁靜默沿用舊代碼」）。
+ * 🔵 AC-P17：部門選項文字一律由 `buildOrgPath(該公司之 units, orgCode)` 產生——`buildOrgPath` 之簽章
+ *    刻意不變，複合鍵（AC-P23d）由本呼叫端先以 `unitsOf` 收斂後負責。
+ * ⚠ 停用狀態一律由 props 推導（React 每次開啟皆重新掛載），故不存在 prototype 之
+ *   「開過 upstream 帳號後殘留 disabled」imperative 陷阱。
+ */
+function ProfileFields({
+  idPrefix,
+  value,
+  onChange,
+  master,
+  readOnly,
+  companyHint,
+  jobHint,
+}: {
+  idPrefix: string;
+  value: ProfileValue;
+  onChange: (next: ProfileValue) => void;
+  master: ProfileMaster;
+  readOnly: boolean;
+  companyHint?: string;
+  jobHint?: string;
+}): JSX.Element {
+  const { companies, orgUnits, jobTitles, ensureJobTitles } = master;
+  const companyUnits = useMemo(
+    () => unitsOf(orgUnits, value.companyCode),
+    [orgUnits, value.companyCode],
+  );
+  const orgOptions = useMemo(
+    () => orgOptionsFor(companyUnits, value.companyCode),
+    [companyUnits, value.companyCode],
+  );
+  const jobOptions = useMemo(
+    () => jobOptionsFor(jobTitles, value.companyCode),
+    [jobTitles, value.companyCode],
+  );
+
+  useEffect(() => {
+    ensureJobTitles(value.companyCode);
+  }, [ensureJobTitles, value.companyCode]);
+
+  // AC-P26：該公司無 ORG_UNIT → 部門下拉停用＋空狀態說明；**不阻擋建立**（orgCode 送 null）。
+  const orgEmpty = value.companyCode !== '' && orgOptions.length === 0;
+  const selectClass = (disabled: boolean) =>
+    `w-full px-3 py-2 rounded-md border border-slate-300 text-sm ${disabled ? 'bg-slate-50' : 'bg-white'}`;
+  const orgDisabled = readOnly || value.companyCode === '' || orgOptions.length === 0;
+  const jobDisabled = readOnly || value.companyCode === '';
+
+  return (
+    <>
+      <div>
+        <label htmlFor={`${idPrefix}Company`} className="block text-sm font-medium text-slate-700 mb-1">
+          公司
+        </label>
+        <select
+          id={`${idPrefix}Company`}
+          value={value.companyCode}
+          disabled={readOnly}
+          onChange={(e) =>
+            // AC-P16：換公司 → 部門與職位之已選值雙雙清空
+            onChange({ companyCode: e.target.value, orgCode: '', jobTitleCode: '' })
+          }
+          className={selectClass(readOnly)}
+        >
+          {companies.map((c) => (
+            <option key={c.companyCode} value={c.companyCode}>
+              {c.companyName}
+            </option>
+          ))}
+        </select>
+        {companyHint && <p className="text-[10px] text-slate-400 mt-1">{companyHint}</p>}
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}Org`} className="block text-sm font-medium text-slate-700 mb-1">
+          部門
+        </label>
+        <select
+          id={`${idPrefix}Org`}
+          value={value.orgCode}
+          disabled={orgDisabled}
+          onChange={(e) => onChange({ ...value, orgCode: e.target.value })}
+          className={selectClass(orgDisabled)}
+        >
+          <option value="">{PROFILE_UNSET_LABEL}</option>
+          {orgOptions.map((u) => (
+            <option key={u.orgCode} value={u.orgCode}>
+              {buildOrgPath(companyUnits, u.orgCode)}
+            </option>
+          ))}
+        </select>
+        {orgEmpty && <p className="text-[10px] text-slate-400 mt-1">{ORG_EMPTY_NOTICE}</p>}
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}Job`} className="block text-sm font-medium text-slate-700 mb-1">
+          職位
+        </label>
+        <select
+          id={`${idPrefix}Job`}
+          value={value.jobTitleCode}
+          disabled={jobDisabled}
+          onChange={(e) => onChange({ ...value, jobTitleCode: e.target.value })}
+          className={selectClass(jobDisabled)}
+        >
+          <option value="">{PROFILE_UNSET_LABEL}</option>
+          {jobOptions.map((j) => (
+            <option key={j.code} value={j.code}>
+              {j.name}
+            </option>
+          ))}
+        </select>
+        {jobHint && <p className="text-[10px] text-slate-400 mt-1">{jobHint}</p>}
+      </div>
+    </>
+  );
+}
+
 export function AccountManagementPage(): JSX.Element {
   const { user } = useAuth();
   const toast = useToast();
@@ -203,9 +365,17 @@ export function AccountManagementPage(): JSX.Element {
   const [accounts, setAccounts] = useState<AccountView[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
+  const [fCompany, setFCompany] = useState('');
   const [fSource, setFSource] = useState('');
   const [fRole, setFRole] = useState('');
   const [fStatus, setFStatus] = useState('');
+
+  // F003 delta：公司／部門／職位之主檔（AC-P13／AC-P14／AC-P15）。載入失敗一律降級為空集合——
+  // 三欄皆為選填，主檔不可用時仍應能建立帳號（只是無候選可選），不得使整頁壞掉。
+  const [companies, setCompanies] = useState<CompanyRecord[]>([]);
+  const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
+  const [jobTitles, setJobTitles] = useState<JobTitleRecord[]>([]);
+  const loadedJobCompanies = useRef<Set<string>>(new Set());
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<AccountView | null>(null);
@@ -217,6 +387,7 @@ export function AccountManagementPage(): JSX.Element {
     setLoading(true);
     try {
       const data = await getAccounts({
+        companyCode: fCompany || undefined,
         source: fSource || undefined,
         roleCode: fRole || undefined,
         status: fStatus || undefined,
@@ -227,11 +398,44 @@ export function AccountManagementPage(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [fSource, fRole, fStatus, toast]);
+  }, [fCompany, fSource, fRole, fStatus, toast]);
 
   useEffect(() => {
     if (canRead) void load();
   }, [canRead, load]);
+
+  /**
+   * AC-P14：首次選到某公司時補抓該公司之職稱（`GET /job-titles?companyCode=`），累積去重後共用。
+   * 回應仍以 `companyCode` 於前端再過濾一次（`jobOptionsFor`）——複合鍵為顯示與寫入之唯一權威，
+   * 不倚賴後端過濾之副作用（AC-P23e）。
+   */
+  const ensureJobTitles = useCallback((companyCode: string) => {
+    if (!companyCode || loadedJobCompanies.current.has(companyCode)) return;
+    loadedJobCompanies.current.add(companyCode);
+    void Promise.resolve(getJobTitles(companyCode))
+      .then((rows) => setJobTitles((prev) => mergeJobTitles(prev, asArray(rows))))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!canRead) return;
+    void Promise.resolve(getCompanies())
+      .then((rows) => setCompanies(asArray(rows)))
+      .catch(() => undefined);
+    // AC-P13：沿用既有 `GET /org-units`（不新增端點）；跨公司之收斂由 `unitsOf` 以複合鍵於前端完成。
+    void Promise.resolve(getOrgUnits())
+      .then((rows) => setOrgUnits(asArray(rows)))
+      .catch(() => undefined);
+  }, [canRead]);
+
+  useEffect(() => {
+    if (canRead) ensureJobTitles(user?.companyCode ?? '');
+  }, [canRead, user?.companyCode, ensureJobTitles]);
+
+  const profileMaster = useMemo<ProfileMaster>(
+    () => ({ companies, orgUnits, jobTitles, ensureJobTitles }),
+    [companies, orgUnits, jobTitles, ensureJobTitles],
+  );
 
   const shown = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
@@ -244,7 +448,7 @@ export function AccountManagementPage(): JSX.Element {
   }, [accounts, keyword]);
 
   // 篩選/關鍵字改變 → 回第 1 頁
-  useEffect(() => setPage(1), [keyword, fSource, fRole, fStatus]);
+  useEffect(() => setPage(1), [keyword, fCompany, fSource, fRole, fStatus]);
   const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const paged = shown.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
@@ -295,6 +499,13 @@ export function AccountManagementPage(): JSX.Element {
             className="pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-sm bg-white w-56 focus:outline-none focus:ring-2 focus:ring-primary-600"
           />
         </div>
+        {/* AC-P23b：清單已無租戶過濾，改以選填「公司」篩選器收斂；預設項逐字＝COMPANY_ALL_LABEL。 */}
+        <select value={fCompany} onChange={(e) => setFCompany(e.target.value)} aria-label="公司篩選" className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
+          <option value="">{COMPANY_ALL_LABEL}</option>
+          {companies.map((c) => (
+            <option key={c.companyCode} value={c.companyCode}>{c.companyName}</option>
+          ))}
+        </select>
         <select value={fSource} onChange={(e) => setFSource(e.target.value)} aria-label="來源篩選" className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
           <option value="">所有來源</option>
           <option value="manual">手動建立</option>
@@ -439,6 +650,8 @@ export function AccountManagementPage(): JSX.Element {
 
       {createOpen && (
         <CreateModal
+          master={profileMaster}
+          defaultCompanyCode={user?.companyCode ?? ''}
           onClose={() => setCreateOpen(false)}
           onCreated={async () => {
             setCreateOpen(false);
@@ -452,6 +665,7 @@ export function AccountManagementPage(): JSX.Element {
       {editTarget && (
         <EditModal
           target={editTarget}
+          master={profileMaster}
           onClose={() => setEditTarget(null)}
           onSaved={async () => {
             setEditTarget(null);
@@ -508,23 +722,50 @@ function Overlay({ children }: { children: React.ReactNode }): JSX.Element {
 }
 
 function CreateModal({
+  master,
+  defaultCompanyCode,
   onClose,
   onCreated,
   onError,
 }: {
+  master: ProfileMaster;
+  defaultCompanyCode: string;
   onClose: () => void;
   onCreated: () => void;
   onError: (e: unknown) => void;
 }): JSX.Element {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [nameError, setNameError] = useState('');
+  // AC-P5：公司欄預選**操作者所屬公司**（可改選他公司）；部門／職位起始為未設定。
+  const [profile, setProfile] = useState<ProfileValue>({
+    companyCode: defaultCompanyCode,
+    orgCode: '',
+    jobTitleCode: '',
+  });
   const [roleCode, setRoleCode] = useState('ICSOPAdmin');
   const [busy, setBusy] = useState(false);
 
   async function submit(): Promise<void> {
+    // AC-P3／AC-P8 ①：姓名必填，行內錯誤沿用「必要欄位缺漏」（＝後端 VALIDATION_ERROR 之文案）。
+    setNameError('');
+    if (!name.trim()) {
+      setNameError(ERROR_MSG.VALIDATION_ERROR);
+      return;
+    }
     setBusy(true);
     try {
-      await createAccount({ loginId: loginId.trim(), password, roleCode });
+      await createAccount({
+        loginId: loginId.trim(),
+        password,
+        roleCode,
+        name: name.trim(),
+        // AC-P2：orgCode／jobTitleCode 空字串一律收斂為 null（空字串不得落地）。
+        companyCode: profile.companyCode || undefined,
+        orgCode: normalizeProfileCode(profile.orgCode),
+        jobTitleCode: normalizeProfileCode(profile.jobTitleCode),
+      });
       onCreated();
     } catch (e) {
       onError(e);
@@ -535,7 +776,7 @@ function CreateModal({
 
   return (
     <Overlay>
-      <div role="dialog" aria-labelledby="createTitle" className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+      <div role="dialog" aria-labelledby="createTitle" className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto">
         <h3 id="createTitle" className="font-semibold text-slate-900 mb-1">建立手動帳號</h3>
         <p className="text-xs text-slate-400 mb-4">手動帳號密碼將以加鹽雜湊儲存（source=manual）。</p>
         <div className="space-y-3">
@@ -552,6 +793,30 @@ function CreateModal({
             required
             value={password}
             onChange={setPassword}
+          />
+          {/* F003 delta AC-P3／AC-P13～AC-P17：姓名必填；公司為可跨公司改選之完整下拉；
+              部門與職位由公司連動（AC-P16），三者皆選填。 */}
+          <div>
+            <label htmlFor="cName" className="block text-sm font-medium text-slate-700 mb-1">
+              姓名 <span className="text-red-500">*</span>
+            </label>
+            <input id="cName" value={name} maxLength={30} onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="例：陳美惠（上限 30 字）" />
+            {nameError && (
+              <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                <Icon name="alert-circle" className="w-3.5 h-3.5" />
+                <span>{nameError}</span>
+              </p>
+            )}
+          </div>
+          <ProfileFields
+            idPrefix="c"
+            value={profile}
+            onChange={setProfile}
+            master={master}
+            readOnly={false}
+            companyHint="預設為您所屬公司，可改選其他公司；變更後部門與職位須重新選擇。"
+            jobHint="公司／部門／職位為選填；留空者於清單顯示「—」。"
           />
           <div>
             <label htmlFor="cRole" className="block text-sm font-medium text-slate-700 mb-1">
@@ -578,11 +843,13 @@ function CreateModal({
 
 function EditModal({
   target,
+  master,
   onClose,
   onSaved,
   onError,
 }: {
   target: AccountView;
+  master: ProfileMaster;
   onClose: () => void;
   onSaved: () => void;
   onError: (e: unknown) => void;
@@ -590,10 +857,16 @@ function EditModal({
   const upstream = target.source === 'upstream';
   const [name, setName] = useState(target.name ?? '');
   const [password, setPassword] = useState('');
+  // AC-P19：三欄以該帳號**現值**預填——公司為該帳號自身之 companyCode（非操作者之公司）。
+  const [profile, setProfile] = useState<ProfileValue>({
+    companyCode: target.companyCode ?? '',
+    orgCode: target.orgCode ?? '',
+    jobTitleCode: target.jobTitleCode ?? '',
+  });
   const [busy, setBusy] = useState(false);
 
   async function submit(): Promise<void> {
-    // 上游帳號姓名/密碼唯讀 → 無可儲存欄位，直接關閉。
+    // 上游帳號姓名/密碼/公司/部門/職位皆唯讀 → 無可儲存欄位，直接關閉（後端亦以 AC-P11 為權威）。
     if (upstream) {
       onClose();
       return;
@@ -603,6 +876,15 @@ function EditModal({
       await updateAccount(target.id, {
         name: name.trim(),
         password: password || undefined,
+        // AC-P10b：公司／部門／職位一律**三者同送**（雙連動已保證不會殘留他公司代碼）。
+        // 公司主檔不可用（載入失敗 → 下拉無值）時整組缺席＝不變更（AC-P9），避免誤把現值清空。
+        ...(profile.companyCode
+          ? {
+              companyCode: profile.companyCode,
+              orgCode: normalizeProfileCode(profile.orgCode),
+              jobTitleCode: normalizeProfileCode(profile.jobTitleCode),
+            }
+          : {}),
       });
       onSaved();
     } catch (e) {
@@ -614,7 +896,7 @@ function EditModal({
 
   return (
     <Overlay>
-      <div role="dialog" aria-labelledby="editTitle" className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+      <div role="dialog" aria-labelledby="editTitle" className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto">
         <h3 id="editTitle" className="font-semibold text-slate-900 mb-1">編輯帳號</h3>
         <p className="text-xs text-slate-400 mb-4">帳號：<span className="mono text-slate-600">{target.loginId}</span></p>
         <div className="space-y-3">
@@ -626,6 +908,19 @@ function EditModal({
               <p className="text-[10px] text-slate-400 mt-1">上游同步帳號，姓名由上游系統維護。</p>
             )}
           </div>
+          {/* F003 delta AC-P19：公司／部門／職位以現值預填；manual 四欄皆可編輯（公司為可改選之完整
+              下拉，AC-P10）；upstream 連同姓名一律 disabled（AC-P11，後端為權威）。 */}
+          <ProfileFields
+            idPrefix="e"
+            value={profile}
+            onChange={setProfile}
+            master={master}
+            readOnly={upstream}
+            companyHint={
+              upstream ? undefined : '變更公司後，部門與職位須重新選擇（舊代碼於新公司不適用）。'
+            }
+            jobHint={upstream ? '上游同步帳號，公司／部門／職位由上游系統維護。' : undefined}
+          />
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">目前角色</label>
             <RoleWithSubtype roleCode={target.roleCode} userSubtype={target.userSubtype} />

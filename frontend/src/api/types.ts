@@ -49,6 +49,13 @@ export interface AccountView {
    * 非 User 角色亦可能保有此值（AC-36 休眠但保留），呈現與否由 isSubtypeApplicable 決定。
    */
   userSubtype?: string | null;
+  /**
+   * F003 delta AC-P19：該帳號自身之公司代碼（**非**操作者之公司）。編輯 modal 之公司欄以此預填，
+   * 部門／職位之候選與解析亦以此為 (companyCode, code) 複合鍵之前半（AC-P23d／AC-P23e）。
+   */
+  companyCode?: string;
+  /** F003 delta AC-P19：職位代碼（JOB_TITLE.code）。編輯 modal 之職位欄以此預填；null＝未設定。 */
+  jobTitleCode?: string | null;
 }
 
 export interface AccountFilters {
@@ -56,6 +63,8 @@ export interface AccountFilters {
   roleCode?: string;
   status?: string;
   keyword?: string;
+  /** F003 delta AC-P23b：選填公司篩選（未帶＝全部公司）。 */
+  companyCode?: string;
 }
 
 /** 循環（F007）。updatedAt 為 ISO 字串。 */
@@ -506,6 +515,26 @@ export interface OrgUnitRecord {
 
 /** 組織層級碼（ORG_UNIT.tier）。 */
 export type OrgTier = 'ROOT' | 'DIVISION' | 'DEPARTMENT' | 'SECTION' | 'SUBSECTION';
+
+/**
+ * 公司（GET /companies；F003 delta AC-P15）。候選＝全部有效公司（SELECTABLE_COMPANIES），
+ * **不限操作者所屬公司**——建立/編輯帳號之公司欄與清單公司篩選器共用同一來源。
+ */
+export interface CompanyRecord {
+  companyCode: string;
+  companyName: string;
+}
+
+/**
+ * 職稱（GET /job-titles；F003 delta AC-P14）。唯一鍵為 (companyCode, code) 複合鍵——
+ * 跨公司可有相同 code 但不同 name（如 AE 之 C01＝高級協理 vs AS 之 C01＝協理），
+ * 故候選與解析一律以複合鍵比對，不得僅以 code 比對（AC-P23e）。
+ */
+export interface JobTitleRecord {
+  companyCode: string;
+  code: string;
+  name: string;
+}
 
 /** 人員（GET /persons/search；鏡射後端 PersonRecord，供 F014 當責室長候選；搜尋僅回在職）。 */
 export interface PersonRecord {
