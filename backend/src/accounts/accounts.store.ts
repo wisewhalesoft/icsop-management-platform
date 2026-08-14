@@ -13,6 +13,11 @@ export interface AccountListFilters {
   roleCode?: string;
   status?: string;
   keyword?: string;
+  /**
+   * F003 AC-P23b：選填之公司篩選。未帶＝回全部公司（AC-P23a 已移除操作者公司之租戶過濾），
+   * 帶值＝僅該公司。與 source／roleCode／status 同一慣例。
+   */
+  companyCode?: string;
 }
 
 /** 清單/回傳用檢視欄位（不含 passwordHash）。 */
@@ -39,6 +44,12 @@ export interface AccountView {
    * 供帳號管理之角色指派 modal 預選現值。刻意選填（`?`）以相容既有測試替身與不回傳此欄之路徑。
    */
   userSubtype?: string | null;
+  /**
+   * F003 AC-P23c／AC-P23d／AC-P23e（2026-08-14 公司可跨選之漣漪）：清單改為跨公司可見後，
+   * 公司／部門／職位名稱必須以**該列自身**之 companyCode 解析，故此欄須隨列帶出。
+   * 刻意選填（`?`）以相容既有測試替身（AccountRecord 另收斂為必填）。
+   */
+  companyCode?: string;
 }
 
 /**
@@ -64,6 +75,12 @@ export interface CreateAccountInput {
   name: string | null;
   roleCode: string;
   passwordHash: string;
+  /** F003 AC-P1：部門代碼（已經 AC-P2 正規化，空字串不得落地 → null）。 */
+  orgCode?: string | null;
+  /** F003 AC-P1：職位代碼（已經 AC-P2 正規化，空字串不得落地 → null）。 */
+  jobTitleCode?: string | null;
+  /** F003 AC-U3：手動建立之預設子分類（`'other'`，不限縮）。 */
+  userSubtype?: string;
 }
 
 export interface UpdateAccountPatch {
@@ -78,6 +95,12 @@ export interface UpdateAccountPatch {
    * 其餘角色**不寫入此鍵**（AC-36：既有值保留、不清空）。
    */
   userSubtype?: string;
+  /** F003 AC-P10：手動帳號可變更公司（限 SELECTABLE_COMPANIES）。 */
+  companyCode?: string;
+  /** F003 AC-P9：明確傳 null＝清空；缺席＝不變更（不出現於 patch）。 */
+  orgCode?: string | null;
+  /** F003 AC-P9：明確傳 null＝清空；缺席＝不變更（不出現於 patch）。 */
+  jobTitleCode?: string | null;
 }
 
 export interface AccountStore {
@@ -86,4 +109,10 @@ export interface AccountStore {
   existsLoginId(companyCode: string, loginId: string): Promise<boolean>;
   create(input: CreateAccountInput): Promise<AccountView>;
   updateById(id: string, patch: UpdateAccountPatch): Promise<AccountView>;
+  /**
+   * F003 AC-P24：`loginId` 於**全部公司**是否已被使用（手動帳號建立之唯一性檢查範圍擴大）。
+   * 刻意選填（`?`）——既有測試替身僅實作 per-company 之 `existsLoginId`；缺此方法時服務層
+   * 退回 `existsLoginId(companyCode, loginId)`（既有行為，為新行為之子集，不會誤放行既有情境）。
+   */
+  existsLoginIdGlobal?(loginId: string): Promise<boolean>;
 }

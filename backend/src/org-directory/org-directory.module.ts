@@ -15,6 +15,10 @@ import {
   OrgUnitReadController,
   PersonReadController,
 } from './org-directory.controller';
+import {
+  CompanyReadController,
+  JobTitleReadController,
+} from './master-data.controller';
 
 /**
  * 組織/人員名冊讀取模組（org-foundation，Wave 2 前置）。
@@ -27,7 +31,14 @@ import {
  */
 @Module({
   imports: [AuthModule, RbacModule],
-  controllers: [OrgUnitReadController, PersonReadController],
+  // F003 AC-P14／AC-P15：職位／公司主檔讀取端點（帳號管理 read 權限；就近置於本模組，
+  // 重用既有 JOB_TITLE_READ_STORE 與靜態 COMPANY_FULL_NAMES，不新增表／store／migration）。
+  controllers: [
+    OrgUnitReadController,
+    PersonReadController,
+    CompanyReadController,
+    JobTitleReadController,
+  ],
   providers: [
     {
       provide: PERSON_STORE,

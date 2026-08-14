@@ -17,11 +17,28 @@ import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { RequirePermission } from '../rbac/require-permission.decorator';
 import { FunctionKey } from '../rbac/function-matrix';
 
+/**
+ * 建立手動帳號之 request body（F003 AC-P1）。未列於本契約之其他鍵一律忽略、不寫入。
+ * 值層驗證（正規化／必填／長度／代碼有效性／順序）一律於服務層（AC-P2～AC-P8），
+ * controller 僅做「與帳號無關之基本必填」把關以維持既有 400 行為。
+ */
 interface CreateBody {
   loginId?: string;
   password?: string;
   roleCode?: string;
   name?: string | null;
+  companyCode?: string;
+  orgCode?: string | null;
+  jobTitleCode?: string | null;
+}
+
+/** 編輯帳號之 request body（F003 AC-P9）。欄位缺席＝不變更；明確傳 null＝清空。 */
+interface UpdateBody {
+  name?: string | null;
+  password?: string;
+  companyCode?: string;
+  orgCode?: string | null;
+  jobTitleCode?: string | null;
 }
 
 /**
@@ -43,12 +60,15 @@ export class AccountsController {
     @Query('roleCode') roleCode?: string,
     @Query('status') status?: string,
     @Query('keyword') keyword?: string,
+    @Query('companyCode') companyCode?: string,
   ) {
     const filters: AccountListFilters = {
       source: source as AccountSource | undefined,
       roleCode: roleCode || undefined,
       status: status || undefined,
       keyword: keyword?.trim() || undefined,
+      // AC-P23b：選填公司篩選；未帶＝全部公司（AC-P23a 已移除操作者公司之租戶過濾）。
+      companyCode: companyCode?.trim() || undefined,
     };
     return this.svc.listAccounts(req.sessionUser!.companyCode, filters);
   }
@@ -64,15 +84,17 @@ export class AccountsController {
       password: body.password,
       roleCode: body.roleCode,
       name: body.name ?? null,
+      // AC-P5：未帶 companyCode 時交由服務層採用操作者 session 之公司（此處不代填，
+      // 才能讓服務層區分「未提供」與「提供空字串」兩種語意）。
+      companyCode: body.companyCode,
+      orgCode: body.orgCode,
+      jobTitleCode: body.jobTitleCode,
     });
   }
 
   @Patch(':id')
   @RequirePermission(FunctionKey.ACCOUNT_MANAGEMENT, 'write')
-  update(
-    @Param('id') id: string,
-    @Body() body: { name?: string | null; password?: string },
-  ) {
+  update(@Param('id') id: string, @Body() body: UpdateBody) {
     return this.svc.updateAccount(id, body ?? {});
   }
 

@@ -55,6 +55,15 @@ export interface AccountRepository {
    * 呼叫端須以 try/catch 包覆，使時間戳寫入失敗永不阻斷登入。
    */
   markLoggedIn(companyCode: string, loginId: string, at: Date): Promise<void>;
+  /**
+   * F001 `AC-C1` 第②段：以 `loginId` **跨全部公司**取回全部候選快照（含停用／上游帳號，
+   * 由 `resolvePasswordLogin` 統一判定）。回傳陣列而非單筆——「恰一筆才採用、多筆一律拒絕」
+   * 之判定需要**筆數**本身，回單筆會使「多筆」情境無從偵測而退化為任選一筆。
+   *
+   * 刻意選填（`?`）：既有測試替身僅實作 per-company 之 `findByLoginId`；缺此方法時第②段
+   * 直接略過（＝既有行為），故不影響任何既有路徑。
+   */
+  findByLoginIdAnyCompany?(loginId: string): Promise<PasswordAuthAccount[]>;
 }
 
 export const ACCOUNT_REPOSITORY = Symbol('ACCOUNT_REPOSITORY');

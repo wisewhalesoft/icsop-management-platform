@@ -75,7 +75,11 @@ export class TypeOrmAccountRepository implements AccountRepository {
     const a = await ds
       .getRepository(Account)
       .findOne({ where: { companyCode, loginId } });
-    if (!a) return null;
+    return a ? TypeOrmAccountRepository.toPasswordAuth(a) : null;
+  }
+
+  /** ACCOUNT 列 → 途徑 B 判定所需之快照（`findByLoginId` 與跨公司第②段共用同一組收斂規則）。 */
+  private static toPasswordAuth(a: Account): PasswordAuthAccount {
     return {
       loginId: a.loginId,
       email: a.email,
@@ -85,6 +89,17 @@ export class TypeOrmAccountRepository implements AccountRepository {
       source: a.source === 'manual' ? 'manual' : 'upstream',
       passwordHash: a.passwordHash,
     };
+  }
+
+  /**
+   * F001 AC-C1 第②段（跨公司解析）：以 loginId 取回**全部公司**之候選快照。
+   * DB 唯一鍵為 (companyCode, loginId)＝per-company，故此處可能多筆（歷史／上游資料）；
+   * 是否採用交呼叫端依「恰一筆」判定（多筆一律拒絕，不任選）。
+   */
+  async findByLoginIdAnyCompany(loginId: string): Promise<PasswordAuthAccount[]> {
+    const ds = await this.ensureInit();
+    const rows = await ds.getRepository(Account).find({ where: { loginId } });
+    return rows.map((a) => TypeOrmAccountRepository.toPasswordAuth(a));
   }
 
   /**
