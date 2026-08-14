@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -97,7 +98,10 @@ export class DocumentsController {
     return this.svc.update(req.sessionUser?.roleCode, id, body ?? {}, actorOf(req));
   }
 
+  // svc.setStatus 回 void → 標 204，否則 Nest 回「200 + 空 body」而前端 apiFetch 會對空 body
+  // 呼叫 res.json() 拋 SyntaxError（同 AppendicesController／UsageFormsController 之修正）。
   @Patch(':id/status')
+  @HttpCode(204)
   @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'write')
   setStatus(
     @Req() req: RequestWithSession,

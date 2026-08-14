@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Post,
   Put,
@@ -33,6 +34,11 @@ const isTrue = (v?: string) => /^(true|1|yes)$/i.test(v ?? '');
  * 前台詳情附錄清單/下載屬文件瀏覽/下載列印（全角色 READ）。
  *
  * 上傳為 multipart/form-data；池上傳支援多檔（欄位名 `files`），覆蓋為單檔（欄位名 `file`）。
+ *
+ * ⚠ 服務層回 `Promise<void>` 之路由一律標 `@HttpCode(204)`（比照 lifecycle／dag／node-docs）：
+ * 不標則 Nest 回「200 + 空 body」，前端 `apiFetch` 會對空 body 呼叫 `res.json()` 而拋
+ * SyntaxError，使**已成功之寫入被前端當成失敗**（畫面不刷新 → 幽靈列 → 再送一次才收到
+ * 真正的 404）。204 為此契約之權威，前端另有空 body 容忍作為雙保險。
  */
 @Controller()
 @UseGuards(SessionGuard, RolePermissionGuard)
@@ -94,6 +100,7 @@ export class AppendicesController {
   }
 
   @Delete('admin/appendices/:appendixId')
+  @HttpCode(204)
   @RequirePermission(FunctionKey.APPENDIX_MANAGEMENT, 'read')
   remove(
     @Req() req: RequestWithSession,
@@ -111,6 +118,7 @@ export class AppendicesController {
    * 最終狀態之權威路徑（architecture-spec §3.6 決策二；UI 只走這一條）。
    */
   @Put('admin/documents/:documentId/appendices')
+  @HttpCode(204)
   @RequirePermission(FunctionKey.APPENDIX_MANAGEMENT, 'read')
   replace(
     @Req() req: RequestWithSession,
@@ -126,6 +134,7 @@ export class AppendicesController {
 
   /** 附加關聯（接續現有最大 sortOrder 之後）；API 完整性保留，建立/編輯 UI 不呼叫。 */
   @Post('admin/documents/:documentId/appendices')
+  @HttpCode(204)
   @RequirePermission(FunctionKey.APPENDIX_MANAGEMENT, 'read')
   append(
     @Req() req: RequestWithSession,
@@ -140,6 +149,7 @@ export class AppendicesController {
   }
 
   @Delete('admin/documents/:documentId/appendices/:appendixId')
+  @HttpCode(204)
   @RequirePermission(FunctionKey.APPENDIX_MANAGEMENT, 'read')
   unlink(
     @Req() req: RequestWithSession,

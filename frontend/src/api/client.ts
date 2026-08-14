@@ -58,6 +58,22 @@ export async function apiFetch<T>(
     throw new ApiError(0, 'NETWORK_ERROR', e instanceof Error ? e.message : String(e));
   }
   if (!res.ok) throw await extractError(res);
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  return (await readBody<T>(res)) as T;
+}
+
+/**
+ * 解析成功回應之 body：**無內容一律回 undefined，不得丟例外**。
+ *
+ * ⚠ 不可退回「只認 204」：Nest 對回傳 void 之 handler 送出的是「200／201 ＋ 空 body」
+ * （除非該路由標了 @HttpCode(204)）。舊版直接 res.json() 會在空 body 上拋 SyntaxError，
+ * 且該例外不是 ApiError → 呼叫端一律顯示「操作失敗」並跳過後續刷新，使**已成功之刪除／關聯
+ * 被當成失敗**（附錄移除後幽靈列殘留、再送一次才收到真正的 404）。後端已補標 204，此處
+ * 為雙保險：任何無內容回應都安全落地。
+ */
+async function readBody<T>(res: Response): Promise<T | undefined> {
+  if (res.status === 204 || res.status === 205) return undefined;
+  if (res.headers.get('content-length') === '0') return undefined;
+  const text = await res.text();
+  if (text.trim() === '') return undefined;
+  return JSON.parse(text) as T;
 }

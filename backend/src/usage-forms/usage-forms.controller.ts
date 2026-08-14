@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Post,
   Put,
@@ -33,6 +34,10 @@ const isTrue = (v?: string) => /^(true|1|yes)$/i.test(v ?? '');
  * 前台詳情表單清單/下載屬文件瀏覽/下載列印（全角色 READ）。
  *
  * 上傳為 multipart/form-data；池上傳支援多檔（欄位名 `files`），覆蓋為單檔（欄位名 `file`）。
+ *
+ * ⚠ 服務層回 `Promise<void>` 之路由一律標 `@HttpCode(204)`：不標則 Nest 回「200/201 + 空 body」，
+ * 前端 `apiFetch` 對空 body 呼叫 `res.json()` 會拋 SyntaxError，使已成功之寫入被當成失敗
+ * （建立文件時更會中斷後續步驟：附錄關聯與連結點被整段跳過）。詳見 AppendicesController 同段註記。
  */
 @Controller()
 @UseGuards(SessionGuard, RolePermissionGuard)
@@ -94,6 +99,7 @@ export class UsageFormsController {
   }
 
   @Delete('admin/usage-forms/:formId')
+  @HttpCode(204)
   @RequirePermission(FunctionKey.USAGE_FORM_MANAGEMENT, 'read')
   remove(
     @Req() req: RequestWithSession,
@@ -107,6 +113,7 @@ export class UsageFormsController {
 
   // ── 文件關聯（多對多）──
   @Post('admin/documents/:documentId/usage-forms')
+  @HttpCode(204)
   @RequirePermission(FunctionKey.USAGE_FORM_MANAGEMENT, 'read')
   link(
     @Req() req: RequestWithSession,
@@ -117,6 +124,7 @@ export class UsageFormsController {
   }
 
   @Delete('admin/documents/:documentId/usage-forms/:formId')
+  @HttpCode(204)
   @RequirePermission(FunctionKey.USAGE_FORM_MANAGEMENT, 'read')
   unlink(
     @Req() req: RequestWithSession,
