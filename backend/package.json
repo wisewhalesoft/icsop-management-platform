@@ -21,12 +21,14 @@
     "seed:lifecycle": "ts-node src/database/seed-lifecycle.ts",
     "seed:doc-catalog": "ts-node src/database/seed-document-catalog.ts",
     "sync:once": "ts-node src/org-sync/sync-once.ts",
+    "repair:filenames": "ts-node src/database/repair-mojibake-filenames.ts",
     "migration:run:prod": "typeorm -d dist/database/data-source.js migration:run",
     "seed:roles:prod": "node dist/database/seed-roles.js",
     "seed:bootstrap-admin:prod": "node dist/database/seed-bootstrap-admin.js",
     "seed:lifecycle:prod": "node dist/database/seed-lifecycle.js",
     "seed:doc-catalog:prod": "node dist/database/seed-document-catalog.js",
-    "sync:once:prod": "node dist/org-sync/sync-once.js"
+    "sync:once:prod": "node dist/org-sync/sync-once.js",
+    "repair:filenames:prod": "node dist/database/repair-mojibake-filenames.js"
   },
   "jest": {
     "moduleFileExtensions": [
