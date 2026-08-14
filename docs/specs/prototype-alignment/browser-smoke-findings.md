@@ -210,3 +210,65 @@ prototypes/NN-*.html（本機靜態伺服 :5188）。
 - ⚠️ 18 權限矩陣：需 SysAdmin session（本輪依決策略過）。
 - ⚠️ 08 帳號 uploadedByName/次要室長+N、19 表單列渲染：需對應真實資料。
 
+
+---
+
+# 遠端測試環境使用回報（2026-08-14 · testicsop.hfcfinance.com.tw）
+
+使用者回報附錄管理兩個現象；查證後**各一個根因，且兩者都在共用層、影響範圍大於回報**。
+與上方 BUG-1/1b/2 同一家族：unit 測不到（controller spec 直呼方法、前端測試 mock 掉 api 模組），
+**只有真的走一趟 HTTP 才會現形**。
+
+## BUG-4 — multipart 中文檔名以 latin1 落地（亂碼）
+
+- **現象**：附錄「多選」上傳 PDF 後，清單顯示 `4. åæ½¤èæ¥­æ°¸çº…pdf`。
+- **根因**：`backend/src/storage/multipart.ts` 的 `MULTIPART_OPTIONS` 未設 `defParamCharset`。
+  multer 2.2.0 / busboy 1.6.0 對 **part header**（`Content-Disposition` 的 filename）預設以 **latin1**
+  解碼（對 form field 值才預設 utf8）→ 瀏覽器送出的 UTF-8 位元組被逐 byte 誤解。
+- **為何只有多檔踩**：單檔時前端把檔名帶進 `name` **表單欄位**（utf8 路徑）；多檔刻意不送 `name`，
+  後端 fallback `file.originalname`（latin1 路徑）。
+- **實際受害**（直查 SOP 庫）：`APPENDIX_POOL` 4 筆（03:05:32 那批多檔）＋ `DOCUMENT_ATTACHMENT` 1 筆
+  （附件從不送 name → 一律走檔名，必踩）。`USAGE_FORM_POOL` 目前 0 筆受害（該頁「表單名稱」為必填欄位）。
+- **修法**：`MULTIPART_OPTIONS` 加 `defParamCharset: 'utf8'`（Nest `MulterOptions` 原生支援）。
+  既有亂碼資料以 `npm run repair:filenames [-- --apply]` 反解回寫（latin1→utf8，判準三條、冪等、
+  預設 dry-run）；**2026-08-14 已對 SOP 庫套用，5/5 筆修復，重跑為 0 筆**。
+- **回歸**：`src/http-contract.spec.ts`（真 multer 走一趟 HTTP，中文檔名須原樣抵達服務層）、
+  `test/int/appendices.itest.ts`（中文名須以 UTF-8 落地 APPENDIX_POOL）、
+  `src/database/repair-mojibake-filenames.spec.ts`（判準與冪等）。
+
+## BUG-5 — 回 void 的路由送「200 + 空 body」，前端把成功當成失敗
+
+- **現象**：附錄移除後畫面仍在，再按一次得 `DELETE /admin/appendices/{id} → 404 APPENDIX_NOT_FOUND`。
+- **查證**：該 id 早已不在 `APPENDIX_POOL`（全表 11 筆、命中 0）→ **第一次刪除其實成功了**。
+- **根因鏈**：服務層回 `Promise<void>` 之 handler 未標 `@HttpCode(204)` → Nest 回「200/201 + 空 body」
+  → `frontend/src/api/client.ts` 的 `apiFetch` 只在 204 提前 return，其餘一律 `res.json()`
+  → 空 body 拋 `SyntaxError`（**不是 ApiError**）→ 呼叫端 toast「操作失敗」且**不執行 `load()`**
+  → 已刪除之列變幽靈列 → 再送一次才是真正的 404。
+- **同型受害端點（8）**：附錄移除、附錄關聯 PUT/POST/DELETE、使用表單刪除/關聯/解除、文件狀態切換。
+  （`lifecycle`／`dag`／`node-docs` 早已正確標 204，故未受影響。）
+- **連帶**：`DocumentCreatePage` 的 `linkUsageForms` 位於附錄步驟之前，一丟錯即中斷 → 附錄關聯與
+  連結點整段被跳過、也不導頁；與 `DOC_APPENDIX` 全庫僅 1 筆之現況吻合。
+- **修法（雙保險，缺一仍留地雷）**：後端 8 條路由補 `@HttpCode(204)`；前端 `apiFetch` 改以
+  `readBody()` 解析——204/205、`content-length: 0`、空字串一律回 `undefined`。
+- **回歸**：`src/http-contract.spec.ts`（8 條路由須 204 且 body 空）、`test/int/appendices.itest.ts`
+  （第一次刪即 204、重送才 404）、`frontend/src/api/client.test.ts`（200/201/204/空字串皆不得丟例外）。
+
+> ⚠ 兩案皆為**後端＋前端程式碼**修正，需重新 build 並重新部署 testicsop 才會生效；
+> 資料修補（BUG-4）已直接對 SOP 庫執行完畢，與部署無關。
+
+## 附帶：修掉一條擲硬幣的整合測試（f040 outbox 等待）
+
+驗證上述修正時，`test/int/f040-name-snapshot-vs-join.itest.ts` 一次紅一次綠。查明原因**與受測程式無關**：
+該檔於斷言前先關閉自己的 Nest app，其 `@Cron(EVERY_5_MINUTES)` 稽核 outbox 補償排程隨之停擺，
+於是它其實是在等**本機 docker `icsop-backend` 容器**（接同一個 SOP 庫）的 cron tick——150 秒視窗
+對上 300 秒週期，命中率約一半。實證：測試放棄後在**本機無任何測試執行**的情況下，pending 列於
+30 秒內被外部行程搬走（`AUDIT_LOG_OUTBOX` 1→0、SNAP 稽核列 12→13）。
+**修法**：`waitForAuditRow()` 改為先呼叫 `AuditWriterService.processOutboxRetry()`（與排程呼叫的是
+同一個方法，不繞過業務邏輯），輪詢保留為安全網。修後單檔重跑穩定通過。
+
+## 已知遺留（本輪未動，非本次修正引入）
+
+- `test/int/access-history.itest.ts · TS-AQ-INT-012`：期待合成 orgCode `Z9AB0` 之操作者
+  department/section 為 null，實際回 `"和潤本部"`。**stash 掉本次全部修改後以同一指令重跑，紅法完全相同**
+  → 屬既有落差（ORG_UNIT 無 `Z9*` 列，故應為名稱解析之 prefix/fallback 行為與測試前提不符），
+  與附錄／使用表單無關，留待該 track 處理。
