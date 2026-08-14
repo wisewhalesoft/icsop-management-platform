@@ -66,6 +66,12 @@ export async function cleanupMarkers(): Promise<void> {
   await q(`DELETE FROM [DOCUMENT_ATTACHMENT] WHERE [documentId] IN ${markerDocs}`).catch(
     () => undefined,
   );
+  // F039 附錄關聯：FK_DOC_APPENDIX_document 同為 NO ACTION，理由與上一段相同（不先刪會讓
+  // marker 文件刪不掉而殘留、下次執行編號碰撞）。附錄池本體不在此清除——它不綁 marker 文件，
+  // 由建立它的測試自行以 id 回收（見 appendices.itest.ts）。
+  await q(`DELETE FROM [DOC_APPENDIX] WHERE [documentId] IN ${markerDocs}`).catch(
+    () => undefined,
+  );
   await q(`DELETE FROM [ICSOP_DOCUMENT] WHERE [documentNumber] LIKE '${MARK.doc}%'`).catch(
     () => undefined,
   );

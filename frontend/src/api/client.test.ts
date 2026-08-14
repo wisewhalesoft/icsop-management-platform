@@ -33,6 +33,27 @@ describe('apiFetch', () => {
     expect(new Headers(init?.headers).get('accept')).toBe('application/json');
   });
 
+  /**
+   * 無內容之成功回應不得丟例外。Nest 對回傳 void 之 handler：標了 @HttpCode(204) 送 204，
+   * 未標則送「200/201 + 空 body」——舊版直接 res.json() 會在後者拋 SyntaxError（非 ApiError），
+   * 呼叫端因而把**已成功的刪除／關聯**顯示為「操作失敗」且不刷新清單（幽靈列 → 再送一次變 404）。
+   */
+  it.each([204, 200, 201])('成功但無 body（HTTP %i）→ 回 undefined，不丟例外', async (status) => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status }));
+    await expect(
+      apiFetch<void>('/admin/appendices/abc', { method: 'DELETE' }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('成功但 body 為空字串（content-length: 0）→ 回 undefined，不丟例外', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response('', { status: 200, headers: { 'content-length': '0' } }),
+    );
+    await expect(
+      apiFetch<void>('/admin/documents/d1/appendices', { method: 'PUT' }),
+    ).resolves.toBeUndefined();
+  });
+
   it('401 → 拋 ApiError（status 401、code 取自 message）', async () => {
     vi.mocked(fetch).mockResolvedValue(
       jsonResponse({ statusCode: 401, message: 'AUTH_SESSION_EXPIRED' }, 401),
