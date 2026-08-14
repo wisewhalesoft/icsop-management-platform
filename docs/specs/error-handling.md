@@ -1,9 +1,9 @@
 ---
 spec-id: error-handling
 title: 錯誤處理與失敗模式
-version: 1.3
-date: 2026-08-10
-status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落與 3 個 `LIFECYCLE_*` 錯誤碼為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.3 之 [#dept-restriction](#dept-restriction) 段落為 🟢 APPROVED 2026-08-11 人類閘門通過——OQ-E06-03 定案為 404 `DOCUMENT_NOT_FOUND`、OQ-E08-10 定案為不記錄拒絕稽核，均沿用既有錯誤碼、不新增**）
+version: 1.5
+date: 2026-08-14
+status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落與 3 個 `LIFECYCLE_*` 錯誤碼為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.3 之 [#dept-restriction](#dept-restriction) 段落為 🟢 APPROVED 2026-08-11 人類閘門通過——OQ-E06-03 定案為 404 `DOCUMENT_NOT_FOUND`、OQ-E08-10 定案為不記錄拒絕稽核，均沿用既有錯誤碼、不新增**；**v1.4 新增 [#account-profile](#account-profile) 段落與 3 個 `ACCOUNT_*_INVALID` 錯誤碼，對應 F003 手動帳號基本資料 delta，2026-08-14 使用者直接裁定**；**v1.5 同日第二次裁決——公司別可跨公司選擇：`ACCOUNT_COMPANY_CODE_INVALID` 語意放寬為「非有效公司」、`ACCOUNT_USERNAME_EXISTS` 比對範圍擴為全域，均不新增錯誤碼**）
 ---
 
 # 錯誤處理（Error Handling）
@@ -28,6 +28,10 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 | `AUTH_SESSION_EXPIRED` | 401 | 工作階段已逾時，請重新登入 | F001 |
 | `ACCOUNT_USERNAME_EXISTS` | 409 | 帳號名稱已存在（比對 `ACCOUNT.loginId`；錯誤碼名稱沿用不改，避免跨層識別碼churn） | F003 |
 | `ACCOUNT_UPSTREAM_READONLY` | 403 | 上游同步帳號資料請透過組織同步更新 | F003 |
+| `VALIDATION_ERROR` | 400 | 必要欄位缺漏或格式/長度不合法（**既有實作常數**，非本次新增；範圍＝帳號建立/編輯之 `loginId`／`password`／`roleCode`／`name` 與四欄長度上限，見 [#account-profile](#account-profile)。**沿用不改名**，避免跨層識別碼 churn） | F003 |
+| `ACCOUNT_COMPANY_CODE_INVALID` | 400 | 公司代碼**不是有效公司**（不在 `SELECTABLE_COMPANIES`；含空字串、未知代碼、已結束之公司）。⚠ 語意於 2026-08-14 由「≠ 操作者所屬公司」放寬——使用者裁定公司別可跨公司選擇 | F003 |
+| `ACCOUNT_ORG_CODE_INVALID` | 400 | 部門代碼不存在於組織主檔，或不屬於該帳號之公司 | F003 |
+| `ACCOUNT_JOB_TITLE_INVALID` | 400 | 職位代碼不存在於該公司之職稱對照主檔 | F003 |
 | `ROLE_INVALID` | 400 | 角色值不合法 | F003 |
 | `ROLE_SELF_DOWNGRADE_BLOCKED` | 409 | 無法降級自身系統管理員角色（草案，待確認） | F003 |
 | `SYNC_IN_PROGRESS` | 409 | 同步進行中，請稍候 | F004 |
@@ -106,6 +110,22 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 
 - 所有登入失敗之使用者可見訊息**不得洩漏可列舉資訊**，包含但不限於：某 email 是否存在於系統、該帳號是否啟用、比對在哪一階段失敗、token 中哪一項檢查未通過。詳細判別資訊僅寫入伺服器端失敗日誌供稽核。
 - **登入失敗鎖定**：定案本輪不做（OQ-E01-02）。
+
+## 手動帳號基本資料（姓名／公司／部門／職位） {#account-profile}
+
+> 對應 [F003](features/F003-account-role-management.md) 之 2026-08-14 delta（`AC-P1`～`AC-P22`）。**新增 3 個錯誤碼**（`ACCOUNT_COMPANY_CODE_INVALID`／`ACCOUNT_ORG_CODE_INVALID`／`ACCOUNT_JOB_TITLE_INVALID`），必填與長度沿用既有 `VALIDATION_ERROR`、上游唯讀沿用既有 `ACCOUNT_UPSTREAM_READONLY`。
+
+- **輸入正規化（先於一切驗證）**：`name`／`companyCode`／`orgCode`／`jobTitleCode` 一律 trim；`orgCode`／`jobTitleCode` 於 trim 後為空字串、純空白或未提供者收斂為 `null`（**空字串不得落地**，比照 [#lifecycle-subcategory](#lifecycle-subcategory) 之 `normalizeSubcategory`）。
+- **驗證順序（固定，先後不可調換；同時違反多項時僅回序位最前者）**：① `VALIDATION_ERROR`（必填缺漏／長度超限，400）→ ② `ROLE_INVALID`（400）→ ③ `ACCOUNT_COMPANY_CODE_INVALID`（400）→ ④ `ACCOUNT_ORG_CODE_INVALID`（400）→ ⑤ `ACCOUNT_JOB_TITLE_INVALID`（400）→ ⑥ `ACCOUNT_USERNAME_EXISTS`（409）。③④⑤ 係**插入於既有 ②⑥ 之間**，既有兩者之相對順序不變。
+- **`VALIDATION_ERROR`（400）**：`loginId`／`password`／`roleCode`／`name` 任一缺漏或 trim 後為空；或 trim 後長度 `name` > 30、`companyCode` > 10、`orgCode` > 10、`jobTitleCode` > 10。**不建立／不更動任何帳號記錄**。刻意不細分為 `ACCOUNT_NAME_REQUIRED` 等專屬碼——維持本端點單一之「必填缺漏」語意，欄位層提示屬前端責任。
+- **`ACCOUNT_COMPANY_CODE_INVALID`（400）**（🔵 **2026-08-14 語意放寬**，使用者裁定公司別可跨公司選擇）：payload 之 `companyCode` **不存在於 `SELECTABLE_COMPANIES`**（＝`COMPANY_FULL_NAMES` 之鍵集合，見 [F003](features/F003-account-role-management.md) `AC-P15`）。建立與編輯皆適用；未提供時採操作者 session 之公司（建立）或維持現值（編輯），非錯誤。**跨公司本身不再是錯誤**。<br>📝 已被取代之舊語意（「≠ 操作者所屬公司即拒絕」）保留於此供追溯：其理由為 `companyCode` 為 `(companyCode, loginId)` 唯一鍵之一半且為清單租戶過濾鍵；使用者已知悉此代價仍裁定放寬，代價之處置見 [F003](features/F003-account-role-management.md) `AC-P23`～`AC-P27`。
+- **`ACCOUNT_USERNAME_EXISTS`（409）之範圍擴大**：手動帳號建立之 `loginId` 唯一性檢查由「所選公司內」擴為 **全部公司**（[F003](features/F003-account-role-management.md) `AC-P24`）；編輯變更公司致 `(companyCode, loginId)` 與他筆碰撞亦回本碼（`AC-P10a`）。**錯誤碼與 HTTP 狀態不變**，僅比對範圍擴大（為既有行為之嚴格超集）。
+- **變更公司時未一併給定 `orgCode`／`jobTitleCode`（400 `VALIDATION_ERROR`）**：公司一變更，舊部門／職位代碼必然失效（其有效性以 `companyCode` 為範圍）。兩者須於同一請求明確出現（合法代碼或 `null`），否則拒絕整筆；**嚴禁靜默沿用舊值**（會於 DB 留下跨公司髒代碼，使部門／職位解析永久錯位）。見 [F003](features/F003-account-role-management.md) `AC-P10b`。
+- **跨公司帳號之登入解析**：見 [F001](features/F001-auth-login-session.md) `AC-C1`～`AC-C3`——拒絕一律沿用 `AUTH_INVALID_CREDENTIALS`（含「`loginId` 跨公司命中多筆」之資料異常情境，不任選一筆、不洩漏原因），**不新增錯誤碼**。
+- **`ACCOUNT_ORG_CODE_INVALID`（400）**：`orgCode` 非 `null` 但查無 `ORG_UNIT` 同時滿足「`orgCode` 相等」且「`companyCode` 等於該帳號之公司」。⚠ **刻意不檢查 `isActive`**——下拉候選雖僅列 active，但既有帳號之部門可能於組織同步後停用，若寫入端強制 active 將使該帳號連姓名都無法儲存。
+- **`ACCOUNT_JOB_TITLE_INVALID`（400）**：`jobTitleCode` 非 `null` 但查無 `JOB_TITLE` 之 `(companyCode, code)` 精確相等列。⚠ 寫入驗證**不採**顯示端之兩段式跨公司 fallback（[data-model.md#job-title-entity](data-model.md#job-title-entity)）；不對稱之追溯見 [open-questions.md](open-questions.md) `OQ-E01-08`。
+- **`ACCOUNT_UPSTREAM_READONLY`（403）**：`source='upstream'` 之帳號，其 `name`／`password`／`orgCode`／`jobTitleCode` 一律不可經 `PATCH /admin/accounts/:id` 變更（**含明確傳 `null` 之清空意圖**）；本檢查**先於**一切值驗證，且**不寫入任何欄位**（非部分更新）。角色指派與啟用狀態不受此限（`OQ-E01-03` 定案）。
+- **不涉稽核**：建立／編輯手動帳號**不寫入 `AUDIT_LOG`**（`targetType` 列舉無 `ACCOUNT`），見 [F003](features/F003-account-role-management.md) `AC-P21`。
 
 ## Session 逾時 {#session}
 

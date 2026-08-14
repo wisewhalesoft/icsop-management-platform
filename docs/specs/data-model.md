@@ -182,6 +182,8 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - 本表 `passwordHash` **僅供手動建立之管理員帳號使用**，與上游密碼欄無任何關聯，不得由上游寫入。
 
 - 手動帳號與上游帳號**共用同一資料表**，以 `source` 區分（US-005）；手動帳號之 `companyCode`／`loginId` 由本系統自行指派，不與上游衝突。
+- **手動帳號之 `name`／`orgCode`／`jobTitleCode` 由 [F003](features/F003-account-role-management.md) 之建立/編輯 modal 維護**（`AC-P1`～`AC-P12`，2026-08-14 delta）：`name` 於手動建立為**必填**（trim 後非空、≤ 30）；`orgCode`／`jobTitleCode` 選填，留空一律存 `null`（空字串不得落地），且須為 [ORG_UNIT](#orgunit-entity)／[JOB_TITLE](#job-title-entity) 主檔內、且與該帳號 `companyCode` 相符之代碼；`companyCode`（NOT NULL）**可於建立與編輯時跨公司選擇**（🔵 2026-08-14 使用者裁決 `OQ-E01-07`；候選＝`SELECTABLE_COMPANIES` ≡ `COMPANY_FULL_NAMES` 之鍵集合，見 F003 `AC-P5`／`AC-P10`／`AC-P15`）。**本規則不新增任何欄位、不需 migration**（四欄皆已存在）。上游帳號之同四欄維持唯讀（`OQ-E01-03`，違反回 `ACCOUNT_UPSTREAM_READONLY`）。
+- **跨公司帳號之連帶不變式（F003 `AC-P23`～`AC-P27`）**：① 手動帳號之 `loginId` 為 **全域唯一**（跨全部公司；DB 唯一鍵仍為 `(companyCode, loginId)`，全域性由應用層保證，**不新增索引**）；② 由 `orgCode`／`jobTitleCode` 解析名稱時，**必須以 `(companyCode, orgCode)`／`(companyCode, jobTitleCode)` 複合鍵為之**——[ORG_UNIT](#orgunit-entity) 與 [JOB_TITLE](#job-title-entity) 之唯一鍵皆為複合鍵，不同公司可存在相同代碼但不同單位/職稱，僅以代碼比對將解析出他公司之名稱；③ `ORG_UNIT` 目前僅同步 `AS`（`SYNC_COMPID`），故非 `AS` 之帳號其 `orgCode` 恆為 `null`，屬資料現實而非錯誤。
 - 上游帳號的姓名/部門等以同步結果為準（見 [open-questions](open-questions.md)）。
 - 帳號停用為**軟刪除**，不可實體刪除（維持稽核外鍵完整性）。
 - 帳號狀態：`active → disabled`（手動或離職）；`disabled → active`（誤判恢復，處理方式見 open-questions）。

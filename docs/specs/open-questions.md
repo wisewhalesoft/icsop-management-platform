@@ -1,8 +1,8 @@
 ---
 spec-id: open-questions
 title: 待釐清事項、風險與假設
-version: 1.6
-date: 2026-08-11
+version: 1.7
+date: 2026-08-14
 status: Draft
 ---
 
@@ -21,6 +21,7 @@ status: Draft
 > **兩項最具後果之裁決**：`OQ-E08-10` 採 A ⇒ **本需求完全不觸及稽核子系統**（`AUDIT_LOG` 不動、F023／F024 不需 delta、nfr 不需覆核）；`OQ-E06-03` 採 A ⇒ **本系統首度出現「刻意隱藏資源存在性」之例外**，已明確接受此與「越權一律 403」全域慣例之不一致，且**不自動推廣**至其他越權場景。
 > 逐題裁決結果與未採選項之追溯見 [F041 §OQ 裁決紀錄](features/F041-user-subtype-business-scope.md#oq-dependency)。
 > 另，`LIFECYCLE` 既有同名重複列之盤點與清理**為「實作前置檢查」**（見 [data-model.md](data-model.md#lifecycle-unique-index-precheck)），非未決問題。
+> **2026-08-14（[F003](features/F003-account-role-management.md) 手動帳號基本資料 delta）**：新增 `OQ-E01-07`～`OQ-E01-10` 四項。其中 **`OQ-E01-07`（公司欄是否可跨公司）已於同日由使用者裁決＝可跨公司選擇**，spec-writer 初稿之「鎖定操作者公司」被推翻；其代價（清單移除租戶過濾、`loginId` 全域唯一、帳密登入改兩段式解析、非 AS 公司無部門候選）已明列於該列並落入 F003 `AC-P23`～`AC-P27` 與 [F001](features/F001-auth-login-session.md) `AC-C1`～`AC-C3`。餘 `OQ-E01-08`（`jobTitleCode` 寫入驗證與顯示端解析之不對稱）、`OQ-E01-09`（帳號 CRUD 是否入稽核——**既存規格↔schema 落差**，非本次新增）、`OQ-E01-10`（多公司之公司全稱來源——**`company-name.ts` 註解與契約 §5.3 互相矛盾**）為 `[CLARIFY]`，**皆不阻塞實作**，本輪假設已落入 F003 `AC-P7`／`AC-P21`／`AC-P15` 並於 spec 中標示。
 > 每項標註分類：**[BLOCKING]** 進入精確估點/實作前須答；**[CLARIFY]** 可先以草案假設實作、待確認微調；**[RISK]** 風險與緩解。狀態未定者於 spec 中以 `[ASSUMPTION]` 標記草案值。
 
 ## 最高優先：規格內部矛盾
@@ -41,6 +42,10 @@ status: Draft
 | OQ-E01-04 | 「操作」判定基準（前端心跳 vs 每次 API 更新最後活動時間） | [已定案 ✅] | F001 | **定案**：每次 API 更新 `lastActivityAt` 作為 Session 閒置逾時之活動判定基準 |
 | OQ-E01-05 | 是否阻擋系統管理員降級自身，避免無管理員可操作？ | [已定案 ✅] | F003 | **定案**：阻擋自身降級（`ROLE_SELF_DOWNGRADE_BLOCKED`） |
 | OQ-E01-06 | 單一帳號是否可同時擁有多個角色（如同時為主管與部門窗口）？ | [已定案 ✅] | F003, F025 | **定案（2026-07-20 補列；原僅存在於 E01 epic-brief，未被本紀錄追蹤）**：**單一帳號僅指派一個角色**。此為現行資料模型之既成決策（`ACCOUNT.roleCode` 為單值 FK，[data-model.md#account-entity](data-model.md#account-entity)；F025 矩陣亦以單一角色判定授權）。⚠ 註記：此為**設計隱含決策**而非訪談明示決策，若需改為多角色，屬材質變更（影響 ACCOUNT schema、RBAC 中介層判定邏輯與 F025 矩陣語意） |
+| OQ-E01-07 | 手動帳號之「公司」是否需支援選擇**非操作者所屬公司**（多公司）？ | **[已定案 ✅（使用者裁決 2026-08-14）]** | F003, F001 | **定案＝是，公司別可選、不限操作者所屬公司**（使用者原話：「建立/編輯帳號時公司別要可選（不限制自己所屬公司）」）。spec-writer 初稿曾裁為「鎖定操作者公司」並列明代價，經如實轉達後**使用者維持此決定**。<br>**已落入**：[F003](features/F003-account-role-management.md) `AC-P5`（建立可跨公司）／`AC-P10`＋`AC-P10a`＋`AC-P10b`（編輯可改公司、碰撞回 409、變更公司須同請求重給 `orgCode`／`jobTitleCode`）／`AC-P15`（新增 `GET /companies`，來源＝靜態 `COMPANY_FULL_NAMES`，INV-C1 鍵集合恆等）／**`AC-P23`～`AC-P27`（漣漪）**；[F001](features/F001-auth-login-session.md) `AC-C1`～`AC-C3`（跨公司帳密登入解析）。<br>**已明確接受之代價（不得隱藏）**：① `GET /admin/accounts` **移除租戶過濾**，SysAdmin／ICSOPAdmin 可見全部公司之帳號（改以選填 `companyCode` 篩選器）——不改則跨公司帳號建立後即消失；② 手動帳號 `loginId` 唯一性**擴為全域**（比既有嚴格之超集）；③ 帳密登入解析改為兩段式（先本公司、再全域恰一筆），否則他公司帳號**建立後無法登入**；④ 選擇 `AS` 以外之公司時**部門候選必為空**（`ORG_UNIT` 僅同步 `AS`），屬資料現實、不阻擋建立。**仍為零 schema 變更** |
+| OQ-E01-08 | `jobTitleCode` 之**寫入驗證**採「本公司精確比對」，與**顯示端**「兩段式（本公司優先→跨公司 fallback）」不對稱，是否需一致？ | [CLARIFY] | F003, F004 | **本輪假設（[F003](features/F003-account-role-management.md) `AC-P7`／`AC-P14`）＝維持不對稱**：手動帳號之職位下拉僅列本公司 `JOB_TITLE`，故手動路徑不受影響；上游同步之帳號**不經此驗證**（同步為 upsert，不走 F003 寫入端），其持有之跨公司代碼（實測 AS 在職者有 `I10`／`G03` 兩碼不在 AS 對照列內）仍由顯示端兩段式解析正確呈現。**不阻塞實作**；若日後開放手動指定跨公司職稱代碼，須放寬 `AC-P7` 之比對範圍 |
+| OQ-E01-09 | 帳號管理之 CRUD（建立／編輯／停用／角色指派）是否應寫入稽核？ | [CLARIFY]（既存落差） | F003, F023 | ⚠ **規格↔schema 既存不一致，非 2026-08-14 delta 新增**：[F003](features/F003-account-role-management.md) Main Flow／AC 敘述「停用帳號…記錄稽核」，但 [AUDIT_LOG](data-model.md#auditlog-entity) 之 `targetType` 列舉**不含 `ACCOUNT`**，[F023](features/F023-audit-logging.md) 範圍亦僅涵蓋文件／使用表單／附錄／循環／變更歷程／組織異動提示。**本輪處置＝不寫入**（[F003](features/F003-account-role-management.md) `AC-P21`：`AuditWriter` 完全未被呼叫），與 [F041](features/F041-user-subtype-business-scope.md) `OQ-E08-10` 之「不觸及稽核子系統」同一取向。若需補齊，屬 **additive schema 變更**（新增 `targetType='ACCOUNT'` ＋ `accountId` 條件必填欄 ＋ F024 篩選歸類決策），另案評估、不阻塞現行實作 |
+| OQ-E01-10 | 多公司之公司**全稱**顯示字串從何而來？`company-name.ts` 註解與上游契約 §5.3 互相矛盾 | [CLARIFY] | F003, F004, F020 | ⚠ **既存矛盾**：`backend/src/org-directory/company-name.ts` 檔頭稱「上游 HR 無公司全稱來源、`VW_HRCOMF` 無全稱欄」，但 [upstream-hr-source-contract.md](upstream-hr-source-contract.md) **§5.3 明載 `companyName ← COMPFULLNM`**、**§8 更以該欄為浮水印公司名稱之定案來源**。二者不可能同時為真，且 `COMPFULLNM` **值層級尚未實測**。<br>**本輪處置（[F003](features/F003-account-role-management.md) `AC-P15`）＝維持靜態常數 `COMPANY_FULL_NAMES`**（零 migration、零同步變更），由 1 筆擴為 2 筆：`AS`→`和潤企業股份有限公司`、`AE`→`和潤電能`〔`[ASSUMPTION]`，取自契約 §10.1 之名稱，非確認之全稱〕；排除 `AC`（測試資料、`COMPENDDT`=1900-01-01）與 `AD`／`AJ`／`ILS`（`VW_HRCOMF` 無該筆且部門主檔不完整）。<br>**待覆核後之後續（另案，additive）**：實測 `VW_HRCOMF.COMPFULLNM` 有值 → 由 [F004](features/F004-org-sync.md) 攝入建 `COMPANY` 主檔表（需 migration ＋ 同步來源 delta），`GET /companies` 改讀該表、`resolveCompanyName` 改讀 store，靜態常數退場。**不阻塞本輪實作** |
 
 ## E02 組織同步與異動管理
 

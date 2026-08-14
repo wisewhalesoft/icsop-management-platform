@@ -1,5 +1,5 @@
 # F001: 雙軌驗證登入與 Session 管理
-Priority: P0-MVP | Status: Draft（途徑 A 端到端驗證；途徑 B 帳密登入＋登入節流已實作＋單元驗證，識別鍵＝loginId；brute-force 節流 OQ-F001-B-04 落地，見 implementation-logs/hardening-impl.md） | Last Updated: 2026-07-24
+Priority: P0-MVP | Status: Draft（途徑 A 端到端驗證；途徑 B 帳密登入＋登入節流已實作＋單元驗證，識別鍵＝loginId；brute-force 節流 OQ-F001-B-04 落地，見 implementation-logs/hardening-impl.md）**＋ 2026-08-14 新增 `AC-C1`～`AC-C3` 跨公司帳密登入解析 delta（待實作）** | Last Updated: 2026-08-14
 Epic/Story: E01 / US-001, US-002, US-004
 
 > ✅ **實作狀態（2026-07-21，垂直切片）**：途徑 A（Azure AD OIDC）已於 `backend/`（NestJS 11＋`@azure/msal-node`）實作並**真人端到端驗證通過**——登入→靜默 SSO→回呼驗簽→`email` 比對帳號→核發我方 session（httpOnly JWT）→受保護路由 `/auth/me`→登出→再存取回 401。
@@ -84,8 +84,18 @@ Epic/Story: E01 / US-001, US-002, US-004
 - Given 使用者點擊登出, When 送出, Then 立即撤銷我方憑證，該憑證不可再用於任何受保護 API。
 - Given 任一登入失敗情境, When 回傳錯誤, Then 訊息**不得洩漏該 email 是否存在於系統**或其他可列舉資訊。
 
+### 跨公司手動帳號之帳密登入解析 delta（🔵 2026-08-14 使用者裁決之漣漪；編號採 `AC-C#`）
+
+> **緣由**：使用者裁定「建立/編輯帳號時公司別可選、不限操作者所屬公司」（[F003](F003-account-role-management.md) `AC-P5`）。現行途徑 B 以 `(DEFAULT_COMPANY_CODE ?? 'AS', loginId)` 定位帳號、且登入頁**不送 `companyCode`**，若不修訂，於 `AS` 以外公司建立之手動帳號**建立後永遠無法登入**——即本檔既已閉合過一次之「建立→登入死鏈」重演。
+> **編號自 `AC-C1` 起，既有無編號 AC 全數不變。途徑 A（OIDC）完全不受影響**（其以 `email` 定位身分，本就不併入 `companyCode`，見上方主流程第 7 點）。
+
+- **AC-C1（帳密登入之帳號解析改為兩段式）**：Given 送出帳密（body **不含** `companyCode`）, When 解析帳號, Then 依序：① 以 `(DEFAULT_COMPANY_CODE ?? 'AS', loginId)` 精確查詢，命中即採用（**既有路徑，`AS` 帳號之行為與效能逐項不變**）；② 未命中則以 `loginId` **跨全部公司**查詢，恰命中一筆即採用；③ 命中多筆（歷史資料異常）→ 一律回 **401 `AUTH_INVALID_CREDENTIALS`**，**不任選一筆、不洩漏原因**（比照既有「email 命中多筆」之處置）。Given body **明確帶入** `companyCode`, Then 僅以 `(companyCode, loginId)` 精確查詢（不進入第②段），既有契約不變。
+- **AC-C2（登入頁不新增公司選擇器）**：Given 登入頁, When 渲染, Then **不得**新增「公司」欄位或選擇器——使用者不應被要求知道自己屬於哪個公司代碼；跨公司解析由 `AC-C1` 於後端完成。Given 以 `AE` 建立之啟用手動帳號與正確密碼, When 於登入頁送出, Then 登入成功且 `SessionUser.companyCode` 為 `AE`（**非** `AS`）。<br>⚠ 前置保證＝[F003](F003-account-role-management.md) `AC-P24`（手動帳號 `loginId` **全域唯一**），使 `AC-C1` 第③段之多筆情境在新資料上不可達。
+- **AC-C3（節流與訊息揭露不變）**：Given 第②段查詢未命中或命中多筆, When 回應, Then 一律回統一 `AUTH_INVALID_CREDENTIALS` 並依既有規則同時記 IP 與 `loginId` 兩軸失敗（`AUTH_TOO_MANY_ATTEMPTS` 之門檻與視窗不變）；**不得**因「查無此公司」「該帳號屬他公司」等理由回傳可區分之訊息或狀態碼。
+
 ## Error Scenarios
 - OIDC 驗證、帳密、停用、逾時錯誤：見 [error-handling.md#auth](../error-handling.md#auth) 與 [#session](../error-handling.md#session)。
+- **跨公司帳密登入解析**（`AC-C1`～`AC-C3`）：拒絕一律沿用 `AUTH_INVALID_CREDENTIALS`，**不新增任何錯誤碼**。
 - 登入失敗鎖定：**定案不做**（OQ-E01-02）。
 
 ## Related
