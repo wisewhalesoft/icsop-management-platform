@@ -1,5 +1,6 @@
 import { bootIntApp, shutdownIntApp, IntCtx, MARK } from './harness';
 import { AppDataSource } from '../../src/database/data-source';
+import { AuditWriterService } from '../../src/audit/audit-writer.service';
 
 /**
  * [int] F040／F038 — **兩表之循環名稱語意刻意相反**，本檔同時釘住兩個方向。
@@ -34,6 +35,8 @@ interface ChangeItem {
 
 describe('[int] F040 循環名稱：AUDIT_LOG 快照 vs LIFECYCLE_CHANGE_LOG join（相反語意）', () => {
   let ctx: IntCtx;
+  /** app 關閉後仍可用（store 綁 AppDataSource，非 Nest 生命週期管理）→ 供主動搬遷 outbox。 */
+  let writer: AuditWriterService;
   let lifecycleId = '';
   /** 事件寫入當下之顯示名稱（＝快照應凍結之值）。 */
   const displayBefore = `${NAME_SNAP}（${SUB_BEFORE}）`;
@@ -55,12 +58,18 @@ describe('[int] F040 循環名稱：AUDIT_LOG 快照 vs LIFECYCLE_CHANGE_LOG joi
   }
 
   /**
-   * 輪詢等待 outbox 將稽核列搬入 `AUDIT_LOG`（非阻斷寫入）。
-   * ⚠ 預算 150 秒係實測所需：60 秒在**單檔執行**足夠，但在**全量序列執行**下曾逾時而假紅
-   * （同一份程式碼一次紅一次綠）。此等待**不是**在等業務行為，而是在等既有 outbox 之搬遷，
-   * 故放寬預算不弱化任何約束；真正的斷言（快照值是否被改寫）在其後。
+   * 等待 outbox 將稽核列搬入 `AUDIT_LOG`（非阻斷寫入）。
+   *
+   * ⚠ 2026-08-14 查明「同一份程式碼一次紅一次綠」的真正原因，並改為**主動搬遷**：
+   * 本測試自己的 app 已於 (3b) 關閉，其 `@Cron(EVERY_5_MINUTES)` 補償排程隨之停擺——
+   * 先前能綠純粹是因為**本機 docker `icsop-backend` 容器**接同一個 SOP 庫，靠它的 5 分鐘
+   * cron 剛好在 150 秒視窗內 tick（實測：測試放棄後約 30 秒該列即落庫，且期間本機無任何測試在跑）。
+   * 命中與否是擲硬幣，與受測程式無關。故改為直接呼叫 `processOutboxRetry()`——**與排程呼叫的是
+   * 同一個方法**，不繞過任何業務邏輯，只是不再等別的行程；輪詢保留為安全網（涵蓋容器搶先搬走
+   * 或其他行程並行的情形）。
    */
   async function waitForAuditRow(): Promise<void> {
+    await writer.processOutboxRetry();
     for (let i = 0; i < 300; i++) {
       if ((await auditRows()).length > 0) return;
       await new Promise((r) => setTimeout(r, 500));
@@ -73,6 +82,7 @@ describe('[int] F040 循環名稱：AUDIT_LOG 快照 vs LIFECYCLE_CHANGE_LOG joi
 
   beforeAll(async () => {
     ctx = await bootIntApp();
+    writer = ctx.app.get(AuditWriterService);
 
     // (1) 建立有子分類之 marker 循環
     const lc = await ctx
