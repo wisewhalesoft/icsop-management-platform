@@ -92,6 +92,40 @@ describe('buildHpmuserIncrementalQuery', () => {
       buildHpmuserIncrementalQuery(ref, "AS'; DROP TABLE x--", null),
     ).toThrow();
   });
+
+  /**
+   * Bug 2（時區語意）之 ring 一環：team-lead 唯讀根因調查指出 `sinceMtdt`（＝ `SYNC_RUN.watermark`）
+   * 若由不同時區之行程寫入/讀取，會使增量同步整整漏抓或重抓 8 小時之上游異動——這是「影響資料
+   * 正確性、非僅顯示」之風險項。本組測試涵蓋鏈路的**後半段**（水位值→組出的 OPENQUERY 字面值
+   * 本身是否為行程時區不敏感之純函式）；鏈路**前半段**（水位值從 DB 讀出來時是否已經是正確的
+   * 瞬間，取決於 TypeORM 之 useUTC 設定）不是本檔（純字串邏輯、無 IO）能驗證的範圍，改由
+   * `backend/test/int/timezone-date-semantics.itest.ts` 之 SyncRun.watermark 案例補上。
+   *
+   * 断言之期望字面值由固定 UTC 瞬間之 UTC 曆法分量手算而得（`2026-07-01T05:30:00.000Z` →
+   * `'2026-07-01 05:30:00'`），非讀 production 原始碼得知「該用 getUTC*」——這是 OPENQUERY 對
+   * 端資料庫（VW_HPMUSER.MTDT，上游欄位不帶時區資訊）比較時，唯一不隨行程時區飄移的組字方式，
+   * 屬於本 agent 可據以推導期望值的通用正確性原則，非實作細節。
+   */
+  it('🔴 Bug 2：sinceMtdt 組出的 MTDT 字面值須為行程時區不敏感（同一 UTC 瞬間，跨三個相異 process.env.TZ 逐字相同）', () => {
+    const ORIGINAL_TZ = process.env.TZ;
+    try {
+      const instant = new Date('2026-07-01T05:30:00.000Z'); // 刻意非整點/非午夜，避免巧合掩蓋日期進位錯誤
+      process.env.TZ = 'Asia/Taipei'; // UTC+8
+      const sqlTaipei = buildHpmuserIncrementalQuery(ref, 'AS', instant);
+      process.env.TZ = 'America/New_York'; // UTC-4/-5（視 DST）
+      const sqlNewYork = buildHpmuserIncrementalQuery(ref, 'AS', instant);
+      process.env.TZ = 'UTC';
+      const sqlUtc = buildHpmuserIncrementalQuery(ref, 'AS', instant);
+
+      expect(sqlTaipei).toBe(sqlNewYork);
+      expect(sqlTaipei).toBe(sqlUtc);
+      // 逐字核對期望之 UTC 字面值，避免「三者剛好都錯成同一個值」之假陽性巧合命中。
+      expect(sqlTaipei).toContain("MTDT > ''2026-07-01 05:30:00''");
+    } finally {
+      if (ORIGINAL_TZ === undefined) delete process.env.TZ;
+      else process.env.TZ = ORIGINAL_TZ;
+    }
+  });
 });
 
 describe('buildHpmuserActiveIdsQuery（消失閾值用之在職 USERID 集合）', () => {
