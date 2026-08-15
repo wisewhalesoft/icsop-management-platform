@@ -41,6 +41,9 @@
     "transform": {
       "^.+\\.ts$": "ts-jest"
     },
+    "setupFiles": [
+      "<rootDir>/../test/jest-setup-tz.ts"
+    ],
     "testEnvironment": "node"
   },
   "devDependencies": {

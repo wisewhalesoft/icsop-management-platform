@@ -49,6 +49,9 @@ services:
     env_file: .env
     environment:
       PORT: '3000'
+      # ⚠ Bug 2（時區語意）：與 backend/src/database/data-source.ts 之 `useUTC: true` 為一組。
+      # 顯式指定使其優先於 env_file（.env 若誤設 TZ 亦不會生效），Dockerfile 另有同值 ENV 兜底。
+      TZ: 'UTC'
     ports:
       - '${BACKEND_PUBLISH:-3000}:3000'
     # 讓容器可連本機的外部 app MSSQL（APP_MSSQL_HOST=host.docker.internal）
@@ -95,6 +98,10 @@ services:
     build: ./backend
     profiles: ['init']
     env_file: .env
+    # ⚠ Bug 2（時區語意）：顯式釘 UTC 使其優先於 env_file；與 data-source.ts 之 useUTC:true 為一組。
+    # org-sync 尤其關鍵——它寫入 SYNC_RUN.watermark 與 hireDate/resignDate（影響資料正確性）。
+    environment:
+      TZ: 'UTC'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     command: ['npm', 'run', 'migration:run:prod']
@@ -105,6 +112,10 @@ services:
     build: ./backend
     profiles: ['init']
     env_file: .env
+    # ⚠ Bug 2（時區語意）：顯式釘 UTC 使其優先於 env_file；與 data-source.ts 之 useUTC:true 為一組。
+    # org-sync 尤其關鍵——它寫入 SYNC_RUN.watermark 與 hireDate/resignDate（影響資料正確性）。
+    environment:
+      TZ: 'UTC'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     command: ['npm', 'run', 'seed:roles:prod']
@@ -119,6 +130,10 @@ services:
     build: ./backend
     profiles: ['init']
     env_file: .env
+    # ⚠ Bug 2（時區語意）：顯式釘 UTC 使其優先於 env_file；與 data-source.ts 之 useUTC:true 為一組。
+    # org-sync 尤其關鍵——它寫入 SYNC_RUN.watermark 與 hireDate/resignDate（影響資料正確性）。
+    environment:
+      TZ: 'UTC'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     command: ['npm', 'run', 'sync:once:prod']
@@ -133,6 +148,10 @@ services:
     build: ./backend
     profiles: ['init']
     env_file: .env
+    # ⚠ Bug 2（時區語意）：顯式釘 UTC 使其優先於 env_file；與 data-source.ts 之 useUTC:true 為一組。
+    # org-sync 尤其關鍵——它寫入 SYNC_RUN.watermark 與 hireDate/resignDate（影響資料正確性）。
+    environment:
+      TZ: 'UTC'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     command: ['npm', 'run', 'seed:bootstrap-admin:prod']
@@ -146,6 +165,10 @@ services:
     build: ./backend
     profiles: ['init']
     env_file: .env
+    # ⚠ Bug 2（時區語意）：顯式釘 UTC 使其優先於 env_file；與 data-source.ts 之 useUTC:true 為一組。
+    # org-sync 尤其關鍵——它寫入 SYNC_RUN.watermark 與 hireDate/resignDate（影響資料正確性）。
+    environment:
+      TZ: 'UTC'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     command: ['npm', 'run', 'seed:lifecycle:prod']
@@ -159,6 +182,10 @@ services:
     build: ./backend
     profiles: ['init']
     env_file: .env
+    # ⚠ Bug 2（時區語意）：顯式釘 UTC 使其優先於 env_file；與 data-source.ts 之 useUTC:true 為一組。
+    # org-sync 尤其關鍵——它寫入 SYNC_RUN.watermark 與 hireDate/resignDate（影響資料正確性）。
+    environment:
+      TZ: 'UTC'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     command: ['npm', 'run', 'seed:doc-catalog:prod']

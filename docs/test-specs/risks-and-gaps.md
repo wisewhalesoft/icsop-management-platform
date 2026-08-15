@@ -98,6 +98,7 @@
 | ~~G-F003P-02~~ | ~~AC-P23e（職位逐列解析，`(companyCode, jobTitleCode)` 複合鍵）~~ | **已關閉（2026-08-14，team-lead 二度糾正）**——前次誤把「int 層真實 DB 缺乏爭議資料」之限制，錯誤延伸適用到 unit 層；team-lead 正確指出這是 service 之純邏輯，FakeStore 可任意種入合成資料，完全不受真實 SOP DB 現況限制。已於 `account-profile.spec.ts` 補上 `AC-P23d`／`AC-P23e` 兩案例（`MultiCompanyStore`，`list()` 忽略 companyCode 以取得跨公司列）：`AC-P23e` 之關鍵設計（亦由 team-lead 指出）＝讓 AS／AE **兩公司皆**有 `C01` 代碼（僅名稱不同，逐字取自 prototype 08 :409/:419），使精確命中恆先於跨公司 fallback 觸發，fallback 因此無從介入、無法掩蓋誤植——這正是前次評估遺漏的設計。實跑：兩案例皆 RED 且失敗原因正確（現況皆解析出 AS 之值，證實現行邏輯確實對全列套用同一公司）。同批亦補上 `AC-P6` 之公司交叉檢查缺口（先前只測過 orgCode 完全不存在，未測過「orgCode 存在但屬另一公司」）。 |
 | ~~G-F003P-03~~ | ~~AC-P25／[F001](features/F001-test.md) AC-C1～AC-C3（跨公司帳密登入解析）~~ | **已關閉（2026-08-14，team-lead 明確要求納入範圍）**——已於 `backend/test/int/auth.itest.ts` 新增 `[int] F001 跨公司帳密登入解析 delta（AC-C1～AC-C3）` 區塊（5 案例）＋ `frontend/src/pages/LoginPage.test.tsx` 新增 AC-C2 兩案例（回歸護欄，登入頁本就無公司欄位）。**AC-C1③（命中多筆→401）與 AC-C3（訊息揭露不變）現況為巧合綠燈**，見下方「已知混淆源」G-F003P-08。 |
 | G-F003P-04 | Playwright e2e fidelity／Stryker mutation／dependency-cruiser metric gate | 使用者明確指示本輪僅建 jest／vitest 單元與元件測試（見 team-lead 任務指派原文），比照 [F040 §B](#f040)／[F041](#f041) 同類範圍決定。 |
+| ~~G-F003P-09~~ | ~~AC-P17 部門欄顯示格式（清單需與下拉共用同一 `buildOrgPath` 演算法，不得回退為 `ORG_UNIT.name` 原值）~~ | **已關閉（2026-08-14，真容器煙霧測試揪出後補測）**——原 ring 只驗過「解析鍵是否正確」（`AC-P23d`），從未驗過「顯示格式是否正確」；既有 `TS-F003-P23d` unit fixture（`X0000`，`tier='DEPARTMENT'` 無父層）恰使回 `ORG_UNIT.name` 原值與正確路徑演算法組字重合，對格式無鑑別力（已於 `account-profile.spec.ts` 補上 `descFull` 覆寫使其與格式問題脫鉤，見檔內修正註解）。新增 `TS-F003-P17dept`（unit＋int，見 [F003-test.md](features/F003-test.md#test-scenarios測項清單精確斷言見對應測試檔)）：以真實兩層部門代碼 `JAC00`（`companyCode='AS'`，2026-08-14 唯讀診斷查詢對照真實 SOP DB 確認 `JA000.descFull='營運管理部'`、`JAC00.name='營管部/審查室'`）精確辨異正確格式（`營運管理部 / 審查室`）與錯誤格式（`營管部/審查室`），實跑為 RED（unit：`account-profile.spec.ts`；int：`account-profile.itest.ts`，其餘 40 案例不受影響）。前端 `AccountManagementPage.test.tsx` 之 `G-ADM-001` 對此 bug 天生全盲（`AccountView.department` 為後端已解析值，前端僅逐字渲染），非其測試設計有誤，只是格式責任 100% 在後端層，`G-ADM-001` 無需改動。 |
 
 ### B. 已知混淆源（現況綠燈但尚未真正證明規則成立，實作/覆核者必讀）
 
@@ -112,3 +113,24 @@
 | # | 缺口 | 說明 |
 |---|---|---|
 | G-F003P-07 | `backend/test/int/access-history.itest.ts` 之 `TS-AQ-INT-012`（合成 orgCode 之操作者 → department/section 應為 null）現況失敗 | 全量 `npm run test:int` 兩次獨立執行皆重現（非本次新增測試造成之連帶失敗）：期望 `null`，實得 `"和潤本部"`（ORG_UNIT 之 ROOT 列名稱）。`git status` 確認 test-generator 本輪未修改此檔；本 delta 之診斷查詢與新測試皆未寫入 `ORG_UNIT` 資料表。研判為真實 SOP DB 之 `ORG_UNIT` 資料內容自該測試上次驗證以來已產生變動（外部資料飄移），非程式碼回歸。**升級對象**：team-lead／負責 F024 之維護者——請核實真實 DB 現況是否確有變動，或該測試之判定邏輯是否需要更新。 |
+
+## MSSQL 時區語意（Bug 2，2026-08-15，跨 F003「最後登入」／F004 增量同步水位） {#mssql-timezone-semantics}
+
+> 真容器煙霧測試發現「最後登入」顯示超前 8 小時。team-lead 唯讀根因調查（結論可信任，斷言由
+> test-generator 自行設計）：TypeORM 之 `SqlServerDriver` 把 tedious 套件的 `useUTC` 硬蓋為
+> `false`（tedious 自身預設 `true`），`backend/src/database/data-source.ts` 未覆寫回 `true`。
+> 讀寫對稱（同一 tedious 連線設定寫進去再讀出來數值不變）使後端容器（行程 TZ=UTC）一路正確，
+> 只有「寫入方 tedious 設定 ≠ 讀取方 tedious 設定」時才現形，一現形即整數小時（行程 TZ 偏移量）
+> 之落差。使用者已裁決之修法：① `data-source.ts` 加 `useUTC: true` ② compose／Dockerfile／jest
+> config 釘 `TZ=UTC`（此為 Task #5 impl-backend 之範圍，非本節內容）。
+
+### 新增之測試（RED／GREEN 狀態皆已實跑核實，非推論）
+
+| 檔案 | 內容 | 現況 |
+|---|---|---|
+| `backend/test/int/timezone-date-semantics.itest.ts` | 於**單一 Node 行程**內同開兩條連線：`AppDataSource`（TypeORM，bug 所在）＋一條比照 `mssql-upstream-reader.ts` 寫法、**不覆寫 `useUTC`**（沿用 tedious 自身預設 `true`）之獨立 `mssql` 連線；寫入同一列後，比較兩條連線各自讀回之 `Account.lastLoginAt`／`SyncRun.watermark`。`beforeAll`／`afterAll` 顯式將 `process.env.TZ` 釘死為 `'Asia/Taipei'`（並還原），使結果與執行機器之原生時區設定無關。 | **RED（已實跑核實）**：兩案例之落差皆**精確為 28,800,000 ms（8 小時）**，與真容器回報之症狀量級逐字相符，非巧合小數字。post-fix 應收斂為 0。 |
+| `backend/src/org-sync/upstream-queries.spec.ts` 新增之 `buildHpmuserIncrementalQuery` TZ 不敏感案例 | 同一 UTC 瞬間之 `sinceMtdt`，跨 `Asia/Taipei`／`America/New_York`／`UTC` 三個 `process.env.TZ` 組出之 OPENQUERY `MTDT >` 字面值須逐字相同。 | **GREEN（已實跑核實，20/20 通過）**——`formatSqlDate`（純函式、無 IO）本身已正確以 `getUTC*()` 組字，天生對行程時區不敏感。**誠實揭露**：此測試對 Bug 2 本身**沒有鑑別力**（它保護的是查詢字串「組字」這一段，Bug 2 的真正病灶在「`sinceMtdt` 這個 `Date` 值本身，經 TypeORM 讀出時是否已經代表錯誤瞬間」——這一段是 driver/DB 層行為，純函式單元測試觸及不到，只有上面那條 int 測試的 `SyncRun.watermark` 案例能證明/證偽）。保留此測試作為**迴歸護欄**（若日後有人「優化」`formatSqlDate` 改用非 UTC 方法，這裡會攔下來），但不得引用它作為「Bug 2 已於 unit 層證明」的證據。 |
+
+### 為何不強行把 unit 層測出紅（誠實邊界，非偷懶）
+
+`formatSqlDate` 是純字串邏輯、不碰 DB/driver，其輸入 `sinceMtdt: Date` 一旦給定即與時區無關（JS `Date` 內部即 UTC epoch）。Bug 2 的病灶不在「怎麼把 Date 格式化成字串」，而在「這個 Date 是怎麼從 DB 被讀出來的」——後者必然涉及真實 tedious 連線行為，unit 層（無 DB）在架構上就不可能重現。這與 F003 Bug 1 那次「誤把 int 層限制套用到 unit 層」剛好相反：這次是**int 層才有鑑別力、unit 層架構上就是不可能**，兩者不可混為一談（見 [F003-test.md 已知混淆源](features/F003-test.md) 同類案例之教訓）。

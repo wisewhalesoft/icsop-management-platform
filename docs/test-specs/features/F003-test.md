@@ -213,6 +213,19 @@ status: draft
   有 `C01` 代碼（僅名稱不同，逐字取自 prototype 08 :409/:419），使精確命中恆先於跨公司 fallback 觸發，
   fallback 因此無從介入。AC-P23d 同理於 unit 層另補一組（`X0000` 同代碼異名部門），與 int 層之
   dirty-seed 版本互補（int 層驗證真實 HTTP／DB 路徑，unit 層驗證邏輯本身、不受真實資料限制）。
+- **G-F003P-09（2026-08-14 真容器煙霧測試揪出、原 ring 對此全盲之缺口）：`department` 欄之顯示
+  格式從未被任何測項驗證過，只驗證過解析鍵是否正確。** 真容器實測：帳號清單第 1 頁 50 列，
+  `department` 含 `' / '`（多層路徑格式）者 0 列——系統性回退為 `ORG_UNIT.name` 原值，而非
+  AC-P17「全站唯一之組織路徑算法，不得另建第二套」所要求之演算法（該演算法之權威副本＝
+  `prototypes/08-account-management.html` 之 `buildOrgPath`，清單列與部門下拉皆呼叫同一函式，
+  `:573`／`:612`／`:450`，故 AC-P17 之原則同樣適用於清單欄，非僅下拉）。既有 TS-F003-P23d 之
+  fixture（`X0000`，`tier='DEPARTMENT'` 無父層）恰使「回 `name` 原值」與「正確演算法組字」重合，
+  對格式沒有鑑別力——已在 `account-profile.spec.ts` 原 fixture 補上 `descFull` 覆寫（見檔內
+  2026-08-14 修正註解）使其與格式問題脫鉤，並新增 TS-F003-P17dept（見下表）以兩層真實部門代碼
+  （`JAC00`，已對真實 SOP DB 診斷確認 `JA000.descFull='營運管理部'`、`JAC00.name='營管部/審查室'`）
+  精確辨異正確格式（`營運管理部 / 審查室`）與錯誤格式（`營管部/審查室`）。前端 `G-ADM-001` 對此
+  bug 全盲之原因記入 `risks-and-gaps.md`（AccountView.department 為後端已解析值，前端僅逐字渲染，
+  格式問題完全是後端責任，`G-ADM-001` 之渲染保真測試本身沒有錯，只是天生看不到這層）。
 
 ## Test Scenarios（測項清單，精確斷言見對應測試檔）
 
@@ -240,6 +253,7 @@ status: draft
 | TS-F003-P21 | AC-P21 稽核不寫入 | int | account-profile.itest.ts |
 | TS-F003-P23abc | AC-P23a／b／c 清單跨公司可見＋篩選＋公司名稱逐列解析（見上方已知混淆源 G-F003P-05） | int | account-profile.itest.ts |
 | TS-F003-P23d | AC-P23d 部門逐列解析（複合鍵；int＝dirty 資料種入真庫，unit＝FakeStore 合成資料） | int＋unit | account-profile.itest.ts／account-profile.spec.ts |
+| TS-F003-P17dept | AC-P17 部門欄顯示格式（兩層部門代碼須組成「部層全名 / 處室簡稱」，不得回退為 `ORG_UNIT.name` 原值；見上方已知缺口 G-F003P-09） | int＋unit | account-profile.itest.ts／account-profile.spec.ts |
 | TS-F003-P23e | AC-P23e 職位逐列解析（複合鍵；unit 層，AS/AE 同碼異名使 fallback 不介入） | unit | account-profile.spec.ts |
 | TS-F003-P06b | AC-P6 公司交叉檢查（orgCode 存在但屬另一公司） | unit | account-profile.spec.ts |
 | TS-F003-P24 | AC-P24 loginId 全域唯一（見上方已知混淆源 G-F003P-05） | int | account-profile.itest.ts |

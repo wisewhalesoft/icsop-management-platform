@@ -4,6 +4,7 @@
   "roots": ["<rootDir>/test/int"],
   "testRegex": ".*\\.itest\\.ts$",
   "transform": { "^.+\\.ts$": "ts-jest" },
+  "setupFiles": ["<rootDir>/test/jest-setup-tz.ts"],
   "testTimeout": 60000,
   "maxWorkers": 1
 }

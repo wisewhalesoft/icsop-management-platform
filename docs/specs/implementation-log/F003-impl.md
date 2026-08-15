@@ -235,3 +235,65 @@ last_updated: 2026-08-14
   型別；真正的鏡射落差是**前端型別少了 `blobPath`**（前端目前無消費者）。屬 F039 附錄線之另案。
 - 前端全量首次執行曾出現 30 個 worker timeout 錯誤，經查為**與 backend jest 並行之 CPU 競用假紅**
   （`--maxWorkers=2` 重跑即 60/60 全綠）。
+
+---
+
+# 追加：AC-P17 部門欄格式回歸（2026-08-14，Task #2）
+
+## 症狀與根因
+
+帳號管理清單 API 之 `department` 欄回 `ORG_UNIT.name` 原值（`營管部/審查室`），與同畫面
+「部門下拉」所用之 `buildOrgPath` 輸出（`營運管理部 / 審查室`）**兩種格式並列於同一頁**。
+真容器實測：清單第 1 頁 50 列，含 ` / ` 者 0 列 —— 系統性，非個案。
+
+違反 `docs/specs/features/F003-account-role-management.md#manual-account-profile` **AC-P17**
+「全站唯一之組織路徑算法，不得另建第二套」。
+
+**屬既有落差**，非上一輪 delta 引入：delta 只把查找鍵改為複合鍵 `(companyCode, orgCode)`
+（修掉跨公司誤解析他公司部門名之真 bug），未動輸出格式。
+
+## Test Results Summary
+
+| Scenario | 檔案 | 結果 |
+|---|---|---|
+| AC-P17 兩層（部→處室）須組成「部層全名 / 處室簡稱」 | `src/accounts/account-profile.spec.ts` | PASS（46/46） |
+| AC-P17 真 SOP DB `JAC00` 之 HTTP 清單格式 | `test/int/account-profile.itest.ts` | PASS（41/41） |
+| 既有全量迴歸 | backend jest 全量 | PASS（123 suites / 1631 tests） |
+
+## Files Changed
+
+| File Path | Change Type | Description |
+|---|---|---|
+| `backend/src/org-directory/org-path.ts` | new | 組織路徑算法之家：三個取值原語（自 F020 搬入）＋ `buildOrgPath`／`createOrgPathResolver` |
+| `backend/src/public/watermark.ts` | modified | 三個取值原語搬出，改為 import + **re-export**（既有匯入端一行未改） |
+| `backend/src/accounts/accounts.service.ts` | modified | `buildDepartmentIndex` 之值由 `u.name` 改為路徑；註解補 AC-P17／效能不變式／兩端 fallback 差異之理由 |
+
+## Architectural Decisions
+
+1. **不重寫取值原語（AC-P17 字面要求）**：後端**早已有**同一套演算法的 2/3 ——
+   `src/public/watermark.ts`（F020 浮水印）之 `departmentCodeCandidates`、`deriveSectionName`、
+   `resolveDepartmentFullName`。本次未重打任何一個，只新增最後的 ` / ` 合併與 fallback。
+2. **放置位置（team-lead 2026-08-14 裁決）**：三個原語**搬至** `src/org-directory/org-path.ts`
+   （`OrgUnitRecord` 之所在模組，已有 `filterSubtree`／`buildOrgTree` 等同性質純函式），
+   `public/watermark.ts` 改為 import + **re-export**。
+   理由：`org-directory` 是 accounts／org-sync／public 共同消費之地基模組，不可反向依賴其消費者；
+   而 file-level 的 `no-circular` gate 對該反向依賴**抓不到**（`watermark.ts` 為零 import 之葉節點），
+   等於沒有守門人。搬移後 `watermark.service.ts`／`watermark.spec.ts` 之 `from './watermark'`
+   **一行未改**（`git diff --quiet` 實證），F020 之 9 suites／118 tests 全綠。
+   已於檔頭註明與 `frontend/src/domain/org-path.ts` 為同一演算法之兩份實作、須同步維護。
+3. **效能：DB 存取次數與改動前完全相同**。仍是「本頁出現過的每家公司各 `listByCompany` 一次」，
+   路徑所需之父層（部層）一律自該次結果建成的記憶體索引取得，**不逐列回查 DB**。
+   每家公司之 `byCode` 索引只建一次（`createOrgPathResolver` 回傳 closure），逐單位求值 O(1)
+   → 整體 O(units + rows)，避免「每列各自 `new Map(units)`」的 O(units²)。
+4. **保留「未命中 → `null`」守衛**：`buildOrgPath` 查無時之 fallback 是**回傳代碼原字串**，
+   但清單契約要求未命中須為 `null`（`accounts.service.spec.ts:119-124` 之 `ZZZ99`、
+   `account-profile.itest.ts:484` 之 AE／`JAC00` 跨公司防線；留空於畫面顯示「—」＝AC-P18）。
+   故索引只為**確實存在於該公司**之單位建鍵，fallback 由查表 miss 表達，兩條既有測試不受影響。
+   ⚠ 清單與下拉之最末層 fallback 不同**不算兩套演算法**（勿「順手統一」，統一會打破 AC-P18）：
+   下拉候選一律來自 ORG_UNIT 主檔，故「查無」於下拉情境在 UI 上**不可達**、其 fallback 是死路；
+   清單則可能遇到主檔已查無之**歷史** `orgCode`。兩者共用同一組取值規則，清單只多一道
+   「須主檔命中」之前置條件。此理由已寫入 `org-path.ts` 與 `accounts.service.ts` 之註解。
+
+## Blocking Issues
+
+無。四道門檻全綠；未新增／修改／跳過任何測試檔（diff 僅 production 兩檔）。
