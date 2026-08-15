@@ -272,3 +272,60 @@ prototypes/NN-*.html（本機靜態伺服 :5188）。
   department/section 為 null，實際回 `"和潤本部"`。**stash 掉本次全部修改後以同一指令重跑，紅法完全相同**
   → 屬既有落差（ORG_UNIT 無 `Z9*` 列，故應為名稱解析之 prefix/fallback 行為與測試前提不符），
   與附錄／使用表單無關，留待該 track 處理。
+
+---
+
+# BUG-2（時區）：「最後登入」超前 8 小時 — 根因與修法
+
+## 根因
+
+`typeorm/driver/sqlserver/SqlServerDriver.js`（0.3.x，約 :1002-1008）**把 tedious 的 `useUTC` 硬蓋為
+`false`**（tedious 自身預設為 `true`），而 `backend/src/database/data-source.ts` 未覆寫回來。語意因此
+變成「datetime 欄位存的是**寫入行程之本地牆鐘**、不帶時區；讀出時以**讀取行程之本地時區**還原」。
+
+**關鍵性質＝讀寫對稱**：同一組設定寫進去再讀出來，數值不變。所以
+- 後端**容器**（行程 TZ 未設定即 UTC）一路正確——這也是問題長期潛伏的原因；
+- 任何天真測試在 `useUTC` 兩種設定下**都會綠**，綠燈本身不構成「修對了」的證據。
+
+只有「寫入方時區 ≠ 讀取方時區」時才現形，一現形就是整數小時：**UTC+8 的 Windows 開發主機寫入
+共用 dev 庫、UTC 容器讀出 → 差整整 8 小時**。
+
+## 修法（兩半，缺一不可）
+
+| # | 檔案 | 內容 |
+|---|---|---|
+| A | `backend/src/database/data-source.ts` | `options` 加 `useUTC: true`（全 app 僅此一個 `DataSource`，各模組皆共用 `AppDataSource`，故單點即涵蓋） |
+| B | `backend/Dockerfile` | runtime stage 加 `ENV TZ=UTC`（涵蓋以同一 image 執行的一次性 init 服務） |
+| B | `docker-compose.yml` | backend ＋ 6 個 init 服務（migration／seed-roles／org-sync／bootstrap-admin／seed-lifecycle／seed-doc-catalog）各顯式 `TZ: 'UTC'`，使其**優先於 `env_file`** |
+| B | `backend/package.json` · `backend/test/jest-int.json` | 兩份 jest 設定加 `setupFiles: [test/jest-setup-tz.ts]`，把測試行程時區釘為 UTC |
+
+`backend/test/jest-setup-tz.ts` 為**設定檔非測試**（無斷言），僅 `process.env.TZ = 'UTC'`。
+它是**預設值不是強制值**——`test/int/timezone-date-semantics.itest.ts` 仍可自行覆寫為 `Asia/Taipei`
+以取得鑑別力（本 bug 的讀寫對稱性使它在 UTC 行程下完全測不出來），該檔自行還原。
+
+⚠ `backend/src/org-sync/mssql-upstream-reader.ts` 之上游連線**刻意不動**：它未覆寫 `useUTC`、
+沿用 tedious 預設 `true`，本來就是正確的一端。
+
+## 資料面：不做算術修補（使用者裁決）
+
+欄位不帶時區標記 ⇒ 逐列無法判定是哪個行程寫的，`-8h` 的 UPDATE 會把容器寫入的**正確**列改壞；
+`AUDIT_LOG` 又是 append-only 且已 REVOKE。唯一要處理的是上游同步資料——待指示後於**容器內**
+以 `SYNC_FULL_RESYNC=1` 重跑全量同步覆蓋 `hireDate`／`resignDate`／`upstreamModifiedAt` 並重置
+`watermark`。
+
+## 已知遺留：共用 dev 庫裡的既有偏移列（會自癒，非程式問題）
+
+修後 `test:int` 出現一條**新紅**：`TS-AQ-INT-001/005 空條件套近 30 天預設 → 含當次`。
+唯讀診斷（`SELECT` only）證明**與程式無關**：
+
+- `AUDIT_LOG` 有 **193 列 `occurredAt` 落在未來**（最多 +7.86h），時間戳集中在修復前那輪本機
+  測試的執行時刻 +8h ⇒ 全是**修復前**由 UTC+8 主機寫入的列。
+- 該測試期望的當次列**確實存在、且時間戳正確**（`2026-08-14T16:19:53Z`＝真實寫入瞬間），
+  但在 `occurredAt DESC` 全表排序中**名次 212**，被那 193 列擠出第 1 頁（`DEFAULT_PAGE_SIZE = 50`）。
+- 算術佐證：`212 − 193 = 19` ⇒ 若無那批偏移列，它落在第 19 名，穩在第 1 頁。
+
+**自癒**：那批列最多只超前 8 小時，一旦真實時間越過它們，之後所有新寫入（皆為正確 UTC）就會
+重新排在最前面，本測試自動恢復綠燈。修復後的新寫入不會再產生偏移列。
+
+> ⚠ 因此**本條紅燈不可作為「修壞了」的證據**；反之，它正是修復生效的副作用——新列開始寫入
+> 正確的瞬間，才會與舊的偏移列產生排序落差。
