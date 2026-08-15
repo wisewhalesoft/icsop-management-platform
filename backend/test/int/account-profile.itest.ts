@@ -486,6 +486,53 @@ describe('[int] F003 手動帳號基本資料 delta（AC-P14／AC-P20／AC-P21 +
   });
 
   /**
+   * AC-P17／AC-P23d 部門欄顯示格式（2026-08-14 真容器煙霧測試揪出、上方測試對此全盲之缺口，
+   * team-lead 指派補測）。真容器實測：帳號清單第 1 頁 50 列，department 含 ' / '（多層路徑格式）
+   * 者 0 列——系統性回退為 ORG_UNIT.name 原值，而非 AC-P17「全站唯一之組織路徑算法，不得另建
+   * 第二套」所要求之演算法（該演算法之權威副本＝prototypes/08-account-management.html 之
+   * `buildOrgPath`，同時也是「部門下拉」選項文字之權威來源，:376／:378／:386～:395；清單列亦
+   * 呼叫同一函式，:573／:612——prototype 對清單與下拉一視同仁，AC-P17 之原則因此同樣適用於清單欄）。
+   * 上方 AC-P23d 之負向案例（AE 髒資料）只證明「不得誤解析出他公司之部門」，未觸及格式本身。
+   *
+   * 期望字串不得直接寫死於帳號 fixture（見 G-ADM-001 之前車之鑑：該測試把 department 直接填入
+   * 期望的完整格式化字串，對後端如何算出這個字串完全無鑑別力）——改為以 (companyCode='AS',
+   * orgCode='JAC00') 之真實 ORG_UNIT 主檔逐段推導，兩段皆以 2026-08-14 唯讀診斷查詢
+   * （SELECT-only，非讀 production 碼）對真實 SOP DB 現場確認：
+   *   JA000（部層）descFull='營運管理部'；JAC00（處室層）name='營管部/審查室'（取 '/' 分段之
+   *   末段'審查室'）→ 依 buildOrgPath 演算法（部層全名 + ' / ' + 處室簡稱）組字＝
+   *   '營運管理部 / 審查室'，與錯誤實作之輸出（ORG_UNIT.name 原值 '營管部/審查室'）逐字不同，
+   *   用精確相等辨異，不使用寬鬆 toMatch。
+   */
+  describe('AC-P17／AC-P23d 部門欄顯示格式（清單需與下拉共用同一 buildOrgPath 演算法，不得回退為 ORG_UNIT.name 原值）', () => {
+    it('AS 帳號之 orgCode 為多層部門代碼（JAC00＝部→處室）時，清單 department 欄須為「部層全名 / 處室簡稱」而非 ORG_UNIT.name 原值', async () => {
+      const loginId = `${MARK.acct}p17dept`;
+      const created = await ctx
+        .http()
+        .post('/admin/accounts')
+        .set('Cookie', sysadminCookie)
+        .send({
+          loginId,
+          password: 'x',
+          roleCode: 'User',
+          name: 'ZZINT P17 部門格式',
+          companyCode: 'AS',
+          orgCode: 'JAC00',
+        });
+      expect(created.status).toBe(201);
+
+      const list = await ctx.http().get('/admin/accounts').set('Cookie', sysadminCookie);
+      expect(list.status).toBe(200);
+      const rows = (list.body.items ?? list.body) as { loginId: string; department?: string | null }[];
+      const row = rows.find((r) => r.loginId === loginId);
+      expect(row).toBeDefined();
+      // 2026-08-14 診斷查詢對真實 SOP DB 確認：JA000.descFull='營運管理部' + JAC00 之處室簡稱'審查室'。
+      expect(row!.department).toBe('營運管理部 / 審查室');
+      // 與現行（錯誤）實作之逐字不同，確保本斷言具鑑別力、非巧合命中：
+      expect(row!.department).not.toBe('營管部/審查室');
+    });
+  });
+
+  /**
    * AC-P15 INV-C1（不變式，可機器驗證）：SELECTABLE_COMPANIES ≡ Object.keys(COMPANY_FULL_NAMES)。
    * 不讀取 production 常數，改以「GET /companies 回傳之每個 companyCode，POST /admin/accounts
    * 皆能接受」＋「一個不在該清單中的代碼必被拒絕」之雙向 HTTP 行為，間接證明兩個常數之鍵集合恆等

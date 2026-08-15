@@ -25,6 +25,7 @@ import {
   normalizeAccountName,
 } from './account-profile-rules';
 import { ORG_UNIT_READ_STORE, OrgUnitReadStore } from '../org-directory/org-unit-read';
+import { createOrgPathResolver } from '../org-directory/org-path';
 import {
   JOB_TITLE_READ_STORE,
   JobTitleReadStore,
@@ -94,7 +95,8 @@ export class AccountsService {
    * 移除；篩選改由選填之 `filters.companyCode` 表達，AC-P23b），故三個名稱一律以**該列自身之
    * `companyCode`** 解析，不得對全列套用操作者公司：
    *  - company＝`resolveCompanyName(row.companyCode)`（AC-P23c）。
-   *  - department＝以**複合鍵 `(row.companyCode, row.orgCode)`** 命中之 ORG_UNIT 名（AC-P23d）
+   *  - department＝以**複合鍵 `(row.companyCode, row.orgCode)`** 命中之 ORG_UNIT 之**組織路徑**
+   *    （AC-P23d ＋ AC-P17，格式如 `營運管理部 / 審查室`；未命中 → `null`）
    *    ——`ORG_UNIT` 之唯一鍵為 `(companyCode, orgCode)`，不同公司可有相同 `orgCode` 但不同單位。
    *    每個出現於本頁之公司各查一次 `listByCompany`（公司數 ≤ SELECTABLE_COMPANIES 之大小，無 N+1）。
    *  - title＝`resolveTitle(row.companyCode, row.jobTitleCode)`（AC-P23e）。
@@ -123,8 +125,27 @@ export class AccountsService {
   }
 
   /**
-   * 建立 `(companyCode, orgCode)` → 部門名稱之索引（AC-P23d）。
+   * 建立 `(companyCode, orgCode)` → 部門**顯示路徑**之索引（AC-P23d ＋ AC-P17）。
    * 逐一列出本頁出現過之公司（去重）各取一次；無 ORG_UNIT store（手建 spec）→ 空索引（優雅降級）。
+   *
+   * 🔵 AC-P17（2026-08-14 真容器煙霧測試揪出之回歸）：值由 `ORG_UNIT.name` 原值（如
+   * `營管部/審查室`）改為**全站唯一之組織路徑算法** `buildOrgPath` 之輸出（如
+   * `營運管理部 / 審查室`）——與同畫面「部門下拉」共用同一演算法，不得並存兩種格式。
+   *
+   * ⚠ 效能（清單為熱路徑，不得引入 N+1）：DB 存取次數**與改動前完全相同**——每家公司仍只
+   * `listByCompany` 一次；路徑所需之父層（部層）一律自該次結果建成的**記憶體索引**取得，
+   * 不為了取父層而逐列回查 DB。每家公司之索引只建一次（`createOrgPathResolver`），
+   * 逐單位求值為 O(1) → 整體 O(units)，非 O(units²)。
+   *
+   * ⚠ 僅為**確實存在於該公司**之單位建鍵：`buildOrgPath` 對查無之代碼會退回代碼原字串，
+   * 而清單契約要求「`(companyCode, orgCode)` 未命中 → `department` 為 `null`」
+   * （跨公司誤解析之防線，AC-P23d／AC-P6；留空於畫面顯示「—」＝AC-P18）。
+   * 故 fallback 交由 `listAccounts` 之查表 miss 表達。
+   *
+   * 為何清單與下拉之最末層 fallback 不同、卻**不算兩套演算法**（勿「順手統一」，統一會打破
+   * AC-P18）：下拉候選一律來自 ORG_UNIT 主檔，故「查無代碼」在下拉情境於 UI 上**不可達**，
+   * 其 fallback 是死路；清單則可能遇到主檔已查無之**歷史** `orgCode`，規格要求該列留空。
+   * 兩者共用同一組取值規則（`org-path.ts`），只是清單多一道「須主檔命中」的前置條件。
    */
   private async buildDepartmentIndex(
     rows: readonly AccountView[],
@@ -141,7 +162,11 @@ export class AccountsService {
       const units = await this.orgUnits.listByCompany(company, {
         includeInactive: true,
       });
-      for (const u of units) index.set(orgUnitKey(u.companyCode, u.orgCode), u.name);
+      const resolveOrgPath = createOrgPathResolver(units);
+      for (const u of units) {
+        const path = resolveOrgPath(u.orgCode);
+        if (path !== null) index.set(orgUnitKey(u.companyCode, u.orgCode), path);
+      }
     }
     return index;
   }

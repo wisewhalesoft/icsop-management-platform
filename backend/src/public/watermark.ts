@@ -8,7 +8,22 @@
  *  - 檢視器疊加、PDF 燒錄、稽核快照三者共用同一 buildWatermarkSnapshot 輸出（一致性）。
  *
  * ⚠ 本模組僅組字/推導；「欄位值從何而來」（org 查找、公司全稱）由 watermark.service 供應。
+ *
+ * ⚠ 2026-08-14：「部門」「處/室」三個取值原語（`deriveSectionName`／`departmentCodeCandidates`／
+ * `resolveDepartmentFullName`）已**搬至** `../org-directory/org-path`（全站唯一之組織路徑算法之家，
+ * F003 AC-P17）——本浮水印與帳號清單、部門下拉本就共用同一套算法，地基模組 `org-directory` 不該
+ * 反向依賴 `public` 這個消費者。此處以 **re-export** 接住，故本模組既有之
+ * `from './watermark'` 匯入端（`watermark.service.ts`、`watermark.spec.ts`）一行未改、
+ * 且仍吃同一份實作。要改取值規則請改 `org-path.ts`（並同步 `frontend/src/domain/org-path.ts`）。
  */
+
+import {
+  departmentCodeCandidates,
+  deriveSectionName,
+  resolveDepartmentFullName,
+} from '../org-directory/org-path';
+
+export { departmentCodeCandidates, deriveSectionName, resolveDepartmentFullName };
 
 /** 固定機密聲明（逐字，非變數）。 */
 export const WATERMARK_CONFIDENTIALITY =
@@ -47,44 +62,6 @@ export function buildWatermarkSnapshot(id: WatermarkIdentity): string {
     id.timestamp,
   ];
   return ordered.filter(present).join('-');
-}
-
-/**
- * 「處/室」欄推導（單一規則）：使用者所屬**最細單位**名稱。
- *  - SECTION（處/室）/ SUBSECTION（課）→ DESC_CHI 以 '/' 切分取最末段。
- *  - DEPARTMENT / DIVISION / ROOT（無下層）→ 空字串（收合）。
- * DESC_CHI 無斜線時取該段本身；null/空 → 空字串（不報錯）。
- */
-export function deriveSectionName(tier: string, descChi: string | null | undefined): string {
-  if (tier !== 'SECTION' && tier !== 'SUBSECTION') return '';
-  if (!descChi) return '';
-  const parts = descChi
-    .split('/')
-    .map((s) => s.trim())
-    .filter((s) => s !== '');
-  return parts.length ? parts[parts.length - 1] : '';
-}
-
-/**
- * 「部門」欄之部層代碼候選（依序 fallback）：部層（LEFT2+000）→ 本部層（LEFT1+0000）→ Root。
- * 契約 §8.2 之 fallback 鏈。
- */
-export function departmentCodeCandidates(orgCode: string): string[] {
-  const dept = orgCode.slice(0, 2).padEnd(5, '0'); // 部層
-  const division = orgCode.slice(0, 1).padEnd(5, '0'); // 本部層
-  return [dept, division, '00000'];
-}
-
-/** 依 fallback 鏈解析部門 DESC_FULL；皆查無/皆無 descFull → null（組裝端收合為空）。 */
-export function resolveDepartmentFullName(
-  orgCode: string,
-  lookup: (code: string) => { descFull: string | null } | null,
-): string | null {
-  for (const code of departmentCodeCandidates(orgCode)) {
-    const row = lookup(code);
-    if (row && present(row.descFull)) return row.descFull;
-  }
-  return null;
 }
 
 /** 伺服器時間 → 'YYYY-MM-DD HH:mm:ss (UTC+8)'（台灣時區；OQ-NFR007b 暫定格式）。 */

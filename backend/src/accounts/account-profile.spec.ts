@@ -671,9 +671,15 @@ describe('AccountsService — F003 手動帳號基本資料 delta', () => {
       const mstore = new MultiCompanyStore();
       mstore.seed({ loginId: 'M1', companyCode: 'AS', orgCode: 'X0000' });
       mstore.seed({ loginId: 'M2', companyCode: 'AE', orgCode: 'X0000' });
+      // 2026-08-14（本次 dept-format 補測時修正）：明確覆寫 descFull＝name，使本測試與「部門欄應
+      // 顯示格式」（見下方新 describe「AC-P17／AC-P23d 部門欄顯示格式」）互相獨立——orgUnit()
+      // 工廠之 descFull 預設值為另一組樣本文字，若不覆寫，正確之路徑演算法（優先取 descFull 而非
+      // name）在本測試會解析出與 name 不同的字串，使本測試（本意僅驗證複合鍵不跨公司污染，非
+      // 驗證格式）在格式 bug 修好後意外變紅。X0000 為 DEPARTMENT 層（無父層可再組字），
+      // descFull=name 使兩種格式演算法（回 name 原值 vs. 正確路徑演算法）於此案例恆得同一結果。
       const multiOrgUnits: OrgUnitRecord[] = [
-        orgUnit({ companyCode: 'AS', orgCode: 'X0000', tier: 'DEPARTMENT', name: '甲部門' }),
-        orgUnit({ companyCode: 'AE', orgCode: 'X0000', tier: 'DEPARTMENT', name: '乙部門' }),
+        orgUnit({ companyCode: 'AS', orgCode: 'X0000', tier: 'DEPARTMENT', name: '甲部門', descFull: '甲部門' }),
+        orgUnit({ companyCode: 'AE', orgCode: 'X0000', tier: 'DEPARTMENT', name: '乙部門', descFull: '乙部門' }),
       ];
       const svc2 = new AccountsService(mstore, fakeOrgUnits(multiOrgUnits), fakeJobTitles([]));
       const rows = await svc2.listAccounts('AS', {});
@@ -699,6 +705,89 @@ describe('AccountsService — F003 手動帳號基本資料 delta', () => {
       expect(asRow.title).toBe('協理');
       expect(aeRow.title).toBe('高級協理');
       expect(aeRow.title).not.toBe(asRow.title);
+    });
+  });
+
+  /**
+   * AC-P17／AC-P23d 部門欄顯示格式（2026-08-14 真容器煙霧測試揪出、上方既有測試對此全盲之缺口，
+   * team-lead 指派補測）。真容器實測：帳號清單第 1 頁 50 列，department 含 ' / '（多層路徑格式）
+   * 者 0 列——系統性回退為 ORG_UNIT.name 原值，而非 AC-P17「全站唯一之組織路徑算法，不得另建
+   * 第二套」所要求之演算法（該演算法之權威副本＝prototypes/08-account-management.html 之
+   * `buildOrgPath`，同時也是「部門下拉」選項文字之權威來源，:376／:378／:386～:395；清單列亦呼叫
+   * 同一函式，:573／:612——prototype 對清單與下拉一視同仁，AC-P17 之原則因此同樣適用於清單欄）。
+   *
+   * 為何上方既有 AC-P23d 測試（'甲部門'／'乙部門'）對此格式 bug 全盲：其 fixture 為單層
+   * tier='DEPARTMENT'、無父層可再組字之部門，回 ORG_UNIT.name 原值與經正確路徑演算法組字之結果
+   * 剛好重合（見上方對該測試 fixture 的修正註解），故任何實作（含 bug 本身）都會綠——對格式沒有
+   * 鑑別力。本區塊改用真實存在之兩層（部→處室）fixture：companyCode/orgCode/tier/name/descFull
+   * 逐字取自 prototype 08 之 ORG_UNITS 樣本（JA000 :352／JAC00 :353），並於 2026-08-14 以唯讀
+   * 診斷查詢（SELECT-only、非讀 production 碼；backend/src/database/entities/org-unit.entity.ts
+   * 為 schema 定義非業務邏輯，比照既有 itest 匯入 Account entity 之慣例）對照真實 SOP DB 之
+   * (companyCode='AS', orgCode='JAC00') 確認同值，兩層結構下錯誤格式（'營管部/審查室'）與正確
+   * 格式（'營運管理部 / 審查室'）逐字不同，具鑑別力。
+   *
+   * 期望值之組字演算法（`referenceBuildOrgPath` 及其兩個輔助函式）逐字移植自該 prototype 的
+   * `buildOrgPath`（:386～:395，全站唯一之組織路徑算法之權威副本）——移植對象是 prototype
+   * （本 agent 之授權輸入），非 backend／frontend production 原始碼，未違反「全盲於實作」規則；
+   * 此舉使期望值真正「從 orgCode ＋ ORG_UNIT 主檔逐段推導」，而非直接寫死 department 答案字串
+   * （team-lead 明確要求，見 G-ADM-001 之前車之鑑——該測試之 fixture 把 department 直接填入
+   * 期望的完整格式化字串，任何後端邏輯都會綠，對此格式 bug 完全無鑑別力）。
+   */
+  describe('AC-P17／AC-P23d 部門欄顯示格式（清單需與下拉共用同一 buildOrgPath 演算法，不得回退為 ORG_UNIT.name 原值）', () => {
+    // 逐字移植自 prototypes/08-account-management.html :338～:395（buildOrgPath 及其兩個輔助函式）。
+    function departmentCodeCandidates(orgCode: string): string[] {
+      return [orgCode.slice(0, 2).padEnd(5, '0'), orgCode.slice(0, 1).padEnd(5, '0'), '00000'];
+    }
+    function deriveSectionName(tier: string, descChi: string | null): string {
+      if (tier !== 'SECTION' && tier !== 'SUBSECTION') return '';
+      const parts = (descChi || '').split('/').map((s) => s.trim()).filter((s) => s !== '');
+      return parts.length ? parts[parts.length - 1] : '';
+    }
+    function referenceBuildOrgPath(units: OrgUnitRecord[], orgCode: string | null): string | null {
+      if (!orgCode) return null;
+      const byCode = new Map(units.map((u) => [u.orgCode, u]));
+      const self = byCode.get(orgCode);
+      let departmentFullName = '';
+      for (const code of departmentCodeCandidates(orgCode)) {
+        const row = byCode.get(code);
+        if (row && row.descFull && row.descFull.trim() !== '') {
+          departmentFullName = row.descFull;
+          break;
+        }
+      }
+      const sectionName = self ? deriveSectionName(self.tier, self.name) : '';
+      const segments = [departmentFullName, sectionName].filter((s) => s && s.trim() !== '');
+      if (segments.length) return segments.join(' / ');
+      return self && self.name && self.name.trim() !== '' ? self.name.trim() : orgCode;
+    }
+
+    // 逐字取自 prototype 08 之 ORG_UNITS 樣本（:352 JA000／:353 JAC00），2026-08-14 已對照真實
+    // SOP DB 之 (companyCode='AS', orgCode='JAC00') 確認同值（parentCode 為本檔既有慣例欄位，
+    // 不影響 buildOrgPath 本身之推導——該演算法刻意只靠代碼前綴，不吃 parentCode）。
+    const twoTierUnits: OrgUnitRecord[] = [
+      orgUnit({ companyCode: 'AS', orgCode: 'JA000', tier: 'DEPARTMENT', name: '營管部', descFull: '營運管理部' }),
+      orgUnit({
+        companyCode: 'AS',
+        orgCode: 'JAC00',
+        tier: 'SECTION',
+        name: '營管部/審查室',
+        descFull: '營運管理部審查室',
+        parentCode: 'JA000',
+      }),
+    ];
+
+    it('AC-P17 部門欄格式須與下拉共用之 buildOrgPath 一致：兩層（部→處室）orgCode 須組成「部層全名 / 處室簡稱」，不得回退為 ORG_UNIT.name 原值', async () => {
+      const store = new FakeStore();
+      store.seed({ loginId: 'M5', companyCode: 'AS', orgCode: 'JAC00' });
+      const svc2 = new AccountsService(store, fakeOrgUnits(twoTierUnits), fakeJobTitles([]));
+      const rows = await svc2.listAccounts('AS', {});
+      const row = rows.find((r) => r.loginId === 'M5')!;
+
+      const expected = referenceBuildOrgPath(twoTierUnits, 'JAC00');
+      expect(expected).toBe('營運管理部 / 審查室'); // 供人閱讀核對；期望值本身仍是從 units 逐段推導而得，非手寫答案
+      expect(row.department).toBe(expected);
+      // 現行（錯誤）實作回 ORG_UNIT.name 原值，逐字不同，確保本斷言具鑑別力、非巧合命中：
+      expect(row.department).not.toBe('營管部/審查室');
     });
   });
 
