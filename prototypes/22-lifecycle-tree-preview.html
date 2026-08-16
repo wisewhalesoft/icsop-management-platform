@@ -3,6 +3,19 @@
      本檔已套用：頁首標題與切換器改用 lifecycleDisplayName；切換器選項值與 ?lifecycleId= 參數
      由「循環代碼」收斂為 lifecycleId（同名不同子分類代碼相同，代碼無法區分，F036 AC-S3）。
      規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
+<!-- 🔵 2026-08-16 additive delta（人類閘門已通過）——本檔已套用（規格權威＝F036 AC-D1～AC-D8）：
+     **雙擊節點 → 唯讀側抽屜**列出該節點掛載之程序書清單
+     （欄位＝程序書編號／程序書書名／版次／狀態／公告日期；點列可另開後台唯讀詳情）。
+     · 抽屜自畫布右側滑出、**非 modal**、不遮擋樹狀圖；關閉鈕或 Escape 關閉（AC-D1）。
+     · 🔒 **純唯讀**（AC-D4）：抽屜為 F009 節點抽屜之**唯讀孿生**，**已移除全部寫入元件**——
+       無新增文件／移除掛載／改派節點／儲存／刪除，亦無任何 <input>／<select>。
+     · 🔒 **單擊之「醒目標示所有下游節點」行為完全保留**（AC-D6）；雙擊時該標示先行觸發且不被取消。
+     · 節點掛載數為 0 → 抽屜仍開啟並顯示空狀態（AC-D7）；本互動不新增稽核事件（AC-D8）。
+     · 資料端點之權限閘門＝「循環管理」read（含 Supervisor 全公司唯讀），**不得**沿用 F009 之
+       ICSOPAdmin 寫入閘門（AC-D5）。
+     📌 節點之 `docs` 由計數（docs:N）改為**程序書列陣列**，每節點筆數與改動前之徽章數字逐節點相同
+        （無視覺回歸）；徽章改由 docs.length 衍生，使「徽章數字」與「抽屜列數」只有一份事實。
+     ⚠ [F038] 之新舊樹狀圖 diff 預覽**刻意不支援雙擊**（OQ-D18-19 裁決＝否，F038 AC-D3）。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -69,7 +82,7 @@
     <button onclick="doAction('DOWNLOAD')" title="下載此循環樹狀圖（PDF，燒錄浮水印）" aria-label="下載" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="download" class="w-4 h-4"></i>下載</button>
     <button onclick="doAction('PRINT')" title="列印此循環樹狀圖（燒錄浮水印）" aria-label="列印" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="printer" class="w-4 h-4"></i>列印</button>
     <div class="w-px h-5 bg-slate-200 mx-1 shrink-0"></div>
-    <span class="text-xs text-slate-400 shrink-0 hidden md:inline">點節點＝醒目標示其所有下游節點；點空白處取消</span>
+    <span class="text-xs text-slate-400 shrink-0 hidden md:inline">點節點＝醒目標示其所有下游節點；點空白處取消；<strong class="text-slate-500">雙擊節點＝檢視該節點掛載之程序書清單</strong></span>
   </div>
 </header>
 
@@ -93,6 +106,28 @@
     <div class="wm-layer" id="wmLayer"></div>
   </div>
 </main>
+
+<!-- ===== 🔵 F036 AC-D1～AC-D8：節點文件清單「唯讀」側抽屜（雙擊節點開啟）=====
+     自畫布**右側**滑出、**非 modal**（無遮罩，不遮擋樹狀圖，樹狀圖仍可捲動／縮放／再點選）。
+     🔒 AC-D4 純唯讀：本區塊內**不得**出現任何寫入類互動元件（新增／移除掛載／改派／儲存／刪除），
+        亦不得有任何 <input>／<select>。它是 F009 節點抽屜之**唯讀孿生**，不得復用其可寫版本。 -->
+<aside id="nodeDocDrawer" aria-hidden="true" aria-label="節點掛載之程序書清單（唯讀）"
+       class="fixed right-0 top-0 bottom-0 z-40 w-full sm:w-[400px] bg-white border-l border-slate-200 shadow-2xl translate-x-full transition-transform duration-300 flex flex-col">
+  <div class="h-14 shrink-0 flex items-center gap-2 px-4 border-b border-slate-200">
+    <i data-lucide="file-stack" class="w-4 h-4 text-primary-600 shrink-0"></i>
+    <div class="min-w-0 flex-1">
+      <div id="ndTitle" class="font-semibold text-slate-900 text-sm truncate"></div>
+      <div id="ndCount" class="text-[11px] text-slate-400"></div>
+    </div>
+    <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">唯讀</span>
+    <button onclick="closeNodeDrawer()" aria-label="關閉" title="關閉（Esc）" class="w-8 h-8 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400 shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
+  </div>
+  <div id="ndBody" class="flex-1 overflow-y-auto divide-y divide-slate-100"></div>
+  <div class="shrink-0 border-t border-slate-200 px-4 py-2.5 text-[11px] text-slate-400 flex items-start gap-1.5">
+    <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>
+    <span>點任一列可另開該程序書之<strong>後台唯讀詳情</strong>。本抽屜為唯讀檢視，不提供任何 DAG 編輯互動；開啟本抽屜<strong>不另記稽核事件</strong>。</span>
+  </div>
+</aside>
 
 <!-- selection chip -->
 <div id="selChip" class="hidden fixed left-1/2 -translate-x-1/2 bottom-5 z-40 items-center gap-2 px-4 py-2 rounded-full bg-slate-900 text-white text-sm shadow-lg">
@@ -140,42 +175,42 @@
        code 欄僅供頁首顯示 ICSOP 編號第 2 段之循環代碼（僅依 name 推導，AC-28）。 */
   const CYCLES={
     lc1:{name:'銷售及收款循環', subcategory:'消金', code:'SRC', nodes:[
-      {id:'a1',name:'進件作業',docs:2},{id:'a2',name:'簽約對保作業',docs:1},{id:'a3',name:'擔保設定作業',docs:1},
-      {id:'a4',name:'撥款核准作業',docs:1},{id:'a5',name:'案件執行作業',docs:1},{id:'a6',name:'案件催收作業',docs:1},{id:'a7',name:'案件結束作業',docs:1}],
+      {id:'a1',name:'進件作業',docs:[{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'},{num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',edition:"25'10",status:'有效',date:'2025-10-01'}]},{id:'a2',name:'簽約對保作業',docs:[{num:'ICSOP-SRC-102-1-01',name:'車輛分期對保作業',edition:"25'11",status:'有效',date:'2025-11-01'}]},{id:'a3',name:'擔保設定作業',docs:[{num:'ICSOP-SRC-102-2-03',name:'擔保品設定登記作業',edition:"26'02",status:'有效',date:'2026-02-01'}]},
+      {id:'a4',name:'撥款核准作業',docs:[{num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",status:'有效',date:'2025-12-01'}]},{id:'a5',name:'案件執行作業',docs:[{num:'ICSOP-SRC-104-1-05',name:'作服撥款作業（車輛）',edition:"26'03",status:'有效',date:'2026-03-01'}]},{id:'a6',name:'案件催收作業',docs:[{num:'ICSOP-SRC-105-1-02',name:'逾期案件催收作業',edition:"26'05",status:'有效',date:'2026-09-01'}]},{id:'a7',name:'案件結束作業',docs:[{num:'ICSOP-SRC-106-1-01',name:'案件結案與檔案歸還作業',edition:"24'08",status:'失效',date:'2024-08-01'}]}],
       edges:[['a1','a2'],['a1','a3'],['a2','a4'],['a3','a4'],['a4','a5'],['a5','a6'],['a5','a7'],['a6','a7']]},
     // 同名不同子分類＝彼此獨立的循環：獨立 UUID、獨立 DAG 結構、獨立文件掛載
     lc10:{name:'銷售及收款循環', subcategory:'企金', code:'SRC', nodes:[
-      {id:'j1',name:'企金案件受理作業',docs:1},{id:'j2',name:'企業徵信作業',docs:0},{id:'j3',name:'擔保品估價作業',docs:0},
-      {id:'j4',name:'授信核准作業',docs:0},{id:'j5',name:'額度撥貸作業',docs:0}],
+      {id:'j1',name:'企金案件受理作業',docs:[{num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",status:'有效',date:'2026-06-01'}]},{id:'j2',name:'企業徵信作業',docs:[]},{id:'j3',name:'擔保品估價作業',docs:[]},
+      {id:'j4',name:'授信核准作業',docs:[]},{id:'j5',name:'額度撥貸作業',docs:[]}],
       edges:[['j1','j2'],['j1','j3'],['j2','j4'],['j3','j4'],['j4','j5']]},
     lc11:{name:'銷售及收款循環', subcategory:'子公司', code:'SRC', nodes:[
-      {id:'k1',name:'子公司案件受理作業',docs:0},{id:'k2',name:'子公司徵信作業',docs:0},
-      {id:'k3',name:'子公司核准作業',docs:0},{id:'k4',name:'子公司撥款作業',docs:0}],
+      {id:'k1',name:'子公司案件受理作業',docs:[]},{id:'k2',name:'子公司徵信作業',docs:[]},
+      {id:'k3',name:'子公司核准作業',docs:[]},{id:'k4',name:'子公司撥款作業',docs:[]}],
       edges:[['k1','k2'],['k1','k3'],['k2','k4'],['k3','k4']]},
     lc2:{name:'採購及付款循環', subcategory:null, code:'PUC', nodes:[
-      {id:'b1',name:'請購申請作業',docs:1},{id:'b2',name:'採購比議價作業',docs:1},{id:'b3',name:'驗收入庫作業',docs:1},
-      {id:'b4',name:'費用請款作業',docs:2},{id:'b5',name:'付款核准作業',docs:1},{id:'b6',name:'付款執行作業',docs:1}],
+      {id:'b1',name:'請購申請作業',docs:[{num:'ICSOP-PUC-101-2-01',name:'請購申請與核決作業',edition:"25'07",status:'有效',date:'2025-07-01'}]},{id:'b2',name:'採購比議價作業',docs:[{num:'ICSOP-PUC-102-1-02',name:'採購比議價作業',edition:"26'01",status:'有效',date:'2026-01-15'}]},{id:'b3',name:'驗收入庫作業',docs:[{num:'ICSOP-PUC-103-1-01',name:'驗收入庫作業',edition:"25'09",status:'有效',date:'2025-09-01'}]},
+      {id:'b4',name:'費用請款作業',docs:[{num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",status:'有效',date:'2026-05-01'},{num:'ICSOP-PUC-101-1-04',name:'員工代墊款請款作業',edition:"25'11",status:'有效',date:'2025-11-01'}]},{id:'b5',name:'付款核准作業',docs:[{num:'ICSOP-PUC-104-1-01',name:'付款核准作業',edition:"26'03",status:'有效',date:'2026-03-01'}]},{id:'b6',name:'付款執行作業',docs:[{num:'ICSOP-PUC-105-1-01',name:'付款執行與對帳作業',edition:"23'12",status:'作廢',date:'2023-12-01'}]}],
       edges:[['b1','b2'],['b2','b3'],['b3','b5'],['b1','b4'],['b4','b5'],['b5','b6']]},
     lc3:{name:'產品企劃循環', subcategory:null, code:'PPC', nodes:[
-      {id:'c1',name:'市場分析作業',docs:1},{id:'c2',name:'產品規劃作業',docs:1},{id:'c3',name:'目標制定作業',docs:1},{id:'c4',name:'政策發布作業',docs:1}],
+      {id:'c1',name:'市場分析作業',docs:[{num:'ICSOP-PPC-100-1-01',name:'市場分析作業',edition:"25'10",status:'有效',date:'2025-10-01'}]},{id:'c2',name:'產品規劃作業',docs:[{num:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',edition:"26'03",status:'有效',date:'2026-03-01'}]},{id:'c3',name:'目標制定作業',docs:[{num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',edition:"26'04",status:'有效',date:'2026-04-01'}]},{id:'c4',name:'政策發布作業',docs:[{num:'ICSOP-PPC-102-1-01',name:'產品政策發布作業',edition:"26'02",status:'有效',date:'2026-02-01'}]}],
       edges:[['c1','c2'],['c2','c3'],['c1','c3'],['c3','c4']]},
     lc4:{name:'薪工循環', subcategory:null, code:'LWC', nodes:[
-      {id:'d1',name:'任用與異動管理',docs:1},{id:'d2',name:'出勤管理作業',docs:1},{id:'d3',name:'薪資計算作業',docs:2},{id:'d4',name:'給付作業',docs:1}],
+      {id:'d1',name:'任用與異動管理',docs:[{num:'ICSOP-LWC-101-1-02',name:'招募管理作業',edition:"25'09",status:'有效',date:'2025-10-01'}]},{id:'d2',name:'出勤管理作業',docs:[{num:'ICSOP-LWC-102-1-01',name:'出勤與請假管理作業',edition:"25'12",status:'有效',date:'2025-12-01'}]},{id:'d3',name:'薪資計算作業',docs:[{num:'ICSOP-LWC-103-1-01',name:'薪資計算作業',edition:"26'01",status:'有效',date:'2026-01-01'},{num:'ICSOP-LWC-103-1-02',name:'獎金計算作業',edition:"26'02",status:'有效',date:'2026-02-01'}]},{id:'d4',name:'給付作業',docs:[{num:'ICSOP-LWC-104-1-01',name:'薪資給付作業',edition:"26'01",status:'有效',date:'2026-01-01'}]}],
       edges:[['d1','d2'],['d2','d3'],['d1','d3'],['d3','d4']]},
     lc5:{name:'融資循環', subcategory:null, code:'FC', nodes:[
-      {id:'e1',name:'額度申請作業',docs:1},{id:'e2',name:'銀行融資作業',docs:1},{id:'e3',name:'動撥作業',docs:1},{id:'e4',name:'還款作業',docs:1}],
+      {id:'e1',name:'額度申請作業',docs:[{num:'ICSOP-FC-100-1-02',name:'銀行額度申請作業',edition:"25'08",status:'有效',date:'2025-08-01'}]},{id:'e2',name:'銀行融資作業',docs:[{num:'ICSOP-FC-101-1-00',name:'銀行融資作業',edition:"26'01",status:'有效',date:'2026-02-01'}]},{id:'e3',name:'動撥作業',docs:[{num:'ICSOP-FC-102-1-01',name:'資金動撥作業',edition:"26'03",status:'有效',date:'2026-03-01'}]},{id:'e4',name:'還款作業',docs:[{num:'ICSOP-FC-103-1-01',name:'借款還本付息作業',edition:"25'10",status:'有效',date:'2025-10-01'}]}],
       edges:[['e1','e2'],['e2','e3'],['e3','e4'],['e2','e4']]},
     lc6:{name:'不動產、廠房及設備循環', subcategory:null, code:'FAC', nodes:[
-      {id:'f1',name:'資產需求作業',docs:1},{id:'f2',name:'資產請購作業',docs:1},{id:'f3',name:'驗收作業',docs:1},{id:'f4',name:'資產管理作業',docs:1},{id:'f5',name:'折舊管理作業',docs:1}],
+      {id:'f1',name:'資產需求作業',docs:[{num:'ICSOP-FAC-100-1-01',name:'資產需求評估作業',edition:"25'06",status:'有效',date:'2025-06-01'}]},{id:'f2',name:'資產請購作業',docs:[{num:'ICSOP-FAC-101-1-02',name:'資產請購作業',edition:"25'09",status:'有效',date:'2025-09-01'}]},{id:'f3',name:'驗收作業',docs:[{num:'ICSOP-FAC-102-1-01',name:'資產驗收作業',edition:"25'10",status:'有效',date:'2025-10-01'}]},{id:'f4',name:'資產管理作業',docs:[{num:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',edition:"25'08",status:'有效',date:'2025-10-01'}]},{id:'f5',name:'折舊管理作業',docs:[{num:'ICSOP-FAC-103-1-01',name:'固定資產折舊管理作業',edition:"26'01",status:'有效',date:'2026-01-01'}]}],
       edges:[['f1','f2'],['f2','f3'],['f3','f4'],['f4','f5'],['f3','f5']]},
     lc7:{name:'投資循環', subcategory:null, code:'IC', nodes:[
-      {id:'g1',name:'投資評估作業',docs:1},{id:'g2',name:'短期投資作業',docs:1},{id:'g3',name:'保管作業',docs:1},{id:'g4',name:'會計入帳作業',docs:1}],
+      {id:'g1',name:'投資評估作業',docs:[{num:'ICSOP-IC-101-1-01',name:'投資評估與核決作業',edition:"25'11",status:'有效',date:'2025-11-01'}]},{id:'g2',name:'短期投資作業',docs:[{num:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',edition:"26'05",status:'有效',date:'2026-05-01'}]},{id:'g3',name:'保管作業',docs:[{num:'ICSOP-IC-103-1-01',name:'有價證券保管作業',edition:"25'12",status:'有效',date:'2025-12-01'}]},{id:'g4',name:'會計入帳作業',docs:[{num:'ICSOP-IC-104-1-01',name:'投資損益會計入帳作業',edition:"26'02",status:'有效',date:'2026-02-01'}]}],
       edges:[['g1','g2'],['g2','g3'],['g2','g4'],['g3','g4']]},
     lc8:{name:'電腦化資訊系統控制作業', subcategory:null, code:'CIPS', nodes:[
-      {id:'h1',name:'系統開發作業',docs:1},{id:'h2',name:'程式及資料存取',docs:1},{id:'h3',name:'使用者權限管理',docs:1},{id:'h4',name:'變更管理作業',docs:1}],
+      {id:'h1',name:'系統開發作業',docs:[{num:'ICSOP-CIPS-101-1-01',name:'資訊系統開發作業',edition:"25'09",status:'有效',date:'2025-09-01'}]},{id:'h2',name:'程式及資料存取',docs:[{num:'ICSOP-CIPS-102-1-01',name:'程式及資料存取控制作業',edition:"26'01",status:'有效',date:'2026-01-01'}]},{id:'h3',name:'使用者權限管理',docs:[{num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',edition:"26'01",status:'有效',date:'2026-04-01'}]},{id:'h4',name:'變更管理作業',docs:[{num:'ICSOP-CIPS-105-1-01',name:'系統變更管理作業',edition:"26'03",status:'有效',date:'2026-03-01'}]}],
       edges:[['h1','h2'],['h1','h3'],['h2','h4'],['h3','h4']]},
     lc9:{name:'管理性控制作業', subcategory:null, code:'GCA', nodes:[
-      {id:'i1',name:'法遵作業',docs:1},{id:'i2',name:'法規更新作業',docs:1},{id:'i3',name:'內部稽核作業',docs:1},{id:'i4',name:'風險評估作業',docs:1}],
+      {id:'i1',name:'法遵作業',docs:[{num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01'}]},{id:'i2',name:'法規更新作業',docs:[{num:'ICSOP-GCA-101-1-01',name:'法規更新與宣導作業',edition:"25'11",status:'有效',date:'2025-11-01'}]},{id:'i3',name:'內部稽核作業',docs:[{num:'ICSOP-GCA-102-1-01',name:'內部稽核作業',edition:"26'02",status:'有效',date:'2026-02-01'}]},{id:'i4',name:'風險評估作業',docs:[{num:'ICSOP-GCA-103-1-01',name:'風險評估作業',edition:"26'01",status:'有效',date:'2026-01-01'}]}],
       edges:[['i1','i2'],['i2','i3'],['i1','i3'],['i3','i4']]}
   };
   const ORDER=['lc1','lc10','lc11','lc2','lc3','lc4','lc5','lc6','lc7','lc8','lc9'];
@@ -236,14 +271,16 @@
     // nodes
     nodesLayer.innerHTML=cur.nodes.map(n=>{
       const p=cur.pos[n.id];
-      return `<div class="node${n.docs?' hasdocs':''}" data-id="${n.id}" style="left:${p.x}px;top:${p.y}px;width:${NODE_W}px" onclick="onNodeClick(event,'${n.id}')" role="button" tabindex="0" aria-label="節點 ${n.name}">
+      const cnt=n.docs.length;
+      // 🔵 F036 AC-D1（2026-08-16 delta）：新增 dblclick → 唯讀側抽屜；單擊之既有行為不變（AC-D6）
+      return `<div class="node${cnt?' hasdocs':''}" data-id="${n.id}" style="left:${p.x}px;top:${p.y}px;width:${NODE_W}px" onclick="onNodeClick(event,'${n.id}')" ondblclick="onNodeDblClick(event,'${n.id}')" role="button" tabindex="0" aria-label="節點 ${n.name}" title="單擊＝標示所有下游節點；雙擊＝檢視此節點掛載之程序書清單">
         <div class="nbody">
           <div class="flex items-center gap-1.5">
             <i data-lucide="git-commit-vertical" class="w-3.5 h-3.5 text-slate-300 shrink-0"></i>
             <span class="font-medium text-slate-800 text-sm truncate">${n.name}</span>
           </div>
-          <div class="mt-1 flex items-center gap-1 text-[11px] ${n.docs?'text-emerald-600':'text-slate-400'}">
-            <i data-lucide="${n.docs?'file-check-2':'file-x-2'}" class="w-3.5 h-3.5"></i>${n.docs?('掛載 '+n.docs+' 份程序書'):'尚未掛載程序書'}
+          <div class="mt-1 flex items-center gap-1 text-[11px] ${cnt?'text-emerald-600':'text-slate-400'}">
+            <i data-lucide="${cnt?'file-check-2':'file-x-2'}" class="w-3.5 h-3.5"></i>${cnt?('掛載 '+cnt+' 份程序書'):'尚未掛載程序書'}
           </div>
         </div>
       </div>`;
@@ -256,6 +293,7 @@
   function loadCycle(lcId){
     if(!CYCLES[lcId]) lcId=DEFAULT_ID;
     CUR=lcId; selected=null;
+    closeNodeDrawer();          // 切換循環時關閉抽屜（節點集合已改變）
     cur=buildGraph(lcId);
     document.getElementById('cycleSel').value=lcId;
     // 頁首標題＝lifecycleDisplayName（含子分類）；代碼僅依名稱推導，子分類不參與（AC-28）
@@ -266,9 +304,69 @@
     const st=document.getElementById('stage'); st.scrollLeft=Math.max(0,(board.offsetWidth-st.clientWidth)/2);
   }
 
-  /* ---- 點節點：醒目標示其及所有下游；其餘淡化；再點同節點/空白取消 ---- */
+  /* ---- 點節點：醒目標示其及所有下游；其餘淡化；再點同節點/空白取消 ----
+     🔒 F036 AC-D6 回歸鎖定：本段行為**完全不變**（雙擊 delta 不得改動單擊語意）。 */
   function onNodeClick(ev,id){ ev.stopPropagation(); if(selected===id){ clearSel(); } else { selected=id; applyHighlight(); } }
   function clearSel(){ selected=null; applyHighlight(); }
+
+  /* ---- 🔵 F036 AC-D1～AC-D8（2026-08-16 additive delta）：雙擊節點 → **唯讀側抽屜** ----
+     AC-D1 自畫布**右側**滑出（**非 modal**，不遮擋樹狀圖）；標題＝該節點名稱；
+           點關閉鈕或按 Escape → 抽屜關閉、樹狀圖狀態不變。
+     AC-D2 每列欄位逐字為 `程序書編號`／`程序書書名`／`版次`／`狀態`／`公告日期`；
+           編號與版次以等寬字（mono）；狀態依 F012 衍生規則顯示徽章。
+     AC-D3 點某一列 → 開啟該文件之**後台唯讀詳情**（/admin/documents/:id；原型導向 16-document-readonly.html）。
+     AC-D4 🔒 **純唯讀**：抽屜內**不存在任何寫入類互動元件**——無「新增文件」「移除掛載」「改派節點」
+           「儲存」「刪除」等按鈕，亦無任何 <input>／<select> 之可編輯欄位。
+           本抽屜為 F009 節點抽屜之**唯讀孿生**，**不得復用其可寫版本**。
+     AC-D5 資料端點之權限閘門＝功能鍵「循環管理」**read**（含 Supervisor 全公司唯讀）；
+           **不得**沿用 F009 之 ICSOPAdmin 寫入閘門（誤用會使 Supervisor 於本頁遭 403）。
+     AC-D6 🔒 單擊之標示下游行為於雙擊時**先行觸發且不被取消**——瀏覽器於雙擊時會先送出兩次
+           click（第二次會把選取切掉），故此處**重新設定 selected 並重繪**，確保標示仍然存在。
+     AC-D7 節點掛載數為 0 → 抽屜仍開啟並顯示空狀態提示（非錯誤、非空白區塊）。
+     AC-D8 本互動**不新增任何 AUDIT_LOG 紀錄**（屬同一次 LIFECYCLE_VIEW 之頁內操作）。 */
+  const TODAY='2026-07-17';
+  function derivedStatus(d){ if(d.status!=='有效') return d.status; return d.date<=TODAY?'已公告':'進度中'; }
+  function statusPill(s){
+    const map={'已公告':['#047857','#D1FAE5','megaphone'],'進度中':['#365C97','#EAF1FA','clock'],'失效':['#B45309','#FEF3C7','pause-circle'],'作廢':['#B91C1C','#FEE2E2','x-circle']};
+    const [t,b,ic]=map[s]||map['失效'];
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style="color:${t};background:${b}"><i data-lucide="${ic}" class="w-3 h-3"></i>${s}</span>`;
+  }
+  function onNodeDblClick(ev,id){
+    ev.stopPropagation(); ev.preventDefault();
+    if(!cur.nodes.some(x=>x.id===id)) return;   // 節點不屬於當前循環（切換後之殘留呼叫）→ 不動任何狀態
+    selected=id; applyHighlight();          // AC-D6：雙擊後標示仍然存在
+    openNodeDrawer(id);
+  }
+  function openNodeDrawer(id){
+    const n=cur.nodes.find(x=>x.id===id); if(!n) return;
+    document.getElementById('ndTitle').textContent=n.name;              // AC-D1：標題＝節點名稱
+    document.getElementById('ndCount').textContent=`掛載 ${n.docs.length} 份程序書`;
+    document.getElementById('ndBody').innerHTML = n.docs.length
+      ? n.docs.map(d=>`
+        <button type="button" onclick="openDocReadonly('${d.num}')" data-node-doc-row
+                class="w-full text-left px-4 py-3 hover:bg-primary-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="mono text-xs text-slate-500">${d.num}</span>${statusPill(derivedStatus(d))}
+          </div>
+          <div class="text-sm text-slate-800 mt-0.5">${d.name}</div>
+          <div class="mt-1 flex items-center gap-3 text-[11px] text-slate-400">
+            <span>版次 <span class="mono text-slate-600">${d.edition}</span></span>
+            <span>公告日期 <span class="mono text-slate-600">${d.date}</span></span>
+          </div>
+        </button>`).join('')
+      // AC-D7：0 份亦開啟抽屜並顯示空狀態
+      : `<div data-node-doc-empty class="px-4 py-10 text-center text-sm text-slate-400">
+           <i data-lucide="file-x-2" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>此節點尚未掛載任何程序書
+         </div>`;
+    const dr=document.getElementById('nodeDocDrawer');
+    dr.classList.remove('translate-x-full'); dr.setAttribute('aria-hidden','false');
+    lucide.createIcons();
+  }
+  function closeNodeDrawer(){
+    const dr=document.getElementById('nodeDocDrawer');
+    dr.classList.add('translate-x-full'); dr.setAttribute('aria-hidden','true');   // AC-D1：樹狀圖狀態不變
+  }
+  function openDocReadonly(num){ location.href='16-document-readonly.html'; }      // AC-D3：/admin/documents/:id
   function applyHighlight(){
     const set = selected? descendants(selected) : null;
     nodesLayer.querySelectorAll('.node').forEach(el=>{
@@ -315,7 +413,13 @@
     document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
     setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4000);
   }
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&selected)clearSel();});
+  // AC-D1：Escape 先關抽屜（不動樹狀圖狀態）；抽屜已關閉時才沿用既有之取消標示行為
+  document.addEventListener('keydown',e=>{
+    if(e.key!=='Escape') return;
+    const dr=document.getElementById('nodeDocDrawer');
+    if(dr && !dr.classList.contains('translate-x-full')){ closeNodeDrawer(); return; }
+    if(selected) clearSel();
+  });
 
   /* init：由 10（循環池）或 13（文件清單第二入口）帶入的 ?lifecycleId=<lifecycleId> 為預設選中。
      F036 AC-S3：參數為 lifecycleId 而非循環代碼——同名不同子分類之代碼相同，

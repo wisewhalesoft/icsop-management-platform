@@ -1,4 +1,23 @@
 <!DOCTYPE html>
+<!-- 🔵 2026-08-16 additive delta（人類閘門已通過）——本檔已套用（規格權威＝F018 AC-D1～AC-D10）：
+     ① 表頭**新增首欄「表單編號」**（AC-D1）：由左至右逐字為
+        表單編號／表單名稱／格式／大小／上傳者 / 上傳時間／關聯文件數／操作。
+     ② 上傳 modal 新增**選填**「表單編號」輸入欄（AC-D2）；未填或純空白 → 落地為 null（不得為空字串）。
+     ③ **無編號者之顯示方式（ui-ux-designer 定稿）＝「—」**（同一符號已用於 13 之「制定室別」空值），
+        並附 title「此表單未設定編號」。
+     ④ 唯一性（AC-D4／AC-D5）、長度上限 100（AC-D6）、驗證順序＝error-handling.md#usage-form-number。
+     🔒 既有列不回填、不自動產生編號（AC-D7）；**不擴及附錄**（AC-D9：24-appendix-management.html 未新增任何編號欄）。
+     🔒 後台恆 RAW：本頁個別下載**不燒錄浮水印、不寫稽核**（F018 AC-D13／OQ-FM-01 維持有效），
+        **不得**出現前台之「此格式不支援浮水印」標示。
+     ⑤ **「編輯編號」動作**（🔴 2026-08-16 人類閘門追加裁決 OQ-D18-28；F018 AC-D16～AC-D20）：
+        清單每列「操作」欄新增 `編輯編號`（`data-edit-number`），開啟 `editNumberModal` 小 modal。
+        **只改 formNumber、不碰檔案**——不重傳、不觸發 USAGE_FORM_OVERWRITE_SHARED、不寫稽核（AC-D20）。
+        此為既有表單補上編號之**唯一途徑**（存量列之 formNumber 全為 null，AC-D7）。
+        清空為合法操作 → 落地 null、該格回復 `—`（AC-D19）；唯一性比對**排除自身列**（AC-D18）。
+        **形式（小 modal）由 designer 決定；全部文案與掛鉤逐字照抄 spec-writer 定稿表，未改寫。**
+        ⚠ 無寫入權之角色（SysAdmin／Supervisor／DeptContact／User）**自 DOM 移除**該動作元件
+          （非 CSS 隱藏——AC-D17 以 `queryByLabelText('編輯編號') === null` 驗證）。
+        ⚠ **不得**改採「把編號欄加進覆蓋上傳彈窗」——該替代方案已於人類閘門明確否決。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -31,10 +50,10 @@
 
 <!-- ===== Admin shell sidebar ===== -->
 <aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-50 bg-white border-r border-slate-200 flex flex-col">
-  <div class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0">
+  <a href="07-admin-shell.html" data-to="/admin" aria-label="回到後台首頁" title="回到後台首頁" class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600">
     <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
     <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
-  </div>
+  </a>
   <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
   <div class="border-t border-slate-200 p-2 shrink-0">
     <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
@@ -47,7 +66,7 @@
   <div class="h-14 px-4 flex items-center gap-3">
     <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
     <div class="leading-tight min-w-0">
-      <div class="text-xs text-slate-400 flex items-center gap-1"><span>使用表單管理</span><i data-lucide="chevron-right" class="w-3 h-3"></i><span>表單池</span></div>
+      <div class="text-xs text-slate-400 flex items-center gap-1"><a href="19-usage-form-management.html" data-to="/admin/usage-forms" class="hover:text-primary-700 hover:underline focus:outline-none focus:ring-2 focus:ring-primary-600 rounded">使用表單管理</a><i data-lucide="chevron-right" class="w-3 h-3"></i><span>表單池</span></div>
       <div class="font-semibold text-slate-900 text-sm truncate">使用表單（表單池）管理</div>
     </div>
     <div class="ml-auto flex items-center gap-2">
@@ -104,9 +123,13 @@
 
   <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
-      <table class="w-full text-sm min-w-[760px]">
+      <!-- 🔵 F018 AC-D1（2026-08-16 additive delta）：表頭由左至右逐字為
+           表單編號／表單名稱／格式／大小／上傳者 / 上傳時間／關聯文件數／操作
+           （**新增之「表單編號」置於首欄**）；formNumber 為 null 之列，該格顯示「—」。 -->
+      <table class="w-full text-sm min-w-[980px]">
         <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
           <tr>
+            <th class="text-left font-medium px-4 py-2.5">表單編號</th>
             <th class="text-left font-medium px-4 py-2.5">表單名稱</th>
             <th class="text-left font-medium px-4 py-2.5">格式</th>
             <th class="text-left font-medium px-4 py-2.5">大小</th>
@@ -158,7 +181,15 @@
         <p id="fileErr" class="hidden mt-2 text-xs text-red-600 items-start gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>檔案格式不支援，僅允許 excel（.xlsx / .xls）與 pdf（FILE_FORMAT_NOT_ALLOWED）。</span></p>
       </div>
       <div>
-        <label class="block text-sm font-medium text-slate-700 mb-1">表單名稱 <span class="text-red-500">*</span></label>
+        <label for="upNumber" class="block text-sm font-medium text-slate-700 mb-1">表單編號 <span class="text-xs font-normal text-slate-400">（選填）</span></label>
+        <!-- 🔵 F018 AC-D2／AC-D4～AC-D7（2026-08-16 additive delta）：選填、唯一（比對前 trim、不分大小寫）、
+             上限 100 字；未填或純空白 → 落地為 null（**不得為空字串**）；系統**不提供**任何自動編號機制，
+             既有列亦不回填（AC-D7）。多筆 null 可並存（AC-D5）。 -->
+        <input id="upNumber" type="text" maxlength="100" placeholder="例：FM-001（不填則留空）" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm mono focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <p id="upNumberErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i><span></span></p>
+      </div>
+      <div>
+        <label for="upName" class="block text-sm font-medium text-slate-700 mb-1">表單名稱 <span class="text-red-500">*</span></label>
         <input id="upName" type="text" placeholder="請輸入表單名稱（可沿用檔名）" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600" />
         <p id="upNameErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>表單名稱不可為空。</p>
       </div>
@@ -171,6 +202,35 @@
     <div class="flex justify-end gap-2 mt-6">
       <button onclick="closeUpload()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
       <button onclick="submitUpload()" class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">上傳</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 🔴 「編輯編號」小 modal（F018 AC-D16～AC-D20；2026-08-16 人類閘門追加裁決 OQ-D18-28）=====
+     只改 formNumber、**不碰檔案**：不重傳、不觸發覆蓋共用警示（USAGE_FORM_OVERWRITE_SHARED 不得被觸發）。
+     ⚠ 下列文案與掛鉤由 spec-writer 定稿，**逐字照抄、不得改寫**：
+        `編輯編號`／`data-edit-number`／`editNumberModal`／`編輯表單編號`／`表單編號`＋`（選填）`／
+        `enNumber`＋maxlength=100＋placeholder `例：FM-001（不填則留空）`（與上傳 modal 同一 placeholder）／
+        `僅更新編號，不會變更表單檔案。`／`儲存`／`取消`／`enNumberErr`／兩則錯誤訊息／兩則成功回饋。
+     ⚠ **不得**把編號欄加進覆蓋上傳彈窗以取代本動作——該替代方案已於人類閘門明確否決。 -->
+<div id="editNumberModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-semibold text-slate-900">編輯表單編號</h3>
+      <button onclick="closeEditNumber()" aria-label="關閉" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <!-- 被編輯之表單名稱（純資料回顯，非新增文案）-->
+    <p id="enFormName" class="text-xs text-slate-400 mb-4 truncate"></p>
+    <div>
+      <label for="enNumber" class="block text-sm font-medium text-slate-700 mb-1">表單編號 <span class="text-xs font-normal text-slate-400">（選填）</span></label>
+      <input id="enNumber" type="text" maxlength="100" placeholder="例：FM-001（不填則留空）" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm mono focus:outline-none focus:ring-2 focus:ring-primary-600" />
+      <p id="enNumberErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5 shrink-0"></i><span></span></p>
+    </div>
+    <p class="mt-3 flex items-start gap-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
+      <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>僅更新編號，不會變更表單檔案。</p>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeEditNumber()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button onclick="submitEditNumber()" class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">儲存</button>
     </div>
   </div>
 </div>
@@ -207,13 +267,20 @@
     {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
   ];
   const CURRENT_MODULE='usageform';
+  /* 🔵 F002 AC-D1／AC-D5（2026-08-16 delta）：側欄最上方「首頁」項。
+     刻意**不放進 MENU**——它不對映任何 F025 功能鍵、不經 canPerform 過濾，
+     F025 功能矩陣逐格未動、未新增「首頁」列（AC-D5 回歸鎖定）。 */
+  const HOME_ITEM={id:'home',label:'首頁',icon:'layout-dashboard',route:'/admin',href:'07-admin-shell.html'};
   function renderSidebar(){
     const role=document.body.dataset.role;
     const items=MENU.filter(m=>m.roles[role]);
-    document.getElementById('sidebarNav').innerHTML = items.length? items.map(m=>{
+    // 🔵 F002 AC-D1（2026-08-16 delta）：「首頁」恆為第一項、不經 F025 角色過濾（四種管理類角色一律顯示）
+    const showHome = role!=='user', homeActive = CURRENT_MODULE==='home';
+    const homeHtml = showHome ? `<a href="${HOME_ITEM.href}" data-to="${HOME_ITEM.route}" title="${HOME_ITEM.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${homeActive?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${HOME_ITEM.icon}" class="w-4 h-4 shrink-0 ${homeActive?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${HOME_ITEM.label}</span></a>` : '';
+    document.getElementById('sidebarNav').innerHTML = homeHtml + (items.length? items.map(m=>{
       const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
       return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
-    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`);
     lucide.createIcons();
   }
   function navTo(id,label){ if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;} shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型：對應頁面）')); return false; }
@@ -224,21 +291,21 @@
   /* ===== form pool data ===== */
   let seq=8;
   let FORMS=[
-    {id:'uf1',name:'進件申請書.xlsx',fmt:'excel',size:'48 KB',by:'李慧玲',dept:'債權管理部 / 法催一室',at:'2026-06-10',docs:[
+    {id:'uf1',formNumber:'FM-001',name:'進件申請書.xlsx',fmt:'excel',size:'48 KB',by:'李慧玲',dept:'債權管理部 / 法催一室',at:'2026-06-10',docs:[
       {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業'},
       {n:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業'}]},
-    {id:'uf2',name:'支票託收登記表.xlsx',fmt:'excel',size:'32 KB',by:'李慧玲',dept:'債權管理部 / 法催一室',at:'2026-06-10',docs:[
+    {id:'uf2',formNumber:null,name:'支票託收登記表.xlsx',fmt:'excel',size:'32 KB',by:'李慧玲',dept:'債權管理部 / 法催一室',at:'2026-06-10',docs:[
       {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業'}]},
-    {id:'uf3',name:'徵信照會表.pdf',fmt:'pdf',size:'120 KB',by:'陳彥廷',dept:'企劃部 / 車輛行銷室',at:'2026-05-22',docs:[
+    {id:'uf3',formNumber:'FM-014',name:'徵信照會表.pdf',fmt:'pdf',size:'120 KB',by:'陳彥廷',dept:'企劃部 / 車輛行銷室',at:'2026-05-22',docs:[
       {n:'ICSOP-SRC-101-2-00',name:'消金審核作業'}]},
-    {id:'uf4',name:'審查建議書.pdf',fmt:'pdf',size:'88 KB',by:'陳彥廷',dept:'企劃部 / 車輛行銷室',at:'2026-05-22',docs:[
+    {id:'uf4',formNumber:null,name:'審查建議書.pdf',fmt:'pdf',size:'88 KB',by:'陳彥廷',dept:'企劃部 / 車輛行銷室',at:'2026-05-22',docs:[
       {n:'ICSOP-SRC-101-2-00',name:'消金審核作業'}]},
-    {id:'uf5',name:'對保確認單.xlsx',fmt:'excel',size:'40 KB',by:'張家豪',dept:'作業服務部 / 文管室',at:'2026-04-18',docs:[
+    {id:'uf5',formNumber:'FM-021',name:'對保確認單.xlsx',fmt:'excel',size:'40 KB',by:'張家豪',dept:'作業服務部 / 文管室',at:'2026-04-18',docs:[
       {n:'ICSOP-SRC-102-1-01',name:'車輛分期對保作業'}]},
-    {id:'uf6',name:'撥款申請單.xlsx',fmt:'excel',size:'52 KB',by:'張家豪',dept:'作業服務部 / 文管室',at:'2026-04-18',docs:[
+    {id:'uf6',formNumber:null,name:'撥款申請單.xlsx',fmt:'excel',size:'52 KB',by:'張家豪',dept:'作業服務部 / 文管室',at:'2026-04-18',docs:[
       {n:'ICSOP-SRC-104-1-05',name:'作服撥款作業（車輛）'}]},
-    {id:'uf7',name:'本票確認檢核表.xlsx',fmt:'excel',size:'36 KB',by:'張家豪',dept:'作業服務部 / 文管室',at:'2026-04-18',docs:[]},
-    {id:'uf8',name:'OJT 訓練紀錄表.xlsx',fmt:'excel',size:'28 KB',by:'李慧玲',dept:'債權管理部 / 法催一室',at:'2026-03-30',docs:[
+    {id:'uf7',formNumber:'FM-033',name:'本票確認檢核表.xlsx',fmt:'excel',size:'36 KB',by:'張家豪',dept:'作業服務部 / 文管室',at:'2026-04-18',docs:[]},
+    {id:'uf8',formNumber:null,name:'OJT 訓練紀錄表.xlsx',fmt:'excel',size:'28 KB',by:'李慧玲',dept:'債權管理部 / 法催一室',at:'2026-03-30',docs:[
       {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業'},
       {n:'ICSOP-SRC-101-2-00',name:'消金審核作業'},
       {n:'ICSOP-SRC-104-1-05',name:'作服撥款作業（車輛）'}]}
@@ -266,7 +333,7 @@
         : `<span class="inline-flex items-center gap-1 text-xs text-slate-400"><i data-lucide="link-2-off" class="w-3 h-3"></i>未關聯</span>`;
       const detail = isOpen && n>0 ? `
         <tr class="bg-slate-50/70">
-          <td colspan="6" class="px-4 py-3">
+          <td colspan="7" class="px-4 py-3">
             <div class="text-xs text-slate-500 mb-2 flex items-center gap-1"><i data-lucide="corner-down-right" class="w-3.5 h-3.5"></i>使用此表單的 ICSOP 文件（${n}）</div>
             <div class="flex flex-col gap-1">
               ${f.docs.map(d=>`<button onclick="jumpDoc('${d.n}')" class="group flex items-center gap-2 text-left rounded-md px-2.5 py-1.5 hover:bg-white border border-transparent hover:border-slate-200">
@@ -278,6 +345,7 @@
         </tr>` : '';
       return `
       <tr class="hover:bg-slate-50">
+        <td class="px-4 py-3" data-form-number>${f.formNumber?`<span class="mono text-xs text-slate-700">${f.formNumber}</span>`:`<span class="text-slate-300" title="此表單未設定編號">—</span>`}</td>
         <td class="px-4 py-3"><div class="flex items-center gap-2"><i data-lucide="${f.fmt==='excel'?'file-spreadsheet':'file-text'}" class="w-4 h-4 text-slate-400 shrink-0"></i><span class="font-medium text-slate-800">${f.name}</span></div></td>
         <td class="px-4 py-3">${fmtBadge(f.fmt)}</td>
         <td class="px-4 py-3 text-slate-500 mono text-xs">${f.size}</td>
@@ -285,6 +353,7 @@
         <td class="px-4 py-3">${countCell}</td>
         <td class="px-4 py-3">
           <div class="flex items-center justify-start gap-1">
+            ${canWrite()?`<button onclick="openEditNumber('${f.id}')" data-edit-number="${f.id}" aria-label="編輯編號" title="編輯編號" class="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px] shrink-0"><i data-lucide="hash" class="w-3 h-3"></i>編輯編號</button>`:''}
             <button onclick="downloadForm('${f.id}')" title="下載" class="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"><i data-lucide="download" class="w-4 h-4"></i></button>
             ${n>0?`<button onclick="toggleExpand('${f.id}')" title="${isOpen?'收合關聯':'展開檢視關聯'}" class="w-8 h-8 rounded hover:bg-slate-100 text-slate-500 flex items-center justify-center"><i data-lucide="chevron-${isOpen?'up':'down'}" class="w-4 h-4"></i></button>`:''}
             <button onclick="overwriteForm('${f.id}')" title="更新／覆蓋上傳" class="write-only w-8 h-8 rounded hover:bg-amber-50 text-amber-600 flex items-center justify-center"><i data-lucide="upload" class="w-4 h-4"></i></button>
@@ -298,12 +367,74 @@
   function clearFilters(){document.getElementById('kw').value='';document.getElementById('fFmt').value='';renderTable();}
   function toggleExpand(id){ if(expanded.has(id))expanded.delete(id); else expanded.add(id); renderTable(); }
   function jumpDoc(n){ shellToast('前往文件 '+n+'（13-document-list / 16-document-readonly）'); }
+
+  /* ===== 🔴 「編輯編號」動作（F018 AC-D16～AC-D20）=====
+     形式＝**小 modal**（見本檔檔頭 delta 註）。**只改 formNumber、不碰檔案**。
+     AC-D17 權限：ICSOPAdmin 可寫；SysAdmin（本頁唯讀）／Supervisor／DeptContact／User **不渲染**該動作元件。
+     ⚠ 此處刻意**不用** .write-only（CSS `display:none`）而是**自 DOM 移除**——AC-D17 之驗證為
+        `queryByLabelText('編輯編號') === null`，Testing Library 之 *ByLabelText **找得到** display:none 之元素，
+        CSS 隱藏會使該斷言失敗。後端仍為權威（403 FIELD_WRITE_FORBIDDEN／PERMISSION_DENIED），前端隱藏僅為體驗優化。 */
+  function canWrite(){ return document.body.dataset.role==='icsop_admin'; }
+  let editingId=null;
+  function openEditNumber(id){
+    if(!canWrite()) return;
+    const f=FORMS.find(x=>x.id===id); if(!f) return;
+    editingId=id;
+    document.getElementById('enFormName').textContent=f.name;
+    document.getElementById('enNumber').value=f.formNumber||'';
+    hideEnErr();
+    const m=document.getElementById('editNumberModal'); m.classList.remove('hidden'); m.classList.add('flex');
+    lucide.createIcons(); document.getElementById('enNumber').focus();
+  }
+  // AC-D16：點「取消」關閉介面且該表單之 formNumber 不變
+  function closeEditNumber(){ editingId=null; const m=document.getElementById('editNumberModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+  function hideEnErr(){const e=document.getElementById('enNumberErr');e.classList.add('hidden');e.classList.remove('flex');document.getElementById('enNumber').classList.remove('border-red-500');}
+  function showEnErr(msg){const e=document.getElementById('enNumberErr');e.querySelector('span').textContent=msg;e.classList.remove('hidden');e.classList.add('flex');document.getElementById('enNumber').classList.add('border-red-500');lucide.createIcons();}
+  function submitEditNumber(){
+    if(!canWrite()||!editingId) return;
+    const f=FORMS.find(x=>x.id===editingId); if(!f) return;
+    hideEnErr();
+    const next=normalizeFormNumber(document.getElementById('enNumber').value);   // 空字串／純空白 → null（AC-D19）
+    // 驗證順序沿用 error-handling.md#usage-form-number：長度（400）先於唯一性（409）
+    if(next && next.length>100){
+      showEnErr('表單編號超過長度上限（100 字元）。');
+      toast('error','表單編號超過長度上限（100 字元）','USAGE_FORM_NUMBER_TOO_LONG · 400'); return;   // 該列不變
+    }
+    // AC-D18：唯一性比對**排除自身列**（值未變之再次儲存不視為衝突）；AC-D19：清空不觸發比對
+    if(isFormNumberDuplicate(next, f.id)){
+      showEnErr('表單編號已存在（比對前 trim、不分大小寫）。');
+      toast('error','表單編號「'+next+'」已存在，該列未變更','USAGE_FORM_NUMBER_DUPLICATE · 409'); return;
+    }
+    /* 🔴 AC-D20 副作用邊界：唯一改變者為 formNumber——
+       blobPath／format／size／name／uploadedBy／uploadedAt 六欄逐欄未變、Blob 位元組未讀未寫、
+       DOC_USAGE_FORM 之全部關聯未變；被 N ≥ 2 份文件引用時**不出現**覆蓋共用警示
+       （USAGE_FORM_OVERWRITE_SHARED 不得被觸發——本動作與覆蓋上傳是兩條完全不同之路徑）。
+       📌 本動作**不寫稽核**（AUDIT_LOG targetType 列舉無對應值）。 */
+    f.formNumber=next;
+    closeEditNumber(); renderTable();
+    toast('success', next?'已更新表單編號。':'已清除表單編號。');
+  }
   function downloadForm(id){ const f=FORMS.find(x=>x.id===id); toast('success','已下載表單「'+f.name+'」'); }
 
   /* ===== upload modal ===== */
-  function openUpload(){ picked=null; document.getElementById('upName').value=''; hideNameErr(); resetFilePreview(); const m=document.getElementById('upModal');m.classList.remove('hidden');m.classList.add('flex');lucide.createIcons(); }
+  function openUpload(){ picked=null; document.getElementById('upName').value=''; document.getElementById('upNumber').value=''; hideNameErr(); hideNumberErr(); resetFilePreview(); const m=document.getElementById('upModal');m.classList.remove('hidden');m.classList.add('flex');lucide.createIcons(); }
   function closeUpload(){const m=document.getElementById('upModal');m.classList.add('hidden');m.classList.remove('flex');}
   function hideNameErr(){const e=document.getElementById('upNameErr');e.classList.add('hidden');e.classList.remove('flex');document.getElementById('upName').classList.remove('border-red-500');}
+  /* 🔵 F018 表單編號之驗證（規格權威＝error-handling.md#usage-form-number）
+     · 輸入正規化先於一切驗證：一律 trim；trim 後為空／純空白／未提供者**收斂為 null**（空字串不得落地，AC-D2）。
+     · 驗證順序固定、不可調換（同時違反多項時僅回序位最前者）：
+       ① FILE_FORMAT_NOT_ALLOWED／FILE_SIZE_EXCEEDED → ② USAGE_FORM_NAME_TOO_LONG
+       → ③ USAGE_FORM_NUMBER_TOO_LONG（400，trim 後 > 100 字元）→ ④ USAGE_FORM_NUMBER_DUPLICATE（409）。
+     · 唯一性比對：trim 後、**不分大小寫**；null 不參與比對（多筆空編號可並存，AC-D5）；編輯時排除自身列。
+     · 覆蓋上傳（換檔）**不改變 formNumber**、不重驗唯一性。 */
+  function hideNumberErr(){const e=document.getElementById('upNumberErr');e.classList.add('hidden');e.classList.remove('flex');document.getElementById('upNumber').classList.remove('border-red-500');}
+  function showNumberErr(msg){const e=document.getElementById('upNumberErr');e.querySelector('span').textContent=msg;e.classList.remove('hidden');e.classList.add('flex');document.getElementById('upNumber').classList.add('border-red-500');lucide.createIcons();}
+  function normalizeFormNumber(v){ const s=(v==null?'':String(v)).trim(); return s?s:null; }
+  function isFormNumberDuplicate(num, selfId){
+    if(num==null) return false;                                   // AC-D5：null 不參與唯一性比對
+    const k=num.toLowerCase();
+    return FORMS.some(f=>f.id!==selfId && f.formNumber && f.formNumber.trim().toLowerCase()===k);
+  }
   function resetFilePreview(){
     document.getElementById('filePreview').classList.add('hidden');
     document.getElementById('fileErr').classList.add('hidden');
@@ -342,9 +473,20 @@
     }
     const name=document.getElementById('upName').value.trim();
     if(!name){const e=document.getElementById('upNameErr');e.classList.remove('hidden');e.classList.add('flex');document.getElementById('upName').classList.add('border-red-500');return;}
-    FORMS.unshift({id:'uf'+(++seq),name,fmt:picked.fmt,size:picked.size,by:'李慧玲',dept:'債權管理部 / 法催一室',at:'2026-07-16',docs:[]});
+    // ③ USAGE_FORM_NUMBER_TOO_LONG（400）→ ④ USAGE_FORM_NUMBER_DUPLICATE（409），順序不可調換
+    hideNumberErr();
+    const formNumber=normalizeFormNumber(document.getElementById('upNumber').value);
+    if(formNumber && formNumber.length>100){
+      showNumberErr('表單編號超過長度上限（100 字元）。');
+      toast('error','表單編號超過長度上限（100 字元）','USAGE_FORM_NUMBER_TOO_LONG · 400'); return;
+    }
+    if(isFormNumberDuplicate(formNumber,null)){
+      showNumberErr('表單編號已存在（比對前 trim、不分大小寫）。');
+      toast('error','表單編號「'+formNumber+'」已存在，未建立任何記錄、未上傳檔案','USAGE_FORM_NUMBER_DUPLICATE · 409'); return;
+    }
+    FORMS.unshift({id:'uf'+(++seq),formNumber,name,fmt:picked.fmt,size:picked.size,by:'李慧玲',dept:'債權管理部 / 法催一室',at:'2026-07-16',docs:[]});
     closeUpload(); renderTable();
-    toast('success','已上傳表單「'+name+'」（配發 UUID，初始關聯 0 份）');
+    toast('success','已上傳表單「'+name+'」'+(formNumber?('（表單編號 '+formNumber+'）'):'（未設定表單編號）')+'：配發 UUID，初始關聯 0 份');
   }
 
   /* ===== remove protection ===== */
@@ -403,7 +545,9 @@
       deptcontact:'部門窗口對「使用表單管理」為「無」。',
       user:'一般使用者無後台存取權。'
     }[r];
-    if(blocked){closeUpload();closeConfirm();}
+    if(blocked){closeUpload();closeConfirm();closeEditNumber();}
+    if(ro) closeEditNumber();                 // SysAdmin 為唯讀，關閉可能開著的編號編輯介面
+    renderTable();                            // AC-D17：重繪以套用「無寫入權即不渲染『編輯編號』」
     renderSidebar(); lucide.createIcons();
   }
 

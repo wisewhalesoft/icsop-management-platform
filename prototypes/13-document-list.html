@@ -2,6 +2,23 @@
 <!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
      本檔已套用：第 14 欄「循環別」改以 lifecycleDisplayName 呈現；循環別 combobox 之選項值由名稱字串改為 lifecycleId；樹狀圖第二入口之 ?lifecycleId= 改帶 lifecycleId。
      規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
+<!-- 🔴 2026-08-16 缺失／變更 delta（人類閘門已通過）——本檔已套用（規格權威＝F017 AC-D1～AC-D9）：
+     篩選由 9 項改為 **13 項**且順序全面重排，逐字為
+     制定公司／制定部門／制定室別／當責室長／狀態／程序書編號／程序書書名內／公告日期／
+     連結點程序書／附錄／使用表單／OJT／循環別。
+       · `公告日期` ＝起～迄區間（閉區間、兩端可空、announcedDate 為 null 者於任一端有值時排除，AC-D4）
+       · `OJT` ＝三值固定下拉（全部／有 OJT／無 OJT，AC-D5）
+       · `附錄`／`使用表單` ＝可搜尋下拉選具體一份（值＝appendixId／formId，AC-D6）
+         使用表單之選項 label ＝ `{編號} {名稱}`、無編號者僅名稱（F018 AC-D8）
+       · `程序書書名內` ＝可搜尋下拉（等值）＋可直接輸入（contains、不分大小寫）之**雙行為**（AC-D3）；
+         同時具備選取值與輸入值時**以選取值優先**，清除選取後所留之輸入文字始生效
+       · `當責室長` 之比對範圍由僅主要擴為 **主要 ∪ 次要**（AC-D7；與前台 F019 AC-D7 為同一語意之兩處斷言，不得只改一處）
+       · `狀態`／`OJT` 為固定值下拉（非 combobox）；其餘 10 項為可搜尋下拉
+     版面（OQ-D18-13 明文授權 ui-ux-designer 定稿）：桌面多列 grid 自動換行（md 2／lg 3／xl 4 欄）；
+     行動（< md）改以「篩選」觸發之底部 sheet，同 13 項同順序；提供「清除全部篩選」（AC-D8）。
+     🔒 **清單 14 欄之欄位集合、由左至右順序與各欄顯示規則逐項不變**（AC-D9 回歸鎖定）；
+        3 張統計卡、排序與分頁行為亦不變。
+     🔒 後台恆 RAW：本頁「檔案」欄之下載**不得**出現「此格式不支援浮水印」等前台燒錄標示（F020 AC-D4）。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -30,6 +47,8 @@
   body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
   /* table */
   .doctbl th,.doctbl td{white-space:nowrap;}
+  /* 行動版篩選底部 sheet（比照前台 03 之既有慣例） */
+  .sheet{transition:transform .3s ease;}
   /* mini DAG */
   .dagnode{border:1px solid #CFDFF3;background:#F8FAFC;color:#475569;}
   .dagnode.active{border-color:#365C97;background:#EAF1FA;color:#2A4A7E;box-shadow:0 0 0 3px rgba(152,182,228,.45);font-weight:600;}
@@ -39,10 +58,10 @@
 
 <!-- ===== Admin shell sidebar ===== -->
 <aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-50 bg-white border-r border-slate-200 flex flex-col">
-  <div class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0">
+  <a href="07-admin-shell.html" data-to="/admin" aria-label="回到後台首頁" title="回到後台首頁" class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600">
     <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
     <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
-  </div>
+  </a>
   <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
   <div class="border-t border-slate-200 p-2 shrink-0">
     <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
@@ -55,7 +74,7 @@
   <div class="h-14 px-4 flex items-center gap-3">
     <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
     <div class="leading-tight min-w-0">
-      <div class="text-xs text-slate-400 flex items-center gap-1"><span>ICSOP 文件管理</span><i data-lucide="chevron-right" class="w-3 h-3"></i><span>程序書清單</span></div>
+      <div class="text-xs text-slate-400 flex items-center gap-1"><a href="13-document-list.html" data-to="/admin/documents" class="hover:text-primary-700 hover:underline focus:outline-none focus:ring-2 focus:ring-primary-600 rounded">ICSOP 文件管理</a><i data-lucide="chevron-right" class="w-3 h-3"></i><span>程序書清單</span></div>
       <div class="font-semibold text-slate-900 text-sm truncate">後台程序書清單</div>
     </div>
     <div class="ml-auto flex items-center gap-2">
@@ -107,16 +126,29 @@
     </div>
   </div>
 
-  <!-- ===== 9 個可搜尋下拉篩選 ===== -->
-  <div class="bg-white border border-slate-200 rounded-xl p-4 mb-4">
+  <!-- ===== 🔴 13 個篩選（F017 AC-D1；2026-08-16 delta，由 9 項改為 13 項且順序全面重排）=====
+       順序（桌面：由左至右、逐列換行；行動 sheet：由上而下）逐字為
+       制定公司／制定部門／制定室別／當責室長／狀態／程序書編號／程序書書名內／公告日期／
+       連結點程序書／附錄／使用表單／OJT／循環別。各控制項之無障礙名稱即為上列逐字字串。
+       版面收納方式（多列 grid／行動底部 sheet／清除全部篩選）＝ OQ-D18-13 明文授權 ui-ux-designer 定稿：
+       · 桌面（≥ md）：卡片內多列 grid 自動換行（md 2 欄／lg 3 欄／xl 4 欄），13 項佔 4 列。
+       · 行動（< md）：改以「篩選」觸發之**底部 sheet**（比照前台 03 之既有慣例），同 13 項、同順序。
+       🔒 清單 14 欄之欄位集合、順序與顯示規則一律不變（AC-D9 回歸鎖定，本 delta 僅動篩選）。 -->
+  <div class="flex items-center gap-2 mb-3 md:hidden">
+    <button onclick="openSheet()" class="relative px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm flex items-center gap-1.5">
+      <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>篩選<span id="filterDot" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary-600"></span>
+    </button>
+    <span id="countTextM" class="ml-auto text-sm text-slate-500"></span>
+  </div>
+  <div class="hidden md:block bg-white border border-slate-200 rounded-xl p-4 mb-4">
     <div class="flex items-center gap-2 mb-3">
       <i data-lucide="filter" class="w-4 h-4 text-slate-400"></i>
       <span class="text-sm font-medium text-slate-600">篩選條件</span>
       <span class="text-xs text-slate-400">（可輸入關鍵字過濾）</span>
-      <button id="clearBtn" onclick="clearFilters()" class="hidden ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-primary-600 hover:bg-primary-50"><i data-lucide="x" class="w-3.5 h-3.5"></i>清除全部</button>
+      <button id="clearBtn" onclick="clearFilters()" class="hidden ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-primary-600 hover:bg-primary-50"><i data-lucide="x" class="w-3.5 h-3.5"></i>清除全部篩選</button>
       <span id="countText" class="ml-auto text-sm text-slate-500"></span>
     </div>
-    <div id="filterBar" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3"></div>
+    <div id="filterBar" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"></div>
   </div>
 
   <!-- ===== 表格 ===== -->
@@ -158,6 +190,22 @@
     </div>
   </div>
 </main>
+
+<!-- ===== 行動版篩選底部 sheet（F017 AC-D1：同 13 項、同順序、由上而下）===== -->
+<div id="sheetOverlay" class="fixed inset-0 z-40 hidden bg-slate-900/40" onclick="closeSheet()"></div>
+<div id="sheet" class="sheet fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl translate-y-full max-h-[80vh] overflow-auto">
+  <div class="flex items-center justify-between px-4 h-14 border-b border-slate-100 sticky top-0 bg-white">
+    <h3 class="font-semibold text-slate-900">篩選條件</h3>
+    <button onclick="closeSheet()" aria-label="關閉篩選" class="text-slate-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+  </div>
+  <div class="p-4 space-y-4">
+    <div id="filterSheetBody" class="space-y-4"></div>
+    <div class="flex gap-2 pt-2">
+      <button onclick="clearFilters();closeSheet()" class="flex-1 py-2.5 rounded-lg border border-slate-300 text-sm">清除全部篩選</button>
+      <button onclick="closeSheet()" class="flex-1 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium">套用</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== 樹狀圖（循環預覽）modal ===== -->
 <div id="treeModal" class="fixed inset-0 z-[55] hidden items-center justify-center bg-slate-900/40 p-4">
@@ -201,13 +249,20 @@
     {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
   ];
   const CURRENT_MODULE='document';
+  /* 🔵 F002 AC-D1／AC-D5（2026-08-16 delta）：側欄最上方「首頁」項。
+     刻意**不放進 MENU**——它不對映任何 F025 功能鍵、不經 canPerform 過濾，
+     F025 功能矩陣逐格未動、未新增「首頁」列（AC-D5 回歸鎖定）。 */
+  const HOME_ITEM={id:'home',label:'首頁',icon:'layout-dashboard',route:'/admin',href:'07-admin-shell.html'};
   function renderSidebar(){
     const role=document.body.dataset.role;
     const items=MENU.filter(m=>m.roles[role]);
-    document.getElementById('sidebarNav').innerHTML = items.length? items.map(m=>{
+    // 🔵 F002 AC-D1（2026-08-16 delta）：「首頁」恆為第一項、不經 F025 角色過濾（四種管理類角色一律顯示）
+    const showHome = role!=='user', homeActive = CURRENT_MODULE==='home';
+    const homeHtml = showHome ? `<a href="${HOME_ITEM.href}" data-to="${HOME_ITEM.route}" title="${HOME_ITEM.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${homeActive?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${HOME_ITEM.icon}" class="w-4 h-4 shrink-0 ${homeActive?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${HOME_ITEM.label}</span></a>` : '';
+    document.getElementById('sidebarNav').innerHTML = homeHtml + (items.length? items.map(m=>{
       const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
       return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
-    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`);
     lucide.createIcons();
   }
   function navTo(id,label){ if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;} shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型本輪未含此頁）')); return false; }
@@ -261,21 +316,21 @@
      edition 版次 / summary 內容摘要 / links 連結點程序書[] / date 公告日期 /
      lcId 循環別（＝lifecycleId；顯示字串一律由 lifecycleDisplayName 產生，F040 AC-S1） */
   const DOCS=[
-    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'消金審核作業_v2.0.pdf',node:'進件作業',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業'],date:'2025-12-01',lcId:'lc1'},
-    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'企業金融授信作業_v1.0.pdf',node:'企金案件受理作業',num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。',links:[],date:'2026-06-01',lcId:'lc10'},
-    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期特約通路作業_v1.2.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',edition:"25'10",summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。',links:[],date:'2025-10-01',lcId:'lc1'},
-    {company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],status:'有效',pdf:'車輛分期進件作業_v1.3.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',links:['ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-102-1-01 車輛分期對保作業'],date:'2026-01-01',lcId:'lc1'},
-    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期產品政策及規範作業_v1.0.pdf',node:null,num:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',edition:"26'03",summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。',links:[],date:'2026-09-01',lcId:'lc3'},
-    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期月目標設定作業_v1.1.pdf',node:'目標制定作業',num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',edition:"26'04",summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。',links:[],date:'2026-08-15',lcId:'lc3'},
-    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'費用請款作業_v2.1.pdf',node:'費用請款作業',num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。',links:[],date:'2026-05-01',lcId:'lc2'},
-    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'有效',pdf:'招募管理作業_v1.4.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-02',name:'招募管理作業',edition:"25'09",summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。',links:[],date:'2025-10-01',lcId:'lc4'},
-    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'短期投資買賣保管及會計作業_v1.0.pdf',node:'短期投資作業',num:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',edition:"26'05",summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。',links:[],date:'2026-10-01',lcId:'lc7'},
-    {company:'和潤企業股份有限公司',dept:'經企公關部',section:'法遵及公司治理室',chief:'劉家瑋（經企公關部 法遵及公司治理室 室長）',sec:[],status:'有效',pdf:'法遵作業_v1.2.pdf',node:'法遵作業',num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。',links:[],date:'2026-03-01',lcId:'lc9'},
-    {company:'和潤企業股份有限公司',dept:'管理部',section:'總務室',chief:'蔡明哲（管理部 總務室 室長）',sec:[],status:'有效',pdf:'不動產請購採購驗收作業_v1.0.pdf',node:'資產管理作業',num:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',edition:"25'08",summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。',links:[],date:'2025-10-01',lcId:'lc6'},
-    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'銀行融資作業_v1.1.pdf',node:'銀行融資作業',num:'ICSOP-FC-101-1-00',name:'銀行融資作業',edition:"26'01",summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。',links:[],date:'2026-02-01',lcId:'lc5'},
-    {company:'和潤企業股份有限公司',dept:'資訊部',section:'應用發展室',chief:'許志偉（資訊部 應用發展室 室長）',sec:[],status:'有效',pdf:'使用者權限管理與覆核_v1.3.pdf',node:'使用者權限管理',num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',edition:"26'01",summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。',links:[],date:'2026-04-01',lcId:'lc8'},
-    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'失效',pdf:'消費分期進件作業_舊版.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',edition:"24'03",summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。',links:[],date:'2025-05-01',lcId:'lc1'},
-    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'作廢',pdf:'任用管理作業_作廢.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',edition:"24'01",summary:'（作廢）任用管理作業，因組織調整不再適用。',links:[],date:'2025-04-01',lcId:'lc4'}
+    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'消金審核作業_v2.0.pdf',node:'進件作業',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業'],date:'2025-12-01',lcId:'lc1',appx:['ax3','ax4','ax8'],forms:['uf3','uf4','uf8'],ojt:true},
+    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'企業金融授信作業_v1.0.pdf',node:'企金案件受理作業',num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。',links:[],date:'2026-06-01',lcId:'lc10',appx:[],forms:[],ojt:false},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期特約通路作業_v1.2.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',edition:"25'10",summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。',links:[],date:'2025-10-01',lcId:'lc1',appx:['ax1'],forms:['uf1'],ojt:false},
+    {company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],status:'有效',pdf:'車輛分期進件作業_v1.3.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',links:['ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-102-1-01 車輛分期對保作業'],date:'2026-01-01',lcId:'lc1',appx:['ax1','ax2','ax8'],forms:['uf1','uf2','uf8'],ojt:true},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期產品政策及規範作業_v1.0.pdf',node:null,num:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',edition:"26'03",summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。',links:[],date:'2026-09-01',lcId:'lc3',appx:[],forms:[],ojt:false},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期月目標設定作業_v1.1.pdf',node:'目標制定作業',num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',edition:"26'04",summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。',links:[],date:'2026-08-15',lcId:'lc3',appx:[],forms:[],ojt:false},
+    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'費用請款作業_v2.1.pdf',node:'費用請款作業',num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。',links:[],date:'2026-05-01',lcId:'lc2',appx:[],forms:[],ojt:false},
+    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'有效',pdf:'招募管理作業_v1.4.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-02',name:'招募管理作業',edition:"25'09",summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。',links:[],date:'2025-10-01',lcId:'lc4',appx:['ax7'],forms:[],ojt:true},
+    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'短期投資買賣保管及會計作業_v1.0.pdf',node:'短期投資作業',num:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',edition:"26'05",summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。',links:[],date:'2026-10-01',lcId:'lc7',appx:[],forms:[],ojt:false},
+    {company:'和潤企業股份有限公司',dept:'經企公關部',section:'法遵及公司治理室',chief:'劉家瑋（經企公關部 法遵及公司治理室 室長）',sec:[],status:'有效',pdf:'法遵作業_v1.2.pdf',node:'法遵作業',num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。',links:[],date:'2026-03-01',lcId:'lc9',appx:[],forms:[],ojt:false},
+    {company:'和潤企業股份有限公司',dept:'管理部',section:'總務室',chief:'蔡明哲（管理部 總務室 室長）',sec:[],status:'有效',pdf:'不動產請購採購驗收作業_v1.0.pdf',node:'資產管理作業',num:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',edition:"25'08",summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。',links:[],date:'2025-10-01',lcId:'lc6',appx:[],forms:[],ojt:false},
+    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'銀行融資作業_v1.1.pdf',node:'銀行融資作業',num:'ICSOP-FC-101-1-00',name:'銀行融資作業',edition:"26'01",summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。',links:[],date:'2026-02-01',lcId:'lc5',appx:[],forms:[],ojt:false},
+    {company:'和潤企業股份有限公司',dept:'資訊部',section:'應用發展室',chief:'許志偉（資訊部 應用發展室 室長）',sec:[],status:'有效',pdf:'使用者權限管理與覆核_v1.3.pdf',node:'使用者權限管理',num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',edition:"26'01",summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。',links:[],date:'2026-04-01',lcId:'lc8',appx:[],forms:[],ojt:false},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'失效',pdf:'消費分期進件作業_舊版.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',edition:"24'03",summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。',links:[],date:'2025-05-01',lcId:'lc1',appx:[],forms:['uf1'],ojt:false},
+    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'作廢',pdf:'任用管理作業_作廢.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',edition:"24'01",summary:'（作廢）任用管理作業，因組織調整不再適用。',links:[],date:'2025-04-01',lcId:'lc4',appx:[],forms:[],ojt:false}
   ];
 
   /* ===== 衍生狀態 ===== */
@@ -289,66 +344,134 @@
     return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style="color:${t};background:${b}"><i data-lucide="${ic}" class="w-3 h-3"></i>${s}</span>`;
   }
 
-  /* ===== 9 個可搜尋下拉篩選 ===== */
-  const uniq=a=>[...new Set(a)];
-  const FILTER={cycle:'',status:'',num:'',name:'',dept:'',section:'',chief:'',company:'',link:''};
+  /* ===== 附錄池／使用表單池（篩選選項來源；與 24／19 之池資料逐筆一致）=====
+     🔵 F018 AC-D1／AC-D8（2026-08-16 additive delta）：USAGE_FORM_POOL 新增**選填、唯一**之 formNumber。
+        後台文件清單「使用表單」篩選下拉之選項 label ＝ `{編號} {名稱}`（兩者間恰一個半形空格）；
+        formNumber 為 null 者 label **僅為名稱**（不得出現前導空格、`null` 或 `—`）；選項值**恆為 formId**。 */
+  const APPENDIX_POOL=[
+    {id:'ax1',name:'作業流程對照表.xlsx'},{id:'ax2',name:'名詞定義說明.pdf'},
+    {id:'ax3',name:'風險等級對照附表.xlsx'},{id:'ax4',name:'徵審評分範例.pdf'},
+    {id:'ax5',name:'對保作業附註.pdf'},{id:'ax6',name:'撥款時程附表.xlsx'},
+    {id:'ax7',name:'法規引用清單.pdf'},{id:'ax8',name:'共用名詞附錄.xlsx'}
+  ];
+  const USAGE_FORM_POOL=[
+    {id:'uf1',formNumber:'FM-001',name:'進件申請書.xlsx'},
+    {id:'uf2',formNumber:null,    name:'支票託收登記表.xlsx'},
+    {id:'uf3',formNumber:'FM-014',name:'徵信照會表.pdf'},
+    {id:'uf4',formNumber:null,    name:'審查建議書.pdf'},
+    {id:'uf5',formNumber:'FM-021',name:'對保確認單.xlsx'},
+    {id:'uf6',formNumber:null,    name:'撥款申請單.xlsx'},
+    {id:'uf7',formNumber:'FM-033',name:'本票確認檢核表.xlsx'},
+    {id:'uf8',formNumber:null,    name:'OJT 訓練紀錄表.xlsx'}
+  ];
+  const apxName=id=>(APPENDIX_POOL.find(a=>a.id===id)||{}).name||'';
+  // F018 AC-D8：`{編號} {名稱}`；無編號者僅名稱
+  const formLabel=id=>{const f=USAGE_FORM_POOL.find(x=>x.id===id); if(!f) return ''; return f.formNumber?`${f.formNumber} ${f.name}`:f.name;};
+
+  /* ===== 🔴 13 個篩選（F017 AC-D1～AC-D8；2026-08-16 delta）=====
+     順序逐字＝制定公司／制定部門／制定室別／當責室長／狀態／程序書編號／程序書書名內／公告日期／
+              連結點程序書／附錄／使用表單／OJT／循環別；各控制項之無障礙名稱即為該逐字字串。
+     控制項型態（AC-D2）：
+       combo  ＝ 可搜尋下拉（10 項）
+       select ＝ 固定值下拉（`狀態`、`OJT` 兩項——**非** combobox）
+       range  ＝ 起／迄兩個日期輸入（`公告日期`——非下拉） */
+  const uniq=a=>[...new Set(a)].filter(v=>v!==''&&v!=null);
+  const FILTER={company:'',dept:'',section:'',chief:'',status:'',num:'',name:'',dateFrom:'',dateTo:'',link:'',appx:'',form:'',ojt:'全部',cycle:''};
+  // `程序書書名內` 之雙行為（AC-D3）：selected 值放 FILTER.name（等值、優先）；
+  // 使用者直接輸入而未選取者放 NAME_TEXT（contains、不分大小寫）。清除選取後所留之輸入文字始生效。
+  let NAME_TEXT='';
   const FILTERS=[
+    {key:'company',label:'制定公司',      type:'combo', opts:()=>uniq(DOCS.map(d=>d.company))},
+    {key:'dept',   label:'制定部門',      type:'combo', opts:()=>uniq(DOCS.map(d=>d.dept))},
+    {key:'section',label:'制定室別',      type:'combo', opts:()=>uniq(DOCS.map(d=>d.section))},
+    // 🔴 AC-D7：選項＝全體文件之 primaryChiefId ∪ secondaryChiefIds 之 distinct（主要∪次要）
+    {key:'chief',  label:'當責室長',      type:'combo', opts:()=>uniq(DOCS.flatMap(d=>[d.chief,...d.sec]).map(shortName))},
+    // 固定值下拉：「全部」＝不施加限制（值為空字串）；四個衍生狀態值之語意不變
+    {key:'status', label:'狀態',          type:'select',opts:()=>[{v:'',t:'全部'},{v:'已公告',t:'已公告'},{v:'進度中',t:'進度中'},{v:'失效',t:'失效'},{v:'作廢',t:'作廢'}]},
+    {key:'num',    label:'程序書編號',    type:'combo', opts:()=>uniq(DOCS.map(d=>d.num))},
+    {key:'name',   label:'程序書書名內',  type:'combo', opts:()=>uniq(DOCS.map(d=>d.name)), free:true},
+    {key:'date',   label:'公告日期',      type:'range'},
+    {key:'link',   label:'連結點程序書',  type:'combo', opts:()=>uniq([].concat(...DOCS.map(d=>d.links)))},
+    // 附錄／使用表單＝選具體一份；值分別為 appendixId／formId（非名稱字串）
+    {key:'appx',   label:'附錄',          type:'combo', opts:()=>APPENDIX_POOL.map(a=>a.id),   optLabel:id=>apxName(id)},
+    {key:'form',   label:'使用表單',      type:'combo', opts:()=>USAGE_FORM_POOL.map(f=>f.id), optLabel:id=>formLabel(id)},
+    // AC-D5：三值下拉，選項文字逐字為 `全部`（預設，不施加限制）／`有 OJT`／`無 OJT`
+    {key:'ojt',    label:'OJT',           type:'select',opts:()=>[{v:'全部',t:'全部'},{v:'有 OJT',t:'有 OJT'},{v:'無 OJT',t:'無 OJT'}]},
     // 循環別：選項值＝lifecycleId、顯示＝lifecycleDisplayName（F040 AC-31／F017 AC-S2）
     // 「銷售及收款循環（消金／企金／子公司）」為三個相異選項，選定其一僅回傳該具體循環之文件
-    {key:'cycle',   label:'循環別',      opts:()=>LIFECYCLE_POOL.map(l=>l.id), optLabel:id=>lcName(id)},
-    {key:'status',  label:'狀態',        opts:()=>['已公告','進度中','失效','作廢']},
-    {key:'num',     label:'程序書編號',  opts:()=>DOCS.map(d=>d.num)},
-    {key:'name',    label:'程序書書名',  opts:()=>DOCS.map(d=>d.name)},
-    {key:'dept',    label:'制定部門',    opts:()=>uniq(DOCS.map(d=>d.dept))},
-    {key:'section', label:'制定室別',   opts:()=>uniq(DOCS.map(d=>d.section).filter(Boolean))},
-    {key:'chief',   label:'當責室長',    opts:()=>uniq(DOCS.map(d=>shortName(d.chief)))},
-    {key:'company', label:'制定公司',    opts:()=>uniq(DOCS.map(d=>d.company))},
-    {key:'link',    label:'連結點程序書',opts:()=>uniq([].concat(...DOCS.map(d=>d.links)))}
+    {key:'cycle',  label:'循環別',        type:'combo', opts:()=>LIFECYCLE_POOL.map(l=>l.id),  optLabel:id=>lcName(id)}
   ];
   const cbCfg=k=>FILTERS.find(f=>f.key===k);
+  // 選項「值」與「顯示字串」分離：循環別＝lifecycleId／附錄＝appendixId／使用表單＝formId
+  const optText=(key,v)=>{const c=cbCfg(key);return c&&c.optLabel?c.optLabel(v):v;};
 
+  function controlHtml(f,scope){
+    const id=`${scope}_${f.key}`;
+    if(f.type==='select'){
+      return `<div>
+        <label for="${id}" class="block text-[11px] font-medium text-slate-500 mb-1">${f.label}</label>
+        <select id="${id}" aria-label="${f.label}" onchange="pickSelect('${f.key}',this.value)" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600">
+          ${f.opts().map(o=>`<option value="${esc(o.v)}" ${FILTER[f.key]===o.v?'selected':''}>${esc(o.t)}</option>`).join('')}
+        </select></div>`;
+    }
+    if(f.type==='range'){
+      // AC-D4：閉區間（含起日、含迄日）、兩端皆可留空；announcedDate 為 null 者於任一端有值時一律排除
+      return `<div>
+        <span class="block text-[11px] font-medium text-slate-500 mb-1">${f.label}</span>
+        <div role="group" aria-label="${f.label}" class="flex items-center gap-1.5">
+          <input id="${id}_from" type="date" aria-label="${f.label} 起日" value="${esc(FILTER.dateFrom)}" onchange="pickDate('from',this.value)" class="min-w-0 flex-1 px-2 py-2 rounded-md border border-slate-300 text-sm mono focus:outline-none focus:ring-2 focus:ring-primary-600" />
+          <span class="text-slate-400 text-xs shrink-0">～</span>
+          <input id="${id}_to" type="date" aria-label="${f.label} 迄日" value="${esc(FILTER.dateTo)}" onchange="pickDate('to',this.value)" class="min-w-0 flex-1 px-2 py-2 rounded-md border border-slate-300 text-sm mono focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        </div></div>`;
+    }
+    const shown = FILTER[f.key] ? optText(f.key,FILTER[f.key]) : (f.free?NAME_TEXT:'');
+    return `<div>
+      <label for="${id}_input" class="block text-[11px] font-medium text-slate-500 mb-1">${f.label}</label>
+      <div class="relative">
+        <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+        <input id="${id}_input" aria-label="${f.label}" role="combobox" aria-expanded="false" aria-autocomplete="list" autocomplete="off"
+               placeholder="${f.free?'全部（或直接輸入部分書名）':'全部'}" value="${esc(shown)}"
+               oninput="comboInput('${f.key}','${scope}')" onfocus="comboFilter('${f.key}','${scope}')" onblur="comboClose('${f.key}','${scope}')"
+               class="w-full pl-8 pr-7 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <button id="${id}_clear" onclick="clearOne('${f.key}')" aria-label="清除${f.label}" class="${FILTER[f.key]?'':'hidden'} absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400"><i data-lucide="x" class="w-3 h-3"></i></button>
+        <div id="${id}_list" class="hidden absolute z-30 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
+      </div></div>`;
+  }
   function buildFilters(){
-    document.getElementById('filterBar').innerHTML = FILTERS.map(f=>`
-      <div>
-        <label class="block text-[11px] font-medium text-slate-500 mb-1">${f.label}</label>
-        <div class="relative">
-          <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
-          <input id="cb_${f.key}_input" oninput="comboFilter('${f.key}')" onfocus="comboFilter('${f.key}')" onblur="comboClose('${f.key}')" autocomplete="off" placeholder="全部"
-                 class="w-full pl-8 pr-7 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
-          <button id="cb_${f.key}_clear" onclick="clearOne('${f.key}')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400"><i data-lucide="x" class="w-3 h-3"></i></button>
-          <div id="cb_${f.key}_list" class="hidden absolute z-30 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
-        </div>
-      </div>`).join('');
+    document.getElementById('filterBar').innerHTML       = FILTERS.map(f=>controlHtml(f,'cbD')).join('');
+    document.getElementById('filterSheetBody').innerHTML = FILTERS.map(f=>controlHtml(f,'cbM')).join('');
     lucide.createIcons();
   }
-  function comboFilter(key){ const list=document.getElementById('cb_'+key+'_list'); list.classList.remove('hidden'); comboRender(key,document.getElementById('cb_'+key+'_input').value); }
-  function comboClose(key){ setTimeout(()=>{const l=document.getElementById('cb_'+key+'_list'); if(l)l.classList.add('hidden');},150); }
-  // 選項「值」與「顯示字串」分離：循環別之值＝lifecycleId、顯示＝lifecycleDisplayName；其餘篩選兩者同一
-  const optText=(key,v)=>{const c=cbCfg(key);return c.optLabel?c.optLabel(v):v;};
-  function comboRender(key,filter){
-    const f=(filter||'').trim().toLowerCase();
-    const list=document.getElementById('cb_'+key+'_list');
-    const opts=cbCfg(key).opts();
-    const items=opts.filter(o=>optText(key,o).toLowerCase().includes(f));
+  function comboInput(key,scope){
+    // AC-D3 之「輸入」分支：僅 `程序書書名內` 具 contains 行為；其餘僅作為選項過濾用之輸入
+    if(cbCfg(key).free){ NAME_TEXT=document.getElementById(`${scope}_${key}_input`).value; renderTable(); }
+    comboFilter(key,scope);
+  }
+  function comboFilter(key,scope){
+    const list=document.getElementById(`${scope}_${key}_list`); list.classList.remove('hidden');
+    const kw=(document.getElementById(`${scope}_${key}_input`).value||'').trim().toLowerCase();
+    const items=cbCfg(key).opts().filter(o=>optText(key,o).toLowerCase().includes(kw));
     list.innerHTML = items.length ? items.map(o=>{
       const sel=FILTER[key]===o, label=optText(key,o);
       return `<div class="combo-opt px-3 py-2 cursor-pointer hover:bg-primary-50 ${sel?'bg-primary-50 text-primary-700 font-medium':''}" data-v="${esc(o)}">${esc(label)}${sel?' ✓':''}</div>`;
     }).join('') : `<div class="px-3 py-2 text-slate-400">查無符合結果</div>`;
     list.querySelectorAll('.combo-opt').forEach(el=>el.addEventListener('mousedown',e=>{e.preventDefault();comboPick(key,el.dataset.v);}));
   }
-  function comboPick(key,v){
-    FILTER[key]=v;
-    const inp=document.getElementById('cb_'+key+'_input'); inp.value=optText(key,v);
-    document.getElementById('cb_'+key+'_list').classList.add('hidden');
-    document.getElementById('cb_'+key+'_clear').classList.remove('hidden');
-    renderTable();
+  function comboClose(key,scope){ setTimeout(()=>{const l=document.getElementById(`${scope}_${key}_list`); if(l)l.classList.add('hidden');},150); }
+  function comboPick(key,v){ FILTER[key]=v; if(cbCfg(key).free) NAME_TEXT=''; buildFilters(); renderTable(); }
+  // 清除選取後，`程序書書名內` 之輸入文字（若有）始生效為 contains（見 Edge Cases）
+  function clearOne(key){ FILTER[key]=''; buildFilters(); renderTable(); }
+  function pickSelect(key,v){ FILTER[key]=v; renderTable(); }
+  function pickDate(which,v){ if(which==='from') FILTER.dateFrom=v; else FILTER.dateTo=v; buildFilters(); renderTable(); }
+  /* 🔴 F017 AC-D8：清除全部篩選＝**13 項篩選與關鍵字同時清空**、清單回復未篩選狀態與預設排序、分頁回第 1 頁。 */
+  function clearFilters(){
+    Object.keys(FILTER).forEach(k=>{FILTER[k]='';});
+    FILTER.ojt='全部'; NAME_TEXT='';
+    buildFilters(); renderTable();
   }
-  function clearOne(key){
-    FILTER[key]=''; document.getElementById('cb_'+key+'_input').value='';
-    document.getElementById('cb_'+key+'_clear').classList.add('hidden');
-    renderTable();
-  }
-  function clearFilters(){ Object.keys(FILTER).forEach(k=>{FILTER[k]='';const i=document.getElementById('cb_'+k+'_input');if(i)i.value='';const c=document.getElementById('cb_'+k+'_clear');if(c)c.classList.add('hidden');}); renderTable(); }
+  function openSheet(){document.getElementById('sheetOverlay').classList.remove('hidden');document.getElementById('sheet').classList.remove('translate-y-full');}
+  function closeSheet(){document.getElementById('sheetOverlay').classList.add('hidden');document.getElementById('sheet').classList.add('translate-y-full');}
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
 
   /* ===== 表格 ===== */
   function fileBtn(name,wm){
@@ -364,17 +487,32 @@
   }
 
   function renderTable(){
+    /* 🔴 F017 AC-D2：13 項之比對語意；未提供者不施加限制；多項並用為 AND。 */
     const rows=DOCS.filter(d=>{
       const ds=derived(d);
-      if(FILTER.cycle && d.lcId!==FILTER.cycle) return false;   // 以 lifecycleId 比對：同名另一子分類之文件不納入
-      if(FILTER.status && ds!==FILTER.status) return false;
-      if(FILTER.num && d.num!==FILTER.num) return false;
-      if(FILTER.name && d.name!==FILTER.name) return false;
-      if(FILTER.dept && d.dept!==FILTER.dept) return false;
-      if(FILTER.section && d.section!==FILTER.section) return false;
-      if(FILTER.chief && shortName(d.chief)!==FILTER.chief) return false;
-      if(FILTER.company && d.company!==FILTER.company) return false;
-      if(FILTER.link && !d.links.includes(FILTER.link)) return false;
+      if(FILTER.company && d.company!==FILTER.company) return false;                       // 1 等值
+      if(FILTER.dept && d.dept!==FILTER.dept) return false;                                // 2 等值
+      if(FILTER.section && d.section!==FILTER.section) return false;                       // 3 等值
+      // 4 🔴 AC-D7：當責室長＝**主要 ∪ 次要**，命中任一即納入（與前台 F019 AC-D7 同語意，不得只改一處）
+      if(FILTER.chief && ![d.chief,...d.sec].map(shortName).includes(FILTER.chief)) return false;
+      if(FILTER.status && ds!==FILTER.status) return false;                                // 5 衍生顯示值
+      if(FILTER.num && d.num!==FILTER.num) return false;                                   // 6 等值
+      // 7 AC-D3 雙行為：選取值（等值）優先；未選取而直接輸入者為 contains、不分大小寫
+      if(FILTER.name){ if(d.name!==FILTER.name) return false; }
+      else if(NAME_TEXT.trim() && !d.name.toLowerCase().includes(NAME_TEXT.trim().toLowerCase())) return false;
+      // 8 AC-D4 公告日期閉區間（含起日、含迄日）；announcedDate 為 null 者於任一端有值時**一律排除**
+      if(FILTER.dateFrom || FILTER.dateTo){
+        if(!d.date) return false;
+        if(FILTER.dateFrom && d.date < FILTER.dateFrom) return false;
+        if(FILTER.dateTo   && d.date > FILTER.dateTo) return false;
+      }
+      if(FILTER.link && !d.links.includes(FILTER.link)) return false;                      // 9 既有 linkTargetId
+      if(FILTER.appx && !(d.appx||[]).includes(FILTER.appx)) return false;                 // 10 DOC_APPENDIX 含該 appendixId
+      if(FILTER.form && !(d.forms||[]).includes(FILTER.form)) return false;                // 11 DOC_USAGE_FORM 含該 formId
+      // 12 AC-D5：OJT 三值（存在／不存在 DOCUMENT_ATTACHMENT.type='OJT_SIGNIN'）
+      if(FILTER.ojt==='有 OJT' && !d.ojt) return false;
+      if(FILTER.ojt==='無 OJT' && d.ojt) return false;
+      if(FILTER.cycle && d.lcId!==FILTER.cycle) return false;   // 13 以 lifecycleId 比對：同名另一子分類之文件不納入
       return true;
     });
     // 統計卡片（衍生數，依目前篩選結果）
@@ -386,8 +524,11 @@
     document.getElementById('pageInfo').textContent=`共 ${rows.length} 筆 · 每頁 50 筆`;
     document.getElementById('emptyState').classList.toggle('hidden',rows.length>0);
     document.getElementById('pager').style.display=rows.length>0?'flex':'none';
-    const anyFilter=Object.values(FILTER).some(v=>v);
+    // `OJT` 之預設值「全部」＝不施加限制，故不計入「已套用篩選」之判定
+    const anyFilter=Object.entries(FILTER).some(([k,v])=>v && !(k==='ojt'&&v==='全部')) || !!NAME_TEXT.trim();
     document.getElementById('clearBtn').classList.toggle('hidden',!anyFilter);
+    document.getElementById('countTextM').textContent=`共 ${rows.length} 筆`;
+    document.getElementById('filterDot').classList.toggle('hidden',!anyFilter);
 
     document.getElementById('tbody').innerHTML=rows.map((d,i)=>{
       const nodeWarn = d.node?'':`<span title="尚未指派節點" class="inline-flex items-center"><i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-amber-500"></i></span>`;
