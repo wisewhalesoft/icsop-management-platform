@@ -204,3 +204,40 @@ F011 於 `feature-status.md` 標記**完全未做**（⬜）：無 `PATCH /admin
 - **OQ-F011-04（阻擋，與 F012 共用，定義於 F012-test.md）：F011 AC「觸發稽核記錄」之落地機制未定。** 現有 `AuditWriter`（F023 D 契約，`backend/src/audit/audit.types.ts`）之 `AuditAccessEvent` 僅涵蓋「調閱」類事件（`VIEW`/`DOWNLOAD`/`PRINT`/`CHANGE_LOG_VIEW`…），**沒有**表達「欄位異動 diff」（誰、何時、改了什麼欄位、新舊值）的 targetType/actionType；真正該落地之處為 `DOCUMENT_CHANGE_LOG`（F037，本 wave 明確排除，`feature-status.md` 標記「無 `DOCUMENT_CHANGE_LOG`；來源交易（F011/F012…）未發變更事件」）。故本 wave 的 `update()` 目前**無法**真正寫入任何可查詢之變更歷程。完整分析與候選方案見 **F012-test.md OQ-F012-01**（主定義處），本檔僅交叉引用；F011 之影響為 AC4「觸發稽核記錄」暫時**不可驗收**，建議標記為已知缺口而非隱性略過。
 
 - **OQ-F011-05（與 F015 共用，定義於 F015-test.md）：「文件連結點」是否併入本端點之 payload（單一 `links: string[]` 陣列欄位隨整批儲存送出），或由 F015 之獨立端點各自即時新增/移除？** `F026-role-field-matrix.md` 對「文件連結點」僅標「可寫」（無入口限定註記，不同於所屬節點），且 prototype 15 的連結點 UI 是嵌在同一編輯頁、隨「儲存」整批送出（非點擊當下即時呼叫 API）。完整分析見 **F015-test.md「開放設計問題」首條**，本檔僅提示此端點之 payload 形狀可能因此決策而需要（或不需要）容納 `links` 鍵。
+
+---
+
+## 🔵 2026-08-16 缺失／變更 delta — 編輯頁返回鈕與版次輸入互動（`AC-D1`～`AC-D9`，lane **L4**）
+
+> 權威＝[F011 §編輯頁返回鈕與版次輸入互動 delta](../../specs/features/F011-edit-with-comparison.md#back-edition-delta)
+> ＋ [architecture-spec §10.15 #16（topbar portal 之 inline fallback 盲區）／#17（`aria-label` 之 jsdom 近似）](../../specs/architecture-spec.md#ch10-defect-delta)
+> ＋ `prototypes/14-document-create.html`、`prototypes/15-document-edit.html`。
+> 本輪約束環為**簡化版**（僅 jest／vitest，無 Playwright fidelity、無 Stryker、無 metric gate）。
+
+### 覆蓋對照表
+
+| AC | 主張 | 測試載體 |
+|---|---|---|
+| `AC-D1` | topbar 動作區有無障礙名稱 `返回` 之鈕；點擊導向 `/admin/documents`；未送出變更不寫入 | `DocumentEditPage.edition.test.tsx` `TS-F011-D1-001`～`003`。🔴 `001` **提供 `TopbarSlotsContext`**，使 portal 注入路徑實際被執行——§10.15 #16 明示未包 `AppShell` 之元件測試命中的是 inline fallback，**不算驗到 AC 所述位置** |
+| `AC-D2` | 擊鍵過程不補零、不截斷（`0` → `"0"`；再 `1` → `"01"`） | 編輯頁 `TS-F011-D2-001`／`002`／`003`（反解回歸）；建立頁鏡射 `DocumentCreatePage.edition.test.tsx` `TS-F010-D2-001`／`002` |
+| `AC-D3` | blur 補零至兩位、冪等 | 編輯頁 `TS-F011-D3-001`／`002`；建立頁 `TS-F010-D3-001`／`002`。⚠ **反巧合綠**：兩處皆先斷言 blur **之前**未補零，否則「每次擊鍵即補零」之現行 bug 會使本案假綠 |
+| `AC-D4` | blur 時為空 → 維持 `""`，不得為 `"00"` | 編輯頁 `TS-F011-D4-001`；建立頁 `TS-F010-D4-001` |
+| `AC-D5` | 長度上限兩位 | 編輯頁 `TS-F011-D5-001`；建立頁 `TS-F010-D5-001` |
+| `AC-D6` | 儲存值恆為 `{YY}'{NN}` | 編輯頁 `TS-F011-D6-001`（`updateDocument`）；建立頁 `TS-F010-D6-001`（`createDocument`）＋既有 `DocumentCreatePage.test.tsx`「版次 YY 與 NN 組出 26'01 隨送出」 |
+| `AC-D7` ① 行為層 | 兩頁逐案結果相同 | 上列 `AC-D2`～`AC-D6` 之編輯頁／建立頁**成對**案例（編號一一對應：`TS-F011-D#-###` ↔ `TS-F010-D#-###`） |
+| `AC-D7` ② 結構層 | 兩頁 import 並渲染**同一** component；專案中無第二份補零／截斷邏輯 | `DocumentEditPage.editionShared.test.tsx` `TS-F011-D7-001`～`005`（原始碼靜態文字斷言，手法比照 §10.15 #1 之 Dockerfile 靜態斷言） |
+| `AC-D8` | 🔒 既有儲存語意回歸（UUID 不變、既有端點） | `DocumentEditPage.edition.test.tsx` `TS-F011-D8-001`（**設計上從一開始即綠**） |
+| `AC-D9` | 選擇器契約：`aria-label` ＝ `版次年度`／`版次序號`、`maxlength=2`、`inputmode=numeric`、placeholder `YY`／`NN` | 編輯頁 `TS-F011-D9-001`／`002`；建立頁 `TS-F010-D9-001`／`002`（**兩頁同一組值**，`AC-D7` ① 以此為前提） |
+
+### 本輪由 test-generator 釘下之新契約（spec 未規定，供 tdd-implementation 對齊）
+
+| 項目 | 契約 |
+|---|---|
+| 共用元件路徑 | `frontend/src/components/EditionInput.tsx` 之具名匯出 `EditionInput`（`AC-D7` ② 只要求「同一模組之單一 export」、未指名路徑；本環指定之，可申訴） |
+| 建議 props | `{ defaultValue?: string \| null; onChange: (edition: string) => void; disabled?: boolean }`；`defaultValue` **僅作初始值**，🔴 不得於每次 render 自已補零之字串反解（`prototypes/15-document-edit.html:541` 明文：那正是「卡死於 00」之成因） |
+| `onChange` 之輸出 | 兩段皆有值時發出 `{YY}'{NN}`（blur 補零後之兩位值），否則 `''` |
+
+### 未涵蓋（本環刻意不做）
+
+- **AC-D1 之「不寫入」在真實導航下之行為**：`TS-F011-D1-003` 以 `updateDocument` 未被呼叫代表「不寫入」，屬前端層事實；「資料庫記錄逐欄與進入編輯頁前相同」需容器內實跑（見 `risks-and-gaps` 乙類）。
+- **§10.15 #17**：`aria-label` 之 accessible name 於 jsdom 為近似計算。本環之 AC 皆以**直接 `aria-label`** 滿足（`TS-F011-D9-001` 同時斷言屬性值本身），避免落入 `aria-labelledby` ＋ `title` 之近似邊緣。

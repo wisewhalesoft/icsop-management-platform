@@ -36,6 +36,17 @@
 | **F041 一般使用者子分類（橫切，業務/其他）** | **[features/F041-test.md](features/F041-test.md)** ← 2026-08-11 新增 |
 | 組織同步與名稱解析 | [ORG-COMPANY](features/ORG-COMPANY-sync-test.md)、[ORG-PERSON](features/ORG-PERSON-sync-test.md)、[ORG-descfull](features/ORG-descfull-normalization-test.md)、[ORG-read-endpoints](features/ORG-read-endpoints-test.md)、[NAME-resolution](features/NAME-resolution-test.md) |
 | Session 延長 | [features/SESSION-extension-test.md](features/SESSION-extension-test.md) |
+| **F002 後台返回首頁與麵包屑導覽 delta**（缺失 delta #1／#10 半，lane L1） | **[features/F002-test.md](features/F002-test.md)** ← 2026-08-16 新增 |
+| **F036 節點雙擊文件清單 delta**（缺失 delta #8，lane L6） | **[features/F036-test.md](features/F036-test.md)** ← 2026-08-16 新增 |
+| **F018 表單編號＋「編輯編號」delta**（缺失 delta #18，lane L7） | **[features/F018-test.md](features/F018-test.md)** 之末段 ← 2026-08-16 追加 |
+| **CJK 字型部署與啟動 fail-fast**（缺失 delta #6，lane L0；橫跨 F020／F036／F038） | **[features/CJK-FONT-deployment-test.md](features/CJK-FONT-deployment-test.md)** ← 2026-08-16 新增 |
+| **F020 前台燒錄與三層式浮水印 delta**（缺失 delta #5a／#5b／#7／#17，lane **L2**；含 F018 `AC-D11`／`AC-D12`／`AC-D14`） | **[features/F020-test.md](features/F020-test.md)** 之末段 ← 2026-08-16 追加 |
+| **F039 前台附錄燒錄 ＋ 附錄池匯出 delta**（缺失 delta #5b／#14，lane **L2**／**L5**） | **[features/F039-test.md](features/F039-test.md)** 之末段 ← 2026-08-16 追加 |
+| **F037／F038 變更歷程兩 tab 匯出 delta**（缺失 delta #16，lane **L5**） | **[features/F037-F038-export-test.md](features/F037-F038-export-test.md)** ← 2026-08-16 新增 |
+| **F019 前台篩選器與顯示欄位改版 delta**（缺失 delta #2／#3／#4，lane **L3**） | **[features/F019-test.md](features/F019-test.md)** 之末段 ← 2026-08-16 追加 |
+| **F017 後台篩選 9 → 13 項 delta**（缺失 delta #9，lane **L4**） | **[features/F017-test.md](features/F017-test.md)** 之末段 ← 2026-08-16 追加 |
+| **F011 編輯頁返回鈕與版次輸入互動 delta**（缺失 delta #10 半／#11，lane **L4**） | **[features/F011-test.md](features/F011-test.md)** 之末段 ← 2026-08-16 追加 |
+| **F018 `AC-D14` 前台使用表單下載稽核與快照落值**（原 `G-L2-01`，改由 lane **B** 代管） | **[features/F018-test.md](features/F018-test.md)** 之末段 ← 2026-08-16 追加 |
 
 ## 自動化就緒度
 

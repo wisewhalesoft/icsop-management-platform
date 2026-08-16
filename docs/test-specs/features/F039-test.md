@@ -240,3 +240,51 @@ tdd-implementation 於實作期間提出 6 項測試申訴＋1 項報備，全�
 7.（報備，非申訴）`backend/src/audit/audit.types.ts` 之 `AuditRow.appendixId` 依 test-generator 裁定收緊為必填 `string | null`（比照既有 `formId`/`lifecycleId`/`documentId` 慣例），tdd-implementation 確認除既有兩處生產建構點（`buildAuditRow()`／`typeorm-audit.store.ts toRow()`）外無其他遺漏建構點。
 
 最終驗證（test-generator 自行實跑，非引用對方數字）：backend `npm test` 111/111 suites、1361/1361 tests 全綠；frontend `npx vitest run` 42/42 files、574/574 tests 全綠；`npx tsc --noEmit` 兩端皆乾淨。
+
+---
+
+# 🔴 2026-08-16 缺失／變更 delta 測試設計（Lane L2 #5b ＋ Lane L5 #14）
+
+> 由 **test-generator（Lane L2／L5）** 於 2026-08-16 追加。權威＝
+> `docs/specs/features/F039-appendix-management.md#front-burn-delta`／`#export-delta`、
+> `docs/specs/error-handling.md#export`、`architecture-spec.md §10.1／§10.3／§10.4`、
+> `prototypes/24-appendix-management.html`、`prototypes/04-public-document-detail.html`。
+
+## ⚠ 被推翻之既有定案（追溯用）
+
+| 原條文 | 現況 |
+|---|---|
+| **F039 `AC-29`**（原）「Given 前台下載附錄成功，When 檢查回應之檔案內容，Then 為原始檔位元組、**未疊加或燒錄浮水印**（已定案）。」 | 已由使用者 2026-08-16 裁決**就地改寫**：前台 `format=pdf` 附錄**必須燒錄**、非 PDF 維持原檔（策略 A）。**僅限前台**。 |
+| F039 §下載浮水印（原）「附錄下載**不燒錄浮水印**，沿用 `OQ-E05-03`…」 | 同上推翻；`OQ-E05-03` 亦已由 `OQ-D18-25` 推翻（僅前台）。 |
+| F039 端點表（附錄側，前台列） | 由「核發短效期 URL」改為「代理串流位元組、PDF 燒錄」（`AC-D3a`）。後台列**一字不改**。 |
+
+📌 **既有測試檔之處置**：本 delta **未修改、未刪除**任何既有測試案例。
+上述被推翻之語意在既有 `backend/src/appendices/appendices.service.spec.ts` 中**沒有對應的斷言**
+（該檔之下載案只斷言 `DownloadGrant.url` 與稽核，未斷言「未燒錄」），故無反轉可做；
+新語意一律以**新檔** `appendices.front-burn.service.spec.ts` 承載。
+⚠ 該既有檔之下載相關案例會在實作把 `downloadAppendix()` 改為回傳位元組時**編譯失敗**——
+屆時由 test-generator（非實作端）依本段就地調整，實作端請走 mailbox 申訴。
+
+## AC ↔ 約束對照
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-D1` 前台 PDF 附錄燒錄（`burnPdf` = 1；快照與檢視器逐字相同） | `backend/src/appendices/appendices.front-burn.service.spec.ts` | unit |
+| `AC-D2` 非 PDF 原檔（逐位元組相同、`burnPdf` = 0）＋ UI 明示 | 同上 ＋ `frontend/src/pages/PublicDocumentDetailPage.watermark.test.tsx` | unit／component |
+| `AC-D2` 📌 旗標來源＝伺服器端（前端不得以 `format` 重算） | `PublicDocumentDetailPage.watermark.test.tsx`（**矛盾 fixture**：`format=pdf` × `watermarkSupported=false` → 顯示負向文案；反向亦驗） | component |
+| `AC-D2` ⚠ 格式判定以 `APPENDIX_POOL.format` 為權威（非 content-type） | `appendices.front-burn.service.spec.ts`（content-type 宣告 PDF 但 `format=xlsx` → 不燒；反向亦驗） | unit |
+| `AC-D3` 🔒 後台 RAW 回歸鎖定 | `appendices.front-burn.service.spec.ts`（ICSOPAdmin／SysAdmin 各一案）＋ `AppendixManagementPage.export.test.tsx` | unit／component |
+| `AC-D4` 匯出鈕存在與權限（SysAdmin 允許） | `frontend/src/pages/AppendixManagementPage.export.test.tsx`（**經 `TopbarSlotsContext` 驗 portal 位置**）＋ `backend/src/appendices/appendices.export.service.spec.ts`（route metadata 逐角色） | component／unit |
+| `AC-D5` 範圍＝當前篩選之全部結果 | `appendices.export.service.spec.ts`（120 筆池／excel 篩選 > 一頁 50 筆） | unit |
+| `AC-D6` BOM／逐字表頭／RFC 4180／列序 | `appendices.export.service.spec.ts` ＋ `backend/src/storage/csv-export.spec.ts` | unit |
+| `AC-D7` 檔名 | `csv-export.spec.ts`（**固定 `Date` 注入＋兩個 `TZ` 下同一結果**）＋ 服務層形狀斷言 | unit |
+| `AC-D8` 上限 10,000 | `appendices.export.service.spec.ts`（10,000 通過／10,001 拋） | unit |
+| `AC-D9` 空結果僅表頭 | 同上 | unit |
+| `AC-D10` 🔒 F024 不外溢 | `backend/src/change-history/change-history-export.routes.spec.ts`（靜態檔案斷言：F024 controller 仍回 JSON、未 import CSV 產生器、無 `Content-Disposition`／`text/csv`） | unit（靜態） |
+| `AC-D11` CSV 注入前綴 | `csv-export.spec.ts`（六字元＋恆等＋順序）＋ `appendices.export.service.spec.ts`（名稱層） | unit |
+| `AC-D12` 逐字回饋文案 | `AppendixManagementPage.export.test.tsx`（成功片段／超限逐字／錯誤碼標記；並斷言**不得**與 F037／F038 句式對齊） | component |
+
+## 未逐字約束者（不臆造，見 risks-and-gaps）
+
+- `AC-D6` ② 之 `大小`／`上傳時間` 兩欄，其**值層**字面格式（`56 KB` vs `57344`；時間之時區與樣式）
+  未入 AC ⇒ 測試僅斷言「非空」＋「儲存格數為 6」。見 `risks-and-gaps.md` `G-L5-01`。
