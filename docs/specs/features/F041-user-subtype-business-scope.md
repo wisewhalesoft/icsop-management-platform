@@ -124,7 +124,7 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
 | 使用部門相符、但文件為「進度中」／失效／作廢 | **仍不可見**（INV-5：兩道過濾為 AND，AC-24） |
 | 業務使用者之清單全數為空 | 顯示既有「查無符合結果」空狀態，**不新增專屬文案分支**（AC-33，OQ-E08-07 4c 選項 A） |
 | 業務使用者之清單結果 | 每一項之 `pinned` 皆為 `true`，「其餘區」恆為空陣列——此為**預期退化行為**，前端不需特殊處理（AC-15，OQ-E08-07 4a 選項 A） |
-| 業務使用者之部門篩選下拉 | **不限縮選項**（維持完整 5 層組織樹），選到範圍外單位時交集為空（AC-16，OQ-E08-07 4b 選項 A） |
+| ~~業務使用者之部門篩選下拉~~ | ~~**不限縮選項**（維持完整 5 層組織樹），選到範圍外單位時交集為空（AC-16，OQ-E08-07 4b 選項 A）~~<br>📝 **因前台「使用部門」篩選器移除而不再適用（2026-08-16 使用者裁決，缺失 delta 第 2 項）**，見 [F019 §前台篩選器與顯示欄位改版 delta](F019-public-list-browsing.md#filter-column-delta) |
 | 使用者部門於 [F004](F004-org-sync.md) 每日同步後異動 | 下次請求即反映新的可見範圍（`orgCode` 每請求由 DB 現行值填入，本即如此，**不需**額外機制；比照 [US-006](../../stories/epics/E01-account-auth/US-006-role-assignment.md) AC1「角色變更下次請求即生效」，OQ-E08-08） |
 | 多部門兼職者 | **本輪不支援**（`ACCOUNT.orgCode` 為單一欄位）。列為 Out of Scope（OQ-E08-08），若未來有需求需先擴充 ACCOUNT 資料模型 |
 
@@ -169,8 +169,8 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
 
 - **AC-14**：Given 池含 3 筆已公告文件（`usingDeptIds` 分別為 `['JA000']`、`['JAD00']`、`['00000']`）、viewer＝`業務@JAC00`，When 呼叫 `buildPublicList`，Then `items` 恰含 2 筆（`['JA000']` 與 `['00000']`），`total === 2`（不相符者**不出現於 items 且不計入 total**，不得以總筆數洩漏其存在）。
 - **AC-15**：Given 同 AC-14 之結果，When 檢視每一項之 `pinned`，Then **全部為 `true`**（置頂區＝全部結果、其餘區恆為空陣列——預期退化行為，非缺陷）。
-- **AC-16**：Given viewer＝`業務@JAC00`、池含一筆 `usingDeptIds = ['JA000']` 之已公告文件，When 以 `filters.deptCode = 'JCHA0'`（不在其子樹範圍內）查詢，Then `items === []`、`total === 0`、**不拋出任何錯誤**（交集為空係正常查詢結果）。
-- **AC-17**：Given viewer＝`業務@JAC00`、池含一筆不相符文件（`usingDeptIds = ['JAD00']`、編號 `ICSOP-AD-001`、名稱含關鍵字 `審查`、`lifecycleId = L1`），When 分別以 ①無篩選 ②`keyword='審查'` ③`deptCode='JAD00'` ④`lifecycleId='L1'` ⑤`keyword='審查' + deptCode='JAD00' + lifecycleId='L1'` 五種組合查詢，Then **五者之 `items` 皆不含該文件**（業務限制與其餘條件為 AND，任何排列組合皆不洩漏）。
+- ~~**AC-16**：Given viewer＝`業務@JAC00`、池含一筆 `usingDeptIds = ['JA000']` 之已公告文件，When 以 `filters.deptCode = 'JCHA0'`（不在其子樹範圍內）查詢，Then `items === []`、`total === 0`、**不拋出任何錯誤**（交集為空係正常查詢結果）。~~<br>📝 **因前台「使用部門」篩選器移除而不再適用（2026-08-16 使用者裁決，缺失 delta 第 2 項）**——`filters.deptCode` 已無 UI 載體。**不得留為懸空 AC，亦不得靜默刪除**。<br>⚠ **後端 `matchesDeptFilter` 純函式與 `PublicListFilters.deptCode` 是否一併移除，屬 system-architect 之實作決策，本條不裁定**；若保留（供內部或未來使用），其行為期望值即為本條原文、不得變更。<br>📌 **「交集為空係正常查詢結果、非錯誤」之語意未被推翻**，改由 [F019](F019-public-list-browsing.md) `AC-D6`（新六項篩選之 AND 交集為空 → 空狀態非錯誤）與本檔 AC-17 承接。
+- **AC-17**：Given viewer＝`業務@JAC00`、池含一筆不相符文件（`usingDeptIds = ['JAD00']`、編號 `ICSOP-AD-001`、名稱含關鍵字 `審查`、`lifecycleId = L1`），When 分別以 ①無篩選 ②`keyword='審查'` ③`deptCode='JAD00'` ④`lifecycleId='L1'` ⑤`keyword='審查' + deptCode='JAD00' + lifecycleId='L1'` 五種組合查詢，Then **五者之 `items` 皆不含該文件**（業務限制與其餘條件為 AND，任何排列組合皆不洩漏）。<br>📝 **2026-08-16 補註**：組合 ③⑤ 之 `deptCode` 已無前台 UI 載體（使用部門篩選器移除）；若 system-architect 決定一併移除 `PublicListFilters.deptCode`，③⑤ 之對應案例改以 [F019](F019-public-list-browsing.md) `AC-D6` 之新六項篩選（`draftingDeptId` 等）等價替代，**「任何排列組合皆不洩漏」之要求本身不變、不得放寬**。
 - **AC-18**：Given 池含 2 筆非已公告文件（進度中／作廢各一）與 1 筆已公告但不相符之文件、viewer＝`業務@JAC00`，When 呼叫 `buildPublicList`，Then `hiddenCount === 2`——**僅計「被強制基底條件隱藏」者，不含因業務限制被過濾者**（避免以計數洩漏他部門文件之存在數）。
 - **AC-19**（**回歸對照組**）：Given 任一池與 viewer＝`{ roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00' }`，When 呼叫 `buildPublicList`，Then 其輸出（`items` 之順序與內容、`total`、`page`、`pageSize`、`hasNext`、`hiddenCount`、每項 `pinned`）與本次變更前**逐欄相同**（既有 `public-list.spec.ts` 全部案例維持綠燈，不得修改任何既有期望值）。
 
@@ -288,7 +288,7 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
 | **OQ-E08-05** | 「自己部門」比對語意 | **A 子樹展開（重用 `isWithinSubtree`）** | AC-05～AC-11、INV-4、AC-10 | 選 **B（精確相等）**＝AC-05／AC-08／AC-11 之期望值反轉為 `false`，INV-4 與 AC-10 作廢（須新增第二套 predicate）。⚠ 業務可用性後果：實測 92% 在職者掛於處室／課層，而文件使用部門常設於部層，精確比對將使多數業務使用者幾乎看不到任何文件 |
 | **OQ-E08-06** | deny-by-default 涵蓋面 | **C 折衷**（清單/搜尋/篩選/詳情/檢視器/下載列印本輪收斂；RAG 未來 ripple） | D 組（AC-20～AC-24）、E 組（AC-25～AC-30）、AC-39 | 選 **A（僅清單）**＝D 組與 E 組全數刪除，AC-14～AC-19 保留。⚠ 後果：知道文件編號即可直連 URL 繞過，「避免外流」形同虛設。選 **B（含 RAG）**＝AC-39 由「未來要求」升為本輪 P0，但 [F033](F033-permission-aware-retrieval.md) 尚未實作（Phase 3），無法對不存在之功能定義可執行之 AC |
 | **OQ-E08-07 4a** | 置頂/其餘兩區塊是否保留 | **A 保留（其餘區恆空）** | AC-15 | 選 **B（前端隱藏分隔）**＝AC-15 保留（後端不變），另需 [F019](F019-public-list-browsing.md) 前端增列一條 UI delta 與 prototype 變更 |
-| **OQ-E08-07 4b** | 部門篩選下拉是否限縮 | **A 不限縮** | AC-16 | 選 **B（限縮下拉）**＝AC-16 改為「下拉選項僅含使用者部門之子樹與祖先鏈」，須新增下拉選項計算純函式與其 AC，並影響 ui-ux-designer 之 prototype |
+| **OQ-E08-07 4b** | 部門篩選下拉是否限縮 | **A 不限縮**<br>📝 **2026-08-16：載體消滅、裁決不再有可驗證對象**（前台使用部門篩選器已由使用者裁決移除，見 [F019 §filter-column-delta](F019-public-list-browsing.md#filter-column-delta)）。裁決本身未被推翻 | ~~AC-16~~（已標記不再適用） | 選 **B（限縮下拉）**＝AC-16 改為「下拉選項僅含使用者部門之子樹與祖先鏈」，須新增下拉選項計算純函式與其 AC，並影響 ui-ux-designer 之 prototype |
 | **OQ-E08-07 4c** | **空狀態**文案是否分支 | **A 沿用「查無符合結果」不分支** | AC-33 | 選 **B（業務專屬空狀態文案）**＝AC-33 期望值改為新文案。⚠ 本題僅涉「查無結果之空狀態」；**清單頂部之範圍說明句另行裁決為「分支」**（見下一列 AC-40），兩者不衝突、亦不得混為一談 |
 | **OQ-E08-08** | 孤兒帳號／多部門／異動生效時機 | **孤兒 deny-by-default；多部門 Out of Scope；異動下次請求生效** | AC-12、Edge Cases 三列 | 孤兒改為「全可見」＝AC-12 期望值反轉，**直接架空本 feature 目的**（不建議）。多部門若納入＝須先擴充 `ACCOUNT` 資料模型，屬另一獨立 story |
 | **OQ-E08-09** | 多使用部門之 OR 推定 | **沿用 F019 既有 OR 語意** | AC-11 | 若改為 AND（全部使用部門皆須相符）＝AC-11 期望值反轉為 `false`，且與 [F019](F019-public-list-browsing.md) 既有置頂語意分歧（不建議） |

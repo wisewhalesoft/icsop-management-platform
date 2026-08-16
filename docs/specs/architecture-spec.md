@@ -1,8 +1,8 @@
 ---
 type: architecture-spec
-version: 1.5
-status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；其餘章節仍有待決 OQ，見第 9 章）
-last_updated: 2026-08-11
+version: 1.6a
+status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
+last_updated: 2026-08-16
 covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038, F039, F040, F041]
 ---
 
@@ -20,6 +20,10 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 >
 > **v1.5（2026-08-10 草擬／2026-08-11 🟢 APPROVED 人類閘門通過）新增 F041 一般使用者子分類（業務／其他）架構擴充**：10 題 OQ（`OQ-E08-04`～`OQ-E08-11`／`OQ-E06-03`／`OQ-E06-04`，其中 5 題 BLOCKING）已於 2026-08-11 人類閘門**全數依草案選項定案，本節架構決策無一需要重寫**——身分模型＝子分類旗標（OQ-E08-04 選項 B）、部門比對＝重用 `isWithinSubtree` 子樹展開（OQ-E08-05 選項 A）、deny-by-default 涵蓋清單/搜尋/篩選/詳情直連/檢視器/下載列印（OQ-E08-06 選項 C）、拒絕不記稽核（OQ-E08-10 選項 A，`AUDIT_LOG.actionType` 不擴充）、直連 URL 拒絕回 404（OQ-E06-03 選項 A）。新增 `ViewerScope`（`{roleCode,userSubtype,orgCode}`，每請求由 `SessionGuard` 之既有「查 DB 現行值覆寫」機制一併組出，不由呼叫端參數提供）與 `RbacModule` 之第三種授權維度——資料列層級可見性過濾（`backend/src/rbac/viewer-scope.ts`：`normalizeUserSubtype`／`isDeptScopedViewer`／`isUsingDeptMatched`／`isDocVisibleToViewer`，`isUsingDeptMatched` 唯一呼叫既有 `org-sync/org-hierarchy.ts` 之 `isWithinSubtree`，不新增第二套部門比對邏輯）。過濾接縫落於 F019 清單（`buildPublicList`）、F019 詳情（`PublicDocumentDetailService.detail`）、F020 檢視器/PDF代理/下載/列印（`WatermarkService` 四方法）共 4 處，皆為**必要參數**簽章變更（刻意不做選填，避免呼叫端遺漏參數而靜默繞過 deny-by-default）——**下游實作最容易漏的三點**：(1) `PublicDocumentsController.detail()` 現況完全未接收 `@Req()`，本次需從零新增；(2) `buildPublicList`／`PublicDocumentsService.list`／`PublicDocumentDetailService.detail` 三處為刻意的破壞性簽章變更，既有呼叫端／既有測試皆需機械式遷移為傳入 `viewer` 物件；(3) `WatermarkDocMeta.getDocMeta()` 由「純顯示用中繼資料」升級為業務子分類路徑之安全關鍵依賴，缺省時須 deny-by-default 而非放行（見 §3.7 決策三(c)）。`ACCOUNT.userSubtype`（`nvarchar(20) NOT NULL DEFAULT 'other'` + `CHECK`）為唯一新增欄位，F004 組織同步 upsert payload 之「不含 `userSubtype` 鍵」由既有明列欄位字面物件（非 spread）之程式碼結構保證。5 題原 BLOCKING OQ 之「若改選其他選項」分析改列為歷史紀錄保留於 §3.7 末段與第 9 章，供日後回溯，**不再阻擋 Phase B 動工**。E08/E06 相關內容以「F041 一般使用者子分類架構擴充」標示分散於第 3（§3.7）、4（§4.10）、5（§5.11）、6、8、9 章對應小節。
 
+> **v1.6（2026-08-16）新增第 10 章「2026-08-16 缺失／變更 Delta 架構決策（15 項）」**：對應 `docs/stories/2026-08-16-defect-delta-18.md` 與十份 feature 之 `AC-D#` 批次。原 18 項需求經人類裁決 `OQ-D18-01`（「只做前台，後台維持 RAW」）縮為 **15 項**——#12／#13／#15（後台下載燒錄）**明確不做**，[F026](features/F026-role-field-matrix.md) 之 `OQ-FM-01`（2026-07-24）**維持有效、未被推翻**。本版**不新增任何模組、不改變架構風格**（Modular Monolith 不動），13 項架構決策（`A1`–`A13`）全數落在既有模組內；唯一 schema 變更為 `USAGE_FORM_POOL.formNumber`（§10.7）。核心決策：**前台/後台燒錄以「路徑命名空間分流 ＋ blobPath 由伺服器推導」達成**（§10.1；明確否決任何「由客戶端傳參數／header／Referer 決定是否燒錄」之設計，該類設計等同讓客戶端自行關閉浮水印）、§5.2 既有「Proxy／SAS 雙模式」之 **Proxy 面擴大至前台附件與附錄**（§10.2）、非 PDF 判定**一律以上傳時已驗證之伺服器端事實為權威、絕不採 client-supplied `content-type`**（§10.3）、三處匯出共用 `storage/csv-export.ts` 純函式產生器並對成長型變更日誌表**強制 SQL `COUNT` 下推**（§10.4）、前台 filter-options 之可見性過濾以「與清單物理共用同一個 `visibleCandidates()` 純函式」為結構性保證而非約定（§10.6）、CJK 字型除補 `COPY assets` 外**新增啟動時 fail-fast**（§10.10，靜默降級正是本 bug 穿過全部測試的唯一原因）。**§10.15「單元測試盲區」獨立成章**，逐項標示哪些項目在原理上 unit test 測不到、必須靠容器內實跑或瀏覽器煙霧測試把關。四項須退回 spec-writer 之爭議見 §10.16（其中 🔴 **F024「既有匯出」實際上不產生 CSV**，三份 spec 所稱之「同構樣板」不存在）。
+>
+> **v1.6a（2026-08-16，同日第二次人類閘門後之同步）**：三項變動。① `OQ-D18-25` 定案——**前台「使用表單」之 PDF 亦須燒錄浮水印（推翻 `OQ-E05-03`）**，範圍與附錄一致（前台 PDF 燒錄／非 PDF 原檔並標示／**後台一律 RAW**）⇒ **§5.2 之下載策略表就地改寫為「前台／後台」兩列**（該表自此以路徑而非附件類型為第一分類軸）、§10.1 之燒錄範圍表與流程圖同步納入使用表單。🔴 **分流機制本身未變**——使用表單之前後台端點早已是兩條不同路徑（`documents/:documentId/usage-forms/:formId/download` vs `admin/usage-forms/:formId/download`），與附錄結構同型，故它**只是第三個消費者**，不需新端點；改動面僅為前台端點之回應語意。前台燒錄範圍自此收斂為一致之四路徑（檢視器／附件／附錄／使用表單）。② 新增 **決策 A14**（§10.7 末段）：使用表單「編輯編號」端點定為 **`PATCH /admin/usage-forms/:formId/number`**，body 僅 `{ formNumber }`、沿用既有兩道授權閘門、不寫稽核、結構上不可能觸發覆蓋共用警示。③ **§10.15「單元測試盲區」依 11 份 feature 共 115 條 `AC-D#` 重新校準**——三列由「需有人記得寫」升級為「已有 AC 載體」，並**新增三個盲區**（逐字文案之 prototype 權威從未進測試、`PageHeader` topbar portal 在單元測試走 inline fallback 分支、`aria-label` 之 jsdom 近似）；經確認本專案為純 CSR SPA，**不存在 SSR/CSR 分歧這一類盲區**。另：v1.6 原提報之四項爭議與 `OQ-D18-A1` 均已由 lead 裁示採納並由 spec-writer 落地（`AC-D3a`／`AC-D6`／CSV 注入規則／F002 麵包屑語意改寫），§10.16 已改列為「裁示與落地」並記錄 **v1.6a 複查後無新增爭議**。
+
 ## Agent Loading Guide
 
 | Agent Role | Relevant Sections |
@@ -32,6 +36,7 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 | RAG / AI Ingestion 工程 | §1.5、§2.4、§3.3–3.4、§4.7、§5.7–5.8、§6（NFR-009/010 列）、§7（GPU/向量庫拓撲）、§8（RAG 風險列）、§9（OQ-E09-*） |
 | 變更歷程（E07）工程 | §3.5（ChangeHistoryModule）、§4.8（資料落地／OQ-E07-05 決策）、§5.9（交易一致性／渲染管線）、§6（稽核與資料保留擴充列）、§8（E07 風險列）、§9（OQ-E07-02/05/06、OQ-NFR003） |
 | 附錄管理（E10）工程 | §3.2（AppendicesModule 元件卡片）、§3.6（模組邊界／排序權威寫入路徑／稽核 additive 擴充／RBAC／前端架構等 5 項決策）、§4.9（資料落地／OQ-E10-02 決策／Migration）、§5.10（排序寫入與下載稽核之交易/併發邊界）、§6（NFR 對應擴充列）、§8（Auto-Challenge 新增列／拒絕替代方案）、§9（OQ-E10-02） |
+| **2026-08-16 缺失／變更 Delta（15 項）工程** | **§10 全章**。依角色取用：**test-generator** → §10.15（單元測試盲區，決定哪些項目建不出有效 unit 約束）＋ §10.1 A1／§10.5 A5／§10.9 A9（回歸鎖定之邊界）；**tdd-implementation** → §10.1–§10.7、§10.12–§10.14（端點形狀、判定依據、共用函式落點、migration 注意事項）；**ui-ux-designer** → §10.3（`watermarkSupported` 旗標之來源）、§10.8（breadcrumb 型別）、§10.14（三層式浮水印之渲染落點）；**DevOps** → §10.7（migration 實跑）、§10.10（Dockerfile ＋ fail-fast ＋ 容器內 smoke）、§10.2（併發閘與記憶體上界）；**lead** → §10.11（分線與合併順序）、§10.16（風險／被否決方案／須退回 spec-writer 之爭議） |
 | 一般使用者子分類（F041）工程 🟢 APPROVED | §3.7（`ViewerScope` 組出點／`rbac/viewer-scope.ts` 三純函式落點／四過濾接縫精確位置／前端接縫／10 題 OQ 裁決紀錄）、§4.10（`ACCOUNT.userSubtype` 資料落地／Migration／F004 upsert 鍵集合保證）、§5.11（清單／詳情／檢視器‑下載‑列印三條路徑之循序圖）、§6（NFR 對應擴充列）、§8（風險與拒絕替代方案）、§9（10 題 OQ 裁決紀錄）。**10 題 OQ 已於 2026-08-11 人類閘門全數依草案選項定案，可直接動工**；下游實作最容易漏的三處已於 §3.7 決策一/三(c) 明確標注（`@Req()` 新增、三處破壞性簽章遷移、`docMeta` 安全關鍵化） |
 
 ## Table of Contents
@@ -45,6 +50,7 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 7. [Deployment & Runtime View](#7-deployment--runtime-view)
 8. [Risks, Trade-offs & Alternatives](#8-risks-trade-offs--alternatives)
 9. [Open Decisions](#9-open-decisions)
+10. [2026-08-16 缺失／變更 Delta 架構決策（15 項）](#ch10-defect-delta)
 
 ---
 
@@ -1200,7 +1206,10 @@ ALTER TABLE [ACCOUNT] DROP COLUMN [userSubtype];
 | 附件類型 | 存取模式 | 理由 |
 |----------|----------|------|
 | `ICSOP_PDF`（VIEW/DOWNLOAD/PRINT） | **後端代理串流（Proxy）**，不對前端核發任何指向原始 Blob 的 SAS URL | 若核發可直接存取原始 Blob 的 SAS Token，使用者可取得**未燒錄浮水印**之原始檔，違反 [NFR-007](nfr.md#watermark) AC2「PDF 實際燒錄」與 AC5「防繞過」；因此浮水印文件必須由 API 讀取原始檔（以後端專用、不外洩之短效憑證存取 Blob）→ 燒錄 → 直接串流回應 |
-| `OJT_SIGNIN`、`USAGE_FORM`（無浮水印需求，草案 OQ-E05-03） | 後端驗證權限＋**同步寫入稽核**後，核發**單次用途、短效期（建議 ≤60 秒）**之 SAS Token，前端持該 Token 直接向 Blob 下載 | 降低 API 頻寬/CPU 負載；符合 [NFR-002](nfr.md#security) AC5 字面要求（短效期憑證），且此類檔案無燒錄需求，代理無額外安全效益 |
+| `OJT_SIGNIN`、`USAGE_FORM`、`APPENDIX` —— **後台路徑** | 後端驗證權限後核發**單次用途、短效期（建議 ≤60 秒）**之 SAS Token，前端持該 Token 直接向 Blob 下載；**不寫稽核、不燒錄**（管理存取，`OQ-FM-01` 2026-07-24 人類裁決，2026-08-16 再次確認維持有效） | 降低 API 頻寬/CPU 負載；符合 [NFR-002](nfr.md#security) AC5 字面要求（短效期憑證）。後台為管理存取，無燒錄需求，代理無額外安全效益 |
+| `OJT_SIGNIN`、`USAGE_FORM`、`APPENDIX` —— **前台路徑**（🔴 **v1.6a 2026-08-16 改寫**） | **一律後端代理串流**（含**非 PDF**）；`format = pdf` 者燒錄浮水印後回傳，非 PDF 者原檔位元組 pass-through。**不核發 SAS、不 3xx 轉址至 Blob**。同步寫入調閱稽核 | 📝 **本列原為「`OJT_SIGNIN`、`USAGE_FORM`（無浮水印需求，草案 `OQ-E05-03`）→ 一律 SAS 直連」，已於 2026-08-16 兩次人類閘門連續推翻**：前台附錄（`OQ-D18-01`／[F039](features/F039-appendix-management.md#front-burn-delta)）與前台使用表單（`OQ-D18-25`，**推翻 `OQ-E05-03`**／[F018](features/F018-usage-form-management.md#front-burn-delta)）之 PDF 皆須燒錄，前台 `OJT_SIGNIN` 之燒錄則屬 [F020](features/F020-watermark.md) 既有 AC 涵蓋之缺陷修復（#5a）。**非 PDF 亦須代理**之理由（稽核可靠性＋分支一致性）見 [F020](features/F020-watermark.md#front-burn-scope-delta) `AC-D3a` 與 §10.2；此為本表「非浮水印檔案走 SAS」原則之**刻意例外，僅限前台**，日後不得以「與本節不一致」為由改回 SAS |
+
+> ⚠ **本表自 2026-08-16 起以「前台／後台」為第一分類軸，而非以「附件類型」**——同一份 `blobPath` 之同一種附件類型，前台與後台走兩條不同的存取模式（前台代理＋燒錄、後台 SAS＋RAW），且兩者取得之位元組**不相等**（[F020](features/F020-watermark.md#front-burn-scope-delta) `AC-D3`）。分流之端點設計見 [§10.1](#ch10-defect-delta)。
 
 ```mermaid
 sequenceDiagram
@@ -1889,4 +1898,876 @@ graph TB
 | OQ-E08-11 | F033 現行文字與 F019 現行行為之既存落差 | 不影響本節（Phase 3 未實作） | **✅ 已裁決：C 維持現狀+補釐清句**（維持草案），不影響 §3.7/§4.10/§5.11 落地 | ✅ 已定案 |
 | **OQ-E06-03** | 直連 URL 被拒之回應碼（404 vs 403，存在性洩漏） | §3.7 決策三(b)/(c) 之 `rejectDeptRestricted()` 私有方法回傳值 | **✅ 已裁決：A 404 `DOCUMENT_NOT_FOUND`**（維持草案，未改判）；`rejectDeptRestricted()` 定稿回傳 `NotFoundException`，§3.7 對照表末列 | ✅ 已定案，可動工 |
 | OQ-E06-04 | 授權檢查時機（後端服務層權威 vs 前端亦可） | §3.7 決策一/三已將判定放在服務層而非 controller/前端 | **✅ 已裁決：A 後端服務層權威**（維持草案），AC-30 可直接呼叫服務層繞過前端驗證以證明 | ✅ 已定案，既有原則之重申 |
+
+
+---
+
+## 10. 2026-08-16 缺失／變更 Delta 架構決策（15 項） {#ch10-defect-delta}
+
+> **來源**：`docs/stories/2026-08-16-defect-delta-18.md`（product-analyst）→ 十份 feature 之 `AC-D#` 批次（spec-writer，已通過人類閘門）。
+> **範圍**：原 18 項需求經人類裁決 `OQ-D18-01`（「只做前台，後台維持 RAW」）縮為 **15 項**；#12／#13／#15（後台下載燒錄）**明確不做**，[F026](features/F026-role-field-matrix.md) 之 `OQ-FM-01`（2026-07-24）**維持有效**。
+> **本章之權威邊界**：本章**只決定技術設計**，不改寫任何 AC。凡本章與 feature 之 `AC-D#` 有出入者，以 AC 為準，並列於 §10.16 之「須退回 spec-writer 之爭議」。
+> **編號對照**：本章之 `A1`–`A13` 為架構決策編號，與 feature 之 `AC-D#` 編號空間**互不相干**、不得混用。
+
+### 10.0 本章範圍與閱讀指引
+
+| 決策 | 節次 | 題目 | 對應 feature | 阻塞誰 |
+|---|---|---|---|---|
+| A1 | §10.1 | 前台/後台燒錄分流之端點設計 | F020 `AC-D3`／F039 `AC-D1`–`AC-D3` | test-generator、tdd |
+| A2 | §10.2 | 傳輸模式改變之效能/記憶體/流量影響 | F020、NFR-001 | DevOps、tdd |
+| A3 | §10.3 | 非 PDF 判定依據與 UI 旗標來源 | F020 `AC-D2`／F039 `AC-D2` | tdd、ui-ux |
+| A4 | §10.4 | 匯出 CSV 之共用產生器與三處端點 | F037／F038／F039 `AC-D#` | tdd |
+| A5 | §10.5 | 樹狀圖節點文件清單端點與權限閘門 | F036 `AC-D1`–`AC-D8` | tdd |
+| A6 | §10.6 | 前台 filter-options 端點與可見性過濾 | F019 `AC-D5`／`AC-D7` | tdd |
+| A7 | §10.7 | `formNumber` 大小寫不敏感實作與 migration | F018 `AC-D4`／`AC-D5`／`AC-D7` | tdd、DevOps |
+| A8 | §10.8 | `breadcrumb` 型別遷移策略 | F002 `AC-D6`／`AC-D7` | 全部前端線 |
+| A9 | §10.9 | `deptCode`／`matchesDeptFilter` 之去留 | F019 `AC-D13`、F041 `AC-16`／`AC-17` | test-generator |
+| A10 | §10.10 | CJK 字型部署修法與可測性 | F020／F036／F038（#6） | test-generator、DevOps |
+| A11 | §10.11 | 分線與合併順序 | 全部 | lead |
+| A12 | §10.12 | 後台 13 項篩選之下推策略 | F017「待 architect ①②」 | tdd |
+| A13 | §10.13 | 前後台選項端點是否共用 | F017「待 architect ③」 | tdd |
+| **A14** | §10.7（末段） | **使用表單「編輯編號」端點之形狀**（v1.6a） | F018 `AC-D3`／`AC-D16`–`AC-D20` | tdd |
+
+> 另有三節非「決策」但為交棒必讀：**§10.14** `watermarkLines()` 共用化落點（#7／#17）、**§10.15** 單元測試盲區、**§10.16** 風險與須退回 spec-writer 之爭議。
+
+> **v1.6a（2026-08-16 同日第二次人類閘門後之同步）**：本章有三處因新裁決而更新——① `OQ-D18-25` 定案（**前台使用表單之 PDF 亦燒錄，推翻 `OQ-E05-03`**）⇒ §5.2 下載策略表與 §10.1 燒錄範圍表就地改寫（分流機制**不變**，使用表單只是第三個消費者）；② 新增 **A14**（編輯編號端點，§10.7 末段）；③ §10.15／§10.16 依 11 份 feature 共 **115 條 `AC-D#`** 之現況重新校準。另有兩項原列為待決／爭議者已由 lead 裁定結案：`OQ-D18-A1`（共用端點閘門收斂 → 採用，落為 F020 `AC-D6`）與爭議 #4（前台非 PDF 是否亦代理 → 採用，落為 F020 `AC-D3a`）。
+
+**其他章節之關聯**：本 delta **不新增任何模組**、**不改變架構風格**（Modular Monolith 不動），僅於既有模組內新增端點與純函式；唯一 schema 變更為 `USAGE_FORM_POOL.formNumber`（A7）。§5.2 之「Proxy／SAS 雙模式」為本章 A1／A2 之既有基礎，本 delta **擴大 Proxy 模式的適用面**而非引入新模式。
+
+---
+
+### 10.1 決策 A1：前台/後台燒錄分流之端點設計
+
+#### 硬約束
+
+[F020](features/F020-watermark.md) `AC-D3`：同一 `blobPath` 之 PDF，前台下載得到**已燒錄**位元組、後台下載得到 **RAW**，兩者位元組不相等；且**明文禁止**「讓前後台共用之 `GET /documents/attachments/download` 一律具備燒錄能力」。
+
+#### 選定方案：路徑命名空間分流（server-derived blobPath）
+
+前台下載一律走**前台專屬路徑**，且該路徑**不接受客戶端傳入 `blobPath`**——伺服器自 `(documentId, type)`／`(documentId, appendixId)`／`(documentId, formId)` 反查儲存位置。
+
+| 對象 | 前台路徑（PDF 燒錄／非 PDF 原檔，一律代理） | 後台路徑（RAW，SAS） | 現況 |
+|---|---|---|---|
+| ICSOP PDF | `GET /public/documents/:documentId/attachments/icsop-pdf/download` | `GET /documents/attachments/download?blobPath=` | **前台為新增**；後台既有，僅收斂閘門（見下 `AC-D6`） |
+| OJT 簽到表 | `GET /public/documents/:documentId/attachments/ojt/download` | 同上（共用後台端點） | **前台為新增** |
+| 附錄 | `GET /documents/:documentId/appendices/:appendixId/download` | `GET /admin/appendices/:appendixId/download` | **兩者皆既有**；僅改前台之回應語意 |
+| 使用表單（🔴 **v1.6a 改寫**） | `GET /documents/:documentId/usage-forms/:formId/download` | `GET /admin/usage-forms/:formId/download` | **兩者皆既有**；僅改前台之回應語意 |
+
+> 📝 **v1.6a（2026-08-16 同日第二次人類閘門）**：本表「使用表單」列原記為「維持現況（不燒錄）／不動」，係基於當時仍有效之 `OQ-E05-03`。`OQ-D18-25` 已裁定**前台使用表單之 PDF 亦燒錄**（推翻 `OQ-E05-03`，權威＝[F018](features/F018-usage-form-management.md#front-burn-delta) `AC-D11`–`AC-D14`）。
+> 🔴 **此裁決不改變分流機制本身**：使用表單之前後台端點**早已是兩條不同路徑**（`/documents/:documentId/usage-forms/:formId/download` vs `/admin/usage-forms/:formId/download`，見 `usage-forms.controller.ts:92, 144`），與附錄之結構完全同型 ⇒ **使用表單只是第三個消費者，不需要任何新端點、不需要新的分流手段**。改動面僅為前台端點之**回應語意**（`{url}` SAS grant → 代理串流位元組）與其內部之 `format = pdf ? burn : passthrough` 分支，與附錄之改法逐字相同。
+> ✅ **前台燒錄範圍自此收斂為一致之四路徑**（檢視器／附件／附錄／使用表單），同一詳情頁上不再有「這個燒、那個不燒」之分歧；F020 `AC-D2`／`AC-D3`／`AC-D3a`／`AC-D4` 已同步涵蓋三類檔案。
+
+```mermaid
+graph LR
+  subgraph FS["前台（燒錄路徑）"]
+    PD["PublicDocumentDetailPage"]
+    PV["PublicViewerPage"]
+  end
+  subgraph BS["後台（RAW 路徑）"]
+    DL["DocumentListPage"]
+    DR["DocumentReadonlyPage"]
+    DE["DocumentEditPage"]
+    AM["AppendixManagementPage"]
+    UM["UsageFormManagementPage"]
+  end
+  subgraph API["NestJS API"]
+    WM["WatermarkModule<br/>/public/documents/*"]
+    AP["AppendicesController<br/>/documents/:id/appendices/*"]
+    UF["UsageFormsController<br/>/documents/:id/usage-forms/*"]
+    AT["AttachmentsController<br/>/documents/attachments/download"]
+    AA["AppendicesController<br/>/admin/appendices/*"]
+    UA["UsageFormsController<br/>/admin/usage-forms/*"]
+    BURN["PdfLibBurner.burnPdf()"]
+  end
+  BLOB[("Azure Blob")]
+
+  PD -->|"fetch → Blob"| WM
+  PD -->|"fetch → Blob"| AP
+  PD -->|"fetch → Blob"| UF
+  PV --> WM
+  DL --> AT
+  DR --> AT
+  DE --> AT
+  AM --> AA
+  UM --> UA
+
+  WM --> BURN
+  AP -->|"format=pdf"| BURN
+  UF -->|"format=pdf"| BURN
+  AP -.->|"非 PDF：原檔代理 pass-through"| BLOB
+  UF -.->|"非 PDF：原檔代理 pass-through"| BLOB
+  BURN --> BLOB
+  AT -->|"核發短效 SAS URL"| BLOB
+  AA -->|"核發短效 SAS URL"| BLOB
+  UA -->|"核發短效 SAS URL"| BLOB
+
+  style WM fill:#dcfce7,stroke:#16a34a
+  style AP fill:#dcfce7,stroke:#16a34a
+  style UF fill:#dcfce7,stroke:#16a34a
+  style BURN fill:#dcfce7,stroke:#16a34a
+  style AT fill:#fee2e2,stroke:#dc2626
+  style AA fill:#fee2e2,stroke:#dc2626
+  style UA fill:#fee2e2,stroke:#dc2626
+```
+
+**實作歸屬（避免第二份燒錄實作）**：
+- `icsop-pdf` 分支**內部委派既有 `WatermarkService.download()`**，不複製任何燒錄或稽核程式碼。
+- `ojt` 分支新增 `WatermarkService.downloadAttachment(session, documentId, 'OJT_SIGNIN')`，與 `download()` **共用同一條管線**：`loadDocMeta → assertDocVisible → buildSnapshot → 取原始位元組 → (pdf ? burnPdf : 原檔) → audit`。差別僅在「取原始位元組」的來源由 `WatermarkPdfSource.getOriginalPdf(documentId)` 改為 `AttachmentsService.getAttachmentRef(documentId, type)` ＋ `BlobStore` 讀取。
+- 附錄之 `AppendicesService.downloadAppendix()` 由「回傳 `{url}`」改為「回傳 `{bytes, fileName, contentType}`」；燒錄同樣呼叫 `PdfBurner.burnPdf`，浮水印快照同樣來自 `WatermarkService.buildSnapshot()`（**不得自行組字**——快照是檢視器疊加／PDF 燒錄／稽核三者的唯一共同來源，F039 `AC-D1` 要求其與同一時刻經 F020 檢視器下載所得**逐字相同**）。
+- **使用表單（v1.6a 新增，`OQ-D18-25`）**：`UsageFormsService` 之前台下載方法（其 controller 路由為 `documents/:documentId/usage-forms/:formId/download`，`usage-forms.controller.ts:144`）作**與附錄逐字相同**之改動——回傳位元組、`format = pdf ? burnPdf : passthrough`、快照取自 `WatermarkService.buildSnapshot()`、稽核義務不變（`targetType='USAGE_FORM'`，[F018](features/F018-usage-form-management.md#front-burn-delta) `AC-D14`）。**後台之 `admin/usage-forms/:formId/download`（`usage-forms.controller.ts:92`）一行不改。**
+- 🔴 **三處（附件／附錄／使用表單）之「取位元組 → 判 format → 燒或不燒 → 寫稽核」序列必須抽為單一共用協作點**，建議 `WatermarkService` 新增 `burnIfPdf(session, bytes, format): Promise<{ bytes: Buffer; snapshot: string | null }>`（snapshot 於非 PDF 時為 `null`，正好對應 `AUDIT_LOG.watermarkSnapshot` 之落值規則，[F020](features/F020-watermark.md#front-burn-scope-delta) `AC-D5`）。**理由**：F020 `AC-D2` 明訂「三類檔案適用同一規則、同一文案，不得分歧」，而三個 service 各寫一份 `if (format === 'pdf')` 正是分歧的溫床——本 delta 開始時只有一處（附錄），第二次閘門後變成三處，第四處（日後任何新附屬檔案類型）幾乎必然會漏。
+
+#### 安全性評估（本題之核心）
+
+| 方案 | 客戶端能否自行取得未燒錄原檔？ | 判定 |
+|---|---|---|
+| **A（選定）路徑分流，blobPath 由伺服器推導** | **否。** 客戶端只能選擇呼叫哪個端點；每個端點之授權閘門與燒錄行為皆為伺服器端路由表之固定屬性，與任何請求參數無關 | ✅ 採用 |
+| B 端點參數（`?watermark=false`／`?raw=1`） | **能。** 任何知道端點的使用者（含業務子分類 `User`）加一個 query 參數即取得 RAW | ❌ **明確否決**——等同讓客戶端自行關閉浮水印，直接架空 [NFR-007](nfr.md#watermark) AC5「防繞過」與 F020 全案。此方案在安全性上等於不做 |
+| C 由 `Referer`／自訂 header（`X-Client-Context: public`）判定呼叫端上下文 | **能。** `Referer` 可任意偽造且會被瀏覽器 privacy 設定剝除（剝除後 fallback 語意即為攻擊面）；自訂 header 由前端自填，是 B 的變體 | ❌ 否決——「前台／後台」是**授權語意**，不得建立在可由客戶端控制的輸入上 |
+| D 讓共用端點一律燒錄 | 否，但後台亦被燒錄 | ❌ 違反 `AC-D3` 明文禁止與 `OQ-FM-01` |
+| E 由 session `roleCode` 判定（`User`→燒錄、管理角色→RAW） | 否 | ❌ 否決——ICSOPAdmin 自前台詳情頁下載會拿到 RAW，違反 `AC-D3`「同一 blobPath 前台燒錄」；且會使 F026 之角色×欄位矩陣與燒錄語意互相污染（兩者本應正交） |
+
+#### 🔴 附帶硬化：收斂共用端點之閘門（✅ **2026-08-16 lead 已裁定採用，落為 [F020](features/F020-watermark.md#front-burn-scope-delta) `AC-D6`**；原 `OQ-D18-A1` 結案）
+
+`GET /documents/attachments/download` 之 `@RequirePermission` 由 `DOCUMENT_DOWNLOAD_PRINT, 'read'`（五角色皆可）**收斂為 `ICSOP_DOCUMENT_MANAGEMENT, 'read'`**。
+
+- **理由一（範圍）**：delta 之後該端點已無前台呼叫端，其應有的角色集合恰等於 `AC-D4` 所列之四種後台角色——`ICSOP_DOCUMENT_MANAGEMENT` 之矩陣列為 SysAdmin `READ`／ICSOPAdmin `CRUD`／Supervisor `READ`／DeptContact `READ`／User `NONE`，**逐格吻合**。
+- **理由二（既有缺口）**：`AttachmentsService.getDownloadUrl()` 現況**完全沒有 F041 可見性檢查**——它只驗「`blobPath` 屬於某筆現存附件」。業務子分類 `User` 只要取得任一 `blobPath` 即可繞過 F041 取得 RAW 原檔。`blobPath` 含不可猜測 UUID（`documents/{documentId}/{type}/{uuid}.{ext}`）故非可直接利用之漏洞，但它是 **F041 deny-by-default 涵蓋面上一個未受檢查的缺口**（§3.7 決策三所列四個接縫不含此端點）。
+- **代價**：已查證 `attachments-controller-routes.spec.ts` **未斷言** `download` handler 之閘門，故無既有 unit 測試反轉；若有以 `User` 角色打該端點的 int 測試，將轉為 403。
+- **被否決之替代方案**：「保留閘門、僅於共用端點補一道 F041 檢查」（`store.findByBlobPath()` 已回傳 `documentId`，餵給 `isDocVisibleToViewer` 即可）。lead 裁定採**收斂**——前台已無呼叫端，收斂比在後台路徑上維護一個永遠為真的判斷更徹底。
+- ✅ **裁定後之落地要點**：① `attachments.controller.ts` 之 `download` handler 改掛 `@RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')`；② [F025](features/F025-role-function-matrix.md) 矩陣**逐格不變**（僅端點改綁既有功能列，未新增列、未改任何格值）；③ 一般使用者之下載能力不受損——前台一律改走本節之前台專屬路徑（內含 F041 檢查與燒錄），[F026](features/F026-role-field-matrix.md)「ICSOP PDF＝唯讀（可下載）」對 `User` 仍成立；④ 已查證 `attachments-controller-routes.spec.ts` **未斷言**該 handler 之閘門，故無既有 unit 反轉——但**須新增**一條 route-metadata 斷言把新閘門釘住，否則這次收斂日後會被無聲改回。
+
+#### 🔴 前端觸發方式：一律 `fetch → Blob`，禁用 `window.open`／`<a href>`
+
+新前台下載端點回應為 binary stream。前端**不得**以 `window.open(url)` 或 `<a href>` 觸發：top-level navigation 會送出 `Accept: text/html,...`，而本專案 2026-07-25 之瀏覽器煙霧測試**已踩過完全同型的 bug**（viewer PDF iframe 之 `Accept: text/html` 撞 SPA fallback，畫面顯示 app shell 而非 PDF；見 `docs/specs/prototype-alignment/browser-smoke-findings.md`）。使用者會「下載成功」，得到一份副檔名為 `.pdf` 但內容是 HTML app shell 的檔案。
+
+**統一 helper**（新增 `frontend/src/api/download-blob.ts`，供 A1 前台下載與 A4 匯出共用）：
+
+```ts
+// 示意，不落地為可執行檔案
+export async function downloadViaBlob(path: string, fallbackName: string): Promise<void> {
+  const res = await fetch(path, {
+    credentials: 'include',
+    headers: { Accept: 'application/octet-stream' }, // ← 關鍵：不送 text/html，不觸發 SPA fallback
+  });
+  if (!res.ok) throw await extractError(res);         // 沿用 client.ts 之既有錯誤轉譯
+  const name = filenameFromContentDisposition(res.headers.get('content-disposition')) ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  try { /* 程式化 <a download> 點擊 */ } finally { URL.revokeObjectURL(url); }
+}
+```
+
+⚠ 既有 `LifecycleTreePreviewPage.tsx:211` 之 `<a href={lifecycleTreeDownloadUrl(id)}>` 屬同一風險型態（且路徑前綴 `/admin/` 與 SPA 路由前綴相同），本 delta **不改它**（不在範圍），但列為 §10.15 之風險與煙霧測試必驗項。
+
+---
+
+### 10.2 決策 A2：傳輸模式由 SAS 核發改為代理串流之影響
+
+#### 效能（NFR-001）
+
+- 既有基準：`test/int/watermark-burn-timing.itest.ts`（TS-HD-WM-001/002），暖機後 10 頁 CJK 燒錄本機實測 **≈250ms**，迴歸警戒線 8,000ms，[NFR-001](nfr.md#performance) 目標「PDF 下載額外處理（含浮水印燒錄）< 3 秒」。
+- 前台附件／附錄／**使用表單**之燒錄走**完全相同**的 `PdfLibBurner`，故**沿用同一基準與同一迴歸測試**，不另立門檻。新增成本僅為「多一次 Blob 下行 ＋ 一次 API 上行」。
+- **決策**：不為本 delta 新增效能 NFR；但既有燒錄計時 int 測試之涵蓋面須擴及**附錄與使用表單兩條路徑**（同一 burner、不同呼叫端）。
+
+#### 記憶體：PDF 必須 buffer、非 PDF 必須 stream
+
+`pdf-lib` 之 `PDFDocument.load(buffer)` **要求全檔進記憶體**，無 streaming 可能。單檔上限 50MB ⇒ 燒錄峰值約 **2–3× 檔案大小**（原始 buffer ＋ parsed document ＋ `save()` 輸出）。
+
+| 分支 | 傳輸方式 | 理由 |
+|---|---|---|
+| `format = pdf` | **buffer**（無選擇） | `pdf-lib` 之硬性限制 |
+| `format ∈ {xlsx, xls, jpg, png}` | **stream pass-through**（`BlobStore` → `res` pipe），**仍為代理、不核發 SAS** | 位元組不需處理，沒有理由落記憶體。50MB xlsx × 併發即為 OOM 風險 |
+
+⚠ **實作前提**：若 `BlobStore` 介面目前僅有 `getBytes()`／`getDownloadUrl()`，須 additive 新增 `getStream(path): Promise<Readable>`。若因故不補，非 PDF 亦以 buffer 傳送，**則須把「50MB × 併發數」列入容量風險並降低下列併發閘上限**。
+
+✅ **v1.6a 確認**：本表之「非 PDF 仍走代理（只是不落記憶體）」已於 2026-08-16 由 lead 裁定並落為 [F020](features/F020-watermark.md#front-burn-scope-delta) **`AC-D3a`**（前台一律代理串流，非 PDF 亦然，不得為 SAS URL、不得 3xx 轉址）。原列於 §10.16 之爭議 #4（「AC-D2 之逐位元組措辭與 §5.2 之 SAS 原則相衝」）**已解消**——§5.2 該列已於本版改寫為前台/後台兩列。**「stream pass-through」與「代理」不是二選一**：pass-through 指的是不落記憶體，代理指的是位元組流經應用層；兩者同時成立。
+
+#### 🔴 燒錄併發閘（additive，不改變任何 AC 之可觀測行為）
+
+現況對燒錄無併發上限。前台燒錄面擴大後，最壞情境為多人同時下載接近 50MB 的 PDF ⇒ Node heap 爆掉會讓**整個 Modular Monolith 一起倒**（單一部署單元，§1.1）。
+
+- **決策**：於 `PdfBurner` 之呼叫端外層加一個**進程內 semaphore**（建議上限 **4** 併發，超出者**排隊**而非拒絕），使記憶體峰值有上界（4 × 3 × 50MB ≈ 600MB，於一般容器記憶體配額內）。
+- 排隊而非拒絕：拒絕會產生一個 AC 沒有定義的錯誤碼；排隊只影響延遲，且 NFR-001 之 3s 目標是對「額外處理」而非「含排隊之端到端」。
+- 上限值應可由環境變數覆寫（`ICSOP_BURN_CONCURRENCY`，預設 4），供容量調校。
+
+#### Blob 出向流量
+
+由「瀏覽器 ↔ Blob 直連」改為「Blob → API → 瀏覽器」，同一份位元組經過兩段，且下行段落在 API 節點。**惟 ICSOP PDF 早已是代理模式**（§5.2 決策），故此為既有模式的**擴大**而非新模式；新增的是「前台 OJT」「前台附錄」「前台使用表單」**三條**路徑（v1.6a 由兩條增為三條），皆為低頻操作。
+
+#### 既有 `getDownloadUrl` 呼叫端之保全（AC-D4 回歸鎖定）
+
+| 方法 | 動作 |
+|---|---|
+| `AttachmentsService.getDownloadUrl()` | **一行不改**（後台三頁之唯一下載路徑） |
+| `AppendicesService.downloadFromPool()` | **一行不改**（後台附錄管理頁） |
+| `AppendicesService.downloadAppendix()` | 改為回傳位元組（其**唯一**呼叫端為前台 controller，故改動不外溢） |
+| `UsageFormsService` 之**後台**下載（`admin/usage-forms/:formId/download`） | **一行不改**（v1.6a；後台使用表單管理頁） |
+| `UsageFormsService` 之**前台**下載（`documents/:documentId/usage-forms/:formId/download`） | 改為回傳位元組（v1.6a；其**唯一**呼叫端為前台 controller，故改動不外溢——與附錄之情形完全同型） |
+| 前端 `downloadAttachment(blobPath)` helper | **保留且不改**；僅 `PublicDocumentDetailPage` 停止呼叫它，後台三頁繼續使用。⚠ 其**閘門**另依 [F020](features/F020-watermark.md#front-burn-scope-delta) `AC-D6` 由 `下載列印文件 read` 收斂為 `ICSOP 文件管理 read`（見 §10.1 附帶硬化，lead 已裁定採用） |
+
+---
+
+### 10.3 決策 A3：非 PDF 判定與 UI 標示之資料來源
+
+#### 選定：以「上傳時已通過白名單驗證之伺服器端事實」為權威
+
+| 對象 | 判定依據 | 為何它是伺服器端事實 |
+|---|---|---|
+| 附錄 | `APPENDIX_POOL.format === 'pdf'` | 上傳時由 `extensionOf(fileName)` 正規化，並經 `assertFormatAllowed('APPENDIX')` 白名單驗證 ⇒ 值域**僅可能是** `xlsx｜xls｜pdf` 三者之一 |
+| 附件 | `extensionOf(DOCUMENT_ATTACHMENT.fileName) === 'pdf'` | 同上（`ICSOP_PDF`→僅 `pdf`；`OJT_SIGNIN`→`pdf/jpg/jpeg/png`）。該表無 `format` 欄，故以 `fileName` 之副檔名為之 |
+
+#### 被否決之依據
+
+- **❌ `content-type`**：直接取自 multipart 之 **client-supplied header**，是**使用者可控輸入**。以它判定等同讓上傳者宣告「我這份 PDF 不是 PDF」而使該檔在前台永不燒錄。這是本題唯一有實質安全差異的選項，明確否決。
+- **❌ `blobPath` 副檔名**：其副檔名由 `buildAttachmentBlobPath()` 自 `fileName` 推導，理論上等價，但它是「儲存位置」而非「檔案型別」的權威；且前台端點已不再接受客戶端傳入 `blobPath`（A1），用它判定只是多繞一層。
+- **三者不一致時一律以上表為準**，不做交叉比對（交叉比對只會在不一致時產生一個 AC 未定義的錯誤情境）。
+
+#### 已知殘餘風險（策略 A 的邊界，明示不修）
+
+若上傳者把一份 PDF 更名為 `.xlsx` 上傳為附錄，系統存 `format='xlsx'`，該檔在前台就**不燒錄**。這是**策略 A 的定義邊界**：其保護範圍是「宣告為 PDF 者燒錄」，而非「內容為 PDF 者燒錄」。
+
+- 關閉此缺口需 magic-byte 嗅探（讀前 5 bytes 是否為 `%PDF-`），成本極低，但會與既有白名單語意衝突（**副檔名為權威**，F027 明訂 `.xls`-only 且「即便內容相符亦排除 `.xlsx`」）。
+- **本輪不做**，理由：附錄／附件之上傳者恆為 **ICSOPAdmin**（受信任之管理角色，非匿名使用者），威脅模型不成立。列入 [§9](#9-open-decisions) 待決。
+
+#### UI 標示之資料來源：伺服器端旗標，前端不重算
+
+`GET /documents/:documentId/appendices` 之每列 additive 新增 **`watermarkSupported: boolean`**（＝上表之判定結果）；前台詳情頁據此渲染逐字文案 `此格式不支援浮水印`（F039 `AC-D2`）。前台附件清單（`PublicDetailAttachment`）additive 新增同名欄位。
+
+- **不讓前端自行以 `format` 字串判斷**：判定式只能有一份，而它已經是伺服器端的**處理分支**（決定要不要呼叫 `burnPdf`）。前端重算一份，日後白名單擴充（例如附錄開放 `.docx`）時兩者必然漂移，且漂移的表現形式是「UI 說支援、實際沒燒」——一個沒有任何測試會抓到的靜默錯誤。
+- 後台清單**不得**出現該旗標與該文案（後台恆 RAW，顯示「不支援浮水印」只會誤導）。
+
+---
+
+### 10.4 決策 A4：匯出（CSV）之共用產生器與三處端點
+
+#### 🔴 前置事實更正：F024 之「既有匯出」不產生 CSV
+
+三份 spec（F037 `AC-D2`、F038 `AC-D2`、F039 `AC-D6`／`AC-D10`）皆以「與 [F024](features/F024-access-history-query.md) 既有匯出**同構**」為前提。**該樣板不存在**：
+
+- `backend/src/audit/access-history.controller.ts:74-87` 之 `GET /admin/access-history/export` 回傳 **JSON `{ rows, total }`**，非 CSV、非檔案。
+- `frontend/src/pages/AccessHistoryPage.tsx:176-186` 之 `onExport` 收到該 JSON 後**直接丟棄**，只跳一個 toast「已匯出查詢結果（CSV，草案格式）」。**沒有任何檔案被產生或下載。**
+
+**架構結論**：
+1. 「重用 F024 既有實作」在技術上**不可能**——沒有可重用之物。三處匯出之 CSV 產生器是**淨新增**。
+2. 「同構」只能解讀為「向 [error-handling.md#export](error-handling.md#export) 之共用規則對齊」，而該規則本身是本次新寫的。
+3. F039 `AC-D10`／F037 `AC-D8` 之「F024 回歸鎖定」因此鎖住的是一個 **no-op**——這不影響交付（不改它就自動滿足），但驗收時若有人去點 F024 那顆按鈕，會發現它什麼都沒下載。已列為須退回 spec-writer 之爭議（§10.15）。
+
+#### 共用產生器之落點：`backend/src/storage/csv-export.ts`（純函式模組，零 Nest DI）
+
+**落點理由**：`storage/` 已是跨模組**檔案類純規則**之家——`storage/file-rules.ts` 由 F016／F018／F027／F039 四個模組直接 `import` 並使用，是本 repo 已建立的慣例（同型者另有 `org-directory/org-path.ts`、`rbac/viewer-scope.ts`）。CSV 產生屬檔案產出關切點，落此處與既有分類一致。
+
+**跨模組使用方式**：由 `AppendicesModule`／`ChangeHistoryModule` **依路徑直接 import 純函式**，**不**註冊為 provider、**不**加入任何 `@Module.imports`。這是本 repo 之既有慣例（`file-rules.ts` 即如此被四個模組消費），且 NestJS 的模組相依圖只看 `@Module` metadata，不看 TS 檔案層的函式 import ⇒ **結構上不可能產生循環模組相依**。
+
+**契約（示意，不落地為可執行檔案）**：
+
+```ts
+export interface CsvColumn<T> { header: string; value: (row: T) => string | number | null | undefined; }
+export const EXPORT_ROW_LIMIT = 10_000;
+export function assertExportRowLimit(count: number): void;          // > 上限 → BadRequestException('EXPORT_ROW_LIMIT_EXCEEDED')
+export function toCsvBuffer<T>(rows: readonly T[], cols: readonly CsvColumn<T>[]): Buffer;
+export function exportFileName(scope: string, now: Date): string;   // `${scope}_${YYYYMMDD}_${HHmmss}.csv`
+```
+
+#### 逐項實作約束
+
+**① BOM 必須以 bytes 前置，不得以字元前置**
+
+```ts
+Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), Buffer.from(body, 'utf8')])
+```
+
+`'﻿' + body` 再 `Buffer.from(..., 'utf8')` 結果雖相同，但一旦有人把編碼改成 `latin1`、或改用 `res.send(string)` 讓 Express 自行決定編碼，BOM 就悄悄壞掉而**測試仍可能綠**（若測試也是比對字串而非 bytes）。Controller 端必須 `res.setHeader('Content-Type', 'text/csv; charset=utf-8')` 並 **`res.send(buffer)`（送 Buffer，不送 string）**。
+
+**② 🔴 檔名時區必須顯式位移，不得依賴行程 TZ**
+
+檔名之 `{YYYYMMDD}_{HHmmss}` 為 **UTC+8**，必須以與既有 `formatWatermarkTimestamp()`（`backend/src/public/watermark.ts:68-75`）**完全相同的手法**計算：`new Date(t.getTime() + 8*3600*1000)` 後取 `getUTCFullYear()` 等。
+
+**絕不可**使用 `toLocaleString('zh-TW')`／`toLocaleDateString` 或任何依賴行程本地時區的格式化——行程時區已釘死為 UTC（`backend/Dockerfile:19` `ENV TZ=UTC`），這類寫法在容器內產生 UTC 檔名、在開發機（UTC+8）產生 UTC+8 檔名，**而兩邊的測試都會綠**（各自符合各自的本地時間）。這與 2026-08-14／15 的 MSSQL 時區 bug 是**同一類錯誤**。建議把該 +8 位移抽成 `toTaipei(date): Date` 供浮水印與匯出共用。
+
+**③ 🔴 CSV 注入防護（spec 未涵蓋，本章決定加入）**
+
+任一儲存格之值若以 `=`／`+`／`-`／`@`／Tab(`\t`)／CR(`\r`) 開頭，一律在其前加一個單引號 `'`（`=cmd` → `'=cmd`），再套用 RFC 4180 之引號逸出。
+
+- **為何必要**：Excel／LibreOffice 會把 `=` 開頭的儲存格當公式執行（DDE 執行、`HYPERLINK` 資料外洩）。三處匯出之欄位含**使用者可控字串**——程序書書名、附錄名稱、變更歷程之舊值／新值——故此為**真實可達**的注入面，非理論風險。
+- **與 AC 的張力**：F037 `AC-D2`／F038 `AC-D2`／F039 `AC-D6` 只逐字規定表頭與 RFC 4180 逸出，未提注入防護。加前綴會使「以 `=` 開頭之書名」在 CSV 中多一個字元，可能打斷逐字比對。
+- **判斷**：**採用防護**。不做的話，我們是在產生一個會在使用者機器上執行任意 DDE 的檔案。已列為須退回 spec-writer 之爭議（§10.15），請補一條 AC 明確化。
+
+**④ 10,000 筆上限之檢查時點：在組 CSV 之前，且對成長型資料表必須先 SQL `COUNT`**
+
+`AC` 明訂「不產生任何檔案」⇒ `assertExportRowLimit()` 必須在 `toCsvBuffer()` **之前**單點執行。但更重要的是**取列本身不能先把整張表載進來**：
+
+| 來源 | 現況 | 決策 |
+|---|---|---|
+| F039 附錄池 | `listPoolOverview()` 為 load-all，但附錄池為**有界**集合（百量級池記錄） | 沿用 load-all；10,000 上限即為天花板。**不需 SQL 下推** |
+| F037 `DOCUMENT_CHANGE_LOG` | 🔴 `typeorm-document-change-log.store.ts:49` 之 `listAll()` 為 **`.find({ order })` 全表載入、無 `take`** | **必須改**：見下 |
+| F038 `LIFECYCLE_CHANGE_LOG` | 🔴 `typeorm-lifecycle-change-log.store.ts:46` 同上 | **必須改**：見下 |
+
+🔴 **兩張變更日誌表是 append-only 且隨每次文件編輯／DAG 異動單調成長**，全表載入是本 delta 中**唯一有真實 OOM 風險**之處，且該風險**在查詢路徑上已經存在**（不是匯出才引入的）。本 repo 已於 F024 踩過完全同型的坑並改為 SQL 下推分頁（見 `feature-status.md`）。
+
+**決策（僅針對匯出路徑，不改既有查詢路徑之行為）**：匯出必須
+1. 先以 SQL `COUNT(*)`（帶同一組 WHERE 條件）下推取得筆數；> 10,000 → 立即 400 `EXPORT_ROW_LIMIT_EXCEEDED`，**不執行 `SELECT`**；
+2. 通過後之 `SELECT` 亦帶 **`TOP 10001`**——防「count 與 select 之間有新列寫入」的競態，且天然封頂。
+
+⚠ 既有查詢路徑之全表載入**列為既有缺口**（不在本 delta 範圍），記入 §10.15 風險與 [§9](#9-open-decisions)。
+
+```mermaid
+graph TD
+  A["匯出請求（帶與查詢端點相同之 filters）"] --> B["RolePermissionGuard<br/>沿用既有功能閘門"]
+  B -->|403| Z1["PERMISSION_DENIED"]
+  B --> C["SQL COUNT(*) 下推<br/>（同一組 WHERE）"]
+  C --> D{"count > 10000 ?"}
+  D -->|是| Z2["400 EXPORT_ROW_LIMIT_EXCEEDED<br/>不產生任何檔案"]
+  D -->|否| E["SELECT TOP 10001（同一組 WHERE + 同一排序）"]
+  E --> F["assertExportRowLimit(rows.length)<br/>（競態第二道）"]
+  F --> G["toCsvBuffer(rows, cols)<br/>BOM + RFC4180 + 注入前綴"]
+  G --> H["寫稽核（F037/F038 各一筆；F039 不寫）"]
+  H --> I["res: text/csv; charset=utf-8<br/>Content-Disposition: attachment"]
+  style Z2 fill:#fee2e2,stroke:#dc2626
+  style G fill:#dcfce7,stroke:#16a34a
+```
+
+#### 三處端點
+
+| 方法 | 路徑 | 閘門 | 稽核 | 檔名 scope |
+|---|---|---|---|---|
+| GET | `/admin/appendices/export` | `附錄管理` read | **不寫**（管理存取，比照後台下載） | `appendices` |
+| GET | `/admin/change-history/documents/export` | `文件變更歷程` read | `CHANGE_LOG_VIEW` × 1 | `document_change_history` |
+| GET | `/admin/change-history/lifecycles/export` | `文件變更歷程` read | `LIFECYCLE_CHANGELOG_VIEW` × 1 | `lifecycle_change_history` |
+
+**三者一律與其對應查詢端點接受完全相同之 query 參數，並複用同一個 `buildFilters()`**，不另立參數集合——否則「匯出範圍＝當前篩選之全部結果」會在兩份參數解析漂移時悄悄失準（例如查詢支援 `field` 而匯出忘了解析，使用者匯出到一份比畫面多的結果卻毫無徵兆）。
+
+**前端**：三處皆使用 A1 之 `downloadViaBlob()` helper（`fetch → Blob → object URL → 程式化 <a download>`）。檔名優先取 `Content-Disposition`，解析失敗才以前端同式重建。
+
+---
+
+### 10.5 決策 A5：樹狀圖節點文件清單端點
+
+#### 選定：新增 `GET /admin/lifecycles/:lifecycleId/nodes/:nodeId/documents`
+
+掛於**既有** `NodeDocsController`（其 `@Controller` 前綴已是 `admin/lifecycles/:lifecycleId/nodes/:nodeId`，新增一個 `@Get('documents')` 即可，不新增 controller、不新增模組）。
+
+#### 🔴 權限閘門（本題唯一真正的陷阱）
+
+```ts
+@Get('documents')
+@RequirePermission(FunctionKey.LIFECYCLE_MANAGEMENT, 'read')   // ← 'read'，不是 'write'
+```
+
+`LIFECYCLE_MANAGEMENT` 之矩陣列為 SysAdmin `READ`／ICSOPAdmin `CRUD`／Supervisor `READ`／DeptContact `NONE`／User `NONE` ⇒ **恰為 F036 `AC-D5` 所要求**（Supervisor 通過、DeptContact／User 403 `PERMISSION_DENIED`）。
+
+⚠ **同一個 controller 上的 `mount()`／`unmount()` 用的是 `'write'`**（F009 之 ICSOPAdmin 寫入路徑）。第二參數一字之差，Supervisor 就會在樹狀圖預覽頁吃 403，直接牴觸 `OQ-E08-03`（主管對循環管理為全公司唯讀）。既有 `@Get('drawer')` 已是 `'read'`，可作為對照樣本。
+
+#### 為何不重用既有端點
+
+| 候選 | 否決理由 |
+|---|---|
+| `GET .../drawer`（F009 節點抽屜） | (1) 它回傳 `candidates`——該循環中**可被掛載**的其他文件及其目前所屬節點名，那是寫入路徑所需之資料，對唯讀抽屜是**多餘的資訊暴露**，且會讓「純唯讀」（`AC-D4`）在 DOM 之外被實質破壞；(2) 其 `mounted` 只有 `{id, documentNumber, documentName}`，**缺 `AC-D2` 要求的 `版次`／`狀態`／`公告日期` 三欄**。要嘛擴充 drawer（污染寫入路徑之契約），要嘛新增端點——選後者 |
+| F017 之 `document-list-query` 管線 | (1) 帶 14 欄富化（名稱解析、`links` 批次注入、`icsopPdfBlobPath`），對本抽屜是重度浪費；(2) 其閘門為 `ICSOP_DOCUMENT_MANAGEMENT`，該列 **DeptContact 為 `READ`**——與 F036 之可視角色集合**不同**（DeptContact 對循環管理為 `NONE`）。混用會讓 DeptContact 從此端點看到節點文件，是一個安靜的權限擴張 |
+
+#### N+1 風險：無
+
+`AC-D2` 所需之五欄（`documentNumber`／`documentName`／`edition`／`status`／`announcedDate`）**全部落在 `ICSOP_DOCUMENT` 單表**，一次 `WHERE nodeId = :nodeId AND lifecycleId = :lifecycleId` 即取全。狀態徽章由既有純函式 `deriveDisplayStatus(status, announcedDate, today)` 衍生（沿用 F017 現況：後端回原始 `status` ＋ `announcedDate`，前端以同一份 `display-status` 邏輯渲染，前後台顯示規則因此不可能分歧）。
+
+#### 為何 lazy per-node，而非預覽頁初次載入即一併回傳
+
+| 方案 | 判定 |
+|---|---|
+| **lazy（選定）**：`dblclick` 時才取該節點之文件清單 | 節點數在低百位、每節點 0..N 份文件；一併回傳會把 tree-preview 之回應從「結構資料」放大為「近乎全文件清單」，而該回應落在 [NFR-001](nfr.md#performance)「DAG 畫布載入/互動 < 500ms」之關鍵路徑上。使用者一次工作階段通常只雙擊少數幾個節點 ⇒ 預載的絕大部分是浪費 |
+| eager（預覽時一併回傳） | 省一次往返，但代價是把成本從「使用者實際需要時」搬到「每次開啟預覽頁」 |
+
+**錯誤處理**（F036 Error Scenarios 明訂）：抽屜顯示錯誤提示但**不關閉**、**不影響**樹狀圖既有渲染與標示狀態、**不寫稽核**。
+
+**稽核**（`AC-D8`）：本端點**不得注入 `AuditWriter`**——雙擊屬同一次 `LIFECYCLE_VIEW` 之頁內操作，不另記事件。「不注入」是比「注入但不呼叫」更強的結構性保證。
+
+---
+
+### 10.6 決策 A6：前台 filter-options 端點
+
+#### 選定：單一端點 `GET /public/documents/filter-options`，一次回傳五組選項
+
+**單一 vs 五個端點**：**單一**。五組選項全部由**同一份候選文件集合**衍生（`listCandidates()` → 已公告基底條件 → `isDocVisibleToViewer` → 五組 distinct）。拆成五個端點會讓同一段管線跑五次，且五次之間可能落在不同的 `today`、不同的資料快照，產生**互不一致的選項組合**。單一端點另使「五組選項與清單結果來自同一次可見性計算」成為結構性保證，而非約定。
+
+#### 🔴 可見性過濾之落實方式：物理共用，不是「記得也要過濾」
+
+抽出純函式 `visibleCandidates(items, viewer, today): PublicDocItem[]`（＝現行 `buildPublicList()` 內 `base` → `visible` 兩行），由 **`buildPublicList()` 與 `buildFilterOptions()` 同時消費**。
+
+- 這是 F019 `AC-D5` 資安要求的正確落實：不是「選項端點也要記得呼叫 `isDocVisibleToViewer`」，而是「兩者物理上呼叫同一個函式」——前者是約定（會被忘記），後者是結構（忘不掉）。
+- ⚠ **`buildPublicList()` 之簽章與輸出一行不改**（`AC-U5`／`AC-D13` 回歸鎖定），只是把開頭兩行 extract 成具名函式。
+
+```mermaid
+graph LR
+  S["PublicDocumentStore.listCandidates()"] --> V["visibleCandidates(items, viewer, today)<br/>= isAnnounced → isDocVisibleToViewer"]
+  V --> L["buildPublicList(...)<br/>篩選 → 置頂排序 → 分頁"]
+  V --> O["buildFilterOptions(...)<br/>五組 distinct"]
+  L --> R1["GET /public/documents"]
+  O --> R2["GET /public/documents/filter-options"]
+  style V fill:#dcfce7,stroke:#16a34a
+```
+
+#### 回傳形狀
+
+```
+{ draftingCompanies: Option[], draftingSections: Option[], draftingDepts: Option[],
+  chiefs: Option[], lifecycles: Option[] }
+Option = { value: string; label: string }
+```
+
+`value` **恆為 id／code**（`draftingCompanyId`／`draftingDeptId`／`draftingSectionId`／`employeeNo`／`lifecycleId`），**不得**為顯示名稱——F019 `AC-D4` 已鎖定比對鍵為 id。`label` 由既有 `NameResolutionService`／`resolvePersonName`／`lifecycleDisplayName` 解析，fallback 為 code（沿用清單既有 fallback 慣例）。
+
+#### 快取策略：**本輪不做**
+
+| 理由 | 說明 |
+|---|---|
+| 資安 | 快取鍵必須含 viewer 之可見集合維度（`roleCode` ＋ `userSubtype` ＋ `orgCode`）。任何一維遺漏即**跨帳號洩漏**——而這正是 `AC-D5` 所防之事。加一層快取等於在資安關鍵路徑上引入一個「鍵寫錯就洩漏、且單元測試永遠測不出來」的元件（unit 每次新建實例，快取跨請求的行為不在其觀測範圍） |
+| 效益 | 資料量微不足道：實測 114 個 `ORG_UNIT`、文件 ≈598 筆、循環數十。五組 distinct 是記憶體內 O(n) 一次掃描 |
+| 成本對比 | 現行清單端點本來就每次 `listCandidates()` 全載，filter-options 不會比它更貴 |
+
+🔴 **若日後要加快取**：鍵**必須**是 `(roleCode, userSubtype, orgCode)` 三元組，業務子分類之 `orgCode` 不可省。已記入 [§9](#9-open-decisions)。
+
+#### 「當責室長」主要∪次要之查詢下推（F019 `AC-D7` × F017 `AC-D7`，「不得只改一處」）
+
+- `PublicDocItem` **additive 新增** `primaryChiefId`／`secondaryChiefIds`／`draftingCompanyId`／`draftingSectionId`／`edition` 五欄。
+- `TypeOrmPublicDocumentsStore.listCandidates()` 已對 `DOC_USING_DEPT` 做 `In(docIds)` 批次查詢並以 `groupUsingDeptIds()` 分組；對 `DOC_SECONDARY_CHIEF` 加**完全同構**的一次批次查詢即可（`IX_DOC_SECONDARY_CHIEF_doc` 索引已存在），**不 N+1**。其餘三欄本就在 `ICSOP_DOCUMENT` 主表上，只是現行 `map` 沒有取出。
+- 🔴 **比對純函式共用**：新增 `backend/src/documents/chief-match.ts`，匯出
+  `matchesChiefFilter(row: { primaryChiefId: string|null; secondaryChiefIds: string[] }, chiefId?: string): boolean`
+  （＝未提供 → `true`；否則 `chiefId === primaryChiefId || secondaryChiefIds.includes(chiefId)`）。
+  由 `public-list.ts`（前台）與 `document-list-query.ts`（後台）**各自依路徑 import 同一份**——這是「F017 `AC-D7` 與 F019 `AC-D7` 為同一語意之兩處斷言，不得只改一處」的**結構性保證**：兩處不可能分歧，因為它們是同一個函式。
+- **語意為既有行為之嚴格超集**：後台現況 `filters.primaryChiefId !== r.primaryChiefId`（`document-list-query.ts:57`）之全部既有期望值不反轉，只新增「次要命中亦納入」之情形。
+
+#### 對外 DTO 之欄位裁剪落點（F019 `AC-D12`）
+
+**於 service 層之 `toDto()`**（`PublicDocumentsService.toDto`／`PublicDocumentDetailService.detail` 之回傳組裝），**不在 controller 序列化層**。
+
+- 理由：`AC-D12` 明訂「內部型別 `PublicDocItem.usingDeptIds` **保留**（置頂與 F041 可見性判定所需），只約束序列化至 HTTP 回應之對外形狀」。`toDto()` 正是「內部型別 → 對外型別」的唯一轉換點，把裁剪放在這裡，型別系統本身就會保證 `PublicListItemDto` 上不存在 `usingDeptIds`／`usingDeptNames`（`hasOwnProperty === false` 自動成立）。
+- 若放在 controller 以 interceptor 剝除欄位，DTO 型別上仍有該欄，`AC-D12` 之 `hasOwnProperty` 斷言就變成對執行期行為的斷言而非型別保證，且任何新增的 controller 忘了掛 interceptor 就洩漏。
+- 連帶：`PublicListItemDto` **additive 新增** `draftingCompanyName`／`draftingSectionName`／`edition`，**移除** `usingDeptIds`／`usingDeptNames`。前台詳情 DTO 同步移除該兩欄（`AC-D9`／`AC-D12`）。
+
+---
+
+### 10.7 決策 A7：`USAGE_FORM_POOL.formNumber` 之唯一性實作與 migration
+
+#### 選定：以**欄位級 `COLLATE` 明示**達成不分大小寫（不另存正規化比較欄）＋ 應用層比對為第一道、filtered unique index 為第二道
+
+> 📝 **2026-08-16 實跑更正（v1.6b）**：本小標原為「**依賴 DB collation**」，該前提已於容器內對真 SOP DB 實跑時被推翻（見下）。現行決策為「**不依賴、一律明示**」；`COLLATE` 明示後之其餘設計（filtered unique index、雙保險、不加正規化欄）**逐項不變**。實體落地檔＝`backend/src/database/migrations/1724025600000-usage-form-number-collation.ts`（本節之 DDL 區塊自此為**對照示意**，非唯一權威）。
+
+🔴 **不得假設 DB 之 collation，實作前必查**（本專案 2026-08-16 實跑打臉此假設）：SOP 資料庫實際為
+`Chinese_Taiwan_Stroke_BIN`——**`_BIN` 是二進位比對，大小寫敏感**，`UNIQUE INDEX` 因而擋不住
+`FM-001` 與 `fm-001` 並存（已於交易內實插驗證）。`account.entity.ts:6` 之既有註解雖寫「MSSQL 預設
+collation 為大小寫不敏感」，**該註解為誤述且程式碼並未依賴它**（`email` 之索引 `IX_ACCOUNT_email`
+非 unique；查詢以 `WHERE LOWER(a.email)=:email` 自保）。⇒ 凡需要「不分大小寫唯一」之欄位，
+**一律以欄位級 `COLLATE ..._CI_AS` 明示**，不依賴資料庫預設。
+
+⚠ **本次事故正是 [§10.15](#ch10-defect-delta) 第 7 項所預告者**（逐字：「大小寫不敏感是 **DB collation** 的行為。記憶體 fake store 用 `toLowerCase()` 比對會**恆綠**，與 DB 實際 collation 完全無關」）。三道機器閘門全綠（backend 145 suites／1921 tests、frontend 79 files／1045 tests、`tsc` exit 0）之下仍然漏掉——**唯一抓到它的是容器內對真 SOP DB 的實插驗證**。全庫其餘欄位之稽核結果與兩項「只登錄不修」之裁決（`ACCOUNT.email`／`ICSOP_DOCUMENT.documentNumber`）見 [open-questions.md](open-questions.md) `OQ-D18-30`／`31`／`32`。
+
+**被否決：另存 `formNumberNormalized`（`lower(trim(...))`）並對它建 unique index**
+- 代價：多一欄、多一份必須與 `formNumber` 同步維護的**衍生狀態**。任何忘記同步的寫入路徑（覆蓋上傳、未來的批次匯入、日後的資料修補腳本）都會產生「唯一索引存在但沒擋住」的**靜默失效**。
+- 且 data-model 已定案欄位集合，加一欄需再改 data-model（本章無權改）。
+- 唯一需要它的情境是「DB collation 為**非 `_CI_`**（`_CS_` 或 `_BIN`）」——而該情境有更便宜的解（欄位級 `COLLATE` 明示，見下表）。故正規化欄位**降為第三順位備案**。⚠ **本專案即落在此情境**（`_BIN`），但仍以 `COLLATE` 解決、**未**新增正規化欄。
+
+#### 🔴 寫 migration 前必須先實跑驗證之前提
+
+```sql
+SELECT DATABASEPROPERTYEX(DB_NAME(), 'Collation');
+SELECT name, collation_name FROM sys.columns WHERE object_id = OBJECT_ID('USAGE_FORM_POOL');
+```
+
+> ⚠ **兩條查詢缺一不可**：`DATABASEPROPERTYEX` 只給**資料庫預設**，`sys.columns.collation_name` 才是**該欄實際生效**的值——欄位可被個別覆寫，兩者不必然相同。判定一律以**欄位級**為準。
+
+| 欄位／DB collation | 採用之方案 |
+|---|---|
+| 含 `_CI_` | 純 `nvarchar(100) NULL` ＋ filtered unique index 即可（仍**建議**明示欄位級 collation，以免日後 DB 遷移靜默失效） |
+| **非 `_CI_`（`_CS_`、`_BIN`、`_BIN2` 等）** | **欄位級 collation 覆寫**：`COLLATE Chinese_Taiwan_Stroke_CI_AS`。仍**不需要**第二欄。<br>⚠ `_BIN` 比 `_CS_` **更嚴**（大小寫、腔調、假名、全半形一律相異），同屬本列。<br>⚠ 欄位若已被索引參照，須 **DROP INDEX → ALTER COLUMN → CREATE INDEX**（MSSQL 拒絕直接 `ALTER COLUMN`）。 |
+
+📌 **本專案之實際落點＝第二列**（SOP DB 為 `Chinese_Taiwan_Stroke_BIN`）。因 `formNumber` 已先由 `1724...-usage-form-number` 建欄並被 filtered unique index 參照，修復 migration 走的正是上表之三步序（DROP → ALTER COLLATE → CREATE），而非一次 `ADD ... COLLATE`。
+
+#### Migration DDL（對照示意；實體落地檔見上文 v1.6b 更正）
+
+```sql
+-- up（必須是兩個獨立的 q.query() 呼叫，見下方注意事項 1）
+ALTER TABLE [USAGE_FORM_POOL] ADD [formNumber] nvarchar(100) NULL;
+CREATE UNIQUE INDEX [UQ_USAGE_FORM_POOL_formNumber]
+  ON [USAGE_FORM_POOL] ([formNumber])
+  WHERE [formNumber] IS NOT NULL;
+
+-- down
+DROP INDEX [UQ_USAGE_FORM_POOL_formNumber] ON [USAGE_FORM_POOL];
+ALTER TABLE [USAGE_FORM_POOL] DROP COLUMN [formNumber];
+```
+
+#### Migration 注意事項（本 repo 之既有教訓，逐條）
+
+1. 🔴 **兩段 `q.query()`，不可合併為一段**：MSSQL 不允許在同一批次中 `ALTER TABLE ADD` 後立即引用新欄，`CREATE INDEX` 會報 `Invalid column name 'formNumber'`；而 TypeORM 的 `QueryRunner` **不吃 `GO`**（`GO` 是 sqlcmd 的批次分隔符，不是 T-SQL）。必須是兩個獨立的 `await q.query(...)`。這是「filtered index on newly added column」的經典踩點。
+2. **單一 `ALTER TABLE ADD`，不做三段式**：既有列自動為 `NULL`，**不需要 `UPDATE` backfill**（`AC-D7`：既有列一律 `null`、不得塞假值）。比照 `1723766400000-account-user-subtype.ts` 之既有註解——誤拆成「先 ADD NULL → UPDATE → ALTER NOT NULL」雖功能等價卻多出可被中途失敗打斷的視窗。
+3. **filtered index 之 SET 選項**：`CREATE INDEX ... WHERE` 要求連線之 `ANSI_NULLS` 與 `QUOTED_IDENTIFIER` 為 `ON`。tedious 預設為 ON，但若日後有人以 `sqlcmd` 手動重跑（其預設不同）會失敗。已知風險，記錄之。
+4. 🔴 **entity 與 migration 之兩軌**：`UsageFormPool` entity 只加
+   `@Column({ type: 'nvarchar', length: 100, nullable: true }) formNumber!: string | null;`
+   **不得**在 entity 上加 `@Index({ unique: true })`——TypeORM **無法表達 filtered index**，加了會產生一個「多筆 `NULL` 互相衝突」的普通 unique index 定義（`synchronize: false` 已鎖，不會被自動套用，但會誤導後人並讓任何 schema 比對工具報假差異）。**filtered index 只存在於手寫 migration。**
+5. 🔴 **寫完必須對真 SOP DB 實跑**（本 repo 反覆教訓）：容器內只有 `dist`（migration 需以編譯後的檔案執行）；Git Bash 下需 `MSYS_NO_PATHCONV=1` 前綴避免路徑被轉換。**單元測試全綠證明不了欄位存在。**
+6. **實跑後之驗收查詢**（三條，缺一不可）：
+   - `SELECT COUNT(*) FROM [USAGE_FORM_POOL] WHERE [formNumber] IS NOT NULL` → 應為 **0**（`AC-D7`）
+   - `SELECT name, is_unique, has_filter, filter_definition FROM sys.indexes WHERE object_id = OBJECT_ID('USAGE_FORM_POOL')` → 應見 `is_unique=1, has_filter=1`
+   - `SELECT collation_name FROM sys.columns WHERE object_id = OBJECT_ID('USAGE_FORM_POOL') AND name = 'formNumber'` → 應含 `_CI_`（**v1.6b 新增**；若此條沒查，下一條的失敗會被誤讀為「測試環境問題」）
+   - 實測兩案：**插入兩筆 `NULL` 不衝突**（`AC-D5`）、**插入 `FM-001` 與 `fm-001` 衝突**（`AC-D4`，2026-08-16 實測應見 MSSQL err **2601**）。🔴 **這兩案是唯一能抓到 collation 假設失效的機制**——三道機器閘門全綠時它們仍可能是紅的
+7. **應用層雙保險與並發**：`USAGE_FORM_NUMBER_DUPLICATE`（409）由服務層先查後判（trim ＋ `toLowerCase()` 比對、編輯時排除自身列）；DB 唯一索引違反時 MSSQL 拋 error **2601／2627**，須於既有 `backend/src/documents/db-error.ts` 之錯誤轉譯**加一條映射至同一個 409**（比照 F013 文件編號唯一性之既有慣例）。缺這條，並發下的重複會以 500 而非 409 現身。
+
+#### A14（v1.6a 追加）：使用表單「編輯編號」端點之形狀
+
+> 權威＝[F018](features/F018-usage-form-management.md#edit-number-action) `AC-D16`–`AC-D20` ＋ `AC-D3`（人類閘門追加裁決）。spec 之 Interface Contract 已標「路徑待 system-architect 確認，不綁死」。
+
+**選定：`PATCH /admin/usage-forms/:formId/number`，body `{ formNumber: string | null }`。**
+
+| 決策點 | 選定 | 理由 |
+|---|---|---|
+| HTTP 方法與路徑 | **`PATCH /admin/usage-forms/:formId/number`** | 本 repo 已有**明確且一致**的「單欄部分更新」慣例：`accounts.controller.ts:101` `@Patch(':id/status')`、`:108` `@Patch(':id/role')`、`documents.controller.ts:103` `@Patch(':id/status')`、`lifecycle.controller.ts:69` `@Patch(':id/status')`。`PATCH /<resource>/:id/<field>` 逐字命中該慣例，無須發明新形狀。**否決 `PUT /admin/usage-forms/:formId`**（該路徑已被覆蓋上傳（multipart）佔用，`usage-forms.controller.ts:77`——同路徑雙語意會讓「改編號」與「換檔案」共用一條 handler，正是人類閘門已否決之替代方案） |
+| 權限閘門 | **路由層 `@RequirePermission(FunctionKey.USAGE_FORM_MANAGEMENT, 'read')` ＋ 服務層 `assertCanWriteDocumentAsset(role, FunctionKey.USAGE_FORM_MANAGEMENT, FieldKey.USAGE_FORMS)`** | 這正是本 repo 既有的**兩道閘門分流**（`storage/document-asset-authz.ts`）：`canPerform(role, fnKey, 'read')` 為 false → `PERMISSION_DENIED`；通過後 `canWriteField(role, fieldKey) !== 'WRITABLE'` → `FIELD_WRITE_FORBIDDEN`。**已逐格查證**：`FunctionKey.USAGE_FORM_MANAGEMENT`（`'文件使用表單管理'`）＝SysAdmin `READ`／ICSOPAdmin `CRUD`／Supervisor `NONE`／DeptContact `NONE`／User `NONE`；`FieldKey.USAGE_FORMS`（`'使用表單'`）＝`ICSOP_WRITABLE`（ICSOPAdmin `WRITABLE`，其餘四角色 `FORBIDDEN`）。⇒ 代入兩道閘門，輸出**恰為 `AC-D17` 所要求之三分**：ICSOPAdmin 2xx／SysAdmin 403 `FIELD_WRITE_FORBIDDEN`（功能面過、欄位面擋）／Supervisor·DeptContact·User 403 `PERMISSION_DENIED`（功能面即擋）。**零新機制、零矩陣改動** |
+| body 形狀 | `{ formNumber: string \| null }`，**只接受這一個鍵**；其餘鍵一律忽略（不報錯，比照既有部分更新慣例） | `AC-D20` 之副作用邊界（六欄逐欄未變、Blob 未讀未寫）由 **body 形狀本身**保證最強：service 收不到檔案，就不可能碰檔案。**不要**用「接受完整表單物件、只挑 `formNumber` 更新」的寫法——那把 `AC-D20` 從結構保證降級為實作紀律 |
+| 正規化與驗證順序 | `trim()` → 空字串／純空白 → `null`；再依 [error-handling.md#usage-form-number](error-handling.md#usage-form-number) **長度（400）先於唯一性（409）**；唯一性比對**排除自身列**（`WHERE id <> :formId`）；`null` **完全不進入**唯一性比對（`AC-D19`） | 與上傳路徑**共用同一個正規化＋驗證純函式**（建議 `usage-forms/form-number.ts`：`normalizeFormNumber(input): string \| null` ＋ `assertFormNumberValid(...)`），供上傳、覆蓋（不改編號故不呼叫）、本端點三處消費。三處各寫一份 trim/lowercase 是 `AC-D4`／`AC-D18` 分歧的溫床 |
+| 稽核 | **不寫**（`AC-D20` 明訂）。**不得注入 `AuditWriter`** | 「不注入」是比「注入但不呼叫」更強的結構性保證（同 §10.5 之節點文件清單端點） |
+| 覆蓋共用警示 | **結構上不可能觸發**——`USAGE_FORM_OVERWRITE_SHARED` 之唯一發出點在覆蓋上傳路徑；本端點是獨立 handler，不經過該路徑 | `AC-D20` 之「不得觸發覆蓋警示」因此不需要任何「記得不要呼叫」的紀律，是端點分離的自然結果。這也是**否決「把編號欄加進覆蓋彈窗」**的技術理由 |
+| 並發 | 服務層先查後判為第一道；**DB filtered unique index 為最終保護**（`AC-D18` 之並發情境）。2601／2627 → 映射為同一個 409（同上第 7 條） | 兩個管理員同時對不同表單設定同一編號時，先查後判存在 TOCTOU 視窗；本 delta **不加 `sp_getapplock`**——編號衝突是使用者可理解、可重試的業務錯誤，其代價遠低於在一個低頻管理動作上引入鎖 |
+
+**回應**：`200` ＋ 更新後之該列（供前端即時反映 `AC-D16` 之「清單即時反映」與成功回饋文案）。**不用 204**——前端需要更新後的值來重繪該列與其 `title`，回 204 會逼前端重查整張清單。
+
+🔴 **`AC-D3` 之「兩處驗證載體」對本端點的意義**：`AC-D3` 明訂「① 前端頁面層 ② API 層——**不經 UI 亦成立**」。這要求端點**不得**依賴任何只有 UI 才會送出的旗標（例如 `?fromEditModal=true`）。本決策之 body 只有 `formNumber` 一鍵，天然滿足。
+
+---
+
+### 10.8 決策 A8：`PageHeader.breadcrumb` 型別遷移
+
+#### 選定：一次性硬改（breaking change），單一 commit 內完成全部呼叫端遷移；**不提供 union 相容型別**
+
+[F002](features/F002-role-based-routing.md) `AC-D7` 已明文要求最終狀態為單一 `{ label, to? }[]`、「**不保留 `string[]` 相容路徑**」，並以 **`tsc` exit 0** 為機器驗證。
+
+🔴 **union 型別 `(string | {label,to?})[]` 會讓 `tsc` 恆為 0，因而直接消滅 `AC-D7` 的可驗證載體。** 在此情境下，相容型別不是「漸進遷移的溫和選項」，它是把驗收條件變成 no-op。
+
+**遷移成本已實測**：呼叫端**實測為 15 處**（F002 之「約 14 處」為近似值，不影響任何 AC）。全部 15 個呼叫端都是**單行字面陣列**（`breadcrumb={['ICSOP 文件管理', '編輯']}`），機械式改寫為 `[{ label: 'ICSOP 文件管理', to: '/admin/documents' }, { label: '編輯' }]`，無邏輯分支、無條件建構。TypeScript 編譯器會逐一指出全部漏改處，不可能遺漏。呼叫端清單（已查證）：`AccessHistoryPage` `AccountManagementPage` `AppendixManagementPage` `ChangeHistoryPage` `DagCanvasPage` `DashboardHome` `DocIndexPage` `DocumentCreatePage` `DocumentEditPage` `DocumentListPage` `DocumentReadonlyPage` `LifecycleListPage` `OrgSyncPage` `PermissionMatrixPage` `UsageFormManagementPage`。
+
+#### 末段不可點之實作落點：元件內部，不在呼叫端
+
+`AC-D6` ① 明訂「最末段一律渲染為不可點之 `<span>`，**縱使該段提供 `to` 亦忽略**」。這只有把規則寫在 `PageHeader` 內部（`i === breadcrumb.length - 1` 一律 `<span>`）才是結構性保證；放在呼叫端等於要求 14 個地方各自「記得不要給末段 `to`」——一次疏忽就破功，且沒有任何機制會發現。
+
+#### 對並行分線之影響（🔴 決定合併順序）
+
+`PageHeader.tsx` 是本 delta **唯一跨多條線的共用檔**。因此 **Lane 1（導覽外殼）必須第一個完成並合併**，其餘各線一律先 rebase 再動工。
+
+反過來做（各線先寫、最後合 Lane 1）的後果：四條線各自持有一份舊型別的 `breadcrumb={[...]}`，`tsc` 只會在 **merge commit** 才爆，且衝突落在別人的檔案裡——這是最難收拾的合併型態。
+
+---
+
+### 10.9 決策 A9：F041 `AC-16` 之遺留（`deptCode`／`matchesDeptFilter`）
+
+#### 選定：**移除** `PublicListFilters.deptCode` 與 `matchesDeptFilter()`；不保留死程式碼
+
+| 選項 | 評估 |
+|---|---|
+| 保留 | 留下一段**無呼叫端**的死程式碼；且 `deptCode` 若仍在 controller 之 query 解析中，客戶端仍可送 `?deptCode=` 而後端仍會據以過濾——`AC-D1` 之「DOM 中不存在使用部門篩選」被滿足，而**該能力靜默續存**。更糟的是，`matchesDeptFilter` 對 `isWithinSubtree` 的呼叫方向與 `isPinned` **相反**（`isWithinSubtree(deptCode, code)` vs `isWithinSubtree(code, userOrgCode)`），這個反向是程式碼註解明文標記的既有陷阱；保留一份沒人呼叫的反向用例，等於為未來的錯誤複製貼上準備好素材 |
+| **移除（選定）** | 無死程式碼；反向呼叫點消失；`PublicListFilters` 收斂為「UI 實際能產生的條件」 |
+
+#### 移除之三處必須同批（缺一即為半吊子狀態）
+
+1. `PublicListFilters.deptCode` 型別成員 ＋ `buildPublicList()` 內的 `matchesDeptFilter(...)` 那一行 ＋ `matchesDeptFilter()` 函式本體
+2. `PublicDocumentsController` 之 `deptCode` query 解析
+3. 前端 `getPublicDocuments()` helper 之 `qs.set('deptCode', ...)`
+
+只移其一會留下「參數還在但沒人讀」或「前端還在送而後端不認」的狀態，兩者都會在日後被誤讀為 bug。
+
+#### 硬邊界（F019 `AC-D13`）
+
+- 🔴 **`isWithinSubtree`／`isDocVisibleToViewer`／`isUsingDeptMatched` 三純函式之簽章與語意一律不變。** `matchesDeptFilter` **不在**該鎖定清單內；且 `isWithinSubtree` 另有兩個呼叫端（`isPinned` 與 `isUsingDeptMatched`）不受影響，`TS-PS-ORG-001`～`006` 全數維持綠燈。
+- **`buildPublicList()` 之簽章不變**（`(items, viewer, filters, today, page, pageSize)`），只是 `filters` 型別少一個成員、函式內少一行。
+- 🔴 **交棒給 test-generator 之明示**：若 `public-list.spec.ts` 內有以 `deptCode` 為輸入的既有案例，那些案例會**隨函式一起刪除**。刪除 ≠ 修改期望值，故不違反 `AC-U5`「不得修改任何既有期望值」，但**必須明示**，否則會被誤判為回歸鎖定遭破壞。
+
+#### F041 `AC-17` 之組合 ③⑤ 之等價替代（「任何排列組合皆不洩漏」不得放寬）
+
+以 F019 `AC-D6` 之新六項篩選任意組合替代。**但更強的保證來自結構而非列舉**：
+
+`isDocVisibleToViewer` 之過濾位置在 `buildPublicList()` 內 `base` **之後**、`filtered` **之前**（`public-list.ts:164-172`），該位置**一行不動**。因此**無論使用者篩選項增減、無論其排列組合**，可見性過濾恆在使用者條件之前執行，不相符文件根本不會進入 `filtered` 的輸入。這比「逐一列舉組合」更強，應在交給 test-generator 時明示——列舉可以窮盡六項的組合，但無法涵蓋日後新增的第七項；位置保證可以。
+
+---
+
+### 10.10 決策 A10：CJK 字型部署與 fail-fast
+
+#### 根因（已由 lead 實測確認）
+
+`backend/Dockerfile` 之 build stage 僅 `COPY tsconfig*.json nest-cli.json ./` ＋ `COPY src ./src`（行 6–7），runtime stage 僅 `COPY --from=build /app/dist ./dist`（行 22）⇒ **`backend/assets/` 從未進入 image**。容器內 `loadCjkFontBytes()` 之兩個候選路徑皆不存在 → 回 `null` → `embedWatermarkFont()` 退化 `StandardFonts.Helvetica` → `pdf-burner.ts:39` 之 `render` 切為 `asciiSafe` → **所有中文變 `?`**。字型檔本體存在於 repo（`backend/assets/fonts/NotoSansTC-Regular.ttf`，7,090,820 bytes）。
+
+#### 修法一：`COPY assets ./assets` 只加到 **runtime stage**
+
+```dockerfile
+# === runtime stage ===
+FROM node:22-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+ENV TZ=UTC
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+COPY assets ./assets                    # ← 新增：置於 COPY --from=build 之前（assets 幾乎不變，dist 每次都變，
+COPY --from=build /app/dist ./dist      #    把不變的放前面才有 layer 快取效益）
+EXPOSE 3000
+CMD ["node", "dist/main.js"]
+```
+
+- **不加到 build stage**：build stage 只跑 `npm run build`（`tsc` → `dist`），字型不參與編譯；加進去只會讓 build layer 多 7MB，且不會被 `COPY --from=build /app/dist` 帶到 runtime（它只複製 `dist`）。
+- **路徑解析驗證**：`__dirname` = `/app/dist/public/fonts` → 上溯三層 → `/app` → `/app/assets/fonts/NotoSansTC-Regular.ttf` ✅；`process.cwd()` = `/app`（WORKDIR）→ 同一路徑 ✅。**兩個候選路徑皆命中，`cjk-font.ts` 一行不需改。**
+
+#### image 大小之取捨：接受 +7.09MB
+
+node:22-alpine 基底 ≈130MB ＋ prod `node_modules` 通常 200MB+，7MB 約占 3%。**被否決的替代方案**：
+
+| 替代方案 | 否決理由 |
+|---|---|
+| 以 `pyftsubset` 預先子集化字型至常用漢字（可壓到 ~1MB） | 浮水印含**使用者姓名與部門名**，任意漢字皆可能出現。子集化會讓罕見姓氏缺字，而缺字在 pdf-lib + fontkit 下的表現是**拋例外或畫空白**——**比 `?` 更難察覺**。且 `embedFont({ subset: true })` 已在**輸出端**做子集化（輸出 PDF 不含整份 7MB），image 內保留全字集才是正確的分工 |
+| volume mount / 啟動時下載 | 引入部署時外部相依——**正是本 bug 的同類根因** |
+
+#### 🔴 修法二：啟動時 fail-fast（本題最重要的決策）
+
+於 `main.ts` bootstrap、`app.listen()` **之前**呼叫 `loadCjkFontBytes()`；回 `null` 即 `throw` 並以非 0 退出，log 逐字列出兩個候選路徑。
+
+- **理由**：本 bug 之所以能穿過全部單元測試、全部整合測試與一次完整的瀏覽器煙霧測試，**唯一原因是靜默降級**——`null` → Helvetica → `asciiSafe`，整條路徑沒有任何一處會失敗。浮水印是**合規性控制項**（[NFR-007](nfr.md#watermark)）；「浮水印上的中文全是 `?`」不是降級，是**控制項失效**。讓它靜默通過，比讓服務起不來更糟。
+- **可關閉性**：以環境變數 `ICSOP_REQUIRE_CJK_FONT`（**預設 `true`**）控制，供不需燒錄之環境（例如純前端 e2e 的 API stub）關閉。🔴 **不可預設 `false`**——預設值就是那個會被忘記設定的值。
+- **相容性**：`PdfLibBurner` 之 `asciiSafe` 退化路徑**保留**（它是「無字型時不崩潰」既有 unit 斷言的載體），只是在正式 runtime 永遠到不了——fail-fast 已在啟動時攔截。
+
+#### 🔴 修法三：如何讓這個 bug 在測試中可被捕捉
+
+**先講清楚原理上測不到的部分**：`ts-jest` 以 repo 根為 cwd 執行、`__dirname` 指向 `backend/src/public/fonts`，兩個候選路徑在 repo 中**恆存在** ⇒ `existsSync` 恆真 ⇒ **無論 `Dockerfile` 寫什麼，單元測試都綠**。任何試圖用 unit test 涵蓋本案的努力都是自欺。
+
+**可行的機器化約束（成本由低到高，建議至少做 a ＋ b ＋ d）**：
+
+| # | 手段 | 層級 | 說明 |
+|---|---|---|---|
+| a | **Dockerfile 靜態斷言** | unit（可跑在既有 jest） | 讀 `backend/Dockerfile` 文字，斷言 runtime stage 內存在 `COPY assets`。不驗證行為，但**它是唯一能在 unit 層擋住迴歸的手段**——把「有人日後刪掉這行」變成紅燈 |
+| b | **容器內檔案存在 smoke** | 部署後（可進 CI） | `docker compose exec api node -e "process.exit(require('fs').existsSync('/app/assets/fonts/NotoSansTC-Regular.ttf')?0:1)"` |
+| c | **端到端位元組斷言** | [integration]，容器內 | 對一份含中文的測試 PDF 呼叫下載端點，以 `pdf-parse`／`pdftotext` 抽出文字層，斷言**含真實中文字串**且**不含 `?` 序列**。這才是真正對應 AC 的驗證 |
+| d | **fail-fast（修法二）** | runtime | 採用後，「容器起得來」本身即為字型存在的證明——等價於把 (b) 內建進 runtime |
+
+🔴 **對 test-generator 之明示**：#6 之有效約束只能建在 **(a) 靜態檔案斷言 ＋ (c) 容器內位元組斷言**。**不要為 `loadCjkFontBytes()` 寫 unit test**——那正是本案的測試盲區本身，寫了只會製造「已覆蓋」的假象。
+
+#### 連帶影響
+
+`backend/src/lifecycle/lifecycle-tree-pdf.ts`（F036 樹狀圖 PDF）與 `lifecycle-change-history-pdf.ts`（F038 新舊樹狀圖 PDF）使用**同一個** `loadCjkFontBytes()` ⇒ 修一處三處齊癒。驗收時三條路徑都要看。
+
+---
+
+### 10.11 決策 A11：分線與合併順序
+
+因範圍縮為 15 項（後台燒錄三項不做），原 analyst 建議之 Lane 1（浮水印）已大幅縮小為「前台燒錄 ＋ 三層式渲染」。以下為依**實際檔案重疊**修正後之分線。
+
+| Lane | 項次 | 主要檔案 | 阻塞於 |
+|---|---|---|---|
+| **L0 · CJK 字型 hotfix** | #6 | `backend/Dockerfile`、`backend/src/main.ts`（fail-fast）、Dockerfile 靜態斷言測試 | 無 |
+| **L1 · 導覽外殼（型別地基）** | #1、#10（麵包屑半） | `components/PageHeader.tsx`（型別）、`components/AppShell.tsx`、`domain/menu.ts`、**15 個 breadcrumb 呼叫端** | 無 |
+| **L2 · 浮水印共用與前台燒錄** | #5a、#5b、#7、#17 | `public/watermark.service.ts`、`public/pdf-burner.ts`、新前台端點、`appendices.{controller,service}.ts`、`api/download-blob.ts`、`domain/watermark-lines.ts`、`PublicViewerPage`／`ChangeHistoryPage`(DiffBoard)／`PublicDocumentDetailPage`／`LifecycleTreePreviewPage` | **L0**（驗收）、**L3**（`PublicDocumentDetailPage` DTO） |
+| **L3 · 前台清單與詳情** | #2、#3、#4 | `public/public-list.ts`、`public-documents.{store,service}.ts`、`typeorm-public-documents.store.ts`、`public-document-detail.service.ts`、新 filter-options 端點、`documents/chief-match.ts`、`PublicListPage`／`PublicDocumentDetailPage`（欄位半） | 無 |
+| **L4 · 後台清單篩選與編輯** | #9、#11 | `documents/document-list-query.ts`、`documents.store.ts`（列富化）、`DocumentListPage`／`DocumentEditPage`／`DocumentCreatePage`、版次共用元件 | **L1**（`DocumentEditPage` breadcrumb）、**L3**（`chief-match.ts`） |
+| **L5 · 匯出** | #14、#16 | `storage/csv-export.ts`（新共用）、三個匯出端點、兩個 change-log store 之 count 下推、`AppendixManagementPage`／`ChangeHistoryPage`（工具列） | **L1**（PageHeader children） |
+| **L6 · 樹狀圖節點抽屜** | #8 | `lifecycle/node-docs.{controller,service,store}.ts`、`LifecycleTreePreviewPage` | 無（完全 disjoint） |
+| **L7 · 使用表單編號** | #18 | `entities/usage-form-pool.entity.ts` ＋ **migration**、`usage-forms/*`、`UsageFormManagementPage`、F017 下拉 label | **L1**（PageHeader） |
+
+#### 跨線共用檔（衝突面）
+
+| 檔案 | 觸及之線 | 處置 |
+|---|---|---|
+| `components/PageHeader.tsx` | L1 建立型別；L4／L5／L7 只改自己頁面的 breadcrumb 字面 | **L1 獨佔，最先合併**，其餘 rebase |
+| `pages/PublicDocumentDetailPage.tsx` | L2（下載鈕行為 ＋ `此格式不支援浮水印` 文案）× L3（移除「文件使用部門」欄） | 不同區域；**序列合併：L3 先、L2 後**（L2 改動較大且需 rebase 到 L3 的 DTO 變更） |
+| `pages/ChangeHistoryPage.tsx` | L5（工具列匯出鈕）× L2（`DiffBoard` 浮水印三層式 ＋ 移除 `nowrap`） | 不同區域；**序列合併：L5 先、L2 後** |
+| `documents/chief-match.ts`（新） | L3 建立（前台先需要）× L4 消費 | **L3 先合併**；L4 直接 import。若並行時 L4 先寫本地實作再於合併時收斂＝反模式，明確禁止 |
+| `api/endpoints.ts` | L2／L5／L6／L7 皆會 append helper | 純 append，衝突機率低但 rebase 必要 |
+| `public/watermark.service.ts`、`pdf-burner.ts` | L2 | **L2 獨佔** |
+
+#### 合併順序
+
+```mermaid
+graph LR
+  L0["L0 CJK 字型<br/>（單檔，可立即出）"] --> L1["L1 導覽外殼<br/>（型別地基）"]
+  L1 --> L6["L6 樹狀圖抽屜<br/>（disjoint）"]
+  L1 --> L7["L7 表單編號<br/>（含 migration）"]
+  L1 --> L3["L3 前台清單與詳情"]
+  L3 --> L4["L4 後台篩選與編輯"]
+  L4 --> L5["L5 匯出"]
+  L5 --> L2["L2 浮水印燒錄<br/>（最大、最後）"]
+  L0 -.->|"驗收前提"| L2
+  L3 -.->|"DTO 變更"| L2
+  style L0 fill:#fef3c7,stroke:#d97706
+  style L1 fill:#dbeafe,stroke:#2563eb
+  style L2 fill:#fee2e2,stroke:#dc2626
+```
+
+**`L0 → L1 → {L6, L7} → L3 → L4 → L5 → L2`**
+
+- **L0 最先**：它是 L2 驗收的前提——沒有字型，燒錄出來的中文是 `?`，無法判斷 L2 是否正確。
+- **L1 第二**：型別地基，其餘四線 rebase 之後才動工。
+- **L6／L7 可任意插入**：完全 disjoint（L7 僅需 L1 之 PageHeader）。
+- **L2 最後**：最大、風險最高，且需要 L0（字型）與 L3（詳情頁 DTO）都已到位。
+
+#### 並行硬限制（沿用既有 worktree 教訓）
+
+各線共用同一套 SOP DB 與埠 ⇒ **單元測試可並行、DB 整合測試必須序列化**。**L7 之 migration 對真 SOP DB 實跑期間，其他線不得同時跑 int 測試。**
+
+---
+
+### 10.12 決策 A12：後台 13 項篩選之下推策略
+
+> 對應 [F017](features/F017-backend-document-list.md)「待 system-architect ①②」。不在 lead 之 A1–A11 題目中，但為 spec 明文委由架構師之題目。
+
+**現況**：`DocumentListPage` 以 `getDocuments({ pageSize: 2000 })` 一次拉工作集，前端做全部篩選／排序／分頁；`linkTargetId` 是唯一例外（走後端查詢取得 id 集合後前端交集，`DocumentListPage.tsx:124`）。
+
+**決策：本輪不做全面 SQL 下推**，維持既有「工作集 ＋ 前端篩選」架構；逐項處置如下。
+
+| 新增篩選 | 資料現況 | 決策 |
+|---|---|---|
+| `公告日期`（區間） | `announcedDate` 已在列上 | 前端篩選，零後端改動 |
+| `OJT`（三值） | **列上無此資訊** | **後端列富化 additive 加 `hasOjt: boolean`**——`DOCUMENT_ATTACHMENT` 之批次 `In(docIds)` 查詢**已存在**於 `icsopPdfBlobPath` 之富化路徑，同一次查詢即可取得，**零額外往返**。前端做 boolean 篩選 |
+| `附錄` / `使用表單`（選具體一份） | **列上無此資訊** | **比照 `linkTargetId` 之既有樣板**：加 `appendixId`／`formId` 兩個後端查詢參數，回傳符合之文件 id 集合，前端交集。**否決「列上富化 `appendixIds[]`／`formIds[]`」**——會讓 2000 筆工作集每列各帶兩個陣列、回應顯著膨脹，而 99% 的請求根本沒用到這兩項篩選；`linkTargetId` 模式只在使用者實際選了該篩選時才付出一次查詢 |
+| `當責室長`（主要∪次要） | 列上只有 `secondaryChiefCount`／`secondaryChiefNames`（顯示用），**沒有 id** | **additive 加 `secondaryChiefIds: string[]`**（`DOC_SECONDARY_CHIEF` 之批次查詢已存在於名稱解析路徑，取 id 零成本）；前端以 §10.6 之共用 `matchesChiefFilter()` 篩選 |
+| `程序書書名內`（等值 ＋ contains 雙行為） | 工作集已在記憶體 | 前端 `includes`（天然免注入）。⚠ **後端 `applyDocumentQuery` 之 `documentName` 等值比對必須保留**（既有 AC）；contains 只加在前端。若日後下推 SQL，`%`／`_`／`[` 之跳脫須用既有 `escapeLikeContains()` |
+
+**不下推之理由**：2000 筆工作集之前端篩選是既有已驗證的架構，13 項篩選不改變其量級（實測文件 ≈598 份 ≪ 2000）。改為全面下推需重寫 `applyDocumentQuery` 之全部語意並重建其等價性測試，風險遠大於效益。
+
+🔴 **規模觸發條件（記入 [§9](#9-open-decisions)）**：當文件數逼近 **2,000**（`LOAD_SIZE` 上限，屆時清單會**靜默截斷**而非報錯）或首屏 > 3s（[NFR-001](nfr.md#performance)）時，整批下推至 SQL。**`LOAD_SIZE = 2000` 之靜默截斷本身即為既有風險**，建議在下推之前先加一個「`total > LOAD_SIZE` 時於 UI 明示」的護欄。
+
+---
+
+### 10.13 決策 A13：前後台 filter-options **不共用**端點
+
+> 對應 [F017](features/F017-backend-document-list.md)「待 system-architect ③」。
+
+**不共用。** 理由：
+
+1. **義務不同**：前台端點**必須**經 `isDocVisibleToViewer` 過濾（F019 `AC-D5`）；後台**沒有**此義務（F017）。把「必須過濾」與「不需過濾」兩種語意壓進同一個處理器，任何一次條件寫錯就是跨部門洩漏——而洩漏的方向是「業務使用者看到他部門以外的文件存在」，正是 F041 全案在防的事。
+2. **後台根本沒有這個端點**：後台選項現況由前端自 2000 筆工作集以 `uniq()`／`cycleFilterOptions()` 導出（`DocumentListPage.tsx:69-81`），沒有伺服器端選項端點可共用。
+
+**維持兩套**：
+- 前台：新增 `GET /public/documents/filter-options`（§10.6）。
+- 後台：沿用「前端從工作集導出」；新增之 `附錄`／`使用表單` 兩項選項則來自**各自既有的池清單端點**（`GET /admin/appendices` ／ `GET /admin/usage-forms`），不新增端點。`使用表單` 之 label 依 F018 `AC-D8` 組為 `{編號} {名稱}`（`formNumber` 為 `null` 者僅名稱、無前導空格），選項值恆為 `formId`。
+
+---
+
+### 10.14 共用化：`watermarkLines()` 之落點與跨前後端一致性
+
+#### 🔴 不改後端回傳結構
+
+[F020](features/F020-watermark.md) 明訂「**線性稽核快照字串之欄位順序不變**」，且 `buildWatermarkSnapshot()` 之輸出**同時**是檢視器疊加、PDF 燒錄、稽核快照三者的**唯一共同來源**（`watermark.service.ts` 之 `snapshot` 一份三用）。若改為回傳結構化欄位陣列，三個消費點就各自需要重組線性字串以維持稽核一致性——那是把一個 `join` 拆成三份重組，**正是規格要防的漂移**。
+
+#### 落點：`frontend/src/domain/watermark-lines.ts`
+
+自 `LifecycleTreePreviewPage.tsx:33-41` **原地搬移**（實作一字不改，它已是正確版本），匯出 `WATERMARK_CONFIDENTIALITY` 常數與 `watermarkLines(snapshot): string[]`。
+
+分割規則（前後端一致）：以 `WATERMARK_CONFIDENTIALITY` 為錨點，前段去尾 `-`、後段去頭 `-`、空段過濾 ⇒ ①身分資料列 ②固定機密聲明 ③時間戳。
+
+**三個消費者**：
+
+| 檔案 | 改動 |
+|---|---|
+| `LifecycleTreePreviewPage.tsx` | 改為 `import`，刪除本地副本（唯一之行為不變者） |
+| `PublicViewerPage.tsx:226-235` | `{watermark}` → `watermarkLines(watermark).map(l => <span style={{display:'block'}}>{l}</span>)`。⚠ `whitespace-pre-line` 可留可去，但**不能只靠它**——後端字串本來就沒有 `\n`，`pre-line` 無換行可斷，這正是現行 bug 的成因 |
+| `ChangeHistoryPage.tsx:851-860`（`DiffBoard`） | 同上；🔴 **必須同時移除 `whiteSpace: 'nowrap'`**——它**主動禁止換行**，即使拆成三行也會在該 `<span>` 內被壓成一行或溢出 |
+
+#### 跨前後端之一致性保證：同一組測試向量
+
+後端已有正確實作 `backend/src/public/pdf-burner.ts:18-24` 之 `toDisplayLines()`。兩份實作**刻意各留一份**——monorepo 無共用 package，強行共用需引入 build 管線改動，代價大於收益。
+
+**以同一組固定測試向量綁定**：三個代表性快照（① 完整五欄 ② 缺「處/室」 ③ 缺「處/室」與「部門」），前後端各自的測試檔皆對它斷言**相同的三行輸出**。任一邊漂移即紅燈。
+
+🔴 這是**唯一**可行的一致性保證。「兩邊程式碼看起來一樣」不是保證——它是本 delta 中 `PublicViewerPage` 與 `ChangeHistoryPage` 兩處錯誤實作之所以能存在的原因。
+
+#### 欄位不完整（缺姓名／員工編號）：非渲染問題
+
+`buildWatermarkSnapshot()` 之 `present()` 過濾（`watermark.ts:46-48`）為服務契約 §8.4「無下層者處/室留空收合」而設，副作用是**任何**空欄位（含姓名、員工編號）都被靜默吞掉且不留痕跡。依 `OQ-D18-14`：
+
+- **姓名**為 [F003](features/F003-account-role-management.md) `AC-P` 必填 ⇒ 為空即屬資料／同步缺陷。**架構層之處置＝於 `WatermarkService.buildSnapshot()` 加一行 `this.logger.warn(...)`**（當 `session.name` 為空時），使「浮水印缺姓名」由靜默變為可觀測。**不拋例外**——拋了會讓使用者無法檢視文件，代價與問題不成比例。這與 §10.10 之 fail-fast 是同一原則的兩個強度：合規性控制項失效必須可觀測，強度依「阻斷的代價」調整。
+- **員工編號**對手動帳號天然可空 ⇒ 維持 §8.4 收合、**不以 `loginId` 頂替**（頂替會產生看似員工編號實則不是的值，反傷追溯可信度）、**不記 warn**（正常情形）。
+
+---
+
+### 10.15 單元測試盲區
+
+> 本節獨立成章，供 lead 判斷哪些項目**必須**靠容器內實跑或瀏覽器煙霧測試把關。
+> 判準：「在原理上測不到」指的是——不論怎麼寫 unit test，它在 bug 存在時仍會綠。
+
+| # | 項目 | 盲區性質 | 為何 unit 測不到 | 必要之把關手段 |
+|---|---|---|---|---|
+| **1** | **#6 CJK 字型缺檔** | 🔴 **原理上測不到** | `ts-jest` 以 repo 根執行、`__dirname` 指向 `backend/src/public/fonts`，兩個候選路徑在 repo 中恆存在 ⇒ `existsSync` 恆真。無論 `Dockerfile` 寫什麼都綠 | Dockerfile 靜態文字斷言（unit 層唯一手段）＋ **容器內實跑** ＋ 端到端 PDF 文字層抽取（斷言含中文、不含 `?`）＋ 啟動 fail-fast |
+| **2** | **前台/後台位元組不相等**（F020 `AC-D3`／`AC-D4`、F039 `AC-D3`） | 部分測得到 | unit 可 spy `burnPdf` 呼叫次數（0 vs 1）；但「同一 `blobPath` 兩條路徑取得的位元組不相等」需要真 Blob ＋ 真 PDF ⇒ [integration]。**且 unit 完全測不到「前端某頁改成呼叫了錯的端點」**——那是 DOM／網路層事實 | 容器內 int（位元組比對）＋ **瀏覽器煙霧測試**（後台三頁各下載一次、前台詳情下載一次，實際比對檔案內容） |
+| **3** | **串流下載被 SPA fallback 吃掉** | 🔴 **原理上測不到** ／ ✅ **2026-08-16 已兌現** | 新端點回傳 binary；若 nginx／vite 代理白名單未含該路徑、或 `Accept: text/html` 撞 SPA bypass，使用者會下載到一份 HTML app shell 而**副檔名仍是 `.pdf`／`.csv`**。unit 與 vitest 皆不經過 nginx | **瀏覽器煙霧測試**（實際點下載、**開啟檔案確認內容**）＋ 檢查 `nginx.conf`／`vite.config.ts` 之 proxy 白名單。<br>🔴 **本列已於 Phase B 收尾兌現**：新增之前台附件下載與**三個匯出端點**在 `Accept: text/html` 下皆回 **200 + `index.html`**，根因＝`nginx.conf:70` 之保護 regex 未涵蓋新路徑。**每新增一個非 HTML 回應之端點，都必須同步擴充該 regex**——這不是一次性修復，是一條持續義務 |
+| **4** | **CSV BOM 與 Excel 實際開啟結果** | 部分測得到 | unit 可斷言前三 bytes 為 `EF BB BF`；但「Excel 開起來中文不是亂碼」需要真的用 Excel／LibreOffice 開一次 | 人工驗一次（一次性，非迴歸） |
+| **5** | **CSV 檔名時區** | 🔴 **會雙綠**（與 MSSQL 時區 bug 同型） | 若不凍結時鐘且不釘 `TZ`，開發機（UTC+8）與容器（`TZ=UTC`）會得到**不同結果而兩邊都綠**（各自符合各自的本地時間） | unit 必須以**固定 `Date` 注入**並斷言逐字檔名；容器內另實跑一次比對 |
+| **6** | **migration 是否真的建了欄位與 filtered index**（#18） | 🔴 **原理上測不到** | 單元測試全綠證明不了 schema 存在（本 repo 明文教訓） | 對真 SOP DB 實跑 ＋ `sys.indexes` 查詢驗 `has_filter=1` |
+| **7** | 🔴 **`formNumber` 大小寫不敏感** | 🔴 **原理上測不到** ／ ✅ **2026-08-16 已兌現** | 大小寫不敏感是 **DB collation** 的行為。記憶體 fake store 用 `toLowerCase()` 比對會**恆綠**，與 DB 實際 collation 完全無關——即使 DB 是 `_CS_`，unit 仍全綠 | 對真 SOP DB 實測「`FM-001` vs `fm-001` 衝突」＋「兩筆 `NULL` 可並存」兩案。<br>🔴 **本列已於 Phase B 收尾兌現**：三道機器閘門全綠（backend 145 suites／1921 tests、frontend 79 files／1045 tests、`tsc` exit 0）之下，容器內實插驗證發現 SOP DB 為 `Chinese_Taiwan_Stroke_BIN`（**`_BIN`＝二進位比對，比 `_CS_` 更嚴**，原表只設想到 `_CS_`），`FM-001` 與 `fm-001` **兩筆皆成功**。已以欄位級 `COLLATE ..._CI_AS` 修復並獨立驗證（`fm-001` 被拒 err=2601、兩筆 `NULL` 仍並存）。決策更正見 §10.7 |
+| **8** | **`@RequirePermission(..., 'read')` vs `'write'`**（#8、A14、`AC-D6` 閘門收斂） | **測得到，且 v1.6a 起已有 AC 載體** | route metadata spec 可斷言（`attachments-controller-routes.spec.ts` 即此形） | ✅ **不再是「需有人記得寫」**：F036 `AC-D5`（Supervisor 2xx／DeptContact 403）、F018 `AC-D17`（三分角色）、F020 `AC-D6`（User 403、其餘四角色維持）皆已明訂逐角色期望值。仍須為**三個**端點各寫 route-metadata 斷言把 `functionKey`＋`action` 釘住（新節點文件清單、新編號端點、**被收斂閘門的既有 `download` handler**——最後一個尤其重要，否則這次收斂日後會被無聲改回） |
+| **9** | **AC-D7 之機器驗證（`tsc` exit 0）** | 需 CI 支援 | 14 個 breadcrumb 呼叫端漏改是**型別錯誤**，unit test 測不出來 | CI 必須跑 `tsc --noEmit`（前端）。⚠ **若目前 CI 只跑 vitest，`AC-D7` 沒有驗收載體**——須先確認 |
+| **10** | **filter-options 之跨帳號洩漏**（`AC-D5`） | **測得到**（本輪） | 純函式，以兩個不同 viewer 呼叫比對即可，**應該測** | ⚠ **但若日後加了快取，unit 仍會綠而真實環境洩漏**（快取跨請求，unit 每次新建實例）。本輪不做快取即無此盲區；已記入 §9 作為日後加快取時的紅線 |
+| **11** | **CSV 注入（`=` 開頭儲存格）** | **測得到，且 v1.6a 起已入 AC** | 無盲區 | ✅ 已由 lead 裁定採用並落為 [error-handling.md#export](error-handling.md#export) 之逐條規則（前綴六字元、**先加前綴再 RFC 4180 逸出**，順序不可顛倒）＋各 feature 之匯出 AC。🔴 **連帶之新注意點**：該段已明訂「加了前綴之儲存格，其 CSV 值**不再與畫面所見字串逐字相同**」⇒ 匯出 AC 之**值層**期望值必須是「畫面字串**經本規則轉換後**之結果」，直接以畫面原字串斷言會在該類值上假失敗／假通過。**表頭層**逐字斷言不受影響 |
+| **12** | **50MB 附錄／使用表單之記憶體峰值** | 🔴 **測不到** | unit 用小檔，永遠不會 OOM | 容器內以接近上限之檔案實跑一次，觀察 heap |
+| **13** | **後台四頁之下載未被誤改**（`AC-D4`／`AC-D13`） | **測得到，且 v1.6a 起已有 AC 載體** | 前端測試可 mock endpoints 並斷言呼叫的是 `downloadAttachment` | 為後台**四頁**（文件清單／唯讀詳情／編輯頁／**使用表單管理頁**）各加一條「呼叫既有後台 helper、**未**呼叫新前台端點」之 vitest。F018 `AC-D13`／F020 `AC-D4` 已明訂期望值 |
+| **14** | **變更日誌全表載入之 OOM** | 🔴 **測不到** | fake store 只有數筆資料；真表隨每次編輯單調成長 | 匯出路徑之 `COUNT` 下推（§10.4 ④）＋ 容器內以真實資料量觀察 |
+
+#### v1.6a 新增盲區（因 115 條 `AC-D#` 大量收進逐字文案與選擇器而浮現）
+
+> lead 之提問「新的 `data-*` 選擇器在 SSR/CSR 差異下的可測性」——**本專案為純 CSR SPA（Vite ＋ React Router，無 SSR、無 hydration）**，故不存在 SSR/CSR 分歧這一類盲區。但同一批 AC 引入了**另外三個**真實盲區：
+
+| # | 項目 | 盲區性質 | 說明與把關手段 |
+|---|---|---|---|
+| **15** | 🔴 **逐字文案之權威是 prototype，但測試斷言的是實作常數** | **原理上測不到** | F018 `AC-D15` 已自陳「本輪約束環為簡化版（僅 jest/vitest、**無 fidelity 測試**）⇒ AC 是唯一防線」。若 spec-writer 自 prototype 抄寫某字串時抄錯一個全形/半形括號，AC、實作、測試會**三方一致地錯**而全綠——沒有任何機器能發現，因為 prototype 從未被讀進測試。**把關**：交付前以 `grep` 對 `prototypes/*.html` 逐條比對本批新增之逐字字串（`此格式不支援浮水印`／`檢視/下載將燒錄浮水印`／`編輯表單編號`／`僅更新編號，不會變更表單檔案。`／`已更新表單編號。`／`已清除表單編號。`／兩則錯誤訊息／placeholder），**由人執行一次**；或（更好）為本批字串建一個「常數 ↔ prototype 字面」對照清單納入 PR checklist |
+| **16** | 🔴 **`PageHeader` 之 topbar portal 在單元測試中走 inline fallback 分支** | **會綠但沒驗到真實位置** | `PageHeader.tsx` 明文：「未包在 `AppShell` 內時（單元測試）退回 inline 呈現」。凡 AC 措辭為「於 **topbar 動作區**存在某按鈕」者（F011 `AC-D1` 返回鈕、F039 `AC-D4` 匯出鈕、F018「操作」欄之編輯編號動作若也走 PageHeader children），若元件測試單獨渲染該頁而未包 `AppShell`，**斷言命中的是 inline fallback 的 DOM，topbar 之 portal 注入路徑從未被執行**。**把關**：這類測試必須包 `AppShell`（或提供 `TopbarSlotsContext`）才算驗到 AC 所述位置；否則列入瀏覽器煙霧測試 |
+| **17** | **`aria-label`／無障礙名稱之 jsdom 近似** | 小幅偏差 | 本批多條 AC 以「無障礙名稱為逐字 X」表述（F011 `AC-D1`、F039 `AC-D4`、F018 `AC-D16`）。Testing Library 於 jsdom 以 `dom-accessibility-api` 計算 accessible name，是**近似**而非瀏覽器 AOM。單純 `aria-label` 情形完全可靠；若實作改以 `aria-labelledby` ＋ `title` 組合，jsdom 與真實螢幕閱讀器可能分歧。**把關**：要求實作一律用直接的 `aria-label`（AC 皆可如此滿足），避免落入近似的邊緣 |
+
+---
+
+### 10.16 風險、被否決之替代方案與須退回 spec-writer 之爭議
+
+#### 本 delta 之 Auto-Challenge（新增風險列，比照第 8 章）
+
+| # | 風險 | 影響 | 緩解 |
+|---|---|---|---|
+| D1 | **既有共用附件下載端點沒有 F041 可見性檢查** | 業務子分類 `User` 取得任一 `blobPath` 即可繞過 F041 拿到 RAW 原檔（`blobPath` 含不可猜測 UUID，故非可直接利用之漏洞，但為 deny-by-default 涵蓋面之缺口） | ✅ **已緩解**：lead 裁定採**收斂閘門**為 `ICSOP_DOCUMENT_MANAGEMENT read`（[F020](features/F020-watermark.md#front-burn-scope-delta) `AC-D6`），User 一律 403。**殘餘要求**：須新增 route-metadata 斷言把新閘門釘住（§10.15 #8） |
+| D7 | **（v1.6a）「PDF 燒錄／非 PDF 原檔」之分支散落於三個 service** | F020 `AC-D2` 明訂三類檔案（附件／附錄／使用表單）「同一規則、同一文案，不得分歧」。本 delta 開始時只有附錄一處，第二次閘門後成為三處；第四種附屬檔案類型日後幾乎必然漏掉一處 | §10.1 之共用 `WatermarkService.burnIfPdf(session, bytes, format)`——三處各自 `if (format === 'pdf')` 是分歧的溫床，抽為單一協作點後「新增第四種類型」只需接上同一函式 |
+| D8 | **（v1.6a）逐字文案／選擇器大量入 AC，但 prototype 從未被讀進測試** | F018 `AC-D15` 已自陳「本輪約束環為簡化版、無 fidelity 測試 ⇒ AC 是唯一防線」。抄寫錯誤會使 AC／實作／測試三方一致地錯而全綠 | §10.15 #15：交付前由人以 `grep` 對 `prototypes/*.html` 逐條比對本批新增之逐字字串；並要求同一字串（如兩個 modal 之 placeholder）以**單一匯出常數**供多處 import |
+| D2 | **`DOCUMENT_CHANGE_LOG`／`LIFECYCLE_CHANGE_LOG` 之 `listAll()` 為無上限全表載入** | append-only 單調成長；查詢路徑**已經**有 OOM 風險，匯出會放大 | 匯出路徑強制 `COUNT` 下推 ＋ `TOP 10001`（§10.4 ④）。**既有查詢路徑之全表載入列為既有缺口**，不在本 delta 修，記入 §9 |
+| D3 | **`LOAD_SIZE = 2000` 之靜默截斷** | 後台文件清單超過 2,000 筆時前端**靜默截斷**、不報錯，13 項篩選會在一個不完整的工作集上運作 | 本 delta 不改；建議先加「`total > LOAD_SIZE` 時 UI 明示」之護欄（§10.12） |
+| D4 | **燒錄無併發上限** | 多人同時下載大 PDF ⇒ Node heap 爆 ⇒ 單一部署單元（Modular Monolith）整個倒 | §10.2 之進程內 semaphore（預設 4） |
+| D5 | **`<a href>` 觸發之下載撞 SPA fallback** | 使用者取得副檔名正確但內容為 HTML app shell 的檔案；且既有 `LifecycleTreePreviewPage.tsx:211` 已是此型態 | 新路徑一律用 `downloadViaBlob()`（§10.1）；既有樹狀圖下載列為煙霧測試必驗項 |
+| D6 | **策略 A 之副檔名信任邊界** | 上傳者把 PDF 更名為 `.xlsx` ⇒ 前台永不燒錄 | 明示為策略 A 之定義邊界；上傳者恆為 ICSOPAdmin（受信任），威脅模型不成立。magic-byte 嗅探列入 §9 |
+
+#### 被否決之替代方案（彙整）
+
+| 方案 | 否決理由 | 出處 |
+|---|---|---|
+| 端點參數／header／Referer 決定是否燒錄 | 等同讓客戶端自行關閉浮水印 | §10.1 |
+| 由 `roleCode` 決定是否燒錄 | ICSOPAdmin 自前台下載會拿到 RAW，違反 `AC-D3`；且污染 F026 矩陣 | §10.1 |
+| 以 `content-type` 判定是否為 PDF | client-supplied header，使用者可宣告「我的 PDF 不是 PDF」 | §10.3 |
+| 後端浮水印改回傳結構化欄位陣列 | 破壞「線性快照一份三用」之一致性保證，把 join 拆成三份重組 | §10.14 |
+| `breadcrumb` union 相容型別漸進遷移 | 讓 `tsc` 恆為 0，直接消滅 `AC-D7` 的驗證載體 | §10.8 |
+| `formNumber` 另存正規化比較欄 | 多一份必須同步的衍生狀態，忘記同步＝唯一性靜默失效 | §10.7 |
+| 字型子集化以縮小 image | 罕見姓氏缺字，且缺字表現為例外/空白，比 `?` 更難察覺 | §10.10 |
+| 重用 `GET .../drawer` 作為節點文件清單 | 洩漏寫入路徑之 `candidates`，且缺三個必要欄位 | §10.5 |
+| 前後台共用 filter-options 端點 | 把「必須過濾」與「不需過濾」壓進同一處理器 | §10.13 |
+| 後台列富化 `appendixIds[]`／`formIds[]` | 2000 筆工作集每列各帶兩陣列，99% 請求用不到 | §10.12 |
+| filter-options 加快取（本輪） | 快取鍵須含 viewer 三維，漏一維即跨帳號洩漏，且 unit 測不到 | §10.6 |
+
+#### ✅ 原四項爭議之裁示與落地（v1.6a 複查，全數結案）
+
+| # | 爭議 | 裁示與落地 |
+|---|---|---|
+| **1** | **F024「既有匯出」實際上不產生 CSV**（事實性錯誤）。`GET /admin/access-history/export` 回 JSON `{rows,total}`，前端收到後直接丟棄、只跳 toast | ✅ **採納**。F037／F038／F039 之「與 F024 同構」措辭已就地更正為「向 [error-handling.md#export](error-handling.md#export) 之共用規則對齊」，並在 F037 註記逐字保留事實查證結果 |
+| **2** | **CSV 注入防護未入 AC** | ✅ **採納**。已落為 [error-handling.md#export](error-handling.md#export) 之逐條規則（六字元前綴、**先加前綴再 RFC 4180 逸出**，順序不可顛倒），並明訂其對「欄位＝畫面所見」逐字斷言之影響（值層期望值須為轉換後結果）。⚠ 下游 test-generator 必讀該註記，見 §10.15 #11 |
+| **3** | **F002 `AC-D3` 在 14 頁中只有 1 頁有載體** | ✅ **採納**（且較建議更進一步）。回首頁手段收斂為**兩種**（側欄「首頁」項＋側欄 logo）；`AC-D3` 就地改寫為**麵包屑各段連往其自身目標**（編輯頁之 `ICSOP 文件管理` → `/admin/documents`，**非** `/admin`）——此為使用者第 10 項需求「麵包屑應該要有作用」之正確語意。`AC-D7`「可見文字逐字不變」因此得以維持 |
+| **4** | **F039 `AC-D2` 隱含「非 PDF 亦須代理串流」，與 §5.2「非浮水印檔案走 SAS」相衝** | ✅ **採納 architect 方案**（一律代理）。已落為 [F020](features/F020-watermark.md#front-burn-scope-delta) **`AC-D3a`**（前台一律代理、不得 SAS、不得 3xx 轉址，附兩項理由：稽核可靠性＋分支一致性），並於本版就地改寫 §5.2 之下載策略表為前台／後台兩列 |
+
+#### 🔴 須退回 spec-writer 之爭議（v1.6a 複查後：**無新增**）
+
+本輪 115 條 `AC-D#` 經逐條對照本章 13＋1 項決策，**未發現新的技術矛盾或不可行條款**。三項僅為「架構層之提醒」而非爭議，已就地寫入對應章節、不需 spec 改動：
+
+- F020 `AC-D2` 要求「三類檔案適用同一規則、同一文案，不得分歧」——架構層之落實手段為 §10.1 之共用 `burnIfPdf()` 協作點（三個 service 各寫一份 `if (format === 'pdf')` 才是分歧的溫床）。
+- F018 `AC-D15` ②與 `AC-D16` 要求上傳 modal（`upNumber`）與編號 modal（`enNumber`）使用**同一句 placeholder**——實作應以**單一匯出常數**供兩處 import，而非各自寫一次字面字串（兩處各寫一次時，兩條 AC 各自綠燈但字串可獨立漂移）。
+- F018 `AC-D20` 之「六欄逐欄未變」——架構層以 **body 形狀只接受 `formNumber` 一鍵**保證（§10.7 A14），優於在 service 內逐欄比對。
+
+#### 對 §9 之新增待決事項
+
+| OQ | 題目 | 影響 | 現況 |
+|---|---|---|---|
+| ~~`OQ-D18-A1`~~ | ~~共用附件下載端點之閘門收斂 vs 補 F041 檢查~~ | ~~是否關閉業務子分類之 RAW 取得缺口~~ | ✅ **2026-08-16 lead 裁定＝採收斂，結案**。落為 [F020](features/F020-watermark.md#front-burn-scope-delta) `AC-D6`（`下載列印文件 read` → `ICSOP 文件管理 read`，User → 403）。落地要點見 §10.1 |
+| `OQ-D18-A2` | 附錄／附件是否加 magic-byte 嗅探以關閉「更名繞過燒錄」缺口 | 策略 A 之邊界 | 本輪不做（上傳者為 ICSOPAdmin，威脅模型不成立） |
+| `OQ-D18-A3` | 變更日誌 store 之 `listAll()` 全表載入（查詢路徑） | 既有 OOM 風險，隨資料成長惡化 | 匯出路徑已於本 delta 下推；查詢路徑之下推**不在本 delta 範圍** |
+| `OQ-D18-A4` | 後台文件清單 `LOAD_SIZE = 2000` 之靜默截斷 | 超量時篩選在不完整工作集上運作 | 建議先加 UI 明示護欄，下推另議 |
+| `OQ-D18-A5` | filter-options 日後若加快取，鍵必須含 `(roleCode, userSubtype, orgCode)` | 漏一維即跨帳號洩漏，且 unit 測不到 | 本輪不做快取；紅線已記錄 |
 
