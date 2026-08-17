@@ -1,6 +1,7 @@
 import { DocumentListItem, DocumentListFilters } from './documents.store';
 import { DocumentStatus, isValidStatus } from './document-status';
 import { deriveDisplayStatus, DISPLAY_LABEL } from './display-status';
+import { matchesChiefFilter } from './chief-match';
 
 /** F017 分頁預設（比照 F024）。 */
 export const DEFAULT_PAGE_SIZE = 50;
@@ -54,7 +55,16 @@ export function applyDocumentQuery(
     if (filters.draftingCompanyId && r.draftingCompanyId !== filters.draftingCompanyId) return false;
     if (filters.draftingDeptId && r.draftingDeptId !== filters.draftingDeptId) return false;
     if (filters.draftingSectionId && r.draftingSectionId !== filters.draftingSectionId) return false;
-    if (filters.primaryChiefId && r.primaryChiefId !== filters.primaryChiefId) return false;
+    // F017 AC-D7：比對範圍＝主要 ∪ 次要。與前台 public-list.ts **共用同一個函式**，
+    // 故兩處不可能分歧（架構 §10.6／§10.11）。篩選鍵名 `primaryChiefId` 維持不改（既有 API 契約）。
+    if (
+      !matchesChiefFilter(
+        { primaryChiefId: r.primaryChiefId, secondaryChiefIds: r.secondaryChiefIds ?? [] },
+        filters.primaryChiefId,
+      )
+    ) {
+      return false;
+    }
     if (filters.keyword) {
       const kw = filters.keyword;
       if (!includesCi(r.documentNumber, kw) && !includesCi(r.documentName, kw)) return false;

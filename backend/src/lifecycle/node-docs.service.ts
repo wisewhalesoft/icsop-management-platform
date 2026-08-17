@@ -5,7 +5,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { NODE_DOCS_STORE, NodeDocsStore } from './node-docs.store';
+import { NODE_DOCS_STORE, NodeDocsStore, NodeMountedDoc } from './node-docs.store';
 import {
   LIFECYCLE_CHANGE_PUBLISHER,
   LifecycleActor,
@@ -120,6 +120,19 @@ export class NodeDocsService {
       })),
       excludedCount,
     };
+  }
+
+  /**
+   * F036 樹狀圖節點雙擊之**唯讀**文件清單（architecture-spec §10.5）。
+   *
+   * 刻意不重用 `getDrawer()`：後者回傳 `candidates`（可被掛載之其他文件），那是**寫入路徑**
+   * 所需之資料，對唯讀抽屜是多餘的資訊暴露；且其 `mounted` 缺版次／狀態／公告日期三欄。
+   */
+  async listNodeDocuments(lifecycleId: string, nodeId: string): Promise<NodeMountedDoc[]> {
+    const node = await this.store.getNode(lifecycleId, nodeId);
+    if (!node) throw new NotFoundException('NODE_NOT_FOUND');
+    if (!this.store.listNodeMountedDocs) return [];
+    return this.store.listNodeMountedDocs(lifecycleId, nodeId);
   }
 
   /** 掛載文件至節點。confirm=true 允許自他節點改派。 */

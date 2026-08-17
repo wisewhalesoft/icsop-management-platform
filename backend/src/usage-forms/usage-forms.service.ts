@@ -19,9 +19,17 @@ import {
   extensionOf,
 } from '../storage/file-rules';
 import { assertCanWriteDocumentAsset } from '../storage/document-asset-authz';
+import { isUniqueConstraintViolation } from '../documents/db-error';
+import {
+  assertFormNumberValid,
+  formNumberCompareKey,
+  normalizeFormNumber,
+} from './form-number';
 import { canPerform, FunctionKey } from '../rbac/function-matrix';
 import { FieldKey } from '../rbac/field-matrix';
 import { SessionContext, UploadFile } from '../attachments/attachments.service';
+import { FRONT_BURNER } from '../appendices/appendices.service';
+import type { WatermarkSession } from '../public/watermark.service';
 import {
   AUDIT_RECORDER,
   AuditRecorder,
@@ -61,6 +69,41 @@ export interface DownloadGrant {
   expiresInSeconds: number;
 }
 
+/**
+ * F020 `AC-D3a`：前台使用表單下載一律**代理串流**——回傳位元組本身，不核發 SAS、不 3xx 轉址。
+ * （後台之 `downloadFromPool()` 維持核發 SAS，一行不改。）
+ */
+export interface UsageFormDownloadBytes {
+  bytes: Buffer;
+  fileName: string;
+  contentType: string;
+}
+
+/**
+ * 前台協作點之窄口徑（實作為 `WatermarkService`；與附錄共用同一 token）。
+ * 🔴 本宣告與 `appendices.service.ts` 之 `FrontBurner` **必須逐字同形**（結構型別、同一 token）：
+ * 兩處刻意各自宣告以避免模組循環，故新增能力時兩邊都要加。
+ */
+export interface FrontBurner {
+  burnIfPdf(
+    session: WatermarkSession,
+    bytes: Buffer,
+    format: string,
+  ): Promise<{ bytes: Buffer; snapshot: string | null }>;
+  /** F041（`AC-D22` ③）：可見性判定，不符者 404 `DOCUMENT_NOT_FOUND`。選填之理由見附錄側宣告。 */
+  assertDocumentVisible?(session: WatermarkSession, documentId: string): Promise<void>;
+}
+
+/** 使用表單之三種允許格式 → 回應 Content-Type（白名單既定，不接受客戶端宣告）。 */
+function usageFormContentType(format: string): string {
+  if (format === 'pdf') return 'application/pdf';
+  if (format === 'xlsx') {
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
+  if (format === 'xls') return 'application/vnd.ms-excel';
+  return 'application/octet-stream';
+}
+
 /** 表單 blob key（穩定；覆蓋一律新 key，舊 key 於 DB 參照更新後回收）。 */
 export function buildFormBlobPath(fileName: string): string {
   const ext = extensionOf(fileName);
@@ -90,6 +133,14 @@ export class UsageFormsService {
     @Optional()
     @Inject(UPLOADER_ORG_RESOLVER)
     private readonly orgResolver?: UploaderOrgResolver,
+    /**
+     * F020 `AC-D2`／architecture-spec §10.1：前台附屬檔案燒錄之**單一共用協作點**
+     * （與附錄之注入形狀逐字相同——三處共用同一個 `burnIfPdf`，不各寫一份 `if (format === 'pdf')`）。
+     * 選填以免破壞既有純建構單測（未注入 → 前台一律回原始位元組、快照為 null）。
+     */
+    @Optional()
+    @Inject(FRONT_BURNER)
+    private readonly frontBurner?: FrontBurner,
   ) {}
 
   /**
@@ -101,11 +152,18 @@ export class UsageFormsService {
     session: SessionContext | undefined,
     file: UploadFile,
     name?: string,
+    formNumber?: string | null,
   ): Promise<UsageFormRecord> {
     this.assertCanWrite(session?.roleCode);
     assertFormatAllowed('USAGE_FORM', file);
     assertSizeWithinLimit(file.size);
-    return this.createFromFile(session, file, resolveUsageFormName(name, file.fileName));
+    const resolvedName = resolveUsageFormName(name, file.fileName);
+    // 驗證順序（error-handling#usage-form-number）：格式/大小 → 名稱長度 → 編號長度 → 編號唯一性。
+    // 全部在寫 blob 之前完成 ⇒ 任一失敗皆「不建立記錄、不寫 blob」。
+    const number = normalizeFormNumber(formNumber);
+    assertFormNumberValid(number);
+    await this.assertFormNumberAvailable(number, null);
+    return this.createFromFile(session, file, resolvedName, number);
   }
 
   /**
@@ -133,6 +191,7 @@ export class UsageFormsService {
     session: SessionContext | undefined,
     file: UploadFile,
     name: string,
+    formNumber: string | null = null,
   ): Promise<UsageFormRecord> {
     const blobPath = buildFormBlobPath(file.fileName);
     await this.blob.put(blobPath, file.buffer ?? Buffer.alloc(0), file.contentType);
@@ -143,7 +202,67 @@ export class UsageFormsService {
       size: file.size,
       uploadedBy: session?.accountId ?? 'unknown',
       uploadedAt: new Date(),
+      formNumber,
     });
+  }
+
+  /**
+   * 唯一性第一道（應用層先查後判）：池中他列之 `formNumber` 正規化後不分大小寫相等 → 409。
+   * `null` 不參與比對（多筆空編號可並存）；`excludeFormId` 為編輯時排除之自身列。
+   * 🔴 第二道為 DB 之 filtered unique index——先查後判存在 TOCTOU 視窗，見 `updateFormNumber`。
+   */
+  private async assertFormNumberAvailable(
+    formNumber: string | null,
+    excludeFormId: string | null,
+  ): Promise<void> {
+    const key = formNumberCompareKey(formNumber);
+    if (key === null) return;
+    const existing = await this.store.list();
+    const taken = existing.some(
+      (f) => f.id !== excludeFormId && formNumberCompareKey(f.formNumber ?? null) === key,
+    );
+    if (taken) {
+      throw new ConflictException(
+        `USAGE_FORM_NUMBER_DUPLICATE: 表單編號「${formNumber}」已被池中其他表單使用`,
+      );
+    }
+  }
+
+  /**
+   * F018「編輯編號」：**只**更新 `formNumber`，不碰檔案、不碰關聯、不寫稽核（AC-D20）。
+   *
+   * 授權沿用既有兩道閘門：功能面 `USAGE_FORM_MANAGEMENT`＋欄位面 `USAGE_FORMS`
+   * ⇒ ICSOPAdmin 通過／SysAdmin `FIELD_WRITE_FORBIDDEN`／其餘三角色 `PERMISSION_DENIED`。
+   */
+  async updateFormNumber(
+    session: SessionContext | undefined,
+    formId: string,
+    formNumber: string | null,
+  ): Promise<UsageFormRecord> {
+    this.assertCanWrite(session?.roleCode);
+    await this.requireForm(formId);
+
+    const number = normalizeFormNumber(formNumber);
+    assertFormNumberValid(number);
+    await this.assertFormNumberAvailable(number, formId);
+
+    const write = this.store.updateFormNumber;
+    if (!write) {
+      // 不得降級為 updateFile()——那會讓「只改編號、不碰檔案」從結構保證變成實作紀律。
+      throw new Error('EDIT_NUMBER_NOT_SUPPORTED: store 未提供 updateFormNumber');
+    }
+    try {
+      return await write.call(this.store, formId, number);
+    } catch (e) {
+      // 並發第二道：DB filtered unique index 攔下時 MSSQL 拋 2601／2627，
+      // 必須以**同一個 409** 現身而非 500（architecture-spec §10.7 注意事項 7）。
+      if (isUniqueConstraintViolation(e)) {
+        throw new ConflictException(
+          `USAGE_FORM_NUMBER_DUPLICATE: 表單編號「${number}」已被池中其他表單使用`,
+        );
+      }
+      throw e;
+    }
   }
 
   /**
@@ -297,12 +416,21 @@ export class UsageFormsService {
   }
 
   /**
-   * 前台下載表單：未登入 → FILE_ACCESS_DENIED（不核發、不稽核）；
-   * 通過 → 核發短效期 URL + 同步寫入調閱稽核。
+   * F018 `AC-D22`／`AC-D23`：**後台**唯讀詳情頁之表單下載——核發 RAW 短效期 SAS URL，
+   * **不燒錄、不寫稽核**（管理存取，比照 `OQ-FM-01` 與附錄後台下載）。
+   *
+   * 🔴 與 `downloadForm()`（前台，回燒錄後之位元組並寫稽核）**刻意分為兩支**：兩端期待相反，
+   * 「一條 route／一支方法同時滿足兩者」在架構上不可能——後台若取得燒錄後位元組即違反
+   * F020 `AC-D4`（後台恆 RAW、`burnPdf` spy 必須為 0）。
+   * 🔴 **不得**改呼叫 `downloadFromPool()`：後者之閘門為 `使用表單管理` read，而 Supervisor／
+   * DeptContact 對該功能無權（F025），會使兩者於後台唯讀詳情頁吃 403，牴觸 F026 矩陣
+   * 「使用表單（多）＝唯讀（可下載）」。本方法之授權由 route 層 `下載列印文件` read 承擔。
+   *
+   * `documentId` 不參與查找（表單以 `formId` 唯一定位，與 `downloadForm()` 一致），
+   * 故不列為參數；路徑保留該段僅為與前台端點形狀對稱。
    */
-  async downloadForm(
+  async downloadFormRaw(
     session: SessionContext | undefined,
-    documentId: string,
     formId: string,
   ): Promise<DownloadGrant> {
     if (!session?.accountId) {
@@ -310,14 +438,46 @@ export class UsageFormsService {
     }
     const form = await this.requireForm(formId);
     const url = await this.blob.getDownloadUrl(form.blobPath, DOWNLOAD_URL_TTL_SECONDS);
+    return { url, expiresInSeconds: DOWNLOAD_URL_TTL_SECONDS };
+  }
+
+  /**
+   * **前台**下載表單（`AC-D22` 之前台專屬端點所用）：未登入 → FILE_ACCESS_DENIED（不回位元組、不稽核）；
+   * 通過 → 回**代理串流之位元組**（PDF 已燒錄／非 PDF 原檔）＋ 同步寫入調閱稽核（`AC-D14`）。
+   */
+  async downloadForm(
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
+    documentId: string,
+    formId: string,
+  ): Promise<UsageFormDownloadBytes> {
+    if (!session?.accountId) {
+      throw new ForbiddenException('FILE_ACCESS_DENIED');
+    }
+    // F041 `AC-D22` ③：業務子分類 viewer 對使用部門不相符之文件 → 404 DOCUMENT_NOT_FOUND，
+    // 且**先於**讀取位元組、燒錄與寫稽核（拒絕路徑不留稽核、不洩漏表單是否存在）。
+    await this.frontBurner?.assertDocumentVisible?.(session as WatermarkSession, documentId);
+    const form = await this.requireForm(formId);
+
+    // 🔴 §10.3：格式判定以上傳時已驗證之伺服器端 `format` 為權威（絕不採 client-supplied
+    // content-type）。與附錄之改法**逐字相同**——使用表單只是第三個消費者（§10.1 v1.6a）。
+    const raw = (await this.blob.getBytes(form.blobPath)) ?? Buffer.alloc(0);
+    const burned = this.frontBurner
+      ? await this.frontBurner.burnIfPdf(session as WatermarkSession, raw, form.format)
+      : { bytes: raw, snapshot: null };
+
     await this.audit.record({
       targetType: 'USAGE_FORM',
       actionType: 'DOWNLOAD',
       formId,
       documentId,
       accountId: session.accountId,
+      watermarkSnapshot: burned.snapshot,
     });
-    return { url, expiresInSeconds: DOWNLOAD_URL_TTL_SECONDS };
+    return {
+      bytes: burned.bytes,
+      fileName: form.name,
+      contentType: usageFormContentType(form.format),
+    };
   }
 
   private assertCanRead(roleCode: string | undefined): void {

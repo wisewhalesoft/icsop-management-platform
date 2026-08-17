@@ -20,6 +20,14 @@ export type ToastType = 'success' | 'error' | 'info';
 export interface ToastOptions {
   /** 自動消失毫秒數；預設 4000（§6.5：3–5 秒區間中值）。傳 0 停用自動消失。 */
   duration?: number;
+  /**
+   * 錯誤碼標記（如 `EXPORT_ROW_LIMIT_EXCEEDED · 400`），以**獨立元素**呈現於訊息下方。
+   *
+   * `error-handling.md#export` 明訂：錯誤碼是使用者回報問題時唯一可靠之定位資訊，
+   * 訊息與碼**須同時可見**；該段亦明示「可為 `ToastApi` 新增 code 欄位」。
+   * 逐字格式權威＝`prototypes/24-appendix-management.html` 之 `toast(type, msg, code)` 第三參數。
+   */
+  code?: string;
 }
 
 export interface ToastApi {
@@ -39,6 +47,7 @@ interface ToastItem {
   id: string;
   type: ToastType;
   message: string;
+  code?: string;
 }
 
 /** 預設自動消失毫秒數（§6.5：3–5 秒）。 */
@@ -73,7 +82,7 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
   const show = useCallback(
     (type: ToastType, message: string, opts?: ToastOptions): string => {
       const id = `toast-${seq.current++}`;
-      setToasts((prev) => [...prev, { id, type, message }]);
+      setToasts((prev) => [...prev, { id, type, message, code: opts?.code }]);
       const duration = opts?.duration ?? DEFAULT_DURATION;
       if (duration > 0) {
         timers.current.set(id, setTimeout(() => dismiss(id), duration));
@@ -132,7 +141,12 @@ function ToastCard({ toast }: { toast: ToastItem }): JSX.Element {
       <span className="mt-0.5 shrink-0 inline-flex" style={{ color }}>
         <Icon name={icon} className="w-4 h-4" />
       </span>
-      <span className="text-slate-700">{toast.message}</span>
+      <span className="text-slate-700">
+        {toast.message}
+        {toast.code && (
+          <span className="block mono text-[10px] text-slate-400 mt-0.5">{toast.code}</span>
+        )}
+      </span>
     </div>
   );
 }

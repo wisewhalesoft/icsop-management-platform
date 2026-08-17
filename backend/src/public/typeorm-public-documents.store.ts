@@ -81,6 +81,22 @@ export class TypeOrmPublicDocumentStore implements PublicDocumentStore {
       : [];
     const deptMap = groupUsingDeptIds(deptRows);
 
+    // 2026-08-16 delta（§10.6）：次要當責室長採**與使用部門完全同構**之一次批次查詢
+    // （`IX_DOC_SECONDARY_CHIEF_doc` 已存在），不 N+1。其餘新增欄位本就在主表上，
+    // 只是先前之 map 沒有取出。
+    const chiefRows = docIds.length
+      ? await ds.getRepository(DocSecondaryChief).find({
+          where: { documentId: In(docIds) },
+          select: { documentId: true, employeeNo: true },
+        })
+      : [];
+    const chiefMap = new Map<string, string[]>();
+    for (const r of chiefRows) {
+      const list = chiefMap.get(r.documentId);
+      if (list) list.push(r.employeeNo);
+      else chiefMap.set(r.documentId, [r.employeeNo]);
+    }
+
     return docs.map((d) => ({
       id: d.id,
       status: d.status as DocumentStatus,
@@ -90,6 +106,11 @@ export class TypeOrmPublicDocumentStore implements PublicDocumentStore {
       lifecycleName: nameMap.get(d.lifecycleId) ?? null,
       usingDeptIds: deptMap.get(d.id) ?? [],
       draftingDeptId: d.draftingDeptId,
+      draftingCompanyId: d.draftingCompanyId,
+      draftingSectionId: d.draftingSectionId,
+      primaryChiefId: d.primaryChiefId,
+      secondaryChiefIds: chiefMap.get(d.id) ?? [],
+      edition: d.edition,
       announcedDate: d.announcedDate ? d.announcedDate.toISOString() : null,
       contentSummary: d.contentSummary,
     }));

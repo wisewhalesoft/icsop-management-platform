@@ -209,7 +209,7 @@ export function AccessHistoryPage(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <PageHeader breadcrumb={['稽核與調閱歷程', '查詢']} title="文件調閱歷程查詢">
+      <PageHeader breadcrumb={[{ label: '稽核與調閱歷程' }, { label: '查詢' }]} title="文件調閱歷程查詢">
         <button
           onClick={() => void onExport()}
           disabled={exporting}

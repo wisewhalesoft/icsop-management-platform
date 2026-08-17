@@ -11,7 +11,7 @@ import {
   Library, Megaphone, PauseCircle, XCircle, FileDown, Link as LinkIcon,
   Eye, Upload, FileSpreadsheet, Sheet, Shield, Pencil, Sparkles,
   UploadCloud, Link2Off, ChevronDown, ChevronUp, CornerDownRight, HardDrive,
-  Pin, List,
+  Pin, List, Hash,
   Clock, FileDiff, FileStack, FileWarning, KeyRound, Layers, Loader,
   MinusCircle, ScanText, Spline,
   UserPlus, UserX, Check,
@@ -107,6 +107,7 @@ const REGISTRY: Record<string, LucideIcon> = {
   'hard-drive': HardDrive,
   // prototype 03（前台清單）之置頂區/其他文件區標題圖示。
   pin: Pin,
+  hash: Hash,
   list: List,
   // 以下 10 枚由 Icon.registry.test.tsx 守門測試揪出：頁面已使用但漏註冊，
   // 先前於測試與正式環境皆靜默渲染為 null。

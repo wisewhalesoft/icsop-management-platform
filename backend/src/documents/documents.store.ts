@@ -86,6 +86,13 @@ export interface DocumentListFilters {
   primaryChiefId?: string;
   /** 連結點程序書篩選（F015 依賴：擁有指向此目標之連結者）。 */
   linkTargetId?: string;
+  /**
+   * F017 `AC-D6`（2026-08-16 delta）：附錄／使用表單篩選（選具體一份）。
+   * 比照 `linkTargetId` 之既有樣板——後端回傳符合之文件 id 集合、前端交集；**不**於列上富化
+   * `appendixIds[]`／`formIds[]`（2000 筆工作集每列各帶兩陣列，99% 請求用不到，§10.12）。
+   */
+  appendixId?: string;
+  formId?: string;
   sortBy?: DocumentSortBy;
   sortDir?: SortDir;
   /** 1-based 頁碼（預設 1）。 */
@@ -117,6 +124,18 @@ export interface DocumentListItem {
   secondaryChiefCount: number;
   /** G-DOC-001「+N」tooltip 內容：次要室長姓名（查無→fallback 員編），與 count 同序。 */
   secondaryChiefNames: string[];
+  /**
+   * F017 `AC-D7`（2026-08-16 delta）：次要當責室長之**員編**。既有之 `secondaryChiefNames`／
+   * `Count` 為顯示用、沒有 id，無法據以篩選；本欄為「主要 ∪ 次要」比對之唯一鍵。
+   * 取自 `DOC_SECONDARY_CHIEF` 之既有批次查詢（名稱解析路徑），零額外往返。
+   * 選填宣告以沿用本 repo「既有共享型別加欄一律 additive optional」之慣例（缺鍵＝無次要室長）。
+   */
+  secondaryChiefIds?: string[];
+  /**
+   * F017 `AC-D5`（2026-08-16 delta）：是否有 OJT 簽到表。`DOCUMENT_ATTACHMENT` 之批次查詢
+   * 已存在於 `icsopPdfBlobPath` 之富化路徑，同一次查詢即可取得（§10.12）。缺鍵＝無 OJT。
+   */
+  hasOjt?: boolean;
   edition: string | null;
   announcedDate: string | null;
   contentSummary: string | null;

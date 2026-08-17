@@ -28,6 +28,7 @@ import {
 } from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
+import { EditionInput } from '../components/EditionInput';
 import { SearchCombobox, MultiSearchCombobox, type ComboOption } from '../components/SearchCombobox';
 import { useToast } from '../components/useToast';
 import type {
@@ -86,8 +87,15 @@ export function DocumentCreatePage(): JSX.Element {
   const [status, setStatus] = useState<DocumentStatus>('active');
   const [numberSuffix, setNumberSuffix] = useState('');
   const [documentName, setDocumentName] = useState('');
-  const [edYear, setEdYear] = useState('');
-  const [edSeq, setEdSeq] = useState('');
+  // F011 AC-D7 ②：版次改由共用元件 EditionInput 持有兩段狀態與補零；本頁只保留最終字串。
+  const [edition, setEdition] = useState('');
+  /**
+   * 「重設」用之 remount 鍵。`EditionInput` 之兩段顯示值為其自有 state、**刻意不回讀
+   * `defaultValue`**（F011 `AC-D2-003`：每次 render 反解就是把補零 bug 換個地方重演），
+   * 故本頁單靠 `setEdition('')` **清不掉已輸入的兩段數字**。重設時遞增本鍵令其重新掛載，
+   * 回到 `defaultValue={null}` 之初始空狀態——與其他欄位之重設語意一致。
+   */
+  const [editionResetKey, setEditionResetKey] = useState(0);
   const [announcedDate, setAnnouncedDate] = useState('');
   const [contentSummary, setContentSummary] = useState('');
   const [errors, setErrors] = useState<Record<string, boolean>>({});
@@ -164,8 +172,6 @@ export function DocumentCreatePage(): JSX.Element {
   const prefix = code ? `ICSOP-${code}-` : 'ICSOP-—-';
   const suffix = numberSuffix.trim();
   const fullNumber = suffix ? (code ? `ICSOP-${code}-${suffix}` : suffix) : '';
-  const edition = edYear && edSeq ? `${edYear}'${edSeq.padStart(2, '0')}` : '';
-  const edPreview = edition || '—';
 
   const dupHit = useMemo(
     () => (fullNumber ? existing.find((d) => d.documentNumber === fullNumber && occupiesNumber(d.status)) : undefined),
@@ -292,8 +298,8 @@ export function DocumentCreatePage(): JSX.Element {
     setStatus('active');
     setNumberSuffix('');
     setDocumentName('');
-    setEdYear('');
-    setEdSeq('');
+    setEdition('');
+    setEditionResetKey((k) => k + 1);
     setAnnouncedDate('');
     setContentSummary('');
     setDraftingCompanyId('');
@@ -429,7 +435,7 @@ export function DocumentCreatePage(): JSX.Element {
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
-      <PageHeader breadcrumb={['ICSOP 文件管理', '建立']} title="建立 ICSOP 文件">
+      <PageHeader breadcrumb={[{ label: 'ICSOP 文件管理', to: '/admin/documents' }, { label: '建立' }]} title="建立 ICSOP 文件">
         <button onClick={reset} className="px-3 py-1.5 rounded-md border border-slate-300 text-sm hover:bg-slate-50">
           重設
         </button>
@@ -610,31 +616,7 @@ export function DocumentCreatePage(): JSX.Element {
             <label htmlFor="dEdYear" className="block text-sm font-medium text-slate-700 mb-1">
               版次 <span className="text-xs font-normal text-slate-400">（選填）</span>
             </label>
-            <div className="flex items-center gap-2">
-              <div className="flex items-stretch rounded-md border border-slate-300 focus-within:ring-2 focus-within:ring-primary-600 overflow-hidden">
-                <input
-                  id="dEdYear"
-                  aria-label="版次年度"
-                  value={edYear}
-                  onChange={(e) => setEdYear(e.target.value.replace(/\D/g, '').slice(0, 2))}
-                  inputMode="numeric"
-                  maxLength={2}
-                  placeholder="YY"
-                  className="w-16 px-3 py-2 text-sm mono text-center focus:outline-none"
-                />
-                <span className="px-1.5 py-2 bg-slate-50 text-slate-500 text-sm mono border-x border-slate-200 select-none">'</span>
-                <input
-                  aria-label="版次序號"
-                  value={edSeq}
-                  onChange={(e) => setEdSeq(e.target.value.replace(/\D/g, '').slice(0, 2))}
-                  inputMode="numeric"
-                  maxLength={2}
-                  placeholder="NN"
-                  className="w-16 px-3 py-2 text-sm mono text-center focus:outline-none"
-                />
-              </div>
-              <span className="text-sm text-slate-400">顯示：<span className="mono text-slate-700 font-medium">{edPreview}</span></span>
-            </div>
+            <EditionInput key={editionResetKey} yearId="dEdYear" defaultValue={null} onChange={setEdition} />
             <p className="text-[10px] text-slate-400 mt-1">格式「年度＇序號」＝<span className="mono">{'{YY}'}'{'{NN}'}</span>（例：<span className="mono">26'01</span>）。</p>
           </div>
           <div>

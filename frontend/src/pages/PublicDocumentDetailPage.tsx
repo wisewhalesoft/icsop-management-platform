@@ -5,12 +5,12 @@ import { useToast } from '../components/useToast';
 import {
   getPublicDocumentDetail,
   getOrgUnits,
-  downloadAttachment,
-  downloadUsageForm,
+  downloadPublicAttachment,
+  downloadUsageFormFront,
   documentDownloadUrl,
   documentPrintUrl,
   getDocumentAppendices,
-  downloadDocumentAppendix,
+  downloadDocumentAppendixFront,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
@@ -162,19 +162,23 @@ export function PublicDocumentDetailPage(): JSX.Element {
   );
 
   /**
-   * 受控下載（附件/使用表單/附錄）：核發短效 URL → 新視窗開啟；寫入稽核由後端負責。
+   * 前台受控下載（附件／使用表單／附錄）：**代理串流**（F020 `AC-D3a`）。
    *
-   * `downloadKey` 於請求期間鎖定該列按鈕（ux-audit-frontstage A-2；UX-32／UX-61）。
-   * 後端**每次核發皆寫入一筆調閱稽核**，故重複點擊會產生重複稽核紀錄——此為稽核資料
-   * 正確性問題而非僅體感問題，因此採「任一下載進行中即不受理其他下載」之保守鎖。
+   * 🔴 一律 `fetch → Blob → 程式化 <a download>`（`downloadViaBlob`），**不得** `window.open(url)`
+   * 或 `<a href>`：top-level navigation 會送 `Accept: text/html,...`，本 repo 2026-07-25 之瀏覽器
+   * 煙霧測試已踩過同型 bug（撞 SPA fallback，下載到副檔名正確但內容為 app shell 的檔案）。
+   * 🔴 前台**不得**呼叫後台共用之 SAS helper `downloadAttachment(blobPath)`——那條路徑回 RAW
+   * 且無 F041 可見性檢查（#5a 之根因，`AC-D3`）。
+   *
+   * `downloadKey` 於請求期間鎖定該列按鈕：後端每次下載皆寫入一筆調閱稽核，重複點擊會產生
+   * 重複稽核紀錄——此為稽核資料正確性問題，故採「任一下載進行中即不受理其他下載」之保守鎖。
    */
   const runDownload = useCallback(
-    async (grant: () => Promise<{ url: string }>, label: string, key: string): Promise<void> => {
+    async (download: () => Promise<void>, label: string, key: string): Promise<void> => {
       if (downloadKey) return;
       setDownloadKey(key);
       try {
-        const { url } = await grant();
-        window.open(url, '_blank', 'noopener,noreferrer');
+        await download();
         toast.success(`已開始下載「${label}」，並寫入調閱稽核。`);
       } catch (e) {
         toast.error(`下載失敗：${msgOf(e)}`);
@@ -252,18 +256,27 @@ export function PublicDocumentDetailPage(): JSX.Element {
             onOpenLink={(targetId) => navigate(`/public/documents/${targetId}`)}
             onDownloadAttachment={(att) =>
               void runDownload(
-                () => downloadAttachment(att.blobPath),
+                () =>
+                  downloadPublicAttachment(
+                    detail.id,
+                    att.type === 'ICSOP_PDF' ? 'icsop-pdf' : 'ojt',
+                    att.fileName,
+                  ),
                 att.fileName,
                 `att:${att.blobPath}`,
               )
             }
             onDownloadUsageForm={(formId, name) =>
-              void runDownload(() => downloadUsageForm(detail.id, formId), name, `form:${formId}`)
+              void runDownload(
+                () => downloadUsageFormFront(detail.id, formId, name),
+                name,
+                `form:${formId}`,
+              )
             }
             appendices={appendices}
             onDownloadAppendix={(appendixId, name) =>
               void runDownload(
-                () => downloadDocumentAppendix(detail.id, appendixId),
+                () => downloadDocumentAppendixFront(detail.id, appendixId, name),
                 name,
                 `appendix:${appendixId}`,
               )
@@ -283,6 +296,26 @@ function StatusPill({ displayStatus }: { displayStatus: string }): JSX.Element {
       style={{ color: '#047857', background: '#D1FAE5' }}
     >
       {DISPLAY_STATUS_LABEL[displayStatus] ?? displayStatus}
+    </span>
+  );
+}
+
+/**
+ * 三類附屬檔案共用之浮水印註記（F020 `AC-D2`／`AC-D7`）。
+ *
+ * 🔴 三類**同一規則、同一文案，不得分歧**；旗標一律取自伺服器端之 `watermarkSupported`
+ * （＝後端「要不要呼叫 burnPdf」之同一個判定結果），前端不得自行以 `format` 重算（§10.3）。
+ */
+const WM_BURN_TEXT = '檢視/下載將燒錄浮水印';
+const WM_UNSUPPORTED_TEXT = '此格式不支援浮水印';
+
+function WatermarkNote({ supported }: { supported: boolean | undefined }): JSX.Element {
+  return (
+    <span
+      data-wm-note=""
+      className={`text-[11px] ${supported ? 'text-primary-600' : 'text-slate-400'}`}
+    >
+      {supported ? WM_BURN_TEXT : WM_UNSUPPORTED_TEXT}
     </span>
   );
 }
@@ -412,22 +445,6 @@ function DetailBody({
               DASH
             )}
           </Field>
-          <Field label="文件使用部門">
-            {detail.usingDeptNames.length > 0 ? (
-              <>
-                <span className="inline-flex flex-wrap gap-1.5">
-                  {detail.usingDeptNames.map((n, i) => (
-                    <Chip key={i}>{n}</Chip>
-                  ))}
-                </span>{' '}
-                <span className="text-[10px] text-slate-400">
-                  （選上層自動涵蓋其下所有單位）
-                </span>
-              </>
-            ) : (
-              DASH
-            )}
-          </Field>
           <Field label="版次">
             <span className="mono">{detail.edition ?? DASH}</span>
           </Field>
@@ -489,16 +506,24 @@ function DetailBody({
         {detail.attachments.length > 0 ? (
           <div className="p-4 grid sm:grid-cols-2 gap-3" data-testid="attachment-list">
             {detail.attachments.map((att) => (
-              <div key={att.blobPath} className="flex items-center gap-3 border border-slate-200 rounded-lg p-3">
+              <div
+                key={att.blobPath}
+                data-attachment-item=""
+                className="flex items-center gap-3 border border-slate-200 rounded-lg p-3"
+              >
                 <Icon name="file-text" className="w-6 h-6 text-red-500 shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm text-slate-800 truncate">{att.fileName}</div>
-                  <div className="text-xs text-slate-400">
-                    {att.type === 'ICSOP_PDF'
-                      ? 'ICSOP PDF · 檢視/下載將燒錄浮水印'
-                      : att.type === 'OJT_SIGNIN'
-                        ? 'OJT 實體簽到表'
-                        : '附件'}
+                  <div className="text-xs text-slate-400 flex items-center gap-1.5 flex-wrap">
+                    <span>
+                      {att.type === 'ICSOP_PDF'
+                        ? 'ICSOP PDF'
+                        : att.type === 'OJT_SIGNIN'
+                          ? 'OJT 實體簽到表'
+                          : '附件'}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <WatermarkNote supported={att.watermarkSupported} />
                   </div>
                 </div>
                 <DownloadButton
@@ -526,12 +551,13 @@ function DetailBody({
             {detail.usageForms.map((f) => {
               const isExcel = /xls/i.test(f.format);
               return (
-                <div key={f.id} className="px-5 py-3 flex items-center gap-3">
+                <div key={f.id} data-usage-form-item="" className="px-5 py-3 flex items-center gap-3">
                   <Icon
                     name={isExcel ? 'sheet' : 'file-text'}
                     className={`w-5 h-5 shrink-0 ${isExcel ? 'text-emerald-600' : 'text-red-500'}`}
                   />
                   <span className="text-sm text-slate-800 flex-1 truncate">{f.name}</span>
+                  <WatermarkNote supported={f.watermarkSupported} />
                   <DownloadButton
                     onClick={() => onDownloadUsageForm(f.id, f.name)}
                     label={f.name}
@@ -574,6 +600,7 @@ function DetailBody({
                   <span data-appendix-name className="text-sm text-slate-800 flex-1 truncate">
                     {a.name}
                   </span>
+                  <WatermarkNote supported={a.watermarkSupported} />
                   <DownloadButton
                     onClick={() => onDownloadAppendix(a.id, a.name)}
                     label={a.name}

@@ -13,6 +13,8 @@ export interface UsageFormRecord {
   size: number;
   uploadedBy: string;
   uploadedAt: Date;
+  /** F018 delta：表單編號（選填、池內唯一、不分大小寫）；未設定一律為 `null`（不得為空字串）。 */
+  formNumber: string | null;
 }
 
 export interface CreateFormInput {
@@ -22,6 +24,7 @@ export interface CreateFormInput {
   size: number;
   uploadedBy: string;
   uploadedAt: Date;
+  formNumber: string | null;
 }
 
 export interface UpdateFormFileInput {
@@ -83,6 +86,16 @@ export interface FormPoolStore {
     formId: string,
     patch: UpdateFormFileInput,
   ): Promise<UsageFormRecord>;
+  /**
+   * F018 delta「編輯編號」：**只**更新 `formNumber` 之寫入路徑，回傳最終列。
+   * 🔴 刻意獨立於 `updateFile()`——AC-D20 之「六欄逐欄未變、Blob 未讀未寫」由**寫入路徑本身**
+   * 保證，而非靠實作者記得不要碰其他欄。
+   *
+   * 選填宣告沿用本 repo「既有 store 介面加方法一律 additive optional」之慣例（不打爆既有測試
+   * 替身）；未提供時「編輯編號」拋錯，**不得**降級為 `updateFile()`（那會把 AC-D20 之結構保證
+   * 降級為實作紀律）。
+   */
+  updateFormNumber?(formId: string, formNumber: string | null): Promise<UsageFormRecord>;
   delete(formId: string): Promise<void>;
 
   // 多對多關聯（documentId ↔ formId）
@@ -108,6 +121,8 @@ export interface UsageFormAuditEvent {
   formId: string;
   documentId: string;
   accountId: string;
+  /** F020 `AC-D5`：前台下載之浮水印快照（PDF 落值、非 PDF 為 `null`）。 */
+  watermarkSnapshot?: string | null;
 }
 
 export interface AuditRecorder {

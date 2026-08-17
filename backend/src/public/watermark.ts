@@ -73,3 +73,21 @@ export function formatWatermarkTimestamp(date: Date): string {
     `${p(t.getUTCHours())}:${p(t.getUTCMinutes())}:${p(t.getUTCSeconds())} (UTC+8)`
   );
 }
+
+/**
+ * F020 `AC-D2`／`AC-D7` ①：某檔案是否可燒錄浮水印——**策略 A：僅 PDF**。
+ *
+ * 🔴 **UI 旗標與燒錄決策之單一判定式**：前台三類檔案（附件／附錄／使用表單）之
+ * `watermarkSupported` DTO 旗標與 `WatermarkService.burnIfPdf` 之分支**必須是同一個函式**。
+ * 兩處各算一次，就會出現「UI 說會燒、實際沒燒」（或反之）——而使用者只看得到 UI 那一半。
+ * 🔴 判定依據為**伺服器端事實**（上傳時已通過白名單驗證之 `format` 欄或檔名副檔名，
+ * architecture-spec §10.3），**絕不採客戶端宣告之 content-type**。
+ */
+export function supportsWatermark(format: string): boolean {
+  return format.toLowerCase() === 'pdf';
+}
+
+/** 檔名 → 副檔名（小寫）。`DOCUMENT_ATTACHMENT` 無 `format` 欄，其格式事實即已驗證之檔名副檔名。 */
+export function formatOfFileName(fileName: string): string {
+  return fileName.split('.').pop()?.toLowerCase() ?? '';
+}

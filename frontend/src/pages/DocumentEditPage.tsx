@@ -33,6 +33,7 @@ import {
   subcategoriesOf,
 } from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
+import { EditionInput } from '../components/EditionInput';
 import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, MultiSearchCombobox, type ComboOption } from '../components/SearchCombobox';
 import { useToast } from '../components/useToast';
@@ -137,6 +138,13 @@ export function DocumentEditPage(): JSX.Element {
   const [view, setView] = useState<DocumentView | null>(null);
   const [orig, setOrig] = useState<Draft | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  /**
+   * 版次還原用之 remount 鍵。`EditionInput` 之兩段顯示值為其自有 state、**刻意不回讀
+   * `defaultValue`**（F011 `AC-D2-003`：每次 render 反解就是把補零 bug 換個地方重演），
+   * 故把 `draft.edition` 寫回 `orig.edition` **改不到畫面上的兩個數字框**。遞增本鍵令其
+   * 重新掛載、以 `defaultValue={orig.edition}` 重取初值 ⇒ 回復為**編輯前原值**（非清空）。
+   */
+  const [editionResetKey, setEditionResetKey] = useState(0);
   const [lifecycles, setLifecycles] = useState<LifecycleView[]>([]);
   // F040 兩段式選取之 UI 狀態：第一段＝循環名稱、第二段＝該子分類列之 lifecycleId。
   const [lcNameSel, setLcNameSel] = useState('');
@@ -300,6 +308,14 @@ export function DocumentEditPage(): JSX.Element {
   const set = useCallback(<K extends keyof Draft>(key: K, value: Draft[K]) => {
     setDraft((d) => (d ? { ...d, [key]: value } : d));
   }, []);
+  /**
+   * 版次回復為原值——`取消`（`cancelAll`）與版次列之 `還原` 兩處**共用同一動作**：
+   * draft 寫回原值 ＋ 令共用元件重新掛載。兩處各寫一份是「只修其中一處」的溫床。
+   */
+  const revertEdition = useCallback(() => {
+    setDraft((d) => (d && orig ? { ...d, edition: orig.edition } : d));
+    setEditionResetKey((k) => k + 1);
+  }, [orig]);
   const onCompanyChange = useCallback((v: string) => {
     setDraft((d) => (d ? { ...d, draftingCompanyId: v, draftingDeptId: '', draftingSectionId: '' } : d));
   }, []);
@@ -476,6 +492,8 @@ export function DocumentEditPage(): JSX.Element {
     setDraft(copyDraft(orig));
     setDraftForms(origForms);
     setDraftAppendices(origAppendices);
+    // 共用 EditionInput 之自帶 state 不隨 draft 還原，須一併重新掛載（見 editionResetKey）。
+    setEditionResetKey((k) => k + 1);
     setStatusReason(''); // 比照 prototype 15 cancelAll 之 reasonEl.value=''。
     toast.info('已取消變更，欄位回復為編輯前原值');
   }, [orig, origForms, origAppendices, toast]);
@@ -604,15 +622,26 @@ export function DocumentEditPage(): JSX.Element {
   }
 
   const ro = !canWrite;
-  const edition = draft.edition;
-  const editionParts = (draft.edition.match(/^(\d{0,2})'(\d{0,2})$/) ?? ['', '', '']).slice(1);
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
       <PageHeader
-        breadcrumb={['ICSOP 文件管理', '編輯']}
+        breadcrumb={[{ label: 'ICSOP 文件管理', to: '/admin/documents' }, { label: '編輯' }]}
         title={`編輯文件 · ${view.documentNumber}`}
       >
+        {/*
+          F011 `AC-D1`：topbar 動作區之「返回」鈕（icon 鍵 `arrow-left`，比照 prototype 22 之慣例）。
+          行為等同「取消編輯」——直接導向清單，不送出、不寫入；未送出之變更隨頁面卸載而消失。
+          🔴 對唯讀角色亦顯示（返回不是寫入動作）。
+        */}
+        <button
+          onClick={() => navigate('/admin/documents')}
+          aria-label="返回"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm hover:bg-slate-50"
+        >
+          <Icon name="arrow-left" className="w-4 h-4" />
+          返回
+        </button>
         {canWrite && (
           <>
             <button onClick={cancelAll} className="px-3 py-1.5 rounded-md border border-slate-300 text-sm hover:bg-slate-50">
@@ -728,19 +757,15 @@ export function DocumentEditPage(): JSX.Element {
           <input id="edName" disabled={ro} value={draft.documentName} onChange={(e) => set('documentName', e.target.value)} className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm disabled:bg-slate-50" />
         </DiffRow>
 
-        <DiffRow inputId="edEdYear" label="版次" changed={changed('edition')} currentText={orig.edition || '—'} onRevert={() => set('edition', orig.edition)} mono showRevert={canWrite && changed('edition')}>
-          <div className="flex items-center gap-2">
-            <div className="flex items-stretch rounded-md border border-slate-300 overflow-hidden">
-              <input id="edEdYear" aria-label="版次年度" disabled={ro} value={editionParts[0]} maxLength={2} inputMode="numeric"
-                onChange={(e) => { const y = e.target.value.replace(/\D/g, '').slice(0, 2); const n = editionParts[1]; set('edition', y || n ? `${y}'${n}` : ''); }}
-                placeholder="YY" className="w-14 px-2 py-2 text-sm mono text-center focus:outline-none disabled:bg-slate-50" />
-              <span className="px-1.5 py-2 bg-slate-50 text-slate-500 text-sm mono border-x border-slate-200 select-none">'</span>
-              <input aria-label="版次序號" disabled={ro} value={editionParts[1]} maxLength={2} inputMode="numeric"
-                onChange={(e) => { const n = e.target.value.replace(/\D/g, '').slice(0, 2); const y = editionParts[0]; set('edition', y || n ? `${y}'${n.padStart(n ? 2 : 0, '0')}` : ''); }}
-                placeholder="NN" className="w-14 px-2 py-2 text-sm mono text-center focus:outline-none disabled:bg-slate-50" />
-            </div>
-            <span className="text-xs text-slate-400">顯示 <span className="mono text-slate-700">{edition || '—'}</span></span>
-          </div>
+        <DiffRow inputId="edEdYear" label="版次" changed={changed('edition')} currentText={orig.edition || '—'} onRevert={revertEdition} mono showRevert={canWrite && changed('edition')}>
+          <EditionInput
+            key={editionResetKey}
+            compact
+            yearId="edEdYear"
+            disabled={ro}
+            defaultValue={orig.edition}
+            onChange={(v) => set('edition', v)}
+          />
           <p className="text-[10px] text-slate-400 mt-1">格式「年度＇序號」＝<span className="mono">{'{YY}'}'{'{NN}'}</span>（例：<span className="mono">26'01</span>）。</p>
         </DiffRow>
 

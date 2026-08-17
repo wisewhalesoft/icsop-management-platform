@@ -1,35 +1,45 @@
-import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
-import { getPublicDocuments, getOrgUnits } from '../api/endpoints';
+import { getPublicDocuments, getOrgUnits, getPublicFilterOptions } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
+import { SearchCombobox } from '../components/SearchCombobox';
 import { buildOrgPath } from '../domain/org-path';
-import { isAncestorOrSelf } from '../domain/org-scope';
 import {
   isSubtypeApplicable,
   normalizeUserSubtype,
   SCOPE_NOTICE_BUSINESS,
   SCOPE_NOTICE_OTHER,
 } from '../domain/user-subtype';
-import type { PublicListItem, PublicListPage as PublicPage, OrgUnitRecord } from '../api/types';
+import type {
+  PublicListItem,
+  PublicListPage as PublicPage,
+  PublicFilterOptions,
+  OrgUnitRecord,
+} from '../api/types';
+
+/** 空選項（filter-options 尚未載入時之初值；不影響其餘篩選之可用性）。 */
+const EMPTY_FILTER_OPTIONS: PublicFilterOptions = {
+  draftingCompanies: [],
+  draftingDepts: [],
+  draftingSections: [],
+  chiefs: [],
+  lifecycles: [],
+};
 
 /**
  * 前台文件清單（E06 / F019）。版面權威來源：prototypes/03-public-list.html。
- * 排序（使用部門置頂＋編號降冪）、篩選（部門子樹/循環/關鍵字 AND）、分頁皆後端權威；本頁僅呈現。
+ * 排序（使用部門置頂＋編號降冪）、篩選、分頁皆後端權威；本頁僅呈現。
  * RWD（F021）：桌機篩選列（lg 顯示）＋手機底部彈出篩選面板（設計系統 §6.1）。
+ *
+ * 🔴 2026-08-16 delta（F019 `AC-D1`／`AC-D2`／`AC-D8`）：篩選器恰六項——制定公司／制定部門／
+ * 制定室別／當責室長／狀態／循環別（前五項中的五個可搜尋下拉，`狀態` 維持原生 select 且為
+ * 裝飾性 no-op）；「使用部門」篩選器與卡片之「使用部門」「循環別」兩列**一併移除**。
+ * 置頂判定仍以使用部門為據（後端 `pinned` 旗標）——「不顯示 ≠ 不判定」。
  */
 const msgOf = (e: unknown): string =>
   e instanceof ApiError ? e.code : e instanceof Error ? e.message : '載入失敗';
-
-/** 依 tier 之縮排層級（部門下拉之 5 層視覺層級）。 */
-const TIER_DEPTH: Record<string, number> = {
-  ROOT: 0,
-  DIVISION: 0,
-  DEPARTMENT: 1,
-  SECTION: 2,
-  SUBSECTION: 3,
-};
 
 export function PublicListPage(): JSX.Element {
   const { user, logout } = useAuth();
@@ -42,21 +52,40 @@ export function PublicListPage(): JSX.Element {
    */
   const [searchParams, setSearchParams] = useSearchParams();
   const keyword = searchParams.get('q') ?? '';
-  const deptCode = searchParams.get('dept') ?? '';
+  const draftingCompanyId = searchParams.get('co') ?? '';
+  /**
+   * 🔴 刻意**不沿用** `dept` 一名：舊 `dept` 之語意為「使用部門」。新篩選列已無使用部門、
+   * 改為「制定部門」——沿用舊名會讓既有已分享出去的網址（`/public?dept=JA000`）在使用者
+   * 毫無察覺的情況下回傳完全不同的一組文件。舊 `dept` 一律忽略。
+   */
+  const draftingDeptId = searchParams.get('mkdept') ?? '';
+  const draftingSectionId = searchParams.get('section') ?? '';
+  const chiefId = searchParams.get('chief') ?? '';
   const lifecycleId = searchParams.get('cycle') ?? '';
   const page = Math.max(1, Number(searchParams.get('page')) || 1);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const [data, setData] = useState<PublicPage | null>(null);
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
+  const [filterOptions, setFilterOptions] = useState<PublicFilterOptions>(EMPTY_FILTER_OPTIONS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 部門下拉之組織樹（全 5 角色 READ；使用部門資料落地前仍供 UI 結構完整，AC10）。
+  // 使用者組織路徑（頁首列與置頂區標題）之來源。
   useEffect(() => {
     getOrgUnits()
       .then(setOrgUnits)
       .catch(() => setOrgUnits([]));
+  }, []);
+
+  /**
+   * F019 `AC-D5`：五組可搜尋下拉之選項。**單一端點一次取回**——拆成五次會讓同一段管線跑五次，
+   * 五次之間可能落在不同快照而產生互不一致的選項組合。選項為全域 distinct，故不隨篩選重取。
+   */
+  useEffect(() => {
+    getPublicFilterOptions()
+      .then(setFilterOptions)
+      .catch(() => setFilterOptions(EMPTY_FILTER_OPTIONS));
   }, []);
 
   // 文件清單：篩選/分頁變更即重新查詢（後端權威排序/篩選）。
@@ -65,7 +94,10 @@ export function PublicListPage(): JSX.Element {
     setLoading(true);
     getPublicDocuments({
       keyword: keyword.trim() || undefined,
-      deptCode: deptCode || undefined,
+      draftingCompanyId: draftingCompanyId || undefined,
+      draftingDeptId: draftingDeptId || undefined,
+      draftingSectionId: draftingSectionId || undefined,
+      chiefId: chiefId || undefined,
       lifecycleId: lifecycleId || undefined,
       page,
     })
@@ -84,27 +116,16 @@ export function PublicListPage(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [keyword, deptCode, lifecycleId, page]);
+  }, [keyword, draftingCompanyId, draftingDeptId, draftingSectionId, chiefId, lifecycleId, page]);
 
   const items = data?.items ?? [];
   const pinned = items.filter((i) => i.pinned);
   const rest = items.filter((i) => !i.pinned);
   const total = data?.total ?? 0;
   const hiddenCount = data?.hiddenCount ?? 0;
-  const hasFilters = Boolean(keyword || deptCode || lifecycleId);
-  const hasSelectFilters = Boolean(deptCode || lifecycleId);
-
-  // 循環選項：由已載入文件之 (lifecycleId, lifecycleName) 去重（前台公開安全來源）。
-  const cycleOptions = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const it of items) if (it.lifecycleName) m.set(it.lifecycleId, it.lifecycleName);
-    return [...m.entries()];
-  }, [items]);
-
-  const deptOptions = useMemo(
-    () => [...orgUnits].sort((a, b) => a.orgCode.localeCompare(b.orgCode)),
-    [orgUnits],
-  );
+  const selected = { draftingCompanyId, draftingDeptId, draftingSectionId, chiefId, lifecycleId };
+  const hasSelectFilters = Object.values(selected).some(Boolean);
+  const hasFilters = Boolean(keyword) || hasSelectFilters;
 
   /**
    * 局部更新 URL query。空字串＝自網址移除該參數（保持可分享網址簡潔）。
@@ -147,16 +168,29 @@ export function PublicListPage(): JSX.Element {
     return () => clearTimeout(timer);
   }, [kwInput, keyword, patchParams]);
 
-  const onDept = useCallback((v: string) => patchParams({ dept: v, page: '' }), [patchParams]);
-  const onCycle = useCallback((v: string) => patchParams({ cycle: v, page: '' }), [patchParams]);
+  /** 任一篩選變更一律回到第 1 頁（避免停在超出範圍之頁碼）。 */
+  const onFilter = useCallback(
+    (key: string, v: string) => patchParams({ [key]: v, page: '' }),
+    [patchParams],
+  );
   const goPage = useCallback(
     (p: number) => patchParams({ page: p > 1 ? String(p) : '' }),
     [patchParams],
   );
-  const clearFilters = useCallback(
-    () => patchParams({ q: '', dept: '', cycle: '', page: '' }),
-    [patchParams],
-  );
+  /**
+   * `AC-D3`：清除涵蓋六項篩選與關鍵字（`狀態` 為 no-op，無狀態可清）。
+   *
+   * 🔴 同時重設搜尋框之本機顯示值：關鍵字送出經 300ms debounce，若使用者在 debounce 未觸發前
+   * 就按下「清除篩選」，僅清 URL 之 `q` 會讓輸入框留著舊字，稍後 debounce 再把它寫回網址
+   * ——畫面已「清除」卻又自己把條件加回去。
+   */
+  const clearFilters = useCallback(() => {
+    setKwInput('');
+    // 本頁之網址參數**全部**都是查詢狀態（q／co／mkdept／section／chief／cycle／page），
+    // 故「清除篩選」＝整組清空。逐鍵刪除會在日後新增第七項篩選時漏刪，且會留下已停用之
+    // 舊參數（例如已被忽略的 `dept`）使網址看起來仍帶著條件。
+    setSearchParams(new URLSearchParams());
+  }, [setSearchParams]);
 
   const sheetRef = useRef<HTMLDivElement>(null);
   const sheetTriggerRef = useRef<HTMLButtonElement>(null);
@@ -210,17 +244,61 @@ export function PublicListPage(): JSX.Element {
       ? SCOPE_NOTICE_BUSINESS
       : SCOPE_NOTICE_OTHER;
 
-  const deptOptionEls = deptOptions.map((u) => (
-    <option key={u.orgCode} value={u.orgCode}>
-      {'　'.repeat(TIER_DEPTH[u.tier] ?? 0)}
-      {u.name}
-    </option>
-  ));
-  const cycleOptionEls = cycleOptions.map(([id, name]) => (
-    <option key={id} value={id}>
-      {name}
-    </option>
-  ));
+  /**
+   * `AC-D1`：六項篩選之單一定義（桌面與行動 sheet **共用同一份順序與標籤**）——
+   * 兩處各寫一份是「順序悄悄漂移」的溫床，而 AC 對兩處各有一條逐字順序斷言。
+   */
+  const FILTERS: Array<
+    | { kind: 'combo'; key: string; label: string; value: string; options: PublicFilterOptions[keyof PublicFilterOptions] }
+    | { kind: 'select'; key: string; label: string }
+  > = [
+    { kind: 'combo', key: 'co', label: '制定公司', value: draftingCompanyId, options: filterOptions.draftingCompanies },
+    { kind: 'combo', key: 'mkdept', label: '制定部門', value: draftingDeptId, options: filterOptions.draftingDepts },
+    { kind: 'combo', key: 'section', label: '制定室別', value: draftingSectionId, options: filterOptions.draftingSections },
+    { kind: 'combo', key: 'chief', label: '當責室長', value: chiefId, options: filterOptions.chiefs },
+    { kind: 'select', key: 'status', label: '狀態' },
+    { kind: 'combo', key: 'cycle', label: '循環別', value: lifecycleId, options: filterOptions.lifecycles },
+  ];
+
+  /**
+   * `狀態` 維持既有**原生 select** 且為裝飾性 no-op（基底條件已鎖「已公告」，OQ-F019-04）——
+   * `AC-D2` 明文不得改為 combobox。
+   */
+  const statusSelect = (scope: string): JSX.Element => (
+    <div key="status">
+      <label htmlFor={`${scope}_status`} className="block text-[11px] font-medium text-slate-500 mb-1">
+        狀態
+      </label>
+      <select
+        id={`${scope}_status`}
+        aria-label="狀態"
+        value="有效"
+        onChange={() => undefined}
+        className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+      >
+        <option value="有效">有效</option>
+      </select>
+    </div>
+  );
+
+  const filterControls = (scope: string): JSX.Element[] =>
+    FILTERS.map((f) =>
+      f.kind === 'select' ? (
+        statusSelect(scope)
+      ) : (
+        <SearchCombobox
+          key={f.key}
+          id={`${scope}_${f.key}`}
+          label={f.label}
+          ariaLabel={f.label}
+          density="filter"
+          placeholder="全部"
+          options={[...f.options]}
+          value={f.value}
+          onChange={(v) => onFilter(f.key, v)}
+        />
+      ),
+    );
 
   return (
     <div className="min-h-screen bg-white text-slate-700">
@@ -289,46 +367,22 @@ export function PublicListPage(): JSX.Element {
           </button>
         </div>
 
-        {/* 桌機篩選列（lg 顯示）：部門/狀態/循環 + 清除 + 共 N 筆（右對齊） */}
-        <div className="hidden lg:flex items-center gap-3 mb-4" data-testid="filter-bar">
-          <select
-            value={deptCode}
-            onChange={(e) => onDept(e.target.value)}
-            aria-label="使用部門篩選"
-            className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm"
-          >
-            <option value="">所有使用部門</option>
-            {deptOptionEls}
-          </select>
-          <select
-            value={lifecycleId}
-            onChange={(e) => onCycle(e.target.value)}
-            aria-label="循環篩選"
-            className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm"
-          >
-            <option value="">所有循環</option>
-            {cycleOptionEls}
-          </select>
-          <select
-            value="已公告"
-            disabled
-            aria-label="狀態篩選"
-            title="前台僅顯示已公告文件"
-            className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-400"
-          >
-            <option value="已公告">狀態：已公告</option>
-          </select>
-          {hasFilters && (
-            <button
-              onClick={clearFilters}
-              className="px-3 py-2 rounded-lg text-sm text-primary-600 hover:bg-primary-50"
-            >
-              清除篩選
-            </button>
-          )}
-          <span className="ml-auto text-sm text-slate-500" data-testid="count-text">
-            共 {total} 筆
-          </span>
+        {/* 桌機篩選列（lg 顯示）：3 欄 grid 逐列換行，順序＝FILTERS（prototype 03 行 90-95）。 */}
+        <div className="hidden lg:flex flex-col mb-4" data-testid="filter-bar">
+          <div className="grid grid-cols-3 gap-3">{filterControls('cbD')}</div>
+          <div className="flex items-center gap-3 mt-2.5">
+            {hasFilters && (
+              <button
+                onClick={clearFilters}
+                className="px-3 py-2 rounded-lg text-sm text-primary-600 hover:bg-primary-50"
+              >
+                清除篩選
+              </button>
+            )}
+            <span className="ml-auto text-sm text-slate-500" data-testid="count-text">
+              共 {total} 筆
+            </span>
+          </div>
         </div>
 
         {/* info note — F041 AC-40：頂部範圍說明句依 viewer 分支（容器/字級/色彩沿用既有樣式，未新增元件）。
@@ -406,12 +460,7 @@ export function PublicListPage(): JSX.Element {
                 </div>
                 <div className="space-y-2.5" data-testid="pinned-list">
                   {pinned.map((d) => (
-                    <DocCard
-                      key={d.id}
-                      doc={d}
-                      userOrgCode={user?.orgCode}
-                      onOpen={() => navigate(`/public/documents/${d.id}`)}
-                    />
+                    <DocCard key={d.id} doc={d} onOpen={() => navigate(`/public/documents/${d.id}`)} />
                   ))}
                 </div>
               </section>
@@ -426,12 +475,7 @@ export function PublicListPage(): JSX.Element {
                 </div>
                 <div className="space-y-2.5" data-testid="rest-list">
                   {rest.map((d) => (
-                    <DocCard
-                      key={d.id}
-                      doc={d}
-                      userOrgCode={user?.orgCode}
-                      onOpen={() => navigate(`/public/documents/${d.id}`)}
-                    />
+                    <DocCard key={d.id} doc={d} onOpen={() => navigate(`/public/documents/${d.id}`)} />
                   ))}
                 </div>
               </section>
@@ -501,41 +545,8 @@ export function PublicListPage(): JSX.Element {
           </button>
         </div>
         <div className="p-4 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">使用部門</label>
-            <select
-              value={deptCode}
-              onChange={(e) => onDept(e.target.value)}
-              aria-label="使用部門篩選（行動）"
-              className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"
-            >
-              <option value="">所有使用部門</option>
-              {deptOptionEls}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">狀態</label>
-            <select
-              value="已公告"
-              disabled
-              aria-label="狀態篩選（行動）"
-              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm bg-slate-50 text-slate-400"
-            >
-              <option value="已公告">已公告</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">循環</label>
-            <select
-              value={lifecycleId}
-              onChange={(e) => onCycle(e.target.value)}
-              aria-label="循環篩選（行動）"
-              className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"
-            >
-              <option value="">所有循環</option>
-              {cycleOptionEls}
-            </select>
-          </div>
+          {/* 與桌面共用同一份 FILTERS 順序（AC-D1 對兩處各有一條逐字順序斷言）。 */}
+          {filterControls('cbM')}
           <div className="flex gap-2 pt-2">
             <button
               onClick={() => {
@@ -566,15 +577,7 @@ const STATUS_LABEL: Record<string, string> = {
   void: '作廢',
 };
 
-function DocCard({
-  doc,
-  userOrgCode,
-  onOpen,
-}: {
-  doc: PublicListItem;
-  userOrgCode: string | null | undefined;
-  onOpen: () => void;
-}): JSX.Element {
+function DocCard({ doc, onOpen }: { doc: PublicListItem; onOpen: () => void }): JSX.Element {
   return (
     <article
       tabIndex={0}
@@ -597,26 +600,39 @@ function DocCard({
         </div>
         <Icon name="chevron-right" className="w-5 h-5 text-slate-300 shrink-0" />
       </div>
+      {/*
+        `AC-D8`：<dl> 標籤順序逐字為 制定公司／制定部門／制定室別／版次／公告日期／內容摘要。
+        🔴 「使用部門：」與「循環別：」兩列已移除（雙重 queryByText 反向斷言）；
+        「使用部門逐段高亮」（G-PUB-016）隨該欄位一併移除，為 `AC-D12` 已接受之代價。
+      */}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 text-xs">
+        <div>
+          <dt className="text-slate-400 inline">制定公司：</dt>
+          <dd className="text-slate-600 inline">{doc.draftingCompanyName ?? '—'}</dd>
+        </div>
         <div>
           <dt className="text-slate-400 inline">制定部門：</dt>
           <dd className="text-slate-600 inline">{doc.draftingDeptName ?? '—'}</dd>
         </div>
         <div>
+          <dt className="text-slate-400 inline">制定室別：</dt>
+          <dd className="text-slate-600 inline">
+            {doc.draftingSectionName ?? (
+              <span className="text-slate-300" title="此部之下無處/室，制定組織掛於部層">
+                —
+              </span>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-slate-400 inline">版次：</dt>
+          <dd className="text-slate-600 inline mono">{doc.edition ?? '—'}</dd>
+        </div>
+        <div className="col-span-2">
           <dt className="text-slate-400 inline">公告日期：</dt>
           <dd className="text-slate-600 inline mono">
             {doc.announcedDate ? doc.announcedDate.slice(0, 10) : '—'}
           </dd>
-        </div>
-        <div className="col-span-2">
-          <dt className="text-slate-400 inline">使用部門：</dt>
-          <dd className="text-slate-600 inline">
-            <UsingDepts doc={doc} userOrgCode={userOrgCode} />
-          </dd>
-        </div>
-        <div className="col-span-2">
-          <dt className="text-slate-400 inline">循環別：</dt>
-          <dd className="text-slate-600 inline">{doc.lifecycleName ?? '—'}</dd>
         </div>
         {doc.contentSummary && (
           <div className="col-span-2">
@@ -626,41 +642,5 @@ function DocCard({
         )}
       </dl>
     </article>
-  );
-}
-
-/**
- * 使用部門逐段呈現（G-PUB-016）：命中使用者組織路徑（in-scope）之段以 primary-700 高亮。
- * 以 usingDeptIds/usingDeptNames 同序配對；命中＝該使用部門為使用者部門之祖先或自身。
- */
-function UsingDepts({
-  doc,
-  userOrgCode,
-}: {
-  doc: PublicListItem;
-  userOrgCode: string | null | undefined;
-}): JSX.Element {
-  if (doc.usingDeptNames.length === 0) return <>—</>;
-  return (
-    <>
-      {doc.usingDeptNames.map((name, i) => {
-        const code = doc.usingDeptIds[i];
-        const inScope = isAncestorOrSelf(code, userOrgCode);
-        return (
-          <Fragment key={`${code ?? i}-${i}`}>
-            {i > 0 && '、'}
-            <span className={inScope ? 'text-primary-700 font-medium' : undefined}>
-              {name}
-              {/*
-                命中標示不可只靠顏色（ux-audit-frontstage A-5；UX-37）。字重（font-medium）
-                已提供一個非顏色線索，此處補上僅供輔助技術讀出的說明；
-                更強的視覺標記（圖示/底線）會變動版面，需先與 prototype 一併決策。
-              */}
-              {inScope && <span className="sr-only">（您所屬部門）</span>}
-            </span>
-          </Fragment>
-        );
-      })}
-    </>
   );
 }

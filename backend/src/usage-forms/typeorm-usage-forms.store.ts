@@ -29,6 +29,7 @@ export class TypeOrmFormPoolStore implements FormPoolStore {
       size: Number(d.size),
       uploadedBy: d.uploadedBy,
       uploadedAt: d.uploadedAt,
+      formNumber: d.formNumber ?? null,
     };
   }
 
@@ -44,6 +45,7 @@ export class TypeOrmFormPoolStore implements FormPoolStore {
         size: String(input.size),
         uploadedBy: input.uploadedBy,
         uploadedAt: input.uploadedAt,
+        formNumber: input.formNumber,
       }),
     );
     return TypeOrmFormPoolStore.toRecord(saved);
@@ -123,6 +125,15 @@ export class TypeOrmFormPoolStore implements FormPoolStore {
         uploadedAt: patch.uploadedAt,
       },
     );
+    const updated = await repo.findOneByOrFail({ id: formId });
+    return TypeOrmFormPoolStore.toRecord(updated);
+  }
+
+  /** F018 delta：只更新 formNumber（不碰檔案六欄；AC-D20 之寫入路徑分離）。 */
+  async updateFormNumber(formId: string, formNumber: string | null): Promise<UsageFormRecord> {
+    const ds = await this.init();
+    const repo = ds.getRepository(UsageFormPool);
+    await repo.update({ id: formId }, { formNumber });
     const updated = await repo.findOneByOrFail({ id: formId });
     return TypeOrmFormPoolStore.toRecord(updated);
   }

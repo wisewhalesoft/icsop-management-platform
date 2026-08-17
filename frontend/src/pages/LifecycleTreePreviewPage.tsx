@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import {
+  getLifecycleNodeDocuments,
   getLifecycleTreePreview,
   getLifecycles,
   lifecycleTreeDownloadUrl,
@@ -12,13 +13,19 @@ import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { lifecycleDisplayName } from '../domain/lifecycle-subcategory';
 import { roleMeta } from '../domain/roles';
 import { Icon } from '../components/Icon';
+import { watermarkLines } from '../domain/watermark-lines';
+import { DISPLAY_LABEL, deriveDisplayStatus, type DisplayStatus } from './document-display';
 import {
   buildTreeLayout,
   descendants,
   edgePath,
   NODE_W,
 } from './lifecycle-tree-layout';
-import type { LifecycleTreePreview, LifecycleView } from '../api/types';
+import type {
+  LifecycleTreePreview,
+  LifecycleView,
+  NodeMountedDocument,
+} from '../api/types';
 
 /**
  * F036 循環樹狀圖預覽（唯讀＋浮水印）。版面/樣式權威來源：prototypes/22-lifecycle-tree-preview.html。
@@ -28,19 +35,20 @@ import type { LifecycleTreePreview, LifecycleView } from '../api/types';
  *  - 下載／列印走後端端點（內容層已燒錄浮水印，各記一筆稽核）。純唯讀，不提供任何 DAG 編輯互動。
  *  - RBAC：循環管理 read（SysAdmin/ICSOPAdmin/Supervisor）；DeptContact/User 前端不顯示入口且後端 403。
  */
-const WM_NOTICE = '僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現';
-
-/** 將線性浮水印快照拆為顯示行（機密聲明獨立一行；比照後端 toDisplayLines）。 */
-function watermarkLines(wm: string): string[] {
-  const i = wm.indexOf(WM_NOTICE);
-  if (i < 0) return [wm];
-  const before = wm.slice(0, i).replace(/-+$/, '');
-  const after = wm.slice(i + WM_NOTICE.length).replace(/^-+/, '');
-  return [before, WM_NOTICE, after].filter((s) => s.trim() !== '');
-}
 
 const msgOf = (e: unknown): string =>
   e instanceof ApiError ? e.code : e instanceof Error ? e.message : '載入失敗';
+
+/** 狀態徽章配色（與後台清單同一組衍生狀態，F036 AC-D2）。 */
+const STATUS_PILL: Record<DisplayStatus, string> = {
+  announced: 'bg-emerald-50 text-emerald-700',
+  in_progress: 'bg-amber-50 text-amber-700',
+  inactive: 'bg-slate-100 text-slate-500',
+  void: 'bg-red-50 text-red-700',
+};
+
+/** ISO 時間戳 → `YYYY-MM-DD`（僅顯示用；無值以 `—` 呈現）。 */
+const dateOnly = (iso: string | null): string => (iso ? iso.slice(0, 10) : '—');
 
 export function LifecycleTreePreviewPage(): JSX.Element {
   const { id = '' } = useParams();
@@ -53,12 +61,17 @@ export function LifecycleTreePreviewPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  // F036 AC-D1：雙擊節點開啟之唯讀側抽屜（lazy per-node，非預覽頁一併預載）。
+  const [drawerNodeId, setDrawerNodeId] = useState<string | null>(null);
+  const [nodeDocs, setNodeDocs] = useState<NodeMountedDocument[]>([]);
+  const [nodeDocsError, setNodeDocsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canRead) return;
     let active = true;
     setData(null);
     setSelected(null);
+    setDrawerNodeId(null);
     getLifecycleTreePreview(id)
       .then((r) => {
         if (active) {
@@ -113,6 +126,44 @@ export function LifecycleTreePreviewPage(): JSX.Element {
   const zoomBy = (d: number) =>
     setZoom((z) => Math.max(0.5, Math.min(1.8, +(z + d).toFixed(2))));
 
+  /**
+   * F036 AC-D1／AC-D6：雙擊 → 標示下游（既有單擊行為不變）＋開啟唯讀抽屜。
+   * AC-D8：本操作**不記稽核**（屬同一次 LIFECYCLE_VIEW 之頁內操作）。
+   */
+  const onNodeDblClick = useCallback((nodeId: string, ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    setSelected(nodeId);
+    setDrawerNodeId(nodeId);
+  }, []);
+  const closeDrawer = useCallback(() => setDrawerNodeId(null), []);
+
+  useEffect(() => {
+    if (!drawerNodeId) return;
+    let active = true;
+    setNodeDocs([]);
+    setNodeDocsError(null);
+    getLifecycleNodeDocuments(id, drawerNodeId)
+      .then((r) => {
+        if (active) setNodeDocs(r);
+      })
+      .catch((e) => {
+        // Error Scenarios：抽屜顯示錯誤提示但不關閉，樹狀圖標示狀態不受影響。
+        if (active) setNodeDocsError(msgOf(e));
+      });
+    return () => {
+      active = false;
+    };
+  }, [id, drawerNodeId]);
+
+  useEffect(() => {
+    if (!drawerNodeId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerNodeId(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawerNodeId]);
+
   if (!canRead) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-slate-50 text-slate-600 px-4 text-center">
@@ -133,6 +184,8 @@ export function LifecycleTreePreviewPage(): JSX.Element {
   const boardH = layout?.boardHeight ?? 320;
   const wmCount = Math.min(160, Math.max(40, Math.round((boardW * boardH) / 16000)));
   const selectedNode = layout?.nodes.find((n) => n.id === selected) ?? null;
+  const drawerNode = layout?.nodes.find((n) => n.id === drawerNodeId) ?? null;
+  const today = new Date();
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-700">
@@ -228,7 +281,8 @@ export function LifecycleTreePreviewPage(): JSX.Element {
             列印
           </a>
           <span className="text-xs text-slate-400 shrink-0 hidden md:inline ml-1">
-            點節點＝醒目標示其所有下游節點；點空白處取消
+            點節點＝醒目標示其所有下游節點；點空白處取消；
+            <strong className="text-slate-500">雙擊節點＝檢視該節點掛載之程序書清單</strong>
           </span>
         </div>
       </header>
@@ -328,6 +382,7 @@ export function LifecycleTreePreviewPage(): JSX.Element {
                     tabIndex={0}
                     aria-label={`節點 ${n.name ?? '未命名節點'}`}
                     onClick={(ev) => onNodeClick(n.id, ev)}
+                    onDoubleClick={(ev) => onNodeDblClick(n.id, ev)}
                     style={{ position: 'absolute', left: n.x, top: n.y, width: NODE_W, cursor: 'pointer', opacity: isDim ? 0.3 : 1, transition: 'opacity .15s' }}
                   >
                     <div
@@ -376,6 +431,102 @@ export function LifecycleTreePreviewPage(): JSX.Element {
           </div>
         )}
       </main>
+
+      {/*
+        F036 AC-D1～AC-D9：節點文件清單「唯讀」側抽屜（雙擊節點開啟）。
+        自畫布右側滑出、非 modal（無遮罩，樹狀圖仍可捲動／縮放／再點選）。
+        🔒 AC-D4 純唯讀：本區塊內不得出現任何寫入類互動元件，亦不得有 <input>／<select>。
+        它是 F009 節點抽屜之唯讀孿生，不得復用其可寫版本。
+      */}
+      <aside
+        id="nodeDocDrawer"
+        aria-hidden={drawerNodeId ? 'false' : 'true'}
+        aria-label="節點掛載之程序書清單（唯讀）"
+        className={`fixed right-0 top-0 bottom-0 z-40 w-full sm:w-[400px] bg-white border-l border-slate-200 shadow-2xl transition-transform duration-300 flex flex-col ${
+          drawerNodeId ? '' : 'translate-x-full'
+        }`}
+      >
+        <div className="h-14 shrink-0 flex items-center gap-2 px-4 border-b border-slate-200">
+          <Icon name="file-stack" className="w-4 h-4 text-primary-600 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div id="ndTitle" className="font-semibold text-slate-900 text-sm truncate">
+              {drawerNode?.name ?? ''}
+            </div>
+            <div id="ndCount" className="text-[11px] text-slate-400">
+              {drawerNodeId ? `掛載 ${nodeDocs.length} 份程序書` : ''}
+            </div>
+          </div>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">
+            唯讀
+          </span>
+          <button
+            type="button"
+            onClick={closeDrawer}
+            aria-label="關閉"
+            title="關閉（Esc）"
+            className="w-8 h-8 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400 shrink-0"
+          >
+            <Icon name="x" className="w-4 h-4" />
+          </button>
+        </div>
+        <div id="ndBody" className="flex-1 overflow-y-auto divide-y divide-slate-100">
+          {nodeDocsError && (
+            <div
+              role="alert"
+              className="m-4 text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2"
+            >
+              節點文件清單載入失敗 · <span className="mono">{nodeDocsError}</span>
+            </div>
+          )}
+          {!nodeDocsError &&
+            nodeDocs.map((d) => {
+              const ds = deriveDisplayStatus(d.status, d.announcedDate, today);
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  data-node-doc-row
+                  onClick={() => navigate(`/admin/documents/${d.id}`)}
+                  className="w-full text-left px-4 py-3 hover:bg-primary-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600"
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="mono text-xs text-slate-500">{d.documentNumber}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${STATUS_PILL[ds]}`}>
+                      {DISPLAY_LABEL[ds]}
+                    </span>
+                  </div>
+                  <div className="text-sm text-slate-800 mt-0.5">{d.documentName}</div>
+                  <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-400">
+                    <span>
+                      版次 <span className="mono text-slate-600">{d.edition ?? '—'}</span>
+                    </span>
+                    <span>
+                      公告日期{' '}
+                      <span className="mono text-slate-600">{dateOnly(d.announcedDate)}</span>
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          {/* AC-D7：0 份亦開啟抽屜並顯示空狀態 */}
+          {drawerNodeId && !nodeDocsError && nodeDocs.length === 0 && (
+            <div
+              data-node-doc-empty
+              className="px-4 py-10 text-center text-sm text-slate-400"
+            >
+              <Icon name="file-x-2" className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+              此節點尚未掛載任何程序書
+            </div>
+          )}
+        </div>
+        <div className="shrink-0 border-t border-slate-200 px-4 py-2.5 text-[11px] text-slate-400 flex items-start gap-1.5">
+          <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span>
+            點任一列可另開該程序書之<strong>後台唯讀詳情</strong>
+            。本抽屜為唯讀檢視，不提供任何 DAG 編輯互動；開啟本抽屜<strong>不另記稽核事件</strong>。
+          </span>
+        </div>
+      </aside>
 
       {/* selection chip */}
       {selectedNode && highlightSet && (

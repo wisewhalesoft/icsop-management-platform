@@ -6,6 +6,7 @@ import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { RequirePermission } from '../rbac/require-permission.decorator';
 import { FunctionKey } from '../rbac/function-matrix';
 import type { SessionUser } from '../auth/session-token.service';
+import { attachmentDisposition } from '../storage/content-disposition';
 
 /** SessionUser（request context）→ 浮水印身分。accountId＝ACCOUNT.id（UUID，稽核用；SessionGuard 每請求填入）。 */
 export function toWatermarkSession(u: SessionUser): WatermarkSession {
@@ -19,6 +20,26 @@ export function toWatermarkSession(u: SessionUser): WatermarkSession {
     // F041：一般使用者子分類（可見性判定用；與 orgCode/roleCode 同為 SessionGuard 之 DB 現行值）。
     userSubtype: u.userSubtype ?? null,
   };
+}
+
+/** 檔名之副檔名（小寫；無副檔名 → 空字串）。 */
+const extensionOf = (fileName: string): string => fileName.split('.').pop()?.toLowerCase() ?? '';
+
+/**
+ * 附件白名單副檔名 → 回應 `Content-Type`（`storage/file-rules.ts` 之 `ICSOP_PDF`＝pdf、
+ * `OJT_SIGNIN`＝pdf/jpg/jpeg/png 兩組聯集）。
+ * 🔴 判定依據為**伺服器端事實**（上傳時已通過白名單驗證之檔名副檔名，architecture-spec §10.3），
+ *   絕不採客戶端宣告之 content-type——後者等同讓上傳者宣告「我這份 PDF 不是 PDF」。
+ */
+const ATTACHMENT_CONTENT_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+};
+
+function attachmentContentType(fileName: string): string {
+  return ATTACHMENT_CONTENT_TYPES[extensionOf(fileName)] ?? 'application/octet-stream';
 }
 
 /**
@@ -70,6 +91,60 @@ export class WatermarkController {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${id}.pdf"`);
     res.send(pdf);
+  }
+
+  /**
+   * F020 `AC-D8`：前台 **ICSOP PDF** 附件下載（燒錄浮水印）。
+   * 閘門為 `下載列印文件` read（**與 `:id/download` 完全相同**，五角色皆通過）——
+   * 🔴 不得誤用 `ICSOP 文件管理`，那是 `AC-D6` 所收斂之**後台**共用端點之閘門（User 為 NONE），
+   * 誤用會使一般使用者連前台附件都下載不到，架空 F026 矩陣「ICSOP PDF＝唯讀（可下載）」。
+   */
+  @Get(':id/attachments/icsop-pdf/download')
+  @RequirePermission(FunctionKey.DOCUMENT_DOWNLOAD_PRINT, 'read')
+  async downloadIcsopPdf(
+    @Req() req: RequestWithSession,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    await this.sendAttachment(req, id, 'ICSOP_PDF', res);
+  }
+
+  /**
+   * F020 `AC-D8`：前台 **OJT 簽到表**下載。OJT 白名單含 jpg／png，故非 PDF 者依策略 A
+   * （`AC-D2`）回原始檔位元組、不轉檔——該分支由 `WatermarkService.burnIfPdf` 統一判定。
+   */
+  @Get(':id/attachments/ojt/download')
+  @RequirePermission(FunctionKey.DOCUMENT_DOWNLOAD_PRINT, 'read')
+  async downloadOjt(
+    @Req() req: RequestWithSession,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    await this.sendAttachment(req, id, 'OJT_SIGNIN', res);
+  }
+
+  /**
+   * 兩個附件端點之共用出口（差別僅在 `type`，不各寫一份串流碼）。
+   *
+   * `AC-D3a`：前台一律**代理串流**——body 即檔案位元組本身，不核發 SAS URL、不 3xx 轉址。
+   * 燒錄與否、快照取得、F041 可見性判定與調閱稽核**全在 `svc.downloadAttachment` 內**完成
+   * （與檢視器共用同一份 `buildSnapshot()`，`AC-D1` 要求逐字相同）；本層只負責回應標頭與送出。
+   * 🔒 `blobPath` 不接受客戶端傳入——伺服器自 `(documentId, type)` 反查（`AC-D8` ②）。
+   */
+  private async sendAttachment(
+    req: RequestWithSession,
+    documentId: string,
+    type: 'ICSOP_PDF' | 'OJT_SIGNIN',
+    res: Response,
+  ): Promise<void> {
+    const { bytes, fileName } = await this.svc.downloadAttachment(
+      toWatermarkSession(req.sessionUser as SessionUser),
+      documentId,
+      type,
+    );
+    res.setHeader('Content-Type', attachmentContentType(fileName));
+    res.setHeader('Content-Disposition', attachmentDisposition(fileName));
+    res.send(bytes);
   }
 
   /** 列印用 PDF（內容層已燒錄浮水印）；記錄 PRINT 稽核。 */

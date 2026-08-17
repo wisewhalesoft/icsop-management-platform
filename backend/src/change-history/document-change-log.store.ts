@@ -38,6 +38,20 @@ export interface DocumentChangeLogStore {
   listAll(): Promise<DocumentChangeLogRow[]>;
   /** 取回單一文件之全部變更列（供展開檢視 + CHANGE_LOG_VIEW 稽核）。 */
   listByDocument(documentId: string): Promise<DocumentChangeLogRow[]>;
+  /**
+   * 🔴 匯出專用之 **SQL COUNT 下推**（architecture-spec §10.4 ④／§10.16 風險 D2）。
+   * 本表 append-only 且隨每次文件編輯單調成長，`listAll()` 之全表載入是本 delta 中唯一有真實
+   * OOM 風險之處。匯出必須先以同一組 WHERE 取得筆數，超限即拒絕、**完全不執行 SELECT**。
+   *
+   * 選填宣告僅為不打爆既有以 `implements` 宣告之測試替身；未提供時匯出**拋錯而非降級為
+   * `listAll()`**——降級到全表載入正是本方法要防的事。
+   */
+  countByFilters?(filters: import('./document-change-query').DocumentChangeFilters): Promise<number>;
+  /** 匯出專用之取列：同一組 WHERE ＋ `TOP take`（競態第二道上界）。 */
+  listByFilters?(
+    filters: import('./document-change-query').DocumentChangeFilters,
+    take: number,
+  ): Promise<DocumentChangeLogRow[]>;
 }
 
 export const DOCUMENT_CHANGE_LOG_STORE = Symbol('DOCUMENT_CHANGE_LOG_STORE');

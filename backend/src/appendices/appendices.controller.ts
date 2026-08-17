@@ -9,12 +9,14 @@ import {
   Put,
   Query,
   Req,
+  Res,
   UploadedFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { AppendicesService } from './appendices.service';
 import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
@@ -25,6 +27,7 @@ import {
   MULTIPART_OPTIONS,
   toUploadFile,
 } from '../storage/multipart';
+import { attachmentDisposition } from '../storage/content-disposition';
 
 const isTrue = (v?: string) => /^(true|1|yes)$/i.test(v ?? '');
 
@@ -57,6 +60,30 @@ export class AppendicesController {
   @RequirePermission(FunctionKey.APPENDIX_MANAGEMENT, 'read')
   listPoolOverview(@Req() req: RequestWithSession) {
     return this.svc.listPoolOverview(req.sessionUser);
+  }
+
+  /**
+   * F039 附錄池匯出（`AC-D4`～`AC-D11`）。與清單端點**共用同一組 query 參數**——
+   * 「匯出範圍＝當前篩選之全部結果」在兩份參數解析漂移時會悄悄失準。
+   * 🔴 宣告於 `admin/appendices/:appendixId/download` 之前，且字面不同（`export` 為固定段），
+   * 不與參數路由互相遮蔽。
+   */
+  @Get('admin/appendices/export')
+  @RequirePermission(FunctionKey.APPENDIX_MANAGEMENT, 'read')
+  async exportPool(
+    @Req() req: RequestWithSession,
+    @Res() res: Response,
+    @Query('q') q?: string,
+    @Query('format') format?: string,
+  ): Promise<void> {
+    const { csv, fileName } = await this.svc.exportPool(req.sessionUser, {
+      q: q?.trim() || undefined,
+      format: format === 'excel' || format === 'pdf' ? format : undefined,
+    });
+    // 🔴 送 Buffer 而非 string：送字串會讓 Express 自行決定編碼，BOM 可能悄悄壞掉。
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(csv);
   }
 
   @Post('admin/appendices')
@@ -166,13 +193,33 @@ export class AppendicesController {
     return this.svc.listByDocument(documentId);
   }
 
+  /**
+   * F020 `AC-D3a`／F039 `AC-D1`：**前台**附錄下載——代理串流，body 即檔案位元組本身。
+   *
+   * 🔴 本處原本直接 `return this.svc.downloadAppendix(...)`，而該服務回的是
+   * `{ bytes: Buffer, fileName, contentType }`——Nest 會把它 **JSON 序列化**成
+   * `{"type":"Buffer","data":[...]}`，使用者存到的是壞檔（副檔名正確、內容是 JSON），
+   * 且完全沒有錯誤：`downloadViaBlob` 只看 HTTP 狀態碼，200 就當成功。
+   * 服務層之燒錄（`burnIfPdf`）與稽核早已正確，缺的只有這一層的標頭與 `res.send`。
+   *
+   * 🔒 後台之 `GET /admin/appendices/:appendixId/download` 維持核發 SAS、RAW、不寫稽核
+   * （`AC-D4` 之回歸鎖、`OQ-FM-01` 有效），**不隨本修正一起改**。
+   */
   @Get('documents/:documentId/appendices/:appendixId/download')
   @RequirePermission(FunctionKey.DOCUMENT_DOWNLOAD_PRINT, 'read')
-  download(
+  async download(
     @Req() req: RequestWithSession,
     @Param('documentId') documentId: string,
     @Param('appendixId') appendixId: string,
-  ) {
-    return this.svc.downloadAppendix(req.sessionUser, documentId, appendixId);
+    @Res() res: Response,
+  ): Promise<void> {
+    const { bytes, fileName, contentType } = await this.svc.downloadAppendix(
+      req.sessionUser,
+      documentId,
+      appendixId,
+    );
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', attachmentDisposition(fileName));
+    res.send(bytes);
   }
 }

@@ -307,7 +307,7 @@ export function DocumentReadonlyPage(): JSX.Element {
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
-      <PageHeader breadcrumb={['ICSOP 文件管理', '檢視（唯讀）']} title={`檢視文件 · ${view.documentNumber}`}>
+      <PageHeader breadcrumb={[{ label: 'ICSOP 文件管理', to: '/admin/documents' }, { label: '檢視（唯讀）' }]} title={`檢視文件 · ${view.documentNumber}`}>
         {canWrite && (
           <button onClick={() => navigate(`/admin/documents/${id}/edit`)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700">
             <Icon name="pencil" className="w-4 h-4" />前往編輯

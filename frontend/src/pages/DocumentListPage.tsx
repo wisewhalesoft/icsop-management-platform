@@ -1,21 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
-import { getDocuments, getDocumentAttachments, downloadAttachment } from '../api/endpoints';
+import {
+  getDocuments,
+  getDocumentAttachments,
+  downloadAttachment,
+  getAppendixPool,
+  getUsageFormPool,
+} from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, type ComboOption } from '../components/SearchCombobox';
+import { usageFormOptionLabel } from '../domain/usage-form-label';
 import { useToast } from '../components/useToast';
 import { formatDateTime } from './org-sync-view';
 import { deriveDisplayStatus, DISPLAY_LABEL, type DisplayStatus } from './document-display';
-import type { DocumentListItem, DocumentLinkView } from '../api/types';
+import type {
+  AppendixRecord,
+  DocumentListItem,
+  DocumentLinkView,
+  UsageFormRecord,
+} from '../api/types';
 
 /**
  * 後台 ICSOP 程序書清單（F017）。版面權威來源：prototypes/13-document-list.html。
  * 全寬（AppShell main 已 px-4 py-6）；統計卡（總數/已公告/進度中，依公告日期衍生 F012）、
- * 14 欄、9 可搜尋下拉篩選（循環別/狀態/編號/書名/制定公司/部門/室別/當責室長/連結點）、
+ * 14 欄、13 項篩選（AC-D1：制定公司/部門/室別、當責室長、狀態、編號、書名內、公告日期區間、
+ * 連結點、附錄、使用表單、OJT、循環別）、
  * 依編號/公告日期排序、真分頁（每頁 50）。RBAC：ICSOP文件管理 read=SysAdmin/ICSOPAdmin/
  * Supervisor/DeptContact、write=ICSOPAdmin（建立/編輯）。
  *
@@ -28,6 +41,7 @@ import type { DocumentListItem, DocumentLinkView } from '../api/types';
  * （先取目標之附件清單，再走同一支受控（稽核）下載端點；不新增第二條下載路徑）。
  * 浮水印與否由伺服器端依 F020 決定，前端不帶任何浮水印旗標。
  */
+const OJT_ALL = '全部';
 const PAGE_SIZE = 50;
 const LOAD_SIZE = 2000;
 
@@ -45,24 +59,50 @@ const DISPLAY_META: Record<DisplayStatus, { cls: string; icon: string }> = {
   void: { cls: 'text-red-700 bg-red-50', icon: 'x-circle' },
 };
 
-type FilterKey = 'cycle' | 'status' | 'num' | 'name' | 'dept' | 'section' | 'chief' | 'company' | 'link';
+type ComboKey =
+  | 'company' | 'dept' | 'section' | 'chief' | 'num' | 'name' | 'link' | 'appendix' | 'form' | 'cycle';
+type FilterKey = ComboKey | 'status' | 'ojt' | 'dateFrom' | 'dateTo';
 type SortBy = '' | 'documentNumber' | 'announcedDate';
 
-/** 篩選定義（順序＝prototype FILTERS）。get 回傳該欄之比對值（連結點另以 linkTargetSet 處理）。 */
-const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: 'cycle', label: '循環別' },
-  { key: 'status', label: '狀態' },
-  { key: 'num', label: '程序書編號' },
-  { key: 'name', label: '程序書書名' },
-  { key: 'dept', label: '制定部門' },
-  { key: 'section', label: '制定室別' },
-  { key: 'chief', label: '當責室長' },
-  { key: 'company', label: '制定公司' },
-  { key: 'link', label: '連結點程序書' },
+/**
+ * F017 `AC-D1`（2026-08-16 delta）：篩選由 9 項擴為 **13 項**，順序逐字如下
+ * （桌面由左至右逐列換行、行動 sheet 由上而下，**兩處共用同一份定義**）。
+ * `狀態`／`OJT` 為固定值原生下拉、`公告日期` 為 role=group 之區間輸入，其餘 10 項為可搜尋下拉。
+ */
+type FilterDef =
+  | { kind: 'combo'; key: ComboKey; label: string }
+  | { kind: 'select'; key: 'status' | 'ojt'; label: string }
+  | { kind: 'range'; key: 'date'; label: string };
+
+const FILTERS: FilterDef[] = [
+  { kind: 'combo', key: 'company', label: '制定公司' },
+  { kind: 'combo', key: 'dept', label: '制定部門' },
+  { kind: 'combo', key: 'section', label: '制定室別' },
+  { kind: 'combo', key: 'chief', label: '當責室長' },
+  { kind: 'select', key: 'status', label: '狀態' },
+  { kind: 'combo', key: 'num', label: '程序書編號' },
+  { kind: 'combo', key: 'name', label: '程序書書名內' },
+  { kind: 'range', key: 'date', label: '公告日期' },
+  { kind: 'combo', key: 'link', label: '連結點程序書' },
+  { kind: 'combo', key: 'appendix', label: '附錄' },
+  { kind: 'combo', key: 'form', label: '使用表單' },
+  { kind: 'select', key: 'ojt', label: 'OJT' },
+  { kind: 'combo', key: 'cycle', label: '循環別' },
 ];
 
-const uniq = (a: (string | null)[]): string[] =>
+const EMPTY_FILTERS: Record<FilterKey, string> = {
+  company: '', dept: '', section: '', chief: '', status: '', num: '', name: '',
+  dateFrom: '', dateTo: '', link: '', appendix: '', form: '', ojt: OJT_ALL, cycle: '',
+};
+
+const uniq = (a: (string | null | undefined)[]): string[] =>
   [...new Set(a.filter((x): x is string => !!x))];
+
+/** `AC-D5` OJT 三值之逐字選項（`全部` 即不施加限制）。 */
+const OJT_OPTIONS = ['全部', '有 OJT', '無 OJT'] as const;
+
+/** ISO 時間戳 → `YYYY-MM-DD`（僅取日期段，供閉區間字串比較）。 */
+const dayOf = (iso: string | null): string | null => (iso ? iso.slice(0, 10) : null);
 
 /**
  * F017 AC-S2／F040 AC-31「循環別」篩選選項：value＝`lifecycleId`（**非**名稱字串，亦非循環代碼——
@@ -90,10 +130,15 @@ export function DocumentListPage(): JSX.Element {
 
   const [all, setAll] = useState<DocumentListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<Record<FilterKey, string>>({
-    cycle: '', status: '', num: '', name: '', dept: '', section: '', chief: '', company: '', link: '',
-  });
+  const [filters, setFilters] = useState<Record<FilterKey, string>>({ ...EMPTY_FILTERS });
+  /** `程序書書名內` 之「已輸入但未選取」查詢字（`AC-D3` 之 contains 行為；選取值優先）。 */
+  const [nameQuery, setNameQuery] = useState('');
   const [linkTargetSet, setLinkTargetSet] = useState<Set<string> | null>(null);
+  const [appendixSet, setAppendixSet] = useState<Set<string> | null>(null);
+  const [formSet, setFormSet] = useState<Set<string> | null>(null);
+  const [appendixPool, setAppendixPool] = useState<AppendixRecord[]>([]);
+  const [formPool, setFormPool] = useState<UsageFormRecord[]>([]);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [sortBy, setSortBy] = useState<SortBy>('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
@@ -133,6 +178,67 @@ export function DocumentListPage(): JSX.Element {
     };
   }, [filters.link]);
 
+  /**
+   * `AC-D6` 附錄／使用表單篩選：**比照 `linkTargetId` 之既有樣板**——後端回符合之文件 id 集合、
+   * 前端交集。刻意**不**在列上富化 `appendixIds[]`／`formIds[]`：那會讓 2000 筆工作集每列各帶
+   * 兩個陣列而回應顯著膨脹，而 99% 的請求根本沒用到這兩項篩選（架構 §10.12）。
+   */
+  useEffect(() => {
+    if (!filters.appendix) {
+      setAppendixSet(null);
+      return;
+    }
+    let alive = true;
+    void getDocuments({ appendixId: filters.appendix, pageSize: LOAD_SIZE })
+      .then((res) => {
+        if (alive) setAppendixSet(new Set(res.items.map((d) => d.id)));
+      })
+      .catch(() => {
+        if (alive) setAppendixSet(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [filters.appendix]);
+
+  useEffect(() => {
+    if (!filters.form) {
+      setFormSet(null);
+      return;
+    }
+    let alive = true;
+    void getDocuments({ formId: filters.form, pageSize: LOAD_SIZE })
+      .then((res) => {
+        if (alive) setFormSet(new Set(res.items.map((d) => d.id)));
+      })
+      .catch(() => {
+        if (alive) setFormSet(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [filters.form]);
+
+  /**
+   * `附錄`／`使用表單` 之選項來自**各自既有的池清單端點**（架構 §10.13：後台不新增選項端點）。
+   * 池為空／取用失敗 → 空選項清單（非錯誤，不阻擋其他篩選）。
+   */
+  useEffect(() => {
+    if (!canRead) return;
+    // 池清單只是兩個下拉的選項來源——取用失敗／回傳非陣列一律降級為空清單，
+    // 絕不可讓它拖垮整張清單頁（Edge Case：池為空時其餘 11 項篩選仍須可用）。
+    const loadPool = async <T,>(fetcher: () => Promise<T[]>, set: (v: T[]) => void): Promise<void> => {
+      try {
+        const rows = await fetcher();
+        set(Array.isArray(rows) ? rows : []);
+      } catch {
+        set([]);
+      }
+    };
+    void loadPool(getAppendixPool, setAppendixPool);
+    void loadPool(getUsageFormPool, setFormPool);
+  }, [canRead]);
+
   /** 受控下載：核發短效期 URL → 開新分頁（伺服器端寫入稽核 DOWNLOAD）。 */
   const openBlob = useCallback(async (blobPath: string, label: string) => {
     try {
@@ -166,8 +272,13 @@ export function DocumentListPage(): JSX.Element {
     [openBlob, toast],
   );
 
-  const chiefValue = useCallback(
-    (d: DocumentListItem): string | null => d.primaryChiefName ?? d.primaryChiefId,
+  /**
+   * `AC-D7`：當責室長之比對值集合＝主要 ∪ 次要（顯示名稱優先，fallback 員編）。
+   * 前端以顯示名稱比對（列上只有名稱），語意與後端 `chief-match.ts` 之主要∪次要一致。
+   */
+  const chiefValues = useCallback(
+    (d: DocumentListItem): string[] =>
+      uniq([d.primaryChiefName ?? d.primaryChiefId, ...(d.secondaryChiefNames ?? [])]),
     [],
   );
   const statusValue = useCallback(
@@ -176,37 +287,41 @@ export function DocumentListPage(): JSX.Element {
     [today],
   );
 
-  // 9 篩選之下拉選項（自完整工作集衍生；首項＝「全部」＝清除）。
-  const filterOptions = useMemo<Record<FilterKey, ComboOption[]>>(() => {
-    const opt = (vals: string[]): ComboOption[] => [
-      { value: '', label: '全部' },
-      ...vals.map((v) => ({ value: v, label: v })),
-    ];
+  /**
+   * 十個可搜尋下拉之選項（自完整工作集／池清單衍生）。
+   * 🔴 `當責室長` 之選項為**主要 ∪ 次要**之 distinct（`AC-D7`）——僅由 `primaryChiefId` 衍生
+   * 會漏掉「只擔任次要室長」的人，使該人永遠無法被選為篩選條件。
+   */
+  const filterOptions = useMemo<Record<ComboKey, ComboOption[]>>(() => {
+    const opt = (vals: string[]): ComboOption[] => vals.map((v) => ({ value: v, label: v }));
     return {
-      cycle: [{ value: '', label: '全部' }, ...cycleFilterOptions(all)],
-      status: opt(['已公告', '進度中', '失效', '作廢']),
+      cycle: cycleFilterOptions(all),
       num: opt(uniq(all.map((d) => d.documentNumber))),
       name: opt(uniq(all.map((d) => d.documentName))),
       dept: opt(uniq(all.map((d) => d.draftingDeptName))),
       section: opt(uniq(all.map((d) => d.draftingSectionName))),
-      chief: opt(uniq(all.map(chiefValue))),
+      chief: opt(uniq(all.flatMap(chiefValues))),
       company: opt(uniq(all.map((d) => d.draftingCompanyName))),
-      link: [
-        { value: '', label: '全部' },
-        ...all.map((d) => ({ value: d.id, label: `${d.documentNumber} ${d.documentName}` })),
-      ],
+      link: all.map((d) => ({ value: d.id, label: `${d.documentNumber} ${d.documentName}` })),
+      appendix: appendixPool.map((a) => ({ value: a.id, label: a.name })),
+      // `AC-D8`（F018）：label ＝ `{編號} {名稱}`；無編號者僅名稱（共用純函式，不在此就地組字）。
+      form: formPool.map((f) => ({ value: f.id, label: usageFormOptionLabel(f) })),
     };
-  }, [all, chiefValue]);
+  }, [all, chiefValues, appendixPool, formPool]);
 
   const setFilter = useCallback((key: FilterKey, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
     setPage(1);
   }, []);
+  /** `AC-D8`：13 項篩選與書名輸入字同時清空、回到第 1 頁。 */
   const clearFilters = useCallback(() => {
-    setFilters({ cycle: '', status: '', num: '', name: '', dept: '', section: '', chief: '', company: '', link: '' });
+    setFilters({ ...EMPTY_FILTERS });
+    setNameQuery('');
     setPage(1);
   }, []);
-  const anyFilter = Object.values(filters).some((v) => v);
+  const anyFilter = (Object.keys(filters) as FilterKey[]).some(
+    (k) => filters[k] !== EMPTY_FILTERS[k],
+  ) || nameQuery !== '';
 
   const toggleSort = useCallback((key: Exclude<SortBy, ''>) => {
     setSortBy((prevBy) => {
@@ -227,12 +342,28 @@ export function DocumentListPage(): JSX.Element {
       if (filters.cycle && d.lifecycleId !== filters.cycle) return false;
       if (filters.status && statusValue(d) !== filters.status) return false;
       if (filters.num && d.documentNumber !== filters.num) return false;
-      if (filters.name && d.documentName !== filters.name) return false;
+      // `AC-D3` 雙行為：**選取值（等值）優先**；僅輸入未選取時才走 contains（不分大小寫）。
+      // 記憶體 includes 天然字面安全——`%`／`_`／`'` 不作萬用字元、不需跳脫。
+      if (filters.name) {
+        if (d.documentName !== filters.name) return false;
+      } else if (nameQuery.trim()) {
+        if (!d.documentName.toLowerCase().includes(nameQuery.trim().toLowerCase())) return false;
+      }
       if (filters.dept && d.draftingDeptName !== filters.dept) return false;
       if (filters.section && d.draftingSectionName !== filters.section) return false;
-      if (filters.chief && chiefValue(d) !== filters.chief) return false;
+      if (filters.chief && !chiefValues(d).includes(filters.chief)) return false;
       if (filters.company && d.draftingCompanyName !== filters.company) return false;
+      // `AC-D4` 閉區間（兩端皆含）；`announcedDate` 為 null 者於任一端有值時一律排除。
+      if (filters.dateFrom || filters.dateTo) {
+        const day = dayOf(d.announcedDate);
+        if (!day) return false;
+        if (filters.dateFrom && day < filters.dateFrom) return false;
+        if (filters.dateTo && day > filters.dateTo) return false;
+      }
+      if (filters.ojt !== OJT_ALL && !!d.hasOjt !== (filters.ojt === '有 OJT')) return false;
       if (filters.link && (!linkTargetSet || !linkTargetSet.has(d.id))) return false;
+      if (filters.appendix && (!appendixSet || !appendixSet.has(d.id))) return false;
+      if (filters.form && (!formSet || !formSet.has(d.id))) return false;
       return true;
     });
     if (sortBy) {
@@ -244,7 +375,10 @@ export function DocumentListPage(): JSX.Element {
       });
     }
     return rows;
-  }, [all, filters, statusValue, chiefValue, linkTargetSet, sortBy, sortDir]);
+  }, [
+    all, filters, nameQuery, statusValue, chiefValues,
+    linkTargetSet, appendixSet, formSet, sortBy, sortDir,
+  ]);
 
   const counts = useMemo(() => {
     let announced = 0;
@@ -256,6 +390,84 @@ export function DocumentListPage(): JSX.Element {
     }
     return { total: filtered.length, announced, inProgress };
   }, [filtered, today]);
+
+  const labelCls = 'block text-[11px] font-medium text-slate-500 mb-1';
+  const selectCls =
+    'w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-600';
+
+  /**
+   * 依 `FILTERS` 產出 13 個控制項（桌面／行動 sheet 共用同一份順序與標籤）。
+   * 兩處各寫一份是「順序悄悄漂移」的溫床，而 `AC-D1` 對兩處各有一條逐字順序斷言。
+   */
+  const filterControls = (scope: string): JSX.Element[] =>
+    FILTERS.map((f) => {
+      if (f.kind === 'select') {
+        const opts = f.key === 'status' ? ['', '已公告', '進度中', '失效', '作廢'] : [...OJT_OPTIONS];
+        return (
+          <div key={f.key}>
+            <label htmlFor={`${scope}_${f.key}`} className={labelCls}>
+              {f.label}
+            </label>
+            <select
+              id={`${scope}_${f.key}`}
+              aria-label={f.label}
+              value={filters[f.key]}
+              onChange={(e) => setFilter(f.key, e.target.value)}
+              className={selectCls}
+            >
+              {opts.map((o) => (
+                <option key={o} value={o}>
+                  {o === '' ? '全部' : o}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      }
+      if (f.kind === 'range') {
+        // `AC-D10`：role=group（aria-label `公告日期`）＋ 兩個 type=date 輸入（起日／迄日）。
+        return (
+          <div key={f.key}>
+            <span className={labelCls}>{f.label}</span>
+            <div role="group" aria-label={f.label} className="flex items-center gap-1">
+              <input
+                id={`${scope}_date_from`}
+                type="date"
+                aria-label={`${f.label} 起日`}
+                value={filters.dateFrom}
+                onChange={(e) => setFilter('dateFrom', e.target.value)}
+                className={selectCls}
+              />
+              <span className="text-slate-400 text-xs shrink-0">～</span>
+              <input
+                id={`${scope}_date_to`}
+                type="date"
+                aria-label={`${f.label} 迄日`}
+                value={filters.dateTo}
+                onChange={(e) => setFilter('dateTo', e.target.value)}
+                className={selectCls}
+              />
+            </div>
+          </div>
+        );
+      }
+      return (
+        <SearchCombobox
+          key={f.key}
+          id={`${scope}_${f.key}_input`}
+          label={f.label}
+          ariaLabel={f.label}
+          density="filter"
+          options={filterOptions[f.key]}
+          value={filters[f.key]}
+          onChange={(v) => setFilter(f.key, v)}
+          onQueryChange={f.key === 'name' ? setNameQuery : undefined}
+          clearLabel={`清除${f.label}`}
+          clearId={`${scope}_${f.key}_clear`}
+          placeholder={f.key === 'name' ? '全部（或直接輸入部分書名）' : '全部'}
+        />
+      );
+    });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const clampedPage = Math.min(page, totalPages);
@@ -278,7 +490,7 @@ export function DocumentListPage(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <PageHeader breadcrumb={['ICSOP 文件管理', '程序書清單']} title="後台程序書清單">
+      <PageHeader breadcrumb={[{ label: 'ICSOP 文件管理' }, { label: '程序書清單' }]} title="後台程序書清單">
         {canWrite && (
           <button
             onClick={() => navigate('/admin/documents/new')}
@@ -304,35 +516,77 @@ export function DocumentListPage(): JSX.Element {
         </div>
       )}
 
-      {/* 9 個可搜尋下拉篩選 */}
+      {/* 13 項篩選（AC-D1；桌面 filterBar ＋ 行動 sheet 共用同一份 FILTERS 定義） */}
       <div className="bg-white border border-slate-200 rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Icon name="filter" className="w-4 h-4 text-slate-400" />
           <span className="text-sm font-medium text-slate-600">篩選條件</span>
           <span className="text-xs text-slate-400">（可輸入關鍵字過濾）</span>
+          <button
+            onClick={() => setSheetOpen(true)}
+            className="lg:hidden ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm"
+          >
+            <Icon name="sliders-horizontal" className="w-4 h-4" />
+            篩選
+          </button>
           {anyFilter && (
-            <button onClick={clearFilters} className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-primary-600 hover:bg-primary-50">
+            <button
+              onClick={clearFilters}
+              className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-primary-600 hover:bg-primary-50"
+            >
               <Icon name="x" className="w-3.5 h-3.5" />
-              清除全部
+              清除全部篩選
             </button>
           )}
           <span className={`text-sm text-slate-500 ${anyFilter ? '' : 'ml-auto'}`}>共 {filtered.length} 筆</span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-          {FILTERS.map((f) => (
-            <SearchCombobox
-              key={f.key}
-              id={`filter-${f.key}`}
-              label={f.label}
-              density="filter"
-              options={filterOptions[f.key]}
-              value={filters[f.key]}
-              onChange={(v) => setFilter(f.key, v)}
-              placeholder="全部"
-            />
-          ))}
+        <div
+          id="filterBar"
+          className="hidden lg:grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3"
+        >
+          {filterControls('cbD')}
         </div>
       </div>
+
+      {/* 行動底部篩選 sheet（AC-D10：標題 `篩選條件`、`關閉篩選`、`清除全部篩選`、`套用`） */}
+      {sheetOpen && (
+        <div
+          role="dialog"
+          aria-label="篩選條件"
+          className="fixed inset-0 z-50 flex items-end lg:hidden bg-slate-900/40"
+        >
+          <div className="w-full bg-white rounded-t-2xl max-h-[85vh] overflow-auto">
+            <div className="flex items-center justify-between px-4 h-14 border-b border-slate-100 sticky top-0 bg-white">
+              <h3 className="font-semibold text-slate-900">篩選條件</h3>
+              <button onClick={() => setSheetOpen(false)} aria-label="關閉篩選" className="text-slate-400">
+                <Icon name="x" className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              {filterControls('cbM')}
+              <div className="flex gap-2 pt-2">
+                {anyFilter && (
+                  <button
+                    onClick={() => {
+                      clearFilters();
+                      setSheetOpen(false);
+                    }}
+                    className="flex-1 py-2.5 rounded-lg border border-slate-300 text-sm"
+                  >
+                    清除全部篩選
+                  </button>
+                )}
+                <button
+                  onClick={() => setSheetOpen(false)}
+                  className="flex-1 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium"
+                >
+                  套用
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 14 欄表格 */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">

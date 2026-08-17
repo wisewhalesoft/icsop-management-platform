@@ -24,13 +24,22 @@ export class PublicDocumentsController {
     private readonly detailSvc: PublicDocumentDetailService,
   ) {}
 
+  /**
+   * 🔴 2026-08-16 delta：`deptCode` 之 query 解析**一併移除**（架構 A9 §10.9 之三處第 2 處）。
+   * 只自 UI 移除而 controller 仍解析，客戶端仍可送 `?deptCode=` 而後端仍據以過濾——
+   * `AC-D1` 表面滿足而該能力靜默續存。
+   * 參數順序：`keyword` 維持首位（既有），其後依 `AC-D1` 之 UI 逐字順序排列。
+   */
   @Get()
   list(
     @Req() req: RequestWithSession,
     @Query('keyword') keyword?: string,
-    @Query('deptCode') deptCode?: string,
-    @Query('lifecycleId') lifecycleId?: string,
+    @Query('draftingCompanyId') draftingCompanyId?: string,
+    @Query('draftingDeptId') draftingDeptId?: string,
+    @Query('draftingSectionId') draftingSectionId?: string,
+    @Query('chiefId') chiefId?: string,
     @Query('status') status?: string,
+    @Query('lifecycleId') lifecycleId?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
   ) {
@@ -38,9 +47,12 @@ export class PublicDocumentsController {
     const viewer = toViewerScope(req.sessionUser);
     const filters: PublicListFilters = {
       keyword: keyword?.trim() || undefined,
-      deptCode: deptCode?.trim() || undefined,
-      lifecycleId: lifecycleId?.trim() || undefined,
+      draftingCompanyId: draftingCompanyId?.trim() || undefined,
+      draftingDeptId: draftingDeptId?.trim() || undefined,
+      draftingSectionId: draftingSectionId?.trim() || undefined,
+      chiefId: chiefId?.trim() || undefined,
       status: status?.trim() || undefined,
+      lifecycleId: lifecycleId?.trim() || undefined,
     };
     return this.svc.list(
       viewer,
@@ -48,6 +60,18 @@ export class PublicDocumentsController {
       parsePositiveInt(page, 1),
       parsePositiveInt(pageSize, DEFAULT_PAGE_SIZE),
     );
+  }
+
+  /**
+   * F019 `AC-D5`：五組可搜尋下拉之選項（單一端點一次回傳，確保五組來自同一次可見性計算）。
+   *
+   * 🔴 **不接受任何 filters／query 參數**——選項為全域 distinct、非當前結果集衍生，
+   * 簽章上沒有 filters 可收即為該語意之結構性保證。
+   * 🔴 必須宣告於 `@Get(':id')` **之前**，否則會被參數路由吃掉。
+   */
+  @Get('filter-options')
+  filterOptions(@Req() req: RequestWithSession) {
+    return this.svc.filterOptions(toViewerScope(req.sessionUser));
   }
 
   /**

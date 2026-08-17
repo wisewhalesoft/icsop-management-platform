@@ -26,6 +26,8 @@ import { DocumentChangeHistoryService } from './document-change-history.service'
 import { LifecycleChangeHistoryService } from './lifecycle-change-history.service';
 import { DOCUMENT_NAME_LOOKUP, DocumentNameLookup } from './document-name-lookup';
 import { TypeOrmDocumentNameLookup } from './typeorm-document-name-lookup';
+import { LIFECYCLE_DISPLAY_NAMES, LifecycleDisplayNames } from './lifecycle-display-names';
+import { TypeOrmLifecycleDisplayNames } from './typeorm-lifecycle-display-names';
 
 /**
  * F037/F038 文件變更歷程模組（獨立後台功能，共用 prototype 23-change-history）。
@@ -72,13 +74,19 @@ import { TypeOrmDocumentNameLookup } from './typeorm-document-name-lookup';
       inject: [DOCUMENT_CHANGE_LOG_STORE, AuditWriterService, DOCUMENT_NAME_LOOKUP],
     },
     {
+      // F038 匯出之「循環別」欄需當前顯示名稱；以獨立 token 自建 adapter，維持與 LifecycleModule 之單向依賴。
+      provide: LIFECYCLE_DISPLAY_NAMES,
+      useFactory: (): LifecycleDisplayNames => new TypeOrmLifecycleDisplayNames(AppDataSource),
+    },
+    {
       provide: LifecycleChangeHistoryService,
       useFactory: (
         store: LifecycleChangeLogStore,
         audit: AuditWriterService,
+        names: LifecycleDisplayNames,
       ): LifecycleChangeHistoryService =>
-        new LifecycleChangeHistoryService(store, audit, () => new Date()),
-      inject: [LIFECYCLE_CHANGE_LOG_STORE, AuditWriterService],
+        new LifecycleChangeHistoryService(store, audit, () => new Date(), names),
+      inject: [LIFECYCLE_CHANGE_LOG_STORE, AuditWriterService, LIFECYCLE_DISPLAY_NAMES],
     },
   ],
   // F038 新舊對照：LifecycleModule 之 LifecycleChangeDiffService 注入下列兩 store（單向依賴，避免循環）。

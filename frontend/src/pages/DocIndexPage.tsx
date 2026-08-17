@@ -178,7 +178,7 @@ export function DocIndexPage(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <PageHeader breadcrumb={['AI 智慧問答', '文件索引管理']} title="文件索引管理 · 提取結果與重新索引" />
+      <PageHeader breadcrumb={[{ label: 'AI 智慧問答' }, { label: '文件索引管理' }]} title="文件索引管理 · 提取結果與重新索引" />
 
       {/* 唯讀提示（SysAdmin） */}
       {canRead && !canWrite && (

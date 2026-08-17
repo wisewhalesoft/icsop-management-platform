@@ -26,4 +26,18 @@ export class UsageFormPool {
 
   @Column({ type: 'datetime2' })
   uploadedAt!: Date;
+
+  /**
+   * F018 delta（2026-08-16）：表單編號（選填、池內唯一、不分大小寫）。
+   *
+   * 🔴 刻意**不加** `@Index({ unique: true })`——TypeORM 無法表達 filtered index，加了會產生一個
+   * 「多筆 NULL 互相衝突」的普通 unique index 定義（MSSQL 視多個 NULL 為相等）。唯一性由手寫
+   * migration 之 `UQ_USAGE_FORM_POOL_formNumber ... WHERE [formNumber] IS NOT NULL` 落實。
+   * 🔴 不分大小寫**由本欄自己的 collation 保證**，不依賴資料庫預設、亦不另存正規化比較欄。
+   * 本專案之 SOP 資料庫實測為 `Chinese_Taiwan_Stroke_BIN`（二進位比對＝大小寫敏感），
+   * §10.7 原本「DB 為 `_CI_`」之前提對它為假，故由 `1724025600000-usage-form-number-collation`
+   * 以欄位級 `COLLATE` 覆寫。此處宣告與該 migration 一致，避免日後 `migration:generate` 判為差異。
+   */
+  @Column({ type: 'nvarchar', length: 100, nullable: true, collation: 'Chinese_Taiwan_Stroke_CI_AS' })
+  formNumber!: string | null;
 }

@@ -74,7 +74,17 @@ Epic/Story: E07 / US-063
   - ① **`變更類型` 欄之值為畫面所見之中文標籤**，值域**恰為六者**（＝ `prototypes/23-change-history.html` 之「變更類型」篩選下拉選項，逐字）：`新增節點`／`移除節點`／`新增連線`／`移除連線`／`節點改名`／`文件掛載變更`。**不得**輸出列舉代碼（`NODE_ADDED` 等）。<br>**對映**：`NODE_ADDED`→`新增節點`、`NODE_REMOVED`→`移除節點`、`EDGE_ADDED`→`新增連線`、`EDGE_REMOVED`→`移除連線`、`NODE_RENAMED`→`節點改名`、**`DOCUMENT_MOUNTED`／`DOCUMENT_REASSIGNED`／`DOCUMENT_UNMOUNTED` 三者皆 →`文件掛載變更`**。<br>⚠ **已知且接受之代價**：後三者為**三對一**，CSV 之 `變更類型` 欄無法區分掛載／改派／解除——但這**與畫面完全一致**（篩選下拉本即只有六個選項），符合「欄位＝畫面所見」；細節仍可由**同列之 `變更摘要`** 讀出（如 `文件 ICSOP-… 由節點 A 改派至節點 B`）。若日後需區分，須**先改畫面之六值下拉**，不得只改 CSV。
   - ② **`時間` 欄之值為 `YYYY-MM-DD HH:mm:ss`**（UTC+8，**不附 `(UTC+8)` 字樣**；顯式 +8 位移，不得依賴行程 TZ）。
   - ③ **`循環別` 欄**沿用 `AC-D2` ④（join `LIFECYCLE` 取當前值經 `lifecycleDisplayName` 組合，非快照）。
-  - ④ **🔴 對照表單一權威**：① 之對照表**只能有一份**，畫面篩選下拉與 CSV 不得各存一份；**可觀測不變式＝「CSV 某列 `變更類型` 之值，與畫面同一事件該欄之可見文字逐字相同」**。落點由 system-architect 定（與 [F037](F037-document-change-history.md#export-delta) `AC-D11` ④ 同一決策）。
+  - ④ **🔴 對照表跨端一致性（可觀測不變式）**（**2026-08-16 lead 裁決修正**，理由：原條文要求之「對照表只能有一份」在本 repo 架構下不可達，且與 [architecture-spec.md](../architecture-spec.md) §10.14 對**完全相同問題**之既有處置不一致——原文逐字保留於本條末之 🔒 項）：Given 本 repo 之前後端為**兩個獨立 TS 專案、無共用 package** ⇒ 「循環結構變更類型 → 中文標籤」對照表**必然存在兩份**：後端 `backend/src/change-history/change-labels.ts` 之 `LIFECYCLE_CHANGE_KIND_LABEL`（對外經 `lifecycleChangeKindLabel()`，**CSV 值之來源**）與前端 `frontend/src/pages/ChangeHistoryPage.tsx` 之 `LC_TYPE`（各項之 `label`，**畫面徽章文字之來源**）, When 比對此兩份對照表, Then 下列 (a)～(d) 全部成立——
+    - **(a) 鍵集合逐字相同**，且恰為八者：`NODE_ADDED`／`NODE_REMOVED`／`EDGE_ADDED`／`EDGE_REMOVED`／`NODE_RENAMED`／`DOCUMENT_MOUNTED`／`DOCUMENT_REASSIGNED`／`DOCUMENT_UNMOUNTED`。
+    - **(b) 每一鍵所對映之中文標籤在兩端逐字相同**，且與本 AC ① 之對映表逐字相同——含 `DOCUMENT_MOUNTED`／`DOCUMENT_REASSIGNED`／`DOCUMENT_UNMOUNTED` **三對一** → `文件掛載變更`。
+    - **(c) 兩表之標籤值域去重後恰為 ① 所列六者**：`新增節點`／`移除節點`／`新增連線`／`移除連線`／`節點改名`／`文件掛載變更`。
+    - **(d) 任一端之單邊改動必為紅燈**——增鍵、刪鍵、或改動任一標籤之任一字元，只要另一端未同步，機器必須攔到。達成方式不拘：比照 §10.14 之「以同一組固定測試向量綁定，前後端各自之測試檔皆對它斷言相同輸出，任一邊漂移即紅燈」，或以單一測試同時讀取兩檔直接比對。
+    - 📝 **防護力不下降**：原條文之目的（CSV 與畫面不得漂移）由 (a)(b) 保證——兩表逐字同值 ⇒ 同一 `changeType` 在 CSV 與畫面必得同一標籤，故原條文之端到端不變式「CSV 某列 `變更類型` 之值與畫面同一事件該欄之可見文字逐字相同」為 (a)(b) 之**推論**。差別僅在於約束由「**禁止**第二份存在」改為「第二份**必須與第一份逐字相同**」。
+    - 📌 **與 §10.14 同一模式，非本條特例**：[architecture-spec.md](../architecture-spec.md) §10.14 對 `watermarkLines()` 之處置即為「兩份實作**刻意各留一份**（monorepo 無共用 package，強行共用需引入 build 管線改動，代價大於收益），以**同一組值**綁定、以**可觀測不變式＝兩端逐字相同**約束」。本條與該處採**同一模式**；若讀到「規格自相矛盾」，請先讀 §10.14。
+    - 📌 **要真正收斂為一份，須先由 system-architect 定共用落點**（共用 package／build-time 產生／後端隨查詢回應直接回傳 label）——該收斂需動建置設定，**超出本 delta 範圍**，**lead 已判定本輪不處理**。在此之前，任何「兩份值不同」皆為缺陷，由 (a)～(d) 攔截。
+    - 🔒 **原條文（2026-08-16 修正前，逐字保留供追溯）**：「**🔴 對照表單一權威**：① 之對照表**只能有一份**，畫面篩選下拉與 CSV 不得各存一份；**可觀測不變式＝「CSV 某列 `變更類型` 之值，與畫面同一事件該欄之可見文字逐字相同」**。落點由 system-architect 定（與 [F037](F037-document-change-history.md#export-delta) `AC-D11` ④ 同一決策）。」
+    - ⚠ **未受本次修正影響者**：本 AC 之 **①②③ 一字未改**（`變更類型` 欄輸出中文標籤、值域恰為六者、不得輸出列舉代碼、`時間` 格式、`循環別` 取當前值），三者已由實作滿足並經 lead 於瀏覽器實測確認。同一架構現實亦適用 [F037](F037-document-change-history.md#export-delta) `AC-D11` ④（`變更欄位`／`來源` 之對照表：後端 `change-labels.ts` 之 `FIELD_LABEL`／`SOURCE_OF_FIELD` ↔ 前端 `ChangeHistoryPage.tsx` 之 `FIELD_LABEL`／`sourceOf()`）——該條之規範文字依 lead 指示**本輪不動**，其括號內「現況對照表只存在於前端，須搬至後端」一句已因後端 `change-labels.ts` 落地而過時，惟**不影響該條之斷言標的**。
+    - 📌 **刻意不入本條斷言**：同檔之 `TYPE_CATEGORY`（篩選下拉之「顯示標籤 → `changeType` 集合」反向索引）為第三處對照，其鍵集合恆等於 (c) 之六個標籤；本條**不對它另立斷言**（避免擴大本 delta 範圍），其一致性由 (c) 間接維持。
 ## Error Scenarios
 - **權限限縮**：主管／部門窗口／一般使用者→403（僅 SysAdmin／ICSOPAdmin，OQ-E07-04 定案）。見 [error-handling.md#permission](../error-handling.md#permission)。
 - **匯出筆數超限**（2026-08-16）：`EXPORT_ROW_LIMIT_EXCEEDED`（400），不產生檔案；見 [error-handling.md#export](../error-handling.md#export)。

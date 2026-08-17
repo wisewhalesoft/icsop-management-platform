@@ -46,6 +46,20 @@ export class NodeDocsController {
     return this.svc.getDrawer(lifecycleId, nodeId);
   }
 
+  /**
+   * F036 樹狀圖節點雙擊之唯讀文件清單。
+   * 🔴 閘門為 `'read'`（非同 controller 上 mount／unmount 之 `'write'`）——`LIFECYCLE_MANAGEMENT`
+   * 之 Supervisor 為 READ，寫成 `'write'` 會讓主管在樹狀圖預覽頁吃 403（F036 AC-D5）。
+   */
+  @Get('documents')
+  @RequirePermission(FunctionKey.LIFECYCLE_MANAGEMENT, 'read')
+  listDocuments(
+    @Param('lifecycleId') lifecycleId: string,
+    @Param('nodeId') nodeId: string,
+  ) {
+    return this.svc.listNodeDocuments(lifecycleId, nodeId);
+  }
+
   @Post('documents')
   @HttpCode(204)
   @RequirePermission(FunctionKey.LIFECYCLE_MANAGEMENT, 'write')

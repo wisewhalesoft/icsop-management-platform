@@ -10,6 +10,7 @@ import {
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
+import { watermarkLines } from '../domain/watermark-lines';
 import { buildOrgPath } from '../domain/org-path';
 import type { OrgUnitRecord } from '../api/types';
 
@@ -231,7 +232,18 @@ export function PublicViewerPage(): JSX.Element {
                         fontFamily: "'JetBrains Mono', monospace",
                       }}
                     >
-                      {watermark}
+                      {/*
+                        F020 #7：三層式（①身分列 ②機密聲明 ③時間戳）。
+                        🔴 `whitespace-pre-line` **不能單獨解決**——後端字串本來就沒有 `
+`，
+                        `pre-line` 無換行可斷，這正是現行 bug 的成因；必須以共用之
+                        `watermarkLines()` 拆為三行、逐行 `display:block`。
+                      */}
+                      {watermarkLines(watermark).map((line, j) => (
+                        <span key={j} style={{ display: 'block' }}>
+                          {line}
+                        </span>
+                      ))}
                     </span>
                   ))}
                 </div>

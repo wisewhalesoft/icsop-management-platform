@@ -199,7 +199,7 @@ export function PermissionMatrixPage(): JSX.Element {
 
   return (
     <div className="space-y-4 max-w-6xl">
-      <PageHeader breadcrumb={['系統參數設定', '權限矩陣']} title="角色權限矩陣（RBAC）">
+      <PageHeader breadcrumb={[{ label: '系統參數設定' }, { label: '權限矩陣' }]} title="角色權限矩陣（RBAC）">
         <button
           onClick={() =>
             toast.info(

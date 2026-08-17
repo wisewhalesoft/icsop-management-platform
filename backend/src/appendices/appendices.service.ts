@@ -19,6 +19,15 @@ import {
   extensionOf,
 } from '../storage/file-rules';
 import { assertCanWriteDocumentAsset } from '../storage/document-asset-authz';
+import type { WatermarkSession } from '../public/watermark.service';
+import { supportsWatermark } from '../public/watermark';
+import {
+  CsvColumn,
+  assertExportRowLimit,
+  exportFileName,
+  formatExportTimestamp,
+  toCsvBuffer,
+} from '../storage/csv-export';
 import { canPerform, FunctionKey } from '../rbac/function-matrix';
 import { FieldKey } from '../rbac/field-matrix';
 import { SessionContext, UploadFile } from '../attachments/attachments.service';
@@ -94,6 +103,88 @@ function dedupe(ids: string[]): string[] {
  * ⚠ 與 F018 之刻意差異（architecture-spec §3.6 決策二）：關聯／解除／詳情查詢**主動驗證
  * documentId 存在性**（DOCUMENT_NOT_FOUND），不沿用 usage-forms 之「信任外鍵」模式。
  */
+/**
+ * F020 `AC-D3a`：前台附錄下載一律**代理串流**——回傳位元組本身，**不核發 SAS URL、不 3xx 轉址**。
+ * （後台之 `downloadFromPool()` 維持核發 SAS，一行不改。）
+ */
+export interface AppendixDownloadBytes {
+  bytes: Buffer;
+  fileName: string;
+  contentType: string;
+}
+
+/** 前台燒錄協作點之窄口徑（實作為 `WatermarkService`；附錄與使用表單共用同一 token）。 */
+export const FRONT_BURNER = Symbol('FRONT_BURNER');
+export interface FrontBurner {
+  burnIfPdf(
+    session: WatermarkSession,
+    bytes: Buffer,
+    format: string,
+  ): Promise<{ bytes: Buffer; snapshot: string | null }>;
+  /**
+   * F041（F018 `AC-D22` ③／F039 同款）：業務子分類 viewer 之可見性判定，不符者拋 404
+   * `DOCUMENT_NOT_FOUND`。實作為 `WatermarkService.assertDocumentVisible`——**與附件路徑同一份判定**。
+   *
+   * 🔴 宣告為**選填**：既有純建構單測以位置參數自建 fake burner（不含本方法），設為必填會讓
+   * 每個 harness 皆需同步改動。未提供 ⇒ 不做判定（僅可能發生於未注入真實 `WatermarkService`
+   * 之單元測試；production 兩個模組皆以 `useExisting: WatermarkService` 提供）。
+   */
+  assertDocumentVisible?(session: WatermarkSession, documentId: string): Promise<void>;
+}
+
+/** 附錄之三種允許格式 → 回應 Content-Type（白名單既定，不接受客戶端宣告）。 */
+function contentTypeOf(format: string): string {
+  if (format === 'pdf') return 'application/pdf';
+  if (format === 'xlsx') {
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
+  if (format === 'xls') return 'application/vnd.ms-excel';
+  return 'application/octet-stream';
+}
+
+/** 匯出結果（controller 據此設定 Content-Disposition 並 `res.send(buffer)`）。 */
+export interface AppendixExportResult {
+  csv: Buffer;
+  fileName: string;
+}
+
+/**
+ * 匯出之篩選條件——**與管理頁清單之篩選同一組**（`AC-D5`：匯出範圍＝當前篩選之全部結果）。
+ * `format` 之 `excel` 涵蓋 `xlsx`／`xls`（與畫面之格式篩選同一分類，AC-16）。
+ */
+export interface AppendixExportFilters {
+  q?: string;
+  format?: 'excel' | 'pdf' | '';
+}
+
+/** 檔案大小之顯示格式——與前端 `AppendixManagementPage.formatSize()` 同值（值層＝畫面所見）。 */
+function formatSizeLabel(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/** 名稱關鍵字（不分大小寫）＋ 格式分類之 AND 比對。 */
+function matchesAppendixFilters(item: AppendixPoolItem, filters: AppendixExportFilters): boolean {
+  const q = (filters.q ?? '').trim().toLowerCase();
+  if (q && !item.name.toLowerCase().includes(q)) return false;
+  if (filters.format === 'pdf' && item.format !== 'pdf') return false;
+  if (filters.format === 'excel' && item.format !== 'xlsx' && item.format !== 'xls') return false;
+  return true;
+}
+
+/**
+ * F039 匯出之六欄（`AC-D6` ②）。⚠ 畫面之「操作」欄**不匯出**；
+ * 畫面之「上傳者 / 上傳時間」單欄於 CSV **拆為兩欄**。
+ */
+const APPENDIX_EXPORT_COLUMNS: CsvColumn<AppendixPoolItem>[] = [
+  { header: '附錄名稱', value: (r) => r.name },
+  { header: '格式', value: (r) => r.format },
+  { header: '大小', value: (r) => formatSizeLabel(r.size) },
+  { header: '上傳者', value: (r) => r.uploadedByName ?? r.uploadedBy },
+  { header: '上傳時間', value: (r) => formatExportTimestamp(r.uploadedAt) },
+  { header: '關聯文件數', value: (r) => r.docCount },
+];
+
 @Injectable()
 export class AppendicesService {
   constructor(
@@ -110,7 +201,40 @@ export class AppendicesService {
     @Optional()
     @Inject(UPLOADER_ORG_RESOLVER)
     private readonly orgResolver?: UploaderOrgResolver,
+    /**
+     * F020 `AC-D2`／architecture-spec §10.1：前台附屬檔案燒錄之**單一共用協作點**。
+     * 三處（附件／附錄／使用表單）一律呼叫同一個 `burnIfPdf`，不各寫一份 `if (format === 'pdf')`。
+     * 選填以免破壞既有純建構單測（未注入 → 前台一律回原始位元組、快照為 null）。
+     */
+    @Optional()
+    @Inject(FRONT_BURNER)
+    private readonly frontBurner?: FrontBurner,
   ) {}
+
+  /**
+   * F039 `AC-D4`～`AC-D11`：附錄池匯出（CSV）。
+   *
+   * 範圍＝**當前篩選之全部結果**（非當前頁）；列序即 `listPoolOverview()` 之列序（畫面當前排序）。
+   * 閘門沿用既有 `assertCanRead`——匯出屬讀取類動作，SysAdmin（唯讀）允許。**不寫稽核**
+   * （管理存取，比照後台下載）。
+   *
+   * 📌 沿用 load-all：附錄池為**有界**集合（百量級），10,000 上限即為天花板，不需 SQL 下推
+   * （架構 §10.4 ④ 之表格：只有兩張 append-only 變更日誌表需要 COUNT 下推）。
+   */
+  async exportPool(
+    session: SessionContext | undefined,
+    filters: AppendixExportFilters,
+  ): Promise<AppendixExportResult> {
+    this.assertCanRead(session?.roleCode);
+    const items = await this.store.listPoolOverview();
+    await this.enrichUploaders(items);
+    const rows = items.filter((it) => matchesAppendixFilters(it, filters));
+    assertExportRowLimit(rows.length);
+    return {
+      csv: toCsvBuffer(rows, APPENDIX_EXPORT_COLUMNS),
+      fileName: exportFileName('appendices', new Date()),
+    };
+  }
 
   // ══════════ 附錄池 CRUD ══════════
 
@@ -335,9 +459,18 @@ export class AppendicesService {
    * 無關聯 → 空陣列（AC-26，非錯誤）。documentId 不存在 → 404 DOCUMENT_NOT_FOUND。
    * 屬文件瀏覽（全角色 READ），不受附錄管理功能權限限制 → 簽章不吃 session（比照 F018）。
    */
-  async listByDocument(documentId: string): Promise<DocumentAppendixRecord[]> {
+  async listByDocument(
+    documentId: string,
+  ): Promise<(DocumentAppendixRecord & { watermarkSupported: boolean })[]> {
     await this.requireDocument(documentId);
-    return this.store.listByDocument(documentId);
+    const rows = await this.store.listByDocument(documentId);
+    /**
+     * F020 `AC-D2`／`AC-D7` ①：列內浮水印註記之旗標**由伺服器端產生**（前端不得以 `format`
+     * 字串自行重算）。判定式與 `burnIfPdf` **同一個** `supportsWatermark()`——兩處各算一次
+     * 就會出現「UI 說會燒、實際沒燒」，而使用者只看得到 UI 那一半。
+     * 附加欄為 additive：後台頁面同樣取用本方法但不渲染該註記（`AC-D7` ④）。
+     */
+    return rows.map((r) => ({ ...r, watermarkSupported: supportsWatermark(r.format) }));
   }
 
   // ══════════ 下載 ══════════
@@ -366,27 +499,41 @@ export class AppendicesService {
    * 任一已登入角色皆允許（屬前台瀏覽/下載列印，不受附錄管理功能權限限制，AC-34）。
    */
   async downloadAppendix(
-    session: SessionContext | undefined,
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
     documentId: string,
     appendixId: string,
-  ): Promise<DownloadGrant> {
+  ): Promise<AppendixDownloadBytes> {
     if (!session?.accountId) {
       throw new ForbiddenException('FILE_ACCESS_DENIED');
     }
     await this.requireDocument(documentId);
+    // F041：業務子分類 viewer 對使用部門不相符之文件 → 404 DOCUMENT_NOT_FOUND，且**先於**
+    // 讀取任何位元組、燒錄與寫稽核（拒絕路徑不得留下稽核，亦不得洩漏附錄是否存在）。
+    await this.frontBurner?.assertDocumentVisible?.(session as WatermarkSession, documentId);
     const linked = await this.store.listByDocument(documentId);
     const appendix = linked.find((a) => a.id === appendixId);
     if (!appendix) throw new NotFoundException('APPENDIX_NOT_FOUND');
 
-    const url = await this.blob.getDownloadUrl(appendix.blobPath, DOWNLOAD_URL_TTL_SECONDS);
+    // 🔴 §10.3：格式判定一律以**上傳時已通過白名單驗證之伺服器端事實**（`APPENDIX_POOL.format`）
+    // 為權威，絕不採 client-supplied `content-type`——後者等同讓上傳者宣告「我這份 PDF 不是 PDF」。
+    const raw = (await this.blob.getBytes(appendix.blobPath)) ?? Buffer.alloc(0);
+    const burned = this.frontBurner
+      ? await this.frontBurner.burnIfPdf(session as WatermarkSession, raw, appendix.format)
+      : { bytes: raw, snapshot: null };
+
     await this.audit.record({
       targetType: 'APPENDIX',
       actionType: 'DOWNLOAD',
       appendixId,
       documentId,
       accountId: session.accountId,
+      watermarkSnapshot: burned.snapshot,
     });
-    return { url, expiresInSeconds: DOWNLOAD_URL_TTL_SECONDS };
+    return {
+      bytes: burned.bytes,
+      fileName: appendix.name,
+      contentType: contentTypeOf(appendix.format),
+    };
   }
 
   // ══════════ 守門與共用查找 ══════════
