@@ -19,10 +19,15 @@ class FakeStore implements PublicDocumentStore {
   }
 }
 
-/** 假名稱解析器：以 Map 提供，未命中回 null（服務端 fallback 為代碼）。 */
+/**
+ * 假名稱解析器：以 Map 提供，未命中回 null（服務端 fallback 為代碼）。
+ * `resolvePersonNames` 恆回空 Map——本檔不驗當責室長選項之姓名（其斷言在
+ * `public-list-filter-options.spec.ts`），僅需滿足介面。
+ */
 function fakeResolver(map: Record<string, string> = {}): OrgNameResolver {
   return {
     resolveOrgUnitName: (code) => Promise.resolve(map[code] ?? null),
+    resolvePersonNames: () => Promise.resolve(new Map<string, string>()),
   };
 }
 

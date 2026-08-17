@@ -11,6 +11,7 @@ import {
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
+import { TREE_PREVIEW_WINDOW_NAME } from './LifecycleTreePreviewPage';
 import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, type ComboOption } from '../components/SearchCombobox';
 import { usageFormOptionLabel } from '../domain/usage-form-label';
@@ -239,11 +240,14 @@ export function DocumentListPage(): JSX.Element {
     void loadPool(getUsageFormPool, setFormPool);
   }, [canRead]);
 
-  /** 受控下載：核發短效期 URL → 開新分頁（伺服器端寫入稽核 DOWNLOAD）。 */
+  /**
+   * 受控下載：後端代理串流 → `fetch` 取 Blob → 程式化 `<a download>`（RAW，不燒錄、不寫稽核）。
+   * 🔴 2026-08-17：原為 `window.open(grant.url)` 導覽至 Azure Blob SAS URL，Chrome Safe Browsing
+   * 對 `*.blob.core.windows.net` 出示「偵測到危險網站」攔截頁（F020 `AC-D3a` 後台側修訂）。
+   */
   const openBlob = useCallback(async (blobPath: string, label: string) => {
     try {
-      const grant = await downloadAttachment(blobPath);
-      window.open(grant.url, '_blank', 'noopener,noreferrer');
+      await downloadAttachment(blobPath, label);
     } catch {
       toast.error(`無法下載「${label}」`);
     }
@@ -653,7 +657,20 @@ export function DocumentListPage(): JSX.Element {
                     </td>
                     <td className="px-3 py-3">
                       <button
-                        onClick={() => window.open(`/lifecycles/${d.lifecycleId}/tree`, '_blank', 'noopener,noreferrer')}
+                        /**
+                         * F036 `AC-D3`（第二入口）：
+                         *  · 具名 target ⇒ 連續查看不同循環時**取代同一個預覽分頁**，不無限增生。
+                         *  · `?from=documents` 供預覽頁之 fallback 返回目標（正常路徑是關閉分頁）。
+                         *  🔴 **不得加 `noopener`／`noreferrer`**：實測會使具名 target 失效而每次開新分頁
+                         *     （HTML 規格於 noopener 為真時把 target 當 `_blank`），且預覽頁之
+                         *     `window.close()` 與「如何進來的」判定都需要 opener。同源第一方，無安全代價。
+                         */
+                        onClick={() =>
+                          window.open(
+                            `/lifecycles/${d.lifecycleId}/tree?from=documents`,
+                            TREE_PREVIEW_WINDOW_NAME,
+                          )
+                        }
                         title="開啟循環樹狀圖預覽"
                         aria-label={`${d.documentName} 循環樹狀圖預覽`}
                         className="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"

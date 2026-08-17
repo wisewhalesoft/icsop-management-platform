@@ -128,11 +128,25 @@ describe('endpoints — 端點契約對映', () => {
     expect(init?.method).toBe('DELETE');
   });
 
-  it('downloadPoolForm → GET /admin/usage-forms/:id/download', async () => {
-    vi.mocked(fetch).mockResolvedValue(jsonResponse({ url: 'blob:z', expiresInSeconds: 300 }));
-    const g = await downloadPoolForm('uf1');
-    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/admin/usage-forms/uf1/download');
-    expect(g.url).toBe('blob:z');
+  /**
+   * 🔴 2026-08-17：後台表單池下載由 `{ url }` SAS JSON 改為**代理串流 ＋ `downloadViaBlob`**
+   * （F020 `AC-D3a` 後台側修訂；Chrome Safe Browsing 對 `*.blob.core.windows.net` 出示
+   * 「偵測到危險網站」攔截頁）。原斷言（供追溯）：OLD> `expect(g.url).toBe('blob:z');`
+   *
+   * 改為斷言其**傳輸特徵**：`Accept: application/octet-stream`（不送 text/html ⇒ 不撞 SPA fallback）
+   * 且回傳 `void`——這正是本次修正的實質內容。
+   */
+  it('downloadPoolForm → GET /admin/usage-forms/:id/download（代理串流，非 SAS JSON）', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(new Blob(['x']), {
+        status: 200,
+        headers: { 'content-disposition': 'attachment; filename="f.xlsx"' },
+      }),
+    );
+    await expect(downloadPoolForm('uf1', 'fallback.xlsx')).resolves.toBeUndefined();
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe('/admin/usage-forms/uf1/download');
+    expect((init?.headers as Record<string, string>).Accept).toBe('application/octet-stream');
   });
 
   it('linkUsageForms → POST /admin/documents/:docId/usage-forms（JSON formIds）', async () => {

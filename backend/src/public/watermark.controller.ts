@@ -6,7 +6,10 @@ import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { RequirePermission } from '../rbac/require-permission.decorator';
 import { FunctionKey } from '../rbac/function-matrix';
 import type { SessionUser } from '../auth/session-token.service';
-import { attachmentDisposition } from '../storage/content-disposition';
+import {
+  attachmentDisposition,
+  contentTypeOfFileName,
+} from '../storage/content-disposition';
 
 /** SessionUser（request context）→ 浮水印身分。accountId＝ACCOUNT.id（UUID，稽核用；SessionGuard 每請求填入）。 */
 export function toWatermarkSession(u: SessionUser): WatermarkSession {
@@ -22,25 +25,13 @@ export function toWatermarkSession(u: SessionUser): WatermarkSession {
   };
 }
 
-/** 檔名之副檔名（小寫；無副檔名 → 空字串）。 */
-const extensionOf = (fileName: string): string => fileName.split('.').pop()?.toLowerCase() ?? '';
-
 /**
- * 附件白名單副檔名 → 回應 `Content-Type`（`storage/file-rules.ts` 之 `ICSOP_PDF`＝pdf、
- * `OJT_SIGNIN`＝pdf/jpg/jpeg/png 兩組聯集）。
- * 🔴 判定依據為**伺服器端事實**（上傳時已通過白名單驗證之檔名副檔名，architecture-spec §10.3），
- *   絕不採客戶端宣告之 content-type——後者等同讓上傳者宣告「我這份 PDF 不是 PDF」。
+ * 附件白名單副檔名 → 回應 `Content-Type`。
+ * 🔴 2026-08-17：改指向 `storage/content-disposition` 之**全站唯一表**（與 `attachmentDisposition`
+ * 同一落點）。原為本檔之私有實作，與 `usage-forms`／`appendices` 服務中兩份逐字相同者並存三份。
+ * 判定依據仍為伺服器端事實（已通過白名單驗證之檔名副檔名，§10.3），絕不採客戶端宣告。
  */
-const ATTACHMENT_CONTENT_TYPES: Record<string, string> = {
-  pdf: 'application/pdf',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-};
-
-function attachmentContentType(fileName: string): string {
-  return ATTACHMENT_CONTENT_TYPES[extensionOf(fileName)] ?? 'application/octet-stream';
-}
+const attachmentContentType = contentTypeOfFileName;
 
 /**
  * F020 前台文件檢視器 / 下載 / 列印（浮水印）。

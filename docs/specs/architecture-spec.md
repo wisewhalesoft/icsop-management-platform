@@ -1206,10 +1206,12 @@ ALTER TABLE [ACCOUNT] DROP COLUMN [userSubtype];
 | 附件類型 | 存取模式 | 理由 |
 |----------|----------|------|
 | `ICSOP_PDF`（VIEW/DOWNLOAD/PRINT） | **後端代理串流（Proxy）**，不對前端核發任何指向原始 Blob 的 SAS URL | 若核發可直接存取原始 Blob 的 SAS Token，使用者可取得**未燒錄浮水印**之原始檔，違反 [NFR-007](nfr.md#watermark) AC2「PDF 實際燒錄」與 AC5「防繞過」；因此浮水印文件必須由 API 讀取原始檔（以後端專用、不外洩之短效憑證存取 Blob）→ 燒錄 → 直接串流回應 |
-| `OJT_SIGNIN`、`USAGE_FORM`、`APPENDIX` —— **後台路徑** | 後端驗證權限後核發**單次用途、短效期（建議 ≤60 秒）**之 SAS Token，前端持該 Token 直接向 Blob 下載；**不寫稽核、不燒錄**（管理存取，`OQ-FM-01` 2026-07-24 人類裁決，2026-08-16 再次確認維持有效） | 降低 API 頻寬/CPU 負載；符合 [NFR-002](nfr.md#security) AC5 字面要求（短效期憑證）。後台為管理存取，無燒錄需求，代理無額外安全效益 |
+| `ICSOP_PDF`、`OJT_SIGNIN`、`USAGE_FORM`、`APPENDIX` —— **後台路徑**（🔴 **v1.6b 2026-08-17 改寫**） | **一律後端代理串流**，回傳**原始檔位元組**（RAW）＋原始檔名之 `Content-Disposition`；**不寫稽核、不燒錄**（管理存取，`OQ-FM-01` 2026-07-24 人類裁決，2026-08-16／2026-08-17 兩度確認維持有效）。**不核發 SAS、不 3xx 轉址至 Blob** | 📝 **本列原為「核發單次用途、短效期 SAS Token，前端持該 Token 直接向 Blob 下載」，已於 2026-08-17 人類閘門推翻**（[F020](features/F020-watermark.md#front-burn-scope-delta) `AC-D3a` 後台側修訂；缺失修正第 5／6 項）。**推翻理由＝該設計在線上根本不能用**：`window.open(sasUrl)` 是對 `*.blob.core.windows.net` 的 top-level 導覽，Chrome Safe Browsing 對該網域出示**「偵測到危險網站」紅底攔截頁**，使用者下載不到檔案。原理由「降低 API 頻寬/CPU 負載」不成立——**全體員工使用的前台早已代理同一批檔案**，僅四種後台角色使用的路徑改走代理，負載嚴格更低。順帶修好檔名：SAS 直連時瀏覽器只看得到 blobPath 末段，而該段是 `randomUUID()`。<br>🔒 **`OQ-FM-01` 之 RAW 裁決一格未動**：改的是傳輸模式，不是內容——四條端點仍不燒錄、不寫稽核 |
 | `OJT_SIGNIN`、`USAGE_FORM`、`APPENDIX` —— **前台路徑**（🔴 **v1.6a 2026-08-16 改寫**） | **一律後端代理串流**（含**非 PDF**）；`format = pdf` 者燒錄浮水印後回傳，非 PDF 者原檔位元組 pass-through。**不核發 SAS、不 3xx 轉址至 Blob**。同步寫入調閱稽核 | 📝 **本列原為「`OJT_SIGNIN`、`USAGE_FORM`（無浮水印需求，草案 `OQ-E05-03`）→ 一律 SAS 直連」，已於 2026-08-16 兩次人類閘門連續推翻**：前台附錄（`OQ-D18-01`／[F039](features/F039-appendix-management.md#front-burn-delta)）與前台使用表單（`OQ-D18-25`，**推翻 `OQ-E05-03`**／[F018](features/F018-usage-form-management.md#front-burn-delta)）之 PDF 皆須燒錄，前台 `OJT_SIGNIN` 之燒錄則屬 [F020](features/F020-watermark.md) 既有 AC 涵蓋之缺陷修復（#5a）。**非 PDF 亦須代理**之理由（稽核可靠性＋分支一致性）見 [F020](features/F020-watermark.md#front-burn-scope-delta) `AC-D3a` 與 §10.2；此為本表「非浮水印檔案走 SAS」原則之**刻意例外，僅限前台**，日後不得以「與本節不一致」為由改回 SAS |
 
-> ⚠ **本表自 2026-08-16 起以「前台／後台」為第一分類軸，而非以「附件類型」**——同一份 `blobPath` 之同一種附件類型，前台與後台走兩條不同的存取模式（前台代理＋燒錄、後台 SAS＋RAW），且兩者取得之位元組**不相等**（[F020](features/F020-watermark.md#front-burn-scope-delta) `AC-D3`）。分流之端點設計見 [§10.1](#ch10-defect-delta)。
+> ⚠ **本表自 2026-08-16 起以「前台／後台」為第一分類軸，而非以「附件類型」**——同一份 `blobPath` 之同一種附件類型，前台與後台走兩條不同的路徑，且兩者取得之位元組**不相等**（[F020](features/F020-watermark.md#front-burn-scope-delta) `AC-D3`）。分流之端點設計見 [§10.1](#ch10-defect-delta)。
+>
+> 🔴 **v1.6b（2026-08-17）之後，本節「Proxy／SAS 雙模式」實質上只剩 Proxy 單模式**：`getDownloadUrl()`／SAS 核發於**應用層已無任何呼叫端**（`BlobStore.getDownloadUrl` 介面保留，供日後大檔直送等情境）。前後台的差別**不再是傳輸模式**，而只剩兩件事：**是否燒錄浮水印**、**是否寫調閱稽核**。日後若有人想「為了效能改回 SAS」，請先讀 F020 `AC-D3a` 的兩段推翻理由——前台會拿到未燒錄原檔（違反 NFR-007），後台會撞 Safe Browsing 攔截頁。
 
 ```mermaid
 sequenceDiagram
@@ -1946,7 +1948,9 @@ graph TB
 
 前台下載一律走**前台專屬路徑**，且該路徑**不接受客戶端傳入 `blobPath`**——伺服器自 `(documentId, type)`／`(documentId, appendixId)`／`(documentId, formId)` 反查儲存位置。
 
-| 對象 | 前台路徑（PDF 燒錄／非 PDF 原檔，一律代理） | 後台路徑（RAW，SAS） | 現況 |
+> 🔴 **2026-08-17 更正**：下表「後台路徑」欄之標題原為 `後台路徑（RAW，SAS）`——SAS 已改為代理串流（§5.2 v1.6b／F020 `AC-D3a`）。**RAW 未變**。
+
+| 對象 | 前台路徑（PDF 燒錄／非 PDF 原檔，一律代理） | 後台路徑（RAW，亦為代理） | 現況 |
 |---|---|---|---|
 | ICSOP PDF | `GET /public/documents/:documentId/attachments/icsop-pdf/download` | `GET /documents/attachments/download?blobPath=` | **前台為新增**；後台既有，僅收斂閘門（見下 `AC-D6`） |
 | OJT 簽到表 | `GET /public/documents/:documentId/attachments/ojt/download` | 同上（共用後台端點） | **前台為新增** |

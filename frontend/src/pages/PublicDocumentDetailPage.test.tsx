@@ -48,8 +48,6 @@ function detailOf(over: Partial<PublicDocumentDetail> = {}): PublicDocumentDetai
     draftingSectionName: '車輛行銷室',
     primaryChiefId: 'e1',
     primaryChiefName: '陳彥廷（企劃部 車輛行銷室 室長）',
-    secondaryChiefIds: ['e2'],
-    secondaryChiefNames: ['林建宏（信用審查部 企金室 室長）'],
     edition: "26'01",
     announcedDate: '2026-01-01T00:00:00.000Z',
     contentSummary: '規範車輛分期案件之進件收件、資格初審與建檔流程。',
@@ -123,7 +121,8 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
     expect(fields.getByText('企劃部')).toBeInTheDocument(); // 制定部門
     expect(fields.getByText('車輛行銷室')).toBeInTheDocument(); // 制定室別
     expect(fields.getByText('陳彥廷（企劃部 車輛行銷室 室長）')).toBeInTheDocument(); // 當責室長-主要
-    expect(fields.getByText('林建宏（信用審查部 企金室 室長）')).toBeInTheDocument(); // 次要 chip
+    // 🔴 2026-08-17 delta（F019 `AC-D15`）：次要室長 chip 已移除。
+    // 原斷言（供追溯）：OLD> `expect(fields.getByText('林建宏（信用審查部 企金室 室長）')).toBeInTheDocument(); // 次要 chip`
     expect(fields.getByText("26'01")).toBeInTheDocument(); // 版次
     expect(fields.getByText('銷售及收款循環')).toBeInTheDocument(); // 循環別
     expect(fields.getByText('進件作業')).toBeInTheDocument(); // 所屬節點名（非 nodeId）
@@ -133,12 +132,16 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
   /**
    * F019 `AC-D9`（🔴 2026-08-16 delta；權威＝`prototypes/04-public-document-detail.html:190-216`）：
    * 不存在標籤為 `文件使用部門` 之欄位列，亦不出現其原附註文字；
-   * **其餘欄位列之集合、順序與逐字標籤一律不變**（19 列，`<dt>` 逐字順序如下）。
+   * **其餘欄位列之集合、順序與逐字標籤一律不變**（`<dt>` 逐字順序如下）。
    */
-  describe('F019 AC-D9：詳情頁移除「文件使用部門」欄', () => {
+  describe('F019 AC-D9／AC-D15：詳情頁移除「文件使用部門」與「當責室長-次要」欄', () => {
+    /**
+     * 🔴 2026-08-17 delta（`AC-D15`）：`當責室長-次要` 自本清單移除（19 → 18 列）。
+     * 其餘 18 列之集合、順序與逐字標籤一律不變。
+     */
     const DETAIL_FIELD_LABELS = [
       '系統 UUID', '文件狀態', '制定公司', '制定部門', '制定室別',
-      '程序書編號', '程序書書名', '當責室長-主要', '當責室長-次要',
+      '程序書編號', '程序書書名', '當責室長-主要',
       '版次', '循環別', '所屬節點', '內容摘要', '公告日期',
       '檔案（ICSOP PDF）', '使用表單', '附錄', 'OJT 實體簽到表', '連結點程序書',
     ];
@@ -156,13 +159,32 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
       expect(screen.queryByText(/選上層自動涵蓋其下所有單位/)).toBeNull();
     });
 
-    it('TS-F019-D9-003 其餘欄位列之集合與順序逐字不變（19 列）', async () => {
+    it('TS-F019-D9-003 其餘欄位列之集合與順序逐字不變（18 列）', async () => {
       renderDetail();
       await screen.findByRole('heading', { name: '車輛分期進件作業' });
       const dts = Array.from(screen.getByTestId('field-list').querySelectorAll('dt')).map(
         (el) => el.textContent?.trim(),
       );
       expect(dts).toEqual(DETAIL_FIELD_LABELS);
+    });
+
+    /**
+     * 🔴 2026-08-17 缺失修正第 3 項。比照 `TS-F019-D9-001` 之反向鎖。
+     *
+     * 🔴 fixture **刻意以 cast 塞回已移除之兩欄**：型別移除後，若只用正常 fixture，
+     * 「不出現次要室長姓名」會因為資料裡根本沒有那個字串而**恆真**——那不是斷言，是同義反覆。
+     * 此處模擬「後端仍回舊形狀」（滾動部署期間必然發生的中間態），要求前端**即使拿到也不渲染**。
+     */
+    it('TS-F019-D15-001 不存在標籤為 `當責室長-次要` 之欄位列；縱使後端仍回該欄亦不渲染', async () => {
+      vi.mocked(api.getPublicDocumentDetail).mockResolvedValue({
+        ...detailOf(),
+        secondaryChiefIds: ['e2'],
+        secondaryChiefNames: ['林建宏（信用審查部 企金室 室長）'],
+      } as unknown as PublicDocumentDetail);
+      renderDetail();
+      await screen.findByRole('heading', { name: '車輛分期進件作業' });
+      expect(screen.queryByText('當責室長-次要')).toBeNull();
+      expect(screen.queryByText('林建宏（信用審查部 企金室 室長）')).toBeNull();
     });
   });
 

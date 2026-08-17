@@ -58,7 +58,10 @@
 <!-- ===== App bar (viewer 樣式，不套後台側選單) ===== -->
 <header class="sticky top-0 z-30 bg-white border-b border-slate-200 shrink-0">
   <div class="px-4 h-14 flex items-center gap-3">
-    <button onclick="goBack()" title="返回循環池" aria-label="返回循環池" class="text-slate-400 hover:text-slate-600 flex items-center"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+    <!-- 🔴 F036 AC-D3（2026-08-17 delta）：名稱與圖示依「如何進來的」分支——
+         自清單開出（有 opener）＝「關閉預覽」＋ x；直接貼網址進來＝「返回…」＋ arrow-left。
+         同一個箭頭配兩種行為會誤導，故圖示一併切換。實際文字由 initBackBtn() 於載入時決定。 -->
+    <button id="backBtn" onclick="goBack()" title="返回循環池" aria-label="返回循環池" class="text-slate-400 hover:text-slate-600 flex items-center"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
     <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="git-fork" class="w-5 h-5"></i></div>
     <div class="leading-tight min-w-0">
       <div class="text-xs text-slate-400">循環樹狀圖預覽</div>
@@ -395,7 +398,26 @@
   function zoomBy(d){ zoom=Math.max(0.5,Math.min(1.8,+(zoom+d).toFixed(2))); applyZoom(); }
   function resetView(){ zoom=1; applyZoom(); }
 
-  function goBack(){ if(document.referrer){ history.back(); } else { location.href='10-lifecycle-list.html'; } }
+  /* 🔴 F036 AC-D3（2026-08-17 delta）：本頁是以 window.open 開出的**獨立分頁**，來源清單分頁
+     仍在背後開著 ⇒ 離開語意＝**關閉本分頁**，不是在本分頁內導覽。
+     若導覽回清單，使用者會得到兩個內容一模一樣的清單分頁，且每看一次樹狀圖就多一個
+     （使用者回報之「無限長出新分頁」）。關閉則直接露出原本那個清單分頁，其篩選/排序/頁碼原封不動。
+     ⚠ 原 `history.back()` 分支在實作（SPA）中不可用：window.open 開出的分頁 history.length===1。
+     ⚠ 直接貼網址進來者沒有 opener、close() 會被拒 ⇒ 退回依 ?from= 導覽（白名單鍵，非任意網址）。 */
+  function goBack(){
+    if(window.opener){ window.close(); }
+    const from=new URLSearchParams(location.search).get('from');
+    setTimeout(function(){ location.href = from==='documents' ? '13-document-list.html' : '10-lifecycle-list.html'; }, 200);
+  }
+  /* 按鈕之名稱／圖示依來源分支（見按鈕處註解）。 */
+  function initBackBtn(){
+    const btn=document.getElementById('backBtn'); if(!btn) return;
+    const from=new URLSearchParams(location.search).get('from');
+    const label = window.opener ? '關閉預覽'
+                : (from==='documents' ? '返回文件清單' : '返回循環池');
+    btn.title=label; btn.setAttribute('aria-label',label);
+    btn.innerHTML='<i data-lucide="'+(window.opener?'x':'arrow-left')+'" class="w-5 h-5"></i>';
+  }
 
   function doAction(kind){
     const label={DOWNLOAD:'下載',PRINT:'列印'}[kind]||kind;
@@ -426,6 +448,7 @@
      以代碼帶入將無法區分「消金」「企金」「子公司」，可能誤開另一子分類之循環。 */
   const qId=new URLSearchParams(location.search).get('lifecycleId')||DEFAULT_ID;
   loadCycle(CYCLES[qId]?qId:DEFAULT_ID);
+  initBackBtn(); lucide.createIcons();
   window.addEventListener('resize',()=>{ const st=document.getElementById('stage'); st.scrollLeft=Math.max(0,(board.offsetWidth-st.clientWidth)/2); });
 </script>
 </body>

@@ -8,11 +8,8 @@ import {
   Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import {
-  BLOB_STORE,
-  BlobStore,
-  DOWNLOAD_URL_TTL_SECONDS,
-} from '../storage/blob-store';
+import { BLOB_STORE, BlobStore } from '../storage/blob-store';
+import { contentTypeOfFormat } from '../storage/content-disposition';
 import {
   assertFormatAllowed,
   assertSizeWithinLimit,
@@ -64,14 +61,11 @@ export function resolveUsageFormName(name: string | undefined | null, fileName: 
   return resolved;
 }
 
-export interface DownloadGrant {
-  url: string;
-  expiresInSeconds: number;
-}
-
 /**
- * F020 `AC-D3a`：前台使用表單下載一律**代理串流**——回傳位元組本身，不核發 SAS、不 3xx 轉址。
- * （後台之 `downloadFromPool()` 維持核發 SAS，一行不改。）
+ * F020 `AC-D3a`：使用表單下載一律**代理串流**——回傳位元組本身，不核發 SAS、不 3xx 轉址。
+ * 🔴 2026-08-17：後台兩支（`downloadFromPool()`／`downloadFormRaw()`）**亦改用本型別**，
+ * 原 `DownloadGrant`（`{ url, expiresInSeconds }`）已無消費端而移除。前後台之差別只剩
+ * 「是否燒錄／是否寫稽核」（`AC-D4` 之後台 RAW 硬邊界），不再是傳輸模式的差別。
  */
 export interface UsageFormDownloadBytes {
   bytes: Buffer;
@@ -94,15 +88,12 @@ export interface FrontBurner {
   assertDocumentVisible?(session: WatermarkSession, documentId: string): Promise<void>;
 }
 
-/** 使用表單之三種允許格式 → 回應 Content-Type（白名單既定，不接受客戶端宣告）。 */
-function usageFormContentType(format: string): string {
-  if (format === 'pdf') return 'application/pdf';
-  if (format === 'xlsx') {
-    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  }
-  if (format === 'xls') return 'application/vnd.ms-excel';
-  return 'application/octet-stream';
-}
+/**
+ * 使用表單之允許格式 → 回應 Content-Type（白名單既定，不接受客戶端宣告）。
+ * 🔴 2026-08-17：改指向 `storage/content-disposition` 之**全站唯一表**——原本此處、附錄服務與
+ * `watermark.controller` 各有一份逐字相同的私有實作（白名單擴充時必然只改到其中一份）。
+ */
+const usageFormContentType = contentTypeOfFormat;
 
 /** 表單 blob key（穩定；覆蓋一律新 key，舊 key 於 DB 參照更新後回收）。 */
 export function buildFormBlobPath(fileName: string): string {
@@ -408,11 +399,10 @@ export class UsageFormsService {
   async downloadFromPool(
     session: SessionContext | undefined,
     formId: string,
-  ): Promise<DownloadGrant> {
+  ): Promise<UsageFormDownloadBytes> {
     this.assertCanRead(session?.roleCode);
     const form = await this.requireForm(formId);
-    const url = await this.blob.getDownloadUrl(form.blobPath, DOWNLOAD_URL_TTL_SECONDS);
-    return { url, expiresInSeconds: DOWNLOAD_URL_TTL_SECONDS };
+    return this.rawBytesOf(form);
   }
 
   /**
@@ -432,13 +422,32 @@ export class UsageFormsService {
   async downloadFormRaw(
     session: SessionContext | undefined,
     formId: string,
-  ): Promise<DownloadGrant> {
+  ): Promise<UsageFormDownloadBytes> {
     if (!session?.accountId) {
       throw new ForbiddenException('FILE_ACCESS_DENIED');
     }
     const form = await this.requireForm(formId);
-    const url = await this.blob.getDownloadUrl(form.blobPath, DOWNLOAD_URL_TTL_SECONDS);
-    return { url, expiresInSeconds: DOWNLOAD_URL_TTL_SECONDS };
+    return this.rawBytesOf(form);
+  }
+
+  /**
+   * 後台兩支下載之**共用出口**（差別僅在授權前提：池為功能閘門、詳情頁為 session 存在）。
+   *
+   * 🔴 **2026-08-17：由核發 SAS URL 改為代理串流**（F020 `AC-D3a` 之後台側修訂）。
+   * 原作法回 `{ url }`，前端 `window.open(sasUrl)` 導覽至 `*.blob.core.windows.net`
+   * ⇒ Chrome Safe Browsing 出示「偵測到危險網站」紅底攔截頁。代理後無第三方網域參與。
+   *
+   * 🔒 **RAW 語意逐字未動**（`AC-D4`）：不呼叫 `burnIfPdf`、不寫調閱稽核——只換傳輸方式。
+   * 這也是刻意**不**改呼叫 `downloadForm()` 的理由：後者會燒錄並寫稽核。
+   */
+  private async rawBytesOf(form: UsageFormRecord): Promise<UsageFormDownloadBytes> {
+    const bytes = await this.blob.getBytes(form.blobPath);
+    // DB 有參照但 blob 不存在 → 與「表單不存在」同一對外錯誤碼（區分兩者即洩漏參照存在）。
+    if (!bytes) {
+      throw new NotFoundException('FILE_ACCESS_DENIED');
+    }
+    // §10.3：格式以上傳時已驗證之 `format` 欄為權威，不採客戶端宣告之 content-type。
+    return { bytes, fileName: form.name, contentType: usageFormContentType(form.format) };
   }
 
   /**

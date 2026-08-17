@@ -523,11 +523,12 @@ export interface PublicDocumentDetail {
   draftingSectionName: string | null;
   primaryChiefId: string | null;
   primaryChiefName: string | null;
-  secondaryChiefIds: string[];
-  secondaryChiefNames: string[];
   /**
    * 🔴 2026-08-16 delta（F019 `AC-D9`／`AC-D12`）：`usingDeptIds`／`usingDeptNames` 已自
    * 前台詳情之對外回應移除。可見性與置頂判定仍在後端以使用部門進行——「不顯示 ≠ 不判定」。
+   *
+   * 🔴 2026-08-17 delta（F019 `AC-D15`）：`secondaryChiefIds`／`secondaryChiefNames` 同此處置
+   * （前台詳情已無「當責室長-次要」欄）。後台清單之同名欄位（`DocumentListItem`）不受影響。
    */
   edition: string | null;
   announcedDate: string | null;
@@ -644,11 +645,11 @@ export interface UsageFormPoolItem {
   uploadedByDept?: string | null;
 }
 
-/** 下載憑證（GET /admin/usage-forms/:formId/download；短效期 URL）。 */
-export interface UsageFormDownloadGrant {
-  url: string;
-  expiresInSeconds: number;
-}
+/**
+ * 🔴 2026-08-17：`UsageFormDownloadGrant`／`AppendixDownloadGrant` 兩個下載憑證型別已移除。
+ * 全部下載端點（前台與後台）皆改為代理串流，前端以 `downloadViaBlob` 觸發、回傳 `void`，
+ * 已無任何 `{ url, expiresInSeconds }` 形狀之回應（F020 `AC-D3a`／architecture-spec §5.2 v1.6b）。
+ */
 
 // ===== E10 F039 附錄管理（附錄池 ＋ 文件關聯與 sortOrder） =====
 
@@ -698,12 +699,6 @@ export interface DocumentAppendixRecord {
   uploadedAt?: string;
   /** F020 `AC-D2`／§10.3：伺服器端之浮水印支援旗標（前端不得自行以 `format` 重算）。 */
   watermarkSupported?: boolean;
-}
-
-/** 附錄下載憑證（後台池下載／前台文件內下載；短效期 URL）。 */
-export interface AppendixDownloadGrant {
-  url: string;
-  expiresInSeconds: number;
 }
 
 export type TriggerType = 'scheduled' | 'manual';

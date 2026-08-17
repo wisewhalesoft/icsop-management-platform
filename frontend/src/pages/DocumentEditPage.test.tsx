@@ -115,7 +115,7 @@ function setupMocks() {
   vi.mocked(endpoints.searchPersons).mockResolvedValue(PERSONS);
   vi.mocked(endpoints.updateDocument).mockResolvedValue({ document: VIEW, changes: [] });
   vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([]);
-  vi.mocked(endpoints.downloadAttachment).mockResolvedValue({ url: 'https://blob/a', expiresInSeconds: 300 });
+  vi.mocked(endpoints.downloadAttachment).mockResolvedValue(undefined);
   vi.mocked(endpoints.getAppendixPool).mockResolvedValue([]); // F039：預設空池，個別測試覆寫
   vi.mocked(endpoints.getDocumentAppendices).mockResolvedValue([]); // F039：預設無關聯附錄，個別測試覆寫
 }
@@ -431,10 +431,15 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
       await userEvent.click(
         within(attachCard('ICSOP PDF（呈現用，1 份，覆蓋式）')).getByRole('button', { name: /下載/ }),
       );
+      // 🔴 2026-08-17：代理串流取代 SAS ＋ window.open（F020 `AC-D3a` 後台側修訂；
+      // 原作法導覽至 `*.blob.core.windows.net` 而遭 Chrome Safe Browsing 攔截）。
       await waitFor(() =>
-        expect(endpoints.downloadAttachment).toHaveBeenCalledWith('documents/d1/icsop_pdf/x.pdf'),
+        expect(endpoints.downloadAttachment).toHaveBeenCalledWith(
+          'documents/d1/icsop_pdf/x.pdf',
+          'sop_v1.3.pdf',
+        ),
       );
-      expect(openMock).toHaveBeenCalledWith('https://blob/a', '_blank', 'noopener,noreferrer');
+      expect(openMock).not.toHaveBeenCalled();
     });
 
     it('TS-D-010 Supervisor（唯讀）→ 僅顯示檔名與下載，無「取代」入口', async () => {

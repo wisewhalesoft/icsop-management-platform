@@ -31,7 +31,10 @@ class FakeStore implements PublicDocumentStore {
 }
 
 function fakeResolver(map: Record<string, string> = {}): OrgNameResolver {
-  return { resolveOrgUnitName: (code) => Promise.resolve(map[code] ?? null) };
+  return {
+    resolveOrgUnitName: (code) => Promise.resolve(map[code] ?? null),
+    resolvePersonNames: () => Promise.resolve(new Map<string, string>()),
+  };
 }
 
 /**

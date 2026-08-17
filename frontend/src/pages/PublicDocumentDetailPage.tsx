@@ -91,13 +91,6 @@ function Field({ label, children }: { label: string; children: ReactNode }): JSX
   );
 }
 
-/** 灰底 chip（次要室長/使用部門多值）。 */
-function Chip({ children }: { children: ReactNode }): JSX.Element {
-  return (
-    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">{children}</span>
-  );
-}
-
 const DASH = '—';
 const findAttachment = (
   atts: PublicDetailAttachment[],
@@ -434,17 +427,9 @@ function DetailBody({
           </Field>
           <Field label="程序書書名">{detail.documentName}</Field>
           <Field label="當責室長-主要">{detail.primaryChiefName ?? DASH}</Field>
-          <Field label="當責室長-次要">
-            {detail.secondaryChiefNames.length > 0 ? (
-              <span className="inline-flex flex-wrap gap-1.5">
-                {detail.secondaryChiefNames.map((n, i) => (
-                  <Chip key={i}>{n}</Chip>
-                ))}
-              </span>
-            ) : (
-              DASH
-            )}
-          </Field>
+          {/* 🔴 2026-08-17 delta（F019 `AC-D15`）：「當責室長-次要」欄已移除（比照 `AC-D9` 之
+              「文件使用部門」）。後端對外 DTO 之 secondaryChiefIds／Names 一併移除，故此處
+              不是「有資料但不顯示」，而是前台根本不再取得該資料。 */}
           <Field label="版次">
             <span className="mono">{detail.edition ?? DASH}</span>
           </Field>

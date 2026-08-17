@@ -116,14 +116,25 @@ export class AppendicesController {
     });
   }
 
-  /** 後台附錄池個別下載（read gate；核發短效 URL、不寫稽核、不燒錄浮水印）。 */
+  /**
+   * 後台附錄池個別下載（read gate；不寫稽核、不燒錄浮水印）。
+   * 🔴 2026-08-17：由核發 SAS 改為**代理串流**（F020 `AC-D3a` 後台側修訂）——理由見
+   * `AppendicesService.downloadFromPool` 與同檔前台端點之註記。RAW 語意（`AC-D4`）未動。
+   */
   @Get('admin/appendices/:appendixId/download')
   @RequirePermission(FunctionKey.APPENDIX_MANAGEMENT, 'read')
-  downloadFromPool(
+  async downloadFromPool(
     @Req() req: RequestWithSession,
     @Param('appendixId') appendixId: string,
-  ) {
-    return this.svc.downloadFromPool(req.sessionUser, appendixId);
+    @Res() res: Response,
+  ): Promise<void> {
+    const { bytes, fileName, contentType } = await this.svc.downloadFromPool(
+      req.sessionUser,
+      appendixId,
+    );
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', attachmentDisposition(fileName));
+    res.send(bytes);
   }
 
   @Delete('admin/appendices/:appendixId')
@@ -202,8 +213,11 @@ export class AppendicesController {
    * 且完全沒有錯誤：`downloadViaBlob` 只看 HTTP 狀態碼，200 就當成功。
    * 服務層之燒錄（`burnIfPdf`）與稽核早已正確，缺的只有這一層的標頭與 `res.send`。
    *
-   * 🔒 後台之 `GET /admin/appendices/:appendixId/download` 維持核發 SAS、RAW、不寫稽核
-   * （`AC-D4` 之回歸鎖、`OQ-FM-01` 有效），**不隨本修正一起改**。
+   * 🔒 後台之 `GET /admin/appendices/:appendixId/download` 維持 **RAW、不寫稽核**
+   * （`AC-D4` 之回歸鎖、`OQ-FM-01` 有效）。
+   * 📝 **2026-08-17 更正**：本註記原寫「維持**核發 SAS**……不隨本修正一起改」——該傳輸模式
+   * 已於 F020 `AC-D3a` 後台側修訂中改為代理串流（Chrome Safe Browsing 對 Blob 網域出示
+   * 「偵測到危險網站」攔截頁）。**回歸鎖的是 RAW 與不寫稽核，不是傳輸模式**。
    */
   @Get('documents/:documentId/appendices/:appendixId/download')
   @RequirePermission(FunctionKey.DOCUMENT_DOWNLOAD_PRINT, 'read')

@@ -85,7 +85,7 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getDocuments).mockResolvedValue(page(DOCS));
-    vi.mocked(endpoints.downloadAttachment).mockResolvedValue({ url: 'https://blob/x', expiresInSeconds: 300 });
+    vi.mocked(endpoints.downloadAttachment).mockResolvedValue(undefined);
     vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([attachment({})]);
     vi.stubGlobal('open', openMock);
   });
@@ -97,6 +97,27 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
     expect(screen.getByText('ICSOP-SRC-101-1-01')).toBeInTheDocument();
     expect(screen.getAllByText('和潤企業股份有限公司').length).toBeGreaterThan(0);
     expect(screen.getByText('陳彥廷')).toBeInTheDocument();
+  });
+
+  /**
+   * 🔴 2026-08-17 缺失修正第 4 項（F036 `AC-D3` 之第二入口側）。
+   *  · `?from=documents`：供預覽頁之 fallback 返回目標（正常路徑是關閉該分頁）。
+   *  · `icsopTreePreview` 具名 target：連續查看不同循環時**取代同一個預覽分頁**，不無限增生。
+   * 🔒 **恰兩個引數**——多帶第三個 features 字串（`noopener`／`noreferrer`）即紅：真實 Chrome
+   *    實測帶了之後具名 target 完全失效（連開三次得到三個分頁），且預覽頁之 `window.close()`
+   *    與 opener 判定都會失去依據。
+   */
+  it('TS-F036-D3-005 樹狀圖圖示以具名分頁＋`?from=documents` 開啟預覽頁', async () => {
+    mockAuth('ICSOPAdmin');
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+    await userEvent.click(
+      screen.getByRole('button', { name: '車輛分期進件作業 循環樹狀圖預覽' }),
+    );
+    // `lc` ＝ d1 之 lifecycleId（`doc()` 預設值）——第二入口須帶該文件**實際所屬**之循環（`AC-S3`）。
+    expect(openSpy).toHaveBeenCalledWith('/lifecycles/lc/tree?from=documents', 'icsopTreePreview');
+    openSpy.mockRestore();
   });
 
   it('以 pageSize 大值一次載入完整工作集', async () => {
@@ -248,15 +269,24 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
       expect(row.querySelectorAll('td')[5].textContent).toBe('—');
     });
 
-    it('TS-D-017 點擊檔案下載鈕 → 以該 blobPath 呼叫既有受控下載端點並開新分頁', async () => {
+      /**
+       * 🔴 2026-08-17：後台下載由「SAS URL ＋ `window.open`」改為「代理串流 ＋ `downloadViaBlob`」
+       * （F020 `AC-D3a` 後台側修訂）——原作法導覽至 `*.blob.core.windows.net`，Chrome Safe Browsing
+       * 對該網域出示「偵測到危險網站」紅底攔截頁。第二引數為 fallback 檔名。
+       * 🔒 `window.open` 之**反向**斷言留著：改回導覽即紅。
+       */
+    it('TS-D-017 點擊檔案下載鈕 → 以該 blobPath 走受控下載端點（代理串流，不開新分頁）', async () => {
       mockAuth('ICSOPAdmin');
       renderPage();
       await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
       await userEvent.click(within(rowOf('車輛分期進件作業')).getByTitle('下載 車輛分期進件作業_v1.3.pdf'));
       await waitFor(() =>
-        expect(endpoints.downloadAttachment).toHaveBeenCalledWith('documents/d1/icsop_pdf/abc.pdf'),
+        expect(endpoints.downloadAttachment).toHaveBeenCalledWith(
+          'documents/d1/icsop_pdf/abc.pdf',
+          '車輛分期進件作業_v1.3.pdf',
+        ),
       );
-      expect(openMock).toHaveBeenCalledWith('https://blob/x', '_blank', 'noopener,noreferrer');
+      expect(openMock).not.toHaveBeenCalled();
     });
   });
 
@@ -311,9 +341,13 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
       // 針對「目標文件」取其附件 → 走同一支受控下載端點（不新增第二條下載路由）
       await waitFor(() => expect(endpoints.getDocumentAttachments).toHaveBeenCalledWith('d2'));
       await waitFor(() =>
-        expect(endpoints.downloadAttachment).toHaveBeenCalledWith('documents/d2/icsop_pdf/zzz.pdf'),
+        expect(endpoints.downloadAttachment).toHaveBeenCalledWith(
+          'documents/d2/icsop_pdf/zzz.pdf',
+          expect.any(String),
+        ),
       );
-      expect(openMock).toHaveBeenCalledWith('https://blob/x', '_blank', 'noopener,noreferrer');
+      // 🔴 2026-08-17：代理串流取代 SAS ＋ window.open（見 TS-D-017 之註記）。
+      expect(openMock).not.toHaveBeenCalled();
       expect(navigateMock).not.toHaveBeenCalled();
     });
 

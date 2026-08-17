@@ -68,8 +68,6 @@ function detailOf(over: Partial<PublicDocumentDetail> = {}): PublicDocumentDetai
     draftingSectionName: '車輛行銷室',
     primaryChiefId: 'e1',
     primaryChiefName: '陳彥廷',
-    secondaryChiefIds: [],
-    secondaryChiefNames: [],
     // 🔴 2026-08-16 fixture 過時修正（F019 `AC-D9`／`AC-D12`；OQ-D18-09）：
     //    `usingDeptIds`／`usingDeptNames` 已自前台詳情之對外 DTO 與 `PublicDocumentDetail`
     //    型別移除（見 `api/types.ts:529` 之 delta 註），舊 fixture 之殘留兩欄使 `tsc --noEmit`
@@ -134,8 +132,8 @@ describe('PublicDocumentDetailPage — 三類附屬檔案之浮水印標示（F0
     vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(detailOf());
     vi.mocked(api.getOrgUnits).mockResolvedValue([]);
     vi.mocked(api.getDocumentAppendices).mockResolvedValue(APPENDICES);
-    vi.mocked(api.downloadAttachment).mockResolvedValue({ url: 'blob:raw', expiresInSeconds: 300 });
-    vi.mocked(api.downloadUsageForm).mockResolvedValue({ url: 'blob:raw', expiresInSeconds: 300 });
+    vi.mocked(api.downloadAttachment).mockResolvedValue(undefined);
+    vi.mocked(api.downloadUsageForm).mockResolvedValue(undefined);
     // 🔴 2026-08-16 移除：`downloadDocumentAppendix` 經查為死碼（無 production 呼叫端，同日刪除）。
     //    本行僅為 mock 準備，無任何斷言依賴之；前台附錄實走 `downloadDocumentAppendixFront`。
     //    OLD> `vi.mocked(api.downloadDocumentAppendix).mockResolvedValue({ url: 'blob:raw', expiresInSeconds: 300 });`
@@ -224,8 +222,8 @@ describe('PublicDocumentDetailPage — 下載觸發方式（F020 AC-D3／AC-D3a�
     vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(detailOf());
     vi.mocked(api.getOrgUnits).mockResolvedValue([]);
     vi.mocked(api.getDocumentAppendices).mockResolvedValue(APPENDICES);
-    vi.mocked(api.downloadAttachment).mockResolvedValue({ url: 'blob:raw', expiresInSeconds: 300 });
-    vi.mocked(api.downloadUsageForm).mockResolvedValue({ url: 'blob:raw', expiresInSeconds: 300 });
+    vi.mocked(api.downloadAttachment).mockResolvedValue(undefined);
+    vi.mocked(api.downloadUsageForm).mockResolvedValue(undefined);
     // 🔴 2026-08-16 移除：`downloadDocumentAppendix` 經查為死碼（無 production 呼叫端，同日刪除）。
     //    本行僅為 mock 準備，無任何斷言依賴之；前台附錄實走 `downloadDocumentAppendixFront`。
     //    OLD> `vi.mocked(api.downloadDocumentAppendix).mockResolvedValue({ url: 'blob:raw', expiresInSeconds: 300 });`

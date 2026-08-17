@@ -560,7 +560,13 @@
   /* 樹狀圖圖示 → 直接開啟循環樹狀圖預覽頁（22），帶入該程序書之**具體**循環。
      F036 AC-S3：參數必須是 lifecycleId——同名不同子分類之代碼相同（皆 SRC），
      以代碼帶入會誤開同名之另一子分類。 */
-  function openTreePage(i){ const d=DOCS[i]; window.open('22-lifecycle-tree-preview.html?lifecycleId='+encodeURIComponent(d.lcId), '_blank'); }
+  /* 🔴 F036 AC-D3（2026-08-17 delta）：
+       ① 以**固定視窗名稱** icsopTreePreview 開啟 ⇒ 連續查看不同循環時**取代同一個預覽分頁**，
+          不會每點一次就多一個分頁（使用者回報之「無限長出新分頁」）。
+       ② 加帶 from=documents，供 22 之 fallback 返回目標（正常路徑是關閉該分頁）。
+       ⚠ 不得加 noopener/noreferrer：實測會使具名 target 失效而每次開新分頁，
+         且 22 的 window.close() 與「如何進來的」判定都需要 opener。 */
+  function openTreePage(i){ const d=DOCS[i]; window.open('22-lifecycle-tree-preview.html?lifecycleId='+encodeURIComponent(d.lcId)+'&from=documents', 'icsopTreePreview'); }
 
   /* ===== 樹狀圖 modal（已停用：改由 openTreePage 直接開啟 22）===== */
   let treeIdx=null;

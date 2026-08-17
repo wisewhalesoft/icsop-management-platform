@@ -282,21 +282,34 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
     });
   });
 
-  describe('受控下載', () => {
-    it('TS-017 授權角色下載既有附件 → 呼叫 getDownloadUrl 並回短效期 URL', async () => {
-      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());
-      const grant = await svc.getDownloadUrl({ roleCode: 'User', accountId: 'reader' }, rec.blobPath);
-      expect(grant.expiresInSeconds).toBe(DOWNLOAD_URL_TTL_SECONDS);
-      expect(blob.urlCalls).toEqual([{ key: rec.blobPath, ttlSeconds: DOWNLOAD_URL_TTL_SECONDS }]);
-      expect(grant.url).toContain(rec.blobPath);
+  /**
+   * 🔴 **2026-08-17：本區塊由「核發 SAS URL」改寫為「代理串流」**（F020 `AC-D3a` 之後台側修訂；
+   * 缺失修正第 5／6 項）。原作法前端以 `window.open(sasUrl)` 導覽至 `*.blob.core.windows.net`，
+   * Chrome Safe Browsing 出示「偵測到危險網站」紅底攔截頁，使用者根本下載不到檔案。
+   *
+   * 授權語意（未登入／參照失效一律 `FILE_ACCESS_DENIED`）**逐字未變**，只換回傳形狀；
+   * 「未核發憑證」之觀察點相應改為「未讀取任何位元組」。
+   */
+  describe('受控下載（代理串流）', () => {
+    it('TS-017 授權角色下載既有附件 → 回原始位元組＋原始檔名（非 SAS URL、非 blob key）', async () => {
+      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf({ fileName: '車輛分期進件作業.pdf' }));
+      const out = await svc.downloadAttachmentRaw({ roleCode: 'User', accountId: 'reader' }, rec.blobPath);
+      expect(out.bytes).toEqual(blob.blobs.get(rec.blobPath)!.content);
+      // 🔴 檔名為**上傳時之原始檔名**：blobPath 末段是 randomUUID()，SAS 直連時使用者
+      // 存到的是 `<uuid>.pdf`——這是本次修正順帶關掉的第二個缺陷。
+      expect(out.fileName).toBe('車輛分期進件作業.pdf');
+      expect(out.contentType).toBe('application/pdf');
+      expect(blob.urlCalls).toHaveLength(0); // 不再核發 SAS
     });
 
-    it('TS-018 未登入下載 → FILE_ACCESS_DENIED，未核發憑證', async () => {
+    it('TS-018 未登入下載 → FILE_ACCESS_DENIED，未讀取任何位元組', async () => {
       const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());
-      await expect(svc.getDownloadUrl(undefined, rec.blobPath)).rejects.toThrow('FILE_ACCESS_DENIED');
-      await expect(svc.getDownloadUrl({ roleCode: 'User' }, rec.blobPath)).rejects.toThrow(
+      const bytesSpy = jest.spyOn(blob, 'getBytes');
+      await expect(svc.downloadAttachmentRaw(undefined, rec.blobPath)).rejects.toThrow('FILE_ACCESS_DENIED');
+      await expect(svc.downloadAttachmentRaw({ roleCode: 'User' }, rec.blobPath)).rejects.toThrow(
         'FILE_ACCESS_DENIED',
       );
+      expect(bytesSpy).not.toHaveBeenCalled();
       expect(blob.urlCalls).toHaveLength(0);
     });
 
@@ -305,8 +318,36 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
       const oldPath = r1.blobPath;
       await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf({ fileName: 'v2.pdf' }));
       await expect(
-        svc.getDownloadUrl({ roleCode: 'ICSOPAdmin', accountId: 'a' }, oldPath),
+        svc.downloadAttachmentRaw({ roleCode: 'ICSOPAdmin', accountId: 'a' }, oldPath),
       ).rejects.toThrow('FILE_ACCESS_DENIED');
+    });
+
+    /**
+     * DB 有參照、blob 卻不存在（人工刪檔／回收失誤）：須與「參照不存在」回**同一錯誤碼**。
+     * 以不同錯誤區分兩者即洩漏「這筆參照確實存在」；靜默回 0 位元組更糟——使用者拿到
+     * 一個看似成功的空檔，沒有任何錯誤。
+     */
+    it('TS-020 參照存在但 blob 已不存在 → 同一 FILE_ACCESS_DENIED（不得回空檔）', async () => {
+      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());
+      blob.blobs.delete(rec.blobPath);
+      await expect(
+        svc.downloadAttachmentRaw({ roleCode: 'ICSOPAdmin', accountId: 'a' }, rec.blobPath),
+      ).rejects.toThrow('FILE_ACCESS_DENIED');
+    });
+
+    /**
+     * 🔒 §10.3：`Content-Type` 取自**已驗證之檔名副檔名**，不得取 `ATTACHMENT.contentType`
+     * （該欄源自 multipart 之客戶端宣告）——否則上傳者可宣告「我這份 PDF 不是 PDF」。
+     */
+    it('TS-021 Content-Type 依副檔名判定，不採上傳時之客戶端宣告', async () => {
+      const rec = await svc.uploadSingle(
+        ICSOP_ADMIN,
+        DOC,
+        'OJT_SIGNIN',
+        pdf({ fileName: '簽到表.png', contentType: 'application/pdf' }),
+      );
+      const out = await svc.downloadAttachmentRaw({ roleCode: 'ICSOPAdmin', accountId: 'a' }, rec.blobPath);
+      expect(out.contentType).toBe('image/png');
     });
   });
 
@@ -323,31 +364,32 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
    * F026 AC6 Edge Case × OQ-FM-01 —— 後台附件下載為 **RAW（不燒錄）** 之既定管理存取行為。
    *
    * 人類裁決（2026-07-24，field-matrix track）：後台（主管/部門窗口/ICSOPAdmin 經
-   * DocumentReadonlyPage/DocumentEditPage）下載 ICSOP PDF，一律核發指向**原始 blob** 之短效期 SAS URL，
-   * 伺服器端**不經手位元組**、故**不燒錄浮水印**；浮水印燒錄與調閱稽核僅發生於前台檢視器路徑
+   * DocumentReadonlyPage/DocumentEditPage）下載 ICSOP PDF，一律取得**原始檔位元組**、
+   * **不燒錄浮水印**；浮水印燒錄與調閱稽核僅發生於前台檢視器路徑
    * （F020 WatermarkController）。理由：後台為管理存取（原件），前台為消費存取（可追溯燒錄件）；
    * 且使用表單常為 .xlsx（無法燒錄 PDF 浮水印）。F026 spec 之 AC6 Edge Case 舊措辭（暗示後台會燒錄）
    * 已依裁決更正為「後台提供原始檔案」。
+   *
+   * 📝 **2026-08-17 措辭更正**：本段原寫「一律核發指向原始 blob 之短效期 SAS URL，伺服器端
+   * **不經手位元組**」——傳輸模式已改為代理串流（F020 `AC-D3a` 後台側修訂），伺服器現在確實
+   * 經手位元組。**裁決本身（RAW、不燒錄、不寫稽核）一格未動**；被更正的只是它當時的實作載體。
    *
    * 本區塊測試因此為**永久之既定行為測試（非暫時性 characterization）**：作為「後台不接線 PdfBurner」
    * 之回歸防線。
    */
   describe('後台原始下載（RAW，不燒錄）為既定管理存取行為（OQ-FM-01 人類裁決）', () => {
-    it('TS-FM-001 後台受控下載（getDownloadUrl）核發原始 blob SAS URL，且不呼叫任何燒錄函式', async () => {
+    it('TS-FM-001 後台受控下載回**原始**位元組（與上傳原件逐位元組相同），且不呼叫任何燒錄函式', async () => {
       const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());
-      blob.urlCalls.length = 0; // 僅觀察下載階段之核發呼叫（上傳不呼叫 getDownloadUrl，保守清零）
+      const original = blob.blobs.get(rec.blobPath)!.content;
       const sup: SessionContext = { roleCode: 'Supervisor', accountId: 'sup1' };
 
-      const grant = await svc.getDownloadUrl(sup, rec.blobPath);
+      const out = await svc.downloadAttachmentRaw(sup, rec.blobPath);
 
-      // 回傳 url 即 FakeBlobStore.getDownloadUrl 之原始輸出（未經任何燒錄轉換／未含燒錄後綴）——
-      // 燒錄需伺服器取位元組、轉換、再服務，根本無從產出一個原始 blob SAS URL。
-      expect(grant.url).toBe(
-        `https://fake.blob/${rec.blobPath}?sig=fake&ttl=${DOWNLOAD_URL_TTL_SECONDS}`,
-      );
-      expect(grant.expiresInSeconds).toBe(DOWNLOAD_URL_TTL_SECONDS);
-      // 恰一次 getDownloadUrl（核發 SAS），未寫入任何新 blob（無 put → 非重建燒錄件後另存）。
-      expect(blob.urlCalls).toEqual([{ key: rec.blobPath, ttlSeconds: DOWNLOAD_URL_TTL_SECONDS }]);
+      // 逐位元組等於上傳原件 ⇒ 未經任何燒錄轉換。燒錄必然改變位元組，故本斷言即為 RAW 之證明
+      // （比原本「回傳的 URL 字串等於 fake 樣板」更直接：那只證明沒動 URL，沒證明沒動內容）。
+      expect(out.bytes).toEqual(original);
+      // 未核發任何 SAS，且未寫入任何新 blob（無 put → 非重建燒錄件後另存）。
+      expect(blob.urlCalls).toHaveLength(0);
       expect(blob.putCalls).toHaveLength(1); // 僅上傳原件那一次；下載未再寫入燒錄件
       // 結構回歸防線：AttachmentsService 建構子＝blob/store/documentStore?/changePublisher?
       // （後者為 F037 附件替換變更事件，非燒錄相依）——**無 burner**，服務層天生不具燒錄能力

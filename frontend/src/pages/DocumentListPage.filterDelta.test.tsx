@@ -156,7 +156,7 @@ beforeEach(() => {
   mockAuth();
   vi.mocked(endpoints.getDocuments).mockResolvedValue(pageOf(DOCS));
   vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([]);
-  vi.mocked(endpoints.downloadAttachment).mockResolvedValue({ url: 'https://blob/x', expiresInSeconds: 300 });
+  vi.mocked(endpoints.downloadAttachment).mockResolvedValue(undefined);
   vi.mocked(endpoints.getAppendixPool).mockResolvedValue(APPENDICES);
   vi.mocked(endpoints.getUsageFormPool).mockResolvedValue(FORMS);
 });

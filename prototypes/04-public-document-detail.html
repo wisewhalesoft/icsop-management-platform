@@ -196,7 +196,10 @@
     ['程序書編號', '<span class="mono">ICSOP-SRC-101-1-01</span>'],
     ['程序書書名', '車輛分期進件作業'],
     ['當責室長-主要', '陳彥廷（企劃部 車輛行銷室 室長）'],
-    ['當責室長-次要', '<span class="inline-flex flex-wrap gap-1.5"><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">林建宏（信用審查部 企金室 室長）</span></span>'],
+    /* 🔴 F019 AC-D15（2026-08-17 delta）：「當責室長-次要」欄已移除，處置比照下方之使用部門欄。
+       原列（供追溯）：OLD> ['當責室長-次要', '<span …>林建宏（信用審查部 企金室 室長）</span>']
+       ⚠ 對外 DTO 之 secondaryChiefIds／secondaryChiefNames 一併移除（前台已無消費端）；
+       ⚠ **不顯示 ≠ 不判定**：後台清單「當責室長」篩選之主要∪次要語意（F017／F019 AC-D7）不變。 */
     /* 🔴 F019 AC-D9（2026-08-16 delta）：使用部門欄（原標籤見本檔檔頭 delta 註 ①）已移除；
        其原附註文字（處/室層＋部層＋課層之說明）一併移除。
        ⚠ 本註解刻意不重複該標籤之逐字字串——AC-D9 以 queryByText 斷言其不存在。

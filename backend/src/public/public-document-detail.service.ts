@@ -40,11 +40,14 @@ export interface PublicDocumentDetailDto {
   draftingSectionName: string | null;
   primaryChiefId: string | null;
   primaryChiefName: string | null;
-  secondaryChiefIds: string[];
-  secondaryChiefNames: string[];
   /**
    * 🔴 2026-08-16 delta（F019 `AC-D9`／`AC-D12`）：`usingDeptIds`／`usingDeptNames` 已自對外
    * DTO 移除。⚠ 內部型別 `PublicDocDetail.usingDeptIds` **保留**——F041 可見性判定所需。
+   *
+   * 🔴 2026-08-17 delta（F019 `AC-D15`）：`secondaryChiefIds`／`secondaryChiefNames` **一併移除**，
+   * 比照上述之處置——前台詳情已無「當責室長-次要」欄，欄位留在對外形狀上只會成為
+   * 「沒有消費端、因而沒有人會發現它壞掉」的死欄。⚠ 內部型別 `PublicDocDetail.secondaryChiefIds`
+   * **保留**：後台清單之「當責室長」篩選為主要∪次要（`AC-D7`），該判定不受本條影響。
    */
   edition: string | null;
   announcedDate: string | null;
@@ -104,18 +107,16 @@ export class PublicDocumentDetailService {
     const orgName = (code: string | null): string | null =>
       code ? (orgNames.get(code) ?? null) : null;
 
-    // 人員名稱（主要 + 次要室長，批次；未命中 fallback 員編）。
-    const empNos = [
-      ...new Set(
-        [raw.primaryChiefId, ...raw.secondaryChiefIds].filter(
-          (x): x is string => !!x,
-        ),
-      ),
-    ];
-    const personNames =
-      empNos.length > 0
-        ? await this.names.resolvePersonNames(empNos)
-        : new Map<string, string>();
+    /**
+     * 人員名稱（主要室長；未命中 → `null`）。
+     * 🔴 2026-08-17（`AC-D15`）：次要室長已自對外 DTO 移除 ⇒ **不再為其解析姓名**。
+     * 只刪 DTO 欄位而仍把次要員編送進解析器，等於為一份不會被回傳的資料付查詢成本
+     * （與 `AC-D12` 移除 `usingDeptNames` 時一併停止解析使用部門名稱為同一手法）。
+     * 仍用批次 API：單筆改 `resolvePersonName` 會多一個協作點形狀，無實益。
+     */
+    const personNames = raw.primaryChiefId
+      ? await this.names.resolvePersonNames([raw.primaryChiefId])
+      : new Map<string, string>();
 
     return {
       id: raw.id,
@@ -137,8 +138,6 @@ export class PublicDocumentDetailService {
       primaryChiefName: raw.primaryChiefId
         ? (personNames.get(raw.primaryChiefId) ?? null)
         : null,
-      secondaryChiefIds: raw.secondaryChiefIds,
-      secondaryChiefNames: raw.secondaryChiefIds.map((e) => personNames.get(e) ?? e),
       edition: raw.edition,
       announcedDate: raw.announcedDate,
       contentSummary: raw.contentSummary,

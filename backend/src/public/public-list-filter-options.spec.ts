@@ -241,8 +241,12 @@ describe('F019 AC-D5：Option 形狀（value 恆為 id／code；未解析時 lab
  * 名稱解析走**既有** `OrgNameResolver` 接縫（`public-documents.service.ts` 之既有第 2 建構子參數，
  * 見既有 `public-documents.service.spec.ts` `TS-F019-030`），fallback 為 code。
  *
- * ⚠ `chiefs` 之人員姓名解析所需之接縫，spec 與 §10.6 皆未指定（前台清單 DTO 現況亦不解析人員姓名）——
- *    已記入 `docs/test-specs/risks-and-gaps.md`（`G-L3-03`），本層僅斷言其 `value` 為員編。
+ * ✅ **2026-08-17 缺口關閉（`G-L3-03`）**：原註記為「`chiefs` 之人員姓名解析所需之接縫，spec 與 §10.6
+ *    皆未指定……本層僅斷言其 `value` 為員編」。該缺口即是前台「當責室長」下拉長期顯示**員編**、
+ *    使用者無從搜尋姓名之成因（`prototypes/03-public-list.html:319` 明訂選項為姓名）。
+ *    接縫已定為 `OrgNameResolver.resolvePersonNames`（`NameResolutionService` 之既有批次方法，
+ *    綁定端 `useExisting` 故無新增協作點）；`lifecycles` 之 label 則取自候選項既有之 `lifecycleName`。
+ *    兩者之斷言見 `TS-F019-D5-305`～`TS-F019-D5-308`。
  */
 class OptStore implements PublicDocumentStore {
   constructor(private readonly items: PublicDocItem[]) {}
@@ -253,8 +257,19 @@ class OptStore implements PublicDocumentStore {
     return Promise.resolve(null);
   }
 }
-const resolverOf = (map: Record<string, string>): OrgNameResolver => ({
+/**
+ * `persons` 未給 ⇒ 人員一律未命中（label fallback 為員編）——既有案例之期望值因而完全不變。
+ * 「未命中之鍵**缺席**於 Map」為 `NameResolutionService.resolvePersonNames` 之逐字契約，此處同形。
+ */
+const resolverOf = (
+  map: Record<string, string>,
+  persons: Record<string, string> = {},
+): OrgNameResolver => ({
   resolveOrgUnitName: (code) => Promise.resolve(map[code] ?? null),
+  resolvePersonNames: (empNos) =>
+    Promise.resolve(
+      new Map(empNos.filter((e) => persons[e] !== undefined).map((e) => [e, persons[e]])),
+    ),
 });
 
 describe('F019 AC-D5：PublicDocumentsService.filterOptions（服務層組裝與名稱解析）', () => {
@@ -297,5 +312,97 @@ describe('F019 AC-D5：PublicDocumentsService.filterOptions（服務層組裝與
     const svc = new PublicDocumentsService(new OptStore(LEAK_POOL), resolverOf(NAMES), () => TODAY);
     const opts = await svc.filterOptions(OTHER);
     expect(values(opts.chiefs)).toEqual(['E001', 'E900', 'E901']);
+  });
+
+  /**
+   * 🔴 2026-08-17 缺失修正第 1 項（權威＝`prototypes/03-public-list.html:319`，該處選項即為姓名）。
+   * `value` 仍為員編（`AC-D4` 鎖定比對鍵為 id，本修正**只動 label**），故 `TS-F019-D5-304` 同時綠。
+   */
+  it('TS-F019-D5-305 `chiefs` 之 label 為姓名（value 仍為員編）', async () => {
+    const svc = new PublicDocumentsService(
+      new OptStore(LEAK_POOL),
+      resolverOf(NAMES, { E001: '陳彥廷', E900: '林建宏', E901: '王志文' }),
+      () => TODAY,
+    );
+    const opts = await svc.filterOptions(OTHER);
+    // 🔴 以 value→label 之對映斷言，**刻意不斷言 CJK 之排列次序**：中文定序由 ICU 之
+    // zh-Hant collation（筆畫）決定，跨 Node/ICU 版本可能不同，硬編次序會產生與本修正無關之脆弱失敗。
+    // 「依 label 排序」之行為另以 ASCII 標籤於 TS-F019-D5-309 斷言，該處次序無歧義。
+    expect(Object.fromEntries(opts.chiefs.map((o) => [o.value, o.label]))).toEqual({
+      E001: '陳彥廷',
+      E900: '林建宏',
+      E901: '王志文',
+    });
+  });
+
+  it('TS-F019-D5-306 人員未命中 → `chiefs` 之 label fallback 為員編（不得為空字串／null）', async () => {
+    const svc = new PublicDocumentsService(
+      new OptStore(pool),
+      resolverOf(NAMES, {}),
+      () => TODAY,
+    );
+    const opts = await svc.filterOptions(OTHER);
+    expect(opts.chiefs).toEqual([{ value: 'E001', label: 'E001' }]);
+  });
+
+  /**
+   * 🔴 2026-08-17 缺失修正第 2 項。F019 `AC-S2` 補註明訂「`lifecycleDisplayName` 之組字自
+   * 2026-08-16 delta 起**由後端提供**（filter-options 管線一併回傳已組合之 label）」——
+   * 現況回傳 lifecycleId（UUID），本條為其回歸鎖。同名不同子分類必須是兩個相異選項。
+   */
+  it('TS-F019-D5-307 `lifecycles` 之 label 為 lifecycleDisplayName（含子分類），value 仍為 lifecycleId', async () => {
+    const cyclePool = [
+      doc({ id: 'a', usingDeptIds: ['JAC00'], lifecycleId: 'lc-c', lifecycleName: '銷售及收款循環（消金）' }),
+      doc({ id: 'b', usingDeptIds: ['JAC00'], lifecycleId: 'lc-b', lifecycleName: '銷售及收款循環（企金）' }),
+    ];
+    const svc = new PublicDocumentsService(new OptStore(cyclePool), resolverOf(NAMES), () => TODAY);
+    const opts = await svc.filterOptions(OTHER);
+    // 同名不同子分類 ⇒ 兩個相異選項（`AC-S2`）。次序不斷言，理由同 TS-F019-D5-305。
+    expect(Object.fromEntries(opts.lifecycles.map((o) => [o.value, o.label]))).toEqual({
+      'lc-c': '銷售及收款循環（消金）',
+      'lc-b': '銷售及收款循環（企金）',
+    });
+  });
+
+  it('TS-F019-D5-308 循環名稱未解析（store 回 null）→ label fallback 為 lifecycleId', async () => {
+    const svc = new PublicDocumentsService(new OptStore(pool), resolverOf(NAMES), () => TODAY);
+    const opts = await svc.filterOptions(OTHER);
+    expect(opts.lifecycles).toEqual([{ value: 'lc1', label: 'lc1' }]);
+  });
+
+  /**
+   * 🔴 排序依 **label**：純函式依 value（代碼／員編／UUID）排序，套上名稱後畫面上看不出規律。
+   * 本條涵蓋五組——三組組織欄位原本也有同一毛病，一併修正。
+   */
+  it('TS-F019-D5-309 五組選項皆依 label 排序（非依 value）', async () => {
+    const sortPool = [
+      doc({
+        id: 'a',
+        usingDeptIds: ['JAC00'],
+        draftingCompanyId: 'C1',
+        primaryChiefId: 'E001',
+        lifecycleId: 'lc1',
+        lifecycleName: 'Zulu 循環',
+      }),
+      doc({
+        id: 'b',
+        usingDeptIds: ['JAC00'],
+        draftingCompanyId: 'C2',
+        primaryChiefId: 'E002',
+        lifecycleId: 'lc2',
+        lifecycleName: 'Alpha 循環',
+      }),
+    ];
+    const svc = new PublicDocumentsService(
+      new OptStore(sortPool),
+      // 🔴 標籤刻意用 ASCII：value 序為 C1<C2、E001<E002、lc1<lc2，label 序三組皆恰好相反，
+      // 故本條能區分「依 value 排」與「依 label 排」，且不依賴 CJK collation。
+      resolverOf({ C1: 'Zeta 事業處', C2: 'Alpha 事業處' }, { E001: 'Zoe', E002: 'Adam' }),
+      () => TODAY,
+    );
+    const opts = await svc.filterOptions(OTHER);
+    expect(opts.draftingCompanies.map((o) => o.label)).toEqual(['Alpha 事業處', 'Zeta 事業處']);
+    expect(opts.chiefs.map((o) => o.label)).toEqual(['Adam', 'Zoe']);
+    expect(opts.lifecycles.map((o) => o.label)).toEqual(['Alpha 循環', 'Zulu 循環']);
   });
 });

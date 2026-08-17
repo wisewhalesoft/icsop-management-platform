@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
@@ -43,12 +43,18 @@ const CYCLES: LifecycleView[] = [
 
 function Probe() {
   const loc = useLocation();
-  return <div data-testid="loc">{loc.pathname}</div>;
+  return (
+    <>
+      <div data-testid="loc">{loc.pathname}</div>
+      {/* F036 `AC-D3`：`?from=` 之保留須以 search 斷言（既有案例僅看 pathname，看不見它消失）。 */}
+      <div data-testid="loc-search">{loc.search}</div>
+    </>
+  );
 }
 
-function renderAt(id = 'lc1') {
+function renderAt(id = 'lc1', search = '') {
   return render(
-    <MemoryRouter initialEntries={[`/lifecycles/${id}/tree`]}>
+    <MemoryRouter initialEntries={[`/lifecycles/${id}/tree${search}`]}>
       <Routes>
         <Route path="/lifecycles/:id/tree" element={<LifecycleTreePreviewPage />} />
       </Routes>
@@ -117,6 +123,116 @@ describe('LifecycleTreePreviewPage — F036 循環樹狀圖預覽', () => {
     await userEvent.selectOptions(sel, 'lc2');
     await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/lifecycles/lc2/tree'));
     await waitFor(() => expect(endpoints.getLifecycleTreePreview).toHaveBeenCalledWith('lc2'));
+  });
+
+  /**
+   * 🔴 2026-08-17 缺失修正第 4 項（F036 `AC-D3`）。
+   *
+   * 本頁有兩個入口（循環管理清單／ICSOP 文件管理清單）且**以 `window.open` 開新分頁**。
+   * 原返回鈕硬寫 `/admin/lifecycles` ⇒ 自文件清單進來的人被丟到循環管理頁。
+   *
+   * 🔴 **第一版修法（僅依 `?from=` 導覽）經使用者指出仍然不對**：在新分頁內導覽回清單，
+   * 會留下**與來源一模一樣的第二個清單分頁**，且每看一次樹狀圖就多一個。
+   * 定案語意：**預覽分頁的離開＝關閉本分頁**；`?from=` 退居 fallback（直連進入／關閉被拒）。
+   *
+   * 📌 jsdom 之 `window.opener` 恆為 `null` ⇒ 預設走「導覽」分支；`popup mode` 需明確 stub，
+   *    見 `asPopup()`。這也正確反映真實情況：直接貼網址進來的分頁確實沒有 opener。
+   */
+  describe('F036 AC-D3：預覽分頁之離開語意（關閉優先、導覽為 fallback）', () => {
+    /** 模擬「由清單以 window.open 開出」：opener 存在 ＋ 可觀察之 close()。 */
+    function asPopup(): { close: ReturnType<typeof vi.fn> } {
+      const close = vi.fn();
+      vi.stubGlobal('opener', {});
+      vi.spyOn(window, 'close').mockImplementation(close);
+      return { close };
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('TS-F036-D3-001 直連進入（無 opener）、未帶 from → 導覽回循環池', async () => {
+      mockAuth('ICSOPAdmin');
+      renderAt();
+      await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: '返回循環池' }));
+      await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/admin/lifecycles'));
+    });
+
+    it('TS-F036-D3-002 直連進入 ＋ `?from=documents` → 導覽回文件清單，無障礙名稱同步', async () => {
+      mockAuth('ICSOPAdmin');
+      renderAt('lc1', '?from=documents');
+      await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: '返回循環池' })).toBeNull();
+      await userEvent.click(screen.getByRole('button', { name: '返回文件清單' }));
+      await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/admin/documents'));
+    });
+
+    /**
+     * 🔒 open-redirect 回歸鎖：`from` 為白名單鍵、**不是**可導覽之網址。
+     * 若實作改成 `navigate(from)`，本案之 `//evil.example` 會成為協定相對外部網址。
+     */
+    it('TS-F036-D3-003 `from` 為未知值／外部網址 → 落預設（循環池），不得據以導覽', async () => {
+      mockAuth('ICSOPAdmin');
+      renderAt('lc1', '?from=%2F%2Fevil.example');
+      await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: '返回循環池' }));
+      await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/admin/lifecycles'));
+    });
+
+    /**
+     * 🔴 最容易漏的一格：切換循環後若不帶走 `from`，fallback 目標會悄悄改回循環池。
+     */
+    it('TS-F036-D3-004 切換循環後 `from` 仍保留，fallback 目標不變', async () => {
+      mockAuth('ICSOPAdmin');
+      renderAt('lc1', '?from=documents');
+      await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
+      await userEvent.selectOptions(screen.getByLabelText('切換循環'), 'lc2');
+      await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/lifecycles/lc2/tree'));
+      expect(screen.getByTestId('loc-search').textContent).toBe('?from=documents');
+      await userEvent.click(screen.getByRole('button', { name: '返回文件清單' }));
+      await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/admin/documents'));
+    });
+
+    /**
+     * 🔴 **本案為「無限長出新分頁」之直接回歸鎖**：由清單開出之預覽分頁，其離開動作必須是
+     * **關閉本分頁**而非導覽——導覽會留下與來源重複的第二個清單分頁。
+     */
+    it('TS-F036-D3-005 自清單開出（有 opener）→ 按鈕為「關閉預覽」且呼叫 window.close()，**不導覽**', async () => {
+      mockAuth('ICSOPAdmin');
+      const { close } = asPopup();
+      renderAt('lc1', '?from=documents');
+      await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
+
+      expect(screen.queryByRole('button', { name: '返回文件清單' })).toBeNull();
+      await userEvent.click(screen.getByRole('button', { name: '關閉預覽' }));
+
+      expect(close).toHaveBeenCalledTimes(1);
+      // 關閉成功時本頁已銷毀 ⇒ 不得同步導覽（否則使用者會看到重複清單一閃而過）。
+      expect(screen.getByTestId('loc').textContent).toBe('/lifecycles/lc1/tree');
+    });
+
+    /**
+     * 極少數瀏覽器拒絕 `window.close()` 之情況：不能讓使用者「按了沒反應」。
+     * 逾時後退回 `?from=` 之導覽目標。
+     */
+    it('TS-F036-D3-006 close() 被瀏覽器拒絕（頁面仍在）→ 逾時後退回 `?from=` 之導覽目標', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mockAuth('ICSOPAdmin');
+        asPopup(); // close() 被 mock 成 no-op ＝ 模擬「呼叫了但分頁沒關掉」
+        renderAt('lc1', '?from=documents');
+        await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
+
+        await userEvent.click(screen.getByRole('button', { name: '關閉預覽' }));
+        expect(screen.getByTestId('loc').textContent).toBe('/lifecycles/lc1/tree'); // 尚未導覽
+
+        await vi.advanceTimersByTimeAsync(500);
+        await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/admin/documents'));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('下載／列印連結指向後端燒錄端點', async () => {

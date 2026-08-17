@@ -395,7 +395,7 @@ describe('UsageFormManagementPage — F018 AC-D13 🔒 後台個別下載維持�
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getUsageFormOverview).mockResolvedValue(POOL);
-    vi.mocked(endpoints.downloadPoolForm).mockResolvedValue({ url: 'blob:zzz', expiresInSeconds: 300 });
+    vi.mocked(endpoints.downloadPoolForm).mockResolvedValue(undefined);
     vi.spyOn(window, 'open').mockReturnValue(null);
     mockAuth('ICSOPAdmin');
   });
@@ -405,7 +405,11 @@ describe('UsageFormManagementPage — F018 AC-D13 🔒 後台個別下載維持�
     renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     await userEvent.click(within(rowOf('進件申請書.xlsx')).getByRole('button', { name: '下載' }));
-    await waitFor(() => expect(endpoints.downloadPoolForm).toHaveBeenCalledWith('uf1'));
+    // 🔴 2026-08-17：第二引數為 fallback 檔名（代理串流之 Content-Disposition 缺漏時才採用）。
+    await waitFor(() =>
+      expect(endpoints.downloadPoolForm).toHaveBeenCalledWith('uf1', expect.any(String)),
+    );
+    expect(window.open).not.toHaveBeenCalled(); // 不再導覽至第三方 Blob 網域
     // OQ-FM-01 維持有效：後台一律 RAW、不燒錄、不寫稽核（缺失 delta #12/#13/#15 明確不做）。
     const called = Object.entries(endpoints)
       .filter(([, v]) => typeof v === 'function' && vi.isMockFunction(v) && v.mock.calls.length > 0)
