@@ -15,7 +15,7 @@ import fontkit from '@pdf-lib/fontkit';
  */
 
 /** 字型檔候選路徑（src 執行 via ts-jest 與 dist 執行皆解析至 `backend/assets/fonts`）。 */
-function fontCandidatePaths(): string[] {
+export function fontCandidatePaths(): string[] {
   const rel = join('assets', 'fonts', 'NotoSansTC-Regular.ttf');
   return [
     // __dirname＝.../src/public/fonts 或 .../dist/public/fonts → 上溯三層至 backend 根
