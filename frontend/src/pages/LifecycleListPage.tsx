@@ -109,7 +109,7 @@ export function LifecycleListPage(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <PageHeader breadcrumb={['循環管理', '循環池']} title="循環（Life Cycle）池管理">
+      <PageHeader breadcrumb={[{ label: '循環管理' }, { label: '循環池' }]} title="循環（Life Cycle）池管理">
         {canWrite && (
           <button
             onClick={() => setEditTarget('new')}

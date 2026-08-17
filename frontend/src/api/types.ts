@@ -111,6 +111,21 @@ export interface LifecycleTreePreview {
   watermark: string;
 }
 
+/**
+ * F036 節點雙擊之唯讀文件清單列
+ * （GET /admin/lifecycles/:lifecycleId/nodes/:nodeId/documents）。
+ * 後端回原始 `status`＋`announcedDate`，徽章由前端以 `deriveDisplayStatus` 衍生
+ * ⇒ 與後台清單同一份規則，不可能分歧。
+ */
+export interface NodeMountedDocument {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+  edition: string | null;
+  status: DocumentStatus;
+  announcedDate: string | null;
+}
+
 /** F038 新舊快照 diff（後-前＝新增；前-後＝刪除；改名/掛載變更＝amber）。 */
 export interface LifecycleDiff {
   addNodes: string[];
@@ -176,6 +191,10 @@ export interface DocumentListItem {
   secondaryChiefCount?: number;
   /** G-DOC-001「+N」badge tooltip：次要室長姓名（查無→員編），與 count 同序。 */
   secondaryChiefNames?: string[];
+  /** F017 `AC-D7`（2026-08-16 delta）：次要當責室長之**員編**（篩選比對鍵；顯示用的是 Names）。 */
+  secondaryChiefIds?: string[];
+  /** F017 `AC-D5`（2026-08-16 delta）：是否有 OJT 簽到表（後端列富化）。缺鍵＝無。 */
+  hasOjt?: boolean;
   edition: string | null;
   announcedDate: string | null;
   contentSummary: string | null;
@@ -213,6 +232,9 @@ export interface DocumentFilters {
   primaryChiefId?: string;
   /** 連結點程序書篩選（擁有指向此目標之連結者）。 */
   linkTargetId?: string;
+  /** F017 `AC-D6`（2026-08-16 delta）：附錄／使用表單篩選（比照 linkTargetId 之後端交集樣板）。 */
+  appendixId?: string;
+  formId?: string;
   sortBy?: DocumentSortBy;
   sortDir?: SortDir;
   /** 1-based 頁碼（預設 1）。 */
@@ -289,6 +311,8 @@ export interface DocumentAttachmentRecord {
 export interface UsageFormRecord {
   id: string;
   name: string;
+  /** F018 delta：表單編號（選填、池內唯一）；下拉 label 組法見 `domain/usage-form-label.ts`。 */
+  formNumber?: string | null;
   blobPath: string;
   format: string;
   size: number;
@@ -408,10 +432,16 @@ export interface PublicListItem {
   documentName: string;
   lifecycleId: string;
   lifecycleName: string | null;
+  /**
+   * 🔴 2026-08-16 delta（F019 `AC-D12`）：**移除** `usingDeptIds`／`usingDeptNames`，
+   * **新增** `draftingCompanyName`／`draftingSectionName`／`edition`。
+   * 未解析之名稱一律為 `null`（前端渲染為「—」），不 fallback 為 code。
+   */
+  draftingCompanyName: string | null;
   draftingDeptId: string | null;
   draftingDeptName: string | null;
-  usingDeptIds: string[];
-  usingDeptNames: string[];
+  draftingSectionName: string | null;
+  edition: string | null;
   status: DocumentStatus;
   displayStatus: PublicDisplayStatus;
   announcedDate: string | null;
@@ -438,6 +468,14 @@ export interface PublicDetailAttachment {
   type: string;
   fileName: string;
   blobPath: string;
+  /**
+   * 🔴 F020 `AC-D2`／architecture-spec §10.3：**伺服器端**之浮水印支援旗標
+   * （＝後端「要不要呼叫 `burnPdf`」之同一個判定結果）。
+   * 前端**不得**自行以 `format` 字串重算——判定式只能有一份，重算一份在日後白名單擴充時必然
+   * 漂移，且漂移的表現是「UI 說支援、實際沒燒」這種沒有任何測試會抓到的靜默錯誤。
+   * additive 選填以免打爆既有 fixture（缺鍵＝不支援）。
+   */
+  watermarkSupported?: boolean;
 }
 
 /** 前台詳情之使用表單（精簡）。 */
@@ -445,6 +483,14 @@ export interface PublicDetailUsageForm {
   id: string;
   name: string;
   format: string;
+  /**
+   * 🔴 F020 `AC-D2`／architecture-spec §10.3：**伺服器端**之浮水印支援旗標
+   * （＝後端「要不要呼叫 `burnPdf`」之同一個判定結果）。
+   * 前端**不得**自行以 `format` 字串重算——判定式只能有一份，重算一份在日後白名單擴充時必然
+   * 漂移，且漂移的表現是「UI 說支援、實際沒燒」這種沒有任何測試會抓到的靜默錯誤。
+   * additive 選填以免打爆既有 fixture（缺鍵＝不支援）。
+   */
+  watermarkSupported?: boolean;
 }
 
 /** 前台詳情之連結點（單向 source→target）。 */
@@ -479,8 +525,10 @@ export interface PublicDocumentDetail {
   primaryChiefName: string | null;
   secondaryChiefIds: string[];
   secondaryChiefNames: string[];
-  usingDeptIds: string[];
-  usingDeptNames: string[];
+  /**
+   * 🔴 2026-08-16 delta（F019 `AC-D9`／`AC-D12`）：`usingDeptIds`／`usingDeptNames` 已自
+   * 前台詳情之對外回應移除。可見性與置頂判定仍在後端以使用部門進行——「不顯示 ≠ 不判定」。
+   */
   edition: string | null;
   announcedDate: string | null;
   contentSummary: string | null;
@@ -492,12 +540,34 @@ export interface PublicDocumentDetail {
 /** 前台清單篩選（皆選填）。 */
 export interface PublicListFilters {
   keyword?: string;
-  /** 選定組織單位 orgCode（任意層級，後端自動展開子樹）。 */
-  deptCode?: string;
+  /**
+   * 🔴 2026-08-16 delta（F019 `AC-D1`）：`deptCode`（使用部門篩選）**已移除**；
+   * 改為制定三級＋當責室長之 id 等值比對。
+   */
+  draftingCompanyId?: string;
+  draftingDeptId?: string;
+  draftingSectionId?: string;
+  /** 當責室長員編（後端比對主要 ∪ 次要）。 */
+  chiefId?: string;
   lifecycleId?: string;
   status?: string;
   page?: number;
   pageSize?: number;
+}
+
+/** 可搜尋下拉之單一選項（`value` 恆為 id／code）。 */
+export interface PublicFilterOption {
+  value: string;
+  label: string;
+}
+
+/** F019 `AC-D5`：五組前台篩選選項（GET /public/documents/filter-options，單一端點）。 */
+export interface PublicFilterOptions {
+  draftingCompanies: PublicFilterOption[];
+  draftingDepts: PublicFilterOption[];
+  draftingSections: PublicFilterOption[];
+  chiefs: PublicFilterOption[];
+  lifecycles: PublicFilterOption[];
 }
 
 /** 組織單位（GET /org-units；鏡射後端 OrgUnitRecord，供前台部門篩選下拉）。 */
@@ -560,6 +630,8 @@ export interface UsageFormDocumentRef {
 export interface UsageFormPoolItem {
   id: string;
   name: string;
+  /** F018 delta：表單編號（選填、池內唯一、不分大小寫）；未設定為 `null`。 */
+  formNumber: string | null;
   format: string;
   size: number;
   uploadedBy: string;
@@ -624,6 +696,8 @@ export interface DocumentAppendixRecord {
   size?: number;
   uploadedBy?: string;
   uploadedAt?: string;
+  /** F020 `AC-D2`／§10.3：伺服器端之浮水印支援旗標（前端不得自行以 `format` 重算）。 */
+  watermarkSupported?: boolean;
 }
 
 /** 附錄下載憑證（後台池下載／前台文件內下載；短效期 URL）。 */

@@ -57,7 +57,8 @@ const listItem = (o: Partial<DocumentListItem>): DocumentListItem => ({
   lifecycleName: '銷售及收款循環', nodeId: null,
   draftingCompanyId: null, draftingDeptId: null, draftingSectionId: null,
   draftingCompanyName: null, draftingDeptName: null, draftingSectionName: null,
-  primaryChiefId: null, primaryChiefName: null, edition: null, announcedDate: null, contentSummary: null,
+  primaryChiefId: null, primaryChiefName: null, secondaryChiefIds: [], hasOjt: false,
+  edition: null, announcedDate: null, contentSummary: null,
   icsopPdfBlobPath: null, icsopPdfFileName: null, links: [], ...o,
 });
 const EXISTING: DocumentListItem[] = [

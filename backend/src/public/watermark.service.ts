@@ -7,7 +7,9 @@ import {
   buildWatermarkSnapshot,
   departmentCodeCandidates,
   deriveSectionName,
+  formatOfFileName,
   formatWatermarkTimestamp,
+  supportsWatermark,
 } from './watermark';
 
 /** 組織單位查找（結構相容 OrgUnitReadStore.findByOrgCode）。 */
@@ -21,6 +23,14 @@ export const WATERMARK_ORG_LOOKUP = Symbol('WATERMARK_ORG_LOOKUP');
 /** 原始 PDF 位元組來源（生產＝getAttachmentRef + blob.getBytes；unit＝fake）。 */
 export interface WatermarkPdfSource {
   getOriginalPdf(documentId: string): Promise<Buffer | null>;
+  /**
+   * F020 `AC-D3`：前台 OJT 簽到表之原始位元組與檔名（architecture-spec §10.1）。
+   * 選填能力——未提供時 `downloadAttachment('OJT_SIGNIN')` 回 404，不降級為別的附件。
+   */
+  getAttachmentBytes?(
+    documentId: string,
+    type: 'ICSOP_PDF' | 'OJT_SIGNIN',
+  ): Promise<{ bytes: Buffer; fileName: string } | null>;
 }
 export const WATERMARK_PDF_SOURCE = Symbol('WATERMARK_PDF_SOURCE');
 
@@ -148,12 +158,87 @@ export class WatermarkService {
     return buf;
   }
 
+  /**
+   * 🔴 前台附屬檔案（附件／附錄／使用表單）之**單一共用協作點**（architecture-spec §10.1 末段）。
+   *
+   * F020 `AC-D2` 明訂三類檔案「適用同一規則、同一文案，不得分歧」，而三個 service 各寫一份
+   * `if (format === 'pdf')` 正是分歧的溫床（§10.16 風險 D7）——本 delta 開始時只有一處（附錄），
+   * 第二次閘門後變成三處，第四處（日後任何新附屬檔案類型）幾乎必然會漏。
+   *
+   *  - `format === 'pdf'` → 以 `buildSnapshot()`（與檢視器**同一份**快照來源）燒錄，回 `{bytes, snapshot}`。
+   *  - 非 PDF → **原封不動**回原始位元組，`snapshot` 為 `null`（正好對應 `AUDIT_LOG.watermarkSnapshot`
+   *    之落值規則，`AC-D5`），且**完全不組裝快照**（不做任何組織查找）。
+   *
+   * 🔒 本方法**不寫稽核**——稽核義務屬各消費端之既有 AC（F039 `AC-27`／F018 `AC-D14`），
+   * 且各自之 `targetType` 不同，集中於此反而會產生錯誤的事件型別。
+   */
+  async burnIfPdf(
+    session: WatermarkSession,
+    bytes: Buffer,
+    format: string,
+  ): Promise<{ bytes: Buffer; snapshot: string | null }> {
+    // 🔴 與 DTO 之 `watermarkSupported` 旗標**共用同一個判定式**（`supportsWatermark`）——
+    // 兩處各算一次會出現「UI 說會燒、實際沒燒」而使用者只看得到 UI 那一半。
+    if (!supportsWatermark(format)) return { bytes, snapshot: null };
+    const { snapshot } = await this.buildSnapshot(session);
+    return { bytes: await this.burner.burnPdf(bytes, snapshot), snapshot };
+  }
+
+  /**
+   * F041（F018 `AC-D22` ③／F039 同款）：**前台附屬檔案之可見性判定**——與附件路徑
+   * （`downloadAttachment`）共用同一份判定，供附錄／使用表單兩個服務經 `FrontBurner` 接縫呼叫。
+   *
+   * 🔴 為何開放為公開方法而非讓兩個服務各自注入 doc-meta：判定式一旦有第二份實作就會漂移，
+   * 且 `isDocVisibleToViewer` 之語意由 F019 `AC-D13` 的 arity 鎖釘死。三個消費端共用這一條路徑，
+   * 就不可能出現「附件擋、附錄不擋」的分歧（那正是本缺口的成因）。
+   * 🔴 非受限 viewer **不觸發任何查詢**（比照 `getOriginalPdf`）——受限者才付出一次 doc-meta 查詢。
+   * 不通過 → 404 `DOCUMENT_NOT_FOUND`（`OQ-E06-03`：隱藏存在性，非 403），由呼叫端在
+   * 讀取位元組／燒錄／寫稽核**之前**呼叫。
+   */
+  async assertDocumentVisible(session: WatermarkSession, documentId: string): Promise<void> {
+    if (!isDeptScopedViewer(this.toViewer(session))) return;
+    this.assertDocVisible(session, await this.loadDocMeta(documentId));
+  }
+
   /** DOWNLOAD：讀原始 → 燒錄 → 回燒錄後 buffer；記錄 DOWNLOAD 稽核。 */
   async download(
     session: WatermarkSession,
     documentId: string,
   ): Promise<{ pdf: Buffer; snapshot: string }> {
     return this.burnAndAudit(session, documentId, 'DOWNLOAD');
+  }
+
+  /**
+   * F020 `AC-D3`：**前台專屬**附件下載（`ICSOP_PDF`／`OJT_SIGNIN`）。
+   *
+   * 🔴 與 `download()` **共用同一條管線**——`loadDocMeta → assertDocVisible → buildSnapshot →
+   * 取原始位元組 → (pdf ? burnPdf : 原檔) → audit`。差別僅在「取原始位元組」之來源，
+   * 以及非 PDF（OJT 可為 jpg／png）走策略 A 之原檔直通。
+   * 🔴 `blobPath` 由伺服器自 `(documentId, type)` 反查，**不接受客戶端傳入**——「前台／後台」是
+   * 授權語意，不得建立在可由客戶端控制的輸入上（§10.1 之方案 B／C 已明確否決）。
+   */
+  async downloadAttachment(
+    session: WatermarkSession,
+    documentId: string,
+    type: 'ICSOP_PDF' | 'OJT_SIGNIN',
+  ): Promise<{ bytes: Buffer; fileName: string; snapshot: string | null }> {
+    const meta = await this.loadDocMeta(documentId);
+    this.assertDocVisible(session, meta);
+
+    const ref = this.pdfSource.getAttachmentBytes
+      ? await this.pdfSource.getAttachmentBytes(documentId, type)
+      : null;
+    if (!ref) throw new NotFoundException('DOCUMENT_PDF_NOT_FOUND');
+
+    // 判定依據＝上傳時已驗證之檔名副檔名（`DOCUMENT_ATTACHMENT` 無 format 欄，§10.3）。
+    const { bytes, snapshot } = await this.burnIfPdf(
+      session,
+      ref.bytes,
+      formatOfFileName(ref.fileName),
+    );
+    const { fields } = await this.buildSnapshot(session);
+    await this.audit(session, documentId, 'DOWNLOAD', snapshot ?? '', fields, meta);
+    return { bytes, fileName: ref.fileName, snapshot };
   }
 
   /** PRINT：與 DOWNLOAD 共用燒錄邏輯，稽核類型記為 PRINT。 */

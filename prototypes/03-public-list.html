@@ -15,7 +15,23 @@
        AC-02 → 未知 userSubtype 收斂為 'other'（fail-open）
      **頂部說明句於業務視角換為專屬文案**（2026-08-11 人類裁決新增；逐字內容＝ SCOPE_NOTICE_BUSINESS，
      下游 test-generator 會逐字斷言）——空狀態文案仍為「查無符合結果」逐字、不分支。
-     規格權威＝docs/specs/features/F041-user-subtype-business-scope.md（AC-12～AC-19、AC-33） -->
+     規格權威＝docs/specs/features/F041-user-subtype-business-scope.md（AC-12～AC-19、AC-33）
+     ⚠ 上列 4b 之**載體（使用部門下拉）已於 2026-08-16 delta 移除**；4b 之裁決本身未被推翻，
+       其精神改由 F019 AC-D5 承接（五項新下拉之選項來源必須先經 isDocVisibleToViewer 過濾）。 -->
+<!-- 🔴 2026-08-16 缺失／變更 delta（人類閘門已通過）——本檔已套用（規格權威＝F019 AC-D1～AC-D13）：
+     ① 桌面篩選列改為**恰 6 項**、順序 制定公司／制定部門／制定室別／當責室長／狀態／循環別；
+        其中五項為**可搜尋下拉（combobox）**，`狀態` 維持原生 select（AC-D1／AC-D2）。
+     ② **移除**「使用部門」篩選器與其預留選項文字（AC-D1）。
+     ③ 行動版底部 sheet 呈現同一 6 項、同一順序（AC-D1）。
+     ④ 清單卡欄位改為九項；<dl> 標籤順序＝制定公司／制定部門／制定室別／版次／公告日期／內容摘要；
+        **移除**「使用部門：」與「循環別：」兩個標籤與使用部門逐段高亮（AC-D8／AC-D12）。
+     ⑤ 「清除篩選」涵蓋新增之四項（AC-D3）。
+     ⑥ 「當責室長」比對範圍＝**主要 ∪ 次要**（AC-D7；與後台 F017 AC-D7 為同一語意之兩處斷言）。
+     🔒 **文案回歸鎖定（AC-D10／OQ-D18-06）**：SCOPE_NOTICE_BUSINESS／SCOPE_NOTICE_OTHER 兩條常數、
+        置頂區標題「您部門相關文件」、其餘區標題「其他文件」、空狀態「查無符合結果」——
+        五者逐字與本 delta 導入前完全相同。**縱使說明句內文提及「使用部門」而該欄位已不再顯示於卡片，
+        仍不得修改**（說明句解釋的是「可見範圍」，非「畫面上有哪個欄位」）。
+     🔒 **不顯示 ≠ 不判定**（AC-D11／AC-D13）：`use` 欄位保留於資料層，置頂機制與 F041 可見性判定不變。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -68,19 +84,15 @@
     </button>
   </div>
 
-  <!-- Desktop filter bar -->
-  <div class="hidden lg:flex items-center gap-3 mb-4">
-    <select id="fDept" onchange="render()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
-      <option value="">所有使用部門</option>
-    </select>
-    <select id="fStatus" onchange="render()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
-      <option value="有效">狀態：有效</option>
-    </select>
-    <select id="fCycle" onchange="render()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
-      <option value="">所有循環</option>
-    </select>
-    <button id="clearBtnD" onclick="clearFilters()" class="hidden px-3 py-2 rounded-lg text-sm text-primary-600 hover:bg-primary-50">清除篩選</button>
-    <span class="ml-auto text-sm text-slate-500" id="countText"></span>
+  <!-- Desktop filter bar — 🔴 F019 AC-D1（2026-08-16 delta）：恰 6 項、順序由左至右／逐列換行為
+       制定公司／制定部門／制定室別／當責室長／狀態／循環別；六項之 aria-label ＝ 該逐字字串。
+       🔴 已移除「使用部門」篩選器與其「所有…」預留選項文字（AC-D1 之雙重斷言）。 -->
+  <div class="hidden lg:block mb-4">
+    <div id="filterBar" class="grid grid-cols-3 gap-3"></div>
+    <div class="flex items-center gap-3 mt-2.5">
+      <button id="clearBtnD" onclick="clearFilters()" class="hidden px-3 py-2 rounded-lg text-sm text-primary-600 hover:bg-primary-50">清除篩選</button>
+      <span class="ml-auto text-sm text-slate-500" id="countText"></span>
+    </div>
   </div>
 
   <!-- 🟢 F041 已定案 · 原型示範控制（非正式 UI；實作時不得移植此區塊） -->
@@ -152,16 +164,12 @@
     <h3 class="font-semibold text-slate-900">篩選</h3>
     <button onclick="closeSheet()" class="text-slate-400"><i data-lucide="x" class="w-5 h-5"></i></button>
   </div>
+  <!-- 🔴 F019 AC-D1：行動裝置底部 sheet 呈現**同一 6 項、同一順序**（由上而下），與桌面一致 -->
   <div class="p-4 space-y-4">
-    <div><label class="block text-sm font-medium text-slate-700 mb-1.5">使用部門</label>
-      <select id="fDeptM" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"><option value="">所有使用部門</option></select></div>
-    <div><label class="block text-sm font-medium text-slate-700 mb-1.5">狀態</label>
-      <select id="fStatusM" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"><option value="有效">有效</option></select></div>
-    <div><label class="block text-sm font-medium text-slate-700 mb-1.5">循環</label>
-      <select id="fCycleM" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"><option value="">所有循環</option></select></div>
+    <div id="filterSheetBody" class="space-y-4"></div>
     <div class="flex gap-2 pt-2">
       <button onclick="clearFilters();closeSheet()" class="flex-1 py-2.5 rounded-lg border border-slate-300 text-sm">清除</button>
-      <button onclick="applyMobile()" class="flex-1 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium">套用</button>
+      <button onclick="closeSheet()" class="flex-1 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium">套用</button>
     </div>
   </div>
 </div>
@@ -225,6 +233,10 @@
     document.getElementById('hdrDept').textContent = m.dept;
     document.getElementById('scopeNotice').textContent = m.notice;
     document.getElementById('viewerNote').textContent = m.note;
+    // 🔴 AC-D5：切換視角後**重建**五項下拉之選項——選項來源須經 isDocVisibleToViewer 過濾，
+    // 故視角改變時選項集合亦隨之收斂（下拉選項本身不得洩漏他部門文件之存在）。
+    Object.keys(FILTER).forEach(k=>{ if(k!=='status') FILTER[k]=''; });
+    buildFilters();
     render();
   }
   // 所屬循環＝ICSOP 編號第 2 段代碼對應（SRC=銷售及收款循環, PUC=採購及付款循環, PPC=產品企劃循環,
@@ -249,48 +261,125 @@
   function lifecycleDisplayName(lc){ if(!lc) return ''; const s=normalizeSubcategory(lc.subcategory); return s?`${lc.name}（${s}）`:lc.name; }
   const lcById=id=>LIFECYCLE_POOL.find(l=>l.id===id)||null;
   const lcName=id=>lifecycleDisplayName(lcById(id));
+  /* 文件資料——制定組織三級（company／dept／section）、當責室長（chief 主要＋sec 次要[]）與 edition
+     為 2026-08-16 delta 新增之顯示／篩選欄位，取值與後台 13 之同一批文件逐筆一致。
+     🔒 `use`（使用部門）**保留於資料層**：它已不顯示於卡片、亦無對應篩選器，但置頂排序與
+        F041 業務子分類可見性判定仍依賴它（F019 AC-D11／AC-D13：**不顯示 ≠ 不判定**）。 */
   const DOCS = [
-    // 使用部門刻意涵蓋不同層級（全公司／本部／部／處室／課），示範「任意層級皆可指定」
-    {n:'ICSOP-SRC-101-2-00',name:'消金審核作業',acc:'信用審查部',use:['營業二本部'],status:'有效',lcId:'lc1',date:'2025-12-01',summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。'},
-    {n:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',acc:'信用審查部',use:['風險管理服務本部 / 信用審查部'],status:'有效',lcId:'lc10',date:'2026-06-01',summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。'},
-    {n:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',acc:'消費分期營業部',use:['營業二本部 / 營運管理部'],status:'有效',lcId:'lc1',date:'2025-10-01',summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。'},
-    {n:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',acc:'消費分期營業部',use:['營業二本部 / 營運管理部 / 審查室','營業二本部 / 消費分期營業部'],status:'有效',lcId:'lc3',date:'2026-03-01',summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。'},
-    {n:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',acc:'消費分期營業部',use:['營業二本部 / 消費分期營業部 / 商品北一處'],status:'有效',lcId:'lc3',date:'2026-04-01',summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。'},
-    {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',acc:'企劃部',use:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部','營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課'],status:'有效',lcId:'lc1',date:'2026-01-01',summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。'},
-    {n:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',acc:'財會部',use:['全公司'],status:'有效',lcId:'lc2',date:'2026-05-01',summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。'},
-    {n:'ICSOP-LWC-101-1-02',name:'招募管理作業',acc:'管理部',use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'有效',lcId:'lc4',date:'2025-10-01',summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。'},
-    {n:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',acc:'財會部',use:['財務資訊本部 / 財會部'],status:'有效',lcId:'lc7',date:'2026-05-01',summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。'},
-    {n:'ICSOP-GCA-100-2-00',name:'法遵作業',acc:'經企公關部',use:['經營企劃管理本部 / 經企公關部 / 法遵及公司治理室'],status:'有效',lcId:'lc9',date:'2026-03-01',summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。'},
-    {n:'ICSOP-FC-101-1-00',name:'銀行融資作業',acc:'財會部',use:['財務資訊本部 / 財會部'],status:'有效',lcId:'lc5',date:'2026-02-01',summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。'},
-    {n:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',acc:'管理部',use:['經營企劃管理本部 / 管理部 / 總務室'],status:'有效',lcId:'lc6',date:'2025-10-01',summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。'},
-    {n:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',acc:'資訊部',use:['財務資訊本部 / 資訊部 / 應用發展室'],status:'有效',lcId:'lc8',date:'2026-04-01',summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。'},
+    // use（使用部門）刻意涵蓋不同層級（全公司／本部／部／處室／課），示範「任意層級皆可指定」
+    {n:'ICSOP-SRC-101-2-00',name:'消金審核作業',company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],edition:"25'12",use:['營業二本部'],status:'有效',lcId:'lc1',date:'2025-12-01',summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。'},
+    {n:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],edition:"26'02",use:['風險管理服務本部 / 信用審查部'],status:'有效',lcId:'lc10',date:'2026-06-01',summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。'},
+    {n:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],edition:"25'10",use:['營業二本部 / 營運管理部'],status:'有效',lcId:'lc1',date:'2025-10-01',summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。'},
+    // section 為空＝此部之下無處/室，制定組織掛於部層（卡片以「—」呈現）
+    {n:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],edition:"26'03",use:['營業二本部 / 營運管理部 / 審查室','營業二本部 / 消費分期營業部'],status:'有效',lcId:'lc3',date:'2026-03-01',summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。'},
+    {n:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],edition:"26'04",use:['營業二本部 / 消費分期營業部 / 商品北一處'],status:'有效',lcId:'lc3',date:'2026-04-01',summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。'},
+    // 🔴 F019 AC-D7：本筆之「當責室長」次要為 林建宏 → 以「當責室長＝林建宏」篩選必須命中本筆（主要∪次要）
+    {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],edition:"26'01",use:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部','營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課'],status:'有效',lcId:'lc1',date:'2026-01-01',summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。'},
+    {n:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],edition:"26'02",use:['全公司'],status:'有效',lcId:'lc2',date:'2026-05-01',summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。'},
+    {n:'ICSOP-LWC-101-1-02',name:'招募管理作業',company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],edition:"25'09",use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'有效',lcId:'lc4',date:'2025-10-01',summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。'},
+    {n:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],edition:"26'05",use:['財務資訊本部 / 財會部'],status:'有效',lcId:'lc7',date:'2026-05-01',summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。'},
+    {n:'ICSOP-GCA-100-2-00',name:'法遵作業',company:'和潤企業股份有限公司',dept:'經企公關部',section:'法遵及公司治理室',chief:'劉家瑋（經企公關部 法遵及公司治理室 室長）',sec:[],edition:"26'01",use:['經營企劃管理本部 / 經企公關部 / 法遵及公司治理室'],status:'有效',lcId:'lc9',date:'2026-03-01',summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。'},
+    {n:'ICSOP-FC-101-1-00',name:'銀行融資作業',company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],edition:"26'01",use:['財務資訊本部 / 財會部'],status:'有效',lcId:'lc5',date:'2026-02-01',summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。'},
+    {n:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',company:'和潤企業股份有限公司',dept:'管理部',section:'總務室',chief:'蔡明哲（管理部 總務室 室長）',sec:[],edition:"25'08",use:['經營企劃管理本部 / 管理部 / 總務室'],status:'有效',lcId:'lc6',date:'2025-10-01',summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。'},
+    {n:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',company:'和潤企業股份有限公司',dept:'資訊部',section:'應用發展室',chief:'許志偉（資訊部 應用發展室 室長）',sec:[],edition:"26'01",use:['財務資訊本部 / 資訊部 / 應用發展室'],status:'有效',lcId:'lc8',date:'2026-04-01',summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。'},
     // 進度中（有效但公告日期未到 today）→ 前台隱藏、僅後台可見
-    {n:'ICSOP-SRC-102-1-00',name:'車輛分期對保作業（新制）',acc:'企劃部',use:['營業二本部 / 營運管理部 / 審查室'],status:'有效',lcId:'lc1',date:'2026-09-01',summary:'（將於 2026-09-01 公告生效）規範車輛分期對保程序之新制作業。'},
+    {n:'ICSOP-SRC-102-1-00',name:'車輛分期對保作業（新制）',company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:[],edition:"26'02",use:['營業二本部 / 營運管理部 / 審查室'],status:'有效',lcId:'lc1',date:'2026-09-01',summary:'（將於 2026-09-01 公告生效）規範車輛分期對保程序之新制作業。'},
     // 以下為失效/作廢，將由「後端」強制過濾，不顯示於前台
-    {n:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',acc:'消費分期營業部',use:['營業二本部 / 消費分期營業部'],status:'失效',lcId:'lc1',date:'2025-05-01',summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。'},
-    {n:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',acc:'管理部',use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'作廢',lcId:'lc4',date:'2025-04-01',summary:'（作廢）任用管理作業，因組織調整不再適用。'}
+    {n:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],edition:"24'03",use:['營業二本部 / 消費分期營業部'],status:'失效',lcId:'lc1',date:'2025-05-01',summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。'},
+    {n:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],edition:"24'01",use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'作廢',lcId:'lc4',date:'2025-04-01',summary:'（作廢）任用管理作業，因組織調整不再適用。'}
   ];
-  // 使用部門篩選選項＝實際出現之使用部門（含全公司／本部／部／處室／課四層＋全域）
-  // 🔴 F041 AC-16／OQ-E08-07 4b 選項 A：業務子分類**不限縮**此下拉之選項（推導方式刻意不變）；
-  // 選到子樹範圍外之單位時交集為空、顯示既有空狀態，非錯誤。
-  const DEPTS = [...new Set(DOCS.flatMap(d => d.use))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
 
-  // populate selects
-  function fillOpts(id,arr,val){const s=document.getElementById(id);arr.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;s.appendChild(o);});}
-  ['fDept','fDeptM'].forEach(id=>fillOpts(id,DEPTS));
-  // 循環篩選：選項值＝lifecycleId、顯示＝lifecycleDisplayName（F019 AC-S2）
-  // 「銷售及收款循環（消金／企金／子公司）」為三個相異選項，選定其一不含同名其他子分類之文件
-  function fillCycleOpts(id){const s=document.getElementById(id);LIFECYCLE_POOL.forEach(l=>{const o=document.createElement('option');o.value=l.id;o.textContent=lifecycleDisplayName(l);s.appendChild(o);});}
-  ['fCycle','fCycleM'].forEach(fillCycleOpts);
+  const TODAY='2026-07-17';
+  const uniq=a=>[...new Set(a)].filter(v=>v!=='' && v!=null);
+  const shortName=s=>(s||'').split('（')[0];
+
+  /* 🔴 F019 AC-D5（2026-08-16 delta）：五項可搜尋下拉之**選項來源**
+     ＝「全域 distinct」（自全體文件衍生，**非**當前結果集——避免「篩了就選不回來」之死鏈），
+     **且必須先經與清單相同之 isDocVisibleToViewer 過濾**——下拉選項本身不得洩漏他部門文件之存在
+     （與 AC-U4 hiddenCount 不洩漏原則同源）。切換示範視角至「業務」即可觀察選項隨之收斂。
+     📌 與 OQ-E08-07 4b「不限縮下拉」不矛盾：4b 所指之「使用部門下拉」選項來自組織主檔
+        （與文件存在與否無關），本頁五項選項則來自**文件衍生值**，故必須過濾。 */
+  function visibleDocs(){
+    return DOCS.filter(d=>d.status==='有效' && d.date<=TODAY)
+               .filter(d=>isDocVisibleToViewer(d.use, VIEWER));
+  }
+
+  /* 🔴 F019 AC-D1／AC-D2：篩選器**恰 6 項**，順序逐字為
+     制定公司／制定部門／制定室別／當責室長／狀態／循環別；各控制項之 aria-label ＝ 該逐字字串。
+     · 五項為**可搜尋下拉（combobox）**——輸入關鍵字即時縮小選項（比照後台 13 之既有慣例）。
+     · `狀態` 維持既有**原生 select**、**不改為 combobox**（AC-D2 明文），且維持既有裝飾性 no-op
+       （基底條件已鎖「已公告」，OQ-F019-04）。
+     🔴 已移除「使用部門」篩選器；DOM 內不存在該控制項之 aria-label，亦無其「所有…」預留選項文字。 */
+  const FILTER={company:'',mkdept:'',section:'',chief:'',status:'有效',cyc:''};
+  const FILTERS=[
+    {key:'company',label:'制定公司',type:'combo', opts:()=>uniq(visibleDocs().map(d=>d.company))},
+    {key:'mkdept', label:'制定部門',type:'combo', opts:()=>uniq(visibleDocs().map(d=>d.dept))},
+    {key:'section',label:'制定室別',type:'combo', opts:()=>uniq(visibleDocs().map(d=>d.section))},
+    // AC-D7：選項清單＝全體可見文件之 primaryChiefId ∪ secondaryChiefIds 之 distinct
+    {key:'chief',  label:'當責室長',type:'combo', opts:()=>uniq(visibleDocs().flatMap(d=>[d.chief,...d.sec]).map(shortName))},
+    {key:'status', label:'狀態',    type:'select',opts:()=>['有效']},
+    // 循環別：選項值＝lifecycleId、顯示＝lifecycleDisplayName（F019 AC-S2）；同名不同子分類為相異選項
+    {key:'cyc',    label:'循環別',  type:'combo', opts:()=>uniq(visibleDocs().map(d=>d.lcId)), optLabel:id=>lcName(id)}
+  ];
+  const cbCfg=k=>FILTERS.find(f=>f.key===k);
+  const optText=(key,v)=>{const c=cbCfg(key);return c&&c.optLabel?c.optLabel(v):v;};
+
+  /* 桌面：3 欄 grid 逐列換行（左→右、上→下）；行動：底部 sheet 由上而下。兩者共用同一 FILTERS 順序。 */
+  function controlHtml(f,scope){
+    const id=`${scope}_${f.key}`;
+    if(f.type==='select'){
+      return `<div>
+        <label for="${id}" class="block text-[11px] font-medium text-slate-500 mb-1">${f.label}</label>
+        <select id="${id}" aria-label="${f.label}" onchange="pickSelect('${f.key}',this.value)" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-600">
+          ${f.opts().map(o=>`<option value="${esc(o)}" ${FILTER[f.key]===o?'selected':''}>${esc(o)}</option>`).join('')}
+        </select></div>`;
+    }
+    return `<div>
+      <label for="${id}_input" class="block text-[11px] font-medium text-slate-500 mb-1">${f.label}</label>
+      <div class="relative">
+        <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+        <input id="${id}_input" aria-label="${f.label}" role="combobox" aria-expanded="false" aria-autocomplete="list" autocomplete="off" placeholder="全部"
+               oninput="comboFilter('${f.key}','${scope}')" onfocus="comboFilter('${f.key}','${scope}')" onblur="comboClose('${f.key}','${scope}')"
+               value="${esc(FILTER[f.key]?optText(f.key,FILTER[f.key]):'')}"
+               class="w-full pl-8 pr-7 py-2 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <button id="${id}_clear" onclick="clearOne('${f.key}')" aria-label="清除${f.label}" class="${FILTER[f.key]?'':'hidden'} absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400"><i data-lucide="x" class="w-3 h-3"></i></button>
+        <div id="${id}_list" class="hidden absolute z-30 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
+      </div></div>`;
+  }
+  function buildFilters(){
+    document.getElementById('filterBar').innerHTML       = FILTERS.map(f=>controlHtml(f,'cbD')).join('');
+    document.getElementById('filterSheetBody').innerHTML = FILTERS.map(f=>controlHtml(f,'cbM')).join('');
+    lucide.createIcons();
+  }
+  function comboFilter(key,scope){
+    const list=document.getElementById(`${scope}_${key}_list`); list.classList.remove('hidden');
+    const kw=(document.getElementById(`${scope}_${key}_input`).value||'').trim().toLowerCase();
+    const items=cbCfg(key).opts().filter(o=>optText(key,o).toLowerCase().includes(kw));
+    list.innerHTML = items.length ? items.map(o=>{
+      const sel=FILTER[key]===o, label=optText(key,o);
+      return `<div class="combo-opt px-3 py-2 cursor-pointer hover:bg-primary-50 ${sel?'bg-primary-50 text-primary-700 font-medium':''}" data-v="${esc(o)}">${esc(label)}${sel?' ✓':''}</div>`;
+    }).join('') : `<div class="px-3 py-2 text-slate-400">查無符合結果</div>`;
+    list.querySelectorAll('.combo-opt').forEach(el=>el.addEventListener('mousedown',e=>{e.preventDefault();comboPick(key,el.dataset.v);}));
+  }
+  function comboClose(key,scope){ setTimeout(()=>{const l=document.getElementById(`${scope}_${key}_list`); if(l)l.classList.add('hidden');},150); }
+  function comboPick(key,v){ FILTER[key]=v; buildFilters(); render(); }
+  function clearOne(key){ FILTER[key]=''; buildFilters(); render(); }
+  function pickSelect(key,v){ FILTER[key]=v; render(); }
 
   function statusPill(s){
     const map={'有效':['#047857','#D1FAE5'],'失效':['#B45309','#FEF3C7'],'作廢':['#B91C1C','#FEE2E2']};
     const [t,b]=map[s];return `<span class="px-2 py-0.5 rounded-full text-xs font-medium" style="color:${t};background:${b}">${s}</span>`;
   }
-  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+  function esc(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
 
+  /* 🔴 F019 AC-D8（2026-08-16 delta）：清單卡之欄位標籤集合**恰為九項**——
+     程序書編號／程序書書名／內容摘要／文件狀態／制定公司／制定部門／制定室別／版次／公告日期。
+     編號、書名、狀態徽章維持於卡片標頭、位置不變；<dl> 區塊之標籤順序逐字為
+     制定公司：／制定部門：／制定室別：／版次：／公告日期：／內容摘要：。
+     🔴 卡片 DOM **不得出現**「使用部門：」與「循環別：」兩個標籤（AC-D8 雙重 queryByText 斷言）。
+     📌 「使用部門逐段高亮」（G-PUB-016）隨欄位移除一併移除——此為 AC-D12 已接受之代價。
+     版次以等寬字（mono）呈現，格式 {YY}'{NN}。 */
   function card(d){
-    const pinnedUse = d.use.map(u=>VIEWER.scope.includes(u)?`<span class="text-primary-700 font-medium">${u}</span>`:u).join('、');
     return `<article tabindex="0" onclick="openDoc('${d.n}')" class="bg-white border border-slate-200 rounded-xl p-4 hover:border-primary-300 hover:shadow-sm transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-600">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
@@ -302,35 +391,36 @@
         <i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 shrink-0"></i>
       </div>
       <dl class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 text-xs">
-        <div><dt class="text-slate-400 inline">制定部門：</dt><dd class="text-slate-600 inline">${d.acc}</dd></div>
-        <div><dt class="text-slate-400 inline">公告日期：</dt><dd class="text-slate-600 inline mono">${d.date}</dd></div>
-        <div class="col-span-2"><dt class="text-slate-400 inline">使用部門：</dt><dd class="text-slate-600 inline">${pinnedUse}</dd></div>
-        <div class="col-span-2"><dt class="text-slate-400 inline">循環別：</dt><dd class="text-slate-600 inline">${lcName(d.lcId)}</dd></div>
+        <div><dt class="text-slate-400 inline">制定公司：</dt><dd class="text-slate-600 inline">${esc(d.company)}</dd></div>
+        <div><dt class="text-slate-400 inline">制定部門：</dt><dd class="text-slate-600 inline">${esc(d.dept)}</dd></div>
+        <div><dt class="text-slate-400 inline">制定室別：</dt><dd class="text-slate-600 inline">${d.section?esc(d.section):'<span class="text-slate-300" title="此部之下無處/室，制定組織掛於部層">—</span>'}</dd></div>
+        <div><dt class="text-slate-400 inline">版次：</dt><dd class="text-slate-600 inline mono">${esc(d.edition)}</dd></div>
+        <div class="col-span-2"><dt class="text-slate-400 inline">公告日期：</dt><dd class="text-slate-600 inline mono">${d.date}</dd></div>
         ${d.summary?`<div class="col-span-2"><dt class="text-slate-400 inline">內容摘要：</dt><dd class="text-slate-500 inline">${esc(d.summary)}</dd></div>`:''}
       </dl>
     </article>`;
   }
 
-  function currentFilters(){
-    return { kw:document.getElementById('kw').value.trim().toLowerCase(),
-             dept:document.getElementById('fDept').value, status:'有效', cyc:document.getElementById('fCycle').value };
-  }
-
   function render(){
-    const f=currentFilters();
+    const kw=document.getElementById('kw').value.trim().toLowerCase();
     // 後端強制：一般使用者僅「已公告」＝有效且公告日期已過（進度中/失效/作廢隱藏）
-    const TODAY='2026-07-17';
     const visible = DOCS.filter(d=>d.status==='有效' && d.date <= TODAY);
     // AC-18／F019 AC-U4：hiddenCount 之計算式刻意不動——插入點在基底條件之後，
     // 故「因業務限制被過濾者」天然不計入，不以計數洩漏他部門文件之存在數。
     const hiddenCount = DOCS.length - visible.length;
     // 🔴 F041 AC-14／F019 AC-U1：於「已公告」基底條件之後、其餘篩選之前套用可見性過濾。
-    // 不相符者不出現於清單、不計入總筆數；與部門／循環／關鍵字條件為 AND（AC-17／F019 AC-U3）。
+    // 不相符者不出現於清單、不計入總筆數；與六項篩選／關鍵字條件為 AND（AC-17／F019 AC-U3／AC-D6）。
     const scoped = visible.filter(d=>isDocVisibleToViewer(d.use, VIEWER));
+    /* AC-D4／AC-D6：制定公司／制定部門／制定室別／循環別皆為**等值比對**（比對鍵為 id，非顯示名稱）；
+       `狀態` 維持既有裝飾性 no-op；任一未提供即不施加該限制；多項並用為 AND。 */
     let rows = scoped.filter(d=>{
-      if(f.dept && !d.use.includes(f.dept)) return false;
-      if(f.cyc && d.lcId!==f.cyc) return false;   // 以 lifecycleId 比對：同名另一子分類之文件不納入
-      if(f.kw && !(d.n.toLowerCase().includes(f.kw) || d.name.toLowerCase().includes(f.kw))) return false;
+      if(FILTER.company && d.company!==FILTER.company) return false;
+      if(FILTER.mkdept  && d.dept!==FILTER.mkdept) return false;
+      if(FILTER.section && d.section!==FILTER.section) return false;
+      // 🔴 AC-D7：當責室長之比對範圍＝**主要 ∪ 次要**（命中任一即納入）；與後台 F017 AC-D7 同語意
+      if(FILTER.chief && ![d.chief,...d.sec].map(shortName).includes(FILTER.chief)) return false;
+      if(FILTER.cyc && d.lcId!==FILTER.cyc) return false;   // 以 lifecycleId 比對：同名另一子分類之文件不納入
+      if(kw && !(d.n.toLowerCase().includes(kw) || d.name.toLowerCase().includes(kw))) return false;
       return true;
     });
     // sort by number desc
@@ -351,14 +441,21 @@
     document.getElementById('countText').textContent = `共 ${total} 筆`;
     document.getElementById('hiddenNote').textContent = hiddenCount? `另有 ${hiddenCount} 筆（進度中/失效/作廢）文件已由後端隱藏` : '';
 
-    const active = f.kw||f.dept||f.cyc;
-    document.getElementById('clearBtnD').classList.toggle('hidden', !active);
-    document.getElementById('filterDot').classList.toggle('hidden', !(f.dept||f.cyc));
+    // AC-D3：「清除篩選」之範圍擴及新增之四項；`狀態` 之預設值為既有 no-op，不計入 active
+    const anyFilter = ['company','mkdept','section','chief','cyc'].some(k=>FILTER[k]);
+    document.getElementById('clearBtnD').classList.toggle('hidden', !(kw||anyFilter));
+    document.getElementById('filterDot').classList.toggle('hidden', !anyFilter);
     lucide.createIcons();
   }
 
-  function clearFilters(){document.getElementById('kw').value='';document.getElementById('fDept').value='';document.getElementById('fCycle').value='';document.getElementById('fDeptM').value='';document.getElementById('fCycleM').value='';render();}
-  function applyMobile(){document.getElementById('fDept').value=document.getElementById('fDeptM').value;document.getElementById('fCycle').value=document.getElementById('fCycleM').value;closeSheet();render();}
+  /* 🔴 F019 AC-D3：清除篩選＝**6 項篩選與關鍵字同時清空**、清單回復未篩選狀態與預設排序。
+     （`狀態` 回到既有預設值「有效」——其為裝飾性 no-op，基底條件已鎖「已公告」。） */
+  function clearFilters(){
+    document.getElementById('kw').value='';
+    Object.keys(FILTER).forEach(k=>{FILTER[k]='';});
+    FILTER.status='有效';
+    buildFilters(); render();
+  }
   function openSheet(){document.getElementById('sheetOverlay').classList.remove('hidden');document.getElementById('sheet').classList.remove('translate-y-full');}
   function closeSheet(){document.getElementById('sheetOverlay').classList.add('hidden');document.getElementById('sheet').classList.add('translate-y-full');}
   function openDoc(n){alert('進入文件詳情 / 檢視器（04 / 05）：'+n+'\n（本輪未產出，僅示意導向）');}

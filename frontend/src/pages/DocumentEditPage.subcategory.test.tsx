@@ -117,6 +117,25 @@ async function ready(lifecycleId: string): Promise<void> {
   mockAuth('ICSOPAdmin');
   renderPage();
   await waitFor(() => expect(screen.getByLabelText(NAME_LABEL)).toBeInTheDocument());
+  /**
+   * 🔴 2026-08-16 等待不足修正（間歇紅燈之根因；**未放寬任何斷言**）。
+   *
+   * 原本只等到「`<select>` 已掛載」——但該元素在 `getDocument`／`getLifecycles` 尚未 resolve 時
+   * 就已渲染，且此時 `value` 為 `''`、`options` 尚未載入。全 79 檔並行時排程較慢，呼叫端便會在
+   * 回填**之前**取值 ⇒ `:129` 出現 `expected '' to be '銷售及收款循環'`（4 次全跑中紅 2 次，
+   * 單檔或三檔同跑則恆綠——典型的「等待條件不足」而非實作缺陷）。
+   *
+   * 改為等到**非同步載入完成並回填**（name select 之 `value` 非空——唯有文件與循環清單皆到齊、
+   * 且對應 option 存在時才可能非空）。這是**全部呼叫端本來就假設**的前置條件：
+   *   · `:129`／`:162` 直接讀 `value`／`options`
+   *   · `:217`／`:229` 以 `selectOptions` 選取具體名稱（未載入會拋 not found in options）
+   *   · `:200` 斷言第二段**不存在**——⚠ 未回填時它也不存在，該案在競態下會**假綠**；本修正一併關閉。
+   *
+   * 🔒 不遮蔽實作缺陷：期望值逐字未動，若回填始終不發生，`waitFor` 逾時仍為紅。
+   */
+  await waitFor(() =>
+    expect((screen.getByLabelText(NAME_LABEL) as HTMLSelectElement).value).not.toBe(''),
+  );
 }
 
 beforeEach(() => {

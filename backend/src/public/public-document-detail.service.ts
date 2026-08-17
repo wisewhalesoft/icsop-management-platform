@@ -9,6 +9,7 @@ import {
   PublicDetailLink,
 } from './public-documents.store';
 import { ViewerScope, isDocVisibleToViewer } from '../rbac/viewer-scope';
+import { formatOfFileName, supportsWatermark } from './watermark';
 
 /** 詳情名稱解析器（結構相容 NameResolutionService.resolveOrgUnitName / resolvePersonNames）。 */
 export interface DetailNameResolver {
@@ -41,13 +42,20 @@ export interface PublicDocumentDetailDto {
   primaryChiefName: string | null;
   secondaryChiefIds: string[];
   secondaryChiefNames: string[];
-  usingDeptIds: string[];
-  usingDeptNames: string[];
+  /**
+   * 🔴 2026-08-16 delta（F019 `AC-D9`／`AC-D12`）：`usingDeptIds`／`usingDeptNames` 已自對外
+   * DTO 移除。⚠ 內部型別 `PublicDocDetail.usingDeptIds` **保留**——F041 可見性判定所需。
+   */
   edition: string | null;
   announcedDate: string | null;
   contentSummary: string | null;
-  attachments: PublicDetailAttachment[];
-  usageForms: PublicDetailUsageForm[];
+  /**
+   * F020 `AC-D2`／`AC-D7` ①：三類檔案之列內浮水印註記，其旗標**一律由伺服器端產生**
+   * （前端不得以 `format` 字串自行重算）。`true` → 該列顯示 `檢視/下載將燒錄浮水印`；
+   * `false` → `此格式不支援浮水印`。值取自 `supportsWatermark()`——**與 `burnIfPdf` 同一判定式**。
+   */
+  attachments: (PublicDetailAttachment & { watermarkSupported: boolean })[];
+  usageForms: (PublicDetailUsageForm & { watermarkSupported: boolean })[];
   links: PublicDetailLink[];
 }
 
@@ -85,12 +93,12 @@ export class PublicDocumentDetailService {
     // 插入點刻意早於下方任何名稱解析——AC-20「未呼叫任何名稱解析」由位置本身保證。
     if (!isDocVisibleToViewer(raw.usingDeptIds, viewer)) throw this.rejectDeptRestricted();
 
-    // 組織名稱（制定三級 + 使用部門；去重、單次批次解析）。fallback＝代碼（使用部門）/null（制定三級）。
+    // 組織名稱（僅制定三級；去重、單次批次解析）。未命中 → null。
+    // AC-D12：使用部門已自對外 DTO 移除 ⇒ 不再為其解析名稱。
     const orgCodes = new Set<string>();
     for (const c of [raw.draftingCompanyId, raw.draftingDeptId, raw.draftingSectionId]) {
       if (c) orgCodes.add(c);
     }
-    for (const c of raw.usingDeptIds) orgCodes.add(c);
     const orgNames = new Map<string, string | null>();
     for (const c of orgCodes) orgNames.set(c, await this.names.resolveOrgUnitName(c));
     const orgName = (code: string | null): string | null =>
@@ -131,13 +139,18 @@ export class PublicDocumentDetailService {
         : null,
       secondaryChiefIds: raw.secondaryChiefIds,
       secondaryChiefNames: raw.secondaryChiefIds.map((e) => personNames.get(e) ?? e),
-      usingDeptIds: raw.usingDeptIds,
-      usingDeptNames: raw.usingDeptIds.map((c) => orgName(c) ?? c),
       edition: raw.edition,
       announcedDate: raw.announcedDate,
       contentSummary: raw.contentSummary,
-      attachments: raw.attachments,
-      usageForms: raw.usageForms,
+      // `AC-D2`：附件無 `format` 欄 → 以已驗證之檔名副檔名為事實（§10.3）；使用表單用 `format` 欄。
+      attachments: raw.attachments.map((a) => ({
+        ...a,
+        watermarkSupported: supportsWatermark(formatOfFileName(a.fileName)),
+      })),
+      usageForms: raw.usageForms.map((f) => ({
+        ...f,
+        watermarkSupported: supportsWatermark(f.format),
+      })),
       links: raw.links,
     };
   }

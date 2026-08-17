@@ -6,12 +6,14 @@
  *  - 強制基底條件：僅「已公告」（status=有效 AND 公告日期≤今日），不可由呼叫端傳入條件繞過（AC9）。
  *  - 置頂：文件使用部門為使用者部門之**祖先或自身**（子樹涵蓋，含全公司 Root；2026-07-24 定案，
  *    取代 OQ-F019-03 之精確比對暫定假設，見 isPinned 註解）。
- *  - 部門篩選：子樹前綴展開（isWithinSubtree，天然免注入；SQL 下推見 escapeLike*）。
- *  - 關鍵字：編號＋名稱子字串（字面比對）。三種篩選與關鍵字以 AND 組合。
+ *  - 篩選（2026-08-16 delta）：制定公司/部門/室別/循環別為 **id 等值比對**、當責室長為主要∪次要；
+ *    「使用部門」篩選已隨 F019 AC-D1 移除（連同 matchesDeptFilter 本體，見架構 §10.9）。
+ *  - 關鍵字：編號＋名稱子字串（字面比對）。六項篩選與關鍵字以 AND 組合。
  */
 import { DocumentStatus } from '../documents/document-status';
 import { deriveDisplayStatus } from '../documents/display-status';
 import { isWithinSubtree } from '../org-sync/org-hierarchy';
+import { matchesChiefFilter } from '../documents/chief-match';
 import { ViewerScope, isDocVisibleToViewer } from '../rbac/viewer-scope';
 
 /** 前台清單項（含使用部門代碼集合，供置頂/部門篩選）。名稱解析由服務層另補。 */
@@ -22,19 +24,42 @@ export interface PublicDocItem {
   documentName: string;
   lifecycleId: string;
   lifecycleName: string | null;
-  /** 使用部門 orgCode 集合（DOC_USING_DEPT）。 */
+  /**
+   * 使用部門 orgCode 集合（DOC_USING_DEPT）。
+   * ⚠ F019 `AC-D12` 只移除**對外 DTO** 之該欄；內部型別保留——置頂（`isPinned`）與 F041
+   * 可見性判定（`isDocVisibleToViewer`）皆以其為依據。「不顯示 ≠ 不判定」。
+   */
   usingDeptIds: string[];
   draftingDeptId: string | null;
+  /** 2026-08-16 delta（§10.6）：以下五欄 additive 新增，供新五項篩選與卡片欄位。 */
+  draftingCompanyId: string | null;
+  draftingSectionId: string | null;
+  primaryChiefId: string | null;
+  /** 次要當責室長員編集合（DOC_SECONDARY_CHIEF）；「當責室長」篩選＝主要 ∪ 次要。 */
+  secondaryChiefIds: string[];
+  edition: string | null;
   /** 公告日期（ISO 字串或 null）。 */
   announcedDate: string | null;
   contentSummary: string | null;
 }
 
-/** 前台篩選條件（皆選填；狀態欄於前台為裝飾性 no-op，見 OQ-F019-04）。 */
+/**
+ * 前台篩選條件（皆選填；狀態欄於前台為裝飾性 no-op，見 OQ-F019-04）。
+ *
+ * 🔴 2026-08-16 delta（F019 `AC-D1`／架構 A9 §10.9）：`deptCode`（使用部門篩選）已**移除**。
+ * 只自 UI 移除而保留此欄，等同讓客戶端仍可送 `?deptCode=` 而後端仍據以過濾——`AC-D1` 表面
+ * 滿足而該能力靜默續存。四項組織／循環篩選一律為 **id 等值比對**，非顯示名稱。
+ */
 export interface PublicListFilters {
   keyword?: string;
-  /** 選定之組織單位 orgCode（任意層級，判定時自動展開子樹）。 */
-  deptCode?: string;
+  /** 制定公司 id（等值）。 */
+  draftingCompanyId?: string;
+  /** 制定部門 orgCode（等值，非子樹展開）。 */
+  draftingDeptId?: string;
+  /** 制定室別 orgCode（等值）。 */
+  draftingSectionId?: string;
+  /** 當責室長員編（主要 ∪ 次要，見 `matchesChiefFilter`）。 */
+  chiefId?: string;
   /** 循環 id。 */
   lifecycleId?: string;
   /** 前台狀態篩選（基底條件已鎖「已公告」，此欄不改變結果，保留以對齊 UI）。 */
@@ -71,7 +96,7 @@ export function isAnnounced(item: PublicDocItem, today: Date): boolean {
  * 對掛處室 `JAC00` 之使用者亦屬「您部門相關」；掛 Root `00000`（全公司）者對所有人置頂。
  * 權威：prototypes/03-public-list.html 第 137-140 行 USER_SCOPE 祖先鏈；
  *       F026-role-field-matrix.md AC（JA000 + JAC00 → 相符；同部兄弟處室 → 不相符）。
- * 呼叫方向與 matchesDeptFilter 相反（此處 scope＝文件使用部門、target＝使用者部門）。
+ * 呼叫方向為 scope＝文件使用部門、target＝使用者部門（與 isUsingDeptMatched 同向）。
  */
 export function isPinned(item: PublicDocItem, userOrgCode: string | null | undefined): boolean {
   if (!userOrgCode) return false;
@@ -96,17 +121,89 @@ export function splitAndSort(
 }
 
 /**
- * 部門篩選（子樹前綴展開）：任一使用部門以選定單位之有效前綴起頭。
- * 未提供/空 → 不限制；Root（有效前綴為空字串）→ 全域不限制。
- * 記憶體 startsWith 天然字面安全（%/_ 不作萬用字元）。
+ * 🔴 清單與選項端點之**唯一共同上游**（architecture-spec §10.6 決策 A6）：
+ * 強制基底條件（僅「已公告」）→ F041 業務子分類可見性。
+ *
+ * 抽為具名函式而非在兩處各寫兩行，是 `AC-D5`（下拉選項不得洩漏不可見文件之存在）之
+ * **結構性**落實：不是「選項端點也要記得呼叫 `isDocVisibleToViewer`」（約定，會被忘記），
+ * 而是「兩者物理上呼叫同一個函式」（結構，忘不掉）。
  */
-export function matchesDeptFilter(
-  item: PublicDocItem,
-  deptCode: string | null | undefined,
-): boolean {
-  if (!deptCode) return true;
-  // scope＝使用者選定之篩選單位、target＝文件使用部門（與置頂之呼叫方向相反）。
-  return item.usingDeptIds.some((code) => isWithinSubtree(deptCode, code));
+export function visibleCandidates(
+  items: readonly PublicDocItem[],
+  viewer: ViewerScope,
+  today: Date,
+): PublicDocItem[] {
+  return items
+    .filter((i) => isAnnounced(i, today))
+    .filter((i) => isDocVisibleToViewer(i.usingDeptIds, viewer));
+}
+
+/**
+ * 使用者條件之 AND 組合（`AC-D6`）：四項 id 等值比對 ＋ 當責室長（主要∪次要）＋ 關鍵字。
+ * `status` 刻意不套用——基底條件已鎖「已公告」，前台狀態為裝飾性（OQ-F019-04）。
+ */
+export function matchesPublicFilters(item: PublicDocItem, filters: PublicListFilters): boolean {
+  return (
+    (!filters.draftingCompanyId || item.draftingCompanyId === filters.draftingCompanyId) &&
+    (!filters.draftingDeptId || item.draftingDeptId === filters.draftingDeptId) &&
+    (!filters.draftingSectionId || item.draftingSectionId === filters.draftingSectionId) &&
+    matchesChiefFilter(item, filters.chiefId) &&
+    (!filters.lifecycleId || item.lifecycleId === filters.lifecycleId) &&
+    matchesKeyword(item, filters.keyword)
+  );
+}
+
+/** 可搜尋下拉之單一選項（`value` 恆為 id／code，不得為顯示名稱——`AC-D4` 已鎖定比對鍵為 id）。 */
+export interface FilterOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * 五組前台篩選選項（單一端點一次回傳，確保五組來自同一次可見性計算）。
+ * 以 type alias 而非 interface 宣告——回應形狀需可與 `Record<string, unknown>` 互換
+ * （契約測試以逐鍵列舉驗證「恰含五組」），interface 無隱含索引簽章。
+ */
+export type PublicFilterOptions = {
+  draftingCompanies: FilterOption[];
+  draftingDepts: FilterOption[];
+  draftingSections: FilterOption[];
+  chiefs: FilterOption[];
+  lifecycles: FilterOption[];
+};
+
+/** 自候選集合取某欄之 distinct 值（去除 null／空字串），依字典序排序後組為 Option。 */
+function distinctOptions(
+  items: readonly PublicDocItem[],
+  pick: (d: PublicDocItem) => Array<string | null>,
+): FilterOption[] {
+  const seen = new Set<string>();
+  for (const d of items) {
+    for (const v of pick(d)) if (v) seen.add(v);
+  }
+  return [...seen].sort().map((value) => ({ value, label: value }));
+}
+
+/**
+ * 五組可搜尋下拉之選項（`AC-D5`）。
+ *
+ * 🔴 選項為**全域 distinct**（不隨已套用之其他篩選收斂）——否則會出現「篩了就選不回來」；
+ * 其唯一收斂維度是 `visibleCandidates()`（已公告 ＋ F041 可見性），故不可見文件之衍生值
+ * 不會洩漏至選項。`label` 於本層 fallback 為 code，由服務層以名稱解析器覆寫。
+ */
+export function buildFilterOptions(
+  items: readonly PublicDocItem[],
+  viewer: ViewerScope,
+  today: Date,
+): PublicFilterOptions {
+  const cands = visibleCandidates(items, viewer, today);
+  return {
+    draftingCompanies: distinctOptions(cands, (d) => [d.draftingCompanyId]),
+    draftingDepts: distinctOptions(cands, (d) => [d.draftingDeptId]),
+    draftingSections: distinctOptions(cands, (d) => [d.draftingSectionId]),
+    chiefs: distinctOptions(cands, (d) => [d.primaryChiefId, ...d.secondaryChiefIds]),
+    lifecycles: distinctOptions(cands, (d) => [d.lifecycleId]),
+  };
 }
 
 /** 關鍵字（編號＋名稱子字串，字面比對，不分大小寫）。空 → 全通過。 */
@@ -142,8 +239,8 @@ export function paginate<T>(
 }
 
 /**
- * 完整前台清單管線：強制基底條件 → 業務子分類可見性（F041） → AND 篩選（部門/循環/關鍵字）
- * → 置頂+編號降冪排序 → 分頁。
+ * 完整前台清單管線：visibleCandidates（強制基底條件 → 業務子分類可見性 F041）
+ * → AND 篩選（六項）→ 置頂+編號降冪排序 → 分頁。
  * 狀態篩選（filters.status）刻意不套用——基底條件已鎖「已公告」，前台狀態為裝飾性（OQ-F019-04）。
  *
  * F041（架構 §3.7 決策三(a)）：第二參數由裸 `userOrgCode` 字串改為**必要參數** `viewer: ViewerScope`
@@ -163,13 +260,8 @@ export function buildPublicList(
 ): PublicListPage<PublicDocItem> {
   const base = items.filter((i) => isAnnounced(i, today));
   // F041 AC-14～AC-17：業務子分類之資料列層級可見性（非受限 viewer 恆全數通過）。
-  const visible = base.filter((i) => isDocVisibleToViewer(i.usingDeptIds, viewer));
-  const filtered = visible.filter(
-    (i) =>
-      matchesDeptFilter(i, filters.deptCode) &&
-      (!filters.lifecycleId || i.lifecycleId === filters.lifecycleId) &&
-      matchesKeyword(i, filters.keyword),
-  );
+  const visible = visibleCandidates(items, viewer, today);
+  const filtered = visible.filter((i) => matchesPublicFilters(i, filters));
   const sorted = splitAndSort(filtered, viewer.orgCode);
   // G-PUB-012：被基底條件隱藏之候選數＝全候選 − 已公告候選（與使用者篩選無關）。
   const hiddenCount = items.length - base.length;

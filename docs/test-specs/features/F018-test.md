@@ -261,3 +261,119 @@ status: draft
 - **OQ-F018-06**：「後台管理頁下載表單」（相對於 AC7 明文的「前台下載」）是否也應觸發稽核，spec 僅明文「前台下載表單 → 記錄稽核」，Main Flow 未提及後台下載的稽核義務。若後台下載也需稽核但未落實，將是稽核完整性缺口；若刻意排除，spec 應明文排除理由。TS-013 僅覆蓋前台路徑，後台下載稽核義務暫列 gap。
 
 - **OQ-F018-07**：多對多關聯附屬表（documentId↔formId）之資料模型未見於 `data-model.md`（僅有 `DOC_SECONDARY_CHIEF`／`DOC_USING_DEPT` 兩個附屬表明列，無對應 `DOC_USAGE_FORM` 或等效表定義），與「使用表單為表單池多對多（OQ-E05-04 定案）」之文字定案不完全對齊於資料模型章節。建議 data-model.md 補上此附屬表定義（比照既有兩個附屬表格式），供實作與測試雙方有一致的資料形狀依據。
+
+---
+
+# F018 — 表單編號 delta ＋「編輯編號」動作 · Test Design（Lane L7，2026-08-16 追加）
+
+> source: `docs/specs/features/F018-usage-form-management.md` §表單編號 delta（`AC-D1`～`AC-D10`、`AC-D15`）
+> ＋ §「編輯編號」動作（`AC-D16`～`AC-D21`）＋ `docs/specs/error-handling.md#usage-form-number`
+> ＋ `docs/specs/architecture-spec.md` §10.7（決策 A7 與 A14）＋ `prototypes/19-usage-form-management.html`
+> 缺失／變更 delta 第 18 項 · 2026-08-16 · lane L7
+>
+> ⚠ **本段不含 `AC-D11`／`AC-D12`／`AC-D14`（前台使用表單下載燒錄）**——該批屬 Lane C（浮水印線）。
+> `AC-D13`（後台 RAW 回歸鎖定）之「使用表單管理頁」切片因檔案所有權落在本線，於本段涵蓋一條。
+
+## 新增之契約（本 lane 據 §10.7／A14 定形，implementer 須照此形狀實作）
+
+```
+// 共用純函式（上傳與編輯兩條寫入路徑共用，避免 AC-D4／AC-D18 分歧）
+backend/src/usage-forms/form-number.ts
+  export const FORM_NUMBER_MAX_LENGTH = 100;
+  export function normalizeFormNumber(v: string | null | undefined): string | null;  // trim；空→null
+  export function assertFormNumberValid(v: string | null): void;                     // >100 → USAGE_FORM_NUMBER_TOO_LONG
+
+// 端點（A14）
+PATCH /admin/usage-forms/:formId/number    body { formNumber: string | null }（只此一鍵）
+  @RequirePermission(FunctionKey.USAGE_FORM_MANAGEMENT, 'read')   ← 路由層
+  service: assertCanWriteDocumentAsset(role, USAGE_FORM_MANAGEMENT, FieldKey.USAGE_FORMS) ← 欄位層
+  → 200 ＋ 更新後之該列（不用 204）
+  handler 名：UsageFormsController.updateNumber(req, formId, body)
+  service：UsageFormsService.updateFormNumber(session, formId, formNumber)
+  store：FormPoolStore.updateFormNumber(formId, formNumber)   ← 與 updateFile 分離＝AC-D20 之結構性保證
+
+// 型別 additive
+UsageFormRecord.formNumber: string | null；CreateFormInput.formNumber?: string | null
+UsageFormsService.uploadForm(session, file, name?, formNumber?)
+前端：endpoints.updateUsageFormNumber(formId, formNumber)；UsageFormPoolItem.formNumber
+前端：frontend/src/domain/usage-form-label.ts → usageFormOptionLabel({formNumber, name})  ← AC-D8
+```
+
+## AC ↔ 約束對照
+
+| AC | 約束 | 檔案 · ID |
+|---|---|---|
+| `AC-D1` 表頭七欄逐字、null 顯示 `—` | `getAllByRole('columnheader')` 逐字陣列比對 | `UsageFormManagementPage.formNumber` TS-D18-060/062 |
+| `AC-D2` 上傳可設定編號、trim、空→null | 服務層 ＋ **前端主線**（於上傳 modal 填入編號 → 該值隨 `uploadUsageForms` 送出；2026-08-16 補，原三條既有上傳測試皆為「留空」情境、不足以涵蓋） | `usage-forms.service.number` TS-D18-010/011；`UsageFormManagementPage.formNumber` **TS-D18-082** |
+| `AC-D3` null→FM-002→null 往返（兩處載體） | ① UI 往返 ② 服務層往返 | TS-D18-071/072；TS-D18-020/021 |
+| `AC-D4` 唯一性（trim／不分大小寫／不寫記錄不上傳 blob） | 三種大小寫變體參數化 ＋ `blob.putCalls` 為 0 | TS-D18-013/014 |
+| `AC-D5` 多筆 null 並存 | 4 筆 null 皆成功 | TS-D18-012 |
+| `AC-D6` 100 通過／101 → 400 | 純函式 ＋ 服務層 | TS-D18-007/008；TS-D18-015/016 |
+| `AC-D7` 既有列一律 null、不自動產生 | ⛔ **本環涵蓋不到**（見下表 #1） | — |
+| `AC-D8` F017 下拉 label `{編號} {名稱}` | 純函式 | `usage-form-label` TS-D18-090～094 |
+| `AC-D9` 不擴及附錄 | ⛔ 屬 F039／Lane L5 之檔案所有權，本線不建 | 見下表 #4 |
+| `AC-D10` 🔒 既有行為回歸 | 既有 `usage-forms.service.spec.ts`／`UsageFormManagementPage.test.tsx` 維持綠燈且期望值未改 | 既有檔（未改動） |
+| `AC-D15` ① 編號欄 `data-form-number`／`—`／`title`／mono | 逐字 | TS-D18-061/062 |
+| `AC-D15` ② 上傳 modal `#upNumber`／maxlength／placeholder／label | 逐字 | TS-D18-063 |
+| `AC-D15` ③／`AC-D16` 兩則錯誤訊息逐字（沿用同一組） | 於 `#enNumberErr` 斷言逐字 | TS-D18-074/075 |
+| `AC-D16` 動作存在、`data-edit-number`、modal 各元素逐字、取消不變更 | 逐項 | TS-D18-064/066～069 |
+| `AC-D17` 🔴 無寫入權角色之動作**自 DOM 移除** | `queryByLabelText('編輯編號') === null` ＋ `[data-edit-number] === null`；ICSOPAdmin 皆非 null | TS-D18-078/079 |
+| `AC-D17` 服務層三分角色 | ICSOPAdmin 2xx／SysAdmin `FIELD_WRITE_FORBIDDEN`／其餘三角 `PERMISSION_DENIED` | `usage-forms.service.number` TS-D18-032～034 |
+| `AC-D17` 路由層閘門為 read | route metadata ＋ `RolePermissionGuard` 逐角色 | `usage-forms.controller.number` TS-D18-041/043/044 |
+| `AC-D18` 排除自身列、大小寫變體、長度 | 六個案例 | TS-D18-022～025 |
+| `AC-D18` 並發（DB filtered unique index 為最終保護） | 2601／2627 → 409；547 不得誤映射 | `usage-forms.number-concurrency` TS-D18-050～052 |
+| `AC-D19` 清空為合法、不觸發比對、UI 回 `—` | 服務層 ＋ UI | TS-D18-026/027；TS-D18-072/073 |
+| `AC-D20` 六欄未變／Blob 未讀未寫／關聯未變／不寫稽核／不觸發覆蓋警示／body 只一鍵 | 逐欄比對 ＋ `blob.{put,delete,url}Calls` 皆 0 ＋ `updateFileCalls` 為空 ＋ audit events 為空 ＋ 夾帶其他鍵被忽略 | TS-D18-028～030；`controller.number` TS-D18-045～047 |
+| `AC-D21` ① icon `hash`（非 pencil） | `.lucide-hash` 存在、`.lucide-pencil` 不存在 | TS-D18-065 |
+| `AC-D21` ② `#enFormName` **恰為** name | 全等比對（非 contain） | TS-D18-068 |
+| `AC-D21` ③ 關閉鈕 `aria-label` 逐字 `關閉`、行為同取消 | — | TS-D18-070 |
+| `AC-D21` ④ 錯誤時輸入框呈現與正常態可區分 | className 前後不相等（色票／class 名屬設計裁量、不入斷言） | TS-D18-076 |
+| `AC-D13`（切片） 後台個別下載仍走既有 helper | `downloadPoolForm` 被呼叫、無任何前台燒錄 helper 被呼叫 | TS-D18-081 |
+| §10.7 A14 端點不得併入覆蓋上傳 | 路徑／方法／handler 皆不同 | `controller.number` TS-D18-040/042 |
+
+## 🔴 本環涵蓋不到
+
+| # | 涵蓋不到者 | 為何 | 把關手段 |
+|---|---|---|---|
+| 1 | `AC-D7`／migration：欄位與 filtered unique index 是否真的建了、既有列是否一律 `null` | §10.15 第 6 項「原理上測不到」——單元測試全綠證明不了 schema 存在 | 見交付物 ③ (乙) 之三條驗收查詢 |
+| 2 | `formNumber` 之**大小寫不敏感**是否真的成立 | §10.15 第 7 項「原理上測不到」——記憶體 fake 用正規化比對會恆綠，即使 DB 為 `_CS_` | 對真 SOP DB 實測兩案 |
+| 3 | `DocumentListPage` 之「使用表單」下拉**是否真的消費** `usageFormOptionLabel` | 該頁測試檔屬其他分線（L4），本線不得改動 | 瀏覽器煙霧：開後台文件清單 → 使用表單篩選下拉，確認有編號者顯示 `FM-001 進件申請書` |
+| 4 | `AC-D9`（不擴及附錄）之回歸鎖定 | `AppendixManagementPage*` 與 `backend/src/appendices/**` 屬其他分線 | 由該線或 lead 於合併時以 `git diff --stat` 確認 `APPENDIX_POOL` 相關檔未被本 delta 觸及 |
+| 5 | 「編輯編號」在真瀏覽器之 modal 疊層／焦點行為 | jsdom 無版面 | 瀏覽器煙霧 |
+
+---
+
+## 🔴 2026-08-16 追加 — `AC-D14` 前台使用表單下載之稽核義務與快照落值（lane **L3/L4 代管**，原屬 L2）
+
+> 由來：Lane C（L2）回報 `G-L2-01`——`AC-D14` 之 **service 層**無測試載體（當時 `backend/src/usage-forms/**` 屬 Lane A）。
+> 2026-08-16 由 lead 改指派 Lane B 補齊，**只補 `AC-D14` 一條**。
+> 權威＝[F018 §前台使用表單下載燒錄](../../specs/features/F018-usage-form-management.md#front-burn-delta) `AC-D14`
+> ＋ [F020 `AC-D5`](../../specs/features/F020-watermark.md#front-burn-scope-delta)
+> ＋ [architecture-spec §10.1](../../specs/architecture-spec.md#ch10-defect-delta)（使用表單前台下載作**與附錄逐字相同**之改動；快照取自 `WatermarkService.buildSnapshot()`，不得自行組字）。
+
+| AC | 主張 | 測試載體 |
+|---|---|---|
+| `AC-D14` PDF | 恰一筆 `targetType='USAGE_FORM'`／`actionType='DOWNLOAD'`／`formId`＋`documentId` 落列 | `usage-forms.front-burn.service.spec.ts` `TS-F018-D14-001` |
+| `AC-D14` PDF | `watermarkSnapshot` 與**該次燒錄**之字串逐字相同；且其唯一來源＝`WatermarkService.buildSnapshot()` | 同上 `TS-F018-D14-002`／`003` |
+| `AC-D14` 非 PDF | **同樣寫入該筆稽核**，惟 `watermarkSnapshot` 為 `null` | 同上 `TS-F018-D14-004`／`005` |
+| `AC-D14` 不變式 | 兩種格式之稽核筆數 1:1，僅快照落值不同（「燒錄與否不改變稽核義務」） | 同上 `TS-F018-D14-006` |
+| 既有語意 | 失敗路徑（未登入／表單不存在）不燒錄、不寫稽核 | 同上 `TS-F018-D14-007`／`008` |
+
+### 本輪由 test-generator 釘下之新契約（可申訴）
+
+| 項目 | 契約 |
+|---|---|
+| `UsageFormAuditEvent` additive | 新增 `watermarkSnapshot: string \| null`（現況無此欄 ⇒ 型別紅） |
+| 燒錄協作點之注入位置 | `UsageFormsService` 建構子**第 6 參數**（前 5 為既有 `blob`／`store`／`audit`／`uploaderDir?`／`orgResolver?`）。附錄側為第 7 參數，位置不同僅因既有建構子長度不同 |
+
+### 🔴 跨線待裁決（**不由本 lane 自行處置**）
+
+`AC-D11`／`AC-D12`／§10.1 要求前台 `downloadForm()` 由回傳 `DownloadGrant`（SAS URL）改為回傳位元組，且稽核事件加欄。
+這會使**既有** `backend/src/usage-forms/usage-forms.service.spec.ts` 之下列案例失效：
+
+| 既有案例 | 失效原因 |
+|---|---|
+| `TS-013 前台下載成功 → 核發憑證 + 稽核參數正確` | `expect(grant.url).toContain(...)`（改回位元組後無 `url`）＋ `expect(audit.events).toEqual([{…5 鍵}])`（加欄後 exact match 失敗） |
+| `TS-FM-003`／`TS-FM-004`（主管／部門窗口經 `downloadForm` 下載） | 同上；另含「後台角色走前台方法」之語意問題——`AC-D13` 只列舉後台**頁面**，未規範後台角色打前台端點 |
+
+**附錄側存在完全同型之遺留**（Lane C 亦未處置 `appendices.service.spec.ts:428/452` 之 `grant` 斷言）⇒ 兩處應由 lead 一次裁決，本 lane 不單方面修改（檔案所有權未明示授予）。詳見 `risks-and-gaps` `G-L3-05`。

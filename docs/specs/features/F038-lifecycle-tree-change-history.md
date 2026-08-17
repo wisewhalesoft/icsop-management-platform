@@ -3,6 +3,8 @@ Priority: P1 | Status: ✅ 完成（結構事件日誌＋查詢＋LIFECYCLE_SNAP
 Epic/Story: E07 / US-063
 
 > **2026-08-07 additive delta（🟢 APPROVED（2026-08-07 人類閘門通過））**：本 tab 之「循環別」查詢下拉與事件清單/預覽標題須反映循環子分類（以快照值呈現）。規則權威＝[F040](F040-lifecycle-subcategory.md)；查詢、diff、燒錄下載、權限與其餘既有條款皆不變。
+> **🔵 2026-08-16 additive delta（使用者裁決；缺失／變更 delta 第 16／17／19 項）**：① 本 tab 提供「匯出」動作（CSV），**與 [F037](F037-document-change-history.md) tab 各自匯出、不合併**；② 新舊樹狀圖 diff 預覽**明文不支援節點雙擊**（OQ-D18-19）。**本 delta 之 AC 編號採 `AC-D#`**（D＝2026-08-16 defect delta），與既有 `AC-S#` 批次區隔。
+> 📌 **#17（新舊樹狀圖浮水印不符三層式、欄位不完整）＝`BUG-IMPL`，不新增 AC**：既有 AC「取得伺服器端產生、浮水印已**燒錄於 PDF 內容層**（格式權威同 [NFR-007](../nfr.md#watermark)、**機密聲明另起一行**、比照 [F020](F020-watermark.md)）」與 Main Flow 4「整頁疊加浮水印（比照 [F036](F036-lifecycle-tree-preview.md) viewer 手法）」**已完整涵蓋**三層式要求。實作以 `white-space: nowrap` 直接渲染後端之線性字串（本檔全檔無 `watermarkLines` 等價函式），屬缺陷；修法應**復用 [F020](F020-watermark.md) delta 所要求之共用 `watermarkLines()`**，而非再寫一份。中文亂碼另受 `backend/Dockerfile` 缺 `assets` 之同一根因影響（見 [F020](F020-watermark.md#front-burn-scope-delta) #6 加註）。
 
 > **獨立後台功能「文件變更歷程」**（獨立側選單項，非「文件調閱歷程」子頁；prototype `23-change-history.html`）之 **循環樹狀圖 tab**（與 ICSOP 程序書 tab [F037](F037-document-change-history.md) 併存，共兩 tab）。以 **append-only 結構變更事件日誌**追溯循環 DAG 結構異動，並可預覽/下載變更前後兩版本樹狀圖（燒錄浮水印）。權限依 [F025](F025-role-function-matrix.md) 獨立功能列「文件變更歷程」。稽核動作屬 [F036](F036-lifecycle-tree-preview.md)「循環」`LIFECYCLE_*` 家族之延伸。
 
@@ -27,7 +29,8 @@ Epic/Story: E07 / US-063
 - **變更事件產生（來源功能側，持久化時同步寫入）**：
   - 節點/連線（F008）：`NODE_ADDED`／`NODE_REMOVED`／`EDGE_ADDED`／`EDGE_REMOVED`（草案列舉），含操作人員/時間/所屬循環。
   - 節點名稱/文件掛載（F009）：`NODE_RENAMED`／`DOCUMENT_MOUNTED`／`DOCUMENT_REASSIGNED`／`DOCUMENT_UNMOUNTED`，含節點/文件識別與舊值/新值（如節點名稱新舊字串、改派來源/目標節點）。
-- 下載 PDF 排版（單一 PDF 兩頁 vs 兩份獨立 PDF）：由架構師/UI-UX 決定，見 OQ-E07-06。
+- 下載 PDF 排版（單一 PDF 兩頁 vs 兩份獨立 PDF）：由架構師/UI-UX 決定，見 OQ-E07-06（**架構已定案＝單一 PDF 兩頁；2026-08-16 之匯出裁決不影響本子題**）。
+- **匯出查詢結果（CSV，2026-08-16 使用者裁決＝納入）**：將**當前查詢條件之全部結構變更事件**（非僅當前頁）輸出為 CSV；**與 [F037](F037-document-change-history.md) tab 各自匯出、不合併**（兩者欄位結構完全不同）。見 [§循環樹狀圖 tab 匯出 delta](#export-delta)。
 
 ## Edge Cases
 - 循環無任何歷史結構變更事件：開啟本 tab 顯示空狀態提示（非錯誤）。
@@ -54,8 +57,37 @@ Epic/Story: E07 / US-063
 - **AC-S1**：Given 池中有「銷售及收款循環（消金）」與「銷售及收款循環（企金）」, When 展開本 tab 之「循環別」查詢下拉, Then 呈現**兩個相異選項**（各以 `lifecycleDisplayName` 顯示），查詢值為各自 `lifecycleId`（**非**名稱字串，亦非循環代碼——同名兩者代碼相同）；When 選定其一送出, Then 事件清單僅含該具體循環之事件，不含同名另一子分類之事件。
 - **AC-S2**（**2026-08-08 使用者裁決 5 改寫**；原條文所指之 `LIFECYCLE_CHANGE_LOG.lifecycleName` 快照欄於 schema 中不存在）：Given 事件清單與新舊樹狀圖預覽/下載 PDF 之「循環別」欄與標題, When 呈現, Then 顯示字串由該事件之 `lifecycleId` **join `LIFECYCLE` 取當前之 `{ name, subcategory }`** 並經 `lifecycleDisplayName` 組合（含子分類）——`LIFECYCLE_CHANGE_LOG` **不存**循環名稱（[F040](F040-lifecycle-subcategory.md) AC-34）；Given 該循環之 `name`／`subcategory` 於事件寫入後才被修改, Then 既有事件之顯示**隨之變為新名稱**（**非**快照）。<br>⚠ **已明確接受之代價**：本 tab 之歷史事件不具人類可讀之名稱快照語意，改名後回看歷史將見新名稱；事件所屬循環仍可由 `lifecycleId` 唯一辨識。此為使用者 2026-08-08 裁定之取捨（不新增欄位與 migration），追溯見 [open-questions.md](../open-questions.md) OQ-E07-11。<br>※ 快照語意僅適用於 `AUDIT_LOG.lifecycleName`（[F040](F040-lifecycle-subcategory.md) AC-36），即本功能之**調閱**稽核紀錄，非事件本體。
 
+### 循環樹狀圖 tab 匯出 delta（🔵 2026-08-16 使用者裁決；缺失／變更 delta 第 16／19 項） {#export-delta}
+
+> 前提裁決：**OQ-D18-16**（格式與範圍，同 [F037](F037-document-change-history.md#export-delta)）；**OQ-D18-17**＝兩 tab 各自匯出；**OQ-D18-19**＝本 tab 之 diff 樹狀圖**不**支援節點雙擊。
+> 🔴 **2026-08-16 事實更正（system-architect 查證）**：`OQ-D18-16` 原表述之「與 [F024](F024-access-history-query.md) 既有匯出**同構**」不成立——**F024 之匯出並不產生 CSV 檔案**（回傳 JSON、前端丟棄、僅跳 toast）。本 tab 之匯出格式基準改為**向 [error-handling.md#export](../error-handling.md#export) 之共用規則對齊**；實質格式要求不變。
+> ⚠ **範圍紀律（不變）**：本 delta **不得改動 [F024](F024-access-history-query.md) 之任何 AC 或既有行為，亦不得為其「匯出不產生檔案」之缺口撰寫任何 AC**（已登錄為 [open-questions.md](../open-questions.md) `OQ-D18-26`）。
+
+- **AC-D1**（匯出動作與範圍）：Given 具權限角色（SysAdmin／ICSOPAdmin）位於「循環樹狀圖」tab 且已送出查詢, When 檢視工具列, Then 存在無障礙名稱為 `匯出` 之按鈕（**與 [F037](F037-document-change-history.md) tab 之匯出鈕為兩個獨立控制項**，切換 tab 時各自匯出各自 tab 之結果）；When 點擊, Then CSV 恰含符合當前查詢條件之**全部結構變更事件**（非僅當前頁），列序與畫面一致（時間新到舊）。
+- **AC-D2**（CSV 格式與欄位）：Given 匯出成功, When 檢視檔案, Then ① 位元組以 **UTF-8 BOM（`EF BB BF`）** 開頭；② 第 1 列表頭逐字為 `循環別,變更類型,變更摘要,操作人,時間`（＝畫面所見五欄；「預覽 / 下載」操作欄不匯出）；③ RFC 4180 逸出規則同 [F037](F037-document-change-history.md#export-delta) `AC-D2`；④ `循環別` 欄之值由該事件之 `lifecycleId` join `LIFECYCLE` 取**當前值**並經 `lifecycleDisplayName` 組合（沿用 `AC-S2` 之語意，**非快照**）。
+- **AC-D3**（🔒 diff 樹狀圖不支援雙擊）：Given 位於本 tab 之新舊樹狀圖 diff 預覽, When 對任一節點快速點擊兩下, Then **不開啟任何抽屜或彈窗、無任何行為變化**（[F036](F036-lifecycle-tree-preview.md#node-dblclick-delta) 之節點雙擊能力**刻意不擴及本 feature**）。<br>📝 **理由（OQ-D18-19 裁決＝否）**：歷史快照中之「該節點文件清單」語意不明（是當時的還是現在的？），且會擴大改動規模；使用者只提「循環管理 > 樹狀圖檢視」。
+- **AC-D4**（匯出上限／檔名／權限／稽核／空結果）：比照 [F037](F037-document-change-history.md#export-delta) `AC-D3`～`AC-D7`，惟 ① 檔名形狀為 `lifecycle_change_history_{YYYYMMDD}_{HHmmss}.csv`；② 匯出記一筆 `LIFECYCLE_CHANGELOG_VIEW` 稽核（**非** `CHANGE_LOG_VIEW`——本 tab 之稽核家族為 `LIFECYCLE_CHANGELOG_*`）；③ 超限一律回 **400 `EXPORT_ROW_LIMIT_EXCEEDED`**（上限 10,000，邊界值 10,000 通過）。
+- **AC-D5**（🔴 CSV 注入防護；2026-08-16 lead 裁定）：Given 某結構變更事件之 `變更摘要` 或 `循環別` 為 `=cmd|'/c calc'!A1`, When 匯出, Then 該儲存格於 CSV 中之值為 `'=cmd|'/c calc'!A1`（**最前面多一個半形單引號**），再依 RFC 4180 包覆逸出；以 `+`／`-`／`@`／Tab（`\t`）／CR（`\r`）開頭者同樣加前綴；不以此六種字元開頭者**不加任何前綴**（恆等）。**表頭列不套用本規則**（`AC-D2` ② 之逐字表頭斷言不受影響）；`AC-D2` ③ 之 RFC 4180 逸出**須在本前綴之後**套用。<br>⚠ **對值層斷言之影響（test-generator 必讀）**：`AC-D2` 之「欄位＝畫面所見」僅約束**表頭與欄位集合**；**值層期望值一律為「畫面所見字串經本規則轉換後之結果」**，不得直接以畫面原字串斷言。規則權威＝[error-handling.md#export](../error-handling.md#export)。
+
+- **AC-D6**（🔴 匯出鈕之選擇器與使用者可見回饋；**2026-08-16 補訂**，權威＝`prototypes/23-change-history.html`）：Given 位於「循環樹狀圖」tab, When 檢視 topbar, Then 匯出鈕之 DOM id 為 **`exportTree`**（與 [F037](F037-document-change-history.md#export-delta) `AC-D10` 之 `exportDoc` 為兩個獨立控制項）。<br>When 匯出成功, Then 成功回饋之文字**以逐字片段 `已匯出循環樹狀圖變更歷程（CSV，UTF-8 BOM）` 起始**。<br>When 符合筆數超過上限, Then 錯誤回饋之文字**含逐字片段** `符合條件之事件為 {N} 筆，超過匯出上限 10000 筆，請縮小查詢條件`，**且字串 `EXPORT_ROW_LIMIT_EXCEEDED` 出現於同一回饋容器內**（與 [F037](F037-document-change-history.md#export-delta) `AC-D10` 共用同一句式、同一錯誤碼與同一兩段式斷言方式）。<br>📝 **2026-08-16 斷言方式調整（ringC 回報 `ToastApi` 無 code 參數）**：原寫「並附錯誤碼標記 `EXPORT_ROW_LIMIT_EXCEEDED · 400`」隱含錯誤碼為獨立元素，該形狀不可達；改為兩段式，達成方式不拘。規則權威＝[error-handling.md#export](../error-handling.md#export)。<br>📌 **切 tab 時兩鈕僅顯示其一**——屬**設計裁量**，見 [open-questions.md](../open-questions.md) `OQ-D18-27`，**刻意不入 AC**（`AC-D1` 只要求「兩個獨立控制項、各自匯出各自 tab 之結果」，同時可見與否不影響該語意）。
+- **AC-D7**（🔴 CSV 值層：列舉欄輸出中文標籤；**2026-08-16 補訂**，lead 裁示）：Given 匯出成功, When 檢視資料列之各儲存格值, Then 下列成立——
+  - ① **`變更類型` 欄之值為畫面所見之中文標籤**，值域**恰為六者**（＝ `prototypes/23-change-history.html` 之「變更類型」篩選下拉選項，逐字）：`新增節點`／`移除節點`／`新增連線`／`移除連線`／`節點改名`／`文件掛載變更`。**不得**輸出列舉代碼（`NODE_ADDED` 等）。<br>**對映**：`NODE_ADDED`→`新增節點`、`NODE_REMOVED`→`移除節點`、`EDGE_ADDED`→`新增連線`、`EDGE_REMOVED`→`移除連線`、`NODE_RENAMED`→`節點改名`、**`DOCUMENT_MOUNTED`／`DOCUMENT_REASSIGNED`／`DOCUMENT_UNMOUNTED` 三者皆 →`文件掛載變更`**。<br>⚠ **已知且接受之代價**：後三者為**三對一**，CSV 之 `變更類型` 欄無法區分掛載／改派／解除——但這**與畫面完全一致**（篩選下拉本即只有六個選項），符合「欄位＝畫面所見」；細節仍可由**同列之 `變更摘要`** 讀出（如 `文件 ICSOP-… 由節點 A 改派至節點 B`）。若日後需區分，須**先改畫面之六值下拉**，不得只改 CSV。
+  - ② **`時間` 欄之值為 `YYYY-MM-DD HH:mm:ss`**（UTC+8，**不附 `(UTC+8)` 字樣**；顯式 +8 位移，不得依賴行程 TZ）。
+  - ③ **`循環別` 欄**沿用 `AC-D2` ④（join `LIFECYCLE` 取當前值經 `lifecycleDisplayName` 組合，非快照）。
+  - ④ **🔴 對照表跨端一致性（可觀測不變式）**（**2026-08-16 lead 裁決修正**，理由：原條文要求之「對照表只能有一份」在本 repo 架構下不可達，且與 [architecture-spec.md](../architecture-spec.md) §10.14 對**完全相同問題**之既有處置不一致——原文逐字保留於本條末之 🔒 項）：Given 本 repo 之前後端為**兩個獨立 TS 專案、無共用 package** ⇒ 「循環結構變更類型 → 中文標籤」對照表**必然存在兩份**：後端 `backend/src/change-history/change-labels.ts` 之 `LIFECYCLE_CHANGE_KIND_LABEL`（對外經 `lifecycleChangeKindLabel()`，**CSV 值之來源**）與前端 `frontend/src/pages/ChangeHistoryPage.tsx` 之 `LC_TYPE`（各項之 `label`，**畫面徽章文字之來源**）, When 比對此兩份對照表, Then 下列 (a)～(d) 全部成立——
+    - **(a) 鍵集合逐字相同**，且恰為八者：`NODE_ADDED`／`NODE_REMOVED`／`EDGE_ADDED`／`EDGE_REMOVED`／`NODE_RENAMED`／`DOCUMENT_MOUNTED`／`DOCUMENT_REASSIGNED`／`DOCUMENT_UNMOUNTED`。
+    - **(b) 每一鍵所對映之中文標籤在兩端逐字相同**，且與本 AC ① 之對映表逐字相同——含 `DOCUMENT_MOUNTED`／`DOCUMENT_REASSIGNED`／`DOCUMENT_UNMOUNTED` **三對一** → `文件掛載變更`。
+    - **(c) 兩表之標籤值域去重後恰為 ① 所列六者**：`新增節點`／`移除節點`／`新增連線`／`移除連線`／`節點改名`／`文件掛載變更`。
+    - **(d) 任一端之單邊改動必為紅燈**——增鍵、刪鍵、或改動任一標籤之任一字元，只要另一端未同步，機器必須攔到。達成方式不拘：比照 §10.14 之「以同一組固定測試向量綁定，前後端各自之測試檔皆對它斷言相同輸出，任一邊漂移即紅燈」，或以單一測試同時讀取兩檔直接比對。
+    - 📝 **防護力不下降**：原條文之目的（CSV 與畫面不得漂移）由 (a)(b) 保證——兩表逐字同值 ⇒ 同一 `changeType` 在 CSV 與畫面必得同一標籤，故原條文之端到端不變式「CSV 某列 `變更類型` 之值與畫面同一事件該欄之可見文字逐字相同」為 (a)(b) 之**推論**。差別僅在於約束由「**禁止**第二份存在」改為「第二份**必須與第一份逐字相同**」。
+    - 📌 **與 §10.14 同一模式，非本條特例**：[architecture-spec.md](../architecture-spec.md) §10.14 對 `watermarkLines()` 之處置即為「兩份實作**刻意各留一份**（monorepo 無共用 package，強行共用需引入 build 管線改動，代價大於收益），以**同一組值**綁定、以**可觀測不變式＝兩端逐字相同**約束」。本條與該處採**同一模式**；若讀到「規格自相矛盾」，請先讀 §10.14。
+    - 📌 **要真正收斂為一份，須先由 system-architect 定共用落點**（共用 package／build-time 產生／後端隨查詢回應直接回傳 label）——該收斂需動建置設定，**超出本 delta 範圍**，**lead 已判定本輪不處理**。在此之前，任何「兩份值不同」皆為缺陷，由 (a)～(d) 攔截。
+    - 🔒 **原條文（2026-08-16 修正前，逐字保留供追溯）**：「**🔴 對照表單一權威**：① 之對照表**只能有一份**，畫面篩選下拉與 CSV 不得各存一份；**可觀測不變式＝「CSV 某列 `變更類型` 之值，與畫面同一事件該欄之可見文字逐字相同」**。落點由 system-architect 定（與 [F037](F037-document-change-history.md#export-delta) `AC-D11` ④ 同一決策）。」
+    - ⚠ **未受本次修正影響者**：本 AC 之 **①②③ 一字未改**（`變更類型` 欄輸出中文標籤、值域恰為六者、不得輸出列舉代碼、`時間` 格式、`循環別` 取當前值），三者已由實作滿足並經 lead 於瀏覽器實測確認。同一架構現實亦適用 [F037](F037-document-change-history.md#export-delta) `AC-D11` ④（`變更欄位`／`來源` 之對照表：後端 `change-labels.ts` 之 `FIELD_LABEL`／`SOURCE_OF_FIELD` ↔ 前端 `ChangeHistoryPage.tsx` 之 `FIELD_LABEL`／`sourceOf()`）——該條之規範文字依 lead 指示**本輪不動**，其括號內「現況對照表只存在於前端，須搬至後端」一句已因後端 `change-labels.ts` 落地而過時，惟**不影響該條之斷言標的**。
+    - 📌 **刻意不入本條斷言**：同檔之 `TYPE_CATEGORY`（篩選下拉之「顯示標籤 → `changeType` 集合」反向索引）為第三處對照，其鍵集合恆等於 (c) 之六個標籤；本條**不對它另立斷言**（避免擴大本 delta 範圍），其一致性由 (c) 間接維持。
 ## Error Scenarios
 - **權限限縮**：主管／部門窗口／一般使用者→403（僅 SysAdmin／ICSOPAdmin，OQ-E07-04 定案）。見 [error-handling.md#permission](../error-handling.md#permission)。
+- **匯出筆數超限**（2026-08-16）：`EXPORT_ROW_LIMIT_EXCEEDED`（400），不產生檔案；見 [error-handling.md#export](../error-handling.md#export)。
 - **下載未授權**：無可視權限角色略過 UI 直接呼叫下載 API→403，不產檔、不燒錄、不留稽核（操作即被拒）。見 [error-handling.md#permission](../error-handling.md#permission)。
 - **稽核寫入失敗不阻斷**：`LIFECYCLE_CHANGELOG_*` 寫入異常時不阻擋瀏覽，進補償佇列重試；稽核不可竄改（`AUDIT_IMMUTABLE`）見 [error-handling.md#audit](../error-handling.md#audit)。
 
@@ -66,7 +98,9 @@ Epic/Story: E07 / US-063
 - Related: 同區塊另一 tab [F037](F037-document-change-history.md)；下載燒錄手法參考 US-054（E06）
 - Story: [US-063](../../stories/epics/E07-audit-trail/US-063-lifecycle-tree-change-history.md)
 - NFR: [浮水印一致性](../nfr.md#watermark)（新舊樹狀圖下載為浮水印燒錄情境，涵蓋見 OQ-NFR007c）、[稽核與資料保留](../nfr.md#audit-retention)（保留政策見 OQ-NFR003）
-- OQ: OQ-E07-05（DAG 儲存粒度＝diff/快照＋事件粒度＝逐動作/編輯階段聚合，待架構師）、OQ-E07-02（`LIFECYCLE_CHANGELOG_*` 併入 F036 `LIFECYCLE_*` 資料模型歸屬）、OQ-E07-06（下載 PDF 排版）、OQ-NFR003（保留期限）
+- OQ: OQ-E07-05（DAG 儲存粒度＝diff/快照＋事件粒度＝逐動作/編輯階段聚合，待架構師）、OQ-E07-02（`LIFECYCLE_CHANGELOG_*` 併入 F036 `LIFECYCLE_*` 資料模型歸屬）、**OQ-E07-06（下載 PDF 排版；其「是否匯出」子題已於 2026-08-16 定案為「是」，排版子題維持原架構定案＝單一 PDF 兩頁）**、OQ-NFR003（保留期限）
+- **2026-08-16 使用者裁決**: OQ-D18-16（匯出格式與範圍）、OQ-D18-17（兩 tab 各自匯出）、OQ-D18-19（本 tab 不支援節點雙擊）。見 [§循環樹狀圖 tab 匯出 delta](#export-delta)。#17（浮水印三層式）為 `BUG-IMPL`、不新增 AC（見檔頭加註）。
+- **待 system-architect（本 delta 新增）**：匯出端點形狀（建議 `GET /admin/change-history/lifecycles/export`）；`watermarkLines()` 共用函式之落點（本 feature 之 `DiffBoard` 為其第三個消費者）。
 - 已定案: OQ-E07-04（「文件變更歷程」為**獨立後台功能**，F025 新增獨立功能列；兩 tab 統一僅 SysAdmin／ICSOPAdmin 全公司唯讀、**主管對本 tab 亦無權**；覆蓋原「比照循環管理」草案）
 - **待 system-architect**：DAG 變更之儲存粒度與事件邊界（OQ-E07-05）、變更/快照實體 schema、新舊樹狀圖重建與 diff 渲染、下載 PDF 排版。
 

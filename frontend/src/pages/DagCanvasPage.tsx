@@ -240,7 +240,7 @@ export function DagCanvasPage(): JSX.Element {
     <div className="space-y-3">
       {/* prototype 11 行 65：標題節點掛 [data-lifecycle-title]，內容為「循環顯示名稱 · DAG 畫布」。 */}
       <PageHeader
-        breadcrumb={['循環管理', 'DAG 畫布']}
+        breadcrumb={[{ label: '循環管理', to: '/admin/lifecycles' }, { label: 'DAG 畫布' }]}
         title={cycleName ? `${cycleName} · DAG 畫布` : 'DAG 畫布'}
         titleAttrs={{ 'data-lifecycle-title': '' }}
       >

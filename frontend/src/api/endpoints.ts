@@ -1,4 +1,5 @@
 import { apiFetch } from './client';
+import { downloadViaBlob } from './download-blob';
 import type {
   SessionUser,
   SyncRunSummary,
@@ -343,6 +344,18 @@ export function lifecycleTreePrintUrl(lifecycleId: string): string {
   return `/admin/lifecycles/${lifecycleId}/tree-preview/print`;
 }
 
+/**
+ * F036 節點雙擊之唯讀文件清單（GET .../nodes/:nodeId/documents）。
+ * 閘門為「循環管理 read」（含 Supervisor）；lazy per-node，不隨預覽頁一併預載。
+ * 刻意不重用 F009 之 `.../drawer`——後者會連寫入路徑之 `candidates` 一起吐出。
+ */
+export function getLifecycleNodeDocuments(
+  lifecycleId: string,
+  nodeId: string,
+): Promise<import('./types').NodeMountedDocument[]> {
+  return apiFetch(`/admin/lifecycles/${lifecycleId}/nodes/${nodeId}/documents`);
+}
+
 // ===== E04 ICSOP 文件（F010/F012/F017） =====
 
 /**
@@ -494,12 +507,34 @@ export function unlinkUsageForm(documentId: string, formId: string): Promise<voi
   });
 }
 
-/** GET /documents/:documentId/usage-forms/:formId/download（前後台共用；核發短效期 URL＋寫入稽核）。 */
+/**
+ * GET /documents/:documentId/usage-forms/:formId/download（F018 `AC-D22` **後台側**）：
+ * 回 `{ url }` 短效期 SAS、RAW（不燒錄）、**不寫稽核**。呼叫端＝後台唯讀詳情頁。
+ * 前台請改用 `downloadUsageFormFront`（`/public/...`，代理串流＋燒錄＋稽核）。
+ */
 export function downloadUsageForm(
   documentId: string,
   formId: string,
 ): Promise<{ url: string; expiresInSeconds: number }> {
   return apiFetch(`/documents/${documentId}/usage-forms/${formId}/download`);
+}
+
+/**
+ * F018 `AC-D11`～`AC-D14`：**前台**使用表單下載——代理串流（PDF 已燒錄浮水印、非 PDF 為原檔）。
+ * 🔴 以 `downloadViaBlob` 觸發，不得 `window.open`／`<a href>`（會送 `Accept: text/html` 撞 SPA fallback）。
+ * 🔴 `AC-D22`：路徑為 `/public/...` 之**前台專屬端點**——與後台之 `/documents/...`（回 `{ url }` SAS、
+ * RAW、不寫稽核）分流。兩端期待相反，共用一條 route 時前台會存到 JSON 壞檔、後台 `grant.url` 為
+ * `undefined`（實測皆壞）；且後台若取得燒錄後位元組即違反 F020 `AC-D4`。
+ */
+export function downloadUsageFormFront(
+  documentId: string,
+  formId: string,
+  fallbackName: string,
+): Promise<void> {
+  return downloadViaBlob(
+    `/public/documents/${documentId}/usage-forms/${formId}/download`,
+    fallbackName,
+  );
 }
 
 // ===== F009 節點抽屜（文件掛載） =====
@@ -567,10 +602,11 @@ import type {
   LifecycleChangeFilters,
 } from './types';
 
-/** GET /admin/change-history/documents（F037 程序書變更清單；文件變更歷程 read）。 */
-export function getDocumentChanges(
-  f: DocumentChangeFilters = {},
-): Promise<{ items: DocumentChangeView[]; total: number }> {
+/**
+ * F037 查詢與匯出**共用同一份 query 組裝**（architecture-spec §10.4「三處端點」）——
+ * 兩份參數解析漂移時，使用者會匯出到一份與畫面不同的結果而毫無徵兆。
+ */
+function documentChangeQuery(f: DocumentChangeFilters): string {
   const qs = new URLSearchParams();
   if (f.doc) qs.set('doc', f.doc);
   if (f.field) qs.set('field', f.field);
@@ -578,7 +614,26 @@ export function getDocumentChanges(
   if (f.from) qs.set('from', f.from);
   if (f.to) qs.set('to', f.to);
   const q = qs.toString();
-  return apiFetch(`/admin/change-history/documents${q ? `?${q}` : ''}`);
+  return q ? `?${q}` : '';
+}
+
+/** GET /admin/change-history/documents（F037 程序書變更清單；文件變更歷程 read）。 */
+export function getDocumentChanges(
+  f: DocumentChangeFilters = {},
+): Promise<{ items: DocumentChangeView[]; total: number }> {
+  return apiFetch(`/admin/change-history/documents${documentChangeQuery(f)}`);
+}
+
+/**
+ * GET /admin/change-history/documents/export（F037 匯出 CSV）。
+ * 🔴 以 `downloadViaBlob` 觸發——`window.open`／`<a href>` 會送 `Accept: text/html` 而撞 SPA
+ * fallback，使用者拿到一份副檔名為 `.csv` 但內容是 app shell 的檔案（§10.1）。
+ */
+export function exportDocumentChanges(f: DocumentChangeFilters = {}): Promise<void> {
+  return downloadViaBlob(
+    `/admin/change-history/documents/export${documentChangeQuery(f)}`,
+    'document_change_history.csv',
+  );
 }
 
 /** GET /admin/change-history/documents/:documentId（F037 展開某文件 before/after ＋記 CHANGE_LOG_VIEW 稽核）。 */
@@ -588,17 +643,30 @@ export function viewDocumentChanges(
   return apiFetch(`/admin/change-history/documents/${encodeURIComponent(documentId)}`);
 }
 
-/** GET /admin/change-history/lifecycles（F038 循環結構變更清單；read）。 */
-export function getLifecycleChanges(
-  f: LifecycleChangeFilters = {},
-): Promise<{ items: LifecycleChangeView[]; total: number }> {
+/** F038 查詢與匯出共用之 query 組裝（理由同 `documentChangeQuery`）。 */
+function lifecycleChangeQuery(f: LifecycleChangeFilters): string {
   const qs = new URLSearchParams();
   if (f.lifecycleId) qs.set('lifecycleId', f.lifecycleId);
   if (f.changeType) qs.set('changeType', f.changeType);
   if (f.person) qs.set('person', f.person);
   if (f.from) qs.set('from', f.from);
   const q = qs.toString();
-  return apiFetch(`/admin/change-history/lifecycles${q ? `?${q}` : ''}`);
+  return q ? `?${q}` : '';
+}
+
+/** GET /admin/change-history/lifecycles（F038 循環結構變更清單；read）。 */
+export function getLifecycleChanges(
+  f: LifecycleChangeFilters = {},
+): Promise<{ items: LifecycleChangeView[]; total: number }> {
+  return apiFetch(`/admin/change-history/lifecycles${lifecycleChangeQuery(f)}`);
+}
+
+/** GET /admin/change-history/lifecycles/export（F038 匯出 CSV；觸發方式同上）。 */
+export function exportLifecycleChanges(f: LifecycleChangeFilters = {}): Promise<void> {
+  return downloadViaBlob(
+    `/admin/change-history/lifecycles/export${lifecycleChangeQuery(f)}`,
+    'lifecycle_change_history.csv',
+  );
 }
 
 /** GET /admin/change-history/lifecycles/:lifecycleId（F038 某循環結構變更 ＋記 LIFECYCLE_CHANGELOG_VIEW 稽核）。 */
@@ -637,13 +705,26 @@ export function lifecycleTreeDiffDownloadUrl(lifecycleId: string, changeLogId: s
 export function getPublicDocuments(f: PublicListFilters = {}): Promise<PublicListPage> {
   const qs = new URLSearchParams();
   if (f.keyword) qs.set('keyword', f.keyword);
-  if (f.deptCode) qs.set('deptCode', f.deptCode);
+  // 🔴 2026-08-16 delta（架構 A9 §10.9 之三處第 3 處）：`deptCode` 已不再送出。
+  if (f.draftingCompanyId) qs.set('draftingCompanyId', f.draftingCompanyId);
+  if (f.draftingDeptId) qs.set('draftingDeptId', f.draftingDeptId);
+  if (f.draftingSectionId) qs.set('draftingSectionId', f.draftingSectionId);
+  if (f.chiefId) qs.set('chiefId', f.chiefId);
   if (f.lifecycleId) qs.set('lifecycleId', f.lifecycleId);
   if (f.status) qs.set('status', f.status);
   if (f.page) qs.set('page', String(f.page));
   if (f.pageSize) qs.set('pageSize', String(f.pageSize));
   const q = qs.toString();
   return apiFetch<PublicListPage>(`/public/documents${q ? `?${q}` : ''}`);
+}
+
+/**
+ * GET /public/documents/filter-options（F019 `AC-D5`）：**單一端點**一次回傳五組選項。
+ * 🔴 不接受任何 filters——選項為全域 distinct（不隨已套用篩選收斂），其唯一收斂維度是
+ * 後端之可見性過濾（與清單物理共用同一 `visibleCandidates()`）。
+ */
+export function getPublicFilterOptions(): Promise<import('./types').PublicFilterOptions> {
+  return apiFetch('/public/documents/filter-options');
 }
 
 /**
@@ -717,12 +798,34 @@ export function getUsageFormOverview(): Promise<import('./types').UsageFormPoolI
  * （prototype 19 之 fileInput 無 multiple），各檔由後端沿用各自檔名。
  * ⚠ FormData 不可設 Content-Type（瀏覽器需自帶 multipart boundary）。
  */
-export function uploadUsageForms(files: File[], name?: string): Promise<unknown> {
+export function uploadUsageForms(
+  files: File[],
+  name?: string,
+  formNumber?: string | null,
+): Promise<unknown> {
   const fd = new FormData();
   for (const f of files) fd.append('files', f);
   const trimmed = (name ?? '').trim();
   if (files.length === 1 && trimmed !== '') fd.append('name', trimmed);
+  const number = (formNumber ?? '').trim();
+  if (files.length === 1 && number !== '') fd.append('formNumber', number);
   return apiFetch('/admin/usage-forms', { method: 'POST', body: fd });
+}
+
+/**
+ * PATCH /admin/usage-forms/:formId/number（F018「編輯編號」，architecture-spec §10.7 A14）。
+ * body 只有 `formNumber` 一鍵——不碰檔案、不碰關聯、不寫稽核、不觸發覆蓋共用警示。
+ * 清空傳 `null`（空字串不得落地）。409 USAGE_FORM_NUMBER_DUPLICATE／400 USAGE_FORM_NUMBER_TOO_LONG。
+ */
+export function updateUsageFormNumber(
+  formId: string,
+  formNumber: string | null,
+): Promise<import('./types').UsageFormPoolItem> {
+  return apiFetch(`/admin/usage-forms/${formId}/number`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ formNumber }),
+  });
 }
 
 /**
@@ -772,6 +875,20 @@ export function getAppendixPool(): Promise<import('./types').AppendixRecord[]> {
  */
 export function getAppendixPoolOverview(): Promise<import('./types').AppendixPoolItem[]> {
   return apiFetch('/admin/appendices/overview');
+}
+
+/**
+ * GET /admin/appendices/export（F039 附錄池匯出 CSV）。
+ * 帶入與清單畫面**相同**之篩選（`AC-D5`：範圍＝當前篩選之全部結果，非當前頁）。
+ */
+export function exportAppendixPool(
+  f: { q?: string; format?: string } = {},
+): Promise<void> {
+  const qs = new URLSearchParams();
+  if (f.q) qs.set('q', f.q);
+  if (f.format) qs.set('format', f.format);
+  const q = qs.toString();
+  return downloadViaBlob(`/admin/appendices/export${q ? `?${q}` : ''}`, 'appendices.csv');
 }
 
 /**
@@ -869,12 +986,29 @@ export function unlinkDocumentAppendix(
   });
 }
 
-/** GET /documents/:documentId/appendices/:appendixId/download（前台下載＋**寫入稽核**，不燒錄浮水印）。 */
-export function downloadDocumentAppendix(
+/** F039 `AC-D1`／`AC-D2`：**前台**附錄下載——代理串流（觸發方式同 `downloadUsageFormFront`）。 */
+export function downloadDocumentAppendixFront(
   documentId: string,
   appendixId: string,
-): Promise<import('./types').AppendixDownloadGrant> {
-  return apiFetch(`/documents/${documentId}/appendices/${appendixId}/download`);
+  fallbackName: string,
+): Promise<void> {
+  return downloadViaBlob(`/documents/${documentId}/appendices/${appendixId}/download`, fallbackName);
+}
+
+/**
+ * F020 `AC-D3`：**前台專屬**附件下載端點（`icsop-pdf`／`ojt`）。
+ * 🔴 路徑**不接受客戶端傳入 `blobPath`**——伺服器自 `(documentId, type)` 反查儲存位置；
+ * 「前台／後台」是授權語意，不得建立在可由客戶端控制的輸入上（§10.1 之方案 B／C 已明確否決）。
+ */
+export function downloadPublicAttachment(
+  documentId: string,
+  type: 'icsop-pdf' | 'ojt',
+  fallbackName: string,
+): Promise<void> {
+  return downloadViaBlob(
+    `/public/documents/${documentId}/attachments/${type}/download`,
+    fallbackName,
+  );
 }
 
 // ===== E09 F031 文件索引管理 =====

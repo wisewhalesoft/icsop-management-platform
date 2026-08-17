@@ -253,3 +253,43 @@ status: draft
 - **OQ-F017-05（非阻擋，已知限制，不視為待修 bug）**：當責室長「姓名」顯示不可達——`ICSOP_DOCUMENT.primaryChiefId` 儲存員編字串，全專案無 `PERSON` 資料表可供 join 解析姓名（`icsop-document.entity.ts` 註解已明寫「PERSON 表待建」）。F017 AC 中「當責室長」欄之顯示需求（прototype 顯示為姓名如「陳彥廷（企劃部 車輛行銷室 室長）」）本 wave **無法**達成，只能顯示原始員編。此限制應於 impl log 中明確記載，避免日後被誤判為「顯示錯誤」而非「資料源缺口」。
 
 - **OQ-F017-06（依賴 F015，交叉引用）**：「連結點程序書」篩選（TS-F017-008）之資料查詢介面直接依賴 F015-test.md OQ-F015-01（F015 是否有獨立儲存/端點設計）之定案結果，本檔僅先以抽象服務層參數 `linkTargetId` 表示，非最終介面。
+
+---
+
+## 🔴 2026-08-16 缺失／變更 delta — 篩選 9 → 13 項且順序重排（`AC-D1`～`AC-D10`，lane **L4**）
+
+> 權威＝[F017 §篩選 9 → 13 項 delta](../../specs/features/F017-backend-document-list.md#filter-13-delta)
+> ＋ [architecture-spec §10.6（A6 共用 `chief-match`）／§10.12（A12 下推策略）／§10.13（A13 選項來源）](../../specs/architecture-spec.md#ch10-defect-delta)
+> ＋ `prototypes/13-document-list.html`（`filterBar`、`FILTERS` 13 項、`controlHtml()` 之 DOM 與屬性、行動 sheet）。
+> 本輪約束環為**簡化版**（僅 jest／vitest，無 Playwright fidelity、無 Stryker、無 metric gate）。
+> ⚠ **本 delta 僅動篩選、不動欄位**——14 欄之集合／順序／顯示規則由 `AC-D9` 回歸鎖定。
+
+### 覆蓋對照表
+
+| AC | 主張 | 測試載體 |
+|---|---|---|
+| `AC-D1` | 篩選控制項恰 13 個、順序與無障礙名稱逐字；行動 sheet 同 13 項同序 | `DocumentListPage.filterDelta.test.tsx` `TS-F017-D1-001`～`003` |
+| `AC-D2` | 各項比對語意（13 列表）；多項並用為 AND | 同上 `TS-F017-D2-001`／`002`（AND）；逐項語意分散於 `AC-D3`～`AC-D7` 之案例；既有等值比對（制定三級／編號／連結點／循環）由 `document-list-query.spec.ts` `TS-F017-006`～`010` 回歸鎖定 |
+| `AC-D3` | `程序書書名內` 雙行為（選取＝等值／輸入＝contains、不分大小寫）＋ `%`／`_`／`'` 字面比對 | 前端 `TS-F017-D3-001`～`005`；🔒 **後端維持等值、不得改為 contains** 之回歸鎖定＝`document-list-query.spec.ts` `TS-F017-010`（fixture 之 B 為 A 之嚴格超字串） |
+| `AC-D4` | 公告日期閉區間、單邊、`null` 一律排除、起晚於迄為空非錯誤 | `DocumentListPage.filterDelta.test.tsx` `TS-F017-D4-001`～`005` |
+| `AC-D5` | OJT 三值 | 同上 `TS-F017-D5-001` |
+| `AC-D6` | 附錄／使用表單選具體一份（`appendixId`／`formId`）；label ＝ `{編號} {名稱}`；空池非錯誤 | 同上 `TS-F017-D6-001`～`004` |
+| `AC-D7` | 🔴 當責室長＝主要 ∪ 次要（與 F019 同一純函式） | 後端 `document-list-query.spec.ts` `TS-F017-D7-001`～`005`；共用函式 `chief-match.spec.ts` `TS-CHIEF-001`～`009`；🔴 **單一實作**靜態約束 `TS-CHIEF-102`／`103`；前端（含選項 distinct）`DocumentListPage.filterDelta.test.tsx` `TS-F017-D7-101`／`102` |
+| `AC-D8` | 清除全部篩選（13 項＋關鍵字、回第 1 頁） | `DocumentListPage.filterDelta.test.tsx` `TS-F017-D8-001` |
+| `AC-D9` | 🔒 14 欄集合／由左至右順序／統計卡回歸鎖定 | `DocumentListPage.test.tsx` `AC-D9 14 欄之表頭順序逐字鎖定`／`AC-D9 3 張統計卡與排序行為不變`（**設計上從一開始即綠**）；後端型別 additive ＝ `document-list-query.spec.ts` `TS-F017-D9-001` |
+| `AC-D10` | 篩選區之逐字文案與選擇器契約（`filterBar`／`cbD_{key}_input`／`cbD_{key}_clear`／placeholder／`狀態`／`OJT`／日期／清除全部／行動 sheet） | `DocumentListPage.filterDelta.test.tsx` `TS-F017-D10-001`～`009`（含 `003b` 清除鈕僅於有值時可見） |
+
+### 本輪由 test-generator 釘下之新契約（spec 未規定，供 tdd-implementation 對齊）
+
+| 項目 | 契約 |
+|---|---|
+| `DocumentListItem` additive | `secondaryChiefIds: string[]`（`AC-D7` 之比對鍵；現況只有顯示用之 `secondaryChiefNames`／`Count`）、`hasOjt: boolean`（`AC-D5`；§10.12 之列富化，沿用既有 `DOCUMENT_ATTACHMENT` 批次查詢） |
+| `DocumentFilters` additive | `appendixId`／`formId`（比照既有 `linkTargetId` 樣板：後端回 id 集合、前端交集，§10.12） |
+| 後台選項來源 | `getAppendixPool()`／`getUsageFormPool()`（§10.13：**不新增端點**） |
+| 行動 sheet | `role="dialog"`（比照前台 `03` 之既有慣例；prototype 之 `#sheet` 為裸 div，React 側需補 role 方可被測試定位） |
+| `狀態`／`OJT` 之 option `value` | 逐字取自 prototype：`狀態` ＝ `''`／`已公告`／`進度中`／`失效`／`作廢`；`OJT` ＝ `全部`／`有 OJT`／`無 OJT`（**value 與 text 相同**） |
+
+### 未涵蓋（本環刻意不做）
+
+- **AC-D2 第 8 列之 SQL 下推**：§10.12 明訂本輪**不做**全面 SQL 下推，公告日期／`程序書書名內` contains 皆於前端工作集上篩選 ⇒ 無後端載體，非缺口。
+- **`LOAD_SIZE = 2000` 靜默截斷**：§10.12 已列為既有風險並記入 §9，本 delta 未改變其行為，本環不新增約束。

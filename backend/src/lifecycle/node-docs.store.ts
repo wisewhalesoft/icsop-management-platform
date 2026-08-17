@@ -23,6 +23,21 @@ export interface DocLite {
   nodeId: string | null;
 }
 
+/**
+ * F036 樹狀圖節點雙擊之唯讀文件清單列（architecture-spec §10.5）。
+ * 五欄全落在 ICSOP_DOCUMENT 單表 ⇒ 一次 WHERE 即取全，無 N+1。
+ * 🔴 回原始 `status`／`announcedDate`，**不回**已衍生之中文徽章字串——徽章由前端以與後台
+ * 同一份 `display-status` 純函式衍生，前後台顯示規則因此不可能分歧。
+ */
+export interface NodeMountedDoc {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+  edition: string | null;
+  status: string;
+  announcedDate: string | null;
+}
+
 export interface NodeDocsStore {
   getNode(lifecycleId: string, nodeId: string): Promise<NodeInfo | null>;
   /** 該循環全部文件（含其現行 nodeId），供掛載/候選判定（後端以 lifecycleId 過濾，F009 定案）。 */
@@ -43,4 +58,9 @@ export interface NodeDocsStore {
   runStructuralChange?<T>(
     work: (tx: import('./lifecycle-structural-change').NodeDocsStructuralTx) => Promise<T>,
   ): Promise<T>;
+  /**
+   * F036 delta：該節點掛載之程序書（含版次／狀態／公告日期）。選填能力——未提供之既有 fake
+   * 一律降級為空清單（不新增必填方法以免打爆既有 store 實作者）。
+   */
+  listNodeMountedDocs?(lifecycleId: string, nodeId: string): Promise<NodeMountedDoc[]>;
 }

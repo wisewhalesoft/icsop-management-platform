@@ -106,6 +106,11 @@ export interface AppendixAuditEvent {
   appendixId: string;
   documentId: string;
   accountId: string;
+  /**
+   * F020 `AC-D5`：前台下載之浮水印快照。PDF → 該次燒錄之字串；非 PDF → `null`
+   * （策略 A：非 PDF 不做任何浮水印處理，故沒有快照可記）。additive 選填以免打爆既有呼叫端。
+   */
+  watermarkSnapshot?: string | null;
 }
 
 export interface AuditRecorder {

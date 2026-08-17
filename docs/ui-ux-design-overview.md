@@ -511,3 +511,70 @@ prototype 產出後，逐檔以下列方式驗證：
 ---
 
 *本總覽為 Phase 0 交付。經使用者確認後，將依 §4 檔案結構與 §5 執行順序，逐階段產出 `prototypes/` 下 25 個 self-contained HTML 原型（含 Phase G AI 智慧問答 RAG：`20`/`21`，循環樹狀圖預覽 `22`／文件變更歷程 `23`，以及 Phase H 附錄管理 `24`）。*
+
+---
+
+### A.4 2026-08-16 缺失／變更 delta（18 項）— prototype 傳播紀錄（🔴 人類閘門已通過）
+
+> 上游：product-analyst → spec-writer → system-architect 已完成；規格權威＝`docs/specs/features/` 中帶 **`AC-D#`** 批次之十份 feature（F002 F011 F017 F018 F019 F020 F026 F036 F037 F038 F039）＋ `architecture-spec.md` §10.3／§10.8／§10.14。
+> 本節僅記錄「傳播到 `prototypes/*.html` 的結果」；行為與資料契約以各該 feature 為準。
+
+#### A.4.1 逐檔改動
+
+| Prototype | 改動 | 權威 |
+|---|---|---|
+| `03-public-list.html` | 桌面篩選列改為**恰 6 項**（`制定公司`／`制定部門`／`制定室別`／`當責室長`／`狀態`／`循環別`），五項為可搜尋下拉、`狀態` 維持原生 select；移除「使用部門」篩選器；行動底部 sheet 同 6 項同順序；卡片 `<dl>` 標籤改為 `制定公司：`／`制定部門：`／`制定室別：`／`版次：`／`公告日期：`／`內容摘要：`（移除「使用部門：」「循環別：」與使用部門逐段高亮）；「清除篩選」涵蓋新增四項；當責室長比對＝主要∪次要 | F019 `AC-D1`～`AC-D13` |
+| `04-public-document-detail.html` | 移除「文件使用部門」欄；附件／附錄／使用表單三類之**非 PDF 列**顯示逐字 `此格式不支援浮水印`、PDF 列顯示既有正向文案 `檢視/下載將燒錄浮水印`；原「附錄不燒錄浮水印」註解改寫為前台燒錄語意 | F019 `AC-D9`、F020 `AC-D1`／`AC-D2`、F039 `AC-D1`／`AC-D2`、F018 `AC-D11`／`AC-D12` |
+| `05-public-viewer-watermark.html` | **未改檔**（已核對，見 A.4.3） | F020 既有 AC |
+| 16 個 admin shell 頁（`07`–`19`／`21`／`23`／`24`） | 側欄最上方新增「首頁」項（不經角色過濾）、側欄 logo 改為可點回 `/admin`、麵包屑非末段改為可點連結（末段維持純文字） | F002 `AC-D1`～`AC-D7`、arch §10.8 |
+| `13-document-list.html` | 篩選 9 → **13 項**且順序全面重排；新增 `公告日期`（區間）／`附錄`／`使用表單`／`OJT`；`程序書書名內` 雙行為；行動底部 sheet；「清除全部篩選」 | F017 `AC-D1`～`AC-D9`、F018 `AC-D8` |
+| `14-document-create.html` | 版次輸入補 blur 補零（與 `15` 收斂為同一行為） | F011 `AC-D2`～`AC-D7` |
+| `15-document-edit.html` | topbar 新增「返回」鈕；版次輸入補 blur 補零 | F011 `AC-D1`～`AC-D6` |
+| `19-usage-form-management.html` | 表頭新增首欄「表單編號」；上傳 modal 新增選填「表單編號」（含長度／唯一性驗證示範） | F018 `AC-D1`～`AC-D7` |
+| `22-lifecycle-tree-preview.html` | 新增**雙擊節點 → 唯讀右側抽屜**（程序書編號／書名／版次／狀態／公告日期，點列開後台唯讀詳情）；節點 `docs:N` 改為程序書列陣列（筆數與改動前逐節點相同） | F036 `AC-D1`～`AC-D8` |
+| `23-change-history.html` | 兩 tab **各自**於 topbar 新增「匯出」鈕（兩個獨立控制項，切 tab 各顯其一） | F037 `AC-D1`～`AC-D9`、F038 `AC-D1`～`AC-D5` |
+| `24-appendix-management.html` | topbar 新增「匯出」鈕（非 write-only：匯出為讀取類動作，SysAdmin 唯讀角色允許） | F039 `AC-D4`～`AC-D11` |
+
+#### A.4.2 本 agent 之設計裁量（spec 明文授權或未規範者）
+
+| # | 裁量 | 理由 |
+|---|---|---|
+| 1 | **`13` 之 13 項篩選收納＝桌面多列 grid（md 2／lg 3／xl 4 欄，佔 4 列）＋ 行動（< md）底部 sheet** | OQ-D18-13 明文授權定稿。多列 grid 直接滿足 `AC-D1` 之「由左至右、逐列換行」；底部 sheet 沿用前台 `03` 之既有慣例（`AC-D1` 亦以「行動 sheet」措辭指名），不新造互動語彙。 |
+| 2 | **`03` 之 6 項篩選＝桌面 3 欄 × 2 列 grid**（原為單列 flex） | 6 個控制項中有 5 個是帶 label 的 combobox，單列 flex 於 `max-w-5xl` 內必然溢出。 |
+| 3 | **`19` 無編號者顯示 `—`**（附 `title="此表單未設定編號"`） | 與 `13` 之「制定室別」空值（`—`＋title）為同一既有慣例，不新造符號。`AC-D1` 亦逐字指定 `—`。 |
+| 4 | **`03` 桌面 `狀態` 之選項文字由 `狀態：有效` 改為 `有效`** | 新版 grid 每個控制項都有獨立 label（`狀態`），選項再自帶「狀態：」前綴會重複；行動 sheet 本來就是「label `狀態` ＋ option `有效`」，此改動使桌面與行動一致。**非 spec 定義之逐字文案**（已列入 A.4.4 回報）。 |
+| 5 | **`13` `程序書書名內` 之 placeholder ＝ `全部（或直接輸入部分書名）`**（其餘 combo 維持 `全部`） | `AC-D3` 之雙行為（等值下拉＋contains 輸入）在 UI 上不可見，需一句提示；placeholder 為既有元件之既有位置，不新增元件。**非 spec 定義之逐字文案**（已列入 A.4.4）。 |
+| 6 | **麵包屑與側欄之 route 以 `data-to="/admin/..."` 屬性記錄**，`href` 指向對應 prototype 檔 | prototype 為靜態檔、無 router；`data-to` 之值**逐字取自 F002 `AC-D3` 之逐頁對映表**，使下游實作不需重新推導 route。 |
+| 7 | **`04` 附件區新增「示範：切換 OJT 格式 pdf／jpg」示範控制** | `AC-D2` 要求三類檔案（附件／附錄／使用表單）**適用同一規則、同一文案**，但附件類原本兩列皆為 PDF，`此格式不支援浮水印` 在該類無載體。OJT 實體簽到表之白名單本含 `jpg/jpeg/png`，故此為真實可達之狀態。沿用本檔既有之「示範：切換有／無附錄」控制形式。 |
+| 8 | **`22` 節點之 `docs:N` 改為程序書列陣列** | `AC-D2`（抽屜列數）與節點徽章數字若各存一份，必然漂移。改為單一事實來源後，**每節點筆數與改動前之徽章數字逐節點相同**（無視覺回歸）。 |
+| 9 | **`23` 兩個匯出鈕以 `id="exportDoc"`／`id="exportTree"` 區分，切 tab 時僅顯示其一** | F038 `AC-D1` 明訂為「兩個獨立控制項」；兩者同時可見會讓使用者無從判斷按下的是哪一份。 |
+
+#### A.4.3 核對後確認「無需改動」之項目
+
+1. **`05-public-viewer-watermark.html` — 浮水印定義已正確，未改檔。** 其疊加層為 `${WM_DATA}<br>${WM_NOTICE}<br>${WM_TIME}` 三層式，`WM_DATA` 已含員工編號（`22345`）與姓名（`王小明`），與 architecture-spec §10.14 之分割規則（①身分資料列 ②固定機密聲明 ③時間戳）**逐項相符**、無衝突。頁尾 `wmString` 仍為線性稽核快照字串（§10.14「不改後端回傳結構」）。缺失 delta 第 7／17 項為 `BUG-IMPL`（React 端 `PublicViewerPage` 直接渲染線性字串、`ChangeHistoryPage` 另加 `whiteSpace:'nowrap'`），非 prototype 錯誤。
+2. **`23-change-history.html` 之新舊樹狀圖浮水印 — 已是三層式，未改。** `wmSpans()` 已輸出 `${WM_DATA}<br>${WM_NOTICE}<br>${WM_TIME}`，`WM_DATA` 含員工編號 `20233` 與姓名 `李慧玲`，與 `05` 逐格式相同。CSS 之 `.wm-layer span{white-space:nowrap}` 與 `05` 相同且**不構成缺陷**——內容以 `<br>` 強制斷行，`nowrap` 僅避免長身分列意外回捲。§10.14 要求移除的 `whiteSpace:'nowrap'` 位於 `ChangeHistoryPage.tsx` 之 `DiffBoard`（該處作用於**單一線性字串**），與本 prototype 情形不同。
+3. **`15-document-edit.html` 之版次輸入 — 部分符合，已補。** 現行 `onEditionChange()` 對 `AC-D2`（輸入不補零）與 `AC-D5`（上限兩位）**已正確**；但**完全沒有 blur 處理**，故 `AC-D3`（失焦補零至兩位）與 `AC-D4`（空值 blur 不補為 `00`）無載體 → 已新增 `onEditionBlur()`。依 `AC-D7`（建立頁與編輯頁收斂為同一元件）同步補到 `14-document-create.html`。
+
+#### A.4.4 需回報 lead 之項目（`AC-D#` 中找不到逐字定義者，見交付回報 ③）
+
+見本輪 ui-ux-designer 交付回報第 ③ 節；本節僅備查，不在此重複。
+
+---
+
+### A.5 「編輯編號」動作（🔴 2026-08-16 人類閘門追加裁決 `OQ-D18-28`）— `19` 傳播紀錄
+
+> 起因：本 agent 於 A.4 回報之爭議 C（F018 `AC-D3` 在 `19` 無 UI 載體）上人類閘門，裁決＝**新增「編輯編號」動作**（存量表單之 `formNumber` 全為 `null`，若僅能於上傳時設定則永遠補不上）。被否決之替代方案＝把編號欄加進覆蓋上傳彈窗。
+> 權威＝F018 `AC-D16`～`AC-D20` ＋ 該檔末「待 ui-ux-designer（追加裁決）」之逐字文案對照表。**表中每一值皆逐字照抄，無偏差。**
+
+| 決定 | 內容 | 理由 |
+|---|---|---|
+| **形式＝小 modal**（非列內 inline） | `id="editNumberModal"`，沿用本頁 `upModal`／`confirmModal` 之既有 modal 語彙 | ① `AC-D16` 只給**單一** DOM id `editNumberModal`（單數），inline 需每列一份或共用一份，modal 天然對應；② 介面必含 label＋輸入框＋`enNumberErr` 錯誤區＋強制說明句 `僅更新編號，不會變更表單檔案。`＋`儲存`／`取消`，塞進 `min-w-[980px]` 表格首欄會破壞列高與橫捲；③ 不新增互動語彙。 |
+| **列內動作＝icon＋可見文字按鈕** | 「操作」欄內 `<i data-lucide="hash">` ＋可見文字 `編輯編號`；`aria-label="編輯編號"`、`title="編輯編號"`、`data-edit-number="{formId}"` | 對照表寫「無障礙名稱／可見文字＝`編輯編號`」，兩種讀法都成立才安全；小型帶邊框文字按鈕沿用 `13` `linkCell` 之既有 `text-[11px]` 樣式。表格 `min-w` 880 → **980**。 |
+| **無寫入權角色＝自 DOM 移除**（非 `.write-only` CSS 隱藏） | `canWrite()` 判斷後才輸出該按鈕；`setRole()` 內補 `renderTable()` 使切角色即時反映 | `AC-D17` 之驗證為 `queryByLabelText('編輯編號') === null`，而 Testing Library 的 `*ByLabelText` **找得到** `display:none` 的元素 ⇒ 沿用本頁既有 `.write-only`（CSS 隱藏）會使該斷言失敗。本頁其餘寫入動作維持 `.write-only` 不變。 |
+| **modal 內顯示被編輯之表單名稱** | `id="enFormName"`，只回顯 `f.name` | 純資料回顯、非新增文案；不指明編輯對象時使用者無從確認選到哪一列。 |
+
+驗證（jsdom 實跑，`19` 0 console error）：`AC-D16` 8 列各一動作＋`data-edit-number`、modal 逐字文案全數命中、`取消` 不變更；`AC-D17` 四種無寫入權角色 `queryByLabelText('編輯編號')` 皆為 0；`AC-D3`／`AC-D19` `null`→`FM-002`→清空→`—`＋`title` 往返成立；`AC-D18` `fm-001` 撞 `FM-001` 回重複訊息且該列不變、自身列同值不衝突、101 字元回超長訊息；`AC-D20` 對被 2 份文件引用之 `uf1` 編輯後 `confirmModal` 未開（覆蓋共用警示未觸發）。
+
+`04-public-document-detail.html` 之使用表單清單於 A.4 已涵蓋（`進件申請書.xlsx`／`支票託收登記表.xlsx` 顯示 `此格式不支援浮水印`、`對保通知書.pdf` 顯示 `檢視/下載將燒錄浮水印`），本輪**核對後無需改動**。
+
+---

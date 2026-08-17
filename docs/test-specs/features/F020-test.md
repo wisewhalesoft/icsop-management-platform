@@ -269,3 +269,54 @@ status: draft
 - **OQ-F020-05**：「使用表單下載是否需浮水印」（`docs/ui-ux-design-overview.md` OQ-E05-03，設計預設為「不燒錄，比照 SAS 直下模式」）與本 F020 spec 之範圍邊界需再次確認——F020 之 Description 僅提及「文件」（即 `ICSOP_PDF`）之疊加/燒錄，本設計依此假設 F020 範圍**不含**使用表單（`USAGE_FORM`）之浮水印，該類下載沿用 F018/F016 既有之 SAS 短效期直下模式（架構 §5.2 第二列）。若日後定案使用表單亦需浮水印，將是對本設計範圍的擴增，需另補 TS。
 
 - **OQ-F020-06**：DevTools 移除浮水印 DOM 之防禦，spec Edge Case 明文「非本 feature 完全防禦範圍」，[NFR-007](../../specs/nfr.md#watermark) AC5 亦稱「完全防截圖/拍照非本系統可保證，屬已知限制」。依測試設計原則（不可驗證/主觀之需求應提出可量測替代方案而非略過），本設計**刻意不為此情境設計測試**，於此明確記錄該決定與理由，避免遺漏被誤讀為疏漏。若日後有「合理技術手段降低風險」（AC5 用語）之具體措施定案（如 CSP、右鍵停用等），屆時再補測試。
+
+---
+
+# 🔴 2026-08-16 缺失／變更 delta 測試設計（Lane L2：前台燒錄與三層式浮水印）
+
+> 本段由 **test-generator（Lane L2／L5）** 於 2026-08-16 追加，涵蓋 **F020 全部 `AC-D#`**、
+> **F018 `AC-D11`／`AC-D12`／`AC-D14`**（前台使用表單燒錄）與 **F026 之後台 RAW 語意**。
+> 權威＝`docs/specs/features/F020-watermark.md#front-burn-scope-delta`、`F018-usage-form-management.md#front-burn-delta`、
+> `F039-appendix-management.md#front-burn-delta`、`architecture-spec.md §10.1／§10.2／§10.3／§10.14`、
+> `prototypes/04-public-document-detail.html`、`prototypes/05-public-viewer-watermark.html`。
+>
+> 🔒 **本段不推翻任何後台條款**：`OQ-FM-01`（2026-07-24）維持有效，
+> `docs/specs/test-design/field-matrix-test-design.md` 之「此服務完全不具備燒錄能力」基準線**一字未動**
+> （它描述的是後台路徑；本段所有燒錄約束皆限前台）。
+>
+> ⚠ **上段 `OQ-F020-05`（「使用表單不燒錄」之測試設計假設）已於 2026-08-16 由 `OQ-D18-25` 推翻**——
+> 逐字保留於上供追溯，其結論**不再適用於前台路徑**（後台仍不燒錄，故該段對後台之描述仍成立）。
+
+## AC ↔ 約束對照
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-D1` 前台附屬檔案 PDF 燒錄 | `backend/src/public/watermark.burn-if-pdf.spec.ts`、`backend/src/appendices/appendices.front-burn.service.spec.ts` | unit（jest） |
+| `AC-D2` 策略 A（非 PDF 原檔＋UI 明示） | 同上 ＋ `frontend/src/pages/PublicDocumentDetailPage.watermark.test.tsx` | unit／component |
+| `AC-D3` 前後台位元組分流 | `appendices.front-burn.service.spec.ts`（前台已燒錄 ≠ 原始位元組；後台不觸發燒錄） | unit（**真位元組比對屬 (乙)**） |
+| `AC-D3a` 前台一律代理串流 | `appendices.front-burn.service.spec.ts`（`blob.urlCalls` 為 0、回應無 `url` 欄）＋ `PublicDocumentDetailPage.watermark.test.tsx`（不得 `window.open`／`<a href>`） | unit／component |
+| `AC-D4` 🔒 後台 RAW 回歸鎖定 | `appendices.front-burn.service.spec.ts`（`downloadFromPool` burn 0／audit 0）＋ `AppendixManagementPage.export.test.tsx`（前端仍呼叫 RAW helper、不渲染 `data-wm-note`） | unit／component |
+| `AC-D5` 稽核義務不變＋快照落值 | `appendices.front-burn.service.spec.ts`（PDF→落值、非 PDF→`null`） | unit |
+| `AC-D6` 共用端點閘門收斂 | `backend/src/attachments/attachments-controller-routes.gate.spec.ts` | unit（route metadata） |
+| `AC-D7` 三類清單之逐字文案與選擇器 | `frontend/src/pages/PublicDocumentDetailPage.watermark.test.tsx` | component |
+| #7 三層式（`BUG-IMPL`，不新增 AC） | `backend/src/public/watermark.three-layer.spec.ts`、`frontend/src/domain/watermark-lines.test.ts`、`PublicViewerPage.watermark.test.tsx`、`ChangeHistoryPage.watermark.test.tsx`、`LifecycleTreePreviewPage.watermark.test.tsx` | unit／component |
+| F018 `AC-D11`／`AC-D12` | `watermark.burn-if-pdf.spec.ts`（規則層）＋ `PublicDocumentDetailPage.watermark.test.tsx`（UI 層） | unit／component |
+| F018 `AC-D14` | 規則層（`burnIfPdf` 之 snapshot 落值）於本檔；**service 層之 `targetType='USAGE_FORM'` 稽核已於 2026-08-16 由 Lane B 補齊**＝`usage-forms.front-burn.service.spec.ts` `TS-F018-D14-001`～`008`（`G-L2-01` 結案，見 [F018-test.md 末段](F018-test.md)） | ✅ 完整 |
+
+## §10.14 跨前後端一致性之測試向量（**兩邊必須逐字相同**）
+
+| # | 快照 | 期望三行 |
+|---|---|---|
+| ① | `E001-王小明-和潤企業股份有限公司-營運管理部-審查室-{機密聲明}-{時間}` | `E001-…-審查室` ／ `{機密聲明}` ／ `{時間}` |
+| ② | `E001-王小明-和潤企業股份有限公司-營運管理部-{機密聲明}-{時間}` | `E001-…-營運管理部` ／ `{機密聲明}` ／ `{時間}` |
+| ③ | `E001-王小明-和潤企業股份有限公司-{機密聲明}-{時間}` | `E001-…-和潤企業股份有限公司` ／ `{機密聲明}` ／ `{時間}` |
+
+載體：`backend/src/public/watermark.three-layer.spec.ts` 之 `WATERMARK_LINE_VECTORS`
+↔ `frontend/src/domain/watermark-lines.test.ts` 之 `VECTORS`。**改任一邊必須同時改另一邊。**
+
+## 三層式之 DOM 判準（刻意不綁實作形式）
+
+`<br>` 分行（prototype 05 之形式）**或** `display:block` 子元素分行（§10.14 建議之形式）**皆可**；
+測試只斷言「恰三個行盒、逐字內容與順序」。
+⚠ **不斷言 `white-space` 必須非 `nowrap`**——`LifecycleTreePreviewPage`（正確參考實作）本來就帶 `nowrap`
+且行為正確（它已用 block 子元素分行）。真正的缺陷是**沒有分行**，不是 `nowrap` 本身。

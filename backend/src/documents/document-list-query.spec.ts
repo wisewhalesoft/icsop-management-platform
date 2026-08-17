@@ -2,7 +2,16 @@ import { applyDocumentQuery, matchesStatusFilter } from './document-list-query';
 import { DocumentListItem } from './documents.store';
 import { DocumentStatus } from './document-status';
 
-/** 建立最小清單項（僅測試關注之欄位，其餘補 null）。 */
+/**
+ * 建立最小清單項（僅測試關注之欄位，其餘補 null）。
+ *
+ * 🔴 2026-08-16 delta（F017 `AC-D2` 第 4／12 列；architecture-spec §10.12「後端列富化」）：
+ * `DocumentListItem` additive 新增兩欄——
+ *   · `secondaryChiefIds: string[]`（`AC-D7` 主要∪次要之比對鍵；現況只有 `secondaryChiefNames`／`Count`，
+ *     顯示用、**沒有 id**，故無法據以篩選）
+ *   · `hasOjt: boolean`（`AC-D5` OJT 三值篩選；`DOCUMENT_ATTACHMENT` 之批次查詢已存在於
+ *     `icsopPdfBlobPath` 富化路徑，同一次查詢即可取得、零額外往返）
+ */
 function item(over: Partial<DocumentListItem>): DocumentListItem {
   return {
     id: 'id',
@@ -22,6 +31,8 @@ function item(over: Partial<DocumentListItem>): DocumentListItem {
     primaryChiefName: null,
     secondaryChiefCount: 0,
     secondaryChiefNames: [],
+    secondaryChiefIds: [],
+    hasOjt: false,
     edition: null,
     announcedDate: null,
     contentSummary: null,
@@ -82,7 +93,7 @@ describe('applyDocumentQuery（F017 篩選/排序/分頁純函式）', () => {
     expect(applyDocumentQuery(rows, { draftingCompanyId: 'coX' }, TODAY).items.map((x) => x.id)).toEqual(['A']);
   });
 
-  it('TS-F017-007 依當責室長 primaryChiefId 精確篩選', () => {
+  it('TS-F017-007 依當責室長 primaryChiefId 精確篩選（既有期望值不反轉，AC-D7 為嚴格超集）', () => {
     const rows = [item({ id: 'A', primaryChiefId: 'E12345' }), item({ id: 'B', primaryChiefId: 'E67890' })];
     expect(applyDocumentQuery(rows, { primaryChiefId: 'E12345' }, TODAY).items.map((x) => x.id)).toEqual(['A']);
   });
@@ -98,7 +109,14 @@ describe('applyDocumentQuery（F017 篩選/排序/分頁純函式）', () => {
     expect(fuzzy.items.map((x) => x.id).sort()).toEqual(['A', 'B']);
   });
 
-  it('TS-F017-010 依程序書書名精確選取', () => {
+  /**
+   * 🔒 兼為 F017 `AC-D3` 之**後端側回歸鎖定**（architecture-spec §10.12 末列）：
+   * 「`程序書書名內` 之 contains 只加在**前端**；後端 `applyDocumentQuery` 之 `documentName`
+   *  **等值**比對必須保留（既有 AC）」。
+   * 本案之 fixture 刻意讓 B 為 A 之嚴格超字串——若實作把後端改為 contains，B 會一併回傳而變紅。
+   * contains 之正向載體在 `frontend/src/pages/DocumentListPage.filterDelta.test.tsx` `TS-F017-D3-002`。
+   */
+  it('TS-F017-010 依程序書書名精確選取（AC-D3：後端維持等值、不得改為 contains）', () => {
     const rows = [item({ id: 'A', documentName: '車輛分期進件作業' }), item({ id: 'B', documentName: '車輛分期進件作業補充' })];
     expect(applyDocumentQuery(rows, { documentName: '車輛分期進件作業' }, TODAY).items.map((x) => x.id)).toEqual(['A']);
   });
@@ -209,5 +227,89 @@ describe('applyDocumentQuery（F017 篩選/排序/分頁純函式）', () => {
   it('既有 keyword 模糊比對（不分大小寫）仍運作', () => {
     const rows = [item({ id: 'a', documentName: '車輛分期' }), item({ id: 'b', documentName: '房屋貸款' })];
     expect(applyDocumentQuery(rows, { keyword: '車輛' }, TODAY).items.map((x) => x.id)).toEqual(['a']);
+  });
+});
+
+/**
+ * 🔴 F017 `AC-D7`（2026-08-16 delta 第 9 項；OQ-D18-08）——「當責室長」比對範圍由**僅主要**
+ * 擴為**主要 ∪ 次要**，與 [F019](../../../docs/specs/features/F019-public-list-browsing.md) `AC-D7`
+ * 為同一語意之兩處斷言，**不得只改一處**。
+ *
+ * 權威：F017 `AC-D7`／F019 `AC-D7`／architecture-spec §10.6（共用純函式 `chief-match.ts`）／
+ *       §10.11（🔴 L4 直接 import L3 建立之 `chief-match.ts`，禁止先寫本地實作）
+ *
+ * ⚠ 現況（spec-writer 2026-08-16 實地核對）：`document-list-query.ts:57` 為
+ *   `filters.primaryChiefId !== r.primaryChiefId`——僅比對主要。本批案例即該行之替換載體。
+ * 📌 篩選鍵名 `primaryChiefId` **不改**（既有 API query 契約），只擴語意；命名之誤導性已知並接受
+ *   （spec 之 `AC-D2` 第 4 列亦以此鍵表述）。
+ */
+describe('F017 AC-D7：當責室長篩選＝主要 ∪ 次要（與前台同一純函式）', () => {
+  const A = item({ id: 'A', primaryChiefId: 'E001', secondaryChiefIds: [] });
+  const B = item({ id: 'B', primaryChiefId: 'E009', secondaryChiefIds: ['E001'] });
+  const C = item({ id: 'C', primaryChiefId: 'E077', secondaryChiefIds: ['E088'] });
+
+  it('TS-F017-D7-001 以 E001 篩選 → A（主要命中）與 B（次要命中）皆回傳', () => {
+    const r = applyDocumentQuery([A, B, C], { primaryChiefId: 'E001' }, TODAY);
+    expect(r.items.map((x) => x.id).sort()).toEqual(['A', 'B']);
+    expect(r.total).toBe(2);
+  });
+
+  it('TS-F017-D7-002 以未關聯之 E999 篩選 → 空結果（非錯誤）', () => {
+    expect(applyDocumentQuery([A, B, C], { primaryChiefId: 'E999' }, TODAY).items).toEqual([]);
+  });
+
+  it('TS-F017-D7-003 次要為多筆時命中任一即納入', () => {
+    const many = item({ id: 'M', primaryChiefId: 'E100', secondaryChiefIds: ['E101', 'E102'] });
+    for (const id of ['E100', 'E101', 'E102']) {
+      expect(applyDocumentQuery([many], { primaryChiefId: id }, TODAY).items.map((x) => x.id)).toEqual(['M']);
+    }
+  });
+
+  it('TS-F017-D7-004 與其他篩選為 AND（當責室長 ∪ 語意不擴散為 OR 到別的條件）', () => {
+    const r = applyDocumentQuery(
+      [item({ id: 'A', primaryChiefId: 'E009', secondaryChiefIds: ['E001'], draftingDeptId: 'JA000' }),
+       item({ id: 'B', primaryChiefId: 'E001', secondaryChiefIds: [], draftingDeptId: 'JB000' })],
+      { primaryChiefId: 'E001', draftingDeptId: 'JA000' },
+      TODAY,
+    );
+    expect(r.items.map((x) => x.id)).toEqual(['A']);
+  });
+
+  it('TS-F017-D7-005 未提供當責室長篩選 → 不施加限制', () => {
+    expect(applyDocumentQuery([A, B, C], {}, TODAY).items).toHaveLength(3);
+  });
+});
+
+/**
+ * F017 `AC-D9`（🔒 回歸鎖定）之後端側佐證：本 delta **僅動篩選、不動欄位**。
+ * `DocumentListItem` 為 additive（只加 `secondaryChiefIds`／`hasOjt`），既有欄位一欄未刪、未改名。
+ */
+/**
+ * 🔴 lead 授權之鑑別力補強（原案為**恆真之結構斷言**）。
+ *
+ * 原斷言（逐字保留）：
+ *   OLD> `const row = item({}) as unknown as Record<string, unknown>;`
+ *   OLD> `for (const key of [...18 鍵...]) { expect(Object.prototype.hasOwnProperty.call(row, key)).toBe(true); }`
+ *
+ * 為何恆真：`item({})` 是**本檔自己的工廠**，那 18 個鍵是它自己寫死的字面 ⇒ 迴圈在執行期
+ * **永遠**通過，與 `DocumentListItem` 真正長什麼樣無關。唯一有效的保護其實來自 TypeScript
+ * 對工廠回傳型別之檢查，而那與這個迴圈無關——迴圈本身什麼都不擋。
+ *
+ * 取代：把保護**明講**為編譯期斷言。若 `DocumentListItem` 少了任一既有鍵，
+ * `RequiredListItemKeys extends keyof DocumentListItem` 即為 false，型別解析為 `never`，
+ * `= true` 的指派立刻編譯錯（TS2322）——這才是 `AC-D9`「欄位一欄未刪」真正的機器閘門。
+ */
+type RequiredListItemKeys =
+  | 'draftingCompanyName' | 'draftingDeptName' | 'draftingSectionName'
+  | 'primaryChiefName' | 'secondaryChiefNames' | 'secondaryChiefCount'
+  | 'status' | 'announcedDate' | 'icsopPdfBlobPath' | 'icsopPdfFileName'
+  | 'nodeId' | 'documentNumber' | 'documentName' | 'edition' | 'contentSummary'
+  | 'links' | 'lifecycleId' | 'lifecycleName';
+
+describe('F017 AC-D9：清單列型別為 additive（既有欄位一欄未刪）', () => {
+  it('TS-F017-D9-001 既有 14 欄之資料來源欄位皆仍存在於 DocumentListItem（編譯期鎖）', () => {
+    // 🔴 本案之真正閘門在**編譯期**：少一個鍵即 TS2322，jest 連跑都跑不起來。
+    const lock: RequiredListItemKeys extends keyof DocumentListItem ? true : never = true;
+    expect(lock).toBe(true);
   });
 });

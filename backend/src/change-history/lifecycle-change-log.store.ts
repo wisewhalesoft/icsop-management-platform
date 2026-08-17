@@ -40,6 +40,19 @@ export interface LifecycleChangeLogStore {
    * 無更早紀錄回 null（循環第一筆事件 → 重建視為空 DAG）。
    */
   findPredecessor(lifecycleId: string, before: Date): Promise<LifecycleChangeLogRow | null>;
+  /**
+   * 🔴 匯出專用之 **SQL COUNT 下推**（architecture-spec §10.4 ④／§10.16 風險 D2）。理由同
+   * `DocumentChangeLogStore.countByFilters`——本表亦為 append-only 單調成長。
+   * 未提供時匯出拋錯，**不得**降級為 `listAll()`。
+   */
+  countByFilters?(
+    filters: import('./lifecycle-change-query').LifecycleChangeFilters,
+  ): Promise<number>;
+  /** 匯出專用之取列：同一組 WHERE ＋ `TOP take`（競態第二道上界）。 */
+  listByFilters?(
+    filters: import('./lifecycle-change-query').LifecycleChangeFilters,
+    take: number,
+  ): Promise<LifecycleChangeLogRow[]>;
 }
 
 export const LIFECYCLE_CHANGE_LOG_STORE = Symbol('LIFECYCLE_CHANGE_LOG_STORE');

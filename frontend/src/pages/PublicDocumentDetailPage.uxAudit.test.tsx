@@ -57,8 +57,6 @@ function detailOf(over: Partial<PublicDocumentDetail> = {}): PublicDocumentDetai
     primaryChiefName: '陳彥廷（企劃部 車輛行銷室 室長）',
     secondaryChiefIds: [],
     secondaryChiefNames: [],
-    usingDeptIds: ['JAC00'],
-    usingDeptNames: ['營運管理部審查室'],
     edition: "26'01",
     announcedDate: '2026-01-01T00:00:00.000Z',
     contentSummary: '規範車輛分期案件之進件收件流程。',
@@ -72,8 +70,14 @@ function detailOf(over: Partial<PublicDocumentDetail> = {}): PublicDocumentDetai
   };
 }
 
+/**
+ * 🔧 遷移時順帶修正**既存**型別錯誤（非本輪引入；HEAD 即已存在）：
+ * `DocumentAppendixRecord`（`api/types.ts:691-701`）並無 `documentId`／`blobPath` 兩欄，
+ * 舊 fixture 之多餘屬性使 `tsc --noEmit` 紅燈（F002 `AC-D7` 之機器驗證載體）。兩欄本測試皆未使用。
+ *   OLD> `{ id: 'ap1', documentId: DOC_ID, name: '附錄一 · 徵信檢核表.xlsx', format: 'xlsx', blobPath: 'blob/ap1.xlsx', sortOrder: 1 },`
+ */
 const APPENDIX: DocumentAppendixRecord[] = [
-  { id: 'ap1', documentId: DOC_ID, name: '附錄一 · 徵信檢核表.xlsx', format: 'xlsx', blobPath: 'blob/ap1.xlsx', sortOrder: 1 },
+  { id: 'ap1', name: '附錄一 · 徵信檢核表.xlsx', format: 'xlsx', sortOrder: 1 },
 ];
 
 function renderDetail() {
@@ -88,14 +92,25 @@ function renderDetail() {
   );
 }
 
-/** 建立一個可由測試自行決定完成時機的下載核發 promise。 */
+/**
+ * 建立一個可由測試自行決定完成時機的下載 promise。
+ *
+ * 🔴 2026-08-16 載體遷移（F020 `AC-D3`／`AC-D3a`；申訴 #10）：前台三類下載自 SAS 核發
+ * （`Promise<{url, expiresInSeconds}>`）改為代理串流（`downloadViaBlob`，`Promise<void>`），
+ * 故 deferred 之型別隨之改變。**鎖之語意（disabled ＋ aria-busy ＋ 單一併發）逐字不變。**
+ *
+ * 原型別／原本體（逐字保留，供追溯）：
+ *   OLD> `promise: Promise<{ url: string; expiresInSeconds: number }>;`
+ *   OLD> `const promise = new Promise<{ url: string; expiresInSeconds: number }>((res) => {`
+ *   OLD> `  resolve = () => res({ url: 'https://x/file', expiresInSeconds: 60 });`
+ */
 function deferredGrant(): {
-  promise: Promise<{ url: string; expiresInSeconds: number }>;
+  promise: Promise<void>;
   resolve: () => void;
 } {
   let resolve!: () => void;
-  const promise = new Promise<{ url: string; expiresInSeconds: number }>((res) => {
-    resolve = () => res({ url: 'https://x/file', expiresInSeconds: 60 });
+  const promise = new Promise<void>((res) => {
+    resolve = () => res();
   });
   return { promise, resolve };
 }
@@ -118,10 +133,16 @@ describe('前台詳情 · UX 稽核回歸（A-2 下載併發鎖）', () => {
     openSpy.mockRestore();
   });
 
+  /**
+   * 🔴 載體遷移（申訴 #10）：驅動鎖之 promise 自 `downloadAttachment`（SAS，已被
+   * `PublicDocumentDetailPage.watermark.test.tsx:239` 明文禁止於前台）改掛
+   * `downloadPublicAttachment`（前台代理串流）。**鎖之語意逐字不變。**
+   *   OLD> `vi.mocked(api.downloadAttachment).mockReturnValue(grant.promise);`
+   */
   it('附件下載進行中鎖定該按鈕（disabled + aria-busy），完成後解鎖', async () => {
     const user = userEvent.setup();
     const grant = deferredGrant();
-    vi.mocked(api.downloadAttachment).mockReturnValue(grant.promise);
+    vi.mocked(api.downloadPublicAttachment).mockReturnValue(grant.promise);
 
     renderDetail();
     await screen.findByRole('heading', { name: '車輛分期進件作業' });
@@ -139,10 +160,15 @@ describe('前台詳情 · UX 稽核回歸（A-2 下載併發鎖）', () => {
     expect(btn).toHaveAttribute('aria-busy', 'false');
   });
 
+  /**
+   * 🔴 載體遷移（申訴 #10）：同上，改掛 `downloadPublicAttachment`。**「不二次核發」之語意逐字不變。**
+   *   OLD> `vi.mocked(api.downloadAttachment).mockReturnValue(grant.promise);`
+   *   OLD> `expect(api.downloadAttachment).toHaveBeenCalledTimes(1);`（兩處）
+   */
   it('進行中重複點擊不會二次核發（避免重複調閱稽核）', async () => {
     const user = userEvent.setup();
     const grant = deferredGrant();
-    vi.mocked(api.downloadAttachment).mockReturnValue(grant.promise);
+    vi.mocked(api.downloadPublicAttachment).mockReturnValue(grant.promise);
 
     renderDetail();
     await screen.findByRole('heading', { name: '車輛分期進件作業' });
@@ -155,18 +181,26 @@ describe('前台詳情 · UX 稽核回歸（A-2 下載併發鎖）', () => {
     await user.click(btn);
     await user.click(btn);
 
-    expect(api.downloadAttachment).toHaveBeenCalledTimes(1);
+    expect(api.downloadPublicAttachment).toHaveBeenCalledTimes(1);
 
     grant.resolve();
     await waitFor(() => expect(btn).not.toBeDisabled());
-    expect(api.downloadAttachment).toHaveBeenCalledTimes(1);
+    expect(api.downloadPublicAttachment).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * 🔴 載體遷移（申訴 #10）：兩端皆改掛前台代理串流 helper。**「任一下載進行中即不受理其他下載」
+   * 之保守策略（ux-audit-frontstage.md:238）逐字不變。**
+   *   OLD> `vi.mocked(api.downloadAttachment).mockReturnValue(grant.promise);`
+   *   OLD> `vi.mocked(api.downloadUsageForm).mockResolvedValue({ url: 'https://x/form', expiresInSeconds: 60 });`
+   *   OLD> `expect(api.downloadUsageForm).not.toHaveBeenCalled();`
+   *   OLD> `await waitFor(() => expect(api.downloadUsageForm).toHaveBeenCalledTimes(1));`
+   */
   it('某列下載進行中時，其他列之下載亦不受理（單一併發鎖）', async () => {
     const user = userEvent.setup();
     const grant = deferredGrant();
-    vi.mocked(api.downloadAttachment).mockReturnValue(grant.promise);
-    vi.mocked(api.downloadUsageForm).mockResolvedValue({ url: 'https://x/form', expiresInSeconds: 60 });
+    vi.mocked(api.downloadPublicAttachment).mockReturnValue(grant.promise);
+    vi.mocked(api.downloadUsageFormFront).mockResolvedValue(undefined);
 
     renderDetail();
     await screen.findByRole('heading', { name: '車輛分期進件作業' });
@@ -182,20 +216,26 @@ describe('前台詳情 · UX 稽核回歸（A-2 下載併發鎖）', () => {
 
     // 其他列按鈕本身未 disable（僅進行中那列顯示忙碌），但核發被鎖拒絕
     await user.click(formBtn);
-    expect(api.downloadUsageForm).not.toHaveBeenCalled();
+    expect(api.downloadUsageFormFront).not.toHaveBeenCalled();
 
     grant.resolve();
     await waitFor(() => expect(attBtn).not.toBeDisabled());
 
     // 解鎖後可正常核發
     await user.click(formBtn);
-    await waitFor(() => expect(api.downloadUsageForm).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.downloadUsageFormFront).toHaveBeenCalledTimes(1));
   });
 
+  /**
+   * 🔴 載體遷移（申訴 #10）：改掛 `downloadDocumentAppendixFront`（前台附錄代理串流）。
+   * **鎖之語意逐字不變。**
+   *   OLD> `vi.mocked(api.downloadDocumentAppendix).mockReturnValue(grant.promise);`
+   *   OLD> `expect(api.downloadDocumentAppendix).toHaveBeenCalledTimes(1);`
+   */
   it('附錄下載同樣受併發鎖保護', async () => {
     const user = userEvent.setup();
     const grant = deferredGrant();
-    vi.mocked(api.downloadDocumentAppendix).mockReturnValue(grant.promise);
+    vi.mocked(api.downloadDocumentAppendixFront).mockReturnValue(grant.promise);
 
     renderDetail();
     await screen.findByRole('heading', { name: '車輛分期進件作業' });
@@ -206,7 +246,7 @@ describe('前台詳情 · UX 稽核回歸（A-2 下載併發鎖）', () => {
     await user.click(btn);
     await waitFor(() => expect(btn).toBeDisabled());
     await user.click(btn);
-    expect(api.downloadDocumentAppendix).toHaveBeenCalledTimes(1);
+    expect(api.downloadDocumentAppendixFront).toHaveBeenCalledTimes(1);
 
     grant.resolve();
     await waitFor(() => expect(btn).not.toBeDisabled());

@@ -64,8 +64,6 @@ function detailOf(over: Partial<PublicDocumentDetail> = {}): PublicDocumentDetai
     primaryChiefName: '陳彥廷（企劃部 車輛行銷室 室長）',
     secondaryChiefIds: [],
     secondaryChiefNames: [],
-    usingDeptIds: ['JAC00'],
-    usingDeptNames: ['營運管理部審查室'],
     edition: "26'01",
     announcedDate: '2026-01-01T00:00:00.000Z',
     contentSummary: '規範車輛分期案件之進件收件、資格初審與建檔流程。',

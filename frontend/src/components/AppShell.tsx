@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { visibleMenu, accessLabelFor } from '../domain/menu';
 import { Icon } from './Icon';
@@ -20,6 +20,8 @@ export function AppShell(): JSX.Element {
   const role = user?.roleCode;
   const items = visibleMenu(role);
   const sidebarW = collapsed ? 60 : 240;
+  // F002 AC-D4：已位於 /admin 時，回首頁手段一律 replace，不重複推入瀏覽歷程。
+  const atHome = useLocation().pathname === '/admin';
   // F022：瀏覽文件網頁以「新視窗/分頁」開啟（後台分頁維持原狀）；被封鎖 → 顯示替代提示。
   const [popupBlocked, setPopupBlocked] = useState(false);
   const openPublic = useCallback(() => {
@@ -35,19 +37,55 @@ export function AppShell(): JSX.Element {
         className="fixed left-0 top-0 bottom-0 z-50 bg-white border-r border-slate-200 flex flex-col transition-[width] duration-200"
         style={{ width: sidebarW }}
       >
-        <div className="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0">
+        {/* F002 AC-D2：logo 區為可鍵盤聚焦之連結（prototype 07 行 33 之 <a aria-label="回到後台首頁">）。 */}
+        <NavLink
+          to="/admin"
+          replace={atHome}
+          aria-label="回到後台首頁"
+          title="回到後台首頁"
+          className="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600"
+        >
           <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0">
             <Icon name="file-text" className="w-5 h-5" />
           </div>
           {!collapsed && (
             <span className="font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
           )}
-        </div>
+        </NavLink>
 
         <nav
           aria-label="功能選單"
           className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"
         >
+          {/*
+            F002 AC-D1：側欄第一項「首頁」。刻意**不**進 MENU／FUNCTION_MATRIX——它不是受控
+            功能（AC-D5），凡能進後台者皆可回首頁，故不經 visibleMenu() 之 canPerform 過濾。
+          */}
+          <NavLink
+            to="/admin"
+            end
+            replace={atHome}
+            title="首頁"
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${
+                collapsed ? 'justify-center px-0' : ''
+              } ${
+                isActive
+                  ? 'bg-primary-50 text-primary-700 font-medium'
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Icon
+                  name="layout-dashboard"
+                  className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary-600' : 'text-slate-400'}`}
+                />
+                {!collapsed && <span className="flex-1 truncate">首頁</span>}
+              </>
+            )}
+          </NavLink>
           {items.length === 0 && !collapsed && (
             <div className="px-2.5 py-3 text-xs text-slate-400">
               此角色無後台功能權限

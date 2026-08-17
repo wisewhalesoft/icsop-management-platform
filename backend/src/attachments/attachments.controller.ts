@@ -84,8 +84,18 @@ export class AttachmentsController {
   }
 
   /** 受控下載（前後台共用；全角色 READ）。未登入由 SessionGuard 擋（服務層另有 FILE_ACCESS_DENIED 防線）。 */
+  /**
+   * 🔴 F020 `AC-D6`（2026-08-16 閘門收斂）：本端點自 delta 之後**已無前台呼叫端**
+   * （前台一律改走 `/public/documents/:id/attachments/{type}/download`，內含 F041 可見性檢查與燒錄），
+   * 其應有之角色集合恰等於四種後台角色 ⇒ 閘門由 `DOCUMENT_DOWNLOAD_PRINT`（五角色皆可）
+   * 收斂為 `ICSOP_DOCUMENT_MANAGEMENT`（User 為 NONE）。
+   *
+   * 收斂之實質效益：`AttachmentsService.getDownloadUrl()` **本身沒有 F041 可見性檢查**——它只驗
+   * 「`blobPath` 屬於某筆現存附件」。收斂前，業務子分類 `User` 只要取得任一 `blobPath` 即可繞過
+   * F041 取得 RAW 原檔。F025 矩陣逐格不變（僅端點改綁既有功能列）。
+   */
   @Get('documents/attachments/download')
-  @RequirePermission(FunctionKey.DOCUMENT_DOWNLOAD_PRINT, 'read')
+  @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
   download(
     @Req() req: RequestWithSession,
     @Query('blobPath') blobPath: string,

@@ -20,6 +20,20 @@ export class AttachmentPdfSource implements WatermarkPdfSource {
     if (!ref) return null;
     return this.blob.getBytes(ref.blobPath);
   }
+
+  /**
+   * F020 `AC-D3`（2026-08-16 delta）：前台附件下載之原始位元組＋檔名。
+   * 檔名為 §10.3 之格式判定依據（`DOCUMENT_ATTACHMENT` 無 `format` 欄，故以副檔名為之）。
+   */
+  async getAttachmentBytes(
+    documentId: string,
+    type: 'ICSOP_PDF' | 'OJT_SIGNIN',
+  ): Promise<{ bytes: Buffer; fileName: string } | null> {
+    const ref = await this.attachments.getAttachmentRef(documentId, type);
+    if (!ref) return null;
+    const bytes = await this.blob.getBytes(ref.blobPath);
+    return bytes ? { bytes, fileName: ref.fileName } : null;
+  }
 }
 
 /**

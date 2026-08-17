@@ -19,9 +19,15 @@ const BACKEND_TARGET =
 const spaBypass = (req: { method?: string; url?: string; headers: Record<string, unknown> }) => {
   const accept = String(req.headers['accept'] ?? '');
   const url = String(req.url ?? '');
-  // 前台檔案端點（pdf/download/print）即使 Accept: text/html（檢視器 iframe 導覽）亦須代理至後端，
-  // 勿回 SPA index.html（否則 iframe 顯示 app shell）。:id/view 仍為 SPA 檢視器路由，不排除。
-  if (/^\/public\/documents\/[^/]+\/(pdf|download|print)(\?|$)/.test(url)) return undefined;
+  // 檔案類端點（下載／匯出／列印／內嵌 PDF）即使 Accept: text/html（檢視器 iframe 導覽、
+  // 右鍵「另存連結」／「在新分頁開啟」）亦須代理至後端，勿回 SPA index.html——否則使用者拿到
+  // 副檔名 .pdf／.csv 而內容是 HTML 的檔案，**靜默、無錯誤**。
+  // 🔴 與 nginx.conf 之兩條 regex location **同一規則**（以「路徑結尾動詞」判定，不逐一列舉端點）：
+  //    只修其中一份，dev 與容器就會有不同行為——本 repo 已四次踩到白名單漏列。
+  //    末段須整段相符：`/admin/documents/:id/attachments/icsop-pdf`（上傳）末段為 `icsop-pdf` ≠ `pdf`。
+  //    `:id/view` 仍為 SPA 檢視器路由，不排除。
+  if (/^\/public\/documents\/.+\/(pdf|download|print)(\?|$)/.test(url)) return undefined;
+  if (/^\/admin\/.+\/(download|export|print|pdf)(\?|$)/.test(url)) return undefined;
   if (req.method === 'GET' && accept.includes('text/html')) {
     return '/index.html';
   }

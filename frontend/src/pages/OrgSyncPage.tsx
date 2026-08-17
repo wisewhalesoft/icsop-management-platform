@@ -175,7 +175,7 @@ export function OrgSyncPage(): JSX.Element {
 
   return (
     <div className="space-y-5">
-      <PageHeader breadcrumb={['組織人員異動管理', '同步與異動']} title="組織人員異動管理" />
+      <PageHeader breadcrumb={[{ label: '組織人員異動管理' }, { label: '同步與異動' }]} title="組織人員異動管理" />
 
       {/* 唯讀橫幅（ICSOPAdmin）——文案逐字沿用 prototype 09 之 #roBanner */}
       {!canWrite && (

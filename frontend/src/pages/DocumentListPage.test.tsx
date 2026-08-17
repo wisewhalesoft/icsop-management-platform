@@ -34,6 +34,8 @@ const doc = (over: Partial<DocumentListItem>): DocumentListItem => ({
   draftingCompanyId: '00000', draftingDeptId: 'A2000', draftingSectionId: 'A2100',
   draftingCompanyName: '和潤企業股份有限公司', draftingDeptName: '企劃部', draftingSectionName: '車輛行銷室',
   primaryChiefId: '20050', primaryChiefName: '陳彥廷',
+  // 🔴 2026-08-16 delta（F017 AC-D2／AC-D5／AC-D7；架構 §10.12 列富化）：additive 兩欄
+  secondaryChiefIds: [], hasOjt: false,
   edition: "26'01", announcedDate: '2020-01-01T00:00:00.000Z', contentSummary: '摘要',
   icsopPdfBlobPath: null, icsopPdfFileName: null, links: [], ...over,
 });
@@ -110,6 +112,52 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
     for (const h of ['制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖', '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別']) {
       expect(screen.getByRole('columnheader', { name: new RegExp(h) })).toBeInTheDocument();
     }
+  });
+
+  /**
+   * 🔒 F017 `AC-D9`（2026-08-16 delta 之回歸鎖定）：「14 欄之欄位集合、**由左至右順序**與各欄
+   * 顯示規則逐項與本 delta 導入前相同——本 delta **僅動篩選、不動欄位**」。
+   *
+   * 本案為既有「14 欄表頭齊全」之**加嚴**版（該案僅驗存在性，`new RegExp(h)` 亦可能跨欄誤命中），
+   * 於本 delta 導入前即應為綠——**這是刻意的**：回歸鎖定之守衛本來就從一開始就綠，
+   * 其價值在於「篩選改版若不慎動到欄位即立刻紅」。
+   */
+  it('AC-D9 14 欄之表頭順序逐字鎖定（僅動篩選、不動欄位）', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+    const headers = screen
+      .getAllByRole('columnheader')
+      .map((th) => (th.textContent ?? '').replace(/[▲▼↑↓\s]/g, ''));
+    expect(headers).toHaveLength(14);
+    expect(headers).toEqual([
+      '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖',
+      '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別',
+    ]);
+  });
+
+  /**
+   * 🔴 lead 授權之鑑別力補強（案名不實）：原案名為「3 張統計卡**與排序行為**不變」，
+   * 但**沒有任何一條斷言碰到排序** ⇒ 案名承諾了它不提供的防護，讀者會以為排序已被鎖住。
+   * 原案名（逐字保留）：`AC-D9 3 張統計卡與排序行為不變（回歸鎖定）`。
+   * 處置：案名收斂為它實際驗證的東西；排序之回歸鎖定由**既有**案「依公告日期排序可切換（表頭可點）」
+   * 持有（本 delta 未動排序，不另立第二份）。
+   * 🔴 **第二次修正（2026-08-16）：原斷言用錯字串，從一開始就沒測到統計卡。**
+   * 原斷言（逐字保留）：OLD> `expect(screen.getByText('已公告')).toBeInTheDocument();`
+   *                     OLD> `expect(screen.getByText('進度中')).toBeInTheDocument();`
+   * 依權威 `prototypes/13-document-list.html:121,125`，統計卡之標籤逐字為
+   * `已公告（公告日期已到）`／`進度中（公告日期未到）`——**裸字串 `已公告` 是列上的狀態徽章**，
+   * 不是統計卡。原斷言先前之所以「綠」，是因為它命中了徽章；`狀態` 篩選下拉落地後多出一個
+   * 同文字之 `<option>`，`getByText` 遂以「Found multiple elements」轉紅——
+   * 一條**假綠**被實作進度揭穿為**假紅**，兩者皆非實作缺陷。
+   * 改以 prototype 之逐字完整標籤斷言，同時取得唯一性與正確性。
+   */
+  it('AC-D9 3 張統計卡之標籤不變（回歸鎖定；排序另由既有案持有）', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('程序書數量（總數）')).toBeInTheDocument());
+    expect(screen.getByText('已公告（公告日期已到）')).toBeInTheDocument();
+    expect(screen.getByText('進度中（公告日期未到）')).toBeInTheDocument();
   });
 
   it('統計卡顯示總數＝2', async () => {
@@ -311,11 +359,19 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
   });
 
   describe('篩選格緊湊密度（G-DOC-005 density=filter）', () => {
+    /**
+     * 相容 shim（2026-08-16 delta）：`AC-D10` 將 combobox 輸入框之 DOM id 定為 `cbD_{key}_input`，
+     * 故其 `<label for>` 由既有 `filter-cycle` 改變。本案之標的是**密度樣式**、與 id 無關，
+     * 因此改以「文字為 `循環別` 之 label」定位，使其在改名前後皆成立、不製造假紅。
+     * 原斷言（供追溯）：`container.querySelector('label[for="filter-cycle"]')`。
+     */
     it('篩選 label 採 text-[11px]（清單篩選密度，非表單密度）', async () => {
       mockAuth('ICSOPAdmin');
       const { container } = renderPage();
       await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
-      const label = container.querySelector('label[for="filter-cycle"]');
+      const label = Array.from(container.querySelectorAll('label')).find(
+        (el) => el.textContent?.trim() === '循環別',
+      );
       expect(label?.className).toContain('text-[11px]');
     });
   });

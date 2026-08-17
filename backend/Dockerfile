@@ -19,6 +19,11 @@ ENV NODE_ENV=production
 ENV TZ=UTC
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
+# ⚠ 缺失 #6（architecture-spec §10.10 A10）：CJK 浮水印字型必須進 image，否則
+# loadCjkFontBytes() 回 null → 退化 Helvetica + asciiSafe → 浮水印之中文全變 `?`。
+# 置於 COPY --from=build 之前：assets 幾乎不變、dist 每次都變，不變的放前面才有 layer 快取效益。
+# 不加到 build stage：build 只跑 tsc，字型不參與編譯，且 `COPY --from=build` 只帶 dist。
+COPY assets ./assets
 COPY --from=build /app/dist ./dist
 EXPOSE 3000
 CMD ["node", "dist/main.js"]

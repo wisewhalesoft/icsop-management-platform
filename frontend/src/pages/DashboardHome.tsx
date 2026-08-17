@@ -68,7 +68,7 @@ export function DashboardHome(): JSX.Element {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <PageHeader breadcrumb={['ICSOP 管理後台', '首頁']} title="後台首頁 / 儀表板" />
+      <PageHeader breadcrumb={[{ label: 'ICSOP 管理後台' }, { label: '首頁' }]} title="後台首頁 / 儀表板" />
       <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">

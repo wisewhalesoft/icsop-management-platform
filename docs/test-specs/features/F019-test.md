@@ -306,3 +306,50 @@ status: draft
 - **OQ-F019-04**：「狀態」篩選之語意在前台情境下有落差——後端基底條件已強制鎖定 `status=有效 AND 公告日期≤今日`（即結果恆為「已公告」），此前提下「狀態」篩選下拉若沿用 F017 後台之 4 值集合（已公告/進度中/失效/作廢）將產生使用者選擇後**必然查無結果**（進度中/失效/作廢皆被基底條件排除）之矛盾 UX。是否應（a）前台「狀態」篩選僅保留單一值「已公告」（近乎裝飾性、無實質篩選作用），或（b）此篩選項在前台情境下應移除、AC 文字為由後台 F017 篩選集合複製貼上時之遺漏？需與 spec-writer/product owner 確認，避免實作出一個選了會導致「查無符合結果」空狀態的誤導性篩選項。
 
 - **OQ-F019-05**：`DocumentListFilters`（`backend/src/documents/documents.store.ts`）與 `DocumentListItem` 現行皆不含 `usingDeptIds`／部門篩選欄位，F017 既有 `DocumentStore.list()` 亦無分頁參數。F019 是否應**擴充既有 `DocumentStore` 介面**（新增 `usingDeptIds`/分頁/前台篩選參數），或**依架構 `PublicBrowseModule` 設計另建獨立查詢路徑**（唯讀 join `DocumentModule` 資料，如架構 §3 所述「無持久資料，唯讀組合 DocumentModule 資料」）？worktree guide 明確要求「公開讀取盡量放新 `PublicDocumentsController`／public module，勿改 `documents.service.ts`（避免撞 doc-edit）」，故本設計傾向後者，但 `DocumentStore` 介面本身是否需要新增唯讀方法（如 `listWithUsingDepts`）供 `PublicBrowseModule` 呼叫，或 `PublicBrowseModule` 直接自行查詢，屬待 architect 定案之介面邊界問題，影響 TS-001～025 之 Fake 實作形狀。
+
+---
+
+## 🔴 2026-08-16 缺失／變更 delta — 前台篩選器與顯示欄位改版（`AC-D1`～`AC-D14`，lane **L3**）
+
+> 權威＝[F019 §前台篩選器與顯示欄位改版 delta](../../specs/features/F019-public-list-browsing.md#filter-column-delta)
+> ＋ [architecture-spec §10.6（A6）／§10.9（A9）](../../specs/architecture-spec.md#ch10-defect-delta)
+> ＋ `prototypes/03-public-list.html`、`prototypes/04-public-document-detail.html`。
+> 本輪約束環為**簡化版**（僅 jest／vitest，無 Playwright fidelity、無 Stryker、無 metric gate）。
+
+### 覆蓋對照表
+
+| AC | 主張 | 測試載體 |
+|---|---|---|
+| `AC-D1` | 篩選器恰 6 項、順序與 `aria-label` 逐字；無「使用部門篩選」／「所有使用部門」 | `PublicListPage.filterDelta.test.tsx` `TS-F019-D1-001`～`004` |
+| `AC-D2` | 五項為 combobox、`狀態` 維持原生 select；輸入即時過濾、選定以 id 送出 | 同上 `TS-F019-D2-001`～`007` |
+| `AC-D3` | 清除篩選涵蓋 6 項與關鍵字 | 同上 `TS-F019-D3-001` |
+| `AC-D4` | 四項為 id 等值比對（非顯示名稱）；`狀態` 為裝飾性 no-op | `public-list-filters.spec.ts` `TS-F019-D4-001`～`005` |
+| `AC-D5` | 選項＝全域 distinct **且先經 `isDocVisibleToViewer` 過濾**；Option 形狀 | 純函式層 `public-list-filter-options.spec.ts` `TS-F019-D5-101`～`111`；服務層（名稱解析、可見性）同檔 `TS-F019-D5-301`～`304`；結構層 `public-list-filters.spec.ts` `TS-F019-D5-001`～`003`；路由／閘門 `public-filter-options.controller.spec.ts` `TS-F019-D5-201`～`206`；前端契約 `PublicListPage.filterDelta.test.tsx` `TS-F019-D5-301`（同編號、不同檔，分屬前後端） |
+| `AC-D6` | 六項＋關鍵字 AND 交集；空交集非錯誤 | `public-list-filters.spec.ts` `TS-F019-D6-001`～`003` |
+| `AC-D7` | 當責室長＝主要 ∪ 次要；選項亦為兩者 distinct | `chief-match.spec.ts` `TS-CHIEF-001`～`009`＋`101`～`103`（單一實作靜態約束）；`public-list-filters.spec.ts` `TS-F019-D7-001`～`004`；`public-list-filter-options.spec.ts` `TS-F019-D7-101`～`103` |
+| `AC-D8` | 卡片九項欄位、`<dl>` 標籤順序；無「使用部門：」「循環別：」 | `PublicListPage.filterDelta.test.tsx` `TS-F019-D8-001`～`004` |
+| `AC-D9` | 詳情頁移除「文件使用部門」欄；其餘 19 列順序逐字不變 | `PublicDocumentDetailPage.test.tsx` `TS-F019-D9-001`～`003` |
+| `AC-D10` | 🔒 五條逐字文案回歸鎖定 | `PublicListPage.filterDelta.test.tsx` `TS-F019-D10-001`～`004`（**設計上從一開始即綠**） |
+| `AC-D11` | 🔒 置頂機制不變 | `public-list-filters.spec.ts` `TS-F019-D11-001`／`002`；`public-list-dto.spec.ts` `TS-F019-D12-002` |
+| `AC-D12` | 對外 DTO 移除兩欄、新增三欄；內部型別保留 | `public-list-dto.spec.ts` `TS-F019-D12-001`～`006`；詳情側 `public-document-detail.service.spec.ts` |
+| `AC-D13` | 🔒 三純函式簽章與語意逐字未變 | `public-list-filters.spec.ts` `TS-F019-D13-001`（arity）／`002`（語意）；既有 `org-hierarchy.spec.ts` `TS-PS-ORG-001`～`007`、`viewer-scope.spec.ts` 全數未動 |
+| `AC-D14` | `狀態` 選項文字 `有效`；空值 `—` ＋ title | `PublicListPage.filterDelta.test.tsx` `TS-F019-D14-001`～`003` |
+
+### 本輪由 test-generator 釘下之新契約（spec 未規定，供 tdd-implementation 對齊）
+
+| 項目 | 契約 |
+|---|---|
+| `PublicDocItem` additive | `draftingCompanyId` / `draftingSectionId` / `primaryChiefId` / `secondaryChiefIds` / `edition`（`usingDeptIds` **保留**） |
+| `PublicListFilters` | 新增 `draftingCompanyId` / `draftingDeptId` / `draftingSectionId` / `chiefId`；🔴 **移除** `deptCode` |
+| 新純函式（`public-list.ts`） | `visibleCandidates(items, viewer, today)`、`buildFilterOptions(items, viewer, today)`<br>📝 **2026-08-16 稽核修正**：前一版另釘了一個 `(kind, value) => label` 之第 4 參數解析器。§10.6 只說「label 由既有 `NameResolutionService`／`resolvePersonName`／`lifecycleDisplayName` 解析」、**未指定注入點** ⇒ 該形狀屬臆造之協作點，已移除；名稱解析改於**服務層**以**既有** `OrgNameResolver` 接縫斷言。 |
+| `buildFilterOptions` 回傳 | `{ draftingCompanies, draftingDepts, draftingSections, chiefs, lifecycles }`，各為 `{ value, label }[]`；`value` 恆為 id/code、`label` 於純函式層（未解析）fallback 為 value |
+| 服務層 | `PublicDocumentsService.filterOptions(viewer): Promise<PublicFilterOptions>`；三組組織選項之 label 走既有 `OrgNameResolver`，未命中 fallback 為 code |
+| DTO 名稱解析未命中 | 清單 DTO 之 `draftingCompanyName`／`draftingDeptName`／`draftingSectionName` **必須與詳情 DTO 逐字相同**（詳情側既有綠燈已釘為 `null`）。本環以「兩者相等」表述，不自行選邊——見 `risks-and-gaps` `G-L3-02` |
+| 共用純函式 | `backend/src/documents/chief-match.ts` → `matchesChiefFilter(row, chiefId?)` |
+| controller | `PublicDocumentsController.filterOptions(req)`（arity 1，不收 filters）；`list()` 位置參數＝`(req, keyword, draftingCompanyId, draftingDeptId, draftingSectionId, chiefId, status, lifecycleId, page, pageSize)` |
+| 前端 endpoint | `getPublicFilterOptions(): Promise<PublicFilterOptions>` |
+| 前端 URL 參數 | `q` / `co` / `mkdept` / `section` / `chief` / `cycle` / `page`；🔴 **不沿用** `dept`（舊語意為「使用部門」，沿用會讓既有已分享網址被靜默改讀） |
+
+### 被推翻之既有測試（修改／刪除清單，含原斷言）
+
+見 [risks-and-gaps §Lane L3／L4](../risks-and-gaps.md#defect-delta-lane-b) 之「B. 被推翻之既有測試」表。

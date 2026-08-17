@@ -7,8 +7,15 @@ import {
   overwriteAppendix,
   deleteAppendix,
   downloadAppendixFromPool,
+  exportAppendixPool,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
+import {
+  EXPORT_LIMIT_BADGE,
+  EXPORT_ROW_LIMIT,
+  countFromLimitError,
+  isExportLimitError,
+} from '../domain/export-feedback';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
@@ -152,6 +159,27 @@ export function AppendixManagementPage(): JSX.Element {
     setKeyword('');
     setFmtFilter('');
   };
+
+  /**
+   * F039 `AC-D5`／`AC-D12`：匯出當前篩選之全部結果。
+   * 逐字回饋文案為**本頁專屬句式**（量詞「筆數」、限定詞「篩選條件」）——與變更歷程兩 tab
+   * 之「事件」／「查詢條件」刻意不同，不得互相對齊。
+   */
+  const onExport = useCallback(async () => {
+    try {
+      await exportAppendixPool({ q: keyword.trim() || undefined, format: fmtFilter || undefined });
+      toast.success('已匯出附錄清單（CSV，UTF-8 BOM）');
+    } catch (e) {
+      if (isExportLimitError(e)) {
+        toast.error(
+          `符合條件之筆數為 ${countFromLimitError(e)} 筆，超過匯出上限 ${EXPORT_ROW_LIMIT} 筆，請縮小篩選條件`,
+          { code: EXPORT_LIMIT_BADGE },
+        );
+        return;
+      }
+      toast.error(e instanceof ApiError ? `匯出失敗：${e.code}` : '匯出失敗');
+    }
+  }, [keyword, fmtFilter, toast]);
 
   // ── 下載（後台管理端存取：不寫稽核、不燒錄浮水印）──
   const onDownload = useCallback(
@@ -343,7 +371,20 @@ export function AppendixManagementPage(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <PageHeader breadcrumb={['附錄管理', '附錄池']} title="附錄（附錄池）管理">
+      <PageHeader breadcrumb={[{ label: '附錄管理' }, { label: '附錄池' }]} title="附錄（附錄池）管理">
+        {/*
+          F039 `AC-D4`：topbar 動作區之「匯出」鈕。
+          🔴 **非** write-only——匯出屬讀取類動作，SysAdmin（唯讀）亦允許（prototype 24 行 61-65 明注）。
+        */}
+        <button
+          onClick={() => void onExport()}
+          aria-label="匯出"
+          title="匯出附錄清單（CSV）"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          <Icon name="download" className="w-4 h-4" />
+          匯出
+        </button>
         {canWrite && (
           <button
             onClick={openUpload}

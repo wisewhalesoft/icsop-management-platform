@@ -468,7 +468,7 @@ export function AccountManagementPage(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <PageHeader breadcrumb={['帳號管理', '帳號與角色指派']} title="帳號與角色管理">
+      <PageHeader breadcrumb={[{ label: '帳號管理' }, { label: '帳號與角色指派' }]} title="帳號與角色管理">
         {canWrite && (
           <button
             onClick={() => setCreateOpen(true)}

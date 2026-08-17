@@ -17,6 +17,19 @@ interface SingleProps {
   placeholder?: string;
   disabled?: boolean;
   /**
+   * 直接指定輸入框之 `aria-label`（未給則沿用 `<label htmlFor>` 之關聯）。
+   * F019 `AC-D1` 要求六項篩選之無障礙名稱為逐字字串且以**直接 `aria-label`** 表達
+   * （architecture-spec §10.15 #17：`aria-labelledby` ＋ `title` 組合在 jsdom 為近似值）。
+   */
+  ariaLabel?: string;
+  /**
+   * 顯示「清除本項」按鈕（僅於 `value` 非空時渲染）。給定字串即為其無障礙名稱
+   * （F017 `AC-D10`：逐字 `清除{label}`）；未給則完全不渲染該鈕（既有呼叫端零回歸）。
+   */
+  clearLabel?: string;
+  /** 清除鈕之 DOM id（F017 `AC-D10`：`cbD_{key}_clear`，與其輸入框同 key）。 */
+  clearId?: string;
+  /**
    * 版面密度（G-DOC-005）：
    *  `form`（預設）＝表單欄位樣式（prototype 14：label text-sm/slate-700、icon w-4、input pl-9）。
    *  `filter`＝清單篩選格緊湊樣式（prototype 13：label text-[11px]/slate-500、icon w-3.5、input pl-8）。
@@ -39,6 +52,9 @@ export function SearchCombobox({
   onQueryChange,
   placeholder,
   disabled,
+  ariaLabel,
+  clearLabel,
+  clearId,
   density = 'form',
 }: SingleProps): JSX.Element {
   const [query, setQuery] = useState('');
@@ -58,7 +74,10 @@ export function SearchCombobox({
   const iconCls = filter
     ? 'w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2'
     : 'w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2';
-  const inputPad = filter ? 'pl-8 pr-3' : 'pl-9 pr-3';
+  const showClear = !!clearLabel && value !== '';
+  const inputPad = filter
+    ? `pl-8 ${showClear ? 'pr-7' : 'pr-3'}`
+    : `pl-9 ${showClear ? 'pr-7' : 'pr-3'}`;
 
   return (
     <div>
@@ -70,6 +89,7 @@ export function SearchCombobox({
         <input
           id={id}
           role="combobox"
+          aria-label={ariaLabel}
           aria-expanded={open}
           autoComplete="off"
           disabled={disabled}
@@ -90,6 +110,23 @@ export function SearchCombobox({
           }}
           className={`w-full ${inputPad} py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 disabled:bg-slate-50 disabled:text-slate-400`}
         />
+        {showClear && (
+          <button
+            type="button"
+            id={clearId}
+            aria-label={clearLabel}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onChange('');
+              setDirty(false);
+              setQuery('');
+              onQueryChange?.('');
+            }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400"
+          >
+            <Icon name="x" className="w-3 h-3" />
+          </button>
+        )}
         {open && !disabled && (
           <div
             role="listbox"

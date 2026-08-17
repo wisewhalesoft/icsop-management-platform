@@ -6,6 +6,9 @@ import { StorageModule } from '../storage/storage.module';
 import { AuditModule } from '../audit/audit.module';
 import { OrgDirectoryModule } from '../org-directory/org-directory.module';
 import { NameResolutionService } from '../org-directory/name-resolution.service';
+import { PublicModule } from '../public/public.module';
+import { WatermarkService } from '../public/watermark.service';
+import { FRONT_BURNER } from '../appendices/appendices.service';
 import { UsageFormsController } from './usage-forms.controller';
 import { UsageFormsService } from './usage-forms.service';
 import {
@@ -23,7 +26,8 @@ import { AuditWriterRecorder } from './audit-writer-recorder.adapter';
  * 調閱稽核收集器＝AuditWriterRecorder（轉接真實 AuditWriterService，落地 AUDIT_LOG，經 Outbox 非阻斷）。
  */
 @Module({
-  imports: [AuthModule, RbacModule, StorageModule, AuditModule, OrgDirectoryModule],
+  /** `PublicModule` 提供前台協作點 `WatermarkService`（理由與反循環說明同 `AppendicesModule`）。 */
+  imports: [AuthModule, RbacModule, StorageModule, AuditModule, OrgDirectoryModule, PublicModule],
   controllers: [UsageFormsController],
   providers: [
     {
@@ -40,6 +44,8 @@ import { AuditWriterRecorder } from './audit-writer-recorder.adapter';
       useFactory: () => new TypeOrmUploaderDirectory(AppDataSource),
     },
     { provide: UPLOADER_ORG_RESOLVER, useExisting: NameResolutionService },
+    /** F018 `AC-D11`／`AC-D22` ③：前台使用表單之燒錄與可見性判定（同一 token，說明見附錄模組）。 */
+    { provide: FRONT_BURNER, useExisting: WatermarkService },
     UsageFormsService,
   ],
 })

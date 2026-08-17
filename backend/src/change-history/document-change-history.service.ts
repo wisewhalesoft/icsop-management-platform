@@ -13,6 +13,36 @@ import {
   DocumentChangeFilters,
   filterDocumentChanges,
 } from './document-change-query';
+import {
+  CsvColumn,
+  EXPORT_ROW_LIMIT,
+  assertExportRowLimit,
+  exportFileName,
+  formatExportTimestamp,
+  toCsvBuffer,
+} from '../storage/csv-export';
+import { actorLabel, changeValueLabel, fieldLabel, sourceLabel } from './change-labels';
+
+/** 匯出結果（controller 據此設定 Content-Disposition 並 `res.send(buffer)`）。 */
+export interface ChangeExportResult {
+  csv: Buffer;
+  fileName: string;
+}
+
+/**
+ * F037 匯出之八欄（表頭逐字，順序即欄序）。值層一律為「畫面所見之中文標籤」
+ * （`error-handling.md#export` 值層通則）。
+ */
+const DOC_EXPORT_COLUMNS: CsvColumn<DocumentChangeView>[] = [
+  { header: '程序書編號', value: (r) => r.documentNumber },
+  { header: '程序書書名', value: (r) => r.documentName },
+  { header: '變更欄位', value: (r) => fieldLabel(r.field) },
+  { header: '舊值', value: (r) => changeValueLabel(r.field, r.oldValue) },
+  { header: '新值', value: (r) => changeValueLabel(r.field, r.newValue) },
+  { header: '來源', value: (r) => sourceLabel(r.changeType, r.field) },
+  { header: '操作人', value: (r) => actorLabel(r.actorName, r.actorEmployeeNo) },
+  { header: '時間', value: (r) => formatExportTimestamp(r.occurredAt) },
+];
 
 /**
  * G-LC-023 程序書變更列 + 現行書名（documentName，自 ICSOP_DOCUMENT 併入）。
@@ -75,6 +105,66 @@ export class DocumentChangeHistoryService {
     const ids = [...new Set(rows.map((r) => r.documentId).filter(Boolean))];
     const nameMap = await this.docNames.findNamesByIds(ids);
     return rows.map((r) => ({ ...r, documentName: nameMap.get(r.documentId) ?? null }));
+  }
+
+  /**
+   * F037 `AC-D1`～`AC-D9`：匯出符合當前查詢條件之**全部**事件為 CSV。
+   *
+   * 🔴 取列策略（architecture-spec §10.4 ④）：
+   *  ① 先 **SQL `COUNT(*)` 下推**（同一組 WHERE）；> 10,000 → 400，**不執行 SELECT**、不產生檔案。
+   *  ② 通過後之 SELECT 帶 **`TOP 10001`**——防「count 與 select 之間有新列寫入」之競態，且天然封頂。
+   * 🔴 **絕不呼叫 `listAll()`**：本表 append-only 單調成長，全表載入是本 delta 唯一之真實 OOM 風險。
+   *
+   * 列序沿用與畫面完全相同之 `filterDocumentChanges()`（時間新到舊），使「匯出列序＝畫面列序」
+   * 由共用函式保證而非各自排序。
+   */
+  async exportChanges(
+    filters: DocumentChangeFilters,
+    actor?: ChangeHistoryActor,
+  ): Promise<ChangeExportResult> {
+    const { countByFilters, listByFilters } = this.store;
+    if (!countByFilters || !listByFilters) {
+      // 不得降級為 listAll()——降級到全表載入正是 §10.16 D2 要防的事。
+      throw new Error('EXPORT_NOT_SUPPORTED: store 未提供 countByFilters／listByFilters');
+    }
+    assertExportRowLimit(await countByFilters.call(this.store, filters));
+    const rows = await listByFilters.call(this.store, filters, EXPORT_ROW_LIMIT + 1);
+    assertExportRowLimit(rows.length); // 競態第二道
+    const items = await this.enrichNames(filterDocumentChanges(rows, filters));
+
+    const csv = toCsvBuffer(items, DOC_EXPORT_COLUMNS);
+    const now = this.clock();
+    await this.recordExportAudit(items, actor, now);
+    return { csv, fileName: exportFileName('document_change_history', now) };
+  }
+
+  /** `AC-D6`：記一筆既有之 `CHANGE_LOG_VIEW`（不新增 actionType）；寫入失敗不阻斷匯出。 */
+  private async recordExportAudit(
+    items: DocumentChangeView[],
+    actor: ChangeHistoryActor | undefined,
+    now: Date,
+  ): Promise<void> {
+    if (!this.audit || !actor) return;
+    const latest = items[0];
+    try {
+      await this.audit.recordAccess({
+        targetType: 'DOCUMENT_CHANGE_LOG',
+        actionType: 'CHANGE_LOG_VIEW',
+        actorId: actor.accountId,
+        actorName: actor.name ?? null,
+        employeeNo: actor.employeeNo ?? null,
+        company: actor.company ?? null,
+        department: actor.department ?? null,
+        section: actor.section ?? null,
+        roleCode: actor.roleCode ?? null,
+        targetId: latest?.documentId ?? null,
+        targetNumber: latest?.documentNumber ?? null,
+        targetName: latest?.documentName ?? latest?.documentNumber ?? null,
+        occurredAt: now,
+      });
+    } catch {
+      // 比照 F023 補償佇列：稽核寫入失敗不阻斷匯出（檔案照樣產生）。
+    }
   }
 
   /** 展開某文件之欄位層 before/after ＋ 記 CHANGE_LOG_VIEW 稽核。 */

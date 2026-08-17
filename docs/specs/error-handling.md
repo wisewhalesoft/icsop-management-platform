@@ -1,9 +1,9 @@
 ---
 spec-id: error-handling
 title: 錯誤處理與失敗模式
-version: 1.5
-date: 2026-08-14
-status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落與 3 個 `LIFECYCLE_*` 錯誤碼為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.3 之 [#dept-restriction](#dept-restriction) 段落為 🟢 APPROVED 2026-08-11 人類閘門通過——OQ-E06-03 定案為 404 `DOCUMENT_NOT_FOUND`、OQ-E08-10 定案為不記錄拒絕稽核，均沿用既有錯誤碼、不新增**；**v1.4 新增 [#account-profile](#account-profile) 段落與 3 個 `ACCOUNT_*_INVALID` 錯誤碼，對應 F003 手動帳號基本資料 delta，2026-08-14 使用者直接裁定**；**v1.5 同日第二次裁決——公司別可跨公司選擇：`ACCOUNT_COMPANY_CODE_INVALID` 語意放寬為「非有效公司」、`ACCOUNT_USERNAME_EXISTS` 比對範圍擴為全域，均不新增錯誤碼**）
+version: 1.6
+date: 2026-08-16
+status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落與 3 個 `LIFECYCLE_*` 錯誤碼為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.3 之 [#dept-restriction](#dept-restriction) 段落為 🟢 APPROVED 2026-08-11 人類閘門通過——OQ-E06-03 定案為 404 `DOCUMENT_NOT_FOUND`、OQ-E08-10 定案為不記錄拒絕稽核，均沿用既有錯誤碼、不新增**；**v1.4 新增 [#account-profile](#account-profile) 段落與 3 個 `ACCOUNT_*_INVALID` 錯誤碼，對應 F003 手動帳號基本資料 delta，2026-08-14 使用者直接裁定**；**v1.5 同日第二次裁決——公司別可跨公司選擇：`ACCOUNT_COMPANY_CODE_INVALID` 語意放寬為「非有效公司」、`ACCOUNT_USERNAME_EXISTS` 比對範圍擴為全域，均不新增錯誤碼**；**v1.6 新增 [#export](#export) 與 [#usage-form-number](#usage-form-number) 兩段落與 3 個錯誤碼（`EXPORT_ROW_LIMIT_EXCEEDED`／`USAGE_FORM_NUMBER_DUPLICATE`／`USAGE_FORM_NUMBER_TOO_LONG`），對應 2026-08-16 缺失／變更 delta 第 14／16／18 項，使用者裁定**）
 ---
 
 # 錯誤處理（Error Handling）
@@ -65,6 +65,9 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 | `USAGE_FORM_OVERWRITE_SHARED` | 409（需二次確認） | 此表單另被 {N} 份文件引用，覆蓋將同時更新全部，是否繼續？（門檻：引用 ≥2） | F018 |
 | `USAGE_FORM_IN_USE` | 409（需二次確認） | 此表單仍被 {N} 份文件引用，移除將自所有引用解除，是否繼續？ | F018 |
 | `USAGE_FORM_NOT_FOUND` | 404 | 找不到此使用表單 | F018 |
+| `USAGE_FORM_NUMBER_TOO_LONG` | 400 | 表單編號超過長度上限（trim 後 100 字元，對齊 `USAGE_FORM_POOL.formNumber` nvarchar(100)）**（2026-08-16 新增）** | F018 |
+| `USAGE_FORM_NUMBER_DUPLICATE` | 409 | 表單編號已存在（比對前 trim、**不分大小寫**；`null` 不參與比對；編輯時排除自身列）**（2026-08-16 新增）** | F018 |
+| `EXPORT_ROW_LIMIT_EXCEEDED` | 400 | 匯出筆數超過上限 10,000，請縮小篩選／查詢條件（訊息含上限值）；**不產生任何檔案**。**（2026-08-16 新增，三處匯出共用同一碼）** | F039, F037, F038 |
 | `APPENDIX_NAME_TOO_LONG` | 400 | 附錄名稱超過長度上限（去空白後 400 字元，對齊 `APPENDIX_POOL.name` nvarchar(400)） | F039 |
 | `APPENDIX_OVERWRITE_SHARED` | 409（需二次確認） | 此附錄另被 {N} 份文件引用，覆蓋將同時更新全部，是否繼續？（門檻：引用 ≥2） | F039 |
 | `APPENDIX_IN_USE` | 409（需二次確認） | 此附錄仍被 {N} 份文件引用，移除將自所有引用解除，是否繼續？（門檻：引用 ≥1） | F039 |
@@ -199,6 +202,47 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 - **未授權存取**：未登入或無權限者組合下載網址 → `FILE_ACCESS_DENIED`（403），**不核發短效期憑證、不寫稽核**。
 - **權限層**：無「附錄管理」功能權限之角色（Supervisor／DeptContact／User）呼叫後台端點 → `PERMISSION_DENIED`（403，路由層）；SysAdmin 之寫入類動作 → `FIELD_WRITE_FORBIDDEN`（403，欄位層），與 F018 守門鏈一致。
 - **稽核**：前台下載成功須寫入 `targetType=APPENDIX`／`actionType=DOWNLOAD`；寫入暫時失敗**不阻斷下載**，進補償佇列重試（見 [#audit](#audit)）。
+
+## 使用表單編號（唯一性與長度） {#usage-form-number}
+
+> 對應 [F018 §表單編號 delta](features/F018-usage-form-management.md#form-number-delta)（2026-08-16 使用者裁決，OQ-D18-22）。欄位定義見 [data-model.md#usage-form-entity](data-model.md#usage-form-entity)。**本段僅適用使用表單；`APPENDIX_POOL` 無編號欄**（OQ-D18-23）。
+
+- **輸入正規化（先於一切驗證）**：`formNumber` 一律 trim；trim 後為空字串、純空白或未提供者**收斂為 `null`**（**空字串不得落地**，比照 [#lifecycle-subcategory](#lifecycle-subcategory) 之 `normalizeSubcategory` 與 [#account-profile](#account-profile) 之既有慣例）。
+- **驗證順序（固定，先後不可調換；同時違反多項時僅回序位最前者）**：① `FILE_FORMAT_NOT_ALLOWED`／`FILE_SIZE_EXCEEDED`（400，沿用 [#file](#file) 之既有優先序）→ ② `USAGE_FORM_NAME_TOO_LONG`（400）→ ③ `USAGE_FORM_NUMBER_TOO_LONG`（400）→ ④ `USAGE_FORM_NUMBER_DUPLICATE`（409）。**格式／大小驗證恆優先於任何唯一性判斷**（比照 [#appendix](#appendix) 之既有定案）。
+- **`USAGE_FORM_NUMBER_TOO_LONG`（400）**：`formNumber` trim 後長度 > 100 字元；**不建立／不更動任何記錄、不寫 blob**。恰 100 字元通過。
+- **`USAGE_FORM_NUMBER_DUPLICATE`（409）**：`formNumber`（非 `null`）與池中他筆之 trim 後、**不分大小寫**之值相等。**編輯時排除自身列**（維持原值不視為衝突，比照 [#document](#document) 之編號唯一性慣例）。`null` 值**不參與比對**，多筆空編號可並存。
+- **編輯情境之比對範圍（2026-08-16 追加裁決後之明確化）**：本段之驗證同時適用**上傳建立**與 **[F018](features/F018-usage-form-management.md#edit-number-action)「編輯編號」動作**兩條寫入路徑。編輯路徑之比對式為「池中**其他列**（`id ≠ 本列 id`）之 `formNumber` 正規化後是否與送出值相等」——**必須排除自身列**，否則使用者無法對同一筆重複送出相同編號（例如點兩次儲存、或只改大小寫後又改回）。
+  - **清空（設回 `null`）為合法操作**，**不觸發本碼亦不觸發任何比對**（`null` 不參與唯一性）。
+  - **「編輯編號」不得觸發 `USAGE_FORM_OVERWRITE_SHARED`**——該碼專屬於**覆蓋上傳**（換檔）路徑；編號更新不碰檔案、與引用數無關（[F018](features/F018-usage-form-management.md#edit-number-action) `AC-D20`）。
+  - **權限錯誤沿用既有碼、不新增**：SysAdmin → `FIELD_WRITE_FORBIDDEN`（403，欄位層）；Supervisor／DeptContact／User → `PERMISSION_DENIED`（403，路由層）。
+- **並發保護**：以 DB **filtered unique index（`WHERE formNumber IS NOT NULL`）** ＋應用層驗證雙保險，僅一筆成功、另一筆回本碼。⚠ **不可用單純全表 UNIQUE**——MSSQL 視多個 `NULL` 為相等，會誤擋第二筆空編號。
+- **覆蓋上傳不觸發本段**：換檔（`PUT`）**不改變 `formNumber`**，故不重驗唯一性（比照「覆蓋不改名稱」之既有語意）。改編號須走**編號專用端點**（[F018 §Interface Contract](features/F018-usage-form-management.md#interface-contract)），不得夾帶於覆蓋上傳。
+
+## 匯出（CSV） {#export}
+
+> 對應 2026-08-16 使用者裁決之三處匯出：[F039 附錄池](features/F039-appendix-management.md#export-delta)（缺失 delta 第 14 項）、[F037 ICSOP 程序書變更歷程](features/F037-document-change-history.md#export-delta) 與 [F038 循環樹狀圖變更歷程](features/F038-lifecycle-tree-change-history.md#export-delta)（第 16 項）。三處**共用同一組規則與同一錯誤碼**，不得各自為政。
+
+- **`EXPORT_ROW_LIMIT_EXCEEDED`（400）**：符合當前篩選／查詢條件之筆數 **> 10,000** 時回本碼，訊息含上限值並提示縮小條件，**不產生任何檔案、不回傳部分結果**。**恰 10,000 筆通過**（邊界值含）。
+  - **🔴 使用者可見呈現載體（2026-08-16 補訂）**：本碼之拒絕**必須以使用者可見之錯誤回饋呈現**（toast 或等效之 alert 區塊，`role="alert"` 或等效可存取角色）。其**逐字訊息由各 feature 定義**（[F037](features/F037-document-change-history.md#export-delta) `AC-D10`／[F038](features/F038-lifecycle-tree-change-history.md#export-delta) `AC-D6`／[F039](features/F039-appendix-management.md#export-delta) `AC-D12`）。
+  - **兩段式斷言（因 `ToastApi` 現無 code 參數）**：① **訊息逐字**出現於畫面；② 字串 **`EXPORT_ROW_LIMIT_EXCEEDED`** 出現於**同一個回饋容器內**。**達成方式不拘**——可為 `ToastApi` 新增 code 欄位，亦可直接把碼串接於訊息尾端（如 `…請縮小查詢條件（EXPORT_ROW_LIMIT_EXCEEDED）`）；**規格不指定實作，只要求兩者同時可見**。<br>📝 理由：錯誤碼是使用者回報問題時唯一可靠之定位資訊（本 repo 既有慣例，見 [F019](features/F019-public-list-browsing.md) `AC-U8` 之 `DOCUMENT_NOT_FOUND · 404` 錯誤碼列與 [F024](features/F024-access-history-query.md) 無權限畫面）；但要求特定元件形狀會過度綁死實作。
+- **匯出範圍**：一律為「符合**當前篩選／查詢條件之全部結果**」，**非**當前分頁之結果；列序與畫面當前排序一致。
+- **編碼**：CSV 以 **UTF-8 with BOM（`EF BB BF`）** 輸出。⚠ **BOM 缺失是 Excel 開啟中文亂碼之經典成因**；此與 [F020](features/F020-watermark.md) 之 PDF 燒錄 CJK 字型亂碼（根因＝`backend/Dockerfile` 未 COPY `assets/`）是**兩件不同的事**，不得混為一談。
+- **逸出**：欄值含 `,`／`"`／換行時以雙引號包覆，內部 `"` 逸出為 `""`（RFC 4180）。
+- **行終止符（2026-08-16 補訂）**：資料列與表頭列之終止符一律為 **CRLF（`\r\n`）**，含**最末一列亦以 CRLF 結尾**。理由：RFC 4180 明訂 CRLF，且 Excel 於部分地區設定下對純 LF 之解析不穩定。⚠ 本項與 [#usage-form-number](#usage-form-number) 無關；注入防護所偵測之 CR（`\r`）指的是**儲存格值本身以 CR 開頭**，與列終止符是兩回事。
+- **🔴 值層之通則（2026-08-16 補訂；三處匯出一體適用）**：
+  - **列舉／代碼欄一律輸出「畫面所見之中文標籤」，不得輸出屬性名或列舉代碼**（例：`documentName` → `程序書書名`；`NODE_ADDED` → `新增節點`）。理由：匯出檔之讀者是人，屬性名對其無意義；且各 feature 之匯出 AC 已定「欄位＝畫面所見」，**值層理應一致**。
+  - **對照表必須只有一份**：中文標籤之對照表為**單一權威**，前端畫面與後端 CSV **不得各存一份**。⚠ 現況該對照表只存在於前端 ⇒ 須搬至後端（或抽為前後端共用之單一模組）；**落點由 system-architect 定**（建議與 `csv-export.ts` 同層之 domain 純模組，或由查詢端點直接回傳已解析之 label 供前端直接顯示）。**可觀測不變式（各 feature AC 之斷言標的）＝「CSV 該儲存格之值，與畫面同一列同一欄之可見文字逐字相同」。**<br>📝 **2026-08-16 lead 裁決之落地現實（規範文字未改，此為指向性註記）**：本 repo 前後端為**兩個獨立 TS 專案、無共用 package** ⇒ 「只有一份」在本輪**架構上不可達**，後端 `backend/src/change-history/change-labels.ts` 與前端 `frontend/src/pages/ChangeHistoryPage.tsx` 各持一份。**本輪之機器可驗約束改為「兩份逐字相同」**——沿用 [architecture-spec.md](architecture-spec.md) §10.14 對 `watermarkLines()` 之既有處置（兩份刻意各留、以同一組值綁定、以兩端逐字相同之不變式約束）。逐條斷言見 [F038](features/F038-lifecycle-tree-change-history.md#export-delta) `AC-D7` ④；決策追溯見 [open-questions.md](open-questions.md) `OQ-D18-34`。**「須搬至後端／抽為共用單一模組」之要求並未取消，僅延後**，落點仍由 system-architect 定。
+  - **時間戳欄一律為 `YYYY-MM-DD HH:mm:ss`（UTC+8）**，且**不附 `(UTC+8)` 字樣於每一格**。時區以與 `formatWatermarkTimestamp()` **完全相同之顯式 +8 位移**計算，**不得**使用 `toLocaleString` 或任何依賴行程 TZ 之格式化（行程 TZ 已釘死 UTC，該類寫法在容器與開發機各產生不同結果而兩邊測試都會綠）。<br>📝 **為何不在每格附 `(UTC+8)`**：① 各 feature 之表頭已逐字鎖定（`時間`／`上傳時間`）且下游約束環已依其建環，改表頭為 churn；② 每列重複同一標註無資訊量、且使值層斷言變脆；③ 全系統單一時區（`OQ-NFR007b`）。**若日後需標註，應改表頭而非改值。**
+  - **數值格式化欄（如檔案大小）**：CSV 值 **＝ 畫面所見之同一格式化結果**，且**與畫面共用同一格式化函式**（不得後端另寫一份）。
+- **空結果**：符合筆數為 0 時產生**僅含表頭列**之 CSV，**非錯誤、非空檔**。
+- **檔名**：`{scope}_{YYYYMMDD}_{HHmmss}.csv`，時間為伺服器時間（UTC+8，沿用 OQ-NFR007b 之時區慣例）。
+- **權限**：沿用各 feature 既有之功能閘門，**不新增功能矩陣列**；無權者回 `PERMISSION_DENIED`（403，路由層）。唯讀角色（SysAdmin）**允許匯出**（匯出屬讀取類動作）。
+- **稽核**：F039 附錄池匯出**不寫稽核**（管理存取，比照後台下載）；F037／F038 匯出**各記一筆既有之查詢類稽核**（`CHANGE_LOG_VIEW`／`LIFECYCLE_CHANGELOG_VIEW`），**不新增 `actionType`**；寫入失敗不阻斷匯出，進補償佇列重試（見 [#audit](#audit)）。
+- **🔴 CSV 注入防護（2026-08-16 lead 裁定採用；system-architect 提出）**：任一儲存格之值，若其**第一個字元**為 `=`、`+`、`-`、`@`、Tab（`\t`）或 CR（`\r`），一律**先在該值最前面加一個半形單引號 `'`**（`=cmd|...` → `'=cmd|...`），**再**套用上述 RFC 4180 之引號包覆與逸出。順序不可顛倒。
+  - **理由**：Excel／LibreOffice 會把 `=` 開頭之儲存格當公式執行（DDE 執行、`HYPERLINK` 資料外洩）。三處匯出之欄位含**使用者可控字串**（程序書書名、附錄名稱、變更歷程之舊值／新值），為**真實可達**之注入面。
+  - **適用範圍**：僅適用**資料列之儲存格值**；**表頭列不適用**（表頭為本規格逐字固定之字面值，且無一以上述字元開頭）。
+  - ⚠ **對「欄位＝畫面所見」逐字斷言之影響（下游 test-generator 必讀）**：加了前綴之儲存格，其 CSV 內之值**不再與畫面所見字串逐字相同**，兩者相差一個前導 `'`。故各 feature 之匯出 AC，其**值層**期望值一律為「**畫面所見字串經本規則轉換後之結果**」，**不得**直接以畫面原字串斷言。**表頭層之逐字斷言不受影響。** 值未以上述六種字元開頭時，轉換為恆等（無前綴），此為絕大多數案例。
+- ⚠ **範圍紀律**：[F024](features/F024-access-history-query.md) 之既有匯出**不在本次範圍**——**且其「匯出」實際上不產生任何檔案**（`GET /admin/access-history/export` 回傳 JSON `{rows,total}`，前端收到後直接丟棄、僅跳 toast；2026-08-16 由 system-architect 查證）。⇒ **本節之共用規則為淨新增、無既有樣板可對齊**；各 feature 原寫之「與 F024 同構」已一律改為「向本節對齊」。**不得**藉本 delta 改動 F024 之端點、參數或前端行為，**亦不得**為其缺口撰寫 AC——該缺口已如實登錄為 [open-questions.md](open-questions.md) `OQ-D18-26`。
 
 ## 權限（功能面 / 欄位面） {#permission}
 

@@ -1,4 +1,11 @@
 <!DOCTYPE html>
+<!-- 🔵 2026-08-16 delta（人類閘門已通過）——本檔已套用：
+     topbar 動作區新增「匯出」鈕（F039 AC-D4；icon 鍵 download、無障礙名稱「匯出」）。
+     🔒 **本檔未新增任何編號欄位或欄**——F018 之「表單編號」delta **刻意不擴及附錄**
+        （F018 AC-D9／OQ-D18-23 裁決＝不主動擴及）；APPENDIX_POOL 之實體欄位與清單表頭逐項不變。
+     🔒 **後台個別下載維持 RAW、不燒錄浮水印、不寫稽核**（F039 AC-D3／OQ-FM-01 於 2026-08-16
+        經使用者再次確認維持有效；缺失 delta 第 15 項明確裁定不做）——本頁**不得**出現
+        前台之「此格式不支援浮水印」標示（該標示僅屬前台 04）。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -31,10 +38,10 @@
 
 <!-- ===== Admin shell sidebar ===== -->
 <aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-50 bg-white border-r border-slate-200 flex flex-col">
-  <div class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0">
+  <a href="07-admin-shell.html" data-to="/admin" aria-label="回到後台首頁" title="回到後台首頁" class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600">
     <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
     <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
-  </div>
+  </a>
   <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
   <div class="border-t border-slate-200 p-2 shrink-0">
     <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
@@ -47,10 +54,15 @@
   <div class="h-14 px-4 flex items-center gap-3">
     <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
     <div class="leading-tight min-w-0">
-      <div class="text-xs text-slate-400 flex items-center gap-1"><span>附錄管理</span><i data-lucide="chevron-right" class="w-3 h-3"></i><span>附錄池</span></div>
+      <div class="text-xs text-slate-400 flex items-center gap-1"><a href="24-appendix-management.html" data-to="/admin/appendices" class="hover:text-primary-700 hover:underline focus:outline-none focus:ring-2 focus:ring-primary-600 rounded">附錄管理</a><i data-lucide="chevron-right" class="w-3 h-3"></i><span>附錄池</span></div>
       <div class="font-semibold text-slate-900 text-sm truncate">附錄（附錄池）管理</div>
     </div>
     <div class="ml-auto flex items-center gap-2">
+      <!-- 🔵 F039 AC-D4（2026-08-16 delta）：topbar 動作區之「匯出」鈕（icon 鍵 download，
+           比照 17-access-history.html 既有匯出鈕之呈現慣例）。
+           📌 **匯出為讀取類動作**：SysAdmin 唯讀角色**允許匯出**，故本鈕**非** write-only；
+              Supervisor／DeptContact／User 於本頁本就被 blockOverlay 擋下（403 PERMISSION_DENIED）。 -->
+      <button onclick="doExport()" aria-label="匯出" title="匯出附錄清單（CSV）" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"><i data-lucide="download" class="w-4 h-4"></i>匯出</button>
       <button onclick="openUpload()" class="write-only inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="upload" class="w-4 h-4"></i>上傳附錄</button>
       <div class="flex items-center gap-1.5 pl-2 border-l border-slate-200">
         <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
@@ -254,13 +266,20 @@
     {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
   ];
   const CURRENT_MODULE='appendix';
+  /* 🔵 F002 AC-D1／AC-D5（2026-08-16 delta）：側欄最上方「首頁」項。
+     刻意**不放進 MENU**——它不對映任何 F025 功能鍵、不經 canPerform 過濾，
+     F025 功能矩陣逐格未動、未新增「首頁」列（AC-D5 回歸鎖定）。 */
+  const HOME_ITEM={id:'home',label:'首頁',icon:'layout-dashboard',route:'/admin',href:'07-admin-shell.html'};
   function renderSidebar(){
     const role=document.body.dataset.role;
     const items=MENU.filter(m=>m.roles[role]);
-    document.getElementById('sidebarNav').innerHTML = items.length? items.map(m=>{
+    // 🔵 F002 AC-D1（2026-08-16 delta）：「首頁」恆為第一項、不經 F025 角色過濾（四種管理類角色一律顯示）
+    const showHome = role!=='user', homeActive = CURRENT_MODULE==='home';
+    const homeHtml = showHome ? `<a href="${HOME_ITEM.href}" data-to="${HOME_ITEM.route}" title="${HOME_ITEM.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${homeActive?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${HOME_ITEM.icon}" class="w-4 h-4 shrink-0 ${homeActive?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${HOME_ITEM.label}</span></a>` : '';
+    document.getElementById('sidebarNav').innerHTML = homeHtml + (items.length? items.map(m=>{
       const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
       return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
-    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`);
     lucide.createIcons();
   }
   function navTo(id,label){ if(id==='usageform'&&CURRENT_MODULE!=='usageform'){location.href='19-usage-form-management.html';return false;} if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;} shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型：對應頁面）')); return false; }
@@ -322,10 +341,36 @@
   // 目標不存在（例如清單過期、他人已移除）→ 404
   function notFound(){ toast('error','找不到指定的附錄（可能已被其他管理員移除），請重新整理清單','APPENDIX_NOT_FOUND · 404'); }
 
+  function currentRows(){
+    const kw=(document.getElementById('kw').value||'').trim().toLowerCase();
+    const fmt=document.getElementById('fFmt').value;
+    return APPENDICES.filter(f=> (!kw||f.name.toLowerCase().includes(kw)) && (!fmt||f.fmt===fmt));
+  }
+  /* 🔵 F039 AC-D4～AC-D11（2026-08-16 delta）：附錄池匯出（CSV）
+     · AC-D5 範圍＝**符合當前篩選之全部結果**（非當前頁之 50 筆）；列序與畫面當前排序一致。
+     · AC-D6 CSV：以 UTF-8 BOM（EF BB BF）開頭；第 1 列表頭逐字為
+       `附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數`（＝畫面所見六欄；「操作」欄不匯出；
+       畫面之「上傳者 / 上傳時間」單一欄於 CSV **拆為兩欄**）；RFC 4180 逸出。
+     · AC-D11 CSV 注入防護：以 `=`／`+`／`-`／`@`／Tab／CR 開頭之儲存格值前置一個半形單引號，
+       **再**依 RFC 4180 包覆逸出（順序不可調換）；表頭列不套用本規則。
+     · AC-D7 檔名＝`appendices_{YYYYMMDD}_{HHmmss}.csv`（伺服器時間 UTC+8）。
+     · AC-D8 超過 10,000 筆 → 400 EXPORT_ROW_LIMIT_EXCEEDED、不產生任何檔案（恰 10,000 通過）。
+     · AC-D9 空結果 → 產生**僅含表頭列**之 CSV（非錯誤、非空檔）。
+     · AC-D4 權限：ICSOPAdmin／SysAdmin 允許（匯出為讀取類動作）；其餘角色端點回 403。 */
+  const EXPORT_ROW_LIMIT=10000;
+  function doExport(){
+    const rows=currentRows();
+    if(rows.length>EXPORT_ROW_LIMIT){
+      toast('error','符合條件之筆數為 '+rows.length+' 筆，超過匯出上限 '+EXPORT_ROW_LIMIT+' 筆，請縮小篩選條件','EXPORT_ROW_LIMIT_EXCEEDED · 400');
+      return;
+    }
+    toast('success','已匯出附錄清單（CSV，UTF-8 BOM）：共 '+rows.length+' 筆資料列＋1 列表頭；'
+      +'表頭＝附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數；檔名 appendices_20260816_143208.csv');
+  }
   function renderTable(){
     const kw=(document.getElementById('kw').value||'').trim().toLowerCase();
     const fmt=document.getElementById('fFmt').value;
-    const rows=APPENDICES.filter(f=> (!kw||f.name.toLowerCase().includes(kw)) && (!fmt||f.fmt===fmt));
+    const rows=currentRows();
     document.getElementById('countText').textContent=`共 ${rows.length} 個附錄`;
     document.getElementById('emptyState').classList.toggle('hidden',rows.length>0);
     document.getElementById('clearBtn').classList.toggle('hidden',!(kw||fmt));

@@ -18,7 +18,22 @@ import type { RoleCode } from './function-matrix';
  * 之行為斷言達成（INV-4「內部呼叫既有 isWithinSubtree」為架構設計陳述，非可獨立於行為之外斷言的內部呼叫次數）。
  */
 
-/** 測試用最小文件工廠，僅設定 usingDeptIds 相關欄位供 isPinned 呼叫。 */
+/**
+ * 測試用最小文件工廠，僅設定 usingDeptIds 相關欄位供 isPinned 呼叫。
+ *
+ * 📝 **2026-08-16 純機械補欄（F019 delta 之型別漣漪；`tdd-implementation` 申訴 #2，lead 已驗證）**：
+ * `PublicDocItem` 依 architecture-spec §10.6 additive 新增五個**必填**欄
+ * （`draftingCompanyId`／`draftingSectionId`／`primaryChiefId`／`secondaryChiefIds`／`edition`），
+ * 本工廠未同步補齊即 `TS2739`，**整個 suite 無法編譯**。
+ *
+ * ⚠ 五欄**不得**改為選填：環自身之 `public-list-filter-options.spec.ts` 之
+ * `distinct((d) => [d.primaryChiefId, ...d.secondaryChiefIds])` 要求 `secondaryChiefIds` 可迭代
+ * （選填即 `TS2488`），其餘四欄選填會使型別成 `string | null | undefined`、不符 `Array<string | null>`。
+ *
+ * 🔒 **本次只補工廠欄位，五欄一律填中性值（本檔僅消費 `usingDeptIds`，其餘與 F041 語意無關）；
+ *    本檔之任何斷言、期望值、案例結構一律未動** —— F041 deny-by-default 之核心測試，
+ *    補欄後應**恢復全綠**（它本來就是綠的，不是本 delta 要推翻的對象）。
+ */
 function doc(usingDeptIds: string[]): PublicDocItem {
   return {
     id: 'd',
@@ -29,6 +44,11 @@ function doc(usingDeptIds: string[]): PublicDocItem {
     lifecycleName: null,
     usingDeptIds,
     draftingDeptId: null,
+    draftingCompanyId: null,
+    draftingSectionId: null,
+    primaryChiefId: null,
+    secondaryChiefIds: [],
+    edition: null,
     announcedDate: '2026-01-01',
     contentSummary: null,
   };

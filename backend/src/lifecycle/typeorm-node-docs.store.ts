@@ -1,7 +1,7 @@
 import { DataSource, EntityManager, In } from 'typeorm';
 import { IcsopDocument } from '../database/entities/icsop-document.entity';
 import { LifecycleNode } from '../database/entities/lifecycle-node.entity';
-import { NodeDocsStore, NodeInfo, DocRef, DocLite } from './node-docs.store';
+import { NodeDocsStore, NodeInfo, DocRef, DocLite, NodeMountedDoc } from './node-docs.store';
 import { NodeDocsStructuralTx } from './lifecycle-structural-change';
 import { recordStructuralChange } from './lifecycle-structural-recorder';
 
@@ -45,6 +45,31 @@ export class TypeOrmNodeDocsStore implements NodeDocsStore {
   async listLifecycleDocs(lifecycleId: string): Promise<DocRef[]> {
     const ds = await this.init();
     return this.listLifecycleDocsWith(ds.manager, lifecycleId);
+  }
+
+  /** F036 節點文件清單：五欄全在 ICSOP_DOCUMENT 單表，一次查詢取全（§10.5 無 N+1）。 */
+  async listNodeMountedDocs(lifecycleId: string, nodeId: string): Promise<NodeMountedDoc[]> {
+    const ds = await this.init();
+    const rows = await ds.manager.getRepository(IcsopDocument).find({
+      where: { lifecycleId, nodeId },
+      select: {
+        id: true,
+        documentNumber: true,
+        documentName: true,
+        edition: true,
+        status: true,
+        announcedDate: true,
+      },
+      order: { documentNumber: 'ASC' },
+    });
+    return rows.map((d) => ({
+      id: d.id,
+      documentNumber: d.documentNumber,
+      documentName: d.documentName,
+      edition: d.edition,
+      status: d.status,
+      announcedDate: d.announcedDate ? d.announcedDate.toISOString() : null,
+    }));
   }
 
   private async getDocWith(m: EntityManager, docId: string): Promise<DocLite | null> {

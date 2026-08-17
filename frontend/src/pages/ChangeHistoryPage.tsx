@@ -2,8 +2,10 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/useAuth';
 import {
   getDocumentChanges,
+  exportDocumentChanges,
   viewDocumentChanges,
   getLifecycleChanges,
+  exportLifecycleChanges,
   viewLifecycleChanges,
   getLifecycles,
   getLifecycleTreeDiff,
@@ -13,7 +15,57 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { lifecycleDisplayName } from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
-import { PageHeader } from '../components/PageHeader';
+import { PageHeader, TopbarActions } from '../components/PageHeader';
+import { watermarkLines } from '../domain/watermark-lines';
+import {
+  EXPORT_LIMIT_BADGE,
+  EXPORT_ROW_LIMIT,
+  countFromLimitError,
+  isExportLimitError,
+} from '../domain/export-feedback';
+
+const msgOf = (e: unknown): string => (e instanceof ApiError ? e.code : '載入失敗');
+
+/** 匯出回饋（訊息 ＋ 錯誤碼標記；碼與訊息須同時可見，`error-handling.md#export`）。 */
+interface ExportFeedback {
+  tone: 'success' | 'error';
+  message: string;
+  code?: string;
+}
+
+/**
+ * 匯出失敗之回饋——**兩 tab 共用同一句式與同一錯誤碼**（F038 `AC-D6` 明訂與 F037 一致）。
+ * ⚠ 量詞為「事件」、範圍限定詞為「查詢條件」；與 F039 附錄頁之「筆數」／「篩選條件」
+ * **刻意不同**，不得互相對齊。
+ */
+function exportFailureFeedback(e: unknown): ExportFeedback {
+  if (isExportLimitError(e)) {
+    return {
+      tone: 'error',
+      message: `符合條件之事件為 ${countFromLimitError(e)} 筆，超過匯出上限 ${EXPORT_ROW_LIMIT} 筆，請縮小查詢條件`,
+      code: EXPORT_LIMIT_BADGE,
+    };
+  }
+  return { tone: 'error', message: `匯出失敗：${msgOf(e)}` };
+}
+
+/** 匯出回饋之呈現（`role="status"`／`role="alert"`；訊息與碼為兩個獨立元素）。 */
+function ExportFeedbackBox({ feedback }: { feedback: ExportFeedback }): JSX.Element {
+  const error = feedback.tone === 'error';
+  return (
+    <div
+      role={error ? 'alert' : 'status'}
+      className={`mb-3 rounded-md border px-3 py-2 text-sm ${
+        error
+          ? 'text-red-700 bg-red-50 border-red-100'
+          : 'text-emerald-700 bg-emerald-50 border-emerald-100'
+      }`}
+    >
+      <p>{feedback.message}</p>
+      {feedback.code && <p className="mono text-[10px] text-slate-400 mt-0.5">{feedback.code}</p>}
+    </div>
+  );
+}
 import type {
   DocumentChangeView,
   LifecycleChangeView,
@@ -50,6 +102,14 @@ const FIELD_LABEL: Record<string, string> = {
   version: '版次',
   contentSummary: '內容摘要',
   summary: '內容摘要',
+  /**
+   * F037 `AC-D11` ①④：附件替換事件。此前本表**缺這兩鍵**，畫面因 `?? f` 而直接顯示屬性名
+   * `attachment`，CSV 端卻已輸出 `附件` ⇒ 違反 ④「CSV 與畫面逐字相同」且違反 ①「不得輸出屬性名」。
+   * 值逐字取自後端 `change-labels.ts` 之同名鍵（發佈端現寫入 `attachment`，`attachment(ICSOP_PDF)`
+   * 為 AC 明列之型別化形式，兩者皆對映以免任一形式漏接）。
+   */
+  attachment: '附件',
+  'attachment(ICSOP_PDF)': '檔案（ICSOP PDF）',
 };
 const STATUS_LABEL: Record<string, string> = {
   active: '有效',
@@ -253,7 +313,6 @@ function groupDoc(rows: DocumentChangeView[]): DocGroup[] {
   return groups;
 }
 
-const msgOf = (e: unknown): string => (e instanceof ApiError ? e.code : '載入失敗');
 
 export function ChangeHistoryPage(): JSX.Element {
   const { user } = useAuth();
@@ -278,7 +337,7 @@ export function ChangeHistoryPage(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <PageHeader breadcrumb={['稽核追溯', '文件變更歷程']} title="文件變更歷程" />
+      <PageHeader breadcrumb={[{ label: '稽核追溯' }, { label: '文件變更歷程' }]} title="文件變更歷程" />
 
       {/* scope note */}
       <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-sm border bg-primary-50 border-primary-100 text-primary-700">
@@ -325,20 +384,46 @@ function DocTab(): JSX.Element {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [audited, setAudited] = useState<Set<string>>(new Set());
 
+  /**
+   * 匯出之使用者可見回饋（`error-handling.md#export`：toast **或等效之 alert 區塊**）。
+   * 🔴 刻意採頁內 alert 而非全域 toast——本頁未包在 `ToastProvider` 內時 `useToast()` 會拋錯，
+   * 而回饋是匯出動作的必要組成，不該讓它相依於外層 provider 是否存在。
+   */
+  const [feedback, setFeedback] = useState<ExportFeedback | null>(null);
+
+  /**
+   * 查詢與匯出**共用同一份條件組裝**（`AC-D1`：匯出範圍＝當前查詢條件之全部事件）——
+   * 兩處各自組一份，使用者會匯出到一份與畫面不同的結果而毫無徵兆。
+   */
+  const filters = useMemo(
+    () => ({
+      doc: doc.trim() || undefined,
+      person: person.trim() || undefined,
+      from: from || undefined,
+      to: to || undefined,
+    }),
+    [doc, person, from, to],
+  );
+
   const load = useCallback(async () => {
     try {
-      const res = await getDocumentChanges({
-        doc: doc.trim() || undefined,
-        person: person.trim() || undefined,
-        from: from || undefined,
-        to: to || undefined,
-      });
+      const res = await getDocumentChanges(filters);
       setRows(res.items);
       setError(null);
     } catch (e) {
       setError(msgOf(e));
     }
-  }, [doc, person, from, to]);
+  }, [filters]);
+
+  /** F037 `AC-D10`：本 tab 之匯出（量詞「事件」、限定詞「查詢條件」，與 F039 附錄頁刻意不同）。 */
+  const onExport = useCallback(async () => {
+    try {
+      await exportDocumentChanges(filters);
+      setFeedback({ tone: 'success', message: '已匯出 ICSOP 程序書變更歷程（CSV，UTF-8 BOM）' });
+    } catch (e) {
+      setFeedback(exportFailureFeedback(e));
+    }
+  }, [filters]);
 
   useEffect(() => {
     void load();
@@ -392,6 +477,24 @@ function DocTab(): JSX.Element {
 
   return (
     <section>
+      {/*
+        F037 `AC-D1`：本 tab 專屬之匯出鈕，位於 **topbar 動作區**（prototype 23:87 之 `#exportDoc`）——
+        admin shell 之版面契約為「頁面動作鈕一律在 topbar」，比照附錄管理／調閱歷程兩頁。
+        與循環樹狀圖 tab 為**兩個獨立控制項**（各自匯出各自結果，OQ-D18-17）；因只有掛載中的 tab
+        會投遞，「切換 tab 時僅顯示當前 tab 之匯出鈕」自然成立，不需 `hidden` class。
+      */}
+      <TopbarActions>
+        <button
+          id="exportDoc"
+          onClick={() => void onExport()}
+          aria-label="匯出"
+          title="匯出 ICSOP 程序書變更歷程（CSV）"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          <Icon name="download" className="w-4 h-4" />
+          匯出
+        </button>
+      </TopbarActions>
       <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4">
         <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <Field label="程序書（編號／書名）" id="dqDoc" value={doc} onChange={setDoc} placeholder="ICSOP-SRC-101-1-01 / 進件" />
@@ -415,6 +518,8 @@ function DocTab(): JSX.Element {
           <span className="ml-auto text-sm text-slate-500">共 {groups.length} 組變更</span>
         </div>
       </div>
+
+      {feedback && <ExportFeedbackBox feedback={feedback} />}
 
       {error && (
         <div role="alert" className="mb-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
@@ -565,20 +670,38 @@ function TreeTab(): JSX.Element {
     [cycles],
   );
 
+  const [feedback, setFeedback] = useState<ExportFeedback | null>(null);
+
+  /** 查詢與匯出共用同一份條件組裝（理由同程序書 tab）。 */
+  const filters = useMemo(
+    () => ({
+      lifecycleId: cyc || undefined,
+      person: person.trim() || undefined,
+      from: from || undefined,
+    }),
+    [cyc, person, from],
+  );
+
   const load = useCallback(async () => {
     try {
-      const res = await getLifecycleChanges({
-        lifecycleId: cyc || undefined,
-        person: person.trim() || undefined,
-        from: from || undefined,
-      });
+      const res = await getLifecycleChanges(filters);
       const set = type ? new Set(TYPE_CATEGORY[type] ?? []) : null;
       setRows(set ? res.items.filter((r) => set.has(r.changeType)) : res.items);
       setError(null);
     } catch (e) {
       setError(msgOf(e));
     }
-  }, [cyc, type, person, from]);
+  }, [filters, type]);
+
+  /** F038 `AC-D6`：本 tab 之匯出（與程序書 tab **共用同一句式與同一錯誤碼**）。 */
+  const onExport = useCallback(async () => {
+    try {
+      await exportLifecycleChanges(filters);
+      setFeedback({ tone: 'success', message: '已匯出循環樹狀圖變更歷程（CSV，UTF-8 BOM）' });
+    } catch (e) {
+      setFeedback(exportFailureFeedback(e));
+    }
+  }, [filters]);
 
   useEffect(() => {
     getLifecycles().then(setCycles).catch(() => undefined);
@@ -610,6 +733,19 @@ function TreeTab(): JSX.Element {
 
   return (
     <section>
+      {/* F038 `AC-D1`：本 tab 專屬之匯出鈕，位於 topbar 動作區（prototype 23:88 之 `#exportTree`）。理由同程序書 tab。 */}
+      <TopbarActions>
+        <button
+          id="exportTree"
+          onClick={() => void onExport()}
+          aria-label="匯出"
+          title="匯出循環樹狀圖變更歷程（CSV）"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          <Icon name="download" className="w-4 h-4" />
+          匯出
+        </button>
+      </TopbarActions>
       <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4">
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
@@ -643,6 +779,8 @@ function TreeTab(): JSX.Element {
           <span className="ml-auto text-sm text-slate-500">共 {rows.length} 筆結構變更</span>
         </div>
       </div>
+
+      {feedback && <ExportFeedbackBox feedback={feedback} />}
 
       {error && (
         <div role="alert" className="mb-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
@@ -853,9 +991,18 @@ function DiffBoard({
         aria-hidden="true"
         style={{ position: 'absolute', inset: '-40%', pointerEvents: 'none', display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', transform: 'rotate(-45deg)', opacity: 0.12, zIndex: 5 }}
       >
+        {/*
+          F038 #17：三層式（①身分列 ②機密聲明 ③時間戳）。
+          🔴 **必須同時移除 `whiteSpace: 'nowrap'`**——它**主動禁止換行**，即使拆成三行
+          也會在該 span 內被壓成一行或溢出（architecture-spec §10.14）。
+        */}
         {Array.from({ length: wmCount }).map((_, i) => (
-          <span key={i} className="mono" style={{ color: '#64748B', fontSize: 14, whiteSpace: 'nowrap', padding: '20px 26px' }}>
-            {watermark}
+          <span key={i} className="mono" style={{ color: '#64748B', fontSize: 14, padding: '20px 26px', textAlign: 'center' }}>
+            {watermarkLines(watermark).map((line, j) => (
+              <span key={j} style={{ display: 'block' }}>
+                {line}
+              </span>
+            ))}
           </span>
         ))}
       </div>

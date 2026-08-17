@@ -88,13 +88,25 @@ describe('PublicDocumentDetailService（G-PUB-020）', () => {
     expect(dto.draftingSectionName).toBe('審查室');
     expect(dto.primaryChiefName).toBe('王主管');
     expect(dto.secondaryChiefNames).toEqual(['李室長', '20999']); // 未命中 fallback 員編
-    expect(dto.usingDeptNames).toEqual(['營運管理部', '業務部']);
+    /**
+     * 🔴 2026-08-16 delta（F019 `AC-D9`／`AC-D12`；OQ-D18-09）：前台詳情 DTO **移除**
+     * `usingDeptNames`／`usingDeptIds` 兩欄。
+     * 原斷言（供追溯）：OLD> `expect(dto.usingDeptNames).toEqual(['營運管理部', '業務部']);`
+     * ⚠ 內部型別 `PublicDocDetail.usingDeptIds` **保留**（F041 可見性判定所需，見本檔後段案例）。
+     */
+    expect(Object.prototype.hasOwnProperty.call(dto, 'usingDeptNames')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(dto, 'usingDeptIds')).toBe(false);
     expect(dto.attachments).toHaveLength(1);
     expect(dto.usageForms[0].name).toBe('進件表');
     expect(dto.links[0].targetNumber).toBe('ICSOP-2');
   });
 
-  it('組織/人員未命中 → 名稱 fallback（使用部門/次要室長→代碼；制定三級/主要→null）', async () => {
+  /**
+   * 🔴 2026-08-16 delta（F019 `AC-D12`）：`usingDeptNames` 已自對外 DTO 移除。
+   * 原斷言（供追溯）：OLD> `expect(dto.usingDeptNames).toEqual(['ZZ000']);`
+   * 「未命中 fallback 為代碼」之語意仍由 `secondaryChiefNames` 一列持有，未放寬。
+   */
+  it('組織/人員未命中 → 名稱 fallback（次要室長→代碼；制定三級/主要→null）', async () => {
     const svc = new PublicDocumentDetailService(
       new FakeStore(detail({ usingDeptIds: ['ZZ000'], secondaryChiefIds: ['E-x'], primaryChiefId: 'E-y' })),
       fakeNames({}, {}),
@@ -103,8 +115,8 @@ describe('PublicDocumentDetailService（G-PUB-020）', () => {
     const dto = await svc.detail('doc-1', UNRESTRICTED_VIEWER);
     expect(dto.draftingCompanyName).toBeNull();
     expect(dto.primaryChiefName).toBeNull();
-    expect(dto.usingDeptNames).toEqual(['ZZ000']);
     expect(dto.secondaryChiefNames).toEqual(['E-x']);
+    expect(Object.prototype.hasOwnProperty.call(dto, 'usingDeptNames')).toBe(false);
   });
 
   it('查無文件 → DOCUMENT_NOT_FOUND', async () => {

@@ -57,23 +57,52 @@ function mockAuth(over: { roleCode?: string; orgCode?: string | null; userSubtyp
   });
 }
 
+/**
+ * 🔴 **2026-08-16 fixture 缺陷修正**（`tdd-implementation` 申訴 #4；與後端申訴 #3 同一形狀）。
+ *
+ * 原以 `??` 逐欄套預設 —— 會把**顯式傳入的 `null`** 當成「沒給」而還原為預設值：
+ *   `draftingSectionName: over.draftingSectionName ?? '車輛行銷室',`（`edition`／`draftingCompanyName` 同形）
+ * 於是 `AC-D14` 之空值案傳 `docItem({ draftingSectionName: null })` 想測「未設定 → 顯示 `—`」，
+ * 到了工廠卻變回 `'車輛行銷室'`，**空值渲染路徑從未被執行**。
+ *
+ * 修法：改為 `{ ...DOC_ITEM_DEFAULTS, ...over }` 展開——顯式之 `null`／`''`／`0` 一律生效，
+ * 未傳之鍵才落預設。已確認全檔無 `docItem({ key: undefined })` 之呼叫、預設值逐欄未變。
+ */
+const DOC_ITEM_DEFAULTS: PublicListItem = {
+    id: 'd1',
+    documentNumber: 'ICSOP-SRC-101-1-01',
+    documentName: '車輛分期進件作業',
+    lifecycleId: 'lc1',
+    lifecycleName: '銷售及收款循環',
+    draftingDeptId: 'JA000',
+    draftingDeptName: '營運管理部',
+    draftingCompanyName: '和潤企業股份有限公司',
+    draftingSectionName: '車輛行銷室',
+    edition: "26'01",
+    status: 'active',
+    displayStatus: 'announced',
+    announcedDate: '2026-01-01T00:00:00.000Z',
+    contentSummary: '進件收件與資格初審流程。',
+    pinned: false,
+};
+
 function docItem(over: Partial<PublicListItem> = {}): PublicListItem {
-  return {
-    id: over.id ?? 'd1',
-    documentNumber: over.documentNumber ?? 'ICSOP-SRC-101-1-01',
-    documentName: over.documentName ?? '車輛分期進件作業',
-    lifecycleId: over.lifecycleId ?? 'lc1',
-    lifecycleName: over.lifecycleName ?? '銷售及收款循環',
-    draftingDeptId: over.draftingDeptId ?? 'JA000',
-    draftingDeptName: over.draftingDeptName ?? '營運管理部',
-    usingDeptIds: over.usingDeptIds ?? ['JAC00'],
-    usingDeptNames: over.usingDeptNames ?? ['審查室'],
-    status: over.status ?? 'active',
-    displayStatus: over.displayStatus ?? 'announced',
-    announcedDate: over.announcedDate ?? '2026-01-01T00:00:00.000Z',
-    contentSummary: over.contentSummary ?? '進件收件與資格初審流程。',
-    pinned: over.pinned ?? false,
-  };
+  return { ...DOC_ITEM_DEFAULTS, ...over };
+}
+
+
+/**
+ * 前台 filter-options 端點（F019 `AC-D5`，2026-08-16 delta 新增）之相容 shim。
+ * 本檔案之測試標的與選項清單無關；以動態鍵設定，避免端點尚未實作時於 shared setup
+ * 拋 TypeError 而擊倒整檔既有案例。契約本身由 `PublicListPage.filterDelta.test.tsx` 嚴格斷言。
+ */
+function stubFilterOptions(): void {
+  const fn = (api as unknown as Record<string, unknown>).getPublicFilterOptions;
+  if (typeof fn === 'function') {
+    (vi.mocked(fn) as unknown as { mockResolvedValue: (v: unknown) => void }).mockResolvedValue({
+      draftingCompanies: [], draftingDepts: [], draftingSections: [], chiefs: [], lifecycles: [],
+    });
+  }
 }
 
 function pageOf(items: PublicListItem[], over: Partial<PublicPage> = {}): PublicPage {
@@ -104,6 +133,7 @@ describe('PublicListPage — F041 AC-40：頂部範圍說明句依 viewer 分支
     vi.clearAllMocks();
     vi.mocked(api.getOrgUnits).mockResolvedValue(ORG_UNITS);
     vi.mocked(api.getPublicDocuments).mockResolvedValue(pageOf([docItem({})]));
+    stubFilterOptions();
   });
 
   it('「其他」子分類一般使用者 → 頂部說明句逐字為 SCOPE_NOTICE_OTHER（既有文案一字未改）', async () => {

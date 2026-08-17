@@ -5,8 +5,13 @@ import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { sessionSecret } from './auth/session.config';
 import { trustProxyHops } from './trust-proxy';
+import { fontCandidatePaths, loadCjkFontBytes } from './public/fonts/cjk-font';
+import { assertCjkFontAvailable } from './startup/cjk-font-guard';
 
 async function bootstrap(): Promise<void> {
+  // 🔴 於建立 app／listen 之前 fail-fast：缺 CJK 字型時浮水印之中文會靜默變成 `?`
+  //（合規性控制項失效）。見 architecture-spec §10.10 決策 A10 修法二。
+  assertCjkFontAvailable(loadCjkFontBytes(), fontCandidatePaths(), process.env);
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   // 以 session 密鑰簽章 cookie（OIDC tx cookie 用 signed）
   app.use(cookieParser(sessionSecret()));

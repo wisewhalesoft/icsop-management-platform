@@ -3,7 +3,6 @@ import {
   isAnnounced,
   isPinned,
   splitAndSort,
-  matchesDeptFilter,
   matchesKeyword,
   paginate,
   buildPublicList,
@@ -23,20 +22,42 @@ function viewerOf(orgCode: string | null): ViewerScope {
   return { roleCode: 'User', userSubtype: 'other', orgCode };
 }
 
-/** 測試用文件工廠（僅設定與斷言相關欄位）。 */
+/**
+ * 測試用文件工廠（僅設定與斷言相關欄位）。
+ *
+ * 🔴 2026-08-16 delta（F019 AC-D4／AC-D7／AC-D12；architecture-spec §10.6）：`PublicDocItem`
+ * additive 新增五欄 `draftingCompanyId`／`draftingSectionId`／`primaryChiefId`／
+ * `secondaryChiefIds`／`edition`。`usingDeptIds` **保留**（AC-D12 明訂內部型別不變，
+ * 置頂與 F041 可見性判定所需；只有對外 DTO 移除）。
+ */
+/**
+ * 📝 **2026-08-16 fixture 硬化**（與 `public-list-dto.spec.ts` 之申訴 #3 同一形狀，一次處理完）：
+ * 原以 `??` 逐欄套預設，會把**顯式傳入的 `null`** 當成「沒給」而還原為預設值
+ * ⇒ 想測「該欄為 null」之案例永遠測不到。本檔目前之預設多為 `null`（故尚未被咬到），
+ * 但形狀相同、隨時會被下一個案例踩中，故一併改為 `{ ...defaults, ...over }` 展開：
+ * 顯式之 `null`／`''`／`0` 一律生效，未傳之鍵才落預設。
+ * ✅ 已確認全檔無 `doc({ key: undefined })` 之呼叫，且預設值逐欄未變 ⇒ **現有案例行為完全不變**。
+ */
+const DOC_DEFAULTS: PublicDocItem = {
+    id: 'd',
+    status: 'active',
+    documentNumber: 'N-1',
+    documentName: '文件',
+    lifecycleId: 'lc1',
+    lifecycleName: null,
+    usingDeptIds: [],
+    draftingDeptId: null,
+    draftingCompanyId: null,
+    draftingSectionId: null,
+    primaryChiefId: null,
+    secondaryChiefIds: [],
+    edition: null,
+    announcedDate: '2026-01-01',
+    contentSummary: null,
+};
+
 function doc(over: Partial<PublicDocItem>): PublicDocItem {
-  return {
-    id: over.id ?? 'd',
-    status: over.status ?? 'active',
-    documentNumber: over.documentNumber ?? 'N-1',
-    documentName: over.documentName ?? '文件',
-    lifecycleId: over.lifecycleId ?? 'lc1',
-    lifecycleName: over.lifecycleName ?? null,
-    usingDeptIds: over.usingDeptIds ?? [],
-    draftingDeptId: over.draftingDeptId ?? null,
-    announcedDate: over.announcedDate ?? '2026-01-01',
-    contentSummary: over.contentSummary ?? null,
-  };
+  return { ...DOC_DEFAULTS, ...over };
 }
 
 const TODAY = new Date('2026-07-17T00:00:00Z');
@@ -112,40 +133,22 @@ describe('F019 排序：使用部門置頂 + 編號降冪', () => {
   });
 });
 
-describe('F019 部門篩選：子樹前綴展開（契約 §9）', () => {
-  it('TS-F019-006 選定本部層 J0000 → 涵蓋整個子樹（prefix J）', () => {
-    const items = [
-      doc({ usingDeptIds: ['JA000'] }),
-      doc({ usingDeptIds: ['JAC00'] }),
-      doc({ usingDeptIds: ['JCHA0'] }),
-    ];
-    expect(items.every((i) => matchesDeptFilter(i, 'J0000'))).toBe(true);
-  });
-
-  it('TS-F019-007 選定部層 JA000（prefix JA）→ 不含他部 JB', () => {
-    expect(matchesDeptFilter(doc({ usingDeptIds: ['JAC00'] }), 'JA000')).toBe(true);
-    expect(matchesDeptFilter(doc({ usingDeptIds: ['JB000'] }), 'JA000')).toBe(false);
-  });
-
-  it('TS-F019-008 選定處室層 JAC00（prefix JAC）→ 不含同部他處室 JAD00', () => {
-    expect(matchesDeptFilter(doc({ usingDeptIds: ['JAC00'] }), 'JAC00')).toBe(true);
-    expect(matchesDeptFilter(doc({ usingDeptIds: ['JAD00'] }), 'JAC00')).toBe(false);
-  });
-
-  it('TS-F019-009 選定課層 JCHA0（prefix JCHA）→ 不誤含同處室他課 JCHB0', () => {
-    expect(matchesDeptFilter(doc({ usingDeptIds: ['JCHA0'] }), 'JCHA0')).toBe(true);
-    expect(matchesDeptFilter(doc({ usingDeptIds: ['JCHB0'] }), 'JCHA0')).toBe(false);
-  });
-
-  it('TS-F019-010 Root（00000）有效前綴為空 → 不施加部門限制', () => {
-    expect(matchesDeptFilter(doc({ usingDeptIds: ['ZZ999'] }), '00000')).toBe(true);
-  });
-
-  it('未提供部門篩選 → 全通過', () => {
-    expect(matchesDeptFilter(doc({ usingDeptIds: ['JAC00'] }), undefined)).toBe(true);
-    expect(matchesDeptFilter(doc({ usingDeptIds: ['JAC00'] }), '')).toBe(true);
-  });
-
+/**
+ * 🔴 2026-08-16 delta：原 `describe('F019 部門篩選：子樹前綴展開（契約 §9）')` 之
+ * `TS-F019-006`／`007`／`008`／`009`／`010`／「未提供部門篩選 → 全通過」六案**已刪除**。
+ *
+ * 理由（架構決策 A9，architecture-spec §10.9「交棒給 test-generator 之明示」）：前台「使用部門」
+ * 篩選器經使用者裁決移除（F019 `AC-D1`），`PublicListFilters.deptCode` 與 `matchesDeptFilter()`
+ * **連同函式本體一併移除**，故以 `deptCode` 為輸入之案例**隨函式一起刪除**。
+ * **刪除 ≠ 修改期望值**，故不違反 `AC-U5`／F041 `AC-19`「不得修改任何既有期望值」。
+ *
+ * 🔒 該六案所驗之**子樹展開語意本身並未消失**，其驗證載體改由下列既有測試持續持有，
+ *   全數維持綠燈、期望值未動（F019 `AC-D13` 回歸鎖定）：
+ *   · `backend/src/org-sync/org-hierarchy.spec.ts` `TS-PS-ORG-001`～`007`（`isWithinSubtree`）
+ *   · `backend/src/rbac/viewer-scope.spec.ts`（`isUsingDeptMatched`／`isDocVisibleToViewer`）
+ *   · 本檔 `TS-PS-F019-001`～`007`（`isPinned` 之置頂判定）
+ */
+describe('F019 SQL LIKE 前綴跳脫（`matchesDeptFilter` 移除後之殘留約束）', () => {
   it('TS-F019-011 前綴含萬用字元 %/_ 視為字面值（不擴大比對）', () => {
     // 記憶體 startsWith 天然字面安全：前綴 'J%' 不應命中 'JA000'
     expect('JA000'.startsWith('J%')).toBe(false);
@@ -164,22 +167,33 @@ describe('F019 狀態/循環篩選 + AND 組合', () => {
     expect(page.items.map((d) => d.id)).toEqual(['a']);
   });
 
-  it('TS-F019-014 部門＋循環三條件交集（AND，非聯集）', () => {
+  /**
+   * 🔴 2026-08-16 delta：本案原以 `deptCode`（使用部門篩選）為第一條件，該篩選器已移除（`AC-D1`／A9）。
+   * 依 architecture-spec §10.9「以 F019 `AC-D6` 之新六項篩選任意組合替代」，第一條件改為
+   * `draftingDeptId`（制定部門，`AC-D4` 等值比對）。**本案之測試標的（AND 而非 OR）未變。**
+   * 原斷言（供追溯）：`buildPublicList(items, viewerOf(null), { deptCode: 'JAC00', lifecycleId: 'LC-A' }, TODAY)`
+   *   → `['hit']`，fixture 以 `usingDeptIds` 區分命中與否。
+   */
+  it('TS-F019-014 制定部門＋循環兩條件交集（AND，非聯集）', () => {
     const items = [
-      doc({ id: 'hit', usingDeptIds: ['JAC00'], lifecycleId: 'LC-A' }),
-      doc({ id: 'deptOnly', usingDeptIds: ['JAC00'], lifecycleId: 'LC-B' }),
-      doc({ id: 'cycOnly', usingDeptIds: ['ZZ000'], lifecycleId: 'LC-A' }),
+      doc({ id: 'hit', draftingDeptId: 'JA000', lifecycleId: 'LC-A' }),
+      doc({ id: 'deptOnly', draftingDeptId: 'JA000', lifecycleId: 'LC-B' }),
+      doc({ id: 'cycOnly', draftingDeptId: 'ZZ000', lifecycleId: 'LC-A' }),
     ];
-    const page = buildPublicList(items, viewerOf(null), { deptCode: 'JAC00', lifecycleId: 'LC-A' }, TODAY);
+    const page = buildPublicList(items, viewerOf(null), { draftingDeptId: 'JA000', lifecycleId: 'LC-A' }, TODAY);
     expect(page.items.map((d) => d.id)).toEqual(['hit']);
   });
 
+  /**
+   * 🔴 2026-08-16 delta：同上，第一條件由 `deptCode` 改為 `draftingDeptId`。
+   * 原斷言（供追溯）：`{ deptCode: 'JAC00', keyword: '審查' }` → `['hit']`。
+   */
   it('TS-F019-015 篩選 AND 關鍵字同時套用', () => {
     const items = [
-      doc({ id: 'hit', usingDeptIds: ['JAC00'], documentName: '審查作業' }),
-      doc({ id: 'deptNoKw', usingDeptIds: ['JAC00'], documentName: '其他' }),
+      doc({ id: 'hit', draftingDeptId: 'JA000', documentName: '審查作業' }),
+      doc({ id: 'deptNoKw', draftingDeptId: 'JA000', documentName: '其他' }),
     ];
-    const page = buildPublicList(items, viewerOf(null), { deptCode: 'JAC00', keyword: '審查' }, TODAY);
+    const page = buildPublicList(items, viewerOf(null), { draftingDeptId: 'JA000', keyword: '審查' }, TODAY);
     expect(page.items.map((d) => d.id)).toEqual(['hit']);
   });
 });
@@ -303,34 +317,69 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
     expect(page.items.every((d) => isPinned(d, 'JAC00'))).toBe(true);
   });
 
-  it('AC-16 部門篩選選到業務子樹範圍外之單位 → items=[]、total=0，不拋錯（交集為空係正常查詢結果）', () => {
-    const items = [doc({ id: 'a', usingDeptIds: ['JA000'] })];
+  /**
+   * 🔴 2026-08-16 delta：F041 `AC-16` 之原載體為 `filters.deptCode`，該欄位隨前台「使用部門」
+   * 篩選器一併移除（F019 `AC-D1`／架構 A9），spec 已標記本條「因篩選器移除而不再適用」。
+   * 依 §10.9 之等價替代原則，改以 `AC-D6` 新六項篩選其一（制定部門）選到業務子樹範圍外之值。
+   * **測試標的（交集為空係正常查詢結果、不得拋錯）逐字未變。**
+   * 原斷言（供追溯）：`buildPublicList([doc({usingDeptIds:['JA000']})], bizViewer('JAC00'), { deptCode: 'JCHA0' }, TODAY)`
+   *   → `items === []`、`total === 0`、不拋錯。
+   */
+  it('AC-16（載體遷移）新篩選選到業務可見集合外之值 → items=[]、total=0，不拋錯（交集為空係正常查詢結果）', () => {
+    const items = [doc({ id: 'a', usingDeptIds: ['JA000'], draftingDeptId: 'JA000' })];
     expect(() => {
-      const page = buildPublicList(items, bizViewer('JAC00'), { deptCode: 'JCHA0' }, TODAY);
+      const page = buildPublicList(items, bizViewer('JAC00'), { draftingDeptId: 'ZZ999' }, TODAY);
       expect(page.items).toEqual([]);
       expect(page.total).toBe(0);
     }).not.toThrow();
   });
 
-  it('AC-17 不相符文件於「關鍵字／部門／循環」任何排列組合下皆不出現（業務限制與其餘條件 AND）', () => {
+  /**
+   * 🔴 2026-08-16 delta：組合列表中之 `deptCode` 條件（原組合 ③ 與 ⑤ 之一部分）改以 `AC-D6`
+   * 之新六項篩選替代，並**擴充為五項篩選逐一 ＋ 全項合併**——比原本三種條件更強。
+   * 原斷言（供追溯）：combos ＝ `[{}, {keyword:'審查'}, {deptCode:'JAD00'}, {lifecycleId:'L1'},
+   *   {keyword:'審查', deptCode:'JAD00', lifecycleId:'L1'}]`，逐一斷言 `items` 不含該文件。
+   *
+   * 📌 §10.9 之更強保證：`isDocVisibleToViewer` 之過濾位置在 `base` 之後、`filtered` 之前，
+   *    故**無論篩選項增減或排列組合**，不相符文件根本不會進入 `filtered` 的輸入。
+   *    本案為該結構保證之行為層佐證（列舉），而非其替代。
+   */
+  it('AC-17 不相符文件於新六項篩選之任何排列組合下皆不出現（業務限制與其餘條件 AND）', () => {
     const mismatched = doc({
       id: 'ICSOP-AD-001',
       documentNumber: 'ICSOP-AD-001',
       documentName: '審查作業',
-      usingDeptIds: ['JAD00'],
+      usingDeptIds: ['JAD00'], // 業務@JAC00 不可見
+      draftingCompanyId: 'C9',
+      draftingDeptId: 'JAD00',
+      draftingSectionId: 'JADA0',
+      primaryChiefId: 'E001',
+      secondaryChiefIds: ['E002'],
       lifecycleId: 'L1',
     });
     const viewer = bizViewer('JAC00');
     const combos: Array<Record<string, string>> = [
       {},
       { keyword: '審查' },
-      { deptCode: 'JAD00' },
+      { draftingCompanyId: 'C9' },
+      { draftingDeptId: 'JAD00' },
+      { draftingSectionId: 'JADA0' },
+      { chiefId: 'E001' },
+      { chiefId: 'E002' }, // AC-D7：次要室長命中亦不得使不可見文件現身
       { lifecycleId: 'L1' },
-      { keyword: '審查', deptCode: 'JAD00', lifecycleId: 'L1' },
+      {
+        keyword: '審查',
+        draftingCompanyId: 'C9',
+        draftingDeptId: 'JAD00',
+        draftingSectionId: 'JADA0',
+        chiefId: 'E001',
+        lifecycleId: 'L1',
+      },
     ];
     for (const filters of combos) {
       const page = buildPublicList([mismatched], viewer, filters, TODAY);
       expect(page.items.map((d) => d.id)).not.toContain('ICSOP-AD-001');
+      expect(page.total).toBe(0);
     }
   });
 
@@ -345,14 +394,47 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
     expect(page.hiddenCount).toBe(2); // 僅 in-progress + void；announced-mismatch 不計入
   });
 
-  it('AC-19（回歸鎖定）「其他」子分類 viewer → 輸出與遷移前逐欄相同（沿用既有 TS-F019-013/014/015 案例佐證）', () => {
+  /**
+   * 🔴 2026-08-16 delta：篩選鍵由 `deptCode` 改為 `draftingDeptId`（載體遷移，`AC-D1`／A9）。
+   * 原斷言（供追溯）：`buildPublicList(items, other, { deptCode: 'JAC00', lifecycleId: 'LC-A' }, TODAY)`
+   *   → `items.map(id) === ['hit']`（fixture 以 `usingDeptIds` 區分）。
+   *
+   * 🔒 本案為 F041 `AC-19` 之**逐欄回歸對照組**，本次**加嚴**（非放寬）：由僅比對 `items` 之 id
+   *    擴為逐欄比對 `items`／`total`／`page`／`pageSize`／`hasNext`／`hiddenCount` 與每項 `isPinned`。
+   */
+  it('AC-19（回歸鎖定）「其他」子分類 viewer → 輸出逐欄與業務限制未介入時相同', () => {
     const items = [
-      doc({ id: 'hit', usingDeptIds: ['JAC00'], lifecycleId: 'LC-A' }),
-      doc({ id: 'deptOnly', usingDeptIds: ['JAC00'], lifecycleId: 'LC-B' }),
-      doc({ id: 'cycOnly', usingDeptIds: ['ZZ000'], lifecycleId: 'LC-A' }),
+      doc({ id: 'hit', usingDeptIds: ['JAC00'], draftingDeptId: 'JA000', lifecycleId: 'LC-A' }),
+      doc({ id: 'deptOnly', usingDeptIds: ['JAC00'], draftingDeptId: 'JA000', lifecycleId: 'LC-B' }),
+      doc({ id: 'cycOnly', usingDeptIds: ['ZZ000'], draftingDeptId: 'ZZ000', lifecycleId: 'LC-A' }),
     ];
-    const other = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00' } as ViewerScope;
-    const page = buildPublicList(items, other, { deptCode: 'JAC00', lifecycleId: 'LC-A' }, TODAY);
-    expect(page.items.map((d) => d.id)).toEqual(['hit']); // 與遷移前 TS-F019-014 期望值一致，未受業務限制影響
+    const other: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00' };
+    const page = buildPublicList(items, other, { draftingDeptId: 'JA000', lifecycleId: 'LC-A' }, TODAY);
+    expect(page.items.map((d) => d.id)).toEqual(['hit']); // 未受業務限制影響
+    expect(page.total).toBe(1);
+    expect(page.page).toBe(1);
+    expect(page.pageSize).toBe(50);
+    expect(page.hasNext).toBe(false);
+    expect(page.hiddenCount).toBe(0);
+    expect(page.items.map((d) => isPinned(d, 'JAC00'))).toEqual([true]);
+  });
+
+  /**
+   * 🔒 F041 `AC-19` 之第二道回歸對照組（**本 delta 新增**）：非 `'User'` 角色（例如 ICSOPAdmin）
+   * 與「其他」子分類一樣不受限，且**新增之五項篩選對其語意與對一般使用者完全相同**——
+   * 篩選是使用者條件，可見性才是角色條件，兩者正交（F019 `AC-D13`／`AC-U5`）。
+   */
+  it('AC-19（回歸鎖定）非 User 角色 viewer → 新五項篩選語意與「其他」子分類逐欄相同', () => {
+    const items = [
+      doc({ id: 'hit', usingDeptIds: ['JAD00'], draftingCompanyId: 'C1', primaryChiefId: 'E001' }),
+      doc({ id: 'miss', usingDeptIds: ['JAD00'], draftingCompanyId: 'C2', primaryChiefId: 'E001' }),
+    ];
+    const admin: ViewerScope = { roleCode: 'ICSOPAdmin', userSubtype: 'other', orgCode: 'JAC00' };
+    const other: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00' };
+    const filters = { draftingCompanyId: 'C1', chiefId: 'E001' };
+    const a = buildPublicList(items, admin, filters, TODAY);
+    const b = buildPublicList(items, other, filters, TODAY);
+    expect(a.items.map((d) => d.id)).toEqual(['hit']);
+    expect({ ...a, items: a.items.map((d) => d.id) }).toEqual({ ...b, items: b.items.map((d) => d.id) });
   });
 });

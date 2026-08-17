@@ -6,8 +6,10 @@ import { StorageModule } from '../storage/storage.module';
 import { AuditModule } from '../audit/audit.module';
 import { OrgDirectoryModule } from '../org-directory/org-directory.module';
 import { NameResolutionService } from '../org-directory/name-resolution.service';
+import { PublicModule } from '../public/public.module';
+import { WatermarkService } from '../public/watermark.service';
 import { AppendicesController } from './appendices.controller';
-import { AppendicesService } from './appendices.service';
+import { AppendicesService, FRONT_BURNER } from './appendices.service';
 import {
   APPENDIX_POOL_STORE,
   AUDIT_RECORDER,
@@ -29,7 +31,12 @@ import { AuditWriterRecorder } from './audit-writer-recorder.adapter';
  * 不匯入 DocumentsModule／AccountsModule。
  */
 @Module({
-  imports: [AuthModule, RbacModule, StorageModule, AuditModule, OrgDirectoryModule],
+  /**
+   * 🔴 `PublicModule` 提供前台協作點 `WatermarkService`（燒錄＋F041 可見性判定）。
+   * 反循環無虞：`PublicModule` 之 imports 為 Auth／Rbac／OrgDirectory／Attachments／Storage／Audit，
+   * **不含**本模組（唯一 import 本模組者為 `AppModule`）。
+   */
+  imports: [AuthModule, RbacModule, StorageModule, AuditModule, OrgDirectoryModule, PublicModule],
   controllers: [AppendicesController],
   providers: [
     {
@@ -49,6 +56,13 @@ import { AuditWriterRecorder } from './audit-writer-recorder.adapter';
       useFactory: () => new TypeOrmUploaderDirectory(AppDataSource),
     },
     { provide: UPLOADER_ORG_RESOLVER, useExisting: NameResolutionService },
+    /**
+     * 🔴 F020 `AC-D1`／F039 `AC-D1`：前台附錄下載之**燒錄與可見性判定**協作點。
+     * 此前本 token **從未被任何模組提供** ⇒ `frontBurner` 恆為 `undefined` ⇒ 前台附錄一律回
+     * 未燒錄之原始位元組、`watermarkSnapshot` 恆為 `null`。單元測試以位置參數自建 fake burner，
+     * 故該缺口在測試層完全不可見（`@Optional()` 的代價）。
+     */
+    { provide: FRONT_BURNER, useExisting: WatermarkService },
     AppendicesService,
   ],
   exports: [AppendicesService],

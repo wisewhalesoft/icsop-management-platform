@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { RequirePermission } from '../rbac/require-permission.decorator';
@@ -8,6 +9,18 @@ import {
   DocumentChangeHistoryService,
 } from './document-change-history.service';
 import { LifecycleChangeHistoryService } from './lifecycle-change-history.service';
+import type { ChangeExportResult } from './document-change-history.service';
+
+/**
+ * 送出 CSV 位元組。
+ * 🔴 `res.send(buffer)`（送 Buffer，不送 string）——送字串會讓 Express 自行決定編碼，
+ * BOM 可能悄悄壞掉而測試仍綠（`error-handling.md#export` ①）。
+ */
+function sendCsv(res: Response, { csv, fileName }: ChangeExportResult): void {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.send(csv);
+}
 
 /** 自 SessionUser 取檢視稽核之操作者身分快照。 */
 function actorOf(req: RequestWithSession): ChangeHistoryActor {
@@ -17,6 +30,29 @@ function actorOf(req: RequestWithSession): ChangeHistoryActor {
     name: s?.name ?? null,
     employeeNo: s?.employeeNo ?? null,
     roleCode: s?.roleCode ?? null,
+  };
+}
+
+/**
+ * 查詢／匯出**共用同一份** query 解析（§10.4「三處端點」）——兩份解析漂移時，
+ * 使用者會匯出到一份比畫面多（或少）的結果而毫無徵兆。
+ */
+function documentFiltersOf(q: Record<string, string | undefined>) {
+  return {
+    doc: q.doc?.trim() || undefined,
+    field: q.field?.trim() || undefined,
+    person: q.person?.trim() || undefined,
+    from: q.from || undefined,
+    to: q.to || undefined,
+  };
+}
+
+function lifecycleFiltersOf(q: Record<string, string | undefined>) {
+  return {
+    lifecycleId: q.lifecycleId?.trim() || undefined,
+    changeType: q.changeType?.trim() || undefined,
+    person: q.person?.trim() || undefined,
+    from: q.from || undefined,
   };
 }
 
@@ -39,13 +75,24 @@ export class ChangeHistoryController {
   @Get('documents')
   @RequirePermission(FunctionKey.DOCUMENT_CHANGE_HISTORY, 'read')
   listDocumentChanges(@Query() q: Record<string, string | undefined>) {
-    return this.docs.queryChanges({
-      doc: q.doc?.trim() || undefined,
-      field: q.field?.trim() || undefined,
-      person: q.person?.trim() || undefined,
-      from: q.from || undefined,
-      to: q.to || undefined,
-    });
+    return this.docs.queryChanges(documentFiltersOf(q));
+  }
+
+  /**
+   * F037 匯出（`AC-D1`～`AC-D9`）。
+   * 🔴 **必須宣告於 `documents/:documentId` 之前**：Nest 依宣告順序比對路由，宣告在後會被參數
+   * 路由吃掉（`:documentId = 'export'`）而回一份「文件 id 為 export」之空清單——HTTP 200、
+   * 前端拿到 JSON 而非 CSV，且沒有任何錯誤。
+   * 與查詢端點**共用同一組 query 參數解析**，避免「匯出範圍＝當前篩選」在兩份解析漂移時悄悄失準。
+   */
+  @Get('documents/export')
+  @RequirePermission(FunctionKey.DOCUMENT_CHANGE_HISTORY, 'read')
+  async exportDocumentChanges(
+    @Req() req: RequestWithSession,
+    @Res() res: Response,
+    @Query() q: Record<string, string | undefined>,
+  ): Promise<void> {
+    sendCsv(res, await this.docs.exportChanges(documentFiltersOf(q), actorOf(req)));
   }
 
   @Get('documents/:documentId')
@@ -60,12 +107,18 @@ export class ChangeHistoryController {
   @Get('lifecycles')
   @RequirePermission(FunctionKey.DOCUMENT_CHANGE_HISTORY, 'read')
   listLifecycleChanges(@Query() q: Record<string, string | undefined>) {
-    return this.lifecycles.queryChanges({
-      lifecycleId: q.lifecycleId?.trim() || undefined,
-      changeType: q.changeType?.trim() || undefined,
-      person: q.person?.trim() || undefined,
-      from: q.from || undefined,
-    });
+    return this.lifecycles.queryChanges(lifecycleFiltersOf(q));
+  }
+
+  /** F038 匯出（`AC-D1`／`AC-D2`／`AC-D4`／`AC-D5`）。路由順序理由同上。 */
+  @Get('lifecycles/export')
+  @RequirePermission(FunctionKey.DOCUMENT_CHANGE_HISTORY, 'read')
+  async exportLifecycleChanges(
+    @Req() req: RequestWithSession,
+    @Res() res: Response,
+    @Query() q: Record<string, string | undefined>,
+  ): Promise<void> {
+    sendCsv(res, await this.lifecycles.exportChanges(lifecycleFiltersOf(q), actorOf(req)));
   }
 
   @Get('lifecycles/:lifecycleId')

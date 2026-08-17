@@ -49,6 +49,8 @@ const doc = (over: Partial<DocumentListItem>): DocumentListItem => ({
   draftingCompanyId: '00000', draftingDeptId: 'A2000', draftingSectionId: 'A2100',
   draftingCompanyName: '和潤企業股份有限公司', draftingDeptName: '企劃部', draftingSectionName: '車輛行銷室',
   primaryChiefId: '20050', primaryChiefName: '陳彥廷',
+  // 🔴 2026-08-16 delta（F017 AC-D2／AC-D5／AC-D7；架構 §10.12 列富化）：additive 兩欄
+  secondaryChiefIds: [], hasOjt: false,
   edition: "26'01", announcedDate: '2020-01-01T00:00:00.000Z', contentSummary: '摘要',
   icsopPdfBlobPath: null, icsopPdfFileName: null, links: [], ...over,
 });
