@@ -645,11 +645,11 @@ export interface UsageFormPoolItem {
   uploadedByDept?: string | null;
 }
 
-/** 下載憑證（GET /admin/usage-forms/:formId/download；短效期 URL）。 */
-export interface UsageFormDownloadGrant {
-  url: string;
-  expiresInSeconds: number;
-}
+/**
+ * 🔴 2026-08-17：`UsageFormDownloadGrant`／`AppendixDownloadGrant` 兩個下載憑證型別已移除。
+ * 全部下載端點（前台與後台）皆改為代理串流，前端以 `downloadViaBlob` 觸發、回傳 `void`，
+ * 已無任何 `{ url, expiresInSeconds }` 形狀之回應（F020 `AC-D3a`／architecture-spec §5.2 v1.6b）。
+ */
 
 // ===== E10 F039 附錄管理（附錄池 ＋ 文件關聯與 sortOrder） =====
 
@@ -699,12 +699,6 @@ export interface DocumentAppendixRecord {
   uploadedAt?: string;
   /** F020 `AC-D2`／§10.3：伺服器端之浮水印支援旗標（前端不得自行以 `format` 重算）。 */
   watermarkSupported?: boolean;
-}
-
-/** 附錄下載憑證（後台池下載／前台文件內下載；短效期 URL）。 */
-export interface AppendixDownloadGrant {
-  url: string;
-  expiresInSeconds: number;
 }
 
 export type TriggerType = 'scheduled' | 'manual';

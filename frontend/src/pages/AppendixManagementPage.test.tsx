@@ -70,7 +70,7 @@ describe('AppendixManagementPage — 附錄（附錄池）管理（F039，移植
     vi.mocked(endpoints.uploadAppendix).mockResolvedValue(undefined);
     vi.mocked(endpoints.overwriteAppendix).mockResolvedValue(undefined);
     vi.mocked(endpoints.deleteAppendix).mockResolvedValue(undefined);
-    vi.mocked(endpoints.downloadAppendixFromPool).mockResolvedValue({ url: 'blob:zzz', expiresInSeconds: 300 });
+    vi.mocked(endpoints.downloadAppendixFromPool).mockResolvedValue(undefined);
     vi.spyOn(window, 'open').mockReturnValue(null);
   });
   afterEach(() => vi.restoreAllMocks());
@@ -271,13 +271,22 @@ describe('AppendixManagementPage — 附錄（附錄池）管理（F039，移植
     await waitFor(() => expect(endpoints.deleteAppendix).toHaveBeenCalledWith('ax7', false));
   });
 
-  it('後台個別下載 → 呼叫 downloadAppendixFromPool(appendixId) 並開啟 URL', async () => {
+  /**
+   * 🔴 2026-08-17：後台下載由「SAS URL ＋ `window.open`」改為「代理串流 ＋ `downloadViaBlob`」
+   * （F020 `AC-D3a` 後台側修訂）——`window.open(sasUrl)` 導覽至 `*.blob.core.windows.net`，
+   * Chrome Safe Browsing 對該網域出示「偵測到危險網站」紅底攔截頁。
+   * 原斷言（供追溯）：OLD> `expect(window.open).toHaveBeenCalledWith('blob:zzz', '_blank', 'noopener,noreferrer');`
+   * 🔒 `window.open` 之**反向**斷言留著：改回導覽即紅。
+   */
+  it('後台個別下載 → 以 downloadAppendixFromPool(id, 檔名) 代理串流，不開新分頁', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole('button', { name: '下載' })[0]);
-    await waitFor(() => expect(endpoints.downloadAppendixFromPool).toHaveBeenCalledWith('ax1'));
-    expect(window.open).toHaveBeenCalledWith('blob:zzz', '_blank', 'noopener,noreferrer');
+    await waitFor(() =>
+      expect(endpoints.downloadAppendixFromPool).toHaveBeenCalledWith('ax1', '作業流程對照表.xlsx'),
+    );
+    expect(window.open).not.toHaveBeenCalled();
   });
 
   it('G-ADM-024 對位：上傳者顯示姓名 + 部門（不洩漏原始 accountId）', async () => {

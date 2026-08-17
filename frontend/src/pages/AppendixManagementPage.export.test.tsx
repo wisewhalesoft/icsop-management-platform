@@ -100,7 +100,7 @@ describe('AppendixManagementPage 匯出鈕（F039 AC-D4；prototype 24）', () =
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getAppendixPoolOverview).mockResolvedValue(POOL);
-    vi.mocked(endpoints.downloadAppendixFromPool).mockResolvedValue({ url: 'blob:x', expiresInSeconds: 300 });
+    vi.mocked(endpoints.downloadAppendixFromPool).mockResolvedValue(undefined);
     vi.mocked(endpoints.exportAppendixPool).mockResolvedValue(undefined);
     vi.spyOn(window, 'open').mockReturnValue(null);
   });
@@ -197,7 +197,7 @@ describe('🔒 F039 AC-D3／F020 AC-D4·AC-D7 ④ 後台附錄管理頁維持 RA
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getAppendixPoolOverview).mockResolvedValue(POOL);
-    vi.mocked(endpoints.downloadAppendixFromPool).mockResolvedValue({ url: 'blob:x', expiresInSeconds: 300 });
+    vi.mocked(endpoints.downloadAppendixFromPool).mockResolvedValue(undefined);
     vi.spyOn(window, 'open').mockReturnValue(null);
   });
   afterEach(() => {

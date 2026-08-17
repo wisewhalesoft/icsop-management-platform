@@ -183,12 +183,16 @@ export function UsageFormManagementPage(): JSX.Element {
     setFmtFilter('');
   };
 
-  // ── 下載 ──
+  /**
+   * ── 下載 ──
+   * 🔴 2026-08-17：由 SAS ＋ `window.open` 改為代理串流 ＋ `downloadViaBlob`
+   * （Chrome Safe Browsing 對 `*.blob.core.windows.net` 出示「偵測到危險網站」攔截頁；
+   * F020 `AC-D3a` 後台側修訂）。RAW 與不寫稽核之語意未動。
+   */
   const onDownload = useCallback(
     async (form: UsageFormPoolItem) => {
       try {
-        const grant = await downloadPoolForm(form.id);
-        window.open(grant.url, '_blank', 'noopener,noreferrer');
+        await downloadPoolForm(form.id, form.name);
         toast.success(`已下載表單「${form.name}」`);
       } catch (e) {
         toast.error(e instanceof ApiError ? `下載失敗：${e.code}` : '下載失敗');

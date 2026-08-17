@@ -87,9 +87,9 @@ function setupMocks() {
   vi.mocked(endpoints.getOrgUnits).mockResolvedValue(ORG);
   vi.mocked(endpoints.getDocumentForms).mockResolvedValue(FORMS);
   vi.mocked(endpoints.searchPersons).mockResolvedValue(PERSONS);
-  vi.mocked(endpoints.downloadUsageForm).mockResolvedValue({ url: 'https://blob/x', expiresInSeconds: 300 });
+  vi.mocked(endpoints.downloadUsageForm).mockResolvedValue(undefined);
   vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([]);
-  vi.mocked(endpoints.downloadAttachment).mockResolvedValue({ url: 'https://blob/a', expiresInSeconds: 300 });
+  vi.mocked(endpoints.downloadAttachment).mockResolvedValue(undefined);
   vi.mocked(endpoints.getDocumentAppendices).mockResolvedValue([]); // F039：預設無關聯附錄，個別測試覆寫
 }
 
@@ -141,13 +141,21 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
     expect(navigateMock).toHaveBeenCalledWith('/admin/documents/d2');
   });
 
-  it('使用表單下載：核發 URL 並開新視窗', async () => {
+  /**
+   * 🔴 2026-08-17：本頁三支下載由「SAS URL ＋ `window.open`」改為「代理串流 ＋ `downloadViaBlob`」
+   * （F020 `AC-D3a` 後台側修訂）——原作法導覽至 `*.blob.core.windows.net`，Chrome Safe Browsing
+   * 對該網域出示「偵測到危險網站」紅底攔截頁。
+   * 🔒 `window.open` 之**反向**斷言留著：改回導覽即紅。
+   */
+  it('使用表單下載：代理串流取得檔案，不開新視窗', async () => {
     mockAuth('Supervisor');
     renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /下載/ }));
-    await waitFor(() => expect(endpoints.downloadUsageForm).toHaveBeenCalledWith('d1', 'f1'));
-    expect(openMock).toHaveBeenCalledWith('https://blob/x', '_blank', 'noopener,noreferrer');
+    await waitFor(() =>
+      expect(endpoints.downloadUsageForm).toHaveBeenCalledWith('d1', 'f1', '進件申請書.xlsx'),
+    );
+    expect(openMock).not.toHaveBeenCalled();
   });
 
   describe('附件（僅下載）三類合併清單（prototype 16 renderAttach）', () => {
@@ -211,13 +219,22 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
         within(attachRow('車輛分期進件作業_v1.3.pdf')).getByRole('button', { name: /下載/ }),
       );
       await waitFor(() =>
-        expect(endpoints.downloadAttachment).toHaveBeenCalledWith('documents/d1/icsop_pdf/abc.pdf'),
+        expect(endpoints.downloadAttachment).toHaveBeenCalledWith(
+          'documents/d1/icsop_pdf/abc.pdf',
+          '車輛分期進件作業_v1.3.pdf',
+        ),
       );
-      expect(openMock).toHaveBeenCalledWith('https://blob/a', '_blank', 'noopener,noreferrer');
+      expect(openMock).not.toHaveBeenCalled();
       // SYS-1：下載回饋改以 toast 呈現（不再是內嵌 notice）。
-      expect(
-        await screen.findByText('下載「車輛分期進件作業_v1.3.pdf」（已寫入稽核 DOWNLOAD）'),
-      ).toBeInTheDocument();
+      /**
+       * 🔴 **2026-08-17 文案更正**：原文案為
+       *   OLD> `下載「車輛分期進件作業_v1.3.pdf」（已寫入稽核 DOWNLOAD）`
+       * 但**後台路徑從來不寫調閱稽核**——`AttachmentsService` 之下載方法未呼叫任何 audit
+       * （管理端存取，F026 OQ-FM-01 之既有裁決；F020 `AC-D4` 更明文「不寫入任何調閱稽核」）。
+       * 該提示自始為假，本測試也就一直在替一句假話背書。稽核只發生於前台 `/public/...`。
+       */
+      expect(await screen.findByText('下載「車輛分期進件作業_v1.3.pdf」')).toBeInTheDocument();
+      expect(screen.queryByText(/已寫入稽核 DOWNLOAD/)).toBeNull();
     });
   });
 
@@ -263,14 +280,16 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
     it('後台個別下載附錄 → 呼叫 downloadAppendixFromPool（後台管理端存取，不寫稽核）', async () => {
       mockAuth('Supervisor');
       vi.mocked(endpoints.getDocumentAppendices).mockResolvedValue(APPX);
-      vi.mocked(endpoints.downloadAppendixFromPool).mockResolvedValue({ url: 'https://blob/appendix', expiresInSeconds: 300 });
+      vi.mocked(endpoints.downloadAppendixFromPool).mockResolvedValue(undefined);
       renderPage();
       await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
       await userEvent.click(
         within(attachRow('作業流程對照表.xlsx')).getByRole('button', { name: /下載/ }),
       );
-      await waitFor(() => expect(endpoints.downloadAppendixFromPool).toHaveBeenCalledWith('ax1'));
-      expect(openMock).toHaveBeenCalledWith('https://blob/appendix', '_blank', 'noopener,noreferrer');
+      await waitFor(() =>
+        expect(endpoints.downloadAppendixFromPool).toHaveBeenCalledWith('ax1', '作業流程對照表.xlsx'),
+      );
+      expect(openMock).not.toHaveBeenCalled();
     });
 
     it('AC-26 無關聯附錄 → 顯示「無附錄」，非錯誤、非空白區塊', async () => {

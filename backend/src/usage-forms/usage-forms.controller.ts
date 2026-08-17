@@ -114,14 +114,26 @@ export class UsageFormsController {
     });
   }
 
-  /** 後台表單池個別下載（read gate；核發短效 URL）。 */
+  /**
+   * 後台表單池個別下載（read gate）。
+   * 🔴 2026-08-17：由核發 SAS 改為**代理串流**（F020 `AC-D3a` 後台側修訂）——原作法之
+   * `window.open(sasUrl)` 導覽至 `*.blob.core.windows.net`，Chrome Safe Browsing 出示
+   * 「偵測到危險網站」攔截頁。RAW、不寫稽核之語意（`AC-D4`）未動。
+   */
   @Get('admin/usage-forms/:formId/download')
   @RequirePermission(FunctionKey.USAGE_FORM_MANAGEMENT, 'read')
-  downloadFromPool(
+  async downloadFromPool(
     @Req() req: RequestWithSession,
     @Param('formId') formId: string,
-  ) {
-    return this.svc.downloadFromPool(req.sessionUser, formId);
+    @Res() res: Response,
+  ): Promise<void> {
+    const { bytes, fileName, contentType } = await this.svc.downloadFromPool(
+      req.sessionUser,
+      formId,
+    );
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', attachmentDisposition(fileName));
+    res.send(bytes);
   }
 
   @Delete('admin/usage-forms/:formId')
@@ -168,18 +180,29 @@ export class UsageFormsController {
   }
 
   /**
-   * F018 `AC-D22` 後台側（既有路徑，維持）：回 `{ url }` 之短效期 SAS JSON、RAW、**不寫稽核**。
+   * F018 `AC-D22` 後台側：**RAW、不寫稽核**（管理端存取）。
    * 閘門維持 `下載列印文件` read（Supervisor／DeptContact 亦須可下載，見 `AC-D22` ⚠）。
-   * 呼叫端＝後台唯讀詳情頁 `DocumentReadonlyPage`（讀 `grant.url` 後 `window.open`）。
+   * 呼叫端＝後台唯讀詳情頁 `DocumentReadonlyPage`。
+   *
+   * 🔴 2026-08-17：由回 `{ url }` 短效期 SAS 改為**代理串流**（F020 `AC-D3a` 後台側修訂）。
+   * ⚠ 與同檔前台端點之差別**只剩燒錄與稽核**（前台燒、後台不燒；前台寫稽核、後台不寫），
+   * 傳輸模式已一致——但兩者**仍為兩條 route、兩支方法**，因為那兩項差異本身不可共用。
    */
   @Get('documents/:documentId/usage-forms/:formId/download')
   @RequirePermission(FunctionKey.DOCUMENT_DOWNLOAD_PRINT, 'read')
-  download(
+  async download(
     @Req() req: RequestWithSession,
     @Param('documentId') _documentId: string,
     @Param('formId') formId: string,
-  ) {
-    return this.svc.downloadFormRaw(req.sessionUser, formId);
+    @Res() res: Response,
+  ): Promise<void> {
+    const { bytes, fileName, contentType } = await this.svc.downloadFormRaw(
+      req.sessionUser,
+      formId,
+    );
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', attachmentDisposition(fileName));
+    res.send(bytes);
   }
 
   /**

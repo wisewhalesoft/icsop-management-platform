@@ -7,11 +7,8 @@ import {
   Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import {
-  BLOB_STORE,
-  BlobStore,
-  DOWNLOAD_URL_TTL_SECONDS,
-} from '../storage/blob-store';
+import { BLOB_STORE, BlobStore } from '../storage/blob-store';
+import { contentTypeOfFileName } from '../storage/content-disposition';
 import {
   assertFormatAllowed,
   assertSizeWithinLimit,
@@ -50,9 +47,15 @@ export interface UploadFile {
   buffer?: Buffer;
 }
 
-export interface DownloadGrant {
-  url: string;
-  expiresInSeconds: number;
+/**
+ * 後台附件下載之回傳（代理串流；controller 據此設定兩個標頭並 `res.send(bytes)`）。
+ * 🔴 2026-08-17 取代原 `DownloadGrant`（`{ url, expiresInSeconds }`）——理由見
+ * `downloadAttachmentRaw` 之註解與 F020 `AC-D3a`。
+ */
+export interface AttachmentDownloadBytes {
+  bytes: Buffer;
+  fileName: string;
+  contentType: string;
 }
 
 const FIELD_KEY_BY_TYPE: Record<SingleAttachmentType, string> = {
@@ -201,13 +204,23 @@ export class AttachmentsService {
 
   /**
    * 受控下載：驗證 session（未登入 → FILE_ACCESS_DENIED）＋ blobPath 歸屬現存附件
-   * （舊/失效參照 → FILE_ACCESS_DENIED），通過後核發短效期 URL。
-   * 下載屬全角色 READ（下載/列印文件），故僅需 session 存在，不另設角色寫入閘門。
+   * （舊/失效參照 → FILE_ACCESS_DENIED），通過後回**原始檔位元組**（代理串流）。
+   * 下載屬後台 ICSOP 文件管理 read（`AC-D6` 之閘門收斂），路由層已把關。
+   *
+   * 🔴 **2026-08-17：由核發 SAS URL 改為代理串流**（F020 `AC-D3a` 之後台側修訂）。
+   * 原作法回 `{ url }`，前端 `window.open(sasUrl)` 導覽至 `*.blob.core.windows.net`——
+   * Chrome Safe Browsing 對該網域出示「偵測到危險網站」紅底攔截頁，使用者根本下載不到檔案。
+   * 代理後**沒有任何第三方網域參與**，攔截頁在結構上不可能出現。
+   * 順帶修好檔名：blobPath 末段為 `randomUUID()`（見 `buildAttachmentBlobPath`），
+   * SAS 直連時使用者存到的是 `<uuid>.pdf`，原始檔名整個丟失。
+   *
+   * 🔒 **F020 `AC-D4` 之後台 RAW 硬邊界未動**：本方法**不燒錄浮水印、不寫調閱稽核**，
+   * 僅換傳輸方式。燒錄與稽核只發生在前台專屬路徑（`/public/...`）。
    */
-  async getDownloadUrl(
+  async downloadAttachmentRaw(
     session: SessionContext | undefined,
     blobPath: string,
-  ): Promise<DownloadGrant> {
+  ): Promise<AttachmentDownloadBytes> {
     if (!session?.accountId) {
       throw new ForbiddenException('FILE_ACCESS_DENIED');
     }
@@ -215,8 +228,19 @@ export class AttachmentsService {
     if (!rec) {
       throw new NotFoundException('FILE_ACCESS_DENIED');
     }
-    const url = await this.blob.getDownloadUrl(blobPath, DOWNLOAD_URL_TTL_SECONDS);
-    return { url, expiresInSeconds: DOWNLOAD_URL_TTL_SECONDS };
+    const bytes = await this.blob.getBytes(blobPath);
+    // DB 有參照但 blob 不存在（人工刪檔／回收失誤）：與「參照不存在」同一對外錯誤碼，
+    // 不以不同錯誤區分兩者（區分即洩漏「這筆參照確實存在」）。
+    if (!bytes) {
+      throw new NotFoundException('FILE_ACCESS_DENIED');
+    }
+    return {
+      bytes,
+      fileName: rec.fileName,
+      // §10.3：以上傳時已驗證之**檔名副檔名**為事實，不採 `rec.contentType`
+      // （該欄源自 multipart 之客戶端宣告）。
+      contentType: contentTypeOfFileName(rec.fileName),
+    };
   }
 
   /**

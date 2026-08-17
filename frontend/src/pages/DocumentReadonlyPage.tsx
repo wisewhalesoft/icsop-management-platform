@@ -137,12 +137,21 @@ export function DocumentReadonlyPage(): JSX.Element {
   );
   const personName = useCallback((empNo: string | null) => (empNo ? personNames.get(empNo) ?? empNo : '—'), [personNames]);
 
+  /**
+   * 🔴 2026-08-17（F020 `AC-D3a` 後台側修訂）：本頁三支下載一律改為
+   * 後端代理串流 ＋ `downloadViaBlob`（fetch → Blob → 程式化 `<a download>`）。
+   * 原作法 `window.open(grant.url)` 導覽至 `*.blob.core.windows.net`，Chrome Safe Browsing
+   * 對該網域出示「偵測到危險網站」紅底攔截頁，使用者根本下載不到檔案。
+   *
+   * 📝 **文案同步更正**：三支原本皆提示「已寫入稽核 DOWNLOAD」，但**後台路徑從來不寫調閱稽核**
+   * （管理端存取，F026 OQ-FM-01 之既有裁決；F020 `AC-D4` 更明文「不寫入任何調閱稽核」）——
+   * 該提示自始為假。稽核只發生於前台 `/public/...` 路徑。
+   */
   const onDownloadForm = useCallback(
     async (formId: string, name: string) => {
       try {
-        const grant = await downloadUsageForm(id, formId);
-        window.open(grant.url, '_blank', 'noopener,noreferrer');
-        toast.success(`下載「${name}」（已寫入稽核 DOWNLOAD）`);
+        await downloadUsageForm(id, formId, name);
+        toast.success(`下載「${name}」`);
       } catch {
         toast.error(`無法下載「${name}」`);
       }
@@ -157,8 +166,7 @@ export function DocumentReadonlyPage(): JSX.Element {
   const onDownloadAppendix = useCallback(
     async (appendixId: string, name: string) => {
       try {
-        const grant = await downloadAppendixFromPool(appendixId);
-        window.open(grant.url, '_blank', 'noopener,noreferrer');
+        await downloadAppendixFromPool(appendixId, name);
         toast.success(`下載附錄「${name}」（不燒錄浮水印；後台管理端存取不寫調閱稽核）`);
       } catch {
         toast.error(`無法下載「${name}」`);
@@ -167,13 +175,12 @@ export function DocumentReadonlyPage(): JSX.Element {
     [toast],
   );
 
-  /** ICSOP PDF／OJT：走受控下載端點（blobPath）；浮水印與否由伺服器端依 F020 決定。 */
+  /** ICSOP PDF／OJT：走後台受控下載端點（blobPath）——RAW 原檔，不燒錄浮水印（F020 `AC-D4`）。 */
   const onDownloadAttachment = useCallback(
     async (blobPath: string, name: string) => {
       try {
-        const grant = await downloadAttachment(blobPath);
-        window.open(grant.url, '_blank', 'noopener,noreferrer');
-        toast.success(`下載「${name}」（已寫入稽核 DOWNLOAD）`);
+        await downloadAttachment(blobPath, name);
+        toast.success(`下載「${name}」`);
       } catch {
         toast.error(`無法下載「${name}」`);
       }

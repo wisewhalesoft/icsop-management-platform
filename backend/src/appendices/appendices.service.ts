@@ -8,11 +8,8 @@ import {
   Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import {
-  BLOB_STORE,
-  BlobStore,
-  DOWNLOAD_URL_TTL_SECONDS,
-} from '../storage/blob-store';
+import { BLOB_STORE, BlobStore } from '../storage/blob-store';
+import { contentTypeOfFormat } from '../storage/content-disposition';
 import {
   assertFormatAllowed,
   assertSizeWithinLimit,
@@ -75,11 +72,6 @@ export function resolveAppendixName(
   return resolved;
 }
 
-export interface DownloadGrant {
-  url: string;
-  expiresInSeconds: number;
-}
-
 /** 附錄 blob key（穩定；覆蓋一律新 key，舊 key 於 DB 參照更新後回收，AC-13）。 */
 export function buildAppendixBlobPath(fileName: string): string {
   const ext = extensionOf(fileName);
@@ -104,8 +96,9 @@ function dedupe(ids: string[]): string[] {
  * documentId 存在性**（DOCUMENT_NOT_FOUND），不沿用 usage-forms 之「信任外鍵」模式。
  */
 /**
- * F020 `AC-D3a`：前台附錄下載一律**代理串流**——回傳位元組本身，**不核發 SAS URL、不 3xx 轉址**。
- * （後台之 `downloadFromPool()` 維持核發 SAS，一行不改。）
+ * F020 `AC-D3a`：附錄下載一律**代理串流**——回傳位元組本身，**不核發 SAS URL、不 3xx 轉址**。
+ * 🔴 2026-08-17：後台之 `downloadFromPool()` **亦改用本型別**，原 `DownloadGrant` 已無消費端
+ * 而移除。前後台之差別只剩「是否燒錄／是否寫稽核」（`AC-D4`），不再是傳輸模式的差別。
  */
 export interface AppendixDownloadBytes {
   bytes: Buffer;
@@ -132,15 +125,12 @@ export interface FrontBurner {
   assertDocumentVisible?(session: WatermarkSession, documentId: string): Promise<void>;
 }
 
-/** 附錄之三種允許格式 → 回應 Content-Type（白名單既定，不接受客戶端宣告）。 */
-function contentTypeOf(format: string): string {
-  if (format === 'pdf') return 'application/pdf';
-  if (format === 'xlsx') {
-    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  }
-  if (format === 'xls') return 'application/vnd.ms-excel';
-  return 'application/octet-stream';
-}
+/**
+ * 附錄之允許格式 → 回應 Content-Type（白名單既定，不接受客戶端宣告）。
+ * 🔴 2026-08-17：改指向 `storage/content-disposition` 之**全站唯一表**（原為三份逐字重複之
+ * 私有實作，見該檔註解）。
+ */
+const contentTypeOf = contentTypeOfFormat;
 
 /** 匯出結果（controller 據此設定 Content-Disposition 並 `res.send(buffer)`）。 */
 export interface AppendixExportResult {
@@ -477,17 +467,25 @@ export class AppendicesService {
 
   /**
    * 後台附錄池個別下載（prototype 24 之下載鈕；功能 read gate → SysAdmin 唯讀亦可下載，
-   * 主管/部門窗口/一般使用者=無 → PERMISSION_DENIED）。核發短效 URL。
+   * 主管/部門窗口/一般使用者=無 → PERMISSION_DENIED）。
    * **管理端存取：不寫稽核、不燒錄浮水印**（比照 F026 OQ-FM-01 之既有裁決）。
+   *
+   * 🔴 **2026-08-17：由核發 SAS URL 改為代理串流**（F020 `AC-D3a` 之後台側修訂）。
+   * 原作法回 `{ url }`，前端 `window.open(sasUrl)` 導覽至 `*.blob.core.windows.net`
+   * ⇒ Chrome Safe Browsing 出示「偵測到危險網站」紅底攔截頁。代理後無第三方網域參與。
+   * 🔒 RAW 語意逐字未動（`AC-D4`）：**不**呼叫 `burnIfPdf`、**不**寫稽核——只換傳輸方式。
    */
   async downloadFromPool(
     session: SessionContext | undefined,
     appendixId: string,
-  ): Promise<DownloadGrant> {
+  ): Promise<AppendixDownloadBytes> {
     this.assertCanRead(session?.roleCode);
     const appendix = await this.requireAppendix(appendixId);
-    const url = await this.blob.getDownloadUrl(appendix.blobPath, DOWNLOAD_URL_TTL_SECONDS);
-    return { url, expiresInSeconds: DOWNLOAD_URL_TTL_SECONDS };
+    const bytes = await this.blob.getBytes(appendix.blobPath);
+    // DB 有參照但 blob 不存在 → 與「附錄不存在」同一對外錯誤碼（區分兩者即洩漏參照存在）。
+    if (!bytes) throw new NotFoundException('APPENDIX_NOT_FOUND');
+    // §10.3：格式以上傳時已驗證之 `format` 欄為權威，不採客戶端宣告之 content-type。
+    return { bytes, fileName: appendix.name, contentType: contentTypeOf(appendix.format) };
   }
 
   /**

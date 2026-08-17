@@ -87,7 +87,7 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
     vi.mocked(endpoints.uploadUsageForms).mockResolvedValue(undefined);
     vi.mocked(endpoints.overwriteUsageForm).mockResolvedValue(undefined);
     vi.mocked(endpoints.deleteUsageForm).mockResolvedValue(undefined);
-    vi.mocked(endpoints.downloadPoolForm).mockResolvedValue({ url: 'blob:zzz', expiresInSeconds: 300 });
+    vi.mocked(endpoints.downloadPoolForm).mockResolvedValue(undefined);
     vi.spyOn(window, 'open').mockReturnValue(null);
   });
   afterEach(() => vi.restoreAllMocks());
@@ -282,13 +282,22 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
     await waitFor(() => expect(endpoints.deleteUsageForm).toHaveBeenCalledWith('uf7', false));
   });
 
-  it('TS-F018-013 個別下載 → 呼叫 downloadPoolForm(formId) 並開啟 URL', async () => {
+  /**
+   * 🔴 2026-08-17：後台下載由「SAS URL ＋ `window.open`」改為「代理串流 ＋ `downloadViaBlob`」
+   * （F020 `AC-D3a` 後台側修訂）——`window.open(sasUrl)` 導覽至 `*.blob.core.windows.net`，
+   * Chrome Safe Browsing 對該網域出示「偵測到危險網站」紅底攔截頁。
+   * 原斷言（供追溯）：OLD> `expect(window.open).toHaveBeenCalledWith('blob:zzz', '_blank', 'noopener,noreferrer');`
+   * 🔒 `window.open` 之**反向**斷言留著：改回導覽即紅。
+   */
+  it('TS-F018-013 個別下載 → 以 downloadPoolForm(formId, 檔名) 代理串流，不開新分頁', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole('button', { name: '下載' })[0]);
-    await waitFor(() => expect(endpoints.downloadPoolForm).toHaveBeenCalledWith('uf1'));
-    expect(window.open).toHaveBeenCalledWith('blob:zzz', '_blank', 'noopener,noreferrer');
+    await waitFor(() =>
+      expect(endpoints.downloadPoolForm).toHaveBeenCalledWith('uf1', '進件申請書.xlsx'),
+    );
+    expect(window.open).not.toHaveBeenCalled();
   });
 
   it('G-ADM-024 上傳者：顯示姓名 + 部門（不顯示原始 accountId）', async () => {

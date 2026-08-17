@@ -298,27 +298,40 @@ describe('🔒 F039 AC-D3 後台附錄管理頁個別下載維持 RAW（OQ-FM-01
     const { svc, blob, burner, audit } = makeHarness([rec]);
     await blob.put(rec.blobPath, PDF_BYTES, 'application/pdf');
 
-    const grant = await svc.downloadFromPool(session, 'ax-pdf');
+    const out = await svc.downloadFromPool(session, 'ax-pdf');
 
     expect(burner.calls).toHaveLength(0);
     expect(audit.events).toHaveLength(0);
-    expect(grant.url).toContain(rec.blobPath); // 維持既有 SAS 核發語意，一字不改
-    expect(blob.urlCalls).toHaveLength(1);
+    /**
+     * 🔴 **2026-08-17：由「核發 SAS」改為「代理串流」**（F020 `AC-D3a` 後台側修訂；
+     * Chrome Safe Browsing 對 `*.blob.core.windows.net` 出示「偵測到危險網站」攔截頁）。
+     * 原斷言（供追溯）：OLD> `expect(grant.url).toContain(rec.blobPath);` ＋ `expect(blob.urlCalls).toHaveLength(1);`
+     * 🔒 **本案所鎖定的 RAW 語意反而更強**：原本只驗「URL 字串沒被動過」，現在直接驗
+     * **回傳位元組逐位元組等於 Blob 原件**——燒錄必然改變位元組，故這才是 RAW 的直接證明。
+     */
+    expect(out.bytes.equals(PDF_BYTES)).toBe(true);
+    expect(blob.urlCalls).toHaveLength(0); // 不再核發任何 SAS
   });
 
-  it('🔴 AC-D3 同一 `blobPath`：前台所得位元組與 Blob 原始位元組**不相等**，後台路徑則完全不經手位元組', async () => {
+  /**
+   * 📝 **2026-08-17 案名更正**：原案名結尾為「**後台路徑則完全不經手位元組**」——傳輸模式改為
+   * 代理串流後，後台確實經手位元組。`AC-D3`／`AC-D4` 所鎖的從來是**內容為 RAW**（不燒錄）
+   * 與**不寫稽核**，不是「伺服器有沒有碰到 bytes」。案名依其實際驗證之事實更正。
+   * 原案名（逐字保留）：`🔴 AC-D3 同一 blobPath：前台所得位元組與 Blob 原始位元組**不相等**，後台路徑則完全不經手位元組`
+   */
+  it('🔴 AC-D3 同一 `blobPath`：前台所得位元組已燒錄（與原件不等），後台所得為 RAW（與原件逐位元組相同）', async () => {
     const rec = recordOf();
     const { svc, blob, burner } = makeHarness([rec]);
     await blob.put(rec.blobPath, PDF_BYTES, 'application/pdf');
 
     const front = await svc.downloadAppendix(VIEWER, 'doc-1', 'ax-pdf');
     const burnedCount = burner.calls.length;
-    await svc.downloadFromPool(ICSOP_ADMIN, 'ax-pdf');
+    const back = await svc.downloadFromPool(ICSOP_ADMIN, 'ax-pdf');
 
     expect(front.bytes.equals(PDF_BYTES)).toBe(false); // 前台＝已燒錄
     expect(burner.calls).toHaveLength(burnedCount); // 後台未再觸發燒錄
-    // 後台回傳之 RAW 位元組即 Blob 中原始檔（逐位元組相同）
-    expect((await blob.getBytes(rec.blobPath))?.equals(PDF_BYTES)).toBe(true);
+    // 🔴 直接比對**後台回傳之位元組**，而非「Blob 裡的原件還在」——後者無論後台回什麼都成立。
+    expect(back.bytes.equals(PDF_BYTES)).toBe(true);
   });
 
   it('🔒 主管／部門窗口／一般使用者呼叫後台端點 → PERMISSION_DENIED（AC-33 不變）', async () => {

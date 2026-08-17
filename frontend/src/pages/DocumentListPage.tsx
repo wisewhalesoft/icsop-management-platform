@@ -239,11 +239,14 @@ export function DocumentListPage(): JSX.Element {
     void loadPool(getUsageFormPool, setFormPool);
   }, [canRead]);
 
-  /** 受控下載：核發短效期 URL → 開新分頁（伺服器端寫入稽核 DOWNLOAD）。 */
+  /**
+   * 受控下載：後端代理串流 → `fetch` 取 Blob → 程式化 `<a download>`（RAW，不燒錄、不寫稽核）。
+   * 🔴 2026-08-17：原為 `window.open(grant.url)` 導覽至 Azure Blob SAS URL，Chrome Safe Browsing
+   * 對 `*.blob.core.windows.net` 出示「偵測到危險網站」攔截頁（F020 `AC-D3a` 後台側修訂）。
+   */
   const openBlob = useCallback(async (blobPath: string, label: string) => {
     try {
-      const grant = await downloadAttachment(blobPath);
-      window.open(grant.url, '_blank', 'noopener,noreferrer');
+      await downloadAttachment(blobPath, label);
     } catch {
       toast.error(`無法下載「${label}」`);
     }

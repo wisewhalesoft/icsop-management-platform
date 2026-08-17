@@ -470,14 +470,22 @@ export function getDocumentAttachments(
 }
 
 /**
- * GET /documents/attachments/download?blobPath=（F016 受控下載；核發短效期 URL＋寫入稽核）。
+ * GET /documents/attachments/download?blobPath=（F016 後台受控下載；RAW、不燒錄、不寫稽核）。
  * 失效/非現存參照 → FILE_ACCESS_DENIED。
+ *
+ * 🔴 **2026-08-17：由 `{ url }` SAS ＋ `window.open` 改為代理串流 ＋ `downloadViaBlob`**
+ * （F020 `AC-D3a` 後台側修訂）。原作法導覽至 `*.blob.core.windows.net`，Chrome Safe Browsing
+ * 對該網域出示「偵測到危險網站」紅底攔截頁——使用者根本下載不到檔案。
+ * 順帶修好檔名：SAS 直連時瀏覽器只看得到 blobPath 末段，而該段是 `randomUUID()`。
+ * 🔴 不得改回 `window.open`／`<a href>`：top-level navigation 送 `Accept: text/html` 會撞
+ * SPA fallback，使用者拿到副檔名 `.pdf` 而內容是 app shell 的檔案（§10.1）。
+ *
+ * `fallbackName` 僅在回應無 `Content-Disposition` 時採用（後端一律帶，故實務上不會用到）。
  */
-export function downloadAttachment(
-  blobPath: string,
-): Promise<{ url: string; expiresInSeconds: number }> {
-  return apiFetch(
+export function downloadAttachment(blobPath: string, fallbackName: string): Promise<void> {
+  return downloadViaBlob(
     `/documents/attachments/download?blobPath=${encodeURIComponent(blobPath)}`,
+    fallbackName,
   );
 }
 
@@ -509,14 +517,22 @@ export function unlinkUsageForm(documentId: string, formId: string): Promise<voi
 
 /**
  * GET /documents/:documentId/usage-forms/:formId/download（F018 `AC-D22` **後台側**）：
- * 回 `{ url }` 短效期 SAS、RAW（不燒錄）、**不寫稽核**。呼叫端＝後台唯讀詳情頁。
- * 前台請改用 `downloadUsageFormFront`（`/public/...`，代理串流＋燒錄＋稽核）。
+ * RAW（不燒錄）、**不寫稽核**。呼叫端＝後台唯讀詳情頁。
+ * 前台請改用 `downloadUsageFormFront`（`/public/...`，同為代理串流但**會燒錄＋寫稽核**）。
+ *
+ * 🔴 2026-08-17：由 `{ url }` SAS 改為代理串流（理由見 `downloadAttachment`）。
+ * ⚠ 兩者傳輸模式已相同，但**仍是兩支不同的函式打兩條不同的 route**——差別在燒錄與稽核，
+ * 那兩項不可共用；合併會讓後台取得燒錄後位元組而違反 F020 `AC-D4`。
  */
 export function downloadUsageForm(
   documentId: string,
   formId: string,
-): Promise<{ url: string; expiresInSeconds: number }> {
-  return apiFetch(`/documents/${documentId}/usage-forms/${formId}/download`);
+  fallbackName: string,
+): Promise<void> {
+  return downloadViaBlob(
+    `/documents/${documentId}/usage-forms/${formId}/download`,
+    fallbackName,
+  );
 }
 
 /**
@@ -855,11 +871,12 @@ export function deleteUsageForm(formId: string, confirmed = false): Promise<void
   return apiFetch<void>(`/admin/usage-forms/${formId}${q}`, { method: 'DELETE' });
 }
 
-/** GET /admin/usage-forms/:formId/download（表單池管理頁個別下載，核發短效 URL）。 */
-export function downloadPoolForm(
-  formId: string,
-): Promise<import('./types').UsageFormDownloadGrant> {
-  return apiFetch(`/admin/usage-forms/${formId}/download`);
+/**
+ * GET /admin/usage-forms/:formId/download（表單池管理頁個別下載；RAW、不寫稽核）。
+ * 🔴 2026-08-17：由 `{ url }` SAS 改為代理串流（理由見 `downloadAttachment`）。
+ */
+export function downloadPoolForm(formId: string, fallbackName: string): Promise<void> {
+  return downloadViaBlob(`/admin/usage-forms/${formId}/download`, fallbackName);
 }
 
 // ===== E10 F039 附錄管理（附錄池 ＋ 文件關聯與 sortOrder） =====
@@ -931,11 +948,15 @@ export function deleteAppendix(appendixId: string, confirmed = false): Promise<v
   return apiFetch<void>(`/admin/appendices/${appendixId}${q}`, { method: 'DELETE' });
 }
 
-/** GET /admin/appendices/:appendixId/download（後台個別下載；管理端存取，不寫稽核、不燒錄浮水印）。 */
+/**
+ * GET /admin/appendices/:appendixId/download（後台個別下載；管理端存取，不寫稽核、不燒錄浮水印）。
+ * 🔴 2026-08-17：由 `{ url }` SAS 改為代理串流（理由見 `downloadAttachment`）。
+ */
 export function downloadAppendixFromPool(
   appendixId: string,
-): Promise<import('./types').AppendixDownloadGrant> {
-  return apiFetch(`/admin/appendices/${appendixId}/download`);
+  fallbackName: string,
+): Promise<void> {
+  return downloadViaBlob(`/admin/appendices/${appendixId}/download`, fallbackName);
 }
 
 /** GET /documents/:documentId/appendices（前後台共用；**已依 sortOrder 遞增**，前端不得再排序）。 */

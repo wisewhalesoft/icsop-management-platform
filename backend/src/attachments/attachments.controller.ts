@@ -5,11 +5,14 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
+import { attachmentDisposition } from '../storage/content-disposition';
 import { AttachmentsService } from './attachments.service';
 import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
@@ -94,12 +97,28 @@ export class AttachmentsController {
    * 「`blobPath` 屬於某筆現存附件」。收斂前，業務子分類 `User` 只要取得任一 `blobPath` 即可繞過
    * F041 取得 RAW 原檔。F025 矩陣逐格不變（僅端點改綁既有功能列）。
    */
+  /**
+   * 🔴 **2026-08-17：代理串流，body 即檔案位元組本身**（F020 `AC-D3a` 之後台側修訂）。
+   * 原回 `{ url }` 短效期 SAS，前端 `window.open(sasUrl)` 導覽至 `*.blob.core.windows.net`
+   * ⇒ Chrome Safe Browsing 出示「偵測到危險網站」紅底攔截頁，使用者下載不到檔案。
+   * 代理後無任何第三方網域參與。⚠ 前端**必須**以 `downloadViaBlob`（fetch → Blob → `<a download>`）
+   * 觸發，不得 `window.open`／`<a href>`（送 `Accept: text/html` 會撞 SPA fallback，見 §10.1）。
+   *
+   * 🔒 RAW 語意未動（`AC-D4`）：不燒錄浮水印、不寫調閱稽核。
+   */
   @Get('documents/attachments/download')
   @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
-  download(
+  async download(
     @Req() req: RequestWithSession,
     @Query('blobPath') blobPath: string,
-  ) {
-    return this.svc.getDownloadUrl(req.sessionUser, blobPath);
+    @Res() res: Response,
+  ): Promise<void> {
+    const { bytes, fileName, contentType } = await this.svc.downloadAttachmentRaw(
+      req.sessionUser,
+      blobPath,
+    );
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', attachmentDisposition(fileName));
+    res.send(bytes);
   }
 }

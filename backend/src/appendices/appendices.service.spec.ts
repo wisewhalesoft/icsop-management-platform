@@ -560,12 +560,20 @@ describe('AppendicesService（F039 附錄池管理）', () => {
       await expect(svc.downloadAppendix(USER, 'doc-1', f.id)).rejects.toThrow('APPENDIX_NOT_FOUND');
     });
 
-    it('後台個別下載（downloadFromPool）：ICSOPAdmin/SysAdmin 皆可核發 URL、不寫稽核', async () => {
+    /**
+     * 🔴 2026-08-17：由「核發 URL」改為「代理串流」（F020 `AC-D3a` 後台側修訂）。
+     * 原斷言（供追溯）：OLD> `expect(g1.url).toContain(f.blobPath); expect(g2.url).toContain(f.blobPath);`
+     * 不寫稽核之語意（`AC-D4`／OQ-FM-01）未動。
+     */
+    it('後台個別下載（downloadFromPool）：ICSOPAdmin/SysAdmin 皆可取得位元組、不寫稽核', async () => {
       const f = await svc.uploadAppendix(ICSOP_ADMIN, xlsx());
       const g1 = await svc.downloadFromPool(ICSOP_ADMIN, f.id);
       const g2 = await svc.downloadFromPool(SYS_ADMIN, f.id);
-      expect(g1.url).toContain(f.blobPath);
-      expect(g2.url).toContain(f.blobPath);
+      for (const g of [g1, g2]) {
+        expect(g.fileName).toBe(f.name);
+        expect(g.contentType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        expect(Buffer.isBuffer(g.bytes)).toBe(true);
+      }
       expect(audit.events).toHaveLength(0); // 管理端存取不寫稽核（比照 F026 OQ-FM-01）
     });
 

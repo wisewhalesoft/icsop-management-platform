@@ -495,13 +495,18 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
       const sup: SessionContext = { roleCode: 'Supervisor', accountId: 'x' };
       await expect(svc.listPoolOverview(sup)).rejects.toThrow('PERMISSION_DENIED');
     });
-    it('TS-033 後台個別下載：ICSOPAdmin/SysAdmin 核發 URL、主管 PERMISSION_DENIED', async () => {
+    /**
+     * 🔴 2026-08-17：由「核發 URL」改為「代理串流」（F020 `AC-D3a` 後台側修訂）。
+     * 原斷言（供追溯）：OLD> `expect(g1.url).toContain(f.blobPath);`（`g2` 同）。
+     * 授權語意（唯讀角色可下載、主管 PERMISSION_DENIED）逐字未變。
+     */
+    it('TS-033 後台個別下載：ICSOPAdmin/SysAdmin 取得位元組、主管 PERMISSION_DENIED', async () => {
       const f = await svc.uploadForm(ICSOP_ADMIN, xlsx());
       const sys: SessionContext = { roleCode: 'SysAdmin', accountId: 's1' };
       const g1 = await svc.downloadFromPool(ICSOP_ADMIN, f.id);
-      expect(g1.url).toContain(f.blobPath);
+      expect(g1.fileName).toBe(f.name);
       const g2 = await svc.downloadFromPool(sys, f.id); // 唯讀角色亦可下載
-      expect(g2.url).toContain(f.blobPath);
+      expect(Buffer.isBuffer(g2.bytes)).toBe(true);
       await expect(
         svc.downloadFromPool({ roleCode: 'Supervisor', accountId: 'x' }, f.id),
       ).rejects.toThrow('PERMISSION_DENIED');
@@ -571,16 +576,25 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
    *   `usage-forms.front-burn.service.spec.ts` 之檔頭契約持有（第 6 參數），本檔不再重複斷言 arity。
    */
   describe('🔒 後台下載為 RAW（不燒錄）之既定行為（OQ-FM-01，2026-08-16 再次確認維持有效）', () => {
-    it('TS-FM-002 downloadFromPool（後台）核發原始 blob SAS URL、未燒錄、不寫稽核', async () => {
+    /**
+     * 🔴 **2026-08-17：由「核發 SAS URL」改為「代理串流」**（F020 `AC-D3a` 後台側修訂）。
+     * 原斷言（供追溯）：
+     *   OLD> `const raw = \`https://fake.blob/${'$'}{f.blobPath}?sig=fake&ttl=${'$'}{DOWNLOAD_URL_TTL_SECONDS}\`;`
+     *   OLD> `expect(g2.url).toBe(raw); // 原始輸出，未含燒錄後綴／未經轉換`
+     * 🔒 **RAW 語意反而更強**：原本驗「URL 字串未被動過」（只證明沒動 URL），現改為驗
+     * **回傳位元組逐位元組等於 Blob 原件**——燒錄必然改變位元組，這才是 RAW 的直接證明。
+     */
+    it('TS-FM-002 downloadFromPool（後台）回原始位元組、未燒錄、不寫稽核', async () => {
       const f = await svc.uploadForm(ICSOP_ADMIN, xlsx());
       await svc.linkForms(ICSOP_ADMIN, 'doc-1', [f.id]);
       const sys: SessionContext = { roleCode: 'SysAdmin', accountId: 's1' };
+      const original = (await blob.getBytes(f.blobPath))!;
 
       // 後台（USAGE_FORM_MANAGEMENT read gate，SysAdmin 唯讀亦可）
       const g2 = await svc.downloadFromPool(sys, f.id);
 
-      const raw = `https://fake.blob/${f.blobPath}?sig=fake&ttl=${DOWNLOAD_URL_TTL_SECONDS}`;
-      expect(g2.url).toBe(raw); // 原始輸出，未含燒錄後綴／未經轉換
+      expect(g2.bytes.equals(original)).toBe(true);
+      expect(blob.urlCalls).toHaveLength(0); // 不再核發任何 SAS
       // 上傳原件寫入一次；下載未再 put（非重建燒錄件另存）。
       expect(blob.putCalls).toHaveLength(1);
       expect(audit.events).toHaveLength(0); // 管理端存取不寫稽核（F018 AC-D13）

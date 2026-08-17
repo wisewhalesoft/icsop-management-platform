@@ -85,7 +85,7 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getDocuments).mockResolvedValue(page(DOCS));
-    vi.mocked(endpoints.downloadAttachment).mockResolvedValue({ url: 'https://blob/x', expiresInSeconds: 300 });
+    vi.mocked(endpoints.downloadAttachment).mockResolvedValue(undefined);
     vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([attachment({})]);
     vi.stubGlobal('open', openMock);
   });
@@ -270,15 +270,24 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
       expect(row.querySelectorAll('td')[5].textContent).toBe('—');
     });
 
-    it('TS-D-017 點擊檔案下載鈕 → 以該 blobPath 呼叫既有受控下載端點並開新分頁', async () => {
+      /**
+       * 🔴 2026-08-17：後台下載由「SAS URL ＋ `window.open`」改為「代理串流 ＋ `downloadViaBlob`」
+       * （F020 `AC-D3a` 後台側修訂）——原作法導覽至 `*.blob.core.windows.net`，Chrome Safe Browsing
+       * 對該網域出示「偵測到危險網站」紅底攔截頁。第二引數為 fallback 檔名。
+       * 🔒 `window.open` 之**反向**斷言留著：改回導覽即紅。
+       */
+    it('TS-D-017 點擊檔案下載鈕 → 以該 blobPath 走受控下載端點（代理串流，不開新分頁）', async () => {
       mockAuth('ICSOPAdmin');
       renderPage();
       await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
       await userEvent.click(within(rowOf('車輛分期進件作業')).getByTitle('下載 車輛分期進件作業_v1.3.pdf'));
       await waitFor(() =>
-        expect(endpoints.downloadAttachment).toHaveBeenCalledWith('documents/d1/icsop_pdf/abc.pdf'),
+        expect(endpoints.downloadAttachment).toHaveBeenCalledWith(
+          'documents/d1/icsop_pdf/abc.pdf',
+          '車輛分期進件作業_v1.3.pdf',
+        ),
       );
-      expect(openMock).toHaveBeenCalledWith('https://blob/x', '_blank', 'noopener,noreferrer');
+      expect(openMock).not.toHaveBeenCalled();
     });
   });
 
@@ -333,9 +342,13 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
       // 針對「目標文件」取其附件 → 走同一支受控下載端點（不新增第二條下載路由）
       await waitFor(() => expect(endpoints.getDocumentAttachments).toHaveBeenCalledWith('d2'));
       await waitFor(() =>
-        expect(endpoints.downloadAttachment).toHaveBeenCalledWith('documents/d2/icsop_pdf/zzz.pdf'),
+        expect(endpoints.downloadAttachment).toHaveBeenCalledWith(
+          'documents/d2/icsop_pdf/zzz.pdf',
+          expect.any(String),
+        ),
       );
-      expect(openMock).toHaveBeenCalledWith('https://blob/x', '_blank', 'noopener,noreferrer');
+      // 🔴 2026-08-17：代理串流取代 SAS ＋ window.open（見 TS-D-017 之註記）。
+      expect(openMock).not.toHaveBeenCalled();
       expect(navigateMock).not.toHaveBeenCalled();
     });
 

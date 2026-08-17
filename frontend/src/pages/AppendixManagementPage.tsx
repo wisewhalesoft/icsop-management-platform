@@ -181,12 +181,16 @@ export function AppendixManagementPage(): JSX.Element {
     }
   }, [keyword, fmtFilter, toast]);
 
-  // ── 下載（後台管理端存取：不寫稽核、不燒錄浮水印）──
+  /**
+   * ── 下載（後台管理端存取：不寫稽核、不燒錄浮水印）──
+   * 🔴 2026-08-17：由 SAS ＋ `window.open` 改為代理串流 ＋ `downloadViaBlob`
+   * （Chrome Safe Browsing 對 `*.blob.core.windows.net` 出示「偵測到危險網站」攔截頁；
+   * F020 `AC-D3a` 後台側修訂）。RAW 與不寫稽核之語意未動。
+   */
   const onDownload = useCallback(
     async (appendix: AppendixPoolItem) => {
       try {
-        const grant = await downloadAppendixFromPool(appendix.id);
-        window.open(grant.url, '_blank', 'noopener,noreferrer');
+        await downloadAppendixFromPool(appendix.id, appendix.name);
         toast.success(`已下載附錄「${appendix.name}」（管理端存取，不寫稽核、不燒錄浮水印）`);
       } catch (e) {
         toast.error(e instanceof ApiError ? `下載失敗：${e.code}` : '下載失敗');

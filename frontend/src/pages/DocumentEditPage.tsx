@@ -589,11 +589,14 @@ export function DocumentEditPage(): JSX.Element {
     [id, toast],
   );
 
-  /** 附件受控下載（核發短效期 URL → 開新分頁；浮水印與否由伺服器端依 F020 決定）。 */
+  /**
+   * 附件受控下載（後端代理串流 → `fetch` 取 Blob → 程式化 `<a download>`；RAW 原檔，不燒錄）。
+   * 🔴 2026-08-17：原為 `window.open(grant.url)` 導覽至 Azure Blob SAS URL，Chrome Safe Browsing
+   * 對 `*.blob.core.windows.net` 出示「偵測到危險網站」攔截頁（F020 `AC-D3a` 後台側修訂）。
+   */
   const onDownloadAttachment = useCallback(async (a: DocumentAttachmentRecord) => {
     try {
-      const grant = await downloadAttachment(a.blobPath);
-      window.open(grant.url, '_blank', 'noopener,noreferrer');
+      await downloadAttachment(a.blobPath, a.fileName);
     } catch (e) {
       toast.error(msgOf(e));
     }
