@@ -14,9 +14,17 @@ import {
 import { PUBLIC_DOCUMENT_STORE, PublicDocumentStore } from './public-documents.store';
 import { ViewerScope } from '../rbac/viewer-scope';
 
-/** 組織單位名稱解析器（結構相容 NameResolutionService.resolveOrgUnitName）。 */
+/**
+ * 名稱解析器（結構相容 `NameResolutionService`）。
+ *
+ * `resolvePersonNames` 為 F019 `AC-D5` 之「當責室長選項以姓名顯示」所需——`public-list-filter-options.spec.ts`
+ * 曾註記「chiefs 之人員姓名解析所需之接縫，spec 與 §10.6 皆未指定」，該缺口即是選項長期顯示員編之成因。
+ * 綁定端 `public.module.ts` 為 `useExisting: NameResolutionService`，該類別本就有此批次方法（無 N+1）。
+ */
 export interface OrgNameResolver {
   resolveOrgUnitName(orgCode: string): Promise<string | null>;
+  /** 批次 employeeNo → 姓名。未命中／無姓名之鍵**缺席**於 Map（呼叫端 fallback 為員編）。 */
+  resolvePersonNames(employeeNos: string[]): Promise<Map<string, string>>;
 }
 export const ORG_NAME_RESOLVER = Symbol('ORG_NAME_RESOLVER');
 
@@ -108,15 +116,43 @@ export class PublicDocumentsService {
       for (const o of group) codes.add(o.value);
     }
     const nameMap = await this.resolveNames(codes);
+
+    /**
+     * 🔴 `AC-D5` 之 label 解析**全部落在本層**，純函式 `buildFilterOptions` 一行不動。
+     * 該純函式之既有斷言（`public-list-filter-options.spec.ts`）逐字鎖定「label fallback 為 code」
+     * 與「依 value 排序」，是 `AC-D5` 可見性過濾之回歸鎖；把顯示層的事推進純函式會讓那批鎖
+     * 為了顯示需求而被改寫——鎖一旦可改就不是鎖了。
+     */
+    const chiefNames = await this.names.resolvePersonNames(opts.chiefs.map((o) => o.value));
+    /**
+     * 循環別 label＝`lifecycleDisplayName`（含子分類），由候選項本身攜帶（store 已解析），
+     * 不另查一次。F019 spec §AC-S2 補註：「組字自 2026-08-16 delta 起由後端提供，前端不再自組」。
+     */
+    const lifecycleNames = new Map<string, string>();
+    for (const it of items) {
+      if (it.lifecycleName && !lifecycleNames.has(it.lifecycleId)) {
+        lifecycleNames.set(it.lifecycleId, it.lifecycleName);
+      }
+    }
+
     // 選項之 label 必須有可顯示文字 ⇒ 未命中一律 fallback 為 code（絕不為空字串／null）。
-    const label = (group: PublicFilterOptions['draftingCompanies']): typeof group =>
-      group.map((o) => ({ value: o.value, label: nameMap.get(o.value) ?? o.value }));
+    const label = (
+      group: PublicFilterOptions['draftingCompanies'],
+      names: ReadonlyMap<string, string | null>,
+    ): typeof group =>
+      group
+        .map((o) => ({ value: o.value, label: names.get(o.value) || o.value }))
+        // 🔴 依 **label** 排序：純函式依 value（代碼／員編／UUID）排序，套上名稱後那個順序在
+        // 畫面上看不出任何規律。排序落在解析之後才排得到使用者實際看見的字。
+        .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'));
 
     return {
       ...opts,
-      draftingCompanies: label(opts.draftingCompanies),
-      draftingDepts: label(opts.draftingDepts),
-      draftingSections: label(opts.draftingSections),
+      draftingCompanies: label(opts.draftingCompanies, nameMap),
+      draftingDepts: label(opts.draftingDepts, nameMap),
+      draftingSections: label(opts.draftingSections, nameMap),
+      chiefs: label(opts.chiefs, chiefNames),
+      lifecycles: label(opts.lifecycles, lifecycleNames),
     };
   }
 

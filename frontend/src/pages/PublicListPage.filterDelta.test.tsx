@@ -246,6 +246,37 @@ describe('F019 AC-D2：五項為可搜尋下拉、`狀態` 維持原生下拉', 
     expect(await within(desktopBar()).findByText('AbC 公司')).toBeInTheDocument();
   });
 
+  /**
+   * 🔴 2026-08-17 缺失修正第 1／2 項之**前端側**斷言。
+   *
+   * 本檔既有案例（`TS-F019-D2-005`／`-006`）餵給 mock 的 `chiefs`／`lifecycles` 一直都帶**人類可讀
+   * label**，於是全綠——而真實後端當時回的是員編與 lifecycle UUID（`public-documents.service.ts`
+   * 只對三組組織欄位做名稱解析）。前端測試因此**結構上不可能**抓到這個缺失：mock 就是契約的一半。
+   * 缺口已於後端補上真正的斷言（`TS-F019-D5-305`／`-307`）；本兩案在前端側鎖住使用者實際的操作——
+   * 「打姓名找得到人」「打循環名找得到循環」，這正是使用者回報的癥結。
+   */
+  it('TS-F019-D2-004a 當責室長可**以姓名**搜尋（非員編）', async () => {
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    const input = control('當責室長');
+    await userEvent.click(input);
+    expect(await within(desktopBar()).findByText('陳彥廷')).toBeInTheDocument();
+    await userEvent.type(input, '林建');
+    await waitFor(() => expect(within(desktopBar()).queryByText('陳彥廷')).toBeNull());
+    expect(within(desktopBar()).getByText('林建宏')).toBeInTheDocument();
+  });
+
+  it('TS-F019-D2-004b 循環別可**以循環名稱**搜尋（非 lifecycleId）', async () => {
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    const input = control('循環別');
+    await userEvent.click(input);
+    expect(await within(desktopBar()).findByText('產品企劃循環')).toBeInTheDocument();
+    await userEvent.type(input, '銷售');
+    await waitFor(() => expect(within(desktopBar()).queryByText('產品企劃循環')).toBeNull());
+    expect(within(desktopBar()).getByText('銷售及收款循環（消金）')).toBeInTheDocument();
+  });
+
   it('TS-F019-D2-005 選定選項 → 以其 value（id）而非 label 送出查詢', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
