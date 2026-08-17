@@ -39,9 +39,26 @@ function mockAuth(roleCode: string) {
   });
 }
 
+/**
+ * 🔴 2026-08-16 fixture 補欄（F018 `AC-D1`／`AC-D2` 之漣漪）：`UsageFormPoolItem.formNumber`
+ * 為**必填**欄（`api/types.ts:630-634`，型別 `string | null`），三筆舊 fixture 皆缺 ⇒ `tsc --noEmit`
+ * 紅燈（F002 `AC-D7` 之機器驗證載體）。
+ *   OLD> `id: 'uf1', name: '進件申請書.xlsx', format: 'xlsx', size: 49152,`
+ *   OLD> `id: 'uf3', name: '徵信照會表.pdf', format: 'pdf', size: 122880,`
+ *   OLD> `id: 'uf7', name: '本票確認檢核表.xlsx', format: 'xlsx', size: 36864,`
+ *
+ * ⚠ **刻意不三筆皆填 `null`**：全 `null` 之 fixture 會使本檔任一渲染案例只走得到「無編號」分支，
+ * 「有編號」分支（`AC-D15` ① 之 mono 呈現）在本檔永不執行——與 Lane A 那三條 `uploadUsageForms`
+ * 全為「留空」情境、使 `AC-D2` 主線失去載體是同一型缺陷。故 `uf1` 帶實際編號、另二筆為 `null`，
+ * 本檔既有案例即同時走過兩條分支（縱使其主題不是編號欄）。
+ * 📌 **編號欄之斷言不在本檔重複造**——`UsageFormManagementPage.formNumber.test.tsx` 已完整持有
+ * `AC-D1`：表頭七欄逐字順序（`TS-D18-060`）、有值者之 `data-form-number`＋mono（`TS-D18-061`）、
+ * `null` → 逐字「—」＋ title「此表單未設定編號」（`TS-D18-062`）；該檔 fixture 亦為
+ * `FM-001` ∕ `null` 之異質組合。
+ */
 const POOL: UsageFormPoolItem[] = [
   {
-    id: 'uf1', name: '進件申請書.xlsx', format: 'xlsx', size: 49152,
+    id: 'uf1', name: '進件申請書.xlsx', formNumber: 'FM-001', format: 'xlsx', size: 49152,
     uploadedBy: 'acct-uuid-1', uploadedByName: '李慧玲', uploadedByDept: '債權管理部 / 法催一室',
     uploadedAt: '2026-06-10T00:00:00Z', docCount: 2,
     documents: [
@@ -50,12 +67,12 @@ const POOL: UsageFormPoolItem[] = [
     ],
   },
   {
-    id: 'uf3', name: '徵信照會表.pdf', format: 'pdf', size: 122880,
+    id: 'uf3', name: '徵信照會表.pdf', formNumber: null, format: 'pdf', size: 122880,
     uploadedBy: '陳彥廷', uploadedAt: '2026-05-22T00:00:00Z', docCount: 1,
     documents: [{ id: 'd3', documentNumber: 'ICSOP-SRC-101-2-00', documentName: '消金審核作業' }],
   },
   {
-    id: 'uf7', name: '本票確認檢核表.xlsx', format: 'xlsx', size: 36864,
+    id: 'uf7', name: '本票確認檢核表.xlsx', formNumber: null, format: 'xlsx', size: 36864,
     uploadedBy: '張家豪', uploadedAt: '2026-04-18T00:00:00Z', docCount: 0, documents: [],
   },
 ];
@@ -153,7 +170,12 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
     expect((within(dialog).getByLabelText(/表單名稱/) as HTMLInputElement).value).toBe('放款覆核表.xlsx');
     await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
     await waitFor(() =>
-      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '放款覆核表.xlsx'),
+      // 🔵 2026-08-16 F018 `AC-D2` 之漣漪：上傳 modal 新增選填「表單編號」欄後，
+      // `uploadUsageForms` 多一個第三參數。本案未填編號 ⇒ 第三參數為空（後端 `normalizeFormNumber()`
+      // 收斂為 `null`，見 backend `TS-D18-011`）。**本案之測試標的（名稱自動帶入檔名）未變。**
+      // 「有填編號時該值真的被送出」＝ `AC-D2` 主線，由 `UsageFormManagementPage.formNumber.test.tsx`
+      // 之 `TS-D18-082` 釘住——本檔三條皆為「留空」情境，不足以涵蓋該主線。
+      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '放款覆核表.xlsx', ''),
     );
   });
 
@@ -170,7 +192,8 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
     await userEvent.type(nameInput, '貸款覆核申請表');
     await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
     await waitFor(() =>
-      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '貸款覆核申請表'),
+      // 第三參數＝表單編號（本案未填）；理由同 TS-PS-F018-FE-001 之註解。
+      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '貸款覆核申請表', ''),
     );
     expect(await screen.findByText(/已上傳表單「貸款覆核申請表」/)).toBeInTheDocument();
   });
@@ -187,7 +210,8 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
     expect((within(dialog).getByLabelText(/表單名稱/) as HTMLInputElement).value).toBe('自訂表單名');
     await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
     await waitFor(() =>
-      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '自訂表單名'),
+      // 第三參數＝表單編號（本案未填）；理由同 TS-PS-F018-FE-001 之註解。
+      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '自訂表單名', ''),
     );
   });
 

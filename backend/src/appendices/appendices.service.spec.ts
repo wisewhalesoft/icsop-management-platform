@@ -12,7 +12,9 @@ import {
   AppendixRecord,
 } from './appendices.store';
 import { FakeBlobStore } from '../storage/fake-blob-store';
-import { DOWNLOAD_URL_TTL_SECONDS } from '../storage/blob-store';
+// 📝 2026-08-16 delta：`DOWNLOAD_URL_TTL_SECONDS` 之唯一使用點為原 `AC-29`（前台 RAW SAS URL），
+// 該 AC 已被 F020 `AC-D1`／`AC-D3a` 推翻 ⇒ import 隨之移除（後台 `downloadFromPool` 兩案以
+// `toContain(blobPath)` 斷言，本就不使用該常數，一字未動）。
 import { MAX_FILE_SIZE_BYTES } from '../storage/file-rules';
 import { SessionContext, UploadFile } from '../attachments/attachments.service';
 
@@ -421,12 +423,52 @@ describe('AppendicesService（F039 附錄池管理）', () => {
     });
   });
 
-  describe('下載與稽核（AC-27～AC-29、AC-34；後台個別下載）', () => {
+  /**
+   * 📝 **2026-08-16 delta：case 別釐清（原標題「AC-27～AC-29、AC-34；後台個別下載」易誤讀）**
+   *
+   * 本 describe **混有前台與後台兩條路徑**，且自本 delta 起兩者語意分歧，故逐案標明：
+   *
+   * | 案 | 路徑 | 方法 | 本 delta 之處置 |
+   * |---|---|---|---|
+   * | `AC-27` 稽核落列 | **前台** | `downloadAppendix(USER, docId, id)` | 改（傳輸形狀＋`watermarkSnapshot` 欄） |
+   * | `AC-28` 未登入拒絕 | **前台** | 同上 | **不動**（`FILE_ACCESS_DENIED`／不寫稽核之語意未變） |
+   * | `AC-D3a` 代理串流（原 `AC-29`） | **前台** | 同上 | 改（原 AC 已被推翻，見該案註解） |
+   * | `AC-34` 任一角色皆可下載 | **前台** | 同上 | **不動**（`resolves.toBeDefined()` 與傳輸形狀無關） |
+   * | `APPENDIX_NOT_FOUND` | **前台** | 同上 | **不動** |
+   * | 後台個別下載 ×2 | 🔒 **後台** | `downloadFromPool(session, id)` | **一字未動，應維持綠燈** |
+   *
+   * 🔒 **後台兩案即 `OQ-FM-01`／F020 `AC-D4`／F039 `AC-D3` 之回歸鎖定**：核發 SAS、不燒錄、不寫稽核。
+   *    `OQ-FM-01` 於 2026-08-16 經再次確認**維持有效**，惟其適用範圍自本日起收斂為**後台**。
+   * 📌 **已知之副作用（不修，僅記錄）**：`AC-28` 之 `expect(blob.urlCalls).toHaveLength(0)` 在前台改為
+   *    代理串流後**恆真**（該路徑本就不再核發 SAS），其鑑別力退化為零；該案真正仍有鑑別力的斷言是
+   *    `expect(audit.events).toHaveLength(0)`。因該案未「必然失效」，依 lead 指示不動它。
+   */
+  describe('下載與稽核（AC-27／AC-28／AC-D3a／AC-34＝前台；末二案＝後台個別下載）', () => {
+    /**
+     * 🔴 2026-08-16 delta（F039 `AC-D2`；F020 `AC-D3a`／`AC-D5`；architecture-spec §10.1）：
+     * **前台** `downloadAppendix()` 由「回傳 `{url}`」改為「回傳 `{ bytes, fileName, contentType }`」，
+     * 稽核事件加 `watermarkSnapshot` 欄。**本案之測試標的（稽核恰 1 筆、兩個 id 正確落地）未變。**
+     *
+     * 原斷言（逐字保留供追溯）：
+     *   OLD> `const grant = await svc.downloadAppendix(USER, 'doc-1', f.id);`
+     *   OLD> `expect(grant.url).toContain(f.blobPath);`
+     *   OLD> `expect(audit.events).toEqual([{ targetType:'APPENDIX', actionType:'DOWNLOAD',`
+     *   OLD> `  appendixId: f.id, documentId:'doc-1', accountId:'u1' }]);`
+     *
+     * 📌 fixture 為 `xlsx()`（非 PDF）⇒ 不燒錄、`watermarkSnapshot` 為 `null`（F020 `AC-D5`）。
+     * 🔒 稽核比對維持 `toEqual` **完整物件**（非 `toMatchObject`）——多餘欄位溜進稽核必須紅。
+     */
     it('AC-27 前台下載成功 → 稽核恰新增 1 筆，appendixId 與 documentId 皆正確落地', async () => {
       const f = await svc.uploadAppendix(ICSOP_ADMIN, xlsx());
       await store.replaceDocumentAppendices('doc-1', [f.id]);
-      const grant = await svc.downloadAppendix(USER, 'doc-1', f.id);
-      expect(grant.url).toContain(f.blobPath);
+      const res = await svc.downloadAppendix(USER, 'doc-1', f.id);
+
+      // F020 AC-D3a：前台一律代理串流，不核發 SAS URL、回應不含 `url` 欄
+      expect(blob.urlCalls).toHaveLength(0);
+      expect((res as unknown as Record<string, unknown>).url).toBeUndefined();
+      // F039 AC-D2：非 PDF → 與 Blob 中之原始檔逐位元組相同
+      expect(res.bytes.equals((await blob.getBytes(f.blobPath))!)).toBe(true);
+
       expect(audit.events).toEqual([
         {
           targetType: 'APPENDIX',
@@ -434,24 +476,72 @@ describe('AppendicesService（F039 附錄池管理）', () => {
           appendixId: f.id,
           documentId: 'doc-1',
           accountId: 'u1',
+          watermarkSnapshot: null,
         },
       ]);
     });
 
-    it('AC-28 未登入下載 → 403 FILE_ACCESS_DENIED，不核發 URL、不寫稽核', async () => {
+    /**
+     * 🔴 **2026-08-16 lead 明確授權之補強**（唯一例外；「其餘一律不動」之指示仍然有效）。
+     *
+     * 問題：前台改為代理串流（F020 `AC-D3a`）後，該路徑**本就不再核發 SAS**
+     * ⇒ 原斷言 `expect(blob.urlCalls).toHaveLength(0)` **恆真**、鑑別力歸零。
+     * 環裡一條恆真的斷言**比沒有斷言更糟**——它在覆蓋率與人眼掃描上都長得像防線，實際上什麼都不擋
+     *（同型者已於本輪稽核中砍除：`expect(buildFilterOptions.length).toBeLessThanOrEqual(4)`，標準一致）。
+     *
+     * 原斷言（逐字保留供追溯；`urlCalls` 那條已失去鑑別力，其餘不變）：
+     *   OLD> `await expect(svc.downloadAppendix(undefined, 'doc-1', f.id)).rejects.toThrow('FILE_ACCESS_DENIED');`
+     *   OLD> `expect(blob.urlCalls).toHaveLength(0);`
+     *   OLD> `expect(audit.events).toHaveLength(0);`
+     *
+     * 取代之**正向**斷言：未授權者**不得取得任何位元組**，且**授權檢查必須早於任何 Blob 讀取**——
+     * 以 `getBytes` spy 之呼叫次數為 0 表述。此即舊世界「一次 SAS 都不得核發」在代理串流世界之對應物：
+     * 若實作把授權檢查放在讀檔**之後**（先讀位元組再判斷），本條即紅。
+     * 🔒 `rejects.toThrow` 與 `audit.events` 兩條原斷言**保留不動**。
+     */
+    it('AC-28 未登入下載 → 403 FILE_ACCESS_DENIED，不讀位元組、不寫稽核', async () => {
       const f = await svc.uploadAppendix(ICSOP_ADMIN, xlsx());
       await store.replaceDocumentAppendices('doc-1', [f.id]);
+      const getBytes = jest.spyOn(blob, 'getBytes');
+
       await expect(svc.downloadAppendix(undefined, 'doc-1', f.id)).rejects.toThrow('FILE_ACCESS_DENIED');
+
+      expect(getBytes).not.toHaveBeenCalled(); // 🔴 授權檢查早於 Blob 讀取（取代已恆真之 urlCalls）
       expect(blob.urlCalls).toHaveLength(0);
       expect(audit.events).toHaveLength(0);
     });
 
-    it('AC-29/OQ-FM-01 下載為 RAW（不燒錄浮水印）：核發原始 blob SAS URL，且服務結構上無 burner 相依', async () => {
+    /**
+     * 🔴 **本案之原 AC 已被推翻**（2026-08-16 使用者裁決；缺失／變更 delta 第 5b 項）：
+     * F039 `AC-29`「未疊加或燒錄浮水印（已定案）」經 F020 `AC-D1` **就地改寫**——
+     * **前台** PDF 附錄自本日起**必須燒錄浮水印**，且前台一律代理串流、不核發 SAS（F020 `AC-D3a`）。
+     * 🔒 **`OQ-FM-01` 本身維持有效**，但其適用範圍收斂為**後台**：後台 `downloadFromPool` 仍 RAW、
+     *    不燒錄、不寫稽核（F020 `AC-D4`／F039 `AC-D3`）——該回歸鎖定由本 describe 後段之
+     *    「後台個別下載（downloadFromPool）」兩案持有，**一字未改、應維持綠燈**。
+     *
+     * 原斷言（逐字保留供追溯；已失效）：
+     *   OLD> `const grant = await svc.downloadAppendix(USER, 'doc-1', f.id);`
+     *   OLD> `const raw = 'https://fake.blob/' + f.blobPath + '?sig=fake&ttl=' + DOWNLOAD_URL_TTL_SECONDS;`
+     *   OLD> `expect(grant.url).toBe(raw);`
+     *   OLD> `expect(blob.putCalls).toHaveLength(1); // 僅上傳原件寫入一次，下載未重建燒錄件`
+     *
+     * 🔴 **「不燒錄」之結論仍成立，但理由已完全不同——這是本註解存在的主因**：
+     *   · **舊理由（已作廢）**：`AC-29`「**附錄一律**不疊加或燒錄浮水印」——與檔案格式無關。
+     *   · **新理由（策略 A，`OQ-D18-02`）**：**僅 PDF 燒錄**；本案 fixture 為 `xlsx()`＝非 PDF，
+     *     **因此**不燒錄。若把本案 fixture 換成 `.pdf`，**結論會反轉為「必須燒錄」**。
+     *   ⚠ 不得因本案仍綠（就其「不燒錄」之部分而言）而誤以為舊定案還在——那正是本 delta 推翻的東西。
+     *
+     * 取代載體：本案改為釘住 **`AC-D3a` 之傳輸模式**（非 PDF 亦代理，不核發 SAS）與
+     * 「下載不重建燒錄件另存」（`putCalls` 仍為 1）。**PDF 燒錄之正向斷言**（`burnPdf` 恰 1 次、
+     * 位元組與原檔不等）在 `appendices.front-burn.service.spec.ts`，本檔不重複。
+     */
+    it('AC-D3a 前台下載一律代理串流（非 PDF 亦然）：不核發 SAS URL，且未重建燒錄件另存', async () => {
       const f = await svc.uploadAppendix(ICSOP_ADMIN, xlsx());
       await store.replaceDocumentAppendices('doc-1', [f.id]);
-      const grant = await svc.downloadAppendix(USER, 'doc-1', f.id);
-      const raw = `https://fake.blob/${f.blobPath}?sig=fake&ttl=${DOWNLOAD_URL_TTL_SECONDS}`;
-      expect(grant.url).toBe(raw);
+      const res = await svc.downloadAppendix(USER, 'doc-1', f.id);
+      expect(blob.urlCalls).toHaveLength(0);
+      expect((res as unknown as Record<string, unknown>).url).toBeUndefined();
+      expect(res.bytes.equals((await blob.getBytes(f.blobPath))!)).toBe(true);
       expect(blob.putCalls).toHaveLength(1); // 僅上傳原件寫入一次，下載未重建燒錄件
     });
 

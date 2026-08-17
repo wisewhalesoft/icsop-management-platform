@@ -26,19 +26,35 @@ function fakeResolver(map: Record<string, string> = {}): OrgNameResolver {
   };
 }
 
+/** 🔴 2026-08-16 delta：`PublicDocItem` additive 新增五欄（architecture-spec §10.6）。 */
+/**
+ * 📝 **2026-08-16 fixture 硬化**（與 `public-list-dto.spec.ts` 之申訴 #3 同一形狀，一次處理完）：
+ * 原以 `??` 逐欄套預設，會把**顯式傳入的 `null`** 當成「沒給」而還原為預設值
+ * ⇒ 想測「該欄為 null」之案例永遠測不到。本檔目前之預設多為 `null`（故尚未被咬到），
+ * 但形狀相同、隨時會被下一個案例踩中，故一併改為 `{ ...defaults, ...over }` 展開：
+ * 顯式之 `null`／`''`／`0` 一律生效，未傳之鍵才落預設。
+ * ✅ 已確認全檔無 `item({ key: undefined })` 之呼叫，且預設值逐欄未變 ⇒ **現有案例行為完全不變**。
+ */
+const ITEM_DEFAULTS: PublicDocItem = {
+    id: 'd',
+    status: 'active',
+    documentNumber: 'N-1',
+    documentName: '文件',
+    lifecycleId: 'lc1',
+    lifecycleName: null,
+    usingDeptIds: [],
+    draftingDeptId: null,
+    draftingCompanyId: null,
+    draftingSectionId: null,
+    primaryChiefId: null,
+    secondaryChiefIds: [],
+    edition: null,
+    announcedDate: '2026-01-01',
+    contentSummary: null,
+};
+
 function item(over: Partial<PublicDocItem>): PublicDocItem {
-  return {
-    id: over.id ?? 'd',
-    status: over.status ?? 'active',
-    documentNumber: over.documentNumber ?? 'N-1',
-    documentName: over.documentName ?? '文件',
-    lifecycleId: over.lifecycleId ?? 'lc1',
-    lifecycleName: over.lifecycleName ?? null,
-    usingDeptIds: over.usingDeptIds ?? [],
-    draftingDeptId: over.draftingDeptId ?? null,
-    announcedDate: over.announcedDate ?? '2026-01-01',
-    contentSummary: over.contentSummary ?? null,
-  };
+  return { ...ITEM_DEFAULTS, ...over };
 }
 
 const TODAY = new Date('2026-07-17T00:00:00Z');
@@ -76,9 +92,15 @@ describe('PublicDocumentsService（F019）', () => {
     expect(page.items[1].pinned).toBe(false);
   });
 
-  it('TS-F019-030 組織名稱解析：命中→名稱、未命中→fallback 代碼（不顯示 undefined/null）', async () => {
+  /**
+   * 🔴 2026-08-16 delta（F019 `AC-D12`／OQ-D18-09）：對外 DTO **移除** `usingDeptNames`／`usingDeptIds`。
+   * 原斷言（供追溯）：OLD> `expect(dto.usingDeptNames).toEqual(['審查室', 'ZZ999']); // 未命中 fallback 為代碼`
+   * 「未命中 fallback 為代碼」之語意**未被推翻**，其驗證載體改為制定三級之名稱解析
+   * （見 `public-list-dto.spec.ts` `TS-F019-D12-005`）。
+   */
+  it('TS-F019-030 組織名稱解析：命中→名稱、未命中→fallback（不顯示 undefined/null）', async () => {
     const store = new FakeStore([
-      item({ id: 'd', draftingDeptId: 'JA000', usingDeptIds: ['JAC00', 'ZZ999'] }),
+      item({ id: 'd', draftingDeptId: 'JA000', draftingSectionId: 'ZZ999', usingDeptIds: ['JAC00'] }),
     ]);
     const svc = new PublicDocumentsService(
       store,
@@ -88,8 +110,12 @@ describe('PublicDocumentsService（F019）', () => {
     const page = await svc.list(viewerOf(null), {}, 1, 50);
     const dto = page.items[0];
     expect(dto.draftingDeptName).toBe('營運管理部');
-    expect(dto.usingDeptNames).toEqual(['審查室', 'ZZ999']); // 未命中 fallback 為代碼
-    expect(dto.draftingDeptName).not.toBeNull();
+    // 未命中之呈現值：與詳情 DTO 之既有慣例一致（制定三級→null），逐字比對見
+    // `public-list-dto.spec.ts` `TS-F019-D12-005`（跨 DTO 一致性）。此處鎖定其**不得**為
+    // undefined、不得為字面 'null'／'undefined'（原案以 `usingDeptNames` 承載，該欄已移除）。
+    expect(dto.draftingSectionName).not.toBeUndefined();
+    expect(['null', 'undefined']).not.toContain(dto.draftingSectionName);
+    expect(dto.draftingSectionName).toBeNull();
   });
 
   it('displayStatus 衍生為 announced（前台恆已公告）', async () => {

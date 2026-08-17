@@ -37,7 +37,7 @@ function doc(over: Partial<DocumentListItem>): DocumentListItem {
     lifecycleId: 'lc1', lifecycleName: '銷售及收款循環', nodeId: null,
     draftingCompanyId: null, draftingDeptId: null, draftingSectionId: null,
     draftingCompanyName: null, draftingDeptName: null, draftingSectionName: null,
-    primaryChiefId: null, primaryChiefName: null,
+    primaryChiefId: null, primaryChiefName: null, secondaryChiefIds: [], hasOjt: false,
     edition: null, announcedDate: null, contentSummary: null,
     icsopPdfBlobPath: null, icsopPdfFileName: null, links: [],
     ...over,

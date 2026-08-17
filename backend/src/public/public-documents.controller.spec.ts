@@ -49,16 +49,43 @@ describe('PublicDocumentsController — 守門鏈與委派（F019）', () => {
     expect(() => guard.canActivate(ctxFor('list', undefined))).toThrow(ForbiddenException);
   });
 
-  it('list：viewer（含 orgCode）取自 session；篩選/分頁委派服務（F041 §3.7 決策一：viewer 取代裸 userOrgCode）', async () => {
+  /**
+   * 🔴 2026-08-16 delta（F019 `AC-D1`／`AC-D4`；架構 A9 §10.9 移除三處之第 2 處）：
+   * controller 之 `deptCode` query 解析**移除**，並新增四項篩選之解析。
+   *
+   * 原斷言（供追溯）：
+   *   OLD> `list(req, '審查', 'JA000', 'lc1', '有效', '2', '25')` →
+   *   OLD> `svc.list(viewer, { keyword: '審查', deptCode: 'JA000', lifecycleId: 'lc1', status: '有效' }, 2, 25)`
+   *
+   * 🔒 **只移不留**：`deptCode` 若僅自 UI 移除而 controller 仍解析，客戶端仍可送 `?deptCode=`
+   *    而後端仍據以過濾——`AC-D1` 表面滿足而該能力靜默續存（§10.9 明文否決之狀態）。
+   *
+   * 📌 **本輪之 controller 位置參數契約**（由 test-generator 定，供 tdd-implementation 對齊）：
+   *    OLD> `list(req, keyword, draftingCompanyId, draftingDeptId, draftingSectionId, chiefId, status, lifecycleId, page, pageSize)`
+   *    ——`keyword` 維持首位（既有），其後依 `AC-D1` 之 UI 逐字順序排列。
+   */
+  it('list：viewer（含 orgCode）取自 session；六項篩選/分頁委派服務，deptCode 已不存在', async () => {
     const svc = fakeSvc();
     const req = { sessionUser: { roleCode: 'User', orgCode: 'JAC00' } } as never;
-    await new PublicDocumentsController(svc, fakeDetailSvc()).list(req, '審查', 'JA000', 'lc1', '有效', '2', '25');
+    await new PublicDocumentsController(svc, fakeDetailSvc()).list(
+      req, '審查', 'CO-1', 'JA000', 'JAC00', 'E001', '有效', 'lc1', '2', '25',
+    );
     expect(svc.list).toHaveBeenCalledWith(
       expect.objectContaining({ roleCode: 'User', orgCode: 'JAC00' }),
-      { keyword: '審查', deptCode: 'JA000', lifecycleId: 'lc1', status: '有效' },
+      {
+        keyword: '審查',
+        draftingCompanyId: 'CO-1',
+        draftingDeptId: 'JA000',
+        draftingSectionId: 'JAC00',
+        chiefId: 'E001',
+        status: '有效',
+        lifecycleId: 'lc1',
+      },
       2,
       25,
     );
+    const filters = (svc.list as jest.Mock).mock.calls[0][1] as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(filters, 'deptCode')).toBe(false);
   });
 
   it('list：無 orgCode → viewer.orgCode 為 null（排序退回純編號降冪）；空 query → 預設頁碼/篩選 undefined', async () => {
@@ -67,7 +94,15 @@ describe('PublicDocumentsController — 守門鏈與委派（F019）', () => {
     await new PublicDocumentsController(svc, fakeDetailSvc()).list(req);
     expect(svc.list).toHaveBeenCalledWith(
       expect.objectContaining({ roleCode: 'SysAdmin', orgCode: null }),
-      { keyword: undefined, deptCode: undefined, lifecycleId: undefined, status: undefined },
+      {
+        keyword: undefined,
+        draftingCompanyId: undefined,
+        draftingDeptId: undefined,
+        draftingSectionId: undefined,
+        chiefId: undefined,
+        status: undefined,
+        lifecycleId: undefined,
+      },
       1,
       50,
     );

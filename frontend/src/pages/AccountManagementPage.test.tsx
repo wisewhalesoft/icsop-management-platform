@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { AccountManagementPage } from './AccountManagementPage';
 import { ToastProvider } from '../components/useToast';
 import * as endpoints from '../api/endpoints';
@@ -11,8 +12,32 @@ import { buildOrgPath } from '../domain/org-path';
 vi.mock('../api/endpoints');
 vi.mock('../auth/useAuth');
 
-/** 頁面已改用全域 toast（SYS-1）；渲染需包 ToastProvider。 */
-const renderPage = () => render(<ToastProvider><AccountManagementPage /></ToastProvider>);
+/**
+ * 頁面已改用全域 toast（SYS-1）；渲染需包 ToastProvider。
+ *
+ * 🔵 2026-08-16 追加 `MemoryRouter`（**純 harness 修正**，未動任何斷言、期望值或案例結構）。
+ *
+ * **現行理由＝防禦性**：本頁為清單頁（`/admin/accounts`），其麵包屑首段 `帳號管理` 之目標
+ * 即該頁自身 ⇒ 依 F002 `AC-D3` 之統一判準（「目標路由 ＝ 當前頁路由者一律不給 `to`」）
+ * **不給 `to`、不渲染 `<Link>`**，因此本頁目前其實不需要 Router context。保留包裝是為了
+ * 日後任一子元件引入 router 相依時，不必再被
+ * `Cannot destructure property 'basename' of React.useContext(...) as it is null` 炸一次。
+ *
+ * 📝 **已被推翻之原始理由（保留供追溯）**：本包裝最初加入時，`AC-D3` 之 A 類表逐字要求
+ * 「`帳號管理` → `/admin/accounts`」為可點，故當時 `PageHeader` 確實會渲染 `<Link>` 而炸。
+ * 該表已於 **2026-08-16 三次修正**（spec-writer 覆核後認定為系統性缺陷，非單列）改為逐路由
+ * 判定——7 個清單頁之首段自此一律不可點。權威見
+ * `docs/specs/features/F002-role-based-routing.md` `AC-D3`；其機器化把關在
+ * `components/PageHeader.callers.test.tsx`（`TS-D10-013`／`TS-D10-015`），不在本檔。
+ */
+const renderPage = () =>
+  render(
+    <ToastProvider>
+      <MemoryRouter>
+        <AccountManagementPage />
+      </MemoryRouter>
+    </ToastProvider>,
+  );
 
 function mockAuth(roleCode: string) {
   const user: SessionUser = { loginId: 'AS22455', email: 'x@y', companyCode: 'AS', roleCode };

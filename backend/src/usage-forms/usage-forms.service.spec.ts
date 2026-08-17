@@ -331,11 +331,32 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
   });
 
   describe('下載與稽核', () => {
-    it('TS-013 前台下載成功 → 核發憑證 + 稽核參數正確', async () => {
+    /**
+     * 🔴 2026-08-16 delta（F018 `AC-D12`／`AC-D14`；F020 `AC-D3a`／`AC-D5`；architecture-spec §10.1）：
+     * **前台** `downloadForm()` 由「核發 SAS URL」改為「代理回傳位元組」，稽核事件加 `watermarkSnapshot` 欄。
+     * 本案之測試標的（前台下載成功 → 稽核參數正確）**未變**，僅傳輸形狀與稽核欄位隨 delta 更新。
+     *
+     * 原斷言（逐字保留供追溯）：
+     *   OLD> `const grant = await svc.downloadForm(USER, 'doc-1', f.id);`
+     *   OLD> `expect(grant.url).toContain(f.blobPath);`
+     *   OLD> `expect(audit.events).toEqual([{ targetType:'USAGE_FORM', actionType:'DOWNLOAD',`
+     *   OLD> `  formId: f.id, documentId:'doc-1', accountId:'u1' }]);`
+     *
+     * 📌 fixture 為 `xlsx()`（非 PDF）⇒ 不燒錄、`watermarkSnapshot` 為 `null`（`AC-D14` 後半）；
+     *    本案因此**不涉及**「後台角色是否該被燒錄」之爭點。
+     * 🔒 稽核比對維持 `toEqual` **完整物件**（非 `toMatchObject`）——多餘欄位溜進稽核必須紅。
+     */
+    it('TS-013 前台下載成功 → 代理回傳位元組（非 SAS）+ 稽核參數正確', async () => {
       const f = await svc.uploadForm(ICSOP_ADMIN, xlsx());
       await svc.linkForms(ICSOP_ADMIN, 'doc-1', [f.id]);
-      const grant = await svc.downloadForm(USER, 'doc-1', f.id);
-      expect(grant.url).toContain(f.blobPath);
+      const res = await svc.downloadForm(USER, 'doc-1', f.id);
+
+      // F020 AC-D3a：前台一律代理串流，**不得**核發 SAS URL、回應不含 `url` 欄
+      expect(blob.urlCalls).toHaveLength(0);
+      expect((res as unknown as Record<string, unknown>).url).toBeUndefined();
+      // F018 AC-D12：非 PDF → 與 Blob 中之原始檔逐位元組相同
+      expect(res.bytes.equals((await blob.getBytes(f.blobPath))!)).toBe(true);
+
       expect(audit.events).toEqual([
         {
           targetType: 'USAGE_FORM',
@@ -343,16 +364,35 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
           formId: f.id,
           documentId: 'doc-1',
           accountId: 'u1',
+          watermarkSnapshot: null,
         },
       ]);
     });
-    it('TS-014 未登入下載 → FILE_ACCESS_DENIED，不核發、不稽核', async () => {
+    /**
+     * 🔴 **lead 授權之鑑別力補強**（與 `appendices.service.spec.ts` `AC-28` 同型、同手法）。
+     *
+     * 問題：前台改為代理串流（F020 `AC-D3a`）後，該路徑**本就不再核發 SAS**，且本案在授權檢查處即
+     * 拋錯 ⇒ 原斷言 `expect(blob.urlCalls).toHaveLength(0)` **恆真**、鑑別力歸零：它無法區分
+     * 「授權檢查早於讀檔」與「先讀了位元組才拒絕」。
+     *
+     * 原斷言（逐字保留供追溯）：
+     *   OLD> `expect(blob.urlCalls).toHaveLength(0);`
+     *   OLD> `expect(audit.events).toHaveLength(0);`
+     *
+     * 取代之**正向**斷言：未授權者**不得取得任何位元組**，且**授權檢查必須早於任何 Blob 讀取**。
+     * 🔒 兩條 `rejects.toThrow('FILE_ACCESS_DENIED')` 與 `audit.events` 原斷言保留不動。
+     */
+    it('TS-014 未登入下載 → FILE_ACCESS_DENIED，不讀位元組、不稽核', async () => {
       const f = await svc.uploadForm(ICSOP_ADMIN, xlsx());
+      const getBytes = jest.spyOn(blob, 'getBytes');
+
       await expect(svc.downloadForm(undefined, 'doc-1', f.id)).rejects.toThrow('FILE_ACCESS_DENIED');
       await expect(svc.downloadForm({ roleCode: 'User' }, 'doc-1', f.id)).rejects.toThrow(
         'FILE_ACCESS_DENIED',
       );
-      expect(blob.urlCalls).toHaveLength(0);
+
+      expect(getBytes).not.toHaveBeenCalled(); // 🔴 授權檢查早於 Blob 讀取（取代已恆真之 urlCalls）
+      expect(blob.urlCalls).toHaveLength(0); // 保留；已失去鑑別力（前台本就不再核發 SAS）
       expect(audit.events).toHaveLength(0);
     });
   });
@@ -507,32 +547,60 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
   });
 
   /**
-   * F026 AC6 Edge Case × OQ-FM-01 —— 使用表單下載為 **RAW（不燒錄）** 之既定行為。
+   * F026 AC6 Edge Case × OQ-FM-01 —— 使用表單**後台**下載為 **RAW（不燒錄）** 之既定行為。
    *
-   * 人類裁決（2026-07-24）：前台 downloadForm 與後台 downloadFromPool 皆核發指向**原始 blob** 之短效期
-   * SAS URL，伺服器端不燒錄浮水印（使用表單常為 .xlsx，本無 PDF 浮水印可燒）；浮水印/追溯僅存於前台
-   * 檢視器路徑（F020）。本測試為**永久之既定行為測試**，作為「UsageFormsService 不接線 PdfBurner」之
-   * 回歸防線（見 attachments.service.spec.ts 同名區塊）。
+   * 人類裁決（2026-07-24）原文：「前台 downloadForm 與後台 downloadFromPool 皆核發指向**原始 blob**
+   * 之短效期 SAS URL，伺服器端不燒錄浮水印…」。
+   *
+   * 🔴 **2026-08-16 同日第二次人類閘門（`OQ-D18-25`）已推翻其中之前台半段**：前台之 `format = pdf`
+   * 使用表單**必須燒錄浮水印**（F018 `AC-D11`），且前台一律代理串流、不核發 SAS（F020 `AC-D3a`）。
+   * 🔒 **後台半段維持有效、一字不改**——`downloadFromPool` 仍核發原始 blob SAS URL、不燒錄、不寫稽核
+   * （F018 `AC-D13`；`OQ-FM-01` 經 2026-08-16 再次確認為維持有效）。
+   *
+   * 原斷言（逐字保留供追溯；前台半段已失效）：
+   *   OLD> `const g1 = await svc.downloadForm(sup, 'doc-1', f.id); // 前台`
+   *   OLD> `const raw = 'https://fake.blob/' + f.blobPath + '?sig=fake&ttl=' + DOWNLOAD_URL_TTL_SECONDS;`
+   *   OLD> `expect(g1.url).toBe(raw); // 原始輸出，未含燒錄後綴／未經轉換`
+   *   OLD> `expect(g2.url).toBe(raw);`
+   *   OLD> `expect(blob.putCalls).toHaveLength(1);`
+   *   `// 結構回歸防線：…**無 burner**，天生不具燒錄能力（接上 PdfBurner 則此斷言破而示警）`
+   *   OLD> `expect(UsageFormsService.length).toBe(5);`
+   *
+   * ⚠ 末條 arity 斷言（`length === 5`）為「服務不得具備燒錄能力」之結構防線，已由 `OQ-D18-25`
+   *   **直接推翻**——§10.1 要求 `UsageFormsService` 接上燒錄協作點；其新注入位置由
+   *   `usage-forms.front-burn.service.spec.ts` 之檔頭契約持有（第 6 參數），本檔不再重複斷言 arity。
    */
-  describe('下載皆 RAW（不燒錄）為既定行為（OQ-FM-01 人類裁決）', () => {
-    it('TS-FM-002 downloadForm（前台）與 downloadFromPool（後台）皆核發原始 blob SAS URL，未燒錄', async () => {
+  describe('🔒 後台下載為 RAW（不燒錄）之既定行為（OQ-FM-01，2026-08-16 再次確認維持有效）', () => {
+    it('TS-FM-002 downloadFromPool（後台）核發原始 blob SAS URL、未燒錄、不寫稽核', async () => {
+      const f = await svc.uploadForm(ICSOP_ADMIN, xlsx());
+      await svc.linkForms(ICSOP_ADMIN, 'doc-1', [f.id]);
+      const sys: SessionContext = { roleCode: 'SysAdmin', accountId: 's1' };
+
+      // 後台（USAGE_FORM_MANAGEMENT read gate，SysAdmin 唯讀亦可）
+      const g2 = await svc.downloadFromPool(sys, f.id);
+
+      const raw = `https://fake.blob/${f.blobPath}?sig=fake&ttl=${DOWNLOAD_URL_TTL_SECONDS}`;
+      expect(g2.url).toBe(raw); // 原始輸出，未含燒錄後綴／未經轉換
+      // 上傳原件寫入一次；下載未再 put（非重建燒錄件另存）。
+      expect(blob.putCalls).toHaveLength(1);
+      expect(audit.events).toHaveLength(0); // 管理端存取不寫稽核（F018 AC-D13）
+    });
+
+    /**
+     * 🔴 前台半段之**取代載體**（F018 `AC-D11`／`AC-D12`、F020 `AC-D3a`）：
+     * 同一份表單經**前台** `downloadForm` 取得者**不再**是 SAS URL。
+     * 非 PDF（本 fixture 為 xlsx）不燒錄、位元組與原檔相同，但傳輸模式已改為代理串流。
+     */
+    it('TS-FM-002b downloadForm（前台）**不再**核發 SAS URL，改為代理回傳位元組', async () => {
       const f = await svc.uploadForm(ICSOP_ADMIN, xlsx());
       await svc.linkForms(ICSOP_ADMIN, 'doc-1', [f.id]);
       const sup: SessionContext = { roleCode: 'Supervisor', accountId: 'sup1' };
-      const sys: SessionContext = { roleCode: 'SysAdmin', accountId: 's1' };
 
-      const g1 = await svc.downloadForm(sup, 'doc-1', f.id); // 前台（僅需 session 存在）
-      const g2 = await svc.downloadFromPool(sys, f.id); // 後台（USAGE_FORM_MANAGEMENT read gate，SysAdmin 唯讀亦可）
+      const res = await svc.downloadForm(sup, 'doc-1', f.id);
 
-      const raw = `https://fake.blob/${f.blobPath}?sig=fake&ttl=${DOWNLOAD_URL_TTL_SECONDS}`;
-      expect(g1.url).toBe(raw); // 原始輸出，未含燒錄後綴／未經轉換
-      expect(g2.url).toBe(raw);
-      // 上傳原件寫入一次；兩次下載皆未再 put（非重建燒錄件另存）。
-      expect(blob.putCalls).toHaveLength(1);
-      // 結構回歸防線：UsageFormsService 建構子＝blob/store/audit/uploaderDir?/orgResolver?
-      //（後二者為 G-ADM-024 上傳者姓名/部門解析，非燒錄相依）——**無 burner**，天生不具燒錄能力
-      //（接上 PdfBurner 則此斷言破而示警）。arity 隨 G-ADM-024 相依由 3→5。
-      expect(UsageFormsService.length).toBe(5);
+      expect(blob.urlCalls).toHaveLength(0);
+      expect((res as unknown as Record<string, unknown>).url).toBeUndefined();
+      expect(res.bytes.equals((await blob.getBytes(f.blobPath))!)).toBe(true);
     });
   });
 
@@ -542,18 +610,34 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
    * 兩個精確動作 ×（主管、部門窗口）兩個逐字指名角色（house DoD：於真實呼叫方法上斷言，不以共用 guard 代替）。
    */
   describe('RBAC — AC6 主管/部門窗口下載允許、取代被拒（F026 精確組合）', () => {
+    /**
+     * 🔴 2026-08-16 delta（F018 `AC-D12`／`AC-D14`；F020 `AC-D3a`／`AC-D5`；§10.1）：
+     * 本案走**前台** `downloadForm`，其傳輸形狀由 SAS URL 改為代理位元組、稽核加 `watermarkSnapshot` 欄。
+     * 🔒 **本案之測試標的未變**——F026 AC6「主管／部門窗口下載使用表單→允許，且照寫稽核」逐字仍然成立；
+     *    改動僅及於傳輸形狀與稽核欄位，**未放寬任何權限期望值**。
+     *
+     * 原斷言（逐字保留供追溯）：
+     *   OLD> `const grant = await svc.downloadForm(s, 'doc-1', f.id);`
+     *   OLD> `expect(grant.url).toContain(f.blobPath);`
+     *   OLD> `expect(grant.expiresInSeconds).toBe(DOWNLOAD_URL_TTL_SECONDS);`
+     *   OLD> `expect(audit.events).toEqual([{ targetType:'USAGE_FORM', actionType:'DOWNLOAD',`
+     *   OLD> `  formId: f.id, documentId:'doc-1', accountId }]);`
+     *
+     * 📌 fixture 為 `xlsx()`（非 PDF）⇒ 不燒錄、`watermarkSnapshot` 為 `null`；本案因此**不觸及**
+     *    「後台角色打前台端點是否該被燒錄」之未決爭點（`AC-D13` 只列舉後台**頁面**，見 risks-and-gaps `G-L3-05`）。
+     */
     it.each([
       ['TS-FM-003 主管', 'Supervisor', 'sup1'],
       ['TS-FM-004 部門窗口', 'DeptContact', 'dc1'],
-    ])('%s 下載使用表單 → 允許，核發憑證＋稽核', async (_label, roleCode, accountId) => {
+    ])('%s 下載使用表單 → 允許，代理回傳位元組＋稽核', async (_label, roleCode, accountId) => {
       const f = await svc.uploadForm(ICSOP_ADMIN, xlsx());
       await svc.linkForms(ICSOP_ADMIN, 'doc-1', [f.id]);
       const s: SessionContext = { roleCode, accountId };
 
-      const grant = await svc.downloadForm(s, 'doc-1', f.id);
+      const res = await svc.downloadForm(s, 'doc-1', f.id);
 
-      expect(grant.url).toContain(f.blobPath);
-      expect(grant.expiresInSeconds).toBe(DOWNLOAD_URL_TTL_SECONDS);
+      expect(blob.urlCalls).toHaveLength(0); // F020 AC-D3a：前台不核發 SAS
+      expect(res.bytes.equals((await blob.getBytes(f.blobPath))!)).toBe(true);
       expect(audit.events).toEqual([
         {
           targetType: 'USAGE_FORM',
@@ -561,6 +645,7 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
           formId: f.id,
           documentId: 'doc-1',
           accountId,
+          watermarkSnapshot: null,
         },
       ]);
     });

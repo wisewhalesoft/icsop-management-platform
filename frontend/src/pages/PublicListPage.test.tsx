@@ -27,23 +27,63 @@ function mockAuth(orgCode: string | null = 'JAC00') {
   });
 }
 
+/**
+ * 🔴 2026-08-16 delta（F019 `AC-D12`／OQ-D18-09）：`PublicListItem` **移除**
+ * `usingDeptIds`／`usingDeptNames`、**新增** `draftingCompanyName`／`draftingSectionName`／`edition`。
+ */
+/**
+ * 🔴 **2026-08-16 fixture 缺陷修正**（`tdd-implementation` 申訴 #4；與後端申訴 #3 同一形狀）。
+ *
+ * 原以 `??` 逐欄套預設 —— 會把**顯式傳入的 `null`** 當成「沒給」而還原為預設值：
+ *   `draftingSectionName: over.draftingSectionName ?? '車輛行銷室',`（`edition`／`draftingCompanyName` 同形）
+ * 於是 `AC-D14` 之空值案傳 `docItem({ draftingSectionName: null })` 想測「未設定 → 顯示 `—`」，
+ * 到了工廠卻變回 `'車輛行銷室'`，**空值渲染路徑從未被執行**。
+ *
+ * 修法：改為 `{ ...DOC_ITEM_DEFAULTS, ...over }` 展開——顯式之 `null`／`''`／`0` 一律生效，
+ * 未傳之鍵才落預設。已確認全檔無 `docItem({ key: undefined })` 之呼叫、預設值逐欄未變。
+ */
+const DOC_ITEM_DEFAULTS: PublicListItem = {
+    id: 'd1',
+    documentNumber: 'ICSOP-SRC-101-1-01',
+    documentName: '車輛分期進件作業',
+    lifecycleId: 'lc1',
+    lifecycleName: '銷售及收款循環',
+    draftingCompanyName: '和潤企業股份有限公司',
+    draftingDeptId: 'JA000',
+    draftingDeptName: '營運管理部',
+    draftingSectionName: '車輛行銷室',
+    edition: "26'01",
+    status: 'active',
+    displayStatus: 'announced',
+    announcedDate: '2026-01-01T00:00:00.000Z',
+    contentSummary: '進件收件與資格初審流程。',
+    pinned: false,
+};
+
 function docItem(over: Partial<PublicListItem>): PublicListItem {
-  return {
-    id: over.id ?? 'd1',
-    documentNumber: over.documentNumber ?? 'ICSOP-SRC-101-1-01',
-    documentName: over.documentName ?? '車輛分期進件作業',
-    lifecycleId: over.lifecycleId ?? 'lc1',
-    lifecycleName: over.lifecycleName ?? '銷售及收款循環',
-    draftingDeptId: over.draftingDeptId ?? 'JA000',
-    draftingDeptName: over.draftingDeptName ?? '營運管理部',
-    usingDeptIds: over.usingDeptIds ?? ['JAC00'],
-    usingDeptNames: over.usingDeptNames ?? ['審查室'],
-    status: over.status ?? 'active',
-    displayStatus: over.displayStatus ?? 'announced',
-    announcedDate: over.announcedDate ?? '2026-01-01T00:00:00.000Z',
-    contentSummary: over.contentSummary ?? '進件收件與資格初審流程。',
-    pinned: over.pinned ?? false,
-  };
+  return { ...DOC_ITEM_DEFAULTS, ...over };
+}
+
+/**
+ * 前台 filter-options 端點（F019 `AC-D5`，本 delta 新增）之相容 shim。
+ * 本檔既有案例之測試標的與選項清單無關，僅需讓頁面取得空選項而不落入未定義之 Promise。
+ * 以動態鍵設定，避免端點尚未實作時於 shared setup 拋 TypeError 而擊倒整檔既有案例；
+ * 該端點之**契約本身**由 `PublicListPage.filterDelta.test.tsx` 以靜態型別嚴格斷言。
+ */
+const EMPTY_FILTER_OPTIONS = {
+  draftingCompanies: [],
+  draftingDepts: [],
+  draftingSections: [],
+  chiefs: [],
+  lifecycles: [],
+};
+function stubFilterOptions(): void {
+  const fn = (api as unknown as Record<string, unknown>).getPublicFilterOptions;
+  if (typeof fn === 'function') {
+    (vi.mocked(fn) as unknown as { mockResolvedValue: (v: unknown) => void }).mockResolvedValue(
+      EMPTY_FILTER_OPTIONS,
+    );
+  }
 }
 
 function pageOf(items: PublicListItem[], over: Partial<PublicPage> = {}): PublicPage {
@@ -79,15 +119,23 @@ describe('PublicListPage（F019 前台清單）', () => {
     mockAuth();
     vi.mocked(api.getOrgUnits).mockResolvedValue(ORG_UNITS);
     vi.mocked(api.getPublicDocuments).mockResolvedValue(pageOf([docItem({})]));
+    stubFilterOptions();
   });
 
-  it('TS-F019-029/030 卡片顯示編號/名稱/制定部門/使用部門/狀態/公告日期（名稱解析、非 undefined）', async () => {
+  /**
+   * 🔴 2026-08-16 delta（F019 `AC-D8`／`AC-D12`）：卡片欄位改為九項，**移除「使用部門」**。
+   * 原斷言（供追溯）：OLD> `expect(card.getByText('審查室')).toBeInTheDocument(); // 使用部門（解析名稱）`
+   * 逐項標籤與順序之嚴格斷言見 `PublicListPage.filterDelta.test.tsx`（`AC-D8`）。
+   */
+  it('TS-F019-029/030 卡片顯示編號/名稱/制定三級/版次/狀態/公告日期（名稱解析、非 undefined）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     const card = within(screen.getByTestId('rest-list')); // 卡片內查詢（排除下拉選項同名字串）
     expect(card.getByText('ICSOP-SRC-101-1-01')).toBeInTheDocument();
+    expect(card.getByText('和潤企業股份有限公司')).toBeInTheDocument(); // 制定公司（解析名稱）
     expect(card.getByText('營運管理部')).toBeInTheDocument(); // 制定部門（解析名稱）
-    expect(card.getByText('審查室')).toBeInTheDocument(); // 使用部門（解析名稱）
+    expect(card.getByText('車輛行銷室')).toBeInTheDocument(); // 制定室別（解析名稱）
+    expect(card.getByText("26'01")).toBeInTheDocument(); // 版次
     expect(card.getByText('2026-01-01')).toBeInTheDocument(); // 公告日期
     expect(card.getByText('已公告')).toBeInTheDocument(); // 顯示狀態
   });
@@ -112,15 +160,16 @@ describe('PublicListPage（F019 前台清單）', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('TS-F019-031 部門篩選下拉呈現組織樹各層級（含課層葉節點以外之上層）', async () => {
-    renderPage();
-    await screen.findByText('車輛分期進件作業');
-    const deptSelect = screen.getByLabelText('使用部門篩選');
-    const opts = within(deptSelect).getAllByRole('option').map((o) => o.textContent?.trim());
-    expect(opts).toContain('營業二本部'); // 本部層
-    expect(opts).toContain('營運管理部'); // 部層
-    expect(opts).toContain('審查室'); // 處室層
-  });
+  /**
+   * 🔴 2026-08-16 delta（F019 `AC-D1`）：原 `TS-F019-031`「部門篩選下拉呈現組織樹各層級」**已刪除**。
+   * 該 DOM 元件（`aria-label="使用部門篩選"`）依使用者裁決移除，**本條所規範之載體已不存在**
+   * （spec 亦以刪節線標記其對應 AC「因前台『使用部門』篩選器移除而不再適用」）。
+   * 原斷言（供追溯）：
+   *   OLD> `const deptSelect = screen.getByLabelText('使用部門篩選');`
+   *   OLD> `expect(opts).toContain('營業二本部'/'營運管理部'/'審查室');`
+   * 🔒 其「可指定任意層級」之規則仍由 F026 §9.1（欄位設定側）持有，不受影響；
+   *   「該控制項不得存在」之反向斷言見 `PublicListPage.filterDelta.test.tsx`（`AC-D1` 雙重斷言）。
+   */
 
   it('TS-F019-028 清除篩選 → 重置關鍵字並重新查詢完整清單', async () => {
     renderPage();
@@ -228,25 +277,26 @@ describe('PublicListPage（F019 前台清單）', () => {
     expect(screen.getByTestId('hidden-note')).toHaveTextContent('');
   });
 
-  it('G-PUB-016 使用部門命中使用者組織路徑之段以 primary-700 高亮，旁系不高亮', async () => {
-    // 使用者 JAC00；文件使用部門 JA000（部層，為使用者祖先→高亮）＋ JB000（旁系→不高亮）。
-    vi.mocked(api.getPublicDocuments).mockResolvedValue(
-      pageOf([
-        docItem({
-          draftingDeptName: '企劃部', // 避免與 in-scope 使用部門名同字串
-          usingDeptIds: ['JA000', 'JB000'],
-          usingDeptNames: ['營運管理部', '其他部門'],
-        }),
-      ]),
-    );
-    renderPage();
-    await screen.findByText('車輛分期進件作業');
-    const card = within(screen.getByTestId('rest-list'));
-    expect(card.getByText('營運管理部').className).toMatch(/text-primary-700/); // in-scope 高亮
-    expect(card.getByText('其他部門').className).not.toMatch(/text-primary-700/); // 旁系不高亮
-  });
+  /**
+   * 🔴 2026-08-16 delta（F019 `AC-D12` 之「📌 已知代價（已接受）」）：
+   * 原 `G-PUB-016`「使用部門逐段高亮」**已刪除**——該欄位與其 DTO 來源（`usingDeptNames`）
+   * 一併自卡片與對外回應移除，spec 明文列為已接受之代價。
+   * 原斷言（供追溯）：
+   *   OLD> `expect(card.getByText('營運管理部').className).toMatch(/text-primary-700/);   // in-scope 高亮`
+   *   OLD> `expect(card.getByText('其他部門').className).not.toMatch(/text-primary-700/); // 旁系不高亮`
+   * 🔒 高亮所依據之**子樹判定本身未被移除**（`AC-D11`／`AC-D13`），仍驅動置頂分區
+   *   （見本檔「置頂區與其餘區依 pinned 旗標分區呈現」）。
+   */
 
-  it('G-PUB-011 手機篩選底部面板：點觸發鈕開啟、選部門後套用關閉', async () => {
+  /**
+   * 🔴 2026-08-16 delta（F019 `AC-D1`／架構 A9）：行動 sheet 之互動載體由「使用部門篩選（行動）」
+   * 改為新六項之一（制定部門）；API 參數由 `deptCode` 改為 `draftingDeptId`。
+   * 原斷言（供追溯）：
+   *   OLD> `await userEvent.selectOptions(screen.getByLabelText('使用部門篩選（行動）'), 'JA000');`
+   *   OLD> `expect(api.getPublicDocuments).toHaveBeenCalledWith(expect.objectContaining({ deptCode: 'JA000' }));`
+   * **本案之測試標的（sheet 開啟／套用後關閉）未變。**
+   */
+  it('G-PUB-011 手機篩選底部面板：點觸發鈕開啟、套用後關閉', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     // 開啟前 dialog 為 aria-hidden（getByRole 不回傳）
@@ -254,11 +304,6 @@ describe('PublicListPage（F019 前台清單）', () => {
     await userEvent.click(screen.getByTestId('mobile-filter-trigger'));
     const sheet = screen.getByRole('dialog', { name: '篩選' });
     expect(sheet).toBeInTheDocument();
-    // 行動下拉具獨立 aria-label（避免與桌機同名衝突）
-    await userEvent.selectOptions(screen.getByLabelText('使用部門篩選（行動）'), 'JA000');
-    await waitFor(() =>
-      expect(api.getPublicDocuments).toHaveBeenCalledWith(expect.objectContaining({ deptCode: 'JA000' })),
-    );
     await userEvent.click(within(sheet).getByRole('button', { name: '套用' }));
     expect(screen.queryByRole('dialog')).toBeNull(); // 套用後關閉
   });
@@ -270,6 +315,7 @@ describe('PublicListPage RWD（F021 · unit 可驗證範圍）', () => {
     mockAuth();
     vi.mocked(api.getOrgUnits).mockResolvedValue(ORG_UNITS);
     vi.mocked(api.getPublicDocuments).mockResolvedValue(pageOf([docItem({})]));
+    stubFilterOptions();
   });
 
   it('TS-F021-001/002 斷點切換（resize）時搜尋關鍵字與篩選狀態不遺失', async () => {
