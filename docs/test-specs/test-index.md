@@ -11,6 +11,7 @@
 | 實作某 feature | 該 feature 之 `features/F###-test.md` ＋ 對應 `docs/specs/features/F###-*.md` |
 | 判斷某條測試是否寫錯 | `features/F###-test.md` 之「AC ↔ 約束對照」＋ 規格 AC ＋ prototype（**不看實作**） |
 | 找「為何這條沒測」 | [risks-and-gaps.md](risks-and-gaps.md) |
+| **驗收伺服器端產生之 PDF** | 🔴 **必讀** [risks-and-gaps.md#pdf-glyph-integrity](risks-and-gaps.md#pdf-glyph-integrity)——`pdftotext` 抽文字層之檢查**已實證無效**，唯一有效手段是渲染後逐字比對 |
 
 ## 已登錄之測試設計文件
 
@@ -56,3 +57,4 @@
 | e2e fidelity（Playwright） | 🟡 專案已有 `e2e/`，但 **F040 本輪刻意不做**（使用者指示，見 [risks-and-gaps G-F040-04](risks-and-gaps.md#f040)） |
 | mutation（Stryker） | 🟡 同上（G-F040-05） |
 | metric gate（dependency-cruiser／覆蓋率／複雜度） | 🟡 同上（G-F040-06） |
+| **PDF 產物之字形完整性**（重新解析嵌入子集輪廓） | ✅ **已建**（2026-08-17）：`backend/src/public/pdf-glyph-integrity.spec.ts`，9 案／5.7 秒／零新增相依，涵蓋 F020 燒錄＋F036 樹狀圖＋F038 新舊對照三條**真實**路徑。負向對照（移除 `glyfSafeFontkit` 包裝）→ **5 紅**。⚠ 只驗輪廓層，**不取代**渲染後逐字比對。詳見 [#pdf-glyph-integrity](risks-and-gaps.md#pdf-glyph-integrity) F 節 |

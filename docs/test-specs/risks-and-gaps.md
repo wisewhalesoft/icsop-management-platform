@@ -175,10 +175,14 @@ docker compose -p icsop exec api sh -c "mv /app/assets/fonts/NotoSansTC-Regular.
 docker compose -p icsop restart api && sleep 5 && docker compose -p icsop logs --tail=40 api    # 須見非 0 退出 ＋ 逐字列出兩個候選路徑
 docker compose -p icsop exec api sh -c "mv /tmp/NotoSansTC-Regular.ttf /app/assets/fonts/" ; docker compose -p icsop restart api
 
-# 3) L0 燒錄後之中文（三條路徑）—— 下載後以 pdftotext 抽文字層
+# 3) L0 燒錄後之中文（三條路徑）
 #    ① F020 前台檢視器 PDF ② GET /admin/lifecycles/:id/tree-preview/download ③ F038 新舊樹狀圖 PDF
-pdftotext downloaded.pdf - | grep -c "僅供內部使用"    # 須 >= 1
-pdftotext downloaded.pdf - | grep -c "???"             # 須為 0
+# 🔴 2026-08-17 更正：原本這裡的兩行 pdftotext 檢查【已實證無效，不得再使用】。
+#    照原文寫（無 -enc UTF-8）對【正常】PDF 亦回 0 ⇒ 恆紅；加上 -enc UTF-8 後對【字形全毀】之 PDF 回 1 ⇒ 假綠。
+#    grep -c "???" 恆為 0（? 只出現在退回 Helvetica 之 asciiSafe 路徑，是不同故障模式）。
+#    ⇒ 改用 risks-and-gaps.md#pdf-glyph-integrity D 節之「渲染後逐字比對」（唯一有效手段）。
+# （作廢）pdftotext downloaded.pdf - | grep -c "僅供內部使用"    # 須 >= 1
+# （作廢）pdftotext downloaded.pdf - | grep -c "???"             # 須為 0
 
 # 4) L7 migration（缺失 #18）—— 容器內只有 dist；Git Bash 需 MSYS_NO_PATHCONV=1
 MSYS_NO_PATHCONV=1 docker compose -p icsop exec api npm run migration:run:prod
@@ -250,8 +254,11 @@ MSYS_NO_PATHCONV=1 docker compose -p icsop exec api npm run migration:run:prod
 
 # 乙2) §10.15 #1／#6 CJK 燒錄非亂碼（與 L0 共用；本 lane 之驗收前提）
 #   docker compose exec api node -e "process.exit(require('fs').existsSync('/app/assets/fonts/NotoSansTC-Regular.ttf')?0:1)"
-#   pdftotext /tmp/front.pdf - | grep -q '僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現' && \
-#   ! (pdftotext /tmp/front.pdf - | grep -qE '\?{5,}')
+#   🔴 2026-08-17 更正：以下兩行 pdftotext 檢查【已證實無效，不得再使用】——
+#      文字層與字形層是 PDF 中兩個獨立物件，字形全毀時 pdftotext 仍抽得出完整中文（假綠）。
+#      改用 risks-and-gaps.md#pdf-glyph-integrity D 節之「渲染後逐字比對」。
+#   （作廢）pdftotext /tmp/front.pdf - | grep -q '僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現'
+#   （作廢）! (pdftotext /tmp/front.pdf - | grep -qE '\?{5,}')
 
 # 乙3) §10.15 #12 50MB 附錄／使用表單之記憶體峰值（unit 用小檔，永遠不會 OOM）
 #   上傳一份接近 50MB 之 pdf 與一份接近 50MB 之 xlsx 為附錄；
@@ -607,6 +614,10 @@ expect(seqInput().value).toBe('01');
 > 本輪容器與代理層驗收共揪出四個缺陷，**四個都是三道機器閘門（unit／build／tsc）全綠時仍然存在的**。
 > 前兩個（DB collation `_BIN`、SPA fallback 吃掉檔案端點）已在 architect 之 §10.15 盲區表中預測到；
 > **後兩個不在**。本節記錄後兩類，並把它們從「只能靠人實跑發現」變成「機器擋得住」。
+>
+> 📌 **同族之第三類見 [#pdf-glyph-integrity](#pdf-glyph-integrity)**（2026-08-17 最終驗收，PDF 中文缺字）：
+> 本節之盲點是「**沒有任何測試跨越邊界**」，該節之盲點是「**沒有任何測試看產物本身**」——
+> 共同形狀為**環驗的是零件、不是成品**。該節另更正了 §10.15 #1 一條**實證無效**之既有檢查步驟。
 
 ### A. 盲點一：前後端契約無人跨越 —— 🔴 已讓真缺陷逃逸
 
@@ -766,3 +777,196 @@ expect(seqInput().value).toBe('01');
 2. ⚠ **AC 缺口**：F037 `AC-D11` ② 只規定 `來源` 之**輸出值域**（六者），**未給出 `changeType` → 來源標籤之逐案對映**
    （相對地 F038 `AC-D7` ① 給了完整八對六對映）。⇒ 約束只能斷言「值落於六者之內且非列舉代碼」，
    **不臆造**特定代碼對特定標籤。若需逐案鎖定，須先補 AC。
+
+---
+
+## PDF 產物之**字形完整性**：環抓不到，且既有盲區表那條檢查是**無效的**（2026-08-17 最終驗收發現） {#pdf-glyph-integrity}
+
+> 與 [#ring-boundary-blind-spots](#ring-boundary-blind-spots) 為**同一族**：那節談「沒有任何測試跨越邊界」，
+> 本節談「沒有任何測試看**產物本身**」。兩者的共同形狀是——環驗的是**零件**，不是**成品**。
+> 🔴 本節之所有數據皆為 **2026-08-17 實跑所得**，非推論；量測方法見 E 節末。
+
+### A. 症狀與根因
+
+伺服器端產生／燒錄之 PDF **中文大量缺字**，且**不只浮水印，文件本文也缺**：
+
+| 產物 | 修前（使用者所見） | 修後 |
+|---|---|---|
+| 樹狀圖 PDF 標題 | 「環 -　環樹」 | 「薪工循環 - 循環樹狀圖」 |
+| 節點名稱 | 「未掛」／「進 作業」／「AD對 作業」 | 「案件起始／尚未掛載程序書」／「商品進件作業」「機車進件作業」／「機車IPAD對保作業」 |
+| 節點副標 | 「掛」 | 「掛載 4 份程序書」 |
+| 前台附件浮水印 | 每磁磚 2–4 字之破碎片段 | 三行完整長串 |
+
+**根因**：`@pdf-lib/fontkit@1.1.1` 之 TTFSubset — Noto Sans TC 為**長 loca**，`glyf` 長度可為奇數；
+`loca.preEncode()` 在小子集時改用**短 loca** 並 `offsets[i] >>>= 1`，**奇數位移被無聲截掉 1 byte**，
+自第一個奇長度字形之後所有字形邊界錯位。修於 commit `9c451f1`（把 `loca.version` 釘為長格式，
++268 bytes／樹狀圖、+53 bytes／附件，**不放棄子集化**）。完整診斷見
+`docs/implementation-logs/cjk-pdf-subset-fix-impl.md`。
+
+### B. 為何四道機器閘門全綠 —— 這一類**結構上**抓不到
+
+現有全部相關測試斷言的都是**兩件事**：① 是否呼叫 `burnPdf`（次數／參數）；② 快照**字串內容**是否逐字正確。
+**沒有任何一條檢查產生出之 PDF 內字形是否完整。**
+
+> 📌 **「服務被呼叫了、參數對」與「產物真的可讀」是兩件不同的事。**
+> 本缺陷中**①②全部成立**：`burnPdf` 有被呼叫、快照字串逐字正確、字型有嵌入——
+> 錯的是那串正確字元被畫成什麼形狀。環從未看過那一層。
+
+### C. 🔴 §10.15 第 1 項之驗收步驟是**無效的**，必須更正（雙向實證）
+
+`architecture-spec.md` §10.15 #1（及 §10.10 表列 (c)）規定之把關手段為「端到端 PDF 文字層抽取
+（斷言含中文、不含 `?`）」，在本 repo 落成兩行：
+
+```bash
+pdftotext downloaded.pdf - | grep -c "僅供內部使用"    # 須 >= 1
+pdftotext downloaded.pdf - | grep -c "???"             # 須為 0
+```
+
+**這兩行對本缺陷完全無效**，且**兩個方向都已實測證明**（2026-08-17，`pdftotext` 4.00 / poppler，
+以 `pdf-lib@1.17.1` ＋ `@pdf-lib/fontkit@1.1.1` `subset:true` 產生**帶有本缺陷**之 PDF，
+與 `subset:false` 之**正常**PDF 逐項對照）：
+
+| 情境 | 破損 PDF（11/37 字形無法解析） | 正常 PDF | 判讀 |
+|---|---|---|---|
+| `pdftotext f - \| grep -c 僅供內部使用`（**如原文所寫**） | **0** | **0** | 🔴 **恆為 0，永遠不可能滿足**。對**正確**產物亦回 0 ⇒ 假紅 |
+| `pdftotext -enc UTF-8 f - \| grep -c 僅供內部使用` | **1** | **1** | 🔴 **假綠**——把使用者退回的那份產物判為通過 |
+| `grep -c "???"` | **0** | **0** | 🔴 恆成立，**恆真斷言**（`?` 只出現在退回 Helvetica 之 `asciiSafe` 路徑，與缺字是**不同故障模式**） |
+
+**兩種寫法都是死路**：照原文寫是**永遠紅**（跑的人會誤判成「字型壞了」，或索性認定這步不可靠而略過——
+實際發生的正是後者）；把它「修好」加上 `-enc UTF-8` 後**永遠綠**——**恰好對本缺陷發假綠**。
+
+**結構性理由（已驗，非推論）**：**文字層與字形層是 PDF 中兩個互相獨立的物件。**
+實測破損 PDF 之 `ToUnicode` CMap **完整且正確**（`<0001> <85AA>`＝薪、`<0002> <5DE5>`＝工 …共 55 個 bfchar），
+它與字形輪廓所在之 `FontFile2` 串流**分屬不同 indirect object**；摧毀 `loca`／`glyf` **完全不會動到它**。
+⇒ **`pdftotext` 讀的是文字層，缺陷住在輪廓層。**
+**任何以文字抽取為基礎之檢查，原理上都看不到這一類缺陷**——不是這兩行寫壞了，是整個手段選錯了層。
+
+> ⚠ **這張表給了假的安全感**：它宣稱能驗中文，實際上對「**字型有嵌入但字形殘缺**」這個故障模式
+> **完全盲目**。在被更正前，不要相信任何引用它的驗收結論。
+
+🔴 **`architecture-spec.md` 屬 system-architect 所有權，本 agent 不得修改。**
+**§10.15 #1 與 §10.10 表列 (c) 之「必要把關手段」欄需由 architect 更正**——
+把「端到端 PDF 文字層抽取」整項移除或改標為無效，換成 D 節之渲染層比對。
+（本 repo 內**由 test-generator 所有**之三處同型抄本已於本次一併更正並指回本節：
+本檔 Lane A 步驟 3、本檔 乙2、`features/CJK-FONT-deployment-test.md` 表列第 3 項。）
+
+### D. 唯一有效之驗證步驟：**渲染後逐字比對**（可執行）
+
+```bash
+# 本機無 pdftoppm 時之替代法：起靜態伺服器讓 Chrome 開 PDF（file:// 會被擋）
+cd <下載目錄> && node -e "
+const http=require('http'),fs=require('fs'),path=require('path');
+const dir='<絕對路徑>'; const f='<檔名>';
+http.createServer((q,r)=>{const b=fs.readFileSync(path.join(dir,f));
+  r.writeHead(200,{'Content-Type':'application/pdf','Content-Length':b.length});r.end(b);})
+ .listen(8896);
+" &
+# 再以瀏覽器開 http://localhost:8896/ 、放大至 150–200%、逐字比對
+```
+
+**比對標的清單**（下一輪照跑；缺一不可）：
+
+| # | 產物 | 逐字比對標的 |
+|---|---|---|
+| 1 | 樹狀圖 PDF（`GET /admin/lifecycles/:id/tree-preview/download`） | **標題**全字 |
+| 2 | 同上 | **每一個**節點名稱（**不是抽樣**——本缺陷是逐字形發生的） |
+| 3 | 同上 | 每個節點之副標「掛載 N 份程序書」 |
+| 4 | F038 新舊樹狀圖 PDF | 同 1–3，新舊兩張各一次 |
+| 5 | 前台附件 PDF（F020 檢視器／下載） | 浮水印**三行**是否與**檢視器畫面**逐字相同 |
+
+> 📌 **判準：不是「有中文出現」就算過——必須逐字比對。**
+> 本缺陷的特徵正是「**部分字正常、部分字消失**」（實測 37 字形中 25 正常、1 空輪廓、11 解析失敗）。
+> 只看到幾個中文就放行，會直接漏掉——使用者所見之「環 -　環樹」裡**每一個字都是真中文**。
+
+### E. 🔴 可推廣教訓：**「元件存在」不等於「元件正確運作」**（本輪**第三次**同型）
+
+lead 自陳：他先前以「`NotoSansTC` 有嵌入 PDF、`Helvetica` 未出現」推論「中文必然正確顯示」，
+據此宣告該項修復完成——**那是結構推論冒充結果驗證**。**字型嵌入 ≠ 字形完整。**
+
+本輪三例並列，**同一個形狀**：
+
+| # | 案例 | 「零件在」之證據（皆為真） | 實際上 | 誰發現 |
+|---|---|---|---|---|
+| 1 | `FRONT_BURNER` 未 provide | 服務類別存在、unit 全綠 | DI 未接上，執行期取不到 | 容器實跑 |
+| 2 | `watermarkSupported` 未產生 | 欄位有定義、型別正確 | 回應中根本沒這個欄位 | 容器實跑 |
+| 3 | **本案：字型嵌入但字形殘缺** | `FontFile2` 存在、無 Helvetica 退回、`ToUnicode` 正確、`burnPdf` 有呼叫、快照字串逐字正確 | **畫出來是空白** | **使用者肉眼** |
+
+> 🔴 **通則：驗收產物時必須驗「產物本身」，不是驗「產生產物的零件有沒有到位」。**
+> 「零件清單齊全」是**必要條件**，不是充分條件。三例中「零件在」的證據**全部為真**，缺陷**全部仍在**。
+> 判定準則：問一句「**我剛才檢查的，是使用者最終會拿到／看到的那個東西嗎？**」
+> 答案若是「不是，我檢查的是它的上游」，那就還沒驗收。
+>
+> 📌 與 [#ring-boundary-blind-spots](#ring-boundary-blind-spots) F 節「AC 落地時問『它的載體是哪個檔案的哪一條？』」
+> 為同一套自問法之兩面：那條問**約束存不存在**，這條問**約束看的是不是成品**。
+
+**本節數據之量測方法**（供覆核；診斷腳本為一次性，已刪除）：於 `backend/` 以 `pdf-lib`＋`@pdf-lib/fontkit`
+（**vanilla，未載入任何本 repo 之 production code**）分別以 `subset:true`／`false` 產生兩份含相同 CJK 字串之 PDF，
+自 `FontDescriptor.FontFile2` 取出嵌入字型程式（`zlib.inflateSync` 解 FlateDecode），
+以 `fontkit.create()` 重新解析後逐一存取 `glyph.path.commands`，並對兩份 PDF 各跑四種 `pdftotext` 組合。
+
+### F. 可機器化之形狀：**重新解析嵌入子集之字形輪廓** —— ✅ **2026-08-17 已建並實跑**
+
+> 🔒 **載體**：`backend/src/public/pdf-glyph-integrity.spec.ts`（9 案，**綠**，5.7 秒）。
+> lead 於 2026-08-17 裁定「建」，理由：本案為 [#ring-boundary-blind-spots](#ring-boundary-blind-spots) F 節
+> 「新發現 → 必須指派人建載體」之**第四次**同型，前三次都只留下記錄。
+> ⇒ 本節不再是「盲區紀錄」，而是**已關閉之缺口**（惟涵蓋邊界仍在，見下）。
+
+D 節之逐字比對是人工的，無法納入 CI。本缺陷**有**可機器化的形狀——即 implementer 診斷時所用之方法：
+**把產出之 PDF 讀回來，取出嵌入字型，重新解析每一個字形輪廓。**
+
+**約束跑在【真實燒錄路徑】產生之 PDF 上**（非 vanilla `pdf-lib`，否則只是在測第三方套件）。
+三條路徑各一組，接線簽章取自**既有測試檔**（`pdf-burner.spec.ts`／`lifecycle-tree-pdf.spec.ts`／
+`lifecycle-change-history-pdf.spec.ts`），**未為此讀任何 production source**（盲測規則）：
+
+| 路徑 | 進入點 | 子集字形數（實測） |
+|---|---|---|
+| F020 浮水印燒錄 | `new PdfLibBurner().burnPdf(pdf, snapshot)` | 62 |
+| F036 循環樹狀圖 | `new PdfLibTreeRenderer().render({ lifecycleName, layout })` | 39 |
+| F038 新舊對照 | `new PdfLibChangeHistoryTreeRenderer().render({ …, diff })` | 35 |
+
+**斷言形狀（已建，9 案）**：
+
+| 層 | 斷言 | 角色 |
+|---|---|---|
+| ① | **零拋錯**——取出嵌入子集後，**沒有任何字形**在存取 `path` 時拋錯（三條路徑各一案） | 🔴 **主斷言**。訊號最乾淨 |
+| ② | **非空輪廓數 ≥ 由原始字型導出之參考值**（三條路徑各一案；參考值**由程式導出，不得手打**） | 輔助，攔截「空輪廓」變體 |
+| ③ | 🔒 **掃描器自我檢查**（2 案）：三條路徑**各恰一份**嵌入子集；子集字形數 ≥ 該串中文之相異字形數；參考值導出本身非平凡（>20） | 反假綠（見 [#ring-boundary-blind-spots](#ring-boundary-blind-spots) D 節：解析器一壞就回空集合而報綠） |
+| ④ | 🔒 **校準守衛**（1 案）：原始字型對浮水印 fixture 回報 **≥1 個合法空輪廓** | 擋住日後有人把 ① 改嚴成「每個字形非空」 |
+| — | 各字形 `path.commands.length` 之**多重集合**比對 | **未建**。可額外攔截「解析得出來但形狀是錯的」；強度未量測，若要建須另立案子 |
+
+**代價（實測）**：新增相依 **零**（`pdf-lib@1.17.1`＋`@pdf-lib/fontkit@1.1.1` 已在 backend deps
+且 lockfile 已釘版；解壓用 stdlib `zlib`）。**整支 9 案 5.7 秒**。
+參考值改由**原始 TTF 直接 `layout()` 導出**（而非再嵌一份 `subset:false` PDF），省掉原估的 ≈600 ms。
+
+**⚠ 校準陷阱（已踩，寫下來免得下一個人紅得不是原因）**：**空輪廓是合法的**——空白字元本來就沒有輪廓。
+實測浮水印 fixture 之參考字型回報 **1 個**合法空輪廓，三條路徑之子集亦各有 **1 個**。
+⇒ 天真的「每個字形都必須非空」會對**正確**產物報紅。故 ① 用「不得拋錯」（0 容忍），
+② 用「≥ 導出之參考值」而非固定數字，並以 ④ 把這個理由**釘成一條可執行的案子**，不只寫在註解。
+
+**⚠ 涵蓋邊界（必須明說，否則又是一次假的安全感）**：本約束驗的是**嵌入子集之輪廓層**。它**不能**證明
+「閱讀器會把**正確的字**畫在**正確的位置**」——`cmap`／`CIDToGIDMap` 對映錯誤（字形完好但對錯字）、
+文字落在頁面外、白字白底、被裁切、版面不符 prototype，**它一律看不到**。
+⇒ 它**縮小**盲區，**不消除**。🔴 **D 節之逐字比對仍為驗收必要步驟，不得因本約束全綠而略過。**
+（同一段文字亦寫在 `pdf-glyph-integrity.spec.ts` 檔頭。）
+
+> 🔬 **負向對照（2026-08-17 實跑，非推論）**：暫時移除 `cjk-font.ts:121` 之 `glyfSafeFontkit()` 包裝
+> （`registerFontkit(glyfSafeFontkit(fontkit))` → `registerFontkit(fontkit)`，即還原缺陷）：
+>
+> | | 有包裝（現況） | 移除包裝（缺陷復現） |
+> |---|---|---|
+> | 整支結果 | **9 綠** | 🔴 **5 紅／4 綠** |
+> | ① 零拋錯 × 3 條路徑 | 全綠 | 🔴 **三條全紅** |
+> | ② 非空輪廓 ≥ 參考值 | 全綠 | 🔴 **紅 2**：浮水印 `34 < 60`、樹狀圖 `20 < 29` |
+>
+> 還原後 `sha256sum -c: **OK**`、`diff` 空、`git diff HEAD` **無差異**（＝與 `9c451f1` 所提交者位元組相同）。
+>
+> 📌 **附帶發現（值得記下）**：F038 之 ② 在缺陷下**仍然綠**——其參考值僅 18，退化後之非空數尚能跨過。
+> ⇒ **① 才是有鑑別力的那一條，② 只是補網**。這正好驗證了把「零拋錯」而非「數量比對」設為主斷言的選擇；
+> 若當初只建 ②，F038 這條路徑會漏。
+>
+> 📌 **為何是行為層守衛，不是「檢查 lockfile 版本／patch 有沒有套上」**：本 repo `backend/package.json`
+> **無 `patches/`、無 `postinstall`、無 `overrides`** ⇒ 修法**不在** node_modules（非 patch-package）。
+> 且 `@pdf-lib/fontkit` 宣告為 caret `^1.1.1`，未來 `1.x` 升版若改動 TTFSubset，
+> **版本比對式守衛會照樣綠而缺陷復發**；行為層守衛（實際產 PDF、實際解析輪廓）對版本漂移免疫。
+> **請勿改成版本／檔案比對**——理由已同步寫進測試檔頭。
+
