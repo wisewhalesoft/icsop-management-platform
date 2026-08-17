@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import {
   getLifecycleNodeDocuments,
@@ -50,9 +50,42 @@ const STATUS_PILL: Record<DisplayStatus, string> = {
 /** ISO 時間戳 → `YYYY-MM-DD`（僅顯示用；無值以 `—` 呈現）。 */
 const dateOnly = (iso: string | null): string => (iso ? iso.slice(0, 10) : '—');
 
+/**
+ * F036 `AC-D3`：返回鈕之目標由 `?from=` 決定（本頁有**兩個入口**）。
+ *
+ * 🔴 為何不用 `history.back()`（prototype 22 `goBack()` 之作法）：兩個入口皆以
+ * `window.open(url, '_blank', 'noopener,noreferrer')` 開**新分頁**——新分頁之 `history.length === 1`
+ * （沒有上一頁可回），且 `noreferrer` 連 `document.referrer` 都清空。prototype 之瀏覽器語意
+ * 在 SPA 新分頁下兩個條件同時不成立，照抄必然無效；能保住的是它的**意圖**（回到來源）。
+ *
+ * 🔒 **白名單映射，不接受任意路徑**：直接把 `from` 當網址 `navigate()` 就是 open-redirect
+ * ——任何人都能發出 `/lifecycles/x/tree?from=//evil.example` 之連結。未知值一律落預設。
+ */
+const BACK_TARGETS = {
+  documents: { path: '/admin/documents', label: '返回文件清單' },
+  lifecycles: { path: '/admin/lifecycles', label: '返回循環池' },
+} as const;
+type BackKey = keyof typeof BACK_TARGETS;
+
+export function backTargetOf(from: string | null): (typeof BACK_TARGETS)[BackKey] {
+  return (from && BACK_TARGETS[from as BackKey]) || BACK_TARGETS.lifecycles;
+}
+
 export function LifecycleTreePreviewPage(): JSX.Element {
   const { id = '' } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  /**
+   * 🔴 `from` 必須隨循環切換器一起帶走（見下方 `onChange`）：漏帶的話，使用者只要切換過一次
+   * 循環，返回鈕就會悄悄改回循環池——正是本次修正要消滅的那個行為，只是晚一步發生。
+   */
+  const from = searchParams.get('from');
+  const back = backTargetOf(from);
+  const cycleHref = useCallback(
+    (lifecycleId: string): string =>
+      `/lifecycles/${lifecycleId}/tree${from ? `?from=${encodeURIComponent(from)}` : ''}`,
+    [from],
+  );
   const { user } = useAuth();
   const canRead = canPerform(user?.roleCode, FunctionKey.LIFECYCLE_MANAGEMENT, 'read');
 
@@ -193,9 +226,9 @@ export function LifecycleTreePreviewPage(): JSX.Element {
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shrink-0">
         <div className="px-4 h-14 flex items-center gap-3">
           <button
-            onClick={() => navigate('/admin/lifecycles')}
-            aria-label="返回循環池"
-            title="返回循環池"
+            onClick={() => navigate(back.path)}
+            aria-label={back.label}
+            title={back.label}
             className="text-slate-400 hover:text-slate-600 flex items-center"
           >
             <Icon name="arrow-left" className="w-5 h-5" />
@@ -233,7 +266,7 @@ export function LifecycleTreePreviewPage(): JSX.Element {
             id="cycleSel"
             aria-label="切換循環"
             value={id}
-            onChange={(e) => navigate(`/lifecycles/${e.target.value}/tree`)}
+            onChange={(e) => navigate(cycleHref(e.target.value))}
             className="shrink-0 px-2.5 py-1.5 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
           >
             {/* 當前循環必列出（即使清單載入中） */}

@@ -653,7 +653,9 @@ export function DocumentListPage(): JSX.Element {
                     </td>
                     <td className="px-3 py-3">
                       <button
-                        onClick={() => window.open(`/lifecycles/${d.lifecycleId}/tree`, '_blank', 'noopener,noreferrer')}
+                        // F036 `AC-D3`：`?from=documents` 使預覽頁之返回鈕回到本頁（第二入口）。
+                        // 新分頁無 history、`noreferrer` 亦清空 referrer ⇒ 來源只能由參數明說。
+                        onClick={() => window.open(`/lifecycles/${d.lifecycleId}/tree?from=documents`, '_blank', 'noopener,noreferrer')}
                         title="開啟循環樹狀圖預覽"
                         aria-label={`${d.documentName} 循環樹狀圖預覽`}
                         className="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"

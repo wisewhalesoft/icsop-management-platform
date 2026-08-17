@@ -99,6 +99,28 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
     expect(screen.getByText('陳彥廷')).toBeInTheDocument();
   });
 
+  /**
+   * 🔴 2026-08-17 缺失修正第 4 項（F036 `AC-D3` 之第二入口側）。
+   * 預覽頁之返回鈕原本硬寫 `/admin/lifecycles`，自本頁進去的人被丟到循環管理頁。
+   * 新分頁無 history、`noreferrer` 亦清空 referrer ⇒ 來源只能由 `?from=` 明說。
+   */
+  it('TS-F036-D3-005 樹狀圖圖示以 `?from=documents` 開啟預覽頁（返回鈕據此回到本頁）', async () => {
+    mockAuth('ICSOPAdmin');
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+    await userEvent.click(
+      screen.getByRole('button', { name: '車輛分期進件作業 循環樹狀圖預覽' }),
+    );
+    // `lc` ＝ d1 之 lifecycleId（`doc()` 預設值）——第二入口須帶該文件**實際所屬**之循環（`AC-S3`）。
+    expect(openSpy).toHaveBeenCalledWith(
+      '/lifecycles/lc/tree?from=documents',
+      '_blank',
+      'noopener,noreferrer',
+    );
+    openSpy.mockRestore();
+  });
+
   it('以 pageSize 大值一次載入完整工作集', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();

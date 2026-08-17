@@ -395,7 +395,15 @@
   function zoomBy(d){ zoom=Math.max(0.5,Math.min(1.8,+(zoom+d).toFixed(2))); applyZoom(); }
   function resetView(){ zoom=1; applyZoom(); }
 
-  function goBack(){ if(document.referrer){ history.back(); } else { location.href='10-lifecycle-list.html'; } }
+  /* 🔴 F036 AC-D3（2026-08-17 delta）：返回目標依來源入口。
+     ⚠ 本 prototype 之 `history.back()` 分支在**實作**（SPA）中不可用：兩個入口皆以
+     window.open(_blank,'noopener,noreferrer') 開新分頁 ⇒ 無 history、referrer 亦被清空。
+     實作改以 `?from=` 白名單鍵表達來源（documents → /admin/documents；其餘 → /admin/lifecycles），
+     保住的是本函式的**意圖**而非其瀏覽器語意。此處同步示意該映射。 */
+  function goBack(){
+    const from=new URLSearchParams(location.search).get('from');
+    location.href = from==='documents' ? '13-document-list.html' : '10-lifecycle-list.html';
+  }
 
   function doAction(kind){
     const label={DOWNLOAD:'下載',PRINT:'列印'}[kind]||kind;

@@ -43,12 +43,18 @@ const CYCLES: LifecycleView[] = [
 
 function Probe() {
   const loc = useLocation();
-  return <div data-testid="loc">{loc.pathname}</div>;
+  return (
+    <>
+      <div data-testid="loc">{loc.pathname}</div>
+      {/* F036 `AC-D3`：`?from=` 之保留須以 search 斷言（既有案例僅看 pathname，看不見它消失）。 */}
+      <div data-testid="loc-search">{loc.search}</div>
+    </>
+  );
 }
 
-function renderAt(id = 'lc1') {
+function renderAt(id = 'lc1', search = '') {
   return render(
-    <MemoryRouter initialEntries={[`/lifecycles/${id}/tree`]}>
+    <MemoryRouter initialEntries={[`/lifecycles/${id}/tree${search}`]}>
       <Routes>
         <Route path="/lifecycles/:id/tree" element={<LifecycleTreePreviewPage />} />
       </Routes>
@@ -117,6 +123,60 @@ describe('LifecycleTreePreviewPage — F036 循環樹狀圖預覽', () => {
     await userEvent.selectOptions(sel, 'lc2');
     await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/lifecycles/lc2/tree'));
     await waitFor(() => expect(endpoints.getLifecycleTreePreview).toHaveBeenCalledWith('lc2'));
+  });
+
+  /**
+   * 🔴 2026-08-17 缺失修正第 4 項（F036 `AC-D3`）。
+   *
+   * 本頁有兩個入口（循環管理清單／ICSOP 文件管理清單），返回鈕原本硬寫 `/admin/lifecycles`
+   * ⇒ 自文件清單進來的人被丟到循環管理頁。兩個入口皆以
+   * `window.open(url,'_blank','noopener,noreferrer')` 開新分頁 ⇒ 無 history、無 referrer，
+   * 來源只能由 `?from=` 明說（prototype 22 之 `history.back()` 在此結構下必然無效）。
+   */
+  describe('F036 AC-D3：返回鈕依 `?from=` 回到來源頁', () => {
+    it('TS-F036-D3-001 未帶 from（第一入口／直連）→ 返回循環池', async () => {
+      mockAuth('ICSOPAdmin');
+      renderAt();
+      await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: '返回循環池' }));
+      await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/admin/lifecycles'));
+    });
+
+    it('TS-F036-D3-002 `?from=documents`（第二入口）→ 返回文件清單，且無障礙名稱同步改為「返回文件清單」', async () => {
+      mockAuth('ICSOPAdmin');
+      renderAt('lc1', '?from=documents');
+      await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: '返回循環池' })).toBeNull();
+      await userEvent.click(screen.getByRole('button', { name: '返回文件清單' }));
+      await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/admin/documents'));
+    });
+
+    /**
+     * 🔒 open-redirect 回歸鎖：`from` 為白名單鍵、**不是**可導覽之網址。
+     * 若實作改成 `navigate(from)`，本案之 `//evil.example` 會成為協定相對外部網址。
+     */
+    it('TS-F036-D3-003 `from` 為未知值／外部網址 → 落預設（循環池），不得據以導覽', async () => {
+      mockAuth('ICSOPAdmin');
+      renderAt('lc1', '?from=%2F%2Fevil.example');
+      await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: '返回循環池' }));
+      await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/admin/lifecycles'));
+    });
+
+    /**
+     * 🔴 最容易漏的一格：切換循環後若不帶走 `from`，返回鈕會悄悄改回循環池——
+     * 正是本次要消滅的行為，只是晚一步發生。
+     */
+    it('TS-F036-D3-004 切換循環後 `from` 仍保留，返回目標不變', async () => {
+      mockAuth('ICSOPAdmin');
+      renderAt('lc1', '?from=documents');
+      await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
+      await userEvent.selectOptions(screen.getByLabelText('切換循環'), 'lc2');
+      await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/lifecycles/lc2/tree'));
+      expect(screen.getByTestId('loc-search').textContent).toBe('?from=documents');
+      await userEvent.click(screen.getByRole('button', { name: '返回文件清單' }));
+      await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/admin/documents'));
+    });
   });
 
   it('下載／列印連結指向後端燒錄端點', async () => {

@@ -74,6 +74,10 @@ Epic/Story: E03 / US-025
 - **AC-S2**：Given 對一個有子分類之循環執行檢視／下載／列印, When 寫入 `AUDIT_LOG`, Then 其 `lifecycleName` 快照值為 `lifecycleDisplayName` 之輸出（含子分類），與當次浮水印及頁面標題所示之循環一致（[F040](F040-lifecycle-subcategory.md) AC-35）。
 - **AC-S3**：Given 由 [F017](F017-backend-document-list.md) 文件清單之第二入口開啟某文件之樹狀圖, When 該文件所屬循環為「銷售及收款循環（消金）」而池中另有「銷售及收款循環（企金）」, Then 開啟之預覽為**該文件實際所屬之具體循環**（消金），不得誤開同名之另一子分類。<br>⚠ **對 OQ-E03-07 之收斂**：因同名不同子分類之**循環代碼相同**（皆為 `SRC`，見 [F040](F040-lifecycle-subcategory.md) AC-28），`?cycle=<業務代碼>` **已不足以唯一定位**；本入口之查詢參數必須攜帶 `lifecycleId`（UUID）。此為子分類需求之衍生必然，非新產品決策。
 
+### 返回鈕依來源入口導向 delta（🔴 2026-08-17 使用者裁決；缺失修正第 4 項） {#back-target-delta}
+
+- **AC-D3**（返回鈕之目標依來源入口；權威＝`prototypes/22-lifecycle-tree-preview.html` 之 `goBack()` **意圖**）：Given 由**第二入口**（[F017](F017-backend-document-list.md) ICSOP 文件管理清單之樹狀圖圖示）開啟預覽頁, When 點擊頁首返回鈕, Then 導向 `/admin/documents`（**文件清單**），且該鈕之 `aria-label`／`title` 逐字為 `返回文件清單`；Given 由**第一入口**（循環管理清單）開啟或直接以網址進入, Then 導向 `/admin/lifecycles`，其無障礙名稱維持既有之 `返回循環池`。<br>🔴 **來源以 `?from=` 明說，不得倚賴 `history.back()`／`document.referrer`**：兩個入口皆以 `window.open(url, '_blank', 'noopener,noreferrer')` 開**新分頁** ⇒ 新分頁 `history.length === 1`（無上一頁可回），且 `noreferrer` 連 `document.referrer` 一併清空——prototype 之瀏覽器語意在 SPA 新分頁下**兩個條件同時不成立**，照抄必然無效；本條保住的是其意圖（回到來源）。<br>🔒 **`from` 為白名單鍵、非可導覽之網址**：實作須以固定映射（`documents` → `/admin/documents`；其餘／未帶 → `/admin/lifecycles`）解析，未知值一律落預設。直接 `navigate(from)` 即為 open-redirect（`?from=//evil.example`），其回歸鎖為 `TS-F036-D3-003`。<br>⚠ **循環切換器須保留 `from`**：Given 帶 `?from=documents` 進入後以頂部切換器切換至另一循環, Then 網址仍帶 `?from=documents`、返回目標不變。漏帶時使用者只要切換過一次循環，返回鈕就悄悄改回循環池——正是本條要消滅的行為，只是晚一步發生（`TS-F036-D3-004`）。<br>📌 其餘頁面行為（浮水印、縮放、標示下游、下載／列印、可視範圍檢查）**一律不變**；`?from=` 不參與任何權限或資料判定，純為返回導向。
+
 ### 節點雙擊顯示文件清單 delta（🔵 2026-08-16 使用者裁決；缺失／變更 delta 第 8 項） {#node-dblclick-delta}
 
 > 前提裁決：**OQ-D18-18**＝唯讀側抽屜、欄位 編號／書名／版次／狀態／公告日期、可另開後台唯讀詳情、單擊標示下游行為保留、**權限閘門沿用 F036「循環管理」read（含 Supervisor）**；**OQ-D18-19**＝[F038](F038-lifecycle-tree-change-history.md) diff 樹狀圖**不**支援雙擊。
