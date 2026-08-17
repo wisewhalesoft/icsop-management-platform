@@ -87,7 +87,13 @@ describe('PublicDocumentDetailService（G-PUB-020）', () => {
     expect(dto.draftingDeptName).toBe('營運管理部');
     expect(dto.draftingSectionName).toBe('審查室');
     expect(dto.primaryChiefName).toBe('王主管');
-    expect(dto.secondaryChiefNames).toEqual(['李室長', '20999']); // 未命中 fallback 員編
+    /**
+     * 🔴 2026-08-17 delta（F019 `AC-D15`）：前台詳情 DTO **移除** `secondaryChiefIds`／
+     * `secondaryChiefNames` 兩欄（前台已無「當責室長-次要」欄，處置比照 `AC-D12`）。
+     * 原斷言（供追溯）：OLD> `expect(dto.secondaryChiefNames).toEqual(['李室長', '20999']);`
+     */
+    expect(Object.prototype.hasOwnProperty.call(dto, 'secondaryChiefNames')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(dto, 'secondaryChiefIds')).toBe(false);
     /**
      * 🔴 2026-08-16 delta（F019 `AC-D9`／`AC-D12`；OQ-D18-09）：前台詳情 DTO **移除**
      * `usingDeptNames`／`usingDeptIds` 兩欄。
@@ -104,9 +110,15 @@ describe('PublicDocumentDetailService（G-PUB-020）', () => {
   /**
    * 🔴 2026-08-16 delta（F019 `AC-D12`）：`usingDeptNames` 已自對外 DTO 移除。
    * 原斷言（供追溯）：OLD> `expect(dto.usingDeptNames).toEqual(['ZZ000']);`
-   * 「未命中 fallback 為代碼」之語意仍由 `secondaryChiefNames` 一列持有，未放寬。
+   *
+   * 🔴 2026-08-17 delta（F019 `AC-D15`）：`secondaryChiefNames` 亦已移除。
+   * 原斷言（供追溯）：OLD> `expect(dto.secondaryChiefNames).toEqual(['E-x']);`
+   * ⚠ 該列原本兼任「未命中 fallback 為**代碼**」之唯一載體（`AC-D12` 移除 `usingDeptNames`
+   * 時明文交棒給它）。本 delta 移除後前台詳情**已無任何 fallback-為-代碼之欄位**——
+   * 主要室長未命中為 `null`、制定三級未命中亦為 `null`。該語意於前台選項側仍有載體
+   * （`TS-F019-D5-306`：chiefs label 未命中 fallback 員編），故非能力遺失。
    */
-  it('組織/人員未命中 → 名稱 fallback（次要室長→代碼；制定三級/主要→null）', async () => {
+  it('組織/人員未命中 → 名稱 fallback（制定三級/主要室長皆→null）', async () => {
     const svc = new PublicDocumentDetailService(
       new FakeStore(detail({ usingDeptIds: ['ZZ000'], secondaryChiefIds: ['E-x'], primaryChiefId: 'E-y' })),
       fakeNames({}, {}),
@@ -115,8 +127,29 @@ describe('PublicDocumentDetailService（G-PUB-020）', () => {
     const dto = await svc.detail('doc-1', UNRESTRICTED_VIEWER);
     expect(dto.draftingCompanyName).toBeNull();
     expect(dto.primaryChiefName).toBeNull();
-    expect(dto.secondaryChiefNames).toEqual(['E-x']);
     expect(Object.prototype.hasOwnProperty.call(dto, 'usingDeptNames')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(dto, 'secondaryChiefNames')).toBe(false);
+  });
+
+  /**
+   * `AC-D15` 之效率面：次要室長既已不回傳，就**不得**再為其查姓名。
+   * 只刪 DTO 欄位而仍把次要員編送進解析器，是「看起來對、卻仍付著成本」的半套修正。
+   */
+  it('AC-D15 次要室長員編不再送入 resolvePersonNames（不為不回傳之資料付查詢成本）', async () => {
+    const seen: string[][] = [];
+    const svc = new PublicDocumentDetailService(
+      new FakeStore(detail({ primaryChiefId: '20053', secondaryChiefIds: ['20541', '20999'] })),
+      {
+        resolveOrgUnitName: () => Promise.resolve(null),
+        resolvePersonNames: (empNos) => {
+          seen.push([...empNos]);
+          return Promise.resolve(new Map());
+        },
+      },
+      () => TODAY,
+    );
+    await svc.detail('doc-1', UNRESTRICTED_VIEWER);
+    expect(seen).toEqual([['20053']]);
   });
 
   it('查無文件 → DOCUMENT_NOT_FOUND', async () => {

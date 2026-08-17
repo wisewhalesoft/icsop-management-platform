@@ -128,6 +128,10 @@ Epic/Story: E06 / US-050, US-051, US-052
 - **AC-D14**（🔴 逐字文案與空值呈現；**2026-08-16 補訂**，權威＝`prototypes/03-public-list.html`）：
   - ① **`狀態` 下拉之選項文字為 `有效`**（**非** `狀態：有效`）。<br>📝 **本項變更一條既有可見文案，已由 spec-writer 確認接受**：新版篩選列每個控制項皆有獨立 label（`狀態`，見 `AC-D1`），選項再自帶「狀態：」前綴即語意重複；且行動 sheet 原本就是「label `狀態` ＋ option `有效`」，本改動使桌面與行動一致。**該字串不屬 `AC-U7`／`AC-D10` 所鎖定之逐字文案集合**（那組僅含兩條 `SCOPE_NOTICE_*`、兩個區塊標題與空狀態句），故不觸發「修改前須經人類再裁決」之條款。
   - ② **空值呈現**：Given 某文件之 `draftingSectionId`（制定室別）為空, When 渲染清單卡, Then 該列之值為逐字 `—`（U+2014 em dash），並帶 `title` 屬性 `此部之下無處/室，制定組織掛於部層`；**不得**顯示 `null`、空字串或整列消失。`draftingCompanyId`／`edition` 為空時同以 `—` 呈現。<br>📌 `AC-D8` 僅列出九項標籤與其順序，未規範空值；本項補齊，使九項標籤之**存在性斷言**在有空值時仍成立。
+
+### 詳情頁移除「當責室長-次要」欄 delta（🔴 2026-08-17 使用者裁決；缺失修正第 3 項） {#secondary-chief-delta}
+
+- **AC-D15**（詳情頁移除當責室長-次要欄；權威＝`prototypes/04-public-document-detail.html`）：Given 前台文件詳情頁渲染完成, When 檢視欄位清單, Then **不存在**標籤為 `當責室長-次要` 之欄位列（`queryByText('當責室長-次要') === null`），欄位列由 19 列成為 **18 列**；其餘 18 列之集合、順序與逐字標籤**一律不變**（`當責室長-主要` 保留）。<br>🔴 **對外 DTO 一併收斂**（處置比照 `AC-D12`）：前台文件詳情 API 之回應**不含** `secondaryChiefIds` 與 `secondaryChiefNames` 兩個屬性（`Object.prototype.hasOwnProperty.call(dto,'secondaryChiefIds') === false`，`secondaryChiefNames` 同）；且**不得**再為次要室長員編呼叫 `resolvePersonNames`——只刪欄位而仍解析，是為不會被回傳的資料付查詢成本。<br>⚠ **內部型別與後台皆不變**：`PublicDocDetail.secondaryChiefIds`（內部）保留；後台清單 DTO 之 `secondaryChiefNames`／`secondaryChiefCount` 與其「當責室長」篩選之**主要∪次要**語意（`AC-D7`／[F017](F017-backend-document-list.md) `AC-D7`）**逐字不受影響**——「前台不顯示 ≠ 後台不判定」。<br>⚠ **前端須容忍舊形狀**：滾動部署期間後端可能仍回該兩欄，前端**縱使收到亦不得渲染**（其回歸鎖以 cast 塞回該兩欄之 fixture 斷言；否則「不出現次要室長姓名」會因資料裡根本沒有該字串而恆真）。<br>📌 **[F026](F026-role-field-matrix.md) 矩陣不變**：該矩陣描述的是欄位之讀寫權限，非「前台詳情頁上有哪幾列」——`文件使用部門` 於 `AC-D9` 移出前台後亦留在矩陣中，本條沿用同一先例。
 ## Error Scenarios
 - 空結果/萬用字元跳脫：見 [error-handling.md#public](../error-handling.md#public)。效能見 [NFR-001](../nfr.md#performance)。
 - **業務子分類之可見範圍限縮**（🟢 APPROVED）：拒絕一律回 **404 `DOCUMENT_NOT_FOUND`**（不新增錯誤碼），見 [error-handling.md#dept-restriction](../error-handling.md#dept-restriction)；規則權威＝[F041](F041-user-subtype-business-scope.md)。

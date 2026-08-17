@@ -68,8 +68,6 @@ function detailOf(over: Partial<PublicDocumentDetail> = {}): PublicDocumentDetai
     draftingSectionName: '車輛行銷室',
     primaryChiefId: 'e1',
     primaryChiefName: '陳彥廷',
-    secondaryChiefIds: [],
-    secondaryChiefNames: [],
     // 🔴 2026-08-16 fixture 過時修正（F019 `AC-D9`／`AC-D12`；OQ-D18-09）：
     //    `usingDeptIds`／`usingDeptNames` 已自前台詳情之對外 DTO 與 `PublicDocumentDetail`
     //    型別移除（見 `api/types.ts:529` 之 delta 註），舊 fixture 之殘留兩欄使 `tsc --noEmit`

@@ -523,11 +523,12 @@ export interface PublicDocumentDetail {
   draftingSectionName: string | null;
   primaryChiefId: string | null;
   primaryChiefName: string | null;
-  secondaryChiefIds: string[];
-  secondaryChiefNames: string[];
   /**
    * 🔴 2026-08-16 delta（F019 `AC-D9`／`AC-D12`）：`usingDeptIds`／`usingDeptNames` 已自
    * 前台詳情之對外回應移除。可見性與置頂判定仍在後端以使用部門進行——「不顯示 ≠ 不判定」。
+   *
+   * 🔴 2026-08-17 delta（F019 `AC-D15`）：`secondaryChiefIds`／`secondaryChiefNames` 同此處置
+   * （前台詳情已無「當責室長-次要」欄）。後台清單之同名欄位（`DocumentListItem`）不受影響。
    */
   edition: string | null;
   announcedDate: string | null;
