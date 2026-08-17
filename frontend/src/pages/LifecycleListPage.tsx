@@ -12,6 +12,7 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { lifecycleDisplayName, normalizeSubcategory } from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
+import { TREE_PREVIEW_WINDOW_NAME } from './LifecycleTreePreviewPage';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
 import { formatDateTime } from './org-sync-view';
@@ -178,9 +179,12 @@ export function LifecycleListPage(): JSX.Element {
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">● 停用</span>
                       )}
-                      {/* F036 循環樹狀圖預覽入口（唯讀，讀權即可見）；開新分頁至 viewer 路由。 */}
+                      {/* F036 循環樹狀圖預覽入口（唯讀，讀權即可見）；開新分頁至 viewer 路由。
+                          F036 `AC-D3`：具名 target ⇒ 連續查看不同循環時**取代同一個預覽分頁**，不無限增生。
+                          🔴 不得加 `noopener`／`noreferrer`（實測會使具名 target 失效而每次開新分頁，
+                             且預覽頁之 `window.close()` 需要 opener）——理由詳見 TREE_PREVIEW_WINDOW_NAME。 */}
                       <button
-                        onClick={() => window.open(`/lifecycles/${l.id}/tree`, '_blank', 'noopener,noreferrer')}
+                        onClick={() => window.open(`/lifecycles/${l.id}/tree`, TREE_PREVIEW_WINDOW_NAME)}
                         title="檢視樹狀圖預覽（開新分頁）"
                         aria-label={`檢視「${lifecycleDisplayName(l)}」樹狀圖預覽`}
                         className="w-7 h-7 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"

@@ -11,6 +11,7 @@ import {
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
+import { TREE_PREVIEW_WINDOW_NAME } from './LifecycleTreePreviewPage';
 import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, type ComboOption } from '../components/SearchCombobox';
 import { usageFormOptionLabel } from '../domain/usage-form-label';
@@ -656,9 +657,20 @@ export function DocumentListPage(): JSX.Element {
                     </td>
                     <td className="px-3 py-3">
                       <button
-                        // F036 `AC-D3`：`?from=documents` 使預覽頁之返回鈕回到本頁（第二入口）。
-                        // 新分頁無 history、`noreferrer` 亦清空 referrer ⇒ 來源只能由參數明說。
-                        onClick={() => window.open(`/lifecycles/${d.lifecycleId}/tree?from=documents`, '_blank', 'noopener,noreferrer')}
+                        /**
+                         * F036 `AC-D3`（第二入口）：
+                         *  · 具名 target ⇒ 連續查看不同循環時**取代同一個預覽分頁**，不無限增生。
+                         *  · `?from=documents` 供預覽頁之 fallback 返回目標（正常路徑是關閉分頁）。
+                         *  🔴 **不得加 `noopener`／`noreferrer`**：實測會使具名 target 失效而每次開新分頁
+                         *     （HTML 規格於 noopener 為真時把 target 當 `_blank`），且預覽頁之
+                         *     `window.close()` 與「如何進來的」判定都需要 opener。同源第一方，無安全代價。
+                         */
+                        onClick={() =>
+                          window.open(
+                            `/lifecycles/${d.lifecycleId}/tree?from=documents`,
+                            TREE_PREVIEW_WINDOW_NAME,
+                          )
+                        }
                         title="開啟循環樹狀圖預覽"
                         aria-label={`${d.documentName} 循環樹狀圖預覽`}
                         className="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"

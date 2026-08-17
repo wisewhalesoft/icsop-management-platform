@@ -164,6 +164,14 @@ describe('LifecycleListPage — F007 循環池', () => {
   });
 
   // ===== F036 入口（1）循環清單樹狀圖圖示 =====
+  /**
+   * 🔴 2026-08-17（F036 `AC-D3`）：改以**固定視窗名稱**開啟 ⇒ 連續查看不同循環時取代同一個
+   * 預覽分頁，不再無限增生。原斷言（供追溯）：
+   *   OLD> `expect(openSpy).toHaveBeenCalledWith('/lifecycles/lc1/tree', '_blank', 'noopener,noreferrer');`
+   * 🔒 **`noopener`／`noreferrer` 不得出現**：真實 Chrome 實測，帶了之後具名 target 完全失效
+   *    （連開三次得到三個分頁），且預覽頁之 `window.close()` 與 opener 判定都會失去依據。
+   *    本案以「恰兩個引數」把它鎖住——多帶第三個 features 字串即紅。
+   */
   it('每列樹狀圖圖示 → 開新分頁至 viewer 路由（唯讀，讀權即可見）', async () => {
     mockAuth('Supervisor'); // 唯讀角色亦可見樹狀圖入口
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
@@ -171,7 +179,7 @@ describe('LifecycleListPage — F007 循環池', () => {
     await waitFor(() => expect(screen.getByText('銷售及收款循環')).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole('button', { name: /檢視「銷售及收款循環」樹狀圖預覽/ }));
-    expect(openSpy).toHaveBeenCalledWith('/lifecycles/lc1/tree', '_blank', 'noopener,noreferrer');
+    expect(openSpy).toHaveBeenCalledWith('/lifecycles/lc1/tree', 'icsopTreePreview');
     openSpy.mockRestore();
   });
 

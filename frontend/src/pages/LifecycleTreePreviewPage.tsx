@@ -51,12 +51,30 @@ const STATUS_PILL: Record<DisplayStatus, string> = {
 const dateOnly = (iso: string | null): string => (iso ? iso.slice(0, 10) : '—');
 
 /**
- * F036 `AC-D3`：返回鈕之目標由 `?from=` 決定（本頁有**兩個入口**）。
+ * 🔴 F036 `AC-D3`：預覽分頁之**固定視窗名稱**（兩個入口共用，故定義於本頁、由入口 import——
+ * 各寫一份字面字串，哪天有人改了其中一個就會悄悄變回「每次都開新分頁」）。
  *
- * 🔴 為何不用 `history.back()`（prototype 22 `goBack()` 之作法）：兩個入口皆以
- * `window.open(url, '_blank', 'noopener,noreferrer')` 開**新分頁**——新分頁之 `history.length === 1`
- * （沒有上一頁可回），且 `noreferrer` 連 `document.referrer` 都清空。prototype 之瀏覽器語意
- * 在 SPA 新分頁下兩個條件同時不成立，照抄必然無效；能保住的是它的**意圖**（回到來源）。
+ * 以具名 target 開啟 ⇒ 第 N 次開樹狀圖是**取代**同一個預覽分頁，而非再開一個。
+ * 使用者連續查看不同循環時，分頁數恆為 2（來源清單 ＋ 預覽），不會無限增生。
+ *
+ * 🔴 **絕對不可加回 `noopener`／`noreferrer`**（2026-08-17 真實 Chrome 實測）：帶了之後
+ * 具名 target **完全失效**——連開三次得到三個分頁（實測 tabId 三個各自獨立），
+ * 因為 HTML 規格於 noopener 為真時直接把 target 視為 `_blank`。
+ * 兩者在此也沒有安全效益：目標是**本站同源**的自家頁面，`noopener` 防的是不受信任的
+ * 目標頁經 `window.opener` 反向操作來源頁（reverse tabnabbing），同源第一方無此暴露面。
+ * 保留 opener 反而是必要的——`window.close()` 與「如何進來的」判定都靠它（見 `onBack`）。
+ */
+export const TREE_PREVIEW_WINDOW_NAME = 'icsopTreePreview';
+
+/**
+ * F036 `AC-D3`：**fallback** 返回目標由 `?from=` 決定（本頁有**兩個入口**）。
+ *
+ * ⚠ 正常路徑是「關閉預覽分頁」而非導覽——見 `onBack`。本表只在「本頁不是被 `window.open`
+ * 開出來的」（直接貼網址／書籤進入）或關閉被瀏覽器拒絕時才用得到。
+ *
+ * 🔴 為何不用 `history.back()`（prototype 22 `goBack()` 之原作法）：以 `window.open` 開出的
+ * 分頁其 `history.length === 1`（沒有上一頁可回）。prototype 的瀏覽器語意在 SPA 新分頁下
+ * 不成立，照抄必然無效；能保住的是它的**意圖**（回到來源）。
  *
  * 🔒 **白名單映射，不接受任意路徑**：直接把 `from` 當網址 `navigate()` 就是 open-redirect
  * ——任何人都能發出 `/lifecycles/x/tree?from=//evil.example` 之連結。未知值一律落預設。
@@ -70,6 +88,9 @@ type BackKey = keyof typeof BACK_TARGETS;
 export function backTargetOf(from: string | null): (typeof BACK_TARGETS)[BackKey] {
   return (from && BACK_TARGETS[from as BackKey]) || BACK_TARGETS.lifecycles;
 }
+
+/** 關閉被拒時之退路延遲（ms）。關閉成功則本頁已銷毀，計時器自然不會觸發。 */
+const CLOSE_FALLBACK_MS = 200;
 
 export function LifecycleTreePreviewPage(): JSX.Element {
   const { id = '' } = useParams();
@@ -86,6 +107,44 @@ export function LifecycleTreePreviewPage(): JSX.Element {
       `/lifecycles/${lifecycleId}/tree${from ? `?from=${encodeURIComponent(from)}` : ''}`,
     [from],
   );
+
+  /**
+   * 本頁是否為「自清單以 `window.open` 開出之預覽分頁」。
+   *
+   * 🔴 **只在掛載時取樣一次**（`useState` 初始化函式）：`window.opener` 會在來源分頁被關閉時
+   * 變成 `null`，若每次 render 重算，使用者關掉清單分頁後按鈕會**當場從「關閉預覽」變成「返回」**
+   * ——同一個按鈕在使用者眼前換了行為。以掛載時的事實為準，行為在該分頁生命週期內恆定。
+   */
+  /**
+   * 🔴 以**真值**判定而非 `!== null`：真實瀏覽器於直連進入時 `window.opener` 為 `null`，
+   * 但 jsdom 給的是 `undefined` ⇒ `!== null` 恆真，會讓每個測試都跑到 popup 分支
+   * （實際踩到：四個「直連」案同時紅）。`Boolean()` 同時涵蓋兩者，且語意就是「有沒有 opener」。
+   */
+  const [openedAsPopup] = useState(() => typeof window !== 'undefined' && Boolean(window.opener));
+
+  /**
+   * `AC-D3`：預覽分頁的「離開」語意＝**關閉本分頁**，不是在本分頁內導覽。
+   *
+   * 🔴 為何不導覽：本頁是以 `window.open` 開出的**獨立分頁**，來源清單分頁仍在背後開著。
+   * 若在本分頁導覽回清單，使用者會得到**兩個內容一模一樣的清單分頁**，而且每看一次樹狀圖
+   * 就多一個——正是 2026-08-17 使用者回報的「無限長出新分頁」。關閉本分頁則直接露出
+   * 原本那個清單分頁，其篩選／排序／頁碼原封不動（後台清單這些狀態都在 component state，
+   * 導覽離開就會全部重置）。
+   *
+   * `window.close()` 已於真實 Chrome 實測：即使使用者在本頁切換過多次循環
+   * （`history.length` > 1）仍可成功關閉。極少數被拒的情況以計時器退回導覽，
+   * 使用者至少不會按了沒反應。
+   */
+  const onBack = useCallback((): void => {
+    if (!openedAsPopup) {
+      navigate(back.path);
+      return;
+    }
+    window.close();
+    window.setTimeout(() => navigate(back.path), CLOSE_FALLBACK_MS);
+  }, [openedAsPopup, navigate, back.path]);
+
+  const backLabel = openedAsPopup ? '關閉預覽' : back.label;
   const { user } = useAuth();
   const canRead = canPerform(user?.roleCode, FunctionKey.LIFECYCLE_MANAGEMENT, 'read');
 
@@ -226,12 +285,13 @@ export function LifecycleTreePreviewPage(): JSX.Element {
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shrink-0">
         <div className="px-4 h-14 flex items-center gap-3">
           <button
-            onClick={() => navigate(back.path)}
-            aria-label={back.label}
-            title={back.label}
+            onClick={onBack}
+            aria-label={backLabel}
+            title={backLabel}
             className="text-slate-400 hover:text-slate-600 flex items-center"
           >
-            <Icon name="arrow-left" className="w-5 h-5" />
+            {/* 圖示隨行為切換：關閉＝x、導覽＝arrow-left（同一個箭頭配兩種行為會誤導）。 */}
+            <Icon name={openedAsPopup ? 'x' : 'arrow-left'} className="w-5 h-5" />
           </button>
           <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0">
             <Icon name="git-fork" className="w-5 h-5" />

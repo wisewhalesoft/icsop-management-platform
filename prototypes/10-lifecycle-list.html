@@ -271,7 +271,9 @@
   /* 循環代碼（ICSOP 編號第 2 段）僅依「名稱」查表推導，子分類不參與（F040 定案②／AC-28）
      ⇒ 同名不同子分類之代碼相同（消金／企金／子公司皆為 SRC），代碼已不足以唯一定位；
      故樹狀圖預覽頁（22）之 ?lifecycleId= 參數必須帶 lifecycleId（F036 AC-S3）。 */
-  function openTree(id){ window.open('22-lifecycle-tree-preview.html?lifecycleId='+encodeURIComponent(id),'_blank'); }
+  /* 🔴 F036 AC-D3（2026-08-17 delta）：固定視窗名稱 ⇒ 取代同一個預覽分頁、不無限增生。
+     ⚠ 不得加 noopener/noreferrer（實測會使具名 target 失效；22 的 close() 亦需 opener）。 */
+  function openTree(id){ window.open('22-lifecycle-tree-preview.html?lifecycleId='+encodeURIComponent(id),'icsopTreePreview'); }
 
   function openCreate(){ editingId=null; document.getElementById('lcTitle').textContent='新增循環'; document.getElementById('lcName').value=''; document.getElementById('lcSub').value=''; document.getElementById('lcDesc').value=''; hideLcErrs(); showLc(); }
   function openEdit(id){ const l=LIFECYCLES.find(x=>x.id===id); editingId=id; document.getElementById('lcTitle').textContent='編輯循環'; document.getElementById('lcName').value=l.name; document.getElementById('lcSub').value=l.subcategory||''; document.getElementById('lcDesc').value=''; hideLcErrs(); showLc(); }
