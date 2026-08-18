@@ -1,8 +1,8 @@
 ---
 type: architecture-spec
-version: 1.6a
-status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
-last_updated: 2026-08-16
+version: 1.7
+status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；**v1.7 新增之 §10.17 決策 A15（AAD authority host 覆寫，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）已實作並併入 main（commit `3448679`），唯 `AC-E4`（遠端端到端登入成功）尚待真人於遠端環境驗證，如實登錄為未兌現項**；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
+last_updated: 2026-08-18
 covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038, F039, F040, F041]
 ---
 
@@ -23,6 +23,8 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 > **v1.6（2026-08-16）新增第 10 章「2026-08-16 缺失／變更 Delta 架構決策（15 項）」**：對應 `docs/stories/2026-08-16-defect-delta-18.md` 與十份 feature 之 `AC-D#` 批次。原 18 項需求經人類裁決 `OQ-D18-01`（「只做前台，後台維持 RAW」）縮為 **15 項**——#12／#13／#15（後台下載燒錄）**明確不做**，[F026](features/F026-role-field-matrix.md) 之 `OQ-FM-01`（2026-07-24）**維持有效、未被推翻**。本版**不新增任何模組、不改變架構風格**（Modular Monolith 不動），13 項架構決策（`A1`–`A13`）全數落在既有模組內；唯一 schema 變更為 `USAGE_FORM_POOL.formNumber`（§10.7）。核心決策：**前台/後台燒錄以「路徑命名空間分流 ＋ blobPath 由伺服器推導」達成**（§10.1；明確否決任何「由客戶端傳參數／header／Referer 決定是否燒錄」之設計，該類設計等同讓客戶端自行關閉浮水印）、§5.2 既有「Proxy／SAS 雙模式」之 **Proxy 面擴大至前台附件與附錄**（§10.2）、非 PDF 判定**一律以上傳時已驗證之伺服器端事實為權威、絕不採 client-supplied `content-type`**（§10.3）、三處匯出共用 `storage/csv-export.ts` 純函式產生器並對成長型變更日誌表**強制 SQL `COUNT` 下推**（§10.4）、前台 filter-options 之可見性過濾以「與清單物理共用同一個 `visibleCandidates()` 純函式」為結構性保證而非約定（§10.6）、CJK 字型除補 `COPY assets` 外**新增啟動時 fail-fast**（§10.10，靜默降級正是本 bug 穿過全部測試的唯一原因）。**§10.15「單元測試盲區」獨立成章**，逐項標示哪些項目在原理上 unit test 測不到、必須靠容器內實跑或瀏覽器煙霧測試把關。四項須退回 spec-writer 之爭議見 §10.16（其中 🔴 **F024「既有匯出」實際上不產生 CSV**，三份 spec 所稱之「同構樣板」不存在）。
 >
 > **v1.6a（2026-08-16，同日第二次人類閘門後之同步）**：三項變動。① `OQ-D18-25` 定案——**前台「使用表單」之 PDF 亦須燒錄浮水印（推翻 `OQ-E05-03`）**，範圍與附錄一致（前台 PDF 燒錄／非 PDF 原檔並標示／**後台一律 RAW**）⇒ **§5.2 之下載策略表就地改寫為「前台／後台」兩列**（該表自此以路徑而非附件類型為第一分類軸）、§10.1 之燒錄範圍表與流程圖同步納入使用表單。🔴 **分流機制本身未變**——使用表單之前後台端點早已是兩條不同路徑（`documents/:documentId/usage-forms/:formId/download` vs `admin/usage-forms/:formId/download`），與附錄結構同型，故它**只是第三個消費者**，不需新端點；改動面僅為前台端點之回應語意。前台燒錄範圍自此收斂為一致之四路徑（檢視器／附件／附錄／使用表單）。② 新增 **決策 A14**（§10.7 末段）：使用表單「編輯編號」端點定為 **`PATCH /admin/usage-forms/:formId/number`**，body 僅 `{ formNumber }`、沿用既有兩道授權閘門、不寫稽核、結構上不可能觸發覆蓋共用警示。③ **§10.15「單元測試盲區」依 11 份 feature 共 115 條 `AC-D#` 重新校準**——三列由「需有人記得寫」升級為「已有 AC 載體」，並**新增三個盲區**（逐字文案之 prototype 權威從未進測試、`PageHeader` topbar portal 在單元測試走 inline fallback 分支、`aria-label` 之 jsdom 近似）；經確認本專案為純 CSR SPA，**不存在 SSR/CSR 分歧這一類盲區**。另：v1.6 原提報之四項爭議與 `OQ-D18-A1` 均已由 lead 裁示採納並由 spec-writer 落地（`AC-D3a`／`AC-D6`／CSV 注入規則／F002 麵包屑語意改寫），§10.16 已改列為「裁示與落地」並記錄 **v1.6a 複查後無新增爭議**。
+>
+> **v1.7（2026-08-18）**：兩項更新，皆在第 10 章內。① **§10.10 修法三 (c) 列更正（2026-08-17 實跑推翻，inline 標記為 v1.6b）**——原「以 `pdftotext` 抽文字層、斷言含中文且不含 `?`」之檢查法已被實測推翻：PDF 之文字層（`ToUnicode`）與字形層（`glyf`／`loca`）為獨立物件，字形層損壞（`@pdf-lib/fontkit@1.1.1` 子集化截斷奇數 `loca` offset）時文字層依然正確，且「不含 `?`」判準本身會隨 `-enc UTF-8` 旗標反轉，兩種設定下都會把使用者退回的壞檔判為通過（假綠）。已改為**字形層完整性斷言**（`fontkit.create()` 解析 `/FontFile2`、斷言零拋錯），層級由「[integration]、容器內」降為**既有 jest 可跑之 unit 層**，載體＝`backend/src/public/pdf-glyph-integrity.spec.ts`（9 案）；原措辭以 `OLD>` 保留、§10.15 盲區表第 1 項同步更正。連帶記入可推廣教訓：「元件存在」≠「元件正確運作」。② **新增決策 A15（§10.17）：AAD authority host 覆寫**（[F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）——遠端測試環境第一跳防火牆對 SNI `login.microsoftonline.com` 注入偽造 RST，改走 Microsoft 官方別名並以 `auth.authorityMetadata` 靜態 metadata（非裸 `authority`）達成零 discovery、issuer 恆釘死為 canonical（`expectedAadIssuer()` 刻意忽略 `authorityHost`）。**已實作並併入 main（commit `3448679`）**；`AC-E4`（遠端端到端登入成功）待真人驗證，尚未兌現。本項獨立於本章原「2026-08-16 缺失／變更 Delta（15 項）」批次之外，依 lead 指示併入本章決策編號序列。**本版不新增模組、不改變架構風格。**
 
 ## Agent Loading Guide
 
@@ -1909,7 +1911,7 @@ graph TB
 > **來源**：`docs/stories/2026-08-16-defect-delta-18.md`（product-analyst）→ 十份 feature 之 `AC-D#` 批次（spec-writer，已通過人類閘門）。
 > **範圍**：原 18 項需求經人類裁決 `OQ-D18-01`（「只做前台，後台維持 RAW」）縮為 **15 項**；#12／#13／#15（後台下載燒錄）**明確不做**，[F026](features/F026-role-field-matrix.md) 之 `OQ-FM-01`（2026-07-24）**維持有效**。
 > **本章之權威邊界**：本章**只決定技術設計**，不改寫任何 AC。凡本章與 feature 之 `AC-D#` 有出入者，以 AC 為準，並列於 §10.16 之「須退回 spec-writer 之爭議」。
-> **編號對照**：本章之 `A1`–`A13` 為架構決策編號，與 feature 之 `AC-D#` 編號空間**互不相干**、不得混用。
+> **編號對照**：本章之 `A1`–`A15` 為架構決策編號，與 feature 之 `AC-D#`／`AC-E#` 編號空間**互不相干**、不得混用。`A15`（§10.17）不屬本章標題所稱之 2026-08-16「15 項」批次，是 2026-08-18 之獨立追加，見該節前言。
 
 ### 10.0 本章範圍與閱讀指引
 
@@ -1929,6 +1931,7 @@ graph TB
 | A12 | §10.12 | 後台 13 項篩選之下推策略 | F017「待 architect ①②」 | tdd |
 | A13 | §10.13 | 前後台選項端點是否共用 | F017「待 architect ③」 | tdd |
 | **A14** | §10.7（末段） | **使用表單「編輯編號」端點之形狀**（v1.6a） | F018 `AC-D3`／`AC-D16`–`AC-D20` | tdd |
+| **A15** | §10.17 | **AAD authority host 覆寫**（v1.7，2026-08-18，獨立於本章原 15 項 delta——來源為遠端環境 SNI 偽造 RST 之網路層修復，非 2026-08-16 缺失批次；依 lead 指示併入本章決策編號序列） | F001 `AC-E1`–`AC-E15` | tdd、DevOps |
 
 > 另有三節非「決策」但為交棒必讀：**§10.14** `watermarkLines()` 共用化落點（#7／#17）、**§10.15** 單元測試盲區、**§10.16** 風險與須退回 spec-writer 之爭議。
 
@@ -2533,18 +2536,28 @@ node:22-alpine 基底 ≈130MB ＋ prod `node_modules` 通常 200MB+，7MB 約�
 
 #### 🔴 修法三：如何讓這個 bug 在測試中可被捕捉
 
-**先講清楚原理上測不到的部分**：`ts-jest` 以 repo 根為 cwd 執行、`__dirname` 指向 `backend/src/public/fonts`，兩個候選路徑在 repo 中**恆存在** ⇒ `existsSync` 恆真 ⇒ **無論 `Dockerfile` 寫什麼，單元測試都綠**。任何試圖用 unit test 涵蓋本案的努力都是自欺。
+**先講清楚原理上測不到的部分**：`ts-jest` 以 repo 根為 cwd 執行、`__dirname` 指向 `backend/src/public/fonts`，兩個候選路徑在 repo 中**恆存在** ⇒ `existsSync` 恆真 ⇒ **無論 `Dockerfile` 寫什麼，單元測試都綠**。任何試圖用 unit test 涵蓋「字型檔是否真的被 COPY 進 image」本身的努力都是自欺。
 
-**可行的機器化約束（成本由低到高，建議至少做 a ＋ b ＋ d）**：
+📝 **2026-08-17 實跑更正（v1.6b）**：下表原 (c) 列與其後之交棒明示已被**實測推翻**，原文逐字保留如下（`OLD>` 前綴標示，**不刪除，供後人不重蹈**）：
+
+> `OLD>` (c) 端到端位元組斷言｜[integration]，容器內｜對一份含中文的測試 PDF 呼叫下載端點，以 `pdf-parse`／`pdftotext` 抽出文字層，斷言**含真實中文字串**且**不含 `?` 序列**。這才是真正對應 AC 的驗證
+>
+> `OLD>` 🔴 對 test-generator 之明示：#6 之有效約束只能建在 **(a) 靜態檔案斷言 ＋ (c) 容器內位元組斷言**。**不要為 `loadCjkFontBytes()` 寫 unit test**——那正是本案的測試盲區本身，寫了只會製造「已覆蓋」的假象。
+
+**為何會假綠（一句話）**：PDF 的文字層（`ToUnicode` CMap）與字形層（`glyf`／`loca`）是兩個獨立物件，`pdftotext` 只讀前者——缺字的破損 PDF 其 `ToUnicode` 依然完全正確（實測 55 個 bfchar 全對），故「含真實中文字串」恆真；而「不含 `?` 序列」這個判準本身會隨抽取旗標反轉——不加 `-enc UTF-8` 時破損檔與正常檔**都得 0**（任何人都會自然地補上 `-enc UTF-8` 來「修好」這個檢查），加了之後破損檔與正常檔**又都得 1**——於是把使用者親手退回的那份壞檔判為通過。本案真正的病灶是 `@pdf-lib/fontkit@1.1.1` 子集化時**截斷奇數 `loca` offset**，產生結構破損的 `glyf` 表——這是**字形層**的損壞，文字層看不見它。
+
+**可行的機器化約束（成本由低到高，建議至少做 a ＋ b ＋ c ＋ d）**：
 
 | # | 手段 | 層級 | 說明 |
 |---|---|---|---|
 | a | **Dockerfile 靜態斷言** | unit（可跑在既有 jest） | 讀 `backend/Dockerfile` 文字，斷言 runtime stage 內存在 `COPY assets`。不驗證行為，但**它是唯一能在 unit 層擋住迴歸的手段**——把「有人日後刪掉這行」變成紅燈 |
 | b | **容器內檔案存在 smoke** | 部署後（可進 CI） | `docker compose exec api node -e "process.exit(require('fs').existsSync('/app/assets/fonts/NotoSansTC-Regular.ttf')?0:1)"` |
-| c | **端到端位元組斷言** | [integration]，容器內 | 對一份含中文的測試 PDF 呼叫下載端點，以 `pdf-parse`／`pdftotext` 抽出文字層，斷言**含真實中文字串**且**不含 `?` 序列**。這才是真正對應 AC 的驗證 |
+| c | 🔴 **字形層完整性斷言（v1.6b 更正，取代原「端到端位元組斷言」）** | **unit（既有 jest 可跑，不需容器）** | 產出含中文之測試 PDF → 取出 `/FontFile2` 串流 → `zlib.inflateSync` 解壓 → 交給 `fontkit.create()` 解析 → 斷言**零拋錯**。破損之子集字型（奇數 `loca` offset）在此步拋錯，正常字型不拋。載體＝`backend/src/public/pdf-glyph-integrity.spec.ts`（9 案，涵蓋三條真實燒錄路徑）；修補手段記於 `backend/src/public/fonts/cjk-font.ts` 之 `withLongLocaOffsets()`／`glyfSafeFontkit()`（強制 `loca.version = 1`＝long offsets） |
 | d | **fail-fast（修法二）** | runtime | 採用後，「容器起得來」本身即為字型存在的證明——等價於把 (b) 內建進 runtime |
 
-🔴 **對 test-generator 之明示**：#6 之有效約束只能建在 **(a) 靜態檔案斷言 ＋ (c) 容器內位元組斷言**。**不要為 `loadCjkFontBytes()` 寫 unit test**——那正是本案的測試盲區本身，寫了只會製造「已覆蓋」的假象。
+🔴 **對 test-generator 之明示（v1.6b 更正）**：#6 之有效約束建在 **(a) 靜態檔案斷言 ＋ (b) 容器內檔案存在 smoke ＋ (c) 字形層完整性斷言**，三者皆可在既有機器閘門內取得載體——**(c) 不再是容器限定項**。**仍不要**為 `loadCjkFontBytes()` 之路徑解析邏輯本身寫 unit test——「兩個候選路徑在 repo 中恆存在」這件事在原理上測不到，寫了只會製造已覆蓋的假象；(c) 驗的是字形層結構是否完整，與路徑解析是兩件不同的事。
+
+📌 **可推廣教訓（記入本節，供其他缺陷排查參照）**：**「元件存在」≠「元件正確運作」。** 本輪同型缺陷共四例：字型有嵌入但字形破損（本節）、`FRONT_BURNER` token 有 `@Optional()` 但從未被 provide、`watermarkSupported` 欄位有定義但後端從未產生、端點有規格有前端但後端不存在。四例的共同結構是「**驗證了載體的存在，沒有驗證載體的效果**」——寫測試時應優先問「這個斷言在壞情境下真的會紅嗎」，而非「這個東西存在嗎」。
 
 #### 連帶影響
 
@@ -2690,7 +2703,7 @@ graph LR
 
 | # | 項目 | 盲區性質 | 為何 unit 測不到 | 必要之把關手段 |
 |---|---|---|---|---|
-| **1** | **#6 CJK 字型缺檔** | 🔴 **原理上測不到** | `ts-jest` 以 repo 根執行、`__dirname` 指向 `backend/src/public/fonts`，兩個候選路徑在 repo 中恆存在 ⇒ `existsSync` 恆真。無論 `Dockerfile` 寫什麼都綠 | Dockerfile 靜態文字斷言（unit 層唯一手段）＋ **容器內實跑** ＋ 端到端 PDF 文字層抽取（斷言含中文、不含 `?`）＋ 啟動 fail-fast |
+| **1** | **#6 CJK 字型缺檔／字形破損** | 🔴 **「檔案是否進 image」原理上測不到**；字形層破損**改為 unit 可測（v1.6b 更正） | `ts-jest` 以 repo 根執行、`__dirname` 指向 `backend/src/public/fonts`，兩個候選路徑在 repo 中恆存在 ⇒ `existsSync` 恆真。無論 `Dockerfile` 寫什麼都綠 | Dockerfile 靜態文字斷言（unit 層唯一手段）＋ **容器內實跑** ＋ 啟動 fail-fast ＋ **字形層完整性斷言**（`pdf-glyph-integrity.spec.ts`，unit 層、既有 jest 可跑，見 §10.10 修法三）。⚠ `OLD>` 原「端到端 PDF 文字層抽取（斷言含中文、不含 `?`）」已於 2026-08-17 實跑推翻——文字層（`ToUnicode`）與字形層（`glyf`）為獨立物件，該法對字形層損壞恆假綠，詳見 §10.10 |
 | **2** | **前台/後台位元組不相等**（F020 `AC-D3`／`AC-D4`、F039 `AC-D3`） | 部分測得到 | unit 可 spy `burnPdf` 呼叫次數（0 vs 1）；但「同一 `blobPath` 兩條路徑取得的位元組不相等」需要真 Blob ＋ 真 PDF ⇒ [integration]。**且 unit 完全測不到「前端某頁改成呼叫了錯的端點」**——那是 DOM／網路層事實 | 容器內 int（位元組比對）＋ **瀏覽器煙霧測試**（後台三頁各下載一次、前台詳情下載一次，實際比對檔案內容） |
 | **3** | **串流下載被 SPA fallback 吃掉** | 🔴 **原理上測不到** ／ ✅ **2026-08-16 已兌現** | 新端點回傳 binary；若 nginx／vite 代理白名單未含該路徑、或 `Accept: text/html` 撞 SPA bypass，使用者會下載到一份 HTML app shell 而**副檔名仍是 `.pdf`／`.csv`**。unit 與 vitest 皆不經過 nginx | **瀏覽器煙霧測試**（實際點下載、**開啟檔案確認內容**）＋ 檢查 `nginx.conf`／`vite.config.ts` 之 proxy 白名單。<br>🔴 **本列已於 Phase B 收尾兌現**：新增之前台附件下載與**三個匯出端點**在 `Accept: text/html` 下皆回 **200 + `index.html`**，根因＝`nginx.conf:70` 之保護 regex 未涵蓋新路徑。**每新增一個非 HTML 回應之端點，都必須同步擴充該 regex**——這不是一次性修復，是一條持續義務 |
 | **4** | **CSV BOM 與 Excel 實際開啟結果** | 部分測得到 | unit 可斷言前三 bytes 為 `EF BB BF`；但「Excel 開起來中文不是亂碼」需要真的用 Excel／LibreOffice 開一次 | 人工驗一次（一次性，非迴歸） |
@@ -2774,4 +2787,54 @@ graph LR
 | `OQ-D18-A3` | 變更日誌 store 之 `listAll()` 全表載入（查詢路徑） | 既有 OOM 風險，隨資料成長惡化 | 匯出路徑已於本 delta 下推；查詢路徑之下推**不在本 delta 範圍** |
 | `OQ-D18-A4` | 後台文件清單 `LOAD_SIZE = 2000` 之靜默截斷 | 超量時篩選在不完整工作集上運作 | 建議先加 UI 明示護欄，下推另議 |
 | `OQ-D18-A5` | filter-options 日後若加快取，鍵必須含 `(roleCode, userSubtype, orgCode)` | 漏一維即跨帳號洩漏，且 unit 測不到 | 本輪不做快取；紅線已記錄 |
+
+---
+
+### 10.17 決策 A15：Azure AD endpoint host 覆寫（v1.7，2026-08-18）
+
+> **與本章其餘 A1–A14 不同源**：本決策對應之缺陷與修復發生於 2026-08-18，來源為 lead 對遠端環境之網路層實測，並非 2026-08-16 缺失批次的一部分。因涉及端點路由，屬架構層決策，依 lead 指示併入本章之決策編號序列與 §10.0 決策表（編為 A15），內容獨立成節，與 A1–A14 之分線／合併順序（§10.11）無關聯、不影響其排程。**已實作並併入 `main`（commit `3448679`，已核對 `git merge-base --is-ancestor` 確認在 `main` 歷史內）。**
+>
+> **事實來源**：[F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`、[implementation-log/F001-aad-authority-host-impl.md](implementation-log/F001-aad-authority-host-impl.md)、`backend/src/auth/aad-authority.ts`（本節下方之函式行為描述已逐一開啟該檔核對，非轉述）。
+
+#### 問題（lead 遠端實測，主機端已排除）
+
+遠端測試環境（DTTHFC01）之第一跳防火牆對 SNI `login.microsoftonline.com` 注入**偽造 RST**，判定證據三項：
+
+1. 同一連線 SYN-ACK TTL＝108（真實 Microsoft，約 20 跳）vs RST TTL＝63（僅 1 跳）——後者來自路徑上的中間設備，非目的端本身。
+2. SYN→SYN-ACK 40.6ms vs ClientHello→RST 0.73ms（快 55 倍）——時間量級與真實伺服器往返不符。
+3. 同一 IP **不帶 SNI** 則握手成功並取得正牌 DigiCert 憑證——證明目的端本身可達，問題出在依 SNI 篩選之中間設備。
+
+#### 決策：新增選填 env `AZURE_AD_AUTHORITY_HOST`，改走 Microsoft 已知別名
+
+未設＝canonical host（`login.microsoftonline.com`），行為零回歸；設定為 `login.microsoft.com` 或 `login.windows.net` 時，四類 endpoint（authorize／token／JWKS／OIDC discovery）之呼叫 host 改為該別名。白名單值域與 fail-fast、issuer 不變式、揭露封閉集等逐條 AC 見 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`；本節只記錄架構層決策與其查證結果，不重列 AC。
+
+#### 🔴 實作手法之陷阱：必須用 `auth.authorityMetadata` 內嵌靜態 metadata，不能用裸 `authority`
+
+**已於 implementation-log 之探針一驗證**（真實 `ConfidentialClientApplication`，三層攔截錄下絕對 URL）：`@azure/msal-node@5.4.1` 若只把 `authority` 直接指向別名，MSAL 會依內建 cloud-discovery 別名表把 authorize URL 之 host **悄悄改寫回 canonical**、token 亦 POST 回 canonical——**本地測試全綠、遠端症狀與修復前完全相同**。對照組實測（`authority`＝別名、無 metadata）：authorize host 仍為 `login.microsoftonline.com`（canonical 命中計數＝1），證明此為「最可能的錯誤實作」且確實會踩雷，非杞人憂天。
+
+機制（已核對 `backend/src/auth/aad-authority.ts` 檔頭註解，非轉述）：`Authority.resolveEndpointsAsync()` 以硬編碼別名表把設定值換成 `preferred_network`（即 canonical），但 `get authorizationEndpoint()` 走 `replacePath()`——**只換 path、不換 host**，故靜態 metadata 內嵌之別名 host 得以留存；且 config 來源的 metadata 不走 MSAL 之 `validateIssuer()`。**內嵌靜態 metadata 是唯一能同時做到「零 discovery ＋ endpoint 走別名」的手法**（`aadAuthorityMetadata()`，`aad-authority.ts:118-127`，內嵌之 `issuer` 固定走 `expectedAadIssuer()`）。
+
+#### 🔒 安全不變式：`expectedAadIssuer()` 忽略 `authorityHost`，恆回 canonical issuer
+
+**已直接開啟 `backend/src/auth/aad-authority.ts` 逐行核對**：
+
+- `expectedAadIssuer(cfg)`（`aad-authority.ts:96-98`）函式體僅取 `cfg.tenantId`，回傳值以模組層常數 `CANONICAL_AAD_HOST`（`aad-authority.ts:17`）組成 issuer——**確認未讀取 `cfg.authorityHost`**。
+- `isAcceptableAadIssuer()`（`aad-authority.ts:100-106`）逐字全等比對 `iss === expectedAadIssuer(cfg)`，未用 `startsWith`／`includes`（二者皆可被構造繞過）。
+- 函式簽章刻意保留 `authorityHost` 參數而不使用，理由見檔頭註解（`aad-authority.ts:9-13`）：期望 issuer 若由可設定之 host 導出，等於讓被檢查者自行決定檢查基準，該檢查即自我廢除。**原則沿用 repo 內 `reference/ad-azure-frontend-logic` 之同一註解**——這是本專案既有的一條可推廣安全原則：**讓可設定的 host 同時決定「打哪裡」與「拿什麼比對」，該檢查即自我廢除**。
+
+另於 callback 新增 `iss` 比對——implementation-log 載明 `@azure/msal-node@5.4.1`／`@azure/msal-common@16.11.2` 對兩套件 `dist` 全樹 grep `.iss` **零命中**，故此為我方新增之比對單元，不是「確認 MSAL 已代勞」；`AC-E9`（白名單）與 `AC-E8`（TLS 驗證不得關閉）因此從 defense-in-depth 升格為主要控制，issuer 釘死是其上之額外一層。
+
+#### 值域控制：程式內常數白名單 ＋ 啟動 fail-fast
+
+`ALLOWED_AAD_AUTHORITY_HOSTS`（`aad-authority.ts:26-30`）為程式內常數，僅含 `login.microsoftonline.com`／`login.microsoft.com`／`login.windows.net`，**不得**由環境變數擴充或關閉；`resolveAadAuthorityHost()`（`aad-authority.ts:63-76`）去頭尾空白＋轉小寫後逐字比對白名單，不做 host 萃取（避免 `https://evil.example.com@login.microsoft.com/` 之歧義），不合法即 throw（啟動期 fail-fast，**不**靜默回退 canonical——靜默回退會使遠端重現原症狀且無診斷線索，即本次故障之成因形狀）。理由：本設定值決定 client secret 與 authorization code 被 POST 到哪一台主機，門檻由「改一個字串」提高為「改程式碼並經 review」。
+
+#### 部署待辦
+
+遠端 `.env` 需設 `AZURE_AD_AUTHORITY_HOST=login.microsoft.com` 並 `--force-recreate`。⚠ 新增之 `iss` 比對要求 `AZURE_AD_TENANT_ID` 為 tenant GUID（implementation-log 載明現況 `4fc63fd2-…` 即是，符合）；若改填網域名或 `common`／`organizations`，`iss` 恆含 GUID 而比對將不符，導致拒登。
+
+🔴 **`AC-E4`（canonical 被封鎖下之端到端登入成功）待真人於遠端環境驗證，尚未兌現**——implementation-log 之 5 個 unit suite（115 條、全綠）與兩個黑箱探針涵蓋了 endpoint 路由、issuer 不變式、白名單 fail-fast、揭露封閉集，但**未涵蓋「真實遠端網路環境下登入確實成功」本身**（本機無法承接此驗證）。**如實登錄為未兌現項，不寫成已驗證。**
+
+#### 對其餘架構之影響
+
+零 schema 變更、零新增錯誤碼、零 migration、不新增模組——`AadAuthorityConfig`／`aadEndpointUrls()`／`aadAuthorityMetadata()` 為 `AuthModule` 內部純函式與型別擴充，不對外暴露新端點。不影響 §10.1–§10.16 之任何決策。
 
