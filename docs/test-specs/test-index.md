@@ -48,6 +48,7 @@
 | **F017 後台篩選 9 → 13 項 delta**（缺失 delta #9，lane **L4**） | **[features/F017-test.md](features/F017-test.md)** 之末段 ← 2026-08-16 追加 |
 | **F011 編輯頁返回鈕與版次輸入互動 delta**（缺失 delta #10 半／#11，lane **L4**） | **[features/F011-test.md](features/F011-test.md)** 之末段 ← 2026-08-16 追加 |
 | **F018 `AC-D14` 前台使用表單下載稽核與快照落值**（原 `G-L2-01`，改由 lane **B** 代管） | **[features/F018-test.md](features/F018-test.md)** 之末段 ← 2026-08-16 追加 |
+| 🔒 **F001 Azure AD endpoint host 覆寫**（`AC-E1`～`AC-E15`；遠端防火牆對 canonical 注入偽造 RST 之修復） | **[features/F001-AAD-authority-host-test.md](features/F001-AAD-authority-host-test.md)** ← 2026-08-18 新增。⚠ **建環前務必讀該檔「為什麼這批的斷言形狀跟直覺不同」**——MSAL 會把別名 authority 悄悄改寫回 canonical，「canonical 出網＝0」對最可能的錯誤實作**恆真** |
 
 ## 自動化就緒度
 

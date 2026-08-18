@@ -1,9 +1,9 @@
 ---
 spec-id: nfr
 title: 非功能需求（Non-Functional Requirements）
-version: 1.1
-date: 2026-07-16
-status: Draft
+version: 1.2
+date: 2026-08-18
+status: Draft（v1.2 新增 [#security](#security) AC2 之 `iss` 釘死子條與 [#deployment](#deployment) `AC2-1`，對應 F001 `AC-E1`～`AC-E15` Azure AD endpoint host 覆寫 delta）
 ---
 
 # 非功能需求（NFR）
@@ -59,6 +59,7 @@ status: Draft
 - **AC2 OIDC id_token 驗證**（2026-07-20 取代原「上游驗簽」，見 [upstream-hr-source-contract.md §12](upstream-hr-source-contract.md)）：身分驗證採 **Azure AD (Entra ID) OIDC authorization code flow**，**無共享密鑰、無自訂簽章、token 不經網址傳遞**。
   1. **id_token 驗簽**：以 **Azure AD JWKS 公鑰**（依 `kid` 取用，公鑰可快取並支援輪替）驗證簽章；驗簽失敗即拒發我方 token。
   2. **claim 檢查**：`iss` 符合本租戶、`aud` 等於本應用 Client ID、`exp`／`nbf` 未過期、`nonce` 等於本次流程之暫存值；任一不符即拒發並記錄。
+     - 🔒 **`iss` 期望值釘死（2026-08-18 新增，對應 [F001](features/F001-auth-login-session.md) `AC-E5`～`AC-E7`）**：期望 issuer **恆為** `https://login.microsoftonline.com/{tenantId}/v2.0`，為**程式內常數**，**不得**由可設定之 endpoint host（`AZURE_AD_AUTHORITY_HOST`）導出。理由：若由設定值導出，等於讓被檢查者自行決定檢查基準，該檢查即不再是檢查。endpoint 走 Microsoft 官方別名（`login.microsoft.com`／`login.windows.net`）時，其 OIDC discovery **仍宣告 canonical issuer**，故本釘死與別名機制並存無矛盾。
   3. **防重放/防 CSRF**：以標準 OIDC **`state` ＋ `nonce` ＋ PKCE**（`code_challenge`／`code_verifier`）達成，取代原「時間戳＋nonce 自訂簽章」；三者皆單次使用、用畢即失效、且與伺服器端流程綁定。
   4. **失敗揭露原則**：對外訊息不得指出未通過之檢查項目或帳號是否存在（見 [error-handling.md#auth](error-handling.md#auth)）；詳細判別資訊僅寫伺服器端日誌。
   5. **Client Secret／憑證**：以環境變數／密鑰機制注入，不得寫入版控（見 [#deployment](#deployment) AC2）。
@@ -125,6 +126,7 @@ status: Draft
 
 - **AC1 一鍵部署**：以 `docker-compose.yml`（或依環境拆分）啟動前台/後台/API/DB 連線等必要服務。
 - **AC2 機密管理**：DB 連線字串、**Azure AD Tenant ID／Client ID／Client Secret（或憑證）／各環境 Redirect URI**、Blob 金鑰等以環境變數/密鑰機制注入，不得寫死於 image 或版控。（原「上游共享密鑰」已隨 OIDC 改版消失，見 [#security](#security) AC2。）
+- **AC2-1 Azure AD endpoint host（2026-08-18 新增，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）**：新增**選填**環境變數 `AZURE_AD_AUTHORITY_HOST`〔[ASSUMPTION] 變數名待 lead 覆核，見 [open-questions](open-questions.md) `OQ-E01-11`〕，**未設時等同現況**（`login.microsoftonline.com`）。允許值限白名單 `{login.microsoftonline.com, login.microsoft.com, login.windows.net}`，其餘值**啟動即失敗**、不靜默回退。**非機密**（可寫入 compose／`.env.sample` 之註解），但**其值決定 Client Secret 被送往哪台主機**，故變更須比照機密設定審慎處理。**遠端測試環境（DTTHFC01）因防火牆對 canonical host 注入偽造 RST，須設為別名方能登入**。
 - **AC3 環境區分**：`.env.development` / `.env.staging` / `.env.production` 互不干擾。
 - **AC4 健康檢查**：各容器定義 healthcheck，支援自動重啟。
 

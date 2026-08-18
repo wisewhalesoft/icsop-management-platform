@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import {
   Body,
   Controller,
   Get,
   Inject,
+  Logger,
   Post,
   Query,
   Req,
@@ -14,7 +16,13 @@ import {
   ConfidentialClientApplication,
   CryptoProvider,
 } from '@azure/msal-node';
-import { buildMsalConfig, OIDC_SCOPES, requireEnv } from './msal.config';
+import {
+  buildAadAuthorityConfig,
+  buildMsalConfig,
+  OIDC_SCOPES,
+  requireEnv,
+} from './msal.config';
+import { expectedAadIssuer, isAcceptableAadIssuer } from './aad-authority';
 import { classifyAccountByEmail } from './account-resolver';
 import { decideAuthOutcome } from './auth-outcome';
 import {
@@ -44,6 +52,41 @@ interface PasswordLoginBody {
   companyCode?: string;
 }
 
+/**
+ * 登入失敗頁**唯一**可顯示之錯誤碼（F001 `AC-E13`(a)(1)）。皆為 error-handling.md 錯誤碼表所定之對外契約。
+ * 不新增任何錯誤碼——本批僅擴充 `AUTH_OIDC_EXCHANGE_FAILED` 之適用階段至 `/auth/login`。
+ */
+type AuthFailureCode =
+  | 'AUTH_OIDC_STATE_MISMATCH'
+  | 'AUTH_OIDC_EXCHANGE_FAILED'
+  | 'AUTH_OIDC_TOKEN_INVALID'
+  | 'AUTH_EMAIL_CLAIM_MISSING'
+  | 'AUTH_ACCOUNT_NOT_FOUND'
+  | 'AUTH_ACCOUNT_DISABLED';
+
+/**
+ * 登入失敗頁**唯一**可顯示之說明句（F001 `AC-E13`(a)(2)(b)）。
+ *
+ * 本表存在的理由是把「使用者可見字串」變成**原始碼中可列舉之有限常數集合**：
+ * `renderError()` 的 detail 參數型別即為本表之值域，因此「把例外 message／上游回應／host／
+ * Azure 回呼之 error 參數插進畫面」在型別層就寫不出來。
+ * 上游原始錯誤、host、堆疊一律只進伺服器日誌（`AC-E13`(c)：畫面收斂、日誌保全）。
+ */
+const AUTH_FAILURE_DETAIL = {
+  TX_COOKIE_MISSING: '找不到交易 cookie（逾時、未經 /auth/login，或簽章驗證失敗）。',
+  TX_COOKIE_CORRUPT: '交易 cookie 損毀。',
+  STATE_MISMATCH: 'state 不符或 code 缺漏（可能為 CSRF／回呼竄改）。',
+  EXCHANGE_FAILED: '驗證失敗，請重新登入。',
+  TOKEN_REPLAY: 'nonce 不符（可能為 token 重放）。',
+  TOKEN_INVALID: 'id_token 未通過驗證。',
+  EMAIL_CLAIM_MISSING:
+    'id_token 未含 email claim；請確認 app registration 之 optional claim 與帳號 mail 屬性。',
+  ACCOUNT_DISABLED: '您的帳號已停用，請洽系統管理員。',
+  ACCOUNT_NOT_FOUND: '查無有效帳號，請洽系統管理員。',
+} as const;
+
+type AuthFailureDetail = (typeof AUTH_FAILURE_DETAIL)[keyof typeof AUTH_FAILURE_DETAIL];
+
 function maskEmail(email: string): string {
   const [lp, domain] = email.split('@');
   if (!domain) return '***';
@@ -55,6 +98,9 @@ export class AuthController {
   private readonly cca = new ConfidentialClientApplication(buildMsalConfig());
   private readonly crypto = new CryptoProvider();
   private readonly redirectUri = requireEnv('AZURE_AD_REDIRECT_URI');
+  /** 生效之 endpoint host + 租戶。endpoint 可搬，issuer 由 aad-authority.ts 釘死為 canonical。 */
+  private readonly aad = buildAadAuthorityConfig();
+  private readonly logger = new Logger(AuthController.name);
 
   constructor(
     @Inject(ACCOUNT_REPOSITORY) private readonly accounts: AccountRepository,
@@ -103,14 +149,26 @@ export class AuthController {
       maxAge: 10 * 60 * 1000,
     });
 
-    const url = await this.cca.getAuthCodeUrl({
-      scopes: OIDC_SCOPES,
-      redirectUri: this.redirectUri,
-      codeChallenge: challenge,
-      codeChallengeMethod: 'S256',
-      state: tx.state,
-      nonce: tx.nonce,
-    });
+    // AC-E12：發起階段若真的出網且失敗（分支 B），必須自行處理成與 callback 同碼、同訊息之錯誤頁；
+    // 不得回 500、不得讓例外或堆疊冒到使用者面前。靜態 metadata 之下此階段零出網（分支 A）。
+    let url: string;
+    try {
+      url = await this.cca.getAuthCodeUrl({
+        scopes: OIDC_SCOPES,
+        redirectUri: this.redirectUri,
+        codeChallenge: challenge,
+        codeChallengeMethod: 'S256',
+        state: tx.state,
+        nonce: tx.nonce,
+      });
+    } catch (e) {
+      return this.renderError(
+        res,
+        'AUTH_OIDC_EXCHANGE_FAILED',
+        AUTH_FAILURE_DETAIL.EXCHANGE_FAILED,
+        '/auth/login 建構 authorization URL 失敗；' + this.diagnose(e),
+      );
+    }
     res.redirect(url);
   }
 
@@ -124,7 +182,16 @@ export class AuthController {
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
-    if (error) return this.renderError(res, `Azure：${error}`, errorDesc);
+    // AC-E13：Azure 回呼之 error／error_description 為外部來源字串，只進日誌不進畫面；
+    // 對外改回我方常數碼＋固定訊息。
+    if (error) {
+      return this.renderError(
+        res,
+        'AUTH_OIDC_EXCHANGE_FAILED',
+        AUTH_FAILURE_DETAIL.EXCHANGE_FAILED,
+        `Azure 回呼帶錯誤參數 error=${error}；error_description=${errorDesc ?? '(無)'}`,
+      );
+    }
 
     const raw = (req.signedCookies as Record<string, string> | undefined)?.[
       OIDC_TX_COOKIE
@@ -134,7 +201,8 @@ export class AuthController {
       return this.renderError(
         res,
         'AUTH_OIDC_STATE_MISMATCH',
-        '找不到交易 cookie（逾時、未經 /auth/login，或簽章驗證失敗）。',
+        AUTH_FAILURE_DETAIL.TX_COOKIE_MISSING,
+        '回呼未帶簽章 tx cookie（逾時、未經 /auth/login，或 cookie 簽章驗證失敗）',
       );
     }
 
@@ -142,14 +210,20 @@ export class AuthController {
     try {
       tx = JSON.parse(raw) as OidcTx;
     } catch {
-      return this.renderError(res, 'AUTH_OIDC_STATE_MISMATCH', '交易 cookie 損毀。');
+      return this.renderError(
+        res,
+        'AUTH_OIDC_STATE_MISMATCH',
+        AUTH_FAILURE_DETAIL.TX_COOKIE_CORRUPT,
+        'tx cookie 內容非合法 JSON',
+      );
     }
 
     if (!code || !state || state !== tx.state) {
       return this.renderError(
         res,
         'AUTH_OIDC_STATE_MISMATCH',
-        'state 不符或 code 缺漏（可能為 CSRF／回呼竄改）。',
+        AUTH_FAILURE_DETAIL.STATE_MISMATCH,
+        'state 不符或 code 缺漏（可能為 CSRF／回呼竄改）',
       );
     }
 
@@ -164,10 +238,14 @@ export class AuthController {
       });
       claims = (result.idTokenClaims ?? {}) as Record<string, unknown>;
     } catch (e) {
+      // AC-E13 缺陷修正：此處原本把 `e.message` 印在畫面上，使用者會看到
+      // `network_error: Network request failed: fetch failed`。上游原始訊息改為只進日誌。
       return this.renderError(
         res,
         'AUTH_OIDC_EXCHANGE_FAILED',
-        e instanceof Error ? e.message : String(e),
+        AUTH_FAILURE_DETAIL.EXCHANGE_FAILED,
+        `authorization code 交換失敗（endpoint host=${this.aad.authorityHost}）；` +
+          this.diagnose(e),
       );
     }
 
@@ -176,7 +254,20 @@ export class AuthController {
       return this.renderError(
         res,
         'AUTH_OIDC_TOKEN_INVALID',
-        'nonce 不符（可能為 token 重放）。',
+        AUTH_FAILURE_DETAIL.TOKEN_REPLAY,
+        'id_token 之 nonce 與本次流程之暫存值不符',
+      );
+    }
+
+    // issuer 釘死（AC-E5～AC-E7）：MSAL 不比對 `iss`，此檢查為我方新增。
+    // 期望值恆為 canonical issuer，**與 AZURE_AD_AUTHORITY_HOST 無關**——endpoint 可搬，issuer 不搬。
+    const iss = claims['iss'] as string | undefined;
+    if (!isAcceptableAadIssuer(iss, this.aad)) {
+      return this.renderError(
+        res,
+        'AUTH_OIDC_TOKEN_INVALID',
+        AUTH_FAILURE_DETAIL.TOKEN_INVALID,
+        `id_token 之 iss 不符：收到 ${iss ?? '(缺漏)'}，期望 ${expectedAadIssuer(this.aad)}`,
       );
     }
 
@@ -185,7 +276,8 @@ export class AuthController {
       return this.renderError(
         res,
         'AUTH_EMAIL_CLAIM_MISSING',
-        'id_token 未含 email claim；請確認 app registration 之 optional claim 與帳號 mail 屬性。',
+        AUTH_FAILURE_DETAIL.EMAIL_CLAIM_MISSING,
+        'id_token 未含 email claim 或其值為空',
       );
     }
 
@@ -201,9 +293,14 @@ export class AuthController {
       }
       const msg =
         outcome.code === 'AUTH_ACCOUNT_DISABLED'
-          ? '您的帳號已停用，請洽系統管理員。'
-          : '查無有效帳號，請洽系統管理員。';
-      return this.renderError(res, outcome.code, msg);
+          ? AUTH_FAILURE_DETAIL.ACCOUNT_DISABLED
+          : AUTH_FAILURE_DETAIL.ACCOUNT_NOT_FOUND;
+      return this.renderError(
+        res,
+        outcome.code,
+        msg,
+        `帳號比對拒絕 ${outcome.code}（email=${maskEmail(email)}）`,
+      );
     }
 
     // 核發我方 session（httpOnly cookie）
@@ -245,7 +342,33 @@ export class AuthController {
     return res.redirect(postLogoutRedirect());
   }
 
-  private renderError(res: Response, code: string, detail?: string): void {
+  /**
+   * 例外之可診斷摘要——**只給日誌用**（`AC-E13`(c)）。含 name／message／堆疊；
+   * 絕不含 `AZURE_AD_CLIENT_SECRET`（本函式不讀該變數，亦不序列化整個設定物件）。
+   */
+  private diagnose(e: unknown): string {
+    if (!(e instanceof Error)) return `非 Error 例外：${String(e)}`;
+    return `${e.name}: ${e.message}\n${e.stack ?? '(無堆疊)'}`;
+  }
+
+  /**
+   * 登入失敗頁（`AC-E13`）。
+   *
+   * **畫面收斂**：只輸出我方錯誤碼常數、`AUTH_FAILURE_DETAIL` 表內之固定訊息、重試連結，
+   * 以及我方產生之隨機 correlation id。`detail` 之型別即為該表之值域，故任何執行期插值之
+   * 外部字串（例外 message、上游回應、AADSTS 代碼、host、tenantId、email…）在型別層就進不來。
+   * **日誌保全**：`diagnostic` 承載全部細節，附同一 correlation id 以供對照。
+   */
+  private renderError(
+    res: Response,
+    code: AuthFailureCode,
+    detail: AuthFailureDetail,
+    diagnostic?: string,
+  ): void {
+    // 我方產生之隨機識別碼，不由任何外部值導出、不含任何內容資訊（AC-E13(a)(4)）。
+    const correlationId = randomUUID();
+    this.logger.warn(`[${correlationId}] ${code}${diagnostic ? ' — ' + diagnostic : ''}`);
+
     res
       .status(401)
       .type('html')
@@ -254,7 +377,8 @@ export class AuthController {
           '登入失敗',
           `<p style="color:#dc2626;font-size:16px">登入失敗</p>
            <p style="font-family:monospace">${esc(code)}</p>
-           ${detail ? `<p style="color:#64748b">${esc(detail)}</p>` : ''}
+           <p style="color:#64748b">${esc(detail)}</p>
+           <p style="color:#94a3b8;font-size:12px">參考碼 ${esc(correlationId)}</p>
            <p style="margin-top:20px"><a href="/auth/login">↻ 重試登入</a></p>`,
         ),
       );

@@ -1,9 +1,9 @@
 ---
 spec-id: error-handling
 title: 錯誤處理與失敗模式
-version: 1.6
-date: 2026-08-16
-status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落與 3 個 `LIFECYCLE_*` 錯誤碼為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.3 之 [#dept-restriction](#dept-restriction) 段落為 🟢 APPROVED 2026-08-11 人類閘門通過——OQ-E06-03 定案為 404 `DOCUMENT_NOT_FOUND`、OQ-E08-10 定案為不記錄拒絕稽核，均沿用既有錯誤碼、不新增**；**v1.4 新增 [#account-profile](#account-profile) 段落與 3 個 `ACCOUNT_*_INVALID` 錯誤碼，對應 F003 手動帳號基本資料 delta，2026-08-14 使用者直接裁定**；**v1.5 同日第二次裁決——公司別可跨公司選擇：`ACCOUNT_COMPANY_CODE_INVALID` 語意放寬為「非有效公司」、`ACCOUNT_USERNAME_EXISTS` 比對範圍擴為全域，均不新增錯誤碼**；**v1.6 新增 [#export](#export) 與 [#usage-form-number](#usage-form-number) 兩段落與 3 個錯誤碼（`EXPORT_ROW_LIMIT_EXCEEDED`／`USAGE_FORM_NUMBER_DUPLICATE`／`USAGE_FORM_NUMBER_TOO_LONG`），對應 2026-08-16 缺失／變更 delta 第 14／16／18 項，使用者裁定**）
+version: 1.7
+date: 2026-08-18
+status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落與 3 個 `LIFECYCLE_*` 錯誤碼為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.3 之 [#dept-restriction](#dept-restriction) 段落為 🟢 APPROVED 2026-08-11 人類閘門通過——OQ-E06-03 定案為 404 `DOCUMENT_NOT_FOUND`、OQ-E08-10 定案為不記錄拒絕稽核，均沿用既有錯誤碼、不新增**；**v1.4 新增 [#account-profile](#account-profile) 段落與 3 個 `ACCOUNT_*_INVALID` 錯誤碼，對應 F003 手動帳號基本資料 delta，2026-08-14 使用者直接裁定**；**v1.5 同日第二次裁決——公司別可跨公司選擇：`ACCOUNT_COMPANY_CODE_INVALID` 語意放寬為「非有效公司」、`ACCOUNT_USERNAME_EXISTS` 比對範圍擴為全域，均不新增錯誤碼**；**v1.6 新增 [#export](#export) 與 [#usage-form-number](#usage-form-number) 兩段落與 3 個錯誤碼（`EXPORT_ROW_LIMIT_EXCEEDED`／`USAGE_FORM_NUMBER_DUPLICATE`／`USAGE_FORM_NUMBER_TOO_LONG`），對應 2026-08-16 缺失／變更 delta 第 14／16／18 項，使用者裁定**；**v1.7 新增 [#aad-authority-host](#aad-authority-host) 段落，對應 F001 `AC-E1`～`AC-E15` Azure AD endpoint host 覆寫 delta（2026-08-18 遠端環境防火牆對 canonical host 注入偽造 RST 之修復）——**擴充 `AUTH_OIDC_EXCHANGE_FAILED` 之適用階段至 `/auth/login`，並定義一類啟動期 fail-fast；**不新增任何錯誤碼**）
 ---
 
 # 錯誤處理（Error Handling）
@@ -101,6 +101,23 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 - **id_token 驗證失敗**：以 Azure AD JWKS 公鑰驗簽，並檢查 `iss`／`aud`／`exp`／`nbf`／`nonce`；任一項不符回 `AUTH_OIDC_TOKEN_INVALID`，**不得洩漏**是哪一項檢查未通過，並記錄失敗事件（[NFR-002](nfr.md#security)）。
 - **`email` claim 缺漏或為空**：回 `AUTH_EMAIL_CLAIM_MISSING`，提示洽系統管理員；此為 app registration 或 HR 資料面問題，不得以其他 claim 或 `HREMAILADDR` 靜默 fallback。
 - **防重放**：以標準 OIDC `state` ＋ `nonce` ＋ PKCE 達成，取代原「時間戳＋nonce 自訂簽章」機制；`state`／`nonce`／`code_verifier` 均為單次使用，用畢即失效。
+
+### Azure AD endpoint host 覆寫之失敗處理 {#aad-authority-host}
+
+> **v1.7 新增（2026-08-18）**，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`。**不新增任何錯誤碼**——本段僅（a）擴充既有 `AUTH_OIDC_EXCHANGE_FAILED` 之**適用階段**，（b）定義一類**啟動期失敗**（非 HTTP 錯誤，故無錯誤碼）。背景＝遠端環境之防火牆對 SNI `login.microsoftonline.com` 注入偽造 RST，改走 Microsoft 官方別名 endpoint；issuer 仍釘死為 canonical。
+
+- **設定 host 於執行期不可達**（RST／逾時／DNS 解析失敗）：
+  - 於 `/auth/callback` 之 authorization code 交換階段 → 回 `AUTH_OIDC_EXCHANGE_FAILED`（既有語意，F001 `AC-E11`）。
+  - 🔴 於 `/auth/login` 之 authorization URL 建構階段 → **兩分支全稱**（F001 `AC-E12`，2026-08-18 改寫）：**分支 A** 該階段零出網（`AC-E3` 靜態注入手法下之現況）⇒ `/auth/login` 仍正常回 302，成敗與設定 host 可達性無關；**分支 B** 該階段有出網且失敗 ⇒ **亦回 `AUTH_OIDC_EXCHANGE_FAILED`**，與 callback 階段同碼、同使用者訊息。**兩分支共同禁止**：不得回 500、不得回未處理例外、不得回堆疊或例外 `message`（此禁止項與實作手法無關、永遠可測）。分支 B 為既有錯誤碼**適用階段之擴充**：原文義僅涵蓋 callback 之 token 交換。
+- 🔴 **登入失敗頁之揭露封閉集（F001 `AC-E13`；2026-08-18 精確化——現況已被違反，屬既有 AC 之缺陷修正而非新需求）**：
+  - **允許顯示（封閉集）**：① 我方錯誤碼常數；② 本表所定之該碼**固定使用者訊息**；③ 重試登入連結；④ 選配之**我方產生**之隨機 correlation id。
+  - **判準**：使用者可見字串**必須完整取自原始碼中可列舉之有限常數集合**（`AUTH_*` 碼 ∪ 固定訊息 ∪ 我方撰寫之靜態說明句）加上 ④。**任何執行期插值之外部來源字串一律禁止**：例外 `message`／`name`／`stack`、`fetch failed`／`network_error`／`ECONNRESET`、上游 HTTP 狀態與 body、`AADSTS*` 及其描述、**Azure 回呼之 `error`／`error_description` query 參數**、authority host 或任何主機名／URL、`tenantId`／`clientId`／`clientSecret`、email／`loginId`。
+  - **診斷保全**：上述細節**必須**改寫入伺服器端日誌（附同一 correlation id），日誌不得含 `clientSecret`。**畫面收斂、日誌保全**（搭配 F001 `AC-E14`）。
+  - **適用範圍**：`/auth/callback` 與 `/auth/login` 之**全部**失敗呈現路徑（`AUTH_OIDC_STATE_MISMATCH`／`AUTH_OIDC_TOKEN_INVALID`／`AUTH_EMAIL_CLAIM_MISSING`／`AUTH_ACCOUNT_*` 同受拘束——其現有 detail 皆為我方靜態字串，**屬回歸鎖而非變更**）。
+  - 沿用並精確化 [#訊息揭露原則](#auth)（「不得回傳上游原始錯誤內容」）與 [NFR-002](nfr.md#security)。
+- **id_token `iss` 不符 canonical issuer**：沿用 `AUTH_OIDC_TOKEN_INVALID`。期望值**恆為** `https://login.microsoftonline.com/{tenantId}/v2.0`，**不得由 `AZURE_AD_AUTHORITY_HOST` 導出**（F001 `AC-E5`～`AC-E7`）；即使 endpoint 走別名亦然。
+- **`AZURE_AD_AUTHORITY_HOST` 值不合法**（不在白名單 `{login.microsoftonline.com, login.microsoft.com, login.windows.net}`，或含 scheme／path／port／query／userinfo）：**啟動期 fail-fast**，比照既有 `requireEnv` 之啟動期 throw；錯誤訊息含收到之值與完整允許清單。**不得靜默回退為 canonical host**——靜默回退會使遠端重現原症狀且無診斷線索，屬**不可恢復之設定錯誤**而非執行期錯誤，因此不落任何 HTTP 錯誤碼（F001 `AC-E9`／`AC-E10`）。
+- **不可恢復情境（登記，不修）**：三個別名**同時**被同一防火牆策略封鎖時，本機制無解——屬網路層問題，須由網管開通或改採出口代理。見 [open-questions.md](open-questions.md) 風險表。
 
 ### 帳號對應與狀態
 

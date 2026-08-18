@@ -970,3 +970,120 @@ D 節之逐字比對是人工的，無法納入 CI。本缺陷**有**可機器�
 > **版本比對式守衛會照樣綠而缺陷復發**；行為層守衛（實際產 PDF、實際解析輪廓）對版本漂移免疫。
 > **請勿改成版本／檔案比對**——理由已同步寫進測試檔頭。
 
+
+---
+
+## F001 Azure AD endpoint host 覆寫（`AC-E1`～`AC-E15`，2026-08-18） {#f001-aad-authority-host}
+
+> 設計文件：[features/F001-AAD-authority-host-test.md](features/F001-AAD-authority-host-test.md)。
+> 本批共 **15 條 AC**、環含 **115 條約束**、分佈於 `backend/src/auth/aad-*.spec.ts` 五檔。
+> 本節即 lead 要的「本環涵蓋不到」清單。
+
+### A. (甲) 本環已涵蓋（可由機器裁決，無需任何 agent 判斷）
+
+| AC | 涵蓋程度 | 備註 |
+|---|---|---|
+| `AC-E1` | **完整** | 純值層 ＋ 真實 MSAL 之 authorize／token 目標。目前**綠**＝現況零回歸守衛 |
+| `AC-E2` | ①② **完整**（真實 MSAL 觀測）；③④ **宣告層** | JWKS／OIDC discovery 於 MSAL confidential-client code flow **沒有執行期載體**（見 D-E-01），故以 `aadEndpointUrls()` 之宣告值約束 |
+| `AC-E3` | **完整** | 三層攔截錄 URL；主斷言為 authorize host ＋ token 交換目標（出網計數對「只換 authority」恆真，見設計文件） |
+| `AC-E5` | **完整**（判定層） | 「依既有流程核發 session」之後半段由既有 1971 條途徑 A 測試承接 |
+| `AC-E6` | **判定層完整 ＋ 死碼掃描** | 「回 `AUTH_OIDC_TOKEN_INVALID`／不核發 cookie」之端到端腿見 D-E-03（結構上不可達） |
+| `AC-E7` | **完整** | 10 fixture × 4 設定矩陣 ＋ 基準表正確性 ＋ 鑑別力自證 |
+| `AC-E8` | **靜態面完整** | repo 內任何生產原始碼與部署檔；執行期 env 見 Y-E-02 |
+| `AC-E9` | **完整** | 純值層 ＋ `buildMsalConfig()` 啟動期接線 |
+| `AC-E10` | **完整** | 3 正規化 ＋ 11 格式拒絕 |
+| `AC-E11` | **完整** | 黑箱往返驅動真實 `AuthController`（state 取自 `/auth/login` 自身輸出，非讀原始碼） |
+| `AC-E12` | **兩分支全稱** | Given 為條件句，見 D-E-02 |
+| `AC-E13` | **完整** | 8 項禁字 ＋ 不得 5xx。**現況已違反**（見 D-E-06） |
+| `AC-E14` | **完整**（函式層） | 真實啟動之日誌見 Y-E-01 |
+| `AC-E15` | **完整** | 八模組解耦掃描 ＋ 既有 1971 條全綠 |
+
+### B. (乙) 只能靠**容器內實跑**（步驟可直接照抄）
+
+**Y-E-01 — `AC-E14` 真實啟動日誌恰一次、等級為 WARN、不含 secret**
+```bash
+cd /opt/icsop
+docker compose -p icsop up -d --build --force-recreate backend   # ⚠ 只 --build 不換容器，須 --force-recreate
+docker compose -p icsop logs backend | grep -c 'authority host'                       # 期望：1
+docker compose -p icsop logs backend | grep 'authority host'                          # 期望：WARN，且含
+#   「已啟用 Azure AD endpoint host 覆寫；issuer 仍釘死為 canonical」與生效 host
+SECRET=$(docker compose -p icsop exec -T backend printenv AZURE_AD_CLIENT_SECRET)
+docker compose -p icsop logs backend | grep -F "$SECRET"                              # 期望：無輸出（exit 1）
+```
+
+**Y-E-02 — `AC-E8` 執行期未被 env 關掉 TLS**（掃描只看得到 repo 內的檔，看不到平台端設的變數）
+```bash
+docker compose -p icsop exec -T backend printenv | grep -E 'NODE_TLS_REJECT_UNAUTHORIZED|NODE_EXTRA_CA_CERTS'
+# 期望：無輸出（exit 1）
+docker compose -p icsop exec -T backend node -e \
+  "console.log('rejectUnauthorized關閉?', process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0')"
+# 期望：false
+```
+
+**Y-E-03 — `AC-E9` 真實啟動期 fail-fast（不得靜默回退、不得啟動監聽）**
+```bash
+docker compose -p icsop run --rm -e AZURE_AD_AUTHORITY_HOST=evil.example.com backend node dist/main.js
+echo "exit=$?"    # 期望：非 0
+# 期望輸出含 evil.example.com 與三個允許值全列；且不得出現「Nest application successfully started」
+docker compose -p icsop run --rm -e AZURE_AD_AUTHORITY_HOST='https://login.microsoft.com' backend node dist/main.js
+echo "exit=$?"    # 期望：非 0（含 scheme 之值一律拒絕，不得萃取 host）
+```
+
+**Y-E-04 — `AC-E3` 真實行程之出網 SNI 稽核**（環只證明「程式碼會打哪裡」，這一步證明「機器實際打了哪裡」）
+```bash
+sudo tcpdump -nn -i any 'tcp port 443' -w /tmp/icsop-login.pcap &     # 開錄
+#   → 於瀏覽器走一次完整登入
+sudo kill %1
+tshark -r /tmp/icsop-login.pcap -Y tls.handshake.extensions_server_name \
+       -T fields -e tls.handshake.extensions_server_name | sort -u
+# 期望：清單含設定之別名，**不含** login.microsoftonline.com
+```
+
+### C. (丙) 只能靠**真環境實測**（需真人＋真 Azure AD）
+
+**Z-E-01 — `AC-E4` canonical 黑洞環境下端到端成功**
+📌 **本條無法納入 (甲)，理由**：jest 拿不到 Microsoft 真簽的 id_token，偽造需要偽造 Microsoft 的簽章；
+且流程中間有一段**互動式輸入公司密碼**。AC 提示的 hosts 檔只能模擬「canonical 不可達」這個**前提**，
+模擬不了「登入成功」這個**結論**。可自動化的核心（canonical 即使 throw、流程仍全走別名）已由 `AC-E3` 覆蓋。
+```bash
+# ① 本地模擬 canonical 黑洞：docker-compose.yml 之 backend 服務加
+#      extra_hosts:
+#        - "login.microsoftonline.com:0.0.0.0"
+# ② 設 AZURE_AD_AUTHORITY_HOST=login.microsoft.com
+docker compose -p icsop up -d --force-recreate backend
+docker compose -p icsop exec -T backend getent hosts login.microsoftonline.com   # 期望：0.0.0.0（黑洞已生效）
+# ③ 真人以真實 AS 帳號走完整登入
+# 期望：取得我方 session、進入對應角色首頁；**不得**出現 AUTH_OIDC_EXCHANGE_FAILED
+docker compose -p icsop logs backend | grep -c AUTH_OIDC_EXCHANGE_FAILED           # 期望：0
+```
+
+**Z-E-02 — `AC-E2`① 真實 302 `Location`（部署／代理層飄移，本 repo 2026-07-25 已踩過同型 bug）**
+```bash
+curl -sSI https://testicsop.hfcfinance.com.tw/auth/login | grep -i '^location:'
+# 期望：host 為設定之別名；**不得**為 login.microsoftonline.com（edge／nginx 若做過 rewrite 會在此現形）
+```
+
+**Z-E-03 — `AC-E11`／`AC-E13` 面對真實防火牆 RST**
+```bash
+# 暫時把 AZURE_AD_AUTHORITY_HOST 設為「白名單內但仍被該防火牆封鎖」之值，重啟後真人點登入
+# 期望：畫面只有通用「登入失敗，請重新登入」；
+#   不得出現生效 host、fetch failed、network_error、tenantId、clientId、堆疊
+docker compose -p icsop logs backend | grep -F "$SECRET"    # 伺服器日誌得有診斷細節，但期望：不含 secret
+```
+
+### D. (丁) 結構上不可達之殘留面（登記，不修）
+
+| # | 項目 | 為何連真環境也測不了 |
+|---|---|---|
+| D-E-03 | `AC-E6` 之「端到端拒絕並回 `AUTH_OIDC_TOKEN_INVALID`、不核發 cookie」 | 要讓系統收下一個 `iss` 偽造但簽章／`aud`／`exp`／`nonce` 皆通過的 token，必須把系統指向一台測試用 IdP；而 `AC-E9` 的白名單**正是為了讓這件事做不到**。二者為刻意的取捨：**用可測性換外洩面防護**。環改以「判定單元（毒注入）＋ 該判定必須被實際呼叫（引用掃描）」兩段覆蓋，這是缺陷真正會住的地方。**此為設計取捨之登記，非缺口**。 |
+
+### E. 須退回 spec-writer／system-architect 之爭議與發現
+
+| # | 對象 | 內容 |
+|---|---|---|
+| D-E-01 | spec-writer | **`AC-E2`③「JWKS 取得 host」在本專案沒有執行期載體**。`@azure/msal-node` 之 confidential-client authorization-code flow **不抓 JWKS**——id_token 由 TLS 保護之 token endpoint 直接回傳，MSAL 不另做簽章驗證取鑰。環已改以宣告值（`aadEndpointUrls().jwks`）約束。請裁決：接受宣告式編碼，或修訂 AC 文字。 |
+| D-E-02 | spec-writer | **`AC-E12` 的 Given 在唯一可行的實作手法下恆不成立**（靜態 metadata ⇒ 發起階段零出網）。環寫成兩分支全稱斷言。請裁決是否改為無條件之「發起階段任何失敗皆須為已處理回應」。 |
+| D-E-04 | system-architect | **`AC-E3` ℹ 註所列四種抑制手法並不等價**（實測，見設計文件表）：裸 `authority` 指向別名會被 MSAL **悄悄改寫回 canonical**（authorize 與 token 都是），`knownAuthorities`／`cloudDiscoveryMetadata` 單獨使用會**強制**一次 discovery，唯 `authorityMetadata` 能達成「零 discovery ＋ endpoint 走別名」。請據此裁定手法。 |
+| D-E-05 | spec-writer | `AC-E14`「恰一次」之語意未界定「同一行程內第二次載入設定（熱重載）」是否應再記一筆。環編碼為**冪等**（重複呼叫只留一筆）。 |
+| D-E-06 | ⚠ **既有缺陷，非爭議** | **現況已違反 `AC-E13`**：`/auth/callback` 之登入失敗 HTML 頁把上游原始錯誤 `network_error: fetch failed` 直接印給使用者。本環兩條約束目前為此紅。 |
+| D-E-07 | lead | 交辦單寫「`AC-E#` 批次（20 處）」；規格實際定義 **`AC-E1`～`AC-E15` 共 15 條**（20 為該字串於檔內之出現次數）。本環按 15 條建。 |
