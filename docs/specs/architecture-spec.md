@@ -1,7 +1,7 @@
 ---
 type: architecture-spec
-version: 1.7
-status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；**v1.7 新增之 §10.17 決策 A15（AAD authority host 覆寫，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）已實作並併入 main（commit `3448679`），唯 `AC-E4`（遠端端到端登入成功）尚待真人於遠端環境驗證，如實登錄為未兌現項**；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
+version: 1.7a
+status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；**v1.7 新增之 §10.17 決策 A15（AAD authority host 覆寫，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）已實作並併入 main（commit `3448679`）；`AC-E4`（遠端端到端登入成功）已於 2026-08-18 由真人於遠端環境（DTTHFC01）實測兌現，證據見 §10 changelog v1.7a 與 §10.17（`OLD>` v1.7 原登錄：「唯 `AC-E4`（遠端端到端登入成功）尚待真人於遠端環境驗證，如實登錄為未兌現項」）**；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
 last_updated: 2026-08-18
 covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038, F039, F040, F041]
 ---
@@ -25,6 +25,14 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 > **v1.6a（2026-08-16，同日第二次人類閘門後之同步）**：三項變動。① `OQ-D18-25` 定案——**前台「使用表單」之 PDF 亦須燒錄浮水印（推翻 `OQ-E05-03`）**，範圍與附錄一致（前台 PDF 燒錄／非 PDF 原檔並標示／**後台一律 RAW**）⇒ **§5.2 之下載策略表就地改寫為「前台／後台」兩列**（該表自此以路徑而非附件類型為第一分類軸）、§10.1 之燒錄範圍表與流程圖同步納入使用表單。🔴 **分流機制本身未變**——使用表單之前後台端點早已是兩條不同路徑（`documents/:documentId/usage-forms/:formId/download` vs `admin/usage-forms/:formId/download`），與附錄結構同型，故它**只是第三個消費者**，不需新端點；改動面僅為前台端點之回應語意。前台燒錄範圍自此收斂為一致之四路徑（檢視器／附件／附錄／使用表單）。② 新增 **決策 A14**（§10.7 末段）：使用表單「編輯編號」端點定為 **`PATCH /admin/usage-forms/:formId/number`**，body 僅 `{ formNumber }`、沿用既有兩道授權閘門、不寫稽核、結構上不可能觸發覆蓋共用警示。③ **§10.15「單元測試盲區」依 11 份 feature 共 115 條 `AC-D#` 重新校準**——三列由「需有人記得寫」升級為「已有 AC 載體」，並**新增三個盲區**（逐字文案之 prototype 權威從未進測試、`PageHeader` topbar portal 在單元測試走 inline fallback 分支、`aria-label` 之 jsdom 近似）；經確認本專案為純 CSR SPA，**不存在 SSR/CSR 分歧這一類盲區**。另：v1.6 原提報之四項爭議與 `OQ-D18-A1` 均已由 lead 裁示採納並由 spec-writer 落地（`AC-D3a`／`AC-D6`／CSV 注入規則／F002 麵包屑語意改寫），§10.16 已改列為「裁示與落地」並記錄 **v1.6a 複查後無新增爭議**。
 >
 > **v1.7（2026-08-18）**：兩項更新，皆在第 10 章內。① **§10.10 修法三 (c) 列更正（2026-08-17 實跑推翻，inline 標記為 v1.6b）**——原「以 `pdftotext` 抽文字層、斷言含中文且不含 `?`」之檢查法已被實測推翻：PDF 之文字層（`ToUnicode`）與字形層（`glyf`／`loca`）為獨立物件，字形層損壞（`@pdf-lib/fontkit@1.1.1` 子集化截斷奇數 `loca` offset）時文字層依然正確，且「不含 `?`」判準本身會隨 `-enc UTF-8` 旗標反轉，兩種設定下都會把使用者退回的壞檔判為通過（假綠）。已改為**字形層完整性斷言**（`fontkit.create()` 解析 `/FontFile2`、斷言零拋錯），層級由「[integration]、容器內」降為**既有 jest 可跑之 unit 層**，載體＝`backend/src/public/pdf-glyph-integrity.spec.ts`（9 案）；原措辭以 `OLD>` 保留、§10.15 盲區表第 1 項同步更正。連帶記入可推廣教訓：「元件存在」≠「元件正確運作」。② **新增決策 A15（§10.17）：AAD authority host 覆寫**（[F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）——遠端測試環境第一跳防火牆對 SNI `login.microsoftonline.com` 注入偽造 RST，改走 Microsoft 官方別名並以 `auth.authorityMetadata` 靜態 metadata（非裸 `authority`）達成零 discovery、issuer 恆釘死為 canonical（`expectedAadIssuer()` 刻意忽略 `authorityHost`）。**已實作並併入 main（commit `3448679`）**；`AC-E4`（遠端端到端登入成功）待真人驗證，尚未兌現。本項獨立於本章原「2026-08-16 缺失／變更 Delta（15 項）」批次之外，依 lead 指示併入本章決策編號序列。**本版不新增模組、不改變架構風格。**
+
+> **v1.7a（2026-08-18，lead 於遠端環境真人驗證後之同日同步）**：v1.7 登錄之 `AC-E4`「待真人驗證，尚未兌現」**已於同日在遠端環境（DTTHFC01）由使用者真人驗證兌現**。`OLD>` 原措辭保留如下（不刪除，供對照）：`OLD> AC-E4（遠端端到端登入成功）待真人驗證，尚未兌現。`
+>
+> **證據四項（皆為 DTTHFC01 實測，非推論）**：① **別名可穿透**——`openssl s_client -servername login.microsoft.com` 握手完成並取得完整 DigiCert 鏈；`curl https://login.microsoft.com/common/v2.0/.well-known/openid-configuration` 回 **200**（curl 預設完整驗鏈，200 即證明無 MITM；先前僅由 reference 註解推論「別名未被封」，現已有該主機、該時點之直接證據）。② **容器內三項落地檢查全過**：`dist/auth/msal.config.js` 含 `authorityMetadata`（`grep -c` = 1）；`printenv AZURE_AD_AUTHORITY_HOST` = `login.microsoft.com`；三容器 healthy、Nest 正常啟動無 throw。③ **runtime 實證別名未被 MSAL 悄悄改寫回 canonical**（§10.17「陷阱」一節所述錯誤實作之正面對照）——`curl -D - https://testicsop.hfcfinance.com.tw/auth/login` 回 `HTTP/2 302`，`location` host 為 `login.microsoft.com`（若採裸 `authority`，此處會顯示 canonical）；`redirect_uri` 為 `https://testicsop.hfcfinance.com.tw/auth/callback`，未掉 port、未走錯 scheme。④ **端到端登入成功**——使用者親自操作（含互動式輸入公司密碼），完成 authorize → code → **token 交換**；原病灶正在 token 交換段，本次驗證直接涵蓋。詳見 §10.17 部署待辦段落之同步更正。
+>
+> **一併記入：同一次驗證掀出的第二個缺陷（已修，非 A15 範圍，屬部署設定殘留）**——遠端 `.env` 殘留 dev 值 `POST_LOGIN_REDIRECT_URL=http://localhost:5173/`，使登入成功後導向 dev SPA 埠；已清空該值（程式預設為相對路徑 `'/'`，同源反代下正確）並 `--force-recreate` 重啟，複驗正常。`POST_LOGOUT_REDIRECT_URL` 未存在於 `.env`，本走預設，無需處理。可推廣教訓：**該殘留值之所以能存活至今，是因為它只在登入成功的最後一步才生效，先前登入根本走不到那一步**——修好一個 bug 之後要把整條流程重跑一遍，而不是只驗剛才失敗的那一段。
+>
+> ⚠ **未加約束之已知缺口（如實登錄，不寫成已防護）**：上述 dev 值殘留目前**只有 `.env.deploy.example` 的註解在擋，無任何機器閘門**；是否加啟動期 fail-fast 尚未定案。
 
 ## Agent Loading Guide
 
@@ -2832,7 +2840,9 @@ graph LR
 
 遠端 `.env` 需設 `AZURE_AD_AUTHORITY_HOST=login.microsoft.com` 並 `--force-recreate`。⚠ 新增之 `iss` 比對要求 `AZURE_AD_TENANT_ID` 為 tenant GUID（implementation-log 載明現況 `4fc63fd2-…` 即是，符合）；若改填網域名或 `common`／`organizations`，`iss` 恆含 GUID 而比對將不符，導致拒登。
 
-🔴 **`AC-E4`（canonical 被封鎖下之端到端登入成功）待真人於遠端環境驗證，尚未兌現**——implementation-log 之 5 個 unit suite（115 條、全綠）與兩個黑箱探針涵蓋了 endpoint 路由、issuer 不變式、白名單 fail-fast、揭露封閉集，但**未涵蓋「真實遠端網路環境下登入確實成功」本身**（本機無法承接此驗證）。**如實登錄為未兌現項，不寫成已驗證。**
+✅ **`AC-E4`（canonical 被封鎖下之端到端登入成功）已於 2026-08-18 由真人於遠端環境（DTTHFC01）驗證兌現**——implementation-log 之 5 個 unit suite（115 條、全綠）與兩個黑箱探針涵蓋了 endpoint 路由、issuer 不變式、白名單 fail-fast、揭露封閉集，先前**未涵蓋「真實遠端網路環境下登入確實成功」本身**（本機無法承接此驗證）；此缺口現已由真人驗證補上，證據四項見 §10 changelog v1.7a：① `openssl s_client`／`curl` 對別名主機之直接驗鏈證明無 MITM；② 容器內三項落地檢查全過；③ `curl -D -` 對 `/auth/login` 之 runtime `302 Location` host 證實別名未被 MSAL 悄悄改寫回 canonical（上方「陷阱」一節所述錯誤實作之正面對照）；④ 使用者親自完成互動式登入，authorize → code → token 交換成功，原病灶正在 token 交換段。原措辭保留如下（`OLD>` 前綴，不刪除）：
+
+> `OLD>` 🔴 **`AC-E4`（canonical 被封鎖下之端到端登入成功）待真人於遠端環境驗證，尚未兌現**——implementation-log 之 5 個 unit suite（115 條、全綠）與兩個黑箱探針涵蓋了 endpoint 路由、issuer 不變式、白名單 fail-fast、揭露封閉集，但**未涵蓋「真實遠端網路環境下登入確實成功」本身**（本機無法承接此驗證）。**如實登錄為未兌現項，不寫成已驗證。**
 
 #### 對其餘架構之影響
 
