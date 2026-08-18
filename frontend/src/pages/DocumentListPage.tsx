@@ -60,6 +60,18 @@ const DISPLAY_META: Record<DisplayStatus, { cls: string; icon: string }> = {
   void: { cls: 'text-red-700 bg-red-50', icon: 'x-circle' },
 };
 
+/** 連結點之編號（無編號者退回目標 id）與 `{編號} {書名}` 標籤——tooltip／toast／展開列共用一份。 */
+const linkNum = (l: DocumentLinkView): string => l.targetNumber ?? l.targetDocumentId;
+const linkLabel = (l: DocumentLinkView): string =>
+  `${linkNum(l)}${l.targetName ? ` ${l.targetName}` : ''}`;
+
+/**
+ * `AC-E3` 之 `+N` 與「收合」共用之徽章樣式：色票與尺寸逐字沿用同一張表「當責室長」之
+ * 次要室長徽章（prototype 13 `chiefCell`），僅追加「這是可點的按鈕」所需之互動樣式與 focus ring。
+ */
+const LINK_BADGE_CLS =
+  'ml-1 inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] hover:bg-slate-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-600';
+
 type ComboKey =
   | 'company' | 'dept' | 'section' | 'chief' | 'num' | 'name' | 'link' | 'appendix' | 'form' | 'cycle';
 type FilterKey = ComboKey | 'status' | 'ojt' | 'dateFrom' | 'dateTo';
@@ -241,6 +253,28 @@ export function DocumentListPage(): JSX.Element {
   }, [canRead]);
 
   /**
+   * `AC-E5` 連結點欄之展開狀態：**逐列獨立**、可同時展開多列，鍵為 `documentId`
+   * （🔴 **不得**為列索引——改篩選／換頁重繪後會把展開狀態落到別列上）。
+   */
+  const [linkOpen, setLinkOpen] = useState<Set<string>>(new Set());
+  const [focusLinkId, setFocusLinkId] = useState<string | null>(null);
+  const toggleLink = useCallback((id: string) => {
+    setLinkOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setFocusLinkId(id);
+  }, []);
+  /** 展開／收合會換掉 toggle 之 DOM 節點；把焦點還給同一顆鈕，鍵盤操作才不會掉回 body。 */
+  useEffect(() => {
+    if (!focusLinkId) return;
+    document.querySelector<HTMLButtonElement>(`[data-link-toggle="${focusLinkId}"]`)?.focus();
+    setFocusLinkId(null);
+  }, [focusLinkId]);
+
+  /**
    * 受控下載：後端代理串流 → `fetch` 取 Blob → 程式化 `<a download>`（RAW，不燒錄、不寫稽核）。
    * 🔴 2026-08-17：原為 `window.open(grant.url)` 導覽至 Azure Blob SAS URL，Chrome Safe Browsing
    * 對 `*.blob.core.windows.net` 出示「偵測到危險網站」攔截頁（F020 `AC-D3a` 後台側修訂）。
@@ -260,7 +294,7 @@ export function DocumentListPage(): JSX.Element {
    */
   const onDownloadLink = useCallback(
     async (l: DocumentLinkView) => {
-      const label = `${l.targetNumber ?? l.targetDocumentId}${l.targetName ? ` ${l.targetName}` : ''}`;
+      const label = linkLabel(l);
       try {
         const atts = await getDocumentAttachments(l.targetDocumentId);
         const pdf = atts.find((a) => a.type === 'ICSOP_PDF');
@@ -712,23 +746,13 @@ export function DocumentListPage(): JSX.Element {
                       </span>
                     </td>
                     <td className="px-3 py-3">
-                      {d.links.length ? (
-                        <div className="flex flex-wrap items-center gap-1">
-                          {d.links.map((l) => (
-                            <button
-                              key={l.linkId}
-                              onClick={() => void onDownloadLink(l)}
-                              title={`下載連結點程序書：${l.targetNumber ?? l.targetDocumentId}${l.targetName ? ` ${l.targetName}` : ''}`}
-                              className="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px]"
-                            >
-                              <Icon name="download" className="w-3 h-3" />
-                              {l.targetNumber ?? l.targetDocumentId}
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
+                      <LinkCell
+                        doc={d}
+                        filterLink={filters.link}
+                        expanded={linkOpen.has(d.id)}
+                        onToggle={toggleLink}
+                        onDownload={onDownloadLink}
+                      />
                     </td>
                     <td className="px-3 py-3 text-slate-500 mono text-xs whitespace-nowrap">
                       {d.announcedDate ? formatDateTime(d.announcedDate).slice(0, 10) : '—'}
@@ -780,6 +804,113 @@ export function DocumentListPage(): JSX.Element {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * F017 `AC-E1`～`AC-E8`（2026-08-18 使用者體驗 delta）第 12 欄「連結點程序書」。
+ * 版面權威＝`prototypes/13-document-list.html` 檔頭 2026-08-18 區塊 ①～⑨。
+ *
+ * 缺失成因：原為 `flex-wrap` ＋每連結一顆 pill，欄寬僅容一顆（等寬字編號約 110px）
+ * ⇒ 一個連結換一行，5～6 個連結之列被拉伸成 5～6 行高、清單無法掃視。
+ *
+ * 新行為：收合態**恆一行高**（`whitespace-nowrap`，**不得**再用 `flex-wrap`）——
+ *   0 個＝「—」／1 個＝單顆 pill（**不出現** `+N`）／N ≥ 2＝第一顆 pill ＋ 可點的 `+{N−1}`。
+ * 🔴 `+N` 必須是真 `<button>`（`AC-E3`）：這些 pill **是動作**（點擊＝下載該連結點程序書之 PDF），
+ *    若只用 `…`＋hover，被摺疊者無法點擊／鍵盤到不了／觸控看不到 ＝ 功能消失。
+ * 🔴 展開為**就地展開**（`AC-E4`），**不得**改用 popover／dropdown 浮層：表格外層為
+ *    `overflow-x-auto` ＋ `rounded-xl overflow-hidden`，絕對定位浮層會被裁切。
+ */
+function LinkCell({ doc, filterLink, expanded, onToggle, onDownload }: {
+  doc: DocumentListItem;
+  filterLink: string;
+  expanded: boolean;
+  onToggle: (id: string) => void;
+  onDownload: (l: DocumentLinkView) => void;
+}): JSX.Element {
+  /**
+   * `AC-E6`：`連結點程序書` 篩選命中者排第一顆（＝收合態唯一可見的那顆），否則使用者
+   * 看不出這列為什麼被篩出來。⚠ 本段**只重排顯示順序**，篩選之比對判定完全不變
+   * （`filters.link` 之值＝目標文件 `id`，語意見 `AC-D2` 第 9 列）。
+   */
+  const links = useMemo(() => {
+    if (!filterLink) return doc.links;
+    const hit = doc.links.filter((l) => l.targetDocumentId === filterLink);
+    return hit.length
+      ? [...hit, ...doc.links.filter((l) => l.targetDocumentId !== filterLink)]
+      : doc.links;
+  }, [doc.links, filterLink]);
+
+  if (!links.length) return <span className="text-slate-300">—</span>;
+
+  const rest = links.length - 1;
+  const open = rest > 0 && expanded;
+
+  if (!open) {
+    return (
+      <div
+        className="flex items-center whitespace-nowrap"
+        data-link-cell=""
+        data-link-count={links.length}
+        data-link-expanded="false"
+      >
+        <button
+          onClick={() => onDownload(links[0])}
+          title={`下載連結點程序書：${linkLabel(links[0])}`}
+          className="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px]"
+        >
+          <Icon name="download" className="w-3 h-3" />
+          {linkNum(links[0])}
+        </button>
+        {rest > 0 && (
+          <button
+            type="button"
+            data-link-toggle={doc.id}
+            aria-expanded={false}
+            aria-label={`展開其餘 ${rest} 個連結點程序書`}
+            title={`其餘 ${rest} 個：${links.slice(1).map(linkNum).join('、')}`}
+            onClick={() => onToggle(doc.id)}
+            className={LINK_BADGE_CLS}
+          >
+            +{rest}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1" data-link-cell="" data-link-count={links.length} data-link-expanded="true">
+      {links.map((l, i) => (
+        <div key={l.linkId} className="flex items-center gap-1.5 whitespace-nowrap" data-link-item="">
+          <span className="mono text-[11px] text-slate-600">{linkNum(l)}</span>
+          <span className="text-slate-300 text-[11px]">·</span>
+          <span className="text-[11px] text-slate-600">{l.targetName ?? ''}</span>
+          <button
+            onClick={() => onDownload(l)}
+            title={`下載連結點程序書：${linkLabel(l)}`}
+            className="w-6 h-6 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"
+          >
+            <Icon name="download" className="w-3.5 h-3.5" />
+          </button>
+          {/* 第一列尾端之「收合」與收合態之 `+N` 為同一顆 toggle（`AC-E4`）。 */}
+          {i === 0 && (
+            <button
+              type="button"
+              data-link-toggle={doc.id}
+              aria-expanded={true}
+              aria-label="收合連結點程序書"
+              title="收合連結點程序書"
+              onClick={() => onToggle(doc.id)}
+              className={LINK_BADGE_CLS}
+            >
+              <Icon name="chevron-up" className="w-3 h-3" />
+              收合
+            </button>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
