@@ -19,6 +19,38 @@
      🔒 **清單 14 欄之欄位集合、由左至右順序與各欄顯示規則逐項不變**（AC-D9 回歸鎖定）；
         3 張統計卡、排序與分頁行為亦不變。
      🔒 後台恆 RAW：本頁「檔案」欄之下載**不得**出現「此格式不支援浮水印」等前台燒錄標示（F020 AC-D4）。 -->
+<!-- 🔴 2026-08-18 缺失 delta（使用者回報：第 12 欄「連結點程序書」把整列上下拉伸，清單無法掃視）——本檔已套用。
+     ⚠ 本 delta **只動第 12 欄「連結點程序書」之顯示規則**；14 欄之欄位集合、由左至右順序、其餘 13 欄之顯示規則，
+       以及 3 張統計卡、13 項篩選（含比對語意）、排序與分頁行為一律不變
+       ⇒ 2026-08-16 AC-D9 之回歸鎖定除「第 12 欄顯示規則」一項外續為有效。
+     背景：原實作為 `flex-wrap` ＋每個連結一顆 pill；欄寬約僅容一顆 pill（等寬字編號如 ICSOP-PPC-101-2-02 約 110px），
+           故一個連結就換一行，5～6 個連結之列被拉伸成 5～6 行高。實測資料庫 591 筆之分佈：
+           0 個 586 筆／1 個 2 筆／2 個 1 筆／5 個 1 筆／6 個 1 筆（長尾於正式匯入後只會更長）。
+     新行為（逐字；下游 spec 之 AC 以本段為權威）：
+       ① 本欄**恆為一行高**：收合態之容器為單行 flex ＋ `whitespace-nowrap`，不換行、不再使用 `flex-wrap`。
+       ② **0 個連結** → 顯示 `—`（逐字 DOM＝`<span class="text-slate-300">—</span>`），與原行為一致。
+       ③ **1 個連結** → 就是一顆 pill，**不出現 `+N` 徽章**。
+       ④ **N ≥ 2 個連結** → **只顯示第一顆 pill**，其餘 N−1 個收進一顆 `+{N−1}` 徽章。
+       ⑤ pill 上之可見文字恆為**編號**（`{編號} {書名}` 以第一個半形空格切出之第一段）；書名不上清單，
+          改由 `title` 提供，逐字＝`下載連結點程序書：{編號} {書名}`。
+          理由：中文書名長度不定，直接顯示會再度拉伸版面；且編號才是使用者對照／篩選用的鍵值。
+       ⑥ `+N` 必須是**真正的 `<button>`**（可 focus、可鍵盤操作、可觸控），不是只有 hover tooltip 的 `<span>`。
+          理由：這些 pill **是動作**（點擊＝下載該連結點程序書之 PDF）；若只用 `…`＋hover，被摺疊的連結等於
+          無法點擊、鍵盤到不了、觸控裝置看不到 ⇒ 功能消失。
+          `+N` 之 `title` 逐字＝`其餘 {N−1} 個：{編號}、{編號}…`（僅編號、以「、」分隔，順序同展開後第 2 列起）。
+       ⑦ 點 `+N` → **該列就地展開**（in-place expand）。**不得**改用 popover／dropdown 浮層：表格外層為
+          `overflow-x-auto` ＋ `rounded-xl overflow-hidden`，絕對定位浮層會被裁切。
+          展開後本格改為逐列列出**全部**連結（含第一顆），每列逐字＝`編號 · 書名 · 下載鈕`；
+          第一列尾端之「收合」鈕與 `+N` 為**同一顆 toggle**，再點一次即收合。
+       ⑧ 展開狀態**逐列獨立**、可同時存在於多列；未展開之列一律維持一行高。
+          狀態容器＝module scope 之 `LINK_OPEN`（Set），**key 為文件編號 `d.num`（非列索引）**，
+          故改篩選／清除篩選／換頁重繪後不會把展開狀態殘留到錯誤的列。
+       ⑨ `連結點程序書` 篩選（`FILTER.link`）有值時，**命中的那一筆排到第一顆**（＝收合態唯一可見的那顆），
+          否則使用者看不出這列為什麼被篩出來。比對語意沿用 renderTable() 第 9 條之等值比對
+          （整串 `{編號} {書名}`）**完全不變**，本 delta 僅改顯示順序。
+     視覺語彙：`+N` 與「收合」沿用同表 chiefCell(d) 之「主要 ＋ `+N` 徽章」色票與尺寸
+       （`ml-1 inline-flex items-center px-1 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]`），
+       另加可點擊之互動樣式（`hover:bg-slate-200 cursor-pointer`）與 focus ring；未引入新色票或新元件語彙。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -133,7 +165,11 @@
        版面收納方式（多列 grid／行動底部 sheet／清除全部篩選）＝ OQ-D18-13 明文授權 ui-ux-designer 定稿：
        · 桌面（≥ md）：卡片內多列 grid 自動換行（md 2 欄／lg 3 欄／xl 4 欄），13 項佔 4 列。
        · 行動（< md）：改以「篩選」觸發之**底部 sheet**（比照前台 03 之既有慣例），同 13 項、同順序。
-       🔒 清單 14 欄之欄位集合、順序與顯示規則一律不變（AC-D9 回歸鎖定，本 delta 僅動篩選）。 -->
+       🔒 清單 14 欄之欄位集合、順序與顯示規則一律不變（AC-D9 回歸鎖定，本 delta 僅動篩選）。
+       🔴 2026-08-18 delta 之補充：AC-D9 之「顯示規則不變」自該日起**排除第 12 欄「連結點程序書」**
+          （改為恆一行高＋第一顆可見＋可點的 `+N`＋就地展開，見檔頭 2026-08-18 區塊）；
+          其餘 13 欄仍逐項鎖定。此外，`連結點程序書` 篩選（FILTER.link）自該日起除了過濾之外
+          **另決定第 12 欄之顯示順序**（命中者排第一顆）；其**比對語意本身不變**。 -->
   <div class="flex items-center gap-2 mb-3 md:hidden">
     <button onclick="openSheet()" class="relative px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm flex items-center gap-1.5">
       <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>篩選<span id="filterDot" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary-600"></span>
@@ -314,12 +350,21 @@
      company 制定公司 / dept 制定部門 / section 制定室別（可留空＝掛於部層） / chief 當責室長-主要 / sec 次要[] /
      status 儲存狀態(有效/失效/作廢) / pdf 檔案 / node 所屬節點 / num 程序書編號 / name 程序書書名 /
      edition 版次 / summary 內容摘要 / links 連結點程序書[] / date 公告日期 /
-     lcId 循環別（＝lifecycleId；顯示字串一律由 lifecycleDisplayName 產生，F040 AC-S1） */
+     lcId 循環別（＝lifecycleId；顯示字串一律由 lifecycleDisplayName 產生，F040 AC-S1）
+     🔴 links（2026-08-18 delta）：每筆元素之格式恆為 `{編號} {書名}`（兩者間恰一個半形空格；書名內可含空白，
+        故切編號一律取**第一個**半形空格之前，切書名取其後之其餘字串）。第 12 欄之呈現規則見 linkCell()：
+        0 個＝`—`／1 個＝單顆 pill（無 `+N`）／N ≥ 2＝第一顆 pill ＋ 可點的 `+{N−1}` 徽章（恆一行高）。
+        示範資料刻意同頁覆蓋四種基數，讓三種狀態一次看得到：
+          · 0 個 ＝ 12 筆（多數列，長尾以外之常態）
+          · 1 個 ＝ `ICSOP-SRC-101-2-00 消金審核作業`（單顆 pill、**不得**出現 `+N`）
+          · 2 個 ＝ `ICSOP-SRC-101-1-06 消費分期特約通路作業`（`+1` 邊界＝N ≥ 2 之最小值）
+          · 6 個 ＝ `ICSOP-SRC-101-1-01 車輛分期進件作業`（`+5`；長尾最壞情況，且其中含全站最長之編號
+                    `ICSOP-CIPS-104-1-01`，可用「以該連結篩選 → 命中者排第一顆」驗證欄寬最壞情況） */
   const DOCS=[
     {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'消金審核作業_v2.0.pdf',node:'進件作業',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業'],date:'2025-12-01',lcId:'lc1',appx:['ax3','ax4','ax8'],forms:['uf3','uf4','uf8'],ojt:true},
     {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'企業金融授信作業_v1.0.pdf',node:'企金案件受理作業',num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。',links:[],date:'2026-06-01',lcId:'lc10',appx:[],forms:[],ojt:false},
-    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期特約通路作業_v1.2.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',edition:"25'10",summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。',links:[],date:'2025-10-01',lcId:'lc1',appx:['ax1'],forms:['uf1'],ojt:false},
-    {company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],status:'有效',pdf:'車輛分期進件作業_v1.3.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',links:['ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-102-1-01 車輛分期對保作業'],date:'2026-01-01',lcId:'lc1',appx:['ax1','ax2','ax8'],forms:['uf1','uf2','uf8'],ojt:true},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期特約通路作業_v1.2.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',edition:"25'10",summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業','ICSOP-SRC-101-2-00 消金審核作業'],date:'2025-10-01',lcId:'lc1',appx:['ax1'],forms:['uf1'],ojt:false},
+    {company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],status:'有效',pdf:'車輛分期進件作業_v1.3.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',links:['ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-102-1-01 車輛分期對保作業','ICSOP-SRC-101-1-06 消費分期特約通路作業','ICSOP-PPC-101-2-02 消費分期產品政策及規範作業','ICSOP-PPC-101-1-03 消費分期-月目標設定作業','ICSOP-CIPS-104-1-01 使用者權限管理與覆核'],date:'2026-01-01',lcId:'lc1',appx:['ax1','ax2','ax8'],forms:['uf1','uf2','uf8'],ojt:true},
     {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期產品政策及規範作業_v1.0.pdf',node:null,num:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',edition:"26'03",summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。',links:[],date:'2026-09-01',lcId:'lc3',appx:[],forms:[],ojt:false},
     {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期月目標設定作業_v1.1.pdf',node:'目標制定作業',num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',edition:"26'04",summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。',links:[],date:'2026-08-15',lcId:'lc3',appx:[],forms:[],ojt:false},
     {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'費用請款作業_v2.1.pdf',node:'費用請款作業',num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。',links:[],date:'2026-05-01',lcId:'lc2',appx:[],forms:[],ojt:false},
@@ -477,9 +522,65 @@
   function fileBtn(name,wm){
     return `<button onclick="dl('${esc(name)}',${wm?'true':'false'})" title="下載 ${esc(name)}" class="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"><i data-lucide="file-down" class="w-4 h-4"></i></button>`;
   }
-  function linkCell(links){
-    if(!links.length) return '<span class="text-slate-300">—</span>';
-    return `<div class="flex flex-wrap items-center gap-1">`+links.map(l=>`<button onclick="dl('${esc(l)}',false)" title="下載連結點程序書：${esc(l)}" class="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px]"><i data-lucide="download" class="w-3 h-3"></i>${esc(l.split(' ')[0])}</button>`).join('')+`</div>`;
+  /* ===== 🔴 第 12 欄「連結點程序書」（2026-08-18 delta：恆一行高＋可點的 `+N`＋就地展開）=====
+     完整逐字規格見檔頭 2026-08-18 區塊 ①～⑨。實作要點：
+       · 收合態恆一行高：容器單行 flex ＋ `whitespace-nowrap`（**不得**再加 `flex-wrap`）。
+       · 展開態逐列 `編號 · 書名 · 下載鈕`；第一列尾端之「收合」鈕與 `+N` 是同一顆 toggle（同一個 onclick）。
+       · 展開狀態存於 LINK_OPEN，key＝文件編號（非列索引）⇒ 改篩選／重繪後不會殘留到錯誤的列。 */
+  const LINK_OPEN=new Set();   // key＝d.num（文件編號）；可同時展開多列，各列互不影響
+  /* `+N` 與「收合」共用之徽章 class：色票與尺寸逐字沿用同表 chiefCell(d) 之次要室長徽章
+     （ml-1 inline-flex items-center px-1 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]），
+     僅追加「這是可點的按鈕」所需之互動樣式與 focus ring；gap-0.5 供「收合」之 icon＋文字用。 */
+  const LINK_BADGE_CLS='ml-1 inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] hover:bg-slate-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-600';
+  // `{編號} {書名}`：編號＝第一個半形空格之前；書名＝其後之其餘字串（書名內可含空白）
+  const linkNum =l=>String(l).split(' ')[0];
+  const linkName=l=>String(l).slice(linkNum(l).length).trim();
+  /* ⑨ 篩選命中優先：`連結點程序書` 篩選有值時，把命中的那一筆排到第一顆（＝收合態唯一可見的那顆），
+        否則使用者看不出這列為什麼被篩出來。
+     ⚠ 比對語意刻意與 renderTable() 第 9 條之 `d.links.includes(FILTER.link)` 同為「整串等值」——
+       本函式**只重排顯示順序，不改變任何過濾判定**。 */
+  function linkOrder(links){
+    if(!FILTER.link) return links;
+    const hit=links.filter(l=>l===FILTER.link);
+    return hit.length ? hit.concat(links.filter(l=>l!==FILTER.link)) : links;
+  }
+  // 收合態之單顆 pill：可見文字＝編號；書名靠 title（不上清單，避免中文書名長度不定再度拉伸版面）
+  function linkPill(l){
+    return `<button onclick="dl('${esc(l)}',false)" title="下載連結點程序書：${esc(l)}" class="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px]"><i data-lucide="download" class="w-3 h-3"></i>${esc(linkNum(l))}</button>`;
+  }
+  // 展開態之單列：`編號 · 書名 · 下載鈕`（tail＝第一列尾端之「收合」鈕，其餘列為空字串）
+  function linkRow(l,tail){
+    return `<div class="flex items-center gap-1.5 whitespace-nowrap" data-link-item>`+
+      `<span class="mono text-[11px] text-slate-600">${esc(linkNum(l))}</span>`+
+      `<span class="text-slate-300 text-[11px]">·</span>`+
+      `<span class="text-[11px] text-slate-600">${esc(linkName(l))}</span>`+
+      `<button onclick="dl('${esc(l)}',false)" aria-label="下載連結點程序書：${esc(l)}" title="下載連結點程序書：${esc(l)}" class="w-6 h-6 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i></button>`+
+      (tail||'')+`</div>`;
+  }
+  function linkCell(d){
+    const links=linkOrder(d.links||[]);
+    if(!links.length) return '<span class="text-slate-300">—</span>';   // ② 0 個
+    const n=links.length, rest=n-1, open=n>1&&LINK_OPEN.has(d.num);
+    if(!open){
+      // ③ 1 個＝單顆 pill 且**不出現** `+N`；④ N ≥ 2＝只顯示第一顆 pill ＋ `+{N−1}` 徽章
+      const more = n>1
+        ? `<button type="button" data-link-toggle="${esc(d.num)}" aria-expanded="false" aria-label="展開其餘 ${rest} 個連結點程序書" title="其餘 ${rest} 個：${esc(links.slice(1).map(linkNum).join('、'))}" onclick="toggleLinks('${esc(d.num)}')" class="${LINK_BADGE_CLS}">+${rest}</button>`
+        : '';
+      return `<div class="flex items-center whitespace-nowrap" data-link-cell data-link-count="${n}" data-link-expanded="false">${linkPill(links[0])}${more}</div>`;
+    }
+    // ⑦ 就地展開（非浮層）：逐列列出**全部**連結；收合鈕與 `+N` 為同一顆 toggle
+    const collapse=`<button type="button" data-link-toggle="${esc(d.num)}" aria-expanded="true" aria-label="收合連結點程序書" title="收合連結點程序書" onclick="toggleLinks('${esc(d.num)}')" class="${LINK_BADGE_CLS}"><i data-lucide="chevron-up" class="w-3 h-3"></i>收合</button>`;
+    return `<div class="space-y-1" data-link-cell data-link-count="${n}" data-link-expanded="true">`+
+      links.map((l,i)=>linkRow(l,i===0?collapse:'')).join('')+`</div>`;
+  }
+  /* ⑧ 逐列獨立之展開／收合。走既有那條重繪路徑（renderTable() 結尾已呼叫 lucide.createIcons()），
+        不新增第二條 icon 重建路徑。重繪會摧毀原按鈕，故以 data-link-toggle 把焦點還給同一顆 toggle，
+        鍵盤操作（Enter／Space）才不會在展開後掉回 <body>。 */
+  function toggleLinks(num){
+    if(LINK_OPEN.has(num)) LINK_OPEN.delete(num); else LINK_OPEN.add(num);
+    renderTable();
+    const btn=document.querySelector(`[data-link-toggle="${num}"]`);
+    if(btn) btn.focus();
   }
   function chiefCell(d){
     const sec = d.sec.length? `<span title="次要：${esc(d.sec.map(shortName).join('、'))}" class="ml-1 inline-flex items-center px-1 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]">+${d.sec.length}</span>` : '';
@@ -549,7 +650,7 @@
         </td>
         <td class="px-3 py-3"><span class="mono text-xs text-slate-700">${esc(d.edition)}</span></td>
         <td class="px-3 py-3"><span class="block max-w-[280px] truncate text-slate-600" title="${esc(d.summary)}">${esc(d.summary)}</span></td>
-        <td class="px-3 py-3">${linkCell(d.links)}</td>
+        <td class="px-3 py-3">${linkCell(d)}</td>
         <td class="px-3 py-3 text-slate-500 mono text-xs">${esc(d.date)}</td>
         <td class="px-3 py-3 text-slate-600" data-cycle-cell>${esc(lcName(d.lcId))}</td>
       </tr>`;
