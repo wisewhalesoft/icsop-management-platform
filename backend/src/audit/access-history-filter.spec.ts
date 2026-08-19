@@ -213,3 +213,39 @@ describe('TS-F024-014 非文件類型 documentId=null → 列表容許空值', (
     expect(page.total).toBe(2);
   });
 });
+
+/**
+ * 🔴 F024 匯出鈕失效之修復 delta — `AC-F7` ②：`occurredAt` 於稽核資料中大量重複（同一次操作、
+ * 同一秒內多筆），只依「新→舊」排序時同秒之列序未定義。SQL 路徑（`typeorm-audit.store.ts:144-145`）
+ * 已為 `ORDER BY occurredAt DESC, id ASC`（決定性次鍵）；本檔（記憶體版 fake，供 unit 測試與
+ * `FakeAuditStore` 使用）**目前只依 `occurredAt` 排序、無次鍵**——若匯出與查詢之「列序一致」機器
+ * 驗證以本 fake 驅動，須先為其補上同一次鍵，否則兩條路徑對同秒資料可能給出不同順序。
+ *
+ * ⚠ 對實作全盲：現況 `resolveAuditQuery` 之 `filtered.sort(...)` 只比較 `occurredAt`，
+ * 下列測試於本環撰寫時即為紅燈，屬預期紅燈。
+ */
+describe('🔴 AC-F7 ② occurredAt 同秒之決定性次鍵（id ASC）——記憶體版 fake 之既有缺口，本 delta 要求補上', () => {
+  it('同一 occurredAt 之列，依 id 升冪排序（非輸入順序、非穩定排序保留之原順序）', () => {
+    const T = new Date('2026-07-16T06:32:08.000Z');
+    // 刻意以 id 遞減順序輸入：若無次鍵，JS 穩定排序會保留輸入順序（zzz-b, aaa-a）——
+    // 與正確之 id ASC（aaa-a, zzz-b）相反，具鑑別力（非恆真斷言）。
+    const rows = [
+      row({ id: 'zzz-b', documentNumber: 'TIEBRK', occurredAt: T }),
+      row({ id: 'aaa-a', documentNumber: 'TIEBRK', occurredAt: T }),
+    ];
+    const page = resolveAuditQuery(rows, { target: 'TIEBRK' }, SCOPE);
+    expect(page.items.map((r) => r.id)).toEqual(['aaa-a', 'zzz-b']);
+  });
+
+  it('不同 occurredAt 之主鍵排序不受次鍵影響（新到舊仍優先於 id）', () => {
+    const older = new Date('2026-07-16T06:00:00.000Z');
+    const newer = new Date('2026-07-16T07:00:00.000Z');
+    const rows = [
+      row({ id: 'zzz-old-but-later-id', documentNumber: 'TIEBRK2', occurredAt: older }),
+      row({ id: 'aaa-new-but-earlier-id', documentNumber: 'TIEBRK2', occurredAt: newer }),
+    ];
+    const page = resolveAuditQuery(rows, { target: 'TIEBRK2' }, SCOPE);
+    // 主鍵（occurredAt 新到舊）優先：id 較小但時間較新者仍排第一。
+    expect(page.items.map((r) => r.id)).toEqual(['aaa-new-but-earlier-id', 'zzz-old-but-later-id']);
+  });
+});

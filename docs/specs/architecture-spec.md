@@ -1,7 +1,7 @@
 ---
 type: architecture-spec
-version: 1.7a
-status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；**v1.7 新增之 §10.17 決策 A15（AAD authority host 覆寫，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）已實作並併入 main（commit `3448679`）；`AC-E4`（遠端端到端登入成功）已於 2026-08-18 由真人於遠端環境（DTTHFC01）實測兌現，證據見 §10 changelog v1.7a 與 §10.17（`OLD>` v1.7 原登錄：「唯 `AC-E4`（遠端端到端登入成功）尚待真人於遠端環境驗證，如實登錄為未兌現項」）**；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
+version: 1.8
+status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；**v1.7 新增之 §10.17 決策 A15（AAD authority host 覆寫，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）已實作並併入 main（commit `3448679`）；`AC-E4`（遠端端到端登入成功）已於 2026-08-18 由真人於遠端環境（DTTHFC01）實測兌現，證據見 §10 changelog v1.7a 與 §10.17（`OLD>` v1.7 原登錄：「唯 `AC-E4`（遠端端到端登入成功）尚待真人於遠端環境驗證，如實登錄為未兌現項」）**；**v1.8 新增之 §10.18 決策 A16（F024 匯出稽核與訊息共用之四項裁決，對應 [F024](features/F024-access-history-query.md#export-fix-delta) `AC-F13`／`AC-F5`／`AC-F9`／`AC-F7`～`AC-F8` 之提報事項 A1～A4）為 draft，待 tdd-implementation 落地**；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
 last_updated: 2026-08-18
 covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038, F039, F040, F041]
 ---
@@ -34,6 +34,8 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 >
 > ⚠ **未加約束之已知缺口（如實登錄，不寫成已防護）**：上述 dev 值殘留目前**只有 `.env.deploy.example` 的註解在擋，無任何機器閘門**；是否加啟動期 fail-fast 尚未定案。
 
+> **v1.8（2026-08-18）新增 §10.18 決策 A16：F024 匯出稽核與訊息共用之四項裁決**。來源：[F024](features/F024-access-history-query.md#export-fix-delta) `AC-F1`～`AC-F19`（2026-08-18 人類閘門 🟢 APPROVED，即 `OQ-D18-26` 之延續、`OQ-D18-26`／`OQ-E07-10` 部分推翻後之實作定案）附帶之四項「📤 需 system-architect 裁量」提報事項。裁決：① **`ACCESS_HISTORY_EXPORT` 之 `AuditTargetType`／`targetId`**——新增 `AuditTargetType='ACCESS_HISTORY'`，`targetId` 採固定哨兵常數（沿用既有 `ORG_CHANGE_ALERT` 之「無對映欄」模式，`buildAuditRow()` 不需改動任何既有程式碼），獨立複核確認 `targetType`（`varchar(30)`）／`actionType`（`varchar(40)`）皆無 `CHECK` 約束、不需 migration；② **三張中文標籤對照表落點**——`backend/src/audit/access-history-labels.ts`（後端專屬純函式模組），沿用本檔案 §10.14（`watermarkLines()`）與 `change-history/change-labels.ts`（`OQ-D18-34`）之既有「兩份逐字相同」處置，不創新模式；③ **超限訊息 `{N}`**——採甲案，修 `storage/csv-export.ts` 之 `assertExportRowLimit()` 令其內插實際筆數（且順序須在上限常數之前），逐一排查現有測試後確認**無任何測試鎖定舊行為**，零回歸，並使 F037／F038／F039 既有 AC（本就要求 `{N}` 為實際筆數）由「文字與程式碼不符」變為一致；④ **計數與取列路徑**——單一次 `queryHistory(..., {page:1, pageSize:EXPORT_ROW_LIMIT+1})` 呼叫（`AuditStore.queryPage()` 之 `getManyAndCount()` 已原生支援下推 `COUNT`+`OFFSET/FETCH`，不需比照 F037／F038 另建 `countByFilters`／`listByFilters` 兩段式）。**四項裁決逐一覆核後皆不要求變更任何 `AC-F#` 斷言文字**。另就 `EXPORT_ROW_LIMIT=10000` 對 F024 全公司量級之適用性提出風險評估與緩解建議（不改動數字本身，遵照人類閘門「沿用共用機制」之裁示）。**本版不新增模組、不改變架構風格、無 schema 變更**（`AuditTargetType`／`AuditActionType` 皆為 TS 判別聯集之字面值擴充，非 DB schema）。
+
 ## Agent Loading Guide
 
 | Agent Role | Relevant Sections |
@@ -47,6 +49,7 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 | 變更歷程（E07）工程 | §3.5（ChangeHistoryModule）、§4.8（資料落地／OQ-E07-05 決策）、§5.9（交易一致性／渲染管線）、§6（稽核與資料保留擴充列）、§8（E07 風險列）、§9（OQ-E07-02/05/06、OQ-NFR003） |
 | 附錄管理（E10）工程 | §3.2（AppendicesModule 元件卡片）、§3.6（模組邊界／排序權威寫入路徑／稽核 additive 擴充／RBAC／前端架構等 5 項決策）、§4.9（資料落地／OQ-E10-02 決策／Migration）、§5.10（排序寫入與下載稽核之交易/併發邊界）、§6（NFR 對應擴充列）、§8（Auto-Challenge 新增列／拒絕替代方案）、§9（OQ-E10-02） |
 | **2026-08-16 缺失／變更 Delta（15 項）工程** | **§10 全章**。依角色取用：**test-generator** → §10.15（單元測試盲區，決定哪些項目建不出有效 unit 約束）＋ §10.1 A1／§10.5 A5／§10.9 A9（回歸鎖定之邊界）；**tdd-implementation** → §10.1–§10.7、§10.12–§10.14（端點形狀、判定依據、共用函式落點、migration 注意事項）；**ui-ux-designer** → §10.3（`watermarkSupported` 旗標之來源）、§10.8（breadcrumb 型別）、§10.14（三層式浮水印之渲染落點）；**DevOps** → §10.7（migration 實跑）、§10.10（Dockerfile ＋ fail-fast ＋ 容器內 smoke）、§10.2（併發閘與記憶體上界）；**lead** → §10.11（分線與合併順序）、§10.16（風險／被否決方案／須退回 spec-writer 之爭議） |
+| **F024 匯出稽核與訊息共用（A16）工程** | **§10.18 全節**（`AuditTargetType='ACCESS_HISTORY'` 之新增與哨兵 `targetId`／`access-history-labels.ts` 落點／`assertExportRowLimit()` 修法／單一 `queryHistory()` 呼叫路徑）；連動 §10.4（既有匯出共用產生器）、§10.14（`watermarkLines()` 之「兩份逐字相同」既有模式） |
 | 一般使用者子分類（F041）工程 🟢 APPROVED | §3.7（`ViewerScope` 組出點／`rbac/viewer-scope.ts` 三純函式落點／四過濾接縫精確位置／前端接縫／10 題 OQ 裁決紀錄）、§4.10（`ACCOUNT.userSubtype` 資料落地／Migration／F004 upsert 鍵集合保證）、§5.11（清單／詳情／檢視器‑下載‑列印三條路徑之循序圖）、§6（NFR 對應擴充列）、§8（風險與拒絕替代方案）、§9（10 題 OQ 裁決紀錄）。**10 題 OQ 已於 2026-08-11 人類閘門全數依草案選項定案，可直接動工**；下游實作最容易漏的三處已於 §3.7 決策一/三(c) 明確標注（`@Req()` 新增、三處破壞性簽章遷移、`docMeta` 安全關鍵化） |
 
 ## Table of Contents
@@ -1900,6 +1903,7 @@ graph TB
 | OQ-E07-05 | DAG 變更歷程之儲存與事件粒度（coordinator 特別點名，BLOCKING） | `ChangeHistoryModule`／`LifecycleModule` 寫入路徑設計（§3.5）、`LIFECYCLE_CHANGE_LOG`/`LIFECYCLE_SNAPSHOT` schema（§4.8） | **架構師已決策（2026-07-17）**：完整快照（非結構化 diff 重放）＋逐原子操作各寫一筆（非儲存層編輯階段聚合）；「編輯階段」呈現需求以查詢層動態分組（時間視窗參數，草案 60 秒）滿足，不引入新持久化狀態機。完整理由（規模／正確性優先／與 F008-F009 持久化模式契合度）見 §4.8 | ✅ 已収斂（原 Blocking） |
 | OQ-E07-06 | 變更歷程呈現/匯出細節（附件 diff 範圍、匯出、F038 下載 PDF 排版） | `ChangeHistoryModule` 查詢/下載 API 設計（§3.5／§5.9） | **架構建議（非最終定案）**：F038 下載採**單一 PDF、兩頁**（非兩份獨立檔案），理由見 §5.9；F037 附件 diff 沿用草案「僅記已替換事件」（不做 metadata 層級 diff），因獨立建表使日後擴充無需重新設計 schema；匯出（CSV/Excel）本輪不列，架構上為既有查詢表之附加輸出格式，日後追加風險低 | [CLARIFY]，PDF 排版已有架構建議，附件 diff 範圍/匯出仍待產品確認 |
 | OQ-E07-08 | 「所屬節點」文件掛載/改派異動應呈現於 F037 或 F038（或兩者） | `ChangeHistoryModule` 查詢 API 是否需跨表 join（F037 tab 讀取 `LIFECYCLE_CHANGE_LOG WHERE entityType=MOUNT`） | 純產品/UX 決策，架構無論何種選擇皆相容：掛載/改派事件已定位於 `LIFECYCLE_CHANGE_LOG`（`entityType=MOUNT`，§4.8），F037 tab 如需交叉呈現僅為額外查詢條件組合，不需 schema 變更或新資料流 | 待使用者/UI-UX 確認，不阻塞架構落地 |
+| （新增） | `EXPORT_ROW_LIMIT=10000` 對 F024（全公司、橫跨 4 個 feature 共 11 種 `actionType`、≥3 年保留）之匯出量級是否足夠 | 若典型「展開時間區間」查詢常態超過萬筆，`AC-F8`「超過即拒絕」會使匯出實質不可用；是否需要 F024 專屬上限（涉及打破§10.4「四處共用同一常數」之既有決策） | **本輪維持 10000（人類裁決沿用共用機制，不擅自改動）**，§10.18 A16-4 末段已就結構性風險因子與緩解建議（近 30 天預設窗之既有緩解、下一輪以正式環境真實資料校準）留下分析；依「dev 個資已遮罩、不做全庫資料統計」之既有規則，本輪**未**查證實際資料量級 | 待下一輪以正式環境真實資料量校準，非本輪 Blocking |
 | **OQ-E08-04** | 身分模型：子分類旗標／新角色／上游推導 | §3.7 全節之 `ViewerScope.userSubtype`／`CurrentAccount`/`SessionUser` 擴充／§4.10 migration | **✅ 已裁決（2026-08-11 人類閘門）：B 子分類旗標**（維持草案，未改判）；架構影響歷史紀錄見 §3.7「5 題原 BLOCKING OQ 之裁決紀錄」表首列 | ✅ 已定案，可動工 |
 | **OQ-E08-05** | 「自己部門」比對語意：子樹展開／精確相等 | §3.7 決策二 `isUsingDeptMatched` 之實作、INV-4、AC-10 等價性、決策三(a)「置頂恆空」之數學推論 | **✅ 已裁決：A 子樹展開，重用 `isWithinSubtree`**（維持草案，未改判）；本節原評估架構衝擊最大之 OQ，現已確認 INV-4/AC-10 等價性與決策三(a) 數學推論皆成立，§3.7 對照表第二列 | ✅ 已定案，可動工 |
 | **OQ-E08-06** | deny-by-default 涵蓋面：僅清單／含詳情/檢視器/下載列印 | §3.7 決策三(b)/(c)（`PublicDocumentDetailService.detail()`／`WatermarkService` 四方法簽章變更） | **✅ 已裁決：C 折衷**（清單+搜尋+篩選+詳情直連+檢視器+下載列印本輪收斂，維持草案）；決策三(b)/(c) 全部生效 | ✅ 已定案，可動工 |
@@ -1919,7 +1923,7 @@ graph TB
 > **來源**：`docs/stories/2026-08-16-defect-delta-18.md`（product-analyst）→ 十份 feature 之 `AC-D#` 批次（spec-writer，已通過人類閘門）。
 > **範圍**：原 18 項需求經人類裁決 `OQ-D18-01`（「只做前台，後台維持 RAW」）縮為 **15 項**；#12／#13／#15（後台下載燒錄）**明確不做**，[F026](features/F026-role-field-matrix.md) 之 `OQ-FM-01`（2026-07-24）**維持有效**。
 > **本章之權威邊界**：本章**只決定技術設計**，不改寫任何 AC。凡本章與 feature 之 `AC-D#` 有出入者，以 AC 為準，並列於 §10.16 之「須退回 spec-writer 之爭議」。
-> **編號對照**：本章之 `A1`–`A15` 為架構決策編號，與 feature 之 `AC-D#`／`AC-E#` 編號空間**互不相干**、不得混用。`A15`（§10.17）不屬本章標題所稱之 2026-08-16「15 項」批次，是 2026-08-18 之獨立追加，見該節前言。
+> **編號對照**：本章之 `A1`–`A16` 為架構決策編號，與 feature 之 `AC-D#`／`AC-E#`／`AC-F#` 編號空間**互不相干**、不得混用。`A15`（§10.17）、`A16`（§10.18）不屬本章標題所稱之 2026-08-16「15 項」批次，皆為 2026-08-18 之獨立追加，見各節前言。**`A16`（§10.18）另有一組自身的內部子項編號 `A16-1`～`A16-4`，對應 [F024](features/F024-access-history-query.md#export-fix-delta) 提報表之項目序號 A1～A4——該提報表序號與本章決策編號 `A1`–`A16` 為兩套獨立編號空間，注意不要混淆（例如「F024 提報表 A1」指的是 `targetType`／`targetId` 議題，本章之「決策 A1」指的是 §10.1 前台/後台燒錄分流，兩者無關）。**
 
 ### 10.0 本章範圍與閱讀指引
 
@@ -1940,6 +1944,7 @@ graph TB
 | A13 | §10.13 | 前後台選項端點是否共用 | F017「待 architect ③」 | tdd |
 | **A14** | §10.7（末段） | **使用表單「編輯編號」端點之形狀**（v1.6a） | F018 `AC-D3`／`AC-D16`–`AC-D20` | tdd |
 | **A15** | §10.17 | **AAD authority host 覆寫**（v1.7，2026-08-18，獨立於本章原 15 項 delta——來源為遠端環境 SNI 偽造 RST 之網路層修復，非 2026-08-16 缺失批次；依 lead 指示併入本章決策編號序列） | F001 `AC-E1`–`AC-E15` | tdd、DevOps |
+| **A16** | §10.18 | **F024 匯出稽核與訊息共用之四項裁決**（v1.8，2026-08-18，獨立於本章原 15 項 delta——來源為 F024「匯出鈕失效」修復批次之提報事項，非 2026-08-16 缺失批次；比照 A15 併入本章決策編號序列） | F024 `AC-F5`／`AC-F7`／`AC-F8`／`AC-F9`／`AC-F13` | tdd |
 
 > 另有三節非「決策」但為交棒必讀：**§10.14** `watermarkLines()` 共用化落點（#7／#17）、**§10.15** 單元測試盲區、**§10.16** 風險與須退回 spec-writer 之爭議。
 
@@ -2847,4 +2852,229 @@ graph LR
 #### 對其餘架構之影響
 
 零 schema 變更、零新增錯誤碼、零 migration、不新增模組——`AadAuthorityConfig`／`aadEndpointUrls()`／`aadAuthorityMetadata()` 為 `AuthModule` 內部純函式與型別擴充，不對外暴露新端點。不影響 §10.1–§10.16 之任何決策。
+
+---
+
+### 10.18 決策 A16：F024 匯出稽核與訊息共用之四項裁決（v1.8，2026-08-18） {#a16-f024-export-decisions}
+
+> **與本章其餘決策不同源**：本決策對應 [F024](features/F024-access-history-query.md#export-fix-delta) `AC-F1`～`AC-F19`（2026-08-18 人類閘門 🟢 APPROVED，`OQ-D18-26`／`OQ-E07-10` 之延續定案）附帶之「📤 需 system-architect 裁量之提報事項」表（四項，spec-writer 依提報順序標為 A1～A4）。**與本章決策編號 `A1`–`A16` 為兩套不同編號空間**——見 §10.0「編號對照」段之澄清；本節內文以 `A16-1`～`A16-4` 稱四項子裁決，避免與提報表之 A1～A4 混淆。
+>
+> **本節不改寫任何 AC**（§10 章前言之權威邊界：「本章只決定技術設計，不改寫任何 AC」）。逐項覆核後，四項裁決**皆不要求變更 `AC-F1`～`AC-F19` 之任何斷言文字**——見本節末「對 AC 之影響」。
+>
+> **獨立查證聲明**：發起本節之訊息稱已獨立複核提報表 A1／A3 兩項屬實；本節四項結論皆為**本節重新開啟原始碼逐行核對**之結果（`backend/src/audit/audit-event.ts`、`audit.types.ts`、`database/migrations/1721952000000-audit-log.ts`、`backend/src/storage/csv-export.ts`（含 `csv-export.spec.ts`）、`backend/src/change-history/document-change-history.service.ts`、`backend/src/change-history/change-labels.ts`、`backend/src/audit/typeorm-audit.store.ts`、`backend/src/audit/audit-writer.service.ts`、`backend/src/audit/access-history.controller.ts`、`frontend/src/domain/export-feedback.ts`、`frontend/src/domain/roles.ts`、`frontend/src/pages/AccessHistoryPage.tsx`，以及全 repo grep 排查既有測試），非轉述提報表或既有訊息之查證結論。
+
+```mermaid
+sequenceDiagram
+  participant FE as 前端 AccessHistoryPage
+  participant C as AccessHistoryController.exportHistory
+  participant W as AuditWriterService
+  participant S as TypeOrmAuditStore.queryPage
+  participant CSV as csv-export.ts
+  participant AUD as AuditWriterService.recordAccess
+
+  FE->>C: GET /admin/access-history/export?filters
+  C->>W: queryHistory(scope, {...filters, page:1, pageSize:EXPORT_ROW_LIMIT+1})
+  W->>S: queryPage()（單一 getManyAndCount，SQL COUNT+OFFSET/FETCH 同一組 WHERE）
+  S-->>W: {items（至多10001）, total（SQL COUNT，權威）}
+  W-->>C: Page<AuditRow>
+  C->>CSV: assertExportRowLimit(total)　第一道
+  alt total > 10000
+    CSV-->>C: throw 400 EXPORT_ROW_LIMIT_EXCEEDED（訊息含實際 total，見 A16-3）
+    C-->>FE: 400（不產生任何檔案、不寫稽核）
+  else total 小於等於 10000
+    C->>CSV: assertExportRowLimit(items.length)　第二道（競態防護，記憶體內比對）
+    C->>CSV: toCsvBuffer(items, columns)　columns 含 roleLabel／actionTypeLabel／auditKindLabel（見 A16-2）
+    CSV-->>C: CSV bytes（BOM+CRLF+注入前綴）
+    C->>AUD: recordAccess({targetType:'ACCESS_HISTORY', actionType:'ACCESS_HISTORY_EXPORT',<br/>targetId:ACCESS_HISTORY_EXPORT_TARGET_ID（固定哨兵）, watermarkSnapshot:null})
+    Note over C,AUD: 非阻斷：recordAccess 內部 try/catch 包覆 outbox.enqueue，<br/>失敗僅記 log，不影響已組好的 CSV 回應（見 A16-1）
+    AUD-->>C: (fire-and-forget)
+    C-->>FE: 200 text/csv; charset=utf-8 + Content-Disposition
+  end
+  style CSV fill:#dcfce7,stroke:#16a34a
+  style AUD fill:#dcfce7,stroke:#16a34a
+```
+
+#### A16-1（回應提報 A1）：`ACCESS_HISTORY_EXPORT` 之 `targetType`／`targetId`
+
+**選定：新增 `AuditTargetType = 'ACCESS_HISTORY'`；`targetId` 採固定哨兵常數，不落地於任何參照欄（沿用既有 `ORG_CHANGE_ALERT` 之「無對映 case」模式）**
+
+🔴 **關鍵查證（決定本題答案的事實）**：`buildAuditRow()`（`audit-event.ts:16-45`）先檢查 `!event.targetId` 才進入 `switch (event.targetType)`；switch **僅** `DOCUMENT`／`DOCUMENT_CHANGE_LOG`／`LIFECYCLE`／`LIFECYCLE_CHANGE_LOG`／`USAGE_FORM`／`APPENDIX` 六者有 `case`，**無 `default`**。`AuditRow` 介面本身**沒有 `targetId` 欄**——它只是 `buildAuditRow()` 的輸入參數，依 `targetType` 被路由進 `documentId`／`lifecycleId`／`formId`／`appendixId` 四個 `uniqueidentifier` 欄之一；**新增 `targetType` 若不加對映 case，`targetId` 完全不落地於任何欄位，只需通過最前面的非空檢查**。
+
+這不是本節首創的情況——`OrgChangeAlertAuditEvent`（`audit.types.ts`，F006）已是同一模式之既有先例：其 `targetId`＝`ORG_CHANGE_ALERT.id`，程式碼註解明載「`AUDIT_LOG` 現無 `alertId` 欄，故 `targetId` 於落地列不對映任何參照欄」。`ACCESS_HISTORY_EXPORT` 唯一的差異是：`ORG_CHANGE_ALERT` 的 `targetId` 雖不落地，仍是一個**真實存在的實體 id**；`ACCESS_HISTORY_EXPORT` 連「真實實體」都沒有（匯出的對象是一個查詢結果集，不是一筆可定址的記錄）。
+
+**決策**：
+1. `AuditTargetType` additive 新增字面值 `'ACCESS_HISTORY'`（`varchar(30)`，14 字元，無 `CHECK` ⇒ **不需 migration**，見下方獨立查證）。
+2. `AuditActionType` additive 新增字面值 `'ACCESS_HISTORY_EXPORT'`（`varchar(40)`，21 字元，無 `CHECK` ⇒ **不需 migration**）。
+3. 新增判別聯集成員（第 8 個變體，既有 7 個變體之形狀**逐字不動**，比照 F039 `APPENDIX` 變體加入時之處置）：
+   ```ts
+   export interface AccessHistoryExportAuditEvent extends AuditEventBase {
+     targetType: 'ACCESS_HISTORY';
+     actionType: 'ACCESS_HISTORY_EXPORT';
+   }
+   ```
+4. `targetId` 一律傳入**固定字面常數**，不隨查詢條件或結果筆數變化：
+   ```ts
+   export const ACCESS_HISTORY_EXPORT_TARGET_ID = 'access-history-export';
+   ```
+   **不做**任何查詢條件雜湊或時間戳合成——理由見下方「被否決方案」第一、二列。
+5. `targetName` 建議填 `null`（不新增任何未經 AC 要求之顯示內容；`AC-F13` 本身已承認此列於 F024「對象」欄呈現為空，見 `AC-F13` ⚠ 自我遞迴效應註記）。
+6. `buildAuditRow()` **不新增 case**（維持無 `default` 分支現況）——`ACCESS_HISTORY` 落入既有的「無對映」路徑，`documentId`／`lifecycleId`／`formId`／`appendixId` 皆為 `null`，與 `ORG_CHANGE_ALERT` 現況完全一致，**不需改動 `buildAuditRow()` 本體一行程式碼**。
+
+**🔴 與 F037 既有呼叫慣例之刻意差異（架構層必須提醒下游）**：F037 `recordExportAudit()`（`document-change-history.service.ts:141-162`）之 `targetId` 取自 `items[0]?.documentId ?? null`——**當匯出結果為 0 筆時 `latest` 為 `undefined`，`targetId` 退化為 `null`，`buildAuditRow()` 因此拋 `AuditTargetRefRequiredError`，該筆稽核被外層 `try/catch` 靜默吞掉，即「0 筆匯出不記稽核」**。但 `AC-F13` 明訂「匯出**成功**（HTTP 2xx、CSV 已產生）」即應寫入**恰一列**，且 `AC-F11` 明訂 0 筆結果之匯出**仍是成功**（僅含表頭列的 CSV）——若 F024 抄用 F037 這個「以首列衍生 `targetId`」的寫法，0 筆匯出會靜默漏記稽核，直接違反 `AC-F13`。這正是本節採**固定常數**而非「衍生自查詢結果」的根本理由：F024 的稽核義務與查詢結果筆數無關，`targetId` 也不應與之耦合。**下游實作務必不要抄 F037 這段呼叫樣板。**
+
+**被否決之替代方案**：
+
+| 方案 | 否決理由 |
+|---|---|
+| `targetId` 採查詢條件雜湊（如 `sha256(JSON.stringify(filters))`） | 該值**從不落地於任何欄位**（見上）——計算一個永遠被丟棄的雜湊值純屬浪費，且日後若有人誤以為此雜湊有查詢意義（例如試圖用它反查條件），會撲空；徒增認知負擔而無任何可觀測效益 |
+| `targetId` 採匯出當下時間戳（如 `occurredAt.toISOString()`） | 同上（不落地）；且與 `occurredAt` 本身重複，若日後真要利用 `targetId` 追蹤，時間戳本已由 `AUDIT_LOG.occurredAt` 欄位提供，不需疊床架屋 |
+| 放寬 `buildAuditRow()`，令特定 `targetType` 可免 `targetId` | 技術上可行（例如 `if (!event.targetId && REQUIRES_TARGET.has(event.targetType)) throw`），但**改動的是 F023 之 D 契約鎖定函式**——`audit-event.ts` 檔頭註解明載「下游 worktree F005/F007/F012/F020/F034/F037/F038 皆呼叫本介面」，且該檢查邏輯本身即是 F023 `AC5`（不可竄改縱深防禦）之上游輸入驗證環節。呼叫端提供一個不落地的常數字串，其風險完全侷限於新增的呼叫點；改寫共用驗證函式的風險則擴及全部既有呼叫端。**兩案效果相同、前者風險嚴格更低**，故不採用後者 |
+| 重用既有 `targetType`（如借用 `ORG_CHANGE_ALERT` 或 `LIFECYCLE`） | 語意錯誤——`ACCESS_HISTORY_EXPORT` 既非組織異動提示、亦非循環動作；借用會讓 `targetType` 篩選／CSV「類型」欄產生誤導性分類，且未來若真要對 `ACCESS_HISTORY_EXPORT` 單獨查詢或統計，會與被借用的既有語意糾纏 |
+
+**Migration 影響（獨立查證，覆核提報表 A1 之查證聲稱）**：已直接開啟 `backend/src/database/migrations/1721952000000-audit-log.ts` 逐行核對——`[targetType] varchar(30) NOT NULL`、`[actionType] varchar(40) NOT NULL`，**表定義中無任何 `CHECK` 約束**（全檔僅有欄位型別與一個 `DF_AUDIT_LOG_source` 之 `DEFAULT` 約束，無 `CHECK`）。`'ACCESS_HISTORY'`（14 字元）與 `'ACCESS_HISTORY_EXPORT'`（21 字元）皆在各自欄寬內。**複核結論：提報表 A1 之查證屬實，兩者皆不需 migration。**
+
+---
+
+#### A16-2（回應提報 A2）：三張中文標籤對照表之落點
+
+**選定：於 `backend/src/audit/access-history-labels.ts` 新增後端專屬純函式模組，與前端各留一份、以「兩份逐字相同」為機器可驗不變式——沿用本檔案 §10.14（`watermarkLines()`）與 `change-history/change-labels.ts`（F037／F038，`OQ-D18-34`）之既有處置，不另創新模式**
+
+**落點理由（與 §10.14／`change-labels.ts` 同一組理由，逐項覆核仍成立）**：
+1. 本 repo 前後端為兩個獨立 TS 專案、**無共用 package**（獨立查證：`frontend/`、`backend/` 各自獨立 `package.json`／`tsconfig.json`，無 workspace 設定、無 `packages/shared` 目錄）——「只有一份」在現有 build 管線下不可達，強行共用需引入 monorepo 工具鏈變更，此決策之影響面遠超一次 bug-fix delta 的授權範圍。
+2. 已有直接可比對的既有先例 `backend/src/change-history/change-labels.ts`——**已開啟逐行核對**：其檔頭註解本身即載明「`error-handling.md#export` 要求『只有一份』，但其落點未經 architect 定案；本輪沿用 architecture-spec §10.14 對 `watermarkLines()` 之既有處置」，並以「兩份實作以同一組值綁定、可觀測不變式為『CSV 儲存格之值與畫面同一格之可見文字逐字相同』」收尾。F024 面對的是**同一道題**（`error-handling.md#export` 對 F024 之落點要求逐字相同），沒有理由給出不同答案。
+
+**模組內容**（比照 `change-labels.ts` 之函式簽章風格）：
+```ts
+/** 角色代碼 → 中文標籤（AC-F5①；與 frontend/src/domain/roles.ts 之 ROLE_META[x].label 同值）。
+ *  未收錄或 null → 空字串（不同於 actionTypeLabel／auditKindLabel 之「原樣輸出」策略，
+ *  此為 AC-F5① 明訂之刻意差異，非疏漏）。*/
+export function roleLabel(roleCode: string | null): string;
+
+/** 操作類型代碼 → 中文標籤（AC-F5②；與 AccessHistoryPage.tsx 之 ACT_LABEL 同值，
+ *  但只回標籤不含代碼——CSV 值層與畫面複合格式之刻意差異，見 AC-F5②裁決註記）。
+ *  未收錄（LIFECYCLE_DELETE／ALERT_RESOLVED）→ 原樣輸出代碼（既有缺口之承接，AC-F5②）。*/
+export function actionTypeLabel(actionType: string): string;
+
+/** AUDIT_LOG.targetType → 類型欄三值之一（AC-F5③；與 AccessHistoryPage.tsx 之 rowKind() 同一規則，
+ *  含 APPENDIX→變更 之既有不一致承接）。*/
+export function auditKindLabel(targetType: string): '文件' | '循環' | '變更';
+```
+
+**放在 `audit/` 而非 `storage/`（與 `csv-export.ts` 不同層）之理由**：`csv-export.ts` 是**格式層**純規則（BOM／CRLF／RFC4180／注入前綴），對「值是什麼」一無所知、被四處匯出（F024／F037／F038／F039）共用；本模組是**F024 領域專屬**的值語意（角色／操作類型／稽核類型皆是 `audit`／`AUDIT_LOG` 之領域概念，F037／F038 有各自的 `change-labels.ts`，不共用本模組）。這與 `change-labels.ts` 落在 `change-history/` 而非 `storage/` 是同一分類原則。
+
+**機器可驗不變式**：與 `AC-F5` ④ 既有之「機器驗證」規劃完全吻合（後端 spec 以本模組之對照表逐鍵斷言 CSV 值、前端 spec 以 `ROLE_META`／`ACT_LABEL`／`rowKind()` 斷言畫面值，兩者期望值皆取自 `AC-F5` 本身），**本節不需新增或修改任何 AC**。
+
+**被否決之替代方案**：
+
+| 方案 | 否決理由 |
+|---|---|
+| 由 `GET /admin/access-history` 查詢端點回傳已解析之 label（如新增 `roleLabel`／`actionTypeLabel` 回應欄位） | 本 delta 之範圍界線明訂「**查詢（`GET /admin/access-history`）之行為、欄位、篩選、分頁一律不變**」（見 F024 spec 開頭紅字）——擴充查詢回應形狀直接牴觸此範圍界線。且前端畫面之「操作類型」欄要顯示**複合格式** `{代碼} · {標籤}`，仍需原始代碼，端點若只回標籤，前端還是得自己留一份代碼→顯示邏輯，並未真正消除兩份 |
+| 抽成前後端共用 package（monorepo workspace） | 見上方理由 1；範圍超出本 delta，且本 repo **目前**無任何既有共用 package 先例，貿然引入的建置管線變更風險與本次 bug-fix 的授權範圍不成比例 |
+| 放在 `storage/csv-export.ts` 同檔 | 混淆「格式層」與「值語意層」——`csv-export.ts` 目前對任何 feature 的具體資料語意一無所知，是其可被四處共用的原因；塞入 F024 專屬的角色/操作類型對照表會讓該檔案從「純格式規則」劣化為「格式規則＋部分業務語意」，且不利日後 F037/F038 若要重構出通用比對工具時的抽取邊界 |
+
+---
+
+#### A16-3（回應提報 A3）：超限訊息 `{N}` — 修共用函式（採甲案），已獨立驗證零回歸
+
+**選定：修 `storage/csv-export.ts` 之 `assertExportRowLimit(count)`，令其訊息內插實際 `count`，且 `count` 必須排在訊息中 `EXPORT_ROW_LIMIT` 常數之前**
+
+**獨立複核提報表 A3 之查證聲稱**：已開啟 `backend/src/storage/csv-export.ts:36-42` 逐行核對——
+```ts
+export function assertExportRowLimit(count: number): void {
+  if (count > EXPORT_ROW_LIMIT) {
+    throw new BadRequestException(
+      `EXPORT_ROW_LIMIT_EXCEEDED: 符合條件之筆數超過上限 ${EXPORT_ROW_LIMIT} 筆，請縮小查詢條件後再匯出`,
+    );
+  }
+}
+```
+`count` 參數確實**只用於比較，未出現在訊息字串中**；訊息內唯一的數字是常數 `EXPORT_ROW_LIMIT`（10000）。`frontend/src/domain/export-feedback.ts` 之 `countFromLimitError()` 取訊息「第一個數字」——**該函式之文件註解本身**寫的示例訊息是 `符合條件之筆數為 10001 筆，超過匯出上限 10000 筆…`，與後端實際訊息**不符**（後端從未產生過這個字串）。**複核結論：提報表 A3 之查證屬實**——`countFromLimitError()` 的文件註解描述的是「應該有」的行為而非「現有」的行為，是本題的一個額外佐證：連撰寫該函式的人都已經假設 `{N}` 是真值，只是後端從未兌現。
+
+**回歸風險之逐一排查（本題之關鍵——需要把「動既有已畢業路徑」的外溢講清楚）**：
+
+| 位置 | 現有斷言方式 | 是否鎖定「訊息只含上限值」之現有行為 |
+|---|---|---|
+| `backend/src/storage/csv-export.spec.ts:159-170` | `err.message` 僅 `.toContain('EXPORT_ROW_LIMIT_EXCEEDED')` | ❌ 不鎖定——字串前綴不變，`toContain` 仍過 |
+| `backend/src/change-history/change-history-export.service.spec.ts`（3 處呼叫） | `.rejects.toThrow('EXPORT_ROW_LIMIT_EXCEEDED')` | ❌ 不鎖定——Jest `toThrow(string)` 為子字串比對，非全等 |
+| `backend/src/appendices/appendices.export.service.spec.ts:212` | 同上 | ❌ 不鎖定 |
+| `frontend/src/pages/ChangeHistoryPage.export.test.tsx`／`AppendixManagementPage.export.test.tsx` | **直接 mock** `new ApiError(400, 'EXPORT_ROW_LIMIT_EXCEEDED', '符合條件之事件為 10001 筆…')`——訊息字串由測試作者手寫，**從未呼叫真正的後端 `assertExportRowLimit()`** | ❌ 不鎖定——這些是前端單元測試，斷言的是「畫面對『某個訊息』如何反應」，訊息本身是測試 fixture，不是後端產出 |
+
+**獨立查證結論**：全域 grep `符合條件之筆數超過上限`／`請縮小查詢條件後再匯出`，命中唯一一處（`csv-export.ts` 本身）。**沒有任何現存測試把「`{N}` 恆為上限值」當作被鎖定的期望行為**。修正後 `csv-export.spec.ts` 既有測試（僅 `toContain` 全域碼）與 F037／F038／F039 三處既有整合測試皆維持綠燈，**不需連帶修改任何既有測試檔**。
+
+**風險特徵定性（與範圍紀律 J 之外溢比較）**：範圍紀律 J（F024 delta）所防的是「順手改動一個看起來無關、但確實有既有行為依賴它的路徑」——F024 匯出本體正是這種外溢，故需要 `AC-F17` 之明文取代條款與就地改寫既有回歸鎖定測試。本題經逐一排查後性質不同：`assertExportRowLimit()` 之訊息格式**從未被任何測試鎖定為期望行為**，故此為**填補既有缺口**而非**變更已被驗證、依賴之既有行為**——不需要比照 `AC-F17` 的「就地改寫並明文取代」處置，因為沒有東西需要被取代。
+
+**訊息格式（僅供實作對齊，不預先寫死逐字文案——各 feature 之逐字句式仍由各自 AC 定義，`assertExportRowLimit` 之訊息只是 `countFromLimitError()` 的解析來源）**：
+```ts
+export function assertExportRowLimit(count: number): void {
+  if (count > EXPORT_ROW_LIMIT) {
+    throw new BadRequestException(
+      `EXPORT_ROW_LIMIT_EXCEEDED: 符合條件之筆數為 ${count} 筆，超過匯出上限 ${EXPORT_ROW_LIMIT} 筆，請縮小查詢條件後再匯出`,
+    );
+  }
+}
+```
+🔴 **`count` 必須排在 `EXPORT_ROW_LIMIT` 之前**——`countFromLimitError()` 取的是**第一個**符合 `/\d+/` 的數字；若順序顛倒，第一個數字仍會是 10000（上限值），本題等於白修。此為本決策唯一對訊息格式的硬性要求，其餘用字不拘（各 feature 之畫面呈現本就各自組句，不逐字複製後端訊息）。
+
+**對 F037／F038／F039 之影響（額外收益，非本次範圍變更）**：三者之既有 AC（`F037 AC-D10`／`F039 AC-D12`）**本就已要求** `{N}` 為實際筆數——本修正使三者從「AC 文字要求 A、程式碼實際產出 B」之既有落差，變為「AC 與程式碼一致」。**這是修正而非破壞**，不需要 spec-writer 為 F037／F038／F039 另開 AC delta。
+
+---
+
+#### A16-4（回應提報 A4）：計數與取列之實作路徑
+
+**選定：單一次 `queryHistory(scope, { ...filters, page: 1, pageSize: EXPORT_ROW_LIMIT + 1 })` 呼叫，取代 F037／F038「先 count 再 list」之兩段式呼叫；競態第二道防護保留，但改以同一回應之 `items.length` 判斷，不另發第二次查詢**
+
+**與 F037／F038 既有模式之關鍵差異（已獨立查證，決定本題答案）**：已開啟 `backend/src/audit/typeorm-audit.store.ts:112-140` 逐行核對——`queryPage()` 以單一 `QueryBuilder`（含完整 WHERE：`targetType IN`／`occurredAt` 範圍／`person`／`target` 之 LIKE）呼叫 TypeORM 之 `qb.getManyAndCount()`，**一次方法呼叫同時取得 `total`（SQL `COUNT`，同一組 WHERE）與當頁列（`OFFSET`/`FETCH`）**。這與 F037 所處理的 `DOCUMENT_CHANGE_LOG` store 原本**沒有**這種下推能力（§10.4 已記載其 `listAll()` 為無 `WHERE` 全表載入，必須**新增** `countByFilters`／`listByFilters` 兩個方法才補上下推能力）截然不同——**F024 的 `AuditStore.queryPage()` 從一開始就是為 F024 本身的查詢頁面而設計的下推查詢，不需要另建一套匯出專用的計數/取列管線**。
+
+**決策細節**：
+1. `AccessHistoryController.exportHistory()` 呼叫 `this.writer.queryHistory(SCOPE, buildFilters(kind, person, target, from, to, /* page */ 1, /* pageSize */ EXPORT_ROW_LIMIT + 1))`——**與查詢端點呼叫同一個 `AuditWriter.queryHistory()` 方法、同一個 `buildFilters()`**，天然滿足 `AC-F7` ④「匯出與查詢共用同一份 filters 解析」，無需額外程式碼保證。
+2. **第一道防護**：`assertExportRowLimit(result.total)`——`total` 為 SQL `COUNT(*)` 之結果（同一組 WHERE，非 app 端計數），> 10000 立即 400，**捨棄 `result.items`、不產生任何檔案**。
+3. **第二道防護（競態）**：`assertExportRowLimit(result.items.length)`——`items.length` 上限為 `pageSize`＝10001，可能因「兩次內部 SQL 語句之間有新列寫入」而與 `total` 不一致（`getManyAndCount()` 之 `COUNT` 與 `SELECT` 為兩條獨立 SQL 陳述式，未包在同一交易內，與 F037 之 count/select 兩步驟有**同一種**競態窗口）。此為記憶體內比對，**不觸發任何額外 SQL**。
+4. `page`／`pageSize` 之呼叫端輸入（`AC-F7` ③ 明訂匯出忽略之）：`exportHistory()` 之 `buildFilters()` 呼叫**固定傳入** `1` 與 `EXPORT_ROW_LIMIT + 1`，**不採納** `@Query('page')`／`@Query('pageSize')`（沿用現況 `exportHistory()` 本就不接收這兩個 query 參數的既有簽章）。
+
+**效益對比 F037／F038 之兩段式**：F037/F038 之兩段式是**必要之惡**（既有 store 缺下推計數能力，只能新增兩個方法補洞）；F024 若照抄兩段式，等於**額外呼叫一次** `queryPage()`（一次只為算 total、捨棄其列；一次才真正取列），對已經支援單次 `getManyAndCount()` 下推的 store 而言是純粹的重工。**這正是提報表 A4 所問「可能可省一趟查詢」之答案：省的是 service 層一次方法呼叫（而非 SQL 陳述式數量——`getManyAndCount()` 底層仍是兩條 SQL，與 F037 兩次呼叫之 SQL 陳述式數量相同）**，兩案在資料庫負載上並無差異，差異在程式碼路徑之簡潔與可維護性。
+
+**被否決之替代方案**：
+
+| 方案 | 否決理由 |
+|---|---|
+| 抄用 F037／F038 之 `countByFilters`／`listByFilters` 兩段式，於 `AuditStore` 新增對應方法 | `AuditStore.queryPage()` 已提供**完全等價**的下推能力（單次呼叫取 total+items）；另開兩個方法是重複實作同一件事，且違反 F023 之 `D` 契約鎖定（`AuditWriter` 介面為 `recordAccess`／`queryHistory`／`processOutboxRetry` 三者，鎖定後不隨意擴充） |
+| `SELECT TOP 10001` 手寫於 `AccessHistoryController`（繞過 `queryHistory()`） | 會產生第二套 WHERE 組裝邏輯，與 `resolveAuditQuerySpec()`／`queryPage()` 之既有下推邏輯**重複**，直接違反 `AC-F7` ④「不得各寫一份」之精神（該款雖字面指 filters 解析，但重寫查詢邏輯是同一類風險的放大版） |
+
+---
+
+#### 對 §9 之新增待決事項：`EXPORT_ROW_LIMIT = 10000` 對 F024 之量級適用性（風險評估，非裁決）
+
+> 人類閘門已明確要求「沿用共用機制」（不擅自改數字），本節**維持 10000**，下述僅為風險評估與緩解建議，已同步列入 §9。
+
+**結構性風險因子（非資料查證，皆為規格/程式碼事實）**：
+1. F024 之保留年限為 **≥3 年**（`NFR-003`），且其涵蓋範圍**橫跨** F020（文件調閱 VIEW/DOWNLOAD/PRINT）、F036（循環樹狀圖 VIEW/DOWNLOAD/PRINT）、F037（`CHANGE_LOG_VIEW`）、F038（`LIFECYCLE_CHANGELOG_VIEW`/`DOWNLOAD`）**四個 feature 共 10 種既有 `actionType`**（本節新增 `ACCESS_HISTORY_EXPORT` 後為第 11 種），是全公司單一 `AUDIT_LOG` 表中成長速率最快的查詢面——相較之下 F037／F038 之匯出對象（`DOCUMENT_CHANGE_LOG`／`LIFECYCLE_CHANGE_LOG`）僅記錄**異動事件本體**（編輯/DAG 操作），事件源頭數量級遠低於「每一次調閱」。
+2. F024 查詢**預設**套用近 30 天窗（F024 spec `Edge Cases`：「查詢條件為空⇒套用預設近 30 天，避免全表掃描」），此為結構性緩解——**未特意展開時間區間之查詢**（多數操作情境）天然被限縮在 30 天窗內，超過萬筆之機率遠低於「全 3 年範圍」查詢。真正的風險集中在**使用者主動展開查詢區間**（如「查全年」「查全部歷史」）之情境。
+3. [NFR-003](nfr.md#audit-retention) 明訂保留 ≥3 年但**未給出**「筆數/年」之量化目標值，[§9](#9-open-decisions) `OQ-NFR001`（規模數量級）與 `OQ-NFR003` 皆已標為 **Blocking**——本題與此二既有 Blocking 項**同源**，非獨立新風險。
+
+**評估（結構性推論，非資料查證——依「dev 個資已遮罩、只查結構、不做全庫資料統計」之既有規則，本節未對真庫做資料量統計）**：`EXPORT_ROW_LIMIT=10000` 對「近 30 天預設窗」之查詢極可能足夠；對「使用者主動展開至數月甚至全年」之查詢，是否超限**待下一輪以真實資料量校準**，本節不擅自假設會或不會超限。
+
+**建議緩解（供下一輪參考，非本節裁決，不改變本次任何數字）**：
+- **短期（不需程式改動）**：`AC-F9` ② 之超限訊息本身已提示「請縮小查詢條件」，對 F024 而言最有效的縮小手段是**時間區間**（既有欄位，非新功能）——不需額外設計。
+- **中期（下一輪校準用）**：待正式環境累積一段時間之真實資料後，實測「近 30 天」「近 90 天」「近 1 年」三種常見查詢區間之筆數分布，據以確認 10000 是否為此情境下的合理上限，或需要 F024 專屬之更高上限（若採此路徑，需重新評估 §10.4 之 `TOP 10001` 硬編碼與 `csv-export.ts` 是否該讓上限可依呼叫端參數化——目前四處匯出共用同一常數，若僅 F024 需要不同值，涉及是否打破「共用同一組規則」之既有決策，屬架構層級變動，非本節範圍）。
+
+---
+
+#### 對 AC 之影響
+
+**逐項覆核結論：四項裁決皆不要求變更 `AC-F1`～`AC-F19` 之任何斷言文字。**
+
+| 裁決 | 是否影響現有 AC 斷言 | 理由 |
+|---|---|---|
+| A16-1（`targetType`/`targetId`） | 否 | `AC-F13` 之 ①②③④ 僅斷言 `actionType`／身分快照／`occurredAt`／`watermarkSnapshot`，未斷言 `targetType`／`targetId` 之值——本裁決填補的正是 AC 刻意留給架構層之空白 |
+| A16-2（標籤表落點） | 否 | `AC-F5` ④ 之機器驗證已規劃「兩份逐字相同」，未指定實作檔案路徑；本裁決僅補上路徑 |
+| A16-3（`{N}` 修法） | 否 | `AC-F9` ② 之斷言（`{N}` 為實際筆數）本就與本裁決之修復方向一致——本裁決是讓程式碼符合既有 AC，非變更 AC |
+| A16-4（count/list 路徑） | 否 | `AC-F7`／`AC-F8` 斷言的是可觀測行為（筆數、列序、上限判定），未指定內部呼叫是一次或兩次 |
+
+**F024 提報表之四行已標記為「已裁決」並指向本節（§10.18）對應子節（A16-1～A16-4）**，見 [F024](features/F024-access-history-query.md#export-fix-delta) `📤 需 system-architect 裁量之提報事項` 表（本節與該表已同步更新）。
+
+⚠ **兩處連動之非-AC 文件（本節不直接編輯，留待 spec-writer 處理）**：`error-handling.md#export` 現有兩處佔位文字——(a) 標籤表段落之「落點由 system-architect 定」（A16-2 已定案，該段可補上指向本節之連結）；(b) 稽核段落之「`targetType`／`targetId` 之落點交 system-architect」（A16-1 已定案，同上）。兩處皆為說明性文字而非規則本體，改動不影響任何 AC 或機器可驗約束，故列為建議而非本節裁決範圍。
+
+#### 對其餘架構之影響
+
+零 schema 變更（`AuditTargetType`／`AuditActionType` 皆為 TS 判別聯集之字面值擴充，非 DB `CHECK`／`ENUM`）、零新增錯誤碼、零新增模組、零新增端點（`GET /admin/access-history/export` 為既有端點之回應形狀變更，非新端點）。不影響 §10.1–§10.17 之任何決策。
 

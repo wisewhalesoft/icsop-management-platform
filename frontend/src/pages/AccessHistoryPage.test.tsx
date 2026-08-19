@@ -138,15 +138,32 @@ describe('AccessHistoryPage — 文件調閱歷程查詢（F024）', () => {
     await waitFor(() => expect(screen.getByText(/近 30 天/)).toBeInTheDocument());
   });
 
-  it('匯出 → 呼叫 exportAccessHistory（遵循當前查詢條件）', async () => {
+  /**
+   * 🔴 AC-F18 承接表就地改寫（F024 匯出鈕失效之修復 delta，2026-08-18）：`exportAccessHistory()`
+   * 之回傳型別由 `Promise<{rows,total}>` 改為 `Promise<void>`（AC-F3 ①），且成功後之回饋文案
+   * 已改為新逐字句（AC-F9 ①）。「下載副作用是否真的發生」不在本檔重複驗證——本檔全域 mock
+   * `../api/endpoints`，`exportAccessHistory()` 的真實實作（`downloadViaBlob`／`createObjectURL`）
+   * 被 mock 取代，此處驗證即為循環論證；該項改由 `AccessHistoryPage.export.test.tsx`（AC-F1，
+   * 真實 fetch 驅動）承擔。本測試僅保留仍可在此驗證的兩件事：呼叫時遵循當前查詢條件、
+   * 成功後顯示新逐字文案。
+   *   OLD> `vi.mocked(endpoints.exportAccessHistory).mockResolvedValue({ rows: [], total: 0 });`
+   *   OLD> 僅斷言 `expect(endpoints.exportAccessHistory).toHaveBeenCalledOnce();`（未斷言文案）
+   */
+  it('匯出 → 呼叫 exportAccessHistory（遵循當前查詢條件），成功後顯示新逐字回饋（AC-F9 ①）', async () => {
     mockAuth('SysAdmin');
-    vi.mocked(endpoints.exportAccessHistory).mockResolvedValue({ rows: [], total: 0 });
+    vi.mocked(endpoints.exportAccessHistory).mockResolvedValue(undefined);
     render(<AccessHistoryPage />);
     await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
 
+    await userEvent.type(screen.getByLabelText(/人員/), '王小明');
     await userEvent.click(screen.getByRole('button', { name: /匯出/ }));
 
     await waitFor(() => expect(endpoints.exportAccessHistory).toHaveBeenCalledOnce());
+    const exportArgs = vi.mocked(endpoints.exportAccessHistory).mock.calls[0]?.[0] ?? {};
+    expect(exportArgs).toMatchObject({ person: '王小明' });
+    expect(
+      await screen.findByText(/^已匯出文件調閱歷程（CSV，UTF-8 BOM）/),
+    ).toBeInTheDocument();
   });
 
   it('查詢列可依人員與時間組合送出（AND）', async () => {

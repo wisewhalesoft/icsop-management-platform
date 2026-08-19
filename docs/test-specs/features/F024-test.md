@@ -1,5 +1,7 @@
 # F024 — 文件調閱歷程查詢後台 · Test Design
 > source: docs/specs/features/F024-access-history-query.md · worktree: audit · 2026-07-22
+> **2026-08-18 新增「匯出鈕失效之修復 delta」**（`AC-F1`～`AC-F19`）：見 [§匯出鈕失效之修復
+> delta](#export-fix-delta)。舊有 TS-001～TS-018（查詢邏輯，不受本 delta 影響）維持不動。
 
 ## 測試策略
 
@@ -154,3 +156,93 @@
 6. **角色範圍是否恆為「全公司」無例外**。目前 SysAdmin/ICSOPAdmin 之查詢範圍皆為全公司唯讀（矩陣值兩者皆 `READ`，prototype `scopeRecords()` 直接回傳全部、不因角色而過濾），本測試設計未包含任何「部分公司範圍」情境。若日後政策改變（如多公司體系分權查詢），需新增範圍過濾測試；目前依現行 F025 矩陣與 F024 spec「全公司」文字，此非本輪 blocking 項。
 
 7. **`kind`（類型）篩選之精確參數值與 `targetType`/`actionType` 之對應表未見於 spec 逐字定義**，僅能從 F024 spec AC7-AC9 之文字（「循環」「變更」「文件」）與 prototype 之 `RECORDS[].kind` 反推。TS-009~011 依此反推撰寫；建議 architect 或 spec-writer 在 F024 spec 補一張顯式對照表（`kind` 前端顯示值 ↔ `targetType`/`actionType` 集合），降低前後端/測試三方各自臆測之風險。
+
+---
+
+## 匯出鈕失效之修復 delta（`AC-F1`～`AC-F19`；2026-08-18 人類閘門 🟢 APPROVED） {#export-fix-delta}
+
+> source: `docs/specs/features/F024-access-history-query.md#export-fix-delta`（`AC-F1`～`AC-F19`）＋
+> `docs/specs/architecture-spec.md` §10.18 決策 `A16-1`～`A16-4`＋`docs/specs/error-handling.md#export`。
+> **對實作全盲，逐字取自上述三份文件；未讀取任何 production 原始碼決定斷言**（僅為 wiring 讀取既有
+> production 之共用函式簽章／既有 test 檔之接線慣例，見各測試檔標頭之「📌 已查證之既有共用 helper
+> 契約」註記）。
+
+### 測試策略
+
+- **端點契約層（AC-F2）**：本輪對 `AccessHistoryController.exportHistory()` 的呼叫簽章訂了一項本環
+  契約——末位新增 `@Res({passthrough:false}) res: Response`（比照 `ChangeHistoryController`／
+  `AppendicesController` 三處既有 CSV 匯出 handler 之既有慣例）。若實作簽章不同，經 mailbox 申訴後
+  由 test-generator 改寫。
+- **值層（AC-F5）雙層驗證**：純函式（`access-history-labels.spec.ts`）逐鍵斷言三張對照表；控制器層
+  （`access-history.controller.spec.ts`）每軸各挑一列驗證「模組確實被匯出路徑採用」（接線驗證，非
+  重複純函式之窮舉）。
+- **AC-F1（缺陷本體）刻意不 mock `../api/endpoints`**：以真實 `fetch` stub 驅動 `exportAccessHistory()`
+  →`downloadViaBlob()` 之完整鏈路，唯一能證明「成功回饋 ⟺ 下載副作用」而非各自獨立斷言之作法
+  （見 `AccessHistoryPage.export.test.tsx` 標頭）。
+- **AC-F19 獨立成檔**：因需要 `vi.mock('../api/endpoints')`（hoisted，效力及全模組），與 AC-F1 之
+  真實 fetch 策略互斥，故另立 `AccessHistoryPage.export-limit-hint.test.tsx`。
+- **AC-F13（真 DB）int 測試補強**：mock 版本（controller.spec）已證明「0 筆仍恰呼叫 recordAccess
+  一次」；`access-history.itest.ts` 之 TS-AQ-INT-013／014 以真實 AUDIT_LOG 表複核同一不變式，並補
+  TS-AQ-INT-008 之 CSV 版本重寫（原斷言 JSON 形狀）。
+- **AC-F17／F18（承接）**：`change-history-export.routes.spec.ts` 原「不外溢」鎖定就地改寫為新行為
+  背書，舊斷言保留於 `OLD>` 註解。
+
+### AC → 載體 → 具體 it() 對照表
+
+| AC | 載體檔案 | it() / 描述 |
+|---|---|---|
+| AC-F1 ① | `AccessHistoryPage.export.test.tsx` | `① 端點回 2xx CSV → 下載副作用發生（createObjectURL 恰一次、<a>.click 恰一次）且顯示成功回饋` |
+| AC-F1 ② | 同上 | `🔴 ② 端點回 400（超限）→ createObjectURL 呼叫次數為 0…`（**現況已綠**，見下方「已綠燈條款」） |
+| AC-F1 ③ | 同上 | `🔴 ③ fetch 本身 reject（網路層失敗）→ createObjectURL 呼叫次數為 0…`（**現況已綠**） |
+| AC-F2 ①②③④ | `access-history.controller.spec.ts` | `describe('AccessHistoryController.exportHistory（AC-F2 端點契約）')` 四條 it |
+| AC-F3 ①②③ | `AccessHistoryPage.export.test.tsx` | `describe('...AC-F3：downloadViaBlob 傳輸方式...')`：`匯出流程全程不呼叫 window.open`＋靜態掃描 it |
+| AC-F4 | `access-history.controller.spec.ts` | `describe('...AC-F4 表頭')`：`第 1 列逐字為 10 欄表頭…` |
+| AC-F5 ①②③④ | `access-history-labels.spec.ts`（純函式逐鍵）＋`access-history.controller.spec.ts`（`describe('...AC-F5 值層...')`，接線驗證） | 見兩檔各自 it 清單 |
+| AC-F6 | `access-history.controller.spec.ts` | `describe('...AC-F6 時間戳')` 兩條 it（含 TZ 切換） |
+| AC-F7 ① | `access-history.controller.spec.ts` | `describe('...AC-F7 範圍與列序')`：`① 資料列數 = 查詢之 total…` |
+| AC-F7 ② | `access-history-filter.spec.ts` | `describe('🔴 AC-F7 ② occurredAt 同秒之決定性次鍵...')` 兩條 it |
+| AC-F7 ③④ | `access-history.controller.spec.ts` | `TS-015 export → ...`（單一次呼叫、`pageSize=EXPORT_ROW_LIMIT+1`、filters 委派） |
+| AC-F7（真 DB 複核） | `access-history.itest.ts` | `TS-AQ-INT-008`（CSV 版本重寫） |
+| AC-F8 ①② | `access-history.controller.spec.ts` | `describe('...AC-F8 筆數上限')`：恰 10000／10001 兩條 it |
+| AC-F8 ③ | 同上 | `🔴 AC-F8 ③：原始碼不得再含識別字 EXPORT_MAX…`（靜態掃描）；`change-history-export.routes.spec.ts` 同義複核 |
+| AC-F9 ①②③ | `AccessHistoryPage.export.test.tsx`（`describe('...AC-F9 逐字文案...')`＋F1 區塊之「舊文案不得出現」）＋`AccessHistoryPage.test.tsx`（既有測試就地改寫） | 見各檔 |
+| AC-F9 ②（{N} 實際筆數） | `csv-export.spec.ts`（`describe('🔴 A16-3...')`）＋`access-history.controller.spec.ts`（`AC-F9 ②：超限之訊息含實際筆數...`） | |
+| AC-F10 | `access-history.controller.spec.ts` | `describe('...AC-F10 CSV 注入防護')` 三條 it |
+| AC-F11 | `access-history.controller.spec.ts`＋`access-history.itest.ts` | `describe('...AC-F11 空結果')`；`TS-AQ-INT-014` |
+| AC-F12 | `access-history.controller.spec.ts` | 既有 `describe('AccessHistoryController（路由與 RBAC 契約）')`（**逐字不變**，機器驗證要求維持綠燈——見下方「編譯連帶效應」提醒） |
+| AC-F13 ①②③④ | `access-history.controller.spec.ts`（mock）＋`access-history.itest.ts`（真 DB） | `describe('...AC-F13 匯出動作記稽核')` 全部 it；`TS-AQ-INT-013`／`014` |
+| AC-F14 ①② | `access-history.controller.spec.ts` | `describe('...AC-F14 明細專屬欄不匯出')` 兩條 it |
+| AC-F15 ①②③ | `access-history.controller.spec.ts` | `describe('...AC-F15 非文件類型與明細欄')` 四條 it |
+| AC-F16 | `AccessHistoryPage.export.test.tsx` | `describe('...AC-F16 匯出鈕 in-flight 狀態')`（**現況已綠**） |
+| AC-F17／F18 | `change-history-export.routes.spec.ts`（就地改寫）＋`access-history.controller.spec.ts`（TS-015）＋`access-history.itest.ts`（TS-AQ-INT-008）＋`AccessHistoryPage.test.tsx`（既有測試就地改寫） | 見各檔 |
+| AC-F19 全部 | `AccessHistoryPage.export-limit-hint.test.tsx` | 全部 7 條 it（含 off-by-one 三值、消失、與 AC-F9② 共存） |
+
+### 已綠燈條款（現況即通過，非人為製造之假紅；見 red-gate-baseline-hygiene 慣例）
+
+三條測試於本環撰寫當下即為綠燈，非漏未撰寫或弱化：
+
+1. **AC-F1 ②③**（`createObjectURL` 呼叫次數為 0）：現行 `exportAccessHistory()` 尚未接上
+   `downloadViaBlob`，故 `URL.createObjectURL` 在**任何**分支都不會被呼叫——「0 次」對現況恆真。
+   這不代表分支②③已被驗證正確；它們只是**尚未被反例推翻**，待實作接上真實下載鏈後仍會持續為真
+   （因為錯誤分支本就不該觸發下載），屬正確的正向規格。真正抓到缺陷的是①（現況 0 次≠期望 1 次）。
+2. **AC-F16**（匯出鈕 in-flight disabled/enabled）：現行 `onExport()` 已正確以 loading 狀態包覆
+   請求週期，此行為與「回饋文案是否誠實」正交，本 delta 未變更之。
+
+### ⚠ 編譯連帶效應（非測試變紅，屬同檔案 TS 編譯之連帶效應，須向實作方說明）
+
+`access-history.controller.spec.ts` 新增之匯出斷言呼叫 `controller.exportHistory(..., res)`
+六個引數，現行方法簽章僅接受 5 個（`TS2554: Expected 0-5 arguments, but got 6`）——這是**預期之
+編譯紅燈**（本環對 `@Res()` 簽章之契約性假設）。但因 TypeScript 以「檔案」為編譯單位，此編譯錯誤
+會使**同檔案內**既有之 `TS-003`／`TS-004`／`TS-005`／`TS-016`（AC-F12 明訂「逐字不變、須維持
+綠燈」之路由/RBAC metadata 測試）**暫時無法被 jest 執行**（非「變紅」，而是整檔案 `Test suite
+failed to run`）。實作方補上 `res` 參數、整檔編譯通過後，這些既有測試會恢復可獨立驗證，屆時務必
+確認它們仍為綠燈（AC-F12 之機器驗證要求）。
+
+### 宣告層約束——現況無執行期載體（不得自行發明斷言）
+
+- **AC-F13「不阻斷之適用界線」（payload 不合法錯誤不得被同一 catch 吞掉）**：此界線在 F024 之
+  黑箱（controller 層）測試中**結構上不可觸發**——`targetId` 恆為固定字面哨兵常數，`recordAccess`
+  之 `AUDIT_TARGET_REF_REQUIRED` payload 驗證錯誤在 F024 呼叫端永遠不會發生（該驗證邏輯本身已由
+  `audit-writer.service.spec.ts` 之既有 `TS-005` 鎖定，非本 delta 職責）。本檔僅能驗證「Outbox／IO
+  暫時性失敗不阻斷」（已覆蓋）；「payload 錯誤不得被同一 catch 吞掉」之區辨，只有讀取
+  `AccessHistoryController.exportHistory()` 原始碼才能確認（違反盲測），故不寫入執行期斷言。

@@ -93,6 +93,17 @@ function matchesSpec(r: AuditRow, spec: ResolvedAuditQuery): boolean {
 }
 
 /**
+ * 排序比較子：`occurredAt DESC`，同值時 `id ASC`（決定性次鍵，AC-F7 ②）。
+ * 以序數比較（非 `localeCompare`）避免受行程 locale 影響，與 SQL 之 `ORDER BY a.id ASC` 同語意。
+ */
+function compareByOccurredAtThenId(a: AuditRow, b: AuditRow): number {
+  const byTime = b.occurredAt.getTime() - a.occurredAt.getTime();
+  if (byTime !== 0) return byTime;
+  if (a.id < b.id) return -1;
+  return a.id > b.id ? 1 : 0;
+}
+
+/**
  * 由已正規化規格與已篩選/排序之列組裝分頁結果（下推與記憶體版共用之末段組裝）。
  * total 為符合條件之全量筆數；items 為當頁切片；hasNext 依偏移＋當頁筆數 < total。
  */
@@ -150,8 +161,10 @@ export function resolveAuditQuery(
 ): Page<AuditRow> {
   const spec = resolveAuditQuerySpec(filters, now);
   const filtered = rows.filter((r) => matchesSpec(r, spec));
-  // 新到舊（stable：JS Array.sort 於現代引擎為穩定排序）。
-  filtered.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+  // 新到舊；同秒以 id ASC 為**決定性次鍵**（AC-F7 ②）——occurredAt 於稽核資料中大量重複，
+  // 只依時間排序時同秒之列序未定義，會使「第 k 列等於某筆」之斷言不穩定。
+  // 與 SQL 路徑（typeorm-audit.store.queryPage 之 ORDER BY occurredAt DESC, id ASC）同一組鍵。
+  filtered.sort(compareByOccurredAtThenId);
   const total = filtered.length;
   const start = (spec.page - 1) * spec.pageSize;
   const items = filtered.slice(start, start + spec.pageSize);

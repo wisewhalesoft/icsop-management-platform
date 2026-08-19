@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>匯出超限事前提示 · 落點示範（F024 AC-F19）</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;color:#334155;background:#FFFFFF;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+</style>
+</head>
+<!--
+  🔴 這不是 F024 之文案／版面權威檔。
+  權威仍為 prototypes/17-access-history.html；本檔僅為 AC-F19「匯出筆數超限事前提示」之
+  **落點示範（delta demo）**，供人類與 test-generator 核對版面落點、長句換行與
+  「事前提示 vs AC-F9 ② 錯誤回饋」之視覺區辨。本檔刻意只重現查詢卡片與其上下文，
+  未重現側選單、角色切換與其餘欄位；匯出成功／失敗之文案以 AC-F9 為準，非本檔。
+-->
+<body class="bg-slate-50">
+
+<!-- 示範控制列（非產品 UI） -->
+<div class="sticky top-0 z-40 bg-slate-900 text-slate-100 text-xs px-4 py-2 flex items-center gap-3 flex-wrap">
+  <span class="font-semibold">落點示範（非產品 UI）</span>
+  <span class="opacity-60">result.total =</span>
+  <button onclick="setTotal(9999)"  data-t="9999"  class="tbtn px-2 py-1 rounded border border-slate-600">9,999</button>
+  <button onclick="setTotal(10000)" data-t="10000" class="tbtn px-2 py-1 rounded border border-slate-600">10,000（邊界·不提示）</button>
+  <button onclick="setTotal(10001)" data-t="10001" class="tbtn px-2 py-1 rounded border border-slate-600">10,001</button>
+  <button onclick="setTotal(128430)" data-t="128430" class="tbtn px-2 py-1 rounded border border-slate-600">128,430</button>
+  <span class="ml-3 opacity-60">|</span>
+  <label class="inline-flex items-center gap-1.5"><input type="checkbox" id="showErr" onchange="render()" /> 同時顯示 AC-F9 ② 錯誤回饋</label>
+  <label class="inline-flex items-center gap-1.5"><input type="checkbox" id="showDefaultNote" onchange="render()" checked /> 顯示既有 30 天提示（先例）</label>
+  <span class="ml-auto opacity-60">縮放瀏覽器寬度可檢視長句換行行為</span>
+</div>
+
+<!-- Top bar（僅為呈現匯出鈕之實際落點：admin shell topbar 動作區，狹窄） -->
+<header class="sticky top-8 z-30 bg-white border-b border-slate-200">
+  <div class="h-14 px-4 flex items-center gap-3">
+    <div class="leading-tight min-w-0">
+      <div class="text-xs text-slate-400 flex items-center gap-1"><span>稽核與調閱歷程</span><i data-lucide="chevron-right" class="w-3 h-3"></i><span>查詢</span></div>
+      <div class="font-semibold text-slate-900 text-sm truncate">文件調閱歷程查詢</div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <!-- AC-F19 ③：aria-describedby 指向 #export-limit-hint（跨 portal，仍在同一 document） -->
+      <button id="exportBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"><i data-lucide="download" class="w-4 h-4"></i>匯出</button>
+      <div class="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200"><i data-lucide="user-circle" class="w-4 h-4"></i><span>黃俊傑</span></div>
+      <button title="登出" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+</header>
+
+<main class="p-5">
+
+  <!-- 既有：查詢範圍提示（頁面層級狀態敘述） -->
+  <div class="mb-4 flex items-start gap-2 rounded-lg px-3 py-2 text-sm border bg-primary-50 border-primary-100 text-primary-700">
+    <i data-lucide="globe" class="w-4 h-4 mt-0.5"></i>
+    <span>查詢範圍：<b>全公司</b>（系統管理員 / ICSOP 管理員）。</span>
+  </div>
+
+  <!-- 既有：頁面層級回饋插槽（AC-F9 ② 之錯誤回饋落在這裡，role="alert"） -->
+  <div id="errSlot" class="hidden mb-4" role="alert">
+    <div class="text-sm border rounded-md px-3 py-2 text-red-700 bg-red-50 border-red-100">
+      匯出失敗：符合查詢條件之筆數為 <span data-n>10001</span> 筆，超過匯出上限 10000 筆，請縮小查詢條件 · EXPORT_ROW_LIMIT_EXCEEDED · 400
+    </div>
+  </div>
+
+  <!-- 查詢列 -->
+  <section class="bg-white border border-slate-200 rounded-xl p-4 mb-4">
+    <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">類型</label>
+        <select class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white">
+          <option value="">全部類型</option><option>文件</option><option>循環</option><option>變更</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">人員（姓名／員工編號）</label>
+        <div class="relative"><i data-lucide="user-search" class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+          <input class="w-full pl-8 pr-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="王小明 / 22345" /></div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">文件（編號／名稱）</label>
+        <div class="relative"><i data-lucide="file-search" class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+          <input class="w-full pl-8 pr-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="ICSOP-SRC-101-1-01 / 進件" /></div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">起始日期</label>
+        <input type="date" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">結束日期</label>
+        <input type="date" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" />
+      </div>
+    </div>
+
+    <!-- 既有動作列：AC-F19 之提示**不得**塞進這一列（塞進去會擠掉「共 N 筆」並整列重排） -->
+    <div class="flex items-center gap-2 mt-3 flex-wrap">
+      <button class="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="search" class="w-4 h-4"></i>查詢</button>
+      <button class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">清除條件</button>
+      <span id="defaultNote" class="ml-1 inline-flex items-center gap-1 text-xs text-amber-700"><i data-lucide="info" class="w-3.5 h-3.5"></i>未輸入條件，已套用近 30 天預設範圍</span>
+      <span id="resultCount" class="ml-auto text-sm text-slate-500">共 10001 筆</span>
+    </div>
+
+    <!-- 🎯 AC-F19 之落點：動作列之後方兄弟節點，自成獨立一列 -->
+    <p id="export-limit-hint" class="mt-2 flex items-start gap-1.5 text-xs text-amber-700">
+      <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span id="hintText"></span>
+    </p>
+  </section>
+
+  <!-- 結果（示意） -->
+  <section class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm min-w-[1220px]">
+        <thead class="bg-slate-50 text-slate-500 text-xs">
+          <tr>
+            <th class="text-left font-medium px-4 py-2.5">操作人員</th>
+            <th class="text-left font-medium px-4 py-2.5">員工編號</th>
+            <th class="text-left font-medium px-4 py-2.5">公司</th>
+            <th class="text-left font-medium px-4 py-2.5">部門</th>
+            <th class="text-left font-medium px-4 py-2.5">處/室</th>
+            <th class="text-left font-medium px-4 py-2.5">角色</th>
+            <th class="text-left font-medium px-4 py-2.5">類型</th>
+            <th class="text-left font-medium px-4 py-2.5">對象（文件／循環）</th>
+            <th class="text-left font-medium px-4 py-2.5">操作類型</th>
+            <th class="text-left font-medium px-4 py-2.5">操作時間（新→舊）</th>
+          </tr>
+        </thead>
+        <tbody id="tbody" class="divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 設計註記（非產品 UI） -->
+  <section class="mt-6 bg-white border border-slate-200 rounded-xl p-4 text-sm text-slate-600 space-y-2">
+    <h2 class="font-semibold text-slate-900 text-sm">設計註記（AC-F19 版面落點）</h2>
+    <ul class="list-disc pl-5 space-y-1">
+      <li><b>落點</b>：查詢卡片內、動作列之<b>後方兄弟節點</b>，自成一列（<code class="mono text-xs">mt-2</code>）。與其量化之「共 N 筆」同卡片、緊接下一行。</li>
+      <li><b>樣式</b>：逐字沿用同頁 <code class="mono text-xs">#defaultNote</code>（30 天提示）之 token —— <code class="mono text-xs">text-xs text-amber-700</code> ＋ <code class="mono text-xs">info</code> 圖示。自成一列故改 <code class="mono text-xs">items-start</code>、圖示加 <code class="mono text-xs">mt-0.5 shrink-0</code>。無新樣式。</li>
+      <li><b>不塞進動作列</b>：該列為 <code class="mono text-xs">flex-wrap</code>，50 字長句會把「共 N 筆」擠到第二行並使整列在提示出現／消失時重排（＝F017 剛修過的撐破版面同型缺陷）。</li>
+      <li><b>與 AC-F9 ② 之區辨</b>：位置（卡片內 vs 卡片上方）／形狀（無框 vs 有框有底）／色調（amber vs 紅）／字級（xs vs sm）／角色（無 live region vs <code class="mono text-xs">role="alert"</code>）／語意（目前狀態 vs 剛才那次操作）。勾選上方「同時顯示錯誤回饋」可檢視兩者並存。</li>
+      <li><b>匯出鈕維持可按</b>（AC-F19 明文禁止 disabled）；關聯僅由 <code class="mono text-xs">aria-describedby</code> 承擔，跨 topbar portal 仍有效。</li>
+    </ul>
+  </section>
+</main>
+
+<script>
+  const EXPORT_ROW_LIMIT = 10000;
+  let total = 10001;
+
+  function hintText(n){
+    return `目前符合查詢條件之筆數為 ${n} 筆，已超過匯出上限 ${EXPORT_ROW_LIMIT} 筆，直接匯出將被拒絕，請先縮小查詢條件後再匯出。`;
+  }
+
+  function setTotal(n){ total = n; render(); }
+
+  function render(){
+    const over = total > EXPORT_ROW_LIMIT;
+    const hint = document.getElementById('export-limit-hint');
+    const btn  = document.getElementById('exportBtn');
+
+    document.getElementById('resultCount').textContent = `共 ${total} 筆`;
+
+    // AC-F19：> 上限才提示；恰等於上限不提示
+    if (over) {
+      hint.classList.remove('hidden');
+      document.getElementById('hintText').textContent = hintText(total);
+      btn.setAttribute('aria-describedby','export-limit-hint');
+    } else {
+      hint.classList.add('hidden');
+      document.getElementById('hintText').textContent = '';
+      btn.removeAttribute('aria-describedby'); // 不得殘留
+    }
+
+    document.getElementById('defaultNote').classList.toggle('hidden', !document.getElementById('showDefaultNote').checked);
+
+    const errSlot = document.getElementById('errSlot');
+    errSlot.classList.toggle('hidden', !document.getElementById('showErr').checked);
+    errSlot.querySelector('[data-n]').textContent = total;
+
+    document.querySelectorAll('.tbtn').forEach(b => {
+      const on = Number(b.dataset.t) === total;
+      b.classList.toggle('bg-slate-100', on);
+      b.classList.toggle('text-slate-900', on);
+    });
+
+    lucide.createIcons();
+  }
+
+  const ROWS = [
+    ['黃俊傑','22345','華南金控','稽核部','資訊稽核室','ICSOP 管理員','文件','ICSOP-SRC-101-1-01','DOWNLOAD · 下載','2026-08-18 14:22:07'],
+    ['王小明','30112','華南金控','風管部','—','系統管理員','循環','銷售及收款循環','LIFECYCLE_VIEW · 循環樹狀圖檢視','2026-08-18 14:19:51'],
+    ['林佳蓉','41288','華南金控','法務部','法遵室','ICSOP 管理員','變更','ICSOP-FIN-204-3-02','CHANGE_LOG_VIEW · 文件變更歷程檢視','2026-08-18 13:58:30'],
+  ];
+
+  document.getElementById('tbody').innerHTML = ROWS.map(r => `<tr class="hover:bg-slate-50">
+    <td class="px-4 py-2.5 font-medium text-slate-800">${r[0]}</td>
+    <td class="px-4 py-2.5 mono text-slate-500">${r[1]}</td>
+    <td class="px-4 py-2.5 text-slate-600">${r[2]}</td>
+    <td class="px-4 py-2.5 text-slate-600">${r[3]}</td>
+    <td class="px-4 py-2.5 text-slate-600">${r[4]}</td>
+    <td class="px-4 py-2.5 text-slate-600">${r[5]}</td>
+    <td class="px-4 py-2.5"><span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs border bg-slate-50 text-slate-700 border-slate-100">${r[6]}</span></td>
+    <td class="px-4 py-2.5 mono text-slate-600">${r[7]}</td>
+    <td class="px-4 py-2.5"><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs border bg-blue-50 text-blue-700 border-blue-100">${r[8]}</span></td>
+    <td class="px-4 py-2.5 mono text-slate-500">${r[9]}</td>
+  </tr>`).join('');
+
+  render();
+</script>
+</body>
+</html>

@@ -4,6 +4,12 @@ import { getAccessHistory, exportAccessHistory } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { roleMeta } from '../domain/roles';
+import {
+  EXPORT_LIMIT_BADGE,
+  EXPORT_ROW_LIMIT,
+  countFromLimitError,
+  isExportLimitError,
+} from '../domain/export-feedback';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import type {
@@ -82,12 +88,51 @@ function formatDateTime(iso: string): string {
 interface Notice {
   tone: 'success' | 'danger' | 'info';
   text: string;
+  /** 錯誤碼標記（與訊息**同一容器**內可見，`error-handling.md#export`／`AC-F9` ②）。 */
+  code?: string;
 }
 const TONE_BADGE: Record<string, string> = {
   success: 'text-emerald-700 bg-emerald-50 border-emerald-100',
   danger: 'text-red-700 bg-red-50 border-red-100',
   info: 'text-blue-700 bg-blue-50 border-blue-100',
 };
+
+/** 匯出成功之逐字回饋（`AC-F9` ①）。 */
+const EXPORT_SUCCESS_TEXT = '已匯出文件調閱歷程（CSV，UTF-8 BOM）';
+
+/**
+ * 匯出失敗之回饋（`AC-F9` ②）。
+ *
+ * ⚠ 量詞取「筆數」、限定詞取「查詢條件」——與 F037／F038（查詢條件＋事件）、F039（篩選條件＋筆數）
+ * **皆刻意不同**，不得互相對齊（`AC-F9` 之選字理由）。
+ * `{N}` 為**實際筆數**，由 `countFromLimitError()` 自後端訊息解析（後端已依 §10.18 `A16-3` 內插）。
+ */
+function exportFailureNotice(e: unknown): Notice {
+  if (isExportLimitError(e)) {
+    return {
+      tone: 'danger',
+      text: `符合查詢條件之筆數為 ${countFromLimitError(e)} 筆，超過匯出上限 ${EXPORT_ROW_LIMIT} 筆，請縮小查詢條件`,
+      code: EXPORT_LIMIT_BADGE,
+    };
+  }
+  return {
+    tone: 'danger',
+    text: e instanceof ApiError ? `匯出失敗：${e.code}` : '匯出失敗',
+  };
+}
+
+/**
+ * 超限之**事前**提示句（`AC-F19` ①，逐字）。
+ *
+ * 🔴 於 JS 內組字而非在 JSX 內跨行書寫：JSX 會把跨來源行之文字以單一空格接合，
+ * 逐字 `textContent` 斷言會因此多出空白而紅。
+ */
+function exportLimitHintText(total: number): string {
+  return `目前符合查詢條件之筆數為 ${total} 筆，已超過匯出上限 ${EXPORT_ROW_LIMIT} 筆，直接匯出將被拒絕，請先縮小查詢條件後再匯出。`;
+}
+
+/** 事前提示之容器 id（`AC-F19` ②；亦為匯出鈕 `aria-describedby` 之指向，`AC-F19` ③）。 */
+const EXPORT_LIMIT_HINT_ID = 'export-limit-hint';
 
 export function AccessHistoryPage(): JSX.Element {
   const { user } = useAuth();
@@ -172,16 +217,18 @@ export function AccessHistoryPage(): JSX.Element {
     [buildFilters, load],
   );
 
+  /**
+   * 匯出（`AC-F1`：成功回饋與檔案產生**嚴格同真值**）。
+   * `exportAccessHistory()` 回 `Promise<void>` 且**內部即為下載鏈**（`downloadViaBlob`）——
+   * 非 2xx 或 fetch reject 皆會 throw ⇒ 成功回饋只可能在下載副作用已發生後出現。
+   */
   const onExport = useCallback(async () => {
     setExporting(true);
     try {
       await exportAccessHistory(buildFilters());
-      setNotice({ tone: 'success', text: '已匯出查詢結果（CSV，草案格式）' });
+      setNotice({ tone: 'success', text: EXPORT_SUCCESS_TEXT });
     } catch (e) {
-      setNotice({
-        tone: 'danger',
-        text: e instanceof ApiError ? `匯出失敗：${e.code}` : '匯出失敗',
-      });
+      setNotice(exportFailureNotice(e));
     } finally {
       setExporting(false);
     }
@@ -203,6 +250,9 @@ export function AccessHistoryPage(): JSX.Element {
   }
 
   const rows = result?.items ?? [];
+  // `AC-F19` off-by-one：`> 10000` 才提示；**恰 10000 不提示**（後端判準為 `count > EXPORT_ROW_LIMIT`，
+  // 恰等於上限是合法且會成功匯出的）。`result` 為 null（載入中／載入失敗）→ 不提示。
+  const overExportLimit = result !== null && result.total > EXPORT_ROW_LIMIT;
   const curPage = result?.page ?? 1;
   const pageSize = result?.pageSize ?? 50;
   const startIdx = (curPage - 1) * pageSize;
@@ -210,9 +260,15 @@ export function AccessHistoryPage(): JSX.Element {
   return (
     <div className="space-y-4">
       <PageHeader breadcrumb={[{ label: '稽核與調閱歷程' }, { label: '查詢' }]} title="文件調閱歷程查詢">
+        {/*
+          🔴 `AC-F19`：超限時**維持可按**、不得 disabled——(a) 沒有說明的 disabled 鈕與本批次要修的
+          缺陷同型（把「假成功」換成「假故障」）；(b) `total` 可能過時而誤擋一次合法匯出。
+          提示只負責告知，放行與拒絕一律由後端決定。`disabled` 僅承載 in-flight（`AC-F16`）。
+        */}
         <button
           onClick={() => void onExport()}
           disabled={exporting}
+          aria-describedby={overExportLimit ? EXPORT_LIMIT_HINT_ID : undefined}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
         >
           <Icon name="download" className="w-4 h-4" />
@@ -228,12 +284,18 @@ export function AccessHistoryPage(): JSX.Element {
         </span>
       </div>
 
+      {/*
+        回饋容器之角色依 tone 決定（`AC-F9` ②：錯誤須為 `role="alert"`）。
+        ⚠ 既有「載入調閱歷程失敗」訊息因此亦由 `status` 變為 `alert`——此為正確方向之副作用
+        （錯誤本就該用 alert），已於 `AC-F9` ② 之註記明列、不視為越界。
+      */}
       {notice && (
         <div
-          role="status"
+          role={notice.tone === 'danger' ? 'alert' : 'status'}
           className={`text-sm border rounded-md px-3 py-2 ${TONE_BADGE[notice.tone]}`}
         >
-          {notice.text}
+          <p>{notice.text}</p>
+          {notice.code && <p className="mono text-[10px] text-slate-400 mt-0.5">{notice.code}</p>}
         </div>
       )}
 
@@ -341,6 +403,25 @@ export function AccessHistoryPage(): JSX.Element {
             {result ? `共 ${result.total} 筆` : ''}
           </span>
         </div>
+        {/*
+          `AC-F19` 事前提示：查詢卡片內、緊接動作列（`共 {total} 筆` 所在列）之下**自成一列**。
+          🔴 不得塞進動作列本身（`flex items-center gap-2 mt-3 flex-wrap`）——該句約 50 個全形字，
+          會在 lg 以下把 `共 {total} 筆` 擠到第二行並使整列於提示出現／消失時重排（與 F017
+          `AC-E1`～`AC-E8` 剛修過的「多連結列撐破版面」同型）。自成一列後動作列諸控制項零位移。
+          視覺 token 逐字沿用同頁既有先例（30 天行內提示：`text-xs text-amber-700` ＋ `<Icon name="info">`），
+          因自成一列僅作兩處必要調整：容器 `items-start`、圖示 `mt-0.5 shrink-0`。
+          刻意不加 `role="status"`／`aria-live`：已由匯出鈕之 `aria-describedby` 建立關聯，
+          再加 live region 會造成重複播報。
+        */}
+        {overExportLimit && result && (
+          <div
+            id={EXPORT_LIMIT_HINT_ID}
+            className="mt-2 flex items-start gap-1.5 text-xs text-amber-700"
+          >
+            <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            <span>{exportLimitHintText(result.total)}</span>
+          </div>
+        )}
       </section>
 
       {/* 結果 */}

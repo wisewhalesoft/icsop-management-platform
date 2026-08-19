@@ -8,13 +8,11 @@ import { REQUIRE_PERMISSION_KEY, RequiredPermission } from '../rbac/require-perm
 import { FunctionKey, canPerform } from '../rbac/function-matrix';
 
 /**
- * F037 `AC-D5`／`AC-D8`、F038 `AC-D4` —— 匯出端點之閘門、路由順序，與 F024「不外溢」回歸鎖定。
+ * F037 `AC-D5`／`AC-D8`、F038 `AC-D4` —— 匯出端點之閘門、路由順序。
  *
  * 權威：
  *  - F037 `AC-D5`（主管／部門窗口／一般使用者直接呼叫匯出端點 → 403 `PERMISSION_DENIED`，
  *    沿用既有閘門，**不新增功能矩陣列**）
- *  - F037 `AC-D8`／F039 `AC-D10`（🔒 **不外溢**：F024 之 `GET /admin/access-history/export` 與其
- *    前端匯出處理，皆與本 delta 導入前逐字相同；共用 CSV 產生器**須以參數承接欄位定義與 scope**）
  *  - architecture-spec §10.4「三處端點」表（`/admin/change-history/documents/export`、
  *    `/admin/change-history/lifecycles/export`，閘門皆為 `文件變更歷程` read）
  *  - §10.15 盲區 #8（route metadata 可測；須把閘門釘住，否則日後被無聲改回）
@@ -26,6 +24,10 @@ import { FunctionKey, canPerform } from '../rbac/function-matrix';
  *    `documents/:documentId` **之後**，`GET /admin/change-history/documents/export` 會被前者吃掉
  *    （`:documentId = 'export'`），匯出永遠回一份「文件 id 為 export」之空變更清單，**HTTP 200、
  *    前端拿到 JSON 而非 CSV，且沒有任何錯誤**。同理適用 `lifecycles/export`。
+ *
+ * 🔴 2026-08-18：F037 `AC-D8`／F039 `AC-D10` 原載明之「F024 不外溢」鎖定條款（範圍紀律 J）
+ *    已由 F024 [`AC-F17`](../../../docs/specs/features/F024-access-history-query.md#export-fix-delta)
+ *    正式取代並解除——見下方 describe 區塊（已就地改寫為新行為之背書，非刪除）。
  */
 
 const proto = ChangeHistoryController.prototype as unknown as Record<string, unknown>;
@@ -94,29 +96,44 @@ describe('ChangeHistoryController 匯出端點（F037 AC-D5／F038 AC-D4；§10.
   });
 });
 
-// ── 🔒 F037 AC-D8／F039 AC-D10：F024 既有程式路徑未被觸及 ────────────────
+// ── 🔴 F024 AC-F17／AC-F18（2026-08-18）：範圍紀律 J 已由人類閘門正式解除 ──────────
+//
+// 本 describe 區塊（原名「🔒 F024 匯出『不外溢』回歸鎖定」）曾刻意禁止 F024 之匯出端點被改動
+// （F037 AC-D8／F039 AC-D10，2026-08-16 範圍紀律 J）。F024 AC-F17 明令「本批次取代 F037
+// AC-D8／F039 AC-D10 之 F024 鎖定條款」——範圍紀律 J 已於 2026-08-18 由人類閘門正式解除，
+// F024 之匯出**正式納入** error-handling.md#export 之共用規則（第四處）。
+//
+// 🔴 依 AC-F17「不得直接刪除，須就地改寫為新行為之背書」之既有慣例（比照本 repo commit
+// `test(document-list): …並改寫為舊行為背書的 TS-D-020`），本區塊改寫如下——舊斷言逐條保留於
+// `OLD>` 註解，新斷言依 AC-F18 承接表逐列對應。
 
-describe('🔒 F024 匯出「不外溢」回歸鎖定（F037 AC-D8／F039 AC-D10；範圍紀律 J）', () => {
+describe('🔓 F024 匯出正式納入共用 CSV 匯出（AC-F17／AC-F18；範圍紀律 J 已解除，2026-08-18）', () => {
   const controllerPath = join(__dirname, '..', 'audit', 'access-history.controller.ts');
   const src = readFileSync(controllerPath, 'utf8');
 
-  it('F024 之 `GET export` 仍回傳 JSON `{ rows, total }`（未被順手改造為輸出 CSV）', () => {
-    expect(src).toContain('return { rows: result.items, total: result.total };');
+  it('F024 之 GET export 不再回傳 JSON {rows,total} 形狀（AC-F2）', () => {
+    // OLD> expect(src).toContain('return { rows: result.items, total: result.total };');
+    expect(src).not.toContain('return { rows: result.items, total: result.total };');
   });
 
-  it('F024 controller **未** import 本 delta 之 CSV 共用產生器（`storage/csv-export`）', () => {
-    expect(src).not.toContain('csv-export');
-    expect(src).not.toContain('toCsvBuffer');
+  it('F024 controller 已 import 共用 CSV 產生器（storage/csv-export），未自行實作第二份 CSV 組字（AC-F2／AC-F17 ②）', () => {
+    // OLD> expect(src).not.toContain('csv-export'); expect(src).not.toContain('toCsvBuffer');
+    expect(src).toContain('csv-export');
+    expect(src).toContain('toCsvBuffer');
   });
 
-  it('F024 controller **未**新增檔案輸出相關之標頭／BOM（`Content-Disposition`／`text/csv`／BOM bytes）', () => {
-    expect(src).not.toContain('Content-Disposition');
-    expect(src).not.toContain('text/csv');
-    expect(src).not.toContain('0xEF');
+  it('F024 controller 已設定 Content-Type/Content-Disposition，BOM 由共用產生器以 bytes 前置（AC-F2）', () => {
+    // OLD> expect(src).not.toContain('Content-Disposition'); expect(src).not.toContain('text/csv'); expect(src).not.toContain('0xEF');
+    expect(src).toContain('Content-Disposition');
+    expect(src).toContain('text/csv');
   });
 
-  it('F024 之閘門與匯出上限常數未被更動（`DOCUMENT_ACCESS_HISTORY` read ＋ `EXPORT_MAX`）', () => {
+  it('閘門 decorator 逐字不變（AC-F12）；EXPORT_MAX 已不存在，上限改由 EXPORT_ROW_LIMIT 承擔（AC-F8 ③）', () => {
+    // OLD> expect(src).toContain("@RequirePermission(FunctionKey.DOCUMENT_ACCESS_HISTORY, 'read')"); expect(src).toContain('EXPORT_MAX');
     expect(src).toContain("@RequirePermission(FunctionKey.DOCUMENT_ACCESS_HISTORY, 'read')");
-    expect(src).toContain('EXPORT_MAX');
+    expect(src).not.toContain('EXPORT_MAX');
   });
+
+  // 📝 改寫而非刪除之理由（AC-F17）：本區塊之存在本身記錄了「範圍紀律 J 曾經有效、且於
+  // 2026-08-18 由人類閘門解除」這件事。刪掉它，日後只會看到一段沒有來由的行為變更。
 });

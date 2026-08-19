@@ -32,11 +32,21 @@ const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
  */
 const INJECTION_PREFIXES = ['=', '+', '-', '@', '\t', '\r'];
 
-/** 筆數上限檢查。**必須在組 CSV 之前**單點執行（AC 明訂「不產生任何檔案」）。 */
+/**
+ * 筆數上限檢查。**必須在組 CSV 之前**單點執行（AC 明訂「不產生任何檔案」）。
+ *
+ * 🔴 訊息**必須內插實際 `count`，且 `count` 必須排在 `EXPORT_ROW_LIMIT` 之前**
+ * （architecture-spec §10.18 決策 `A16-3`，採甲案）：前端 `countFromLimitError()` 取的是訊息中
+ * **第一個**符合 `/\d+/` 的數字；順序顛倒則四處匯出之 `{N}` 仍恆為上限值 10000，本修正等於白修。
+ *
+ * 📌 此為**填補既有缺口**而非變更已被驗證之既有行為——全域 grep 確認無任何測試把「訊息只含上限值」
+ * 鎖定為期望行為（既有斷言皆為 `toContain('EXPORT_ROW_LIMIT_EXCEEDED')` 之子字串比對）。
+ * 連帶使 F037／F038／F039 三處既有 AC（本就要求 `{N}` 為實際筆數）由「文字與程式碼不符」變為一致。
+ */
 export function assertExportRowLimit(count: number): void {
   if (count > EXPORT_ROW_LIMIT) {
     throw new BadRequestException(
-      `EXPORT_ROW_LIMIT_EXCEEDED: 符合條件之筆數超過上限 ${EXPORT_ROW_LIMIT} 筆，請縮小查詢條件後再匯出`,
+      `EXPORT_ROW_LIMIT_EXCEEDED: 符合條件之筆數為 ${count} 筆，超過匯出上限 ${EXPORT_ROW_LIMIT} 筆，請縮小查詢條件後再匯出`,
     );
   }
 }

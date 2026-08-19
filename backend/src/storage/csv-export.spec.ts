@@ -175,6 +175,56 @@ describe('csv-export 共用產生器（error-handling.md#export；F037/F038/F039
     });
   });
 
+  /**
+   * 🔴 A16-3（F024 AC-F9 ②，architecture-spec §10.18）：`assertExportRowLimit` 訊息須內插
+   * 實際筆數，且該數字必須排在 `EXPORT_ROW_LIMIT` 常數（10000）**之前**——`countFromLimitError()`
+   * 取的是訊息中**第一個**符合 `/\d+/` 的數字，順序顛倒則 `{N}` 仍恆為上限值，本題等於白修。
+   *
+   * ⚠ 對實作全盲：現況 `assertExportRowLimit` 之訊息**未內插** `count`（僅含上限值 10000），
+   * 下列斷言於本環撰寫時即為紅燈，屬預期紅燈。
+   *
+   * 📝 回歸複核（非本環新增之保證，已由 architecture-spec §10.18 A16-3 獨立查證，此處僅重申）：
+   * 上方既有測試（「10001 筆 → 拋 EXPORT_ROW_LIMIT_EXCEEDED（400），訊息含上限值」）僅以
+   * `.toContain('EXPORT_ROW_LIMIT_EXCEEDED')` 斷言，並未鎖定「訊息只含上限值」，故本節之修改
+   * 不會使該既有測試變紅——它會在本節生效後繼續保持綠燈（合法之既有回歸鎖定）。
+   */
+  describe('🔴 A16-3（F024 AC-F9 ②）：訊息內插實際筆數，且排在上限值之前', () => {
+    function messageOf(count: number): string {
+      let caught: unknown;
+      try {
+        assertExportRowLimit(count);
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeDefined();
+      return (caught as { message: string }).message;
+    }
+
+    it('10001 筆 → 訊息含實際筆數 10001', () => {
+      expect(messageOf(10_001)).toContain('10001');
+    });
+
+    it('🔴 順序：實際筆數必須出現於上限值（10000）之前（countFromLimitError 取第一個數字）', () => {
+      const msg = messageOf(10_001);
+      const idxActual = msg.indexOf('10001');
+      const idxLimit = msg.indexOf('10000');
+      expect(idxActual).toBeGreaterThanOrEqual(0);
+      expect(idxLimit).toBeGreaterThan(idxActual);
+    });
+
+    it('大量超限（128430 筆）→ 訊息中第一個數字為實際筆數 128430，非恆為上限值 10000', () => {
+      const msg = messageOf(128_430);
+      const firstNumber = msg.match(/\d+/)?.[0];
+      expect(firstNumber).toBe('128430');
+    });
+
+    it('恰上限＋1（10001）與大量超限（128430）之訊息中「第一個數字」不得恆為同一值（鑑別力自查）', () => {
+      const first10001 = messageOf(10_001).match(/\d+/)?.[0];
+      const first128430 = messageOf(128_430).match(/\d+/)?.[0];
+      expect(first10001).not.toBe(first128430);
+    });
+  });
+
   describe('🔴 檔名與時區（F039 AC-D7／F037 AC-D4／F038 AC-D4 ①；§10.15 盲區 #5「會雙綠」）', () => {
     /** 2026-08-16T16:32:08Z → UTC+8 為 2026-08-17 00:32:08（**跨日**，故可鑑別 UTC vs UTC+8）。 */
     const FIXED = new Date('2026-08-16T16:32:08.000Z');

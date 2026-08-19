@@ -21,7 +21,6 @@ import type {
   NodeDrawerData,
   AccessHistoryFilters,
   AccessHistoryPage,
-  AccessHistoryRow,
   PublicListFilters,
   PublicListPage,
   OrgUnitRecord,
@@ -600,12 +599,21 @@ export function getAccessHistory(f: AccessHistoryFilters = {}): Promise<AccessHi
   return apiFetch<AccessHistoryPage>(`/admin/access-history${accessHistoryQuery(f)}`);
 }
 
-/** GET /admin/access-history/export（匯出，遵循當前查詢條件與角色範圍）。 */
-export function exportAccessHistory(
-  f: AccessHistoryFilters = {},
-): Promise<{ rows: AccessHistoryRow[]; total: number }> {
-  return apiFetch<{ rows: AccessHistoryRow[]; total: number }>(
+/**
+ * GET /admin/access-history/export（匯出 CSV，遵循當前查詢條件與角色範圍；F024 `AC-F3`）。
+ *
+ * 🔴 以 `downloadViaBlob` 觸發，**不得**用 `window.open`／`<a href>`／`apiFetch`：
+ * top-level navigation 會送 `Accept: text/html` 而撞 SPA fallback，使用者會拿到一份副檔名
+ * `.csv`、內容卻是 app shell 的檔案——沒有錯誤、沒有任何測試會抓到（2026-07-25 瀏覽器煙霧測試
+ * 已踩過同型 bug；architecture-spec §10.1 明文禁令）。
+ *
+ * 回傳 `Promise<void>`：檔名以回應之 `Content-Disposition` 為準，第二引數僅為解析失敗時之 fallback。
+ * 查詢字串與 `getAccessHistory()` 共用 `accessHistoryQuery()`（`AC-F7` ④：不得各寫一份）。
+ */
+export function exportAccessHistory(f: AccessHistoryFilters = {}): Promise<void> {
+  return downloadViaBlob(
     `/admin/access-history/export${accessHistoryQuery(f)}`,
+    'access_history.csv',
   );
 }
 

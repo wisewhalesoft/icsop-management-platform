@@ -25,7 +25,11 @@ export type AuditTargetType =
   // 比照 F007 LIFECYCLE_DELETE 先例）。targetId＝ORG_CHANGE_ALERT.id。
   | 'ORG_CHANGE_ALERT'
   // F039 附錄下載（architecture-spec §3.6 決策三，additive）。targetId＝APPENDIX_POOL.id。
-  | 'APPENDIX';
+  | 'APPENDIX'
+  // F024 調閱歷程匯出（architecture-spec §10.18 A16-1，additive）。無自然之對象實體 id ⇒
+  // targetId 採固定哨兵常數 ACCESS_HISTORY_EXPORT_TARGET_ID，且**不對映任何參照欄**
+  // （沿用 ORG_CHANGE_ALERT 之「無對映 case」既有模式，buildAuditRow 不需新增 case）。
+  | 'ACCESS_HISTORY';
 
 /** 操作類型（data-model AUDIT_LOG.actionType，逐字沿用 F036/F037/F038 spec 命名）。 */
 export type AuditActionType =
@@ -43,7 +47,9 @@ export type AuditActionType =
   | 'LIFECYCLE_CHANGELOG_VIEW'
   | 'LIFECYCLE_CHANGELOG_DOWNLOAD'
   // F006：組織異動待確認提示被處理（Route A 自動／Route B 手動皆記錄）。
-  | 'ALERT_RESOLVED';
+  | 'ALERT_RESOLVED'
+  // F024：調閱歷程匯出（AC-F13）。additive：僅新增字面值，既有 11 種變體之語意逐字不變。
+  | 'ACCESS_HISTORY_EXPORT';
 
 /** 調閱來源（E09 US-097），預設 DIRECT。 */
 export type AuditSource = 'DIRECT' | 'AI_QA';
@@ -134,6 +140,27 @@ export interface AppendixAuditEvent extends AuditEventBase {
   documentId: string;
 }
 
+/**
+ * 調閱歷程匯出（F024 `AC-F13`，無浮水印）。第 8 個變體；既有 7 個變體之形狀逐字不動
+ * （比照 F039 `APPENDIX` 變體加入時之處置，architecture-spec §10.18 `A16-1`）。
+ *
+ * 🔴 `targetId` 恆為 {@link ACCESS_HISTORY_EXPORT_TARGET_ID}——匯出之對象是一個**查詢結果集**，
+ * 不是任何一筆可定址之記錄。**不得**比照 F037／F038 以 `items[0]?.documentId ?? null` 一類
+ * 「取結果集第一筆」之運算式導出（0 筆匯出時會退化為 null → `AUDIT_TARGET_REF_REQUIRED`
+ * → 稽核靜默漏記；該既有缺陷登錄於 `OQ-E07-15`，本輪不修但不得照抄）。
+ */
+export interface AccessHistoryExportAuditEvent extends AuditEventBase {
+  targetType: 'ACCESS_HISTORY';
+  actionType: 'ACCESS_HISTORY_EXPORT';
+}
+
+/**
+ * `ACCESS_HISTORY_EXPORT` 之固定哨兵 `targetId`（architecture-spec §10.18 `A16-1`）。
+ * 僅用於通過 `buildAuditRow()` 最前面之非空檢查；`ACCESS_HISTORY` 無對映 case ⇒
+ * 本值**不落地於任何參照欄**（documentId／lifecycleId／formId／appendixId 皆為 null）。
+ */
+export const ACCESS_HISTORY_EXPORT_TARGET_ID = 'access-history-export';
+
 /** 稽核調閱事件（以 targetType 判別之聯集）——D 契約鎖定形狀。 */
 export type AuditAccessEvent =
   | DocumentAuditEvent
@@ -142,7 +169,8 @@ export type AuditAccessEvent =
   | DocumentChangeLogAuditEvent
   | LifecycleChangeLogAuditEvent
   | OrgChangeAlertAuditEvent
-  | AppendixAuditEvent;
+  | AppendixAuditEvent
+  | AccessHistoryExportAuditEvent;
 
 /**
  * 已物化之稽核列（append-only）。同時作為 AUDIT_LOG 落地列與 F024 查詢結果列。

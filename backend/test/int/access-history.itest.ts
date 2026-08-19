@@ -54,6 +54,11 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+/** 去除 UTF-8 BOM 字元（供解析 CSV 匯出回應之 `.text` 使用，AC-F2③）。 */
+function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
 describe('[int] F024 調閱歷程查詢（audit-query）vs SOP', () => {
   let ctx: IntCtx;
   let viewerCookie: string;
@@ -265,7 +270,14 @@ describe('[int] F024 調閱歷程查詢（audit-query）vs SOP', () => {
     expect(r.status).toBe(401);
   });
 
-  it('TS-AQ-INT-008 匯出遵循查詢條件（與 TS-002 之查詢結果一致）', async () => {
+  /**
+   * 🔴 AC-F18 承接表就地改寫：原斷言解析 JSON `e.body.total`／`e.body.rows`；
+   * 匯出回應已依 AC-F2 改為 CSV 位元組，改為解析 CSV：資料列數＝查詢 total、
+   * 「對象（文件／循環）」欄之值集合＝查詢結果之 documentNumber 集合（AC-F7）。
+   *   OLD> `expect(e.body.total).toBe(q.body.total);`
+   *   OLD> `const eNums = (e.body.rows as Row[]).map((r) => r.documentNumber).sort();`
+   */
+  it('TS-AQ-INT-008 匯出遵循查詢條件（CSV 列數與「對象」欄集合與 TS-002 之查詢結果一致，AC-F2／AC-F7）', async () => {
     const params = { kind: '文件', target: curNum };
     const q = await query(ctx.adminCookie, qs(params));
     const e = await ctx
@@ -273,16 +285,71 @@ describe('[int] F024 調閱歷程查詢（audit-query）vs SOP', () => {
       .get(`/admin/access-history/export${qs(params)}`)
       .set('Cookie', ctx.adminCookie);
     expect(e.status).toBe(200);
-    expect(e.body.total).toBe(q.body.total);
-    const eNums = (e.body.rows as Row[]).map((r) => r.documentNumber).sort();
+    expect(e.headers['content-type']).toContain('text/csv');
+    const text = stripBom(e.text as string).replace(/\r?\n$/, '');
+    const lines = text.split(/\r?\n/);
+    expect(lines[0]).toBe(
+      '操作人員,員工編號,公司,部門,處/室,角色,類型,對象（文件／循環）,操作類型,操作時間',
+    );
+    const dataLines = lines.slice(1);
+    expect(dataLines).toHaveLength(q.body.total);
+    const eTargets = dataLines.map((l) => l.split(',')[7]).sort();
     const qNums = (q.body.items as Row[]).map((r) => r.documentNumber).sort();
-    expect(eNums).toEqual(qNums);
+    expect(eTargets).toEqual(qNums);
   });
 
   it('TS-AQ-INT-009 匯出角色守門同查詢（真 User session）→ 403 PERMISSION_DENIED', async () => {
     const r = await ctx.http().get('/admin/access-history/export').set('Cookie', denyCookie);
     expect(r.status).toBe(403);
     expect(JSON.stringify(r.body)).toContain('PERMISSION_DENIED');
+  });
+
+  /**
+   * 🔴 AC-F13（真 DB）：匯出成功 → AUDIT_LOG 恰新增一筆 ACCESS_HISTORY_EXPORT。
+   * 稽核經 outbox 非阻斷入列，須 `processOutboxRetry()` 搬遷後才落 AUDIT_LOG
+   * （比照既有 F040 int 測試慣例：`f040-name-snapshot-vs-join.itest.ts`）。
+   */
+  it('TS-AQ-INT-013 匯出成功（N 筆）→ AUDIT_LOG 恰新增一筆 ACCESS_HISTORY_EXPORT，watermarkSnapshot=null（AC-F13）', async () => {
+    const since = new Date();
+    const e = await ctx
+      .http()
+      .get(`/admin/access-history/export${qs({ kind: '文件', target: curNum })}`)
+      .set('Cookie', ctx.adminCookie);
+    expect(e.status).toBe(200);
+
+    await ctx.app.get(AuditWriterService).processOutboxRetry();
+
+    const rows = await AppDataSource.getRepository(AuditLog).find({
+      where: { actionType: 'ACCESS_HISTORY_EXPORT' },
+    });
+    const fresh = rows.filter((r) => r.occurredAt.getTime() >= since.getTime());
+    expect(fresh.length).toBeGreaterThanOrEqual(1);
+    expect(fresh[0].watermarkSnapshot).toBeNull();
+  });
+
+  /**
+   * 🔴 AC-F11 ＋ AC-F13（真 DB）：0 筆匯出仍為成功（僅表頭 CSV），且稽核義務與非空匯出相同，
+   * 不因結果集為空而豁免（AC-F13 明訂「0 筆不得靜默漏記」，此為其真 DB 版本，補強
+   * `access-history.controller.spec.ts` 已有之 mock 版本）。
+   */
+  it('TS-AQ-INT-014 0 筆匯出（無匹配之對象查詢）→ 200，CSV 僅表頭，AUDIT_LOG 仍新增一筆（AC-F11／AC-F13）', async () => {
+    const since = new Date();
+    const noMatch = `${curNum}-NOMATCH-ZZINT`;
+    const e = await ctx
+      .http()
+      .get(`/admin/access-history/export${qs({ kind: '文件', target: noMatch })}`)
+      .set('Cookie', ctx.adminCookie);
+    expect(e.status).toBe(200);
+    const text = stripBom(e.text as string).replace(/\r?\n$/, '');
+    expect(text.split(/\r?\n/)).toHaveLength(1);
+
+    await ctx.app.get(AuditWriterService).processOutboxRetry();
+
+    const rows = await AppDataSource.getRepository(AuditLog).find({
+      where: { actionType: 'ACCESS_HISTORY_EXPORT' },
+    });
+    const fresh = rows.filter((r) => r.occurredAt.getTime() >= since.getTime());
+    expect(fresh.length).toBeGreaterThanOrEqual(1);
   });
 
   it('TS-AQ-INT-010 展開 VIEW 列：非空浮水印快照＋身分快照與種入值一致', async () => {

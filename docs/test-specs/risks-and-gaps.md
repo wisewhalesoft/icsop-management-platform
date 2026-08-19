@@ -1087,3 +1087,27 @@ docker compose -p icsop logs backend | grep -F "$SECRET"    # 伺服器日誌得
 | D-E-05 | spec-writer | `AC-E14`「恰一次」之語意未界定「同一行程內第二次載入設定（熱重載）」是否應再記一筆。環編碼為**冪等**（重複呼叫只留一筆）。 |
 | D-E-06 | ⚠ **既有缺陷，非爭議** | **現況已違反 `AC-E13`**：`/auth/callback` 之登入失敗 HTML 頁把上游原始錯誤 `network_error: fetch failed` 直接印給使用者。本環兩條約束目前為此紅。 |
 | D-E-07 | lead | 交辦單寫「`AC-E#` 批次（20 處）」；規格實際定義 **`AC-E1`～`AC-E15` 共 15 條**（20 為該字串於檔內之出現次數）。本環按 15 條建。 |
+
+## F024 匯出鈕失效之修復 delta（2026-08-18） {#f024-export-fix}
+
+> source: [features/F024-test.md#export-fix-delta](features/F024-test.md#export-fix-delta)（`AC-F1`～`AC-F19`）。
+
+### D. 結構上不可達之殘留面（登記，不修）
+
+| # | 項目 | 為何連黑箱測試也測不了 |
+|---|---|---|
+| D-F024-01 | `AC-F13` ⚠「不阻斷之適用界線」——Outbox／IO 暫時性失敗須非阻斷，但 payload 不合法（`AUDIT_TARGET_REF_REQUIRED`）不得被同一 `catch` 吞掉，兩者須被實作區分對待 | F024 之 `targetId` 恆為固定字面哨兵常數（A16-1 裁決），`AuditWriterService.recordAccess()` 之 `AUDIT_TARGET_REF_REQUIRED` 驗證錯誤在 F024 的呼叫路徑上**結構上不可能發生**——該驗證邏輯本身已由既有 `audit-writer.service.spec.ts` 之 `TS-005` 鎖定，不屬本 delta 職責。要區辨「controller 是否用同一個 blanket `catch` 吞掉兩種不同錯誤」，唯一辦法是讀取 `AccessHistoryController.exportHistory()` 之原始碼本身，違反盲測。`access-history.controller.spec.ts` 之「🔴 Outbox／IO 層之稽核寫入失敗（暫時性）→ 不阻斷匯出」一條已覆蓋「非阻斷」半；「不得吞 payload 錯誤」半僅登記於此，供人工 code review 時對照 AC-F13 原文核對，機器環無法覆蓋。 |
+
+### B. 本輪刻意不覆蓋（機器可驗約束環之範圍決定）
+
+| # | 缺口 | 理由 |
+|---|---|---|
+| G-F024-01 | Playwright e2e fidelity（對真實整合堆疊之 prototype 對齊） | 使用者明確指示本輪（F024 匯出修復）僅建 jest／vitest 單元與元件測試＋既有 int 測試延伸，不建 Playwright／Stryker mutation／dependency-cruiser。 |
+| G-F024-02 | AC-F8「10001 筆」邊界之真實 DB 版本（int 測試以真 10001 筆種入 AUDIT_LOG 驗證上限） | 種入萬筆等級之測試資料對共用 SOP dev DB 之成本／風險（磁碟、其他 int 測試序列排隊時間）與本次 bug-fix delta 之授權範圍不成比例；架構文件 §10.18 A16-4 末段本身亦記載「F024 全公司量級待下一輪以正式環境真實資料校準，非本輪 blocking」。上限邏輯已由 `access-history.controller.spec.ts`（mock `total`）與共用 `csv-export.spec.ts` 兩層機器驗證覆蓋，數值上完全等價，只是不經真實 SQL COUNT。 |
+
+### 編譯連帶效應（已於 test-spec 文件本體記載，此處重申供快速索引）
+
+`access-history.controller.spec.ts` 新增之 6 參數 `exportHistory(...)` 呼叫，在實作補上 `@Res()`
+參數前會使**整份檔案**（含既有 `AC-F12` 明訂「須維持綠燈」的 `TS-003`／`TS-004`／`TS-005`／
+`TS-016`）因 TS 編譯失敗而暫時無法執行。這不是這些既有測試變紅，而是同檔案編譯單位的連帶效應；
+實作補上參數、整檔編譯通過後即會恢復可獨立驗證。詳見 [features/F024-test.md#export-fix-delta](features/F024-test.md#export-fix-delta)。

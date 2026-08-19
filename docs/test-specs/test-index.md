@@ -30,7 +30,7 @@
 | F020 前台檢視器 | [features/F020-test.md](features/F020-test.md) |
 | F021 / F022 檢視與列印 | [features/F021-test.md](features/F021-test.md)、[features/F022-test.md](features/F022-test.md) |
 | F023 稽核紀錄 | [features/F023-test.md](features/F023-test.md) |
-| F024 調閱查詢 | [features/F024-test.md](features/F024-test.md) |
+| F024 調閱查詢（含 2026-08-18 匯出鈕失效之修復 delta `AC-F1`～`AC-F19`） | [features/F024-test.md](features/F024-test.md)（末段 [#export-fix-delta](features/F024-test.md#export-fix-delta) ← 2026-08-18 追加） |
 | F027–F031 RAG ingestion | [F027](features/F027-test.md)、[F028](features/F028-test.md)、[F029](features/F029-test.md)、[F030](features/F030-test.md)、[F031](features/F031-test.md) |
 | F039 附錄管理 | [features/F039-test.md](features/F039-test.md) |
 | **F040 循環子分類（橫切）** | **[features/F040-test.md](features/F040-test.md)** ← 2026-08-07 新增 |
