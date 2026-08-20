@@ -97,9 +97,9 @@ npx tsc --noEmit → 無輸出（乾淨）
 | 2 | `TS-D18-062` 之 `within(row).getByText('—')`（單數）被同檔 `AC-N47` 新欄連坐 | fixture `uf3` 之 `formNumber` 為 `null` **且**無 `draftingDeptCodes` ⇒ 同一 `<tr>` 內必然出現兩個 `—`。兩條 AC（`AC-D15①`／`AC-N47`）都明訂 0 值顯示 U+2014，且 `AC-N47` 明訂該欄置於「表單名稱」之後 ⇒ **結構上必然**多重命中，非產品缺陷 | 成立 → 先取 `[data-form-number]` 容器再於其內找文字 |
 | 3 | `AppendixManagementPage.export.test.tsx` 之「後台**不得**渲染 `data-wm-note`」前提已失效 | 前提源自 `OQ-FM-01`，已被 `OQ-D9-08`／`OQ-D9-33`／`F020 AC-N20` 全面推翻；**環內互斥可直接舉證**——同 feature 之 `AppendixManagementPage.test.tsx:83`／`:96` 正面要求每列帶 `data-wm-note` 且文案逐字，兩案不可能同時綠於同一份 DOM | 成立 → 就地反轉為 `AC-N20` 正面斷言（pdf／非 pdf 兩態），原案全文逐字保留於註解 |
 
-> 📌 三則皆為「**環內兩條斷言互斥**」或「**前提已被人類裁決推翻**」，屬 [dispute-proof-patterns] 之
-> 「互斥窮舉」型。本人未因任何一則而修改測試或放寬產品行為；申訴期間先實作**可綠之那一側**
-> （＝spec／prototype 所要求者），不空等。
+> 📌 三則皆為「**環內兩條斷言互斥**」或「**前提已被人類裁決推翻**」——即可**逐格窮舉舉證**之型，
+> 而非「我覺得測試太嚴」。本人未因任何一則而修改測試或放寬產品行為；申訴期間先實作
+> **可綠之那一側**（＝spec／prototype 所要求者），不空等裁決。
 
 ## 五、刻意偏離 prototype 之項目與可舉證理由（**本輪最需留存之紀錄**）
 
@@ -140,7 +140,7 @@ prototype 該行自帶 `<span class="...">示範值</span>` 標記，即 designe
 ### (e) 🔴 兩個「—」儲存格：把 `title`／配色 class 從 prototype 的內層 `<span>` **移到帶掛鉤的 `<td>`**
 > **這是可推廣的測試／DOM 接縫知識，是本輪最值得留給下一輪的一條。**
 
-- **prototype 形狀**（19 行 321-322 同型）：
+- **prototype 形狀**（`prototypes/19-usage-form-management.html:322`，`data-form-number` 於 `:320` 同型）：
   `<td class="px-4 py-3" data-drafting-dept><span class="text-slate-300" title="此表單未指定制定部門">—</span></td>`
 - **問題**：環以 `getByText('—', { selector: '[data-drafting-dept]' })` 定位。DTL 的 `selector` **只過濾
   「被文字命中的那個元素本身」，不看祖先**；而 `getNodeText(node)` 只串接**直屬** text node。
@@ -223,7 +223,7 @@ lead 交接時列為待查項。本人**在動手前先跑一次乾淨基準**�
 |---|---|---|
 | 1 | **兩個新頁之瀏覽器煙霧測試** | 未做。vitest 全為 jsdom＋`vi.mock('../api/endpoints')`，**從未真的打到後端**。需真人驗：`/admin/usage-forms/new` 建立一筆（含編號與制定部門）→ 清單該列「制定部門」欄顯示**組織名稱**而非裸 `orgCode`；`/admin/usage-forms/:id/edit` 回填後儲存 → 該列六欄不變。硬重新整理（非 SPA 導覽）兩條新路由亦須回 SPA 而非 404 |
 | 2 | **制定部門名稱解析之真實資料** | 清單頁與兩新頁之標籤皆由 `/org-units` 解析；解析失敗時**優雅降級為顯示 `orgCode`**（不顯示 undefined、不阻斷清單）。此降級路徑在單元測試中恆被走到（環未 mock `getOrgUnits`），**但「解析成功」之路徑從未被機器驗證** |
-| 3 | `prototypes/18-permission-matrix.html:221` 之 OJT 列仍為舊值 | 該行仍為 `['唯讀','可寫','唯讀','唯讀','唯讀']`，未隨 `OQ-D9-19/20/24` 更新。本人依 `FIELD_MATRIX`（`AC-N22` 之權威）改前端 `FIELD_DISPLAY`，故**程式與 prototype 現為不一致**。lead 已派回 designer 補正；本人未碰 `prototypes/**` |
+| 3 | ~~`prototypes/18-permission-matrix.html` 之 OJT 列落後~~ ✅ **已解決** | 交付時該行仍為舊值 `['唯讀','可寫','唯讀','唯讀','唯讀']`，未隨 `OQ-D9-19/20/24` 更新；本人依 `FIELD_MATRIX`（`AC-N22` 之權威）而非依過時 prototype 改前端 `FIELD_DISPLAY`，並如實提報「程式與 prototype 不一致」而**未自行修改 `prototypes/**`**。lead 派回 designer 後已於 `f36b51e` 補正為 `['唯讀','可寫','可寫','可寫','唯讀']`（`:230`），兩側現已一致 |
 | 4 | 前後端 `FIELD_MATRIX` 兩份鏡射之交叉比對 | 沿 impl-fe 段之盲區 #24：兩側測試各自對各自檔案斷言，**無自動化交叉比對**。本段只動前端**顯示**鏡射（`FIELD_DISPLAY`），未動 `domain/field-matrix.ts` |
 | 5 | `.xls` 上傳鈕仍為 `disabled` | 沿 impl-fe 段 §六(e)②之登錄，本段未觸碰。**請勿因該案綠燈而認為 `.xls` 上傳可用** |
 | 6 | backend 線之實作日誌 | `impl-be` 因額度中止未寫；lead 已表明另行處理，非本人範圍 |
