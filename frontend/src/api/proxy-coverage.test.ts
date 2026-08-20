@@ -39,6 +39,7 @@ const NOT_PROXIED: Record<string, string> = {
  * 📌 已實測驗證兩者皆為 `try_files $uri =404`、皆無 `proxy_pass`（純靜態檔服務，非代理）。
  */
 const STATIC_LOCATIONS: Record<string, string> = {
+  auth: '（負向控制注入，臨時）測試用假理由超過十個字元。',
   assets: '雜湊資產（Vite build 產出，nginx.conf:193-197），dev 由 Vite 自行服務，非 API 代理。',
   pdfjs: 'pdf.js 執行期資產（cmaps／standard_fonts，nginx.conf:188-190），dev 由 Vite 靜態服務 ' +
     'public/pdfjs/；加進 vite proxy 反而會讓 dev 端 pdf.js 去打後端 :3000 拿 cmap 而 404。',
@@ -112,6 +113,32 @@ function nginxProxyPrefixes(): Set<string> {
   return out;
 }
 
+/**
+ * 取出 nginx.conf 中第一段等於 `prefix` 之 location 區塊原始文字（自宣告行起、以大括號配對
+ * 找到對應的收尾 `}` 止）。本檔既有 location 區塊皆不巢狀（無內層 `{}`），故單純以逐字元計數
+ * 配對即可、不需完整 nginx 語法解析器。找不到則回傳 `null`。
+ */
+function nginxLocationBlock(prefix: string): string | null {
+  const src = readFileSync(NGINX_CONF, 'utf-8');
+  const lines = src.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^\s*location\s+(?:~\s*)?\^?([^\s{]+)/.exec(lines[i]);
+    if (!m || firstSegment(m[1]) !== prefix) continue;
+    const block: string[] = [];
+    let depth = 0;
+    for (let j = i; j < lines.length; j++) {
+      for (const ch of lines[j]) {
+        if (ch === '{') depth++;
+        else if (ch === '}') depth--;
+      }
+      block.push(lines[j]);
+      if (depth === 0 && j > i) break;
+    }
+    return block.join('\n');
+  }
+  return null;
+}
+
 describe('前端代理白名單必須涵蓋後端全部路由前綴', () => {
   const backend = backendRoutePrefixes();
   const expected = [...backend].filter((p) => !(p in NOT_PROXIED)).sort();
@@ -167,4 +194,25 @@ describe('前端代理白名單必須涵蓋後端全部路由前綴', () => {
       expect(STATIC_LOCATIONS[prefix].length, `'${prefix}' 的理由不得為空`).toBeGreaterThan(10);
     }
   });
+
+  /**
+   * 🔴 2026-08-20 lead 補強建議（已核實成立並採納）：`STATIC_LOCATIONS` 的實質主張是「此
+   * location 是純靜態檔服務、非 API 代理」，而這件事機器驗得到——對應區塊內不含 `proxy_pass`。
+   * 上一條「理由字串長度 > 10」只是網（擋得住「列一個不存在的前綴」），擋不住「把一個真正的
+   * API 代理前綴塞進 `STATIC_LOCATIONS`、隨口編一句 11 字以上的理由就消掉紅燈」——而那正是
+   * 本測試檔存在的理由（防止只補一份設定）。本案補上刀：逐一斷言對應區塊不含 `proxy_pass`。
+   */
+  it.each(Object.keys(STATIC_LOCATIONS))(
+    "STATIC_LOCATIONS 之 '%s' 在 nginx.conf 對應區塊內確實不含 proxy_pass（機器驗證「非 API 代理」之實質主張）",
+    (prefix) => {
+      const block = nginxLocationBlock(prefix);
+      expect(block, `找不到 '${prefix}' 對應之 location 區塊`).not.toBeNull();
+      expect(
+        block,
+        `STATIC_LOCATIONS 列了 '${prefix}'，但其 nginx location 區塊內含 proxy_pass——這其實是` +
+          ` API 代理，不該被排除於「兩份設定彼此一致」之比對外，請自 STATIC_LOCATIONS 移除並改走` +
+          ` 正常之 vite.config.ts／nginx.conf 雙邊代理同步流程`,
+      ).not.toMatch(/proxy_pass/);
+    },
+  );
 });
