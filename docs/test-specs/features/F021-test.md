@@ -182,14 +182,20 @@ status: draft
 
 ## risks-and-gaps 提醒
 
-- 🔴 **`AC-N59` 之「不存在 `text-[Npx]`」為絕對禁令，與前台既有之非本 delta 相關任意值字級用法
-  衝突**——已實測發現 `PublicListPage.tsx`（`text-[11px]`，篩選 label 密度）與
-  `PublicDocumentDetailPage.tsx`（`text-[11px]`／`text-[10px]`，附件支援標記／次要室長徽章）皆
-  現存此類**與本次 D9 字級遷移無關**之既有任意值用法。三個對應 prototype（`03`／`04`）**未見**
-  相同任意值寫法，故無法確認這是「刻意的既有密度設計」抑或「應隨本 delta 一併收斂之殘留」。
-  **本段依 `AC-N59` 之逐字（無條件）文字保留斷言**（不擅自加入排除清單），故此二測試會在本 delta
-  完全實作後仍為紅——**這是本段刻意保留之發現，供 lead／spec-writer 裁決是否追加排除條款**，
-  而非本段之測試錯誤。
+- ✅ **`AC-N59`「不存在 `text-[Npx]`」——已由 lead 裁決（2026-08-20）＝逐字成立，斷言原樣保留，
+  不追加排除條款。** 判準：prototype 為版面權威來源，「prototype 沒有、實作有」＝實作待收斂，
+  非既有設計。查證結果：
+
+  | | `text-[11px]` | `text-[10px]` |
+  |---|---|---|
+  | `prototypes/03-public-list.html`＋`04-public-document-detail.html`（權威） | **0** | **0** |
+  | `PublicListPage.tsx`＋`PublicDocumentDetailPage.tsx`（現行實作） | 2 | 2 |
+
+  ui-ux-designer 於 Phase A 已將這些任意字級收斂掉（其交付報告逐字記載「`03` 之 11px 任意字級
+  收斂為 `text-sm`」「`04` 之 10px 任意字級收斂」），故 prototype 現況為零任意字級——是**實作尚未
+  跟上 prototype**，不是「既有設計」與 `AC-N59` 之間存在真衝突。`typography-d9.test.ts` 之
+  `PublicListPage.tsx`／`PublicDocumentDetailPage.tsx` 不存在 `text-[Npx]` 兩案**紅燈成立、無需
+  修改**，會在 tdd-implementation 依 prototype 收斂該兩處任意值後轉綠。
 - `AC-N60` 之選擇器（`data-summary`／`#scopeNotice`→`data-testid="scope-notice"`）與掛鉤逐字
   由 `prototypes/03-public-list.html` 檔頭之 `AC-N60` 專用註記授權（designer 已於該檔明文標註
   掛鉤名稱），非 test-generator 臆測。

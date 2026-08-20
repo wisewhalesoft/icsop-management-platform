@@ -17,11 +17,24 @@ describe('F026 D9 delta：OJT 簽到表破例（前端鏡射，AC-N22～AC-N27�
   const OJT_KEY = FieldKey.OJT_SIGNIN;
   /** 20 欄位鍵中，OJT 簽到表以外之 19 欄——`AC-N24` 之防護對象。 */
   const OTHER_KEYS = Object.keys(FIELD_MATRIX).filter((k) => k !== OJT_KEY);
+  /**
+   * 🔴 2026-08-20 lead 裁決（回應 backend 線 `ring-be` 同型問題之更強解法）：19 欄拆為兩組，
+   * 逐一斷言其**精確分類**，而非弱化為「不得為 WRITABLE」——後者會放過「業務欄被悄悄改成
+   * `IGNORE`（寫入被靜默忽略、不再回 403）」這類真實缺陷，違背 `AC-N24`「開一個洞、鬆一片牆」
+   * 之防護本意。系統 UUID 為系統產生之既有既定分類（非本 delta 變動），與其餘 18 個業務欄
+   * 分開斷言。
+   */
+  const BUSINESS_KEYS = OTHER_KEYS.filter((k) => k !== FieldKey.SYSTEM_UUID);
 
   it('AC-N24 自我守護：19 欄清單非空且恰為 19 項（防止過濾條件寫錯而 it.each 空跑仍綠）', () => {
     expect(OTHER_KEYS.length).toBeGreaterThan(0);
     expect(OTHER_KEYS).toHaveLength(19);
     expect(OTHER_KEYS).not.toContain(OJT_KEY);
+  });
+
+  it('AC-N24 自我守護：18 業務欄清單恰為 18 項（19 欄扣除系統 UUID）', () => {
+    expect(BUSINESS_KEYS).toHaveLength(18);
+    expect(BUSINESS_KEYS).not.toContain(FieldKey.SYSTEM_UUID);
   });
 
   it('AC-N22 矩陣逐格斷言：恰有 2 格改值（OJT 簽到表 × Supervisor／DeptContact → WRITABLE）', () => {
@@ -40,27 +53,26 @@ describe('F026 D9 delta：OJT 簽到表破例（前端鏡射，AC-N22～AC-N27�
   });
 
   /**
-   * 🔴 **斷言形狀之取捨（如實記錄）**：`AC-N24` 文字為「一律回 403 `FIELD_WRITE_FORBIDDEN`」，
-   * 但既有矩陣中「系統 UUID」欄之角色無關值為 `IGNORE`（系統產生，本檔頂部既有測試「系統
-   * UUID：全角色 IGNORE」已為此背書，非本 delta 引入）——`IGNORE` 與 `FORBIDDEN` 是矩陣既有的
-   * 兩個不同分類（前者為「系統產生、任何角色皆與寫入無關」，後者為「該角色被拒絕」），並非
-   * 本 delta 之新裁決。若本案對 19 欄逐一斷言恰為 `'FORBIDDEN'`，會使系統 UUID 一欄對一個
-   * **本 delta 從未變動**的既有事實恆紅，而非真正偵測「開一個洞、鬆一片牆」。
-   * ⇒ 本案改為斷言**恰不為 `'WRITABLE'`**——這是 `AC-N24` 真正要防護之不變式核心
-   * （「其餘 19 欄不得也一併被放寬為可寫」），且不預設每欄之既有精確分類，故不受此邊界影響。
+   * `AC-N24` 19 欄回歸鎖定，拆兩組逐一斷言精確分類（強度對齊 backend 線）：
+   * ① 18 個業務欄 → 恰為 `'FORBIDDEN'`；② 系統 UUID → 恰為 `'IGNORE'`（獨立斷言，見下）。
    */
-  it.each(OTHER_KEYS)(
-    'AC-N24 19 欄回歸鎖定：Supervisor 對「%s」不得為 WRITABLE（僅 OJT 一欄破例，其餘不得也一併放寬）',
+  it.each(BUSINESS_KEYS)(
+    'AC-N24 18 業務欄回歸鎖定：Supervisor 對「%s」恰為 FORBIDDEN（僅 OJT 一欄破例，其餘不得也一併放寬）',
     (key) => {
-      expect(canWriteField('Supervisor', key)).not.toBe('WRITABLE');
+      expect(canWriteField('Supervisor', key)).toBe('FORBIDDEN');
     },
   );
-  it.each(OTHER_KEYS)(
-    'AC-N24 19 欄回歸鎖定：DeptContact 對「%s」不得為 WRITABLE（僅 OJT 一欄破例，其餘不得也一併放寬）',
+  it.each(BUSINESS_KEYS)(
+    'AC-N24 18 業務欄回歸鎖定：DeptContact 對「%s」恰為 FORBIDDEN（僅 OJT 一欄破例，其餘不得也一併放寬）',
     (key) => {
-      expect(canWriteField('DeptContact', key)).not.toBe('WRITABLE');
+      expect(canWriteField('DeptContact', key)).toBe('FORBIDDEN');
     },
   );
+
+  it('AC-N24 🔒 系統 UUID（既有既定分類，非本 delta 變動）：Supervisor／DeptContact 恰為 IGNORE', () => {
+    expect(canWriteField('Supervisor', FieldKey.SYSTEM_UUID)).toBe('IGNORE');
+    expect(canWriteField('DeptContact', FieldKey.SYSTEM_UUID)).toBe('IGNORE');
+  });
 
   it('AC-N26 系統管理員（SysAdmin）對 OJT 簽到表仍唯讀（OQ-D9-24 明文排除）', () => {
     expect(canWriteField('SysAdmin', OJT_KEY)).toBe('FORBIDDEN');

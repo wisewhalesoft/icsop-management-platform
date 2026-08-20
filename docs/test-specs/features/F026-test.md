@@ -42,14 +42,16 @@ status: draft
 | `AC-N75` ①②③④⑤⑦ 唯讀頁附件區 DOM 契約 | `frontend/src/pages/DocumentReadonlyPage.test.tsx`（同上，另見 F016-test.md 前端段落之交叉引用） | component |
 | `AC-N76` ①②④ 編輯頁逐元素 `data-attachment-write` 契約、`data-ojt-exception` 徽章 | `frontend/src/pages/DocumentEditPage.test.tsx`（3 案，逐元素＋集合式兩層並列） | component |
 
-## ⚠ 斷言形狀之取捨（如實記錄，非規格臆造）
+## ⚠ 斷言形狀之取捨（如實記錄，非規格臆造；2026-08-20 已依 lead 裁決加嚴）
 
-`AC-N24` 文字為「一律回 403 `FIELD_WRITE_FORBIDDEN`」，但既有矩陣中「系統 UUID」欄之角色無關值
-為 `IGNORE`（系統產生，非本 delta 引入，本檔頂部既有測試已為此背書）——`IGNORE` 與 `FORBIDDEN`
-是矩陣既有的兩個不同分類。本段之 19 欄回歸鎖定改為斷言**恰不為 `'WRITABLE'`**（而非逐一斷言恰為
-`'FORBIDDEN'`），這是 `AC-N24` 真正要防護之不變式核心（「其餘 19 欄不得也一併被放寬為可寫」），
-且不受既有 `IGNORE`／`FORBIDDEN` 之精確分類邊界影響——更精確的逐格值斷言已由本檔頂部既有測試
-（非 D9）持有。
+`AC-N24` 文字為「一律回 403 `FIELD_WRITE_FORBIDDEN`」，既有矩陣中「系統 UUID」欄之角色無關值為
+`IGNORE`（系統產生，非本 delta 引入）——`IGNORE` 與 `FORBIDDEN` 是矩陣既有的兩個不同分類。**本段
+最初弱化為「恰不為 `'WRITABLE'`」，經 lead 比對 backend 線（`ring-be`）之同型處置後裁定不必弱化**：
+backend 線改採「18 業務欄逐一斷言恰為 `FORBIDDEN`、系統 UUID 單獨斷言恰為 `IGNORE`」之兩組拆法，
+強度更高且已實測前端矩陣現況與此拆法完全相容（18 業務欄 × 2 角色＝36 案、系統 UUID × 2 角色＝
+4 案，共 40 案於實作前皆綠，僅 `AC-N22`／`AC-N23` 之 OJT 本身兩案為紅）。**本段已改採相同兩組
+拆法**——弱化版（「不為 WRITABLE」）之風險在於會放過「業務欄被悄悄改成 `IGNORE`（寫入被靜默忽略、
+不再回 403）」這類真實缺陷，違背 `AC-N24` 之防護本意；加嚴後之逐格精確斷言可攔截此類缺陷。
 
 ## risks-and-gaps 提醒
 
