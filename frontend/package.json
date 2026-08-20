@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "copy:pdfjs": "node scripts/copy-pdfjs-assets.mjs",
+    "verify:pdfjs": "node scripts/verify-pdfjs-assets.mjs",
+    "prebuild": "npm run copy:pdfjs",
     "build": "vite build",
+    "postbuild": "npm run verify:pdfjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -15,6 +19,7 @@
     "@dagrejs/dagre": "^1.1.8",
     "@xyflow/react": "^12.11.2",
     "lucide-react": "^1.25.0",
+    "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.4"

@@ -18,6 +18,7 @@ import {
 } from '../domain/export-feedback';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
+import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT, isWatermarkSupportedFormat } from '../domain/watermark-note';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
 import type { AppendixPoolItem } from '../api/types';
@@ -38,6 +39,27 @@ import type { AppendixPoolItem } from '../api/types';
 type FmtClass = 'excel' | 'pdf';
 
 /** 附錄格式（xlsx/xls/pdf）→ 清單顯示之兩類（prototype 24 fmtBadge）。 */
+/**
+ * 列內浮水印註記（F020 `AC-N20`；`OQ-D9-08` 選項 B ＋ `OQ-D9-33`）。
+ * 🔴 文案與前台詳情頁**同一組逐字常數**（`domain/watermark-note.ts`），不得分歧；
+ *    版面權威＝`prototypes/24-appendix-management.html`（列內小字，非前台之 `text-sm` 純文字）。
+ */
+function WmNote({ format }: { format: string }): JSX.Element {
+  return isWatermarkSupportedFormat(format) ? (
+    <div data-wm-note="" className="mt-0.5 text-[10px] text-primary-700 whitespace-nowrap">
+      {WM_BURN_TEXT}
+    </div>
+  ) : (
+    <div
+      data-wm-note=""
+      className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-amber-700 whitespace-nowrap"
+    >
+      <Icon name="info" className="w-3 h-3" />
+      {WM_UNSUPPORTED_TEXT}
+    </div>
+  );
+}
+
 function classifyFormat(format: string): FmtClass {
   const f = format.toLowerCase();
   return f === 'xlsx' || f === 'xls' ? 'excel' : 'pdf';
@@ -715,12 +737,15 @@ function AppendixRow({
     <>
       <tr className="hover:bg-slate-50">
         <td className="px-4 py-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             <Icon
               name={fmt === 'excel' ? 'file-spreadsheet' : 'file-text'}
-              className="w-4 h-4 text-slate-400 shrink-0"
+              className="w-4 h-4 text-slate-400 shrink-0 mt-0.5"
             />
-            <span className="font-medium text-slate-800">{appendix.name}</span>
+            <div className="min-w-0">
+              <span className="font-medium text-slate-800">{appendix.name}</span>
+              <WmNote format={appendix.format} />
+            </div>
           </div>
         </td>
         <td className="px-4 py-3">

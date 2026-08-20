@@ -1,7 +1,7 @@
 import {
   ShieldCheck, FileCog, UserCog, Contact, User, Users, Workflow, FileText,
   Files, Database, History, GitCompare, RefreshCw, Settings, PanelLeft,
-  ChevronRight, UserCircle, LogOut, ExternalLink, ArrowRight, ArrowLeft,
+  ChevronRight, ChevronLeft, UserCircle, LogOut, ExternalLink, ArrowRight, ArrowLeft,
   LayoutGrid, Activity, Building2, Info, AlertCircle, AlertTriangle, Loader2,
   Search, PanelsTopLeft, LayoutDashboard, CheckCircle2, X, Plus, Inbox,
   RotateCw, GitBranch, CircleDot, FileCheck2, FileX2, GitCommitVertical,
@@ -43,6 +43,8 @@ const REGISTRY: Record<string, LucideIcon> = {
   settings: Settings,
   'panel-left': PanelLeft,
   'chevron-right': ChevronRight,
+  // F020 AC-N71（D9 delta）：檢視器單頁翻頁之「上一頁」鈕（prototypes/05:79）。
+  'chevron-left': ChevronLeft,
   'user-circle': UserCircle,
   'log-out': LogOut,
   'external-link': ExternalLink,
@@ -141,6 +143,15 @@ export interface IconProps {
   name: string;
   className?: string;
   'aria-hidden'?: boolean;
+  /**
+   * 以下三項供「圖示本身即為資訊」之情境（F017 `AC-N38`／`AC-N39` 之 OJT 圖示欄）——
+   * 圖示預設為 `aria-hidden`（純裝飾）；當它承載語意時，呼叫端須同時給
+   * `role="img"`、`aria-label` 與 `aria-hidden={false}`（`{...rest}` 在預設值之後展開，故可覆寫）。
+   * 版面權威＝`prototypes/13-document-list.html:553`（`<i ... title aria-label role="img">`）。
+   */
+  title?: string;
+  'aria-label'?: string;
+  role?: string;
 }
 
 export function Icon({ name, className, ...rest }: IconProps): JSX.Element | null {

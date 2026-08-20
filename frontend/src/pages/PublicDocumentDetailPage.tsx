@@ -14,6 +14,7 @@ import {
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
+import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT } from '../domain/watermark-note';
 import { buildOrgPath } from '../domain/org-path';
 import type {
   PublicDocumentDetail,
@@ -69,11 +70,11 @@ function NotFoundPanel({ onBack }: { onBack: () => void }): JSX.Element {
         <Icon name="file-x" className="w-7 h-7 text-red-500" />
       </div>
       <h3 className="font-semibold text-slate-900">{NOT_FOUND_TITLE}</h3>
-      <p className="text-sm text-slate-500 mt-1">{NOT_FOUND_DESC}</p>
-      <p className="text-xs mono text-slate-400 mt-2">{NOT_FOUND_CODE}</p>
+      <p className="text-base text-slate-500 mt-1">{NOT_FOUND_DESC}</p>
+      <p className="text-sm mono text-slate-400 mt-2">{NOT_FOUND_CODE}</p>
       <button
         onClick={onBack}
-        className="mt-4 px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50"
+        className="mt-4 px-4 py-2 rounded-md border border-slate-300 text-base hover:bg-slate-50"
       >
         返回文件瀏覽
       </button>
@@ -85,8 +86,8 @@ function NotFoundPanel({ onBack }: { onBack: () => void }): JSX.Element {
 function Field({ label, children }: { label: string; children: ReactNode }): JSX.Element {
   return (
     <div className="px-5 py-3 grid grid-cols-1 sm:grid-cols-3 gap-1 sm:gap-4">
-      <dt className="text-sm text-slate-400">{label}</dt>
-      <dd className="sm:col-span-2 text-sm text-slate-800">{children}</dd>
+      <dt className="text-base text-slate-400">{label}</dt>
+      <dd className="sm:col-span-2 text-base text-slate-800">{children}</dd>
     </div>
   );
 }
@@ -193,7 +194,7 @@ export function PublicDocumentDetailPage(): JSX.Element {
           <span className="font-bold text-slate-900 truncate">ICSOP 文件瀏覽</span>
           <div className="ml-auto flex items-center gap-3">
             <div
-              className="hidden sm:flex items-center gap-2 text-sm text-slate-500"
+              className="hidden sm:flex items-center gap-2 text-base text-slate-500"
               data-testid="topbar-user"
             >
               <Icon name="user" className="w-4 h-4" />
@@ -218,7 +219,7 @@ export function PublicDocumentDetailPage(): JSX.Element {
 
       <main className="max-w-4xl mx-auto px-4 py-5">
         {/* breadcrumb */}
-        <div className="flex items-center gap-1.5 text-sm text-slate-400 mb-4">
+        <div className="flex items-center gap-1.5 text-base text-slate-400 mb-4">
           <Link to="/public" className="hover:text-primary-600 flex items-center gap-1">
             <Icon name="arrow-left" className="w-4 h-4" />
             文件瀏覽
@@ -238,7 +239,7 @@ export function PublicDocumentDetailPage(): JSX.Element {
         {!loading && notFound && <NotFoundPanel onBack={() => navigate('/public')} />}
 
         {!loading && error && !notFound && (
-          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
+          <div role="alert" className="text-base text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
             載入失敗 · <span className="mono">{error}</span>
           </div>
         )}
@@ -285,7 +286,7 @@ export function PublicDocumentDetailPage(): JSX.Element {
 function StatusPill({ displayStatus }: { displayStatus: string }): JSX.Element {
   return (
     <span
-      className="px-2 py-0.5 rounded-full text-xs font-medium"
+      className="px-2 py-0.5 rounded-full text-sm font-medium"
       style={{ color: '#047857', background: '#D1FAE5' }}
     >
       {DISPLAY_STATUS_LABEL[displayStatus] ?? displayStatus}
@@ -299,14 +300,11 @@ function StatusPill({ displayStatus }: { displayStatus: string }): JSX.Element {
  * 🔴 三類**同一規則、同一文案，不得分歧**；旗標一律取自伺服器端之 `watermarkSupported`
  * （＝後端「要不要呼叫 burnPdf」之同一個判定結果），前端不得自行以 `format` 重算（§10.3）。
  */
-const WM_BURN_TEXT = '檢視/下載將燒錄浮水印';
-const WM_UNSUPPORTED_TEXT = '此格式不支援浮水印';
-
 function WatermarkNote({ supported }: { supported: boolean | undefined }): JSX.Element {
   return (
     <span
       data-wm-note=""
-      className={`text-[11px] ${supported ? 'text-primary-600' : 'text-slate-400'}`}
+      className={`text-sm ${supported ? 'text-primary-600' : 'text-slate-400'}`}
     >
       {supported ? WM_BURN_TEXT : WM_UNSUPPORTED_TEXT}
     </span>
@@ -333,7 +331,7 @@ function DownloadButton({
       disabled={busy}
       aria-busy={busy}
       aria-label={`下載 ${label}`}
-      className="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-xs hover:bg-slate-50 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+      className="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-sm hover:bg-slate-50 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
     >
       <Icon
         name={busy ? 'loader-2' : 'download'}
@@ -371,7 +369,7 @@ function DetailBody({
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="mono text-sm text-slate-500">{detail.documentNumber}</span>
+            <span className="mono text-base text-slate-500">{detail.documentNumber}</span>
             <StatusPill displayStatus={detail.displayStatus} />
           </div>
           <h1 className="text-xl font-bold text-slate-900 mt-1">{detail.documentName}</h1>
@@ -379,7 +377,7 @@ function DetailBody({
         <div className="flex items-center gap-2 shrink-0">
           <Link
             to={`/public/documents/${detail.id}/view`}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 transition min-h-[44px]"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-primary-600 text-white text-base font-medium hover:bg-primary-700 transition min-h-[44px]"
           >
             <Icon name="eye" className="w-4 h-4" />
             檢視
@@ -387,7 +385,7 @@ function DetailBody({
           <a
             href={documentDownloadUrl(detail.id)}
             aria-label="下載文件"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50 transition min-h-[44px]"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-slate-300 text-base text-slate-700 hover:bg-slate-50 transition min-h-[44px]"
           >
             <Icon name="download" className="w-4 h-4" />
             下載
@@ -397,7 +395,7 @@ function DetailBody({
             target="_blank"
             rel="noreferrer"
             aria-label="列印文件"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50 transition min-h-[44px]"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-slate-300 text-base text-slate-700 hover:bg-slate-50 transition min-h-[44px]"
           >
             <Icon name="printer" className="w-4 h-4" />
             列印
@@ -409,8 +407,8 @@ function DetailBody({
       <section className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
         <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
           <Icon name="file-text" className="w-4 h-4 text-primary-600" />
-          <h2 className="font-semibold text-slate-900 text-sm">文件資訊</h2>
-          <span className="ml-auto text-xs text-slate-400">唯讀</span>
+          <h2 className="font-semibold text-slate-900 text-base">文件資訊</h2>
+          <span className="ml-auto text-sm text-slate-400">唯讀</span>
         </div>
         <dl className="divide-y divide-slate-100" data-testid="field-list">
           <Field label="系統 UUID">
@@ -452,7 +450,7 @@ function DetailBody({
             {icsopPdf ? (
               <>
                 {icsopPdf.fileName}{' '}
-                <span className="text-slate-400 text-xs">（見附件）</span>
+                <span className="text-slate-400 text-sm">（見附件）</span>
               </>
             ) : (
               DASH
@@ -460,16 +458,16 @@ function DetailBody({
           </Field>
           <Field label="使用表單">
             {detail.usageForms.length} 份{' '}
-            <span className="text-slate-400 text-xs">（見下方）</span>
+            <span className="text-slate-400 text-sm">（見下方）</span>
           </Field>
           <Field label="附錄">
             {appendices.length} 份{' '}
-            <span className="text-slate-400 text-xs">（見下方）</span>
+            <span className="text-slate-400 text-sm">（見下方）</span>
           </Field>
           <Field label="OJT 實體簽到表">
             {ojt ? (
               <>
-                {ojt.fileName} <span className="text-slate-400 text-xs">（見附件）</span>
+                {ojt.fileName} <span className="text-slate-400 text-sm">（見附件）</span>
               </>
             ) : (
               DASH
@@ -477,7 +475,7 @@ function DetailBody({
           </Field>
           <Field label="連結點程序書">
             {detail.links.length} 筆{' '}
-            <span className="text-slate-400 text-xs">（見下方）</span>
+            <span className="text-slate-400 text-sm">（見下方）</span>
           </Field>
         </dl>
       </section>
@@ -486,7 +484,7 @@ function DetailBody({
       <section className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
         <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
           <Icon name="paperclip" className="w-4 h-4 text-primary-600" />
-          <h2 className="font-semibold text-slate-900 text-sm">附件</h2>
+          <h2 className="font-semibold text-slate-900 text-base">附件</h2>
         </div>
         {detail.attachments.length > 0 ? (
           <div className="p-4 grid sm:grid-cols-2 gap-3" data-testid="attachment-list">
@@ -498,8 +496,8 @@ function DetailBody({
               >
                 <Icon name="file-text" className="w-6 h-6 text-red-500 shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm text-slate-800 truncate">{att.fileName}</div>
-                  <div className="text-xs text-slate-400 flex items-center gap-1.5 flex-wrap">
+                  <div className="text-base text-slate-800 truncate">{att.fileName}</div>
+                  <div className="text-sm text-slate-400 flex items-center gap-1.5 flex-wrap">
                     <span>
                       {att.type === 'ICSOP_PDF'
                         ? 'ICSOP PDF'
@@ -520,7 +518,7 @@ function DetailBody({
             ))}
           </div>
         ) : (
-          <p className="px-5 py-4 text-sm text-slate-400">無附件</p>
+          <p className="px-5 py-4 text-base text-slate-400">無附件</p>
         )}
       </section>
 
@@ -528,8 +526,8 @@ function DetailBody({
       <section className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
         <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
           <Icon name="files" className="w-4 h-4 text-primary-600" />
-          <h2 className="font-semibold text-slate-900 text-sm">使用表單</h2>
-          <span className="ml-auto text-xs text-slate-400">下載將寫入稽核</span>
+          <h2 className="font-semibold text-slate-900 text-base">使用表單</h2>
+          <span className="ml-auto text-sm text-slate-400">下載將寫入稽核</span>
         </div>
         {detail.usageForms.length > 0 ? (
           <div className="divide-y divide-slate-100" data-testid="usage-form-list">
@@ -541,7 +539,7 @@ function DetailBody({
                     name={isExcel ? 'sheet' : 'file-text'}
                     className={`w-5 h-5 shrink-0 ${isExcel ? 'text-emerald-600' : 'text-red-500'}`}
                   />
-                  <span className="text-sm text-slate-800 flex-1 truncate">{f.name}</span>
+                  <span className="text-base text-slate-800 flex-1 truncate">{f.name}</span>
                   <WatermarkNote supported={f.watermarkSupported} />
                   <DownloadButton
                     onClick={() => onDownloadUsageForm(f.id, f.name)}
@@ -553,7 +551,7 @@ function DetailBody({
             })}
           </div>
         ) : (
-          <p className="px-5 py-4 text-sm text-slate-400">無關聯使用表單</p>
+          <p className="px-5 py-4 text-base text-slate-400">無關聯使用表單</p>
         )}
       </section>
 
@@ -561,8 +559,8 @@ function DetailBody({
       <section className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
         <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
           <Icon name="paperclip" className="w-4 h-4 text-primary-600" />
-          <h2 className="font-semibold text-slate-900 text-sm">附錄</h2>
-          <span className="ml-auto text-xs text-slate-400">下載將寫入稽核</span>
+          <h2 className="font-semibold text-slate-900 text-base">附錄</h2>
+          <span className="ml-auto text-sm text-slate-400">下載將寫入稽核</span>
         </div>
         {appendices.length > 0 ? (
           <div className="divide-y divide-slate-100" data-testid="appendix-list">
@@ -575,14 +573,14 @@ function DetailBody({
                   data-appendix-order={i + 1}
                   className="px-5 py-3 flex items-center gap-3"
                 >
-                  <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+                  <span className="w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-sm font-bold flex items-center justify-center shrink-0">
                     {i + 1}
                   </span>
                   <Icon
                     name={isExcel ? 'sheet' : 'file-text'}
                     className={`w-5 h-5 shrink-0 ${isExcel ? 'text-emerald-600' : 'text-red-500'}`}
                   />
-                  <span data-appendix-name className="text-sm text-slate-800 flex-1 truncate">
+                  <span data-appendix-name className="text-base text-slate-800 flex-1 truncate">
                     {a.name}
                   </span>
                   <WatermarkNote supported={a.watermarkSupported} />
@@ -598,7 +596,7 @@ function DetailBody({
         ) : (
           <div
             data-appendix-empty=""
-            className="px-5 py-6 flex items-center justify-center gap-2 text-sm text-slate-400"
+            className="px-5 py-6 flex items-center justify-center gap-2 text-base text-slate-400"
           >
             <Icon name="paperclip" className="w-4 h-4" />無附錄
           </div>
@@ -609,7 +607,7 @@ function DetailBody({
       <section className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
         <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
           <Icon name="link" className="w-4 h-4 text-primary-600" />
-          <h2 className="font-semibold text-slate-900 text-sm">文件連結點</h2>
+          <h2 className="font-semibold text-slate-900 text-base">文件連結點</h2>
         </div>
         {detail.links.length > 0 ? (
           <div className="divide-y divide-slate-100" data-testid="link-list">
@@ -624,20 +622,20 @@ function DetailBody({
                   <Icon name="link" className="w-5 h-5 text-slate-400 shrink-0" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="mono text-xs text-slate-500">{l.targetNumber ?? DASH}</span>
+                      <span className="mono text-sm text-slate-500">{l.targetNumber ?? DASH}</span>
                       {st && (
                         <span
-                          className="px-2 py-0.5 rounded-full text-xs font-medium"
+                          className="px-2 py-0.5 rounded-full text-sm font-medium"
                           style={{ color: st.color, background: st.bg }}
                         >
                           {st.label}
                         </span>
                       )}
                       {l.targetStatus === 'void' && (
-                        <span className="text-[10px] text-slate-400">目標作廢，僅供辨識</span>
+                        <span className="text-sm text-slate-400">目標作廢，僅供辨識</span>
                       )}
                     </div>
-                    <div className="text-sm text-slate-800 truncate mt-0.5">{l.targetName ?? DASH}</div>
+                    <div className="text-base text-slate-800 truncate mt-0.5">{l.targetName ?? DASH}</div>
                   </div>
                   <Icon name="chevron-right" className="w-5 h-5 text-slate-300 shrink-0" />
                 </button>
@@ -645,11 +643,11 @@ function DetailBody({
             })}
           </div>
         ) : (
-          <p className="px-5 py-4 text-sm text-slate-400">無連結點程序書</p>
+          <p className="px-5 py-4 text-base text-slate-400">無連結點程序書</p>
         )}
       </section>
 
-      <p className="text-center text-xs text-slate-400 mb-4">
+      <p className="text-center text-sm text-slate-400 mb-4">
         查看/下載/列印皆留下稽核軌跡，內容與檢視器浮水印一致。
       </p>
     </>

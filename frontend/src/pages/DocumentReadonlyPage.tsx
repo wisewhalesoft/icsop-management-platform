@@ -13,10 +13,20 @@ import {
   downloadAttachment,
   getDocumentAppendices,
   downloadAppendixFromPool,
+  uploadOjtAttachment,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
+import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT, isWatermarkSupportedFormat } from '../domain/watermark-note';
+import {
+  ATTACH_NOTE_OJT,
+  ATTACH_NOTE_RO,
+  FIELD_RO_NOTE,
+  RO_NOTICE_FULL,
+  RO_NOTICE_OJT_EXCEPTION,
+  canWriteOjt,
+} from '../domain/readonly-notice';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
 import type {
@@ -63,6 +73,12 @@ export function DocumentReadonlyPage(): JSX.Element {
   const role = user?.roleCode;
   const canRead = canPerform(role, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read');
   const canWrite = canPerform(role, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'write');
+  /**
+   * 🔴 F026 `AC-N23`／`AC-N26`／`AC-N27`（2026-08-20 D9 delta）：該角色對「OJT 簽到表」是否可寫。
+   * 判定取自 `FIELD_MATRIX`（單一權威），**不得**在本頁另寫角色白名單——`SysAdmin` 與 `User`
+   * 已明文排除，自建白名單正是「開一個洞、鬆一片牆」之典型形狀。
+   */
+  const ojtWritable = canWriteOjt(role);
   const toast = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -175,6 +191,26 @@ export function DocumentReadonlyPage(): JSX.Element {
     [toast],
   );
 
+  /**
+   * 🔴 F016 `AC-N28`／`AC-N29`（2026-08-20 D9 delta）：OJT 簽到表為主管／部門窗口在本頁之
+   * **唯一**可寫項，沿用既有覆蓋式上傳端點（`POST /admin/documents/:id/attachments/ojt`）——
+   * 端點與其路由層閘門逐字不變，實際擋住其他寫入者為服務層之欄位矩陣。
+   * ⚠ 重傳即覆蓋、不留歷史版本（`AC-N29`，語意不因角色而異）。
+   */
+  const onUploadOjt = useCallback(
+    async (file: File | null) => {
+      if (!file) return;
+      try {
+        const rec = await uploadOjtAttachment(id, file);
+        setAttachments((prev) => [...prev.filter((a) => a.type !== rec.type), rec]);
+        toast.success(`已上傳「${file.name}」（覆蓋式；舊檔不再可存取）`);
+      } catch (e) {
+        toast.error(e instanceof ApiError ? e.code : `無法上傳「${file.name}」`);
+      }
+    },
+    [id, toast],
+  );
+
   /** ICSOP PDF／OJT：走後台受控下載端點（blobPath）——RAW 原檔，不燒錄浮水印（F020 `AC-D4`）。 */
   const onDownloadAttachment = useCallback(
     async (blobPath: string, name: string) => {
@@ -233,6 +269,13 @@ export function DocumentReadonlyPage(): JSX.Element {
   const attachItems: {
     key: string; label: string; name: string; icon: string; iconClass: string;
     watermark: boolean; onDownload: () => void;
+    /**
+     * `AC-N75` ①：本列之附件類別，值域逐字為 `icsop_pdf`／`ojt`／`usageform`／`appendix`
+     * （**不得**改寫為駝峰或連字號）。它是「哪一列可寫」在畫面上唯一可機器驗證之定位基礎。
+     */
+    kind: 'icsop_pdf' | 'ojt' | 'usageform' | 'appendix';
+    /** `AC-N20`：浮水印註記之判定依據（策略 A：僅 PDF 燒錄）。 */
+    format: string;
     /** F039：附錄專屬之顯示序號（1..N）；非附錄項為 undefined。 */
     order?: number;
   }[] = [
@@ -245,6 +288,8 @@ export function DocumentReadonlyPage(): JSX.Element {
         icon: 'file-text',
         iconClass: 'text-red-500',
         watermark: a.type === 'ICSOP_PDF',
+        kind: (a.type === 'ICSOP_PDF' ? 'icsop_pdf' : 'ojt') as 'icsop_pdf' | 'ojt',
+        format: (a.fileName.split('.').pop() ?? '').toLowerCase(),
         onDownload: () => void onDownloadAttachment(a.blobPath, a.fileName),
       })),
     ...forms.map((f) => ({
@@ -254,6 +299,8 @@ export function DocumentReadonlyPage(): JSX.Element {
       icon: 'sheet',
       iconClass: 'text-emerald-600',
       watermark: false,
+      kind: 'usageform' as const,
+      format: f.format,
       onDownload: () => void onDownloadForm(f.id, f.name),
     })),
     // F039：附錄依 sortOrder 遞增列於清單末段（與前台詳情 04 之順序完全一致）。
@@ -264,6 +311,8 @@ export function DocumentReadonlyPage(): JSX.Element {
       icon: /xls/i.test(a.format) ? 'sheet' : 'file-text',
       iconClass: /xls/i.test(a.format) ? 'text-emerald-600' : 'text-red-500',
       watermark: false,
+      kind: 'appendix' as const,
+      format: a.format,
       onDownload: () => void onDownloadAppendix(a.id, a.name),
       order: i + 1,
     })),
@@ -327,9 +376,16 @@ export function DocumentReadonlyPage(): JSX.Element {
           <Icon name="info" className="w-4 h-4" />您是 ICSOP 管理員 · 可修改此文件，請前往編輯頁。
         </div>
       ) : (
-        <div role="note" className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2 rounded-lg flex items-center gap-2">
-          <Icon name="eye" className="w-4 h-4" />
-          <span>唯讀模式 · <strong>此角色對 ICSOP 文件全欄位皆唯讀</strong>；附件可下載（燒錄浮水印），但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。</span>
+        /*
+          🔴 F016 `AC-N74` ①（2026-08-20 D9 delta）：唯讀提示依角色分支。
+          · 主管／部門窗口 → `RO_NOTICE_OJT_EXCEPTION`（原句「全欄位皆唯讀…不可上傳/取代」
+            對其**已不成立**，OJT 為例外）。
+          · 🔒 系統管理員 → `RO_NOTICE_FULL` **一字未改**（`AC-N26`：其對 OJT 亦唯讀）
+            ⇒ 本分支同時是 `AC-N26` 在畫面上之載體。
+        */
+        <div role="note" className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2 rounded-lg flex items-start gap-2">
+          <Icon name="eye" className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{ojtWritable ? RO_NOTICE_OJT_EXCEPTION : RO_NOTICE_FULL}</span>
         </div>
       )}
 
@@ -339,6 +395,19 @@ export function DocumentReadonlyPage(): JSX.Element {
           <Icon name="file-text" className="w-4 h-4 text-primary-600" />
           <h2 className="font-semibold text-slate-900">文件欄位（唯讀）</h2>
         </div>
+        {/*
+          `AC-N75` ⑤／`AC-N74`：欄位區唯讀說明。僅對「被開放 OJT 的兩個角色」顯示——
+          對 `SysAdmin` 顯示會讓它誤讀為「本頁有例外可寫」，與 `AC-N26` 相矛盾。
+        */}
+        {ojtWritable && !canWrite && (
+          <p
+            data-field-readonly-note=""
+            className="mb-3 flex items-start gap-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2"
+          >
+            <Icon name="lock" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-400" />
+            <span>{FIELD_RO_NOTE}</span>
+          </p>
+        )}
         <dl className="divide-y divide-slate-100">
           {ROWS.map((r, i) => (
             <div key={i} className="grid grid-cols-12 gap-3 items-center py-2.5">
@@ -352,46 +421,110 @@ export function DocumentReadonlyPage(): JSX.Element {
         </dl>
       </section>
 
-      {/* 附件（僅下載） — ICSOP PDF ／ OJT 實體簽到表 ／ 使用表單（合併清單，prototype 16 renderAttach） */}
+      {/*
+        附件 — ICSOP PDF ／ OJT 實體簽到表 ／ 使用表單 ／ 附錄（合併清單，prototype 16 renderAttach）。
+        🔴 `AC-N74` ③：區塊標題與說明依「本角色對 OJT 是否可寫」二擇一。
+      */}
       <section className="bg-white border border-slate-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-1">
           <Icon name="paperclip" className="w-4 h-4 text-primary-600" />
-          <h2 className="font-semibold text-slate-900">附件（僅下載）</h2>
+          <h2 id="attachTitle" className="font-semibold text-slate-900">
+            {ojtWritable ? '附件' : '附件（僅下載）'}
+          </h2>
         </div>
-        <p className="text-xs text-slate-400 mb-3 flex items-center gap-1.5">
-          <Icon name="shield" className="w-3.5 h-3.5" />
-          下載/列印時伺服器端<strong className="text-slate-500">燒錄浮水印</strong>並寫入稽核；無上傳/取代入口。
+        <p className="text-xs text-slate-400 mb-3 flex items-start gap-1.5">
+          <Icon name="shield" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span id="attachNote">{ojtWritable ? ATTACH_NOTE_OJT : ATTACH_NOTE_RO}</span>
         </p>
         <div className="space-y-2">
-          {attachItems.map((a) => (
-            <div
-              key={a.key}
-              {...(a.order ? { 'data-appendix-item': '', 'data-appendix-order': a.order } : {})}
-              className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5"
-            >
-              {a.order && (
-                <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">
-                  {a.order}
-                </span>
-              )}
-              <Icon name={a.icon} className={`w-5 h-5 ${a.iconClass} shrink-0`} />
-              <div className="min-w-0 flex-1">
-                <div className="text-xs text-slate-400">{a.label}</div>
-                <div
-                  {...(a.order ? { 'data-appendix-name': '' } : {})}
-                  className="text-sm text-slate-700 truncate"
-                >
-                  {a.name}
+          {attachItems.map((a) => {
+            /*
+              🔴 `AC-N75` ②③⑦（`AC-N24`／`AC-N25` 之畫面載體）：**恰一列可寫**（OJT），
+              其餘三種 kind 之列一律唯讀。可寫／唯讀必須「看起來就不一樣」，且各自帶
+              `data-writable-attachment`／`data-readonly-attachment` 以便機器驗證。
+            */
+            const writable = a.kind === 'ojt' && ojtWritable;
+            return (
+              <div
+                key={a.key}
+                data-attachment-kind={a.kind}
+                {...(a.order ? { 'data-appendix-item': '', 'data-appendix-order': a.order } : {})}
+                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
+                  writable ? 'border-primary-300 bg-primary-50/40' : 'border-slate-200'
+                }`}
+              >
+                {a.order && (
+                  <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+                    {a.order}
+                  </span>
+                )}
+                <Icon name={a.icon} className={`w-5 h-5 ${a.iconClass} shrink-0`} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs text-slate-400">{a.label}</div>
+                  <div
+                    {...(a.order ? { 'data-appendix-name': '' } : {})}
+                    className="text-sm text-slate-700 truncate"
+                  >
+                    {a.name}
+                  </div>
                 </div>
+                {/* `AC-N20`：後台亦渲染浮水印註記，文案與前台同一組逐字常數。 */}
+                {isWatermarkSupportedFormat(a.format) ? (
+                  <span
+                    data-wm-note=""
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0 whitespace-nowrap"
+                  >
+                    {WM_BURN_TEXT}
+                  </span>
+                ) : (
+                  <span
+                    data-wm-note=""
+                    className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 shrink-0 whitespace-nowrap"
+                  >
+                    <Icon name="info" className="w-3 h-3" />
+                    {WM_UNSUPPORTED_TEXT}
+                  </span>
+                )}
+                {a.watermark && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0">下載燒錄浮水印</span>
+                )}
+                {writable ? (
+                  <span
+                    data-writable-attachment=""
+                    className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary-600 text-white shrink-0 whitespace-nowrap"
+                  >
+                    <Icon name="pencil" className="w-3 h-3" />可上傳／覆蓋
+                  </span>
+                ) : (
+                  <span
+                    data-readonly-attachment=""
+                    className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0 whitespace-nowrap"
+                  >
+                    <Icon name="lock" className="w-3 h-3" />唯讀
+                  </span>
+                )}
+                {writable && (
+                  <label
+                    data-ojt-upload=""
+                    aria-label="上傳／取代 OJT 實體簽到表"
+                    title="上傳／取代 OJT 實體簽到表"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 bg-white text-primary-700 text-xs hover:bg-primary-50 shrink-0 cursor-pointer"
+                  >
+                    <Icon name="upload" className="w-3.5 h-3.5" />上傳／取代
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={(e) => void onUploadOjt(e.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                )}
+                <button onClick={a.onDownload} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0">
+                  <Icon name="download" className="w-3.5 h-3.5" />下載
+                </button>
               </div>
-              {a.watermark && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">下載燒錄浮水印</span>
-              )}
-              <button onClick={a.onDownload} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0">
-                <Icon name="download" className="w-3.5 h-3.5" />下載
-              </button>
-            </div>
-          ))}
+            );
+          })}
           {/* F039 AC-26：無關聯附錄 → 顯示提示（非錯誤、非空白區塊）。 */}
           {appendices.length === 0 && (
             <div

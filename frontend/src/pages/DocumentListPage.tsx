@@ -11,6 +11,7 @@ import {
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
+import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT } from '../domain/watermark-note';
 import { TREE_PREVIEW_WINDOW_NAME } from './LifecycleTreePreviewPage';
 import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, type ComboOption } from '../components/SearchCombobox';
@@ -629,15 +630,20 @@ export function DocumentListPage(): JSX.Element {
       {/* 14 欄表格 */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[1560px]">
+          <table className="w-full text-sm min-w-[1724px]">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
               <tr>
+                {/*
+                  🔵 AC-N37（2026-08-20 D9 delta）：第 1 個 th（最左）之可見文字逐字為 OJT；
+                  其後接續之 14 個表頭＝既有 14 欄、由左至右順序不變；表頭總數為 15。
+                */}
+                <th className="text-left font-medium px-3 py-2.5 min-w-[56px]">OJT</th>
                 <th className="text-left font-medium px-3 py-2.5 min-w-[152px]">制定公司</th>
                 <th className="text-left font-medium px-3 py-2.5 min-w-[88px]">制定部門</th>
                 <th className="text-left font-medium px-3 py-2.5 min-w-[104px]">制定室別</th>
                 <th className="text-left font-medium px-3 py-2.5 min-w-[118px]">當責室長</th>
                 <th className="text-left font-medium px-3 py-2.5 min-w-[90px]">狀態</th>
-                <th className="text-left font-medium px-3 py-2.5 min-w-[60px]">檔案</th>
+                <th className="text-left font-medium px-3 py-2.5 min-w-[160px]">檔案</th>
                 <th className="text-left font-medium px-3 py-2.5 min-w-[62px]">樹狀圖</th>
                 <SortHeader label="程序書編號" active={sortBy === 'documentNumber'} dir={sortDir} onClick={() => toggleSort('documentNumber')} className="min-w-[152px]" />
                 <th className="text-left font-medium px-3 py-2.5 min-w-[176px]">程序書書名</th>
@@ -654,6 +660,7 @@ export function DocumentListPage(): JSX.Element {
                 const meta = DISPLAY_META[disp];
                 return (
                   <tr key={d.id} className="hover:bg-slate-50 align-top">
+                    <OjtCell hasOjt={d.hasOjt} />
                     <td className="px-3 py-3 text-slate-600 whitespace-nowrap">{d.draftingCompanyName ?? '—'}</td>
                     <td className="px-3 py-3 text-slate-600 whitespace-nowrap">{d.draftingDeptName ?? '—'}</td>
                     <td className="px-3 py-3 text-slate-600 whitespace-nowrap">
@@ -678,13 +685,16 @@ export function DocumentListPage(): JSX.Element {
                     </td>
                     <td className="px-3 py-3">
                       {d.icsopPdfBlobPath ? (
-                        <button
-                          onClick={() => void openBlob(d.icsopPdfBlobPath!, d.icsopPdfFileName ?? d.documentNumber)}
-                          title={`下載 ${d.icsopPdfFileName ?? d.documentNumber}`}
-                          className="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"
-                        >
-                          <Icon name="file-down" className="w-4 h-4" />
-                        </button>
+                        <>
+                          <button
+                            onClick={() => void openBlob(d.icsopPdfBlobPath!, d.icsopPdfFileName ?? d.documentNumber)}
+                            title={`下載 ${d.icsopPdfFileName ?? d.documentNumber}`}
+                            className="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"
+                          >
+                            <Icon name="file-down" className="w-4 h-4" />
+                          </button>
+                          <WmNote fileName={d.icsopPdfFileName} />
+                        </>
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
@@ -912,6 +922,58 @@ function LinkCell({ doc, filterLink, expanded, onToggle, onDownload }: {
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * 🔵 最左「OJT」圖示欄（F017 `AC-N37`～`AC-N40`；2026-08-20 D9 delta，`OQ-D9-25` 選項 A／`OQ-D9-26` 選項 A）。
+ *
+ * · 三種輸入 → **兩種**視覺：`hasOjt === true` → `file-check-2` ＋「有 OJT」；
+ *   `false` **與缺鍵（undefined）** → 皆為 `file-x-2` ＋「無 OJT」
+ *   （`AC-N38` ③：缺鍵視同 false，**不得**渲染為空白／—／null／第三種視覺狀態）。
+ * · 兩態字面逐字沿用既有 OJT 篩選下拉之選項文字（`AC-D5`），**不得**另造「已上傳／未上傳」。
+ * · DOM 契約（`AC-N39`）：儲存格帶 `data-ojt-cell`，並帶 `data-has-ojt="true"|"false"`（缺鍵一律 `"false"`）。
+ * 🔒 `AC-N40`：本 delta **只加顯示欄、不動篩選**。
+ * 版面權威＝`prototypes/13-document-list.html:548-553`。
+ */
+function OjtCell({ hasOjt }: { hasOjt: boolean | undefined }): JSX.Element {
+  const has = hasOjt === true; // undefined 與 false 皆落入 else 分支
+  const label = has ? '有 OJT' : '無 OJT';
+  return (
+    <td className="px-3 py-3" data-ojt-cell="" data-has-ojt={has ? 'true' : 'false'}>
+      <span className="inline-flex items-center" title={label} aria-label={label} role="img">
+        <Icon name={has ? 'file-check-2' : 'file-x-2'} className={`w-4 h-4 ${has ? 'text-emerald-600' : 'text-slate-300'}`} />
+        {/*
+          `AC-N38` ③「不得渲染為空白」之文字載體：外層 `role="img"` 已使 AT 將本節點視為葉節點
+          （僅唸 `aria-label`、不重複唸子孫），故此 `sr-only` 不造成重複播報，純粹讓「這一格
+          到底有沒有內容」在不依賴圖示字型／SVG 的情境下仍可判定。視覺上與 prototype 之
+          icon-only 儲存格完全相同（`sr-only` 為視覺隱藏）。
+        */}
+        <span className="sr-only">{label}</span>
+      </span>
+    </td>
+  );
+}
+
+/**
+ * 🔵 後台檔案列之浮水印註記（F020 `AC-N20`；2026-08-20 `OQ-D9-08`／`OQ-D9-33` 裁決）。
+ * 文案與前台詳情頁**同一組逐字常數**（`domain/watermark-note.ts`），不得分歧；
+ * 版面權威＝`prototypes/13-document-list.html:563-566`（判定依上傳時之原始檔名副檔名）。
+ */
+function WmNote({ fileName }: { fileName: string | null | undefined }): JSX.Element {
+  const isPdf = /\.pdf$/i.test(fileName ?? '');
+  return isPdf ? (
+    <span data-wm-note="" className="mt-1 block text-xs text-slate-400 whitespace-nowrap">
+      {WM_BURN_TEXT}
+    </span>
+  ) : (
+    <span
+      data-wm-note=""
+      className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 whitespace-nowrap"
+    >
+      <Icon name="info" className="w-3 h-3" />
+      {WM_UNSUPPORTED_TEXT}
+    </span>
   );
 }
 

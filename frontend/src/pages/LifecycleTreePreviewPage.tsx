@@ -506,14 +506,14 @@ export function LifecycleTreePreviewPage(): JSX.Element {
             <div
               data-testid="watermark-overlay"
               aria-hidden="true"
-              style={{ position: 'absolute', inset: '-40%', pointerEvents: 'none', display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', transform: 'rotate(-45deg)', opacity: 0.12, userSelect: 'none', zIndex: 5 }}
+              style={{ position: 'absolute', inset: '-40%', pointerEvents: 'none', display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', transform: 'rotate(-45deg)', opacity: 0.30, userSelect: 'none', zIndex: 5 }}
             >
               {Array.from({ length: wmCount }).map((_, i) => (
                 <span
                   key={i}
                   data-testid="watermark-text"
                   className="mono"
-                  style={{ color: '#64748B', fontSize: 14, whiteSpace: 'nowrap', padding: '22px 30px', fontWeight: 500, textAlign: 'center', lineHeight: 1.6 }}
+                  style={{ color: '#334155', fontSize: 14, whiteSpace: 'nowrap', padding: '22px 30px', fontWeight: 500, textAlign: 'center', lineHeight: 1.6 }}
                 >
                   {wmLines.map((ln, j) => (
                     <span key={j} style={{ display: 'block' }}>{ln}</span>

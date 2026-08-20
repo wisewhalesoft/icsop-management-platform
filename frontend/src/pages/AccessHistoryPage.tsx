@@ -26,10 +26,19 @@ import type {
  * 篩選/排序/分頁/近 30 天預設由後端 queryHistory 完成，前端僅呈現與傳遞條件。
  */
 
+/**
+ * 「不施加類型限制」之哨兵（F024 `AC-N69`）。刻意**不用空字串**：`AC-N69` 之類型值清單
+ * 把預設項一併列為 `全部`，以它為 `<option value>` 才能讓「五個 option 之值」成為可枚舉之契約。
+ */
+const KIND_ALL = '全部';
+
 /** targetType → 前端類型顯示值。 */
 function rowKind(targetType: string): AuditKind {
   if (targetType === 'DOCUMENT' || targetType === 'USAGE_FORM') return '文件';
   if (targetType === 'LIFECYCLE') return '循環';
+  // 🔴 F024 `AC-N53`：OJT 上傳事件之專屬 targetType（`OQ-D9-29` 之核心——
+  //    它必須**不落入「文件」類**，否則「文件調閱歷程」會被非調閱事件污染且無從排除。
+  if (targetType === 'DOCUMENT_ATTACHMENT') return '上傳';
   return '變更';
 }
 
@@ -44,12 +53,17 @@ const ACT_LABEL: Record<string, string> = {
   CHANGE_LOG_VIEW: '文件變更歷程檢視',
   LIFECYCLE_CHANGELOG_VIEW: '循環變更歷程檢視',
   LIFECYCLE_CHANGELOG_DOWNLOAD: '新舊樹狀圖下載',
+  // 🔴 F024 `AC-N53`：中文標籤逐字為「附件上傳」；與 backend/src/audit/access-history-labels.ts
+  //    之 ACTION_TYPE_LABEL **兩份逐字相同**（前後端無共用 package 之既定處置）。
+  ATTACHMENT_UPLOAD: '附件上傳',
 };
 
 const KIND_TONE: Record<AuditKind, string> = {
   文件: 'bg-slate-50 text-slate-700 border-slate-100',
   循環: 'bg-emerald-50 text-emerald-700 border-emerald-100',
   變更: 'bg-amber-50 text-amber-700 border-amber-100',
+  // prototypes/17-access-history.html:261 之 KIND_STYLE（色票屬設計裁量、不入 AC）。
+  上傳: 'bg-violet-50 text-violet-700 border-violet-100',
 };
 
 /**
@@ -68,6 +82,8 @@ const ACT_TONE: Record<string, string> = {
   CHANGE_LOG_VIEW: 'bg-amber-50 text-amber-700 border-amber-100',
   LIFECYCLE_CHANGELOG_VIEW: 'bg-amber-50 text-amber-700 border-amber-100',
   LIFECYCLE_CHANGELOG_DOWNLOAD: 'bg-amber-50 text-amber-700 border-amber-100',
+  // prototypes/17-access-history.html:259 之 ACT_STYLE（violet；色票屬設計裁量、不入 AC）。
+  ATTACHMENT_UPLOAD: 'bg-violet-50 text-violet-700 border-violet-100',
 };
 function actTone(actionType: string): string {
   return ACT_TONE[actionType] ?? ACT_TONE_SLATE;
@@ -139,7 +155,7 @@ export function AccessHistoryPage(): JSX.Element {
   const role = user?.roleCode;
   const canRead = canPerform(role, FunctionKey.DOCUMENT_ACCESS_HISTORY, 'read');
 
-  const [kind, setKind] = useState<AuditKind | ''>('');
+  const [kind, setKind] = useState<AuditKind | typeof KIND_ALL>(KIND_ALL);
   const [person, setPerson] = useState('');
   const [target, setTarget] = useState('');
   const [from, setFrom] = useState('');
@@ -170,13 +186,13 @@ export function AccessHistoryPage(): JSX.Element {
   // 目前輸入狀態組成 filters（可帶 override，供類型切換即時查詢）。
   const buildFilters = useCallback(
     (o?: Partial<Record<'kind' | 'person' | 'target' | 'from' | 'to', string>>): AccessHistoryFilters => {
-      const k = (o?.kind ?? kind) as AuditKind | '';
+      const k = (o?.kind ?? kind) as AuditKind | typeof KIND_ALL;
       const p = o?.person ?? person;
       const t = o?.target ?? target;
       const f = o?.from ?? from;
       const tt = o?.to ?? to;
       const filters: AccessHistoryFilters = {};
-      if (k) filters.kind = k;
+      if (k && k !== KIND_ALL) filters.kind = k;
       if (p.trim()) filters.person = p.trim();
       if (t.trim()) filters.target = t.trim();
       if (f) filters.from = f;
@@ -191,7 +207,7 @@ export function AccessHistoryPage(): JSX.Element {
   }, [canRead, load]);
 
   const onKindChange = (v: string) => {
-    const next = v as AuditKind | '';
+    const next = v as AuditKind | typeof KIND_ALL;
     setKind(next);
     void load(buildFilters({ kind: next }));
   };
@@ -312,10 +328,18 @@ export function AccessHistoryPage(): JSX.Element {
               onChange={(e) => onKindChange(e.target.value)}
               className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"
             >
-              <option value="">全部類型</option>
+              {/*
+                🔴 F024 `AC-N69`（`OQ-D9-35` 定案讀法）：**類型值恰為四種**（文件／循環／變更／上傳），
+                控制項連同既有預設項共 **5 個 option**；`上傳` 置於既有三者**之後**，
+                既有三者與預設項之字面與相對順序逐字不變。
+                📌 預設項之 `value` 為 `全部`（非空字串）＝「不施加類型限制」之哨兵，
+                   於 `buildFilters()` 中被略去、不送入 API；其**可見文字仍為「全部類型」**。
+              */}
+              <option value={KIND_ALL}>全部類型</option>
               <option value="文件">文件</option>
               <option value="循環">循環</option>
               <option value="變更">變更</option>
+              <option value="上傳">上傳</option>
             </select>
           </div>
           <div>
@@ -554,12 +578,23 @@ export function AccessHistoryPage(): JSX.Element {
                                 <Icon name="stamp" className="w-4 h-4 text-primary-600" />
                                 當次浮水印快照（與稽核內容完全一致）
                               </div>
+                              {/*
+                                `AC-N80`：本欄恆帶 `data-wm-snapshot`。留空時**不得**渲染為空字串或 `—`——
+                                空字串會被讀成「資料遺失」，明訂說明句才能讓「本來就沒有」與
+                                「應該有卻沒寫進去」在畫面上可區分。
+                              */}
                               {r.watermarkSnapshot ? (
-                                <div className="mono text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded px-3 py-2 break-all">
+                                <div
+                                  data-wm-snapshot=""
+                                  className="mono text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded px-3 py-2 break-all"
+                                >
                                   {r.watermarkSnapshot}
                                 </div>
                               ) : (
-                                <div className="text-xs text-slate-400">
+                                <div
+                                  data-wm-snapshot=""
+                                  className="mono text-xs text-slate-400 bg-slate-50 border border-slate-200 rounded px-3 py-2 break-all"
+                                >
                                   （此動作類型無浮水印，該欄留空）
                                 </div>
                               )}

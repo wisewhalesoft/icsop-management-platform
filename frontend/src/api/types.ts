@@ -322,8 +322,13 @@ export interface UsageFormRecord {
 
 // ===== E07 文件調閱歷程（F024） =====
 
-/** 類型篩選前端顯示值（↔ 後端 targetType 集合）。 */
-export type AuditKind = '文件' | '循環' | '變更';
+/**
+ * 類型篩選前端顯示值（↔ 後端 targetType 集合）。
+ * 🔴 2026-08-20 D9 delta（F024 `AC-N69`／`OQ-D9-29`）新增第四種類型值 `上傳`
+ * （↔ `targetType='DOCUMENT_ATTACHMENT'`）——使 OJT 上傳事件既可**自「文件」類排除**、
+ * 亦可**單獨篩出**。既有三者之字面與相對順序逐字不變。
+ */
+export type AuditKind = '文件' | '循環' | '變更' | '上傳';
 
 /**
  * 稽核調閱列（GET /admin/access-history）。鏡射後端 audit.types AuditRow；

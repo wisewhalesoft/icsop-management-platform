@@ -33,6 +33,8 @@ import {
   subcategoriesOf,
 } from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
+import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT } from '../domain/watermark-note';
+import { canWriteOjt } from '../domain/readonly-notice';
 import { EditionInput } from '../components/EditionInput';
 import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, MultiSearchCombobox, type ComboOption } from '../components/SearchCombobox';
@@ -997,7 +999,10 @@ export function DocumentEditPage(): JSX.Element {
           <ReplaceCard
             title="ICSOP PDF（呈現用，1 份，覆蓋式）"
             accept=".pdf,.jpg,.jpeg,.png"
-            disabled={ro}
+            canReplace={!ro}
+            writeHook="icsop_pdf"
+            writeClass="write-only"
+            replaceAriaLabel="取代 ICSOP PDF"
             existing={attachments.find((a) => a.type === 'ICSOP_PDF') ?? null}
             onDownload={onDownloadAttachment}
             onSelect={(f) => void onUpload('pdf', f)}
@@ -1005,12 +1010,38 @@ export function DocumentEditPage(): JSX.Element {
           <ReplaceCard
             title="OJT 實體簽到表（1 份，覆蓋式）"
             accept=".pdf,.jpg,.jpeg,.png"
-            disabled={ro}
+            /*
+              🔴 F026 `AC-N23`（2026-08-20 `OQ-D9-19`／`OQ-D9-20`）：OJT 為主管／部門窗口之
+              **唯一**可寫項；判定取自 `FIELD_MATRIX`（單一權威），不在此另寫角色白名單。
+            */
+            canReplace={canWriteOjt(role)}
+            writeHook="ojt"
+            writeClass="ojt-write"
+            replaceAriaLabel="取代 OJT 簽到表"
+            ojtUpload
+            titleBadge={
+              canWriteOjt(role) ? (
+                <span
+                  data-ojt-exception=""
+                  className="ojt-write text-[10px] px-1.5 py-0.5 rounded bg-primary-600 text-white whitespace-nowrap"
+                >
+                  主管／部門窗口亦可寫
+                </span>
+              ) : undefined
+            }
             existing={attachments.find((a) => a.type === 'OJT_SIGNIN') ?? null}
             onDownload={onDownloadAttachment}
             onSelect={(f) => void onUpload('ojt', f)}
           />
-          {/* ICSOP 原始檔 .xls：保存待 AI 索引管線（F027/F029）就緒；本輪停用（比照建立頁佔位卡，copy 一致）。 */}
+          {/*
+            ICSOP 原始檔 .xls：保存待 AI 索引管線（F027/F029）就緒；本輪停用（比照建立頁佔位卡，copy 一致）。
+            🔴 上傳鈕**已停用但仍存在**（`disabled`），理由：F026 `AC-N76` ④ 之逐元素掛鉤
+               `data-attachment-write="xls"` 必須有載體——它擋的是「有人把 `.xls` 上傳鈕的
+               `.write-only` 整個刪掉」這一形狀；控制項若不存在，該防護日後恢復本功能時就沒了。
+            ⚠ 如實登錄：本鈕**現在不能用**（`disabled`），真正的 `.xls` 上傳需要 multipart 二進位
+               ＋ `.xls` 解析（`backend/src/xls-source/xls-source.controller.ts` 現行僅接受已解析之
+               `templateSummary` JSON body，標註為 [integration]）。
+          */}
           <div
             className="border border-dashed border-primary-200 rounded-lg p-4 text-center bg-primary-50/20 opacity-60 sm:col-span-2"
             title="ICSOP 原始檔 .xls 之保存待 AI 索引管線（F027/F029）就緒"
@@ -1018,6 +1049,17 @@ export function DocumentEditPage(): JSX.Element {
             <Icon name="file-spreadsheet" className="w-6 h-6 text-primary-400 mx-auto mb-1.5" />
             <div className="text-sm font-medium text-slate-500">上傳 ICSOP 原始檔（.xls，1 份）</div>
             <div className="text-xs text-slate-400 mt-1">待 AI 索引管線就緒（F027/F029）</div>
+            {!ro && (
+              <button
+                type="button"
+                disabled
+                data-attachment-write="xls"
+                title="待 AI 索引管線就緒（F027/F029）"
+                className="write-only mt-2 inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 text-primary-700 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Icon name="upload" className="w-3.5 h-3.5" />上傳新版 .xls（取代）
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -1245,22 +1287,44 @@ function ReadonlyChips({ values, emptyText }: {
 }
 
 /**
- * 附件卡（prototype 15）：現有檔名 ＋「下載」＋「取代」。
- * 尚未上傳 → 無檔名列與下載鈕；唯讀角色 → 無「取代」入口（write-only）。
+ * 附件卡（prototype 15）：現有檔名 ＋ 浮水印註記 ＋「下載」＋「取代」。
+ * 尚未上傳 → 無檔名列與下載鈕；無寫入權之角色 → 無「取代」入口。
+ *
+ * 🔴 **`writeHook`／`writeClass` 為 F026 `AC-N76` ④ 之逐元素掛鉤，兩者必須成對且不得混用**：
+ *  · `icsop_pdf`／`xls` → `write-only`（僅 ICSOP 管理員之牆）
+ *  · `ojt`            → `ojt-write`（2026-08-20 新開放主管／部門窗口之**唯一**破口）
+ * ⚠ **不得**把 OJT 取代鈕併入 `write-only`「順手統一」——一旦 `write-only` 之角色條件為兩角色
+ *   放寬，ICSOP PDF 取代鈕與 `.xls` 上傳鈕會**一起對主管放行**（`AC-N25` 第三輪擴充明文禁令）。
  */
-function ReplaceCard({ title, accept, disabled, existing, onDownload, onSelect }: {
-  title: string; accept: string; disabled?: boolean;
+function ReplaceCard({
+  title, accept, canReplace, writeHook, writeClass, replaceAriaLabel, ojtUpload, titleBadge,
+  existing, onDownload, onSelect,
+}: {
+  title: string;
+  accept: string;
+  /** 該角色對本附件是否可寫（`icsop_pdf` ＝ ICSOPAdmin；`ojt` ＝ ICSOPAdmin／主管／部門窗口）。 */
+  canReplace: boolean;
+  writeHook: 'icsop_pdf' | 'ojt';
+  writeClass: 'write-only' | 'ojt-write';
+  replaceAriaLabel: string;
+  /** OJT 專屬：另掛 `data-ojt-upload`（`AC-N76` ④、`AC-N75` ④）。 */
+  ojtUpload?: boolean;
+  titleBadge?: JSX.Element;
   existing: DocumentAttachmentRecord | null;
   onDownload: (a: DocumentAttachmentRecord) => void;
   onSelect: (f: File | null) => void;
 }): JSX.Element {
   return (
     <div className="border border-slate-200 rounded-lg p-3">
-      <div className="text-xs font-medium text-slate-500 mb-2">{title}</div>
+      <div className="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1.5">
+        {title}
+        {titleBadge}
+      </div>
       {existing && (
         <div className="flex items-center gap-2">
           <Icon name="file-text" className="w-5 h-5 text-red-500" />
           <span className="text-sm text-slate-700 truncate flex-1">{existing.fileName}</span>
+          <WmNote fileName={existing.fileName} />
         </div>
       )}
       <div className="flex gap-2 mt-3">
@@ -1272,14 +1336,42 @@ function ReplaceCard({ title, accept, disabled, existing, onDownload, onSelect }
             <Icon name="download" className="w-3.5 h-3.5" />下載
           </button>
         )}
-        {!disabled && (
-          <label className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 cursor-pointer">
+        {canReplace && (
+          <label
+            data-attachment-write={writeHook}
+            {...(ojtUpload ? { 'data-ojt-upload': '' } : {})}
+            aria-label={replaceAriaLabel}
+            className={`${writeClass} inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 cursor-pointer`}
+          >
             <Icon name="upload" className="w-3.5 h-3.5" />取代
             <input type="file" accept={accept} aria-label={`上傳取代 ${title}`} className="hidden" onChange={(e) => onSelect(e.target.files?.[0] ?? null)} />
           </label>
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * 附件列之浮水印註記（F020 `AC-N20`）。文案與前台詳情頁**同一組逐字常數**，不得分歧；
+ * 版面權威＝`prototypes/15-document-edit.html:228,238,246`。
+ */
+function WmNote({ fileName }: { fileName: string }): JSX.Element {
+  return /\.pdf$/i.test(fileName) ? (
+    <span
+      data-wm-note=""
+      className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0 whitespace-nowrap"
+    >
+      {WM_BURN_TEXT}
+    </span>
+  ) : (
+    <span
+      data-wm-note=""
+      className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 shrink-0 whitespace-nowrap"
+    >
+      <Icon name="info" className="w-3 h-3" />
+      {WM_UNSUPPORTED_TEXT}
+    </span>
   );
 }
 

@@ -266,7 +266,7 @@ export function PublicListPage(): JSX.Element {
    */
   const statusSelect = (scope: string): JSX.Element => (
     <div key="status">
-      <label htmlFor={`${scope}_status`} className="block text-[11px] font-medium text-slate-500 mb-1">
+      <label htmlFor={`${scope}_status`} className="block text-sm font-medium text-slate-500 mb-1">
         狀態
       </label>
       <select
@@ -274,7 +274,7 @@ export function PublicListPage(): JSX.Element {
         aria-label="狀態"
         value="有效"
         onChange={() => undefined}
-        className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+        className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-base focus:outline-none focus:ring-2 focus:ring-primary-600"
       >
         <option value="有效">有效</option>
       </select>
@@ -311,7 +311,7 @@ export function PublicListPage(): JSX.Element {
           <span className="font-bold text-slate-900 truncate">ICSOP 文件瀏覽</span>
           <div className="ml-auto flex items-center gap-3">
             <div
-              className="hidden sm:flex items-center gap-2 text-sm text-slate-500"
+              className="hidden sm:flex items-center gap-2 text-base text-slate-500"
               data-testid="topbar-user"
             >
               <Icon name="user" className="w-4 h-4" />
@@ -348,7 +348,7 @@ export function PublicListPage(): JSX.Element {
               onChange={(e) => setKwInput(e.target.value)}
               aria-label="搜尋文件編號或名稱"
               placeholder="搜尋文件編號或名稱…"
-              className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+              className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 text-base bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
             />
           </div>
           <button
@@ -357,7 +357,7 @@ export function PublicListPage(): JSX.Element {
             aria-label="開啟篩選"
             aria-expanded={sheetOpen}
             data-testid="mobile-filter-trigger"
-            className="lg:hidden relative px-3 py-2.5 rounded-lg border border-slate-300 bg-white text-sm flex items-center gap-1.5"
+            className="lg:hidden relative px-3 py-2.5 rounded-lg border border-slate-300 bg-white text-base flex items-center gap-1.5"
           >
             <Icon name="sliders-horizontal" className="w-4 h-4" />
             篩選
@@ -374,12 +374,12 @@ export function PublicListPage(): JSX.Element {
             {hasFilters && (
               <button
                 onClick={clearFilters}
-                className="px-3 py-2 rounded-lg text-sm text-primary-600 hover:bg-primary-50"
+                className="px-3 py-2 rounded-lg text-base text-primary-600 hover:bg-primary-50"
               >
                 清除篩選
               </button>
             )}
-            <span className="ml-auto text-sm text-slate-500" data-testid="count-text">
+            <span className="ml-auto text-base text-slate-500" data-testid="count-text">
               共 {total} 筆
             </span>
           </div>
@@ -387,7 +387,7 @@ export function PublicListPage(): JSX.Element {
 
         {/* info note — F041 AC-40：頂部範圍說明句依 viewer 分支（容器/字級/色彩沿用既有樣式，未新增元件）。
             ⚠ 與 AC-33 之空狀態文案「查無符合結果」為不同 DOM 位置之不同字串，業務使用者查無結果時兩者同時出現。 */}
-        <div className="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-xs text-primary-700 mb-4">
+        <div className="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-sm text-primary-700 mb-4">
           <Icon name="info" className="w-4 h-4 shrink-0 mt-0.5" />
           <span data-testid="scope-notice">{scopeNotice}</span>
         </div>
@@ -420,7 +420,7 @@ export function PublicListPage(): JSX.Element {
         )}
 
         {error && !loading && (
-          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
+          <div role="alert" className="text-base text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
             載入失敗 · <span className="mono">{error}</span>
           </div>
         )}
@@ -429,11 +429,11 @@ export function PublicListPage(): JSX.Element {
           <div className="text-center py-16">
             <Icon name="inbox" className="w-12 h-12 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-500">查無符合結果</p>
-            <p className="text-sm text-slate-400 mt-1">請調整搜尋關鍵字或篩選條件</p>
+            <p className="text-base text-slate-400 mt-1">請調整搜尋關鍵字或篩選條件</p>
             {hasFilters && (
               <button
                 onClick={clearFilters}
-                className="mt-4 px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50"
+                className="mt-4 px-4 py-2 rounded-md border border-slate-300 text-base hover:bg-slate-50"
               >
                 清除篩選
               </button>
@@ -448,7 +448,7 @@ export function PublicListPage(): JSX.Element {
                 <div className="flex items-center gap-2 mb-2">
                   <Icon name="pin" className="w-4 h-4 text-primary-600" />
                   {/* prototype 03 第 79 行：您部門相關文件 · <span>營運管理部 / 審查室</span> */}
-                  <h2 className="text-sm font-semibold text-slate-700">
+                  <h2 className="text-base font-semibold text-slate-700">
                     您部門相關文件
                     {orgPath && (
                       <>
@@ -469,7 +469,7 @@ export function PublicListPage(): JSX.Element {
               <section aria-label="其他文件">
                 <div className="flex items-center gap-2 mb-2">
                   <Icon name="list" className="w-4 h-4 text-slate-400" />
-                  <h2 className="text-sm font-semibold text-slate-700">
+                  <h2 className="text-base font-semibold text-slate-700">
                     其他文件 · <span className="text-slate-400 font-normal">依編號降冪</span>
                   </h2>
                 </div>
@@ -482,8 +482,8 @@ export function PublicListPage(): JSX.Element {
             )}
 
             {/* pagination：左＝後端隱藏筆數提示（G-PUB-012/014），右＝頁碼 */}
-            <div className="flex items-center justify-between mt-6 text-sm text-slate-500">
-              <span data-testid="hidden-note" className="text-xs text-slate-400">
+            <div className="flex items-center justify-between mt-6 text-base text-slate-500">
+              <span data-testid="hidden-note" className="text-sm text-slate-400">
                 {hiddenCount > 0
                   ? `另有 ${hiddenCount} 筆（進度中／失效／作廢）文件已由後端隱藏`
                   : ''}
@@ -553,13 +553,13 @@ export function PublicListPage(): JSX.Element {
                 clearFilters();
                 closeSheet();
               }}
-              className="flex-1 py-2.5 rounded-lg border border-slate-300 text-sm"
+              className="flex-1 py-2.5 rounded-lg border border-slate-300 text-base"
             >
               清除
             </button>
             <button
               onClick={closeSheet}
-              className="flex-1 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium"
+              className="flex-1 py-2.5 rounded-lg bg-primary-600 text-white text-base font-medium"
             >
               套用
             </button>
@@ -591,8 +591,8 @@ function DocCard({ doc, onOpen }: { doc: PublicListItem; onOpen: () => void }): 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="mono text-xs text-slate-500">{doc.documentNumber}</span>
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium text-emerald-700 bg-emerald-50">
+            <span className="mono text-sm text-slate-500">{doc.documentNumber}</span>
+            <span className="px-2 py-0.5 rounded-full text-sm font-medium text-emerald-700 bg-emerald-50">
               {STATUS_LABEL[doc.displayStatus] ?? doc.displayStatus}
             </span>
           </div>
@@ -605,7 +605,7 @@ function DocCard({ doc, onOpen }: { doc: PublicListItem; onOpen: () => void }): 
         🔴 「使用部門：」與「循環別：」兩列已移除（雙重 queryByText 反向斷言）；
         「使用部門逐段高亮」（G-PUB-016）隨該欄位一併移除，為 `AC-D12` 已接受之代價。
       */}
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 text-xs">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 text-sm">
         <div>
           <dt className="text-slate-400 inline">制定公司：</dt>
           <dd className="text-slate-600 inline">{doc.draftingCompanyName ?? '—'}</dd>
@@ -634,10 +634,16 @@ function DocCard({ doc, onOpen }: { doc: PublicListItem; onOpen: () => void }): 
             {doc.announcedDate ? doc.announcedDate.slice(0, 10) : '—'}
           </dd>
         </div>
+        {/*
+          AC-N60（F021 D9 delta）：內容摘要為前台字級之代表性節點，逐字含 text-base；
+          掛鉤 data-summary 之權威＝prototypes/03-public-list.html:404。
+        */}
         {doc.contentSummary && (
-          <div className="col-span-2">
+          <div className="col-span-2 text-base">
             <dt className="text-slate-400 inline">內容摘要：</dt>
-            <dd className="text-slate-500 inline">{doc.contentSummary}</dd>
+            <dd className="text-slate-500 inline text-base" data-summary="">
+              {doc.contentSummary}
+            </dd>
           </div>
         )}
       </dl>
