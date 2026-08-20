@@ -419,12 +419,18 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
       expect(pill).not.toHaveTextContent('消費分期產品政策及規範作業');
     });
 
-    it('TS-D-019 無連結之列顯示「—」', async () => {
+    /**
+     * 🔴 2026-08-20 D9 delta（`AC-N37`）：OJT 圖示欄插入最左，連結點程序書欄之絕對索引由
+     * 11（0-based，第 12 欄）順移為 12（第 13 欄）。
+     * 📝 被取代之原斷言逐字保留供追溯：
+     *   OLD> expect(rowOf('消費分期產品政策及規範作業').querySelectorAll('td')[11].textContent).toBe('—');
+     */
+    it('TS-D-019／AC-N37 無連結之列顯示「—」', async () => {
       mockAuth('ICSOPAdmin');
       renderPage();
       await waitFor(() => expect(screen.getByText('消費分期產品政策及規範作業')).toBeInTheDocument());
-      // 連結點程序書欄（第 12 欄，index 11）
-      expect(rowOf('消費分期產品政策及規範作業').querySelectorAll('td')[11].textContent).toBe('—');
+      // 連結點程序書欄（第 13 欄，index 12，因 OJT 圖示欄插入最左而順移）
+      expect(rowOf('消費分期產品政策及規範作業').querySelectorAll('td')[12].textContent).toBe('—');
     });
 
     /**
@@ -432,7 +438,7 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
      * 正是使用者回報「多份連結點把整列上下拉伸」之成因。新行為＝只顯示第一顆 pill ＋ 可點的 `+{N−1}`。
      * 摺疊之完整驗證（三態／展開／篩選命中優先／DOM 契約）見 `DocumentListPage.linkCell.test.tsx`。
      */
-    it('TS-D-020 一列多個連結 → 只顯示第一顆 pill ＋ 可點的 +N（`AC-E1`／`AC-E3`）', async () => {
+    it('TS-D-020／AC-N37 一列多個連結 → 只顯示第一顆 pill ＋ 可點的 +N（`AC-E1`／`AC-E3`）', async () => {
       mockAuth('ICSOPAdmin');
       vi.mocked(endpoints.getDocuments).mockResolvedValue(
         page([
@@ -447,7 +453,8 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
       );
       renderPage();
       await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
-      const cell = rowOf('車輛分期進件作業').querySelectorAll('td')[11];
+      // 🔴 AC-N37：連結點程序書欄索引由 11 順移為 12（OJT 圖示欄插入最左）。
+      const cell = rowOf('車輛分期進件作業').querySelectorAll('td')[12];
       // 第一顆 pill（編號可見）＋ 一顆 `+1` toggle；第二個連結之編號**不上清單**
       expect(cell.textContent).toContain('ICSOP-PPC-101-2-02');
       expect(cell.textContent).not.toContain('ICSOP-SRC-102-1-01');

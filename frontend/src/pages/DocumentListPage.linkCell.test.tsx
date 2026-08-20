@@ -118,18 +118,22 @@ const renderPage = () =>
   );
 
 /**
- * 以「程序書書名」欄（第 9 欄，index 8）定位列。
+ * 以「程序書書名」欄（第 10 欄，index 9）定位列。
  * ⚠ 不可用 `getByText(name).closest('tr')`：展開態之連結列也會渲染目標**書名**，
  *   同一書名會同時命中「某列的書名欄」與「另一列展開後的連結列」而拋 multiple elements。
+ *
+ * 🔴 2026-08-20 D9 delta（`AC-N37`）：OJT 圖示欄插入最左，本欄索引由 8（第 9 欄）順移為
+ * 9（第 10 欄）；本檔內以此 helper 定位之全部案例連坐同步（無需逐案修改）。
+ * 📝 被取代之原索引逐字保留供追溯：OLD> `.find((r) => r.querySelectorAll('td')[8]?.textContent?.trim() === docName);`
  */
 const rowOf = (docName: string): HTMLElement => {
   const row = screen
     .getAllByRole('row')
-    .find((r) => r.querySelectorAll('td')[8]?.textContent?.trim() === docName);
+    .find((r) => r.querySelectorAll('td')[9]?.textContent?.trim() === docName);
   if (!row) throw new Error(`找不到程序書書名為「${docName}」之列`);
   return row;
 };
-/** `AC-E8`：第 12 欄之容器帶 `data-link-cell`。 */
+/** `AC-E8`：第 13 欄之容器帶 `data-link-cell`（原第 12 欄，因 OJT 圖示欄插入最左而順移）。 */
 const cellOf = (name: string): HTMLElement => {
   const el = rowOf(name).querySelector<HTMLElement>('[data-link-cell]');
   if (!el) throw new Error(`AC-E8: 「${name}」列找不到 [data-link-cell]`);
@@ -169,7 +173,8 @@ describe('F017 AC-E1／AC-E8：三態與收合態之 DOM 契約', () => {
     await screen.findByText('車輛分期進件作業');
 
     // 0 個：整格為「—」，且不產生 [data-link-cell] 容器（逐字沿用既有 DOM）
-    const zeroCell = rowOf('法遵作業').querySelectorAll('td')[11];
+    // 🔴 AC-N37：連結點程序書欄索引由 11 順移為 12（OJT 圖示欄插入最左）。
+    const zeroCell = rowOf('法遵作業').querySelectorAll('td')[12];
     expect(zeroCell.textContent).toBe('—');
     expect(zeroCell.querySelector('[data-link-cell]')).toBeNull();
     expect(toggleOf('法遵作業')).toBeNull();

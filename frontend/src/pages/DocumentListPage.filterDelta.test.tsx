@@ -136,8 +136,13 @@ const filterBar = (): HTMLElement => {
   return el;
 };
 const control = (label: string): HTMLElement => within(filterBar()).getByLabelText(label);
+/**
+ * 🔴 2026-08-20 D9 delta（`AC-N37`）：OJT 圖示欄插入最左，程序書書名欄索引由 8（第 9 欄）
+ * 順移為 9（第 10 欄）；本檔全部依此 helper 定位之案例連坐同步（無需逐案修改）。
+ * 📝 被取代之原索引逐字保留供追溯：OLD> `.map((r) => r.querySelectorAll('td')[8]?.textContent?.trim() ?? '');`
+ */
 const rowNames = (): string[] =>
-  screen.getAllByRole('row').slice(1).map((r) => r.querySelectorAll('td')[8]?.textContent?.trim() ?? '');
+  screen.getAllByRole('row').slice(1).map((r) => r.querySelectorAll('td')[9]?.textContent?.trim() ?? '');
 const visibleDocNames = (): string[] =>
   DOCS.map((d) => d.documentName).filter((n) => screen.queryByText(n) !== null);
 
