@@ -32,6 +32,18 @@ const NOT_PROXIED: Record<string, string> = {
   health: '容器 liveness 探針，直接打後端 :3000；SPA 不呼叫，無須經前端同源代理。',
 };
 
+/**
+ * 🔴 2026-08-20 D9 delta（`impl-fe2` 申訴，已核實成立）：nginx 端之靜態檔 location（非 API
+ * 代理），不參與「兩份設定彼此一致」之比對。新增項目必須附理由——與 `NOT_PROXIED` 同型之
+ * 逃生口，防止有人把真正的 API 前綴誤塞進例外清單而使本測試喪失鑑別力。
+ * 📌 已實測驗證兩者皆為 `try_files $uri =404`、皆無 `proxy_pass`（純靜態檔服務，非代理）。
+ */
+const STATIC_LOCATIONS: Record<string, string> = {
+  assets: '雜湊資產（Vite build 產出，nginx.conf:193-197），dev 由 Vite 自行服務，非 API 代理。',
+  pdfjs: 'pdf.js 執行期資產（cmaps／standard_fonts，nginx.conf:188-190），dev 由 Vite 靜態服務 ' +
+    'public/pdfjs/；加進 vite proxy 反而會讓 dev 端 pdf.js 去打後端 :3000 拿 cmap 而 404。',
+};
+
 /** 取路由第一段（代理白名單以第一段為單位）。'admin/documents/:id' → 'admin'。 */
 function firstSegment(routePath: string): string {
   return routePath.replace(/^\/+/, '').split('/')[0] ?? '';
@@ -124,10 +136,18 @@ describe('前端代理白名單必須涵蓋後端全部路由前綴', () => {
     ).toContain(prefix);
   });
 
+  /**
+   * 📝 被取代之原斷言逐字保留供追溯：
+   *   OLD> const nginx = [...nginxProxyPrefixes()].filter((p) => p !== 'assets').sort();
+   *   OLD> // nginx 的 `location /` fallback 會被解析成空段而略去；'assets' 為靜態資產，非 API 代理。
+   */
   it('兩份設定彼此一致（避免只補其中一份）', () => {
     const vite = [...viteProxyPrefixes()].sort();
-    const nginx = [...nginxProxyPrefixes()].filter((p) => p !== 'assets').sort();
-    // nginx 的 `location /` fallback 會被解析成空段而略去；'assets' 為靜態資產，非 API 代理。
+    const nginx = [...nginxProxyPrefixes()]
+      .filter((p) => !(p in STATIC_LOCATIONS))
+      .sort();
+    // nginx 的 `location /` fallback 會被解析成空段而略去；STATIC_LOCATIONS 之項目為純靜態
+    // 檔服務（無 proxy_pass），非 API 代理，不參與本比對。
     expect(nginx, 'nginx.conf 與 vite.config.ts 的代理前綴不一致——修正時兩份都要改').toEqual(
       vite,
     );
@@ -137,6 +157,14 @@ describe('前端代理白名單必須涵蓋後端全部路由前綴', () => {
     for (const prefix of Object.keys(NOT_PROXIED)) {
       expect(backend, `NOT_PROXIED 列了 '${prefix}'，但後端已無此前綴，請移除`).toContain(prefix);
       expect(NOT_PROXIED[prefix].length, `'${prefix}' 的理由不得為空`).toBeGreaterThan(10);
+    }
+  });
+
+  it('STATIC_LOCATIONS 之每個項目皆確實存在於 nginx.conf 且理由非空（避免例外清單腐爛或憑空排除）', () => {
+    const nginxAll = [...nginxProxyPrefixes()];
+    for (const prefix of Object.keys(STATIC_LOCATIONS)) {
+      expect(nginxAll, `STATIC_LOCATIONS 列了 '${prefix}'，但 nginx.conf 已無此 location，請移除`).toContain(prefix);
+      expect(STATIC_LOCATIONS[prefix].length, `'${prefix}' 的理由不得為空`).toBeGreaterThan(10);
     }
   });
 });
