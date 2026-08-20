@@ -324,6 +324,7 @@ status: Draft
 
 > ✅ **spec-writer 提報之六題（`OQ-D9-28`～`OQ-D9-33`）已於 2026-08-20 第二輪全數定案**；各對應 AC 之 `[ASSUMPTION]` 標記**已全部解除**。
 > ✅ **ui-ux-designer 於 prototype 傳播後提報之 `OQ-D9-35` 已於第三輪定案**（`OQ-D9-34` 為 spec-writer 第二輪之裁量題，見表末）。
+> 🔵 **另有 `OQ-D9-36` 待裁決**（2026-08-21 登錄，ui-ux-designer 機械式逐格比對揪出之**既有**落差，**非本 delta 引入**）——**只登錄、本輪不修、不阻塞**，見下方 [§三、待裁決](#三待裁決本輪不修不阻塞)。
 > 🔴 **其中兩題由使用者親自裁決且推翻 spec-writer 原案**：`OQ-D9-31`（**全面推翻**定稿門檻 3:1 → 1.7:1）與 `OQ-D9-32`（**半採納半推翻**：`/pdf` 燒錄採納、雙層保留推翻）。其餘四題採納原案。
 > 📌 「原提報之假設」欄保留 spec-writer 之原案供追溯；被推翻者於「裁決」欄明載推翻範圍與理由。
 
@@ -337,6 +338,39 @@ status: Draft
 | **OQ-D9-34** | 🔵 **（spec-writer 2026-08-20 第二輪裁量，待 lead 覆核）** `OQ-D9-29` 裁定「F024 必須能將上傳事件排除／篩出」，但**未指定達成手段**。spec-writer 選定＝**新增第 8 個 `targetType`「`DOCUMENT_ATTACHMENT`」＋ F024 新增第四種類型篩選值「`上傳`」**。是否認可？ | **[已裁量 ✅（spec-writer 裁量，待 lead 覆核）]｜不阻塞** | **裁量內容**：`kindToTargetTypes('上傳') = ['DOCUMENT_ATTACHMENT']`；`kindToTargetTypes('文件')` **逐字不變** ⇒ 「文件」類天然排除上傳事件。**仍不需 migration**（`targetType` 為 `varchar(30)` 無 CHECK）。<br>**採此手段之理由**：完全沿用既有 `kind → targetType[]` 之函式形狀，**不改變 `kindToTargetTypes` 之簽章**，既有三組對映一格未動 ⇒ [F039](features/F039-appendix-management.md) `AC-30` 等既有 AC 全數維持綠燈。<br>**明確否決之替代手段**：① 維持 `targetType='DOCUMENT'`、改以 **`actionType` 為第二個篩選維度** ⇒ 須改 `kindToTargetTypes` 之回傳形狀與查詢下推之 WHERE 組裝（`AuditStore.queryPage` 現以 `targetType IN` 下推），波及既有 12 條 int 測試；② 另建獨立稽核表 ⇒ 與 `OQ-E07-02`「調閱事件不另建表」之既有定案衝突，且 F024 將無法一頁綜覽。<br>**若 lead 不認可**：改動範圍為 `AC-N50`／`AC-N53`／`AC-N69` 三條 ＋ [data-model](data-model.md#auditlog-entity) 之 `targetType` 列舉；`AC-N70` 與其餘 AC 不受影響 | **spec-writer**（待 lead 覆核） | — | [F023](features/F023-audit-logging.md#d9-audit-delta) `AC-N50`；[F024](features/F024-access-history-query.md#d9-audit-view-delta) `AC-N69`；[data-model](data-model.md#auditlog-entity) |
 | **OQ-D9-35** | 🔴 **（ui-ux-designer 2026-08-20 第三輪提報）`F024 AC-N69` 自相矛盾**：末子句寫「篩選控制項之選項**恰為四個**」，卻逐字列出**五個**字面值（`全部`／`文件`／`循環`／`變更`／`上傳`）。兩者不可能同時成立 | ✅ **[已定案 ✅]＝採納 designer 之唯一自洽讀法**：就地改寫為「**類型值恰為四種**（`文件`／`循環`／`變更`／`上傳`）；**控制項連同既有預設項「全部類型」共 5 個 `option`**」。原條文逐字保留供追溯 | lead | **designer 未自行選邊（正確判斷）**：採「恰為四個」就必須刪掉 `全部`，而那會直接牴觸**同一條之 ③**（類型＝`全部` ⇒ 兩筆皆回傳）與 `AC-N55` 之查詢回歸鎖定 ⇒ **該讀法不可實作**。⇒ 「第四種類型篩選值」一詞自此明確指「**類型值之第四個**」，非 `option` 總數 | [F024](features/F024-access-history-query.md#d9-audit-view-delta) `AC-N69`（就地改寫）。`17-access-history.html` 已依此讀法落地，**改動範圍僅該 `<select>` 一處** |
 | **OQ-D9-33** | 後台既然改為燒錄，後台各檔案列是否亦渲染浮水印註記文案？（`AC-D7` ④ 之禁令唯一理由已失效） | ✅ **[已定案 ✅]＝採納原案**：後台**亦渲染**同一組 `data-wm-note` 與同一組逐字文案；[F020](features/F020-watermark.md) `AC-D7` ④ 之禁止條款**就地失效並加追溯註記** | lead | 同裁決（原案獲採納） | [F020](features/F020-watermark.md#backend-burn-delta) `AC-N20`（`[ASSUMPTION]` 已解除）；`AC-D7` ④ 已加註 |
+
+### 三、待裁決（**本輪不修、不阻塞**）
+
+> 🔴 **本小節之項目為「只登錄、不修」**（比照 `OQ-D18-31`／`OQ-D18-32` 之既有處置）。
+> **不阻塞 Phase B／後續實作**；規格、prototype 與實作**維持現況不動**，直到人類裁決。
+
+**`OQ-D9-36`** — 「系統 UUID」列（[F026](features/F026-role-field-matrix.md) 角色×欄位矩陣第 1 列）之顯示值**三方各不相同** **[CLARIFY]**｜相關：F026, F025, `prototypes/18-permission-matrix.html`
+
+- 🔴 **非本 delta 引入**：屬**既有**落差。**發現者＝ui-ux-designer**（2026-08-20 補正 `prototypes/18` 之 OJT 列時），**發現方式＝機械式逐列逐格比對（非目視）**。
+- **三方實測值（spec-writer 已逐一查證，非採信轉述）**：
+
+  | 來源 | 五格值 | 出處 |
+  |---|---|---|
+  | `prototypes/18-permission-matrix.html` | `['唯讀','唯讀','唯讀','唯讀','唯讀']` ＋ 列標籤下小字註記 `系統產生` | `:204` |
+  | `frontend/src/pages/PermissionMatrixPage.tsx`（`FIELD_DISPLAY`） | `['系統產生','系統產生','系統產生','系統產生','系統產生']` | `:80` |
+  | [F026](features/F026-role-field-matrix.md) 矩陣表 | `唯讀（系統產生）｜唯讀（系統產生）｜唯讀｜唯讀｜唯讀` | `:22` |
+
+- ⚠ **不只是註記位置差異，畫面上看得出來**：`18` 之 `cell()` 對非 `{CRUD, 可寫, 可}` 之值一律套琥珀 `eye` pill ⇒ prototype 該列呈現 **5 顆「唯讀」pill**，實作呈現 **5 顆「系統產生」灰底 pill**。且 spec 表之五格**基底值皆為「唯讀」**，`（系統產生）` 僅掛於**前兩格** ⇒ **實作同時偏離 prototype 與 spec 表**。
+- 🔴 **spec-writer 查證所得、原提報未涵蓋之關鍵事實（影響選項權重，請人類一併衡量）**：
+  1. **實作之偏離是「已裁決並刻意保留」者，非靜默漂移**——`PermissionMatrixPage.tsx:21` 之檔頭註解逐字載明「例外：系統 UUID 列儲存格顯示『系統產生』灰底 pill（`IGNORE`；**`G-ADM-016` deviation-keep**，非 prototype 之『唯讀』）」；該編號見 [prototype-alignment/gap-inventory.md](prototype-alignment/gap-inventory.md) `:175`（`possibly-intentional`，route 至 product-analyst）並於 [adjudicated-inventory.md](prototype-alignment/adjudicated-inventory.md) `:63` 裁定為 **`deviation-keep`**，理由記為「**系統產生 distinct per F026**」。⇒ **選項 (b) 之實質是「推翻 2026-07-24／25 prototype 對齊輪之既有裁決」**，非單純修 bug。
+  2. ⚠ **該既有裁決之理由本身可能出於對 F026 之部分讀取**：其援引「distinct per F026」，但 F026 表之 `（系統產生）` **只掛在前兩格**、五格基底值皆為「唯讀」 ⇒ spec 表**從未**主張五格皆為「系統產生」。**此點僅陳述事實，不代為判斷該裁決是否應維持。**
+  3. **後端 `FIELD_MATRIX` 之三分類為 `WRITABLE | FORBIDDEN | IGNORE`**，「系統 UUID」列五格皆為 **`IGNORE`**（`frontend/src/domain/field-matrix.ts`）；F026 Main Flow 3 與其既有 AC「API 夾帶系統 UUID 欲覆寫 → **忽略該欄位**」與此一致。⇒ **三方在「行為」上並無分歧，分歧純在「顯示字面」。**
+
+- **選項與代價（請人類裁決）**：
+
+  | 選項 | 內容 | 代價 |
+  |---|---|---|
+  | **(a)** 以 `FIELD_MATRIX` 之三分類為準（`IGNORE` → 顯示「系統產生」），**prototype 與 spec 表向實作對齊** | 改 `prototypes/18:204` 之五格為 `系統產生`；改 [F026](features/F026-role-field-matrix.md) 表第 1 列為五格皆「系統產生」 | **維持 `G-ADM-016` 之既有裁決**、**實作與測試零改動**（anti-drift 斷言續綠）。代價＝**須改動 F026 矩陣表之格值**——該表為本 delta `AC-N22`（「恰 2 格改值、其餘 98 格逐格相同」）之比對基準，**若與本 delta 同批進行會污染該條之逐格斷言**；⇒ 若採 (a)，**必須另開批次、與 D9 delta 分離**。 |
+  | **(b)** 以 prototype 為準，**實作改回「唯讀」＋列註記** | 改 `FIELD_DISPLAY:80` 五格為 `唯讀`；spec 表可維持不動 | 🔴 **推翻 `G-ADM-016` 之 `deviation-keep` 裁決**。且 **`PermissionMatrixPage.test.tsx:211` 之 anti-drift 斷言會轉紅**——該測試對 `outcome === 'IGNORE'` 明文要求 `expect(c.kind).toBe('system')`（`:222-223`），改為「唯讀」後 `classifyCell` 回 `amber` ⇒ 該分支失敗；**須連帶改寫該測試**（屬 test-generator 地盤）。另代價＝畫面上「系統產生」此一使用者可理解之語意消失，退回與其餘 19 列同形之「唯讀」。 |
+  | **(c)** 以 spec 表為準（**混合式**：前兩格「唯讀（系統產生）」、後三格「唯讀」） | prototype 與實作皆改為混合式 | **三方改動面最大**，且**混合式本身缺乏可解釋之理由**——`IGNORE` 對五種角色**行為完全相同**，卻只對前兩格加註，會被下一位讀者判為疏漏而再度「修正」。⚠ **spec 表現行之混合式極可能本就是撰寫時之殘留**（前兩格加註後未回頭補齊後三格），非刻意設計。 |
+
+- 📌 **spec-writer 不代為建議**：本題牽涉「是否推翻既有 `deviation-keep` 裁決」與「顯示語意之取捨」，屬人類判斷；三個選項之代價已如實列出。
+- 🔒 **本輪處置＝完全不動**：F026 矩陣值、`prototypes/18`、`FIELD_DISPLAY`、anti-drift 測試**一格未改**。本 delta 之 `AC-N22`（矩陣逐格斷言）以**現行 F026 表**為基準，**不受本題影響**。
 
 ## 非功能相關
 

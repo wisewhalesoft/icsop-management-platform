@@ -97,7 +97,13 @@
   <div class="mb-4 grid sm:grid-cols-2 gap-3">
     <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 flex items-start gap-2">
       <i data-lucide="badge-check" class="w-4 h-4 mt-0.5 shrink-0"></i>
-      <div><b>已定案</b>：系統管理員、主管、部門窗口對 ICSOP 文件全欄位皆<b>唯讀</b>（可檢視、無寫入，與功能矩陣一致）。共 20 欄，含新增之「制定公司／制定部門／制定室別／內容摘要」（制定組織三級＝公司／部／處室，由上而下相依連動）與 F039 新增之「附錄（多）」。</div>
+      <!-- 🔴 2026-08-20 D9 delta（`OQ-D9-19`／`OQ-D9-20`／`OQ-D9-24`）就地改寫：
+           原句「系統管理員、主管、部門窗口對 ICSOP 文件全欄位皆唯讀」自本日起**對主管／部門窗口不再為真**
+           （OJT 簽到表一欄已開放寫入），而下方矩陣之 OJT 列已顯示「可寫」⇒ 不改則同一頁自相矛盾。
+           逐字沿用 F026 頂部之現行定案措辭，不自創。
+           OLD> 「系統管理員、主管、部門窗口對 ICSOP 文件全欄位皆唯讀（可檢視、無寫入，與功能矩陣一致）。」
+                （⚠ 不得用於斷言或照抄） -->
+      <div><b>已定案</b>：<b>除「OJT 簽到表」一欄外</b>，系統管理員、主管、部門窗口對 ICSOP 文件所有欄位皆<b>唯讀</b>（可檢視、無寫入，與功能矩陣一致；其餘 19 欄僅 ICSOP 管理員可寫）。<b>「OJT 簽到表」自 2026-08-20 起對主管與部門窗口開放寫入</b>（<code class="mono">OQ-D9-19</code>；<b>系統管理員與一般使用者對該欄仍為唯讀</b>，<code class="mono">OQ-D9-24</code>）。共 20 欄，含新增之「制定公司／制定部門／制定室別／內容摘要」（制定組織三級＝公司／部／處室，由上而下相依連動）與 F039 新增之「附錄（多）」。</div>
     </div>
     <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 flex items-start gap-2">
       <i data-lucide="clock" class="w-4 h-4 mt-0.5 shrink-0"></i>
@@ -246,7 +252,12 @@
   let TAB='func';
   function renderMatrix(){
     const rows = TAB==='func'?FUNC_ROWS:FIELD_ROWS;
-    document.getElementById('cornerLabel').textContent = TAB==='func'?'功能模組':'文件欄位（19）';
+    /* 📝 欄數修正（2026-08-21）：本標籤停在 `文件欄位（19）`，但 FIELD_ROWS 實為 **20 列**，
+       且同頁橫幅「共 20 欄」早已是正確值 ⇒ 同一頁自相矛盾。
+       OLD> `'文件欄位（19）'`（⚠ 不得用於斷言或照抄）
+       🔴 **成因＝E10 附錄那輪（欄位 19→20，新增「附錄（多）」）只改了橫幅、漏改本標籤**，
+          **非** 2026-08-20 D9 delta 所致；本輪一併校正。 */
+    document.getElementById('cornerLabel').textContent = TAB==='func'?'功能模組':'文件欄位（20）';
     document.getElementById('mtxBody').innerHTML = rows.map(r=>{
       const [label,vals,note]=r;
       return `<tr>
