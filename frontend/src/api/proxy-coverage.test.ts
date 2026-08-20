@@ -39,7 +39,6 @@ const NOT_PROXIED: Record<string, string> = {
  * 📌 已實測驗證兩者皆為 `try_files $uri =404`、皆無 `proxy_pass`（純靜態檔服務，非代理）。
  */
 const STATIC_LOCATIONS: Record<string, string> = {
-  auth: '（負向控制注入，臨時）測試用假理由超過十個字元。',
   assets: '雜湊資產（Vite build 產出，nginx.conf:193-197），dev 由 Vite 自行服務，非 API 代理。',
   pdfjs: 'pdf.js 執行期資產（cmaps／standard_fonts，nginx.conf:188-190），dev 由 Vite 靜態服務 ' +
     'public/pdfjs/；加進 vite proxy 反而會讓 dev 端 pdf.js 去打後端 :3000 拿 cmap 而 404。',
