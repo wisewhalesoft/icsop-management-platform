@@ -45,10 +45,16 @@ describe('F026 D9 delta：OJT 簽到表破例（前端鏡射，AC-N22～AC-N27�
     expect(Object.keys(FIELD_MATRIX[OJT_KEY]).sort()).toEqual([...ROLE_CODES].sort());
   });
 
-  it('AC-N23 主管／部門窗口對 OJT 欄之寫入解析為允許（非 FORBIDDEN）', () => {
+  /**
+   * 🔴 2026-08-20 lead 指出並修正：原第二條 `.not.toBe('FORBIDDEN')` 是第一條
+   * `.toBe('WRITABLE')` 之必然推論（`canWriteField` 回傳單一判別值，不可能同時為兩者）——
+   * 看似多一層保護、實際零額外鑑別力，已移除。與 `AC-N22` 之機械斷言重疊（同一組
+   * `canWriteField` 呼叫），保留為獨立案例純為 AC 對照表之可追溯性（`AC-N22`＝矩陣格值本身，
+   * `AC-N23`＝寫入解析行為），非另一種鑑別力來源。
+   */
+  it('AC-N23 主管／部門窗口對 OJT 欄之寫入解析為允許', () => {
     for (const role of ['Supervisor', 'DeptContact'] as const) {
       expect(canWriteField(role, OJT_KEY)).toBe('WRITABLE');
-      expect(canWriteField(role, OJT_KEY)).not.toBe('FORBIDDEN');
     }
   });
 
