@@ -237,12 +237,22 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
       expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument();
     });
 
+    /**
+     * 🔴 2026-08-20 D9 delta（`impl-fe` 申訴 #2，已核實成立）：原以 `附件（僅下載）` 字面值作為
+     * 「頁面已載入」之等待閘——本案之測試標的（無附件/無使用表單時不拋錯、不顯示任何附件列）
+     * 與 `#attachTitle` 之標題分支邏輯**無關**，該字面值只是恰好被借來當閘門用。`AC-N74`③
+     * 使該標題依角色對 OJT 是否可寫分支（`Supervisor` 本輪起可寫 OJT ⇒ 標題應為逐字「附件」，
+     * 見同檔 `AC-N74③ Supervisor` 案），與本案原本借用之 `Supervisor`＋`附件（僅下載）` 組合互斥。
+     * 改為與本檔其餘案例一致之標題等待閘（`車輛分期進件作業`，不隨標題分支變化）。
+     * 📝 被取代之原斷言逐字保留供追溯：
+     *   OLD> await waitFor(() => expect(screen.getByText('附件（僅下載）')).toBeInTheDocument());
+     */
     it('TS-D-013 三類附件與使用表單皆無 → 不拋錯、不顯示任何附件列', async () => {
       mockAuth('Supervisor');
       vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([]);
       vi.mocked(endpoints.getDocumentForms).mockResolvedValue([]);
       renderPage();
-      await waitFor(() => expect(screen.getByText('附件（僅下載）')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
       expect(screen.queryByText('檔案（ICSOP PDF）')).not.toBeInTheDocument();
       expect(screen.queryByText('OJT 實體簽到表')).not.toBeInTheDocument();
       expect(screen.queryByText('使用表單')).not.toBeInTheDocument();
