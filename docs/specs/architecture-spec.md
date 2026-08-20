@@ -1,6 +1,6 @@
 ---
 type: architecture-spec
-version: 1.8
+version: 1.9
 status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；**v1.7 新增之 §10.17 決策 A15（AAD authority host 覆寫，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）已實作並併入 main（commit `3448679`）；`AC-E4`（遠端端到端登入成功）已於 2026-08-18 由真人於遠端環境（DTTHFC01）實測兌現，證據見 §10 changelog v1.7a 與 §10.17（`OLD>` v1.7 原登錄：「唯 `AC-E4`（遠端端到端登入成功）尚待真人於遠端環境驗證，如實登錄為未兌現項」）**；**v1.8 新增之 §10.18 決策 A16（F024 匯出稽核與訊息共用之四項裁決，對應 [F024](features/F024-access-history-query.md#export-fix-delta) `AC-F13`／`AC-F5`／`AC-F9`／`AC-F7`～`AC-F8` 之提報事項 A1～A4）為 draft，待 tdd-implementation 落地**；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
 last_updated: 2026-08-18
 covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038, F039, F040, F041]
@@ -36,6 +36,8 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 
 > **v1.8（2026-08-18）新增 §10.18 決策 A16：F024 匯出稽核與訊息共用之四項裁決**。來源：[F024](features/F024-access-history-query.md#export-fix-delta) `AC-F1`～`AC-F19`（2026-08-18 人類閘門 🟢 APPROVED，即 `OQ-D18-26` 之延續、`OQ-D18-26`／`OQ-E07-10` 部分推翻後之實作定案）附帶之四項「📤 需 system-architect 裁量」提報事項。裁決：① **`ACCESS_HISTORY_EXPORT` 之 `AuditTargetType`／`targetId`**——新增 `AuditTargetType='ACCESS_HISTORY'`，`targetId` 採固定哨兵常數（沿用既有 `ORG_CHANGE_ALERT` 之「無對映欄」模式，`buildAuditRow()` 不需改動任何既有程式碼），獨立複核確認 `targetType`（`varchar(30)`）／`actionType`（`varchar(40)`）皆無 `CHECK` 約束、不需 migration；② **三張中文標籤對照表落點**——`backend/src/audit/access-history-labels.ts`（後端專屬純函式模組），沿用本檔案 §10.14（`watermarkLines()`）與 `change-history/change-labels.ts`（`OQ-D18-34`）之既有「兩份逐字相同」處置，不創新模式；③ **超限訊息 `{N}`**——採甲案，修 `storage/csv-export.ts` 之 `assertExportRowLimit()` 令其內插實際筆數（且順序須在上限常數之前），逐一排查現有測試後確認**無任何測試鎖定舊行為**，零回歸，並使 F037／F038／F039 既有 AC（本就要求 `{N}` 為實際筆數）由「文字與程式碼不符」變為一致；④ **計數與取列路徑**——單一次 `queryHistory(..., {page:1, pageSize:EXPORT_ROW_LIMIT+1})` 呼叫（`AuditStore.queryPage()` 之 `getManyAndCount()` 已原生支援下推 `COUNT`+`OFFSET/FETCH`，不需比照 F037／F038 另建 `countByFilters`／`listByFilters` 兩段式）。**四項裁決逐一覆核後皆不要求變更任何 `AC-F#` 斷言文字**。另就 `EXPORT_ROW_LIMIT=10000` 對 F024 全公司量級之適用性提出風險評估與緩解建議（不改動數字本身，遵照人類閘門「沿用共用機制」之裁示）。**本版不新增模組、不改變架構風格、無 schema 變更**（`AuditTargetType`／`AuditActionType` 皆為 TS 判別聯集之字面值擴充，非 DB schema）。
 
+> **v1.9（2026-08-20）新增第 11 章「2026-08-20 缺失／變更 Delta 架構決策（9 項）」**：對應 `docs/stories/2026-08-20-defect-delta-9.md` 與人類閘門 `OQ-D9-01`～`OQ-D9-34`（27＋6 題，兩輪全數定案）之 `AC-N1`～`AC-N70`。**本批推翻兩項既有明文定案**：① `OQ-D9-08`（選項 B）全面推翻 `OQ-FM-01`／`OQ-D18-01`——**後台四類下載自本版起一律燒錄浮水印並寫調閱稽核，無例外角色**，§5.2 下載策略表、§10.1 燒錄範圍表／流程圖、`field-matrix-test-design.md` `TS-FM-001`／`TS-FM-002` 之「不具備燒錄能力」基準線**同步失效並反向重寫**；② `OQ-D9-19`（選項 A）推翻 F026 頂部定案——**「OJT 簽到表」一欄對主管／部門窗口開放寫入**，落地為 `FIELD_MATRIX`（前後端兩份鏡射）新增一列 `OJT_WRITABLE`，不新增 if 特例。核心決策：**B1–B4** 前台檢視器改 `pdfjs-dist` 自繪 canvas（取代 `<iframe>`），`/public/documents/:id/pdf` 改回傳已燒錄位元組並移除 DOM 疊加層；**B5–B7** 後台燒錄之共用協作點自 `WatermarkService` **抽出**為零相依之 `WatermarkBurnerModule`（`WATERMARK_BURNER`，取代 `FRONT_BURNER`），解決 `AttachmentsModule ↔ PublicModule` 之潛在模組循環相依，並改 `@Optional()` 為必要注入以達成**啟動期 fail-fast**（回應 lead 點名之 `FRONT_BURNER` 從未被 provide 之教訓）；同時**發現並必須一併修正**既有 `AuditWriterRecorder`（附錄／使用表單兩份，`appendices/audit-writer-recorder.adapter.ts:22-29`、`usage-forms/audit-writer-recorder.adapter.ts:22-29`）**未轉送身分快照與 `watermarkSnapshot` 予 `recordAccess()`** 之既有缺口——此為滿足本輪 `AC-N17`／`AC-N51` 之必要前提，非新裁決。**B8** OJT 破例採資料驅動矩陣列新增。**B10** 新增 `USAGE_FORM_DRAFTING_DEPT`（本輪唯一需 migration 者）。**§11.11「單元測試盲區」新增 8 項**（含 pdf.js 之 cMap／standard fonts 部署與 CJK 燒錄字型缺檔為同型盲區、`AuditWriterRecorder` 身分欄位遺漏、`WATERMARK_BURNER` 循環相依重構之回歸風險）。**本版新增一個模組**（`WatermarkBurnerModule`，自既有 `WatermarkService` 抽出，非新增業務能力）、**不改變架構風格**。
+
 ## Agent Loading Guide
 
 | Agent Role | Relevant Sections |
@@ -50,6 +52,7 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 | 附錄管理（E10）工程 | §3.2（AppendicesModule 元件卡片）、§3.6（模組邊界／排序權威寫入路徑／稽核 additive 擴充／RBAC／前端架構等 5 項決策）、§4.9（資料落地／OQ-E10-02 決策／Migration）、§5.10（排序寫入與下載稽核之交易/併發邊界）、§6（NFR 對應擴充列）、§8（Auto-Challenge 新增列／拒絕替代方案）、§9（OQ-E10-02） |
 | **2026-08-16 缺失／變更 Delta（15 項）工程** | **§10 全章**。依角色取用：**test-generator** → §10.15（單元測試盲區，決定哪些項目建不出有效 unit 約束）＋ §10.1 A1／§10.5 A5／§10.9 A9（回歸鎖定之邊界）；**tdd-implementation** → §10.1–§10.7、§10.12–§10.14（端點形狀、判定依據、共用函式落點、migration 注意事項）；**ui-ux-designer** → §10.3（`watermarkSupported` 旗標之來源）、§10.8（breadcrumb 型別）、§10.14（三層式浮水印之渲染落點）；**DevOps** → §10.7（migration 實跑）、§10.10（Dockerfile ＋ fail-fast ＋ 容器內 smoke）、§10.2（併發閘與記憶體上界）；**lead** → §10.11（分線與合併順序）、§10.16（風險／被否決方案／須退回 spec-writer 之爭議） |
 | **F024 匯出稽核與訊息共用（A16）工程** | **§10.18 全節**（`AuditTargetType='ACCESS_HISTORY'` 之新增與哨兵 `targetId`／`access-history-labels.ts` 落點／`assertExportRowLimit()` 修法／單一 `queryHistory()` 呼叫路徑）；連動 §10.4（既有匯出共用產生器）、§10.14（`watermarkLines()` 之「兩份逐字相同」既有模式） |
+| **2026-08-20 缺失／變更 Delta（9 項）工程** | **§11 全章**。依角色取用：**test-generator** → §11.11（單元測試盲區，決定哪些項目建不出有效 unit 約束）＋ §11.1／§11.5（`AC-N9` 渲染 seam、後台燒錄回歸鎖定之邊界）；**tdd-implementation** → §11.1–§11.10（pdf.js 選型與 canvas 縮放算法、`WATERMARK_BURNER` 抽出與模組接線、四端點燒錄改造、`AuditWriterRecorder` 修正、OJT 矩陣列、`USAGE_FORM_DRAFTING_DEPT` migration、使用表單整頁化端點）；**ui-ux-designer** → §11.1（canvas 佔位取代 iframe）、§11.6（前台字級 tokens 分層）、§11.9（整頁化版面）；**DevOps** → §11.2（pdf.js 靜態資產部署、cMap／standard fonts）、§11.10（migration 實跑）；**lead** → §11.12（分線與合併順序）、§11.13（須退回 spec-writer 之新 OQ，若有） |
 | 一般使用者子分類（F041）工程 🟢 APPROVED | §3.7（`ViewerScope` 組出點／`rbac/viewer-scope.ts` 三純函式落點／四過濾接縫精確位置／前端接縫／10 題 OQ 裁決紀錄）、§4.10（`ACCOUNT.userSubtype` 資料落地／Migration／F004 upsert 鍵集合保證）、§5.11（清單／詳情／檢視器‑下載‑列印三條路徑之循序圖）、§6（NFR 對應擴充列）、§8（風險與拒絕替代方案）、§9（10 題 OQ 裁決紀錄）。**10 題 OQ 已於 2026-08-11 人類閘門全數依草案選項定案，可直接動工**；下游實作最容易漏的三處已於 §3.7 決策一/三(c) 明確標注（`@Req()` 新增、三處破壞性簽章遷移、`docMeta` 安全關鍵化） |
 
 ## Table of Contents
@@ -64,6 +67,7 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 8. [Risks, Trade-offs & Alternatives](#8-risks-trade-offs--alternatives)
 9. [Open Decisions](#9-open-decisions)
 10. [2026-08-16 缺失／變更 Delta 架構決策（15 項）](#ch10-defect-delta)
+11. [2026-08-20 缺失／變更 Delta 架構決策（9 項）](#ch11-defect-delta-9)
 
 ---
 
@@ -3077,4 +3081,619 @@ export function assertExportRowLimit(count: number): void {
 #### 對其餘架構之影響
 
 零 schema 變更（`AuditTargetType`／`AuditActionType` 皆為 TS 判別聯集之字面值擴充，非 DB `CHECK`／`ENUM`）、零新增錯誤碼、零新增模組、零新增端點（`GET /admin/access-history/export` 為既有端點之回應形狀變更，非新端點）。不影響 §10.1–§10.17 之任何決策。
+
+---
+
+## 11. 2026-08-20 缺失／變更 Delta 架構決策（9 項） {#ch11-defect-delta-9}
+
+> **來源**：`docs/stories/2026-08-20-defect-delta-9.md`（product-analyst）→ 人類閘門兩輪裁決 `OQ-D9-01`～`OQ-D9-27`（27 題）與 `OQ-D9-28`～`OQ-D9-34`（6 題）→ 十份 feature 之 `AC-N#` 批次（spec-writer，已通過人類閘門）。
+> **範圍**：9 項使用者原文缺失／變更，經人類裁決全數採納（不同於 2026-08-16 delta 之範圍縮減）。其中 **#5**（後台全面燒錄）與 **#8**（OJT 破例）**各自推翻一項既有明文定案**（`OQ-FM-01`／`OQ-D18-01`；F026 頂部定案）。
+> **本章之權威邊界**：本章**只決定技術設計，不改寫任何 AC**。凡本章與 feature 之 `AC-N#` 有出入者，以 AC 為準，並列於 §11.13。
+> **編號對照**：本章之 `B1`–`B10` 為架構決策編號，與第 10 章之 `A1`–`A16` 及 F024 之 `A16-1`～`A16-4` 為三套互不相干之獨立編號空間，不得混用。
+
+### 11.0 本章範圍與閱讀指引
+
+| 決策 | 節次 | 題目 | 對應 feature | 阻塞誰 |
+|---|---|---|---|---|
+| B1 | §11.1 | 前台檢視器改自繪 canvas：套件選型與 worker／CJK 資源部署 | F020 `AC-N4`／`AC-N8`／`AC-N9` | tdd、DevOps |
+| B2 | §11.2 | `devicePixelRatio` 感知之縮放算法與大頁數記憶體上限 | F020 `AC-N8`／`AC-N9` | tdd |
+| B3 | §11.3 | `/pdf` 端點改燒錄之效能取捨與快取裁量 | F020 `AC-N6` | tdd、DevOps |
+| B4 | §11.4 | 檢視器渲染 seam 之可測性設計（`AC-N9` 之執行期載體） | F020 `AC-N9` | test-generator |
+| B5 | §11.5 | `WATERMARK_BURNER` 抽出：解決循環相依＋啟動期 fail-fast | F020 `AC-N14`–`AC-N21` | tdd |
+| B6 | §11.6 | 後台四端點之燒錄／稽核改造（含 `AuditWriterRecorder` 既有缺口修正） | F020 `AC-N14`–`AC-N21`、F023 `AC-N50`／`AC-N51`、F039 `AC-N56`／`AC-N57` | tdd |
+| B7 | §11.7 | 後台燒錄之併發／效能與既有燒錄閘之關係 | NFR-001 | DevOps |
+| B8 | §11.8 | OJT 破例：`FIELD_MATRIX` 資料驅動新增列＋稽核角色分支落點 | F026 `AC-N22`–`AC-N27`、F016 `AC-N28`–`AC-N35` | tdd |
+| B9 | §11.9 | 前台字級隔離機制與浮水印公司簡稱落點 | F021 `AC-N59`–`AC-N62`、F020 `AC-N10`–`AC-N13` | tdd、ui-ux |
+| B10 | §11.10 | 使用表單整頁化：路由、PATCH 端點擴充、`USAGE_FORM_DRAFTING_DEPT` migration | F018 `AC-N41`–`AC-N49` | tdd、DevOps |
+
+> 另有三節非「決策」但為交棒必讀：**§11.11** 單元測試盲區（含對第 10 章 §10.15 #1 之現況說明）、**§11.12** 分線與合併順序、**§11.13** 新增 OQ／須退回 spec-writer 之爭議。
+
+**其他章節之關聯**：本 delta **新增一個模組**（`WatermarkBurnerModule`，§11.5——自既有 `WatermarkService` 抽出零相依之燒錄協作點，非新增業務能力，`WatermarkService` 本身之對外 API 不變）、**不改變架構風格**（Modular Monolith 不動）。唯一 schema 變更為 `USAGE_FORM_DRAFTING_DEPT`（§11.10）。§5.2「Proxy／SAS 雙模式」自本版起**後台列之「不燒錄、不寫稽核」欄位就地改寫**（見 §11.6 開頭）。
+
+---
+
+### 11.1 決策 B1：前台檢視器改自繪 canvas——套件選型與資源部署
+
+#### 硬約束
+
+[F020](features/F020-watermark.md#d9-watermark-delta) `AC-N4`：檢視器 DOM 中不存在 `<iframe>`／`<embed>`／`<object>`，改由 `<canvas>` 承載預覽。`AC-N8`：縮放不得以 CSS `transform: scale()` 達成。`AC-N6`：`/pdf` 端點回傳**已燒錄**位元組。前提裁決 `OQ-D9-04`（使用者）：改用 pdf.js／react-pdf 自繪，使用者已明確接受新增前端相依之代價。
+
+#### 選定：`pdfjs-dist`（直用，不經 `react-pdf` 封裝）
+
+| 面向 | `pdfjs-dist` 直用 | `react-pdf`（`@react-pdf/renderer` 之姊妹套件，即 wojtekmaj/react-pdf） | 判定 |
+|---|---|---|---|
+| DOM 契約可控性（`AC-N4`） | 完全自建 `<canvas>`，无中间层 | 其 `<Page>` 內部亦渲染 `<canvas>`，但額外包一層 `<div class="react-pdf__Page">`——`AC-N4` 之斷言僅檢查無 `iframe/embed/object`，兩者皆過 | 兩者皆可 |
+| 渲染 seam 可測性（`AC-N9`） | 直接呼叫 `page.render({canvasContext, viewport})`，回傳之 `RenderTask` 天然可 `vi.mock('pdfjs-dist')` 後 spy | 封裝在元件內部生命週期（`useEffect`），需額外 mock `react-pdf` 模組本身之內部渲染時機，測試脆弱度更高 | **pdfjs-dist 勝** |
+| worker／CJK 資源之部署掌控 | 直接管理 `GlobalWorkerOptions.workerSrc`／`cMapUrl`／`standardFontDataUrl` 三個選項，與本節 §11.1 下方設計一一對應 | 同樣底層用 pdfjs-dist，但版本綁死於 `react-pdf` 之 peerDependency 宣告，本 repo 需額外核對版本相容矩陣 | pdfjs-dist 勝（少一層版本耦合） |
+| 與本 repo 既有慣例之一致性 | 符合既有「自建可 spy 之窄 seam」慣例（`watermarkLines()`、`downloadViaBlob`、`burnIfPdf`） | 引入一個管理自己生命週期、狀態機較不透明的第三方 React 元件庫 | pdfjs-dist 勝 |
+| 套件維運負擔 | 需自行處理 `PDFDocumentProxy`／`PDFPageProxy` 之取消與釋放（`destroy()`） | 已封裝 | react-pdf 勝，但差距小（釋放邏輯集中於一個 hook 即可） |
+
+**決策：`pdfjs-dist`（現行穩定版 4.x，ESM）**，新增前端相依 `pdfjs-dist`（不含 `react-pdf`）。新增元件 `frontend/src/components/PdfCanvasViewer.tsx`（或等效檔名，命名交 tdd-implementation），對外暴露：
+
+```ts
+// 示意介面，供 AC-N9 之渲染 seam 設計（§11.4 詳述）；不落地為可執行檔案
+export interface PdfCanvasViewerProps {
+  pdfBytes: ArrayBuffer | null;   // 來自 GET /public/documents/:id/pdf（AC-N6，已燒錄）
+  scale: number;                  // 使用者縮放倍率（1 = 100%）
+  onRendered?: (info: { pageCount: number; scale: number }) => void; // 測試 spy 掛鉤（AC-N9）
+}
+```
+
+#### Worker 打包（Vite）——避免踩 CDN／CSP／nginx 404 三個已知雷區
+
+```ts
+// 示意，不落地為可執行檔案
+import { GlobalWorkerOptions } from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
+GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+```
+
+- 🔴 **不得**依賴 pdfjs-dist 之預設行為（未設定 `workerSrc` 時部分版本會嘗試自 unpkg／jsDelivr CDN 抓取 worker）——正式環境無對外網路白名單（§2.4 GPU 節點同受信任內網之既有假設），CDN 請求會被防火牆擋下且**靜默失敗為「無 worker、退化主執行緒渲染」或直接拋錯**，兩者皆非 AC 定義之錯誤路徑。
+- 以 Vite 的 `?url` 匯入語法，`pdf.worker.mjs` 會被打包為**雜湊檔名之靜態資產**，自動落於 `frontend/dist/assets/`——`nginx.conf:168-172` 之 `location /assets/` 區塊（immutable 長快取）**已原生覆蓋**，不需新增 nginx 規則。dev 模式下 Vite dev server 自動處理 `?url` 匯入，同樣不需 `vite.config.ts` 之 proxy 白名單變更（worker 請求走 Vite 自己的資產伺服，非後端 API）。
+
+#### CJK 渲染資源：`cMapUrl` 與 `standardFontDataUrl`——與燒錄側 CJK 缺字為同型風險
+
+🔴 **本節回應 lead 點名之查證要求**：燒錄側（`PdfLibBurner`）之 CJK 缺字 bug（`@pdf-lib/fontkit@1.1.1` 子集化截斷 `loca` offset）**已於 §10.10（決策 A10）修復並落地**——`backend/Dockerfile` 已 `COPY assets ./assets`（見 §10.10 修法一）、啟動期 fail-fast（`ICSOP_REQUIRE_CJK_FONT`，修法二）、字形層完整性斷言 `backend/src/public/pdf-glyph-integrity.spec.ts`（9 案，修法三）。**本輪之關係**：燒錄側之修復**與 pdf.js 之渲染側是兩套完全獨立的字型管線**——燒錄側嵌入 `backend/assets/fonts/NotoSansTC-Regular.ttf` 進 PDF 內容層本身（子集化、隨檔攜帶），pdf.js 則是瀏覽器端**解析**該 PDF 位元組時，對「PDF 內未嵌入字型、依賴 Reader 端標準字型／CID cmap」的文字內容才需要額外資源。
+
+- **我方燒錄之浮水印文字**：已嵌入子集化字型（§10.10 已修復），pdf.js 可直接讀取 PDF 內嵌 `/FontFile2` 渲染，**不需**任何外部資源。
+- **原始上傳之 ICSOP PDF 內文**（使用者上傳、非本系統產生）：若其製作工具（如舊版 Word 另存 PDF、部分掃描軟體）**未嵌入**所用之 CJK 字型、改依賴 Adobe-Identity CID 編碼＋Reader 端標準字型，pdf.js **必須**有 `cMapUrl`（CID→Unicode 對照）與 `standardFontDataUrl`（標準 14 字型＋CJK 替代字型資料）才能正確渲染；缺此兩項資源時 pdf.js **不拋錯，靜默改繪空白或替代符號**——與燒錄側「`?` 佔位」是**同一種失敗模式（靜默降級）**，只是發生在瀏覽器端而非伺服器端。
+
+**部署設計**：`pdfjs-dist` 套件內建這兩份資產（`node_modules/pdfjs-dist/cmaps/`、`node_modules/pdfjs-dist/standard_fonts/`），透過 Vite 之 `public/` 目錄機制原樣複製：
+
+```
+frontend/public/pdfjs/cmaps/*.bcmap
+frontend/public/pdfjs/standard_fonts/*.pfb, *.ttf
+```
+
+```ts
+// getDocument 呼叫時傳入（示意）
+getDocument({
+  data: pdfBytes,
+  cMapUrl: '/pdfjs/cmaps/',
+  cMapPacked: true,
+  standardFontDataUrl: '/pdfjs/standard_fonts/',
+});
+```
+
+- Vite 建置時 `public/` 之內容原樣複製到 `dist/` 根目錄；nginx `location /`（`try_files $uri $uri/ /index.html`，`nginx.conf:175-178`）對確實存在的靜態檔會直接命中 `try_files $uri` 分支回傳該檔，**不會**誤入 SPA fallback——不需新增 nginx location。dev 模式下 Vite dev server 對 `public/` 內容有原生靜態伺服，同樣不需 proxy 設定。
+- **需一次性建置腳本**（`frontend/scripts/copy-pdfjs-assets.*` 或 `package.json` 之 `postinstall`／`prebuild` hook）將 `node_modules/pdfjs-dist/{cmaps,standard_fonts}` 複製進 `public/pdfjs/`——🔴 **這正是 §10.10 CJK 燒錄 bug 之部署層根因的鏡像**（「資產存在於 repo／`node_modules`，但未被複製進最終產物」）。此腳本**必須**是建置管線的一部分（`npm run build` 之前置步驟），而非一次性手動操作，否則會在下一次 `npm ci` 或版本升級後靜默消失。列入 §11.11 盲區表第 1 項。
+- **快取**：`/pdfjs/` 落於 `location /` 之 `no-cache` 分支（非 `/assets/` 之 immutable 長快取），因其檔名無內容雜湊。此為效能次佳但正確性無虞之選擇；若後續要優化，可將複製目標改為 `frontend/src/pdfjs-assets/` 並經 Vite 資產管線雜湊化，或新增專屬 nginx location 給予長快取——**本輪不做**（非 AC 要求，且首要目標是先讓資源可達，優化屬另案）。
+
+#### 記憶體上限：大頁數 PDF 全渲染會爆——虛擬化渲染
+
+見 §11.2。
+
+---
+
+### 11.2 決策 B2：`devicePixelRatio` 感知之縮放算法與大頁數記憶體上限
+
+#### `AC-N8`／`AC-N9` 之真正機制：以倍率重新渲染，而非 CSS 縮放已渲染之點陣圖
+
+現行 bug（`PublicViewerPage.tsx:197-211`）之根因：`transform: scale(${zoom})` 作用於**已經是點陣圖**的內容（iframe 內部瀏覽器渲染之畫面）外層，屬**點陣縮放**——放大即模糊。canvas 化後必須改為：**縮放倍率變更時，以新的目標解析度重新呼叫 `page.render()`**，畫出全新的向量→點陣結果，而非縮放既有 canvas 之 CSS `transform`。
+
+**HiDPI 感知之 canvas 尺寸算法**（業界 pdf.js 標準模式，非本專案發明，於此明文供 test-generator／tdd-implementation 對齊）：
+
+```ts
+// 示意，不落地為可執行檔案
+const outputScale = zoom * (window.devicePixelRatio || 1);
+const viewport = page.getViewport({ scale: outputScale });
+
+canvas.width = Math.floor(viewport.width);       // 實際點陣寬度（含 DPR 放大）
+canvas.height = Math.floor(viewport.height);
+canvas.style.width = Math.floor(viewport.width / (window.devicePixelRatio || 1)) + 'px';  // CSS 佈局寬度（僅依 zoom，不含 DPR）
+canvas.style.height = Math.floor(viewport.height / (window.devicePixelRatio || 1)) + 'px';
+
+await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+```
+
+- **原理**：`canvas.width`／`canvas.height`（點陣緩衝區大小）與 `canvas.style.width`／`canvas.style.height`（CSS 佈局大小）是兩組獨立屬性。若兩者相等，在 DPR=2 的螢幕（如多數筆電／Retina）上每個 CSS px 只對應 1 個實體像素，瀏覽器仍需插值放大顯示 ⇒ 模糊。令緩衝區尺寸為 CSS 尺寸的 `devicePixelRatio` 倍，瀏覽器原生 1:1 映射到實體像素，文字邊緣清晰。
+- **`AC-N8` 之逐字斷言**（`previewEl.style.transform` 不含 `scale(`）與本算法**天然相容**——`canvas.style.transform` 全程不被設定，縮放完全由 `render()` 之 `viewport.scale` 承載。
+- **`window.devicePixelRatio` 在 jsdom 下恆為 `1`**（jsdom 無真實螢幕）；`AC-N8`（負向 CSS 斷言）與 `AC-N9`（重新渲染呼叫次數／參數斷言）皆不依賴 DPR 之實際數值，故此為**渲染品質之視覺特性、非邏輯正確性**，不影響 unit 測試之可驗證性——但也代表「放大後是否真的清晰」本身**測不到**，列入 §11.11 盲區表。
+
+#### 記憶體上限：虛擬化渲染，不得全頁數 eager render
+
+`test/int/watermark-burn-timing.itest.ts` 之既有基準「暖機後 10 頁 CJK 燒錄 ≈250ms」是**伺服器端燒錄**耗時；**瀏覽器端渲染**是另一個獨立成本——`page.render()` 對高解析度（DPR=2、zoom=2 時 outputScale=4）之 A4 頁面，單頁 canvas 緩衝區可達數千萬像素（RGBA，每像素 4 bytes），多頁同時渲染會使分頁瀏覽器分頁記憶體快速累積。
+
+- **決策：只渲染目前檢視中之頁（或其鄰近 ±1 頁），其餘頁面之 canvas 延遲建立、離開視窗後釋放**（虛擬化渲染，windowing）。實作可用 `IntersectionObserver` 判定頁面是否進入可視範圍，或（若首輪僅支援單頁捲動介面）直接限制為「當前頁」單頁渲染＋上下頁導覽按鈕，不做連續捲動之全頁一次渲染。
+- **決策依據**：現行 prototype／既有 iframe 行為為瀏覽器原生多頁連續捲動（PDF.js 內建 viewer 也是如此），但本專案之**檢視器工具列既有縮放控制**（`ZOOM_MIN=0.6`／`ZOOM_MAX=2`，`PublicViewerPage.tsx:27-28`）暗示畫面聚焦於單一頁面之精讀情境（比對 §5.2 SOP 文件通常頁數個位數~十位數，非百頁文件）。**具體單頁 vs 虛擬化多頁之最終 UI 決策交 ui-ux-designer**（prototype 傳播時定案），本節僅鎖定**架構護欄**：`PdfCanvasViewer` 之渲染 seam **不得**對超過視窗可視範圍的頁面觸發 `render()`。
+- **`PDFDocumentProxy.destroy()` 之呼叫時機**：元件卸載（路由離開檢視器頁）時**必須**呼叫，否則 pdf.js 內部之 worker 端文件物件與已解碼字型快取不會釋放——這是一般 React `useEffect` 清理函式即可覆蓋的既有模式，不需額外基礎設施。
+- 列入 §11.11 盲區表：「大頁數 PDF 之瀏覽器記憶體峰值」與既有 §10.15 #12（50MB 附錄之伺服器端記憶體峰值）為**同型但不同層**的風險，unit 測試（jsdom 無真實 canvas 點陣渲染、無真實記憶體壓力）**原理上測不到**。
+
+---
+
+### 11.3 決策 B3：`/pdf` 端點改燒錄之效能取捨與快取裁量
+
+#### 硬約束
+
+`OQ-D9-32`（使用者裁決）：`GET /public/documents/:id/pdf` 改回傳**已燒錄**位元組（`AC-N6`）；`OQ-D9-03`（lead 預設）已認定原未燒錄行為為安全缺陷。
+
+#### 效能：沿用既有 `burnIfPdf` 管線，不另立門檻
+
+`/pdf` 端點（`watermark.controller.ts:60-71`）現行呼叫 `svc.getOriginalPdf()`（僅代理原始位元組，不燒錄）。`AC-N6` 要求其改為呼叫燒錄管線——**與 `download()`（`:id/download`）完全相同之燒錄成本**（同一 `PdfLibBurner`，同一 `buildSnapshot()`）。既有基準（暖機後 10 頁 CJK ≈250ms，迴歸警戒線 8,000ms）**直接沿用**，不新增 NFR。
+
+#### 快取裁量：**不快取**——理由與代價明文裁量
+
+| 方案 | 時間戳失真？ | 燒錄成本 | 判定 |
+|---|---|---|---|
+| **A（選定）不快取，每次 VIEW 皆即時燒錄** | 否——浮水印之「當下時間」欄（`AC-N67` 頁尾格式字幕）每次皆反映**真實檢視時刻**，與稽核 `occurredAt` 逐次一致 | 每次 VIEW 皆付出 ≈250ms（10 頁基準） | ✅ 採用 |
+| B 依 `(documentId, accountId)` 快取燒錄結果（如 60 秒 TTL） | **是**——同一使用者在 TTL 窗內重複開啟同文件會看到**同一個時間戳**，與 `AC-N67`「逐字等於伺服器回傳之線性浮水印快照」及既有 AC「相隔時間兩次開啟同文件時間戳記不同」**直接衝突** | 快取命中時 0 | ❌ 否決 |
+| C 快取「未燒錄原始位元組」，僅快取讀 Blob 這一段（燒錄仍每次做） | 否（燒錄仍即時） | 省 Blob I/O，燒錄成本不變 | 🔶 可行但效益有限——見下 |
+
+**決策：選 A，不快取**。理由：
+1. **時間戳一致性是本 feature 的核心契約**（`AC-N67`／既有稽核一致性 AC），任何快取燒錄結果的方案都會直接違反已核准 AC，不需要人類裁決（技術上不可能兩全，AC 已明確要求「當下時間」）。
+2. **250ms 遠低於 3s 目標**（[NFR-001](nfr.md#performance)），VIEW 動作本身之使用者容忍延遲基準線更高（開啟一份文件、非高頻互動），不快取造成的延遲增量在既有效能預算內。
+3. 方案 C（僅快取原始位元組讀取）之效益有限：`WatermarkPdfSource.getOriginalPdf()` 讀 Blob 的 I/O 成本在既有基準測試中並非瓶頸（燒錄本身之 CPU 成本才是），額外引入一層快取失效邏輯（覆蓋上傳後須失效既有快取）換來的效益與複雜度不成比例，**本輪不做**。
+4. **與 §11.7 併發閘之關係**：不快取意味著 VIEW／DOWNLOAD／PRINT 三動作與後台四端點下載（§11.6）**共用同一個燒錄併發閘**（`PdfBurner` 呼叫端外層之 semaphore，見 §10.2／§11.7）——這是既有機制的自然延伸，不需新設計。
+
+📌 若日後量測顯示 VIEW 端點延遲成為使用者體感問題（例如高頻重複開啟同一份大頁數文件），方案 C（僅快取原始位元組）為**風險最低的漸進優化路徑**，列入 [§9](#9-open-decisions) 供日後參考，本輪不裁決。
+
+---
+
+### 11.4 決策 B4：檢視器渲染 seam 之可測性設計（`AC-N9` 之執行期載體）
+
+#### 硬約束
+
+[F020](features/F020-watermark.md#d9-watermark-delta) `AC-N9`：「渲染必須經由可注入或可 spy 之 seam……若渲染完全封裝於第三方元件內部而不暴露任何 seam，本條將無執行期載體……架構定案前不得刪除本條」。
+
+#### 選定：`pdfjs-dist` 模組本身即為天然可 mock 之 seam，不需額外抽象層
+
+因 §11.1 已選定 `pdfjs-dist` 直用（非 `react-pdf` 封裝），`PdfCanvasViewer` 元件內部呼叫鏈為：
+
+```
+getDocument({ data }) → pdfDoc.getPage(n) → page.render({ canvasContext, viewport }) → renderTask.promise
+```
+
+- **測試 seam**：`vi.mock('pdfjs-dist')`，令 `getDocument` 回傳一個 fake `PDFDocumentProxy`（`getPage` 回 fake `PDFPageProxy`，`render` 回 `{ promise: Promise.resolve() }` 並記錄呼叫參數）。這是 vitest 對 ESM 模組匯出函式之標準 mock 手法，**不需**元件額外暴露 props-based render 函式（`PdfCanvasViewerProps.onRendered` 已足夠承載「重新渲染時通知外部」之語意，供整合層斷言）。
+- **`AC-N9` 之逐字斷言**（「頁面渲染函式再次被呼叫且其接收之縮放參數等於 `z2`……渲染呼叫累計次數 ≥ 2」）之落地：對 mock 之 `page.render` spy 斷言呼叫次數與最後一次呼叫之 `viewport.scale` 參數（即 §11.2 算法之 `zoom * devicePixelRatio`，jsdom 下 `devicePixelRatio=1` 故等於 `zoom`）。
+- **不引入額外抽象層之理由**：若為了「可測性」而在 `pdfjs-dist` 之上再包一層自訂 `renderPage(scale)` 函式 prop，測試會变成 mock 這層自訂函式而非驗證元件是否真的呼叫了 pdf.js——這會讓測試「證明了 wiring 正確」但**漏掉「元件是否真的用新 scale 重新渲染」這件事本身**（正是 `AC-N9` 要防的迴歸）。直接 mock `pdfjs-dist` 模組本身之匯出，測試才是對「真正會執行的程式碼路徑」斷言。
+
+**結論：`AC-N9` 之執行期載體已確立，不需退回 open-questions。**
+
+---
+
+### 11.5 決策 B5：`WATERMARK_BURNER` 抽出——解決循環相依＋啟動期 fail-fast
+
+#### 硬約束與已查證之既有缺陷
+
+[F020](features/F020-watermark.md#backend-burn-delta) `AC-N14`：後台四條端點一律燒錄。`OQ-D9-08`（使用者，選項 B）已全面推翻 `OQ-FM-01`／`OQ-D18-01`。lead 點名之既有教訓（`backend/src/appendices/appendices.module.ts:60-64`、`backend/src/usage-forms/usage-forms.module.ts` 同型註記）：
+
+> 「此前本 token **從未被任何模組提供** ⇒ `frontBurner` 恆為 `undefined` ⇒ 前台附錄一律回未燒錄之原始位元組……單元測試以位置參數自建 fake burner，故該缺口在測試層完全不可見（`@Optional()` 的代價）」
+
+🔴 **已查證：此缺陷本身在目前 main 已修復**——`appendices.module.ts:65` 與 `usage-forms.module.ts:48` 皆已有 `{ provide: FRONT_BURNER, useExisting: WatermarkService }`。lead 提出的「命名與 provider 佈線需一併收斂＋fail-fast」是對**本輪擴大燒錄面**（後台四端點新增為消費者）之前瞻要求，非既有缺陷復發。
+
+#### 新發現之模組循環相依風險
+
+本輪需求（`AC-N14`）要求 `AttachmentsController.download()`（`backend/src/attachments/attachments.controller.ts:109-123`，對應 `AttachmentsService.downloadAttachmentRaw()`，`attachments.service.ts:220-244`）也取得燒錄能力。但：
+
+- `PublicModule`（`backend/src/public/public.module.ts:54`）**已 `imports: [..., AttachmentsModule, ...]`**（供 `WATERMARK_PDF_SOURCE` 之 `AttachmentPdfSource` adapter 讀取附件位元組，`public.module.ts:84-88`）。
+- 若比照 `AppendicesModule`／`UsageFormsModule` 之既有作法，讓 `AttachmentsModule` 也 `imports: [PublicModule]` 以取得 `WatermarkService`，會構成 **`PublicModule → AttachmentsModule → PublicModule`** 之模組循環相依——這是 Appendices／UsageForms 兩模組之既有反循環（`appendices.module.ts:35-38` 明文自陳「`PublicModule` 之 imports……不含本模組」）**不成立於 Attachments 的唯一原因**。
+
+被否決之替代方案：
+
+| 方案 | 否決理由 |
+|---|---|
+| `forwardRef(() => PublicModule)` / `forwardRef(() => AttachmentsModule)` 雙向宣告 | NestJS 官方支援之標準手法，但**本 repo 全域 0 處使用先例**（已 grep 確認）；本 repo 既有之反循環慣例一律是「窄 adapter／抽出零相依子模組」（如 `AppendicesModule` 自建 `TypeOrmDocumentExistenceChecker` 而不 import `DocumentsModule`），引入一個全新模式（`forwardRef`）之學習與維運成本高於抽出（下方選定方案），且抽出後**其餘三個既有消費者的相依關係也一併簡化**（見下） |
+| 把新的第 4 個燒錄消費者（後台附件下載）之邏輯搬進 `WatermarkController`／`WatermarkService`（即 `PublicModule` 內部），讓 `AttachmentsController.download()` 直接呼叫 `WatermarkService` 對應方法 | 端點 `GET /documents/attachments/download` 之路由定義與其既有 `blobPath` 查找邏輯（`AttachmentsService.downloadAttachmentRaw()`）都活在 `AttachmentsModule`；搬遷 controller handler 到另一個模組會使同一資源的路由定義分散於兩處，違反既有「一個 controller 對應一個資源族」之組織原則，且**仍需 `AttachmentsModule` 匯出某種型別供 `WatermarkController` 呼叫**，並未真正消解相依方向的問題 |
+
+#### 選定：抽出零相依之 `WatermarkBurnerModule`
+
+**關鍵觀察**：`WatermarkService` 目前耦合了三種不同性質的相依：
+
+1. `WATERMARK_ORG_LOOKUP`（`OrgDirectoryModule`）＋ `PDF_BURNER`（零相依，`pdf-lib`）＋ `WATERMARK_DOC_META`（`TypeOrmDocMeta`，直讀 `AppDataSource`，零模組相依）—— **`burnIfPdf()`／`buildSnapshot()`／`assertDocumentVisible()` 三個方法只需要這一組**，且**沒有一個依賴 `AttachmentsModule`**。
+2. `WATERMARK_PDF_SOURCE`（`AttachmentPdfSource`，依賴 `AttachmentsService` 讀取 ICSOP PDF／OJT 原始位元組）＋ `AuditWriterService`——**只有 `view()`／`download()`／`print()`／`downloadAttachment()`（前台檢視器四動作本身）需要這一組**，這才是 `PublicModule` 必須 import `AttachmentsModule` 的真正原因。
+
+`Appendices`／`UsageForms`／(新)`Attachments` 三個消費者要的**只是第 1 組**（`burnIfPdf`／`assertDocumentVisible`），從未用到 `WatermarkPdfSource`。過去讓它們 import 整個 `PublicModule` 只是「順手」，並非必要——這正是本次在 Attachments 身上踩到循環相依的根因。
+
+```mermaid
+graph TD
+  subgraph WBM["WatermarkBurnerModule（新增，零外部業務模組相依）"]
+    ORG["WATERMARK_ORG_LOOKUP<br/>← OrgDirectoryModule"]
+    PB["PDF_BURNER<br/>（PdfLibBurner，零相依）"]
+    DM["WATERMARK_DOC_META<br/>（TypeOrmDocMeta，直讀 AppDataSource）"]
+    WBS["WatermarkBurnerService<br/>burnIfPdf() / buildSnapshot() / assertDocumentVisible()"]
+    ORG --> WBS
+    PB --> WBS
+    DM --> WBS
+  end
+  PM["PublicModule<br/>WatermarkService（VIEW/DOWNLOAD/PRINT/downloadAttachment）"] -->|"imports（取得 burn 能力，組合而非重複實作）"| WBM
+  PM -->|"imports（取得 WATERMARK_PDF_SOURCE 之附件位元組來源）"| AM["AttachmentsModule"]
+  AM -->|"imports（新增，取得後台下載之燒錄能力）"| WBM
+  APM["AppendicesModule"] -->|"imports（v1.9 由 PublicModule 改為 WatermarkBurnerModule）"| WBM
+  UFM["UsageFormsModule"] -->|"imports（v1.9 由 PublicModule 改為 WatermarkBurnerModule）"| WBM
+
+  style WBM fill:#dcfce7,stroke:#16a34a
+  style PM fill:#e0e7ff,stroke:#4338ca
+```
+
+**無循環**：`WatermarkBurnerModule` 不 import 任何一個消費者模組（`PublicModule`／`AttachmentsModule`／`AppendicesModule`／`UsageFormsModule`），四者皆可安全地單向 import 它。
+
+**落地要點**：
+
+1. 新增 `backend/src/public/watermark-burner.service.ts`：從 `WatermarkService`（`watermark.service.ts:96-201`）**原樣搬移** `buildSnapshot()`、`resolveDeptFull()`、`burnIfPdf()`、`assertDocumentVisible()`、`toViewer()`、`assertDocVisible()`、`rejectDeptRestricted()` 七個方法之邏輯（純搬移，行為不變），介面命名由 `FrontBurner` 改為 **`WatermarkBurner`**（不再含「Front」，反映後台亦消費）；token 由 `FRONT_BURNER` 改為 **`WATERMARK_BURNER`**。
+2. 新增 `backend/src/public/watermark-burner.module.ts`：`imports: [OrgDirectoryModule]`，providers 為 `WATERMARK_ORG_LOOKUP`／`PDF_BURNER`／`WATERMARK_DOC_META`／`WatermarkBurnerService`／`{ provide: WATERMARK_BURNER, useExisting: WatermarkBurnerService }`，`exports: [WATERMARK_BURNER, WatermarkBurnerService]`。
+3. `WatermarkService`（`watermark.service.ts`）**改為組合而非直接持有**這三個相依——建構子改注入 `@Inject(WATERMARK_BURNER) private readonly burnerSvc: WatermarkBurner`，內部 `buildSnapshot()`／`burnIfPdf()`／`assertDocumentVisible()` 三個既有公開方法**改為委派**（`return this.burnerSvc.buildSnapshot(session)` 等），其餘方法（`view`／`getOriginalPdf`／`download`／`print`／`downloadAttachment`／`audit`）**簽章與行為完全不變**——`WatermarkService` 對外仍是同一個類別、同一組公開方法，`WatermarkController` 與既有測試**不需任何改動**。
+4. `PublicModule`（`public.module.ts`）之 providers 陣列移除 `WATERMARK_ORG_LOOKUP`／`PDF_BURNER`／`WATERMARK_DOC_META` 三項（改由 import 取得），`imports` 新增 `WatermarkBurnerModule`，`WatermarkService` 之 `useFactory` 改注入 `WATERMARK_BURNER` 而非那三個 token。
+5. `AppendicesModule`／`UsageFormsModule`：`imports` 由 `PublicModule` 改為 `WatermarkBurnerModule`；providers 之 `{ provide: FRONT_BURNER, useExisting: WatermarkService }` 改為 `{ provide: WATERMARK_BURNER, useExisting: WatermarkBurnerService }`（**不再需要間接經過 `WatermarkService`**，直接拿到提供燒錄能力的服務本身）；`appendices.service.ts`／`usage-forms.service.ts` 之 `import { FRONT_BURNER } from '../appendices/appendices.service'` 改為 `import { WATERMARK_BURNER, WatermarkBurner } from '../public/watermark-burner.service'`（型別 `FrontBurner` 改名 `WatermarkBurner`，簽章不變）。
+6. `AttachmentsModule`（`attachments.module.ts`）：`imports` 新增 `WatermarkBurnerModule`；`AttachmentsService` 建構子新增注入 `WATERMARK_BURNER`（見 §11.6）。
+
+#### 🔴 `@Optional()` → 必要注入：達成啟動期 fail-fast，且不破壞既有 unit 測試
+
+- **移除**三個消費端（`AppendicesService`／`UsageFormsService`／新 `AttachmentsService`）建構子上的 `@Optional()` **NestJS 裝飾器**——此三者皆為標準 `@Injectable()` 類別、由 Nest 以裝飾器反射 metadata 自動解析建構子相依（`providers: [AppendicesService]` 之隱式 `useClass` 風格）。
+- **保留** TypeScript 參數型別之 `?`（如 `private readonly burner?: WatermarkBurner`）——這是關鍵：`@Optional()` 是 Nest DI 容器在**解析相依圖**時讀取的 metadata，決定「找不到 provider 時要不要 throw」；TS 的 `?` 只影響型別檢查，不影響執行期行為。兩者獨立：
+  - **正式部署（經 Nest `NestFactory.create()` 啟動）**：容器解析 `AppendicesService` 建構子第 N 個參數（`WATERMARK_BURNER`）時，因**移除了 `@Optional()`**，若該模組未 import `WatermarkBurnerModule` 或 provider 未註冊，Nest 會在 `app.listen()` **之前**丟出 `UnknownDependenciesException`（「Nest can't resolve dependencies of the AppendicesService」），容器啟動失敗、程序以非 0 結束——這正是 lead 要求的「缺 provider 就啟動失敗，而非靜默降級」。
+  - **既有純建構子單元測試**（如 `new AppendicesService(pool, checker)`，省略 burner 參數）：這些測試**完全繞過 Nest DI 容器**，直接呼叫 TypeScript class 建構子——`@Optional()` 裝飾器對它們從未產生任何作用（裝飾器只在 Nest 容器解析時被讀取），故**移除 `@Optional()` 對這些既有測試零影響**，仍會因 TS 型別為 `?` 而編譯通過、執行時 `frontBurner` 為 `undefined`，服務內既有的 `this.frontBurner?.burnIfPdf(...)` 空值防禦邏輯依然生效。
+- 🔴 **`WatermarkService` 不適用上述機制，且本就不需要**：其建構子（`watermark.service.ts:87-94`）**沒有任何 `@Inject`／`@Optional` 裝飾器**——它是以 `useFactory` 佈線（`public.module.ts` 之 `{ provide: WatermarkService, useFactory: (...) => new WatermarkService(...), inject: [...] }`），裝飾器反射對 `useFactory` 之呼叫**完全不生效**（Nest 直接依 `inject` 陣列之 token 清單逐一解析後以位置參數呼叫工廠函式）。fail-fast 之達成方式因此不同：只要重構後的 `inject` 陣列含 `WATERMARK_BURNER`（取代原三個 token），該 token 若解析不到，Nest 在建構 `WatermarkService` 這個 provider 本身時就會拋出同一種 `UnknownDependenciesException`——**不需要、也沒有** `@Optional()` 裝飾器可移除，`useFactory` 之注入預設即為必要（除非顯式以 `Optional` provider wrapper 標記，本例不需要）。
+- **可推廣教訓**（供 §11.11 盲區表引用）：`@Optional()` 裝飾器與 TS 型別之 `?` 是**兩個獨立的旋鈕**——前者控制「Nest 容器裝不到時要不要炸」，後者只控制「編譯器要不要讓你省略這個參數／檢查你有沒有處理 `undefined`」。本 repo 大量既有相依（`documents.service.ts:71-88`、`accounts.service.ts:82-88` 等）皆採「`@Optional()` ＋ 優雅降級」，那是**刻意的可選能力**（如「無 org resolver 則名稱留 null」）；`WATERMARK_BURNER` 之前之所以踩雷，是因為它被**誤當成了可選能力**，實際上是「業務正確性的必要條件」——這是本輪要收斂的認知落差，而非全面否定 `@Optional()` 模式本身。
+
+#### 被否決之替代方案
+
+| 方案 | 否決理由 |
+|---|---|
+| 保留 `FRONT_BURNER` 名稱，僅補上 `AttachmentsModule` 之 provider（不重構、不改名） | 名稱與語意脫節（`FRONT_BURNER` 供後台四端點消費）會誤導下一位工程師以為它只用於前台；且不解決 `AttachmentsModule ↔ PublicModule` 之循環相依——若不抽出，`AttachmentsModule` 仍只能透過 `forwardRef` 或搬遷 controller 兩個更差的選項取得燒錄能力 |
+| 於啟動時另寫一段自訂健康檢查（`OnModuleInit` 手動檢查相依是否為 `undefined` 並 `process.exit(1)`） | Nest 內建的 DI 解析失敗機制**已經是**啟動期 fail-fast，自訂檢查是重造輪子且容易漏寫；唯一需要的動作只是移除 `@Optional()` |
+
+---
+
+### 11.6 決策 B6：後台四端點之燒錄／稽核改造（含 `AuditWriterRecorder` 既有缺口修正）
+
+#### 硬約束
+
+[F020](features/F020-watermark.md#backend-burn-delta) `AC-N14`（一律燒錄）、`AC-N16`（無例外角色）、`AC-N17`（寫稽核，含 `watermarkSnapshot` 與身分快照落值）、`AC-N18`（浮水印身分＝操作者本人）、`AC-N21`（傳輸模式不變，仍為代理串流）。[F023](features/F023-audit-logging.md#d9-audit-delta) `AC-N51`。[F039](features/F039-appendix-management.md#d9-backend-burn-delta) `AC-N56`／`AC-N57`。
+
+#### §5.2 下載策略表之就地改寫
+
+| 附件類型 | 現行（v1.8 及之前） | 🔴 現行（v1.9 起） |
+|---|---|---|
+| 後台四條端點（`documents/attachments/download`、`admin/usage-forms/:formId/download`、`documents/:documentId/usage-forms/:formId/download`、`admin/appendices/:appendixId/download`） | 一律後端代理串流，回傳**原始檔位元組**（RAW）；**不寫稽核、不燒錄**（`OQ-FM-01` 裁決） | 一律後端代理串流，`format=pdf` 者回傳**已燒錄浮水印**之位元組、非 PDF 者原檔（策略 A）；**一律寫入調閱稽核**（`OQ-D9-08`／`OQ-D9-10` 全面推翻 `OQ-FM-01`／`OQ-D18-01`） |
+
+前後台之**唯一**剩餘差異收斂為：① [F041](features/F041-user-subtype-business-scope.md) 可見性檢查（僅前台，因後台四種角色皆非 F041 限定之業務子分類一般使用者）；② `AUDIT_LOG.documentId` 落值（後台經池管理頁下載者為 `null`，見 data-model 之明列例外）。**傳輸模式、燒錄與否、是否寫稽核**三者自本版起前後台完全一致。
+
+#### 四端點之改造要點（皆重用 §11.5 之 `WATERMARK_BURNER` 協作點）
+
+```mermaid
+sequenceDiagram
+  participant FE as 後台頁面（清單／唯讀詳情／編輯頁／表單管理頁／附錄管理頁）
+  participant C as 對應 Controller（4 個既有 handler）
+  participant Svc as 對應 Service
+  participant WB as WatermarkBurnerService（WATERMARK_BURNER）
+  participant AUD as AuditWriterService
+
+  FE->>C: GET .../download（既有路由，session 帶操作者身分）
+  C->>Svc: downloadXxxRaw(session, id)
+  Svc->>Svc: 讀 Blob 原始位元組（既有邏輯不變）
+  Svc->>WB: burnIfPdf(toWatermarkSession(session), bytes, format)
+  WB-->>Svc: { bytes, snapshot }（非 PDF → snapshot=null，bytes 原樣）
+  Svc->>WB: buildSnapshot(toWatermarkSession(session))　（取身分快照供稽核欄位，同 WatermarkService.downloadAttachment 之既有模式）
+  WB-->>Svc: { fields }
+  Svc->>AUD: recordAccess({ targetType, actionType:'DOWNLOAD', targetId, documentId, employeeNo:fields.employeeNo, company:fields.companyFullName, department:fields.departmentFullName, section:fields.sectionName, watermarkSnapshot:snapshot })
+  Note over Svc,AUD: 非阻斷（try/catch，失敗僅記 log，沿用既有補償佇列規則）
+  Svc-->>C: { bytes:burned, fileName, contentType }
+  C-->>FE: Content-Type + Content-Disposition + 位元組（傳輸模式不變）
+```
+
+| # | 端點 | Service 方法 | targetType | documentId 落值 |
+|---|---|---|---|---|
+| 1 | `GET /documents/attachments/download` | `AttachmentsService.downloadAttachmentRaw()`（`attachments.service.ts:220-244`） | `DOCUMENT` | 必填（`store.findByBlobPath()` 已回傳所屬文件） |
+| 2 | `GET /admin/usage-forms/:formId/download` | `UsageFormsService.downloadFromPool()`（`usage-forms.service.ts:399-406`） | `USAGE_FORM` | `null`（池管理頁脈絡） |
+| 3 | `GET /documents/:documentId/usage-forms/:formId/download` | `UsageFormsService.downloadFormRaw()`（`usage-forms.service.ts:422-431`） | `USAGE_FORM` | 必填（路由帶 `documentId`） |
+| 4 | `GET /admin/appendices/:appendixId/download` | `AppendicesService.downloadFromPool()`（`appendices.service.ts:478-489`） | `APPENDIX` | `null`（池管理頁脈絡） |
+
+**逐端點落地**：
+
+- **#1（AttachmentsService）**：目前**未注入**任何燒錄或稽核相依（`attachments.module.ts` 之 imports 不含 `AuditModule`）。新增：`imports` 加 `WatermarkBurnerModule`、`AuditModule`；建構子新增 `@Inject(WATERMARK_BURNER) private readonly burner: WatermarkBurner` 與 `private readonly auditWriter: AuditWriterService`（直接注入，理由見下）。`downloadAttachmentRaw()` 內部於既有「取 `bytes`」步驟之後，插入 `burnIfPdf` ＋ `recordAccess` 兩步；格式判定沿用既有 `contentTypeOfFileName(rec.fileName)` 之副檔名事實（§10.3 既有原則）。
+- **#2／#3（UsageFormsService）**：已注入 `WATERMARK_BURNER`（原 `FRONT_BURNER`，`usage-forms.service.ts:132-134`，前台既用），**只需擴大其呼叫範圍**至 `downloadFromPool()`／`downloadFormRaw()` 兩方法（現行僅 `downloadForm()`，即前台方法，呼叫它）；稽核經既有 `AUDIT_RECORDER` 注入（`AUDIT_RECORDER` 已存在，見下方 adapter 修正）。
+- **#4（AppendicesService）**：同上，`WATERMARK_BURNER` 已注入（`appendices.service.ts:199-201`），擴大呼叫至 `downloadFromPool()`；稽核經既有 `AUDIT_RECORDER`。
+
+#### 🔴 必要前提：`AuditWriterRecorder` 兩份既有實作皆未轉送身分快照與 `watermarkSnapshot`
+
+**已查證之既有缺口**（獨立於本輪需求、透過本次讀原始碼發現）：
+
+- `backend/src/appendices/audit-writer-recorder.adapter.ts:22-29`：
+  ```ts
+  async record(event: AppendixAuditEvent): Promise<void> {
+    await this.writer.recordAccess({
+      targetType: 'APPENDIX', actionType: event.actionType, targetId: event.appendixId,
+      documentId: event.documentId, actorId: event.accountId, occurredAt: new Date(),
+    });
+  }
+  ```
+- `backend/src/usage-forms/audit-writer-recorder.adapter.ts:22-29`：同型，且其**原始碼註解自陳**「此 seam 未持有更豐富之身分/對象快照，其餘欄留空由 AuditWriter 補 null」。
+
+兩者皆**完全未轉送** `employeeNo`／`company`／`department`／`section`／`roleCode`／`watermarkSnapshot` 五個欄位予 `AuditWriterService.recordAccess()`——即便 `AppendicesService.downloadAppendix()`（`appendices.service.ts:522-529`）已正確組出 `watermarkSnapshot: burned.snapshot` 傳入 `this.audit.record({...})`，adapter 在轉送給真正的 `AuditWriter` 之前**把它丟棄了**。`AuditAccessEvent` 型別（`audit.types.ts:66-71`／`79`）本身這些欄位皆為 `?`（選填），故 TypeScript 編譯期不會示警；既有 unit 測試以**替身 `AuditRecorder`**（非真正的 `AuditWriterRecorder`）驗證服務層是否「呼叫了 `record()` 且參數含 `watermarkSnapshot`」，從未走過這個轉接器本身，故此缺口**在既有測試層完全不可見**——與 §10.10 CJK 字型 bug、`FRONT_BURNER` 未 provide 為**同一種「驗證了呼叫、沒驗證轉送」之結構性盲區**。
+
+🔴 **本缺口是滿足 `AC-N17`／`AC-N51`（後台燒錄下載寫入正確之身分快照與 `watermarkSnapshot`）之必要前提，非本輪新增裁決**——`AC-D5`（前台附錄下載，2026-08-16 已核准之既有 AC）本就要求 `watermarkSnapshot` 落值正確，此缺口**現already違反該已核准 AC**，只是尚無測試證偽。修正範圍：
+
+1. `AppendixAuditEvent`（`appendices.store.ts`）／`UsageFormAuditEvent`（`usage-forms.store.ts`）之型別 **additive** 新增五個選填欄位：`employeeNo?`／`company?`／`department?`／`section?`／`roleCode?`（與 `WatermarkIdentity` 之對應欄位同源，命名對齊 `AuditAccessEvent`）。
+2. `AppendicesService.downloadAppendix()`／`downloadFromPool()`（新）與 `UsageFormsService.downloadForm()`／`downloadFromPool()`／`downloadFormRaw()`（新），於呼叫 `this.audit.record({...})` 之前，**額外呼叫一次** `burner.buildSnapshot(session)` 取得 `fields`（`WatermarkIdentity`），比照 `WatermarkService.downloadAttachment()` 既有模式（`watermark.service.ts:239` 之 `const { fields } = await this.buildSnapshot(session);`——**同一份程式碼已有先例，非新手法**），將五個欄位一併帶入 `record()` 呼叫。
+3. 兩份 `AuditWriterRecorder.record()` **additive** 擴充：轉送 `event.employeeNo`／`event.company`／`event.department`／`event.section`／`event.roleCode`／`event.watermarkSnapshot` 予 `writer.recordAccess({...})`。
+4. **回歸鎖定**：修正後既有 `AC-D5`（附錄）／`AC-D14`（使用表單）之前台稽核斷言若原先只驗 `targetType`／`actionType`／`targetId`（未斷言身分欄），維持綠燈；若 test-generator 願意加強，可新增身分欄斷言（非本次強制要求，但建議一併補強，因為這正是本缺口能穿過既有測試的原因）。
+
+**AttachmentsService（新，#1）不沿用 `AuditRecorder` 間接層**：直接注入 `AuditWriterService`（比照 `WatermarkService` 自身之既有模式），因為 `AttachmentsService` 是新增此能力、無歷史包袱，且該服務同時需要稽核能力於**兩個**呼叫點（本節之下載燒錄、§11.8 之 OJT 上傳）——直接注入避免為兩個呼叫點各自維護一份 `AuditRecorder` adapter 之間接層，這是比 Appendices／UsageForms 更簡單的正確選擇（後兩者維持既有 `AuditRecorder` 間接層是為了不擴大本次改動面，非因為該模式更優）。
+
+---
+
+### 11.7 決策 B7：後台燒錄之併發／效能與既有燒錄閘之關係
+
+- **沿用 §10.2 既有之燒錄併發閘**（`PdfBurner` 呼叫端外層之進程內 semaphore，建議上限 `ICSOP_BURN_CONCURRENCY`，預設 4）——本輪**不新增**第二個閘，後台四端點與前台四路徑（檢視器／附件／附錄／使用表單）**共用同一個閘**，因為它們最終都呼叫同一個 `PdfLibBurner.burnPdf()` 單例（經 `WATERMARK_BURNER` 統一協作點，§11.5）。
+- **效能影響評估**：後台清單頁（`DocumentListPage`）之「檔案」欄下載鈕、唯讀/編輯頁之附件下載，皆為**低頻、單次點擊觸發之操作**（管理員手動下載，非批次／輪詢），不像前台可能有全公司使用者併發存取。`OJT`／`ICSOP PDF` 之單檔上限與前台相同（50MB，§10.2 既有記憶體峰值分析），不需額外之併發閘上限調整。
+- **無需新增之理由**：既有併發閘之設計目標是「限制 Node heap 峰值」（§10.2「4 × 3 × 50MB ≈ 600MB」），與請求來源（前台／後台）無關，只與**同時進行中之燒錄呼叫數**有關——後台新增的燒錄呼叫點會自然計入既有閘之額度，不需要為它們另建邏輯。
+
+---
+
+### 11.8 決策 B8：OJT 破例——`FIELD_MATRIX` 資料驅動新增列＋稽核角色分支落點
+
+#### 硬約束
+
+[F026](features/F026-role-field-matrix.md#ojt-write-exception-delta) `AC-N22`（矩陣恰兩格改值）／`AC-N24`（19 欄回歸鎖定，最重要之防護）。[F016](features/F016-pdf-ojt-attachment.md#ojt-role-open-delta) `AC-N28`（成功）／`AC-N31`／`AC-N32`（稽核角色不對稱）。
+
+#### 選定：新增一個具名 `Row` 常數，不寫 if 特例——矩陣本身已是資料驅動設計
+
+**已查證：`backend/src/rbac/field-matrix.ts` 與其前端鏡射 `frontend/src/domain/field-matrix.ts` 之 `FIELD_MATRIX` 本已是「欄位鍵 → `Row`（角色→結果）」之查表結構**（`field-matrix.ts:60-106`），每個欄位鍵指向一個共用 `Row` 常數（`ICSOP_WRITABLE`／`SYSTEM_GENERATED`）。開放 OJT 例外**不需要任何條件分支**，只需：
+
+1. 兩個檔案（後端＋前端鏡射）各自新增一個具名常數：
+   ```ts
+   /** OJT 簽到表專屬：主管／部門窗口可寫（2026-08-20 D9 delta，OQ-D9-19/20），其餘同 ICSOP_WRITABLE。 */
+   const OJT_WRITABLE: Row = {
+     SysAdmin: 'FORBIDDEN', ICSOPAdmin: 'WRITABLE',
+     Supervisor: 'WRITABLE', DeptContact: 'WRITABLE',   // ← 本次唯一改值
+     User: 'FORBIDDEN',
+   };
+   ```
+2. `FIELD_MATRIX[FieldKey.OJT_SIGNIN]` 由 `ICSOP_WRITABLE` 改指向 `OJT_WRITABLE`（各檔各一行）。
+
+`canWriteField()`／`assertCanWriteDocumentAsset()`（`backend/src/storage/document-asset-authz.ts:14-25`）之呼叫鏈**完全不需改動**——`AttachmentsController.uploadOjt()`（`attachments.controller.ts:73-87`）現行閘門即為 `ICSOP_DOCUMENT_MANAGEMENT` read（route 層，`AC-N28`「不得誤用其他閘門」明訂沿用），實際寫入判定已由 `AttachmentsService.uploadSingle()`（`attachments.service.ts:131-146`）之 `assertCanWriteDocumentAsset(role, ICSOP_DOCUMENT_MANAGEMENT, FIELD_KEY_BY_TYPE['OJT_SIGNIN'])` 承擔，該呼叫**自動**因矩陣格值改變而放行 Supervisor／DeptContact——**這正是「資料驅動查表」設計的價值**：改變行為只需改資料，不需改任何呼叫端邏輯，`AC-N24`（19 欄回歸鎖定）之防護面因此**結構性成立**（其餘 19 個欄位鍵之 `Row` 常數一個字元未動）。
+
+**`AC-N24`「38 案全組合逐案斷言」之機器可驗性**：因矩陣本身已是查表結構，test-generator 可對 `FIELD_MATRIX` 物件本身做**結構性遍歷斷言**（`Object.entries(FIELD_MATRIX)` 排除 `OJT_SIGNIN` 後逐鍵斷言 `Supervisor`／`DeptContact` 皆為 `'FORBIDDEN'`），不需手寫 38 行個案——這是本設計相對「if 特例」的額外好處：**回歸測試本身也更不容易漏欄**。
+
+#### 前端：`DocumentReadonlyPage` 之獨立 `canWriteOjt` 布林
+
+現行頁面（`DocumentReadonlyPage.tsx:326`）已有 `canWrite`（ICSOPAdmin 專用，驅動整頁唯讀 banner 與「前往編輯」鈕，`:332` 唯讀提示文案）。本次**新增**一個獨立布林：
+
+```ts
+// 示意
+const canWriteOjt = canWriteField(user?.roleCode, FieldKey.OJT_SIGNIN) === 'WRITABLE';
+```
+
+- `canWrite`（整頁唯讀 banner）之邏輯與文案**不變**——唯讀 banner 仍描述「全欄位唯讀」對 SysAdmin／User 成立；對 Supervisor／DeptContact，文案由 spec-writer／ui-ux-designer 定稿之新句式取代（`F016 AC-N28` 已標註「逐字文案由 ui-ux-designer 於 prototype 定稿後回寫」，本節僅鎖定**架構層之布林旗標存在且與矩陣同源**）。
+- 附件清單區塊（`:355` 起，`renderAttach` 邏輯）之 OJT 列，其上傳/覆蓋控制項之條件渲染改依 `canWriteOjt`（獨立於既有 `canWrite`），ICSOP PDF／使用表單兩列之控制項渲染條件維持依 `canWrite`（不受影響）。
+- 🔴 **比照 F018 `AC-D17` 之既有裁決（`.write-only` CSS 隱藏 vs DOM 移除）**——OJT 上傳控制項對唯讀角色（含 Supervisor／DeptContact 本身在「無寫入權之其餘欄位」情境、以及 SysAdmin／User）**建議採 DOM 移除**而非僅 CSS 隱藏，理由與 `F018 AC-D17` 完全相同（Testing Library 之 `*ByLabelText`／`*ByText` 不尊重 `display:none`）；本節不新增 AC，僅提醒 tdd-implementation 沿用既有慣例，避免重蹈 `F018` 曾踩過的坑。
+
+#### 稽核角色分支之落點：服務層，與欄位矩陣判定同源
+
+[F016](features/F016-pdf-ojt-attachment.md#ojt-role-open-delta) `AC-N31`／`AC-N32` 要求「Supervisor／DeptContact 上傳寫稽核、ICSOPAdmin 上傳不寫稽核」——`AttachmentsService.uploadSingle()` 已知呼叫者 `session.roleCode`（授權判定已用過），**於同一方法內、寫入成功後**追加：
+
+```ts
+// 示意，緊接 assertCanWriteDocumentAsset 通過與 Blob 寫入成功之後
+if (type === 'OJT_SIGNIN' && (session.roleCode === 'Supervisor' || session.roleCode === 'DeptContact')) {
+  const { fields } = await this.burner.buildSnapshot(toWatermarkSession(session));
+  await this.auditWriter.recordAccess({
+    targetType: 'DOCUMENT_ATTACHMENT', actionType: 'ATTACHMENT_UPLOAD',
+    targetId: documentId, employeeNo: fields.employeeNo, company: fields.companyFullName,
+    department: fields.departmentFullName, section: fields.sectionName,
+    watermarkSnapshot: null, occurredAt: new Date(),
+  });
+}
+```
+
+- **落點理由（回應 F016 spec「待 system-architect：該分支若寫在 controller 會與既有欄位矩陣判定分居兩處」之提問）**：寫在 **service 層、緊接授權判定之後**——與欄位矩陣判定（`assertCanWriteDocumentAsset`）同一方法、同一次角色讀取，避免「controller 判一次角色、service 判一次角色」之重複與潛在漂移。`type === 'OJT_SIGNIN'` 之守衛確保 ICSOP PDF 上傳（同一 `uploadSingle()` 方法之另一分支）不受影響（`AC-N33` 回歸鎖定：ICSOP PDF 上傳仍無條件 403）。
+- **`buildSnapshot()` 之重用**：與 §11.6 相同模式——`WATERMARK_BURNER` 已於 §11.5／§11.6 注入 `AttachmentsService`，此處直接複用，不另建身分快照組裝邏輯。
+- **`targetType='DOCUMENT_ATTACHMENT'`**：[data-model](data-model.md#auditlog-entity)「`ATTACHMENT_UPLOAD` 擴充」段已定案（2026-08-20 第二輪就地修訂，`OQ-D9-29`），**不需 migration**（`varchar(30)`／`varchar(40)`，皆無 `CHECK`）。
+
+---
+
+### 11.9 決策 B9：前台字級隔離機制與浮水印公司簡稱落點
+
+#### 前台字級：Tailwind class 層級之局部覆寫，不動設計系統 tokens
+
+[F021](features/F021-rwd-responsive.md#d9-typography-delta) `AC-N59`–`AC-N62`；`OQ-D9-12`（使用者，選項 A：僅前台）。
+
+- **機制**：`prototypes/00-design-system.html:100-108` 之字級 tokens 表（`text-sm`＝Body 14px、`text-xs`＝Caption 12px）為**全站權威、逐字不動**（`AC-N61` ②）。前台三個頁面模組（`PublicListPage.tsx`／`PublicDocumentDetailPage.tsx`／`PublicViewerPage.tsx`）之原始碼**直接以更大一階之 Tailwind class 字面取代**（`text-xs`→`text-sm`、既有 `text-sm` 節點依 `AC-N60` 表列之代表性節點上移至 `text-base`），**不透過任何新增之 CSS 變數／主題切換機制**。
+- **為何不做「主題分層」（如 CSS custom property `--font-size-body` 依路由切換）**：`OQ-D9-12` 選項 A 之代價已明文接受（前後台字級分歧、後台維持現行）——這是**永久性**的分歧（非過渡期），且僅 3 個頁面模組受影響（`AC-N59` 之 source-level 斷言範圍），規模遠低於需要引入主題變數層的門檻。若日後前台字級需求擴大（如新增更多前台頁面模組），才是重新評估「是否該收斂為主題變數」的時機（記入 [§9](#9-open-decisions)）。
+- **`AC-N59`（source-level 全域約束：三檔 `text-xs` 出現次數為 0，且無 `text-\[\d+px\]` 任意值繞過）之實作意涵**：這是一個**負向的靜態檔案斷言**（比照既有 `change-label-authority.ts` 之權威性檢查慣例），tdd-implementation 於三個頁面模組內逐一手動替換字級 class 即可滿足，不需要建置期 lint 規則（該負向斷言本身即扮演此角色）。
+- **`AC-N61` ①（後台五檔仍含 `text-xs`）之防呆意義**：本條偵測的失誤形狀是「跨全專案 find-replace」——tdd-implementation **不得**用全域搜尋取代處理本次字級調整，必須逐檔手動編輯前台三個模組。
+
+#### 浮水印公司簡稱：與 `COMPANY_FULL_NAMES` 同模組、型別層 + 執行期雙重防漂移
+
+[F020](features/F020-watermark.md#d9-watermark-delta) `AC-N10`（字面值）／`AC-N11`（INV-C2）；`OQ-D9-06`（使用者，選項 A：新增專用簡稱常數，不動全稱三處消費點）。
+
+- **落點**：`backend/src/org-directory/company-name.ts`（與 `COMPANY_FULL_NAMES` 同檔，緊接其後）：
+  ```ts
+  /** 浮水印專用公司簡稱（2026-08-20 D9 delta，AC-N10）。INV-C2：鍵集合恆等於 COMPANY_FULL_NAMES。 */
+  export const COMPANY_SHORT_NAMES: Readonly<Record<keyof typeof COMPANY_FULL_NAMES, string>> = {
+    AS: '和潤企業',
+    AE: '和潤電能',
+  };
+
+  /** INV-C2 之執行期斷言（型別層防護見上方 Record 之 keyof 約束，本函式為執行期第二道防線）。 */
+  export function assertCompanyShortNamesComplete(): void {
+    const full = Object.keys(COMPANY_FULL_NAMES).sort();
+    const short = Object.keys(COMPANY_SHORT_NAMES).sort();
+    if (full.join(',') !== short.join(',')) {
+      throw new Error(`INV-C2 violated: COMPANY_SHORT_NAMES keys ${short} != COMPANY_FULL_NAMES keys ${full}`);
+    }
+  }
+
+  /** COMPID → 浮水印公司簡稱；查無 → null（比照 resolveCompanyName 之寬容處置，§8.4 分隔符收合）。 */
+  export function resolveCompanyShortName(companyCode: string | null | undefined): string | null {
+    if (companyCode == null) return null;
+    const code = companyCode.trim();
+    return code.length === 0 ? null : (COMPANY_SHORT_NAMES[code as keyof typeof COMPANY_FULL_NAMES] ?? null);
+  }
+  ```
+- **雙重防漂移**：① **型別層**——`Record<keyof typeof COMPANY_FULL_NAMES, string>` 使新增公司到 `COMPANY_FULL_NAMES` 而漏登 `COMPANY_SHORT_NAMES` 時，`tsc` 編譯直接失敗（缺鍵）；② **執行期層**——`AC-N11` 明訂「本 AC 仍須保留為執行期載體，型別在 build 產物中不存在」，`assertCompanyShortNamesComplete()` 供 unit 測試直接呼叫斷言（亦可選擇性掛於 `main.ts` bootstrap，比照 §10.10 CJK fail-fast 之精神，但**本輪不強制**——公司清單為靜態常數、非部署環境變異，型別層防護已於**編譯期**攔截，執行期斷言主要供 test-generator 撰寫 unit 測試之斷言載體，非必要之啟動期 fail-fast）。
+- **`resolveCompanyShortName()` 之消費點**：僅 `WatermarkService.buildSnapshot()`（`watermark.service.ts:111` 之 `resolveCompanyName(session.companyCode)` **改為** `resolveCompanyShortName(session.companyCode) ?? ''`——⚠ **此方法現已搬遷至 §11.5 之 `WatermarkBurnerService`**，改動點隨之同移）。`resolveCompanyName()`（全稱）之其餘三處消費點（F003 帳號管理、`GET /companies`、F024 調閱稽核公司欄）**一個字元不動**（`AC-N13` 回歸鎖定）。
+
+---
+
+### 11.10 決策 B10：使用表單整頁化——路由、PATCH 端點擴充、`USAGE_FORM_DRAFTING_DEPT` migration
+
+#### (a) 整頁化路由
+
+[F018](features/F018-usage-form-management.md#usage-form-page-delta) `AC-N41`：獨立路由，非彈窗。
+
+- **新增前端路由**：`/admin/usage-forms/new`（新增頁）、`/admin/usage-forms/:formId/edit`（編輯頁），比照既有 `/admin/documents/new`／`/admin/documents/:id/edit` 之既有慣例（React Router `<Route>` 宣告於既有 admin 路由樹）。
+- **nginx／vite 白名單影響：零改動**。兩條新路由皆落於既有 `location /admin/`（`nginx.conf:55-64`）與 `vite.config.ts:44` 之 `/admin` proxy 規則之下——該區塊已依 `Accept` header 分流整頁導覽（回 SPA）與 API fetch（代理至後端），**新路由本身不對應任何新的後端路徑字面**（是純前端路由），故不落入既有「檔案端點白名單依路徑結尾動詞」之關注範圍（那組規則只管**檔案下載類**端點，見 §11.6 表格四端點與既有規則之對照，皆未改變路徑字面）。
+
+#### (b) 制定部門攜帶方式：新增時併入既有 multipart，編輯時併入 metadata PATCH
+
+- **新增**（`POST /admin/usage-forms`，既有 multipart 端點，`AC-N43` 明訂 API 契約不變、`draftingDeptCodes` 為 additive 欄位）：新增一個**純文字** multipart 欄位 `draftingDeptCodes`，值為 **JSON 陣列字串**（如 `'["JA000","KB000"]'`），伺服器端 `JSON.parse()` 後比照既有 `normalizeIdList()`（`documents.service.ts:143` 之既有慣例）正規化（trim、去空、去重）。
+  - **理由（不採重複同名欄位）**：multipart 對「同一欄位名重複出現」之陣列化行為依賴 body-parser 之實作細節（multer 對非檔案欄位之陣列化並非所有設定下皆一致），JSON 字串化是**顯式、無歧義、跨 multer 版本穩定**的作法，且與既有 `documents.service.ts` 之陣列正規化函式可直接複用（該函式本就處理 `string[]` 輸入，不在乎其原始傳輸格式）。
+  - 建立流程之交易邊界：`USAGE_FORM_POOL` 插入與 `USAGE_FORM_DRAFTING_DEPT` 批次插入需在**同一交易**內完成（建立失敗則兩者皆不落地），比照既有上傳流程之既有交易慣例。
+- **編輯**（`AC-N48`）：**擴大既有** `PATCH /admin/usage-forms/:formId/number`（`usage-forms.controller.ts:93-101`）**為** `PATCH /admin/usage-forms/:formId`（**移除 `/number` 尾段**），body 由 `{ formNumber }` 擴為 `{ formNumber?: string | null; draftingDeptCodes?: string[] }`（純 JSON body，非 multipart——編輯頁不含檔案）。
+  - **本端點目前唯一呼叫端為既有「編輯編號」modal**，該 modal 本身正是本次要被整頁化取代之對象（`AC-N41` 明訂 modal → 獨立路由）——**改動路徑無外部相容性代價**，可安全地擴大端點形狀而非新增第二條端點。
+  - `draftingDeptCodes` 之更新採 **delete-then-insert replace-set（單一交易）**（`data-model.md#usage-form-drafting-dept` 已定案，比照 F014 多值欄位之既有模式）；`formNumber` 之既有驗證鏈（長度、唯一性排除自身列、trim 收斂）**逐字不變**。
+  - `AC-N49`「六欄未變、Blob 未讀未寫」之副作用邊界對新增之 `draftingDeptCodes` 更新**同樣成立**——`USAGE_FORM_DRAFTING_DEPT` 為獨立關聯表，其 replace-set 與 `USAGE_FORM_POOL` 本體六欄（`blobPath`／`format`／`size`／`name`／`uploadedBy`／`uploadedAt`）之更新為**互不相涉**的兩張表，不需要額外設計保證此邊界（結構上不可能誤觸）。
+- **清單顯示**（`AC-N47`，制定部門欄）：`GET /admin/usage-forms` 之回應列 additive 新增 `draftingDeptCodes: string[]`（或已解析之組織名稱陣列，供前端直接渲染而不需二次查名稱）——比照 §10.12 之「後端列富化」既有模式（`hasOjt`／`secondaryChiefIds` 之批次 `In(formIds)` 查詢同一次取得，零額外往返）；名稱解析重用既有 `NameResolutionService`／`ORG_UNIT_READ_STORE`（`OrgDirectoryModule` 既有匯出），批次查詢避免 N+1。
+
+#### (c) `USAGE_FORM_DRAFTING_DEPT` migration（本輪唯一需 migration 者）
+
+**DDL 設計比照既有 `DOC_USING_DEPT`**（`backend/src/database/migrations/1722556800000-doc-org-multivalue.ts:44-57`，同構模式）：
+
+```ts
+// backend/src/database/migrations/1724112000000-usage-form-drafting-dept.ts（新增，示意）
+export class UsageFormDraftingDept1724112000000 implements MigrationInterface {
+  name = 'UsageFormDraftingDept1724112000000';
+
+  public async up(q: QueryRunner): Promise<void> {
+    await q.query(`
+      CREATE TABLE [USAGE_FORM_DRAFTING_DEPT] (
+        [id] uniqueidentifier NOT NULL CONSTRAINT [DF_USAGE_FORM_DRAFTING_DEPT_id] DEFAULT NEWSEQUENTIALID(),
+        [formId] uniqueidentifier NOT NULL,
+        [orgCode] varchar(10) NOT NULL,
+        CONSTRAINT [PK_USAGE_FORM_DRAFTING_DEPT] PRIMARY KEY ([id]),
+        CONSTRAINT [FK_USAGE_FORM_DRAFTING_DEPT_form] FOREIGN KEY ([formId])
+          REFERENCES [USAGE_FORM_POOL]([id]) ON DELETE CASCADE
+      )`);
+    await q.query(`CREATE INDEX [IX_USAGE_FORM_DRAFTING_DEPT_form] ON [USAGE_FORM_DRAFTING_DEPT] ([formId])`);
+    await q.query(`
+      CREATE UNIQUE INDEX [UQ_USAGE_FORM_DRAFTING_DEPT_form_org]
+        ON [USAGE_FORM_DRAFTING_DEPT] ([formId], [orgCode])`);
+  }
+
+  public async down(q: QueryRunner): Promise<void> {
+    await q.query(`DROP TABLE [USAGE_FORM_DRAFTING_DEPT]`);
+  }
+}
+```
+
+- **`orgCode varchar(10)`、預設（`_BIN`）collation，不覆寫**：🔴 **回應 lead 對 `OQ-D18-30` 同型 collation 教訓之明文要求**——`orgCode` 為**系統代碼**（5 碼前綴階層，`VW_DEPT_SQL.CODE` 之精確參照，見 [upstream-hr-source-contract.md](upstream-hr-source-contract.md) §3.5），**非使用者輸入之自由文字**，其比對語意為**精確相等**（複合唯一鍵 `(formId, orgCode)`），不存在「使用者輸入之大小寫變異」之需求。這與 `USAGE_FORM_POOL.formNumber`（`OQ-D18-30` 之真正教訓：使用者手動輸入、需不分大小寫唯一、故顯式覆寫為 `Chinese_Taiwan_Stroke_CI_AS`）**性質不同**——已查證 `data-model.md`（§`usage-form-entity`）之附註「全庫『唯一索引 × 字元欄』共 18 項，除 `formNumber` 外其餘 17 項皆為 `_BIN`（多數為 app 自產／上游同步之代碼與 enum，無使用者輸入之大小寫變異）」，`DOC_USING_DEPT.orgCode`（既有、已對真庫驗證安全運作）即為同型先例。**明確結論：本表 `orgCode` 沿用資料庫預設 collation（`_BIN`，精確比對），不覆寫。**
+- **時間戳命名**：延續既有 migration 檔名之時間戳序列（最新既有為 `1724025600000-usage-form-number-collation.ts`），本檔取 `1724112000000`（+1 天間隔，符合既有序列慣例）。
+- 🔴 **依既有教訓，migration 寫完必須對真 SOP DB 實跑**（`project-icsop-migration-deploy` 記憶、`OQ-D18-30` 前車之鑑）：`migration:run` 後以 `sys.foreign_keys`／`sys.indexes` 查詢驗證 FK 與兩個索引皆存在，並實際插入兩筆 `(formId, orgCode)` 相同組合驗證第二筆被拒（`UQ_..._form_org` 生效）——**單元測試全綠不能證明資料表存在**，此為本 repo 反覆驗證之硬規則，列入 §11.11 盲區表。
+- **`USAGE_FORM_DRAFTING_DEPT` TypeORM entity**：比照 `DOC_USING_DEPT` 之既有 entity 慣例（若該表本身以 raw SQL store 存取而非 TypeORM Repository，本表沿用同一存取模式，維持與 `USAGE_FORM_POOL` 既有存取層一致；具體 entity vs raw-query store 之選擇由 tdd-implementation 依循 `usage-forms.store.ts` 既有慣例決定，非本節鎖定範圍）。
+
+#### 附：#9 F017 OJT 圖示欄——無架構決策，純前端顯示
+
+[F017](features/F017-backend-document-list.md#ojt-icon-column-delta) `AC-N37`–`AC-N40`：資料已就緒（`documents.store.ts:135-142` 之 `hasOjt` 已於既有批次查詢取得），本項為**純前端渲染變更**（新增最左一欄，依 `hasOjt` 兩態渲染既有 icon 鍵 `file-check-2`／`file-x-2`），**不新增後端查詢、不新增 API 欄位、不影響任何本章決策**。列於此僅供 §11.0 對照表完整性；tdd-implementation 直接依 AC 逐字實作即可，無需等待本章任何裁決。
+
+---
+
+### 11.11 單元測試盲區
+
+> 沿用 §10.15 之判準：「在原理上測不到」指的是——不論怎麼寫 unit test，它在 bug 存在時仍會綠。**編號延續 §10.15／v1.6a 之全域序列（該表止於 #17）**，本節新增 #18–#25 共 8 項。
+
+#### 對 §10.15 #1 之現況說明（回應 lead「已掛帳待更正」之提報——已於前一輪更正，非本輪待辦）
+
+lead 之訊息要求「更正 `pdftotext` 檢查法已被實測證明無效且會假綠」。**已查證：此更正已於 v1.6b（2026-08-17，§10.10 修法三）完成，並非本輪待辦**——§10.15 #1 現行內容明文記載「`OLD>` 原『端到端 PDF 文字層抽取』已於 2026-08-17 實跑推翻……字形層完整性斷言（`pdf-glyph-integrity.spec.ts`，unit 層、既有 jest 可跑）」，且採用的把關手段**不是**「起 node 靜態伺服器讓瀏覽器開 PDF、逐字比對」（lead 訊息建議之替代方案），而是**更早偵測、成本更低**的字形層結構完整性斷言（`fontkit.create()` 解析 `/FontFile2`、斷言零拋錯，可在既有 jest 內執行、不需容器或瀏覽器）——此法已於 2026-08-17 對真實壞檔／好檔驗證有效（壞檔拋錯、好檔不拋）。**本節不重複修正，僅如實記錄現況供 lead 核對**；若 lead 認為瀏覽器逐字比對法仍有其獨立價值（例如驗證「瀏覽器實際渲染出的字形是否與設計稿一致」而非僅「字形資料結構完整」），可另案列入 §11.11 下方 #18（pdf.js 渲染側，性質不同——那是**瀏覽器渲染 PDF**、非**伺服器燒錄 PDF**，兩者的字型管線本就獨立，見 §11.1）。
+
+| # | 項目 | 盲區性質 | 為何 unit 測不到 | 必要之把關手段 |
+|---|---|---|---|---|
+| **18** | 🔴 **pdf.js `cMapUrl`／`standardFontDataUrl` 靜態資產未真正部署** | 🔴 **與 §10.10 CJK 燒錄字型缺檔同型——「資產是否真的進最終產物」原理上測不到** | vitest 以 jsdom＋mock `pdfjs-dist` 執行，從未真的下載 `/pdfjs/cmaps/*.bcmap`；即使複製腳本（`copy-pdfjs-assets`）被刪除或路徑寫錯，`getDocument({cMapUrl:'/pdfjs/cmaps/',...})` 呼叫本身在 unit 測試中恆為 mock、不會失敗 | ① 建置後靜態檢查（`ls frontend/dist/pdfjs/cmaps/*.bcmap` 或等效 CI 步驟，比照 §10.10 手段 a／b）；② 瀏覽器煙霧測試——開啟一份使用非嵌入式 CJK 字型製作之 ICSOP PDF（若既有測試素材皆為嵌入式字型，需額外準備一份非嵌入樣本），確認中文內容非空白／非 `notdef` 方塊；③ `frontend/package.json` 之 `postinstall`／`prebuild` hook 是否真的被執行（`npm ci` 之後手動確認 `public/pdfjs/` 目錄存在） |
+| **19** | pdf.js worker 部署（`pdf.worker.mjs` 之 hashed asset 是否可達） | 部分測得到 | Vite 建置期若 `?url` 匯入失敗會使**建置本身失敗**（非靜默）——這比 CJK 字型缺檔更容易被抓到；但**執行期** `GlobalWorkerOptions.workerSrc` 若被覆寫或環境變數誤設，unit（jsdom 無 Worker 支援，通常整個 mock 掉 pdfjs-dist）測不到 | 瀏覽器煙霧測試（開啟檢視器，檢查瀏覽器 DevTools Network 面板之 worker 請求為 200、Console 無 `Failed to fetch dynamically imported module` 或 CDN fallback 之相關錯誤） |
+| **20** | 🔴 **`AuditWriterRecorder`（附錄／使用表單）未轉送身分快照與 `watermarkSnapshot`**（§11.6 已查證之既有缺口） | 🔴 **原理上測不到——現有測試從未觸及真正的 adapter** | `AppendicesService`／`UsageFormsService` 之既有 unit 測試以**替身** `AuditRecorder`（非真正的 `AuditWriterRecorder`）驗證服務層送出的 event 物件是否含 `watermarkSnapshot`——替身直接回顯呼叫參數，測試看到的是「服務層有沒有算對」，從未經過 adapter 本身的轉送邏輯，故 adapter 遺漏欄位這件事對現有測試**完全不可見** | 新增 **`AuditWriterRecorder` 自身的 unit 測試**（`audit-writer-recorder.adapter.spec.ts`，兩檔皆已存在但需擴充斷言）：以完整含五個身分欄＋`watermarkSnapshot` 之 `AppendixAuditEvent`／`UsageFormAuditEvent` 呼叫 `record()`，斷言傳給 `AuditWriterService.recordAccess()` 的**完整參數物件**（而非僅 spy 呼叫次數）；容器內 int 測試另實跑一次「下載燒錄 PDF → 查 `AUDIT_LOG` 該列之 `employeeNo`／`watermarkSnapshot` 非空」 |
+| **21** | 🔴 **`WATERMARK_BURNER` 抽出重構之接線回歸**（token 改名、模組移動） | 🔴 **原理上測不到（DI 佈線錯誤本身）** | 若重構時遺漏更新任一消費模組（`AppendicesModule`／`UsageFormsModule`／`AttachmentsModule`）之 `imports`（仍 import 舊 `PublicModule` 或忘記 import 新 `WatermarkBurnerModule`），**純建構子單元測試完全測不到**——它們直接 `new XxxService(...)`，從不經過 Nest 容器解析，故「這個 token 在正式部署下解析不解析得出來」這件事對 unit 測試層不可見 | ① **啟動期 fail-fast 本身即是把關手段**（§11.5 已移除 `@Optional()`）——容器內以 `docker compose up` 或 `npm run start:prod` 實際啟動一次，觀察是否有 `UnknownDependenciesException`；② `AppModule`（或 e2e bootstrap 測試，若既有 int 測試套件已含「應用程式可成功啟動」之 smoke case）需在重構後至少跑過一次完整 `NestFactory.create()` |
+| **22** | 大頁數 PDF 之瀏覽器端記憶體峰值（§11.2） | 🔴 **測不到** | jsdom 無真實 `<canvas>` 點陣渲染、無真實記憶體壓力，`page.render()` 於 mock 環境下瞬間 resolve，不論頁數多寡皆不會反映真實記憶體佔用 | 容器外以真實瀏覽器開啟一份頁數偏多（如 20+ 頁）之 ICSOP PDF，透過 DevTools Performance／Memory 面板觀察 heap 峰值；驗證虛擬化渲染（§11.2「僅渲染可視範圍 ±1 頁」）確實限制了同時存在之 canvas 數量 |
+| **23** | HiDPI 縮放之實際清晰度（`devicePixelRatio` 感知算法，§11.2） | 🔴 **測不到（視覺品質、非邏輯正確性）** | jsdom 之 `window.devicePixelRatio` 恆為 `1`，`AC-N8`／`AC-N9` 之邏輯斷言（不含 `scale(`、渲染呼叫次數與參數）皆可通過，但「放大後文字是否真的不模糊」是視覺呈現，非純函式可驗 | 人工於高 DPR 螢幕（如 Retina／2x 顯示器）以瀏覽器實際放大檢視器至 200%，比對文字邊緣清晰度；此為一次性驗收，非迴歸測試 |
+| **24** | 前後端 `FIELD_MATRIX` 兩份鏡射之 OJT 列漂移 | **部分測得到，但無自動化交叉比對** | `backend/src/rbac/field-matrix.spec.ts` 與 `frontend/src/domain/field-matrix.test.ts` 各自獨立斷言各自檔案之期望值——若只改動其中一份（如僅改後端 `OJT_WRITABLE`、忘記同步前端），**兩邊測試各自對各自檔案仍為綠燈**，因為期望值本身就是照抄各自檔案寫的，不是跨檔比對 | 比照本 repo 既有「兩份逐字相同」慣例之機器可驗形式（`watermarkLines()`／`access-history-labels.ts` 之既有模式）：任一側之測試改為**以固定測試向量**斷言（如「角色×欄位全組合之期望值表」寫死於測試本身，兩邊測試各自比對同一份字面值），而非讓測試從被測檔案匯出後直接斷言自己——但即使如此仍需人工確認兩份測試檔的「固定測試向量」彼此一致；瀏覽器煙霧測試（Supervisor 帳號實際嘗試上傳 OJT）為最終把關 |
+| **25** | 🔴 **`GET /public/documents/:id/pdf` 之回應快取標頭**（新發現之風險，非既有已知缺口） | 部分測得到 | `watermark.controller.ts:60-71` 現行**未設定任何 `Cache-Control` 標頭**。此端點原僅代理未燒錄原始位元組（內容對所有使用者相同，快取與否無隱私疑慮）；`AC-N6` 之後其回應**含操作者個人身分之浮水印**，若被瀏覽器或中介代理（企業網路常見）依 HTTP 快取啟發式規則（無 `Cache-Control` 時，部分快取實作對 200 GET 回應仍可能快取）暫存，**下一位共用該快取節點的使用者可能看到別人的浮水印身分**——unit／vitest 測不到快取行為本身（需真實瀏覽器或代理層驗證），且此為**新增之隱私風險**（前提是回應真的被中介快取，屬機率性、非必然） | **建議本節連帶追加一項架構護欄**（非 AC 要求，但為防禦既有 `AC-N6` 精神之延伸）：`WatermarkController` 之 `:id/pdf`、`:id/download`、`:id/print` 三個既有燒錄端點與 §11.6 新增之四個後台端點，皆應設定 `Cache-Control: private, no-store`（`download`／`print` 為既有既有燒錄端點，此為既有缺口之連帶發現，非本輪新增行為，修正成本低、風險對稱，建議一併補上）；瀏覽器煙霧測試以 DevTools Network 面板確認回應標頭 |
+
+**本輪最擔心之三條（供 lead 優先關注）**：**#18**（pdf.js CJK 資源部署——與已修復之 §10.10 為同一種失敗模式，換了一個管線重演一次，風險評分最高，因為它是「已知模式的重演」而非新型態風險，最容易讓人掉以輕心）、**#20**（`AuditWriterRecorder` 身分快照遺漏——已查證為現行 main 之真實缺陷，即便不做本輪任何其他事，`AC-D5`／`AC-D14` 現在就是不成立的）、**#21**（`WATERMARK_BURNER` 抽出重構之接線回歸——本輪唯一觸及既有生產程式碼結構之重構，範圍雖小但四個模組同時改動，最容易漏一處）。
+
+---
+
+### 11.12 分線與合併順序
+
+| Lane | 項次 | 主要檔案 | 阻塞於 |
+|---|---|---|---|
+| **M0 · `WATERMARK_BURNER` 抽出** | B5 | `public/watermark-burner.service.ts`（新）、`public/watermark-burner.module.ts`（新）、`public/watermark.service.ts`（改為委派）、`public.module.ts`、`appendices.module.ts`、`usage-forms.module.ts` | 無（純重構，先行以降低後續線之相依複雜度） |
+| **M1 · 後台燒錄＋稽核修正** | B6、B7 | `attachments.{module,service,controller}.ts`、`appendices.service.ts`（`downloadFromPool`）、`usage-forms.service.ts`（`downloadFromPool`／`downloadFormRaw`）、兩份 `audit-writer-recorder.adapter.ts`、`appendices.store.ts`／`usage-forms.store.ts`（event 型別 additive） | **M0** |
+| **M2 · OJT 破例** | B8 | `rbac/field-matrix.ts`、`domain/field-matrix.ts`（前端鏡射）、`attachments.service.ts`（稽核分支，與 M1 同檔）、`DocumentReadonlyPage.tsx` | **M0**（`buildSnapshot` 供稽核身分）、**M1**（同檔 `attachments.service.ts`，建議與 M1 合併為同一次改動而非兩次分別碰同一檔案） |
+| **M3 · 檢視器 canvas 化** | B1–B4 | `PdfCanvasViewer.tsx`（新）、`PublicViewerPage.tsx`、`watermark.controller.ts`（`:id/pdf`）、`package.json`（新增 `pdfjs-dist`）、`scripts/copy-pdfjs-assets.*`（新） | **M0**（`:id/pdf` 端點內部呼叫鏈不變但共用同一份燒錄協作點，建議 M0 先行以減少 merge 衝突，非強制技術阻塞） |
+| **M4 · 前台字級＋浮水印簡稱** | B9 | `PublicListPage.tsx`／`PublicDocumentDetailPage.tsx`／`PublicViewerPage.tsx`（字級）、`org-directory/company-name.ts`（簡稱） | 無（`PublicViewerPage.tsx` 與 M3 同檔——見下方衝突面） |
+| **M5 · 使用表單整頁化** | B10 | `usage-forms.{controller,service,module}.ts`、`entities/usage-form-drafting-dept.entity.ts`（新）＋ **migration**、`UsageFormManagementPage.tsx` → 拆分為 `UsageFormCreatePage.tsx`／`UsageFormEditPage.tsx`（新）、路由設定 | 無（完全 disjoint，`usage-forms.service.ts` 與 M1 同檔——見下方衝突面） |
+| **M6 · F017 OJT 圖示欄** | 附 | `DocumentListPage.tsx` | 無（完全 disjoint） |
+
+#### 跨線共用檔（衝突面）
+
+| 檔案 | 觸及之線 | 處置 |
+|---|---|---|
+| `usage-forms.service.ts` | M1（後台 `downloadFromPool`／`downloadFormRaw` 燒錄）× M5（整頁化之建立/編輯流程、`draftingDeptCodes`） | 不同區域（下載方法 vs 建立/編輯方法）；**序列合併：M1 先、M5 後**（M1 改動較小且是 M0 之直接延伸） |
+| `attachments.service.ts` | M1（後台 `downloadAttachmentRaw` 燒錄＋稽核注入）× M2（OJT 上傳稽核分支，同一服務、同一建構子新增之相依） | **強烈建議合併為單次改動**（同一檔案、同一組新增建構子參數，分開改會製造不必要的 rebase） |
+| `PublicViewerPage.tsx` | M3（canvas 化，改寫預覽區塊與工具列縮放邏輯）× M4（字級 class） | 不同區域（預覽容器結構 vs 文字 class）；**序列合併：M4 先、M3 後**（M4 改動小且風險低，先落地減少 M3 大改動時的 rebase 面） |
+| `public.module.ts` | M0（imports／providers 調整）× M3（`:id/pdf` handler 內部邏輯，不改 module 接線） | 無實質衝突（M3 不改 providers），可平行 |
+
+#### 合併順序
+
+```mermaid
+graph LR
+  M0["M0 WATERMARK_BURNER 抽出<br/>（重構先行）"] --> M1["M1 後台燒錄＋稽核修正"]
+  M1 --> M2["M2 OJT 破例<br/>（同檔 attachments.service.ts）"]
+  M0 -.->|"降低 rebase 面"| M3["M3 檢視器 canvas 化"]
+  M4["M4 字級＋公司簡稱<br/>（disjoint）"] --> M3
+  M0 --> M5["M5 使用表單整頁化<br/>＋ migration"]
+  M1 -.->|"同檔 usage-forms.service.ts"| M5
+  M6["M6 OJT 圖示欄<br/>（完全 disjoint）"]
+  style M0 fill:#fef3c7,stroke:#d97706
+  style M1 fill:#fee2e2,stroke:#dc2626
+  style M6 fill:#dcfce7,stroke:#16a34a
+```
+
+**`M0 → M1 → M2`；`M4 → M3`；`M0 → M1 -.-> M5`；`M6` 隨時可插入。**
+
+#### 並行硬限制（沿用既有教訓，本輪約束環為簡化版）
+
+- **本輪約束環僅 backend jest ＋ frontend vitest**（無 Playwright／Stryker／dep-cruiser）——`test/int/*.itest.ts` 仍為既有 int 套件之延伸（非新增機制），對真 SOP DB 之測試（M5 之 migration 實跑、M1／M2 之稽核落列驗證）**必須序列化**，不同線之 int 測試不得同時打同一顆 DB。
+- 🔴 **backend jest 與 frontend vitest 不得併跑**（既有實測：隔離 5.8s vs 併跑 91s/169s，併跑曾造成 2 支假紅）——各線之 CI／本地驗證步驟務必分開執行兩個測試指令，不得用單一指令並發觸發兩者。
+- **M0（`WATERMARK_BURNER` 抽出）建議由單一線獨立完成並先行合併**——它是後續 M1／M2／M3／M5 之共同地基（M3／M5 為弱相依，M1／M2 為強相依），且**觸及四個既有模組之接線**，讓多線同時改動會使 DI 佈線的 rebase 衝突機率大幅升高，與 §10.11 M0（CJK 字型）／L1（PageHeader 型別地基）之既有經驗一致——地基類變更應獨佔窗口、優先合併。
+
+---
+
+### 11.13 風險、須退回 spec-writer 之爭議與新增 OQ
+
+#### 本輪未發現任何 AC 技術上不可能達成或內部矛盾之情形
+
+逐條檢視 `AC-N1`～`AC-N70` 後，**本章之全部裁量點皆屬「AC 已鎖行為、實作手法留白」之正常授權範圍**（如：使用表單制定部門之 multipart 攜帶格式、`PATCH` 端點是否擴大路徑、`USAGE_FORM_DRAFTING_DEPT` 之 collation 選擇），**無一項需要推翻或重新詮釋既有 AC**，故**本輪不新增任何 `OQ-D9-35` 起之編號**。
+
+#### 新發現、非本輪裁決範圍但影響本輪能否兌現 AC 之既有缺陷（不需人類裁決，屬技術債務、已於 §11.6／§11.11 #20 明文排定修正）
+
+🔴 **`AuditWriterRecorder`（附錄／使用表單，2 個檔案）未轉送身分快照與 `watermarkSnapshot` 予 `AuditWriter.recordAccess()`**——此為現行 main 之真實缺陷（非本輪引入），已直接違反**既有已核准**之 `AC-D5`（[F039](features/F039-appendix-management.md)）／`AC-D14`（[F018](features/F018-usage-form-management.md#front-burn-delta)）。**不需 OQ**：這不是一個需要人類在多個方案間抉擇的政策問題——`AC-D5`／`AC-D14` 之文字已明確要求 `watermarkSnapshot` 落值正確，唯一動作是讓程式碼符合既有已核准之 AC。已於 §11.6 定案修正方式（型別 additive 擴充＋兩處 adapter 補轉送），**本輪必須一併修正**，理由：`AC-N17`／`AC-N51`（後台燒錄下載之稽核）明文要求同一組欄位正確落值，若不修，後台新增的四個燒錄稽核路徑會重蹈同一個坑，且前台既有路徑之缺陷也一併償還（非本輪之額外授權範圍擴張，而是同一段程式碼的必要前提）。
+
+#### 供 lead 參考之非阻塞觀察（不要求裁決，記入 [§9](#9-open-decisions) 供日後參考）
+
+| 觀察 | 影響 | 建議 |
+|---|---|---|
+| `EXPORT_ROW_LIMIT`／燒錄併發閘等既有 NFR 參數，在後台燒錄面擴大四倍消費端後是否仍足夠 | §11.7 已評估為低頻操作、既有閘無需調整 | 待正式環境有實際使用量後校準，非本輪 Blocking |
+| `/pdf`／`:id/download`／`:id/print` 三端點之 `Cache-Control` 缺口（§11.11 #25） | 隱私風險（機率性，需中介快取實際發生） | 建議一併補上 `Cache-Control: private, no-store`，但因非 AC 明文要求、且風險發生條件（存在會快取此類回應的中介節點）在本專案之部署拓撲下未經證實存在，**不列為本輪 Blocking**，留待 tdd-implementation 裁量是否於本輪順手補上 |
+| pdf.js 若日後需支援超大頁數（如百頁以上）SOP 文件，§11.2 之視窗化渲染門檻可能需要調整為更積極之虛擬滾動（如 `react-window` 等） | 目前假設 SOP 文件頁數個位數~十位數 | 待實際文件頁數分布資料，非本輪 Blocking |
+
+---
 
