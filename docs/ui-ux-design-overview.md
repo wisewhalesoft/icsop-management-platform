@@ -26,7 +26,7 @@ covers: F001–F041 (E01–E10 ＋ F040／F041 橫切)
 > ④ 🔴 **後台四類下載一律燒錄＋一律寫稽核、無例外角色**（`AC-N14`～`AC-N18`；`OQ-FM-01`／`OQ-D18-01` 正式失效）⇒ **後台各檔案列亦渲染 `data-wm-note`**（`AC-N20`）：`13`／`15`／`16`／`19`／`24`。
 > ⑤ **前台字級整體上移一階**（`AC-N59`～`AC-N62`；僅 `03`／`04`／`05` 三頁）：`text-sm`→`text-base`、`text-xs`→`text-sm`；🔒 **後台與 `00` 之字級 tokens 表逐字不動**（前後台字級自此永久分歧，`00` 已加註說明）。
 > ⑥ 🔴 **OJT 簽到表破例**（`AC-N22`～`AC-N35`）：主管／部門窗口對 **OJT 一欄**可上傳／覆蓋，**其餘 19 欄與另兩類附件＋附錄仍唯讀**（`AC-N24`／`AC-N25`＝本輪最重要之回歸鎖定）；系統管理員維持唯讀（`AC-N26`）。落點＝`16`（主入口）＋`15`（一致化）。
-> ⑦ **使用表單新增／編輯整頁化**（`AC-N41`～`AC-N49`）：**新增 2 檔** `19a-usage-form-create.html`／`19b-usage-form-edit.html`（命名沿用 `17a-*` 之前例），`19` 之兩個 modal 移除；清單新增「制定部門」欄（`AC-N47`）。**合計 27 個 prototype 檔**。
+> ⑦ **使用表單新增／編輯整頁化**（`AC-N41`～`AC-N49`）：**新增 2 檔** `19a-usage-form-create.html`／`19b-usage-form-edit.html`（命名沿用 `17a-*` 之前例），`19` 之兩個 modal 移除；清單新增「制定部門」欄（`AC-N47`）。**合計 28 個 prototype 檔**（📌 更正：`17a` 於 2026-08-18 加入時未計入，故本輪一併校正）。
 > ⑧ **`13` 最左新增「OJT」圖示欄**（`AC-N37`～`AC-N40`），清單 14 欄 → **15 欄**。
 > ⑨ **`17` 新增第四種類型篩選值「上傳」**（`AC-N53`／`AC-N69`／`AC-N70`）。
 > **本 agent 之裁量、逐字文案定稿與新提報之 `OQ-D9-35` 見附錄 A.6。**
@@ -197,7 +197,7 @@ prototypes/
 └── 24-appendix-management.html   # F039 附錄池管理（多檔上傳/覆蓋警示/移除保護/關聯文件展開）— 排序於 14/15 排定
 ```
 
-合計 **27 個 prototype 檔（`00`–`24` ＋ `17a` ＋ `19a`／`19b`）**。<br>📌 `17a-access-history-export-limit-hint.html` 與 `19a`／`19b` 為既有主頁之衍生頁，沿用「主編號＋字母後綴」之既有命名慣例。
+合計 **28 個 prototype 檔（`00`–`24` 共 25 檔 ＋ `17a` ＋ `19a` ＋ `19b`）**。📌 **計數更正**：`17a-access-history-export-limit-hint.html` 於 2026-08-18 加入時未更新本節計數（當時仍寫 25），本輪一併校正。<br>📌 `17a-access-history-export-limit-hint.html` 與 `19a`／`19b` 為既有主頁之衍生頁，沿用「主編號＋字母後綴」之既有命名慣例。
 
 ---
 
@@ -388,7 +388,7 @@ prototype 產出後，逐檔以下列方式驗證：
 10. **循環子分類驗證（F040 新增）** — (a) `10`：同名三列顯示為「銷售及收款循環（消金）」「（企金）」「（子公司）」、無子分類列不含括號；搜尋「企金」命中顯示名稱；建立同名同子分類 → `LIFECYCLE_DUPLICATE`、對無子分類之名稱補子分類（或反向）→ `LIFECYCLE_SUBCATEGORY_CONFLICT`、名稱留白 → `LIFECYCLE_NAME_REQUIRED` **優先於**兩者；編輯維持原值不報衝突；停用列仍參與比對。(b) `14`／`15`：選「銷售及收款循環」→ 出現子分類層（三選項、值為 `lc1`／`lc10`／`lc11`）、選「採購及付款循環」→ **不出現**子分類層、清空名稱 → 收起且欄位重新上鎖；未選子分類送出 → `LIFECYCLE_SUBCATEGORY_REQUIRED`；編號前綴恆為 `ICSOP-SRC-`（消金／企金／子公司相同）。(c) `13`／`03`／`23`：下拉 `option.value` 為 `lifecycleId`（非名稱字串）、選其一之結果不含同名另一子分類。(d) `22`：`?lifecycleId=lc10` 開啟「（企金）」而非「（消金）」。(e) `04`／`16`／`11`／`12`：循環別／標題字串與 `13` 完全一致。**本輪已於 headless Chromium（Playwright）實跑 51 條斷言全數通過、11 檔 0 console error。**
 11. **使用者子分類驗證（F041，🟢 2026-08-11 定稿後複驗）** — (a) `08`：一般使用者列之「角色」欄同時顯示角色徽章與 `業務`／`其他` 徽章，**主管列不顯示子分類徽章**（即使其欄位值為 `business`，INV-2）；指派角色 modal 選「一般使用者」→ 子分類選擇器出現且預選目前值、選項標籤逐字為 `業務`／`其他`，其餘 **4 種角色皆不呈現**該選擇器；主管（隱含 `business`）改回一般使用者 → **保留值復活並預選**（AC-36 定案行為）；儲存後 `role`＋`subtype` 皆持久化；新建帳號之 `subtype` 預設 `other`。(b) `03`：**預設視角＝其他 → 共 13 筆、置頂 5／其餘 8（與 delta 導入前逐欄相同）且頂部說明句＝既有文案逐字未改**；切「業務」→ 共 5 筆、**全部落在置頂區、其餘區為空**、「另有 3 筆…已由後端隱藏」**數字不變**、使用部門下拉**選項數不變**、**頂部說明句＝ `SCOPE_NOTICE_BUSINESS` 逐字**；業務＋範圍外部門篩選 → 0 筆、顯示 `查無符合結果`（逐字）**且說明句仍為業務專屬文案**（空結果不再分支）；切「孤兒帳號」→ 0 筆、同一空狀態文案、**同一業務說明句**（不因帳號異常換句）。純函式 11 種輸入之 `normalizeUserSubtype`、5 種輸入之 `userSubtypeLabel`、5 角色之 `isSubtypeApplicable`、AC-05～AC-13 之可見性判定 7 例、以及 **`isUsingDeptMatched` 與置頂判定 `inScope` 逐案相等**（AC-10／INV-4）；1440／375 兩寬度無水平溢出。(c) `18`：`thead` 仍為 1+5 欄、`FUNC_ROWS` 13 列 × 5 值、`FIELD_ROWS` 20 列 × 5 值、每列渲染 6 格（**無第 6 欄**）、註記橫幅已翻為已定案。(d) `04`：拒絕面板可開啟、覆蓋層 `rgb(255,255,255)` **不透明**、**定稿為 404 `DOCUMENT_NOT_FOUND` 單案**、**面板全文不含任何 `403`／`PERMISSION_DENIED` 字樣**（403 一案已依裁決移除，歷史紀錄僅留於檔頭註解與附錄 A.3）、面板文字**不含**文件編號／書名／組織名稱、明列「不寫成功稽核亦不寫拒絕事件」。**定稿後已於 headless Chromium（Playwright）實跑 38 條斷言全數通過、4 檔 0 console error**（草案階段另跑過 46 條，兩案並陳相關斷言已隨裁決汰換）。
 
-12. **D9 delta 驗證（2026-08-20 新增；已於 headless Chromium／Playwright 實跑 **124 條斷言全數通過**、27 檔 0 console error）** — (a) `05`：`querySelector('iframe, embed, object') === null`、`canvas[data-pdf-canvas]` 存在、`[data-testid="watermark-overlay"]` 與 `[data-testid="watermark-text"]` 皆為 0、`.wm-layer` 為 0、下載／列印鈕仍在、`[data-testid="watermark-format"]` 存在且標籤逐字、`#page.style.transform` 全程不含 `scale(`、`zoom(0.1)` 使渲染呼叫 +1 且最後一次參數為 `1.1`、`WM_COLOR==="#334155"`／`WM_OPACITY===0.30`、`toDisplayLines()` 恰 3 行、浮水印公司欄為簡稱、`goPage(2)` 生效。(b) 前台字級：`03`／`04`／`05` 三檔 rendered DOM 之 `text-xs` class **計數為 0**、無 `text-[Npx]` 任意值；`#scopeNotice` 含 `text-sm`、清單卡「內容摘要」含 `text-base`、`04` 之 `data-wm-note` 含 `text-sm`。(c) `13`：表頭 15 個、第 1 個逐字 `OJT`、其後 14 欄順序逐字比對通過、每列 `data-ojt-cell` ＋ `data-has-ojt` 僅 `"true"|"false"`、三種輸入兩種視覺（含一列刻意缺 `ojt` 鍵之 `undefined` 路徑）、OJT 三值篩選一字未動。(d) `16`：主管／部門窗口 → 可寫項**恰 1 個**（OJT）、其餘 6 列皆帶 `data-readonly-attachment`、唯讀句為改寫句；系統管理員 → 上傳入口 0、全列唯讀、**原唯讀句逐字保留**。(e) `15`：主管可見 OJT 取代鈕，但 ICSOP PDF 取代／`.xls` 上傳／儲存鈕**仍隱藏**。(f) `19`：表頭 8 欄逐字、0 筆 `制定部門` 顯示 `—`、多筆以 `、` 分隔、每列 `data-wm-note`、SysAdmin 之「編輯編號」`queryByLabelText === null`。(g) `19a`／`19b`：`[role="dialog"]` 為 `null`、頁標題與三區塊標題逐字、topbar 有「儲存」「取消」、重複／超長編號之錯誤訊息逐字、唯一性排除自身列、清空回 `已清除表單編號。`。(h) `17`：類型下拉 5 個 option 逐字、選「上傳」只回上傳列、選「文件」排除上傳列、上傳列浮水印快照留空、公司欄仍全稱而浮水印快照為簡稱。(i) `22`／`23`：疊加層仍存在、`opacity` 為 `0.3`、色值為 `rgb(51, 65, 85)`。(j) `24`：每列 `data-wm-note`。(k) `05` RWD：1440／768／375／360 四寬度 `documentElement` 水平溢出皆為 **0**、`#page` 左緣 ≥ 0（修正 flex 置中在子元素較寬時把左緣推成負值之缺陷）。
+12. **D9 delta 驗證（2026-08-20 新增；已於 headless Chromium／Playwright 實跑 **124 條斷言全數通過**、28 檔 0 console error；🔴 **第三輪另補跑 39 條**（`AC-N74`／`AC-N75`／`AC-N76`／`AC-N25` 第三輪／`AC-N48` ① 改名 ＋ 逐字回歸），亦全數通過）** — (a) `05`：`querySelector('iframe, embed, object') === null`、`canvas[data-pdf-canvas]` 存在、`[data-testid="watermark-overlay"]` 與 `[data-testid="watermark-text"]` 皆為 0、`.wm-layer` 為 0、下載／列印鈕仍在、`[data-testid="watermark-format"]` 存在且標籤逐字、`#page.style.transform` 全程不含 `scale(`、`zoom(0.1)` 使渲染呼叫 +1 且最後一次參數為 `1.1`、`WM_COLOR==="#334155"`／`WM_OPACITY===0.30`、`toDisplayLines()` 恰 3 行、浮水印公司欄為簡稱、`goPage(2)` 生效。(b) 前台字級：`03`／`04`／`05` 三檔 rendered DOM 之 `text-xs` class **計數為 0**、無 `text-[Npx]` 任意值；`#scopeNotice` 含 `text-sm`、清單卡「內容摘要」含 `text-base`、`04` 之 `data-wm-note` 含 `text-sm`。(c) `13`：表頭 15 個、第 1 個逐字 `OJT`、其後 14 欄順序逐字比對通過、每列 `data-ojt-cell` ＋ `data-has-ojt` 僅 `"true"|"false"`、三種輸入兩種視覺（含一列刻意缺 `ojt` 鍵之 `undefined` 路徑）、OJT 三值篩選一字未動。(d) `16`：主管／部門窗口 → 可寫項**恰 1 個**（OJT）、其餘 6 列皆帶 `data-readonly-attachment`、唯讀句為改寫句；系統管理員 → 上傳入口 0、全列唯讀、**原唯讀句逐字保留**。(e) `15`（🔴 **2026-08-20 第三輪就地改寫斷言形狀**）：以 **class 指派**斷言而**非版面**——`[data-ojt-upload]` 之 class 含 `ojt-write`、不含 `write-only` 且**恰 1 個**；ICSOP PDF 取代鈕與 `.xls` 上傳鈕之 class 含 `write-only`、不含 `ojt-write`；`querySelectorAll('.write-only.ojt-write').length === 0`（兩組交集為空）；兩則唯讀提示常數與 `16` **逐字相同**（`AC-N76` ③）。<br>⚠ **被撤回之錯誤建議（如實記錄）**：本 agent 原建議以 `offsetParent === null` 斷言「PDF 取代鈕對主管不可見」——**該形狀在 vitest／jsdom 下恆真（假綠）**，jsdom 不做版面計算。經 lead 指出後已全面改為 class 指派 ＋ `data-*` 掛鉤，並就地補入 `AC-N25` 第三輪擴充／`AC-N76`。**`offsetParent` 僅可用於 prototype 在真實瀏覽器中之自檢，不得進入約束環。**(f) `19`：表頭 8 欄逐字、0 筆 `制定部門` 顯示 `—`、多筆以 `、` 分隔、每列 `data-wm-note`、SysAdmin 之列內動作 `queryByLabelText('編輯') === null`（🔴 第三輪改名後之新標籤）。(g) `19a`／`19b`：`[role="dialog"]` 為 `null`、頁標題與三區塊標題逐字、topbar 有「儲存」「取消」、重複／超長編號之錯誤訊息逐字、唯一性排除自身列、清空回 `已清除表單編號。`。(h) `17`：類型下拉 5 個 option 逐字、選「上傳」只回上傳列、選「文件」排除上傳列、上傳列浮水印快照留空、公司欄仍全稱而浮水印快照為簡稱。(i) `22`／`23`：疊加層仍存在、`opacity` 為 `0.3`、色值為 `rgb(51, 65, 85)`。(j) `24`：每列 `data-wm-note`。(k) `05` RWD：1440／768／375／360 四寬度 `documentElement` 水平溢出皆為 **0**、`#page` 左緣 ≥ 0（修正 flex 置中在子元素較寬時把左緣推成負值之缺陷）。
 
 ---
 
@@ -585,11 +585,11 @@ prototype 產出後，逐檔以下列方式驗證：
 | 決定 | 內容 | 理由 |
 |---|---|---|
 | **形式＝小 modal**（非列內 inline） | `id="editNumberModal"`，沿用本頁 `upModal`／`confirmModal` 之既有 modal 語彙 | ① `AC-D16` 只給**單一** DOM id `editNumberModal`（單數），inline 需每列一份或共用一份，modal 天然對應；② 介面必含 label＋輸入框＋`enNumberErr` 錯誤區＋強制說明句 `僅更新編號，不會變更表單檔案。`＋`儲存`／`取消`，塞進 `min-w-[980px]` 表格首欄會破壞列高與橫捲；③ 不新增互動語彙。 |
-| **列內動作＝icon＋可見文字按鈕** | 「操作」欄內 `<i data-lucide="hash">` ＋可見文字 `編輯編號`；`aria-label="編輯編號"`、`title="編輯編號"`、`data-edit-number="{formId}"` | 對照表寫「無障礙名稱／可見文字＝`編輯編號`」，兩種讀法都成立才安全；小型帶邊框文字按鈕沿用 `13` `linkCell` 之既有 `text-[11px]` 樣式。表格 `min-w` 880 → **980**。 |
-| **無寫入權角色＝自 DOM 移除**（非 `.write-only` CSS 隱藏） | `canWrite()` 判斷後才輸出該按鈕；`setRole()` 內補 `renderTable()` 使切角色即時反映 | `AC-D17` 之驗證為 `queryByLabelText('編輯編號') === null`，而 Testing Library 的 `*ByLabelText` **找得到** `display:none` 的元素 ⇒ 沿用本頁既有 `.write-only`（CSS 隱藏）會使該斷言失敗。本頁其餘寫入動作維持 `.write-only` 不變。 |
+| **列內動作＝icon＋可見文字按鈕**<br>🔴 **可見文字／`aria-label` 已於 2026-08-20 第三輪改為逐字 `編輯`**（`AC-N48` ① 之明文例外）；下列為改名前之原始紀錄，保留供追溯 | 「操作」欄內 `<i data-lucide="hash">` ＋可見文字 `編輯編號`；`aria-label="編輯編號"`、`title="編輯編號"`、`data-edit-number="{formId}"` | 對照表寫「無障礙名稱／可見文字＝`編輯編號`」，兩種讀法都成立才安全；小型帶邊框文字按鈕沿用 `13` `linkCell` 之既有 `text-[11px]` 樣式。表格 `min-w` 880 → **980**。 |
+| **無寫入權角色＝自 DOM 移除**（非 `.write-only` CSS 隱藏） | `canWrite()` 判斷後才輸出該按鈕；`setRole()` 內補 `renderTable()` 使切角色即時反映 | 🔴 **現行可執行斷言字面＝`queryByLabelText('編輯') === null`**（第三輪改名後）；📝 下列為改名前之原始紀錄、**不得用於斷言**：`AC-D17` 之驗證為 `queryByLabelText('編輯編號') === null`，而 Testing Library 的 `*ByLabelText` **找得到** `display:none` 的元素 ⇒ 沿用本頁既有 `.write-only`（CSS 隱藏）會使該斷言失敗。本頁其餘寫入動作維持 `.write-only` 不變。 |
 | **modal 內顯示被編輯之表單名稱** | `id="enFormName"`，只回顯 `f.name` | 純資料回顯、非新增文案；不指明編輯對象時使用者無從確認選到哪一列。 |
 
-驗證（jsdom 實跑，`19` 0 console error）：`AC-D16` 8 列各一動作＋`data-edit-number`、modal 逐字文案全數命中、`取消` 不變更；`AC-D17` 四種無寫入權角色 `queryByLabelText('編輯編號')` 皆為 0；`AC-D3`／`AC-D19` `null`→`FM-002`→清空→`—`＋`title` 往返成立；`AC-D18` `fm-001` 撞 `FM-001` 回重複訊息且該列不變、自身列同值不衝突、101 字元回超長訊息；`AC-D20` 對被 2 份文件引用之 `uf1` 編輯後 `confirmModal` 未開（覆蓋共用警示未觸發）。
+驗證（jsdom 實跑，`19` 0 console error）：`AC-D16` 8 列各一動作＋`data-edit-number`、modal 逐字文案全數命中、`取消` 不變更；`AC-D17` 四種無寫入權角色 `queryByLabelText(...)` 皆為 0（📝 該次實跑所用之字面為當時的 `'編輯編號'`；**現行字面為 `'編輯'`**，見 §A.6.9）；`AC-D3`／`AC-D19` `null`→`FM-002`→清空→`—`＋`title` 往返成立；`AC-D18` `fm-001` 撞 `FM-001` 回重複訊息且該列不變、自身列同值不衝突、101 字元回超長訊息；`AC-D20` 對被 2 份文件引用之 `uf1` 編輯後 `confirmModal` 未開（覆蓋共用警示未觸發）。
 
 `04-public-document-detail.html` 之使用表單清單於 A.4 已涵蓋（`進件申請書.xlsx`／`支票託收登記表.xlsx` 顯示 `此格式不支援浮水印`、`對保通知書.pdf` 顯示 `檢視/下載將燒錄浮水印`），本輪**核對後無需改動**。
 
@@ -614,7 +614,7 @@ prototype 產出後，逐檔以下列方式驗證：
 | `15-document-edit.html` | 三個附件區塊各加 `data-wm-note`；OJT「取代」鈕改用新的 `.ojt-write` class（主管／部門窗口／ICSOP 管理員可見）；🔒 其餘寫入控制項維持 `.write-only`（僅 ICSOP 管理員）；唯讀提示改為角色相依。 |
 | `16-document-readonly.html` | 🔴 **本輪 OJT 破例之主入口**：OJT 列可上傳／覆蓋（`AC-N28`／`AC-N29`），其餘每列掛「唯讀」鎖頭徽章、欄位區加 19 欄唯讀明示（`AC-N24`／`AC-N25`）；唯讀提示改為角色相依（sysadmin 保留原句）；每列 `data-wm-note`；附錄下載 toast 由「不燒錄、不寫稽核」改為「燒錄＋寫稽核」。 |
 | `17-access-history.html` | 類型篩選新增第四值「上傳」＋兩筆 `ATTACHMENT_UPLOAD` 示範列（`AC-N69`）；`ACT_STYLE` 新增逐字標籤「附件上傳」；浮水印快照區依 `hasWm(r)` 分支留空（`AC-N53`）；`wm()` 之公司欄改簡稱、🔒 表格「公司」欄仍全稱（`AC-N12` vs `AC-N13` ③）。 |
-| `19-usage-form-management.html` | topbar「上傳表單」→「**新增表單**」導向 `19a`；列內「編輯編號」導向 `19b`；`upModal`／`editNumberModal` 整段移除；新增「制定部門」欄（8 欄，`AC-N47`）；每列 `data-wm-note`；下載 toast 改為「燒錄＋寫稽核」。 |
+| `19-usage-form-management.html` | topbar「上傳表單」→「**新增表單**」導向 `19a`；列內動作（🔴 第三輪改名為逐字「**編輯**」）導向 `19b`；`upModal`／`editNumberModal` 整段移除；新增「制定部門」欄（8 欄，`AC-N47`）；每列 `data-wm-note`；下載 toast 改為「燒錄＋寫稽核」。 |
 | 🆕 `19a-usage-form-create.html` | 新增使用表單獨立整頁（三區塊、動作鈕在 topbar、單一動作一次送出、編號驗證逐字沿用）。 |
 | 🆕 `19b-usage-form-edit.html` | 編輯使用表單獨立整頁（範圍＝表單編號＋制定部門；檔案與名稱唯讀；說明句改為「僅更新表單資訊，不會變更表單檔案。」）。 |
 | `22-lifecycle-tree-preview.html` | 🔒 疊加層**保留**（`AC-N66`）＋色值改 `#334155` @ `0.30` ＋ 公司名稱改簡稱。 |
@@ -685,9 +685,43 @@ prototype 產出後，逐檔以下列方式驗證：
 | 2 | **`17-access-history.html` 不在 lead 指派清單，但 `AC-N69` 需要 UI 載體** | 已改（新增「上傳」類型值＋兩筆示範列＋標籤＋快照留空）。同時處理 `AC-N12` vs `AC-N13` ③ 之**刻意分歧**：浮水印快照用簡稱、表格「公司」欄用全稱。 |
 | 3 | **`00-design-system.html` 之浮水印示範不在 `AC-N2` 表列** | 已一併改為 `#334155` @ `0.30`。理由：`00` 是設計系統的**文件**，留著 `#64748B` @ `0.12` 會使它與全部四個實際載體矛盾，且它本身不是行為載體、無回歸風險。若 lead 認為應維持不動，回退成本為 3 行。 |
 | 4 | **`19b` 不再有容器 DOM id `editNumberModal`** | `AC-N48` ② 明訂「其 **modal 形式**部分由本頁取代」；一個整頁不應保留名為 `...Modal` 的容器 id。欄位層 id（`enNumber`／`enNumberErr`／`enFormName`）**逐字保留**。若 test-generator 仍依 `AC-D16` 斷言容器 id，請以 `AC-N48` ② 為準。 |
-| 5 | **列內動作仍逐字為「編輯編號」，但導向的頁面叫「編輯使用表單」且可改制定部門** | 依 `AC-N48` ①「全部逐字文案沿用、不另造」與「本 delta 唯一改動之逐字文案＝說明句」執行，**未自行改名**。惟此處存在輕微語意落差，若 lead 願意再開一次文案裁決，建議改為「編輯」或「編輯表單資訊」。 |
+| 5 | ✅ **已於 2026-08-20 第三輪由 lead 裁決**：列內動作之可見文字與無障礙名稱改為逐字 **`編輯`** | 原提報＝標籤停在「編輯編號」名不副實（導向之頁面叫「編輯使用表單」且範圍已含制定部門）。lead 裁決改名並就地修訂 `AC-N48` ①，列為「逐字沿用」原則之**明文例外**；原值 `編輯編號` 保留供追溯。🔒 其餘逐字文案（兩則錯誤訊息、`enNumber`／`enNumberErr`／`enFormName`、`data-edit-number`、icon 鍵 `hash`）**一格未動**，已逐條斷言回歸。 |
 | 6 | **`16` 之 OJT 上傳入口對 ICSOPAdmin 亦顯示** | `F026` 矩陣中 `OJT 簽到表 × ICSOPAdmin` 本即「可寫」。若只對主管／部門窗口顯示，會出現「權限較大的角色看到較少控制項」之視覺矛盾。上傳成功 toast 已如實區分**寫稽核（主管／窗口）vs 不寫稽核（ICSOPAdmin）**，正是 `AC-N31`／`AC-N32` 之不對稱在原型上的可操作載體。 |
 | 7 | **`13`／`19`／`24` 之下載 toast 文案** | 由「不燒錄、不寫稽核」改寫為「燒錄＋寫稽核」。這些 toast 未入任何 AC，但保留原文即為畫面與行為矛盾（`AC-N14`～`AC-N18`）。 |
+
+#### A.6.8 🔴 第三輪修正（2026-08-20，lead 覆核後）
+
+| # | 項目 | 處置 |
+|---|---|---|
+| 1 | **`19` 列內動作改名為逐字 `編輯`**（`AC-N48` ① 第三輪修訂） | 可見文字＋`aria-label`＋`title` 三處同時改；🔒 `data-edit-number`、icon 鍵 `hash`、兩則錯誤訊息、`enNumber`／`enNumberErr`／`enFormName` **一格未動**（已逐條斷言）。`AC-D17` 之斷言字面隨之改為 `queryByLabelText('編輯') === null`。 |
+| 2 | 🔴 **撤回我先前建議的 `offsetParent === null` 斷言形狀** | 本輪約束環為 backend jest ＋ frontend **vitest（jsdom）**，而 **jsdom 不做版面計算 ⇒ `offsetParent` 對所有元素恆為 `null`** ⇒ 該斷言**恆真、毫無鑑別力（假綠）**，且正好掛在我自己標為最高風險的「開一個洞、鬆一片牆」上。改採 **class 指派互斥 ＋ `data-*` 掛鉤**（`AC-N25` 第三輪擴充／`AC-N76`）。**教訓：提供斷言形狀時必須先確認該形狀在目標 runner 下具鑑別力**——版面相關斷言（`offsetParent`／`toBeVisible`／`getBoundingClientRect`）在 jsdom 下一律不可用。 |
+| 3 | **`15` 之兩則唯讀提示常數同步為 `AC-N74` 之共用值**（`AC-N76` ③） | 第三輪前 `15` 與 `16` 各有自己的措辭（`15` 的 `RO_NOTICE_FULL` 是該頁原句、`RO_NOTICE_OJT_EXCEPTION` 另列舉「ICSOP 原始檔 .xls」）。`AC-N76` ③ 明訂**兩頁共用同一組常數、不得各自重打** ⇒ 已改為與 `16` 逐字相同，原句保留於 `15` script 區註解供追溯。<br>⚠ **一項連帶已知落差（回報 lead，非阻塞）**：共用句未列舉「ICSOP 原始檔 .xls」，故 `15` 的橫幅不再明講該檔案唯讀；其寫入入口仍由 `.write-only` 擋住（`AC-N25` ②），使用者不會被誤導為可寫。若要在文案中補回該項，須改的是 `AC-N74` 的共用字串，**`16` 會一起變**。 |
+| 4 | **prototype 檔數計數更正 25／27 → 28** | `17a`（2026-08-18 加入）當時未更新 §4 計數；本輪連同 `19a`／`19b` 一併校正為 `00`–`24`（25）＋`17a`＋`19a`＋`19b`＝**28**。 |
+
+**第三輪之 DOM 現況判定（未改動、已量測確認滿足）**：`16` 之 `AC-N74`／`AC-N75` 全數通過（`data-attachment-kind` 四值、`data-writable-attachment` 恰 1 且其列 kind＝`ojt`、`data-readonly-attachment` 6 個、徽章與 `aria-label` 逐字、`#attachTitle`／`#attachNote` 兩態逐字）；`15` 之 `AC-N25` ①②③ 與 `AC-N76` ①② 亦全數通過（`.write-only` ∩ `.ojt-write` ＝ ∅、`[data-ojt-upload]` 恰 1）。**故第 2 項僅需換掉斷言形狀，DOM 本身無需補掛鉤。**
+
+📌 **一項留給 spec-writer 判斷者**：`AC-N25` ② 逐字點名「ICSOP PDF 取代鈕」與「`.xls` 上傳鈕」，但這兩顆按鈕**沒有專屬 `data-*` 掛鉤**（僅能以可存取名稱定位，`.xls` 那顆的可見文字為「上傳新版 .xls（取代）」）。集合式的 ③（交集為空）已足以攔截「順手統一 class」之失誤，**故本輪未自行新增未經授權之掛鉤**。若 test-generator 需要**逐元素**斷言 ②，建議由 spec-writer 於 `AC-N76` 授權 `data-attachment-write="icsop_pdf|xls|ojt"`，我再補上——**不先斬後奏，正是為了避免第三輪要處理的「載體存在卻無 AC 授權」之反面問題。**
+
+#### A.6.9 🔴 第四輪修正（2026-08-21，lead 覆核後）——註解裡的斷言字面也會假綠
+
+> **起因**：第三輪我回報「檔頭與內部註解之追溯記錄同步」，但 `19-usage-form-management.html` **三處只同步了一處**（第 341 行改了，第 23／36 行仍為舊字面）。lead 逐行對磁碟驗出。**我的回報與磁碟不符，這是本輪最該記取的一點。**
+
+**為何是假綠而非筆誤**：`AC-D17` 約束的是「無寫入權角色時該動作**自 DOM 移除**」。按鈕的無障礙名稱現在是 `編輯`，所以 `queryByLabelText('編輯編號')` **對任何角色都回 `null`**——有寫入權時回 null、被錯誤地以 CSS 隱藏時也回 null、正確移除時還是 null。**斷言恆真、零鑑別力**，而它守的正是「無寫入權角色不得看到寫入入口」。這與第三輪撤回的 `offsetParent` **是同一型，只是換了入口**：前者的恆真來自 runner 不做版面計算，後者的恆真來自**選擇器指向一個已不存在的名稱**。
+
+**🔴 通則（本 repo）**：prototype 的**註解**在此 repo 會被 test-generator 當成建構約束的線索 ⇒ **註解裡的斷言字面與程式碼同等重要**，改名時必須全檔掃過，不能只改「看起來像程式碼的那一處」。
+
+**已採用之一眼可辨標記法**（`19`／`19b` 與本檔一致）：
+
+| 標記 | 用途 |
+|---|---|
+| ✅ **現行可執行斷言字面** | 唯一可以照抄進測試的值 |
+| 📝 已作廢（僅供追溯，⚠ **不得用於斷言**） | 歷史值，保留以便追溯裁決，但明文禁止照抄 |
+
+**第四輪逐處修正**：`19` 第 23 行、第 36 行（兩處假綠斷言字面）、第 339 行與第 414 行（以舊標籤稱呼現行控制項）、第 14 行與第 28 行（歷史／現行敘述之標籤釐清）；`19b` 第 16 行（標明「逐字沿用」之明文例外）；本檔 §A.5 之兩處（斷言字面與實跑紀錄）。
+
+**lead 之兩項裁示（已記錄）**：
+① **共用唯讀句不補列「ICSOP 原始檔 .xls」** — 維持 `AC-N74` 單一共用字串。理由：該檔寫入入口已由 `.write-only` 擋住（`AC-N25` ② 已斷言），且為 `15` 特有的一個控制項去改動 `16` 也在用的共用句，會犧牲 `AC-N76` ③ 才剛修好的「兩頁共用同一組常數」性質。**不改。**
+② **`data-attachment-write` 掛鉤＝授權新增**，待 spec-writer 於 `AC-N76` 明文授權後由 lead ping 我補上。<br>🔴 **lead 補充之關鍵一層（我原分析漏掉）**：集合式斷言 ③（`.write-only.ojt-write` 交集為空）擋得住「順手把兩條 class 統一」，但**擋不住「有人直接把 `.xls` 上傳鈕的 `.write-only` 整個刪掉」**——那種情況下交集仍為空、③ 照樣綠，**只有逐元素斷言 ② 抓得到**。⇒ **「集合式斷言涵蓋逐元素斷言」是錯的**：集合式只能證明兩集合不相交，證明不了每個元素都落在應在的那一集合裡。
 
 #### A.6.7 需要但**不在任何 AC** 之新增物（供 spec-writer 決定是否補 AC）
 

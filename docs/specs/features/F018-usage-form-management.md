@@ -109,11 +109,15 @@ Epic/Story: E05 / US-040, US-041, US-042
 
 #### 「編輯編號」動作（🔴 2026-08-16 人類閘門追加裁決） {#edit-number-action}
 
+> 🔴 **2026-08-20 消歧義註記（一次說明，涵蓋本檔其餘所有出現處）**：本檔以「**「編輯編號」動作**」指稱**這個動作／本節之沿用名稱**（含錨點 `#edit-number-action`，改名會斷連結）；
+> 但其**UI 標籤**自 2026-08-20 第三輪起**逐字為 `編輯`**（`AC-N48` ①／`AC-D16`／`AC-D17`），且其**範圍已擴為「表單編號 ＋ 制定部門」**（`AC-N48`）。
+> ⇒ 凡本檔出現「「編輯編號」動作」之處，一律讀作**該動作**，**不得**當成可見文字或無障礙名稱之逐字值。**唯一權威之逐字標籤在 `AC-D16`。**
+>
 > **裁決＝新增一個輕量之「編輯編號」入口**（列內 inline 或小 modal，形式由 ui-ux-designer 決定），**只改 `formNumber`、不碰檔案**。
 > **理由（裁決註記，不得省略）**：現存表單之 `formNumber` **全為 `null`**（無來源，migration 只能留空，`AC-D7`）。若編號僅能於**上傳時**設定，則**所有既有表單永遠補不上編號**——缺失 delta 第 18 項需求對**存量資料形同無效**。
 > 📝 **被否決之替代方案**：把編號欄加進**覆蓋上傳彈窗**。否決理由：① 強迫使用者為了改一個編號而**重傳檔案**；② 覆蓋共用表單會**連帶改變所有引用文件所見內容**並觸發 `USAGE_FORM_OVERWRITE_SHARED` 二次確認（`OQ-E05-05`）——以「改編號」為由觸發一個檔案層級之破壞性動作，風險與意圖完全不成比例。此不對稱正是 `AC-D20` 所鎖定者。
 
-- **AC-D16**（動作存在、逐字文案與選擇器）：Given ICSOPAdmin 進入使用表單管理頁, When 檢視清單任一列之「操作」欄, Then 存在一個無障礙名稱為逐字 **`編輯編號`** 之動作元件（帶 `data-edit-number` 屬性，供定位到所屬列）；When 觸發該動作, Then 開啟編號編輯介面（DOM id `editNumberModal`），其中：
+- **AC-D16**（動作存在、逐字文案與選擇器）：Given ICSOPAdmin 進入使用表單管理頁, When 檢視清單任一列之「操作」欄, Then 存在一個無障礙名稱為逐字 **`編輯`** 之動作元件（帶 `data-edit-number` 屬性，供定位到所屬列）；<br>📝 **2026-08-20 第三輪就地更正（`AC-N48` ① 之 lead 文案裁決）**；**被改寫之原逐字值保留供追溯**：`編輯編號`。理由＝該入口導向之頁面已可改「制定部門」，原標籤名不副實（完整理由見 `AC-N48` ①）。⚠ **屬性名 `data-edit-number` 逐字不變**——它是穩定之定位掛鉤，改名會使既有測試與 prototype 一併失效，而該成本無對應收益。When 觸發該動作, Then 開啟編號編輯介面（DOM id `editNumberModal`），其中：
   - 標題逐字為 **`編輯表單編號`**；
   - 欄位 `<label>` 可見文字為 `表單編號` 並緊接逐字 `（選填）`（與 `AC-D15` ② 一致）；輸入框 DOM id 為 **`enNumber`**、`maxlength="100"`、placeholder 逐字為 `例：FM-001（不填則留空）`（與上傳 modal **同一 placeholder**，不另造）；
   - 介面內含一句逐字說明 **`僅更新編號，不會變更表單檔案。`**（此句為裁決理由之 UI 體現，**不得省略**）；
@@ -123,7 +127,7 @@ Epic/Story: E05 / US-040, US-041, US-042
   - When 點擊 `取消`, Then 關閉介面且該表單之 `formNumber` **不變**。
 - **AC-D17**（權限）：Given 角色為 **ICSOPAdmin**, When 呼叫編號更新端點, Then 允許（[F026](F026-role-field-matrix.md) 矩陣「使用表單（多）」＝ICSOPAdmin 可寫）；Given 角色為 **SysAdmin**, When 呼叫, Then 回 **403 `FIELD_WRITE_FORBIDDEN`**（欄位層；SysAdmin 對本頁為唯讀，比照 [F039](F039-appendix-management.md) AC-32 之守門鏈）；Given 角色為 **Supervisor／DeptContact／User**, When 呼叫, Then 回 **403 `PERMISSION_DENIED`**（路由層；三者無「使用表單管理」功能權限）。**[F025](F025-role-function-matrix.md)／[F026](F026-role-field-matrix.md) 矩陣皆逐格不變**——本動作沿用「使用表單管理」既有功能列與「使用表單（多）」既有欄位列，**不新增任何矩陣列**；惟後端恆為權威（前端不渲染僅為體驗優化，不構成防護）。
   - **🔴 前端側之呈現要求（2026-08-16 補訂，ui-ux-designer 實測後裁定）**：Given 角色為 SysAdmin／Supervisor／DeptContact／User（任一無「使用表單（多）」寫入權者）, When 渲染使用表單管理頁清單, Then 該列之「編輯編號」動作元件**必須自 DOM 移除**（條件式渲染，`canWrite` 為偽時**根本不輸出該節點**），**不得**以 `display:none`／`visibility:hidden`／`.write-only` 之類**僅視覺隱藏**之方式達成。
-  - **逐字斷言**：`queryByLabelText('編輯編號')` 之回傳為 **`null`**；且 `container.querySelector('[data-edit-number]')` 亦為 **`null`**。When 角色切換回 ICSOPAdmin, Then 兩者皆非 `null`（**切角色須即時重繪**）。
+  - **逐字斷言（🔴 2026-08-20 第四輪就地更正）**：`queryByLabelText('編輯')` 之回傳為 **`null`**；且 `container.querySelector('[data-edit-number]')` 亦為 **`null`**。When 角色切換回 ICSOPAdmin, Then 兩者皆非 `null`（**切角色須即時重繪**）。<br>📝 **被更正之原斷言逐字保留供追溯**：`queryByLabelText('編輯編號')` 之回傳為 **`null`**。<br>🔴 **必須更正之理由（假綠攔截）**：`AC-N48` ① 已將該動作之無障礙名稱改為 `編輯` ⇒ `queryByLabelText('編輯編號')` 對**任何角色**（含 ICSOPAdmin）皆回 `null`，該斷言**恆真、零鑑別力**，而它守的正是「無寫入權角色時該動作必須自 DOM 移除」這條權限規則——**一個恆真的守衛等於沒有守衛**。<br>⚠ 本更正同時使本條之後半（「角色切換回 ICSOPAdmin ⇒ 兩者皆非 `null`」）**恢復其鑑別力**：在原字面下該後半**必然失敗**，實作者若照抄只會得到一條紅燈或被迫刪除它。
   - ⚠ **為何必須「移除」而非「隱藏」（不得省略之理由）**：Testing Library 之 `*ByLabelText`／`*ByText` 系列**不尊重 `display:none`**（僅 `*ByRole` 預設排除 a11y tree 之隱藏元素）。若實作沿用 CSS 隱藏，本條之 `queryByLabelText(...) === null` **必然紅燈**；若為了讓它綠而改斷言為 `*ByRole`＋`hidden:false`，則該權限元件**仍實際存在於 DOM 中**，唯讀角色可自 devtools 直接看到並觸發之（雖後端仍會擋，但這是把「不應存在的入口」留在畫面上）。**兩害相權，取「移除」。**
   - 🔴 **本頁存在兩種隱藏機制之刻意不一致，不得「順手統一」**：`prototypes/19-usage-form-management.html` 之**其餘**寫入動作（上傳／覆蓋／移除）沿用既有 CSS 類別 `.write-only`（`body:not([data-role="icsop_admin"]) .write-only{display:none !important}`）；**僅「編輯編號」一個元件採 DOM 移除**。此為**本 delta 刻意之局部差異**——統一為 CSS 隱藏會使本條無法驗證（見上），統一為 DOM 移除則屬既有元件之改造、**超出本 delta 範圍**。日後之收斂方向登錄於 [open-questions.md](../open-questions.md) `OQ-D18-29`，**在該題定案前，任何「統一為 `.write-only`」之重構皆會使本條紅燈，屬回歸而非整理**。
 - **AC-D18**（驗證沿用既有錯誤碼、編輯時排除自身列）：Given 池中另一筆之 `formNumber` 為 `FM-001`, When 對本列以 `FM-001`／`fm-001`／`'  FM-001  '` 任一形式儲存, Then 回 **409 `USAGE_FORM_NUMBER_DUPLICATE`**、**該列 `formNumber` 不變**；Given 本列自身之 `formNumber` 已為 `FM-001`, When 以 `FM-001` 再次儲存（值未變）, Then **不視為衝突**、回 2xx（**唯一性比對排除自身列**）；Given 送出之值 trim 後長度為 101 字元, Then 回 **400 `USAGE_FORM_NUMBER_TOO_LONG`**、該列不變；恰 100 字元通過。**驗證順序沿用** [error-handling.md#usage-form-number](../error-handling.md#usage-form-number)（長度先於唯一性）；**不新增任何錯誤碼**。
@@ -240,7 +244,7 @@ Epic/Story: E05 / US-040, US-041, US-042
 
   | 元素 | 逐字值 |
   |---|---|
-  | 列內動作元件之無障礙名稱／可見文字 | `編輯編號` |
+  | 列內動作元件之無障礙名稱／可見文字 | **`編輯`**（🔴 2026-08-20 第三輪 lead 文案裁決；📝 原逐字值 `編輯編號` 保留供追溯，理由見 `AC-N48` ①） |
   | 該元件之定位屬性 | `data-edit-number`（每列一個，供定位到所屬列） |
   | 編輯介面容器 DOM id | `editNumberModal` |
   | 介面標題 | `編輯表單編號` |

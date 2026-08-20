@@ -9,6 +9,9 @@
         🔒 **其餘一切寫入控制項維持 .write-only（僅 ICSOP 管理員）**——AC-N24／AC-N25 之回歸鎖定，
            特別是 ICSOP PDF 之「取代」與 .xls 之「上傳新版」**不得**一併放行。
         ⚠ 本頁之角色切換器含 supervisor／deptcontact 純為原型示範唯讀路徑；真實路由以 16 唯讀頁為主入口。
+     ④ 🔴 **2026-08-20 第三輪（`AC-N76` ③）**：本頁之 `RO_NOTICE_FULL`／`RO_NOTICE_OJT_EXCEPTION`
+        **改為與 `16-document-readonly` 共用同一組逐字值**（權威＝F016 `AC-N74`），不得各自重打；
+        本頁原有之兩句自有措辭已保留於 script 區之註解供追溯。
      🔒 後台字級逐字不動（F021 AC-N61 ①）。 -->
 <!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
      本檔已套用：「所屬循環」改兩段式選取（名稱 → 子分類）、新舊值對照兩側皆以 lifecycleDisplayName 呈現、
@@ -225,7 +228,7 @@
       <div class="flex items-center gap-2"><i data-lucide="file-spreadsheet" class="w-5 h-5 text-emerald-600"></i><span class="text-sm text-slate-700 truncate flex-1">車輛分期進件作業_v1.3.xls</span><span data-wm-note class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 shrink-0 whitespace-nowrap"><i data-lucide="info" class="w-3 h-3"></i>此格式不支援浮水印</span></div>
       <div class="flex gap-2 mt-3">
         <button class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-white"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
-        <button onclick="replaceFile('ICSOP .xls')" class="write-only inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 text-primary-700 text-xs hover:bg-white"><i data-lucide="upload" class="w-3.5 h-3.5"></i>上傳新版 .xls（取代）</button>
+        <button onclick="replaceFile('ICSOP .xls')" data-attachment-write="xls" class="write-only inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 text-primary-700 text-xs hover:bg-white"><i data-lucide="upload" class="w-3.5 h-3.5"></i>上傳新版 .xls（取代）</button>
       </div>
       <p class="text-[11px] text-slate-500 mt-2 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-500"></i>上傳新版 .xls 將<strong>覆蓋</strong>舊 .xls 並觸發 AI <strong>重新抽取／重建索引</strong>（F030）；舊檔不再可經文件記錄存取。<strong>不影響 ICSOP PDF</strong>——如需同步更新呈現用 PDF，請於右側另行上傳取代。</p>
     </div>
@@ -235,7 +238,7 @@
         <div class="flex items-center gap-2"><i data-lucide="file-text" class="w-5 h-5 text-red-500"></i><span class="text-sm text-slate-700 truncate flex-1">車輛分期進件作業_v1.3.pdf</span><span data-wm-note class="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0 whitespace-nowrap">檢視/下載將燒錄浮水印</span></div>
         <div class="flex gap-2 mt-3">
           <button class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
-          <button onclick="replaceFile('ICSOP PDF')" class="write-only inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50"><i data-lucide="upload" class="w-3.5 h-3.5"></i>取代</button>
+          <button onclick="replaceFile('ICSOP PDF')" data-attachment-write="icsop_pdf" class="write-only inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50"><i data-lucide="upload" class="w-3.5 h-3.5"></i>取代</button>
         </div>
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
@@ -243,7 +246,7 @@
         <div class="flex items-center gap-2"><i data-lucide="file-text" class="w-5 h-5 text-red-500"></i><span class="text-sm text-slate-700 truncate flex-1">車輛分期進件作業_OJT簽到表.pdf</span><span data-wm-note class="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0 whitespace-nowrap">檢視/下載將燒錄浮水印</span></div>
         <div class="flex gap-2 mt-3">
           <button class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
-          <button onclick="replaceFile('OJT 簽到表')" data-ojt-upload aria-label="取代 OJT 簽到表" class="ojt-write inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 bg-white text-primary-700 text-xs hover:bg-primary-50"><i data-lucide="upload" class="w-3.5 h-3.5"></i>取代</button>
+          <button onclick="replaceFile('OJT 簽到表')" data-attachment-write="ojt" data-ojt-upload aria-label="取代 OJT 簽到表" class="ojt-write inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 bg-white text-primary-700 text-xs hover:bg-primary-50"><i data-lucide="upload" class="w-3.5 h-3.5"></i>取代</button>
         </div>
       </div>
     </div>
@@ -897,11 +900,17 @@
         sc.placeholder=!draft.mkdept?'請先選擇制定部門':(none?'此部之下無處/室（留空）':'搜尋制定室別…'); }
     }
   }
-  /* ===== 🔴 逐字文案常數（D9 定稿；與 16-document-readonly 同一組措辭，勿讓兩頁漂移）=====
-     RO_NOTICE_FULL ＝**原句一字未改**，僅適用系統管理員（AC-N26：其對 OJT 仍唯讀）。
-     RO_NOTICE_OJT_EXCEPTION ＝主管／部門窗口專用（AC-N28 之 📝 要求就地改寫）。 */
-  const RO_NOTICE_FULL = '唯讀模式 · 此角色對所有文件欄位皆唯讀，附件可下載但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。';
-  const RO_NOTICE_OJT_EXCEPTION = '唯讀模式 · 此角色對 ICSOP 文件其餘 19 個欄位、ICSOP PDF、ICSOP 原始檔 .xls、使用表單與附錄皆唯讀（FIELD_WRITE_FORBIDDEN）；唯一例外為「OJT 實體簽到表」，可上傳或覆蓋，該次上傳會寫入稽核。全部附件皆可下載（下載一律燒錄浮水印並寫入稽核）。';
+  /* ===== 🔴 逐字文案常數（權威＝F016 `AC-N74`）=====
+     🔴 **2026-08-20 第三輪：`AC-N76` ③ 明訂本頁與 `16-document-readonly` 共用同一組常數、不得各自重打**
+        ⇒ 下列兩個字面值與 `16` **逐字相同**；任一頁要改，兩頁必須同批改。
+     RO_NOTICE_FULL ＝僅適用系統管理員（`AC-N26`：其對 OJT 仍唯讀）；該句同時是 `AC-N26` 在畫面上之載體。
+     RO_NOTICE_OJT_EXCEPTION ＝主管／部門窗口專用（`AC-N28` 之 📝 要求就地改寫）。
+     📝 **被取代之本頁原句逐字保留供追溯**（第三輪前為本頁自有措辭，與 `16` 不同）：
+        · RO_NOTICE_FULL 原為「唯讀模式 · 此角色對所有文件欄位皆唯讀，附件可下載但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。」
+        · RO_NOTICE_OJT_EXCEPTION 原另列舉「ICSOP 原始檔 .xls」一項；`AC-N74` 之共用句未列舉該項，
+          惟該檔案之寫入入口仍由 `.write-only` 擋住（見上方 CSS 與 `AC-N25` ②），使用者不會被誤導為可寫。 */
+  const RO_NOTICE_FULL = '唯讀模式 · 此角色對 ICSOP 文件全欄位皆唯讀；附件可下載（燒錄浮水印），但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。';
+  const RO_NOTICE_OJT_EXCEPTION = '唯讀模式 · 此角色對 ICSOP 文件其餘 19 個欄位、ICSOP PDF、使用表單與附錄皆唯讀（FIELD_WRITE_FORBIDDEN）；唯一例外為「OJT 實體簽到表」，可上傳或覆蓋，該次上傳會寫入稽核。全部附件皆可下載（下載一律燒錄浮水印並寫入稽核）。';
   function setRole(r){
     document.body.dataset.role=r;
     const blocked=(r==='user');

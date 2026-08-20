@@ -146,6 +146,19 @@ Epic/Story: E08 / US-071（附錄（多）列：E10 / US-101、US-102）
   - ① **OJT 取代鈕**帶 **`data-ojt-upload`**，其 class **含 `ojt-write`、不含 `write-only`**（class 指派之互斥契約見 `AC-N25` 之 2026-08-20 第三輪擴充）。
   - ② **OJT 區塊標題旁帶一枚徽章 `data-ojt-exception`**，其可見文字逐字為 **`主管／部門窗口亦可寫`**（全形斜線）。
   - ③ 唯讀提示句依角色分支，逐字值沿用 [F016](F016-pdf-ojt-attachment.md#ojt-role-open-delta) `AC-N74` 之 `RO_NOTICE_FULL`／`RO_NOTICE_OJT_EXCEPTION`（**兩頁共用同一組常數，不得各自重打**）。
+  - ④ 🔴 **逐元素掛鉤 `data-attachment-write`（2026-08-20 第四輪 lead 裁決＝授權新增）**：編輯頁之**三顆附件寫入控制項各帶一個 `data-attachment-write` 屬性**，其值逐字為——
+
+    | 控制項（`prototypes/15-document-edit.html`） | `data-attachment-write` 值 | 應有之隱藏 class |
+    |---|---|---|
+    | 「上傳新版 .xls（取代）」鈕 | **`xls`** | `write-only` |
+    | ICSOP PDF 之「取代」鈕 | **`icsop_pdf`** | `write-only` |
+    | OJT 之「取代」鈕（另帶 `data-ojt-upload`） | **`ojt`** | `ojt-write` |
+
+    **逐元素斷言（三條，缺一不可）**：`querySelector('[data-attachment-write="xls"]')` 與 `querySelector('[data-attachment-write="icsop_pdf"]')` 之 `classList` **各自含 `write-only` 且不含 `ojt-write`**；`querySelector('[data-attachment-write="ojt"]')` 之 `classList` **含 `ojt-write` 且不含 `write-only`**。三個掛鉤在頁面上**各恰出現一次**。
+    <br>🔴 **授權理由（本子條存在之正當性，不得省略）**：既有之**集合式**斷言（`AC-N25` 第三輪擴充 ③：兩組 class 之結果集合交集為空、`[data-ojt-upload]` 恰 1 個）擋得住「**把兩條 class 順手統一**」，但**擋不住「有人直接把 `.xls` 上傳鈕的 `.write-only` 整個刪掉**」——該情況下兩組 class 之交集**仍為空**、集合式斷言**依然全綠**，而該鈕已對所有角色可見。**只有逐元素斷言抓得到這個形狀。**
+    <br>⚠ **集合式與逐元素兩層必須並列保留、不得二擇一**：兩者攔截的是**不同的失誤**——集合式擋「class 被統一」、逐元素擋「class 被刪除」；任一單獨存在皆有盲區。而 `AC-N24`／`AC-N25` 是本 delta 最重要之回歸鎖定（使用者裁決 `OQ-D9-20`＝**僅 OJT 一欄破例**），值得多一組獨立掛鉤。
+    <br>📌 **為何原本無法逐元素定位（designer 提報之事實，已查證）**：`AC-N25` ② 逐字點名之兩顆鈕**皆無專屬掛鉤**，且 **ICSOP PDF 取代鈕與 OJT 取代鈕之可見文字都是「取代」**（`15-document-edit.html:241` 與 `:249`），前者**又沒有 `aria-label`** ⇒ `getByRole('button', { name: '取代' })` 會**同時命中兩顆**，無從分辨。ui-ux-designer 如實提報此困難並**拒絕自行新增未經 AC 授權之掛鉤**（正確判斷），經 lead 於第四輪授權。
+    <br>📌 **與 `AC-N75` ① 之 `data-attachment-kind` 為兩個不同屬性，刻意不統一**：`data-attachment-kind`（唯讀頁 `16`）標示「**這一列是哪一類附件**」，值域含 `usageform`／`appendix`；`data-attachment-write`（編輯頁 `15`）標示「**這顆鈕寫的是哪一個附件**」，值域含 `xls`（唯讀頁無此項）。**兩者值域刻意不同，不得互相對齊或合併**。
   - 🔴 **本條之必要性（lead 追認理由）**：`AC-N20` 明文含「編輯頁」；且若 `15` 不改，同一 delta 下 **`16` 說「OJT 可寫」、`15` 說「全欄位唯讀不可取代」，兩頁自相矛盾**——使用者會依先看到的那頁形成錯誤認知。
   - ⚠ **`.ojt-write` 為刻意新增之第二套隱藏規則，不得「順手統一」為 `.write-only`**——理由與可斷言形狀見 `AC-N25`（併入會使 ICSOP PDF 取代鈕與 `.xls` 上傳鈕**一起對主管放行**）。此不一致之性質與 [F018](F018-usage-form-management.md) `AC-D17` 之既有局部不一致同型（該處亦明文禁止統一）。
 

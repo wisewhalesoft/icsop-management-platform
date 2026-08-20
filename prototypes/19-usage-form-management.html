@@ -11,24 +11,35 @@
         **不得**出現前台之「此格式不支援浮水印」標示。~~
         🔴 **本段已於 2026-08-20 由 OQ-D9-08（選項 B）全面推翻**（原文逐字保留於上，供追溯）。
      ⑤ **「編輯編號」動作**（🔴 2026-08-16 人類閘門追加裁決 OQ-D18-28；F018 AC-D16～AC-D20）：
-        清單每列「操作」欄新增 `編輯編號`（`data-edit-number`），開啟 `editNumberModal` 小 modal。
+        清單每列「操作」欄新增列內動作（`data-edit-number`），開啟 `editNumberModal` 小 modal。
         🔴 **小 modal 之形式已於 2026-08-20 由 AC-N41／AC-N48 ② 改為獨立整頁 19b**（原文保留供追溯）。
+        🔴 **列內動作之可見文字與無障礙名稱已於 2026-08-20 第三輪由 lead 裁決改為逐字「編輯」**
+           （`AC-N48` ① 就地修訂，列為「逐字沿用」原則之**明文例外**；原值 `編輯編號` 保留於本行供追溯）。
         **只改 formNumber、不碰檔案**——不重傳、不觸發 USAGE_FORM_OVERWRITE_SHARED、不寫稽核（AC-D20）。
         此為既有表單補上編號之**唯一途徑**（存量列之 formNumber 全為 null，AC-D7）。
         清空為合法操作 → 落地 null、該格回復 `—`（AC-D19）；唯一性比對**排除自身列**（AC-D18）。
         **形式（小 modal）由 designer 決定；全部文案與掛鉤逐字照抄 spec-writer 定稿表，未改寫。**
-        ⚠ 無寫入權之角色（SysAdmin／Supervisor／DeptContact／User）**自 DOM 移除**該動作元件
-          （非 CSS 隱藏——AC-D17 以 `queryByLabelText('編輯編號') === null` 驗證）。
+        ⚠ 無寫入權之角色（SysAdmin／Supervisor／DeptContact／User）**自 DOM 移除**該動作元件（非 CSS 隱藏）。
+          ✅ **現行可執行斷言字面**：`queryByLabelText('編輯') === null`
+          📝 已作廢（僅供追溯，⚠ **不得用於斷言**）：`queryByLabelText('編輯編號') === null`
+             ——標籤已於 2026-08-20 第三輪改名（`AC-N48` ①）。**沿用舊字面會使該斷言對任何角色恆真（假綠）**：
+             按鈕的無障礙名稱已不是「編輯編號」，故有寫入權時回 null、被錯誤地以 CSS 隱藏時也回 null。
         ⚠ **不得**改採「把編號欄加進覆蓋上傳彈窗」——該替代方案已於人類閘門明確否決。 -->
 <!-- 🔴 2026-08-20 D9 delta（人類閘門已裁決）——本檔已套用：
      ① 🔴 **新增／編輯由彈窗改為獨立整頁**（AC-N41／AC-N42；OQ-D9-15 選項 A ＝純版面搬遷）：
         · topbar「新增表單」→ `19a-usage-form-create.html`（實作路由 /admin/usage-forms/new）
-        · 列內「編輯編號」→ `19b-usage-form-edit.html`（實作路由 /admin/usage-forms/:formId/edit）
+        · 列內動作「編輯」→ `19b-usage-form-edit.html`（實作路由 /admin/usage-forms/:formId/edit）
         ⇒ 本頁之 `upModal` 與 `editNumberModal` **已整段移除**（AC-N41 逐字斷言：新增／編輯畫面上
           `container.querySelector('[role="dialog"]')` 為 null；把已搬走的彈窗留著會變成兩份權威）。
-        🔒 「編輯編號」之**可見文字／aria-label／data-edit-number／icon 鍵 hash** 逐字沿用（AC-N48 ①），
-           **且仍以「自 DOM 移除」方式對無寫入權角色隱藏**（AC-D17：queryByLabelText('編輯編號') === null；
-           本頁其餘寫入動作沿用 .write-only CSS 隱藏，此局部不一致為刻意、不得統一）。
+        🔴 **列內動作之可見文字與 aria-label 已於第三輪改為逐字「編輯」**（`AC-N48` ① 就地修訂之明文例外；
+           改名理由＝本入口導向之頁面標題為「編輯使用表單」且範圍已含「制定部門」，停在「編輯編號」名不副實）。
+           📝 被改寫之原逐字值保留供追溯：`編輯編號`。
+        🔒 其餘一格不動：`data-edit-number`、icon 鍵 `hash`、兩則編號錯誤訊息、
+           欄位層 DOM id `enNumber`／`enNumberErr`／`enFormName` 全數沿用（AC-N48 ①），
+           **且仍以「自 DOM 移除」方式對無寫入權角色隱藏**（AC-D17）——
+           ✅ **現行可執行斷言字面**：`queryByLabelText('編輯') === null`；
+           📝 已作廢（僅供追溯，⚠ 不得用於斷言）：`queryByLabelText('編輯編號') === null`。
+           本頁其餘寫入動作沿用 .write-only CSS 隱藏，此局部不一致為刻意、不得統一。
         ⚠ topbar 主要鈕之可見文字由「上傳表單」改為 **「新增表單」**——AC-N41 之 Given 逐字為
            「點擊『新增表單』」，且本動作已不只是上傳檔案（同時設定編號與制定部門）。
      ② 🔵 **清單新增「制定部門」欄**（AC-N47）：置於「表單名稱」之後，表頭可見文字逐字為「制定部門」；
@@ -315,7 +326,7 @@
         <td class="px-4 py-3">${countCell}</td>
         <td class="px-4 py-3">
           <div class="flex items-center justify-start gap-1">
-            ${canWrite()?`<button onclick="gotoEdit('${f.id}')" data-edit-number="${f.id}" aria-label="編輯編號" title="編輯編號" class="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px] shrink-0"><i data-lucide="hash" class="w-3 h-3"></i>編輯編號</button>`:''}
+            ${canWrite()?`<button onclick="gotoEdit('${f.id}')" data-edit-number="${f.id}" aria-label="編輯" title="編輯" class="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px] shrink-0"><i data-lucide="hash" class="w-3 h-3"></i>編輯</button>`:''}
             <button onclick="downloadForm('${f.id}')" title="下載" class="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"><i data-lucide="download" class="w-4 h-4"></i></button>
             ${n>0?`<button onclick="toggleExpand('${f.id}')" title="${isOpen?'收合關聯':'展開檢視關聯'}" class="w-8 h-8 rounded hover:bg-slate-100 text-slate-500 flex items-center justify-center"><i data-lucide="chevron-${isOpen?'up':'down'}" class="w-4 h-4"></i></button>`:''}
             <button onclick="overwriteForm('${f.id}')" title="更新／覆蓋上傳" class="write-only w-8 h-8 rounded hover:bg-amber-50 text-amber-600 flex items-center justify-center"><i data-lucide="upload" class="w-4 h-4"></i></button>
@@ -330,9 +341,11 @@
   function toggleExpand(id){ if(expanded.has(id))expanded.delete(id); else expanded.add(id); renderTable(); }
   function jumpDoc(n){ shellToast('前往文件 '+n+'（13-document-list / 16-document-readonly）'); }
 
-  /* ===== 🔴 AC-D17 之權限判定（沿用；「編輯編號」對無寫入權角色自 DOM 移除，非 CSS 隱藏）=====
+  /* ===== 🔴 AC-D17 之權限判定（沿用；列內動作「編輯」對無寫入權角色自 DOM 移除，非 CSS 隱藏）=====
      ⚠ 刻意**不用** .write-only（CSS display:none）——Testing Library 之 *ByLabelText **找得到**
-        display:none 之元素，CSS 隱藏會使 queryByLabelText('編輯編號') === null 之斷言失敗。
+        display:none 之元素，CSS 隱藏會使該斷言失敗。
+        ✅ **現行可執行斷言字面**：`queryByLabelText('編輯') === null`
+        📝 已作廢（僅供追溯，⚠ 不得用於斷言）：`queryByLabelText('編輯編號') === null`（第三輪改名，AC-N48 ①）
         本頁其餘寫入動作沿用 .write-only，此局部不一致為刻意、不得統一（OQ-D18-29）。 */
   function canWrite(){ return document.body.dataset.role==='icsop_admin'; }
   /* 🔴 F020 AC-N14～AC-N18（2026-08-20 OQ-D9-08 選項 B）：後台下載一律燒錄（PDF）＋一律寫稽核，
@@ -404,7 +417,7 @@
       user:'一般使用者無後台存取權。'
     }[r];
     if(blocked){closeConfirm();}
-    renderTable();                            // AC-D17：重繪以套用「無寫入權即不渲染『編輯編號』」
+    renderTable();                            // AC-D17：重繪以套用「無寫入權即不渲染列內動作『編輯』」
     renderSidebar(); lucide.createIcons();
   }
 
