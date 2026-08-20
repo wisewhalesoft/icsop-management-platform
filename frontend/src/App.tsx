@@ -20,6 +20,8 @@ import { AccessHistoryPage } from './pages/AccessHistoryPage';
 import { ChangeHistoryPage } from './pages/ChangeHistoryPage';
 import { DocIndexPage } from './pages/DocIndexPage';
 import { UsageFormManagementPage } from './pages/UsageFormManagementPage';
+import { UsageFormCreatePage } from './pages/UsageFormCreatePage';
+import { UsageFormEditPage } from './pages/UsageFormEditPage';
 import { AppendixManagementPage } from './pages/AppendixManagementPage';
 import { ModulePlaceholder } from './pages/ModulePlaceholder';
 import { PublicListPage } from './pages/PublicListPage';
@@ -105,6 +107,9 @@ export function AppRoutes(): JSX.Element {
           <Route path="documents/:id" element={<DocumentReadonlyPage />} />
           <Route path="documents/:id/edit" element={<DocumentEditPage />} />
           <Route path="usage-forms" element={<UsageFormManagementPage />} />
+          {/* F018 `AC-N41`：新增／編輯由 modal 改為獨立整頁（architecture-spec §11.10(a)）。 */}
+          <Route path="usage-forms/new" element={<UsageFormCreatePage />} />
+          <Route path="usage-forms/:formId/edit" element={<UsageFormEditPage />} />
           <Route path="appendices" element={<AppendixManagementPage />} />
           <Route path="org-sync" element={<OrgSyncPage />} />
           <Route path="access-history" element={<AccessHistoryPage />} />

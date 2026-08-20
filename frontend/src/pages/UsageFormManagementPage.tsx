@@ -2,20 +2,27 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import {
+  getOrgUnits,
   getUsageFormOverview,
-  uploadUsageForms,
   overwriteUsageForm,
   deleteUsageForm,
   downloadPoolForm,
-  updateUsageFormNumber,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT, isWatermarkSupportedFormat } from '../domain/watermark-note';
 import { PageHeader } from '../components/PageHeader';
+import { FormatBadge } from '../components/UsageFormFormatBadge';
+import { orgPathLabel } from '../components/DraftingDeptPicker';
+import {
+  classifyFormat,
+  detectAllowedFmt,
+  formatSize,
+  type FmtClass,
+} from '../domain/usage-form-format';
 import { useToast } from '../components/useToast';
-import type { UsageFormPoolItem } from '../api/types';
+import type { OrgUnitRecord, UsageFormPoolItem } from '../api/types';
 
 /**
  * F018 使用表單（表單池）管理。版面／結構／文案／欄寬權威來源：prototypes/19-usage-form-management.html。
@@ -29,16 +36,6 @@ import type { UsageFormPoolItem } from '../api/types';
  * 移除保護：docCount≥1 → 二次確認（USAGE_FORM_IN_USE，解除全部關聯）。
  * 表單↔文件關聯之「編輯」屬文件建立/編輯側（F014）；本頁對關聯僅唯讀展開檢視（依 prototype 定位）。
  */
-
-type FmtClass = 'excel' | 'pdf';
-
-/**
- * 上傳 modal 與編號 modal **共用同一句** placeholder（F018 AC-D15 ②／AC-D16）。
- * 以單一常數供兩處 import——兩處各寫一次字面字串時，兩條 AC 各自綠燈但字串可獨立漂移。
- */
-const FORM_NUMBER_PLACEHOLDER = '例：FM-001（不填則留空）';
-/** `USAGE_FORM_POOL.formNumber` 之欄寬（與後端 form-number.ts 同值）。 */
-const FORM_NUMBER_MAX_LENGTH = 100;
 
 /**
  * 列內浮水印註記（F020 `AC-N20`；`OQ-D9-08` 選項 B ＋ `OQ-D9-33`）。
@@ -61,44 +58,9 @@ function WmNote({ format }: { format: string }): JSX.Element {
   );
 }
 
-function classifyFormat(format: string): FmtClass {
-  const f = format.toLowerCase();
-  return f === 'xlsx' || f === 'xls' ? 'excel' : 'pdf';
-}
-
-/** 允許之上傳副檔名（與後端 file-rules USAGE_FORM 一致；權威為副檔名）。 */
-function detectAllowedFmt(fileName: string): FmtClass | null {
-  const ext = (fileName.split('.').pop() || '').toLowerCase();
-  if (ext === 'xlsx' || ext === 'xls') return 'excel';
-  if (ext === 'pdf') return 'pdf';
-  return null;
-}
-
-function formatSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
-
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('sv-SE');
-}
-
-/**
- * 「編輯編號」之錯誤訊息（F018 AC-D16／AC-D21 ④；逐字文案權威＝prototype 19）。
- * 非預期錯誤沿用 ApiError.code，避免吞掉後端未預期之失敗。
- */
-function editNumberErrorMessage(e: unknown): string {
-  if (e instanceof ApiError) {
-    if (e.code === 'USAGE_FORM_NUMBER_DUPLICATE') {
-      return '表單編號已存在（比對前 trim、不分大小寫）。';
-    }
-    if (e.code === 'USAGE_FORM_NUMBER_TOO_LONG') {
-      return '表單編號超過長度上限（100 字元）。';
-    }
-    return e.code;
-  }
-  return '更新表單編號失敗。';
 }
 
 interface ConfirmState {
@@ -108,26 +70,6 @@ interface ConfirmState {
   okLabel: string;
   documents?: UsageFormPoolItem['documents'];
   onConfirm: () => void | Promise<void>;
-}
-
-function FormatBadge({ fmt }: { fmt: FmtClass }): JSX.Element {
-  return fmt === 'excel' ? (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-      style={{ color: '#047857', background: '#D1FAE5' }}
-    >
-      <Icon name="file-spreadsheet" className="w-3 h-3" />
-      excel
-    </span>
-  ) : (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-      style={{ color: '#B91C1C', background: '#FEE2E2' }}
-    >
-      <Icon name="file-text" className="w-3 h-3" />
-      pdf
-    </span>
-  );
 }
 
 export function UsageFormManagementPage(): JSX.Element {
@@ -144,20 +86,12 @@ export function UsageFormManagementPage(): JSX.Element {
   const [fmtFilter, setFmtFilter] = useState<'' | FmtClass>('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  // 上傳 modal
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadName, setUploadName] = useState('');
-  const [uploadNumber, setUploadNumber] = useState('');
-  const [uploadFmtErr, setUploadFmtErr] = useState(false);
-  const [uploadNameErr, setUploadNameErr] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  // 編輯編號 modal（F018 AC-D16；獨立於覆蓋上傳之寫入路徑）
-  const [editNumberTarget, setEditNumberTarget] = useState<UsageFormPoolItem | null>(null);
-  const [editNumberValue, setEditNumberValue] = useState('');
-  const [editNumberErr, setEditNumberErr] = useState<string | null>(null);
-  const [editNumberBusy, setEditNumberBusy] = useState(false);
+  /**
+   * 制定部門欄之名稱解析來源（F018 `AC-N47`）。
+   * 後端列富化只回 `draftingDeptCodes`（代碼），名稱沿用既有 `/org-units` 解析。
+   * 載入失敗／未提供 → 空陣列 ⇒ 該格退回顯示代碼本身，不顯示 undefined、不阻斷清單。
+   */
+  const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
 
   // 覆蓋（以隱藏 input 選新檔）
   const overwriteInputRef = useRef<HTMLInputElement>(null);
@@ -181,6 +115,24 @@ export function UsageFormManagementPage(): JSX.Element {
   useEffect(() => {
     if (canRead) void load();
   }, [canRead, load]);
+
+  useEffect(() => {
+    if (!canRead) return;
+    void (async () => {
+      try {
+        const units = await getOrgUnits();
+        setOrgUnits(Array.isArray(units) ? units : []);
+      } catch {
+        setOrgUnits([]);
+      }
+    })();
+  }, [canRead]);
+
+  const orgByCode = useMemo(() => {
+    const m = new Map<string, OrgUnitRecord>();
+    for (const u of orgUnits) m.set(u.orgCode, u);
+    return m;
+  }, [orgUnits]);
 
   const rows = useMemo(() => {
     const list = items ?? [];
@@ -222,84 +174,6 @@ export function UsageFormManagementPage(): JSX.Element {
     },
     [toast],
   );
-
-  // ── 上傳 ──
-  const openUpload = (): void => {
-    setUploadFile(null);
-    setUploadName('');
-    setUploadNumber('');
-    setUploadFmtErr(false);
-    setUploadNameErr(false);
-    setUploadOpen(true);
-  };
-  const onUploadPick = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const f = e.target.files?.[0];
-    e.target.value = '';
-    if (!f) return;
-    if (!detectAllowedFmt(f.name)) {
-      setUploadFile(null);
-      setUploadFmtErr(true);
-      return;
-    }
-    setUploadFmtErr(false);
-    setUploadFile(f);
-    if (!uploadName.trim()) setUploadName(f.name);
-  };
-  const submitUpload = async (): Promise<void> => {
-    if (!uploadFile) {
-      setUploadFmtErr(true);
-      return;
-    }
-    if (!uploadName.trim()) {
-      setUploadNameErr(true);
-      return;
-    }
-    setSubmitting(true);
-    try {
-      // 表單名稱隨 multipart 一併送出（prototype 19 submitUpload 以 upName.trim() 為記錄名稱）。
-      await uploadUsageForms([uploadFile], uploadName.trim(), uploadNumber);
-      setUploadOpen(false);
-      toast.success(`已上傳表單「${uploadName.trim()}」（初始關聯 0 份）`);
-      await load();
-    } catch (e) {
-      toast.error(e instanceof ApiError ? `上傳失敗：${e.code}` : '上傳失敗');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // ── 編輯編號（F018 AC-D16～AC-D21）──
-  const openEditNumber = (form: UsageFormPoolItem): void => {
-    setEditNumberTarget(form);
-    setEditNumberValue(form.formNumber ?? '');
-    setEditNumberErr(null);
-  };
-  const closeEditNumber = (): void => {
-    setEditNumberTarget(null);
-    setEditNumberErr(null);
-  };
-  const submitEditNumber = async (): Promise<void> => {
-    const form = editNumberTarget;
-    if (!form) return;
-    // AC-D19：空字串／純空白一律送 null（空字串不得落地）。
-    const next = editNumberValue.trim() === '' ? null : editNumberValue.trim();
-    setEditNumberBusy(true);
-    try {
-      const updated = await updateUsageFormNumber(form.id, next);
-      // 清單即時反映（AC-D16）：就地換該列，不重查整張清單。
-      setItems((prev) =>
-        (prev ?? []).map((f) => (f.id === form.id ? { ...f, formNumber: updated.formNumber } : f)),
-      );
-      setEditNumberTarget(null);
-      setEditNumberErr(null);
-      toast.success(next ? '已更新表單編號。' : '已清除表單編號。');
-    } catch (e) {
-      // AC-D21 ④：錯誤時介面不關閉、該列不變，訊息就地顯示於 enNumberErr。
-      setEditNumberErr(editNumberErrorMessage(e));
-    } finally {
-      setEditNumberBusy(false);
-    }
-  };
 
   // ── 覆蓋 ──
   const onOverwriteClick = (form: UsageFormPoolItem): void => {
@@ -420,13 +294,22 @@ export function UsageFormManagementPage(): JSX.Element {
   return (
     <div className="space-y-4">
       <PageHeader breadcrumb={[{ label: '使用表單管理' }, { label: '表單池' }]} title="使用表單（表單池）管理">
+        {/*
+          🔴 F018 `AC-N41`／`AC-N77`：新增改為**導向獨立整頁**（非開 modal）；可見文字與
+          `aria-label` 皆逐字為「新增表單」。
+          📝 被改寫之原逐字值保留供追溯：OLD> `上傳表單`（該動作已不只是上傳檔案，
+             同時設定表單編號與制定部門）。
+        */}
         {canWrite && (
           <button
-            onClick={openUpload}
+            type="button"
+            data-create-usage-form=""
+            aria-label="新增表單"
+            onClick={() => navigate('/admin/usage-forms/new')}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
           >
-            <Icon name="upload" className="w-4 h-4" />
-            上傳表單
+            <Icon name="plus" className="w-4 h-4" />
+            新增表單
           </button>
         )}
       </PageHeader>
@@ -490,6 +373,8 @@ export function UsageFormManagementPage(): JSX.Element {
               <tr>
                 <th className="text-left font-medium px-4 py-2.5">表單編號</th>
                 <th className="text-left font-medium px-4 py-2.5">表單名稱</th>
+                {/* 🔵 F018 `AC-N47`（D9 delta）：新增欄置於「表單名稱」之後，表頭逐字為「制定部門」。 */}
+                <th className="text-left font-medium px-4 py-2.5">制定部門</th>
                 <th className="text-left font-medium px-4 py-2.5">格式</th>
                 <th className="text-left font-medium px-4 py-2.5">大小</th>
                 <th className="text-left font-medium px-4 py-2.5">上傳者 / 上傳時間</th>
@@ -510,11 +395,14 @@ export function UsageFormManagementPage(): JSX.Element {
                     isOpen={isOpen}
                     n={n}
                     canWrite={canWrite}
+                    draftingDeptNames={(f.draftingDeptCodes ?? []).map((c) =>
+                      orgPathLabel(orgByCode, c),
+                    )}
                     onToggle={() => toggleExpand(f.id)}
                     onDownload={() => void onDownload(f)}
                     onOverwrite={() => onOverwriteClick(f)}
                     onRemove={() => onRemoveClick(f)}
-                    onEditNumber={() => openEditNumber(f)}
+                    onEdit={() => navigate(`/admin/usage-forms/${f.id}/edit`)}
                     onJump={(documentId) => navigate(`/admin/documents/${documentId}`)}
                   />
                 );
@@ -546,182 +434,13 @@ export function UsageFormManagementPage(): JSX.Element {
         onChange={onOverwritePick}
       />
 
-      {/* 上傳 modal */}
-      {uploadOpen && (
-        <div
-          role="dialog"
-          aria-label="上傳使用表單"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
-        >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-slate-900">上傳使用表單</h3>
-              <button onClick={() => setUploadOpen(false)} aria-label="關閉" className="text-slate-400 hover:text-slate-600">
-                <Icon name="x" className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  選擇檔案 <span className="text-red-500">*</span>
-                </label>
-                <label className="w-full border border-dashed border-slate-300 rounded-lg px-4 py-5 flex flex-col items-center gap-1 text-slate-500 hover:border-primary-400 hover:bg-primary-50/40 cursor-pointer">
-                  <Icon name="upload-cloud" className="w-6 h-6 text-slate-400" />
-                  <span className="text-sm">點此選擇檔案</span>
-                  <span className="text-xs text-slate-400">支援格式：excel（.xlsx / .xls）、pdf</span>
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls,.pdf"
-                    aria-label="選擇檔案"
-                    className="sr-only"
-                    onChange={onUploadPick}
-                  />
-                </label>
-                {uploadFile && (
-                  <div className="mt-2 flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                    <Icon
-                      name={detectAllowedFmt(uploadFile.name) === 'excel' ? 'file-spreadsheet' : 'file-text'}
-                      className="w-4 h-4 text-slate-500"
-                    />
-                    <span className="text-slate-700 truncate">{uploadFile.name}</span>
-                    <span className="ml-auto">
-                      <FormatBadge fmt={detectAllowedFmt(uploadFile.name) ?? 'pdf'} />
-                    </span>
-                  </div>
-                )}
-                {uploadFmtErr && (
-                  <p className="mt-2 text-xs text-red-600 flex items-start gap-1">
-                    <Icon name="alert-circle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span>檔案格式不支援，僅允許 excel（.xlsx / .xls）與 pdf（FILE_FORMAT_NOT_ALLOWED）。</span>
-                  </p>
-                )}
-              </div>
-              <div>
-                <label htmlFor="uf-upload-name" className="block text-sm font-medium text-slate-700 mb-1">
-                  表單名稱 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="uf-upload-name"
-                  type="text"
-                  value={uploadName}
-                  onChange={(e) => {
-                    setUploadName(e.target.value);
-                    if (e.target.value.trim()) setUploadNameErr(false);
-                  }}
-                  placeholder="請輸入表單名稱（可沿用檔名）"
-                  className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-                />
-                {uploadNameErr && <p className="mt-1 text-xs text-red-600">表單名稱不可為空。</p>}
-              </div>
-              {/* AC-D15 ②：上傳 modal 之選填編號欄；placeholder 與編號 modal 共用同一常數。 */}
-              <div>
-                <label htmlFor="upNumber" className="block text-sm font-medium text-slate-700 mb-1">
-                  表單編號 <span className="text-xs font-normal text-slate-400">（選填）</span>
-                </label>
-                <input
-                  id="upNumber"
-                  type="text"
-                  maxLength={FORM_NUMBER_MAX_LENGTH}
-                  value={uploadNumber}
-                  onChange={(e) => setUploadNumber(e.target.value)}
-                  placeholder={FORM_NUMBER_PLACEHOLDER}
-                  className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm mono focus:outline-none focus:ring-2 focus:ring-primary-600"
-                />
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
-                <Icon name="hard-drive" className="w-3.5 h-3.5 text-slate-400" />
-                檔案大小上限 <span className="font-medium text-slate-600">50&nbsp;MB</span>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setUploadOpen(false)} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">
-                取消
-              </button>
-              <button
-                onClick={() => void submitUpload()}
-                disabled={submitting}
-                className="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700 disabled:opacity-50"
-              >
-                上傳
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 編輯編號 modal（F018 AC-D16／AC-D21；逐字文案權威＝prototype 19） */}
-      {editNumberTarget && (
-        <div
-          id="editNumberModal"
-          role="dialog"
-          aria-label="編輯表單編號"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
-        >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="font-semibold text-slate-900">編輯表單編號</h3>
-              <button
-                type="button"
-                onClick={closeEditNumber}
-                aria-label="關閉"
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <Icon name="x" className="w-5 h-5" />
-              </button>
-            </div>
-            {/* AC-D21 ②：被編輯之表單名稱純資料回顯（無前綴後綴） */}
-            <p id="enFormName" className="text-xs text-slate-400 mb-4 truncate">
-              {editNumberTarget.name}
-            </p>
-            <div>
-              <label htmlFor="enNumber" className="block text-sm font-medium text-slate-700 mb-1">
-                表單編號 <span className="text-xs font-normal text-slate-400">（選填）</span>
-              </label>
-              <input
-                id="enNumber"
-                type="text"
-                maxLength={FORM_NUMBER_MAX_LENGTH}
-                value={editNumberValue}
-                onChange={(e) => setEditNumberValue(e.target.value)}
-                placeholder={FORM_NUMBER_PLACEHOLDER}
-                className={`w-full px-3 py-2 rounded-md border text-sm mono focus:outline-none focus:ring-2 focus:ring-primary-600 ${
-                  editNumberErr ? 'border-red-500' : 'border-slate-300'
-                }`}
-              />
-              {editNumberErr && (
-                <p
-                  id="enNumberErr"
-                  className="mt-1 text-xs text-red-600 flex items-center gap-1"
-                >
-                  <Icon name="alert-circle" className="w-3.5 h-3.5 shrink-0" />
-                  <span>{editNumberErr}</span>
-                </p>
-              )}
-            </div>
-            <p className="mt-3 flex items-start gap-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
-              <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              僅更新編號，不會變更表單檔案。
-            </p>
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                type="button"
-                onClick={closeEditNumber}
-                className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50"
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={() => void submitEditNumber()}
-                disabled={editNumberBusy}
-                className="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700 disabled:opacity-50"
-              >
-                儲存
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/*
+        📝 **被取代之兩個 modal 逐字保留於 git 歷史**（F018 `AC-N41`）：
+        「上傳使用表單」modal → `UsageFormCreatePage`（/admin/usage-forms/new）；
+        「編輯表單編號」modal（容器 id `editNumberModal`）→ `UsageFormEditPage`
+        （/admin/usage-forms/:formId/edit）。`AC-N48` 明訂 `editNumberModal` **自此不存在**。
+        ⚠ 本頁其餘 modal（覆蓋共用／移除保護之二次確認）**不受本 delta 影響**，維持原樣。
+      */}
 
       {/* 二次確認 modal（覆蓋共用 / 移除保護） */}
       {confirm && (
@@ -778,11 +497,12 @@ function FormRow({
   isOpen,
   n,
   canWrite,
+  draftingDeptNames,
   onToggle,
   onDownload,
   onOverwrite,
   onRemove,
-  onEditNumber,
+  onEdit,
   onJump,
 }: {
   form: UsageFormPoolItem;
@@ -790,26 +510,36 @@ function FormRow({
   isOpen: boolean;
   n: number;
   canWrite: boolean;
+  /** 已解析之制定部門名稱（F018 `AC-N47`；0 筆為合法，該格顯示逐字「—」）。 */
+  draftingDeptNames: string[];
   onToggle: () => void;
   onDownload: () => void;
   onOverwrite: () => void;
   onRemove: () => void;
-  onEditNumber: () => void;
+  onEdit: () => void;
   onJump: (documentId: string) => void;
 }): JSX.Element {
   return (
     <>
       <tr className="hover:bg-slate-50">
-        {/* AC-D1／AC-D15 ①：表單編號首欄；null 顯示「—」＋title（不得顯示 null 或空白）。 */}
-        <td className="px-4 py-3" data-form-number>
-          {form.formNumber ? (
+        {/*
+          AC-D1／AC-D15 ①：表單編號首欄；null 顯示「—」＋ title（不得顯示 null 或空白）。
+          ⚠ **無值分支之 `data-form-number`、逐字「—」與 `title` 必須落在同一個元素上**——
+             `TS-D18-062` 以 `getByText('—', { selector: '[data-form-number]' })` 定位後直接斷言
+             其 `title`（`AC-N47` 新增之制定部門欄同列亦有一個「—」，不限縮就會多重命中）。
+             把掛鉤留在 `<td>`、文字包進內層 `<span>` 會使兩者分屬不同元素而永遠找不到；
+             故此處把 `text-slate-300` 與 `title` 一併移到 `<td>`（視覺相同）。
+             有值分支維持內層 `<span className="mono">`——`TS-D18-061` 斷言的正是該 span 之 class。
+        */}
+        {form.formNumber ? (
+          <td className="px-4 py-3" data-form-number>
             <span className="mono text-xs text-slate-700">{form.formNumber}</span>
-          ) : (
-            <span className="text-slate-300" title="此表單未設定編號">
-              —
-            </span>
-          )}
-        </td>
+          </td>
+        ) : (
+          <td className="px-4 py-3 text-slate-300" data-form-number title="此表單未設定編號">
+            —
+          </td>
+        )}
         <td className="px-4 py-3">
           <div className="flex items-start gap-2">
             <Icon name={fmt === 'excel' ? 'file-spreadsheet' : 'file-text'} className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
@@ -819,6 +549,27 @@ function FormRow({
             </div>
           </div>
         </td>
+        {/*
+          🔵 F018 `AC-N47`：制定部門欄。多筆以全形頓號「、」分隔；**0 筆顯示逐字「—」**
+          （U+2014，比照 `AC-D15` ① 之既有慣例，不得顯示 null 或空白）。
+          ⚠ `data-drafting-dept` 與該逐字文字**必須落在同一個元素上**——`AC-N47` 之斷言以
+             `getByText('—', { selector: '[data-drafting-dept]' })` 定位，掛在外層而把文字包進
+             內層 `<span>` 會使該掛鉤與文字分屬兩個元素而永遠找不到。
+          🔴 `AC-N46`：本欄為**純 metadata**，不參與任何可見性／RBAC 判定。
+        */}
+        {draftingDeptNames.length > 0 ? (
+          <td className="px-4 py-3 text-slate-600" data-drafting-dept>
+            {draftingDeptNames.join('、')}
+          </td>
+        ) : (
+          <td
+            className="px-4 py-3 text-slate-300"
+            data-drafting-dept
+            title="此表單未指定制定部門"
+          >
+            —
+          </td>
+        )}
         <td className="px-4 py-3">
           <FormatBadge fmt={fmt} />
         </td>
@@ -852,6 +603,29 @@ function FormRow({
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center justify-start gap-1">
+            {/*
+              🔴 AC-D17：無寫入權角色之列內「編輯」動作必須**自 DOM 移除**，不得僅以 CSS 隱藏
+              ——Testing Library 之 *ByLabelText 不尊重 display:none。本頁其餘寫入動作沿用
+              既有 CSS 隱藏機制，此局部不一致為刻意，不得「順手統一」。
+              🔴 `AC-N48` ①：可見文字與無障礙名稱自 2026-08-20 第三輪起逐字改為「編輯」
+                 （lead 裁決，「逐字沿用」原則之明文例外——本入口導向之頁面已可改制定部門，
+                 停在「編輯編號」名不副實）。
+              📝 被改寫之原逐字值保留供追溯：OLD> `編輯編號`。
+              🔒 屬性名 `data-edit-number` 與 icon 鍵 `hash` **逐字不變**（穩定之定位掛鉤）。
+              🔴 `AC-N41`：點擊後**導向** /admin/usage-forms/:formId/edit，不再開啟 modal。
+            */}
+            {canWrite && (
+              <button
+                onClick={onEdit}
+                data-edit-number={form.id}
+                aria-label="編輯"
+                title="編輯"
+                className="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px] shrink-0"
+              >
+                <Icon name="hash" className="w-3 h-3" />
+                編輯
+              </button>
+            )}
             <button
               onClick={onDownload}
               title="下載"
@@ -866,23 +640,6 @@ function FormRow({
                 className="w-8 h-8 rounded hover:bg-slate-100 text-slate-500 flex items-center justify-center"
               >
                 <Icon name={isOpen ? 'chevron-up' : 'chevron-down'} className="w-4 h-4" />
-              </button>
-            )}
-            {/*
-              🔴 AC-D17：無寫入權角色之「編輯編號」必須**自 DOM 移除**，不得僅以 CSS 隱藏
-              ——Testing Library 之 *ByLabelText 不尊重 display:none。本頁其餘寫入動作沿用
-              既有 CSS 隱藏機制，此局部不一致為刻意，不得「順手統一」。
-            */}
-            {canWrite && (
-              <button
-                onClick={onEditNumber}
-                data-edit-number={form.id}
-                aria-label="編輯編號"
-                title="編輯編號"
-                className="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px] shrink-0"
-              >
-                <Icon name="hash" className="w-3 h-3" />
-                編輯編號
               </button>
             )}
             {canWrite && (
@@ -908,7 +665,8 @@ function FormRow({
       </tr>
       {isOpen && n > 0 && (
         <tr className="bg-slate-50/70">
-          <td colSpan={7} className="px-4 py-3">
+          {/* `AC-N47`：表頭由 7 欄擴為 8 欄（新增「制定部門」），展開列之 colSpan 隨之。 */}
+          <td colSpan={8} className="px-4 py-3">
             <div className="text-xs text-slate-500 mb-2 flex items-center gap-1">
               <Icon name="corner-down-right" className="w-3.5 h-3.5" />
               使用此表單的 ICSOP 文件（{n}）

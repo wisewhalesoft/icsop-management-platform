@@ -648,6 +648,13 @@ export interface UsageFormPoolItem {
   uploadedByName?: string | null;
   /** G-ADM-024 上傳者部門名（accountId→orgCode→ORG_UNIT.name；未解析→null）。 */
   uploadedByDept?: string | null;
+  /**
+   * F018 D9 delta（`AC-N45`／`AC-N47`）：制定部門之 `orgCode` 清單（0..*，0 筆為合法）。
+   *
+   * 🔴 **純 metadata**（`AC-N46`）——顯示與清單呈現用，**不參與任何可見性或 RBAC 判定**。
+   * 選填：後端 store 未提供該能力時為 `undefined`，既有呼叫端不受影響（additive）。
+   */
+  draftingDeptCodes?: string[];
 }
 
 /**

@@ -826,6 +826,7 @@ export function uploadUsageForms(
   files: File[],
   name?: string,
   formNumber?: string | null,
+  draftingDeptCodes?: string[],
 ): Promise<unknown> {
   const fd = new FormData();
   for (const f of files) fd.append('files', f);
@@ -833,22 +834,42 @@ export function uploadUsageForms(
   if (files.length === 1 && trimmed !== '') fd.append('name', trimmed);
   const number = (formNumber ?? '').trim();
   if (files.length === 1 && number !== '') fd.append('formNumber', number);
+  // F018 `AC-N43`／architecture-spec §11.10(b)：additive 純文字欄位，值為 JSON 陣列字串。
+  // 0 筆時**不送出該欄**——後端以「未帶鍵 ≠ 帶空陣列」區分「不動」與「顯式清空」，
+  // 建立路徑本就無既有值可清，送空陣列只會多要求 store 支援 replace-set。
+  const depts = (draftingDeptCodes ?? []).map((c) => c.trim()).filter((c) => c !== '');
+  if (files.length === 1 && depts.length > 0) {
+    fd.append('draftingDeptCodes', JSON.stringify(Array.from(new Set(depts))));
+  }
   return apiFetch('/admin/usage-forms', { method: 'POST', body: fd });
 }
 
 /**
- * PATCH /admin/usage-forms/:formId/number（F018「編輯編號」，architecture-spec §10.7 A14）。
- * body 只有 `formNumber` 一鍵——不碰檔案、不碰關聯、不寫稽核、不觸發覆蓋共用警示。
- * 清空傳 `null`（空字串不得落地）。409 USAGE_FORM_NUMBER_DUPLICATE／400 USAGE_FORM_NUMBER_TOO_LONG。
+ * PATCH /admin/usage-forms/:formId（F018 編輯頁 metadata，architecture-spec §11.10(b)）。
+ *
+ * 📝 **被取代之路徑逐字保留供追溯**：OLD> `PATCH /admin/usage-forms/:formId/number`
+ * （函式名 OLD> `updateUsageFormNumber(formId, formNumber)`）。`AC-N41`／`AC-N48` 將「編輯編號」
+ * modal 整頁化為 `/admin/usage-forms/:formId/edit`，其範圍已擴為「表單編號 ＋ 制定部門」兩項
+ * metadata，後端隨之移除 `/number` 尾段（`usage-forms.controller.ts` 之 `@Patch`）。
+ *
+ * body 只有 `formNumber`／`draftingDeptCodes` 兩鍵——不碰檔案、不碰關聯、不觸發覆蓋共用警示
+ * （`AC-N49` 副作用邊界）。**未帶鍵＝不動該項；帶鍵但為 `null`／`[]`＝顯式清空**，故呼叫端
+ * 須自行決定要送哪幾鍵。清空編號傳 `null`（空字串不得落地）。
+ * 409 USAGE_FORM_NUMBER_DUPLICATE／400 USAGE_FORM_NUMBER_TOO_LONG。
+ *
+ * 📌 後端雖回 200 ＋更新後之該列，本函式**刻意宣告為 `Promise<void>`**：唯一呼叫端
+ * （編輯頁）儲存成功後即導回清單頁並重查，不需要該值；宣告它會讓呼叫端誤以為可以就地
+ * 拿它更新畫面，而該值之形狀（`UsageFormRecord`，不含 `docCount`／`documents`）與清單列
+ * （`UsageFormPoolItem`）並不相同。
  */
-export function updateUsageFormNumber(
+export function updateUsageForm(
   formId: string,
-  formNumber: string | null,
-): Promise<import('./types').UsageFormPoolItem> {
-  return apiFetch(`/admin/usage-forms/${formId}/number`, {
+  patch: { formNumber?: string | null; draftingDeptCodes?: string[] },
+): Promise<void> {
+  return apiFetch(`/admin/usage-forms/${formId}`, {
     method: 'PATCH',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ formNumber }),
+    body: JSON.stringify(patch),
   });
 }
 

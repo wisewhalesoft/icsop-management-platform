@@ -83,7 +83,13 @@ export function PageHeader({
           </Fragment>
         ))}
       </div>
-      <div className="font-semibold text-slate-900 text-sm truncate" {...titleAttrs}>{title}</div>
+      {/*
+        🔴 2026-08-20：由 `div` 改為 `h1`——admin shell 之 prototype topbar 一律為
+        `<h1 class="font-semibold text-slate-900 text-sm truncate">`（見 19a/19b 等各頁 `<header>`）。
+        頁標題是該頁唯一之 landmark 標題，以 `div` 呈現使 `getByRole('heading')` 與螢幕報讀器
+        皆找不到它。視覺 class 逐字不變。
+      */}
+      <h1 className="font-semibold text-slate-900 text-sm truncate" {...titleAttrs}>{title}</h1>
     </div>
   );
 

@@ -215,7 +215,10 @@ export function AccessHistoryPage(): JSX.Element {
   const runQuery = () => void load(buildFilters());
 
   const clearQuery = () => {
-    setKind('');
+    // 🔴 F024 `AC-N69`：類型之「不施加限制」哨兵為 `KIND_ALL`（`全部`），**不再是空字串**。
+    //    留著 `''` 會使 `<select>` 落到「無任何 option 相符」之狀態（畫面顯示空白選項），
+    //    且 `tsc --noEmit` 紅燈（`''` 不在 `AuditKind | typeof KIND_ALL` 之值域內）。
+    setKind(KIND_ALL);
     setPerson('');
     setTarget('');
     setFrom('');
