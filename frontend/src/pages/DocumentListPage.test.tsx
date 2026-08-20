@@ -126,11 +126,19 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
     await waitFor(() => expect(endpoints.getDocuments).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 2000 })));
   });
 
-  it('14 欄表頭齊全', async () => {
+  /**
+   * 🔴 2026-08-20 D9 delta（缺失／變更 delta 第 9 項；`AC-N37`）：清單由 14 欄改為 **15 欄**，
+   * 新增之 OJT 圖示欄置於**最左**（`制定公司` 之前）。原「14 欄表頭齊全」就地擴充為 15 欄。
+   * 📝 被取代之原斷言集合逐字保留供追溯：
+   *   OLD> for (const h of ['制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖', '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別']) {
+   *   OLD>   expect(screen.getByRole('columnheader', { name: new RegExp(h) })).toBeInTheDocument();
+   *   OLD> }
+   */
+  it('15 欄表頭齊全（AC-N37：新增 OJT 圖示欄置於最左）', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
-    for (const h of ['制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖', '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別']) {
+    for (const h of ['OJT', '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖', '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別']) {
       expect(screen.getByRole('columnheader', { name: new RegExp(h) })).toBeInTheDocument();
     }
   });
@@ -142,19 +150,110 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
    * 本案為既有「14 欄表頭齊全」之**加嚴**版（該案僅驗存在性，`new RegExp(h)` 亦可能跨欄誤命中），
    * 於本 delta 導入前即應為綠——**這是刻意的**：回歸鎖定之守衛本來就從一開始就綠，
    * 其價值在於「篩選改版若不慎動到欄位即立刻紅」。
+   *
+   * 🔴 2026-08-20 D9 delta（`AC-N37`）：欄數擴充為 15，`OJT` 為新增之**第 1 欄**、其後 14 欄之
+   * 集合與相對順序逐字不變（`AC-N40` ①）——本案就地擴充，不另立第二份。
+   * 📝 被取代之原斷言逐字保留供追溯：
+   *   OLD> expect(headers).toHaveLength(14);
+   *   OLD> expect(headers).toEqual([
+   *   OLD>   '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖',
+   *   OLD>   '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別',
+   *   OLD> ]);
    */
-  it('AC-D9 14 欄之表頭順序逐字鎖定（僅動篩選、不動欄位）', async () => {
+  it('AC-D9／AC-N37 15 欄之表頭順序逐字鎖定（OJT 為新增之第 1 欄，其餘 14 欄僅動篩選、不動欄位）', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
     const headers = screen
       .getAllByRole('columnheader')
       .map((th) => (th.textContent ?? '').replace(/[▲▼↑↓\s]/g, ''));
-    expect(headers).toHaveLength(14);
+    expect(headers).toHaveLength(15);
     expect(headers).toEqual([
-      '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖',
+      'OJT', '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖',
       '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別',
     ]);
+  });
+
+  /**
+   * 2026-08-20 D9 delta（缺失／變更 delta 第 9 項）—— OJT 圖示欄三態渲染與 DOM 契約。
+   * 權威：`docs/specs/features/F017-backend-document-list.md#ojt-icon-column-delta`
+   *  （`AC-N38`／`AC-N39`／`AC-N40`）。資料已就緒（`hasOjt`），本 delta 純前端顯示變更。
+   */
+  describe('OJT 圖示欄（D9 delta，AC-N37～AC-N40）', () => {
+    const OJT_DOCS: DocumentListItem[] = [
+      doc({ id: 'o-true', documentNumber: 'N-T', documentName: '有OJT文件', hasOjt: true }),
+      doc({ id: 'o-false', documentNumber: 'N-F', documentName: '無OJT文件', hasOjt: false }),
+      doc({ id: 'o-undef', documentNumber: 'N-U', documentName: '缺鍵OJT文件', hasOjt: undefined }),
+    ];
+
+    beforeEach(() => {
+      mockAuth('ICSOPAdmin');
+      vi.mocked(endpoints.getDocuments).mockResolvedValue(page(OJT_DOCS));
+    });
+
+    it('AC-N39 每列之 OJT 儲存格帶 data-ojt-cell', async () => {
+      renderPage();
+      await waitFor(() => expect(screen.getByText('有OJT文件')).toBeInTheDocument());
+      for (const name of ['有OJT文件', '無OJT文件', '缺鍵OJT文件']) {
+        const cell = rowOf(name).querySelector('[data-ojt-cell]');
+        expect(cell, `${name} 之列找不到 data-ojt-cell 儲存格`).not.toBeNull();
+      }
+    });
+
+    it('AC-N38① hasOjt=true → title／aria-label 逐字為「有 OJT」；AC-N39 data-has-ojt="true"', async () => {
+      renderPage();
+      await waitFor(() => expect(screen.getByText('有OJT文件')).toBeInTheDocument());
+      const cell = rowOf('有OJT文件').querySelector('[data-ojt-cell]') as HTMLElement;
+      expect(cell.getAttribute('data-has-ojt')).toBe('true');
+      const marker = cell.querySelector('[title], [aria-label]') as HTMLElement;
+      expect(marker, '找不到帶 title/aria-label 之圖示元素').not.toBeNull();
+      expect(marker.getAttribute('title') ?? marker.textContent).toMatch(/有 OJT/);
+      expect(marker.getAttribute('aria-label')).toBe('有 OJT');
+    });
+
+    it('AC-N38② hasOjt=false → title／aria-label 逐字為「無 OJT」；AC-N39 data-has-ojt="false"', async () => {
+      renderPage();
+      await waitFor(() => expect(screen.getByText('無OJT文件')).toBeInTheDocument());
+      const cell = rowOf('無OJT文件').querySelector('[data-ojt-cell]') as HTMLElement;
+      expect(cell.getAttribute('data-has-ojt')).toBe('false');
+      const marker = cell.querySelector('[title], [aria-label]') as HTMLElement;
+      expect(marker.getAttribute('aria-label')).toBe('無 OJT');
+    });
+
+    it('AC-N38③ hasOjt 缺鍵（undefined）→ 視同 false（file-x-2／「無 OJT」），非空白或第三種狀態', async () => {
+      renderPage();
+      await waitFor(() => expect(screen.getByText('缺鍵OJT文件')).toBeInTheDocument());
+      const cell = rowOf('缺鍵OJT文件').querySelector('[data-ojt-cell]') as HTMLElement;
+      expect(cell.getAttribute('data-has-ojt')).toBe('false');
+      const marker = cell.querySelector('[title], [aria-label]') as HTMLElement;
+      expect(marker.getAttribute('aria-label')).toBe('無 OJT');
+      // 不得渲染為空白／—／null
+      expect(cell.textContent?.trim()).not.toBe('');
+      expect(cell.textContent?.trim()).not.toBe('—');
+    });
+
+    it('AC-N38 兩態之無障礙名稱互不相同（鑑別力守衛：防止兩態渲染成相同文案）', async () => {
+      renderPage();
+      await waitFor(() => expect(screen.getByText('有OJT文件')).toBeInTheDocument());
+      const trueMarker = rowOf('有OJT文件').querySelector('[data-ojt-cell] [aria-label]') as HTMLElement;
+      const falseMarker = rowOf('無OJT文件').querySelector('[data-ojt-cell] [aria-label]') as HTMLElement;
+      expect(trueMarker.getAttribute('aria-label')).not.toBe(falseMarker.getAttribute('aria-label'));
+    });
+
+    it('AC-N40② 既有 OJT 篩選下拉（全部／有 OJT／無 OJT）逐字不動——本 delta 只加顯示欄、不動篩選', async () => {
+      renderPage();
+      await waitFor(() => expect(screen.getByText('有OJT文件')).toBeInTheDocument());
+      // 精確比對（非 /OJT/ 子字串）：避免命中新增之 OJT 圖示 aria-label「有 OJT」／「無 OJT」。
+      const ojtFilter = screen.getByLabelText(/^OJT$/) as HTMLSelectElement;
+      const optionTexts = Array.from(ojtFilter.options).map((o) => o.textContent?.trim());
+      expect(optionTexts).toEqual(['全部', '有 OJT', '無 OJT']);
+    });
+
+    it('AC-N40④ 不得新增後端查詢：hasOjt 隨既有一次批次查詢取得，getDocuments 僅呼叫一次', async () => {
+      renderPage();
+      await waitFor(() => expect(screen.getByText('有OJT文件')).toBeInTheDocument());
+      expect(endpoints.getDocuments).toHaveBeenCalledTimes(1);
+    });
   });
 
   /**
@@ -259,14 +358,32 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
       expect(btn.tagName).toBe('BUTTON');
     });
 
-    it('TS-D-016 無 ICSOP PDF 之列顯示「—」（非按鈕）', async () => {
+    /**
+     * 🔴 2026-08-20 D9 delta（`AC-N37`）：新增 OJT 圖示欄置於最左，「檔案」欄之絕對索引由
+     * 5（0-based）順移為 6。
+     * 📝 被取代之原斷言逐字保留供追溯：OLD> expect(row.querySelectorAll('td')[5].textContent).toBe('—');
+     */
+    it('TS-D-016／AC-N37 無 ICSOP PDF 之列顯示「—」（非按鈕）', async () => {
       mockAuth('ICSOPAdmin');
       renderPage();
       await waitFor(() => expect(screen.getByText('消費分期產品政策及規範作業')).toBeInTheDocument());
       const row = rowOf('消費分期產品政策及規範作業');
       expect(within(row).queryByTitle(/^下載 /)).not.toBeInTheDocument();
-      // 檔案欄（第 6 欄，index 5）為「—」
-      expect(row.querySelectorAll('td')[5].textContent).toBe('—');
+      // 檔案欄（第 7 欄，index 6，因 OJT 圖示欄插入最左而順移）為「—」
+      expect(row.querySelectorAll('td')[6].textContent).toBe('—');
+    });
+
+    /**
+     * 🔴 2026-08-20 D9 delta（`OQ-D9-08`／`OQ-D9-33`）—— 後台清單頁「檔案」欄亦渲染浮水印註記。
+     * 權威：`docs/specs/features/F020-watermark.md#backend-burn-delta` `AC-N20`。
+     */
+    it('AC-N20 「檔案」欄之 ICSOP PDF（pdf）列帶 data-wm-note，逐字為「檢視/下載將燒錄浮水印」', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      const note = rowOf('車輛分期進件作業').querySelector('[data-wm-note]');
+      expect(note, '找不到 data-wm-note').not.toBeNull();
+      expect(note!.textContent).toBe('檢視/下載將燒錄浮水印');
     });
 
       /**

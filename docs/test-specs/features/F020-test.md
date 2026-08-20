@@ -368,3 +368,51 @@ status: draft
 - **#25**（`/pdf` 等端點之 `Cache-Control` 標頭）：非 AC 明文要求（architecture §11.11 列為建議、
   非阻擋），本輪未建約束，列入 `risks-and-gaps.md` 供追蹤。
 且行為正確（它已用 block 子元素分行）。真正的缺陷是**沒有分行**，不是 `nowrap` 本身。
+
+---
+
+# 🔴🔴 2026-08-20 D9 缺失／變更 delta 測試設計（檢視器 canvas 化＋疊加層收斂，frontend 線）
+
+> 本段由 **test-generator（frontend／vitest 線）** 於 2026-08-20 追加，涵蓋 `AC-N2`（前端 2 處有效
+> 載體之色值／不透明度）、`AC-N4`／`AC-N5`／`AC-N7`／`AC-N8`／`AC-N9`／`AC-N20`（前端半：後台各頁
+> 渲染 `data-wm-note`）／`AC-N66`／`AC-N67`／`AC-N71`～`AC-N73`。backend 線已持有 `AC-N1`／`AC-N3`
+> （後端半）／`AC-N6`（燒錄本體）／`AC-N10`～`AC-N19`／`AC-N21`／`AC-N68`（後端半），不重複建約束。
+
+## AC ↔ 約束對照
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-N2` `ChangeHistoryPage`／`LifecycleTreePreviewPage` 疊加之定稿值 `#334155` @ `0.30` | `frontend/src/pages/ChangeHistoryPage.watermark.test.tsx`／`LifecycleTreePreviewPage.watermark.test.tsx`（各自新增「浮水印疊加：色值／不透明度」案） | component |
+| `AC-N4` 無 `<iframe>`／`<embed>`／`<object>`，`<canvas data-pdf-canvas>` 承載 | `frontend/src/pages/PublicViewerPage.test.tsx`（「AC-N4」案） | component |
+| `AC-N5` 🔒 系統下載／列印鈕仍存在（回歸鎖定） | 同檔（「AC-N5」案，沿用既有斷言） | component |
+| `AC-N6` 前端消費半：檢視器經 `/pdf` 端點取得位元組（`fetch` 呼叫） | 同檔（「AC-N6」案）＋`PublicViewerPage.watermark.test.tsx`（「AC-N6 單層浮水印之前提」） | component |
+| `AC-N7` 🔴 無任何浮水印疊加層（負向斷言） | 同二檔（「AC-N7」＋「初次載入完成後...」「縮放互動...」共 3 案） | component |
+| `AC-N8` 縮放不得以 `transform: scale()` 達成 | `PublicViewerPage.test.tsx`（「AC-N8」案，含祖先容器遍歷） | component |
+| `AC-N9`／`AC-N73` 縮放觸發以新倍率重新渲染（`vi.mock('pdfjs-dist')` seam） | 同檔（「AC-N9／AC-N73」案，`pdfjsState` 可觀測序列） | component |
+| `AC-N20` 前端半：後台 5 頁各檔案列渲染 `data-wm-note` | `DocumentListPage.test.tsx`／`DocumentReadonlyPage.test.tsx`／`DocumentEditPage.test.tsx`／`UsageFormManagementPage.test.tsx`／`AppendixManagementPage.test.tsx`（各自新增「AC-N20」案，共 9 案） | component |
+| `AC-N66` 🔒 兩頁疊加層必須保留（正向鎖定） | 既有 `ChangeHistoryPage.watermark.test.tsx`／`LifecycleTreePreviewPage.watermark.test.tsx` 之三層式渲染案（未修改，本輪僅新增色值案；🔴 三層拆行語意本身不受本 delta 影響，逐字綠燈即為 `AC-N66` 佐證） | component |
+| `AC-N67` ①② 格式字幕保留＋`/view` 端點稽核觸發 | `PublicViewerPage.test.tsx`（「AC-N67 ①」「AC-N67 ②」案） | component |
+| `AC-N68` 前端半：`watermarkLines()` 固定測試向量 | 既有 `frontend/src/domain/watermark-lines.test.ts`（未修改，已對同一組固定向量斷言，本輪不重複建） | unit |
+| `AC-N71` DOM 契約（canvas aria-label／`data-viewer-page`／`prevBtn`／`nextBtn`／`pageInput`／`pageTotal`） | `PublicViewerPage.test.tsx`（「AC-N71」3 案） | component |
+| `AC-N72` `#securityBand` 逐字文案（空白正規化） | 同檔（「AC-N72」案） | component |
+
+## ⚠ 契約性假設（test-generator 訂立，非讀取實作決定；供 tdd-implementation 對齊或申訴）
+
+1. **檢視器取得已燒錄位元組之機制**：推定為 `PublicViewerPage` 呼叫 `fetch(documentPdfUrl(id))`
+   取得 `ArrayBuffer` 後交給 `pdfjs-dist` 之 `getDocument({ data })`（`AC-N6`／`AC-N9` 之測試皆
+   `vi.stubGlobal('fetch', ...)`）。若實作改採其他取得方式（如 `pdfjs-dist` 之 `getDocument({url})`
+   直接內建抓取），`AC-N6` 之 `fetch` 斷言需調整，屬合理申訴。
+2. **`vi.mock('pdfjs-dist', ...)` 之可執行性已實測驗證**——本檔（`PublicViewerPage.test.tsx`／
+   `.watermark.test.tsx`）**不** `import` `pdfjs-dist`（僅透過 `vi.hoisted` 之 `pdfjsState` 存取
+   mock 內部狀態），故在 `pdfjs-dist` 尚未安裝之現階段**仍可正常收集與執行**（非「收集階段失敗」）
+   ——此為建環時之重要澄清，避免誤判本檔為不可執行。待 tdd-implementation 依架構決策 B1 新增
+   `pdfjs-dist` 相依並改為 canvas 化實作後，其內部 `import` 才會被本檔之 `vi.mock` 正確攔截。
+
+## risks-and-gaps 提醒
+
+- **§11.11 #22／#23（大頁數記憶體峰值、HiDPI 實際清晰度）**：架構文件已明文列為「原理上測不到」
+  （jsdom 無真實 canvas 點陣渲染），本輪不建約束，需瀏覽器煙霧測試把關，列入 `risks-and-gaps.md`。
+- **§11.11 #18／#19（pdf.js 靜態資產部署）**：純建置/部署問題，vitest 以 mock 執行、從未真的下載
+  `/pdfjs/cmaps/*.bcmap`，本輪不建約束，列入 `risks-and-gaps.md`。
+- **`AC-N71` 之「單頁 vs 連續捲動」為 ui-ux-designer 之授權裁量，本段只鎖可觀測掛鉤**（`data-viewer-page`
+  等），不鎖畫面呈現形式本身。

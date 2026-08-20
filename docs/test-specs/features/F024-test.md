@@ -275,3 +275,31 @@ failed to run`）。實作方補上 `res` 參數、整檔編譯通過後，這�
 （`audit.types.ts`）三者皆需新增列舉字面值（`'上傳'`／`'DOCUMENT_ATTACHMENT'`／
 `'ATTACHMENT_UPLOAD'`）——本段測試對這些新字面值之呼叫（如 `kindToTargetTypes('上傳' as never)`）
 於本環撰寫時預期為**編譯期型別紅燈**，是「紅在對的原因」之一種，非測試本身有誤。
+
+---
+
+# 🔴🔴 2026-08-20 D9 缺失／變更 delta 測試設計（frontend 線）
+
+> 本段由 **test-generator（frontend／vitest 線）** 於 2026-08-20 追加，涵蓋 `AC-N80`／`AC-N81` 之
+> 前端 DOM 契約，並補上 `AC-N53`／`AC-N69`／`AC-N70` 之 render-level 呈現半（backend 線已持有
+> 標籤對照表本身與查詢/匯出邏輯，本段不重複建）。
+
+## AC ↔ 約束對照
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-N53` 上傳事件之「類型」欄逐字「上傳」、「操作類型」欄逐字「附件上傳」 | `frontend/src/pages/AccessHistoryPage.test.tsx`（「AC-N53」案） | component |
+| `AC-N69` ①② 類型＝文件（排除上傳）／類型＝上傳（篩出，新增之第四種篩選值） | 同檔（「AC-N69①」「AC-N69②」案） | component |
+| `AC-N69` 🔴 篩選控制項恰 5 個 option（`全部`／`文件`／`循環`／`變更`／`上傳`，順序逐字） | 同檔（「AC-N69 🔴」案） | component |
+| `AC-N80` `data-wm-snapshot` DOM 契約＋留空時逐字文案「（此動作類型無浮水印，該欄留空）」 | 同檔（「AC-N80」案） | component |
+| `AC-N81` 同頁刻意分歧：表格「公司」欄全稱、展開明細浮水印快照片段簡稱（前端 DOM 半） | 同檔（「AC-N81」案，兩者同時斷言於同一渲染結果） | component |
+
+## risks-and-gaps 提醒
+
+- **`AC-N54`（後台燒錄下載列與前台同形）與 `AC-N70`（上傳事件之匯出呈現）未於前端另建新約束**——
+  前者因後台/前台稽核列本就沿用同一組既有渲染路徑（`targetType`／`actionType` 對照表），無新增
+  前端邏輯可測；後者（CSV 匯出）之欄位值層通則屬既有 `AC-F5`／`AC-N55` 之既有測試範圍
+  （`AccessHistoryPage.export.test.tsx`，本段未觸及、未修改，維持既有覆蓋）。
+- **`AC-N81` 之前端測試僅驗證「渲染輸出符合輸入」，不驗證後端是否真的算出正確簡稱**——後者屬
+  backend 線 `company-name.spec.ts`（`AC-N12`）之職責；前端 fixture 之簡稱字串為本段人工建構
+  （模擬後端已正確產出之情境），這是刻意的層次區分，非疏漏。

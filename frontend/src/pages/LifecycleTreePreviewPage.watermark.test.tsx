@@ -107,4 +107,24 @@ describe('🔒 LifecycleTreePreviewPage 三層式浮水印（§10.14 共用化�
     const el = (await screen.findAllByTestId('watermark-text'))[0];
     expect(renderedLines(el).join('-')).toBe(WM);
   });
+
+  /**
+   * 🔴 2026-08-20 D9 delta（`OQ-D9-01`／`OQ-D9-02`／`OQ-D9-31`）——浮水印加深：色值／不透明度
+   * 定稿為 `#334155` @ `0.30`。權威：`docs/specs/features/F020-watermark.md#d9-watermark-delta`
+   * `AC-N2`（本頁為表列 4 處有效載體之一，🔒 `AC-N66` 正向鎖定：本頁渲染 HTML DAG 節點、
+   * 無內容層可燒錄，疊加層是唯一浮水印載體，不受 `AC-N7`——僅限 `PublicViewerPage`——影響）。
+   * 📝 被推翻之現行值逐字保留供追溯：`#64748B` ＋ `opacity: 0.12`（`LifecycleTreePreviewPage.tsx:509,516`）。
+   * 📌 CSS 慣例參考＝`prototypes/22-lifecycle-tree-preview.html:46-47`
+   *    （`.wm-layer{opacity:.30}`／`.wm-layer span{color:#334155}`）——同時檢查疊加層容器與
+   *    文字節點兩處之聯集，不臆測實作是否逐字沿用該分佈。
+   */
+  it('🔴 浮水印疊加：色值 #334155（rgb(51, 65, 85)）／不透明度 0.30（AC-N2）', async () => {
+    renderAt();
+    const overlay = await screen.findByTestId('watermark-overlay');
+    const tile = (await screen.findAllByTestId('watermark-text'))[0];
+    const opacity = tile.style.opacity || overlay.style.opacity;
+    const color = tile.style.color || overlay.style.color;
+    expect(opacity, '不透明度既非疊加層亦非文字節點之 inline style').toBe('0.3');
+    expect(color, '色值既非疊加層亦非文字節點之 inline style').toBe('rgb(51, 65, 85)');
+  });
 });

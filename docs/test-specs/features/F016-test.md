@@ -241,3 +241,28 @@ interface BlobStore {
 - `AC-N30`（不限權責範圍）為負向鎖定——本段測試僅能證明「目前程式碼未拒絕」，無法窮舉證明「未來
   任何實作都不會意外引入子樹檢查」；若日後有人改動 `assertCanWriteDocumentAsset` 呼叫鏈，需重跑
   本測試確認仍為綠燈（回歸測試之固有局限，非本段缺口）。
+
+---
+
+# 🔴 2026-08-20 D9 缺失／變更 delta 測試設計（OJT 上傳角色開放，frontend 線）
+
+> 本段由 **test-generator（frontend／vitest 線）** 於 2026-08-20 追加，涵蓋 `AC-N74`（前端命名常數
+> 與唯讀提示分支）之前端呈現半；`AC-N28`～`AC-N35`（授權判定行為）已由 backend 線持有，不重複建約束。
+> 權威＝`docs/specs/features/F016-pdf-ojt-attachment.md#ojt-role-open-delta`。
+
+## AC ↔ 約束對照
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-N74` ①②③ 唯讀提示三條具名常數（`RO_NOTICE_FULL`／`RO_NOTICE_OJT_EXCEPTION`／`FIELD_RO_NOTE`）逐字值＋分支渲染 | `frontend/src/pages/DocumentReadonlyPage.test.tsx`（「Supervisor：唯讀說明改為 RO_NOTICE_OJT_EXCEPTION」「DeptContact：唯讀說明同 Supervisor」「🔒 SysAdmin：唯讀說明仍為 RO_NOTICE_FULL」「AC-N75⑤ 欄位區唯讀說明」「AC-N74③ #attachTitle」四案） | component |
+| `AC-N28` 📝 唯讀提示句就地改寫（`DocumentReadonlyPage.tsx:332` 舊句過時之修復） | 同上（Supervisor 案已斷言新句、且明文排除舊句） | component |
+| `AC-N75` ①②③④⑤⑦ 唯讀頁附件區 DOM 契約（`data-attachment-kind`／`data-writable-attachment`／`data-readonly-attachment`／`data-ojt-upload`／`data-field-readonly-note`；恰 1 列可寫；ICSOPAdmin 亦顯示入口） | 同檔「OJT 上傳破例：唯讀頁附件區 DOM 契約」describe（8 案） | component |
+
+## risks-and-gaps 提醒
+
+- **OJT 上傳之前端呼叫端點函式名稱未建約束**——`AC-N28`（成功上傳）之伺服器端行為屬 backend 線
+  範圍；本段刻意不對「唯讀頁 OJT 上傳鈕點擊後呼叫哪個 `endpoints.ts` 函式」建立斷言，因為現行
+  `DocumentReadonlyPage.test.tsx` 從未出現任何上傳端點呼叫（該頁現行標題逐字為「附件（僅下載）」，
+  上傳能力為本 delta 全新引入），且 spec 未鎖定確切函式名稱。若 tdd-implementation 之呼叫端點與
+  本段既有 DOM 契約斷言（`data-ojt-upload` 存在性）不一致，屬合理申訴範圍；**呼叫行為本身之驗證
+  留待 tdd-implementation 落地後，由本段作者視需要補一條端點呼叫斷言**，本輪僅鎖可觀測 DOM 掛鉤。

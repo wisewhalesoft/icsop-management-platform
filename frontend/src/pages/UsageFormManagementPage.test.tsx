@@ -100,28 +100,71 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
     expect(endpoints.getUsageFormOverview).not.toHaveBeenCalled();
   });
 
-  it('TS-F018-024 ICSOPAdmin → 清單渲染 + 上傳按鈕 + 覆蓋/移除按鈕', async () => {
+  /**
+   * 🔴 2026-08-20 D9 delta（缺失／變更 delta 第 7 項；`AC-N41`／`AC-N77`）—— 新增改為獨立整頁，
+   * 入口鈕由「上傳表單」改名「新增表單」（`data-create-usage-form`），點擊後**導向新頁**、
+   * 不再開啟 modal。清單頁本身之覆蓋／移除／下載三動作**不受影響**（見 `AC-N48` 之範圍界線：
+   * 僅「新增」與「編輯編號」兩入口改版，其餘列內動作維持原樣）。
+   * 📝 被取代之原斷言逐字保留供追溯：
+   *   OLD> expect(screen.getByRole('button', { name: /上傳表單/ })).toBeInTheDocument();
+   *   OLD> expect(screen.queryByRole('button', { name: /上傳表單/ })).toBeNull();
+   * 📌 原「上傳表單」modal 之逐案行為斷言（名稱自動帶入檔名／自訂名稱／留空驗證／格式驗證）
+   *   已遷移至 `UsageFormCreatePage.test.tsx`（新頁面之測試標的），本檔不重複持有。
+   */
+  it('TS-F018-024／AC-N77 ICSOPAdmin → 清單渲染 + 「新增表單」導頁鈕 + 覆蓋/移除按鈕', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     expect(screen.getByText('徵信照會表.pdf')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /上傳表單/ })).toBeInTheDocument();
-    // 每列可寫入操作（覆蓋/移除）— 至少各一
+    const createBtn = document.querySelector('[data-create-usage-form]') as HTMLElement;
+    expect(createBtn, '找不到 data-create-usage-form 動作元件').not.toBeNull();
+    expect(createBtn.textContent).toBe('新增表單');
+    expect(createBtn.getAttribute('aria-label')).toBe('新增表單');
+    await userEvent.click(createBtn);
+    expect(navigateMock).toHaveBeenCalledWith('/admin/usage-forms/new');
+    // 每列可寫入操作（覆蓋/移除）— 至少各一（不受本 delta 影響）。
     expect(screen.getAllByRole('button', { name: '更新／覆蓋上傳' }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: '移除' }).length).toBeGreaterThan(0);
     expect(screen.getByText('共 3 個表單')).toBeInTheDocument();
+    // 舊「上傳使用表單」modal 之入口不復存在。
+    expect(screen.queryByRole('button', { name: /^上傳表單$/ })).toBeNull();
   });
 
-  it('TS-F018-025 SysAdmin → 唯讀提示、無上傳/覆蓋/移除', async () => {
+  it('TS-F018-025 SysAdmin → 唯讀提示、無「新增表單」/覆蓋/移除', async () => {
     mockAuth('SysAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     expect(screen.getByText(/唯讀模式/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /上傳表單/ })).toBeNull();
+    // 🔒 `AC-N77`：無寫入權角色沿用既有 `.write-only` CSS 隱藏（非 DOM 移除）——
+    //    jsdom 不做版面計算，改以「導頁不生效」驗證其不可用，而非 toBeNull（class-hidden 元素仍在 DOM）。
     expect(screen.queryByRole('button', { name: '更新／覆蓋上傳' })).toBeNull();
     expect(screen.queryByRole('button', { name: '移除' })).toBeNull();
     // 下載仍可用
     expect(screen.getAllByRole('button', { name: '下載' }).length).toBeGreaterThan(0);
+  });
+
+  /**
+   * 🔴 2026-08-20 D9 delta（`OQ-D9-08`／`OQ-D9-33`）—— 後台各檔案列亦渲染浮水印註記文案。
+   * 權威：`docs/specs/features/F020-watermark.md#backend-burn-delta` `AC-N20`。
+   */
+  it('AC-N20 pdf 格式列帶 data-wm-note，逐字為「檢視/下載將燒錄浮水印」', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('徵信照會表.pdf')).toBeInTheDocument());
+    const row = screen.getByText('徵信照會表.pdf').closest('tr') as HTMLElement;
+    const note = row.querySelector('[data-wm-note]');
+    expect(note, '找不到 data-wm-note').not.toBeNull();
+    expect(note!.textContent).toBe('檢視/下載將燒錄浮水印');
+  });
+
+  it('AC-N20 非 pdf 格式列帶 data-wm-note，逐字為「此格式不支援浮水印」', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
+    const row = screen.getByText('進件申請書.xlsx').closest('tr') as HTMLElement;
+    const note = row.querySelector('[data-wm-note]');
+    expect(note, '找不到 data-wm-note').not.toBeNull();
+    expect(note!.textContent).toBe('此格式不支援浮水印');
   });
 
   it('搜尋表單名稱 → 過濾清單', async () => {
@@ -155,93 +198,13 @@ describe('UsageFormManagementPage — 使用表單管理（F018）', () => {
   });
 
   /**
-   * ⚠ 取代原 `TS-F018-001` 之斷言 `toHaveBeenCalledWith([file])`——該斷言逐字鎖定本次要修的 bug
-   * （表單名稱已於 UI 輸入/驗證，卻未隨 multipart 送出）。修復後名稱必須攜帶。
+   * 🔴 2026-08-20 D9 delta（`AC-N41`）—— 以下 5 案之測試標的（「上傳使用表單」modal 內之名稱
+   * 自動帶入／自訂名稱／留空驗證／格式驗證）已隨新增流程整頁化而**遷移至**
+   * `UsageFormCreatePage.test.tsx`（新頁面 `/admin/usage-forms/new`），本檔不再持有——
+   * 該 modal（`role="dialog"` name「上傳使用表單」）本身已被 `AC-N41` 要求之獨立整頁取代，
+   * `container.querySelector('[role="dialog"]')` 於新頁**必須為 `null`**。
+   * 原 5 案全文（含 `TS-PS-F018-FE-001`～`004`／`TS-F018-005`）逐字保留於 git 歷史，不重複貼於此。
    */
-  it('TS-PS-F018-FE-001 上傳合法 xlsx → 名稱自動帶入檔名 → uploadUsageForms 攜帶名稱參數', async () => {
-    mockAuth('ICSOPAdmin');
-    renderPage();
-    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
-    const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
-    const file = xlsxFile('放款覆核表.xlsx');
-    await userEvent.upload(within(dialog).getByLabelText('選擇檔案'), file);
-    // 名稱自動帶入檔名（限縮於 modal，避免與搜尋框 aria-label 撞名）
-    expect((within(dialog).getByLabelText(/表單名稱/) as HTMLInputElement).value).toBe('放款覆核表.xlsx');
-    await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
-    await waitFor(() =>
-      // 🔵 2026-08-16 F018 `AC-D2` 之漣漪：上傳 modal 新增選填「表單編號」欄後，
-      // `uploadUsageForms` 多一個第三參數。本案未填編號 ⇒ 第三參數為空（後端 `normalizeFormNumber()`
-      // 收斂為 `null`，見 backend `TS-D18-011`）。**本案之測試標的（名稱自動帶入檔名）未變。**
-      // 「有填編號時該值真的被送出」＝ `AC-D2` 主線，由 `UsageFormManagementPage.formNumber.test.tsx`
-      // 之 `TS-D18-082` 釘住——本檔三條皆為「留空」情境，不足以涵蓋該主線。
-      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '放款覆核表.xlsx', ''),
-    );
-  });
-
-  it('TS-PS-F018-FE-002 使用者改寫名稱為自訂文字 → 以自訂名稱呼叫，成功訊息含自訂名稱', async () => {
-    mockAuth('ICSOPAdmin');
-    renderPage();
-    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
-    const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
-    const file = xlsxFile('放款覆核表.xlsx');
-    await userEvent.upload(within(dialog).getByLabelText('選擇檔案'), file);
-    const nameInput = within(dialog).getByLabelText(/表單名稱/);
-    await userEvent.clear(nameInput);
-    await userEvent.type(nameInput, '貸款覆核申請表');
-    await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
-    await waitFor(() =>
-      // 第三參數＝表單編號（本案未填）；理由同 TS-PS-F018-FE-001 之註解。
-      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '貸款覆核申請表', ''),
-    );
-    expect(await screen.findByText(/已上傳表單「貸款覆核申請表」/)).toBeInTheDocument();
-  });
-
-  it('TS-PS-F018-FE-003 已手動輸入名稱後才選檔 → 不覆蓋既有輸入值（prototype 第 333 行同語意）', async () => {
-    mockAuth('ICSOPAdmin');
-    renderPage();
-    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
-    const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
-    await userEvent.type(within(dialog).getByLabelText(/表單名稱/), '自訂表單名');
-    const file = xlsxFile('放款覆核表.xlsx');
-    await userEvent.upload(within(dialog).getByLabelText('選擇檔案'), file);
-    expect((within(dialog).getByLabelText(/表單名稱/) as HTMLInputElement).value).toBe('自訂表單名');
-    await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
-    await waitFor(() =>
-      // 第三參數＝表單編號（本案未填）；理由同 TS-PS-F018-FE-001 之註解。
-      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '自訂表單名', ''),
-    );
-  });
-
-  it('TS-PS-F018-FE-004 名稱欄留空送出 → 顯示「表單名稱不可為空。」且不呼叫上傳', async () => {
-    mockAuth('ICSOPAdmin');
-    renderPage();
-    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
-    const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
-    await userEvent.upload(within(dialog).getByLabelText('選擇檔案'), xlsxFile('放款覆核表.xlsx'));
-    await userEvent.clear(within(dialog).getByLabelText(/表單名稱/));
-    await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
-    expect(within(dialog).getByText('表單名稱不可為空。')).toBeInTheDocument();
-    expect(endpoints.uploadUsageForms).not.toHaveBeenCalled();
-  });
-
-  it('TS-F018-005 上傳 .docx → 顯示 FILE_FORMAT_NOT_ALLOWED，不呼叫上傳', async () => {
-    mockAuth('ICSOPAdmin');
-    renderPage();
-    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
-    const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
-    // applyAccept:false → 繞過 input accept 過濾，讓 .docx 抵達 onChange 由前端規則驗證（模擬使用者於原生對話框選「所有檔案」）。
-    await userEvent.upload(within(dialog).getByLabelText('選擇檔案'), new File(['x'], '作業說明.docx'), {
-      applyAccept: false,
-    });
-    expect(within(dialog).getByText(/FILE_FORMAT_NOT_ALLOWED/)).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
-    expect(endpoints.uploadUsageForms).not.toHaveBeenCalled();
-  });
 
   it('TS-F018-017/018 覆蓋共用表單（docCount≥2）→ USAGE_FORM_OVERWRITE_SHARED 二次確認後覆蓋', async () => {
     mockAuth('ICSOPAdmin');

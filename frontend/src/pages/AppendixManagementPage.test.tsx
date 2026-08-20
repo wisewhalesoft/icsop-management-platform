@@ -75,6 +75,34 @@ describe('AppendixManagementPage — 附錄（附錄池）管理（F039，移植
   });
   afterEach(() => vi.restoreAllMocks());
 
+  /**
+   * 🔴 2026-08-20 D9 delta（`OQ-D9-08`／`OQ-D9-33`）—— 後台各檔案列亦渲染浮水印註記文案。
+   * 權威：`docs/specs/features/F020-watermark.md#backend-burn-delta` `AC-N20`。
+   * 🛑 就地推翻 `AC-D7` ④（原禁止後台出現該兩條文案）——本頁列亦適用。
+   */
+  it('AC-N20 每一列帶 data-wm-note，pdf 格式逐字為「檢視/下載將燒錄浮水印」', async () => {
+    mockAuth('ICSOPAdmin');
+    vi.mocked(endpoints.getAppendixPoolOverview).mockResolvedValue([
+      { ...POOL[0], format: 'pdf' },
+    ]);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
+    const row = screen.getByText('作業流程對照表.xlsx').closest('tr') as HTMLElement;
+    const note = row.querySelector('[data-wm-note]');
+    expect(note, '找不到 data-wm-note').not.toBeNull();
+    expect(note!.textContent).toBe('檢視/下載將燒錄浮水印');
+  });
+
+  it('AC-N20 非 pdf 格式列之 data-wm-note 逐字為「此格式不支援浮水印」', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
+    const row = screen.getByText('作業流程對照表.xlsx').closest('tr') as HTMLElement;
+    const note = row.querySelector('[data-wm-note]');
+    expect(note, '找不到 data-wm-note').not.toBeNull();
+    expect(note!.textContent).toBe('此格式不支援浮水印');
+  });
+
   it('AC-33 主管無權 → 顯示封鎖畫面、不呼叫查詢端點', () => {
     mockAuth('Supervisor');
     renderPage();

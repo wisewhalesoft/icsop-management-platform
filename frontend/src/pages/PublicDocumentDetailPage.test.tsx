@@ -79,6 +79,33 @@ function renderDetail(id = 'a3f81c22-9e04-4b7a-8f2d-e2c9d1748e2f') {
   );
 }
 
+/**
+ * 2026-08-20 D9 delta（缺失／變更 delta 第 6 項）—— 前台字級上移一階，render-level 代表性斷言。
+ * 權威：`docs/specs/features/F021-rwd-responsive.md#d9-typography-delta` `AC-N60`；
+ * 掛鉤與字級由 `prototypes/04-public-document-detail.html` 檔頭 AC-N60 註記逐字授權
+ * （附件／附錄／使用表單列之浮水印註記 `data-wm-note` 含 `text-sm`，不得回到 12px 級距）。
+ */
+describe('PublicDocumentDetailPage — F021 D9 delta 字級（AC-N60）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth();
+    vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(detailOf());
+    vi.mocked(api.getOrgUnits).mockResolvedValue([]);
+    vi.mocked(api.getDocumentAppendices).mockResolvedValue([]);
+  });
+
+  it('AC-N60 附件／使用表單列之浮水印註記（data-wm-note）逐一含 text-sm、不含 text-xs', async () => {
+    renderDetail();
+    await screen.findByRole('heading', { name: '車輛分期進件作業' });
+    const notes = Array.from(document.querySelectorAll('[data-wm-note]')) as HTMLElement[];
+    expect(notes.length, '找不到任何 data-wm-note 節點（F020 AC-D7）').toBeGreaterThan(0);
+    for (const note of notes) {
+      expect(note.className, `${note.textContent} 之 data-wm-note 缺 text-sm`).toMatch(/\btext-sm\b/);
+      expect(note.className).not.toMatch(/\btext-xs\b/);
+    }
+  });
+});
+
 describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -442,6 +442,21 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
       expect(openMock).not.toHaveBeenCalled();
     });
 
+    /**
+     * 🔴 2026-08-20 D9 delta（`OQ-D9-08`／`OQ-D9-33`）—— 編輯頁附件卡片亦渲染浮水印註記。
+     * 權威：`docs/specs/features/F020-watermark.md#backend-burn-delta` `AC-N20`。
+     */
+    it('AC-N20 ICSOP PDF 卡片帶 data-wm-note，逐字為「檢視/下載將燒錄浮水印」', async () => {
+      mockAuth('ICSOPAdmin');
+      vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([ICSOP_PDF]);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('sop_v1.3.pdf')).toBeInTheDocument());
+      const card = attachCard('ICSOP PDF（呈現用，1 份，覆蓋式）');
+      const note = card.querySelector('[data-wm-note]');
+      expect(note, '找不到 data-wm-note').not.toBeNull();
+      expect(note!.textContent).toBe('檢視/下載將燒錄浮水印');
+    });
+
     it('TS-D-010 Supervisor（唯讀）→ 僅顯示檔名與下載，無「取代」入口', async () => {
       mockAuth('Supervisor');
       vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([ICSOP_PDF]);
@@ -450,6 +465,88 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
       const card = attachCard('ICSOP PDF（呈現用，1 份，覆蓋式）');
       expect(within(card).getByRole('button', { name: /下載/ })).toBeInTheDocument();
       expect(within(card).queryByText('取代')).not.toBeInTheDocument();
+    });
+  });
+
+  /**
+   * 🔴 2026-08-20 D9 delta 第三輪（`AC-N76`；lead 追認之超範圍改動）—— 編輯頁 `.ojt-write` 隔離
+   * 契約與逐元素 `data-attachment-write` 掛鉤。權威：
+   * `docs/specs/features/F026-role-field-matrix.md#ojt-write-exception-delta` `AC-N25`（第三輪
+   * 擴充 ①②③）／`AC-N76`；DOM 值域＝`prototypes/15-document-edit.html:231,241,249`。
+   * 🔴 **不得**以 `offsetParent === null`／`toBeVisible()` 斷言可見性（jsdom 不做版面計算，
+   * 該類斷言恆真無鑑別力）——一律以 class 指派與 `data-*` 掛鉤斷言（`AC-N25` 明文禁令）。
+   */
+  describe('OJT 上傳破例：編輯頁 .ojt-write 隔離契約（AC-N25 第三輪擴充／AC-N76）', () => {
+    const OJT_ATT: DocumentAttachmentRecord = {
+      id: 'a2', documentId: 'd1', type: 'OJT_SIGNIN', fileName: 'ojt_v1.pdf',
+      blobPath: 'documents/d1/ojt_signin/x.pdf', contentType: 'application/pdf', size: 512,
+      uploadedBy: 'admin', uploadedAt: '2026-06-01T00:00:00.000Z',
+    };
+
+    beforeEach(() => {
+      vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([ICSOP_PDF, OJT_ATT]);
+    });
+
+    it('AC-N76④ 逐元素斷言：xls／icsop_pdf 之 data-attachment-write 帶 write-only、不含 ojt-write', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      const xls = document.querySelector('[data-attachment-write="xls"]');
+      const icsopPdf = document.querySelector('[data-attachment-write="icsop_pdf"]');
+      expect(xls, '找不到 data-attachment-write="xls"').not.toBeNull();
+      expect(icsopPdf, '找不到 data-attachment-write="icsop_pdf"').not.toBeNull();
+      for (const el of [xls, icsopPdf]) {
+        expect(el!.className).toMatch(/\bwrite-only\b/);
+        expect(el!.className).not.toMatch(/\bojt-write\b/);
+      }
+    });
+
+    it('AC-N76④ 逐元素斷言：OJT 之 data-attachment-write 帶 ojt-write、不含 write-only；且 data-ojt-upload 恰 1 個', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      const ojt = document.querySelector('[data-attachment-write="ojt"]');
+      expect(ojt, '找不到 data-attachment-write="ojt"').not.toBeNull();
+      expect(ojt!.className).toMatch(/\bojt-write\b/);
+      expect(ojt!.className).not.toMatch(/\bwrite-only\b/);
+      expect(ojt!.hasAttribute('data-ojt-upload')).toBe(true);
+      expect(document.querySelectorAll('[data-ojt-upload]')).toHaveLength(1);
+    });
+
+    it('AC-N25③ 集合式互斥：.ojt-write 與 .write-only 之結果集合交集為空', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      const ojtWrite = new Set(Array.from(document.querySelectorAll('.ojt-write')));
+      const writeOnly = new Set(Array.from(document.querySelectorAll('.write-only')));
+      const intersection = [...ojtWrite].filter((el) => writeOnly.has(el));
+      expect(intersection).toEqual([]);
+    });
+
+    it('AC-N76② OJT 區塊標題旁徽章（data-ojt-exception）逐字文案「主管／部門窗口亦可寫」', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      const badge = document.querySelector('[data-ojt-exception]');
+      expect(badge, '找不到 data-ojt-exception 徽章').not.toBeNull();
+      expect(badge!.textContent).toBe('主管／部門窗口亦可寫');
+    });
+
+    /**
+     * `AC-N25` 第三輪擴充 ①②③（正面：對 Supervisor／DeptContact 渲染時之 class 指派）。
+     * 🔴 本頁現行對 Supervisor 之寫入控制項一律以 `.write-only`（僅 ICSOPAdmin 可見）機制隱藏——
+     * `.ojt-write` 條件須擴大納入 Supervisor／DeptContact，使該角色能看到 OJT 取代鈕本身。
+     */
+    it('AC-N25①②③ Supervisor 渲染時：OJT 取代鈕仍帶 ojt-write（非依角色從 DOM 移除），且集合式互斥依然成立', async () => {
+      mockAuth('Supervisor');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      const ojt = document.querySelector('[data-attachment-write="ojt"]');
+      expect(ojt, 'Supervisor 渲染下找不到 OJT 取代鈕（data-attachment-write="ojt"）').not.toBeNull();
+      expect(ojt!.className).toMatch(/\bojt-write\b/);
+      const icsopPdf = document.querySelector('[data-attachment-write="icsop_pdf"]');
+      // ICSOP PDF 取代鈕即便存在於 DOM（.write-only 隱藏），其 class 仍不得含 ojt-write。
+      if (icsopPdf) expect(icsopPdf.className).not.toMatch(/\bojt-write\b/);
     });
   });
 

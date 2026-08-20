@@ -415,3 +415,52 @@ UsageFormsService.uploadForm(session, file, name?, formNumber?)
 architecture §11.10(c)）。**單元測試無法證明資料表真的存在**——依本 repo 既有硬規則
 （`project-icsop-migration-deploy`），migration 寫完後必須對真 SOP DB 實跑驗證 FK／索引／唯一鍵
 衝突，此為 unit 盲區，列入 `risks-and-gaps.md`。
+
+---
+
+# 🔴🔴 2026-08-20 D9 缺失／變更 delta 測試設計（整頁化＋制定部門，frontend 線）
+
+> 本段由 **test-generator（frontend／vitest 線）** 於 2026-08-20 追加，涵蓋 `AC-N41`／`AC-N42`／
+> `AC-N44`（前端半）／`AC-N45`（前端呈現半）／`AC-N47`～`AC-N49`（前端半）／`AC-N77`～`AC-N79`。
+> 權威＝`docs/specs/features/F018-usage-form-management.md#usage-form-page-delta`、
+> `architecture-spec.md §11.10`。
+
+## AC ↔ 約束對照
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-N41` 獨立整頁（非彈窗、路徑改變） | `frontend/src/pages/UsageFormCreatePage.test.tsx`／`UsageFormEditPage.test.tsx`（各自「AC-N41」案） | component |
+| `AC-N42` ①②③④ 標題／breadcrumb／topbar 動作鈕／分區塊／取消不送出 | `UsageFormCreatePage.test.tsx`（4 案） | component |
+| `AC-N43` 🔒 單一動作一次送出 | `UsageFormCreatePage.test.tsx`（「AC-N43」案） | component |
+| `AC-N44` 編號唯一性沿用（前端半：驗證訊息呈現＋欄位契約） | `UsageFormCreatePage.test.tsx`／`UsageFormEditPage.test.tsx`（各自「AC-N44」案，含遷移自 `TS-D18-082`／`063` 之鑑別力主線） | component |
+| `AC-N45` 多選、任意層級、持久化（前端呈現半：chip 渲染、回填） | `UsageFormCreatePage.test.tsx`（`AC-N78`③空狀態）／`UsageFormEditPage.test.tsx`（「AC-N45」chip 案） | component |
+| `AC-N47` 清單顯示（8 欄表頭含「制定部門」、0 筆顯示「—」＋`data-drafting-dept`） | `UsageFormManagementPage.formNumber.test.tsx`（就地擴充「TS-D18-060／AC-N47」＋新案） | component |
+| `AC-N48` 編輯頁範圍、「編輯編號」→「編輯」改名與導頁、`editNumberModal` 不存在、欄位 id 沿用 | `UsageFormManagementPage.formNumber.test.tsx`（改名＋導頁 3 案，取代原 `TS-D18-064`～`070`）＋`UsageFormEditPage.test.tsx`（9 案） | component |
+| `AC-N49` 🔒 既有行為回歸鎖定（本頁不觸發 `USAGE_FORM_OVERWRITE_SHARED`） | `UsageFormEditPage.test.tsx`（「AC-N49」案） | component |
+| `AC-N77` 新增入口改名「新增表單」＋`data-create-usage-form`＋導頁 | `UsageFormManagementPage.test.tsx`（就地重寫「TS-F018-024／AC-N77」） | component |
+| `AC-N78` ①②③ 三區塊序號徽章、chip、0 筆空狀態逐字 | `UsageFormCreatePage.test.tsx`（3 案） | component |
+| `AC-N79` ①②③ 檔案唯讀徽章、換檔引導句、原型示範切換器負向鎖定 | `UsageFormEditPage.test.tsx`（3 案） | component |
+
+## ⚠ 契約性假設（test-generator 訂立，非讀取實作決定；供 tdd-implementation 對齊或申訴）
+
+1. **新頁面元件檔名**：`UsageFormCreatePage.tsx`／`UsageFormEditPage.tsx`（沿用架構 §11.12 建議
+   命名，與既有 `DocumentCreatePage.tsx`／`DocumentEditPage.tsx` 之命名慣例一致）。
+2. **前端資料來源**：`UsageFormEditPage` 沿用既有 `getUsageFormOverview()` 取池、以路由 `:formId`
+   篩選單筆（未新增單筆專用端點函式）。
+3. **前端 PATCH 呼叫**：推定為 `endpoints.updateUsageForm(formId, { formNumber, draftingDeptCodes
+   })`（`vi.mocked(endpoints.updateUsageForm)`）。**此為 additive 新增之端點函式，`tsc` 現階段
+   即會因 `endpoints.ts` 尚無此匯出而報錯**（已實測驗證，屬紅在對的原因）。
+4. **新增頁 `uploadUsageForms` 簽章擴大為 4 參數**：`(files, name, formNumber, draftingDeptCodes:
+   string[])`——延續既有位置參數慣例新增第 4 參數。若 tdd-implementation 之實際簽章形狀不同
+   （如改用物件參數），屬合理申訴，由本段作者（test-generator）調整，實作者不得自行改動測試。
+
+## risks-and-gaps 提醒
+
+- **`UsageFormManagementPage.formNumber.test.tsx` 之大規模遷移**：原「編輯編號」modal 之 12 案
+  （`TS-D18-066`～`077`，涵蓋標題／說明句／欄位帶入現值／取消／儲存往返／409／400 錯誤呈現）
+  因容器（`#editNumberModal`）本身被推翻而整批遷移至 `UsageFormEditPage.test.tsx`，原檔已就地
+  改寫為「僅驗證入口與導頁」，全文逐字保留於 git 歷史，不重複貼於文件。
+- **`AC-N45` 之互動選取機制未建約束**——AC 只鎖定「已選結果之持久化與回填」，未鎖定制定部門
+  之選取 UI（下拉／樹狀勾選等）。`UsageFormEditPage.test.tsx` 之 chip 回填案僅驗證**既有選取之
+  呈現**，不驗證使用者如何新增/移除選取項（該互動機制留待 tdd-implementation 依 prototype 19a/19b
+  裁量，本輪不臆造選擇器）。

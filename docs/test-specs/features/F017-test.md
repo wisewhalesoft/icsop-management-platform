@@ -293,3 +293,29 @@ status: draft
 
 - **AC-D2 第 8 列之 SQL 下推**：§10.12 明訂本輪**不做**全面 SQL 下推，公告日期／`程序書書名內` contains 皆於前端工作集上篩選 ⇒ 無後端載體，非缺口。
 - **`LOAD_SIZE = 2000` 靜默截斷**：§10.12 已列為既有風險並記入 §9，本 delta 未改變其行為，本環不新增約束。
+
+---
+
+# 🔵 2026-08-20 D9 缺失／變更 delta 測試設計（OJT 圖示欄，frontend 線）
+
+> 本段由 **test-generator（frontend／vitest 線）** 於 2026-08-20 追加，涵蓋 `AC-N37`～`AC-N40`。
+> 權威＝`docs/specs/features/F017-backend-document-list.md#ojt-icon-column-delta`。
+> 📌 純前端顯示變更：`hasOjt` 已於既有批次查詢取得（`documents.store.ts:135-142`），不新增後端
+> 查詢／欄位／API 契約。
+
+## AC ↔ 約束對照
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-N37` 欄位存在與位置（第 1 欄 `OJT`，其後 14 欄相對順序不變、表頭總數 15） | `frontend/src/pages/DocumentListPage.test.tsx`（「15 欄表頭齊全」「AC-D9／AC-N37 15 欄之表頭順序逐字鎖定」，就地擴充自既有 14 欄案） | component |
+| `AC-N38` ①②③ 三態渲染（`hasOjt` true／false／undefined）與逐字無障礙文案「有 OJT」／「無 OJT」 | 同檔「OJT 圖示欄」describe（4 案，含缺鍵視同 false 與兩態互不相同之鑑別力守衛） | component |
+| `AC-N39` DOM 契約（`data-ojt-cell`／`data-has-ojt`） | 同上（「AC-N39 每列之 OJT 儲存格帶 data-ojt-cell」） | component |
+| `AC-N40` ①③④ 🔒 回歸鎖定（14 欄集合／順序不變、OJT 篩選下拉逐字不動、不新增後端查詢） | 同上（「AC-D9／AC-N37」表頭順序案、「AC-N40② 既有 OJT 篩選下拉」、「AC-N40④ 不得新增後端查詢」） | component |
+| `AC-N40` ② 13 項篩選之組成／順序／比對語意不變 | 既有 `DocumentListPage.filterDelta.test.tsx`（不受本 delta 影響，維持綠燈，未修改） | component |
+
+## risks-and-gaps 提醒
+
+- **欄寬數值（`min-w-[56px]` 等）刻意不入約束**——spec 明文歸類為設計裁量（版面調校數值非行為
+  契約），本段不建立任何寬度斷言，避免高噪訊比之脆弱測試。
+- **icon 視覺色彩／填色不入約束**——僅約束 icon 鍵名（透過無障礙文案間接鑑別）與 `data-has-ojt`
+  屬性，不斷言 CSS 顏色/填色（同屬設計裁量）。

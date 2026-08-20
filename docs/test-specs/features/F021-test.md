@@ -157,3 +157,39 @@ status: draft
 - **OQ-F021-04**：極小寬度（280px）之「不得版面完全崩壞」缺乏量化定義（何謂「完全崩壞」？無 JS 錯誤即合格，或需額外可讀性標準？），[NFR-005](../../specs/nfr.md#browser-rwd) AC4 僅提及後台 DAG 畫布之對應情境，未涵蓋前台此邊界。建議 product owner/UI-UX 補充明確驗收標準（如「無重疊裁切超過 X%」或簡化為「無 JS runtime error + 主要 CTA 按鈕仍可點擊」之最低門檻），否則 TS-016 之 pass/fail 判準將流於測試執行者主觀認定。
 
 - **OQ-F021-05**：本 feature 之所有 [integration] 場景需要之工具鏈（真實瀏覽器多視窗尺寸渲染、觸控手勢模擬、視覺回歸快照比對）未於現有專案中出現先例（後台頁面測試多為 RTL/jsdom），屬全新測試基礎設施需求，需 CI/CD owner 評估導入成本與是否於本輪 MVP 範圍內建置，或改列為上線前人工 QA checklist（非自動化 CI 項目）。此為 F021 相較 F019/F020/F022 之獨特風險，其餘三檔之 [integration] 場景多可沿用既有真 DB/Blob 測試基礎設施，F021 則需額外的瀏覽器自動化能力。
+
+---
+
+# 🔴 2026-08-20 D9 缺失／變更 delta 測試設計（前台字級上移一階，frontend 線）
+
+> 本段由 **test-generator（frontend／vitest 線）** 於 2026-08-20 追加，涵蓋 `AC-N59`～`AC-N62`／
+> `AC-N82`。權威＝`docs/specs/features/F021-rwd-responsive.md#d9-typography-delta`；
+> `OQ-D9-12`（使用者，選項 A：僅前台）／`OQ-D9-13`（選項 A：`text-sm`→`text-base`、`text-xs`→`text-sm`）。
+> **本 delta 為橫向字級調整，本身不含新業務邏輯**——與本檔既有「範圍聲明」一致，unit/component
+> 層可驗證者為 class 存在性（source-scan＋render-level），不含真實視覺渲染品質。
+
+## AC ↔ 約束對照
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-N59` 前台三頁 `text-xs` 出現次數為 0、無 `text-[Npx]` 任意值繞過（source-level） | `frontend/src/pages/typography-d9.test.ts`（「AC-N59」describe，5 案） | unit（純檔案內容掃描，比照既有 `change-label-authority.test.ts`） |
+| `AC-N60` render-level 代表性節點字級（清單卡摘要 `data-summary`／`#scopeNotice`／`data-wm-note`／`#securityBand`） | `PublicListPage.test.tsx`（2 案）／`PublicDocumentDetailPage.test.tsx`（1 案）／`PublicViewerPage.test.tsx`（`AC-N72` 案間接涵蓋 `#securityBand` 之 `text-sm`，另可由 `AC-N60` 讀取） | component |
+| `AC-N61` ① 後台五頁 `text-xs` 計數 > 0（回歸鎖定，偵測跨全專案 find-replace） | `typography-d9.test.ts`（「AC-N61 ①」describe，5 案） | unit |
+| `AC-N61` ② 設計系統 tokens 表逐字不變 | 同檔（「AC-N61 ②」案） | unit |
+| `AC-N61` ③ 共用元件不動 | 未單獨建案——`components/**` 未被本 delta 觸及，屬「零改動即零漣漪」之自然滿足；若日後有共用元件字級 class 變更，由該元件既有測試（如 `PageHeader.*.test.tsx`）之既有斷言把關 | — |
+| `AC-N62` 🔒 `ChangeHistoryPage`／`LifecycleTreePreviewPage` 疊加 `fontSize:14` 不變 | 既有兩檔之三層式渲染案（未修改）；`PublicViewerPage.test.tsx` 舊 `TS-F020-025`（`fontSize:'14px'`）已隨疊加層整體移除而由 `PublicViewerPage.watermark.test.tsx` 之「無疊加層殘留」案背書取代 | component |
+| `AC-N82` 設計系統字級分歧註記橫幅（表外，逐字片段） | `typography-d9.test.ts`（「AC-N82」describe，3 案，跨 HTML 標籤之視覺文字正規化） | unit（prototype 檔案內容掃描） |
+
+## risks-and-gaps 提醒
+
+- 🔴 **`AC-N59` 之「不存在 `text-[Npx]`」為絕對禁令，與前台既有之非本 delta 相關任意值字級用法
+  衝突**——已實測發現 `PublicListPage.tsx`（`text-[11px]`，篩選 label 密度）與
+  `PublicDocumentDetailPage.tsx`（`text-[11px]`／`text-[10px]`，附件支援標記／次要室長徽章）皆
+  現存此類**與本次 D9 字級遷移無關**之既有任意值用法。三個對應 prototype（`03`／`04`）**未見**
+  相同任意值寫法，故無法確認這是「刻意的既有密度設計」抑或「應隨本 delta 一併收斂之殘留」。
+  **本段依 `AC-N59` 之逐字（無條件）文字保留斷言**（不擅自加入排除清單），故此二測試會在本 delta
+  完全實作後仍為紅——**這是本段刻意保留之發現，供 lead／spec-writer 裁決是否追加排除條款**，
+  而非本段之測試錯誤。
+- `AC-N60` 之選擇器（`data-summary`／`#scopeNotice`→`data-testid="scope-notice"`）與掛鉤逐字
+  由 `prototypes/03-public-list.html` 檔頭之 `AC-N60` 專用註記授權（designer 已於該檔明文標註
+  掛鉤名稱），非 test-generator 臆測。

@@ -113,6 +113,49 @@ function renderPage() {
   );
 }
 
+/**
+ * 2026-08-20 D9 delta（缺失／變更 delta 第 6 項）—— 前台字級上移一階，render-level 代表性斷言。
+ * 權威：`docs/specs/features/F021-rwd-responsive.md#d9-typography-delta` `AC-N60`；
+ * 掛鉤與字級由 `prototypes/03-public-list.html` 檔頭 AC-N60 註記逐字授權
+ * （`data-summary` 含 `text-base`；`#scopeNotice` 含 `text-sm`）。
+ * source-scan 半（`AC-N59`）另置於 `frontend/src/pages/typography-d9.test.ts`，本檔補其
+ * render-level 半——source-scan 只能證明「舊 class 消失」，本檔證明「新 class 落在使用者
+ * 看得到的節點上」。
+ */
+describe('PublicListPage — F021 D9 delta 字級（AC-N60）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth();
+    vi.mocked(api.getOrgUnits).mockResolvedValue(ORG_UNITS);
+    vi.mocked(api.getPublicDocuments).mockResolvedValue(pageOf([docItem({})]));
+    stubFilterOptions();
+  });
+
+  it('AC-N60 清單卡片之內容摘要文字節點（data-summary）含 text-base、不含 text-sm／text-xs', async () => {
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    const summary = document.querySelector('[data-summary]');
+    expect(summary, '找不到 data-summary 節點（prototypes/03-public-list.html:404 之權威掛鉤）').not.toBeNull();
+    expect(summary!.className).toMatch(/\btext-base\b/);
+    expect(summary!.className).not.toMatch(/\btext-sm\b/);
+    expect(summary!.className).not.toMatch(/\btext-xs\b/);
+  });
+
+  it('AC-N60 清單頂部範圍說明句（data-testid="scope-notice"）含 text-sm、不含 text-xs', async () => {
+    // 選擇器依本 repo 既有慣例：prototype id `#scopeNotice` → 實作端 `data-testid="scope-notice"`
+    // （見 `PublicListPage.userSubtype.test.tsx` 檔頭「`hiddenNote`→`hidden-note`」換算慣例）。
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    const notice = screen.getByTestId('scope-notice');
+    // 字級 class 落於權威（prototypes/03-public-list.html:122）之外層容器，非 span 本身；
+    // 若實作將 class 直接掛在 testid 節點本身亦應通過（取兩者聯集）。
+    const container = (notice.closest('div') as HTMLElement | null) ?? notice;
+    const cls = `${notice.className} ${container.className}`;
+    expect(cls).toMatch(/\btext-sm\b/);
+    expect(cls).not.toMatch(/\btext-xs\b/);
+  });
+});
+
 describe('PublicListPage（F019 前台清單）', () => {
   beforeEach(() => {
     vi.clearAllMocks();

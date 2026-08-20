@@ -64,6 +64,101 @@ function pageOf(items: object[], over: Partial<AccessHistoryPageResult> = {}): A
   };
 }
 
+const UPLOAD_ROW = {
+  id: 'r5', accountId: 'a5', employeeNo: '20541', name: '林建宏',
+  company: '和潤企業股份有限公司', department: '企劃部', section: '車輛行銷室', roleCode: 'Supervisor',
+  targetType: 'DOCUMENT_ATTACHMENT', actionType: 'ATTACHMENT_UPLOAD',
+  documentId: 'd3', documentNumber: 'ICSOP-SRC-101-1-06',
+  lifecycleId: null, lifecycleName: null, formId: null, targetName: '消費分期特約通路作業',
+  watermarkSnapshot: null, occurredAt: '2026-08-20T09:12:00.000Z', source: 'DIRECT',
+};
+
+/**
+ * 2026-08-20 D9 delta（缺失／變更 delta 第 5／8 項之連動）—— 新增之稽核事件（後台燒錄下載、
+ * OJT 上傳）於查詢／匯出之呈現。權威：`docs/specs/features/F024-access-history-query.md
+ * #d9-audit-view-delta`（`AC-N53`／`AC-N54`／`AC-N69`／`AC-N70`）＋ `#prototype 17`（`AC-N80`／
+ * `AC-N81`）。
+ */
+describe('AccessHistoryPage — D9 delta：上傳事件呈現與排除／篩出（AC-N53、AC-N69、AC-N80、AC-N81）', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockAuth('SysAdmin');
+  });
+
+  it('AC-N53 上傳事件之「類型」欄逐字為「上傳」、「操作類型」欄逐字為「附件上傳」、浮水印快照欄留空', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([UPLOAD_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('林建宏')).toBeInTheDocument());
+    const row = screen.getByText('林建宏').closest('tr') as HTMLElement;
+    expect(within(row).getByText('上傳')).toBeInTheDocument();
+    expect(within(row).getByText('附件上傳')).toBeInTheDocument();
+  });
+
+  it('AC-N80 浮水印快照留空時，該欄帶 data-wm-snapshot 且文字逐字為「（此動作類型無浮水印，該欄留空）」', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([UPLOAD_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('林建宏')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('林建宏'));
+    await waitFor(() => {
+      const el = document.querySelector('[data-wm-snapshot]');
+      expect(el, '找不到 data-wm-snapshot 節點').not.toBeNull();
+      expect(el!.textContent).toBe('（此動作類型無浮水印，該欄留空）');
+    });
+  });
+
+  it('AC-N69① 類型＝文件 → 僅回傳文件類、不含上傳事件（排除）', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([DOC_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText('類型'), '文件');
+    await waitFor(() =>
+      expect(endpoints.getAccessHistory).toHaveBeenCalledWith(expect.objectContaining({ kind: '文件' })),
+    );
+  });
+
+  it('AC-N69② 類型＝上傳（新增之第四種類型篩選值）→ 以 kind=上傳 重新查詢（篩出）', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([DOC_ROW, UPLOAD_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText('類型'), '上傳');
+    await waitFor(() =>
+      expect(endpoints.getAccessHistory).toHaveBeenCalledWith(expect.objectContaining({ kind: '上傳' })),
+    );
+  });
+
+  it('AC-N69 🔴 篩選控制項之類型值恰為四種＋預設「全部」共 5 個 option，「上傳」置於既有三者之後', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([DOC_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
+    const select = screen.getByLabelText('類型') as HTMLSelectElement;
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).toEqual(['全部', '文件', '循環', '變更', '上傳']);
+  });
+
+  /**
+   * `AC-N81`：本頁同時呈現簡稱（浮水印快照）與全稱（表格公司欄）兩種公司名稱寫法，
+   * 兩者不同源是刻意的（`OQ-D9-06`），不得被「統一」。
+   */
+  it('AC-N81 同一頁同時呈現：表格「公司」欄為全稱、展開明細之浮水印快照片段為簡稱', async () => {
+    const rowWithFullSnapshot = {
+      ...DOC_ROW,
+      watermarkSnapshot:
+        '22345-王小明-和潤企業-營運管理部-審查室-僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現-2026-07-16 14:32:08',
+    };
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([rowWithFullSnapshot]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
+    const row = screen.getByText('王小明').closest('tr') as HTMLElement;
+    // ① 表格「公司」欄仍為全稱（AC-N13 ③ 之回歸鎖定，本頁不受浮水印簡稱影響）。
+    expect(within(row).getByText('和潤企業股份有限公司')).toBeInTheDocument();
+    // ② 展開後之浮水印快照片段為簡稱（本案 fixture 之快照字串本身已是簡稱，模擬後端產出）。
+    await userEvent.click(screen.getByText('王小明'));
+    await waitFor(() =>
+      expect(screen.getByText(/22345-王小明-和潤企業-營運管理部-審查室/)).toBeInTheDocument(),
+    );
+  });
+});
+
 describe('AccessHistoryPage — 文件調閱歷程查詢（F024）', () => {
   beforeEach(() => {
     vi.resetAllMocks();

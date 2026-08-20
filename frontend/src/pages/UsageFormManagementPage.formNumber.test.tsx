@@ -80,10 +80,23 @@ const POOL: UsageFormPoolItem[] = [
 const rowOf = (name: string) =>
   within(screen.getByRole('table')).getByText(name).closest('tr') as HTMLElement;
 
-async function openEditNumber(formName: string) {
+/**
+ * 🔴 2026-08-20 D9 delta（`AC-N41`／`AC-N48`）——「編輯編號」modal 已由獨立整頁取代，容器 id
+ * `#editNumberModal` 自此不存在（`AC-N48` 明文記錄），入口動作之無障礙名稱同時由「編輯編號」
+ * 改名「編輯」。點擊後**導頁**而非開 modal，本 helper 就地改為斷言導頁。
+ * 📝 被取代之原 helper 逐字保留供追溯：
+ *   OLD> async function openEditNumber(formName: string) {
+ *   OLD>   const row = rowOf(formName);
+ *   OLD>   await userEvent.click(within(row).getByLabelText('編輯編號'));
+ *   OLD>   return document.querySelector('#editNumberModal') as HTMLElement;
+ *   OLD> }
+ * 原「編輯編號」modal 之逐案行為斷言（`TS-D18-066`～`077`：標題／說明句／欄位帶入現值／
+ * 取消不呼叫端點／儲存往返／409/400 錯誤呈現）已遷移至 `UsageFormEditPage.test.tsx`
+ * （新頁面 `/admin/usage-forms/:formId/edit` 之測試標的），本檔不再持有。
+ */
+async function clickEdit(formName: string): Promise<void> {
   const row = rowOf(formName);
-  await userEvent.click(within(row).getByLabelText('編輯編號'));
-  return document.querySelector('#editNumberModal') as HTMLElement;
+  await userEvent.click(within(row).getByLabelText('編輯'));
 }
 
 describe('UsageFormManagementPage — F018 AC-D1 清單欄位', () => {
@@ -94,19 +107,39 @@ describe('UsageFormManagementPage — F018 AC-D1 清單欄位', () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it('TS-D18-060 表頭由左至右逐字為 表單編號／表單名稱／格式／大小／上傳者 / 上傳時間／關聯文件數／操作', async () => {
+  /**
+   * 🔴 2026-08-20 D9 delta（`AC-N47`）—— 「表單名稱」欄之後新增「制定部門」欄，表頭由 7 欄
+   * 擴為 8 欄；其餘 7 欄之相對順序不變。
+   * 📝 被取代之原斷言逐字保留供追溯：
+   *   OLD> expect(headers).toEqual(['表單編號','表單名稱','格式','大小','上傳者 / 上傳時間','關聯文件數','操作']);
+   */
+  it('TS-D18-060／AC-N47 表頭由左至右逐字為 表單編號／表單名稱／制定部門／格式／大小／上傳者 / 上傳時間／關聯文件數／操作', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     const headers = screen.getAllByRole('columnheader').map((th) => th.textContent?.trim());
     expect(headers).toEqual([
       '表單編號',
       '表單名稱',
+      '制定部門',
       '格式',
       '大小',
       '上傳者 / 上傳時間',
       '關聯文件數',
       '操作',
     ]);
+  });
+
+  /**
+   * `AC-N47`：0 筆制定部門顯示逐字 `—`（比照 `AC-D15` ① 之既有慣例），該儲存格帶
+   * `data-drafting-dept` 屬性。既有 fixture（`POOL`）之兩筆皆未設 `draftingDeptCodes`。
+   */
+  it('AC-N47 制定部門欄：0 筆時顯示逐字「—」，儲存格帶 data-drafting-dept', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
+    const cell = within(rowOf('進件申請書.xlsx')).getByText('—', {
+      selector: '[data-drafting-dept]',
+    });
+    expect(cell).toBeInTheDocument();
   });
 
   it('TS-D18-061 AC-D15 ① 編號欄儲存格帶 data-form-number；有值者以 mono 呈現', async () => {
@@ -127,7 +160,22 @@ describe('UsageFormManagementPage — F018 AC-D1 清單欄位', () => {
   });
 });
 
-describe('UsageFormManagementPage — F018 AC-D15 ② 上傳 modal 之編號欄', () => {
+/**
+ * 🔴 2026-08-20 D9 delta（`AC-N41`）—— 原「上傳 modal 之編號欄」（`TS-D18-082`／`TS-D18-063`）之
+ * 測試標的已隨新增流程整頁化遷移至 `UsageFormCreatePage.test.tsx`（`#upNumber` 之等價欄位、
+ * 填入編號後隨 `uploadUsageForms` 送出之鑑別力斷言，見該檔 `AC-N44` 相關案例）。
+ * 原兩案全文逐字保留於 git 歷史，不重複貼於此。
+ */
+
+/**
+ * 🔴 2026-08-20 D9 delta（`AC-N41`／`AC-N48`）—— 列內「編輯」動作（原「編輯編號」）之範圍限縮
+ * 為**入口與 icon 契約**：本檔只驗證清單頁如何觸發、導向何處；欄位帶入現值／儲存往返／
+ * 取消不呼叫端點／409／400 錯誤呈現等**介面內部行為**，已整批遷移至
+ * `UsageFormEditPage.test.tsx`（新頁面之測試標的）。
+ * 📝 被取代之三個 describe 區塊全文（`TS-D18-066`～`077`，含「編輯表單編號」modal 之標題／
+ *   說明句／`#enNumber`／`#enFormName`／`#enNumberErr` 諸斷言）逐字保留於 git 歷史，不重複貼於此。
+ */
+describe('UsageFormManagementPage — F018 AC-D16／AC-D21 「編輯」入口（AC-N41／AC-N48 改名與導頁）', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getUsageFormOverview).mockResolvedValue(POOL);
@@ -135,250 +183,60 @@ describe('UsageFormManagementPage — F018 AC-D15 ② 上傳 modal 之編號欄'
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it('TS-D18-082 🔴 AC-D2 主線：於上傳 modal 填入編號 → 該值隨 uploadUsageForms 送出', async () => {
-    // 🔴 本條之存在理由（2026-08-16 補）：既有 `UsageFormManagementPage.test.tsx` 之
-    // `TS-PS-F018-FE-001/002/003` 三條**全部是「編號留空」情境**（第三參數恆為 `''`）
-    // ⇒「有填編號時該值真的被送出」這件 `AC-D2` 的主線原本沒有任何前端載體：
-    // 實作若把編號欄接錯（永遠送空字串），那三條仍會全綠。本條補上鑑別力。
-    // 📌 只斷言「使用者輸入什麼就送出什麼」；**不斷言前端是否 trim**——`AC-D2` 規範的是
-    //    「**落地**為 trim 後值」，正規化由後端 `normalizeFormNumber()` 負責（backend TS-D18-010）。
-    //    在此對前端加 trim 斷言等於發明規格。
-    vi.mocked(endpoints.uploadUsageForms).mockResolvedValue(undefined);
+  /**
+   * 📝 被取代之原斷言逐字保留供追溯：
+   *   OLD> expect(screen.getAllByLabelText('編輯編號')).toHaveLength(2);
+   *   OLD> expect(within(rowOf('進件申請書.xlsx')).getByLabelText('編輯編號')).toBeInTheDocument();
+   */
+  it('TS-D18-064／AC-N48① 每列「操作」欄存在無障礙名稱逐字「編輯」之動作，帶 data-edit-number', async () => {
     const { container } = renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
-
-    const file = new File(['zzz'], '放款覆核表.xlsx', {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-    const dialog = screen.getByRole('dialog', { name: '上傳使用表單' });
-    await userEvent.upload(within(dialog).getByLabelText('選擇檔案'), file);
-    await userEvent.type(container.querySelector('#upNumber') as HTMLInputElement, 'FM-001');
-    await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
-
-    await waitFor(() =>
-      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '放款覆核表.xlsx', 'FM-001'),
-    );
-  });
-
-  it('TS-D18-063 upNumber 之 id／maxlength／placeholder 逐字；label 為「表單編號」＋「（選填）」', async () => {
-    const { container } = renderPage();
-    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    await userEvent.click(screen.getByRole('button', { name: /上傳表單/ }));
-    const input = container.querySelector('#upNumber') as HTMLInputElement;
-    expect(input, '上傳 modal 缺少 #upNumber').not.toBeNull();
-    expect(input).toHaveAttribute('maxlength', '100');
-    expect(input).toHaveAttribute('placeholder', '例：FM-001（不填則留空）');
-    const label = container.querySelector('label[for="upNumber"]') as HTMLElement;
-    expect(label, '缺少 upNumber 之 <label for>').not.toBeNull();
-    expect(label.textContent?.replace(/\s+/g, '')).toBe('表單編號（選填）');
-  });
-});
-
-describe('UsageFormManagementPage — F018 AC-D16／AC-D21 「編輯編號」介面', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    vi.mocked(endpoints.getUsageFormOverview).mockResolvedValue(POOL);
-    vi.mocked(endpoints.updateUsageFormNumber).mockImplementation((id, formNumber) =>
-      Promise.resolve({ ...POOL.find((f) => f.id === id)!, formNumber }),
-    );
-    mockAuth('ICSOPAdmin');
-  });
-  afterEach(() => vi.restoreAllMocks());
-
-  it('TS-D18-064 AC-D16 每列「操作」欄存在無障礙名稱逐字「編輯編號」之動作，帶 data-edit-number', async () => {
-    const { container } = renderPage();
-    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    expect(screen.getAllByLabelText('編輯編號')).toHaveLength(2);
+    expect(screen.getAllByLabelText('編輯')).toHaveLength(2);
     expect(container.querySelectorAll('[data-edit-number]')).toHaveLength(2);
-    expect(within(rowOf('進件申請書.xlsx')).getByLabelText('編輯編號')).toBeInTheDocument();
+    expect(within(rowOf('進件申請書.xlsx')).getByLabelText('編輯')).toBeInTheDocument();
   });
 
   it('TS-D18-065 AC-D21 ① 列內動作之 icon 鍵為 hash（非 pencil／edit）', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    const action = within(rowOf('進件申請書.xlsx')).getByLabelText('編輯編號');
+    const action = within(rowOf('進件申請書.xlsx')).getByLabelText('編輯');
     expect(action.querySelector('.lucide-hash'), 'icon 鍵應為 hash').not.toBeNull();
     expect(action.querySelector('.lucide-pencil')).toBeNull();
   });
 
-  it('TS-D18-066 AC-D16 觸發後開啟 editNumberModal，標題／說明句／按鈕逐字', async () => {
+  it('AC-N41／AC-N48 點擊「編輯」→ 導向 /admin/usage-forms/:formId/edit（非開啟 modal）', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    const modal = await openEditNumber('進件申請書.xlsx');
-    expect(modal, '缺少 #editNumberModal').not.toBeNull();
-    expect(within(modal).getByText('編輯表單編號')).toBeInTheDocument();
-    expect(within(modal).getByText('僅更新編號，不會變更表單檔案。')).toBeInTheDocument();
-    expect(within(modal).getByRole('button', { name: '儲存' })).toBeInTheDocument();
-    expect(within(modal).getByRole('button', { name: '取消' })).toBeInTheDocument();
-  });
-
-  it('TS-D18-067 AC-D16 輸入框 enNumber：id／maxlength=100／placeholder 與上傳 modal 同一句；label 逐字', async () => {
-    renderPage();
-    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    const modal = await openEditNumber('進件申請書.xlsx');
-    const input = modal.querySelector('#enNumber') as HTMLInputElement;
-    expect(input, '缺少 #enNumber').not.toBeNull();
-    expect(input).toHaveAttribute('maxlength', '100');
-    expect(input).toHaveAttribute('placeholder', '例：FM-001（不填則留空）');
-    expect(input.value).toBe('FM-001'); // 帶入現值
-    const label = modal.querySelector('label[for="enNumber"]') as HTMLElement;
-    expect(label.textContent?.replace(/\s+/g, '')).toBe('表單編號（選填）');
-  });
-
-  it('TS-D18-068 AC-D21 ② enFormName 之文字**恰為**該表單之 name（無前綴後綴）', async () => {
-    renderPage();
-    await waitFor(() => expect(screen.getByText('徵信照會表.pdf')).toBeInTheDocument());
-    const modal = await openEditNumber('徵信照會表.pdf');
-    expect(modal.querySelector('#enFormName')?.textContent).toBe('徵信照會表.pdf');
-  });
-
-  it('TS-D18-069 AC-D16 點「取消」→ 關閉介面且不呼叫更新端點', async () => {
-    renderPage();
-    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    const modal = await openEditNumber('進件申請書.xlsx');
-    await userEvent.clear(modal.querySelector('#enNumber') as HTMLInputElement);
-    await userEvent.type(modal.querySelector('#enNumber') as HTMLInputElement, 'FM-999');
-    await userEvent.click(within(modal).getByRole('button', { name: '取消' }));
-    expect(endpoints.updateUsageFormNumber).not.toHaveBeenCalled();
-    await waitFor(() => expect(within(rowOf('進件申請書.xlsx')).getByText('FM-001')).toBeInTheDocument());
-  });
-
-  it('TS-D18-070 AC-D21 ③ 關閉鈕 aria-label 逐字「關閉」，行為同「取消」', async () => {
-    renderPage();
-    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    const modal = await openEditNumber('進件申請書.xlsx');
-    await userEvent.click(within(modal).getByLabelText('關閉'));
-    expect(endpoints.updateUsageFormNumber).not.toHaveBeenCalled();
-    await waitFor(() => expect(within(rowOf('進件申請書.xlsx')).getByText('FM-001')).toBeInTheDocument());
+    await clickEdit('進件申請書.xlsx');
+    expect(navigateMock).toHaveBeenCalledWith('/admin/usage-forms/uf1/edit');
+    expect(document.querySelector('#editNumberModal')).toBeNull();
   });
 });
 
-describe('UsageFormManagementPage — F018 AC-D3 ①／AC-D19 編號往返與清單即時反映', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    vi.mocked(endpoints.getUsageFormOverview).mockResolvedValue(POOL);
-    vi.mocked(endpoints.updateUsageFormNumber).mockImplementation((id, formNumber) =>
-      Promise.resolve({ ...POOL.find((f) => f.id === id)!, formNumber }),
-    );
-    mockAuth('ICSOPAdmin');
-  });
-  afterEach(() => vi.restoreAllMocks());
-
-  it('TS-D18-071 AC-D3 ① null → FM-002：呼叫端點、清單該列即時顯示 FM-002、回饋逐字「已更新表單編號。」', async () => {
-    renderPage();
-    await waitFor(() => expect(screen.getByText('徵信照會表.pdf')).toBeInTheDocument());
-    const modal = await openEditNumber('徵信照會表.pdf');
-    await userEvent.type(modal.querySelector('#enNumber') as HTMLInputElement, 'FM-002');
-    await userEvent.click(within(modal).getByRole('button', { name: '儲存' }));
-
-    await waitFor(() => expect(endpoints.updateUsageFormNumber).toHaveBeenCalledWith('uf3', 'FM-002'));
-    expect(await screen.findByText('已更新表單編號。')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(within(rowOf('徵信照會表.pdf')).getByText('FM-002')).toBeInTheDocument(),
-    );
-  });
-
-  it('TS-D18-072 AC-D19 清空 → 送出 null、清單回復「—」＋title、回饋逐字「已清除表單編號。」', async () => {
-    renderPage();
-    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    const modal = await openEditNumber('進件申請書.xlsx');
-    await userEvent.clear(modal.querySelector('#enNumber') as HTMLInputElement);
-    await userEvent.click(within(modal).getByRole('button', { name: '儲存' }));
-
-    await waitFor(() => expect(endpoints.updateUsageFormNumber).toHaveBeenCalledWith('uf1', null));
-    expect(await screen.findByText('已清除表單編號。')).toBeInTheDocument();
-    await waitFor(() => {
-      const dash = within(rowOf('進件申請書.xlsx')).getByText('—');
-      expect(dash).toHaveAttribute('title', '此表單未設定編號');
-    });
-  });
-
-  it('TS-D18-073 AC-D19 純空白視同清空（送出 null，非空字串）', async () => {
-    renderPage();
-    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    const modal = await openEditNumber('進件申請書.xlsx');
-    const input = modal.querySelector('#enNumber') as HTMLInputElement;
-    await userEvent.clear(input);
-    await userEvent.type(input, '   ');
-    await userEvent.click(within(modal).getByRole('button', { name: '儲存' }));
-    await waitFor(() => expect(endpoints.updateUsageFormNumber).toHaveBeenCalledWith('uf1', null));
-  });
-});
-
-describe('UsageFormManagementPage — F018 AC-D16／AC-D21 ④ 錯誤呈現', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    vi.mocked(endpoints.getUsageFormOverview).mockResolvedValue(POOL);
-    mockAuth('ICSOPAdmin');
-  });
-  afterEach(() => vi.restoreAllMocks());
-
-  async function submitAndFail(status: number, code: string) {
-    const { ApiError } = await import('../api/client');
-    vi.mocked(endpoints.updateUsageFormNumber).mockRejectedValue(new ApiError(status, code));
-    renderPage();
-    await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    const modal = await openEditNumber('進件申請書.xlsx');
-    const input = modal.querySelector('#enNumber') as HTMLInputElement;
-    const classBefore = input.className;
-    await userEvent.clear(input);
-    await userEvent.type(input, 'FM-777');
-    await userEvent.click(within(modal).getByRole('button', { name: '儲存' }));
-    return { modal, input, classBefore };
-  }
-
-  it('TS-D18-074 409 USAGE_FORM_NUMBER_DUPLICATE → enNumberErr 逐字「表單編號已存在（比對前 trim、不分大小寫）。」', async () => {
-    const { modal } = await submitAndFail(409, 'USAGE_FORM_NUMBER_DUPLICATE');
-    await waitFor(() =>
-      expect(modal.querySelector('#enNumberErr')?.textContent).toContain(
-        '表單編號已存在（比對前 trim、不分大小寫）。',
-      ),
-    );
-  });
-
-  it('TS-D18-075 400 USAGE_FORM_NUMBER_TOO_LONG → enNumberErr 逐字「表單編號超過長度上限（100 字元）。」', async () => {
-    const { modal } = await submitAndFail(400, 'USAGE_FORM_NUMBER_TOO_LONG');
-    await waitFor(() =>
-      expect(modal.querySelector('#enNumberErr')?.textContent).toContain(
-        '表單編號超過長度上限（100 字元）。',
-      ),
-    );
-  });
-
-  it('TS-D18-076 AC-D21 ④ 錯誤時 enNumber 之呈現與正常態可區分（加上錯誤邊框樣式）', async () => {
-    const { input, classBefore } = await submitAndFail(409, 'USAGE_FORM_NUMBER_DUPLICATE');
-    await waitFor(() => expect(input.className).not.toBe(classBefore));
-  });
-
-  it('TS-D18-077 錯誤發生時介面**不關閉**且該列編號不變', async () => {
-    const { modal } = await submitAndFail(409, 'USAGE_FORM_NUMBER_DUPLICATE');
-    await waitFor(() => expect(modal.querySelector('#enNumberErr')?.textContent).toBeTruthy());
-    expect(document.querySelector('#editNumberModal')).not.toBeNull();
-    expect(within(rowOf('進件申請書.xlsx')).getByText('FM-001')).toBeInTheDocument();
-  });
-});
-
-describe('UsageFormManagementPage — F018 AC-D17 🔴 無寫入權角色之「編輯編號」自 DOM 移除', () => {
+describe('UsageFormManagementPage — F018 AC-D17 🔴 無寫入權角色之「編輯」自 DOM 移除', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getUsageFormOverview).mockResolvedValue(POOL);
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it('TS-D18-078 SysAdmin（唯讀）→ queryByLabelText("編輯編號") 與 [data-edit-number] 皆為 null', async () => {
+  /**
+   * 📝 被取代之原斷言逐字保留供追溯（`AC-N48` 改名，行為與掛鉤不變）：
+   *   OLD> expect(screen.queryByLabelText('編輯編號')).toBeNull();
+   */
+  it('TS-D18-078／AC-N48 SysAdmin（唯讀）→ queryByLabelText("編輯") 與 [data-edit-number] 皆為 null', async () => {
     mockAuth('SysAdmin');
     const { container } = renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    expect(screen.queryByLabelText('編輯編號')).toBeNull();
+    expect(screen.queryByLabelText('編輯')).toBeNull();
     expect(container.querySelector('[data-edit-number]')).toBeNull();
   });
 
-  it('TS-D18-079 ICSOPAdmin → 兩者皆非 null（切角色須即時重繪）', async () => {
+  it('TS-D18-079／AC-N48 ICSOPAdmin → 兩者皆非 null（切角色須即時重繪）', async () => {
     mockAuth('ICSOPAdmin');
     const { container } = renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
-    expect(screen.getAllByLabelText('編輯編號').length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('編輯').length).toBeGreaterThan(0);
     expect(container.querySelector('[data-edit-number]')).not.toBeNull();
   });
 
@@ -391,7 +249,18 @@ describe('UsageFormManagementPage — F018 AC-D17 🔴 無寫入權角色之「�
   });
 });
 
-describe('UsageFormManagementPage — F018 AC-D13 🔒 後台個別下載維持既有 RAW 路徑', () => {
+/**
+ * 🔴 2026-08-20 D9 delta（`OQ-D9-08`，全面推翻 `OQ-FM-01`）—— 後台個別下載端點自本輪起
+ * **一律燒錄浮水印並寫稽核**（`AC-N14`／`AC-N17`），描述由「維持既有 RAW 路徑」就地改寫。
+ * 📝 被推翻之原 describe 標題與註解逐字保留供追溯：
+ *   OLD> describe('UsageFormManagementPage — F018 AC-D13 🔒 後台個別下載維持既有 RAW 路徑', ...)
+ *   OLD> // OQ-FM-01 維持有效：後台一律 RAW、不燒錄、不寫稽核（缺失 delta #12/#13/#15 明確不做）。
+ * ⚠ **本案唯一存活之斷言（downloadPoolForm 之呼叫參數、不開新分頁）不受本次改寫影響**——
+ *   燒錄與寫稽核自本輪起發生於**同一個既有端點之伺服器端**，前端呼叫之函式與參數形狀不變；
+ *   「未呼叫額外之 front/burn/watermark 具名函式」之守衛依然成立且仍有意義（防止前端誤走
+ *   前台專用端點，而非宣稱後端不燒錄）。
+ */
+describe('UsageFormManagementPage — F018 後台個別下載（AC-N14／AC-N17：一律燒錄並寫稽核，端點與呼叫參數不變）', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getUsageFormOverview).mockResolvedValue(POOL);
@@ -401,7 +270,7 @@ describe('UsageFormManagementPage — F018 AC-D13 🔒 後台個別下載維持�
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it('TS-D18-081 下載仍呼叫既有後台 helper downloadPoolForm，**未**改呼叫任何前台燒錄端點', async () => {
+  it('TS-D18-081 下載仍呼叫既有後台 helper downloadPoolForm（燒錄與寫稽核發生於同端點之伺服器端），未改呼叫其他具名端點', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
     await userEvent.click(within(rowOf('進件申請書.xlsx')).getByRole('button', { name: '下載' }));
@@ -410,7 +279,6 @@ describe('UsageFormManagementPage — F018 AC-D13 🔒 後台個別下載維持�
       expect(endpoints.downloadPoolForm).toHaveBeenCalledWith('uf1', expect.any(String)),
     );
     expect(window.open).not.toHaveBeenCalled(); // 不再導覽至第三方 Blob 網域
-    // OQ-FM-01 維持有效：後台一律 RAW、不燒錄、不寫稽核（缺失 delta #12/#13/#15 明確不做）。
     const called = Object.entries(endpoints)
       .filter(([, v]) => typeof v === 'function' && vi.isMockFunction(v) && v.mock.calls.length > 0)
       .map(([k]) => k);

@@ -117,11 +117,50 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
     expect(screen.getByText(/無文件檢視權限/)).toBeInTheDocument();
   });
 
-  it('Supervisor：顯示唯讀說明、無「前往編輯」', async () => {
+  /**
+   * 🔴 2026-08-20 D9 delta（缺失／變更 delta 第 8 項；`OQ-D9-19`／`AC-N28`）——推翻 F026 頂部定案
+   * 「主管、部門窗口、系統管理員對所有文件欄位皆唯讀」，僅為 OJT 開例外。Supervisor 之唯讀
+   * 提示自此改為 `RO_NOTICE_OJT_EXCEPTION`（見 `F016#ojt-role-open-delta` `AC-N74`），而非
+   * `RO_NOTICE_FULL`——原句「全欄位皆唯讀…不可上傳/取代」對 Supervisor 已不成立（OJT 例外）。
+   * 「無『前往編輯』」之既有語意不變（本 delta 只開 OJT 一欄，不授予整頁編輯路徑）。
+   * 📝 被取代之原斷言逐字保留供追溯：
+   *   OLD> expect(screen.getByText(/此角色對 ICSOP 文件全欄位皆唯讀/)).toBeInTheDocument();
+   */
+  it('Supervisor：唯讀說明改為 RO_NOTICE_OJT_EXCEPTION（AC-N28／AC-N74①）、仍無「前往編輯」', async () => {
     mockAuth('Supervisor');
     renderPage();
     await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
-    expect(screen.getByText(/此角色對 ICSOP 文件全欄位皆唯讀/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/此角色對 ICSOP 文件其餘 19 個欄位、ICSOP PDF、使用表單與附錄皆唯讀/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/唯一例外為「OJT 實體簽到表」，可上傳或覆蓋/)).toBeInTheDocument();
+    expect(screen.queryByText(/此角色對 ICSOP 文件全欄位皆唯讀/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /前往編輯/ })).not.toBeInTheDocument();
+  });
+
+  it('DeptContact：唯讀說明同 Supervisor，亦為 RO_NOTICE_OJT_EXCEPTION（AC-N74①，兩角色共用同一常數）', async () => {
+    mockAuth('DeptContact');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+    expect(
+      screen.getByText(/此角色對 ICSOP 文件其餘 19 個欄位、ICSOP PDF、使用表單與附錄皆唯讀/),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * 🔒 `AC-N26`（系統管理員對 OJT 仍唯讀）之畫面載體＝`AC-N74`②：`RO_NOTICE_FULL` 對 SysAdmin
+   * 一字未改仍然為真——本案即該回歸鎖定之正面斷言（防止實作誤把 SysAdmin 也順手改成例外文案）。
+   */
+  it('🔒 SysAdmin：唯讀說明仍為 RO_NOTICE_FULL 一字未改（AC-N74②／AC-N26 之畫面載體）', async () => {
+    mockAuth('SysAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+    // 以既有可命中之子字串定位容器，再對其 textContent 做空白正規化後之逐字比對——
+    // 容忍文案被拆成多個行內元素（`getByText` 對完整字串之精確比對會被標籤切割影響）。
+    const notice = screen.getByText(/此角色對 ICSOP 文件全欄位皆唯讀/).closest('div, p') as HTMLElement;
+    expect((notice.textContent ?? '').replace(/\s+/g, '')).toBe(
+      '唯讀模式·此角色對ICSOP文件全欄位皆唯讀；附件可下載（燒錄浮水印），但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。',
+    );
     expect(screen.queryByRole('button', { name: /前往編輯/ })).not.toBeInTheDocument();
   });
 
@@ -235,6 +274,125 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
        */
       expect(await screen.findByText('下載「車輛分期進件作業_v1.3.pdf」')).toBeInTheDocument();
       expect(screen.queryByText(/已寫入稽核 DOWNLOAD/)).toBeNull();
+    });
+  });
+
+  /**
+   * 2026-08-20 D9 delta（缺失／變更 delta 第 8 項）—— 唯讀頁附件區之 DOM 契約與逐字文案。
+   * 權威：`docs/specs/features/F016-pdf-ojt-attachment.md#ojt-role-open-delta` `AC-N74`／`AC-N75`。
+   */
+  describe('OJT 上傳破例：唯讀頁附件區 DOM 契約（AC-N74／AC-N75）', () => {
+    const APPX = [
+      { id: 'ax1', name: '作業流程對照表.xlsx', format: 'xlsx', size: 57344, uploadedBy: 'u', uploadedAt: '2026-06-10T00:00:00.000Z', sortOrder: 1 },
+    ];
+
+    beforeEach(() => {
+      vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue(ATTACHMENTS);
+      vi.mocked(endpoints.getDocumentForms).mockResolvedValue(FORMS);
+      vi.mocked(endpoints.getDocumentAppendices).mockResolvedValue(APPX);
+    });
+
+    it('AC-N75① 每一附件／使用表單／附錄列皆帶 data-attachment-kind，值域為 icsop_pdf／ojt／usageform／appendix', async () => {
+      mockAuth('Supervisor');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+      expect(attachRow('車輛分期進件作業_v1.3.pdf').getAttribute('data-attachment-kind')).toBe('icsop_pdf');
+      expect(attachRow('車輛分期進件作業_OJT簽到表.pdf').getAttribute('data-attachment-kind')).toBe('ojt');
+      expect(attachRow('進件申請書.xlsx').getAttribute('data-attachment-kind')).toBe('usageform');
+      expect(attachRow('作業流程對照表.xlsx').getAttribute('data-attachment-kind')).toBe('appendix');
+    });
+
+    it('AC-N75②③⑦ Supervisor：恰 1 列可寫（OJT），其餘三種 kind 之列皆為唯讀（僅開一個洞）', async () => {
+      mockAuth('Supervisor');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+      const writable = document.querySelectorAll('[data-writable-attachment]');
+      expect(writable).toHaveLength(1);
+      const kindOfWritable = writable[0].closest('[data-attachment-kind]')?.getAttribute('data-attachment-kind')
+        ?? writable[0].getAttribute('data-attachment-kind');
+      expect(kindOfWritable).toBe('ojt');
+      expect(attachRow('車輛分期進件作業_v1.3.pdf').querySelector('[data-writable-attachment]')).toBeNull();
+      expect(attachRow('進件申請書.xlsx').querySelector('[data-writable-attachment]')).toBeNull();
+      expect(attachRow('作業流程對照表.xlsx').querySelector('[data-writable-attachment]')).toBeNull();
+      expect(attachRow('車輛分期進件作業_v1.3.pdf').querySelector('[data-readonly-attachment]')).not.toBeNull();
+      expect(attachRow('進件申請書.xlsx').querySelector('[data-readonly-attachment]')).not.toBeNull();
+      expect(attachRow('作業流程對照表.xlsx').querySelector('[data-readonly-attachment]')).not.toBeNull();
+    });
+
+    it('AC-N75④ OJT 列之上傳鈕帶 data-ojt-upload，aria-label 逐字為「上傳／取代 OJT 實體簽到表」（Supervisor）', async () => {
+      mockAuth('Supervisor');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業_OJT簽到表.pdf')).toBeInTheDocument());
+      const btn = attachRow('車輛分期進件作業_OJT簽到表.pdf').querySelector('[data-ojt-upload]') as HTMLElement;
+      expect(btn, '找不到 OJT 列之 data-ojt-upload 控制項').not.toBeNull();
+      expect(btn.getAttribute('aria-label')).toBe('上傳／取代 OJT 實體簽到表');
+    });
+
+    it('AC-N75⑦📌 ICSOPAdmin 亦顯示 OJT 上傳入口（其對 OJT 本即可寫，權限較大者不得看到較少控制項）', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業_OJT簽到表.pdf')).toBeInTheDocument());
+      expect(
+        attachRow('車輛分期進件作業_OJT簽到表.pdf').querySelector('[data-ojt-upload]'),
+      ).not.toBeNull();
+    });
+
+    it('🔒 SysAdmin：四類列皆為唯讀，無任何 data-writable-attachment（維持既有全唯讀）', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+      expect(document.querySelectorAll('[data-writable-attachment]')).toHaveLength(0);
+    });
+
+    it('AC-N75⑤ 欄位區唯讀說明（data-field-readonly-note）文字逐字為 FIELD_RO_NOTE', async () => {
+      mockAuth('Supervisor');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      const note = document.querySelector('[data-field-readonly-note]');
+      expect(note, '找不到 data-field-readonly-note 節點').not.toBeNull();
+      expect(note!.textContent).toBe(
+        '此區 19 個欄位對本角色一律唯讀（FIELD_WRITE_FORBIDDEN）；本頁唯一可寫項為下方附件區之「OJT 實體簽到表」。',
+      );
+    });
+
+    it('AC-N74③ Supervisor（OJT 可寫）：#attachTitle 逐字為「附件」（非「附件（僅下載）」）', async () => {
+      mockAuth('Supervisor');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+      const title = document.getElementById('attachTitle');
+      expect(title, '找不到 #attachTitle').not.toBeNull();
+      expect(title!.textContent).toBe('附件');
+    });
+
+    /**
+     * 🔴 2026-08-20 D9 delta（`OQ-D9-08`／`OQ-D9-33`）—— 唯讀詳情頁各檔案列亦渲染浮水印註記。
+     * 權威：`docs/specs/features/F020-watermark.md#backend-burn-delta` `AC-N20`。
+     */
+    it('AC-N20 各附件列帶 data-wm-note：ICSOP PDF（pdf）為「檢視/下載將燒錄浮水印」', async () => {
+      mockAuth('Supervisor');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+      const note = attachRow('車輛分期進件作業_v1.3.pdf').querySelector('[data-wm-note]');
+      expect(note, '找不到 data-wm-note').not.toBeNull();
+      expect(note!.textContent).toBe('檢視/下載將燒錄浮水印');
+    });
+
+    it('AC-N20 使用表單（xlsx）之 data-wm-note 逐字為「此格式不支援浮水印」', async () => {
+      mockAuth('Supervisor');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument());
+      const note = attachRow('進件申請書.xlsx').querySelector('[data-wm-note]');
+      expect(note, '找不到 data-wm-note').not.toBeNull();
+      expect(note!.textContent).toBe('此格式不支援浮水印');
+    });
+
+    it('AC-N74③ SysAdmin（OJT 亦唯讀）：#attachTitle 逐字為「附件（僅下載）」', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+      const title = document.getElementById('attachTitle');
+      expect(title, '找不到 #attachTitle').not.toBeNull();
+      expect(title!.textContent).toBe('附件（僅下載）');
     });
   });
 
