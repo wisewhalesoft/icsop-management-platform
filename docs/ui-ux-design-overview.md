@@ -586,10 +586,10 @@ prototype 產出後，逐檔以下列方式驗證：
 |---|---|---|
 | **形式＝小 modal**（非列內 inline） | `id="editNumberModal"`，沿用本頁 `upModal`／`confirmModal` 之既有 modal 語彙 | ① `AC-D16` 只給**單一** DOM id `editNumberModal`（單數），inline 需每列一份或共用一份，modal 天然對應；② 介面必含 label＋輸入框＋`enNumberErr` 錯誤區＋強制說明句 `僅更新編號，不會變更表單檔案。`＋`儲存`／`取消`，塞進 `min-w-[980px]` 表格首欄會破壞列高與橫捲；③ 不新增互動語彙。 |
 | **列內動作＝icon＋可見文字按鈕**<br>🔴 **可見文字／`aria-label` 已於 2026-08-20 第三輪改為逐字 `編輯`**（`AC-N48` ① 之明文例外）；下列為改名前之原始紀錄，保留供追溯 | 「操作」欄內 `<i data-lucide="hash">` ＋可見文字 `編輯編號`；`aria-label="編輯編號"`、`title="編輯編號"`、`data-edit-number="{formId}"` | 對照表寫「無障礙名稱／可見文字＝`編輯編號`」，兩種讀法都成立才安全；小型帶邊框文字按鈕沿用 `13` `linkCell` 之既有 `text-[11px]` 樣式。表格 `min-w` 880 → **980**。 |
-| **無寫入權角色＝自 DOM 移除**（非 `.write-only` CSS 隱藏） | `canWrite()` 判斷後才輸出該按鈕；`setRole()` 內補 `renderTable()` 使切角色即時反映 | 🔴 **現行可執行斷言字面＝`queryByLabelText('編輯') === null`**（第三輪改名後）；📝 下列為改名前之原始紀錄、**不得用於斷言**：`AC-D17` 之驗證為 `queryByLabelText('編輯編號') === null`，而 Testing Library 的 `*ByLabelText` **找得到** `display:none` 的元素 ⇒ 沿用本頁既有 `.write-only`（CSS 隱藏）會使該斷言失敗。本頁其餘寫入動作維持 `.write-only` 不變。 |
+| **無寫入權角色＝自 DOM 移除**（非 `.write-only` CSS 隱藏） | `canWrite()` 判斷後才輸出該按鈕；`setRole()` 內補 `renderTable()` 使切角色即時反映 | 🔴 **現行可執行斷言字面＝`queryByLabelText('編輯') === null`**（第三輪改名後）；📝 下列為改名前之原始紀錄、**不得用於斷言**：`AC-D17` 之驗證為 OLD> `queryByLabelText('編輯編號') === null`，而 Testing Library 的 `*ByLabelText` **找得到** `display:none` 的元素 ⇒ 沿用本頁既有 `.write-only`（CSS 隱藏）會使該斷言失敗。本頁其餘寫入動作維持 `.write-only` 不變。 |
 | **modal 內顯示被編輯之表單名稱** | `id="enFormName"`，只回顯 `f.name` | 純資料回顯、非新增文案；不指明編輯對象時使用者無從確認選到哪一列。 |
 
-驗證（jsdom 實跑，`19` 0 console error）：`AC-D16` 8 列各一動作＋`data-edit-number`、modal 逐字文案全數命中、`取消` 不變更；`AC-D17` 四種無寫入權角色 `queryByLabelText(...)` 皆為 0（📝 該次實跑所用之字面為當時的 `'編輯編號'`；**現行字面為 `'編輯'`**，見 §A.6.9）；`AC-D3`／`AC-D19` `null`→`FM-002`→清空→`—`＋`title` 往返成立；`AC-D18` `fm-001` 撞 `FM-001` 回重複訊息且該列不變、自身列同值不衝突、101 字元回超長訊息；`AC-D20` 對被 2 份文件引用之 `uf1` 編輯後 `confirmModal` 未開（覆蓋共用警示未觸發）。
+驗證（jsdom 實跑，`19` 0 console error）：`AC-D16` 8 列各一動作＋`data-edit-number`、modal 逐字文案全數命中、`取消` 不變更；`AC-D17` 四種無寫入權角色 `queryByLabelText(...)` 皆為 0（📝 該次實跑所用之字面為當時的 OLD> `'編輯編號'`；**現行字面為 `'編輯'`**，見 §A.6.9）；`AC-D3`／`AC-D19` `null`→`FM-002`→清空→`—`＋`title` 往返成立；`AC-D18` `fm-001` 撞 `FM-001` 回重複訊息且該列不變、自身列同值不衝突、101 字元回超長訊息；`AC-D20` 對被 2 份文件引用之 `uf1` 編輯後 `confirmModal` 未開（覆蓋共用警示未觸發）。
 
 `04-public-document-detail.html` 之使用表單清單於 A.4 已涵蓋（`進件申請書.xlsx`／`支票託收登記表.xlsx` 顯示 `此格式不支援浮水印`、`對保通知書.pdf` 顯示 `檢視/下載將燒錄浮水印`），本輪**核對後無需改動**。
 
@@ -714,8 +714,10 @@ prototype 產出後，逐檔以下列方式驗證：
 
 | 標記 | 用途 |
 |---|---|
-| ✅ **現行可執行斷言字面** | 唯一可以照抄進測試的值 |
-| 📝 已作廢（僅供追溯，⚠ **不得用於斷言**） | 歷史值，保留以便追溯裁決，但明文禁止照抄 |
+| ✅ **現行可執行斷言字面** | 唯一可以照抄進測試的值；**不帶 `OLD>`** |
+| 📝 已作廢（僅供追溯，⚠ **不得用於斷言**）＋ `OLD>` 前綴 | 歷史值，保留以便追溯裁決，但明文禁止照抄 |
+
+📌 **`OLD>` 為本 repo 既有慣例**（既有出處＝`backend/src/appendices/appendices.service.spec.ts` 等之註解「原斷言（供追溯）：OLD> …」），第五輪起一併套用於 prototype 註解 ⇒ **`grep -rn "OLD>"` 即可列出全部「不可照抄」之值**，不需逐處判讀語意。
 
 **第四輪逐處修正**：`19` 第 23 行、第 36 行（兩處假綠斷言字面）、第 339 行與第 414 行（以舊標籤稱呼現行控制項）、第 14 行與第 28 行（歷史／現行敘述之標籤釐清）；`19b` 第 16 行（標明「逐字沿用」之明文例外）；本檔 §A.5 之兩處（斷言字面與實跑紀錄）。
 

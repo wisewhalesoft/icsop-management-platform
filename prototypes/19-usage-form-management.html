@@ -14,14 +14,14 @@
         清單每列「操作」欄新增列內動作（`data-edit-number`），開啟 `editNumberModal` 小 modal。
         🔴 **小 modal 之形式已於 2026-08-20 由 AC-N41／AC-N48 ② 改為獨立整頁 19b**（原文保留供追溯）。
         🔴 **列內動作之可見文字與無障礙名稱已於 2026-08-20 第三輪由 lead 裁決改為逐字「編輯」**
-           （`AC-N48` ① 就地修訂，列為「逐字沿用」原則之**明文例外**；原值 `編輯編號` 保留於本行供追溯）。
+           （`AC-N48` ① 就地修訂，列為「逐字沿用」原則之**明文例外**；原值 OLD> `編輯編號` 保留於本行供追溯）。
         **只改 formNumber、不碰檔案**——不重傳、不觸發 USAGE_FORM_OVERWRITE_SHARED、不寫稽核（AC-D20）。
         此為既有表單補上編號之**唯一途徑**（存量列之 formNumber 全為 null，AC-D7）。
         清空為合法操作 → 落地 null、該格回復 `—`（AC-D19）；唯一性比對**排除自身列**（AC-D18）。
         **形式（小 modal）由 designer 決定；全部文案與掛鉤逐字照抄 spec-writer 定稿表，未改寫。**
         ⚠ 無寫入權之角色（SysAdmin／Supervisor／DeptContact／User）**自 DOM 移除**該動作元件（非 CSS 隱藏）。
           ✅ **現行可執行斷言字面**：`queryByLabelText('編輯') === null`
-          📝 已作廢（僅供追溯，⚠ **不得用於斷言**）：`queryByLabelText('編輯編號') === null`
+          📝 已作廢（僅供追溯，⚠ **不得用於斷言**）：OLD> `queryByLabelText('編輯編號') === null`
              ——標籤已於 2026-08-20 第三輪改名（`AC-N48` ①）。**沿用舊字面會使該斷言對任何角色恆真（假綠）**：
              按鈕的無障礙名稱已不是「編輯編號」，故有寫入權時回 null、被錯誤地以 CSS 隱藏時也回 null。
         ⚠ **不得**改採「把編號欄加進覆蓋上傳彈窗」——該替代方案已於人類閘門明確否決。 -->
@@ -33,12 +33,12 @@
           `container.querySelector('[role="dialog"]')` 為 null；把已搬走的彈窗留著會變成兩份權威）。
         🔴 **列內動作之可見文字與 aria-label 已於第三輪改為逐字「編輯」**（`AC-N48` ① 就地修訂之明文例外；
            改名理由＝本入口導向之頁面標題為「編輯使用表單」且範圍已含「制定部門」，停在「編輯編號」名不副實）。
-           📝 被改寫之原逐字值保留供追溯：`編輯編號`。
+           📝 被改寫之原逐字值保留供追溯：OLD> `編輯編號`（⚠ 不得用於斷言或選擇器）。
         🔒 其餘一格不動：`data-edit-number`、icon 鍵 `hash`、兩則編號錯誤訊息、
            欄位層 DOM id `enNumber`／`enNumberErr`／`enFormName` 全數沿用（AC-N48 ①），
            **且仍以「自 DOM 移除」方式對無寫入權角色隱藏**（AC-D17）——
            ✅ **現行可執行斷言字面**：`queryByLabelText('編輯') === null`；
-           📝 已作廢（僅供追溯，⚠ 不得用於斷言）：`queryByLabelText('編輯編號') === null`。
+           📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> `queryByLabelText('編輯編號') === null`。
            本頁其餘寫入動作沿用 .write-only CSS 隱藏，此局部不一致為刻意、不得統一。
         ⚠ topbar 主要鈕之可見文字由「上傳表單」改為 **「新增表單」**——AC-N41 之 Given 逐字為
            「點擊『新增表單』」，且本動作已不只是上傳檔案（同時設定編號與制定部門）。
@@ -345,7 +345,7 @@
      ⚠ 刻意**不用** .write-only（CSS display:none）——Testing Library 之 *ByLabelText **找得到**
         display:none 之元素，CSS 隱藏會使該斷言失敗。
         ✅ **現行可執行斷言字面**：`queryByLabelText('編輯') === null`
-        📝 已作廢（僅供追溯，⚠ 不得用於斷言）：`queryByLabelText('編輯編號') === null`（第三輪改名，AC-N48 ①）
+        📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> `queryByLabelText('編輯編號') === null`（第三輪改名，AC-N48 ①）
         本頁其餘寫入動作沿用 .write-only，此局部不一致為刻意、不得統一（OQ-D18-29）。 */
   function canWrite(){ return document.body.dataset.role==='icsop_admin'; }
   /* 🔴 F020 AC-N14～AC-N18（2026-08-20 OQ-D9-08 選項 B）：後台下載一律燒錄（PDF）＋一律寫稽核，
