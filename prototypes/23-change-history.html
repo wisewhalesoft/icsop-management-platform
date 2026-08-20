@@ -28,9 +28,11 @@
   body.sb-collapsed #sidebar{width:60px;}
   body.sb-collapsed .sb-label{display:none;}
   body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
-  /* diagonal tiled watermark（格式同 05／22：45°, opacity .12, slate-500, 14px, 機密聲明另起一行）*/
-  .wm-layer{position:absolute;inset:-40%;pointer-events:none;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;transform:rotate(-45deg);opacity:.12;user-select:none;z-index:5;}
-  .wm-layer span{color:#64748B;font-size:14px;white-space:nowrap;padding:20px 26px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.6;}
+  /* diagonal tiled watermark（字串格式同 05／22：45°, 14px, 機密聲明另起一行）
+     🔴 F020 AC-N2（2026-08-20 定稿，逐字照抄）：色值 #334155 @ opacity 0.30（對比度 ≈ 1.716:1 ≥ 1.70）。
+     🔒 AC-N66 正向斷言：本頁渲染 HTML（diff 表格／DAG 節點）而非 PDF，無內容層可燒錄 ⇒ 疊加層必須保留。*/
+  .wm-layer{position:absolute;inset:-40%;pointer-events:none;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;transform:rotate(-45deg);opacity:.30;user-select:none;z-index:5;}
+  .wm-layer span{color:#334155;font-size:14px;white-space:nowrap;padding:20px 26px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.6;}
   /* mini DAG（沿用 22 節點視覺 + 直角箭頭）*/
   .dagboard{position:relative;background:#F8FAFC;background-image:radial-gradient(#E7EDF5 1px,transparent 1px);background-size:20px 20px;border-radius:10px;}
   .mnode{position:absolute;z-index:2;}
@@ -291,7 +293,17 @@
 
   /* ===== 浮水印（格式同 05／22；身分＝當下登入管理者 李慧玲／債權管理部 法催一室）
      公司名稱＝VW_HRCOMF.COMPFULLNM 全稱；部門＝部層完整名稱；處/室＝最細單位名稱。 ===== */
-  const WM_DATA='20233-李慧玲-和潤企業股份有限公司-債權管理部-法催一室';
+  /* ===== 🔴 F020 AC-N10～AC-N13（2026-08-20 D9 delta · OQ-D9-06 選項 A／OQ-D9-07）=====
+     浮水印之「公司名稱」欄改用**浮水印專用簡稱** COMPANY_SHORT_NAMES（AS → 和潤企業、AE → 和潤電能）；
+     🔒 **全稱三處消費點逐字不動**（AC-N13）：F003 帳號建立／編輯之公司下拉與清單公司欄、
+        GET /companies 之回應、F024 調閱歷程之「公司」欄與其 CSV 匯出值——一律仍為「和潤企業股份有限公司」。
+     🔒 INV-C2（AC-N11）：短稱表之鍵集合 ≡ 全稱表之鍵集合；新增公司時只登全稱會使浮水印公司欄靜默留空
+        （且因 §8.4 收合規則「看起來像正常留空」而不會被發現）——這是本裁決唯一的防漂移機制。
+     📝 被取代之原值逐字保留供追溯：「和潤企業股份有限公司」（VW_HRCOMF.COMPFULLNM 全稱）。 */
+  const COMPANY_FULL_NAMES  = { AS:'和潤企業股份有限公司', AE:'和潤電能' };
+  const COMPANY_SHORT_NAMES = { AS:'和潤企業',             AE:'和潤電能' };
+  const WM_COMPANY = COMPANY_SHORT_NAMES.AS;
+  const WM_DATA=`20233-李慧玲-${WM_COMPANY}-債權管理部-法催一室`;
   const WM_NOTICE='僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現';
   const WM_TIME='2026-07-16 14:32:08';
   const WM_STR=`${WM_DATA}-${WM_NOTICE}-${WM_TIME}`;

@@ -1,4 +1,26 @@
 <!DOCTYPE html>
+<!-- 🔴 2026-08-20 D9 delta（人類閘門已裁決；規格權威＝F016 §ojt-role-open-delta AC-N28～AC-N35
+     ＋ F026 §ojt-write-exception-delta AC-N22～AC-N27 ＋ F020 AC-N14～AC-N20）——本檔已套用：
+     ① 🔴 **OJT 簽到表破例**（OQ-D9-19 選項 A 推翻 F026 頂部定案 · OQ-D9-20 選項 A 僅此一欄）：
+        主管／部門窗口對「OJT 實體簽到表」**可上傳、可覆蓋**（AC-N28／AC-N29），
+        **不限權責範圍**（AC-N30：不得新增任何子樹範圍檢查）。
+     ② 🔴 **原唯讀提示文案已就地改寫**：原句「此角色對 ICSOP 文件全欄位皆唯讀…不可上傳/取代」
+        對主管／部門窗口**自本日起不再為真**（AC-N28 之 📝 明文要求改寫）。
+        ⚠ 該原句對**系統管理員仍然為真**（OQ-D9-24／AC-N26），故本檔**逐字保留**於 sysadmin 分支。
+        兩則逐字文案已提為具名常數 RO_NOTICE_OJT_EXCEPTION／RO_NOTICE_FULL（見 script 區）。
+     ③ 🔒 **AC-N24／AC-N25＝本輪最重要之回歸鎖定（防「開一個洞、鬆一片牆」）**：
+        其餘 **19 個欄位**與**另兩類附件（ICSOP PDF／使用表單）＋附錄**對主管／部門窗口**仍必須唯讀**。
+        本檔以**可見標記**強制區分：可寫項＝primary 外框 ＋「可上傳／覆蓋」徽章 ＋ 上傳鈕；
+        其餘每一列一律掛「唯讀」鎖頭徽章（data-readonly-attachment），欄位區另有 data-field-readonly-note。
+        ⚠ **不得**因為開了 OJT 就把附件區整體改為可寫——那正是本兩條 AC 要偵測的失誤形狀。
+     ④ 🔒 AC-N26：**系統管理員對 OJT 仍唯讀**（明文排除，防實作把「非 ICSOPAdmin 之後台角色」一併放行）。
+     ⑤ AC-N31／AC-N32 之**角色不對稱稽核**（OQ-D9-23／OQ-D9-29）：主管／部門窗口之上傳寫入
+        AUDIT_LOG（actionType=ATTACHMENT_UPLOAD、targetType=DOCUMENT_ATTACHMENT）；
+        **ICSOPAdmin 之相同操作不寫稽核**（OQ-E01-09 之既有落差本輪不償還）——上傳成功 toast 已如實區分。
+     ⑥ F020 AC-N20：各檔案列新增 data-wm-note（pdf →「檢視/下載將燒錄浮水印」；非 pdf →「此格式不支援浮水印」），
+        並且**後台四類下載一律燒錄、一律寫稽核、無例外角色**（OQ-D9-08 B／OQ-D9-09 B／OQ-D9-10 A）
+        ⇒ 原「附錄下載不燒錄浮水印、不寫調閱稽核」之文案已作廢並改寫。
+     🔒 後台字級逐字不動（F021 AC-N61 ①）。 -->
 <!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
      本檔已套用：第 13 列「循環別」改以 lifecycleDisplayName 呈現（銷售及收款循環（消金））。
      規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
@@ -70,7 +92,7 @@
   </div>
   <!-- readonly banner -->
   <div id="roBanner" class="bg-cyan-50 border-t border-cyan-200 text-cyan-800 text-sm px-4 py-2 flex items-center gap-2">
-    <i data-lucide="eye" class="w-4 h-4"></i><span>唯讀模式 · <strong>此角色對 ICSOP 文件全欄位皆唯讀</strong>；附件可下載（燒錄浮水印），但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。</span>
+    <i data-lucide="eye" class="w-4 h-4"></i><span id="roText"></span>
   </div>
   <!-- admin note -->
   <div id="adminNote" class="hidden bg-primary-50 border-t border-primary-100 text-primary-700 text-sm px-4 py-2 items-center gap-2">
@@ -92,13 +114,15 @@
   <!-- 16 fields readonly -->
   <section class="bg-white border border-slate-200 rounded-xl p-5">
     <div class="flex items-center gap-2 mb-4"><i data-lucide="file-text" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">文件欄位（唯讀）</h2></div>
+    <p id="fieldRoNote" data-field-readonly-note class="hidden mb-3 items-start gap-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
+      <i data-lucide="lock" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-400"></i><span></span></p>
     <dl id="fieldGrid" class="divide-y divide-slate-100"></dl>
   </section>
 
   <!-- attachments (download only) -->
   <section class="bg-white border border-slate-200 rounded-xl p-5">
-    <div class="flex items-center gap-2 mb-1"><i data-lucide="paperclip" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">附件（僅下載）</h2></div>
-    <p class="text-xs text-slate-400 mb-3 flex items-center gap-1.5"><i data-lucide="shield" class="w-3.5 h-3.5"></i>下載/列印時伺服器端<strong class="text-slate-500">燒錄浮水印</strong>並寫入稽核；無上傳/取代入口。</p>
+    <div class="flex items-center gap-2 mb-1"><i data-lucide="paperclip" class="w-4 h-4 text-primary-600"></i><h2 id="attachTitle" class="font-semibold text-slate-900">附件</h2></div>
+    <p class="text-xs text-slate-400 mb-3 flex items-start gap-1.5"><i data-lucide="shield" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span id="attachNote"></span></p>
     <div id="attachList" class="space-y-2"></div>
   </section>
   <div class="h-4"></div>
@@ -191,34 +215,112 @@
     ].join('');
     lucide.createIcons();
   }
+  /* ===== 🔴 逐字文案常數（D9 定稿；test-generator 會逐字斷言，勿改寫）=====
+     RO_NOTICE_FULL      ＝**原句一字未改**，僅適用「系統管理員」——AC-N26 明訂其對 OJT 仍唯讀，
+                            故對該角色此句仍然為真，保留亦同時成為 AC-N26 之畫面載體。
+     RO_NOTICE_OJT_EXCEPTION ＝主管／部門窗口專用之改寫句（AC-N28 之 📝 要求）。
+     ⚠ 三個要點（擬稿理由，供覆核）：
+       (1) 前半沿用既有句型（「唯讀模式 ·」＋ FIELD_WRITE_FORBIDDEN）維持語氣一致、明示基底規則未變；
+       (2) **明講「19 個欄位」與「另兩類附件＋附錄」**，使 AC-N24／AC-N25 的界線在畫面上可讀，
+           而不是只講「除了 OJT 以外」——後者容易被讀成「附件區都放行了」；
+       (3) 明講「該次上傳會寫入稽核」，因為這是首次開放非管理角色之寫入路徑（AC-N31）。 */
+  const RO_NOTICE_FULL = '唯讀模式 · 此角色對 ICSOP 文件全欄位皆唯讀；附件可下載（燒錄浮水印），但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。';
+  const RO_NOTICE_OJT_EXCEPTION = '唯讀模式 · 此角色對 ICSOP 文件其餘 19 個欄位、ICSOP PDF、使用表單與附錄皆唯讀（FIELD_WRITE_FORBIDDEN）；唯一例外為「OJT 實體簽到表」，可上傳或覆蓋，該次上傳會寫入稽核。全部附件皆可下載（下載一律燒錄浮水印並寫入稽核）。';
+  const FIELD_RO_NOTE = '此區 19 個欄位對本角色一律唯讀（FIELD_WRITE_FORBIDDEN）；本頁唯一可寫項為下方附件區之「OJT 實體簽到表」。';
+  const ATTACH_NOTE_RO  = '下載/列印時伺服器端燒錄浮水印並寫入稽核；本角色無任何上傳/取代入口。';
+  const ATTACH_NOTE_OJT = '下載/列印時伺服器端燒錄浮水印並寫入稽核。本角色僅「OJT 實體簽到表」一項可上傳/覆蓋，其餘各列皆為唯讀（見各列標記）。';
+
+  /* ===== 🔵 浮水印註記（F020 AC-N20；與前台 04 同一組逐字文案，不得分歧）===== */
+  const WM_BURN_TEXT        = '檢視/下載將燒錄浮水印';
+  const WM_UNSUPPORTED_TEXT = '此格式不支援浮水印';
+  function wmNote(fmt){
+    return fmt==='pdf'
+      ? `<span data-wm-note class="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0 whitespace-nowrap">${WM_BURN_TEXT}</span>`
+      : `<span data-wm-note class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 shrink-0 whitespace-nowrap"><i data-lucide="info" class="w-3 h-3"></i>${WM_UNSUPPORTED_TEXT}</span>`;
+  }
+
+  /* 🔴 AC-N23／AC-N26／AC-N27：OJT 欄之寫入解析。
+     可寫＝Supervisor／DeptContact（本 delta 新開放）＋ ICSOPAdmin（既有）；
+     **SysAdmin 唯讀**（AC-N26 明文排除）、**User 亦唯讀**（AC-N27，且其於本頁本就被封鎖）。 */
+  function canWriteOjt(){ return ['supervisor','deptcontact','icsop_admin'].includes(document.body.dataset.role); }
+
   function renderAttach(){
     const items=[
-      {ic:'file-text',c:'text-red-500',label:'檔案（ICSOP PDF）',name:'車輛分期進件作業_v1.3.pdf',wm:true},
-      {ic:'file-text',c:'text-red-500',label:'OJT 實體簽到表',name:'車輛分期進件作業_OJT簽到表.pdf',wm:false},
-      {ic:'sheet',c:'text-emerald-600',label:'使用表單',name:'進件申請書.xlsx',wm:false},
-      {ic:'sheet',c:'text-emerald-600',label:'使用表單',name:'支票託收登記表.xlsx',wm:false}
+      {kind:'icsop_pdf', ic:'file-text', c:'text-red-500',      label:'檔案（ICSOP PDF）', name:'車輛分期進件作業_v1.3.pdf',      fmt:'pdf'},
+      {kind:'ojt',       ic:'file-text', c:'text-red-500',      label:'OJT 實體簽到表',    name:'車輛分期進件作業_OJT簽到表.pdf', fmt:'pdf'},
+      {kind:'usageform', ic:'sheet',     c:'text-emerald-600',  label:'使用表單',          name:'進件申請書.xlsx',                fmt:'excel'},
+      {kind:'usageform', ic:'sheet',     c:'text-emerald-600',  label:'使用表單',          name:'支票託收登記表.xlsx',            fmt:'excel'}
     ];
     // 附錄（F039）：依 sortOrder 遞增列出，與前台詳情（04）順序完全一致
     doc.appendices.forEach((a,i)=>items.push({
-      ic:a.fmt==='excel'?'sheet':'file-text', c:a.fmt==='excel'?'text-emerald-600':'text-red-500',
-      label:'附錄', name:a.name, wm:false, ord:i+1
+      kind:'appendix', ic:a.fmt==='excel'?'sheet':'file-text', c:a.fmt==='excel'?'text-emerald-600':'text-red-500',
+      label:'附錄', name:a.name, fmt:a.fmt==='excel'?'excel':'pdf', ord:i+1
     }));
-    document.getElementById('attachList').innerHTML=items.map(f=>`
-      <div class="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5"${f.ord?` data-appendix-item data-appendix-order="${f.ord}"`:''}>
-        ${f.ord?`<span class="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">${f.ord}</span>`:''}
+
+    const ojtWritable = canWriteOjt();
+    document.getElementById("attachList").innerHTML=items.map(f=>{
+      const writable = (f.kind==='ojt' && ojtWritable);
+      /* 🔒 AC-N24／AC-N25 之畫面載體：可寫項與唯讀項必須**看起來就不一樣**。
+         可寫＝primary 外框＋淡底＋「可上傳／覆蓋」徽章＋上傳鈕；其餘每一列一律掛「唯讀」鎖頭徽章。 */
+      const rowCls = writable ? 'border-primary-300 bg-primary-50/40' : 'border-slate-200';
+      const marker = writable
+        ? `<span data-writable-attachment class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary-600 text-white shrink-0 whitespace-nowrap"><i data-lucide="pencil" class="w-3 h-3"></i>可上傳／覆蓋</span>`
+        : `<span data-readonly-attachment class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0 whitespace-nowrap"><i data-lucide="lock" class="w-3 h-3"></i>唯讀</span>`;
+      const upBtn = writable
+        ? `<button onclick="uploadOjt()" data-ojt-upload aria-label="上傳／取代 OJT 實體簽到表" title="上傳／取代 OJT 實體簽到表" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 bg-white text-primary-700 text-xs hover:bg-primary-50 shrink-0"><i data-lucide="upload" class="w-3.5 h-3.5"></i>上傳／取代</button>`
+        : '';
+      return `
+      <div class="flex items-center gap-3 rounded-lg border ${rowCls} px-3 py-2.5" data-attachment-kind="${f.kind}"${f.ord?` data-appendix-item data-appendix-order="${f.ord}"`:``}>
+        ${f.ord?`<span class="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">${f.ord}</span>`:``}
         <i data-lucide="${f.ic}" class="w-5 h-5 ${f.c} shrink-0"></i>
-        <div class="min-w-0 flex-1"><div class="text-xs text-slate-400">${f.label}</div><div class="text-sm text-slate-700 truncate"${f.ord?' data-appendix-name':''}>${f.name}</div></div>
-        ${f.wm?'<span class="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">下載燒錄浮水印</span>':''}
-        <button onclick="download('${f.name}','${f.label}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
-      </div>`).join('')
+        <div class="min-w-0 flex-1"><div class="text-xs text-slate-400">${f.label}</div><div class="text-sm text-slate-700 truncate"${f.ord?` data-appendix-name`:``}>${f.name}</div></div>
+        ${wmNote(f.fmt)}
+        ${marker}
+        ${upBtn}
+        <button onclick="download('${f.name}','${f.label}','${f.fmt}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
+      </div>`;
+    }).join('')
       + (doc.appendices.length?'':`<div data-appendix-empty class="flex items-center gap-2 rounded-lg border border-dashed border-slate-200 px-3 py-2.5 text-sm text-slate-400"><i data-lucide="paperclip" class="w-4 h-4 shrink-0"></i>無附錄</div>`);
     lucide.createIcons();
   }
-  // 附錄下載：後台管理端存取，不燒錄浮水印（F039 已定案）、不寫前台調閱稽核
-  function download(n,kind){
-    if(kind==='附錄'){toast('success','下載附錄「'+n+'」（不燒錄浮水印；後台管理端存取不寫調閱稽核）');return;}
-    toast('success','下載「'+n+'」（伺服器端已燒錄浮水印並寫入稽核 DOWNLOAD）');
+
+  /* 🔴 F020 AC-N14～AC-N18（OQ-D9-08 選項 B）：後台四類下載自 2026-08-20 起**一律燒錄浮水印**、
+     **一律寫調閱稽核**、**無例外角色**（含 ICSOPAdmin，OQ-D9-09 選項 B ＝不保留任何原始檔下載路徑）。
+     浮水印身分＝**執行下載動作之操作者本人**（AC-N18，非當責室長、非制定部門）。
+     非 PDF 走策略 A：維持原檔位元組、不轉檔不失真、burnPdf 不被呼叫，但**同樣寫稽核**（AC-N15／AC-N17）。
+     📝 被推翻之原文逐字保留供追溯：「下載附錄「X」（不燒錄浮水印；後台管理端存取不寫調閱稽核）」。 */
+  function download(n,kind,fmt){
+    const tt = kind==='使用表單' ? 'USAGE_FORM' : (kind==='附錄' ? 'APPENDIX' : 'DOCUMENT');
+    if(fmt==='pdf'){
+      toast('success','下載「'+n+'」（伺服器端已將浮水印燒錄進 PDF 內容層，浮水印身分為您本人；並寫入稽核 DOWNLOAD · '+tt+'）');
+    } else {
+      toast('success','下載「'+n+'」（此格式不支援浮水印，回傳原始檔位元組；仍寫入稽核 DOWNLOAD · '+tt+'）');
+    }
   }
+
+  /* 🔴 AC-N28／AC-N29／AC-N31／AC-N32：OJT 上傳（可覆蓋、無版本歷史）＋ **角色不對稱稽核**。
+     ⚠ 不對稱是刻意寫成可測之明文（AC-N32），非實作自由裁量：
+        主管／部門窗口之上傳**寫** AUDIT_LOG；ICSOPAdmin 之相同操作**不寫**（OQ-E01-09 本輪不償還）。
+     ⚠ AC-N30：**不限權責範圍**——不得新增任何子樹範圍檢查。
+     ⚠ AC-N35：格式／大小驗證與覆蓋語意逐字不變、不因角色而異，不新增任何錯誤碼。 */
+  function uploadOjt(){
+    if(!canWriteOjt()){ toast('error','此角色對「OJT 簽到表」為唯讀','FIELD_WRITE_FORBIDDEN · 403'); return; }
+    const r=document.body.dataset.role;
+    const audited = (r==='supervisor'||r==='deptcontact');
+    openOjtConfirm(audited);
+  }
+  function openOjtConfirm(audited){
+    const ok = confirmLike('覆蓋既有 OJT 實體簽到表？','重新上傳即覆蓋舊檔（F016 既有語意：不保留歷史版本、舊檔不再可經文件記錄存取）。');
+    if(!ok) return;
+    if(audited){
+      toast('success','已上傳並覆蓋「OJT 實體簽到表」（不保留歷史版本）；已寫入稽核 ATTACHMENT_UPLOAD · DOCUMENT_ATTACHMENT');
+    } else {
+      toast('success','已上傳並覆蓋「OJT 實體簽到表」（不保留歷史版本）。⚠ ICSOP 管理員之附件上傳目前不寫稽核（OQ-E01-09 之既有落差，本輪不償還）');
+    }
+  }
+  // 原型用之簡化二次確認（實作以既有 confirm modal 元件承接；本頁原無 confirm 元件）
+  function confirmLike(title,body){ return window.confirm(title + String.fromCharCode(10) + body); }
+
   function jumpNode(){shellToast('跳轉至 DAG 畫布檢視所屬節點（11 / 12）');}
   function jumpLink(){shellToast('跳轉至連結目標文件詳情');}
   function gotoEdit(){shellToast('前往編輯頁（15-document-edit）');}
@@ -227,15 +329,26 @@
     document.body.dataset.role=r;
     const blocked=(r==='user');
     const admin=(r==='icsop_admin');
+    const ojtRole=(r==='supervisor'||r==='deptcontact');   // 🔴 本 delta 唯一被開放寫入之兩個角色
     const ro=(r==='supervisor'||r==='deptcontact'||r==='sysadmin');
     document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
     document.getElementById('roBanner').classList.toggle('hidden',!ro);
     document.getElementById('roBanner').classList.toggle('flex',ro);
+    /* 🔴 AC-N28 之 📝：原句對主管／部門窗口已不再為真 ⇒ 換成 RO_NOTICE_OJT_EXCEPTION；
+       🔒 AC-N26：對系統管理員原句**仍然為真** ⇒ 逐字保留 RO_NOTICE_FULL。 */
+    document.getElementById('roText').textContent = ojtRole ? RO_NOTICE_OJT_EXCEPTION : RO_NOTICE_FULL;
+    // AC-N24 之欄位側明示（僅對被開放 OJT 的兩個角色顯示，避免對 sysadmin 產生「有例外」之誤讀）
+    const frn=document.getElementById('fieldRoNote');
+    frn.classList.toggle('hidden',!ojtRole); frn.classList.toggle('flex',ojtRole);
+    frn.querySelector('span').textContent=FIELD_RO_NOTE;
+    document.getElementById('attachTitle').textContent = canWriteOjt()?'附件':'附件（僅下載）';
+    document.getElementById('attachNote').textContent  = canWriteOjt()?ATTACH_NOTE_OJT:ATTACH_NOTE_RO;
     document.getElementById('adminNote').classList.toggle('hidden',!admin);
     document.getElementById('adminNote').classList.toggle('flex',admin);
     document.getElementById('editEntry').classList.toggle('hidden',!admin);
     document.getElementById('userName').textContent = admin?'陳管理':(r==='deptcontact'?'李窗口':'王主管');
     if(blocked)document.getElementById('blockMsg').textContent={user:'一般使用者無後台存取權（前台可瀏覽有效文件）。'}[r];
+    renderAttach();                       // 🔴 角色切換必須重繪附件列，否則 OJT 之可寫/唯讀標記與上傳鈕不會更新
     renderSidebar(); lucide.createIcons();
   }
 
@@ -251,7 +364,7 @@
   }
 
   // init
-  renderFields(); renderAttach(); setRole('supervisor'); lucide.createIcons();
+  renderFields(); setRole('supervisor'); lucide.createIcons();   // setRole 內部會呼叫 renderAttach()
 </script>
 </body>
 </html>

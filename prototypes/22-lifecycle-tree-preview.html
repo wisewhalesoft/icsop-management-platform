@@ -38,9 +38,13 @@
   /* board = the "document" being viewed */
   #board{background:#fff;background-image:radial-gradient(#EEF2F7 1px,transparent 1px);background-size:22px 22px;
          box-shadow:0 4px 24px rgba(0,0,0,.08);position:relative;transform-origin:top center;transition:transform .15s ease;border-radius:12px;overflow:hidden;}
-  /* diagonal tiled watermark overlay — 格式與 05-public-viewer-watermark 完全一致（45°, opacity .12, slate-500, 14px, 機密聲明另起一行）*/
-  .wm-layer{position:absolute;inset:-40%;pointer-events:none;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;transform:rotate(-45deg);opacity:.12;user-select:none;z-index:5;}
-  .wm-layer span{color:#64748B;font-size:14px;white-space:nowrap;padding:22px 30px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.6;}
+  /* diagonal tiled watermark overlay — 字串格式與 05-public-viewer-watermark 完全一致（45°, 14px, 機密聲明另起一行）
+     🔴 F020 AC-N2（2026-08-20 定稿，逐字照抄不得自行發明）：色值 #334155 @ opacity 0.30
+        （有效色 rgb(193.8,198.0,204.0)、與白底對比度 ≈ 1.716:1，滿足 AC-N1 之 ≥ 1.70）。
+     🔒 AC-N66 正向斷言：本頁渲染的是 HTML 而非 PDF、**沒有內容層可燒錄**，DOM 疊加層是其唯一浮水印載體 ⇒
+        **不得**因 05 之 AC-N7 移除疊加層而順手一併刪除本層。*/
+  .wm-layer{position:absolute;inset:-40%;pointer-events:none;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;transform:rotate(-45deg);opacity:.30;user-select:none;z-index:5;}
+  .wm-layer span{color:#334155;font-size:14px;white-space:nowrap;padding:22px 30px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.6;}
   /* DAG nodes */
   .node{position:absolute;cursor:pointer;transition:opacity .15s;}
   .node .nbody{background:#fff;border:1.5px solid #E2E8F0;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.05);padding:8px 11px;transition:border-color .15s,box-shadow .15s,background .15s;}
@@ -155,7 +159,17 @@
      視覺：固定機密聲明「另起一行」；線性格式字串順序不變（與稽核快照一致）。
      身分＝當下登入之管理者（李慧玲／債權管理部 法催一室）；時間沿用示範值。
      公司名稱＝VW_HRCOMF.COMPFULLNM 全稱；部門＝部層完整名稱；處/室＝最細單位名稱。 */
-  const WM_DATA   = '20233-李慧玲-和潤企業股份有限公司-債權管理部-法催一室';
+  /* ===== 🔴 F020 AC-N10～AC-N13（2026-08-20 D9 delta · OQ-D9-06 選項 A／OQ-D9-07）=====
+     浮水印之「公司名稱」欄改用**浮水印專用簡稱** COMPANY_SHORT_NAMES（AS → 和潤企業、AE → 和潤電能）；
+     🔒 **全稱三處消費點逐字不動**（AC-N13）：F003 帳號建立／編輯之公司下拉與清單公司欄、
+        GET /companies 之回應、F024 調閱歷程之「公司」欄與其 CSV 匯出值——一律仍為「和潤企業股份有限公司」。
+     🔒 INV-C2（AC-N11）：短稱表之鍵集合 ≡ 全稱表之鍵集合；新增公司時只登全稱會使浮水印公司欄靜默留空
+        （且因 §8.4 收合規則「看起來像正常留空」而不會被發現）——這是本裁決唯一的防漂移機制。
+     📝 被取代之原值逐字保留供追溯：「和潤企業股份有限公司」（VW_HRCOMF.COMPFULLNM 全稱）。 */
+  const COMPANY_FULL_NAMES  = { AS:'和潤企業股份有限公司', AE:'和潤電能' };
+  const COMPANY_SHORT_NAMES = { AS:'和潤企業',             AE:'和潤電能' };
+  const WM_COMPANY = COMPANY_SHORT_NAMES.AS;
+  const WM_DATA   = `20233-李慧玲-${WM_COMPANY}-債權管理部-法催一室`;
   const WM_NOTICE = '僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現';
   const WM_TIME   = '2026-07-16 14:32:08';
   const WM = `${WM_DATA}-${WM_NOTICE}-${WM_TIME}`;

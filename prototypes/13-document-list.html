@@ -1,4 +1,17 @@
 <!DOCTYPE html>
+<!-- 🔵 2026-08-20 D9 delta（人類閘門已裁決）——本檔已套用：
+     ① **最左新增「OJT」圖示欄**（F017 AC-N37～AC-N40；OQ-D9-25 選項 A＝新增獨立欄置於最左）：
+        清單由 14 欄改為 **15 欄**；既有 14 欄之集合、相對順序與各欄顯示規則**逐項不變**
+        （AC-D9／AC-E9 之「欄位集合」鎖定已就地縮減範圍以容納本欄）。
+        兩態圖示 file-check-2／file-x-2，title 與 aria-label 逐字沿用既有篩選下拉之「有 OJT」／「無 OJT」（OQ-D9-26）。
+        DOM 契約 data-ojt-cell ＋ data-has-ojt="true|false"；**缺鍵（undefined）視同 false**（AC-N38 ③）。
+        🔒 本 delta **只加顯示欄、不動篩選**：既有 13 項篩選之組成、順序與比對語意一字不動（AC-N40 ②）。
+     ② **各檔案列新增浮水印註記 data-wm-note**（F020 AC-N20；OQ-D9-08 選項 B ＋ OQ-D9-33）：
+        後台四類下載自 2026-08-20 起**一律燒錄浮水印並寫調閱稽核、無例外角色**（OQ-FM-01／OQ-D18-01 正式失效），
+        故 F020 AC-D7 ④「後台不得出現這兩條文案」之禁令**已就地推翻**。
+        文案與前台 04 同一組、逐字相同：pdf →「檢視/下載將燒錄浮水印」；非 pdf →「此格式不支援浮水印」。
+        ⚠ 表格 min-w 由 1560px 調為 1724px（OJT 欄 +56、檔案欄 60→160 以容納註記），表格既有 overflow-x-auto 吸收之。
+     🔒 後台字級**逐字不動**（F021 AC-N61 ①：本 delta 僅前台三頁放大，後台一律不改）。 -->
 <!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
      本檔已套用：第 14 欄「循環別」改以 lifecycleDisplayName 呈現；循環別 combobox 之選項值由名稱字串改為 lifecycleId；樹狀圖第二入口之 ?lifecycleId= 改帶 lifecycleId。
      規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
@@ -190,15 +203,18 @@
   <!-- ===== 表格 ===== -->
   <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
-      <table class="doctbl w-full text-sm min-w-[1560px]">
+      <table class="doctbl w-full text-sm min-w-[1724px]">
         <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
           <tr>
+            <!-- 🔵 AC-N37（2026-08-20 D9 delta）：第 1 個 th（最左）之可見文字逐字為 OJT；
+                 其後接續之 14 個表頭＝既有 14 欄、由左至右順序不變；表頭總數為 15。 -->
+            <th class="text-left font-medium px-3 py-2.5 min-w-[56px]">OJT</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[152px]">制定公司</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[88px]">制定部門</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[104px]">制定室別</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[118px]">當責室長</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[90px]">狀態</th>
-            <th class="text-left font-medium px-3 py-2.5 min-w-[60px]">檔案</th>
+            <th class="text-left font-medium px-3 py-2.5 min-w-[160px]">檔案</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[62px]">樹狀圖</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[152px]">程序書編號</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[176px]">程序書書名</th>
@@ -362,7 +378,7 @@
                     `ICSOP-CIPS-104-1-01`，可用「以該連結篩選 → 命中者排第一顆」驗證欄寬最壞情況） */
   const DOCS=[
     {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'消金審核作業_v2.0.pdf',node:'進件作業',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業'],date:'2025-12-01',lcId:'lc1',appx:['ax3','ax4','ax8'],forms:['uf3','uf4','uf8'],ojt:true},
-    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'企業金融授信作業_v1.0.pdf',node:'企金案件受理作業',num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。',links:[],date:'2026-06-01',lcId:'lc10',appx:[],forms:[],ojt:false},
+    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'企業金融授信作業_v1.0.pdf',node:'企金案件受理作業',num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。',links:[],date:'2026-06-01',lcId:'lc10',appx:[],forms:[]}  /* 🔵 AC-N38 ③ 示範：本列刻意**不帶 ojt 鍵**（模擬後端未回該鍵）⇒ 視同 false，渲染與 false 完全相同（file-x-2 ＋「無 OJT」、data-has-ojt="false"）。勿「修正」為 ojt:false——這是缺鍵路徑唯一的示範載體；篩選行為與 false 一致，統計卡與筆數不受影響。 */,
     {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期特約通路作業_v1.2.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',edition:"25'10",summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業','ICSOP-SRC-101-2-00 消金審核作業'],date:'2025-10-01',lcId:'lc1',appx:['ax1'],forms:['uf1'],ojt:false},
     {company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],status:'有效',pdf:'車輛分期進件作業_v1.3.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',links:['ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-102-1-01 車輛分期對保作業','ICSOP-SRC-101-1-06 消費分期特約通路作業','ICSOP-PPC-101-2-02 消費分期產品政策及規範作業','ICSOP-PPC-101-1-03 消費分期-月目標設定作業','ICSOP-CIPS-104-1-01 使用者權限管理與覆核'],date:'2026-01-01',lcId:'lc1',appx:['ax1','ax2','ax8'],forms:['uf1','uf2','uf8'],ojt:true},
     {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期產品政策及規範作業_v1.0.pdf',node:null,num:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',edition:"26'03",summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。',links:[],date:'2026-09-01',lcId:'lc3',appx:[],forms:[],ojt:false},
@@ -519,6 +535,35 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
 
   /* ===== 表格 ===== */
+  /* ===== 🔵 最左「OJT」圖示欄（F017 AC-N37～AC-N40；2026-08-20 D9 delta，OQ-D9-25 選項 A／OQ-D9-26 選項 A）=====
+     · 三種輸入 → **兩種**視覺：hasOjt===true → file-check-2 ＋「有 OJT」；
+       hasOjt===false **與缺鍵（undefined）** → 皆為 file-x-2 ＋「無 OJT」
+       （AC-N38 ③：缺鍵視同 false，**不得**渲染為空白／—／null／第三種視覺狀態）。
+     · 兩態字面刻意逐字沿用既有 OJT 篩選下拉之選項文字（AC-D5 之「有 OJT」／「無 OJT」），
+       使畫面上「篩選出來的東西」與「欄位顯示的東西」用同一組詞；**不得**另造「已上傳／未上傳」。
+     · DOM 契約（AC-N39）：儲存格帶 data-ojt-cell，並帶 data-has-ojt="true" 或 "false"（缺鍵一律 "false"）。
+     · icon 鍵 file-check-2／file-x-2 皆為既有鍵、不新增圖示；兩態之顏色差異屬設計裁量、不入 AC。
+     🔒 AC-N40：本 delta **只加顯示欄、不動篩選**——既有 OJT 三值篩選下拉（全部／有 OJT／無 OJT）一字不動。 */
+  function ojtCell(d){
+    const has = d.ojt === true;                       // undefined 與 false 皆落入 else 分支
+    const icon  = has ? 'file-check-2' : 'file-x-2';
+    const label = has ? '有 OJT' : '無 OJT';
+    const cls   = has ? 'text-emerald-600' : 'text-slate-300';
+    return `<td class="px-3 py-3" data-ojt-cell data-has-ojt="${has?'true':'false'}"><i data-lucide="${icon}" class="w-4 h-4 ${cls}" title="${label}" aria-label="${label}" role="img"></i></td>`;
+  }
+  /* ===== 🔵 後台檔案列之浮水印註記（F020 AC-N20；2026-08-20 OQ-D9-08／OQ-D9-33 裁決）=====
+     後台四類下載自 2026-08-20 起**一律燒錄浮水印並寫調閱稽核**（OQ-FM-01／OQ-D18-01 正式失效）⇒
+     AC-D7 ④「後台不得出現這兩條文案」之唯一理由（後台恆 RAW、顯示皆為誤導）隨之失效、已就地推翻；
+     若維持禁令反而變成「後台會燒、卻不告訴使用者」。
+     文案與前台 04 **同一組、逐字相同、不得分歧**。 */
+  const WM_BURN_TEXT        = '檢視/下載將燒錄浮水印';   // F020 AC-D7 ①／AC-N20 逐字文案，不得改
+  const WM_UNSUPPORTED_TEXT = '此格式不支援浮水印';       // 同上
+  function isPdf(name){ return /\.pdf$/i.test(String(name||'')); }
+  function wmNote(name){
+    return isPdf(name)
+      ? `<span data-wm-note class="mt-1 block text-xs text-slate-400 whitespace-nowrap">${WM_BURN_TEXT}</span>`
+      : `<span data-wm-note class="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 whitespace-nowrap"><i data-lucide="info" class="w-3 h-3"></i>${WM_UNSUPPORTED_TEXT}</span>`;
+  }
   function fileBtn(name,wm){
     return `<button onclick="dl('${esc(name)}',${wm?'true':'false'})" title="下載 ${esc(name)}" class="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"><i data-lucide="file-down" class="w-4 h-4"></i></button>`;
   }
@@ -546,7 +591,7 @@
   }
   // 收合態之單顆 pill：可見文字＝編號；書名靠 title（不上清單，避免中文書名長度不定再度拉伸版面）
   function linkPill(l){
-    return `<button onclick="dl('${esc(l)}',false)" title="下載連結點程序書：${esc(l)}" class="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px]"><i data-lucide="download" class="w-3 h-3"></i>${esc(linkNum(l))}</button>`;
+    return `<button onclick="dl('${esc(l)}',true)" title="下載連結點程序書：${esc(l)}" class="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px]"><i data-lucide="download" class="w-3 h-3"></i>${esc(linkNum(l))}</button>`;
   }
   // 展開態之單列：`編號 · 書名 · 下載鈕`（tail＝第一列尾端之「收合」鈕，其餘列為空字串）
   function linkRow(l,tail){
@@ -554,7 +599,7 @@
       `<span class="mono text-[11px] text-slate-600">${esc(linkNum(l))}</span>`+
       `<span class="text-slate-300 text-[11px]">·</span>`+
       `<span class="text-[11px] text-slate-600">${esc(linkName(l))}</span>`+
-      `<button onclick="dl('${esc(l)}',false)" aria-label="下載連結點程序書：${esc(l)}" title="下載連結點程序書：${esc(l)}" class="w-6 h-6 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i></button>`+
+      `<button onclick="dl('${esc(l)}',true)" aria-label="下載連結點程序書：${esc(l)}" title="下載連結點程序書：${esc(l)}" class="w-6 h-6 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i></button>`+
       (tail||'')+`</div>`;
   }
   function linkCell(d){
@@ -634,12 +679,13 @@
     document.getElementById('tbody').innerHTML=rows.map((d,i)=>{
       const nodeWarn = d.node?'':`<span title="尚未指派節點" class="inline-flex items-center"><i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-amber-500"></i></span>`;
       return `<tr class="hover:bg-slate-50 align-top">
+        ${ojtCell(d)}
         <td class="px-3 py-3 text-slate-600">${esc(d.company)}</td>
         <td class="px-3 py-3 text-slate-600">${esc(d.dept)}</td>
         <td class="px-3 py-3 text-slate-600">${d.section?esc(d.section):`<span class="text-slate-300" title="此部之下無處/室，制定組織掛於部層">—</span>`}</td>
         <td class="px-3 py-3">${chiefCell(d)}</td>
         <td class="px-3 py-3">${statusPill(derived(d))}</td>
-        <td class="px-3 py-3">${fileBtn(d.pdf,true)}</td>
+        <td class="px-3 py-3">${fileBtn(d.pdf,true)}${wmNote(d.pdf)}</td>
         <td class="px-3 py-3"><button onclick="openTreePage(${i})" title="開啟循環樹狀圖預覽（22）" class="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"><i data-lucide="workflow" class="w-4 h-4"></i></button></td>
         <td class="px-3 py-3"><div class="flex items-center gap-1.5"><span class="mono text-xs text-slate-600">${esc(d.num)}</span>${nodeWarn}</div></td>
         <td class="px-3 py-3">
@@ -695,7 +741,15 @@
   function closeTree(){ const m=document.getElementById('treeModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
   function gotoCanvas(){ const d=treeIdx!=null?DOCS[treeIdx]:null; shellToast('前往循環畫布（11-dag-canvas）'+(d?('，定位「'+lcName(d.lcId)+'」'+(d.node?('／節點「'+d.node+'」'):'')):'')); }
 
-  function dl(name,wm){ toast('success','下載「'+name+'」'+(wm?'（伺服器端已燒錄浮水印並寫入稽核 DOWNLOAD）':'（已寫入稽核 DOWNLOAD）')); }
+  /* 🔴 2026-08-20（OQ-D9-08 選項 B／OQ-D9-09 選項 B／OQ-D9-10 選項 A）：後台下載一律燒錄、一律寫稽核、
+     **無例外角色**（含 ICSOPAdmin）；系統不再提供任何「原始檔（無浮水印）」下載入口。
+     非 PDF（策略 A）維持原檔位元組、不燒錄，但**同樣寫稽核**（AC-N15／AC-N17）。 */
+  function dl(name,burn){
+    const b = (burn===undefined) ? isPdf(name) : !!burn;
+    toast('success','下載「'+name+'」'+(b
+      ? '（伺服器端已將浮水印燒錄進 PDF 內容層，並寫入稽核 DOWNLOAD）'
+      : '（此格式不支援浮水印，回傳原始檔位元組；仍寫入稽核 DOWNLOAD）'));
+  }
   function viewDoc(n){ shellToast('檢視程序書 '+n+'（16-document-readonly）'); }
   function editDoc(n){ shellToast('編輯程序書 '+n+'（15-document-edit）'); }
   function createDoc(){ shellToast('建立新程序書（14-document-create）'); }

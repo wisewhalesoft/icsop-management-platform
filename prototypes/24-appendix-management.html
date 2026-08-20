@@ -3,9 +3,22 @@
      topbar 動作區新增「匯出」鈕（F039 AC-D4；icon 鍵 download、無障礙名稱「匯出」）。
      🔒 **本檔未新增任何編號欄位或欄**——F018 之「表單編號」delta **刻意不擴及附錄**
         （F018 AC-D9／OQ-D18-23 裁決＝不主動擴及）；APPENDIX_POOL 之實體欄位與清單表頭逐項不變。
-     🔒 **後台個別下載維持 RAW、不燒錄浮水印、不寫稽核**（F039 AC-D3／OQ-FM-01 於 2026-08-16
+     🛑 ~~**後台個別下載維持 RAW、不燒錄浮水印、不寫稽核**（F039 AC-D3／OQ-FM-01 於 2026-08-16
         經使用者再次確認維持有效；缺失 delta 第 15 項明確裁定不做）——本頁**不得**出現
-        前台之「此格式不支援浮水印」標示（該標示僅屬前台 04）。 -->
+        前台之「此格式不支援浮水印」標示（該標示僅屬前台 04）。~~
+        🔴 **本段已於 2026-08-20 由 OQ-D9-08（選項 B）全面推翻**（原文逐字保留於上，供追溯）。 -->
+<!-- 🔴 2026-08-20 D9 delta（人類閘門已裁決）——本檔已套用：
+     ① **後台四類下載一律燒錄浮水印、一律寫調閱稽核、無例外角色**（OQ-D9-08 選項 B／OQ-D9-09 選項 B／
+        OQ-D9-10 選項 A；F020 AC-N14～AC-N18）。OQ-FM-01（2026-07-24）與 OQ-D18-01（2026-08-16）正式失效。
+        浮水印身分＝**執行下載動作之操作者本人**（AC-N18）。非 PDF 走策略 A：維持原檔位元組、不燒錄，
+        但**同樣寫稽核**（AC-N15／AC-N17，targetType=APPENDIX；經本頁下載者 documentId 為 null）。
+        ⚠ **明確接受之代價**（OQ-D9-09 選項 B）：ICSOP 管理員自此**無任何介面途徑取得真正原始檔**，
+           內容維運須改由直接存取 Azure Blob 後台完成。**不得**新增 ?raw=true 之類旁路。
+     ② **各附錄列新增 data-wm-note**（F020 AC-N20；OQ-D9-33）：與前台 04 同一組逐字文案、不得分歧——
+        pdf →「檢視/下載將燒錄浮水印」；非 pdf →「此格式不支援浮水印」。
+        F020 AC-D7 ④ 之「後台不得出現這兩條文案」之唯一理由（後台恆 RAW、顯示皆為誤導）已隨 ① 失效。
+     🔒 本檔仍**不新增任何編號欄位或欄**（F018 AC-D9／OQ-D18-23 未被本輪推翻）。
+     🔒 後台字級逐字不動（F021 AC-N61 ①）。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -116,7 +129,7 @@
 
   <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
-      <table class="w-full text-sm min-w-[760px]">
+      <table class="w-full text-sm min-w-[900px]">
         <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
           <tr>
             <th class="text-left font-medium px-4 py-2.5">附錄名稱</th>
@@ -393,7 +406,7 @@
         </tr>` : '';
       return `
       <tr class="hover:bg-slate-50" data-appendix-row="${f.id}">
-        <td class="px-4 py-3"><div class="flex items-center gap-2"><i data-lucide="${f.fmt==='excel'?'file-spreadsheet':'file-text'}" class="w-4 h-4 text-slate-400 shrink-0"></i><span data-appendix-name class="font-medium text-slate-800">${f.name}</span></div></td>
+        <td class="px-4 py-3"><div class="flex items-start gap-2"><i data-lucide="${f.fmt==='excel'?'file-spreadsheet':'file-text'}" class="w-4 h-4 text-slate-400 shrink-0 mt-0.5"></i><div class="min-w-0"><div data-appendix-name class="font-medium text-slate-800 whitespace-nowrap">${f.name}</div>${wmNote(f.fmt)}</div></div></td>
         <td class="px-4 py-3">${fmtBadge(f.fmt)}</td>
         <td class="px-4 py-3 text-slate-500 mono text-xs">${f.size}</td>
         <td class="px-4 py-3"><div class="text-slate-700">${f.by}<span class="text-slate-400 text-xs ml-1">${f.dept}</span></div><div class="text-slate-400 mono text-xs">${f.at}</div></td>
@@ -413,9 +426,23 @@
   function clearFilters(){document.getElementById('kw').value='';document.getElementById('fFmt').value='';renderTable();}
   function toggleExpand(id){ if(expanded.has(id))expanded.delete(id); else expanded.add(id); renderTable(); }
   function jumpDoc(n){ shellToast('前往文件 '+n+'（13-document-list / 16-document-readonly）'); }
+  /* ===== 🔵 浮水印註記（F020 AC-N20；與前台 04 同一組逐字文案，不得分歧）===== */
+  const WM_BURN_TEXT        = '檢視/下載將燒錄浮水印';   // 逐字，不得改
+  const WM_UNSUPPORTED_TEXT = '此格式不支援浮水印';       // 逐字，不得改
+  function wmNote(fmt){
+    return fmt==='pdf'
+      ? `<div data-wm-note class="mt-0.5 text-[10px] text-primary-700 whitespace-nowrap">${WM_BURN_TEXT}</div>`
+      : `<div data-wm-note class="mt-0.5 inline-flex items-center gap-1 text-[10px] text-amber-700 whitespace-nowrap"><i data-lucide="info" class="w-3 h-3"></i>${WM_UNSUPPORTED_TEXT}</div>`;
+  }
+  /* 🔴 F020 AC-N14～AC-N18（2026-08-20 OQ-D9-08 選項 B）：後台附錄下載一律燒錄（PDF）＋一律寫稽核。
+     📝 被推翻之原文逐字保留供追溯：「已下載附錄「X」（管理端存取，不寫稽核、不燒錄浮水印）」。 */
   function downloadAppendix(id){
     const f=findAppendix(id); if(!f){ notFound(); return; }
-    toast('success','已下載附錄「'+f.name+'」（管理端存取，不寫稽核、不燒錄浮水印）');
+    if(f.fmt==='pdf'){
+      toast('success','已下載附錄「'+f.name+'」（伺服器端已將浮水印燒錄進 PDF 內容層，身分為您本人；並寫入稽核 DOWNLOAD · APPENDIX，documentId 為 null）');
+    } else {
+      toast('success','已下載附錄「'+f.name+'」（此格式不支援浮水印，回傳原始檔位元組；仍寫入稽核 DOWNLOAD · APPENDIX，documentId 為 null）');
+    }
   }
 
   /* ===== upload modal（US-100：一次一個或多個檔案；名稱選填、留空 fallback 檔名）===== */

@@ -1,4 +1,21 @@
 <!DOCTYPE html>
+<!-- 🔴 2026-08-20 D9 delta（人類閘門已裁決）——本檔已套用（規格權威＝F024 §d9-audit-view-delta
+     AC-N53／AC-N54／AC-N69／AC-N70 ＋ F020 AC-N10～AC-N13）：
+     ① 🔴 **「類型」篩選新增第四種類型值「上傳」**（AC-N69；OQ-D9-29 裁決之核心兌現，手段見 OQ-D9-34）：
+        對映 kindToTargetTypes('上傳') = ['DOCUMENT_ATTACHMENT']；
+        kindToTargetTypes('文件') = ['DOCUMENT','USAGE_FORM','APPENDIX'] **逐字不變**
+        ⇒「文件」類**天然排除**上傳事件（AC-N69 ①＝排除、②＝篩出，兩者必須各自斷言）。
+        既有三個選項（文件／循環／變更）之字面與相對順序**逐字不變**，「上傳」置於其後。
+        ⚠ **AC-N69 之「篩選控制項之選項恰為四個」與其後逐字列出之五個字面值（全部／文件／循環／變更／上傳）
+           不一致**——已提報 open-questions 之 `OQ-D9-35` 交回 lead。本檔採唯一自洽之讀法＝
+           **四種「類型值」＋既有「全部類型」預設項，控制項共 5 個 option**（移除「全部」會直接牴觸
+           AC-N69 ③「類型＝全部 ⇒ 兩筆皆回傳」與 AC-N55 之查詢回歸鎖定）。
+     ② AC-N53：上傳事件之「類型」欄逐字為「上傳」、「操作類型」欄之中文標籤逐字為「附件上傳」、
+        「浮水印快照」欄**留空**（該動作 watermarkSnapshot 為 null，非浮水印動作）。
+     ③ AC-N54：後台燒錄下載之列與前台**完全同形**，本頁**不新增任何前後台區分欄位或篩選**（OQ-D9-30）。
+     ④ F020 AC-N12：浮水印快照之「公司名稱」欄改用**簡稱**（和潤企業）；
+        🔒 AC-N13 ③：本頁「公司」欄與其 CSV 匯出值**仍為全稱**（和潤企業股份有限公司），逐字不動。
+     🔒 AC-N55：查詢篩選組成（除新增之類型值外）、30 天預設、RBAC、分頁、CSV 表頭逐字、匯出上限一律不變。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -92,6 +109,8 @@
           <option value="文件">文件</option>
           <option value="循環">循環</option>
           <option value="變更">變更</option>
+          <!-- 🔴 AC-N69 ②：本 delta 新增之第四種類型值，**置於既有三者之後**，既有三者字面與相對順序不變 -->
+          <option value="上傳">上傳</option>
         </select>
       </div>
       <div>
@@ -223,17 +242,36 @@
     // 變更（文件欄位變更歷程 F037／循環結構變更歷程 F038）
     {kind:'變更',name:'黃俊傑',emp:'20001',company:'和潤企業股份有限公司',dept:'資訊部',section:'應用發展室',role:'系統管理員',num:'採購及付款循環',doc:'循環結構變更歷程檢視（PUC）',act:'LIFECYCLE_CHANGELOG_VIEW',time:'2026-07-16 16:12:44'},
     {kind:'變更',name:'李慧玲',emp:'20233',company:'和潤企業股份有限公司',dept:'債權管理部',section:'法催一室',role:'ICSOP 管理員',num:'ICSOP-SRC-101-1-01',doc:'文件欄位變更歷程檢視',act:'CHANGE_LOG_VIEW',time:'2026-07-16 15:05:19'},
-    {kind:'變更',name:'李慧玲',emp:'20233',company:'和潤企業股份有限公司',dept:'債權管理部',section:'法催一室',role:'ICSOP 管理員',num:'銷售及收款循環',doc:'新舊樹狀圖對照 PDF 下載（SRC）',act:'LIFECYCLE_CHANGELOG_DOWNLOAD',time:'2026-07-14 11:33:07'}
+    {kind:'變更',name:'李慧玲',emp:'20233',company:'和潤企業股份有限公司',dept:'債權管理部',section:'法催一室',role:'ICSOP 管理員',num:'銷售及收款循環',doc:'新舊樹狀圖對照 PDF 下載（SRC）',act:'LIFECYCLE_CHANGELOG_DOWNLOAD',time:'2026-07-14 11:33:07'},
+    /* 🔴 上傳（AC-N53／AC-N69；2026-08-20 D9 delta）——首次開放非管理角色之寫入路徑，故寫稽核（OQ-D9-23）。
+       actionType='ATTACHMENT_UPLOAD'、targetType='DOCUMENT_ATTACHMENT'（**獨立值，不得與任何既有調閱動作共用**），
+       watermarkSnapshot = null（非浮水印動作）⇒ 明細之「當次浮水印快照」區必須留空。
+       ⚠ AC-N32 之角色不對稱：**ICSOPAdmin 之相同上傳不寫稽核**，故本頁刻意**沒有**一筆 ICSOP 管理員的上傳列。 */
+    {kind:'上傳',name:'陳彥廷',emp:'20088',company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',role:'主管',num:'ICSOP-SRC-101-1-01',doc:'OJT 實體簽到表上傳（覆蓋）',act:'ATTACHMENT_UPLOAD',time:'2026-07-16 17:02:55'},
+    {kind:'上傳',name:'林建宏',emp:'20521',company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',role:'部門窗口',num:'ICSOP-SRC-101-2-00',doc:'OJT 實體簽到表上傳（新增）',act:'ATTACHMENT_UPLOAD',time:'2026-07-13 09:41:26'}
   ];
   const ACT_STYLE={
     VIEW:['slate','檢視'],DOWNLOAD:['blue','下載'],PRINT:['violet','列印'],
     LIFECYCLE_VIEW:['emerald','循環樹狀圖檢視'],LIFECYCLE_DOWNLOAD:['emerald','循環樹狀圖下載'],LIFECYCLE_PRINT:['emerald','循環樹狀圖列印'],
     CHANGE_LOG_VIEW:['amber','文件變更歷程檢視'],LIFECYCLE_CHANGELOG_VIEW:['amber','循環變更歷程檢視'],
-    LIFECYCLE_CHANGELOG_DOWNLOAD:['amber','新舊樹狀圖下載']
+    LIFECYCLE_CHANGELOG_DOWNLOAD:['amber','新舊樹狀圖下載'],
+    // 🔴 AC-N53：中文標籤逐字為「附件上傳」（actionTypeLabel('ATTACHMENT_UPLOAD') === '附件上傳'）
+    ATTACHMENT_UPLOAD:['violet','附件上傳']
   };
-  const KIND_STYLE={'文件':'slate','循環':'emerald','變更':'amber'};
-  // §8.4：無處/室者 section 留空，分隔符自動收合（不得出現 '--'）；與檢視器疊加／PDF 燒錄同一組字邏輯
-  function wm(r){return [r.emp,r.name,r.company,r.dept,r.section,'僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現',r.time].filter(p=>p!==''&&p!=null).join('-');}
+  const KIND_STYLE={'文件':'slate','循環':'emerald','變更':'amber','上傳':'violet'};
+  /* 🔴 F020 AC-N10～AC-N13（2026-08-20）：浮水印組字之「公司名稱」欄＝**簡稱**（AC-N12），
+     🔒 而本頁「公司」欄與 CSV 匯出值**仍為全稱**（AC-N13 ③）——兩者刻意不同源，勿「統一」。
+     INV-C2（AC-N11）：短稱表鍵集合 ≡ 全稱表鍵集合。 */
+  const COMPANY_FULL_NAMES  = { AS:'和潤企業股份有限公司', AE:'和潤電能' };
+  const COMPANY_SHORT_NAMES = { AS:'和潤企業',             AE:'和潤電能' };
+  function companyShortOf(full){
+    const code=Object.keys(COMPANY_FULL_NAMES).find(c=>COMPANY_FULL_NAMES[c]===full);
+    return code ? COMPANY_SHORT_NAMES[code] : '';   // 查無 → 留空並套用 §8.4 收合（不得輸出 null、不得回退為全稱）
+  }
+  // 🔴 AC-N53：非浮水印之動作類型（附件上傳）其 watermarkSnapshot 為 null ⇒ 明細該欄留空
+  function hasWm(r){ return r.act!=='ATTACHMENT_UPLOAD'; }
+  // §8.4：無處/室者 section 留空，分隔符自動收合（不得出現 '--'）；與 PDF 燒錄同一組字邏輯
+  function wm(r){return [r.emp,r.name,companyShortOf(r.company),r.dept,r.section,'僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現',r.time].filter(p=>p!==''&&p!=null).join('-');}
   let expandedIdx=-1;
 
   function scopeRecords(){
@@ -306,7 +344,7 @@
             </dl>
             <div class="mt-3 pt-3 border-t border-slate-100">
               <div class="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-1.5"><i data-lucide="stamp" class="w-4 h-4 text-primary-600"></i>當次浮水印快照（與稽核內容完全一致）</div>
-              <div class="mono text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded px-3 py-2 break-all">${wm(r)}</div>
+              <div data-wm-snapshot class="mono text-xs bg-slate-50 border border-slate-200 rounded px-3 py-2 break-all ${hasWm(r)?'text-slate-700':'text-slate-400'}">${hasWm(r)?wm(r):'（此動作類型無浮水印，該欄留空）'}</div>
             </div>
           </div></td></tr>`;
       }

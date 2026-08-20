@@ -1,4 +1,29 @@
 <!DOCTYPE html>
+<!-- 🔴 D9 delta · 前台文件檢視器改自繪 canvas（2026-08-20 使用者裁決）
+     規格權威＝docs/specs/features/F020-watermark.md#d9-watermark-delta（AC-N4～AC-N9、AC-N66～AC-N68）
+              ＋ docs/specs/architecture-spec.md §11.1／§11.2（決策 B1／B2）
+
+     本檔已套用：
+     ① AC-N4：預覽區**不存在** iframe／embed／object 元素，改由頁面自繪之 canvas 元素承載
+        （原型以 Canvas 2D 直接繪製一份模擬 SOP 內容；實作以 pdfjs-dist 之 page.render() 取代，DOM 契約相同）。
+     ② AC-N6：/public/documents/:id/pdf 回傳**已燒錄**位元組 ⇒ 本原型把浮水印**畫進 canvas 像素**
+        （＝內容層），而非疊一層 DOM。畫布上看到的浮水印就是位元組裡的浮水印。
+     ③ 🔴 AC-N7（負向斷言）：**.wm-layer 疊加層整段移除**——DOM 內不得存在
+        testid 為 watermark-overlay 或 watermark-text 之元素。
+        理由：底下位元組已燒錄（AC-N6），DOM 疊加變成純冗餘（同一份浮水印疊兩次）。
+        🔒 **範圍界線**：移除僅限本頁。22-lifecycle-tree-preview 與 23-change-history 之 .wm-layer
+           **必須保留**（AC-N66）——那兩頁渲染 HTML、沒有內容層可燒錄，疊加層是其唯一浮水印載體。
+     ④ 🔒 AC-N5：本系統自身之「下載」「列印」鈕**保留且可觸發**（不得以「移除工具列」為由順手拿掉）。
+     ⑤ 🔒 AC-N67：頁尾「浮水印格式（與稽核快照一致）：」字幕區**保留**（data-testid="watermark-format"）——
+        它不是疊加圖層，而是「所見浮水印字串之可讀對照」，也是 AC-N6 燒錄字串於前端唯一可斷言之投影。
+     ⑥ AC-N8：縮放**不得**以 CSS scale() 達成 ⇒ #page 全程不設 transform；
+        AC-N9：縮放改變即以新倍率**重新渲染**（renderPage(page, zoom) 再次被呼叫，參數為新倍率）。
+     ⑦ AC-N2：燒錄浮水印之色值／不透明度＝**#334155 @ 0.30**（定稿值，逐字照抄不得自行發明；
+        有效色 rgb(193.8,198.0,204.0)、與白底對比度 ≈ 1.716:1，滿足 AC-N1 之 ≥ 1.70）。
+     ⑧ F021 AC-N59～AC-N62：前台字級上移一階（正文 text-sm→text-base；12px caption 級距→text-sm）；本檔不得再出現 12px caption 級距之 class。
+
+     🔴 ui-ux-designer 之裁量（architecture-spec §11.2 明文交付本角色定案）＝**單頁翻頁（single-page paging）**，
+        **不做連續捲動之虛擬化渲染**。理由見本檔 <main> 上方之 [PAGING] 註解與 docs/ui-ux-design-overview.md。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -19,10 +44,13 @@
   .mono{font-family:'JetBrains Mono',monospace;}
   /* viewer stage */
   #stage{background:#E2E8F0;}
-  #page{background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.08);position:relative;overflow:hidden;transform-origin:top center;transition:transform .15s ease;}
-  /* diagonal tiled watermark overlay (F020: 45deg, opacity .12, slate-500, 14px) */
-  .wm-layer{position:absolute;inset:-40%;pointer-events:none;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;transform:rotate(-45deg);opacity:.12;user-select:none;}
-  .wm-layer span{color:#64748B;font-size:14px;white-space:nowrap;padding:22px 30px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.6;}
+  /* 🔴 AC-N8：#page 全程**不得**帶 transform:scale()。縮放由 renderPage() 以新倍率重繪 canvas 達成，
+     canvas 之 width/height（點陣緩衝區）與 style.width/height（CSS 佈局）為兩組獨立屬性，
+     緩衝區＝CSS 尺寸 × devicePixelRatio ⇒ HiDPI 螢幕原生 1:1 映射、放大不模糊（architecture-spec §11.2）。 */
+  /* ⚠ RWD：flex + justify-center 在子元素寬於容器時會把左緣推成負值（實測 375px 下 -192.5px，內容被裁掉且捲不回去）。
+     改用 block formatting context ＋ margin:0 auto：空間足夠時置中，不足時 auto 解析為 0 ⇒ 只往右溢出、左緣恆可達。 */
+  #page{background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.08);position:relative;line-height:0;width:max-content;margin:0 auto;}
+  #pdfCanvas{display:block;}
 </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -33,66 +61,70 @@
     <a href="04-public-document-detail.html" class="text-slate-400 hover:text-slate-600 flex items-center"><i data-lucide="arrow-left" class="w-5 h-5"></i></a>
     <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
     <div class="leading-tight min-w-0">
-      <div class="text-xs text-slate-400">文件檢視器</div>
-      <div class="font-semibold text-slate-900 text-sm truncate">車輛分期進件作業 · <span class="mono text-slate-500">ICSOP-SRC-101-1-01</span></div>
+      <div class="text-sm text-slate-400">文件檢視器</div>
+      <div class="font-semibold text-slate-900 text-base truncate">車輛分期進件作業 · <span class="mono text-slate-500">ICSOP-SRC-101-1-01</span></div>
     </div>
-    <div class="ml-auto hidden sm:flex items-center gap-2 text-sm text-slate-500">
+    <div class="ml-auto hidden sm:flex items-center gap-2 text-base text-slate-500">
       <i data-lucide="user" class="w-4 h-4"></i><span>王小明</span><span class="text-slate-300">·</span><span>營運管理部 / 審查室</span>
     </div>
   </div>
 
-  <!-- toolbar -->
-  <div class="px-4 h-11 border-t border-slate-100 flex items-center gap-2 text-sm overflow-x-auto">
+  <!-- toolbar：🔒 AC-N5「下載」「列印」為本系統自身之受控動作，必須保留 -->
+  <div class="px-4 h-11 border-t border-slate-100 flex items-center gap-2 text-base overflow-x-auto">
     <span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-primary-50 text-primary-700 font-medium shrink-0"><i data-lucide="eye" class="w-4 h-4"></i>檢視</span>
     <button onclick="doAction('DOWNLOAD')" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="download" class="w-4 h-4"></i>下載</button>
     <button onclick="doAction('PRINT')" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="printer" class="w-4 h-4"></i>列印</button>
     <div class="w-px h-5 bg-slate-200 mx-1 shrink-0"></div>
-    <button onclick="zoom(-0.1)" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="zoom-out" class="w-4 h-4"></i></button>
-    <span id="zoomLabel" class="mono text-xs text-slate-500 w-10 text-center shrink-0">100%</span>
-    <button onclick="zoom(0.1)" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="zoom-in" class="w-4 h-4"></i></button>
+    <!-- 單頁翻頁導覽（ui-ux-designer 裁量定案，見檔頭與 [PAGING] 註解） -->
+    <button id="prevBtn" onclick="goPage(CUR-1)" aria-label="上一頁" title="上一頁" class="w-8 h-8 rounded-md hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center shrink-0"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+    <label for="pageInput" class="sr-only">頁碼</label>
+    <input id="pageInput" type="text" inputmode="numeric" aria-label="頁碼" onchange="goPage(parseInt(this.value,10))" class="mono text-sm w-10 h-8 text-center rounded-md border border-slate-300 bg-white shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-600" value="1" />
+    <span class="mono text-sm text-slate-500 shrink-0">/ <span id="pageTotal">3</span></span>
+    <button id="nextBtn" onclick="goPage(CUR+1)" aria-label="下一頁" title="下一頁" class="w-8 h-8 rounded-md hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center shrink-0"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+    <div class="w-px h-5 bg-slate-200 mx-1 shrink-0"></div>
+    <button onclick="zoom(-0.1)" aria-label="縮小" title="縮小" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="zoom-out" class="w-4 h-4"></i></button>
+    <span id="zoomLabel" class="mono text-sm text-slate-500 w-10 text-center shrink-0">100%</span>
+    <button onclick="zoom(0.1)" aria-label="放大" title="放大" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="zoom-in" class="w-4 h-4"></i></button>
   </div>
 </header>
 
-<!-- info note -->
-<div class="px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700 flex items-start gap-2">
+<!-- 安全資訊帶
+     🔴 D9：原文宣稱「下載/列印時將燒錄進 PDF 內容層（非僅前端疊加）」——該句自 AC-N6 起會誤導：
+        **檢視預覽本身即為已燒錄之位元組**，不是「下載時才燒」。此處已就地改寫。
+     🔒 AC-N60：本帶（安全資訊帶）之 class 含 text-sm（14px）。 -->
+<div id="securityBand" class="px-4 py-2 bg-primary-50 border-b border-primary-100 text-sm text-primary-700 flex items-start gap-2">
   <i data-lucide="shield-check" class="w-4 h-4 shrink-0 mt-0.5"></i>
-  <span>浮水印由<strong>伺服器端</strong>依當下登入身分與時間動態產生；下載/列印時將<strong>燒錄進 PDF 內容層</strong>（非僅前端疊加），脫離系統仍存在。未登入存取本檢視器將被拒並導回登入頁。</span>
+  <span>浮水印由<strong>伺服器端</strong>依當下登入身分與時間動態產生，並<strong>燒錄進 PDF 內容層</strong>；您正在檢視的預覽<strong>即是已燒錄的位元組</strong>，與下載／列印所得完全一致，脫離系統仍存在。本檢視器由頁面<strong>自繪 canvas</strong> 呈現，不使用瀏覽器內建 PDF 工具列；縮放為<strong>依倍率重新渲染</strong>而非放大點陣圖。未登入存取本檢視器將被拒並導回登入頁。</span>
 </div>
 
-<!-- viewer stage -->
-<main id="stage" class="flex-1 overflow-auto p-4 sm:p-8 flex justify-center">
-  <div id="page" style="width:min(760px,94vw);min-height:1000px;padding:56px 60px;">
-    <!-- watermark overlay -->
-    <div class="wm-layer" id="wmLayer"></div>
-    <!-- simulated document content -->
-    <div class="relative" style="z-index:1">
-      <div class="text-center border-b-2 border-slate-800 pb-4 mb-6">
-        <div class="text-xs tracking-widest text-slate-400 mono">ICSOP-SRC-101-1-01 · 26'01</div>
-        <h1 class="text-2xl font-bold text-slate-900 mt-2">車輛分期進件作業</h1>
-        <div class="text-xs text-slate-500 mt-2">制定部門：企劃部　｜　循環別：銷售及收款循環　｜　公告日期：2026-01-01</div>
-      </div>
-      <h2 class="font-bold text-slate-800 mt-6 mb-2">一、目的</h2>
-      <p class="text-sm text-slate-600 leading-7">為規範車輛分期案件之進件受理、資料徵提與初步審核作業，確保案件品質、風險控管與資料留存符合內部控制與法規要求，特訂定本作業程序。</p>
-      <h2 class="font-bold text-slate-800 mt-6 mb-2">二、適用範圍</h2>
-      <p class="text-sm text-slate-600 leading-7">適用於營運管理部審查室、信用審查部與供應商金融部北區綜合處醫療一課辦理之車輛分期進件業務，涵蓋經銷通路與直營據點受理之案件。</p>
-      <h2 class="font-bold text-slate-800 mt-6 mb-2">三、作業流程</h2>
-      <ol class="text-sm text-slate-600 leading-7 list-decimal pl-5 space-y-1">
-        <li>案件受理：受理客戶車輛分期申請，核對申請書與證件完整性。</li>
-        <li>資料徵提：徵提財力證明、車輛資料與相關文件並建檔。</li>
-        <li>徵信查核：進行聯徵查詢與 KYC 檢核，評估案件風險。</li>
-        <li>初步審核：依進件審核標準核對條件，提送信用審查部覆核。</li>
-        <li>案件建立：完成進件建檔，移交後續簽約對保作業。</li>
-      </ol>
-      <p class="text-xs text-slate-400 leading-6 mt-8 border-t border-slate-100 pt-3">（本頁內容為原型示意；實際檢視器將載入伺服器回傳之已疊加浮水印預覽。）</p>
-    </div>
+<!-- [PAGING] 🔴 ui-ux-designer 裁量定案：**單頁翻頁**，不做連續捲動之虛擬化渲染（architecture-spec §11.2 交付本角色）
+     理由（四點，擇一即足，四點同向）：
+     1. **AC-N9 需要確定性的渲染呼叫計數**：「渲染呼叫累計次數 ≥ 2、最後一次參數為 z2」在單頁模式下與縮放操作 1:1 對應；
+        連續捲動＋IntersectionObserver 之下渲染次數取決於捲動位置與 observer 觸發時機，且 jsdom 無 IntersectionObserver，
+        該 AC 會退化為需要 shim 的脆弱測試。
+     2. **記憶體上限（§11.2 之架構護欄）**：DPR=2、zoom=2 時 outputScale=4，單張 A4 canvas 緩衝區已達數千萬像素；
+        「當前頁 ±1」的連續捲動等於同時持有 3 份。單頁模式天然滿足「不得對視窗可視範圍外的頁面觸發 render()」。
+     3. **與既有縮放區間相符**：ZOOM_MIN 0.6 / ZOOM_MAX 2 是「單頁精讀」的區間，不是「快速翻閱全文」的區間；
+        SOP 文件頁數為個位數～十位數（§5.2），翻頁成本低。
+     4. **實作面最小相依**：不需 IntersectionObserver、不需捲動位置還原、不需 canvas 池回收。
+     ⚠ **已知取捨（明文記錄，非疏漏）**：使用者失去「連續往下捲讀」的手感。緩解＝頁碼輸入框可直接跳頁、
+        上一頁／下一頁鈕、鍵盤 ← → / PageUp PageDown；若日後使用者回報翻頁成本過高，
+        升級為連續捲動屬 additive 變更（renderPage(page, zoom) 之 seam 不需改簽章）。 -->
+<main id="stage" class="flex-1 overflow-auto p-4 sm:p-8">
+  <!-- 🔴 AC-N4：預覽區內不存在 iframe / embed / object；預覽內容由本頁自繪之 <canvas> 承載 -->
+  <div id="page" data-viewer-page="1">
+    <canvas id="pdfCanvas" data-pdf-canvas aria-label="文件預覽（第 1 頁，浮水印已燒錄於內容層）" role="img"></canvas>
   </div>
 </main>
 
-<!-- watermark format caption -->
+<!-- watermark format caption
+     🔒 AC-N67 ①：本區**不在 AC-N7 的移除範圍內**——它不是疊加圖層，而是所見浮水印字串之可讀對照，
+        且是 AC-N6 燒錄字串於前端唯一可斷言之投影（其文字逐字等於伺服器回傳之線性浮水印快照）。
+     🔒 AC-N67 ②：其來源端點 GET /public/documents/:id/view 不得移除（它同時是 VIEW 稽核之唯一觸發點）。 -->
 <footer class="shrink-0 bg-white border-t border-slate-200 px-4 py-2.5">
   <div class="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
-    <span class="text-xs text-slate-400 shrink-0">浮水印格式（與稽核快照一致）：</span>
-    <code class="mono text-xs text-slate-600 truncate" id="wmString"></code>
+    <span class="text-sm text-slate-400 shrink-0">浮水印格式（與稽核快照一致）：</span>
+    <code class="mono text-sm text-slate-600 truncate" id="wmString" data-testid="watermark-format"></code>
   </div>
 </footer>
 
@@ -100,34 +132,237 @@
 <div id="toastWrap" class="fixed top-20 right-4 z-50 space-y-2"></div>
 
 <script>
-  // F020 watermark: {員工編號}-{姓名}-{公司名稱}-{部門}-{處/室}-{機密聲明(固定)}-YYYY-MM-DD HH:mm:ss (UTC+8)
-  // 視覺呈現：固定機密聲明「另起一行」獨立一行；線性格式字串順序不變（與稽核快照一致）
-  // 公司名稱＝VW_HRCOMF.COMPFULLNM 全稱；部門＝部層完整名稱；處/室＝最細單位名稱
-  const WM_DATA   = '22345-王小明-和潤企業股份有限公司-營運管理部-審查室';
+  /* ===== F020 浮水印字串（格式權威＝NFR-007，本 delta 不改字串格式、欄位順序與收合規則）=====
+     {員工編號}-{姓名}-{公司名稱}-{部門}-{處/室}-{機密聲明(固定)}-YYYY-MM-DD HH:mm:ss (UTC+8)
+     視覺呈現：固定機密聲明「另起一行」獨立一行；線性格式字串順序不變（與稽核快照一致）。
+     ⚠ 公司名稱欄之取值來源（AC-N10～AC-N13）＝**浮水印專用簡稱** COMPANY_SHORT_NAMES（AS → 和潤企業），
+        **非** COMPANY_FULL_NAMES（和潤企業股份有限公司）——後者於帳號管理／GET /companies／F024 稽核公司欄
+        三處**維持全稱、逐字不動**（AC-N13 回歸鎖定）。 */
+  const WM_DATA   = '22345-王小明-和潤企業-營運管理部-審查室';
   const WM_NOTICE = '僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現';
   const WM_TIME   = '2026-07-16 14:32:08';
   const WM = `${WM_DATA}-${WM_NOTICE}-${WM_TIME}`;
-  document.getElementById('wmLayer').innerHTML = Array.from({length:60}).map(()=>`<span>${WM_DATA}<br>${WM_NOTICE}<br>${WM_TIME}</span>`).join('');
+  // AC-N68：三層式呈現契約（①身分資料列 ②固定機密聲明另起一行 ③時間戳）之新載體＝燒錄側之 toDisplayLines()。
+  // 本原型即以此三行繪入 canvas 像素（＝內容層），下游斷言「恰為 3 行」。
+  function toDisplayLines(){ return [WM_DATA, WM_NOTICE, WM_TIME]; }
   document.getElementById('wmString').textContent = WM + '  （時區 UTC+8）';
 
-  let z = 1;
-  function zoom(d){ z=Math.max(0.6,Math.min(2,+(z+d).toFixed(2))); document.getElementById('page').style.transform='scale('+z+')'; document.getElementById('zoomLabel').textContent=Math.round(z*100)+'%'; }
+  /* ===== 模擬「伺服器回傳之已燒錄 PDF」內容 =====
+     實作以 pdfjs-dist 解析真實位元組；原型以 Canvas 2D 直接繪製等價版面，DOM 契約（<canvas>）相同。 */
+  const PAGE_W = 760, PAGE_H = 1075;            // 頁面 CSS px 尺寸（A4 比例）
+  const ZOOM_MIN = 0.6, ZOOM_MAX = 2;           // 沿用既有檢視器之縮放區間
+  const PAGES = [
+    { head:true, blocks:[
+      { t:'h2', s:'一、目的' },
+      { t:'p',  s:'為規範車輛分期案件之進件受理、資料徵提與初步審核作業，確保案件品質、風險控管與資料留存符合內部控制與法規要求，特訂定本作業程序。' },
+      { t:'h2', s:'二、適用範圍' },
+      { t:'p',  s:'適用於營運管理部審查室、信用審查部與供應商金融部北區綜合處醫療一課辦理之車輛分期進件業務，涵蓋經銷通路與直營據點受理之案件。' },
+      { t:'h2', s:'三、權責單位' },
+      { t:'p',  s:'企劃部車輛行銷室為本程序之制定與維護單位；營運管理部審查室負責進件初審；信用審查部負責覆核與例外簽核。' }
+    ]},
+    { head:false, blocks:[
+      { t:'h2', s:'四、作業流程' },
+      { t:'li', s:'案件受理：受理客戶車輛分期申請，核對申請書與證件完整性。' },
+      { t:'li', s:'資料徵提：徵提財力證明、車輛資料與相關文件並建檔。' },
+      { t:'li', s:'徵信查核：進行聯徵查詢與 KYC 檢核，評估案件風險。' },
+      { t:'li', s:'初步審核：依進件審核標準核對條件，提送信用審查部覆核。' },
+      { t:'li', s:'案件建立：完成進件建檔，移交後續簽約對保作業。' },
+      { t:'h2', s:'五、檢查事項' },
+      { t:'p',  s:'進件資料齊備度、聯徵查詢紀錄保存、例外案件簽核層級是否符合授權表，均應於月度自行查核中抽樣覆核。' }
+    ]},
+    { head:false, blocks:[
+      { t:'h2', s:'六、相關表單' },
+      { t:'li', s:'進件申請書（FM-001）' },
+      { t:'li', s:'支票託收登記表' },
+      { t:'h2', s:'七、相關附錄' },
+      { t:'li', s:'作業流程對照表.xlsx' },
+      { t:'li', s:'名詞定義說明.pdf' },
+      { t:'li', s:'共用名詞附錄.xlsx' },
+      { t:'note', s:'（本頁內容為原型示意；實作由 pdfjs-dist 將伺服器回傳之「已燒錄」PDF 位元組自繪於同一個 canvas。）' }
+    ]}
+  ];
 
+  let CUR = 1;   // 目前頁碼（單頁翻頁）
+  let Z   = 1;   // 縮放倍率
+
+  /* 🔴 AC-N9 之渲染 seam：renderPage(pageNo, scale) 為**唯一**的渲染入口，且對外暴露呼叫紀錄供斷言。
+     實作對應＝pdfjs-dist 之 page.render({ canvasContext, viewport })（architecture-spec §11.4：
+     直接 vi.mock('pdfjs-dist') 對 page.render 之 spy 斷言呼叫次數與 viewport.scale）。 */
+  window.__pdfRenderCalls = [];
+
+  function renderPage(pageNo, scale){
+    window.__pdfRenderCalls.push({ page: pageNo, scale: scale });
+
+    const cv  = document.getElementById('pdfCanvas');
+    const dpr = window.devicePixelRatio || 1;
+    // architecture-spec §11.2：outputScale = zoom × devicePixelRatio
+    const outputScale = scale * dpr;
+    cv.width  = Math.floor(PAGE_W * outputScale);      // 點陣緩衝區（含 DPR 放大）
+    cv.height = Math.floor(PAGE_H * outputScale);
+    cv.style.width  = Math.floor(PAGE_W * outputScale / dpr) + 'px';   // CSS 佈局尺寸（僅依 zoom）
+    cv.style.height = Math.floor(PAGE_H * outputScale / dpr) + 'px';
+
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(outputScale, 0, 0, outputScale, 0, 0);            // 之後一律以 CSS px 座標作畫
+    ctx.clearRect(0, 0, PAGE_W, PAGE_H);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, PAGE_W, PAGE_H);
+
+    drawContent(ctx, PAGES[pageNo - 1], pageNo);
+    burnWatermark(ctx);                                                // ⬅ 浮水印畫進**像素**＝內容層（AC-N6）
+
+    cv.setAttribute('aria-label', `文件預覽（第 ${pageNo} 頁，共 ${PAGES.length} 頁，浮水印已燒錄於內容層）`);
+    document.getElementById('page').setAttribute('data-viewer-page', String(pageNo));
+  }
+
+  /* ===== 內容層繪製（模擬 SOP 內文）===== */
+  function drawContent(ctx, page, pageNo){
+    const L = 60, R = PAGE_W - 60;
+    let y = 64;
+    if(page.head){
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#94A3B8'; ctx.font = "500 12px 'JetBrains Mono', monospace";
+      ctx.fillText("ICSOP-SRC-101-1-01 · 26'01", PAGE_W/2, y); y += 30;
+      ctx.fillStyle = '#0F172A'; ctx.font = "700 26px 'Noto Sans TC', sans-serif";
+      ctx.fillText('車輛分期進件作業', PAGE_W/2, y); y += 24;
+      ctx.fillStyle = '#64748B'; ctx.font = "400 13px 'Noto Sans TC', sans-serif";
+      ctx.fillText('制定部門：企劃部　｜　循環別：銷售及收款循環（消金）　｜　公告日期：2026-01-01', PAGE_W/2, y); y += 18;
+      ctx.textAlign = 'left';
+      ctx.strokeStyle = '#1E293B'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(R, y); ctx.stroke(); y += 34;
+    }
+    let ord = 0;
+    page.blocks.forEach(b => {
+      if(b.t === 'h2'){
+        y += 10;
+        ctx.fillStyle = '#1E293B'; ctx.font = "700 17px 'Noto Sans TC', sans-serif";
+        ctx.fillText(b.s, L, y); y += 26; ord = 0;
+      } else if(b.t === 'p'){
+        ctx.fillStyle = '#475569'; ctx.font = "400 15px 'Noto Sans TC', sans-serif";
+        y = wrapText(ctx, b.s, L, y, R - L, 27);
+      } else if(b.t === 'li'){
+        ord += 1;
+        ctx.fillStyle = '#475569'; ctx.font = "400 15px 'Noto Sans TC', sans-serif";
+        ctx.fillText(ord + '.', L, y);
+        y = wrapText(ctx, b.s, L + 24, y, R - L - 24, 27);
+      } else if(b.t === 'note'){
+        y += 18;
+        ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(L, y - 12); ctx.lineTo(R, y - 12); ctx.stroke();
+        ctx.fillStyle = '#94A3B8'; ctx.font = "400 12px 'Noto Sans TC', sans-serif";
+        y = wrapText(ctx, b.s, L, y + 6, R - L, 22);
+      }
+    });
+    // 頁碼（頁尾）
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#94A3B8'; ctx.font = "400 12px 'JetBrains Mono', monospace";
+    ctx.fillText(pageNo + ' / ' + PAGES.length, PAGE_W/2, PAGE_H - 42);
+    ctx.textAlign = 'left';
+  }
+
+  function wrapText(ctx, text, x, y, maxW, lh){
+    let line = '';
+    for(const ch of text){
+      if(ctx.measureText(line + ch).width > maxW){ ctx.fillText(line, x, y); y += lh; line = ch; }
+      else { line += ch; }
+    }
+    if(line) { ctx.fillText(line, x, y); y += lh; }
+    return y;
+  }
+
+  /* ===== 🔴 浮水印燒錄（AC-N2 定稿值：#334155 @ opacity 0.30）=====
+     ⚠ 這是**內容層**：畫在 canvas 像素上，不是 DOM 疊加層。AC-N7 已移除 DOM 疊加層。
+     ⚠ 色值與不透明度為定稿常數，**不得自行挑選近似色**——test-generator 會對此數值建立約束。 */
+  const WM_COLOR = '#334155';
+  const WM_OPACITY = 0.30;
+  function burnWatermark(ctx){
+    const lines = toDisplayLines();     // AC-N68：恰 3 行
+    ctx.save();
+    ctx.globalAlpha = WM_OPACITY;
+    ctx.fillStyle = WM_COLOR;
+    ctx.font = "500 14px 'JetBrains Mono', monospace";
+    ctx.textAlign = 'center';
+    ctx.translate(PAGE_W/2, PAGE_H/2);
+    ctx.rotate(-Math.PI/4);             // 對角 45°
+    const stepX = 560, stepY = 132, span = 1.35;
+    for(let gy = -PAGE_H*span; gy <= PAGE_H*span; gy += stepY){
+      for(let gx = -PAGE_W*span; gx <= PAGE_W*span; gx += stepX){
+        lines.forEach((ln, i) => ctx.fillText(ln, gx, gy + i*22));
+      }
+    }
+    ctx.restore();
+  }
+
+  /* ===== 縮放：🔴 AC-N8 不使用 CSS scale()；AC-N9 以新倍率重新渲染 ===== */
+  function zoom(d){
+    const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, +(Z + d).toFixed(2)));
+    if(next === Z) return;
+    userZoomed = true;                  // 之後不再自動 fit-to-width（見 init 段）
+    Z = next;
+    document.getElementById('zoomLabel').textContent = Math.round(Z*100) + '%';
+    renderPage(CUR, Z);                 // ⬅ 重新渲染，而非縮放既有點陣圖
+  }
+
+  /* ===== 單頁翻頁 ===== */
+  function goPage(n){
+    if(!Number.isFinite(n)) { syncPager(); return; }
+    const next = Math.max(1, Math.min(PAGES.length, n));
+    document.getElementById('stage').scrollTop = 0;
+    if(next !== CUR){ CUR = next; renderPage(CUR, Z); }
+    syncPager();
+  }
+  function syncPager(){
+    document.getElementById('pageInput').value = String(CUR);
+    document.getElementById('pageTotal').textContent = String(PAGES.length);
+    document.getElementById('prevBtn').disabled = (CUR === 1);
+    document.getElementById('nextBtn').disabled = (CUR === PAGES.length);
+  }
+  document.addEventListener('keydown', e => {
+    if(e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    if(e.key === 'ArrowLeft'  || e.key === 'PageUp')   { goPage(CUR-1); }
+    if(e.key === 'ArrowRight' || e.key === 'PageDown') { goPage(CUR+1); }
+  });
+
+  /* ===== toast ===== */
   function toast(type,msg){
     const map={success:['check-circle-2','#059669'],info:['info','#365C97'],error:['alert-circle','#DC2626']};
     const [ic,color]=map[type]||map.info;
     const el=document.createElement('div');
-    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-base max-w-sm';
     el.style.borderLeft='4px solid '+color;
     el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><span class="text-slate-700">${msg}</span>`;
     document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
     setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4500);
   }
+  // 🔒 AC-N5：本系統自身之下載／列印，目標仍為既有之受控端點（皆已燒錄、皆寫稽核）
   function doAction(kind){
     const label={DOWNLOAD:'下載',PRINT:'列印'}[kind];
-    toast('success',`已${label}：伺服器端已將浮水印燒錄進 PDF 內容層（非僅前端疊加），並寫入 ${kind} 稽核紀錄`);
+    toast('success',`已${label}：所得位元組與畫面上這份預覽<strong>同為已燒錄浮水印之 PDF 內容層</strong>，並寫入 ${kind} 稽核紀錄`);
   }
 
+  /* ===== RWD：窄螢幕自動以「符合寬度」之倍率首次渲染（F021：手機 360px 不得內容截斷）=====
+     ⚠ 仍是**依倍率重新渲染**（AC-N9），不是 CSS 縮放（AC-N8）——只是把初始倍率算成適合當前寬度。
+     使用者一旦手動縮放（userZoomed）即不再自動套用，避免旋轉螢幕時把使用者選的倍率蓋掉。 */
+  let userZoomed = false;
+  function fitToWidth(){
+    const stage = document.getElementById("stage");
+    const cs = getComputedStyle(stage);
+    const avail = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    if(avail <= 0) return;
+    const target = Math.max(ZOOM_MIN, Math.min(1, +(avail / PAGE_W).toFixed(2)));
+    if(target === Z) return;
+    Z = target;
+    document.getElementById("zoomLabel").textContent = Math.round(Z*100) + "%";
+    renderPage(CUR, Z);
+  }
+  window.addEventListener("resize", ()=>{ if(!userZoomed) fitToWidth(); });
+
+  // init
+  syncPager();
+  renderPage(CUR, Z);
+  fitToWidth();
+  // 網頁字型載入完成後以同倍率重繪一次，避免首屏以 fallback 字型量測換行
+  if(document.fonts && document.fonts.ready){ document.fonts.ready.then(()=>{ if(!userZoomed) fitToWidth(); renderPage(CUR, Z); }); }
   lucide.createIcons();
 </script>
 </body>

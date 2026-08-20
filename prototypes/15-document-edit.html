@@ -1,4 +1,15 @@
 <!DOCTYPE html>
+<!-- 🔴 2026-08-20 D9 delta（人類閘門已裁決）——本檔已套用（規格權威＝F020 AC-N14～AC-N20、
+     F026 §ojt-write-exception-delta AC-N22～AC-N27、F016 §ojt-role-open-delta AC-N28～AC-N35）：
+     ① F020 AC-N20：附件區三個檔案區塊各新增 data-wm-note（pdf →「檢視/下載將燒錄浮水印」；
+        非 pdf →「此格式不支援浮水印」）。AC-D7 ④ 之「後台不得出現這兩條文案」已由 OQ-D9-33 就地推翻。
+     ② 🔴 唯讀提示文案就地改寫：原句「此角色對所有文件欄位皆唯讀，附件可下載但不可上傳/取代」
+        對**主管／部門窗口**自 2026-08-20 起不再為真（OJT 破例）。系統管理員仍逐字適用原句（AC-N26）。
+     ③ 🔴 OJT「取代」鈕改用 .ojt-write（非 .write-only）：主管／部門窗口／ICSOP 管理員可見；
+        🔒 **其餘一切寫入控制項維持 .write-only（僅 ICSOP 管理員）**——AC-N24／AC-N25 之回歸鎖定，
+           特別是 ICSOP PDF 之「取代」與 .xls 之「上傳新版」**不得**一併放行。
+        ⚠ 本頁之角色切換器含 supervisor／deptcontact 純為原型示範唯讀路徑；真實路由以 16 唯讀頁為主入口。
+     🔒 後台字級逐字不動（F021 AC-N61 ①）。 -->
 <!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
      本檔已套用：「所屬循環」改兩段式選取（名稱 → 子分類）、新舊值對照兩側皆以 lifecycleDisplayName 呈現、
      未選具體子分類即送出 → LIFECYCLE_SUBCATEGORY_REQUIRED（400）。編號前綴仍僅依循環名稱。
@@ -25,6 +36,10 @@
   .field.changed .newbox{border-color:#365C97;}
   input:disabled,select:disabled{background:#F8FAFC;color:#64748B;cursor:not-allowed;}
   body:not([data-role="icsop_admin"]) .write-only{display:none !important;}
+  /* 🔴 D9：OJT 簽到表為唯一破例欄（F026 AC-N22／AC-N23）——主管／部門窗口亦可寫。
+     🔒 刻意與 .write-only 分開兩條規則：若把 supervisor／deptcontact 併進 .write-only，
+        ICSOP PDF 取代鈕與 .xls 上傳鈕會一起被放行 ⇒ 正是 AC-N24／AC-N25 要偵測的「鬆一片牆」。 */
+  body:not([data-role="icsop_admin"]):not([data-role="supervisor"]):not([data-role="deptcontact"]) .ojt-write{display:none !important;}
   /* admin shell sidebar */
   #sidebar{width:240px;transition:width .2s ease;}
   body{padding-left:240px;transition:padding-left .2s ease;}
@@ -85,7 +100,7 @@
   </div>
   <!-- readonly banner -->
   <div id="roBanner" class="hidden bg-cyan-50 border-t border-cyan-200 text-cyan-800 text-sm px-4 py-2 items-center gap-2">
-    <i data-lucide="eye" class="w-4 h-4"></i><span id="roText">唯讀模式 · 此角色對所有文件欄位皆唯讀，附件可下載但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。</span>
+    <i data-lucide="eye" class="w-4 h-4"></i><span id="roText"></span>
   </div>
 </header>
 
@@ -207,7 +222,7 @@
         <div class="text-sm font-semibold text-slate-800">ICSOP 原始檔（.xls）· AI 檢索來源</div>
         <span class="text-[10px] px-1.5 py-0.5 rounded bg-primary-100 text-primary-700">US-090</span>
       </div>
-      <div class="flex items-center gap-2"><i data-lucide="file-spreadsheet" class="w-5 h-5 text-emerald-600"></i><span class="text-sm text-slate-700 truncate flex-1">車輛分期進件作業_v1.3.xls</span></div>
+      <div class="flex items-center gap-2"><i data-lucide="file-spreadsheet" class="w-5 h-5 text-emerald-600"></i><span class="text-sm text-slate-700 truncate flex-1">車輛分期進件作業_v1.3.xls</span><span data-wm-note class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 shrink-0 whitespace-nowrap"><i data-lucide="info" class="w-3 h-3"></i>此格式不支援浮水印</span></div>
       <div class="flex gap-2 mt-3">
         <button class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-white"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
         <button onclick="replaceFile('ICSOP .xls')" class="write-only inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 text-primary-700 text-xs hover:bg-white"><i data-lucide="upload" class="w-3.5 h-3.5"></i>上傳新版 .xls（取代）</button>
@@ -217,18 +232,18 @@
     <div class="grid sm:grid-cols-2 gap-4">
       <div class="border border-slate-200 rounded-lg p-3">
         <div class="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1.5">ICSOP PDF（呈現用，1 份，覆蓋式）</div>
-        <div class="flex items-center gap-2"><i data-lucide="file-text" class="w-5 h-5 text-red-500"></i><span class="text-sm text-slate-700 truncate flex-1">車輛分期進件作業_v1.3.pdf</span></div>
+        <div class="flex items-center gap-2"><i data-lucide="file-text" class="w-5 h-5 text-red-500"></i><span class="text-sm text-slate-700 truncate flex-1">車輛分期進件作業_v1.3.pdf</span><span data-wm-note class="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0 whitespace-nowrap">檢視/下載將燒錄浮水印</span></div>
         <div class="flex gap-2 mt-3">
           <button class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
           <button onclick="replaceFile('ICSOP PDF')" class="write-only inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50"><i data-lucide="upload" class="w-3.5 h-3.5"></i>取代</button>
         </div>
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
-        <div class="text-xs font-medium text-slate-500 mb-2">OJT 實體簽到表（1 份，覆蓋式）</div>
-        <div class="flex items-center gap-2"><i data-lucide="file-text" class="w-5 h-5 text-red-500"></i><span class="text-sm text-slate-700 truncate flex-1">車輛分期進件作業_OJT簽到表.pdf</span></div>
+        <div class="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1.5">OJT 實體簽到表（1 份，覆蓋式）<span data-ojt-exception class="ojt-write text-[10px] px-1.5 py-0.5 rounded bg-primary-600 text-white whitespace-nowrap">主管／部門窗口亦可寫</span></div>
+        <div class="flex items-center gap-2"><i data-lucide="file-text" class="w-5 h-5 text-red-500"></i><span class="text-sm text-slate-700 truncate flex-1">車輛分期進件作業_OJT簽到表.pdf</span><span data-wm-note class="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0 whitespace-nowrap">檢視/下載將燒錄浮水印</span></div>
         <div class="flex gap-2 mt-3">
           <button class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
-          <button onclick="replaceFile('OJT 簽到表')" class="write-only inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50"><i data-lucide="upload" class="w-3.5 h-3.5"></i>取代</button>
+          <button onclick="replaceFile('OJT 簽到表')" data-ojt-upload aria-label="取代 OJT 簽到表" class="ojt-write inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 bg-white text-primary-700 text-xs hover:bg-primary-50"><i data-lucide="upload" class="w-3.5 h-3.5"></i>取代</button>
         </div>
       </div>
     </div>
@@ -861,7 +876,13 @@
 
   function jumpNode(){toast('info','開新視窗前往 DAG 畫布（11 / 12）以節點抽屜改派所屬節點');}
   // OQ-E09-10：.xls 與 ICSOP PDF 各自獨立，不自動轉檔
-  function replaceFile(kind){ if(kind==='ICSOP .xls'){ toast('success','已選擇新版 .xls；儲存後覆蓋原件並觸發 AI 重新抽取／重建索引（F030）。不影響 ICSOP PDF——如需同步更新呈現用 PDF 請另行上傳取代'); return; } toast('success','已選擇新檔以取代「'+kind+'」（覆蓋式，舊檔不再可存取）'); }
+  /* 🔴 AC-N29／AC-N31／AC-N32：OJT 重傳即覆蓋、不保留歷史版本；**稽核角色不對稱**——
+     主管／部門窗口之上傳寫 AUDIT_LOG（ATTACHMENT_UPLOAD · DOCUMENT_ATTACHMENT），
+     ICSOPAdmin 之相同操作**不寫**（OQ-E01-09 之既有落差，本輪不償還）。 */
+  function replaceFile(kind){ if(kind==='OJT 簽到表'){ const r=document.body.dataset.role;
+      toast('success','已選擇新檔以取代「OJT 簽到表」（覆蓋式、不保留歷史版本，舊檔不再可存取）'+((r==='supervisor'||r==='deptcontact')?'；已寫入稽核 ATTACHMENT_UPLOAD · DOCUMENT_ATTACHMENT':'。⚠ ICSOP 管理員之附件上傳目前不寫稽核（OQ-E01-09）'));
+      return; }
+    if(kind==='ICSOP .xls'){ toast('success','已選擇新版 .xls；儲存後覆蓋原件並觸發 AI 重新抽取／重建索引（F030）。不影響 ICSOP PDF——如需同步更新呈現用 PDF 請另行上傳取代'); return; } toast('success','已選擇新檔以取代「'+kind+'」（覆蓋式，舊檔不再可存取）'); }
 
   // ----- role -----
   function applyRoleDisable(){
@@ -876,10 +897,17 @@
         sc.placeholder=!draft.mkdept?'請先選擇制定部門':(none?'此部之下無處/室（留空）':'搜尋制定室別…'); }
     }
   }
+  /* ===== 🔴 逐字文案常數（D9 定稿；與 16-document-readonly 同一組措辭，勿讓兩頁漂移）=====
+     RO_NOTICE_FULL ＝**原句一字未改**，僅適用系統管理員（AC-N26：其對 OJT 仍唯讀）。
+     RO_NOTICE_OJT_EXCEPTION ＝主管／部門窗口專用（AC-N28 之 📝 要求就地改寫）。 */
+  const RO_NOTICE_FULL = '唯讀模式 · 此角色對所有文件欄位皆唯讀，附件可下載但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。';
+  const RO_NOTICE_OJT_EXCEPTION = '唯讀模式 · 此角色對 ICSOP 文件其餘 19 個欄位、ICSOP PDF、ICSOP 原始檔 .xls、使用表單與附錄皆唯讀（FIELD_WRITE_FORBIDDEN）；唯一例外為「OJT 實體簽到表」，可上傳或覆蓋，該次上傳會寫入稽核。全部附件皆可下載（下載一律燒錄浮水印並寫入稽核）。';
   function setRole(r){
     document.body.dataset.role=r;
     const blocked=(r==='user');
+    const ojtRole=(r==='supervisor'||r==='deptcontact');
     const ro=(r==='supervisor'||r==='deptcontact'||r==='sysadmin');
+    document.getElementById('roText').textContent = ojtRole ? RO_NOTICE_OJT_EXCEPTION : RO_NOTICE_FULL;
     document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
     document.getElementById('roBanner').classList.toggle('hidden',!ro);
     document.getElementById('roBanner').classList.toggle('flex',ro);

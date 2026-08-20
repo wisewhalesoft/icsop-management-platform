@@ -31,8 +31,8 @@
   .mono{font-family:'JetBrains Mono',monospace;}
   h2{scroll-margin-top:1rem;}
   .wm-demo{position:relative;overflow:hidden;}
-  .wm-layer{position:absolute;inset:0;pointer-events:none;display:flex;flex-wrap:wrap;transform:rotate(-45deg) scale(1.6);transform-origin:center;opacity:.12;}
-  .wm-layer span{color:#64748B;font-size:14px;white-space:nowrap;padding:22px 30px;font-weight:500;text-align:center;line-height:1.5;}
+  .wm-layer{position:absolute;inset:0;pointer-events:none;display:flex;flex-wrap:wrap;transform:rotate(-45deg) scale(1.6);transform-origin:center;opacity:.30;}
+  .wm-layer span{color:#334155;font-size:14px;white-space:nowrap;padding:22px 30px;font-weight:500;text-align:center;line-height:1.5;}
 </style>
 </head>
 <body class="text-slate-700">
@@ -106,6 +106,16 @@
         <div class="p-4 flex items-baseline gap-4"><span class="w-24 text-xs text-slate-400 mono">14 / regular</span><span class="text-sm">正文 Body — ICSOP 文件管理平台。</span></div>
         <div class="p-4 flex items-baseline gap-4"><span class="w-24 text-xs text-slate-400 mono">14 / mono</span><span class="text-sm mono text-slate-700">ICSOP-SRC-101-1-01 · 22345</span></div>
         <div class="p-4 flex items-baseline gap-4"><span class="w-24 text-xs text-slate-400 mono">12 / regular</span><span class="text-xs text-slate-500">輔助說明 Caption</span></div>
+      </div>
+      <!-- 🔴 2026-08-20 D9 delta（OQ-D9-12 選項 A ＝僅前台）：字級 tokens 表**逐字不變**（F021 AC-N61 ②），
+           下列說明為 additive 註記、不改動上表任何一列。 -->
+      <div class="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+        <i data-lucide="triangle-alert" class="w-4 h-4 shrink-0 mt-0.5"></i>
+        <div>
+          <div class="font-semibold">🔴 前台／後台字級自此分歧（2026-08-20 使用者裁決 · OQ-D9-12／OQ-D9-13）</div>
+          <div class="mt-1">上表為<strong>後台管理介面</strong>與設計系統之權威 tokens，<strong>逐字不變</strong>。<strong>前台三頁</strong>（<span class="mono">03-public-list</span>／<span class="mono">04-public-document-detail</span>／<span class="mono">05-public-viewer-watermark</span>）之字級<strong>各級距上移一階</strong>：<span class="mono">text-sm</span> → <span class="mono">text-base</span>（16px）、<span class="mono">text-xs</span> → <span class="mono">text-sm</span>（14px）；前台不得再出現 <span class="mono">text-xs</span> 或 <span class="mono">text-[Npx]</span> 之任意字級（F021 AC-N59）。</div>
+          <div class="mt-1">⚠ <strong>不得</strong>把本表改成單一新值——那會讓後台一起變大（AC-N61 ① 之防呆對象＝跨全專案 find-replace）。新增頁面時須先判斷「這是前台還是後台」再決定套用哪一組。</div>
+        </div>
       </div>
     </section>
 
@@ -230,7 +240,8 @@
     <!-- WATERMARK -->
     <section id="watermark">
       <h2 class="text-xl font-bold text-slate-900 mb-1">浮水印呈現（F020 · 已定案）</h2>
-      <p class="text-sm text-slate-500 mb-4">對角 45° 平鋪重複、opacity 0.12、slate-500、14px；格式與稽核快照一字不差一致。</p>
+      <p class="text-sm text-slate-500 mb-4">對角 45° 平鋪重複、<strong class="text-slate-700">色值 #334155 @ opacity 0.30</strong>、14px；格式與稽核快照一字不差一致。</p>
+      <p class="text-xs text-slate-500 mb-4 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-600"></i><span>🔴 <strong class="text-slate-700">F020 AC-N1／AC-N2（2026-08-20 定稿）</strong>：有效色 <span class="mono">rgb(193.8, 198.0, 204.0)</span>、與白底對比度 <span class="mono">≈ 1.716:1</span>（門檻 <span class="mono">≥ 1.70</span>）。<strong class="text-slate-700">此為定稿值，不得自行挑選近似色</strong>。前一版 <span class="mono">#64748B @ 0.12</span> 已作廢。</span></p>
       <div class="wm-demo bg-white border border-slate-200 rounded-lg h-64 flex items-center justify-center">
         <div class="wm-layer" id="wmLayer"></div>
         <div class="text-center relative z-10">
@@ -254,7 +265,8 @@
           </div>
         </dl>
       </div>
-      <p class="mt-2 text-xs text-slate-500 flex items-start gap-1.5"><i data-lucide="shield-check" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-600"></i><span>此收合規則於<strong class="text-slate-700">檢視器疊加</strong>、<strong class="text-slate-700">下載／列印 PDF 燒錄</strong>、<strong class="text-slate-700">稽核快照</strong>三者套用同一份組字邏輯，字串必須一字不差一致。</span></p>
+      <p class="mt-2 text-xs text-slate-500 flex items-start gap-1.5"><i data-lucide="shield-check" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-600"></i><span>此收合規則於<strong class="text-slate-700">PDF 內容層燒錄</strong>（前台檢視器所見位元組亦由此產生）、<strong class="text-slate-700">變更歷程／循環樹狀圖之 DOM 疊加</strong>、<strong class="text-slate-700">稽核快照</strong>三者套用同一份組字邏輯，字串必須一字不差一致。</span></p>
+      <p class="mt-2 text-xs text-slate-500 flex items-start gap-1.5"><i data-lucide="layers" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-600"></i><span>🔴 <strong class="text-slate-700">載體自 2026-08-20 起為 4 處</strong>（F020 AC-N2）：變更歷程疊加、循環樹狀圖預覽疊加、PDF 燒錄、prototype 權威（22／23）。<strong class="text-slate-700">前台文件檢視器之 DOM 疊加層已整段移除</strong>（AC-N7）——其位元組已於伺服器端燒錄（AC-N6），疊加層變成純冗餘；但變更歷程與循環樹狀圖<strong class="text-slate-700">渲染的是 HTML、沒有內容層可燒錄</strong>，疊加層是它們唯一的浮水印載體，<strong class="text-slate-700">必須保留</strong>（AC-N66）。</span></p>
     </section>
 
     <!-- ICONS -->
@@ -321,16 +333,26 @@
 
   // 浮水印權威格式（與 05/17/22/23 疊加寫法一致）：{員編}-{姓名}-{公司}-{部門}-{處/室}-{機密聲明}-{時間}，機密聲明自成一行
   // 公司名稱＝VW_HRCOMF.COMPFULLNM 全稱；部門＝部層完整名稱；處/室＝最細單位名稱（§8.2／§8.3）
-  const WM_DATA   = '22345-王小明-和潤企業股份有限公司-營運管理部-審查室';
+  /* ===== 🔴 F020 AC-N10～AC-N13（2026-08-20 D9 delta · OQ-D9-06 選項 A／OQ-D9-07）=====
+     浮水印之「公司名稱」欄改用**浮水印專用簡稱** COMPANY_SHORT_NAMES（AS → 和潤企業、AE → 和潤電能）；
+     🔒 **全稱三處消費點逐字不動**（AC-N13）：F003 帳號建立／編輯之公司下拉與清單公司欄、
+        GET /companies 之回應、F024 調閱歷程之「公司」欄與其 CSV 匯出值——一律仍為「和潤企業股份有限公司」。
+     🔒 INV-C2（AC-N11）：短稱表之鍵集合 ≡ 全稱表之鍵集合；新增公司時只登全稱會使浮水印公司欄靜默留空
+        （且因 §8.4 收合規則「看起來像正常留空」而不會被發現）——這是本裁決唯一的防漂移機制。
+     📝 被取代之原值逐字保留供追溯：「和潤企業股份有限公司」（VW_HRCOMF.COMPFULLNM 全稱）。 */
+  const COMPANY_FULL_NAMES  = { AS:'和潤企業股份有限公司', AE:'和潤電能' };  // 🔒 AC-N13：三處全稱消費點沿用此表，逐字不動
+  const COMPANY_SHORT_NAMES = { AS:'和潤企業',             AE:'和潤電能' };  // AC-N10：僅浮水印組字消費
+  const WM_COMPANY = COMPANY_SHORT_NAMES.AS;   // ⬅ 浮水印公司名稱欄＝簡稱（非全稱）
+  const WM_DATA   = `22345-王小明-${WM_COMPANY}-營運管理部-審查室`;
   const WM_NOTICE = '僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現';
   const WM_TIME   = '2026-07-16 14:32:08';
   document.getElementById('wmLayer').innerHTML = Array.from({length:18}).map(()=>`<span>${WM_DATA}<br>${WM_NOTICE}<br>${WM_TIME}</span>`).join('');
 
   // §8.4 無處/室者（掛於部層以上）：「處/室」欄留空並自動收合分隔符，不得出現連續分隔符 '--'
   const wmJoin = (...parts)=>parts.filter(p=>p!==''&&p!=null).join('-');
-  document.getElementById('wmSampleFull').textContent      = wmJoin('22345','王小明','和潤企業股份有限公司','營運管理部','審查室',WM_NOTICE,WM_TIME)+' (UTC+8)';
+  document.getElementById('wmSampleFull').textContent      = wmJoin('22345','王小明',WM_COMPANY,'營運管理部','審查室',WM_NOTICE,WM_TIME)+' (UTC+8)';
   // 示範 persona＝吳佩珊 21002（財務資訊本部／財會部，該部之下無處/室；同 08 帳號管理、17 稽核快照）
-  document.getElementById('wmSampleNoSection').textContent = wmJoin('21002','吳佩珊','和潤企業股份有限公司','財會部','',WM_NOTICE,WM_TIME)+' (UTC+8)';
+  document.getElementById('wmSampleNoSection').textContent = wmJoin('21002','吳佩珊',WM_COMPANY,'財會部','',WM_NOTICE,WM_TIME)+' (UTC+8)';
 
   function togglePw(){const i=document.getElementById('pwDemo');const ic=document.getElementById('pwIcon');const show=i.type==='password';i.type=show?'text':'password';ic.setAttribute('data-lucide',show?'eye-off':'eye');lucide.createIcons();}
 

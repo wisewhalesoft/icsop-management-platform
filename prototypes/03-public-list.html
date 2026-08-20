@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!-- 🔴 D9 delta · 前台字級整體上移一階（2026-08-20 使用者裁決 · OQ-D9-12 選項 A／OQ-D9-13 選項 A；F021 AC-N59～AC-N62）
+     本檔已套用：正文 text-sm → text-base（16px）、輔助說明（原 12px 級距）→ text-sm（14px）；原 11px 之任意字級一併收斂為 text-sm。
+     🔴 本檔不得再出現 12px caption 級距之 class，亦不得以任意像素值（text-方括號寫法）繞過（AC-N59 之 source-level 負向斷言）。
+     🔴 AC-N60 代表性節點：清單卡片之「內容摘要」文字節點含 text-base（data-summary）；頂部範圍說明句 #scopeNotice 含 text-sm（14px）。
+     🔒 適用範圍**僅前台三頁**（03／04／05）；後台 prototype 與 00-design-system 之字級 tokens 表**逐字不動**（AC-N61）。 -->
 <!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
      本檔已套用：「循環」篩選之選項值由名稱字串改為 lifecycleId、顯示改以 lifecycleDisplayName 呈現；詳情之「循環別」同步。
      規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
@@ -61,7 +66,7 @@
     <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
     <span class="font-bold text-slate-900 truncate">ICSOP 文件瀏覽</span>
     <div class="ml-auto flex items-center gap-3">
-      <div class="hidden sm:flex items-center gap-2 text-sm text-slate-500">
+      <div class="hidden sm:flex items-center gap-2 text-base text-slate-500">
         <i data-lucide="user" class="w-4 h-4"></i><span>王小明</span>
         <span class="text-slate-300">·</span><span id="hdrDept">營運管理部 / 審查室</span>
       </div>
@@ -77,9 +82,9 @@
     <div class="relative flex-1">
       <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
       <input id="kw" oninput="render()" type="search" placeholder="搜尋文件編號或名稱…"
-             class="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600" />
+             class="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 text-base bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600" />
     </div>
-    <button onclick="openSheet()" class="lg:hidden relative px-3 py-2.5 rounded-lg border border-slate-300 bg-white text-sm flex items-center gap-1.5">
+    <button onclick="openSheet()" class="lg:hidden relative px-3 py-2.5 rounded-lg border border-slate-300 bg-white text-base flex items-center gap-1.5">
       <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>篩選<span id="filterDot" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary-600"></span>
     </button>
   </div>
@@ -90,31 +95,31 @@
   <div class="hidden lg:block mb-4">
     <div id="filterBar" class="grid grid-cols-3 gap-3"></div>
     <div class="flex items-center gap-3 mt-2.5">
-      <button id="clearBtnD" onclick="clearFilters()" class="hidden px-3 py-2 rounded-lg text-sm text-primary-600 hover:bg-primary-50">清除篩選</button>
-      <span class="ml-auto text-sm text-slate-500" id="countText"></span>
+      <button id="clearBtnD" onclick="clearFilters()" class="hidden px-3 py-2 rounded-lg text-base text-primary-600 hover:bg-primary-50">清除篩選</button>
+      <span class="ml-auto text-base text-slate-500" id="countText"></span>
     </div>
   </div>
 
   <!-- 🟢 F041 已定案 · 原型示範控制（非正式 UI；實作時不得移植此區塊） -->
-  <div data-prototype-demo="true" class="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 mb-3">
+  <div data-prototype-demo="true" class="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-base text-emerald-800 mb-3">
     <i data-lucide="badge-check" class="w-4 h-4 shrink-0 mt-0.5"></i>
     <div class="flex-1 min-w-0">
       <div><b>🟢 已定案（F041 · 2026-08-11 人類閘門通過）</b>：一般使用者子分類「業務／其他」。下方切換器<b>僅供原型示範</b>不同子分類之視角，<b>非正式 UI</b>。</div>
       <div class="mt-2 flex flex-wrap items-center gap-2">
-        <label for="demoSubtype" class="text-xs shrink-0">示範視角</label>
-        <select id="demoSubtype" onchange="setViewer(this.value)" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-700">
+        <label for="demoSubtype" class="text-sm shrink-0">示範視角</label>
+        <select id="demoSubtype" onchange="setViewer(this.value)" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-base text-slate-700">
           <option value="other">一般使用者 · 其他（現行行為，預設）</option>
           <option value="business">一般使用者 · 業務（限縮於使用部門）</option>
           <option value="orphan">一般使用者 · 業務（孤兒帳號 · 無部門資料）</option>
         </select>
       </div>
-      <div id="viewerNote" class="mt-1.5 text-xs"></div>
+      <div id="viewerNote" class="mt-1.5 text-sm"></div>
     </div>
   </div>
 
   <!-- info note — 🟢 F041：文案依子分類切換（容器/字級/色彩沿用既有樣式，未新增元件）
        其他子分類＝既有文案逐字不變；業務子分類＝2026-08-11 人類裁決新增之專屬文案（見 SCOPE_NOTICE_*） -->
-  <div class="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-xs text-primary-700 mb-4">
+  <div class="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-sm text-primary-700 mb-4">
     <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
     <span id="scopeNotice"></span>
   </div>
@@ -123,7 +128,7 @@
   <section id="pinnedWrap" class="mb-6">
     <div class="flex items-center gap-2 mb-2">
       <i data-lucide="pin" class="w-4 h-4 text-primary-600"></i>
-      <h2 class="text-sm font-semibold text-slate-700">您部門相關文件 · <span class="text-slate-400 font-normal">營運管理部 / 審查室</span></h2>
+      <h2 class="text-base font-semibold text-slate-700">您部門相關文件 · <span class="text-slate-400 font-normal">營運管理部 / 審查室</span></h2>
     </div>
     <div id="pinnedList" class="space-y-2.5"></div>
   </section>
@@ -132,7 +137,7 @@
   <section>
     <div class="flex items-center gap-2 mb-2">
       <i data-lucide="list" class="w-4 h-4 text-slate-400"></i>
-      <h2 class="text-sm font-semibold text-slate-700">其他文件 · <span class="text-slate-400 font-normal">依編號降冪</span></h2>
+      <h2 class="text-base font-semibold text-slate-700">其他文件 · <span class="text-slate-400 font-normal">依編號降冪</span></h2>
     </div>
     <div id="restList" class="space-y-2.5"></div>
   </section>
@@ -141,13 +146,13 @@
   <div id="emptyState" class="hidden text-center py-16">
     <i data-lucide="inbox" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
     <p class="text-slate-500">查無符合結果</p>
-    <p class="text-sm text-slate-400 mt-1">請調整搜尋關鍵字或篩選條件</p>
-    <button onclick="clearFilters()" class="mt-4 px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">清除篩選</button>
+    <p class="text-base text-slate-400 mt-1">請調整搜尋關鍵字或篩選條件</p>
+    <button onclick="clearFilters()" class="mt-4 px-4 py-2 rounded-md border border-slate-300 text-base hover:bg-slate-50">清除篩選</button>
   </div>
 
   <!-- pagination -->
-  <div id="pager" class="flex items-center justify-between mt-6 text-sm text-slate-500">
-    <span id="hiddenNote" class="text-xs text-slate-400"></span>
+  <div id="pager" class="flex items-center justify-between mt-6 text-base text-slate-500">
+    <span id="hiddenNote" class="text-sm text-slate-400"></span>
     <div class="flex items-center gap-1">
       <button class="w-8 h-8 rounded border border-slate-200 bg-white hover:bg-slate-50">‹</button>
       <button class="w-8 h-8 rounded bg-primary-600 text-white">1</button>
@@ -168,8 +173,8 @@
   <div class="p-4 space-y-4">
     <div id="filterSheetBody" class="space-y-4"></div>
     <div class="flex gap-2 pt-2">
-      <button onclick="clearFilters();closeSheet()" class="flex-1 py-2.5 rounded-lg border border-slate-300 text-sm">清除</button>
-      <button onclick="closeSheet()" class="flex-1 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium">套用</button>
+      <button onclick="clearFilters();closeSheet()" class="flex-1 py-2.5 rounded-lg border border-slate-300 text-base">清除</button>
+      <button onclick="closeSheet()" class="flex-1 py-2.5 rounded-lg bg-primary-600 text-white text-base font-medium">套用</button>
     </div>
   </div>
 </div>
@@ -329,21 +334,21 @@
     const id=`${scope}_${f.key}`;
     if(f.type==='select'){
       return `<div>
-        <label for="${id}" class="block text-[11px] font-medium text-slate-500 mb-1">${f.label}</label>
-        <select id="${id}" aria-label="${f.label}" onchange="pickSelect('${f.key}',this.value)" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-600">
+        <label for="${id}" class="block text-sm font-medium text-slate-500 mb-1">${f.label}</label>
+        <select id="${id}" aria-label="${f.label}" onchange="pickSelect('${f.key}',this.value)" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-base focus:outline-none focus:ring-2 focus:ring-primary-600">
           ${f.opts().map(o=>`<option value="${esc(o)}" ${FILTER[f.key]===o?'selected':''}>${esc(o)}</option>`).join('')}
         </select></div>`;
     }
     return `<div>
-      <label for="${id}_input" class="block text-[11px] font-medium text-slate-500 mb-1">${f.label}</label>
+      <label for="${id}_input" class="block text-sm font-medium text-slate-500 mb-1">${f.label}</label>
       <div class="relative">
         <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
         <input id="${id}_input" aria-label="${f.label}" role="combobox" aria-expanded="false" aria-autocomplete="list" autocomplete="off" placeholder="全部"
                oninput="comboFilter('${f.key}','${scope}')" onfocus="comboFilter('${f.key}','${scope}')" onblur="comboClose('${f.key}','${scope}')"
                value="${esc(FILTER[f.key]?optText(f.key,FILTER[f.key]):'')}"
-               class="w-full pl-8 pr-7 py-2 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
+               class="w-full pl-8 pr-7 py-2 rounded-lg border border-slate-300 text-base bg-white focus:outline-none focus:ring-2 focus:ring-primary-600" />
         <button id="${id}_clear" onclick="clearOne('${f.key}')" aria-label="清除${f.label}" class="${FILTER[f.key]?'':'hidden'} absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400"><i data-lucide="x" class="w-3 h-3"></i></button>
-        <div id="${id}_list" class="hidden absolute z-30 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"></div>
+        <div id="${id}_list" class="hidden absolute z-30 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-base"></div>
       </div></div>`;
   }
   function buildFilters(){
@@ -368,7 +373,7 @@
 
   function statusPill(s){
     const map={'有效':['#047857','#D1FAE5'],'失效':['#B45309','#FEF3C7'],'作廢':['#B91C1C','#FEE2E2']};
-    const [t,b]=map[s];return `<span class="px-2 py-0.5 rounded-full text-xs font-medium" style="color:${t};background:${b}">${s}</span>`;
+    const [t,b]=map[s];return `<span class="px-2 py-0.5 rounded-full text-sm font-medium" style="color:${t};background:${b}">${s}</span>`;
   }
   function esc(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
 
@@ -384,19 +389,19 @@
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
-            <span class="mono text-xs text-slate-500">${d.n}</span>${statusPill(d.status)}
+            <span class="mono text-sm text-slate-500">${d.n}</span>${statusPill(d.status)}
           </div>
           <h3 class="font-semibold text-slate-900 mt-1 leading-snug">${esc(d.name)}</h3>
         </div>
         <i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 shrink-0"></i>
       </div>
-      <dl class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 text-xs">
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 text-sm">
         <div><dt class="text-slate-400 inline">制定公司：</dt><dd class="text-slate-600 inline">${esc(d.company)}</dd></div>
         <div><dt class="text-slate-400 inline">制定部門：</dt><dd class="text-slate-600 inline">${esc(d.dept)}</dd></div>
         <div><dt class="text-slate-400 inline">制定室別：</dt><dd class="text-slate-600 inline">${d.section?esc(d.section):'<span class="text-slate-300" title="此部之下無處/室，制定組織掛於部層">—</span>'}</dd></div>
         <div><dt class="text-slate-400 inline">版次：</dt><dd class="text-slate-600 inline mono">${esc(d.edition)}</dd></div>
         <div class="col-span-2"><dt class="text-slate-400 inline">公告日期：</dt><dd class="text-slate-600 inline mono">${d.date}</dd></div>
-        ${d.summary?`<div class="col-span-2"><dt class="text-slate-400 inline">內容摘要：</dt><dd class="text-slate-500 inline">${esc(d.summary)}</dd></div>`:''}
+        ${d.summary?`<div class="col-span-2 text-base"><dt class="text-slate-400 inline">內容摘要：</dt><dd class="text-slate-500 inline text-base" data-summary>${esc(d.summary)}</dd></div>`:''}
       </dl>
     </article>`;
   }
