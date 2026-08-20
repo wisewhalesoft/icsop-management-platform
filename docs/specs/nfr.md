@@ -1,9 +1,9 @@
 ---
 spec-id: nfr
 title: 非功能需求（Non-Functional Requirements）
-version: 1.2
-date: 2026-08-18
-status: Draft（v1.2 新增 [#security](#security) AC2 之 `iss` 釘死子條與 [#deployment](#deployment) `AC2-1`，對應 F001 `AC-E1`～`AC-E15` Azure AD endpoint host 覆寫 delta）
+version: 1.3
+date: 2026-08-20
+status: Draft（v1.2 新增 [#security](#security) AC2 之 `iss` 釘死子條與 [#deployment](#deployment) `AC2-1`，對應 F001 `AC-E1`～`AC-E15` Azure AD endpoint host 覆寫 delta；**v1.3 就地改寫 [#watermark](#watermark) 三處，對應 2026-08-20 D9 delta 之使用者裁決：① 視覺樣式由 `slate-500`／`opacity 0.12` 改為 `#334155`／`opacity 0.30`（量化目標＝與白底對比度 ≥ 1.7:1，`OQ-D9-01`／`OQ-D9-31`）；② AC3 情境 1「文件檢視器**疊加**」改為「文件檢視器所見之**已燒錄 PDF 位元組**」（`OQ-D9-32`）；③ AC3 情境 3 加註「樹狀圖預覽之 DOM 疊加層**未被移除**」之範圍界線。**格式、欄位順序與一致性要求本身一字未變、不新增 NFR 條目**）
 ---
 
 # 非功能需求（NFR）
@@ -113,13 +113,13 @@ status: Draft（v1.2 新增 [#security](#security) AC2 之 `iss` 釘死子條與
 - **AC1 伺服器端產生**：內容於伺服器端動態組裝，前端不可自組或竄改。
 - **AC2 PDF 實際燒錄**：下載/列印之 PDF 將浮水印文字嵌入內容層（非僅顯示樣式），脫離系統仍存在。
 - **AC3 格式一致（涵蓋範圍已擴充，OQ-NFR007c 定案 2026-07-17）**：以下**四種情境**之浮水印格式、欄位順序、固定機密聲明（另起一行呈現）**完全一致**，且與稽核快照字串一致：
-  1. **文件檢視器疊加**（US-053／[F020](features/F020-watermark.md)）
+  1. 🛑 ~~**文件檢視器疊加**（US-053／[F020](features/F020-watermark.md)）~~ → 🔴 **2026-08-20 就地改寫（`OQ-D9-32`，使用者裁決；原條文逐字保留供追溯）＝ 文件檢視器所見之 PDF 位元組（伺服器端已燒錄；US-053／[F020](features/F020-watermark.md) `AC-N6`）**。檢視器自本日起**不再疊加任何 DOM 圖層**（[F020](features/F020-watermark.md#d9-watermark-delta) `AC-N7`），改由內容層燒錄承載；**本情境之格式一致性要求一字未變**。
   2. **文件下載/列印 PDF 燒錄**（US-054／[F020](features/F020-watermark.md)）
-  3. **循環樹狀圖預覽之檢視疊加＋下載/列印燒錄**（US-025／[F036](features/F036-lifecycle-tree-preview.md)）
+  3. **循環樹狀圖預覽之檢視疊加＋下載/列印燒錄**（US-025／[F036](features/F036-lifecycle-tree-preview.md)）<br>⚠ **本情境之「檢視疊加」為 DOM 疊加層，2026-08-20 起仍然存在、未被移除**——該頁渲染 HTML 而非 PDF，無內容層可燒錄，疊加層是其**唯一**浮水印載體（[F020](features/F020-watermark.md#d9-watermark-delta) `AC-N66`）。[F037](features/F037-document-change-history.md) 變更歷程 diff 之疊加同理。
   4. **循環樹狀圖變更歷程之新舊版下載燒錄**（US-063／[F038](features/F038-lifecycle-tree-change-history.md)）
 - **AC4 時間即時**：「當下時間」為實際操作當下之伺服器時間，不同次產生不同時間戳（四情境皆適用）。
 - **AC5 防繞過**：以合理技術手段降低移除浮水印圖層風險；完全防截圖/拍照非本系統可保證，屬已知限制。
-- **視覺樣式（OQ-NFR007a 定案）**：對角 45° 平鋪重複、`opacity 0.12`、`slate-500`、字級 14px、`pointer-events:none`。
+- **視覺樣式（OQ-NFR007a 定案；🔴 2026-08-20 就地改寫，`OQ-D9-01`／`OQ-D9-02`／`OQ-D9-31` 使用者裁決）**：對角 45° 平鋪重複、**`opacity 0.30`**、**`#334155`（slate-700）**、字級 14px、`pointer-events:none`。<br>📝 **被推翻之原值逐字保留供追溯**：「對角 45° 平鋪重複、`opacity 0.12`、`slate-500`、字級 14px、`pointer-events:none`。」<br>📌 **量化驗收目標＝與純白底之對比度 ≥ 1.7:1**（本專案專用數值門檻，非 WCAG 條文值；`#334155` @ `0.30` 實算 ≈ 1.716:1）。**逐字契約與合成／亮度公式見 [F020](features/F020-watermark.md#d9-watermark-delta) `AC-N1`～`AC-N3`**（其中 `AC-N2` 為定稿值權威表）。<br>⚠ **字級 14px 不變**，且**不受 [F021](features/F021-rwd-responsive.md) 前台字級 delta 影響**（`AC-N62`）。
 - **時區與時間格式（OQ-NFR007b 定案）**：`YYYY-MM-DD HH:mm:ss (UTC+8)`；檢視器疊加、PDF 燒錄、稽核快照三者字串完全一致。
 
 ## 容器化部署與環境管理 {#deployment}

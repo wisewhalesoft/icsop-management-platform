@@ -2,7 +2,7 @@
 Priority: P0-MVP | Status: 部分（unit 綠；快照/稽核/端點完成；**CJK 燒錄字型已補**（@pdf-lib/fontkit + Noto Sans TC 嵌入，asciiSafe '□'→'?' bug 修正，見 implementation-log/F036-impl.md）；**<3s 燒錄計時已補 int 迴歸測試**（`test/int/watermark-burn-timing.itest.ts`，TS-HD-WM-001/002 取代 TS-F020-028 佔位；暖機後 10 頁 CJK 燒錄本機實測 ≈250ms ≪ 3s NFR，門檻設 8000ms 迴歸警戒線）；真實中文 PDF 視覺/位元組驗證仍 [integration]） | Last Updated: 2026-07-24
 Epic/Story: E06 / US-053, US-054
 
-> 合併理由：網頁檢視器疊加（US-053）與下載/列印 PDF 燒錄（US-054）共用同一浮水印內容產生邏輯與稽核觸發，須格式完全一致。
+> 合併理由：網頁檢視器（US-053）與下載/列印 PDF 燒錄（US-054）共用同一浮水印內容產生邏輯與稽核觸發，須格式完全一致。<br>📝 **2026-08-20 措辭更正（`OQ-D9-32`）**：原文為「網頁檢視器**疊加**（US-053）」——自本日起檢視器不再疊加 DOM 圖層，改由內容層燒錄承載，故「疊加」二字已移除；**US-053 之需求本體（使用者於檢視器看得到浮水印）未變**。
 > **🟢 2026-08-11 restrictive delta（APPROVED，人類閘門通過）**：「業務」子分類之一般使用者，其檢視器／PDF 代理／下載／列印之**授權檢查層**須加入「使用部門相符」判斷。規則權威＝[F041](F041-user-subtype-business-scope.md)；**本 delta 之 AC 編號採 `AC-U#`**。⚠ 本 delta 影響的是**授權檢查層**（是否允許執行），**不改變浮水印內容產生層**——[NFR-007](../nfr.md#watermark) 之字串格式、欄位取值規則、三處一致性要求**完全不變**。
 > **🔴 2026-08-16 CHANGE delta（使用者裁決；缺失／變更 delta 第 5b 項 ＋ 同日第二次閘門之 `OQ-D18-25`）——前台下載燒錄範圍擴張至附錄與使用表單**：前台文件詳情頁下載之 **PDF 格式附錄**與 **PDF 格式使用表單**自本日起**必須燒錄浮水印**（分別推翻 [F039](F039-appendix-management.md#front-burn-delta) 與 `OQ-E05-03`／[F018](F018-usage-form-management.md#front-burn-delta) 之既有定案，權威改寫落於各該檔；本檔為燒錄能力側之宣告）；非 PDF 格式維持原檔並於 UI 明示（策略 A）。**本 delta 之 AC 編號採 `AC-D#`**（D＝2026-08-16 defect delta）。
 > 🛑 ~~**後台一律維持 RAW、不燒錄**——[F026](F026-role-field-matrix.md) 之 **OQ-FM-01 人類裁決（2026-07-24）於 2026-08-16 經再次確認為維持有效、不得推翻**；使用者已明確裁定「只做前台，後台維持 RAW」（缺失 delta 第 12／13／15 項**不做**）。前台/後台之分流以 **AC-D3** 之可觀測行為契約鎖定。~~<br>🔴 **本行已於 2026-08-20 由 `OQ-D9-08`（選項 B）全面推翻**（原文逐字保留於上，供追溯）。**現行定案＝後台下載一律燒錄浮水印、一律寫調閱稽核、無例外角色**（含 ICSOPAdmin，`OQ-D9-09` 選項 B＝不保留任何原始檔下載路徑）。權威見 [§後台燒錄範圍 delta](#backend-burn-delta)。**`AC-D3` 之「前台/後台分流」與 `AC-D4` 之「後台 RAW 回歸鎖定」已同步就地改寫。**
@@ -12,17 +12,18 @@ Epic/Story: E06 / US-053, US-054
 > ---
 >
 > **🔴 2026-08-20 D9 delta（缺失／變更 delta 9 項之第 1／2／3／4／5 項；來源 [stories/2026-08-20-defect-delta-9.md](../../stories/2026-08-20-defect-delta-9.md)，人類閘門逐題裁決見 [open-questions §D9](../open-questions.md#d9--2026-08-20-缺失變更-delta來源stories2026-08-20-defect-delta-9md)）——本 delta 之 AC 編號採 `AC-N#`**（N＝New delta 2026-08-20，與既有 `AC-D#`／`AC-E#`／`AC-U#` 批次區隔、不重號）。四個子題落於本檔：
-> - **#1 浮水印顏色加深**（`OQ-D9-01`→選項 C：色值轉深＋提高不透明度，並訂量化目標＝**與白底對比度 ≥ 3:1**；`OQ-D9-02`→選項 B：**5 處全動**）⇒ [§D9 浮水印呈現 delta](#d9-watermark-delta) `AC-N1`～`AC-N3`。
-> - **#2 移除檢視器套件之下載／列印鈕（無浮水印漏洞）**（`OQ-D9-03`→選項 A：認定為**安全缺陷 BUG-IMPL**；`OQ-D9-04`→選項 A：改採 **pdf.js／react-pdf 自繪 canvas 渲染**取代 `<iframe>`，使用者已明確接受新增前端相依之代價）⇒ `AC-N4`～`AC-N7`。
+> - **#1 浮水印顏色加深**（`OQ-D9-01`→選項 C：色值轉深＋提高不透明度，並訂量化目標；🔴 **原「≥ 3:1」門檻已於 2026-08-20 同日由使用者調整為「≥ 1.7:1」**，見 `OQ-D9-31`；`OQ-D9-02`→選項 B：**5 處全動**——⚠ 其中「前台檢視器疊加」一處已因 `OQ-D9-32` 整個移除，實際落地為 **4 處**，見 `AC-N2`）⇒ [§D9 浮水印呈現 delta](#d9-watermark-delta) `AC-N1`～`AC-N3`。
+> - **#2 移除檢視器套件之下載／列印鈕（無浮水印漏洞）**（`OQ-D9-03`→選項 A：認定為**安全缺陷 BUG-IMPL**；`OQ-D9-04`→選項 A：改採 **pdf.js／react-pdf 自繪 canvas 渲染**取代 `<iframe>`，使用者已明確接受新增前端相依之代價；🔴 `OQ-D9-32`→**`/public/documents/:id/pdf` 改回傳已燒錄位元組**，且**前台檢視器之 DOM 疊加層一併移除** ⇒ 檢視器自此為**單層浮水印＝只靠 PDF 內容層燒錄**）⇒ `AC-N4`～`AC-N7` ＋ `AC-N66`～`AC-N68`。<br>🔴 **範圍界線（最易做錯，逐字遵守）**：「移除疊加層」**僅限前台檢視器 `PublicViewerPage`**；`ChangeHistoryPage` 與 `LifecycleTreePreviewPage` 兩處疊加層**必須保留**並照樣加深色值——該兩頁渲染的是 **HTML 而非 PDF、沒有內容層可燒錄，DOM 疊加層是其唯一浮水印載體**（`AC-N7` 負向／`AC-N66` 正向雙向斷言）。
 > - **#4 縮放模糊**（`OQ-D9-05`→選項 A：與 #2 同批，同根因同一次架構變更）⇒ `AC-N8`／`AC-N9`。
 > - **#3 浮水印公司簡稱**（`OQ-D9-06`→選項 A：**新增浮水印專用簡稱常數**，全稱三處消費點逐字不動，並訂 **INV-C2** 鎖定鍵集合恆等；`OQ-D9-07`→逐一提供字面：`AS`→`和潤企業`、`AE`→`和潤電能`）⇒ `AC-N10`～`AC-N13`。
 > - 🔴 **#5 後台全面燒錄**（`OQ-D9-08`→**選項 B：全面推翻，四類皆燒錄**）⇒ [§後台燒錄範圍 delta](#backend-burn-delta) `AC-N14`～`AC-N21`。
 >
+> **🔴 2026-08-20 同日第二輪（spec-writer 提報之 `OQ-D9-28`～`OQ-D9-33` 六題已全數裁決；AC 編號沿用 `AC-N#` 接續 `AC-N65` 往下編）**：`OQ-D9-31`（**使用者**）＝**推翻 spec-writer 定稿之 3:1 門檻，降為 ≥ 1.7:1、定稿值 `#334155` @ `opacity 0.30`**（`AC-N1`／`AC-N2` 已就地改寫，原值逐字保留）｜`OQ-D9-32`（**使用者**）＝**半採納半推翻**——`/pdf` 改燒錄（採納）、**DOM 疊加層移除**（推翻原「雙層保留」；`AC-N7` 已反轉）｜`OQ-D9-33`（lead）＝採納原案，`AC-N20` 之 `[ASSUMPTION]` 已解除。
 > 🔴 **本 delta 推翻 `OQ-FM-01`（2026-07-24）與 `OQ-D18-01`（2026-08-16）**：「後台維持 RAW、不接線 PdfBurner」之定案**自 2026-08-20 起正式失效**。本檔上方兩行「後台一律維持 RAW」之宣告與 `AC-D3`／`AC-D4`／`AC-D7` ④ 皆已就地改寫，**被推翻之原條文逐字保留供追溯**。
 > 📌 **「跨路徑共用之燒錄能力」之消費者自本日起擴為前後台全部下載路徑**（見 [§後台燒錄範圍 delta](#backend-burn-delta) 之端點清單）。
 
 ## Description
-使用者於網頁檢視器開啟文件時疊加浮水印；下載/列印時於伺服器端將浮水印**燒錄**進 PDF 內容層。浮水印格式（權威，[NFR-007](../nfr.md#watermark)）：`{員工編號}-{姓名}-{公司名稱}-{部門}-{處/室}-{僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現}-{當下時間}`，由伺服器端當下動態產生；其中「僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現」為固定機密聲明字串（非變數）；於檢視器疊加與 PDF 燒錄呈現時，該機密聲明**另起一行**（獨立一行）顯示，惟線性稽核快照字串之欄位順序不變。三種操作（查看/下載/列印）皆觸發稽核（F023）。
+🔴 **2026-08-20 就地改寫（`OQ-D9-32`，使用者裁決）**：使用者於網頁檢視器開啟文件時，**其所見之 PDF 位元組已於伺服器端燒錄浮水印**（`AC-N6`），檢視器**不再疊加任何 DOM 浮水印圖層**（`AC-N7`）；下載/列印時同樣於伺服器端將浮水印**燒錄**進 PDF 內容層。<br>📝 **被推翻之原條文逐字保留供追溯**：「使用者於網頁檢視器開啟文件時疊加浮水印；下載/列印時於伺服器端將浮水印**燒錄**進 PDF 內容層。」<br>⚠ **僅前台檢視器改為單層**；[F036](F036-lifecycle-tree-preview.md) 樹狀圖預覽與 [F037](F037-document-change-history.md)／[F038](F038-lifecycle-tree-change-history.md) 變更歷程之 DOM 疊加層**維持不變**（`AC-N66`）。浮水印格式（權威，[NFR-007](../nfr.md#watermark)）：`{員工編號}-{姓名}-{公司名稱}-{部門}-{處/室}-{僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現}-{當下時間}`，由伺服器端當下動態產生；其中「僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現」為固定機密聲明字串（非變數）；於檢視器疊加與 PDF 燒錄呈現時，該機密聲明**另起一行**（獨立一行）顯示，惟線性稽核快照字串之欄位順序不變。三種操作（查看/下載/列印）皆觸發稽核（F023）。
 
 ## 浮水印欄位取值規則（契約 §8，定案 2026-07-20）
 
@@ -49,14 +50,14 @@ Epic/Story: E06 / US-053, US-054
 - **「處/室」欄留空，並自動收合分隔符**，呈現為
   `{員工編號}-{姓名}-{公司名稱}-{部門}-{固定機密聲明}-{當下時間}`
 - **不得出現連續分隔符**（如 `…-營運管理部--僅供內部使用…`）。
-- **檢視器疊加、PDF 燒錄、稽核快照三者必須套用同一收合規則**，確保 [NFR-007](../nfr.md#watermark) 之字串一致性不被破壞。
+- 🔴 **2026-08-20 就地改寫（`OQ-D9-32`）**：**PDF 燒錄（含檢視器所見之位元組）與稽核快照必須套用同一收合規則**，確保 [NFR-007](../nfr.md#watermark) 之字串一致性不被破壞。<br>📝 **被推翻之原條文逐字保留供追溯**：「**檢視器疊加、PDF 燒錄、稽核快照三者必須套用同一收合規則**」——「檢視器疊加」已不存在（`AC-N7`），其角色由「檢視器所見之已燒錄位元組」承接，**收合規則本身一字未改**。<br>⚠ [F036](F036-lifecycle-tree-preview.md)／[F038](F038-lifecycle-tree-change-history.md) 之樹狀圖疊加仍為第三個必須套用同一規則之載體（`AC-N66`）。
 
 ## Preconditions
 - 使用者已登入（F001）；文件已有 ICSOP PDF（F016）；身分/部門/公司資料來自 F004 同步結果。
 
 ## Main Flow
-1. 讀取當下登入身分與伺服器時間，依上述取值規則（含部層推導、`DESC_CHI` 最末段擷取、空欄收合）組裝浮水印快照；**該快照為檢視器疊加、PDF 燒錄、稽核紀錄之唯一共同來源**。
-2. 網頁檢視（VIEW）：回傳疊加浮水印圖層之預覽，不提供「另存無浮水印原檔」途徑。
+1. 讀取當下登入身分與伺服器時間，依上述取值規則（含部層推導、`DESC_CHI` 最末段擷取、空欄收合）組裝浮水印快照；**該快照為 PDF 燒錄（含檢視器所見位元組）、樹狀圖疊加、稽核紀錄之唯一共同來源**。<br>📝 **2026-08-20 就地改寫（`OQ-D9-32`）**，原文逐字保留：「**該快照為檢視器疊加、PDF 燒錄、稽核紀錄之唯一共同來源**」。
+2. 網頁檢視（VIEW）：🔴 **2026-08-20 就地改寫（`OQ-D9-32`）**——回傳**已燒錄浮水印之 PDF 位元組**供前端自繪渲染（`AC-N6`），**不疊加任何 DOM 圖層**（`AC-N7`），亦不提供「另存無浮水印原檔」途徑。<br>📝 **被推翻之原條文逐字保留供追溯**：「網頁檢視（VIEW）：回傳疊加浮水印圖層之預覽，不提供「另存無浮水印原檔」途徑。」
 3. 下載/列印（DOWNLOAD/PRINT）：取原始 PDF → 伺服器端以 PDF 處理套件燒錄浮水印文字圖層 → 回傳檔案（浮水印內嵌內容層）。
 4. 以同一份身分/時間快照寫入稽核（F023），操作類型明確區分 VIEW/DOWNLOAD/PRINT。
 
@@ -71,14 +72,14 @@ Epic/Story: E06 / US-053, US-054
 - 一人多帳號：以當次登入之 `USERID` 對應之 `EMPNO` 呈現，不同帳號浮水印之員工編號可能不同，屬預期行為。
 - 同使用者相隔時間兩次開啟同文件：時間戳記不同（各自當下伺服器時間）。
 - 未登入直接存取檢視器/下載網址：拒絕並導回登入頁。
-- 開發工具移除浮水印 DOM：屬 NFR-007 已知限制，非本 feature 完全防禦範圍。
+- 開發工具移除浮水印 DOM：屬 NFR-007 已知限制，非本 feature 完全防禦範圍。<br>🔴 **2026-08-20 範圍縮減（`OQ-D9-32`）**：本項自本日起**不再適用於前台文件檢視器**——該頁已無 DOM 疊加層，浮水印存在於 **PDF 內容層**，開發工具移不掉。本項**僅餘**適用於 [F036](F036-lifecycle-tree-preview.md) 樹狀圖預覽與 [F037](F037-document-change-history.md)／[F038](F038-lifecycle-tree-change-history.md) 變更歷程之 HTML 疊加（該三頁無內容層可燒錄，見 `AC-N66`）。
 - 未授權角色直接呼叫下載 API：依 F025 拒絕。
 
 ## Postconditions
 - 取得之檔案脫離系統後浮水印仍存在；稽核內容與浮水印一致。
 
 ## Acceptance Criteria
-- Given 一般使用者開啟文件, When 檢視器載入, Then 疊加浮水印顯示員工編號/姓名/公司名稱/部門/處室/固定機密聲明/時間（伺服器端動態產生，格式見上）。
+- 🛑 ~~Given 一般使用者開啟文件, When 檢視器載入, Then 疊加浮水印顯示員工編號/姓名/公司名稱/部門/處室/固定機密聲明/時間（伺服器端動態產生，格式見上）。~~<br>🔴 **2026-08-20 由 `OQ-D9-32`（使用者裁決）推翻並就地改寫，原條文逐字保留於左供追溯**：Given 一般使用者開啟文件, When 檢視器載入, Then 其所見之 PDF **內容層**已燒錄浮水印，顯示員工編號/姓名/公司名稱/部門/處室/固定機密聲明/時間（伺服器端動態產生，格式見上）；**頁面 DOM 中不存在任何浮水印疊加層**（`AC-N7`）。<br>🔴 **本條原載體（`data-testid="watermark-overlay"`／`watermark-text` 之 DOM 斷言）自本日起失效**；**新載體＝ `AC-N6` 之 `PdfBurner.burnPdf` spy 斷言 ＋ `AC-N67` 之頁尾格式字幕斷言**。⚠ **既有測試須就地改寫為新行為之背書、不得刪除**。
 - Given 相隔時間兩次開啟同文件, When 各自產生浮水印, Then 時間戳記不同。
 - Given 使用者下載文件, When 下載完成, Then PDF 內容層已燒錄浮水印（非僅前端疊加）。
 - Given 使用者列印, When 產生列印用 PDF, Then 內容層同樣已燒錄浮水印。
@@ -89,7 +90,7 @@ Epic/Story: E06 / US-053, US-054
 - Given 使用者部門代碼為 `JAC00`（處室層）, When 產生浮水印, Then 「部門」為部層 `JA000` 之 `DESC_FULL`（營運管理部）、「處/室」為 `DESC_CHI` 最末段（審查室）。
 - Given 使用者部門代碼為 `BJAA0`（課層）, When 產生浮水印, Then 「處/室」顯示課名（醫療一課），不顯示中間處層名稱。
 - Given 使用者掛於部層或本部層（無下層）, When 產生浮水印, Then 「處/室」欄留空且分隔符自動收合，浮水印字串中不存在連續分隔符。
-- Given 同一無下層使用者同時執行查看/下載/列印, When 三者各自產生浮水印, Then 檢視器疊加、PDF 燒錄內容層、稽核快照三者之收合後字串完全一致（僅時間戳記依當下產生）。
+- 🛑 ~~Given 同一無下層使用者同時執行查看/下載/列印, When 三者各自產生浮水印, Then 檢視器疊加、PDF 燒錄內容層、稽核快照三者之收合後字串完全一致（僅時間戳記依當下產生）。~~<br>🔴 **2026-08-20 由 `OQ-D9-32` 推翻並就地改寫，原條文逐字保留於左供追溯**：Given 同一無下層使用者同時執行查看/下載/列印, When 三者各自產生浮水印, Then **PDF 燒錄內容層（三種操作皆是）與稽核快照**之收合後字串完全一致（僅時間戳記依當下產生）。<br>📌 **「三者一致」之第三方由「檢視器疊加」換為「檢視（VIEW）路徑之已燒錄位元組」**——比對對象數量未變，**收合規則與字串格式一字未改**；本條之驗證載體由「DOM 文字 vs 燒錄字串」改為「三次 `buildWatermarkSnapshot` 輸出逐字相等」，仍為純函式可測。
 - Given 使用者部門無對應部層, When 產生浮水印, Then 「部門」依 fallback 取本部層 `DESC_FULL`。
 
 ### 業務子分類授權檢查 delta（🟢 APPROVED 2026-08-11 人類閘門通過；規則權威＝[F041](F041-user-subtype-business-scope.md)）
@@ -114,7 +115,7 @@ Epic/Story: E06 / US-053, US-054
 
 - **#5a 前台詳情頁「附件」下載繞過燒錄＝`BUG-IMPL`**：`prototypes/04-public-document-detail.html:105` 逐字「ICSOP PDF · **檢視/下載將燒錄浮水印**」，本檔既有 AC「**Given 使用者下載文件, When 下載完成, Then PDF 內容層已燒錄浮水印（非僅前端疊加）**」**已完整涵蓋**前台詳情頁之附件（ICSOP PDF／OJT）下載路徑。實作改走短效期 SAS 原檔 URL 而繞過燒錄，屬**缺陷**，**不新增 AC**——新增只會製造兩份權威。
 - **#6 中文亂碼（PDF 燒錄之 CJK 字型缺失）＝`BUG-IMPL`**：使用者已確認外觀為「**中文全變 `?`**」（OQ-D18-24），根因＝`backend/Dockerfile` 未 COPY `assets/`（build 與 runtime 兩 stage 皆無），致 `loadCjkFontBytes()` 於容器內回 `null` 而退化為 `StandardFonts.Helvetica` → `asciiSafe`。**屬部署層缺陷，不新增 AC**；既有 AC「PDF 內容層已燒錄浮水印（格式權威同 [NFR-007](../nfr.md#watermark)）」即涵蓋「浮水印字串須與規格逐字相同」之要求。⚠ **單元測試恆綠（ts-jest 以 repo 根執行，`existsSync` 恆真），驗證必須在容器內實跑**。同一根因亦劣化 [F036](F036-lifecycle-tree-preview.md) 樹狀圖 PDF 與 [F038](F038-lifecycle-tree-change-history.md) 新舊樹狀圖 PDF。<br>📌 **`ICSOP_REQUIRE_CJK_FONT` 之值語意（2026-08-16 補訂，ringA 提報）**：該旗標採 **fail-safe 讀法**——**唯有值恰為字串 `'false'` 時方為關閉**；未設定、空字串、`'0'`、`'no'`、大小寫變體（`'False'`／`'FALSE'`）或任何其他值**一律視為開啟**（即要求 CJK 字型必須可載入，否則 fail-fast）。理由：本旗標之作用是**防止再次靜默退化為 `?` 亂碼**，其預設必須是嚴格側；「拼錯環境變數值就悄悄關掉保護」正是本 delta 第 6 項所修之同類錯誤。
-- **#7 三層式浮水印與欄位不完整＝`BUG-IMPL`**：三層式（①身分資料列 ②固定機密聲明 ③時間戳）已於 `prototypes/05-public-viewer-watermark.html:110` 與本檔 Description「該機密聲明**另起一行**（獨立一行）顯示」明確定義，**不新增 AC**。欄位不完整（無姓名／員工編號）之處置依 **OQ-D18-14**：姓名為 [F003](F003-account-role-management.md) `AC-P` 必填，為空即屬資料/同步缺陷須修；**員工編號對手動帳號可能天然為空，維持 §8.4「留空並收合分隔符」規則、不以 `loginId` 頂替**（頂替會產生看似員工編號實則不是的值，反而傷害追溯可信度）。已存在正確參考實作（`LifecycleTreePreviewPage` 之 `watermarkLines()`），修法應**抽為共用函式供三處消費**（viewer／tree preview／change-history diff），而非再寫第三、第四份。
+- **#7 三層式浮水印與欄位不完整＝`BUG-IMPL`**：三層式（①身分資料列 ②固定機密聲明 ③時間戳）已於 `prototypes/05-public-viewer-watermark.html:110` 與本檔 Description「該機密聲明**另起一行**（獨立一行）顯示」明確定義，**不新增 AC**。欄位不完整（無姓名／員工編號）之處置依 **OQ-D18-14**：姓名為 [F003](F003-account-role-management.md) `AC-P` 必填，為空即屬資料/同步缺陷須修；**員工編號對手動帳號可能天然為空，維持 §8.4「留空並收合分隔符」規則、不以 `loginId` 頂替**（頂替會產生看似員工編號實則不是的值，反而傷害追溯可信度）。已存在正確參考實作（`LifecycleTreePreviewPage` 之 `watermarkLines()`），修法應**抽為共用函式**，而非再寫第三、第四份。<br>🔴 **2026-08-20 消費者清單就地更正（`OQ-D9-32`）**：原文為「供**三處消費**（viewer／tree preview／change-history diff）」——**viewer 已於本日移除其 DOM 疊加層（`AC-N7`），不再是消費者** ⇒ 前端之 `watermarkLines()` 現為**兩處消費**（tree preview／change-history diff）。<br>🔴 **三層式呈現契約本身未被推翻，但其於檢視器路徑之載體已轉移**：檢視器之三層式改由**後端燒錄側**承載——`backend/src/public/pdf-burner.ts` 之 **`toDisplayLines(snapshot)`**（燒錄行拆分）即為新載體，其輸出行數與內容須與前端 `watermarkLines()` 逐行相同（`AC-N68`）。
 
 #### 新增 AC
 
@@ -130,7 +131,7 @@ Epic/Story: E06 / US-053, US-054
   - ① **每一列皆帶一個浮水印註記元素**（`data-wm-note` 屬性），其可見文字為**二擇一**：`format = pdf` → 逐字 `檢視/下載將燒錄浮水印`（**正向文案**）；非 PDF → 逐字 `此格式不支援浮水印`。**三類清單使用同一組文案，不得分歧**（`AC-D2` 之延伸）。
   - ② **`檢視/下載將燒錄浮水印` 為本檔既有文案之擴用**：原僅出現於附件區之 ICSOP PDF 列（`04:105`），本 delta 將其一致化沿用至附錄與使用表單之 PDF 列；**該字串一字未改**。
   - ③ **列選擇器**：附件列帶 `data-attachment-item`、使用表單列帶 `data-usage-form-item`、附錄列帶既有之附錄列掛鉤；`within(row).getByText(...)` 可據此定位到該列之 `data-wm-note`。
-  - ④ 🛑 ~~**後台不得出現**：後台清單／唯讀詳情／編輯頁**一律不渲染** `data-wm-note` 與上述兩條文案（後台恆 RAW，顯示「將燒錄」或「不支援」皆為誤導）——`queryByText('檢視/下載將燒錄浮水印') === null` 與 `queryByText('此格式不支援浮水印') === null` 於後台三頁皆成立。~~<br>🔴 **2026-08-20 就地推翻（`OQ-D9-08` 選項 B 之直接後果）**：後台自本日起亦燒錄 ⇒ 本子句之**唯一理由（「後台恆 RAW，顯示皆為誤導」）已失效**，若維持禁令則變成「後台會燒、卻不告訴使用者」——恰為誤導之反面。現行條文見 `AC-N20`（後台亦渲染同一組 `data-wm-note` 與同一組逐字文案）。原條文逐字保留於左供追溯。<br>⚠ 本子句之改寫係 spec-writer 依既有理由失效而推導，**未經人類逐題裁決**，已如實登錄為 [open-questions](../open-questions.md) `OQ-D9-33` 並於 `AC-N20` 標 `[ASSUMPTION]`。
+  - ④ 🛑 ~~**後台不得出現**：後台清單／唯讀詳情／編輯頁**一律不渲染** `data-wm-note` 與上述兩條文案（後台恆 RAW，顯示「將燒錄」或「不支援」皆為誤導）——`queryByText('檢視/下載將燒錄浮水印') === null` 與 `queryByText('此格式不支援浮水印') === null` 於後台三頁皆成立。~~<br>🔴 **2026-08-20 就地推翻（`OQ-D9-08` 選項 B 之直接後果）**：後台自本日起亦燒錄 ⇒ 本子句之**唯一理由（「後台恆 RAW，顯示皆為誤導」）已失效**，若維持禁令則變成「後台會燒、卻不告訴使用者」——恰為誤導之反面。現行條文見 `AC-N20`（後台亦渲染同一組 `data-wm-note` 與同一組逐字文案）。原條文逐字保留於左供追溯。<br>✅ **本子句之失效已於 2026-08-20 經 lead 裁決確認**（[open-questions](../open-questions.md) `OQ-D9-33` ＝採納 spec-writer 原案）；`AC-N20` 之 `[ASSUMPTION]` 已解除。
   
   📌 **本條之存在理由**：`AC-D2` 只規定了非 PDF 之負向文案，**未規定 PDF 之正向文案、亦未定義任何列選擇器**——test-generator 無從定位「該列」，也無從驗證 PDF 列之呈現。本輪約束環為簡化版（僅 jest/vitest、無 fidelity 測試）⇒ AC 是唯一防線。<br>📌 **旗標來源**：文案之選擇依伺服器端旗標（見 `AC-D2` 之註），**前端不得自行以 `format` 字串重算**。
 - **AC-D8**（🔴 前台附件下載端點之權限閘門與可觀測契約；**2026-08-16 補訂**，test-generator ringC 提報 `G-L2-02`）：`architecture-spec.md` §10.1 為前台附件下載新增**兩個專屬端點**，其 handler 名稱與權限閘門原**未入任何 AC**，致約束環無從建立 route-metadata 斷言。端點形狀**以 §10.1 為準、不另立**：
@@ -147,7 +148,7 @@ Epic/Story: E06 / US-053, US-054
 ### D9 浮水印呈現 delta（🔴 2026-08-20 使用者裁決；缺失／變更 delta 第 1／2／3／4 項） {#d9-watermark-delta}
 
 > 前提裁決（全部落於 [open-questions §D9](../open-questions.md#d9--2026-08-20-缺失變更-delta來源stories2026-08-20-defect-delta-9md)）：
-> **`OQ-D9-01`→選項 C**（色值轉深＋提高不透明度**兩者皆調**，量化目標＝**與白底對比度 ≥ 3:1**，WCAG non-text contrast）〔使用者〕｜
+> **`OQ-D9-01`→選項 C**（色值轉深＋提高不透明度**兩者皆調**，並訂可機器驗證之量化目標）〔使用者〕；🔴 **量化門檻已於 2026-08-20 同日由使用者調整為「與白底對比度 ≥ 1.7:1」**（`OQ-D9-31`）——**被推翻之原門檻逐字保留供追溯**：「**與白底對比度 ≥ 3:1**（WCAG non-text contrast）」。**改採之 ≥ 1.7:1 為本專案專用之數值門檻**（非 WCAG 條文值），**仍為純數值、可機器驗證，不是主觀判斷**｜
 > **`OQ-D9-02`→選項 B**（**5 處全動**：`PublicViewerPage`／`ChangeHistoryPage`／`LifecycleTreePreviewPage` 三處前端疊加 ＋ `pdf-burner.ts` 燒錄 ＋ 對應 prototype）〔使用者〕｜
 > **`OQ-D9-03`→選項 A**（`/pdf` 端點回未燒錄位元組供瀏覽器原生工具列直取＝**安全缺陷 BUG-IMPL**，最高優先）〔lead 預設〕｜
 > **`OQ-D9-04`→選項 A**（改用 **pdf.js／react-pdf 自繪 canvas 渲染**取代 `<iframe>`；縮放依倍率**重新渲染**；使用者已明確接受新增前端相依之代價）〔使用者〕｜
@@ -159,30 +160,47 @@ Epic/Story: E06 / US-053, US-054
 
 #### #1 顏色加深與對比度目標
 
-- **AC-N1**（🔴 對比度門檻，可計算之量化驗收）：Given 浮水印之呈現色值與不透明度, When 以 sRGB alpha 合成於**純白背景**（`#FFFFFF`）求其有效色，並依 **WCAG 2.1 相對亮度公式**計算該有效色與 `#FFFFFF` 之對比度, Then 其值 **≥ 3.0**（含邊界）。<br>📌 **驗證載體**：純函式單元測試——被測輸入為 `AC-N3` 所要求之具名常數（色值＋不透明度），測試自備合成與對比度計算之工具函式（不得改為讀取瀏覽器計算樣式，jsdom 不做合成）。<br>📌 **合成公式（供測試逐字實作，避免各自臆造）**：`effective = round(255 - alpha × (255 − channel))`，逐通道套用；相對亮度 `L = 0.2126·R' + 0.7152·G' + 0.0722·B'`，其中 `C' = c/255 ≤ 0.03928 ? (c/255)/12.92 : ((c/255 + 0.055)/1.055)^2.4`；對比度 `= (1.05) / (L + 0.05)`。
-- **AC-N2**（🔴 定稿值與五處一致）：Given 本 delta 實作完成, When 檢視五處浮水印載體之色值／不透明度常數, Then **逐字為下列定稿值**——
+- **AC-N1**（🔴 對比度門檻，可計算之量化驗收；🔴 **2026-08-20 就地改寫——門檻由 `3.0` 降為 `1.70`**，`OQ-D9-31` 使用者裁決）：Given 浮水印之呈現色值與不透明度, When 以 sRGB alpha 合成於**純白背景**（`#FFFFFF`）求其有效色，並依 **WCAG 2.1 相對亮度公式**計算該有效色與 `#FFFFFF` 之對比度, Then 其值 **≥ 1.70**（含邊界）。<br>📝 **被推翻之原門檻逐字保留供追溯**：「Then 其值 **≥ 3.0**（含邊界）。」**推翻理由（使用者裁決）＝ 3:1 之可讀性代價過高**——lead 已獨立驗算並確認原算式正確（3:1 ⇒ 有效色不得淺於 `rgb(149,149,149)` ⇒ `#334155` 需 `opacity ≈ 0.57`），但使用者判定該不透明度會過度遮蓋文件內容。<br>📌 **驗證載體**：純函式單元測試——被測輸入為 `AC-N3` 所要求之具名常數（色值＋不透明度），測試自備合成與對比度計算之工具函式（**不得**改為讀取瀏覽器計算樣式，jsdom 不做 alpha 合成）。<br>📌 **合成與亮度公式（供測試逐字實作，避免各自臆造）**：`effective = 255 − alpha × (255 − channel)`，逐通道套用（**不四捨五入為整數亦可，兩種算法於本定稿值下皆落在 1.715～1.716，同樣 ≥ 1.70**）；相對亮度 `L = 0.2126·R' + 0.7152·G' + 0.0722·B'`，其中 `C' = c/255 ≤ 0.03928 ? (c/255)/12.92 : ((c/255 + 0.055)/1.055)^2.4`；對比度 `= 1.05 / (L + 0.05)`。<br>⚠ **門檻為 `≥ 1.70`、不是 `≈ 1.72`**——請以**不等式**斷言，**不得**寫成對某個小數點後兩位之相等比較（浮點與四捨五入差異會使等值斷言脆裂）。
+- **AC-N2**（🔴 定稿值與各載體一致；🔴 **2026-08-20 兩處就地改寫——不透明度 `0.57`→`0.30`（`OQ-D9-31`）、載體由 5 處減為 4 處（`OQ-D9-32`）**）：Given 本 delta 實作完成, When 檢視**下表各載體**之色值／不透明度常數, Then **逐字為下列定稿值**——
 
   | # | 載體 | 檔案 | 色值（定稿） | 不透明度（定稿） |
   |---|---|---|---|---|
-  | 1 | 前台檢視器疊加 | `frontend/src/pages/PublicViewerPage.tsx` | `#334155` | `0.57` |
-  | 2 | 變更歷程新舊並列疊加 | `frontend/src/pages/ChangeHistoryPage.tsx` | `#334155` | `0.57` |
-  | 3 | 循環樹狀圖預覽疊加 | `frontend/src/pages/LifecycleTreePreviewPage.tsx` | `#334155` | `0.57` |
-  | 4 | PDF 燒錄（內容層） | `backend/src/public/pdf-burner.ts` | `rgb(0.2, 0.255, 0.3333)`〔＝`#334155` 之 0–1 正規化〕 | `0.57` |
-  | 5 | Prototype 權威 | `prototypes/05-public-viewer-watermark.html`、`prototypes/22-*`、`prototypes/23-*` | `#334155` | `0.57` |
+  | ~~1~~ | 🛑 ~~前台檢視器疊加~~ | 🛑 ~~`frontend/src/pages/PublicViewerPage.tsx`~~ | **該載體已整個移除** | **不適用** |
+  | 2 | 變更歷程新舊並列疊加 | `frontend/src/pages/ChangeHistoryPage.tsx` | `#334155` | **`0.30`** |
+  | 3 | 循環樹狀圖預覽疊加 | `frontend/src/pages/LifecycleTreePreviewPage.tsx` | `#334155` | **`0.30`** |
+  | 4 | PDF 燒錄（內容層；**檢視器所見位元組亦由此產生**） | `backend/src/public/pdf-burner.ts` | `rgb(0.2, 0.255, 0.3333)`〔＝`#334155` 之 0–1 正規化〕 | **`0.30`** |
+  | 5 | Prototype 權威 | `prototypes/22-*`、`prototypes/23-*`（⚠ `prototypes/05-public-viewer-watermark.html` 之 `.wm-layer` **整段移除**，見 `AC-N7`） | `#334155` | **`0.30`** |
 
   📝 **被推翻之現行值（逐字保留供追溯）**：前端三處＝`#64748B`＋`opacity: 0.12`（`PublicViewerPage.tsx:229-231`、`ChangeHistoryPage.tsx:992,1000`、`LifecycleTreePreviewPage.tsx:509,516`）；後端＝`rgb(0.4, 0.45, 0.5)`＋`opacity = 0.12`（`pdf-burner.ts:42,56`）。
-  <br>📌 **定稿值由 spec-writer 依 `AC-N1` 之門檻反推並驗算**（`#334155` @ `0.57` ⇒ 有效色 ≈ `rgb(139,147,158)`、對比度 ≈ **3.11:1**，滿足 ≥ 3.0）；**ui-ux-designer 逐字照抄，不得自行發明**（比照 [F018](F018-usage-form-management.md#edit-number-action) 之既有慣例）。若人類決定調整門檻，**只需改本表兩個字面值與 `AC-N1` 之門檻數字**，其餘 AC 一字不動。
-  <br>⚠ **本值之已知代價已如實登錄為 [open-questions](../open-questions.md) `OQ-D9-31` `[RISK]`**：`0.12 → 0.57` 為近 5 倍之不透明度，浮水印將明顯遮蓋文件內容；此為達成「對比度 ≥ 3:1」之數學必然（純白底下欲達 3:1，合成色不得淺於 `rgb(149,149,149)`），非實作裁量。
-- **AC-N3**（單一來源與可測性前提）：Given 上表五處之任一前端或後端載體, When 檢視其實作, Then 其色值與不透明度**必須取自該側之具名匯出常數**（前端一份、後端一份；**不得**以字面值散落於 JSX inline style 或 `drawText` 呼叫處）。<br>🔴 **本條是 `AC-N1`／`AC-N2` 的可測性前提**——常數若不可 import，前述兩條就沒有斷言載體，只能退化為「讀原始碼字串」之脆弱測試。<br>📌 **前後端為兩個獨立 TS 專案、無共用 package ⇒「只有一份」在現行 build 管線下不可達**；沿用 `watermarkLines()`（architecture-spec §10.14）與 `change-labels.ts`（`OQ-D18-34`）之既有處置＝**各側各一份，兩側各自對本檔宣告之字面值斷言**。
+  <br>📌 **現行定稿值之驗算**：`#334155` @ `0.30` ⇒ 有效色 `rgb(193.8, 198.0, 204.0)`、對比度 **≈ 1.716:1**，滿足 `AC-N1` 之 ≥ 1.70。**ui-ux-designer 逐字照抄，不得自行發明**（比照 [F018](F018-usage-form-management.md#edit-number-action) 之既有慣例）。<br>📝 **被推翻之前一版定稿值逐字保留供追溯**：`#334155` @ `0.57`（有效色 ≈ `rgb(138.7, 146.7, 158.1)`、對比度 ≈ **3.115:1**，為滿足原 ≥ 3.0 門檻之最小不透明度）。<br>⚠ **與 lead 裁決備忘之數字差異（如實記錄）**：lead 之裁決文字記為「≈ 1.73:1」；spec-writer 以本條所載公式重新驗算為 **≈ 1.716:1**（整數化合成色後為 ≈ 1.715）。**兩者皆滿足 ≥ 1.70 之門檻，裁決不受影響**；本檔採實算值 1.716，以免測試把 1.73 當成期望值而恆紅。若人類決定調整門檻，**只需改本表兩個字面值與 `AC-N1` 之門檻數字**，其餘 AC 一字不動。
+  <br>✅ **`OQ-D9-31` 已於 2026-08-20 由使用者裁決結案**：原提報之風險（`0.12 → 0.57` 近 5 倍不透明度、明顯遮蓋內容）**經使用者採納**，門檻降為 ≥ 1.7:1、不透明度定為 `0.30`（仍為現況 `0.12` 之 2.5 倍，可辨識度顯著提升而不致遮蔽內容）。<br>📌 **若日後再次調整門檻，改動範圍僅 `AC-N1` 之數字與本表之不透明度欄**，其餘 AC 一字不動——`AC-N3`「必須為具名常數」正是為此而立。
+- **AC-N3**（單一來源與可測性前提）：Given 上表**各有效載體**（4 處；第 1 列已移除）之任一前端或後端載體, When 檢視其實作, Then 其色值與不透明度**必須取自該側之具名匯出常數**（前端一份、後端一份；**不得**以字面值散落於 JSX inline style 或 `drawText` 呼叫處）。<br>🔴 **本條是 `AC-N1`／`AC-N2` 的可測性前提**——常數若不可 import，前述兩條就沒有斷言載體，只能退化為「讀原始碼字串」之脆弱測試。<br>📌 **前後端為兩個獨立 TS 專案、無共用 package ⇒「只有一份」在現行 build 管線下不可達**；沿用 `watermarkLines()`（architecture-spec §10.14）與 `change-labels.ts`（`OQ-D18-34`）之既有處置＝**各側各一份，兩側各自對本檔宣告之字面值斷言**。
 
 #### #2／#4 檢視器渲染契約（自繪 canvas 取代 iframe）
 
 - **AC-N4**（🔴 不得存在瀏覽器原生 PDF 檢視器容器）：Given 前台檢視器頁（`/public/documents/:id/view`）載入完成且非錯誤／非載入中, When 檢視其 DOM, Then 文件預覽區內**不存在**任何 `<iframe>`、`<embed>` 或 `<object>` 元素——`container.querySelector('iframe, embed, object') === null` 逐字成立；且預覽內容由頁面自行渲染之 `<canvas>` 承載（`container.querySelector('canvas') !== null`）。<br>📌 **本條即 #2「移除套件下載/列印鈕」之可斷言等價**：瀏覽器原生工具列渲染於 browser chrome 層、非本系統 DOM，無法直接斷言其不存在；但它**只會伴隨上述三種容器出現**，故消除容器即消除工具列。
 - **AC-N5**（🔒 系統自身之下載／列印鈕不受影響——回歸鎖定）：Given 前台檢視器頁, When 檢視 header 動作區, Then 本系統自身之「下載」與「列印」動作**仍存在且可觸發**，其目標仍為既有之受控端點（`documentDownloadUrl`／`documentPrintUrl`，皆已燒錄且皆寫稽核）；本 feature 既有 AC「使用者下載文件 → PDF 內容層已燒錄浮水印」「查看/下載/列印各自記錄對應類型稽核」**逐字維持綠燈**。<br>⚠ **不得**以「移除工具列」為由順手移除或停用本系統之下載／列印鈕。
-- **AC-N6**（🔴 PDF 代理端點改回傳已燒錄位元組；`[ASSUMPTION]`，見 `OQ-D9-32`）：Given 任一已授權使用者呼叫 `GET /public/documents/:id/pdf`（檢視器之位元組來源）, When 回應產生, Then 其 body 為**已燒錄浮水印**之 PDF 位元組——`PdfBurner.burnPdf` 之 spy **呼叫次數為 1**，且其浮水印字串與同一使用者於同一時刻經 `download` 取得者**逐字相同**（僅時間戳依當下產生）。<br>🔴 **理由（不得省略）**：`OQ-D9-03` 已裁定 `/pdf` 回未燒錄位元組為**安全缺陷**。單純換掉渲染器**只移除了工具列這一個入口**——瀏覽器開發者工具之 Network 面板仍可直接另存該回應之位元組，缺陷本體（未燒錄原件離開系統）**完全未被關閉**。<br>⚠ `[ASSUMPTION]`：**「`/pdf` 是否改為燒錄」未列於人類閘門之 27 題**，本條為 spec-writer 依 `OQ-D9-03`「認定為安全缺陷」之裁決推導；已如實登錄為 `OQ-D9-32` 交回 lead。若人類裁定 `/pdf` 維持 RAW，本條與 `AC-N7` 一併作廢，且須於 `OQ-D9-03` 之紀錄註明「#2 僅關閉工具列入口、不關閉 Network 面板入口」。
-- **AC-N7**（DOM 疊加層保留；與 `AC-N6` 並存不衝突）：Given `AC-N6` 之已燒錄位元組被渲染於 canvas, When 檢視 DOM, Then 既有之 DOM 疊加層**仍然存在**（`data-testid="watermark-overlay"` 與 `data-testid="watermark-text"` 皆可命中），其字串與內容層燒錄者**逐字相同**（本 feature 既有 AC「三者必須套用同一收合規則」不變）。<br>📌 **雙層非冗餘**：DOM 疊加可被開發者工具移除（[NFR-007](../nfr.md#watermark) 已知限制），內容層不可；內容層之時間戳為位元組產生當下，DOM 層與之同源同值。移除任一層皆會使既有 AC 轉紅。
+- **AC-N6**（🔴 PDF 代理端點改回傳已燒錄位元組；✅ **`OQ-D9-32` 已於 2026-08-20 由使用者裁決＝採納本條**，`[ASSUMPTION]` 已解除）：Given 任一已授權使用者呼叫 `GET /public/documents/:id/pdf`（檢視器之位元組來源）, When 回應產生, Then 其 body 為**已燒錄浮水印**之 PDF 位元組——`PdfBurner.burnPdf` 之 spy **呼叫次數為 1**，且其浮水印字串與同一使用者於同一時刻經 `download` 取得者**逐字相同**（僅時間戳依當下產生）。<br>🔴 **理由（不得省略）**：`OQ-D9-03` 已裁定 `/pdf` 回未燒錄位元組為**安全缺陷**。單純換掉渲染器**只移除了工具列這一個入口**——瀏覽器開發者工具之 Network 面板仍可直接另存該回應之位元組，缺陷本體（未燒錄原件離開系統）**完全未被關閉**。<br>📌 **本條使檢視器成為單層浮水印之前提**：正因位元組已燒錄，`AC-N7` 之移除疊加層才不造成浮水印消失。**兩條必須同批實作**——只做 `AC-N7` 不做 `AC-N6` 會使檢視器完全無浮水印。
+- **AC-N7**（🔴 **前台檢視器之 DOM 疊加層移除——負向斷言**；🔴 **2026-08-20 由 `OQ-D9-32`（使用者裁決）完全反轉**）：Given `AC-N6` 之已燒錄位元組被渲染於 canvas, When 檢視前台檢視器頁（`/public/documents/:id/view`）之 DOM, Then **不存在任何浮水印疊加層**——`queryByTestId('watermark-overlay') === null` **且** `queryAllByTestId('watermark-text').length === 0` 逐字成立。<br>📝 **被推翻之原條文逐字保留供追溯**：「（DOM 疊加層保留；與 `AC-N6` 並存不衝突）Given `AC-N6` 之已燒錄位元組被渲染於 canvas, When 檢視 DOM, Then 既有之 DOM 疊加層**仍然存在**（`data-testid="watermark-overlay"` 與 `data-testid="watermark-text"` 皆可命中），其字串與內容層燒錄者**逐字相同**…**雙層非冗餘**…」<br>🔴 **推翻理由（使用者裁決）**：`AC-N6` 使檢視器底下已是燒錄過的 PDF，DOM 疊加層變成**純冗餘**（同一份浮水印疊兩次）。<br>🔴 **範圍界線——本條僅適用前台文件檢視器 `PublicViewerPage`**，正向對應條款見 **`AC-N66`**（`ChangeHistoryPage` 與 `LifecycleTreePreviewPage` 之疊加層**必須保留**）。**兩條為同一界線之負向與正向雙向斷言，必須同批驗證**——只驗負向者，實作者極可能一次刪三處。
 - **AC-N8**（🔴 縮放不得以 CSS 點陣縮放達成）：Given 檢視器之縮放控制項, When 使用者調整倍率至任一值, Then 預覽容器之 `style.transform` **不含 `scale(`**（`expect(previewEl.style.transform).not.toMatch(/scale\(/)`）。<br>📝 **被修正之現行實作（逐字保留供追溯）**：`frontend/src/pages/PublicViewerPage.tsx:197-211` 之 `transform: scale(${zoom})` 作用於**已包含 iframe 之外層容器**，屬點陣拉伸 ⇒ 放大即模糊（＝缺失第 4 項之根因）。
 - **AC-N9**（縮放觸發以新倍率之重新渲染）：Given 檢視器已完成首次渲染, When 縮放倍率由 `z1` 變更為 `z2`（`z1 ≠ z2`）, Then 頁面渲染函式**再次被呼叫**且其接收之縮放參數等於 `z2`（渲染呼叫累計次數 ≥ 2，最後一次之參數為 `z2`）。<br>🔴 **可測性前提（交 system-architect）**：渲染必須經由**可注入或可 spy 之 seam**（例如以 props 傳入之 render 函式、或可 `vi.mock` 之模組匯出）暴露其縮放參數；**若渲染完全封裝於第三方元件內部而不暴露任何 seam，本條將無執行期載體**——屆時須退回以 `AC-N8` 之負向斷言為唯一保障，並於 [open-questions](../open-questions.md) 就地補記。**架構定案前不得刪除本條。**
+
+- **AC-N66**（🔴 **另兩頁之疊加層必須保留——正向斷言**；`OQ-D9-32` 之範圍界線）：Given 後台**變更歷程頁**（`ChangeHistoryPage`，新舊並列 diff）與**循環樹狀圖預覽頁**（`LifecycleTreePreviewPage`）渲染完成, When 檢視 DOM, Then 兩頁之浮水印疊加層**必須存在**——
+  - `ChangeHistoryPage`：`getByTestId('watermark-overlay-before')` 與 `getByTestId('watermark-overlay-after')` **皆可命中**（現行為 `data-testid={\`watermark-overlay-${side}\`}`，`side` 之值域為 `'before' | 'after'`，見 `ChangeHistoryPage.tsx:990` 與其 `DiffBoard` 之 `side` prop `:1070,1078`）。⚠ **該頁之浮水印 `<span>` 目前不帶 `data-testid`**，故本條**不得**以 `watermark-text` 定位它；若實作補上掛鉤，須先入 AC。
+  - `LifecycleTreePreviewPage`：`getByTestId('watermark-overlay')` 可命中，且 `getAllByTestId('watermark-text').length > 0`（`LifecycleTreePreviewPage.tsx:507,514`）。
+  - 兩頁之色值／不透明度為 `AC-N2` 表列之**加深後定稿值**（`#334155`／`0.30`）。
+  <br>🔴 **本條與 `AC-N7` 為同一界線之正向與負向雙向斷言，必須同批驗證。**
+  <br>🔴 **保留理由（不得省略，亦不得日後「順手統一」而刪除）**：這兩頁渲染的是 **HTML（diff 表格／DAG 節點），不是 PDF——沒有「內容層」可以燒錄**；DOM 疊加層是它們**唯一**的浮水印載體。若因 `AC-N7` 而一併移除，這兩頁將**完全失去浮水印**，直接牴觸 [NFR-007](../nfr.md#watermark) AC3 之情境 3。
+  <br>📌 **檢視器與這兩頁之差異是「底下有沒有可燒錄的內容層」，不是「要不要浮水印」**——三頁都要有浮水印，只是承載層不同。
+  <br>⚠ 此處**不含** [F036](F036-lifecycle-tree-preview.md)／[F038](F038-lifecycle-tree-change-history.md) 之**下載/列印 PDF** 路徑——那條路徑本就走燒錄（`pdf-burner.ts`），不受本條與 `AC-N7` 影響。
+- **AC-N67**（🔒 檢視器頁尾「浮水印格式字幕」與 `/view` 端點必須保留——回歸鎖定）：Given 前台檢視器頁載入完成, When 檢視頁尾, Then——
+  - ① **格式字幕仍存在**：`getByTestId('watermark-format')` 可命中，其文字**逐字等於伺服器回傳之線性浮水印快照**（`frontend/src/pages/PublicViewerPage.tsx:260`；標籤逐字為 `浮水印格式（與稽核快照一致）：`）。<br>⚠ **本元素不在 `AC-N7` 之移除範圍內**——它不是疊加圖層，而是「所見浮水印字串之可讀對照」，且是 `AC-N6` 燒錄字串於前端**唯一**可斷言之投影。**不得**因清理疊加層而一併刪除。
+  - ② **`GET /public/documents/:id/view` 端點不得被移除**：疊加層移除後，該端點**仍有四項不可替代之職責**——(a) 供給 ① 之格式字幕字串；(b) 回傳檢視器標題列之 `documentNumber`／`documentName`（`G-PUB-032`）；(c) **它是 `VIEW` 稽核之唯一觸發點**（本 feature 既有 AC「檢視器載入 → 產生 1 筆 `VIEW` 紀錄」與 [F023](F023-audit-logging.md) 皆依賴之）；(d) 它是 [F041](F041-user-subtype-business-scope.md) `AC-U1` 之 `view` 授權入口（業務子分類可見性檢查）。
+  - **逐字斷言**：Given 檢視器載入完成, Then `AUDIT_LOG` 恰新增一筆 `actionType='VIEW'` 之紀錄，且 `getByTestId('watermark-format')` 之文字與該筆之 `watermarkSnapshot` **逐字相同**。
+  - 📝 **端點路徑之更正（如實記錄）**：lead 之裁決備忘記為 `GET /public/documents/:id/watermark`；**本 repo 實際不存在該路徑**，對應端點為 **`GET /public/documents/:id/view`**（`backend/src/public/watermark.controller.ts:50`，前端 `getDocumentWatermark()`，`frontend/src/api/endpoints.ts:786`）。**語意完全相同，僅路徑字面不同**；本條以實際路徑為準。⇒ **該端點並非孤兒，不需提報新 OQ。**
+- **AC-N68**（三層式呈現契約之新載體）：Given 任一浮水印快照字串, When 於**檢視器路徑**呈現（＝ `AC-N6` 之已燒錄位元組）, Then 其三層式結構（①身分資料列 ②固定機密聲明**另起一行** ③時間戳）由 `backend/src/public/pdf-burner.ts` 之 **`toDisplayLines(snapshot)`** 承載——該純函式對同一輸入之回傳**恰為 3 行**，且**逐行與前端 `watermarkLines(snapshot)` 之對應行字串相同**。
+  <br>🔴 **本條之存在理由**：`AC-D7` #7 之三層式契約原以 `prototypes/05-public-viewer-watermark.html:110` 之 DOM 疊加為權威載體；`AC-N7` 移除該疊加後，**該契約於檢視器路徑失去載體**。本條明確指定新載體，避免「契約還在、但沒有東西驗它」。
+  <br>📌 **前端 `watermarkLines()` 並未消失**——它仍為 `AC-N66` 兩頁之消費對象；本條要求的是**兩份實作對同一輸入逐行相等**（沿用 `access-history-labels.ts` 檔頭所載「兩份逐字相同」之既有不變式寫法，前後端無共用 package 之既定處置）。
 
 #### #3 浮水印公司簡稱
 
@@ -208,7 +226,7 @@ Epic/Story: E06 / US-053, US-054
 - **AC-N17**（🔴 後台下載寫調閱稽核——`OQ-D9-10` 選項 A）：Given `AC-N14`／`AC-N15` 之任一後台下載成功, When 檢視稽核, Then `AUDIT_LOG` **恰新增一筆**，其欄位落值為——`actionType='DOWNLOAD'`；`targetType` 依檔案類別為 `DOCUMENT`（ICSOP PDF／OJT，`documentId` 必填）／`USAGE_FORM`（`formId`＋`documentId` 必填；經表單池管理頁下載者 `documentId` 為 `null`）／`APPENDIX`（`appendixId`＋`documentId` 必填；經附錄管理頁下載者 `documentId` 為 `null`）；身分快照欄取自**執行下載之操作者本人**；`watermarkSnapshot` 於已燒錄（PDF）時**落值且與該次浮水印逐字相同**、於未燒錄（非 PDF）時為 `null`。<br>📌 **不新增任何 `targetType`／`actionType` 列舉值**——四條後台端點之稽核完全沿用既有列舉（見 [data-model AUDIT_LOG](../data-model.md#auditlog-entity)）。<br>⚠ **`documentId` 為 `null` 之兩種情形**（表單池／附錄池管理頁之個別下載，其脈絡不隸屬任何文件）**與既有「條件必填」規則相容**：該規則要求 `targetType ∈ {DOCUMENT, USAGE_FORM, APPENDIX, DOCUMENT_CHANGE_LOG}` 時 `documentId` 必填——本項為該規則之**唯一例外**，已於 [data-model](../data-model.md#auditlog-entity) 就地登錄。<br>🔴 **稽核寫入失敗不阻斷下載**（沿用 [error-handling.md#audit](../error-handling.md#audit) 之補償佇列既有規則，與前台一致）。
 - **AC-N18**（浮水印身分＝操作者本人——`OQ-D9-11`）：Given ICSOPAdmin 帳號 `A` 自後台下載某文件之 ICSOP PDF, When 檢視所得位元組之浮水印與該筆稽核之 `watermarkSnapshot`, Then 兩者之員工編號／姓名／公司名稱／部門／處室**皆為 `A` 本人**之身分快照（**非**文件之當責室長、**非**制定部門、**非**任何其他人）；Given 同一份檔案由 Supervisor 帳號 `B` 下載, Then 其浮水印為 `B` 之身分快照，且與 `A` 之位元組**不相等**。
 - **AC-N19**（🔒 前台側零漣漪回歸鎖定）：Given 本 delta 實作完成, When 執行前台四條燒錄路徑（檢視器／詳情頁附件／詳情頁附錄／詳情頁使用表單）之全部既有 AC（`AC-D1`／`AC-D2`／`AC-D3a`／`AC-D5`／`AC-D6`／`AC-D7` ①②③／`AC-D8`、[F018](F018-usage-form-management.md#front-burn-delta) `AC-D11`／`AC-D12`／`AC-D14`／`AC-D22`、[F039](F039-appendix-management.md#export-delta) `AC-D1`／`AC-D2`、[F041](F041-user-subtype-business-scope.md) 相關之 `AC-U1`～`AC-U5`）, Then **全數維持綠燈、期望值一字未改**——本 delta **只加後台、不動前台**。<br>⚠ 特別鎖定：`AC-D6`（共用附件下載端點對 `roleCode='User'` 一律 403 `PERMISSION_DENIED`）之期望值**不得**因「後台也燒錄了、所以可以放寬」而鬆動——燒錄與否和 F041 可見性檢查是兩個正交維度，該端點仍無可見性檢查。
-- **AC-N20**（後台亦渲染浮水印註記文案；`[ASSUMPTION]`，見 `OQ-D9-33`）：Given 後台之 ICSOP 文件清單頁／唯讀詳情頁／編輯頁／使用表單管理頁／附錄管理頁渲染完成, When 檢視各檔案列, Then 每一列帶一個 `data-wm-note` 元素，其可見文字為**二擇一**且**與前台同一組逐字文案**——`format = pdf` → 逐字 `檢視/下載將燒錄浮水印`；非 PDF → 逐字 `此格式不支援浮水印`。<br>🛑 **本條就地推翻 `AC-D7` ④**（原禁止後台出現該兩條文案），原條文逐字保留於 `AC-D7` ④。<br>⚠ `[ASSUMPTION]`：本項未列於人類閘門之 27 題，係 spec-writer 依「`AC-D7` ④ 之唯一理由（後台恆 RAW ⇒ 顯示即誤導）已失效」推導；已登錄為 `OQ-D9-33` 交回 lead。若人類裁定後台不顯示，本條作廢並須為 `AC-D7` ④ 之禁令補上新理由。
+- **AC-N20**（後台亦渲染浮水印註記文案；✅ **`OQ-D9-33` 已於 2026-08-20 由 lead 裁決＝採納本條**，`[ASSUMPTION]` 已解除）：Given 後台之 ICSOP 文件清單頁／唯讀詳情頁／編輯頁／使用表單管理頁／附錄管理頁渲染完成, When 檢視各檔案列, Then 每一列帶一個 `data-wm-note` 元素，其可見文字為**二擇一**且**與前台同一組逐字文案**——`format = pdf` → 逐字 `檢視/下載將燒錄浮水印`；非 PDF → 逐字 `此格式不支援浮水印`。<br>🛑 **本條就地推翻 `AC-D7` ④**（原禁止後台出現該兩條文案），原條文逐字保留於 `AC-D7` ④。<br>✅ **`OQ-D9-33` 已定案（2026-08-20，lead）＝採納**：後台亦渲染同一組 `data-wm-note` 與同一組逐字文案，`AC-D7` ④ 之禁止條款就地失效（該處已加追溯註記）。
 - **AC-N21**（🔒 傳輸模式不變）：Given 本 delta 實作完成, When 檢視上列四條後台端點之回應, Then 其形狀**仍為 `AC-D3a` 所定之代理串流**——body 為檔案位元組本身、`Content-Type` 為該檔 MIME、`Content-Disposition: attachment` 且檔名為**上傳時之原始檔名**（含中文，RFC 5987 編碼）；**不得**回 SAS URL、不得 3xx 轉址至 Blob。<br>⚠ 唯一例外之既有殘留＝ `GET /documents/:documentId/usage-forms/:formId/download` 現行回 `{ url }` JSON（[F018](F018-usage-form-management.md#front-burn-delta) `AC-D23`）——**該形狀已與燒錄不相容**（回 URL 就無從燒錄），必須改為代理串流；`AC-D23` 已就地改寫。
 ## Error Scenarios
 - 未授權存取/未登入：見 [error-handling.md#public](../error-handling.md#public)、[#file](../error-handling.md#file)。防竄改與已知限制：[NFR-007](../nfr.md#watermark)。
@@ -227,5 +245,5 @@ Epic/Story: E06 / US-053, US-054
 - **前台使用表單燒錄之權威**：[F018](F018-usage-form-management.md#front-burn-delta)（`AC-D11`～`AC-D14`；`OQ-E05-03` 已就地改寫為推翻）
 - **2026-08-20 使用者裁決（D9 delta）**：`OQ-D9-01`（色深＋不透明度皆調、對比度 ≥ 3:1）／`OQ-D9-02`（5 處全動）／`OQ-D9-03`（`/pdf` 未燒錄＝安全缺陷）／`OQ-D9-04`（pdf.js 自繪 canvas）／`OQ-D9-05`（#2＋#4 同批）／`OQ-D9-06`（浮水印專用簡稱常數）／`OQ-D9-07`（`AS`→和潤企業、`AE`→和潤電能）／**`OQ-D9-08`（🔴 全面推翻 `OQ-FM-01`／`OQ-D18-01`，後台四類皆燒錄）**／`OQ-D9-09`（不保留原始檔路徑）／`OQ-D9-10`（後台寫稽核）／`OQ-D9-11`（浮水印身分＝操作者）。見 [§D9 浮水印呈現 delta](#d9-watermark-delta)、[§後台燒錄範圍 delta](#backend-burn-delta)。
 - **🔴 待 system-architect（2026-08-20 D9 delta 新增）**：① **pdf.js／react-pdf 之具體選型與 CJK 字型策略**（既有燒錄側已嵌 Noto Sans TC，前端渲染側需另行驗證中文顯示；⚠ 本 repo 之 CJK 缺字曾以「單元測試恆綠、容器內才炸」形態出現，見 `AC-D7` #6 註）；② **`AC-N9` 之渲染 seam 形狀**（縮放參數必須可 spy，否則該 AC 無執行期載體）；③ **後台全面燒錄對 [NFR-001](../nfr.md#performance) 之影響**——後台下載自本日起每次皆需取回原件＋燒錄（既有實測暖機後 10 頁 CJK ≈ 250ms，但後台清單頁可能連續多次下載），是否需快取或串流式燒錄；④ **`GET /documents/:documentId/usage-forms/:formId/download` 由 `{url}` JSON 改為代理串流**之呼叫端調和（`AC-N21`／[F018](F018-usage-form-management.md) `AC-D23`）；⑤ `COMPANY_SHORT_NAMES` 之落點（建議與 `COMPANY_FULL_NAMES` 同模組以利 **INV-C2** 之型別層防護）。
-- **⚠ 待 ui-ux-designer（2026-08-20 D9 delta 新增）**：① `prototypes/05-public-viewer-watermark.html`／`22-*`／`23-*` 之浮水印色值與不透明度**逐字改為 `AC-N2` 定稿值**（`#334155`／`0.57`），不得自行發明；② 檢視器 prototype 之預覽區由 `<iframe>` 改為 canvas 佔位（`AC-N4`）；③ 後台五頁之 `data-wm-note` 列內註記（`AC-N20`，待 `OQ-D9-33` 覆核）。
+- **⚠ 待 ui-ux-designer（2026-08-20 D9 delta；🔴 已依同日第二輪裁決更新）**：① `prototypes/22-*`／`23-*` 之浮水印色值與不透明度**逐字改為 `AC-N2` 現行定稿值**（**`#334155`／`0.30`**，⚠ **非**先前版本之 `0.57`），不得自行發明；② `prototypes/05-public-viewer-watermark.html`：預覽區由 `<iframe>` 改為 canvas 佔位（`AC-N4`），**且 `.wm-layer` 疊加層整段移除**（`AC-N7`；該頁改以「內容層已燒錄」表達浮水印），**頁尾之浮水印格式字幕必須保留**（`AC-N67` ①）；③ 後台五頁之 `data-wm-note` 列內註記（`AC-N20`，`OQ-D9-33` 已定案＝採納）。<br>🔴 **不得順手移除 `22-*`／`23-*` 之疊加層**——該兩頁無內容層可燒錄，疊加層是其唯一浮水印載體（`AC-N66`）。
 - **待 system-architect（2026-08-16 delta）**：① **前台/後台下載路徑之分流設計**（現行 `GET /documents/attachments/download` 為前後台共用、核發 SAS 由前端直取 Blob，伺服器不經手位元組；燒錄要求位元組流經應用層 ⇒ 端點語意由「回傳 URL」變為「回傳串流」，僅前台側改變）；② 燒錄之延遲與 Blob 出向流量對 [NFR-001](../nfr.md#performance) 之影響；③ `watermarkLines()` 共用函式之落點（供 viewer／tree preview／change-history diff 三處消費）。
