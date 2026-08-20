@@ -169,7 +169,7 @@ Epic/Story: E06 / US-053, US-054
   | 2 | 變更歷程新舊並列疊加 | `frontend/src/pages/ChangeHistoryPage.tsx` | `#334155` | **`0.30`** |
   | 3 | 循環樹狀圖預覽疊加 | `frontend/src/pages/LifecycleTreePreviewPage.tsx` | `#334155` | **`0.30`** |
   | 4 | PDF 燒錄（內容層；**檢視器所見位元組亦由此產生**） | `backend/src/public/pdf-burner.ts` | `rgb(0.2, 0.255, 0.3333)`〔＝`#334155` 之 0–1 正規化〕 | **`0.30`** |
-  | 5 | Prototype 權威 | `prototypes/22-*`、`prototypes/23-*`（⚠ `prototypes/05-public-viewer-watermark.html` 之 `.wm-layer` **整段移除**，見 `AC-N7`） | `#334155` | **`0.30`** |
+  | 5 | Prototype 權威 | `prototypes/22-*`、`prototypes/23-*` ＋ **`prototypes/00-design-system.html` 之浮水印示範**（🔴 2026-08-20 第三輪**追認納入**：`00` 為設計系統之文件，留著舊值會與全部四個實際載體矛盾；**它非行為載體、無回歸風險**，lead 已核可）（⚠ `prototypes/05-public-viewer-watermark.html` 之 `.wm-layer` **整段移除**，見 `AC-N7`） | `#334155` | **`0.30`** |
 
   📝 **被推翻之現行值（逐字保留供追溯）**：前端三處＝`#64748B`＋`opacity: 0.12`（`PublicViewerPage.tsx:229-231`、`ChangeHistoryPage.tsx:992,1000`、`LifecycleTreePreviewPage.tsx:509,516`）；後端＝`rgb(0.4, 0.45, 0.5)`＋`opacity = 0.12`（`pdf-burner.ts:42,56`）。
   <br>📌 **現行定稿值之驗算**：`#334155` @ `0.30` ⇒ 有效色 `rgb(193.8, 198.0, 204.0)`、對比度 **≈ 1.716:1**，滿足 `AC-N1` 之 ≥ 1.70。**ui-ux-designer 逐字照抄，不得自行發明**（比照 [F018](F018-usage-form-management.md#edit-number-action) 之既有慣例）。<br>📝 **被推翻之前一版定稿值逐字保留供追溯**：`#334155` @ `0.57`（有效色 ≈ `rgb(138.7, 146.7, 158.1)`、對比度 ≈ **3.115:1**，為滿足原 ≥ 3.0 門檻之最小不透明度）。<br>⚠ **與 lead 裁決備忘之數字差異（如實記錄）**：lead 之裁決文字記為「≈ 1.73:1」；spec-writer 以本條所載公式重新驗算為 **≈ 1.716:1**（整數化合成色後為 ≈ 1.715）。**兩者皆滿足 ≥ 1.70 之門檻，裁決不受影響**；本檔採實算值 1.716，以免測試把 1.73 當成期望值而恆紅。若人類決定調整門檻，**只需改本表兩個字面值與 `AC-N1` 之門檻數字**，其餘 AC 一字不動。
@@ -178,12 +178,12 @@ Epic/Story: E06 / US-053, US-054
 
 #### #2／#4 檢視器渲染契約（自繪 canvas 取代 iframe）
 
-- **AC-N4**（🔴 不得存在瀏覽器原生 PDF 檢視器容器）：Given 前台檢視器頁（`/public/documents/:id/view`）載入完成且非錯誤／非載入中, When 檢視其 DOM, Then 文件預覽區內**不存在**任何 `<iframe>`、`<embed>` 或 `<object>` 元素——`container.querySelector('iframe, embed, object') === null` 逐字成立；且預覽內容由頁面自行渲染之 `<canvas>` 承載（`container.querySelector('canvas') !== null`）。<br>📌 **本條即 #2「移除套件下載/列印鈕」之可斷言等價**：瀏覽器原生工具列渲染於 browser chrome 層、非本系統 DOM，無法直接斷言其不存在；但它**只會伴隨上述三種容器出現**，故消除容器即消除工具列。
+- **AC-N4**（🔴 不得存在瀏覽器原生 PDF 檢視器容器）：Given 前台檢視器頁（`/public/documents/:id/view`）載入完成且非錯誤／非載入中, When 檢視其 DOM, Then 文件預覽區內**不存在**任何 `<iframe>`、`<embed>` 或 `<object>` 元素——`container.querySelector('iframe, embed, object') === null` 逐字成立；且預覽內容由頁面自行渲染之 `<canvas>` 承載（`container.querySelector('[data-pdf-canvas]') !== null`；**掛鉤契約見 `AC-N71`**）。<br>📌 **本條即 #2「移除套件下載/列印鈕」之可斷言等價**：瀏覽器原生工具列渲染於 browser chrome 層、非本系統 DOM，無法直接斷言其不存在；但它**只會伴隨上述三種容器出現**，故消除容器即消除工具列。
 - **AC-N5**（🔒 系統自身之下載／列印鈕不受影響——回歸鎖定）：Given 前台檢視器頁, When 檢視 header 動作區, Then 本系統自身之「下載」與「列印」動作**仍存在且可觸發**，其目標仍為既有之受控端點（`documentDownloadUrl`／`documentPrintUrl`，皆已燒錄且皆寫稽核）；本 feature 既有 AC「使用者下載文件 → PDF 內容層已燒錄浮水印」「查看/下載/列印各自記錄對應類型稽核」**逐字維持綠燈**。<br>⚠ **不得**以「移除工具列」為由順手移除或停用本系統之下載／列印鈕。
 - **AC-N6**（🔴 PDF 代理端點改回傳已燒錄位元組；✅ **`OQ-D9-32` 已於 2026-08-20 由使用者裁決＝採納本條**，`[ASSUMPTION]` 已解除）：Given 任一已授權使用者呼叫 `GET /public/documents/:id/pdf`（檢視器之位元組來源）, When 回應產生, Then 其 body 為**已燒錄浮水印**之 PDF 位元組——`PdfBurner.burnPdf` 之 spy **呼叫次數為 1**，且其浮水印字串與同一使用者於同一時刻經 `download` 取得者**逐字相同**（僅時間戳依當下產生）。<br>🔴 **理由（不得省略）**：`OQ-D9-03` 已裁定 `/pdf` 回未燒錄位元組為**安全缺陷**。單純換掉渲染器**只移除了工具列這一個入口**——瀏覽器開發者工具之 Network 面板仍可直接另存該回應之位元組，缺陷本體（未燒錄原件離開系統）**完全未被關閉**。<br>📌 **本條使檢視器成為單層浮水印之前提**：正因位元組已燒錄，`AC-N7` 之移除疊加層才不造成浮水印消失。**兩條必須同批實作**——只做 `AC-N7` 不做 `AC-N6` 會使檢視器完全無浮水印。
 - **AC-N7**（🔴 **前台檢視器之 DOM 疊加層移除——負向斷言**；🔴 **2026-08-20 由 `OQ-D9-32`（使用者裁決）完全反轉**）：Given `AC-N6` 之已燒錄位元組被渲染於 canvas, When 檢視前台檢視器頁（`/public/documents/:id/view`）之 DOM, Then **不存在任何浮水印疊加層**——`queryByTestId('watermark-overlay') === null` **且** `queryAllByTestId('watermark-text').length === 0` 逐字成立。<br>📝 **被推翻之原條文逐字保留供追溯**：「（DOM 疊加層保留；與 `AC-N6` 並存不衝突）Given `AC-N6` 之已燒錄位元組被渲染於 canvas, When 檢視 DOM, Then 既有之 DOM 疊加層**仍然存在**（`data-testid="watermark-overlay"` 與 `data-testid="watermark-text"` 皆可命中），其字串與內容層燒錄者**逐字相同**…**雙層非冗餘**…」<br>🔴 **推翻理由（使用者裁決）**：`AC-N6` 使檢視器底下已是燒錄過的 PDF，DOM 疊加層變成**純冗餘**（同一份浮水印疊兩次）。<br>🔴 **範圍界線——本條僅適用前台文件檢視器 `PublicViewerPage`**，正向對應條款見 **`AC-N66`**（`ChangeHistoryPage` 與 `LifecycleTreePreviewPage` 之疊加層**必須保留**）。**兩條為同一界線之負向與正向雙向斷言，必須同批驗證**——只驗負向者，實作者極可能一次刪三處。
 - **AC-N8**（🔴 縮放不得以 CSS 點陣縮放達成）：Given 檢視器之縮放控制項, When 使用者調整倍率至任一值, Then 預覽容器之 `style.transform` **不含 `scale(`**（`expect(previewEl.style.transform).not.toMatch(/scale\(/)`）。<br>📝 **被修正之現行實作（逐字保留供追溯）**：`frontend/src/pages/PublicViewerPage.tsx:197-211` 之 `transform: scale(${zoom})` 作用於**已包含 iframe 之外層容器**，屬點陣拉伸 ⇒ 放大即模糊（＝缺失第 4 項之根因）。
-- **AC-N9**（縮放觸發以新倍率之重新渲染）：Given 檢視器已完成首次渲染, When 縮放倍率由 `z1` 變更為 `z2`（`z1 ≠ z2`）, Then 頁面渲染函式**再次被呼叫**且其接收之縮放參數等於 `z2`（渲染呼叫累計次數 ≥ 2，最後一次之參數為 `z2`）。<br>🔴 **可測性前提（交 system-architect）**：渲染必須經由**可注入或可 spy 之 seam**（例如以 props 傳入之 render 函式、或可 `vi.mock` 之模組匯出）暴露其縮放參數；**若渲染完全封裝於第三方元件內部而不暴露任何 seam，本條將無執行期載體**——屆時須退回以 `AC-N8` 之負向斷言為唯一保障，並於 [open-questions](../open-questions.md) 就地補記。**架構定案前不得刪除本條。**
+- **AC-N9**（縮放觸發以新倍率之重新渲染）：Given 檢視器已完成首次渲染, When 縮放倍率由 `z1` 變更為 `z2`（`z1 ≠ z2`）, Then 頁面渲染函式**再次被呼叫**且其接收之縮放參數等於 `z2`（渲染呼叫累計次數 ≥ 2，最後一次之參數為 `z2`）。<br>✅ **可測性前提已於 2026-08-20 第三輪滿足（原風險解除）**：ui-ux-designer 已於 `prototypes/05-public-viewer-watermark.html` 建立可觀測之渲染紀錄 seam；其契約與實作端之對應要求見 **`AC-N73`**。<br>📝 **原風險註記逐字保留供追溯**：「**若渲染完全封裝於第三方元件內部而不暴露任何 seam，本條將無執行期載體**——屆時須退回以 `AC-N8` 之負向斷言為唯一保障。」**該退路已不需動用。**
 
 - **AC-N66**（🔴 **另兩頁之疊加層必須保留——正向斷言**；`OQ-D9-32` 之範圍界線）：Given 後台**變更歷程頁**（`ChangeHistoryPage`，新舊並列 diff）與**循環樹狀圖預覽頁**（`LifecycleTreePreviewPage`）渲染完成, When 檢視 DOM, Then 兩頁之浮水印疊加層**必須存在**——
   - `ChangeHistoryPage`：`getByTestId('watermark-overlay-before')` 與 `getByTestId('watermark-overlay-after')` **皆可命中**（現行為 `data-testid={\`watermark-overlay-${side}\`}`，`side` 之值域為 `'before' | 'after'`，見 `ChangeHistoryPage.tsx:990` 與其 `DiffBoard` 之 `side` prop `:1070,1078`）。⚠ **該頁之浮水印 `<span>` 目前不帶 `data-testid`**，故本條**不得**以 `watermark-text` 定位它；若實作補上掛鉤，須先入 AC。
@@ -208,6 +208,34 @@ Epic/Story: E06 / US-053, US-054
 - **AC-N11**（🔴 **INV-C2**：短稱表鍵集合 ≡ 全稱表鍵集合）：Given `COMPANY_SHORT_NAMES` 與 `COMPANY_FULL_NAMES`, When 比對兩者之鍵集合, Then **完全相等**（`Object.keys` 排序後逐項相同）；且每一鍵之短稱值**非空字串、非 `null`**。<br>🔴 **本條之存在理由（不得省略）**：`OQ-D9-06` 選項 A 以「新增第二份公司對照表」換取「不波及全稱三處消費點」，其代價是**新增公司時可能只登錄全稱、漏登短稱** ⇒ 浮水印公司名稱靜默退化為 `null`／空欄（且因 §8.4 之分隔符收合規則，**看起來像正常留空**，不會有人發現）。本不變式比照既有 **INV-C1** 之寫法，是本裁決唯一的防漂移機制。<br>📌 **實作建議（非規格鎖定）**：以 `COMPANY_FULL_NAMES` 之鍵導出短稱表之型別（`Record<keyof typeof COMPANY_FULL_NAMES, string>`），使漏登在 `tsc` 即失敗；縱使如此，**本 AC 仍須保留為執行期載體**（型別在 build 產物中不存在）。
 - **AC-N12**（浮水印快照使用短稱）：Given 使用者所屬公司為 `AS`, When 呼叫 `buildWatermarkSnapshot` 產生線性快照, Then 其「公司名稱」欄逐字為 **`和潤企業`**（**非** `和潤企業股份有限公司`）；Given 公司為 `AE`, Then 逐字為 `和潤電能`；Given 公司代碼查無於短稱表, Then 該欄比照既有 `resolveCompanyName` 之寬容處置**留空並套用 §8.4 分隔符收合**（不得輸出 `null`、不得回退為全稱）。<br>📌 **三處呈現一致**：檢視器疊加、PDF 燒錄內容層、`AUDIT_LOG.watermarkSnapshot` 三者之公司名稱欄**同時**改為短稱（既有「三者字串完全一致」之 AC 不得因本項而破）。
 - **AC-N13**（🔒 全稱三處消費點回歸鎖定）：Given 本 delta 實作完成, When 檢視下列三處, Then 其顯示字串**逐字未變、仍為全稱**——① [F003](F003-account-role-management.md) 帳號建立／編輯之公司下拉與清單公司欄（`AS` 顯示 `和潤企業股份有限公司`）；② `GET /companies` 之回應（`companyName` 欄為全稱）；③ [F024](F024-access-history-query.md) 調閱歷程之「公司」欄與其 CSV 匯出值。且 `COMPANY_FULL_NAMES` 之**值**逐字未被修改、**INV-C1**（`SELECTABLE_COMPANIES ≡ Object.keys(COMPANY_FULL_NAMES)`）維持成立。<br>🔴 **本條是 `OQ-D9-06` 選 A 而非選 B 的唯一保障**：選 B（直接改短 `COMPANY_FULL_NAMES`）會使這三處連帶改變，屬波及既有已驗收功能之變更，使用者已明確否決。
+
+#### 🔴 prototype 載體之權威化（2026-08-20 第三輪；來源＝`docs/ui-ux-design-overview.md` §A.6.7）
+
+> **本節之存在理由（與本 repo 頭號教訓互為反面）**：既往之失誤是「**補了 AC ≠ AC 有載體**」；
+> 本節處理的是它的**反面**——**載體已存在於 prototype，卻沒有任何 AC 賦予它權威**。
+> 本輪約束環為簡化版（**僅 backend jest ＋ frontend vitest，無 Playwright／fidelity**），test-generator 只認 spec ＋ prototype：
+> 未入 AC 之掛鉤與文案，它要嘛**不建約束**（實作者刪掉也沒人發現），要嘛**自行臆造斷言**（建出規格從未授權之約束）。兩者皆為缺陷。
+> 📌 **共同載體形狀**：prototype 為**權威**，實際斷言落於**實作端**之 vitest 測試（比照 `AC-D10`／`AC-E8`／`AC-D15` 之既有慣例）。
+
+- **AC-N71**（🔴 檢視器之 DOM 契約與翻頁控制項；權威＝`prototypes/05-public-viewer-watermark.html`）：Given 前台檢視器頁載入完成, When 檢視 DOM, Then 下列**逐字成立**——
+  | 元素 | 契約 |
+  |---|---|
+  | 頁面畫布 | `<canvas>` 帶 **`data-pdf-canvas`**；其 `aria-label` 以逐字片段 `文件預覽（第 ` 起始並含 `浮水印已燒錄於內容層`；`role="img"` |
+  | 目前頁容器 | 帶 **`data-viewer-page="{N}"`**，`{N}` 為 1-based 目前頁碼，**隨翻頁即時更新** |
+  | 上一頁／下一頁鈕 | DOM id **`prevBtn`**／**`nextBtn`**；`aria-label` 逐字為 `上一頁`／`下一頁`；位於首／末頁時該鈕為 `disabled` |
+  | 頁碼輸入框 | DOM id **`pageInput`**；`aria-label` 逐字為 `頁碼`；輸入越界值時**夾回合法範圍**、不崩潰 |
+  | 總頁數 | DOM id **`pageTotal`**，其文字為總頁數之十進位整數 |
+  | 安全資訊帶 | DOM id **`securityBand`**（文案見 `AC-N72`） |
+  📌 **`data-viewer-page` 與翻頁控制項所實作之「單頁翻頁」為 ui-ux-designer 依 `architecture-spec` §11.2 之授權裁量**（理由與已明文接受之取捨見 overview §A.6.2：`AC-N9` 需要確定性之渲染呼叫計數、jsdom 無 `IntersectionObserver`、記憶體護欄、翻頁成本低）。**本條只鎖可觀測掛鉤與無障礙名稱，不鎖「單頁 vs 連續捲動」之選擇**——日後若升級為連續捲動屬 additive，`renderPage(page, zoom)` 之 seam 簽章不需改。
+  📌 **明列為設計裁量、刻意不入 AC 者**：翻頁控制項之視覺形狀與排列、窄螢幕之 fit-to-width 初始倍率算法、`#stage` 之置中手法（overview §A.6.4 #4／#5／#12）。
+- **AC-N72**（🔴 安全資訊帶之逐字文案；**推翻既有錯誤宣告**）：Given 前台檢視器頁載入完成, When 檢視 `#securityBand` 之文字（空白正規化後）, Then **逐字為**——<br>`浮水印由伺服器端依當下登入身分與時間動態產生，並燒錄進 PDF 內容層；您正在檢視的預覽即是已燒錄的位元組，與下載／列印所得完全一致，脫離系統仍存在。本檢視器由頁面自繪 canvas 呈現，不使用瀏覽器內建 PDF 工具列；縮放為依倍率重新渲染而非放大點陣圖。未登入存取本檢視器將被拒並導回登入頁。`
+  <br>📝 **被推翻之原文案逐字保留供追溯**（`frontend/src/pages/PublicViewerPage.tsx:170-173`）：「浮水印由**伺服器端**依當下登入身分與時間動態產生；下載／列印時將**燒錄進 PDF 內容層**（非僅前端疊加），脫離系統仍存在。未登入存取本檢視器將被拒並導回登入頁。」
+  <br>🔴 **必須改寫之理由（不得省略）**：原文案說「**下載／列印時**將燒錄」，隱含**檢視當下未燒錄**——那正是 `OQ-D9-03` 認定之安全缺陷所在，也是本 repo 反覆出現之「**系統陳述了一件與實際不符的事**」同型缺陷（比照 F024 匯出鈕）。`AC-N6` 使檢視當下即為已燒錄位元組後，**不改文案就會從「說得比做的多」翻轉為「做得比說的多」，同樣是錯的**。
+  <br>📌 **本條之驗證載體**：實作端 vitest 對 `#securityBand` 之 `textContent` 逐字比對（空白正規化）。
+- **AC-N73**（🔴 渲染 seam 之可觀測紀錄；`AC-N9` 之載體）：Given 檢視器之頁面渲染函式, When 任一次渲染發生, Then 該次呼叫之 **`{ page, scale }` 被記錄於一個可自測試讀取之序列**；序列之每一筆含 `page`（1-based 頁碼）與 `scale`（縮放倍率），**順序即呼叫順序**。
+  <br>📌 **prototype 之等價實作＝ `window.__pdfRenderCalls`**（`prototypes/05-public-viewer-watermark.html:191,194`），為本條之權威參考形狀。
+  <br>🔴 **實作端不得沿用 `window` 全域**：React 側須以**可注入或可 `vi.mock` 之模組級 seam** 暴露同一序列（具體形狀由 system-architect 定，見 `AC-N9`）——把診斷用序列掛上 `window` 會在正式版洩漏內部狀態，且無法在測試間隔離。
+  <br>📌 **本條使 `AC-N9`（縮放觸發以新倍率之重新渲染）自「可能無載體」轉為確定可測**：斷言＝該序列長度 ≥ 2 且最後一筆之 `scale === z2`。
 
 ### 後台燒錄範圍 delta（🔴 2026-08-20 使用者裁決；缺失／變更 delta 第 5 項——**全面推翻 `OQ-FM-01`／`OQ-D18-01`**） {#backend-burn-delta}
 

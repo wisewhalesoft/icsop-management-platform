@@ -121,9 +121,33 @@ Epic/Story: E08 / US-071（附錄（多）列：E10 / US-101、US-102）
 - **AC-N22**（🔴 矩陣逐格斷言——恰兩格改值）：Given `FIELD_MATRIX` 之全部 20 個欄位鍵 × 5 種角色（共 100 格）, When 逐格取值, Then **恰有 2 格與本 delta 導入前不同**——欄位鍵 `OJT 簽到表` × `Supervisor` 與 `OJT 簽到表` × `DeptContact`，兩者皆由「唯讀」改為「可寫」；**其餘 98 格逐格相同**；欄位鍵集合與角色集合亦未增減（仍為 20 × 5）。
 - **AC-N23**（主管／部門窗口對 OJT 欄之寫入解析為允許）：Given 角色為 `Supervisor` 或 `DeptContact`, When 對欄位鍵 `OJT 簽到表` 呼叫欄位權限解析函式, Then 回傳「可寫」；When 該角色經 OJT 上傳路徑送出寫入, Then **不得**回 `FIELD_WRITE_FORBIDDEN`（行為面契約見 [F016](F016-pdf-ojt-attachment.md#ojt-role-open-delta) `AC-N28`）。
 - **AC-N24**（🔒 **19 欄回歸鎖定——本 delta 最重要之防護**）：Given 角色為 `Supervisor` 或 `DeptContact`, When 逐一嘗試寫入 `OJT 簽到表` **以外之 19 個欄位鍵**中的任一個（含 `文件狀態`／`制定公司`／`制定部門`／`制定室別`／`文件編號`／`當責室長-主要`／`當責室長-次要`／`文件使用部門`／`版次`／`所屬循環`／`所屬節點`／`文件連結點`／`公告日期`／`文件名稱`／`內容摘要`／`系統 UUID`）, Then **一律回 403 `FIELD_WRITE_FORBIDDEN`**、該更新不寫入 DB。<br>📌 **可測形狀**：以 `Supervisor`／`DeptContact` × 19 個欄位鍵之**全組合逐案斷言**（38 案），**不得**只抽驗其中數欄——本條要偵測的正是「整頁鬆綁」，抽驗會漏掉未抽到的欄位。<br>🔴 **all-or-nothing 語意不變**：既有「一次請求夾帶多欄、其中任一為唯讀即整批拒絕」之判定**逐字不變**；`Supervisor` 送出「OJT ＋ 任一其他欄」之混合 payload 時**仍整批拒絕**（OJT 之寫入路徑為獨立之附件上傳端點，不經文件欄位 payload）。
-- **AC-N25**（🔒 另兩類附件與附錄仍拒——同一防護之第二面）：Given 角色為 `Supervisor` 或 `DeptContact`, When 嘗試上傳／取代 **ICSOP PDF**、上傳／關聯／移除**使用表單**、或上傳／覆蓋／關聯／解除**附錄**, Then 一律拒絕——ICSOP PDF 與附錄之欄位層回 403 `FIELD_WRITE_FORBIDDEN`；使用表單管理端點之路由層回 403 `PERMISSION_DENIED`（[F025](F025-role-function-matrix.md) 矩陣「文件使用表單管理」對兩者為「無」）、附錄管理端點同理（「附錄管理」為「無」，[F039](F039-appendix-management.md) AC-33）。<br>⚠ **本條與 `AC-N24` 不可合併**：`AC-N24` 鎖的是**文件欄位 payload** 路徑，本條鎖的是**檔案上傳／關聯端點**路徑；兩條路徑之守門機制不同（欄位層 vs 路由層），只驗其一會漏掉另一。
+- **AC-N25**（🔒 另兩類附件與附錄仍拒——同一防護之第二面）：Given 角色為 `Supervisor` 或 `DeptContact`, When 嘗試上傳／取代 **ICSOP PDF**、上傳／關聯／移除**使用表單**、或上傳／覆蓋／關聯／解除**附錄**, Then 一律拒絕——ICSOP PDF 與附錄之欄位層回 403 `FIELD_WRITE_FORBIDDEN`；使用表單管理端點之路由層回 403 `PERMISSION_DENIED`（[F025](F025-role-function-matrix.md) 矩陣「文件使用表單管理」對兩者為「無」）、附錄管理端點同理（「附錄管理」為「無」，[F039](F039-appendix-management.md) AC-33）。<br>⚠ **本條與 `AC-N24` 不可合併**：`AC-N24` 鎖的是**文件欄位 payload** 路徑，本條鎖的是**檔案上傳／關聯端點**路徑；兩條路徑之守門機制不同（欄位層 vs 路由層），只驗其一會漏掉另一。<br>🔴 **2026-08-20 第三輪擴充——前端呈現層之隔離（`15`／`16` 兩頁，lead 追認 designer 之超範圍改動）**：本條之回歸鎖定範圍自此**含編輯頁（`DocumentEditPage`／`prototypes/15-document-edit.html`）之控制項可見性規則**。Given 以 `Supervisor` 或 `DeptContact` 渲染後台**編輯頁**, When 檢視其寫入控制項之 class 指派, Then——<br>　① **OJT 取代鈕**之 class **含 `ojt-write`、不含 `write-only`**，且帶 `data-ojt-upload`；<br>　② **ICSOP PDF 取代鈕**與 **`.xls` 上傳鈕**（及其餘全部寫入控制項）之 class **含 `write-only`、不含 `ojt-write`**；<br>　③ 兩組 class **互斥**——`querySelectorAll('.ojt-write')` 之結果集合與 `querySelectorAll('.write-only')` 之結果集合**交集為空**，且對該兩角色**可寫控制項恰為 1 個**（＝ OJT 取代鈕；`container.querySelectorAll('[data-ojt-upload]').length === 1`）。<br>🔴 **本子條所防之失誤形狀（lead 明確點名）**：把 OJT 取代鈕**併入既有 `.write-only`** ⇒ `.write-only` 之角色條件一旦為兩角色放寬，**ICSOP PDF 取代鈕與 `.xls` 上傳鈕會一起對主管放行**——一個 class 之誤用即造成整片牆鬆動，且後端 `AC-N33` 雖仍會擋（403），畫面上卻已出現不該存在的入口。<br>⚠ **不得**以 `offsetParent === null` 或 `toBeVisible()` 作為 vitest 斷言——**jsdom 不做版面計算，`offsetParent` 對所有元素恆為 `null`**，該斷言會**恆真而毫無鑑別力**（假綠）。該形狀僅適用於 prototype 於**真實瀏覽器**中之自檢；**約束環側一律以 class 指派與 `data-*` 掛鉤斷言**（如上 ①②③）。<br>📌 **`15` 之改動屬 lead 追認之超範圍項**：`AC-N20` 明文含「編輯頁」，且不改則同一 delta 下 `16` 說「OJT 可寫」、`15` 說「全欄位唯讀不可取代」，兩頁自相矛盾。DOM／文案契約見 `AC-N76`。
 - **AC-N26**（🔒 系統管理員對 OJT 仍唯讀——`OQ-D9-24` 之明文排除）：Given 角色為 `SysAdmin`, When 對欄位鍵 `OJT 簽到表` 呼叫欄位權限解析函式, Then 回傳「唯讀」；When 經 OJT 上傳路徑送出, Then 回 **403 `FIELD_WRITE_FORBIDDEN`**。<br>📌 **本條之存在理由**：使用者原文僅提及「主管/部門窗口」；`OQ-D9-24` 明文排除系統管理員，正是為了防止實作時把「非 ICSOPAdmin 之後台角色」一併放行。
 - **AC-N27**（🔒 一般使用者對 OJT 仍唯讀）：Given 角色為 `User`（`userSubtype` 為 `business` 或 `other` 皆然）, When 對欄位鍵 `OJT 簽到表` 呼叫欄位權限解析函式, Then 回傳「唯讀」；When 呼叫 OJT 上傳端點, Then 回 **403 `PERMISSION_DENIED`**（路由層；該端點之閘門為 `ICSOP 文件管理` read，`User` 為 `NONE`，見 [F025](F025-role-function-matrix.md) `AC-N36`）。
+
+#### 🔴 prototype 載體之權威化（2026-08-20 第三輪；來源＝`docs/ui-ux-design-overview.md` §A.6.7）
+
+> **本節之存在理由（與本 repo 頭號教訓互為反面）**：既往之失誤是「**補了 AC ≠ AC 有載體**」；
+> 本節處理的是它的**反面**——**載體已存在於 prototype，卻沒有任何 AC 賦予它權威**。
+> 本輪約束環為簡化版（**僅 backend jest ＋ frontend vitest，無 Playwright／fidelity**），test-generator 只認 spec ＋ prototype：
+> 未入 AC 之掛鉤與文案，它要嘛**不建約束**（實作者刪掉也沒人發現），要嘛**自行臆造斷言**（建出規格從未授權之約束）。兩者皆為缺陷。
+> 📌 **共同載體形狀**：prototype 為**權威**，實際斷言落於**實作端**之 vitest 測試（比照 `AC-D10`／`AC-E8`／`AC-D15` 之既有慣例）。
+
+- **AC-N75**（🔴 唯讀頁附件區之 DOM 契約與徽章文案；權威＝`prototypes/16-document-readonly.html`）：Given 後台文件唯讀頁渲染完成, When 檢視附件區, Then 下列**逐字成立**——
+  - ① **每一附件列帶 `data-attachment-kind`**，其值為四者之一：**`icsop_pdf`／`ojt`／`usageform`／`appendix`**（**逐字，不得改寫為駝峰或連字號**）。
+  - ② **可寫列**（該角色對該列可寫者）另帶 **`data-writable-attachment`**，並顯示一枚徽章，其可見文字逐字為 **`可上傳／覆蓋`**（全形斜線）。
+  - ③ **唯讀列**另帶 **`data-readonly-attachment`**，並顯示一枚鎖頭徽章，其可見文字逐字為 **`唯讀`**。
+  - ④ **OJT 上傳鈕**帶 **`data-ojt-upload`**，其 `aria-label` 逐字為 **`上傳／取代 OJT 實體簽到表`**（全形斜線）。
+  - ⑤ **欄位區之唯讀說明**帶 **`data-field-readonly-note`**，其文字為 `AC-N74` 之 `FIELD_RO_NOTE`。
+  - 🔴 **本條為 `AC-N24`／`AC-N25` 在前端之定位基礎**：Given 以 `Supervisor` 或 `DeptContact` 渲染, Then `querySelectorAll('[data-writable-attachment]').length === 1` 且該唯一元素之所屬列 `data-attachment-kind === 'ojt'`；其餘三種 kind 之列**皆帶 `data-readonly-attachment`**。⚠ **這是「只開一個洞」在畫面上唯一可機器驗證之形狀**——沒有它，test-generator 無從斷言「哪一列可寫」。
+  - 📌 **明列為設計裁量、刻意不入 AC 者**：可寫／唯讀列之視覺區分手法（`border-primary-300`／`bg-primary-50/40`／鎖頭圖示）與 `data-wm-note` 之擺放位置（overview §A.6.4 #2／#3）。
+  - 📌 **`16` 之 OJT 上傳入口對 `ICSOPAdmin` 亦顯示**（其於本矩陣對 OJT 本即「可寫」）——若只對主管／部門窗口顯示，會出現「權限較大之角色看到較少控制項」之視覺矛盾。**上傳成功之回饋須如實區分寫稽核（主管／窗口）vs 不寫稽核（ICSOPAdmin）**，此即 [F016](F016-pdf-ojt-attachment.md#ojt-role-open-delta) `AC-N31`／`AC-N32` 之不對稱在畫面上之載體。
+- **AC-N76**（🔴 編輯頁之 `.ojt-write` 隔離契約與徽章文案；權威＝`prototypes/15-document-edit.html`；lead 追認之超範圍改動）：Given 後台文件**編輯頁**渲染完成, When 檢視 OJT 區塊, Then——
+  - ① **OJT 取代鈕**帶 **`data-ojt-upload`**，其 class **含 `ojt-write`、不含 `write-only`**（class 指派之互斥契約見 `AC-N25` 之 2026-08-20 第三輪擴充）。
+  - ② **OJT 區塊標題旁帶一枚徽章 `data-ojt-exception`**，其可見文字逐字為 **`主管／部門窗口亦可寫`**（全形斜線）。
+  - ③ 唯讀提示句依角色分支，逐字值沿用 [F016](F016-pdf-ojt-attachment.md#ojt-role-open-delta) `AC-N74` 之 `RO_NOTICE_FULL`／`RO_NOTICE_OJT_EXCEPTION`（**兩頁共用同一組常數，不得各自重打**）。
+  - 🔴 **本條之必要性（lead 追認理由）**：`AC-N20` 明文含「編輯頁」；且若 `15` 不改，同一 delta 下 **`16` 說「OJT 可寫」、`15` 說「全欄位唯讀不可取代」，兩頁自相矛盾**——使用者會依先看到的那頁形成錯誤認知。
+  - ⚠ **`.ojt-write` 為刻意新增之第二套隱藏規則，不得「順手統一」為 `.write-only`**——理由與可斷言形狀見 `AC-N25`（併入會使 ICSOP PDF 取代鈕與 `.xls` 上傳鈕**一起對主管放行**）。此不一致之性質與 [F018](F018-usage-form-management.md) `AC-D17` 之既有局部不一致同型（該處亦明文禁止統一）。
 
 > **權限矩陣頁之 F041 註記橫幅（不在本檔立 AC）**：`prototypes/18-permission-matrix.html` 於兩份矩陣共用之頁面層級新增一則註記橫幅（子分類非第 6 種角色、兩份矩陣皆維持 5 欄）。
 > 因其位於**頁面層級、橫跨兩個分頁**，AC 僅立於 [F025 AC-U4](F025-role-function-matrix.md)（對應 [F041 AC-45](F041-user-subtype-business-scope.md#f2-fidelity-gap)），本檔不重複規範。本檔之欄數與格值斷言（AC-U1）不受該橫幅影響。

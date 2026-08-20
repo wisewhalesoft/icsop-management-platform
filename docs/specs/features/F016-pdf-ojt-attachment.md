@@ -54,6 +54,27 @@ Epic/Story: E04 / US-036
 - **AC-N34**（🔒 系統管理員與一般使用者仍拒）：Given 角色為 `SysAdmin`, When 呼叫 OJT 上傳端點, Then 回 **403 `FIELD_WRITE_FORBIDDEN`**（欄位層，`OQ-D9-24`）；Given 角色為 `User`（兩種 `userSubtype` 皆然）, When 呼叫, Then 回 **403 `PERMISSION_DENIED`**（路由層，其對 `ICSOP 文件管理` 為 `NONE`）。兩者皆**不寫稽核**。
 - **AC-N35**（🔒 上傳驗證與覆蓋語意回歸鎖定）：Given 本 delta 實作完成, When 由**任一**現在被允許之角色（ICSOPAdmin／Supervisor／DeptContact）上傳 OJT, Then 本 feature 之全部既有驗證**逐字不變且不因角色而異**——格式不在允許清單 → `FILE_FORMAT_NOT_ALLOWED` ＋允許清單；超過大小上限 → `FILE_SIZE_EXCEEDED`；未登入／以 Blob URL 直取 → `FILE_ACCESS_DENIED`；重新上傳即覆蓋、舊檔不再可經文件記錄存取。**驗證順序與錯誤碼一律沿用 [error-handling.md#file](../error-handling.md#file)，不新增任何錯誤碼。**
 
+#### 🔴 prototype 載體之權威化（2026-08-20 第三輪；來源＝`docs/ui-ux-design-overview.md` §A.6.7）
+
+> **本節之存在理由（與本 repo 頭號教訓互為反面）**：既往之失誤是「**補了 AC ≠ AC 有載體**」；
+> 本節處理的是它的**反面**——**載體已存在於 prototype，卻沒有任何 AC 賦予它權威**。
+> 本輪約束環為簡化版（**僅 backend jest ＋ frontend vitest，無 Playwright／fidelity**），test-generator 只認 spec ＋ prototype：
+> 未入 AC 之掛鉤與文案，它要嘛**不建約束**（實作者刪掉也沒人發現），要嘛**自行臆造斷言**（建出規格從未授權之約束）。兩者皆為缺陷。
+> 📌 **共同載體形狀**：prototype 為**權威**，實際斷言落於**實作端**之 vitest 測試（比照 `AC-D10`／`AC-E8`／`AC-D15` 之既有慣例）。
+
+- **AC-N74**（🔴 唯讀提示三條具名常數之逐字值；`AC-N28` 之 📝 所授權，designer 已定稿）：Given 後台文件唯讀頁（`prototypes/16-document-readonly.html` 為權威）, When 依角色渲染, Then 下列三個**具名常數**之值**逐字成立**，且**實作端與測試端共用同一份**（不得各自重打）——
+  | 常數 | 適用角色 | 逐字值 |
+  |---|---|---|
+  | **`RO_NOTICE_FULL`** | **僅 `SysAdmin`** | `唯讀模式 · 此角色對 ICSOP 文件全欄位皆唯讀；附件可下載（燒錄浮水印），但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。` |
+  | **`RO_NOTICE_OJT_EXCEPTION`** | `Supervisor`／`DeptContact` | `唯讀模式 · 此角色對 ICSOP 文件其餘 19 個欄位、ICSOP PDF、使用表單與附錄皆唯讀（FIELD_WRITE_FORBIDDEN）；唯一例外為「OJT 實體簽到表」，可上傳或覆蓋，該次上傳會寫入稽核。全部附件皆可下載（下載一律燒錄浮水印並寫入稽核）。` |
+  | **`FIELD_RO_NOTE`** | 三角色皆同（欄位區） | `此區 19 個欄位對本角色一律唯讀（FIELD_WRITE_FORBIDDEN）；本頁唯一可寫項為下方附件區之「OJT 實體簽到表」。` |
+
+  - ① **分支斷言**：以 `SysAdmin` 渲染 ⇒ 唯讀提示之文字**恰為 `RO_NOTICE_FULL`**；以 `Supervisor` 或 `DeptContact` 渲染 ⇒ **恰為 `RO_NOTICE_OJT_EXCEPTION`**。
+  - ② 🔒 **`RO_NOTICE_FULL` 為原句一字未改**——它對 `SysAdmin` **仍然為真**（`AC-N26`：其對 OJT 亦唯讀）⇒ **本條同時成為 `AC-N26` 在畫面上之載體**，而不只存在於後端判定。
+  - ③ **附件區標題與說明**：`#attachTitle` 之文字為 `附件`（該角色對 OJT 可寫時）或 `附件（僅下載）`（不可寫時）；`#attachNote` 之文字為二擇一——可寫 → `下載/列印時伺服器端燒錄浮水印並寫入稽核。本角色僅「OJT 實體簽到表」一項可上傳/覆蓋，其餘各列皆為唯讀（見各列標記）。`／不可寫 → `下載/列印時伺服器端燒錄浮水印並寫入稽核；本角色無任何上傳/取代入口。`
+  - 📌 **擬稿之三個要點（designer 定稿理由，保留供覆核）**：(a) 前半沿用既有句型（`唯讀模式 ·` ＋ `FIELD_WRITE_FORBIDDEN`）維持語氣一致並明示基底規則未變；(b) **明講「19 個欄位」與「另兩類附件＋附錄」**，使 [F026](F026-role-field-matrix.md) `AC-N24`／`AC-N25` 之界線在畫面上可讀——只寫「除了 OJT 以外」易被讀成「附件區都放行了」，那正是本輪要防的誤解；(c) **明講「該次上傳會寫入稽核」**——首次開放非管理角色之寫入路徑（`AC-N31`），使用者應被告知留痕。
+  - 🔴 **本條取代 `AC-N28` 之「逐字文案待 designer 定稿後回寫」佔位**：`AC-N28` 之 📝 原記「改寫後之逐字文案由 ui-ux-designer 於 prototype 定稿後回寫本節」——**已於本條兌現**。
+
 ## Error Scenarios
 - 格式/大小/未授權存取：見 [error-handling.md#file](../error-handling.md#file)。存取控管見 [NFR-002](../nfr.md#security)（短效期憑證）。
 - **OJT 上傳之權限（2026-08-20）**：`SysAdmin` → `FIELD_WRITE_FORBIDDEN`（403，欄位層）；`User` → `PERMISSION_DENIED`（403，路由層）；`Supervisor`／`DeptContact`／`ICSOPAdmin` → 允許。**不新增任何錯誤碼**（`AC-N34`）。

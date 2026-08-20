@@ -60,6 +60,22 @@ Epic/Story: E06 / US-055
   - ③ **共用元件不動**：`frontend/src/components/**` 之字級 class 逐字未變。
 - **AC-N62**（🔒 浮水印疊加之字級不受本項影響；🔴 **2026-08-20 就地縮減範圍——`PublicViewerPage` 一項已不適用**）：Given 本 delta 實作完成, When 檢視 `ChangeHistoryPage` 與 `LifecycleTreePreviewPage` 之浮水印疊加文字節點, Then 其 inline `fontSize` **仍逐字為 `14`**（兩頁現行 `fontSize: 14`，`ChangeHistoryPage.tsx:1000`／`LifecycleTreePreviewPage.tsx:516`），**不因本字級 delta 而改變**。<br>📝 **被縮減之原條文逐字保留供追溯**：「Given 本 delta 實作完成, When 檢視 `PublicViewerPage` 之浮水印疊加文字節點（`data-testid="watermark-text"`）, Then 其 inline `style.fontSize` **仍逐字為 `'14px'`**（`PublicViewerPage.test.tsx:58` 之既有斷言維持綠燈）；`ChangeHistoryPage`／`LifecycleTreePreviewPage` 之浮水印 `fontSize: 14` 亦不變。」<br>🔴 **縮減理由**：`PublicViewerPage` 之浮水印疊加層已由 [F020](F020-watermark.md#d9-watermark-delta) `AC-N7`（`OQ-D9-32`，使用者裁決）**整個移除** ⇒ 該節點不存在，本條對它**失去載體**。⚠ **本條並未被推翻**——它對**仍然存在**的兩頁疊加層**逐字有效**；且該兩頁位於**後台**，若前台單方面放大字級而波及它們即為越界（`OQ-D9-12` 選項 A ＝僅前台）。<br>🔴 **本 delta 只動 `text-*` Tailwind class，不動任何 inline `fontSize`**（此原則未變）。
 
+#### 🔴 prototype 載體之權威化（2026-08-20 第三輪；來源＝`docs/ui-ux-design-overview.md` §A.6.7）
+
+> **本節之存在理由（與本 repo 頭號教訓互為反面）**：既往之失誤是「**補了 AC ≠ AC 有載體**」；
+> 本節處理的是它的**反面**——**載體已存在於 prototype，卻沒有任何 AC 賦予它權威**。
+> 本輪約束環為簡化版（**僅 backend jest ＋ frontend vitest，無 Playwright／fidelity**），test-generator 只認 spec ＋ prototype：
+> 未入 AC 之掛鉤與文案，它要嘛**不建約束**（實作者刪掉也沒人發現），要嘛**自行臆造斷言**（建出規格從未授權之約束）。兩者皆為缺陷。
+> 📌 **共同載體形狀**：prototype 為**權威**，實際斷言落於**實作端**之 vitest 測試（比照 `AC-D10`／`AC-E8`／`AC-D15` 之既有慣例）。
+
+- **AC-N82**（設計系統之字級分歧註記橫幅；權威＝`prototypes/00-design-system.html`）：Given `prototypes/00-design-system.html`, When 讀取其內容, Then 於字級 tokens 表**之外**存在一則註記橫幅，其文字**含下列三段逐字片段**——
+  - ① 標題：**`🔴 前台／後台字級自此分歧（2026-08-20 使用者裁決 · OQ-D9-12／OQ-D9-13）`**
+  - ② 規則：**`上表為後台管理介面與設計系統之權威 tokens，逐字不變。`** 且含 **`text-sm → text-base（16px）、text-xs → text-sm（14px）`** 與 **`前台不得再出現 text-xs 或 text-[Npx] 之任意字級`**
+  - ③ 防呆：**`不得把本表改成單一新值`**（其後說明該誤改會讓後台一起變大）
+  - 🔒 **字級 tokens 表本身逐字不動**——`AC-N61` ② 之斷言（表中仍含 `14 / regular`＋`text-sm` 與 `12 / regular`＋`text-xs` 兩列）**維持有效**；本橫幅位於**表外**，不影響該斷言。
+  - 🔴 **本條之必要性**：`AC-N61` 只鎖住「表不許改」，**但沒有任何地方告訴後續讀者「為什麼前台和這張表不一樣」**。缺了這段說明，下一個看到前台用 `text-base`、設計系統寫 `text-sm` 的人會判定為漂移並「修回去」——那正是 `AC-N61` ① 所防之跨全專案 find-replace 的動機來源。**把理由寫在畫面上，是讓回歸鎖定能長期存活的前提。**
+  - 📌 **驗證載體**：以 `node:fs` 讀取 `prototypes/00-design-system.html` 之字串包含檢查（比照 `AC-N59`／`AC-N61` ② 之既有 source-scan 慣例）。
+
 ## Error Scenarios
 - 極小寬度降級：見 [NFR-005](../nfr.md#browser-rwd)（後台 DAG 畫布以桌機為主）。
 - **字級調整不產生任何錯誤路徑**（2026-08-20）：純呈現變更，**不新增錯誤碼、不改變任何 API 契約**。
