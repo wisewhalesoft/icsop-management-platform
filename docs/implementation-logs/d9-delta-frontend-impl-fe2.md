@@ -95,6 +95,7 @@ npx tsc --noEmit → 無輸出（乾淨）
 |---|---|---|---|
 | 1 | `AC-N53` 之 `within(row).getByText('附件上傳')` 與同檔既有 `TS-AQ-FE-001` 之 `getByText('DOWNLOAD · 下載')`（且該元素本身帶顏色 class）互斥 | **窮舉三種 pill DOM 形狀**：①標籤為 pill 直屬文字（＝`prototypes/17:315` 之 `${act} · ${lbl}` 逐字形狀）→ B 綠 A 紅；②標籤包進子元素 → A 綠但 pill 之 `getNodeText` 變 `"DOWNLOAD · "`、B 紅；③依 actionType 分支結構 → 兩者皆綠但**無任何 AC 授權**。另舉 `AC-N53` 之規格文字本身為**對映函式層級**（`actionTypeLabel(...) === '附件上傳'`），未要求該標籤在 DOM 中自成節點 | 成立 → 改為 `getByText('ATTACHMENT_UPLOAD · 附件上傳')`，明文不走 ③ |
 | 2 | `TS-D18-062` 之 `within(row).getByText('—')`（單數）被同檔 `AC-N47` 新欄連坐 | fixture `uf3` 之 `formNumber` 為 `null` **且**無 `draftingDeptCodes` ⇒ 同一 `<tr>` 內必然出現兩個 `—`。兩條 AC（`AC-D15①`／`AC-N47`）都明訂 0 值顯示 U+2014，且 `AC-N47` 明訂該欄置於「表單名稱」之後 ⇒ **結構上必然**多重命中，非產品缺陷 | 成立 → 先取 `[data-form-number]` 容器再於其內找文字 |
+| 4 | `proxy-coverage.test.ts` 之「兩份設定彼此一致」把**靜態檔 location** 誤算為 API 代理前綴 | 該斷言之排除清單硬寫死單一字面 `.filter((p) => p !== 'assets')`；新增之 `location /pdfjs/`（純 `try_files $uri =404`、**無 `proxy_pass`**）因而被算進代理前綴而與 vite 的 8 個 proxy key 不等。`pdfjs` 與 `assets` 同性質：dev 端由 Vite 靜態服務 `public/pdfjs/`，**加進 vite proxy 反而會讓 dev 的 pdf.js 去打後端 :3000 拿 cmap 而 404** ⇒ 該斷言現行形狀等於「禁止 nginx 再新增任何靜態檔 location」，而那並非它要守的東西 | 成立 → 採本人建議之 ②：改為具名 `STATIC_LOCATIONS` 常數（比照既有 `NOT_PROXIED` 逃生口，須附理由），並**加碼一條反腐爛守衛**（清單項目必須確實存在於 `nginx.conf`）。`18cd385` |
 | 3 | `AppendixManagementPage.export.test.tsx` 之「後台**不得**渲染 `data-wm-note`」前提已失效 | 前提源自 `OQ-FM-01`，已被 `OQ-D9-08`／`OQ-D9-33`／`F020 AC-N20` 全面推翻；**環內互斥可直接舉證**——同 feature 之 `AppendixManagementPage.test.tsx:83`／`:96` 正面要求每列帶 `data-wm-note` 且文案逐字，兩案不可能同時綠於同一份 DOM | 成立 → 就地反轉為 `AC-N20` 正面斷言（pdf／非 pdf 兩態），原案全文逐字保留於註解 |
 
 > 📌 三則皆為「**環內兩條斷言互斥**」或「**前提已被人類裁決推翻**」——即可**逐格窮舉舉證**之型，
@@ -221,9 +222,84 @@ lead 交接時列為待查項。本人**在動手前先跑一次乾淨基準**�
 
 | # | 項目 | 現況 |
 |---|---|---|
-| 1 | **兩個新頁之瀏覽器煙霧測試** | 未做。vitest 全為 jsdom＋`vi.mock('../api/endpoints')`，**從未真的打到後端**。需真人驗：`/admin/usage-forms/new` 建立一筆（含編號與制定部門）→ 清單該列「制定部門」欄顯示**組織名稱**而非裸 `orgCode`；`/admin/usage-forms/:id/edit` 回填後儲存 → 該列六欄不變。硬重新整理（非 SPA 導覽）兩條新路由亦須回 SPA 而非 404 |
+| 1 | **兩個新頁之瀏覽器煙霧測試** | 未做。vitest 全為 jsdom＋`vi.mock('../api/endpoints')`，**從未真的打到後端**。需真人驗：`/admin/usage-forms/new` 建立一筆（含編號與制定部門）→ 清單該列「制定部門」欄顯示**組織名稱**而非裸 `orgCode`；`/admin/usage-forms/:id/edit` 回填後儲存 → 該列六欄不變。~~硬重新整理（非 SPA 導覽）兩條新路由亦須回 SPA 而非 404~~ ✅ **此子項已實證**，見 §八 (c) |
 | 2 | **制定部門名稱解析之真實資料** | 清單頁與兩新頁之標籤皆由 `/org-units` 解析；解析失敗時**優雅降級為顯示 `orgCode`**（不顯示 undefined、不阻斷清單）。此降級路徑在單元測試中恆被走到（環未 mock `getOrgUnits`），**但「解析成功」之路徑從未被機器驗證** |
 | 3 | ~~`prototypes/18-permission-matrix.html` 之 OJT 列落後~~ ✅ **已解決** | 交付時該行仍為舊值 `['唯讀','可寫','唯讀','唯讀','唯讀']`，未隨 `OQ-D9-19/20/24` 更新；本人依 `FIELD_MATRIX`（`AC-N22` 之權威）而非依過時 prototype 改前端 `FIELD_DISPLAY`，並如實提報「程式與 prototype 不一致」而**未自行修改 `prototypes/**`**。lead 派回 designer 後已於 `f36b51e` 補正為 `['唯讀','可寫','可寫','可寫','唯讀']`（`:230`），兩側現已一致 |
 | 4 | 前後端 `FIELD_MATRIX` 兩份鏡射之交叉比對 | 沿 impl-fe 段之盲區 #24：兩側測試各自對各自檔案斷言，**無自動化交叉比對**。本段只動前端**顯示**鏡射（`FIELD_DISPLAY`），未動 `domain/field-matrix.ts` |
 | 5 | `.xls` 上傳鈕仍為 `disabled` | 沿 impl-fe 段 §六(e)②之登錄，本段未觸碰。**請勿因該案綠燈而認為 `.xls` 上傳可用** |
 | 6 | backend 線之實作日誌 | `impl-be` 因額度中止未寫；lead 已表明另行處理，非本人範圍 |
+
+## 八、部署面：`frontend/nginx.conf` 缺 `/pdfjs/` 規則（lead 指派之 NEW work，已修並實證）
+
+> 🔴 **這是「閘門全綠但部署會靜默壞掉」的一格**——與上一輪 `@pdf-lib/fontkit` 短 loca 截斷
+> （使用者親自發現、lead 誤判為已修）同一形狀。單元測試永遠抓不到：vitest 以
+> `vi.mock('pdfjs-dist')` 執行，**從未真的下載任何 `.bcmap`**。
+
+### (a) 缺陷形狀
+`nginx.conf` 原本沒有 `/pdfjs/` 之 location，故落入最後的 SPA fallback：
+```nginx
+location / { try_files $uri $uri/ /index.html; }
+```
+檔案**存在**時 `try_files $uri` 先命中真檔，所以**正常路徑看起來完全正常**；
+**缺檔時**則回 `200` ＋ `index.html`。pdf.js 於是收到一份 `Content-Type: text/html` 的「cmap」——
+**它不拋錯，只會靜默缺字**（中文變空白／方塊）。`/assets/` 寫 `try_files $uri =404` 正是為了這件事。
+
+### (b) 修正
+於 `/assets/` 之前新增（`nginx.conf`）：
+```nginx
+location /pdfjs/ {
+  try_files $uri =404;
+}
+```
+⚠ **刻意不下 `immutable` 長快取**（與 `/assets/` 之唯一差異）：本目錄檔名由 pdfjs-dist 版本決定、
+**不含內容雜湊**，升版後同名檔內容會變，`immutable` 會讓瀏覽器整年不回頭檢查而卡在舊版；
+改以預設 `Last-Modified`／`ETag` 重新驗證（304，pdf.js 每份文件通常只取 1～2 個 bcmap）。
+
+### (c) 🔴 實證（**不是結構推論**）——以拋棄式 nginx 容器做 A／B 對照
+以 `nginx:alpine` 掛載**真實的** `nginx.conf` 與一個最小 doc root（`index.html` ＋ 一個真的
+`UniGB-UCS2-H.bcmap` ＋ 一個真的 `FoxitFixed.pfb`）起兩個容器：`:8098` 掛 **`git show HEAD:` 之修正前**
+設定、`:8099` 掛**修正後**設定。另起一個 `--network-alias backend` 的容器讓 `proxy_pass` 之上游名稱可解析
+（否則 nginx 於載入設定時即因 `host not found in upstream` 拒絕啟動）。
+
+| 請求 | 修正前 `:8098` | 修正後 `:8099` |
+|---|---|---|
+| `/pdfjs/cmaps/NOPE.bcmap`（缺檔） | 🔴 **`200` `text/html` 98 bytes ＝ SPA index.html** | ✅ `404`（nginx 404 頁，153 bytes） |
+| `/pdfjs/standard_fonts/NOPE.pfb`（缺檔） | 🔴 **`200` `text/html` 98 bytes** | ✅ `404` |
+| `/pdfjs/cmaps/UniGB-UCS2-H.bcmap`（真檔） | `200` `application/octet-stream` 43366 bytes | `200` `application/octet-stream` **43366 bytes**（位元組數與來源檔相同） |
+| `/pdfjs/standard_fonts/FoxitFixed.pfb`（真檔） | — | `200` `application/octet-stream` 17597 bytes |
+
+**回歸對照（修正後 `:8099`，證明沒有誤攔既有行為）**
+
+| 請求 | 結果 | 意義 |
+|---|---|---|
+| `/assets/nope.js` | `404` | 既有 `=404` 規則未受影響 |
+| `/admin/documents/abc`（`Accept: text/html`） | `200` SPA shell | Accept-based SPA bypass 未受影響 |
+| `/admin/usage-forms/new`（`Accept: text/html`） | `200` SPA shell | **本 delta 新增路由之硬重新整理可用** |
+| `/admin/usage-forms/uf1/edit`（`Accept: text/html`） | `200` SPA shell | 同上（含路由參數） |
+| `/admin/usage-forms/overview`（`Accept: application/json`） | `502` | 確實走了 `proxy_pass`（驗證環境之 `backend` 別名容器只聽 80 非 3000，故 502 為預期）——**重點是沒有回 200 index.html** |
+| `/org-units`（`Accept: application/json`） | `502` | 同上 |
+| `/some/spa/route`（`Accept: text/html`） | `200` SPA shell | SPA fallback 本身未被破壞 |
+
+驗證後三個拋棄式容器與該 network 已刪除；**正式 stack（`icsop-frontend`／`icsop-backend`／`icsop-pgvector`）全程未觸碰**（驗證前後皆 `Up 12 hours (healthy)`）。
+
+### (d) 🔴 對「正在跑的 dev 容器」之實地探測——同一形狀已在真實環境成立
+```
+docker exec icsop-frontend grep -c pdfjs /etc/nginx/conf.d/default.conf   → 0
+docker exec icsop-frontend ls /usr/share/nginx/html/pdfjs                 → No such file or directory
+curl http://127.0.0.1:5173/pdfjs/cmaps/UniGB-UCS2-H.bcmap  → HTTP 200  text/html  764 bytes
+curl http://127.0.0.1:5173/assets/nope.js                  → HTTP 404
+```
+該容器為**本 delta 之前**所建（`Up 12 hours`），dist 內根本沒有 `pdfjs/` 目錄 ⇒ 連**真實檔名**的 cmap
+都回 `200 text/html`。`/assets/nope.js` 同時回 `404` 是最好的對照組：**同一台 nginx、同一份設定，
+差別只在有沒有那條 `=404` 規則**。
+
+### (e) ⚠ 生效條件（交還 lead）
+`frontend/Dockerfile:11` 為 `COPY nginx.conf /etc/nginx/conf.d/default.conf`——設定檔是**烘進 image** 的，
+`docker-compose.yml` 之 `frontend` 服務**沒有掛載 volume**。故本修正與 `dist/pdfjs/` 資產
+**都必須重建 image 才會生效**。
+🔴 且依本 repo 既有教訓：`docker compose up -d --build` **只換 image 不換容器**（會印 `Running` 而非
+`Recreated`），須 `--force-recreate`，否則會對著舊碼做驗收。**本人未執行任何重建**（不動共用 stack）。
+
+### (f) 申訴 #4（`proxy-coverage.test.ts`）
+新增 location 使該檔之「兩份設定彼此一致」轉紅——**已走 mailbox 申訴、未自行修改測試**，
+`ring-fe` 核實成立並於 `18cd385` 改為具名 `STATIC_LOCATIONS` 常數＋反腐爛守衛。詳見 §四 第 4 列。
