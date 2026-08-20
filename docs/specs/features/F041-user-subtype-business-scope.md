@@ -300,6 +300,18 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
 | **［AC-02 之 ASSUMPTION 確認］** | `userSubtype` 讀到未知值時 fail-open（收斂 `'other'`）或 fail-closed？ | **fail-open，收斂為 `'other'`** | AC-02、Edge Cases 首列 | 選 fail-closed（未知值視同 `'business'` 而限縮）＝髒資料將導致合法使用者被誤鎖。**裁決採 fail-open 之安全性依據：INV-1 之 DB `NOT NULL`＋`CHECK` 約束使未知值不可能持久化**，讀取端之寬鬆不構成實際風險 |
 | **［人類閘門新增裁決］** | 前台清單**頂部說明句**是否於業務視角換為專屬文案？ | **是，換專屬文案**（ui-ux-designer 已定稿逐字內容） | **AC-40**（新增）、[F019](F019-public-list-browsing.md) AC-U7 | 選「不換、沿用單一說明句」＝業務使用者無從得知自己的瀏覽範圍已被限縮，容易誤判為「系統沒有這份文件」而重複詢問。**裁決採「換」之附帶決定：孤兒帳號沿用 `SCOPE_NOTICE_BUSINESS`、不另立第三句**（另立將以文案差異宣告帳號異常，牴觸 [error-handling.md#dept-restriction](../error-handling.md#dept-restriction)）。⚠ **空狀態文案仍為 `查無符合結果` 逐字不分支**（OQ-E08-07 4c），與本列為兩件不同的字串 |
 
+### D9 delta：可見性判定零漣漪回歸鎖定（🔴 2026-08-20；`OQ-D9-18` 選項 A 之連動核實） {#d9-no-ripple-lock}
+
+> 前提裁決：**`OQ-D9-18`→選項 A：純 metadata**——使用表單之「制定部門」僅供顯示與清單篩選，**不**影響任何既有可見性／RBAC 判定；**本 feature 之判定邏輯逐字不動**〔使用者〕。
+> **本節僅立回歸鎖定 AC，不新增任何行為。** AC 編號採 `AC-N#`。
+
+- **AC-N64**（🔒 業務子分類可見性判定零漣漪）：Given 2026-08-20 D9 delta 全數實作完成, When 執行本 feature 之全部既有 AC（`AC-01`～`AC-45`）與其於 [F019](F019-public-list-browsing.md)／[F020](F020-watermark.md)／[F025](F025-role-function-matrix.md)／[F026](F026-role-field-matrix.md)／[F003](F003-account-role-management.md) 之全部 `AC-U#` delta, Then **全數維持綠燈、期望值一字未改**。逐項鎖定——
+  - ① **可見性判定式之輸入維度未增加**：業務子分類之可見範圍仍恆為「**已公告 AND 文件使用部門（`DOC_USING_DEPT`）與 viewer `orgCode` 子樹相符**」二元組；**使用表單之制定部門不是第三個維度**。
+  - ② **`isWithinSubtree` 之第四處消費（本 feature）不變**（INV-4）：簽章、語意與既有測試逐案不變。
+  - ③ **拒絕語意不變**：仍回 404 `DOCUMENT_NOT_FOUND`、仍**不寫任何稽核**（`OQ-E08-10` 選項 A）——⚠ **不得**因本輪 `OQ-D9-10`／`OQ-D9-23` 開始寫後台稽核而順手把 F041 之拒絕路徑也接上 `AuditWriter`；兩者為互不相干之裁決。
+  - ④ **後台燒錄範圍擴張（[F020](F020-watermark.md#backend-burn-delta) `AC-N14`～`AC-N21`）不放寬本 feature 任何檢查**：業務子分類使用者對不相符文件之前台檢視器／代理／下載／列印**仍一律拒絕**，`PdfBurner.burnPdf` spy 仍恆為 0（`AC-U2` 不變）。
+  - 🔴 **本條所防之失誤形狀**：本輪同時動了「誰能拿到燒錄檔」與「誰能看到哪些文件」兩個相鄰主題，最可能的越界是把後台之寬鬆（無 F041 檢查）誤植到前台路徑，或反之。
+
 ## Error Scenarios
 
 | 情境 | HTTP／錯誤碼 | 說明 |

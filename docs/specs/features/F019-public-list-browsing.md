@@ -132,6 +132,18 @@ Epic/Story: E06 / US-050, US-051, US-052
 ### 詳情頁移除「當責室長-次要」欄 delta（🔴 2026-08-17 使用者裁決；缺失修正第 3 項） {#secondary-chief-delta}
 
 - **AC-D15**（詳情頁移除當責室長-次要欄；權威＝`prototypes/04-public-document-detail.html`）：Given 前台文件詳情頁渲染完成, When 檢視欄位清單, Then **不存在**標籤為 `當責室長-次要` 之欄位列（`queryByText('當責室長-次要') === null`），欄位列由 19 列成為 **18 列**；其餘 18 列之集合、順序與逐字標籤**一律不變**（`當責室長-主要` 保留）。<br>🔴 **對外 DTO 一併收斂**（處置比照 `AC-D12`）：前台文件詳情 API 之回應**不含** `secondaryChiefIds` 與 `secondaryChiefNames` 兩個屬性（`Object.prototype.hasOwnProperty.call(dto,'secondaryChiefIds') === false`，`secondaryChiefNames` 同）；且**不得**再為次要室長員編呼叫 `resolvePersonNames`——只刪欄位而仍解析，是為不會被回傳的資料付查詢成本。<br>⚠ **內部型別與後台皆不變**：`PublicDocDetail.secondaryChiefIds`（內部）保留；後台清單 DTO 之 `secondaryChiefNames`／`secondaryChiefCount` 與其「當責室長」篩選之**主要∪次要**語意（`AC-D7`／[F017](F017-backend-document-list.md) `AC-D7`）**逐字不受影響**——「前台不顯示 ≠ 後台不判定」。<br>⚠ **前端須容忍舊形狀**：滾動部署期間後端可能仍回該兩欄，前端**縱使收到亦不得渲染**（其回歸鎖以 cast 塞回該兩欄之 fixture 斷言；否則「不出現次要室長姓名」會因資料裡根本沒有該字串而恆真）。<br>📌 **[F026](F026-role-field-matrix.md) 矩陣不變**：該矩陣描述的是欄位之讀寫權限，非「前台詳情頁上有哪幾列」——`文件使用部門` 於 `AC-D9` 移出前台後亦留在矩陣中，本條沿用同一先例。
+### D9 delta：判定邏輯零漣漪回歸鎖定（🔴 2026-08-20；缺失／變更 delta 第 6／7 項之連動核實） {#d9-no-ripple-lock}
+
+> 前提裁決：**`OQ-D9-18`→選項 A**（使用表單「制定部門」為**純 metadata**，不影響任何既有可見性／RBAC 判定；[F041](F041-user-subtype-business-scope.md)／[F033](F033-permission-aware-retrieval.md)／[F026](F026-role-field-matrix.md) 之判定邏輯**逐字不動**）〔使用者〕｜**`OQ-D9-12`→選項 A**（字級調整僅前台呈現層）〔使用者〕。
+> **本節僅立回歸鎖定 AC，不新增任何行為。** AC 編號採 `AC-N#`。
+
+- **AC-N63**（🔒 前台清單之判定與呈現零漣漪）：Given 2026-08-20 D9 delta 全數實作完成, When 執行本 feature 之全部既有 AC 與 `AC-S1`／`AC-S2`／`AC-U1`～`AC-U8`／`AC-D1`～`AC-D14`, Then **全數維持綠燈、期望值一字未改**。逐項鎖定——
+  - ① **三個純函式之簽章與語意逐字不變**：`isWithinSubtree`（`backend/src/org-sync/org-hierarchy.ts`）／`isDocVisibleToViewer`／`isUsingDeptMatched`；其既有測試（含 `TS-PS-ORG-001`～`006`）逐案綠燈且**期望值未經修改**。
+  - ② **使用表單之「制定部門」（[`USAGE_FORM_DRAFTING_DEPT`](../data-model.md#usage-form-drafting-dept)）不進入任何前台判定**——上列三函式**皆不接受**該資料作為輸入；置頂排序（Main Flow 2–3）之輸入仍僅為 `DOC_USING_DEPT` 與 viewer 之 `orgCode`。
+  - ③ **前台清單之篩選組成仍為 6 項**（`AC-D1`），**不因使用表單新增制定部門而增加任何篩選器**。
+  - ④ **字級調整（[F021](F021-rwd-responsive.md) `AC-N59`～`AC-N62`）不改變任何行為斷言**——清單排序、置頂、搜尋、篩選、分頁、可見性過濾之全部既有測試**不得**因 class 變更而需要修改期望值。
+  - 🔴 **本條之存在理由**：`USAGE_FORM_DRAFTING_DEPT` 與 `DOC_USING_DEPT` **結構完全同構**（`OQ-D9-17` 選 B 之刻意設計），最容易被「順手」接進同一套子樹判定；而 `OQ-D9-18` 已明確否決該作法。同源之斷言另見 [F018](F018-usage-form-management.md#usage-form-page-delta) `AC-N46`。
+
 ## Error Scenarios
 - 空結果/萬用字元跳脫：見 [error-handling.md#public](../error-handling.md#public)。效能見 [NFR-001](../nfr.md#performance)。
 - **業務子分類之可見範圍限縮**（🟢 APPROVED）：拒絕一律回 **404 `DOCUMENT_NOT_FOUND`**（不新增錯誤碼），見 [error-handling.md#dept-restriction](../error-handling.md#dept-restriction)；規則權威＝[F041](F041-user-subtype-business-scope.md)。

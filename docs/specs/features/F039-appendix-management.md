@@ -53,7 +53,7 @@ ICSOP 文件建立/編輯時，自附錄池**可搜尋多選**關聯附錄（**�
 
 **現行定案（2026-08-16 起）**：
 - **前台**文件詳情頁下載之附錄，`format = pdf` 者**必須於伺服器端將浮水印燒錄進 PDF 內容層**（格式權威同 [NFR-007](../nfr.md#watermark)、機密聲明另起一行、比照 [F020](F020-watermark.md)）；`format ∈ {xlsx, xls}` 者**維持原檔位元組不作任何處理**，並於前台清單該列明示逐字文案 `此格式不支援浮水印`（策略 A，OQ-D18-02）。
-- **後台**附錄管理頁之個別下載**維持原檔（RAW）、不燒錄、不寫稽核**，一字不改（OQ-FM-01 維持有效）。
+- 🛑 ~~**後台**附錄管理頁之個別下載**維持原檔（RAW）、不燒錄、不寫稽核**，一字不改（OQ-FM-01 維持有效）。~~ → 🔴 **2026-08-20 由 `OQ-D9-08`（選項 B）推翻**（原文逐字保留供追溯）：**後台附錄管理頁之個別下載亦燒錄（PDF）並寫稽核，無例外角色**，見 [§後台附錄下載燒錄 delta](#d9-backend-burn-delta) `AC-N56`／`AC-N57`。
 - 前台下載之**稽核義務不變**：燒錄與否皆恰寫入一筆 `targetType=APPENDIX` 之 `DOWNLOAD` 紀錄（AC-27 不變，OQ-D18-03）。
 
 📝 **2026-08-16 使用者裁決推翻，理由：使用者明確要求「前台 document detail 附錄的下載缺少浮水印」應予燒錄（缺失 delta 第 5b 項）**。
@@ -173,7 +173,7 @@ ICSOP 文件建立/編輯時，自附錄池**可搜尋多選**關聯附錄（**�
 
 - **AC-D1**（前台 PDF 附錄燒錄）：Given 一般使用者於前台文件詳情頁下載一份 `format = pdf` 之附錄, When 下載完成, Then 回應之位元組其 PDF 內容層**已燒錄浮水印**，其字串與同一使用者於同一時刻經 [F020](F020-watermark.md) 檢視器下載所得之浮水印**逐字相同**（僅時間戳依當下產生）；`PdfBurner.burnPdf` 之 spy **呼叫次數為 1**。
 - **AC-D2**（非 PDF 原檔＋UI 明示）：Given 某附錄之 `format ∈ {xlsx, xls}`, When 於前台文件詳情頁下載, Then 回應之位元組與 Blob 中之原始檔**逐位元組相同**、`PdfBurner.burnPdf` 之 spy **呼叫次數為 0**；且 When 渲染前台詳情頁之附錄清單, Then 該列顯示逐字文案 `此格式不支援浮水印`；`format = pdf` 之列**不得**出現該文案（`within(pdfRow).queryByText('此格式不支援浮水印') === null`）。<br>📌 **「回應之位元組」＝應用層代理回傳之 body，非 SAS URL**：本條隱含**前台一律代理串流（非 PDF 亦然）**，此為 architecture-spec §5.2「非浮水印檔案走 SAS Token」之**刻意例外、僅限前台路徑**（後台仍走 SAS），理由與完整契約見 [F020](F020-watermark.md#front-burn-scope-delta) `AC-D3a`——**不得**日後以「與 §5.2 不一致」為由改回 SAS。<br>📌 **UI 旗標之資料來源**：`此格式不支援浮水印` 之呈現依據為**伺服器端旗標**（`GET /documents/:documentId/appendices` 每列 additive 回傳之布林欄），**前端不得自行以 `format` 字串重算**——判定式只能有一份，且它已是伺服器端決定是否呼叫 `burnPdf` 之同一分支；前端重算日後必與白名單擴充漂移，且漂移形式為「UI 說支援、實際沒燒」之靜默錯誤。<br>⚠ **策略 A 之定義邊界（明示不修）**：格式判定以**上傳時經白名單驗證之 `APPENDIX_POOL.format`** 為權威（非 `content-type`——後者為客戶端可控輸入）。故將 PDF 更名為 `.xlsx` 上傳者於前台不燒錄；上傳者恆為受信任之 ICSOPAdmin，威脅模型不成立，本輪**不做 magic-byte 嗅探**。
-- **AC-D3**（🔒 後台 RAW 回歸鎖定）：Given 同一份 `format = pdf` 之附錄, When 以 ICSOPAdmin 或 SysAdmin 自**後台附錄管理頁**點擊個別下載, Then 取得**原始檔位元組**（與 Blob 逐位元組相同）、`PdfBurner.burnPdf` 之 spy **呼叫次數為 0**、**不寫入任何稽核**；且該位元組與 AC-D1 所得之前台位元組**不相等**。既有 AC-28（未授權者 403、不核發 URL、不寫稽核）維持不變。
+- **AC-D3**（🛑 **已於 2026-08-20 由 `OQ-D9-08` 選項 B 推翻並反轉**）：<br>🛑 ~~（🔒 後台 RAW 回歸鎖定）Given 同一份 `format = pdf` 之附錄, When 以 ICSOPAdmin 或 SysAdmin 自**後台附錄管理頁**點擊個別下載, Then 取得**原始檔位元組**（與 Blob 逐位元組相同）、`PdfBurner.burnPdf` 之 spy **呼叫次數為 0**、**不寫入任何稽核**；且該位元組與 AC-D1 所得之前台位元組**不相等**。~~（原條文逐字保留供追溯）<br>🔴 **現行條文**：後台附錄管理頁之個別下載**亦燒錄浮水印（PDF）並寫入稽核**，逐條見 [§後台附錄下載燒錄 delta](#d9-backend-burn-delta) `AC-N56`／`AC-N57`。<br>🔒 **未被推翻之子句**：既有 **AC-28**（未授權者 403 `FILE_ACCESS_DENIED`、不核發 URL、不寫稽核）**維持不變**。
 
 #### 附錄池匯出（#14）
 
@@ -193,6 +193,15 @@ ICSOP 文件建立/編輯時，自附錄池**可搜尋多選**關聯附錄（**�
   - ③ **`上傳時間` 欄**之值為 **`YYYY-MM-DD HH:mm:ss`**（UTC+8，**不附 `(UTC+8)` 字樣**；顯式 +8 位移，不得依賴行程 TZ）。<br>⚠ **本項為「欄位＝畫面所見」原則之唯一明列例外，且範圍僅限時間戳欄**：畫面因欄寬限制只顯示日期（`prototypes/24` 之 `at:'2026-06-10'`），但**匯出為存查用途，日期粒度不足以區分同日多次覆蓋**（`uploadedAt` 於每次覆蓋皆更新）。此為 spec-writer 之判斷，已如實標明；若 lead 認為應與畫面完全一致（僅 `YYYY-MM-DD`），改動範圍僅本項一句。
   - ④ **`上傳者` 欄**之值為上傳（或最後覆蓋）者之姓名，與畫面該欄逐字相同；**`關聯文件數`** 為十進位整數（無千分位、無單位後綴）。
   - 規則權威＝[error-handling.md#export](../error-handling.md#export) 之「值層通則」。
+### 後台附錄下載燒錄 delta（🔴 2026-08-20 使用者裁決；缺失／變更 delta 第 5 項——**推翻 `OQ-FM-01`／`OQ-D18-01`**） {#d9-backend-burn-delta}
+
+> 前提裁決：🔴 **`OQ-D9-08`→選項 B：全面推翻，四類皆燒錄**〔使用者〕｜**`OQ-D9-09`→選項 B：不保留**任何原始檔下載路徑、**無例外角色**〔使用者〕｜**`OQ-D9-10`→選項 A：寫稽核**〔使用者〕｜**`OQ-D9-11`：浮水印身分＝操作者本人**〔lead 預設〕。
+> 燒錄能力側之權威＝[F020 §後台燒錄範圍 delta](F020-watermark.md#backend-burn-delta)；本節為附錄側之對應宣告。**本 delta 之 AC 編號採 `AC-N#`**。
+
+- **AC-N56**（後台附錄下載燒錄）：Given 任一具「附錄管理」權限之角色（**ICSOPAdmin 或 SysAdmin**）自後台附錄管理頁點擊某 `format = pdf` 附錄之個別下載, When 下載完成, Then 回應之 body 為**代理串流之已燒錄位元組**（`PdfBurner.burnPdf` spy ＝ **1**；`Content-Type: application/pdf`、`Content-Disposition: attachment` 且檔名為上傳時之原始檔名），其浮水印字串與同一操作者於同一時刻經前台路徑取得者**逐字相同**（僅時間戳依當下產生）；Given `format ∈ {xlsx, xls}`, Then 為**原始檔位元組**（`burnPdf` spy ＝ 0，策略 A 於後台亦適用）。<br>🔴 **`burnPdf` spy 之期望值由 0 反轉為 1**——`AC-D3` 與 `field-matrix-test-design.md` 之「不具備燒錄能力」基準線**必須反向重寫**。
+- **AC-N57**（後台附錄下載寫稽核）：Given `AC-N56` 之下載成功, When 檢視稽核, Then `AUDIT_LOG` **恰新增一筆**：`targetType='APPENDIX'`、`actionType='DOWNLOAD'`、`appendixId`＝該附錄 id、**`documentId` 為 `null`**（附錄池管理頁之下載不隸屬任何文件——此為 [data-model](../data-model.md#auditlog-entity) 「`targetType=APPENDIX` 時 `documentId` 必填」之**明列例外**，已就地登錄）、身分快照＝操作者本人、`watermarkSnapshot` 於 PDF（已燒錄）時落值、非 PDF 時為 `null`。<br>🔒 **既有 AC-27**（**前台**下載寫稽核，`documentId` 必填）**逐字不變**；本條為後台側之新增列。
+- **AC-N58**（🔒 前台附錄行為零漣漪）：Given 本 delta 實作完成, When 執行前台附錄下載之全部既有 AC（`AC-D1`／`AC-D2`／AC-27／AC-28／AC-29／AC-30／AC-34）與附錄池匯出之 `AC-D4`～`AC-D13`, Then **全數維持綠燈、期望值一字未改**——本 delta **只加後台下載，不動前台、不動匯出、不動附錄池 CRUD 與排序**。<br>🔒 **權限矩陣不變**：`AC-31`／`AC-32`／`AC-33`（ICSOPAdmin CRUD／SysAdmin 唯讀但可下載可匯出／Supervisor・DeptContact・User 對 `/admin/appendices*` 一律 403）**逐字不變**——「後台下載改為燒錄」**不改變誰能下載**，僅改變下載到的位元組與是否寫稽核。
+
 ### Story AC ↔ 本規格 AC 對照（完整性檢核）
 
 | Story | Story AC | 本規格 AC |
@@ -250,7 +259,7 @@ ICSOP 文件建立/編輯時，自附錄池**可搜尋多選**關聯附錄（**�
 | POST | `/admin/appendices` | 功能 `附錄管理` read ＋ 欄位 `附錄` write | multipart 上傳（欄位名 `files`）。單檔可帶選填 `name`；多檔不接受 `name`、先全部驗證再全部建立 |
 | PUT | `/admin/appendices/:appendixId` | 同上 | 覆蓋上傳（欄位名 `file`；`?confirmed=true` 放行共用警示）。**不改名稱** |
 | DELETE | `/admin/appendices/:appendixId` | 同上 | 自池移除（`?confirmed=true` 一併解除全部關聯） |
-| GET | `/admin/appendices/:appendixId/download` | 功能 `附錄管理` read | 後台個別下載（核發短效期 URL；管理存取，**不寫稽核、不燒錄浮水印**，比照 F026 OQ-FM-01）。<br>🔴 **2026-08-16 經使用者再次確認維持不變**——缺失 delta 第 15 項（後台附錄下載燒錄）**明確裁定不做**；本列一字不改（AC-D3 回歸鎖定） |
+| GET | `/admin/appendices/:appendixId/download` | 功能 `附錄管理` read | 🔴 **2026-08-20 改寫（`OQ-D9-08` 選項 B）**：後台個別下載**代理串流**；`format = pdf` 者**於伺服器端燒錄浮水印後回傳**、非 PDF 維持原檔；**寫入 `targetType='APPENDIX'`／`actionType='DOWNLOAD'` 之調閱稽核**（`documentId` 為 `null`——本路徑不隸屬任何文件）。**無例外角色**（`OQ-D9-09` 選項 B）。<br>📝 **被推翻之原條文逐字保留供追溯**：「後台個別下載（核發短效期 URL；管理存取，**不寫稽核、不燒錄浮水印**，比照 F026 OQ-FM-01）。🔴 **2026-08-16 經使用者再次確認維持不變**——缺失 delta 第 15 項（後台附錄下載燒錄）**明確裁定不做**；本列一字不改（AC-D3 回歸鎖定）」 |
 | GET | `/admin/appendices/export` | 功能 `附錄管理` read | **（2026-08-16 新增）** 匯出附錄池清單為 CSV；接受與 `GET /admin/appendices/overview` **相同之篩選參數**（關鍵字／格式），匯出範圍＝符合該篩選之**全部結果**（非僅當前頁）；超過 10,000 筆回 400 `EXPORT_ROW_LIMIT_EXCEEDED`。**不寫稽核**（管理存取，比照後台下載） |
 | POST | `/admin/documents/:documentId/appendices` | 同寫入 | **附加**關聯：body `{ appendixIds: string[] }`，依陣列順序接續現有最大 `sortOrder` 之後；已存在之關聯忽略且其 `sortOrder` 不變 |
 | PUT | `/admin/documents/:documentId/appendices` | 同寫入 | **取代整組關聯並依陣列索引重寫 `sortOrder`（1-based）**；建立／編輯畫面送出「已選＋排序」最終狀態之權威路徑（delete-then-insert replace-set，單一交易，比照 [F014](F014-accountable-dept-chief.md) 多值欄位既有模式） |
@@ -274,4 +283,5 @@ ICSOP 文件建立/編輯時，自附錄池**可搜尋多選**關聯附錄（**�
 - **定案**：格式／大小（OQ-E04-06／OQ-E05-02）、跨文件共用（OQ-E05-04）、覆蓋不留版本（OQ-E05-05，門檻 ≥2）、~~下載不燒錄浮水印（OQ-E05-03）~~ → **🔴 2026-08-16 使用者裁決推翻（僅前台）：前台 PDF 附錄燒錄、非 PDF 維持原檔；後台維持 RAW（OQ-FM-01 有效）**，見 [§前台附錄下載燒錄](#front-burn-delta)、自訂排序與分類延後（E10 epic-brief Open Questions 1／2）
 - **2026-08-16 使用者裁決**：OQ-D18-01／02／03／16（見 [§前台燒錄與附錄池匯出 delta](#export-delta)）
 - **未決（不阻塞實作）**：[open-questions.md](../open-questions.md) OQ-E10-01～OQ-E10-04（**OQ-E10-05 已於 2026-08-16 償還結案**）。~~OQ-D18-25~~ **已於 2026-08-16 同日第二次人類閘門定案＝前台使用表單 PDF 一併燒錄**（推翻 `OQ-E05-03`），見 [F018 §front-burn-delta](F018-usage-form-management.md#front-burn-delta)
-- **待 system-architect（本 delta 新增）**：① 前台附錄下載之燒錄路徑與後台 RAW 路徑之分流設計（見 [F020](F020-watermark.md#front-burn-scope-delta) `AC-D3`）；② 匯出端點之串流/緩衝策略與 10,000 筆上限之檢查時點（查詢前 count vs 產生中計數）；③ 三處匯出（[F024](F024-access-history-query.md)／本檔／[F037](F037-document-change-history.md)＋[F038](F038-lifecycle-tree-change-history.md)）是否共用同一 CSV 產生器
+- **2026-08-20 使用者裁決（D9 delta）**：🔴 `OQ-D9-08`（全面推翻 `OQ-FM-01`／`OQ-D18-01`，後台附錄下載改燒錄）／`OQ-D9-09`（不保留原始檔路徑）／`OQ-D9-10`（寫稽核）／`OQ-D9-11`（身分＝操作者）。見 [§後台附錄下載燒錄 delta](#d9-backend-burn-delta)（`AC-N56`～`AC-N58`）；`AC-D3` 與端點表該列已就地推翻改寫。**⚠ 待 system-architect**：`GET /admin/appendices/:appendixId/download` 由核發 SAS 改為代理串流＋燒錄之接線（與 [F020](F020-watermark.md#backend-burn-delta) `AC-N14`／`AC-N21` 同批）。
+- **待 system-architect（2026-08-16 delta）**：① 前台附錄下載之燒錄路徑與後台 RAW 路徑之分流設計（見 [F020](F020-watermark.md#front-burn-scope-delta) `AC-D3`）；② 匯出端點之串流/緩衝策略與 10,000 筆上限之檢查時點（查詢前 count vs 產生中計數）；③ 三處匯出（[F024](F024-access-history-query.md)／本檔／[F037](F037-document-change-history.md)＋[F038](F038-lifecycle-tree-change-history.md)）是否共用同一 CSV 產生器

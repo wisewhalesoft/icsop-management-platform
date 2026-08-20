@@ -1,9 +1,9 @@
 ---
 spec-id: data-model
 title: 資料模型（概念層）
-version: 1.6
-date: 2026-08-16
-status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.5 之 ACCOUNT.userSubtype 段落為 🟢 APPROVED 2026-08-11 人類閘門通過**；**v1.6 之 USAGE_FORM_POOL／DOC_USAGE_FORM 補登錄與 `formNumber` 新欄為 2026-08-16 使用者裁決**）
+version: 1.7
+date: 2026-08-20
+status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.5 之 ACCOUNT.userSubtype 段落為 🟢 APPROVED 2026-08-11 人類閘門通過**；**v1.6 之 USAGE_FORM_POOL／DOC_USAGE_FORM 補登錄與 `formNumber` 新欄為 2026-08-16 使用者裁決**；**v1.7 新增 [USAGE_FORM_DRAFTING_DEPT](#usage-form-drafting-dept) 實體＋`AUDIT_LOG` 兩項 additive 擴充，為 2026-08-20 使用者裁決（D9 delta）**）
 ---
 
 # 資料模型（Data Model）
@@ -17,6 +17,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 > **v1.4（2026-08-07）🟢 APPROVED（2026-08-07 人類閘門通過）**：[LIFECYCLE](#lifecycle-entity) **新增非必填 `subcategory`（子分類）欄位**，循環之業務身分改為 `(name, subcategory)` 組合（**additive**：既有列全數落在 `subcategory = null`，語意與行為向後相容、不需回填）；併同新增唯一性不變式 INV-1／INV-2／INV-3 與 [MSSQL 唯一索引之實作前置檢查](#lifecycle-unique-index-precheck)。權威規格見 [F040](features/F040-lifecycle-subcategory.md)。**既有欄位、既有實體與 ICSOP 文件編號規則皆不變**。
 > **🟢 v1.5（2026-08-11）APPROVED（2026-08-11 人類閘門通過）**：[ACCOUNT](#account-entity) **新增 `userSubtype`（一般使用者子分類：`business`／`other`）欄位**（**additive**：`NOT NULL DEFAULT 'other'`，既有列一律落在 `'other'` ＝不限縮，行為向後相容、不需回填、無前置檢查）。權威規格見 [F041](features/F041-user-subtype-business-scope.md)。**[ROLE](#role-entity) 維持固定 5 種、不新增第 6 種角色**（`OQ-E08-04` 已定案為選項 B）。**既有欄位、既有實體與所有既有行為皆不變**；`AUDIT_LOG` 亦不受影響（`OQ-E08-10` 定案為「不記錄拒絕稽核」，本需求完全不觸及稽核子系統）。
 > **🔵 v1.6（2026-08-16）使用者裁決（缺失／變更 delta 第 18 項）**：① **補登錄 [USAGE_FORM_POOL](#usage-form-entity)／[DOC_USAGE_FORM](#doc-usage-form) 兩實體**（F018 早已實作，本文件此前缺漏——`OQ-E10-05` 就此**結案**）；② `USAGE_FORM_POOL` **新增選填欄 `formNumber`（表單編號）**——`nullable`、trim 後儲存、**唯一（不分大小寫、`null` 不參與比對）**、`nvarchar(100)`；既有列一律 `null`、不自動產生。權威規格見 [F018 §表單編號 delta](features/F018-usage-form-management.md#form-number-delta)。**本項為 2026-08-16 delta 中唯一需 migration 者**（MSSQL 須以 **filtered unique index `WHERE formNumber IS NOT NULL`** 實作）。**`APPENDIX_POOL` 刻意不比照新增編號欄**（OQ-D18-23）。
+> **🔴 v1.7（2026-08-20）使用者裁決（缺失／變更 delta 9 項之第 5／7／8 項）**：① **新增 [USAGE_FORM_DRAFTING_DEPT](#usage-form-drafting-dept)**（使用表單↔制定部門多對多，`OQ-D9-17` 選項 B＝比照 `DOC_USING_DEPT`）——**本輪唯一需 migration 者**；🔴 該表為**純 metadata**（`OQ-D9-18` 選項 A），**與結構同構之 `DOC_USING_DEPT` 用途相反**，四條回歸鎖定 AC 明文保護。② `AUDIT_LOG` **兩項 additive 擴充**（**皆不需 migration**——`actionType`／`targetType` 為無 CHECK 之 varchar）：**(a)** 新增 `actionType='ATTACHMENT_UPLOAD'`（主管／部門窗口之 OJT 上傳，`OQ-D9-23`）；**(b)** **後台四條下載端點開始寫入本表**（`OQ-D9-10`，**推翻 `OQ-FM-01`「後台不寫稽核」**），沿用既有列舉、新增「表單池／附錄池管理頁下載之 `documentId` 為 `null`」之明列例外。**其餘實體與欄位皆不變。**
 > **v1.3（2026-08-06）新增 E10 附錄管理（F039）相關實體**：`APPENDIX_POOL`（附錄池）＋`DOC_APPENDIX`（文件↔附錄多對多關聯，**帶 `sortOrder`**）；併同 `AUDIT_LOG` 之 **additive 擴充**（`targetType` 新增 `APPENDIX`、新增 `appendixId` 參照欄）與 `ICSOP_DOCUMENT` 新增第 20 欄「附錄」。權威規格見 [F039](features/F039-appendix-management.md)。
 
 ## 實體總覽
@@ -36,6 +37,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | DOCUMENT_ATTACHMENT | 附件（ICSOP PDF / OJT；`type='USAGE_FORM'` 為池模型導入前之歷史型態） | 本系統（檔案於 Azure Blob） |
 | USAGE_FORM_POOL | 使用表單池（跨文件共用，含選填唯一之 `formNumber`，F018） | 本系統（檔案於 Azure Blob） |
 | DOC_USAGE_FORM | 文件↔使用表單多對多關聯（**無** `sortOrder`，F018） | 本系統 |
+| **USAGE_FORM_DRAFTING_DEPT** | 使用表單↔**制定部門**多對多關聯（`formId, orgCode`，可任意層級、可複選；**純 metadata、不參與任何權限判定**，F018／2026-08-20 新增） | 本系統 |
 | APPENDIX_POOL | 附錄池（跨文件共用之補充說明/對照表/範例，F039） | 本系統（檔案於 Azure Blob） |
 | DOC_APPENDIX | 文件↔附錄多對多關聯（帶每份文件內之顯示序位 `sortOrder`，F039） | 本系統 |
 | SYNC_RUN | 同步執行紀錄 | 本系統 |
@@ -392,6 +394,25 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - ⚠ **與 [DOC_APPENDIX](#doc-appendix) 之刻意差異**：本表**無 `sortOrder`**——使用表單無「每份文件內之顯示順序」概念（F039 之排序為附錄特有）。
 - **相關功能**：F018、F010、F011、F017、F019。
 
+### 使用表單↔制定部門 USAGE_FORM_DRAFTING_DEPT {#usage-form-drafting-dept}
+
+> **2026-08-20 新增（[F018](features/F018-usage-form-management.md#usage-form-page-delta) `AC-N45`；使用者裁決 `OQ-D9-17` 選項 B）**。**本表為 2026-08-20 D9 delta 中唯一需 schema 變更＋migration 者。**
+> ⚠ **依既有教訓，migration 寫完必須對真 SOP DB 實跑**（見 [open-questions](open-questions.md) `OQ-D18-30` 與 `project-icsop-migration-deploy`：單元測試全綠證明不了資料表存在）。
+
+| 屬性 | 說明 | 必填 |
+|------|------|------|
+| id | 系統 UUID | 是 |
+| formId | → [USAGE_FORM_POOL](#usage-form-entity) | 是 |
+| **orgCode** | 制定部門之組織代碼（`VW_DEPT_SQL.CODE`，5 碼前綴階層），**以代碼為單位參照、非代理鍵** | 是 |
+
+- **欄位形狀與語意刻意與 [DOC_USING_DEPT](#doc-using-dept) 同構**（`OQ-D9-17` 選項 B：比照既有多對多模式，可指定**任意層級**、可**複選**、不要求三級完整）。
+- **唯一性**：`(formId, orgCode)` 唯一（同一部門於同一表單至多一筆）；`formId` 另建索引供清單顯示之批次查詢。
+- **寫入路徑**：新增／編輯使用表單時送出「已選部門」最終狀態，以 **delete-then-insert replace-set（單一交易）** 重寫，比照 [F014](features/F014-accountable-dept-chief.md) 多值欄位之既有模式。送出前一律 trim、去空值、**去重**。
+- **不驗證 `orgCode` 存在性、不新增錯誤碼**——比照 `DOC_USING_DEPT` 之既有處置（`backend/src/documents/documents.service.ts:143,390-391` 僅 `normalizeIdList`，無存在性檢查）。0 筆為合法狀態。
+- 🔴 **與 `DOC_USING_DEPT` 之**唯一但關鍵**之差異＝用途**：本表為 **純 metadata**（顯示與清單呈現用，`OQ-D9-18` 選項 A），**不參與任何可見性、RBAC、置頂排序或 RAG 檢索過濾判定**。<br>⚠ **兩表結構同構、用途相反**——這正是實作最容易誤接之處。三處回歸鎖定 AC 明文保護：[F018](features/F018-usage-form-management.md#usage-form-page-delta) `AC-N46`、[F019](features/F019-public-list-browsing.md#d9-no-ripple-lock) `AC-N63`、[F041](features/F041-user-subtype-business-scope.md#d9-no-ripple-lock) `AC-N64`、[F033](features/F033-permission-aware-retrieval.md#d9-no-ripple-lock) `AC-N65`。
+- ⚠ **不擴及附錄**：`APPENDIX_POOL` **不**比照新增制定部門關聯（使用者只提使用表單，比照 `OQ-D18-23` 對 `formNumber` 之既有不對稱處置）。
+- **相關功能**：F018（新增／編輯與清單顯示）、F017（**本輪不新增篩選器**，見 `AC-N47` 註）。
+
 ## 附錄池 APPENDIX_POOL {#appendix-entity}
 
 跨文件共用之附錄（補充說明、對照表、範例文件），採**池模型**：一份附錄可被 0..* 份 ICSOP 文件引用（關聯見 [DOC_APPENDIX](#doc-appendix)）。**覆蓋式，不保留歷史版本**（比照全域「僅保存當前版本」原則）。權威規格：[F039](features/F039-appendix-management.md)。
@@ -476,7 +497,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | id | 系統 UUID | 是 |
 | accountId | 操作者帳號 | 是 |
 | employeeNo / name / department / section | 操作者身分快照（與浮水印同一來源） | 是 |
-| documentId / documentNumber | 被調閱文件（**條件必填**：`targetType∈{DOCUMENT, USAGE_FORM, APPENDIX, DOCUMENT_CHANGE_LOG}` 時必填，其餘為 null） | 否 |
+| documentId / documentNumber | 被調閱文件（**條件必填**：`targetType∈{DOCUMENT, USAGE_FORM, APPENDIX, DOCUMENT_CHANGE_LOG}` 時必填，其餘為 null）。<br>🔴 **2026-08-20 新增之明列例外**：自**表單池管理頁**（`GET /admin/usage-forms/:formId/download`）或**附錄池管理頁**（`GET /admin/appendices/:appendixId/download`）之個別下載，其脈絡**不隸屬任何文件** ⇒ `targetType='USAGE_FORM'`／`'APPENDIX'` 而 `documentId` 為 **`null`**（`formId`／`appendixId` 仍必填）。見 [F020](features/F020-watermark.md#backend-burn-delta) `AC-N17`、[F023](features/F023-audit-logging.md#d9-audit-delta) `AC-N51`、[F039](features/F039-appendix-management.md#d9-backend-burn-delta) `AC-N57`。 | 否 |
 | lifecycleId / lifecycleName | 被調閱循環（**新增**；**條件必填**：`targetType∈{LIFECYCLE, LIFECYCLE_CHANGE_LOG}` 時必填，其餘為 null） | 否 |
 | targetType | `DOCUMENT` / `USAGE_FORM` / `APPENDIX`（**新增**，F039 附錄下載）/ `LIFECYCLE`（F036 循環樹狀圖）/ `DOCUMENT_CHANGE_LOG`（F037 變更歷程）/ `LIFECYCLE_CHANGE_LOG`（F038 循環變更歷程）/ `ORG_CHANGE_ALERT`（F006 組織異動提示處理） | 是 |
 | formId | 使用表單附件（targetType=USAGE_FORM 時） | 否 |
@@ -492,12 +513,14 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - **問答事件本身**（提問→回答）記於 [QA_LOG](#qalog-entity)，非以 `actionType` 表示；經 AI 問答導引之檢視/下載仍寫本表，並以 `source=AI_QA`＋`qaLogId` 標示來源（F034）。
 - **[OQ-E07-02 已定案 ✅，system-architect 2026-07-17]** 循環樹狀圖預覽（[F036](features/F036-lifecycle-tree-preview.md)）之檢視/下載/列印、變更歷程（[F037](features/F037-document-change-history.md)／[F038](features/F038-lifecycle-tree-change-history.md)）之查詢檢視/下載，皆屬「**調閱/存取事件**」（誰在何時存取了什麼），與既有 VIEW/DOWNLOAD/PRINT 語意一致，**擴充本表**（`targetType`＋`actionType` 各新增列舉值，見上）而非另建稽核表；三個 feature（F036/F037/F038）共用同一組決策，家族一致。決策理由：(1) 這些動作的資料形狀（操作者/時間/被存取對象/浮水印快照）與既有 VIEW/DOWNLOAD/PRINT 完全同構，另建表僅為重複 schema；(2) `documentId`/`lifecycleId` 皆改為條件必填（依 `targetType` 二擇一），不強迫每列填滿兩組外鍵；(3) `actionType` 沿用 feature spec 既有文字定義之草案動作名（`CHANGE_LOG_VIEW` 等）逐字落地，不重新發明命名以維持與已核准 spec 文件（F036/F037/F038 AC、US-062/US-063 AC）之字面一致性，降低下游 test-designer/tdd-developer 之轉譯落差風險。
 - **[OQ-E07-02 已定案 ✅]** 變更歷程記錄的是「**資料異動事件**」本體（欄位/結構層 old→new diff），與上述「調閱事件」性質不同（前者是「什麼被改了」，後者是「誰看了什麼」），**不併入本表**，另建獨立實體 [DOCUMENT_CHANGE_LOG](#documentchangelog-entity)、[LIFECYCLE_CHANGE_LOG](#lifecyclechangelog-entity)、[LIFECYCLE_SNAPSHOT](#lifecyclesnapshot-entity)（詳見下方「變更歷程相關實體」）。不併表理由：(1) 欄位形狀截然不同（`fieldName`/`oldValue`/`newValue` 或 `changeType`/`entityType`/`beforeValue`/`afterValue` vs 本表之 `actionType`/`watermarkSnapshot`），併表將產生大量依 `targetType` 才有意義的稀疏可空欄位（polymorphic 反樣式），複雜化本表既有查詢；(2) 一致性模型不同——本表為 Outbox 非阻斷寫入（§5.5），變更歷程須與來源交易強一致（見 architecture-spec.md §5.9，遺失即等同稽核造假，不可退化為 best-effort）；(3) 獨立表使 [OQ-NFR003](open-questions.md) 之「變更歷程是否需獨立保留政策」在不修改本表結構前提下即可彈性套用不同歸檔策略。
-- **`APPENDIX` 擴充（F039，2026-08-06，additive）**：前台下載附錄須寫本表。變更為**純新增**——`targetType` 聯集新增字面值 `APPENDIX`、新增參照欄 `appendixId`（nullable），**既有 6 種 targetType 之語意與既有欄位皆不變**（比照 `ORG_CHANGE_ALERT`／`LIFECYCLE_DELETE` 之先例）。落列規則：`targetType='APPENDIX'` 時 `appendixId`＋`documentId` 皆必填（附錄下載恆發生於某份文件之詳情頁脈絡），`formId`／`lifecycleId` 為 null，`actionType` 恆為 `DOWNLOAD`。<br>🔴 **`watermarkSnapshot` 之落值規則於 2026-08-16 使用者裁決推翻，理由：前台附錄與使用表單之 PDF 改為燒錄浮水印**——原條文為「`watermarkSnapshot` 為 null（附錄**不燒錄浮水印**，OQ-E05-03 定案沿用）」。**現行規則（適用 `targetType ∈ {APPENDIX, USAGE_FORM}`）**：前台下載之 `format = pdf` 者，`watermarkSnapshot` **落值**（與該次燒錄之浮水印字串逐字相同，比照 `DOCUMENT` 之既有語意）；`format ∈ {xlsx, xls}` 者（策略 A，未燒錄）`watermarkSnapshot` **為 null**。**後台下載一律不寫本表**（OQ-FM-01 維持有效），故不存在後台列。**本項為落值語意之變更，非 schema 變更——欄位本即 nullable，不需 migration。**
+- **`APPENDIX` 擴充（F039，2026-08-06，additive）**：前台下載附錄須寫本表。變更為**純新增**——`targetType` 聯集新增字面值 `APPENDIX`、新增參照欄 `appendixId`（nullable），**既有 6 種 targetType 之語意與既有欄位皆不變**（比照 `ORG_CHANGE_ALERT`／`LIFECYCLE_DELETE` 之先例）。落列規則：`targetType='APPENDIX'` 時 `appendixId`＋`documentId` 皆必填（附錄下載恆發生於某份文件之詳情頁脈絡），`formId`／`lifecycleId` 為 null，`actionType` 恆為 `DOWNLOAD`。<br>🔴 **`watermarkSnapshot` 之落值規則於 2026-08-16 使用者裁決推翻，理由：前台附錄與使用表單之 PDF 改為燒錄浮水印**——原條文為「`watermarkSnapshot` 為 null（附錄**不燒錄浮水印**，OQ-E05-03 定案沿用）」。**現行規則（適用 `targetType ∈ {APPENDIX, USAGE_FORM}`）**：前台下載之 `format = pdf` 者，`watermarkSnapshot` **落值**（與該次燒錄之浮水印字串逐字相同，比照 `DOCUMENT` 之既有語意）；`format ∈ {xlsx, xls}` 者（策略 A，未燒錄）`watermarkSnapshot` **為 null**。🛑 ~~**後台下載一律不寫本表**（OQ-FM-01 維持有效），故不存在後台列。~~ → 🔴 **2026-08-20 由 `OQ-D9-08`／`OQ-D9-10` 推翻**（原文逐字保留供追溯）：**後台下載自本日起亦寫本表**，落列規則見下方「🔴 後台燒錄下載之稽核擴充」。**本項為落值語意之變更，非 schema 變更——欄位本即 nullable，不需 migration。**
   - **`buildAuditRow` 之 switch 對映**須新增 `APPENDIX → appendixId` 分支（既有分支 `DOCUMENT→documentId`／`USAGE_FORM→formId`／`LIFECYCLE→lifecycleId` 不動）。
   - **[F024](features/F024-access-history-query.md) 類型篩選歸屬（定案）**：`APPENDIX` 歸入既有「**文件**」類，即 `kindToTargetTypes('文件') = ['DOCUMENT', 'USAGE_FORM', 'APPENDIX']`。理由：附錄下載與使用表單下載同為「對某份文件之附屬檔案之調閱」，語意同群；**不新增第四種類型篩選值**，F024 之 UI 篩選選項與匯出範本皆不需變更。
 - **`ACCESS_HISTORY_EXPORT` 擴充（F024，2026-08-18，additive）**：F024 之「匯出文件調閱歷程」動作須寫本表一列（人類閘門裁決，`OQ-D18-26` ③；部分推翻 `OQ-E07-10` 之「meta-audit 全不納入」——**匯出記、查詢仍不記**，後者之殘留缺口見 `OQ-E07-12`）。**純新增字面值**，既有 11 種 `actionType` 之語意與落列規則皆不變（比照 `LIFECYCLE_DELETE`／`APPENDIX` 先例）。落列規則：`accountId` 與身分快照欄＝當前操作者、`watermarkSnapshot` 為 `null`（非浮水印動作）、`occurredAt`＝匯出當下之伺服器時間；超限（400）與無權（403）之被拒請求**不落列**。<br>✅ **不需 migration（2026-08-18 查證）**：`actionType` 為 `varchar(40)`、`targetType` 為 `varchar(30)`，**皆無 CHECK 約束**（`migrations/1721952000000-audit-log.ts`）⇒ 新字面值（含日後可能新增之 `targetType`）落得下。<br>⚠ **未定案**：本動作之 `targetType`／`targetId` 落點——現有 7 個 `targetType` 皆不適用，而 `buildAuditRow()` 於 `targetId` 缺值時必拋 `AUDIT_TARGET_REF_REQUIRED`。**交 system-architect 裁定**（見 [F024](features/F024-access-history-query.md#export-fix-delta) 提報事項 A1）。<br>📌 **F024 類型篩選歸屬**：**不新增第四種類型篩選值**；此列於 F024 查詢之「類型」欄依現行 fallback 顯示為「變更」（刻意接受，見 `AC-F13` 之自我遞迴效應註記）。
+- **`ATTACHMENT_UPLOAD` 擴充（F016，2026-08-20，additive）**：主管／部門窗口之 **OJT 附件上傳**須寫本表一列（`OQ-D9-23` 裁決）。**純新增 `actionType` 字面值**，既有 12 種 `actionType` 與 7 種 `targetType` 之語意與落列規則**皆不變**（比照 `LIFECYCLE_DELETE`／`APPENDIX`／`ACCESS_HISTORY_EXPORT` 之先例）。落列規則：`targetType='DOCUMENT'`、`documentId`／`documentNumber` 必填（⇒ `buildAuditRow()` 之 `targetId` **不會缺值**，與 `ACCESS_HISTORY_EXPORT` 之未決落點問題**不同型**）、身分快照欄＝**執行上傳之操作者本人**、`watermarkSnapshot` 為 **`null`**（非浮水印動作）、`source='DIRECT'`、`occurredAt`＝伺服器時間。<br>✅ **不需 migration**：`actionType` 為 `varchar(40)`、**無 CHECK 約束**（`migrations/1721952000000-audit-log.ts`，2026-08-18 已查證）。<br>📌 **[F024](features/F024-access-history-query.md) 類型篩選歸屬**：`targetType='DOCUMENT'` ⇒ 落入既有「**文件**」類（`kindToTargetTypes` 不變）；「操作類型」欄之中文標籤為 **`附件上傳`**（前後端兩份對照表各補同一組鍵值，見 `AC-N53`）。<br>🔴 **角色不對稱（刻意，`OQ-D9-23` 之直接後果）**：**僅**主管／部門窗口之上傳寫入本表；**ICSOPAdmin 之附件上傳仍不寫**（`OQ-E01-09` 之既有落差本輪不償還）。⚠ 此不一致與「調閱歷程表承載寫入事件」之分類學衝突已提報為 [open-questions](open-questions.md) `OQ-D9-29`。
+- 🔴 **後台燒錄下載之稽核擴充（F020／F018／F039，2026-08-20，`OQ-D9-10`）**：後台四條下載端點自本日起**一律寫入本表**（推翻 `OQ-FM-01`「後台不寫稽核」之定案）。**不新增任何列舉值**——沿用既有 `actionType='DOWNLOAD'` 與 `targetType ∈ {DOCUMENT, USAGE_FORM, APPENDIX}`；`watermarkSnapshot` 之落值規則與前台完全相同（PDF 已燒錄 → 落值；非 PDF → `null`）。<br>📝 **被推翻之原條文逐字保留供追溯**（原載於 `APPENDIX` 擴充段）：「**後台下載一律不寫本表**（OQ-FM-01 維持有效），故不存在後台列。」<br>⚠ **本項為落列範圍之擴大，非 schema 變更——不需 migration。**<br>⚠ **前後台之列於本表無法區分**（無來源／通道欄）——已提報為 [open-questions](open-questions.md) `OQ-D9-30` `[CLARIFY]`；本輪假設＝不新增區分欄位。
 - 保留年限草案 ≥ 3 年（[NFR-003](nfr.md#audit-retention)，待確認）。
-- **相關功能**：F020、F023、F024、F034、F036、F037、F038、F039。
+- **相關功能**：F016（2026-08-20 起 OJT 上傳）、F018、F020、F023、F024、F034、F036、F037、F038、F039。
 
 ---
 

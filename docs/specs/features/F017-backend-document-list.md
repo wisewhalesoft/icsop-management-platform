@@ -5,6 +5,7 @@ Epic/Story: E04 / US-037
 > **2026-08-07 additive delta**：第 14 欄「循環別」之顯示與其可搜尋下拉之選項，須反映循環子分類。規則權威＝[F040](F040-lifecycle-subcategory.md)；欄位數、篩選數與既有條款皆不變。
 > **🔴 2026-08-16 CHANGE delta（使用者裁決；缺失／變更 delta 第 9 項）——篩選由 9 項改為 13 項且順序全面重排**：新增 `公告日期`（區間）／`附錄`／`使用表單`／`OJT` 四項，並將 13 項之順序改為使用者原文之逐字順序。**清單 14 欄之欄位集合、順序與顯示規則一律不變**。**本 delta 之 AC 編號採 `AC-D#`**（D＝2026-08-16 defect delta），與既有 `AC-S#` 批次區隔、不重號。
 > **🔴 2026-08-18 CHANGE delta（使用者體驗缺失回報）——第 12 欄「連結點程序書」改為恆一行高之摺疊呈現**：多連結之列原被上下拉伸至 5～6 行高、清單無法掃視。新行為＝只顯示第一顆 pill ＋ 可點的 `+{N−1}` 徽章、點擊就地展開；**編號仍為可見文字、書名仍只在 tooltip**；`連結點程序書` 篩選命中者排第一顆。**14 欄之欄位集合與順序、13 項篩選之比對語意、統計卡／排序／分頁一律不變。** 逐條見 [§連結點程序書欄摺疊 delta](#link-cell-collapse-delta)（`AC-E1`～`AC-E9`）。
+> **🔵 2026-08-20 additive delta（使用者裁決；缺失／變更 delta 第 9 項）——清單最左新增「OJT」圖示欄**：清單由 14 欄改為 **15 欄**，新增之圖示欄置於**最左**（第 1 欄，`制定公司` 之前），依既有 `hasOjt` 布林值呈現兩種視覺狀態。**資料層已就緒**（`backend/src/documents/documents.store.ts:135-142` 之 `hasOjt?: boolean` 已於同一次批次查詢取得、`frontend/src/api/types.ts:196-197` 已有型別），**不需新增後端欄位或查詢**。**本 delta 之 AC 編號採 `AC-N#`**（N＝2026-08-20 defect delta），與既有 `AC-S#`／`AC-D#`／`AC-E#` 區隔、不重號。逐條見 [§OJT 圖示欄 delta](#ojt-icon-column-delta)（`AC-N37`～`AC-N40`）。
 > ⚠ **另含兩處既有語意之擴充**：① `程序書書名內`（使用者原文之「內」字）＝等值下拉 ＋ contains 輸入之**雙行為**（OQ-D18-12）；② `當責室長` 比對範圍由**僅主要**擴為**主要∪次要**（OQ-D18-08，與 [F019](F019-public-list-browsing.md) `AC-D7` 為同一語意之兩處斷言，**不得只改一處**）。
 
 ## Description
@@ -15,7 +16,8 @@ Epic/Story: E04 / US-037
 
 ## Main Flow
 1. 進入後台清單頁 → 頂部顯示 3 張統計卡：程序書數量（總數）、已公告（衍生數）、進度中（衍生數）。
-2. 分頁呈現清單，由左至右 14 欄：
+2. 分頁呈現清單，由左至右 **15 欄**（🔴 **2026-08-20 就地改寫，原為 14 欄**；新增之第 1 欄「OJT」圖示欄為本次唯一變動，其餘 14 欄之集合、相對順序與顯示規則逐項不變）：
+   0. **OJT**（圖示欄，依 `hasOjt` 兩態呈現；`AC-N37`～`AC-N39`，2026-08-20 delta）
    1. 制定公司
    2. 制定部門
    3. 制定室別
@@ -59,7 +61,7 @@ Epic/Story: E04 / US-037
 - 管理員可定位需維護文件並掌握文件池狀態（含程序書數量/已公告/進度中總覽）。
 
 ## Acceptance Criteria
-- Given 進入清單頁, When 載入, Then 頂部顯示 3 張統計卡（程序書數量/已公告/進度中），清單分頁顯示 14 欄。
+- Given 進入清單頁, When 載入, Then 頂部顯示 3 張統計卡（程序書數量/已公告/進度中），清單分頁顯示 **15 欄**。<br>📝 **2026-08-20 就地改寫（`OQ-D9-25` 選項 A）**：原條文為「清單分頁顯示 **14 欄**」；新增最左之「OJT」圖示欄後為 15 欄。原數值逐字保留於此供追溯。
 - Given 輸入既存程序書編號或書名關鍵字, When 查詢, Then 僅回傳符合結果。
 - Given 套用「制定部門+狀態」複合篩選, When 條件套用, Then 清單反映交集結果。
 - Given 於 制定公司／制定部門／制定室別／當責室長／程序書編號／程序書書名內／連結點程序書／附錄／使用表單／循環別 任一可搜尋下拉輸入關鍵字, When 過濾, Then 下拉選項即時縮小並可選取。<br>📝 **2026-08-16 使用者裁決推翻，理由：篩選由 9 項改為 13 項且順序重排**——原條文列舉為「循環別/狀態/程序書編號/程序書書名/制定部門/制定室別/當責室長/制定公司/連結點程序書」共 9 項。本條改列**具 combobox 語意之 10 項**；`狀態` 與 `OJT` 為固定值下拉（非 combobox）、`公告日期` 為區間輸入（非下拉），三者不適用本條。
@@ -102,7 +104,7 @@ Epic/Story: E04 / US-037
 - **AC-D6**（附錄／使用表單選具體一份）：Given 附錄 X 被文件 A、B 引用、附錄 Y 僅被 C 引用, When `附錄 = X`, Then 回傳 A、B 且不含 C；使用表單同構（以 `formId` 比對）。
 - **AC-D7**（🔴 當責室長主要∪次要；與前台一致）：Given 文件 A（`primaryChiefId='E001'`、`secondaryChiefIds=[]`）與文件 B（`primaryChiefId='E009'`、`secondaryChiefIds=['E001']`）, When 以 `當責室長 = E001` 篩選, Then **A 與 B 皆回傳**。<br>📝 **2026-08-16 使用者裁決推翻既有實作語意，理由：OQ-D18-08 要求前後台兩處語意一致**——spec-writer 於 2026-08-16 實地核對 `backend/src/documents/document-list-query.ts:57`（`filters.primaryChiefId !== r.primaryChiefId`）與 `frontend/src/pages/DocumentListPage.tsx:170`（`d.primaryChiefName ?? d.primaryChiefId`），確認**後台現況僅比對主要室長**。本條將其擴為主要∪次要（**嚴格超集**：既有「以主要室長篩選能找到該文件」之期望值不反轉，僅新增次要命中之情形）。與 [F019](F019-public-list-browsing.md) `AC-D7` 為同一語意之兩處斷言，**必須同批實作、不得只改一處**。<br>下拉選項清單相應改為「全體文件之 `primaryChiefId` ∪ `secondaryChiefIds`」之 distinct。
 - **AC-D8**（清除全部篩選）：Given 已套用任意數量之篩選, When 點擊「清除全部篩選」, Then 13 項篩選與關鍵字同時清空、清單回復未篩選狀態與預設排序、分頁回第 1 頁。
-- **AC-D9**（🔒 清單欄位回歸鎖定）<br>📝 **2026-08-18 範圍縮減**：本條之「各欄顯示規則逐項不變」自該日起**排除第 12 欄「連結點程序書」**（改為摺疊呈現，權威＝`AC-E1`～`AC-E9`）；其餘 13 欄仍逐項鎖定。<br>Given 本 delta 實作完成, When 檢視清單, Then **14 欄之欄位集合、由左至右順序與各欄顯示規則逐項與本 delta 導入前相同**——本 delta **僅動篩選、不動欄位**；3 張統計卡、排序與分頁行為亦不變；既有 AC 與 `AC-S1`／`AC-S2` 維持綠燈。
+- **AC-D9**（🔒 清單欄位回歸鎖定）<br>📝 **2026-08-18 範圍縮減**：本條之「各欄顯示規則逐項不變」自該日起**排除第 12 欄「連結點程序書」**（改為摺疊呈現，權威＝`AC-E1`～`AC-E9`）；其餘 13 欄仍逐項鎖定。<br>📝 **2026-08-20 範圍再次縮減**：本條之「**欄位集合**」自該日起改讀為「**既有 14 欄之集合與其相對順序**」——最左新增之「OJT」圖示欄為 `OQ-D9-25`（選項 A）核可之 additive 變更，**不視為違反本條**（權威＝`AC-N37`～`AC-N40`）。**除該新增欄外，欄位集合仍不得增減、既有 14 欄之相對順序仍不得變動。**<br>Given 本 delta 實作完成, When 檢視清單, Then **既有 14 欄之欄位集合、其由左至右之相對順序與各欄顯示規則逐項與本 delta 導入前相同**——本 delta **僅動篩選、不動欄位**；3 張統計卡、排序與分頁行為亦不變；既有 AC 與 `AC-S1`／`AC-S2` 維持綠燈。
 
 - **AC-D10**（🔴 篩選區之逐字文案與選擇器契約；**2026-08-16 補訂**，權威＝`prototypes/13-document-list.html`）：Given 後台文件清單頁渲染完成, When 檢視篩選區, Then 下列文案與選擇器**逐字成立**——
   | 項目 | 逐字值 | 說明 |
@@ -133,9 +135,28 @@ Epic/Story: E04 / US-037
 - **AC-E4**（就地展開、非浮層）：Given 收合態之 `+N`, When 點擊（或以鍵盤觸發）, Then **該列就地展開**（in-place），該格改為逐列列出**全部 N 個**連結（含第一顆），每列逐字結構為 `編號 · 書名 · 下載鈕`；第一列尾端之「收合」鈕與 `+N` 為**同一顆 toggle**（`aria-expanded="true"`、`aria-label` 逐字 `收合連結點程序書`），再次觸發即回到收合態。<br>🔴 **不得**改以 popover／dropdown 浮層實作：表格外層為 `overflow-x-auto` ＋ `rounded-xl overflow-hidden`，絕對定位浮層會被裁切。
 - **AC-E5**（展開狀態逐列獨立且不錯位）：Given 展開列 A, When 檢視同頁其他列, Then 其餘各列維持收合態之一行高（展開只影響被觸發的那一列），且**可同時展開多列**。Given 已展開列 A, When 改變任一篩選、清除全部篩選或換頁而重繪清單, Then 展開狀態**不得**落到其他列上——狀態鍵須為**列身分**（prototype 為文件編號 `d.num`、實作為 `documentId`），**不得**為列索引。
 - **AC-E6**（篩選命中者排第一顆）：Given `連結點程序書` 篩選已選定某目標文件、某列因擁有指向該目標之連結而入選, When 呈現該列收合態, Then **命中的那一筆排為第一顆**（＝收合態唯一可見的那顆），其餘依原順序接續於 `+N` 之內。<br>🔒 本條**只改顯示順序**：`連結點程序書` 篩選之**比對語意本身完全不變**（既有 `linkTargetId` 語意，見 `AC-D2` 第 9 列）。
-- **AC-E7**（下載路徑不變）：Given 收合態之 pill 或展開態任一列之下載鈕, When 點擊, Then 一律走**既有受控（稽核）下載路徑**——取目標文件之附件清單 → 取其 `ICSOP_PDF` → 同一支代理串流下載端點（[F020](F020-watermark-viewer.md) `AC-D3a` 後台側）；**不得**新增第二條下載路徑，浮水印與否仍由伺服器端決定、前端不帶旗標。目標文件無 ICSOP PDF／取用失敗時，以既有錯誤提示（toast）呈現且不崩潰。
+- **AC-E7**（下載路徑不變）：Given 收合態之 pill 或展開態任一列之下載鈕, When 點擊, Then 一律走**既有受控（稽核）下載路徑**——取目標文件之附件清單 → 取其 `ICSOP_PDF` → 同一支代理串流下載端點（[F020](F020-watermark.md#front-burn-scope-delta) `AC-D3a` 後台側；⚠ **2026-08-20 起該端點亦燒錄浮水印**，見 [F020 §backend-burn-delta](F020-watermark.md#backend-burn-delta) `AC-N14`）〔📝 本連結原誤指不存在之 `F020-watermark-viewer.md`，2026-08-20 順手更正，語意未變〕；**不得**新增第二條下載路徑，浮水印與否仍由伺服器端決定、前端不帶旗標。目標文件無 ICSOP PDF／取用失敗時，以既有錯誤提示（toast）呈現且不崩潰。
 - **AC-E8**（DOM 契約；供約束環定位，權威＝prototype）：Given 第 12 欄渲染完成, When 檢視 DOM, Then 下列屬性逐字成立——收合態／展開態之容器帶 `data-link-cell`、`data-link-count="{N}"`、`data-link-expanded="false|true"`；toggle 鈕帶 `data-link-toggle="{列身分鍵}"`；展開態每一連結列帶 `data-link-item`。<br>📌 **本條之存在理由**：同 `AC-D10`——本輪約束環為簡化版（僅 vitest／jest，Playwright 僅驗表頭），未入 AC 之選擇器只能由 test-generator 臆造，測出來之物會與畫面對不上。
-- **AC-E9**（🔒 回歸鎖定）：Given 本 delta 實作完成, When 檢視清單, Then **14 欄之欄位集合與由左至右順序不變**、**第 12 欄以外之 13 欄顯示規則逐項不變**、3 張統計卡／13 項篩選（含各項比對語意）／排序／分頁行為一律不變；既有 AC 與 `AC-S1`／`AC-S2`／`AC-D1`～`AC-D10` 除 `AC-D9` 就「第 12 欄顯示規則」一項之範圍外，全數維持綠燈。
+- **AC-E9**（🔒 回歸鎖定）：Given 本 delta 實作完成, When 檢視清單, Then **14 欄之欄位集合與由左至右順序不變**、**第 12 欄以外之 13 欄顯示規則逐項不變**、3 張統計卡／13 項篩選（含各項比對語意）／排序／分頁行為一律不變；既有 AC 與 `AC-S1`／`AC-S2`／`AC-D1`～`AC-D10` 除 `AC-D9` 就「第 12 欄顯示規則」一項之範圍外，全數維持綠燈。<br>📝 **2026-08-20 範圍縮減**：本條之「14 欄之欄位集合與由左至右順序不變」自該日起同 `AC-D9` 改讀為「**既有 14 欄**之集合與其**相對**順序不變」——最左新增之「OJT」圖示欄不視為違反（`OQ-D9-25` 選項 A，權威＝`AC-N37`～`AC-N40`）。
+
+### OJT 圖示欄 delta（🔵 2026-08-20 使用者裁決；缺失／變更 delta 第 9 項） {#ojt-icon-column-delta}
+
+> 前提裁決（逐題紀錄見 [open-questions §D9](../open-questions.md#d9--2026-08-20-缺失變更-delta來源stories2026-08-20-defect-delta-9md)）：
+> **`OQ-D9-25`→選項 A**（清單**新增獨立欄**置於最左；表格已有 `overflow-x-auto` 可吸收欄寬）〔lead 預設〕｜
+> **`OQ-D9-26`→選項 A**（沿用既有 OJT 篩選下拉之字面 `有 OJT`／`無 OJT` 作為 `title`／`aria-label`，圖示以兩種視覺狀態呈現）〔lead 預設〕。
+>
+> 📌 **純前端顯示變更**：資料已就緒（`hasOjt`），**不新增後端欄位、不新增查詢、不改變任何 API 契約**。
+> 📌 **逐字文案與 DOM 掛鉤由 spec-writer 定稿，ui-ux-designer 逐字照抄**（比照 [F018](F018-usage-form-management.md#edit-number-action) 之既有慣例；本輪為簡化版約束環＝僅 jest／vitest，未入 AC 之選擇器 test-generator 只能臆造）。
+
+- **AC-N37**（欄位存在與位置）：Given 後台 ICSOP 文件清單頁載入完成, When 檢視表頭, Then **第 1 個 `<th>`（最左）之可見文字逐字為 `OJT`**，其後接續之 14 個表頭依序為 `制定公司`／`制定部門`／`制定室別`／`當責室長`／`狀態`／`檔案`／`樹狀圖`／`程序書編號`／`程序書書名`／`版次`／`內容摘要`／`連結點程序書`／`公告日期`／`循環別`（＝既有 14 欄，順序不變）；表頭總數為 **15**。
+- **AC-N38**（🔴 三態渲染與逐字無障礙文案）：Given 同頁存在三列文件，其 `hasOjt` 分別為 `true`、`false` 與**缺鍵**（`undefined`）, When 渲染各列之 OJT 儲存格, Then——
+  - ① `hasOjt === true` → 圖示 icon 鍵為 **`file-check-2`**，其 `title` 與 `aria-label` **皆逐字為 `有 OJT`**；
+  - ② `hasOjt === false` → 圖示 icon 鍵為 **`file-x-2`**，其 `title` 與 `aria-label` **皆逐字為 `無 OJT`**；
+  - ③ `hasOjt === undefined`（後端未回該鍵）→ **視同 `false`**，渲染與 ② **完全相同**（`file-x-2` ＋ `無 OJT`）——見 `documents.store.ts:135-138` 之既有註解（缺鍵＝無 OJT）；**不得**渲染為空白、`—`、`null` 或第三種視覺狀態。
+  - 📌 **兩態之字面值刻意逐字沿用既有 OJT 篩選下拉之選項文字**（`AC-D2` 第 12 列與 `AC-D5` 之 `有 OJT`／`無 OJT`），使畫面上「篩選出來的東西」與「欄位顯示的東西」用同一組詞；**不得**另造 `已上傳`／`未上傳` 之類新詞。
+  - 📌 **兩態之視覺區別（顏色／填色）屬設計裁量、不入 AC**；本條只約束「icon 鍵不同 ＋ 無障礙名稱不同」此二可觀測事實。
+- **AC-N39**（DOM 契約；供約束環定位，權威＝`prototypes/13-document-list.html`）：Given 第 1 欄渲染完成, When 檢視 DOM, Then 下列屬性**逐字成立**——該儲存格帶 `data-ojt-cell`，並帶 `data-has-ojt="true"`（`hasOjt === true`）或 `data-has-ojt="false"`（`false` 與 `undefined` 兩種輸入**皆為 `"false"`**）。<br>📌 **本條之存在理由**：同 `AC-D10`／`AC-E8`——本輪約束環為簡化版（僅 vitest／jest），未入 AC 之選擇器只能由 test-generator 臆造，測出來之物會與畫面對不上。
+- **AC-N40**（🔒 回歸鎖定）：Given 本 delta 實作完成, When 檢視清單, Then ① **既有 14 欄之欄位集合、相對順序與各欄顯示規則逐項不變**（新增欄位僅插入於最左，`AC-D9`／`AC-E9` 之範圍已就地縮減）；② **13 項篩選之組成、順序與各項比對語意逐字不變**——特別是既有「OJT」篩選下拉（`AC-D2` 第 12 列、`AC-D5`、`AC-D10` 之三選項 `全部`／`有 OJT`／`無 OJT`）**一字不動**，本 delta **只加顯示欄、不動篩選**；③ 3 張統計卡／排序／分頁行為不變；④ 既有 AC 與 `AC-S1`／`AC-S2`／`AC-D1`～`AC-D10`／`AC-E1`～`AC-E9` 全數維持綠燈（除 `AC-D9`／`AC-E9` 就「欄位集合」一項之已宣告範圍縮減外）。<br>⚠ **不得新增任何後端查詢**：`hasOjt` 於既有批次查詢中已取得（`documents.store.ts:135-142`），本 delta 若引入第 4 次查詢或 N+1，即違反 [NFR-001](../nfr.md#performance) 與 `AC-D9` 之既有效能前提。
 ## Error Scenarios
 - 空結果/搜尋跳脫：見 [error-handling.md#public](../error-handling.md#public)。分頁效能見 [NFR-001](../nfr.md#performance)。
 
@@ -145,5 +166,6 @@ Epic/Story: E04 / US-037
 - **循環子分類規則權威**: [F040](F040-lifecycle-subcategory.md)（`lifecycleDisplayName` 顯示規則、篩選值＝`lifecycleId`）
 - Related: 樹狀圖預覽（第二入口）見 [F036](F036-lifecycle-tree-preview.md)；DAG 資料見 [F008](F008-dag-node-edge.md)/[F009](F009-node-drawer-maintenance.md)；連結點見 [F015](F015-document-cross-link.md)
 - 對比前台: [F019](F019-public-list-browsing.md)（後台不套用部門置頂；**「當責室長」比對語意兩處必須一致，見 `AC-D7`**）
+- **2026-08-20 使用者裁決（D9 delta）**: `OQ-D9-25`（新增獨立欄置於最左）／`OQ-D9-26`（沿用 `有 OJT`／`無 OJT` 字面）。見 [§OJT 圖示欄 delta](#ojt-icon-column-delta)。**⚠ 待 ui-ux-designer**：`prototypes/13-document-list.html` 表頭最左新增 `OJT` 欄並依 `AC-N38`／`AC-N39` 逐字實作兩態圖示與 DOM 掛鉤。
 - **2026-08-16 使用者裁決**: OQ-D18-08／10／11／12／13（見 [§篩選 9 → 13 項 delta](#filter-13-delta)）。新增篩選之資料來源：[F039](F039-appendix-management.md)（附錄）、[F018](F018-usage-form-management.md)（使用表單，含 `formNumber` 顯示字串）、[F016](F016-pdf-ojt-attachment.md)（OJT）。
 - **待 system-architect（本 delta 新增）**：① 13 項篩選之後端下推策略（現況為前端於完整工作集上客端篩選＋`linkTargetId` 例外查詢；新增之附錄／使用表單／OJT／日期區間是否一併下推至 SQL，關乎 [NFR-001](../nfr.md#performance)）；② 「當責室長」主要∪次要之 `DOC_SECONDARY_CHIEF` join 策略（須與 [F019](F019-public-list-browsing.md) `AC-D7` 共用同一實作）；③ 篩選選項來源端點（後台無可見性過濾義務，與前台 [F019](F019-public-list-browsing.md) `AC-D5` 之端點是否共用）。

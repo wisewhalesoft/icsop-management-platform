@@ -1,9 +1,9 @@
 ---
 spec-id: error-handling
 title: 錯誤處理與失敗模式
-version: 1.7
-date: 2026-08-18
-status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落與 3 個 `LIFECYCLE_*` 錯誤碼為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.3 之 [#dept-restriction](#dept-restriction) 段落為 🟢 APPROVED 2026-08-11 人類閘門通過——OQ-E06-03 定案為 404 `DOCUMENT_NOT_FOUND`、OQ-E08-10 定案為不記錄拒絕稽核，均沿用既有錯誤碼、不新增**；**v1.4 新增 [#account-profile](#account-profile) 段落與 3 個 `ACCOUNT_*_INVALID` 錯誤碼，對應 F003 手動帳號基本資料 delta，2026-08-14 使用者直接裁定**；**v1.5 同日第二次裁決——公司別可跨公司選擇：`ACCOUNT_COMPANY_CODE_INVALID` 語意放寬為「非有效公司」、`ACCOUNT_USERNAME_EXISTS` 比對範圍擴為全域，均不新增錯誤碼**；**v1.6 新增 [#export](#export) 與 [#usage-form-number](#usage-form-number) 兩段落與 3 個錯誤碼（`EXPORT_ROW_LIMIT_EXCEEDED`／`USAGE_FORM_NUMBER_DUPLICATE`／`USAGE_FORM_NUMBER_TOO_LONG`），對應 2026-08-16 缺失／變更 delta 第 14／16／18 項，使用者裁定**；**v1.7 新增 [#aad-authority-host](#aad-authority-host) 段落，對應 F001 `AC-E1`～`AC-E15` Azure AD endpoint host 覆寫 delta（2026-08-18 遠端環境防火牆對 canonical host 注入偽造 RST 之修復）——**擴充 `AUTH_OIDC_EXCHANGE_FAILED` 之適用階段至 `/auth/login`，並定義一類啟動期 fail-fast；**不新增任何錯誤碼**）；**v1.8 將 [#export](#export) 之適用範圍由三處擴為四處——新增 [F024](features/F024-access-history-query.md#export-fix-delta) 文件調閱歷程匯出（2026-08-18 人類閘門裁決 `OQ-D18-26` 選項 (a)），並解除該節原「F024 不在範圍」之範圍紀律；本節既有規則逐字不變、不新增任何錯誤碼**
+version: 1.9
+date: 2026-08-20
+status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落與 3 個 `LIFECYCLE_*` 錯誤碼為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.3 之 [#dept-restriction](#dept-restriction) 段落為 🟢 APPROVED 2026-08-11 人類閘門通過——OQ-E06-03 定案為 404 `DOCUMENT_NOT_FOUND`、OQ-E08-10 定案為不記錄拒絕稽核，均沿用既有錯誤碼、不新增**；**v1.4 新增 [#account-profile](#account-profile) 段落與 3 個 `ACCOUNT_*_INVALID` 錯誤碼，對應 F003 手動帳號基本資料 delta，2026-08-14 使用者直接裁定**；**v1.5 同日第二次裁決——公司別可跨公司選擇：`ACCOUNT_COMPANY_CODE_INVALID` 語意放寬為「非有效公司」、`ACCOUNT_USERNAME_EXISTS` 比對範圍擴為全域，均不新增錯誤碼**；**v1.6 新增 [#export](#export) 與 [#usage-form-number](#usage-form-number) 兩段落與 3 個錯誤碼（`EXPORT_ROW_LIMIT_EXCEEDED`／`USAGE_FORM_NUMBER_DUPLICATE`／`USAGE_FORM_NUMBER_TOO_LONG`），對應 2026-08-16 缺失／變更 delta 第 14／16／18 項，使用者裁定**；**v1.7 新增 [#aad-authority-host](#aad-authority-host) 段落，對應 F001 `AC-E1`～`AC-E15` Azure AD endpoint host 覆寫 delta（2026-08-18 遠端環境防火牆對 canonical host 注入偽造 RST 之修復）——**擴充 `AUTH_OIDC_EXCHANGE_FAILED` 之適用階段至 `/auth/login`，並定義一類啟動期 fail-fast；**不新增任何錯誤碼**）；**v1.8 將 [#export](#export) 之適用範圍由三處擴為四處——新增 [F024](features/F024-access-history-query.md#export-fix-delta) 文件調閱歷程匯出（2026-08-18 人類閘門裁決 `OQ-D18-26` 選項 (a)），並解除該節原「F024 不在範圍」之範圍紀律；本節既有規則逐字不變、不新增任何錯誤碼*；**v1.9 為 2026-08-20 使用者裁決（D9 delta，缺失／變更 9 項）之連帶更新——新增 [#d9-delta](#d9-delta) 一節，🔴 **不新增任何錯誤碼**（本輪全數複用既有碼）**）
 ---
 
 # 錯誤處理（Error Handling）
@@ -266,7 +266,7 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 ## 權限（功能面 / 欄位面） {#permission}
 
 - **功能面**：角色對功能為「無/唯讀」時，呼叫寫入型 API 回 `PERMISSION_DENIED`（403）。組織範圍限定須由**後端強制過濾**，不可信任前端傳入條件（F025）；**現行矩陣已無啟用之「本部門」範圍**（主管循環管理已放寬為全公司唯讀，OQ-E08-03 定案），範圍過濾機制保留備用。
-- **欄位面**：唯讀欄位被寫入時回 `FIELD_WRITE_FORBIDDEN`（**非靜默忽略**業務欄位變更），該更新不得寫入；惟系統產生欄位（UUID）一律**忽略傳入值**而非報錯（F026）。
+- **欄位面**：唯讀欄位被寫入時回 `FIELD_WRITE_FORBIDDEN`（**非靜默忽略**業務欄位變更），該更新不得寫入；惟系統產生欄位（UUID）一律**忽略傳入值**而非報錯（F026）。<br>🔴 **2026-08-20 之唯一例外（`OQ-D9-19`／`OQ-D9-20`）**：欄位 **「OJT 簽到表」對主管（`Supervisor`）與部門窗口（`DeptContact`）為可寫** ⇒ 兩者之 OJT 上傳**不得**回 `FIELD_WRITE_FORBIDDEN`。**其餘 19 欄與另兩類附件（ICSOP PDF／使用表單）＋附錄對兩者仍為唯讀**，寫入一律回 `FIELD_WRITE_FORBIDDEN`（[F026](features/F026-role-field-matrix.md#ojt-write-exception-delta) `AC-N24`／`AC-N25`）。`SysAdmin`／`User` 不受本例外影響。
 - **資料列面（🟢 APPROVED 2026-08-11）**：「業務」子分類之一般使用者對非其使用部門文件之存取，屬**資料列層級**之限縮，既非功能面亦非欄位面；其回應碼為 **404 `DOCUMENT_NOT_FOUND`（刻意隱藏存在性，非 403）**——本系統唯一之此類例外，不自動推廣至其他越權場景，見 [#dept-restriction](#dept-restriction)（F041）。
 
 ## 業務子分類之使用部門限縮（🟢 APPROVED 2026-08-11 人類閘門通過） {#dept-restriction}
@@ -294,6 +294,36 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 - 拒絕路徑**一律不得寫入 `VIEW`／`DOWNLOAD`／`PRINT` 成功事件**（調閱事實未發生，[F041](features/F041-user-subtype-business-scope.md) AC-27），且 **`AuditWriter` 完全未被呼叫**（AC-28）。
 - **直接後果：本需求完全不觸及稽核子系統**——`AUDIT_LOG` 不動、[F023](features/F023-audit-logging.md)／[F024](features/F024-access-history-query.md) 皆不需 AC delta、[nfr.md](nfr.md) 稽核保留規則不需覆核。
 - 📝 否決之選項 B（寫入 `actionType = 'ACCESS_DENIED_DEPT_RESTRICTION'` 供資安／外流意圖偵測）：曾是本需求**唯一會擴散到 schema** 者，需 `AUDIT_LOG` 列舉擴充 ＋ 上述三項連帶變更。保留於此供追溯；日後若組織將「業務人員嘗試繞過限制」視為需追蹤之風險訊號，此為 additive 變更、不阻塞現有實作。
+
+## D9 delta：2026-08-20 缺失／變更 9 項之錯誤面（**零新增錯誤碼**） {#d9-delta}
+
+> 對應 [stories/2026-08-20-defect-delta-9.md](../stories/2026-08-20-defect-delta-9.md) 與 [open-questions §D9](open-questions.md#d9--2026-08-20-缺失變更-delta來源stories2026-08-20-defect-delta-9md)。
+> 🔴 **本輪不新增任何錯誤碼**——九項需求全數複用既有碼。本節逐項說明「為何不需要新碼」，避免下游實作者自行發明。
+
+### 後台下載改為燒錄（#5，`OQ-D9-08`／`OQ-D9-09`／`OQ-D9-10`）
+
+- **未授權存取**：沿用 [#file](#file) 之 `FILE_ACCESS_DENIED`（403）與 [#appendix](#appendix) 之既有規則，**語意一字不變**——「誰能下載」未因燒錄而改變（[F039](features/F039-appendix-management.md) `AC-N58` 明文鎖定）。
+- **燒錄失敗**（PDF 損毀、字型缺失等）：**不新增錯誤碼**，沿用既有 5xx 系統錯誤路徑；⚠ **不得**靜默退化為回傳未燒錄之原始位元組——那會使 `OQ-D9-09`（不保留任何無浮水印下載路徑）於失敗路徑上被架空。
+- **稽核寫入失敗**：**不阻斷下載**，進補償佇列重試（沿用 [#audit](#audit)）。
+- ⚠ **`OQ-FM-01`／`OQ-D18-01` 已失效**：本文件他處若仍以「後台維持 RAW／不寫稽核」為前提之措辭，一律以 [F020 §後台燒錄範圍 delta](features/F020-watermark.md#backend-burn-delta) 為準。
+
+### OJT 上傳開放主管／部門窗口（#8，`OQ-D9-19`～`OQ-D9-24`）
+
+- **權限錯誤沿用既有碼、不新增**：`SysAdmin` → `FIELD_WRITE_FORBIDDEN`（403，欄位層）；`User` → `PERMISSION_DENIED`（403，路由層）；`Supervisor`／`DeptContact`／`ICSOPAdmin` → **允許**。見 [#permission](#permission) 與 [F016](features/F016-pdf-ojt-attachment.md#ojt-role-open-delta) `AC-N34`。
+- **上傳驗證不因角色而異**：格式／大小／覆蓋語意一律沿用 [#file](#file)（`FILE_FORMAT_NOT_ALLOWED`／`FILE_SIZE_EXCEEDED`／重傳即覆蓋），**驗證順序不變**。
+- **不限權責範圍**（`OQ-D9-21` 選項 A）：**不存在**「非權責範圍」之錯誤情境——任一主管／部門窗口對任何文件之 OJT 上傳皆為合法請求，**不得**新增任何範圍相關錯誤碼。
+- **稽核寫入失敗**：不阻斷上傳（沿用 [#audit](#audit)）。
+
+### 使用表單整頁化與制定部門（#7，`OQ-D9-15`～`OQ-D9-18`）
+
+- **編號唯一性**：**完全沿用** [#usage-form-number](#usage-form-number) 之既有規則與兩個既有錯誤碼（`USAGE_FORM_NUMBER_DUPLICATE` 409／`USAGE_FORM_NUMBER_TOO_LONG` 400），含驗證順序、trim、不分大小寫、`null` 不參與比對、**編輯時排除自身列**、清空為合法操作——`OQ-D9-16` 裁定本項**不新增後端工作**。使用者可見之錯誤文案亦**逐字沿用**（[F018](features/F018-usage-form-management.md#usage-form-page-delta) `AC-N44`）。
+- **制定部門（多選）**：**不新增錯誤碼**——比照 [`DOC_USING_DEPT`](data-model.md#doc-using-dept) 之既有處置，`orgCode` **不驗證存在性**，僅 trim／去空值／去重；**0 筆為合法狀態**、**不得**回必填錯誤。
+- **整頁化為純版面搬遷**：後端建立流程與 API 契約不變 ⇒ **既有上傳／覆蓋／移除之全部錯誤路徑一字不動**（含 `USAGE_FORM_OVERWRITE_SHARED` 409 與 `USAGE_FORM_IN_USE` 409）；⚠ **編輯 metadata 之路徑不得觸發 `USAGE_FORM_OVERWRITE_SHARED`**（[F018](features/F018-usage-form-management.md) `AC-D20`／`AC-N49`）。
+
+### 浮水印呈現與檢視器（#1／#2／#3／#4）、字級（#6）、OJT 圖示欄（#9）
+
+- **皆為呈現層或常數層變更，不產生任何新錯誤路徑**：色值／不透明度（`AC-N1`～`AC-N3`）、canvas 渲染（`AC-N4`～`AC-N9`）、公司簡稱（`AC-N10`～`AC-N13`）、前台字級（`AC-N59`～`AC-N62`）、清單圖示欄（`AC-N37`～`AC-N40`）**一律不新增錯誤碼、不改變任何 API 契約**。
+- **公司簡稱查無**：沿用 `resolveCompanyName` 之既有寬容處置——回 `null` 並由 [F020](features/F020-watermark.md) §8.4 之分隔符收合規則吸收，**不拋錯、不回退為全稱**（[F020](features/F020-watermark.md#d9-watermark-delta) `AC-N12`）。
 
 ## 稽核 {#audit}
 

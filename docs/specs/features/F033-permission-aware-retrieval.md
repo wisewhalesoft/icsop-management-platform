@@ -68,6 +68,13 @@ Epic/Story: E09 / US-096
 - Given 文件使用部門為處室層 `JAC00`、我所屬部門為同部之另一處室, When 我提問, Then 該文件之 chunk 不被檢索、不出現於答案或引用。
 - Given 系統執行使用部門過濾, When 檢視實際查詢, Then 過濾以前綴比對（`orgCode LIKE 'prefix%'`）直接下推為向量檢索之 SQL `WHERE` 條件，未於應用層先取回再過濾，符合 [nfr.md#rag-security](../nfr.md#rag-security) AC2。
 
+### D9 delta：檢索層過濾維度零漣漪回歸鎖定（🔴 2026-08-20；`OQ-D9-18` 選項 A 之連動核實） {#d9-no-ripple-lock}
+
+> 前提裁決：**`OQ-D9-18`→選項 A：純 metadata**——使用表單之「制定部門」**不**作為新的過濾維度；**本 feature 之權限感知檢索邏輯逐字不動**〔使用者〕。
+> **本節僅立回歸鎖定 AC，不新增任何行為、不改變 Phase 3 之實作範圍。** AC 編號採 `AC-N#`。
+
+- **AC-N65**（🔒 RAG 檢索層過濾維度未增加）：Given 2026-08-20 D9 delta 全數實作完成, When 檢視本 feature 之檢索層權限過濾契約, Then **其過濾維度仍恆為「已公告 AND 文件使用部門相符（子樹展開，共用 `isWithinSubtree`）」二者**——[`USAGE_FORM_DRAFTING_DEPT`](../data-model.md#usage-form-drafting-dept) **不得**成為第三個過濾維度、亦不得進入任何 chunk metadata 之權限欄位；本 feature 之全部既有 AC 與其與 [F026](F026-role-field-matrix.md) §9.1／[F019](F019-public-list-browsing.md) 之「三者不得各自訂定不同展開規則」之既有約束**逐字不變**。<br>📌 **本 feature 於本輪為 `[宣告層約束、現況無執行期載體]`**：F033 屬 Phase 3（⬜ 未開始），無實作可供斷言。**保留理由**＝本條之價值在於「日後實作 F033 時，此處已明文排除使用表單制定部門」；若不記錄，Phase 3 實作者面對兩張結構同構的部門關聯表時無從判斷該不該納入。比照 [F001](F001-auth-login-session.md) `AC-E2` ③④ 之既有寫法（保留、明標、**不得放寬亦不得 `.skip`**）。
+
 ## Error Scenarios
 - 權限過濾為**靜默排除**（非回錯誤）：受限 chunk 不進上下文，可能導致 `no_result`（見 [error-handling.md#rag-query](../error-handling.md#rag-query)）。負向測試（prompt injection）納入上線前 security review（[NFR-009](../nfr.md#rag-security)）。
 

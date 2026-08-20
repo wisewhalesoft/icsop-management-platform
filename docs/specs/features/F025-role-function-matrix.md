@@ -72,6 +72,18 @@ Epic/Story: E08 / US-070（附錄管理列：E10 / US-102 AC5）
 - **AC-U3**：Given 業務子分類使用者呼叫任一後台功能 API（帳號管理／循環管理／ICSOP 文件管理／…）, When 請求送出, Then 回 403 `PERMISSION_DENIED`——與「其他」子分類之一般使用者**完全一致**，業務限制**不放寬亦不加嚴**後台功能權限。
 - **AC-U4**（**權限矩陣頁之 F041 註記橫幅**；2026-08-11 補訂，vitest 可斷言）：Given 以系統管理員開啟權限矩陣頁, When 渲染, Then 於既有兩則橫幅（「已定案…全欄位唯讀」／「草案待審（OQ-E08-02）」）**之下、分頁列之上**呈現第三則**跨兩欄**之定案橫幅，其 `textContent`（空白正規化後）逐字為：<br>`🟢 已定案（F041 · OQ-E08-04 裁決 B，2026-08-11 人類閘門通過）：一般使用者再細分之子分類「業務／其他」為 ACCOUNT 之獨立欄位，非第 6 種角色——本頁兩份矩陣維持 5 欄、逐格不變（F041 AC-37／AC-38），權限解析函式亦不接受子分類參數。子分類僅影響前台可見之文件範圍（資料列層級：業務者僅見「使用部門相符」之已公告文件），不參與功能授權與欄位授權判定；指派入口見「帳號管理」之指派角色 modal（08）。`<br>Then 既有兩則橫幅之文案、順序與存廢**一律不變**（`prototypes/18-permission-matrix.html` 檔頭明示：「草案待審（OQ-E08-02）」與 F041 無關，**不得**一併翻轉為已定案）；且兩份矩陣仍為 **5 欄、逐格不變**（AC-U1／[F026](F026-role-field-matrix.md) AC-U1 之既有斷言不得放寬）。<br>📌 本橫幅為 prototype 18 檔頭所稱之「**本檔唯一變更**」，位於**頁面層級、涵蓋兩個分頁**，故僅於本檔立 AC，[F026](F026-role-field-matrix.md) 不另立。〔[F041](F041-user-subtype-business-scope.md) AC-45〕
 
+### D9 delta：功能矩陣不變之回歸鎖定（🔴 2026-08-20；缺失／變更 delta 第 8 項之連動核實） {#d9-function-matrix-lock}
+
+> **核實結論＝本矩陣逐格不變、不新增功能列。**
+> `OQ-D9-19`～`OQ-D9-24` 開放主管／部門窗口上傳 OJT，屬**欄位層**（[F026](F026-role-field-matrix.md)）之破例，**非功能層**。
+> 理由（已對原始碼核實）：OJT 上傳端點 `POST /admin/documents/:documentId/attachments/ojt` 之路由層閘門為
+> `@RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')`（`backend/src/attachments/attachments.controller.ts:73-74`）——
+> 本矩陣「ICSOP 文件管理」列對主管／部門窗口之值為 **唯讀**，`'read'` 閘門**本即通過**；實際擋住寫入者為服務層之欄位矩陣。
+> ⇒ **開放 OJT 不需要、也不得改動本矩陣任何一格。**
+> **本 delta 之 AC 編號採 `AC-N#`**。
+
+- **AC-N36**（🔒 功能矩陣逐格不變 ＋ 閘門值不得改動）：Given 2026-08-20 D9 delta 實作完成, When 逐格取 `FUNCTION_MATRIX` 之全部功能鍵 × 5 種角色之值, Then **與本 delta 導入前逐格相同**、功能鍵集合亦未增減（**不新增「OJT 上傳」之類的功能列**）；且 When 檢視 OJT 上傳端點之 route metadata, Then 其功能鍵仍為 `ICSOP_DOCUMENT_MANAGEMENT`、動作仍為 **`'read'`**（**不得**被改為 `'write'`）。<br>🔴 **「不得改為 `'write'`」之理由（不得省略）**：本矩陣對主管／部門窗口之「ICSOP 文件管理」為**唯讀**，改為 `'write'` 閘門會使兩者**連 OJT 都上傳不了**，直接架空本次裁決；而若為了讓它通過而把矩陣格值改為 CRUD，則等同**把整個 ICSOP 文件管理模組對兩角色開放寫入**——那正是 [F026](F026-role-field-matrix.md) `AC-N24`／`AC-N25` 所要防止的「鬆一片牆」。**兩種改法皆為回歸，不是整理。**
+
 ## Error Scenarios
 - 越權/範圍限縮：見 [error-handling.md#permission](../error-handling.md#permission)。
 - **業務子分類之前台使用部門限縮**（🟢 APPROVED）：屬**資料列層級過濾**，非本矩陣之功能層級授權；拒絕回 404 `DOCUMENT_NOT_FOUND`（非 403 `PERMISSION_DENIED`），見 [error-handling.md#dept-restriction](../error-handling.md#dept-restriction) 與 [F041](F041-user-subtype-business-scope.md)。
@@ -81,4 +93,5 @@ Epic/Story: E08 / US-070（附錄管理列：E10 / US-102 AC5）
 - Depends on: [F003](F003-account-role-management.md); Blocks: 全系統寫入型操作
 - Related: [F026 角色×欄位矩陣](F026-role-field-matrix.md)；獨立功能「文件變更歷程」見 [F037](F037-document-change-history.md)／[F038](F038-lifecycle-tree-change-history.md)；功能列「附錄管理」之行為規格見 [F039](F039-appendix-management.md)
 - **使用者子分類（業務／其他）規則權威**: [F041](F041-user-subtype-business-scope.md)（本矩陣不變之理由與 `AC-U1`～`AC-U3`；🟢 APPROVED 2026-08-11，OQ-E08-04 定案為選項 B）
+- **2026-08-20 使用者裁決（D9 delta）**：`OQ-D9-19`～`OQ-D9-24`（OJT 上傳開放主管／部門窗口）**不影響本矩陣**，見 [§D9 delta：功能矩陣不變之回歸鎖定](#d9-function-matrix-lock) `AC-N36`；行為權威＝[F016](F016-pdf-ojt-attachment.md#ojt-role-open-delta)、欄位矩陣權威＝[F026](F026-role-field-matrix.md#ojt-write-exception-delta)。
 - 定案: OQ-E08-01（SysAdmin 對文件為唯讀、無寫入權）；OQ-E08-03（主管循環管理全公司唯讀、雙入口一致——本次已將矩陣主管「循環管理」欄由「唯讀（本部門相關）」改為「唯讀」）；OQ-E07-04（新增獨立功能列「文件變更歷程」＝僅 SysAdmin／ICSOPAdmin 全公司唯讀，其餘無）。OQ: OQ-E08-02（矩陣其餘部分審核）。

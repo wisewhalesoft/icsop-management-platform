@@ -10,7 +10,11 @@ Epic/Story: E05 / US-040, US-041, US-042
 > **🔴 2026-08-16 人類閘門追加裁決（`OQ-D18-28`）——新增「編輯編號」動作**：使用表單管理頁每列新增一個**輕量之「編輯編號」入口**（形式由 ui-ux-designer 決定），**只改 `formNumber`、不碰檔案**。**理由**：存量表單之 `formNumber` 全為 `null`（無來源、migration 只能留空），若編號僅能於上傳時設定，**所有既有表單永遠補不上編號**，第 18 項需求對存量資料形同無效。**被否決之替代方案＝把編號欄加進覆蓋上傳彈窗**（會強迫為改一個編號而重傳檔案，且覆蓋共用表單將連帶影響所有引用文件並觸發 `USAGE_FORM_OVERWRITE_SHARED`）。AC 續編為 `AC-D16`～`AC-D20`，端點見 [§Interface Contract](#interface-contract)；**不新增錯誤碼、不新增矩陣列、不寫稽核**。
 >
 > **🔴 2026-08-16 CHANGE delta（同日第二次人類閘門；`OQ-D18-25` 定案）——前台使用表單下載改為燒錄浮水印**：**前台**文件詳情頁下載之 `format = pdf` 使用表單**必須燒錄浮水印**；非 PDF 維持原檔並於該列明示 `此格式不支援浮水印`（策略 A，與 [F039](F039-appendix-management.md#front-burn-delta) 附錄一致）。**此推翻 `OQ-E05-03` 之既有定案**（「使用表單暫不燒錄浮水印」），見 [§前台使用表單下載燒錄](#front-burn-delta)。AC 編號續用本檔 `AC-D#` 空間（`AC-D11`～`AC-D14`）。
-> 🔴 **後台使用表單管理頁之個別下載維持 RAW、不燒錄、不寫稽核，一字不改**——[F026](F026-role-field-matrix.md) `OQ-FM-01`（2026-07-24）**維持有效**；缺失 delta #12／#13／#15 **明確不做**（`AC-D13` 回歸鎖定）。
+> 🛑 ~~**後台使用表單管理頁之個別下載維持 RAW、不燒錄、不寫稽核，一字不改**——[F026](F026-role-field-matrix.md) `OQ-FM-01`（2026-07-24）**維持有效**；缺失 delta #12／#13／#15 **明確不做**（`AC-D13` 回歸鎖定）。~~<br>🔴 **本行已於 2026-08-20 由 `OQ-D9-08`（選項 B）全面推翻**（原文逐字保留供追溯）：**後台之使用表單下載自本日起亦燒錄浮水印（PDF）並寫入調閱稽核，無例外角色**。`AC-D13`／`AC-D23` 已就地改寫，權威見 [F020 §後台燒錄範圍 delta](F020-watermark.md#backend-burn-delta) `AC-N14`～`AC-N21`。
+>
+> ---
+>
+> **🔴 2026-08-20 CHANGE delta（使用者裁決；缺失／變更 delta 第 7 項）——使用表單新增／編輯改為整頁式，並新增「制定部門（多選）」**：三個子項——(a) **整頁化**（新增／編輯由 modal 改為獨立整頁，比照 ICSOP 文件建立／編輯頁之視覺與操作體驗；`OQ-D9-15`→**選項 A：純版面搬遷**，仍為單一動作一次送出、後端建立流程與 API 契約不變）；(b) **編號檢查唯一**（`OQ-D9-16`→**選項 A：既有機制已存在且有效，本項僅要求新頁面沿用，不新增後端工作**；使用者明確答覆「未曾實際遇到重複未被擋下」）；(c) **制定部門（多選）**（`OQ-D9-17`→**選項 B：比照 `DOC_USING_DEPT` 新增多對多關聯表**，可任意層級、可複選；`OQ-D9-18`→**選項 A：純 metadata**，不影響任何既有可見性／RBAC 判定）。**本 delta 之 AC 編號採 `AC-N#`**。逐條見 [§使用表單新增／編輯整頁化 delta](#usage-form-page-delta)（`AC-N41`～`AC-N49`）。
 
 ## Description
 使用表單採**集中表單池**模型：ICSOP 管理員於**獨立「使用表單管理」畫面**維護表單池（上傳/更新/移除、查詢、檢視關聯文件）；ICSOP 文件建立/編輯時，從表單池**可搜尋多選**關聯表單（**多對多**，一表單可被多份文件共用）。前台與後台文件詳情頁列出該文件所有關聯表單並可個別下載；前台下載觸發稽核（比照 F023）。檔案存 Azure Blob。**每份使用表單另可設定選填之「表單編號」（`formNumber`），全池唯一（2026-08-16 delta）。**
@@ -26,7 +30,7 @@ Epic/Story: E05 / US-040, US-041, US-042
 2. **文件關聯**：文件建立/編輯（F010/F011）時自表單池可搜尋多選關聯表單（多對多）。
 3. **移除表單**：若表單仍被文件關聯，二次確認（一併解除關聯）或提示先解除（`USAGE_FORM_IN_USE`）。
 4. 文件詳情頁（前台/後台共用同一 API）列出該文件所有關聯表單之名稱與格式，提供個別下載連結。
-5. 前台下載表單 → 記錄稽核（targetType=USAGE_FORM，actionType=DOWNLOAD）；**`format = pdf` 者於伺服器端燒錄浮水印後回傳，非 PDF 者維持原檔**（2026-08-16 使用者裁決，見 [§前台使用表單下載燒錄](#front-burn-delta)）。**後台下載一律 RAW、不寫稽核**（OQ-FM-01 有效）。
+5. 前台下載表單 → 記錄稽核（targetType=USAGE_FORM，actionType=DOWNLOAD）；**`format = pdf` 者於伺服器端燒錄浮水印後回傳，非 PDF 者維持原檔**（2026-08-16 使用者裁決，見 [§前台使用表單下載燒錄](#front-burn-delta)）。🛑 ~~**後台下載一律 RAW、不寫稽核**（OQ-FM-01 有效）。~~ → 🔴 **2026-08-20 由 `OQ-D9-08` 推翻**：後台下載亦燒錄（PDF）並寫稽核（`AC-D13` 已改寫，權威＝[F020](F020-watermark.md#backend-burn-delta)）。
 
 ### 前台使用表單下載燒錄（🔴 2026-08-16 使用者裁決推翻 OQ-E05-03） {#front-burn-delta}
 
@@ -46,7 +50,7 @@ Epic/Story: E05 / US-040, US-041, US-042
 ## Alternative Flows
 - 無關聯表單：詳情頁顯示「無使用表單」提示，非錯誤或空白區塊。
 - 一次上傳多個 excel/pdf：全部成功建立關聯。
-- **後台使用表單管理頁之個別下載（2026-08-16 經確認維持不變）**：核發短效期 SAS URL、伺服器不經手位元組，故**不燒錄浮水印、不寫稽核**（管理存取，比照 [F026](F026-role-field-matrix.md) `OQ-FM-01`）。⚠ 本檔無 Interface Contract 端點表（歷來以 Main Flow 與 AC 描述行為），故後台 RAW 之語意以本條 ＋ `AC-D13` 承載；端點層之前台/後台分流設計見 [F020](F020-watermark.md#front-burn-scope-delta) `AC-D3`（由 system-architect 定案）。
+- 🛑 ~~**後台使用表單管理頁之個別下載（2026-08-16 經確認維持不變）**：核發短效期 SAS URL、伺服器不經手位元組，故**不燒錄浮水印、不寫稽核**（管理存取，比照 [F026](F026-role-field-matrix.md) `OQ-FM-01`）。~~<br>🔴 **2026-08-20 由 `OQ-D9-08` 推翻（原文逐字保留供追溯）**：後台使用表單管理頁之個別下載**改為代理串流、`format = pdf` 者燒錄浮水印、並寫入 `targetType='USAGE_FORM'`／`actionType='DOWNLOAD'` 之調閱稽核**（該路徑不隸屬任何文件，故 `documentId` 為 `null`，見 [F020](F020-watermark.md#backend-burn-delta) `AC-N17`）。**無例外角色**（含 ICSOPAdmin，`OQ-D9-09` 選項 B）。⚠ 本檔無 Interface Contract 端點表（歷來以 Main Flow 與 AC 描述行為），故後台 RAW 之語意以本條 ＋ `AC-D13` 承載；端點層之前台/後台分流設計見 [F020](F020-watermark.md#front-burn-scope-delta) `AC-D3`（由 system-architect 定案）。
 
 ## Edge Cases
 - 上傳非 excel/pdf（如 .docx）：拒絕並提示格式。
@@ -65,7 +69,8 @@ Epic/Story: E05 / US-040, US-041, US-042
 ## Postconditions
 - 文件持有 0..* 使用表單；前後台清單一致（共用 API）。
 - `USAGE_FORM_POOL` 中 `formNumber` 非 `null` 之列，其 trim 後不分大小寫之值**全池唯一**。
-- **（2026-08-16）** 前台下載之 `format = pdf` 使用表單，其位元組之 PDF 內容層必含浮水印；後台下載同一表單之位元組為原始檔且不含浮水印，兩者不相等。
+- 🛑 ~~**（2026-08-16）** 前台下載之 `format = pdf` 使用表單，其位元組之 PDF 內容層必含浮水印；後台下載同一表單之位元組為原始檔且不含浮水印，兩者不相等。~~ → 🔴 **2026-08-20 改寫（`OQ-D9-08`）**：前台**與後台**下載之 `format = pdf` 使用表單，其位元組之 PDF 內容層**皆含浮水印**，且各自反映該次操作者本人之身分快照。
+- **（2026-08-20）** 每份使用表單持有 0..* 筆制定部門（`USAGE_FORM_DRAFTING_DEPT`），該欄位**不參與任何可見性／授權判定**（`AC-N46`）。
 
 ## Acceptance Criteria
 - Given 選擇 excel/pdf 上傳, When 送出, Then 存 Blob、建立關聯、顯示於清單。
@@ -139,7 +144,7 @@ Epic/Story: E05 / US-040, US-041, US-042
 
 - **AC-D11**（前台 PDF 使用表單燒錄）：Given 一般使用者於**前台**文件詳情頁下載一份 `format = pdf` 之使用表單, When 下載完成, Then 回應之位元組其 **PDF 內容層已燒錄浮水印**（非原始檔位元組、非僅前端疊加），其字串與同一使用者於同一時刻經 [F020](F020-watermark.md) 檢視器下載所得之浮水印**逐字相同**（僅時間戳依當下產生）；`PdfBurner.burnPdf` 之 spy **呼叫次數為 1**。
 - **AC-D12**（非 PDF 原檔＋UI 明示）：Given 某使用表單之 `format ∈ {xlsx, xls}`, When 於前台文件詳情頁下載, Then 回應之位元組與 Blob 中之原始檔**逐位元組相同**、`PdfBurner.burnPdf` 之 spy **呼叫次數為 0**；且 When 渲染前台詳情頁之使用表單清單, Then 該列顯示逐字文案 `此格式不支援浮水印`；`format = pdf` 之列**不得**出現該文案（`within(pdfRow).queryByText('此格式不支援浮水印') === null`）。<br>📌 **「回應之位元組」＝應用層代理回傳之 body，非 SAS URL**：本條隱含**前台一律代理串流（非 PDF 亦然）**，此為 architecture-spec §5.2 之**刻意例外、僅限前台路徑**（後台仍走 SAS），理由與完整契約見 [F020](F020-watermark.md#front-burn-scope-delta) `AC-D3a`。<br>📌 **UI 旗標之資料來源**：同 [F039](F039-appendix-management.md#export-delta) `AC-D2`——依**伺服器端旗標**渲染，前端不得自行以 `format` 字串重算。格式判定以上傳時經白名單驗證之伺服器端事實為權威，**非** client-supplied `content-type`。
-- **AC-D13**（🔒 後台 RAW 回歸鎖定；`OQ-FM-01` 維持有效）：Given 同一份 `format = pdf` 之使用表單, When 以 ICSOPAdmin／SysAdmin／Supervisor／DeptContact 任一角色自**後台**（使用表單管理頁個別下載、後台文件唯讀詳情、編輯頁）下載, Then 取得**原始檔位元組**（與 Blob 逐位元組相同）、`PdfBurner.burnPdf` 之 spy **呼叫次數為 0**、**不寫入任何稽核**；且該位元組與 `AC-D11` 所得之前台位元組**不相等**。既有「未登入／無權限者組合下載網址 → `FILE_ACCESS_DENIED`」之 AC 維持不變。
+- **AC-D13**（🛑 **已於 2026-08-20 由 `OQ-D9-08` 選項 B 全面推翻並反轉**）：<br>🛑 ~~（🔒 後台 RAW 回歸鎖定；`OQ-FM-01` 維持有效）Given 同一份 `format = pdf` 之使用表單, When 以 ICSOPAdmin／SysAdmin／Supervisor／DeptContact 任一角色自**後台**（使用表單管理頁個別下載、後台文件唯讀詳情、編輯頁）下載, Then 取得**原始檔位元組**（與 Blob 逐位元組相同）、`PdfBurner.burnPdf` 之 spy **呼叫次數為 0**、**不寫入任何稽核**；且該位元組與 `AC-D11` 所得之前台位元組**不相等**。~~（原條文逐字保留供追溯）<br>🔴 **現行條文**：後台之使用表單下載（三處路徑皆然）**取得已燒錄浮水印之位元組**（`burnPdf` spy ＝ **1**，非 0）並**寫入一筆 `targetType='USAGE_FORM'`／`actionType='DOWNLOAD'` 之調閱稽核**；非 PDF 維持原檔（`burnPdf` spy ＝ 0）。逐條見 [F020](F020-watermark.md#backend-burn-delta) `AC-N14`～`AC-N17`。<br>🔒 **既有「未登入／無權限者組合下載網址 → `FILE_ACCESS_DENIED`」之 AC 維持不變**（本項未被推翻）。
 - **AC-D14**（稽核義務不變＋快照落值）：Given `AC-D11` 之前台 PDF 下載成功（含燒錄）, When 檢視稽核, Then `AUDIT_LOG` 恰新增一筆 `targetType='USAGE_FORM'`／`actionType='DOWNLOAD'`／`formId` 落列之紀錄（既有 AC「前台下載表單成功 → 同步寫入正確稽核紀錄」**語意不變**），且其 `watermarkSnapshot` **與該次燒錄之浮水印字串逐字相同**；Given `AC-D12` 之非 PDF 下載成功, Then **同樣寫入該筆稽核**，惟 `watermarkSnapshot` 為 `null`。**燒錄與否不改變稽核義務。**
 
 - **AC-D22**（🔴 前台使用表單下載之專屬端點與前後台分流；**2026-08-16 三次補訂**，容器／瀏覽器驗收揪出「一條 route 兩個相衝呼叫端」）：既有 `GET /documents/:documentId/usage-forms/:formId/download` 為**前後台共用之單一 route**，但兩端期待相反——前台需**燒錄後之位元組**、後台需 **`{ url }` 之 SAS JSON**；且該服務對 PDF 燒錄 ⇒ **後台若改取位元組即違反 [F020](F020-watermark.md#front-burn-scope-delta) `AC-D4`**（後台恆 RAW、`PdfBurner.burnPdf` spy 必須為 0）。**「一條 route 同時滿足兩者」在架構上不可能**，故比照 [F020](F020-watermark.md#front-burn-scope-delta) `AC-D8` 之附件作法分流：
@@ -153,7 +158,40 @@ Epic/Story: E05 / US-040, US-041, US-042
   - ② **稽核義務隨前台路徑移轉**：`AC-D14` 之「恰寫入一筆 `targetType='USAGE_FORM'`／`actionType='DOWNLOAD'`」自本條起**由前台專屬端點承擔**；**後台路徑不寫稽核**（管理存取，比照 `OQ-FM-01` 與 [F039](F039-appendix-management.md) 後台下載）。⚠ **此使既有共用 route 之稽核行為由「兩端皆寫」收斂為「不寫」**——為分流之直接後果，非額外裁決。
   - ③ **[F041](F041-user-subtype-business-scope.md) 可見性檢查於服務層生效**：業務子分類使用者對使用部門不相符之文件呼叫前台端點, Then 回 **404 `DOCUMENT_NOT_FOUND`**、不回傳任何位元組、不寫稽核。
   - 📌 **路徑形狀已與 architecture-spec §10.1「路徑命名空間分流」一致，不需另行拍板**（`/public/...` ＝前台專屬命名空間，與 `AC-D8` 之 `/public/documents/:id/attachments/{icsop-pdf,ojt}/download` 同型）。<br>⚠ **不得**改採「比照附錄之 `/documents/...` 前台＋`/admin/...` 後台」形狀：既有 `GET /admin/usage-forms/:formId/download` 之閘門為 `USAGE_FORM_MANAGEMENT` read，而 **Supervisor／DeptContact 對「使用表單管理」無權**（[F025](F025-role-function-matrix.md)），改走該路徑會使兩者於後台唯讀詳情頁下載表單時吃 403，**直接牴觸 [F026](F026-role-field-matrix.md) 矩陣「使用表單（多）＝唯讀（可下載）」**。
-- **AC-D23**（🔒 後台使用表單下載 RAW 回歸鎖定）：Given 同一份 `format = pdf` 之使用表單, When 自**後台唯讀詳情頁**（`/admin/documents/:id`）觸發下載, Then 取得之回應為 **`{ url }` 形狀之 JSON**（非位元組），依該 URL 取得之檔案與 Blob **逐位元組相同**、`PdfBurner.burnPdf` 之 spy **呼叫次數為 0**、**不寫入任何稽核**；且該位元組與 `AC-D22` 前台端點所得**不相等**。Supervisor／DeptContact 執行同一操作亦**允許**（不得回 403）。
+- **AC-D23**（🛑 **已於 2026-08-20 由 `OQ-D9-08` 選項 B 推翻並反轉**）：<br>🛑 ~~（🔒 後台使用表單下載 RAW 回歸鎖定）Given 同一份 `format = pdf` 之使用表單, When 自**後台唯讀詳情頁**（`/admin/documents/:id`）觸發下載, Then 取得之回應為 **`{ url }` 形狀之 JSON**（非位元組），依該 URL 取得之檔案與 Blob **逐位元組相同**、`PdfBurner.burnPdf` 之 spy **呼叫次數為 0**、**不寫入任何稽核**；且該位元組與 `AC-D22` 前台端點所得**不相等**。~~（原條文逐字保留供追溯）<br>🔴 **現行條文**：Given 同一份 `format = pdf` 之使用表單, When 自**後台唯讀詳情頁**（`/admin/documents/:id`）或編輯頁觸發下載, Then 回應之 body 為**代理串流之已燒錄位元組**（**非** `{ url }` JSON——回 URL 與燒錄在架構上不相容，見 [F020](F020-watermark.md#backend-burn-delta) `AC-N21`），`PdfBurner.burnPdf` 之 spy **呼叫次數為 1**，並**寫入一筆 `targetType='USAGE_FORM'`／`actionType='DOWNLOAD'` 之調閱稽核**（`documentId` 落該文件 id）。<br>🔒 **未被推翻之子句**：Supervisor／DeptContact 執行同一操作**仍允許**（不得回 403）——[F026](F026-role-field-matrix.md) 矩陣「使用表單（多）＝唯讀（可下載）」逐格不變。
+### 使用表單新增／編輯整頁化 delta（🔴 2026-08-20 使用者裁決；缺失／變更 delta 第 7 項） {#usage-form-page-delta}
+
+> 前提裁決（逐題紀錄見 [open-questions §D9](../open-questions.md#d9--2026-08-20-缺失變更-delta來源stories2026-08-20-defect-delta-9md)）：
+> **`OQ-D9-15`→選項 A：純版面搬遷**（modal → 獨立整頁、分區塊排版、動作鈕移 topbar，比照文件建立／編輯頁之**視覺與操作體驗**；但**仍為單一動作一次送出**，`usage-forms` 後端建立流程與 API 契約**不變**）〔使用者〕｜
+> **`OQ-D9-16`→選項 A**：既有唯一性機制（應用層 409 `USAGE_FORM_NUMBER_DUPLICATE` ＋ DB filtered unique index ＋ collation 修正）**已存在且有效**，本項僅要求新頁面**沿用**該機制與既有錯誤文案，**不新增後端工作**；使用者明確答覆「未曾實際遇到重複未被擋下」〔使用者〕｜
+> **`OQ-D9-17`→選項 B**：比照 [`DOC_USING_DEPT`](../data-model.md#doc-using-dept) **新增多對多關聯表**（可任意層級、可複選）〔使用者〕｜
+> **`OQ-D9-18`→選項 A：純 metadata**（顯示與清單篩選用），**不**影響任何既有可見性／RBAC 判定；[F041](F041-user-subtype-business-scope.md)／[F033](F033-permission-aware-retrieval.md)／[F026](F026-role-field-matrix.md) 之判定邏輯**逐字不動**〔使用者〕。
+>
+> 📌 **新實體＝[`USAGE_FORM_DRAFTING_DEPT`](../data-model.md#usage-form-drafting-dept)**（`id, formId, orgCode`），欄位形狀與語意刻意與 `DOC_USING_DEPT` 同構。**本項為本 delta 唯一需 schema 變更＋migration 者**。
+> ⚠ **依既有教訓，migration 寫完必須對真 SOP DB 實跑**（`project-icsop-migration-deploy`：單元測試全綠證明不了資料表存在）。
+
+#### (a) 整頁化
+
+- **AC-N41**（🔴 獨立路由整頁，非彈窗）：Given ICSOPAdmin 於使用表單管理頁（`/admin/usage-forms`）點擊「新增表單」, When 動作觸發, Then **導向獨立路由之整頁**（建議 `/admin/usage-forms/new`，比照既有 `/admin/documents/new`；最終路徑由 system-architect 定，但**必須為獨立 route**）；Given 點擊某列之編輯動作, Then 導向 `/admin/usage-forms/:formId/edit`（同上）。<br>**逐字斷言**：於新增／編輯畫面上，`container.querySelector('[role="dialog"]')` **為 `null`**；且 `window.location.pathname`（或 router 之 `useLocation().pathname`）**已改變**。<br>📝 **被取代之現行實作（逐字保留供追溯）**：新增＝上傳 modal 一次送出「檔案＋名稱＋選填編號」（`UsageFormManagementPage.tsx:226-247`）；編輯＝獨立「編輯編號」modal（`:249-280`，DOM id `editNumberModal`）。
+- **AC-N42**（分區塊排版與 topbar 動作鈕；逐字文案與選擇器契約）：Given 新增或編輯頁渲染完成, When 檢視版面, Then——
+  - ① 以 `PageHeader` 提供 breadcrumb 與頁標題，**頁標題逐字為** `新增使用表單`（新增頁）／`編輯使用表單`（編輯頁）；breadcrumb 末段即該標題、其前一段為 `使用表單管理` 並連往 `/admin/usage-forms`。
+  - ② **主要／次要動作鈕以 `TopbarActions` 投遞至 admin shell topbar 右側**（`frontend/src/components/PageHeader.tsx:42`；未包在 `AppShell` 內時退回 inline 呈現，故單元測試可 `getByRole('button', { name })` 命中）；主要鈕可見文字逐字為 **`儲存`**、次要鈕逐字為 **`取消`**。<br>⚠ **不得**把動作鈕留在頁面內容區底部——admin shell 之版面契約為「頁面動作鈕一律在 topbar」（見既有 prototype 與 `PageHeader` 註解）。
+  - ③ 內容區以**分區塊**（section）呈現，各區塊標題逐字為 **`表單檔案`**／**`基本資訊`**／**`制定部門`**；三者皆存在且順序如列。
+  - ④ 點擊 `取消` → 導回 `/admin/usage-forms`，且**不送出任何寫入請求**（新增頁：未建立任何記錄；編輯頁：該列逐欄不變）。
+- **AC-N43**（🔒 仍為單一動作一次送出——後端契約回歸鎖定）：Given 新增頁已選檔並填妥名稱／編號／制定部門, When 點擊 `儲存`, Then **以使用者視角之單一動作完成建立**——不出現「先建立空殼、再上傳檔案」之中間態，清單中**不得**出現任何「已建立但無檔案」之列。<br>🔒 **後端既有建立流程與 API 契約不變**：既有 multipart 上傳端點之語意、欄位名與錯誤碼**逐字不變**（`OQ-D9-15` 明示不改為分步）；`draftingDeptCodes` 之攜帶為 **additive** 欄位（欄位名與是否併入同一 multipart 由 system-architect 定）。<br>📝 **被否決之選項 B（比照 STEP 式「先建立、後上傳」）逐字保留供追溯**：需重新設計 `usage-forms` 後端建立流程（現行 `uploadUsageForms` 為一次性 multipart 建立，無「先建空殼記錄」之路徑），並須處理「建立後未上傳檔案」之中間態如何呈現於清單——使用者已明確選擇不做。
+
+#### (b) 編號唯一（沿用既有機制，不新增後端工作）
+
+- **AC-N44**（🔒 唯一性與錯誤文案沿用）：Given 池中已有一筆 `formNumber = 'FM-001'`, When 於**新增頁或編輯頁**以 `FM-001`／`fm-001`／`'  FM-001  '` 任一形式送出 `儲存`, Then 回 **409 `USAGE_FORM_NUMBER_DUPLICATE`**（**不新增錯誤碼**）、**不建立任何記錄／不上傳 blob／該列不變**，且畫面呈現之錯誤訊息**逐字沿用** `AC-D15` ③ 之既有文案 **`表單編號已存在（比對前 trim、不分大小寫）。`**；長度超限時逐字沿用 **`表單編號超過長度上限（100 字元）。`**（`USAGE_FORM_NUMBER_TOO_LONG`，400）。<br>驗證順序、trim／不分大小寫比對、`null` 不參與比對、**編輯時排除自身列**、清空為合法操作等語意，**一律沿用 [error-handling.md#usage-form-number](../error-handling.md#usage-form-number)，一字不改**（`AC-D4`／`AC-D5`／`AC-D6`／`AC-D18`／`AC-D19` 全部維持綠燈）。<br>📌 **本條為 `OQ-D9-16` 選項 A 之兌現**：使用者反映之「編號檢查唯一」係**提醒改版不可遺漏既有機制**，非新需求；**本項不新增任何後端工作**。
+
+#### (c) 制定部門（多選）
+
+- **AC-N45**（多選、任意層級、持久化）：Given ICSOPAdmin 於新增或編輯頁之 `制定部門` 區塊, When 勾選**多個**組織單位（**可為本部／部／處室／課任一層級，且各筆層級可不同**）並點擊 `儲存`, Then 全部選取項持久化為 [`USAGE_FORM_DRAFTING_DEPT`](../data-model.md#usage-form-drafting-dept) 之多筆列（每筆一個 `orgCode`）；When 重新開啟該表單之編輯頁, Then 原選取項**完整回填且順序穩定**（依 `orgCode` 昇冪）。Given **未勾選任何部門**, Then 合法（0 筆），**非錯誤**。<br>📌 **正規化沿用既有慣例**：送出清單一律 trim、去空值、**去重**（同一 `orgCode` 重複勾選只落一筆）；寫入採 **delete-then-insert replace-set（單一交易）**，比照 [F014](F014-accountable-dept-chief.md) 多值欄位之既有模式。<br>📌 **不驗證 `orgCode` 存在性、不新增錯誤碼**——比照 `DOC_USING_DEPT` 之既有處置（`backend/src/documents/documents.service.ts:143,390-391` 僅 `normalizeIdList`，無存在性檢查）。
+- **AC-N46**（🔴 **純 metadata 回歸鎖定**——`OQ-D9-18` 選項 A）：Given 某使用表單之 `USAGE_FORM_DRAFTING_DEPT` 為 `['KB000']`、某業務子分類使用者之 `orgCode` 為 `JAC00`（**與該表單之制定部門完全不相符**）、而該使用者對引用此表單之文件**依 [F041](F041-user-subtype-business-scope.md) 判定為可見**, When 開啟前台文件詳情頁, Then 該使用表單**照常列出且照常可下載**——制定部門**不參與任何可見性或授權判定**。<br>**逐字斷言（三處純函式）**：`isWithinSubtree`／`isDocVisibleToViewer`／`isUsingDeptMatched` 三者之**簽章與既有測試逐案不變**，且**皆不接受**使用表單制定部門作為輸入；[F033](F033-permission-aware-retrieval.md) 之檢索層過濾維度**未增加**。<br>🔴 **本條之存在理由**：`OQ-D9-17` 選 B 使新表與 `DOC_USING_DEPT` **結構完全同構**——同構的兩張表最容易被實作者「順手」接進同一套子樹判定，而那正是 `OQ-D9-18` 明確否決的選項 B。本條即該誤接之偵測器。
+- **AC-N47**（清單顯示）：Given 使用表單管理頁清單, When 渲染, Then 於 `表單名稱` 欄之後新增一欄，其表頭可見文字逐字為 **`制定部門`**；該格顯示各 `orgCode` 之組織名稱（沿用既有名稱解析），多筆以全形頓號 `、` 分隔；**0 筆者顯示逐字 `—`**（U+2014，比照 `AC-D15` ① 之既有慣例，不得顯示 `null` 或空白）。該儲存格帶 `data-drafting-dept` 屬性。<br>📌 **清單欄位順序**：`表單編號`／`表單名稱`／**`制定部門`**／`格式`／`大小`／`上傳者 / 上傳時間`／`關聯文件數`／`操作`——`AC-D1` 之逐字表頭斷言**已由本條就地擴充**（原為 7 欄，現為 8 欄；`表單編號` 仍為首欄、既有 7 欄之相對順序不變）。<br>⚠ **本項不新增篩選器**——`OQ-D9-17`／`OQ-D9-18` 只要求「提供欄位」與「顯示／清單篩選用」，使用者未要求新增篩選控制項；若日後要加，屬 additive 另案。
+- **AC-N48**（編輯頁之範圍與「編輯編號」動作之處置；🔴 `[ASSUMPTION]`，見 `OQ-D9-28`）：Given 編輯頁（`/admin/usage-forms/:formId/edit`）, When 檢視可編輯之欄位, Then 其範圍為 **`表單編號` ＋ `制定部門` 兩項 metadata**；**檔案本身不可於本頁更換**（換檔仍走既有「覆蓋上傳」路徑與其 `USAGE_FORM_OVERWRITE_SHARED` 二次確認，`AC-D20` 之副作用邊界完全不變）。<br>① 既有列內「編輯編號」動作（`AC-D16`～`AC-D21`）**之入口改為導向本編輯頁**；其**全部逐字文案與驗證語意沿用、不另造**——欄位 label `表單編號` ＋ `（選填）`、placeholder `例：FM-001（不填則留空）`、`maxlength="100"`、錯誤區之兩則訊息、成功回饋 `已更新表單編號。`／`已清除表單編號。`、以及**說明句 `僅更新編號，不會變更表單檔案。`**（該句改為 `僅更新表單資訊，不會變更表單檔案。`——因本頁範圍已含制定部門；此為本 delta 唯一改動之逐字文案，原句保留於此供追溯）。<br>② `AC-D16` 之 DOM id 契約（`editNumberModal`／`enNumber`／`enNumberErr`／`enFormName`）與 `AC-D17` 之「動作元件必須自 DOM 移除」條款，其**modal 形式**部分由本頁取代；**權限語意（SysAdmin → `FIELD_WRITE_FORBIDDEN`、Supervisor／DeptContact／User → `PERMISSION_DENIED`）逐字不變**。<br>⚠ **`[ASSUMPTION]`：「整頁化之『編輯』其範圍為何、既有『編輯編號』modal 之逐字 DOM 契約如何承接」未列於人類閘門之 27 題**；本條為 spec-writer 依 `OQ-D9-15`（純版面搬遷）＋ 需求 (c)（編輯時亦須可設定制定部門）推導，**已如實登錄為 [open-questions](../open-questions.md) `OQ-D9-28` 交回 lead**。**在該題定案前，本條為現行規格**；若人類裁定「編輯編號 modal 保留、另立制定部門編輯入口」，本條與 `AC-N41` 之編輯頁部分須改寫。
+- **AC-N49**（🔒 既有行為回歸鎖定）：Given 本 delta 實作完成, When 執行本 feature 之全部既有 AC, Then **全數維持綠燈**——上傳格式白名單／大小上限／`FILE_FORMAT_NOT_ALLOWED`、覆蓋上傳與 `USAGE_FORM_OVERWRITE_SHARED`（引用 ≥2 二次確認）、移除與 `USAGE_FORM_IN_USE`、文件關聯之多對多語意、前台詳情頁列出與下載、前台燒錄（`AC-D11`／`AC-D12`）與其稽核（`AC-D14`）、`formNumber` 之全部語意（`AC-D1`～`AC-D10`、`AC-D18`～`AC-D20`）**一律不變**。<br>⚠ **特別鎖定 `AC-D20` 之副作用邊界**：於編輯頁儲存 metadata（編號／制定部門）後逐欄比對該 `USAGE_FORM_POOL` 列，**`blobPath`／`format`／`size`／`name`／`uploadedBy`／`uploadedAt` 六欄逐欄未變**、Blob 位元組**未被讀取亦未被寫入**、`DOC_USAGE_FORM` 之全部關聯**未變**；且**不得觸發 `USAGE_FORM_OVERWRITE_SHARED`**。<br>📌 **`name` 是否可於編輯頁更改**：`AC-D20` 明訂 `name` 不得被本路徑更動（覆蓋不改名稱之既有語意）⇒ **本輪編輯頁不提供表單名稱編輯**；此限制一併登錄於 `OQ-D9-28` 供 lead 覆核。
+
 ## Interface Contract（端點） {#interface-contract}
 
 > ⚠ **本檔歷來無完整端點表**（行為與資料契約以 Main Flow ＋ AC 描述，端點形狀由 system-architect 決定）。本節**僅登錄 2026-08-16 追加裁決所新增之單一端點**，不追溯補齊既有端點；既有上傳／覆蓋／移除／關聯／下載之端點形狀維持現況、不受本節影響。
@@ -199,4 +237,7 @@ Epic/Story: E05 / US-040, US-041, US-042
 
   ⚠ **無寫入權之角色（SysAdmin／Supervisor／DeptContact／User）該動作元件必須自 DOM 移除，不得僅以 CSS 隱藏**（`AC-D17`）——本頁其餘寫入動作沿用 `.write-only` CSS 隱藏，**此局部不一致為刻意，不得統一**（理由與收斂方向見 `AC-D17` 與 [open-questions.md](../open-questions.md) `OQ-D18-29`）。
   ✅ **2026-08-16 已完成傳播**：ui-ux-designer 已依上表逐字實作於 `prototypes/19-usage-form-management.html`，**零偏差、無異議**；`AC-D21` 之四項即為其實作過程中回報、而 `AC-D16` 未預見者，已補入 AC。<br>⚠ **不得**把編號欄加進覆蓋上傳彈窗以取代本動作——該替代方案已於人類閘門**明確否決**（理由見 [§「編輯編號」動作](#edit-number-action)）。
-- **待 system-architect（本 delta 新增）**：① `formNumber` 之 migration（唯一 filtered index 之確切 DDL 與既有列處置）、唯一性比對之大小寫不敏感實作（collation vs 正規化欄位）——⚠ 依既有教訓，**migration 寫完必須對真 SOP DB 實跑**；② **前台使用表單下載之燒錄路徑與後台 RAW 路徑分流**（與附錄、附件共用同一分流設計，見 [F020](F020-watermark.md#front-burn-scope-delta) `AC-D3`）。<br>⚠ **既有 `architecture-spec.md` 有兩處需其擁有者同步**：`§下載策略表`（將 `USAGE_FORM` 列為「無浮水印需求，草案 OQ-E05-03」而採 SAS 直連）與 `§燒錄範圍表`（「使用表單｜維持現況（不燒錄）」）——本 delta 已推翻該前提，**惟該檔屬 system-architect 所有，spec-writer 未修改**。
+- **2026-08-20 使用者裁決（D9 delta）**：`OQ-D9-15`（純版面搬遷）／`OQ-D9-16`（唯一性機制已存在、僅沿用）／`OQ-D9-17`（新增多對多關聯表）／`OQ-D9-18`（純 metadata）／**`OQ-D9-08`（後台下載改燒錄＋寫稽核，`AC-D13`／`AC-D23` 已就地推翻）**。見 [§使用表單新增／編輯整頁化 delta](#usage-form-page-delta)。**新增 OQ（交回 lead）**：`OQ-D9-28`（編輯頁範圍與「編輯編號」modal 契約之承接，`AC-N48` 標 `[ASSUMPTION]`）。
+- **🔴 待 system-architect（2026-08-20 D9 delta 新增）**：① [`USAGE_FORM_DRAFTING_DEPT`](../data-model.md#usage-form-drafting-dept) 之 migration 與索引（⚠ **寫完必須對真 SOP DB 實跑**）；② `draftingDeptCodes` 之攜帶方式（併入既有 multipart 建立端點 vs 獨立端點）與**編輯頁「單一動作一次送出」之後端形狀**（既有編號專用端點 `PATCH /admin/usage-forms/:formId/number` 是否擴為 `PATCH /admin/usage-forms/:formId` 之部分更新；**不變者為其可觀測契約＝只改 metadata、不碰檔案、不觸發覆蓋警示**，`AC-N49`）；③ 新增／編輯頁之路由路徑定案（`AC-N41`）；④ **後台使用表單下載由 `{ url }` JSON 改為代理串流＋燒錄**（`AC-D23` 已改寫，與 [F020](F020-watermark.md#backend-burn-delta) `AC-N21` 同批）。
+- **⚠ 待 ui-ux-designer（2026-08-20 D9 delta 新增）**：① `prototypes/19-usage-form-management.html` 之上傳 modal 與編輯編號 modal **改為兩個獨立整頁 prototype**（比照 `14-document-create.html`／`15-document-edit.html` 之視覺與操作體驗），逐字文案依 `AC-N42`／`AC-N48`；② 清單新增 `制定部門` 欄（`AC-N47`）；③ 後台各檔案列之 `data-wm-note` 註記（[F020](F020-watermark.md#backend-burn-delta) `AC-N20`，待 `OQ-D9-33` 覆核）。
+- **待 system-architect（2026-08-16 delta）**：① `formNumber` 之 migration（唯一 filtered index 之確切 DDL 與既有列處置）、唯一性比對之大小寫不敏感實作（collation vs 正規化欄位）——⚠ 依既有教訓，**migration 寫完必須對真 SOP DB 實跑**；② **前台使用表單下載之燒錄路徑與後台 RAW 路徑分流**（與附錄、附件共用同一分流設計，見 [F020](F020-watermark.md#front-burn-scope-delta) `AC-D3`）。<br>⚠ **既有 `architecture-spec.md` 有兩處需其擁有者同步**：`§下載策略表`（將 `USAGE_FORM` 列為「無浮水印需求，草案 OQ-E05-03」而採 SAS 直連）與 `§燒錄範圍表`（「使用表單｜維持現況（不燒錄）」）——本 delta 已推翻該前提，**惟該檔屬 system-architect 所有，spec-writer 未修改**。
