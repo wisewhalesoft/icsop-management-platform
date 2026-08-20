@@ -287,15 +287,17 @@ describe('F018 AC-D14：前台使用表單下載之稽核（非 PDF 未燒錄）
  * 之正確載體**——`usage-forms.service.spec.ts` 之 bare `svc`（未注入 burner）僅能驗證非 PDF 半段
  * （格式驅動、不受 D9 影響），PDF 燒錄之正向斷言必須在本檔（見該檔對應案之取捨說明）。
  *
- * 📌 **`downloadFormRaw()` 符號名之來源**：architecture-spec.md §11.6 表列「
- * `GET /documents/:documentId/usage-forms/:formId/download`（後台唯讀／編輯頁） →
- * `UsageFormsService.downloadFormRaw()`（`usage-forms.service.ts:422-431`）」——此為架構文件
- * 明文指名之既有方法（非本檔臆造）。⚠ **本檔對此符號名之風險提示**：本 repo 既有測試（`TS-FM-003`／
- * `TS-FM-004`，見 `usage-forms.service.spec.ts` 之「RBAC — AC6 主管/部門窗口下載允許」describe）
- * 顯示 Supervisor／DeptContact 角色**目前**經由 `downloadForm()`（前台方法）取得使用表單，與
- * architecture 描述之「`downloadFormRaw()` 為後台唯讀/編輯頁專屬方法」存在名稱/歸屬上的落差——
- * 若 `downloadFormRaw()` 於實作中並不存在或與 `downloadForm()` 為同一方法，請走 mailbox 向
- * test-generator 申訴，由 test-generator 統一改寫（不得由實作端自行決定取捨何者為準）。
+ * ✅ **`downloadFormRaw()` 符號名與簽章——已由 architect 於 2026-08-21 裁定並查證兌現**
+ * （§11.6 v1.9a，`33a8529`）：`downloadFormRaw()` 確實存在（`usage-forms.service.ts:429`，實跑
+ * stack trace 已證實），簽章為 **`downloadFormRaw(session, documentId, formId)`**——與姊妹方法
+ * `downloadForm(session, documentId, formId)`（`:457-460`）參數順序一致。原提報之「與 `TS-FM-003`／
+ * `TS-FM-004`（`usage-forms.service.spec.ts`）疑似路徑歸屬落差」**已由 architect 查明並非衝突**：
+ * Supervisor／DeptContact 確實有**兩條獨立且各自自洽**之路徑——`downloadFormRaw()`（後台唯讀頁）
+ * 與 `downloadForm()`（前台公開詳情頁，服務層直呼，`TS-FM-003`／`TS-FM-004` 緊鄰註解已明載「本案
+ * 走前台」），兩者皆維持不動、皆為既有合法呼叫點，**不是**「一條 route 兩個相衝呼叫端」。
+ * 🔴 **本次查證同時揪出真缺口**：`usage-forms.controller.ts:195` 現行把路由參數宣告為
+ * `@Param('documentId') _documentId`（底線前綴、從未使用、呼叫時未傳給 service）——見下方 AC-N14
+ * ／AC-N51 案之詳細裁定記錄。
  */
 describe('D9 delta — 後台受控下載改為一律燒錄＋寫稽核（AC-N14／AC-N51；全面推翻 OQ-FM-01）', () => {
   it('AC-N14 downloadFromPool（表單池管理頁）PDF 下載 → burnPdf 恰呼叫 1 次，回傳已燒錄位元組', async () => {
@@ -347,25 +349,39 @@ describe('D9 delta — 後台受控下載改為一律燒錄＋寫稽核（AC-N14
    * 🔴 `downloadFormRaw()`——見本 describe 檔頭關於此符號名來源與風險之說明。若此方法於
    * 實作中不存在（TS2339），視為前述風險已兌現，屬需經 mailbox 申訴之情形，非測試本身之錯誤。
    */
-  it('AC-N14／AC-N51 downloadFormRaw（後台唯讀/編輯頁下載，architecture §11.6 明文指名）PDF → 燒錄 1 次且寫稽核，documentId 落列', async () => {
+  /**
+   * 🔴 2026-08-21 architect 裁定（§11.6 v1.9a，`33a8529`）：`downloadFormRaw(session, documentId,
+   * formId)`——與姊妹方法 `downloadForm(session, documentId, formId)`（`usage-forms.service.ts:
+   * 457-460`）參數順序一致。**真缺口**：`usage-forms.controller.ts:195` 現行把路由參數宣告為
+   * `@Param('documentId') _documentId`（底線前綴、從未使用、呼叫時未傳），舊 docblock「documentId
+   * 不參與查找」在「RAW、不寫稽核」之舊語意下成立，但 `AC-N17` 要求本路徑寫稽核時 `documentId`
+   * 必須落列，舊理由不再成立——此為 architect 依我原提報之落差親查後找到的真正缺口，非我方測試誤判。
+   * 📝 **被更正之原斷言逐字保留供追溯**（我方一度依實跑報錯之表面現象誤校正為相反順序）：
+   *   OLD> `const out = await svcAny.downloadFormRaw(supervisor, rec.id, 'doc-42');`
+   *   （即 `(session, formId, documentId)`——與裁定之 `(session, documentId, formId)` 相反）
+   * 🔴 **鑑別力（防「兩參數皆 string，TS 抓不到對調」）**：`documentId`（`'doc-42'`）與 `formId`
+   * （`rec.id`，`FakeFormPoolStore` 產生之 `form-N` 格式）為刻意不同形狀之值，並**分別**斷言
+   * `audit.events[0].documentId` 與 `audit.events[0].formId`——若實作把兩參數對調，`documentId`
+   * 會被錯誤地寫入 `rec.id`（或反之），兩條斷言至少一條會紅；若兩值恰好長得像，此斷言即恆真
+   * （比照「三種 fixture 缺陷」第三種），本案已刻意避開此陷阱。
+   */
+  it('AC-N14／AC-N51 downloadFormRaw（後台唯讀/編輯頁下載，architecture §11.6 v1.9a 裁定簽章）PDF → 燒錄 1 次且寫稽核，documentId／formId 皆正確落列（不得對調）', async () => {
     const { svc, audit, burner } = makeHarness();
     const rec = await svc.uploadForm(ICSOP_ADMIN, PDF_FILE());
     await svc.linkForms(ICSOP_ADMIN, 'doc-42', [rec.id]);
     audit.events.length = 0; // 排除上傳/關聯路徑之干擾
 
-    // ⚠ 呼叫慣例經實跑探測校正（見檔頭風險提示）：`downloadFormRaw` 之第 2 參數為 `formId`
-    // （非 `documentId`）——`requireForm(formId)` 內部以此參數查表，與 `downloadFromPool(session,
-    // formId)` 同慣例，非 `downloadForm(session, documentId, formId)` 之三參數慣例。
     const svcAny = svc as unknown as {
-      downloadFormRaw: (session: SessionContext, formId: string, documentId?: string) => Promise<{ bytes: Buffer }>;
+      downloadFormRaw: (session: SessionContext, documentId: string, formId: string) => Promise<{ bytes: Buffer }>;
     };
     const supervisor: SessionContext = { roleCode: 'Supervisor', accountId: 'sup-1' };
-    const out = await svcAny.downloadFormRaw(supervisor, rec.id, 'doc-42');
+    const out = await svcAny.downloadFormRaw(supervisor, 'doc-42', rec.id);
 
     expect(burner.calls).toHaveLength(1);
     expect(out.bytes.equals(PDF_BYTES)).toBe(false);
     expect(audit.events).toHaveLength(1);
     expect(audit.events[0].documentId).toBe('doc-42');
+    expect(audit.events[0].formId).toBe(rec.id); // 與 documentId 分開斷言，防參數對調
   });
 });
 
