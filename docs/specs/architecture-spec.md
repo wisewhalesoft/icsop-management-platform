@@ -36,6 +36,8 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 
 > **v1.8（2026-08-18）新增 §10.18 決策 A16：F024 匯出稽核與訊息共用之四項裁決**。來源：[F024](features/F024-access-history-query.md#export-fix-delta) `AC-F1`～`AC-F19`（2026-08-18 人類閘門 🟢 APPROVED，即 `OQ-D18-26` 之延續、`OQ-D18-26`／`OQ-E07-10` 部分推翻後之實作定案）附帶之四項「📤 需 system-architect 裁量」提報事項。裁決：① **`ACCESS_HISTORY_EXPORT` 之 `AuditTargetType`／`targetId`**——新增 `AuditTargetType='ACCESS_HISTORY'`，`targetId` 採固定哨兵常數（沿用既有 `ORG_CHANGE_ALERT` 之「無對映欄」模式，`buildAuditRow()` 不需改動任何既有程式碼），獨立複核確認 `targetType`（`varchar(30)`）／`actionType`（`varchar(40)`）皆無 `CHECK` 約束、不需 migration；② **三張中文標籤對照表落點**——`backend/src/audit/access-history-labels.ts`（後端專屬純函式模組），沿用本檔案 §10.14（`watermarkLines()`）與 `change-history/change-labels.ts`（`OQ-D18-34`）之既有「兩份逐字相同」處置，不創新模式；③ **超限訊息 `{N}`**——採甲案，修 `storage/csv-export.ts` 之 `assertExportRowLimit()` 令其內插實際筆數（且順序須在上限常數之前），逐一排查現有測試後確認**無任何測試鎖定舊行為**，零回歸，並使 F037／F038／F039 既有 AC（本就要求 `{N}` 為實際筆數）由「文字與程式碼不符」變為一致；④ **計數與取列路徑**——單一次 `queryHistory(..., {page:1, pageSize:EXPORT_ROW_LIMIT+1})` 呼叫（`AuditStore.queryPage()` 之 `getManyAndCount()` 已原生支援下推 `COUNT`+`OFFSET/FETCH`，不需比照 F037／F038 另建 `countByFilters`／`listByFilters` 兩段式）。**四項裁決逐一覆核後皆不要求變更任何 `AC-F#` 斷言文字**。另就 `EXPORT_ROW_LIMIT=10000` 對 F024 全公司量級之適用性提出風險評估與緩解建議（不改動數字本身，遵照人類閘門「沿用共用機制」之裁示）。**本版不新增模組、不改變架構風格、無 schema 變更**（`AuditTargetType`／`AuditActionType` 皆為 TS 判別聯集之字面值擴充，非 DB schema）。
 
+> **v1.9a（2026-08-21，Phase B 建環期間 test-generator 提報後之同日更正）**：§11.6 上表 #3 之「`documentId` 必填」一格**經查證為未經驗證即斷言**——已查證 `usage-forms.controller.ts:191-206` 之 `download()` handler 現行**捨棄**路由帶入的 `documentId`（宣告為底線前綴之 `_documentId`，從未使用），`UsageFormsService.downloadFormRaw()`（`usage-forms.service.ts:422-431`）簽章本身**沒有** `documentId` 參數。**更正**：`downloadFormRaw()` 簽章須擴充為 `(session, documentId, formId)`，controller 須傳入。**§11.6 之路徑指認本身（後台唯讀頁 → `downloadFormRaw()`）經逐檔逐行核對後確認正確、不需更正**——test-generator 提報之疑慮（既有 `usage-forms.service.spec.ts` `TS-FM-003`／`TS-FM-004` 顯示 Supervisor／DeptContact 經 `downloadForm()` 下載）查證後為**另一條獨立、合法、同時存在之路徑**（前台公開詳情頁，`PublicDocumentDetailPage.tsx:264`），非與 `downloadFormRaw()` 相衝之同路徑兩端——**該兩案不需改寫**。逐項證據見 §11.6「v1.9a 更正」小節。連帶驗證：`AttachmentsService.downloadAttachmentRaw()` 無同型缺口（`documentId` 已由 `store.findByBlobPath()` 查得，不依賴路由參數）。**本次更正不改變任何 `AC-N#` 之斷言文字**，僅補正一項此前未經驗證的實作細節斷言。
+
 > **v1.9（2026-08-20）新增第 11 章「2026-08-20 缺失／變更 Delta 架構決策（9 項）」**：對應 `docs/stories/2026-08-20-defect-delta-9.md` 與人類閘門 `OQ-D9-01`～`OQ-D9-34`（27＋6 題，兩輪全數定案）之 `AC-N1`～`AC-N70`。**本批推翻兩項既有明文定案**：① `OQ-D9-08`（選項 B）全面推翻 `OQ-FM-01`／`OQ-D18-01`——**後台四類下載自本版起一律燒錄浮水印並寫調閱稽核，無例外角色**，§5.2 下載策略表、§10.1 燒錄範圍表／流程圖、`field-matrix-test-design.md` `TS-FM-001`／`TS-FM-002` 之「不具備燒錄能力」基準線**同步失效並反向重寫**；② `OQ-D9-19`（選項 A）推翻 F026 頂部定案——**「OJT 簽到表」一欄對主管／部門窗口開放寫入**，落地為 `FIELD_MATRIX`（前後端兩份鏡射）新增一列 `OJT_WRITABLE`，不新增 if 特例。核心決策：**B1–B4** 前台檢視器改 `pdfjs-dist` 自繪 canvas（取代 `<iframe>`），`/public/documents/:id/pdf` 改回傳已燒錄位元組並移除 DOM 疊加層；**B5–B7** 後台燒錄之共用協作點自 `WatermarkService` **抽出**為零相依之 `WatermarkBurnerModule`（`WATERMARK_BURNER`，取代 `FRONT_BURNER`），解決 `AttachmentsModule ↔ PublicModule` 之潛在模組循環相依，並改 `@Optional()` 為必要注入以達成**啟動期 fail-fast**（回應 lead 點名之 `FRONT_BURNER` 從未被 provide 之教訓）；同時**發現並必須一併修正**既有 `AuditWriterRecorder`（附錄／使用表單兩份，`appendices/audit-writer-recorder.adapter.ts:22-29`、`usage-forms/audit-writer-recorder.adapter.ts:22-29`）**未轉送身分快照與 `watermarkSnapshot` 予 `recordAccess()`** 之既有缺口——此為滿足本輪 `AC-N17`／`AC-N51` 之必要前提，非新裁決。**B8** OJT 破例採資料驅動矩陣列新增。**B10** 新增 `USAGE_FORM_DRAFTING_DEPT`（本輪唯一需 migration 者）。**§11.11「單元測試盲區」新增 8 項**（含 pdf.js 之 cMap／standard fonts 部署與 CJK 燒錄字型缺檔為同型盲區、`AuditWriterRecorder` 身分欄位遺漏、`WATERMARK_BURNER` 循環相依重構之回歸風險）。**本版新增一個模組**（`WatermarkBurnerModule`，自既有 `WatermarkService` 抽出，非新增業務能力）、**不改變架構風格**。
 
 ## Agent Loading Guide
@@ -3395,14 +3397,42 @@ sequenceDiagram
 |---|---|---|---|---|
 | 1 | `GET /documents/attachments/download` | `AttachmentsService.downloadAttachmentRaw()`（`attachments.service.ts:220-244`） | `DOCUMENT` | 必填（`store.findByBlobPath()` 已回傳所屬文件） |
 | 2 | `GET /admin/usage-forms/:formId/download` | `UsageFormsService.downloadFromPool()`（`usage-forms.service.ts:399-406`） | `USAGE_FORM` | `null`（池管理頁脈絡） |
-| 3 | `GET /documents/:documentId/usage-forms/:formId/download` | `UsageFormsService.downloadFormRaw()`（`usage-forms.service.ts:422-431`） | `USAGE_FORM` | 必填（路由帶 `documentId`） |
+| 3 | `GET /documents/:documentId/usage-forms/:formId/download` | `UsageFormsService.downloadFormRaw()`（`usage-forms.service.ts:422-431`） | `USAGE_FORM` | 必填——🔴 **簽章須擴充**，見下方「v1.9a 更正」 |
 | 4 | `GET /admin/appendices/:appendixId/download` | `AppendicesService.downloadFromPool()`（`appendices.service.ts:478-489`） | `APPENDIX` | `null`（池管理頁脈絡） |
 
 **逐端點落地**：
 
 - **#1（AttachmentsService）**：目前**未注入**任何燒錄或稽核相依（`attachments.module.ts` 之 imports 不含 `AuditModule`）。新增：`imports` 加 `WatermarkBurnerModule`、`AuditModule`；建構子新增 `@Inject(WATERMARK_BURNER) private readonly burner: WatermarkBurner` 與 `private readonly auditWriter: AuditWriterService`（直接注入，理由見下）。`downloadAttachmentRaw()` 內部於既有「取 `bytes`」步驟之後，插入 `burnIfPdf` ＋ `recordAccess` 兩步；格式判定沿用既有 `contentTypeOfFileName(rec.fileName)` 之副檔名事實（§10.3 既有原則）。
-- **#2／#3（UsageFormsService）**：已注入 `WATERMARK_BURNER`（原 `FRONT_BURNER`，`usage-forms.service.ts:132-134`，前台既用），**只需擴大其呼叫範圍**至 `downloadFromPool()`／`downloadFormRaw()` 兩方法（現行僅 `downloadForm()`，即前台方法，呼叫它）；稽核經既有 `AUDIT_RECORDER` 注入（`AUDIT_RECORDER` 已存在，見下方 adapter 修正）。
+- **#2／#3（UsageFormsService）**：已注入 `WATERMARK_BURNER`（原 `FRONT_BURNER`，`usage-forms.service.ts:132-134`，前台既用），**只需擴大其呼叫範圍**至 `downloadFromPool()`／`downloadFormRaw()` 兩方法（現行僅 `downloadForm()`，即前台方法，呼叫它）；稽核經既有 `AUDIT_RECORDER` 注入（`AUDIT_RECORDER` 已存在，見下方 adapter 修正）。**`downloadFormRaw()` 之簽章須擴充**——見下方「v1.9a 更正」。
 - **#4（AppendicesService）**：同上，`WATERMARK_BURNER` 已注入（`appendices.service.ts:199-201`），擴大呼叫至 `downloadFromPool()`；稽核經既有 `AUDIT_RECORDER`。
+
+#### 🔴 v1.9a 更正（2026-08-21，建環期間 test-generator 提報）：`downloadFormRaw()` 之 `documentId` 從未被傳遞——簽章須擴充
+
+**提報**：test-generator 依上表 #3 將 `AC-N14`／`AC-N51` 之斷言綁在 `downloadFormRaw()`，容器內實跑轉紅（符合預期，實作未動）；但同時指出既有 `usage-forms.service.spec.ts` 之 `TS-FM-003`／`TS-FM-004`（`:658-680`）顯示 Supervisor／DeptContact 目前經由 `downloadForm()`（前台方法）下載表單，與上表 #3 所指之 `downloadFormRaw()` 是否為同一條實際被呼叫的路徑有疑義，要求本節裁定。
+
+**已查證之呼叫鏈（逐檔逐行）**：
+
+| 步驟 | 檔案:行號 | 內容 |
+|---|---|---|
+| 1 | `frontend/src/pages/DocumentReadonlyPage.tsx:153` | `await downloadUsageForm(id, formId, name)`——`id` 為本頁路由參數（`/admin/documents/:id`），即該文件之 `documentId` |
+| 2 | `frontend/src/api/endpoints.ts:518-532` | `downloadUsageForm()` 呼叫 `GET /documents/${documentId}/usage-forms/${formId}/download`（**無 `/public` 前綴**） |
+| 3 | `backend/src/usage-forms/usage-forms.controller.ts:191-206` | 該路由之 handler `download()`；🔴 **`@Param('documentId') _documentId: string` 底線前綴、宣告後從未使用**——呼叫 `this.svc.downloadFormRaw(req.sessionUser, formId)`，**未傳入 `documentId`** |
+| 4 | `backend/src/usage-forms/usage-forms.service.ts:422-431` | `downloadFormRaw(session, formId)`——**簽章本身沒有 `documentId` 參數**；其上方 docblock（`:419-421`）逐字載明理由：「`documentId` 不參與查找（表單以 `formId` 唯一定位）……路徑保留該段僅為與前台端點形狀對稱」 |
+
+**`TS-FM-003`／`TS-FM-004` 之定位（已查證非同一路徑、非過時測試）**：`usage-forms.service.spec.ts:617-661` 之 `it.each` 直接呼叫 **`svc.downloadForm(s, 'doc-1', f.id)`**（服務層直呼，繞過 HTTP 路由），其緊鄰之區塊註解（`:636-652`）**逐字自陳**：「本案走**前台** `downloadForm`……本案之測試標的未變——F026 AC6『主管／部門窗口下載使用表單→允許』逐字仍然成立」，且明文排除本輪關注點：「本案因此**不觸及**『後台角色打前台端點是否該被燒錄』之未決爭點」。交叉核對 `downloadForm()` 之唯一前端呼叫端——`frontend/src/pages/PublicDocumentDetailPage.tsx:264` 之 `downloadUsageFormFront(detail.id, formId, name)`（前台公開詳情頁），且 `frontend/src/pages/DocumentEditPage.tsx` 對使用表單**只呼叫** `linkUsageForms`／`unlinkUsageForm`（`:557-558`），**無任何下載呼叫**。
+
+**結論**：
+
+1. **§11.6 之路徑指認本身正確、不需更正**——`DocumentReadonlyPage`（後台唯讀頁）與 `downloadFormRaw()` 之對應關係已如上表逐行驗證為真；`TS-FM-003`／`TS-FM-004` 測試的是**另一條合法且同時存在的路徑**（Supervisor／DeptContact 以已登入身分瀏覽**前台公開網站**時可及之 `downloadForm()`），二者非「同一 route 兩個相衝呼叫端」（`AC-D6`／`OQ-D18-A1` 那種同路徑期待互斥的反例），而是**兩條獨立路徑、各自的期待都是自洽的**——`downloadFormRaw()` 現在該燒錄（`AC-N14`），`downloadForm()` 早已燒錄（既有 `AC-D11`），互不影響。`TS-FM-003`／`TS-FM-004` **不需要、也不應該**被 test-generator 改寫。
+2. 🔴 **但 §11.6 上表 #3 之「`documentId` 必填」一格未經證實即斷言——這是本節之真正錯誤，非 test-generator 找錯了問題，而是我先前只核對了「哪個方法要燒錄」，沒有核對「該方法目前是否真的收得到 `documentId` 這個 AC-N17 落列所需的值」**。既有 `downloadFormRaw()` docblock 之理由（「表單以 formId 唯一定位，不需 documentId」）在 RAW／不寫稽核的舊語意下成立，但 `AC-N17` 要求該路徑下載時 `documentId` 必填落列（因其呼叫脈絡確實隸屬某份文件），**該理由在新語意下不再成立**。
+3. **修正**（本輪 M1 範圍內，非新裁決、屬 §11.6 既有工作項之精確化）：
+   - `usage-forms.controller.ts:191-206` 之 `download()` handler：`_documentId` 改回正常具名 `documentId`（移除底線前綴），並將其一併傳入 `downloadFormRaw()`。
+   - `usage-forms.service.ts:422-431` 之 `downloadFormRaw()` 簽章擴充為 `downloadFormRaw(session, documentId, formId)`，內部於燒錄與稽核步驟使用該 `documentId` 落列 `AUDIT_LOG.documentId`（`AC-N17` 條件必填之落值）。
+   - `AttachmentsService.downloadAttachmentRaw()`（上表 #1）**不受影響**——該方法之 `documentId` 本就經 `store.findByBlobPath()` 查得（見 §11.6 主表 #1 之既有註記），不依賴路由參數，無同型缺口。
+
+**可推廣教訓（已一併記入本人持久記憶）**：一個方法「不需要某參數」的既有理由，在**該理由所依附的行為前提被推翻後**（本例：RAW／不寫稽核 → 燒錄／寫稽核），該理由必須**重新核對**而非沿用——僅檢視「呼叫哪個方法」不足以驗證該方法「目前是否具備滿足新 AC 所需的輸入」，兩者是獨立的檢查項。
+
+---
 
 #### 🔴 必要前提：`AuditWriterRecorder` 兩份既有實作皆未轉送身分快照與 `watermarkSnapshot`
 
