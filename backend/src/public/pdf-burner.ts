@@ -14,6 +14,24 @@ export interface PdfBurner {
   burnPdf(originalBuffer: Buffer, snapshot: string): Promise<Buffer>;
 }
 
+/**
+ * 🔴 浮水印色值（F020 `AC-N2`／`AC-N3`，2026-08-20 D9 delta；`OQ-D9-01`／`OQ-D9-31`）。
+ *
+ * 定稿值 `rgb(0.2, 0.255, 0.3333)` ＝ `#334155`（Tailwind slate-700），逐字取自 `AC-N2` 表列之
+ * 後端欄；不透明度 `0.30`（2026-08-20 就地改寫，原 `0.57` 已被 `OQ-D9-31` 推翻）。
+ *
+ * 🔴 **為何是具名匯出常數而非寫死於 `drawText()` 呼叫處**（`AC-N3` 之可測性前提）：色值若散落在
+ * 呼叫點，「檢視器所見」與「PDF 內容層所燒」兩處會各自演化而無人察覺；具名常數使兩者之一致性
+ * 可被 unit 測試以 `import` 直接斷言，也使日後調色只有一個落點。
+ *
+ * 📌 對比度（合成於純白背景，`AC-N1` 之公式）：`effective = 255 − alpha × (255 − channel)`，
+ * 再以 WCAG 相對亮度求 `1.05 / (L + 0.05)` ≥ 1.70。
+ */
+export const WATERMARK_RGB = rgb(0.2, 0.255, 0.3333);
+
+/** 浮水印不透明度（`AC-N2` 定稿值；`OQ-D9-31` 將原 0.57 下修為 0.30）。 */
+export const WATERMARK_OPACITY = 0.3;
+
 /** 將線性快照拆為「機密聲明另起一行」之呈現行（契約：機密聲明獨立一行）。 */
 export function toDisplayLines(snapshot: string): string[] {
   const idx = snapshot.indexOf(WATERMARK_CONFIDENTIALITY);
@@ -39,7 +57,6 @@ export class PdfLibBurner implements PdfBurner {
     const render = cjk ? (s: string): string => s : asciiSafe;
     const lines = toDisplayLines(snapshot);
     const size = 12;
-    const opacity = 0.12;
 
     for (const page of pdf.getPages()) {
       const { width, height } = page.getSize();
@@ -53,9 +70,9 @@ export class PdfLibBurner implements PdfBurner {
               y: y - i * (size + 3),
               size,
               font,
-              color: rgb(0.4, 0.45, 0.5),
+              color: WATERMARK_RGB,
               rotate: degrees(45),
-              opacity,
+              opacity: WATERMARK_OPACITY,
             });
           });
         }

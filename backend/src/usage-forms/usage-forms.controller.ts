@@ -33,6 +33,27 @@ import { attachmentDisposition } from '../storage/content-disposition';
 const isTrue = (v?: string) => /^(true|1|yes)$/i.test(v ?? '');
 
 /**
+ * 🔴 `AC-N43`／architecture-spec §11.10(b)：multipart 之制定部門欄位為**純文字 JSON 陣列字串**
+ * （如 `'["JA000","KB000"]'`）。
+ *
+ * **為何不採「同名欄位重複出現」**：multipart 對重複欄位名之陣列化行為依賴 body-parser 之實作
+ * 細節（multer 對非檔案欄位之陣列化並非所有設定下皆一致）；JSON 字串化是顯式、無歧義、跨
+ * multer 版本穩定的作法。
+ *
+ * 未送出 → `undefined`（＝不觸碰關聯表，與「送出空陣列＝清空」語意不同）；
+ * 送出但非合法 JSON 陣列 → 視為空陣列（不因客戶端送壞值而 500；正規化仍由 service 負責）。
+ */
+function parseDraftingDeptCodes(raw: string | undefined): string[] | undefined {
+  if (raw === undefined) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map((v) => String(v)) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * F018 使用表單管理。守門鏈 SessionGuard→RolePermissionGuard。
  * 寫入路由要求 `read`（G 定案：唯讀角色卡欄位層 FIELD_WRITE_FORBIDDEN、無存取角色路由層 PERMISSION_DENIED）。
  * 前台詳情表單清單/下載屬文件瀏覽/下載列印（全角色 READ）。
@@ -70,34 +91,52 @@ export class UsageFormsController {
     @UploadedFiles() files: MulterUploadedFile[],
     @Body('name') name?: string,
     @Body('formNumber') formNumber?: string,
+    @Body('draftingDeptCodes') draftingDeptCodes?: string,
   ) {
     const uploads = (files ?? []).map(toUploadFile);
     // 多檔 → uploadForms（先全部驗證再全部建立，避免部分寫入；不接受 name/formNumber
     // ——prototype 19 之 fileInput 無 multiple，UI 無逐檔命名/編號之驗收依據）。
     if (uploads.length !== 1) return this.svc.uploadForms(req.sessionUser, uploads);
-    // 單檔 → uploadForm。`formNumber` 僅在客戶端**確實送出**時才轉發（未送 ≠ 送 undefined），
-    // 使既有呼叫形狀不因本 delta 改變。
-    return formNumber === undefined
-      ? this.svc.uploadForm(req.sessionUser, uploads[0], name)
-      : this.svc.uploadForm(req.sessionUser, uploads[0], name, formNumber);
+    const depts = parseDraftingDeptCodes(draftingDeptCodes);
+    // 單檔 → uploadForm。`formNumber`／`draftingDeptCodes` 僅在客戶端**確實送出**時才轉發
+    // （未送 ≠ 送 undefined），使既有呼叫形狀不因本 delta 改變。
+    if (formNumber === undefined && depts === undefined) {
+      return this.svc.uploadForm(req.sessionUser, uploads[0], name);
+    }
+    return this.svc.uploadForm(req.sessionUser, uploads[0], name, formNumber ?? null, depts);
   }
 
   /**
-   * F018「編輯編號」（architecture-spec §10.7 A14）：`PATCH /admin/usage-forms/:formId/number`。
+   * F018 編輯頁 metadata 端點（🔴 D9 delta `AC-N48`／architecture-spec §11.10(b)）：
+   * **`PATCH /admin/usage-forms/:formId`**。
    *
-   * 🔴 body **只接受 `{ formNumber }` 一鍵**——`AC-D20` 之「六欄未變、Blob 未讀未寫」由 body
-   * 形狀本身保證最強：service 收不到檔案，就不可能碰檔案。其餘鍵一律忽略（不報錯）。
-   * 🔴 與覆蓋上傳（`PUT admin/usage-forms/:formId`，multipart）為兩條不同路徑，不共用 handler。
+   * 📝 **被推翻之路由字面逐字保留供追溯**：OLD> `PATCH admin/usage-forms/:formId/number`（`AC-D3`）。
+   * **推翻理由**：`AC-N41` 明訂「編輯編號」modal 由獨立整頁取代，該頁範圍已擴大為
+   * 「表單編號＋制定部門」兩項 metadata，端點路徑隨之擴大、移除 `/number` 尾段。
+   * 本端點之唯一呼叫端正是被取代的那個 modal ⇒ 擴大端點形狀無外部相容性代價。
+   *
+   * 🔴 body **只接受 `{ formNumber?, draftingDeptCodes? }` 兩鍵**——`AC-D20`／`AC-N49` 之
+   * 「六欄未變、Blob 未讀未寫」由 body 形狀本身保證最強：service 收不到檔案，就不可能碰檔案。
+   * 其餘鍵（含意圖夾帶 `name`／`blobPath`／`size` 者）一律**忽略且不報錯**。
+   * 🔴 以 `'key' in body` 逐鍵挑選而非整個 body 轉發：**「未帶鍵」與「帶鍵但值為 null／空陣列」
+   * 語意不同**（前者＝不動該項，後者＝顯式清空），照抄整個 body 會讓惡意鍵一併流入 service。
+   * 🔴 與覆蓋上傳（`PUT admin/usage-forms/:formId`，multipart）為兩條不同路徑，不共用 handler
+   * （HTTP 方法不同：PATCH vs PUT）。
    * 回 200 ＋更新後之該列（不用 204——前端需其值重繪該列，否則得重查整張清單）。
    */
-  @Patch('admin/usage-forms/:formId/number')
+  @Patch('admin/usage-forms/:formId')
   @RequirePermission(FunctionKey.USAGE_FORM_MANAGEMENT, 'read')
   updateNumber(
     @Req() req: RequestWithSession,
     @Param('formId') formId: string,
-    @Body() body: { formNumber?: string | null },
+    @Body() body: { formNumber?: string | null; draftingDeptCodes?: string[] },
   ) {
-    return this.svc.updateFormNumber(req.sessionUser, formId, body?.formNumber ?? null);
+    const patch: { formNumber?: string | null; draftingDeptCodes?: string[] } = {};
+    if (body && 'formNumber' in body) patch.formNumber = body.formNumber ?? null;
+    if (body && 'draftingDeptCodes' in body) {
+      patch.draftingDeptCodes = body.draftingDeptCodes ?? [];
+    }
+    return this.svc.updateFormMetadata(req.sessionUser, formId, patch);
   }
 
   @Put('admin/usage-forms/:formId')
@@ -192,12 +231,16 @@ export class UsageFormsController {
   @RequirePermission(FunctionKey.DOCUMENT_DOWNLOAD_PRINT, 'read')
   async download(
     @Req() req: RequestWithSession,
-    @Param('documentId') _documentId: string,
+    // 🔴 §11.6 v1.9a：原宣告為 `_documentId`（底線前綴、宣告後從未使用）——`AC-N17` 要求本路徑
+    // 之稽核列 `documentId` 必填落值，故改回正常具名並一併傳入 service。舊 docblock 之理由
+    // 「documentId 不參與查找」在「RAW／不寫稽核」之舊語意下成立，該前提已被 `AC-N14` 推翻。
+    @Param('documentId') documentId: string,
     @Param('formId') formId: string,
     @Res() res: Response,
   ): Promise<void> {
     const { bytes, fileName, contentType } = await this.svc.downloadFormRaw(
       req.sessionUser,
+      documentId,
       formId,
     );
     res.setHeader('Content-Type', contentType);

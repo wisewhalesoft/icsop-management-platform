@@ -29,7 +29,12 @@ export type AuditTargetType =
   // F024 調閱歷程匯出（architecture-spec §10.18 A16-1，additive）。無自然之對象實體 id ⇒
   // targetId 採固定哨兵常數 ACCESS_HISTORY_EXPORT_TARGET_ID，且**不對映任何參照欄**
   // （沿用 ORG_CHANGE_ALERT 之「無對映 case」既有模式，buildAuditRow 不需新增 case）。
-  | 'ACCESS_HISTORY';
+  | 'ACCESS_HISTORY'
+  // 🔴 F016/F023 D9 delta（2026-08-20，OQ-D9-29；additive）：OJT 簽到表**上傳**事件。
+  // targetId＝documentId（上傳之標的文件）。刻意**不**沿用 'DOCUMENT'——上傳非調閱，
+  // 混入 DOCUMENT 會使 F024「類型＝文件」之調閱查詢被上傳事件污染（AC-N69 之分類學防線）。
+  // data-model「ATTACHMENT_UPLOAD 擴充」段已定案：varchar(30)/varchar(40) 無 CHECK ⇒ 不需 migration。
+  | 'DOCUMENT_ATTACHMENT';
 
 /** 操作類型（data-model AUDIT_LOG.actionType，逐字沿用 F036/F037/F038 spec 命名）。 */
 export type AuditActionType =
@@ -49,7 +54,11 @@ export type AuditActionType =
   // F006：組織異動待確認提示被處理（Route A 自動／Route B 手動皆記錄）。
   | 'ALERT_RESOLVED'
   // F024：調閱歷程匯出（AC-F13）。additive：僅新增字面值，既有 11 種變體之語意逐字不變。
-  | 'ACCESS_HISTORY_EXPORT';
+  | 'ACCESS_HISTORY_EXPORT'
+  // 🔴 F016 D9 delta（AC-N31／F023 AC-N50）：主管／部門窗口上傳 OJT 簽到表。
+  // ⚠ 角色不對稱（AC-N32）：ICSOPAdmin 執行同一操作**不**寫入本事件——那是既有職掌內之
+  // 日常維護，本事件之存在理由是「破例開放之角色其寫入行為需可追溯」。
+  | 'ATTACHMENT_UPLOAD';
 
 /** 調閱來源（E09 US-097），預設 DIRECT。 */
 export type AuditSource = 'DIRECT' | 'AI_QA';
@@ -88,10 +97,18 @@ export interface DocumentAuditEvent extends AuditEventBase {
   targetType: 'DOCUMENT';
   actionType: 'VIEW' | 'DOWNLOAD' | 'PRINT';
 }
-/** 使用表單下載（F018，浮水印動作）。targetId＝使用表單附件 id。 */
+/**
+ * 使用表單下載（F018，浮水印動作）。targetId＝使用表單附件 id。
+ *
+ * 🔴 D9 delta（`AC-N17`）：additive 新增選填 `documentId`——後台唯讀詳情頁之
+ * `downloadFormRaw()` 自本輪起需寫稽核，且該路徑之呼叫脈絡確實隸屬某份文件，
+ * `AUDIT_LOG.documentId` 必須落值。**選填**而非必填：表單池管理頁之 `downloadFromPool()`
+ * 無文件脈絡（`AC-N51` 明訂該路徑 `documentId` 為 `null`），且既有呼叫端不需同步改動。
+ */
 export interface UsageFormAuditEvent extends AuditEventBase {
   targetType: 'USAGE_FORM';
   actionType: 'VIEW' | 'DOWNLOAD' | 'PRINT';
+  documentId?: string | null;
 }
 /**
  * 循環動作（F036 樹狀圖預覽之浮水印動作 VIEW/DOWNLOAD/PRINT，watermarkSnapshot 攜帶；
@@ -136,8 +153,12 @@ export interface OrgChangeAlertAuditEvent extends AuditEventBase {
 export interface AppendixAuditEvent extends AuditEventBase {
   targetType: 'APPENDIX';
   actionType: 'DOWNLOAD';
-  /** 下載來源之文件 id（必填；buildAuditRow 之 APPENDIX 分支直接落至 AUDIT_LOG.documentId）。 */
-  documentId: string;
+  /**
+   * 下載來源之文件 id（buildAuditRow 之 APPENDIX 分支直接落至 AUDIT_LOG.documentId）。
+   * 🔴 D9 delta（`AC-N57`）：後台附錄池管理頁之個別下載自本輪起亦寫稽核，該脈絡**無所屬文件**
+   * ⇒ 型別放寬為可 `null`（前台路徑仍恆帶該次下載之來源文件 id，`AC-27` 不變）。
+   */
+  documentId: string | null;
 }
 
 /**
@@ -161,6 +182,19 @@ export interface AccessHistoryExportAuditEvent extends AuditEventBase {
  */
 export const ACCESS_HISTORY_EXPORT_TARGET_ID = 'access-history-export';
 
+/**
+ * 🔴 附件上傳（F016 `AC-N31`／F023 `AC-N50`，D9 delta）。第 9 個變體；既有 8 個變體形狀逐字不動。
+ *
+ * `targetId`＝`documentId`（上傳之標的文件；`buildAuditRow` 之本分支落至 `AUDIT_LOG.documentId`）。
+ * `watermarkSnapshot` 恆為 `null`——上傳**非浮水印動作**（`AC-N31` 明訂）；此處以型別鎖死，
+ * 而非依賴呼叫端記得傳 null。
+ */
+export interface DocumentAttachmentAuditEvent extends AuditEventBase {
+  targetType: 'DOCUMENT_ATTACHMENT';
+  actionType: 'ATTACHMENT_UPLOAD';
+  watermarkSnapshot?: null;
+}
+
 /** 稽核調閱事件（以 targetType 判別之聯集）——D 契約鎖定形狀。 */
 export type AuditAccessEvent =
   | DocumentAuditEvent
@@ -170,7 +204,8 @@ export type AuditAccessEvent =
   | LifecycleChangeLogAuditEvent
   | OrgChangeAlertAuditEvent
   | AppendixAuditEvent
-  | AccessHistoryExportAuditEvent;
+  | AccessHistoryExportAuditEvent
+  | DocumentAttachmentAuditEvent;
 
 /**
  * 已物化之稽核列（append-only）。同時作為 AUDIT_LOG 落地列與 F024 查詢結果列。
@@ -206,8 +241,13 @@ export interface AuditRow {
   source: AuditSource;
 }
 
-/** F024 類型篩選（前端顯示值）↔ targetType 集合（見 access-history-filter.kindToTargetTypes）。 */
-export type AuditKind = '文件' | '循環' | '變更';
+/**
+ * F024 類型篩選（前端顯示值）↔ targetType 集合（見 access-history-filter.kindToTargetTypes）。
+ *
+ * 🔴 D9 delta（`AC-N69`，`OQ-D9-34`）：additive 新增第四值「上傳」→ `DOCUMENT_ATTACHMENT`。
+ * 既有三值之對映**逐字不變**（「文件」天然不含上傳事件——分類學污染防線之「排除」面）。
+ */
+export type AuditKind = '文件' | '循環' | '變更' | '上傳';
 
 /**
  * 已正規化之查詢規格（OQ-AQ-01）。將 AuditQueryFilters 收斂為「可下推至 SQL WHERE/ORDER/OFFSET」之形狀：

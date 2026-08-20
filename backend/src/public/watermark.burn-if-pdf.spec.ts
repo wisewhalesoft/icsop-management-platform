@@ -84,6 +84,13 @@ function makeService() {
 
 const RAW = Buffer.from('%PDF-1.4 raw appendix bytes\n', 'utf8');
 
+/**
+ * 🔴🔴 2026-08-21 D9 delta（`AC-N12`；impl-be 申訴 2，經 test-generator 覆核＝屬實並裁決 A：
+ * 兌現 AC-N12）——本檔快照字串之公司名稱欄由全稱改為簡稱，理由與追溯全文見
+ * `watermark.service.spec.ts` 同型變更之檔頭註解，不重複。
+ * 📝 OLD> `E001-王小明-和潤企業股份有限公司-營運管理部-審查室-{機密聲明}-2026-08-16 10:00:00 (UTC+8)`
+ * 📝 OLD> `E001-王小明-和潤企業股份有限公司-營運管理部-{機密聲明}-2026-08-16 10:00:00 (UTC+8)`
+ */
 describe('WatermarkService.burnIfPdf（F020 AC-D1／AC-D2／AC-D5；三類前台附屬檔案之共用協作點）', () => {
   it('AC-D1 format=pdf → burnPdf 恰呼叫 1 次，回傳已燒錄位元組（非原始）', async () => {
     const { svc, burner } = makeService();
@@ -94,14 +101,14 @@ describe('WatermarkService.burnIfPdf（F020 AC-D1／AC-D2／AC-D5；三類前台
     expect(out.bytes.toString()).toBe(`BURNED:${out.snapshot as string}`);
   });
 
-  it('AC-D1 燒錄所用之浮水印字串與同一使用者同一時刻經檢視器 buildSnapshot 所得**逐字相同**', async () => {
+  it('AC-D1 燒錄所用之浮水印字串與同一使用者同一時刻經檢視器 buildSnapshot 所得**逐字相同**（AC-N12：公司簡稱）', async () => {
     const { svc, burner } = makeService();
     const { snapshot: viewerSnapshot } = await svc.buildSnapshot(SESSION);
     const out = await svc.burnIfPdf(SESSION, RAW, 'pdf');
     expect(out.snapshot).toBe(viewerSnapshot);
     expect(burner.calls[0].snapshot).toBe(viewerSnapshot);
     expect(viewerSnapshot).toBe(
-      `E001-王小明-和潤企業股份有限公司-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-08-16 10:00:00 (UTC+8)`,
+      `E001-王小明-和潤企業-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-08-16 10:00:00 (UTC+8)`,
     );
   });
 
@@ -117,7 +124,7 @@ describe('WatermarkService.burnIfPdf（F020 AC-D1／AC-D2／AC-D5；三類前台
     );
     const out = await svc.burnIfPdf({ ...SESSION, orgCode: 'JA000' }, RAW, 'pdf');
     expect(out.snapshot).toBe(
-      `E001-王小明-和潤企業股份有限公司-營運管理部-${WATERMARK_CONFIDENTIALITY}-2026-08-16 10:00:00 (UTC+8)`,
+      `E001-王小明-和潤企業-營運管理部-${WATERMARK_CONFIDENTIALITY}-2026-08-16 10:00:00 (UTC+8)`,
     );
     expect(out.snapshot).not.toContain('--');
   });

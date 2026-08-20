@@ -109,12 +109,33 @@ function makeService(opts: {
   return { svc, burner, audit };
 }
 
+/**
+ * 🔴🔴 2026-08-21 D9 delta（`AC-N12`，OQ-D9-06 之消費點；impl-be 申訴 2，經 test-generator 覆核＝
+ * 屬實並裁決 A：兌現 AC-N12）——本檔全部經 `svc.buildSnapshot()`/`svc.view()`/`svc.download()`/
+ * `svc.print()` 產生之「公司名稱」欄，逐字由**全稱**改為**簡稱**（`和潤企業股份有限公司`→`和潤企業`）。
+ *
+ * **裁決理由（不得再逆改回全稱）**：`AC-N12` 明文「三處呈現一致：檢視器疊加、PDF 燒錄內容層、
+ * `AUDIT_LOG.watermarkSnapshot` 三者之公司名稱欄同時改為短稱」——這三處**皆**經由本檔測試之
+ * `WatermarkService.buildSnapshot()`/`view()`/`download()`/`print()` 產生（唯一組字入口），
+ * 全稱與簡稱屬同一函式輸出之互斥兩態，無法沿用「新舊並存」之 shim 手法（比照
+ * `red-gate-baseline-hygiene` §3c「新約束檔禁止舊路徑」之處置：直接遷移既有斷言，`OLD>` 保留
+ * 原文供追溯，不留半吊子狀態）。architecture-spec.md §11.9 逐字指定落點：
+ * `resolveCompanyName(session.companyCode)` 改為 `resolveCompanyShortName(session.companyCode) ?? ''`。
+ * ⚠ **`WatermarkIdentity.companyFullName` 欄位名本身不變**（僅其值改變來源解析器）——本輪未獲授權
+ * 重新命名該型別欄位，此為架構文件既有選擇，非本檔疏漏。
+ *
+ * 📝 **本檔各處被取代之全稱字面值，逐字保留供追溯（下同）**：
+ *   OLD> `E001-王小明-和潤企業股份有限公司-營運管理部-審查室-{機密聲明}-2026-07-23 10:00:00 (UTC+8)`
+ *   OLD> `E001-王小明-和潤企業股份有限公司-營運管理部-{機密聲明}-2026-07-23 10:00:00 (UTC+8)`
+ *   OLD> `E001-王小明-和潤企業股份有限公司-{機密聲明}-2026-07-23 10:00:00 (UTC+8)`（孤兒帳號案）
+ *   OLD> `expect(fields.companyFullName).toBe('和潤企業股份有限公司'); // resolveCompanyName`
+ */
 describe('WatermarkService（F020）', () => {
-  it('buildSnapshot：處室層使用者 → 部門=部層 DESC_FULL、處室=DESC_CHI 末段、公司全稱、時間 UTC+8', async () => {
+  it('buildSnapshot：處室層使用者 → 部門=部層 DESC_FULL、處室=DESC_CHI 末段、公司簡稱（AC-N12）、時間 UTC+8', async () => {
     const { svc } = makeService({});
     const { snapshot } = await svc.buildSnapshot(sessionOf());
     expect(snapshot).toBe(
-      `E001-王小明-和潤企業股份有限公司-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-07-23 10:00:00 (UTC+8)`,
+      `E001-王小明-和潤企業-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-07-23 10:00:00 (UTC+8)`,
     );
   });
 
@@ -126,7 +147,7 @@ describe('WatermarkService（F020）', () => {
     const p = await svc.print(s, 'doc-1');
     // 處/室留空且收合（無連續分隔符）
     expect(v.watermark).toBe(
-      `E001-王小明-和潤企業股份有限公司-營運管理部-${WATERMARK_CONFIDENTIALITY}-2026-07-23 10:00:00 (UTC+8)`,
+      `E001-王小明-和潤企業-營運管理部-${WATERMARK_CONFIDENTIALITY}-2026-07-23 10:00:00 (UTC+8)`,
     );
     expect(v.watermark).not.toContain('--');
     expect(d.snapshot).toBe(v.watermark);
@@ -193,10 +214,10 @@ describe('WatermarkService（F020）', () => {
     expect(res.pdf.toString()).toContain('BURNED:'); // 檔案照樣回傳
   });
 
-  it('TS-F020-012/013 依賴缺口已由 org-foundation 解除：公司全稱與部層 DESC_FULL 真實解析（非 stub）', async () => {
+  it('TS-F020-012/013 依賴缺口已由 org-foundation 解除：公司簡稱（AC-N12）與部層 DESC_FULL 真實解析（非 stub）', async () => {
     const { svc } = makeService({});
     const { fields } = await svc.buildSnapshot(sessionOf());
-    expect(fields.companyFullName).toBe('和潤企業股份有限公司'); // resolveCompanyName
+    expect(fields.companyFullName).toBe('和潤企業'); // resolveCompanyShortName（AC-N12；欄位名不變，值源已改）
     expect(fields.departmentFullName).toBe('營運管理部'); // 部層 DESC_FULL
     expect(fields.departmentFullName).not.toMatch(/待建|TODO|undefined/);
   });
@@ -205,7 +226,7 @@ describe('WatermarkService（F020）', () => {
     const { svc } = makeService({ org: fakeOrg({}) });
     const { snapshot } = await svc.buildSnapshot(sessionOf({ orgCode: 'ZZ999' }));
     expect(snapshot).toBe(
-      `E001-王小明-和潤企業股份有限公司-${WATERMARK_CONFIDENTIALITY}-2026-07-23 10:00:00 (UTC+8)`,
+      `E001-王小明-和潤企業-${WATERMARK_CONFIDENTIALITY}-2026-07-23 10:00:00 (UTC+8)`,
     );
     expect(snapshot).not.toContain('ZZ999');
     expect(snapshot).not.toMatch(/null|undefined/);
@@ -260,6 +281,36 @@ describe('D9 delta — AC-N6：getOriginalPdf 改為回傳已燒錄位元組', (
     const { svc, burner } = makeService({ pdf: null });
     await expect(svc.getOriginalPdf(sessionOf(), 'doc-x')).rejects.toThrow('DOCUMENT_PDF_NOT_FOUND');
     expect(burner.calls).toHaveLength(0);
+  });
+});
+
+/**
+ * 🔴🔴 D9 delta（2026-08-20，`OQ-D9-06`，2026-08-21 impl-be 申訴 2 之補洞）：`AC-N12` 消費點
+ * 本身之正向驗證——`buildSnapshot()` 之公司名稱欄確實改呼叫 `resolveCompanyShortName`，而非僅
+ * 生產端常數（`AC-N10`／`AC-N11`，已於 `company-name.spec.ts` 覆蓋）存在卻從未被消費。
+ * 權威：docs/specs/features/F020-watermark.md#d9-watermark-delta `AC-N12`。
+ */
+describe('D9 delta — AC-N12：buildSnapshot 公司名稱欄改用短稱（消費點驗證）', () => {
+  it('AC-N12 公司代碼 AS → 快照公司名稱欄逐字為「和潤企業」（非「和潤企業股份有限公司」全稱）', async () => {
+    const { svc } = makeService({});
+    const { fields } = await svc.buildSnapshot(sessionOf({ companyCode: 'AS' }));
+    expect(fields.companyFullName).toBe('和潤企業');
+    expect(fields.companyFullName).not.toBe('和潤企業股份有限公司');
+  });
+
+  it('AC-N12 公司代碼 AE → 快照公司名稱欄逐字為「和潤電能」', async () => {
+    const { svc } = makeService({});
+    const { fields } = await svc.buildSnapshot(sessionOf({ companyCode: 'AE' }));
+    expect(fields.companyFullName).toBe('和潤電能');
+  });
+
+  it('AC-N12 公司代碼查無於短稱表 → 該欄留空並套 §8.4 分隔符收合（不得輸出 null、不得回退為全稱）', async () => {
+    const { svc } = makeService({});
+    const { snapshot, fields } = await svc.buildSnapshot(sessionOf({ companyCode: 'ZZ' }));
+    expect(fields.companyFullName).toBe('');
+    expect(snapshot).not.toContain('和潤企業股份有限公司'); // 不得回退全稱
+    expect(snapshot).not.toMatch(/null|undefined/);
+    expect(snapshot).not.toContain('--'); // 分隔符收合
   });
 });
 

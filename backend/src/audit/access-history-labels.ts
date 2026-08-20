@@ -59,6 +59,8 @@ const ACTION_TYPE_LABEL: Readonly<Record<string, string>> = {
   LIFECYCLE_CHANGELOG_DOWNLOAD: '新舊樹狀圖下載',
   // 本 delta 新增（`AC-F13`）：匯出動作本身之稽核列亦會出現在後續查詢／匯出結果中。
   ACCESS_HISTORY_EXPORT: '調閱歷程匯出',
+  // 🔴 D9 delta（`AC-N53`／`AC-N50`，`OQ-D9-29`）：OJT 簽到表上傳事件。
+  ATTACHMENT_UPLOAD: '附件上傳',
 };
 
 export function actionTypeLabel(actionType: string): string {
@@ -74,8 +76,12 @@ export function actionTypeLabel(actionType: string): string {
  *    CSV 與畫面保持一致優先，兩處同時錯優於兩處各自錯不同方向。
  *    本 delta 新增之 `ACCESS_HISTORY` 亦落入「其餘 → 變更」之通則（`AC-F13` 自我遞迴效應）。
  */
-export function auditKindLabel(targetType: string): '文件' | '循環' | '變更' {
+export function auditKindLabel(targetType: string): '文件' | '循環' | '變更' | '上傳' {
   if (targetType === 'DOCUMENT' || targetType === 'USAGE_FORM') return '文件';
   if (targetType === 'LIFECYCLE') return '循環';
+  // 🔴 D9 delta（`AC-N53`）：`DOCUMENT_ATTACHMENT` **不得**落入下方「其餘 → 變更」之通則——
+  // 那會使上傳事件在「類型」欄顯示為「變更」，與 `AC-N69` 新增之「上傳」篩選值自相矛盾
+  // （選了「上傳」篩出來的列，類型欄卻寫「變更」）。故本判斷必須置於 return '變更' 之前。
+  if (targetType === 'DOCUMENT_ATTACHMENT') return '上傳';
   return '變更';
 }

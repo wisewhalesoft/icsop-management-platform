@@ -120,11 +120,20 @@ const BASE: WatermarkSession = {
   roleCode: 'User',
 };
 
+/**
+ * 🔴🔴 2026-08-21 D9 delta（`AC-N12`；發現於覆核 impl-be 申訴 2 之全庫二次掃描——本檔第二個
+ * describe 呼叫真實 `svcOf().buildSnapshot()`，先前觸發 `AC-N12` 掃描時誤判為與上方
+ * `WATERMARK_LINE_VECTORS`（純樣板、手打向量，不呼叫服務層）同屬「純函式測試」而漏改，特此更正、
+ * 記錄教訓）：以下兩案改用短稱。上方 `WATERMARK_LINE_VECTORS`（純 `toDisplayLines` 樣板向量，
+ * 與前端 `watermark-lines.test.ts` 同步）**不受影響、刻意不改**——那組向量測的是拆行機制本身，
+ * 與公司名稱解析器選用無關，逐字全稱與否對其驗證目標無影響。
+ * OLD> `王小明-和潤企業股份有限公司-營運管理部-審查室-{機密聲明}-2026-08-16 10:00:00 (UTC+8)`
+ */
 describe('浮水印欄位不完整之處置（F020 #7／OQ-D18-14）', () => {
   it('🔒 員工編號為空（手動帳號天然可空）→ 該欄收合、不出現連續分隔符、**不以任何識別字頂替**', async () => {
     const { snapshot } = await svcOf().buildSnapshot({ ...BASE, employeeNo: null });
     expect(snapshot).toBe(
-      `王小明-和潤企業股份有限公司-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-08-16 10:00:00 (UTC+8)`,
+      `王小明-和潤企業-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-08-16 10:00:00 (UTC+8)`,
     );
     expect(snapshot).not.toContain('--');
     expect(snapshot.startsWith('-')).toBe(false);
@@ -134,7 +143,7 @@ describe('浮水印欄位不完整之處置（F020 #7／OQ-D18-14）', () => {
     const { snapshot } = await svcOf().buildSnapshot({ ...BASE, employeeNo: '' });
     const lines = toDisplayLines(snapshot);
     expect(lines).toHaveLength(3);
-    expect(lines[0]).toBe('王小明-和潤企業股份有限公司-營運管理部-審查室');
+    expect(lines[0]).toBe('王小明-和潤企業-營運管理部-審查室');
     expect(lines[1]).toBe(WATERMARK_CONFIDENTIALITY);
   });
 

@@ -25,8 +25,12 @@ import {
 import { canPerform, FunctionKey } from '../rbac/function-matrix';
 import { FieldKey } from '../rbac/field-matrix';
 import { SessionContext, UploadFile } from '../attachments/attachments.service';
-import { FRONT_BURNER } from '../appendices/appendices.service';
-import type { WatermarkSession } from '../public/watermark.service';
+import {
+  WATERMARK_BURNER,
+  WatermarkBurner,
+  WatermarkSession,
+  resolveAuditIdentity,
+} from '../public/watermark-burner.service';
 import {
   AUDIT_RECORDER,
   AuditRecorder,
@@ -74,19 +78,15 @@ export interface UsageFormDownloadBytes {
 }
 
 /**
- * 前台協作點之窄口徑（實作為 `WatermarkService`；與附錄共用同一 token）。
- * 🔴 本宣告與 `appendices.service.ts` 之 `FrontBurner` **必須逐字同形**（結構型別、同一 token）：
- * 兩處刻意各自宣告以避免模組循環，故新增能力時兩邊都要加。
+ * 🔴 §11.5（2026-08-20 D9 delta）：本檔原持有之 `FrontBurner` 介面**已刪除**，改用
+ * `public/watermark-burner.service.ts` 之 `WatermarkBurner`（token `WATERMARK_BURNER`）。
+ *
+ * 📝 被取代之既有註記逐字保留供追溯：OLD> 「本宣告與 `appendices.service.ts` 之 `FrontBurner`
+ * **必須逐字同形**……兩處刻意各自宣告以避免模組循環，故新增能力時兩邊都要加。」
+ * **為何可以取消那條紀律**：兩處各自宣告是為了迴避 `appendices ↔ usage-forms ↔ public` 之
+ * 模組循環；`WatermarkBurnerModule` 抽出後該循環在結構上已不存在，兩份宣告可收斂為一份，
+ * 「新增能力時兩邊都要加」這條**靠人記得**的規則隨之消失。
  */
-export interface FrontBurner {
-  burnIfPdf(
-    session: WatermarkSession,
-    bytes: Buffer,
-    format: string,
-  ): Promise<{ bytes: Buffer; snapshot: string | null }>;
-  /** F041（`AC-D22` ③）：可見性判定，不符者 404 `DOCUMENT_NOT_FOUND`。選填之理由見附錄側宣告。 */
-  assertDocumentVisible?(session: WatermarkSession, documentId: string): Promise<void>;
-}
 
 /**
  * 使用表單之允許格式 → 回應 Content-Type（白名單既定，不接受客戶端宣告）。
@@ -94,6 +94,26 @@ export interface FrontBurner {
  * `watermark.controller` 各有一份逐字相同的私有實作（白名單擴充時必然只改到其中一份）。
  */
 const usageFormContentType = contentTypeOfFormat;
+
+/**
+ * 🔴 D9 delta（`AC-N45`）：制定部門編輯之 patch 形狀。
+ *
+ * **兩鍵皆選填，且「未帶鍵」與「帶鍵但值為空」語意不同**——`{}` ＝兩項都不動；
+ * `{ draftingDeptCodes: [] }` ＝清空制定部門（0 筆為合法狀態）。故服務層一律以
+ * `'key' in patch` 判斷，不得用 `patch.x !== undefined`（那會把「顯式清空」誤判為「不動」）。
+ */
+export interface UsageFormMetadataPatch {
+  formNumber?: string | null;
+  draftingDeptCodes?: string[];
+}
+
+/**
+ * 制定部門代碼之正規化（`AC-N45`）：trim → 去空 → 去重 → 依 orgCode 昇冪。
+ * 排序於**寫入時**完成，使「重新開啟編輯頁完整回填且依 orgCode 昇冪」不依賴讀取端各自排序。
+ */
+export function normalizeDraftingDeptCodes(codes: readonly string[] | undefined): string[] {
+  return [...new Set((codes ?? []).map((c) => (c ?? '').trim()).filter((c) => c.length > 0))].sort();
+}
 
 /** 表單 blob key（穩定；覆蓋一律新 key，舊 key 於 DB 參照更新後回收）。 */
 export function buildFormBlobPath(fileName: string): string {
@@ -129,9 +149,13 @@ export class UsageFormsService {
      * （與附錄之注入形狀逐字相同——三處共用同一個 `burnIfPdf`，不各寫一份 `if (format === 'pdf')`）。
      * 選填以免破壞既有純建構單測（未注入 → 前台一律回原始位元組、快照為 null）。
      */
-    @Optional()
-    @Inject(FRONT_BURNER)
-    private readonly frontBurner?: FrontBurner,
+    /**
+     * 🔴 **`@Optional()` 已移除**（§11.5：啟動期 fail-fast）——理由與 `AppendicesService` 逐字相同：
+     * 缺 provider 必須讓容器啟動失敗，而非靜默降級為「不燒錄」。TS 型別之 `?` 保留，既有純建構子
+     * 單元測試（`new UsageFormsService(blob, store, audit)`）不受影響。
+     */
+    @Inject(WATERMARK_BURNER)
+    private readonly burner?: WatermarkBurner,
   ) {}
 
   /**
@@ -144,6 +168,7 @@ export class UsageFormsService {
     file: UploadFile,
     name?: string,
     formNumber?: string | null,
+    draftingDeptCodes?: string[],
   ): Promise<UsageFormRecord> {
     this.assertCanWrite(session?.roleCode);
     assertFormatAllowed('USAGE_FORM', file);
@@ -154,7 +179,13 @@ export class UsageFormsService {
     const number = normalizeFormNumber(formNumber);
     assertFormNumberValid(number);
     await this.assertFormNumberAvailable(number, null);
-    return this.createFromFile(session, file, resolvedName, number);
+    const rec = await this.createFromFile(session, file, resolvedName, number);
+    // 🔴 `AC-N43`／`AC-N45`：制定部門為 additive 欄位；**未帶該鍵**時完全不觸碰關聯表
+    // （既有呼叫端之行為逐字不變）。帶了才寫，與本體建立同屬一次流程。
+    if (draftingDeptCodes !== undefined) {
+      await this.writeDraftingDepts(rec.id, draftingDeptCodes);
+    }
+    return rec;
   }
 
   /**
@@ -220,19 +251,102 @@ export class UsageFormsService {
   }
 
   /**
-   * F018「編輯編號」：**只**更新 `formNumber`，不碰檔案、不碰關聯、不寫稽核（AC-D20）。
+   * F018 編輯頁 metadata 更新（🔴 D9 delta `AC-N48`：由「編輯編號」擴大為「表單編號＋制定部門」）。
+   *
+   * 📝 **被取代之方法名逐字保留供追溯**：OLD> `updateFormNumber(session, formId, formNumber)`
+   * ——body 已擴為物件形狀（`AC-N48`），service 簽章隨之物件化。
+   *
+   * 🔒 `AC-D20`／`AC-N49`（副作用邊界）：**六欄未變、Blob 未讀未寫**——本方法收不到檔案，
+   * 就不可能碰檔案；`USAGE_FORM_DRAFTING_DEPT` 為獨立關聯表，其 replace-set 與 `USAGE_FORM_POOL`
+   * 本體六欄互不相涉，此邊界是**結構性**成立，不需額外設計保證。
    *
    * 授權沿用既有兩道閘門：功能面 `USAGE_FORM_MANAGEMENT`＋欄位面 `USAGE_FORMS`
    * ⇒ ICSOPAdmin 通過／SysAdmin `FIELD_WRITE_FORBIDDEN`／其餘三角色 `PERMISSION_DENIED`。
+   */
+  async updateFormMetadata(
+    session: SessionContext | undefined,
+    formId: string,
+    patch: UsageFormMetadataPatch,
+  ): Promise<UsageFormRecord & { draftingDeptCodes: string[] }> {
+    this.assertCanWrite(session?.roleCode);
+    let record = await this.requireForm(formId);
+
+    if ('formNumber' in patch) {
+      record = await this.writeFormNumber(formId, patch.formNumber ?? null);
+    }
+    if ('draftingDeptCodes' in patch) {
+      await this.writeDraftingDepts(formId, patch.draftingDeptCodes);
+    }
+    return { ...record, draftingDeptCodes: await this.readDraftingDepts(formId) };
+  }
+
+  /**
+   * 制定部門之 replace-set 寫入（`AC-N45`）。store 未提供該能力 → **拋錯而非靜默忽略**：
+   * 靜默忽略會讓使用者看到「儲存成功」卻什麼都沒存進去（本 repo 已有同型前科）。
+   */
+  private async writeDraftingDepts(
+    formId: string,
+    codes: string[] | undefined,
+  ): Promise<void> {
+    const write = this.store.replaceDraftingDepts;
+    if (!write) {
+      throw new Error('EDIT_DRAFTING_DEPT_NOT_SUPPORTED: store 未提供 replaceDraftingDepts');
+    }
+    await write.call(this.store, formId, normalizeDraftingDeptCodes(codes));
+  }
+
+  /** 單一表單之制定部門（store 未提供 → 空陣列，比照既有選填能力之優雅降級）。 */
+  private async readDraftingDepts(formId: string): Promise<string[]> {
+    const read = this.store.listDraftingDepts;
+    return read ? await read.call(this.store, formId) : [];
+  }
+
+  /**
+   * 清單之制定部門批次富化（`AC-N47`；比照 §10.12「後端列富化」既有模式，單次查詢、零 N+1）。
+   * store 未提供批次方法 → 逐筆退回單筆查詢；兩者皆無 → 一律留空陣列（不拋錯，清單為讀取路徑）。
+   */
+  private async enrichDraftingDepts(items: UsageFormPoolItem[]): Promise<void> {
+    if (items.length === 0) return;
+    const batch = this.store.listDraftingDeptsByForms;
+    if (batch) {
+      const map = await batch.call(
+        this.store,
+        items.map((i) => i.id),
+      );
+      for (const it of items) it.draftingDeptCodes = map.get(it.id) ?? [];
+      return;
+    }
+    for (const it of items) it.draftingDeptCodes = await this.readDraftingDepts(it.id);
+  }
+
+  /**
+   * 🔒 **既有窄口徑（只改編號）之相容保留**：`AC-N48` 擴大的是**端點與編輯頁範圍**，不是
+   * 「只改編號」這個既有行為本身——`AC-D16`～`AC-D21` 之編號驗證鏈（長度／唯一性排除自身列／
+   * trim 收斂／409 對映）逐字仍然有效，其既有測試（`usage-forms.service.number.spec.ts`／
+   * `usage-forms.number-concurrency.spec.ts`）為該鏈之回歸鎖定。
+   *
+   * 本方法因此保留為 `updateFormMetadata` 之**薄轉接**（不是第二份實作，是同一條路徑的窄入口），
+   * 使那些回歸鎖定不需為了本輪的端點擴大而改寫。回傳形狀刻意剝除 `draftingDeptCodes`——
+   * 舊入口之契約是「回傳 `UsageFormRecord`」，不得因內部改走新路徑而悄悄多一個欄位。
    */
   async updateFormNumber(
     session: SessionContext | undefined,
     formId: string,
     formNumber: string | null,
   ): Promise<UsageFormRecord> {
-    this.assertCanWrite(session?.roleCode);
-    await this.requireForm(formId);
+    const { draftingDeptCodes: _drafting, ...record } = await this.updateFormMetadata(
+      session,
+      formId,
+      { formNumber },
+    );
+    return record;
+  }
 
+  /** `formNumber` 之既有驗證鏈與寫入路徑（逐字未變，僅由 `updateFormMetadata` 呼叫）。 */
+  private async writeFormNumber(
+    formId: string,
+    formNumber: string | null,
+  ): Promise<UsageFormRecord> {
     const number = normalizeFormNumber(formNumber);
     assertFormNumberValid(number);
     await this.assertFormNumberAvailable(number, formId);
@@ -355,6 +469,7 @@ export class UsageFormsService {
     this.assertCanRead(session?.roleCode);
     const items = await this.store.listPoolOverview();
     await this.enrichUploaders(items);
+    await this.enrichDraftingDepts(items);
     return items;
   }
 
@@ -397,12 +512,13 @@ export class UsageFormsService {
    * ⚠ 管理端下載之稽核義務未定（OQ-F018-06；spec 僅明文「前台下載→稽核」）→ 暫不記錄，於 summary flag。
    */
   async downloadFromPool(
-    session: SessionContext | undefined,
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
     formId: string,
   ): Promise<UsageFormDownloadBytes> {
     this.assertCanRead(session?.roleCode);
     const form = await this.requireForm(formId);
-    return this.rawBytesOf(form);
+    // AC-N14／AC-N51：後台池管理頁下載自本輪起一律燒錄＋寫稽核；documentId 為 null（無文件脈絡）。
+    return this.burnAndAudit(session, form, null);
   }
 
   /**
@@ -420,14 +536,17 @@ export class UsageFormsService {
    * 故不列為參數；路徑保留該段僅為與前台端點形狀對稱。
    */
   async downloadFormRaw(
-    session: SessionContext | undefined,
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
+    documentId: string,
     formId: string,
   ): Promise<UsageFormDownloadBytes> {
     if (!session?.accountId) {
       throw new ForbiddenException('FILE_ACCESS_DENIED');
     }
     const form = await this.requireForm(formId);
-    return this.rawBytesOf(form);
+    // AC-N14／AC-N17：後台唯讀/編輯頁下載自本輪起一律燒錄＋寫稽核，且 `documentId` 落列
+    // （該路徑之呼叫脈絡確實隸屬某份文件——§11.6 v1.9a 之簽章擴充即為此）。
+    return this.burnAndAudit(session, form, documentId);
   }
 
   /**
@@ -440,14 +559,49 @@ export class UsageFormsService {
    * 🔒 **RAW 語意逐字未動**（`AC-D4`）：不呼叫 `burnIfPdf`、不寫調閱稽核——只換傳輸方式。
    * 這也是刻意**不**改呼叫 `downloadForm()` 的理由：後者會燒錄並寫稽核。
    */
-  private async rawBytesOf(form: UsageFormRecord): Promise<UsageFormDownloadBytes> {
-    const bytes = await this.blob.getBytes(form.blobPath);
+  private async burnAndAudit(
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
+    form: UsageFormRecord,
+    documentId: string | null,
+  ): Promise<UsageFormDownloadBytes> {
+    const raw = await this.blob.getBytes(form.blobPath);
     // DB 有參照但 blob 不存在 → 與「表單不存在」同一對外錯誤碼（區分兩者即洩漏參照存在）。
-    if (!bytes) {
+    if (!raw) {
       throw new NotFoundException('FILE_ACCESS_DENIED');
     }
     // §10.3：格式以上傳時已驗證之 `format` 欄為權威，不採客戶端宣告之 content-type。
-    return { bytes, fileName: form.name, contentType: usageFormContentType(form.format) };
+    // AC-N15：策略 A 於後台亦適用（非 PDF 原檔直通、burnPdf 不被呼叫）。
+    const burned = this.burner
+      ? await this.burner.burnIfPdf(session as WatermarkSession, raw, form.format)
+      : { bytes: raw, snapshot: null };
+    await this.recordDownload(session, form.id, documentId, burned.snapshot);
+    return {
+      bytes: burned.bytes,
+      fileName: form.name,
+      contentType: usageFormContentType(form.format),
+    };
+  }
+
+  /**
+   * 使用表單下載稽核之**單一組裝點**（前台 `downloadForm` 與後台兩支共用）。
+   * `AC-D14`／`AC-N17`／`AC-N51` 對三條路徑之要求逐字相同，僅 `documentId` 之落值不同。
+   */
+  private async recordDownload(
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
+    formId: string,
+    documentId: string | null,
+    watermarkSnapshot: string | null,
+  ): Promise<void> {
+    const identity = await resolveAuditIdentity(this.burner, session as WatermarkSession);
+    await this.audit.record({
+      targetType: 'USAGE_FORM',
+      actionType: 'DOWNLOAD',
+      formId,
+      documentId,
+      accountId: session?.accountId ?? '',
+      ...identity,
+      watermarkSnapshot,
+    });
   }
 
   /**
@@ -464,24 +618,17 @@ export class UsageFormsService {
     }
     // F041 `AC-D22` ③：業務子分類 viewer 對使用部門不相符之文件 → 404 DOCUMENT_NOT_FOUND，
     // 且**先於**讀取位元組、燒錄與寫稽核（拒絕路徑不留稽核、不洩漏表單是否存在）。
-    await this.frontBurner?.assertDocumentVisible?.(session as WatermarkSession, documentId);
+    await this.burner?.assertDocumentVisible?.(session as WatermarkSession, documentId);
     const form = await this.requireForm(formId);
 
     // 🔴 §10.3：格式判定以上傳時已驗證之伺服器端 `format` 為權威（絕不採 client-supplied
     // content-type）。與附錄之改法**逐字相同**——使用表單只是第三個消費者（§10.1 v1.6a）。
     const raw = (await this.blob.getBytes(form.blobPath)) ?? Buffer.alloc(0);
-    const burned = this.frontBurner
-      ? await this.frontBurner.burnIfPdf(session as WatermarkSession, raw, form.format)
+    const burned = this.burner
+      ? await this.burner.burnIfPdf(session as WatermarkSession, raw, form.format)
       : { bytes: raw, snapshot: null };
 
-    await this.audit.record({
-      targetType: 'USAGE_FORM',
-      actionType: 'DOWNLOAD',
-      formId,
-      documentId,
-      accountId: session.accountId,
-      watermarkSnapshot: burned.snapshot,
-    });
+    await this.recordDownload(session, formId, documentId, burned.snapshot);
     return {
       bytes: burned.bytes,
       fileName: form.name,

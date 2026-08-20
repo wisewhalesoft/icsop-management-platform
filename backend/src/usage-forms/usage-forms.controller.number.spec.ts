@@ -92,10 +92,23 @@ describe('UsageFormsController — 編輯頁 metadata 端點之路由 metadata�
     expect(meta.action).toBe('read');
   });
 
-  it('AC-N48 🔒 與覆蓋上傳為兩條不同路徑（不得共用 handler／不得同路徑同方法，此性質不因路徑擴大而改變）', () => {
+  /**
+   * 🔴 2026-08-21 修正（impl-be 申訴 3，經 test-generator 覆核＝屬實，就地改寫）：本案原斷言
+   * `numberPath !== overwritePath` 為 `/number` 尾段時代之路徑不等式殘留——`AC-N48` 已將
+   * `updateNumber` 之路徑擴大為 `admin/usage-forms/:formId`（見上方案），與既有 `overwrite`
+   * （`PUT admin/usage-forms/:formId`，`AC-D3` ①，本輪未被任何 AC 推翻）**同一路徑字面**，
+   * 兩者僅以 HTTP method 區分——這是**唯一**滿足 `AC-N48`（路徑擴大）且不破壞 `overwrite` 既有
+   * 契約（`AC-D3` ①「獨立端點、不得併入」）的組合，故 `not.toBe` 之路徑不等式必然恆紅，任何
+   * 符合兩條 AC 的實作都會落在此處。
+   * 📝 **被取代之原斷言逐字保留供追溯**：OLD> `expect(numberPath).not.toBe(overwritePath);`
+   * 修法：把「不得共用 handler／不得同路徑同方法」之標題原意**顯式化**——同路徑、但方法與 handler
+   * 皆不同，才是本案真正要鎖的性質（比刪除更強：日後若有人把 PATCH 併進 PUT handler 仍會被抓到）。
+   */
+  it('AC-N48 🔒 與覆蓋上傳同路徑但不同方法／不同 handler（不得共用 handler，此性質不因路徑擴大而改變）', () => {
     const numberPath = Reflect.getMetadata(PATH_METADATA, handler('updateNumber'));
     const overwritePath = Reflect.getMetadata(PATH_METADATA, handler('overwrite'));
-    expect(numberPath).not.toBe(overwritePath);
+    expect(numberPath).toBe(overwritePath); // 路徑擴大後兩者同路徑，僅以方法區分
+    expect(Reflect.getMetadata(METHOD_METADATA, handler('updateNumber'))).toBe(RequestMethod.PATCH);
     expect(Reflect.getMetadata(METHOD_METADATA, handler('overwrite'))).toBe(RequestMethod.PUT);
     expect(handler('updateNumber')).not.toBe(handler('overwrite'));
   });

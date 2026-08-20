@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { UsageFormPool } from '../database/entities/usage-form-pool.entity';
 import { DocUsageForm } from '../database/entities/doc-usage-form.entity';
 import { IcsopDocument } from '../database/entities/icsop-document.entity';
+import { UsageFormDraftingDept } from '../database/entities/usage-form-drafting-dept.entity';
 import {
   CreateFormInput,
   FormPoolStore,
@@ -176,5 +177,56 @@ export class TypeOrmFormPoolStore implements FormPoolStore {
   async unlinkAll(formId: string): Promise<void> {
     const ds = await this.init();
     await ds.getRepository(DocUsageForm).delete({ formId });
+  }
+
+  // ── 🔴 D9 delta：制定部門（USAGE_FORM_DRAFTING_DEPT，`AC-N45`／`AC-N47`）──
+
+  /**
+   * replace-set（delete-then-insert）於**單一交易**內完成（architecture-spec §11.10(b)）——
+   * 兩段拆開跑時，若 insert 失敗會留下「制定部門全被清空」的中間狀態，而使用者看到的是一個
+   * 失敗訊息，不會知道舊資料已經沒了。
+   *
+   * 🔴 `id` 由 app 端預生（`randomUUID()`）而非依賴 `NEWSEQUENTIALID()` 之 DEFAULT——沿用本 repo
+   * 既有慣例（見 `create()`），避免 mssql driver 在批次 insert 時取不到 generated id。
+   */
+  async replaceDraftingDepts(formId: string, orgCodes: string[]): Promise<void> {
+    const ds = await this.init();
+    await ds.transaction(async (m) => {
+      await m.getRepository(UsageFormDraftingDept).delete({ formId });
+      if (orgCodes.length === 0) return;
+      const repo = m.getRepository(UsageFormDraftingDept);
+      await repo.insert(
+        orgCodes.map((orgCode) => ({ id: randomUUID(), formId, orgCode })),
+      );
+    });
+  }
+
+  /** 單一表單之制定部門（依 orgCode 昇冪，`AC-N45` 之回填順序）。 */
+  async listDraftingDepts(formId: string): Promise<string[]> {
+    const ds = await this.init();
+    const rows = await ds
+      .getRepository(UsageFormDraftingDept)
+      .find({ where: { formId }, order: { orgCode: 'ASC' } });
+    return rows.map((r) => r.orgCode);
+  }
+
+  /**
+   * 批次版（清單富化，`AC-N47`）：單次 `IN` 查詢 ＋ JS 端分組，**零 N+1**
+   * （比照 §10.12「後端列富化」既有模式）。未關聯任何部門之表單不出現於回傳 Map，
+   * 由服務層補空陣列（0 筆為合法值）。
+   */
+  async listDraftingDeptsByForms(formIds: string[]): Promise<Map<string, string[]>> {
+    const out = new Map<string, string[]>();
+    if (formIds.length === 0) return out;
+    const ds = await this.init();
+    const rows = await ds
+      .getRepository(UsageFormDraftingDept)
+      .find({ where: { formId: In(formIds) }, order: { orgCode: 'ASC' } });
+    for (const r of rows) {
+      const list = out.get(r.formId);
+      if (list) list.push(r.orgCode);
+      else out.set(r.formId, [r.orgCode]);
+    }
+    return out;
   }
 }

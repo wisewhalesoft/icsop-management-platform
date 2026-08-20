@@ -65,6 +65,30 @@ const ICSOP_WRITABLE: Row = {
   User: 'FORBIDDEN',
 };
 
+/**
+ * 🔴 OJT 簽到表**專屬**列（F026 `AC-N22`，2026-08-20 D9 delta；`OQ-D9-19`／`OQ-D9-20`）：
+ * 主管／部門窗口可寫，其餘三格與 `ICSOP_WRITABLE` 逐格相同。
+ *
+ * **推翻範圍嚴格限於本列兩格**（`AC-N22`：20 欄 × 5 角色＝100 格，本輪僅 2 格改值）——
+ * F026 頂部定案「主管、部門窗口、系統管理員對所有文件欄位皆唯讀」對其餘 19 欄逐字仍然成立。
+ *
+ * 🔴 **為何新增一個具名 `Row` 常數而非在 `canWriteField()` 寫 `if` 特例**：矩陣本身已是
+ * 「欄位鍵 → Row」之資料驅動查表結構，改變行為只需改資料。呼叫鏈
+ * （`canWriteField` → `assertCanWriteDocumentAsset` → `AttachmentsService.uploadSingle`）
+ * **一個字元都不需要動**，`AC-N24`（19 欄回歸鎖定）之防護因此是**結構性**成立而非紀律性成立：
+ * 其餘 19 個欄位鍵仍指向原本的 `Row` 常數物件，不可能被本次改動波及。
+ *
+ * ⚠ `AC-N26`／`AC-N27`：SysAdmin 與 User 對 OJT 仍為 `FORBIDDEN`（`OQ-D9-24` 明文排除）。
+ * ⚠ 前端鏡射 `frontend/src/domain/field-matrix.ts` 須同步（§11.11 #24：兩份鏡射無自動交叉比對）。
+ */
+const OJT_WRITABLE: Row = {
+  SysAdmin: 'FORBIDDEN',
+  ICSOPAdmin: 'WRITABLE',
+  Supervisor: 'WRITABLE', // ← 本次唯一改值之兩格
+  DeptContact: 'WRITABLE', // ←
+  User: 'FORBIDDEN',
+};
+
 /** 系統產生欄位：一律忽略傳入值（不論角色，含 ICSOPAdmin）。 */
 const SYSTEM_GENERATED: Row = {
   SysAdmin: 'IGNORE',
@@ -100,7 +124,8 @@ export const FIELD_MATRIX: Record<string, Row> = {
   // F039：附錄（多）與使用表單（多）完全比照——ICSOPAdmin 可寫、其餘四角色唯讀（可下載）。
   [FieldKey.APPENDICES]: ICSOP_WRITABLE,
   [FieldKey.ANNOUNCE_DATE]: ICSOP_WRITABLE,
-  [FieldKey.OJT_SIGNIN]: ICSOP_WRITABLE,
+  // 🔴 D9 delta（`AC-N22`）：本輪唯一改指向之列——由 ICSOP_WRITABLE 改為 OJT_WRITABLE。
+  [FieldKey.OJT_SIGNIN]: OJT_WRITABLE,
   [FieldKey.DOCUMENT_NAME]: ICSOP_WRITABLE,
   [FieldKey.CONTENT_SUMMARY]: ICSOP_WRITABLE,
 };

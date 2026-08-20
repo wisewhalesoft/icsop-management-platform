@@ -29,6 +29,15 @@ import {
   DOCUMENT_CHANGE_PUBLISHER,
   DocumentChangePublisher,
 } from '../documents/document-change-event';
+import {
+  WATERMARK_BURNER,
+  WatermarkBurner,
+  WatermarkSession,
+  resolveAuditIdentity,
+} from '../public/watermark-burner.service';
+import { AuditWriter } from '../audit/audit.types';
+import { AuditWriterService } from '../audit/audit-writer.service';
+import { formatOfFileName } from '../public/watermark';
 
 /** 列表之固定回傳順序（供前端渲染順序穩定、避免依賴 store 插入序）。 */
 const LIST_ORDER: SingleAttachmentType[] = ['ICSOP_PDF', 'OJT_SIGNIN'];
@@ -38,6 +47,13 @@ export interface SessionContext {
   roleCode?: string;
   accountId?: string | null; // ← SessionUser.accountId（UUID，可能為 null 於未帶身分之邊界）
 }
+
+/**
+ * 🔴 D9 delta：需要浮水印身分之呼叫端 session（`AC-N14`／`AC-N18`／`AC-N31`）。
+ * 以 `Partial<Omit<WatermarkSession,'accountId'>>` 疊加，沿用本 repo 附錄／使用表單兩處之既有寫法
+ * ——既有只帶 `roleCode`／`accountId` 之呼叫端仍然合法（缺欄之快照欄位一律留空並由 §8.4 收合）。
+ */
+export type AttachmentSession = SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>;
 
 /** 上傳檔案描述（size 為權威中繼資料，不必等於 buffer.length，供大檔邊界測試）。 */
 export interface UploadFile {
@@ -106,6 +122,22 @@ export class AttachmentsService {
     @Optional()
     @Inject(DOCUMENT_CHANGE_PUBLISHER)
     private readonly changePublisher?: DocumentChangePublisher,
+    /**
+     * 🔴 D9 delta（§11.5／§11.6）：燒錄協作點。**`@Optional()` 刻意未加**——`AC-N14` 要求本服務
+     * 之受控下載一律燒錄，缺 provider 必須讓容器啟動失敗（`UnknownDependenciesException`），
+     * 而非靜默降級為「回未燒錄原件」。TS 型別之 `?` 保留，使既有純建構子單元測試
+     * （`new AttachmentsService(blob, store)`）繼續編譯通過。
+     */
+    @Inject(WATERMARK_BURNER)
+    private readonly burner?: WatermarkBurner,
+    /**
+     * 🔴 D9 delta（§11.6）：**直接注入 `AuditWriterService`，不經 `AuditRecorder` 間接層**——
+     * 本服務是新增此能力、無歷史包袱，且同時有**兩個**稽核呼叫點（受控下載 `AC-N17`、
+     * OJT 上傳 `AC-N31`），為兩者各維護一份 adapter 之間接層純屬多餘。
+     * （附錄／使用表單維持既有 `AuditRecorder` 間接層是為了不擴大改動面，非因該模式更優。）
+     */
+    @Inject(AuditWriterService)
+    private readonly auditWriter?: AuditWriter,
   ) {}
 
   /**
@@ -114,7 +146,7 @@ export class AttachmentsService {
    * 「列出」屬讀取操作，不受 F026 欄位面寫入矩陣管轄（唯讀角色可查看已有哪些附件）。
    */
   async listForDocument(
-    _session: SessionContext | undefined,
+    _session: AttachmentSession | undefined,
     documentId: string,
   ): Promise<DocumentAttachmentRecord[]> {
     if (this.documentStore) {
@@ -129,7 +161,7 @@ export class AttachmentsService {
 
   /** 上傳/覆蓋單份附件（ICSOP PDF 或 OJT 簽到表）。 */
   async uploadSingle(
-    session: SessionContext | undefined,
+    session: AttachmentSession | undefined,
     documentId: string,
     type: SingleAttachmentType,
     file: UploadFile,
@@ -199,7 +231,42 @@ export class AttachmentsService {
         );
       }
     }
+    // 9) 🔴 D9 delta（F016 `AC-N31`／`AC-N32`；F023 `AC-N50`）：**OJT 簽到表**之上傳於
+    //    **主管／部門窗口**執行時寫入一筆 `AUDIT_LOG`。
+    //
+    //    🔴 **角色不對稱是明文要求，不是實作裁量**（`AC-N32`）：ICSOPAdmin 執行完全相同之上傳
+    //    **不**寫入任何列——本事件之存在理由是「D9 破例開放之角色，其寫入行為需可追溯」，
+    //    ICSOPAdmin 之上傳屬既有職掌內的日常維護。
+    //    🔴 `type === 'OJT_SIGNIN'` 之守衛確保 ICSOP PDF 上傳（同一方法之另一分支）完全不受影響
+    //    （`AC-N33` 回歸鎖定：對這兩個角色仍無條件 `FIELD_WRITE_FORBIDDEN`，根本走不到這裡）。
+    //    落點在 service 層、緊接授權判定與寫入成功之後，與欄位矩陣判定同一次角色讀取——
+    //    寫在 controller 會讓「判角色」這件事分居兩處而漂移（§11.8）。
+    await this.auditOjtUpload(session, documentId, type);
     return record;
+  }
+
+  /** `AC-N31`／`AC-N32`：OJT 上傳之稽核（僅主管／部門窗口；非浮水印動作故快照為 null）。 */
+  private async auditOjtUpload(
+    session: AttachmentSession | undefined,
+    documentId: string,
+    type: SingleAttachmentType,
+  ): Promise<void> {
+    if (type !== 'OJT_SIGNIN') return;
+    const role = session?.roleCode;
+    if (role !== 'Supervisor' && role !== 'DeptContact') return;
+    if (!this.auditWriter) return;
+    const identity = await resolveAuditIdentity(this.burner, session as WatermarkSession);
+    await this.auditWriter.recordAccess({
+      targetType: 'DOCUMENT_ATTACHMENT',
+      actionType: 'ATTACHMENT_UPLOAD',
+      targetId: documentId,
+      actorId: session?.accountId ?? '',
+      actorName: session?.name ?? null,
+      ...identity,
+      // 上傳非浮水印動作（`AC-N31`）——型別已鎖為 null，此處為顯式落值而非省略。
+      watermarkSnapshot: null,
+      occurredAt: new Date(),
+    });
   }
 
   /**
@@ -214,11 +281,20 @@ export class AttachmentsService {
    * 順帶修好檔名：blobPath 末段為 `randomUUID()`（見 `buildAttachmentBlobPath`），
    * SAS 直連時使用者存到的是 `<uuid>.pdf`，原始檔名整個丟失。
    *
-   * 🔒 **F020 `AC-D4` 之後台 RAW 硬邊界未動**：本方法**不燒錄浮水印、不寫調閱稽核**，
-   * 僅換傳輸方式。燒錄與稽核只發生在前台專屬路徑（`/public/...`）。
+   * 🔴🔴 **2026-08-20 D9 delta（`OQ-D9-08` 選項 B）：後台 RAW 硬邊界已被全面推翻。**
+   *
+   * 📝 **被推翻之原註記逐字保留供追溯**：OLD> 「🔒 **F020 `AC-D4` 之後台 RAW 硬邊界未動**：
+   * 本方法**不燒錄浮水印、不寫調閱稽核**，僅換傳輸方式。燒錄與稽核只發生在前台專屬路徑。」
+   *
+   * 現行語意（`AC-N14`～`AC-N18`）：`format=pdf` → **一律燒錄**（策略 A：非 PDF 原檔直通，
+   * `AC-N15`）；**無例外角色**（含 ICSOPAdmin 本人，`AC-N16`）；浮水印身分＝**執行下載動作之
+   * 操作者本人**（非上傳者、非文件當責者，`AC-N18`）；**一律寫調閱稽核**（`AC-N17`）。
+   * 🔒 傳輸模式不變（`AC-N21`）：仍為後端代理串流，不核發 SAS。
+   * 🔒 授權語意不變（`AC-N19`）：未登入／參照失效仍為 `FILE_ACCESS_DENIED`，且**先於**
+   * 讀取位元組、燒錄與寫稽核（拒絕路徑不得留下稽核）。
    */
   async downloadAttachmentRaw(
-    session: SessionContext | undefined,
+    session: AttachmentSession | undefined,
     blobPath: string,
   ): Promise<AttachmentDownloadBytes> {
     if (!session?.accountId) {
@@ -228,19 +304,45 @@ export class AttachmentsService {
     if (!rec) {
       throw new NotFoundException('FILE_ACCESS_DENIED');
     }
-    const bytes = await this.blob.getBytes(blobPath);
+    const raw = await this.blob.getBytes(blobPath);
     // DB 有參照但 blob 不存在（人工刪檔／回收失誤）：與「參照不存在」同一對外錯誤碼，
     // 不以不同錯誤區分兩者（區分即洩漏「這筆參照確實存在」）。
-    if (!bytes) {
+    if (!raw) {
       throw new NotFoundException('FILE_ACCESS_DENIED');
     }
+    // §10.3：以上傳時已驗證之**檔名副檔名**為事實，不採 `rec.contentType`
+    // （該欄源自 multipart 之客戶端宣告）——燒錄與否之格式判定亦取同一份事實。
+    const format = formatOfFileName(rec.fileName);
+    const burned = this.burner
+      ? await this.burner.burnIfPdf(session as WatermarkSession, raw, format)
+      : { bytes: raw, snapshot: null };
+    // `AC-N17`：燒錄與否**不改變稽核義務**——非 PDF 同樣寫入，僅 `watermarkSnapshot` 為 null。
+    await this.auditDownload(session, rec.documentId, burned.snapshot);
     return {
-      bytes,
+      bytes: burned.bytes,
       fileName: rec.fileName,
-      // §10.3：以上傳時已驗證之**檔名副檔名**為事實，不採 `rec.contentType`
-      // （該欄源自 multipart 之客戶端宣告）。
       contentType: contentTypeOfFileName(rec.fileName),
     };
+  }
+
+  /** `AC-N17`：後台受控下載之調閱稽核（targetType=DOCUMENT，targetId＝該附件所屬文件）。 */
+  private async auditDownload(
+    session: AttachmentSession | undefined,
+    documentId: string,
+    watermarkSnapshot: string | null,
+  ): Promise<void> {
+    if (!this.auditWriter) return;
+    const identity = await resolveAuditIdentity(this.burner, session as WatermarkSession);
+    await this.auditWriter.recordAccess({
+      targetType: 'DOCUMENT',
+      actionType: 'DOWNLOAD',
+      targetId: documentId,
+      actorId: session?.accountId ?? '',
+      actorName: session?.name ?? null,
+      ...identity,
+      watermarkSnapshot,
+      occurredAt: new Date(),
+    });
   }
 
   /**

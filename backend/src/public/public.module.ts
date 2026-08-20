@@ -4,7 +4,6 @@ import { AuthModule } from '../auth/auth.module';
 import { RbacModule } from '../rbac/rbac.module';
 import { OrgDirectoryModule } from '../org-directory/org-directory.module';
 import { NameResolutionService } from '../org-directory/name-resolution.service';
-import { ORG_UNIT_READ_STORE } from '../org-directory/org-unit-read';
 import { AttachmentsModule } from '../attachments/attachments.module';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { StorageModule } from '../storage/storage.module';
@@ -25,17 +24,20 @@ import {
 } from './public-document-detail.service';
 import { PublicDocumentsController } from './public-documents.controller';
 import {
-  WATERMARK_DOC_META,
-  WATERMARK_ORG_LOOKUP,
   WATERMARK_PDF_SOURCE,
-  WatermarkDocMeta,
-  WatermarkOrgLookup,
   WatermarkPdfSource,
   WatermarkService,
 } from './watermark.service';
+import {
+  WATERMARK_BURNER,
+  WATERMARK_ORG_LOOKUP,
+  WatermarkBurnerService,
+  WatermarkOrgLookup,
+} from './watermark-burner.service';
+import { WatermarkBurnerModule } from './watermark-burner.module';
 import { WatermarkController } from './watermark.controller';
-import { PDF_BURNER, PdfBurner, PdfLibBurner } from './pdf-burner';
-import { AttachmentPdfSource, TypeOrmDocMeta } from './typeorm-watermark.sources';
+import { PdfBurner, PDF_BURNER } from './pdf-burner';
+import { AttachmentPdfSource } from './typeorm-watermark.sources';
 
 /**
  * 前台瀏覽模組（E06 / F019 清單、F020 浮水印）。
@@ -54,6 +56,9 @@ import { AttachmentPdfSource, TypeOrmDocMeta } from './typeorm-watermark.sources
     AttachmentsModule,
     StorageModule,
     AuditModule,
+    // 🔴 §11.5：燒錄協作點改由獨立模組提供（WATERMARK_ORG_LOOKUP／PDF_BURNER／
+    // WATERMARK_DOC_META 三個 provider 自本模組移出，改由 import 取得）。
+    WatermarkBurnerModule,
   ],
   controllers: [PublicDocumentsController, WatermarkController],
   providers: [
@@ -78,18 +83,20 @@ import { AttachmentPdfSource, TypeOrmDocMeta } from './typeorm-watermark.sources
       inject: [PUBLIC_DOCUMENT_STORE, DETAIL_NAME_RESOLVER],
     },
     // ── F020 浮水印 ──
-    { provide: WATERMARK_ORG_LOOKUP, useExisting: ORG_UNIT_READ_STORE },
-    { provide: PDF_BURNER, useFactory: (): PdfBurner => new PdfLibBurner() },
     {
       provide: WATERMARK_PDF_SOURCE,
       useFactory: (attachments: AttachmentsService, blob: BlobStore): WatermarkPdfSource =>
         new AttachmentPdfSource(attachments, blob),
       inject: [AttachmentsService, BLOB_STORE],
     },
-    {
-      provide: WATERMARK_DOC_META,
-      useFactory: (): WatermarkDocMeta => new TypeOrmDocMeta(AppDataSource),
-    },
+    /**
+     * 🔴 §11.5：改為**組合** —— `WatermarkService` 之 buildSnapshot／burnIfPdf／
+     * assertDocumentVisible 一律委派給 `WATERMARK_BURNER`（模組單例），三者不再有第二份實作。
+     *
+     * 🔴 **啟動期 fail-fast**：`useFactory` 之 `inject` 陣列不含 `@Optional()` 語意——
+     * `WATERMARK_BURNER` 若解析不到，Nest 於 `app.listen()` 之前即拋
+     * `UnknownDependenciesException`（`useFactory` 之注入預設即為必要）。
+     */
     {
       provide: WatermarkService,
       useFactory: (
@@ -97,14 +104,15 @@ import { AttachmentPdfSource, TypeOrmDocMeta } from './typeorm-watermark.sources
         pdf: WatermarkPdfSource,
         burner: PdfBurner,
         audit: AuditWriterService,
-        docMeta: WatermarkDocMeta,
-      ) => new WatermarkService(org, pdf, burner, audit, docMeta, () => new Date()),
+        burnerSvc: WatermarkBurnerService,
+      ) =>
+        new WatermarkService(org, pdf, burner, audit, undefined, () => new Date(), burnerSvc),
       inject: [
         WATERMARK_ORG_LOOKUP,
         WATERMARK_PDF_SOURCE,
         PDF_BURNER,
         AuditWriterService,
-        WATERMARK_DOC_META,
+        WATERMARK_BURNER,
       ],
     },
   ],

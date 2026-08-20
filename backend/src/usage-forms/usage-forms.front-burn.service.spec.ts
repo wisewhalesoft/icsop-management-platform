@@ -230,8 +230,10 @@ describe('F018 AC-D14：前台使用表單下載之稽核（PDF 已燒錄）', (
 
     expect(audit.events[0].watermarkSnapshot).toBe(viewerSnapshot);
     // 逐字形狀（與 F020 檢視器同一時刻所得相同；僅時間戳依當下產生）
+    // 🔴 2026-08-21 D9 delta（AC-N12；impl-be 申訴 2，經覆核＝屬實並裁決 A）：公司名稱欄改用簡稱。
+    // OLD> `E001-王小明-和潤企業股份有限公司-營運管理部-審查室-{機密聲明}-2026-08-16 10:00:00 (UTC+8)`
     expect(viewerSnapshot).toBe(
-      `E001-王小明-和潤企業股份有限公司-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-08-16 10:00:00 (UTC+8)`,
+      `E001-王小明-和潤企業-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-08-16 10:00:00 (UTC+8)`,
     );
   });
 });

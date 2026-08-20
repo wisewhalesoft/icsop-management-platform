@@ -37,15 +37,25 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
       lifecycleId = event.targetId;
       lifecycleName = event.targetNumber ?? null;
       break;
+    // 🔴 D9 delta（`AC-N17`）：`documentId` 自本輪起於「文件脈絡之下載」路徑落值
+    // （`downloadFormRaw()`），池管理頁脈絡（`downloadFromPool()`）維持 null。
+    // 📝 被推翻之既有落差逐字保留供追溯：OLD> 「USAGE_FORM 列之 AUDIT_LOG.documentId 恆為 null」
+    // ——該落差在「後台不寫稽核」之舊語意下無人受害，`AC-N17` 要求寫稽核後即不再成立。
     case 'USAGE_FORM':
       formId = event.targetId;
+      documentId = event.documentId ?? null;
+      documentNumber = event.targetNumber ?? null;
+      break;
+    // 🔴 D9 delta（F016 `AC-N31`）：OJT 上傳事件之 targetId 本身即為 documentId。
+    case 'DOCUMENT_ATTACHMENT':
+      documentId = event.targetId;
       documentNumber = event.targetNumber ?? null;
       break;
     // F039：附錄下載**同時**落地 appendixId 與 documentId（AC-27）——刻意不沿用
     // USAGE_FORM 分支之「單一 targetId」模式（該分支 documentId 恆 null 為既有落差）。
     case 'APPENDIX':
       appendixId = event.targetId;
-      documentId = event.documentId;
+      documentId = event.documentId ?? null;
       documentNumber = event.targetNumber ?? null;
       break;
   }

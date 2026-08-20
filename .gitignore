@@ -39,3 +39,7 @@ desktop.ini
 # Stryker mutation testing
 .stryker-tmp/
 reports/mutation/
+
+# pdf.js 之 CJK 渲染資源：由 frontend/scripts/copy-pdfjs-assets.mjs 於 prebuild 自 node_modules 產生，
+# 屬建置產物而非原始碼（architecture-spec §11.1／§11.11 #18）。
+frontend/public/pdfjs/

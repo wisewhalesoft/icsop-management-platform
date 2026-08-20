@@ -11,6 +11,8 @@ import { DOCUMENT_STORE, DocumentStore } from '../documents/documents.store';
 import { TypeOrmDocumentStore } from '../documents/typeorm-documents.store';
 import { DOCUMENT_CHANGE_PUBLISHER } from '../documents/document-change-event';
 import { ChangeHistoryModule } from '../change-history/change-history.module';
+import { AuditModule } from '../audit/audit.module';
+import { WatermarkBurnerModule } from '../public/watermark-burner.module';
 import { DocumentChangeLogPublisher } from '../change-history/document-change-log-publisher';
 
 /**
@@ -22,7 +24,23 @@ import { DocumentChangeLogPublisher } from '../change-history/document-change-lo
  * ATTACHMENT_STORE）形成模組循環相依。
  */
 @Module({
-  imports: [AuthModule, RbacModule, StorageModule, ChangeHistoryModule],
+  /**
+   * 🔴 §11.5／§11.6（v1.9）：新增 `WatermarkBurnerModule`（`AC-N14` 之燒錄能力）與 `AuditModule`
+   * （`AC-N17`／`AC-N31` 之稽核能力）。
+   *
+   * 🔴 **為何不是 import `PublicModule`**：`PublicModule` **已** import 本模組
+   * （`WATERMARK_PDF_SOURCE` 需要 `AttachmentsService` 讀附件位元組），反向 import 會構成
+   * `PublicModule → AttachmentsModule → PublicModule` 之模組循環（dep-cruiser `no-circular`
+   * 為 error 級 gate）。`WatermarkBurnerModule` 之零消費者相依正是為此而抽出。
+   */
+  imports: [
+    AuthModule,
+    RbacModule,
+    StorageModule,
+    ChangeHistoryModule,
+    AuditModule,
+    WatermarkBurnerModule,
+  ],
   controllers: [AttachmentsController],
   providers: [
     {

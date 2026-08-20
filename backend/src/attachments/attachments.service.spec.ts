@@ -652,8 +652,10 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
       await svc.downloadAttachmentRaw(SUP_SESSION, rec.blobPath);
 
       expect(pdfBurner.calls[0].snapshot).toBe(expected);
+      // 🔴 2026-08-21 D9 delta（AC-N12；impl-be 申訴 2，經覆核＝屬實並裁決 A）：公司名稱欄改用簡稱。
+      // OLD> `S001-陳主管-和潤企業股份有限公司-營運管理部-審查室-{機密聲明}-2026-08-20 10:00:00 (UTC+8)`
       expect(expected).toBe(
-        `S001-陳主管-和潤企業股份有限公司-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-08-20 10:00:00 (UTC+8)`,
+        `S001-陳主管-和潤企業-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-08-20 10:00:00 (UTC+8)`,
       );
     });
 

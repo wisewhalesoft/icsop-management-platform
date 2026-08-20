@@ -1,24 +1,30 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { AuditWriter } from '../audit/audit.types';
-import { resolveCompanyName } from '../org-directory/company-name';
-import { ViewerScope, isDeptScopedViewer, isDocVisibleToViewer } from '../rbac/viewer-scope';
+import { isDeptScopedViewer } from '../rbac/viewer-scope';
+import { WatermarkIdentity, formatOfFileName } from './watermark';
 import {
-  WatermarkIdentity,
-  buildWatermarkSnapshot,
-  departmentCodeCandidates,
-  deriveSectionName,
-  formatOfFileName,
-  formatWatermarkTimestamp,
-  supportsWatermark,
-} from './watermark';
+  DocMeta,
+  WatermarkBurnerService,
+  WatermarkDocMeta,
+  WatermarkOrgLookup,
+  WatermarkSession,
+} from './watermark-burner.service';
 
-/** 組織單位查找（結構相容 OrgUnitReadStore.findByOrgCode）。 */
-export interface WatermarkOrgLookup {
-  findByOrgCode(
-    orgCode: string,
-  ): Promise<{ tier: string; name: string; descFull: string | null } | null>;
-}
-export const WATERMARK_ORG_LOOKUP = Symbol('WATERMARK_ORG_LOOKUP');
+/**
+ * 🔴 §11.5：組織查找／文件中繼／呼叫者身分之型別與 token 已隨 `buildSnapshot()`／`burnIfPdf()`／
+ * `assertDocumentVisible()` 一併搬遷至 `watermark-burner.service.ts`（該檔為零消費者相依之
+ * 燒錄協作點）。此處 **re-export** 以保既有 import 路徑（`from './watermark.service'`）逐字不變——
+ * 既有生產程式碼與單元測試皆不需改動。
+ */
+export {
+  WATERMARK_DOC_META,
+  WATERMARK_ORG_LOOKUP,
+} from './watermark-burner.service';
+export type {
+  WatermarkDocMeta,
+  WatermarkOrgLookup,
+  WatermarkSession,
+} from './watermark-burner.service';
 
 /** 原始 PDF 位元組來源（生產＝getAttachmentRef + blob.getBytes；unit＝fake）。 */
 export interface WatermarkPdfSource {
@@ -34,95 +40,46 @@ export interface WatermarkPdfSource {
 }
 export const WATERMARK_PDF_SOURCE = Symbol('WATERMARK_PDF_SOURCE');
 
-/**
- * 文件顯示中繼（供稽核 targetNumber/targetName 快照；查無 → null）。
- *
- * F041（架構 §3.7 決策三(c)）：additive 擴充 `usingDeptIds`，供四個入口於取得原始 PDF 之前判定
- * 業務子分類之可見性。本相依因此**由「選填便利」升級為業務子分類路徑之安全關鍵相依**——
- * 缺省時對受限 viewer 一律 deny-by-default（見 `assertDocVisible`）。
- */
-export interface WatermarkDocMeta {
-  getDocMeta(documentId: string): Promise<{
-    documentNumber: string | null;
-    documentName: string | null;
-    usingDeptIds: string[];
-  } | null>;
-}
-export const WATERMARK_DOC_META = Symbol('WATERMARK_DOC_META');
-
-/**
- * 呼叫者身分（來自 request context SessionUser）。
- *
- * F041 刻意**不**直接改用 `ViewerScope` 型別：本介面另攜帶 accountId/employeeNo/name/companyCode
- * 等浮水印身分快照專屬欄位，與 `ViewerScope` 是「同一份 session 資料的兩種投影」（身分 vs 可見性），
- * 非同一實體——服務內部以 `toViewer()` 就地投影，不強行合併兩型別。
- */
-export interface WatermarkSession {
-  accountId: string;
-  employeeNo?: string | null;
-  name?: string | null;
-  companyCode: string;
-  orgCode?: string | null;
-  roleCode?: string | null;
-  /** F041 一般使用者子分類（`SessionGuard` 每請求以 DB 現行值填入）。 */
-  userSubtype?: string | null;
-}
-
 type DocumentAction = 'VIEW' | 'DOWNLOAD' | 'PRINT';
-
-/** `WatermarkDocMeta.getDocMeta()` 之回傳形狀（查無 → null）。 */
-type DocMeta = { documentNumber: string | null; documentName: string | null; usingDeptIds: string[] };
 
 /**
  * F020 浮水印服務：組裝快照（伺服器端唯一來源）＋ VIEW/DOWNLOAD/PRINT 編排。
  *  - 快照由 buildWatermarkSnapshot 純函式產生（欄位值：session 身分 + org 查找 + 公司全稱）。
- *  - VIEW：回疊加用快照字串（原始 PDF 另由 getOriginalPdf 代理，不燒錄、不提供無浮水印另存）。
+ *  - VIEW：回疊加用快照字串（原始 PDF 另由 getOriginalPdf 代理）。
  *  - DOWNLOAD/PRINT：讀原始 PDF → PdfBurner 燒錄 → 回燒錄後 buffer。
  *  - 三動作皆經 AuditWriter.recordAccess 記錄；稽核失敗**不阻斷**檔案取得（error-handling#audit）。
+ *
+ * 🔴 §11.5（決策 B5）：`buildSnapshot()`／`burnIfPdf()`／`assertDocumentVisible()` 三個公開方法
+ * 之**實作已搬遷**至 `WatermarkBurnerService`（零消費者相依之獨立模組），本類別改為**委派**。
+ * 對外仍是同一個類別、同一組公開方法、同一組建構子參數——`WatermarkController` 與既有單元測試
+ * 皆不需任何改動（建構子第 7 參數為選填之協作點覆寫，僅供 `PublicModule` 注入模組單例；
+ * 省略時由本類別以既有三個相依自行組合，行為完全相同）。
  */
 @Injectable()
 export class WatermarkService {
   private readonly logger = new Logger(WatermarkService.name);
 
+  /** §11.5：燒錄協作點（組合而非重複實作）。 */
+  private readonly burnerSvc: WatermarkBurnerService;
+
   constructor(
-    private readonly orgLookup: WatermarkOrgLookup,
+    orgLookup: WatermarkOrgLookup,
     private readonly pdfSource: WatermarkPdfSource,
     private readonly burner: { burnPdf(original: Buffer, snapshot: string): Promise<Buffer> },
     private readonly auditWriter: AuditWriter,
-    private readonly docMeta?: WatermarkDocMeta,
+    docMeta?: WatermarkDocMeta,
     private readonly clock: () => Date = () => new Date(),
-  ) {}
-
-  /** 組裝浮水印快照（檢視器疊加/PDF 燒錄/稽核快照三者之唯一共同來源）。 */
-  async buildSnapshot(
-    session: WatermarkSession,
-  ): Promise<{ snapshot: string; fields: WatermarkIdentity }> {
-    const orgCode = session.orgCode ?? null;
-    let sectionName = '';
-    let departmentFullName = '';
-    if (orgCode) {
-      const ownRow = await this.orgLookup.findByOrgCode(orgCode);
-      if (ownRow) sectionName = deriveSectionName(ownRow.tier, ownRow.name);
-      departmentFullName = (await this.resolveDeptFull(orgCode)) ?? '';
-    }
-    const fields: WatermarkIdentity = {
-      employeeNo: session.employeeNo ?? '',
-      name: session.name ?? '',
-      companyFullName: resolveCompanyName(session.companyCode) ?? '',
-      departmentFullName,
-      sectionName,
-      timestamp: formatWatermarkTimestamp(this.clock()),
-    };
-    return { snapshot: buildWatermarkSnapshot(fields), fields };
+    burnerSvc?: WatermarkBurnerService,
+  ) {
+    this.burnerSvc =
+      burnerSvc ?? new WatermarkBurnerService(orgLookup, burner, docMeta, this.clock);
   }
 
-  /** 部門 DESC_FULL 之 fallback 鏈（部層→本部層→Root；async 逐一查，命中即止）。 */
-  private async resolveDeptFull(orgCode: string): Promise<string | null> {
-    for (const code of departmentCodeCandidates(orgCode)) {
-      const row = await this.orgLookup.findByOrgCode(code);
-      if (row && row.descFull && row.descFull.trim() !== '') return row.descFull;
-    }
-    return null;
+  /** 組裝浮水印快照（檢視器疊加/PDF 燒錄/稽核快照三者之唯一共同來源）。§11.5 起委派。 */
+  buildSnapshot(
+    session: WatermarkSession,
+  ): Promise<{ snapshot: string; fields: WatermarkIdentity }> {
+    return this.burnerSvc.buildSnapshot(session);
   }
 
   /**
@@ -135,8 +92,8 @@ export class WatermarkService {
   ): Promise<{ watermark: string; documentNumber: string | null; documentName: string | null }> {
     // F041 AC-25：先取文件中繼（原本就要取，零額外查詢）→ 判定可見性 → 才組裝快照。
     // 拒絕路徑因此不執行 buildSnapshot（組織查找 0 次）、不寫任何稽核（AC-27／AC-28）。
-    const meta = await this.loadDocMeta(documentId);
-    this.assertDocVisible(session, meta);
+    const meta = await this.burnerSvc.loadDocMeta(documentId);
+    this.burnerSvc.assertDocVisible(session, meta);
     const { snapshot, fields } = await this.buildSnapshot(session);
     await this.audit(session, documentId, 'VIEW', snapshot, fields, meta);
     return {
@@ -146,58 +103,47 @@ export class WatermarkService {
     };
   }
 
-  /** 代理原始 PDF 位元組（供檢視器疊加預覽；不核發 SAS）。查無 → 404。 */
+  /**
+   * 🔴 **AC-N6（D9 delta，`OQ-D9-03`／`OQ-D9-32`）：本端點之位元組自本版起已燒錄浮水印。**
+   *
+   * 原行為（代理**未燒錄**之原始 PDF 供檢視器疊加預覽）經使用者裁決認定為**安全缺陷**——
+   * 瀏覽器開發者工具之 Network 面板可直接自本回應另存無浮水印之原件，使檢視器上的 DOM
+   * 疊加浮水印形同虛設。自本版起改回傳燒錄後位元組。
+   *
+   * 🔒 **不快取**（§11.3 決策 A）：每次呼叫各自獨立燒錄，時間戳一致性優先於效能——浮水印
+   * 含操作當下之時間戳與操作者身分，快取即等於把別人的浮水印發給下一個人。
+   * 🔒 錯誤路徑不變：來源查無 → 404 `DOCUMENT_PDF_NOT_FOUND`，且**於燒錄之前**（burnPdf 0 次）。
+   */
   async getOriginalPdf(session: WatermarkSession, documentId: string): Promise<Buffer> {
     // F041 AC-25／AC-26：受限 viewer 才需查中繼判定可見性（非受限者維持零額外查詢之現況）；
     // 不通過即於讀取任何位元組**之前**拒絕（WatermarkPdfSource.getOriginalPdf 呼叫次數 0）。
-    if (isDeptScopedViewer(this.toViewer(session))) {
-      this.assertDocVisible(session, await this.loadDocMeta(documentId));
+    if (isDeptScopedViewer(this.burnerSvc.toViewer(session))) {
+      this.burnerSvc.assertDocVisible(session, await this.burnerSvc.loadDocMeta(documentId));
     }
     const buf = await this.pdfSource.getOriginalPdf(documentId);
     if (!buf) throw new NotFoundException('DOCUMENT_PDF_NOT_FOUND');
-    return buf;
+    const { snapshot } = await this.buildSnapshot(session);
+    return this.burner.burnPdf(buf, snapshot);
   }
 
   /**
-   * 🔴 前台附屬檔案（附件／附錄／使用表單）之**單一共用協作點**（architecture-spec §10.1 末段）。
-   *
-   * F020 `AC-D2` 明訂三類檔案「適用同一規則、同一文案，不得分歧」，而三個 service 各寫一份
-   * `if (format === 'pdf')` 正是分歧的溫床（§10.16 風險 D7）——本 delta 開始時只有一處（附錄），
-   * 第二次閘門後變成三處，第四處（日後任何新附屬檔案類型）幾乎必然會漏。
-   *
-   *  - `format === 'pdf'` → 以 `buildSnapshot()`（與檢視器**同一份**快照來源）燒錄，回 `{bytes, snapshot}`。
-   *  - 非 PDF → **原封不動**回原始位元組，`snapshot` 為 `null`（正好對應 `AUDIT_LOG.watermarkSnapshot`
-   *    之落值規則，`AC-D5`），且**完全不組裝快照**（不做任何組織查找）。
-   *
-   * 🔒 本方法**不寫稽核**——稽核義務屬各消費端之既有 AC（F039 `AC-27`／F018 `AC-D14`），
-   * 且各自之 `targetType` 不同，集中於此反而會產生錯誤的事件型別。
+   * 🔴 附屬檔案（附件／附錄／使用表單／後台四端點）之**單一共用協作點**（§10.1 末段／§11.5）。
+   * 實作已搬遷至 `WatermarkBurnerService`，本方法為委派（既有呼叫端與測試不受影響）。
    */
-  async burnIfPdf(
+  burnIfPdf(
     session: WatermarkSession,
     bytes: Buffer,
     format: string,
   ): Promise<{ bytes: Buffer; snapshot: string | null }> {
-    // 🔴 與 DTO 之 `watermarkSupported` 旗標**共用同一個判定式**（`supportsWatermark`）——
-    // 兩處各算一次會出現「UI 說會燒、實際沒燒」而使用者只看得到 UI 那一半。
-    if (!supportsWatermark(format)) return { bytes, snapshot: null };
-    const { snapshot } = await this.buildSnapshot(session);
-    return { bytes: await this.burner.burnPdf(bytes, snapshot), snapshot };
+    return this.burnerSvc.burnIfPdf(session, bytes, format);
   }
 
   /**
-   * F041（F018 `AC-D22` ③／F039 同款）：**前台附屬檔案之可見性判定**——與附件路徑
-   * （`downloadAttachment`）共用同一份判定，供附錄／使用表單兩個服務經 `FrontBurner` 接縫呼叫。
-   *
-   * 🔴 為何開放為公開方法而非讓兩個服務各自注入 doc-meta：判定式一旦有第二份實作就會漂移，
-   * 且 `isDocVisibleToViewer` 之語意由 F019 `AC-D13` 的 arity 鎖釘死。三個消費端共用這一條路徑，
-   * 就不可能出現「附件擋、附錄不擋」的分歧（那正是本缺口的成因）。
-   * 🔴 非受限 viewer **不觸發任何查詢**（比照 `getOriginalPdf`）——受限者才付出一次 doc-meta 查詢。
-   * 不通過 → 404 `DOCUMENT_NOT_FOUND`（`OQ-E06-03`：隱藏存在性，非 403），由呼叫端在
-   * 讀取位元組／燒錄／寫稽核**之前**呼叫。
+   * F041（F018 `AC-D22` ③／F039 同款）：**附屬檔案之可見性判定**——與附件路徑
+   * （`downloadAttachment`）共用同一份判定。實作已搬遷至 `WatermarkBurnerService`，本方法為委派。
    */
-  async assertDocumentVisible(session: WatermarkSession, documentId: string): Promise<void> {
-    if (!isDeptScopedViewer(this.toViewer(session))) return;
-    this.assertDocVisible(session, await this.loadDocMeta(documentId));
+  assertDocumentVisible(session: WatermarkSession, documentId: string): Promise<void> {
+    return this.burnerSvc.assertDocumentVisible(session, documentId);
   }
 
   /** DOWNLOAD：讀原始 → 燒錄 → 回燒錄後 buffer；記錄 DOWNLOAD 稽核。 */
@@ -222,8 +168,8 @@ export class WatermarkService {
     documentId: string,
     type: 'ICSOP_PDF' | 'OJT_SIGNIN',
   ): Promise<{ bytes: Buffer; fileName: string; snapshot: string | null }> {
-    const meta = await this.loadDocMeta(documentId);
-    this.assertDocVisible(session, meta);
+    const meta = await this.burnerSvc.loadDocMeta(documentId);
+    this.burnerSvc.assertDocVisible(session, meta);
 
     const ref = this.pdfSource.getAttachmentBytes
       ? await this.pdfSource.getAttachmentBytes(documentId, type)
@@ -256,46 +202,14 @@ export class WatermarkService {
   ): Promise<{ pdf: Buffer; snapshot: string }> {
     // F041 AC-26：可見性判定置於 buildSnapshot／getOriginalPdf／burnPdf 之前——拒絕路徑不燒錄、
     // 不讀取原始位元組、不寫稽核。已取得之 meta 直接重用給 audit（沿用「不重複查詢」之既有節流）。
-    const meta = await this.loadDocMeta(documentId);
-    this.assertDocVisible(session, meta);
+    const meta = await this.burnerSvc.loadDocMeta(documentId);
+    this.burnerSvc.assertDocVisible(session, meta);
     const { snapshot, fields } = await this.buildSnapshot(session);
     const original = await this.pdfSource.getOriginalPdf(documentId);
     if (!original) throw new NotFoundException('DOCUMENT_PDF_NOT_FOUND');
     const pdf = await this.burner.burnPdf(original, snapshot);
     await this.audit(session, documentId, actionType, snapshot, fields, meta);
     return { pdf, snapshot };
-  }
-
-  /** 文件中繼一次取得（docMeta 未注入 → null；由 assertDocVisible 依 deny-by-default 處理）。 */
-  private async loadDocMeta(documentId: string): Promise<DocMeta | null> {
-    return this.docMeta ? await this.docMeta.getDocMeta(documentId) : null;
-  }
-
-  /** 浮水印身分 → 可見性判定所需之最小投影（架構 §3.7 決策三(c)）。 */
-  private toViewer(session: WatermarkSession): ViewerScope {
-    return {
-      roleCode: session.roleCode ?? null,
-      userSubtype: session.userSubtype ?? null,
-      orgCode: session.orgCode ?? null,
-    };
-  }
-
-  /**
-   * F041 AC-25／AC-26／AC-30（INV-3，後端服務層權威）：業務子分類 viewer 存取使用部門不相符之文件
-   * 一律拒絕，回既有 404 `DOCUMENT_NOT_FOUND`（OQ-E06-03 選項 A，隱藏存在性）。
-   *
-   * 🔴 架構風險#19（deny-by-default）：`docMeta` 未注入或查無 → **無法判定即不可見**，對受限 viewer
-   *    拒絕（非放行、非拋型別錯誤）。非受限 viewer 不受影響，沿用「meta 為 null 不影響回應」之既有容錯。
-   */
-  private assertDocVisible(session: WatermarkSession, meta: DocMeta | null): void {
-    const viewer = this.toViewer(session);
-    if (isDocVisibleToViewer(meta?.usingDeptIds ?? [], viewer)) return;
-    throw this.rejectDeptRestricted();
-  }
-
-  /** 與 PublicDocumentDetailService 同一隔離慣例：拒絕之唯一 throw 點（政策若改判 403 僅需改此處）。 */
-  private rejectDeptRestricted(): NotFoundException {
-    return new NotFoundException('DOCUMENT_NOT_FOUND');
   }
 
   /**
@@ -308,15 +222,11 @@ export class WatermarkService {
     actionType: DocumentAction,
     snapshot: string,
     fields: WatermarkIdentity,
-    metaArg?: { documentNumber: string | null; documentName: string | null } | null,
+    metaArg?: DocMeta | null,
   ): Promise<void> {
     try {
       const meta =
-        metaArg !== undefined
-          ? metaArg
-          : this.docMeta
-            ? await this.docMeta.getDocMeta(documentId)
-            : null;
+        metaArg !== undefined ? metaArg : await this.burnerSvc.loadDocMeta(documentId);
       await this.auditWriter.recordAccess({
         targetType: 'DOCUMENT',
         actionType,

@@ -104,8 +104,25 @@ export interface AppendixAuditEvent {
   targetType: 'APPENDIX';
   actionType: 'DOWNLOAD';
   appendixId: string;
-  documentId: string;
+  /** 🔴 D9 delta（`AC-N57`）：後台池管理頁下載無文件脈絡 ⇒ 允許 `null`（前台仍必填該文件 id）。 */
+  documentId: string | null;
   accountId: string;
+  /**
+   * 🔴 §11.6／§11.11 #20（D9 delta，`AC-N17`／`AC-N51`）：操作者身分快照五欄。
+   *
+   * **既有缺口之修正**：本 seam 過去只攜帶 `accountId`，`AuditWriterRecorder` 轉送時
+   * 其餘欄一律留空由 `AuditWriter` 補 `null` ⇒ `AUDIT_LOG` 之 `employeeNo`／`company`／
+   * `department`／`section`／`roleCode` 對本路徑之列**恆為 null**，已直接違反既有已核准之
+   * `AC-D5`／`AC-D14`（只是當時沒有測試證偽）。
+   *
+   * additive 選填：既有呼叫端（不帶身分欄者）不需同步改動，型別上仍合法。
+   */
+  employeeNo?: string | null;
+  company?: string | null;
+  department?: string | null;
+  section?: string | null;
+  roleCode?: string | null;
+
   /**
    * F020 `AC-D5`：前台下載之浮水印快照。PDF → 該次燒錄之字串；非 PDF → `null`
    * （策略 A：非 PDF 不做任何浮水印處理，故沒有快照可記）。additive 選填以免打爆既有呼叫端。

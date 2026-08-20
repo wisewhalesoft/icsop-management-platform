@@ -6,9 +6,11 @@ import { StorageModule } from '../storage/storage.module';
 import { AuditModule } from '../audit/audit.module';
 import { OrgDirectoryModule } from '../org-directory/org-directory.module';
 import { NameResolutionService } from '../org-directory/name-resolution.service';
-import { PublicModule } from '../public/public.module';
-import { WatermarkService } from '../public/watermark.service';
-import { FRONT_BURNER } from '../appendices/appendices.service';
+import { WatermarkBurnerModule } from '../public/watermark-burner.module';
+import {
+  WATERMARK_BURNER,
+  WatermarkBurnerService,
+} from '../public/watermark-burner.service';
 import { UsageFormsController } from './usage-forms.controller';
 import { UsageFormsService } from './usage-forms.service';
 import {
@@ -26,8 +28,18 @@ import { AuditWriterRecorder } from './audit-writer-recorder.adapter';
  * 調閱稽核收集器＝AuditWriterRecorder（轉接真實 AuditWriterService，落地 AUDIT_LOG，經 Outbox 非阻斷）。
  */
 @Module({
-  /** `PublicModule` 提供前台協作點 `WatermarkService`（理由與反循環說明同 `AppendicesModule`）。 */
-  imports: [AuthModule, RbacModule, StorageModule, AuditModule, OrgDirectoryModule, PublicModule],
+  /**
+   * 🔴 §11.5（v1.9）：燒錄協作點由 `PublicModule` 改為 **`WatermarkBurnerModule`**（零消費者
+   * 相依之獨立模組，反循環自本版起為結構性保證）。理由與 `AppendicesModule` 逐字相同。
+   */
+  imports: [
+    AuthModule,
+    RbacModule,
+    StorageModule,
+    AuditModule,
+    OrgDirectoryModule,
+    WatermarkBurnerModule,
+  ],
   controllers: [UsageFormsController],
   providers: [
     {
@@ -45,7 +57,9 @@ import { AuditWriterRecorder } from './audit-writer-recorder.adapter';
     },
     { provide: UPLOADER_ORG_RESOLVER, useExisting: NameResolutionService },
     /** F018 `AC-D11`／`AC-D22` ③：前台使用表單之燒錄與可見性判定（同一 token，說明見附錄模組）。 */
-    { provide: FRONT_BURNER, useExisting: WatermarkService },
+    // 🔴 §11.5：改由 `WatermarkBurnerModule` 之 `WatermarkBurnerService` 直接提供，
+    // 不再間接經過 `PublicModule` 之 `WatermarkService`。
+    { provide: WATERMARK_BURNER, useExisting: WatermarkBurnerService },
     UsageFormsService,
   ],
 })

@@ -54,6 +54,11 @@ export interface UsageFormPoolItem extends UsageFormRecord {
   uploadedByName?: string | null;
   /** G-ADM-024 上傳者部門名（accountId → orgCode → ORG_UNIT.name）；未解析→null。 */
   uploadedByDept?: string | null;
+  /**
+   * 🔴 D9 delta（`AC-N47`）：制定部門之 `orgCode` 陣列，依 orgCode 昇冪；0 筆為合法值（空陣列）。
+   * additive **選填**（不打爆既有 store 替身與 fixture）；由服務層批次富化，避免 N+1。
+   */
+  draftingDeptCodes?: string[];
 }
 
 /**
@@ -98,6 +103,20 @@ export interface FormPoolStore {
   updateFormNumber?(formId: string, formNumber: string | null): Promise<UsageFormRecord>;
   delete(formId: string): Promise<void>;
 
+  // ── 🔴 D9 delta：制定部門（多值，USAGE_FORM_DRAFTING_DEPT，`AC-N45`／`AC-N47`）──
+  /**
+   * replace-set 語意（delete-then-insert，單一交易）：完全取代該表單之制定部門集合，**非累加**。
+   * 傳入空陣列＝清空（0 筆為合法狀態，非錯誤）。比照 F014 多值欄位之既有模式。
+   *
+   * 選填宣告沿用本 repo「既有 store 介面加方法一律 additive optional」之慣例（不打爆既有替身）；
+   * 未提供時「編輯制定部門」拋錯，**不得**靜默忽略——靜默忽略會讓使用者以為存檔成功。
+   */
+  replaceDraftingDepts?(formId: string, orgCodes: string[]): Promise<void>;
+  /** 單一表單之制定部門（依 orgCode 昇冪）。 */
+  listDraftingDepts?(formId: string): Promise<string[]>;
+  /** 批次版（清單富化用，避免 N+1）：formId → orgCode[]（各自昇冪）。未關聯者不出現於 Map。 */
+  listDraftingDeptsByForms?(formIds: string[]): Promise<Map<string, string[]>>;
+
   // 多對多關聯（documentId ↔ formId）
   /** 某表單目前被幾份文件引用（覆蓋/刪除門檻判定）。 */
   countLinks(formId: string): Promise<number>;
@@ -119,8 +138,25 @@ export interface UsageFormAuditEvent {
   targetType: 'USAGE_FORM';
   actionType: 'DOWNLOAD';
   formId: string;
-  documentId: string;
+  /** 🔴 D9 delta（`AC-N51`）：後台池管理頁下載無文件脈絡 ⇒ 允許 `null`（其餘路徑仍帶文件 id）。 */
+  documentId: string | null;
   accountId: string;
+  /**
+   * 🔴 §11.6／§11.11 #20（D9 delta，`AC-N17`／`AC-N51`）：操作者身分快照五欄。
+   *
+   * **既有缺口之修正**：本 seam 過去只攜帶 `accountId`，`AuditWriterRecorder` 轉送時
+   * 其餘欄一律留空由 `AuditWriter` 補 `null` ⇒ `AUDIT_LOG` 之 `employeeNo`／`company`／
+   * `department`／`section`／`roleCode` 對本路徑之列**恆為 null**，已直接違反既有已核准之
+   * `AC-D5`／`AC-D14`（只是當時沒有測試證偽）。
+   *
+   * additive 選填：既有呼叫端（不帶身分欄者）不需同步改動，型別上仍合法。
+   */
+  employeeNo?: string | null;
+  company?: string | null;
+  department?: string | null;
+  section?: string | null;
+  roleCode?: string | null;
+
   /** F020 `AC-D5`：前台下載之浮水印快照（PDF 落值、非 PDF 為 `null`）。 */
   watermarkSnapshot?: string | null;
 }

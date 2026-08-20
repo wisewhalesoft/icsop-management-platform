@@ -6,10 +6,13 @@ import { StorageModule } from '../storage/storage.module';
 import { AuditModule } from '../audit/audit.module';
 import { OrgDirectoryModule } from '../org-directory/org-directory.module';
 import { NameResolutionService } from '../org-directory/name-resolution.service';
-import { PublicModule } from '../public/public.module';
-import { WatermarkService } from '../public/watermark.service';
+import { WatermarkBurnerModule } from '../public/watermark-burner.module';
+import {
+  WATERMARK_BURNER,
+  WatermarkBurnerService,
+} from '../public/watermark-burner.service';
 import { AppendicesController } from './appendices.controller';
-import { AppendicesService, FRONT_BURNER } from './appendices.service';
+import { AppendicesService } from './appendices.service';
 import {
   APPENDIX_POOL_STORE,
   AUDIT_RECORDER,
@@ -32,11 +35,18 @@ import { AuditWriterRecorder } from './audit-writer-recorder.adapter';
  */
 @Module({
   /**
-   * 🔴 `PublicModule` 提供前台協作點 `WatermarkService`（燒錄＋F041 可見性判定）。
-   * 反循環無虞：`PublicModule` 之 imports 為 Auth／Rbac／OrgDirectory／Attachments／Storage／Audit，
-   * **不含**本模組（唯一 import 本模組者為 `AppModule`）。
+   * 🔴 §11.5（v1.9）：燒錄協作點由 `PublicModule` 改為 **`WatermarkBurnerModule`**（零消費者相依
+   * 之獨立模組）。反循環自本版起是**結構性**保證而非「查過 imports 清單」之紀律性保證——
+   * `WatermarkBurnerModule` 只 import `OrgDirectoryModule`，不可能 import 回本模組。
    */
-  imports: [AuthModule, RbacModule, StorageModule, AuditModule, OrgDirectoryModule, PublicModule],
+  imports: [
+    AuthModule,
+    RbacModule,
+    StorageModule,
+    AuditModule,
+    OrgDirectoryModule,
+    WatermarkBurnerModule,
+  ],
   controllers: [AppendicesController],
   providers: [
     {
@@ -62,7 +72,10 @@ import { AuditWriterRecorder } from './audit-writer-recorder.adapter';
      * 未燒錄之原始位元組、`watermarkSnapshot` 恆為 `null`。單元測試以位置參數自建 fake burner，
      * 故該缺口在測試層完全不可見（`@Optional()` 的代價）。
      */
-    { provide: FRONT_BURNER, useExisting: WatermarkService },
+    // 🔴 §11.5：由 `PublicModule` 之 `WatermarkService` 改為 `WatermarkBurnerModule` 之
+    // `WatermarkBurnerService`——不再需要間接經過 `WatermarkService`（本模組從不使用其
+    // `view`／`download` 等前台編排能力），且解除對 `PublicModule` 之整體相依。
+    { provide: WATERMARK_BURNER, useExisting: WatermarkBurnerService },
     AppendicesService,
   ],
   exports: [AppendicesService],

@@ -23,6 +23,11 @@ export function kindToTargetTypes(kind: AuditKind): AuditTargetType[] {
       return ['LIFECYCLE'];
     case '變更':
       return ['DOCUMENT_CHANGE_LOG', 'LIFECYCLE_CHANGE_LOG'];
+    // 🔴 D9 delta（`AC-N69`，`OQ-D9-34`）：第四種類型篩選值，**獨佔** DOCUMENT_ATTACHMENT。
+    // 🔒 上方三個既有分支一格未動——「文件」不含 DOCUMENT_ATTACHMENT 是**排除**面，
+    // 本 case 是**篩出**面；兩面必須各自成立（只驗其一不足以證明另一面）。
+    case '上傳':
+      return ['DOCUMENT_ATTACHMENT'];
   }
 }
 

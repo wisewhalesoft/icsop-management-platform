@@ -16,7 +16,12 @@ import {
   extensionOf,
 } from '../storage/file-rules';
 import { assertCanWriteDocumentAsset } from '../storage/document-asset-authz';
-import type { WatermarkSession } from '../public/watermark.service';
+import {
+  WATERMARK_BURNER,
+  WatermarkBurner,
+  WatermarkSession,
+  resolveAuditIdentity,
+} from '../public/watermark-burner.service';
 import { supportsWatermark } from '../public/watermark';
 import {
   CsvColumn,
@@ -106,24 +111,14 @@ export interface AppendixDownloadBytes {
   contentType: string;
 }
 
-/** 前台燒錄協作點之窄口徑（實作為 `WatermarkService`；附錄與使用表單共用同一 token）。 */
-export const FRONT_BURNER = Symbol('FRONT_BURNER');
-export interface FrontBurner {
-  burnIfPdf(
-    session: WatermarkSession,
-    bytes: Buffer,
-    format: string,
-  ): Promise<{ bytes: Buffer; snapshot: string | null }>;
-  /**
-   * F041（F018 `AC-D22` ③／F039 同款）：業務子分類 viewer 之可見性判定，不符者拋 404
-   * `DOCUMENT_NOT_FOUND`。實作為 `WatermarkService.assertDocumentVisible`——**與附件路徑同一份判定**。
-   *
-   * 🔴 宣告為**選填**：既有純建構單測以位置參數自建 fake burner（不含本方法），設為必填會讓
-   * 每個 harness 皆需同步改動。未提供 ⇒ 不做判定（僅可能發生於未注入真實 `WatermarkService`
-   * 之單元測試；production 兩個模組皆以 `useExisting: WatermarkService` 提供）。
-   */
-  assertDocumentVisible?(session: WatermarkSession, documentId: string): Promise<void>;
-}
+/**
+ * 🔴 §11.5（2026-08-20 D9 delta）：本檔原持有之 `FRONT_BURNER` token 與 `FrontBurner` 介面
+ * **已搬遷並更名**為 `WATERMARK_BURNER`／`WatermarkBurner`（`public/watermark-burner.service.ts`）。
+ *
+ * **更名理由**：`AC-N14` 起後台四條下載端點亦為消費者，名稱中的「Front」已與語意脫節，會誤導
+ * 下一位工程師以為它只用於前台。**搬遷理由**：附錄與使用表單此前各自宣告一份結構同形的介面
+ * （「兩處必須逐字同形」是紀律性保證），搬到零相依之共用模組後只剩一份，結構上不可能漂移。
+ */
 
 /**
  * 附錄之允許格式 → 回應 Content-Type（白名單既定，不接受客戶端宣告）。
@@ -196,9 +191,19 @@ export class AppendicesService {
      * 三處（附件／附錄／使用表單）一律呼叫同一個 `burnIfPdf`，不各寫一份 `if (format === 'pdf')`。
      * 選填以免破壞既有純建構單測（未注入 → 前台一律回原始位元組、快照為 null）。
      */
-    @Optional()
-    @Inject(FRONT_BURNER)
-    private readonly frontBurner?: FrontBurner,
+    /**
+     * 🔴 **`@Optional()` 已移除**（§11.5：啟動期 fail-fast）。上一輪 `FRONT_BURNER` 曾**從未被
+     * 任何模組 provide**，而注入處寫了 `@Optional()` ⇒ 燒錄整段靜默跳過、單元測試全綠、
+     * 使用者以為有浮水印其實一個字都沒燒。移除後，若 `AppendicesModule` 忘記 import
+     * `WatermarkBurnerModule` 或漏註冊 provider，Nest 於 `app.listen()` **之前**即拋
+     * `UnknownDependenciesException`、程序非 0 結束。
+     *
+     * ⚠ TS 型別之 `?` **保留**：`@Optional()`（Nest 容器解析行為）與 `?`（編譯期）是兩個獨立
+     * 的旋鈕。既有純建構子單元測試（`new AppendicesService(blob, store, audit, checker)`）完全
+     * 繞過 Nest 容器，故移除 `@Optional()` 對它們零影響。
+     */
+    @Inject(WATERMARK_BURNER)
+    private readonly burner?: WatermarkBurner,
   ) {}
 
   /**
@@ -476,16 +481,52 @@ export class AppendicesService {
    * 🔒 RAW 語意逐字未動（`AC-D4`）：**不**呼叫 `burnIfPdf`、**不**寫稽核——只換傳輸方式。
    */
   async downloadFromPool(
-    session: SessionContext | undefined,
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
     appendixId: string,
   ): Promise<AppendixDownloadBytes> {
     this.assertCanRead(session?.roleCode);
     const appendix = await this.requireAppendix(appendixId);
-    const bytes = await this.blob.getBytes(appendix.blobPath);
+    const raw = await this.blob.getBytes(appendix.blobPath);
     // DB 有參照但 blob 不存在 → 與「附錄不存在」同一對外錯誤碼（區分兩者即洩漏參照存在）。
-    if (!bytes) throw new NotFoundException('APPENDIX_NOT_FOUND');
+    if (!raw) throw new NotFoundException('APPENDIX_NOT_FOUND');
     // §10.3：格式以上傳時已驗證之 `format` 欄為權威，不採客戶端宣告之 content-type。
-    return { bytes, fileName: appendix.name, contentType: contentTypeOf(appendix.format) };
+    // AC-N56／AC-N15：策略 A 於後台亦適用——PDF 燒錄、非 PDF 原檔直通。
+    // AC-N16／AC-N18：無例外角色，浮水印身分＝執行下載動作之操作者本人。
+    const burned = this.burner
+      ? await this.burner.burnIfPdf(session as WatermarkSession, raw, appendix.format)
+      : { bytes: raw, snapshot: null };
+    // AC-N57：一律寫稽核；documentId 為 null（池管理頁脈絡無所屬文件）。
+    await this.recordDownload(session, appendixId, null, burned.snapshot);
+    return {
+      bytes: burned.bytes,
+      fileName: appendix.name,
+      contentType: contentTypeOf(appendix.format),
+    };
+  }
+
+  /**
+   * 附錄下載稽核之**單一組裝點**（前台 `downloadAppendix` 與後台 `downloadFromPool` 共用）。
+   *
+   * 🔴 兩條路徑共用同一組裝點，是為了不讓「身分快照欄要不要帶」這件事在兩處各自演化——
+   * `AC-N17`／`AC-D5` 對兩條路徑之要求逐字相同，只有 `documentId` 之落值不同（前台＝來源文件、
+   * 後台池管理頁＝null）。
+   */
+  private async recordDownload(
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
+    appendixId: string,
+    documentId: string | null,
+    watermarkSnapshot: string | null,
+  ): Promise<void> {
+    const identity = await resolveAuditIdentity(this.burner, session as WatermarkSession);
+    await this.audit.record({
+      targetType: 'APPENDIX',
+      actionType: 'DOWNLOAD',
+      appendixId,
+      documentId,
+      accountId: session?.accountId ?? '',
+      ...identity,
+      watermarkSnapshot,
+    });
   }
 
   /**
@@ -507,7 +548,7 @@ export class AppendicesService {
     await this.requireDocument(documentId);
     // F041：業務子分類 viewer 對使用部門不相符之文件 → 404 DOCUMENT_NOT_FOUND，且**先於**
     // 讀取任何位元組、燒錄與寫稽核（拒絕路徑不得留下稽核，亦不得洩漏附錄是否存在）。
-    await this.frontBurner?.assertDocumentVisible?.(session as WatermarkSession, documentId);
+    await this.burner?.assertDocumentVisible?.(session as WatermarkSession, documentId);
     const linked = await this.store.listByDocument(documentId);
     const appendix = linked.find((a) => a.id === appendixId);
     if (!appendix) throw new NotFoundException('APPENDIX_NOT_FOUND');
@@ -515,18 +556,11 @@ export class AppendicesService {
     // 🔴 §10.3：格式判定一律以**上傳時已通過白名單驗證之伺服器端事實**（`APPENDIX_POOL.format`）
     // 為權威，絕不採 client-supplied `content-type`——後者等同讓上傳者宣告「我這份 PDF 不是 PDF」。
     const raw = (await this.blob.getBytes(appendix.blobPath)) ?? Buffer.alloc(0);
-    const burned = this.frontBurner
-      ? await this.frontBurner.burnIfPdf(session as WatermarkSession, raw, appendix.format)
+    const burned = this.burner
+      ? await this.burner.burnIfPdf(session as WatermarkSession, raw, appendix.format)
       : { bytes: raw, snapshot: null };
 
-    await this.audit.record({
-      targetType: 'APPENDIX',
-      actionType: 'DOWNLOAD',
-      appendixId,
-      documentId,
-      accountId: session.accountId,
-      watermarkSnapshot: burned.snapshot,
-    });
+    await this.recordDownload(session, appendixId, documentId, burned.snapshot);
     return {
       bytes: burned.bytes,
       fileName: appendix.name,

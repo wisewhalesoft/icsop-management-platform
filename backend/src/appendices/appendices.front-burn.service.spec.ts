@@ -170,8 +170,10 @@ describe('AppendicesService 前台附錄下載（F039 AC-D1／AC-D2；F020 AC-D1
     await svc.downloadAppendix(VIEWER, 'doc-1', 'ax-pdf');
 
     expect(burner.calls[0].snapshot).toBe(viewerSnapshot);
+    // 🔴 2026-08-21 D9 delta（AC-N12；impl-be 申訴 2，經覆核＝屬實並裁決 A）：公司名稱欄改用簡稱。
+    // OLD> `E001-王小明-和潤企業股份有限公司-營運管理部-審查室-{機密聲明}-2026-08-16 10:00:00 (UTC+8)`
     expect(viewerSnapshot).toBe(
-      `E001-王小明-和潤企業股份有限公司-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-08-16 10:00:00 (UTC+8)`,
+      `E001-王小明-和潤企業-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-08-16 10:00:00 (UTC+8)`,
     );
   });
 
@@ -367,13 +369,44 @@ describe('D9 delta — 後台附錄管理頁個別下載改為一律燒錄＋寫
     expect(audit.events[0].watermarkSnapshot).toBeNull();
   });
 
+  /**
+   * 🔴 2026-08-21 修正（impl-be 申訴，經 test-generator 覆核＝屬實，就地改寫）：本檔頂層之
+   * `ICSOP_ADMIN`／`SYS_ADMIN`（`:96-97`）僅含 `roleCode`／`accountId` 兩鍵，而
+   * `buildWatermarkSnapshot` 之六個組字來源（`employeeNo`／`name`／`companyFullName`／
+   * `departmentFullName`／`sectionName`／`timestamp`）**沒有一個**來自 `roleCode`／`accountId`
+   * ——用這兩個共用夾具驗證「不同操作者→不同快照」是「三種 fixture 缺陷」第三種（初值＝目標值）
+   * 之鏡像形態：無論實作是否正確使用操作者本人身分，兩次 `buildSnapshot` 於這兩個夾具下必然逐字
+   * 相同，`not.toBe` 恆紅，本案原本沒有鑑別力。
+   * 📝 **被取代之原夾具用法逐字保留供追溯**：OLD> `const byAdmin = await svc.downloadFromPool(ICSOP_ADMIN, 'ax-pdf');`
+   *   OLD> `const bySys = await svc.downloadFromPool(SYS_ADMIN, 'ax-pdf');`
+   * 修法：比照 `attachments.service.spec.ts` 之 `SUP_SESSION`／`DC_SESSION` 慣例，本案專用兩個
+   * 補齊六欄來源之夾具（僅本案使用，不動同檔其餘沿用 `ICSOP_ADMIN`／`SYS_ADMIN` 之案，那些案之
+   * 標的與快照內容無關）。
+   */
   it('AC-N18 浮水印身分＝操作者本人：ICSOPAdmin 與 SysAdmin 分別下載同一份 PDF → 燒錄字串與位元組皆不相等', async () => {
     const rec = recordOf();
     const { svc, blob, burner } = makeHarness([rec]);
     await blob.put(rec.blobPath, PDF_BYTES, 'application/pdf');
 
-    const byAdmin = await svc.downloadFromPool(ICSOP_ADMIN, 'ax-pdf');
-    const bySys = await svc.downloadFromPool(SYS_ADMIN, 'ax-pdf');
+    const icsopAdminWm: SessionContext & WatermarkSession = {
+      accountId: 'admin-1',
+      roleCode: 'ICSOPAdmin',
+      employeeNo: 'A001',
+      name: '李管理',
+      companyCode: 'AS',
+      orgCode: 'JAC00',
+    };
+    const sysAdminWm: SessionContext & WatermarkSession = {
+      accountId: 'sys-1',
+      roleCode: 'SysAdmin',
+      employeeNo: 'S900',
+      name: '吳系統',
+      companyCode: 'AS',
+      orgCode: 'JA000',
+    };
+
+    const byAdmin = await svc.downloadFromPool(icsopAdminWm, 'ax-pdf');
+    const bySys = await svc.downloadFromPool(sysAdminWm, 'ax-pdf');
 
     expect(burner.calls).toHaveLength(2);
     expect(burner.calls[0].snapshot).not.toBe(burner.calls[1].snapshot);

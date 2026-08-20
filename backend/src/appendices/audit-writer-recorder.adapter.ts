@@ -21,6 +21,20 @@ import { AppendixAuditEvent, AuditRecorder } from './appendices.store';
  * recordAccess 內部經 Outbox 非阻斷入列（§5.5）；本 record 不吞例外，由呼叫端決定
  * （AppendicesService 於下載成功後才呼叫，權限/歸屬把關在前）。
  */
+/**
+ * 🔴🔴 **2026-08-21 修正既有缺口**（architecture-spec §11.6／§11.11 #20）：本轉接器過去
+ * **完全未轉送** `employeeNo`／`company`／`department`／`section`／`roleCode`／`watermarkSnapshot`
+ * 六個欄位——即便呼叫端已正確組出 `watermarkSnapshot`，adapter 在轉送前把它丟棄了。
+ *
+ * **為何過去測不到**（同型結構性盲區，比照 §10.10 CJK 字型 bug）：既有單元測試以**替身**
+ * `AuditRecorder` 驗證「服務層有沒有算對」，從未經過本轉接器；`AuditAccessEvent` 之這些欄位
+ * 皆為選填 ⇒ 編譯期亦不示警。此缺口已違反既有已核准之 `AC-D5`／`AC-D14`，
+ * 並且是 `AC-N17`／`AC-N51`（後台燒錄下載寫入正確身分快照）之必要前提。
+ *
+ * 🔴 `watermarkSnapshot` 以 `?? null` 顯式落值（非 `undefined`）：`undefined` 會讓
+ * `buildAuditRow` 之 `?? null` 看似補上，但「本來就沒有快照」與「快照被丟掉了」在資料層
+ * 無法區分——顯式 null 是「非 PDF ⇒ 無快照」之**斷言**，不是預設值。
+ */
 @Injectable()
 export class AuditWriterRecorder implements AuditRecorder {
   constructor(private readonly writer: AuditWriterService) {}
@@ -30,8 +44,15 @@ export class AuditWriterRecorder implements AuditRecorder {
       targetType: 'APPENDIX',
       actionType: event.actionType,
       targetId: event.appendixId,
-      documentId: event.documentId,
+      // AC-N57：後台池管理頁脈絡無所屬文件 ⇒ null（前台仍為該次下載之來源文件 id）。
+      documentId: event.documentId ?? null,
       actorId: event.accountId,
+      employeeNo: event.employeeNo ?? null,
+      company: event.company ?? null,
+      department: event.department ?? null,
+      section: event.section ?? null,
+      roleCode: event.roleCode ?? null,
+      watermarkSnapshot: event.watermarkSnapshot ?? null,
       occurredAt: new Date(),
     });
   }
