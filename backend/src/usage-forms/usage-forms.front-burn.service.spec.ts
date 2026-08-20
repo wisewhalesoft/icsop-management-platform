@@ -278,6 +278,97 @@ describe('F018 AC-D14：前台使用表單下載之稽核（非 PDF 未燒錄）
   });
 });
 
+/**
+ * 🔴🔴 D9 delta（2026-08-20，`OQ-D9-08` 選項 B，全面推翻 `OQ-FM-01`）：後台受控下載改為一律
+ * 燒錄＋寫稽核。權威：docs/specs/features/F020-watermark.md#backend-burn-delta `AC-N14`～`AC-N18`；
+ * docs/specs/features/F023-audit-logging.md#d9-audit-delta `AC-N51`。
+ *
+ * 📌 **本檔（burner 已於 `makeHarness()` 第 6 參數注入）為驗證「後台下載 PDF 格式時是否真的燒錄」
+ * 之正確載體**——`usage-forms.service.spec.ts` 之 bare `svc`（未注入 burner）僅能驗證非 PDF 半段
+ * （格式驅動、不受 D9 影響），PDF 燒錄之正向斷言必須在本檔（見該檔對應案之取捨說明）。
+ *
+ * 📌 **`downloadFormRaw()` 符號名之來源**：architecture-spec.md §11.6 表列「
+ * `GET /documents/:documentId/usage-forms/:formId/download`（後台唯讀／編輯頁） →
+ * `UsageFormsService.downloadFormRaw()`（`usage-forms.service.ts:422-431`）」——此為架構文件
+ * 明文指名之既有方法（非本檔臆造）。⚠ **本檔對此符號名之風險提示**：本 repo 既有測試（`TS-FM-003`／
+ * `TS-FM-004`，見 `usage-forms.service.spec.ts` 之「RBAC — AC6 主管/部門窗口下載允許」describe）
+ * 顯示 Supervisor／DeptContact 角色**目前**經由 `downloadForm()`（前台方法）取得使用表單，與
+ * architecture 描述之「`downloadFormRaw()` 為後台唯讀/編輯頁專屬方法」存在名稱/歸屬上的落差——
+ * 若 `downloadFormRaw()` 於實作中並不存在或與 `downloadForm()` 為同一方法，請走 mailbox 向
+ * test-generator 申訴，由 test-generator 統一改寫（不得由實作端自行決定取捨何者為準）。
+ */
+describe('D9 delta — 後台受控下載改為一律燒錄＋寫稽核（AC-N14／AC-N51；全面推翻 OQ-FM-01）', () => {
+  it('AC-N14 downloadFromPool（表單池管理頁）PDF 下載 → burnPdf 恰呼叫 1 次，回傳已燒錄位元組', async () => {
+    const { svc, burner } = makeHarness();
+    const rec = await svc.uploadForm(ICSOP_ADMIN, PDF_FILE());
+
+    const out = await svc.downloadFromPool(ICSOP_ADMIN, rec.id);
+
+    expect(burner.calls).toHaveLength(1);
+    expect(out.bytes.equals(PDF_BYTES)).toBe(false); // 燒錄必然改變位元組
+  });
+
+  it('AC-N15 downloadFromPool 非 PDF（xlsx）→ 策略 A 於後台亦適用：burnPdf 呼叫次數為 0', async () => {
+    const { svc, burner } = makeHarness();
+    const rec = await svc.uploadForm(ICSOP_ADMIN, XLSX_FILE());
+
+    const out = await svc.downloadFromPool(ICSOP_ADMIN, rec.id);
+
+    expect(burner.calls).toHaveLength(0);
+    expect(out.bytes.equals(XLSX_BYTES)).toBe(true);
+  });
+
+  it('AC-N51 downloadFromPool PDF 下載成功 → AUDIT_LOG 恰新增一筆，documentId 為 null（池管理頁脈絡）、watermarkSnapshot 落值', async () => {
+    const { svc, audit, burner } = makeHarness();
+    const rec = await svc.uploadForm(ICSOP_ADMIN, PDF_FILE());
+
+    await svc.downloadFromPool(ICSOP_ADMIN, rec.id);
+
+    expect(audit.events).toHaveLength(1);
+    const e = audit.events[0];
+    expect(e.targetType).toBe('USAGE_FORM');
+    expect(e.actionType).toBe('DOWNLOAD');
+    expect(e.formId).toBe(rec.id);
+    expect(e.documentId ?? null).toBeNull();
+    expect(e.watermarkSnapshot).toBe(burner.calls[0].snapshot);
+  });
+
+  it('AC-N16 無例外角色：SysAdmin 自後台下載同一份 PDF → 同樣取得已燒錄位元組（burnPdf 呼叫次數為 1）', async () => {
+    const { svc, burner } = makeHarness();
+    const rec = await svc.uploadForm(ICSOP_ADMIN, PDF_FILE());
+    const sys: SessionContext = { roleCode: 'SysAdmin', accountId: 'sys-1' };
+
+    await svc.downloadFromPool(sys, rec.id);
+
+    expect(burner.calls).toHaveLength(1);
+  });
+
+  /**
+   * 🔴 `downloadFormRaw()`——見本 describe 檔頭關於此符號名來源與風險之說明。若此方法於
+   * 實作中不存在（TS2339），視為前述風險已兌現，屬需經 mailbox 申訴之情形，非測試本身之錯誤。
+   */
+  it('AC-N14／AC-N51 downloadFormRaw（後台唯讀/編輯頁下載，architecture §11.6 明文指名）PDF → 燒錄 1 次且寫稽核，documentId 落列', async () => {
+    const { svc, audit, burner } = makeHarness();
+    const rec = await svc.uploadForm(ICSOP_ADMIN, PDF_FILE());
+    await svc.linkForms(ICSOP_ADMIN, 'doc-42', [rec.id]);
+    audit.events.length = 0; // 排除上傳/關聯路徑之干擾
+
+    // ⚠ 呼叫慣例經實跑探測校正（見檔頭風險提示）：`downloadFormRaw` 之第 2 參數為 `formId`
+    // （非 `documentId`）——`requireForm(formId)` 內部以此參數查表，與 `downloadFromPool(session,
+    // formId)` 同慣例，非 `downloadForm(session, documentId, formId)` 之三參數慣例。
+    const svcAny = svc as unknown as {
+      downloadFormRaw: (session: SessionContext, formId: string, documentId?: string) => Promise<{ bytes: Buffer }>;
+    };
+    const supervisor: SessionContext = { roleCode: 'Supervisor', accountId: 'sup-1' };
+    const out = await svcAny.downloadFormRaw(supervisor, rec.id, 'doc-42');
+
+    expect(burner.calls).toHaveLength(1);
+    expect(out.bytes.equals(PDF_BYTES)).toBe(false);
+    expect(audit.events).toHaveLength(1);
+    expect(audit.events[0].documentId).toBe('doc-42');
+  });
+});
+
 describe('F018 AC-D14：失敗路徑不得留下稽核（既有語意不變）', () => {
   it('TS-F018-D14-007 未登入（無 accountId）→ FILE_ACCESS_DENIED，不燒錄、不寫稽核', async () => {
     const { svc, audit, burner } = makeHarness();

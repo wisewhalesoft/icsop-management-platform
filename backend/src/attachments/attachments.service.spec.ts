@@ -14,6 +14,9 @@ import {
   DocumentChangedEvent,
 } from '../documents/document-change-event';
 import { canPerform, FunctionKey } from '../rbac/function-matrix';
+import { WatermarkService, WatermarkOrgLookup, WatermarkSession } from '../public/watermark.service';
+import { WATERMARK_CONFIDENTIALITY } from '../public/watermark';
+import { AuditAccessEvent, AuditWriter } from '../audit/audit.types';
 
 /** 比照 documents.service.spec 之 FakeStore 風格：記憶體維護 DOCUMENT_ATTACHMENT 單份列。 */
 class FakeAttachmentStore implements AttachmentStore {
@@ -89,6 +92,103 @@ const pdf = (over: Partial<UploadFile> = {}): UploadFile => ({
   size: 2 * 1024 * 1024,
   ...over,
 });
+
+/**
+ * 🔴 D9 delta（2026-08-20，OQ-D9-08 全面推翻 OQ-FM-01／OQ-D18-01）：後台燒錄協作點假體。
+ *
+ * 📌 **本環對 `AttachmentsService` 建構子擴充之契約性假設（test-generator 依 architecture-spec.md
+ * §11.5／§11.6 訂立，非讀取實作決定）**：建構子新增第 5／6 參數＝`burner?: WatermarkBurner`／
+ * `auditWriter?: AuditWriterService`（TS 型別維持選填 `?`，僅 NestJS DI 層之 `@Optional()` 裝飾器
+ * 被移除以達成啟動期 fail-fast——見 §11.5「兩個獨立的旋鈕」）。既有呼叫端（`new AttachmentsService(blob, store)`
+ * 等 2～4 參數呼叫）**因此不受影響、繼續編譯通過**。若 tdd-implementation 之注入位置或形狀不同，
+ * 請走 mailbox 向 test-generator 申訴，由 test-generator 修改本檔（實作端不得自行改測試）。
+ *
+ * 📌 `burner` 之形狀＝`WatermarkBurner`（`burnIfPdf`／`buildSnapshot`／`assertDocumentVisible`，
+ * §11.5 已定案）——比照本 repo `appendices.front-burn.service.spec.ts`／
+ * `usage-forms.front-burn.service.spec.ts` 之既有慣例，直接注入一個真實 `WatermarkService`
+ * 實例（其對外方法形狀與 `WatermarkBurner` 結構相容），而非另建假體，以取得真實之
+ * `buildSnapshot`／`burnIfPdf` 組字邏輯（已由 `watermark.burn-if-pdf.spec.ts` 驗證正確）。
+ * `auditWriter` 之形狀＝`AuditWriter`（`recordAccess`），與 `AttachmentsService` 直接注入
+ * `AuditWriterService`（非既有 `AuditRecorder` 間接層，§11.6 之明文選擇）結構相容。
+ */
+const ORG_D9 = {
+  JAC00: { tier: 'SECTION', name: '營管部/審查室', descFull: '營運管理部審查室' },
+  JA000: { tier: 'DEPARTMENT', name: '營運管理部', descFull: '營運管理部' },
+};
+function fakeOrgD9(): WatermarkOrgLookup {
+  return {
+    findByOrgCode: (code) =>
+      Promise.resolve((ORG_D9 as Record<string, { tier: string; name: string; descFull: string | null }>)[code] ?? null),
+  };
+}
+class FakePdfBurner {
+  calls: { original: Buffer; snapshot: string }[] = [];
+  burnPdf(original: Buffer, snapshot: string): Promise<Buffer> {
+    this.calls.push({ original, snapshot });
+    return Promise.resolve(Buffer.concat([Buffer.from(`BURNED[${snapshot}]`), original]));
+  }
+}
+class NoopAuditWriterD9 implements AuditWriter {
+  recordAccess(_e: AuditAccessEvent): Promise<void> {
+    return Promise.resolve();
+  }
+  queryHistory(): never {
+    throw new Error('n/a');
+  }
+  processOutboxRetry(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+class FakeAuditWriterD9 implements AuditWriter {
+  events: AuditAccessEvent[] = [];
+  recordAccess(event: AuditAccessEvent): Promise<void> {
+    this.events.push(event);
+    return Promise.resolve();
+  }
+  queryHistory(): never {
+    throw new Error('n/a');
+  }
+  processOutboxRetry(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+const T0_D9 = new Date('2026-08-20T02:00:00Z'); // → 10:00:00 (UTC+8)
+const SUP_SESSION: SessionContext & WatermarkSession = {
+  accountId: 'sup-1',
+  roleCode: 'Supervisor',
+  employeeNo: 'S001',
+  name: '陳主管',
+  companyCode: 'AS',
+  orgCode: 'JAC00',
+};
+const DC_SESSION: SessionContext & WatermarkSession = {
+  accountId: 'dc-1',
+  roleCode: 'DeptContact',
+  employeeNo: 'D001',
+  name: '林窗口',
+  companyCode: 'AS',
+  orgCode: 'JAC00',
+};
+
+/** 建構一組已注入燒錄協作點＋稽核之 harness（供 D9 backend-burn／OJT delta 兩區塊共用）。 */
+function makeD9Harness() {
+  const blobD9 = new FakeBlobStore();
+  const storeD9 = new FakeAttachmentStore();
+  const pdfBurner = new FakePdfBurner();
+  const auditWriter = new FakeAuditWriterD9();
+  const watermark = new WatermarkService(
+    fakeOrgD9(),
+    { getOriginalPdf: () => Promise.resolve(null) },
+    pdfBurner,
+    new NoopAuditWriterD9(),
+    undefined,
+    () => T0_D9,
+  );
+  // 第 3／4 參數為既有選填之 documentStore／changePublisher（本組用不到，傳 undefined）；
+  // 第 5／6 參數＝本檔頭契約所訂之 burner／auditWriter。
+  const svc = new AttachmentsService(blobD9, storeD9, undefined, undefined, watermark, auditWriter);
+  return { svc, blob: blobD9, store: storeD9, pdfBurner, auditWriter, watermark };
+}
 
 describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
   let blob: FakeBlobStore;
@@ -283,6 +383,149 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
   });
 
   /**
+   * 🔴 D9 delta（2026-08-20，缺失／變更 delta 第 8 項；`OQ-D9-19`～`OQ-D9-24`）：OJT 簽到表上傳
+   * 開放主管／部門窗口——**推翻 F026 頂部定案，推翻範圍嚴格限於 OJT 一欄**。
+   * 權威：docs/specs/features/F016-pdf-ojt-attachment.md#ojt-role-open-delta `AC-N28`～`AC-N35`；
+   * architecture-spec.md §11.8（服務層授權判定不需改動，矩陣本身已是資料驅動查表——本描述區塊
+   * 之上傳測試因此天然依賴 `field-matrix.ts` 之 `OJT_WRITABLE` 常數，見 `rbac/field-matrix.spec.ts`
+   * `AC-N22`～`AC-N27`）。
+   *
+   * 📌 端點不變：仍為既有 `POST /admin/documents/:documentId/attachments/ojt`（即本檔之
+   * `svc.uploadSingle(session, documentId, 'OJT_SIGNIN', file)`），路由層閘門維持
+   * `ICSOP_DOCUMENT_MANAGEMENT` read（對 Supervisor/DeptContact 本即通過）——實際放行/攔阻
+   * 全由服務層 `assertCanWriteDocumentAsset` 依矩陣格值判定，本區塊之測試因此直接呼叫
+   * `svc.uploadSingle`（不重複測路由層 metadata，那屬 controller-routes 之既有覆蓋範圍）。
+   */
+  describe('D9 delta — OJT 簽到表上傳角色開放（AC-N28～AC-N35）', () => {
+    it('AC-N28 Supervisor 上傳 OJT（合法 pdf，目標文件無既有 OJT）→ 成功，不回 FIELD_WRITE_FORBIDDEN／PERMISSION_DENIED', async () => {
+      const rec = await svc.uploadSingle(SUP_SESSION, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' }));
+      expect(rec.type).toBe('OJT_SIGNIN');
+      expect(blob.putCalls).toHaveLength(1);
+    });
+
+    it('AC-N28 DeptContact 上傳 OJT（合法 jpg）→ 成功', async () => {
+      const rec = await svc.uploadSingle(DC_SESSION, DOC, 'OJT_SIGNIN', {
+        fileName: 'signin.jpg',
+        contentType: 'image/jpeg',
+        size: 1024,
+      });
+      expect(rec.type).toBe('OJT_SIGNIN');
+    });
+
+    it('AC-N29 可覆蓋既有 OJT（不論原上傳者為 ICSOPAdmin 或他人）：Supervisor 覆蓋 ICSOPAdmin 上傳之 OJT → 成功、恆 1 份、無版本歷史', async () => {
+      const r1 = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', pdf({ fileName: 'by-admin.pdf' }));
+      const r2 = await svc.uploadSingle(SUP_SESSION, DOC, 'OJT_SIGNIN', pdf({ fileName: 'by-sup.pdf' }));
+      expect(r2.id).toBe(r1.id); // 同一列覆蓋
+      expect(r2.blobPath).not.toBe(r1.blobPath);
+      const current = await svc.getAttachmentRef(DOC, 'OJT_SIGNIN');
+      expect(current?.blobPath).toBe(r2.blobPath);
+      expect(await store.findByBlobPath(r1.blobPath)).toBeNull(); // 舊參照失效、無版本歷史
+    });
+
+    /**
+     * 🔴 AC-N30（不限權責範圍，`OQ-D9-21` 選項 A，負向鎖定）：Supervisor 之 `orgCode` 與目標文件
+     * 完全無交集，仍必須成功——實作不得新增任何子樹範圍檢查（`isWithinSubtree` 或同義判定）於此路徑。
+     */
+    it('AC-N30 Supervisor（orgCode 與文件毫無關聯）上傳該文件之 OJT → 仍然成功（不得新增子樹範圍檢查）', async () => {
+      const unrelated: SessionContext & WatermarkSession = {
+        accountId: 'sup-unrelated',
+        roleCode: 'Supervisor',
+        employeeNo: 'S999',
+        name: '無關主管',
+        companyCode: 'AS',
+        orgCode: 'ZZ999', // 與 DOC 之當責室長/使用部門毫無交集之任意代碼
+      };
+      const rec = await svc.uploadSingle(unrelated, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' }));
+      expect(rec.type).toBe('OJT_SIGNIN');
+    });
+
+    /**
+     * AC-N31（🔴 寫入稽核）——與 F023 `AC-N50` 同一份契約：`actionType='ATTACHMENT_UPLOAD'`、
+     * `targetType='DOCUMENT_ATTACHMENT'`（🔴 2026-08-20 第二輪就地修訂，`OQ-D9-29`；非 `DOCUMENT`）、
+     * `documentId` 落列、身分快照＝執行上傳者本人、`watermarkSnapshot=null`（非浮水印動作）。
+     */
+    it('AC-N31 Supervisor 上傳 OJT 成功 → AUDIT_LOG 恰新增一筆，actionType=ATTACHMENT_UPLOAD／targetType=DOCUMENT_ATTACHMENT', async () => {
+      const { svc: svcD9, auditWriter } = makeD9Harness();
+      await svcD9.uploadSingle(SUP_SESSION, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' }));
+
+      expect(auditWriter.events).toHaveLength(1);
+      const e = auditWriter.events[0];
+      expect(e.actionType).toBe('ATTACHMENT_UPLOAD');
+      expect(e.targetType).toBe('DOCUMENT_ATTACHMENT');
+      expect(e.targetId).toBe(DOC);
+      expect(e.watermarkSnapshot).toBeNull();
+      expect(e.actorId).toBe('sup-1');
+    });
+
+    it('AC-N31 DeptContact 上傳 OJT 成功 → 同樣寫稽核（身分快照為部門窗口本人）', async () => {
+      const { svc: svcD9, auditWriter, watermark } = makeD9Harness();
+      await svcD9.uploadSingle(DC_SESSION, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' }));
+
+      expect(auditWriter.events).toHaveLength(1);
+      const { fields } = await watermark.buildSnapshot(DC_SESSION);
+      expect(auditWriter.events[0].employeeNo).toBe(fields.employeeNo);
+    });
+
+    /**
+     * 🔴 AC-N32（角色不對稱，`OQ-D9-23` 之直接後果，已提報 `OQ-D9-29`）：ICSOPAdmin 執行完全相同
+     * 之上傳操作 → 不寫入任何 AUDIT_LOG 列。本條刻意把不對稱寫成可測之明文，非實作者之自由裁量。
+     */
+    it('AC-N32（🔴 角色不對稱）ICSOPAdmin 上傳 OJT 成功 → 不寫入任何 AUDIT_LOG 列（AuditWriter 完全未被呼叫）', async () => {
+      const { svc: svcD9, auditWriter } = makeD9Harness();
+      await svcD9.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' }));
+
+      expect(auditWriter.events).toHaveLength(0);
+    });
+
+    /**
+     * 🔴 AC-N33（🔒 ICSOP PDF 上傳仍拒——回歸鎖定，同一支 controller 上兩條相鄰路由、期望值相反）：
+     * 這正是「開一個洞、鬆一片牆」最可能發生之處——同一 describe 內對照 OJT（放行）與 ICSOP PDF（仍拒）。
+     */
+    it.each([
+      ['Supervisor', SUP_SESSION as SessionContext],
+      ['DeptContact', DC_SESSION as SessionContext],
+    ])('AC-N33 %s 上傳/取代 ICSOP PDF（非 OJT）→ 仍為 FIELD_WRITE_FORBIDDEN，不寫入 Blob、不建立附件、不寫稽核', async (_label, session) => {
+      const { svc: svcD9, blob: blobD9, store: storeD9, auditWriter } = makeD9Harness();
+      await expect(svcD9.uploadSingle(session, DOC, 'ICSOP_PDF', pdf())).rejects.toThrow(
+        'FIELD_WRITE_FORBIDDEN',
+      );
+      expect(blobD9.putCalls).toHaveLength(0);
+      expect(storeD9.rows).toHaveLength(0);
+      expect(auditWriter.events).toHaveLength(0);
+    });
+
+    it('AC-N34 系統管理員上傳 OJT → FIELD_WRITE_FORBIDDEN（OQ-D9-24 明文排除，不因 D9 而放行）', async () => {
+      await expect(
+        svc.uploadSingle({ roleCode: 'SysAdmin', accountId: 'sys-1' }, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' })),
+      ).rejects.toThrow('FIELD_WRITE_FORBIDDEN');
+    });
+
+    it('AC-N34 一般使用者上傳 OJT → PERMISSION_DENIED（路由層，功能面無存取）', async () => {
+      await expect(
+        svc.uploadSingle({ roleCode: 'User', accountId: 'u1' }, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' })),
+      ).rejects.toThrow('PERMISSION_DENIED');
+    });
+
+    it('AC-N35 🔒 既有驗證不因角色而異：Supervisor 上傳不允許格式（exe）→ FILE_FORMAT_NOT_ALLOWED，不建立、未 put', async () => {
+      await expect(
+        svc.uploadSingle(SUP_SESSION, DOC, 'OJT_SIGNIN', {
+          fileName: 'x.exe',
+          contentType: 'application/x-msdownload',
+          size: 10,
+        }),
+      ).rejects.toThrow('FILE_FORMAT_NOT_ALLOWED');
+      expect(blob.putCalls).toHaveLength(0);
+    });
+
+    it('AC-N35 🔒 既有驗證不因角色而異：DeptContact 上傳超過大小上限 → FILE_SIZE_EXCEEDED，未 put', async () => {
+      await expect(
+        svc.uploadSingle(DC_SESSION, DOC, 'OJT_SIGNIN', pdf({ size: MAX_FILE_SIZE_BYTES + 1 })),
+      ).rejects.toThrow('FILE_SIZE_EXCEEDED');
+      expect(blob.putCalls).toHaveLength(0);
+    });
+  });
+
+  /**
    * 🔴 **2026-08-17：本區塊由「核發 SAS URL」改寫為「代理串流」**（F020 `AC-D3a` 之後台側修訂；
    * 缺失修正第 5／6 項）。原作法前端以 `window.open(sasUrl)` 導覽至 `*.blob.core.windows.net`，
    * Chrome Safe Browsing 出示「偵測到危險網站」紅底攔截頁，使用者根本下載不到檔案。
@@ -361,40 +604,148 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
   });
 
   /**
-   * F026 AC6 Edge Case × OQ-FM-01 —— 後台附件下載為 **RAW（不燒錄）** 之既定管理存取行為。
+   * 🔴🔴 D9 delta（2026-08-20，`OQ-D9-08` 選項 B）——**本段落就地反向重寫，取代原「RAW 不燒錄」
+   * 基準線，比照 `AC-F17` 之既有處置慣例保留原文供追溯，不得刪除**。
    *
-   * 人類裁決（2026-07-24，field-matrix track）：後台（主管/部門窗口/ICSOPAdmin 經
-   * DocumentReadonlyPage/DocumentEditPage）下載 ICSOP PDF，一律取得**原始檔位元組**、
-   * **不燒錄浮水印**；浮水印燒錄與調閱稽核僅發生於前台檢視器路徑
-   * （F020 WatermarkController）。理由：後台為管理存取（原件），前台為消費存取（可追溯燒錄件）；
-   * 且使用表單常為 .xlsx（無法燒錄 PDF 浮水印）。F026 spec 之 AC6 Edge Case 舊措辭（暗示後台會燒錄）
-   * 已依裁決更正為「後台提供原始檔案」。
+   * 舊裁決（2026-07-24，field-matrix track；`OQ-FM-01`）：後台受控下載一律 RAW、不燒錄、不寫稽核。
+   * **`OQ-FM-01` 與 `OQ-D18-01`（2026-08-16 再次確認維持有效）已於 2026-08-20 由 `OQ-D9-08`
+   * （使用者裁決，選項 B）全面推翻**：後台文件本體／附件（ICSOP PDF／OJT）／附錄／使用表單之全部
+   * 下載端點一律燒錄浮水印，且無例外角色（`OQ-D9-09` 選項 B，含 ICSOPAdmin）、一律寫稽核
+   * （`OQ-D9-10` 選項 A）。
    *
-   * 📝 **2026-08-17 措辭更正**：本段原寫「一律核發指向原始 blob 之短效期 SAS URL，伺服器端
-   * **不經手位元組**」——傳輸模式已改為代理串流（F020 `AC-D3a` 後台側修訂），伺服器現在確實
-   * 經手位元組。**裁決本身（RAW、不燒錄、不寫稽核）一格未動**；被更正的只是它當時的實作載體。
+   * 權威：docs/specs/features/F020-watermark.md#backend-burn-delta `AC-N14`（一律燒錄）／
+   * `AC-N15`（策略 A 於後台亦適用）／`AC-N16`（無例外角色）／`AC-N17`（寫稽核）／`AC-N18`（身分＝操作者本人）。
    *
-   * 本區塊測試因此為**永久之既定行為測試（非暫時性 characterization）**：作為「後台不接線 PdfBurner」
-   * 之回歸防線。
+   * 📝 **被推翻之原斷言逐字保留供追溯（`OQ-FM-01`／`OQ-D18-01` 已失效，不得再照抄執行）**：
+   *   OLD> `const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());`
+   *   OLD> `const original = blob.blobs.get(rec.blobPath)!.content;`
+   *   OLD> `const sup: SessionContext = { roleCode: 'Supervisor', accountId: 'sup1' };`
+   *   OLD> `const out = await svc.downloadAttachmentRaw(sup, rec.blobPath);`
+   *   OLD> `expect(out.bytes).toEqual(original); // 逐位元組等於上傳原件 ⇒ 未經任何燒錄轉換`
+   *   OLD> `expect(blob.urlCalls).toHaveLength(0);`
+   *   OLD> `expect(blob.putCalls).toHaveLength(1);`
+   *   OLD> `expect(AttachmentsService.length).toBe(4); // 無 burner，天生不具燒錄能力`
+   *
+   * ⚠ **末條 arity 斷言（`length === 4`）之結論已被 `OQ-D9-08` 直接推翻**——建構子新增
+   * `burner?`／`auditWriter?` 兩參數後 arity 變為 6；比照 `usage-forms.service.spec.ts` 同型案例之
+   * 既有處置（該檔已刪除對應之 arity 斷言），本檔亦不再斷言 arity 數值，改由本檔頭之建構子契約
+   * 段落持有（見上方 `makeD9Harness` 之注解）。
    */
-  describe('後台原始下載（RAW，不燒錄）為既定管理存取行為（OQ-FM-01 人類裁決）', () => {
-    it('TS-FM-001 後台受控下載回**原始**位元組（與上傳原件逐位元組相同），且不呼叫任何燒錄函式', async () => {
+  describe('D9 delta — 後台受控下載改為一律燒錄＋寫稽核（AC-N14／AC-N15／AC-N16／AC-N17／AC-N18；全面推翻 OQ-FM-01／OQ-D18-01）', () => {
+    it('AC-N14 PDF 附件經後台受控下載 → burnPdf 恰呼叫 1 次，回傳已燒錄位元組（非原始）', async () => {
+      const { svc, blob, pdfBurner } = makeD9Harness();
       const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());
       const original = blob.blobs.get(rec.blobPath)!.content;
-      const sup: SessionContext = { roleCode: 'Supervisor', accountId: 'sup1' };
 
-      const out = await svc.downloadAttachmentRaw(sup, rec.blobPath);
+      const out = await svc.downloadAttachmentRaw(SUP_SESSION, rec.blobPath);
 
-      // 逐位元組等於上傳原件 ⇒ 未經任何燒錄轉換。燒錄必然改變位元組，故本斷言即為 RAW 之證明
-      // （比原本「回傳的 URL 字串等於 fake 樣板」更直接：那只證明沒動 URL，沒證明沒動內容）。
-      expect(out.bytes).toEqual(original);
-      // 未核發任何 SAS，且未寫入任何新 blob（無 put → 非重建燒錄件後另存）。
-      expect(blob.urlCalls).toHaveLength(0);
-      expect(blob.putCalls).toHaveLength(1); // 僅上傳原件那一次；下載未再寫入燒錄件
-      // 結構回歸防線：AttachmentsService 建構子＝blob/store/documentStore?/changePublisher?
-      // （後者為 F037 附件替換變更事件，非燒錄相依）——**無 burner**，服務層天生不具燒錄能力
-      //（若日後有人接上 PdfBurner，此斷言將破而示警）。arity 隨 F037 相依由 3→4。
-      expect(AttachmentsService.length).toBe(4);
+      expect(pdfBurner.calls).toHaveLength(1);
+      expect(pdfBurner.calls[0].original.equals(original)).toBe(true);
+      expect(out.bytes.equals(original)).toBe(false); // 燒錄必然改變位元組 ⇒ 非 RAW 之直接證明
+    });
+
+    it('AC-N14 燒錄字串與同一使用者同一時刻經 buildSnapshot 所得逐字相同（快照唯一來源）', async () => {
+      const { svc, pdfBurner, watermark } = makeD9Harness();
+      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());
+      const { snapshot: expected } = await watermark.buildSnapshot(SUP_SESSION);
+
+      await svc.downloadAttachmentRaw(SUP_SESSION, rec.blobPath);
+
+      expect(pdfBurner.calls[0].snapshot).toBe(expected);
+      expect(expected).toBe(
+        `S001-陳主管-和潤企業股份有限公司-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-08-20 10:00:00 (UTC+8)`,
+      );
+    });
+
+    it('AC-N15 策略 A 於後台亦適用：非 PDF（xlsx）附件不受本 delta 影響 → burnPdf 呼叫次數為 0、位元組不變', async () => {
+      const { svc, blob, pdfBurner } = makeD9Harness();
+      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', {
+        fileName: 'signin.png',
+        contentType: 'image/png',
+        size: 1024,
+      });
+      const original = blob.blobs.get(rec.blobPath)!.content;
+
+      const out = await svc.downloadAttachmentRaw(SUP_SESSION, rec.blobPath);
+
+      expect(pdfBurner.calls).toHaveLength(0);
+      expect(out.bytes.equals(original)).toBe(true);
+    });
+
+    /**
+     * 🔴 AC-N16（無例外角色，`OQ-D9-09` 選項 B）：四種後台角色 × 皆須為 1 次燒錄，不得有任一角色為 0
+     * （含 ICSOPAdmin 本人——系統自此不再提供任何「原始檔（無浮水印）」下載入口，無例外）。
+     */
+    it.each([
+      ['ICSOPAdmin', ICSOP_ADMIN],
+      ['SysAdmin', { roleCode: 'SysAdmin', accountId: 'sys-1' } as SessionContext],
+      ['Supervisor', SUP_SESSION as SessionContext],
+      ['DeptContact', DC_SESSION as SessionContext],
+    ])('AC-N16 %s 下載同一份 PDF 附件 → 同樣取得已燒錄位元組（burnPdf 呼叫次數為 1，無例外角色）', async (_label, session) => {
+      const { svc, pdfBurner } = makeD9Harness();
+      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());
+
+      await svc.downloadAttachmentRaw(session, rec.blobPath);
+
+      expect(pdfBurner.calls).toHaveLength(1);
+    });
+
+    it('AC-N18 浮水印身分＝執行下載動作之操作者本人（非上傳者、非文件當責者）：不同操作者位元組不相等', async () => {
+      const { svc, pdfBurner } = makeD9Harness();
+      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());
+
+      const bySup = await svc.downloadAttachmentRaw(SUP_SESSION, rec.blobPath);
+      const byDc = await svc.downloadAttachmentRaw(DC_SESSION, rec.blobPath);
+
+      expect(pdfBurner.calls).toHaveLength(2);
+      expect(pdfBurner.calls[0].snapshot).not.toBe(pdfBurner.calls[1].snapshot);
+      expect(bySup.bytes.equals(byDc.bytes)).toBe(false);
+      expect(pdfBurner.calls[0].snapshot).toContain('陳主管');
+      expect(pdfBurner.calls[1].snapshot).toContain('林窗口');
+    });
+
+    /**
+     * AC-N17（🔴 寫調閱稽核，`OQ-D9-10` 選項 A）——本條之落地前提為 §11.6「AuditWriterRecorder
+     * 既有缺口修正」，`AttachmentsService` 為新增消費端、無此歷史包袱，直接注入 `AuditWriterService`
+     * （§11.6 明文，不經 `AuditRecorder` 間接層），故本條斷言直接對 `auditWriter.events` 之完整物件
+     * （非僅呼叫次數）。
+     */
+    it('AC-N17 PDF 下載成功 → AUDIT_LOG 恰新增一筆，targetType=DOCUMENT／actionType=DOWNLOAD／watermarkSnapshot 落值且與燒錄字串逐字相同', async () => {
+      const { svc, auditWriter, pdfBurner } = makeD9Harness();
+      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());
+
+      await svc.downloadAttachmentRaw(SUP_SESSION, rec.blobPath);
+
+      expect(auditWriter.events).toHaveLength(1);
+      const e = auditWriter.events[0];
+      expect(e.targetType).toBe('DOCUMENT');
+      expect(e.actionType).toBe('DOWNLOAD');
+      expect(e.targetId).toBe(DOC);
+      expect(e.watermarkSnapshot).toBe(pdfBurner.calls[0].snapshot);
+    });
+
+    it('AC-N17 非 PDF 下載成功 → 同樣寫入稽核，惟 watermarkSnapshot 為 null（燒錄與否不改變稽核義務）', async () => {
+      const { svc, auditWriter } = makeD9Harness();
+      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', {
+        fileName: 'signin.png',
+        contentType: 'image/png',
+        size: 1024,
+      });
+
+      await svc.downloadAttachmentRaw(SUP_SESSION, rec.blobPath);
+
+      expect(auditWriter.events).toHaveLength(1);
+      expect(auditWriter.events[0].watermarkSnapshot).toBeNull();
+    });
+
+    it('🔒 AC-N19 前台側零漣漪：既有受控下載之未登入拒絕（FILE_ACCESS_DENIED）語意不變，且不燒錄不寫稽核', async () => {
+      const { svc, auditWriter, pdfBurner } = makeD9Harness();
+      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());
+
+      await expect(svc.downloadAttachmentRaw(undefined, rec.blobPath)).rejects.toThrow('FILE_ACCESS_DENIED');
+
+      expect(pdfBurner.calls).toHaveLength(0);
+      expect(auditWriter.events).toHaveLength(0);
     });
   });
 });

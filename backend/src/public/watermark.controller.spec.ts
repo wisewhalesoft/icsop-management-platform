@@ -102,14 +102,33 @@ describe('WatermarkController — 委派與回應', () => {
     expect((res.send as jest.Mock).mock.calls[0][0].toString()).toBe('BURNED');
   });
 
-  it('pdf：代理原始位元組（application/pdf, inline）', async () => {
+  /**
+   * 🔴🔴 D9 delta（2026-08-20，`OQ-D9-03` lead 預設；`OQ-D9-32` 使用者裁決＝採納）：
+   * `GET /public/documents/:id/pdf` 認定為**安全缺陷（BUG-IMPL）**——瀏覽器開發者工具之
+   * Network 面板可直接另存未燒錄原件，`/pdf` 改回傳**已燒錄**位元組。
+   * 權威：docs/specs/features/F020-watermark.md#d9-watermark-delta `AC-N6`。
+   *
+   * 📝 **被推翻之原斷言逐字保留供追溯**：
+   *   OLD> `expect(svc.getOriginalPdf).toHaveBeenCalledWith(toWatermarkSession(SESSION), 'doc-1');`
+   *   OLD> `expect((res.send as jest.Mock).mock.calls[0][0].toString()).toBe('ORIG');`
+   *
+   * 📌 **本環對呼叫端契約之假設（test-generator 訂立，非讀取實作決定）**：`WatermarkController.pdf()`
+   * 之委派對象**方法名不變**，仍呼叫 `svc.getOriginalPdf(session, id)`——變動的是
+   * `WatermarkService.getOriginalPdf()` 本身之內部行為（新增燒錄步驟，見 `watermark.service.spec.ts`
+   * 之對應新案），而非改叫另一個新方法。此為侵入面最小之自然延伸（`architecture-spec.md` §11.3：
+   * 「現行呼叫 svc.getOriginalPdf()……AC-N6 要求其改為呼叫燒錄管線」，未提及改呼叫端方法名）。
+   * 若 tdd-implementation 認為應改為呼叫一個新方法名，請走 mailbox 向 test-generator 申訴。
+   */
+  it('AC-N6 pdf：回傳已燒錄浮水印之位元組（非原始），委派對象仍為 svc.getOriginalPdf', async () => {
     const svc = fakeSvc();
+    (svc.getOriginalPdf as jest.Mock).mockResolvedValue(Buffer.from('BURNED-PDF-BYTES'));
     const req = { sessionUser: SESSION } as never;
     const res = fakeRes();
     await new WatermarkController(svc).pdf(req, 'doc-1', res as never);
     expect(svc.getOriginalPdf).toHaveBeenCalledWith(toWatermarkSession(SESSION), 'doc-1');
     expect(res.headers['Content-Type']).toBe('application/pdf');
-    expect((res.send as jest.Mock).mock.calls[0][0].toString()).toBe('ORIG');
+    expect((res.send as jest.Mock).mock.calls[0][0].toString()).toBe('BURNED-PDF-BYTES');
+    expect((res.send as jest.Mock).mock.calls[0][0].toString()).not.toBe('ORIG');
   });
 
   it('toWatermarkSession：accountId=ACCOUNT.id（UUID）、身分快照映射', () => {

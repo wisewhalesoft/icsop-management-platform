@@ -50,6 +50,80 @@ describe('kindToTargetTypes', () => {
       'LIFECYCLE_CHANGE_LOG',
     ]);
   });
+
+  /**
+   * 🔴 D9 delta（2026-08-20，`OQ-D9-29`／`OQ-D9-34`）：F024 新增第四種類型篩選值「上傳」，
+   * 對映至本 delta 新增之 `targetType='DOCUMENT_ATTACHMENT'`（OJT 上傳事件）。
+   * 權威：docs/specs/features/F024-access-history-query.md#d9-audit-view-delta `AC-N69`；
+   * spec-writer 裁量（`OQ-D9-34`，待 lead 覆核）：`kindToTargetTypes('上傳') = ['DOCUMENT_ATTACHMENT']`；
+   * `kindToTargetTypes('文件')` **逐字不變**（天然排除上傳事件，見下方「排除／篩出」描述區塊）。
+   */
+  it('AC-N69 上傳→DOCUMENT_ATTACHMENT（新增第四種類型篩選值，not sharing with any existing kind）', () => {
+    expect(kindToTargetTypes('上傳' as never)).toEqual(['DOCUMENT_ATTACHMENT']);
+  });
+
+  it('AC-N69 🔒 回歸鎖定：「文件」分支逐字不變，天然不含 DOCUMENT_ATTACHMENT（既有三組對映一格未動）', () => {
+    expect(kindToTargetTypes('文件')).toEqual(['DOCUMENT', 'USAGE_FORM', 'APPENDIX']);
+    expect(kindToTargetTypes('文件')).not.toContain('DOCUMENT_ATTACHMENT');
+    expect(kindToTargetTypes('循環')).toEqual(['LIFECYCLE']);
+    expect(kindToTargetTypes('變更')).toEqual(['DOCUMENT_CHANGE_LOG', 'LIFECYCLE_CHANGE_LOG']);
+  });
+});
+
+/**
+ * 🔴🔴 AC-N69（`OQ-D9-29` 裁決之核心兌現）：上傳事件必須可**排除**（類型＝文件不含它）且可
+ * **篩出**（類型＝上傳僅含它）——兩者為分類學污染防線之兩面，必須各自斷言，只驗其一不足以
+ * 證明另一面（例如「選『上傳』看得到」不能證明「選『文件』看不到」）。
+ * 比照既有 `TS-F039-002`（AC-30）之測試形狀。
+ */
+describe('AC-N69 上傳事件之排除／篩出（同時存在 1 筆調閱＋1 筆 OJT 上傳事件）', () => {
+  it('① 類型＝文件 → 僅回傳調閱紀錄，不含上傳事件（排除）', () => {
+    const rows = [
+      row({ targetType: 'DOCUMENT', actionType: 'VIEW', documentNumber: 'ICSOP-A' }),
+      row({
+        targetType: 'DOCUMENT_ATTACHMENT',
+        actionType: 'ATTACHMENT_UPLOAD',
+        documentId: 'doc-1',
+        documentNumber: 'ICSOP-A',
+        watermarkSnapshot: null,
+      }),
+    ];
+    const page = resolveAuditQuery(rows, { kind: '文件' }, SCOPE);
+    expect(page.total).toBe(1);
+    expect(page.items[0].targetType).toBe('DOCUMENT');
+  });
+
+  it('② 類型＝上傳 → 僅回傳上傳事件，不含調閱紀錄（篩出）', () => {
+    const rows = [
+      row({ targetType: 'DOCUMENT', actionType: 'VIEW', documentNumber: 'ICSOP-A' }),
+      row({
+        targetType: 'DOCUMENT_ATTACHMENT',
+        actionType: 'ATTACHMENT_UPLOAD',
+        documentId: 'doc-1',
+        documentNumber: 'ICSOP-A',
+        watermarkSnapshot: null,
+      }),
+    ];
+    const page = resolveAuditQuery(rows, { kind: '上傳' as never }, SCOPE);
+    expect(page.total).toBe(1);
+    expect(page.items[0].targetType).toBe('DOCUMENT_ATTACHMENT');
+    expect(page.items[0].actionType).toBe('ATTACHMENT_UPLOAD');
+  });
+
+  it('③ 類型＝全部（預設）→ 兩筆皆回傳（既有「全部」語意不變）', () => {
+    const rows = [
+      row({ targetType: 'DOCUMENT', actionType: 'VIEW', documentNumber: 'ICSOP-A' }),
+      row({
+        targetType: 'DOCUMENT_ATTACHMENT',
+        actionType: 'ATTACHMENT_UPLOAD',
+        documentId: 'doc-1',
+        documentNumber: 'ICSOP-A',
+        watermarkSnapshot: null,
+      }),
+    ];
+    const page = resolveAuditQuery(rows, { from: '2000-01-01' }, SCOPE);
+    expect(page.total).toBe(2);
+  });
 });
 
 describe('TS-F039-002（AC-30）類型＝文件 篩選 → APPENDIX 紀錄納入結果', () => {

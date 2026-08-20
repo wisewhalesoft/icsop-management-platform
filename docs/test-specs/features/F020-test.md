@@ -319,4 +319,52 @@ status: draft
 `<br>` 分行（prototype 05 之形式）**或** `display:block` 子元素分行（§10.14 建議之形式）**皆可**；
 測試只斷言「恰三個行盒、逐字內容與順序」。
 ⚠ **不斷言 `white-space` 必須非 `nowrap`**——`LifecycleTreePreviewPage`（正確參考實作）本來就帶 `nowrap`
+
+---
+
+# 🔴🔴 2026-08-20 D9 缺失／變更 delta 測試設計（backend 線）
+
+> 本段由 **test-generator（backend／jest 線）** 於 2026-08-20 追加，涵蓋 `AC-N1`～`AC-N21`／`AC-N68`
+> 之**後端**部分。權威＝`docs/specs/features/F020-watermark.md#d9-watermark-delta`／`#backend-burn-delta`、
+> `architecture-spec.md §11.1～§11.9`。**本輪約束環為簡化版（僅 backend jest ＋ frontend vitest）**，
+> 前端線（`AC-N4`／`AC-N5`／`AC-N7`／`AC-N8`／`AC-N9`／`AC-N66`／`AC-N67`／`AC-N71`～`AC-N73`，皆為
+> 檢視器 canvas 化與 DOM 契約）不在本段範圍，由 frontend 線另立。
+>
+> 🔴🔴 **本段推翻既有明文定案**：`OQ-FM-01`（2026-07-24）與 `OQ-D18-01`（2026-08-16 再次確認）
+> **已全面失效**——`docs/specs/test-design/field-matrix-test-design.md` 之「此服務完全不具備燒錄
+> 能力」基準線已就地反向重寫（見該檔頭之 2026-08-20 D9 delta 橫幅）。
+
+## AC ↔ 約束對照（backend）
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-N1` 對比度門檻 ≥ 1.70 | `backend/src/public/pdf-burner.spec.ts`（「D9 delta — 浮水印色值／不透明度」describe） | unit |
+| `AC-N2` 定稿值 `#334155` @ `0.30` | 同上 | unit |
+| `AC-N3` 具名匯出常數（`WATERMARK_RGB`／`WATERMARK_OPACITY`，命名由 test-generator 依 AC-N2 字面值訂立，可申訴） | 同上 | unit（可測性前提） |
+| `AC-N6` `/pdf` 端點改回傳已燒錄位元組（安全缺陷修復） | `backend/src/public/watermark.controller.spec.ts`（`pdf` 案就地改寫）＋`watermark.service.spec.ts`（「D9 delta — AC-N6」describe，`getOriginalPdf` 新增正向燒錄案） | unit |
+| `AC-N10` `COMPANY_SHORT_NAMES` 字面值 | `backend/src/org-directory/company-name.spec.ts`（「D9 delta — COMPANY_SHORT_NAMES」describe） | unit |
+| `AC-N11`（INV-C2）短稱鍵集合≡全稱鍵集合 | 同上 | unit |
+| `AC-N12` `resolveCompanyShortName` | 同上 | unit |
+| `AC-N13`（🔒 全稱三處消費點回歸鎖定，本檔僅驗共用常數本身未被連帶修改） | 同上 | unit |
+| `AC-N14`／`AC-N16` 後台四端點一律燒錄、無例外角色 | `attachments.service.spec.ts`（附件）／`appendices.front-burn.service.spec.ts`（附錄）／`usage-forms.front-burn.service.spec.ts`（使用表單，各自之「D9 delta — 後台受控下載改為一律燒錄＋寫稽核」describe） | unit |
+| `AC-N15` 策略 A 於後台亦適用 | 同上三檔 | unit |
+| `AC-N17` 後台下載寫調閱稽核 | 同上三檔 | unit |
+| `AC-N18` 浮水印身分＝操作者本人 | 同上三檔（不同操作者位元組不相等案） | unit |
+| `AC-N19` 🔒 前台側零漣漪 | `attachments.service.spec.ts`（既有 `downloadAttachmentRaw` 未登入拒絕案，燒錄/稽核皆 0） | unit |
+| `AC-N20` 後台亦渲染 `data-wm-note` | 🔵 前端 DOM 契約，本檔（backend）不涉及；歸屬 frontend 線 | component |
+| `AC-N21` 🔒 傳輸模式不變 | 同上三檔（`blob.urlCalls` 恆為 0） | unit |
+| `AC-N68` `toDisplayLines` 恰 3 行 | `pdf-burner.spec.ts`（新增兩案）；⚠ 跨前後端逐行相等之另一半由 frontend 線之 `watermark-lines.test.ts` 補上 | unit |
+
+## §11.11 單元測試盲區（本段新增，backend 相關者）
+
+- **#18／#19**（pdf.js 資源部署）：純前端資源部署問題，backend 無法測，見 architecture §11.11。
+- **#20**（`AuditWriterRecorder` 身分快照遺漏，🔴 本輪最擔心之三條之一）：已修——
+  `backend/src/appendices/audit-writer-recorder.adapter.spec.ts`／
+  `backend/src/usage-forms/audit-writer-recorder.adapter.spec.ts` 新增「§11.6／§11.11#20」案，
+  以完整六欄輸入斷言完整轉送物件（非僅呼叫次數）。
+- **#21**（`WATERMARK_BURNER` 抽出重構之接線回歸）：🔴 **原理上測不到**（純建構子單元測試不經
+  Nest 容器解析）——本檔之單元測試無法涵蓋，必要把關手段為容器內實際啟動（`docker compose up`
+  或等效 smoke test），列入 `risks-and-gaps.md`。
+- **#25**（`/pdf` 等端點之 `Cache-Control` 標頭）：非 AC 明文要求（architecture §11.11 列為建議、
+  非阻擋），本輪未建約束，列入 `risks-and-gaps.md` 供追蹤。
 且行為正確（它已用 block 子元素分行）。真正的缺陷是**沒有分行**，不是 `nowrap` 本身。

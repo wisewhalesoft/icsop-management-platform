@@ -219,6 +219,51 @@ describe('WatermarkService（F020）', () => {
 });
 
 /**
+ * 🔴🔴 D9 delta（2026-08-20，`OQ-D9-03`／`OQ-D9-32`）：`getOriginalPdf()` 改為呼叫燒錄管線並
+ * 回傳已燒錄位元組——`GET /public/documents/:id/pdf` 之安全缺陷修復。
+ * 權威：docs/specs/features/F020-watermark.md#d9-watermark-delta `AC-N6`。
+ *
+ * ⚠ 本區塊之既有（尚未觸及）行為前提：`getOriginalPdf()` 之成功路徑（回傳未燒錄位元組）此前
+ * **未在本檔被任何測試直接驗證**——唯一驗證未燒錄行為之測試在 `watermark.controller.spec.ts`
+ * （mock 掉整個 `WatermarkService`），故本區塊為**新增**而非**改寫**既有 service 層案例；
+ * `watermark.controller.spec.ts` 之對應舊斷言已於該檔就地改寫。F041 業務子分類之拒絕路徑
+ * （`svc.getOriginalPdf(bizSession(), ...)` 於使用部門不符時拒絕）**不受影響、逐字不變**——
+ * 那組既有案例（見上方「F041 AC-25～AC-30」describe）測的是**拒絕**分支，本區塊測的是**成功**分支。
+ */
+describe('D9 delta — AC-N6：getOriginalPdf 改為回傳已燒錄位元組', () => {
+  it('AC-N6 burnPdf 呼叫次數為 1，回傳位元組非原始位元組', async () => {
+    const { svc, burner } = makeService({ pdf: Buffer.from('ORIGINAL') });
+    const pdfBytes = await svc.getOriginalPdf(sessionOf(), 'doc-1');
+    expect(burner.calls).toHaveLength(1);
+    expect(pdfBytes.toString()).not.toBe('ORIGINAL');
+    expect(pdfBytes.toString()).toContain('BURNED:');
+  });
+
+  it('AC-N6 浮水印字串與同一使用者同一時刻經 download 取得者逐字相同（僅時間戳依當下產生，本測試同一 clock 故完全相同）', async () => {
+    const { svc, burner } = makeService({ pdf: Buffer.from('ORIGINAL') });
+    const dl = await svc.download(sessionOf(), 'doc-1');
+    const pdfBytes = await svc.getOriginalPdf(sessionOf(), 'doc-1');
+    // burner.calls[0]＝download 之燒錄、[1]＝getOriginalPdf 之燒錄（各自獨立呼叫，不快取，§11.3 決策 A）
+    expect(burner.calls).toHaveLength(2);
+    expect(burner.calls[1].snapshot).toBe(dl.snapshot);
+    expect(pdfBytes.toString()).toBe(`BURNED:${dl.snapshot}`);
+  });
+
+  it('AC-N6 不快取：連續兩次呼叫各自獨立觸發燒錄（§11.3 決策 A，時間戳一致性優先於效能）', async () => {
+    const { svc, burner } = makeService({ pdf: Buffer.from('ORIGINAL') });
+    await svc.getOriginalPdf(sessionOf(), 'doc-1');
+    await svc.getOriginalPdf(sessionOf(), 'doc-1');
+    expect(burner.calls).toHaveLength(2);
+  });
+
+  it('AC-N6 PDF 來源查無 → 404 DOCUMENT_PDF_NOT_FOUND，未呼叫燒錄（既有錯誤路徑不變）', async () => {
+    const { svc, burner } = makeService({ pdf: null });
+    await expect(svc.getOriginalPdf(sessionOf(), 'doc-x')).rejects.toThrow('DOCUMENT_PDF_NOT_FOUND');
+    expect(burner.calls).toHaveLength(0);
+  });
+});
+
+/**
  * F041 AC-25～AC-30（F020 delta AC-U1～AC-U5）：業務子分類使用者存取使用部門不相符之文件，
  * 於取得原始 PDF 之前（buildSnapshot 之前）即拒絕。權威：F041 spec §E；架構 §3.7 決策三(c)。
  * 業務子分類（新欄位）以 `sessionOf({ userSubtype: 'business', ... } as unknown as Partial<WatermarkSession>)`

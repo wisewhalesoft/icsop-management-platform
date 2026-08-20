@@ -41,33 +41,58 @@ function ctxFor(method: string, sessionUser: unknown): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
+/**
+ * 📌 **本環對服務層方法簽章之假設（test-generator 依 AC-N48 之 body 形狀訂立，非讀取實作決定）**：
+ * 服務層方法**改名**為 `updateFormMetadata(session, formId, patch)`——`patch` 為
+ * `{ formNumber?: string | null; draftingDeptCodes?: string[] }` 物件，取代原單一字串參數之
+ * `updateFormNumber(session, formId, formNumber)`。理由：body 本身已擴為物件形狀（`AC-N48`），
+ * service 簽章隨之物件化屬自然延伸；若 tdd-implementation 認為應保留舊方法名或不同簽章形狀，
+ * 請走 mailbox 向 test-generator 申訴。
+ */
 function fakeSvc(): UsageFormsService {
   return {
-    updateFormNumber: jest.fn().mockResolvedValue({ id: 'f1', formNumber: 'FM-001' }),
+    updateFormMetadata: jest.fn().mockResolvedValue({ id: 'f1', formNumber: 'FM-001', draftingDeptCodes: [] }),
     overwriteForm: jest.fn(),
   } as unknown as UsageFormsService;
 }
 
 const REQ = { sessionUser: { roleCode: 'ICSOPAdmin', accountId: 'a1' } } as never;
 
-describe('UsageFormsController — 編號專用端點之路由 metadata（F018 AC-D3／§10.7 A14）', () => {
-  it('TS-D18-040 PATCH admin/usage-forms/:formId/number', () => {
+/**
+ * 🔴🔴 D9 delta（2026-08-20，缺失／變更 delta 第 7 項）——**本檔就地反向重寫**：使用表單
+ * 新增／編輯整頁化，「編輯編號」端點**擴大**為承載制定部門之編輯頁 metadata 端點，移除 `/number`
+ * 尾段。權威：docs/specs/features/F018-usage-form-management.md#usage-form-page-delta `AC-N48`；
+ * architecture-spec.md §11.10(b)。
+ *
+ * 📝 **被推翻之路由字面逐字保留供追溯**：`PATCH admin/usage-forms/:formId/number`（`AC-D3`，
+ * 2026-08-16 定案）。**推翻理由**：`AC-N41` 明訂「編輯編號」modal 由獨立整頁取代，該頁範圍已擴大
+ * 為「表單編號＋制定部門」兩項 metadata（`AC-N48`），端點路徑亦隨之擴大、移除 `/number` 尾段。
+ *
+ * 📌 **本環對呼叫端契約之假設（test-generator 依 architecture-spec.md §11.10(b) 訂立）**：
+ *   ① 路徑改為 `admin/usage-forms/:formId`（移除 `/number`）；方法維持 `PATCH`。
+ *   ② handler 方法名**沿用** `updateNumber`（不改名——本檔對外可觀測之路由/body 契約才是 AC 鎖定
+ *      對象，handler 內部方法名非規格明文範圍；若 tdd-implementation 認為應改名，請走 mailbox 申訴）。
+ *   ③ body 由 `{ formNumber }` 擴為 `{ formNumber?: string | null; draftingDeptCodes?: string[] }`。
+ *   ④ 路由層閘門逐字不變（`USAGE_FORM_MANAGEMENT` read）。
+ */
+describe('UsageFormsController — 編輯頁 metadata 端點之路由 metadata（D9 delta，F018 AC-N48／architecture §11.10(b)）', () => {
+  it('AC-N48 PATCH admin/usage-forms/:formId（🔴 移除 /number 尾段）', () => {
     expect(Reflect.getMetadata(PATH_METADATA, handler('updateNumber'))).toBe(
-      'admin/usage-forms/:formId/number',
+      'admin/usage-forms/:formId',
     );
     expect(Reflect.getMetadata(METHOD_METADATA, handler('updateNumber'))).toBe(
       RequestMethod.PATCH,
     );
   });
 
-  it('TS-D18-041 路由層閘門為 RequirePermission(USAGE_FORM_MANAGEMENT, read)', () => {
+  it('AC-N48 路由層閘門仍為 RequirePermission(USAGE_FORM_MANAGEMENT, read)（🔒 不變）', () => {
     const meta = permOf('updateNumber');
     expect(meta).toBeDefined();
     expect(meta.functionKey).toBe(FunctionKey.USAGE_FORM_MANAGEMENT);
     expect(meta.action).toBe('read');
   });
 
-  it('TS-D18-042 🔴 與覆蓋上傳為兩條不同路徑（不得共用 handler／不得同路徑同方法）', () => {
+  it('AC-N48 🔒 與覆蓋上傳為兩條不同路徑（不得共用 handler／不得同路徑同方法，此性質不因路徑擴大而改變）', () => {
     const numberPath = Reflect.getMetadata(PATH_METADATA, handler('updateNumber'));
     const overwritePath = Reflect.getMetadata(PATH_METADATA, handler('overwrite'));
     expect(numberPath).not.toBe(overwritePath);
@@ -96,19 +121,47 @@ describe('UsageFormsController — AC-D17 路由層逐角色守門', () => {
   );
 });
 
-describe('UsageFormsController — AC-D20 body 只接受 formNumber', () => {
+/**
+ * 🔴 D9 delta：body 由「只接受 formNumber」擴為「接受 formNumber?／draftingDeptCodes? 兩鍵」
+ * （`AC-N48`／`AC-N45`）。`AC-D20`「六欄未變、Blob 未讀未寫」之副作用邊界對新增之
+ * `draftingDeptCodes` 更新同樣成立（`AC-N49`）——本 describe 標題與案例隨之擴充，`formNumber`
+ * 半段之既有驗證語意逐字不變。
+ */
+describe('UsageFormsController — AC-N48／AC-D20 body 接受 formNumber?／draftingDeptCodes? 兩鍵（其餘一律忽略）', () => {
   it('TS-D18-045 轉發 body.formNumber 給 service（含 null）', async () => {
     const svc = fakeSvc();
     await new UsageFormsController(svc).updateNumber(REQ, 'f1', { formNumber: 'FM-001' });
-    expect(svc.updateFormNumber).toHaveBeenCalledWith(
+    expect(svc.updateFormMetadata).toHaveBeenCalledWith(
       { roleCode: 'ICSOPAdmin', accountId: 'a1' },
       'f1',
-      'FM-001',
+      { formNumber: 'FM-001' },
     );
 
     const svc2 = fakeSvc();
     await new UsageFormsController(svc2).updateNumber(REQ, 'f1', { formNumber: null });
-    expect(svc2.updateFormNumber).toHaveBeenCalledWith(expect.anything(), 'f1', null);
+    expect(svc2.updateFormMetadata).toHaveBeenCalledWith(expect.anything(), 'f1', { formNumber: null });
+  });
+
+  it('AC-N45 轉發 body.draftingDeptCodes 給 service（新鍵，additive）', async () => {
+    const svc = fakeSvc();
+    await new UsageFormsController(svc).updateNumber(REQ, 'f1', {
+      draftingDeptCodes: ['JA000', 'KB000'],
+    } as never);
+    expect(svc.updateFormMetadata).toHaveBeenCalledWith(expect.anything(), 'f1', {
+      draftingDeptCodes: ['JA000', 'KB000'],
+    });
+  });
+
+  it('AC-N45 兩鍵可同時送出（編輯頁同時更新編號與制定部門）', async () => {
+    const svc = fakeSvc();
+    await new UsageFormsController(svc).updateNumber(REQ, 'f1', {
+      formNumber: 'FM-002',
+      draftingDeptCodes: ['JA000'],
+    } as never);
+    expect(svc.updateFormMetadata).toHaveBeenCalledWith(expect.anything(), 'f1', {
+      formNumber: 'FM-002',
+      draftingDeptCodes: ['JA000'],
+    });
   });
 
   it('TS-D18-046 🔴 其餘鍵一律忽略（不報錯、不轉發）——含意圖夾帶檔案欄位者', async () => {
@@ -119,7 +172,9 @@ describe('UsageFormsController — AC-D20 body 只接受 formNumber', () => {
       blobPath: 'usage-forms/hack.xlsx',
       size: 999,
     } as never);
-    expect(svc.updateFormNumber).toHaveBeenCalledWith(expect.anything(), 'f1', 'FM-002');
+    expect(svc.updateFormMetadata).toHaveBeenCalledWith(expect.anything(), 'f1', {
+      formNumber: 'FM-002',
+    });
     expect(svc.overwriteForm).not.toHaveBeenCalled();
   });
 

@@ -82,6 +82,17 @@ describe('actionTypeLabel（AC-F5 ②：操作類型代碼 → 中文標籤，CS
   it('未知代碼（非既有 11 種變體之一）→ 原樣輸出（fallback 與既有缺口一致，非崩潰）', () => {
     expect(actionTypeLabel('SOME_FUTURE_ACTION')).toBe('SOME_FUTURE_ACTION');
   });
+
+  /**
+   * 🔴 D9 delta（2026-08-20，`OQ-D9-29`）：`ATTACHMENT_UPLOAD`（OJT 上傳事件）之操作類型中文標籤。
+   * 權威：docs/specs/features/F024-access-history-query.md#d9-audit-view-delta `AC-N53`；
+   * docs/specs/features/F023-audit-logging.md#d9-audit-delta `AC-N50`。
+   */
+  it('AC-N53 ATTACHMENT_UPLOAD（本 delta 新增之 actionType）→ 附件上傳（只出標籤，不含代碼）', () => {
+    const out = actionTypeLabel('ATTACHMENT_UPLOAD');
+    expect(out).toBe('附件上傳');
+    expect(out).not.toContain('ATTACHMENT_UPLOAD');
+  });
 });
 
 describe('auditKindLabel（AC-F5 ③：targetType → 類型欄三值之一）', () => {
@@ -108,5 +119,16 @@ describe('auditKindLabel（AC-F5 ③：targetType → 類型欄三值之一）',
   /** F024 本輪新增之 ACCESS_HISTORY targetType（A16-1）亦落入「其餘 → 變更」之通則。 */
   it('ACCESS_HISTORY（本 delta 新增之 targetType，AC-F13 自我遞迴效應）→ 變更', () => {
     expect(auditKindLabel('ACCESS_HISTORY')).toBe('變更');
+  });
+
+  /**
+   * 🔴 D9 delta（2026-08-20，`OQ-D9-29`／`OQ-D9-34`）：`DOCUMENT_ATTACHMENT` 為本輪新增之第 8 個
+   * `targetType`（OJT 上傳事件），其類型欄標籤**不得**落入「其餘 → 變更」之通則——必須獨立顯示為
+   * 「上傳」，否則會被歸入「變更」類、與 F024 `AC-N69`「上傳事件可篩出」之新增類型值互相矛盾。
+   * 權威：docs/specs/features/F024-access-history-query.md#d9-audit-view-delta `AC-N53`。
+   */
+  it('AC-N53 DOCUMENT_ATTACHMENT（本 delta 新增之 targetType）→ 上傳（不得落入「其餘→變更」通則）', () => {
+    expect(auditKindLabel('DOCUMENT_ATTACHMENT')).toBe('上傳');
+    expect(auditKindLabel('DOCUMENT_ATTACHMENT')).not.toBe('變更');
   });
 });

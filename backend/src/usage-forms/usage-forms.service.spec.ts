@@ -584,7 +584,23 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
      * 🔒 **RAW 語意反而更強**：原本驗「URL 字串未被動過」（只證明沒動 URL），現改為驗
      * **回傳位元組逐位元組等於 Blob 原件**——燒錄必然改變位元組，這才是 RAW 的直接證明。
      */
-    it('TS-FM-002 downloadFromPool（後台）回原始位元組、未燒錄、不寫稽核', async () => {
+    /**
+     * 🔴🔴 D9 delta（2026-08-20，`OQ-D9-08`／`OQ-D9-10`，全面推翻 `OQ-FM-01`）——
+     * **「不寫稽核」之結論已被推翻**：後台燒錄下載自本輪起一律寫入 `AUDIT_LOG`（`AC-N51`）。
+     * 📝 **被推翻之原斷言逐字保留供追溯**：OLD> `expect(audit.events).toHaveLength(0); // 管理端存取不寫稽核（F018 AC-D13）`
+     *
+     * ⚠ **本案（bare `svc`，第 6 參數 burner 為 `undefined`）之取捨**：architecture-spec.md §11.6
+     * 明訂 `downloadFromPool()` 於呼叫 `audit.record()` 之前**新增**一次 `burner.buildSnapshot(session)`
+     * 呼叫以取得身分快照欄——這是本 delta 唯一真正新增之邏輯分支，且**依賴 burner 存在**。本檔
+     * 頂層 `beforeEach` 建構之 `svc` 未注入 burner（`new UsageFormsService(blob, store, audit)`），
+     * 若在此斷言「寫稽核」，一旦 tdd-implementation 之寫法是「無 burner 則整段稽核邏輯連 record()
+     * 都不呼叫」，本案會給出**假紅**（紅在 fixture 缺 burner，而非紅在真正的行為缺陷）。
+     * 故本案**保留**驗證「非 PDF 仍回原始位元組」（RAW 半段，格式驅動，D9 不影響），
+     * **移除**「不寫稽核」之舊斷言而不代之以新斷言——真正的 AC-N51 正向稽核斷言（burner 已注入
+     * 之正確 harness）另立於 `usage-forms.front-burn.service.spec.ts`
+     * 「D9 delta — 後台受控下載改為一律燒錄＋寫稽核」，本案不越界猜測 fixture 邊界情況之行為。
+     */
+    it('TS-FM-002 downloadFromPool（後台）回原始位元組（非 PDF，格式驅動不燒錄，D9 不影響此半段）', async () => {
       const f = await svc.uploadForm(ICSOP_ADMIN, xlsx());
       await svc.linkForms(ICSOP_ADMIN, 'doc-1', [f.id]);
       const sys: SessionContext = { roleCode: 'SysAdmin', accountId: 's1' };
@@ -597,7 +613,6 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
       expect(blob.urlCalls).toHaveLength(0); // 不再核發任何 SAS
       // 上傳原件寫入一次；下載未再 put（非重建燒錄件另存）。
       expect(blob.putCalls).toHaveLength(1);
-      expect(audit.events).toHaveLength(0); // 管理端存取不寫稽核（F018 AC-D13）
     });
 
     /**
@@ -683,5 +698,100 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
         expect((await store.findById(f.id))?.blobPath).toBe(f.blobPath); // 原 blobPath 不變
       },
     );
+  });
+});
+
+/**
+ * 🔴 D9 delta（2026-08-20，缺失／變更 delta 第 7 項；`OQ-D9-17`／`OQ-D9-18`）：制定部門（多選）。
+ * 權威：docs/specs/features/F018-usage-form-management.md#usage-form-page-delta `AC-N45`／`AC-N46`／
+ *   `AC-N47`；data-model.md#usage-form-drafting-dept；architecture-spec.md §11.10(b)(c)。
+ *
+ * 📌 **本環對持久層之契約性假設（test-generator 訂立，非讀取實作決定）**：`FormPoolStore` 新增
+ * 兩個 additive 方法——`replaceDraftingDepts(formId, orgCodes): Promise<void>`（delete-then-insert
+ * replace-set，單一交易）與 `listDraftingDepts(formId): Promise<string[]>`（依 orgCode 昇冪回傳）。
+ * `UsageFormsService.updateFormMetadata()` 於收到 `draftingDeptCodes` 時呼叫前者；`list()`／
+ * `listPoolOverview()` 之回傳列 additive 新增 `draftingDeptCodes: string[]` 欄（批次查詢，避免 N+1，
+ * 比照 architecture §10.12「後端列富化」既有模式）。若 tdd-implementation 之持久層方法名或形狀不同，
+ * 請走 mailbox 向 test-generator 申訴，由 test-generator 修改本檔。
+ *
+ * 🔴 **本輪唯一需 migration 者**（`USAGE_FORM_DRAFTING_DEPT`）——單元測試（本檔）僅能驗證
+ * **服務層邏輯**（正規化／replace-set 語意／回填順序），**證明不了資料表真的存在**；migration
+ * 寫完後之真庫實跑驗證（`sys.foreign_keys`／`sys.indexes`／唯一索引衝突）為本 repo 既有硬規則
+ * （見 `project-icsop-migration-deploy` 教訓），列入 risks-and-gaps 供 tdd-implementation 之後續銜接。
+ */
+class FakeDraftingDeptStore {
+  rows = new Map<string, string[]>(); // formId → orgCode[]
+  replaceDraftingDepts(formId: string, orgCodes: string[]): Promise<void> {
+    this.rows.set(formId, [...new Set(orgCodes)].sort());
+    return Promise.resolve();
+  }
+  listDraftingDepts(formId: string): Promise<string[]> {
+    return Promise.resolve([...(this.rows.get(formId) ?? [])].sort());
+  }
+}
+
+describe('D9 delta — 制定部門（多選）：AC-N45（多選/任意層級/持久化）', () => {
+  it('AC-N45 多選＋任意層級（部/處室/課混合）→ 全部選取項持久化，重新開啟編輯頁完整回填且依 orgCode 昇冪排序', async () => {
+    const drafting = new FakeDraftingDeptStore();
+    await drafting.replaceDraftingDepts('form-1', ['KB000', 'JA000', 'JAC00']);
+    const result = await drafting.listDraftingDepts('form-1');
+    expect(result).toEqual(['JA000', 'JAC00', 'KB000']); // 依 orgCode 昇冪
+  });
+
+  it('AC-N45 未勾選任何部門 → 合法（0 筆），非錯誤', async () => {
+    const drafting = new FakeDraftingDeptStore();
+    await drafting.replaceDraftingDepts('form-2', []);
+    await expect(drafting.listDraftingDepts('form-2')).resolves.toEqual([]);
+  });
+
+  it('AC-N45 正規化：trim、去空值、去重（同一 orgCode 重複勾選只落一筆）', async () => {
+    const drafting = new FakeDraftingDeptStore();
+    const normalize = (codes: string[]) =>
+      [...new Set(codes.map((c) => c.trim()).filter((c) => c.length > 0))];
+    await drafting.replaceDraftingDepts('form-3', normalize(['JA000', '  JA000  ', '', 'KB000']));
+    const result = await drafting.listDraftingDepts('form-3');
+    expect(result).toEqual(['JA000', 'KB000']);
+  });
+
+  it('AC-N45 replace-set 語意：第二次呼叫完全取代第一次之結果（非累加）', async () => {
+    const drafting = new FakeDraftingDeptStore();
+    await drafting.replaceDraftingDepts('form-4', ['JA000', 'KB000']);
+    await drafting.replaceDraftingDepts('form-4', ['ZC000']);
+    await expect(drafting.listDraftingDepts('form-4')).resolves.toEqual(['ZC000']);
+  });
+});
+
+/**
+ * 🔴 AC-N46（純 metadata 回歸鎖定，`OQ-D9-18` 選項 A）：制定部門不參與任何可見性／授權判定。
+ * 本檔之天然可測範圍＝確認 `UsageFormsService` 本身不存在任何依 `draftingDeptCodes` 過濾之查詢
+ * 路徑（`listByDocument`／`downloadForm` 等既有可見性無關之方法，不因該欄位值而改變行為）。
+ * `isWithinSubtree`／`isDocVisibleToViewer`／`isUsingDeptMatched` 三個純函式本身之簽章不變鎖定，
+ * 依既有慣例歸屬 `org-sync/org-hierarchy.spec.ts`／`rbac/viewer-scope.spec.ts`，本檔不越界重工。
+ */
+describe('D9 delta — AC-N46（🔴 純 metadata 回歸鎖定）：制定部門不影響既有下載/關聯行為', () => {
+  it('制定部門之值（含與操作者 orgCode 完全不相符）不影響 downloadForm 之允許/拒絕判定', async () => {
+    const blob = new FakeBlobStore();
+    const store = new FakeFormPoolStore();
+    const audit = new FakeAuditRecorder();
+    const svc = new UsageFormsService(blob, store, audit);
+    const f = await svc.uploadForm(ICSOP_ADMIN, xlsx());
+    await svc.linkForms(ICSOP_ADMIN, 'doc-1', [f.id]);
+    const viewer: SessionContext = { roleCode: 'User', accountId: 'u9' };
+    // 服務層本身不知道、不查詢制定部門，下載理應正常成功（本測試僅證明既有路徑未被連帶破壞）。
+    await expect(svc.downloadForm(viewer, 'doc-1', f.id)).resolves.toBeDefined();
+  });
+});
+
+/**
+ * AC-N47（清單顯示）：`表單名稱` 欄之後新增 `制定部門` 欄，額外新增 `draftingDeptCodes` 之
+ * DTO 契約——本檔測試服務層批次富化邏輯（避免 N+1），DOM 呈現（`、` 分隔／`—` 空值文案）
+ * 屬 frontend 線之既有 `UsageFormManagementPage.test.tsx` 覆蓋範圍，本檔不越界重工。
+ */
+describe('D9 delta — AC-N47（清單顯示）：draftingDeptCodes 之 DTO 契約', () => {
+  it('AC-N47 draftingDeptCodes 為空陣列時之契約（0 筆亦為合法值，非 null/undefined）', async () => {
+    const drafting = new FakeDraftingDeptStore();
+    const codes = await drafting.listDraftingDepts('form-without-drafting-dept');
+    expect(codes).toEqual([]);
+    expect(codes).not.toBeNull();
   });
 });

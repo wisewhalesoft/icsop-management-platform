@@ -61,4 +61,66 @@ describe('AuditWriterRecorder（附錄稽核 → 真實 AuditWriter 轉接，F03
       }),
     ).rejects.toThrow('outbox down');
   });
+
+  /**
+   * 🔴🔴 architecture-spec.md §11.6／§11.11 #20（本輪最擔心之三條之一，lead 明文點名）：
+   * `AuditWriterRecorder` 之 `record()` **已查證完全未轉送** `employeeNo`／`company`／`department`／
+   * `section`／`roleCode`／`watermarkSnapshot` 六個欄位予 `AuditWriterService.recordAccess()`——
+   * 即便呼叫端 `AppendicesService.downloadAppendix()` 已正確組出 `watermarkSnapshot: burned.snapshot`
+   * 傳入 `this.audit.record({...})`，adapter 在轉送前把它丟棄了。
+   *
+   * 🔴 **原理上測不到之原因**：既有測試（本檔前兩案）以**替身** `AuditWriter`（`FakeAuditWriter`）
+   * 直接回顯呼叫參數，驗證的是「服務層有沒有算對」，從未經過 adapter 本身的轉送邏輯——本測試
+   * 是本檔**第一次**以「輸入含六個身分欄＋`watermarkSnapshot` 的完整 `AppendixAuditEvent`」驅動
+   * `record()`，並斷言傳給 `writer.recordAccess()` 的**完整參數物件**（而非僅 spy 呼叫次數），才是
+   * 真正驗證了轉送邏輯本身。
+   *
+   * 🔴 本缺口是滿足 `AC-N17`／`AC-N51`（後台燒錄下載寫入正確之身分快照與 `watermarkSnapshot`）之
+   * 必要前提，亦已違反既有已核准之 `AC-D5`（F039 前台附錄下載）——本條同時是兩者之回歸鎖定。
+   */
+  it('🔴 §11.6／§11.11#20 六個身分/快照欄位必須完整轉送予 AuditWriterService.recordAccess()（既有缺口修正）', async () => {
+    await recorder.record({
+      targetType: 'APPENDIX',
+      actionType: 'DOWNLOAD',
+      appendixId: 'ax-42',
+      documentId: 'doc-7',
+      accountId: 'acct-9',
+      employeeNo: 'E001',
+      company: '和潤企業股份有限公司',
+      department: '營運管理部',
+      section: '審查室',
+      roleCode: 'Supervisor',
+      watermarkSnapshot: 'E001-王小明-和潤企業股份有限公司-營運管理部-審查室-僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現-2026-08-20 10:00:00 (UTC+8)',
+    } as never);
+
+    expect(writer.calls).toHaveLength(1);
+    const ev = writer.calls[0] as AuditAccessEvent & {
+      employeeNo?: string;
+      company?: string;
+      department?: string;
+      section?: string;
+      roleCode?: string;
+    };
+    expect(ev.employeeNo).toBe('E001');
+    expect(ev.company).toBe('和潤企業股份有限公司');
+    expect(ev.department).toBe('營運管理部');
+    expect(ev.section).toBe('審查室');
+    expect(ev.roleCode).toBe('Supervisor');
+    expect(ev.watermarkSnapshot).toBe(
+      'E001-王小明-和潤企業股份有限公司-營運管理部-審查室-僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現-2026-08-20 10:00:00 (UTC+8)',
+    );
+  });
+
+  it('watermarkSnapshot 為 null（非 PDF 下載）之情形亦須逐字轉送 null（非被丟棄為 undefined）', async () => {
+    await recorder.record({
+      targetType: 'APPENDIX',
+      actionType: 'DOWNLOAD',
+      appendixId: 'ax-1',
+      documentId: 'doc-1',
+      accountId: 'a1',
+      watermarkSnapshot: null,
+    } as never);
+
+    expect(writer.calls[0].watermarkSnapshot).toBeNull();
+  });
 });

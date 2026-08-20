@@ -211,3 +211,33 @@ interface BlobStore {
 - **OQ-F016-05**：短效期憑證（SAS Token）之 TTL 秒數（NFR-002「短效期」未給出具體數值）未定案，`architecture-spec.md` §8.3 之 OQ-E04-06 列仍標「Blocking」（與 `open-questions.md` 已定案 ✅ 的檔案大小/格式部分不一致，但**未涵蓋 TTL 秒數本身**，兩份文件對「已定案範圍」認知略有落差，建議一併釐清 TTL 是否也已定案或仍待補）。TS-021 僅能整合層驗證「有到期」，無法斷言精確秒數邊界。
 
 - **OQ-F016-06**：附件與 `ICSOP_DOCUMENT`（documents worktree）的掛接點——附件上傳/下載端點是否掛在 `DocumentsController` 底下（如 `POST /admin/documents/:id/attachments/icsop-pdf`），或獨立 `AttachmentsController` 以 `documentId` 為外部參照？此為與 doc-family worktree 的唯一衝突面，需盡早對齊路由前綴與 `DocumentsService` 依賴方向（何者依賴何者），避免雙方各自實作出不相容的介面。
+
+---
+
+# 🔴 2026-08-20 D9 缺失／變更 delta 測試設計（OJT 上傳角色開放）
+
+> 本段由 **test-generator（backend／jest 線）** 於 2026-08-20 追加，涵蓋 `AC-N28`～`AC-N35`。
+> 權威＝`docs/specs/features/F016-pdf-ojt-attachment.md#ojt-role-open-delta`、
+> `docs/specs/features/F026-role-field-matrix.md#ojt-write-exception-delta`、
+> `architecture-spec.md §11.8`。**推翻 F026 頂部定案，推翻範圍嚴格限於 OJT 一欄。**
+
+## AC ↔ 約束對照
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-N28` Supervisor／DeptContact 上傳 OJT 成功 | `backend/src/attachments/attachments.service.spec.ts`（「D9 delta — OJT 簽到表上傳角色開放」describe） | unit |
+| `AC-N29` 可覆蓋既有 OJT（不論原上傳者） | 同上 | unit |
+| `AC-N30` 🔴 不限權責範圍（負向鎖定：不得新增子樹範圍檢查） | 同上 | unit |
+| `AC-N31` 🔴 寫入稽核（`actionType='ATTACHMENT_UPLOAD'`／`targetType='DOCUMENT_ATTACHMENT'`） | 同上 | unit |
+| `AC-N32` 🔴 稽核角色不對稱（ICSOPAdmin 不寫稽核） | 同上 | unit |
+| `AC-N33` 🔒 ICSOP PDF 上傳仍拒（同一支 controller 相鄰路由、期望值相反） | 同上（`.each` Supervisor/DeptContact × ICSOP_PDF 案） | unit |
+| `AC-N34` 🔒 系統管理員／一般使用者仍拒 | 同上 | unit |
+| `AC-N35` 🔒 既有驗證不因角色而異（格式白名單／大小上限） | 同上 | unit |
+| 矩陣格值本身（`OJT_WRITABLE`，恰兩格改值） | `backend/src/rbac/field-matrix.spec.ts`（「D9 delta — OJT 簽到表破例」describe，`AC-N22`～`AC-N27`） | unit |
+| `AC-N74` 唯讀提示三條具名常數逐字值 | 🔵 前端常數定義＋渲染，不在本段範圍（本段僅驗證後端授權判定，不驗前端文案） | component |
+
+## risks-and-gaps 提醒
+
+- `AC-N30`（不限權責範圍）為負向鎖定——本段測試僅能證明「目前程式碼未拒絕」，無法窮舉證明「未來
+  任何實作都不會意外引入子樹檢查」；若日後有人改動 `assertCanWriteDocumentAsset` 呼叫鏈，需重跑
+  本測試確認仍為綠燈（回歸測試之固有局限，非本段缺口）。

@@ -141,3 +141,29 @@
 5. **targetType 條件必填欄位之驗證錯誤碼未定**。data-model 明定 `documentId`/`lifecycleId` 依 `targetType` 二擇一為條件必填，但 `error-handling.md` 未列出對應錯誤碼。TS-005 暫以 `AUDIT_TARGET_FIELD_REQUIRED`（暫定名）佔位，需 architect 於 error-handling.md 補上精確碼值後 tdd-developer 才能斷言確切字串（避免各 worktree 各自臆造碼值造成日後不一致）。
 
 6. **`AuditStore.queryHistory()` 之低階契約 vs F024 業務篩選邏輯之分工**：架構將 `queryHistory(scope, filters)` 列為 `AuditModule` 之關鍵函式，但實際篩選/分頁/排序邏輯應落在哪一層（`AuditStore` 純資料存取 vs `AuditWriter`/`AuditService` 業務邏輯層）未定。本測試設計刻意將「基礎查詢契約」留給 F023（僅需確認 store 能依 filters 回傳資料），完整篩選矩陣（類型切換、互斥條件等）測試落在 `F024-test.md`，兩檔案的分工假設需與 tdd-developer 確認一致，避免重複或遺漏。
+
+---
+
+# 🔴 2026-08-20 D9 缺失／變更 delta 測試設計
+
+> 本段由 **test-generator（backend／jest 線）** 於 2026-08-20 追加，涵蓋 `AC-N50`～`AC-N52`。
+> 權威＝`docs/specs/features/F023-audit-logging.md#d9-audit-delta`、
+> `docs/specs/features/F016-pdf-ojt-attachment.md#ojt-role-open-delta`、
+> `docs/specs/features/F020-watermark.md#backend-burn-delta`。
+> ✅ **不需 migration**：`actionType`／`targetType` 皆為無 CHECK 約束之 varchar，新字面值落得下。
+
+## AC ↔ 約束對照
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-N50` OJT 上傳稽核（`actionType='ATTACHMENT_UPLOAD'`／`targetType='DOCUMENT_ATTACHMENT'`，🔴 2026-08-20 第二輪就地修訂） | `backend/src/attachments/attachments.service.spec.ts`（「D9 delta — OJT 簽到表上傳角色開放」describe，`AC-N31`／`AC-N32` 案） | unit |
+| `AC-N51` 後台燒錄下載寫稽核（不新增列舉值） | `attachments.service.spec.ts`／`appendices.front-burn.service.spec.ts`／`usage-forms.front-burn.service.spec.ts` 之「D9 delta — 後台受控下載改為一律燒錄＋寫稽核」describe | unit |
+| `AC-N52` 🔒 既有稽核行為回歸鎖定＋角色不對稱明文（ICSOPAdmin 上傳 OJT 不寫稽核） | `attachments.service.spec.ts`「AC-N32（🔴 角色不對稱）」案 | unit |
+| §11.6／§11.11 #20（`AuditWriterRecorder` 身分快照遺漏，本輪最擔心之三條之一） | `appendices/audit-writer-recorder.adapter.spec.ts`／`usage-forms/audit-writer-recorder.adapter.spec.ts` 新增案（完整六欄輸入→完整轉送物件斷言） | unit |
+
+## risks-and-gaps 提醒（供彙整）
+
+- `OQ-D9-29` 之角色不對稱（ICSOPAdmin 上傳附件從不寫稽核，`OQ-E01-09` 既有落差）本輪**不償還**，
+  `AC-N52` 已將此不對稱寫成明文可測斷言，不留給實作者自由裁量。
+- §11.11 #21（`WATERMARK_BURNER` 抽出重構之接線回歸）原理上測不到，非本檔可補，列入
+  `docs/test-specs/risks-and-gaps.md`（由 lead 彙整）。

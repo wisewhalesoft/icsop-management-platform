@@ -1,5 +1,5 @@
-import { PDFDocument } from 'pdf-lib';
-import { PdfLibBurner, toDisplayLines } from './pdf-burner';
+import { PDFDocument, rgb } from 'pdf-lib';
+import { PdfLibBurner, toDisplayLines, WATERMARK_RGB, WATERMARK_OPACITY } from './pdf-burner';
 import { asciiSafe, loadCjkFontBytes } from './fonts/cjk-font';
 import { WATERMARK_CONFIDENTIALITY } from './watermark';
 
@@ -50,5 +50,83 @@ describe('PdfLibBurner（F020 CJK 浮水印燒錄）', () => {
   it('toDisplayLines：機密聲明獨立一行', () => {
     const lines = toDisplayLines(`身分快照-${WATERMARK_CONFIDENTIALITY}`);
     expect(lines).toContain(WATERMARK_CONFIDENTIALITY);
+  });
+
+  /**
+   * 🔴 AC-N68（D9 delta，2026-08-20）：三層式呈現契約之新載體——`toDisplayLines(snapshot)`
+   * 對同一輸入之回傳**恰為 3 行**（①身分資料列 ②固定機密聲明另起一行 ③時間戳）。
+   * 權威：docs/specs/features/F020-watermark.md#d9-watermark-delta `AC-N68`。
+   *
+   * ⚠ 本檔（backend）僅能驗證「恰 3 行」與「逐行內容正確切分」這半條——AC-N68 另要求
+   * 「逐行與前端 `watermarkLines(snapshot)` 之對應行字串相同」，該跨前後端相等性須由
+   * frontend 線之 `watermark-lines.test.ts` 補上對稱斷言（本檔不越界驗證前端檔案）。
+   */
+  it('AC-N68 toDisplayLines：三層式結構固定回傳恰 3 行（①身分資料列 ②機密聲明 ③時間戳，各自獨立一行）', () => {
+    const snapshot = `E001-王小明-和潤企業股份有限公司-營運管理部-審查室-${WATERMARK_CONFIDENTIALITY}-2026-07-23 10:00:00 (UTC+8)`;
+    const lines = toDisplayLines(snapshot);
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toBe('E001-王小明-和潤企業股份有限公司-營運管理部-審查室');
+    expect(lines[1]).toBe(WATERMARK_CONFIDENTIALITY);
+    expect(lines[2]).toBe('2026-07-23 10:00:00 (UTC+8)');
+  });
+
+  it('AC-N68 收合後（處/室留空）之快照亦回恰 3 行，身分資料列本身之內部收合不受影響', () => {
+    const snapshot = `E001-王小明-和潤企業股份有限公司-營運管理部-${WATERMARK_CONFIDENTIALITY}-2026-07-23 10:00:00 (UTC+8)`;
+    const lines = toDisplayLines(snapshot);
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toBe('E001-王小明-和潤企業股份有限公司-營運管理部');
+  });
+});
+
+/**
+ * 🔴 D9 delta（2026-08-20，OQ-D9-01／OQ-D9-31）：浮水印色值加深＋不透明度調整之量化驗收。
+ * 權威：docs/specs/features/F020-watermark.md#d9-watermark-delta `AC-N1`／`AC-N2`／`AC-N3`。
+ *
+ * 🔴 **AC-N3 可測性前提之落點決定（test-generator 之命名決定，非規格明文指名——規格僅稱
+ * 「具名匯出常數」，未指名符號）**：本檔（`pdf-burner.ts`）為 AC-N2 表列第 4 列（PDF 燒錄内容層，
+ * ＝檢視器所見位元組之唯一來源）之載體檔案，故將色值／不透明度常數落於本檔、以
+ * `WATERMARK_RGB`（`pdf-lib` 之 `RGB` 型別，經 `rgb(0.2, 0.255, 0.3333)` 建構——逐字取自
+ * `AC-N2` 表列後端欄之字面值）與 `WATERMARK_OPACITY`（`number`）兩個具名匯出常數承載。
+ * 若 tdd-implementation 認為此符號名或落點不合適，請走 mailbox 向 test-generator 申訴。
+ *
+ * 📌 對比度計算之合成公式與 WCAG 相對亮度公式逐字取自 `AC-N1` 本文（供測試逐字實作，
+ * 避免各自臆造）：`effective = 255 − alpha × (255 − channel)`；
+ * `L = 0.2126·R' + 0.7152·G' + 0.0722·B'`；對比度 `= 1.05 / (L + 0.05)`。
+ */
+describe('D9 delta — 浮水印色值／不透明度（AC-N1／AC-N2／AC-N3，pdf-burner.ts 為 4 個有效載體之一）', () => {
+  it('AC-N3 可測性前提：色值與不透明度必須取自具名匯出常數（可 import，非散落於 drawText 呼叫處）', () => {
+    expect(WATERMARK_RGB).toBeDefined();
+    expect(typeof WATERMARK_OPACITY).toBe('number');
+  });
+
+  it('AC-N2（🔴 2026-08-20 就地改寫：不透明度 0.57→0.30）定稿值逐字為 rgb(0.2, 0.255, 0.3333)（＝#334155）＋ opacity 0.30', () => {
+    expect(WATERMARK_RGB).toEqual(rgb(0.2, 0.255, 0.3333));
+    expect(WATERMARK_OPACITY).toBe(0.3);
+  });
+
+  /**
+   * 📝 被推翻之原門檻逐字保留供追溯（`OQ-D9-31` 前）：對比度 ≥ 3.0；對應不透明度 0.57。
+   * 🔴 門檻以不等式斷言（≥ 1.70），不得寫成小數點後兩位之相等比較（浮點/四捨五入差異會使等值斷言脆裂）。
+   */
+  it('AC-N1（🔴 2026-08-20 就地改寫：門檻 3.0→1.70）合成於純白背景之對比度 ≥ 1.70', () => {
+    const channels255 = [WATERMARK_RGB.red, WATERMARK_RGB.green, WATERMARK_RGB.blue].map(
+      (c) => c * 255,
+    );
+    const alpha = WATERMARK_OPACITY;
+    const effective = channels255.map((c) => 255 - alpha * (255 - c));
+    const linearize = (c: number) => {
+      const cs = c / 255;
+      return cs <= 0.03928 ? cs / 12.92 : Math.pow((cs + 0.055) / 1.055, 2.4);
+    };
+    const [rLin, gLin, bLin] = effective.map(linearize);
+    const L = 0.2126 * rLin + 0.7152 * gLin + 0.0722 * bLin;
+    const contrast = 1.05 / (L + 0.05);
+    expect(contrast).toBeGreaterThanOrEqual(1.7);
+  });
+
+  it('AC-N1 負向對照：被推翻之舊門檻（3.0）與舊定稿值（opacity 0.57）已不再是現行常數（回歸鎖定門檻不得倒退）', () => {
+    // 現行常數之不透明度必須明確小於舊值（0.57），證明本輪確實改動而非殘留舊值。
+    expect(WATERMARK_OPACITY).toBeLessThan(0.57);
+    expect(WATERMARK_OPACITY).toBeGreaterThan(0); // 非零（仍可見）
   });
 });

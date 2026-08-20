@@ -377,6 +377,43 @@ describe('AccessHistoryController.exportHistory（AC-F5 值層：中文標籤）
     const cells = lines[1].split(',');
     expect(cells[6]).toBe('循環');
   });
+
+  /**
+   * 🔴 D9 delta（2026-08-20，`OQ-D9-29`／`OQ-D9-34`）：`AC-N70`（上傳事件於匯出之呈現）。
+   * 權威：docs/specs/features/F024-access-history-query.md#d9-audit-view-delta `AC-N70`；
+   * 值層通則沿用 `AC-F5`（列舉欄一律輸出中文標籤）。CSV 表頭與 10 欄集合逐字不變（`AC-N55`）。
+   */
+  it('④ 類型欄：DOCUMENT_ATTACHMENT → 上傳；操作類型欄：ATTACHMENT_UPLOAD → 附件上傳（AC-N70）', async () => {
+    const lines = await exportRows([
+      auditRow({
+        targetType: 'DOCUMENT_ATTACHMENT',
+        actionType: 'ATTACHMENT_UPLOAD',
+        documentId: 'd1',
+        documentNumber: 'ICSOP-SRC-101-1-01',
+        watermarkSnapshot: null,
+      }),
+    ]);
+    const cells = lines[1].split(',');
+    expect(cells[6]).toBe('上傳'); // 類型欄（0-based 第 6 欄）
+    expect(cells[8]).toBe('附件上傳'); // 操作類型欄（0-based 第 8 欄）
+    expect(lines[1]).not.toContain('DOCUMENT_ATTACHMENT');
+    expect(lines[1]).not.toContain('ATTACHMENT_UPLOAD');
+  });
+
+  it('AC-N70 上傳事件之對象（文件／循環）欄為該文件之編號；CSV 表頭仍逐字不變（10 欄，AC-N55）', async () => {
+    const lines = await exportRows([
+      auditRow({
+        targetType: 'DOCUMENT_ATTACHMENT',
+        actionType: 'ATTACHMENT_UPLOAD',
+        documentId: 'd1',
+        documentNumber: 'ICSOP-SRC-101-1-01',
+        watermarkSnapshot: null,
+      }),
+    ]);
+    expect(HEADER.split(',')).toHaveLength(10);
+    const cells = lines[1].split(',');
+    expect(cells[7]).toContain('ICSOP-SRC-101-1-01'); // 對象（文件／循環）欄（0-based 第 7 欄）
+  });
 });
 
 /** AC-F6（時間戳格式：YYYY-MM-DD HH:mm:ss，UTC+8，不附 (UTC+8) 字樣，顯式 +8 位移）。 */

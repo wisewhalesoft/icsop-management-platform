@@ -4,10 +4,23 @@ covers: [F026]
 priority: P0-MVP
 related_spec:
   - docs/specs/features/F026-role-field-matrix.md
+  - docs/specs/features/F020-watermark.md#backend-burn-delta
 worktree: field-matrix (feature/field-matrix)
-last_updated: 2026-07-24
+last_updated: 2026-08-20
 status: draft
 ---
+
+> 🔴🔴 **D9 delta（2026-08-20，`OQ-D9-08` 選項 B）——本檔 §0.2／§1／§1.3／§3／§9／§10 之「後台不燒錄
+> （OQ-FM-01）」基準線已就地反向重寫，比照 `AC-F17` 之既有處置慣例，逐節保留原文供追溯、不得刪除。**
+> `OQ-FM-01`（2026-07-24）與其 2026-08-16 之再次確認（`OQ-D18-01`）**已於本輪全面失效**——後台
+> 文件本體、附件（ICSOP PDF／OJT）、附錄、使用表單之全部下載端點自本輪起**一律燒錄浮水印**，
+> 無例外角色（含 ICSOPAdmin），且一律寫入調閱稽核。**原「TS-FM-001／TS-FM-002 描述現況特徵、待
+> OQ-FM-01 裁決」之定位已終結——OQ-FM-01 已裁決，且裁決結果與本檔原載之現況相反。**
+> 實際執行之測試已就地反向重寫於 `backend/src/attachments/attachments.service.spec.ts`
+> （「D9 delta — 後台受控下載改為一律燒錄＋寫稽核」describe，取代原 TS-FM-001）與
+> `backend/src/usage-forms/usage-forms.front-burn.service.spec.ts`（「D9 delta — 後台受控下載
+> 改為一律燒錄＋寫稽核」describe，取代原 TS-FM-002；`usage-forms.service.spec.ts` 之 bare-svc
+> 半段僅保留「非 PDF 仍為原始位元組」之 RAW 格式驅動半段，該半段本身不受 D9 影響）。
 
 # field-matrix 測試設計：F026 AC5-9（附件／浮水印／使用部門子樹）欄位權限判定
 
@@ -137,33 +150,59 @@ async getDownloadUrl(session, blobPath): Promise<DownloadGrant> {
   新增「應燒錄」之強制斷言（避免違反「不得杜撰新需求」）。裁決後若確認需燒錄，`tdd-developer` 可將
   §1.3 之特徵測試改寫為正向驗收測試。
 
-### 1.3 New Test Scenarios — 記錄現況（目標檔案：`backend/src/attachments/attachments.service.spec.ts`）
+### 1.3 New Test Scenarios（🔴🔴 D9 delta，2026-08-20 就地反向重寫；原「記錄現況」定位已終結）
 
-#### TS-FM-001 現況特徵：後台受控下載（`getDownloadUrl`）不呼叫任何燒錄函式，回傳原始 blob URL
-- **對應 AC**：AC6 Edge Case（現況記錄，非既定驗收；OQ-FM-01）
-- **Test Type**：Characterization（現況特徵，非 Positive/Negative）
-- **Preconditions**：已上傳 ICSOP PDF（`ICSOP_ADMIN` 上傳）；`FakeBlobStore` 記錄每次 `getUrlCalls`
-- **Steps**：
-  1. `svc.getDownloadUrl({ roleCode: 'Supervisor', accountId: 'x' }, rec.blobPath)`
-  2. 檢視回傳值與 `blob` 之呼叫記錄
-- **Expected Result**：回傳 `url` 等同 `blob.getDownloadUrl(blobPath, TTL)` 之原始輸出（未經任何轉換／
-  未含燒錄後綴）；測試中不注入任何 `burner`/`PdfBurner` 依賴（`AttachmentsService` 建構子本無此參數）
-  ——本案例之斷言重點即「此服務完全不具備燒錄能力」，作為 OQ-FM-01 裁決後之明確比對基準線。
-- **標註**：此測試預期**現在即通過**（描述現況，非期望修復後行為）。若人類裁決「後台亦須燒錄」，
-  此測試需被**取代**為正向燒錄驗收測試（届時 `AttachmentsService` 需新增 burner 相依），並在
-  `docs/specs/error-handling.md`／`F026`／`F020` spec 補充明文規則。
+> **原標題**（逐字保留供追溯）：「New Test Scenarios — 記錄現況（目標檔案：
+> `backend/src/attachments/attachments.service.spec.ts`）」——`OQ-FM-01` 已裁決（`OQ-D9-08` 選項 B，
+> 2026-08-20），且裁決方向與原「現況記錄、待裁決」之特徵測試相反，故本節之「現況特徵測試」定位
+> 直接終結，兩案皆已**取代為正向燒錄驗收測試**。
 
-（目標檔案：`backend/src/usage-forms/usage-forms.service.spec.ts`，同構案例）
+#### TS-FM-001（🔴 已反向重寫，原文逐字保留供追溯）後台受控下載改為一律燒錄浮水印＋寫稽核
 
-#### TS-FM-002 現況特徵：使用表單下載（前台 `downloadForm` 與後台 `downloadFromPool`）皆不燒錄
-- **對應 AC**：AC6 Edge Case（現況記錄，OQ-FM-01）
-- **Test Type**：Characterization
-- **Preconditions**：已上傳表單並關聯文件
-- **Steps**：分別以 `svc.downloadForm(SUPERVISOR, docId, formId)` 與
-  `svc.downloadFromPool(SUPERVISOR_OR_SYSADMIN, formId)` 呼叫
-- **Expected Result**：兩者回傳值皆為 `blob.getDownloadUrl(form.blobPath, TTL)` 之原始輸出；
-  `UsageFormsService` 建構子無 burner 相依，無法燒錄。
-- **標註**：同 TS-FM-001，現況通過、待 OQ-FM-01 裁決。
+> **原文（逐字保留，已作廢）**：「現況特徵：後台受控下載（`getDownloadUrl`）不呼叫任何燒錄函式，
+> 回傳原始 blob URL。對應 AC：AC6 Edge Case（現況記錄，非既定驗收；OQ-FM-01）。Test Type：
+> Characterization（現況特徵，非 Positive/Negative）。Preconditions：已上傳 ICSOP PDF（`ICSOP_ADMIN`
+> 上傳）；`FakeBlobStore` 記錄每次 `getUrlCalls`。Steps：① `svc.getDownloadUrl({ roleCode:
+> 'Supervisor', accountId: 'x' }, rec.blobPath)` ② 檢視回傳值與 `blob` 之呼叫記錄。Expected Result：
+> 回傳 `url` 等同 `blob.getDownloadUrl(blobPath, TTL)` 之原始輸出（未經任何轉換／未含燒錄後綴）；
+> 測試中不注入任何 `burner`/`PdfBurner` 依賴（`AttachmentsService` 建構子本無此參數）——本案例之
+> 斷言重點即『此服務完全不具備燒錄能力』，作為 OQ-FM-01 裁決後之明確比對基準線。標註：此測試預期
+> 現在即通過（描述現況，非期望修復後行為）。若人類裁決『後台亦須燒錄』，此測試需被取代為正向燒錄
+> 驗收測試（届時 `AttachmentsService` 需新增 burner 相依），並在 `docs/specs/error-handling.md`／
+> `F026`／`F020` spec 補充明文規則。」
+
+- **現行狀態（🔴 2026-08-20 裁決兌現）**：`OQ-FM-01` 已由 `OQ-D9-08`（選項 B，使用者裁決）全面推翻。
+- **對應 AC**：docs/specs/features/F020-watermark.md#backend-burn-delta `AC-N14`（一律燒錄）／
+  `AC-N16`（無例外角色）／`AC-N17`（寫稽核）／`AC-N18`（身分＝操作者本人）。
+- **Test Type**：Positive（正向驗收，非 Characterization）。
+- **傳輸模式已於中途另案改為代理串流**（`AC-D3a`，2026-08-17）：呼叫方法已由 `getDownloadUrl` 改為
+  `downloadAttachmentRaw`，回傳形狀由 `{url}` 改為 `{bytes, fileName, contentType}`——此為與燒錄
+  裁決獨立之既有改動，非本次反向重寫之範圍，僅一併如實記錄。
+- **執行載體（已落地，非計畫）**：`backend/src/attachments/attachments.service.spec.ts` 之
+  「D9 delta — 後台受控下載改為一律燒錄＋寫稽核（AC-N14／AC-N15／AC-N16／AC-N17／AC-N18；
+  全面推翻 OQ-FM-01／OQ-D18-01）」describe 區塊——含 PDF 燒錄 1 次、非 PDF 不燒錄（策略 A）、
+  四角色皆燒錄（無例外）、身分快照為操作者本人、稽核恰新增一筆等逐項斷言。
+
+#### TS-FM-002（🔴 已反向重寫，原文逐字保留供追溯）使用表單後台下載改為一律燒錄浮水印＋寫稽核
+
+> **原文（逐字保留，已作廢）**：「（目標檔案：`backend/src/usage-forms/usage-forms.service.spec.ts`，
+> 同構案例）現況特徵：使用表單下載（前台 `downloadForm` 與後台 `downloadFromPool`）皆不燒錄。
+> 對應 AC：AC6 Edge Case（現況記錄，OQ-FM-01）。Test Type：Characterization。Preconditions：
+> 已上傳表單並關聯文件。Steps：分別以 `svc.downloadForm(SUPERVISOR, docId, formId)` 與
+> `svc.downloadFromPool(SUPERVISOR_OR_SYSADMIN, formId)` 呼叫。Expected Result：兩者回傳值皆為
+> `blob.getDownloadUrl(form.blobPath, TTL)` 之原始輸出；`UsageFormsService` 建構子無 burner 相依，
+> 無法燒錄。標註：同 TS-FM-001，現況通過、待 OQ-FM-01 裁決。」
+
+- **現行狀態（🔴 2026-08-20 裁決兌現）**：同上，`OQ-FM-01` 已全面推翻。
+- **對應 AC**：F020 `AC-N14`／`AC-N15`／`AC-N16`／F023 `AC-N51`。
+- **Test Type**：Positive。
+- **執行載體（已落地，非計畫）**：`backend/src/usage-forms/usage-forms.front-burn.service.spec.ts`
+  之「D9 delta — 後台受控下載改為一律燒錄＋寫稽核（AC-N14／AC-N51；全面推翻 OQ-FM-01）」
+  describe——含 `downloadFromPool()`（表單池管理頁）與 `downloadFormRaw()`（後台唯讀/編輯頁，
+  符號名取自 architecture-spec.md §11.6，見該檔頭之風險提示）兩條路徑之燒錄與稽核正向斷言。
+  `usage-forms.service.spec.ts`（bare `svc`，未注入燒錄協作點）之對應舊案（`TS-FM-002`）僅保留
+  「非 PDF 仍回原始位元組」之格式驅動半段（不受 D9 影響），「不寫稽核」半段之舊斷言已移除、
+  不代之以新斷言（理由：bare `svc` 缺 burner，若在此斷言寫稽核有假紅風險，見該檔案內註解）。
 
 ---
 
@@ -334,15 +373,15 @@ RBAC 缺陷，修正後 `DocumentReadonlyPage.test.tsx`/`DocumentEditPage.test.t
 
 ## 9. 開放設計問題（Open Questions）
 
-- **OQ-FM-01（🔴 高價值發現，需產品/架構裁決，非阻擋現行測試落地但阻擋「正式驗收」定調）**：
-  後台（Supervisor/DeptContact/ICSOPAdmin 經 `AttachmentsController.download`／
+- **OQ-FM-01（✅ 已於 2026-08-20 由 `OQ-D9-08` 選項 B 裁決＝應燒錄；🔴 原提報文字逐字保留供追溯）**：
+  「後台（Supervisor/DeptContact/ICSOPAdmin 經 `AttachmentsController.download`／
   `UsageFormsController` 之 `downloadFromPool`/`download`）下載 ICSOP PDF／使用表單，是否應與前台
   （`WatermarkController`）一致燒錄浮水印？現況**不燒錄**，但 UI 文案與 AC6 Edge Case 原文皆宣稱／
-  暗示會燒錄。若裁決「應燒錄」：需將 `AttachmentsService`/`UsageFormsService` 接上
-  `PdfBurner`+身分快照（依賴同 `WatermarkService` 之 `buildSnapshot`），§1.3 之 TS-FM-001/002 需
-  改寫為正向驗收案例，並補 `F026`/`F020` spec 與 `error-handling.md` 明文。若裁決「維持不燒錄」：
-  應修正三處 UI 文案（§7）與 F026 spec 第 53 行 Edge Case 原文之措辭。**本文件不擅自選邊**，
-  §1.3 之現況特徵測試可在任一裁決前先行落地作為回歸防線。
+  暗示會燒錄……本文件不擅自選邊，§1.3 之現況特徵測試可在任一裁決前先行落地作為回歸防線。」
+  **裁決結果**：應燒錄，且無例外角色、一律寫稽核（`OQ-D9-08`／`OQ-D9-09`／`OQ-D9-10`）。
+  §1.3 之 TS-FM-001／TS-FM-002 已就地改寫為正向驗收案例（見上）；`F020`／`F023`／`F039` spec 之
+  `AC-N14`～`AC-N21`／`AC-N50`／`AC-N51`／`AC-N56`～`AC-N58` 已補齊明文；`error-handling.md`
+  不需新增錯誤碼（本 delta 未新增任何錯誤路徑）。
 - **OQ-FM-02（🟢 低風險，供 doc-changelog/doc-seams 後續 track 參考）**：AC7「任一層級」之窮舉層級
   多樣性測試（§6 建議）是否需要正式補上？現況設計已「預設允許」（無層級檢查邏輯），功能性風險低，
   非阻擋。
@@ -358,9 +397,11 @@ RBAC 缺陷，修正後 `DocumentReadonlyPage.test.tsx`/`DocumentEditPage.test.t
 
 ## 10. 給人類的裁決清單（Summary of Decisions Needing Sign-off）
 
-1. **OQ-FM-01（優先）**：後台附件/使用表單下載是否應燒錄浮水印？直接決定 §1.3 兩案例最終形態
-   （現況特徵 vs 正向驗收）與是否需要新增 `PdfBurner` 相依 wiring 工作（超出本 test-design 範圍，
-   屬 tdd-developer 之實作決策，但需先有此裁決）。
+1. **OQ-FM-01（✅ 已於 2026-08-20 由 `OQ-D9-08` 裁決＝應燒錄）**：原文「後台附件/使用表單下載是否
+   應燒錄浮水印？直接決定 §1.3 兩案例最終形態（現況特徵 vs 正向驗收）……」逐字保留供追溯——
+   §1.3 已改寫為正向驗收，`AttachmentsService`／`UsageFormsService`／`AppendicesService` 之
+   `WATERMARK_BURNER` wiring 為 architecture-spec.md §11.5／§11.6 之明文範圍（非本 test-design
+   自行決定，已授權 tdd-implementation 依該節落地）。
 2. **OQ-FM-04**：`feature-status.md` F026 列文字是否需依本文件 §3 重新措辭（下次該檔解凍時處理）。
 3. OQ-FM-02/03 為低風險文件維護性質，不阻擋本文件測試案例（§1/§2 共 6 案）之落地。
 

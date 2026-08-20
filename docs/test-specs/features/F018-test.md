@@ -377,3 +377,41 @@ UsageFormsService.uploadForm(session, file, name?, formNumber?)
 | `TS-FM-003`／`TS-FM-004`（主管／部門窗口經 `downloadForm` 下載） | 同上；另含「後台角色走前台方法」之語意問題——`AC-D13` 只列舉後台**頁面**，未規範後台角色打前台端點 |
 
 **附錄側存在完全同型之遺留**（Lane C 亦未處置 `appendices.service.spec.ts:428/452` 之 `grant` 斷言）⇒ 兩處應由 lead 一次裁決，本 lane 不單方面修改（檔案所有權未明示授予）。詳見 `risks-and-gaps` `G-L3-05`。
+
+---
+
+# 🔴🔴 2026-08-20 D9 缺失／變更 delta 測試設計（整頁化＋制定部門，backend 線）
+
+> 本段由 **test-generator（backend／jest 線）** 於 2026-08-20 追加，涵蓋 `AC-N43`～`AC-N49` 之
+> **後端**部分（`AC-N41`／`AC-N42`／`AC-N77`～`AC-N79` 為前端路由與 DOM 契約，不在本段範圍）。
+> 權威＝`docs/specs/features/F018-usage-form-management.md#usage-form-page-delta`、
+> `architecture-spec.md §11.10`。**本輪唯一需 migration 者**（`USAGE_FORM_DRAFTING_DEPT`）。
+
+## AC ↔ 約束對照
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-N43` 🔒 仍為單一動作一次送出（後端契約回歸鎖定） | 既有 multipart 上傳端點語意不變（無新增測試，既有 `TS-001` 等維持綠燈即為佐證） | unit |
+| `AC-N44` 🔒 編號唯一性與錯誤文案沿用（不新增後端工作） | 既有 `AC-D4`／`AC-D5`／`AC-D6`／`AC-D18`／`AC-D19` 全數維持綠燈 | unit |
+| `AC-N45` 多選、任意層級、持久化 | `backend/src/usage-forms/usage-forms.service.spec.ts`（「D9 delta — 制定部門（多選）：AC-N45」describe） | unit（⚠ 見下方契約性假設） |
+| `AC-N46` 🔴 純 metadata 回歸鎖定 | 同檔「D9 delta — AC-N46」describe | unit |
+| `AC-N47` 清單顯示（`draftingDeptCodes` DTO 契約） | 同檔「D9 delta — AC-N47」describe | unit |
+| `AC-N48` 編輯頁範圍與「編輯編號」動作之處置（路由擴大、body 擴大） | `backend/src/usage-forms/usage-forms.controller.number.spec.ts`（就地反向重寫，路由由 `/number` 改為無尾段，body 擴為 `formNumber?`／`draftingDeptCodes?`） | unit |
+| `AC-N49` 🔒 既有行為回歸鎖定（六欄未變、Blob 未讀未寫） | 既有 `AC-D20` 語意不變（本 delta 未新增覆寫既有斷言） | unit |
+
+## ⚠ 契約性假設（test-generator 訂立，非讀取實作決定；供 tdd-implementation 對齊或申訴）
+
+1. `UsageFormsController.updateNumber()` 之路由由 `admin/usage-forms/:formId/number` 改為
+   `admin/usage-forms/:formId`（移除 `/number` 尾段），**handler 方法名沿用 `updateNumber`**。
+2. 服務層方法**改名**為 `updateFormMetadata(session, formId, patch: { formNumber?: string | null;
+   draftingDeptCodes?: string[] })`，取代原 `updateFormNumber(session, formId, formNumber)`。
+3. `FormPoolStore` 新增 additive 方法 `replaceDraftingDepts(formId, orgCodes): Promise<void>`
+   （delete-then-insert replace-set）與 `listDraftingDepts(formId): Promise<string[]>`（依 orgCode
+   昇冪）。**`AC-N45` 之測試目前僅針對一個獨立的 `FakeDraftingDeptStore` 驗證，尚未串接進
+   `UsageFormsService` 本身的呼叫鏈**（真正的服務層整合測試待 tdd-implementation 定案實際存取層
+   形狀後，由 test-generator 補上更強之整合案，或經 mailbox 確認本假設後補強）。
+
+🔴 **本輪唯一需 migration 者**：`USAGE_FORM_DRAFTING_DEPT`（`data-model.md#usage-form-drafting-dept`；
+architecture §11.10(c)）。**單元測試無法證明資料表真的存在**——依本 repo 既有硬規則
+（`project-icsop-migration-deploy`），migration 寫完後必須對真 SOP DB 實跑驗證 FK／索引／唯一鍵
+衝突，此為 unit 盲區，列入 `risks-and-gaps.md`。

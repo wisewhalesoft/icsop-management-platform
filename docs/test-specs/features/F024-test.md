@@ -246,3 +246,32 @@ failed to run`）。實作方補上 `res` 參數、整檔編譯通過後，這�
   `audit-writer.service.spec.ts` 之既有 `TS-005` 鎖定，非本 delta 職責）。本檔僅能驗證「Outbox／IO
   暫時性失敗不阻斷」（已覆蓋）；「payload 錯誤不得被同一 catch 吞掉」之區辨，只有讀取
   `AccessHistoryController.exportHistory()` 原始碼才能確認（違反盲測），故不寫入執行期斷言。
+
+---
+
+# 🔴🔴 2026-08-20 D9 缺失／變更 delta 測試設計
+
+> 本段由 **test-generator（backend／jest 線）** 於 2026-08-20 追加，涵蓋 `AC-N53`～`AC-N55`／
+> `AC-N69`／`AC-N70`（`AC-N80`／`AC-N81` 為前端 DOM 契約，不在本段範圍）。
+> 權威＝`docs/specs/features/F024-access-history-query.md#d9-audit-view-delta`。
+> ⚠ **本 delta 不改動 F024 之查詢契約、篩選組成、分頁或 CSV 欄位**——僅補齊「新資料落進既有查詢後
+> 怎麼顯示」，以及新增第四種類型篩選值「上傳」。
+
+## AC ↔ 約束對照
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-N53` OJT 上傳事件之類型/操作類型標籤（🔴 第二輪就地修訂，`targetType` 改為 `DOCUMENT_ATTACHMENT`） | `backend/src/audit/access-history-labels.spec.ts`（`auditKindLabel('DOCUMENT_ATTACHMENT')`／`actionTypeLabel('ATTACHMENT_UPLOAD')` 案） | unit |
+| `AC-N54` 後台燒錄下載列之呈現與前台同形 | 由 `AC-N51` 之稽核落值間接涵蓋（呈現層沿用既有 `auditKindLabel('DOCUMENT')`/`actionTypeLabel('DOWNLOAD')`，無新增邏輯，不重複建約束） | — |
+| `AC-N55` 🔒 F024 查詢與匯出之回歸鎖定 | 既有 `AC-F1`～`AC-F19` 全數維持綠燈（本 delta 之新增案不觸及既有斷言） | unit |
+| `AC-N69` 🔴 上傳事件必須可排除／篩出（`OQ-D9-29` 核心兌現）＋第四種類型篩選值 | `backend/src/audit/access-history-filter.spec.ts`（`kindToTargetTypes('上傳')` 案＋「AC-N69 上傳事件之排除／篩出」describe，① 排除／② 篩出／③ 全部三案） | unit |
+| `AC-N70` 上傳事件於匯出（CSV）與明細之呈現 | `backend/src/audit/access-history.controller.spec.ts`（AC-F5 describe 新增「④ 類型欄：DOCUMENT_ATTACHMENT→上傳」案＋對象欄案） | unit |
+| `AC-N80` 浮水印快照欄之 DOM 契約與留空文案 | 🔵 前端，不在本段範圍 | component |
+| `AC-N81` 同頁刻意分歧（浮水印簡稱 vs 表格全稱） | 🔵 前端 DOM 呈現層，本段之 backend 半段由 `company-name.spec.ts`（AC-N12／AC-N13）與本檔既有「公司」欄全稱回歸鎖定共同涵蓋 | unit（backend 半段） |
+
+## 型別缺口（如實回報，不臆造）
+
+`AuditKind`（`access-history-filter.ts` 內部型別）與 `AuditTargetType`／`AuditActionType`
+（`audit.types.ts`）三者皆需新增列舉字面值（`'上傳'`／`'DOCUMENT_ATTACHMENT'`／
+`'ATTACHMENT_UPLOAD'`）——本段測試對這些新字面值之呼叫（如 `kindToTargetTypes('上傳' as never)`）
+於本環撰寫時預期為**編譯期型別紅燈**，是「紅在對的原因」之一種，非測試本身有誤。

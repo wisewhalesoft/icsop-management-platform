@@ -287,54 +287,120 @@ describe('AppendicesService 前台附錄下載之稽核（F039 AC-27；F020 AC-D
   });
 });
 
-// ── AC-D3：🔒 後台 RAW 回歸鎖定（OQ-FM-01 維持有效）──────────────────────
+// ── D9 delta：後台個別下載改為一律燒錄＋寫稽核（全面推翻 OQ-FM-01；AC-N56／AC-N57／AC-N58）──
 
-describe('🔒 F039 AC-D3 後台附錄管理頁個別下載維持 RAW（OQ-FM-01；缺失 delta #15 明確不做）', () => {
+/**
+ * 🔴🔴 D9 delta（2026-08-20，`OQ-D9-08` 選項 B，缺失／變更 delta 第 5 項）——**本段落就地反向
+ * 重寫，取代原「後台維持 RAW」基準線，比照 `AC-F17` 之既有處置慣例保留原文供追溯，不得刪除**。
+ *
+ * 舊裁決：`OQ-FM-01`（2026-07-24 人類裁決，2026-08-16 `OQ-D18-01` 再次確認維持有效，缺失 delta #15
+ * 明確不做）——後台附錄管理頁個別下載一律 RAW、不燒錄、不寫稽核。
+ * **已於 2026-08-20 由 `OQ-D9-08`（使用者裁決，選項 B）全面推翻**：後台文件本體／附件／附錄／
+ * 使用表單之全部下載端點一律燒錄浮水印，無例外角色（`OQ-D9-09` 選項 B，含 ICSOPAdmin／SysAdmin），
+ * 一律寫稽核（`OQ-D9-10` 選項 A）。
+ *
+ * 權威：docs/specs/features/F039-appendix-management.md#d9-backend-burn-delta `AC-N56`（燒錄）／
+ *   `AC-N57`（寫稽核）／`AC-N58`（🔒 前台附錄行為零漣漪、權限矩陣不變）；
+ *   docs/specs/features/F020-watermark.md#backend-burn-delta `AC-N14`～`AC-N18`（同一組決策之共通條文）。
+ */
+describe('D9 delta — 後台附錄管理頁個別下載改為一律燒錄＋寫稽核（AC-N56／AC-N57；全面推翻 OQ-FM-01）', () => {
+  /**
+   * 📝 **被推翻之原斷言逐字保留供追溯（`OQ-FM-01` 已失效，不得再照抄執行）**：
+   *   OLD> `const out = await svc.downloadFromPool(session, 'ax-pdf');`
+   *   OLD> `expect(burner.calls).toHaveLength(0);`
+   *   OLD> `expect(audit.events).toHaveLength(0);`
+   *   OLD> `expect(out.bytes.equals(PDF_BYTES)).toBe(true); // RAW，與原件逐位元組相同`
+   *   OLD> `expect(blob.urlCalls).toHaveLength(0);`
+   */
   it.each([
     ['ICSOPAdmin', ICSOP_ADMIN],
     ['SysAdmin', SYS_ADMIN],
-  ])('%s 自後台下載同一份 PDF 附錄 → `burnPdf` 呼叫次數為 0、不寫任何稽核', async (_role, session) => {
+  ])('AC-N56／AC-N16 %s 自後台下載同一份 PDF 附錄 → burnPdf 呼叫次數為 1（無例外角色，含 ICSOPAdmin/SysAdmin 本人）', async (_role, session) => {
     const rec = recordOf();
-    const { svc, blob, burner, audit } = makeHarness([rec]);
+    const { svc, blob, burner } = makeHarness([rec]);
     await blob.put(rec.blobPath, PDF_BYTES, 'application/pdf');
 
     const out = await svc.downloadFromPool(session, 'ax-pdf');
 
+    expect(burner.calls).toHaveLength(1);
+    expect(burner.calls[0].original.equals(PDF_BYTES)).toBe(true);
+    // 燒錄必然改變位元組 ⇒ 與原件不相等，正是「不再是 RAW」的直接證明。
+    expect(out.bytes.equals(PDF_BYTES)).toBe(false);
+    expect(blob.urlCalls).toHaveLength(0); // 傳輸模式不變：仍為代理串流，不核發 SAS（AC-N21）
+  });
+
+  it('AC-N56 非 PDF（xlsx/xls）→ 策略 A 於後台亦適用：burnPdf 呼叫次數為 0、回傳與原件逐位元組相同', async () => {
+    const rec = recordOf({ id: 'ax-x', name: 'a.xlsx', format: 'xlsx', blobPath: 'appendices/ax-x.xlsx' });
+    const { svc, blob, burner } = makeHarness([rec]);
+    await blob.put(rec.blobPath, XLSX_BYTES, 'application/octet-stream');
+
+    const out = await svc.downloadFromPool(ICSOP_ADMIN, 'ax-x');
+
     expect(burner.calls).toHaveLength(0);
-    expect(audit.events).toHaveLength(0);
-    /**
-     * 🔴 **2026-08-17：由「核發 SAS」改為「代理串流」**（F020 `AC-D3a` 後台側修訂；
-     * Chrome Safe Browsing 對 `*.blob.core.windows.net` 出示「偵測到危險網站」攔截頁）。
-     * 原斷言（供追溯）：OLD> `expect(grant.url).toContain(rec.blobPath);` ＋ `expect(blob.urlCalls).toHaveLength(1);`
-     * 🔒 **本案所鎖定的 RAW 語意反而更強**：原本只驗「URL 字串沒被動過」，現在直接驗
-     * **回傳位元組逐位元組等於 Blob 原件**——燒錄必然改變位元組，故這才是 RAW 的直接證明。
-     */
-    expect(out.bytes.equals(PDF_BYTES)).toBe(true);
-    expect(blob.urlCalls).toHaveLength(0); // 不再核發任何 SAS
+    expect(out.bytes.equals(XLSX_BYTES)).toBe(true);
+  });
+
+  it('AC-N57 PDF 下載成功 → AUDIT_LOG 恰新增一筆，targetType=APPENDIX／actionType=DOWNLOAD／documentId 為 null（池管理頁脈絡）／watermarkSnapshot 落值', async () => {
+    const rec = recordOf();
+    const { svc, blob, burner, audit } = makeHarness([rec]);
+    await blob.put(rec.blobPath, PDF_BYTES, 'application/pdf');
+
+    await svc.downloadFromPool(ICSOP_ADMIN, 'ax-pdf');
+
+    expect(audit.events).toHaveLength(1);
+    const e = audit.events[0];
+    expect(e.targetType).toBe('APPENDIX');
+    expect(e.actionType).toBe('DOWNLOAD');
+    expect(e.appendixId).toBe('ax-pdf');
+    expect(e.documentId ?? null).toBeNull();
+    expect(e.watermarkSnapshot).toBe(burner.calls[0].snapshot);
+  });
+
+  it('AC-N57 非 PDF 下載成功 → 同樣寫入稽核，惟 watermarkSnapshot 為 null', async () => {
+    const rec = recordOf({ id: 'ax-x', name: 'a.xlsx', format: 'xlsx', blobPath: 'appendices/ax-x.xlsx' });
+    const { svc, blob, audit } = makeHarness([rec]);
+    await blob.put(rec.blobPath, XLSX_BYTES, 'application/octet-stream');
+
+    await svc.downloadFromPool(SYS_ADMIN, 'ax-x');
+
+    expect(audit.events).toHaveLength(1);
+    expect(audit.events[0].watermarkSnapshot).toBeNull();
+  });
+
+  it('AC-N18 浮水印身分＝操作者本人：ICSOPAdmin 與 SysAdmin 分別下載同一份 PDF → 燒錄字串與位元組皆不相等', async () => {
+    const rec = recordOf();
+    const { svc, blob, burner } = makeHarness([rec]);
+    await blob.put(rec.blobPath, PDF_BYTES, 'application/pdf');
+
+    const byAdmin = await svc.downloadFromPool(ICSOP_ADMIN, 'ax-pdf');
+    const bySys = await svc.downloadFromPool(SYS_ADMIN, 'ax-pdf');
+
+    expect(burner.calls).toHaveLength(2);
+    expect(burner.calls[0].snapshot).not.toBe(burner.calls[1].snapshot);
+    expect(byAdmin.bytes.equals(bySys.bytes)).toBe(false);
   });
 
   /**
-   * 📝 **2026-08-17 案名更正**：原案名結尾為「**後台路徑則完全不經手位元組**」——傳輸模式改為
-   * 代理串流後，後台確實經手位元組。`AC-D3`／`AC-D4` 所鎖的從來是**內容為 RAW**（不燒錄）
-   * 與**不寫稽核**，不是「伺服器有沒有碰到 bytes」。案名依其實際驗證之事實更正。
-   * 原案名（逐字保留）：`🔴 AC-D3 同一 blobPath：前台所得位元組與 Blob 原始位元組**不相等**，後台路徑則完全不經手位元組`
+   * 📝 **案名沿用 2026-08-17 之既有更正**（傳輸模式為代理串流，伺服器確實經手位元組）；
+   * 🔴 **本案內容因 D9 而反轉**：前台／後台自本輪起**皆已燒錄**，差異縮小為「浮水印身分不同」
+   * （前台＝檢視者本人、後台＝下載動作之操作者本人），而非「一邊燒一邊不燒」。
+   * 📝 **被推翻之原斷言逐字保留供追溯**：OLD> `expect(back.bytes.equals(PDF_BYTES)).toBe(true); // 後台＝RAW`
    */
-  it('🔴 AC-D3 同一 `blobPath`：前台所得位元組已燒錄（與原件不等），後台所得為 RAW（與原件逐位元組相同）', async () => {
+  it('AC-N14／AC-N56 同一 `blobPath`：前台與後台所得位元組自 D9 起皆已燒錄（皆與原件不相等），惟身分快照不同故彼此亦不相等', async () => {
     const rec = recordOf();
     const { svc, blob, burner } = makeHarness([rec]);
     await blob.put(rec.blobPath, PDF_BYTES, 'application/pdf');
 
     const front = await svc.downloadAppendix(VIEWER, 'doc-1', 'ax-pdf');
-    const burnedCount = burner.calls.length;
     const back = await svc.downloadFromPool(ICSOP_ADMIN, 'ax-pdf');
 
-    expect(front.bytes.equals(PDF_BYTES)).toBe(false); // 前台＝已燒錄
-    expect(burner.calls).toHaveLength(burnedCount); // 後台未再觸發燒錄
-    // 🔴 直接比對**後台回傳之位元組**，而非「Blob 裡的原件還在」——後者無論後台回什麼都成立。
-    expect(back.bytes.equals(PDF_BYTES)).toBe(true);
+    expect(front.bytes.equals(PDF_BYTES)).toBe(false); // 前台＝已燒錄（VIEWER 身分）
+    expect(back.bytes.equals(PDF_BYTES)).toBe(false); // 後台＝已燒錄（ICSOPAdmin 身分，D9 起同樣燒錄）
+    expect(front.bytes.equals(back.bytes)).toBe(false); // 身分不同 ⇒ 浮水印字串不同 ⇒ 位元組不同
+    expect(burner.calls).toHaveLength(2);
   });
 
-  it('🔒 主管／部門窗口／一般使用者呼叫後台端點 → PERMISSION_DENIED（AC-33 不變）', async () => {
+  it('🔒 AC-N58 主管／部門窗口／一般使用者呼叫後台端點 → 仍為 PERMISSION_DENIED（權限矩陣不變，燒錄與否不改變誰能下載）', async () => {
     const rec = recordOf();
     const { svc, blob } = makeHarness([rec]);
     await blob.put(rec.blobPath, PDF_BYTES, 'application/pdf');

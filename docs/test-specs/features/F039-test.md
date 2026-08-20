@@ -288,3 +288,28 @@ tdd-implementation 於實作期間提出 6 項測試申訴＋1 項報備，全�
 
 - `AC-D6` ② 之 `大小`／`上傳時間` 兩欄，其**值層**字面格式（`56 KB` vs `57344`；時間之時區與樣式）
   未入 AC ⇒ 測試僅斷言「非空」＋「儲存格數為 6」。見 `risks-and-gaps.md` `G-L5-01`。
+
+---
+
+# 🔴🔴 2026-08-20 D9 缺失／變更 delta 測試設計（後台附錄下載燒錄，全面推翻 OQ-FM-01）
+
+> 本段由 **test-generator（backend／jest 線）** 於 2026-08-20 追加，涵蓋 `AC-N56`～`AC-N58`。
+> 權威＝`docs/specs/features/F039-appendix-management.md#d9-backend-burn-delta`。
+> 🔴🔴 **本段就地反向重寫既有「🔒 F039 AC-D3 後台附錄管理頁個別下載維持 RAW（OQ-FM-01）」
+> describe**（`backend/src/appendices/appendices.front-burn.service.spec.ts`），比照 `AC-F17`
+> 之既有處置慣例保留原斷言供追溯（見該檔內 OLD> 註解）。
+
+## AC ↔ 約束對照
+
+| AC | 約束檔案 | 層級 |
+|---|---|---|
+| `AC-N56` 後台附錄下載燒錄（`burnPdf` spy 0→1 反轉） | `appendices.front-burn.service.spec.ts`（「D9 delta — 後台附錄管理頁個別下載改為一律燒錄＋寫稽核」describe） | unit |
+| `AC-N57` 後台附錄下載寫稽核（`documentId` 為 null，池管理頁脈絡） | 同上 | unit |
+| `AC-N58` 🔒 前台附錄行為零漣漪＋權限矩陣不變 | 同上（Supervisor/DeptContact/User 仍 `PERMISSION_DENIED` 案）＋前台既有 `AC-D1`～`AC-D5`、`AC-27`～`AC-30`、`AC-34` 全數維持綠燈 | unit |
+
+## 對 `appendices.service.spec.ts` 之連帶調整
+
+該檔既有「後台個別下載（downloadFromPool）」案使用 `xlsx()`（非 PDF）fixture、且 `svc` 未注入
+燒錄協作點——「不寫稽核」之舊斷言已**移除**（非替換為新斷言，見該檔內詳細取捨說明），
+避免因 fixture 缺 burner 而產生假紅；PDF 格式之正向燒錄＋稽核斷言完整落於
+`appendices.front-burn.service.spec.ts`（burner 已正確注入之 harness）。

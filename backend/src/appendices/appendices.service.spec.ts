@@ -435,10 +435,15 @@ describe('AppendicesService（F039 附錄池管理）', () => {
    * | `AC-D3a` 代理串流（原 `AC-29`） | **前台** | 同上 | 改（原 AC 已被推翻，見該案註解） |
    * | `AC-34` 任一角色皆可下載 | **前台** | 同上 | **不動**（`resolves.toBeDefined()` 與傳輸形狀無關） |
    * | `APPENDIX_NOT_FOUND` | **前台** | 同上 | **不動** |
-   * | 後台個別下載 ×2 | 🔒 **後台** | `downloadFromPool(session, id)` | **一字未動，應維持綠燈** |
+   * | 後台個別下載 ×2 | 🔒 **後台** | `downloadFromPool(session, id)` | 🔴 **2026-08-20 D9 delta 已改**（見下方） |
    *
-   * 🔒 **後台兩案即 `OQ-FM-01`／F020 `AC-D4`／F039 `AC-D3` 之回歸鎖定**：核發 SAS、不燒錄、不寫稽核。
-   *    `OQ-FM-01` 於 2026-08-16 經再次確認**維持有效**，惟其適用範圍自本日起收斂為**後台**。
+   * 🔴🔴 **2026-08-20 D9 delta（`OQ-D9-08` 選項 B）：`OQ-FM-01` 已被全面推翻**——後台兩案原本
+   *    「核發 SAS、不燒錄、不寫稽核」之回歸鎖定**其中「不寫稽核」半段已反轉**（本檔下方之
+   *    「後台個別下載」案已就地改寫）；「不燒錄」半段對本檔之 `xlsx()` fixture 仍成立（策略 A，
+   *    格式驅動，非角色驅動），PDF 格式之正向燒錄斷言在 `appendices.front-burn.service.spec.ts`。
+   *    📝 被推翻之原文逐字保留供追溯：「後台兩案即 `OQ-FM-01`／F020 `AC-D4`／F039 `AC-D3` 之回歸
+   *    鎖定：核發 SAS、不燒錄、不寫稽核。`OQ-FM-01` 於 2026-08-16 經再次確認維持有效，惟其適用
+   *    範圍自本日起收斂為後台。」
    * 📌 **已知之副作用（不修，僅記錄）**：`AC-28` 之 `expect(blob.urlCalls).toHaveLength(0)` 在前台改為
    *    代理串流後**恆真**（該路徑本就不再核發 SAS），其鑑別力退化為零；該案真正仍有鑑別力的斷言是
    *    `expect(audit.events).toHaveLength(0)`。因該案未「必然失效」，依 lead 指示不動它。
@@ -563,9 +568,23 @@ describe('AppendicesService（F039 附錄池管理）', () => {
     /**
      * 🔴 2026-08-17：由「核發 URL」改為「代理串流」（F020 `AC-D3a` 後台側修訂）。
      * 原斷言（供追溯）：OLD> `expect(g1.url).toContain(f.blobPath); expect(g2.url).toContain(f.blobPath);`
-     * 不寫稽核之語意（`AC-D4`／OQ-FM-01）未動。
+     *
+     * 🔴🔴 D9 delta（2026-08-20，`OQ-D9-08`／`OQ-D9-10`，全面推翻 `OQ-FM-01`）——
+     * **「不寫稽核」之結論已被推翻**：後台燒錄下載自本輪起一律寫入 `AUDIT_LOG`（`AC-N57`）。
+     * 📝 **被推翻之原斷言逐字保留供追溯**：OLD> `expect(audit.events).toHaveLength(0); // 管理端存取不寫稽核（比照 F026 OQ-FM-01）`
+     *
+     * ⚠ **本案（bare `svc = new AppendicesService(blob, store, audit, docChecker)`，未注入
+     * 燒錄協作點）之取捨**：architecture-spec.md §11.6 明訂 `downloadFromPool()` 於呼叫
+     * `audit.record()` 之前**新增**一次 `burner.buildSnapshot(session)` 呼叫以取得身分快照
+     * 欄——此為本 delta 唯一真正新增之邏輯分支，且依賴 burner 存在。若在此（無 burner 之 fixture）
+     * 斷言「寫稽核」，一旦 tdd-implementation 之寫法是「無 burner 則整段稽核邏輯連 record() 都不
+     * 呼叫」，本案會給出**假紅**（紅在 fixture 缺 burner，而非紅在真正的行為缺陷）。
+     * 故本案**移除**「不寫稽核」之舊斷言而不代之以新斷言，僅保留與 D9 無關之既有事實（取得位元組、
+     * 檔名、Content-Type 正確）——真正的 `AC-N57` 正向稽核斷言（burner 已注入之正確 harness）
+     * 已另立於 `appendices.front-burn.service.spec.ts`「D9 delta — 後台附錄管理頁個別下載改為
+     * 一律燒錄＋寫稽核」，本檔不越界猜測 fixture 邊界情況之行為。
      */
-    it('後台個別下載（downloadFromPool）：ICSOPAdmin/SysAdmin 皆可取得位元組、不寫稽核', async () => {
+    it('後台個別下載（downloadFromPool）：ICSOPAdmin/SysAdmin 皆可取得位元組（正向稽核斷言另立於燒錄協作點已注入之 harness）', async () => {
       const f = await svc.uploadAppendix(ICSOP_ADMIN, xlsx());
       const g1 = await svc.downloadFromPool(ICSOP_ADMIN, f.id);
       const g2 = await svc.downloadFromPool(SYS_ADMIN, f.id);
@@ -574,7 +593,6 @@ describe('AppendicesService（F039 附錄池管理）', () => {
         expect(g.contentType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         expect(Buffer.isBuffer(g.bytes)).toBe(true);
       }
-      expect(audit.events).toHaveLength(0); // 管理端存取不寫稽核（比照 F026 OQ-FM-01）
     });
 
     it('後台個別下載：Supervisor（功能=無）→ PERMISSION_DENIED', async () => {
