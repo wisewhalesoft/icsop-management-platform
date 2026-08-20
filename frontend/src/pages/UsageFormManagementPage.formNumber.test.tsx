@@ -150,11 +150,23 @@ describe('UsageFormManagementPage — F018 AC-D1 清單欄位', () => {
     expect(cell.className).toMatch(/\bmono\b/);
   });
 
+  /**
+   * 🔴 2026-08-20 D9 delta（`impl-fe2` 申訴，已核實成立）：`AC-N47` 新增「制定部門」欄，0 筆時
+   * 亦顯示逐字「—」——`uf3` fixture 之 `formNumber` 為 `null` 且無 `draftingDeptCodes`，
+   * 同一列因而**同時**存在兩個「—」（編號欄＋制定部門欄），無範圍限縮之 `getByText('—')`
+   * 必拋 `Found multiple elements`。改為先以 `data-form-number` 定位編號欄容器，再於其內尋找
+   * 「—」文字節點——`data-form-number` 掛在外層 `<td>`，文字與 `title` 則在內層 `<span>`
+   * （與 `AC-N47` 案之 `data-drafting-dept`＋文字同掛一元素不同構，故不可直接沿用
+   * `{ selector: '[data-form-number]' }` 之單層寫法，已實測確認）。
+   * 📝 被取代之原斷言逐字保留供追溯：OLD> const dash = within(row).getByText('—');
+   */
   it('TS-D18-062 AC-D1／AC-D15 ① formNumber 為 null → 逐字「—」＋ title「此表單未設定編號」，不得顯示 null 或空白', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('徵信照會表.pdf')).toBeInTheDocument());
     const row = rowOf('徵信照會表.pdf');
-    const dash = within(row).getByText('—');
+    const numberCell = row.querySelector('[data-form-number]') as HTMLElement;
+    expect(numberCell, '找不到 data-form-number 儲存格').not.toBeNull();
+    const dash = within(numberCell).getByText('—');
     expect(dash).toHaveAttribute('title', '此表單未設定編號');
     expect(within(row).queryByText('null')).toBeNull();
   });

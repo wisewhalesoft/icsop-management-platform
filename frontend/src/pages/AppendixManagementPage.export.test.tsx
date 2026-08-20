@@ -20,8 +20,12 @@ import type { AppendixPoolItem, SessionUser } from '../api/types';
  *  - F039 `AC-D4`（匯出鈕存在與權限）／`AC-D12`（成功片段 `已匯出附錄清單（CSV，UTF-8 BOM）`；
  *    超限逐字 `符合條件之筆數為 {N} 筆，超過匯出上限 10000 筆，請縮小篩選條件` ＋ `EXPORT_ROW_LIMIT_EXCEEDED · 400`；
  *    ⚠「與 F037 `AC-D10`／F038 `AC-D6` 之句式差異為**刻意**」——本頁量詞為「筆數」、限定詞為「篩選條件」）
- *  - F039 `AC-D3`／F020 `AC-D4`／`AC-D7` ④（🔒 後台恆 RAW：不呼叫前台燒錄端點、**不得**渲染
- *    `data-wm-note` 與兩條浮水印文案）
+ *  - F039 `AC-D3`（🔒 個別下載仍走後台專屬 helper `downloadAppendixFromPool`，非前台燒錄端點
+ *    `downloadDocumentAppendixFront`——這是「呼叫哪個函式」之區分，與是否燒錄浮水印為正交
+ *    維度，不受下方 D9 delta 影響）
+ *  - 🔴 2026-08-20 D9 delta（`OQ-D9-08`／`OQ-D9-33`）：F020 `AC-D4`／`AC-D7`④ 之「後台恆 RAW、
+ *    不得渲染 data-wm-note」定案已**全面推翻**——後台自本輪起一律燒錄並寫稽核，且亦渲染
+ *    `data-wm-note`（`F020 AC-N20`）。原引用之 `AC-D7`④ 禁止條款已於 spec 就地加註失效。
  *  - architecture-spec §10.15 盲區 #16（🔴「凡 AC 措辭為『於 **topbar 動作區**存在某按鈕』者，
  *    元件測試若未包 `AppShell`／未提供 `TopbarSlotsContext`，命中的是 inline fallback 的 DOM，
  *    **topbar 之 portal 注入路徑從未被執行**」⇒ 本檔提供真實 slots 以驗到 AC 所述位置）
@@ -193,7 +197,13 @@ describe('AppendixManagementPage 匯出之使用者可見回饋（F039 AC-D12 �
   });
 });
 
-describe('🔒 F039 AC-D3／F020 AC-D4·AC-D7 ④ 後台附錄管理頁維持 RAW（OQ-FM-01；#15 明確不做）', () => {
+/**
+ * 📝 被取代之原 describe 標題逐字保留供追溯：
+ *   OLD> describe('🔒 F039 AC-D3／F020 AC-D4·AC-D7 ④ 後台附錄管理頁維持 RAW（OQ-FM-01；#15 明確不做）', () => {
+ * 🔴 2026-08-20 D9 delta：`OQ-FM-01`／`#15` 已由 `OQ-D9-08` 全面推翻，後台自本輪起一律燒錄並
+ * 渲染 `data-wm-note`（`F020 AC-N20`）；本 describe 內僅「下載走哪個 helper」一事維持不變。
+ */
+describe('F039 AC-D3 個別下載沿用既有 helper；F020 AC-N20 後台頁面亦渲染 data-wm-note', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getAppendixPoolOverview).mockResolvedValue(POOL);
@@ -221,12 +231,43 @@ describe('🔒 F039 AC-D3／F020 AC-D4·AC-D7 ④ 後台附錄管理頁維持 RA
     expect(endpoints.downloadDocumentAppendixFront).not.toHaveBeenCalled();
   });
 
-  it('🔒 F020 AC-D7 ④ 後台頁面**不得**渲染 `data-wm-note` 與兩條浮水印文案（後台恆 RAW，顯示即誤導）', async () => {
+  /**
+   * 🔴 2026-08-20 D9 delta（`OQ-D9-08`／`OQ-D9-33`；`impl-fe2` 申訴，已核實成立）—— 就地反轉。
+   * `OQ-D9-08`（選項 B）全面推翻 `OQ-FM-01`／`OQ-D18-01`：後台自本輪起一律燒錄並寫稽核；
+   * `OQ-D9-33` 進一步裁定後台各檔案列亦渲染 `data-wm-note`（`F020 AC-N20`），就地推翻本檔
+   * 原引用之 `AC-D7`④ 禁止條款（該條原文已於 spec 就地加註失效，逐字保留供追溯）。
+   * 環內互斥可直接舉證：本 feature 之 `AppendixManagementPage.test.tsx`（另一測試檔）已新增
+   * `AC-N20` 正面案，要求每列恰帶一個 `data-wm-note` 且文案逐字二擇一——與本檔原負向案（要求
+   * 該屬性出現次數為 0）不可能同時成立於同一份 DOM。與 backend 線 `AC-N12`（`downloadFromPool`
+   * 一律燒錄）之反向重寫同型。
+   * 📝 被推翻之原案全文逐字保留供追溯：
+   *   OLD> it('🔒 F020 AC-D7 ④ 後台頁面**不得**渲染 `data-wm-note` 與兩條浮水印文案（後台恆 RAW，顯示即誤導）', async () => {
+   *   OLD>   mockAuth('ICSOPAdmin');
+   *   OLD>   renderWithTopbar();
+   *   OLD>   await waitFor(() => expect(screen.getByText('名詞定義說明.pdf')).toBeInTheDocument());
+   *   OLD>   expect(document.querySelectorAll('[data-wm-note]')).toHaveLength(0);
+   *   OLD>   expect(screen.queryByText(BURN_TEXT)).toBeNull();
+   *   OLD>   expect(screen.queryByText(UNSUPPORTED_TEXT)).toBeNull();
+   *   OLD> });
+   */
+  it('AC-N20 後台頁面亦渲染 data-wm-note（pdf 格式列逐字為「檢視/下載將燒錄浮水印」）', async () => {
     mockAuth('ICSOPAdmin');
     renderWithTopbar();
     await waitFor(() => expect(screen.getByText('名詞定義說明.pdf')).toBeInTheDocument());
-    expect(document.querySelectorAll('[data-wm-note]')).toHaveLength(0);
-    expect(screen.queryByText(BURN_TEXT)).toBeNull();
-    expect(screen.queryByText(UNSUPPORTED_TEXT)).toBeNull();
+    const row = screen.getByText('名詞定義說明.pdf').closest('tr') as HTMLElement;
+    const note = row.querySelector('[data-wm-note]');
+    expect(note, '找不到 data-wm-note').not.toBeNull();
+    expect(note!.textContent).toBe(BURN_TEXT);
+  });
+
+  /** `AC-N20`：非 pdf 格式列（`ax1`＝`作業流程對照表.xlsx`）之 data-wm-note 逐字為「此格式不支援浮水印」。 */
+  it('AC-N20 非 pdf 格式列之 data-wm-note 逐字為「此格式不支援浮水印」', async () => {
+    mockAuth('ICSOPAdmin');
+    renderWithTopbar();
+    await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
+    const row = screen.getByText('作業流程對照表.xlsx').closest('tr') as HTMLElement;
+    const note = row.querySelector('[data-wm-note]');
+    expect(note, '找不到 data-wm-note').not.toBeNull();
+    expect(note!.textContent).toBe(UNSUPPORTED_TEXT);
   });
 });

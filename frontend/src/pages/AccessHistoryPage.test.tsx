@@ -85,13 +85,25 @@ describe('AccessHistoryPage — D9 delta：上傳事件呈現與排除／篩出�
     mockAuth('SysAdmin');
   });
 
-  it('AC-N53 上傳事件之「類型」欄逐字為「上傳」、「操作類型」欄逐字為「附件上傳」、浮水印快照欄留空', async () => {
+  /**
+   * 🔴 2026-08-20 D9 delta（`impl-fe`／`impl-fe2` 申訴，已核實成立）：`prototypes/17-access-
+   * history.html:315` 之操作類型 pill 為**單一** `<span>${r.act} · ${lbl}</span>`（`ACT_STYLE`
+   * 對映之既有渲染式），與既有回歸鎖定 `TS-AQ-FE-001`（`screen.getByText('DOWNLOAD · 下載')`
+   * 且該元素本身帶顏色 class）同形——DTL 之 `getNodeText` 只串接元素之直屬 text node，故
+   * pill 之直屬文字**必為**組合字串，不可能同時有一個「僅含中文標籤」的獨立節點可供
+   * `getByText('附件上傳')` 命中，除非改變 pill 之 DOM 結構而使 `TS-AQ-FE-001` 轉紅。
+   * `AC-N53` 之規格文字本身是**對映函式**層級（`actionTypeLabel('ATTACHMENT_UPLOAD') ===
+   * '附件上傳'`），並未要求標籤在 DOM 中自成節點——原斷言把它過度收緊為 DOM 文字獨立性。
+   * 改為與 `TS-AQ-FE-001` 同形之組合字串斷言。
+   * 📝 被取代之原斷言逐字保留供追溯：OLD> expect(within(row).getByText('附件上傳')).toBeInTheDocument();
+   */
+  it('AC-N53 上傳事件之「類型」欄逐字為「上傳」、「操作類型」pill 含逐字標籤「附件上傳」、浮水印快照欄留空', async () => {
     vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([UPLOAD_ROW]));
     render(<AccessHistoryPage />);
     await waitFor(() => expect(screen.getByText('林建宏')).toBeInTheDocument());
     const row = screen.getByText('林建宏').closest('tr') as HTMLElement;
     expect(within(row).getByText('上傳')).toBeInTheDocument();
-    expect(within(row).getByText('附件上傳')).toBeInTheDocument();
+    expect(within(row).getByText('ATTACHMENT_UPLOAD · 附件上傳')).toBeInTheDocument();
   });
 
   it('AC-N80 浮水印快照留空時，該欄帶 data-wm-snapshot 且文字逐字為「（此動作類型無浮水印，該欄留空）」', async () => {
