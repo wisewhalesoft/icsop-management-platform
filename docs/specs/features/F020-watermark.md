@@ -21,6 +21,7 @@ Epic/Story: E06 / US-053, US-054
 > **🔴 2026-08-20 同日第二輪（spec-writer 提報之 `OQ-D9-28`～`OQ-D9-33` 六題已全數裁決；AC 編號沿用 `AC-N#` 接續 `AC-N65` 往下編）**：`OQ-D9-31`（**使用者**）＝**推翻 spec-writer 定稿之 3:1 門檻，降為 ≥ 1.7:1、定稿值 `#334155` @ `opacity 0.30`**（`AC-N1`／`AC-N2` 已就地改寫，原值逐字保留）｜`OQ-D9-32`（**使用者**）＝**半採納半推翻**——`/pdf` 改燒錄（採納）、**DOM 疊加層移除**（推翻原「雙層保留」；`AC-N7` 已反轉）｜`OQ-D9-33`（lead）＝採納原案，`AC-N20` 之 `[ASSUMPTION]` 已解除。
 > 🔴 **本 delta 推翻 `OQ-FM-01`（2026-07-24）與 `OQ-D18-01`（2026-08-16）**：「後台維持 RAW、不接線 PdfBurner」之定案**自 2026-08-20 起正式失效**。本檔上方兩行「後台一律維持 RAW」之宣告與 `AC-D3`／`AC-D4`／`AC-D7` ④ 皆已就地改寫，**被推翻之原條文逐字保留供追溯**。
 > 📌 **「跨路徑共用之燒錄能力」之消費者自本日起擴為前後台全部下載路徑**（見 [§後台燒錄範圍 delta](#backend-burn-delta) 之端點清單）。
+> **🔴 2026-08-21 CHANGE delta（使用者裁決；三項裁決第 1 項）——全域三行式浮水印加大行高**：**四個載體之行距比一律為 `2.0`**——前端 DOM 疊加層 `line-height` ＝ `2.0`；後端 PDF 燒錄每行位移 ＝ `WATERMARK_FONT_SIZE(12) × WATERMARK_LINE_HEIGHT(2)` ＝ **`24`**、平鋪 `stepY` `180` → **`198`**（同日第三輪裁決，`OQ-T3-01` 選項 (c) ＋ `OQ-T3-02`；📝 OLD> 第一輪之 `size + 8`＝`20` 已作廢，它只有 1.667 倍）。**本 delta 之 AC 編號採 `AC-T#`**（`AC-T1`～`AC-T5`），權威見 [§三行式浮水印行高 delta](#line-height-delta)。⚠ **色值／不透明度／字串格式／三層式結構一律不變**——本輪只動行距與其連動之平鋪間距。
 
 ## Description
 🔴 **2026-08-20 就地改寫（`OQ-D9-32`，使用者裁決）**：使用者於網頁檢視器開啟文件時，**其所見之 PDF 位元組已於伺服器端燒錄浮水印**（`AC-N6`），檢視器**不再疊加任何 DOM 浮水印圖層**（`AC-N7`）；下載/列印時同樣於伺服器端將浮水印**燒錄**進 PDF 內容層。<br>📝 **被推翻之原條文逐字保留供追溯**：「使用者於網頁檢視器開啟文件時疊加浮水印；下載/列印時於伺服器端將浮水印**燒錄**進 PDF 內容層。」<br>⚠ **僅前台檢視器改為單層**；[F036](F036-lifecycle-tree-preview.md) 樹狀圖預覽與 [F037](F037-document-change-history.md)／[F038](F038-lifecycle-tree-change-history.md) 變更歷程之 DOM 疊加層**維持不變**（`AC-N66`）。浮水印格式（權威，[NFR-007](../nfr.md#watermark)）：`{員工編號}-{姓名}-{公司名稱}-{部門}-{處/室}-{僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現}-{當下時間}`，由伺服器端當下動態產生；其中「僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現」為固定機密聲明字串（非變數）；於檢視器疊加與 PDF 燒錄呈現時，該機密聲明**另起一行**（獨立一行）顯示，惟線性稽核快照字串之欄位順序不變。三種操作（查看/下載/列印）皆觸發稽核（F023）。
@@ -256,6 +257,66 @@ Epic/Story: E06 / US-053, US-054
 - **AC-N19**（🔒 前台側零漣漪回歸鎖定）：Given 本 delta 實作完成, When 執行前台四條燒錄路徑（檢視器／詳情頁附件／詳情頁附錄／詳情頁使用表單）之全部既有 AC（`AC-D1`／`AC-D2`／`AC-D3a`／`AC-D5`／`AC-D6`／`AC-D7` ①②③／`AC-D8`、[F018](F018-usage-form-management.md#front-burn-delta) `AC-D11`／`AC-D12`／`AC-D14`／`AC-D22`、[F039](F039-appendix-management.md#export-delta) `AC-D1`／`AC-D2`、[F041](F041-user-subtype-business-scope.md) 相關之 `AC-U1`～`AC-U5`）, Then **全數維持綠燈、期望值一字未改**——本 delta **只加後台、不動前台**。<br>⚠ 特別鎖定：`AC-D6`（共用附件下載端點對 `roleCode='User'` 一律 403 `PERMISSION_DENIED`）之期望值**不得**因「後台也燒錄了、所以可以放寬」而鬆動——燒錄與否和 F041 可見性檢查是兩個正交維度，該端點仍無可見性檢查。
 - **AC-N20**（後台亦渲染浮水印註記文案；✅ **`OQ-D9-33` 已於 2026-08-20 由 lead 裁決＝採納本條**，`[ASSUMPTION]` 已解除）：Given 後台之 ICSOP 文件清單頁／唯讀詳情頁／編輯頁／使用表單管理頁／附錄管理頁渲染完成, When 檢視各檔案列, Then 每一列帶一個 `data-wm-note` 元素，其可見文字為**二擇一**且**與前台同一組逐字文案**——`format = pdf` → 逐字 `檢視/下載將燒錄浮水印`；非 PDF → 逐字 `此格式不支援浮水印`。<br>🛑 **本條就地推翻 `AC-D7` ④**（原禁止後台出現該兩條文案），原條文逐字保留於 `AC-D7` ④。<br>✅ **`OQ-D9-33` 已定案（2026-08-20，lead）＝採納**：後台亦渲染同一組 `data-wm-note` 與同一組逐字文案，`AC-D7` ④ 之禁止條款就地失效（該處已加追溯註記）。
 - **AC-N21**（🔒 傳輸模式不變）：Given 本 delta 實作完成, When 檢視上列四條後台端點之回應, Then 其形狀**仍為 `AC-D3a` 所定之代理串流**——body 為檔案位元組本身、`Content-Type` 為該檔 MIME、`Content-Disposition: attachment` 且檔名為**上傳時之原始檔名**（含中文，RFC 5987 編碼）；**不得**回 SAS URL、不得 3xx 轉址至 Blob。<br>⚠ 唯一例外之既有殘留＝ `GET /documents/:documentId/usage-forms/:formId/download` 現行回 `{ url }` JSON（[F018](F018-usage-form-management.md#front-burn-delta) `AC-D23`）——**該形狀已與燒錄不相容**（回 URL 就無從燒錄），必須改為代理串流；`AC-D23` 已就地改寫。
+### 三行式浮水印行高 delta（🔴 2026-08-21 使用者裁決；三項裁決第 1 項） {#line-height-delta}
+
+> **裁決逐字（人類，2026-08-21 第一輪）**：前端 DOM 疊加層 `line-height` → **`2.0`**；後端 PDF 燒錄每行位移 `size + 3` → `size + 8`；`prototypes/05` canvas 內容層之每行位移 → `WM_FONT_SIZE(14) × 2.0` ＝ **`28`**，且平鋪 `stepY` `132` → **`144`**（維持 tile 間隙不變）。
+> **🔴 裁決（人類，2026-08-21 第三輪；結案 `OQ-T3-01` 選項 (c) ＋ `OQ-T3-02`）——後端側就地改寫**：後端字級為 `12` ⇒ 第一輪之 `size + 8`（＝`20`）僅為 **1.667 倍**，與另三個載體之 `2.0` **不同構**（spec-writer 於第一輪提報、lead 確認為出選項時之算術失誤）。**現行定稿＝後端行距由行高常數推導**——`WATERMARK_LINE_STEP` ＝ `WATERMARK_FONT_SIZE × WATERMARK_LINE_HEIGHT` ＝ `12 × 2.0` ＝ **`24`**；後端平鋪 `stepY` `180` → **`198`**（三行區塊長高 `2 × 9 = 18`，維持 tile 間隙不變，與 `05` 之 `132 → 144` 同一理由）；`stepX` 維持 `260`。
+> ⇒ **四個載體之行距比自此全部同構為 `2.0`**：DOM 疊加 `2.0`／canvas `28 ÷ 14`／PDF 燒錄 `24 ÷ 12`。
+> 📝 **已作廢（⚠ 不得用於斷言）**：OLD> 後端每行位移 `size + 3`（＝`15`，本 delta 前之原始值）｜OLD> 後端每行位移 `size + 8`（＝`20`，**2026-08-21 第一輪之定稿值，曾進入 `AC-T4`**）｜OLD> 後端 `stepY = 180`。
+> 🔒 **`prototypes/05` 與三個 DOM prototype 不受第三輪裁決影響**（它們本即為 `2.0`）——**ui-ux-designer 無需改動任何檔案**。
+> **本 delta 之 AC 編號採 `AC-T#`**（T ＝ 2026-08-21 三項裁決；**跨三檔不重號**——`AC-T1`～`AC-T5` 屬本檔，`AC-T10`～`AC-T27` 屬 [F036](F036-lifecycle-tree-preview.md)，`AC-T40`～`AC-T48` 屬 [F017](F017-backend-document-list.md)），與既有 `AC-D#`／`AC-N#`／`AC-U#` 批次區隔。
+> ⚠ **本節不改變**浮水印之字串格式、欄位順序與收合規則（[NFR-007](../nfr.md#watermark) 逐字不變）、色值 `#334155` 與不透明度 `0.30`（`AC-N1`／`AC-N2`／`AC-N3` 逐字不變）、三層式結構（`AC-N68` 不變）——**僅改行距**。
+> 🔒 **`17-access-history` 之 `wm(r)` 線性單行快照不適用本節**：它產生的是以 `-` 串接之單行稽核欄字串，不是三行式呈現載體。
+> 📌 **權威＝ `docs/ui-ux-design-overview.md` §A.7.1／§A.7.2 ＋ 四份 prototype**（已由 ui-ux-designer 傳播並經 lead 逐項驗收）。
+
+- **AC-T1**（🔴 單一定稿常數＝本節之可測性前提）：Given 前端側與後端側各自之浮水印呈現常數, When 檢視其實作, Then 各側**恰一個具名匯出常數**承載行距定稿值，且**不得**以字面值散落於 JSX inline style 或 `drawText` 呼叫處——
+  | 側 | 具名匯出常數 | 定稿值 | 落點 |
+  |---|---|---|---|
+  | 前端 | `WATERMARK_LINE_HEIGHT` | `2`（**無單位倍數**，非 `'2px'`／`'200%'`） | 與 `AC-N3` 所要求之前端側色值／不透明度常數**同一模組**（模組落點由 system-architect 定；🔴 **兩者不得分居兩檔**——一致性條款若散在兩個模組，改一個忘一個沒有測試會抓到） |
+  | 後端 | `WATERMARK_LINE_HEIGHT`、`WATERMARK_FONT_SIZE`、`WATERMARK_LINE_STEP` | `2`（**無單位倍數**）、`12`、**`24`** | `backend/src/public/pdf-burner.ts`（與既有 `WATERMARK_RGB`／`WATERMARK_OPACITY` 同檔，比照 `AC-N3` 之既有處置） |
+
+  🔴 **後端亦持有 `WATERMARK_LINE_HEIGHT` 且 `WATERMARK_LINE_STEP` 必須由它推導**（`OQ-T3-01` 選項 (c) 之核心）：
+  <br>**斷言＝ `WATERMARK_LINE_STEP === WATERMARK_FONT_SIZE * WATERMARK_LINE_HEIGHT`**（而**不僅是** `=== 24`）。
+  <br>📌 **為何不只匯出一個 `WATERMARK_LINE_STEP = 24`**：那樣 `24` 就成了魔術數字——日後若行高由 `2.0` 調為 `1.8`，必須有人記得回去手算 `12 × 1.8`，而**沒有任何測試會在他忘記時轉紅**。本輪之算術失誤（`size + 8` 於 `size = 12` 只有 1.667 倍）**正是這個形狀**：偏移量寫死後，它與「行高」之關係只存在於人的腦中。持有 `2.0` 並要求推導，等於把該關係搬進可斷言的位置。
+  <br>⚠ **後端之 `WATERMARK_LINE_HEIGHT` 與前端那份為「兩份、值相同」，不是「同一份」**——兩側之一致性如何斷言見 `AC-T3` ③。
+
+  📌 **前後端為兩個獨立 TS 專案、無共用 package ⇒「全系統只有一份」在現行 build 管線下不可達**；沿用 `AC-N3` 之既有處置＝**各側各一份，兩側各自對本節宣告之字面值斷言**。
+  <br>⚠ **斷言請用數值比較**（`Number(el.style.lineHeight) === WATERMARK_LINE_HEIGHT`），**不得**用字串相等（`'2'` vs `'2.0'` 之差異會使斷言脆裂而與行為無關）。
+
+- **AC-T2**（各載體逐一綁定；數值逐字）：Given 本 delta 實作完成, When 檢視下表各載體, Then 其行距**逐字為下列定稿值**——
+
+  | # | 載體 | 檔案 | 型別 | 定稿值 | 約束環是否斷言 |
+  |---|---|---|---|---|---|
+  | 1 | 變更歷程新舊並列疊加 | `frontend/src/pages/ChangeHistoryPage.tsx` | DOM `line-height` | `2` | ✅ 是（`AC-T2`／`AC-T3`） |
+  | 2 | 循環樹狀圖預覽疊加 | `frontend/src/pages/LifecycleTreePreviewPage.tsx` | DOM `line-height` | `2` | ✅ 是（`AC-T2`／`AC-T3`） |
+  | 3 | PDF 燒錄（內容層；**檢視器所見位元組亦由此產生**，`AC-N6`） | `backend/src/public/pdf-burner.ts` | 每行 y 位移 | `WATERMARK_FONT_SIZE × WATERMARK_LINE_HEIGHT` ＝ `12 × 2.0` ＝ **`24`**（🔴 2026-08-21 第三輪就地改寫；📝 OLD> `size + 8` ＝ `20`、OLD> `size + 3` ＝ `15`） | ✅ 是（`AC-T4`） |
+  | 4 | Prototype DOM 權威 | `prototypes/00-design-system.html`／`22-lifecycle-tree-preview.html`／`23-change-history.html` 之 `.wm-layer span` | CSS `line-height` | `2.0` | ❌ 否（設計權威，見 `AC-T5`） |
+  | 5 | Prototype canvas 權威（＝後端燒錄之視覺代理） | `prototypes/05-public-viewer-watermark.html` | `WM_LINE_STEP`／`stepY` | `28`（＝`WM_FONT_SIZE 14 × WM_LINE_HEIGHT 2.0`）／`144` | ❌ 否（設計權威，見 `AC-T5`） |
+
+  🔴 **「4 個前端載體 ＋ 1 個後端燒錄點」之對照說明（裁決之計數 vs 實作之計數）**：裁決所稱之 4 個前端載體係 **prototype 計數**（`00`／`22`／`23` 之 DOM ＋ `05` 之 canvas）。**實作側之前端 DOM 疊加載體恰 2 個**——前台檢視器之疊加層已由 `OQ-D9-32`／`AC-N7` **整個移除**，`00` 為設計系統文件（無實作對應物），`05` 之 canvas 在實作側對應的就是**後端 `pdf-burner`**（檢視器渲染的是後端已燒錄之位元組，`AC-N6`）。⇒ **實作側之有效載體＝前端 2 ＋ 後端 1，與裁決不矛盾，只是計數基準不同。**
+  <br>📌 **選擇器契約（本條授權新增之掛鉤）**：兩個前端 DOM 載體之三行式文字 `<span>` 皆須帶 `data-testid="watermark-text"`。`LifecycleTreePreviewPage.tsx` 已有此掛鉤；`ChangeHistoryPage.tsx` **需補上**（其外層疊加容器既有之 `data-testid="watermark-overlay-{side}"` 逐字不動）。**行距掛在該 `<span>` 上**（即 `.wm-layer span` 之對應物），不是掛在疊加容器或內層 `display:block` 之單行 `<span>` 上。
+
+- **AC-T3**（🔴 **INV-WM-LH ＝ 跨載體一致性不變式**；本節最關鍵之一條）：Given 於**同一個測試檔**內分別渲染 `ChangeHistoryPage` 與 `LifecycleTreePreviewPage`, When 蒐集兩頁全部 `[data-testid="watermark-text"]` 之 `line-height` 並取其**相異值集合**, Then 該集合之 `size` **恰為 `1`**，且其唯一元素 **等於 `WATERMARK_LINE_HEIGHT`**。
+  <br>🔴 **為何寫成集合大小而非在各載體各寫一條**：本專案已因「兩處各算一次」吃過虧（見本檔 `supportsWatermark` 之 🔴 註記與 `AC-N3` 之立條理由）。**各載體各一條互不相干的 AC，全綠時仍可能三個值互不相同**——`00` ＝ `1.5`、`22`／`23` ＝ `1.6`、`05` ＝ `i*22`（≈ `1.571`）**正是本 delta 前之實況**，三種值同時存在而沒有任何一條 AC 會紅。集合大小 `=== 1` 是唯一能讓「不一致」本身轉紅的形狀。
+  <br>📌 **負向回歸鎖**：同一測試須額外斷言該唯一值 **不等於任一被作廢舊值**——`1.5`、`1.6`、`22/14`（≈ `1.5714`）。
+  <br>⚠ **本條 ①②（集合）之涵蓋範圍僅限 DOM 疊加載體**（型別相同、單位相同、可直接比大小）。燒錄載體（canvas／PDF）之行距落在**不同單位系統**（px vs PDF point、字級 14 vs 12），**刻意不納入本集合**；其定稿值由 `AC-T4` 單獨鎖定。
+  <br>🔴 **③ 跨側之行高常數等值（2026-08-21 第三輪新增；`OQ-T3-01` 選項 (c) 之連帶）**：前端與後端**各自**之 `WATERMARK_LINE_HEIGHT` **值皆為 `2`**。
+  <br>⚠ **③ 不得寫成單一測試**：前後端為兩個獨立 TS 專案、兩個 runner、無共用 package ⇒ **沒有任何一個測試 import 得到兩側的常數**。沿用 `AC-N3` 之既有處置——**兩側各自對本檔宣告之字面值 `2` 斷言**（前端 vitest 一條、後端 jest 一條），**本檔即為單一權威**。
+  <br>🔴 **③ 也不得併入 ①② 的集合**：即使四個載體現在都是 `2.0`，把 PDF point 的行距與 DOM 的無單位 `line-height` 放進同一個 `Set` 比較，比的是兩種單位系統下**恰好相等的數字**，而不是同一個量——`WM_FONT_SIZE` 一旦不同（canvas 14 vs PDF 12），該集合就會無故轉紅或無故轉綠。**③ 比的是「行高倍數」這個無單位量，①② 比的是 DOM 載體的實際 `line-height`，兩者是不同的斷言。**
+
+- **AC-T4**（後端燒錄之每行位移與平鋪間距；🔴 **2026-08-21 第三輪就地改寫**，`OQ-T3-01` 選項 (c) ＋ `OQ-T3-02`）：Given `PdfLibBurner.burnPdf` 對一份三行式快照燒錄, When 檢視其每頁每個 tile 之三行文字, Then 第 `i` 行（`i` 由 `0` 起）之 y 座標為 `y − i × WATERMARK_LINE_STEP`，其中 `WATERMARK_LINE_STEP` **逐字為 `24`**（＝`WATERMARK_FONT_SIZE(12) × WATERMARK_LINE_HEIGHT(2)`）；且 `drawText` 之 `size` 逐字為 `WATERMARK_FONT_SIZE`。
+  <br>📌 **可斷言形狀（比照 `AC-N3` 之既有處置與 `pdf-burner.spec.ts` 之既有慣例）**：以 `import` 直接斷言具名匯出常數——`WATERMARK_FONT_SIZE === 12`、`WATERMARK_LINE_HEIGHT === 2`、`WATERMARK_LINE_STEP === 24`，**且** `WATERMARK_LINE_STEP === WATERMARK_FONT_SIZE * WATERMARK_LINE_HEIGHT`（**推導關係本身也要斷**，見 `AC-T1`），**不需**真的解析 PDF 位元組。
+  <br>📌 **負向回歸鎖（🔴 兩個作廢值都要鎖）**：`WATERMARK_LINE_STEP !== 15`（＝`size + 3`，本 delta 前之原始值）**且** `WATERMARK_LINE_STEP !== 20`（＝`size + 8`，**2026-08-21 第一輪之定稿值，曾進入本條 AC**——不鎖住它，實作者照第一輪 AC 寫出 `20` 也會綠）。
+  <br>⚠ **「燒錄迴圈確實消費該常數」在 unit 層無直接斷言載體**（`drawText` 由 `pdf-lib` 內部持有，既有 `pdf-burner.spec.ts` 亦僅斷言常數本身）。本條之殘留缺口與既有 `AC-N3` **完全同型**，非本 delta 引入；`AC-T1` 之「不得以字面值散落於 `drawText` 呼叫處」即為其唯一防線。
+  <br>🔴 **平鋪間距**：後端 `stepY` **逐字為 `198`**（📝 OLD> `180`）——三行區塊之墨跡高度隨行距由 `15` 增為 `24` 而長高 `2 × 9 = 18`，`stepY` 同步 `+18` 使 **tile 間隙與本 delta 前完全相同**（與 `prototypes/05` 之 `132 → 144` 為同一理由與同一算式）。🔒 **`stepX` 逐字維持 `260`**（水平方向未受行距影響）。
+  <br>📌 **`stepY` 亦須為具名匯出常數**（`WATERMARK_TILE_STEP_Y = 198`、`WATERMARK_TILE_STEP_X = 260`），理由同 `AC-T1`——否則它會以字面值躺在雙層迴圈裡，而它與行距之連動關係無人可斷。
+  <br>✅ **`[ASSUMPTION]` 已解除**：本條前一版以 `[ASSUMPTION]` 鎖 `stepY = 180` 並提報 `OQ-T3-02`；該題已於 2026-08-21 第三輪由人類裁決，本條改為逐字定案值。
+
+- **AC-T5**（Prototype 權威登錄與作廢舊值；**非約束環斷言對象**）：Given `AC-T2` 表列第 4／5 列之 prototype 載體, When 人工比對或日後改動, Then 其值**逐字為**——`00`／`22`／`23` 之 `.wm-layer span` `line-height:2.0`；`05` 之 `WM_FONT_SIZE = 14`、`WM_LINE_HEIGHT = 2.0`、`WM_LINE_STEP = 28`、`stepY = 144`。
+  <br>🔒 **`prototypes/05` 與三個 DOM prototype 不受 2026-08-21 第三輪裁決影響**（它們本即為 `2.0` 倍）——第三輪只動後端側之三個數字，**ui-ux-designer 無需改動任何檔案**。
+  <br>📝 **已作廢（僅供追溯，⚠ 不得用於斷言）**：`00` OLD> `line-height:1.5`｜`22`／`23` OLD> `line-height:1.6`｜`05` OLD> 每行位移 `22px`、OLD> `stepY = 132`｜後端 OLD> 每行位移 `size + 3`（＝`15`）、OLD> 每行位移 `size + 8`（＝`20`，第一輪定稿值）、OLD> `stepY = 180`。
+  <br>📌 **為何標為非斷言對象**：本 repo 之測試**從未以 `fs` 讀取 `prototypes/*.html`**（既有 `AC-N2` 第 5 列亦同）；prototype 是設計權威與人工比對基準，不是執行期載體。test-generator **不需**為本條產生測試；若日後建立 prototype 靜態掃描，本條即為其逐字期望值來源。
+
 ## Error Scenarios
 - 未授權存取/未登入：見 [error-handling.md#public](../error-handling.md#public)、[#file](../error-handling.md#file)。防竄改與已知限制：[NFR-007](../nfr.md#watermark)。
 - **業務子分類之使用部門不相符**（🟢 APPROVED）：一律回 **404 `DOCUMENT_NOT_FOUND`**（✅ OQ-E06-03 定案，既有錯誤碼、不新增），見 [error-handling.md#dept-restriction](../error-handling.md#dept-restriction)；規則權威＝[F041](F041-user-subtype-business-scope.md)。

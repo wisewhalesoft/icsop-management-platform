@@ -372,6 +372,102 @@ status: Draft
 - 📌 **spec-writer 不代為建議**：本題牽涉「是否推翻既有 `deviation-keep` 裁決」與「顯示語意之取捨」，屬人類判斷；三個選項之代價已如實列出。
 - 🔒 **本輪處置＝完全不動**：F026 矩陣值、`prototypes/18`、`FIELD_DISPLAY`、anti-drift 測試**一格未改**。本 delta 之 `AC-N22`（矩陣逐格斷言）以**現行 F026 表**為基準，**不受本題影響**。
 
+## T3 — 2026-08-21 三項裁決（浮水印行高 ＋ 子樹抽屜 ＋ 子樹 deep link） {#t3-2026-08-21}
+
+> 來源＝使用者 2026-08-21 之三項裁決（含同日第二輪之「導向方式」裁決）；prototype 傳播紀錄＝`docs/ui-ux-design-overview.md` §A.7（已由 lead 逐項驗收）。
+> 規格落點＝[F020 `AC-T1`～`AC-T5`](features/F020-watermark.md#line-height-delta)／[F036 `AC-T10`～`AC-T27`](features/F036-lifecycle-tree-preview.md#subtree-drawer-delta)／[F017 `AC-T40`～`AC-T48`](features/F017-backend-document-list.md#subtree-filter-delta)。
+> 🔴 **本節之項目皆為「規格已依裁決逐字落地、但另有一事需人類或架構師定奪」**，不阻塞 test-generator 建環（AC 已以現行定稿值可斷言）。
+> **狀態（2026-08-21 全部三輪＋架構定案＋spec-writer 落地後）**：`OQ-T3-01`／`OQ-T3-02` **✅ 人類裁決結案**（後端行距 `24`、`stepY` `198` ⇒ 已落 `AC-T1`／`AC-T3` ③／`AC-T4`）｜`OQ-T3-03`／`OQ-T3-04` **✅ system-architect 定案、spec-writer 已落地**（第 12 章 C2／C3 ⇒ `AC-T25` ④／`AC-T45` 之具體契約已補完，並連帶就地修訂 `AC-T11` ④／`AC-T12` ④／`AC-T13` ④／`AC-T16`／`AC-T40` ④⑤／`AC-T44`／`AC-T48` ⑥／`AC-D9` 之端點名）｜子樹走訪演算法歸屬（lead 另指定題）**✅ 定案且已落地** ⇒ `AC-T14` ①③ 就地修訂 ＋ **新增 `AC-T28`**（F1–F5 雙端向量）｜`OQ-T3-05` 為登錄項（不需裁決）｜`OQ-T3-06` **只登錄、本輪不修**｜`OQ-T3-07` **✅ lead 裁決本輪不退休**（登錄為後續項目）｜`OQ-T3-08` **`[ASSUMPTION]`、待裁決、不阻塞**。
+
+**`OQ-T3-01`** — 後端燒錄行距與 canvas 行距之**比例不一致**（裁決之三個字面值本身不同構）**[已定案 ✅ 2026-08-21 第三輪人類裁決＝選項 (c)]**｜相關：F020 `AC-T1`／`AC-T2`／`AC-T3` ③／`AC-T4`、`prototypes/05`、`backend/src/public/pdf-burner.ts`
+
+- ✅ **裁決（人類，2026-08-21 第三輪）＝選項 (c)**：後端亦持有 `WATERMARK_LINE_HEIGHT = 2`，行距**由它推導**——`WATERMARK_LINE_STEP` ＝ `WATERMARK_FONT_SIZE(12) × WATERMARK_LINE_HEIGHT(2)` ＝ **`24`**。⇒ 四個載體之行距比自此**全部同構為 `2.0`**（DOM `2.0`／canvas `28÷14`／PDF `24÷12`）。
+- ✅ **lead 已確認第一輪之 `size + 8` 為出選項時之算術失誤**（把 `line-height 2.0` 與 `size + 8` 配成同一選項，但後端字級是 12）。
+- **落規格**：`AC-T4` 已就地改寫為 `24`，並**同時鎖兩個作廢值**（`!== 15` 之原始值 **與 `!== 20` 之第一輪定稿值**——後者曾進入 AC，不鎖住它，實作者照舊 AC 寫也會綠）；`AC-T1` 後端常數表加入 `WATERMARK_LINE_HEIGHT` 並要求斷言**推導關係本身**（`STEP === FONT_SIZE * LINE_HEIGHT`，而不僅是 `=== 24`）；`AC-T3` 新增 ③（跨側行高常數等值，**兩側各自對本檔字面值斷言，不得寫成單一測試、亦不得併入 ①② 之 DOM 集合**）。
+- 🔒 **`prototypes/05` 與三個 DOM prototype 不受影響**（本即 `2.0` 倍），**ui-ux-designer 無需改動任何檔案**。
+- 📝 **被推翻之處置逐字保留供追溯（第一輪）**：
+  - **事實（spec-writer 實地查證，非推論）**：`backend/src/public/pdf-burner.ts` 之字級為 **`size = 12`** ⇒ 裁決之 `size + 8` ＝ **`20`**，行距比 ＝ `20 / 12` ≈ **`1.667`**。而 `prototypes/05` 之 canvas 為 `WM_FONT_SIZE 14 × WM_LINE_HEIGHT 2.0` ＝ **`28`**，比值 **`2.0`**；DOM 疊加層亦為 **`2.0`**。
+  - ⇒ **裁決標題所稱之「全域行高 2.0」在後端燒錄載體上實際落為 ≈ 1.667**。若目標是三種載體之**視覺行距比一致**，後端應為 `size + 12`（＝`24`）。
+  - 🔒 **本輪處置＝逐字照裁決**：`AC-T4` 已鎖定 `WATERMARK_LINE_STEP = 20`（＝`WATERMARK_FONT_SIZE + 8`）。**spec-writer 未自行改寫裁決之字面值**。
+  - **選項**：**(a)** 維持 `size + 8`（＝現行 AC，行距比 1.667；改動成本 0）｜**(b)** 改為 `size + 12`（＝比值 2.0，與另三個載體同構；改動成本＝`AC-T4` 之兩個數字 ＋ 一次燒錄檔目視）｜**(c)** 改為由 `WATERMARK_LINE_HEIGHT` 推導（`WATERMARK_LINE_STEP = round(WATERMARK_FONT_SIZE × 2.0)` ＝ `24`，與 (b) 同值但把「2.0」變成後端也持有的單一定稿值）。
+  - 📌 **spec-writer 不代為建議**：裁決逐字給了三個各自的字面值，是否要求它們同構屬人類判斷。
+
+**`OQ-T3-02`** — 後端平鋪 `stepY` 是否需比照 `prototypes/05` 同步放大 **[已定案 ✅ 2026-08-21 第三輪人類裁決＝`180 → 198`]**｜相關：F020 `AC-T4`
+
+- ✅ **裁決（人類，2026-08-21 第三輪，與 `OQ-T3-01` 一併裁決）**：後端 `stepY` **`180 → 198`**（行距 `15 → 24` 使三行區塊長高 `2 × 9 = 18`，`stepY` 同步 `+18` ⇒ **tile 間隙與本 delta 前完全相同**，與 `05` 之 `132 → 144` 同一算式）；🔒 **`stepX` 維持 `260`**（水平方向未受行距影響）。
+- **落規格**：`AC-T4` 之 `stepY` 鎖定由「逐字維持 `180`」改為「逐字為 `198`」，**`[ASSUMPTION]` 標記已移除**；並要求 `stepY`／`stepX` 亦為具名匯出常數（`WATERMARK_TILE_STEP_Y`／`WATERMARK_TILE_STEP_X`），否則它與行距之連動關係無人可斷。
+- 📝 **被推翻之處置逐字保留供追溯（第一輪；當時之候選值 `190` 係以行距 `20` 推得，隨 `OQ-T3-01` 改採 `24` 而失效）**：
+  - **事實**：裁決逐字指定 `prototypes/05` 之 `stepY 132 → 144`，**理由明載為「行距長高後維持 tile 間隙不變」**（三行區塊之墨跡高度增加 `2 × 6 = 12px`）。**裁決未提及後端**。
+  - 同一理由套到後端：每行位移 `15 → 20`，三行區塊長高 `2 × 5 = 10` ⇒ 若要維持 tile 間隙不變，`stepY` 應由 `180` 改為 `190`。
+  - 🔒 **本輪處置＝`[ASSUMPTION]` 鎖定現值**：`AC-T4` 已明文要求後端 `stepY` 逐字維持 `180`、`stepX` 維持 `260`，**目的是不讓實作靜默改動**；若人類裁定應同步放大，改動範圍僅該一個數字。
+  - ⚠ **與 `OQ-T3-01` 連動**：若 `OQ-T3-01` 採 (b)／(c)（行距 `24`），區塊長高 `2 × 9 = 18` ⇒ `stepY` 應為 `198`。**兩題請一併裁決**。
+
+**`OQ-T3-03`** — 子樹抽屜取得「整個子樹之文件」之資料來源形狀 **[已定案 ✅（system-architect，2026-08-21）]**｜相關：F036 `AC-T25`、[architecture-spec.md §12.2](architecture-spec.md#ch12-t3-decisions)、[NFR-001](nfr.md#performance)
+
+- **定案（採候選 b，並額外決定分組/排序由後端做）**：新增 `GET /admin/lifecycles/:lifecycleId/nodes/:nodeId/subtree-documents`，一次回傳**已依 `AC-T11` 分組排序、已依 `AC-T13` 去重排序**之結果；權限閘門沿用既有 `LIFECYCLE_MANAGEMENT read`。候選 (a)（前端逐節點 N 次呼叫）因與 `AC-T43` 原則牴觸且 NFR-001 延遲風險（十餘次往返落於使用者感知路徑）**否決**；候選 (c)（`?includeSubtree=true`）因回應形狀與既有端點不相容、徒增路由語意混淆**否決**。
+- **分組排序歸屬之關鍵查證**：本題背景敘述之「後端沒有座標」**不成立**——後端已有 `buildTreeLayout()` 之獨立副本（`backend/src/lifecycle/lifecycle-tree-layout.ts`，現用於 F036 唯讀預覽與 F038 diff PDF），重用它取得子樹節點座標即可完成 `AC-T11` 排序，成本近乎零。**分組與排序因此由後端做**，前端不需也不應再自行走訪或排序。
+- **連帶建議（架構師）＝退休既有單節點 `GET .../documents` 端點**（失去唯一消費端）。🔴 **lead 已裁決：本輪不退休、不刪**——見下方 `OQ-T3-07`。`AC-T25` ④ 已明文加註「本條之措辭不隱含既有端點已被移除」。
+- 完整理由、被否決方案、回應形狀、殘留風險見 [architecture-spec.md §12.2](architecture-spec.md#ch12-t3-decisions)。
+
+**`OQ-T3-04`** — 文件清單回應中之「子樹描述子」契約 **[已定案 ✅（system-architect，2026-08-21）]**｜相關：F017 `AC-T44`／`AC-T45`
+
+- **定案**：`GET /admin/documents` 回應 additive 新增頂層欄位 `subtreeFilter: { lifecycleId, lifecycleName, nodeId, nodeName } | null`（與建議形狀一致，欄位名定案）。`null`＝`AC-T41` no-op 之畫面呈現，恆為顯式 key（不省略）。
+- **命名理由**：`lifecycleName`（非更精確的 `lifecycleDisplayName`）係刻意沿用既有 `DocumentListItem.lifecycleName`（同語意＝`lifecycleDisplayName()` 輸出）之命名先例，避免同一回應內兩個同義欄位異名。
+- **解析落點**：service 層單一函式同時產出 SQL 篩選（`DocumentListFilters.nodeIdIn`，additive）與此描述子，防止兩者互相漂移；不透過 NestJS 跨模組注入 `DAG_STORE`，比照既有「唯讀複用」慣例直接查詢 `LIFECYCLE_NODE`／`LIFECYCLE_EDGE`。
+- 完整理由、程式碼示意、殘留風險見 [architecture-spec.md §12.3](architecture-spec.md#ch12-t3-decisions)。
+
+**（架構師另定）子樹走訪演算法之歸屬與雙執行環境一致性** — lead 直接指定之第三題，非 OQ 編號｜相關：F036 `AC-T14`、F017 `AC-T40`
+
+- **定案**：後端於 `backend/src/lifecycle/lifecycle-tree-layout.ts`（與既有 `buildTreeLayout()` 後端副本同檔）另留一份 `descendants()`，語意契約（含自身／僅沿 parent→child／`Set` 去重／重複邊防禦／自環防禦／走訪順序不綁定）與綁定用 5 組固定測試向量見 [architecture-spec.md §12.1](architecture-spec.md#ch12-t3-decisions)。
+- ✅ **spec-writer 已處置（2026-08-21，lead 裁決＝就地修訂 `AC-T14`、不修改 C1）**：`AC-T14` ① 之「不得存在第二份」**範圍限縮為單一執行環境內**（前端一份、後端一份；跨端兩份為既定架構，前例＝`watermarkLines()` §10.14 與 `buildTreeLayout()` 之後端副本）；① 之一致性保證改由**新增之 [F036 `AC-T28`](features/F036-lifecycle-tree-preview.md#subtree-drawer-delta)** 承擔（F1–F5 五組固定向量，🔴 **明文要求兩端各自之 `lifecycle-tree-layout.spec.ts` 皆須擴充、逐檔核對**——架構師已提報這是「必須做但不自動保證會做」之項目，只在一端建向量測試時另一端漂移無人攔截）；③ 之 `S_grp ⊆ S_hl` 改由**元件測試層級**保證，並於該條寫明「C2 之後 `S_grp` 與 `S_hl` 來自兩個不同執行環境，本條 ＋ `AC-T28` 合起來才等價於修訂前那句話原本想保證的事，只做其中一條即為缺口」。
+
+**`OQ-T3-05`** — 本輪**明確不可自動驗證**之項目（僅登錄，不需裁決）｜相關：F036 `AC-T15`～`AC-T18`、F017 `AC-T44`
+
+> 本輪之約束環為簡化版（僅 vitest／jest 單元＋元件測試，**無 Playwright fidelity、無 e2e**）。下列為 ui-ux-designer 已定稿、但**在 jsdom 下無法客觀斷言**者，**刻意未寫成 AC**，以免產生零鑑別力之假綠斷言：
+
+| # | 項目 | 為何不入 AC |
+|---|---|---|
+| 1 | 導向鈕之 full-width primary 樣式與 `list-filter` 圖示 | 純視覺；jsdom 不做版面計算，斷 class 字串等於斷 Tailwind 寫法而非行為 |
+| 2 | 分組標題列之 `sticky` 定位 | 同上；`position: sticky` 之效果需真實捲動與版面 |
+| 3 | chip 右側說明文字 `由循環樹狀圖預覽帶入` | ui-ux-designer 自陳為設計裁量（§A.7.2 第 12 列）；純輔助說明、非行為載體 |
+| 4 | chip 於 375／640／768／1024／1440 之 RWD 換行行為 | 需真實版面量測；且 `13` 於 375px 之版面本即不可用（既有問題，非本輪造成，見 §A.7.6 ⑤） |
+| 5 | 抽屜捲動時「換節點回到第一組」之視覺（`scrollTop = 0`） | jsdom 之 `scrollTop` 恆為 `0`，斷言恆真＝零鑑別力 |
+| 6 | 「點完只剩 1 個分頁」之真實分頁數 | 需真實瀏覽器 context；本輪改以 `AC-T20`／`AC-T22` 之 `window.close()` 呼叫次數與 seam 之 `closedSelf` 斷言其**因**，不斷言其**果** |
+
+- 🔴 **`AC-T23` 為本表之反面**：`opener.closed === true` 分支**只能**在 jsdom 以替身建案例（Chromium 在來源分頁關閉後把 `window.opener` 直接設為 `null`，該分支**在真瀏覽器量不到**）。**這一條務必不要因為「等 e2e 再驗」而漏掉——e2e 永遠驗不到它。**
+
+**`OQ-T3-06`** — [F038](features/F038-lifecycle-tree-change-history.md) 之 diff 預覽是否比照支援子樹抽屜與導向鈕（**本輪不修、不阻塞**）**[CLARIFY]**｜相關：F036 `AC-T27`、F038 `AC-D3`、`OQ-D18-19`
+
+- **現況**：`OQ-D18-19`（2026-08-16 裁決＝否）明訂 diff 樹狀圖**不支援雙擊**；本輪未變更該裁決 ⇒ `23-change-history` 之 diff 預覽**沒有**子樹抽屜、也沒有導向鈕（`AC-T27` 已將此鎖為回歸鎖定）。
+- ⚠ **登錄理由**：使用者若在變更歷程頁對節點雙擊而無反應，會與 `22` 之行為不一致。**若期待兩頁一致，須新的人類裁決**（ui-ux-designer 已於 §A.7.6 ③ 同步提報）。
+- 🔒 **本輪處置＝完全不動**：F038、`prototypes/23`（除浮水印行距外）一格未改。
+
+**`OQ-T3-07`** — 既有單節點 `GET /admin/lifecycles/:lifecycleId/nodes/:nodeId/documents` 端點是否退休（**🔴 lead 已裁決＝本輪不退休；登錄為後續項目**）｜相關：F036 `AC-T25` ④／`AC-T26`、[architecture-spec.md §12.2](architecture-spec.md#ch12-t3-decisions)
+
+- **架構師建議（2026-08-21）**：`grep` 已核實 `frontend/src/api/endpoints.ts:355` 為該端點**唯一**消費端（同檔 569／578 之 `POST`／`DELETE .../documents` 屬 F009 寫入路徑、不受影響）；裁決 2 之後該消費端必然改接子樹端點 ⇒ 舊端點失去唯一消費者，建議連同 `NodeDocsService.listNodeDocuments()` 一併退休。
+- 🔴 **lead 裁決（2026-08-21）＝本輪保留、不刪**。理由三項：
+  1. **刪除既有端點屬回歸範圍擴張**——會連帶動到 `node-docs-controller-routes.spec.ts`／`node-docs-list.service.spec.ts` 與 [F036 `AC-D9`](features/F036-lifecycle-tree-preview.md#node-dblclick-delta) 之「兩個資料來源」敘述，而**三項裁決沒有任何一項需要它被刪掉**。
+  2. **本輪環為簡易版（無 e2e／無整合測試），刪端點的回歸風險驗不到**。
+  3. 保留一個暫時無消費端的端點，其代價（技術債務）**低於**在無 e2e 的一輪裡動既有路由。
+- **本輪落規格**：`AC-T25` ④ 末段已明文「本條之措辭**不隱含**既有單節點端點已被移除」；`AC-T26` 已新增一條 🔒 回歸鎖（該端點與其兩個既有 spec 檔**逐字不動**；本輪只**新增**一條子樹路由、**不刪**任何既有路由）。
+- ⏭ **待下一輪處理**：屆時需一併處理者＝上述兩個既有 spec 檔、`AC-D9` 之「兩個資料來源」敘述、以及 `NodeDocsService.listNodeDocuments()`（🔒 但 `NodeDocsStore.listNodeMountedDocs?()` **不刪**——它仍是新批次方法 fallback 路徑之組成部分）。
+
+**`OQ-T3-08`** — 子樹 chip 之 `{節點名稱}` 於節點無名稱（`nodeName === null`）時之逐字文案 **[ASSUMPTION]**｜相關：F017 `AC-T44`／`AC-T45`
+
+- **問題（spec-writer 於 2026-08-21 補 `AC-T45` 契約時發現，非架構師提報）**：C3 定案之描述子欄位 `nodeName` 型別為 **`string | null`**（如實延續既有 `NodeInfo.name`），但 [F017 `AC-T44`](features/F017-backend-document-list.md#subtree-filter-delta) 之 chip 逐字文案 `循環：{...} · 節點子樹：{節點名稱}` **從未定義 `null` 時代入什麼**——prototype 之 mock 語料每個節點都有名稱，故此情形在 prototype 上不會出現。
+- **本輪處置＝`[ASSUMPTION]` 取既有慣例**：逐字代入 **`未命名節點`**——`frontend/src/pages/LifecycleTreePreviewPage.tsx` 之節點 `aria-label` 既有寫法即 `節點 ${n.name ?? '未命名節點'}`，[F036](features/F036-lifecycle-tree-preview.md) 之單擊 chip 亦沿用同一字串。已寫入 `AC-T44` 並標明未經裁決。
+- **選項**：**(a)** 採 `未命名節點`（＝現行 `[ASSUMPTION]`，與畫布上該節點所顯示者一致）｜**(b)** 此情形不渲染 chip（等同 no-op）｜**(c)** 只顯示循環段、省略 `· 節點子樹：…` 後半。
+- 📌 **不阻塞**：三個選項皆不影響 `AC-T40`／`AC-T41` 之篩選語意；改動範圍僅 `AC-T44` 之一列。**發生機率低**（節點名稱於 F009 為必填），登錄之目的是**不讓 test-generator 自行臆造一個字面**。
+
+**📌 本輪已由 lead 裁決、無需再問者（僅記錄，非開放問題）**
+
+| 事項 | 處置 |
+|---|---|
+| `22` 與 `13` 之 mock 語料不對齊（跳轉後筆數 ≠ 抽屜副標題之 N；§A.7.6 ②） | **lead 已裁決不對齊**。`AC-T40` 已明文**禁止**斷言「兩頁筆數相等」——只鎖篩選語意（同 `lifecycleId` 且掛載節點 ∈ 子樹），該類斷言鎖的是 mock 資料而非行為 |
+| `13` 之 `ICSOP-SRC-101-2-00` 掛載節點由 `進件作業` 更正為 `撥款核准作業`（§A.7.6 ④） | designer 已就地對齊（節點掛載之權威＝樹狀圖那一頁）；該欄不出現在 15 欄清單上，**無版面回歸**，不需 AC |
+| `docs/ui-ux-design-overview.md` §6.10 之舊浮水印值就地更正（§A.7.6 ⑥） | 屬 designer 之文件內部一致性修正，與 `AC-N2` 之定稿值一致，不需 AC |
+| 導向鈕之退化路徑採 `navigate()` 或 `location.href` | `AC-T21` 刻意不指定手段，只鎖「導到哪裡」與「`window.close()` 呼叫次數為 0」 |
+
 ## 非功能相關
 
 | ID | 問題 | 分類 | 相關 | 草案/選項 |

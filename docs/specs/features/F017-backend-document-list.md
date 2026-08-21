@@ -7,6 +7,8 @@ Epic/Story: E04 / US-037
 > **🔴 2026-08-18 CHANGE delta（使用者體驗缺失回報）——第 12 欄「連結點程序書」改為恆一行高之摺疊呈現**：多連結之列原被上下拉伸至 5～6 行高、清單無法掃視。新行為＝只顯示第一顆 pill ＋ 可點的 `+{N−1}` 徽章、點擊就地展開；**編號仍為可見文字、書名仍只在 tooltip**；`連結點程序書` 篩選命中者排第一顆。**14 欄之欄位集合與順序、13 項篩選之比對語意、統計卡／排序／分頁一律不變。** 逐條見 [§連結點程序書欄摺疊 delta](#link-cell-collapse-delta)（`AC-E1`～`AC-E9`）。
 > **🔵 2026-08-20 additive delta（使用者裁決；缺失／變更 delta 第 9 項）——清單最左新增「OJT」圖示欄**：清單由 14 欄改為 **15 欄**，新增之圖示欄置於**最左**（第 1 欄，`制定公司` 之前），依既有 `hasOjt` 布林值呈現兩種視覺狀態。**資料層已就緒**（`backend/src/documents/documents.store.ts:135-142` 之 `hasOjt?: boolean` 已於同一次批次查詢取得、`frontend/src/api/types.ts:196-197` 已有型別），**不需新增後端欄位或查詢**。**本 delta 之 AC 編號採 `AC-N#`**（N＝2026-08-20 defect delta），與既有 `AC-S#`／`AC-D#`／`AC-E#` 區隔、不重號。逐條見 [§OJT 圖示欄 delta](#ojt-icon-column-delta)（`AC-N37`～`AC-N40`）。
 > ⚠ **另含兩處既有語意之擴充**：① `程序書書名內`（使用者原文之「內」字）＝等值下拉 ＋ contains 輸入之**雙行為**（OQ-D18-12）；② `當責室長` 比對範圍由**僅主要**擴為**主要∪次要**（OQ-D18-08，與 [F019](F019-public-list-browsing.md) `AC-D7` 為同一語意之兩處斷言，**不得只改一處**）。
+> **🔵 2026-08-21 additive delta（使用者裁決；三項裁決第 3 項）——節點子樹 deep link 篩選**：`GET /admin/documents` 新增 `nodeSubtreeId` 篩選參數（**恆與 `lifecycleId` 成對**），語意＝同一循環且掛載節點 ∈ 該節點子樹；本頁以**可清除的 chip** 呈現。**本 delta 之 AC 編號採 `AC-T#`**（`AC-T40`～`AC-T48`），權威見 [§節點子樹篩選（deep link）delta](#subtree-filter-delta)。
+> 🔒 **子樹為第 14 個篩選來源但不進那 13 項**——`AC-D1`／`AC-D2`／`AC-D9`／`AC-D10`／`AC-N40` ② 逐字續為有效；本 delta 僅**就地擴充 `AC-D8`**（清除全部篩選須連 chip 一起清）。上游入口＝[F036](F036-lifecycle-tree-preview.md#subtree-drawer-delta) 之子樹抽屜導向鈕。
 
 ## Description
 後台以分頁清單檢視所有 ICSOP 文件，頂部呈現 3 張統計卡，提供 **13 個**篩選（其中 10 項為可搜尋下拉，另有公告日期區間、程序書書名內之雙行為欄、OJT 三值下拉）與依編號/公告日期排序。<br>📝 **2026-08-16 使用者裁決推翻，理由：使用者明列 13 項篩選條件（缺失 delta 第 9 項）**——原條文為「提供 **9 個**可搜尋下拉篩選」。清單顯示 14 欄（UI 顯示標籤，實體名維持「ICSOP 文件」）。狀態欄依「公告日期」衍生顯示（已公告/進度中/失效/作廢，見 F012）。與前台清單邏輯不同：**後台不套用「使用部門置頂」規則**，預設依最後更新時間或編號排序。未指派節點文件明顯標示。19 欄位權威定義見 [data-model.md](../data-model.md#document-entity)。
@@ -103,7 +105,8 @@ Epic/Story: E04 / US-037
 - **AC-D5**（OJT 三值）：Given 文件 A 有 `OJT_SIGNIN` 附件、文件 B 無, When `OJT = 全部`, Then A、B 皆回傳；When `OJT = 有 OJT`, Then 僅 A；When `OJT = 無 OJT`, Then 僅 B。
 - **AC-D6**（附錄／使用表單選具體一份）：Given 附錄 X 被文件 A、B 引用、附錄 Y 僅被 C 引用, When `附錄 = X`, Then 回傳 A、B 且不含 C；使用表單同構（以 `formId` 比對）。
 - **AC-D7**（🔴 當責室長主要∪次要；與前台一致）：Given 文件 A（`primaryChiefId='E001'`、`secondaryChiefIds=[]`）與文件 B（`primaryChiefId='E009'`、`secondaryChiefIds=['E001']`）, When 以 `當責室長 = E001` 篩選, Then **A 與 B 皆回傳**。<br>📝 **2026-08-16 使用者裁決推翻既有實作語意，理由：OQ-D18-08 要求前後台兩處語意一致**——spec-writer 於 2026-08-16 實地核對 `backend/src/documents/document-list-query.ts:57`（`filters.primaryChiefId !== r.primaryChiefId`）與 `frontend/src/pages/DocumentListPage.tsx:170`（`d.primaryChiefName ?? d.primaryChiefId`），確認**後台現況僅比對主要室長**。本條將其擴為主要∪次要（**嚴格超集**：既有「以主要室長篩選能找到該文件」之期望值不反轉，僅新增次要命中之情形）。與 [F019](F019-public-list-browsing.md) `AC-D7` 為同一語意之兩處斷言，**必須同批實作、不得只改一處**。<br>下拉選項清單相應改為「全體文件之 `primaryChiefId` ∪ `secondaryChiefIds`」之 distinct。
-- **AC-D8**（清除全部篩選）：Given 已套用任意數量之篩選, When 點擊「清除全部篩選」, Then 13 項篩選與關鍵字同時清空、清單回復未篩選狀態與預設排序、分頁回第 1 頁。
+- **AC-D8**（清除全部篩選；🔴 **2026-08-21 就地擴充**）：Given 已套用任意數量之篩選, When 點擊「清除全部篩選」, Then **13 項篩選、關鍵字與節點子樹 chip 三者同時清空**（含自網址移除 `lifecycleId`／`nodeSubtreeId` 兩參數）、清單回復未篩選狀態與預設排序、分頁回第 1 頁。
+  <br>📝 **OLD>「13 項篩選與關鍵字同時清空」**（未涵蓋 chip）。<br>🔴 **擴充理由**：按鈕字面是「清除全部篩選」，清完卻仍有一條 chip 在縮小結果集，**畫面與文字自相矛盾**。<br>⚠ **反向不成立**——chip 自己的 ✕ **只**清 chip、不動那 13 項與關鍵字（清除之**方向性不對稱**，見 `AC-T46`）。
 - **AC-D9**（🔒 清單欄位回歸鎖定）<br>📝 **2026-08-18 範圍縮減**：本條之「各欄顯示規則逐項不變」自該日起**排除第 12 欄「連結點程序書」**（改為摺疊呈現，權威＝`AC-E1`～`AC-E9`）；其餘 13 欄仍逐項鎖定。<br>📝 **2026-08-20 範圍再次縮減**：本條之「**欄位集合**」自該日起改讀為「**既有 14 欄之集合與其相對順序**」——最左新增之「OJT」圖示欄為 `OQ-D9-25`（選項 A）核可之 additive 變更，**不視為違反本條**（權威＝`AC-N37`～`AC-N40`）。**除該新增欄外，欄位集合仍不得增減、既有 14 欄之相對順序仍不得變動。**<br>Given 本 delta 實作完成, When 檢視清單, Then **既有 14 欄之欄位集合、其由左至右之相對順序與各欄顯示規則逐項與本 delta 導入前相同**——本 delta **僅動篩選、不動欄位**；3 張統計卡、排序與分頁行為亦不變；既有 AC 與 `AC-S1`／`AC-S2` 維持綠燈。
 
 - **AC-D10**（🔴 篩選區之逐字文案與選擇器契約；**2026-08-16 補訂**，權威＝`prototypes/13-document-list.html`）：Given 後台文件清單頁渲染完成, When 檢視篩選區, Then 下列文案與選擇器**逐字成立**——
@@ -158,14 +161,79 @@ Epic/Story: E04 / US-037
   - 📌 **2026-08-20 第三輪明文歸類（來源＝`docs/ui-ux-design-overview.md` §A.6.7）**：ui-ux-designer 為容納本欄而調整之**欄寬數值**——OJT 欄 `min-w-[56px]`、檔案欄 `min-w-[160px]`、表格 `min-w-[1560px]` → **`min-w-[1724px]`**——**經 spec-writer 判定為設計裁量，刻意不入 AC**。<br>**理由**：① 它們是**版面調校數值**而非行為契約，與本節既有之「顏色／填色不入 AC」同類；② 若入 AC，任何一次欄寬微調都會使測試轉紅，而該轉紅**不指向任何缺陷**（高噪訊比之脆弱斷言）；③ 真正需要保護的性質是「新增欄不得造成橫向截斷」，而該性質已由 `OQ-D9-25` 之前提裁決（表格已有 `overflow-x-auto` 可吸收欄寬）與 `AC-N40` 之欄位集合鎖定共同涵蓋。<br>⚠ **本註記之目的是讓「不入 AC」成為一個有紀錄的決定**，而非讓該項目在 §A.6.7 與規格之間靜默消失。
 - **AC-N39**（DOM 契約；供約束環定位，權威＝`prototypes/13-document-list.html`）：Given 第 1 欄渲染完成, When 檢視 DOM, Then 下列屬性**逐字成立**——該儲存格帶 `data-ojt-cell`，並帶 `data-has-ojt="true"`（`hasOjt === true`）或 `data-has-ojt="false"`（`false` 與 `undefined` 兩種輸入**皆為 `"false"`**）。<br>📌 **本條之存在理由**：同 `AC-D10`／`AC-E8`——本輪約束環為簡化版（僅 vitest／jest），未入 AC 之選擇器只能由 test-generator 臆造，測出來之物會與畫面對不上。
 - **AC-N40**（🔒 回歸鎖定）：Given 本 delta 實作完成, When 檢視清單, Then ① **既有 14 欄之欄位集合、相對順序與各欄顯示規則逐項不變**（新增欄位僅插入於最左，`AC-D9`／`AC-E9` 之範圍已就地縮減）；② **13 項篩選之組成、順序與各項比對語意逐字不變**——特別是既有「OJT」篩選下拉（`AC-D2` 第 12 列、`AC-D5`、`AC-D10` 之三選項 `全部`／`有 OJT`／`無 OJT`）**一字不動**，本 delta **只加顯示欄、不動篩選**；③ 3 張統計卡／排序／分頁行為不變；④ 既有 AC 與 `AC-S1`／`AC-S2`／`AC-D1`～`AC-D10`／`AC-E1`～`AC-E9` 全數維持綠燈（除 `AC-D9`／`AC-E9` 就「欄位集合」一項之已宣告範圍縮減外）。<br>⚠ **不得新增任何後端查詢**：`hasOjt` 於既有批次查詢中已取得（`documents.store.ts:135-142`），本 delta 若引入第 4 次查詢或 N+1，即違反 [NFR-001](../nfr.md#performance) 與 `AC-D9` 之既有效能前提。
+### 節點子樹篩選（deep link）delta（🔴 2026-08-21 使用者裁決；三項裁決第 3 項） {#subtree-filter-delta}
+
+> **裁決逐字（人類，2026-08-21）**：[F036](F036-lifecycle-tree-preview.md) 之子樹抽屜新增導向鈕，導向 `/admin/documents?lifecycleId=..&nodeSubtreeId=..`，**後端新增子樹篩選參數**；本頁以**可清除的 chip** 呈現。
+> **本 delta 之 AC 編號採 `AC-T#`**（T ＝ 2026-08-21 三項裁決；**跨三檔不重號**——`AC-T1`～`AC-T5` 屬 [F020](F020-watermark.md#line-height-delta)，`AC-T10`～`AC-T27` 屬 [F036](F036-lifecycle-tree-preview.md#subtree-drawer-delta)，`AC-T40`～`AC-T48` 屬本檔）。
+> **權威＝ `docs/ui-ux-design-overview.md` §A.7.2／§A.7.3 ＋ `prototypes/13-document-list.html`**（已由 ui-ux-designer 傳播並經 lead 逐項驗收）。
+> 🔒 **子樹為第 14 個篩選來源，但不進那 13 項**：`AC-D1`（13 項之組成與順序）／`AC-D2`（比對語意表）／`AC-D10`（篩選區文案與選擇器）／`AC-D9` ／`AC-N40` ② **逐字續為有效，本 delta 一字未動**——子樹以**獨立 chip** 承載，不新增第 14 個篩選控制項。
+> 🔴 **本 delta 就地擴充 `AC-D8`**（清除全部篩選須連 chip 一起清），見該條。
+> ⚠ **本輪之約束環為簡化版（僅 vitest／jest 單元＋元件測試，無 Playwright fidelity、無 e2e）**：以下每條 AC 皆須能於 jsdom／jest 斷死。
+
+#### 後端：`nodeSubtreeId` 篩選參數
+
+- **AC-T40**（參數語意）：Given `GET /admin/documents` 之查詢字串同時帶 `lifecycleId` 與 `nodeSubtreeId`（兩者皆能解析，見 `AC-T41`）, When 後端執行查詢, Then 僅回傳**同時滿足**下列兩條件之文件——① 其所屬循環 ＝ 該 `lifecycleId`；② 其**掛載節點 ∈ 以 `nodeSubtreeId` 為根之子樹**（該節點本身 ＋ 沿 parent→child 方向可達之全部後代，與 [F036](F036-lifecycle-tree-preview.md#subtree-drawer-delta) `AC-T14` 之 `descendants` **同語意**）。
+  1. **未指派節點者（掛載節點為 `null`）一律排除**——它不屬於任何節點，自然不屬於任何子樹。📌 **實作上由 SQL `IN` 對 `NULL` 恆不匹配之語意自動滿足**，**不需**額外 `AND nodeId IS NOT NULL`（`architecture-spec.md` §12.3）；但**測試仍須存在**（以「有一筆未指派節點之文件」之 fixture 斷言其不出現）——這條的綠燈來自 SQL 語意而非防呆碼，正因如此更需要一條斷言把它釘住。
+  2. 與既有 13 項篩選、關鍵字之關係為 **AND**（本條件僅縮小結果集，不放寬）。
+  3. 套用後**分頁回第 1 頁**；3 張統計卡之數字依**篩選後**結果集衍生（既有規則不變）。
+  4. 🔴 **子樹走訪之歸屬與落點（2026-08-21 就地補完；`architecture-spec.md` §12.1 決策 C1 ＋ §12.3 決策 C3）**：走訪使用**後端那一份** `descendants(edges, startId)`（`backend/src/lifecycle/lifecycle-tree-layout.ts`），其語意由 [F036 `AC-T28`](F036-lifecycle-tree-preview.md#subtree-drawer-delta) 之 F1–F5 固定向量釘死；解析結果以**已展開之節點 id 陣列**（`DocumentListFilters.nodeIdIn`，選填）下推為單一 SQL `IN` 條件。⚠ **store 不知道、也不需要知道這是「子樹」**——對它而言只是又一個 id 清單篩選（比照既有 `linkTargetId` 樣板）；圖走訪屬 service 層職責，**不得**混入 store。
+  5. 🔴 **篩選條件與 `AC-T45` 之描述子必須來自同一次解析呼叫**：同一個解析函式回傳「`nodeIds` ＋ 描述子」或 `null`；成功 ⇒ 兩者同時設定，失敗 ⇒ 兩者同時不設定。**不得**存在兩條各自判斷「這個 `nodeSubtreeId` 解析得出來嗎」的路徑。<br>**斷言形狀**：對解析成功之案例，斷言「結果集已縮小」**且** `subtreeFilter !== null`；對 `AC-T41` 四種失敗案例，斷言「結果集等同未帶參數」**且** `subtreeFilter === null`——**兩件事必須寫在同一個案例裡**，分開寫就驗不到「篩選生效但描述子算錯」這一類分岔。
+  <br>🔴 **禁止斷言「兩頁筆數相等」**：`prototypes/22` 與 `prototypes/13` 是**兩份獨立 mock 語料**，本輪刻意不對齊（`docs/ui-ux-design-overview.md` §A.7.6 ②：`lc1`／`a1` 之子樹在 `22` 為 8 份、跳到 `13` 只有 4 筆）。**AC 只鎖篩選語意**（同 `lifecycleId` 且掛載節點 ∈ 子樹）；斷言具體筆數相等鎖的是 mock 資料而非行為。**測試請以自備 fixture 驗語意**（例：子樹外之文件不出現、子樹內之文件全部出現、未指派節點者不出現）。
+- **AC-T41**（🔴 兩參數恆成對；殘缺或無法解析 ⇒ **靜默 no-op**）：Given 下列任一情形——① 只帶 `lifecycleId`；② 只帶 `nodeSubtreeId`；③ `lifecycleId` 不存在／查無此循環；④ `nodeSubtreeId` 不屬於該 `lifecycleId` 之節點集合——, When 請求送出, Then **完全不施加子樹篩選**（回應等同於未帶該兩參數之請求）、**不回錯誤**（HTTP 仍為 `200`，**非** `400`／`404`）、且前端**不顯示 chip**。
+  <br>📌 **理由（設計裁量，本條明文鎖定）**：deep link 是機器產生的；殘缺參數只可能來自手改網址或過期連結，對使用者跳錯誤訊息沒有意義。
+  <br>⚠ **no-op ≠ 回 0 筆**：情形 ③④ 之期望是**回傳未篩選之完整清單**，不是空結果。此為最容易寫反的一條，請對四種情形**各建一個案例**，且每個案例**同時**斷言 `subtreeFilter === null`（`AC-T40` ⑤）。
+  <br>🔒 `nodeSubtreeId` **不影響權限**：本頁既有之角色可視範圍（[F025](F025-role-function-matrix.md)「ICSOP 文件管理」）逐字不變；子樹篩選只縮小結果集，**不得**成為看見原本看不見之文件的途徑。
+- **AC-T42**（🔒 `lifecycleId` 不寫入既有「循環別」篩選）：Given 帶兩參數進入本頁, When 檢視第 13 項篩選「循環別」之控制項, Then 其值**仍為未選取（`全部`）**，`AC-D10` 之 combobox 契約逐字不變。
+  <br>📌 **理由**：若把 `lifecycleId` 灌進「循環別」，清 chip 時就得決定要不要連帶清掉使用者自己選的循環別——兩個來源會糾纏。**兩者互不寫入**，`AC-T46` 之方向性不對稱才成立。
+- **AC-T43**（🔴 子樹解析為**後端**職責；前端不得自行走訪）：Given 前端取得兩個 URL 參數, When 發出清單請求, Then 前端**原樣**把兩參數帶上（`GET /admin/documents?lifecycleId=…&nodeSubtreeId=…&page=1`），**不得**於前端展開子樹。
+  <br>🔴 **前端不得存在任何 DAG 鏡像表或子樹走訪**（`prototypes/13` 之 `NODE_DAG` 為**原型專用**，已於該檔明文標註「實作不得移植」）：前端若自己走訪一次，就會出現與 [F036](F036-lifecycle-tree-preview.md#subtree-drawer-delta) `AC-T14` **同型的分家**——樹狀圖說 7 個節點、清單按 6 個節點篩。**斷言形狀**：前端送出之請求參數逐字相符（`fetch`／API client 之 spy），且前端模組**不匯出**任何子樹走訪函式。<br>⚠ **本條與 [F036 `AC-T14`](F036-lifecycle-tree-preview.md#subtree-drawer-delta) ① 之修訂不衝突**：`AC-T14` ① 之「不得存在第二份」限**單一執行環境內**，後端依決策 C1 另有一份 `descendants()`（供本檔 `AC-T40` ④ 之篩選與 F036 之子樹端點**兩個呼叫端共用**）。**本條禁止的是「前端」再走訪一次**——前端唯一持有的子樹語意是醒目標示用的 `descendants()`，它**不得**被用來決定要送什麼參數或過濾清單結果。
+
+#### 前端：chip 之呈現與清除
+
+- **AC-T44**（chip 之逐字文案與選擇器契約；權威＝§A.7.2／§A.7.3）：Given 兩參數已由後端成功解析, When 本頁渲染完成, Then 下列**逐字成立**——
+  | 掛鉤 | 逐字值／語意 |
+  |---|---|
+  | `#subtreeChipBar` | chip 列容器，位於篩選區與清單之間 |
+  | `[data-subtree-chip]` | chip 本體（pill），**恰 1 個** |
+  | `[data-subtree-chip-text]` | 逐字 `循環：{循環顯示名稱} · 節點子樹：{節點名稱}`（`循環：` 後**無空白**；`·` 兩側**各一個半形空格**）。🔴 **兩個代入值分別取自回應之 `subtreeFilter.lifecycleName` 與 `subtreeFilter.nodeName`**（`AC-T45`）——`lifecycleName` 之值即 `lifecycleDisplayName()` 之輸出，含子分類時為 `名稱（子分類）`（[F040](F040-lifecycle-subcategory.md) `AC-S1` 不變）；前端**不得**自行組字或另行查名 |
+  | `nodeName` 為 `null` 時之 `{節點名稱}` | **`[ASSUMPTION]`** 逐字代入 `未命名節點`（沿用本專案既有慣例——`LifecycleTreePreviewPage` 之節點 `aria-label` 已為 `節點 ${n.name ?? '未命名節點'}`）。⚠ **此文案未經人類裁決**，見 [OQ-T3-08](../open-questions.md#t3-2026-08-21) |
+  | `[data-subtree-chip-clear]` | chip 之 ✕ 清除鈕，`<button type="button">`，`aria-label` ＝ `title` ＝ 逐字 `清除節點子樹篩選` |
+
+  🔴 **未套用時 chip 之整段內容不得存在於 DOM**：`queryBy` `[data-subtree-chip]` 為 `null`（**不得**以 `hidden` class／`display:none` 保留 chip 本體）。理由與 [F036 `AC-T18`](F036-lifecycle-tree-preview.md#subtree-drawer-delta) 相同——jsdom 不做版面計算，以 CSS 隱藏保留會讓「查無」與「隱藏」無法區分。
+  <br>📝 **原型以 `#subtreeChipBar` 之 `hidden`／`flex` class 切換為靜態 HTML 之等價手段**（`prototypes/13:234, 460-461`）；**實作端採條件渲染**，此為兩種載體之必然差異，非文案或行為差異。
+  <br>⚠ **chip 右側之說明文字 `由循環樹狀圖預覽帶入` 為設計裁量、刻意不入 AC**（純輔助說明，非行為載體；ui-ux-designer 已於 §A.7.2 第 12 列自行標明）。
+- **AC-T45**（🔴 chip 之顯示與其內容以**後端解析結果**為準）：Given 前端無法自行解析子樹（`AC-T43`）, When 決定是否顯示 chip 及其文案中之 `{循環顯示名稱}`／`{節點名稱}`, Then 兩者皆取自**後端於清單回應中回傳之子樹描述子**；描述子為 `null`／缺席時 **chip 不渲染**（即 `AC-T41` 之 no-op 於畫面上的呈現）。
+  <br>🔴 **描述子之具體契約（2026-08-21 就地補完；權威＝`architecture-spec.md` §12.3 決策 C3，`OQ-T3-04` 已結案）**——📝 本條前一版為「欄位名、巢狀位置＝system-architect 定，本 AC 只鎖來源與不渲染兩件事」，該留白已由 C3 填實：
+
+  | 項目 | 契約 |
+  |---|---|
+  | 落點 | `GET /admin/documents` 回應之**頂層**（既有 `{items, total, page, pageSize, hasNext}` 之第 6 個欄位，**additive**） |
+  | 欄位 | `subtreeFilter: { lifecycleId: string; lifecycleName: string; nodeId: string; nodeName: string \| null } \| null` |
+  | 🔴 顯式 key | **恆為顯式 key，不省略**——不適用時值為 `null`。⚠ 前端仍須對「`null`」與「缺席」**兩種情形一視同仁**防禦性判斷（`AC-T41` 之 no-op 於畫面上即「chip 不渲染」） |
+  | 🔴 `lifecycleName` 之值 | **`lifecycleDisplayName()` 之輸出**（含子分類格式 `名稱（子分類）`，[F040](F040-lifecycle-subcategory.md) `AC-S1`），**非** `LIFECYCLE.name` 原始值。斷言請以「有子分類之循環」建案例，期望值為 `名稱（子分類）` |
+  | 🔴 欄位名為何不叫 `lifecycleDisplayName` | 既有 `DocumentListItem.lifecycleName` **已是同一概念之命名先例**（其值即 `lifecycleDisplayName()` 之輸出）；同一份回應內若一個叫 `lifecycleName`、另一個語意相同的叫 `lifecycleDisplayName`，會製造「這兩個名字所指是否不同」之無謂疑惑。**一致性優先於字面精確性**（§12.3） |
+  | `nodeName` 之 `null` | 如實延續既有 `NodeInfo.name` 之 `string \| null` 型別；`null` 時 chip 文案之 `{節點名稱}` 呈現規則見 [OQ-T3-08](../open-questions.md#t3-2026-08-21)（**未命名節點**之逐字文案未經裁決，本輪標為 `[ASSUMPTION]`） |
+
+  <br>🔴 **`subtreeFilter` 與篩選條件必須來自同一次解析**（見 `AC-T40` ④）：這是防止「篩選生效但描述子算錯」或「描述子有值但篩選沒施加」兩種分岔的關鍵——**不得**有兩條各自判斷「這個 `nodeSubtreeId` 到底解析得出來嗎」的路徑。
+  <br>📌 **為何不讓前端自行查名稱**：另外呼叫循環／節點端點取名稱，等於製造第二個「這個 nodeId 到底屬不屬於這個循環」的判斷點——與 `AC-T43` 同一個分家風險。
+- **AC-T46**（🔴 **清除之方向性不對稱**——兩個方向必須各建一案）：Given 已套用子樹 chip **且**使用者另外自行選了任一項既有篩選（如 `狀態 = 已公告`）, When——
+  1. 點擊 `[data-subtree-chip-clear]`（chip 之 ✕）, Then **只清 chip**：chip 自 DOM 消失、網址上之 `lifecycleId`／`nodeSubtreeId` 兩參數被移除、**使用者自選之 `狀態 = 已公告` 仍然生效且其控制項仍顯示該值**；分頁回第 1 頁。
+  2. 點擊「清除全部篩選」, Then **13 項篩選、關鍵字與 chip 三者同時清空**（`AC-D8` 已就地擴充），網址參數亦一併移除。
+  <br>🔴 **不對稱是刻意的，不是遺漏**：chip 是「使用者從樹狀圖帶進來的一個外部條件」，清掉它不該連帶丟棄使用者在本頁自己下的功夫；而「清除全部篩選」四個字若留下一條仍在縮小結果集的 chip，畫面與按鈕字面自相矛盾。**兩個方向若只測一個，反向錯誤不會被發現。**
+- **AC-T47**（chip 納入「已套用篩選」之判定）：Given 僅套用子樹 chip、13 項篩選與關鍵字皆為空, When 檢視頁面, Then 「清除全部篩選」按鈕**可見**（`AC-D10` 之逐字 `清除全部篩選` 不變），行動版之篩選紅點亦顯示。
+  <br>📌 **`OJT` 之預設值 `全部` 仍不計入該判定**（既有規則不變）。
+- **AC-T48**（🔒 回歸鎖定）：Given 本 delta 實作完成, When 檢視清單, Then ① **15 欄之欄位集合與由左至右順序逐字不變**（`AC-D9`／`AC-E9`／`AC-N40` ①）；② **13 項篩選之組成、順序與比對語意逐字不變**（`AC-D1`／`AC-D2`／`AC-N40` ②）；③ 篩選區之文案與選擇器契約（`AC-D10`）逐字不變；④ 3 張統計卡、排序、分頁、空狀態 `查無符合結果` 之行為不變；⑤ 未帶兩參數時，本頁之呈現與行為與本 delta 導入前**完全相同**（含首屏**不得**先閃一次未篩選之完整清單——子樹狀態須於首次渲染前決定）；⑥ 🔴 **回應形狀之既有五個頂層欄位 `items`／`total`／`page`／`pageSize`／`hasNext` 逐字不變**——`subtreeFilter` 為 **additive 第 6 欄**，既有消費者忽略未知欄位即可（本專案前端以具名欄位存取，非嚴格 schema 驗證）。**不得**把 `subtreeFilter` 塞進 `items` 之元素或改動任何既有欄位之型別。
+
 ## Error Scenarios
 - 空結果/搜尋跳脫：見 [error-handling.md#public](../error-handling.md#public)。分頁效能見 [NFR-001](../nfr.md#performance)。
+- **子樹參數殘缺／無法解析**：**不視為錯誤**——靜默 no-op、HTTP `200`、不顯示 chip（`AC-T41`）；不寫任何稽核、不產生錯誤碼。
 
 ## Related
 - Data: [ICSOP_DOCUMENT（19 欄位）](../data-model.md#document-entity)
 - Depends on: [F010](F010-create-document.md), [F012](F012-document-status-toggle.md)（狀態衍生）, [F014](F014-accountable-dept-chief.md)（制定組織/當責室長）, [F016](F016-pdf-ojt-attachment.md)（檔案下載）
 - **循環子分類規則權威**: [F040](F040-lifecycle-subcategory.md)（`lifecycleDisplayName` 顯示規則、篩選值＝`lifecycleId`）
 - Related: 樹狀圖預覽（第二入口）見 [F036](F036-lifecycle-tree-preview.md)；DAG 資料見 [F008](F008-dag-node-edge.md)/[F009](F009-node-drawer-maintenance.md)；連結點見 [F015](F015-document-cross-link.md)
+- **2026-08-21 使用者裁決（三項裁決第 3 項）**: 節點子樹 deep link 篩選（`AC-T40`～`AC-T48`）。上游＝[F036 子樹抽屜之導向鈕](F036-lifecycle-tree-preview.md#subtree-drawer-delta)；傳播紀錄＝`docs/ui-ux-design-overview.md` §A.7。<br>✅ **system-architect 已定案（2026-08-21，`architecture-spec.md` 第 12 章 C1／C3）**：① 子樹走訪＝後端 `descendants()`（`backend/src/lifecycle/lifecycle-tree-layout.ts`，**非**遞迴 CTE——純記憶體圖走訪，語意由 [F036 `AC-T28`](F036-lifecycle-tree-preview.md#subtree-drawer-delta) 之 F1–F5 向量釘死），解析置於 **service 層**、以 `DocumentListFilters.nodeIdIn`（選填）下推為單一 SQL `IN`，**store 不承擔圖走訪**；② 描述子契約＝頂層 `subtreeFilter`（`AC-T45` 已補完）；③ 下推順序與 `linkTargetId` 之既有樣板同構，未新增效能顧慮。
 - 對比前台: [F019](F019-public-list-browsing.md)（後台不套用部門置頂；**「當責室長」比對語意兩處必須一致，見 `AC-D7`**）
 - **2026-08-20 使用者裁決（D9 delta）**: `OQ-D9-25`（新增獨立欄置於最左）／`OQ-D9-26`（沿用 `有 OJT`／`無 OJT` 字面）。見 [§OJT 圖示欄 delta](#ojt-icon-column-delta)。**⚠ 待 ui-ux-designer**：`prototypes/13-document-list.html` 表頭最左新增 `OJT` 欄並依 `AC-N38`／`AC-N39` 逐字實作兩態圖示與 DOM 掛鉤。
 - **2026-08-16 使用者裁決**: OQ-D18-08／10／11／12／13（見 [§篩選 9 → 13 項 delta](#filter-13-delta)）。新增篩選之資料來源：[F039](F039-appendix-management.md)（附錄）、[F018](F018-usage-form-management.md)（使用表單，含 `formNumber` 顯示字串）、[F016](F016-pdf-ojt-attachment.md)（OJT）。
