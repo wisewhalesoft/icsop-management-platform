@@ -965,6 +965,129 @@ describe('DocumentsService.listDocuments 富化：檔案＋連結點（C）', ()
   });
 });
 
+/**
+ * D 節：OJT 圖示欄之 hasOjt 富化（2026-08-20 D9 缺失／變更 delta；F017 `AC-N37`～`AC-N40`）。
+ *
+ * ⚠ 缺陷紀錄（team-lead 定位；architecture-spec §10.12 之假設不成立）：
+ * §10.12 原假設「`DOCUMENT_ATTACHMENT` 之批次 `In(docIds)` 查詢已存在於 `icsopPdfBlobPath` 之
+ * 富化路徑，同一次查詢即可取得 `hasOjt`，零額外往返」——但該查詢（見上方 C 節
+ * `attachments.findManyByType(ids, 'ICSOP_PDF')`）係**依附件型別過濾**，`OJT_SIGNIN` 從未被
+ * 查出。`DocumentListItem.hasOjt` 於全 `backend/src` 只有介面上一個選填宣告，沒有任何地方計算／
+ * 賦值，故現況恆為 `undefined`。前端因此「有 OJT／無 OJT」圖示永遠顯示「無 OJT」。
+ *
+ * 📌 本節「無 OJT」情境採用之判準（回覆 team-lead 之詢問）：hasOjt 嚴格斷言為 **`false`**
+ * （而非僅 falsy、亦非允許 `undefined`）。理由：
+ *   ① 與既有姊妹富化欄位 `icsopPdfBlobPath`／`icsopPdfFileName` 之既有慣例一致——兩者「無資料」
+ *      時明確賦值為 `null`（見上方 TS-C-002），並非省略鍵；富化欄位「不存在＝顯式空值」為本檔
+ *      既有慣例，`hasOjt` 沒有理由自成一格改採省略鍵。
+ *   ② 更關鍵：若改用 `toBeFalsy()`，現況缺陷（恆為 `undefined`）在「反向」案例會**巧合通過**
+ *      （`undefined` 亦為 falsy）——這正是本 repo 已知之「初值＝目標值」型 fixture 陷阱，會讓
+ *      「從未計算」這個真正病灶對測試完全隱形。只有嚴格 `toBe(false)` 才能讓反向案例在修復前
+ *      正確地紅。
+ *   `AC-N38`③「`hasOjt === undefined` 視同 `false`」是**前端**對（可能退化的）API 回應之防禦性
+ *   容錯寫法，不代表後端修復後仍可繼續省略此鍵——兩者是不同層級的關注點。
+ *
+ * ⚠ 測試接縫（供 lead／實作者知悉，非本節缺口）：`hasOjt` 之計算層級比照 `icsopPdfBlobPath`
+ * 富化——僅透過 `AttachmentStore` 介面驗證（`DocumentsService.listDocuments()` 呼叫端），不觸及
+ * `typeorm-documents.store.ts` 之實際 SQL 查詢實作（本輪為簡化版環，僅 jest，無真庫 int 測試）。
+ * 若實作選擇修改 `findManyByType()` 之簽章（例如改吃型別陣列）而非新增第二次呼叫，下方
+ * `FakeAttachmentStore`（定義於本檔頂部 C 節之前）之既有單型別簽章可能需要同步調整——此為
+ * 介面形狀變動，屬於「測試看起來錯誤」之申訴管道，不由 tdd-implementation 自行更動本檔。
+ */
+describe('DocumentsService.listDocuments 富化：OJT 圖示欄 hasOjt（D，AC-N37～AC-N40）', () => {
+  let store: FakeStore;
+  let attachments: FakeAttachmentStore;
+  let svc: DocumentsService;
+  beforeEach(() => {
+    store = new FakeStore();
+    attachments = new FakeAttachmentStore();
+    svc = new DocumentsService(store, undefined, undefined, undefined, attachments);
+  });
+  const itemOf = (page: DocumentListPage, id: string) => page.items.find((i) => i.id === id)!;
+
+  it('TS-N37-001 文件有 OJT_SIGNIN 附件 → hasOjt 嚴格為 true', async () => {
+    const d = store.seedDoc({ documentNumber: 'OJT-1' });
+    attachments.seed(d.id, 'OJT_SIGNIN', { fileName: 'ojt.pdf' });
+    const page = await svc.listDocuments({});
+    expect(itemOf(page, d.id).hasOjt).toBe(true);
+  });
+
+  it('TS-N37-002 文件無任何附件 → hasOjt 嚴格為 false（非 undefined，判準見檔頭說明）', async () => {
+    const d = store.seedDoc({ documentNumber: 'NO-OJT' });
+    const page = await svc.listDocuments({});
+    expect(itemOf(page, d.id).hasOjt).toBe(false);
+  });
+
+  it('TS-N37-003 文件僅有 ICSOP_PDF（無 OJT）→ hasOjt 為 false，且與「檔案」欄互不干擾', async () => {
+    const d = store.seedDoc({ documentNumber: 'PDF-ONLY' });
+    attachments.seed(d.id, 'ICSOP_PDF', {
+      fileName: 'sop.pdf',
+      blobPath: 'documents/x/icsop_pdf/a.pdf',
+    });
+    const page = await svc.listDocuments({});
+    expect(itemOf(page, d.id).hasOjt).toBe(false);
+    expect(itemOf(page, d.id).icsopPdfBlobPath).toBe('documents/x/icsop_pdf/a.pdf');
+    expect(itemOf(page, d.id).icsopPdfFileName).toBe('sop.pdf');
+  });
+
+  it('TS-N37-004（🔒 回歸鎖定）文件僅有 OJT_SIGNIN（無 ICSOP_PDF）→「檔案」欄仍為 null（prototype 13 之「檔案」欄僅承載 ICSOP PDF）', async () => {
+    const d = store.seedDoc({ documentNumber: 'OJT-ONLY' });
+    attachments.seed(d.id, 'OJT_SIGNIN', { fileName: 'ojt.pdf' });
+    const page = await svc.listDocuments({});
+    expect(itemOf(page, d.id).icsopPdfBlobPath).toBeNull();
+    expect(itemOf(page, d.id).icsopPdfFileName).toBeNull();
+    expect(itemOf(page, d.id).hasOjt).toBe(true);
+  });
+
+  it('TS-N37-005（🔴 鑑別力核心）同一份清單混合有 OJT 與無 OJT 之文件 → 兩者 hasOjt 值不同', async () => {
+    // 若實作永遠回 false（或永遠回 undefined／永遠回 true），以下兩行至少一行必為紅——
+    // 避免「只驗單一情境」讓「永遠回同一個值」之偽實作矇混過關。
+    const withOjt = store.seedDoc({ documentNumber: 'MIX-A' });
+    const withoutOjt = store.seedDoc({ documentNumber: 'MIX-B' });
+    attachments.seed(withOjt.id, 'OJT_SIGNIN', { fileName: 'ojt.pdf' });
+    const page = await svc.listDocuments({});
+    expect(itemOf(page, withOjt.id).hasOjt).toBe(true);
+    expect(itemOf(page, withoutOjt.id).hasOjt).toBe(false);
+  });
+
+  it('TS-N37-006 未注入 attachmentStore → 優雅降級為 false（不拋錯，比照 icsopPdfBlobPath 之 null 降級慣例）', async () => {
+    const bare = new DocumentsService(store);
+    const d = store.seedDoc({ documentNumber: 'BARE' });
+    const page = await bare.listDocuments({});
+    expect(itemOf(page, d.id).hasOjt).toBe(false);
+  });
+
+  it('TS-N37-007（🔒 不得 N+1）hasOjt 富化不得逐列查詢——多筆文件下 findSingle 仍為 0 次呼叫', async () => {
+    const withOjt = store.seedDoc({ documentNumber: 'N1' });
+    for (let i = 0; i < 4; i++) store.seedDoc({ documentNumber: `N${i + 2}` });
+    attachments.seed(withOjt.id, 'OJT_SIGNIN', { fileName: 'ojt.pdf' });
+    const singleSpy = jest.spyOn(attachments, 'findSingle');
+    await svc.listDocuments({});
+    expect(singleSpy).not.toHaveBeenCalled();
+  });
+
+  it('TS-N37-008（🔒 不得 N+1，列數不變性）批次查詢呼叫次數不隨文件筆數增長', async () => {
+    const batchSpy = jest.spyOn(attachments, 'findManyByType');
+
+    const small = new FakeStore();
+    small.seedDoc({ documentNumber: 'S1' });
+    const svcSmall = new DocumentsService(small, undefined, undefined, undefined, attachments);
+    await svcSmall.listDocuments({});
+    const callsSmall = batchSpy.mock.calls.length;
+    batchSpy.mockClear();
+
+    const big = new FakeStore();
+    for (let i = 0; i < 20; i++) big.seedDoc({ documentNumber: `B${i}` });
+    const svcBig = new DocumentsService(big, undefined, undefined, undefined, attachments);
+    await svcBig.listDocuments({});
+    const callsBig = batchSpy.mock.calls.length;
+
+    // 呼叫次數應與文件筆數無關（不論實作是併入既有批次查詢或新增第二個固定次數的批次查詢，
+    // 只要不隨列數增長即為合格；本斷言刻意不預設具體數字，以容納兩種實作路線）。
+    expect(callsBig).toBe(callsSmall);
+  });
+});
+
 describe('DocumentsService.setStatus 切換原因＋STATUS 事件（F012）', () => {
   let store: FakeStore;
   let pub: FakePublisher;
