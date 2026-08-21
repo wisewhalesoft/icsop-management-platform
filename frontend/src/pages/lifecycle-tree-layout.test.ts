@@ -86,6 +86,47 @@ describe('descendants（下游遍歷）', () => {
   });
 });
 
+/**
+ * F036 §抽屜擴為子樹 delta（2026-08-21 三項裁決第 2 項）—— `AC-T28`（架構決策 C1，
+ * `architecture-spec.md` §12.1）：與後端 `descendants` 之 5 組固定測試向量綁定
+ * （`backend/src/lifecycle/lifecycle-tree-layout.spec.ts` 之同名區塊）。
+ *
+ * 🔴 本區塊為「本輪唯一必須做但沒有任何機制自動保證會做」之項目：只在一端建立此向量測試，
+ * 另一端的語意漂移不會被任何東西攔截。**兩端皆已擴充**（本檔＋後端對應檔）。
+ *
+ * 📌 與上方既有「descendants（下游遍歷）」describe 並存、不重複——既有區塊之 a1–a5 拓樸
+ * 涵蓋的行為場景與本區塊之 F1–F5 命名向量有重疊但非同一組 fixture，AC-T28 明文要求以
+ * 這 5 組**具名**向量作為跨執行環境綁定之唯一權威，故另立區塊而非改寫既有測試。
+ */
+describe('descendants（AC-T28 · F1–F5 固定向量，跨執行環境綁定，權威＝architecture-spec.md §12.1）', () => {
+  it('F1（鏈）A→B, B→C, C→D：descendants(A)/(C)/(D) 逐一相符', () => {
+    const edges = [e('e1', 'A', 'B'), e('e2', 'B', 'C'), e('e3', 'C', 'D')];
+    expect(descendants(edges, 'A')).toEqual(new Set(['A', 'B', 'C', 'D']));
+    expect(descendants(edges, 'C')).toEqual(new Set(['C', 'D']));
+    expect(descendants(edges, 'D')).toEqual(new Set(['D']));
+  });
+
+  it('F2（菱形匯流）A→B, A→C, B→D, C→D：D 經兩路徑可達，計入一次', () => {
+    const edges = [e('e1', 'A', 'B'), e('e2', 'A', 'C'), e('e3', 'B', 'D'), e('e4', 'C', 'D')];
+    expect(descendants(edges, 'A')).toEqual(new Set(['A', 'B', 'C', 'D']));
+  });
+
+  it('F3（分支排除）A→B, A→C, B→D, C→E：descendants(B) 不含旁支 C／E', () => {
+    const edges = [e('e1', 'A', 'B'), e('e2', 'A', 'C'), e('e3', 'B', 'D'), e('e4', 'C', 'E')];
+    expect(descendants(edges, 'B')).toEqual(new Set(['B', 'D']));
+  });
+
+  it('F4（葉節點）A→B：descendants(B) 回最小集（僅自身，無出邊）', () => {
+    const edges = [e('e1', 'A', 'B')];
+    expect(descendants(edges, 'B')).toEqual(new Set(['B']));
+  });
+
+  it('F5（重複邊防禦）A→B, A→B：不因重複邊而重複計入或無窮成長', () => {
+    const edges = [e('e1', 'A', 'B'), e('e2', 'A', 'B')];
+    expect(descendants(edges, 'A')).toEqual(new Set(['A', 'B']));
+  });
+});
+
 describe('edgePath（直角連線）', () => {
   it('產生垂直→水平→垂直之 elbow path，起於 source 底、止於 target 頂', () => {
     const l = buildTreeLayout([n('A'), n('B')], [e('e1', 'A', 'B')]);

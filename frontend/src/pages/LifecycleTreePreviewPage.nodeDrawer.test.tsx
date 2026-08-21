@@ -21,6 +21,28 @@ import type {
  *
  * 🔴 抽屜為 F009 節點抽屜之**唯讀孿生**，不得復用其可寫版本；亦不得沿用其 ICSOPAdmin
  *    寫入閘門（`AC-D5`，後端側之驗證見 `backend/src/lifecycle/node-docs-controller-routes.spec.ts`）。
+ *
+ * 🔴 2026-08-21 三項裁決第 2 項（`AC-T10`～`AC-T27`）之連帶修訂——經 team-lead 逐條核可
+ * （授權範圍見 mailbox 紀錄），本檔本輪之修改**僅限**下列項目，其餘一字不動：
+ *   · **逐字文案就地修訂**（`AC-T15` 已推翻其舊值，屬修訂非回歸）：`TS-D8-020`（抽屜 aria-label）／
+ *     `TS-D8-022`（`#ndCount` 舊「掛載 N 份」→ 新「子樹共 N 份」）／`TS-D8-033`（空狀態文案）／
+ *     `TS-D8-035`（工具列提示句片段）。
+ *   · **資料來源端點置換**（`AC-D9`／`AC-D6`／`AC-D7` 之空狀態各 describe 之 `beforeEach` 管線接線，
+ *     `AC-T10`「抽屜自 2026-08-21 起不再呼叫單節點端點」）：`TS-D8-021`／`025`～`028`／`036` 之斷言
+ *     本身，以及 `AC-D1`／`AC-D2`／`AC-D3`／`AC-D4`／`AC-D6`／`AC-D7`（含 `TS-D8-034` 未使用抽屜之
+ *     describe 除外）**各 describe 共用之 `beforeEach` mock**（由 `getLifecycleNodeDocuments` 改為
+ *     `getLifecycleNodeSubtreeDocuments`，回應包成 `{nodeId, totalCount, groups:[{...}]}` 之子樹形狀，
+ *     以 `A1_SUBTREE`／`EMPTY_SUBTREE(nodeId)` 等價封裝原本之 `A1_DOCS`／`[]`）——此為**管線接線**，
+ *     不是重寫測試意圖：`TS-D8-025`～`028` 之欄位/列數斷言逐字不動，只是資料現在包了一層 `groups`。
+ * 🔒 **逐字不動（`AC-D9`／`AC-D4`／`AC-D6` 未被本 delta 修訂之部分）**：`TS-D8-023`／`024`（開關）、
+ *   `TS-D8-029`／`030`（純唯讀否定式，`AC-D4` 只加了一個 `[data-subtree-jump]` 例外，其餘一字未改）、
+ *   `TS-D8-031`（單擊回歸）、`TS-D8-034`（節點徽章逐字，`AC-D9` 明文鎖定不動，`AC-T15` 亦聲明徽章與
+ *   副標題語意已分家）。
+ * 🔴 **`TS-D8-032`（追加授權，2026-08-21 第二輪）**：原斷言單擊時 `endpoints.getLifecycleNodeDocuments`
+ *   未被呼叫；但依 `AC-T10`，雙擊自本 delta 起也不再呼叫該（舊）端點，故此斷言若不改，實作後將對
+ *   「單擊」與「雙擊」兩種情形**同時恆真**，從「單擊不觸發抽屜載入」之鑑別力退化為零（外界符號不再
+ *   被任何呼叫端使用，而非本斷言被誰改壞）。**已改為斷言 `getLifecycleNodeSubtreeDocuments` 未被
+ *   呼叫，斷言意圖逐字不變，與 `TS-D8-021`／`025`～`028`／`036` 屬同一類管線接線。**
  */
 vi.mock('../api/endpoints');
 vi.mock('../auth/useAuth');
@@ -75,6 +97,23 @@ const A1_DOCS: NodeMountedDocument[] = [
   },
 ];
 
+/**
+ * `AC-T10`：抽屜自 2026-08-21 起改走子樹端點。本檔沿用「a1 恰 2 份」之既有測試意圖，
+ * 以子樹＝{a1}單組（無下游有文件）之等價回應包裝 `A1_DOCS`，使 `TS-D8-021`／`025`～`028`
+ * 之欄位/列數斷言不需重寫。子樹分組（多節點分組、排序、去重）本身之完整測試見另一檔
+ * `LifecycleTreePreviewPage.subtreeDrawer.test.tsx`，本檔不重複。
+ */
+const A1_SUBTREE = {
+  nodeId: 'a1',
+  totalCount: A1_DOCS.length,
+  groups: [{ nodeId: 'a1', nodeName: '進件作業', documents: A1_DOCS }],
+};
+
+/** 子樹合計 0 份之等價回應（`AC-T18`：`groups` 為空陣列時前端不得出現導向鈕，本檔不驗證該半）。 */
+function emptySubtree(nodeId: string) {
+  return { nodeId, totalCount: 0, groups: [] as { nodeId: string; nodeName: string | null; documents: NodeMountedDocument[] }[] };
+}
+
 function Probe() {
   const loc = useLocation();
   return <div data-testid="loc">{loc.pathname}</div>;
@@ -106,16 +145,17 @@ describe('LifecycleTreePreviewPage — F036 AC-D1 雙擊節點開啟唯讀側抽
     vi.mocked(endpoints.getLifecycles).mockResolvedValue(CYCLES);
     vi.mocked(endpoints.lifecycleTreeDownloadUrl).mockImplementation((id) => `/admin/lifecycles/${id}/tree-preview/download`);
     vi.mocked(endpoints.lifecycleTreePrintUrl).mockImplementation((id) => `/admin/lifecycles/${id}/tree-preview/print`);
-    vi.mocked(endpoints.getLifecycleNodeDocuments).mockResolvedValue(A1_DOCS);
+    vi.mocked(endpoints.getLifecycleNodeSubtreeDocuments).mockResolvedValue(A1_SUBTREE);
     mockAuth('ICSOPAdmin');
   });
 
   it('TS-D8-020 AC-D9 抽屜容器：DOM id nodeDocDrawer、aria-label 逐字、關閉時 aria-hidden=true', async () => {
+    // 🔴 AC-T15 就地修訂：aria-label 舊值「節點掛載之程序書清單（唯讀）」→ 新值（子樹語意）。
     const { container } = renderAt();
     await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
     const dr = drawerEl(container);
     expect(dr, '抽屜容器 #nodeDocDrawer 不存在（AC-D9 要求其常駐並以 aria-hidden 切換）').not.toBeNull();
-    expect(dr).toHaveAttribute('aria-label', '節點掛載之程序書清單（唯讀）');
+    expect(dr).toHaveAttribute('aria-label', '節點與其下游節點之程序書清單（唯讀）');
     expect(dr).toHaveAttribute('aria-hidden', 'true');
   });
 
@@ -123,14 +163,15 @@ describe('LifecycleTreePreviewPage — F036 AC-D1 雙擊節點開啟唯讀側抽
     const { container } = renderAt();
     await openDrawer('a1');
     await waitFor(() => expect(drawerEl(container)).toHaveAttribute('aria-hidden', 'false'));
-    expect(endpoints.getLifecycleNodeDocuments).toHaveBeenCalledWith('lc1', 'a1');
+    expect(endpoints.getLifecycleNodeSubtreeDocuments).toHaveBeenCalledWith('lc1', 'a1');
     expect(container.querySelector('#ndTitle')?.textContent).toBe('進件作業');
   });
 
-  it('TS-D8-022 AC-D9 抽屜筆數 ndCount 逐字為「掛載 2 份程序書」＋唯讀徽章逐字「唯讀」', async () => {
+  it('TS-D8-022 AC-D9 抽屜筆數 ndCount 逐字為「子樹共 2 份程序書」＋唯讀徽章逐字「唯讀」', async () => {
+    // 🔴 AC-T15 就地修訂：舊值「掛載 2 份程序書」（單節點語意）→ 新值「子樹共 N 份程序書」（子樹合計語意）。
     const { container } = renderAt();
     await openDrawer('a1');
-    await waitFor(() => expect(container.querySelector('#ndCount')?.textContent).toBe('掛載 2 份程序書'));
+    await waitFor(() => expect(container.querySelector('#ndCount')?.textContent).toBe('子樹共 2 份程序書'));
     expect(within(drawerEl(container)!).getByText('唯讀')).toBeInTheDocument();
   });
 
@@ -159,7 +200,7 @@ describe('LifecycleTreePreviewPage — F036 AC-D2/AC-D3 抽屜欄位與跳轉', 
     vi.mocked(endpoints.getLifecycles).mockResolvedValue(CYCLES);
     vi.mocked(endpoints.lifecycleTreeDownloadUrl).mockImplementation((id) => `/x/${id}`);
     vi.mocked(endpoints.lifecycleTreePrintUrl).mockImplementation((id) => `/y/${id}`);
-    vi.mocked(endpoints.getLifecycleNodeDocuments).mockResolvedValue(A1_DOCS);
+    vi.mocked(endpoints.getLifecycleNodeSubtreeDocuments).mockResolvedValue(A1_SUBTREE);
     mockAuth('ICSOPAdmin');
   });
 
@@ -222,7 +263,7 @@ describe('LifecycleTreePreviewPage — F036 AC-D4 🔒 抽屜純唯讀', () => {
     vi.mocked(endpoints.getLifecycles).mockResolvedValue(CYCLES);
     vi.mocked(endpoints.lifecycleTreeDownloadUrl).mockImplementation((id) => `/x/${id}`);
     vi.mocked(endpoints.lifecycleTreePrintUrl).mockImplementation((id) => `/y/${id}`);
-    vi.mocked(endpoints.getLifecycleNodeDocuments).mockResolvedValue(A1_DOCS);
+    vi.mocked(endpoints.getLifecycleNodeSubtreeDocuments).mockResolvedValue(A1_SUBTREE);
     mockAuth('ICSOPAdmin');
   });
 
@@ -253,7 +294,7 @@ describe('LifecycleTreePreviewPage — F036 AC-D6 🔒 單擊標示下游之行�
     vi.mocked(endpoints.getLifecycles).mockResolvedValue(CYCLES);
     vi.mocked(endpoints.lifecycleTreeDownloadUrl).mockImplementation((id) => `/x/${id}`);
     vi.mocked(endpoints.lifecycleTreePrintUrl).mockImplementation((id) => `/y/${id}`);
-    vi.mocked(endpoints.getLifecycleNodeDocuments).mockResolvedValue([]);
+    vi.mocked(endpoints.getLifecycleNodeSubtreeDocuments).mockResolvedValue(emptySubtree('a2'));
     mockAuth('ICSOPAdmin');
   });
 
@@ -272,7 +313,8 @@ describe('LifecycleTreePreviewPage — F036 AC-D6 🔒 單擊標示下游之行�
     await userEvent.click(screen.getByTestId('tree-node-a2'));
     expect(screen.getByTestId('tree-node-a2').getAttribute('data-selected')).toBe('true');
     expect(drawerEl(container)).toHaveAttribute('aria-hidden', 'true');
-    expect(endpoints.getLifecycleNodeDocuments).not.toHaveBeenCalled();
+    // 🔴 2026-08-21 team-lead 追加授權：符號名換成新端點，斷言意圖（單擊不觸發抽屜載入）逐字不變。
+    expect(endpoints.getLifecycleNodeSubtreeDocuments).not.toHaveBeenCalled();
   });
 });
 
@@ -283,17 +325,19 @@ describe('LifecycleTreePreviewPage — F036 AC-D7／AC-D9 空狀態與節點徽�
     vi.mocked(endpoints.getLifecycles).mockResolvedValue(CYCLES);
     vi.mocked(endpoints.lifecycleTreeDownloadUrl).mockImplementation((id) => `/x/${id}`);
     vi.mocked(endpoints.lifecycleTreePrintUrl).mockImplementation((id) => `/y/${id}`);
-    vi.mocked(endpoints.getLifecycleNodeDocuments).mockResolvedValue([]);
+    vi.mocked(endpoints.getLifecycleNodeSubtreeDocuments).mockResolvedValue(emptySubtree('a3'));
     mockAuth('Supervisor');
   });
 
-  it('TS-D8-033 AC-D7／AC-D9 掛載數 0 之節點雙擊 → 抽屜仍開啟並顯示 data-node-doc-empty 之逐字空狀態', async () => {
+  it('TS-D8-033 AC-D7／AC-D9 子樹合計 0 之節點雙擊 → 抽屜仍開啟並顯示 data-node-doc-empty 之逐字空狀態', async () => {
+    // 🔴 AC-T15／AC-D7 就地修訂：觸發條件由「本節點 0 份」改為「整個子樹 0 份」；
+    // 舊文案「此節點尚未掛載任何程序書」→ 新文案「此節點與其下游節點皆未掛載程序書」。
     const { container } = renderAt();
     await openDrawer('a3');
     await waitFor(() => expect(drawerEl(container)).toHaveAttribute('aria-hidden', 'false'));
     const empty = drawerEl(container)!.querySelector('[data-node-doc-empty]');
     expect(empty, '空狀態區塊 [data-node-doc-empty] 不存在').not.toBeNull();
-    expect(empty!.textContent).toContain('此節點尚未掛載任何程序書');
+    expect(empty!.textContent).toContain('此節點與其下游節點皆未掛載程序書');
     expect(drawerEl(container)!.querySelectorAll('[data-node-doc-row]')).toHaveLength(0);
   });
 
@@ -305,10 +349,12 @@ describe('LifecycleTreePreviewPage — F036 AC-D7／AC-D9 空狀態與節點徽�
   });
 
   it('TS-D8-035 AC-D9 工具列提示句：新增片段與既有片段並列，既有片段一字不改', async () => {
+    // 🔴 AC-T15 就地修訂：片段舊值「雙擊節點＝檢視該節點掛載之程序書清單」
+    // → 新值「雙擊節點＝檢視該節點與其下游節點之程序書清單」（子樹語意）；既有片段一字不改。
     renderAt();
     await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
     expect(
-      screen.getByText(/雙擊節點＝檢視該節點掛載之程序書清單/),
+      screen.getByText(/雙擊節點＝檢視該節點與其下游節點之程序書清單/),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/點節點＝醒目標示其所有下游節點；點空白處取消；/),
@@ -328,7 +374,7 @@ describe('LifecycleTreePreviewPage — F036 Error Scenarios 節點文件清單�
 
   it('TS-D8-036 端點失敗 → 抽屜顯示錯誤提示但**不關閉**，且樹狀圖之標示狀態不受影響', async () => {
     const { ApiError } = await import('../api/client');
-    vi.mocked(endpoints.getLifecycleNodeDocuments).mockRejectedValue(new ApiError(500, 'STORE_IO'));
+    vi.mocked(endpoints.getLifecycleNodeSubtreeDocuments).mockRejectedValue(new ApiError(500, 'STORE_IO'));
     const { container } = renderAt();
     await openDrawer('a2');
     await waitFor(() => expect(drawerEl(container)).toHaveAttribute('aria-hidden', 'false'));
