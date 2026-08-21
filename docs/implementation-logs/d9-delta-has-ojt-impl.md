@@ -2,7 +2,7 @@
 type: implementation-log
 feature_id: F017
 feature_name: 文件清單 OJT 圖示欄之 hasOjt 富化（D9 缺失 delta）
-status: partial
+status: complete
 last_updated: 2026-08-21
 ---
 
@@ -43,11 +43,13 @@ last_updated: 2026-08-21
 
 | 指令 | 修復前（環定版時） | 修復後 |
 |---|---|---|
-| `npx jest src/documents/documents.service.spec.ts` | 118 案：6 紅 / 112 綠 | 118 案：**1 紅 / 117 綠** |
-| `npx jest`（全量） | 153 suites / 2286 案，6 紅 | 153 suites / 2286 案，**1 紅 / 2285 綠** |
+| `npx jest src/documents/documents.service.spec.ts` | 118 案：6 紅 / 112 綠 | 118 案：**118 綠 / 0 紅** |
+| `npx jest`（全量） | 153 suites / 2286 案，6 紅 | 153 suites / 2286 案，**全綠 / 0 紅** |
 | `npx tsc --noEmit` | — | **exit 0，零錯誤** |
 
-剩餘 1 紅為下方「待裁決之申訴」，**非本次實作造成的行為回歸**，且該案早於本輪的環。
+中間態（申訴裁決前）為該檔 1 紅 / 117 綠、全量 1 紅 / 2285 綠——唯一的紅是下方申訴之
+`documents.service.spec.ts:961` 常數，**非本次實作造成的行為回歸**，且該案早於本輪的環。
+`ring-be2` 裁決後該常數已更正，現為全綠。
 
 ## 改動檔案
 
@@ -87,7 +89,7 @@ last_updated: 2026-08-21
 `enrichOjt()` 獨立於 `enrichIcsopPdf()`，因 prototype 13 之「檔案」欄僅承載 ICSOP PDF；
 `TS-N37-004` 即為此回歸鎖定（僅有 OJT 的文件，「檔案」欄必須仍是 `null`）。
 
-## 待裁決之申訴（已送 `ring-be2`）
+## 申訴與裁決結果（`ring-be2` 已採納）
 
 `documents.service.spec.ts:961`（C 節「富化為批次查詢（不隨列數退化為 N+1）」）之
 `expect(batchSpy).toHaveBeenCalledTimes(1)` 與本欄需求**數學互斥**。
@@ -108,7 +110,12 @@ last_updated: 2026-08-21
   同為精確固定次數 pin，防 N+1 的強度分毫未減，只是常數隨事實更新；且 `TS-N37-008` 的註解
   已明文開放「新增第二個固定次數的批次查詢」，961 是唯一與該裁決不同步的殘留。
 
-裁決權在 `ring-be2`。若改判路線 3，實作端將改回單次查詢並同步介面與 typeorm store。
+**裁決結果（2026-08-21）**：`ring-be2` 採納申訴與建議路線，自行將 `documents.service.spec.ts:961`
+之常數由 `1` 更正為 `2`，並加註說明「本行仍是精確固定次數之 pin（非鬆綁為 `toBeGreaterThan(0)`
+或移除斷言）——若日後退化為隨列數增長，本斷言依然會抓到」。
+
+⚠ 該 spec 檔之變更**由 `ring-be2` 執筆**，實作端（本 agent）自始至終未觸動任何 `*.spec.ts`。
+實作端之 `git diff` 僅含 `backend/src/documents/documents.service.ts` 一個 production 檔。
 
 ## 已知盲區（如實標註，非新增）
 
