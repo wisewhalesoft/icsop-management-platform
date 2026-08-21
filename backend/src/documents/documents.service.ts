@@ -226,6 +226,7 @@ export class DocumentsService {
     await this.enrichNames(page.items);
     await this.enrichSecondaryChiefs(page.items);
     await this.enrichIcsopPdf(page.items);
+    await this.enrichOjt(page.items);
     await this.enrichLinks(page.items);
     return page;
   }
@@ -273,6 +274,33 @@ export class DocumentsService {
       const rec = byDoc.get(it.id);
       it.icsopPdfBlobPath = rec?.blobPath ?? null;
       it.icsopPdfFileName = rec?.fileName ?? null;
+    }
+  }
+
+  /**
+   * F017 `AC-N37`～`AC-N40`「OJT」圖示欄：批次補上各列是否有 OJT 簽到表附件。
+   *
+   * ⚠ architecture-spec §10.12 原假設「`icsopPdfBlobPath` 之既有批次查詢同一次即可取得
+   * `hasOjt`，零額外往返」——該假設不成立：`enrichIcsopPdf` 之查詢係依附件型別過濾
+   * （`'ICSOP_PDF'`），`OJT_SIGNIN` 從未被查出，故本欄此前恆為 `undefined`。
+   * 本方法補上第二次**固定次數**之批次查詢（`'OJT_SIGNIN'`）：往返數與列數無關（非 N+1），
+   * 與 `enrichLinks` 之「兩次批次查詢」慣例同型。
+   *
+   * `hasOjt` 一律顯式賦值為布林（無附件／無 attachmentStore→`false`，非省略鍵），
+   * 與姊妹富化欄位「無資料＝顯式空值」之既有慣例一致。
+   * OJT 不落「檔案」欄（prototype 13 之「檔案」欄僅呈現 ICSOP PDF），故與 `enrichIcsopPdf` 分離。
+   */
+  private async enrichOjt(items: DocumentListItem[]): Promise<void> {
+    if (items.length === 0) return;
+    const recs = this.attachmentStore
+      ? await this.attachmentStore.findManyByType(
+          items.map((i) => i.id),
+          'OJT_SIGNIN',
+        )
+      : [];
+    const withOjt = new Set(recs.map((r) => r.documentId));
+    for (const it of items) {
+      it.hasOjt = withOjt.has(it.id);
     }
   }
 

@@ -951,6 +951,19 @@ describe('DocumentsService.listDocuments 富化：檔案＋連結點（C）', ()
     expect(itemOf(page, d1.id).links).toEqual([]);
   });
 
+  /**
+   * 🔴 2026-08-21 常數更正（`1` → `2`）——D 節 hasOjt 裁決之連帶結果，非弱化。
+   *
+   * 本常數原為「僅 `icsopPdfBlobPath` 富化」時代之事實值（一次批次查詢即可取得 `ICSOP_PDF`）。
+   * D 節 hasOjt 落地後，`OJT_SIGNIN` 為**另一個附件型別**，而 `findManyByType(ids, type)` 依單一
+   * 型別過濾（見上方 `FakeAttachmentStore.findManyByType`），故必然是**第二次**固定次數之批次
+   * 呼叫，而非逐列查詢——往返數仍與文件筆數無關（見 TS-N37-008 之列數不變性斷言，5 筆與 20 筆
+   * 呼叫次數相等），只是常數由 1 變為 2。
+   *
+   * 本行仍是**精確固定次數**之 pin（非鬆綁為 `toBeGreaterThan(0)` 或移除斷言）——若日後退化為
+   * 隨列數增長，本斷言依然會抓到。經與 tdd-implementation 之申訴核對（實測 117/118 綠、唯獨此行
+   * 因常數過時而紅、且窮舉其餘管道皆與既有約束互斥後），確認 `2` 為正確之新事實值。
+   */
   it('富化為批次查詢（不隨列數退化為 N+1）', async () => {
     for (let i = 0; i < 5; i++) store.seedDoc({ documentNumber: `N-${i}` });
     const batchSpy = jest.spyOn(attachments, 'findManyByType');
@@ -958,7 +971,7 @@ describe('DocumentsService.listDocuments 富化：檔案＋連結點（C）', ()
     const singleSpy = jest.spyOn(attachments, 'findSingle');
     const bySourceSpy = jest.spyOn(links, 'findBySource');
     await svc.listDocuments({});
-    expect(batchSpy).toHaveBeenCalledTimes(1);
+    expect(batchSpy).toHaveBeenCalledTimes(2);
     expect(linkSpy).toHaveBeenCalledTimes(1);
     expect(singleSpy).not.toHaveBeenCalled();
     expect(bySourceSpy).not.toHaveBeenCalled();
