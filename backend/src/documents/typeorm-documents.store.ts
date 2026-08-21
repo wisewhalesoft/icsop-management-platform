@@ -193,10 +193,40 @@ export class TypeOrmDocumentStore implements DocumentStore {
     if (filters.draftingDeptId) qb.andWhere('d.draftingDeptId = :dept', { dept: filters.draftingDeptId });
     if (filters.draftingSectionId) qb.andWhere('d.draftingSectionId = :sec', { sec: filters.draftingSectionId });
     if (filters.primaryChiefId) qb.andWhere('d.primaryChiefId = :chief', { chief: filters.primaryChiefId });
+    // F017 AC-T40（架構決策 C3）：子樹篩選之單一 SQL IN 下推（節點 id 集合已由服務層展開）。
+    // `AC-T40` ①「未指派節點者排除」由 `IN` 對 NULL 恆不匹配之語意自動滿足，不需額外 IS NOT NULL。
+    if (filters.nodeIdIn?.length) {
+      qb.andWhere('d.nodeId IN (:...nodeIds)', { nodeIds: filters.nodeIdIn });
+    }
     if (filters.linkTargetId) {
       qb.andWhere(
         'EXISTS (SELECT 1 FROM DOCUMENT_LINK dl WHERE dl.sourceDocumentId = d.id AND dl.targetDocumentId = :lt)',
         { lt: filters.linkTargetId },
+      );
+    }
+    /*
+     * 🔴 F017 `AC-D6`（2026-08-16 delta）：附錄／使用表單「選具體一份」之篩選。
+     * 逐字比照上方 `linkTargetId` 之既有 `EXISTS` 子查詢樣板（`AC-D6` 明文「比照 linkTargetId 之
+     * 既有樣板」），僅換關聯表與欄名：
+     *   · `DOC_APPENDIX(documentId, appendixId, sortOrder)`——data-model #doc-appendix ＋
+     *     entity `database/entities/doc-appendix.entity.ts` ＋ migration `1723507200000-appendix.ts`
+     *   · `DOC_USAGE_FORM(documentId, formId)`——data-model #doc-usage-form ＋
+     *     entity `database/entities/doc-usage-form.entity.ts` ＋ migration `1722124800000-usage-form.ts`
+     * 兩表之 `documentId` 皆直接參照 `ICSOP_DOCUMENT.id`（無中介表）；`appendixId`／`formId` 各有索引
+     * （`IX_DOC_APPENDIX_appendixId`／`IX_DOC_USAGE_FORM_formId`）供本查詢使用。
+     * ⚠ 刻意**不**於列上富化 `appendixIds[]`／`formIds[]`：2000 筆工作集每列各帶兩陣列會讓回應顯著
+     * 膨脹，而 99% 的請求用不到這兩項篩選（architecture-spec §10.12）。
+     */
+    if (filters.appendixId) {
+      qb.andWhere(
+        'EXISTS (SELECT 1 FROM DOC_APPENDIX da WHERE da.documentId = d.id AND da.appendixId = :apx)',
+        { apx: filters.appendixId },
+      );
+    }
+    if (filters.formId) {
+      qb.andWhere(
+        'EXISTS (SELECT 1 FROM DOC_USAGE_FORM duf WHERE duf.documentId = d.id AND duf.formId = :uf)',
+        { uf: filters.formId },
       );
     }
     if (filters.keyword) {

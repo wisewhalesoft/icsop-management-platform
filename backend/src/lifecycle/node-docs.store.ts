@@ -63,4 +63,13 @@ export interface NodeDocsStore {
    * 一律降級為空清單（不新增必填方法以免打爆既有 store 實作者）。
    */
   listNodeMountedDocs?(lifecycleId: string, nodeId: string): Promise<NodeMountedDoc[]>;
+  /**
+   * F036 子樹抽屜 delta（架構決策 C2，architecture-spec §12.2）：`listNodeMountedDocs` 之批次版，
+   * 避免對子樹逐節點各發一次查詢。回傳 nodeId → 該節點掛載之程序書（`NodeMountedDoc` 既有形狀）。
+   * 選填能力——未提供時，服務層 fallback 為對子樹每個節點各呼叫一次既有 `listNodeMountedDocs()`。
+   */
+  listNodesMountedDocs?(
+    lifecycleId: string,
+    nodeIds: string[],
+  ): Promise<Map<string, NodeMountedDoc[]>>;
 }

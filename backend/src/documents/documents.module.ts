@@ -9,6 +9,10 @@ import { DOCUMENT_STORE, DocumentStore } from './documents.store';
 import { TypeOrmDocumentStore } from './typeorm-documents.store';
 import { NODE_NAME_STORE, NodeNameStore } from './node-name.store';
 import { TypeOrmNodeNameStore } from './typeorm-node-name.store';
+import { LIFECYCLE_STORE, LifecycleStore } from '../lifecycle/lifecycle.store';
+import { TypeOrmLifecycleStore } from '../lifecycle/typeorm-lifecycle.store';
+import { DAG_STORE, DagStore } from '../lifecycle/dag.store';
+import { TypeOrmDagStore } from '../lifecycle/typeorm-dag.store';
 import { DOCUMENT_LINK_STORE, DocumentLinkStore } from './document-link.store';
 import { TypeOrmDocumentLinkStore } from './typeorm-document-link.store';
 import { DOCUMENT_CHANGE_PUBLISHER, DocumentChangePublisher } from './document-change-event';
@@ -54,6 +58,17 @@ import { OrgChangeAlertAutoResolveSubscriber } from '../org-change-alert/documen
     {
       provide: NODE_NAME_STORE,
       useFactory: (): NodeNameStore => new TypeOrmNodeNameStore(AppDataSource),
+    },
+    // F017 AC-T40／AC-T45 子樹篩選（架構決策 C3）之唯讀查詢來源。反循環：於本模組自建
+    // store 實例（同 AppDataSource 單例），**不匯入 LifecycleModule**——比照上方 ATTACHMENT_STORE／
+    // NODE_NAME_STORE 之既有慣例，不建立模組級 DI 邊界。
+    {
+      provide: LIFECYCLE_STORE,
+      useFactory: (): LifecycleStore => new TypeOrmLifecycleStore(AppDataSource),
+    },
+    {
+      provide: DAG_STORE,
+      useFactory: (): DagStore => new TypeOrmDagStore(AppDataSource),
     },
     // 決策 B（F037）＋F006：seam 由單一綁定改為 fan-out（Composite）——
     //  1) DocumentChangeLogPublisher：持久化為 DOCUMENT_CHANGE_LOG（變更歷程）。

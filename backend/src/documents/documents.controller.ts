@@ -56,6 +56,13 @@ export class DocumentsController {
       draftingSectionId: q.draftingSectionId || undefined,
       primaryChiefId: q.primaryChiefId || undefined,
       linkTargetId: q.linkTargetId || undefined,
+      // 🔴 F017 `AC-D2` 第 10／11 列／`AC-D6`：附錄／使用表單篩選（比照上一行 linkTargetId 之樣板）。
+      // 📝 這兩行自 2026-08-16 立條起就漏了——本方法逐欄手動映射 q → filters，獨缺這兩欄；
+      //    與前端 getDocuments() 之同型缺漏合起來，使該兩項篩選端到端完全無作用（靜默無錯誤）。
+      appendixId: q.appendixId || undefined,
+      formId: q.formId || undefined,
+      // F017 AC-T40／AC-T43（2026-08-21 delta）：前端**原樣**帶上兩參數，子樹展開由服務層負責。
+      nodeSubtreeId: q.nodeSubtreeId || undefined,
       sortBy:
         q.sortBy === 'documentNumber' || q.sortBy === 'announcedDate'
           ? q.sortBy

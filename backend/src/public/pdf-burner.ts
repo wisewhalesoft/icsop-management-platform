@@ -32,6 +32,34 @@ export const WATERMARK_RGB = rgb(0.2, 0.255, 0.3333);
 /** 浮水印不透明度（`AC-N2` 定稿值；`OQ-D9-31` 將原 0.57 下修為 0.30）。 */
 export const WATERMARK_OPACITY = 0.3;
 
+/**
+ * 🔴 浮水印行距定稿常數（F020 `AC-T1`／`AC-T2`／`AC-T4`，2026-08-21 三項裁決第 1 項；
+ * `OQ-T3-01` 選項 (c) ＋ `OQ-T3-02`）。落點刻意與上方 `WATERMARK_RGB`／`WATERMARK_OPACITY`
+ * **同檔**（`AC-T1` 明文；比照 `AC-N3` 之既有處置）。
+ *
+ * 🔴 **`WATERMARK_LINE_STEP` 由 `FONT_SIZE × LINE_HEIGHT` 推導，不是硬編之 `24`**：若行高日後由
+ * `2.0` 調為其他值，位移必須自動跟著變；把「行高」這個關係留在人的腦中，正是本輪算術失誤
+ * （`size + 8` 於 `size = 12` 僅 1.667 倍、非 2.0 倍）的形狀。
+ *
+ * ⚠ 後端這份 `WATERMARK_LINE_HEIGHT` 與前端那份為「**兩份、值相同**」，不是「同一份」——
+ * 前後端為兩個獨立 TS 專案、無共用 package，一致性由兩側各自對字面值 `2` 斷言保證（`AC-T3` ③）。
+ */
+/** 浮水印字級（PDF point）。 */
+export const WATERMARK_FONT_SIZE = 12;
+/** 行高倍數（**無單位**；與前端 DOM `line-height` 為同一個無單位量）。 */
+export const WATERMARK_LINE_HEIGHT = 2;
+/** 每行 y 位移（PDF point）＝ 字級 × 行高倍數。📝 OLD> `size + 3`＝15；OLD> `size + 8`＝20（皆已作廢）。 */
+export const WATERMARK_LINE_STEP = WATERMARK_FONT_SIZE * WATERMARK_LINE_HEIGHT;
+
+/**
+ * 平鋪間距。`WATERMARK_TILE_STEP_Y` 隨行距由 `15` 增為 `24` 而 `+18`（三行區塊墨跡高度增加
+ * `2 × 9`），使 **tile 間隙與本 delta 前完全相同**（📝 OLD> `180`）；水平方向未受行距影響，
+ * `WATERMARK_TILE_STEP_X` 逐字維持 `260`。具名匯出之理由同 `AC-T1`——否則它會以字面值躺在
+ * 雙層迴圈裡，而它與行距之連動關係無人可斷。
+ */
+export const WATERMARK_TILE_STEP_X = 260;
+export const WATERMARK_TILE_STEP_Y = 198;
+
 /** 將線性快照拆為「機密聲明另起一行」之呈現行（契約：機密聲明獨立一行）。 */
 export function toDisplayLines(snapshot: string): string[] {
   const idx = snapshot.indexOf(WATERMARK_CONFIDENTIALITY);
@@ -56,18 +84,18 @@ export class PdfLibBurner implements PdfBurner {
     const { font, cjk } = await embedWatermarkFont(pdf, this.fontBytes);
     const render = cjk ? (s: string): string => s : asciiSafe;
     const lines = toDisplayLines(snapshot);
-    const size = 12;
+    const size = WATERMARK_FONT_SIZE;
 
     for (const page of pdf.getPages()) {
       const { width, height } = page.getSize();
-      const stepX = 260;
-      const stepY = 180;
+      const stepX = WATERMARK_TILE_STEP_X;
+      const stepY = WATERMARK_TILE_STEP_Y;
       for (let y = 0; y < height + stepY; y += stepY) {
         for (let x = -100; x < width; x += stepX) {
           lines.forEach((line, i) => {
             page.drawText(render(line), {
               x,
-              y: y - i * (size + 3),
+              y: y - i * WATERMARK_LINE_STEP,
               size,
               font,
               color: WATERMARK_RGB,

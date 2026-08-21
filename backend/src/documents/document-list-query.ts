@@ -55,6 +55,12 @@ export function applyDocumentQuery(
     if (filters.draftingCompanyId && r.draftingCompanyId !== filters.draftingCompanyId) return false;
     if (filters.draftingDeptId && r.draftingDeptId !== filters.draftingDeptId) return false;
     if (filters.draftingSectionId && r.draftingSectionId !== filters.draftingSectionId) return false;
+    // F017 AC-T40 子樹篩選：已由服務層展開之節點 id 集合。與既有篩選為 AND（僅縮小結果集）；
+    // 未指派節點者（nodeId=null）一律排除——等價於 SQL `IN` 對 NULL 恆不匹配。
+    // 空陣列視同未施加篩選（架構 §12.3：nodeIds.length 為 0 時不下推 IN）。
+    if (filters.nodeIdIn && filters.nodeIdIn.length > 0) {
+      if (r.nodeId === null || !filters.nodeIdIn.includes(r.nodeId)) return false;
+    }
     // F017 AC-D7：比對範圍＝主要 ∪ 次要。與前台 public-list.ts **共用同一個函式**，
     // 故兩處不可能分歧（架構 §10.6／§10.11）。篩選鍵名 `primaryChiefId` 維持不改（既有 API 契約）。
     if (

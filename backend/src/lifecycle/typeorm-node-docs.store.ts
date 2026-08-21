@@ -72,6 +72,47 @@ export class TypeOrmNodeDocsStore implements NodeDocsStore {
     }));
   }
 
+  /**
+   * F036 子樹抽屜（架構決策 C2）：`listNodeMountedDocs` 之批次版——單次
+   * `WHERE lifecycleId = :lc AND nodeId IN (:...ids)`（僅由 `=` 換 `IN`），非 N+1。
+   * 空 ids → 直接回空 Map（不發查詢，亦避免 `IN ()` 之非法 SQL）。
+   */
+  async listNodesMountedDocs(
+    lifecycleId: string,
+    nodeIds: string[],
+  ): Promise<Map<string, NodeMountedDoc[]>> {
+    const map = new Map<string, NodeMountedDoc[]>();
+    if (nodeIds.length === 0) return map;
+    const ds = await this.init();
+    const rows = await ds.manager.getRepository(IcsopDocument).find({
+      where: { lifecycleId, nodeId: In(nodeIds) },
+      select: {
+        id: true,
+        documentNumber: true,
+        documentName: true,
+        edition: true,
+        status: true,
+        announcedDate: true,
+        nodeId: true,
+      },
+      order: { documentNumber: 'ASC' },
+    });
+    for (const d of rows) {
+      if (!d.nodeId) continue;
+      const list = map.get(d.nodeId) ?? [];
+      list.push({
+        id: d.id,
+        documentNumber: d.documentNumber,
+        documentName: d.documentName,
+        edition: d.edition,
+        status: d.status,
+        announcedDate: d.announcedDate ? d.announcedDate.toISOString() : null,
+      });
+      map.set(d.nodeId, list);
+    }
+    return map;
+  }
+
   private async getDocWith(m: EntityManager, docId: string): Promise<DocLite | null> {
     const d = await m.getRepository(IcsopDocument).findOne({
       where: { id: docId },
