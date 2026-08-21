@@ -18,6 +18,11 @@ import { Icon } from '../components/Icon';
 import { PageHeader, TopbarActions } from '../components/PageHeader';
 import { watermarkLines } from '../domain/watermark-lines';
 import {
+  WATERMARK_COLOR,
+  WATERMARK_LINE_HEIGHT,
+  WATERMARK_OPACITY,
+} from '../domain/watermark-style';
+import {
   EXPORT_LIMIT_BADGE,
   EXPORT_ROW_LIMIT,
   countFromLimitError,
@@ -989,7 +994,7 @@ function DiffBoard({
       <div
         data-testid={`watermark-overlay-${side}`}
         aria-hidden="true"
-        style={{ position: 'absolute', inset: '-40%', pointerEvents: 'none', display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', transform: 'rotate(-45deg)', opacity: 0.30, zIndex: 5 }}
+        style={{ position: 'absolute', inset: '-40%', pointerEvents: 'none', display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', transform: 'rotate(-45deg)', opacity: WATERMARK_OPACITY, zIndex: 5 }}
       >
         {/*
           F038 #17：三層式（①身分列 ②機密聲明 ③時間戳）。
@@ -997,7 +1002,12 @@ function DiffBoard({
           也會在該 span 內被壓成一行或溢出（architecture-spec §10.14）。
         */}
         {Array.from({ length: wmCount }).map((_, i) => (
-          <span key={i} className="mono" style={{ color: '#334155', fontSize: 14, padding: '20px 26px', textAlign: 'center' }}>
+          <span
+            key={i}
+            data-testid="watermark-text"
+            className="mono"
+            style={{ color: WATERMARK_COLOR, fontSize: 14, padding: '20px 26px', textAlign: 'center', lineHeight: WATERMARK_LINE_HEIGHT }}
+          >
             {watermarkLines(watermark).map((line, j) => (
               <span key={j} style={{ display: 'block' }}>
                 {line}

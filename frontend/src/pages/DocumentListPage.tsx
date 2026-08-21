@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import {
   getDocuments,
@@ -23,6 +23,7 @@ import type {
   AppendixRecord,
   DocumentListItem,
   DocumentLinkView,
+  SubtreeFilterDescriptor,
   UsageFormRecord,
 } from '../api/types';
 
@@ -133,9 +134,31 @@ const cycleFilterOptions = (rows: DocumentListItem[]): ComboOption[] => {
   return [...byId].map(([value, label]) => ({ value, label }));
 };
 
+/** F017 `AC-T43`：deep link 之兩個參數，恆成對。 */
+interface SubtreeParams {
+  lifecycleId: string;
+  nodeSubtreeId: string;
+}
+
+/** 自網址取兩參數；**任一缺席即視為未套用**（`AC-T41` ①②之前端半，靜默 no-op、不回錯誤）。 */
+function readSubtreeParams(q: URLSearchParams): SubtreeParams | null {
+  const lifecycleId = q.get('lifecycleId') ?? '';
+  const nodeSubtreeId = q.get('nodeSubtreeId') ?? '';
+  return lifecycleId && nodeSubtreeId ? { lifecycleId, nodeSubtreeId } : null;
+}
+
+/**
+ * F017 `AC-T44`：chip 之逐字文案（`循環：` 後**無空白**；`·` 兩側**各一個半形空格**）。
+ * 🔴 兩個代入值皆取自後端描述子——`lifecycleName` 即後端 `lifecycleDisplayName()` 之輸出。
+ */
+function subtreeChipText(f: SubtreeFilterDescriptor): string {
+  return `循環：${f.lifecycleName} · 節點子樹：${f.nodeName ?? ''}`;
+}
+
 export function DocumentListPage(): JSX.Element {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const role = user?.roleCode;
   const canRead = canPerform(role, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read');
   const canWrite = canPerform(role, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'write');
@@ -144,6 +167,20 @@ export function DocumentListPage(): JSX.Element {
 
   const [all, setAll] = useState<DocumentListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  /**
+   * F017 `AC-T43`／`AC-T48` ⑤：兩個 deep link 參數。**於首次渲染前（state 初始化函式）即自網址取樣**
+   * ——若改成掛載後才讀，首屏會先閃一次未篩選之完整清單。
+   * 🔴 兩者**恆成對**；前端**原樣**帶給後端，**不得**於前端展開子樹（`AC-T43`：前端若自己走訪一次，
+   * 就會出現「樹狀圖說 7 個節點、清單按 6 個節點篩」的分家）。
+   */
+  const [subtreeParams, setSubtreeParams] = useState<SubtreeParams | null>(() =>
+    readSubtreeParams(searchParams),
+  );
+  /**
+   * F017 `AC-T45`：chip 之顯示與其文案**完全以後端解析結果為準**（前端不自算、不另行查名）。
+   * 後端 no-op（`AC-T41` 四種情形）時為 `null` ⇒ chip 不渲染。
+   */
+  const [subtreeFilter, setSubtreeFilter] = useState<SubtreeFilterDescriptor | null>(null);
   const [filters, setFilters] = useState<Record<FilterKey, string>>({ ...EMPTY_FILTERS });
   /** `程序書書名內` 之「已輸入但未選取」查詢字（`AC-D3` 之 contains 行為；選取值優先）。 */
   const [nameQuery, setNameQuery] = useState('');
@@ -160,14 +197,16 @@ export function DocumentListPage(): JSX.Element {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await getDocuments({ pageSize: LOAD_SIZE });
+      const res = await getDocuments({ pageSize: LOAD_SIZE, ...(subtreeParams ?? {}) });
       setAll(res.items);
+      // `AC-T45`：`null` 與「缺席」兩種情形一視同仁（後端恆回顯式 key，前端仍防禦性判斷）。
+      setSubtreeFilter(res.subtreeFilter ?? null);
     } catch (e) {
       toast.error(msgOf(e));
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, subtreeParams]);
 
   useEffect(() => {
     if (canRead) void load();
@@ -352,15 +391,36 @@ export function DocumentListPage(): JSX.Element {
     setFilters((prev) => ({ ...prev, [key]: value }));
     setPage(1);
   }, []);
-  /** `AC-D8`：13 項篩選與書名輸入字同時清空、回到第 1 頁。 */
+  /**
+   * `AC-T46` 之**一個方向**：chip 自己的 ✕ **只**清 chip——13 項篩選與關鍵字維持不動。
+   * 一併把兩個參數自網址移除，否則使用者重新整理後篩選又回來（他已明示要清掉）。
+   */
+  const clearSubtree = useCallback(() => {
+    if (!subtreeParams) return;
+    setSubtreeParams(null);
+    setSubtreeFilter(null);
+    setPage(1);
+    const next = new URLSearchParams(searchParams);
+    next.delete('lifecycleId');
+    next.delete('nodeSubtreeId');
+    setSearchParams(next, { replace: true });
+  }, [subtreeParams, searchParams, setSearchParams]);
+
+  /**
+   * `AC-D8`：13 項篩選與書名輸入字同時清空、回到第 1 頁。
+   * 🔴 `AC-T46` 之**另一個方向**（2026-08-21 就地擴充）：**連子樹 chip 一起清**——按鈕字面是
+   * 「清除全部篩選」，清完卻仍有一條 chip 在縮小結果集，畫面與文字自相矛盾。⚠ 反向不成立。
+   */
   const clearFilters = useCallback(() => {
     setFilters({ ...EMPTY_FILTERS });
     setNameQuery('');
     setPage(1);
-  }, []);
+    clearSubtree();
+  }, [clearSubtree]);
+  // `AC-T47`：子樹 chip 亦計入「已套用篩選」之判定（否則只套 chip 時清除鈕不出現）。
   const anyFilter = (Object.keys(filters) as FilterKey[]).some(
     (k) => filters[k] !== EMPTY_FILTERS[k],
-  ) || nameQuery !== '';
+  ) || nameQuery !== '' || subtreeFilter !== null;
 
   const toggleSort = useCallback((key: Exclude<SortBy, ''>) => {
     setSortBy((prevBy) => {
@@ -624,6 +684,40 @@ export function DocumentListPage(): JSX.Element {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/*
+        🔴 `AC-T44`／`AC-T45`：節點子樹篩選 chip（由 F036 之子樹抽屜 deep link 帶入）。
+        位置＝「篩選條件」卡片與表格之間，桌機／行動**皆顯示**——它是當前清單為何被縮小的唯一解釋，
+        藏在行動版 sheet 裡會使人以為資料不見了。
+        🔒 **不併入既有 13 項篩選**（`AC-T42`：`lifecycleId` 不寫入「循環別」，否則兩個來源會糾纏、
+        `AC-T46` 之方向性不對稱不成立）。
+        未套用（或後端 no-op）時**整段不渲染**——非 hidden、非 CSS 隱藏（`AC-T44` ③ 以 `=== null` 斷言）。
+      */}
+      {subtreeFilter && (
+        <div id="subtreeChipBar" className="mb-3 flex items-center gap-2 flex-wrap">
+          <span
+            data-subtree-chip
+            className="inline-flex items-center gap-2 max-w-full pl-3 pr-1.5 py-1.5 rounded-full border border-primary-200 bg-primary-50 text-primary-700 text-sm"
+          >
+            <Icon name="git-fork" className="w-3.5 h-3.5 shrink-0" />
+            {/* 🔴 兩個代入值分別取自回應之 subtreeFilter.lifecycleName／nodeName——前端不得自行組字或另行查名。 */}
+            <span data-subtree-chip-text className="min-w-0">
+              {subtreeChipText(subtreeFilter)}
+            </span>
+            <button
+              type="button"
+              data-subtree-chip-clear
+              onClick={clearSubtree}
+              aria-label="清除節點子樹篩選"
+              title="清除節點子樹篩選"
+              className="w-5 h-5 rounded-full hover:bg-primary-200/60 focus:outline-none focus:ring-2 focus:ring-primary-600 flex items-center justify-center shrink-0"
+            >
+              <Icon name="x" className="w-3.5 h-3.5" />
+            </button>
+          </span>
+          <span className="text-xs text-slate-400">由循環樹狀圖預覽帶入</span>
         </div>
       )}
 
