@@ -303,3 +303,126 @@ curl http://127.0.0.1:5173/assets/nope.js                  → HTTP 404
 ### (f) 申訴 #4（`proxy-coverage.test.ts`）
 新增 location 使該檔之「兩份設定彼此一致」轉紅——**已走 mailbox 申訴、未自行修改測試**，
 `ring-fe` 核實成立並於 `18cd385` 改為具名 `STATIC_LOCATIONS` 常數＋反腐爛守衛。詳見 §四 第 4 列。
+
+## 九、部署面（二）：`.mjs` 無 MIME 對映 ⇒ 前台檢視器整個掛掉（使用者實測揪出）
+
+> 🔴 **本輪第二個「四道驗證全綠、真瀏覽器一開就死」的缺陷，且是使用者親自發現的。**
+> 與 §八 的 `/pdfjs/` 是**不同路徑、不同機制**——§八 是「資源取得不到時被 SPA 吃掉」，
+> 本節是「資源**取得得到**、但**不能被瀏覽器當成模組執行**」。
+
+### (a) 症狀與根因
+使用者於真瀏覽器開前台檢視器：
+```
+載入失敗 · Setting up fake worker failed:
+"Failed to fetch dynamically imported module:
+ http://localhost:5173/assets/pdf.worker-BgryrOlp.mjs"
+```
+實測（對正在跑的容器，唯讀）：
+
+| 觀測 | 值 |
+|---|---|
+| 容器內檔案 | **存在**，`/usr/share/nginx/html/assets/pdf.worker-BgryrOlp.mjs`，2,209,730 bytes |
+| nginx 版本 | `nginx/1.31.2` |
+| `grep -w mjs /etc/nginx/mime.types` | **命中 0**（無 `.mjs` 對映） |
+| `/assets/pdf.worker-*.mjs` 之回應 | `200` **`application/octet-stream`** |
+| 對照：一般 `/assets/index-*.js` | `200` `application/javascript` |
+
+**根因**：nginx 的 `mime.types` 沒有 `.mjs`，落到 `default_type`＝`application/octet-stream`；
+而瀏覽器對 **ES module 有嚴格 MIME 檢查——非 JavaScript MIME 的模組一律拒絕執行**。
+pdf.js 的 worker 由 Vite 以 `?url` 打包（`PublicViewerPage.tsx:4`）並以 module 型 Worker 載入，正中此規則。
+⇒ 症狀是「Failed to fetch dynamically imported module」而**不是 404**——**檔案明明在、還回 200**，
+所以任何「檔案有沒有進 image」「HTTP 是不是 200」的檢查都會說一切正常。
+
+### (b) 🔴 為什麼四道驗證全部放它過去（**比修法本身更值得記**）
+
+| 驗證 | 為何抓不到 |
+|---|---|
+| 前端單元測試（vitest） | `vi.mock('pdfjs-dist')` ⇒ **根本不碰真 worker**，結構上不可能抓到 |
+| `npm run build` ＋ `verify-pdfjs-assets.mjs` | 只驗 `dist/pdfjs/` 之 cmaps／fonts **數量**；不驗 `dist/assets/` 的 worker，**更不驗 MIME** |
+| 本人 §八 之 A／B 容器實測 | 驗的是 `/pdfjs/` 的**缺檔 404 與真檔位元組數**——結論都對，但那是**另一條路徑**；`.mjs` 不在該路徑上 |
+| lead 之正式容器驗證 | 看到 cmap 為 `application/octet-stream` 並判定正常——**對 cmap 而言確實正常**（它走 `fetch` 取 ArrayBuffer，不受 module MIME 規則管），未意識到 worker 是 `.mjs` 且受**另一套**規則管 |
+
+🔴 **共同盲點（一句話）**：
+> **「資源取得得到」與「資源能被瀏覽器當成它該有的型別使用」是兩件事。**
+> 盲區表 `#18` 原本只關了前半（檔案有沒有進產物、拿不拿得到）；後半（`Content-Type` 是否
+> 滿足**該載入方式**的規則）**從未被任何一道閘門檢查過**。
+
+📌 這與本輪一路抓到的是同一族：**斷言瞄準的東西，不是它名字所指的東西**。
+「資產已部署」聽起來涵蓋「資產可用」，實際上只涵蓋「資產存在」。
+
+### (c) 修正
+於 `location /assets/` **之前**新增（`frontend/nginx.conf`）：
+```nginx
+location ~ ^/assets/.+\.mjs$ {
+  types { text/javascript mjs; }
+  expires 1y;
+  add_header Cache-Control "public, immutable";
+  try_files $uri =404;
+}
+```
+⚠ **為何是獨立 regex location，而不是在 `server` 層加 `types`**：nginx 的 `types` 是**區塊型指令**，
+在某層宣告即**「取代」而非「附加」**該層繼承來的整份對映表。（此非引述文件，而是**實測結論**，見 (d)。）
+⚠ regex location 優先於 prefix location ⇒ 本區塊**取代** `/assets/` 對 `.mjs` 的處理，
+故必須**自行複製** immutable 長快取，否則 worker 會悄悄失去快取。
+（`.mjs` 檔名含內容雜湊，`immutable` 對它安全——與 `/pdfjs/` 那組**非**雜湊檔名不同，見 §八 (b)。）
+
+### (d) 實證：三向對照（拋棄式容器，同一份 doc root）
+`:8101` 掛 `git show HEAD:` 之修正前設定；`:8102` 掛本次修正；
+`:8103` 掛**刻意寫錯的危險變體**（把 `types { text/javascript mjs; }` 放在 `server` 層）——
+第三欄的用途是**把 (c) 那段「會取代整份對映表」的主張從斷言變成實測**。
+
+| 資源 | before（HEAD） | **after（本次修正）** | danger（`server` 層 `types`） |
+|---|---|---|---|
+| `/assets/pdf.worker-*.mjs` | 🔴 `application/octet-stream` | ✅ **`text/javascript`** | `text/javascript` |
+| `/assets/index-*.js` | `application/javascript` | ✅ 不變 | 🔴 **`application/octet-stream`** |
+| `/assets/index-*.css` | `text/css` | ✅ 不變 | 🔴 **`application/octet-stream`** |
+| `/index.html` | `text/html` | ✅ 不變 | 🔴 **`application/octet-stream`** |
+| `/pdfjs/cmaps/*.bcmap` | `application/octet-stream` | 不變（見 (e)） | `application/octet-stream` |
+
+⇒ 危險變體會把 **html／js／css 全部打回 `application/octet-stream`**，整站崩潰——
+所以「在 `server` 層加一行 `types` 就好」是錯的，本修正的 location 範圍限縮是必要的、非過度設計。
+
+**快取未退化**（`.mjs` 之 `Cache-Control`，before／after 逐字相同）：
+```
+max-age=31536000
+public, immutable
+```
+
+### (e) 第 3 點掃描結果：還有沒有別的副檔名同型？
+
+`dist/` 內全部副檔名：`bcmap`(168)／`pfb`(10)／`ttf`(4)／`html`(2)／`mjs`(1)／`js`(1)／`css`(1)。
+`nginx/1.31.2` 之 `mime.types` 對映情況與實測 `Content-Type`：
+
+| 副檔名 | mime.types | 實際回應 | 載入方式 | 是否受嚴格 MIME 檢查 | 判定 |
+|---|---|---|---|---|---|
+| `.mjs` | **無** | ~~octet-stream~~ → `text/javascript` | `new Worker(url, { type:'module' })` | 🔴 **是**（ES module） | **已修** |
+| `.js` | 有 | `application/javascript` | classic script | 是，但已正確 | OK |
+| `.css` | 有 | `text/css` | `<link rel=stylesheet>` | 是，但已正確 | OK |
+| `.bcmap` | 無 | `application/octet-stream` | pdf.js `fetch` → ArrayBuffer | **否** | 可接受 |
+| `.pfb` | 無 | `application/octet-stream` | pdf.js `fetch` → ArrayBuffer | **否** | 可接受 |
+| `.ttf` | 無 | `application/octet-stream` | 位於 `pdfjs/standard_fonts/`，亦由 pdf.js `fetch` 取用，**非** CSS `@font-face` | **否** | 可接受 |
+| `.wasm` | **有**（`application/wasm`） | — | — | 是（`instantiateStreaming`） | **不適用**：已查 `pdfjs-dist@4.10.38` **不含任何 `.wasm`**（`find … -name "*.wasm"` 無輸出）；且 nginx 本來就有正確對映 |
+
+📌 **不確定的部分如實登錄**：`.bcmap`／`.pfb`／`.ttf` 現況為 `application/octet-stream`，
+**依目前的載入方式（`fetch` 取 ArrayBuffer）不會出問題**，故本輪**不改**（避免擴大範圍）。
+⚠ 但若日後有人加上 `X-Content-Type-Options: nosniff`，或改以 CSS `@font-face` 載入那批 `.ttf`，
+`octet-stream` 就會變成問題。若要一併正名，成本極低（同一 regex location 手法）——**交還 lead 決定**。
+
+### (f) 測試影響：**無**
+`proxy-coverage.test.ts` 之 `nginxProxyPrefixes()` 取 location 字面第一段，
+`location ~ ^/assets/.+\.mjs$` → 解析為 `assets`，而 `assets` 已在 `STATIC_LOCATIONS` 內
+⇒ 不影響一致性比對。**實跑**：該檔 22/22 綠；全量 88 檔／1330 案全綠、`tsc --noEmit` 乾淨。
+（本次**未**動任何測試檔，亦無需申訴。）
+
+### (g) ⚠ 生效條件與尚未驗到的一步
+同 §八 (e)：`nginx.conf` 烘進 image ⇒ **必須重建 frontend image 並 `--force-recreate`** 才生效。
+lead 指示本輪**先不重建**（使用者環境），故上述 after 欄位全部來自**拋棄式容器掛載工作區設定**之實測，
+**尚未**在正式容器上覆核。重建後應以一行覆核：
+```
+curl -s -o /dev/null -w "%{http_code} %{content_type}
+" http://localhost:5173/assets/pdf.worker-*.mjs
+# 期望：200 text/javascript（修正前為 200 application/octet-stream）
+```
+📌 **同時修正 §八 (d) 之一處觀測**：該節所記「dev 容器 dist 內無 `pdfjs/` 目錄」係**重建前**之狀態；
+lead 已於 `2026-08-21T01:25` 重建該容器，現況為 `pdfjs/cmaps` 168 檔、`standard_fonts` 10 檔皆在，
+且 `/pdfjs/` 之 `=404` 規則已生效（`grep -c "location /pdfjs/"` → 1）。`.mjs` 之修正則尚未進 image。
