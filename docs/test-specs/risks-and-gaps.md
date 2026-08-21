@@ -1111,3 +1111,63 @@ docker compose -p icsop logs backend | grep -F "$SECRET"    # 伺服器日誌得
 參數前會使**整份檔案**（含既有 `AC-F12` 明訂「須維持綠燈」的 `TS-003`／`TS-004`／`TS-005`／
 `TS-016`）因 TS 編譯失敗而暫時無法執行。這不是這些既有測試變紅，而是同檔案編譯單位的連帶效應；
 實作補上參數、整檔編譯通過後即會恢復可獨立驗證。詳見 [features/F024-test.md#export-fix-delta](features/F024-test.md#export-fix-delta)。
+
+## 2026-08-21 三項裁決 delta（浮水印行高 ＋ 子樹抽屜 ＋ 子樹 deep link） {#t3-2026-08-21}
+
+> source: [features/F020-test.md#line-height-delta](features/F020-test.md#line-height-delta)（`AC-T1`～`AC-T5`）／
+> [features/F036-test.md](features/F036-test.md)（`AC-T10`～`AC-T27`）／
+> [features/F017-test.md](features/F017-test.md)（`AC-T40`～`AC-T48`）。
+> 🔴 **本輪約束環為簡易版**（人類指定）：僅 backend jest／frontend vitest 單元＋元件測試，
+> 無 Playwright fidelity、無 e2e、無 Stryker mutation、無 dependency-cruiser/coverage/複雜度 metric gate。
+
+### B. 本輪刻意不覆蓋（`OQ-T3-05` 之 6 項，spec-writer／ui-ux-designer 已明文登錄，非本 agent 遺漏）
+
+| # | 項目 | 為何不入 AC／不建約束 |
+|---|---|---|
+| G-T3-01 | 導向鈕之 full-width primary 樣式與 `list-filter` 圖示 | 純視覺；jsdom 不做版面計算，斷 class 字串等於斷 Tailwind 寫法而非行為 |
+| G-T3-02 | 分組標題列之 `sticky` 定位 | 同上；`position: sticky` 之效果需真實捲動與版面 |
+| G-T3-03 | chip 右側說明文字「由循環樹狀圖預覽帶入」 | ui-ux-designer 自陳為設計裁量；純輔助說明、非行為載體 |
+| G-T3-04 | chip 於 375／640／768／1024／1440 之 RWD 換行行為 | 需真實版面量測；且 `13` 於 375px 之版面本即不可用（既有問題，非本輪造成） |
+| G-T3-05 | 抽屜捲動時「換節點回到第一組」之視覺（`scrollTop=0`） | jsdom 之 `scrollTop` 恆為 0，斷言恆真＝零鑑別力 |
+| G-T3-06 | 「點完只剩 1 個分頁」之真實分頁數 | 需真實瀏覽器 context；本輪改以 `AC-T20`／`AC-T22` 之 `window.close()` 呼叫次數與 seam 之 `closedSelf` 斷言其因，不斷言其果——`LifecycleTreePreviewPage.subtreeJump.test.tsx` 之 `TS-T20-F01`／`TS-T22-F01` |
+
+### B（續）. 本 agent 自行判斷之未覆蓋項目
+
+| # | 項目 | 理由 |
+|---|---|---|
+| G-T3-07 | `AC-T11`(a) 第③層 tie-break（節點 `x`／`y` 皆相同時以 id 字典序打破平手） {#t3-ac-t11-third-tier-tiebreak} | 構造兩個「真正同 x 同 y」之節點需仰賴 `buildTreeLayout()` 內部欄位分配演算法之確切細節（例如同層節點是否可能因多 parent 匯流而共用座標），該演算法屬 production 原始碼，對實作全盲之限制下無法安全構造 fixture 座標。第①②層（本節點恆首、同層依 x 遞增、跨層依 y 遞增）已由 `node-docs-subtree.service.spec.ts` 之 `TS-T11-001`～`003` 覆蓋。若 tdd-implementation 有把握以既知拓樸構造出真正的 x/y 相同案例，歡迎經 mailbox 提供 fixture，本 agent 可補一條案例。 |
+| G-T3-08 | `OQ-T3-08`（`13` 之子樹 chip 於 `nodeName===null` 時之逐字文案 `未命名節點`） {#oq-t3-08-node-name-null} | 該值標為 `[ASSUMPTION]`、**未經人類裁決**（見 `open-questions.md` `OQ-T3-08`）。本輪 `DocumentListPage.subtreeChip.test.tsx` 之全部 fixture 皆使用有名稱之節點，刻意不對此未裁決字面建立斷言，避免鎖死一個可能被推翻的值。一旦 `OQ-T3-08` 結案，請回頭補一條案例。 |
+
+### D. 結構上不可達之殘留面（登記，不修）
+
+| # | 項目 | 為何連容器內實跑也測不了（本輪環之限制） |
+|---|---|---|
+| D-T3-01 | `AC-T40` ④「`IN (:...nodeIds)` 對真實 MSSQL 之行為」 {#t3-subtree-in-clause-mssql} | 🔴 **本條之原文有誤導，2026-08-21 team-lead 查證後更正**：原文稱「unit 可對 fake store 斷言呼叫參數，`documents.service.subtreeFilter.spec.ts` 已覆蓋此半」——這句話不準確。`document-list-query.subtreeFilter.spec.ts`／`documents.service.subtreeFilter.spec.ts` 所驗證的 `applyDocumentQuery` 純函式**在 production 端零消費者**（`grep -rn "applyDocumentQuery" backend/src` 除 `.spec.ts` 外唯一命中為 `typeorm-documents.store.ts:10` 之 `DEFAULT_PAGE_SIZE` import，篩選邏輯本身完全未被匯入）——它只是本 repo既有（早於本輪）之 FakeStore 測試替身慣例，與真實 `TypeOrmDocumentStore`（`d.nodeId IN (:...nodeIds)`，`typeorm-documents.store.ts:198`）是**兩份互不相干、無任何機制綁定同步之平行實作**，不是「同一段語意的可測性前提」。**詳見新條目 `D-T3-04`。** |
+| D-T3-02 | `AC-T14` ①「單一走訪」不變式之後端半——是否真的只有一份 `descendants()` 匯出，而非後端又寫了第二份 | 靜態掃描 `backend/src/lifecycle/*.ts` 是否存在第二個子樹走訪函式需要讀取生產原始碼清單，逐檔核對匯出符號——對實作全盲，本輪不做原始碼層級之靜態掃描；`AC-T28` 之固定向量測試（兩端各一份）已是本專案既定之跨執行環境一致性保證機制（見 architecture-spec §12.1），足以偵測「語意漂移」，但無法偵測「多寫了一份但語意剛好一致」這種形式重複。 |
+| D-T3-04 {#t3-fakestore-parallel-impl-not-production-coverage} | 🔴 **`applyDocumentQuery`（`document-list-query.ts`）之測試，不代表任何 production 篩選行為已被驗證——這句話要記死。** 2026-08-21 team-lead 逐段查證：`grep -rn "applyDocumentQuery\|document-list-query" backend/src --include=*.ts` 顯示該函式**在 production 端零消費者**（唯一 production import 是 `typeorm-documents.store.ts` 對 `DEFAULT_PAGE_SIZE` 常數，篩選邏輯本身完全未被引用）；所有呼叫端皆在 `*.spec.ts`（含 `document-list-query.spec.ts`／`document-list-query.subtreeFilter.spec.ts`／`documents.service.spec.ts`／`documents.service.subtreeFilter.spec.ts`／`documents.service.appendixFormFilters.spec.ts`），其中 `documents.service.spec.ts` 之既有 `FakeStore.list()`（**早於本輪、非本輪引入**）以 `applyDocumentQuery(rows, f, new Date())` 做為其記憶體篩選之實作依據。**它不是「production 邏輯的可測性投影」，是一份獨立、只有假體會走的平行實作**，與真實 `TypeOrmDocumentStore.list()`（`typeorm-documents.store.ts` 之 TypeORM `QueryBuilder`，逐條 `if (filters.X) qb.andWhere(...)` 樣板）**之間沒有任何機制保證兩者語意一致**——不像 §10.14 之 `watermarkLines()`／`toDisplayLines()` 有固定測試向量跨執行環境綁定；這一對**完全沒有**。<br>**具體後果（已確認，非假設）**：`document-list-query.subtreeFilter.spec.ts`（`nodeIdIn`，6 案）與 `documents.service.appendixFormFilters.spec.ts`（`appendixId`／`formId`，4 案）之全綠**只證明「服務層把篩選鍵原樣轉發給注入的 store」，完全無法偵測「真實 `TypeOrmDocumentStore` 完全忘記實作某個 `if (filters.X) qb.andWhere(...)` 區塊」這種失效模式**——而這正是本輪已實際發生過兩次的失效模式（前端 `getDocuments()` 漏 2 個 key、後端 controller 手動列舉漏 2 個 key）之同型第三種可能發生位置，且尚無任何約束覆蓋。<br>**此為本 repo 之既有、通盤性缺口**（`typeorm-documents.store.ts` 對其**任何**既有篩選——含早已上線之 `linkTargetId`／`draftingDeptId`／`primaryChiefId` 等——從無單元測試先例，`find` 不到 `typeorm-documents.store.spec.ts`），非本輪新增，但本輪之 6＋4 案綠燈**外觀上容易被誤讀為「這兩個篩選已驗證到 SQL 層」**，故特別登錄。<br>**若要補（尚未裁決，等待 team-lead／使用者定奪）**：對 `TypeOrmDocumentStore.list()` 建立「QueryBuilder 呼叫確實發生」層級之單元測試——注入一個假 `DataSource`（`getRepository().createQueryBuilder()` 回傳一個可鏈式呼叫、記錄 `.andWhere()` 呼叫之 stub），斷言帶入 `appendixId`／`nodeIdIn` 等篩選時 `.andWhere()` 確實以提及該篩選鍵之引數被呼叫過。**此僅能證明「篩選程式碼路徑被執行」，不能證明 SQL 語意正確**（後者仍需真庫）；且為本 repo **首創**之測試典範（無既有前例可循），本輪尚未動手，待裁決。 |
+| D-T3-03 | 🔴 **NFR 計時案（`lifecycle-change-history-pdf.spec.ts`／`lifecycle-change-diff.service.spec.ts` 之真實 PDF 燒錄計時）與「本輪環境負載偶發 flake」無法用單次紅燈本身區分** {#t3-nfr-timing-vs-flake} | 2026-08-21 T3 delta 建環期間，這兩個 suite 曾於高負載下逾時（5000ms）；team-lead 已獨立**隔離重跑**（單獨跑這兩個 suite，無其他並行負載）證實為 flake——2 suites／11 案全綠、7.3 秒（jest 原估 175 秒）。**但本輪之 `AC-T4` 恰好改動了與這兩個 suite 共用之燒錄迴圈參數**（`stepY` `180→198`，平鋪間距加大 ⇒ 每頁 tile 數理論上**減少**，燒錄理應**更快而非更慢**）——這代表「這兩案是舊的已知 flake」與「這兩案因本 delta 之真實效能回歸而變慢」在**單次紅燈之外觀上完全無法區分**：兩者都會逾時，兩者都在同一批 suite。<br>⚠ **危險之處**：`stepY` 加大若被實作成 tile 迴圈次數不變但每次繪製成本增加（例如誤把間距誤植為額外繪製迴圈），會是一個真實的效能回歸，而「反正這兩案常常 flake」正是最容易掩蓋它的藉口。<br>**本輪唯一之區分手段＝隔離重跑**：獨立跑這兩個 suite（不與其他 suite 或其他 agent 之測試並行），若隔離後仍逾時 → 視為真實回歸，不得以 flake 結案；若隔離後全綠 → 方可歸類為既有已知 flake（見 `icsop-project-facts` 記憶：「非決定性、無已知成因」）。**任何人（含未來的我）看到這兩案紅，禁止未經隔離重跑就直接判定為 flake。** |
+
+### E. 須退回 spec-writer／system-architect 之爭議與待補契約
+
+| # | 對象 | 內容 |
+|---|---|---|
+| D-T3-E01 | system-architect | **`AC-T22` 之模組級 seam 形狀，architecture-spec §12.6 明文尚未定案**（僅指出「不得掛 window」）。test-generator 已先行拍板：`frontend/src/pages/subtree-jump-seam.ts`，匯出 `recordSubtreeJump()`／`getSubtreeJumpCalls()`／`resetSubtreeJumpCalls()`，`call` 形狀 `{mode, href, appHref, closedSelf}`。若 system-architect 日後補定案且形狀不同，屬既定之申訴管道，`LifecycleTreePreviewPage.subtreeJump.test.tsx` 需配合調整 import 路徑與欄位名。 |
+| D-T3-E02 | tdd-implementation（經 mailbox 申訴管道，非爭議，僅記錄設計決定） | 本輪多處 DI 位置為 test-generator 依既有建構子之**實測**（ts-jest 編譯錯誤揭露，非讀原始碼）訂立：`NodeDocsService` 之 `DagStore` 落於第 4 個建構子位置（第 2／3 位置已實測分別為 `LifecycleChangePublisher`／`() => Date`）；`DocumentsService` 之 `LifecycleStore`／`DagStore` 落於第 7／8 個位置（既有上限實測為 6）。兩者皆為必然之建構子擴張，非猜測性設計，但確切命名與是否合併為單一物件參數留給 tdd-implementation 之自然設計，經 mailbox 申訴可調整。 |
+| D-T3-E03 | tdd-implementation（同上） | `AC-T1` 前端半之 `WATERMARK_LINE_HEIGHT` 落點選定 `frontend/src/domain/watermark-style.ts`（新模組）。`AC-T1` 本文要求「與 `AC-N3` 所要求之前端側色值／不透明度常數同一模組」，但本 repo **現無任何既有測試以具名 import 斷言過 `AC-N3` 之模組路徑**（`grep WATERMARK_OPACITY\|WATERMARK_RGB` 於 `frontend/src` 零命中——既有 `.watermark.test.tsx` 兩檔僅斷言 inline style 字面值），故無法確認該常數目前實際落於何處。若該常數已存在於別的模組，請把 `WATERMARK_LINE_HEIGHT` 加進那個既有模組即可，`WatermarkLineHeight.crossPage.test.tsx` 只需調整 import 路徑，不影響斷言本身。 {#t3-watermark-line-height} |
+
+### F. 人工抽查發現並裁決之偏離（比環自動攔到的更值得記錄）
+
+| # | 內容 |
+|---|---|
+| F-T3-01 {#t3-onback-sampling-timing-survived-two-revisions} | 🔴 **`LifecycleTreePreviewPage.tsx` 之 `onBack`（離開動作）沿用掛載時快取之 `openedAsPopup()` 值，而非如 prototype `goBack()` 於點擊當下重新呼叫——此偏離連續熬過一次 prototype 重寫＋一次 AC 就地修訂＋一次建環全綠，才被 team-lead 人工抽查揪出。** <br>**時間線**：① 掛載時取樣（`useState(() => Boolean(window.opener))`）是**本輪之前**既有寫法，非本輪引入；② 2026-08-21 本輪，ui-ux-designer 重寫 `prototypes/22-lifecycle-tree-preview.html` 之 `goBack()`／`initBackBtn()`／`jumpToDocuments()`，三者**逐行皆為獨立呼叫** `openedAsPopup()`（`goBack()` 於點擊當下呼叫、`initBackBtn()` 僅於掛載時呼叫一次設定標籤）；③ spec-writer 同輪就地修訂 `AC-D3b`／`AC-D3c`，把判定收斂為具名述詞 `openedAsPopup()`；④ tdd-implementation 依 `AC-T19` 把述詞換成新名稱，**但沿用了舊有之掛載時快取時機**（`AC-T19` 要求恰三處消費者各自獨立呼叫，實作卻讓標籤與離開動作共用同一份掛載時快取，等於把三處合成兩處）；⑤ 建環時（test-generator）之既有測試（`LifecycleTreePreviewPage.test.tsx` 之 `asPopup()` helper 恆用 `{}`，opener 全程不變）**無法區分**「掛載時取樣」與「點擊時取樣」兩種實作——兩者在「opener 從頭到尾未變」的 fixture 下行為完全相同；⑥ 兩套全綠、雙閘門乾淨；⑦ team-lead 人工閱讀 production code 才發現。<br>**裁決**：test-generator 依 `AC-T19`「恰三處消費者」之結構性論證 ＋ prototype 逐行核實（`goBack()`／`initBackBtn()` 各自獨立呼叫，無共用變數）判定為 **(a) 實作偏離**，已建 `LifecycleTreePreviewPage.backActionFreshness.test.tsx` 釘住（負向案：opener 於掛載後、點擊前變為已關閉 → 離開動作不得呼叫 `window.close()`；正向對照：opener 全程有效 → 確實呼叫）。<br>**這個縫怎麼形成的（供之後複盤）**：三份權威（prototype、AC、既有測試）本輪都被碰過，但**沒有一份的修訂範圍涵蓋「取樣時機」這個維度**——prototype 重寫時取樣時機本就正確（未曾壞過，故 ui-ux-designer 沒有理由碰它）；AC 修訂聚焦於「述詞收斂」（單一具名函式）而非「取樣時機」（本就假設沿用 `AC-D3c` 既有之掛載時規則，未意識到該規則之射程應限縮於標籤）；既有測試之 fixture 恰好落在「取樣時機不影響觀察結果」的等價類（opener 從未在測試過程中變化）。**三個「沒有理由懷疑」疊在一起，就是一個全綠但錯的實作能夠通過的完整路徑。** |
+| F-T3-02 {#t3-node-badge-rerender-never-implemented} | 🔴 **`AC-D9`「抽屜載入後以本節點那組份數重繪節點徽章」自 2026-08-16 立條起從未實作、從未有任何測試覆蓋——本輪只改了它的比對對象，沒有改變它未實作的事實；環全綠不代表這條 AC 成立，它根本不在環裡。** <br>**查證方式**：`git show HEAD:frontend/src/pages/LifecycleTreePreviewPage.tsx`（本輪變更前之版本）顯示節點徽章一律直接取 `n.docCount`（該版本 `:497` 附近），從未存在任何「開抽屜後以抽屜資料重繪徽章」之邏輯——本條 AC 立條（2026-08-16）與實作之間，從第一天就沒有對上過。<br>**本輪之就地修訂只換了比對對象**（`AC-D9` 第二次就地改寫：由「以抽屜實際回傳之筆數為準」改為「以本節點那一組之份數為準，即 `[data-node-group-self="true"]` 之 `data-node-group-count`」），**修訂的是「重繪時該拿哪個數字」，不是「有沒有在重繪」——後者從未存在，本輪修訂並未使其存在**。tdd-implementation 已於本輪明確告知：刻意未實作，理由是怕打到既有回歸鎖 `TS-D8-034`（節點徽章文字回歸鎖定）。<br>**裁決（team-lead）**：本輪不補（三項裁決沒有任何一項需要它，比照既有「舊端點不退休」之裁決精神）。<br>**若之後要補，需要**：抽屜開啟完成後，以該次回應中 `[data-node-group-self="true"]` 之 `data-node-group-count`（該組不存在時視為 `0`）覆寫該節點徽章之顯示文字（呼叫 `formatMountedCount()`，見 `AC-D9` 本文與本檔 `LifecycleTreePreviewPage.formatFunctions.test.ts` 之既有純函式契約），且僅限**當次已開啟之節點**、不觸發其餘節點重取。測試層面需新增：(a) 開抽屜前後同一節點徽章文字之變化案（例如徽章原顯示「掛載 3 份程序書」、抽屜載入後之本節點組份數為 `2` 而子樹合計 `8` → 徽章應變為「掛載 2 份程序書」，**不得**變為「掛載 8 份程序書」）；(b) 未開抽屜之其餘節點徽章不受影響之回歸鎖。 |
+
+## `appendixId`／`formId` 死篩選修復（2026-08-21，tdd-implementation 提報 (b)，使用者裁決「順手修」） {#appendix-form-id-dead-filter-fix}
+
+> source: [features/F017-test.md](features/F017-test.md)（末段）。權威＝`AC-D2`（第 10／11 列）／`AC-D6`（2026-08-16 立條，此前從未實作亦從未有測試覆蓋）。
+
+### D. 結構上不可達之殘留面（登記，不修）
+
+| # | 項目 | 為何連容器內實跑也測不了（本輪環之限制） |
+|---|---|---|
+| D-F017-D6-01 | 真實 `TypeOrmDocumentStore`（SQL 層）之 `appendixId`／`formId` `EXISTS` 子查詢正確性 | 🔴 **2026-08-21 team-lead 進一步查證後更正本條之精確度**：team-lead 已查證 `typeorm-documents.store.ts` 對這兩個 key 零命中——連「好」的樣板 `linkTargetId` 本身在本 repo **從無**任何單元測試先例（`find` 不到 `typeorm-documents.store.spec.ts`），SQL 正確性向來只靠 int 測試／容器內驗證守門，非本輪環涵蓋範圍。本輪環之 `documents.service.appendixFormFilters.spec.ts` 已以 FakeStore 驗證「服務層正確轉發」（4/4 綠，非新紅燈，確認缺陷唯一存在於 controller 之欄位列舉）。⚠ **原文「不驗證真實 SQL 交集本身」尚不夠精確——精確說法見 `D-T3-04`**：該 FakeStore 之篩選邏輯（`appendixLinks`／`formLinks` 交集判斷）為**本檔自行實作**，與真實 `TypeOrmDocumentStore` 之 `EXISTS` 子查詢**不是同一段程式碼、亦無綁定機制**；若真實 store 完全忘記實作 `appendixId`／`formId` 之 `if (...) qb.andWhere(...)` 區塊，本檔之 4/4 綠**不會**轉紅——不只是「驗不到 SQL 正確性」，是「即使 SQL 完全缺席，本檔仍然全綠」。建議排入下一輪 int 套件或部署前 smoke，並評估 `D-T3-04` 提出之 QueryBuilder 呼叫層級單元測試是否值得建立。 |

@@ -416,3 +416,52 @@ status: draft
   `/pdfjs/cmaps/*.bcmap`，本輪不建約束，列入 `risks-and-gaps.md`。
 - **`AC-N71` 之「單頁 vs 連續捲動」為 ui-ux-designer 之授權裁量，本段只鎖可觀測掛鉤**（`data-viewer-page`
   等），不鎖畫面呈現形式本身。
+
+# 🔴🔴🔴 2026-08-21 三項裁決第 1 項 —— 三行式浮水印行高 delta 測試設計（簡易版環）
+
+> 本段由 **test-generator**（單線，backend＋frontend 皆本人建）於 2026-08-21 追加，涵蓋 `AC-T1`～`AC-T5`。
+> 權威＝[F020 §三行式浮水印行高 delta](F020-watermark.md#line-height-delta)（本文件同名檔案）。
+> 🔴 **本輪約束環為簡易版**（人類指定）：僅 backend jest／frontend vitest 單元＋元件測試，
+> **無 Playwright fidelity、無 e2e、無 Stryker mutation、無 dependency-cruiser/coverage/複雜度 metric gate**，
+> 亦**不呼叫 `ring-setup` skill**。本節之「AC ↔ 約束對照」即為本輪僅有的驗收層。
+
+## AC ↔ 約束對照
+
+| AC | 約束 | 檔案 | 層級 |
+|---|---|---|---|
+| `AC-T1` 單一定稿常數（前端 `WATERMARK_LINE_HEIGHT`；後端 `WATERMARK_LINE_HEIGHT`／`WATERMARK_FONT_SIZE`／`WATERMARK_LINE_STEP`，且 `STEP = SIZE × HEIGHT` 之推導關係本身） | `backend/src/public/pdf-burner.lineHeight.spec.ts`（「AC-T1」）／`frontend/src/pages/WatermarkLineHeight.crossPage.test.tsx`（「AC-T1」，import `WATERMARK_LINE_HEIGHT`） | unit／component |
+| `AC-T2` 各載體行距逐字定稿值（DOM `line-height:2`＝`ChangeHistoryPage`／`LifecycleTreePreviewPage`；PDF 燒錄 `WATERMARK_LINE_STEP=24`） | 同上兩檔（「AC-T2」） | component／unit |
+| `AC-T3` 🔴 **INV-WM-LH**（①②：兩頁 `watermark-text` 之 `line-height` 相異值集合 size＝1 且等於 `WATERMARK_LINE_HEIGHT`，含負向回歸鎖 `≠1.5/1.6/1.5714`；③：前後端常數各自對字面值 `2` 斷言，**不得合併為單一測試**） | `WatermarkLineHeight.crossPage.test.tsx`（①②，同一測試檔內同時渲染兩頁）＋ 前端半③同檔、後端半③在 `pdf-burner.lineHeight.spec.ts` | component／unit |
+| `AC-T4` 後端燒錄每行位移＝`WATERMARK_LINE_STEP`＝24（＝`12×2`）；負向回歸鎖 `≠15` 且 `≠20`（🔴 兩個作廢值都要鎖，`20` 為第一輪曾進 AC 之定稿值）；平鋪 `WATERMARK_TILE_STEP_Y=198`／`WATERMARK_TILE_STEP_X=260` 具名匯出 | `pdf-burner.lineHeight.spec.ts`（「AC-T4」） | unit |
+| `AC-T5` prototype 權威登錄 | **非約束環斷言對象**（AC 本文明載）；不建執行期測試，僅在本文件留紀錄供人工比對 | — |
+
+## 🔴 六個點名項目之落實情形（本 delta 僅涉其中第 3、5 點）
+
+- **第 3 點（`AC-T4` 負向回歸鎖須同時排除 `15` 與 `20`）**：`pdf-burner.lineHeight.spec.ts` 之「AC-T4」
+  區塊同時斷言 `WATERMARK_LINE_STEP !== 15` **且** `!== 20`，並在測試標題與註解中逐字寫明兩個作廢值
+  各自的來歷（`15`＝delta 前原始值、`20`＝第一輪曾進 AC 之算術失誤值），避免只鎖其中一個。
+- **第 5 點（`AC-T3` 跨載體一致性）**：`WatermarkLineHeight.crossPage.test.tsx` 之「INV-WM-LH ①②」
+  案在**同一 `it()`** 內同時 render `ChangeHistoryPage` 與 `LifecycleTreePreviewPage`，蒐集兩頁全部
+  `[data-testid="watermark-text"]` 之 `line-height` 取 `Set`，斷言 `size === 1`；③則**不**併入該
+  `Set`（型別/單位不同，見 AC 本文），改為前後端各自對字面值 `2` 各斷一條。
+
+## ⚠ 契約性假設（test-generator 訂立，非讀取實作決定；供 tdd-implementation 對齊或申訴）
+
+1. **前端 `WATERMARK_LINE_HEIGHT` 之模組落點**：`AC-T1` 要求它與 `AC-N3`（D9 delta）所要求之前端側
+   色值／不透明度常數同一模組，但**本 repo 現無任何既有測試以具名 import 斷言過該 AC-N3 常數之模組
+   路徑**（`grep WATERMARK_OPACITY|WATERMARK_RGB` 於 `frontend/src` 零命中——兩頁既有之
+   `.watermark.test.tsx` 皆僅斷言 inline `style.opacity`／`style.color` 字面值，未曾 import 具名常數）。
+   **本輪選定路徑＝`frontend/src/domain/watermark-style.ts`**，匯出 `WATERMARK_LINE_HEIGHT`（本 delta
+   新增；不重新斷言既有色值/不透明度，那是 `AC-N3` 的既有責任範圍，本輪不重複造測試）。若
+   tdd-implementation 認為既有色值常數已落在別的模組，請把 `WATERMARK_LINE_HEIGHT` 加進**那個既有
+   模組**即可（本檔測試只 import 常數本身，不斷言檔案路徑），並經 mailbox 告知以便本檔案頭註解同步
+   更正。已登錄 [risks-and-gaps.md](../risks-and-gaps.md#t3-watermark-line-height)。
+2. **`WatermarkLineHeight.crossPage.test.tsx` 之 DI／mock 慣例**沿用既有
+   `LifecycleTreePreviewPage.watermark.test.tsx`／`ChangeHistoryPage.watermark.test.tsx` 兩檔已驗證
+   可行之 `vi.mock('../api/endpoints')`／`vi.mock('../auth/useAuth')` 模式，兩頁在同一測試檔內個別
+   `render()`（非同時掛載），依序蒐集各自之 `watermark-text` 節點後再比較集合。
+
+🔴 **`AC-T4`（後端 `stepY 180→198`）與既有 `lifecycle-change-history-pdf.spec.ts`／
+`lifecycle-change-diff.service.spec.ts` 兩個真實 PDF 燒錄 NFR 計時 suite 共用燒錄迴圈參數**——
+單次紅燈無法區分「既有已知 flake」與「本 delta 之真實效能回歸」，唯一區分手段為隔離重跑，
+不得憑印象判定為 flake。詳見 [risks-and-gaps.md#t3-nfr-timing-vs-flake](../risks-and-gaps.md#t3-nfr-timing-vs-flake)。

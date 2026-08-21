@@ -319,3 +319,92 @@ status: draft
   契約），本段不建立任何寬度斷言，避免高噪訊比之脆弱測試。
 - **icon 視覺色彩／填色不入約束**——僅約束 icon 鍵名（透過無障礙文案間接鑑別）與 `data-has-ojt`
   屬性，不斷言 CSS 顏色/填色（同屬設計裁量）。
+
+---
+
+# 🔴🔴🔴 2026-08-21 三項裁決第 3 項 —— 節點子樹篩選（deep link）delta 測試設計（簡易版環）
+
+> 本段由 **test-generator**（單線，backend＋frontend 皆本人建）於 2026-08-21 追加，涵蓋 `AC-T40`～`AC-T48`。
+> 權威＝[F017 §節點子樹篩選（deep link）delta](F017-backend-document-list.md#subtree-filter-delta)
+>      ＋ [architecture-spec.md §12.3](../architecture-spec.md#ch12-t3-decisions)（決策 C3，依賴 §12.1 決策 C1）
+>      ＋ `docs/ui-ux-design-overview.md` §A.7.2／§A.7.3。
+> 🔴 **本輪約束環為簡易版**（人類指定）：僅 backend jest／frontend vitest 單元＋元件測試，
+> **無 Playwright fidelity、無 e2e、無 Stryker mutation、無 metric gate**。
+> 上游入口＝[F036 子樹抽屜之導向鈕](F036-lifecycle-tree-preview.md#subtree-drawer-delta)，
+> `AC-T28` 之 `descendants` F1–F5 向量已於 [F036 段](F036-test.md) 涵蓋，本檔不重複。
+
+## AC ↔ 約束對照
+
+| AC | 約束 | 檔案 | 層級 |
+|---|---|---|---|
+| `AC-T40` 參數語意、AND、後端走訪歸屬、同一次解析 | 純函式半：`document-list-query.subtreeFilter.spec.ts`（TS-T40-00x）；service 半：`documents.service.subtreeFilter.spec.ts`（TS-T40-S0x） | unit |
+| `AC-T41` 🔴 四種殘缺／無法解析 → 靜默 no-op | `documents.service.subtreeFilter.spec.ts`（TS-T41-S01～S05，四種情形各一案＋顯式 `subtreeFilter` key 案） | unit |
+| `AC-T42` 🔒 `lifecycleId` 不寫入既有「循環別」篩選 | `DocumentListPage.subtreeChip.test.tsx`（TS-T42-001） | component |
+| `AC-T43` 🔴 前端原樣傳遞、不自行展開子樹 | 同檔（TS-T43-001／TS-T43-002：module export 掃描確認無 `descendants`/`NODE_DAG` 匯出） | component |
+| `AC-T44` chip 逐字文案與選擇器契約 | 同檔（TS-T44-00x） | component |
+| `AC-T45` 🔴 chip 內容以後端解析結果為準；描述子契約（`lifecycleName`＝`lifecycleDisplayName()`） | 純函式半：`document-list-query.subtreeFilter.spec.ts` 不涉及（描述子非篩選純函式職責）；service 半：`documents.service.subtreeFilter.spec.ts`（TS-T45-S01／S02）；前端半：`DocumentListPage.subtreeChip.test.tsx`（TS-T45-001） | unit／component |
+| `AC-T46` 🔴 清除之方向性不對稱（兩方向各一案） | `DocumentListPage.subtreeChip.test.tsx`（TS-T46-001／002） | component |
+| `AC-T47` chip 納入「已套用篩選」之判定 | 同檔（TS-T47-001） | component |
+| `AC-T48` 🔒 回歸鎖定（15 欄／13 項篩選／回應五個既有頂層欄位不變） | ⑥ 回應形狀：`documents.service.subtreeFilter.spec.ts`（TS-T48-S01）；①～⑤：依賴既有 `DocumentListPage.test.tsx`／`.filterDelta.test.tsx` 逐字不動、繼續執行（本輪未修改） | unit／既有 |
+
+## 🔴 六個點名項目之落實情形（本 delta 涉及第 2、3 點）
+
+- **第 2 點（`descendants` 前後端各建）**：本 F017 delta 本身**不重複建** `AC-T28` 之向量測試——
+  已於 [F036 段](F036-test.md) 之姊妹批一併涵蓋（兩端同一份 `descendants()`，`AC-T40` ④ 明文
+  「與 F036 `AC-T14` 之 `descendants` 同語意」，不另立第二套向量）。
+- **第 3 點（`AC-T4` 負向回歸鎖）**：本 F017 delta 不涉及；見 [F020 段](F020-test.md#line-height-delta) 之對應說明。
+
+## ⚠ 契約性假設（test-generator 訂立，非讀取實作決定；供 tdd-implementation 對齊或申訴）
+
+1. **`applyDocumentQuery` 之 `nodeIdIn` 支援**：`document-list-query.subtreeFilter.spec.ts` 要求既有
+   純函式 `applyDocumentQuery(rows, filters, today)` 新認得選填鍵 `nodeIdIn?: string[]`，語意為
+   `rows.filter(d => d.nodeId !== null && nodeIdIn.includes(d.nodeId))`。此純函式亦為
+   `documents.service.spec.ts` 既有 `FakeStore.list()` 之內部依賴，選定它作為驗證載體是為了
+   在無 DB 情況下同時滿足「純函式可測性」與「service 層 FakeStore 之正確運作」兩個目的——
+   `architecture-spec.md` §12.3 所述之**真實** SQL `IN` 下推屬 `TypeOrmDocumentStore`（本輪環無
+   容器內實跑，落於殘留風險，見下方 risks-and-gaps 連結）。
+2. **`DocumentsService` 之 `LifecycleStore`／`DagStore` 注入位置**：既有建構子已實測（ts-jest 型別
+   錯誤揭露）上限 6 參數（`store, pub, resolver, links, attachments, nodeStore`）。本檔要求擴充至
+   第 7／第 8 個位置分別注入 `LifecycleStore`／`DagStore`（沿用既有 `lifecycle.store.ts`／
+   `dag.store.ts` 介面，比照 `lifecycle-preview.service.spec.ts` 之既有 `fakeLifecycles()`／
+   `fakeDag()` 慣例）。`svc.listDocuments(filters)` 之 `filters` 物件本身直接攜帶 `lifecycleId`／
+   `nodeSubtreeId` 兩個新增選填鍵。此為必然之建構子擴張，屬預期紅。
+3. **`DocumentListPage`（前端）之 chip 選擇器與端點回應**：`endpoints.getDocuments()` 回應新增
+   `subtreeFilter` 頂層欄位（依 C3 逐字），前端 `DocumentListPage.tsx` 依此欄位條件渲染
+   `#subtreeChipBar`／`[data-subtree-chip]` 系列 DOM。
+
+## risks-and-gaps 提醒
+
+- **§12.4 #4：`IN (:...nodeIds)` 對真實 MSSQL 之行為**——本輪環無容器內實跑，架構文件建議至少
+  排入下一輪 int 套件或部署前 smoke。已登錄 [risks-and-gaps.md §T3](../risks-and-gaps.md#t3-subtree-in-clause-mssql)。
+- **`OQ-T3-08`（chip 之 `nodeName===null` 逐字文案 `未命名節點`）為 `[ASSUMPTION]`，未經人類裁決**——
+  本輪之 `TS-T44-00x` fixture 皆使用有名稱之節點，**未針對 `nodeName===null` 建案**，避免對一個
+  未裁決之字面斷言。已登錄 [risks-and-gaps.md §T3](../risks-and-gaps.md#oq-t3-08-node-name-null)。
+
+---
+
+# 🔴 既有缺陷修復（tdd-implementation 提報 (b)，2026-08-21 使用者裁決「順手修」）—— `appendixId`／`formId` 死篩選
+
+> 權威＝`AC-D2`（第 10／11 列）／`AC-D6`（本檔既有條文，2026-08-16 立條，此前從未實作、從未有測試覆蓋）。
+> 缺陷形狀：`frontend/src/api/types.ts` 之 `DocumentFilters` 宣告 17 key，`getDocuments()` 只組 15 個，
+> 缺 `appendixId`／`formId`；後端 `documents.controller.ts` 之 `list()` 手動逐欄映射亦未列這兩欄——
+> UI 選得到、`getDocuments()` 呼叫得到、但 query string 沒帶、後端沒接，篩選看似套用實則回全部，
+> 無錯誤、與 F024 匯出鈕同型（兩側各自單元測試皆綠、接縫無人驗）。
+
+## 建了哪些檔案
+
+| 檔案 | 層級 | 涵蓋 |
+|---|---|---|
+| `frontend/src/api/endpoints.documentFilters.test.ts` | unit | 🔴 **跨越斷點本身**——不 mock `../api/endpoints`，直接呼叫真實 `getDocuments()` 並 stub `fetch`，斷言實際 URL 逐字含 `appendixId=`／`formId=`；正向對照（無篩選時 URL 不含該 key）；AND 語意（與既有篩選並存） |
+| `backend/src/documents/documents-controller.appendixFormFilters.spec.ts` | unit | 🔴 **後端接縫**——`DocumentsController.list()` 是否把 `q.appendixId`／`q.formId` 映入傳給 service 之 filters 物件；AND 語意 |
+| `backend/src/documents/documents.service.appendixFormFilters.spec.ts` | unit | `AC-D6` 逐字例（附錄 X 被 A/B 引用、Y 僅 C 引用 → 篩 X 得 A/B 不含 C）；使用表單同構；正向對照（未篩選回全部）；AND 語意（與 `draftingDeptId` 並用）——以 FakeStore 驗證**服務層是否正確轉發**這兩個新篩選鍵 |
+
+## 紅燈結果（已實跑）
+
+- **`endpoints.documentFilters.test.ts`：3 紅 1 綠**——紅因：`getDocuments()` 目前組出的 URL 完全不含 `appendixId=`／`formId=`（連同 AND 案之 `draftingDeptId` 亦驗證「其餘既有篩選傳遞不受影響」，僅新兩鍵缺失）；綠：正向對照（無篩選時本就不該出現這兩個 key，符合預期）。
+- **`documents-controller.appendixFormFilters.spec.ts`：3 紅 1 綠**——紅因：`svc.listDocuments` 收到之 filters 物件完全不含 `appendixId`／`formId`（controller 之逐欄映射列舉中沒有這兩行）；綠：未帶時之 `undefined` 案（不存在的 key 本就是 `undefined`）。
+- **`documents.service.appendixFormFilters.spec.ts`：4/4 綠**——**非新紅燈，是既有事實之確認**：以 FakeStore 直接呼叫 `DocumentsService.listDocuments({appendixId:'X'})`（繞過有問題的 controller），服務層**正確轉發**了這兩個鍵給 store，證明缺陷**唯一**存在於 controller 之欄位列舉，服務層本身沒有對應問題。
+
+## 🔴 已知殘留風險（比照既有 `AC-T40 ④` 之處置，登錄於 risks-and-gaps.md）
+
+真實 `TypeOrmDocumentStore`（SQL 層）目前也未實作 `appendixId`／`formId` 之 `EXISTS` 子查詢（team-lead 已查證 `typeorm-documents.store.ts` 零命中）；本輪環之 `documents.service.appendixFormFilters.spec.ts` 僅以 FakeStore 驗證「服務層正確轉發」，**不驗證真實 SQL 之交集正確性**——本 repo 對 `TypeOrmDocumentStore` 從無單元測試先例（含既有已運作之 `linkTargetId` 樣板亦無），真實 SQL 正確性需 int 測試或容器內驗證，非本輪環涵蓋範圍。
