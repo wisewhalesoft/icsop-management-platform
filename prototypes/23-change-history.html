@@ -32,7 +32,9 @@
      🔴 F020 AC-N2（2026-08-20 定稿，逐字照抄）：色值 #334155 @ opacity 0.30（對比度 ≈ 1.716:1 ≥ 1.70）。
      🔒 AC-N66 正向斷言：本頁渲染 HTML（diff 表格／DAG 節點）而非 PDF，無內容層可燒錄 ⇒ 疊加層必須保留。*/
   .wm-layer{position:absolute;inset:-40%;pointer-events:none;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;transform:rotate(-45deg);opacity:.30;user-select:none;z-index:5;}
-  .wm-layer span{color:#334155;font-size:14px;white-space:nowrap;padding:20px 26px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.6;}
+  /* 🔴 F020 行高定稿（2026-08-21 使用者裁決）：三行式浮水印之 DOM 疊加層 line-height ＝ **2.0**（全域）。
+     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> line-height:1.6 */
+  .wm-layer span{color:#334155;font-size:14px;white-space:nowrap;padding:20px 26px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:2.0;}
   /* mini DAG（沿用 22 節點視覺 + 直角箭頭）*/
   .dagboard{position:relative;background:#F8FAFC;background-image:radial-gradient(#E7EDF5 1px,transparent 1px);background-size:20px 20px;border-radius:10px;}
   .mnode{position:absolute;z-index:2;}

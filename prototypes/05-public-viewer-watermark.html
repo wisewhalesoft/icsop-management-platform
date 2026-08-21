@@ -275,19 +275,30 @@
      ⚠ 色值與不透明度為定稿常數，**不得自行挑選近似色**——test-generator 會對此數值建立約束。 */
   const WM_COLOR = '#334155';
   const WM_OPACITY = 0.30;
+  /* 🔴 三行式浮水印之行高定稿（2026-08-21 使用者裁決 · 全域）＝ **字級的 2.0 倍**。
+     本檔為 canvas 內容層 ⇒「行高」落地為 fillText 的每行 y 位移：WM_FONT_SIZE(14) × 2.0 ＝ **28px**。
+     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> 每行位移 22px（22 ÷ 14 ≈ 1.571）。
+     ⚠ **stepY 必須同步放大**：三行區塊的墨跡高度＝ascent + 2×行距 + descent，行距 22→28 使區塊
+        長高 2 × 6 ＝ **12px**；stepY 若維持 132，相鄰 tile 的縱向間隙會被吃掉整整 12px 而變得相黏。
+        故 stepY 132 → **144**（＝132 + 12），tile 間隙與裁決前**完全相同**——這是把行距長出來的高度
+        原數補回去，不是重新挑一個「看起來差不多」的密度。stepX 不受行高影響，維持 560。
+     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> stepY = 132。 */
+  const WM_FONT_SIZE = 14;
+  const WM_LINE_HEIGHT = 2.0;                              // 全域定稿值（DOM 疊加層之 line-height 同值）
+  const WM_LINE_STEP = WM_FONT_SIZE * WM_LINE_HEIGHT;      // ＝ 28
   function burnWatermark(ctx){
     const lines = toDisplayLines();     // AC-N68：恰 3 行
     ctx.save();
     ctx.globalAlpha = WM_OPACITY;
     ctx.fillStyle = WM_COLOR;
-    ctx.font = "500 14px 'JetBrains Mono', monospace";
+    ctx.font = "500 " + WM_FONT_SIZE + "px 'JetBrains Mono', monospace";
     ctx.textAlign = 'center';
     ctx.translate(PAGE_W/2, PAGE_H/2);
     ctx.rotate(-Math.PI/4);             // 對角 45°
-    const stepX = 560, stepY = 132, span = 1.35;
+    const stepX = 560, stepY = 144, span = 1.35;
     for(let gy = -PAGE_H*span; gy <= PAGE_H*span; gy += stepY){
       for(let gx = -PAGE_W*span; gx <= PAGE_W*span; gx += stepX){
-        lines.forEach((ln, i) => ctx.fillText(ln, gx, gy + i*22));
+        lines.forEach((ln, i) => ctx.fillText(ln, gx, gy + i*WM_LINE_STEP));
       }
     }
     ctx.restore();

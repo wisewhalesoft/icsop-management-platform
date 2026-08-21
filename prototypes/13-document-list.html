@@ -12,6 +12,32 @@
         文案與前台 04 同一組、逐字相同：pdf →「檢視/下載將燒錄浮水印」；非 pdf →「此格式不支援浮水印」。
         ⚠ 表格 min-w 由 1560px 調為 1724px（OJT 欄 +56、檔案欄 60→160 以容納註記），表格既有 overflow-x-auto 吸收之。
      🔒 後台字級**逐字不動**（F021 AC-N61 ①：本 delta 僅前台三頁放大，後台一律不改）。 -->
+<!-- 🔴 2026-08-21 使用者裁決 3（節點子樹 deep link）——本檔已套用。**本段為 prototype 權威**：
+     22-lifecycle-tree-preview 之節點雙擊抽屜新增一顆導向鈕，導向
+       `/admin/documents?lifecycleId={lifecycleId}&nodeSubtreeId={nodeId}`（原型＝本檔之同名 query 參數）。
+     本頁掛載時讀 URL → GET /admin/documents?lifecycleId=…&nodeSubtreeId=…&page=1（**後端**新增之子樹篩選參數）。
+     🔴 呈現方式（本 agent 定稿，理由見下）：**獨立的可清除 chip**，位於「篩選條件」卡片與表格之間，
+        **不併入既有 13 項篩選**。逐字＝`循環：{循環顯示名稱} · 節點子樹：{節點名稱}`，右側 ✕ 清除鈕。
+        ① F017 AC-D9／AC-N40 ② 明文鎖定「13 項篩選之組成、順序與比對語意一字不動」⇒ 加第 14 項會**直接**牴觸。
+        ② 這不是使用者在本頁選的條件，而是**由外部帶入的情境**（deep link）；它沒有可列舉的選項來源
+           （節點屬於某一循環，節點池不在本頁的資料範圍內），做成 combobox 需要再引一份節點池。
+        ③ chip 的語意正是「一眼看得到、一鍵可清除」，與 deep link 的來去對稱。
+     📌 行為定稿：
+        · 兩個參數**恆成對**——只帶其中一個（或值無法解析為既有循環／節點）⇒ **不顯示 chip、不施加任何篩選**，
+          頁面與未帶參數時完全相同（不報錯、不 toast）。
+        · `lifecycleId` **只作為 nodeSubtreeId 的定位範圍**，**不寫入既有的「循環別」篩選**——否則清除 chip 時
+          得決定要不要連帶清掉使用者自己選的循環別，兩個來源會糾纏。
+        · 比對語意＝`d.lcId === lifecycleId` **且** `d.node ∈ 子樹節點名稱集合`（本節點＋全部下游節點）；
+          與既有 13 項為 AND。
+        · ✕ 清除 ⇒ 移除 chip、回到**無此篩選**的清單（其餘 13 項篩選與關鍵字**維持不動**）、分頁回第 1 頁，
+          並把兩個參數自網址移除（否則重新整理又跑回來）。
+        · 「清除全部篩選」**一併清掉本 chip**（它就是一種篩選；留著會與按鈕字面自相矛盾）⇒ F017 AC-D8 需就地擴充。
+        · 「已套用篩選」之判定（清除鈕與行動版紅點）**納入**本 chip。
+     🔒 清單 15 欄之欄位集合、順序與顯示規則、3 張統計卡、排序與分頁行為**一律不變**（本 delta 只加一個篩選來源）。
+     ⚠ 已知且**刻意不在本輪對齊**之落差：本檔的 mock 語料與 22 的 mock 語料是兩份獨立資料，
+        故「22 抽屜副標題的 N」與「跳轉後本頁的筆數」**不會相等**（例：lc1 子樹在 22 為 8 份、在本頁為 4 筆）。
+        對齊需同時改動 22 的節點徽章數與本頁的統計卡數字，兩者皆為回歸鎖定項 ⇒ 下游 AC 應斷言**篩選語意**，
+        不得斷言「兩頁筆數相等」。 -->
 <!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
      本檔已套用：第 14 欄「循環別」改以 lifecycleDisplayName 呈現；循環別 combobox 之選項值由名稱字串改為 lifecycleId；樹狀圖第二入口之 ?lifecycleId= 改帶 lifecycleId。
      規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
@@ -200,6 +226,21 @@
     <div id="filterBar" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"></div>
   </div>
 
+  <!-- ===== 🔴 2026-08-21 裁決 3：節點子樹篩選 chip（由 22 之抽屜 deep link 帶入）=====
+       位置＝「篩選條件」卡片與表格之間，桌機／行動**皆顯示**（不隨 md 斷點切換）——它是當前清單為何被縮小的
+       唯一解釋，藏在行動版 sheet 裡會使人以為資料不見了。
+       🔒 **不併入既有 13 項篩選**（理由見檔頭）；13 項之組成、順序與比對語意一字未動。
+       無參數（或參數不成對／無法解析）時整條 bar 帶 hidden，chip 不在版面上。 -->
+  <div id="subtreeChipBar" class="hidden mb-3 items-center gap-2 flex-wrap">
+    <span data-subtree-chip class="inline-flex items-center gap-2 max-w-full pl-3 pr-1.5 py-1.5 rounded-full border border-primary-200 bg-primary-50 text-primary-700 text-sm">
+      <i data-lucide="git-fork" class="w-3.5 h-3.5 shrink-0"></i>
+      <span data-subtree-chip-text class="min-w-0"></span>
+      <button type="button" data-subtree-chip-clear onclick="clearSubtreeFilter()" aria-label="清除節點子樹篩選" title="清除節點子樹篩選"
+              class="w-5 h-5 rounded-full hover:bg-primary-200/60 focus:outline-none focus:ring-2 focus:ring-primary-600 flex items-center justify-center shrink-0"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+    </span>
+    <span class="text-xs text-slate-400">由循環樹狀圖預覽帶入</span>
+  </div>
+
   <!-- ===== 表格 ===== -->
   <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
@@ -362,6 +403,79 @@
     lc8:['系統開發','程式及資料存取','使用者權限管理','變更管理']
   };
 
+  /* ===== 🔴 2026-08-21 裁決 3：節點子樹之解析（原型專用；實作由**後端**以子樹篩選參數完成）=====
+     本表是 22-lifecycle-tree-preview 之 CYCLES 的**結構鏡像**（僅 id/名稱/邊，不含文件）——原型沒有後端，
+     必須自己把 nodeSubtreeId 展開成節點集合才示範得出篩選。
+     ⚠ 實作時**不要移植本表**：真實系統由 `GET /admin/documents?lifecycleId=&nodeSubtreeId=` 於伺服器端
+        以遞迴 CTE（或等價走訪）解析子樹，前端只負責把兩個參數原樣帶上去。
+     ⚠ **與 22 的一致性**：本表若與 22 的 CYCLES 結構分歧，跳轉後的篩選結果就會與抽屜列出的節點對不上。
+        兩檔皆為 prototype，唯一的同步手段是人工比對；改動任一邊時務必同步另一邊。 */
+  const NODE_DAG={
+    lc1:{nodes:{a1:'進件作業',a2:'簽約對保作業',a3:'擔保設定作業',a4:'撥款核准作業',a5:'案件執行作業',a6:'案件催收作業',a7:'案件結束作業'},
+         edges:[['a1','a2'],['a1','a3'],['a2','a4'],['a3','a4'],['a4','a5'],['a5','a6'],['a5','a7'],['a6','a7']]},
+    lc10:{nodes:{j1:'企金案件受理作業',j2:'企業徵信作業',j3:'擔保品估價作業',j4:'授信核准作業',j5:'額度撥貸作業'},
+         edges:[['j1','j2'],['j1','j3'],['j2','j4'],['j3','j4'],['j4','j5']]},
+    lc11:{nodes:{k1:'子公司案件受理作業',k2:'子公司徵信作業',k3:'子公司核准作業',k4:'子公司撥款作業'},
+         edges:[['k1','k2'],['k1','k3'],['k2','k4'],['k3','k4']]},
+    lc2:{nodes:{b1:'請購申請作業',b2:'採購比議價作業',b3:'驗收入庫作業',b4:'費用請款作業',b5:'付款核准作業',b6:'付款執行作業'},
+         edges:[['b1','b2'],['b2','b3'],['b3','b5'],['b1','b4'],['b4','b5'],['b5','b6']]},
+    lc3:{nodes:{c1:'市場分析作業',c2:'產品規劃作業',c3:'目標制定作業',c4:'政策發布作業'},
+         edges:[['c1','c2'],['c2','c3'],['c1','c3'],['c3','c4']]},
+    lc4:{nodes:{d1:'任用與異動管理',d2:'出勤管理作業',d3:'薪資計算作業',d4:'給付作業'},
+         edges:[['d1','d2'],['d2','d3'],['d1','d3'],['d3','d4']]},
+    lc5:{nodes:{e1:'額度申請作業',e2:'銀行融資作業',e3:'動撥作業',e4:'還款作業'},
+         edges:[['e1','e2'],['e2','e3'],['e3','e4'],['e2','e4']]},
+    lc6:{nodes:{f1:'資產需求作業',f2:'資產請購作業',f3:'驗收作業',f4:'資產管理作業',f5:'折舊管理作業'},
+         edges:[['f1','f2'],['f2','f3'],['f3','f4'],['f4','f5'],['f3','f5']]},
+    lc7:{nodes:{g1:'投資評估作業',g2:'短期投資作業',g3:'保管作業',g4:'會計入帳作業'},
+         edges:[['g1','g2'],['g2','g3'],['g2','g4'],['g3','g4']]},
+    lc8:{nodes:{h1:'系統開發作業',h2:'程式及資料存取',h3:'使用者權限管理',h4:'變更管理作業'},
+         edges:[['h1','h2'],['h1','h3'],['h2','h4'],['h3','h4']]},
+    lc9:{nodes:{i1:'法遵作業',i2:'法規更新作業',i3:'內部稽核作業',i4:'風險評估作業'},
+         edges:[['i1','i2'],['i2','i3'],['i1','i3'],['i3','i4']]}
+  };
+  /* 子樹＝本節點 ＋ 沿 child 邊遞移之全部下游節點（與 22 之 descendants() 同語意）。
+     回傳**節點名稱**陣列（本頁的 DOCS 以節點名稱記錄掛載，非節點 id）；無法解析時回 null。 */
+  function subtreeNodeNames(lcId,nodeId){
+    const g=NODE_DAG[lcId]; if(!g||!g.nodes[nodeId]) return null;
+    const adj={}; Object.keys(g.nodes).forEach(k=>{adj[k]=[];});
+    g.edges.forEach(([s,t])=>{ if(adj[s]) adj[s].push(t); });
+    const set=new Set([nodeId]), stack=[nodeId];
+    while(stack.length){ const u=stack.pop(); (adj[u]||[]).forEach(v=>{ if(!set.has(v)){ set.add(v); stack.push(v);} }); }
+    return [...set].map(id=>g.nodes[id]);
+  }
+  /* 節點子樹篩選之狀態。names===null ⇒ 未套用（chip 不顯示、不施加限制）。 */
+  const SUBTREE={lcId:'',nodeId:'',nodeName:'',names:null};
+  function clearSubtreeState(){ SUBTREE.lcId=''; SUBTREE.nodeId=''; SUBTREE.nodeName=''; SUBTREE.names=null; }
+  /* 兩個參數**恆成對**且必須解析得出；任一條件不成立 ⇒ 靜默略過（頁面與未帶參數時完全相同）。 */
+  function initSubtreeFromUrl(){
+    const q=new URLSearchParams(location.search);
+    const lcId=q.get('lifecycleId')||'', nodeId=q.get('nodeSubtreeId')||'';
+    if(!lcId||!nodeId) return;
+    const names=subtreeNodeNames(lcId,nodeId);
+    if(!names) return;
+    SUBTREE.lcId=lcId; SUBTREE.nodeId=nodeId; SUBTREE.nodeName=NODE_DAG[lcId].nodes[nodeId]; SUBTREE.names=names;
+  }
+  function renderSubtreeChip(){
+    const bar=document.getElementById('subtreeChipBar'), on=!!SUBTREE.names;
+    bar.classList.toggle('hidden',!on); bar.classList.toggle('flex',on);
+    if(on) document.querySelector('[data-subtree-chip-text]').textContent=
+      `循環：${lcName(SUBTREE.lcId)} · 節點子樹：${SUBTREE.nodeName}`;
+  }
+  /* ✕ 清除：只清本 chip，其餘 13 項篩選與關鍵字**維持不動**；分頁回第 1 頁（本原型固定第 1 頁）。
+     一併把兩個參數自網址移除，否則使用者重新整理後篩選又回來（他已明示要清掉）。
+     ⚠ file:// 下 replaceState 於部分瀏覽器會擲 SecurityError ⇒ 包 try/catch，維持 0 console error。 */
+  function clearSubtreeFilter(){
+    clearSubtreeState();
+    try{
+      const q=new URLSearchParams(location.search);
+      q.delete('lifecycleId'); q.delete('nodeSubtreeId');
+      const qs=q.toString();
+      history.replaceState(null,'',location.pathname+(qs?'?'+qs:''));
+    }catch(e){/* file:// 或跨來源限制：URL 清不掉不影響畫面行為 */}
+    renderSubtreeChip(); renderTable();
+  }
+
   /* ===== 程序書資料（14 欄 + 樹狀圖所需 node）=====
      company 制定公司 / dept 制定部門 / section 制定室別（可留空＝掛於部層） / chief 當責室長-主要 / sec 次要[] /
      status 儲存狀態(有效/失效/作廢) / pdf 檔案 / node 所屬節點 / num 程序書編號 / name 程序書書名 /
@@ -376,8 +490,15 @@
           · 2 個 ＝ `ICSOP-SRC-101-1-06 消費分期特約通路作業`（`+1` 邊界＝N ≥ 2 之最小值）
           · 6 個 ＝ `ICSOP-SRC-101-1-01 車輛分期進件作業`（`+5`；長尾最壞情況，且其中含全站最長之編號
                     `ICSOP-CIPS-104-1-01`，可用「以該連結篩選 → 命中者排第一顆」驗證欄寬最壞情況） */
+  /* 🔴 2026-08-21：`ICSOP-SRC-101-2-00 消金審核作業` 之 node 由 OLD> `進件作業` 更正為 `撥款核准作業`。
+     理由：22-lifecycle-tree-preview 之 lc1 把這份掛在節點 a4「撥款核准作業」，本檔卻掛在 a1「進件作業」——
+     兩份 prototype 對**同一份**程序書的掛載節點不一致。節點掛載之權威是樹狀圖那一頁，故就地對齊本檔。
+     此欄不出現在 15 欄清單上（僅供 nodeWarn 與已停用之 openTree modal 使用），故無版面回歸。
+     ⚠ 對齊後，本檔與 22 在**共有的**程序書上掛載節點已完全一致；但兩份 mock 語料的**集合**仍不同
+       （22 的 lc1 有 8 份、本檔只有其中 3 份 ＋ 1 份 22 沒有的失效舊版）⇒ 跳轉後的筆數仍會小於抽屜的 N。
+       見檔頭「已知且刻意不在本輪對齊之落差」。 */
   const DOCS=[
-    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'消金審核作業_v2.0.pdf',node:'進件作業',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業'],date:'2025-12-01',lcId:'lc1',appx:['ax3','ax4','ax8'],forms:['uf3','uf4','uf8'],ojt:true},
+    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'消金審核作業_v2.0.pdf',node:'撥款核准作業',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業'],date:'2025-12-01',lcId:'lc1',appx:['ax3','ax4','ax8'],forms:['uf3','uf4','uf8'],ojt:true},
     {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'企業金融授信作業_v1.0.pdf',node:'企金案件受理作業',num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。',links:[],date:'2026-06-01',lcId:'lc10',appx:[],forms:[]}  /* 🔵 AC-N38 ③ 示範：本列刻意**不帶 ojt 鍵**（模擬後端未回該鍵）⇒ 視同 false，渲染與 false 完全相同（file-x-2 ＋「無 OJT」、data-has-ojt="false"）。勿「修正」為 ojt:false——這是缺鍵路徑唯一的示範載體；篩選行為與 false 一致，統計卡與筆數不受影響。 */,
     {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期特約通路作業_v1.2.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',edition:"25'10",summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業','ICSOP-SRC-101-2-00 消金審核作業'],date:'2025-10-01',lcId:'lc1',appx:['ax1'],forms:['uf1'],ojt:false},
     {company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],status:'有效',pdf:'車輛分期進件作業_v1.3.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',links:['ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-102-1-01 車輛分期對保作業','ICSOP-SRC-101-1-06 消費分期特約通路作業','ICSOP-PPC-101-2-02 消費分期產品政策及規範作業','ICSOP-PPC-101-1-03 消費分期-月目標設定作業','ICSOP-CIPS-104-1-01 使用者權限管理與覆核'],date:'2026-01-01',lcId:'lc1',appx:['ax1','ax2','ax8'],forms:['uf1','uf2','uf8'],ojt:true},
@@ -524,10 +645,15 @@
   function clearOne(key){ FILTER[key]=''; buildFilters(); renderTable(); }
   function pickSelect(key,v){ FILTER[key]=v; renderTable(); }
   function pickDate(which,v){ if(which==='from') FILTER.dateFrom=v; else FILTER.dateTo=v; buildFilters(); renderTable(); }
-  /* 🔴 F017 AC-D8：清除全部篩選＝**13 項篩選與關鍵字同時清空**、清單回復未篩選狀態與預設排序、分頁回第 1 頁。 */
+  /* 🔴 F017 AC-D8：清除全部篩選＝**13 項篩選與關鍵字同時清空**、清單回復未篩選狀態與預設排序、分頁回第 1 頁。
+     🔴 2026-08-21 就地擴充：**節點子樹 chip 一併清除**（含網址上的兩個參數）。
+        理由：按鈕字面是「清除全部篩選」，清完卻仍有一條 chip 在縮小結果集，畫面與文字自相矛盾。
+        ⚠ 反向不成立：chip 自己的 ✕ **只**清 chip，不動那 13 項（見 clearSubtreeFilter()）。 */
   function clearFilters(){
     Object.keys(FILTER).forEach(k=>{FILTER[k]='';});
     FILTER.ojt='全部'; NAME_TEXT='';
+    const hadSubtree=!!SUBTREE.names;
+    if(hadSubtree){ clearSubtreeFilter(); }      // 內含 renderSubtreeChip() + renderTable()
     buildFilters(); renderTable();
   }
   function openSheet(){document.getElementById('sheetOverlay').classList.remove('hidden');document.getElementById('sheet').classList.remove('translate-y-full');}
@@ -659,6 +785,13 @@
       if(FILTER.ojt==='有 OJT' && !d.ojt) return false;
       if(FILTER.ojt==='無 OJT' && d.ojt) return false;
       if(FILTER.cycle && d.lcId!==FILTER.cycle) return false;   // 13 以 lifecycleId 比對：同名另一子分類之文件不納入
+      /* 🔴 2026-08-21 裁決 3：節點子樹篩選。**不是**第 14 項篩選，而是由 deep link 帶入的獨立條件，
+         與上列 13 項為 AND。比對＝同一 lifecycleId 且掛載節點落在子樹節點集合內。
+         未指派節點者（d.node 為 null）一律排除——它不屬於任何節點，自然不屬於任何子樹。 */
+      if(SUBTREE.names){
+        if(d.lcId!==SUBTREE.lcId) return false;
+        if(!d.node || !SUBTREE.names.includes(d.node)) return false;
+      }
       return true;
     });
     // 統計卡片（衍生數，依目前篩選結果）
@@ -671,7 +804,8 @@
     document.getElementById('emptyState').classList.toggle('hidden',rows.length>0);
     document.getElementById('pager').style.display=rows.length>0?'flex':'none';
     // `OJT` 之預設值「全部」＝不施加限制，故不計入「已套用篩選」之判定
-    const anyFilter=Object.entries(FILTER).some(([k,v])=>v && !(k==='ojt'&&v==='全部')) || !!NAME_TEXT.trim();
+    // 🔴 2026-08-21：節點子樹 chip 也算「已套用篩選」⇒ 清除鈕與行動版紅點會出現
+    const anyFilter=Object.entries(FILTER).some(([k,v])=>v && !(k==='ojt'&&v==='全部')) || !!NAME_TEXT.trim() || !!SUBTREE.names;
     document.getElementById('clearBtn').classList.toggle('hidden',!anyFilter);
     document.getElementById('countTextM').textContent=`共 ${rows.length} 筆`;
     document.getElementById('filterDot').classList.toggle('hidden',!anyFilter);
@@ -777,8 +911,9 @@
   }
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeTree();});
 
-  // init
-  buildFilters(); renderTable(); renderSidebar(); lucide.createIcons();
+  // init（initSubtreeFromUrl 必須在第一次 renderTable 之前，否則首屏會先閃一次未篩選的完整清單）
+  initSubtreeFromUrl();
+  buildFilters(); renderSubtreeChip(); renderTable(); renderSidebar(); lucide.createIcons();
 </script>
 </body>
 </html>
