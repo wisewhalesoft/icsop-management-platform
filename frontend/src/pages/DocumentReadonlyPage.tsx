@@ -66,6 +66,99 @@ const ATTACH_ORDER: Record<DocumentAttachmentRecord['type'], number> = {
   OJT_SIGNIN: 1,
 };
 
+/**
+ * 🔴 2026-08-21 補正（使用者實測揪出）：OJT「尚未上傳」空狀態列之逐字文案。
+ * 版面權威＝`prototypes/16-document-readonly.html`（`724532e`）之 `:260-262`／`ojtEmptyRow()`，
+ * **照抄不得自創**（說明句三角色共用，與權限無關）。
+ */
+const OJT_EMPTY_TEXT = '尚未上傳 OJT 實體簽到表';
+const OJT_UPLOAD_FIRST_TEXT = '上傳第一份';
+const OJT_UPLOAD_FIRST_ARIA = '上傳第一份 OJT 實體簽到表';
+
+/**
+ * prototype 16 `renderAttach()` 之 `rows.splice(1,0,ojtEmptyRow())`：OJT 缺席時，空狀態列插在
+ * **伺服器附件段之後**（`at`＝該段長度；有 ICSOP PDF 時即索引 1，與 prototype 之字面索引一致），
+ * 亦即 OJT 原本的列序位置 ⇒ 兩種狀態之列序與列數一致。`row` 為 null（已有 OJT）時原樣返回。
+ */
+function withOjtEmptyRow(rows: JSX.Element[], row: JSX.Element | null, at: number): JSX.Element[] {
+  return row ? [...rows.slice(0, at), row, ...rows.slice(at)] : rows;
+}
+
+/**
+ * OJT「尚未上傳」空狀態列（prototype 16 `ojtEmptyRow()`）。
+ *
+ * ⚠ 本列是「**第一份 OJT 的唯一入口**」——原缺陷即為 `data-ojt-upload` 只長在**既有 OJT 之
+ * 附件列**的模板裡（附件清單「缺者不列」），該文件尚無任何 OJT 時，主管／部門窗口畫面上
+ * 沒有任何上傳入口，第一份永遠傳不上去。
+ *
+ * 🔒 **權限分支與既有檔案列完全同源**（呼叫端傳入之 `writable` 即 `canWriteOjt(role)`，
+ *    **不得**在本元件另寫角色白名單）；不可寫時上傳鈕於 **DOM 直接不產生**，非以 CSS 隱藏。
+ * 🔒 掛鉤語意兩態一致，使 `AC-N24`／`AC-N25` 一格未鬆：本列仍帶 `data-attachment-kind="ojt"`，
+ *    可寫時帶 `data-writable-attachment`（全頁仍恰 1 個）＋徽章逐字 `可上傳／覆蓋`
+ *    （標示**權限**而非當下動作；動作語意由按鈕文案承擔），不可寫時帶 `data-readonly-attachment`。
+ * 📌 本列**刻意不帶 `data-wm-note`**、亦無下載鈕——無檔案可下載、無浮水印可言。
+ */
+function OjtEmptyRow({
+  writable,
+  onPick,
+}: {
+  writable: boolean;
+  onPick: (file: File | null) => void;
+}): JSX.Element {
+  return (
+    <div
+      data-attachment-kind="ojt"
+      data-ojt-empty=""
+      className={`flex items-center gap-3 rounded-lg border border-dashed px-3 py-2.5 ${
+        writable ? 'border-primary-300 bg-primary-50/40' : 'border-slate-200'
+      }`}
+    >
+      <Icon name="file-plus" className={`w-5 h-5 ${writable ? 'text-primary-500' : 'text-slate-300'} shrink-0`} />
+      <div className="min-w-0 flex-1">
+        <div className="text-xs text-slate-400">OJT 實體簽到表</div>
+        <div data-ojt-empty-text="" className="text-sm text-slate-500 truncate">{OJT_EMPTY_TEXT}</div>
+      </div>
+      {writable ? (
+        <span
+          data-writable-attachment=""
+          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary-600 text-white shrink-0 whitespace-nowrap"
+        >
+          <Icon name="pencil" className="w-3 h-3" />可上傳／覆蓋
+        </span>
+      ) : (
+        <span
+          data-readonly-attachment=""
+          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0 whitespace-nowrap"
+        >
+          <Icon name="lock" className="w-3 h-3" />唯讀
+        </span>
+      )}
+      {writable && (
+        /*
+          `data-ojt-upload-mode`（prototype 724532e 新增之逐字屬性，值域恰二）：
+          `create`＝本文件尚無 OJT ⇒ **新增第一份**；`replace`＝取代既有 OJT（見附件列）。
+          ⚠ 首次上傳無舊檔可覆蓋 ⇒ 不問「覆蓋既有？」二次確認（假前提）。
+        */
+        <label
+          data-ojt-upload=""
+          data-ojt-upload-mode="create"
+          aria-label={OJT_UPLOAD_FIRST_ARIA}
+          title={OJT_UPLOAD_FIRST_ARIA}
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 bg-white text-primary-700 text-xs hover:bg-primary-50 shrink-0 cursor-pointer"
+        >
+          <Icon name="upload" className="w-3.5 h-3.5" />{OJT_UPLOAD_FIRST_TEXT}
+          <input
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png"
+            className="hidden"
+            onChange={(e) => onPick(e.target.files?.[0] ?? null)}
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
 export function DocumentReadonlyPage(): JSX.Element {
   const { id = '' } = useParams();
   const { user } = useAuth();
@@ -255,6 +348,9 @@ export function DocumentReadonlyPage(): JSX.Element {
     );
   }
 
+  /** 本文件是否尚無任何 OJT 附件紀錄（＝空狀態；prototype 16 之 `ojtPresent` 反面）。 */
+  const ojtAbsent = !attachments.some((a) => a.type === 'OJT_SIGNIN');
+
   const sm = STATUS_META[view.status];
   const cycleName = lifecycles.find((l) => l.id === view.lifecycleId)?.name ?? view.lifecycleId;
   const statusPill = (s: DocumentStatus) => (
@@ -265,6 +361,9 @@ export function DocumentReadonlyPage(): JSX.Element {
    * 附件合併清單（prototype 16 renderAttach 之 items 順序與 wm 旗標）：
    * 檔案（ICSOP PDF）→ OJT 實體簽到表 → 使用表單 ×N；缺者不列。
    * 「下載燒錄浮水印」徽章僅標示於 ICSOP PDF（伺服器端燒錄，前端不帶旗標）。
+   *
+   * ⚠ 「缺者不列」對 OJT **有一個例外**（2026-08-21 補正）：OJT 之**檔案列**確實只在已有 OJT 時
+   * 存在，但缺席時由 `OjtEmptyRow` 於同一列序位置遞補，否則第一份 OJT 永遠沒有上傳入口。
    */
   const attachItems: {
     key: string; label: string; name: string; icon: string; iconClass: string;
@@ -437,94 +536,105 @@ export function DocumentReadonlyPage(): JSX.Element {
           <span id="attachNote">{ojtWritable ? ATTACH_NOTE_OJT : ATTACH_NOTE_RO}</span>
         </p>
         <div className="space-y-2">
-          {attachItems.map((a) => {
-            /*
-              🔴 `AC-N75` ②③⑦（`AC-N24`／`AC-N25` 之畫面載體）：**恰一列可寫**（OJT），
-              其餘三種 kind 之列一律唯讀。可寫／唯讀必須「看起來就不一樣」，且各自帶
-              `data-writable-attachment`／`data-readonly-attachment` 以便機器驗證。
-            */
-            const writable = a.kind === 'ojt' && ojtWritable;
-            return (
-              <div
-                key={a.key}
-                data-attachment-kind={a.kind}
-                {...(a.order ? { 'data-appendix-item': '', 'data-appendix-order': a.order } : {})}
-                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
-                  writable ? 'border-primary-300 bg-primary-50/40' : 'border-slate-200'
-                }`}
-              >
-                {a.order && (
-                  <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">
-                    {a.order}
-                  </span>
-                )}
-                <Icon name={a.icon} className={`w-5 h-5 ${a.iconClass} shrink-0`} />
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs text-slate-400">{a.label}</div>
-                  <div
-                    {...(a.order ? { 'data-appendix-name': '' } : {})}
-                    className="text-sm text-slate-700 truncate"
-                  >
-                    {a.name}
+          {withOjtEmptyRow(
+            attachItems.map((a) => {
+              /*
+                🔴 `AC-N75` ②③⑦（`AC-N24`／`AC-N25` 之畫面載體）：**恰一列可寫**（OJT），
+                其餘三種 kind 之列一律唯讀。可寫／唯讀必須「看起來就不一樣」，且各自帶
+                `data-writable-attachment`／`data-readonly-attachment` 以便機器驗證。
+              */
+              const writable = a.kind === 'ojt' && ojtWritable;
+              return (
+                <div
+                  key={a.key}
+                  data-attachment-kind={a.kind}
+                  {...(a.order ? { 'data-appendix-item': '', 'data-appendix-order': a.order } : {})}
+                  className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
+                    writable ? 'border-primary-300 bg-primary-50/40' : 'border-slate-200'
+                  }`}
+                >
+                  {a.order && (
+                    <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+                      {a.order}
+                    </span>
+                  )}
+                  <Icon name={a.icon} className={`w-5 h-5 ${a.iconClass} shrink-0`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs text-slate-400">{a.label}</div>
+                    <div
+                      {...(a.order ? { 'data-appendix-name': '' } : {})}
+                      className="text-sm text-slate-700 truncate"
+                    >
+                      {a.name}
+                    </div>
                   </div>
+                  {/* `AC-N20`：後台亦渲染浮水印註記，文案與前台同一組逐字常數。 */}
+                  {isWatermarkSupportedFormat(a.format) ? (
+                    <span
+                      data-wm-note=""
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0 whitespace-nowrap"
+                    >
+                      {WM_BURN_TEXT}
+                    </span>
+                  ) : (
+                    <span
+                      data-wm-note=""
+                      className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 shrink-0 whitespace-nowrap"
+                    >
+                      <Icon name="info" className="w-3 h-3" />
+                      {WM_UNSUPPORTED_TEXT}
+                    </span>
+                  )}
+                  {a.watermark && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0">下載燒錄浮水印</span>
+                  )}
+                  {writable ? (
+                    <span
+                      data-writable-attachment=""
+                      className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary-600 text-white shrink-0 whitespace-nowrap"
+                    >
+                      <Icon name="pencil" className="w-3 h-3" />可上傳／覆蓋
+                    </span>
+                  ) : (
+                    <span
+                      data-readonly-attachment=""
+                      className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0 whitespace-nowrap"
+                    >
+                      <Icon name="lock" className="w-3 h-3" />唯讀
+                    </span>
+                  )}
+                  {writable && (
+                    <label
+                      data-ojt-upload=""
+                      data-ojt-upload-mode="replace"
+                      aria-label="上傳／取代 OJT 實體簽到表"
+                      title="上傳／取代 OJT 實體簽到表"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 bg-white text-primary-700 text-xs hover:bg-primary-50 shrink-0 cursor-pointer"
+                    >
+                      <Icon name="upload" className="w-3.5 h-3.5" />上傳／取代
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        className="hidden"
+                        onChange={(e) => void onUploadOjt(e.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                  )}
+                  <button onClick={a.onDownload} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0">
+                    <Icon name="download" className="w-3.5 h-3.5" />下載
+                  </button>
                 </div>
-                {/* `AC-N20`：後台亦渲染浮水印註記，文案與前台同一組逐字常數。 */}
-                {isWatermarkSupportedFormat(a.format) ? (
-                  <span
-                    data-wm-note=""
-                    className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0 whitespace-nowrap"
-                  >
-                    {WM_BURN_TEXT}
-                  </span>
-                ) : (
-                  <span
-                    data-wm-note=""
-                    className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 shrink-0 whitespace-nowrap"
-                  >
-                    <Icon name="info" className="w-3 h-3" />
-                    {WM_UNSUPPORTED_TEXT}
-                  </span>
-                )}
-                {a.watermark && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0">下載燒錄浮水印</span>
-                )}
-                {writable ? (
-                  <span
-                    data-writable-attachment=""
-                    className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary-600 text-white shrink-0 whitespace-nowrap"
-                  >
-                    <Icon name="pencil" className="w-3 h-3" />可上傳／覆蓋
-                  </span>
-                ) : (
-                  <span
-                    data-readonly-attachment=""
-                    className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0 whitespace-nowrap"
-                  >
-                    <Icon name="lock" className="w-3 h-3" />唯讀
-                  </span>
-                )}
-                {writable && (
-                  <label
-                    data-ojt-upload=""
-                    aria-label="上傳／取代 OJT 實體簽到表"
-                    title="上傳／取代 OJT 實體簽到表"
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 bg-white text-primary-700 text-xs hover:bg-primary-50 shrink-0 cursor-pointer"
-                  >
-                    <Icon name="upload" className="w-3.5 h-3.5" />上傳／取代
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      className="hidden"
-                      onChange={(e) => void onUploadOjt(e.target.files?.[0] ?? null)}
-                    />
-                  </label>
-                )}
-                <button onClick={a.onDownload} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0">
-                  <Icon name="download" className="w-3.5 h-3.5" />下載
-                </button>
-              </div>
-            );
-          })}
+              );
+            }),
+            /*
+              🔴 2026-08-21 補正：OJT 缺席 ⇒ 於 OJT 原本的列序位置遞補空狀態列（第一份之唯一入口）。
+              權限分支同源於 `ojtWritable`（＝`canWriteOjt(role)`）：SysAdmin／User 不產生上傳鈕。
+            */
+            ojtAbsent ? (
+              <OjtEmptyRow key="ojt-empty" writable={ojtWritable} onPick={(f) => void onUploadOjt(f)} />
+            ) : null,
+            attachments.length,
+          )}
           {/* F039 AC-26：無關聯附錄 → 顯示提示（非錯誤、非空白區塊）。 */}
           {appendices.length === 0 && (
             <div

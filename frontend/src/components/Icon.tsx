@@ -5,7 +5,7 @@ import {
   LayoutGrid, Activity, Building2, Info, AlertCircle, AlertTriangle, Loader2,
   Search, PanelsTopLeft, LayoutDashboard, CheckCircle2, X, Plus, Inbox,
   RotateCw, GitBranch, CircleDot, FileCheck2, FileX2, GitCommitVertical,
-  PlusCircle, Filter, FilePlus2, Paperclip, Save, Lock, Trash2,
+  PlusCircle, Filter, FilePlus, FilePlus2, Paperclip, Save, Lock, Trash2,
   Download, Globe, UserSearch, FileSearch, FileBadge, Stamp,
   GitFork, ZoomIn, ZoomOut, Maximize, Printer,
   Library, Megaphone, PauseCircle, XCircle, FileDown, Link as LinkIcon,
@@ -72,6 +72,8 @@ const REGISTRY: Record<string, LucideIcon> = {
   'git-commit-vertical': GitCommitVertical,
   'plus-circle': PlusCircle,
   filter: Filter,
+  // `file-plus`：prototype 16 之 OJT 空狀態列圖示（`data-lucide="file-plus"`，不是 `file-plus-2`）。
+  'file-plus': FilePlus,
   'file-plus-2': FilePlus2,
   paperclip: Paperclip,
   save: Save,
