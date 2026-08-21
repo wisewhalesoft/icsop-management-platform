@@ -228,12 +228,21 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
       }
     });
 
-    it('TS-D-012 僅部分附件存在（僅 ICSOP PDF）→ 清單僅顯示存在者', async () => {
+    /**
+     * 🔴 2026-08-21 補正（prototype `724532e`）：OJT 缺席時原本「完全不顯示任何 OJT 相關文字」
+     * 之假設已被推翻——OJT 缺席時改渲染**空狀態列**（`data-ojt-empty`，見本檔下方「OJT 空狀態
+     * 上傳入口」區塊之完整 AC），故 OJT 之「OJT 實體簽到表」標籤文字在空狀態下**仍會出現**
+     * （空狀態列本身即帶此標籤）。本案標題與情境（僅 ICSOP PDF 存在）不變，但斷言改為驗證
+     * 空狀態列確實渲染，而非「完全不顯示」；使用表單仍存在之既有斷言不變。
+     * 📝 被取代之原斷言逐字保留供追溯：
+     *   OLD> expect(screen.queryByText('OJT 實體簽到表')).not.toBeInTheDocument();
+     */
+    it('TS-D-012 僅部分附件存在（僅 ICSOP PDF，OJT 缺席）→ OJT 缺席改渲染空狀態列，非完全不顯示', async () => {
       mockAuth('Supervisor');
       vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([att({})]);
       renderPage();
       await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
-      expect(screen.queryByText('OJT 實體簽到表')).not.toBeInTheDocument();
+      expect(document.querySelector('[data-ojt-empty]')).not.toBeNull();
       expect(screen.getByText('進件申請書.xlsx')).toBeInTheDocument();
     });
 
@@ -246,15 +255,22 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
      * 改為與本檔其餘案例一致之標題等待閘（`車輛分期進件作業`，不隨標題分支變化）。
      * 📝 被取代之原斷言逐字保留供追溯：
      *   OLD> await waitFor(() => expect(screen.getByText('附件（僅下載）')).toBeInTheDocument());
+     *
+     * 🔴 2026-08-21 追加補正（prototype `724532e`）：本案 fixture（`getDocumentAttachments` 回傳
+     * `[]`）本身即代表「OJT 亦無附件紀錄」，OJT 缺席時改渲染空狀態列（同 TS-D-012 之補正理由）。
+     * 「OJT 實體簽到表」標籤文字現由空狀態列帶出，故該行斷言改為驗證空狀態列存在；ICSOP PDF／
+     * 使用表單／下載鈕之「缺席即不顯示」既有語意不受影響（該三者無等效空狀態設計）。
+     * 📝 被取代之原斷言逐字保留供追溯：
+     *   OLD> expect(screen.queryByText('OJT 實體簽到表')).not.toBeInTheDocument();
      */
-    it('TS-D-013 三類附件與使用表單皆無 → 不拋錯、不顯示任何附件列', async () => {
+    it('TS-D-013 ICSOP PDF／使用表單皆無、OJT 亦無附件紀錄 → 不拋錯，OJT 改渲染空狀態列（其餘不顯示）', async () => {
       mockAuth('Supervisor');
       vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([]);
       vi.mocked(endpoints.getDocumentForms).mockResolvedValue([]);
       renderPage();
       await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
       expect(screen.queryByText('檔案（ICSOP PDF）')).not.toBeInTheDocument();
-      expect(screen.queryByText('OJT 實體簽到表')).not.toBeInTheDocument();
+      expect(document.querySelector('[data-ojt-empty]')).not.toBeNull();
       expect(screen.queryByText('使用表單')).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /下載/ })).not.toBeInTheDocument();
     });
@@ -329,6 +345,12 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
       expect(attachRow('作業流程對照表.xlsx').querySelector('[data-readonly-attachment]')).not.toBeNull();
     });
 
+    /**
+     * 🔴 2026-08-21 補正追加（prototype `724532e`，非取代，僅擴充）：`data-ojt-upload-mode` 為本次
+     * delta 新增之逐字屬性（值域恰 `replace`／`create`），既有 OJT 已存在時必須維持 `replace`，
+     * 逐字 aria-label 亦不得因補了空狀態列而被動到——此為「有值態不回歸」之直接載體。
+     * 另補一行確認：有 OJT 時不得同時出現空狀態列（`data-ojt-empty`），兩態互斥。
+     */
     it('AC-N75④ OJT 列之上傳鈕帶 data-ojt-upload，aria-label 逐字為「上傳／取代 OJT 實體簽到表」（Supervisor）', async () => {
       mockAuth('Supervisor');
       renderPage();
@@ -336,6 +358,8 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
       const btn = attachRow('車輛分期進件作業_OJT簽到表.pdf').querySelector('[data-ojt-upload]') as HTMLElement;
       expect(btn, '找不到 OJT 列之 data-ojt-upload 控制項').not.toBeNull();
       expect(btn.getAttribute('aria-label')).toBe('上傳／取代 OJT 實體簽到表');
+      expect(btn.getAttribute('data-ojt-upload-mode'), '有值態應為 replace，非新增之 create').toBe('replace');
+      expect(document.querySelector('[data-ojt-empty]'), '有 OJT 時不應同時出現空狀態列').toBeNull();
     });
 
     it('AC-N75⑦📌 ICSOPAdmin 亦顯示 OJT 上傳入口（其對 OJT 本即可寫，權限較大者不得看到較少控制項）', async () => {
@@ -403,6 +427,134 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
       const title = document.getElementById('attachTitle');
       expect(title, '找不到 #attachTitle').not.toBeNull();
       expect(title!.textContent).toBe('附件（僅下載）');
+    });
+
+    /**
+     * 🔴 2026-08-21 補正（使用者實測揪出；lead 裁定＝澄清 `OQ-D9-19` 而非新決策）：
+     * 主管／部門窗口可以取代既有 OJT，但該文件**尚無任何 OJT** 時，畫面上原本沒有任何上傳
+     * 入口 ⇒ 第一份 OJT 永遠傳不上去。權威 ＝ prototype `16-document-readonly.html`
+     * `ojtEmptyRow()`（commit `724532e`）。
+     * ⚠ 對應 AC（F016 §ojt-role-open-delta 後續編號）尚未回填——spec-writer 於本輪額度中止
+     * 前未及補上——故本區塊逐項以 prototype 逐字文案／掛鉤為唯一權威；AC 編號回填後請對照
+     * 本區塊補上引註（測試內容不因回填而需更動，除非回填內容與 prototype 衝突）。
+     *
+     * 逐字文案／掛鉤（prototype 16 `:260-262`／`:342-356`，照抄不得自創）：
+     *   OJT_EMPTY_TEXT        ＝『尚未上傳 OJT 實體簽到表』（三角色共用，與權限無關）
+     *   OJT_UPLOAD_FIRST_TEXT ＝『上傳第一份』（可見文字）
+     *   OJT_UPLOAD_FIRST_ARIA ＝『上傳第一份 OJT 實體簽到表』（aria-label＝title）
+     *   data-ojt-empty        ＝空狀態列容器；data-ojt-empty-text ＝空狀態說明句
+     *   data-ojt-upload-mode  ＝兩顆上傳鈕皆有，值域恰二：replace／create
+     */
+    describe('OJT 空狀態上傳入口（2026-08-21 補正；prototype 724532e）', () => {
+      beforeEach(() => {
+        // 僅 ICSOP PDF 存在，無 OJT_SIGNIN 紀錄 ⇒ 該文件對 OJT 而言即為「空狀態」。
+        vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([att({})]);
+      });
+
+      it.each([['Supervisor'], ['DeptContact']])(
+        '%s：空狀態列恰 1 顆 create 上傳鈕，逐字文案／aria-label／title 皆為 prototype 定稿值',
+        async (role) => {
+          mockAuth(role);
+          renderPage();
+          await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+
+          const createBtns = document.querySelectorAll('[data-ojt-upload][data-ojt-upload-mode="create"]');
+          expect(createBtns, '空狀態應恰有 1 顆 create 模式之上傳鈕').toHaveLength(1);
+          const btn = createBtns[0] as HTMLElement;
+          expect(btn.getAttribute('aria-label')).toBe('上傳第一份 OJT 實體簽到表');
+          expect(btn.getAttribute('title')).toBe('上傳第一份 OJT 實體簽到表');
+          expect(btn.textContent?.trim()).toBe('上傳第一份');
+
+          const emptyText = document.querySelector('[data-ojt-empty-text]');
+          expect(emptyText, '找不到 data-ojt-empty-text').not.toBeNull();
+          expect(emptyText!.textContent).toBe('尚未上傳 OJT 實體簽到表');
+
+          const emptyRow = document.querySelector('[data-ojt-empty]');
+          expect(emptyRow, '找不到 data-ojt-empty 容器').not.toBeNull();
+          expect(emptyRow!.getAttribute('data-attachment-kind')).toBe('ojt');
+        },
+      );
+
+      it('ICSOPAdmin 亦顯示空狀態上傳入口（其對 OJT 本即可寫，鏡射既有 AC-N75⑦ 於空狀態下同樣成立）', async () => {
+        mockAuth('ICSOPAdmin');
+        renderPage();
+        await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+        expect(
+          document.querySelectorAll('[data-ojt-upload][data-ojt-upload-mode="create"]'),
+        ).toHaveLength(1);
+      });
+
+      /**
+       * 🔒 最重要之回歸鎖定：空狀態列本身不得因為「補了上傳入口」而外洩給不可寫角色。
+       * SysAdmin 對 OJT 仍唯讀（AC-N26 既有裁決，見本檔 `🔒 SysAdmin` 系列案）；此鎖定確保
+       * 修補空狀態 bug 時，實作沒有把 `canWriteOjt()` 檢查漏掉、對所有角色一律開放上傳鈕。
+       */
+      it('🔒 SysAdmin：空狀態下仍無任何上傳入口、無任何 data-writable-attachment', async () => {
+        mockAuth('SysAdmin');
+        renderPage();
+        await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+        expect(document.querySelectorAll('[data-ojt-upload]')).toHaveLength(0);
+        expect(document.querySelectorAll('[data-writable-attachment]')).toHaveLength(0);
+        // 空狀態列仍應渲染（唯讀角色看不到的是寫入路徑，不代表整列消失）。
+        const emptyRow = document.querySelector('[data-ojt-empty]');
+        expect(emptyRow, '找不到 data-ojt-empty 容器').not.toBeNull();
+        expect(emptyRow!.querySelector('[data-readonly-attachment]')).not.toBeNull();
+      });
+
+      /**
+       * ⚠ 鑑別力備註（如實揭露，非隱藏）：User 於本頁本就無讀取權——已用診斷探測確認整頁僅
+       * 渲染 403 訊息（`無文件檢視權限`），附件區 DOM 完全不存在，故本案之 0 計數在**目前架構
+       * 下**必然成立，並非本次 OJT 空狀態修補的判別式。保留是為了與既有 403 全頁封鎖疊加一層
+       * 防線：若日後重構把 OJT 判斷提到角色守門之前，本案才會咬到；其鑑別力弱於上方 SysAdmin
+       * 一案，此點於回報時一併說明。
+       */
+      it('User：空狀態下（403 既有全頁封鎖之延伸防線）亦無任何上傳入口', () => {
+        mockAuth('User');
+        renderPage();
+        expect(screen.getByText(/無文件檢視權限/)).toBeInTheDocument();
+        expect(document.querySelectorAll('[data-ojt-upload]')).toHaveLength(0);
+        expect(document.querySelectorAll('[data-writable-attachment]')).toHaveLength(0);
+      });
+    });
+
+    /**
+     * 🔒 不得鬆掉一片牆：空狀態下 `data-writable-attachment` 之「恰 1 個」不變量必須維持，
+     * 且該唯一可寫者之 `data-attachment-kind` 仍為 `ojt`；其餘三種 kind（icsop_pdf／usageform／
+     * appendix）每一列皆須帶 `data-readonly-attachment`。鏡射既有「present」態之
+     * `AC-N75②③⑦`（同 describe 上方），本案補上「absent」態之對稱版本；集合式（恰 1 個）
+     * 與逐元素（每列皆唯讀）兩層並列，避免「兩集合不相交」掩蓋「有一列漏檢」。
+     */
+    describe('OJT 空狀態下之可寫牆不得外洩（鏡射 AC-N75②③⑦ 之 absent 態）', () => {
+      beforeEach(() => {
+        vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([att({})]); // 無 OJT
+      });
+
+      it('Supervisor：恰 1 個 data-writable-attachment，位於 kind=ojt（空狀態列）；其餘三種 kind 逐列皆唯讀', async () => {
+        mockAuth('Supervisor');
+        renderPage();
+        await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
+
+        const writable = document.querySelectorAll('[data-writable-attachment]');
+        expect(writable, '空狀態下仍應恰有 1 個可寫標記').toHaveLength(1);
+        const kindOfWritable =
+          writable[0].closest('[data-attachment-kind]')?.getAttribute('data-attachment-kind') ??
+          writable[0].getAttribute('data-attachment-kind');
+        expect(kindOfWritable).toBe('ojt');
+
+        // 集合式（恰 1 個可寫）之外，逐元素核對：非 ojt-empty 之每一列皆為唯讀，一個都不能漏。
+        const nonOjtRows = Array.from(
+          document.querySelectorAll('[data-attachment-kind]:not([data-ojt-empty])'),
+        ) as HTMLElement[];
+        expect(nonOjtRows.length, '掃描集合不得為空——否則以下逐元素核對會假綠').toBeGreaterThan(0);
+        for (const row of nonOjtRows) {
+          expect(
+            row.querySelector('[data-readonly-attachment]'),
+            `kind=${row.getAttribute('data-attachment-kind')} 列應為唯讀`,
+          ).not.toBeNull();
+          expect(row.querySelector('[data-writable-attachment]')).toBeNull();
+        }
+      });
     });
   });
 
