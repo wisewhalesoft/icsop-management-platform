@@ -126,6 +126,26 @@ export interface NodeMountedDocument {
   announcedDate: string | null;
 }
 
+/**
+ * F036 `AC-T25` ④（2026-08-21 delta）：子樹文件清單端點之回應。
+ * 🔴 分組順序、組內排序與去重**皆已由後端完成**——前端不得再排一次、也不得再去重一次
+ * （`AC-T11` ④／`AC-T13` ④）。`isSelf`／`count` 刻意不在 wire 上，由前端以
+ * `group.nodeId === 請求之 nodeId` 與 `documents.length` 推導。
+ */
+export interface SubtreeDocumentGroup {
+  nodeId: string;
+  nodeName: string | null;
+  documents: NodeMountedDocument[];
+}
+
+export interface SubtreeDocumentsResponse {
+  /** 回顯請求之根節點 id。 */
+  nodeId: string;
+  /** 去重後之子樹文件總數（＝Σ 各組 `documents.length`）。 */
+  totalCount: number;
+  groups: SubtreeDocumentGroup[];
+}
+
 /** F038 新舊快照 diff（後-前＝新增；前-後＝刪除；改名/掛載變更＝amber）。 */
 export interface LifecycleDiff {
   addNodes: string[];
@@ -207,12 +227,30 @@ export interface DocumentListItem {
 }
 
 /** F017 後端分頁結果（GET /admin/documents 回傳）。 */
+/**
+ * F017 `AC-T45`（2026-08-21 delta）：後端解析出之子樹篩選描述子。
+ * 🔴 chip 之顯示與其文案完全以本描述子為準——前端**不得**自行組字或另行查名（`AC-T43`）。
+ */
+export interface SubtreeFilterDescriptor {
+  lifecycleId: string;
+  /** 循環顯示名稱（後端 `lifecycleDisplayName()` 之輸出，含子分類時為 `名稱（子分類）`）。 */
+  lifecycleName: string;
+  nodeId: string;
+  nodeName: string | null;
+}
+
 export interface DocumentListPage {
   items: DocumentListItem[];
   total: number;
   page: number;
   pageSize: number;
   hasNext: boolean;
+  /**
+   * F017 `AC-T45`／`AC-T48` ⑥：**additive 第 6 個頂層欄位**。後端回應恆為顯式 key（不適用時 `null`）；
+   * 此處宣告為選填係沿用本 repo「既有共享型別加欄一律 additive optional」之慣例——前端仍須對
+   * 「`null`」與「缺席」**兩種情形一視同仁**防禦性判斷（`AC-T41` 之 no-op 於畫面上即「chip 不渲染」）。
+   */
+  subtreeFilter?: SubtreeFilterDescriptor | null;
 }
 
 /** F017 清單排序鍵（後端支援 documentNumber/announcedDate）。 */
@@ -235,6 +273,12 @@ export interface DocumentFilters {
   /** F017 `AC-D6`（2026-08-16 delta）：附錄／使用表單篩選（比照 linkTargetId 之後端交集樣板）。 */
   appendixId?: string;
   formId?: string;
+  /**
+   * F017 `AC-T40`／`AC-T43`（2026-08-21 delta）：節點子樹 deep link 之根節點 id。
+   * 🔴 **恆與 `lifecycleId` 成對**且由前端**原樣**帶上——子樹展開是後端職責，前端不得自行走訪
+   * （否則會出現「樹狀圖說 7 個節點、清單按 6 個節點篩」的分家）。
+   */
+  nodeSubtreeId?: string;
   sortBy?: DocumentSortBy;
   sortDir?: SortDir;
   /** 1-based 頁碼（預設 1）。 */

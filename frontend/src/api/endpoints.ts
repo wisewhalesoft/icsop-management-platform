@@ -355,6 +355,19 @@ export function getLifecycleNodeDocuments(
   return apiFetch(`/admin/lifecycles/${lifecycleId}/nodes/${nodeId}/documents`);
 }
 
+/**
+ * F036 `AC-T25` ④（2026-08-21 delta）：節點雙擊之**子樹**唯讀文件清單
+ * （GET .../nodes/:nodeId/subtree-documents）——該節點及其全部下游節點所掛載之程序書。
+ * 閘門同單節點端點（「循環管理 read」，含 Supervisor）；分組／排序／去重皆由後端完成。
+ * 🔒 既有單節點 `.../documents` 端點本輪保留不刪（見 OQ-T3-07），但抽屜自 2026-08-21 起改走本端點。
+ */
+export function getLifecycleNodeSubtreeDocuments(
+  lifecycleId: string,
+  nodeId: string,
+): Promise<import('./types').SubtreeDocumentsResponse> {
+  return apiFetch(`/admin/lifecycles/${lifecycleId}/nodes/${nodeId}/subtree-documents`);
+}
+
 // ===== E04 ICSOP 文件（F010/F012/F017） =====
 
 /**
@@ -373,6 +386,15 @@ export function getDocuments(f: DocumentFilters = {}): Promise<DocumentListPage>
   if (f.draftingSectionId) qs.set('draftingSectionId', f.draftingSectionId);
   if (f.primaryChiefId) qs.set('primaryChiefId', f.primaryChiefId);
   if (f.linkTargetId) qs.set('linkTargetId', f.linkTargetId);
+  // 🔴 F017 `AC-D2` 第 10／11 列／`AC-D6`：附錄／使用表單篩選。
+  // 📝 這兩行自 2026-08-16 立條起就漏了——`DocumentFilters` 宣告了 17 個 key，此處只組進 15 個，
+  //    使用者選了附錄卻沒有任何參數送出 ⇒ 後端回完整清單 ⇒ 前端拿「全部 id」當交集集合 ⇒
+  //    **篩選看起來有套用但一筆都沒縮小、靜默無錯誤**。既有元件測試 mock 掉整個 endpoints 模組，
+  //    只驗到「有呼叫 getDocuments({appendixId})」，驗不到本函式是否真的把它組進 URL。
+  if (f.appendixId) qs.set('appendixId', f.appendixId);
+  if (f.formId) qs.set('formId', f.formId);
+  // F017 AC-T43：兩參數原樣帶上（子樹展開由後端負責；殘缺者後端靜默 no-op）。
+  if (f.nodeSubtreeId) qs.set('nodeSubtreeId', f.nodeSubtreeId);
   if (f.sortBy) qs.set('sortBy', f.sortBy);
   if (f.sortDir) qs.set('sortDir', f.sortDir);
   if (f.page) qs.set('page', String(f.page));

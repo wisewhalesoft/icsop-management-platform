@@ -1,8 +1,8 @@
 ---
 type: architecture-spec
-version: 1.9
-status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；**v1.7 新增之 §10.17 決策 A15（AAD authority host 覆寫，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）已實作並併入 main（commit `3448679`）；`AC-E4`（遠端端到端登入成功）已於 2026-08-18 由真人於遠端環境（DTTHFC01）實測兌現，證據見 §10 changelog v1.7a 與 §10.17（`OLD>` v1.7 原登錄：「唯 `AC-E4`（遠端端到端登入成功）尚待真人於遠端環境驗證，如實登錄為未兌現項」）**；**v1.8 新增之 §10.18 決策 A16（F024 匯出稽核與訊息共用之四項裁決，對應 [F024](features/F024-access-history-query.md#export-fix-delta) `AC-F13`／`AC-F5`／`AC-F9`／`AC-F7`～`AC-F8` 之提報事項 A1～A4）為 draft，待 tdd-implementation 落地**；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
-last_updated: 2026-08-18
+version: 1.10
+status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；**v1.7 新增之 §10.17 決策 A15（AAD authority host 覆寫，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）已實作並併入 main（commit `3448679`）；`AC-E4`（遠端端到端登入成功）已於 2026-08-18 由真人於遠端環境（DTTHFC01）實測兌現，證據見 §10 changelog v1.7a 與 §10.17（`OLD>` v1.7 原登錄：「唯 `AC-E4`（遠端端到端登入成功）尚待真人於遠端環境驗證，如實登錄為未兌現項」）**；**v1.8 新增之 §10.18 決策 A16（F024 匯出稽核與訊息共用之四項裁決，對應 [F024](features/F024-access-history-query.md#export-fix-delta) `AC-F13`／`AC-F5`／`AC-F9`／`AC-F7`～`AC-F8` 之提報事項 A1～A4）為 draft，待 tdd-implementation 落地**；**v1.10 新增之第 12 章「2026-08-21 三項裁決架構決策」為 draft，待 spec-writer 覆核 `AC-T14` 措辭範圍界定（§12.6）與 lead 核准舊端點退休（§12.2／§12.6）後方可交 tdd-implementation**；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
+last_updated: 2026-08-21
 covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038, F039, F040, F041]
 ---
 
@@ -40,6 +40,8 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 
 > **v1.9（2026-08-20）新增第 11 章「2026-08-20 缺失／變更 Delta 架構決策（9 項）」**：對應 `docs/stories/2026-08-20-defect-delta-9.md` 與人類閘門 `OQ-D9-01`～`OQ-D9-34`（27＋6 題，兩輪全數定案）之 `AC-N1`～`AC-N70`。**本批推翻兩項既有明文定案**：① `OQ-D9-08`（選項 B）全面推翻 `OQ-FM-01`／`OQ-D18-01`——**後台四類下載自本版起一律燒錄浮水印並寫調閱稽核，無例外角色**，§5.2 下載策略表、§10.1 燒錄範圍表／流程圖、`field-matrix-test-design.md` `TS-FM-001`／`TS-FM-002` 之「不具備燒錄能力」基準線**同步失效並反向重寫**；② `OQ-D9-19`（選項 A）推翻 F026 頂部定案——**「OJT 簽到表」一欄對主管／部門窗口開放寫入**，落地為 `FIELD_MATRIX`（前後端兩份鏡射）新增一列 `OJT_WRITABLE`，不新增 if 特例。核心決策：**B1–B4** 前台檢視器改 `pdfjs-dist` 自繪 canvas（取代 `<iframe>`），`/public/documents/:id/pdf` 改回傳已燒錄位元組並移除 DOM 疊加層；**B5–B7** 後台燒錄之共用協作點自 `WatermarkService` **抽出**為零相依之 `WatermarkBurnerModule`（`WATERMARK_BURNER`，取代 `FRONT_BURNER`），解決 `AttachmentsModule ↔ PublicModule` 之潛在模組循環相依，並改 `@Optional()` 為必要注入以達成**啟動期 fail-fast**（回應 lead 點名之 `FRONT_BURNER` 從未被 provide 之教訓）；同時**發現並必須一併修正**既有 `AuditWriterRecorder`（附錄／使用表單兩份，`appendices/audit-writer-recorder.adapter.ts:22-29`、`usage-forms/audit-writer-recorder.adapter.ts:22-29`）**未轉送身分快照與 `watermarkSnapshot` 予 `recordAccess()`** 之既有缺口——此為滿足本輪 `AC-N17`／`AC-N51` 之必要前提，非新裁決。**B8** OJT 破例採資料驅動矩陣列新增。**B10** 新增 `USAGE_FORM_DRAFTING_DEPT`（本輪唯一需 migration 者）。**§11.11「單元測試盲區」新增 8 項**（含 pdf.js 之 cMap／standard fonts 部署與 CJK 燒錄字型缺檔為同型盲區、`AuditWriterRecorder` 身分欄位遺漏、`WATERMARK_BURNER` 循環相依重構之回歸風險）。**本版新增一個模組**（`WatermarkBurnerModule`，自既有 `WatermarkService` 抽出，非新增業務能力）、**不改變架構風格**。
 
+> **v1.10（2026-08-21）新增第 12 章「2026-08-21 三項裁決架構決策」**：回應 lead 指派之兩個 `[ARCH]` 接縫（`OQ-T3-03`／`OQ-T3-04`，來源 [F036](features/F036-lifecycle-tree-preview.md#subtree-drawer-delta) `AC-T10`～`AC-T27`、[F017](features/F017-backend-document-list.md#subtree-filter-delta) `AC-T40`～`AC-T48`）與一項 lead 直接指定之子樹走訪演算法歸屬問題。**本章範圍刻意限縮為僅此三題，非全架構複審**。核心決策：**C1** 子樹走訪語意（`descendants()`）於後端另留一份（`backend/src/lifecycle/lifecycle-tree-layout.ts`，與既有 `buildTreeLayout()` 後端副本同檔），以 5 組固定測試向量與前端版綁定（比照 §10.14 慣例，monorepo 無共用 package 前提不變）；**C2**（`OQ-T3-03`）新增 `GET /admin/lifecycles/:lifecycleId/nodes/:nodeId/subtree-documents`，**分組與排序改由後端做**——關鍵查證：後端**已有** `buildTreeLayout()` 之獨立副本（`lifecycle-preview.service.ts` 既用於 F036 唯讀預覽端點），故「後端沒有座標」之原始前提不成立，只是此前未被此用途重用；連帶建議**退休**現行單節點 `GET .../documents`（grep 確認前端僅剩此一個呼叫端）；**C3**（`OQ-T3-04`）`GET /admin/documents` 回應新增 additive 頂層欄位 `subtreeFilter: {lifecycleId, lifecycleName, nodeId, nodeName} | null`，`lifecycleName` 刻意沿用既有 `DocumentListItem.lifecycleName` 之命名precedent（兩者皆為 `lifecycleDisplayName()` 之輸出，非原始 `LIFECYCLE.name`）。**本版不新增模組、不改變架構風格、無 schema 變更**；`NodeDocsStore`／`DocumentListFilters` 各新增一個選填欄位（additive）。一項待 spec-writer 覆核之 AC 措辭疑慮（`AC-T14` 第①點「不得存在第二份子樹走訪」之範圍界定）已於 §12.6 列出，不自行改寫 AC。
+
 ## Agent Loading Guide
 
 | Agent Role | Relevant Sections |
@@ -55,6 +57,7 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 | **2026-08-16 缺失／變更 Delta（15 項）工程** | **§10 全章**。依角色取用：**test-generator** → §10.15（單元測試盲區，決定哪些項目建不出有效 unit 約束）＋ §10.1 A1／§10.5 A5／§10.9 A9（回歸鎖定之邊界）；**tdd-implementation** → §10.1–§10.7、§10.12–§10.14（端點形狀、判定依據、共用函式落點、migration 注意事項）；**ui-ux-designer** → §10.3（`watermarkSupported` 旗標之來源）、§10.8（breadcrumb 型別）、§10.14（三層式浮水印之渲染落點）；**DevOps** → §10.7（migration 實跑）、§10.10（Dockerfile ＋ fail-fast ＋ 容器內 smoke）、§10.2（併發閘與記憶體上界）；**lead** → §10.11（分線與合併順序）、§10.16（風險／被否決方案／須退回 spec-writer 之爭議） |
 | **F024 匯出稽核與訊息共用（A16）工程** | **§10.18 全節**（`AuditTargetType='ACCESS_HISTORY'` 之新增與哨兵 `targetId`／`access-history-labels.ts` 落點／`assertExportRowLimit()` 修法／單一 `queryHistory()` 呼叫路徑）；連動 §10.4（既有匯出共用產生器）、§10.14（`watermarkLines()` 之「兩份逐字相同」既有模式） |
 | **2026-08-20 缺失／變更 Delta（9 項）工程** | **§11 全章**。依角色取用：**test-generator** → §11.11（單元測試盲區，決定哪些項目建不出有效 unit 約束）＋ §11.1／§11.5（`AC-N9` 渲染 seam、後台燒錄回歸鎖定之邊界）；**tdd-implementation** → §11.1–§11.10（pdf.js 選型與 canvas 縮放算法、`WATERMARK_BURNER` 抽出與模組接線、四端點燒錄改造、`AuditWriterRecorder` 修正、OJT 矩陣列、`USAGE_FORM_DRAFTING_DEPT` migration、使用表單整頁化端點）；**ui-ux-designer** → §11.1（canvas 佔位取代 iframe）、§11.6（前台字級 tokens 分層）、§11.9（整頁化版面）；**DevOps** → §11.2（pdf.js 靜態資產部署、cMap／standard fonts）、§11.10（migration 實跑）；**lead** → §11.12（分線與合併順序）、§11.13（須退回 spec-writer 之新 OQ，若有） |
+| **2026-08-21 三項裁決（子樹抽屜＋deep link）工程** | **§12 全章**。依角色取用：**test-generator** → §12.1（`descendants()` 綁定用固定測試向量 F1–F5，兩端皆須各建一組）＋ §12.4（單元測試盲區）；**tdd-implementation** → §12.2（新端點 `subtree-documents` 之回應形狀、`NodeDocsService`／`NodeDocsStore` 擴充、舊單節點端點退休）、§12.3（`subtreeFilter` 描述子之解析落點與 `DocumentListFilters.nodeIdIn`）；**spec-writer** → §12.6（`AC-T14` 措辭範圍界定之覆核請求，未自行改寫 AC）；**lead** → §12.5（被否決之替代方案）、§12.6（殘留風險與待覆核事項） |
 | 一般使用者子分類（F041）工程 🟢 APPROVED | §3.7（`ViewerScope` 組出點／`rbac/viewer-scope.ts` 三純函式落點／四過濾接縫精確位置／前端接縫／10 題 OQ 裁決紀錄）、§4.10（`ACCOUNT.userSubtype` 資料落地／Migration／F004 upsert 鍵集合保證）、§5.11（清單／詳情／檢視器‑下載‑列印三條路徑之循序圖）、§6（NFR 對應擴充列）、§8（風險與拒絕替代方案）、§9（10 題 OQ 裁決紀錄）。**10 題 OQ 已於 2026-08-11 人類閘門全數依草案選項定案，可直接動工**；下游實作最容易漏的三處已於 §3.7 決策一/三(c) 明確標注（`@Req()` 新增、三處破壞性簽章遷移、`docMeta` 安全關鍵化） |
 
 ## Table of Contents
@@ -70,6 +73,7 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 9. [Open Decisions](#9-open-decisions)
 10. [2026-08-16 缺失／變更 Delta 架構決策（15 項）](#ch10-defect-delta)
 11. [2026-08-20 缺失／變更 Delta 架構決策（9 項）](#ch11-defect-delta-9)
+12. [2026-08-21 三項裁決架構決策](#ch12-t3-decisions)
 
 ---
 
@@ -1920,6 +1924,8 @@ graph TB
 | OQ-E08-11 | F033 現行文字與 F019 現行行為之既存落差 | 不影響本節（Phase 3 未實作） | **✅ 已裁決：C 維持現狀+補釐清句**（維持草案），不影響 §3.7/§4.10/§5.11 落地 | ✅ 已定案 |
 | **OQ-E06-03** | 直連 URL 被拒之回應碼（404 vs 403，存在性洩漏） | §3.7 決策三(b)/(c) 之 `rejectDeptRestricted()` 私有方法回傳值 | **✅ 已裁決：A 404 `DOCUMENT_NOT_FOUND`**（維持草案，未改判）；`rejectDeptRestricted()` 定稿回傳 `NotFoundException`，§3.7 對照表末列 | ✅ 已定案，可動工 |
 | OQ-E06-04 | 授權檢查時機（後端服務層權威 vs 前端亦可） | §3.7 決策一/三已將判定放在服務層而非 controller/前端 | **✅ 已裁決：A 後端服務層權威**（維持草案），AC-30 可直接呼叫服務層繞過前端驗證以證明 | ✅ 已定案，既有原則之重申 |
+| （新增） | `OQ-T3-03` 之連帶建議——退休既有單節點 `GET /admin/lifecycles/:lifecycleId/nodes/:nodeId/documents` 端點（§12.2） | 影響既有回歸測試範圍（`node-docs-controller-routes.spec.ts`／`node-docs-list.service.spec.ts`）與前端唯一呼叫端之改接 | **架構師建議退休**（grep 已確認前端僅剩一個消費端，且該消費端本輪必然改接新端點 `subtree-documents`），但刪除既有端點屬產品/回歸範圍決策，非架構層可片面拍板 | 待 lead 核准（§12.6） |
+| （新增） | `AC-T14`（F036）第①點「不得存在第二份子樹走訪」之措辭是否需就地修訂，以明示範圍限前端執行環境（§12.1／§12.6） | 若不修訂，逐字讀法與 `AC-T40`（F017，要求後端「同語意」）及本章 C1 決策（後端另留一份、以固定測試向量綁定）矛盾 | 架構師之界定（§12.1）已足夠交 test-generator 依循，但措辭本身屬 spec-writer 之權責 | 待 spec-writer 覆核（§12.6） |
 
 
 ---
@@ -3724,6 +3730,291 @@ graph LR
 | `EXPORT_ROW_LIMIT`／燒錄併發閘等既有 NFR 參數，在後台燒錄面擴大四倍消費端後是否仍足夠 | §11.7 已評估為低頻操作、既有閘無需調整 | 待正式環境有實際使用量後校準，非本輪 Blocking |
 | `/pdf`／`:id/download`／`:id/print` 三端點之 `Cache-Control` 缺口（§11.11 #25） | 隱私風險（機率性，需中介快取實際發生） | 建議一併補上 `Cache-Control: private, no-store`，但因非 AC 明文要求、且風險發生條件（存在會快取此類回應的中介節點）在本專案之部署拓撲下未經證實存在，**不列為本輪 Blocking**，留待 tdd-implementation 裁量是否於本輪順手補上 |
 | pdf.js 若日後需支援超大頁數（如百頁以上）SOP 文件，§11.2 之視窗化渲染門檻可能需要調整為更積極之虛擬滾動（如 `react-window` 等） | 目前假設 SOP 文件頁數個位數~十位數 | 待實際文件頁數分布資料，非本輪 Blocking |
+
+---
+
+## 12. 2026-08-21 三項裁決架構決策 {#ch12-t3-decisions}
+
+> **來源**：lead 指派之兩個 `[ARCH]` 接縫——[F036](features/F036-lifecycle-tree-preview.md#subtree-drawer-delta) `OQ-T3-03`（子樹抽屜之資料來源形狀）、[F017](features/F017-backend-document-list.md#subtree-filter-delta) `OQ-T3-04`（清單回應之子樹描述子契約）——與 lead 另行指定之第三題（子樹走訪演算法之歸屬與雙執行環境一致性）。三題之上游裁決見 [open-questions.md §T3](open-questions.md#t3-2026-08-21)、[F036 `AC-T10`–`AC-T27`](features/F036-lifecycle-tree-preview.md#subtree-drawer-delta)、[F017 `AC-T40`–`AC-T48`](features/F017-backend-document-list.md#subtree-filter-delta)。
+> **範圍**：**本章刻意限縮為僅此三題**，不重審 F036／F017 之其餘既有決策（§10.5、§10.12、§10.13 等維持原判）。凡本章與 `AC-T#` 有出入者，以 AC 為準，出入之處列於 §12.6，**本章不改寫任何 AC**。
+> **編號空間**：本章之 `C1`–`C3` 為架構決策編號，與第 10 章 `A1`–`A16`、第 11 章 `B1`–`B10` 為三套互不相干之獨立編號空間，不得混用。
+> **本輪約束環**：僅 backend jest／frontend vitest 單元＋元件測試，**無 Playwright、無 e2e、無整合測試**。本章決策若產生只能在真實 DB／真實瀏覽器才驗得到的接縫，已於 §12.4 逐項標出。
+
+### 12.0 本章範圍與閱讀指引
+
+| 決策 | 節次 | 題目 | 回應之 OQ／AC | 阻塞誰 |
+|---|---|---|---|---|
+| C1 | §12.1 | 子樹走訪語意（`descendants()`）之權威定義與雙執行環境綁定 | lead 指定題；[F036](features/F036-lifecycle-tree-preview.md#subtree-drawer-delta) `AC-T14`、[F017](features/F017-backend-document-list.md#subtree-filter-delta) `AC-T40` | test-generator、tdd-implementation |
+| C2 | §12.2 | 子樹抽屜資料來源：新端點＋後端分組排序 | `OQ-T3-03`；F036 `AC-T10`–`AC-T13`、`AC-T25` | tdd-implementation |
+| C3 | §12.3 | `GET /admin/documents` 回應之子樹描述子契約 | `OQ-T3-04`；F017 `AC-T44`、`AC-T45` | tdd-implementation |
+
+> C2、C3 皆**依賴** C1 之走訪語意，故本章先定 C1 再定 C2／C3。另有兩節非「決策」但為交棒必讀：**§12.4** 單元測試盲區、**§12.5** 被否決之替代方案。**§12.6** 為交回 spec-writer／lead 之具體契約與待覆核事項。
+
+**本章對其他章節之關聯**：不新增模組、不改變架構風格（Modular Monolith 不動）、無 schema 變更。`NodeDocsStore`（§10.5 之既有 store 介面）與 `DocumentListFilters`（§10.12 之既有介面）各新增一個選填欄位（additive）。§10.5「決策 A5：樹狀圖節點文件清單端點」之單節點端點決策**因本章 C2 而被建議退休**，見 §12.2 與 §12.6。
+
+---
+
+### 12.1 決策 C1：子樹走訪語意（`descendants()`）之權威定義與雙執行環境綁定
+
+#### 現況查證（非推論）
+
+- **前端已有**：`frontend/src/pages/lifecycle-tree-layout.ts:112` 之 `descendants(edges, startId): Set<string>`，沿有向邊 parent→child 以 stack（DFS）走訪，`Set` 天然去重，含起點自身。目前唯一呼叫端為單擊醒目標示（F036 `AC-T14` 之 `S_hl`）。
+- **後端尚無**子樹走訪能力，但**已有**與前端 `buildTreeLayout()` 逐項比對後確認演算法一致（相同分層/置中規則、相同 `NODE_W/NODE_H/HGAP/VGAP/MARGIN` 常數）之獨立副本：`backend/src/lifecycle/lifecycle-tree-layout.ts`，現由 `lifecycle-preview.service.ts:88`（F036 唯讀預覽/PDF 匯出）與 `lifecycle-change-diff.service.ts:171`（F038 新舊樹狀圖 diff/PDF）兩處消費。**這是 C2 決策「分組由後端做」得以成立的關鍵既有事實**，見 §12.2。
+- `backend/src/documents/typeorm-documents.store.ts:189` 起之 F017 篩選管線為逐條 `andWhere` 之 SQL 下推，無任何子樹/圖走訪能力。
+
+#### 決策：後端另留一份 `descendants()`，與既有 `buildTreeLayout()` 同檔並存，以固定測試向量與前端版綁定
+
+**不共用 package**（monorepo 現況無共用 TS package，前例已充分確立：`watermarkLines()`/`toDisplayLines()`【§10.14】、`buildTreeLayout()` 前後端各一份【§12.1 上文】）。新增 `backend/src/lifecycle/lifecycle-tree-layout.ts` 之匯出：
+
+```ts
+// 沿用該檔既有 TreeLayoutEdge 型別（{ sourceNodeId, targetNodeId }），與前端 DagEdge 結構相容。
+export function descendants(edges: TreeLayoutEdge[], startId: string): Set<string>
+```
+
+實作邏輯忠實比照前端版（BFS 或 DFS 皆可，見下方「走訪順序不綁定」），供 §12.2（C2）與 §12.3（C3）**兩個呼叫端共用**——後端內部只有這**一份**，不因兩個消費場景各寫一次。
+
+#### 🔴 語意契約（本題之核心交付；供兩端測試綁定）
+
+| # | 語意 | 規則 |
+|---|---|---|
+| 1 | 含自身 | `descendants(edges, r)` 恆含 `r` 本身（`{r}` 為最小回傳值，葉節點情形） |
+| 2 | 方向 | 僅沿 `sourceNodeId → targetNodeId`（parent→child）；反向邊不追隨 |
+| 3 | 去重 | 回傳型別為 `Set`；經多條路徑可達之節點（菱形匯流）僅計入一次，且僅被展開（探索其出邊）一次 |
+| 4 | 重複邊防禦 | 同一 `(sourceNodeId, targetNodeId)` 於 `edges` 中出現多次，結果不受影響（`Set` 去重天然吸收） |
+| 5 | 自環／異常路徑防禦 | F008 已於寫入時交易內權威禁止 self-loop／成環（`LifecycleEdge` entity 註解）；`descendants()` 仍須以 `set.has()` 守衛為第二道防線，異常資料下**不得**無窮迴圈或拋錯 |
+| 6 | **走訪順序不綁定** | 前端現行為 DFS（`stack.pop()`），[F036 `AC-T11`](features/F036-lifecycle-tree-preview.md#subtree-drawer-delta) 之註記已明言「刻意不採 `descendants()` 之走訪順序」——本契約僅約束**最終 `Set` 成員**，BFS／DFS／任何走訪策略皆可，後端**不需**複製前端之 DFS-via-stack 實作細節，只需回傳集合相等 |
+
+#### 綁定機制：5 組固定測試向量（比照 §10.14 慣例）
+
+| Fixture | edges | 斷言 |
+|---|---|---|
+| F1（鏈） | `A→B, B→C, C→D` | `descendants(A)={A,B,C,D}`；`descendants(C)={C,D}`；`descendants(D)={D}` |
+| F2（菱形匯流） | `A→B, A→C, B→D, C→D` | `descendants(A)={A,B,C,D}`（`D` 經兩路徑可達，計入一次） |
+| F3（分支排除） | `A→B, A→C, B→D, C→E` | `descendants(B)={B,D}`（**不含** `C`／`E`，旁支不涵蓋） |
+| F4（葉節點） | `A→B` | `descendants(B)={B}`（無出邊，回最小集） |
+| F5（重複邊防禦） | `A→B, A→B` | `descendants(A)={A,B}`（不因重複邊而重複計入或無窮成長） |
+
+**綁定方式**：`frontend/src/pages/lifecycle-tree-layout.spec.ts`（既有）與 `backend/src/lifecycle/lifecycle-tree-layout.spec.ts`（既有，現僅測 `buildTreeLayout`，本題**擴充**新增 `descendants` 區塊）**各自**對上表 5 組向量斷言相同期望值。任一邊漂移即該邊自己的紅燈——這是本 repo 唯一可行的跨執行環境一致性保證（§10.14 之既有教訓：「兩邊程式碼看起來一樣」不是保證）。
+
+#### 🔴 與 `AC-T14` 第①點文字之範圍界定（非推翻，需 spec-writer 覆核措辭）
+
+[F036](features/F036-lifecycle-tree-preview.md#subtree-drawer-delta) `AC-T14` 第①點原文：「子樹解析與醒目標示皆呼叫同一具名匯出純函式 `descendants()`……**專案中不得存在第二份子樹走訪**」。逐字讀，這會與本決策（後端另留一份）及 [F017](features/F017-backend-document-list.md#subtree-filter-delta) `AC-T40` 註記（「與 F036 `AC-T14` 之 `descendants` **同語意**」，明確預期後端有對應能力）矛盾。
+
+**本章之界定**：「不得存在第二份」限**前端執行環境內**——前端不得有第二個獨立實作（例如抽屜元件另寫一次走訪），但**跨執行環境**（前端 TS in browser／後端 TS in Node）依 monorepo 無共用 package 之既有事實，兩份各自存在是不可避免且已有前例（`buildTreeLayout()`）的正常設計，以本節之固定測試向量取代「同一份程式碼」作為一致性保證。**且因 C2（§12.2）決定抽屜之分組完全由後端回應驅動**，前端 `descendants()` 之呼叫端**只剩醒目標示（`S_hl`）一處**——抽屜不再呼叫它。`AC-T14` 第③點「`S_grp ⊆ S_hl`」之不變式因此改由**元件測試層級**保證：測試以同一組 `edges`／`r` 分別（a）呼叫前端 `descendants()` 算出 `S_hl`，（b）建構一個以**本節之相同語意**（可直接使用上表 5 組向量之一，或以 `descendants()` 本身之輸出）計算出的 mock API 回應，斷言渲染後 DOM 之 `S_grp` 為其子集。此界定與測試方法之表述已列入 §12.6，交回 spec-writer 決定是否要就地修訂 `AC-T14` 文字或僅補註記。
+
+---
+
+### 12.2 決策 C2（`OQ-T3-03`）：子樹抽屜資料來源——新端點，分組與排序改由後端做
+
+#### 候選比較
+
+| 候選 | 判定 |
+|---|---|
+| (a) 前端對子樹每節點各呼叫既有 `.../documents`（N 次往返） | **否決**。雙重理由：① 與 `AC-T43`（F017）「子樹解析屬後端」之設計原則相牴觸——前端須先自行走訪才知道要呼叫哪 N 個節點，等於前端也做了一次子樹解析；② **NFR-001 量化**：抽屜開啟落在使用者感知路徑，子樹實測可達十餘節點；即便以 `Promise.all` 平行化，對單一部署單元（Modular Monolith，§10 D4 已記錄併發風險）之 N 個並發連線仍有非零延遲與失敗率，且「部分節點失敗如何呈現」需要額外設計 UI 語意（現行 `AC-D9` 為單一請求語意）。序列呼叫更直接超出 NFR-001「DAG 畫布互動 <500ms」預算數倍 |
+| (b) 新增子樹端點，一次回傳已分組結果 | **選定** |
+| (c) 既有端點加 `?includeSubtree=true` | **否決**。既有端點回傳「單節點文件陣列」，加參數後回傳形狀（分組結構）與既有回傳形狀不相容，等於是換了一個不同的回應型別卻共用同一支路由——與候選(b)相比純粹是省一次路由宣告，換來的是路由語意混淆（同一 URL 依查詢參數回傳結構迥異的 body），且無法對舊呼叫端保持向後相容（見下方「舊端點退休」） |
+
+#### 選定：新增 `GET /admin/lifecycles/:lifecycleId/nodes/:nodeId/subtree-documents`
+
+掛於既有 `NodeDocsController`（比照 §10.5 之既有慣例：「不新增 controller、不新增模組」）。權限閘門逐字沿用 §10.5 已定案且已通過 `AC-T25` 覆核之設定：
+
+```ts
+@Get('subtree-documents')
+@RequirePermission(FunctionKey.LIFECYCLE_MANAGEMENT, 'read')   // ← 與既有 .../documents 端點同一閘門，AC-T25 ①
+```
+
+節點不存在 → 404 `NODE_NOT_FOUND`（沿用 `listNodeDocuments()` 既有行為）。子樹之全部節點恆屬同一循環（`AC-T25` ②）為**結構性保證**，非執行期檢查——因為 `listNodes(lifecycleId)`／`listEdges(lifecycleId)` 本就以 `WHERE lifecycleId = :lc` 限定（`typeorm-dag.store.ts`），跨循環之邊不可能被納入走訪。DeptContact／User 403（`AC-T25` ③）由既有 `LIFECYCLE_MANAGEMENT` 矩陣列（Supervisor READ／DeptContact NONE／User NONE）自動滿足，同 §10.5。
+
+#### 🔴 關鍵查證：分組排序（`AC-T11` 之 `pos.y`/`pos.x` tie-break）由後端做，是可行且低成本的——因為後端已有 `buildTreeLayout()`
+
+`OQ-T3-03` 原文之背景敘述「後端沒有座標」**並不成立**——它只是尚未把既有的 `buildTreeLayout()`（§12.1 已查證，現用於 F036 唯讀預覽/PDF、F038 diff/PDF）用在這個新用途上。既然該函式是**純函式**、對相同 `nodes`／`edges` 輸入產生確定性輸出，重用它取得子樹內各節點之 `{x, y}` 幾乎零額外成本：
+
+```ts
+// 示意，不落地為可執行檔案
+const layout = buildTreeLayout(allNodesInLifecycle, allEdgesInLifecycle);
+const posOf = new Map(layout.nodes.map(n => [n.id, { x: n.x, y: n.y }]));
+```
+
+**分組順序（`AC-T11`）完全由後端計算並直接反映在回應陣列順序中**——前端不需、也不應該再自行排序：本節點恆為 `groups[0]`（`AC-T11` ①）；其餘依 `pos.y` 升冪→同值 `pos.x` 升冪→仍相同以節點 id 字典序打破平手（`AC-T11` ③）。
+
+📌 **不要求後端佈局與使用者當下畫布之像素位置逐一相符**——`buildTreeLayout()` 為確定性純函式，只要後端用**同一次**呼叫（同一份 `nodes`／`edges`）算出的 `pos` 內部一致地排序，`AC-T11` 之測試 fixture（人工建構特定座標之 edges/nodes）即可斷死，不依賴「使用者瀏覽器裡實際渲染的畫面」。兩端各自獨立呼叫同一純函式對同一份 DB 資料，數學上必然同構；本章不要求、也不建議額外驗證「畫布看到的和抽屜排序」逐 px 相符（§12.4 已列為超出本輪環之殘留低風險項）。
+
+#### 回應形狀（示意，不落地為可執行檔案）
+
+```ts
+export interface SubtreeDocumentGroup {
+  nodeId: string;
+  nodeName: string | null;
+  /** 既有 NodeMountedDoc 形狀（id/documentNumber/documentName/edition/status/announcedDate）；
+   *  已依 AC-T13 去重（鍵＝documentNumber，AC-T11 分組順序中首次出現者勝）＋組內依 documentNumber 遞增排序。 */
+  documents: NodeMountedDoc[];
+}
+export interface SubtreeDocumentsResponse {
+  nodeId: string;               // 回顯請求之根節點 id
+  totalCount: number;           // 去重後之子樹文件總數（＝ AC-T15 #1 之 {N}，＝ Σ 各組 documents.length）
+  groups: SubtreeDocumentGroup[]; // 已依 AC-T11 排序；本節點恆 groups[0]；0 份之節點不產生分組（AC-T12）
+}
+```
+
+- **刻意省略 `isSelf`／`count` 兩個可由前端零成本推導之欄位**：`isSelf` 由前端以 `group.nodeId === 請求之 nodeId` 推導（比「取陣列第 0 個」更穩固，不依賴陣列順序恰好正確之隱性假設）；`data-node-group-count` 由 `documents.length` 推導。與本文件既有之最小化欄位慣例一致（§10.6「`value` 恆為 id」同類精神）。
+- **去重（`AC-T13`）由後端做**：理由——`ICSOP_DOCUMENT.documentNumber` 唯一性僅比對「有效＋作廢」兩狀態（`OQ-E04-01b`），「失效」文件之編號可被重新使用；故**同一 `documentNumber` 完全可能對應兩筆不同 `id` 之文件列**，分別掛載於子樹內不同節點——這正是 `AC-T13` ③ 防禦之「資料異常」情境的真實成因，非假設性顧慮。去重必須在**看得到全子樹**的聚合層執行，後端在建構 `groups` 時天然具備這個視角，前端若也做一次等於是重複實作同一段去重邏輯（與 C1 的「不重複實作」精神一致）。
+
+#### Store／Service 落點：擴充既有 `NodeDocsService`，新增 `DAG_STORE` 注入
+
+`NodeDocsService` 現僅注入 `NODE_DOCS_STORE`；本決策**追加注入 `DAG_STORE`**（`backend/src/lifecycle/dag.store.ts` 之既有 token），比照 `lifecycle.module.ts` 中 `LifecycleTreePreviewService` 已示範之「多 store 同時注入單一 service」既有模式（`useFactory` inject 陣列含 `DAG_STORE` 等多個 token），**不新增第二個 service／module**——這是「既有服務之第二種鏡頭」而非全新聚合模組（比照既有慣例：僅當邏輯與既有服務完全無關時才另立模組）。
+
+`NodeDocsStore` 介面新增一個**選填**批次能力（沿用該介面既有之「選填能力、未提供則優雅降級」慣例，見既有 `listNodeMountedDocs?`）：
+
+```ts
+/**
+ * F036 子樹抽屜 delta（架構決策 C2）：listNodeMountedDocs 的批次版，避免對子樹逐節點各發一次查詢。
+ * 回傳 nodeId → 該節點掛載之程序書（NodeMountedDoc 既有形狀）。
+ * 選填能力——未提供時，服務層 fallback 為對子樹每個節點各呼叫一次既有 listNodeMountedDocs()
+ * （行程內部迴圈，非 N 次「用戶端」HTTP 往返，與候選(a)否決之 N 次網路往返為不同量級的取捨）。
+ */
+listNodesMountedDocs?(lifecycleId: string, nodeIds: string[]): Promise<Map<string, NodeMountedDoc[]>>;
+```
+
+TypeORM 落地為**單次** `WHERE lifecycleId = :lc AND nodeId IN (:...ids)` 查詢（比照 §10.5「五欄全落在 `ICSOP_DOCUMENT` 單表 ⇒ 一次 `WHERE` 即取全」之既有理由，僅由 `=` 換 `IN`），非 N+1。子樹節點數（十餘）遠低於 MSSQL 參數上限，`org-sync/param-batching.ts` 之 `chunkByParamBudget()`（既有工具，`typeorm-documents.store.ts` 已 import）可作為未來節點數大幅成長時的現成防線，**本輪不需啟用**。
+
+#### 🔴 建議退休：既有單節點 `GET .../documents` 端點
+
+**證據**（`grep` 已核實，非推測）：`frontend/src/api/endpoints.ts:355` 為此端點**唯一**呼叫端（同檔 569/578 行為 `POST`/`DELETE .../documents`，屬 F009 掛載/移除寫入路徑，與本端點無關、不受影響）。裁決 2 之後，抽屜行為已從「單節點」全面改為「整個子樹」，該呼叫端**必然**改呼叫新端點——單節點端點因而失去唯一消費者。
+
+**建議**：連同 `NodeDocsService.listNodeDocuments()` 一併退休（保留 `NodeDocsStore.listNodeMountedDocs?()`——單節點批次能力仍是新批次方法在 fallback 路徑下的組成部分，不刪）。**不建議**保留一個已無消費者的端點：這正是本 repo 反覆告誡之「第二份實作、無人維護、悄悄漂移」風險的鏡像（此處是「零消費者但仍佔用一條路由與一段程式碼」），且 §10.5 原本論證此端點存在之全部理由（避免 F009 抽屜之 `candidates` 洩漏、補齊三欄）在**子樹端點已完整涵蓋單節點退化情形**（葉節點之子樹＝自身，回應恰為單一分組）後，不再有獨立存在的必要性。此為**建議**，非本章可片面拍板——退休一個既有端點屬產品/回歸範圍決策，已列入 §12.6 交回 lead 確認。
+
+---
+
+### 12.3 決策 C3（`OQ-T3-04`）：`GET /admin/documents` 回應之子樹描述子契約
+
+#### 選定形狀
+
+於既有 `DocumentListPage` 介面（`{items, total, page, pageSize, hasNext}`）**additive** 新增第 6 個頂層欄位：
+
+```ts
+export interface SubtreeFilterDescriptor {
+  lifecycleId: string;
+  lifecycleName: string;      // 見下方命名理由
+  nodeId: string;
+  nodeName: string | null;    // NodeInfo.name 既有型別即 string | null，如實延續
+}
+export interface DocumentListPage {
+  items: DocumentListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasNext: boolean;
+  subtreeFilter: SubtreeFilterDescriptor | null;   // 新增，additive
+}
+```
+
+- **additive 安全性**：新增頂層欄位對既有消費者無破壞性——本專案前端以具名欄位存取（非嚴格 schema 驗證/`additionalProperties:false`），既有呼叫端忽略未知欄位即可；此手法已是本文件既有慣例（§10.6「`PublicListItemDto` additive 新增」、§10.9 等多處）。
+- **`subtreeFilter` 恆為顯式 key**（不省略）：不適用時值為 `null`，**不省略該 key**——與本專案既有慣例一致（`lifecycleName: nameMap.get(...) ?? null`、`draftingCompanyName: null` 等既有欄位皆為顯式 `null` 而非省略），前端仍應依 `AC-T45` 對「`null` 或缺席」兩種情形一視同仁防禦性判斷。
+
+#### 🔴 命名理由：`lifecycleName` 而非 `lifecycleDisplayName`
+
+`AC-T44` 之 chip 文案需要「循環顯示名稱」（`lifecycleDisplayName()` 之輸出，含子分類格式 `名稱（子分類）`，[F040](features/F040-lifecycle-subcategory.md) `AC-S1`）。命名上刻意**不用** `lifecycleDisplayName` 這個更精確的名字，而沿用 `lifecycleName`——因為 `DocumentListItem.lifecycleName`（既有欄位，`typeorm-documents.store.ts` 中以 `nameMap.get(d.lifecycleId)` 賦值，其值即 `lifecycleDisplayName(l)` 之輸出）**已經**是同一概念的既有命名先例。同一份回應（`DocumentListPage`）內若一個欄位叫 `lifecycleName`、另一個語意相同的欄位叫 `lifecycleDisplayName`，會製造「這兩個名字所指是否不同」的無謂疑惑。**一致性優先於字面精確性**。
+
+#### 解析落點：單一函式，同時產出 SQL 篩選條件與回應描述子
+
+**不在 `TypeOrmDocumentStore` 內解析**——子樹走訪（C1 之 `descendants()`）是純記憶體圖演算法，不是 SQL 關注點，混入 store 會讓 store 同時承擔「SQL 組建」與「圖走訪」兩種不相干職責。解析放在 **service 層**（`DocumentsService.listDocuments()` 呼叫前），產出後把**純 SQL 友善**之結果交給 store：
+
+`DocumentListFilters` 新增一個**選填**、對 store 而言語意單純的欄位：
+
+```ts
+export interface DocumentListFilters {
+  // …既有欄位不動…
+  /** 2026-08-21 delta（架構決策 C3）：子樹篩選已解析之節點 id 集合，純 SQL IN() 下推。
+   *  Store 不知道、也不需要知道這是「子樹」——對它而言只是又一個 id 清單篩選（比照既有 linkTargetId 之樣板）。*/
+  nodeIdIn?: string[];
+}
+```
+
+`TypeOrmDocumentStore.list()` 新增一行（比照既有 `linkTargetId` 之 `EXISTS` 子查詢樣板，此處更單純，直接 `IN`）：
+
+```ts
+if (filters.nodeIdIn?.length) {
+  qb.andWhere('d.nodeId IN (:...nodeIds)', { nodeIds: filters.nodeIdIn });
+}
+```
+
+`AC-T40` ①「未指派節點者（`nodeId IS NULL`）一律排除」由 SQL `IN` 對 `NULL` 恆不匹配之既有語意**自動滿足**，不需額外 `AND d.nodeId IS NOT NULL`。
+
+**解析函式本身**（示意，不落地為可執行檔案，命名與檔案組織留給 tdd-implementation）：
+
+```ts
+// backend/src/documents/*（確切檔名不綁死）
+import { descendants } from '../lifecycle/lifecycle-tree-layout';   // C1：純函式匯入，無 NestJS DI 耦合
+
+async function resolveSubtreeFilter(
+  lifecycleId: string | undefined,
+  nodeSubtreeId: string | undefined,
+): Promise<{ nodeIds: string[]; descriptor: SubtreeFilterDescriptor } | null> {
+  if (!lifecycleId || !nodeSubtreeId) return null;                 // AC-T41 ①②：任一缺席即 no-op
+  // 讀 LIFECYCLE / LIFECYCLE_NODE / LIFECYCLE_EDGE（唯讀複用，見下方落點理由）
+  if (該 lifecycleId 不存在) return null;                           // AC-T41 ③
+  const node = 該循環節點集合.find(n => n.id === nodeSubtreeId);
+  if (!node) return null;                                          // AC-T41 ④
+  const nodeIds = [...descendants(edges, nodeSubtreeId)];
+  return {
+    nodeIds,
+    descriptor: { lifecycleId, lifecycleName: lifecycleDisplayName(lc), nodeId: nodeSubtreeId, nodeName: node.name },
+  };
+}
+```
+
+`DocumentsService.listDocuments()` 呼叫本函式一次：成功→把 `nodeIds` 併入 `filters.nodeIdIn` 再呼叫 `store.list()`，並把 `descriptor` 賦值給回應之 `page.subtreeFilter`；失敗（回傳 `null`）→ 兩者皆不設定，`filters` 維持未帶 `nodeIdIn`（等同未施加子樹篩選，`AC-T41` 之「回應等同於未帶該兩參數之請求」）、`page.subtreeFilter = null`。**這是本決策防止 `AC-T40`／`AC-T41`／`AC-T45` 三者互相漂移的關鍵**——過濾條件與描述子來自**同一次**解析呼叫，不存在「篩選生效但描述子算錯」或反之的分岔路徑。
+
+**讀取 `LIFECYCLE_NODE`／`LIFECYCLE_EDGE` 不透過 NestJS 跨模組注入 `DAG_STORE`**：比照 `typeorm-documents.store.ts` 現行已對 `Lifecycle` entity 之**直接唯讀**查詢（F036 Related 段稱「唯讀複用」），本函式對 `LifecycleNode`／`LifecycleEdge` entity 採**同一慣例**直接 TypeORM 查詢，不要求 `DocumentsModule` 以 NestJS `imports: [LifecycleModule]` 建立模組級耦合。**被否決**：跨模組注入 `DAG_STORE`——為一個唯讀、範圍限定於單一 `lifecycleId` 的圖讀取，換來一條新的模組間 DI 邊界（且需檢查是否與 `LifecycleModule` 未來可能之反向依賴形成循環），代價與既有「唯讀複用」慣例的簡單性不成比例。
+
+---
+
+### 12.4 單元測試盲區（比照 §10.15／§11.11 格式）
+
+| # | 項目 | 盲區性質 | 說明 |
+|---|---|---|---|
+| 1 | **`descendants()` 前後端一致性** | ✅ **非盲區，環內可驗**——刻意在此明列以澄清「跨執行環境」不等於「測不到」 | §12.1 之 5 組固定測試向量兩端皆可在既有 jest／vitest 跑；**必須做**（不是可選加分項）。test-generator 若只在一端建測試，另一端之語意漂移會全綠通過 |
+| 2 | **`buildTreeLayout()` 重用之座標排序（`AC-T11`）** | ✅ **非盲區，環內可驗** | 純函式、fixture 可直接構造特定 `x`／`y` 座標之節點/邊組合斷死排序規則，不依賴真實瀏覽器渲染 |
+| 3 | **抽屜排序與「使用者當下畫布視覺」之像素級一致感** | 🔴 **原理上測不到（本輪環無 Playwright／e2e）** | §12.2 已論證此非 `AC-T11` 要求之不變式（後端獨立計算、不比對前端已渲染畫面），純屬 UX 觀感層面之低嚴重度殘留風險，**不要求**額外驗證手段；若日後恢復 e2e 環，可加一條「開抽屜前後畫布與抽屜排序視覺一致」之人工探索性檢查，非機器可斷言 |
+| 4 | **`IN (:...nodeIds)` 與新 `nodeId IN` 篩選對真實 MSSQL 之實際行為** | 部分測得到 | unit 可對 fake store 斷言呼叫參數／SQL 片段組建；但**本專案已多次教訓**（collation、時區、filtered index）皆是「單元全綠、真庫才現形」——本查詢屬單純 `IN` 條件，風險遠低於前例，但建議至少一次容器內或既有 int 套件之實跑覆核 |
+| 5 | **`listNodesMountedDocs()` 批次查詢是否真的無 N+1** | ✅ **環內可驗** | service 層可 spy store 呼叫次數（斷言呼叫 `listNodesMountedDocs` 恰 1 次、不逐節點呼叫 `listNodeMountedDocs`），比照既有慣例（§10.15 #13 之後台四頁下載未被誤改）|
+| 6 | **舊端點退休後之路由層回歸** | 需 test-generator 處理 | `node-docs-controller-routes.spec.ts`／`node-docs-list.service.spec.ts`（既有）若鎖定舊端點之路由/回應形狀，退休時須同步移除或改寫；此為 test-generator 之工作範圍，本章僅標出既有測試檔案存在此相依 |
+
+---
+
+### 12.5 被否決之替代方案（彙整）
+
+| 方案 | 否決理由 | 出處 |
+|---|---|---|
+| 前端對子樹逐節點呼叫既有端點（候選 a） | 與 `AC-T43` 原則牴觸＋ NFR-001 延遲風險（十餘次往返落於使用者感知路徑） | §12.2 |
+| 既有端點加 `?includeSubtree=true`（候選 c） | 同一路由回傳不相容之兩種形狀，語意混淆，且無法對舊呼叫端保持相容 | §12.2 |
+| 抽屜分組/排序改由前端做（前端重算 `buildTreeLayout` 或另建排序邏輯） | 前端已持有畫布渲染用之 `pos`，但將其用於「決定後端回應的分組順序」等於讓前端逆向影響一個應由後端統一解析之結果，且需額外把 `pos` 隨每個文件列往返傳遞；後端既有 `buildTreeLayout()` 可零成本重用，收斂為單一權威來源更簡單 | §12.2 |
+| `subtreeFilter` 命名為 `lifecycleDisplayName` | 與既有 `DocumentListItem.lifecycleName`（同語意）不一致，徒增疑惑 | §12.3 |
+| `resolveSubtreeFilter()` 以跨模組注入 `DAG_STORE` 讀取節點/邊 | 為唯讀單一 lifecycleId 範圍之圖讀取換取不必要之模組間 DI 耦合，與既有「唯讀複用」慣例（直接查 `Lifecycle` entity）不一致 | §12.3 |
+| `descendants()` 抽成前後端共用 npm package | monorepo 現況無共用 package 機制，投入 build 管線改動之成本遠大於「固定測試向量綁定」之收益（與 §10.14 同一判斷） | §12.1 |
+
+---
+
+### 12.6 交回 spec-writer／lead 之具體契約與待覆核事項
+
+#### 具體契約（供 spec-writer 補 `AC-T25`／`AC-T45` 之落地細節）
+
+| AC | 補入內容 |
+|---|---|
+| `AC-T25`（F036） | 端點 ＝ `GET /admin/lifecycles/:lifecycleId/nodes/:nodeId/subtree-documents`；權限閘門 ＝ `LIFECYCLE_MANAGEMENT read`（同既有 `.../documents`）；404 `NODE_NOT_FOUND`；回應形狀見 §12.2「回應形狀」（`{nodeId, totalCount, groups:[{nodeId, nodeName, documents}]}`，`isSelf`／`count` 由前端推導不在 wire 上）；分組已依 `AC-T11` 排序、文件已依 `AC-T13` 去重＋排序，前端**不需**再做任何排序/去重 |
+| `AC-T45`（F017） | `GET /admin/documents` 回應新增頂層欄位 `subtreeFilter: {lifecycleId, lifecycleName, nodeId, nodeName} | null`；`null`＝`AC-T41` no-op 之畫面呈現；`lifecycleName` 為 `lifecycleDisplayName()` 輸出（含子分類格式），非原始 `LIFECYCLE.name`（命名理由見 §12.3） |
+
+#### 待覆核（不自行改寫 AC）
+
+- **`AC-T14` 第①點**「不得存在第二份子樹走訪」之範圍界定——本章主張限**前端執行環境內**，後端依 §10.14 慣例另留一份、以 §12.1 之 5 組固定測試向量綁定；且因 C2 之設計，前端 `descendants()` 之呼叫端本輪起**只剩醒目標示一處**（抽屜不再呼叫它）。第③點「`S_grp ⊆ S_hl`」之不變式改由元件測試層級保證（測試自行以相同 `edges`/`r` 分別驅動前端 `descendants()` 與 mock 之後端回應）。**請 spec-writer 決定**是否需要就地修訂 `AC-T14` 文字，或本章之界定說明已足夠交給 test-generator 直接依循。
+- **建議退休既有單節點 `GET .../documents` 端點**（§12.2）——已用 `grep` 確認前端僅剩一個消費端，且該消費端本輪必然改接新端點。此屬影響既有回歸測試範圍之刪除動作，**交 lead 確認**是否核准退休（或改為保留但不再由任何前端呼叫，成為技術債務）。
+
+#### 殘留風險（落在簡易版環涵蓋範圍之外，逐項列出）
+
+1. **`IN (:...nodeIds)` 篩選對真實 MSSQL 之行為**——本輪環無容器內實跑，建議至少排入下一輪 int 套件或部署前 smoke（§12.4 #4）。風險等級低（純 `IN` 條件，非本 repo 曾踩雷之 collation/時區/filtered-index 類陷阱），但仍建議留一次真庫驗證，符合本 repo「單元全綠證明不了…」之既有教訓精神。
+2. **抽屜排序與畫布視覺之像素級一致感**——非 AC 要求之不變式，本輪不驗證，純 UX 觀感層面（§12.4 #3）。
+3. **舊端點退休之回歸測試處理**——移除 `GET .../documents` 後，既有鎖定該端點的測試檔（`node-docs-controller-routes.spec.ts`、`node-docs-list.service.spec.ts`）需同步調整，屬 test-generator 之工作範圍，本章僅標出相依（§12.4 #6）。
+4. **`descendants()` 兩端綁定測試是否確實各自落地**——這是本章唯一「必須做但不是自動保證會做」的項目：若 test-generator 只在一端建立 §12.1 之 5 組向量測試，另一端的語意漂移不會被任何機制攔截。建議 lead 在驗收時明確核對兩個 `lifecycle-tree-layout.spec.ts` 檔案皆已擴充。
 
 ---
 

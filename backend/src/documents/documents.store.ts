@@ -93,6 +93,18 @@ export interface DocumentListFilters {
    */
   appendixId?: string;
   formId?: string;
+  /**
+   * F017 `AC-T40`（2026-08-21 delta，架構決策 C3）：**子樹解析之根節點 id**。
+   * 恆與 `lifecycleId` 成對；任一缺席／無法解析 ⇒ 靜默 no-op（`AC-T41`）。
+   * 🔴 由**服務層**解析為 `nodeIdIn`；store 不承擔圖走訪。
+   */
+  nodeSubtreeId?: string;
+  /**
+   * F017 `AC-T40`（2026-08-21 delta，架構決策 C3）：子樹篩選**已展開**之節點 id 集合，純 SQL `IN()` 下推。
+   * Store 不知道、也不需要知道這是「子樹」——對它而言只是又一個 id 清單篩選（比照既有 `linkTargetId` 樣板）。
+   * `AC-T40` ①「未指派節點者（`nodeId IS NULL`）一律排除」由 `IN` 對 `NULL` 恆不匹配之語意自動滿足。
+   */
+  nodeIdIn?: string[];
   sortBy?: DocumentSortBy;
   sortDir?: SortDir;
   /** 1-based 頁碼（預設 1）。 */
@@ -156,12 +168,31 @@ export interface DocumentSummary {
 }
 
 /** F017 分頁結果（real pagination，取代既有 take(2000)）。 */
+/**
+ * F017 `AC-T45`（2026-08-21 delta，架構決策 C3）：子樹篩選描述子。
+ * 🔴 chip 之顯示與文案完全以本描述子為準——前端**不得**自行組字或另行查名（`AC-T43`）。
+ */
+export interface SubtreeFilterDescriptor {
+  lifecycleId: string;
+  /** `lifecycleDisplayName()` 之輸出（含子分類時為 `名稱（子分類）`，F040 `AC-S1`）。 */
+  lifecycleName: string;
+  nodeId: string;
+  /** `NodeInfo.name` 既有型別即 `string | null`，如實延續（不代入任何字面）。 */
+  nodeName: string | null;
+}
+
 export interface DocumentListPage {
   items: DocumentListItem[];
   total: number;
   page: number;
   pageSize: number;
   hasNext: boolean;
+  /**
+   * F017 `AC-T45`／`AC-T48` ⑥（2026-08-21 delta）：子樹篩選描述子，**additive 第 6 個頂層欄位**。
+   * 🔴 服務層回應**恆為顯式 key**（不適用時為 `null`，不省略）。宣告為選填係因 store 層不產出本欄
+   * ——它由 `DocumentsService.listDocuments()` 與篩選條件於**同一次**解析中一併賦值（`AC-T40` ⑤）。
+   */
+  subtreeFilter?: SubtreeFilterDescriptor | null;
 }
 
 export interface DocumentStore {

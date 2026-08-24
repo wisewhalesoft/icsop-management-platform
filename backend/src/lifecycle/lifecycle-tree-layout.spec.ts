@@ -1,5 +1,6 @@
 import {
   buildTreeLayout,
+  descendants,
   TREE_LAYOUT_CONST,
   TreeLayoutNode,
   TreeLayoutEdge,
@@ -62,5 +63,45 @@ describe('buildTreeLayout（F036 上到下分層佈局）', () => {
     const l = buildTreeLayout([n('A'), n('B')], [e('A', 'B'), e('A', 'ghost')]);
     expect(l.edges).toHaveLength(1);
     expect(l.edges[0]).toEqual(e('A', 'B'));
+  });
+});
+
+/**
+ * F036 §抽屜擴為子樹 delta（2026-08-21 三項裁決第 2 項）—— `AC-T28`（架構決策 C1，
+ * `architecture-spec.md` §12.1）：後端 `descendants(edges, startId): Set<string>` 之權威定義，
+ * 以 5 組固定測試向量與前端版綁定（`frontend/src/pages/lifecycle-tree-layout.test.ts` 之同名區塊）。
+ *
+ * 🔴 本區塊為「本輪唯一必須做但沒有任何機制自動保證會做」之項目（system-architect 如實提報）：
+ * 只在一端建立此向量測試，另一端的語意漂移不會被任何東西攔截。**兩端皆已擴充**（本檔＋前端對應檔）。
+ *
+ * ⚠ 對實作全盲：`descendants` 尚未在本檔（後端）匯出，本區塊預期一開始為紅
+ * （§12.1「後端尚無子樹走訪能力」）。
+ */
+describe('descendants（AC-T28 · F1–F5 固定向量，跨執行環境綁定，權威＝architecture-spec.md §12.1）', () => {
+  it('F1（鏈）A→B, B→C, C→D：descendants(A)/(C)/(D) 逐一相符', () => {
+    const edges = [e('A', 'B'), e('B', 'C'), e('C', 'D')];
+    expect(descendants(edges, 'A')).toEqual(new Set(['A', 'B', 'C', 'D']));
+    expect(descendants(edges, 'C')).toEqual(new Set(['C', 'D']));
+    expect(descendants(edges, 'D')).toEqual(new Set(['D']));
+  });
+
+  it('F2（菱形匯流）A→B, A→C, B→D, C→D：D 經兩路徑可達，計入一次', () => {
+    const edges = [e('A', 'B'), e('A', 'C'), e('B', 'D'), e('C', 'D')];
+    expect(descendants(edges, 'A')).toEqual(new Set(['A', 'B', 'C', 'D']));
+  });
+
+  it('F3（分支排除）A→B, A→C, B→D, C→E：descendants(B) 不含旁支 C／E', () => {
+    const edges = [e('A', 'B'), e('A', 'C'), e('B', 'D'), e('C', 'E')];
+    expect(descendants(edges, 'B')).toEqual(new Set(['B', 'D']));
+  });
+
+  it('F4（葉節點）A→B：descendants(B) 回最小集（僅自身，無出邊）', () => {
+    const edges = [e('A', 'B')];
+    expect(descendants(edges, 'B')).toEqual(new Set(['B']));
+  });
+
+  it('F5（重複邊防禦）A→B, A→B：不因重複邊而重複計入或無窮成長', () => {
+    const edges = [e('A', 'B'), e('A', 'B')];
+    expect(descendants(edges, 'A')).toEqual(new Set(['A', 'B']));
   });
 });

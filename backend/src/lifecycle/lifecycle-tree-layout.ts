@@ -128,3 +128,35 @@ export function buildTreeLayout(
     nodeHeight: NODE_H,
   };
 }
+
+/**
+ * 某節點及其所有下游（沿 parent→child 遞移可達的全部後代，含起點本身）。
+ *
+ * 架構決策 C1（architecture-spec.md §12.1）之後端權威實作：與前端
+ * `frontend/src/pages/lifecycle-tree-layout.ts` 之同名函式**同語意**（monorepo 無共用 package，
+ * 兩份並存為既定架構），以 F1–F5 五組固定測試向量兩端各自斷言相同期望值而綁定。
+ *
+ * 語意契約：① 恆含起點自身（葉節點回 `{startId}`）；② 僅沿 sourceNodeId→targetNodeId，反向邊不追隨；
+ * ③ 回傳 `Set`，多路徑可達之節點僅計入並展開一次；④ 重複邊不影響結果；
+ * ⑤ 自環／異常資料以 `set.has()` 守衛為第二道防線，不無窮迴圈亦不拋錯；⑥ **走訪順序不綁定**（僅約束最終集合成員）。
+ */
+export function descendants(edges: TreeLayoutEdge[], startId: string): Set<string> {
+  const adj = new Map<string, string[]>();
+  for (const e of edges) {
+    (adj.get(e.sourceNodeId) ?? adj.set(e.sourceNodeId, []).get(e.sourceNodeId)!).push(
+      e.targetNodeId,
+    );
+  }
+  const set = new Set<string>([startId]);
+  const stack = [startId];
+  while (stack.length) {
+    const u = stack.pop() as string;
+    for (const v of adj.get(u) ?? []) {
+      if (!set.has(v)) {
+        set.add(v);
+        stack.push(v);
+      }
+    }
+  }
+  return set;
+}

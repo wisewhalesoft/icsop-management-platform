@@ -98,9 +98,14 @@ import {
     },
     {
       provide: NodeDocsService,
-      useFactory: (store: NodeDocsStore, pub: LifecycleChangePublisher): NodeDocsService =>
-        new NodeDocsService(store, pub, () => new Date()),
-      inject: [NODE_DOCS_STORE, LIFECYCLE_CHANGE_PUBLISHER],
+      // F036 子樹抽屜（決策 C2）：追加注入既有 DAG_STORE（同模組既有 provider），
+      // 比照 LifecycleTreePreviewService 之「多 store 同時注入單一 service」既有模式。
+      useFactory: (
+        store: NodeDocsStore,
+        pub: LifecycleChangePublisher,
+        dag: DagStore,
+      ): NodeDocsService => new NodeDocsService(store, pub, () => new Date(), dag),
+      inject: [NODE_DOCS_STORE, LIFECYCLE_CHANGE_PUBLISHER, DAG_STORE],
     },
     // ── F036 樹狀圖預覽 ──
     { provide: LIFECYCLE_WATERMARK_BUILDER, useExisting: WatermarkService },

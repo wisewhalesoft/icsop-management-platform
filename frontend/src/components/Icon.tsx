@@ -16,7 +16,7 @@ import {
   MinusCircle, ScanText, Spline,
   UserPlus, UserX, Check,
   AlertOctagon, BadgeCheck, SquarePen,
-  EyeOff, SlidersHorizontal, FileX,
+  EyeOff, SlidersHorizontal, FileX, ListFilter,
   FileClock,
   type LucideIcon,
 } from 'lucide-react';
@@ -43,6 +43,8 @@ const REGISTRY: Record<string, LucideIcon> = {
   settings: Settings,
   'panel-left': PanelLeft,
   'chevron-right': ChevronRight,
+  // F036 AC-T17（2026-08-21 delta）：子樹抽屜 footer 之導向鈕（prototypes/22 之 list-filter）。
+  'list-filter': ListFilter,
   // F020 AC-N71（D9 delta）：檢視器單頁翻頁之「上一頁」鈕（prototypes/05:79）。
   'chevron-left': ChevronLeft,
   'user-circle': UserCircle,

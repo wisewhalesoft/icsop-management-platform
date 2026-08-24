@@ -16,6 +16,40 @@
      📌 節點之 `docs` 由計數（docs:N）改為**程序書列陣列**，每節點筆數與改動前之徽章數字逐節點相同
         （無視覺回歸）；徽章改由 docs.length 衍生，使「徽章數字」與「抽屜列數」只有一份事實。
      ⚠ [F038] 之新舊樹狀圖 diff 預覽**刻意不支援雙擊**（OQ-D18-19 裁決＝否，F038 AC-D3）。 -->
+<!-- 🔴 2026-08-21 使用者裁決（裁決 2 ＋ 裁決 3）——本檔已套用。**本段為 prototype 權威，F036 之 AC-D1～AC-D9 需依此就地修訂**：
+     【裁決 2】雙擊抽屜之範圍由「**該節點自己**掛載之程序書」擴大為「**本節點 ＋ 其所有下游節點（整個子樹）**」，
+       並**依節點分組**呈現。子樹集合 ≡ 單擊時醒目標示的那一組節點（同一個 descendants()，不另寫第二份走訪）。
+       · 抽屜副標題（#ndCount）逐字改為 `子樹共 {N} 份程序書`（N＝去重後之子樹文件總數）。
+         📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> `掛載 {N} 份程序書`（該字面現在**只**屬於節點徽章）。
+       · 分組標題逐字＝本節點 `{節點名稱}（本節點）`／其餘 `{節點名稱}`，右側份數徽章逐字＝`{N} 份`。
+       · 分組順序＝**本節點恆為第一組**，其餘依畫布上的視覺順序（pos.y 由上而下、同列再 pos.x 由左而右）。
+       · **掛載 0 份的節點不出現**（不產生空分組）；整個子樹皆 0 份時才顯示空狀態。
+       · 空狀態逐字改為 `此節點與其下游節點皆未掛載程序書`。
+         📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> `此節點尚未掛載任何程序書`。
+       · 每列五欄（程序書編號／程序書書名／版次／狀態／公告日期）與點列跳轉 /admin/documents/:id **完全不變**（AC-D2／AC-D3）。
+       · 🔒 AC-D4 純唯讀**續為有效**：除【裁決 3】那一顆導向鈕外，抽屜內不得出現任何寫入類元件、<input>、<select>。
+     【裁決 3】抽屜 footer 新增一顆導向鈕 → `/admin/documents?lifecycleId={lifecycleId}&nodeSubtreeId={nodeId}`
+       （原型導向 13-document-list.html 之同名參數），由後端以**子樹篩選參數**回傳該批文件；
+       13 落地後以一顆可清除的 chip 呈現。可見文字逐字＝`在文件管理中檢視這 {N} 份程序書`；掛鉤 data-subtree-jump。
+       · N ＝ 0 時該鈕**自 DOM 移除**（不是 disabled、不是 CSS 隱藏）——沒有文件可看的入口不該存在。
+     🔴 **導向方式（2026-08-21 第二輪人類裁決，取代第一輪之同分頁 navigate）**：
+       主路徑（本頁是由 13 以 window.open 開出的具名分頁，opener 可用）——
+         ① `opener.location.href = /admin/documents?lifecycleId=..&nodeSubtreeId=..`
+         ② `opener.focus()`
+         ③ `window.close()`  ← 預覽頁自行退場
+         ⇒ 結果：**永遠只有 1 個文件清單分頁**（與 F036 AC-D3 修掉「無限長出新分頁」是同一個病）。
+       退化路徑（直連進來無 opener／opener 已關閉／跨源不可存取）——**同分頁 navigate**，
+         且 🔒 **不得呼叫 `window.close()`**（沒有 opener 就自關，只會留下一個空白分頁）。
+       🔒 兩條路徑之分岔**只由 `openedAsPopup()` 一個具名述詞決定**，goBack()／initBackBtn()／導向鈕
+         **三處共用同一個判斷**，全檔不得出現第二套 opener 偵測（兩份判斷各自演化正是本 delta 要防的事）。
+       📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> 導向鈕以 `location.href = …`（同分頁 navigate）為主路徑。
+     🔴 連帶失效之既有條文（spec-writer 請就地修訂，勿當成回歸）：
+       ① AC-D9「抽屜筆數文字＝`掛載 {N} 份程序書`」與「節點徽章與抽屜筆數**共用同一格式化函式**」——
+          兩者語意已分家（徽章＝本節點掛載數、副標題＝子樹合計），**不應再共用**。
+          節點徽章之 `掛載 {N} 份程序書`／`尚未掛載程序書` 兩個字面**逐字不動**。
+       ② AC-D9「兩來源不一致時以抽屜筆數重繪該節點徽章」——比對對象改為**本節點那一組的份數**（非子樹合計）。
+       ③ AC-D9 抽屜 aria-label 由 OLD> `節點掛載之程序書清單（唯讀）` 改為 `節點與其下游節點之程序書清單（唯讀）`。
+       ④ 工具列提示句由 OLD> `雙擊節點＝檢視該節點掛載之程序書清單` 改為 `雙擊節點＝檢視該節點與其下游節點之程序書清單`。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -44,7 +78,9 @@
      🔒 AC-N66 正向斷言：本頁渲染的是 HTML 而非 PDF、**沒有內容層可燒錄**，DOM 疊加層是其唯一浮水印載體 ⇒
         **不得**因 05 之 AC-N7 移除疊加層而順手一併刪除本層。*/
   .wm-layer{position:absolute;inset:-40%;pointer-events:none;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;transform:rotate(-45deg);opacity:.30;user-select:none;z-index:5;}
-  .wm-layer span{color:#334155;font-size:14px;white-space:nowrap;padding:22px 30px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.6;}
+  /* 🔴 F020 行高定稿（2026-08-21 使用者裁決）：三行式浮水印之 DOM 疊加層 line-height ＝ **2.0**（全域）。
+     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> line-height:1.6 */
+  .wm-layer span{color:#334155;font-size:14px;white-space:nowrap;padding:22px 30px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:2.0;}
   /* DAG nodes */
   .node{position:absolute;cursor:pointer;transition:opacity .15s;}
   .node .nbody{background:#fff;border:1.5px solid #E2E8F0;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.05);padding:8px 11px;transition:border-color .15s,box-shadow .15s,background .15s;}
@@ -89,7 +125,7 @@
     <button onclick="doAction('DOWNLOAD')" title="下載此循環樹狀圖（PDF，燒錄浮水印）" aria-label="下載" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="download" class="w-4 h-4"></i>下載</button>
     <button onclick="doAction('PRINT')" title="列印此循環樹狀圖（燒錄浮水印）" aria-label="列印" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="printer" class="w-4 h-4"></i>列印</button>
     <div class="w-px h-5 bg-slate-200 mx-1 shrink-0"></div>
-    <span class="text-xs text-slate-400 shrink-0 hidden md:inline">點節點＝醒目標示其所有下游節點；點空白處取消；<strong class="text-slate-500">雙擊節點＝檢視該節點掛載之程序書清單</strong></span>
+    <span class="text-xs text-slate-400 shrink-0 hidden md:inline">點節點＝醒目標示其所有下游節點；點空白處取消；<strong class="text-slate-500">雙擊節點＝檢視該節點與其下游節點之程序書清單</strong></span>
   </div>
 </header>
 
@@ -117,8 +153,17 @@
 <!-- ===== 🔵 F036 AC-D1～AC-D8：節點文件清單「唯讀」側抽屜（雙擊節點開啟）=====
      自畫布**右側**滑出、**非 modal**（無遮罩，不遮擋樹狀圖，樹狀圖仍可捲動／縮放／再點選）。
      🔒 AC-D4 純唯讀：本區塊內**不得**出現任何寫入類互動元件（新增／移除掛載／改派／儲存／刪除），
-        亦不得有任何 <input>／<select>。它是 F009 節點抽屜之**唯讀孿生**，不得復用其可寫版本。 -->
-<aside id="nodeDocDrawer" aria-hidden="true" aria-label="節點掛載之程序書清單（唯讀）"
+        亦不得有任何 <input>／<select>。它是 F009 節點抽屜之**唯讀孿生**，不得復用其可寫版本。
+     🔴 2026-08-21 裁決 2：範圍由「本節點」擴為「本節點 ＋ 全部下游節點（子樹）」並依節點分組（見檔頭）。
+     🔴 2026-08-21 裁決 3：footer 新增唯一一顆導向鈕（data-subtree-jump）——它是 AC-D4 之**明文唯一例外**，
+        且本身是**導覽**不是寫入（不改任何資料、不寫稽核）。
+     🔴 2026-08-21 第二輪裁決（提報 ①）：該鈕之導向語意＝**導回 opener 分頁 ＋ 本頁自關**，
+        非同分頁 navigate——`opener.location.href = 目標網址` → `opener.focus()` → `window.close()`。
+        退化路徑（openedAsPopup() 為 false：無 opener／opener 已關閉／跨源不可存取）＝同分頁 navigate，
+        且 🔒 **不得**呼叫 window.close()。目標網址另以 data-subtree-jump-href 靜態掛在鈕上
+        （攜帶**實作端**路由），使下游不必開分頁即可斷言。詳見檔頭與 jumpToDocuments()。
+        📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> 本鈕以同分頁 location.href 導覽。 -->
+<aside id="nodeDocDrawer" aria-hidden="true" aria-label="節點與其下游節點之程序書清單（唯讀）"
        class="fixed right-0 top-0 bottom-0 z-40 w-full sm:w-[400px] bg-white border-l border-slate-200 shadow-2xl translate-x-full transition-transform duration-300 flex flex-col">
   <div class="h-14 shrink-0 flex items-center gap-2 px-4 border-b border-slate-200">
     <i data-lucide="file-stack" class="w-4 h-4 text-primary-600 shrink-0"></i>
@@ -129,7 +174,10 @@
     <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">唯讀</span>
     <button onclick="closeNodeDrawer()" aria-label="關閉" title="關閉（Esc）" class="w-8 h-8 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400 shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
   </div>
-  <div id="ndBody" class="flex-1 overflow-y-auto divide-y divide-slate-100"></div>
+  <div id="ndBody" class="flex-1 overflow-y-auto"></div>
+  <!-- 🔴 2026-08-21 裁決 3：導向鈕之容器。**子樹合計為 0 時整顆鈕自 DOM 移除**（innerHTML 置空），
+       非 disabled、非 CSS 隱藏——下游以 `queryByLabelText(...) === null` 斷言時，CSS 隱藏會假綠。 -->
+  <div id="ndFooterAction" class="shrink-0 border-t border-slate-200 px-4 py-3 empty:hidden empty:py-0 empty:border-t-0"></div>
   <div class="shrink-0 border-t border-slate-200 px-4 py-2.5 text-[11px] text-slate-400 flex items-start gap-1.5">
     <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>
     <span>點任一列可另開該程序書之<strong>後台唯讀詳情</strong>。本抽屜為唯讀檢視，不提供任何 DAG 編輯互動；開啟本抽屜<strong>不另記稽核事件</strong>。</span>
@@ -290,7 +338,7 @@
       const p=cur.pos[n.id];
       const cnt=n.docs.length;
       // 🔵 F036 AC-D1（2026-08-16 delta）：新增 dblclick → 唯讀側抽屜；單擊之既有行為不變（AC-D6）
-      return `<div class="node${cnt?' hasdocs':''}" data-id="${n.id}" style="left:${p.x}px;top:${p.y}px;width:${NODE_W}px" onclick="onNodeClick(event,'${n.id}')" ondblclick="onNodeDblClick(event,'${n.id}')" role="button" tabindex="0" aria-label="節點 ${n.name}" title="單擊＝標示所有下游節點；雙擊＝檢視此節點掛載之程序書清單">
+      return `<div class="node${cnt?' hasdocs':''}" data-id="${n.id}" style="left:${p.x}px;top:${p.y}px;width:${NODE_W}px" onclick="onNodeClick(event,'${n.id}')" ondblclick="onNodeDblClick(event,'${n.id}')" role="button" tabindex="0" aria-label="節點 ${n.name}" title="單擊＝標示所有下游節點；雙擊＝檢視此節點與其下游節點之程序書清單">
         <div class="nbody">
           <div class="flex items-center gap-1.5">
             <i data-lucide="git-commit-vertical" class="w-3.5 h-3.5 text-slate-300 shrink-0"></i>
@@ -339,7 +387,9 @@
            **不得**沿用 F009 之 ICSOPAdmin 寫入閘門（誤用會使 Supervisor 於本頁遭 403）。
      AC-D6 🔒 單擊之標示下游行為於雙擊時**先行觸發且不被取消**——瀏覽器於雙擊時會先送出兩次
            click（第二次會把選取切掉），故此處**重新設定 selected 並重繪**，確保標示仍然存在。
-     AC-D7 節點掛載數為 0 → 抽屜仍開啟並顯示空狀態提示（非錯誤、非空白區塊）。
+     AC-D7 🔴 2026-08-21 裁決 2 就地擴充：**整個子樹**掛載數為 0 → 抽屜仍開啟並顯示空狀態提示
+           （非錯誤、非空白區塊）；逐字為 `此節點與其下游節點皆未掛載程序書`。
+           📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> `此節點尚未掛載任何程序書`。
      AC-D8 本互動**不新增任何 AUDIT_LOG 紀錄**（屬同一次 LIFECYCLE_VIEW 之頁內操作）。 */
   const TODAY='2026-07-17';
   function derivedStatus(d){ if(d.status!=='有效') return d.status; return d.date<=TODAY?'已公告':'進度中'; }
@@ -354,29 +404,140 @@
     selected=id; applyHighlight();          // AC-D6：雙擊後標示仍然存在
     openNodeDrawer(id);
   }
+  /* ===== 🔴 2026-08-21 裁決 2：抽屜範圍＝**本節點 ＋ 全部下游節點（整個子樹）**，依節點分組 =====
+     🔒 **不變式**：子樹集合 ≡ 單擊時醒目標示的那一組節點——兩者共用同一個 descendants()，
+        專案中**不存在第二份子樹走訪**。若哪天兩者分家，畫面會出現「標示 5 個節點、抽屜列出 6 個節點」的矛盾。
+     分組順序（本 agent 定稿）：**本節點恆為第一組**；其餘依**畫布上的視覺順序**——pos.y 由上而下，
+        同一列再以 pos.x 由左而右，仍相同者以 id 字典序打破平手（保證可重現、無隨機性）。
+        理由：使用者剛剛在畫布上看過這張圖，抽屜用同一個順序，不需要另學一套排序。
+        （刻意不用 descendants() 的走訪順序：那是 stack pop 序，與畫面無關。）
+     📌 **掛載 0 份的節點不產生分組**（定稿）——子樹可達十餘個節點，空分組只會把有內容的組推到捲軸外，
+        且份數已由抽屜副標題彙總。整個子樹皆 0 份時才顯示空狀態。
+     📌 **去重／排序規則**：一份程序書只掛一個節點，故跨組本不會重複；仍明文以 `程序書編號`（d.num）
+        為去重鍵、**首次出現者勝**（依上述分組順序），避免資料異常時同一份出現兩次而使副標題的 N 對不上列數。
+        組內排序＝`程序書編號` 遞增（localeCompare）。 */
+  function subtreeNodeOrder(rootId){
+    const set=descendants(rootId);
+    const rest=[...set].filter(id=>id!==rootId).sort((a,b)=>{
+      const pa=cur.pos[a], pb=cur.pos[b];
+      return (pa.y-pb.y) || (pa.x-pb.x) || (a<b?-1:1);
+    });
+    return [rootId,...rest];
+  }
+  function subtreeGroups(rootId){
+    const seen=new Set(), groups=[];
+    subtreeNodeOrder(rootId).forEach(id=>{
+      const n=cur.nodes.find(x=>x.id===id); if(!n) return;
+      const docs=(n.docs||[])
+        .filter(d=>{ if(seen.has(d.num)) return false; seen.add(d.num); return true; })
+        .sort((a,b)=>a.num.localeCompare(b.num));
+      if(!docs.length) return;                     // 0 份之節點不出現
+      groups.push({id, name:n.name, self:id===rootId, docs});
+    });
+    return groups;
+  }
+  /* 每列五欄與點列跳轉 /admin/documents/:id **完全不變**（AC-D2／AC-D3）；本輪只新增 data-doc-num 掛鉤，
+     供下游斷言去重與組內排序而不必解析可見文字。 */
+  function docRowHtml(d){
+    return `<button type="button" onclick="openDocReadonly('${d.num}')" data-node-doc-row data-doc-num="${d.num}"
+              class="w-full text-left px-4 py-3 hover:bg-primary-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="mono text-xs text-slate-500">${d.num}</span>${statusPill(derivedStatus(d))}
+        </div>
+        <div class="text-sm text-slate-800 mt-0.5">${d.name}</div>
+        <div class="mt-1 flex items-center gap-3 text-[11px] text-slate-400">
+          <span>版次 <span class="mono text-slate-600">${d.edition}</span></span>
+          <span>公告日期 <span class="mono text-slate-600">${d.date}</span></span>
+        </div>
+      </button>`;
+  }
+  /* 分組標題：逐字＝本節點 `{節點名稱}（本節點）`／其餘 `{節點名稱}`；右側份數徽章逐字＝`{N} 份`。
+     ⚠ 標題列為**純顯示**（<div>，非 button、非 details）——AC-D4 之唯讀性質不容許在此長出可展開／可勾選的控制項；
+       chevron 圖示僅為視覺標記，已標 aria-hidden，不暗示可互動。
+     標題列 sticky：子樹分組可能長於抽屜高度，捲動時仍看得到「現在讀到哪個節點」。 */
+  function groupHtml(g){
+    const title = g.self ? `${g.name}（本節點）` : g.name;
+    return `<section data-node-group="${g.id}" data-node-group-self="${g.self}" data-node-group-count="${g.docs.length}">
+      <div data-node-group-title class="sticky top-0 z-10 bg-slate-50 border-y border-slate-200 px-4 py-1.5 flex items-center gap-1.5">
+        <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true"></i>
+        <span data-node-group-name class="text-xs font-semibold text-slate-700 truncate">${title}</span>
+        <span data-node-group-count-text class="ml-auto shrink-0 mono text-[11px] text-slate-500">${g.docs.length} 份</span>
+      </div>
+      <div class="divide-y divide-slate-100">${g.docs.map(docRowHtml).join('')}</div>
+    </section>`;
+  }
+  /* ===== 🔴 導向目標網址之單一組字點 =====
+     DOC_LIST_ROUTE ＝ **實作端**路由；DOC_LIST_PROTOTYPE ＝ 原型端落地檔（**僅原型用，不得移植**）。
+     兩個參數**恆成對**：只帶其中一個時 13 不顯示 chip、不施加篩選（見 13 之 initSubtreeFromUrl()）。
+     DocumentListPage 掛載時讀 URL → GET /admin/documents?lifecycleId=…&nodeSubtreeId=…&page=1（後端子樹篩選參數）。 */
+  const DOC_LIST_ROUTE = '/admin/documents';
+  const DOC_LIST_PROTOTYPE = '13-document-list.html';
+  function subtreeJumpHref(lcId,nodeId){
+    return DOC_LIST_ROUTE+'?lifecycleId='+encodeURIComponent(lcId)+'&nodeSubtreeId='+encodeURIComponent(nodeId);
+  }
+  /* 原型專用：把實作路由換成同參數的原型檔名。實作端直接用 subtreeJumpHref() 的回傳值，不需本函式。 */
+  function prototypeHref(appHref){ return DOC_LIST_PROTOTYPE + appHref.slice(DOC_LIST_ROUTE.length); }
+
+  /* 🔴 2026-08-21 裁決 3：抽屜 footer 之導向鈕。可見文字／aria-label／title 三者逐字同值。
+     🔒 子樹合計為 0 時**不產生此 HTML**（容器 innerHTML 為空字串）⇒ DOM 內查無此按鈕。
+        不用 disabled、不用 CSS 隱藏：下游若以 `queryByLabelText(...) === null` 斷言，CSS 隱藏會恆真＝假綠。
+     🔴 `data-subtree-jump-href` 攜帶**實作端**之完整目標網址（非原型檔名）⇒ 下游**不必真的開分頁**
+        即可斷言目標；本輪環是 vitest／jsdom，`window.close()`／`opener` 只能靠 spy，光靠點擊斷言很脆。
+     ⚠ 刻意**不用 `<a href>`**：主路徑需要 preventDefault 才能改導 opener 並自關，且 `<a>` 的中鍵／
+        Ctrl 點擊會用原型檔名再開第三個分頁——正好是本裁決要消滅的行為。 */
+  function jumpBtnHtml(nodeId,total){
+    const label=`在文件管理中檢視這 ${total} 份程序書`;
+    return `<button type="button" data-subtree-jump data-lifecycle-id="${CUR}" data-node-subtree-id="${nodeId}"
+              data-subtree-jump-href="${subtreeJumpHref(CUR,nodeId)}"
+              onclick="jumpToDocuments('${nodeId}')" aria-label="${label}" title="${label}"
+              class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-1">
+              <i data-lucide="list-filter" class="w-4 h-4"></i>${label}</button>`;
+  }
+  /* 🔴 2026-08-21 第二輪裁決：導回**來源分頁**並關閉預覽頁（見檔頭）。
+     🔒 分岔只讀 openedAsPopup()（全檔唯一之 opener 偵測）。
+     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> `location.href = '13-document-list.html?…'`（第一輪之同分頁 navigate）。
+     📌 **可觀測 seam**（比照 05 之 window.__pdfRenderCalls 既有慣例）：每次派送把
+        `{mode, href, appHref, closedSelf}` 推進 window.__subtreeJumpCalls，使 jsdom 下**不必真的導覽**
+        即可斷言走了哪一條路徑；`closedSelf` 明確記錄有無呼叫 window.close()（退化路徑必須為 false）。
+     ⚠ 實作端請以 `opener.location.href = appHref` 直接使用實作路由（`opener.location = appHref` 語意等價）；
+        原型因為沒有後端路由，改導同參數的原型檔名。 */
+  function jumpToDocuments(nodeId){
+    const appHref = subtreeJumpHref(CUR,nodeId);
+    const href = prototypeHref(appHref);            // 實作端此行不需要，直接用 appHref
+    const asPopup = openedAsPopup();
+    window.__subtreeJumpCalls = window.__subtreeJumpCalls || [];
+    window.__subtreeJumpCalls.push({mode: asPopup?'opener':'self', href: href, appHref: appHref, closedSelf: asPopup});
+    if(asPopup){
+      window.opener.location.href = href;          // ① 導回來源分頁
+      window.opener.focus();                       // ② 把焦點還給它
+      window.close();                              // ③ 預覽頁自行退場
+      return;
+    }
+    location.href = href;                          // 退化路徑：同分頁 navigate；🔒 **不得**呼叫 window.close()
+  }
   function openNodeDrawer(id){
     const n=cur.nodes.find(x=>x.id===id); if(!n) return;
-    document.getElementById('ndTitle').textContent=n.name;              // AC-D1：標題＝節點名稱
-    document.getElementById('ndCount').textContent=`掛載 ${n.docs.length} 份程序書`;
-    document.getElementById('ndBody').innerHTML = n.docs.length
-      ? n.docs.map(d=>`
-        <button type="button" onclick="openDocReadonly('${d.num}')" data-node-doc-row
-                class="w-full text-left px-4 py-3 hover:bg-primary-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="mono text-xs text-slate-500">${d.num}</span>${statusPill(derivedStatus(d))}
-          </div>
-          <div class="text-sm text-slate-800 mt-0.5">${d.name}</div>
-          <div class="mt-1 flex items-center gap-3 text-[11px] text-slate-400">
-            <span>版次 <span class="mono text-slate-600">${d.edition}</span></span>
-            <span>公告日期 <span class="mono text-slate-600">${d.date}</span></span>
-          </div>
-        </button>`).join('')
-      // AC-D7：0 份亦開啟抽屜並顯示空狀態
+    const groups=subtreeGroups(id);
+    const total=groups.reduce((s,g)=>s+g.docs.length,0);
+    document.getElementById('ndTitle').textContent=n.name;              // AC-D1：標題＝節點名稱（不變）
+    /* 副標題＝**子樹合計**。📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> 掛載 {N} 份程序書。
+       🔒 節點徽章之 `掛載 {N} 份程序書`／`尚未掛載程序書` 兩字面**逐字不動**（見 renderCycle()），
+          它量的是「本節點掛載數」，與本副標題已非同一語意 ⇒ **兩者不再共用格式化函式**（AC-D9 需就地修訂）。
+       🔒 AC-D9 之「兩來源不一致時以抽屜筆數重繪徽章」：比對對象改為**本節點那一組的份數**
+          （groups[0] 且 self===true 時之 docs.length），不是子樹合計。 */
+    const cntEl=document.getElementById('ndCount');
+    cntEl.textContent=`子樹共 ${total} 份程序書`;
+    cntEl.setAttribute('data-subtree-total', String(total));
+    document.getElementById('ndBody').innerHTML = total
+      ? groups.map(groupHtml).join('')
+      // AC-D7：整個子樹 0 份亦開啟抽屜並顯示空狀態
       : `<div data-node-doc-empty class="px-4 py-10 text-center text-sm text-slate-400">
-           <i data-lucide="file-x-2" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>此節點尚未掛載任何程序書
+           <i data-lucide="file-x-2" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>此節點與其下游節點皆未掛載程序書
          </div>`;
+    document.getElementById('ndFooterAction').innerHTML = total ? jumpBtnHtml(id,total) : '';
     const dr=document.getElementById('nodeDocDrawer');
     dr.classList.remove('translate-x-full'); dr.setAttribute('aria-hidden','false');
+    document.getElementById('ndBody').scrollTop=0;   // 換節點時回到第一組
     lucide.createIcons();
   }
   function closeNodeDrawer(){
@@ -418,19 +579,33 @@
      （使用者回報之「無限長出新分頁」）。關閉則直接露出原本那個清單分頁，其篩選/排序/頁碼原封不動。
      ⚠ 原 `history.back()` 分支在實作（SPA）中不可用：window.open 開出的分頁 history.length===1。
      ⚠ 直接貼網址進來者沒有 opener、close() 會被拒 ⇒ 退回依 ?from= 導覽（白名單鍵，非任意網址）。 */
+  /* ===== 🔒 全檔**唯一**的 opener 偵測（2026-08-21 第二輪裁決要求：三處共用同一判斷）=====
+     消費者恰為三處：goBack()／initBackBtn()／jumpToDocuments()。**不得再寫第二套** —— 兩份判斷各自
+     演化，就會出現「返回鈕以為自己是彈出頁、導向鈕以為不是」這種互相矛盾的行為。
+     回 false 之三種情形（皆代表「沒有可用的來源分頁」）：
+       ① 直接貼網址進來 ⇒ window.opener 為 null
+       ② 來源分頁已被使用者關掉 ⇒ opener.closed === true
+       ③ 跨源或被瀏覽器切斷 ⇒ 存取即擲例外，catch 後視同無 opener
+     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> 三處各自寫 `window.opener ? … : …`（只看屬性存在與否，
+        opener 已關閉時仍會判為 true ⇒ close() 被瀏覽器拒絕、返回鈕還顯示「關閉預覽」）。 */
+  function openedAsPopup(){
+    try{ return !!(window.opener && !window.opener.closed); }
+    catch(e){ return false; }
+  }
   function goBack(){
-    if(window.opener){ window.close(); }
+    if(openedAsPopup()){ window.close(); }
     const from=new URLSearchParams(location.search).get('from');
     setTimeout(function(){ location.href = from==='documents' ? '13-document-list.html' : '10-lifecycle-list.html'; }, 200);
   }
-  /* 按鈕之名稱／圖示依來源分支（見按鈕處註解）。 */
+  /* 按鈕之名稱／圖示依來源分支（見按鈕處註解）。🔒 兩個標籤字面逐字不動。 */
   function initBackBtn(){
     const btn=document.getElementById('backBtn'); if(!btn) return;
     const from=new URLSearchParams(location.search).get('from');
-    const label = window.opener ? '關閉預覽'
+    const asPopup=openedAsPopup();
+    const label = asPopup ? '關閉預覽'
                 : (from==='documents' ? '返回文件清單' : '返回循環池');
     btn.title=label; btn.setAttribute('aria-label',label);
-    btn.innerHTML='<i data-lucide="'+(window.opener?'x':'arrow-left')+'" class="w-5 h-5"></i>';
+    btn.innerHTML='<i data-lucide="'+(asPopup?'x':'arrow-left')+'" class="w-5 h-5"></i>';
   }
 
   function doAction(kind){

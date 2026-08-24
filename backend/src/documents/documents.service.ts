@@ -21,6 +21,9 @@ import {
   DocumentListPage,
 } from './documents.store';
 import { NODE_NAME_STORE, NodeNameStore } from './node-name.store';
+import { LIFECYCLE_STORE, LifecycleStore } from '../lifecycle/lifecycle.store';
+import { DAG_STORE, DagStore } from '../lifecycle/dag.store';
+import { resolveSubtreeFilter } from './subtree-filter';
 import { NameResolutionService } from '../org-directory/name-resolution.service';
 import { missingRequired, isNumberAvailable } from './document-rules';
 import { isValidStatus, DocumentStatus } from './document-status';
@@ -86,6 +89,16 @@ export class DocumentsService {
     @Optional()
     @Inject(NODE_NAME_STORE)
     private readonly nodeNameStore?: NodeNameStore,
+    // F017 AC-T40／AC-T45（架構決策 C3）：子樹篩選解析所需之唯讀查詢能力。
+    // 反循環：DocumentsModule **自建** store 實例（同 AppDataSource 單例），不匯入 LifecycleModule
+    // ——比照同模組既有之 ATTACHMENT_STORE／NODE_NAME_STORE 慣例。
+    // 選填以免打爆既有純 store 單測（無 → 子樹篩選恆 no-op，既有行為完全不變）。
+    @Optional()
+    @Inject(LIFECYCLE_STORE)
+    private readonly lifecycleStore?: LifecycleStore,
+    @Optional()
+    @Inject(DAG_STORE)
+    private readonly dagStore?: DagStore,
   ) {
     // 預設 no-op 綁定（決策 A）：seam 存在但不落地，rag/F037 併回後覆寫。
     this.publisher = publisher ?? new NoopDocumentChangePublisher();
@@ -221,14 +234,30 @@ export class DocumentsService {
    * 後台文件清單（F017）。store 負責篩選/排序/分頁；service 補上組織/當責室長之名稱解析
    * （org-foundation NameResolutionService；查無→null，前端 fallback）。
    */
+  /**
+   * F017 清單查詢。
+   *
+   * F017 `AC-T40` ⑤（2026-08-21 delta，架構決策 C3）：子樹篩選之**篩選條件與描述子來自同一次解析
+   * 呼叫**——`resolveSubtreeFilter()` 成功 ⇒ `nodeIdIn` 下推與 `subtreeFilter` 描述子同時設定；
+   * 回 `null`（`AC-T41` 四種殘缺情形）⇒ 兩者同時不設定，回應等同於未帶該兩參數之請求（HTTP 仍 200）。
+   * `subtreeFilter` 為 **additive 第 6 個頂層欄位且恆為顯式 key**（不適用時 `null`，`AC-T45`／`AC-T48` ⑥）。
+   */
   async listDocuments(filters: DocumentListFilters): Promise<DocumentListPage> {
-    const page = await this.store.list(filters);
+    const subtree = await resolveSubtreeFilter(
+      filters.lifecycleId,
+      filters.nodeSubtreeId,
+      this.lifecycleStore,
+      this.dagStore,
+    );
+    const page = await this.store.list(
+      subtree ? { ...filters, nodeIdIn: subtree.nodeIds } : filters,
+    );
     await this.enrichNames(page.items);
     await this.enrichSecondaryChiefs(page.items);
     await this.enrichIcsopPdf(page.items);
     await this.enrichOjt(page.items);
     await this.enrichLinks(page.items);
-    return page;
+    return { ...page, subtreeFilter: subtree?.descriptor ?? null };
   }
 
   /**

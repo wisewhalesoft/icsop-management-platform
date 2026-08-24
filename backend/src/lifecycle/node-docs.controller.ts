@@ -60,6 +60,21 @@ export class NodeDocsController {
     return this.svc.listNodeDocuments(lifecycleId, nodeId);
   }
 
+  /**
+   * F036 子樹抽屜（架構決策 C2，architecture-spec §12.2）：該節點及其全部下游所掛載之程序書，
+   * 已由後端分組／排序／去重。
+   * 🔴 閘門逐字沿用同 controller 之單節點 `.../documents` 端點（`LIFECYCLE_MANAGEMENT read`，
+   * `AC-T25` ①）——寫成 `'write'` 會讓主管在樹狀圖預覽頁吃 403。
+   */
+  @Get('subtree-documents')
+  @RequirePermission(FunctionKey.LIFECYCLE_MANAGEMENT, 'read')
+  listSubtreeDocuments(
+    @Param('lifecycleId') lifecycleId: string,
+    @Param('nodeId') nodeId: string,
+  ) {
+    return this.svc.listSubtreeDocuments(lifecycleId, nodeId);
+  }
+
   @Post('documents')
   @HttpCode(204)
   @RequirePermission(FunctionKey.LIFECYCLE_MANAGEMENT, 'write')

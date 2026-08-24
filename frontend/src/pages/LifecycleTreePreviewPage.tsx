@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import {
-  getLifecycleNodeDocuments,
+  getLifecycleNodeSubtreeDocuments,
   getLifecycleTreePreview,
   getLifecycles,
   lifecycleTreeDownloadUrl,
@@ -14,6 +14,13 @@ import { lifecycleDisplayName } from '../domain/lifecycle-subcategory';
 import { roleMeta } from '../domain/roles';
 import { Icon } from '../components/Icon';
 import { watermarkLines } from '../domain/watermark-lines';
+import {
+  WATERMARK_COLOR,
+  WATERMARK_LINE_HEIGHT,
+  WATERMARK_OPACITY,
+} from '../domain/watermark-style';
+import { openedAsPopup } from './opened-as-popup';
+import { recordSubtreeJump } from './subtree-jump-seam';
 import { DISPLAY_LABEL, deriveDisplayStatus, type DisplayStatus } from './document-display';
 import {
   buildTreeLayout,
@@ -24,7 +31,7 @@ import {
 import type {
   LifecycleTreePreview,
   LifecycleView,
-  NodeMountedDocument,
+  SubtreeDocumentGroup,
 } from '../api/types';
 
 /**
@@ -92,6 +99,50 @@ export function backTargetOf(from: string | null): (typeof BACK_TARGETS)[BackKey
 /** 關閉被拒時之退路延遲（ms）。關閉成功則本頁已銷毀，計時器自然不會觸發。 */
 const CLOSE_FALLBACK_MS = 200;
 
+/**
+ * F036 `AC-D9`／`AC-T15`：**節點徽章**之份數文字（唯一消費者＝畫布上的節點卡）。
+ *
+ * 🔴 與 `formatSubtreeCount` **刻意不共用**（2026-08-21 裁決 2 使兩者語意分家）：本函式量的是
+ * **本節點掛載數**、`formatSubtreeCount` 量的是**整個子樹之去重合計**——同一函式無法同時對
+ * 「本節點 2 份、子樹 8 份」給出兩個正確字串。🔒 兩個字面逐字不動。
+ */
+export function formatMountedCount(n: number): string {
+  return n > 0 ? `掛載 ${n} 份程序書` : '尚未掛載程序書';
+}
+
+/**
+ * F036 `AC-T15` #1：**抽屜副標題**（`#ndCount`）之子樹合計文字（唯一消費者＝抽屜副標題）。
+ * 含 `n === 0`，**無第二種字面**。📝 已作廢（⚠ 不得用於斷言）：OLD> `掛載 {N} 份程序書`。
+ */
+export function formatSubtreeCount(n: number): string {
+  return `子樹共 ${n} 份程序書`;
+}
+
+/**
+ * F036 `AC-T17` ⑤：導向目標網址之**單一組字點**——`data-subtree-jump-href` 與實際導覽共用它，
+ * 專案中不存在第二份組字邏輯。兩參數皆經 `encodeURIComponent`、順序固定 `lifecycleId` 在前。
+ */
+export function subtreeJumpHref(lifecycleId: string, nodeId: string): string {
+  return `/admin/documents?lifecycleId=${encodeURIComponent(lifecycleId)}&nodeSubtreeId=${encodeURIComponent(nodeId)}`;
+}
+
+/** F036 `AC-T15` #2／#3：分組標題——本節點帶全形括號後綴，其餘不加任何後綴。 */
+function groupTitleOf(name: string | null, isSelf: boolean): string {
+  const base = name ?? '未命名節點';
+  return isSelf ? `${base}（本節點）` : base;
+}
+
+/**
+ * F036 `AC-T15` #6：導向鈕之標籤——**可見文字＝`aria-label`＝`title` 三者同值**，
+ * 故只在此組一次字（`{N}` ＝子樹合計，與 `#ndCount` 同數且皆取自回應之 `totalCount`）。
+ */
+function jumpLabel(n: number): string {
+  return `在文件管理中檢視這 ${n} 份程序書`;
+}
+
+/** F036 `AC-T15` #9：節點 `title` 屬性（單擊／雙擊兩種行為之提示）。 */
+const NODE_TITLE = '單擊＝標示所有下游節點；雙擊＝檢視此節點與其下游節點之程序書清單';
+
 export function LifecycleTreePreviewPage(): JSX.Element {
   const { id = '' } = useParams();
   const [searchParams] = useSearchParams();
@@ -109,18 +160,24 @@ export function LifecycleTreePreviewPage(): JSX.Element {
   );
 
   /**
-   * 本頁是否為「自清單以 `window.open` 開出之預覽分頁」。
+   * 本頁是否為「自清單以 `window.open` 開出之預覽分頁」——**僅供返回鈕之標籤與圖示使用**
+   * （`AC-D3c`）。
    *
    * 🔴 **只在掛載時取樣一次**（`useState` 初始化函式）：`window.opener` 會在來源分頁被關閉時
-   * 變成 `null`，若每次 render 重算，使用者關掉清單分頁後按鈕會**當場從「關閉預覽」變成「返回」**
-   * ——同一個按鈕在使用者眼前換了行為。以掛載時的事實為準，行為在該分頁生命週期內恆定。
+   * 變成 `null`，若每次 render 重算，使用者關掉清單分頁後按鈕文字會**當場從「關閉預覽」變成
+   * 「返回」**——同一個按鈕在使用者眼前換了字。標籤以掛載時的事實為準，在該分頁生命週期內恆定。
+   *
+   * 🔴 **本值不得用於決定「離開動作」之分支**（`onBack`）：`AC-T19` 明文宣告 `openedAsPopup()`
+   * 之消費者為**三個獨立點**（離開動作／標籤與圖示／導向鈕之派送），不是「一份快取值供多處共用」；
+   * `AC-D3c` 之「只取樣一次」其兩點理由（jsdom `undefined` 誤判、標籤閃爍）皆**專屬標籤**，
+   * 不涉及離開動作之正確性。權威＝`prototypes/22` 之 `goBack()`：它於點擊當下重新呼叫
+   * `openedAsPopup()`，**完全不讀** `initBackBtn()` 掛載時算出的值。
+   *
+   * 🔴 `AC-T19`：判定一律經**全站唯一**之述詞 `openedAsPopup()`（`./opened-as-popup`），
+   * 本頁不得再寫第二套。📝 已作廢：OLD> `Boolean(window.opener)`——只看屬性存在與否，
+   * opener 已被關閉時仍判為 `true`（`opener.closed === true` 之分支被漏掉）。
    */
-  /**
-   * 🔴 以**真值**判定而非 `!== null`：真實瀏覽器於直連進入時 `window.opener` 為 `null`，
-   * 但 jsdom 給的是 `undefined` ⇒ `!== null` 恆真，會讓每個測試都跑到 popup 分支
-   * （實際踩到：四個「直連」案同時紅）。`Boolean()` 同時涵蓋兩者，且語意就是「有沒有 opener」。
-   */
-  const [openedAsPopup] = useState(() => typeof window !== 'undefined' && Boolean(window.opener));
+  const [isPopup] = useState(() => openedAsPopup());
 
   /**
    * `AC-D3`：預覽分頁的「離開」語意＝**關閉本分頁**，不是在本分頁內導覽。
@@ -136,15 +193,19 @@ export function LifecycleTreePreviewPage(): JSX.Element {
    * 使用者至少不會按了沒反應。
    */
   const onBack = useCallback((): void => {
-    if (!openedAsPopup) {
+    // 🔴 AC-D3b／AC-T19：於**點擊當下**重新判定，**不讀** isPopup 之掛載時快取（比照下方導向鈕
+    // 之 onSubtreeJump，以及 prototypes/22 之 goBack()）。沿用快取值會在「掛載時 opener 尚在、
+    // 點擊前使用者才把來源分頁關掉」這個真實時序下呼叫一個必然被瀏覽器拒絕的 close()
+    // ——使用者按了沒反應，正是本輪要消滅的缺陷形狀。
+    if (!openedAsPopup()) {
       navigate(back.path);
       return;
     }
     window.close();
     window.setTimeout(() => navigate(back.path), CLOSE_FALLBACK_MS);
-  }, [openedAsPopup, navigate, back.path]);
+  }, [navigate, back.path]);
 
-  const backLabel = openedAsPopup ? '關閉預覽' : back.label;
+  const backLabel = isPopup ? '關閉預覽' : back.label;
   const { user } = useAuth();
   const canRead = canPerform(user?.roleCode, FunctionKey.LIFECYCLE_MANAGEMENT, 'read');
 
@@ -153,9 +214,11 @@ export function LifecycleTreePreviewPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
-  // F036 AC-D1：雙擊節點開啟之唯讀側抽屜（lazy per-node，非預覽頁一併預載）。
+  // F036 AC-D1／AC-T10：雙擊節點開啟之唯讀側抽屜（lazy per-node，非預覽頁一併預載）。
+  // 🔴 自 2026-08-21 起內容為**整個子樹**（本節點＋全部下游），分組／排序／去重皆由後端完成。
   const [drawerNodeId, setDrawerNodeId] = useState<string | null>(null);
-  const [nodeDocs, setNodeDocs] = useState<NodeMountedDocument[]>([]);
+  const [subtreeGroups, setSubtreeGroups] = useState<SubtreeDocumentGroup[]>([]);
+  const [subtreeTotal, setSubtreeTotal] = useState(0);
   const [nodeDocsError, setNodeDocsError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -232,11 +295,16 @@ export function LifecycleTreePreviewPage(): JSX.Element {
   useEffect(() => {
     if (!drawerNodeId) return;
     let active = true;
-    setNodeDocs([]);
+    setSubtreeGroups([]);
+    setSubtreeTotal(0);
     setNodeDocsError(null);
-    getLifecycleNodeDocuments(id, drawerNodeId)
+    getLifecycleNodeSubtreeDocuments(id, drawerNodeId)
       .then((r) => {
-        if (active) setNodeDocs(r);
+        if (!active) return;
+        // 🔴 AC-T11 ④／AC-T13 ④：**照抄**後端之 groups 陣列順序與內容——前端不得再排一次、
+        // 不得再去重一次、也不得自行過濾空組（過濾掉後端的漏過濾會使該缺陷永遠無法顯形）。
+        setSubtreeGroups(r.groups);
+        setSubtreeTotal(r.totalCount);
       })
       .catch((e) => {
         // Error Scenarios：抽屜顯示錯誤提示但不關閉，樹狀圖標示狀態不受影響。
@@ -246,6 +314,34 @@ export function LifecycleTreePreviewPage(): JSX.Element {
       active = false;
     };
   }, [id, drawerNodeId]);
+
+  /**
+   * F036 `AC-T20`／`AC-T21`／`AC-T22`：導向鈕之派送。
+   *  - 主路徑（`openedAsPopup()` 為 `true`）：`opener.location.href` → `opener.focus()` → `window.close()`；
+   *    本分頁**不自行導覽**（否則會多出一個內容重複的清單分頁，`AC-D3a`）。
+   *  - 退化路徑：同分頁 `navigate()`，🔒 **不得**呼叫 `window.close()`（舊寫法在 opener 已關閉時仍呼叫，
+   *    被瀏覽器拒絕後使用者「按了沒反應」）。
+   * 判定於**點擊當下**取樣（非渲染時之投影），派送後記錄 seam。
+   */
+  const onSubtreeJump = useCallback(() => {
+    if (!drawerNodeId) return;
+    const appHref = subtreeJumpHref(id, drawerNodeId);
+    const asPopup = openedAsPopup();
+    recordSubtreeJump({
+      mode: asPopup ? 'opener' : 'self',
+      href: appHref,
+      appHref,
+      closedSelf: asPopup,
+    });
+    if (asPopup) {
+      const opener = window.opener as { location: { href: string }; focus: () => void };
+      opener.location.href = appHref;
+      opener.focus();
+      window.close();
+      return;
+    }
+    navigate(appHref);
+  }, [id, drawerNodeId, navigate]);
 
   useEffect(() => {
     if (!drawerNodeId) return;
@@ -291,7 +387,7 @@ export function LifecycleTreePreviewPage(): JSX.Element {
             className="text-slate-400 hover:text-slate-600 flex items-center"
           >
             {/* 圖示隨行為切換：關閉＝x、導覽＝arrow-left（同一個箭頭配兩種行為會誤導）。 */}
-            <Icon name={openedAsPopup ? 'x' : 'arrow-left'} className="w-5 h-5" />
+            <Icon name={isPopup ? 'x' : 'arrow-left'} className="w-5 h-5" />
           </button>
           <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0">
             <Icon name="git-fork" className="w-5 h-5" />
@@ -375,7 +471,7 @@ export function LifecycleTreePreviewPage(): JSX.Element {
           </a>
           <span className="text-xs text-slate-400 shrink-0 hidden md:inline ml-1">
             點節點＝醒目標示其所有下游節點；點空白處取消；
-            <strong className="text-slate-500">雙擊節點＝檢視該節點掛載之程序書清單</strong>
+            <strong className="text-slate-500">雙擊節點＝檢視該節點與其下游節點之程序書清單</strong>
           </span>
         </div>
       </header>
@@ -469,11 +565,13 @@ export function LifecycleTreePreviewPage(): JSX.Element {
                   <div
                     key={n.id}
                     data-testid={`tree-node-${n.id}`}
+                    data-node-id={n.id}
                     data-selected={isSel}
                     data-highlighted={isHl}
                     role="button"
                     tabIndex={0}
                     aria-label={`節點 ${n.name ?? '未命名節點'}`}
+                    title={NODE_TITLE}
                     onClick={(ev) => onNodeClick(n.id, ev)}
                     onDoubleClick={(ev) => onNodeDblClick(n.id, ev)}
                     style={{ position: 'absolute', left: n.x, top: n.y, width: NODE_W, cursor: 'pointer', opacity: isDim ? 0.3 : 1, transition: 'opacity .15s' }}
@@ -494,7 +592,7 @@ export function LifecycleTreePreviewPage(): JSX.Element {
                       </div>
                       <div className={`mt-1 flex items-center gap-1 text-[11px] ${n.docCount > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
                         <Icon name={n.docCount > 0 ? 'file-check-2' : 'file-x-2'} className="w-3.5 h-3.5" />
-                        {n.docCount > 0 ? `掛載 ${n.docCount} 份程序書` : '尚未掛載程序書'}
+                        {formatMountedCount(n.docCount)}
                       </div>
                     </div>
                   </div>
@@ -506,14 +604,14 @@ export function LifecycleTreePreviewPage(): JSX.Element {
             <div
               data-testid="watermark-overlay"
               aria-hidden="true"
-              style={{ position: 'absolute', inset: '-40%', pointerEvents: 'none', display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', transform: 'rotate(-45deg)', opacity: 0.30, userSelect: 'none', zIndex: 5 }}
+              style={{ position: 'absolute', inset: '-40%', pointerEvents: 'none', display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', transform: 'rotate(-45deg)', opacity: WATERMARK_OPACITY, userSelect: 'none', zIndex: 5 }}
             >
               {Array.from({ length: wmCount }).map((_, i) => (
                 <span
                   key={i}
                   data-testid="watermark-text"
                   className="mono"
-                  style={{ color: '#334155', fontSize: 14, whiteSpace: 'nowrap', padding: '22px 30px', fontWeight: 500, textAlign: 'center', lineHeight: 1.6 }}
+                  style={{ color: WATERMARK_COLOR, fontSize: 14, whiteSpace: 'nowrap', padding: '22px 30px', fontWeight: 500, textAlign: 'center', lineHeight: WATERMARK_LINE_HEIGHT }}
                 >
                   {wmLines.map((ln, j) => (
                     <span key={j} style={{ display: 'block' }}>{ln}</span>
@@ -534,7 +632,7 @@ export function LifecycleTreePreviewPage(): JSX.Element {
       <aside
         id="nodeDocDrawer"
         aria-hidden={drawerNodeId ? 'false' : 'true'}
-        aria-label="節點掛載之程序書清單（唯讀）"
+        aria-label="節點與其下游節點之程序書清單（唯讀）"
         className={`fixed right-0 top-0 bottom-0 z-40 w-full sm:w-[400px] bg-white border-l border-slate-200 shadow-2xl transition-transform duration-300 flex flex-col ${
           drawerNodeId ? '' : 'translate-x-full'
         }`}
@@ -545,8 +643,14 @@ export function LifecycleTreePreviewPage(): JSX.Element {
             <div id="ndTitle" className="font-semibold text-slate-900 text-sm truncate">
               {drawerNode?.name ?? ''}
             </div>
-            <div id="ndCount" className="text-[11px] text-slate-400">
-              {drawerNodeId ? `掛載 ${nodeDocs.length} 份程序書` : ''}
+            {/* AC-T15 #1／AC-T16：副標題＝**子樹合計**，與 data-subtree-total 同數且皆取自回應之
+                totalCount（前端不得自行 count）。🔒 節點徽章之字面與此已非同一語意，兩者不共用函式。 */}
+            <div
+              id="ndCount"
+              data-subtree-total={drawerNodeId ? String(subtreeTotal) : undefined}
+              className="text-[11px] text-slate-400"
+            >
+              {drawerNodeId ? formatSubtreeCount(subtreeTotal) : ''}
             </div>
           </div>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">
@@ -571,45 +675,108 @@ export function LifecycleTreePreviewPage(): JSX.Element {
               節點文件清單載入失敗 · <span className="mono">{nodeDocsError}</span>
             </div>
           )}
+          {/*
+            AC-T10／AC-T11／AC-T16：依節點分組；**DOM 順序＝回應 groups 之陣列順序**（前端不再排一次）。
+            data-node-group-self 由 `group.nodeId === 請求之 nodeId` 推導（🔴 **不得**改以「取陣列第 0 個」
+            判定——那依賴「陣列順序恰好正確」之隱性假設，後端排序一旦出錯，這個屬性會跟著錯到同一個
+            地方而互相掩蓋）；data-node-group-count 由 `documents.length` 推導（兩者皆刻意不在 wire 上）。
+          */}
           {!nodeDocsError &&
-            nodeDocs.map((d) => {
-              const ds = deriveDisplayStatus(d.status, d.announcedDate, today);
+            subtreeGroups.map((g) => {
+              const isSelf = g.nodeId === drawerNodeId;
               return (
-                <button
-                  key={d.id}
-                  type="button"
-                  data-node-doc-row
-                  onClick={() => navigate(`/admin/documents/${d.id}`)}
-                  className="w-full text-left px-4 py-3 hover:bg-primary-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600"
+                <section
+                  key={g.nodeId}
+                  data-node-group={g.nodeId}
+                  data-node-group-self={String(isSelf)}
+                  data-node-group-count={String(g.documents.length)}
                 >
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="mono text-xs text-slate-500">{d.documentNumber}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${STATUS_PILL[ds]}`}>
-                      {DISPLAY_LABEL[ds]}
+                  {/* 🔒 AC-D4：標題列為**純顯示** <div>（非 button／details／summary）；chevron 僅視覺標記。 */}
+                  <div
+                    data-node-group-title
+                    className="sticky top-0 z-10 bg-slate-50 border-y border-slate-200 px-4 py-1.5 flex items-center gap-1.5"
+                  >
+                    <Icon name="chevron-right" className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span data-node-group-name className="text-xs font-semibold text-slate-700 truncate">
+                      {groupTitleOf(g.nodeName, isSelf)}
+                    </span>
+                    <span
+                      data-node-group-count-text
+                      className="ml-auto shrink-0 mono text-[11px] text-slate-500"
+                    >
+                      {`${g.documents.length} 份`}
                     </span>
                   </div>
-                  <div className="text-sm text-slate-800 mt-0.5">{d.documentName}</div>
-                  <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-400">
-                    <span>
-                      版次 <span className="mono text-slate-600">{d.edition ?? '—'}</span>
-                    </span>
-                    <span>
-                      公告日期{' '}
-                      <span className="mono text-slate-600">{dateOnly(d.announcedDate)}</span>
-                    </span>
+                  <div className="divide-y divide-slate-100">
+                    {g.documents.map((d) => {
+                      const ds = deriveDisplayStatus(d.status, d.announcedDate, today);
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          data-node-doc-row
+                          data-doc-num={d.documentNumber}
+                          onClick={() => navigate(`/admin/documents/${d.id}`)}
+                          className="w-full text-left px-4 py-3 hover:bg-primary-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600"
+                        >
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="mono text-xs text-slate-500">{d.documentNumber}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${STATUS_PILL[ds]}`}>
+                              {DISPLAY_LABEL[ds]}
+                            </span>
+                          </div>
+                          <div className="text-sm text-slate-800 mt-0.5">{d.documentName}</div>
+                          <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-400">
+                            <span>
+                              版次 <span className="mono text-slate-600">{d.edition ?? '—'}</span>
+                            </span>
+                            <span>
+                              公告日期{' '}
+                              <span className="mono text-slate-600">{dateOnly(d.announcedDate)}</span>
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
-                </button>
+                </section>
               );
             })}
-          {/* AC-D7：0 份亦開啟抽屜並顯示空狀態 */}
-          {drawerNodeId && !nodeDocsError && nodeDocs.length === 0 && (
+          {/* AC-D7／AC-T15 #5：**整個子樹** 0 份時亦開啟抽屜並顯示空狀態 */}
+          {drawerNodeId && !nodeDocsError && subtreeGroups.length === 0 && (
             <div
               data-node-doc-empty
               className="px-4 py-10 text-center text-sm text-slate-400"
             >
               <Icon name="file-x-2" className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-              此節點尚未掛載任何程序書
+              此節點與其下游節點皆未掛載程序書
             </div>
+          )}
+        </div>
+        {/*
+          🔴 AC-T17／AC-T18：導向鈕之容器。子樹合計為 0 時**整顆鈕自 DOM 移除**（容器內容為空），
+          非 disabled、非 CSS 隱藏——下游以 `queryByLabelText(...) === null` 斷言時，CSS 隱藏會假綠。
+          🔒 它是 AC-D4 純唯讀之**明文唯一例外**：本身是導覽不是寫入（不改任何資料、不寫稽核）。
+        */}
+        <div
+          id="ndFooterAction"
+          className="shrink-0 border-t border-slate-200 px-4 py-3 empty:hidden empty:py-0 empty:px-0 empty:border-t-0"
+        >
+          {drawerNodeId && !nodeDocsError && subtreeTotal > 0 && (
+            <button
+              type="button"
+              data-subtree-jump
+              data-lifecycle-id={id}
+              data-node-subtree-id={drawerNodeId}
+              data-subtree-jump-href={subtreeJumpHref(id, drawerNodeId)}
+              onClick={onSubtreeJump}
+              aria-label={jumpLabel(subtreeTotal)}
+              title={jumpLabel(subtreeTotal)}
+              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-1"
+            >
+              <Icon name="list-filter" className="w-4 h-4" />
+              {jumpLabel(subtreeTotal)}
+            </button>
           )}
         </div>
         <div className="shrink-0 border-t border-slate-200 px-4 py-2.5 text-[11px] text-slate-400 flex items-start gap-1.5">
