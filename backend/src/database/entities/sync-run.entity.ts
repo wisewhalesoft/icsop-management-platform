@@ -8,9 +8,15 @@ import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
  */
 @Entity({ name: 'SYNC_RUN' })
 @Index('IX_SYNC_RUN_status', ['status'])
+@Index('IX_SYNC_RUN_compid_status', ['compid', 'status'])
+@Index('IX_SYNC_RUN_compid_endedAt', ['compid', 'endedAt'])
 export class SyncRun {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  // B 階段（開放多公司）新增：互斥鎖與水位查詢改為 per-company（見該 migration JSDoc）。
+  @Column({ type: 'varchar', length: 10 })
+  compid!: string;
 
   @Column({ type: 'varchar', length: 10 })
   triggerType!: string; // scheduled / manual
