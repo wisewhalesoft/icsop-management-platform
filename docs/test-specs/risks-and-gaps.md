@@ -1171,3 +1171,49 @@ docker compose -p icsop logs backend | grep -F "$SECRET"    # 伺服器日誌得
 | # | 項目 | 為何連容器內實跑也測不了（本輪環之限制） |
 |---|---|---|
 | D-F017-D6-01 | 真實 `TypeOrmDocumentStore`（SQL 層）之 `appendixId`／`formId` `EXISTS` 子查詢正確性 | 🔴 **2026-08-21 team-lead 進一步查證後更正本條之精確度**：team-lead 已查證 `typeorm-documents.store.ts` 對這兩個 key 零命中——連「好」的樣板 `linkTargetId` 本身在本 repo **從無**任何單元測試先例（`find` 不到 `typeorm-documents.store.spec.ts`），SQL 正確性向來只靠 int 測試／容器內驗證守門，非本輪環涵蓋範圍。本輪環之 `documents.service.appendixFormFilters.spec.ts` 已以 FakeStore 驗證「服務層正確轉發」（4/4 綠，非新紅燈，確認缺陷唯一存在於 controller 之欄位列舉）。⚠ **原文「不驗證真實 SQL 交集本身」尚不夠精確——精確說法見 `D-T3-04`**：該 FakeStore 之篩選邏輯（`appendixLinks`／`formLinks` 交集判斷）為**本檔自行實作**，與真實 `TypeOrmDocumentStore` 之 `EXISTS` 子查詢**不是同一段程式碼、亦無綁定機制**；若真實 store 完全忘記實作 `appendixId`／`formId` 之 `if (...) qb.andWhere(...)` 區塊，本檔之 4/4 綠**不會**轉紅——不只是「驗不到 SQL 正確性」，是「即使 SQL 完全缺席，本檔仍然全綠」。建議排入下一輪 int 套件或部署前 smoke，並評估 `D-T3-04` 提出之 QueryBuilder 呼叫層級單元測試是否值得建立。 |
+
+## F001 帳號選擇 delta（`AC-M1`～`AC-M29`，2026-08-24） {#f001-multi-account-picker}
+
+> 設計文件：[features/F001-test.md](features/F001-test.md) 之「F001 帳號選擇 delta」段落。
+> 本批共 **29 條 AC**（其中 13 條 🔒 安全性），環含 6 個新 backend 檔＋3 個新 frontend 檔。
+> **本輪為人類明示之簡化環**（僅 jest／vitest 單元/元件測試，無 Playwright／Stryker／
+> dependency-cruiser），故下列「甲」表之涵蓋語意皆限定於單元層。
+
+### 甲. 本環已涵蓋（可由機器裁決）
+
+| AC | 涵蓋程度 | 備註 |
+|---|---|---|
+| AC-M1, M28 | 完整（純邏輯回歸鎖） | 與既有 `classifyAccountByEmail` 同源 fixture |
+| AC-M2 | 決策層完整 | 三分支＋規劃層映射，見下方 D-M-01（HTTP 邊界之保留） |
+| AC-M3 | 規劃層完整；HTTP 邊界為 gap | 見 D-M-01 |
+| AC-M4, M5, M6, M9 | 完整 | 純函式，無 IO |
+| AC-M7 | 部分完整 | fail-closed 之 trim-only／內部空白／全形半形／相似度四項已鎖；**case 大小寫語意未鎖**，見 D-M-02（規格語意疑點） |
+| AC-M8 | 完整（決策＋規劃層） | `warnLog` 內容形狀已鎖；實際 `console.warn`／logger 呼叫未鎖（見 D-M-03） |
+| AC-M10, M19, M20, M22, M23 | 完整 | `selection-ticket.spec.ts`（純邏輯）＋ `auth.controller.select-account.spec.ts`（HTTP 層再驗） |
+| AC-M11 | 完整 | 借既有 `SessionGuard` 之窄界 cookie key 讀取自然成立，測試以真實類別驅動 |
+| AC-M12, M14, M15 | 完整 | `candidate-payload.spec.ts`（後端）＋前端渲染對應 |
+| AC-M13, M16, M17 | 完整 | 前端元件測試 |
+| AC-M18, M21, M24 | 完整 | HTTP 層 |
+| AC-M26 | 完整（規劃層＋HTTP 層＋前端可見文字層） | |
+| AC-M27, M29 | 完整 | `multi-account-regression.spec.ts` |
+
+### 乙. 本環刻意保留／未臆造之缺口（記錄，不阻擋建環）
+
+| # | 缺口 | 說明 | 現況處置 |
+|---|---|---|---|
+| D-M-01 | `/auth/callback` 對 `AC-M2`／`AC-M3`／`AC-M8` 之**實際 HTTP 邊界接線**（真正呼叫 `res.redirect`／`res.cookie`／拋例外）未經端到端測試驅動 | 既有 `aad-*.spec.ts` 系列顯示：本專案控制 MSAL（`@azure/msal-node`）行為之唯一手段是全域攔截 `fetch`/`http`/`https` 使其**失敗**；要驅動出一個**成功**之完整 OIDC 交換（才能走到本 delta 之 email 比對分支）須偽造 MSAL 內部 HTTP 回應格式，等同須讀懂 MSAL SDK 內部實作與既有 `callback()` 之確切呼叫序列——不符合本輪 blind 建環之精神，且團隊已明確排除 Playwright／真實整合堆疊測試。 | 改以 `planCallbackResponse()` 之純函式規劃層（`multi-account-callback-plan.spec.ts`）驗證「決策應該導出什麼計畫」，決策正確性有完整覆蓋；「計畫是否被正確套用到 Express response」之接線本身**未經自動化測試驗證**，需 tdd-implementation 自行正確接線，並建議上線前以真人操作驗證（比照本檔既有 `AC-E4` 之「部署級驗證，非自動化測試」處置模式）。 |
+| D-M-02 | `AC-M7` 姓名一致判準之 **case（大小寫）語意有內部矛盾** | 條文主句「去頭尾空白後**逐字比對**」隱含大小寫敏感；同條後段「不做大小寫以外之等價處理」字面上又暗示「案例正規化本身是允許的唯一例外」，兩句對「大小寫是否影響一致性」給出相反推論。姓名以中文字元為主，此歧義多數情形不可觸及，但若姓名含拉丁字母（如英文別名）則行為未定義。 | **未自行臆造**——測試已鎖住四項無爭議之嚴格規則（trim-only／內部空白敏感／全半形敏感／不做相似度），刻意跳過 case 語意之斷言。升級對象：spec-writer／product-analyst 於下次覆核 `AC-M7` 時明確化「案例是否正規化」，屆時本檔可直接補一組正向/負向案。 |
+| D-M-03 | `AC-M8`／`AC-M20` 要求之 **WARN 伺服器日誌**（共用信箱告警、票證竄改告警）未鎖定實際 logger 呼叫 | 本 repo 之診斷式日誌慣例分歧（`session.config.ts` 直接 `console.warn`；`aad-authority.ts` 走注入之 `AadAuthorityLogger` 結構型別）。盲測前提下無法確知 tdd-implementation 會採哪一種，若鎖死其中一種形狀，測試會綁死一個未經 AC 明文指定之實作選擇。 | 已鎖定「規劃層之 `warnLog` 資料形狀正確」（`multi-account-callback-plan.spec.ts`），此為 tdd-implementation 接線時所需之全部資訊；「是否真的呼叫了 logger」留給 tdd-implementation 自行決定慣例、非本環之機器可驗證斷言範圍。 |
+| D-M-04 | `AC-M25`（切換帳號須重新登入、系統不得提供已登入狀態下直接切換之路徑）**無正面可觀察行為可鎖** | 本條之本質是「消極不存在」——沒有新增任何切換端點即自動滿足，不存在一個「呼叫某端點應該失敗」的正面案例（呼叫一個根本沒被要求存在的端點必然失敗，鎖它只是重述「這個端點不存在」，屬套套邏輯，不具鑑別力）。 | 未建測試，記錄於此供 code review 人工核對：確認 `AuthController`／`AuthModule` 未新增任何「已持 session 狀態下重新兌換票證或切換帳號」之路由。 |
+| D-M-05 | `[OPEN-M4]`（正式環境姓名不一致重驗）與 `[OPEN-M5]`（無 prototype） | 兩者皆為 F001 spec 自身已標記之 `[OPEN]` 項目，非本環新發現；`[OPEN-M4]` 屬營運前置（部署後真人查證），`[OPEN-M5]` 已由人類裁決本輪不補 prototype、丙節 AC 即為唯一 oracle（本環已依此執行）。 | 不阻擋本輪，記錄以便追蹤，見 F001 spec 原文之 `[OPEN]` 清單。 |
+
+### 丙. 建環時之查證方法論（供後續同型任務參考）
+
+本批全部新測試均以「拋棄式驗證 stub」逐檔驗證——為每個尚不存在之模組寫最小可行實作、跑全部斷言確認
+轉綠、再刪除 stub（含對 `auth.controller.ts`／`App.tsx`／`types.ts`／`endpoints.ts` 之暫時性修改，
+以 `git checkout` 完整還原）。過程中揪出並修正兩處**測試自身**的錯誤（皆非規格或實作問題）：
+1. `AC-M4` 排序期望值誤算字典序（誤設 `'AS' < 'AE'`，實際 `'AE' < 'AS'`）。
+2. `AC-M14` 之「全域禁止 undefined/null 字樣」掃描原始版本把整列 JSON（含合法為 `null` 之
+   `orgCode` 原始欄位）一併掃入，誤判合法資料為缺陷；已收斂為只掃「顯示欄」（`companyName`／
+   `orgName`／`roleName`／`loginId`）之字面值。
+若未做這道驗證，這兩處會使實作端在**做對的情況下**仍收到假紅燈，浪費 tdd-implementation 之除錯時間。

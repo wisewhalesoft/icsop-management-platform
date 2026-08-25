@@ -17,7 +17,7 @@
 
 | Feature / 主題 | 文件 |
 |---|---|
-| F001 驗證與登入 | [features/F001-test.md](features/F001-test.md) |
+| F001 驗證與登入（含 2026-08-24 帳號選擇 delta `AC-M1`～`AC-M29`，末段 [#f001-帳號選擇-delta](features/F001-test.md)） | [features/F001-test.md](features/F001-test.md) |
 | F003 帳號管理 | [features/F003-test.md](features/F003-test.md) |
 | F011 編輯與版本對照 | [features/F011-test.md](features/F011-test.md) |
 | F012 文件狀態 | [features/F012-test.md](features/F012-test.md) |
