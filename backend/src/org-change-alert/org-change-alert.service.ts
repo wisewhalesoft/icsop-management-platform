@@ -20,6 +20,7 @@ import { generateDocumentFieldAlerts, docFieldKey } from './alert-generation';
 import { detectClosedDeptAlerts } from './closed-dept-detection';
 import { detectDataInconsistencyAlerts } from './data-inconsistency-detection';
 import { detectAccountDisappearedAlerts } from './account-disappeared-detection';
+import { detectRoleDowngradeAlerts } from './role-downgrade-detection';
 import { taipeiMonthRange } from './monthly-range';
 import {
   OrgChangeAlertGenerator,
@@ -76,6 +77,9 @@ export class OrgChangeAlertService implements OrgChangeAlertGenerator {
     // F005 兩類各自獨立之 pending loginId 去重集合（依 alertKind 分流，互不污染，D2/D4）。
     const existingPendingInconLoginIds = new Set<string>();
     const existingPendingVanishLoginIds = new Set<string>();
+    // 🔴 角色降級待審（裁定 Q1.3）之獨立去重集合——與 F005 兩類互不污染，
+    // 同一帳號可同時有三類 pending（語意獨立，處理其一不代表其餘已處理）。
+    const existingPendingRoleDowngradeLoginIds = new Set<string>();
     for (const p of pending) {
       if (p.alertKind === 'DOCUMENT_FIELD' && p.documentId && p.affectedField) {
         existingPendingKeys.add(docFieldKey(p.documentId, p.affectedField));
@@ -85,6 +89,8 @@ export class OrgChangeAlertService implements OrgChangeAlertGenerator {
         existingPendingInconLoginIds.add(p.accountLoginId);
       } else if (p.alertKind === 'ACCOUNT_DISAPPEARED' && p.accountLoginId) {
         existingPendingVanishLoginIds.add(p.accountLoginId);
+      } else if (p.alertKind === 'ROLE_DOWNGRADE_PENDING' && p.accountLoginId) {
+        existingPendingRoleDowngradeLoginIds.add(p.accountLoginId);
       }
     }
 
@@ -132,11 +138,21 @@ export class OrgChangeAlertService implements OrgChangeAlertGenerator {
       sourceSyncRunId: input.runId,
     });
 
+    // 🔴 角色降級待審（裁定 Q1.3）：推導判定應降級但**未套用**者，轉為待確認提示。
+    const roleDowngradeAlerts = detectRoleDowngradeAlerts({
+      roleDowngrades: input.roleDowngrades ?? [],
+      existingAcc: input.existingAcc,
+      existingPendingLoginIds: existingPendingRoleDowngradeLoginIds,
+      createdAt,
+      sourceSyncRunId: input.runId,
+    });
+
     const all: AlertCreateCommand[] = [
       ...docAlerts,
       ...personAlerts,
       ...inconAlerts,
       ...vanishAlerts,
+      ...roleDowngradeAlerts,
     ];
     if (all.length > 0) await this.store.insertMany(all);
   }

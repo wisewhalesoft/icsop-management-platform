@@ -30,10 +30,23 @@ import {
   computeDisappeared,
   DEFAULT_DISAPPEARED_THRESHOLD,
 } from './disappeared-threshold';
+import {
+  DEFAULT_ROLE_CHANGE_THRESHOLD,
+  deriveRoles,
+  roleChangeRatioExceeded,
+  type DerivationJobTitle,
+  type DerivationOrgUnit,
+  type RoleChange,
+} from './role-derivation';
 
 export interface OrgSyncOptions {
   compid?: string;
   disappearedThreshold?: number;
+  /**
+   * 🔴 角色變更閾值（裁定 Q4.3）。未給 → `DEFAULT_ROLE_CHANGE_THRESHOLD` 5%。
+   * 覆寫僅供首次全量套用之一次性作業（`OQ-RA-01`），見 `loadRoleChangeThresholdOverride`。
+   */
+  roleChangeThreshold?: number;
   now?: () => Date;
 }
 
@@ -69,6 +82,7 @@ export class SyncWriteError extends Error {
 export class OrgSyncService {
   private readonly compid: string;
   private readonly threshold: number;
+  private readonly roleThreshold: number;
   private readonly now: () => Date;
 
   constructor(
@@ -83,6 +97,8 @@ export class OrgSyncService {
   ) {
     this.compid = options.compid ?? 'AS';
     this.threshold = options.disappearedThreshold ?? DEFAULT_DISAPPEARED_THRESHOLD;
+    this.roleThreshold =
+      options.roleChangeThreshold ?? DEFAULT_ROLE_CHANGE_THRESHOLD;
     this.now = options.now ?? ((): Date => new Date());
   }
 
@@ -286,6 +302,80 @@ export class OrgSyncService {
         throw new SyncWriteError(e instanceof Error ? e.message : String(e));
       }
 
+      // 🔴 降級清單（裁定 Q1.3）：於 6.5 產生、於步驟 7 轉為 ROLE_DOWNGRADE_PENDING 待審告警。
+      // 刻意 hoist 至此：告警產生器與推導是兩個步驟，需跨越 try 邊界傳遞。
+      let roleDowngrades: RoleChange[] = [];
+
+      // --- 6.5 角色推導（🔴 2026-08-25 角色自動化 delta；裁定 Q1.1～Q1.4、Q3.1～Q3.5、Q4.2～Q4.6）---
+      //
+      // ⚠ **置於 applySync 之後**：推導需要本次新建/更新之帳號已落地（否則新進人員永遠慢一輪）。
+      //   代價是它無法與帳號寫入同交易——故閾值超標時**不回滾已成功之帳號同步**，
+      //   只跳過推導並記警告（與消失閾值之「寫入前中止」語意不同，見下方 skip 分支）。
+      //
+      // ⚠ 全程不使同步失敗：推導是附加價值，不得讓已成功之組織/帳號同步被標記為失敗
+      //   （比照下方 F006 提示產生之既有處置）。
+      if (this.store.findAccountsForDerivation && this.store.applyRoleDerivation) {
+        try {
+          const derivAccounts = await this.store.findAccountsForDerivation(this.compid);
+          const derivOrgUnits: DerivationOrgUnit[] = normDepts.map((d) => ({
+            companyCode: d.companyCode,
+            orgCode: d.orgCode,
+            tier: d.tier,
+            managerEmpNo: d.managerEmpNo,
+            isActive: d.isActive,
+          }));
+          // 職稱對照於 applySync 後重讀：本次新建之對照列必須納入，否則新職稱代碼
+          // 在當次同步解析不到名稱、業務判定會少算一輪。~109 列，成本可忽略。
+          const titleMap = (await this.store.findJobTitles?.()) ?? new Map();
+          const derivJobTitles: DerivationJobTitle[] = [...titleMap.values()].map((t) => ({
+            companyCode: t.companyCode,
+            code: t.code,
+            name: t.name,
+          }));
+
+          const rolePlan = deriveRoles({
+            accounts: derivAccounts,
+            orgUnits: derivOrgUnits,
+            jobTitles: derivJobTitles,
+          });
+          stats.roleUpgrades = rolePlan.roleUpgrades.length;
+          stats.subtypeChanges = rolePlan.subtypeChanges.length;
+          stats.roleDowngradeAlerts = rolePlan.roleDowngradeAlerts.length;
+
+          // 🔴 閾值（裁定 Q4.3）：分母為本次納入推導者（roleSource='derived'），
+          //    分子為**會被寫入**之變更（升級＋子分類）——子分類必須計入，否則
+          //    「上游職稱改名致數百人靜默失去限縮」完全沒有偵測管道（delta §七第 1 項）。
+          if (
+            roleChangeRatioExceeded(rolePlan, derivAccounts.length, this.roleThreshold)
+          ) {
+            stats.roleDerivationSkipped = true;
+            warnings.push(
+              `角色推導變更量 ${rolePlan.writeCount}/${derivAccounts.length} ` +
+                `超過閾值 ${(this.roleThreshold * 100).toFixed(1)}%，**整批未套用**。` +
+                `帳號資料同步本身已成功。若為首次全量套用，請依 OQ-RA-01 以 ` +
+                `SYNC_ROLE_CHANGE_THRESHOLD 一次性放寬後重跑，跑完務必移除該變數。`,
+            );
+          } else {
+            await this.store.applyRoleDerivation(this.compid, rolePlan);
+            // 裁定 Q1.3：降級不自動執行，改由步驟 7 產生 ROLE_DOWNGRADE_PENDING 待審告警。
+            // ⚠ **僅在推導確實套用時才採計**——閾值跳過時整個計畫都不可信，
+            //   據其產生數百筆待審告警只會製造噪音，且會讓人誤以為降級已被評估過。
+            roleDowngrades = rolePlan.roleDowngradeAlerts;
+            if (roleDowngrades.length > 0) {
+              warnings.push(
+                `角色降級 ${roleDowngrades.length} 筆**未自動執行**，已轉為待確認提示（見組織人員異動管理）。`,
+              );
+            }
+          }
+        } catch (e) {
+          warnings.push(
+            `角色推導失敗（不影響本次同步結果）：${
+              e instanceof Error ? e.message : String(e)
+            }`,
+          );
+        }
+      }
+
       const changeCount =
         stats.orgCreated +
         stats.orgUpdated +
@@ -319,6 +409,8 @@ export class OrgSyncService {
             // F005：本次消失（本地在職、來源查無）之 loginId；閾值放行時逐帳號產生 ACCOUNT_DISAPPEARED
             //       告警但不停用（消失≠離職）。閾值中止路徑不會走到此處（提前 return）。
             disappearedLoginIds: disappeared.missingIds,
+            // 🔴 裁定 Q1.3：降級待審（未套用之角色變更）。
+            roleDowngrades,
           });
         } catch (e) {
           warnings.push(

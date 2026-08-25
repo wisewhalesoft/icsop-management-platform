@@ -96,6 +96,8 @@ export class TypeOrmAccountStore implements AccountStore {
       loginId: input.loginId,
       name: input.name,
       roleCode: input.roleCode,
+      // 🔴 手動建立＝管理員於建立當下即指派角色 ⇒ 一律 'manual'，同步之推導永不覆寫。
+      roleSource: 'manual',
       passwordHash: input.passwordHash,
       // F003 AC-P1：部門／職位（已由服務層正規化，空字串不落地）。
       orgCode: input.orgCode ?? null,

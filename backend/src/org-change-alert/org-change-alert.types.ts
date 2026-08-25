@@ -21,7 +21,11 @@ export type AlertKind =
   | 'DOCUMENT_FIELD'
   | 'CLOSED_DEPT_PERSON'
   | 'DATA_INCONSISTENCY'
-  | 'ACCOUNT_DISAPPEARED';
+  | 'ACCOUNT_DISAPPEARED'
+  // 🔴 2026-08-25 角色自動化 delta（裁定 Q1.3）：推導判定應降級，但**不自動執行**、轉待審。
+  // 去重鍵沿用 accountLoginId（不以 EMPNO 連坐）；alertKind 為 varchar(30) 無 CHECK ⇒ 不需 schema 變更，
+  // 但仍加 filtered unique index 作第二道防線（migration 1724630400000）。
+  | 'ROLE_DOWNGRADE_PENDING';
 
 /** 提示生命週期狀態。 */
 export type AlertStatus = 'pending' | 'resolved';
