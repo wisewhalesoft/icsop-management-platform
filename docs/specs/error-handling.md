@@ -35,6 +35,7 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 | `ACCOUNT_JOB_TITLE_INVALID` | 400 | 職位代碼不存在於該公司之職稱對照主檔 | F003 |
 | `ROLE_INVALID` | 400 | 角色值不合法 | F003 |
 | `ROLE_SELF_DOWNGRADE_BLOCKED` | 409 | 無法降級自身系統管理員角色（草案，待確認） | F003 |
+| **`ROLE_ASSIGN_SCOPE_FORBIDDEN`** 🔴 | 403 | **操作者無權指派該角色**。2026-08-25 角色自動化 delta 新增（`OQ-RA-03`）：ICSOP 管理員對「角色指派」為 `受限CRUD`，可指派 `Supervisor`／`DeptContact`／`User`，**不得指派 `SysAdmin`／`ICSOPAdmin`**。與 `ROLE_INVALID`（角色字串本身不合法，400）為**兩種不同情形**，不得合併 | F003, F025 |
 | `SYNC_IN_PROGRESS` | 409 | 同步進行中，請稍候 | F004 |
 | `SYNC_SOURCE_UNAVAILABLE` | 5xx | 組織來源暫時無法連線 | F004 |
 | `SYNC_DATA_FORMAT_ERROR` | 5xx | 來源資料格式異常 | F004 |

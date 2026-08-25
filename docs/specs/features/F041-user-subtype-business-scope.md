@@ -3,6 +3,28 @@ Priority: P0-MVP | Status: 規格 🟢 **APPROVED（2026-08-11 人類閘門通�
 
 Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user-subtype-business-dept-restriction.md)（主）＋ E06 / [US-057](../../stories/epics/E06-public-browsing/US-057-business-user-dept-scoped-browsing.md)（從）
 
+> **🔴 2026-08-25 additive delta（APPROVED，人類閘門通過）——`userSubtype` 新增自動判定來源。**
+> 權威＝[stories/2026-08-25-role-automation-delta.md](../../stories/2026-08-25-role-automation-delta.md)、[open-questions §RA](../open-questions.md#ra-2026-08-25)。**本 delta 之 AC 編號採 `AC-R#`**。
+>
+> **本檔既有內容一律不變**：`INV-1`／`INV-2`、列舉值、`normalizeUserSubtype`／`isDeptScopedViewer`／`isUsingDeptMatched`／`isDocVisibleToViewer`
+> 之判定契約、可見範圍定義（裁定 `Q2.5`：維持現行）、5 種固定角色——**全數維持原狀**。本 delta **只新增「值從哪裡來」**。
+>
+> **起因（已在發生之缺口，非未來風險）**：`userSubtype` 之 DB 預設為 `'other'`＝不限縮，而同步端建立上游帳號時**不寫入**該欄
+> （`typeorm-org-sync.store.ts:238-254` 之 insert 物件不含此鍵）。正式環境實測**業務人員 699 人，佔全體在職者 51.1%**——
+> 這半數使用者**現在就**看得到全部已公告文件，直到有人手動逐一標記。
+>
+> **判定規則（裁定 `Q2.1`～`Q2.4`、`Q4.6`）**：職稱名稱含「業務」二字 ⇒ `'business'`，其餘 ⇒ `'other'`。
+> 資料來源＝既有之 `ACCOUNT.jobTitleCode` → `JOB_TITLE`（`(companyCode, code)` 複合鍵，沿用契約 §5.4.1 兩段式解析；正式環境解析率 1,368/1,368＝100%）。
+> **不需對照表、不需營業單位清單。** 中性職員序列（辦事員／專員／高級專員，333 人）與中性管理序列（副課長／課長／副理／襄理／經理等，238 人）
+> **一律非業務**；臨時／約聘人員有帳號但非業務。
+>
+> **⭐ 與主管角色推導之互補（依賴 `INV-2`）**：職稱認不出營業單位之主管——例 AS `BAA00`（43 人）主管張振榮職稱為中性之「襄理」而非「業務襄理」。
+> 但這些人正好被主管推導規則認出，而依 **`INV-2`，`userSubtype` 對非 `User` 角色恆無效力**——故無需為他們的子分類操心。
+> **`INV-2` 在本 delta 中由「不變式」升格為推導設計之支柱，更不得放寬。**
+>
+> ⚠ 寫入端不受「只升不降」拘束（裁定 `Q1.3b`）：`roleCode` 只升不降，但 `userSubtype` 一律以推導為準直接寫入，
+> 否則上述 699 人之缺口不會被關閉。🔴 **兩者規則不同，實作與測試必須分離。**
+
 > **🟢 2026-08-11 人類閘門通過，可進入實作。** 12 項裁決中 **11 項照本檔草案**（OQ-E08-04→B 子分類旗標、OQ-E08-05→A 子樹展開、
 > OQ-E08-06→C 全面收斂、OQ-E08-07 4a/4b/4c→皆 A、OQ-E08-08→孤兒 deny-by-default／多部門 Out of Scope／異動下次請求生效、
 > OQ-E08-09→OR 語意、OQ-E08-10→A 不記錄拒絕稽核、OQ-E08-11→C 維持現狀＋釐清句、OQ-E06-03→**A 404 `DOCUMENT_NOT_FOUND`**、
