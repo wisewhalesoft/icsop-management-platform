@@ -70,7 +70,10 @@ docker compose --profile init up --build seed-doc-catalog
 
 程序書目錄的組織欄對應表為 `backend/src/database/seeds/document-catalog-org-map.json`（人工維護，尚未對應者留 NULL）；補完後重跑 `seed-doc-catalog` 會就地補寫，不覆寫既有人工編輯。資料檔本身由 `python tools/build-document-catalog.py` 自 `reference/` 之 Excel 產生。
 
-## 部署至遠端測試環境（`https://testicsop.hfcfinance.com.tw`）
+## 部署至遠端環境（測試 `testicsop` / 正式 `icsop`）
+
+兩環境拓樸相同、主機不同。**以下步驟以測試環境（`https://testicsop.hfcfinance.com.tw`）為準，
+正式環境（`https://icsop.hfcfinance.com.tw`）的差異集中列於本章末段的「正式環境」小節**。
 
 部署於與 `testcdmp` **同一台**測試機，沿用該機既有的 edge 前門（獨佔 80/443、終結 TLS、
 共用同一張 `*.hfcfinance.com.tw` wildcard 憑證），ICSOP 為其中一站。
@@ -124,7 +127,10 @@ cp infra/edge/testicsop.hfcfinance.com.tw.conf  "$EDGE/conf.d/"
 #        - cdmp                         icsop:
 #        - icsop        ← 新增            external: true
 #                                          name: icsop_default   ← 新增
-docker compose -f "$EDGE/docker-compose.yml" up -d
+#    ⚠ 必須帶 --force-recreate：networks 是【容器建立時】才決定的屬性，改了 compose 的
+#      networks 後若僅 up -d，compose 會判定容器 up-to-date 而不重建，等於完全沒改
+#      （edge 仍不在 icsop_default 上 → 站台 502。2026-08-21 正式站事故根因）。
+docker compose -f "$EDGE/docker-compose.yml" up -d --force-recreate
 #    ⚠ 只複製 conf 而未改 compose 時，up -d 會判定容器 up-to-date 而【不重建】，
 #      nginx 也就不會重讀設定 → 站台等同不存在。故一律補一次 reload：
 docker exec edge-nginx nginx -t && docker exec edge-nginx nginx -s reload
@@ -142,6 +148,9 @@ curl -sf http://127.0.0.1:3100/health # {"status":"ok",...}（BACKEND_PUBLISH �
 # edge 到位確認（繞過 DNS 與瀏覽器快取，直接指定 Host）
 docker exec edge-nginx ls /etc/nginx/conf.d/    # 應有 testicsop.hfcfinance.com.tw.conf
 docker network inspect icsop_default --format '{{range .Containers}}{{.Name}} {{end}}'  # 應含 edge-nginx
+docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' edge-nginx
+#   ↑ 反向再確認一次：應同時列出 cdmp-mvp_default 與 icsop_default。
+#     只有前者＝compose 寫對了但容器沒重建（見疑難排解），此時站台必 502。
 curl -sk -H 'Host: testicsop.hfcfinance.com.tw' https://127.0.0.1/ -o /dev/null -w '%{http_code}\n'
 #   200 = 正常；出現 Vite 的 "This host is not allowed" = 本站 server_name 沒被載入，
 #   Host 落到 conf.d 字母序第一個 server block（testcdmp → Vite）當預設站 → 補上方 reload
@@ -187,7 +196,54 @@ pgvector 的 volume 亦隨之更名（RAG 為 Phase 3 未實作，內容僅為�
 `--profile init` 的一次性服務刻意設 `restart: 'no'`。三者皆有 healthcheck（NFR-008 AC4）。
 業務資料存於**外部 MSSQL 與 Azure Blob**，容器重建不影響。
 
-### 疑難排解
+### 正式環境（`https://icsop.hfcfinance.com.tw`）
+
+與測試環境**同拓樸、不同主機**，步驟完全相同，僅以下項目替換：
+
+| 項目 | 測試 | 正式 |
+|------|------|------|
+| 主機 | `DTTHFC01` / `172.20.202.209` | `DTGHFC01` / `172.20.203.31` |
+| edge 前門同居站台 | `testcdmp` | `cdmp`（`conf.d/` 另有 `00-map.conf`，屬 edge 自身設定） |
+| 本站 edge conf | `infra/edge/testicsop.hfcfinance.com.tw.conf` | `infra/edge/icsop.hfcfinance.com.tw.conf` |
+| Azure AD redirect URI | `https://testicsop.hfcfinance.com.tw/auth/callback` | `https://icsop.hfcfinance.com.tw/auth/callback` |
+| `.env` | 該機 `~/icsop-management-platform/.env` | 同路徑但為**另一份**：`AZURE_AD_REDIRECT_URI` 必須改為正式站網址，`SESSION_JWT_SECRET` 另行產生，DB／Blob 依正式環境實際配置填寫（勿沿用測試值） |
+
+部署步驟同上方 1～6，唯步驟 5 改複製正式站那份 conf：
+
+```bash
+EDGE=~/cdmp-mvp/edge
+cp infra/edge/icsop.hfcfinance.com.tw.conf "$EDGE/conf.d/"
+docker compose -f "$EDGE/docker-compose.yml" up -d --force-recreate
+docker exec edge-nginx nginx -t && docker exec edge-nginx nginx -s reload
+```
+
+edge 前門一樣位於該機的 `~/cdmp-mvp/edge`，其 compose 需同時掛上 `cdmp-mvp_default` 與
+`icsop_default` 兩張 external 網路——**寫在 compose 裡不等於生效，容器必須 recreate**（見疑難排解）。
+
+> 兩站的 conf 除 `server_name` 外逐字相同（可用 `diff <(grep -vE '^\s*#|^\s*$' infra/edge/testicsop.hfcfinance.com.tw.conf) <(grep -vE '^\s*#|^\s*$' infra/edge/icsop.hfcfinance.com.tw.conf)` 核對），
+> 改動其一時務必同步另一份。
+
+#### 上線後的驗收基準線
+
+以下為正式站健康時的預期回應，可原樣貼上比對（在主機上自測時加 `--resolve icsop.hfcfinance.com.tw:443:127.0.0.1 -k` 可繞過 DNS）：
+
+```bash
+curl -so /dev/null -w '%{http_code}
+' https://icsop.hfcfinance.com.tw/          # 200
+curl -so /dev/null -w '%{http_code}
+' https://icsop.hfcfinance.com.tw/login     # 200
+curl -so /dev/null -w '%{http_code} %{redirect_url}
+'      https://icsop.hfcfinance.com.tw/admin                                        # 301 → .../admin/
+curl -s -H 'Accept: text/html' https://icsop.hfcfinance.com.tw/admin/ | head -1   # <!doctype html>
+curl -s https://icsop.hfcfinance.com.tw/admin/                                    # 404 Cannot GET /admin/
+```
+
+最後兩行**不是**互相矛盾，而是 `frontend/nginx.conf` 的整頁導覽判斷正常運作的證據：同一個
+`/admin/`，帶 `Accept: text/html`（瀏覽器整頁導覽）給 SPA、帶 `*/*`（API 語意）交給後端。
+同理 `https://icsop.hfcfinance.com.tw/health` 回的是 SPA HTML 而非 JSON——`/health` 不在 edge 與
+frontend 的反代前綴內，僅供容器內部 healthcheck（`http://127.0.0.1:3100/health` 才是後端本人）。
+
+### 疑難排解（兩環境共用）
 
 | 症狀 | 原因 / 處置 |
 |------|-----------|
@@ -195,7 +251,8 @@ pgvector 的 volume 亦隨之更名（RAG 為 Phase 3 未實作，內容僅為�
 | 登入跳 `AADSTS50011` | Azure 未登記本站 redirect URI，或 `.env` 的 `AZURE_AD_REDIRECT_URI` 與登記值不逐字相同 |
 | 登入後仍是未登入狀態 | `SESSION_COOKIE_SECURE` 與實際 scheme 不符（HTTPS 站必須 `true`；若誤設於 http 環境則 cookie 完全不會送出） |
 | 畫面出現 Vite 的 `Blocked request. This host ... is not allowed` | 請求根本沒進 `icsop-frontend`（它是靜態 nginx，沒有 Vite）。edge 上找不到本站 `server_name` → 落到 conf.d 字母序第一個 server block（`testcdmp` → cdmp 的 Vite）當預設站。多半是 conf 沒複製進去，或複製了但 nginx 沒重讀（compose 判定容器 up-to-date 不重建）→ `docker exec edge-nginx nginx -t && docker exec edge-nginx nginx -s reload` |
-| edge 回 502 | ICSOP 網路名不是 `icsop_default`（`docker network ls` 確認），或 `edge` 未掛上該網路 |
+| edge 回 502 | 上游解析不到或連不上。**先讀 edge 的錯誤訊息**：`docker logs --tail 50 edge-nginx \| grep -iE 'icsop\|upstream\|resolv'`。<br>・`icsop-frontend could not be resolved (2: Server failure)` → edge 不在 `icsop_default` 上（Docker 內建 DNS 只解析「本容器已加入之網路」上的容器名），或 ICSOP 網路名不是 `icsop_default`（`docker network ls` 確認）。急救：`docker network connect icsop_default edge-nginx && docker exec edge-nginx nginx -s reload`（零停機、不影響同 edge 上的其他站），再依下一列做永久修復。<br>・`connect() failed (111: Connection refused)` → 網路通但 `icsop-frontend` 沒在聽 → `docker compose ps` 查容器 |
+| edge compose 的 `networks:` 已寫 `icsop_default`，站台仍 502 | **網路是容器建立時才決定的屬性**：改完 `networks:` 只跑 `up -d`，compose 判定 up-to-date 不重建 → 等於沒改（2026-08-21 正式站事故根因）。修：`docker compose -f "$EDGE/docker-compose.yml" up -d --force-recreate`，再以 `docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' edge-nginx` 確認兩張網路都在。<br>同族陷阱：改 conf 要 `nginx -s reload`、改程式要 `--build`、換 image 要 `--force-recreate`。<br>反向線索：`docker compose down` 在 edge 已掛上時**刪不掉**該網路（會警告 active endpoints），故「網路換了新 ID」本身即 edge 從未真正掛上的旁證 |
 | 上傳大於 1MB 的檔案回 413 | edge 或 frontend 任一層的 `client_max_body_size` 未設（兩層都要 60m） |
 | 後端連 DB `EHOSTUNREACH` | compose 網段撞到 DB 所在的 `172.20.x`；本專案已釘 `172.30.0.0/16`，若主機已佔用需另換 |
 | 一人登入失敗鎖到全體 | `TRUST_PROXY_HOPS` 未設 2 → `req.ip` 恆為反代位址，IP 節流額度全體共用 |
