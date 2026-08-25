@@ -21,9 +21,16 @@ export class NameResolutionService {
     @Inject(ORG_UNIT_READ_STORE) private readonly orgUnits: OrgUnitReadStore,
   ) {}
 
-  /** employeeNo → 姓名。查無 / 無姓名 → null。 */
-  async resolvePersonName(employeeNo: string): Promise<string | null> {
-    const p = await this.persons.findByEmployeeNo(employeeNo);
+  /**
+   * employeeNo → 姓名。查無 / 無姓名 → null。
+   * 🔴 B 階段（多公司）：`companyCode` 為必要參數——`employeeNo` 僅在單一公司內唯一，
+   * 見 `PersonStore` 介面 JSDoc。
+   */
+  async resolvePersonName(
+    companyCode: string,
+    employeeNo: string,
+  ): Promise<string | null> {
+    const p = await this.persons.findByEmployeeNo(companyCode, employeeNo);
     return p ? p.name : null;
   }
 
@@ -32,9 +39,10 @@ export class NameResolutionService {
    * 未命中/無姓名鍵**缺席**於 Map（呼叫端可 `map.get(id) ?? fallback`）。避免 F017 N+1。
    */
   async resolvePersonNames(
+    companyCode: string,
     employeeNos: string[],
   ): Promise<Map<string, string>> {
-    const found = await this.persons.findByEmployeeNos(employeeNos);
+    const found = await this.persons.findByEmployeeNos(companyCode, employeeNos);
     const out = new Map<string, string>();
     for (const [empNo, rec] of found) {
       if (rec.name !== null) out.set(empNo, rec.name);
@@ -42,9 +50,16 @@ export class NameResolutionService {
     return out;
   }
 
-  /** orgId → 單層名稱（DESC_CHI）。查無 → null。 */
-  async resolveOrgUnitName(orgCode: string): Promise<string | null> {
-    const u = await this.orgUnits.findByOrgCode(orgCode);
+  /**
+   * orgId → 單層名稱（DESC_CHI）。查無 → null。
+   * 🔴 B 階段（多公司）：`companyCode` 為必要參數——`orgCode` 各公司獨立編碼、字串可能相同，
+   * 見 `OrgUnitReadStore.findByOrgCode` JSDoc。
+   */
+  async resolveOrgUnitName(
+    companyCode: string,
+    orgCode: string,
+  ): Promise<string | null> {
+    const u = await this.orgUnits.findByOrgCode(companyCode, orgCode);
     return u ? u.name : null;
   }
 
@@ -54,6 +69,7 @@ export class NameResolutionService {
    * 循環守衛：以 seen 集合避免資料異常造成無窮迴圈。含全部層級（不假設固定 4 層，TS-NAMERES-009）。
    */
   async resolveOrgUnitPath(
+    companyCode: string,
     orgCode: string,
     separator: string = ORG_PATH_SEPARATOR,
   ): Promise<string | null> {
@@ -64,7 +80,7 @@ export class NameResolutionService {
     while (code !== null) {
       if (seen.has(code)) break;
       seen.add(code);
-      const u = await this.orgUnits.findByOrgCode(code);
+      const u = await this.orgUnits.findByOrgCode(companyCode, code);
       if (u === null) {
         if (first) return null;
         break;

@@ -9,7 +9,7 @@ import {
   escapeLikeContains,
 } from './public-list';
 import { escapeLikePrefix } from '../org-directory/org-unit-read';
-import { ViewerScope } from '../rbac/viewer-scope';
+import { ViewerScope, UsingDeptRef } from '../rbac/viewer-scope';
 
 /**
  * F041 簽章遷移 shim（架構 §3.7 決策一，刻意的破壞性變更）：`buildPublicList` 第二參數
@@ -19,7 +19,7 @@ import { ViewerScope } from '../rbac/viewer-scope';
  * `isPinned`／`splitAndSort` 簽章不變（仍吃 orgCode 字串），不受本次遷移影響。
  */
 function viewerOf(orgCode: string | null): ViewerScope {
-  return { roleCode: 'User', userSubtype: 'other', orgCode };
+  return { roleCode: 'User', userSubtype: 'other', orgCode, companyCode: 'AS' };
 }
 
 /**
@@ -45,7 +45,8 @@ const DOC_DEFAULTS: PublicDocItem = {
     documentName: '文件',
     lifecycleId: 'lc1',
     lifecycleName: null,
-    usingDeptIds: [],
+    usingDepts: [],
+    companyCode: 'AS',
     draftingDeptId: null,
     draftingCompanyId: null,
     draftingSectionId: null,
@@ -60,36 +61,46 @@ function doc(over: Partial<PublicDocItem>): PublicDocItem {
   return { ...DOC_DEFAULTS, ...over };
 }
 
+/**
+ * 便利建構：同一公司（預設 AS）之使用部門參照清單。
+ * 🔴 B 階段（多公司）：`usingDepts` 由裸 `orgCode[]` 改為帶公司別之 `UsingDeptRef[]`——
+ * 跨公司隔離之專屬案例見 `rbac/viewer-scope.spec.ts`；本檔沿用單一公司（AS）情境，
+ * 驗證公司維度加入後既有排序／置頂語意逐案不變。
+ */
+function depts(codes: string[], companyCode = 'AS'): UsingDeptRef[] {
+  return codes.map((orgCode) => ({ companyCode, orgCode }));
+}
+
 const TODAY = new Date('2026-07-17T00:00:00Z');
 
 describe('F019 排序：使用部門置頂 + 編號降冪', () => {
   it('TS-F019-001 使用者部門與文件使用部門完全相符 → 置頂', () => {
-    const d1 = doc({ id: 'D1', usingDeptIds: ['JAC00'], documentNumber: 'A002' });
-    const d2 = doc({ id: 'D2', usingDeptIds: ['JCHA0'], documentNumber: 'A001' });
-    const out = splitAndSort([d2, d1], 'JAC00');
+    const d1 = doc({ id: 'D1', usingDepts: depts(['JAC00']), documentNumber: 'A002' });
+    const d2 = doc({ id: 'D2', usingDepts: depts(['JCHA0']), documentNumber: 'A001' });
+    const out = splitAndSort([d2, d1], 'JAC00', 'AS');
     expect(out.map((d) => d.id)).toEqual(['D1', 'D2']); // D1 置頂在前
   });
 
   it('TS-F019-002 置頂區與其餘區各自依文件編號降冪', () => {
-    const p1 = doc({ id: 'A003', usingDeptIds: ['JAC00'], documentNumber: 'A003' });
-    const p2 = doc({ id: 'A001', usingDeptIds: ['JAC00'], documentNumber: 'A001' });
-    const r1 = doc({ id: 'B010', usingDeptIds: ['ZZ000'], documentNumber: 'B010' });
-    const r2 = doc({ id: 'B002', usingDeptIds: ['ZZ000'], documentNumber: 'B002' });
-    const out = splitAndSort([p2, r2, p1, r1], 'JAC00');
+    const p1 = doc({ id: 'A003', usingDepts: depts(['JAC00']), documentNumber: 'A003' });
+    const p2 = doc({ id: 'A001', usingDepts: depts(['JAC00']), documentNumber: 'A001' });
+    const r1 = doc({ id: 'B010', usingDepts: depts(['ZZ000']), documentNumber: 'B010' });
+    const r2 = doc({ id: 'B002', usingDepts: depts(['ZZ000']), documentNumber: 'B002' });
+    const out = splitAndSort([p2, r2, p1, r1], 'JAC00', 'AS');
     expect(out.map((d) => d.id)).toEqual(['A003', 'A001', 'B010', 'B002']);
   });
 
   it('TS-F019-003 使用者部門查無相符文件 → 無置頂，純編號降冪', () => {
-    const a = doc({ id: 'a', usingDeptIds: ['ZZ000'], documentNumber: 'N-1' });
-    const b = doc({ id: 'b', usingDeptIds: ['YY000'], documentNumber: 'N-2' });
-    const out = splitAndSort([a, b], 'JAC00');
+    const a = doc({ id: 'a', usingDepts: depts(['ZZ000']), documentNumber: 'N-1' });
+    const b = doc({ id: 'b', usingDepts: depts(['YY000']), documentNumber: 'N-2' });
+    const out = splitAndSort([a, b], 'JAC00', 'AS');
     expect(out.map((d) => d.id)).toEqual(['b', 'a']); // 純降冪，無異常空區塊
   });
 
   it('TS-F019-004 文件使用部門為多部門，其一相符 → 仍列入置頂', () => {
-    const d1 = doc({ id: 'D1', usingDeptIds: ['JCHA0', 'JAC00'], documentNumber: 'A001' });
-    const d2 = doc({ id: 'D2', usingDeptIds: ['ZZ000'], documentNumber: 'A009' });
-    const out = splitAndSort([d2, d1], 'JAC00');
+    const d1 = doc({ id: 'D1', usingDepts: depts(['JCHA0', 'JAC00']), documentNumber: 'A001' });
+    const d2 = doc({ id: 'D2', usingDepts: depts(['ZZ000']), documentNumber: 'A009' });
+    const out = splitAndSort([d2, d1], 'JAC00', 'AS');
     expect(out[0].id).toBe('D1'); // 置頂優先於編號較大之非置頂
   });
 
@@ -100,36 +111,36 @@ describe('F019 排序：使用部門置頂 + 編號降冪', () => {
    *       F026-role-field-matrix.md AC「部層 JA000 + 使用者 JAC00 → 相符（子樹自動展開）」。
    */
   it('TS-PS-F019-001 文件使用部門為使用者部門之上層（部層 JA000）→ 置頂', () => {
-    const d1 = doc({ id: 'D1', usingDeptIds: ['JA000'] });
-    expect(isPinned(d1, 'JAC00')).toBe(true);
+    const d1 = doc({ id: 'D1', usingDepts: depts(['JA000']) });
+    expect(isPinned(d1, 'JAC00', 'AS')).toBe(true);
   });
 
   it('TS-PS-F019-002 使用者部門與文件使用部門完全相符（自身層級）→ 置頂', () => {
-    expect(isPinned(doc({ usingDeptIds: ['JAC00'] }), 'JAC00')).toBe(true);
+    expect(isPinned(doc({ usingDepts: depts(['JAC00']) }), 'JAC00', 'AS')).toBe(true);
   });
 
   it('TS-PS-F019-003 文件使用部門為使用者所屬部門之下層（更細單位）→ 不置頂', () => {
     // 使用者掛部層 JA000；文件使用部門為其下處室 JAC00 → 不涵蓋使用者
-    expect(isPinned(doc({ usingDeptIds: ['JAC00'] }), 'JA000')).toBe(false);
+    expect(isPinned(doc({ usingDepts: depts(['JAC00']) }), 'JA000', 'AS')).toBe(false);
   });
 
   it('TS-PS-F019-004 多筆使用部門其一為使用者之上層 → 仍置頂（OR 語意不變）', () => {
-    expect(isPinned(doc({ usingDeptIds: ['JCHA0', 'JA000'] }), 'JAC00')).toBe(true);
+    expect(isPinned(doc({ usingDepts: depts(['JCHA0', 'JA000']) }), 'JAC00', 'AS')).toBe(true);
   });
 
   it('TS-PS-F019-005 使用者無部門（orgCode 空）→ 一律非置頂', () => {
-    expect(isPinned(doc({ usingDeptIds: ['JAC00'] }), null)).toBe(false);
-    expect(isPinned(doc({ usingDeptIds: ['JAC00'] }), undefined)).toBe(false);
-    expect(isPinned(doc({ usingDeptIds: ['JAC00'] }), '')).toBe(false);
+    expect(isPinned(doc({ usingDepts: depts(['JAC00']) }), null, 'AS')).toBe(false);
+    expect(isPinned(doc({ usingDepts: depts(['JAC00']) }), undefined, 'AS')).toBe(false);
+    expect(isPinned(doc({ usingDepts: depts(['JAC00']) }), '', 'AS')).toBe(false);
   });
 
   it('TS-PS-F019-006 全公司（Root 00000）使用部門 → 對任何使用者皆置頂', () => {
-    expect(isPinned(doc({ usingDeptIds: ['00000'] }), 'JCHA0')).toBe(true);
-    expect(isPinned(doc({ usingDeptIds: ['00000'] }), 'JAC00')).toBe(true);
+    expect(isPinned(doc({ usingDepts: depts(['00000']) }), 'JCHA0', 'AS')).toBe(true);
+    expect(isPinned(doc({ usingDepts: depts(['00000']) }), 'JAC00', 'AS')).toBe(true);
   });
 
   it('TS-PS-F019-007 兄弟處室之使用部門 → 不置頂（回歸：子樹展開不放寬至兄弟）', () => {
-    expect(isPinned(doc({ usingDeptIds: ['JAD00'] }), 'JAC00')).toBe(false);
+    expect(isPinned(doc({ usingDepts: depts(['JAD00']) }), 'JAC00', 'AS')).toBe(false);
   });
 });
 
@@ -263,9 +274,9 @@ describe('F019 分頁', () => {
   it('TS-F019-024/025 分頁中繼與跨頁排序一致（105 筆 / 每頁 50）', () => {
     // 產生編號可排序之 105 筆（皆已公告、無置頂）
     const items = Array.from({ length: 105 }, (_, i) =>
-      doc({ id: `d${i}`, documentNumber: `N-${String(i).padStart(3, '0')}`, usingDeptIds: ['ZZ000'] }),
+      doc({ id: `d${i}`, documentNumber: `N-${String(i).padStart(3, '0')}`, usingDepts: depts(['ZZ000']) }),
     );
-    const sorted = splitAndSort(items.filter((i) => isAnnounced(i, TODAY)), null);
+    const sorted = splitAndSort(items.filter((i) => isAnnounced(i, TODAY)), null, 'AS');
     const p1 = paginate(sorted, 1, 50);
     const p2 = paginate(sorted, 2, 50);
     const p3 = paginate(sorted, 3, 50);
@@ -289,15 +300,15 @@ describe('F019 分頁', () => {
  * docs/specs/architecture-spec.md §3.7 決策三(a)（插入點在 base 之後，hiddenCount 計算式零額外邏輯）。
  */
 function bizViewer(orgCode: string | null = 'JAC00'): ViewerScope {
-  return { roleCode: 'User', userSubtype: 'business', orgCode };
+  return { roleCode: 'User', userSubtype: 'business', orgCode, companyCode: 'AS' };
 }
 
 describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', () => {
   it('AC-14 業務@JAC00：3 筆已公告文件中僅 2 筆相符（JA000 祖先 + 00000 Root）進入 items，total 同步收斂', () => {
     const items = [
-      doc({ id: 'match-anc', usingDeptIds: ['JA000'] }),
-      doc({ id: 'no-match', usingDeptIds: ['JAD00'] }),
-      doc({ id: 'match-root', usingDeptIds: ['00000'] }),
+      doc({ id: 'match-anc', usingDepts: depts(['JA000']) }),
+      doc({ id: 'no-match', usingDepts: depts(['JAD00']) }),
+      doc({ id: 'match-root', usingDepts: depts(['00000']) }),
     ];
     const page = buildPublicList(items, bizViewer('JAC00'), {}, TODAY);
     expect(page.items.map((d) => d.id).sort()).toEqual(['match-anc', 'match-root']);
@@ -309,12 +320,12 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
     // 見 public-documents.service.spec.ts）；此處以「與置頂判定式同一函式」isPinned() 直接驗證
     // 每一項目對業務 viewer 之 orgCode 皆滿足置頂條件——此即 AC-15「其餘區恆空」之數學推論本身。
     const items = [
-      doc({ id: 'a', usingDeptIds: ['JA000'] }),
-      doc({ id: 'b', usingDeptIds: ['00000'] }),
+      doc({ id: 'a', usingDepts: depts(['JA000']) }),
+      doc({ id: 'b', usingDepts: depts(['00000']) }),
     ];
     const page = buildPublicList(items, bizViewer('JAC00'), {}, TODAY);
     expect(page.items).toHaveLength(2);
-    expect(page.items.every((d) => isPinned(d, 'JAC00'))).toBe(true);
+    expect(page.items.every((d) => isPinned(d, 'JAC00', 'AS'))).toBe(true);
   });
 
   /**
@@ -326,7 +337,7 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
    *   → `items === []`、`total === 0`、不拋錯。
    */
   it('AC-16（載體遷移）新篩選選到業務可見集合外之值 → items=[]、total=0，不拋錯（交集為空係正常查詢結果）', () => {
-    const items = [doc({ id: 'a', usingDeptIds: ['JA000'], draftingDeptId: 'JA000' })];
+    const items = [doc({ id: 'a', usingDepts: depts(['JA000']), draftingDeptId: 'JA000' })];
     expect(() => {
       const page = buildPublicList(items, bizViewer('JAC00'), { draftingDeptId: 'ZZ999' }, TODAY);
       expect(page.items).toEqual([]);
@@ -349,7 +360,7 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
       id: 'ICSOP-AD-001',
       documentNumber: 'ICSOP-AD-001',
       documentName: '審查作業',
-      usingDeptIds: ['JAD00'], // 業務@JAC00 不可見
+      usingDepts: depts(['JAD00']), // 業務@JAC00 不可見
       draftingCompanyId: 'C9',
       draftingDeptId: 'JAD00',
       draftingSectionId: 'JADA0',
@@ -387,7 +398,7 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
     const items = [
       doc({ id: 'in-progress', status: 'active', announcedDate: '2099-01-01' }),
       doc({ id: 'void', status: 'void' }),
-      doc({ id: 'announced-mismatch', status: 'active', usingDeptIds: ['JAD00'] }),
+      doc({ id: 'announced-mismatch', status: 'active', usingDepts: depts(['JAD00']) }),
     ];
     const page = buildPublicList(items, bizViewer('JAC00'), {}, TODAY);
     expect(page.items).toEqual([]);
@@ -404,11 +415,11 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
    */
   it('AC-19（回歸鎖定）「其他」子分類 viewer → 輸出逐欄與業務限制未介入時相同', () => {
     const items = [
-      doc({ id: 'hit', usingDeptIds: ['JAC00'], draftingDeptId: 'JA000', lifecycleId: 'LC-A' }),
-      doc({ id: 'deptOnly', usingDeptIds: ['JAC00'], draftingDeptId: 'JA000', lifecycleId: 'LC-B' }),
-      doc({ id: 'cycOnly', usingDeptIds: ['ZZ000'], draftingDeptId: 'ZZ000', lifecycleId: 'LC-A' }),
+      doc({ id: 'hit', usingDepts: depts(['JAC00']), draftingDeptId: 'JA000', lifecycleId: 'LC-A' }),
+      doc({ id: 'deptOnly', usingDepts: depts(['JAC00']), draftingDeptId: 'JA000', lifecycleId: 'LC-B' }),
+      doc({ id: 'cycOnly', usingDepts: depts(['ZZ000']), draftingDeptId: 'ZZ000', lifecycleId: 'LC-A' }),
     ];
-    const other: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00' };
+    const other: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00', companyCode: 'AS' };
     const page = buildPublicList(items, other, { draftingDeptId: 'JA000', lifecycleId: 'LC-A' }, TODAY);
     expect(page.items.map((d) => d.id)).toEqual(['hit']); // 未受業務限制影響
     expect(page.total).toBe(1);
@@ -416,7 +427,7 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
     expect(page.pageSize).toBe(50);
     expect(page.hasNext).toBe(false);
     expect(page.hiddenCount).toBe(0);
-    expect(page.items.map((d) => isPinned(d, 'JAC00'))).toEqual([true]);
+    expect(page.items.map((d) => isPinned(d, 'JAC00', 'AS'))).toEqual([true]);
   });
 
   /**
@@ -426,11 +437,11 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
    */
   it('AC-19（回歸鎖定）非 User 角色 viewer → 新五項篩選語意與「其他」子分類逐欄相同', () => {
     const items = [
-      doc({ id: 'hit', usingDeptIds: ['JAD00'], draftingCompanyId: 'C1', primaryChiefId: 'E001' }),
-      doc({ id: 'miss', usingDeptIds: ['JAD00'], draftingCompanyId: 'C2', primaryChiefId: 'E001' }),
+      doc({ id: 'hit', usingDepts: depts(['JAD00']), draftingCompanyId: 'C1', primaryChiefId: 'E001' }),
+      doc({ id: 'miss', usingDepts: depts(['JAD00']), draftingCompanyId: 'C2', primaryChiefId: 'E001' }),
     ];
-    const admin: ViewerScope = { roleCode: 'ICSOPAdmin', userSubtype: 'other', orgCode: 'JAC00' };
-    const other: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00' };
+    const admin: ViewerScope = { roleCode: 'ICSOPAdmin', userSubtype: 'other', orgCode: 'JAC00', companyCode: 'AS' };
+    const other: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00', companyCode: 'AS' };
     const filters = { draftingCompanyId: 'C1', chiefId: 'E001' };
     const a = buildPublicList(items, admin, filters, TODAY);
     const b = buildPublicList(items, other, filters, TODAY);

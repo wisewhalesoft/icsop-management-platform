@@ -16,10 +16,18 @@ export class Account {
   companyCode!: string;
 
   @Column({ type: 'varchar', length: 20 })
-  loginId!: string; // 上游 USERID
+  loginId!: string; // ← 上游 VW_PERSONNEL_SQL.NO（v2.0；v1.0 為 VW_HPMUSER.USERID）
+
+  /**
+   * 換來源前之舊 `loginId`（← `VW_HPMUSER.USERID`），由 migration
+   * `AccountLoginIdToEmployeeNo1724198400000` 填入；手動帳號恆為 NULL。
+   * 保留為切換稽核軌跡與 `down()` 之還原依據，**刻意不清除**。
+   */
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  legacyLoginId!: string | null;
 
   @Column({ type: 'varchar', length: 10, nullable: true })
-  employeeNo!: string | null; // 非唯一，不可作鍵
+  employeeNo!: string | null; // ← 上游 NO（v2.0 起與 loginId 同源，見契約 §5.2）
 
   @Column({ type: 'nvarchar', length: 30, nullable: true })
   name!: string | null;

@@ -19,13 +19,34 @@ export interface PersonRecord {
   employmentStatus: EmploymentStatus;
 }
 
+/**
+ * 🔴 B 階段（多公司）：全部方法之 `companyCode` 皆為**必要參數**，刻意不給預設值。
+ *
+ * `ACCOUNT` 之唯一鍵為 `(companyCode, loginId)`；`employeeNo`（＝上游 `NO`）僅在**單一公司內**
+ * 保證唯一。舊版 `TypeOrmPersonStore` 建構子寫死 `companyCode='AS'`，使 AD/AE/AJ 員工之員編
+ * 永遠解析不到（姓名顯示為員編原字串），且若員編字串跨公司偶然重複，會把某公司員工的姓名
+ * 誤植到另一公司的文件上——兩者皆為靜默錯誤。
+ *
+ * 不設預設值的理由同 `OrgUnitReadStore.findByOrgCode`：預設值正是缺陷成因，改必填後未接上
+ * 公司別的呼叫點會直接編譯失敗。
+ */
 export interface PersonStore {
   /** 單筆解析（含離職者，供歷史顯示）。查無 → null。 */
-  findByEmployeeNo(employeeNo: string): Promise<PersonRecord | null>;
+  findByEmployeeNo(
+    companyCode: string,
+    employeeNo: string,
+  ): Promise<PersonRecord | null>;
   /** 批次解析（F017 清單避免 N+1）。回 Map<employeeNo, PersonRecord>，未命中鍵缺席。 */
-  findByEmployeeNos(employeeNos: string[]): Promise<Map<string, PersonRecord>>;
+  findByEmployeeNos(
+    companyCode: string,
+    employeeNos: string[],
+  ): Promise<Map<string, PersonRecord>>;
   /** 關鍵字（姓名/員編）搜尋，僅回在職者（F014 當責室長候選）。 */
-  searchActive(keyword: string, limit?: number): Promise<PersonRecord[]>;
+  searchActive(
+    companyCode: string,
+    keyword: string,
+    limit?: number,
+  ): Promise<PersonRecord[]>;
 }
 
 export const PERSON_STORE = Symbol('PERSON_STORE');

@@ -28,7 +28,7 @@ const ORG = {
 };
 
 function fakeOrg(map: Record<string, { tier: string; name: string; descFull: string | null }>): WatermarkOrgLookup {
-  return { findByOrgCode: (code) => Promise.resolve(map[code] ?? null) };
+  return { findByOrgCode: (_companyCode, code) => Promise.resolve(map[code] ?? null) };
 }
 
 class FakeBurner {
@@ -75,7 +75,7 @@ function makeService() {
     audit,
     {
       getDocMeta: () =>
-        Promise.resolve({ documentNumber: 'ICSOP-1', documentName: '車輛分期進件', usingDeptIds: ['JAC00'] }),
+        Promise.resolve({ documentNumber: 'ICSOP-1', documentName: '車輛分期進件', usingDepts: [{ companyCode: 'AS', orgCode: 'JAC00' }] }),
     },
     () => T0,
   );
@@ -153,7 +153,7 @@ describe('WatermarkService.burnIfPdf（F020 AC-D1／AC-D2／AC-D5；三類前台
     const burner = new FakeBurner();
     const svc = new WatermarkService(
       {
-        findByOrgCode: (code) => {
+        findByOrgCode: (_companyCode, code) => {
           orgCalls += 1;
           return Promise.resolve((ORG as Record<string, { tier: string; name: string; descFull: string | null }>)[code] ?? null);
         },

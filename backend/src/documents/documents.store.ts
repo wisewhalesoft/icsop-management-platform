@@ -29,6 +29,8 @@ export interface CreateDocumentInput {
 
 export interface DocumentView extends CreateDocumentInput {
   id: string;
+  /** 🔴 B 階段（多公司）：文件所屬公司（見 `DocumentListItem.companyCode`）。 */
+  companyCode: string;
   nodeId: string | null;
   /** F014：單筆讀取一律回明確集合（可為空陣列），供編輯頁載入次要室長/使用部門。 */
   secondaryChiefIds: string[];
@@ -116,6 +118,12 @@ export interface DocumentListFilters {
 /** 清單項（含循環名稱、公告日期以 ISO 字串傳出，供前端衍生已公告/進度中）。 */
 export interface DocumentListItem {
   id: string;
+  /**
+   * 🔴 B 階段（多公司）：文件所屬公司。名稱解析（部門／室長姓名）必須以本欄為範圍——
+   * 清單一頁可能橫跨多家公司，若以單一公司批次解析，會把某公司員工的姓名誤植到另一公司
+   * 的文件列上（員編僅在單一公司內唯一）。
+   */
+  companyCode: string;
   status: DocumentStatus;
   documentNumber: string;
   documentName: string;

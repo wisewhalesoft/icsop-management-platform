@@ -2,10 +2,11 @@ import { DataSource } from 'typeorm';
 import { IcsopDocument } from '../database/entities/icsop-document.entity';
 import { DocUsingDept } from '../database/entities/doc-using-dept.entity';
 import { WatermarkDocMeta } from './watermark-burner.service';
+import { UsingDeptRef } from '../rbac/viewer-scope';
 
 /**
  * F020 稽核 target 顯示中繼（生產）：讀 ICSOP_DOCUMENT 之編號/名稱。
- * F041：additive 擴充 `usingDeptIds`（供業務子分類之可見性判定）——比照
+ * F041：additive 擴充使用部門（供業務子分類之可見性判定）——比照
  * `typeorm-public-documents.store.ts` 既有「分離查詢 DOC_USING_DEPT + JS 端映射」手法，不改用 JOIN。
  *
  * 🔴 §11.5：本類別自 `typeorm-watermark.sources.ts` **原樣搬移至獨立檔案**，使
@@ -25,20 +26,21 @@ export class TypeOrmDocMeta implements WatermarkDocMeta {
   async getDocMeta(documentId: string): Promise<{
     documentNumber: string | null;
     documentName: string | null;
-    usingDeptIds: string[];
+    usingDepts: UsingDeptRef[];
   } | null> {
     const ds = await this.init();
     const d = await ds
       .getRepository(IcsopDocument)
       .findOne({ where: { id: documentId }, select: { documentNumber: true, documentName: true } });
     if (!d) return null;
+    // 🔴 B 階段（多公司）：一併取回 companyCode——沒有它，可見性判定會跨公司誤中（越權瀏覽）。
     const deptRows = await ds
       .getRepository(DocUsingDept)
-      .find({ where: { documentId }, select: { orgCode: true } });
+      .find({ where: { documentId }, select: { orgCode: true, companyCode: true } });
     return {
       documentNumber: d.documentNumber,
       documentName: d.documentName,
-      usingDeptIds: deptRows.map((r) => r.orgCode),
+      usingDepts: deptRows.map((r) => ({ companyCode: r.companyCode, orgCode: r.orgCode })),
     };
   }
 }

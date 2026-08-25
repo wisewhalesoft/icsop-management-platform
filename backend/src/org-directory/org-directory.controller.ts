@@ -4,20 +4,36 @@ import {
   NotFoundException,
   Param,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { OrgDirectoryService } from './org-directory.service';
 import { OrgTreeNode, OrgUnitRecord } from './org-unit-read';
 import { PersonRecord } from './person-directory';
-import { SessionGuard } from '../auth/session.guard';
+import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { RequirePermission } from '../rbac/require-permission.decorator';
 import { FunctionKey } from '../rbac/function-matrix';
 
-const DEFAULT_COMPANY = 'AS';
-
 function parseBool(v: string | undefined): boolean {
   return v === 'true' || v === '1';
+}
+
+/**
+ * 生效公司別：明確帶入之 `?companyCode=` 優先，否則取**登入者自己的公司**。
+ *
+ * 🔴 B 階段（多公司）：舊版此處為常數 `DEFAULT_COMPANY = 'AS'`——在多公司資料共存後，該預設
+ * 會使非 AS 公司的使用者在未帶參數時，靜默地取到 AS 的組織樹（部門下拉列出別家公司的部門）。
+ * 改以 session 之公司為預設，語意才正確：「未指定＝我這家公司」。
+ *
+ * `SessionGuard` 已保證此端點必有 `sessionUser`（未登入 → 401），故此處不需再處理缺值分支；
+ * 仍保留 `?? ''` 之防禦性收斂，避免型別上出現 undefined 而被迫在下游散落判斷。
+ */
+function effectiveCompany(
+  req: RequestWithSession,
+  explicit?: string,
+): string {
+  return explicit?.trim() || req.sessionUser?.companyCode || '';
 }
 
 /**
@@ -38,10 +54,11 @@ export class OrgUnitReadController {
   /** list：依 companyCode 取全部（預設僅 active）。 */
   @Get()
   list(
+    @Req() req: RequestWithSession,
     @Query('companyCode') companyCode?: string,
     @Query('includeInactive') includeInactive?: string,
   ): Promise<OrgUnitRecord[]> {
-    return this.svc.listOrgUnits(companyCode?.trim() || DEFAULT_COMPANY, {
+    return this.svc.listOrgUnits(effectiveCompany(req, companyCode), {
       includeInactive: parseBool(includeInactive),
     });
   }
@@ -49,10 +66,11 @@ export class OrgUnitReadController {
   /** tree：巢狀樹（公司層由 COMPANY 靜態名另包，不混入此結構）。 */
   @Get('tree')
   tree(
+    @Req() req: RequestWithSession,
     @Query('companyCode') companyCode?: string,
     @Query('includeInactive') includeInactive?: string,
   ): Promise<OrgTreeNode[]> {
-    return this.svc.orgUnitTree(companyCode?.trim() || DEFAULT_COMPANY, {
+    return this.svc.orgUnitTree(effectiveCompany(req, companyCode), {
       includeInactive: parseBool(includeInactive),
     });
   }
@@ -60,6 +78,7 @@ export class OrgUnitReadController {
   /** cascade：直屬子層（F014 由上而下逐層；上層變更時清空下層之後端保證）。 */
   @Get('children')
   children(
+    @Req() req: RequestWithSession,
     @Query('parentCode') parentCode?: string,
     @Query('companyCode') companyCode?: string,
     @Query('includeInactive') includeInactive?: string,
@@ -67,21 +86,22 @@ export class OrgUnitReadController {
     const parent = parentCode?.trim();
     if (!parent) return Promise.resolve([]);
     return this.svc.orgUnitChildren(
+      effectiveCompany(req, companyCode),
       parent,
       { includeInactive: parseBool(includeInactive) },
-      companyCode?.trim() || DEFAULT_COMPANY,
     );
   }
 
   /** subtree：codePrefix 前綴展開（空前綴 → 全域）。 */
   @Get('subtree')
   subtree(
+    @Req() req: RequestWithSession,
     @Query('prefix') prefix?: string,
     @Query('companyCode') companyCode?: string,
     @Query('includeInactive') includeInactive?: string,
   ): Promise<OrgUnitRecord[]> {
     return this.svc.orgUnitSubtree(
-      companyCode?.trim() || DEFAULT_COMPANY,
+      effectiveCompany(req, companyCode),
       prefix?.trim() ?? '',
       { includeInactive: parseBool(includeInactive) },
     );
@@ -104,22 +124,33 @@ export class PersonReadController {
 
   @Get('search')
   search(
+    @Req() req: RequestWithSession,
     @Query('q') q?: string,
     @Query('limit') limit?: string,
+    @Query('companyCode') companyCode?: string,
   ): Promise<PersonRecord[]> {
     const parsed = limit === undefined ? undefined : Number(limit);
     const lim =
       parsed !== undefined && Number.isFinite(parsed) && parsed > 0
         ? Math.min(Math.floor(parsed), 100)
         : undefined;
-    return this.svc.searchActivePersons(q?.trim() ?? '', lim);
+    return this.svc.searchActivePersons(
+      effectiveCompany(req, companyCode),
+      q?.trim() ?? '',
+      lim,
+    );
   }
 
   @Get(':employeeNo')
   async byEmployeeNo(
+    @Req() req: RequestWithSession,
     @Param('employeeNo') employeeNo: string,
+    @Query('companyCode') companyCode?: string,
   ): Promise<PersonRecord> {
-    const p = await this.svc.getPerson(employeeNo);
+    const p = await this.svc.getPerson(
+      effectiveCompany(req, companyCode),
+      employeeNo,
+    );
     if (p === null) throw new NotFoundException('PERSON_NOT_FOUND');
     return p;
   }

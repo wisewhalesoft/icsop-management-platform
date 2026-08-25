@@ -5,6 +5,7 @@ import { Icon } from './components/Icon';
 import { AppShell } from './components/AppShell';
 import { ToastProvider } from './components/useToast';
 import { LoginPage } from './pages/LoginPage';
+import { SelectAccountPage } from './pages/SelectAccountPage';
 import { RoleLanding } from './pages/RoleLanding';
 import { DashboardHome } from './pages/DashboardHome';
 import { OrgSyncPage } from './pages/OrgSyncPage';
@@ -81,6 +82,8 @@ export function AppRoutes(): JSX.Element {
   if (status === 'unauthenticated') {
     return (
       <Routes>
+        {/* F001 帳號選擇 delta：同一 email 命中多帳號時之登入中繼狀態畫面。 */}
+        <Route path="/login/select-account" element={<SelectAccountPage />} />
         <Route path="*" element={<LoginPage />} />
       </Routes>
     );

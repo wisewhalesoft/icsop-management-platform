@@ -1,9 +1,9 @@
 # F001: 雙軌驗證登入與 Session 管理
-Priority: P0-MVP | Status: Draft（途徑 A 端到端驗證；途徑 B 帳密登入＋登入節流已實作＋單元驗證，識別鍵＝loginId；brute-force 節流 OQ-F001-B-04 落地，見 implementation-logs/hardening-impl.md）**＋ 2026-08-14 新增 `AC-C1`～`AC-C3` 跨公司帳密登入解析 delta（已實作並併入 main，commit `26d074f`；`OLD>` 原標「待實作」——本次僅更正實作狀態，未查證其驗證情形，不寫成已驗證）＋ 2026-08-18 新增 `AC-E1`～`AC-E15` Azure AD endpoint host 覆寫 delta（已實作並併入 main，commit `3448679`；其中 `AC-E4` 已於 2026-08-18 由真人於遠端環境驗證兌現，見該條目與 `architecture-spec.md` §10 changelog v1.7a；`OLD>` 原標「待實作，遠端環境登入不可用之修復」）** | Last Updated: 2026-08-18
+Priority: P0-MVP | Status: Draft（途徑 A 端到端驗證；途徑 B 帳密登入＋登入節流已實作＋單元驗證，識別鍵＝loginId；brute-force 節流 OQ-F001-B-04 落地，見 implementation-logs/hardening-impl.md）**＋ 2026-08-14 新增 `AC-C1`～`AC-C3` 跨公司帳密登入解析 delta（已實作並併入 main，commit `26d074f`；`OLD>` 原標「待實作」——本次僅更正實作狀態，未查證其驗證情形，不寫成已驗證）＋ 2026-08-18 新增 `AC-E1`～`AC-E15` Azure AD endpoint host 覆寫 delta（已實作並併入 main，commit `3448679`；其中 `AC-E4` 已於 2026-08-18 由真人於遠端環境驗證兌現，見該條目與 `architecture-spec.md` §10 changelog v1.7a；`OLD>` 原標「待實作，遠端環境登入不可用之修復」）** ＋ **2026-08-24 新增 `AC-M1`～`AC-M29` 同一 email 命中多帳號 → 帳號選擇 delta（🔄 **待實作**，權威來源＝[upstream-hr-source-contract.md §12.2 人類裁決 #2](../upstream-hr-source-contract.md)；本批**取代**既有「命中多筆 → 拒登」之行為，惟其於 `AC-M7` 安全前置條件不成立時仍保留；含 5 項 `[OPEN-M#]` 待人類裁決）** | Last Updated: 2026-08-24
 Epic/Story: E01 / US-001, US-002, US-004
 
 > ✅ **實作狀態（2026-07-21，垂直切片）**：途徑 A（Azure AD OIDC）已於 `backend/`（NestJS 11＋`@azure/msal-node`）實作並**真人端到端驗證通過**——登入→靜默 SSO→回呼驗簽→`email` 比對帳號→核發我方 session（httpOnly JWT）→受保護路由 `/auth/me`→登出→再存取回 401。
-> **已實作**：`/auth/login`（state＋nonce＋PKCE、簽章 tx cookie）／`/auth/callback`（state 驗證、code 交換、**nonce 強制驗證**、`email` claim 缺漏→`AUTH_EMAIL_CLAIM_MISSING`、三態分類）／三態導向（SingleActive→核發 session；NotFound→`AUTH_ACCOUNT_NOT_FOUND`；Disabled→`AUTH_ACCOUNT_DISABLED`；MultipleActive→拒絕＋告警＋對外仍回 NOT_FOUND 不可列舉）／30 分鐘 sliding 閒置逾時（guard 每次請求刷新，OQ-E01-04）／`/auth/logout`。帳號來源抽象為 `AccountRepository` 介面。單元測試 33 個（帳號分類、三態決策、session token、guard）。
+> **已實作**：`/auth/login`（state＋nonce＋PKCE、簽章 tx cookie）／`/auth/callback`（state 驗證、code 交換、**nonce 強制驗證**、`email` claim 缺漏→`AUTH_EMAIL_CLAIM_MISSING`、三態分類）／三態導向（SingleActive→核發 session；NotFound→`AUTH_ACCOUNT_NOT_FOUND`；Disabled→`AUTH_ACCOUNT_DISABLED`；MultipleActive→拒絕＋告警＋對外仍回 NOT_FOUND 不可列舉——🔄 **此路徑已於 2026-08-24 被 `AC-M1`～`AC-M29` 取代為「帳號選擇畫面」，僅在姓名不一致時保留，見 [帳號選擇 delta](#multi-account-picker)**）／30 分鐘 sliding 閒置逾時（guard 每次請求刷新，OQ-E01-04）／`/auth/logout`。帳號來源抽象為 `AccountRepository` 介面。單元測試 33 個（帳號分類、三態決策、session token、guard）。
 > **已知 gap（非本切片範圍，待後續）**：① **登出非「即時」撤銷被竊 token**——無狀態設計下清 cookie 僅撤銷該瀏覽器，token 副本活到 exp（≤30 分）；即時撤銷需 server 端 denylist（待 Redis/DB infra），與下方 AC「登出立即撤銷」之「即時」語意有落差。② **帳號來源為種子**（`SeedAccountRepository`），待 [F004](F004-org-sync.md) 組織同步寫入真實 `ACCOUNT` 表後改接。③ ~~途徑 B 帳密登入尚未實作~~ **途徑 B 帳密登入已於 authfix 實作**（`POST /auth/login`，識別鍵＝loginId，統一 `AUTH_INVALID_CREDENTIALS`；`PasswordLoginService`＋純函式 `resolvePasswordLogin`＋`AccountRepository.findByLoginId`；密碼雜湊 `accounts/password.ts` 早已就緒）。單元測試覆蓋 TS-F001-001〜007/009/010/013；`[integration]` 情境（008/011/012、真實 DB 端到端）待整合階段。**密碼路徑節流（brute-force 防護）已於 hardening 實作**（`LoginThrottleService`＝單機 process 記憶體固定時窗計數器，IP 軸 20／loginId 軸 5 每 60 秒，逾越回 429 `AUTH_TOO_MANY_ATTEMPTS`；不做持久性帳號鎖定故不與 OQ-E01-02 衝突，落地 OQ-F001-B-04；TS-HD-THR/SVC/CTRL 共 22 案，見 implementation-logs/hardening-impl.md）。⚠ 反向代理（nginx）部署下需於 `main.ts` 設 `trust proxy`，否則 IP 軸失效（部署待辦）。
 > 對應設定文件：[docs/setup/azure-ad-app-registration.md](../../setup/azure-ad-app-registration.md)。
 
@@ -33,6 +33,10 @@ Epic/Story: E01 / US-001, US-002, US-004
 6. 取 `id_token` 之 **`email` claim** 作為身分對應鍵。
 7. 以該 email 比對本地 `ACCOUNT.email`（← `VW_HPMUSER.EMAILADDR`）：**完整 email 含網域逐字比對、不分大小寫、不拆 local-part**，並強制 `status=active`（← `EMPSTS='A'`，僅在職帳號）。跨公司兼職者由網域天然區分，**不需併入 `companyCode`**。**不得** fallback 至 `HREMAILADDR`。
 8. 命中唯一且啟用之帳號 → 記錄登入事件 → 核發我方 JWT（內含 `roleCode`）與 session → 進入 [F002](F002-role-based-routing.md)。
+9. 🔄 **（2026-08-24 新增，`AC-M1`～`AC-M29`）命中多筆啟用帳號**：先判定該組是否為**同一自然人**（判準＝候選集合姓名一致，`AC-M7`）——
+   - **一致** → **不核發 session**，改進入**登入中繼狀態**：下發短時效之選擇票證並導向帳號選擇畫面；使用者選定後兌換，方核發我方 JWT／session 並進入 F002。
+   - **不一致**（＝真正的共用信箱）→ **不得**進入選單，退回既有拒登＋告警行為（`AC-M8`）。
+   - 詳見 [同一 email 命中多帳號 → 帳號選擇 delta](#multi-account-picker)。
 
 ### 途徑 B：管理員帳密登入
 1. 使用者於獨立登入頁輸入帳號密碼送出。
@@ -57,13 +61,16 @@ Epic/Story: E01 / US-001, US-002, US-004
 - **`email` claim 缺漏或為空**：無法取得對應鍵，拒絕登入並提示洽系統管理員。
 - **email 查無對應在職帳號**（含該員 `EMAILADDR` 從缺、或僅存在於已離職帳號）：拒絕登入。屬 HR 資料面問題，應由 HR 補齊，**不得**以其他欄位靜默 fallback。
 - **AD 認證成功但本地帳號已停用**（含離職停用）：仍**拒絕**登入（見 [F005](F005-auto-disable-departed.md)）。
-- **email 於在職帳號中命中多筆**：視為資料異常，拒絕登入並告警系統管理員，不任選一筆。
+- **email 於在職帳號中命中多筆**：🔄 **2026-08-24 改寫（人類裁決 #2，`AC-M1`～`AC-M29`）**。`OLD>` 原文＝「視為資料異常，拒絕登入並告警系統管理員，不任選一筆」。<br>**新行為**：候選集合姓名一致（＝同一自然人）→ 進入登入中繼狀態、由使用者於選擇畫面選定帳號後方核發 session（`AC-M3`）；姓名不一致（＝真正的共用信箱）→ **維持原文之拒登＋告警**，對外仍回 `AUTH_ACCOUNT_NOT_FOUND`（`AC-M8`）。**任何情形下皆不得由系統任選一筆**（`AC-M16`／`AC-M24`）。
+- **選擇票證過期／被竄改／已使用／所選帳號不在票證集合內**：回 `AUTH_SELECTION_TICKET_INVALID`（401），不核發 session（`AC-M19`～`AC-M23`）。
+- **所選帳號於票證簽發後被停用**：回既有 `AUTH_ACCOUNT_DISABLED`，不得自動改選其他候選（`AC-M24`）。
 - 閒置 29:59 時操作：session 維持有效並重新計時。
 - 多分頁同帳號：任一分頁有效操作重置全域閒置計時（依 OQ-E01-04，以每次 API 更新 `lastActivityAt` 為基準）。
 
 ## Postconditions
 - 成功：持有我方核發之有效 JWT，角色資訊嵌於 token/session；Azure AD 於此後不參與授權判定。
 - 逾時/登出：原憑證不可再用於任何受保護 API。
+- 🔄 **登入中繼狀態（`AC-M3`）**：僅持有選擇票證，**尚未**持有我方 session；該票證不可用於任何受保護 API（`AC-M11`），且於兌換成功後即失效（`AC-M18`／`AC-M23`）。
 
 ## Acceptance Criteria
 - Given 使用者已持有有效 Azure AD session 且本地有對應之啟用帳號, When 進入 ICSOP 觸發 OIDC 登入, Then **不出現 AD 登入畫面（靜默 SSO）**、核發我方有效 JWT 並回傳角色，記錄登入事件。
@@ -146,14 +153,103 @@ Epic/Story: E01 / US-001, US-002, US-004
 
 - **AC-E15（其餘行為完全不變）**：Given 任一 `AZURE_AD_AUTHORITY_HOST` 設定（含未設）, When 執行途徑 B 帳密登入（含 `AC-C1`～`AC-C3` 之兩段式解析）、session 30 分鐘閒置逾時、登出撤銷、`AUTH_TOO_MANY_ATTEMPTS` 節流, Then 行為**逐項不變**——本設定僅影響 Azure AD endpoint 之出網目標，不影響我方 session 之任何面向；[F002](F002-role-based-routing.md) 角色分流亦不受影響。同時，本批**不改動** `state`／`nonce`／PKCE／`aud`／`exp`／簽章驗證之任何既有規則。
 
+### 同一 email 命中多帳號 → 帳號選擇 delta（🔄 2026-08-24 人類裁決 #2 之漣漪；編號採 `AC-M#`，M＝multi-account picker）{#multi-account-picker}
+
+> **權威來源（本批不得推翻）**：[upstream-hr-source-contract.md](../upstream-hr-source-contract.md) **§12.2「人類裁決 #2」**（v2.0，2026-08-24）與同檔 §13。
+> **緣由**：dev 實測**推翻** v1.0「完整 email（含網域）已足以唯一定位、兼職者由網域天然區分」之假設——**6 組／16 筆**在職人員記錄共用同一 `EMAIL`（1 組同公司內重複、3 組跨 2 家公司、2 組跨 4 家公司），且該 **6 組之 `NAME_IN_CHINESE` 全部一致**（姓名基數 1,343 相異／1,362 人，證實姓名未被遮罩）⇒ 每組皆為**同一自然人**在多家公司之人事記錄，非共用信箱。裁決＝**命中多筆不再拒登，改為進入登入中繼狀態、由使用者於選擇畫面選定帳號後方核發 session**。
+> **本批取代之既有條文**：本檔 Edge Cases 之「email 於在職帳號中命中多筆 → 視為資料異常，拒絕登入並告警」——該行為**僅於 `AC-M7` 之安全前置條件不成立時保留**（見乙節 `AC-M8`），其餘情形一律改走選單。
+> **編號自 `AC-M1` 起；本檔既有無編號 AC、`AC-C1`～`AC-C3`、`AC-E1`～`AC-E15` 全數不變**（戊節為其回歸鎖）。與 `AC-D#`／`AC-P#`／`AC-S#`／`AC-U#` 等其他批次區隔、不重號。
+>
+> **本批術語（下文一律依此，不另作解釋）**：
+> - **候選集合**＝以該次 id_token 之 `email` claim 依既有比對規則命中、且 `status='active'` 之 `ACCOUNT` 集合。
+> - **登入中繼狀態**＝已通過 Azure AD 驗證、已完成帳號比對，但**尚未核發我方 session** 之狀態。
+> - **選擇票證（selection ticket）**＝承載登入中繼狀態之短時效、受我方金鑰簽章保護之憑證。
+>
+> **[ASSUMPTION] 端點、路由與 cookie 命名**（語意為規範，字面命名可由 system-architect 更動，但**更動須回寫本節**，否則約束環會鎖到不存在的介面）：
+> - 前端路由 `/login/select-account`；後端 `GET /auth/select-account`（取候選）與 `POST /auth/select-account`（兌換）。
+> - 選擇票證 cookie 名 `icsop_login_select`（沿用本 repo `icsop_*` 前綴；與 session cookie `icsop_session` **必須不同名**）。
+>
+> ⚠ **本批無對應 prototype**：`prototypes/01-login.html` 僅有 SSO／帳密兩區塊與逾時 modal，**不含帳號選擇畫面**。丙節之 AC 為選擇畫面之**唯一 oracle**；若後續補上 prototype，須與丙節逐項對齊。
+>
+> 🔒 **本批之安全性 AC（供 test-generator 優先建環）**：`AC-M6`、`AC-M7`、`AC-M8`、`AC-M9`、`AC-M10`、`AC-M11`、`AC-M19`、`AC-M20`、`AC-M21`、`AC-M22`、`AC-M23`、`AC-M24`、`AC-M26`。
+>
+> **本批新增錯誤碼＝1 個**：`AUTH_SELECTION_TICKET_INVALID`（401，固定使用者訊息「登入未完成，請重新登入」）。✅ **已經人類核可（2026-08-24）**——本 repo 近數批 delta 皆以「零新增錯誤碼」為紀律，故此新增經專案負責人明示核可後方成立；已登錄於 [error-handling.md 錯誤碼一覽](../error-handling.md)。
+
+#### 甲、候選集合之判定（登入中繼狀態之進入條件）
+
+- **AC-M1（比對規則逐項不變——回歸鎖）**：Given id_token 通過驗證並取得 `email` claim, When 建立候選集合, Then 比對規則**沿用本檔既有規定**：完整 email（含網域）逐字比對、**不分大小寫**、不拆 local-part、**不得** fallback 至 `HREMAILADDR`、**不得**併入 `companyCode`；並僅納入 `status='active'` 之帳號。本批**不引入任何新的比對規則**。
+- **AC-M2（0／1／多筆之三分支——唯一決策點）**：Given 候選集合大小為 `N`, When 完成比對, Then：
+  - `N = 0` 且該 email 亦無任何非 `active` 帳號 → 回 `AUTH_ACCOUNT_NOT_FOUND`（**不變**）。
+  - `N = 0` 但該 email 存在至少一筆非 `active` 帳號 → 回 `AUTH_ACCOUNT_DISABLED`（**不變**）。
+  - `N = 1` → **直接核發我方 session**；**不得**顯示選擇畫面、**不得**簽發選擇票證（**不變**）。
+  - `N ≥ 2` → 進入乙節之安全前置條件判定。
+- **AC-M3（`N ≥ 2` 且前置條件成立 → 進入登入中繼狀態）**：Given `N ≥ 2` 且 `AC-M7` 成立, When `/auth/callback` 回應, Then 回 **302 導向 `/login/select-account`**，並以 `Set-Cookie` 下發選擇票證；**該回應不得下發我方 session cookie**（`icsop_session`），亦不得於任何位置回傳可直接用於受保護 API 之憑證。
+- **AC-M4（候選排序具決定性）**：Given 候選集合, When 產生候選清單, Then 排序為：先依 `companyCode` 字典序升冪，同 `companyCode` 內再依 `loginId` 字典序升冪。同一輸入重複執行，順序**逐項相同**（不得依賴資料庫預設順序或雜湊順序）。
+- **AC-M5（候選集合封閉於該 email）**：Given 候選集合, When 產生, Then 其每一筆之 `email` 皆與該次 `email` claim 依 `AC-M1` 之規則相符；**不得**含任何其他 email 之帳號，亦不得因姓名相同、員工編號相同或部門相同而納入。
+- **AC-M6 🔒（僅 `active` 進入選單）**：Given 某 email 命中 3 筆帳號、其中 1 筆 `status='disabled'`, When 建立候選集合, Then 候選集合為 2 筆，且選擇畫面與 `GET /auth/select-account` 之 payload **均不含**該停用帳號之任何欄位；若過濾後恰剩 1 筆 → 依 `AC-M2` 直接登入、不出選單。
+
+#### 乙、🔒 安全前置條件（裁決 #2 之成立條件，非背景說明）
+
+> 契約 §12.2 明文：「此前提為裁決 #2 的成立條件，不是背景說明……實作時應將『同組姓名一致』列為顯示選單的**執行期前置條件**」。本節即該要求之可驗證化。
+
+- **AC-M7 🔒（姓名一致方得顯示選單）**：Given `N ≥ 2`, When 判定是否進入登入中繼狀態, Then **僅當候選集合全部帳號之 `name` 在「去頭尾空白後、忽略大小寫」逐字比對下完全相同**，方得進入。判準**僅做**下列兩項正規化——**去頭尾空白**、**大小寫正規化**；除此之外一律逐字比對：**不忽略內部空白**、不做全形／半形轉換、不做同音／別名／相似度比對。大小寫視為一致之理由：姓名之大小寫差異多為輸入習慣或系統轉寫差異（例如英文姓名全大寫存檔），非身分差異；email 比對本身已採大小寫不分（見 `AC-M1`、`AC-M28`），姓名判準採同一原則以求一致。⇒ 除去頭尾空白與大小寫外之任何殘餘差異一律**朝拒登方向失敗（fail-closed）**，此為刻意選擇：誤拒的代價是一名同名同信箱者需洽管理員，誤放的代價是共用信箱之權限提升。
+- **AC-M8 🔒（姓名不一致 → 退回既有拒登＋告警）**：Given `N ≥ 2` 且 `AC-M7` 不成立（＝真正的共用信箱）, When 處理回呼, Then **不得**簽發選擇票證、**不得**顯示選擇畫面、**不得**核發任何 session；對外回**既有** `AUTH_ACCOUNT_NOT_FOUND`（沿用既有「不可列舉」處置與其固定訊息，**不新增錯誤碼、不新增對外可區分之狀態**），並於伺服器日誌以 **WARN** 記錄一筆共用信箱告警，內容至少含：該 email、候選帳號之 `(companyCode, loginId)` 清單、相異姓名之組數；**不得**記錄密碼、`passwordHash` 或 `clientSecret`。
+- **AC-M9 🔒（姓名判準只施於候選集合）**：Given 某 email 另命中一筆**已停用**且姓名與候選集合不同之帳號, When 執行 `AC-M7`, Then 該停用帳號**不參與**姓名一致判定（其已由 `AC-M6` 排除），登入流程照常進入選擇畫面。**不得**因已停用帳號之姓名差異而觸發 `AC-M8` 之拒登。
+- **AC-M10 🔒（票證範圍限於該候選集合且受簽章保護）**：Given 簽發選擇票證, Then 票證**必須**綁定下列三者，且三者皆在我方金鑰之簽章保護範圍內：① 該次 `email` claim 之值（或其不可逆之衍生值）；② 候選集合之**帳號識別碼全集**；③ 簽發時間與到期時間。Given 票證之任一位元被修改, When 驗證票證, Then 必須驗簽失敗（見 `AC-M20`）。
+- **AC-M11 🔒（票證不是 session）**：Given 僅持有有效之選擇票證、且**未**持有我方 session cookie, When 存取任一受保護 API（測試至少涵蓋 `/auth/me` 與任一需登入之後台端點）, Then 回 **401**、**不得**視為已登入、**不得**回傳任何帳號或組織資料；選擇票證**不得**被 session guard 接受為身分憑證，亦**不得**觸發 `lastActivityAt` 之更新。
+
+#### 丙、選擇畫面之可觀察內容
+
+- **AC-M12（候選查詢端點之 payload 封閉集）**：Given 持有效選擇票證, When `GET /auth/select-account`, Then 回 **200**，payload 含 `email`、`name`（該自然人姓名；依 `AC-M7` 全體一致故為單一值）與 `candidates` 陣列；`candidates` 之每一筆**恰含且僅含**八個欄位：`accountId`、`companyCode`、`companyName`、`orgCode`、`orgName`、`roleCode`、`roleName`、`loginId`。**不得**含 `passwordHash`、`resignDate`、`hireDate`、`managerEmpNo`，亦不得含 [upstream-hr-source-contract.md §5.2](../upstream-hr-source-contract.md) 明列之任何禁欄（身分證字號、金融個資、第三人聯絡資料等）。
+- **AC-M13（畫面必顯欄位＝四項）**：Given 選擇畫面, When 渲染, Then 每一候選列**必須**顯示四項：**公司**、**部門**、**角色**、**員工編號**（＝`loginId`）；**姓名於頁面層顯示一次**（全體一致，不逐列重複）。<br>[ASSUMPTION] **不顯示「職位」**——契約未指定欄位集合；可辨識性已由員工編號保證（`AC-M15`），故取最小揭露。若人類裁定加入職位，僅需於本條與 `AC-M12`、`AC-M14` 各補一欄，其餘 AC 一字不動。
+- **AC-M14（缺值之顯示規則——逐欄明定，無「妥善處理」）**：Given 任一候選之欄位值缺漏或解析不到, When 渲染該列, Then：
+  - **公司**：`companyCode` 有公司名稱對照 → 顯示**公司簡稱**；無對照 → 顯示 `companyCode` **原值**；`companyCode` 為空 → 顯示 `—`（U+2014 EM DASH）。
+  - **部門**：`orgCode` 於 `ORG_UNIT` 有對應列（**不論該列 `status` 為 `active` 或 `inactive`**）→ 顯示該單位名稱；無對應列 → 顯示 `orgCode` **原值**；`orgCode` 為空 → 顯示 `—`。
+  - **角色**：一律顯示 `roleCode` 所對應之角色顯示名稱（`ACCOUNT.roleCode` 為必填，**無缺值分支**）。
+  - **員工編號**：一律顯示 `loginId` **原值**（必填，**無缺值分支**）。
+  - **全域禁止**：任何情況下**不得**輸出空白欄、`undefined`、`null`、`NaN`、`[object Object]` 等字樣。
+- **AC-M15（每一列必可辨識）**：Given 候選集合中存在兩筆 `companyCode`、`orgCode`、`roleCode` **皆相同**之帳號（實測「同一公司內重複」1 組 2 筆即為此形狀）, When 渲染選擇畫面, Then 該兩列之**顯示內容必須不同**（由員工編號欄保證）；**不得**出現兩列在使用者眼中完全無法區分之情形。
+- **AC-M16（不得自動選取、不得記憶偏好）**：Given 進入選擇畫面, Then **不得**預先選取任一候選、**不得**因先前之選擇紀錄（cookie／localStorage／伺服器端偏好）而自動送出或跳過本畫面；必須由使用者**明確選定**後方進入兌換。
+- **AC-M17（無票證而直接開啟選擇路由）**：Given 未持有選擇票證（或票證無效／已過期）, When 直接以瀏覽器開啟 `/login/select-account`, Then 該頁**不得**顯示任何帳號資料；其 `GET /auth/select-account` 回 **401 `AUTH_SELECTION_TICKET_INVALID`**，前端據此**導回登入頁**並呈現該碼之固定使用者訊息。
+
+#### 丁、兌換、時效與錯誤情境
+
+- **AC-M18（兌換成功之完整後果）**：Given 持有效票證且 `POST /auth/select-account` 之 body `{ accountId }` 滿足三項——① `accountId` ∈ 票證所綁之帳號集合；② 該帳號於**兌換當下**仍為 `status='active'`；③ 該帳號之 `email` 仍與票證所綁之 email 依 `AC-M1` 規則相符——, When 處理兌換, Then：核發我方 session（`roleCode` 取自**所選帳號**）、**同一回應必須清除選擇票證 cookie**（`Set-Cookie` 立即過期）、並於伺服器日誌記錄一筆登入事件（含所選帳號之 `(companyCode, loginId)`、候選集合大小、可判別「經選單登入」之標記）。此後之行為與單筆命中之登入**逐項相同**（[F002](F002-role-based-routing.md) 角色分流、30 分鐘 sliding 閒置逾時、登出撤銷）。
+- **AC-M19 🔒（票證時效——非 sliding）**：Given 票證簽發後已逾其有效期, When 提交 `GET` 或 `POST /auth/select-account`, Then 回 **401 `AUTH_SELECTION_TICKET_INVALID`**、**不核發任何 session**、並清除票證 cookie。票證之到期時間**不得**因任何請求而延長（**非 sliding**，與我方 session 之 30 分鐘 sliding 逾時語意不同，不得共用同一機制）。<br>✅ **有效期＝5 分鐘（2026-08-24 人類裁決，`[OPEN-M1]` 結案）**。理由：本畫面之唯一動作是「剛完成 AD 驗證的人從 2～4 列中點一列」，5 分鐘對人類綽綽有餘，同時把票證失竊後之可用視窗壓到遠小於 session 的 30 分鐘。
+- **AC-M20 🔒（票證竄改／缺漏／不可解析）**：Given 票證之任一欄位（email、帳號集合、到期時間）被修改，或簽章不符，或票證缺漏，或格式不可解析, When 查詢候選或提交兌換, Then 回 **401 `AUTH_SELECTION_TICKET_INVALID`**、**不核發任何 session**，並以 **WARN** 記錄。**不得**因票證所宣稱之內容而放行任何帳號；**不得**在驗簽失敗後回退為「以 email 重新查詢候選集合」之任何路徑。
+- **AC-M21 🔒（選了不在集合內之帳號）**：Given 持**有效**票證，但 body 之 `accountId` **不在**票證所綁之集合內——測試至少涵蓋三種來源：① 屬於他人之帳號；② 屬於同一 email 但**於票證簽發後才建立**之帳號；③ 隨機或不存在之識別碼——, When 提交兌換, Then 回 **401 `AUTH_SELECTION_TICKET_INVALID`**、**不核發任何 session**，並以 WARN 記錄。🔴 **明確禁止**：不得回退為「以票證之 email 重新查詢、若該帳號亦屬該 email 則放行」——票證之集合是**唯一**授權範圍，重新查詢會使 `AC-M10` 之簽章保護失效。
+- **AC-M22 🔒（不得跨 email 重放）**：Given 以 email `a@example.com` 之流程所簽發之票證, When 用於兌換 email `b@example.com` 之帳號, Then 依 `AC-M21` 拒絕。Given 兩個不同 email 之登入流程各自簽發之票證 `T_a`、`T_b`, When 以 `T_a` 提交 `T_b` 之任一候選, Then 拒絕且**不核發任何 session**。本條為契約 §12.2 前置條件③「不可跨 email 重放」之直接載體。
+- **AC-M23 🔒（票證一次性）**：Given 一張票證已成功兌換, When 於其有效期內以**同一票證**再次提交 `POST` 或 `GET /auth/select-account`, Then 回 **401 `AUTH_SELECTION_TICKET_INVALID`**、**不核發第二個 session**。<br>✅ **要求一次性消耗（2026-08-24 人類裁決，`[OPEN-M2]` 結案）**。理由：純「短時效＋清 cookie」只撤銷本瀏覽器之副本，票證副本仍活到 exp，與本檔既知 gap ①（登出無法即時撤銷）同型；而此處成本極低——**比照既有 `LoginThrottleService` 之單機 process 記憶體做法**記錄已消耗之票證識別碼（到期自動清除），**不需 Redis／DB、零 schema 變更**。<br>**明確接受之代價（人類係在檢視本段後方裁決，故保留）**：與 `LoginThrottleService` 相同——多 worker／多容器部署時各自持有獨立記憶體，一次性保證退化為 per-worker；行程重啟後紀錄消失。因票證有效期極短（5 分鐘）且該視窗內之副本僅能選到**同一自然人本人**之帳號，殘餘風險已評估為可接受。
+- **AC-M24 🔒（選了已停用之帳號）**：Given 持有效票證且 `accountId` ∈ 集合，但該帳號**於票證簽發後被停用**（含 [F005](F005-auto-disable-departed.md) 之離職自動停用）, When 提交兌換, Then 回 **401 `AUTH_ACCOUNT_DISABLED`**（沿用**既有**錯誤碼與其既有使用者訊息「帳號已停用」，**不新增碼**）、**不核發任何 session**；🔴 **不得**自動改選集合中其他仍啟用之帳號。
+- **AC-M25（切換帳號須重新登入）**：Given 已以候選 A 完成登入, When 使用者欲改以候選 B 登入, Then 必須先登出（票證此時已依 `AC-M18`／`AC-M23` 失效），再重新發起 OIDC 流程（AD session 仍有效時為靜默 SSO）；系統**不得**提供「於已登入狀態下直接切換帳號」之任何路徑，亦不得保留可再次兌換之票證。
+- **AC-M26 🔒（揭露封閉集不變——`AC-E13` 之適用擴充）**：Given 本批之任一失敗呈現路徑（`/auth/callback` 之 `AC-M8`、`/login/select-account` 頁、`GET`／`POST /auth/select-account`）, When 呈現錯誤, Then **全數受 `AC-E13`(a)(b) 之封閉允許集拘束**；新增之 `AUTH_SELECTION_TICKET_INVALID` 與其固定訊息「登入未完成，請重新登入」**加入**該可列舉常數集合。使用者可見字串**不得**包含：`accountId`、票證內容或其任一欄位、候選集合之內容或大小、姓名不一致之細節、例外 `message`／`stack`、任何主機名或 URL。
+
+#### 戊、零漣漪回歸鎖
+
+- **AC-M27（其餘登入行為逐項不變）**：Given 本批上線後, When 執行下列既有流程, Then 行為**逐項不變**——途徑 B 帳密登入（含 `AC-C1`～`AC-C3` 之兩段式解析）、`AUTH_TOO_MANY_ATTEMPTS` 節流之門檻與視窗（60 秒／IP 20 次／`loginId` 5 次）、30 分鐘 sliding 閒置逾時、登出撤銷、`AC-E1`～`AC-E15` 之 authority host 與 issuer 規則、`state`／`nonce`／PKCE／`aud`／`exp`／簽章驗證。本批**僅**改變「途徑 A 之 email 命中多筆」單一分支。
+- **AC-M28（既有 email 比對 AC 逐條重跑不變）**：Given 本檔既有無編號 AC 中關於 email 比對之四條（僅大小寫不同視為相符／local-part 同但網域不同視為不相符／查無 active 回 `AUTH_ACCOUNT_NOT_FOUND`／已停用回 `AUTH_ACCOUNT_DISABLED`）, When 於本批上線後重跑, Then 結果**逐項相同**。
+- **AC-M29（零 schema 變更、不觸及稽核子系統）**：Given 本批, Then **不新增任何資料表或欄位**——選擇票證為無狀態之簽章憑證，`AC-M23` 之一次性紀錄存於 process 記憶體、不落 DB；`AUDIT_LOG` 之 `actionType`／`targetType` 列舉**不變**（本批之登入事件與告警一律寫伺服器日誌，比照既有登入事件之處置，不新增稽核類別）。
+
+#### 本批 `[OPEN]` 清單（M1–M3 已於 2026-08-24 裁決；M4／M5 未結）
+
+| 標籤 | 狀態 | 問題 | 裁決／建議 |
+|---|---|---|---|
+| `[OPEN-M1]` | ✅ **已裁決 2026-08-24** | 選擇票證之有效期具體值（契約 §12.2 僅要求「短時效」，未給數值） | **5 分鐘**（採納 spec-writer 建議）。已落於 `AC-M19` |
+| `[OPEN-M2]` | ✅ **已裁決 2026-08-24** | 票證是否強制**一次性消耗**（契約未提，屬 spec-writer 裁量） | **要求一次性**（採納）。實作比照 `LoginThrottleService` 之 process 記憶體，零 schema 變更；per-worker 退化與行程重啟後紀錄消失之代價**已由人類在檢視後明確接受**。已落於 `AC-M23` |
+| `[OPEN-M3]` | ✅ **已裁決 2026-08-24** | 是否核可**新增 1 個錯誤碼** `AUTH_SELECTION_TICKET_INVALID`（近數批 delta 皆以「零新增錯誤碼」為紀律） | **核可新增**（採納）。接受之理由：硬塞既有碼會語意錯誤——`AUTH_SESSION_EXPIRED` 意味「曾經登入」（不成立）、`AUTH_OIDC_STATE_MISMATCH` 指向 OIDC 回呼階段（不成立）、`AUTH_ACCOUNT_NOT_FOUND` 會把竄改事件偽裝成資料問題而喪失告警語意。已登錄 [error-handling.md](../error-handling.md) |
+| `[OPEN-M4]` | 🟡 **未結（營運前置）** | 契約 §11 #12 之「**正式環境重驗**」尚未執行；若正式環境存在**姓名不一致**之組，該組成員將依 `AC-M8` **無法登入**（回到 v1.0 之拒登） | 上線前完成重驗，並就不一致組先行以營運面處置（HR 更正或改配手動帳號）。**不改動任何 AC**——`AC-M8` 之 fail-closed 為刻意設計，非待調整項 |
+| `[OPEN-M5]` | 🟡 **未結（本輪刻意不補）** | 選擇畫面**無 prototype**（`prototypes/01-login.html` 不含此畫面） | **本輪人類已指定約束環不做 prototype fidelity 閘門**（僅 vitest／jest 單元測試層），故丙節 `AC-M12`～`AC-M17` 即為選擇畫面之**唯一 oracle**，缺 prototype 不阻擋建環與實作。日後若補 `01a-login-select-account.html`，須與丙節逐項對齊，並以丙節為準（prototype 不得反過來覆寫已驗收之 AC） |
+
 ## Error Scenarios
 - OIDC 驗證、帳密、停用、逾時錯誤：見 [error-handling.md#auth](../error-handling.md#auth) 與 [#session](../error-handling.md#session)。
+- **同一 email 命中多帳號之帳號選擇**（`AC-M1`～`AC-M29`）：**新增 1 個錯誤碼** `AUTH_SELECTION_TICKET_INVALID`（**401**；固定使用者訊息「登入未完成，請重新登入」），涵蓋票證之缺漏／過期／簽章不符／被竄改／已使用／所選帳號不在票證集合內（`AC-M19`～`AC-M23`）。其餘一律沿用既有碼：姓名不一致之共用信箱 → `AUTH_ACCOUNT_NOT_FOUND`（`AC-M8`）；所選帳號於兌換時已停用 → `AUTH_ACCOUNT_DISABLED`（`AC-M24`）；候選集合為空 → 依 `AC-M2` 之 `AUTH_ACCOUNT_NOT_FOUND`／`AUTH_ACCOUNT_DISABLED`。全部失敗呈現受 `AC-E13` 封閉允許集拘束（`AC-M26`）。✅ **已登錄** [error-handling.md](../error-handling.md#auth) 之錯誤碼一覽（`[OPEN-M3]` 於 2026-08-24 核可後補列）。
 - **跨公司帳密登入解析**（`AC-C1`～`AC-C3`）：拒絕一律沿用 `AUTH_INVALID_CREDENTIALS`，**不新增任何錯誤碼**。
 - **Azure AD endpoint host 覆寫**（`AC-E1`～`AC-E15`）：執行期不可達一律沿用 `AUTH_OIDC_EXCHANGE_FAILED`（涵蓋 `/auth/login` 發起階段與 `/auth/callback` 交換階段兩處）；issuer 不符沿用 `AUTH_OIDC_TOKEN_INVALID`；設定值不合法為**啟動期失敗**（非 HTTP 錯誤，無錯誤碼）。**不新增任何錯誤碼**。見 [error-handling.md#aad-authority-host](../error-handling.md#aad-authority-host)。
 - 登入失敗鎖定：**定案不做**（OQ-E01-02）。
 
 ## Related
 - **驗證方式與身分對應鍵之權威定案**：[upstream-hr-source-contract.md §12](../upstream-hr-source-contract.md)（§12.1 驗證方式／§12.2 對應鍵／§12.3 Azure AD 註冊需求）
+- 🔄 **同一 email 命中多帳號之權威裁決**：同檔 **§12.2「人類裁決 #2」**（v2.0，2026-08-24）＋ **§13** 之影響範圍表；四項安全前置條件之載體＝本檔 `AC-M6`／`AC-M7`＋`AC-M8`／`AC-M10`＋`AC-M22`。⚠ 契約 §13 之連結指向 `features/F001-authentication.md`，**實際檔名為本檔 `F001-auth-login-session.md`**（連結失效，待契約側修正）。
 - **Azure AD endpoint host 覆寫之參考實作**（同 repo，已於同一台主機驗證可用）：`reference/ad-azure-frontend-logic/src/backend/config.ts`（`DEFAULT_AAD_AUTHORITY_HOST`、`AadSettings.authorityHost`）與 `reference/ad-azure-frontend-logic/src/backend/services/aad-service.ts`（`CANONICAL_AAD_ISSUER_HOST` 常數、`authority()` vs `expectedIssuer()` 之分離）。⚠ 該實作**自組 URL、不使用 MSAL**，故無 instance discovery 問題；本專案用 `@azure/msal-node`，`AC-E3` 為其專屬增量約束。
 - Diagram: [../diagrams/F001-auth-login.mmd](../diagrams/F001-auth-login.mmd)
 - Data: [ACCOUNT](../data-model.md#account-entity)（`email` 為 AD 身分對應鍵）, [PERSON](../data-model.md#person-entity)

@@ -7,6 +7,7 @@ import {
   getDocuments,
   getLifecycles,
   getOrgUnits,
+  getCompanies,
   searchPersons,
   getUsageFormPool,
   getDocumentForms,
@@ -45,6 +46,7 @@ import type {
   DocumentListItem,
   LifecycleView,
   OrgUnitRecord,
+  CompanyRecord,
   PersonRecord,
   UsageFormRecord,
   DocumentAttachmentRecord,
@@ -153,6 +155,8 @@ export function DocumentEditPage(): JSX.Element {
   const [lcSubId, setLcSubId] = useState('');
   const [subErr, setSubErr] = useState(false);
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
+  /** 🔴 B 階段（多公司）：公司主檔，供制定公司下拉（取代 org-unit 之 ROOT 列）。 */
+  const [companies, setCompanies] = useState<CompanyRecord[]>([]);
   const [existing, setExisting] = useState<DocumentListItem[]>([]);
   const [personResults, setPersonResults] = useState<ComboOption[]>([]);
   const [primaryChiefOrig, setPrimaryChiefOrig] = useState<ComboOption | null>(null);
@@ -182,7 +186,10 @@ export function DocumentEditPage(): JSX.Element {
       setDraft(copyDraft(d));
       // 輔助資料（失敗不阻擋主體）。
       void getLifecycles().then(setLifecycles).catch(() => undefined);
-      void getOrgUnits().then(setOrgUnits).catch(() => undefined);
+      // 🔴 B 階段（多公司）：以**文件自身之 companyCode** 載入組織，不可無參數呼叫
+      // （那會取登入者自己公司的組織，替他公司文件編輯時部門下拉會列錯公司的部門）。
+      void Promise.resolve(getOrgUnits(v.companyCode)).then((rows) => setOrgUnits(rows ?? [])).catch(() => undefined);
+      void Promise.resolve(getCompanies()).then((rows) => setCompanies(rows ?? [])).catch(() => undefined);
       void getDocuments({ pageSize: 2000 }).then((p) => setExisting(p.items)).catch(() => undefined);
       void getUsageFormPool().then(setFormPool).catch(() => undefined);
       void getDocumentForms(id)
@@ -257,9 +264,10 @@ export function DocumentEditPage(): JSX.Element {
     [orgByCode],
   );
   const orgName = useCallback((code: string) => orgByCode.get(code)?.name ?? code, [orgByCode]);
+  // 🔴 B 階段：來源為公司主檔，非 org-unit 之 ROOT 列（四家 ROOT 代碼皆為 `00000`、AE 無 ROOT 列）。
   const companyOptions = useMemo<ComboOption[]>(
-    () => orgUnits.filter((u) => u.tier === 'ROOT').map((u) => ({ value: u.orgCode, label: u.name })),
-    [orgUnits],
+    () => companies.map((c) => ({ value: c.companyCode, label: c.companyName })),
+    [companies],
   );
   const deptOptions = useMemo<ComboOption[]>(
     () => orgUnits.filter((u) => u.tier === 'DEPARTMENT').map((u) => ({ value: u.orgCode, label: u.name })),

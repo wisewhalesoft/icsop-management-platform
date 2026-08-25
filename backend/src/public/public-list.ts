@@ -14,7 +14,7 @@ import { DocumentStatus } from '../documents/document-status';
 import { deriveDisplayStatus } from '../documents/display-status';
 import { isWithinSubtree } from '../org-sync/org-hierarchy';
 import { matchesChiefFilter } from '../documents/chief-match';
-import { ViewerScope, isDocVisibleToViewer } from '../rbac/viewer-scope';
+import { ViewerScope, UsingDeptRef, isDocVisibleToViewer } from '../rbac/viewer-scope';
 
 /** 前台清單項（含使用部門代碼集合，供置頂/部門篩選）。名稱解析由服務層另補。 */
 export interface PublicDocItem {
@@ -25,11 +25,14 @@ export interface PublicDocItem {
   lifecycleId: string;
   lifecycleName: string | null;
   /**
-   * 使用部門 orgCode 集合（DOC_USING_DEPT）。
+   * 使用部門集合（DOC_USING_DEPT）。
    * ⚠ F019 `AC-D12` 只移除**對外 DTO** 之該欄；內部型別保留——置頂（`isPinned`）與 F041
    * 可見性判定（`isDocVisibleToViewer`）皆以其為依據。「不顯示 ≠ 不判定」。
+   * 🔴 B 階段（多公司）：改為帶公司別之 `UsingDeptRef`，見 `isUsingDeptMatched` JSDoc。
    */
-  usingDeptIds: string[];
+  usingDepts: UsingDeptRef[];
+  /** 🔴 B 階段（多公司）：文件所屬公司（← ICSOP_DOCUMENT.companyCode）。 */
+  companyCode: string;
   draftingDeptId: string | null;
   /** 2026-08-16 delta（§10.6）：以下五欄 additive 新增，供新五項篩選與卡片欄位。 */
   draftingCompanyId: string | null;
@@ -97,10 +100,19 @@ export function isAnnounced(item: PublicDocItem, today: Date): boolean {
  * 權威：prototypes/03-public-list.html 第 137-140 行 USER_SCOPE 祖先鏈；
  *       F026-role-field-matrix.md AC（JA000 + JAC00 → 相符；同部兄弟處室 → 不相符）。
  * 呼叫方向為 scope＝文件使用部門、target＝使用者部門（與 isUsingDeptMatched 同向）。
+ *
+ * 🔴 B 階段（多公司）：加上公司過濾，與 `isUsingDeptMatched` 保持逐字等價（INV-4／AC-10）。
+ * 兩者若只改其一，該不變式即破——置頂與可見性會對同一份文件給出不同答案。
  */
-export function isPinned(item: PublicDocItem, userOrgCode: string | null | undefined): boolean {
-  if (!userOrgCode) return false;
-  return item.usingDeptIds.some((code) => isWithinSubtree(code, userOrgCode));
+export function isPinned(
+  item: PublicDocItem,
+  userOrgCode: string | null | undefined,
+  userCompanyCode: string | null | undefined,
+): boolean {
+  if (!userOrgCode || !userCompanyCode) return false;
+  return item.usingDepts.some(
+    (d) => d.companyCode === userCompanyCode && isWithinSubtree(d.orgCode, userOrgCode),
+  );
 }
 
 /** 文件編號降冪比較（字串字面）。 */
@@ -114,9 +126,14 @@ export function byNumberDesc(a: PublicDocItem, b: PublicDocItem): number {
 export function splitAndSort(
   items: readonly PublicDocItem[],
   userOrgCode: string | null | undefined,
+  userCompanyCode: string | null | undefined,
 ): PublicDocItem[] {
-  const pinned = items.filter((i) => isPinned(i, userOrgCode)).sort(byNumberDesc);
-  const rest = items.filter((i) => !isPinned(i, userOrgCode)).sort(byNumberDesc);
+  const pinned = items
+    .filter((i) => isPinned(i, userOrgCode, userCompanyCode))
+    .sort(byNumberDesc);
+  const rest = items
+    .filter((i) => !isPinned(i, userOrgCode, userCompanyCode))
+    .sort(byNumberDesc);
   return [...pinned, ...rest];
 }
 
@@ -135,7 +152,7 @@ export function visibleCandidates(
 ): PublicDocItem[] {
   return items
     .filter((i) => isAnnounced(i, today))
-    .filter((i) => isDocVisibleToViewer(i.usingDeptIds, viewer));
+    .filter((i) => isDocVisibleToViewer(i.usingDepts, viewer));
 }
 
 /**
@@ -262,7 +279,7 @@ export function buildPublicList(
   // F041 AC-14～AC-17：業務子分類之資料列層級可見性（非受限 viewer 恆全數通過）。
   const visible = visibleCandidates(items, viewer, today);
   const filtered = visible.filter((i) => matchesPublicFilters(i, filters));
-  const sorted = splitAndSort(filtered, viewer.orgCode);
+  const sorted = splitAndSort(filtered, viewer.orgCode, viewer.companyCode);
   // G-PUB-012：被基底條件隱藏之候選數＝全候選 − 已公告候選（與使用者篩選無關）。
   const hiddenCount = items.length - base.length;
   return { ...paginate(sorted, page, pageSize), hiddenCount };

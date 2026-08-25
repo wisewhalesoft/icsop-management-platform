@@ -8,6 +8,7 @@ import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
  */
 @Entity({ name: 'DOC_USING_DEPT' })
 @Index('UQ_DOC_USING_DEPT_doc_org', ['documentId', 'orgCode'], { unique: true })
+@Index('IX_DOC_USING_DEPT_company_org', ['companyCode', 'orgCode'])
 export class DocUsingDept {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -15,6 +16,14 @@ export class DocUsingDept {
   @Index('IX_DOC_USING_DEPT_doc')
   @Column({ type: 'uniqueidentifier' })
   documentId!: string;
+
+  /**
+   * 🔴 B 階段（多公司）：使用部門所屬公司（恆等同其文件之 companyCode）。
+   * 沒有本欄，`isUsingDeptMatched` 之前綴比對會跨公司誤中——F041「業務」子分類使用者可能
+   * 看到別家公司的文件（越權瀏覽）。既有列已由 migration 依所屬文件回填。
+   */
+  @Column({ type: 'varchar', length: 10 })
+  companyCode!: string;
 
   @Column({ type: 'varchar', length: 10 })
   orgCode!: string;

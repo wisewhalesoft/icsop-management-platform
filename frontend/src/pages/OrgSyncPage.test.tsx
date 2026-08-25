@@ -33,15 +33,23 @@ function mockAuth(roleCode: string) {
 }
 
 const RUNS: SyncRunSummary[] = [
-  { id: 'r1', triggerType: 'scheduled', status: 'success', startedAt: '2026-07-15T22:00:00.000Z', endedAt: '2026-07-15T22:00:12.000Z', changeCount: 12, errorCode: null, errorMessage: null },
-  { id: 'r0', triggerType: 'manual', status: 'failed', startedAt: '2026-07-14T06:22:03.000Z', endedAt: '2026-07-14T06:22:03.000Z', changeCount: 0, errorCode: 'SYNC_SOURCE_UNAVAILABLE', errorMessage: '組織來源 View 連線逾時' },
+  { id: 'r1', compid: 'AS', triggerType: 'scheduled', status: 'success', startedAt: '2026-07-15T22:00:00.000Z', endedAt: '2026-07-15T22:00:12.000Z', changeCount: 12, errorCode: null, errorMessage: null },
+  { id: 'r0', compid: 'AS', triggerType: 'manual', status: 'failed', startedAt: '2026-07-14T06:22:03.000Z', endedAt: '2026-07-14T06:22:03.000Z', changeCount: 0, errorCode: 'SYNC_SOURCE_UNAVAILABLE', errorMessage: '組織來源 View 連線逾時' },
 ];
 
-const OK_RESULT: SyncResult = {
-  runId: 'r2', triggerType: 'manual', status: 'success', changeCount: 7,
-  stats: { departmentsRead: 303, orgCreated: 0, orgUpdated: 0, accountsRead: 1114, accountsCreated: 0, accountsUpdated: 7, accountsDisabled: 0, orphanWarnings: 0, dirtyRows: 0, disappearedCount: 0, disappearedRatio: 0 },
-  warnings: [],
-};
+/** B 階段（多公司）：公司主檔，供頁面解析 compid → 公司名稱（`getCompanies` 之測試替身）。 */
+const COMPANIES = [
+  { companyCode: 'AS', companyName: '和潤企業股份有限公司' },
+  { companyCode: 'AD', companyName: '和潤興業股份有限公司' },
+];
+
+const OK_RESULT: SyncResult[] = [
+  {
+    runId: 'r2', compid: 'AS', triggerType: 'manual', status: 'success', changeCount: 7,
+    stats: { departmentsRead: 303, orgCreated: 0, orgUpdated: 0, accountsRead: 1114, accountsCreated: 0, accountsUpdated: 7, accountsDisabled: 0, orphanWarnings: 0, dirtyRows: 0, disappearedCount: 0, disappearedRatio: 0 },
+    warnings: [],
+  },
+];
 
 const SUMMARY: OrgSyncMonthlySummary = {
   month: '2026-07',
@@ -166,6 +174,7 @@ describe('OrgSyncPage — 同步狀態/歷史（US-011 回歸，移入頁籤後�
     vi.resetAllMocks();
     navigateMock.mockReset();
     vi.mocked(endpoints.getOrgSyncRuns).mockResolvedValue(RUNS);
+    vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
     vi.mocked(endpoints.getOrgChangeAlerts).mockResolvedValue([]);
     vi.mocked(endpoints.getOrgSyncMonthlySummary).mockResolvedValue(SUMMARY);
   });
@@ -220,15 +229,30 @@ describe('OrgSyncPage — 同步狀態/歷史（US-011 回歸，移入頁籤後�
     );
   });
 
-  it('觸發時後端 409 SYNC_IN_PROGRESS → 顯示提示', async () => {
+  it('B 階段：某公司 SYNC_IN_PROGRESS → 200 陣列中標記該公司，顯示提示（不再是 409）', async () => {
+    // 協調層已將單一公司之互斥吞為陣列中一筆 failed 項（見 org-sync-coordinator.ts），
+    // 故此處不再模擬 rejected（409）——觸發永遠成功回應，busy 狀態改由陣列內容表達。
     mockAuth('SysAdmin');
-    vi.mocked(endpoints.triggerOrgSync).mockRejectedValue(new ApiError(409, 'SYNC_IN_PROGRESS'));
+    vi.mocked(endpoints.triggerOrgSync).mockResolvedValue([
+      { ...OK_RESULT[0], compid: 'AS', status: 'failed', errorCode: 'SYNC_IN_PROGRESS', changeCount: 0 },
+    ]);
     renderPage();
     await waitFor(() => expect(screen.getByRole('button', { name: /立即同步/ })).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole('button', { name: /立即同步/ }));
 
     await waitFor(() => expect(screen.getByText(/進行中/)).toBeInTheDocument());
+  });
+
+  it('B 階段：`triggerOrgSync` 請求層真正失敗（非個別公司之已知失敗）→ 仍顯示失敗提示', async () => {
+    mockAuth('SysAdmin');
+    vi.mocked(endpoints.triggerOrgSync).mockRejectedValue(new ApiError(500, 'INTERNAL_ERROR'));
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: /立即同步/ })).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /立即同步/ }));
+
+    await waitFor(() => expect(screen.getByText(/失敗/)).toBeInTheDocument());
   });
 
   it('TS-F006-064 同步狀態卡位於頁籤列之外：切換頁籤後仍持續可見', async () => {
@@ -263,6 +287,7 @@ describe('OrgSyncPage — 頁籤列與總覽 KPI（F006）', () => {
     vi.resetAllMocks();
     navigateMock.mockReset();
     vi.mocked(endpoints.getOrgSyncRuns).mockResolvedValue(RUNS);
+    vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
     vi.mocked(endpoints.getOrgChangeAlerts).mockResolvedValue(THREE_ALERTS);
     vi.mocked(endpoints.getOrgSyncMonthlySummary).mockResolvedValue(SUMMARY);
   });
@@ -341,6 +366,7 @@ describe('OrgSyncPage — 待確認異動清單（F006）', () => {
     vi.resetAllMocks();
     navigateMock.mockReset();
     vi.mocked(endpoints.getOrgSyncRuns).mockResolvedValue(RUNS);
+    vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
     vi.mocked(endpoints.getOrgChangeAlerts).mockResolvedValue(THREE_ALERTS);
     vi.mocked(endpoints.getOrgSyncMonthlySummary).mockResolvedValue(SUMMARY);
   });
@@ -461,6 +487,7 @@ describe('OrgSyncPage — RBAC 前端守門（F006）', () => {
     vi.resetAllMocks();
     navigateMock.mockReset();
     vi.mocked(endpoints.getOrgSyncRuns).mockResolvedValue(RUNS);
+    vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
     vi.mocked(endpoints.getOrgChangeAlerts).mockResolvedValue(THREE_ALERTS);
     vi.mocked(endpoints.getOrgSyncMonthlySummary).mockResolvedValue(SUMMARY);
   });
@@ -502,6 +529,7 @@ describe('OrgSyncPage — 待確認異動 F005 兩類告警卡（DATA_INCONSISTE
     vi.resetAllMocks();
     navigateMock.mockReset();
     vi.mocked(endpoints.getOrgSyncRuns).mockResolvedValue(RUNS);
+    vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
     vi.mocked(endpoints.getOrgSyncMonthlySummary).mockResolvedValue(SUMMARY);
   });
 

@@ -15,6 +15,7 @@ import { DocumentStatus } from './document-status';
 function item(over: Partial<DocumentListItem>): DocumentListItem {
   return {
     id: 'id',
+    companyCode: 'AS',
     status: 'active' as DocumentStatus,
     documentNumber: 'N',
     documentName: '書名',

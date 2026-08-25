@@ -1,6 +1,11 @@
 import { NotFoundException } from '@nestjs/common';
 import { resolveCompanyName, resolveCompanyShortName } from '../org-directory/company-name';
-import { ViewerScope, isDeptScopedViewer, isDocVisibleToViewer } from '../rbac/viewer-scope';
+import {
+  ViewerScope,
+  UsingDeptRef,
+  isDeptScopedViewer,
+  isDocVisibleToViewer,
+} from '../rbac/viewer-scope';
 import {
   WatermarkIdentity,
   buildWatermarkSnapshot,
@@ -28,9 +33,15 @@ import {
  * 🔒 本模組**不 import 任何一個消費者模組**——這是「無循環」的結構性保證，不是紀律性保證。
  */
 
-/** 組織單位查找（結構相容 OrgUnitReadStore.findByOrgCode）。 */
+/**
+ * 組織單位查找（結構相容 `OrgUnitReadStore.findByOrgCode`）。
+ * 🔴 B 階段（多公司）：`companyCode` 為必要參數——各公司之 orgCode 獨立編碼、字串可能相同，
+ * 舊版未帶公司別會使 AD/AE/AJ 之浮水印部門欄顯示別家公司之單位名或留空，且**燒錄後烙印於
+ * 已下載 PDF、無法事後更正**。
+ */
 export interface WatermarkOrgLookup {
   findByOrgCode(
+    companyCode: string,
     orgCode: string,
   ): Promise<{ tier: string; name: string; descFull: string | null } | null>;
 }
@@ -47,7 +58,8 @@ export interface WatermarkDocMeta {
   getDocMeta(documentId: string): Promise<{
     documentNumber: string | null;
     documentName: string | null;
-    usingDeptIds: string[];
+    /** 🔴 B 階段（多公司）：改為帶公司別之參照，見 `UsingDeptRef`／`isUsingDeptMatched`。 */
+    usingDepts: UsingDeptRef[];
   } | null>;
 }
 export const WATERMARK_DOC_META = Symbol('WATERMARK_DOC_META');
@@ -74,7 +86,7 @@ export interface WatermarkSession {
 export type DocMeta = {
   documentNumber: string | null;
   documentName: string | null;
-  usingDeptIds: string[];
+  usingDepts: UsingDeptRef[];
 };
 
 /**
@@ -135,9 +147,11 @@ export class WatermarkBurnerService implements WatermarkBurner {
     let sectionName = '';
     let departmentFullName = '';
     if (orgCode) {
-      const ownRow = await this.orgLookup.findByOrgCode(orgCode);
+      // 🔴 B 階段：以 session 之公司別解析，不得再以裸 orgCode 查（見 WatermarkOrgLookup JSDoc）。
+      const ownRow = await this.orgLookup.findByOrgCode(session.companyCode, orgCode);
       if (ownRow) sectionName = deriveSectionName(ownRow.tier, ownRow.name);
-      departmentFullName = (await this.resolveDeptFull(orgCode)) ?? '';
+      departmentFullName =
+        (await this.resolveDeptFull(session.companyCode, orgCode)) ?? '';
     }
     const fields: WatermarkIdentity = {
       employeeNo: session.employeeNo ?? '',
@@ -157,9 +171,12 @@ export class WatermarkBurnerService implements WatermarkBurner {
   }
 
   /** 部門 DESC_FULL 之 fallback 鏈（部層→本部層→Root；async 逐一查，命中即止）。 */
-  private async resolveDeptFull(orgCode: string): Promise<string | null> {
+  private async resolveDeptFull(
+    companyCode: string,
+    orgCode: string,
+  ): Promise<string | null> {
     for (const code of departmentCodeCandidates(orgCode)) {
-      const row = await this.orgLookup.findByOrgCode(code);
+      const row = await this.orgLookup.findByOrgCode(companyCode, code);
       if (row && row.descFull && row.descFull.trim() !== '') return row.descFull;
     }
     return null;
@@ -208,6 +225,9 @@ export class WatermarkBurnerService implements WatermarkBurner {
       roleCode: session.roleCode ?? null,
       userSubtype: session.userSubtype ?? null,
       orgCode: session.orgCode ?? null,
+      // 🔴 B 階段（多公司）：`WatermarkSession.companyCode` 本就存在（供 resolveCompanyShortName），
+      // 舊版卻未傳入可見性判定，使 isUsingDeptMatched 跨公司誤中（越權瀏覽）。
+      companyCode: session.companyCode ?? null,
     };
   }
 
@@ -220,7 +240,7 @@ export class WatermarkBurnerService implements WatermarkBurner {
    */
   assertDocVisible(session: WatermarkSession, meta: DocMeta | null): void {
     const viewer = this.toViewer(session);
-    if (isDocVisibleToViewer(meta?.usingDeptIds ?? [], viewer)) return;
+    if (isDocVisibleToViewer(meta?.usingDepts ?? [], viewer)) return;
     throw this.rejectDeptRestricted();
   }
 

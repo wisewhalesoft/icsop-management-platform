@@ -117,7 +117,7 @@ const ORG_D9 = {
 };
 function fakeOrgD9(): WatermarkOrgLookup {
   return {
-    findByOrgCode: (code) =>
+    findByOrgCode: (_companyCode, code) =>
       Promise.resolve((ORG_D9 as Record<string, { tier: string; name: string; descFull: string | null }>)[code] ?? null),
   };
 }

@@ -23,6 +23,7 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 | `AUTH_ACCOUNT_NOT_FOUND` | 401 | 查無有效帳號，請洽系統管理員 | F001 |
 | `AUTH_INVALID_CREDENTIALS` | 401 | 帳號或密碼錯誤 | F001 |
 | `AUTH_ACCOUNT_DISABLED` | 401 | 帳號已停用 | F001, F005 |
+| `AUTH_SELECTION_TICKET_INVALID` | 401 | 登入未完成，請重新登入 | F001 |
 | `AUTH_MISSING_FIELD` | 400 | 必要欄位缺漏 | F001 |
 | `AUTH_TOO_MANY_ATTEMPTS` | 429 | 帳密登入嘗試過於頻繁（節流，60 秒視窗；同帳號 5 次／同來源 IP 20 次失敗）；不洩漏帳號是否存在 | F001 |
 | `AUTH_SESSION_EXPIRED` | 401 | 工作階段已逾時，請重新登入 | F001 |
@@ -123,7 +124,11 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 
 - **AD 驗證通過但查無對應在職帳號**（OQ-E01-01 定案）：回 `AUTH_ACCOUNT_NOT_FOUND`，提示「查無有效帳號，請洽系統管理員」，**不自動建立帳號**。比對規則為完整 email（含網域）逐字、不分大小寫，且強制 `status=active`（← `EMPSTS='A'`）。
 - **停用帳號登入**：即使 AD 驗證通過，仍須檢查本地帳號狀態，停用即回 `AUTH_ACCOUNT_DISABLED`。
-- **email 於在職帳號中命中多筆**：視為上游資料異常，拒絕登入並告警系統管理員，**不得任選一筆**。
+- **email 於在職帳號中命中多筆**（🔄 **2026-08-24 人類裁決 #2 改寫**，權威＝[upstream-hr-source-contract.md §12.2](upstream-hr-source-contract.md)；AC 見 [F001 `AC-M1`～`AC-M29`](features/F001-auth-login-session.md#multi-account-picker)）：
+  - **候選集合姓名全部一致**（＝同一自然人在多家公司之人事記錄）→ **不再拒登**。進入登入中繼狀態、下發短時效之**選擇票證**（5 分鐘、非 sliding、一次性消耗），導向帳號選擇畫面；使用者選定後方核發 session。票證之缺漏／過期／簽章不符／被竄改／已使用／所選帳號不在票證集合內 → `AUTH_SELECTION_TICKET_INVALID`（`AC-M19`～`AC-M23`）。
+  - **姓名不一致**（＝真正的共用信箱）→ **維持既有拒登**：回 `AUTH_ACCOUNT_NOT_FOUND`（沿用既有「不可列舉」處置、**不新增對外可區分之狀態**），並於伺服器日誌以 WARN 記錄共用信箱告警（`AC-M8`）。此為刻意之 fail-closed——共用信箱持有者若能任選帳號登入即為權限提升。
+  - **所選帳號於兌換時已被停用** → `AUTH_ACCOUNT_DISABLED`，且**不得**自動改選集合中其他帳號（`AC-M24`）。
+  - 上述任一失敗呈現皆受 `AC-E13` 之封閉允許集拘束（`AC-M26`）。
 - **帳密錯誤/帳號不存在**：一律回相同 `AUTH_INVALID_CREDENTIALS`，不洩漏帳號是否存在。
 
 ### 訊息揭露原則

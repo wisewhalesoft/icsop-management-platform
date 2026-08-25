@@ -18,7 +18,22 @@ export interface OrgUnitRecord {
 }
 
 export interface OrgUnitReadStore {
-  findByOrgCode(orgCode: string): Promise<OrgUnitRecord | null>;
+  /**
+   * 🔴 B 階段（多公司）：`companyCode` 為**必要參數**，刻意不給預設值。
+   *
+   * `orgCode` 是 5 碼部門代碼，**每家公司各自從 `00000`（Root）獨立編碼**——AS 的 `A0000`
+   * 與 AD 的 `A0000` 是兩個完全不同的單位，字串卻一模一樣。`ORG_UNIT` 的真實唯一鍵為
+   * `(companyCode, orgCode)`（見 `org-unit.entity.ts` 之 `IX_ORG_UNIT_company_code`），
+   * 故單以 `orgCode` 查詢在多公司資料共存後**必然歧義**：查到別家公司的部門（顯示錯誤名稱）
+   * 或查無（顯示空白），兩者都是靜默錯誤、不會拋例外。
+   *
+   * 不設預設值的理由：預設值正是本缺陷的成因（舊版建構子 `defaultCompany='AS'` 使所有呼叫端
+   * 沉默地只查 AS）。改為必填後，未接上公司別的呼叫點會直接編譯失敗，無法漏改。
+   */
+  findByOrgCode(
+    companyCode: string,
+    orgCode: string,
+  ): Promise<OrgUnitRecord | null>;
   listByCompany(
     companyCode: string,
     opts?: { includeInactive?: boolean },

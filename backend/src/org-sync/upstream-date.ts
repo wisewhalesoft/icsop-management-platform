@@ -5,7 +5,7 @@
  * 上游（遮罩 dev）之日期值可能低於 1753、為 Invalid Date（遮罩破壞）、或哨兵 9999-12-31 之
  * 溢位邊界（9999-12-31 23:59:59.999 進位即超出），tedious 綁定時拋 "Out of range"。
  *
- * 對 RESIGNDT / HIREDT / MTDT 一律套用本函式，將不可寫入/無意義之值收斂為 null：
+ * 對 RESIGN_DATE / REHIRE_DATE / MTDT 一律套用本函式，將不可寫入/無意義之值收斂為 null：
  *  - 哨兵年份 >= 9999（未離職/未結束，契約 §4）→ null（語意乾淨，勝過存 magic date）。
  *  - Invalid Date → null。
  *  - 低於 datetime 下界（< 1753）或明顯異常 → null。

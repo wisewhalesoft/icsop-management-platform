@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
-import { OrgSyncService } from './org-sync.service';
+import { OrgSyncCoordinator } from './org-sync-coordinator';
 import { SyncResult, SyncRunSummary } from './org-sync.types';
 import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
@@ -21,15 +21,16 @@ import { MonthlySummary } from '../org-change-alert/org-change-alert.types';
 @UseGuards(SessionGuard, RolePermissionGuard)
 export class OrgSyncController {
   constructor(
-    private readonly svc: OrgSyncService,
+    private readonly coordinator: OrgSyncCoordinator,
     private readonly alerts: OrgChangeAlertService,
   ) {}
 
+  /** B 階段：手動觸發同步全部設定之公司（依序），回傳各公司之個別結果。 */
   @Post('run')
   @RequirePermission(FunctionKey.ORG_SYNC_MANAGEMENT, 'write')
-  trigger(@Req() req: RequestWithSession): Promise<SyncResult> {
+  trigger(@Req() req: RequestWithSession): Promise<SyncResult[]> {
     const triggeredBy = req.sessionUser?.loginId ?? null;
-    return this.svc.run('manual', triggeredBy);
+    return this.coordinator.runAll('manual', triggeredBy);
   }
 
   /**
@@ -41,7 +42,7 @@ export class OrgSyncController {
   @RequirePermission(FunctionKey.ORG_SYNC_MANAGEMENT, 'read')
   recentRuns(@Query('limit') limit?: string): Promise<SyncRunSummary[]> {
     const parsed = limit === undefined ? undefined : Number(limit);
-    return this.svc.recentRuns(parsed);
+    return this.coordinator.recentRuns(parsed);
   }
 
   /**

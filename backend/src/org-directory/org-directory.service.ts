@@ -35,11 +35,15 @@ export class OrgDirectoryService {
     return this.orgUnits.listByCompany(companyCode, opts);
   }
 
-  /** cascade：依上層 orgCode 回直屬子層（查無 → []）。 */
+  /**
+   * cascade：依上層 orgCode 回直屬子層（查無 → []）。
+   * 🔴 B 階段（多公司）：`companyCode` 改為**必要且置於首位**——舊簽章之尾端預設值 `'AS'` 使
+   * 呼叫端可省略而沉默地只查 AS（A4）。參數順序與本服務其餘方法一致（companyCode 在前）。
+   */
   async orgUnitChildren(
+    companyCode: string,
     parentCode: string,
     opts: OrgReadOptions = {},
-    companyCode = 'AS',
   ): Promise<OrgUnitRecord[]> {
     const all = await this.orgUnits.listByCompany(companyCode, opts);
     return directChildren(all, parentCode);
@@ -65,12 +69,19 @@ export class OrgDirectoryService {
   }
 
   /** 單筆人員解析（含離職者，供歷史顯示）。查無 → null。 */
-  getPerson(employeeNo: string): Promise<PersonRecord | null> {
-    return this.persons.findByEmployeeNo(employeeNo);
+  getPerson(
+    companyCode: string,
+    employeeNo: string,
+  ): Promise<PersonRecord | null> {
+    return this.persons.findByEmployeeNo(companyCode, employeeNo);
   }
 
   /** 人員搜尋（僅在職者，供 F014 當責室長候選）。 */
-  searchActivePersons(keyword: string, limit?: number): Promise<PersonRecord[]> {
-    return this.persons.searchActive(keyword, limit);
+  searchActivePersons(
+    companyCode: string,
+    keyword: string,
+    limit?: number,
+  ): Promise<PersonRecord[]> {
+    return this.persons.searchActive(companyCode, keyword, limit);
   }
 }

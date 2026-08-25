@@ -529,7 +529,7 @@ describe('OrgChangeAlertService.resolve × F005 兩類（Route B）', () => {
     );
   });
 
-  it('TS-ORGALERT-040 稽核 targetName 為「資料不一致（EMPSTS/RESIGNDT）」，非「掛於已關閉部門」', async () => {
+  it('TS-ORGALERT-040 稽核 targetName 為「資料不一致（在職狀態／離職日）」，非「掛於已關閉部門」', async () => {
     const store = new FakeAlertStore();
     store.rows = [
       pending({
@@ -547,7 +547,7 @@ describe('OrgChangeAlertService.resolve × F005 兩類（Route B）', () => {
 
     expect(audit.events[0]).toMatchObject({
       targetType: 'ORG_CHANGE_ALERT',
-      targetName: '資料不一致（EMPSTS/RESIGNDT）',
+      targetName: '資料不一致（在職狀態／離職日）',
     });
     expect(audit.events[0].targetName).not.toBe('掛於已關閉部門');
   });

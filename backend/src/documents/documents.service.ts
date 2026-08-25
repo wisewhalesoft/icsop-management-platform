@@ -275,15 +275,32 @@ export class DocumentsService {
       if (bucket) bucket.push(r.employeeNo);
       else byDoc.set(r.documentId, [r.employeeNo]);
     }
-    const empNos = [...new Set(refs.map((r) => r.employeeNo))];
-    const nameMap =
-      this.nameResolver && empNos.length
-        ? await this.nameResolver.resolvePersonNames(empNos)
-        : new Map<string, string>();
+    // 🔴 B 階段（多公司）：**依公司分組**批次解析，不得把整頁員編混成一批。
+    // 員編（← 上游 `NO`）僅在單一公司內唯一；一頁清單可能橫跨多家公司，混批解析會讓
+    // 某公司員工的姓名被誤植到另一公司的文件列（靜默錯誤，且隨清單筆數放大）。
+    // 仍維持「每公司一次批次查詢」，公司數 ≤ 4，不構成 N+1。
+    const companiesOf = new Map<string, Set<string>>();
     for (const it of items) {
       const list = byDoc.get(it.id) ?? [];
+      if (list.length === 0) continue;
+      const bucket = companiesOf.get(it.companyCode) ?? new Set<string>();
+      for (const e of list) bucket.add(e);
+      companiesOf.set(it.companyCode, bucket);
+    }
+    const nameMapByCompany = new Map<string, Map<string, string>>();
+    if (this.nameResolver) {
+      for (const [companyCode, empNoSet] of companiesOf) {
+        nameMapByCompany.set(
+          companyCode,
+          await this.nameResolver.resolvePersonNames(companyCode, [...empNoSet]),
+        );
+      }
+    }
+    for (const it of items) {
+      const list = byDoc.get(it.id) ?? [];
+      const nameMap = nameMapByCompany.get(it.companyCode);
       it.secondaryChiefCount = list.length;
-      it.secondaryChiefNames = list.map((e) => nameMap.get(e) ?? e);
+      it.secondaryChiefNames = list.map((e) => nameMap?.get(e) ?? e);
     }
   }
 
@@ -367,29 +384,49 @@ export class DocumentsService {
     const resolver = this.nameResolver;
     if (!resolver || items.length === 0) return;
 
-    const orgCodes = new Set<string>();
+    // 🔴 B 階段（多公司）：解析鍵一律為 **(companyCode, code) 複合鍵**，不得再以裸 code 扁平化。
+    // 一頁清單可能橫跨多家公司，而 orgCode／employeeNo 皆僅在單一公司內唯一——扁平化會使
+    // 某公司之部門名或室長姓名被誤植到另一公司的文件列（靜默錯誤）。
+    const key = (companyCode: string, code: string): string => `${companyCode} ${code}`;
+
+    const orgKeys = new Map<string, { companyCode: string; orgCode: string }>();
     for (const it of items) {
       for (const c of [it.draftingCompanyId, it.draftingDeptId, it.draftingSectionId]) {
-        if (c) orgCodes.add(c);
+        if (c) orgKeys.set(key(it.companyCode, c), { companyCode: it.companyCode, orgCode: c });
       }
     }
     const orgNames = new Map<string, string | null>();
     await Promise.all(
-      [...orgCodes].map(async (c) => orgNames.set(c, await resolver.resolveOrgUnitName(c))),
+      [...orgKeys].map(async ([k, v]) =>
+        orgNames.set(k, await resolver.resolveOrgUnitName(v.companyCode, v.orgCode)),
+      ),
     );
 
-    const chiefIds = [
-      ...new Set(items.map((i) => i.primaryChiefId).filter((x): x is string => !!x)),
-    ];
-    const chiefNames = chiefIds.length
-      ? await resolver.resolvePersonNames(chiefIds)
-      : new Map<string, string>();
+    // 室長姓名：依公司分組批次（每公司一次查詢；公司數 ≤ 4，非 N+1）。
+    const chiefsByCompany = new Map<string, Set<string>>();
+    for (const it of items) {
+      if (!it.primaryChiefId) continue;
+      const bucket = chiefsByCompany.get(it.companyCode) ?? new Set<string>();
+      bucket.add(it.primaryChiefId);
+      chiefsByCompany.set(it.companyCode, bucket);
+    }
+    const chiefNamesByCompany = new Map<string, Map<string, string>>();
+    for (const [companyCode, ids] of chiefsByCompany) {
+      chiefNamesByCompany.set(
+        companyCode,
+        await resolver.resolvePersonNames(companyCode, [...ids]),
+      );
+    }
 
     for (const it of items) {
-      it.draftingCompanyName = it.draftingCompanyId ? orgNames.get(it.draftingCompanyId) ?? null : null;
-      it.draftingDeptName = it.draftingDeptId ? orgNames.get(it.draftingDeptId) ?? null : null;
-      it.draftingSectionName = it.draftingSectionId ? orgNames.get(it.draftingSectionId) ?? null : null;
-      it.primaryChiefName = it.primaryChiefId ? chiefNames.get(it.primaryChiefId) ?? null : null;
+      const orgName = (c: string | null): string | null =>
+        c ? (orgNames.get(key(it.companyCode, c)) ?? null) : null;
+      it.draftingCompanyName = orgName(it.draftingCompanyId);
+      it.draftingDeptName = orgName(it.draftingDeptId);
+      it.draftingSectionName = orgName(it.draftingSectionId);
+      it.primaryChiefName = it.primaryChiefId
+        ? (chiefNamesByCompany.get(it.companyCode)?.get(it.primaryChiefId) ?? null)
+        : null;
     }
   }
 

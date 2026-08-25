@@ -1,5 +1,6 @@
 import { PublicDocItem } from './public-list';
 import { DocumentStatus } from '../documents/document-status';
+import { UsingDeptRef } from '../rbac/viewer-scope';
 
 /**
  * F019 前台文件讀取邊界（唯讀組合 DocumentModule 資料，不改 documents.service）。
@@ -50,7 +51,10 @@ export interface PublicDocDetail {
   draftingSectionId: string | null;
   primaryChiefId: string | null;
   secondaryChiefIds: string[];
-  usingDeptIds: string[];
+  /** 🔴 B 階段（多公司）：帶公司別之使用部門參照（可見性判定所需，見 `UsingDeptRef`）。 */
+  usingDepts: UsingDeptRef[];
+  /** 🔴 B 階段（多公司）：文件所屬公司（← ICSOP_DOCUMENT.companyCode）。 */
+  companyCode: string;
   edition: string | null;
   announcedDate: string | null;
   contentSummary: string | null;

@@ -8,33 +8,33 @@ import { groupUsingDeptIds } from './typeorm-public-documents.store';
  * 且分組邏輯不需 DataSource 即可測。真實 join 之筆數/欄位對映驗證屬 [integration]
  * （test/int/public-documents.itest.ts）。
  */
-describe('groupUsingDeptIds（DOC_USING_DEPT 列 → Map<documentId, orgCode[]>）', () => {
+describe('groupUsingDeptIds（DOC_USING_DEPT 列 → Map<documentId, UsingDeptRef[]>；B 階段帶公司別）', () => {
   it('TS-PS-F019-STORE-001 空輸入 → 空 Map', () => {
     expect(groupUsingDeptIds([]).size).toBe(0);
   });
 
   it('TS-PS-F019-STORE-002 單一文件單筆列 → 陣列長度 1', () => {
-    const map = groupUsingDeptIds([{ documentId: 'd1', orgCode: 'JAC00' }]);
-    expect(map.get('d1')).toEqual(['JAC00']);
+    const map = groupUsingDeptIds([{ documentId: 'd1', orgCode: 'JAC00', companyCode: 'AS' }]);
+    expect(map.get('d1')).toEqual([{ companyCode: 'AS', orgCode: 'JAC00' }]);
   });
 
   it('TS-PS-F019-STORE-003 單一文件多筆列 → 全數保留，順序等同輸入順序', () => {
     const map = groupUsingDeptIds([
-      { documentId: 'd1', orgCode: 'JAC00' },
-      { documentId: 'd1', orgCode: 'JA000' },
-      { documentId: 'd1', orgCode: '00000' },
+      { documentId: 'd1', orgCode: 'JAC00', companyCode: 'AS' },
+      { documentId: 'd1', orgCode: 'JA000', companyCode: 'AS' },
+      { documentId: 'd1', orgCode: '00000', companyCode: 'AS' },
     ]);
-    expect(map.get('d1')).toEqual(['JAC00', 'JA000', '00000']);
+    expect(map.get('d1')).toEqual([{ companyCode: 'AS', orgCode: 'JAC00' }, { companyCode: 'AS', orgCode: 'JA000' }, { companyCode: 'AS', orgCode: '00000' }]);
   });
 
   it('TS-PS-F019-STORE-004 多份文件各自分組 → 不互相污染（交錯輸入）', () => {
     const map = groupUsingDeptIds([
-      { documentId: 'd1', orgCode: 'JAC00' },
-      { documentId: 'd2', orgCode: 'ZZ000' },
-      { documentId: 'd1', orgCode: 'JA000' },
+      { documentId: 'd1', orgCode: 'JAC00', companyCode: 'AS' },
+      { documentId: 'd2', orgCode: 'ZZ000', companyCode: 'AS' },
+      { documentId: 'd1', orgCode: 'JA000', companyCode: 'AS' },
     ]);
-    expect(map.get('d1')).toEqual(['JAC00', 'JA000']);
-    expect(map.get('d2')).toEqual(['ZZ000']);
+    expect(map.get('d1')).toEqual([{ companyCode: 'AS', orgCode: 'JAC00' }, { companyCode: 'AS', orgCode: 'JA000' }]);
+    expect(map.get('d2')).toEqual([{ companyCode: 'AS', orgCode: 'ZZ000' }]);
     expect(map.size).toBe(2);
   });
 
@@ -42,13 +42,13 @@ describe('groupUsingDeptIds（DOC_USING_DEPT 列 → Map<documentId, orgCode[]>�
     // 定案：DB 唯一索引 UQ_DOC_USING_DEPT_doc_org 已是唯一性防線；純函式不做防禦性去重，
     // 以免掩蓋資料異常（見 public-seams-test-design §8 OQ 之建議行為）。
     const map = groupUsingDeptIds([
-      { documentId: 'd1', orgCode: 'JAC00' },
-      { documentId: 'd1', orgCode: 'JAC00' },
+      { documentId: 'd1', orgCode: 'JAC00', companyCode: 'AS' },
+      { documentId: 'd1', orgCode: 'JAC00', companyCode: 'AS' },
     ]);
-    expect(map.get('d1')).toEqual(['JAC00', 'JAC00']);
+    expect(map.get('d1')).toEqual([{ companyCode: 'AS', orgCode: 'JAC00' }, { companyCode: 'AS', orgCode: 'JAC00' }]);
   });
 
   it('查無之 documentId → undefined（呼叫端以 ?? [] 收斂為空陣列）', () => {
-    expect(groupUsingDeptIds([{ documentId: 'd1', orgCode: 'JAC00' }]).get('nope')).toBeUndefined();
+    expect(groupUsingDeptIds([{ documentId: 'd1', orgCode: 'JAC00', companyCode: 'AS' }]).get('nope')).toBeUndefined();
   });
 });

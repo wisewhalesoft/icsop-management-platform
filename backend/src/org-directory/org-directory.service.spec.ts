@@ -42,7 +42,7 @@ const FIXTURE: OrgUnitRecord[] = [
 
 class FakeOrgStore implements OrgUnitReadStore {
   constructor(private readonly units: OrgUnitRecord[]) {}
-  findByOrgCode(orgCode: string): Promise<OrgUnitRecord | null> {
+  findByOrgCode(_companyCode: string, orgCode: string): Promise<OrgUnitRecord | null> {
     return Promise.resolve(this.units.find((u) => u.orgCode === orgCode) ?? null);
   }
   listByCompany(
@@ -59,15 +59,27 @@ class FakeOrgStore implements OrgUnitReadStore {
 
 class FakePersonStore implements PersonStore {
   constructor(private readonly people: PersonRecord[]) {}
-  findByEmployeeNo(employeeNo: string): Promise<PersonRecord | null> {
+  // B 階段（多公司）：替身之資料集皆屬單一公司，故 companyCode 參數於此不影響篩選結果；
+  // 真正的跨公司隔離驗證見 `name-resolution.service.spec.ts` 與 `viewer-scope.spec.ts`。
+  findByEmployeeNo(
+    _companyCode: string,
+    employeeNo: string,
+  ): Promise<PersonRecord | null> {
     return Promise.resolve(this.people.find((p) => p.employeeNo === employeeNo) ?? null);
   }
-  findByEmployeeNos(employeeNos: string[]): Promise<Map<string, PersonRecord>> {
+  findByEmployeeNos(
+    _companyCode: string,
+    employeeNos: string[],
+  ): Promise<Map<string, PersonRecord>> {
     const m = new Map<string, PersonRecord>();
     for (const p of this.people) if (employeeNos.includes(p.employeeNo)) m.set(p.employeeNo, p);
     return Promise.resolve(m);
   }
-  searchActive(keyword: string, limit = 20): Promise<PersonRecord[]> {
+  searchActive(
+    _companyCode: string,
+    keyword: string,
+    limit = 20,
+  ): Promise<PersonRecord[]> {
     return Promise.resolve(
       this.people
         .filter((p) => p.employmentStatus === 'active')
@@ -141,12 +153,12 @@ describe('OrgDirectoryService — ORG_UNIT 讀取', () => {
   });
 
   it('TS-ORGREAD-003 cascade：依 parentCode 回直屬子層', async () => {
-    const kids = await svc().orgUnitChildren('JA000');
+    const kids = await svc().orgUnitChildren('AS', 'JA000');
     expect(kids.map((u) => u.orgCode).sort()).toEqual(['JAC00', 'JAD00']);
   });
 
   it('TS-ORGREAD-004 cascade：查無上層 → 空陣列（非錯誤）', async () => {
-    await expect(svc().orgUnitChildren('NOPE0')).resolves.toEqual([]);
+    await expect(svc().orgUnitChildren('AS', 'NOPE0')).resolves.toEqual([]);
   });
 
   it('TS-ORGREAD-005 subtree：prefix=JA 跨層混合', async () => {
@@ -181,24 +193,24 @@ describe('OrgDirectoryService — PERSON 讀取', () => {
     new OrgDirectoryService(new FakeOrgStore(FIXTURE), new FakePersonStore(people));
 
   it('TS-PERSON-012 getPerson：employeeNo → 姓名（含部門）', async () => {
-    const p = await svc().getPerson('E001');
+    const p = await svc().getPerson('AS', 'E001');
     expect(p?.name).toBe('王在職');
     expect(p?.orgCode).toBe('JAC00');
   });
 
   it('TS-PERSON-013 searchActivePersons：僅回在職者', async () => {
-    const res = await svc().searchActivePersons('在職');
+    const res = await svc().searchActivePersons('AS', '在職');
     expect(res.map((p) => p.employeeNo).sort()).toEqual(['E001', 'E003']);
     expect(res.find((p) => p.employeeNo === 'E002')).toBeUndefined();
   });
 
   it('TS-PERSON-014 搜尋排除離職者，但個別 ID 查詢仍可解析', async () => {
     const s = svc();
-    expect((await s.searchActivePersons('離職')).length).toBe(0);
-    expect((await s.getPerson('E002'))?.name).toBe('李離職'); // 供歷史文件顯示既有室長
+    expect((await s.searchActivePersons('AS', '離職')).length).toBe(0);
+    expect((await s.getPerson('AS', 'E002'))?.name).toBe('李離職'); // 供歷史文件顯示既有室長
   });
 
   it('getPerson：查無 → null（不 throw）', async () => {
-    await expect(svc().getPerson('E999')).resolves.toBeNull();
+    await expect(svc().getPerson('AS', 'E999')).resolves.toBeNull();
   });
 });

@@ -19,6 +19,13 @@ import {
 } from './public-list';
 import { isDocVisibleToViewer, isUsingDeptMatched, ViewerScope } from '../rbac/viewer-scope';
 import { isWithinSubtree } from '../org-sync/org-hierarchy';
+import { UsingDeptRef } from '../rbac/viewer-scope';
+
+/** 便利建構：同一公司（預設 AS）之使用部門參照（B 階段多公司；跨公司案例見 viewer-scope.spec.ts）。 */
+function depts(codes: string[], companyCode = 'AS'): UsingDeptRef[] {
+  return codes.map((orgCode) => ({ companyCode, orgCode }));
+}
+
 
 const TODAY = new Date('2026-07-17T00:00:00Z');
 
@@ -37,7 +44,8 @@ const DOC_DEFAULTS: PublicDocItem = {
     documentName: '文件',
     lifecycleId: 'lc1',
     lifecycleName: null,
-    usingDeptIds: [],
+    usingDepts: depts([]),
+    companyCode: 'AS',
     draftingDeptId: null,
     draftingCompanyId: null,
     draftingSectionId: null,
@@ -53,7 +61,7 @@ function doc(over: Partial<PublicDocItem>): PublicDocItem {
 }
 
 /** 不受限 viewer（「其他」子分類）——本檔多數案例之測試標的與可見性無關。 */
-const OTHER: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00' };
+const OTHER: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00', companyCode: 'AS' };
 
 /**
  * `AC-D4`：制定公司／制定部門／制定室別／循環別皆為**等值比對**，比對鍵為
@@ -209,33 +217,41 @@ describe('F019 AC-D6：六項篩選 ＋ 關鍵字為 AND 交集', () => {
  */
 describe('F019 AC-D11／AC-D13：置頂與可見性判定回歸鎖定', () => {
   it('TS-F019-D11-001 使用者部門 JAC00、文件使用部門為部層 JA000 → 仍出現於置頂區', () => {
-    const d = doc({ id: 'anc', usingDeptIds: ['JA000'] });
+    const d = doc({ id: 'anc', usingDepts: depts(['JA000']) });
     const page = buildPublicList([d], OTHER, {}, TODAY);
     expect(page.items.map((x) => x.id)).toEqual(['anc']);
-    expect(isPinned(page.items[0], 'JAC00')).toBe(true);
+    expect(isPinned(page.items[0], 'JAC00', 'AS')).toBe(true);
   });
 
   it('TS-F019-D11-002 套用新五項篩選後，置頂判定仍以 usingDeptIds 為依據（不隨制定組織改變）', () => {
-    const d = doc({ id: 'anc', usingDeptIds: ['JA000'], draftingDeptId: 'ZZ999' });
+    const d = doc({ id: 'anc', usingDepts: depts(['JA000']), draftingDeptId: 'ZZ999' });
     const page = buildPublicList([d], OTHER, { draftingDeptId: 'ZZ999' }, TODAY);
-    expect(isPinned(page.items[0], 'JAC00')).toBe(true);
+    expect(isPinned(page.items[0], 'JAC00', 'AS')).toBe(true);
   });
 
-  it('TS-F019-D13-001 三純函式之簽章（arity）未變：2／2／2', () => {
+  it('TS-F019-D13-001 三純函式之簽章（arity）鎖定：2／3／2', () => {
     // 簽章鎖定以 arity 表達：任何一方新增/移除參數即紅燈（`AC-D13` 之機器可驗證載體）。
+    //
+    // 🔄 B 階段（2026-08-24，開放多公司）更新期望值：`isUsingDeptMatched` 由 2 → **3**
+    // （新增 `userCompanyCode`）。本鎖之用意是防止「AC-D12 移除顯示欄位」那批 delta 順手改動
+    // 判定邏輯，**不是永久凍結簽章**；本次為有明確授權之安全性修正（跨公司誤中＝越權瀏覽，
+    // 見 `viewer-scope.ts` 之 `isUsingDeptMatched` JSDoc 與 `viewer-scope.spec.ts` 之跨公司隔離組）。
+    //
+    // `isWithinSubtree` 維持 2（純字串前綴比對，公司過濾由呼叫端負責，刻意不下沉至此）；
+    // `isDocVisibleToViewer` 維持 2（公司別隨 `ViewerScope` 一併傳入，未增參數）。
     expect(isWithinSubtree.length).toBe(2);
-    expect(isUsingDeptMatched.length).toBe(2);
+    expect(isUsingDeptMatched.length).toBe(3);
     expect(isDocVisibleToViewer.length).toBe(2);
   });
 
   it('TS-F019-D13-002 三純函式之語意未變（子樹祖先鏈、deny-by-default、非受限恆可見）', () => {
     expect(isWithinSubtree('JA000', 'JAC00')).toBe(true);
     expect(isWithinSubtree('JAC00', 'JA000')).toBe(false);
-    expect(isUsingDeptMatched(['JA000'], 'JAC00')).toBe(true);
-    expect(isUsingDeptMatched(['JAD00'], 'JAC00')).toBe(false);
-    expect(isUsingDeptMatched(['JAC00'], null)).toBe(false); // 孤兒帳號 deny-by-default
-    expect(isDocVisibleToViewer(['JAD00'], OTHER)).toBe(true); // 非受限恆可見
-    expect(isDocVisibleToViewer(['JAD00'], { roleCode: 'User', userSubtype: 'business', orgCode: 'JAC00' })).toBe(false);
+    expect(isUsingDeptMatched(depts(['JA000']), 'JAC00', 'AS')).toBe(true);
+    expect(isUsingDeptMatched(depts(['JAD00']), 'JAC00', 'AS')).toBe(false);
+    expect(isUsingDeptMatched(depts(['JAC00']), null, 'AS')).toBe(false); // 孤兒帳號 deny-by-default
+    expect(isDocVisibleToViewer(depts(['JAD00']), OTHER)).toBe(true); // 非受限恆可見
+    expect(isDocVisibleToViewer(depts(['JAD00']), { roleCode: 'User', userSubtype: 'business', orgCode: 'JAC00', companyCode: 'AS' })).toBe(false);
   });
 });
 
@@ -246,14 +262,14 @@ describe('F019 AC-D11／AC-D13：置頂與可見性判定回歸鎖定', () => {
  */
 describe('F019 AC-D5（結構）：visibleCandidates 為清單與選項之唯一共同上游', () => {
   const pool = [
-    doc({ id: 'ann-visible', status: 'active', announcedDate: '2026-01-01', usingDeptIds: ['JAC00'] }),
-    doc({ id: 'ann-invisible', status: 'active', announcedDate: '2026-01-01', usingDeptIds: ['JAD00'] }),
-    doc({ id: 'in-progress', status: 'active', announcedDate: '2099-01-01', usingDeptIds: ['JAC00'] }),
-    doc({ id: 'void', status: 'void', announcedDate: '2026-01-01', usingDeptIds: ['JAC00'] }),
+    doc({ id: 'ann-visible', status: 'active', announcedDate: '2026-01-01', usingDepts: depts(['JAC00']) }),
+    doc({ id: 'ann-invisible', status: 'active', announcedDate: '2026-01-01', usingDepts: depts(['JAD00']) }),
+    doc({ id: 'in-progress', status: 'active', announcedDate: '2099-01-01', usingDepts: depts(['JAC00']) }),
+    doc({ id: 'void', status: 'void', announcedDate: '2026-01-01', usingDepts: depts(['JAC00']) }),
   ];
 
   it('TS-F019-D5-001 業務 viewer：僅「已公告且使用部門相符」進入候選', () => {
-    const biz: ViewerScope = { roleCode: 'User', userSubtype: 'business', orgCode: 'JAC00' };
+    const biz: ViewerScope = { roleCode: 'User', userSubtype: 'business', orgCode: 'JAC00', companyCode: 'AS' };
     expect(visibleCandidates(pool, biz, TODAY).map((d) => d.id)).toEqual(['ann-visible']);
   });
 
@@ -265,7 +281,7 @@ describe('F019 AC-D5（結構）：visibleCandidates 為清單與選項之唯一
   });
 
   it('TS-F019-D5-003 清單結果恆為 visibleCandidates 之子集（過濾位置在使用者條件之前）', () => {
-    const biz: ViewerScope = { roleCode: 'User', userSubtype: 'business', orgCode: 'JAC00' };
+    const biz: ViewerScope = { roleCode: 'User', userSubtype: 'business', orgCode: 'JAC00', companyCode: 'AS' };
     const candidateIds = new Set(visibleCandidates(pool, biz, TODAY).map((d) => d.id));
     const page = buildPublicList(pool, biz, { keyword: '文件' }, TODAY);
     expect(page.items.length).toBeGreaterThan(0);

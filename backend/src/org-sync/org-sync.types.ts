@@ -1,6 +1,6 @@
 /**
  * 同步引擎之 IO 邊界介面（可注入 mock）。
- *  - UpstreamOrgReader：OPENQUERY 讀 VW_DEPT_SQL / VW_HPMUSER / VW_PERSONAL_JOB（唯讀上游）。
+ *  - UpstreamOrgReader：OPENQUERY 讀 VW_DEPT_SQL / VW_PERSONNEL_SQL / VW_PERSONAL_JOB（唯讀上游）。
  *  - OrgSyncStore：本地 ACCOUNT / ORG_UNIT / JOB_TITLE / SYNC_RUN 之交易性寫入 + 互斥鎖。
  * 純邏輯（推導/分類/閾值/正規化）不在此層，見同目錄各純模組。
  */
@@ -28,6 +28,8 @@ export type SyncRunStatus = 'running' | 'success' | 'failed';
  */
 export interface SyncRunSummary {
   id: string;
+  /** B 階段（多公司）新增：供前端於歷程列表區分各筆屬於哪家公司。 */
+  compid: string;
   triggerType: TriggerType;
   status: SyncRunStatus;
   startedAt: Date;
@@ -41,9 +43,10 @@ export interface SyncRunSummary {
 export interface UpstreamOrgReader {
   /** VW_DEPT_SQL 全量（非增量）。 */
   readDepartments(compid: string): Promise<RawDept[]>;
-  /** 消失閾值用：本次來源之在職 USERID 集合（EMPSTS='A'）。 */
+  /** 消失閾值用：本次來源之在職穩定鍵集合（v2.0：`NO`，判定見契約 §6）。 */
+  /** 在職者之穩定鍵集合（v2.0：`NO`），供消失閾值保護。 */
   readActiveAccountLoginIds(compid: string): Promise<string[]>;
-  /** VW_HPMUSER 白名單 12 欄；sinceMtdt=null 為首次全量。 */
+  /** VW_PERSONNEL_SQL 白名單 10 欄（v2.0）；sinceMtdt=null 為首次全量。含離職者，供停用判定。 */
   readAccountChanges(compid: string, sinceMtdt: Date | null): Promise<RawAccount[]>;
   /**
    * 職稱對照主檔（VW_PERSONAL_JOB distinct 三欄，全公司範圍、非增量；實測 109 列）。
@@ -90,15 +93,25 @@ export interface FinishSyncRunPatch {
 
 /** 本地寫入端（含互斥鎖：以「進行中之 SYNC_RUN」實現）。 */
 export interface OrgSyncStore {
-  /** 互斥：是否已有進行中（running）之 SYNC_RUN。 */
-  hasRunningSyncRun(): Promise<boolean>;
+  /**
+   * 互斥：該公司是否已有進行中（running）之 SYNC_RUN。
+   * 🔴 B 階段（多公司）修正：**per-company**，不得為全域查詢——否則 A 公司同步中會誤擋
+   * B 公司獨立的手動觸發／排程（兩者本互不相干）。
+   */
+  hasRunningSyncRun(compid: string): Promise<boolean>;
   createSyncRun(input: {
+    compid: string;
     triggerType: TriggerType;
     triggeredBy?: string | null;
     startedAt: Date;
   }): Promise<string>;
   finishSyncRun(id: string, patch: FinishSyncRunPatch): Promise<void>;
-  /** 上次成功同步之 MTDT 水位（首次為 null）。 */
+  /**
+   * 上次成功同步之 MTDT 水位（首次為 null）。
+   * 🔴 B 階段（多公司）修正：**per-company**——舊版實作曾接受 `compid` 參數卻從未使用
+   * （全域查詢「最後一次成功同步」），會導致新公司首次同步誤繼承他公司水位、增量查詢
+   * 誤判無異動（靜默資料遺失）。
+   */
   getAccountWatermark(compid: string): Promise<Date | null>;
   /** 本地在職（status='active'）上游帳號之 loginId 集合（消失閾值 prev 端）。 */
   listActiveAccountLoginIds(compid: string): Promise<string[]>;
@@ -179,6 +192,8 @@ export interface SyncStats {
 
 export interface SyncResult {
   runId: string;
+  /** B 階段（多公司）新增：本結果所屬公司。 */
+  compid: string;
   triggerType: TriggerType;
   status: Exclude<SyncRunStatus, 'running'>;
   changeCount: number;

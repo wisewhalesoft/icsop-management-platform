@@ -11,26 +11,35 @@ import { DocumentLinkEntity } from '../database/entities/document-link.entity';
 import { DocumentStatus } from '../documents/document-status';
 import { lifecycleDisplayName } from '../lifecycle/lifecycle-subcategory';
 import { PublicDocItem } from './public-list';
+import { UsingDeptRef } from '../rbac/viewer-scope';
 import { PublicDocDetail, PublicDocumentStore } from './public-documents.store';
 
 /** DOC_USING_DEPT 之最小讀取形狀（分組純函式不依賴 entity 全欄）。 */
 export interface UsingDeptRow {
   documentId: string;
   orgCode: string;
+  /** 🔴 B 階段（多公司）：可見性判定所需，見 `UsingDeptRef`。 */
+  companyCode: string;
 }
 
 /**
- * `DOC_USING_DEPT` 列 → `Map<documentId, orgCode[]>`（純函式，無 IO，unit 可測）。
+ * `DOC_USING_DEPT` 列 → `Map<documentId, UsingDeptRef[]>`（純函式，無 IO，unit 可測）。
  *
  * 刻意**不去重**：`UQ_DOC_USING_DEPT_doc_org` 唯一索引已是唯一性防線，純函式再做防禦性去重
  * 只會掩蓋資料異常。輸入順序即輸出順序（穩定，供快照/斷言可預期）。
+ *
+ * 🔴 B 階段（多公司）：值型別由裸 `orgCode[]` 改為 `UsingDeptRef[]`（帶公司別）。裸字串正是
+ * F041 可見性跨公司誤中之成因，故型別層面直接杜絕其再度流通。
  */
-export function groupUsingDeptIds(rows: readonly UsingDeptRow[]): Map<string, string[]> {
-  const map = new Map<string, string[]>();
+export function groupUsingDeptIds(
+  rows: readonly UsingDeptRow[],
+): Map<string, UsingDeptRef[]> {
+  const map = new Map<string, UsingDeptRef[]>();
   for (const r of rows) {
+    const ref: UsingDeptRef = { companyCode: r.companyCode, orgCode: r.orgCode };
     const list = map.get(r.documentId);
-    if (list) list.push(r.orgCode);
-    else map.set(r.documentId, [r.orgCode]);
+    if (list) list.push(ref);
+    else map.set(r.documentId, [ref]);
   }
   return map;
 }
@@ -76,7 +85,7 @@ export class TypeOrmPublicDocumentStore implements PublicDocumentStore {
     const deptRows = docIds.length
       ? await ds.getRepository(DocUsingDept).find({
           where: { documentId: In(docIds) },
-          select: { documentId: true, orgCode: true },
+          select: { documentId: true, orgCode: true, companyCode: true },
         })
       : [];
     const deptMap = groupUsingDeptIds(deptRows);
@@ -104,7 +113,8 @@ export class TypeOrmPublicDocumentStore implements PublicDocumentStore {
       documentName: d.documentName,
       lifecycleId: d.lifecycleId,
       lifecycleName: nameMap.get(d.lifecycleId) ?? null,
-      usingDeptIds: deptMap.get(d.id) ?? [],
+      usingDepts: deptMap.get(d.id) ?? [],
+      companyCode: d.companyCode,
       draftingDeptId: d.draftingDeptId,
       draftingCompanyId: d.draftingCompanyId,
       draftingSectionId: d.draftingSectionId,
@@ -183,7 +193,8 @@ export class TypeOrmPublicDocumentStore implements PublicDocumentStore {
       draftingSectionId: d.draftingSectionId,
       primaryChiefId: d.primaryChiefId,
       secondaryChiefIds: chiefRows.map((c) => c.employeeNo),
-      usingDeptIds: deptRows.map((r) => r.orgCode),
+      usingDepts: deptRows.map((r) => ({ companyCode: r.companyCode, orgCode: r.orgCode })),
+      companyCode: d.companyCode,
       edition: d.edition,
       announcedDate: d.announcedDate ? d.announcedDate.toISOString() : null,
       contentSummary: d.contentSummary,

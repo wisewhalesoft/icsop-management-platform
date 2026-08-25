@@ -41,7 +41,7 @@ const ORG = {
   JA000: { tier: 'DEPARTMENT', name: '營運管理部', descFull: '營運管理部' },
 };
 const fakeOrg = (): WatermarkOrgLookup => ({
-  findByOrgCode: (code) =>
+  findByOrgCode: (_companyCode, code) =>
     Promise.resolve(
       (ORG as Record<string, { tier: string; name: string; descFull: string | null }>)[code] ?? null,
     ),

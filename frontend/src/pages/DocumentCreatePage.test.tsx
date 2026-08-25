@@ -63,6 +63,16 @@ function org(over: Partial<OrgUnitRecord>): OrgUnitRecord {
     name: '', descFull: null, managerEmpNo: null, isActive: true, ...over,
   };
 }
+/**
+ * 🔴 B 階段（多公司）：公司下拉之來源由 org-unit 之 ROOT 列改為**公司主檔**
+ * （四家 ROOT 代碼皆為 `00000`、AE 甚至無 ROOT 列，見 B-multi-company-impl.md §七）。
+ * 故本檔之「制定公司」選項名稱由「和潤本部」（ROOT 節點名）改為公司全稱。
+ */
+const COMPANIES = [
+  { companyCode: 'AS', companyName: '和潤企業股份有限公司' },
+  { companyCode: 'AD', companyName: '和潤興業股份有限公司' },
+];
+
 // 迷你組織樹：ROOT 和潤本部 → DIVISION 經企本部 → 部（企劃部/資訊部/稽核部）→ 室
 const ORG: OrgUnitRecord[] = [
   org({ orgCode: '00000', parentCode: null, tier: 'ROOT', name: '和潤本部' }),
@@ -98,7 +108,7 @@ async function selectLifecycle(lifecycleId: string): Promise<void> {
 async function selectToDept(): Promise<void> {
   await selectLifecycle('lc1');
   await userEvent.click(screen.getByLabelText(/制定公司/));
-  await userEvent.click(await screen.findByRole('option', { name: '和潤本部' }));
+  await userEvent.click(await screen.findByRole('option', { name: '和潤企業股份有限公司' }));
   await userEvent.click(screen.getByLabelText(/制定部門/));
   await userEvent.click(await screen.findByRole('option', { name: '企劃部' }));
 }
@@ -109,6 +119,7 @@ describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', ()
     vi.mocked(endpoints.getLifecycles).mockResolvedValue(LCS);
     vi.mocked(endpoints.getDocuments).mockResolvedValue(page([]));
     vi.mocked(endpoints.getOrgUnits).mockResolvedValue([]);
+    vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
     vi.mocked(endpoints.searchPersons).mockResolvedValue([]);
     vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([]);
     vi.mocked(endpoints.getAppendixPool).mockResolvedValue([]); // F039：預設空池，個別測試覆寫
@@ -233,6 +244,7 @@ describe('DocumentCreatePage — STEP3 制定組織與當責室長（F014，移�
     vi.mocked(endpoints.getLifecycles).mockResolvedValue(LCS);
     vi.mocked(endpoints.getDocuments).mockResolvedValue(page([]));
     vi.mocked(endpoints.getOrgUnits).mockResolvedValue(ORG);
+    vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
     vi.mocked(endpoints.searchPersons).mockResolvedValue(PERSONS);
     vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([]);
     vi.mocked(endpoints.getAppendixPool).mockResolvedValue([]); // F039：預設空池，個別測試覆寫
@@ -276,7 +288,7 @@ describe('DocumentCreatePage — STEP3 制定組織與當責室長（F014，移�
     await selectLifecycle('lc1');
     expect(screen.getByLabelText(/制定部門/)).toBeDisabled();
     await userEvent.click(screen.getByLabelText(/制定公司/));
-    await userEvent.click(await screen.findByRole('option', { name: '和潤本部' }));
+    await userEvent.click(await screen.findByRole('option', { name: '和潤企業股份有限公司' }));
     expect(screen.getByLabelText(/制定部門/)).not.toBeDisabled();
   });
 
@@ -351,6 +363,9 @@ describe('DocumentCreatePage — STEP3 制定組織與當責室長（F014，移�
     await waitFor(() =>
       expect(endpoints.createDocument).toHaveBeenCalledWith(
         expect.objectContaining({
+          // 🔴 B 階段（多公司）：兩者語意分離——`companyCode` 為公司代碼（新欄位），
+          // `draftingCompanyId` 維持 `ORG_UNIT.orgCode`（該公司之 ROOT 節點）。
+          companyCode: 'AS',
           draftingCompanyId: '00000',
           draftingDeptId: 'A2000',
           draftingSectionId: 'A2100',
@@ -375,6 +390,7 @@ describe('DocumentCreatePage — STEP4 附件與關聯文件（F016/F018/F015，
     vi.mocked(endpoints.getLifecycles).mockResolvedValue(LCS);
     vi.mocked(endpoints.getDocuments).mockResolvedValue(page([EXISTING]));
     vi.mocked(endpoints.getOrgUnits).mockResolvedValue([]);
+    vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
     vi.mocked(endpoints.searchPersons).mockResolvedValue([]);
     vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([FORM]);
     vi.mocked(endpoints.getAppendixPool).mockResolvedValue([]); // F039：本區塊聚焦附件/使用表單，附錄池預設空
@@ -441,6 +457,7 @@ describe('DocumentCreatePage — STEP4 附錄選取與排序（F039，移植 pro
     vi.mocked(endpoints.getLifecycles).mockResolvedValue(LCS);
     vi.mocked(endpoints.getDocuments).mockResolvedValue(page([]));
     vi.mocked(endpoints.getOrgUnits).mockResolvedValue([]);
+    vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
     vi.mocked(endpoints.searchPersons).mockResolvedValue([]);
     vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([]);
     vi.mocked(endpoints.getAppendixPool).mockResolvedValue(APPX);

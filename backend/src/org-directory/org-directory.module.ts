@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { AppDataSource } from '../database/data-source';
 import { AuthModule } from '../auth/auth.module';
 import { RbacModule } from '../rbac/rbac.module';
-import { SYNC_COMPID } from '../org-sync/org-sync.config';
 import { PERSON_STORE, PersonStore } from './person-directory';
 import { ORG_UNIT_READ_STORE, OrgUnitReadStore } from './org-unit-read';
 import { JOB_TITLE_READ_STORE, JobTitleReadStore } from './job-title-directory';
@@ -43,12 +42,12 @@ import {
     {
       provide: PERSON_STORE,
       useFactory: (): PersonStore =>
-        new TypeOrmPersonStore(AppDataSource, SYNC_COMPID),
+        new TypeOrmPersonStore(AppDataSource),
     },
     {
       provide: ORG_UNIT_READ_STORE,
       useFactory: (): OrgUnitReadStore =>
-        new TypeOrmOrgUnitReadStore(AppDataSource, SYNC_COMPID),
+        new TypeOrmOrgUnitReadStore(AppDataSource),
     },
     {
       // 職稱對照（G-ADM-001「職位」欄）。不帶 SYNC_COMPID：跨公司 fallback 需要全表。

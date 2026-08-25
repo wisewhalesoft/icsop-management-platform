@@ -114,7 +114,7 @@ export class OrgChangeAlertService implements OrgChangeAlertGenerator {
       sourceSyncRunId: input.runId,
     });
 
-    // F005：EMPSTS='A' 但 RESIGNDT 過去日之資料不一致告警（不停用，僅告警）。
+    // F005：在職中但離職日已過之資料不一致告警（不停用，僅告警）。
     const inconAlerts = detectDataInconsistencyAlerts({
       activeAccounts,
       existingPendingLoginIds: existingPendingInconLoginIds,
@@ -254,7 +254,7 @@ export function auditTarget(row: AlertRow): {
     case 'DATA_INCONSISTENCY':
       return {
         targetNumber: row.accountLoginId,
-        targetName: '資料不一致（EMPSTS/RESIGNDT）',
+        targetName: '資料不一致（在職狀態／離職日）',
       };
     case 'ACCOUNT_DISAPPEARED':
       return { targetNumber: row.accountLoginId, targetName: '帳號消失（來源查無）' };

@@ -10,6 +10,16 @@ export class IcsopDocument {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
+  /**
+   * 🔴 B 階段（多公司）：文件所屬公司。`draftingCompanyId`／`draftingDeptId`／
+   * `draftingSectionId` 存的是裸 `ORG_UNIT.orgCode`，而各公司之 orgCode 獨立編碼、字串可能
+   * 相同——沒有本欄，文件無法自證屬於哪家公司，部門名稱解析與 F041 可見性判定皆會歧義。
+   * 既有列已由 migration backfill 為 'AS'（上線以來僅同步過該公司）。
+   */
+  @Index('IX_ICSOP_DOCUMENT_companyCode')
+  @Column({ type: 'varchar', length: 10 })
+  companyCode!: string;
+
   @Column({ type: 'varchar', length: 20 })
   status!: string; // active / inactive / void
 

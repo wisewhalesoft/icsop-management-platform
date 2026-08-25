@@ -38,14 +38,47 @@ describe('resolveCompanyName（靜態 COMPID→全稱）', () => {
 });
 
 /**
+ * 🔴 B 階段（2026-08-24，開放 AD／AE／AJ）：四家公司之全稱回歸鎖 + AE 全稱缺字修正。
+ * 權威：upstream-hr-source-contract.md §10.1（2026-08-24 v2.0 實測 `VW_HRCOMF.COMPFULLNM`）。
+ */
+describe('B 階段 — 四家公司全稱（AD／AE／AJ／AS）', () => {
+  it('AD → 和潤興業股份有限公司', () => {
+    expect(resolveCompanyName('AD')).toBe('和潤興業股份有限公司');
+  });
+
+  it('AJ → 和勁企業股份有限公司', () => {
+    expect(resolveCompanyName('AJ')).toBe('和勁企業股份有限公司');
+  });
+
+  it('🔴 AE 全稱缺字修正：完整為「和潤電能股份有限公司」（v1.0 曾誤植為「和潤電能」，漏「股份有限公司」）', () => {
+    expect(resolveCompanyName('AE')).toBe('和潤電能股份有限公司');
+    expect(COMPANY_FULL_NAMES.AE.endsWith('股份有限公司')).toBe(true);
+  });
+
+  it('ILS（上游 VW_HRCOMF 無此公司代碼）仍查無 → null，未被誤納入', () => {
+    expect(resolveCompanyName('ILS')).toBeNull();
+  });
+});
+
+/**
  * 🔴 D9 delta（2026-08-20，OQ-D9-06／OQ-D9-07）：浮水印專用公司簡稱常數。
  * 權威：docs/specs/features/F020-watermark.md#d9-watermark-delta `AC-N10`／`AC-N11`（INV-C2）／`AC-N12`／`AC-N13`。
  * 落點與符號名逐字取自 architecture-spec.md §11.9（`COMPANY_SHORT_NAMES`／`resolveCompanyShortName`／
  * `assertCompanyShortNamesComplete`，非本檔臆造）。
  */
 describe('D9 delta — COMPANY_SHORT_NAMES（浮水印專用公司簡稱，AC-N10）', () => {
-  it('AC-N10 逐字為 { AS: 和潤企業, AE: 和潤電能 }', () => {
-    expect(COMPANY_SHORT_NAMES).toEqual({ AS: '和潤企業', AE: '和潤電能' });
+  it('AC-N10 AS／AE 逐字不變（B 階段新增 AD／AJ 不得連帶改動既有兩家之值，AC-N13 之延伸）', () => {
+    expect(COMPANY_SHORT_NAMES.AS).toBe('和潤企業');
+    expect(COMPANY_SHORT_NAMES.AE).toBe('和潤電能');
+  });
+
+  it('B 階段新增：AD → 和潤興業、AJ → 和勁企業（依既有慣例——全稱去尾「股份有限公司」）', () => {
+    expect(COMPANY_SHORT_NAMES.AD).toBe('和潤興業');
+    expect(COMPANY_SHORT_NAMES.AJ).toBe('和勁企業');
+  });
+
+  it('🔒 簡稱不得回接上游 COMPSIMPNM（AS 上游簡稱為「和潤」，與本表既有慣例「和潤企業」不同源）', () => {
+    expect(COMPANY_SHORT_NAMES.AS).not.toBe('和潤');
   });
 
   /**
@@ -119,7 +152,7 @@ describe('D9 delta — AC-N13（🔒 全稱三處消費點回歸鎖定，本檔�
     expect(resolveCompanyName('AS')).toBe('和潤企業股份有限公司');
   });
 
-  it('INV-C1（既有）維持成立：SELECTABLE_COMPANIES 等同 COMPANY_FULL_NAMES 鍵集合 —— 由既有 org-company-sync 測試持有，本檔僅確認鍵集合未被本次新增之短稱表連帶改動', () => {
-    expect(Object.keys(COMPANY_FULL_NAMES).sort()).toEqual(['AE', 'AS']);
+  it('INV-C1（既有）維持成立：SELECTABLE_COMPANIES 等同 COMPANY_FULL_NAMES 鍵集合（B 階段：四家）', () => {
+    expect(Object.keys(COMPANY_FULL_NAMES).sort()).toEqual(['AD', 'AE', 'AJ', 'AS']);
   });
 });

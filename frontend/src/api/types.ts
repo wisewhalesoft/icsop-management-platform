@@ -21,6 +21,30 @@ export interface SessionUser {
   userSubtype?: string | null;
 }
 
+// ===== F001 帳號選擇 delta（同一 email 命中多帳號） =====
+
+/**
+ * 選擇畫面之單一候選列（GET /auth/select-account；鏡射後端 candidate-payload.ts CandidateDisplayRow）。
+ * 恰含八欄，不含 passwordHash 等禁欄（AC-M12）。
+ */
+export interface SelectAccountCandidate {
+  accountId: string;
+  companyCode: string;
+  companyName: string;
+  orgCode: string | null;
+  orgName: string;
+  roleCode: string;
+  roleName: string;
+  loginId: string;
+}
+
+/** GET /auth/select-account 回應（AC-M12）：email／name（該自然人姓名，全體一致故單一值）／候選陣列。 */
+export interface SelectAccountResponse {
+  email: string;
+  name: string;
+  candidates: SelectAccountCandidate[];
+}
+
 /** 帳號管理檢視（GET/POST/PATCH /admin/accounts；鏡射後端 accounts.store AccountView / AccountListItem）。 */
 export interface AccountView {
   id: string;
@@ -294,6 +318,8 @@ export interface DocumentFilters {
  */
 export interface DocumentView {
   id: string;
+  /** 🔴 B 階段（多公司）：文件所屬公司（← ICSOP_DOCUMENT.companyCode）。 */
+  companyCode: string;
   status: DocumentStatus;
   documentNumber: string;
   documentName: string;
@@ -763,6 +789,8 @@ export type SyncRunStatus = 'running' | 'success' | 'failed';
 /** GET /admin/org-sync/runs 之單筆。 */
 export interface SyncRunSummary {
   id: string;
+  /** B 階段（多公司）新增：本筆所屬公司代碼。 */
+  compid: string;
   triggerType: TriggerType;
   status: SyncRunStatus;
   startedAt: string;
@@ -786,9 +814,10 @@ export interface SyncStats {
   disappearedRatio: number;
 }
 
-/** POST /admin/org-sync/run 回傳。 */
+/** POST /admin/org-sync/run 回傳陣列之單筆（B 階段：一筆對應一家公司）。 */
 export interface SyncResult {
   runId: string;
+  compid: string;
   triggerType: TriggerType;
   status: Exclude<SyncRunStatus, 'running'>;
   changeCount: number;

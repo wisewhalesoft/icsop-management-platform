@@ -230,6 +230,8 @@ interface ProfileMaster {
   jobTitles: JobTitleRecord[];
   /** 首次選到某公司時補抓該公司之職稱（AC-P14 之 `?companyCode=`）；已抓過即 no-op。 */
   ensureJobTitles: (companyCode: string) => void;
+  /** 🔴 B 階段（多公司）：同上，補抓該公司之組織（`GET /org-units?companyCode=`）。 */
+  ensureOrgUnits: (companyCode: string) => void;
 }
 
 /**
@@ -261,7 +263,7 @@ function ProfileFields({
   companyHint?: string;
   jobHint?: string;
 }): JSX.Element {
-  const { companies, orgUnits, jobTitles, ensureJobTitles } = master;
+  const { companies, orgUnits, jobTitles, ensureJobTitles, ensureOrgUnits } = master;
   const companyUnits = useMemo(
     () => unitsOf(orgUnits, value.companyCode),
     [orgUnits, value.companyCode],
@@ -277,7 +279,9 @@ function ProfileFields({
 
   useEffect(() => {
     ensureJobTitles(value.companyCode);
-  }, [ensureJobTitles, value.companyCode]);
+    // 🔴 B 階段：組織亦須逐公司補抓，否則他公司帳號之部門下拉恆為空（見 ensureOrgUnits）。
+    ensureOrgUnits(value.companyCode);
+  }, [ensureJobTitles, ensureOrgUnits, value.companyCode]);
 
   // AC-P26：該公司無 ORG_UNIT → 部門下拉停用＋空狀態說明；**不阻擋建立**（orgCode 送 null）。
   const orgEmpty = value.companyCode !== '' && orgOptions.length === 0;
@@ -376,6 +380,8 @@ export function AccountManagementPage(): JSX.Element {
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
   const [jobTitles, setJobTitles] = useState<JobTitleRecord[]>([]);
   const loadedJobCompanies = useRef<Set<string>>(new Set());
+  /** 🔴 B 階段（多公司）：已載入組織之公司集合（比照 loadedJobCompanies 之累積模式）。 */
+  const loadedOrgCompanies = useRef<Set<string>>(new Set());
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<AccountView | null>(null);
@@ -417,15 +423,41 @@ export function AccountManagementPage(): JSX.Element {
       .catch(() => undefined);
   }, []);
 
+  /**
+   * 🔴 B 階段（多公司）：首次選到某公司時補抓該公司之組織（`GET /org-units?companyCode=`），
+   * 累積後共用；比照 `ensureJobTitles` 之模式。
+   *
+   * 為何必須逐公司補抓：`GET /org-units` 未帶參數時，後端取**登入者自己的公司**
+   * （B 階段前為常數 `'AS'`）。帳號可跨公司建立（AC-P5），若沿用單次無參數載入，
+   * **他公司帳號之部門下拉會是空的**——AC-P26 之空狀態文案會被誤觸發，看起來像
+   * 「該公司尚未同步組織」，實際上只是前端沒去要那家公司的資料。
+   *
+   * 去重以 `(companyCode, orgCode)` 複合鍵：不同公司之 orgCode 字串可能相同，
+   * 僅以 orgCode 去重會使後載入的公司覆蓋先前公司之同代碼單位。
+   */
+  const ensureOrgUnits = useCallback((companyCode: string) => {
+    if (!companyCode || loadedOrgCompanies.current.has(companyCode)) return;
+    loadedOrgCompanies.current.add(companyCode);
+    void Promise.resolve(getOrgUnits(companyCode))
+      .then((rows) =>
+        setOrgUnits((prev) => {
+          const byKey = new Map(prev.map((u) => [`${u.companyCode} ${u.orgCode}`, u]));
+          for (const u of asArray(rows)) byKey.set(`${u.companyCode} ${u.orgCode}`, u);
+          return [...byKey.values()];
+        }),
+      )
+      .catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     if (!canRead) return;
     void Promise.resolve(getCompanies())
       .then((rows) => setCompanies(asArray(rows)))
       .catch(() => undefined);
     // AC-P13：沿用既有 `GET /org-units`（不新增端點）；跨公司之收斂由 `unitsOf` 以複合鍵於前端完成。
-    void Promise.resolve(getOrgUnits())
-      .then((rows) => setOrgUnits(asArray(rows)))
-      .catch(() => undefined);
+    // 🔴 B 階段：改為逐公司補抓（見 ensureOrgUnits）。此處先載入登入者自己公司，
+    //    其餘公司於使用者於下拉選到時再補（避免一次打 4 支請求）。
+    ensureOrgUnits(user?.companyCode ?? '');
   }, [canRead]);
 
   useEffect(() => {
@@ -433,8 +465,8 @@ export function AccountManagementPage(): JSX.Element {
   }, [canRead, user?.companyCode, ensureJobTitles]);
 
   const profileMaster = useMemo<ProfileMaster>(
-    () => ({ companies, orgUnits, jobTitles, ensureJobTitles }),
-    [companies, orgUnits, jobTitles, ensureJobTitles],
+    () => ({ companies, orgUnits, jobTitles, ensureJobTitles, ensureOrgUnits }),
+    [companies, orgUnits, jobTitles, ensureJobTitles, ensureOrgUnits],
   );
 
   const shown = useMemo(() => {
