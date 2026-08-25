@@ -5,6 +5,7 @@ import {
   PasswordAuthAccount,
 } from './account-repository';
 import { normalizeEmail, ResolvableAccount } from './account-resolver';
+import { CandidateAccount } from './multi-account-picker';
 import { Account } from '../database/entities/account.entity';
 
 /**
@@ -89,6 +90,32 @@ export class TypeOrmAccountRepository implements AccountRepository {
       source: a.source === 'manual' ? 'manual' : 'upstream',
       passwordHash: a.passwordHash,
     };
+  }
+
+  /**
+   * F001 帳號選擇 delta（`AC-M1`〜`AC-M29`）：以 email 取回同 email 下全部帳號（含停用）之
+   * 候選集合資料，供 `decideMultiAccountLogin()` 使用（含姓名一致判定所需之 `name`）。
+   * 查詢方式與 `findByEmail` 相同（LOWER(email) 比對），僅多帶 `accountId`／`name`／`orgCode`。
+   */
+  async findCandidatesByEmail(email: string): Promise<CandidateAccount[]> {
+    const norm = normalizeEmail(email);
+    if (norm === null) return [];
+    const ds = await this.ensureInit();
+    const rows = await ds
+      .getRepository(Account)
+      .createQueryBuilder('a')
+      .where('LOWER(a.email) = :email', { email: norm })
+      .getMany();
+    return rows.map((a) => ({
+      accountId: a.id,
+      loginId: a.loginId,
+      email: a.email,
+      companyCode: a.companyCode,
+      orgCode: a.orgCode,
+      roleCode: a.roleCode,
+      status: a.status === 'disabled' ? 'disabled' : 'active',
+      name: a.name,
+    }));
   }
 
   /**

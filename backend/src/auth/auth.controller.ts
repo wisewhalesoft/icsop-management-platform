@@ -9,9 +9,11 @@ import {
   Query,
   Req,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { JwtService } from '@nestjs/jwt';
 import {
   ConfidentialClientApplication,
   CryptoProvider,
@@ -37,7 +39,24 @@ import {
   OIDC_TX_COOKIE,
   sessionCookieOptions,
   cookieSecure,
+  sessionSecret,
 } from './session.config';
+import {
+  CandidateAccount,
+  CallbackPlan,
+  decideMultiAccountLogin,
+  planCallbackResponse,
+} from './multi-account-picker';
+import {
+  SELECTION_TICKET_COOKIE,
+  SELECTION_TICKET_TTL_SECONDS,
+  SelectionTicketService,
+} from './selection-ticket';
+import { buildCandidatePayload, DisplayResolvers } from './candidate-payload';
+import { resolveCompanyShortName } from '../org-directory/company-name';
+import { roleLabel } from '../audit/access-history-labels';
+import { AppDataSource } from '../database/data-source';
+import { OrgUnit } from '../database/entities/org-unit.entity';
 
 interface OidcTx {
   state: string;
@@ -106,6 +125,11 @@ export class AuthController {
     @Inject(ACCOUNT_REPOSITORY) private readonly accounts: AccountRepository,
     private readonly tokens: SessionTokenService,
     private readonly passwordLoginSvc: PasswordLoginService,
+    // F001 帳號選擇 delta：第 4 參數選填＋預設值，使既有以 3 參數直接建構本類別之測試檔
+    // （如 aad-failure-disclosure.spec.ts）不受影響；正式路徑由 AuthModule 之 DI 明確提供。
+    private readonly tickets: SelectionTicketService = new SelectionTicketService(
+      new JwtService({ secret: sessionSecret() }),
+    ),
   ) {}
 
   /**
@@ -281,6 +305,16 @@ export class AuthController {
       );
     }
 
+    // F001 帳號選擇 delta（`AC-M1`〜`AC-M29`）：repo 若支援 findCandidatesByEmail 即走新流程
+    // （0/1/多筆姓名一致→選單／姓名不一致→既有拒登）；缺此方法（既有測試替身）→ 逐字沿用既有行為
+    // （`AC-M27` 零漣漪）。
+    if (this.accounts.findCandidatesByEmail) {
+      const richCandidates: CandidateAccount[] = await this.accounts.findCandidatesByEmail(email);
+      const decision = decideMultiAccountLogin(email, richCandidates);
+      const plan = planCallbackResponse(decision);
+      return this.applyCallbackPlan(plan, email, res);
+    }
+
     const candidates = await this.accounts.findByEmail(email);
     const outcome = decideAuthOutcome(classifyAccountByEmail(email, candidates));
 
@@ -321,6 +355,171 @@ export class AuthController {
     // POST_LOGIN_REDIRECT_URL：正式（同源反代）用 '/'；dev（redirect_uri 在 :3000、SPA 在 :5173）
     // 設為 http://localhost:5173/ 以跨埠導回 SPA（cookie 為 localhost host-only、跨埠共用）。
     return res.redirect(postLoginRedirect());
+  }
+
+  /**
+   * F001 帳號選擇 delta：把 `planCallbackResponse()` 之規劃套用到實際 Express 回應。
+   * `issueSession`／`reject` 兩分支之既有動作與既有 fallback 段逐項相同（`AC-M27`）；
+   * `requireSelection` 為本 delta 新增：簽發選擇票證、導向 `/login/select-account`、
+   * 不得下發 session cookie（`AC-M3`）。
+   */
+  private async applyCallbackPlan(plan: CallbackPlan, email: string, res: Response): Promise<void> {
+    switch (plan.action) {
+      case 'issueSession': {
+        const account = plan.account;
+        const su: SessionUser = {
+          loginId: account.loginId,
+          email: account.email ?? email,
+          companyCode: account.companyCode,
+          roleCode: account.roleCode,
+        };
+        try {
+          await this.accounts.markLoggedIn(su.companyCode, su.loginId, new Date());
+        } catch {
+          // 靜默：登入已成功；時間戳為輔助資料。
+        }
+        res.cookie(SESSION_COOKIE, this.tokens.issue(su), sessionCookieOptions());
+        res.redirect(postLoginRedirect());
+        return;
+      }
+      case 'requireSelection': {
+        const token = this.tickets.issue(plan.ticketPayload);
+        res.cookie(SELECTION_TICKET_COOKIE, token, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: cookieSecure(),
+          maxAge: SELECTION_TICKET_TTL_SECONDS * 1000,
+          path: '/',
+        });
+        res.redirect(selectAccountRedirect());
+        return;
+      }
+      case 'reject': {
+        if (plan.warnLog) {
+          // AC-M8：WARN 記錄共用信箱告警（email＋候選 (companyCode, loginId) 清單＋相異姓名組數）；
+          // 不得記錄密碼／passwordHash／clientSecret（warnLog 本身之型別已不含姓名/密碼欄）。
+          this.logger.warn(
+            `[ALERT] ${plan.warnLog.event}：email=${maskEmail(plan.warnLog.email)}；` +
+              `候選=${JSON.stringify(plan.warnLog.accounts)}；相異姓名組數=${plan.warnLog.distinctNameCount}`,
+          );
+        }
+        const msg =
+          plan.code === 'AUTH_ACCOUNT_DISABLED'
+            ? AUTH_FAILURE_DETAIL.ACCOUNT_DISABLED
+            : AUTH_FAILURE_DETAIL.ACCOUNT_NOT_FOUND;
+        this.renderError(res, plan.code, msg, `帳號比對拒絕 ${plan.code}（email=${maskEmail(email)}）`);
+        return;
+      }
+    }
+  }
+
+  /**
+   * F001 帳號選擇 delta（丙節）：`GET /auth/select-account`——以選擇票證取回候選清單投影。
+   * 無票證／竄改／過期／已消耗 → 401 `AUTH_SELECTION_TICKET_INVALID`（`AC-M17`／`AC-M19`／`AC-M20`）。
+   */
+  @Get('select-account')
+  async getSelectAccount(@Req() req: Request, @Res() res: Response): Promise<void> {
+    const token = (req.cookies as Record<string, string> | undefined)?.[
+      SELECTION_TICKET_COOKIE
+    ];
+    const check = this.tickets.verify(token);
+    if (!check.ok) {
+      throw new UnauthorizedException('AUTH_SELECTION_TICKET_INVALID');
+    }
+
+    const candidateAccounts: CandidateAccount[] = await Promise.all(
+      check.payload.candidates.map(async (ref) => {
+        const current = await this.accounts.findCurrentByLogin(ref.companyCode, ref.loginId);
+        return {
+          accountId: ref.accountId,
+          loginId: ref.loginId,
+          email: check.payload.email,
+          companyCode: ref.companyCode,
+          orgCode: current?.orgCode ?? null,
+          roleCode: current?.roleCode,
+          status: (current?.status === 'disabled' ? 'disabled' : 'active') as
+            | 'active'
+            | 'disabled',
+          name: check.payload.name,
+        };
+      }),
+    );
+
+    const payload = await buildCandidatePayload(
+      check.payload.email,
+      check.payload.name,
+      candidateAccounts,
+      this.candidateDisplayResolvers(),
+    );
+    res.json(payload);
+  }
+
+  /**
+   * F001 帳號選擇 delta（丁節）：`POST /auth/select-account`——以選擇票證＋`accountId` 兌換 session。
+   * 驗證順序：票證有效性 → `accountId` 屬於票證綁定集合（`AC-M21`／`AC-M22`）→ 現行狀態仍 active
+   * （`AC-M24`）→ 原子性消耗票證（`AC-M23`）。任一步失敗皆不得核發 session、不得回退重查候選
+   * （`AC-M20`）。
+   */
+  @Post('select-account')
+  async postSelectAccount(
+    @Body() body: { accountId?: string },
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<SessionUser> {
+    const token = (req.cookies as Record<string, string> | undefined)?.[
+      SELECTION_TICKET_COOKIE
+    ];
+    const check = this.tickets.verify(token);
+    if (!check.ok) {
+      throw new UnauthorizedException('AUTH_SELECTION_TICKET_INVALID');
+    }
+
+    const ref = check.payload.candidates.find((c) => c.accountId === body?.accountId);
+    if (!ref) {
+      throw new UnauthorizedException('AUTH_SELECTION_TICKET_INVALID');
+    }
+
+    const current = await this.accounts.findCurrentByLogin(ref.companyCode, ref.loginId);
+    if (!current || current.status !== 'active') {
+      throw new UnauthorizedException('AUTH_ACCOUNT_DISABLED');
+    }
+
+    // 至此已通過票證有效性＋帳號集合成員資格＋現行狀態三項確認 → 原子性標記消耗（AC-M23）。
+    const consumed = this.tickets.consume(token);
+    if (!consumed.ok) {
+      throw new UnauthorizedException('AUTH_SELECTION_TICKET_INVALID');
+    }
+
+    const su: SessionUser = {
+      loginId: ref.loginId,
+      email: check.payload.email,
+      companyCode: ref.companyCode,
+      roleCode: current.roleCode,
+    };
+    try {
+      await this.accounts.markLoggedIn(su.companyCode, su.loginId, new Date());
+    } catch {
+      // 靜默：登入已成功；時間戳為輔助資料。
+    }
+    res.clearCookie(SELECTION_TICKET_COOKIE, { path: '/' });
+    res.cookie(SESSION_COOKIE, this.tokens.issue(su), sessionCookieOptions());
+    return su;
+  }
+
+  /** 候選畫面顯示名稱解析器（`AC-M14`）：company 走靜態簡稱表；org 查 ORG_UNIT；role 走既有標籤表。 */
+  private candidateDisplayResolvers(): DisplayResolvers {
+    return {
+      companyName: (c) => resolveCompanyShortName(c ?? null),
+      orgName: (o) => this.resolveOrgName(o),
+      roleName: (r) => (r ? roleLabel(r) || r : ''),
+    };
+  }
+
+  private async resolveOrgName(orgCode: string | null | undefined): Promise<string | null> {
+    if (orgCode == null || orgCode.trim() === '') return null;
+    if (!AppDataSource.isInitialized) await AppDataSource.initialize();
+    const unit = await AppDataSource.getRepository(OrgUnit).findOne({ where: { orgCode } });
+    return unit ? unit.name : null;
   }
 
   /** 受保護：回傳當前 session 使用者。同時驗證 guard 之 sliding 刷新。 */
@@ -388,6 +587,16 @@ export class AuthController {
 /** 登入成功後導向目標。正式（同源反代）預設 '/'；dev 以 POST_LOGIN_REDIRECT_URL 指向 SPA 埠。 */
 function postLoginRedirect(): string {
   return process.env.POST_LOGIN_REDIRECT_URL?.trim() || '/';
+}
+
+/**
+ * F001 帳號選擇 delta（`AC-M3`）：`N ≥ 2` 且前置條件成立時之導向目標——`/login/select-account`。
+ * 與 postLoginRedirect() 同一 dev/正式雙軌邏輯：正式（同源反代）為相對路徑；
+ * dev（redirect_uri 在 :3000、SPA 在 :5173）以 POST_LOGIN_REDIRECT_URL 之 origin 為基準跨埠導回 SPA。
+ */
+function selectAccountRedirect(): string {
+  const base = process.env.POST_LOGIN_REDIRECT_URL?.trim();
+  return base ? `${base.replace(/\/$/, '')}/login/select-account` : '/login/select-account';
 }
 
 /**

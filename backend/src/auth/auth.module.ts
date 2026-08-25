@@ -9,6 +9,7 @@ import { ACCOUNT_REPOSITORY } from './account-repository';
 import { TypeOrmAccountRepository } from './typeorm-account.repository';
 import { AppDataSource } from '../database/data-source';
 import { sessionSecret } from './session.config';
+import { SelectionTicketService } from './selection-ticket';
 
 @Module({
   controllers: [AuthController],
@@ -34,6 +35,13 @@ import { sessionSecret } from './session.config';
       useFactory: (repo, tokens, throttle) =>
         new PasswordLoginService(repo, tokens, throttle),
       inject: [ACCOUNT_REPOSITORY, SessionTokenService, LoginThrottleService],
+    },
+    // F001 帳號選擇 delta（AC-M10）：獨立 JwtService 實例簽發選擇票證（與 session token 分離，
+    // process 記憶體記錄一次性消耗，AC-M23/AC-M29；零新增基礎設施，比照 SessionTokenService 同哲學）。
+    {
+      provide: SelectionTicketService,
+      useFactory: () =>
+        new SelectionTicketService(new JwtService({ secret: sessionSecret() })),
     },
     SessionGuard,
   ],

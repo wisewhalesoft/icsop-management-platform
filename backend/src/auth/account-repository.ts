@@ -1,4 +1,5 @@
 import { normalizeEmail, ResolvableAccount } from './account-resolver';
+import { CandidateAccount } from './multi-account-picker';
 
 /**
  * SessionGuard 每請求即時把關所需之現行帳號狀態（來源真相＝DB）。
@@ -64,6 +65,17 @@ export interface AccountRepository {
    * 直接略過（＝既有行為），故不影響任何既有路徑。
    */
   findByLoginIdAnyCompany?(loginId: string): Promise<PasswordAuthAccount[]>;
+
+  /**
+   * F001 帳號選擇 delta（`AC-M1`〜`AC-M29`）：以 email 取回同 email 下**全部**帳號（含停用）之
+   * 候選集合資料——比 `findByEmail` 多帶 `accountId`／`name`／`orgCode`，供
+   * `decideMultiAccountLogin()` 之姓名一致判定（`AC-M7`）與候選畫面使用。
+   *
+   * 刻意選填（`?`）：既有測試替身無需實作；`/auth/callback` 於缺此方法時退化為既有
+   * `findByEmail`／`classifyAccountByEmail`／`decideAuthOutcome` 行為（命中多筆 → 拒登＋告警，
+   * `AC-M27` 之零漣漪保證），不影響任何既有路徑。
+   */
+  findCandidatesByEmail?(email: string): Promise<CandidateAccount[]>;
 }
 
 export const ACCOUNT_REPOSITORY = Symbol('ACCOUNT_REPOSITORY');
