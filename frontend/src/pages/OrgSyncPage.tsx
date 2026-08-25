@@ -7,6 +7,7 @@ import {
   getOrgChangeAlerts,
   resolveOrgChangeAlert,
   getOrgSyncMonthlySummary,
+  getCompanies,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
@@ -18,6 +19,7 @@ import type {
   SyncRunSummary,
   OrgChangeAlertView,
   OrgSyncMonthlySummary,
+  CompanyRecord,
 } from '../api/types';
 import {
   trigLabel,
@@ -71,6 +73,7 @@ export function OrgSyncPage(): JSX.Element {
 
   const [tab, setTab] = useState<TabKey>('overview');
   const [runs, setRuns] = useState<SyncRunSummary[]>([]);
+  const [companies, setCompanies] = useState<CompanyRecord[]>([]);
   const [alerts, setAlerts] = useState<OrgChangeAlertView[]>([]);
   const [summary, setSummary] = useState<OrgSyncMonthlySummary | null>(null);
   const [summaryFailed, setSummaryFailed] = useState(false);
@@ -114,7 +117,17 @@ export function OrgSyncPage(): JSX.Element {
     void load();
     void loadAlerts();
     void loadSummary();
+    // B 階段（多公司）：同步紀錄清單需顯示公司名稱，公司主檔一次載入即可（變動頻率低）。
+    void Promise.resolve(getCompanies())
+      .then((rows) => setCompanies(rows ?? []))
+      .catch(() => undefined);
   }, [canRead, load, loadAlerts, loadSummary]);
+
+  /** compid → 公司簡稱；查無 → 原代碼（AC-P23c 同款寬容處置）。 */
+  const companyLabel = useCallback(
+    (compid: string) => companies.find((c) => c.companyCode === compid)?.companyName ?? compid,
+    [companies],
+  );
 
   // 有進行中同步 → 持續輪詢直到完成（US-011「執行中→輪詢結果」）。
   useEffect(() => {
@@ -123,25 +136,44 @@ export function OrgSyncPage(): JSX.Element {
     return () => clearTimeout(t);
   }, [runs, load]);
 
+  /**
+   * B 階段（多公司）：`triggerOrgSync` 回傳陣列，一筆對應一家設定公司。
+   * 個別公司之互斥（SYNC_IN_PROGRESS）已由後端協調層吞掉、不再以 409 拋出（見
+   * `org-sync-coordinator.ts`），故此處**不會**再因單一公司忙碌而整批進 catch；
+   * catch 僅保留給真正未預期之請求層失敗（網路、認證等）。
+   */
   const onTrigger = useCallback(async () => {
     setTriggering(true);
     toast.info('已啟動手動同步…（互斥鎖已取得）');
     try {
-      const res = await triggerOrgSync();
-      toast.success(`同步完成，異動 ${res.changeCount} 筆（頁面已自動更新，無需重新整理）`);
-    } catch (e) {
-      if (e instanceof ApiError && e.code === 'SYNC_IN_PROGRESS') {
-        toast.info('同步進行中，請稍候（SYNC_IN_PROGRESS）');
-      } else {
-        toast.error(e instanceof ApiError ? `同步失敗：${e.code}` : '同步失敗');
+      const results = await triggerOrgSync();
+      const totalChange = results.reduce((sum, r) => sum + r.changeCount, 0);
+      const busy = results.filter((r) => r.errorCode === 'SYNC_IN_PROGRESS');
+      const otherFailed = results.filter(
+        (r) => r.status === 'failed' && r.errorCode !== 'SYNC_IN_PROGRESS',
+      );
+      if (busy.length > 0) {
+        toast.info(
+          `${busy.map((r) => companyLabel(r.compid)).join('、')} 同步進行中，本次略過（SYNC_IN_PROGRESS）`,
+        );
       }
+      if (otherFailed.length > 0) {
+        toast.error(
+          `${otherFailed.map((r) => companyLabel(r.compid)).join('、')} 同步失敗`,
+        );
+      }
+      if (busy.length === 0 && otherFailed.length === 0) {
+        toast.success(`同步完成，異動 ${totalChange} 筆（頁面已自動更新，無需重新整理）`);
+      }
+    } catch (e) {
+      toast.error(e instanceof ApiError ? `同步失敗：${e.code}` : '同步失敗');
     } finally {
       setTriggering(false);
       await load();
       await loadAlerts();
       await loadSummary();
     }
-  }, [load, loadAlerts, loadSummary, toast]);
+  }, [companyLabel, load, loadAlerts, loadSummary, toast]);
 
   const onResolve = useCallback(
     async (id: string) => {
@@ -346,6 +378,7 @@ export function OrgSyncPage(): JSX.Element {
                 <table className="w-full text-sm min-w-[720px]">
                   <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
                     <tr>
+                      <th className="text-left font-medium px-4 py-2.5">公司</th>
                       <th className="text-left font-medium px-4 py-2.5">開始時間</th>
                       <th className="text-left font-medium px-4 py-2.5">結束時間</th>
                       <th className="text-left font-medium px-4 py-2.5">觸發方式</th>
@@ -362,6 +395,9 @@ export function OrgSyncPage(): JSX.Element {
                       return (
                         <Fragment key={r.id}>
                           <tr className="hover:bg-slate-50">
+                            <td className="px-4 py-2.5 text-xs text-slate-600">
+                              {companyLabel(r.compid)}
+                            </td>
                             <td className="px-4 py-2.5 mono text-xs text-slate-600">
                               {formatDateTime(r.startedAt)}
                             </td>
@@ -392,7 +428,7 @@ export function OrgSyncPage(): JSX.Element {
                           </tr>
                           {failed && isOpen && r.errorMessage && (
                             <tr>
-                              <td colSpan={6} className="px-4 pb-3 pt-0">
+                              <td colSpan={7} className="px-4 pb-3 pt-0">
                                 <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2 flex items-start gap-1.5">
                                   <Icon
                                     name="alert-octagon"

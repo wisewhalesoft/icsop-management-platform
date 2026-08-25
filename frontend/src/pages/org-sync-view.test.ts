@@ -13,6 +13,7 @@ import type { SyncRunSummary } from '../api/types';
 
 const run = (over: Partial<SyncRunSummary>): SyncRunSummary => ({
   id: 'r',
+  compid: 'AS',
   triggerType: 'scheduled',
   status: 'success',
   startedAt: '2026-07-15T22:00:00.000Z',

@@ -2,6 +2,7 @@ import { apiFetch } from './client';
 import { downloadViaBlob } from './download-blob';
 import type {
   SessionUser,
+  SelectAccountResponse,
   SyncRunSummary,
   SyncResult,
   AccountView,
@@ -56,6 +57,22 @@ export function passwordLogin(body: {
   });
 }
 
+// ===== F001 帳號選擇 delta（同一 email 命中多帳號） =====
+
+/** GET /auth/select-account（AC-M12）：以選擇票證 cookie 取回候選清單投影。 */
+export function getSelectAccountCandidates(): Promise<SelectAccountResponse> {
+  return apiFetch<SelectAccountResponse>('/auth/select-account');
+}
+
+/** POST /auth/select-account（AC-M18）：以所選 accountId 兌換 session；成功後呼叫端須 refresh() 重新解析。 */
+export function selectAccount(accountId: string): Promise<SessionUser> {
+  return apiFetch<SessionUser>('/auth/select-account', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ accountId }),
+  });
+}
+
 /**
  * GET /admin/org-sync/runs?limit=N（US-011 輪詢/歷程）。
  * limit 省略時不帶 query，交後端預設（20，上限 100）。
@@ -65,9 +82,13 @@ export function getOrgSyncRuns(limit?: number): Promise<SyncRunSummary[]> {
   return apiFetch<SyncRunSummary[]>(`/admin/org-sync/runs${q}`);
 }
 
-/** POST /admin/org-sync/run（手動同步，僅 SysAdmin；409 SYNC_IN_PROGRESS）。 */
-export function triggerOrgSync(): Promise<SyncResult> {
-  return apiFetch<SyncResult>('/admin/org-sync/run', { method: 'POST' });
+/**
+ * POST /admin/org-sync/run（手動同步，僅 SysAdmin）。
+ * B 階段（多公司）：回傳**陣列**，每筆為一家設定公司之結果；單一公司互斥中不再使整批 409，
+ * 而是該公司於陣列中回傳 `errorCode:'SYNC_IN_PROGRESS'` 之 failed 項，其餘公司照常執行。
+ */
+export function triggerOrgSync(): Promise<SyncResult[]> {
+  return apiFetch<SyncResult[]>('/admin/org-sync/run', { method: 'POST' });
 }
 
 // ===== F006 組織異動待確認提示 =====
@@ -783,9 +804,18 @@ export function getPublicDocumentDetail(
   return apiFetch(`/public/documents/${encodeURIComponent(id)}`);
 }
 
-/** GET /org-units（組織單位清單，全 5 角色 READ；供前台部門篩選下拉之 5 層樹來源）。 */
-export function getOrgUnits(): Promise<OrgUnitRecord[]> {
-  return apiFetch<OrgUnitRecord[]>('/org-units');
+/**
+ * GET /org-units（組織單位清單，全 5 角色 READ；供前台部門篩選下拉之 5 層樹來源）。
+ *
+ * 🔴 B 階段（多公司）：新增選填 `companyCode`。
+ *  - **省略** → 後端取**登入者自己的公司**（`req.sessionUser.companyCode`）。舊版後端此處為
+ *    常數 `'AS'`，多公司後會使非 AS 使用者靜默取到別家組織樹。
+ *  - **指定** → 取該公司之組織。建立文件時若允許替其他公司建，須明確帶入所選公司，
+ *    否則部門下拉會列出登入者自己公司的部門（與所選制定公司不符）。
+ */
+export function getOrgUnits(companyCode?: string): Promise<OrgUnitRecord[]> {
+  const q = companyCode ? `?companyCode=${encodeURIComponent(companyCode)}` : '';
+  return apiFetch<OrgUnitRecord[]>(`/org-units${q}`);
 }
 
 /**

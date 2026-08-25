@@ -46,10 +46,13 @@ describe('endpoints — 端點契約對映', () => {
     expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/admin/org-sync/runs');
   });
 
-  it('triggerOrgSync → POST /admin/org-sync/run', async () => {
-    vi.mocked(fetch).mockResolvedValue(jsonResponse({ runId: 'r1', status: 'success' }));
+  it('triggerOrgSync → POST /admin/org-sync/run（B 階段：回傳陣列，一筆對應一家公司）', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse([{ runId: 'r1', compid: 'AS', status: 'success' }]),
+    );
     const r = await triggerOrgSync();
-    expect(r.runId).toBe('r1');
+    expect(r[0].runId).toBe('r1');
+    expect(r[0].compid).toBe('AS');
     const [url, init] = vi.mocked(fetch).mock.calls[0];
     expect(url).toBe('/admin/org-sync/run');
     expect(init?.method).toBe('POST');

@@ -7,6 +7,7 @@ import {
   createDocument,
   updateDocument,
   getOrgUnits,
+  getCompanies,
   searchPersons,
   getUsageFormPool,
   linkUsageForms,
@@ -36,6 +37,7 @@ import type {
   DocumentListItem,
   DocumentStatus,
   OrgUnitRecord,
+  CompanyRecord,
   PersonRecord,
   UsageFormRecord,
   AppendixRecord,
@@ -103,7 +105,22 @@ export function DocumentCreatePage(): JSX.Element {
 
   // STEP3 制定組織與當責室長（F014）。
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
-  const [draftingCompanyId, setDraftingCompanyId] = useState('');
+  /**
+   * 🔴 B 階段（多公司）：公司主檔（`GET /companies`），取代舊版以 `tier='ROOT'` 之 org-unit
+   * 充當公司清單之作法——四家公司之 Root 代碼**皆為 `00000`**（各公司獨立編碼），
+   * 舊作法會產生多個值相同、標籤不同的選項；且 **AE 根本沒有 Root 列**，該公司使用者
+   * 連制定公司都選不出來。
+   */
+  const [companies, setCompanies] = useState<CompanyRecord[]>([]);
+  /**
+   * 🔴 B 階段（多公司）：本狀態承載的是**公司代碼**（`AS`／`AD`…），非 `ORG_UNIT.orgCode`。
+   * 舊版以 ROOT 節點之 orgCode（`00000`）充當，兩種語意混用；`ICSOP_DOCUMENT` 於 B 階段
+   * 新增 `companyCode` 欄位後即應分離：
+   *  - `companyCode`（本狀態）→ 送出至新欄位，決定文件所屬公司。
+   *  - `draftingCompanyId` → 維持原語意（`ORG_UNIT.orgCode`，該公司之 ROOT 節點），
+   *    由所選公司之組織資料推導；該公司無 ROOT 列（如 AE）時留空，**不得**以公司代碼頂替。
+   */
+  const [companyCode, setCompanyCode] = useState('');
   const [draftingDeptId, setDraftingDeptId] = useState('');
   const [draftingSectionId, setDraftingSectionId] = useState('');
   const [primaryChief, setPrimaryChief] = useState<ComboOption | null>(null);
@@ -131,10 +148,12 @@ export function DocumentCreatePage(): JSX.Element {
       .catch(() => {
         /* 唯一性即時檢查為輔助；載入失敗不阻擋（後端 F013 為權威把關） */
       });
-    // F014：制定組織三級與使用部門之來源（最新同步組織資料）。
-    void getOrgUnits()
-      .then(setOrgUnits)
-      .catch(() => toast.error('無法載入組織資料'));
+    // 🔴 B 階段（多公司）：公司主檔一次載入（變動頻率極低）；組織資料改為**依所選公司**
+    // 於下方另一個 effect 載入——不可再無參數呼叫 getOrgUnits()，那會固定取登入者自己公司的組織，
+    // 使「替其他公司建立文件」時部門下拉列出錯誤公司的部門。
+    void Promise.resolve(getCompanies())
+      .then((rows) => setCompanies(rows ?? []))
+      .catch(() => toast.error('無法載入公司清單'));
     // F018：使用表單池（自「使用表單管理」選取關聯，非於此上傳）。
     void getUsageFormPool()
       .then(setFormPool)
@@ -148,6 +167,30 @@ export function DocumentCreatePage(): JSX.Element {
         /* 附錄池載入失敗不阻擋建立（選填關聯） */
       });
   }, [canWrite, toast]);
+
+  /**
+   * 🔴 B 階段（多公司）：組織資料依**所選制定公司**載入。
+   * 未選公司 → 清空（部門/室別下拉本就 disabled，不需資料）。
+   * 變更公司 → 重新載入該公司組織；下層已選值由 `onCompanyChange` 清空。
+   */
+  useEffect(() => {
+    if (!canWrite) return;
+    if (!companyCode) {
+      setOrgUnits([]);
+      return;
+    }
+    let cancelled = false;
+    void Promise.resolve(getOrgUnits(companyCode))
+      .then((rows) => {
+        if (!cancelled) setOrgUnits(rows ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error('無法載入組織資料');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canWrite, companyCode, toast]);
 
   // F040 選取池（LifecycleView → LifecycleIdentity；subcategory 缺鍵＝無子分類）。
   const lcPool = useMemo<LifecycleIdentity[]>(
@@ -198,9 +241,20 @@ export function DocumentCreatePage(): JSX.Element {
     },
     [orgByCode],
   );
-  const companyOptions = useMemo<ComboOption[]>(
-    () => orgUnits.filter((u) => u.tier === 'ROOT').map((u) => ({ value: u.orgCode, label: u.name })),
+  /**
+   * 該公司之 ROOT 節點 orgCode（供 `draftingCompanyId` 欄位）。
+   * 🔴 查無 ROOT 列（實測 AE 即為此情形，`ROOT_N=0`）→ `null`，該欄留空；
+   *    **不得**以公司代碼頂替——那正是 B 階段前混用兩種語意所造成的問題。
+   */
+  const draftingRootCode = useMemo<string | null>(
+    () => orgUnits.find((u) => u.tier === 'ROOT')?.orgCode ?? null,
     [orgUnits],
+  );
+
+  // 🔴 B 階段：來源為公司主檔（companyCode↔companyName），非 org-unit 之 ROOT 列。
+  const companyOptions = useMemo<ComboOption[]>(
+    () => companies.map((c) => ({ value: c.companyCode, label: c.companyName })),
+    [companies],
   );
   const deptOptions = useMemo<ComboOption[]>(
     () => orgUnits.filter((u) => u.tier === 'DEPARTMENT').map((u) => ({ value: u.orgCode, label: u.name })),
@@ -223,7 +277,7 @@ export function DocumentCreatePage(): JSX.Element {
 
   // 三級由上而下相依：變更上層即清空下層已選值（AC「變更上層時清空下層」）。
   const onCompanyChange = useCallback((v: string) => {
-    setDraftingCompanyId(v);
+    setCompanyCode(v);
     setDraftingDeptId('');
     setDraftingSectionId('');
   }, []);
@@ -302,7 +356,7 @@ export function DocumentCreatePage(): JSX.Element {
     setEditionResetKey((k) => k + 1);
     setAnnouncedDate('');
     setContentSummary('');
-    setDraftingCompanyId('');
+    setCompanyCode('');
     setDraftingDeptId('');
     setDraftingSectionId('');
     setPrimaryChief(null);
@@ -349,7 +403,9 @@ export function DocumentCreatePage(): JSX.Element {
         ...(announcedDate ? { announcedDate } : {}),
         ...(contentSummary.trim() ? { contentSummary: contentSummary.trim() } : {}),
         // F014 制定組織/當責室長/使用部門（皆選填；空值不送出，由後端正規化為空集合）。
-        ...(draftingCompanyId ? { draftingCompanyId } : {}),
+        ...(companyCode ? { companyCode } : {}),
+        // `draftingCompanyId` 維持原語意（該公司之 ROOT 節點 orgCode）；無 ROOT 列則不送。
+        ...(draftingRootCode ? { draftingCompanyId: draftingRootCode } : {}),
         ...(draftingDeptId ? { draftingDeptId } : {}),
         ...(draftingSectionId ? { draftingSectionId } : {}),
         ...(primaryChief ? { primaryChiefId: primaryChief.value } : {}),
@@ -386,7 +442,7 @@ export function DocumentCreatePage(): JSX.Element {
     edition,
     announcedDate,
     contentSummary,
-    draftingCompanyId,
+    companyCode,
     draftingDeptId,
     draftingSectionId,
     primaryChief,
@@ -666,7 +722,7 @@ export function DocumentCreatePage(): JSX.Element {
               </>
             }
             options={companyOptions}
-            value={draftingCompanyId}
+            value={companyCode}
             onChange={onCompanyChange}
             placeholder="搜尋制定公司…"
           />
@@ -676,8 +732,8 @@ export function DocumentCreatePage(): JSX.Element {
             options={deptOptions}
             value={draftingDeptId}
             onChange={onDeptChange}
-            disabled={!draftingCompanyId}
-            placeholder={draftingCompanyId ? '搜尋制定部門…' : '請先選擇制定公司'}
+            disabled={!companyCode}
+            placeholder={companyCode ? '搜尋制定部門…' : '請先選擇制定公司'}
           />
           <SearchCombobox
             id="dSection"

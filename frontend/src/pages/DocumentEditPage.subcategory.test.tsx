@@ -53,6 +53,7 @@ const LCS: LifecycleView[] = [
 
 const viewOn = (lifecycleId: string): DocumentView => ({
   id: 'd1',
+  companyCode: 'AS',
   status: 'active',
   documentNumber: 'ICSOP-SRC-101-1-01',
   documentName: '車輛分期進件作業',
