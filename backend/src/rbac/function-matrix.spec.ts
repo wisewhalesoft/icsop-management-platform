@@ -29,8 +29,10 @@ const R = (
 describe('F025 FUNCTION_MATRIX 逐格對照 spec', () => {
   // 逐列對照 F025 spec「角色×功能矩陣」表格（順序：系統管理員/ICSOP管理員/主管/部門窗口/一般使用者）
   const expected: Record<string, Record<RoleCode, Permission>> = {
-    [FunctionKey.ACCOUNT_MANAGEMENT]: R('CRUD', 'READ', 'NONE', 'NONE', 'NONE'),
-    [FunctionKey.ROLE_ASSIGNMENT]: R('CRUD', 'NONE', 'NONE', 'NONE', 'NONE'),
+    // 🔴 2026-08-25 角色自動化 delta（Q4.1）：ICSOPAdmin 'READ' → 'CRUD'。
+    [FunctionKey.ACCOUNT_MANAGEMENT]: R('CRUD', 'CRUD', 'NONE', 'NONE', 'NONE'),
+    // 🔴 2026-08-25 角色自動化 delta（Q4.1b／OQ-RA-03）：ICSOPAdmin 'NONE' → 'RESTRICTED_CRUD'。
+    [FunctionKey.ROLE_ASSIGNMENT]: R('CRUD', 'RESTRICTED_CRUD', 'NONE', 'NONE', 'NONE'),
     [FunctionKey.LIFECYCLE_MANAGEMENT]: R('READ', 'CRUD', 'READ', 'NONE', 'NONE'),
     [FunctionKey.ICSOP_DOCUMENT_MANAGEMENT]: R('READ', 'CRUD', 'READ', 'READ', 'NONE'),
     [FunctionKey.USAGE_FORM_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
@@ -105,9 +107,19 @@ describe('F025 canPerform 純判定', () => {
     expect(canPerform('ICSOPAdmin', FunctionKey.SYSTEM_PARAMETER, 'read')).toBe(false);
   });
 
-  it('角色指派：僅系統管理員；ICSOP管理員亦無', () => {
+  // 🔴 2026-08-25 角色自動化 delta（Q4.1b／OQ-RA-03）。原斷言逐字保留供追溯：
+  //   OLD> '角色指派：僅系統管理員；ICSOP管理員亦無'
+  //   OLD> expect(canPerform('ICSOPAdmin', ROLE_ASSIGNMENT, 'read')).toBe(false);
+  // ICSOPAdmin 改為 'RESTRICTED_CRUD'——**功能層等同 CRUD**（進得了端點），
+  // 「受限」發生於端點內部之 canAssignRole（見 accounts/account-rules.ts）。
+  it('角色指派：SysAdmin 全權；ICSOPAdmin 於功能層可進入（受限發生在端點內部）', () => {
     expect(canPerform('SysAdmin', FunctionKey.ROLE_ASSIGNMENT, 'write')).toBe(true);
-    expect(canPerform('ICSOPAdmin', FunctionKey.ROLE_ASSIGNMENT, 'read')).toBe(false);
+    expect(canPerform('ICSOPAdmin', FunctionKey.ROLE_ASSIGNMENT, 'read')).toBe(true);
+    expect(canPerform('ICSOPAdmin', FunctionKey.ROLE_ASSIGNMENT, 'write')).toBe(true);
+    // 其餘三角色維持 'NONE'——本 delta 未動它們。
+    expect(canPerform('Supervisor', FunctionKey.ROLE_ASSIGNMENT, 'read')).toBe(false);
+    expect(canPerform('DeptContact', FunctionKey.ROLE_ASSIGNMENT, 'read')).toBe(false);
+    expect(canPerform('User', FunctionKey.ROLE_ASSIGNMENT, 'read')).toBe(false);
   });
 
   it('部門窗口 循環管理＝無 → read/write 皆 false', () => {

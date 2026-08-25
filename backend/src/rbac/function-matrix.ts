@@ -5,6 +5,13 @@
  *   - CRUD          → 'CRUD'（讀寫皆允許）
  *   - 唯讀／全部唯讀  → 'READ'（讀取允許、寫入拒絕）
  *   - 無            → 'NONE'（讀寫皆拒）
+ *   - 受限CRUD       → 'RESTRICTED_CRUD'（🔴 2026-08-25 角色自動化 delta，`OQ-RA-03`）
+ *                     **功能層等同 CRUD**（讀寫皆允許進入端點）；「受限」發生於**該端點內部**
+ *                     之業務規則，不在本矩陣展開。目前唯一使用者＝「角色指派」列之 ICSOPAdmin：
+ *                     可指派 Supervisor／DeptContact／User，不得指派 SysAdmin／ICSOPAdmin
+ *                     （範圍規則之權威＝F003，錯誤碼 `ROLE_ASSIGN_SCOPE_FORBIDDEN`）。
+ *                     🔴 **刻意不讓 canPerform 表達此限制**——它只知道功能鍵與 read/write，
+ *                     不知道「要指派成哪個角色」，硬塞進來會讓矩陣開始承載業務規則。
  *   - 可／可（浮水印） → 'READ'（普遍可存取列＝前台瀏覽／下載列印；僅讀取型動作，五角色一致）
  *
  * ⚠ 矩陣值逐格對照 spec，勿臆造或簡化。若 spec 更新，本檔須同步（並更新 function-matrix.spec.ts）。
@@ -27,7 +34,7 @@ export const ROLE_CODES: readonly RoleCode[] = [
 ];
 
 /** 功能面權限值。 */
-export type Permission = 'CRUD' | 'READ' | 'NONE';
+export type Permission = 'CRUD' | 'RESTRICTED_CRUD' | 'READ' | 'NONE';
 
 /** 功能面動作：查詢類＝read、寫入類（Create/Update/Delete/觸發）＝write。 */
 export type PermissionAction = 'read' | 'write';
@@ -78,8 +85,8 @@ const row = (
  *
  * | 功能                       | 系統管理員 | ICSOP管理員 | 主管   | 部門窗口 | 一般使用者 |
  * |----------------------------|-----------|-------------|--------|----------|-----------|
- * | 帳號管理                    | CRUD      | 唯讀        | 無     | 無       | 無        |
- * | 角色指派                    | CRUD      | 無          | 無     | 無       | 無        |
+ * | 帳號管理                    | CRUD      | **CRUD**🔴  | 無     | 無       | 無        |
+ * | 角色指派                    | CRUD      | **受限CRUD**🔴| 無   | 無       | 無        |
  * | 循環管理（DAG）             | 唯讀      | CRUD        | 唯讀   | 無       | 無        |
  * | ICSOP 文件管理              | 唯讀      | CRUD        | 唯讀   | 唯讀     | 無        |
  * | 文件使用表單管理            | 唯讀      | CRUD        | 無     | 無       | 無        |
@@ -93,8 +100,10 @@ const row = (
  * | 系統參數設定                | CRUD      | 無          | 無     | 無       | 無        |
  */
 export const FUNCTION_MATRIX: Record<string, Row> = {
-  [FunctionKey.ACCOUNT_MANAGEMENT]: row('CRUD', 'READ', 'NONE', 'NONE', 'NONE'),
-  [FunctionKey.ROLE_ASSIGNMENT]: row('CRUD', 'NONE', 'NONE', 'NONE', 'NONE'),
+  // 🔴 2026-08-25 角色自動化 delta（Q4.1）：ICSOPAdmin 由 'READ' 升為 'CRUD'。
+  [FunctionKey.ACCOUNT_MANAGEMENT]: row('CRUD', 'CRUD', 'NONE', 'NONE', 'NONE'),
+  // 🔴 2026-08-25 角色自動化 delta（Q4.1b／OQ-RA-03）：ICSOPAdmin 由 'NONE' 改為 'RESTRICTED_CRUD'。
+  [FunctionKey.ROLE_ASSIGNMENT]: row('CRUD', 'RESTRICTED_CRUD', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.LIFECYCLE_MANAGEMENT]: row('READ', 'CRUD', 'READ', 'NONE', 'NONE'),
   [FunctionKey.ICSOP_DOCUMENT_MANAGEMENT]: row('READ', 'CRUD', 'READ', 'READ', 'NONE'),
   [FunctionKey.USAGE_FORM_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
@@ -124,7 +133,8 @@ export function canPerform(
   if (!permRow || roleCode === undefined) return false;
   const perm = permRow[roleCode as RoleCode];
   if (!perm || perm === 'NONE') return false;
-  if (perm === 'CRUD') return true;
+  // 'RESTRICTED_CRUD' 於功能層等同 CRUD——限制發生在端點內部之業務規則（見型別註解）。
+  if (perm === 'CRUD' || perm === 'RESTRICTED_CRUD') return true;
   // 'READ'
   return action === 'read';
 }

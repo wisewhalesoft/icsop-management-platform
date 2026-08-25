@@ -45,9 +45,12 @@ describe('menu — 後台選單角色過濾', () => {
   });
 
   describe('accessLabelFor — 側欄唯讀徽章', () => {
+    // 🔴 2026-08-25 角色自動化 delta：ICSOPAdmin 之帳號管理徽章由「唯讀」改為 CRUD。
+    //   「僅讀」之代表格位改用 ORG_SYNC_MANAGEMENT（該列 ICSOPAdmin 仍為唯讀、本 delta 未動）。
     it('可寫 → CRUD、僅讀 → 唯讀、無權 → null', () => {
       expect(accessLabelFor('SysAdmin', FunctionKey.ACCOUNT_MANAGEMENT)).toBe('CRUD');
-      expect(accessLabelFor('ICSOPAdmin', FunctionKey.ACCOUNT_MANAGEMENT)).toBe('唯讀');
+      expect(accessLabelFor('ICSOPAdmin', FunctionKey.ACCOUNT_MANAGEMENT)).toBe('CRUD');
+      expect(accessLabelFor('ICSOPAdmin', FunctionKey.ORG_SYNC_MANAGEMENT)).toBe('唯讀');
       expect(accessLabelFor('User', FunctionKey.ACCOUNT_MANAGEMENT)).toBeNull();
     });
   });

@@ -63,3 +63,32 @@ export function loadUpstreamConfig(): UpstreamReaderConfig {
     },
   };
 }
+
+/**
+ * 角色變更閾值之**臨時覆寫**（`SYNC_ROLE_CHANGE_THRESHOLD`，0–1 之小數；未設 → `undefined`
+ * ＝沿用 `DEFAULT_ROLE_CHANGE_THRESHOLD` 5%，裁定 `Q4.3`）。
+ *
+ * 🔴 **僅供首次全量套用之一次性作業**（`OQ-RA-02`／delta §五 N-1），平時**不得**設定於任何 `.env`：
+ *   角色自動化首次上線需一口氣變更 **699 人**之 `userSubtype`（全體 51.1%），
+ *   而 5% 閾值以 1,368 人計僅 68 人 ⇒ 必然觸發中止而整批不套用。
+ *   首次跑完後**務必移除此環境變數**。
+ *
+ * 🔒 閾值保護本身**不得移除、不得永久調高**：裁定 `Q4.6` 採「執行時字串比對、不存代碼對照表」，
+ *   上游若將「業務專員」改名為「營業專員」，288 人（21%）會靜默失去限縮——
+ *   **本閾值是該情形唯一的偵測管道**。移除它等於把 delta §七第 1 項之防線拆掉。
+ *
+ * 無效值 → 拋錯而非靜默退回預設，理由同 `loadDisappearedThresholdOverride`。
+ */
+export function loadRoleChangeThresholdOverride(): number | undefined {
+  const raw = process.env.SYNC_ROLE_CHANGE_THRESHOLD?.trim();
+  if (!raw) return undefined;
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v < 0 || v > 1) {
+    throw new Error(
+      `SYNC_ROLE_CHANGE_THRESHOLD 必須為 0–1 之小數（收到：${raw}）。` +
+        `例：0.6 表示允許 60% 帳號之角色/子分類異動。` +
+        `此變數僅供角色自動化首次全量套用，平時請移除。`,
+    );
+  }
+  return v;
+}

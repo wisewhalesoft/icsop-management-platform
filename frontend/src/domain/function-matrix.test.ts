@@ -47,9 +47,12 @@ describe('function-matrix（前端鏡射）', () => {
   });
 
   describe('canPerform — 代表性格位', () => {
-    it('帳號管理：SysAdmin 可寫、ICSOPAdmin 僅讀', () => {
+    // 🔴 2026-08-25 角色自動化 delta（Q4.1）。原斷言逐字保留供追溯：
+    //   OLD> it('帳號管理：SysAdmin 可寫、ICSOPAdmin 僅讀')
+    //   OLD> expect(canPerform('ICSOPAdmin', ACCOUNT_MANAGEMENT, 'write')).toBe(false);
+    it('帳號管理：SysAdmin 與 ICSOPAdmin 皆可寫（ICSOPAdmin 由唯讀升為 CRUD）', () => {
       expect(canPerform('SysAdmin', FunctionKey.ACCOUNT_MANAGEMENT, 'write')).toBe(true);
-      expect(canPerform('ICSOPAdmin', FunctionKey.ACCOUNT_MANAGEMENT, 'write')).toBe(false);
+      expect(canPerform('ICSOPAdmin', FunctionKey.ACCOUNT_MANAGEMENT, 'write')).toBe(true);
       expect(canPerform('ICSOPAdmin', FunctionKey.ACCOUNT_MANAGEMENT, 'read')).toBe(true);
     });
     it('組織同步：SysAdmin 可寫、ICSOPAdmin 讀不可寫、Supervisor 無', () => {

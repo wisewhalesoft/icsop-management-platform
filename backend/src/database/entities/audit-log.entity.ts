@@ -68,6 +68,13 @@ export class AuditLog {
   @Column({ type: 'uniqueidentifier', nullable: true })
   appendixId!: string | null;
 
+  /**
+   * 🔴 2026-08-25 角色自動化 delta：被異動之帳號 id（僅 targetType='ACCOUNT' 之列非 null）。
+   * 無 FK——AUDIT_LOG 為 append-only 稽核事實，不得受目標帳號後續變動約束（比照既有參照欄）。
+   */
+  @Column({ type: 'uniqueidentifier', nullable: true })
+  targetAccountId!: string | null;
+
   @Column({ type: 'nvarchar', length: 200, nullable: true })
   targetName!: string | null;
 

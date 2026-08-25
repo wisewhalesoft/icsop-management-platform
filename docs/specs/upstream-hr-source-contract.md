@@ -61,7 +61,7 @@ ICSOP 後端  ──►  172.20.202.193 (APYHFC16, SQL Server 2016 Standard 13.0
 | 組織階層 | `VW_DEPT_SQL` | `HRDEPTMF` | 無（原 `WHERE COMPID IN ('AS','AR','BF')` 已被註解） |
 | **人員主檔（v2.0 主來源）** | **`VW_PERSONNEL_SQL`** | `HREMPMF` + 3 表 join | **`INNER JOIN HRDEPTMF`**，見 §3.2 |
 | 職稱／職務功能指派 | `VW_PERSONAL_JOB` | `HREMPMF` + 3 表 join | 無 |
-| 職務功能定義 | `VW_JOB_FUN` | `HRJFUNMF` | `END_DT >= GETDATE()` |
+| **職級／職務名稱定義** 🔴 | `VW_JOB_FUN` | `HRJFUNMF` | `END_DT >= GETDATE()` |
 | ~~帳號／在職狀態~~（v2.0 起**不採用**） | ~~`VW_HPMUSER`~~ 🔴 | `PORTAL_HPMUSER` | 無（`SELECT *`）；見 §3.7 |
 
 **為何以 `VW_PERSONNEL_SQL` 為人員主來源（2026-08-24 定案，推翻 v1.0）**：上游單位確認 `VW_HPMUSER` 各公司皆混入不該出現的員工，而 `VW_PERSONNEL_SQL` 是**公司各系統取用人事資料的共同基礎**。v1.0 以 `VW_HPMUSER` 提供 `USERID`／`EMPSTS` 為由選用它，但那兩欄的價值建立在母體正確的前提上——前提不成立時，欄位齊全反而使錯誤資料看起來可信。
@@ -259,11 +259,25 @@ view 內註解明載（2013-12-27 應和潤需求）：
 | `companyShortName` | `COMPSIMPNM` |
 | `isActive` | `COMPENDDT > GETDATE()` |
 
-### 5.4 職稱／職務功能
+### 5.4 職稱／職級
 
-- 職稱名稱：`VW_PERSONAL_JOB.JTITLE_NM`（63 種，空值 0）
-- 職務功能：`VW_PERSONAL_JOB.JFUN_NM` / 定義主檔 `VW_JOB_FUN`（AS 23 種）
-- ⚠ **職級（`GRADECD` / `JOB_LEVEL_CODE`）之名稱對照主檔尚未定位**，見 §10。
+> 🔴 **2026-08-25 正式環境實查更正（本節原標題為「職稱／職務功能」，記載有誤）**，見
+> [`docs/stories/2026-08-25-role-automation-delta.md`](../stories/2026-08-25-role-automation-delta.md)。
+
+- 職稱名稱：`VW_PERSONAL_JOB.JTITLE_NM`（63 種，空值 0）。**人員側之對應鍵＝`VW_PERSONNEL_SQL.TITLE_CODE`**（見 §5.4.1）。
+- 🔴 **`VW_JOB_FUN` 不是「職務功能」定義主檔，而是「職級／職務名稱」主檔**——實查其欄位僅
+  `COMPID`／`CODE`／`DESC_CHI`／`DESC_ENG` ＋ 四個異動軌跡欄（`CRTUSERID`/`CRTPGMID`/`CRTDT`/`MTUSERID`/`MTPGMID`/`MTDT`），
+  **不含任何 `JFUN_*` 欄**；內容為 董事長／總經理／本部長／部長／處長／科長／事務一般職／營業一般職／臨時人員 等。
+  正式環境四家共 **75 列**（本節原記「AS 23 種」為 dev 舊值），其中 **17 列無任何人員使用**（死代碼）。
+  ⚠ **一碼多名跨公司成立且語意可相反**：`D04` 在 AS＝「營業經理」、在 AD＝「科長」；`C04` 在 AD＝「部長」、他家＝「處長」。
+  任何以本表為基礎之對照**必須以 `(COMPID, CODE)` 為鍵**。
+- `VW_PERSONAL_JOB.JFUN_NM` 之值域與 `VW_JOB_FUN.DESC_CHI` **逐筆 100% 命中**（含 `代理科長`／`處長代行`／
+  `營業副理(消)`／`借調主管職` 等冷僻值），證實兩者為同一字典。**但本系統未採用**——該欄長在
+  `VW_PERSONAL_JOB` 上，受 §5.4.1「`EMPNO` 非唯一、無法安全 join 至 `ACCOUNT`」之同一限制。
+- 🔴 **`VW_PERSONNEL_SQL.JOB_LEVEL_CODE` 已排除，不得用於任何判定**：實測在職者空白率
+  AD 98.8%（166/168）／AE 93.8%／AJ 96.3%／AS 81.7%（858/1050），
+  且其值為純數字（`003`／`004`／`10`）與 `VW_JOB_FUN.CODE`（`A03`／`N03`）**編碼體系不同**，無從對照。
+  → §11 未結項 #6 據此結案，見該節。
 
 #### 5.4.1 `JOB_TITLE` ← `VW_PERSONAL_JOB`（職稱對照主檔，2026-08-12 定案並實作）
 
@@ -550,7 +564,7 @@ AS 有效組織實測為 **5 層**（層級判定見 §3.5，一律由代碼前�
 | 3 | ~~補齊 AD／AJ 之部門主檔~~ | — | — | ✅ **結案**：原判定係污染母體所致之誤判（§3.7） |
 | 4 | ~~`EMPSTS='C'` 之正式語意~~ | — | — | ✅ **結案**：`EMPSTS` 已不使用（§6） |
 | 5 | ~~`ILS` 公司代碼之來源~~ | — | — | ✅ **結案**：新母體不存在（§10.1） |
-| 6 | **職級（`GRADECD`）名稱對照主檔位於何處** | 職級顯示 | 中 | 🟡 未結（新來源有 `JOB_LEVEL_CODE`，名稱對照仍未定位） |
+| 6 | ~~**職級（`GRADECD`）名稱對照主檔位於何處**~~ | — | — | ✅ **結案（2026-08-25）——結論為「不值得追」而非「找到了」**：`JOB_LEVEL_CODE` 在職者空白率 82–99%（AD 98.8%／AE 93.8%／AJ 96.3%／AS 81.7%），且其值為純數字與 `VW_JOB_FUN.CODE` 編碼體系不同，**縱使找到對照主檔亦套不上任何人**。見 §5.4 與 [role-automation-delta](../stories/2026-08-25-role-automation-delta.md) |
 | 7 | 上游 view 之變更通知機制與 SLA | 同步穩定性（[nfr.md#integration](nfr.md#integration)） | 中 | 🟡 未結；**優先度應提高**——v2.0 之換來源即源於 view 語意問題無人通知 |
 | 8 | **於正式環境覆核值層級統計** | 身分對應鍵設計正確性 | **高** | 🟡 部分覆核：`EMAIL`≡`EMAILADDR` 已逐筆比對；姓名基數 1,343/1,362 證實未遮罩。**信箱重複組數仍須於正式環境重驗** |
 | 9 | ~~處/室代碼推導部層之 1 筆 miss~~ | — | — | ✅ **結案**：實為 2 筆（`CKA00`／`WAA00`），人類裁決不處理（§10.1） |

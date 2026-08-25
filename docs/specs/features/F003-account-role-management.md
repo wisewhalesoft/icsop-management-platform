@@ -6,6 +6,22 @@ Epic/Story: E01 / US-005, US-006
 > **🔵 2026-08-14 additive delta（使用者直接裁定，非開放問題）——手動帳號之基本資料（姓名／公司／部門／職位）**：「建立手動帳號」與「編輯帳號」modal 除既有欄位外，一併提供 **姓名（必填）／公司／部門／職位**；三者皆為**主檔下拉**、分別持久化於 `ACCOUNT.companyCode`／`orgCode`／`jobTitleCode`。**本 delta 之 AC 編號採 `AC-P#`**（P＝Profile 基本資料），與既有無編號 AC 及 `AC-U#` 併存、**不重編任何既有編號**。**無 schema 變更、不需 migration**（見 `AC-P22`）。
 > **🟢 2026-08-11 additive delta（APPROVED，人類閘門通過）——一般使用者子分類（業務／其他）指派入口**：角色指派 modal 於所選角色為「一般使用者」時，額外呈現子分類選擇器；**帳號清單「角色」欄與「編輯帳號」modal 之「目前角色」亦一併顯示子分類徽章**（AC-U6／AC-U7，2026-08-11 補訂）。規則權威＝[F041](F041-user-subtype-business-scope.md)；**本 delta 之 AC 編號採 `AC-U#`**。⚠ **角色種類仍為 5 種、不新增**（子分類為 `ACCOUNT` 之獨立欄位，非第 6 種角色）——本檔既有 AC「僅顯示 5 種固定角色」**不變**。
 
+> **🔴 2026-08-25 delta（APPROVED，人類閘門通過）——角色自動化：可指派範圍限制 ＋ `roleSource`。**
+> 權威＝[stories/2026-08-25-role-automation-delta.md](../../stories/2026-08-25-role-automation-delta.md)、[open-questions §RA](../open-questions.md#ra-2026-08-25)。**本 delta 之 AC 編號採 `AC-R#`**。
+>
+> **① 操作者範圍擴大（連動 [F025](F025-role-function-matrix.md) 兩列變更）**：本檔既有多處敘述「帳號管理與角色指派僅 SysAdmin 可 CRUD」
+> **已不再完整**——ICSOP 管理員對「帳號管理」升為 `CRUD`、對「角色指派」為 `受限CRUD`。
+> **② 可指派角色範圍（`ROLE_ASSIGN_SCOPE_FORBIDDEN`, 403）**：ICSOP 管理員可指派 `Supervisor`／`DeptContact`／`User`，
+> **不得指派 `SysAdmin`／`ICSOPAdmin`**（否則可自我提權，兩層管理者之區隔即消失）；SysAdmin 不受此限。
+> 新錯誤碼登錄於 [error-handling.md](../error-handling.md)，與 `ROLE_INVALID`（角色字串不合法，400）為**兩種不同情形，不得合併**。
+> 驗證順序：既有 `ROLE_INVALID`（②）→ 帳號存在 → **新增之可指派範圍檢查** → 既有自我降級阻擋。
+> **③ `roleSource` 之維護**：`PATCH /admin/accounts/:id/role` 成功時，一律將 [`ACCOUNT.roleSource`](../data-model.md#account-role-source)
+> 由 `'derived'` 翻為 `'manual'`（單向、無反向路徑），使該列之角色**永不再被同步覆寫**（裁定 `Q1.2`）。
+> ⚠ 此為 `AC-P12`（編輯成功之副作用邊界）之**例外**：該條列舉「`roleCode`／`userSubtype`／`status`／`source`／`loginId`／`companyCode` 一律不受影響」，
+> 現須補上 `roleSource`——但僅限**角色指派端點**會改動它，`PATCH /admin/accounts/:id`（編輯基本資料）**仍不得**觸及。
+> **④ 🔴 角色變更稽核（裁定 `Q4.5`，須先於自動化完成）**：現行 `assignRole` **完全沒有寫稽核紀錄**（`backend/src/accounts/` 全模組無任何 audit 呼叫）。
+> 手動時代尚可忍受，一旦每日自動推導上線，「這個人的角色為什麼變了」將無人可查。本項**無前置依賴**，應優先實作。
+
 ## Description
 系統管理員於後台建立/查詢/編輯/停用帳號，區分「手動建立」與「上游同步」兩來源；並將 5 種固定角色之一指派給帳號。
 

@@ -7,6 +7,7 @@ import {
   loadUpstreamConfig,
   SYNC_COMPIDS,
   loadDisappearedThresholdOverride,
+  loadRoleChangeThresholdOverride,
 } from './org-sync.config';
 
 /**
@@ -30,11 +31,13 @@ async function runOneCompany(
   compid: string,
   fullResync: boolean,
   thresholdOverride: number | undefined,
+  roleThresholdOverride: number | undefined,
   log: (msg: string) => void,
 ): Promise<void> {
   const service = new OrgSyncService(reader, store, {
     compid,
     disappearedThreshold: thresholdOverride,
+    roleChangeThreshold: roleThresholdOverride,
   });
 
   log(
@@ -111,9 +114,16 @@ async function main(): Promise<void> {
   const reader = new MssqlUpstreamOrgReader(loadUpstreamConfig());
   const store = new TypeOrmOrgSyncStore(AppDataSource);
   const thresholdOverride = loadDisappearedThresholdOverride();
+  const roleThresholdOverride = loadRoleChangeThresholdOverride();
 
   // eslint-disable-next-line no-console
   const log = console.log;
+  if (roleThresholdOverride !== undefined) {
+    log(
+      `⚠ 角色變更閾值已被 SYNC_ROLE_CHANGE_THRESHOLD 覆寫為 ` +
+        `${(roleThresholdOverride * 100).toFixed(1)}%（僅供角色自動化首次全量套用之一次性作業；完成後請移除）。`,
+    );
+  }
   if (thresholdOverride !== undefined) {
     log(
       `⚠ 消失閾值已被 SYNC_DISAPPEARED_THRESHOLD 覆寫為 ` +
@@ -123,7 +133,15 @@ async function main(): Promise<void> {
 
   try {
     for (const compid of compids) {
-      await runOneCompany(reader, store, compid, fullResync, thresholdOverride, log);
+      await runOneCompany(
+        reader,
+        store,
+        compid,
+        fullResync,
+        thresholdOverride,
+        roleThresholdOverride,
+        log,
+      );
     }
   } finally {
     await reader.close().catch(() => undefined);

@@ -147,7 +147,7 @@ status: Draft
 | OQ-E08-01 | （歷史）組織異動時文件組織歸屬欄位是否允許系統管理員協助調整（例外通道），或一律限 ICSOP 管理員？ | [已收斂 ✅] | F014, F026, F006 | **定案**：SysAdmin 無文件欄位寫入權（與 F025 一致）；組織異動歸屬重設由 ICSOPAdmin 依 F006 提示處理。如需 SysAdmin 緊急例外通道再議。（註：原「當責部門」欄位已於 2026-07-17 移除，組織歸屬改由制定公司/部門/室別承接） |
 | OQ-E08-02 | 矩陣其餘部分（除已定案唯讀規則外）需經利害關係人正式審核 | [已定案 ✅] | F025, F026 | **定案**：**採現行草案作為開發依據**（不阻塞實作），待利害關係人正式簽核；簽核如有調整再依 F025 AC「矩陣審核後更新版本」處理 |
 | OQ-E08-03 | 雙入口可視範圍不一致（原：主管文件管理全公司唯讀 vs 循環管理本部門唯讀之處置） | [已定案 ✅] | F036, F017, F025, US-070 | **定案（2026-07-17，採反向放寬）**：主管「循環管理（DAG）」由「唯讀（本部門相關）」改為**「唯讀」（全公司）**，與主管文件管理全公司唯讀一致；雙入口不一致消失、無「主管→非本部門循環→403」落差。F025 矩陣主管「循環管理」欄已更新；主管對循環仍唯讀（寫入 403），DeptContact／User 仍無權（→403） |
-| **OQ-E08-04** | **一般使用者子分類「業務／其他」之身分模型與儲存定位**：A. 新增第 6 種角色 `BusinessUser`／**B.（建議）`ACCOUNT.userSubtype ∈ {business, other}` 子分類旗標，僅 `roleCode='User'` 時有效**／C. 由上游人資職務功能欄位自動判定 | **[已定案 ✅]** | F041, F003, F025, F026, data-model#account-entity, data-model#role-entity, US-072 | **定案（2026-08-11 人類閘門）：採選項 B——`ACCOUNT.userSubtype ∈ {business, other}` 子分類旗標，僅 `roleCode='User'` 時有效；[ROLE](data-model.md#role-entity) 維持固定 5 種、不新增第 6 種角色。** 已落入 [F041](features/F041-user-subtype-business-scope.md)（全檔）、[F003](features/F003-account-role-management.md) `AC-U1`～`AC-U5`、[data-model#account-user-subtype](data-model.md#account-user-subtype)。**附帶兩項 `[ASSUMPTION]` 亦同日確認**：① 角色改為非 `User` 時 `userSubtype` **保留、不清空**（F041 AC-36／F003 AC-U5；已接受代價＝改回一般使用者時舊設定直接復活）；② 讀取端遇未知值 **fail-open 收斂為 `'other'`**（F041 AC-02；安全性由 DB `NOT NULL`＋`CHECK` 保證）。<br>📝 原 analyst 建議 B，人類採納。理由：原始需求用詞為「再細分」＝子類別而非新角色；業務／其他於 F025 功能矩陣與 F026 欄位矩陣**逐格相同**（差異僅在前台可見文件範圍，兩矩陣皆未涵蓋之維度）。選 A 將迫使兩份矩陣各新增一欄且每列與「一般使用者」重複，並牴觸 3 處「5 種固定角色」定案文字（[US-006](../stories/epics/E01-account-auth/US-006-role-assignment.md) AC3／[data-model#role-entity](data-model.md#role-entity)／[F003](features/F003-account-role-management.md) AC）。選 C 因[上游契約](upstream-hr-source-contract.md) §5.4 明載「職級名稱對照主檔尚未定位」、職務功能對「業務」之字典規則從未定案，屬高風險假設。未採之 A／C 之逐項後果見 [F041 §OQ 裁決紀錄](features/F041-user-subtype-business-scope.md#oq-dependency)。<br>📝 兩項附帶項（spec-writer 提報、analyst 未涵蓋）原為 `[ASSUMPTION]`，**已於同日一併裁決確認**（見本格上方），不再待辦。 |
+| **OQ-E08-04** | **一般使用者子分類「業務／其他」之身分模型與儲存定位**：A. 新增第 6 種角色 `BusinessUser`／**B.（建議）`ACCOUNT.userSubtype ∈ {business, other}` 子分類旗標，僅 `roleCode='User'` 時有效**／C. 由上游人資職務功能欄位自動判定 | **[已定案 ✅]** | F041, F003, F025, F026, data-model#account-entity, data-model#role-entity, US-072 | **定案（2026-08-11 人類閘門）：採選項 B——`ACCOUNT.userSubtype ∈ {business, other}` 子分類旗標，僅 `roleCode='User'` 時有效；[ROLE](data-model.md#role-entity) 維持固定 5 種、不新增第 6 種角色。** 已落入 [F041](features/F041-user-subtype-business-scope.md)（全檔）、[F003](features/F003-account-role-management.md) `AC-U1`～`AC-U5`、[data-model#account-user-subtype](data-model.md#account-user-subtype)。**附帶兩項 `[ASSUMPTION]` 亦同日確認**：① 角色改為非 `User` 時 `userSubtype` **保留、不清空**（F041 AC-36／F003 AC-U5；已接受代價＝改回一般使用者時舊設定直接復活）；② 讀取端遇未知值 **fail-open 收斂為 `'other'`**（F041 AC-02；安全性由 DB `NOT NULL`＋`CHECK` 保證）。<br>📝 原 analyst 建議 B，人類採納。理由：原始需求用詞為「再細分」＝子類別而非新角色；業務／其他於 F025 功能矩陣與 F026 欄位矩陣**逐格相同**（差異僅在前台可見文件範圍，兩矩陣皆未涵蓋之維度）。選 A 將迫使兩份矩陣各新增一欄且每列與「一般使用者」重複，並牴觸 3 處「5 種固定角色」定案文字（[US-006](../stories/epics/E01-account-auth/US-006-role-assignment.md) AC3／[data-model#role-entity](data-model.md#role-entity)／[F003](features/F003-account-role-management.md) AC）。選 C 因[上游契約](upstream-hr-source-contract.md) §5.4 明載「職級名稱對照主檔尚未定位」、職務功能對「業務」之字典規則從未定案，屬高風險假設。未採之 A／C 之逐項後果見 [F041 §OQ 裁決紀錄](features/F041-user-subtype-business-scope.md#oq-dependency)。<br>📝 兩項附帶項（spec-writer 提報、analyst 未涵蓋）原為 `[ASSUMPTION]`，**已於同日一併裁決確認**（見本格上方），不再待辦。 <br>🔴 **2026-08-25 人類閘門：選項 C 以 additive 形式復活，本列之 B 定案維持不變。**被推翻者**僅為當初「否決 C」之理由**——「職務功能字典尚未定案、屬高風險假設」已由正式環境實查推翻：業務判定**不需要**職務功能字典，`ACCOUNT.jobTitleCode`（既有白名單欄位、已同步、解析率 1,368/1,368＝100%）即足以判定，規則為「職稱名稱含『業務』二字 ⇒ `business`」，涵蓋 16 種職稱／**699 人（全體 51.1%）**。儲存模型、列舉值、`INV-2`、`normalizeUserSubtype`、5 種角色**一律不動**。裁定全文見 [§RA](#ra-2026-08-25) 與 [role-automation-delta](../stories/2026-08-25-role-automation-delta.md)。 |
 | **OQ-E08-05** | **「自己部門」之比對語意**：A.（建議）沿用既有子樹前綴展開判定式 `isWithinSubtree`／B. 精確相等比對 | **[已定案 ✅]** | F041, F019, F026, F033, org-hierarchy.ts | **定案（2026-08-11 人類閘門）：採選項 A——沿用既有子樹前綴展開判定式 `isWithinSubtree`，不新增第二套部門比對邏輯（[F041](features/F041-user-subtype-business-scope.md) INV-4）。** 本 predicate 之消費點由三處擴為四處（F019 置頂／F019 部門篩選／F026 欄位判定／F041 可見性過濾），其簽章、語意與既有測試（`TS-PS-ORG-001`～`006`）一律不動。<br>📝 原 analyst 建議 A，人類採納。與系統既有三處（F019 置頂／F019 部門篩選／F026 欄位判定）之「使用部門相符」語意完全一致，避免同一概念出現兩套 predicate（F041 INV-4）。選 B 之後果：文件使用部門常設於較高層級（部），而[上游契約](upstream-hr-source-contract.md) §8.1 實測 **92% 在職者掛於處室／課層**，精確比對將使業務使用者幾乎看不到任何文件，可用性趨近於零；且須新增第二套比對邏輯（三處既有消費點須同步覆核）。受影響 AC：F041 AC-05～AC-11 |
 | **OQ-E08-06** | **deny-by-default 之涵蓋面**：A. 僅清單／B. 全面（含 RAG）／**C.（建議）折衷**——清單・搜尋・篩選・詳情直連 URL・檢視器・下載列印本輪收斂，RAG（F033，Phase 3 未實作）列為未來 ripple | **[已定案 ✅]** | F041, F019, F020, F033, US-057 | **定案（2026-08-11 人類閘門）：採選項 C——清單／搜尋／篩選／詳情直連 URL／檢視器／PDF 代理／下載／列印本輪全面收斂；RAG（[F033](features/F033-permission-aware-retrieval.md)，Phase 3 未實作）列為未來 ripple、不納入本輪驗收（[F041](features/F041-user-subtype-business-scope.md) AC-39 為下限保證）。** 已落入 F041 AC-20～AC-30、[F019](features/F019-public-list-browsing.md) `AC-U1`～`AC-U6`、[F020](features/F020-watermark.md) `AC-U1`～`AC-U5`。**不受影響**：[F017](features/F017-backend-document-list.md) 後台清單、[F024](features/F024-access-history-query.md) 調閱歷程查詢。<br>📝 原 analyst 建議 C，人類採納。最終目標須是全面 deny-by-default——僅擋清單而不擋詳情／下載，則「知道文件編號即可直連 URL 繞過」使「避免外流」形同虛設（US-057 核心風險）；但 F033 尚未實作（Phase 3 Draft），無法對不存在之功能定義可執行之 P0 AC，故以「ripple 記錄＋未來實作時之強制下限」處理（F041 AC-39）。受影響 AC：F041 AC-20～AC-30。**不影響**：F017 後台清單、F024 調閱歷程查詢（僅 SysAdmin／ICSOPAdmin 可查） |
 | **OQ-E08-07** | **與 F019 既有條款之交互**（三小題）：**4a** 置頂／其餘兩區塊語意是否還有意義（A. 保留、其餘區恆空為預期退化／B. 前端隱藏視覺分隔）；**4b** 部門篩選下拉是否限縮選項（A. 不限縮／B. 僅顯示子樹與祖先鏈）；**4c** 空狀態文案是否分支（A. 沿用「查無符合結果」／B. 業務專屬文案） | **[已定案 ✅]** | F041, F019, prototype 03 | **定案（2026-08-11 人類閘門）：三小題皆採選項 A**——4a 保留置頂／其餘兩區塊（業務使用者之其餘區恆空，屬預期退化，前端不需特殊分支，F041 AC-15）；4b 部門篩選下拉**不限縮**選項（選到範圍外時交集為空，F041 AC-16）；4c **空狀態**文案沿用 `查無符合結果` 逐字、**不因子分類分支**（F041 AC-33）。<br>⚠ **2026-08-16 更新（4b 之載體消滅）**：使用者裁定移除前台「使用部門」篩選器（`OQ-D18-05`／缺失 delta 第 2 項），**4b 之裁決本身未被推翻，但已無可驗證之對象**；`F041 AC-16` 與 `F019 AC-U3` 之對應子句已就地標記「因篩選器移除而不再適用」。**4a／4c 完全不受影響、維持有效**。⚠ **勿誤讀為「下拉選項一律不過濾」**：新增之五項可搜尋下拉其選項來自**文件衍生值**（非組織主檔），**必須先經 `isDocVisibleToViewer` 過濾**，否則選項本身即洩漏他部門文件之存在（`OQ-D18-07`／[F019](features/F019-public-list-browsing.md#filter-column-delta) `AC-D5`）——與 4b 之情形方向相反、不衝突。<br>⚠ **另有一項同日新增裁決（非本題）**：**前台清單頂部之「範圍說明句」則裁定為分支**——業務視角換用專屬文案 `SCOPE_NOTICE_BUSINESS`（[F041](features/F041-user-subtype-business-scope.md) **AC-40**／[F019](features/F019-public-list-browsing.md) `AC-U7`，逐字內容由 ui-ux-designer 定稿於 `prototypes/03-public-list.html`）。**「空狀態文案不分支」與「頂部說明句分支」是兩件不同的字串、兩個不同的 DOM 位置，不得混為一談。** 孤兒帳號沿用同一句業務文案、不另立第三句（避免以文案差異宣告帳號異常，牴觸 [error-handling.md#dept-restriction](error-handling.md#dept-restriction)）。<br>📝 原 analyst 三題皆建議 A，人類採納 |
@@ -467,6 +467,51 @@ status: Draft
 | `13` 之 `ICSOP-SRC-101-2-00` 掛載節點由 `進件作業` 更正為 `撥款核准作業`（§A.7.6 ④） | designer 已就地對齊（節點掛載之權威＝樹狀圖那一頁）；該欄不出現在 15 欄清單上，**無版面回歸**，不需 AC |
 | `docs/ui-ux-design-overview.md` §6.10 之舊浮水印值就地更正（§A.7.6 ⑥） | 屬 designer 之文件內部一致性修正，與 `AC-N2` 之定稿值一致，不需 AC |
 | 導向鈕之退化路徑採 `navigate()` 或 `location.href` | `AC-T21` 刻意不指定手段，只鎖「導到哪裡」與「`window.close()` 呼叫次數為 0」 |
+
+## RA — 2026-08-25 角色自動化 delta（來源：[stories/2026-08-25-role-automation-delta.md](../stories/2026-08-25-role-automation-delta.md)） {#ra-2026-08-25}
+
+> **✅ 人類閘門 2026-08-25 通過（20 題問卷＋3 則補裁，共 23 條裁定）。** 裁定全文見來源檔 §五，本節僅登錄
+> **新開之開放問題**與**對既有裁決之推翻紀錄**。
+> **起因**：`ACCOUNT.userSubtype` 之 DB 預設為 `'other'`＝不限縮，而同步端建立上游帳號時不寫入該欄
+> （`typeorm-org-sync.store.ts:238-254` 之 insert 物件不含此鍵），故 **699 名業務人員（全體 51.1%）現處於
+> fail-open 狀態**——看得到全部已公告文件，直到有人手動逐一標記。此為**已在發生**之可見範圍缺口，非未來風險。
+
+**兩條推導規則（已定案）**：
+- **業務** ← 職稱名稱含「業務」⇒ `userSubtype='business'`（16 種／699 人；以**執行時字串比對**落實，不另存代碼對照表）
+- **主管** ← `ORG_UNIT.managerEmpNo` 命中 且 `tier ≠ SUBSECTION` 且非 AS 五個借調部（`A2000`/`A5000`/`A6000`/`A7000`/`A8000`）⇒ `Supervisor`（150 個部門）
+- ⭐ **兩者盲區互補**：職稱認不出營業單位主管（其職稱為中性之「襄理」「課長」），但這些人正好被主管規則認出，
+  而依 `F041 INV-2`，`userSubtype` 對非 `User` 角色恆無效力。故必須兩條都做。
+
+**推翻之既有裁決**（僅此二項；`OQ-E08-03`／`OQ-E01-03`／`F041 INV-1`・`INV-2` 皆維持不變）：
+
+| 既有 | 變更 | 性質 |
+|---|---|---|
+| `F025`「帳號管理」列：ICSOPAdmin＝唯讀 | 改為 **CRUD**（主管維持「無」） | 破壞性 |
+| `F025`「角色指派」列：僅 SysAdmin CRUD | **開放 ICSOPAdmin，但不得指派 `SysAdmin`／`ICSOPAdmin`**；矩陣需新增第四種值以表達「受限 CRUD」。⚠ 既有 `F025 AC-U1`／`F026 AC-U1`「逐格不變」之斷言將失效，須改寫 | 破壞性 |
+
+**新開之開放問題（皆已於同日裁決，登錄供追溯）**：
+
+| ID | 問題 | 分類 | 相關 | 裁定 |
+|----|------|------|------|------|
+| **OQ-RA-01** | 首次全量套用需變更 **699 人**之 `userSubtype`，而 `OQ-RA` 採用之 5% 中止閾值以 1,368 人計僅 **68 人**——首次執行必然撞閾值而中止。如何處置？ | **[已定案 ✅]** | F004, F005, org-sync | **定案**：以**環境變數一次性放寬**，比照 commit `ac5efea` 之「同步消失閾值一次性覆寫變數」既有慣例；跑完即移除該變數，不留常設旁路 |
+| **OQ-RA-02** | 首次執行時，既有帳號之 `ACCOUNT.roleSource` 初始值應為 `'derived'` 或 `'manual'`？標 `'manual'` 將使自動推導對既有帳號永遠無效（`Q1.4` 全量套用等於白做）；標 `'derived'` 則既有人工指派納入推導範圍 | **[已定案 ✅]** | F003, F004, data-model | **定案**：一律標 **`'derived'`**。因 `Q1.3` 之 `roleCode` 只升不降，既有 `SysAdmin`／`ICSOPAdmin` **不會**被降級。<br>⚠ **已明確接受之代價**：先前被管理員**刻意人工降級**者（例：某處室主管被刻意設為一般使用者以不給後台權限）將被**升回主管**，且因 `Q1.4` 裁定不預覽而**無法事前攔截** |
+| **OQ-RA-03** | `F025` 矩陣現行值域僅 `CRUD`／`唯讀`／`無` 三種，容納不下 `Q4.1b` 之「可指派但不得指派兩種管理者」 | **[已定案 ✅]** | F025, F026, function-matrix.ts, prototypes/18 | **定案**：**矩陣新增第四種特例值**。連帶須新增「無權指派此角色」錯誤碼（現行 `assignRole` 僅有 `ROLE_INVALID`／`ROLE_SELF_DOWNGRADE_BLOCKED`），登錄於 [error-handling.md](error-handling.md) |
+
+**實作期補裁兩則（2026-08-25 同日裁決，登錄供追溯）**：
+
+| ID | 問題 | 分類 | 相關 | 裁定 |
+|----|------|------|------|------|
+| **OQ-RA-04** | `Q4.3` 之 5% 比例閾值在**小母體**下失效：AE 實測在職僅 16 人，5%＝0.8 ⇒ **任何一筆**變更（6.25%）都超標，AE 之角色推導將**永遠不會套用**；AJ（134 人）亦僅需 7 筆即整批被擋 | **[已定案 ✅]** | F004, F005, role-derivation.ts | **定案：新增絕對下限 `ROLE_CHANGE_MIN_ABSOLUTE = 10`**——變更數 ≤10 一律放行，超過才回歸比例判定。實際生效門檻：AE/AJ/AD＝10、AS＝52（下限對 AS 無影響）。閾值原欲防範之情境（上游改名致 288 人翻轉，21%）完全不受影響 |
+| **OQ-RA-05** | `OQ-RA-02` 裁定「一律標 `derived`」若逐字執行，會使**手動建立之帳號**亦納入推導——但 `createManual` 明確要求管理員於建立時指派 `roleCode`，其角色**本來就是人工指派的**；推導會把管理員刻意設為「部門窗口」者升成「主管」 | **[已定案 ✅]** | F003, F004, data-model#account-role-source | **定案：手動帳號不納入推導。** `source='manual'` ⇒ `roleSource='manual'`（migration `1724544000000` 回填 ＋ `createManual` 寫入時直接落值）。📝 `OQ-RA-02` 所接受之代價原文為「刻意人工**降級**者會被升回」，指涉**上游**帳號之角色被人工調整，未涵蓋「手動建立帳號」此一類別——本條為其邊界釐清，非推翻。<br>**已於 dev SQL 實跑驗證**：upstream/derived 1,435、manual/manual 6 |
+
+**🔴 實作期之前提條件（未落 AC 則保護不存在）**：`Q4.3` 之 5% 閾值**必須把 `userSubtype` 變更也計入「角色變更量」**，
+不得只算 `roleCode`。這是 `Q4.6`（執行時字串比對，不存對照表）能夠成立的**唯一防線**——若上游將「業務專員」
+改名為「營業專員」，288 人會靜默失去限縮；該變更量佔 1,368 之 21%，**唯有**閾值計入 `userSubtype` 時才會觸發中止而被發現。
+
+**連帶結案**：上游契約 §11 未結項 #6（職級名稱對照主檔）已結案，結論為**「不值得追」**——`JOB_LEVEL_CODE`
+在職者空白率 82–99%，且其值為純數字與 `VW_JOB_FUN.CODE` 編碼體系不同，縱使找到對照主檔亦套不上任何人。
+同時更正契約 §2／§5.4：**`VW_JOB_FUN` 實為「職級／職務名稱」主檔，非「職務功能」定義主檔**。
+
 
 ## 非功能相關
 

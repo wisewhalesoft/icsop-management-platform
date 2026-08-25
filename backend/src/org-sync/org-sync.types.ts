@@ -5,6 +5,11 @@
  * 純邏輯（推導/分類/閾值/正規化）不在此層，見同目錄各純模組。
  */
 
+import type {
+  DerivationAccount,
+  RoleChange,
+  RoleDerivationPlan,
+} from './role-derivation';
 import {
   RawDept,
   RawAccount,
@@ -130,6 +135,22 @@ export interface OrgSyncStore {
   /** 於單一交易套用 plan（失敗須整批回滾，AC3）。 */
   applySync(compid: string, plan: SyncPlan): Promise<void>;
   /**
+   * 🔴 2026-08-25 角色自動化 delta：載入該公司全部帳號之推導投影
+   * （含 `roleCode`／`userSubtype`／`roleSource`——刻意與 `findExistingAccounts` 分開，
+   * 後者之 `ExistingAccount` 明文排除這三欄，見 change-classification 檔頭）。
+   *
+   * ⚠ 一次全量載入（load-all），比照 `findExistingAccounts` 之既有理由（MSSQL 2100 參數上限）。
+   * ⚠ 選填：未實作之替身視為「本次不做角色推導」——既有測試替身因此不需改動。
+   */
+  findAccountsForDerivation?(compid: string): Promise<DerivationAccount[]>;
+  /**
+   * 🔴 2026-08-25 角色自動化 delta：於單一交易套用推導結果。
+   * 僅寫入 `roleUpgrades`（roleCode）與 `subtypeChanges`（userSubtype）；
+   * `roleDowngradeAlerts` **不寫入**（裁定 Q1.3，改由告警管道處理）。
+   * ⚠ 選填，理由同上。
+   */
+  applyRoleDerivation?(compid: string, plan: RoleDerivationPlan): Promise<void>;
+  /**
    * 最近 N 筆同步紀錄（依 startedAt 由新到舊，取 limit 筆）。供 US-011 查詢端點/前端輪詢。
    * limit 之預設與上限由呼叫端（OrgSyncService.recentRuns）正規化，本層僅忠實下推。
    */
@@ -161,6 +182,12 @@ export interface SyncAlertInput {
    * 對每個消失帳號產生 ACCOUNT_DISAPPEARED 告警但不停用（消失≠離職，US-010 AC4）。
    */
   disappearedLoginIds: string[];
+  /**
+   * 🔴 2026-08-25 角色自動化 delta（裁定 Q1.3）：本次推導判定為**降級**之變更。
+   * 這些變更**未被套用**（角色維持原值），僅產生 `ROLE_DOWNGRADE_PENDING` 待審告警。
+   * ⚠ 選填：既有呼叫端與測試替身不需改動；缺漏 → 不產生此類告警。
+   */
+  roleDowngrades?: RoleChange[];
 }
 
 /**
@@ -188,6 +215,14 @@ export interface SyncStats {
    * （主檔維護非組織/帳號異動，計入會扭曲 F006 KPI 語意），僅供可觀測性。
    */
   jobTitlesUpserted?: number;
+  /** 🔴 角色自動化 delta：本次自動執行之角色升級筆數。 */
+  roleUpgrades?: number;
+  /** 🔴 本次自動寫入之子分類變更筆數。 */
+  subtypeChanges?: number;
+  /** 🔴 本次**未執行**、僅產生告警之角色降級筆數（裁定 Q1.3）。 */
+  roleDowngradeAlerts?: number;
+  /** 🔴 推導因超過變更閾值而**整批未套用**（裁定 Q4.3／OQ-RA-01）。 */
+  roleDerivationSkipped?: boolean;
 }
 
 export interface SyncResult {

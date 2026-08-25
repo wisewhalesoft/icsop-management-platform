@@ -11,6 +11,7 @@ function row(over: Partial<AuditRow>): AuditRow {
   seq++;
   return {
     id: `r-${seq}`,
+    targetAccountId: null,
     accountId: 'a',
     employeeNo: null,
     name: null,

@@ -113,7 +113,12 @@ describe('PermissionMatrixPage — RBAC 矩陣唯讀顯示（F025/F026）', () =
   it('G-ADM-015 列註記：角色指派→經帳號管理 modal 執行', () => {
     mockAuth('SysAdmin');
     renderPage();
-    expect(screen.getByText('經帳號管理 modal 執行、非獨立側選單頁')).toBeInTheDocument();
+    // 🔴 2026-08-25 角色自動化 delta：註記追加 ICSOPAdmin 之受限範圍說明。
+    expect(
+      screen.getByText(
+        '經帳號管理 modal 執行、非獨立側選單頁；ICSOP管理員不得指派系統管理員／ICSOP管理員',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('G-ADM-017/018 banner：已定案（badge-check + 共 20 欄，F039 附錄（多）併入已定案）＋草案待審（clock + 分析師草案）', () => {

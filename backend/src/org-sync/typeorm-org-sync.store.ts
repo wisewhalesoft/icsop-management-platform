@@ -18,6 +18,7 @@ import { Account } from '../database/entities/account.entity';
 import { JobTitle } from '../database/entities/job-title.entity';
 import { SyncRun } from '../database/entities/sync-run.entity';
 import { jobTitleKey } from '../org-directory/job-title-directory';
+import type { DerivationAccount, RoleDerivationPlan } from './role-derivation';
 
 /**
  * 本地寫入端（實際 IO，TypeORM/MSSQL）。
@@ -172,6 +173,66 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
       errorCode: r.errorCode,
       errorMessage: r.errorMessage,
     }));
+  }
+
+  /**
+   * 🔴 角色推導之來源投影（2026-08-25 delta）。
+   *
+   * ⚠ **以 `roleSource='derived'` 過濾於 SQL**，非載回後才篩：
+   *    閾值之分母必須是「本次納入推導者」——若把 `'manual'` 也算進分母，
+   *    鎖定的帳號愈多、保護反而愈鬆（同樣的變更筆數會被稀釋成較小的比例）。
+   *
+   * ⚠ 不限 `source`：上游帳號與手動帳號皆可能為 `'derived'`
+   *    （手動帳號於 migration 已回填為 `'manual'`，故實務上只會取到上游列；
+   *    此處刻意不再以 `source` 二次過濾——旗標才是權威，不是來源）。
+   */
+  async findAccountsForDerivation(compid: string): Promise<DerivationAccount[]> {
+    const ds = await this.ensureInit();
+    const rows = await ds.getRepository(Account).find({
+      where: { companyCode: compid, roleSource: 'derived' },
+    });
+    return rows.map((a) => ({
+      id: a.id,
+      companyCode: a.companyCode,
+      loginId: a.loginId,
+      employeeNo: a.employeeNo,
+      jobTitleCode: a.jobTitleCode,
+      roleCode: a.roleCode,
+      userSubtype: a.userSubtype,
+      roleSource: a.roleSource,
+    }));
+  }
+
+  /**
+   * 🔴 套用推導結果（2026-08-25 delta）。單一交易——部分套用會使角色與子分類處於
+   * 互相矛盾的中間狀態，且下次同步不會自動修復（推導只看現值差異）。
+   *
+   * ⚠ **`roleDowngradeAlerts` 一律不寫**（裁定 Q1.3）：降級須人工確認。
+   *    本方法刻意連讀都不讀該欄位，避免日後有人「順手」把它接上。
+   *
+   * ⚠ **不動 `roleSource`**：推導寫入的列仍維持 `'derived'`，下次同步可再覆寫。
+   *    只有人工指派（`assignRole`）才會翻成 `'manual'`。
+   */
+  async applyRoleDerivation(compid: string, plan: RoleDerivationPlan): Promise<void> {
+    const ds = await this.ensureInit();
+    await ds.transaction(async (manager) => {
+      for (const c of plan.roleUpgrades) {
+        // 條件帶 roleSource='derived'：即使計畫產生後、套用前該列剛被人工指派，
+        // 這道 WHERE 也會讓本次更新落空（0 列受影響）而不是覆蓋人的決定。
+        await manager.update(
+          Account,
+          { id: c.accountId, roleSource: 'derived' },
+          { roleCode: c.to },
+        );
+      }
+      for (const c of plan.subtypeChanges) {
+        await manager.update(
+          Account,
+          { id: c.accountId, roleSource: 'derived' },
+          { userSubtype: c.to },
+        );
+      }
+    });
   }
 
   async applySync(compid: string, plan: SyncPlan): Promise<void> {

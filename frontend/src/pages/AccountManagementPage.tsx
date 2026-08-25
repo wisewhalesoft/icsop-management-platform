@@ -515,7 +515,7 @@ export function AccountManagementPage(): JSX.Element {
       {canRead && !canWrite && (
         <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2">
           <Icon name="eye" className="w-4 h-4 shrink-0" />
-          唯讀模式 · ICSOP 管理員對帳號管理為唯讀，可查詢但不可建立/停用/指派角色。
+          唯讀模式 · 此角色對帳號管理為唯讀，可查詢但不可建立/停用/指派角色。
         </div>
       )}
 

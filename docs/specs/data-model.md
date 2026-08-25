@@ -3,7 +3,7 @@ spec-id: data-model
 title: 資料模型（概念層）
 version: 1.7
 date: 2026-08-20
-status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.5 之 ACCOUNT.userSubtype 段落為 🟢 APPROVED 2026-08-11 人類閘門通過**；**v1.6 之 USAGE_FORM_POOL／DOC_USAGE_FORM 補登錄與 `formNumber` 新欄為 2026-08-16 使用者裁決**；**v1.7 新增 [USAGE_FORM_DRAFTING_DEPT](#usage-form-drafting-dept) 實體＋`AUDIT_LOG` 兩項 additive 擴充，為 2026-08-20 使用者裁決（D9 delta）**）
+status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.5 之 ACCOUNT.userSubtype 段落為 🟢 APPROVED 2026-08-11 人類閘門通過**；**v1.6 之 USAGE_FORM_POOL／DOC_USAGE_FORM 補登錄與 `formNumber` 新欄為 2026-08-16 使用者裁決**；**v1.7 新增 [USAGE_FORM_DRAFTING_DEPT](#usage-form-drafting-dept) 實體＋`AUDIT_LOG` 兩項 additive 擴充，為 2026-08-20 使用者裁決（D9 delta）**；**v1.8 新增 [ACCOUNT.roleSource](#account-role-source) 欄位，為 2026-08-25 人類閘門通過之角色自動化 delta**）
 ---
 
 # 資料模型（Data Model）
@@ -16,6 +16,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 > **v1.2（2026-07-17）新增 E07 變更歷程（F037/F038）相關實體**：`DOCUMENT_CHANGE_LOG`（文件欄位層變更事件）、`LIFECYCLE_CHANGE_LOG`＋`LIFECYCLE_SNAPSHOT`（循環 DAG 結構變更事件＋快照）；併同定案 `AUDIT_LOG` 之 `targetType`/`actionType` 擴充（涵蓋 F036/F037/F038 調閱事件，OQ-E07-02 已定案 ✅）。完整理由見 architecture-spec.md §4.8。
 > **v1.4（2026-08-07）🟢 APPROVED（2026-08-07 人類閘門通過）**：[LIFECYCLE](#lifecycle-entity) **新增非必填 `subcategory`（子分類）欄位**，循環之業務身分改為 `(name, subcategory)` 組合（**additive**：既有列全數落在 `subcategory = null`，語意與行為向後相容、不需回填）；併同新增唯一性不變式 INV-1／INV-2／INV-3 與 [MSSQL 唯一索引之實作前置檢查](#lifecycle-unique-index-precheck)。權威規格見 [F040](features/F040-lifecycle-subcategory.md)。**既有欄位、既有實體與 ICSOP 文件編號規則皆不變**。
 > **🟢 v1.5（2026-08-11）APPROVED（2026-08-11 人類閘門通過）**：[ACCOUNT](#account-entity) **新增 `userSubtype`（一般使用者子分類：`business`／`other`）欄位**（**additive**：`NOT NULL DEFAULT 'other'`，既有列一律落在 `'other'` ＝不限縮，行為向後相容、不需回填、無前置檢查）。權威規格見 [F041](features/F041-user-subtype-business-scope.md)。**[ROLE](#role-entity) 維持固定 5 種、不新增第 6 種角色**（`OQ-E08-04` 已定案為選項 B）。**既有欄位、既有實體與所有既有行為皆不變**；`AUDIT_LOG` 亦不受影響（`OQ-E08-10` 定案為「不記錄拒絕稽核」，本需求完全不觸及稽核子系統）。
+> **🔴 v1.8（2026-08-25）APPROVED（人類閘門通過）**：[ACCOUNT](#account-entity) **新增 [`roleSource`](#account-role-source)（角色來源：`derived`／`manual`）欄位**（**additive**：`NOT NULL DEFAULT 'derived'`，既有列一律落在 `'derived'`）。用途＝仲裁「同步之角色推導」與「管理員人工指派」之覆寫優先權：**同步僅覆寫 `derived` 之列**。權威＝[stories/2026-08-25-role-automation-delta.md](../stories/2026-08-25-role-automation-delta.md)。**[ROLE](#role-entity) 仍維持固定 5 種**；`userSubtype` 之語意與 `INV-2` **完全不變**。⚠ 連帶：[F025](features/F025-role-function-matrix.md) 功能矩陣「帳號管理」「角色指派」兩列變更且值域新增 `受限CRUD`（`OQ-RA-03`）。
 > **🔵 v1.6（2026-08-16）使用者裁決（缺失／變更 delta 第 18 項）**：① **補登錄 [USAGE_FORM_POOL](#usage-form-entity)／[DOC_USAGE_FORM](#doc-usage-form) 兩實體**（F018 早已實作，本文件此前缺漏——`OQ-E10-05` 就此**結案**）；② `USAGE_FORM_POOL` **新增選填欄 `formNumber`（表單編號）**——`nullable`、trim 後儲存、**唯一（不分大小寫、`null` 不參與比對）**、`nvarchar(100)`；既有列一律 `null`、不自動產生。權威規格見 [F018 §表單編號 delta](features/F018-usage-form-management.md#form-number-delta)。**本項為 2026-08-16 delta 中唯一需 migration 者**（MSSQL 須以 **filtered unique index `WHERE formNumber IS NOT NULL`** 實作）。**`APPENDIX_POOL` 刻意不比照新增編號欄**（OQ-D18-23）。
 > **🔴 v1.7（2026-08-20）使用者裁決（缺失／變更 delta 9 項之第 5／7／8 項）**：① **新增 [USAGE_FORM_DRAFTING_DEPT](#usage-form-drafting-dept)**（使用表單↔制定部門多對多，`OQ-D9-17` 選項 B＝比照 `DOC_USING_DEPT`）——**本輪唯一需 migration 者**；🔴 該表為**純 metadata**（`OQ-D9-18` 選項 A），**與結構同構之 `DOC_USING_DEPT` 用途相反**，四條回歸鎖定 AC 明文保護。② `AUDIT_LOG` **兩項 additive 擴充**（**皆不需 migration**——`actionType`／`targetType` 為無 CHECK 之 varchar）：**(a)** 新增 `actionType='ATTACHMENT_UPLOAD'` **＋ `targetType='DOCUMENT_ATTACHMENT'`**（主管／部門窗口之 OJT 上傳，`OQ-D9-23`；🔴 **`targetType` 為 2026-08-20 第二輪依 `OQ-D9-29` 裁決新增之第 8 個值**——刻意不沿用 `DOCUMENT`，否則 F024「文件」類會被非調閱事件污染且無從排除）；**(b)** **後台四條下載端點開始寫入本表**（`OQ-D9-10`，**推翻 `OQ-FM-01`「後台不寫稽核」**），沿用既有列舉、新增「表單池／附錄池管理頁下載之 `documentId` 為 `null`」之明列例外。**其餘實體與欄位皆不變。**
 > **v1.3（2026-08-06）新增 E10 附錄管理（F039）相關實體**：`APPENDIX_POOL`（附錄池）＋`DOC_APPENDIX`（文件↔附錄多對多關聯，**帶 `sortOrder`**）；併同 `AUDIT_LOG` 之 **additive 擴充**（`targetType` 新增 `APPENDIX`、新增 `appendixId` 參照欄）與 `ICSOP_DOCUMENT` 新增第 20 欄「附錄」。權威規格見 [F039](features/F039-appendix-management.md)。
@@ -147,6 +148,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | source | `manual`(手動建立) / `upstream`(上游同步) | 是 |
 | roleCode | 指派角色（→ ROLE） | 是 |
 | **userSubtype** | **一般使用者子分類**：`business`(業務) / `other`(其他)。**🟢 APPROVED（[F041](features/F041-user-subtype-business-scope.md)，2026-08-11 人類閘門通過）**；`NOT NULL DEFAULT 'other'`；**僅在 `roleCode = 'User'` 時具效力**（見下） | 是（有預設值） |
+| **roleSource** | **角色來源**：`derived`(由同步推導) / `manual`(管理員手動指派)。**🔴 APPROVED（2026-08-25 人類閘門通過，角色自動化 delta）**；`NOT NULL DEFAULT 'derived'`；**同步之角色推導僅覆寫 `derived` 之列**（見下） | 是（有預設值） |
 | status | `active` / `disabled`（上游同步時 ← `EMPSTS = 'A'`） | 是 |
 | disableReason | `manual` / `departed`（nullable） | 否 |
 | disabledAt | 停用時間（nullable） | 否 |
@@ -180,6 +182,32 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - **不新增索引**：本欄不用於任何查詢條件（判定發生於已取得 session 身分之後、以純函式進行），無索引需求。
 - **migration 前置檢查**：無（純 additive 欄位＋預設值，既有列不需盤點或清理，與 [F040](features/F040-lifecycle-subcategory.md) 之 `LIFECYCLE.subcategory` 需前置盤點之情形不同）。
 
+### `roleSource` 角色來源（🔴 APPROVED 2026-08-25 人類閘門通過） {#account-role-source}
+
+> **權威＝[stories/2026-08-25-role-automation-delta.md](../stories/2026-08-25-role-automation-delta.md)** ＋ [open-questions §RA](open-questions.md#ra-2026-08-25)（`OQ-RA-02`）。
+> 本欄為「同步之角色推導」與「管理員之人工指派」兩者共存之**唯一仲裁依據**。
+
+- **型別**：`nvarchar(20) NOT NULL DEFAULT 'derived'`，並加 `CHECK (roleSource IN ('derived','manual'))` 約束。型別選擇之理由比照 [`userSubtype`](#account-user-subtype)。
+- **語意**：`'derived'` ＝該帳號之 `roleCode` 由同步推導而來、**後續同步可再覆寫**；`'manual'` ＝管理員曾透過
+  `PATCH /admin/accounts/:id/role` 指派過，**同步永不再覆寫該列之角色**。
+- **狀態轉移為單向**：`derived → manual`（一經人工指派即鎖定），**無反向路徑**。刻意不提供「解除鎖定」入口——
+  若日後確有需求，屬 additive 之新功能，須另立 AC，不得由本欄語意默默擴充。
+- **預設 `'derived'` 之理由（`OQ-RA-02` 定案）**：既有列於 migration 後一律落在 `'derived'`，使首次全量套用得以生效。
+  若預設 `'manual'`，自動推導對既有帳號將永遠無效，等同功能未上線。
+  ⚠ **已明確接受之代價**：先前被管理員**刻意人工降級**者（例：某處室主管被刻意設為一般使用者以不給後台權限）
+  將於首次套用時被**升回主管**；因裁定 `Q1.4` 為「不預覽」，此情形**無法事前攔截**。
+- 🔴 **手動建立之帳號一律 `'manual'`，不納入推導**（`OQ-RA-05`，2026-08-25 裁定）：
+  `createManual` 明確要求管理員於建立時指派 `roleCode`，其角色本來就是人工指派的。
+  由 migration `1724544000000` 之 `UPDATE ... WHERE source='manual'` 回填，
+  並由 `TypeOrmAccountStore.create` 於寫入時直接落值。
+  上一條之代價**不適用**於此類帳號——它們自始即在推導範圍之外。
+- **`roleCode` 只升不降、`userSubtype` 直接寫**：本欄僅仲裁 `roleCode` 之覆寫權。`userSubtype` 之推導**不受本欄拘束**
+  （裁定 `Q1.3b`），一律以推導結果寫入——否則 699 名業務人員之 fail-open 缺口不會被關閉。
+  🔴 **兩者規則不同，實作與測試必須分離，不得共用同一條寫入路徑。**
+- **非上游來源欄位**：上游白名單**不含**此欄；其值由本系統之角色推導階段與 `assignRole` 端點維護。
+- **不新增索引**：推導階段已全量載入該公司帳號（既有作法），無以本欄為條件之查詢。
+- **migration 前置檢查**：無（純 additive 欄位＋預設值）。
+
 ### 上游欄位白名單與密碼欄禁令
 
 - 🔴 上游 `VW_HPMUSER` 定義為 `SELECT *`（57 欄），內含 **`USERPW`／`DEFAULTPW`／`PWCHANGEDT`／`PWERRCNT`** 及 `BIRTHDAY`／`ADDR`／`TELNO`／`MOBILNO`／`EDUCATIONLVL` 等非必要個資。
@@ -192,7 +220,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - 上游帳號的姓名/部門等以同步結果為準（見 [open-questions](open-questions.md)）。
 - 帳號停用為**軟刪除**，不可實體刪除（維持稽核外鍵完整性）。
 - 帳號狀態：`active → disabled`（手動或離職）；`disabled → active`（誤判恢復，處理方式見 open-questions）。
-- **相關功能**：F001、F002、F003、F005、F023、**F041**（`userSubtype`，🔴 Draft）。
+- **相關功能**：F001、F002、F003、F005、F023、**F041**（`userSubtype`，🔴 Draft）、**F004／F025**（`roleSource` 與角色推導，🔴 2026-08-25 delta）。
 
 ## 職稱對照 JOB_TITLE {#job-title-entity}
 
