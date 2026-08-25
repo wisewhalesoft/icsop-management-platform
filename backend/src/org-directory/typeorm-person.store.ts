@@ -4,18 +4,17 @@ import { Account } from '../database/entities/account.entity';
 import { chunkByParamBudget } from '../org-sync/param-batching';
 
 /**
- * 生產 PersonStore：直接讀 ACCOUNT（不另建 PERSON 表——ACCOUNT 已同步全體在職 AS 員工，
- * 離職者保留為 status='disabled'）。範圍限 companyCode（本輪 AS）。
+ * 生產 PersonStore：直接讀 ACCOUNT（不另建 PERSON 表——ACCOUNT 已同步全體在職員工，
+ * 離職者保留為 status='disabled'）。
  *
- * ⚠ AS 之 EMPNO（employeeNo）非唯一（一人多帳號）→ 單筆解析時以「在職優先、其次 upstreamModifiedAt
- *   由新到舊」取一列（同一員編各列姓名一致，取任一皆正確）。
+ * 🔴 B 階段（多公司）：移除建構子之 `companyCode='AS'` 預設值，公司別改由各方法之必要參數
+ *   傳入（見 `PersonStore` 介面 JSDoc）。
+ * ⚠ 同一公司內之 employeeNo 仍可能對應多列（一人多帳號）→ 單筆解析時以「在職優先、其次
+ *   upstreamModifiedAt 由新到舊」取一列（同一員編各列姓名一致，取任一皆正確）。
  * ⚠ MSSQL 2100 參數上限：批次 IN 以 chunkByParamBudget 切批（單欄 IN，每批 ≤1000）。
  */
 export class TypeOrmPersonStore implements PersonStore {
-  constructor(
-    private readonly ds: DataSource,
-    private readonly companyCode = 'AS',
-  ) {}
+  constructor(private readonly ds: DataSource) {}
 
   private async ensureInit(): Promise<DataSource> {
     if (!this.ds.isInitialized) await this.ds.initialize();
@@ -31,7 +30,10 @@ export class TypeOrmPersonStore implements PersonStore {
     };
   }
 
-  async findByEmployeeNo(employeeNo: string): Promise<PersonRecord | null> {
+  async findByEmployeeNo(
+    companyCode: string,
+    employeeNo: string,
+  ): Promise<PersonRecord | null> {
     const key = employeeNo.trim();
     if (key.length === 0) return null;
     const ds = await this.ensureInit();
@@ -39,7 +41,7 @@ export class TypeOrmPersonStore implements PersonStore {
       .getRepository(Account)
       .createQueryBuilder('a')
       .where('a.companyCode = :c AND a.employeeNo = :e', {
-        c: this.companyCode,
+        c: companyCode,
         e: key,
       })
       // 在職優先（status='active' 排前），其次上游異動時間由新到舊。
@@ -50,6 +52,7 @@ export class TypeOrmPersonStore implements PersonStore {
   }
 
   async findByEmployeeNos(
+    companyCode: string,
     employeeNos: string[],
   ): Promise<Map<string, PersonRecord>> {
     const keys = [...new Set(employeeNos.map((e) => e.trim()).filter(Boolean))];
@@ -65,7 +68,7 @@ export class TypeOrmPersonStore implements PersonStore {
     )) {
       const rows = await repo.find({
         where: {
-          companyCode: this.companyCode,
+          companyCode,
           employeeNo: In(batch.map((b) => b.k)),
         },
       });
@@ -85,14 +88,18 @@ export class TypeOrmPersonStore implements PersonStore {
     return out;
   }
 
-  async searchActive(keyword: string, limit = 20): Promise<PersonRecord[]> {
+  async searchActive(
+    companyCode: string,
+    keyword: string,
+    limit = 20,
+  ): Promise<PersonRecord[]> {
     const kw = keyword.trim();
     const ds = await this.ensureInit();
     const qb = ds
       .getRepository(Account)
       .createQueryBuilder('a')
       .where('a.companyCode = :c AND a.status = :s', {
-        c: this.companyCode,
+        c: companyCode,
         s: 'active',
       });
     if (kw.length > 0) {

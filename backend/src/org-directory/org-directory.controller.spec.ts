@@ -6,7 +6,7 @@ import {
   PersonReadController,
 } from './org-directory.controller';
 import { OrgDirectoryService } from './org-directory.service';
-import { SessionGuard } from '../auth/session.guard';
+import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { ROLE_CODES } from '../rbac/function-matrix';
 
@@ -38,6 +38,14 @@ function ctxFor(
     getClass: () => ControllerClass,
     switchToHttp: () => ({ getRequest: () => ({ sessionUser }) }),
   } as unknown as ExecutionContext;
+}
+
+/**
+ * 🔴 B 階段（多公司）：controller 之公司別預設值由常數 `'AS'` 改為**登入者自己的公司**
+ * （`req.sessionUser.companyCode`）。替身據此提供 session；未帶 `?companyCode=` 時應取此值。
+ */
+function reqOf(companyCode = 'AS'): RequestWithSession {
+  return { sessionUser: { companyCode } } as unknown as RequestWithSession;
 }
 
 describe('讀取端點守門鏈（認證＋授權）', () => {
@@ -72,7 +80,7 @@ describe('讀取端點守門鏈（認證＋授權）', () => {
 describe('OrgUnitReadController — 委派', () => {
   it('list：未帶 companyCode → 預設 AS、預設僅 active', async () => {
     const svc = fakeSvc();
-    await new OrgUnitReadController(svc).list(undefined, undefined);
+    await new OrgUnitReadController(svc).list(reqOf(), undefined, undefined);
     expect(svc.listOrgUnits).toHaveBeenCalledWith('AS', {
       includeInactive: false,
     });
@@ -80,7 +88,7 @@ describe('OrgUnitReadController — 委派', () => {
 
   it('list：includeInactive=true 傳遞', async () => {
     const svc = fakeSvc();
-    await new OrgUnitReadController(svc).list('AS', 'true');
+    await new OrgUnitReadController(svc).list(reqOf(), 'AS', 'true');
     expect(svc.listOrgUnits).toHaveBeenCalledWith('AS', {
       includeInactive: true,
     });
@@ -88,7 +96,7 @@ describe('OrgUnitReadController — 委派', () => {
 
   it('children：無 parentCode → 直接回 []（不查詢）', async () => {
     const svc = fakeSvc();
-    const res = await new OrgUnitReadController(svc).children(
+    const res = await new OrgUnitReadController(svc).children(reqOf(), 
       undefined,
       undefined,
       undefined,
@@ -97,19 +105,19 @@ describe('OrgUnitReadController — 委派', () => {
     expect(svc.orgUnitChildren).not.toHaveBeenCalled();
   });
 
-  it('children：帶 parentCode → 委派（companyCode 預設 AS）', async () => {
+  it('children：帶 parentCode → 委派（B 階段：companyCode 為首參，預設取登入者公司）', async () => {
     const svc = fakeSvc();
-    await new OrgUnitReadController(svc).children('JA000', undefined, undefined);
+    await new OrgUnitReadController(svc).children(reqOf(), 'JA000', undefined, undefined);
     expect(svc.orgUnitChildren).toHaveBeenCalledWith(
+      'AS',
       'JA000',
       { includeInactive: false },
-      'AS',
     );
   });
 
   it('subtree：未帶 prefix → 空字串（全域）', async () => {
     const svc = fakeSvc();
-    await new OrgUnitReadController(svc).subtree(undefined, 'AS', undefined);
+    await new OrgUnitReadController(svc).subtree(reqOf(), undefined, 'AS', undefined);
     expect(svc.orgUnitSubtree).toHaveBeenCalledWith('AS', '', {
       includeInactive: false,
     });
@@ -120,10 +128,10 @@ describe('PersonReadController — 委派與路由順序', () => {
   it('search：limit 夾限（>100 → 100；非法 → undefined）', async () => {
     const svc = fakeSvc();
     const c = new PersonReadController(svc);
-    await c.search('王', '9999');
-    expect(svc.searchActivePersons).toHaveBeenCalledWith('王', 100);
-    await c.search('王', 'abc');
-    expect(svc.searchActivePersons).toHaveBeenLastCalledWith('王', undefined);
+    await c.search(reqOf(), '王', '9999');
+    expect(svc.searchActivePersons).toHaveBeenCalledWith('AS', '王', 100);
+    await c.search(reqOf(), '王', 'abc');
+    expect(svc.searchActivePersons).toHaveBeenLastCalledWith('AS', '王', undefined);
   });
 
   it('byEmployeeNo：命中 → 回記錄（含離職者）', async () => {
@@ -135,14 +143,14 @@ describe('PersonReadController — 委派與路由順序', () => {
         employmentStatus: 'departed',
       }),
     });
-    const p = await new PersonReadController(svc).byEmployeeNo('E002');
+    const p = await new PersonReadController(svc).byEmployeeNo(reqOf(), 'E002');
     expect(p.name).toBe('李離職');
   });
 
   it('byEmployeeNo：查無 → 404 PERSON_NOT_FOUND', async () => {
     const svc = fakeSvc();
     await expect(
-      new PersonReadController(svc).byEmployeeNo('E999'),
+      new PersonReadController(svc).byEmployeeNo(reqOf(), 'E999'),
     ).rejects.toThrow('PERSON_NOT_FOUND');
   });
 

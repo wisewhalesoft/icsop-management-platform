@@ -1,23 +1,28 @@
 /**
  * 公司全稱（COMPFULLNM）— 靜態 COMPID→全稱 對映（純邏輯，無 IO）。
  *
- * 定案依據（docs/specs/upstream-person-org-source.md §COMPFULLNM）：
- *  - 上游 HR（portalapp-sp 全專案）無公司全稱來源；COMPID 僅 2 碼。
- *  - 採靜態對映；AS＝和潤企業股份有限公司（與 prototype 14 COMPANY_NAME 常數一致）。
+ * 定案依據（docs/specs/upstream-person-org-source.md §COMPFULLNM；
+ * upstream-hr-source-contract.md §10.1，2026-08-24 v2.0 實測）：
+ *  - 上游 `VW_HRCOMF.COMPFULLNM` 四家俱全（v1.0 曾誤判「無來源」，已於契約 v2.0 更正）。
  *  - 供 F020 浮水印「公司名稱」欄。
  *
  * F003 AC-P15（2026-08-14）：本表同時作為「可選公司集合」之**唯一**來源——手動帳號建立／編輯
  * 之公司下拉、寫入驗證（AC-P5／AC-P10）、清單公司欄（AC-P23c）、F020 浮水印公司名稱四處
  * 一律由此導出。新增公司＝只改本表一處。
- *  - AE＝和潤電能〔[ASSUMPTION] 全稱待覆核，見 F003 AC-P15 之矛盾註記〕。
- *  - 刻意排除 AC（COMPENDDT=1900-01-01，測試資料且已結束）與 AD／AJ／ILS（VW_HRCOMF 無該筆、
- *    部門主檔嚴重不完整，契約明載補齊前不具納入條件）。
  *
- * TODO（多公司）：改為設定表／上游同步（VW_HRCOMF 目前僅 3 筆且無全稱欄）。屆時本模組改讀 store。
+ * B 階段（2026-08-24，開放 AD／AE／AJ）：
+ *  - 新增 AD＝和潤興業、AJ＝和勁企業（皆取自 `VW_HRCOMF.COMPFULLNM` 實測值）。
+ *  - 🔴 **修正 AE 全稱缺字**：v1.0 誤植為「和潤電能」，漏了「股份有限公司」；契約 §10.1
+ *    實測值為「和潤電能股份有限公司」。此前所有以 AE 建立之手動帳號、浮水印皆顯示不完整全稱。
+ *  - 刻意排除 **ILS**（`VW_HRCOMF` 無此公司代碼，來源不明，契約 §11 #5 待上游確認）。
+ *    契約 v1.0 曾一併排除 AD／AJ（理由「部門主檔嚴重不完整」），該理由已於 v2.0 更正為
+ *    「量到的是舊來源 `VW_HPMUSER` 之母體污染，非真實缺漏」，四家組織資料實測皆完整。
  */
 const COMPANY_FULL_NAME_ENTRIES = {
   AS: '和潤企業股份有限公司',
-  AE: '和潤電能',
+  AD: '和潤興業股份有限公司',
+  AE: '和潤電能股份有限公司',
+  AJ: '和勁企業股份有限公司',
 } as const;
 
 export const COMPANY_FULL_NAMES: Readonly<Record<string, string>> =
@@ -79,10 +84,17 @@ export function resolveCompanyName(
  *
  * ⚠ 漏登之後果為何值得兩道防線：浮水印公司欄會靜默退化為空字串，而 §8.4 之分隔符收合規則
  * 會讓它**看起來像正常留空**（不是 `null`、不是亂碼），沒有人會發現。
+ *
+ * ⚠ **不得回接上游 `COMPSIMPNM`**：上游簡稱（AS＝「和潤」）與本表既有慣例（AS＝「和潤企業」，
+ * 即全稱去掉「股份有限公司」）不同源，改接會變更已驗收之 AS 浮水印（使用者已明確否決此類變更，
+ * 見上方 INV-C2 段落）。B 階段新增之 AD／AJ 短稱依**既有慣例**（全稱去尾「股份有限公司」）產生，
+ * 與上游簡稱無關。
  */
 export const COMPANY_SHORT_NAMES: Readonly<Record<CompanyCode, string>> = {
   AS: '和潤企業',
+  AD: '和潤興業',
   AE: '和潤電能',
+  AJ: '和勁企業',
 };
 
 /** INV-C2 之執行期斷言（`AC-N11`）：鍵集合不相等即拋錯。型別層防護見上方 `Record<CompanyCode, …>`。 */
