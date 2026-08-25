@@ -25,6 +25,7 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
   let lifecycleName: string | null = null;
   let formId: string | null = null;
   let appendixId: string | null = null;
+  let targetAccountId: string | null = null;
 
   switch (event.targetType) {
     case 'DOCUMENT':
@@ -58,6 +59,11 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
       documentId = event.documentId ?? null;
       documentNumber = event.targetNumber ?? null;
       break;
+    // 🔴 2026-08-25 角色自動化 delta：targetId＝**被異動之帳號** id（非操作者，操作者為 actorId）。
+    // 刻意不落入既有四個參照欄之任一——角色異動不是調閱，混入會污染 F024 之類型篩選。
+    case 'ACCOUNT':
+      targetAccountId = event.targetId;
+      break;
   }
 
   return {
@@ -77,6 +83,7 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
     lifecycleName,
     formId,
     appendixId,
+    targetAccountId,
     targetName: event.targetName ?? null,
     watermarkSnapshot: event.watermarkSnapshot ?? null,
     occurredAt: event.occurredAt,

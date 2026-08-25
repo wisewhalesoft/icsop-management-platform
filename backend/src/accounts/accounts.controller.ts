@@ -118,7 +118,17 @@ export class AccountsController {
     // 之判定一律在服務層（AC-01／AC-02／AC-36），controller 不做任何子分類邏輯。
     return this.svc.assignRole(
       id,
-      { companyCode: su.companyCode, loginId: su.loginId },
+      {
+        companyCode: su.companyCode,
+        loginId: su.loginId,
+        // 🔴 2026-08-25 角色自動化 delta：操作者身分快照，供角色變更稽核（裁定 `Q4.5`）。
+        // 自 session 直接取——SessionGuard 每請求以 DB 現行值覆寫，故此處恆為當下真值。
+        accountId: su.accountId ?? null,
+        name: su.name ?? null,
+        employeeNo: su.employeeNo ?? null,
+        orgCode: su.orgCode ?? null,
+        roleCode: su.roleCode ?? null,
+      },
       body.roleCode,
       body.userSubtype,
     );

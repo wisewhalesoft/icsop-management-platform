@@ -14,9 +14,16 @@ import {
   AccountListItem,
   AccountView,
   UpdateAccountPatch,
+  ACCOUNT_AUDIT_RECORDER,
+  AccountAuditRecorder,
 } from './accounts.store';
 import { hashPassword } from './password';
-import { isValidRole, isSelfRoleLockout, AccountIdentity } from './account-rules';
+import {
+  isValidRole,
+  isSelfRoleLockout,
+  canAssignRole,
+  AccountIdentity,
+} from './account-rules';
 import {
   ACCOUNT_CODE_MAX_LENGTH,
   ACCOUNT_NAME_MAX_LENGTH,
@@ -74,6 +81,23 @@ const UPSTREAM_READONLY_KEYS = [
  * 帳號管理服務（F003 / US-005+US-006）。RBAC 於 controller 之 guard 落實
  * （帳號管理 write＝SysAdmin；角色指派＝SysAdmin only）；本服務負責業務規則與驗證。
  */
+/**
+ * 角色變更之人可讀快照（→ `AUDIT_LOG.targetName`，供 F024 明細直接呈現）。
+ *
+ * 格式：`舊角色 → 新角色`；若本次一併寫入子分類則附記 `（子分類：業務）`。
+ * ⚠ 純函式、無 IO——快照之措辭是**稽核資料的一部分**，一旦寫入即不可回頭重算，
+ *   故獨立成可單測之函式，避免日後在服務層被順手改動而使新舊列語意不一致。
+ */
+export function buildRoleChangeSummary(
+  oldRole: string,
+  newRole: string,
+  newSubtype?: string,
+): string {
+  const base = `${oldRole} → ${newRole}`;
+  if (newSubtype === undefined) return base;
+  return `${base}（子分類：${newSubtype === 'business' ? '業務' : '其他'}）`;
+}
+
 @Injectable()
 export class AccountsService {
   constructor(
@@ -86,6 +110,13 @@ export class AccountsService {
     @Optional()
     @Inject(JOB_TITLE_READ_STORE)
     private readonly jobTitles?: JobTitleReadStore,
+    // 🔴 2026-08-25 角色自動化 delta（裁定 `Q4.5`）：角色變更稽核。
+    // 選填係為相容既有 14 處以測試替身建構本服務之單元測試（比照上方兩個 store 之慣例）。
+    // ⚠ **選填 ≠ 可以不接線**——真實 DI 若漏接，稽核會靜默消失且無人察覺。
+    //   接線之證明必須靠整合測試（`test/int/account-role-audit.itest.ts`），單元測試證明不了。
+    @Optional()
+    @Inject(ACCOUNT_AUDIT_RECORDER)
+    private readonly auditRecorder?: AccountAuditRecorder,
   ) {}
 
   /**
@@ -247,6 +278,13 @@ export class AccountsService {
     if (!isValidRole(newRole)) throw new BadRequestException('ROLE_INVALID');
     const acc = await this.store.findById(id);
     if (!acc) throw new NotFoundException('ACCOUNT_NOT_FOUND');
+    // 🔴 2026-08-25 角色自動化 delta（Q4.1b／OQ-RA-03）：可指派範圍檢查。
+    // 順序固定：① ROLE_INVALID（既有）→ ② 帳號存在（既有）→ ③ **本檢查** → ④ 自我降級阻擋（既有）。
+    // 置於自我降級之前：「你根本無權指派這個角色」比「你不能降自己」更前置，
+    // 且可避免對無權者洩漏「該帳號是不是你自己」之資訊。
+    if (!canAssignRole(actor.roleCode, newRole)) {
+      throw new ForbiddenException('ROLE_ASSIGN_SCOPE_FORBIDDEN');
+    }
     if (
       isSelfRoleLockout(
         actor,
@@ -257,9 +295,33 @@ export class AccountsService {
     ) {
       throw new ForbiddenException('ROLE_SELF_DOWNGRADE_BLOCKED');
     }
-    const patch: UpdateAccountPatch = { roleCode: newRole };
+    // 🔴 舊角色必須在寫入**之前**取值並複製為原始字串。
+    // `updateById` 之實作可能就地改寫 `acc`（記憶體 store 即如此 `Object.assign`），
+    // 寫入後再讀 `acc.roleCode` 會拿到新值，使快照退化為「User → User」。
+    // 正式環境走 DB 時 `acc` 為獨立物件、湊巧不會顯現——這種別名依賴不可留。
+    const previousRole = acc.roleCode;
+    // 🔴 裁定 Q1.2：人工指派過即鎖定——翻為 'manual' 後，同步之角色推導永不再覆寫此列。
+    //    這是「自動化」與「人工優先權」共存的機制本體；漏寫此鍵 ⇒ 管理員的決定會在
+    //    隔天 02:00 被推導蓋掉，且不會有任何錯誤訊息。
+    const patch: UpdateAccountPatch = { roleCode: newRole, roleSource: 'manual' };
     if (newRole === 'User') patch.userSubtype = normalizeUserSubtype(userSubtype);
-    return this.store.updateById(id, patch);
+    const updated = await this.store.updateById(id, patch);
+
+    // 🔴 稽核（裁定 `Q4.5`）：**寫入成功後**才記錄——失敗之嘗試不產生稽核列，
+    // 與既有各 recordDownload 之「權限/歸屬把關在前、成功才寫」慣例一致。
+    // ⚠ 刻意記錄「舊 → 新」而非僅記新值：F024 明細須能自證當時發生了什麼變化，
+    //   而帳號之現值日後還會再變，回查現值無法還原當時。
+    await this.auditRecorder?.record({
+      accountId: id,
+      summary: buildRoleChangeSummary(previousRole, newRole, patch.userSubtype),
+      actorAccountId: actor.accountId ?? '',
+      actorName: actor.name ?? null,
+      actorEmployeeNo: actor.employeeNo ?? null,
+      actorCompany: actor.companyCode,
+      actorDepartment: actor.orgCode ?? null,
+      actorRoleCode: actor.roleCode ?? null,
+    });
+    return updated;
   }
 
   /**

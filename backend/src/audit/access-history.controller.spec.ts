@@ -67,6 +67,7 @@ function auditRow(over: Partial<AuditRow> = {}): AuditRow {
   rowSeq += 1;
   return {
     id: `r-${rowSeq}`,
+    targetAccountId: null,
     accountId: 'a1',
     employeeNo: '22345',
     name: '王小明',

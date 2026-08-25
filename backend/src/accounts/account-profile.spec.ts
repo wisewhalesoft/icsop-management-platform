@@ -111,7 +111,12 @@ class FakeStore implements AccountStore {
   }
 }
 
-const ACTOR = { companyCode: 'AS', loginId: 'AS22455' };
+/**
+ * 操作者身分。🔴 2026-08-25 角色自動化 delta 起 `roleCode` 為**必要**——
+ * `assignRole` 依它判定可指派範圍（`canAssignRole`），缺漏一律 fail-safe 拒絕。
+ * 正式路徑由 controller 自 session 帶入，恆有值。
+ */
+const ACTOR = { companyCode: 'AS', loginId: 'AS22455', roleCode: 'SysAdmin' };
 
 function fakeOrgUnits(units: OrgUnitRecord[]): OrgUnitReadStore {
   const byCode = new Map(units.map((u) => [u.orgCode, u]));

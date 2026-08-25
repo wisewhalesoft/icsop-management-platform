@@ -34,7 +34,11 @@ export type AuditTargetType =
   // targetId＝documentId（上傳之標的文件）。刻意**不**沿用 'DOCUMENT'——上傳非調閱，
   // 混入 DOCUMENT 會使 F024「類型＝文件」之調閱查詢被上傳事件污染（AC-N69 之分類學防線）。
   // data-model「ATTACHMENT_UPLOAD 擴充」段已定案：varchar(30)/varchar(40) 無 CHECK ⇒ 不需 migration。
-  | 'DOCUMENT_ATTACHMENT';
+  | 'DOCUMENT_ATTACHMENT'
+  // 🔴 2026-08-25 角色自動化 delta（裁定 Q4.5）：帳號之角色／子分類異動。
+  // targetId＝被異動之帳號 id，經 buildAuditRow 落至 AUDIT_LOG.targetAccountId。
+  // 刻意獨立於既有四個參照欄——角色異動不是調閱，混入任一既有 targetType 會污染 F024 查詢。
+  | 'ACCOUNT';
 
 /** 操作類型（data-model AUDIT_LOG.actionType，逐字沿用 F036/F037/F038 spec 命名）。 */
 export type AuditActionType =
@@ -58,7 +62,11 @@ export type AuditActionType =
   // 🔴 F016 D9 delta（AC-N31／F023 AC-N50）：主管／部門窗口上傳 OJT 簽到表。
   // ⚠ 角色不對稱（AC-N32）：ICSOPAdmin 執行同一操作**不**寫入本事件——那是既有職掌內之
   // 日常維護，本事件之存在理由是「破例開放之角色其寫入行為需可追溯」。
-  | 'ATTACHMENT_UPLOAD';
+  | 'ATTACHMENT_UPLOAD'
+  // 🔴 2026-08-25 角色自動化 delta：角色／子分類異動。
+  // 涵蓋**兩種來源**：管理員手動指派（F003 assignRole）與同步之自動推導（F004 角色推導階段）。
+  // 兩者以 actorId 區分——自動推導無操作者，故落系統帳號哨兵；語意差異記於 targetName 快照。
+  | 'ROLE_ASSIGNED';
 
 /** 調閱來源（E09 US-097），預設 DIRECT。 */
 export type AuditSource = 'DIRECT' | 'AI_QA';
@@ -196,6 +204,22 @@ export interface DocumentAttachmentAuditEvent extends AuditEventBase {
 }
 
 /** 稽核調閱事件（以 targetType 判別之聯集）——D 契約鎖定形狀。 */
+/**
+ * 角色／子分類異動（🔴 2026-08-25 角色自動化 delta，裁定 Q4.5）。
+ *
+ * `targetId`＝**被異動之帳號 id**（非操作者；操作者為 `actorId`）。
+ * `targetName`＝人可讀之變更快照，建議格式 `舊角色 → 新角色`（子分類一併異動時附記），
+ * 供 F024 明細直接呈現而不必回查帳號現值——帳號改名或再次異動後，本列仍能自證當時發生了什麼。
+ *
+ * ⚠ **本事件涵蓋手動與自動兩種來源**，不另立第二種 actionType：
+ * 兩者之差異在 `actorId`（手動＝操作者帳號；自動推導＝系統哨兵），而非動作本身。
+ * 若日後需在 F024 分別篩選，應以 actorId 過濾，不得增生 actionType 變體。
+ */
+export interface AccountRoleAuditEvent extends AuditEventBase {
+  targetType: 'ACCOUNT';
+  actionType: 'ROLE_ASSIGNED';
+}
+
 export type AuditAccessEvent =
   | DocumentAuditEvent
   | UsageFormAuditEvent
@@ -205,7 +229,8 @@ export type AuditAccessEvent =
   | OrgChangeAlertAuditEvent
   | AppendixAuditEvent
   | AccessHistoryExportAuditEvent
-  | DocumentAttachmentAuditEvent;
+  | DocumentAttachmentAuditEvent
+  | AccountRoleAuditEvent;
 
 /**
  * 已物化之稽核列（append-only）。同時作為 AUDIT_LOG 落地列與 F024 查詢結果列。
@@ -234,6 +259,12 @@ export interface AuditRow {
    * 不另開選填先例。所有建構點（buildAuditRow／TypeOrmAuditStore.toRow）皆顯式填值。
    */
   appendixId: string | null;
+  /**
+   * 🔴 2026-08-25 角色自動化 delta：被異動之帳號 id（僅 targetType='ACCOUNT' 之列非 null）。
+   * **必填**（顯式帶 null），沿用 documentId／lifecycleId／formId／appendixId 之既有慣例，
+   * 不另開選填先例。所有建構點（buildAuditRow／TypeOrmAuditStore.toRow）皆顯式填值。
+   */
+  targetAccountId: string | null;
   /** 對象名稱／說明快照（供 F024 明細；非 data-model 現有欄，見 impl log flag）。 */
   targetName: string | null;
   watermarkSnapshot: string | null;

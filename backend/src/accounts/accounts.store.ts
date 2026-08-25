@@ -84,6 +84,11 @@ export interface CreateAccountInput {
 }
 
 export interface UpdateAccountPatch {
+  /**
+   * 🔴 角色來源（2026-08-25 delta，裁定 Q1.2）。**唯一合法寫入者＝角色指派端點**，
+   * 值恆為 `'manual'`（單向）。`PATCH /admin/accounts/:id`（編輯基本資料）不得帶此鍵。
+   */
+  roleSource?: string;
   name?: string | null;
   passwordHash?: string;
   roleCode?: string;
@@ -115,4 +120,39 @@ export interface AccountStore {
    * 退回 `existsLoginId(companyCode, loginId)`（既有行為，為新行為之子集，不會誤放行既有情境）。
    */
   existsLoginIdGlobal?(loginId: string): Promise<boolean>;
+}
+
+/**
+ * 角色變更稽核之注入符號（🔴 2026-08-25 角色自動化 delta，裁定 `Q4.5`）。
+ * 命名刻意帶 `ACCOUNT_` 前綴——`appendices`／`usage-forms` 各自有同名之 `AUDIT_RECORDER`，
+ * 三者為不同 port、不得互換注入。
+ */
+export const ACCOUNT_AUDIT_RECORDER = Symbol('ACCOUNT_AUDIT_RECORDER');
+
+/**
+ * 角色／子分類異動事件（服務層之對外形狀；轉為 F023 共用契約由 adapter 負責）。
+ *
+ * 🔴 `accountId`＝**被異動之帳號**；`actorAccountId`＝**操作者**。兩者極易寫反，
+ * 故刻意不共用 `accountId` 一個名字——`AUDIT_LOG.accountId` 存的是操作者，
+ * 被異動者存於 `targetAccountId`（見 `audit/audit.types.ts` 之 `AccountRoleAuditEvent`）。
+ */
+export interface AccountRoleChangeEvent {
+  /** 被異動之帳號 id（→ AUDIT_LOG.targetAccountId）。 */
+  accountId: string;
+  /** 變更快照，供 F024 明細直接呈現（→ AUDIT_LOG.targetName）。 */
+  summary: string;
+  /** 操作者帳號 id（→ AUDIT_LOG.accountId）。 */
+  actorAccountId: string;
+  /** 操作者身分快照（皆選填；缺漏一律落 null，比照既有 adapter 之慣例）。 */
+  actorName?: string | null;
+  actorEmployeeNo?: string | null;
+  actorCompany?: string | null;
+  actorDepartment?: string | null;
+  actorSection?: string | null;
+  actorRoleCode?: string | null;
+}
+
+/** 角色變更稽核之寫入 port。 */
+export interface AccountAuditRecorder {
+  record(event: AccountRoleChangeEvent): Promise<void>;
 }

@@ -60,6 +60,16 @@ export class Account {
   @Column({ type: 'nvarchar', length: 20, default: 'other' })
   userSubtype!: string;
 
+  /**
+   * 🔴 角色來源（2026-08-25 角色自動化 delta，裁定 Q1.2／OQ-RA-02）。
+   * `'derived'`＝由同步推導、後續同步可再覆寫；`'manual'`＝管理員指派過，**同步永不覆寫**。
+   * `NOT NULL DEFAULT 'derived'` ＋ CHECK 約束（migration 1724544000000-account-role-source）。
+   * ⚠ 狀態轉移單向：`derived → manual`，無反向路徑。
+   * ⚠ 非上游來源欄位——同步之帳號 upsert payload 不得含此鍵。
+   */
+  @Column({ type: 'nvarchar', length: 20, default: 'derived' })
+  roleSource!: string;
+
   // --- F004 組織同步新增（← VW_HPMUSER 白名單欄位 + 停用軌跡） ---
 
   @Column({ type: 'varchar', length: 10, nullable: true })
