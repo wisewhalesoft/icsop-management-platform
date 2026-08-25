@@ -49,7 +49,7 @@ const ORG: Record<string, { tier: string; name: string; descFull: string | null 
   JA000: { tier: 'DEPARTMENT', name: '營運管理部', descFull: '營運管理部' },
 };
 const fakeOrg = (): WatermarkOrgLookup => ({
-  findByOrgCode: (code) => Promise.resolve(ORG[code] ?? null),
+  findByOrgCode: (_companyCode, code) => Promise.resolve(ORG[code] ?? null),
 });
 
 class FakeBurner {

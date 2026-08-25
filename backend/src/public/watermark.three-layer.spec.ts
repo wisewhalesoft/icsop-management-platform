@@ -83,7 +83,7 @@ const ORG = {
 };
 
 function fakeOrg(): WatermarkOrgLookup {
-  return { findByOrgCode: (code) => Promise.resolve((ORG as Record<string, { tier: string; name: string; descFull: string | null }>)[code] ?? null) };
+  return { findByOrgCode: (_companyCode, code) => Promise.resolve((ORG as Record<string, { tier: string; name: string; descFull: string | null }>)[code] ?? null) };
 }
 
 class NoopAudit implements AuditWriter {

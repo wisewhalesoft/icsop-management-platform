@@ -95,7 +95,7 @@ export class PublicDocumentsService {
       code ? (nameMap.get(code) ?? null) : null; // 未命中＝null（與詳情 DTO 逐字一致）
 
     const dtos: PublicListItemDto[] = result.items.map((it) =>
-      this.toDto(it, viewer.orgCode, resolve, today),
+      this.toDto(it, viewer, resolve, today),
     );
     return { ...result, items: dtos };
   }
@@ -171,7 +171,9 @@ export class PublicDocumentsService {
    */
   private toDto(
     it: PublicDocItem,
-    userOrgCode: string | null | undefined,
+    // 🔴 B 階段（多公司）：由裸 `userOrgCode` 改為整個 `viewer`——置頂判定需同時知道部門與公司
+    // 別（見 `isPinned`）。傳整個投影而非再拆一個參數，避免日後又漏傳新欄位。
+    viewer: ViewerScope,
     resolve: (code: string | null) => string | null,
     today: Date,
   ): PublicListItemDto {
@@ -190,7 +192,7 @@ export class PublicDocumentsService {
       displayStatus: deriveDisplayStatus(it.status, it.announcedDate, today),
       announcedDate: it.announcedDate,
       contentSummary: it.contentSummary,
-      pinned: isPinned(it, userOrgCode),
+      pinned: isPinned(it, viewer.orgCode, viewer.companyCode),
     };
   }
 }

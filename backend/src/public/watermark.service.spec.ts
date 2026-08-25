@@ -4,7 +4,9 @@ import { WATERMARK_CONFIDENTIALITY } from './watermark';
 
 /** 假 org 查找：以 map 提供 tier/name/descFull。 */
 function fakeOrg(map: Record<string, { tier: string; name: string; descFull: string | null }>): WatermarkOrgLookup {
-  return { findByOrgCode: (code) => Promise.resolve(map[code] ?? null) };
+  // 🔴 B 階段（多公司）：簽章為 (companyCode, orgCode)。替身以 orgCode 查表；
+  // 公司別之實際隔離由 typeorm 實作與 viewer-scope.spec.ts 負責，此處僅需正確接參數順序。
+  return { findByOrgCode: (_companyCode, code) => Promise.resolve(map[code] ?? null) };
 }
 
 class FakeBurner {
@@ -59,7 +61,7 @@ function sessionOf(over: Partial<WatermarkSession> = {}): WatermarkSession {
 function countingOrg(map: Record<string, { tier: string; name: string; descFull: string | null }>) {
   const counter = { calls: 0 };
   const lookup: WatermarkOrgLookup = {
-    findByOrgCode: (code) => {
+    findByOrgCode: (_companyCode, code) => {
       counter.calls += 1;
       return Promise.resolve(map[code] ?? null);
     },
@@ -76,10 +78,15 @@ function countingPdfSource(buf: Buffer | null) {
 
 /** F041 docMeta：additive 擴充 usingDeptIds（架構 §3.7 決策三(c)）。既有測試未指定時預設與 sessionOf() 之
  * JAC00 相符，故不影響既有（皆為非受限 viewer）測試之綠燈。 */
-function docMetaOf(usingDeptIds: string[] = ['JAC00']) {
+function docMetaOf(usingDeptIds: string[] = ['JAC00'], companyCode = 'AS') {
   return {
     getDocMeta: () =>
-      Promise.resolve({ documentNumber: 'ICSOP-1', documentName: '車輛分期進件', usingDeptIds }),
+      Promise.resolve({
+        documentNumber: 'ICSOP-1',
+        documentName: '車輛分期進件',
+        // 🔴 B 階段（多公司）：DocMeta 改帶公司別之使用部門參照。
+        usingDepts: usingDeptIds.map((orgCode) => ({ companyCode, orgCode })),
+      }),
   };
 }
 

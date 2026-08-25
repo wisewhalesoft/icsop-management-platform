@@ -15,6 +15,13 @@ import { PublicDocItem, buildFilterOptions, buildPublicList, visibleCandidates }
 import { PublicDocumentsService, OrgNameResolver } from './public-documents.service';
 import { PublicDocDetail, PublicDocumentStore } from './public-documents.store';
 import { ViewerScope } from '../rbac/viewer-scope';
+import { UsingDeptRef } from '../rbac/viewer-scope';
+
+/** 便利建構：同一公司（預設 AS）之使用部門參照（B 階段多公司；跨公司案例見 viewer-scope.spec.ts）。 */
+function depts(codes: string[], companyCode = 'AS'): UsingDeptRef[] {
+  return codes.map((orgCode) => ({ companyCode, orgCode }));
+}
+
 
 const TODAY = new Date('2026-07-17T00:00:00Z');
 
@@ -33,7 +40,8 @@ const DOC_DEFAULTS: PublicDocItem = {
     documentName: '文件',
     lifecycleId: 'lc1',
     lifecycleName: null,
-    usingDeptIds: [],
+    usingDepts: depts([]),
+    companyCode: 'AS',
     draftingDeptId: null,
     draftingCompanyId: null,
     draftingSectionId: null,
@@ -48,9 +56,9 @@ function doc(over: Partial<PublicDocItem>): PublicDocItem {
   return { ...DOC_DEFAULTS, ...over };
 }
 
-const OTHER: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00' };
-const BUSINESS: ViewerScope = { roleCode: 'User', userSubtype: 'business', orgCode: 'JAC00' };
-const ORPHAN: ViewerScope = { roleCode: 'User', userSubtype: 'business', orgCode: null };
+const OTHER: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00', companyCode: 'AS' };
+const BUSINESS: ViewerScope = { roleCode: 'User', userSubtype: 'business', orgCode: 'JAC00', companyCode: 'AS' };
+const ORPHAN: ViewerScope = { roleCode: 'User', userSubtype: 'business', orgCode: null, companyCode: 'AS' };
 
 const values = (opts: ReadonlyArray<{ value: string }>): string[] => opts.map((o) => o.value).sort();
 
@@ -61,7 +69,8 @@ const values = (opts: ReadonlyArray<{ value: string }>): string[] => opts.map((o
 const LEAK_POOL: PublicDocItem[] = [
   doc({
     id: 'visible',
-    usingDeptIds: ['JAC00'],
+    usingDepts: depts(['JAC00']),
+    companyCode: 'AS',
     draftingCompanyId: 'C1',
     draftingDeptId: 'JA000',
     draftingSectionId: 'JAC00',
@@ -70,7 +79,8 @@ const LEAK_POOL: PublicDocItem[] = [
   }),
   doc({
     id: 'hidden',
-    usingDeptIds: ['JAD00'],
+    usingDepts: depts(['JAD00']),
+    companyCode: 'AS',
     draftingCompanyId: 'C9',
     draftingDeptId: 'JD000',
     draftingSectionId: 'JAD00',
@@ -276,7 +286,8 @@ describe('F019 AC-D5：PublicDocumentsService.filterOptions（服務層組裝與
   const pool = [
     doc({
       id: 'a',
-      usingDeptIds: ['JAC00'],
+      usingDepts: depts(['JAC00']),
+      companyCode: 'AS',
       draftingCompanyId: '00000',
       draftingDeptId: 'JA000',
       draftingSectionId: 'JAC00',
@@ -352,8 +363,8 @@ describe('F019 AC-D5：PublicDocumentsService.filterOptions（服務層組裝與
    */
   it('TS-F019-D5-307 `lifecycles` 之 label 為 lifecycleDisplayName（含子分類），value 仍為 lifecycleId', async () => {
     const cyclePool = [
-      doc({ id: 'a', usingDeptIds: ['JAC00'], lifecycleId: 'lc-c', lifecycleName: '銷售及收款循環（消金）' }),
-      doc({ id: 'b', usingDeptIds: ['JAC00'], lifecycleId: 'lc-b', lifecycleName: '銷售及收款循環（企金）' }),
+      doc({ id: 'a', usingDepts: depts(['JAC00']), lifecycleId: 'lc-c', lifecycleName: '銷售及收款循環（消金）' }),
+      doc({ id: 'b', usingDepts: depts(['JAC00']), lifecycleId: 'lc-b', lifecycleName: '銷售及收款循環（企金）' }),
     ];
     const svc = new PublicDocumentsService(new OptStore(cyclePool), resolverOf(NAMES), () => TODAY);
     const opts = await svc.filterOptions(OTHER);
@@ -378,7 +389,8 @@ describe('F019 AC-D5：PublicDocumentsService.filterOptions（服務層組裝與
     const sortPool = [
       doc({
         id: 'a',
-        usingDeptIds: ['JAC00'],
+        usingDepts: depts(['JAC00']),
+        companyCode: 'AS',
         draftingCompanyId: 'C1',
         primaryChiefId: 'E001',
         lifecycleId: 'lc1',
@@ -386,7 +398,8 @@ describe('F019 AC-D5：PublicDocumentsService.filterOptions（服務層組裝與
       }),
       doc({
         id: 'b',
-        usingDeptIds: ['JAC00'],
+        usingDepts: depts(['JAC00']),
+        companyCode: 'AS',
         draftingCompanyId: 'C2',
         primaryChiefId: 'E002',
         lifecycleId: 'lc2',

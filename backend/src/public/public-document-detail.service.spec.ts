@@ -5,6 +5,13 @@ import {
 import { PublicDocDetail, PublicDocumentStore } from './public-documents.store';
 import { PublicDocItem } from './public-list';
 import { ViewerScope } from '../rbac/viewer-scope';
+import { UsingDeptRef } from '../rbac/viewer-scope';
+
+/** 便利建構：同一公司（預設 AS）之使用部門參照（B 階段多公司；跨公司案例見 viewer-scope.spec.ts）。 */
+function depts(codes: string[], companyCode = 'AS'): UsingDeptRef[] {
+  return codes.map((orgCode) => ({ companyCode, orgCode }));
+}
+
 
 const TODAY = new Date('2026-07-23T00:00:00Z');
 
@@ -13,12 +20,13 @@ const TODAY = new Date('2026-07-23T00:00:00Z');
  * 由「無」改為必要參數 `viewer: ViewerScope`。既有案例之測試標的與業務子分類無關，
  * 以「其他」子分類包裝之不受限 viewer 呼叫，行為與遷移前相同（AC-23 回歸鎖定）。
  */
-const UNRESTRICTED_VIEWER: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00' };
+const UNRESTRICTED_VIEWER: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00', companyCode: 'AS' };
 
 function detail(over: Partial<PublicDocDetail> = {}): PublicDocDetail {
   return {
     id: 'doc-1',
     status: 'active',
+    companyCode: 'AS',
     documentNumber: 'ICSOP-SRC-101-1-01',
     documentName: '車輛分期進件作業',
     lifecycleId: 'lc1',
@@ -30,7 +38,7 @@ function detail(over: Partial<PublicDocDetail> = {}): PublicDocDetail {
     draftingSectionId: 'JAC00',
     primaryChiefId: '20053',
     secondaryChiefIds: ['20541', '20999'],
-    usingDeptIds: ['JA000', 'JB000'],
+    usingDepts: depts(['JA000', 'JB000']),
     edition: "26'01",
     announcedDate: '2026-01-01T00:00:00.000Z',
     contentSummary: '摘要',
@@ -60,8 +68,8 @@ function fakeNames(
   person: Record<string, string> = {},
 ): DetailNameResolver {
   return {
-    resolveOrgUnitName: (code) => Promise.resolve(org[code] ?? null),
-    resolvePersonNames: (empNos) => {
+    resolveOrgUnitName: (_companyCode, code) => Promise.resolve(org[code] ?? null),
+    resolvePersonNames: (_companyCode, empNos) => {
       const m = new Map<string, string>();
       for (const e of empNos) if (person[e]) m.set(e, person[e]);
       return Promise.resolve(m);
@@ -120,7 +128,7 @@ describe('PublicDocumentDetailService（G-PUB-020）', () => {
    */
   it('組織/人員未命中 → 名稱 fallback（制定三級/主要室長皆→null）', async () => {
     const svc = new PublicDocumentDetailService(
-      new FakeStore(detail({ usingDeptIds: ['ZZ000'], secondaryChiefIds: ['E-x'], primaryChiefId: 'E-y' })),
+      new FakeStore(detail({ usingDepts: depts(['ZZ000']), secondaryChiefIds: ['E-x'], primaryChiefId: 'E-y' })),
       fakeNames({}, {}),
       () => TODAY,
     );
@@ -141,7 +149,7 @@ describe('PublicDocumentDetailService（G-PUB-020）', () => {
       new FakeStore(detail({ primaryChiefId: '20053', secondaryChiefIds: ['20541', '20999'] })),
       {
         resolveOrgUnitName: () => Promise.resolve(null),
-        resolvePersonNames: (empNos) => {
+        resolvePersonNames: (_companyCode: string, empNos: string[]) => {
           seen.push([...empNos]);
           return Promise.resolve(new Map());
         },
@@ -182,16 +190,16 @@ describe('PublicDocumentDetailService（G-PUB-020）', () => {
  * 權威：F041 spec §D；架構 §3.7 決策三(b)（插入點早於名稱解析，AC-20「未執行任何名稱解析」由此保證）。
  */
 describe('F041 AC-20～AC-24：業務子分類詳情直連可見性檢查', () => {
-  const bizViewer: ViewerScope = { roleCode: 'User', userSubtype: 'business', orgCode: 'JAC00' };
+  const bizViewer: ViewerScope = { roleCode: 'User', userSubtype: 'business', orgCode: 'JAC00', companyCode: 'AS' };
 
   function spyNames(): { resolver: DetailNameResolver; calls: { org: number; person: number } } {
     const calls = { org: 0, person: 0 };
     const resolver: DetailNameResolver = {
-      resolveOrgUnitName: (code) => {
+      resolveOrgUnitName: (_companyCode: string, code: string) => {
         calls.org += 1;
         return Promise.resolve(code);
       },
-      resolvePersonNames: (empNos) => {
+      resolvePersonNames: (_companyCode: string, empNos: string[]) => {
         calls.person += 1;
         return Promise.resolve(new Map(empNos.map((e) => [e, e])));
       },
@@ -202,7 +210,7 @@ describe('F041 AC-20～AC-24：業務子分類詳情直連可見性檢查', () =
   it('AC-20 使用部門不相符（JAD00）→ 拒絕（不回傳任何文件欄位——拒絕即不產出可解析之 DTO）、未呼叫任何名稱解析', async () => {
     const spy = spyNames();
     const svc = new PublicDocumentDetailService(
-      new FakeStore(detail({ usingDeptIds: ['JAD00'] })),
+      new FakeStore(detail({ usingDepts: depts(['JAD00']) })),
       spy.resolver,
       () => TODAY,
     );
@@ -213,7 +221,7 @@ describe('F041 AC-20～AC-24：業務子分類詳情直連可見性檢查', () =
 
   it('AC-21 拒絕之錯誤訊息與「文件確實不存在」逐字相同（404 DOCUMENT_NOT_FOUND，不得回 403）', async () => {
     const svcMismatch = new PublicDocumentDetailService(
-      new FakeStore(detail({ usingDeptIds: ['JAD00'] })),
+      new FakeStore(detail({ usingDepts: depts(['JAD00']) })),
       fakeNames(),
       () => TODAY,
     );
@@ -236,7 +244,7 @@ describe('F041 AC-20～AC-24：業務子分類詳情直連可見性檢查', () =
   });
 
   it('AC-22 業務子分類 viewer 存取相符文件（JA000 祖先）→ 回傳完整 DTO，與「其他」子分類逐欄相同', async () => {
-    const store = new FakeStore(detail({ usingDeptIds: ['JA000'] }));
+    const store = new FakeStore(detail({ usingDepts: depts(['JA000']) }));
     const names = fakeNames({ JA000: '營運管理部' });
     const svcBiz = new PublicDocumentDetailService(store, names, () => TODAY);
     const svcOther = new PublicDocumentDetailService(store, names, () => TODAY);
@@ -247,11 +255,11 @@ describe('F041 AC-20～AC-24：業務子分類詳情直連可見性檢查', () =
   });
 
   it.each<[string, ViewerScope]>([
-    ['其他子分類', { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00' }],
-    ['主管（非 User 角色，即使 userSubtype=business）', { roleCode: 'Supervisor', userSubtype: 'business', orgCode: 'JAC00' }],
+    ['其他子分類', { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00', companyCode: 'AS' }],
+    ['主管（非 User 角色，即使 userSubtype=business）', { roleCode: 'Supervisor', userSubtype: 'business', orgCode: 'JAC00', companyCode: 'AS' }],
   ])('AC-23（回歸對照組）%s → 對不相符文件（JAD00）仍正常回傳完整 DTO', async (_label, viewer) => {
     const svc = new PublicDocumentDetailService(
-      new FakeStore(detail({ usingDeptIds: ['JAD00'] })),
+      new FakeStore(detail({ usingDepts: depts(['JAD00']) })),
       fakeNames(),
       () => TODAY,
     );
@@ -261,7 +269,7 @@ describe('F041 AC-20～AC-24：業務子分類詳情直連可見性檢查', () =
 
   it('AC-24（INV-5：AND）使用部門相符但顯示狀態為「進度中」→ 仍 404 DOCUMENT_NOT_FOUND（基底條件不因相符而放寬）', async () => {
     const svc = new PublicDocumentDetailService(
-      new FakeStore(detail({ usingDeptIds: ['JA000'], announcedDate: '2026-12-31T00:00:00.000Z' })),
+      new FakeStore(detail({ usingDepts: depts(['JA000']), announcedDate: '2026-12-31T00:00:00.000Z' })),
       fakeNames(),
       () => TODAY,
     );

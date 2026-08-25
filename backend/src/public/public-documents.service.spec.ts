@@ -2,11 +2,18 @@ import { PublicDocumentsService, OrgNameResolver } from './public-documents.serv
 import { PublicDocDetail, PublicDocumentStore } from './public-documents.store';
 import { PublicDocItem } from './public-list';
 import { ViewerScope } from '../rbac/viewer-scope';
+import { UsingDeptRef } from '../rbac/viewer-scope';
+
+/** 便利建構：同一公司（預設 AS）之使用部門參照（B 階段多公司；跨公司案例見 viewer-scope.spec.ts）。 */
+function depts(codes: string[], companyCode = 'AS'): UsingDeptRef[] {
+  return codes.map((orgCode) => ({ companyCode, orgCode }));
+}
+
 
 /** F041 簽章遷移 shim（架構 §3.7 決策一）：list() 第一參數由 userOrgCode 字串改為 ViewerScope。
  * 既有案例與業務子分類無關，一律以「其他」子分類包裝（不受限，行為與遷移前相同）。 */
 function viewerOf(orgCode: string | null): ViewerScope {
-  return { roleCode: 'User', userSubtype: 'other', orgCode };
+  return { roleCode: 'User', userSubtype: 'other', orgCode, companyCode: 'AS' };
 }
 
 class FakeStore implements PublicDocumentStore {
@@ -47,7 +54,8 @@ const ITEM_DEFAULTS: PublicDocItem = {
     documentName: '文件',
     lifecycleId: 'lc1',
     lifecycleName: null,
-    usingDeptIds: [],
+    usingDepts: depts([]),
+    companyCode: 'AS',
     draftingDeptId: null,
     draftingCompanyId: null,
     draftingSectionId: null,
@@ -87,8 +95,8 @@ describe('PublicDocumentsService（F019）', () => {
 
   it('TS-F019-001 使用者部門相符 → pinned 旗標、置頂在前', async () => {
     const store = new FakeStore([
-      item({ id: 'D1', usingDeptIds: ['JAC00'], documentNumber: 'A001' }),
-      item({ id: 'D2', usingDeptIds: ['ZZ000'], documentNumber: 'A009' }),
+      item({ id: 'D1', usingDepts: depts(['JAC00']), documentNumber: 'A001' }),
+      item({ id: 'D2', usingDepts: depts(['ZZ000']), documentNumber: 'A009' }),
     ]);
     const svc = new PublicDocumentsService(store, fakeResolver(), clock);
     const page = await svc.list(viewerOf('JAC00'), {}, 1, 50);
@@ -105,7 +113,7 @@ describe('PublicDocumentsService（F019）', () => {
    */
   it('TS-F019-030 組織名稱解析：命中→名稱、未命中→fallback（不顯示 undefined/null）', async () => {
     const store = new FakeStore([
-      item({ id: 'd', draftingDeptId: 'JA000', draftingSectionId: 'ZZ999', usingDeptIds: ['JAC00'] }),
+      item({ id: 'd', draftingDeptId: 'JA000', draftingSectionId: 'ZZ999', usingDepts: depts(['JAC00']) }),
     ]);
     const svc = new PublicDocumentsService(
       store,
@@ -132,7 +140,7 @@ describe('PublicDocumentsService（F019）', () => {
 
   it('TS-F019-025 分頁中繼：105 筆、每頁 50 → 第 3 頁 5 筆、hasNext=false', async () => {
     const items = Array.from({ length: 105 }, (_, i) =>
-      item({ id: `d${i}`, documentNumber: `N-${String(i).padStart(3, '0')}`, usingDeptIds: ['ZZ000'] }),
+      item({ id: `d${i}`, documentNumber: `N-${String(i).padStart(3, '0')}`, usingDepts: depts(['ZZ000']) }),
     );
     const svc = new PublicDocumentsService(new FakeStore(items), fakeResolver(), clock);
     const p3 = await svc.list(viewerOf(null), {}, 3, 50);
@@ -146,11 +154,11 @@ describe('PublicDocumentsService（F019）', () => {
 describe('PublicDocumentsService（F041 AC-14 viewer pass-through）', () => {
   it('業務子分類 viewer → 服務層輸出已排除不相符文件（非僅純函式層）', async () => {
     const store = new FakeStore([
-      item({ id: 'match', usingDeptIds: ['JA000'] }),
-      item({ id: 'no-match', usingDeptIds: ['JAD00'] }),
+      item({ id: 'match', usingDepts: depts(['JA000']) }),
+      item({ id: 'no-match', usingDepts: depts(['JAD00']) }),
     ]);
     const svc = new PublicDocumentsService(store, fakeResolver(), clock);
-    const page = await svc.list({ roleCode: 'User', userSubtype: 'business', orgCode: 'JAC00' }, {}, 1, 50);
+    const page = await svc.list({ roleCode: 'User', userSubtype: 'business', orgCode: 'JAC00', companyCode: 'AS' }, {}, 1, 50);
     expect(page.items.map((d) => d.id)).toEqual(['match']);
     expect(page.total).toBe(1);
   });

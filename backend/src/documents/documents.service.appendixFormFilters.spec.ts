@@ -26,7 +26,7 @@ class FakeStore implements Partial<DocumentStore> {
   seedDoc(over: Partial<DocumentListItem> & { appendixIds?: string[]; formIds?: string[] }): DocumentListItem {
     const { appendixIds, formIds, ...rest } = over;
     const d: DocumentListItem = {
-      id: `doc-${this.seq++}`, status: 'active', documentNumber: 'N', documentName: '書名',
+      id: `doc-${this.seq++}`, companyCode: 'AS', status: 'active', documentNumber: 'N', documentName: '書名',
       lifecycleId: 'lc1', lifecycleName: null, nodeId: null,
       draftingCompanyId: null, draftingDeptId: null, draftingSectionId: null,
       draftingCompanyName: null, draftingDeptName: null, draftingSectionName: null,

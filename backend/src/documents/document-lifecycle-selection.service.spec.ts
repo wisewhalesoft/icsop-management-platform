@@ -59,6 +59,7 @@ class FakeStore implements DocumentStore {
   seedDoc(over: Partial<DocumentView>): DocumentView {
     const d: DocumentView = {
       id: `doc-${this.seq++}`,
+      companyCode: 'AS',
       nodeId: null,
       lifecycleId: 'lc-consumer',
       status: 'active',
@@ -82,6 +83,7 @@ class FakeStore implements DocumentStore {
     this.created.push(input);
     const d: DocumentView = {
       id: `doc-${this.seq++}`,
+      companyCode: 'AS',
       nodeId: null,
       ...input,
       secondaryChiefIds: input.secondaryChiefIds ?? [],

@@ -65,10 +65,15 @@ class FakeLinkStore implements DocumentLinkStore {
 class FakeNameResolver {
   orgNames = new Map<string, string>();
   personNames = new Map<string, string>();
-  resolveOrgUnitName(code: string): Promise<string | null> {
+  // 🔴 B 階段（多公司）：兩方法皆加 companyCode 首參（見 NameResolutionService）。
+  // 替身之資料集屬單一公司，故僅需正確接參數順序；跨公司隔離另由 name-resolution.service.spec 驗證。
+  resolveOrgUnitName(_companyCode: string, code: string): Promise<string | null> {
     return Promise.resolve(this.orgNames.get(code) ?? null);
   }
-  resolvePersonNames(empNos: string[]): Promise<Map<string, string>> {
+  resolvePersonNames(
+    _companyCode: string,
+    empNos: string[],
+  ): Promise<Map<string, string>> {
     const out = new Map<string, string>();
     for (const e of empNos) {
       const n = this.personNames.get(e);
@@ -147,6 +152,7 @@ class FakeStore implements DocumentStore {
   seedDoc(over: Partial<DocumentView>): DocumentView {
     const d: DocumentView = {
       id: `doc-${this.seq++}`,
+      companyCode: 'AS',
       nodeId: null,
       lifecycleId: 'lc1',
       status: 'active',
@@ -168,6 +174,7 @@ class FakeStore implements DocumentStore {
     this.created.push(input);
     const d: DocumentView = {
       id: `doc-${this.seq++}`,
+      companyCode: 'AS',
       nodeId: null,
       ...input,
       secondaryChiefIds: input.secondaryChiefIds ?? [],
@@ -188,7 +195,7 @@ class FakeStore implements DocumentStore {
   }
   list(f: DocumentListFilters): Promise<DocumentListPage> {
     const rows: DocumentListItem[] = this.docs.map((d) => ({
-      id: d.id, status: d.status, documentNumber: d.documentNumber, documentName: d.documentName,
+      id: d.id, companyCode: d.companyCode, status: d.status, documentNumber: d.documentNumber, documentName: d.documentName,
       lifecycleId: d.lifecycleId, lifecycleName: null, nodeId: d.nodeId,
       draftingCompanyId: d.draftingCompanyId ?? null, draftingDeptId: d.draftingDeptId ?? null,
       draftingSectionId: d.draftingSectionId ?? null,
@@ -617,6 +624,7 @@ describe('DocumentsService.update（F011 編輯＋版本對照＋F013 編輯側�
     const d = store.seedDoc({ documentName: '舊名' });
     const res = await svc.update('ICSOPAdmin', d.id, {
       id: 'attacker-supplied',
+      companyCode: 'AS',
       documentName: '新名',
     });
     expect(res.document.id).toBe(d.id);

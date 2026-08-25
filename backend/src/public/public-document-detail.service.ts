@@ -11,10 +11,20 @@ import {
 import { ViewerScope, isDocVisibleToViewer } from '../rbac/viewer-scope';
 import { formatOfFileName, supportsWatermark } from './watermark';
 
-/** 詳情名稱解析器（結構相容 NameResolutionService.resolveOrgUnitName / resolvePersonNames）。 */
+/**
+ * 詳情名稱解析器（結構相容 NameResolutionService.resolveOrgUnitName / resolvePersonNames）。
+ * 🔴 B 階段（多公司）：兩方法皆加 `companyCode` 必要參數，與 `NameResolutionService` 同步——
+ * 本介面刻意維持「結構相容」，故上游簽章改變時此處必須跟著改，否則注入時型別不符。
+ */
 export interface DetailNameResolver {
-  resolveOrgUnitName(orgCode: string): Promise<string | null>;
-  resolvePersonNames(employeeNos: string[]): Promise<Map<string, string>>;
+  resolveOrgUnitName(
+    companyCode: string,
+    orgCode: string,
+  ): Promise<string | null>;
+  resolvePersonNames(
+    companyCode: string,
+    employeeNos: string[],
+  ): Promise<Map<string, string>>;
 }
 export const DETAIL_NAME_RESOLVER = Symbol('DETAIL_NAME_RESOLVER');
 
@@ -94,7 +104,7 @@ export class PublicDocumentDetailService {
 
     // F041 AC-20～AC-24：業務子分類之使用部門限縮（AND 疊加於既有基底條件之上，INV-5）。
     // 插入點刻意早於下方任何名稱解析——AC-20「未呼叫任何名稱解析」由位置本身保證。
-    if (!isDocVisibleToViewer(raw.usingDeptIds, viewer)) throw this.rejectDeptRestricted();
+    if (!isDocVisibleToViewer(raw.usingDepts, viewer)) throw this.rejectDeptRestricted();
 
     // 組織名稱（僅制定三級；去重、單次批次解析）。未命中 → null。
     // AC-D12：使用部門已自對外 DTO 移除 ⇒ 不再為其解析名稱。
@@ -103,7 +113,9 @@ export class PublicDocumentDetailService {
       if (c) orgCodes.add(c);
     }
     const orgNames = new Map<string, string | null>();
-    for (const c of orgCodes) orgNames.set(c, await this.names.resolveOrgUnitName(c));
+    // 🔴 B 階段（多公司）：以文件自身之 companyCode 解析部門名稱，不得再以裸 orgCode 查。
+    for (const c of orgCodes)
+      orgNames.set(c, await this.names.resolveOrgUnitName(raw.companyCode, c));
     const orgName = (code: string | null): string | null =>
       code ? (orgNames.get(code) ?? null) : null;
 
@@ -115,7 +127,7 @@ export class PublicDocumentDetailService {
      * 仍用批次 API：單筆改 `resolvePersonName` 會多一個協作點形狀，無實益。
      */
     const personNames = raw.primaryChiefId
-      ? await this.names.resolvePersonNames([raw.primaryChiefId])
+      ? await this.names.resolvePersonNames(raw.companyCode, [raw.primaryChiefId])
       : new Map<string, string>();
 
     return {

@@ -15,10 +15,17 @@ import { PublicDocumentDetailService } from './public-document-detail.service';
 import { PublicDocDetail, PublicDocumentStore } from './public-documents.store';
 import { PublicDocItem } from './public-list';
 import { ViewerScope } from '../rbac/viewer-scope';
+import { UsingDeptRef } from '../rbac/viewer-scope';
+
+/** 便利建構：同一公司（預設 AS）之使用部門參照（B 階段多公司；跨公司案例見 viewer-scope.spec.ts）。 */
+function depts(codes: string[], companyCode = 'AS'): UsingDeptRef[] {
+  return codes.map((orgCode) => ({ companyCode, orgCode }));
+}
+
 
 const TODAY = new Date('2026-07-17T00:00:00Z');
 const clock = (): Date => TODAY;
-const VIEWER: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00' };
+const VIEWER: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00', companyCode: 'AS' };
 
 class FakeStore implements PublicDocumentStore {
   constructor(private readonly items: PublicDocItem[]) {}
@@ -64,7 +71,8 @@ const ITEM_DEFAULTS: PublicDocItem = {
   documentName: '文件',
   lifecycleId: 'lc1',
   lifecycleName: null,
-  usingDeptIds: ['JAC00'],
+  usingDepts: depts(['JAC00']),
+  companyCode: 'AS',
   draftingDeptId: 'JA000',
   draftingCompanyId: '00000',
   draftingSectionId: 'JAC00',
@@ -84,6 +92,7 @@ const NAMES = { '00000': '和潤企業股份有限公司', JA000: '營運管理�
 /** 詳情側之最小 fixture（僅供 `TS-F019-D12-005` 之跨 DTO 一致性比對）。 */
 const DETAIL_BASE: PublicDocDetail = {
   id: 'doc-1',
+  companyCode: 'AS',
   status: 'active',
   documentNumber: 'N-1',
   documentName: '文件',
@@ -96,7 +105,7 @@ const DETAIL_BASE: PublicDocDetail = {
   draftingSectionId: 'JAC00',
   primaryChiefId: null,
   secondaryChiefIds: [],
-  usingDeptIds: ['JAC00'],
+  usingDepts: depts(['JAC00']),
   edition: "26'01",
   announcedDate: '2026-01-01T00:00:00.000Z',
   contentSummary: '摘要',
@@ -126,7 +135,7 @@ describe('F019 AC-D12：前台清單 DTO 移除使用部門兩欄', () => {
 
   it('TS-F019-D12-002 內部型別 PublicDocItem.usingDeptIds 保留（置頂判定仍以其為依據）', async () => {
     const svc = new PublicDocumentsService(
-      new FakeStore([item({ id: 'anc', usingDeptIds: ['JA000'] })]),
+      new FakeStore([item({ id: 'anc', usingDepts: depts(['JA000']) })]),
       fakeResolver(NAMES),
       clock,
     );
