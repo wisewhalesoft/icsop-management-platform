@@ -60,8 +60,12 @@ export interface MatrixDisplayRow {
 
 /** 角色×功能顯示矩陣（順序逐列對齊 FUNCTION_MATRIX；anti-drift 測試據此比對）。 */
 export const FUNC_DISPLAY: MatrixDisplayRow[] = [
-  { label: '帳號管理', cells: ['CRUD', '唯讀', '無', '無', '無'] },
-  { label: '角色指派', note: '經帳號管理 modal 執行、非獨立側選單頁', cells: ['CRUD', '無', '無', '無', '無'] },
+  { label: '帳號管理', cells: ['CRUD', 'CRUD', '無', '無', '無'] },
+  {
+    label: '角色指派',
+    note: '經帳號管理 modal 執行、非獨立側選單頁；ICSOP管理員不得指派系統管理員／ICSOP管理員',
+    cells: ['CRUD', '受限CRUD', '無', '無', '無'],
+  },
   { label: '循環管理（DAG）', cells: ['唯讀', 'CRUD', '唯讀', '無', '無'] },
   { label: 'ICSOP 文件管理', cells: ['唯讀', 'CRUD', '唯讀', '唯讀', '無'] },
   { label: '文件使用表單管理', cells: ['唯讀', 'CRUD', '無', '無', '無'] },

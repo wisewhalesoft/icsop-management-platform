@@ -75,13 +75,20 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
     expect(screen.getAllByRole('button', { name: /指派角色/ }).length).toBeGreaterThan(0);
   });
 
-  it('ICSOPAdmin 唯讀：無建立按鈕、無列操作、顯示唯讀說明', async () => {
+  // 🔴 2026-08-25 角色自動化 delta（Q4.1／Q4.1b）。原斷言逐字保留供追溯：
+  //   OLD> it('ICSOPAdmin 唯讀：無建立按鈕、無列操作、顯示唯讀說明')
+  //   OLD> expect(queryByRole('button', {name:/建立帳號/})).not.toBeInTheDocument();
+  //   OLD> expect(getByText(/唯讀模式/)).toBeInTheDocument();
+  // ICSOPAdmin 對「帳號管理」由唯讀升為 CRUD、對「角色指派」為受限CRUD ⇒ 兩個按鈕皆應出現、
+  // 唯讀橫幅不再出現。「不得指派 SysAdmin／ICSOPAdmin」之限制由**後端**強制
+  // （`ROLE_ASSIGN_SCOPE_FORBIDDEN`），前端不以隱藏按鈕表達——比照 F003 AC-P11
+  // 「前端 disabled 僅為輔助、後端為權威」之既有慣例。
+  it('ICSOPAdmin 具 CRUD：有建立按鈕、有列操作、不顯示唯讀橫幅', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /建立帳號/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /指派角色/ })).not.toBeInTheDocument();
-    expect(screen.getByText(/唯讀模式/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /建立帳號/ })).toBeInTheDocument();
+    expect(screen.queryByText(/唯讀模式/)).not.toBeInTheDocument();
   });
 
   it('建立帳號：填表送出 → 呼叫 createAccount 並重新載入', async () => {
@@ -246,14 +253,19 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
     expect(btn.querySelector('.lucide-user-plus')).not.toBeNull();
   });
 
-  it('G-ADM-004 唯讀橫幅 eye 圖示 + prototype 逐字文案', async () => {
-    mockAuth('ICSOPAdmin');
-    const { container } = renderPage();
-    await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
-    expect(
-      screen.getByText('唯讀模式 · ICSOP 管理員對帳號管理為唯讀，可查詢但不可建立/停用/指派角色。'),
-    ).toBeInTheDocument();
-    expect(container.querySelector('.lucide-eye')).not.toBeNull();
+  // 🔴 2026-08-25 角色自動化 delta：帳號管理列已無「只讀不寫」之角色
+  // （CRUD/CRUD/無/無/無），故唯讀橫幅於現行矩陣下**不可達**。
+  // 保留橫幅機制（由 canPerform 推導、矩陣若再變即自動復活），但文案改為角色中性
+  // ——原文案指名「ICSOP 管理員」，於本 delta 後已為錯誤陳述。
+  // 本測試改為釘住「不可達」這件事本身，避免日後有人誤以為它壞了而把它接回去。
+  it('G-ADM-004 唯讀橫幅於現行矩陣下不可達（五角色皆非唯讀）', async () => {
+    for (const role of ['SysAdmin', 'ICSOPAdmin'] as const) {
+      mockAuth(role);
+      const { unmount } = renderPage();
+      await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
+      expect(screen.queryByText(/唯讀模式/)).not.toBeInTheDocument();
+      unmount();
+    }
   });
 
   it('G-ADM-005 無權限卡 lock 圖示 + per-role 訊息', () => {

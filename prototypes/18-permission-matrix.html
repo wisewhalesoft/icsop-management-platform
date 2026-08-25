@@ -156,7 +156,7 @@
 <script>
   /* ===== admin shell sidebar ===== */
   const MENU=[
-    {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'CRUD'}},
     {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
     {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
     {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
@@ -192,8 +192,8 @@
   /* ===== matrices ===== */
   // order: SysAdmin / ICSOPAdmin / Supervisor / DeptContact / User
   const FUNC_ROWS=[
-    ['帳號管理',['CRUD','唯讀','無','無','無']],
-    ['角色指派',['CRUD','無','無','無','無'],'經帳號管理 modal 執行、非獨立側選單頁'],
+    ['帳號管理',['CRUD','CRUD','無','無','無']],
+    ['角色指派',['CRUD','受限CRUD','無','無','無'],'經帳號管理 modal 執行、非獨立側選單頁；ICSOP管理員不得指派系統管理員／ICSOP管理員'],
     ['循環管理（DAG）',['唯讀','CRUD','唯讀','無','無']],
     ['ICSOP 文件管理',['唯讀','CRUD','唯讀','唯讀','無']],
     ['文件使用表單管理',['唯讀','CRUD','無','無','無']],
