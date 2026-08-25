@@ -34,20 +34,22 @@ const rawDept = (over: Partial<RawDept> & Pick<RawDept, 'CODE'>): RawDept => ({
 });
 
 const rawAcc = (
-  over: Partial<RawAccount> & Pick<RawAccount, 'USERID'>,
+  over: Partial<RawAccount> & Pick<RawAccount, 'NO'>,
 ): RawAccount => ({
   COMPID: 'AS',
-  EMPNO: `E-${over.USERID}`,
-  USERNM: `name-${over.USERID}`,
-  DEPTID: 'JAC00',
-  EMAILADDR: `${over.USERID}@hfcfinance.com.tw`,
-  EMPSTS: 'A',
-  RESIGNDT: '9999-12-31',
-  HIREDT: '2015-01-01',
-  DIRECTOR: 'E9999',
+  NAME_IN_CHINESE: `name-${over.NO}`,
+  DEPT_CODE: 'JAC00',
+  EMAIL: `${over.NO}@hfcfinance.com.tw`,
+  // 哨兵＝未離職（契約 §4）；離職案例改以「已過之 RESIGN_DATE」表達（§6）。
+  RESIGN_DATE: '9999-12-31',
+  REHIRE_DATE: '2015-01-01',
+  DIRECT_BOSS: 'E9999',
   MTDT: '2026-07-09T00:00:00Z',
   ...over,
 });
+
+/** 已離職：最後在職日早於各測試之基準時刻（一律遠早，避免與 now 之設定耦合）。 */
+const RESIGNED = '2020-01-01';
 
 /** 可注入之假上游。 */
 class FakeReader implements UpstreamOrgReader {
@@ -179,6 +181,7 @@ class FakeStore implements OrgSyncStore {
       .slice(0, limit)
       .map((r) => ({
         id: r.id,
+        compid: 'AS',
         triggerType: r.triggerType,
         status: (r.patch?.status ?? r.status) as SyncRunSummary['status'],
         startedAt: r.startedAt,
@@ -201,7 +204,9 @@ function seedActiveAccount(
 ): void {
   store.accounts.set(over.loginId, {
     companyCode: 'AS',
-    employeeNo: `E-${over.loginId}`,
+    // v2.0：employeeNo 與 loginId 同源於上游 `NO`（契約 §5.2）——兩者相異即為異動，
+    // 故「無異動」之種子必須讓兩者相等，否則每次同步都會判為 update。
+    employeeNo: over.loginId,
     name: `name-${over.loginId}`,
     email: `${over.loginId}@hfcfinance.com.tw`,
     orgCode: 'JAC00',
@@ -220,7 +225,7 @@ describe('OrgSyncService.run', () => {
     const reader = new FakeReader();
     reader.depts = [rawDept({ CODE: 'JA000' }), rawDept({ CODE: 'JAC00' })];
     reader.activeIds = ['peter'];
-    reader.changes = [rawAcc({ USERID: 'peter', MTDT: '2026-07-09T00:00:00Z' })];
+    reader.changes = [rawAcc({ NO: 'peter', MTDT: '2026-07-09T00:00:00Z' })];
     const store = new FakeStore();
 
     const res = await makeService(reader, store).run('scheduled');
@@ -245,7 +250,7 @@ describe('OrgSyncService.run', () => {
     const reader = new FakeReader();
     reader.depts = [rawDept({ CODE: 'JAC00' })];
     reader.activeIds = ['peter'];
-    reader.changes = [rawAcc({ USERID: 'peter', USERNM: '新名字' })];
+    reader.changes = [rawAcc({ NO: 'peter', NAME_IN_CHINESE: '新名字' })];
     const store = new FakeStore();
     seedActiveAccount(store, { loginId: 'peter', name: 'name-peter' });
 
@@ -264,7 +269,7 @@ describe('OrgSyncService.run', () => {
     for (let i = 0; i < 30; i++) seedActiveAccount(store, { loginId: `keep${i}` });
     // 來源在職集合＝其餘 30 人（peter 已離職，故不在在職集合）。
     reader.activeIds = Array.from({ length: 30 }, (_, i) => `keep${i}`);
-    reader.changes = [rawAcc({ USERID: 'peter', EMPSTS: 'B' })];
+    reader.changes = [rawAcc({ NO: 'peter', RESIGN_DATE: RESIGNED })];
 
     const res = await makeService(reader, store).run('scheduled');
     expect(res.stats.accountsDisabled).toBe(1);
@@ -279,7 +284,7 @@ describe('OrgSyncService.run', () => {
     const reader = new FakeReader();
     reader.depts = [rawDept({ CODE: 'JAC00', DESC_CHI: 'dept-JAC00' })];
     reader.activeIds = ['peter'];
-    reader.changes = [rawAcc({ USERID: 'peter' })];
+    reader.changes = [rawAcc({ NO: 'peter' })];
     const store = new FakeStore();
     // 先種一份與來源完全一致之組織與帳號
     store.orgUnits.set('JAC00', {
@@ -314,7 +319,7 @@ describe('OrgSyncService.run', () => {
       rawDept({ CODE: 'JAC00', DESC_CHI: 'dept-JAC00', DESC_FULL: '營運管理部審查室' }),
     ];
     reader.activeIds = ['peter'];
-    reader.changes = [rawAcc({ USERID: 'peter' })];
+    reader.changes = [rawAcc({ NO: 'peter' })];
     const store = new FakeStore();
     // 既有列為加欄前建立（descFull=null），其餘欄位皆與來源相同 → 若 classifyOrgUnit 未納 descFull
     // 比對即誤判 noop、永不回填。
@@ -346,7 +351,7 @@ describe('OrgSyncService.run', () => {
     // 來源只回報 940 筆在職（60 筆消失＝6%）
     reader.activeIds = Array.from({ length: 940 }, (_, i) => `u${i + 60}`);
     // 即使 changes 帶了離職，也不得執行（已中止）
-    reader.changes = [rawAcc({ USERID: 'u0', EMPSTS: 'B' })];
+    reader.changes = [rawAcc({ NO: 'u0', RESIGN_DATE: RESIGNED })];
 
     const res = await makeService(reader, store).run('manual', 'admin1');
     expect(res.status).toBe('failed');
@@ -364,7 +369,7 @@ describe('OrgSyncService.run', () => {
     for (let i = 0; i < 1000; i++) seedActiveAccount(store, { loginId: `u${i}` });
     reader.activeIds = Array.from({ length: 980 }, (_, i) => `u${i + 20}`); // u0..u19 消失＝2%
     // changes 含一筆真正離職（EMPSTS=B），且該人（u5）確實已從在職集合消失（一致）。
-    reader.changes = [rawAcc({ USERID: 'u5', EMPSTS: 'B' })];
+    reader.changes = [rawAcc({ NO: 'u5', RESIGN_DATE: RESIGNED })];
 
     const res = await makeService(reader, store).run('scheduled');
     expect(res.status).toBe('success');
@@ -395,8 +400,8 @@ describe('OrgSyncService.run', () => {
     ];
     reader.activeIds = ['peter'];
     reader.changes = [
-      rawAcc({ USERID: 'peter' }),
-      rawAcc({ USERID: '' }), // 空 USERID（穩定鍵不可缺）→ 髒（壞日期已改為收斂 null，不再成髒）
+      rawAcc({ NO: 'peter' }),
+      rawAcc({ NO: '' }), // 空 USERID（穩定鍵不可缺）→ 髒（壞日期已改為收斂 null，不再成髒）
     ];
     const store = new FakeStore();
 
@@ -414,7 +419,7 @@ describe('OrgSyncService.run', () => {
     reader.depts = [rawDept({ CODE: 'JAC00' })];
     reader.activeIds = ['peter'];
     reader.changes = [
-      rawAcc({ USERID: 'peter', MTDT: 'not-a-date', RESIGNDT: '9999-12-31' }),
+      rawAcc({ NO: 'peter', MTDT: 'not-a-date', RESIGN_DATE: '9999-12-31' }),
     ];
     const store = new FakeStore();
 
@@ -429,7 +434,7 @@ describe('OrgSyncService.run', () => {
     const reader = new FakeReader();
     reader.depts = [rawDept({ CODE: 'JAC00' })];
     reader.activeIds = ['orphanUser'];
-    reader.changes = [rawAcc({ USERID: 'orphanUser', DEPTID: 'ZZ999' })]; // ZZ999 非有效部門
+    reader.changes = [rawAcc({ NO: 'orphanUser', DEPT_CODE: 'ZZ999' })]; // ZZ999 非有效部門
     const store = new FakeStore();
 
     const res = await makeService(reader, store).run('scheduled');
@@ -475,7 +480,7 @@ describe('OrgSyncService.run', () => {
     const reader = new FakeReader();
     reader.depts = [rawDept({ CODE: 'JAC00' })];
     reader.activeIds = Array.from({ length: N }, (_, i) => `u${i}`);
-    reader.changes = Array.from({ length: N }, (_, i) => rawAcc({ USERID: `u${i}` }));
+    reader.changes = Array.from({ length: N }, (_, i) => rawAcc({ NO: `u${i}` }));
     const store = new FakeStore(); // 空 → 全部為新增
 
     const res = await makeService(reader, store).run('scheduled');
@@ -492,7 +497,7 @@ describe('OrgSyncService.run', () => {
     const reader = new FakeReader();
     reader.depts = [rawDept({ CODE: 'JAC00' })];
     reader.activeIds = ['peter'];
-    reader.changes = [rawAcc({ USERID: 'peter', USERNM: '改名觸發更新' })];
+    reader.changes = [rawAcc({ NO: 'peter', NAME_IN_CHINESE: '改名觸發更新' })];
     const store = new FakeStore();
     seedActiveAccount(store, { loginId: 'peter', name: 'name-peter' });
     store.failApplySync = true;
@@ -516,6 +521,7 @@ describe('OrgSyncService.recentRuns', () => {
   const SAMPLE: SyncRunSummary[] = [
     {
       id: 'run-1',
+      compid: 'AS',
       triggerType: 'scheduled',
       status: 'success',
       startedAt: new Date('2026-07-21T02:00:00Z'),
@@ -674,7 +680,7 @@ describe('職稱對照主檔（planJobTitles）', () => {
   it('🔴 對照主檔取回失敗 → 同步仍 success（非阻斷），僅記警告', async () => {
     const { reader, store, svc } = setup();
     reader.failTitles = true;
-    reader.changes = [rawAcc({ USERID: 'AS0001' })];
+    reader.changes = [rawAcc({ NO: 'AS0001' })];
     const res = await svc.run('manual');
     expect(res.status).toBe('success');
     expect(res.warnings.some((w) => w.includes('職稱對照主檔同步略過'))).toBe(true);
@@ -686,7 +692,7 @@ describe('職稱對照主檔（planJobTitles）', () => {
     const reader = new FakeReader();
     const store = new FakeStore();
     reader.depts = [rawDept({ CODE: 'JAC00' })];
-    reader.changes = [rawAcc({ USERID: 'AS0001' })];
+    reader.changes = [rawAcc({ NO: 'AS0001' })];
     const res = await makeService(reader, store).run('manual');
     expect(res.status).toBe('success');
     expect(store.applied[0].jobTitleCreates).toEqual([]);
@@ -702,7 +708,7 @@ describe('職稱對照主檔（planJobTitles）', () => {
 
   it('帳號之 jobTitleCode 由 JOBTITLEID 帶入同步計畫', async () => {
     const { reader, store, svc } = setup();
-    reader.changes = [rawAcc({ USERID: 'AS0001', JOBTITLEID: 'J01' })];
+    reader.changes = [rawAcc({ NO: 'AS0001', TITLE_CODE: 'J01' })];
     await svc.run('manual');
     expect(store.applied[0].accountCreates[0].jobTitleCode).toBe('J01');
   });
@@ -738,7 +744,7 @@ describe('fullResync（忽略 MTDT 水位）', () => {
     const { reader, store, svc } = setup();
     seedActiveAccount(store, { loginId: 'AS0001' }); // 替身之 jobTitleCode 未設（undefined）
     reader.activeIds = ['AS0001'];
-    reader.changes = [rawAcc({ USERID: 'AS0001', JOBTITLEID: 'J01' })];
+    reader.changes = [rawAcc({ NO: 'AS0001', TITLE_CODE: 'J01' })];
     await svc.run('manual', 'cli', { fullResync: true });
     const updates = store.applied[0].accountUpdates;
     expect(updates).toHaveLength(1);
@@ -747,7 +753,7 @@ describe('fullResync（忽略 MTDT 水位）', () => {
 
   it('fullResync 不改變水位推進語意（仍以來源 MTDT 最大值推進）', async () => {
     const { reader, store, svc } = setup();
-    reader.changes = [rawAcc({ USERID: 'AS0001', MTDT: '2026-08-01T00:00:00Z' })];
+    reader.changes = [rawAcc({ NO: 'AS0001', MTDT: '2026-08-01T00:00:00Z' })];
     await svc.run('manual', 'cli', { fullResync: true });
     expect(store.watermark).toEqual(new Date('2026-08-01T00:00:00Z'));
   });

@@ -1,8 +1,9 @@
 /**
  * 異動分類（純邏輯，無 IO）——冪等核心。
  *
- * upstream-hr-source-contract.md §6（EMPSTS 權威）／US-010 AC2（無異動不寫）／AC4（三類異動）。
- * ⚠ 離職停用一律以 EMPSTS≠'A'（source.empActive=false）觸發；
+ * upstream-hr-source-contract.md §6（在職判定權威）／US-010 AC2（無異動不寫）／AC4（三類異動）。
+ * ⚠ 離職停用一律以 `source.empActive=false` 觸發；v2.0 該旗標由 `RESIGN_DATE` 與基準日比較
+ *   導出（契約 §6），v1.0 之 `EMPSTS≠'A'` 已停用。
  *   絕不以「來源消失」逕行判定為離職（US-010 AC4）——消失僅作為 disappeared 閾值之保護訊號，
  *   不在本分類函式內產生 disable。
  */
@@ -96,7 +97,7 @@ export function classifyAccount(
     return changed ? 'update' : 'noop';
   }
 
-  // EMPSTS ≠ 'A'（離職/非在職）
+  // 非在職（v2.0：RESIGN_DATE 早於基準日）
   if (local === null) return 'noop'; // 不建立離職帳號
   if (local.status === 'active') return 'disable';
   return 'noop'; // 已停用，不重複停用

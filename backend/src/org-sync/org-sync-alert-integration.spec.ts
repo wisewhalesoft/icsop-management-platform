@@ -29,19 +29,20 @@ const rawDept = (over: Partial<RawDept> & Pick<RawDept, 'CODE'>): RawDept => ({
   ...over,
 });
 
-const rawAcc = (over: Partial<RawAccount> & Pick<RawAccount, 'USERID'>): RawAccount => ({
+const rawAcc = (over: Partial<RawAccount> & Pick<RawAccount, 'NO'>): RawAccount => ({
   COMPID: 'AS',
-  EMPNO: `E-${over.USERID}`,
-  USERNM: `name-${over.USERID}`,
-  DEPTID: 'JAC00',
-  EMAILADDR: `${over.USERID}@hfcfinance.com.tw`,
-  EMPSTS: 'A',
-  RESIGNDT: '9999-12-31',
-  HIREDT: '2015-01-01',
-  DIRECTOR: 'E9999',
+  NAME_IN_CHINESE: `name-${over.NO}`,
+  DEPT_CODE: 'JAC00',
+  EMAIL: `${over.NO}@hfcfinance.com.tw`,
+  RESIGN_DATE: '9999-12-31',
+  REHIRE_DATE: '2015-01-01',
+  DIRECT_BOSS: 'E9999',
   MTDT: '2026-07-09T00:00:00Z',
   ...over,
 });
+
+/** 已離職：最後在職日遠早於各測試之基準時刻（契約 §6）。 */
+const RESIGNED = '2020-01-01';
 
 class FakeReader implements UpstreamOrgReader {
   depts: RawDept[] = [];
@@ -182,7 +183,7 @@ describe('OrgSyncService × F006 提示產生整合點', () => {
     // 帳號部門異動（update）。
     seedAcc(store, { loginId: 'u1', orgCode: 'JAB00' });
     reader.activeIds = ['u1'];
-    reader.changes = [rawAcc({ USERID: 'u1', DEPTID: 'JAC00' })];
+    reader.changes = [rawAcc({ NO: 'u1', DEPT_CODE: 'JAC00' })];
 
     await makeService(reader, store, alerts).run('manual');
 
@@ -303,9 +304,9 @@ describe('OrgSyncService × SYNC_RUN 帳號異動細分（D7 KPI 來源）', () 
     for (const id of fillers) seedAcc(store, { loginId: id });
     reader.activeIds = ['upd', 'new', ...fillers];
     reader.changes = [
-      rawAcc({ USERID: 'new' }),
-      rawAcc({ USERID: 'upd', DEPTID: 'JAC00' }),
-      rawAcc({ USERID: 'gone', EMPSTS: 'R' }),
+      rawAcc({ NO: 'new' }),
+      rawAcc({ NO: 'upd', DEPT_CODE: 'JAC00' }),
+      rawAcc({ NO: 'gone', RESIGN_DATE: RESIGNED }),
     ];
 
     const res = await makeService(reader, store).run('manual');

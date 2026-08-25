@@ -300,3 +300,79 @@ describe('TypeOrmOrgSyncStore.finishSyncRun — 帳號異動細分落地', () =>
     });
   });
 });
+
+/**
+ * B 階段（開放多公司）根因回歸測試：`hasRunningSyncRun`／`getAccountWatermark`／`createSyncRun`
+ * 必須 per-company，不得為全域查詢。修前之 `getAccountWatermark(_compid)` 曾以底線前綴宣告
+ * 卻從未使用該參數（全域查「最後一次成功同步」），會使新公司首次同步誤繼承他公司水位，
+ * 增量查詢誤判無異動（靜默資料遺失）；`hasRunningSyncRun()` 曾為全域互斥，會使 A 公司同步中
+ * 誤擋 B 公司獨立的觸發。
+ */
+describe('TypeOrmOrgSyncStore — per-company 範圍（B 階段回歸鎖）', () => {
+  function fakeSyncRunRepo(): {
+    ds: DataSource;
+    countByArgs: () => Record<string, unknown> | null;
+    findOneArgs: () => Record<string, unknown> | null;
+    inserted: () => Record<string, unknown> | null;
+  } {
+    let countByArgs: Record<string, unknown> | null = null;
+    let findOneArgs: Record<string, unknown> | null = null;
+    let inserted: Record<string, unknown> | null = null;
+    const repo = {
+      countBy: (where: Record<string, unknown>) => {
+        countByArgs = where;
+        return Promise.resolve(0);
+      },
+      findOne: (opts: { where: Record<string, unknown> }) => {
+        findOneArgs = opts.where;
+        return Promise.resolve(null);
+      },
+      insert: (row: Record<string, unknown>) => {
+        inserted = row;
+        return Promise.resolve();
+      },
+    };
+    const ds = {
+      isInitialized: true,
+      getRepository: () => repo,
+    } as unknown as DataSource;
+    return {
+      ds,
+      countByArgs: () => countByArgs,
+      findOneArgs: () => findOneArgs,
+      inserted: () => inserted,
+    };
+  }
+
+  it('hasRunningSyncRun(compid) 之查詢條件含該公司代碼（不得為全域）', async () => {
+    const { ds, countByArgs } = fakeSyncRunRepo();
+    await new TypeOrmOrgSyncStore(ds).hasRunningSyncRun('AD');
+    expect(countByArgs()).toMatchObject({ compid: 'AD', status: 'running' });
+  });
+
+  it('🔴 不同公司各自查詢：AS 忙碌不得使 AD 之 hasRunningSyncRun 查到 AS 之列', async () => {
+    const { ds, countByArgs } = fakeSyncRunRepo();
+    await new TypeOrmOrgSyncStore(ds).hasRunningSyncRun('AS');
+    expect(countByArgs()?.compid).toBe('AS');
+    const { ds: ds2, countByArgs: countByArgs2 } = fakeSyncRunRepo();
+    await new TypeOrmOrgSyncStore(ds2).hasRunningSyncRun('AD');
+    expect(countByArgs2()?.compid).toBe('AD');
+  });
+
+  it('getAccountWatermark(compid) 之查詢條件含該公司代碼', async () => {
+    const { ds, findOneArgs } = fakeSyncRunRepo();
+    await new TypeOrmOrgSyncStore(ds).getAccountWatermark('AJ');
+    expect(findOneArgs()).toMatchObject({ compid: 'AJ', status: 'success' });
+  });
+
+  it('createSyncRun 落地之列含 compid 欄位', async () => {
+    const { ds, inserted } = fakeSyncRunRepo();
+    await new TypeOrmOrgSyncStore(ds).createSyncRun({
+      compid: 'AE',
+      triggerType: 'manual',
+      triggeredBy: 'admin1',
+      startedAt: new Date('2026-08-24T02:00:00Z'),
+    });
+    expect(inserted()).toMatchObject({ compid: 'AE', triggerType: 'manual' });
+  });
+});

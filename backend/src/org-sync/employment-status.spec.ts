@@ -6,23 +6,48 @@ import {
 
 /**
  * 在職 / 部門有效判定（upstream-hr-source-contract.md §4 / §6）。
- *  - 在職權威欄位＝EMPSTS='A'（優於 RESIGNDT）
- *  - 部門有效 ⇔ CLOSE_DATE > now（哨兵 9999-12-31）
+ *  - v2.0 在職權威＝`RESIGN_DATE >= 基準日`（以日為單位；語意＝最後在職日）
+ *  - v1.0 之 `EMPSTS='A'` 已停用（來源 VW_HPMUSER 母體污染，契約 §3.7）
+ *  - 部門有效 ⇔ CLOSE_DATE > now（哨兵 9999-12-31，時間戳嚴格大於，語意不變）
  */
 
-describe('isEmploymentActive（EMPSTS=A）', () => {
-  it('EMPSTS=A → true', () => {
-    expect(isEmploymentActive('A')).toBe(true);
+describe('isEmploymentActive（RESIGN_DATE >= 基準日）', () => {
+  // 同步實務上於當日稍晚執行；刻意選非零時之基準，才驗得出「以日比較」而非比時間戳。
+  const now = new Date('2026-08-24T18:00:00Z');
+
+  it('哨兵已收斂為 null（未離職）→ 在職', () => {
+    expect(isEmploymentActive(null, now)).toBe(true);
+    expect(isEmploymentActive(undefined, now)).toBe(true);
   });
-  it('EMPSTS=B（離職）/ C / 其他 / 空 → false', () => {
-    expect(isEmploymentActive('B')).toBe(false);
-    expect(isEmploymentActive('C')).toBe(false);
-    expect(isEmploymentActive('')).toBe(false);
-    expect(isEmploymentActive(null)).toBe(false);
-    expect(isEmploymentActive(undefined)).toBe(false);
+
+  it('離職日在未來 → 在職', () => {
+    expect(isEmploymentActive(new Date('2026-12-31T00:00:00Z'), now)).toBe(true);
+    expect(isEmploymentActive(new Date('2026-08-25T00:00:00Z'), now)).toBe(true);
   });
-  it('大小寫敏感：小寫 a 不算在職（上游值域為大寫 A）', () => {
-    expect(isEmploymentActive('a')).toBe(false);
+
+  it('🔴 最後在職日＝當日 → 仍在職（當日整天，不因同步時刻而翻面）', () => {
+    // 迴歸鎖定：天真的 `resign >= now` 會在此回 false，使當天離職者整批被誤停用。
+    expect(isEmploymentActive(new Date('2026-08-24T00:00:00Z'), now)).toBe(true);
+  });
+
+  it('當日之判定不隨同步時刻改變（00:00 與 23:59 一致）', () => {
+    const resign = new Date('2026-08-24T00:00:00Z');
+    expect(isEmploymentActive(resign, new Date('2026-08-24T00:00:00Z'))).toBe(true);
+    expect(isEmploymentActive(resign, new Date('2026-08-24T23:59:59Z'))).toBe(true);
+  });
+
+  it('離職日已過（前一日）→ 非在職', () => {
+    expect(isEmploymentActive(new Date('2026-08-23T00:00:00Z'), now)).toBe(false);
+    expect(isEmploymentActive(new Date('2020-01-01T00:00:00Z'), now)).toBe(false);
+  });
+
+  it('接受可解析之日期字串', () => {
+    expect(isEmploymentActive('2026-08-24', now)).toBe(true);
+    expect(isEmploymentActive('2026-08-23', now)).toBe(false);
+  });
+
+  it('無法解析之值 → 拋 RangeError（不靜默視為在職）', () => {
+    expect(() => isEmploymentActive('not-a-date', now)).toThrow(RangeError);
   });
 });
 

@@ -14,7 +14,7 @@ import { ExistingOrgUnit, ExistingAccount } from '../org-sync/change-classificat
 /**
  * 提示種類（判別欄）。
  *  - DOCUMENT_FIELD／CLOSED_DEPT_PERSON：F006 既有兩類。
- *  - DATA_INCONSISTENCY（F005）：EMPSTS='A' 但 RESIGNDT 為過去日期之上游資料矛盾（不停用，僅告警）。
+ *  - DATA_INCONSISTENCY（F005）：在職中但離職日已過之落差（不停用，僅告警）。
  *  - ACCOUNT_DISAPPEARED（F005）：本地在職之單一帳號其來源列消失（低於整批中止閾值；不停用，僅告警）。
  */
 export type AlertKind =
@@ -102,7 +102,7 @@ export interface ActiveAccountRef {
   status: 'active' | 'disabled';
   /** 帳號穩定鍵（F005 兩類之去重鍵；不以 EMPNO 連坐）。 */
   loginId: string;
-  /** 上游 RESIGNDT 正規化後之值（哨兵/超範圍 → null，由 normalization 收斂）。 */
+  /** 上游 RESIGN_DATE 正規化後之值（哨兵/超範圍 → null，由 normalization 收斂）。 */
   resignDate: Date | null;
 }
 
@@ -137,7 +137,7 @@ export interface ClosedDeptDetectionInput {
 }
 
 /**
- * DATA_INCONSISTENCY（F005）偵測之輸入 —— 全量掃描同步後在職帳號，找 EMPSTS='A' 但 RESIGNDT 過去日者。
+ * DATA_INCONSISTENCY（F005）偵測之輸入 —— 全量掃描同步後在職帳號，找離職日已過者。
  * 與儲存方案無關（純中介資料結構；若改採方案 (B) 亦可沿用）。
  */
 export interface DataInconsistencyDetectionInput {

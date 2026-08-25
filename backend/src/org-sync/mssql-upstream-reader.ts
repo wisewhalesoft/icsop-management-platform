@@ -4,8 +4,8 @@ import { RawDept, RawAccount, RawJobTitle } from './normalization';
 import {
   UpstreamRef,
   buildDeptQuery,
-  buildHpmuserActiveIdsQuery,
-  buildHpmuserIncrementalQuery,
+  buildPersonnelActiveIdsQuery,
+  buildPersonnelIncrementalQuery,
   buildJobTitleQuery,
   assertNoForbiddenColumns,
 } from './upstream-queries';
@@ -30,7 +30,7 @@ export interface UpstreamReaderConfig {
  *  - 沿用 auth 盤點（OQ-E02-01）之連線方式，維持操作一致性；
  *  - 直接掌控 pool、requestTimeout 與 TLS（linked server 主機常為內網自簽憑證）。
  *
- * 硬約束：所有彙總/過濾以 OPENQUERY 下推（見 upstream-queries）；VW_HPMUSER 僅白名單 12 欄，
+ * 硬約束：所有彙總/過濾以 OPENQUERY 下推（見 upstream-queries）；VW_PERSONNEL_SQL 僅白名單 10 欄，
  * USERPW/DEFAULTPW 永不出現於查詢（每支查詢再經 assertNoForbiddenColumns 二次防禦）。
  */
 export class MssqlUpstreamOrgReader implements UpstreamOrgReader {
@@ -69,10 +69,11 @@ export class MssqlUpstreamOrgReader implements UpstreamOrgReader {
   }
 
   async readActiveAccountLoginIds(compid: string): Promise<string[]> {
-    const rows = await this.query<{ USERID: string }>(
-      buildHpmuserActiveIdsQuery(this.cfg.ref, compid),
+    // v2.0：穩定鍵改為 NO（契約 §7.2）；欄名隨來源更換，回傳型別（loginId 字串陣列）不變。
+    const rows = await this.query<{ NO: string }>(
+      buildPersonnelActiveIdsQuery(this.cfg.ref, compid),
     );
-    return rows.map((r) => r.USERID);
+    return rows.map((r) => r.NO);
   }
 
   async readAccountChanges(
@@ -80,7 +81,7 @@ export class MssqlUpstreamOrgReader implements UpstreamOrgReader {
     sinceMtdt: Date | null,
   ): Promise<RawAccount[]> {
     return this.query<RawAccount>(
-      buildHpmuserIncrementalQuery(this.cfg.ref, compid, sinceMtdt),
+      buildPersonnelIncrementalQuery(this.cfg.ref, compid, sinceMtdt),
     );
   }
 

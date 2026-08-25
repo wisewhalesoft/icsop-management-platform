@@ -5,14 +5,17 @@ import {
 } from './org-change-alert.types';
 
 /**
- * F005「EMPSTS='A' 但 RESIGNDT 為過去日期」資料不一致告警 —— 純邏輯，無 IO、與儲存方案無關。
+ * F005「在職中但離職日已過」資料不一致告警 —— 純邏輯，無 IO、與儲存方案無關。
  *
- * 全量掃描同步後在職帳號；矛盾未被上游修正前恆為真（比照 closed-dept 之不變式檢查哲學）。
- * ⚠ 去重鍵＝帳號 loginId（不以 EMPNO 連坐）；EMPSTS='A' 權威 → 不停用，僅告警。
+ * 全量掃描同步後在職帳號；落差未被下次同步修正前恆為真（比照 closed-dept 之不變式檢查哲學）。
+ * ⚠ 去重鍵＝帳號 loginId（不以 EMPNO 連坐）；不停用，僅告警。
+ *
+ * 🔄 v2.0（契約 §6）：在職判定改由 `RESIGN_DATE` 導出後，比較基準由**時間戳**改為**日期**。
+ *    TS-INCON-005 之語意隨之改寫（見該案之註記）。
  */
 
 const NOW = new Date('2026-07-24T02:00:00.000Z'); // 本次同步 createdAt
-const PAST = new Date('2024-12-31T00:00:00.000Z'); // 過去之 RESIGNDT
+const PAST = new Date('2024-12-31T00:00:00.000Z'); // 過去之 RESIGN_DATE
 const RUN = 'run-1';
 
 function account(over: Partial<ActiveAccountRef> = {}): ActiveAccountRef {
@@ -60,12 +63,15 @@ describe('detectDataInconsistencyAlerts', () => {
     expect(out[0].deptCloseDate).toBeNull();
   });
 
-  it('TS-INCON-002 beforeValue/afterValue 內容正確（含矛盾日期）', () => {
+  it('TS-INCON-002 beforeValue/afterValue 內容正確（含已過之離職日）', () => {
     const out = detectDataInconsistencyAlerts(input({ activeAccounts: [account()] }));
 
-    expect(out[0].beforeValue).toMatch(/EMPSTS=A|在職/);
+    expect(out[0].beforeValue).toMatch(/在職/);
     expect(out[0].afterValue).toContain('2024-12-31');
-    expect(out[0].afterValue).toMatch(/過去日期|矛盾/);
+    expect(out[0].afterValue).toMatch(/已過期|不符/);
+    // v2.0：不得再出現已停用來源之欄名（契約 §3.7）。
+    expect(out[0].beforeValue).not.toMatch(/EMPSTS/);
+    expect(out[0].afterValue).not.toMatch(/RESIGNDT/);
   });
 
   it('TS-INCON-003 resignDate=null（哨兵已由 normalization 收斂）→ 不產生', () => {
@@ -84,9 +90,31 @@ describe('detectDataInconsistencyAlerts', () => {
     expect(out).toEqual([]);
   });
 
-  it('TS-INCON-005 resignDate 早於 createdAt 一毫秒 → 產生（邊界另一側）', () => {
+  it('🔴 TS-INCON-005（v2.0 改寫）resignDate 早於 createdAt 一毫秒但仍為同一日 → 不產生', () => {
+    // v1.0 此案期望「產生」（比時間戳）。v2.0 起 status 由 RESIGN_DATE 導出（契約 §6），
+    // 而 RESIGN_DATE 為日期（00:00:00）、同步於當日稍晚執行 ⇒ 沿用時間戳比較會使
+    // **每位「最後在職日為今天」的在職者都被誤報**。故改以日期比較。
     const out = detectDataInconsistencyAlerts(
       input({ activeAccounts: [account({ resignDate: new Date(NOW.getTime() - 1) })] }),
+    );
+
+    expect(out).toEqual([]);
+  });
+
+  it('🔴 TS-INCON-005b 最後在職日＝同步當日零時 → 不產生（每日離職者不得誤報）', () => {
+    // 迴歸鎖定：NOW 為 02:00，離職日為當日 00:00——正是實務上最常見的形狀。
+    const sameDayMidnight = new Date('2026-07-24T00:00:00.000Z');
+    const out = detectDataInconsistencyAlerts(
+      input({ activeAccounts: [account({ resignDate: sameDayMidnight })] }),
+    );
+
+    expect(out).toEqual([]);
+  });
+
+  it('TS-INCON-005c resignDate 為前一日 → 產生（跨日方為落差）', () => {
+    const prevDay = new Date('2026-07-23T23:59:59.999Z');
+    const out = detectDataInconsistencyAlerts(
+      input({ activeAccounts: [account({ resignDate: prevDay })] }),
     );
 
     expect(out).toHaveLength(1);

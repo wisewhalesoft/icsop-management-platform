@@ -1,18 +1,21 @@
 import { Logger } from '@nestjs/common';
 import { ScheduledOrgSyncService } from './scheduled-org-sync.service';
-import { OrgSyncService, SyncInProgressError } from './org-sync.service';
+import { OrgSyncCoordinator } from './org-sync-coordinator';
 import { SyncResult } from './org-sync.types';
 
 /**
  * 每日排程同步（OQ-E02-02）。不測 @Cron decorator 之時間觸發（難以確定性驗證），
  * 改直接測 runScheduled()：
- *  1. 以 ('scheduled', null) 呼叫 OrgSyncService.run。
- *  2. svc.run 拋錯（含互斥 SYNC_IN_PROGRESS、hasRunningSyncRun 之 DB 例外）時，
- *     例外被吞掉、不外拋（排程失敗只記 log，不中斷程序）。
+ *  1. 以 ('scheduled', null) 呼叫 OrgSyncCoordinator.runAll（B 階段：多公司協調層）。
+ *  2. 逐筆結果記 log（不驗 log 內容，僅驗不外拋）。
+ *  3. coordinator.runAll 本身拋出**未預期**例外（單一公司之互斥／已知失敗已由協調層內部
+ *     吞掉並轉為陣列中一筆 failed 結果，見 org-sync-coordinator.spec.ts）時，仍須被本層
+ *     外層 try/catch 攔下，不讓例外自 cron 回呼外拋而中斷程序（縱深防禦）。
  */
 
 const okResult: SyncResult = {
   runId: 'run-sch-1',
+  compid: 'AS',
   triggerType: 'scheduled',
   status: 'success',
   changeCount: 2,
@@ -41,31 +44,35 @@ describe('ScheduledOrgSyncService.runScheduled', () => {
 
   afterEach(() => jest.restoreAllMocks());
 
-  it('以 (scheduled, null) 呼叫 OrgSyncService.run', async () => {
-    const run = jest.fn().mockResolvedValue(okResult);
-    const svc = { run } as unknown as OrgSyncService;
-    const scheduled = new ScheduledOrgSyncService(svc);
+  it('以 (scheduled, null) 呼叫 OrgSyncCoordinator.runAll', async () => {
+    const runAll = jest.fn().mockResolvedValue([okResult]);
+    const coordinator = { runAll } as unknown as OrgSyncCoordinator;
+    const scheduled = new ScheduledOrgSyncService(coordinator);
 
     await scheduled.runScheduled();
 
-    expect(run).toHaveBeenCalledTimes(1);
-    expect(run).toHaveBeenCalledWith('scheduled', null);
+    expect(runAll).toHaveBeenCalledTimes(1);
+    expect(runAll).toHaveBeenCalledWith('scheduled', null);
   });
 
-  it('svc.run 拋一般例外 → 被吞掉、runScheduled 不外拋', async () => {
-    const run = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
-    const svc = { run } as unknown as OrgSyncService;
-    const scheduled = new ScheduledOrgSyncService(svc);
+  it('多公司結果逐筆記 log，不因其中一筆非 success 而中斷其餘筆記錄', async () => {
+    const failed: SyncResult = { ...okResult, compid: 'AD', status: 'failed', errorCode: 'SYNC_IN_PROGRESS' };
+    const runAll = jest.fn().mockResolvedValue([okResult, failed]);
+    const coordinator = { runAll } as unknown as OrgSyncCoordinator;
+    const scheduled = new ScheduledOrgSyncService(coordinator);
+    const logSpy = jest.spyOn(Logger.prototype, 'log');
 
-    await expect(scheduled.runScheduled()).resolves.toBeUndefined();
-    expect(run).toHaveBeenCalledWith('scheduled', null);
+    await scheduled.runScheduled();
+
+    expect(logSpy).toHaveBeenCalledTimes(2);
   });
 
-  it('svc.run 拋 SYNC_IN_PROGRESS（互斥）→ 被吞掉、不外拋', async () => {
-    const run = jest.fn().mockRejectedValue(new SyncInProgressError());
-    const svc = { run } as unknown as OrgSyncService;
-    const scheduled = new ScheduledOrgSyncService(svc);
+  it('coordinator.runAll 拋一般例外（縱深防禦，非per-company 已知失敗）→ 被吞掉、不外拋', async () => {
+    const runAll = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+    const coordinator = { runAll } as unknown as OrgSyncCoordinator;
+    const scheduled = new ScheduledOrgSyncService(coordinator);
 
     await expect(scheduled.runScheduled()).resolves.toBeUndefined();
+    expect(runAll).toHaveBeenCalledWith('scheduled', null);
   });
 });

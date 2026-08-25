@@ -32,13 +32,14 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
     return this.ds;
   }
 
-  async hasRunningSyncRun(): Promise<boolean> {
+  async hasRunningSyncRun(compid: string): Promise<boolean> {
     const ds = await this.ensureInit();
-    const n = await ds.getRepository(SyncRun).countBy({ status: 'running' });
+    const n = await ds.getRepository(SyncRun).countBy({ compid, status: 'running' });
     return n > 0;
   }
 
   async createSyncRun(input: {
+    compid: string;
     triggerType: TriggerType;
     triggeredBy?: string | null;
     startedAt: Date;
@@ -47,6 +48,7 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
     const id = randomUUID();
     await ds.getRepository(SyncRun).insert({
       id,
+      compid: input.compid,
       triggerType: input.triggerType,
       triggeredBy: input.triggeredBy ?? null,
       startedAt: input.startedAt,
@@ -73,10 +75,10 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
     await ds.getRepository(SyncRun).update({ id }, update);
   }
 
-  async getAccountWatermark(_compid: string): Promise<Date | null> {
+  async getAccountWatermark(compid: string): Promise<Date | null> {
     const ds = await this.ensureInit();
     const last = await ds.getRepository(SyncRun).findOne({
-      where: { status: 'success' },
+      where: { compid, status: 'success' },
       order: { endedAt: 'DESC' },
     });
     return last?.watermark ?? null;
@@ -161,6 +163,7 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
     });
     return rows.map((r) => ({
       id: r.id,
+      compid: r.compid,
       triggerType: r.triggerType as SyncRunSummary['triggerType'],
       status: r.status as SyncRunSummary['status'],
       startedAt: r.startedAt,

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { OrgSyncService } from './org-sync.service';
+import { OrgSyncCoordinator } from './org-sync-coordinator';
 
 /**
  * 每日排程同步（OQ-E02-02：02:00 UTC+8）。
@@ -20,15 +20,19 @@ import { OrgSyncService } from './org-sync.service';
 export class ScheduledOrgSyncService {
   private readonly logger = new Logger(ScheduledOrgSyncService.name);
 
-  constructor(private readonly svc: OrgSyncService) {}
+  constructor(private readonly coordinator: OrgSyncCoordinator) {}
 
+  /** B 階段：排程一次觸發全部設定之公司（依序），逐筆記 log；單一公司失敗不影響其餘公司。 */
   @Cron('0 2 * * *', { name: 'org-sync-daily', timeZone: 'Asia/Taipei' })
   async runScheduled(): Promise<void> {
     try {
-      const result = await this.svc.run('scheduled', null);
-      this.logger.log(
-        `排程同步完成 runId=${result.runId} status=${result.status} changeCount=${result.changeCount}`,
-      );
+      const results = await this.coordinator.runAll('scheduled', null);
+      for (const result of results) {
+        this.logger.log(
+          `排程同步完成 compid=${result.compid} runId=${result.runId} ` +
+            `status=${result.status} changeCount=${result.changeCount}`,
+        );
+      }
     } catch (err) {
       // 排程失敗（含互斥 SYNC_IN_PROGRESS、hasRunningSyncRun 之 DB 例外）只記 log，
       // 不讓未捕捉例外自 cron 回呼外拋而中斷程序。

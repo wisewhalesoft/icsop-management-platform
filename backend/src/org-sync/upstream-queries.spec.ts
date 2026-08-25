@@ -1,8 +1,9 @@
 import {
-  WHITELIST_HPMUSER_COLUMNS,
+  WHITELIST_PERSONNEL_COLUMNS,
+  FORBIDDEN_PERSONNEL_COLUMNS,
   FORBIDDEN_HPMUSER_COLUMNS,
-  buildHpmuserIncrementalQuery,
-  buildHpmuserActiveIdsQuery,
+  buildPersonnelIncrementalQuery,
+  buildPersonnelActiveIdsQuery,
   buildDeptQuery,
   buildJobTitleQuery,
   assertNoForbiddenColumns,
@@ -15,55 +16,80 @@ import {
  * OPENQUERY 下推查詢建構（upstream-hr-source-contract.md §1 下推、§3.4 密碼欄禁讀、§5 欄位對應）。
  * 硬約束：
  *  - 一律包在 OPENQUERY([linkedServer], '...')，不得整表拉回本地。
- *  - VW_HPMUSER 僅選白名單 12 欄；USERPW/DEFAULTPW 等禁欄不得出現於查詢字串。
+ *  - VW_PERSONNEL_SQL 僅選白名單 10 欄（v2.0）；ID_NO／ACCOUNT 等禁欄不得出現於查詢字串。
  */
 
 const ref: UpstreamRef = { linkedServer: 'APYHFC23', remoteDb: 'HR2' };
 
-describe('白名單常數', () => {
-  it('恰為 12 欄', () => {
-    expect(WHITELIST_HPMUSER_COLUMNS).toHaveLength(12);
+describe('白名單常數（v2.0：VW_PERSONNEL_SQL）', () => {
+  it('恰為 10 欄', () => {
+    expect(WHITELIST_PERSONNEL_COLUMNS).toHaveLength(10);
   });
-  it('包含穩定鍵與增量欄且不含任何禁欄', () => {
-    expect(WHITELIST_HPMUSER_COLUMNS).toEqual(
+
+  it('包含穩定鍵、在職判定欄與增量欄', () => {
+    expect(WHITELIST_PERSONNEL_COLUMNS).toEqual(
       expect.arrayContaining([
-        'USERID',
-        'EMPNO',
-        'USERNM',
         'COMPID',
-        'DEPTID',
-        'EMAILADDR',
-        'EMPSTS',
-        'RESIGNDT',
-        'HIREDT',
-        'DIRECTOR',
+        'NO',
+        'NAME_IN_CHINESE',
+        'DEPT_CODE',
+        'EMAIL',
+        'RESIGN_DATE',
+        'REHIRE_DATE',
+        'DIRECT_BOSS',
+        'TITLE_CODE',
         'MTDT',
-        'JOBTITLEID',
       ]),
     );
-    for (const forbidden of FORBIDDEN_HPMUSER_COLUMNS) {
-      expect(WHITELIST_HPMUSER_COLUMNS).not.toContain(forbidden);
+  });
+
+  it('不含任何禁欄（新來源＋已停用來源之守衛清單皆然）', () => {
+    for (const forbidden of [
+      ...FORBIDDEN_PERSONNEL_COLUMNS,
+      ...FORBIDDEN_HPMUSER_COLUMNS,
+    ]) {
+      expect(WHITELIST_PERSONNEL_COLUMNS).not.toContain(forbidden);
     }
+  });
+
+  it('🔴 不含三個欄名說謊之陷阱欄（契約 §3.1／§3.3）', () => {
+    // NAME＝銀行名稱、DIV_CODE＝薪資部門、HIRE_DATE＝年資起算日。
+    for (const trap of ['NAME', 'DIV_CODE', 'HIRE_DATE']) {
+      expect(WHITELIST_PERSONNEL_COLUMNS).not.toContain(trap);
+    }
+  });
+
+  it('🔴 字界比對不得誤傷白名單：禁欄清單套用於白名單欄位不得命中', () => {
+    // 迴歸鎖定：HIRE_DATE 不得誤中 REHIRE_DATE、NAME 不得誤中 NAME_IN_CHINESE、
+    // ID_NO 不得誤中 NO——否則正常查詢會被自身斷言擋下。
+    for (const col of WHITELIST_PERSONNEL_COLUMNS) {
+      expect(() => assertNoForbiddenColumns(`SELECT ${col} FROM x`)).not.toThrow();
+    }
+  });
+
+  it('🔴 JOB_CODE 不得列入禁欄（VW_DEPT_SQL 合法使用，列入會擋掉部門查詢）', () => {
+    expect(FORBIDDEN_PERSONNEL_COLUMNS).not.toContain('JOB_CODE');
+    expect(() => buildDeptQuery(ref, 'AS')).not.toThrow();
   });
 });
 
-describe('buildHpmuserIncrementalQuery', () => {
+describe('buildPersonnelIncrementalQuery', () => {
   it('包在 OPENQUERY 並以 4 段式命名 remoteDb 存取 VW_HPMUSER', () => {
-    const sql = buildHpmuserIncrementalQuery(ref, 'AS', null);
+    const sql = buildPersonnelIncrementalQuery(ref, 'AS', null);
     expect(sql).toContain('OPENQUERY([APYHFC23]');
-    expect(sql).toContain('[HR2].[dbo].[VW_HPMUSER]');
+    expect(sql).toContain('[HR2].[dbo].[VW_PERSONNEL_SQL]');
   });
 
   it('只選白名單 12 欄、且無 SELECT *', () => {
-    const sql = buildHpmuserIncrementalQuery(ref, 'AS', null);
+    const sql = buildPersonnelIncrementalQuery(ref, 'AS', null);
     expect(sql).not.toMatch(/SELECT\s+\*/i);
-    for (const col of WHITELIST_HPMUSER_COLUMNS) {
+    for (const col of WHITELIST_PERSONNEL_COLUMNS) {
       expect(sql).toContain(col);
     }
   });
 
   it('🔴 查詢字串不得出現任何密碼欄 / 非必要個資欄（以 token 比對，EMAILADDR 合法含 ADDR）', () => {
-    const sql = buildHpmuserIncrementalQuery(ref, 'AS', null);
+    const sql = buildPersonnelIncrementalQuery(ref, 'AS', null);
     for (const forbidden of FORBIDDEN_HPMUSER_COLUMNS) {
       expect(sql).not.toMatch(new RegExp(`\\b${forbidden}\\b`));
     }
@@ -71,25 +97,25 @@ describe('buildHpmuserIncrementalQuery', () => {
   });
 
   it('限定 COMPID=AS（單引號於 OPENQUERY 內以雙寫跳脫）', () => {
-    const sql = buildHpmuserIncrementalQuery(ref, 'AS', null);
+    const sql = buildPersonnelIncrementalQuery(ref, 'AS', null);
     expect(sql).toContain("COMPID=''AS''");
   });
 
   it('sinceMtdt 提供時附加 MTDT 增量過濾', () => {
     const since = new Date('2026-07-01T00:00:00Z');
-    const sql = buildHpmuserIncrementalQuery(ref, 'AS', since);
+    const sql = buildPersonnelIncrementalQuery(ref, 'AS', since);
     expect(sql).toContain('MTDT');
     expect(sql).toMatch(/MTDT\s*>/);
   });
 
   it('sinceMtdt 為 null（首次同步）→ 不含 MTDT 過濾（全量）', () => {
-    const sql = buildHpmuserIncrementalQuery(ref, 'AS', null);
+    const sql = buildPersonnelIncrementalQuery(ref, 'AS', null);
     expect(sql).not.toMatch(/MTDT\s*>/);
   });
 
   it('compid 注入防禦：非法 compid → 拋錯', () => {
     expect(() =>
-      buildHpmuserIncrementalQuery(ref, "AS'; DROP TABLE x--", null),
+      buildPersonnelIncrementalQuery(ref, "AS'; DROP TABLE x--", null),
     ).toThrow();
   });
 
@@ -103,7 +129,7 @@ describe('buildHpmuserIncrementalQuery', () => {
    *
    * 断言之期望字面值由固定 UTC 瞬間之 UTC 曆法分量手算而得（`2026-07-01T05:30:00.000Z` →
    * `'2026-07-01 05:30:00'`），非讀 production 原始碼得知「該用 getUTC*」——這是 OPENQUERY 對
-   * 端資料庫（VW_HPMUSER.MTDT，上游欄位不帶時區資訊）比較時，唯一不隨行程時區飄移的組字方式，
+   * 端資料庫（VW_PERSONNEL_SQL.MTDT，上游欄位不帶時區資訊）比較時，唯一不隨行程時區飄移的組字方式，
    * 屬於本 agent 可據以推導期望值的通用正確性原則，非實作細節。
    */
   it('🔴 Bug 2：sinceMtdt 組出的 MTDT 字面值須為行程時區不敏感（同一 UTC 瞬間，跨三個相異 process.env.TZ 逐字相同）', () => {
@@ -111,11 +137,11 @@ describe('buildHpmuserIncrementalQuery', () => {
     try {
       const instant = new Date('2026-07-01T05:30:00.000Z'); // 刻意非整點/非午夜，避免巧合掩蓋日期進位錯誤
       process.env.TZ = 'Asia/Taipei'; // UTC+8
-      const sqlTaipei = buildHpmuserIncrementalQuery(ref, 'AS', instant);
+      const sqlTaipei = buildPersonnelIncrementalQuery(ref, 'AS', instant);
       process.env.TZ = 'America/New_York'; // UTC-4/-5（視 DST）
-      const sqlNewYork = buildHpmuserIncrementalQuery(ref, 'AS', instant);
+      const sqlNewYork = buildPersonnelIncrementalQuery(ref, 'AS', instant);
       process.env.TZ = 'UTC';
-      const sqlUtc = buildHpmuserIncrementalQuery(ref, 'AS', instant);
+      const sqlUtc = buildPersonnelIncrementalQuery(ref, 'AS', instant);
 
       expect(sqlTaipei).toBe(sqlNewYork);
       expect(sqlTaipei).toBe(sqlUtc);
@@ -128,15 +154,28 @@ describe('buildHpmuserIncrementalQuery', () => {
   });
 });
 
-describe('buildHpmuserActiveIdsQuery（消失閾值用之在職 USERID 集合）', () => {
-  it('僅選 USERID、以 EMPSTS=A 於對端下推過濾', () => {
-    const sql = buildHpmuserActiveIdsQuery(ref, 'AS');
+describe('buildPersonnelActiveIdsQuery（消失閾值用之在職 NO 集合）', () => {
+  it('僅選 NO、以 RESIGN_DATE 於對端下推過濾', () => {
+    const sql = buildPersonnelActiveIdsQuery(ref, 'AS');
     expect(sql).toContain('OPENQUERY([APYHFC23]');
-    expect(sql).toContain('USERID');
-    expect(sql).toContain("EMPSTS=''A''");
+    expect(sql).toContain('NO');
     expect(sql).toContain("COMPID=''AS''");
-    // 不得洩漏禁欄（token 比對）
-    for (const forbidden of FORBIDDEN_HPMUSER_COLUMNS) {
+  });
+
+  it('🔴 以 CAST(GETDATE() AS DATE) 比較，不得直接比 GETDATE()', () => {
+    // 迴歸鎖定：GETDATE() 含時分秒，會漏算「最後在職日為今天」者，
+    // 進而虛增消失比例、誤觸 §7.3 之中止閾值（契約 §6）。
+    const sql = buildPersonnelActiveIdsQuery(ref, 'AS');
+    expect(sql).toContain('RESIGN_DATE >= CAST(GETDATE() AS DATE)');
+    expect(sql).not.toMatch(/RESIGN_DATE\s*>=\s*GETDATE\(\)/);
+  });
+
+  it('不得洩漏禁欄（token 比對）', () => {
+    const sql = buildPersonnelActiveIdsQuery(ref, 'AS');
+    for (const forbidden of [
+      ...FORBIDDEN_PERSONNEL_COLUMNS,
+      ...FORBIDDEN_HPMUSER_COLUMNS,
+    ]) {
       expect(sql).not.toMatch(new RegExp(`\\b${forbidden}\\b`));
     }
   });
@@ -155,7 +194,7 @@ describe('buildDeptQuery（組織階層全量）', () => {
 describe('assertNoForbiddenColumns', () => {
   it('偵測到密碼欄 → 拋錯（防禦性檢查）', () => {
     expect(() =>
-      assertNoForbiddenColumns('SELECT USERID, USERPW FROM x'),
+      assertNoForbiddenColumns('SELECT NO, USERPW FROM x'),
     ).toThrow();
   });
 });

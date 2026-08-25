@@ -4,11 +4,16 @@ import { AuthModule } from '../auth/auth.module';
 import { RbacModule } from '../rbac/rbac.module';
 import { OrgSyncController } from './org-sync.controller';
 import { OrgSyncService } from './org-sync.service';
+import { OrgSyncCoordinator } from './org-sync-coordinator';
 import { ScheduledOrgSyncService } from './scheduled-org-sync.service';
 import { MssqlUpstreamOrgReader } from './mssql-upstream-reader';
 import { TypeOrmOrgSyncStore } from './typeorm-org-sync.store';
 import { UpstreamOrgReader, OrgSyncStore } from './org-sync.types';
-import { loadUpstreamConfig, SYNC_COMPID } from './org-sync.config';
+import {
+  loadUpstreamConfig,
+  SYNC_COMPIDS,
+  loadDisappearedThresholdOverride,
+} from './org-sync.config';
 import { OrgChangeAlertModule } from '../org-change-alert/org-change-alert.module';
 import { OrgChangeAlertService } from '../org-change-alert/org-change-alert.service';
 
@@ -37,13 +42,27 @@ export const ORG_SYNC_STORE = Symbol('ORG_SYNC_STORE');
       useFactory: (): OrgSyncStore => new TypeOrmOrgSyncStore(AppDataSource),
     },
     {
-      provide: OrgSyncService,
+      // B 階段（多公司）：一家公司一個 OrgSyncService 實例（各自綁定固定 compid，內部流程
+      // 完全不變）；OrgSyncCoordinator 為薄薄一層外部迴圈，見該檔案 JSDoc。
+      provide: OrgSyncCoordinator,
       useFactory: (
         reader: UpstreamOrgReader,
         store: OrgSyncStore,
         alerts: OrgChangeAlertService,
-      ): OrgSyncService =>
-        new OrgSyncService(reader, store, { compid: SYNC_COMPID }, alerts),
+      ): OrgSyncCoordinator => {
+        const disappearedThreshold = loadDisappearedThresholdOverride();
+        const services = SYNC_COMPIDS.map(
+          (compid) =>
+            new OrgSyncService(
+              reader,
+              store,
+              // undefined → 服務層沿用 DEFAULT_DISAPPEARED_THRESHOLD（5%）。
+              { compid, disappearedThreshold },
+              alerts,
+            ),
+        );
+        return new OrgSyncCoordinator(services, store);
+      },
       inject: [UPSTREAM_READER, ORG_SYNC_STORE, OrgChangeAlertService],
     },
     // 每日排程觸發（02:00 UTC+8）。@Cron metadata 由 AppModule 之 ScheduleModule.forRoot() 掃描。

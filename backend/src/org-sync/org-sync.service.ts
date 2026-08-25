@@ -14,6 +14,7 @@ import {
   normalizeDept,
   normalizeAccount,
   normalizeJobTitle,
+  dedupeAccountsByStableKey,
   NormalizedOrgUnit,
   NormalizedAccount,
   NormalizedJobTitle,
@@ -59,7 +60,8 @@ export class SyncWriteError extends Error {
  *  2. 建立 running SYNC_RUN。
  *  3. 組織階層全量取回 → 推導 tier/parent/prefix → 分類 create/update。
  *  4. 消失閾值保護：本地在職 vs 來源在職，超過閾值 → 中止（不套用任何異動、不停用）。
- *  5. 帳號增量（MTDT 水位）→ 分類 create/update/disable（disable 一律以 EMPSTS≠'A' 觸發）。
+ *  5. 帳號增量（MTDT 水位）→ 去重 → 分類 create/update/disable
+ *     （disable 一律以 `empActive=false` 觸發，v2.0 由 `RESIGN_DATE` 導出，見契約 §6）。
  *  6. 單一交易套用 plan；更新 SYNC_RUN（success/failed + 水位）。
  * 失敗（來源不可用/交易回滾）：保留同步前既有資料，記 failed。
  */
@@ -84,6 +86,11 @@ export class OrgSyncService {
     this.now = options.now ?? ((): Date => new Date());
   }
 
+  /** 本實例綁定之公司代碼（B 階段：`OrgSyncCoordinator` 於多公司迴圈中識別各實例所需）。 */
+  getCompid(): string {
+    return this.compid;
+  }
+
   /**
    * @param opts.fullResync 忽略 MTDT 水位，改為全量取回帳號（預設 false ＝增量）。
    *
@@ -101,12 +108,17 @@ export class OrgSyncService {
     triggeredBy?: string | null,
     opts: { fullResync?: boolean } = {},
   ): Promise<SyncResult> {
-    if (await this.store.hasRunningSyncRun()) {
+    if (await this.store.hasRunningSyncRun(this.compid)) {
       throw new SyncInProgressError();
     }
 
     const startedAt = this.now();
-    const runId = await this.store.createSyncRun({ triggerType, triggeredBy, startedAt });
+    const runId = await this.store.createSyncRun({
+      compid: this.compid,
+      triggerType,
+      triggeredBy,
+      startedAt,
+    });
     const warnings: string[] = [];
     const stats: SyncStats = {
       departmentsRead: 0,
@@ -177,6 +189,7 @@ export class OrgSyncService {
         });
         return {
           runId,
+          compid: this.compid,
           triggerType,
           status: 'failed',
           changeCount: 0,
@@ -195,10 +208,12 @@ export class OrgSyncService {
       }
       const rawAccts = await this.reader.readAccountChanges(this.compid, since);
       stats.accountsRead = rawAccts.length;
-      const normAccts: NormalizedAccount[] = [];
+      // 在職判定基準（契約 §6）：整批共用同一時刻，避免長時間同步中途跨日而使前後批判定不一致。
+      const employmentBasis = this.now();
+      const parsedAccts: NormalizedAccount[] = [];
       for (const raw of rawAccts) {
         try {
-          normAccts.push(normalizeAccount(raw));
+          parsedAccts.push(normalizeAccount(raw, employmentBasis));
         } catch (e) {
           if (e instanceof DirtyRowError) {
             stats.dirtyRows++;
@@ -207,6 +222,14 @@ export class OrgSyncService {
             throw e;
           }
         }
+      }
+      // 穩定鍵去重（人類裁決 #1，契約 §7.2）：撞鍵不得使整批 upsert 失敗。
+      const [normAccts, dedupedCount] = dedupeAccountsByStableKey(parsedAccts);
+      if (dedupedCount > 0) {
+        warnings.push(
+          `上游穩定鍵 (COMPID, NO) 重複 ${dedupedCount} 筆，已依 MTDT 較新者去重後續行。` +
+            `此為上游資料異常，請通報人資系統負責人（契約 §11 #11）。`,
+        );
       }
       // 一次載入全公司帳號（load-all），記憶體比對；不以 loginId IN(…) 查詢（MSSQL 2100 參數上限）。
       const existingAcc = await this.store.findExistingAccounts(this.compid);
@@ -222,7 +245,9 @@ export class OrgSyncService {
         ) {
           maxMtdt = a.upstreamModifiedAt;
         }
-        // 孤兒：DEPTID 於本次部門集合查無 → 保留、記警告（不停用不中止）。
+        // 孤兒：DEPT_CODE 於本次部門集合查無 → 保留、記警告（不停用不中止）。
+        // ⚠ v2.0：新來源之 INNER JOIN 使孤兒在來源端即被濾除（契約 §3.2），此路徑實務上不會命中；
+        //    刻意保留為縱深防禦——上游若換掉該 join，孤兒會無聲回歸。
         if (a.orgCode !== null && !deptCodeSet.has(a.orgCode)) {
           stats.orphanWarnings++;
           warnings.push(`孤兒帳號（部門 ${a.orgCode} 查無）：${a.loginId}，已保留。`);
@@ -306,6 +331,7 @@ export class OrgSyncService {
 
       return {
         runId,
+        compid: this.compid,
         triggerType,
         status: 'success',
         changeCount,
@@ -319,6 +345,7 @@ export class OrgSyncService {
       await this.safeFinishFailed(runId, errorCode, errorMessage);
       return {
         runId,
+        compid: this.compid,
         triggerType,
         status: 'failed',
         changeCount: 0,

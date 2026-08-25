@@ -7,7 +7,8 @@ import {
 import { PATH_METADATA, METHOD_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { OrgSyncController } from './org-sync.controller';
-import { OrgSyncService, SyncInProgressError } from './org-sync.service';
+import { SyncInProgressError } from './org-sync.service';
+import { OrgSyncCoordinator } from './org-sync-coordinator';
 import { SyncResult, SyncRunSummary } from './org-sync.types';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { RequestWithSession } from '../auth/session.guard';
@@ -36,6 +37,7 @@ const req = { sessionUser: admin } as RequestWithSession;
 
 const okResult: SyncResult = {
   runId: 'run-1',
+  compid: 'AS',
   triggerType: 'manual',
   status: 'success',
   changeCount: 5,
@@ -55,24 +57,29 @@ const okResult: SyncResult = {
   warnings: [],
 };
 
-describe('OrgSyncController.trigger', () => {
-  it('以 manual + 觸發者 loginId 呼叫引擎並回傳結果', async () => {
-    const run = jest.fn().mockResolvedValue(okResult);
-    const svc = { run } as unknown as OrgSyncService;
-    const controller = new OrgSyncController(svc, alertsStub());
+describe('OrgSyncController.trigger（B 階段：多公司，回傳陣列）', () => {
+  it('以 manual + 觸發者 loginId 呼叫協調層並回傳全部公司之結果陣列', async () => {
+    const runAll = jest.fn().mockResolvedValue([okResult]);
+    const coordinator = { runAll } as unknown as OrgSyncCoordinator;
+    const controller = new OrgSyncController(coordinator, alertsStub());
 
     const res = await controller.trigger(req);
-    expect(run).toHaveBeenCalledWith('manual', 'sysadmin1');
-    expect(res).toEqual(okResult);
+    expect(runAll).toHaveBeenCalledWith('manual', 'sysadmin1');
+    expect(res).toEqual([okResult]);
   });
 
-  it('已有進行中 → 傳遞 SyncInProgressError（Nest 映射為 409）', async () => {
-    const run = jest.fn().mockRejectedValue(new SyncInProgressError());
-    const svc = { run } as unknown as OrgSyncService;
-    const controller = new OrgSyncController(svc, alertsStub());
+  it('單一公司互斥中 → 該公司於陣列中為 SYNC_IN_PROGRESS 失敗項，不影響其餘公司', async () => {
+    // 協調層本身已吞掉 SyncInProgressError（見 org-sync-coordinator.ts），
+    // 故控制器不再拋出——此為 B 階段之刻意行為變更：忙碌之單一公司不得擋住其他公司同步。
+    const busy: SyncResult = { ...okResult, compid: 'AD', errorCode: 'SYNC_IN_PROGRESS', status: 'failed', errorMessage: new SyncInProgressError().message };
+    const runAll = jest.fn().mockResolvedValue([okResult, busy]);
+    const coordinator = { runAll } as unknown as OrgSyncCoordinator;
+    const controller = new OrgSyncController(coordinator, alertsStub());
 
-    await expect(controller.trigger(req)).rejects.toThrow(SyncInProgressError);
-    await expect(controller.trigger(req)).rejects.toThrow('SYNC_IN_PROGRESS');
+    const res = await controller.trigger(req);
+    expect(res).toHaveLength(2);
+    expect(res[1].errorCode).toBe('SYNC_IN_PROGRESS');
+    expect(res[0].status).toBe('success');
   });
 });
 
@@ -84,6 +91,7 @@ describe('OrgSyncController.trigger', () => {
 const SAMPLE_RUNS: SyncRunSummary[] = [
   {
     id: 'run-2',
+    compid: 'AS',
     triggerType: 'scheduled',
     status: 'success',
     startedAt: new Date('2026-07-21T02:00:00Z'),
@@ -95,20 +103,20 @@ const SAMPLE_RUNS: SyncRunSummary[] = [
 ];
 
 describe('OrgSyncController.recentRuns（委派）', () => {
-  it('未帶 limit → 以 undefined 委派 service.recentRuns 並回傳結果', async () => {
+  it('未帶 limit → 以 undefined 委派 coordinator.recentRuns 並回傳結果（跨全部公司）', async () => {
     const recentRuns = jest.fn().mockResolvedValue(SAMPLE_RUNS);
-    const svc = { recentRuns } as unknown as OrgSyncService;
-    const controller = new OrgSyncController(svc, alertsStub());
+    const coordinator = { recentRuns } as unknown as OrgSyncCoordinator;
+    const controller = new OrgSyncController(coordinator, alertsStub());
 
     const res = await controller.recentRuns(undefined);
     expect(recentRuns).toHaveBeenCalledWith(undefined);
     expect(res).toBe(SAMPLE_RUNS);
   });
 
-  it('limit=50（字串）→ 以數字 50 委派（正規化/夾取交由 service）', async () => {
+  it('limit=50（字串）→ 以數字 50 委派（正規化/夾取交由 coordinator）', async () => {
     const recentRuns = jest.fn().mockResolvedValue(SAMPLE_RUNS);
-    const svc = { recentRuns } as unknown as OrgSyncService;
-    const controller = new OrgSyncController(svc, alertsStub());
+    const coordinator = { recentRuns } as unknown as OrgSyncCoordinator;
+    const controller = new OrgSyncController(coordinator, alertsStub());
 
     await controller.recentRuns('50');
     expect(recentRuns).toHaveBeenCalledWith(50);
@@ -181,7 +189,7 @@ describe('OrgSyncController.monthlySummary', () => {
   it('委派 OrgChangeAlertService.monthlySummary 並回傳 4 項 KPI', async () => {
     const monthlySummary = jest.fn().mockResolvedValue(SUMMARY);
     const controller = new OrgSyncController(
-      {} as unknown as OrgSyncService,
+      {} as unknown as OrgSyncCoordinator,
       alertsStub(monthlySummary),
     );
 
