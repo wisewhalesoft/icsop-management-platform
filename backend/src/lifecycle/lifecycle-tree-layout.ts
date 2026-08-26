@@ -42,17 +42,42 @@ export interface TreeLayout {
   /** 節點卡尺寸（供連線錨點計算）。 */
   nodeWidth: number;
   nodeHeight: number;
+  /**
+   * 本佈局實際採用之幾何。**繞線（`buildEdgeRoutes`）必須讀這裡**，不得再讀常數——
+   * 兩者一旦不同源，換了幾何之後線會照著舊尺寸畫（節點在 26pt 寬的位置、線卻從 176pt 的中心出發）。
+   * 選填：手工組出 `TreeLayout` 的既有測試不必補這個鍵（消費端 `?? TREE_LAYOUT_CONST`）。
+   */
+  geom?: TreeGeometry;
 }
 
-export const TREE_LAYOUT_CONST = {
+/**
+ * 樹狀圖之幾何參數。畫面（檢視器）與列印各有一組——2026-08-26 使用者裁決「兩者都做」：
+ * 列印改**中文直排**節點以壓縮寬度，畫面維持橫排不動（見 `lifecycle-tree-print-layout.ts`）。
+ */
+export interface TreeGeometry {
+  NODE_W: number;
+  NODE_H: number;
+  /** 同層相鄰節點之中心距（dagre nodesep = HGAP − NODE_W）。 */
+  HGAP: number;
+  /** 相鄰層之中心距（dagre ranksep = VGAP − NODE_H）。 */
+  VGAP: number;
+  MARGIN: number;
+  /** 節點文字方向：畫面／PDF 皆由此決定要橫排還是 1 字 1 行直排。 */
+  textOrientation: 'horizontal' | 'vertical';
+}
+
+/**
+ * 🔒 **畫面幾何＝既有契約**（前後端與 prototype 三方座標一致之基準，見檔頭）。
+ * 這五個數字**不得**因列印需求而更動——列印另給一組幾何，不共用這一組。
+ */
+export const TREE_LAYOUT_CONST: TreeGeometry = {
   NODE_W: 176,
   NODE_H: 62,
-  /** 同層相鄰節點之中心距（dagre nodesep = HGAP − NODE_W）。 */
   HGAP: 210,
-  /** 相鄰層之中心距（dagre ranksep = VGAP − NODE_H）。 */
   VGAP: 132,
   MARGIN: 48,
-} as const;
+  textOrientation: 'horizontal',
+};
 
 /**
  * 以 dagre 做上到下（rankdir TB）佈局，回傳每節點座標、層級與整體版面尺寸。
@@ -64,8 +89,9 @@ export const TREE_LAYOUT_CONST = {
 export function buildTreeLayout(
   nodes: TreeLayoutNode[],
   edges: TreeLayoutEdge[],
+  geom: TreeGeometry = TREE_LAYOUT_CONST,
 ): TreeLayout {
-  const { NODE_W, NODE_H, HGAP, VGAP, MARGIN } = TREE_LAYOUT_CONST;
+  const { NODE_W, NODE_H, HGAP, VGAP, MARGIN } = geom;
   const idSet = new Set(nodes.map((n) => n.id));
   const kept = edges.filter((e) => idSet.has(e.sourceNodeId) && idSet.has(e.targetNodeId));
   if (!nodes.length) {
@@ -74,8 +100,9 @@ export function buildTreeLayout(
       edges: kept,
       boardWidth: MARGIN * 2,
       boardHeight: MARGIN * 2,
-    nodeWidth: NODE_W,
-    nodeHeight: NODE_H,
+      nodeWidth: NODE_W,
+      nodeHeight: NODE_H,
+      geom,
     };
   }
 
@@ -112,6 +139,7 @@ export function buildTreeLayout(
     boardHeight: Math.max(...laidOut.map((n) => n.y + NODE_H)) + MARGIN,
     nodeWidth: NODE_W,
     nodeHeight: NODE_H,
+    geom,
   };
 }
 
@@ -201,7 +229,8 @@ function spreadOffset(i: number, k: number, step: number): number {
  * 索引一一對應。前端另有一份對應實作（frontend/src/pages/lifecycle-tree-layout.ts），演算法一致。
  */
 export function buildEdgeRoutes(layout: TreeLayout): EdgeRoute[] {
-  const { NODE_W, NODE_H, VGAP, MARGIN } = TREE_LAYOUT_CONST;
+  // 🔴 讀 layout 自身之幾何（列印幾何與畫面幾何不同）；未帶者＝既有畫面契約。
+  const { NODE_W, NODE_H, VGAP, MARGIN } = layout.geom ?? TREE_LAYOUT_CONST;
   const { LANES, LANE_ORDER, LANE_STEP, LANE_GAP, CHANNEL_CLEAR, CHANNEL_STEP, HOP_R } =
     TREE_ROUTE_CONST;
   const pos = new Map(layout.nodes.map((n) => [n.id, n]));

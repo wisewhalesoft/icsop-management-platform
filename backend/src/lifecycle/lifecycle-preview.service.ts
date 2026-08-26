@@ -8,6 +8,7 @@ import { lifecycleDisplayName } from './lifecycle-subcategory';
 import { LifecycleWatermarkBuilder } from './lifecycle-watermark';
 import { LifecycleTreePdfRenderer } from './lifecycle-tree-pdf';
 import { buildTreeLayout } from './lifecycle-tree-layout';
+import { buildPrintGeometry } from './lifecycle-tree-print-layout';
 
 export interface LifecycleTreePreviewResult {
   lifecycle: { id: string; name: string };
@@ -85,7 +86,12 @@ export class LifecycleTreePreviewService {
     const lc = await this.requireLifecycle(lifecycleId);
     const graph = await this.loadGraph(lifecycleId);
     const { snapshot, fields } = await this.watermark.buildSnapshot(session);
-    const layout = buildTreeLayout(graph.nodes, graph.edges);
+    /**
+     * 🔴 2026-08-26 UX ④：下載／列印走**列印幾何**（節點中文直排、節距收窄），不是畫面幾何。
+     * 畫面（`GET /tree-preview`）之座標完全不受影響——那條路徑不經過本方法。
+     * 兩者刻意分家：畫面要好讀（橫排＋可拖曳平移），紙上要放得下（窄卡＋A4 縮放分頁）。
+     */
+    const layout = buildTreeLayout(graph.nodes, graph.edges, buildPrintGeometry(graph.nodes));
     const base = await this.renderer.render({ lifecycleName: lc.name, layout });
     const pdf = await this.burner.burnPdf(base, snapshot);
     await this.audit(session, lc, actionType, snapshot, fields);
