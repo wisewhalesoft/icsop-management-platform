@@ -1,5 +1,5 @@
 import { PDFDocument, PDFFont, PDFPage, rgb } from 'pdf-lib';
-import { buildEdgeRoutes, TreeLayout } from './lifecycle-tree-layout';
+import { buildEdgeRoutes, routePath, TreeLayout } from './lifecycle-tree-layout';
 import { drawArrowHead } from './lifecycle-tree-pdf';
 import { LifecycleDiff } from './lifecycle-change-diff';
 import { asciiSafe, embedWatermarkFont, loadCjkFontBytes } from '../public/fonts/cjk-font';
@@ -132,11 +132,15 @@ export class PdfLibChangeHistoryTreeRenderer implements LifecycleChangeHistoryPd
         color = COLORS.edgeAdd;
         thickness = 3;
       }
-      const pts = route.points.map((p) => ({ x: pad + p.x, y: toPageY(p.y) }));
-      for (let i = 0; i + 1 < pts.length; i += 1) {
-        page.drawLine({ start: pts[i], end: pts[i + 1], thickness, color, dashArray });
-      }
-      drawArrowHead(page, pts[pts.length - 1], color);
+      const tip = route.points[route.points.length - 1];
+      page.drawSvgPath(routePath(route), {
+        x: pad,
+        y: toPageY(0),
+        borderColor: color,
+        borderWidth: thickness,
+        borderDashArray: dashArray,
+      });
+      drawArrowHead(page, { x: pad + tip.x, y: toPageY(tip.y) }, color);
     }
 
     // 節點卡。

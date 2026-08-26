@@ -1,5 +1,5 @@
 import { PDFDocument, PDFPage, RGB, rgb } from 'pdf-lib';
-import { buildEdgeRoutes, TreeLayout } from './lifecycle-tree-layout';
+import { buildEdgeRoutes, routePath, TreeLayout } from './lifecycle-tree-layout';
 import { asciiSafe, embedWatermarkFont, loadCjkFontBytes } from '../public/fonts/cjk-font';
 
 /**
@@ -57,13 +57,19 @@ export class PdfLibTreeRenderer implements LifecycleTreePdfRenderer {
     const nh = layout.nodeHeight;
     // 直角連線（child 端朝下）：折線與箭頭一律取自 buildEdgeRoutes，與檢視器同一組座標。
     const grey = rgb(0.58, 0.64, 0.72);
+    // 連線走 routePath 產生之單一 path 字串（與檢視器逐字同一份，含跨線繞過）。
+    // drawSvgPath 之座標系 y 向下，錨在版面原點 (pad, toPageY(0)) 即與 toPageY 對齊。
+    const originY = toPageY(0);
     for (const route of buildEdgeRoutes(layout)) {
-      const pts = route.points.map((p) => ({ x: pad + p.x, y: toPageY(p.y) }));
-      for (let i = 0; i + 1 < pts.length; i += 1) {
-        page.drawLine({ start: pts[i], end: pts[i + 1], thickness: 1.5, color: grey });
-      }
-      const tip = pts[pts.length - 1];
-      if (tip) drawArrowHead(page, tip, grey);
+      const tip = route.points[route.points.length - 1];
+      if (!tip) continue;
+      page.drawSvgPath(routePath(route), {
+        x: pad,
+        y: originY,
+        borderColor: grey,
+        borderWidth: 1.5,
+      });
+      drawArrowHead(page, { x: pad + tip.x, y: toPageY(tip.y) }, grey);
     }
 
     // 節點卡。
