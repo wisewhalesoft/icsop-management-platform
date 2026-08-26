@@ -71,6 +71,8 @@ export const UPLOADER_DIRECTORY = Symbol('APPENDIX_UPLOADER_DIRECTORY');
 export interface UploaderInfo {
   name: string | null;
   orgCode: string | null;
+  /** 🔴 部門名解析需要它：`orgCode` 僅在單一公司內有意義（見 `UploaderOrgResolver`）。 */
+  companyCode: string | null;
 }
 export interface UploaderDirectory {
   resolveUploaders(accountIds: string[]): Promise<Map<string, UploaderInfo>>;
@@ -79,7 +81,13 @@ export interface UploaderDirectory {
 /** 部門名解析（結構相容 NameResolutionService.resolveOrgUnitName）。 */
 export const UPLOADER_ORG_RESOLVER = Symbol('APPENDIX_UPLOADER_ORG_RESOLVER');
 export interface UploaderOrgResolver {
-  resolveOrgUnitName(orgCode: string): Promise<string | null>;
+  /**
+   * 🔴 B 階段（多公司）：`companyCode` 為**必要**第一參數（`orgCode` 各公司獨立編碼）。
+   * 📝 已作廢（⚠ 不得復原）：OLD> `resolveOrgUnitName(orgCode: string)`——本 port 與實作
+   * （`NameResolutionService`）長期不同步，而模組之 `useExisting` 綁定不受 TS 型別檢查，
+   * 編譯期看不出來、執行期第二參數恆 `undefined`（2026-08-26 前台同型缺陷之姊妹案）。
+   */
+  resolveOrgUnitName(companyCode: string, orgCode: string): Promise<string | null>;
 }
 
 /**

@@ -29,7 +29,12 @@ export class TypeOrmUploaderDirectory implements UploaderDirectory {
     const ds = await this.init();
     const rows = await ds
       .getRepository(Account)
-      .find({ where: { id: In(ids) }, select: { id: true, name: true, orgCode: true } });
-    return new Map(rows.map((r) => [r.id, { name: r.name, orgCode: r.orgCode }]));
+      .find({
+        where: { id: In(ids) },
+        select: { id: true, name: true, orgCode: true, companyCode: true },
+      });
+    return new Map(
+      rows.map((r) => [r.id, { name: r.name, orgCode: r.orgCode, companyCode: r.companyCode }]),
+    );
   }
 }

@@ -44,6 +44,7 @@ import {
   DocumentAppendixRecord,
   DocumentExistenceChecker,
   UPLOADER_DIRECTORY,
+  UploaderInfo,
   UPLOADER_ORG_RESOLVER,
   UploaderDirectory,
   UploaderOrgResolver,
@@ -379,19 +380,28 @@ export class AppendicesService {
     const uploaders =
       accountIds.length > 0
         ? await this.uploaderDir.resolveUploaders(accountIds)
-        : new Map<string, { name: string | null; orgCode: string | null }>();
+        : new Map<string, UploaderInfo>();
 
-    const orgCodes = new Set<string>();
-    for (const u of uploaders.values()) if (u.orgCode) orgCodes.add(u.orgCode);
+    // 🔴 以 (上傳者公司, 部門代碼) 配對解析——跨公司的同名代碼是不同單位。
+    const key = (companyCode: string, orgCode: string): string => `${companyCode}\u0000${orgCode}`;
+    const pairs = new Map<string, { companyCode: string; orgCode: string }>();
+    for (const u of uploaders.values()) {
+      if (u.orgCode && u.companyCode) {
+        pairs.set(key(u.companyCode, u.orgCode), { companyCode: u.companyCode, orgCode: u.orgCode });
+      }
+    }
     const deptNames = new Map<string, string | null>();
     if (this.orgResolver) {
-      for (const c of orgCodes) deptNames.set(c, await this.orgResolver.resolveOrgUnitName(c));
+      for (const { companyCode, orgCode } of pairs.values()) {
+        deptNames.set(key(companyCode, orgCode), await this.orgResolver.resolveOrgUnitName(companyCode, orgCode));
+      }
     }
 
     for (const it of items) {
       const u = uploaders.get(it.uploadedBy);
       it.uploadedByName = u?.name ?? null;
-      it.uploadedByDept = u?.orgCode ? (deptNames.get(u.orgCode) ?? null) : null;
+      it.uploadedByDept =
+        u?.orgCode && u?.companyCode ? (deptNames.get(key(u.companyCode, u.orgCode)) ?? null) : null;
     }
   }
 

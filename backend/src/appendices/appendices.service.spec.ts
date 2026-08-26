@@ -645,8 +645,22 @@ describe('AppendicesService（F039 附錄池管理）', () => {
       resolveUploaders: (ids) =>
         Promise.resolve(new Map(ids.filter((id) => map[id]).map((id) => [id, map[id]]))),
     });
+    /**
+     * 🔴 2026-08-26：替身**檢查 `companyCode` 位置的實際值**。原本寫 `(c) => map[c]`（單參數，
+     * 抄自當時同樣過期的 port 宣告），於是「服務層漏傳 companyCode」在替身上看不出來——測試全綠、
+     * 正式環境卻把 `orgCode` 當公司代碼查、第二參數為 `undefined` 而拋 TypeORM 例外。
+     * 替身跟著錯誤的 port 一起漂移，就從攔截器變成共犯（前台 F019 同型缺陷之姊妹案）。
+     */
     const orgResolver = (map: Record<string, string>): UploaderOrgResolver => ({
-      resolveOrgUnitName: (c) => Promise.resolve(map[c] ?? null),
+      resolveOrgUnitName: (companyCode, orgCode) => {
+        if (typeof companyCode !== 'string' || companyCode.trim() === '') {
+          throw new TypeError(
+            `UploaderOrgResolver 第一參數必須為 companyCode（收到 ${JSON.stringify(companyCode)}）` +
+              '——呼叫端疑似仍在用已作廢的單參數簽章。',
+          );
+        }
+        return Promise.resolve(map[orgCode] ?? null);
+      },
     });
 
     it('uploadedBy(accountId) → 解析 uploadedByName + uploadedByDept', async () => {
@@ -655,7 +669,7 @@ describe('AppendicesService（F039 附錄池管理）', () => {
         store,
         audit,
         docChecker,
-        uploaderDir({ admin1: { name: '李慧玲', orgCode: 'JAC00' } }),
+        uploaderDir({ admin1: { name: '李慧玲', orgCode: 'JAC00', companyCode: 'AS' } }),
         orgResolver({ JAC00: '法催一室' }),
       );
       await svc2.uploadAppendix(ICSOP_ADMIN, xlsx());
