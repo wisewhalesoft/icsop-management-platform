@@ -25,7 +25,8 @@ import { DISPLAY_LABEL, deriveDisplayStatus, type DisplayStatus } from './docume
 import {
   buildTreeLayout,
   descendants,
-  edgePath,
+  buildEdgeRoutes,
+  routePath,
   NODE_W,
 } from './lifecycle-tree-layout';
 import type {
@@ -265,10 +266,8 @@ export function LifecycleTreePreviewPage(): JSX.Element {
     () => (selected && data ? descendants(data.graph.edges, selected) : null),
     [selected, data],
   );
-  const posById = useMemo(
-    () => new Map((layout?.nodes ?? []).map((n) => [n.id, n])),
-    [layout],
-  );
+  /** 連線折線：與 layout.edges 索引一一對應（車道分流／錨點分散／跨層通道皆在此決定）。 */
+  const edgeRoutes = useMemo(() => (layout ? buildEdgeRoutes(layout) : []), [layout]);
 
   const onNodeClick = useCallback(
     (nodeId: string, ev: React.MouseEvent) => {
@@ -528,16 +527,15 @@ export function LifecycleTreePreviewPage(): JSX.Element {
                   <path d="M0,0 L8,3 L0,6 Z" fill="#365C97" />
                 </marker>
               </defs>
-              {layout.edges.map((e) => {
-                const s = posById.get(e.sourceNodeId);
-                const t = posById.get(e.targetNodeId);
-                if (!s || !t) return null;
+              {layout.edges.map((e, i) => {
+                const route = edgeRoutes[i];
+                if (!route || !route.points.length) return null;
                 const on = !!highlightSet && highlightSet.has(e.sourceNodeId) && highlightSet.has(e.targetNodeId);
                 const dim = !!highlightSet && !on;
                 return (
                   <path
                     key={e.id}
-                    d={edgePath(s, t)}
+                    d={routePath(route)}
                     fill="none"
                     stroke={on ? '#365C97' : '#94A3B8'}
                     strokeWidth={on ? 3 : 2}
