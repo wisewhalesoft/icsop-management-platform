@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import {
@@ -21,6 +21,7 @@ import {
   WATERMARK_OPACITY,
 } from '../domain/watermark-style';
 import { openedAsPopup } from './opened-as-popup';
+import { beginPan, panExceeded, panScroll, type PanOrigin } from './tree-pan';
 import { recordSubtreeJump } from './subtree-jump-seam';
 import { DISPLAY_LABEL, deriveDisplayStatus, type DisplayStatus } from './document-display';
 import {
@@ -281,6 +282,8 @@ export function LifecycleTreePreviewPage(): JSX.Element {
   const onNodeClick = useCallback(
     (nodeId: string, ev: React.MouseEvent) => {
       ev.stopPropagation();
+      // 拖曳結束時瀏覽器仍會補一個 click；若不擋，放手當下就會順手選到指標下的節點。
+      if (panMovedRef.current) return;
       setSelected((cur) => (cur === nodeId ? null : nodeId));
     },
     [],
@@ -322,6 +325,76 @@ export function LifecycleTreePreviewPage(): JSX.Element {
 
   const zoomBy = (d: number) =>
     setZoom((z) => Math.max(0.5, Math.min(1.8, +(z + d).toFixed(2))));
+
+  /**
+   * 2026-08-26 UX ③：**按住拖曳平移**。使用者回報「樹狀圖寬度超過螢幕解析度時，缺乏可以左右
+   * 拖曳的手段」——本頁原本連捲都捲不到左半邊（見 `<main>` 之版面註解），拖曳是第二層手段。
+   *
+   * 🔴 只接手滑鼠（`pointerType === 'mouse'`）：觸控／觸控筆之原生慣性捲動本來就能平移，
+   * 再攔一層只會與瀏覽器搶事件（拖到一半停住、慣性消失）。
+   * 🔴 移動與放開掛在 **window** 而非本元素：不掛 window 時指標一離開畫布（很容易發生，
+   * 因為拖的就是「比畫布還寬的東西」）就再也收不到 pointermove，圖會卡在半路。
+   * 🔴 **不使用** `setPointerCapture`：擷取後連 `click` 都會被改派到擷取元素，節點點擊（標示下游）
+   * 會整組失效——那是用一個缺陷換另一個缺陷。
+   */
+  const stageRef = useRef<HTMLElement | null>(null);
+  const panRef = useRef<PanOrigin | null>(null);
+  /** 本次互動是否已構成拖曳 → 隨後的 click 一律抑制（否則放手當下會順手清掉／選到節點）。 */
+  const panMovedRef = useRef(false);
+  const panListenersRef = useRef<(() => void) | null>(null);
+
+  const onStagePointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    const el = stageRef.current;
+    if (!el) return;
+    panRef.current = beginPan(e.clientX, e.clientY, el.scrollLeft, el.scrollTop);
+    panMovedRef.current = false;
+
+    const onMove = (ev: PointerEvent): void => {
+      const origin = panRef.current;
+      const stage = stageRef.current;
+      if (!origin || !stage) return;
+      if (!panMovedRef.current && !panExceeded(origin, ev.clientX, ev.clientY)) return;
+      panMovedRef.current = true;
+      const next = panScroll(origin, ev.clientX, ev.clientY);
+      stage.scrollLeft = next.scrollLeft;
+      stage.scrollTop = next.scrollTop;
+    };
+    const onUp = (): void => {
+      panRef.current = null;
+      panListenersRef.current?.();
+    };
+    const detach = (): void => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      panListenersRef.current = null;
+    };
+    panListenersRef.current?.();
+    panListenersRef.current = detach;
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  }, []);
+
+  // 卸載時務必解除 window 監聽（拖曳中直接關閉預覽分頁／切換循環都會走到這裡）。
+  useEffect(() => () => panListenersRef.current?.(), []);
+
+  /**
+   * 圖比視窗寬時，初次呈現先水平置中（根節點多半落在版面正中；比照 prototypes/22 之 init）。
+   * 只在**佈局改變**時做（載入／切換循環），縮放時不做——縮放中被拉回中央會讓使用者失去定位。
+   */
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el || !layout || layout.nodes.length === 0) return;
+    el.scrollLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
+  }, [layout]);
+
+  /** 空白處點擊＝取消標示；但「拖曳後放手」不是點擊（AC 之外之互動細節，見 panMovedRef）。 */
+  const onStageClick = useCallback(() => {
+    if (panMovedRef.current) return;
+    if (selected) clearSel();
+  }, [selected, clearSel]);
 
   /**
    * F036 AC-D1／AC-D6：雙擊 → 標示下游（既有單擊行為不變）＋開啟唯讀抽屜。
@@ -529,6 +602,7 @@ export function LifecycleTreePreviewPage(): JSX.Element {
           <span className="text-xs text-slate-400 shrink-0 hidden md:inline ml-1">
             點節點＝醒目標示其所有下游節點；點空白處取消；
             <strong className="text-slate-500">雙擊節點＝檢視該節點與其下游節點之程序書清單</strong>
+            ；圖寬超出畫面時可<strong className="text-slate-500">按住拖曳平移</strong>
           </span>
         </div>
       </header>
@@ -554,10 +628,24 @@ export function LifecycleTreePreviewPage(): JSX.Element {
         </div>
       )}
 
-      {/* viewer stage */}
-      <main className="flex-1 overflow-auto p-4 sm:p-8 flex justify-center items-start" onClick={() => selected && clearSel()}>
+      {/*
+        viewer stage。
+        🔴 2026-08-26 UX ③：**不得**用 `flex justify-center` 置中畫板。子元素比容器寬時，flex 置中
+           會把左緣推成**負座標**，而 `scrollLeft` 不能為負 ⇒ 左半邊的節點永遠捲不回來（前台檢視器
+           踩過同一個坑，見 `PublicViewerPage` 之 `#page` 註解）。改為 block 版面＋`margin: 0 auto`：
+           空間夠時置中、不夠時 auto 解析為 0 ⇒ 只往右溢出、左緣恆可達。
+        📝 已作廢（⚠ 不得復原）：OLD> `className="... flex justify-center items-start"`。
+        `select-none`：拖曳時不要一路反白節點文字（本頁是浮水印唯讀預覽，本就不供選取複製）。
+      */}
+      <main
+        ref={stageRef}
+        data-testid="tree-stage"
+        className="flex-1 overflow-auto p-4 sm:p-8 select-none cursor-grab active:cursor-grabbing"
+        onClick={onStageClick}
+        onPointerDown={onStagePointerDown}
+      >
         {error && (
-          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-4 py-3">
+          <div role="alert" className="mx-auto w-fit text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-4 py-3">
             載入失敗 · <span className="mono">{error}</span>
           </div>
         )}
@@ -568,6 +656,21 @@ export function LifecycleTreePreviewPage(): JSX.Element {
           </div>
         )}
         {!error && data && layout && layout.nodes.length > 0 && (
+          /*
+            🔴 尺寸盒：`transform: scale()` **不改變版面盒**——放大後捲動範圍不會跟著長，
+            使用者放大到 180% 只會看到被裁掉的右下角且捲不過去。故由本層以
+            `boardW × zoom` 的實體尺寸撐出捲動範圍，畫板自身則改 `transformOrigin: 'top left'`
+            （用 `top center` 會讓縮放後之內容與本盒錯開半個寬度）。
+          */
+          <div
+            data-testid="tree-scroll-sizer"
+            style={{
+              width: boardW * zoom,
+              height: boardH * zoom,
+              margin: '0 auto',
+              transition: 'width .15s ease, height .15s ease',
+            }}
+          >
           <div
             data-testid="tree-board"
             className="relative bg-white rounded-xl overflow-hidden"
@@ -575,7 +678,7 @@ export function LifecycleTreePreviewPage(): JSX.Element {
               width: boardW,
               height: boardH,
               transform: `scale(${zoom})`,
-              transformOrigin: 'top center',
+              transformOrigin: 'top left',
               transition: 'transform .15s ease',
               boxShadow: '0 4px 24px rgba(0,0,0,.08)',
               backgroundImage: 'radial-gradient(#EEF2F7 1px, transparent 1px)',
@@ -686,6 +789,7 @@ export function LifecycleTreePreviewPage(): JSX.Element {
                 </span>
               ))}
             </div>
+          </div>
           </div>
         )}
       </main>

@@ -72,8 +72,14 @@
   .mono{font-family:'JetBrains Mono',monospace;}
   #stage{background:#E2E8F0;}
   /* board = the "document" being viewed */
+  /* 🔴 2026-08-26 UX ③：transform-origin 由 top center 改 top left——縮放後之內容要與 #boardSizer
+     對齊（top center 會讓兩者錯開半個寬度）。#boardSizer 以 boardW×zoom 的**實體尺寸**撐出捲動範圍：
+     transform:scale() 不改變版面盒，不另撐就會「放大後右下角看得到、捲不過去」。 */
   #board{background:#fff;background-image:radial-gradient(#EEF2F7 1px,transparent 1px);background-size:22px 22px;
-         box-shadow:0 4px 24px rgba(0,0,0,.08);position:relative;transform-origin:top center;transition:transform .15s ease;border-radius:12px;overflow:hidden;}
+         box-shadow:0 4px 24px rgba(0,0,0,.08);position:relative;transform-origin:top left;transition:transform .15s ease;border-radius:12px;overflow:hidden;}
+  #boardSizer{margin:0 auto;transition:width .15s ease,height .15s ease;}
+  #stage{cursor:grab;user-select:none;}
+  #stage.panning{cursor:grabbing;}
   /* diagonal tiled watermark overlay — 字串格式與 05-public-viewer-watermark 完全一致（45°, 14px, 機密聲明另起一行）
      🔴 F020 AC-N2（2026-08-20 定稿，逐字照抄不得自行發明）：色值 #334155 @ opacity 0.30
         （有效色 rgb(193.8,198.0,204.0)、與白底對比度 ≈ 1.716:1，滿足 AC-N1 之 ≥ 1.70）。
@@ -127,7 +133,7 @@
     <button onclick="doAction('DOWNLOAD')" title="下載此循環樹狀圖（PDF，燒錄浮水印）" aria-label="下載" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="download" class="w-4 h-4"></i>下載</button>
     <button onclick="doAction('PRINT')" title="列印此循環樹狀圖（燒錄浮水印）" aria-label="列印" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="printer" class="w-4 h-4"></i>列印</button>
     <div class="w-px h-5 bg-slate-200 mx-1 shrink-0"></div>
-    <span class="text-xs text-slate-400 shrink-0 hidden md:inline">點節點＝醒目標示其所有下游節點；點空白處取消；<strong class="text-slate-500">雙擊節點＝檢視該節點與其下游節點之程序書清單</strong></span>
+    <span class="text-xs text-slate-400 shrink-0 hidden md:inline">點節點＝醒目標示其所有下游節點；點空白處取消；<strong class="text-slate-500">雙擊節點＝檢視該節點與其下游節點之程序書清單</strong>；圖寬超出畫面時可<strong class="text-slate-500">按住拖曳平移</strong></span>
   </div>
 </header>
 
@@ -138,7 +144,12 @@
 </div>
 
 <!-- viewer stage -->
-<main id="stage" class="flex-1 overflow-auto p-4 sm:p-8 flex justify-center items-start">
+<!-- 🔴 2026-08-26 UX ③：**不得**用 flex justify-center 置中畫板——子元素比容器寬時，flex 置中會把
+     左緣推成負座標，而 scrollLeft 不能為負 ⇒ 左半邊的節點永遠捲不回來（05-public-viewer 踩過同一個坑）。
+     改 block ＋ #boardSizer 的 margin:0 auto：空間夠時置中、不夠時 auto 解析為 0 ⇒ 只往右溢出、左緣恆可達。
+     📝 已作廢（⚠ 不得復原）：OLD> class="... flex justify-center items-start" -->
+<main id="stage" class="flex-1 overflow-auto p-4 sm:p-8">
+  <div id="boardSizer">
   <div id="board">
     <svg id="edges" style="position:absolute;inset:0;pointer-events:none;z-index:1;">
       <defs>
@@ -149,6 +160,7 @@
     <div id="nodesLayer" style="position:absolute;inset:0;z-index:2;"></div>
     <!-- watermark overlay（疊於樹狀圖之上，pointer-events:none 不擋點擊）-->
     <div class="wm-layer" id="wmLayer"></div>
+  </div>
   </div>
 </main>
 
@@ -443,7 +455,7 @@
 
   function renderCycle(){
     // board size
-    board.style.width=cur.boardW+'px'; board.style.height=cur.boardH+'px';
+    board.style.width=cur.boardW+'px'; board.style.height=cur.boardH+'px'; syncSizer();
     svg.setAttribute('width',cur.boardW); svg.setAttribute('height',cur.boardH);
     svg.setAttribute('viewBox',`0 0 ${cur.boardW} ${cur.boardH}`);
     // edges
@@ -494,7 +506,7 @@
 
   /* ---- 點節點：醒目標示其及所有下游；其餘淡化；再點同節點/空白取消 ----
      🔒 F036 AC-D6 回歸鎖定：本段行為**完全不變**（雙擊 delta 不得改動單擊語意）。 */
-  function onNodeClick(ev,id){ ev.stopPropagation(); if(selected===id){ clearSel(); } else { selected=id; applyHighlight(); } }
+  function onNodeClick(ev,id){ ev.stopPropagation(); if(panMoved)return; if(selected===id){ clearSel(); } else { selected=id; applyHighlight(); } }
   function clearSel(){ selected=null; applyHighlight(); }
 
   /* ---- 🔵 F036 AC-D1～AC-D8（2026-08-16 additive delta）：雙擊節點 → **唯讀側抽屜** ----
@@ -688,11 +700,49 @@
       chip.classList.remove('hidden'); chip.classList.add('flex');
     }else{ chip.classList.add('hidden'); chip.classList.remove('flex'); }
   }
-  // 點空白處取消
-  document.getElementById('stage').addEventListener('click',()=>{ if(selected)clearSel(); });
+  // 點空白處取消（🔴 拖曳後放手瀏覽器仍會補一個 click，panMoved 為真時一律不當作點擊）
+  document.getElementById('stage').addEventListener('click',()=>{ if(panMoved)return; if(selected)clearSel(); });
+
+  /* ---- 🔴 2026-08-26 UX ③：按住拖曳平移 ----
+     只接手滑鼠：觸控／筆之原生慣性捲動本來就能平移，再攔一層只會與瀏覽器搶事件。
+     move/up 掛在 window：指標一離開畫布（拖的就是比畫布還寬的東西，很容易發生）就收不到事件、圖會卡在半路。
+     不用 setPointerCapture：擷取後連 click 都會改派到擷取元素，節點點擊（標示下游）會整組失效。 */
+  const PAN_CLICK_THRESHOLD=4;   // 位移在此以內仍視為點擊
+  let panOrigin=null, panMoved=false;
+  (function initPan(){
+    const st=document.getElementById('stage');
+    st.addEventListener('pointerdown', e=>{
+      if(e.pointerType!=='mouse' || e.button!==0) return;
+      panOrigin={x:e.clientX,y:e.clientY,sl:st.scrollLeft,st:st.scrollTop}; panMoved=false;
+      st.classList.add('panning');
+      window.addEventListener('pointermove',onMove);
+      window.addEventListener('pointerup',onUp);
+      window.addEventListener('pointercancel',onUp);
+    });
+    function onMove(e){
+      if(!panOrigin) return;
+      if(!panMoved && Math.abs(e.clientX-panOrigin.x)<=PAN_CLICK_THRESHOLD
+                   && Math.abs(e.clientY-panOrigin.y)<=PAN_CLICK_THRESHOLD) return;
+      panMoved=true;
+      // 抓住畫布拖：指標往右移 ⇒ 捲動位置往左（減）。負值夾回 0，否則往左拖過頭會累積負債。
+      st.scrollLeft=Math.max(0,panOrigin.sl-(e.clientX-panOrigin.x));
+      st.scrollTop =Math.max(0,panOrigin.st-(e.clientY-panOrigin.y));
+    }
+    function onUp(){
+      panOrigin=null; st.classList.remove('panning');
+      window.removeEventListener('pointermove',onMove);
+      window.removeEventListener('pointerup',onUp);
+      window.removeEventListener('pointercancel',onUp);
+    }
+  })();
 
   /* ---- zoom ---- */
-  function applyZoom(){ board.style.transform='scale('+zoom+')'; document.getElementById('zoomLabel').textContent=Math.round(zoom*100)+'%'; }
+  function applyZoom(){ board.style.transform='scale('+zoom+')'; syncSizer(); document.getElementById('zoomLabel').textContent=Math.round(zoom*100)+'%'; }
+  /* 捲動範圍＝畫板實際佔用之視覺尺寸（含縮放）。 */
+  function syncSizer(){
+    const sz=document.getElementById('boardSizer');
+    sz.style.width=(cur.boardW*zoom)+'px'; sz.style.height=(cur.boardH*zoom)+'px';
+  }
   function zoomBy(d){ zoom=Math.max(0.5,Math.min(1.8,+(zoom+d).toFixed(2))); applyZoom(); }
   function resetView(){ zoom=1; applyZoom(); }
 
