@@ -300,11 +300,15 @@
     const levels={}; nodes.forEach(n=>{(levels[level[n.id]]=levels[level[n.id]]||[]).push(n.id);});
     const numLv=Math.max(...nodes.map(n=>level[n.id]))+1;
     const maxCols=Math.max(...Object.keys(levels).map(k=>levels[k].length));
+    const parents={}; nodes.forEach(n=>{parents[n.id]=[];}); edges.forEach(([s,t])=>{parents[t].push(s);});
+    orderRowsByBarycenter(levels,numLv,level,adj,parents);
     const pos={};
     Object.keys(levels).forEach(lv=>{const row=levels[lv];const count=row.length;const rowW=count*HGAP;const startX=MARGIN+(maxCols*HGAP-rowW)/2;
       row.forEach((id,i)=>{pos[id]={x:startX+i*HGAP+(HGAP-NODE_W)/2, y:MARGIN+(+lv)*VGAP};});});
     const boardW=MARGIN*2+maxCols*HGAP, boardH=MARGIN*2+(numLv-1)*VGAP+NODE_H;
-    return {nodes,edges,adj,pos,boardW,boardH};
+    const g={nodes,edges,adj,pos,level,boardW,boardH};
+    g.routes=buildEdgeRoutes(g);
+    return g;
   }
 
   function descendants(id){ // id 及其所有下游（沿 child 邊遞移）
@@ -313,11 +317,108 @@
     return set;
   }
 
-  function edgeD(s,t){ // 直角（elbow / orthogonal）：垂直→水平→垂直，child 端帶箭頭
-    const sx=cur.pos[s].x+NODE_W/2, sy=cur.pos[s].y+NODE_H;
-    const tx=cur.pos[t].x+NODE_W/2, ty=cur.pos[t].y;
-    const midY=sy+(ty-sy)/2;
-    return `M ${sx} ${sy} L ${sx} ${midY} L ${tx} ${midY} L ${tx} ${ty}`;
+  /* ---- 同層欄位順序：barycenter 掃描（Sugiyama 第二階段）----
+     為何需要：同層順序原＝節點建立順序，父子交錯（P1→C2、P2→C1）時兩條邊的水平段會落在
+     同一條走廊線上且 x 區間完全重疊 → 畫面成「H」形，讀起來與真實連線相反。
+     決定性：固定 4 趟（下、上、下、上）；無鄰居者以當前索引為鍵、鍵同時以索引 tie-break，
+     故已無交叉之圖（多數樹）順序不變，外觀與修正前一致。 */
+  function orderRowsByBarycenter(levels,numLv,level,children,parents){
+    if(numLv<2) return;
+    const sweep=(lv,refLv,nb)=>{
+      const row=levels[lv], ref=levels[refLv];
+      if(!row||!ref||row.length<2) return;
+      const refIdx={}; ref.forEach((id,i)=>{refIdx[id]=i;});
+      levels[lv]=row.map((id,i)=>{
+        const xs=(nb[id]||[]).filter(v=>level[v]===refLv).map(v=>refIdx[v]);
+        return {id,i,key:xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:i};
+      }).sort((a,b)=>a.key-b.key||a.i-b.i).map(k=>k.id);
+    };
+    for(let pass=0;pass<4;pass++){
+      if(pass%2===0){ for(let lv=1;lv<numLv;lv++) sweep(lv,lv-1,parents); }
+      else { for(let lv=numLv-2;lv>=0;lv--) sweep(lv,lv+1,children); }
+    }
+  }
+
+  /* ---- 連線繞線（2026-08-26 樹狀圖連線缺陷修正）----
+     ① 水平段共線重疊 → 走廊車道分流（LANE_ORDER 由中央往外，單一車道時＝走廊正中＝舊外觀）
+     ② 同一點進出 → 錨點沿卡片底/頂邊等距分散
+     ③ 跨層邊穿過中間層卡片／與主鏈完全重合而隱形 → 改走掃描出來的無卡片垂直通道
+     權威實作同步於 frontend/src/pages/lifecycle-tree-layout.ts 與後端同名檔（演算法一致）。 */
+  const ROUTE={LANES:5,LANE_ORDER:[2,1,3,0,4],LANE_STEP:12,LANE_GAP:16,ANCHOR_STEP:18,ANCHOR_SPAN:136,CHANNEL_CLEAR:10,CHANNEL_STEP:8};
+  function spreadOffset(i,k,step){ return k<2?0:(i-(k-1)/2)*step; }
+  function anchorOffset(i,k){ return spreadOffset(i,k,k<2?0:Math.min(ROUTE.ANCHOR_STEP,ROUTE.ANCHOR_SPAN/(k-1))); }
+
+  function buildEdgeRoutes(g){
+    const corridorY=lv=>MARGIN+lv*VGAP-(VGAP-NODE_H)/2;
+    const work=g.edges.map(([s,t],idx)=>({idx,s,t,span:g.level[t]-g.level[s],sx:0,tx:0,cx:0,gapLo:0,gapHi:0,yA:0,yB:0}))
+      .filter(w=>g.pos[w.s]&&g.pos[w.t]);
+    const groupBy=key=>{const m={};work.forEach(w=>{(m[key(w)]=m[key(w)]||[]).push(w);});return Object.keys(m).map(k=>m[k]);};
+
+    // ② 錨點分散：出邊依目標 x、入邊依來源 x 由左至右配位。
+    groupBy(w=>w.s).forEach(gr=>{
+      gr.slice().sort((a,b)=>g.pos[a.t].x-g.pos[b.t].x||g.pos[a.t].y-g.pos[b.t].y||(a.t<b.t?-1:1))
+        .forEach((w,i)=>{w.sx=g.pos[w.s].x+NODE_W/2+anchorOffset(i,gr.length);});
+    });
+    groupBy(w=>w.t).forEach(gr=>{
+      gr.slice().sort((a,b)=>g.pos[a.s].x-g.pos[b.s].x||g.pos[a.s].y-g.pos[b.s].y||(a.s<b.s?-1:1))
+        .forEach((w,i)=>{w.tx=g.pos[w.t].x+NODE_W/2+anchorOffset(i,gr.length);});
+    });
+
+    // ③ 跨層邊之垂直通道：掃出中間各層卡片以外的 x 空隙，取夾住目標 x 後最近者。
+    const longs=work.filter(w=>w.span>=2);
+    longs.forEach(w=>{
+      const blocks=g.nodes.filter(n=>g.level[n.id]>g.level[w.s]&&g.level[n.id]<g.level[w.t])
+        .map(n=>[g.pos[n.id].x-ROUTE.CHANNEL_CLEAR,g.pos[n.id].x+NODE_W+ROUTE.CHANNEL_CLEAR])
+        .sort((a,b)=>a[0]-b[0]);
+      const gaps=[]; let cursor=0;
+      blocks.forEach(([lo,hi])=>{ if(lo-cursor>ROUTE.CHANNEL_CLEAR*2) gaps.push([cursor,lo]); cursor=Math.max(cursor,hi); });
+      if(g.boardW-cursor>ROUTE.CHANNEL_CLEAR*2) gaps.push([cursor,g.boardW]);
+      if(!gaps.length){ w.cx=w.tx; w.gapLo=w.tx; w.gapHi=w.tx; return; }
+      const clampTo=gp=>Math.min(Math.max(w.tx,gp[0]+2),gp[1]-2);
+      let best=gaps[0];
+      gaps.forEach(gp=>{ if(Math.abs(clampTo(gp)-w.tx)<Math.abs(clampTo(best)-w.tx)) best=gp; });
+      w.cx=clampTo(best); w.gapLo=best[0]; w.gapHi=best[1];
+    });
+    const chan={}; longs.forEach(w=>{(chan[w.gapLo]=chan[w.gapLo]||[]).push(w);});
+    Object.keys(chan).forEach(k=>{
+      const gr=chan[k];
+      gr.forEach((w,i)=>{ w.cx=Math.min(Math.max(w.cx+spreadOffset(i,gr.length,ROUTE.CHANNEL_STEP),w.gapLo+2),w.gapHi-2); });
+    });
+
+    // ① 車道分流：同走廊之水平段以 x 區間貪婪配道（中央優先）。
+    const corridors={};
+    const push=(lv,item)=>{(corridors[lv]=corridors[lv]||[]).push(item);};
+    work.forEach(w=>{
+      if(w.span>=2){
+        push(g.level[w.s]+1,{w,slot:'A',lo:Math.min(w.sx,w.cx),hi:Math.max(w.sx,w.cx)});
+        push(g.level[w.t],{w,slot:'B',lo:Math.min(w.cx,w.tx),hi:Math.max(w.cx,w.tx)});
+      } else {
+        push(g.level[w.t],{w,slot:'B',lo:Math.min(w.sx,w.tx),hi:Math.max(w.sx,w.tx)});
+      }
+    });
+    Object.keys(corridors).forEach(lv=>{
+      const lastHi=new Array(ROUTE.LANES).fill(-Infinity);
+      corridors[lv].slice().sort((a,b)=>a.lo-b.lo||a.hi-b.hi||a.w.idx-b.w.idx).forEach(it=>{
+        let lane=ROUTE.LANE_ORDER.find(l=>lastHi[l]+ROUTE.LANE_GAP<=it.lo);
+        if(lane===undefined) lane=ROUTE.LANE_ORDER.reduce((best,l)=>lastHi[l]<lastHi[best]?l:best,ROUTE.LANE_ORDER[0]);
+        lastHi[lane]=it.hi;
+        const y=corridorY(+lv)+(lane-(ROUTE.LANES-1)/2)*ROUTE.LANE_STEP;
+        if(it.slot==='A') it.w.yA=y; else it.w.yB=y;
+      });
+    });
+
+    const out=g.edges.map(()=>[]);
+    work.forEach(w=>{
+      const sBottom=g.pos[w.s].y+NODE_H, tTop=g.pos[w.t].y;
+      out[w.idx]=w.span>=2
+        ? [[w.sx,sBottom],[w.sx,w.yA],[w.cx,w.yA],[w.cx,w.yB],[w.tx,w.yB],[w.tx,tTop]]
+        : [[w.sx,sBottom],[w.sx,w.yB],[w.tx,w.yB],[w.tx,tTop]];
+    });
+    return out;
+  }
+
+  function edgeD(points){ // 折線 → SVG path d（末點＝進入 child 頂邊處，箭頭畫在此）
+    return points.map(([x,y],i)=>`${i?'L':'M'} ${x} ${y}`).join(' ');
   }
 
   function renderCycle(){
@@ -327,10 +428,12 @@
     svg.setAttribute('viewBox',`0 0 ${cur.boardW} ${cur.boardH}`);
     // edges
     [...svg.querySelectorAll('path.edge')].forEach(p=>p.remove());
-    cur.edges.forEach(([s,t])=>{
+    cur.edges.forEach(([s,t],i)=>{
+      const pts=cur.routes[i];
+      if(!pts||!pts.length) return;
       const p=document.createElementNS('http://www.w3.org/2000/svg','path');
       p.setAttribute('class','edge'); p.dataset.s=s; p.dataset.t=t;
-      p.setAttribute('d',edgeD(s,t)); p.setAttribute('marker-end','url(#arrow)');
+      p.setAttribute('d',edgeD(pts)); p.setAttribute('marker-end','url(#arrow)');
       svg.appendChild(p);
     });
     // nodes
