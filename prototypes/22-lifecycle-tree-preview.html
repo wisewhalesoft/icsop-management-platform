@@ -65,6 +65,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
 <script src="https://unpkg.com/lucide@latest"></script>
+<!-- 佈局：與 F008 DAG 畫布及前後端同一套（版本須與 package.json 釘死之 1.1.8 一致） -->
+<script src="https://unpkg.com/@dagrejs/dagre@1.1.8/dist/dagre.min.js"></script>
 <style>
   body{font-family:'Inter','Noto Sans TC',sans-serif;background:#F8FAFC;color:#334155;}
   .mono{font-family:'JetBrains Mono',monospace;}
@@ -292,20 +294,24 @@
   /* ---- 由上而下分層佈局（最長路徑分層；支援多 parent/多 child）---- */
   function buildGraph(lcId){
     const cy=CYCLES[lcId]; const nodes=cy.nodes, edges=cy.edges;
-    const adj={},indeg={}; nodes.forEach(n=>{adj[n.id]=[];indeg[n.id]=0;});
-    edges.forEach(([s,t])=>{adj[s].push(t);indeg[t]++;});
-    const level={},deg={}; nodes.forEach(n=>{level[n.id]=0;deg[n.id]=indeg[n.id];});
-    const q=nodes.filter(n=>indeg[n.id]===0).map(n=>n.id);
-    while(q.length){const u=q.shift(); adj[u].forEach(v=>{level[v]=Math.max(level[v],level[u]+1); if(--deg[v]===0)q.push(v);});}
-    const levels={}; nodes.forEach(n=>{(levels[level[n.id]]=levels[level[n.id]]||[]).push(n.id);});
-    const numLv=Math.max(...nodes.map(n=>level[n.id]))+1;
-    const maxCols=Math.max(...Object.keys(levels).map(k=>levels[k].length));
-    const parents={}; nodes.forEach(n=>{parents[n.id]=[];}); edges.forEach(([s,t])=>{parents[t].push(s);});
-    orderRowsByBarycenter(levels,numLv,level,adj,parents);
-    const pos={};
-    Object.keys(levels).forEach(lv=>{const row=levels[lv];const count=row.length;const rowW=count*HGAP;const startX=MARGIN+(maxCols*HGAP-rowW)/2;
-      row.forEach((id,i)=>{pos[id]={x:startX+i*HGAP+(HGAP-NODE_W)/2, y:MARGIN+(+lv)*VGAP};});});
-    const boardW=MARGIN*2+maxCols*HGAP, boardH=MARGIN*2+(numLv-1)*VGAP+NODE_H;
+    const adj={}; nodes.forEach(n=>{adj[n.id]=[];}); edges.forEach(([s,t])=>{adj[s].push(t);});
+
+    /* 座標交給 dagre（與 F008 DAG 畫布之「整理連結線」同一套；前後端亦同）。
+       手刻的分層＋同層各自置中已移除——它會把父節點擺在版面正中、橫桿得往左右掃兩千點
+       去找子女（正式站真圖：父偏離子女中心平均 735pt；dagre 為 96pt）。 */
+    const gg=new dagre.graphlib.Graph().setDefaultEdgeLabel(()=>({}));
+    gg.setGraph({rankdir:'TB',nodesep:HGAP-NODE_W,ranksep:VGAP-NODE_H,marginx:MARGIN,marginy:MARGIN});
+    nodes.forEach(n=>gg.setNode(n.id,{width:NODE_W,height:NODE_H}));
+    edges.forEach(([s,t])=>gg.setEdge(s,t));
+    dagre.layout(gg);
+    const pos={}; nodes.forEach(n=>{const p=gg.node(n.id);
+      pos[n.id]={x:Math.round(p.x-NODE_W/2), y:Math.round(p.y-NODE_H/2)};});
+    // level 由實際 y 去重排序推得（同 rank 高度相同 ⇒ y 相同），供連線繞線使用。
+    const rankY=[...new Set(nodes.map(n=>pos[n.id].y))].sort((a,b)=>a-b);
+    const level={}; nodes.forEach(n=>{level[n.id]=rankY.indexOf(pos[n.id].y);});
+    const boardW=Math.max(...nodes.map(n=>pos[n.id].x+NODE_W))+MARGIN;
+    const boardH=Math.max(...nodes.map(n=>pos[n.id].y+NODE_H))+MARGIN;
+
     const g={nodes,edges,adj,pos,level,boardW,boardH};
     g.routes=buildEdgeRoutes(g);
     return g;
@@ -317,36 +323,13 @@
     return set;
   }
 
-  /* ---- 同層欄位順序：barycenter 掃描（Sugiyama 第二階段）----
-     為何需要：同層順序原＝節點建立順序，父子交錯（P1→C2、P2→C1）時兩條邊的水平段會落在
-     同一條走廊線上且 x 區間完全重疊 → 畫面成「H」形，讀起來與真實連線相反。
-     決定性：固定 4 趟（下、上、下、上）；無鄰居者以當前索引為鍵、鍵同時以索引 tie-break，
-     故已無交叉之圖（多數樹）順序不變，外觀與修正前一致。 */
-  function orderRowsByBarycenter(levels,numLv,level,children,parents){
-    if(numLv<2) return;
-    const sweep=(lv,refLv,nb)=>{
-      const row=levels[lv], ref=levels[refLv];
-      if(!row||!ref||row.length<2) return;
-      const refIdx={}; ref.forEach((id,i)=>{refIdx[id]=i;});
-      levels[lv]=row.map((id,i)=>{
-        const xs=(nb[id]||[]).filter(v=>level[v]===refLv).map(v=>refIdx[v]);
-        return {id,i,key:xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:i};
-      }).sort((a,b)=>a.key-b.key||a.i-b.i).map(k=>k.id);
-    };
-    for(let pass=0;pass<4;pass++){
-      if(pass%2===0){ for(let lv=1;lv<numLv;lv++) sweep(lv,lv-1,parents); }
-      else { for(let lv=numLv-2;lv>=0;lv--) sweep(lv,lv+1,children); }
-    }
-  }
-
   /* ---- 連線繞線（2026-08-26 樹狀圖連線缺陷修正）----
      ① 水平段共線重疊 → 走廊車道分流（LANE_ORDER 由中央往外，單一車道時＝走廊正中＝舊外觀）
-     ② 同一點進出 → 錨點沿卡片底/頂邊等距分散
+     ② 同父扇出被畫成好幾條平行線 → 進出口合併（出邊同一點出、入邊同一點進，到子節點前才分岔）
      ③ 跨層邊穿過中間層卡片／與主鏈完全重合而隱形 → 改走掃描出來的無卡片垂直通道
      權威實作同步於 frontend/src/pages/lifecycle-tree-layout.ts 與後端同名檔（演算法一致）。 */
-  const ROUTE={LANES:5,LANE_ORDER:[2,1,3,0,4],LANE_STEP:12,LANE_GAP:16,ANCHOR_STEP:18,ANCHOR_SPAN:136,CHANNEL_CLEAR:10,CHANNEL_STEP:8};
+  const ROUTE={LANES:5,LANE_ORDER:[2,1,3,0,4],LANE_STEP:12,LANE_GAP:16,CHANNEL_CLEAR:10,CHANNEL_STEP:8,HOP_R:5};
   function spreadOffset(i,k,step){ return k<2?0:(i-(k-1)/2)*step; }
-  function anchorOffset(i,k){ return spreadOffset(i,k,k<2?0:Math.min(ROUTE.ANCHOR_STEP,ROUTE.ANCHOR_SPAN/(k-1))); }
 
   function buildEdgeRoutes(g){
     const corridorY=lv=>MARGIN+lv*VGAP-(VGAP-NODE_H)/2;
@@ -354,15 +337,9 @@
       .filter(w=>g.pos[w.s]&&g.pos[w.t]);
     const groupBy=key=>{const m={};work.forEach(w=>{(m[key(w)]=m[key(w)]||[]).push(w);});return Object.keys(m).map(k=>m[k]);};
 
-    // ② 錨點分散：出邊依目標 x、入邊依來源 x 由左至右配位。
-    groupBy(w=>w.s).forEach(gr=>{
-      gr.slice().sort((a,b)=>g.pos[a.t].x-g.pos[b.t].x||g.pos[a.t].y-g.pos[b.t].y||(a.t<b.t?-1:1))
-        .forEach((w,i)=>{w.sx=g.pos[w.s].x+NODE_W/2+anchorOffset(i,gr.length);});
-    });
-    groupBy(w=>w.t).forEach(gr=>{
-      gr.slice().sort((a,b)=>g.pos[a.s].x-g.pos[b.s].x||g.pos[a.s].y-g.pos[b.s].y||(a.s<b.s?-1:1))
-        .forEach((w,i)=>{w.tx=g.pos[w.t].x+NODE_W/2+anchorOffset(i,gr.length);});
-    });
+    // ② 進出口合併：出邊自底邊同一點離開、入邊進頂邊同一點（同父者合成一條橫桿，
+    //    到各自子節點前才分岔）。
+    work.forEach(w=>{ w.sx=g.pos[w.s].x+NODE_W/2; w.tx=g.pos[w.t].x+NODE_W/2; });
 
     // ③ 跨層邊之垂直通道：掃出中間各層卡片以外的 x 空隙，取夾住目標 x 後最近者。
     const longs=work.filter(w=>w.span>=2);
@@ -385,40 +362,83 @@
       gr.forEach((w,i)=>{ w.cx=Math.min(Math.max(w.cx+spreadOffset(i,gr.length,ROUTE.CHANNEL_STEP),w.gapLo+2),w.gapHi-2); });
     });
 
-    // ① 車道分流：同走廊之水平段以 x 區間貪婪配道（中央優先）。
+    // ① 車道分流：以「同一父的整組扇出」為單位配道（同組共用橫桿＝視覺上一條線），
+    //    不同父之 x 區間相交時才分到不同車道。
     const corridors={};
-    const push=(lv,item)=>{(corridors[lv]=corridors[lv]||[]).push(item);};
+    const push=(lv,key,slot,lo,hi,w)=>{
+      const byKey=corridors[lv]=corridors[lv]||{};
+      const gr=byKey[key];
+      if(!gr){ byKey[key]={slot,lo,hi,idx:w.idx,ws:[w]}; return; }
+      gr.lo=Math.min(gr.lo,lo); gr.hi=Math.max(gr.hi,hi); gr.idx=Math.min(gr.idx,w.idx); gr.ws.push(w);
+    };
     work.forEach(w=>{
       if(w.span>=2){
-        push(g.level[w.s]+1,{w,slot:'A',lo:Math.min(w.sx,w.cx),hi:Math.max(w.sx,w.cx)});
-        push(g.level[w.t],{w,slot:'B',lo:Math.min(w.cx,w.tx),hi:Math.max(w.cx,w.tx)});
+        push(g.level[w.s]+1,'A'+w.idx,'A',Math.min(w.sx,w.cx),Math.max(w.sx,w.cx),w);
+        push(g.level[w.t],'B'+w.idx,'B',Math.min(w.cx,w.tx),Math.max(w.cx,w.tx),w);
       } else {
-        push(g.level[w.t],{w,slot:'B',lo:Math.min(w.sx,w.tx),hi:Math.max(w.sx,w.tx)});
+        push(g.level[w.t],'S'+w.s,'B',Math.min(w.sx,w.tx),Math.max(w.sx,w.tx),w);
       }
     });
     Object.keys(corridors).forEach(lv=>{
       const lastHi=new Array(ROUTE.LANES).fill(-Infinity);
-      corridors[lv].slice().sort((a,b)=>a.lo-b.lo||a.hi-b.hi||a.w.idx-b.w.idx).forEach(it=>{
-        let lane=ROUTE.LANE_ORDER.find(l=>lastHi[l]+ROUTE.LANE_GAP<=it.lo);
+      Object.keys(corridors[lv]).map(k=>corridors[lv][k])
+        .sort((a,b)=>a.lo-b.lo||a.hi-b.hi||a.idx-b.idx).forEach(gr=>{
+        let lane=ROUTE.LANE_ORDER.find(l=>lastHi[l]+ROUTE.LANE_GAP<=gr.lo);
         if(lane===undefined) lane=ROUTE.LANE_ORDER.reduce((best,l)=>lastHi[l]<lastHi[best]?l:best,ROUTE.LANE_ORDER[0]);
-        lastHi[lane]=it.hi;
+        lastHi[lane]=gr.hi;
         const y=corridorY(+lv)+(lane-(ROUTE.LANES-1)/2)*ROUTE.LANE_STEP;
-        if(it.slot==='A') it.w.yA=y; else it.w.yB=y;
+        gr.ws.forEach(w=>{ if(gr.slot==='A') w.yA=y; else w.yB=y; });
       });
     });
 
-    const out=g.edges.map(()=>[]);
+    const pts=g.edges.map(()=>[]);
     work.forEach(w=>{
       const sBottom=g.pos[w.s].y+NODE_H, tTop=g.pos[w.t].y;
-      out[w.idx]=w.span>=2
+      pts[w.idx]=w.span>=2
         ? [[w.sx,sBottom],[w.sx,w.yA],[w.cx,w.yA],[w.cx,w.yB],[w.tx,w.yB],[w.tx,tTop]]
         : [[w.sx,sBottom],[w.sx,w.yB],[w.tx,w.yB],[w.tx,tTop]];
+    });
+
+    // ④ 跨線繞過（hop）：不同子樹之線交會時由水平段以小半圓跳過垂直段（無顏色區隔時
+    //    十字交會分不出哪條連續）。🔴 同父扇出／同子扇入之交會不畫——那是刻意合併的一束線。
+    const verticals=[];
+    work.forEach(w=>{
+      const p=pts[w.idx];
+      for(let i=0;i+1<p.length;i++) if(p[i][0]===p[i+1][0])
+        verticals.push({x:p[i][0],lo:Math.min(p[i][1],p[i+1][1]),hi:Math.max(p[i][1],p[i+1][1]),s:w.s,t:w.t});
+    });
+    const out=g.edges.map(()=>({points:[],hops:[]}));
+    work.forEach(w=>{
+      const p=pts[w.idx], hops=[];
+      for(let i=0;i+1<p.length;i++){
+        const a=p[i], b=p[i+1];
+        if(a[1]!==b[1]){ hops.push([]); continue; }
+        const lo=Math.min(a[0],b[0]), hi=Math.max(a[0],b[0]);
+        const xs=verticals.filter(v=>v.s!==w.s&&v.t!==w.t&&v.x>lo+ROUTE.HOP_R&&v.x<hi-ROUTE.HOP_R
+                                     &&a[1]>v.lo+0.5&&a[1]<v.hi-0.5).map(v=>v.x).sort((m,n)=>m-n);
+        const merged=[];
+        xs.forEach(x=>{ if(!merged.length||x-merged[merged.length-1]>ROUTE.HOP_R*2) merged.push(x); });
+        hops.push(a[0]<=b[0]?merged:merged.reverse());
+      }
+      out[w.idx]={points:p,hops};
     });
     return out;
   }
 
-  function edgeD(points){ // 折線 → SVG path d（末點＝進入 child 頂邊處，箭頭畫在此）
-    return points.map(([x,y],i)=>`${i?'L':'M'} ${x} ${y}`).join(' ');
+  /* 折線 → SVG path d；繞過以三次貝茲近似半圓（控制點 4/3·r），往 −y 凸起＝畫面上往上凸。 */
+  function edgeD(route){
+    const p=route.points, R=ROUTE.HOP_R;
+    if(!p.length) return '';
+    let d=`M ${p[0][0]} ${p[0][1]}`;
+    for(let i=0;i+1<p.length;i++){
+      const a=p[i], b=p[i+1], dir=b[0]>=a[0]?1:-1, bulge=a[1]-R*4/3;
+      (route.hops[i]||[]).forEach(x=>{
+        d+=` L ${x-R*dir} ${a[1]}`;
+        d+=` C ${x-R*dir} ${bulge} ${x+R*dir} ${bulge} ${x+R*dir} ${a[1]}`;
+      });
+      d+=` L ${b[0]} ${b[1]}`;
+    }
+    return d;
   }
 
   function renderCycle(){
@@ -430,7 +450,7 @@
     [...svg.querySelectorAll('path.edge')].forEach(p=>p.remove());
     cur.edges.forEach(([s,t],i)=>{
       const pts=cur.routes[i];
-      if(!pts||!pts.length) return;
+      if(!pts||!pts.points.length) return;
       const p=document.createElementNS('http://www.w3.org/2000/svg','path');
       p.setAttribute('class','edge'); p.dataset.s=s; p.dataset.t=t;
       p.setAttribute('d',edgeD(pts)); p.setAttribute('marker-end','url(#arrow)');

@@ -1,11 +1,19 @@
 /**
  * F036 循環樹狀圖「上到下」分層佈局 — 純演算法（無 IO）。
  *
- * 忠實移植 prototypes/22-lifecycle-tree-preview.html 之 buildGraph：
- *  - 以最長路徑分層（BFS，支援多 parent／多 child）；同層水平置中排列。
+ * 節點座標交給 **dagre**（`@dagrejs/dagre`，與 F008 DAG 畫布「整理連結線」同一套演算法，
+ * 全站 DAG 佈局一致；OQ-E03-09）。手刻的分層＋同層置中已移除——它每一列各自置中，父節點
+ * 因而落在版面正中、橫桿得往左右掃兩千點去找子女（正式站真圖：父偏離子女中心平均 735pt）。
+ * dagre 的座標指派會把父節點放在子女正上方（同圖平均 96pt，−87%），子樹連續性同樣保持。
+ *
+ * 🔴 **前後端與 prototype 三方必須算出同一組座標**（檢視器／PDF／原型畫出來要一樣），故
+ * `@dagrejs/dagre` 在前後端 package.json 皆**釘死同一版本**（不得改回 `^`），並以本檔
+ * 「dagre 固定座標向量」測試兩端各自斷言同一組期望值；版本漂移會在該測試當場現形。
  *  - 供伺服器端 PDF 匯出（LifecycleTreePdfRenderer）計算節點座標與直角連線路徑。
  * 前端檢視器另有一份對應實作（frontend/src/pages/lifecycle-tree-layout.ts），演算法一致。
  */
+
+import Dagre from '@dagrejs/dagre';
 
 export interface TreeLayoutNode {
   id: string;
@@ -39,100 +47,69 @@ export interface TreeLayout {
 export const TREE_LAYOUT_CONST = {
   NODE_W: 176,
   NODE_H: 62,
+  /** 同層相鄰節點之中心距（dagre nodesep = HGAP − NODE_W）。 */
   HGAP: 210,
+  /** 相鄰層之中心距（dagre ranksep = VGAP − NODE_H）。 */
   VGAP: 132,
   MARGIN: 48,
 } as const;
 
 /**
- * 依有向邊做上到下最長路徑分層佈局，回傳每節點座標與整體版面尺寸。
- * 空節點 → boardWidth/Height 僅含邊界。含環時（理論上 F008 已禁）以已達層級為準、不無窮迴圈。
+ * 以 dagre 做上到下（rankdir TB）佈局，回傳每節點座標、層級與整體版面尺寸。
+ *
+ * `level` 由實際 y 值去重排序而得（同一 rank 之節點高度相同 ⇒ y 相同），故仍是「第幾層」之語意，
+ * 供連線繞線（走廊、車道、跨層通道）使用。空圖 → 版面僅含邊界。端點不存在之邊先濾掉，
+ * 否則 dagre 會替它自動長出一個幽靈節點。
  */
 export function buildTreeLayout(
   nodes: TreeLayoutNode[],
   edges: TreeLayoutEdge[],
 ): TreeLayout {
   const { NODE_W, NODE_H, HGAP, VGAP, MARGIN } = TREE_LAYOUT_CONST;
-  const ids = nodes.map((n) => n.id);
-  const idSet = new Set(ids);
+  const idSet = new Set(nodes.map((n) => n.id));
+  const kept = edges.filter((e) => idSet.has(e.sourceNodeId) && idSet.has(e.targetNodeId));
+  if (!nodes.length) {
+    return {
+      nodes: [],
+      edges: kept,
+      boardWidth: MARGIN * 2,
+      boardHeight: MARGIN * 2,
+    nodeWidth: NODE_W,
+    nodeHeight: NODE_H,
+    };
+  }
 
-  const adj = new Map<string, string[]>();
-  const indeg = new Map<string, number>();
-  ids.forEach((id) => {
-    adj.set(id, []);
-    indeg.set(id, 0);
+  const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  g.setGraph({
+    rankdir: 'TB',
+    nodesep: HGAP - NODE_W,
+    ranksep: VGAP - NODE_H,
+    marginx: MARGIN,
+    marginy: MARGIN,
   });
-  for (const e of edges) {
-    if (!idSet.has(e.sourceNodeId) || !idSet.has(e.targetNodeId)) continue;
-    adj.get(e.sourceNodeId)!.push(e.targetNodeId);
-    indeg.set(e.targetNodeId, (indeg.get(e.targetNodeId) ?? 0) + 1);
-  }
+  nodes.forEach((n) => g.setNode(n.id, { width: NODE_W, height: NODE_H }));
+  kept.forEach((e) => g.setEdge(e.sourceNodeId, e.targetNodeId));
+  Dagre.layout(g);
 
-  // Kahn + 最長路徑分層（level[v] = max(level[u]+1)）。
-  const level = new Map<string, number>();
-  const deg = new Map<string, number>();
-  ids.forEach((id) => {
-    level.set(id, 0);
-    deg.set(id, indeg.get(id) ?? 0);
+  // dagre 回傳的是中心點；四捨五入為整數左上角座標（浮點殘差會讓兩端座標對不起來）。
+  const placed = nodes.map((n) => {
+    const p = g.node(n.id) as { x: number; y: number };
+    return {
+      id: n.id,
+      name: n.name,
+      docCount: n.docCount ?? 0,
+      x: Math.round(p.x - NODE_W / 2),
+      y: Math.round(p.y - NODE_H / 2),
+    };
   });
-  const queue = ids.filter((id) => (indeg.get(id) ?? 0) === 0);
-  const seen = new Set<string>(queue);
-  while (queue.length) {
-    const u = queue.shift() as string;
-    for (const v of adj.get(u) ?? []) {
-      level.set(v, Math.max(level.get(v) ?? 0, (level.get(u) ?? 0) + 1));
-      deg.set(v, (deg.get(v) ?? 0) - 1);
-      if ((deg.get(v) ?? 0) === 0 && !seen.has(v)) {
-        seen.add(v);
-        queue.push(v);
-      }
-    }
-  }
-
-  const levels = new Map<number, string[]>();
-  ids.forEach((id) => {
-    const lv = level.get(id) ?? 0;
-    (levels.get(lv) ?? levels.set(lv, []).get(lv)!).push(id);
-  });
-
-  const numLv = ids.length ? Math.max(...ids.map((id) => level.get(id) ?? 0)) + 1 : 0;
-  const maxCols = levels.size ? Math.max(...[...levels.values()].map((r) => r.length)) : 0;
-
-  // 同層欄位順序：barycenter 掃描降低交叉（見 orderRowsByBarycenter）。
-  const parents = new Map<string, string[]>();
-  ids.forEach((id) => parents.set(id, []));
-  for (const e of edges) {
-    if (!idSet.has(e.sourceNodeId) || !idSet.has(e.targetNodeId)) continue;
-    parents.get(e.targetNodeId)!.push(e.sourceNodeId);
-  }
-  orderRowsByBarycenter(levels, numLv, level, adj, parents);
-
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const laidOut: LaidOutNode[] = [];
-  for (const [lv, rowIds] of levels) {
-    const count = rowIds.length;
-    const rowW = count * HGAP;
-    const startX = MARGIN + (maxCols * HGAP - rowW) / 2;
-    rowIds.forEach((id, i) => {
-      const n = byId.get(id)!;
-      laidOut.push({
-        id,
-        name: n.name,
-        docCount: n.docCount ?? 0,
-        x: startX + i * HGAP + (HGAP - NODE_W) / 2,
-        y: MARGIN + lv * VGAP,
-        level: lv,
-      });
-    });
-  }
-  // 依原節點順序輸出，穩定可測。
-  laidOut.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+  const rankY = [...new Set(placed.map((p) => p.y))].sort((a, b) => a - b);
+  const laidOut: LaidOutNode[] = placed.map((p) => ({ ...p, level: rankY.indexOf(p.y) }));
 
   return {
     nodes: laidOut,
-    edges: edges.filter((e) => idSet.has(e.sourceNodeId) && idSet.has(e.targetNodeId)),
-    boardWidth: ids.length ? MARGIN * 2 + maxCols * HGAP : MARGIN * 2,
-    boardHeight: ids.length ? MARGIN * 2 + (numLv - 1) * VGAP + NODE_H : MARGIN * 2,
+    edges: kept,
+    boardWidth: Math.max(...laidOut.map((n) => n.x + NODE_W)) + MARGIN,
+    boardHeight: Math.max(...laidOut.map((n) => n.y + NODE_H)) + MARGIN,
     nodeWidth: NODE_W,
     nodeHeight: NODE_H,
   };
@@ -170,51 +147,6 @@ export function descendants(edges: TreeLayoutEdge[], startId: string): Set<strin
   return set;
 }
 
-/**
- * 同層欄位順序：barycenter 掃描（Sugiyama 第二階段之經典作法），就地重排 `levels` 各列。
- *
- * 為何需要：原本同層順序＝節點建立順序，父子交錯（P1→C2、P2→C1）時兩條邊的水平段會落在
- * 同一條走廊線上、且 x 區間完全重疊 → 畫面成「H」形，讀起來與真實連線相反。依父（或子）之
- * 平均欄位重排後，這類交錯多數會自然消失。
- *
- * 決定性：固定 4 趟（下、上、下、上）；無鄰居之節點以「當前索引」為鍵（不被拉走），鍵相同
- * 時以當前索引 tie-break（穩定）→ 同一輸入恆得同一輸出，可測。已無交叉之圖（多數樹）鍵值
- * 即等於原索引 → 順序不變，維持與 prototype 一致的既有外觀。
- */
-function orderRowsByBarycenter(
-  levels: Map<number, string[]>,
-  numLv: number,
-  level: Map<string, number>,
-  children: Map<string, string[]>,
-  parents: Map<string, string[]>,
-): void {
-  if (numLv < 2) return;
-  const sweep = (lv: number, refLv: number, neighbors: Map<string, string[]>): void => {
-    const row = levels.get(lv);
-    const ref = levels.get(refLv);
-    if (!row || !ref || row.length < 2) return;
-    const refIdx = new Map(ref.map((id, i) => [id, i]));
-    const keyed = row.map((id, i) => {
-      const xs = (neighbors.get(id) ?? [])
-        .filter((v) => (level.get(v) ?? -1) === refLv)
-        .map((v) => refIdx.get(v) as number);
-      return { id, i, key: xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : i };
-    });
-    keyed.sort((a, b) => a.key - b.key || a.i - b.i);
-    levels.set(
-      lv,
-      keyed.map((k) => k.id),
-    );
-  };
-  for (let pass = 0; pass < 4; pass += 1) {
-    if (pass % 2 === 0) {
-      for (let lv = 1; lv < numLv; lv += 1) sweep(lv, lv - 1, parents);
-    } else {
-      for (let lv = numLv - 2; lv >= 0; lv -= 1) sweep(lv, lv + 1, children);
-    }
-  }
-}
-
 export interface RoutePoint {
   x: number;
   y: number;
@@ -225,6 +157,11 @@ export interface EdgeRoute {
   sourceNodeId: string;
   targetNodeId: string;
   points: RoutePoint[];
+  /**
+   * 跨線繞過（hop）之位置：`hops[i]` 對應線段 `points[i] → points[i+1]`，內容為該段上需要
+   * 「跳過」別條線之 x 座標，且已依該段之行進方向排序。僅水平段會有值（採「水平跳垂直」之慣例）。
+   */
+  hops: number[][];
 }
 
 export const TREE_ROUTE_CONST = {
@@ -236,14 +173,12 @@ export const TREE_ROUTE_CONST = {
   LANE_STEP: 12,
   /** 同車道兩段水平線之最小水平淨空（小於此值視為會黏成一條）。 */
   LANE_GAP: 16,
-  /** 同一節點多條邊之錨點間距上限。 */
-  ANCHOR_STEP: 18,
-  /** 錨點分散總寬上限（卡片寬左右各留 20px）。 */
-  ANCHOR_SPAN: 136,
   /** 跨層邊之垂直通道與卡片之淨空。 */
   CHANNEL_CLEAR: 10,
   /** 同一通道內多條跨層邊之水平錯開間距。 */
   CHANNEL_STEP: 8,
+  /** 跨線繞過之半徑（半圓凸起高度亦為此值）。 */
+  HOP_R: 5,
 } as const;
 
 /** 第 i 條（共 k 條）相對中心之等距展開偏移；k<2 → 0（單條維持置中）。 */
@@ -251,18 +186,13 @@ function spreadOffset(i: number, k: number, step: number): number {
   return k < 2 ? 0 : (i - (k - 1) / 2) * step;
 }
 
-/** 錨點偏移：條數多時自動縮距，總寬不超過 ANCHOR_SPAN。 */
-function anchorOffset(i: number, k: number): number {
-  const { ANCHOR_STEP, ANCHOR_SPAN } = TREE_ROUTE_CONST;
-  return spreadOffset(i, k, k < 2 ? 0 : Math.min(ANCHOR_STEP, ANCHOR_SPAN / (k - 1)));
-}
-
 /**
  * F036 連線繞線：把佈局後的邊轉成「不會視覺上異常相連」的直角折線。
  *
  * 修掉三個幾何缺陷（2026-08-26 裁決；prototypes/22 與前端同步改）：
  *  ① **水平段共線重疊** → 走廊車道分流：同一走廊內 x 區間相交的水平段配到不同車道。
- *  ② **同一點進出** → 錨點分散：同節點的多條出邊沿底邊、多條入邊沿頂邊等距展開。
+ *  ② **同父扇出被畫成好幾條平行線** → 進出口合併：同節點的出邊自底邊同一點離開、入邊進
+ *     頂邊同一點，同父者共用一條橫桿，到各自子節點前才分岔。
  *  ③ **跨層邊穿過中間層卡片** → 垂直通道：跨層邊於「來源下方走廊」轉入一條掃描出來的無卡片
  *     x 通道垂直下行，到「目標上方走廊」再轉進目標；不再從卡片中間穿過，也不會與主鏈完全
  *     重合而整條隱形。
@@ -272,7 +202,8 @@ function anchorOffset(i: number, k: number): number {
  */
 export function buildEdgeRoutes(layout: TreeLayout): EdgeRoute[] {
   const { NODE_W, NODE_H, VGAP, MARGIN } = TREE_LAYOUT_CONST;
-  const { LANES, LANE_ORDER, LANE_STEP, LANE_GAP, CHANNEL_CLEAR, CHANNEL_STEP } = TREE_ROUTE_CONST;
+  const { LANES, LANE_ORDER, LANE_STEP, LANE_GAP, CHANNEL_CLEAR, CHANNEL_STEP, HOP_R } =
+    TREE_ROUTE_CONST;
   const pos = new Map(layout.nodes.map((n) => [n.id, n]));
   /** 走廊＝第 lv 列上方之列間空隙中線。相鄰層時與舊式 (sy+ty)/2 同值 → 既有外觀不變。 */
   const corridorY = (lv: number): number => MARGIN + lv * VGAP - (VGAP - NODE_H) / 2;
@@ -310,28 +241,14 @@ export function buildEdgeRoutes(layout: TreeLayout): EdgeRoute[] {
     });
   });
 
-  // ② 錨點分散：出邊依目標 x、入邊依來源 x 由左至右配位（同節點的線不自我交叉）。
-  const grouped = (key: (w: Work) => string): Work[][] => {
-    const m = new Map<string, Work[]>();
-    for (const w of work) {
-      const k = key(w);
-      (m.get(k) ?? m.set(k, []).get(k)!).push(w);
-    }
-    return [...m.values()];
-  };
-  for (const group of grouped((w) => w.s.id)) {
-    [...group]
-      .sort((a, b) => a.t.x - b.t.x || a.t.y - b.t.y || a.t.id.localeCompare(b.t.id))
-      .forEach((w, i) => {
-        w.sx = w.s.x + NODE_W / 2 + anchorOffset(i, group.length);
-      });
-  }
-  for (const group of grouped((w) => w.t.id)) {
-    [...group]
-      .sort((a, b) => a.s.x - b.s.x || a.s.y - b.s.y || a.s.id.localeCompare(b.s.id))
-      .forEach((w, i) => {
-        w.tx = w.t.x + NODE_W / 2 + anchorOffset(i, group.length);
-      });
+  // ② 進出口合併：一個節點的所有出邊自**底邊同一點**離開、所有入邊進**頂邊同一點**——
+  //    同父的線於走廊上合成一條橫桿，直到各自的子節點前才分岔（org chart 的畫法）。
+  //    📝 已作廢：OLD> 出入邊沿卡片邊等距分散成多個錨點。錨點分散雖能區分個別連線，但把
+  //    「本來就該是一束」的同父扇出畫成好幾條平行線，56 節點的真圖看起來像電路板
+  //    （2026-08-26 使用者裁定：該合併的合併，跨子樹才要分開）。
+  for (const w of work) {
+    w.sx = w.s.x + NODE_W / 2;
+    w.tx = w.t.x + NODE_W / 2;
   }
 
   // ③ 跨層邊之垂直通道：掃出中間各層卡片以外的 x 空隙，取夾住目標 x 後最近者。
@@ -378,74 +295,166 @@ export function buildEdgeRoutes(layout: TreeLayout): EdgeRoute[] {
     });
   }
 
-  // ① 車道分流：以水平段之 x 區間做貪婪配道（中央優先），同走廊重疊者必落不同車道。
-  interface LaneItem {
-    w: Work;
+  // ① 車道分流：**以「同一父節點的整組扇出」為一個單位**配道（同組共用一條橫桿，才會在
+  //    視覺上合成一條線）；不同父之 x 區間相交時才落到不同車道。走廊只用到一條車道時
+  //    恰為正中，與修正前外觀一致。跨層邊自成一組（它另有垂直通道，不併入任何扇出）。
+  interface LaneGroup {
     slot: 'A' | 'B';
     lo: number;
     hi: number;
+    idx: number;
+    ws: Work[];
   }
-  const corridors = new Map<number, LaneItem[]>();
-  const push = (lv: number, item: LaneItem): void => {
-    (corridors.get(lv) ?? corridors.set(lv, []).get(lv)!).push(item);
+  const corridors = new Map<number, Map<string, LaneGroup>>();
+  const push = (lv: number, key: string, slot: 'A' | 'B', lo: number, hi: number, w: Work): void => {
+    const byKey = corridors.get(lv) ?? corridors.set(lv, new Map()).get(lv)!;
+    const g = byKey.get(key);
+    if (!g) {
+      byKey.set(key, { slot, lo, hi, idx: w.idx, ws: [w] });
+      return;
+    }
+    g.lo = Math.min(g.lo, lo);
+    g.hi = Math.max(g.hi, hi);
+    g.idx = Math.min(g.idx, w.idx);
+    g.ws.push(w);
   };
   for (const w of work) {
     if (w.span >= 2) {
-      push(w.s.level + 1, { w, slot: 'A', lo: Math.min(w.sx, w.cx), hi: Math.max(w.sx, w.cx) });
-      push(w.t.level, { w, slot: 'B', lo: Math.min(w.cx, w.tx), hi: Math.max(w.cx, w.tx) });
+      push(w.s.level + 1, `A${w.idx}`, 'A', Math.min(w.sx, w.cx), Math.max(w.sx, w.cx), w);
+      push(w.t.level, `B${w.idx}`, 'B', Math.min(w.cx, w.tx), Math.max(w.cx, w.tx), w);
     } else {
-      push(w.t.level, { w, slot: 'B', lo: Math.min(w.sx, w.tx), hi: Math.max(w.sx, w.tx) });
+      push(w.t.level, `S${w.s.id}`, 'B', Math.min(w.sx, w.tx), Math.max(w.sx, w.tx), w);
     }
   }
-  for (const [lv, items] of corridors) {
+  for (const [lv, byKey] of corridors) {
     const lastHi = new Array<number>(LANES).fill(Number.NEGATIVE_INFINITY);
-    [...items]
-      .sort((a, b) => a.lo - b.lo || a.hi - b.hi || a.w.idx - b.w.idx)
-      .forEach((it) => {
-        let lane = LANE_ORDER.find((l) => lastHi[l] + LANE_GAP <= it.lo);
+    [...byKey.values()]
+      .sort((a, b) => a.lo - b.lo || a.hi - b.hi || a.idx - b.idx)
+      .forEach((g) => {
+        let lane = LANE_ORDER.find((l) => lastHi[l] + LANE_GAP <= g.lo);
         if (lane === undefined) {
           lane = LANE_ORDER.reduce((best, l) => (lastHi[l] < lastHi[best] ? l : best), LANE_ORDER[0]);
         }
-        lastHi[lane] = it.hi;
+        lastHi[lane] = g.hi;
         const y = corridorY(lv) + (lane - (LANES - 1) / 2) * LANE_STEP;
-        if (it.slot === 'A') it.w.yA = y;
-        else it.w.yB = y;
+        for (const w of g.ws) {
+          if (g.slot === 'A') w.yA = y;
+          else w.yB = y;
+        }
       });
   }
 
-  const byIdx = new Map<number, EdgeRoute>();
+  const pointsOf = new Map<number, RoutePoint[]>();
   for (const w of work) {
     const sBottom = w.s.y + NODE_H;
     const tTop = w.t.y;
-    byIdx.set(w.idx, {
-      sourceNodeId: w.s.id,
-      targetNodeId: w.t.id,
-      points:
-        w.span >= 2
-          ? [
-              { x: w.sx, y: sBottom },
-              { x: w.sx, y: w.yA },
-              { x: w.cx, y: w.yA },
-              { x: w.cx, y: w.yB },
-              { x: w.tx, y: w.yB },
-              { x: w.tx, y: tTop },
-            ]
-          : [
-              { x: w.sx, y: sBottom },
-              { x: w.sx, y: w.yB },
-              { x: w.tx, y: w.yB },
-              { x: w.tx, y: tTop },
-            ],
-    });
+    pointsOf.set(
+      w.idx,
+      w.span >= 2
+        ? [
+            { x: w.sx, y: sBottom },
+            { x: w.sx, y: w.yA },
+            { x: w.cx, y: w.yA },
+            { x: w.cx, y: w.yB },
+            { x: w.tx, y: w.yB },
+            { x: w.tx, y: tTop },
+          ]
+        : [
+            { x: w.sx, y: sBottom },
+            { x: w.sx, y: w.yB },
+            { x: w.tx, y: w.yB },
+            { x: w.tx, y: tTop },
+          ],
+    );
+  }
+
+  // ④ 跨線繞過（hop）：不同子樹之線交會時，由**水平段**以小半圓跳過垂直段。
+  //    沒有顏色區隔時，十字交會無法分辨哪一條才是連續的那條；繞過是電路圖／流程圖的既有慣例。
+  //    🔴 同父扇出／同子扇入之交會**不畫繞過**——那是刻意合併的同一束線，不是兩條不同的線。
+  interface VSeg {
+    x: number;
+    lo: number;
+    hi: number;
+    s: string;
+    t: string;
+  }
+  const verticals: VSeg[] = [];
+  for (const w of work) {
+    const pts = pointsOf.get(w.idx) as RoutePoint[];
+    for (let i = 0; i + 1 < pts.length; i += 1) {
+      if (pts[i].x !== pts[i + 1].x) continue;
+      verticals.push({
+        x: pts[i].x,
+        lo: Math.min(pts[i].y, pts[i + 1].y),
+        hi: Math.max(pts[i].y, pts[i + 1].y),
+        s: w.s.id,
+        t: w.t.id,
+      });
+    }
+  }
+  const byIdx = new Map<number, EdgeRoute>();
+  for (const w of work) {
+    const pts = pointsOf.get(w.idx) as RoutePoint[];
+    const hops: number[][] = [];
+    for (let i = 0; i + 1 < pts.length; i += 1) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      if (a.y !== b.y) {
+        hops.push([]);
+        continue;
+      }
+      const lo = Math.min(a.x, b.x);
+      const hi = Math.max(a.x, b.x);
+      const xs = verticals
+        .filter(
+          (v) =>
+            v.s !== w.s.id &&
+            v.t !== w.t.id &&
+            v.x > lo + HOP_R &&
+            v.x < hi - HOP_R &&
+            a.y > v.lo + 0.5 &&
+            a.y < v.hi - 0.5,
+        )
+        .map((v) => v.x)
+        .sort((p, q) => p - q);
+      // 太靠近的交會併成一個繞過，免得畫成一排鋸齒。
+      const merged: number[] = [];
+      for (const x of xs) if (!merged.length || x - merged[merged.length - 1] > HOP_R * 2) merged.push(x);
+      hops.push(a.x <= b.x ? merged : merged.reverse());
+    }
+    byIdx.set(w.idx, { sourceNodeId: w.s.id, targetNodeId: w.t.id, points: pts, hops });
   }
   return layout.edges.map(
     (e, i) =>
-      byIdx.get(i) ?? { sourceNodeId: e.sourceNodeId, targetNodeId: e.targetNodeId, points: [] },
+      byIdx.get(i) ?? {
+        sourceNodeId: e.sourceNodeId,
+        targetNodeId: e.targetNodeId,
+        points: [],
+        hops: [],
+      },
   );
 }
 
-/** 折線 → SVG path d（供 <path d>／PDF 逐段連線共用同一組點）。 */
+/**
+ * 折線 → SVG path d（`<path d>` 與 PDF `drawSvgPath` 共用同一份字串，兩邊畫出來必然一致）。
+ * 繞過以三次貝茲近似半圓（控制點取 4/3·r，兩端切線垂直）——`C` 指令 SVG 與 pdf-lib 皆支援，
+ * 圓弧 `A` 則不保證，故不用。凸起方向為 −y（版面座標 y 向下 ⇒ 視覺上往上凸）。
+ */
 export function routePath(route: EdgeRoute): string {
-  if (!route.points.length) return '';
-  return route.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const { HOP_R } = TREE_ROUTE_CONST;
+  const pts = route.points;
+  if (!pts.length) return '';
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 0; i + 1 < pts.length; i += 1) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    const dir = b.x >= a.x ? 1 : -1;
+    const bulge = a.y - (HOP_R * 4) / 3;
+    for (const x of route.hops[i] ?? []) {
+      d += ` L ${x - HOP_R * dir} ${a.y}`;
+      d += ` C ${x - HOP_R * dir} ${bulge} ${x + HOP_R * dir} ${bulge} ${x + HOP_R * dir} ${a.y}`;
+    }
+    d += ` L ${b.x} ${b.y}`;
+  }
+  return d;
 }
