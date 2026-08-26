@@ -74,7 +74,14 @@
       </a>
     </div>
 
-    <!-- user (no choice) -->
+    <!--
+      user (no choice)
+      🔴 2026-08-26 已作廢，⚠ 不得移植為實作：本區塊只是一張「唯一選項的選擇卡」，逼一般使用者
+         多按一次；F002 `AC1` 逐字要求「直接導向前台瀏覽頁，**不顯示選擇畫面**」，連本頁副標
+         （`subline`）自己都寫著「一般使用者將直接進入前台」。真人於 2026-08-26 回報「很多餘」，
+         實作已改為 `RoleLanding` 於無後台功能權限時直接 `<Navigate to="/public" replace />`。
+         本區塊**僅保留供原型演示切換角色時看得出差異**，不再是任何實作之權威來源。
+    -->
     <div id="userDirect" class="hidden">
       <div class="bg-white border border-slate-200 rounded-2xl p-8 text-center">
         <div class="w-14 h-14 rounded-full bg-primary-50 flex items-center justify-center mx-auto mb-4">

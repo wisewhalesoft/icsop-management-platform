@@ -38,6 +38,14 @@ Epic/Story: E01 / US-003
 
 ## Acceptance Criteria
 - Given 角色為一般使用者且登入成功, When 登入完成, Then 直接導向前台瀏覽頁，不顯示選擇畫面。
+  <br>🔴 **2026-08-26 缺陷修復（本條原未兌現）**：實作原對 `roleCode==='User'` 渲染一張「前往前台
+  瀏覽」單卡（移植自 `prototypes/02-role-landing.html` 之 `#userDirect` 區塊）——那是一個**只有一個
+  選項的選擇畫面**，與本條「不顯示選擇畫面」直接牴觸，且該頁副標自己就寫著「一般使用者將直接進入
+  前台」卻沒有直接進去。真人回報「很多餘」後改為 `<Navigate to="/public" replace />`。
+  判定條件採 `visibleMenu(roleCode).length === 0`（**與 `AdminGuard` 同一式**，不比對 `roleCode`
+  字面），涵蓋 [F041](F041-user-subtype-business-scope.md) 業務子分類；兩邊各寫一套會在日後調整
+  [F025](F025-role-function-matrix.md) 矩陣時產生「分流頁放行、後台守衛擋掉」之死鏈。
+  prototype 之 `#userDirect` 區塊已就地標註為**不得移植**。
 - Given 角色為管理類之一且登入成功, When 登入完成, Then 顯示「瀏覽頁/管理後台」選擇畫面。
 - Given 管理類角色選擇管理後台, When 後台載入, Then 僅顯示 F025 有權限的功能選單。
 - Given JWT 角色遺失或無效, When 導向判定, Then 導回登入頁並提示重新登入。
