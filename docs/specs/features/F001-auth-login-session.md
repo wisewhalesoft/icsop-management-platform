@@ -87,6 +87,11 @@ Epic/Story: E01 / US-001, US-002, US-004
 - Given 錯誤帳密或帳號不存在, When 送出登入, Then 回統一 `AUTH_INVALID_CREDENTIALS`，記錄失敗。
 - Given 帳號建立密碼, When 寫入 DB, Then 以不可逆加鹽雜湊儲存。
 - Given 最後操作逾 30 分鐘, When 下一次操作, Then 判逾時、回 `AUTH_SESSION_EXPIRED`、導回登入頁。
+  <br>🔴 **2026-08-26 缺陷修復（本條之「導回登入頁」原僅在整頁重載時成立）**：後端側一直正確
+  （`SessionGuard` 回 401 `AUTH_SESSION_EXPIRED`），**前端無人接手**——`AuthProvider` 只在掛載時
+  打一次 `/auth/me`，其後任何 API 的 401 都只被各頁自己 `catch` 成「載入失敗」，`status` 仍停在
+  `authenticated` ⇒ 畫面留在逾時前的樣子，使用者得手動登出或重打網址。詳見下方
+  [工作階段失效導向 delta](#session-lost-redirect-delta)。
 - Given 30 分內持續互動, When 每次互動, Then 重置計時，不被強制登出。
 - Given 使用者點擊登出, When 送出, Then 立即撤銷我方憑證，該憑證不可再用於任何受保護 API。
 - Given 任一登入失敗情境, When 回傳錯誤, Then 訊息**不得洩漏該 email 是否存在於系統**或其他可列舉資訊。
@@ -239,6 +244,36 @@ Epic/Story: E01 / US-001, US-002, US-004
 | `[OPEN-M3]` | ✅ **已裁決 2026-08-24** | 是否核可**新增 1 個錯誤碼** `AUTH_SELECTION_TICKET_INVALID`（近數批 delta 皆以「零新增錯誤碼」為紀律） | **核可新增**（採納）。接受之理由：硬塞既有碼會語意錯誤——`AUTH_SESSION_EXPIRED` 意味「曾經登入」（不成立）、`AUTH_OIDC_STATE_MISMATCH` 指向 OIDC 回呼階段（不成立）、`AUTH_ACCOUNT_NOT_FOUND` 會把竄改事件偽裝成資料問題而喪失告警語意。已登錄 [error-handling.md](../error-handling.md) |
 | `[OPEN-M4]` | 🟡 **未結（營運前置）** | 契約 §11 #12 之「**正式環境重驗**」尚未執行；若正式環境存在**姓名不一致**之組，該組成員將依 `AC-M8` **無法登入**（回到 v1.0 之拒登） | 上線前完成重驗，並就不一致組先行以營運面處置（HR 更正或改配手動帳號）。**不改動任何 AC**——`AC-M8` 之 fail-closed 為刻意設計，非待調整項 |
 | `[OPEN-M5]` | 🟡 **未結（本輪刻意不補）** | 選擇畫面**無 prototype**（`prototypes/01-login.html` 不含此畫面） | **本輪人類已指定約束環不做 prototype fidelity 閘門**（僅 vitest／jest 單元測試層），故丙節 `AC-M12`～`AC-M17` 即為選擇畫面之**唯一 oracle**，缺 prototype 不阻擋建環與實作。日後若補 `01a-login-select-account.html`，須與丙節逐項對齊，並以丙節為準（prototype 不得反過來覆寫已驗收之 AC） |
+
+### 工作階段失效導向 delta（🔴 2026-08-26 真人回報） {#session-lost-redirect-delta}
+
+> 症狀（逐字）：「login session 過期後…目前是看到留在過期前的畫面（有時候是一堆 json 文字），
+> 需要手動登出或是重新打網址。」
+
+- **AC-S1（掛載後之 401 亦須導回登入頁）**：Given 使用者已登入且停留在任一畫面, When 其後任一
+  API 回 401 `AUTH_SESSION_EXPIRED` 或 `AUTH_ACCOUNT_DISABLED`, Then 前端立即切為未登入狀態並
+  顯示登入頁，**不得**停留在逾時前之畫面。實作＝全站唯一之通報接縫
+  `frontend/src/api/session-lost.ts`，由 `AuthProvider` 掛載時註冊唯一處理器。
+- **AC-S2（三條低層路徑皆須接上）**：Given 逾時後之操作分別為①一般 API ②檔案下載 ③列印開新分頁,
+  When 任一者收到上述 401, Then 三者**皆**觸發 `AC-S1` 之導向。接縫落於 `apiFetch`、
+  `downloadViaBlob`、`openPdfViaBlob` 三處，缺一即留下一個「畫面不動」的洞。
+- **AC-S3（🔴 負向：登入流程之 401 不得誤判為逾時）**：Given 使用者於登入頁輸入錯誤帳密（401
+  `AUTH_INVALID_CREDENTIALS`）或選擇票證失效（401 `AUTH_SELECTION_TICKET_INVALID`）, When 收到
+  該回應, Then **不得**觸發逾時導向、**不得**顯示逾時模態、**不得**消耗 `wasAuthed` 旗標。
+  判定僅認 `SessionGuard` 擲出之兩個錯誤碼，非「所有 401」。
+- **AC-S4（逾時模態順序）**：Given `AC-S1` 之導向發生, When 登入頁掛載, Then 顯示 G-PUB-006
+  工作階段逾時模態。🔴 逾時旗標必須在切換狀態**之前**寫入——`LoginPage` 是以 `useState` 初始化
+  函式讀取該旗標的，先切狀態再標記就來不及，模態不會出現。
+- **AC-S5（檔案端點不得以 top-level navigation 觸發）**：Given 逾時後點擊任一下載／列印,
+  When 該動作送出, Then 使用者**不得**看到後端 JSON 錯誤被當成網頁呈現。
+  🔴 根因＝下列入口原為 `<a href>`（top-level navigation，不受 `AC-S2` 之接縫保護，且同分頁的
+  「下載」會直接把整個 SPA 換成一頁 JSON）：前台詳情與檢視器之「下載／列印」（[F020](F020-watermark.md)）、
+  循環樹狀圖預覽之「下載／列印」（[F036](F036-lifecycle-tree-preview.md)）、變更歷程之「新舊對照 PDF」
+  清單列與模態兩處（[F038](F038-lifecycle-tree-change-history.md)）。全數改為代理串流
+  （`downloadViaBlob`／`openPdfViaBlob`），與 architecture-spec §10.1 之既有禁令一致——該禁令早已
+  寫在其他下載函式上，唯獨這 8 處主動作漏改。
+  ⚠ 列印之新分頁必須於 click handler 內、**任何 `await` 之前**同步 `window.open('', '_blank')`
+  取得（transient user activation），否則伺服器端燒錄耗時一長就會被彈出視窗封鎖器擋下。
 
 ## Error Scenarios
 - OIDC 驗證、帳密、停用、逾時錯誤：見 [error-handling.md#auth](../error-handling.md#auth) 與 [#session](../error-handling.md#session)。
