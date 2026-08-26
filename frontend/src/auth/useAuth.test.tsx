@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { AuthProvider, useAuth, consumeSessionExpired } from './useAuth';
 import { ApiError } from '../api/client';
 import * as endpoints from '../api/endpoints';
+import { notifySessionLost, setSessionLostHandler } from '../api/session-lost';
 
 vi.mock('../api/endpoints');
 
@@ -147,5 +148,71 @@ describe('useAuth — 登出', () => {
 
     // 若 logout() 未清除 wasAuthed，這裡會被誤標為 true（登入頁將誤顯逾時模態）。
     expect(consumeSessionExpired()).toBe(false);
+  });
+});
+
+/**
+ * 2026-08-26 缺陷修復：掛載**之後**才逾時的 session。
+ *
+ * 舊行為（真人回報）：`/auth/me` 只在掛載時打一次；其後任何 API 的 401 只被各頁自己 `catch`，
+ * `status` 仍停在 `authenticated` ⇒ 畫面留在逾時前的樣子，得手動登出或重打網址才回得去登入頁。
+ * 現行為：`AuthProvider` 掛載時註冊全域處理器（`api/session-lost`），收到通報即切
+ * `unauthenticated` 並標記逾時旗標，由 `AppRoutes` 換上登入頁、`LoginPage` 顯示逾時模態。
+ */
+describe('useAuth — 掛載後 session 失效之全域處理（F001「逾時 → 導回登入頁」）', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    sessionStorage.clear();
+    setSessionLostHandler(null);
+  });
+
+  const authed = {
+    loginId: 'AS22455',
+    email: 'peter@hfcfinance.com.tw',
+    companyCode: 'AS',
+    roleCode: 'ICSOPAdmin',
+  };
+
+  it('已登入狀態下收到通報 → 切 unauthenticated、清 user，並標記逾時（登入頁模態）', async () => {
+    vi.mocked(endpoints.getMe).mockResolvedValue(authed);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe('authenticated'));
+
+    act(() => notifySessionLost({ status: 401, code: 'AUTH_SESSION_EXPIRED' }));
+
+    await waitFor(() => expect(result.current.status).toBe('unauthenticated'));
+    expect(result.current.user).toBeNull();
+    expect(result.current.error).toBeNull();
+    expect(consumeSessionExpired()).toBe(true);
+  });
+
+  it('帳號被停用（AUTH_ACCOUNT_DISABLED）同樣導回登入頁', async () => {
+    vi.mocked(endpoints.getMe).mockResolvedValue(authed);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe('authenticated'));
+
+    act(() => notifySessionLost({ status: 401, code: 'AUTH_ACCOUNT_DISABLED' }));
+
+    await waitFor(() => expect(result.current.status).toBe('unauthenticated'));
+  });
+
+  /** 🔴 負向：登入流程之 401（打錯密碼）不得把使用者踢成逾時。 */
+  it('AUTH_INVALID_CREDENTIALS 不觸發（帳密打錯不是 session 逾時）', async () => {
+    vi.mocked(endpoints.getMe).mockResolvedValue(authed);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe('authenticated'));
+
+    act(() => notifySessionLost({ status: 401, code: 'AUTH_INVALID_CREDENTIALS' }));
+
+    expect(result.current.status).toBe('authenticated');
+    expect(consumeSessionExpired()).toBe(false);
+  });
+
+  it('AuthProvider 卸載後取消註冊（不對已卸載之元件 setState）', async () => {
+    vi.mocked(endpoints.getMe).mockResolvedValue(authed);
+    const { result, unmount } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe('authenticated'));
+    unmount();
+    expect(() => notifySessionLost({ status: 401, code: 'AUTH_SESSION_EXPIRED' })).not.toThrow();
   });
 });

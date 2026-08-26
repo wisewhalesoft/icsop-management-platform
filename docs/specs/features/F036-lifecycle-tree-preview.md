@@ -281,6 +281,16 @@ Epic/Story: E03 / US-025
 - **稽核寫入失敗不阻斷（檢視）**：`LIFECYCLE_VIEW` 寫入暫時異常時不阻擋檢視，改進補償佇列重試補寫；不可竄改保證見 [error-handling.md#audit](../error-handling.md#audit)（比照 F023）。稽核不可修改/刪除（`AUDIT_IMMUTABLE`）。
 - **未登入存取預覽網址**：拒絕並導回登入頁；見 [error-handling.md#public](../error-handling.md#public)。
 
+### 檔案動作載體遷移 delta（🔴 2026-08-26 真人回報） {#file-action-carrier-delta}
+
+- **AC-T49**：Given session 已逾時, When 點擊本 feature 之樹狀圖預覽之「下載」「列印」, Then 使用者**不得**看到後端
+  JSON 錯誤被當成網頁呈現，而應被導回登入頁（[F001](F001-auth-login-session.md#session-lost-redirect-delta)
+  `AC-S1`／`AC-S5`）。載體由 `<a href>`（top-level navigation）改為代理串流
+  （`downloadViaBlob`／`openPdfViaBlob`）；**端點、燒錄與稽核行為逐項不變**，僅取得位元組之方式改變。
+  📝 已作廢（⚠ 不得復原）：`<a href={lifecycleTreeDownloadUrl(id)}>`／`<a href={lifecycleTreePrintUrl(id)} target="_blank">`
+  ⚠ 列印之新分頁須於 click handler 內、任何 `await` **之前**同步 `window.open('', '_blank')` 取得，
+  否則會被彈出視窗封鎖器擋下。
+
 ## Related
 - **循環子分類規則權威**: [F040](F040-lifecycle-subcategory.md)（標題／切換器顯示、稽核名稱快照、`?cycle` 收斂為 `lifecycleId`）
 - Data: [LIFECYCLE](../data-model.md#lifecycle-entity)、[LIFECYCLE_NODE](../data-model.md#node-entity)、[LIFECYCLE_EDGE](../data-model.md#edge-entity)（唯讀複用）、[ICSOP_DOCUMENT](../data-model.md#document-entity)（節點掛載文件數；第二入口之所屬循環來源）、[AUDIT_LOG](../data-model.md#auditlog-entity)（`LIFECYCLE_VIEW`／`LIFECYCLE_DOWNLOAD`／`LIFECYCLE_PRINT` 歸屬待架構師定案，見 OQ-E07-02）

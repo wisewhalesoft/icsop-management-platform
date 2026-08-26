@@ -106,8 +106,8 @@ describe('PublicViewerPage — F020 D9 delta：canvas 化檢視器（AC-N4〜AC-
     vi.mocked(api.getDocumentWatermark).mockResolvedValue({ watermark: WM });
     vi.mocked(api.getOrgUnits).mockResolvedValue([]);
     vi.mocked(api.documentPdfUrl).mockImplementation((id) => `/public/documents/${id}/pdf`);
-    vi.mocked(api.documentDownloadUrl).mockImplementation((id) => `/public/documents/${id}/download`);
-    vi.mocked(api.documentPrintUrl).mockImplementation((id) => `/public/documents/${id}/print`);
+    vi.mocked(api.downloadDocumentFront).mockResolvedValue(undefined);
+    vi.mocked(api.printDocumentFront).mockResolvedValue(undefined);
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -124,15 +124,44 @@ describe('PublicViewerPage — F020 D9 delta：canvas 化檢視器（AC-N4〜AC-
     expect(container.querySelector('[data-pdf-canvas]')).not.toBeNull();
   });
 
-  it('AC-N5 🔒 系統自身之「下載」與「列印」動作仍存在且指向既有受控端點（回歸鎖定）', async () => {
+  /**
+   * 🔴 2026-08-26 載體遷移（同前台詳情頁）：`AC-N5` 之「動作必須保留」意旨不變，但載體由
+   * `<a href>` 改為 `<button>`＋代理串流。原斷言把 top-level navigation 釘成正確行為，而那正是
+   * 「session 逾時後整頁被後端 401 JSON 取代」之根因（真人回報）。
+   * 📝 已作廢（⚠ 不得復原）：
+   *   OLD> const download = screen.getByRole('link', { name: '下載文件' });
+   *   OLD> expect(download).toHaveAttribute('href', '/public/documents/doc-9/download');
+   *   OLD> expect(print).toHaveAttribute('href', '/public/documents/doc-9/print');
+   * 「不得出現 SAS URL」之負向斷言逐字保留（改為掃描全部 link 與 button）。
+   */
+  it('AC-N5 🔒 系統自身之「下載」與「列印」動作仍存在，且走代理串流（非 <a href> 導覽、無 SAS）', async () => {
+    vi.mocked(api.downloadDocumentFront).mockResolvedValue(undefined);
+    vi.mocked(api.printDocumentFront).mockResolvedValue(undefined);
     renderViewer('doc-9');
     await screen.findByTestId('watermark-format');
-    const download = screen.getByRole('link', { name: '下載文件' });
-    const print = screen.getByRole('link', { name: '列印文件' });
-    expect(download).toHaveAttribute('href', '/public/documents/doc-9/download');
-    expect(print).toHaveAttribute('href', '/public/documents/doc-9/print');
-    const links = screen.getAllByRole('link').map((a) => a.getAttribute('href') ?? '');
-    expect(links.some((h) => /blob\.core\.windows\.net|\?sig=/.test(h))).toBe(false);
+
+    const download = screen.getByRole('button', { name: '下載文件' });
+    const print = screen.getByRole('button', { name: '列印文件' });
+    expect(download).not.toHaveAttribute('href');
+    expect(print).not.toHaveAttribute('href');
+
+    await userEvent.click(download);
+    await waitFor(() =>
+      expect(api.downloadDocumentFront).toHaveBeenCalledWith('doc-9', expect.any(String)),
+    );
+
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    await userEvent.click(print);
+    await waitFor(() => expect(api.printDocumentFront).toHaveBeenCalledWith('doc-9', expect.anything()));
+    // 🔴 分頁必須在 await 之前開好（transient user activation）——見 openPdfViaBlob。
+    expect(openSpy).toHaveBeenCalledWith('', '_blank');
+    openSpy.mockRestore();
+
+    const hrefs = [
+      ...screen.queryAllByRole('link'),
+      ...screen.queryAllByRole('button'),
+    ].map((el) => el.getAttribute('href') ?? '');
+    expect(hrefs.some((h) => /blob\.core\.windows\.net|\?sig=/.test(h))).toBe(false);
   });
 
   it('AC-N6 檢視器之預覽位元組取自 /pdf 端點（已燒錄，OQ-D9-32）——僅一次呼叫', async () => {

@@ -5,6 +5,7 @@ import { visibleMenu, accessLabelFor } from '../domain/menu';
 import { Icon } from './Icon';
 import { RoleBadge } from './RoleBadge';
 import { TopbarSlotsContext } from './PageHeader';
+import { POPUP_BLOCKED_TEXT } from '../domain/print-error';
 
 /**
  * 後台外殼（sidebar＋topbar＋Outlet）。版面、收合行為、側欄結構權威來源：
@@ -22,11 +23,19 @@ export function AppShell(): JSX.Element {
   const sidebarW = collapsed ? 60 : 240;
   // F002 AC-D4：已位於 /admin 時，回首頁手段一律 replace，不重複推入瀏覽歷程。
   const atHome = useLocation().pathname === '/admin';
-  // F022：瀏覽文件網頁以「新視窗/分頁」開啟（後台分頁維持原狀）；被封鎖 → 顯示替代提示。
+  /**
+   * F022：瀏覽文件網頁以「新視窗/分頁」開啟（後台分頁維持原狀）；被封鎖 → 顯示替代提示。
+   *
+   * 🔴 **`window.open` 之第三引數不得帶 `noopener`／`noreferrer`**：HTML 規格明定 `noopener`
+   * 為真時 `window.open()` **一律回 `null`**（與是否被封鎖無關）⇒ 下一行的 `win === null` 恆成立，
+   * 分頁明明開了卻永遠顯示「新視窗被瀏覽器封鎖」（2026-08-26 真人回報）。
+   * 同源第一方無 reverse tabnabbing 暴露面——與 `DocumentListPage` 之樹狀圖預覽入口同一裁決。
+   * ⚠ 單元測試抓不到此類 bug：測試把 `window.open` 整個 spy 掉，回傳值由測試決定。
+   */
   const [popupBlocked, setPopupBlocked] = useState(false);
   const openPublic = useCallback(() => {
     // 相對路徑（同源 cookie 自動攜帶，不夾帶 token 於網址，NFR-002）。
-    const win = window.open('/public', '_blank', 'noopener,noreferrer');
+    const win = window.open('/public', '_blank');
     setPopupBlocked(win === null); // 多數瀏覽器封鎖時回傳 null（非拋例外）
   }, []);
 
@@ -146,7 +155,7 @@ export function AppShell(): JSX.Element {
           </button>
           {popupBlocked && !collapsed && (
             <div role="alert" className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-2.5 py-2">
-              新視窗被瀏覽器封鎖，請允許彈出視窗後再試。
+              {POPUP_BLOCKED_TEXT}
             </div>
           )}
         </div>

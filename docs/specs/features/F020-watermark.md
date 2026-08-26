@@ -321,6 +321,16 @@ Epic/Story: E06 / US-053, US-054
 - 未授權存取/未登入：見 [error-handling.md#public](../error-handling.md#public)、[#file](../error-handling.md#file)。防竄改與已知限制：[NFR-007](../nfr.md#watermark)。
 - **業務子分類之使用部門不相符**（🟢 APPROVED）：一律回 **404 `DOCUMENT_NOT_FOUND`**（✅ OQ-E06-03 定案，既有錯誤碼、不新增），見 [error-handling.md#dept-restriction](../error-handling.md#dept-restriction)；規則權威＝[F041](F041-user-subtype-business-scope.md)。
 
+### 檔案動作載體遷移 delta（🔴 2026-08-26 真人回報） {#file-action-carrier-delta}
+
+- **AC-D3b**：Given session 已逾時, When 點擊本 feature 之前台詳情頁與檢視器之「下載」「列印」, Then 使用者**不得**看到後端
+  JSON 錯誤被當成網頁呈現，而應被導回登入頁（[F001](F001-auth-login-session.md#session-lost-redirect-delta)
+  `AC-S1`／`AC-S5`）。載體由 `<a href>`（top-level navigation）改為代理串流
+  （`downloadViaBlob`／`openPdfViaBlob`）；**端點、燒錄與稽核行為逐項不變**，僅取得位元組之方式改變。
+  📝 已作廢（⚠ 不得復原）：`<a href={documentDownloadUrl(id)}>`／`<a href={documentPrintUrl(id)} target="_blank">`
+  ⚠ 列印之新分頁須於 click handler 內、任何 `await` **之前**同步 `window.open('', '_blank')` 取得，
+  否則會被彈出視窗封鎖器擋下。
+
 ## Related
 - **來源契約: [upstream-hr-source-contract.md](../upstream-hr-source-contract.md)**（§5.3 `COMPFULLNM`、§8 浮水印欄位對應定案、§8.2 取值規則、§8.3 最細單位、§8.4 無下層者留空收合）
 - Diagram: [../diagrams/F020-watermark-audit.mmd](../diagrams/F020-watermark-audit.mmd)

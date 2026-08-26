@@ -112,8 +112,8 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
     mockAuth();
     vi.mocked(api.getOrgUnits).mockResolvedValue([]);
     vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(detailOf());
-    vi.mocked(api.documentDownloadUrl).mockImplementation((id) => `/public/documents/${id}/download`);
-    vi.mocked(api.documentPrintUrl).mockImplementation((id) => `/public/documents/${id}/print`);
+    vi.mocked(api.downloadDocumentFront).mockResolvedValue(undefined);
+    vi.mocked(api.printDocumentFront).mockResolvedValue(undefined);
     vi.mocked(api.getDocumentAppendices).mockResolvedValue([]); // F039：預設無關聯附錄，個別測試覆寫
   });
 
@@ -215,22 +215,39 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
     });
   });
 
-  it('「檢視」導向檢視器路由 /:id/view；下載/列印為受控端點連結', async () => {
+  /**
+   * 🔴 2026-08-26 載體遷移：主文件之「下載」「列印」由 `<a href>` 改為 `<button>`＋代理串流
+   * （`downloadDocumentFront`／`printDocumentFront`）。原作法是 top-level navigation——session
+   * 逾時時後端回 401 JSON，瀏覽器**把那份 JSON 當成網頁畫出來**，同分頁的「下載」更會直接把
+   * 整個 SPA 換成一頁 JSON（真人回報）。「檢視」仍是 SPA 路由連結，逐字不變。
+   * 📝 已作廢（⚠ 不得復原）：
+   *   OLD> expect(screen.getByRole('link', { name: '下載文件' })).toHaveAttribute('href', '/public/documents/doc-9/download');
+   *   OLD> expect(screen.getByRole('link', { name: '列印文件' })).toHaveAttribute('href', '/public/documents/doc-9/print');
+   */
+  it('「檢視」導向檢視器路由 /:id/view；下載/列印為代理串流動作（非 <a href> 導覽）', async () => {
     vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(detailOf({ id: 'doc-9' }));
+    vi.mocked(api.downloadDocumentFront).mockResolvedValue(undefined);
+    vi.mocked(api.printDocumentFront).mockResolvedValue(undefined);
     renderDetail('doc-9');
     await screen.findByRole('heading', { name: '車輛分期進件作業' });
     expect(screen.getByRole('link', { name: /檢視/ })).toHaveAttribute(
       'href',
       '/public/documents/doc-9/view',
     );
-    expect(screen.getByRole('link', { name: '下載文件' })).toHaveAttribute(
-      'href',
-      '/public/documents/doc-9/download',
+
+    await userEvent.click(screen.getByRole('button', { name: '下載文件' }));
+    await waitFor(() =>
+      expect(api.downloadDocumentFront).toHaveBeenCalledWith('doc-9', expect.any(String)),
     );
-    expect(screen.getByRole('link', { name: '列印文件' })).toHaveAttribute(
-      'href',
-      '/public/documents/doc-9/print',
+
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    await userEvent.click(screen.getByRole('button', { name: '列印文件' }));
+    await waitFor(() =>
+      expect(api.printDocumentFront).toHaveBeenCalledWith('doc-9', expect.anything()),
     );
+    // 🔴 分頁必須於 click handler 內、任何 await 之前同步開好，否則會被彈出視窗封鎖器擋掉。
+    expect(openSpy).toHaveBeenCalledWith('', '_blank');
+    openSpy.mockRestore();
   });
 
   /**

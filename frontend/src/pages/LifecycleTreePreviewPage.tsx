@@ -5,11 +5,12 @@ import {
   getLifecycleNodeSubtreeDocuments,
   getLifecycleTreePreview,
   getLifecycles,
-  lifecycleTreeDownloadUrl,
-  lifecycleTreePrintUrl,
+  downloadLifecycleTree,
+  printLifecycleTree,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
+import { printErrorMessage } from '../domain/print-error';
 import { lifecycleDisplayName } from '../domain/lifecycle-subcategory';
 import { roleMeta } from '../domain/roles';
 import { Icon } from '../components/Icon';
@@ -221,6 +222,14 @@ export function LifecycleTreePreviewPage(): JSX.Element {
   const [subtreeGroups, setSubtreeGroups] = useState<SubtreeDocumentGroup[]>([]);
   const [subtreeTotal, setSubtreeTotal] = useState(0);
   const [nodeDocsError, setNodeDocsError] = useState<string | null>(null);
+  /**
+   * 受控動作（下載／列印）之進行中旗標與失敗訊息。
+   * 🔴 2026-08-26：兩個動作由 `<a href>` 改為代理串流——`<a href>` 是 top-level navigation，
+   * session 逾時時瀏覽器把後端 401 JSON 當網頁畫出來（下載那顆更會直接取代整個預覽分頁）。
+   * 失敗訊息與樹狀圖載入失敗之 `error` 分開：下載失敗不該把已畫好的樹從畫面上抹掉。
+   */
+  const [actionBusy, setActionBusy] = useState<'download' | 'print' | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canRead) return;
@@ -277,6 +286,40 @@ export function LifecycleTreePreviewPage(): JSX.Element {
     [],
   );
   const clearSel = useCallback(() => setSelected(null), []);
+
+  /** F036 下載：代理串流（已燒錄浮水印）＋記 LIFECYCLE_DOWNLOAD 稽核，故同時只受理一個動作。 */
+  const runDownload = useCallback(async (): Promise<void> => {
+    if (actionBusy) return;
+    setActionBusy('download');
+    setActionError(null);
+    try {
+      await downloadLifecycleTree(id, `lifecycle-${id}.pdf`);
+    } catch (e) {
+      setActionError(`下載失敗：${e instanceof ApiError ? e.code : String(e)}`);
+    } finally {
+      setActionBusy(null);
+    }
+  }, [id, actionBusy]);
+
+  /**
+   * F036 列印：新分頁開啟已燒錄之 PDF。
+   * 🔴 `window.open('', '_blank')` 須在**任何 `await` 之前**同步呼叫（transient user activation），
+   * 否則伺服器端燒錄耗時一長，新分頁就會被彈出視窗封鎖器擋下（見 `openPdfViaBlob`）。
+   */
+  const runPrint = useCallback(async (): Promise<void> => {
+    if (actionBusy) return;
+    setActionBusy('print');
+    setActionError(null);
+    const win = window.open('', '_blank');
+    try {
+      await printLifecycleTree(id, win);
+    } catch (e) {
+      setActionError(printErrorMessage(e));
+    } finally {
+      setActionBusy(null);
+    }
+  }, [id, actionBusy]);
+
   const zoomBy = (d: number) =>
     setZoom((z) => Math.max(0.5, Math.min(1.8, +(z + d).toFixed(2))));
 
@@ -448,26 +491,41 @@ export function LifecycleTreePreviewPage(): JSX.Element {
             <Icon name="maximize" className="w-4 h-4" />
           </button>
           <div className="w-px h-5 bg-slate-200 mx-1 shrink-0" />
-          <a
-            href={lifecycleTreeDownloadUrl(id)}
+          {/*
+            📝 已作廢（⚠ 不得復原）：OLD> `<a href={lifecycleTreeDownloadUrl(id)}>`／
+               `<a href={lifecycleTreePrintUrl(id)} target="_blank">`——top-level navigation，
+               session 逾時時整個預覽分頁被後端 401 JSON 取代（2026-08-26）。
+          */}
+          <button
+            type="button"
+            onClick={() => void runDownload()}
+            disabled={actionBusy !== null}
+            aria-busy={actionBusy === 'download'}
             aria-label="下載"
             title="下載此循環樹狀圖（PDF，燒錄浮水印）"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
-            <Icon name="download" className="w-4 h-4" />
+            <Icon
+              name={actionBusy === 'download' ? 'loader-2' : 'download'}
+              className={`w-4 h-4 ${actionBusy === 'download' ? 'animate-spin' : ''}`}
+            />
             下載
-          </a>
-          <a
-            href={lifecycleTreePrintUrl(id)}
-            target="_blank"
-            rel="noreferrer"
+          </button>
+          <button
+            type="button"
+            onClick={() => void runPrint()}
+            disabled={actionBusy !== null}
+            aria-busy={actionBusy === 'print'}
             aria-label="列印"
             title="列印此循環樹狀圖（燒錄浮水印）"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
-            <Icon name="printer" className="w-4 h-4" />
+            <Icon
+              name={actionBusy === 'print' ? 'loader-2' : 'printer'}
+              className={`w-4 h-4 ${actionBusy === 'print' ? 'animate-spin' : ''}`}
+            />
             列印
-          </a>
+          </button>
           <span className="text-xs text-slate-400 shrink-0 hidden md:inline ml-1">
             點節點＝醒目標示其所有下游節點；點空白處取消；
             <strong className="text-slate-500">雙擊節點＝檢視該節點與其下游節點之程序書清單</strong>
@@ -484,6 +542,17 @@ export function LifecycleTreePreviewPage(): JSX.Element {
           <strong>燒錄進 PDF 內容層</strong>並各自記錄稽核。
         </span>
       </div>
+
+      {/* 受控動作（下載／列印）之失敗提示；與樹狀圖載入失敗分開，不覆蓋已畫好的圖。 */}
+      {actionError && (
+        <div
+          role="alert"
+          className="px-4 py-2 bg-red-50 border-b border-red-100 text-sm text-red-700 flex items-start gap-2 shrink-0"
+        >
+          <Icon name="alert-circle" className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{actionError}</span>
+        </div>
+      )}
 
       {/* viewer stage */}
       <main className="flex-1 overflow-auto p-4 sm:p-8 flex justify-center items-start" onClick={() => selected && clearSel()}>

@@ -9,7 +9,7 @@ import {
   viewLifecycleChanges,
   getLifecycles,
   getLifecycleTreeDiff,
-  lifecycleTreeDiffDownloadUrl,
+  downloadLifecycleTreeDiff,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
@@ -708,6 +708,32 @@ function TreeTab(): JSX.Element {
     }
   }, [filters]);
 
+  /**
+   * F038 新舊對照 PDF 下載（清單列與預覽模態兩處入口共用）。
+   *
+   * 🔴 2026-08-26：由 `<a href={lifecycleTreeDiffDownloadUrl(...)}>` 改為代理串流。原作法是
+   * top-level navigation——session 逾時時後端回 401 JSON，瀏覽器**把那份 JSON 當網頁畫出來**，
+   * 整個變更歷程頁被一頁 JSON 取代（真人回報之症狀）。改走 fetch 後，逾時會由
+   * `notifySessionLost` 統一導回登入頁。回饋沿用本頁既有之 `feedback` 區塊（本頁不在
+   * `ToastProvider` 內，見 `feedback` 之註解）。
+   */
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const onDownloadDiff = useCallback(
+    async (lifecycleId: string, changeLogId: string): Promise<void> => {
+      if (downloadingId) return;
+      setDownloadingId(changeLogId);
+      setFeedback(null);
+      try {
+        await downloadLifecycleTreeDiff(lifecycleId, changeLogId, `tree-diff-${changeLogId}.pdf`);
+      } catch (e) {
+        setFeedback({ tone: 'error', message: `下載失敗：${msgOf(e)}` });
+      } finally {
+        setDownloadingId(null);
+      }
+    },
+    [downloadingId],
+  );
+
   useEffect(() => {
     getLifecycles().then(setCycles).catch(() => undefined);
     void load();
@@ -831,10 +857,21 @@ function TreeTab(): JSX.Element {
                           <Icon name="eye" className="w-4 h-4" />
                           預覽
                         </button>
-                        <a href={lifecycleTreeDiffDownloadUrl(e.lifecycleId, e.id)} className="text-slate-600 hover:text-primary-700 hover:underline inline-flex items-center gap-1">
-                          <Icon name="download" className="w-4 h-4" />
+                        {/* 📝 已作廢（⚠ 不得復原）：OLD> `<a href={lifecycleTreeDiffDownloadUrl(...)}>`——
+                            top-level navigation，session 逾時時整頁被後端 401 JSON 取代。 */}
+                        <button
+                          type="button"
+                          onClick={() => void onDownloadDiff(e.lifecycleId, e.id)}
+                          disabled={downloadingId !== null}
+                          aria-busy={downloadingId === e.id}
+                          className="text-slate-600 hover:text-primary-700 hover:underline inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline"
+                        >
+                          <Icon
+                            name={downloadingId === e.id ? 'loader-2' : 'download'}
+                            className={`w-4 h-4 ${downloadingId === e.id ? 'animate-spin' : ''}`}
+                          />
                           下載
-                        </a>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -861,7 +898,8 @@ function TreeTab(): JSX.Element {
           event={preview.event}
           data={preview.data}
           onClose={() => setPreview(null)}
-          downloadHref={lifecycleTreeDiffDownloadUrl(preview.event.lifecycleId, preview.event.id)}
+          onDownload={() => void onDownloadDiff(preview.event.lifecycleId, preview.event.id)}
+          downloading={downloadingId === preview.event.id}
         />
       )}
     </section>
@@ -1029,13 +1067,15 @@ function TreeDiffModal({
   event,
   data,
   onClose,
-  downloadHref,
+  onDownload,
+  downloading,
 }: {
   title: string;
   event: LifecycleChangeView;
   data: LifecycleTreeDiff;
   onClose: () => void;
-  downloadHref: string;
+  onDownload: () => void;
+  downloading: boolean;
 }): JSX.Element {
   return (
     <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-900/45 p-4" role="dialog" aria-label="新舊樹狀圖對照預覽">
@@ -1094,10 +1134,19 @@ function TreeDiffModal({
           <code className="mono text-[11px] text-slate-500 truncate flex-1">浮水印：{data.watermark}</code>
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={onClose} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">關閉</button>
-            <a href={downloadHref} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700">
-              <Icon name="download" className="w-4 h-4" />
+            <button
+              type="button"
+              onClick={onDownload}
+              disabled={downloading}
+              aria-busy={downloading}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Icon
+                name={downloading ? 'loader-2' : 'download'}
+                className={`w-4 h-4 ${downloading ? 'animate-spin' : ''}`}
+              />
               下載新舊對照 PDF
-            </a>
+            </button>
           </div>
         </div>
       </div>

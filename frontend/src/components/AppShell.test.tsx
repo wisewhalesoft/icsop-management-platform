@@ -118,6 +118,25 @@ describe('AppShell — 瀏覽文件網頁入口以新視窗開啟（F022）', ()
     expect(entry).not.toHaveAttribute('href');
   });
 
+  /**
+   * 🔴 2026-08-26 回歸鎖定（真人回報「明明沒被封鎖卻一直說被封鎖」）：`window.open` 之 features
+   * 引數**不得**含 `noopener`／`noreferrer`。HTML 規格明定 `noopener` 為真時 `window.open()`
+   * 一律回 `null`，於是下一行的 `win === null` 恆成立 ⇒ 分頁開了卻永遠顯示封鎖提示。
+   *
+   * ⚠ 本案是**唯一**能以單元測試攔下此 bug 的斷言形狀——TS-F022-001／004 都把 `window.open`
+   * 整個 spy 掉，回傳值由測試決定，真實回傳語意在那兩案中永遠測不到。
+   */
+  it('TS-F022-005 window.open 不得帶 noopener／noreferrer（否則回傳恆為 null → 誤判封鎖）', async () => {
+    mockAuth('SysAdmin');
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    renderShell();
+    await userEvent.click(screen.getByRole('button', { name: /瀏覽文件網頁/ }));
+    const features = String(openSpy.mock.calls[0][2] ?? '');
+    expect(features).not.toMatch(/noopener|noreferrer/);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    openSpy.mockRestore();
+  });
+
   it('TS-F022-004 window.open 回傳 null（被封鎖）→ 顯示替代提示', async () => {
     mockAuth('SysAdmin');
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);

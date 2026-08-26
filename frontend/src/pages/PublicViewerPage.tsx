@@ -7,12 +7,13 @@ import {
   getDocumentWatermark,
   getOrgUnits,
   documentPdfUrl,
-  documentDownloadUrl,
-  documentPrintUrl,
+  downloadDocumentFront,
+  printDocumentFront,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
 import { buildOrgPath } from '../domain/org-path';
+import { printErrorMessage } from '../domain/print-error';
 import type { OrgUnitRecord } from '../api/types';
 
 /**
@@ -84,6 +85,46 @@ export function PublicViewerPage(): JSX.Element {
   const [page, setPage] = useState(1);
   /** 位元組載入完成之訊號：驅動渲染 effect，且不把不可序列化的 pdf 物件塞進 state。 */
   const [pdfReady, setPdfReady] = useState(0);
+  /** 受控動作（下載／列印）進行中旗標：每次核發皆寫一筆調閱稽核，故同一時間只受理一個。 */
+  const [actionBusy, setActionBusy] = useState<'download' | 'print' | null>(null);
+  /**
+   * 受控動作之失敗訊息。與 `error`（預覽載入失敗）刻意分開：下載失敗時預覽仍可正常閱讀，
+   * 共用一個狀態會讓一次下載錯誤把整份文件從畫面上抹掉。
+   */
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  /** F020 下載：代理串流（已燒錄浮水印）＋寫入調閱稽核。 */
+  const runDownload = useCallback(async (): Promise<void> => {
+    if (actionBusy) return;
+    setActionBusy('download');
+    setActionError(null);
+    try {
+      await downloadDocumentFront(id, `${docNumber ?? id}.pdf`);
+    } catch (e) {
+      setActionError(`下載失敗：${msgOf(e)}`);
+    } finally {
+      setActionBusy(null);
+    }
+  }, [id, docNumber, actionBusy]);
+
+  /**
+   * F020 列印：於新分頁開啟已燒錄之 PDF。
+   * 🔴 `window.open('', '_blank')` 必須在**任何 `await` 之前**同步呼叫——它需要使用者手勢之
+   * transient user activation，等伺服器燒錄完位元組再開會被彈出視窗封鎖器擋掉（見 `openPdfViaBlob`）。
+   */
+  const runPrint = useCallback(async (): Promise<void> => {
+    if (actionBusy) return;
+    setActionBusy('print');
+    setActionError(null);
+    const win = window.open('', '_blank');
+    try {
+      await printDocumentFront(id, win);
+    } catch (e) {
+      setActionError(printErrorMessage(e));
+    } finally {
+      setActionBusy(null);
+    }
+  }, [id, actionBusy]);
 
   useEffect(() => {
     let active = true;
@@ -265,24 +306,40 @@ export function PublicViewerPage(): JSX.Element {
             <Icon name="eye" className="w-4 h-4" />
             檢視
           </span>
-          <a
-            href={documentDownloadUrl(id)}
+          {/*
+            🔴 2026-08-26：由 `<a href>` 改為 `<button>`＋代理串流（與前台詳情頁同一裁決）。
+            `<a href>` 是 top-level navigation——session 逾時時整頁被後端的 401 JSON 取代。
+            📝 已作廢（⚠ 不得復原）：OLD> `<a href={documentDownloadUrl(id)}>`／
+               `<a href={documentPrintUrl(id)} target="_blank">`。
+          */}
+          <button
+            type="button"
+            onClick={() => void runDownload()}
+            disabled={actionBusy !== null}
+            aria-busy={actionBusy === 'download'}
             aria-label="下載文件"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
-            <Icon name="download" className="w-4 h-4" />
+            <Icon
+              name={actionBusy === 'download' ? 'loader-2' : 'download'}
+              className={`w-4 h-4 ${actionBusy === 'download' ? 'animate-spin' : ''}`}
+            />
             下載
-          </a>
-          <a
-            href={documentPrintUrl(id)}
-            target="_blank"
-            rel="noreferrer"
+          </button>
+          <button
+            type="button"
+            onClick={() => void runPrint()}
+            disabled={actionBusy !== null}
+            aria-busy={actionBusy === 'print'}
             aria-label="列印文件"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
-            <Icon name="printer" className="w-4 h-4" />
+            <Icon
+              name={actionBusy === 'print' ? 'loader-2' : 'printer'}
+              className={`w-4 h-4 ${actionBusy === 'print' ? 'animate-spin' : ''}`}
+            />
             列印
-          </a>
+          </button>
           <div className="w-px h-5 bg-slate-200 mx-1 shrink-0" />
 
           {/* 單頁翻頁導覽（AC-N71；ui-ux-designer 依 §11.2 之授權裁量） */}
@@ -344,6 +401,17 @@ export function PublicViewerPage(): JSX.Element {
           </button>
         </div>
       </header>
+
+      {/* 受控動作（下載／列印）之失敗提示；不覆蓋預覽內容（見 actionError）。 */}
+      {actionError && (
+        <div
+          role="alert"
+          className="px-4 py-2 bg-red-50 border-b border-red-100 text-sm text-red-700 flex items-start gap-2 shrink-0"
+        >
+          <Icon name="alert-circle" className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{actionError}</span>
+        </div>
+      )}
 
       {/*
         安全資訊帶（`AC-N72` 逐字文案）。

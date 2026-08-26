@@ -235,14 +235,36 @@ describe('LifecycleTreePreviewPage — F036 循環樹狀圖預覽', () => {
     });
   });
 
-  it('下載／列印連結指向後端燒錄端點', async () => {
+  /**
+   * 🔴 2026-08-26 載體遷移：下載／列印由 `<a href>` 改為代理串流。`<a href>` 是 top-level
+   * navigation——session 逾時時預覽分頁整頁被後端 401 JSON 取代（真人回報）。端點不變。
+   * 📝 已作廢（⚠ 不得復原）：
+   *   OLD> expect(screen.getByRole('link', { name: '下載' })).toHaveAttribute('href', '/admin/lifecycles/lc1/tree-preview/download');
+   *   OLD> expect(print).toHaveAttribute('href', '/admin/lifecycles/lc1/tree-preview/print');
+   *   OLD> expect(print).toHaveAttribute('target', '_blank');
+   */
+  it('下載／列印走代理串流（非 <a href> 導覽），列印於新分頁開啟', async () => {
     mockAuth('ICSOPAdmin');
+    vi.mocked(endpoints.downloadLifecycleTree).mockResolvedValue(undefined);
+    vi.mocked(endpoints.printLifecycleTree).mockResolvedValue(undefined);
     renderAt();
     await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: '下載' })).toHaveAttribute('href', '/admin/lifecycles/lc1/tree-preview/download');
-    const print = screen.getByRole('link', { name: '列印' });
-    expect(print).toHaveAttribute('href', '/admin/lifecycles/lc1/tree-preview/print');
-    expect(print).toHaveAttribute('target', '_blank');
+
+    const download = screen.getByRole('button', { name: '下載' });
+    expect(download).not.toHaveAttribute('href');
+    await userEvent.click(download);
+    await waitFor(() =>
+      expect(endpoints.downloadLifecycleTree).toHaveBeenCalledWith('lc1', expect.any(String)),
+    );
+
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    await userEvent.click(screen.getByRole('button', { name: '列印' }));
+    await waitFor(() =>
+      expect(endpoints.printLifecycleTree).toHaveBeenCalledWith('lc1', expect.anything()),
+    );
+    // 🔴 分頁必須於 click handler 內、任何 await 之前同步開好（transient user activation）。
+    expect(openSpy).toHaveBeenCalledWith('', '_blank');
+    openSpy.mockRestore();
   });
 
   it('DeptContact／User → 前端顯示無權限、不呼叫預覽 API', async () => {

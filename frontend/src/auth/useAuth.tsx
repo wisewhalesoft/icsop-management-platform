@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { getMe } from '../api/endpoints';
 import { isUnauthorized } from '../api/client';
+import { setSessionLostHandler } from '../api/session-lost';
 import type { SessionUser } from '../api/types';
 
 /**
@@ -105,6 +106,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  /**
+   * F001「逾時 → 導回登入頁」之前端側落實：任何 API 收到 `AUTH_SESSION_EXPIRED`／
+   * `AUTH_ACCOUNT_DISABLED` 即切回 `unauthenticated`，由 `AppRoutes` 換上登入頁。
+   *
+   * 🔴 `markExpiredIfWasAuthed()` 必須在 `setStatus` **之前**呼叫：登入頁之逾時模態旗標是在
+   * `LoginPage` 掛載時以 `useState` 初始化函式讀取的（`consumeSessionExpired()`），先切狀態
+   * 再標記就來不及，模態不會出現。
+   */
+  useEffect(() => {
+    setSessionLostHandler(() => {
+      markExpiredIfWasAuthed();
+      setUser(null);
+      setError(null);
+      setStatus('unauthenticated');
+    });
+    return () => setSessionLostHandler(null);
+  }, []);
 
   const login = useCallback(() => {
     window.location.href = '/auth/login';

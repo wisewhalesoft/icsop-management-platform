@@ -271,15 +271,41 @@ class OptStore implements PublicDocumentStore {
  * `persons` 未給 ⇒ 人員一律未命中（label fallback 為員編）——既有案例之期望值因而完全不變。
  * 「未命中之鍵**缺席**於 Map」為 `NameResolutionService.resolvePersonNames` 之逐字契約，此處同形。
  */
+/**
+ * 🔴 2026-08-26：替身**主動檢查 `companyCode` 位置的實際值**，不再只是照抄 port 的形狀。
+ *
+ * 本檔原本的替身寫的是 `(code) => ...`／`(empNos) => ...`（單參數，抄自當時同樣過期的
+ * `OrgNameResolver` 宣告）。於是「服務層漏傳 `companyCode`」這件事在替身上**完全看不出來**——
+ * 替身照收第一個參數當代碼、測試全綠，正式環境卻因為真正的 `NameResolutionService` 是兩參數而
+ * 對 `undefined` 呼叫 `.map`，整條前台 500。替身只要跟著錯誤的 port 一起漂移，它就從「攔截器」
+ * 變成「共犯」。此處改為明確斷言第一參數是公司代碼形狀，讓同型回歸當場炸掉而非靜默通過。
+ */
+function assertCompanyCode(v: unknown): asserts v is string {
+  if (typeof v !== 'string' || v.trim() === '') {
+    throw new TypeError(
+      `OrgNameResolver 第一參數必須為 companyCode（收到 ${JSON.stringify(v)}）——` +
+        '呼叫端疑似仍在用已作廢的單參數簽章。',
+    );
+  }
+}
+
 const resolverOf = (
   map: Record<string, string>,
   persons: Record<string, string> = {},
 ): OrgNameResolver => ({
-  resolveOrgUnitName: (code) => Promise.resolve(map[code] ?? null),
-  resolvePersonNames: (empNos) =>
-    Promise.resolve(
+  resolveOrgUnitName: (companyCode, code) => {
+    assertCompanyCode(companyCode);
+    return Promise.resolve(map[code] ?? null);
+  },
+  resolvePersonNames: (companyCode, empNos) => {
+    assertCompanyCode(companyCode);
+    if (!Array.isArray(empNos)) {
+      throw new TypeError(`resolvePersonNames 第二參數必須為員編陣列（收到 ${typeof empNos}）。`);
+    }
+    return Promise.resolve(
       new Map(empNos.filter((e) => persons[e] !== undefined).map((e) => [e, persons[e]])),
-    ),
+    );
+  },
 });
 
 describe('F019 AC-D5：PublicDocumentsService.filterOptions（服務層組裝與名稱解析）', () => {

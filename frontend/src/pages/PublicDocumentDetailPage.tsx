@@ -7,14 +7,15 @@ import {
   getOrgUnits,
   downloadPublicAttachment,
   downloadUsageFormFront,
-  documentDownloadUrl,
-  documentPrintUrl,
+  downloadDocumentFront,
+  printDocumentFront,
   getDocumentAppendices,
   downloadDocumentAppendixFront,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT } from '../domain/watermark-note';
+import { printErrorMessage } from '../domain/print-error';
 import { buildOrgPath } from '../domain/org-path';
 import type {
   PublicDocumentDetail,
@@ -183,6 +184,30 @@ export function PublicDocumentDetailPage(): JSX.Element {
     [toast, downloadKey],
   );
 
+  /**
+   * 前台列印（F020）：`fetch → blob → 新分頁`，與下載共用同一把併發鎖（列印同樣寫一筆稽核）。
+   *
+   * 🔴 `window.open('', '_blank')` 必須在 **任何 `await` 之前**同步呼叫：它需要使用者手勢之
+   * transient user activation，而列印端點要在伺服器端燒錄浮水印，等位元組回來才開分頁會被
+   * 彈出視窗封鎖器擋掉。取得位元組後再把該分頁導向 blob URL（見 `openPdfViaBlob`）。
+   */
+  const runPrint = useCallback(
+    async (documentId: string): Promise<void> => {
+      if (downloadKey) return;
+      setDownloadKey('print');
+      const win = window.open('', '_blank');
+      try {
+        await printDocumentFront(documentId, win);
+        toast.success('已於新分頁開啟列印用文件，並寫入調閱稽核。');
+      } catch (e) {
+        toast.error(printErrorMessage(e));
+      } finally {
+        setDownloadKey(null);
+      }
+    },
+    [toast, downloadKey],
+  );
+
   return (
     <div className="min-h-screen bg-white text-slate-700">
       {/* App bar */}
@@ -267,6 +292,14 @@ export function PublicDocumentDetailPage(): JSX.Element {
                 `form:${formId}`,
               )
             }
+            onDownloadDocument={() =>
+              void runDownload(
+                () => downloadDocumentFront(detail.id, `${detail.documentNumber}.pdf`),
+                detail.documentName,
+                'document',
+              )
+            }
+            onPrintDocument={() => void runPrint(detail.id)}
             appendices={appendices}
             onDownloadAppendix={(appendixId, name) =>
               void runDownload(
@@ -347,6 +380,8 @@ function DetailBody({
   onOpenLink,
   onDownloadAttachment,
   onDownloadUsageForm,
+  onDownloadDocument,
+  onPrintDocument,
   appendices,
   onDownloadAppendix,
   downloadKey,
@@ -355,12 +390,16 @@ function DetailBody({
   onOpenLink: (targetDocumentId: string) => void;
   onDownloadAttachment: (att: PublicDetailAttachment) => void;
   onDownloadUsageForm: (formId: string, name: string) => void;
+  onDownloadDocument: () => void;
+  onPrintDocument: () => void;
   appendices: DocumentAppendixRecord[];
   onDownloadAppendix: (appendixId: string, name: string) => void;
   downloadKey: string | null;
 }): JSX.Element {
   const icsopPdf = findAttachment(detail.attachments, 'ICSOP_PDF');
   const ojt = findAttachment(detail.attachments, 'OJT_SIGNIN');
+  // 任一下載／列印進行中即鎖住全部（每次核發都寫一筆調閱稽核，重複點擊＝重複稽核，見 runDownload）。
+  const busy = downloadKey !== null;
   const announced = detail.announcedDate ? detail.announcedDate.slice(0, 10) : DASH;
 
   return (
@@ -382,24 +421,41 @@ function DetailBody({
             <Icon name="eye" className="w-4 h-4" />
             檢視
           </Link>
-          <a
-            href={documentDownloadUrl(detail.id)}
+          {/*
+            🔴 2026-08-26：下載／列印由 `<a href>` 改為 `<button>`＋代理串流。`<a href>` 是 top-level
+            navigation——session 逾時時瀏覽器把後端 401 的 JSON 當網頁畫出來（同分頁的「下載」更慘：
+            整個 SPA 被那頁 JSON 取代）。與附件／使用表單／附錄三處下載自此為**同一種載體**。
+            📝 已作廢（⚠ 不得復原）：OLD> `<a href={documentDownloadUrl(detail.id)}>`／
+               `<a href={documentPrintUrl(detail.id)} target="_blank">`。
+          */}
+          <button
+            type="button"
+            onClick={onDownloadDocument}
+            disabled={busy}
+            aria-busy={busy && downloadKey === 'document'}
             aria-label="下載文件"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-slate-300 text-base text-slate-700 hover:bg-slate-50 transition min-h-[44px]"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-slate-300 text-base text-slate-700 hover:bg-slate-50 transition min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
-            <Icon name="download" className="w-4 h-4" />
+            <Icon
+              name={downloadKey === 'document' ? 'loader-2' : 'download'}
+              className={`w-4 h-4 ${downloadKey === 'document' ? 'animate-spin' : ''}`}
+            />
             下載
-          </a>
-          <a
-            href={documentPrintUrl(detail.id)}
-            target="_blank"
-            rel="noreferrer"
+          </button>
+          <button
+            type="button"
+            onClick={onPrintDocument}
+            disabled={busy}
+            aria-busy={busy && downloadKey === 'print'}
             aria-label="列印文件"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-slate-300 text-base text-slate-700 hover:bg-slate-50 transition min-h-[44px]"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-slate-300 text-base text-slate-700 hover:bg-slate-50 transition min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
-            <Icon name="printer" className="w-4 h-4" />
+            <Icon
+              name={downloadKey === 'print' ? 'loader-2' : 'printer'}
+              className={`w-4 h-4 ${downloadKey === 'print' ? 'animate-spin' : ''}`}
+            />
             列印
-          </a>
+          </button>
         </div>
       </div>
 

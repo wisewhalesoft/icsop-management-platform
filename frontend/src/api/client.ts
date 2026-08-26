@@ -3,6 +3,8 @@
  * 故一律以相對路徑呼叫並帶 credentials:'include'（送出 httpOnly session cookie）。
  */
 
+import { notifySessionLost } from './session-lost';
+
 /** 具結構化錯誤碼之 API 例外。code 優先取後端 Nest 例外之 message（穩定錯誤碼）。 */
 export class ApiError extends Error {
   constructor(
@@ -57,7 +59,12 @@ export async function apiFetch<T>(
   } catch (e) {
     throw new ApiError(0, 'NETWORK_ERROR', e instanceof Error ? e.message : String(e));
   }
-  if (!res.ok) throw await extractError(res);
+  if (!res.ok) {
+    const err = await extractError(res);
+    // session 逾時/帳號停用 → 通報全域處理器導回登入頁（不改變本函式對呼叫端之契約：仍然擲出）。
+    notifySessionLost(err);
+    throw err;
+  }
   return (await readBody<T>(res)) as T;
 }
 

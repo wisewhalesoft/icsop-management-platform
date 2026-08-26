@@ -123,8 +123,8 @@ describe('前台詳情 · UX 稽核回歸（A-2 下載併發鎖）', () => {
     vi.mocked(api.getOrgUnits).mockResolvedValue([]);
     vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(detailOf());
     vi.mocked(api.getDocumentAppendices).mockResolvedValue(APPENDIX);
-    vi.mocked(api.documentDownloadUrl).mockImplementation((id) => `/public/documents/${id}/download`);
-    vi.mocked(api.documentPrintUrl).mockImplementation((id) => `/public/documents/${id}/print`);
+    vi.mocked(api.downloadDocumentFront).mockResolvedValue(undefined);
+    vi.mocked(api.printDocumentFront).mockResolvedValue(undefined);
   });
 
   afterEach(() => {

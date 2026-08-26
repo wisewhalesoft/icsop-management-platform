@@ -37,9 +37,24 @@ class FakeStore implements PublicDocumentStore {
   }
 }
 
+/**
+ * 🔴 2026-08-26：替身簽章補上 `companyCode`，並斷言其為公司代碼形狀。
+ *
+ * ⚠ 這裡的漂移**連 tsc 都攔不到**：TypeScript 允許「參數較少的函式」指派給「參數較多的簽章」，
+ * 所以原本的 `(code) => map[code]` 在 port 改為兩參數後仍然編譯通過，只是實際收到的是
+ * `companyCode` ⇒ 一律查無、靜默回 null。這是替身漂移比 port 漂移更難察覺的一種形狀：
+ * 型別系統這邊完全沉默，只有斷言值會變。
+ */
 function fakeResolver(map: Record<string, string> = {}): OrgNameResolver {
   return {
-    resolveOrgUnitName: (code) => Promise.resolve(map[code] ?? null),
+    resolveOrgUnitName: (companyCode, code) => {
+      if (typeof companyCode !== 'string' || companyCode.trim() === '') {
+        throw new TypeError(
+          `OrgNameResolver 第一參數必須為 companyCode（收到 ${JSON.stringify(companyCode)}）。`,
+        );
+      }
+      return Promise.resolve(map[code] ?? null);
+    },
     resolvePersonNames: () => Promise.resolve(new Map<string, string>()),
   };
 }
