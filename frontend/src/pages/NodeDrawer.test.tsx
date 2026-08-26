@@ -94,6 +94,32 @@ describe('NodeDrawer — F009 節點抽屜（文件掛載）', () => {
     expect(endpoints.mountNodeDoc).not.toHaveBeenCalled();
   });
 
+  it('掛於無名節點之候選 → 徽章「已掛載於 未命名節點」（節點存在，非未掛載）', async () => {
+    vi.mocked(endpoints.getNodeDrawer).mockResolvedValue({
+      ...DRAWER,
+      candidates: [
+        {
+          id: 'd4',
+          documentNumber: 'ICSOP-SRC-103-1-01',
+          documentName: '對保覆核作業',
+          assignedNode: { id: 'n3', name: null }, // 節點存在但尚未命名
+        },
+      ],
+    });
+    renderDrawer();
+    expect(await screen.findByText('已掛載於 未命名節點')).toBeInTheDocument();
+    expect(screen.queryByText('未掛載')).not.toBeInTheDocument();
+  });
+
+  it('草稿中移除掛載之文件 → 候選區徽章回落「未掛載」（徽章鍵於草稿狀態）', async () => {
+    const user = userEvent.setup();
+    renderDrawer();
+    await waitFor(() => expect(screen.getByText('ICSOP-SRC-101-1-01')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: '移除掛載' }));
+    // d1 落回候選；originNode 仍為 n1，但草稿 node 已為 null → 不得顯示「已掛載於 …」
+    await waitFor(() => expect(screen.getAllByText('未掛載')).toHaveLength(2));
+  });
+
   it('移除已掛載文件 → 儲存送出 unmountNodeDoc', async () => {
     const user = userEvent.setup();
     renderDrawer();

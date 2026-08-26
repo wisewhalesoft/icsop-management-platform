@@ -203,6 +203,10 @@ export class NodeDocsService {
 
     const otherNodeIds = [...new Set(candDocs.map((d) => d.nodeId).filter((v): v is string => !!v))];
     const names = await this.store.nodeNames(otherNodeIds);
+    // 🔴 防禦：nodeId 無 FK，節點被刪後會留下懸空值。`nodeNames` 查無者＝該節點已不存在 → 一律視為
+    // 「未指派」（assignedNode: null），否則抽屜會顯示節點名空白之「已掛載於 」並要求改派確認。
+    const assignedNodeOf = (nodeId: string | null): DrawerCandidate['assignedNode'] =>
+      nodeId && names.has(nodeId) ? { id: nodeId, name: names.get(nodeId) ?? null } : null;
 
     // G-LC-015：掛載於其他循環而排除之文件數（選填能力；未提供之 fake → 0）。
     const excludedCount = this.store.countDocsMountedInOtherLifecycles
@@ -216,7 +220,7 @@ export class NodeDocsService {
         id: d.id,
         documentNumber: d.documentNumber,
         documentName: d.documentName,
-        assignedNode: d.nodeId ? { id: d.nodeId, name: names.get(d.nodeId) ?? null } : null,
+        assignedNode: assignedNodeOf(d.nodeId),
       })),
       excludedCount,
     };
@@ -309,7 +313,10 @@ export class NodeDocsService {
         throw new ConflictException('NODE_DOC_LIFECYCLE_MISMATCH');
       }
       if (doc.nodeId === nodeId) return { result: undefined, event: null }; // 已在本節點，no-op
-      const reassigned = !!doc.nodeId;
+      // 🔴 防禦：`doc.nodeId` 非空**不等於**真的掛在某個節點上——節點刪除後（無 FK）會留下懸空值。
+      // 僅當原節點確實存在於本循環時才算改派（需二次確認、記 DOCUMENT_REASSIGNED）；懸空／跨循環之
+      // 殘值一律視為未掛載，直接掛上並記 DOCUMENT_MOUNTED，不再要求使用者確認不存在的節點。
+      const reassigned = doc.nodeId ? !!(await m.getNode(lifecycleId, doc.nodeId)) : false;
       if (reassigned && !confirm) {
         throw new ConflictException('NODE_DOC_ALREADY_ASSIGNED');
       }

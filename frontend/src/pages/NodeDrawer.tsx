@@ -306,8 +306,11 @@ export function NodeDrawer({
                         <div className="mono text-xs text-slate-500">{c.number}</div>
                         <div className="text-sm text-slate-700 truncate">{c.name}</div>
                       </div>
-                      {c.otherName ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">已掛載於 {c.otherName}</span>
+                      {/* prototype 12 行 301：徽章鍵於「是否掛在他節點」（原型之 `other` 物件），非其名稱字串——
+                          節點無名時仍屬已掛載（顯示未命名節點）。取草稿 `node` 而非 `originNode`，草稿中已移除
+                          掛載者即時回落「未掛載」。後端已將懸空 nodeId 正規化為 assignedNode:null。 */}
+                      {c.node ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">已掛載於 {c.otherName ?? '未命名節點'}</span>
                       ) : (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-50 text-slate-400 border border-slate-200">未掛載</span>
                       )}

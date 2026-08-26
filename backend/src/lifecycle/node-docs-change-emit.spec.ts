@@ -75,6 +75,13 @@ describe('NodeDocsService F038 掛載事件發射', () => {
     expect(pub.events).toHaveLength(0);
   });
 
+  it('mount 懸空 nodeId（原節點已刪）→ DOCUMENT_MOUNTED（非 REASSIGNED）', async () => {
+    store.docs[0].nodeId = 'ghost-node'; // 節點已刪，nodeId 無 FK 故殘留
+    await svc.mount('lc1', 'nA', 'd1', false, actor);
+    expect(pub.events).toHaveLength(1);
+    expect(pub.events[0]).toMatchObject({ changeType: 'DOCUMENT_MOUNTED', nodeId: 'nA' });
+  });
+
   it('unmount → DOCUMENT_UNMOUNTED', async () => {
     store.docs[0].nodeId = 'nA';
     await svc.unmount('lc1', 'nA', 'd1', actor);

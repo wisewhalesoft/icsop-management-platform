@@ -74,6 +74,13 @@ describe('NodeDocsService（F009 節點抽屜）', () => {
       await expect(svc.getDrawer('lc1', 'ghost')).rejects.toThrow('NODE_NOT_FOUND');
     });
 
+    it('掛於已刪除節點之文件（懸空 nodeId）→ assignedNode 為 null（視同未掛載）', async () => {
+      store.doc('D9', { nodeId: 'ghost-node' }); // 節點已被刪除，nodeId 無 FK 故殘留
+      const drawer = await svc.getDrawer('lc1', 'n1');
+      const d9 = drawer.candidates.find((d) => d.id === 'D9')!;
+      expect(d9.assignedNode).toBeNull(); // 不得顯示節點名空白之「已掛載於 」
+    });
+
     it('G-LC-015 excludedCount＝掛載於其他循環之文件數（候選過濾註記）', async () => {
       store.doc('D1', { nodeId: 'n1' });
       store.mountedElsewhere = 4;
@@ -102,6 +109,12 @@ describe('NodeDocsService（F009 節點抽屜）', () => {
       await svc.mount('lc1', 'n1', 'D2', true);
       expect(store.setCalls).toContainEqual({ docId: 'D2', nodeId: 'n1' });
     });
+    it('懸空 nodeId（節點已刪）且未確認 → 直接掛載，不丟 NODE_DOC_ALREADY_ASSIGNED', async () => {
+      store.doc('D9', { nodeId: 'ghost-node' });
+      await svc.mount('lc1', 'n1', 'D9', false);
+      expect(store.setCalls).toContainEqual({ docId: 'D9', nodeId: 'n1' });
+    });
+
     it('文件不存在 → DOCUMENT_NOT_FOUND', async () => {
       await expect(svc.mount('lc1', 'n1', 'nope', false)).rejects.toThrow('DOCUMENT_NOT_FOUND');
     });
