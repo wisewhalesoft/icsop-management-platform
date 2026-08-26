@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { graphToFlow, layoutDag, dagErrorMessage } from './dag-flow';
+import { graphToFlow, layoutDag, dagErrorMessage, deleteNodeConfirm } from './dag-flow';
 import type { DagGraph } from '../api/types';
 
 describe('dag-flow', () => {
@@ -36,6 +36,20 @@ describe('dag-flow', () => {
     expect(y('c')).toBeGreaterThan(y('b'));
     expect(out.map((n) => n.id)).toEqual(['a', 'b', 'c']); // 順序/身分不變
     expect(out.find((n) => n.id === 'a')!.data).toEqual({ keep: 1 }); // data 保留
+  });
+
+  it('deleteNodeConfirm：掛載 > 0 時揭露連動解除掛載份數與文件保留', () => {
+    const c = deleteNodeConfirm('進件作業', 3);
+    expect(c.title).toContain('進件作業');
+    expect(c.body).toContain('3 份文件');
+    expect(c.body).toMatch(/解除掛載/);
+    expect(c.body).toMatch(/文件本身保留/);
+  });
+
+  it('deleteNodeConfirm：無掛載時僅提示連動移除連線（不提文件）', () => {
+    const c = deleteNodeConfirm('未命名節點', 0);
+    expect(c.body).toMatch(/連線/);
+    expect(c.body).not.toMatch(/文件/);
   });
 
   it('dagErrorMessage：成環/自環/節點不存在碼對映', () => {

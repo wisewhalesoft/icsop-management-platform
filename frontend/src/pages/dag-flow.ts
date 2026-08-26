@@ -83,3 +83,23 @@ const DAG_ERR: Record<string, string> = {
 export function dagErrorMessage(code: string): string {
   return DAG_ERR[code] ?? code;
 }
+
+/**
+ * 刪除節點之確認文案（純函式，供 DagCanvasPage 之確認對話框）。
+ *
+ * 刪節點會連動刪除其連線，並解除其上全部文件掛載（後端 DagService.deleteNode 於同一交易內執行，
+ * 因 ICSOP_DOCUMENT.nodeId 對 LIFECYCLE_NODE 無 FK，不解除即成孤兒掛載）。掛載數 > 0 屬破壞性副作用，
+ * 必須事前讓使用者知情——文件本身不會被刪除，只回到「未掛載」。
+ */
+export function deleteNodeConfirm(
+  label: string,
+  docCount: number,
+): { title: string; body: string } {
+  return {
+    title: `確認刪除節點「${label}」？`,
+    body:
+      docCount > 0
+        ? `此節點掛有 ${docCount} 份文件，刪除後將一併解除掛載（文件本身保留，回到未掛載狀態），並移除其所有連線。此操作無法復原。`
+        : '刪除後將一併移除其所有連線。此操作無法復原。',
+  };
+}

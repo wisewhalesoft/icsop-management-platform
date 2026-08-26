@@ -33,7 +33,13 @@ import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
 import { NodeDrawer } from './NodeDrawer';
-import { graphToFlow, layoutDag, dagErrorMessage, type FlowNodeData } from './dag-flow';
+import {
+  graphToFlow,
+  layoutDag,
+  dagErrorMessage,
+  deleteNodeConfirm,
+  type FlowNodeData,
+} from './dag-flow';
 import type { DagGraph } from '../api/types';
 
 /**
@@ -82,6 +88,12 @@ export function DagCanvasPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerNodeId, setDrawerNodeId] = useState<string | null>(null);
+  // 刪除節點之二次確認：掛載文件會被連動解除掛載（破壞性副作用）→ 事前告知份數。
+  const [pendingDelete, setPendingDelete] = useState<{
+    id: string;
+    label: string;
+    docCount: number;
+  } | null>(null);
   // G-LC-007 循環名稱（頂欄標題「«name» · DAG 畫布」＋抽屜候選註記）；沿用清單端點反查。
   const [cycleName, setCycleName] = useState<string | null>(null);
   const rfRef = useRef<ReactFlowInstance<Node<FlowNodeData>, Edge> | null>(null);
@@ -189,19 +201,36 @@ export function DagCanvasPage(): JSX.Element {
     }
   }, [lifecycleId, nodes.length, setNodes, toast]);
 
-  const onDeleteSelected = useCallback(async () => {
+  // 開啟確認對話框（帶入該節點掛載份數，供文案提示連動解除掛載）。
+  const onDeleteSelected = useCallback(() => {
     if (!selectedId) return;
+    const n = nodes.find((x) => x.id === selectedId);
+    setPendingDelete({
+      id: selectedId,
+      label: n?.data.label ?? '未命名節點',
+      docCount: n?.data.docCount ?? 0,
+    });
+  }, [selectedId, nodes]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!pendingDelete) return;
+    const { id, docCount } = pendingDelete;
+    setPendingDelete(null);
     try {
-      await deleteDagNode(lifecycleId, selectedId);
+      await deleteDagNode(lifecycleId, id);
       // 就地移除節點與其相關連線（後端亦連動刪邊），不重掛畫布以維持視角。
-      setNodes((nds) => nds.filter((n) => n.id !== selectedId));
-      setEdges((eds) => eds.filter((e) => e.source !== selectedId && e.target !== selectedId));
+      setNodes((nds) => nds.filter((n) => n.id !== id));
+      setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
       setSelectedId(null);
-      toast.success('節點已刪除（連動移除相關連線）');
+      toast.success(
+        docCount > 0
+          ? `節點已刪除（連動移除相關連線，並解除 ${docCount} 份文件掛載）`
+          : '節點已刪除（連動移除相關連線）',
+      );
     } catch {
       toast.error('刪除節點失敗');
     }
-  }, [lifecycleId, selectedId, setNodes, setEdges, toast]);
+  }, [lifecycleId, pendingDelete, setNodes, setEdges, toast]);
 
   // 整理連結線：dagre 上到下分層排列，套用並持久化座標，再框選全圖。
   const onTidy = useCallback(async () => {
@@ -254,7 +283,7 @@ export function DagCanvasPage(): JSX.Element {
               新增節點
             </button>
             <button
-              onClick={() => void onDeleteSelected()}
+              onClick={onDeleteSelected}
               disabled={!selectedId}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -336,6 +365,57 @@ export function DagCanvasPage(): JSX.Element {
           onChanged={() => void silentReload()}
         />
       )}
+
+      {pendingDelete && (
+        <DeleteNodeConfirm
+          label={pendingDelete.label}
+          docCount={pendingDelete.docCount}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => void confirmDelete()}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 刪除節點之確認對話框（版式沿用 LifecycleListPage.ConfirmModal）。 */
+function DeleteNodeConfirm({
+  label,
+  docCount,
+  onCancel,
+  onConfirm,
+}: {
+  label: string;
+  docCount: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+}): JSX.Element {
+  const { title, body } = deleteNodeConfirm(label, docCount);
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/45 p-4"
+      onClick={onCancel}
+    >
+      <div
+        role="dialog"
+        aria-labelledby="delNodeTitle"
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-xl shadow-xl w-full max-w-md p-6"
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+            <Icon name="alert-triangle" className="w-5 h-5 text-red-500" />
+          </div>
+          <div>
+            <h3 id="delNodeTitle" className="font-semibold text-slate-900">{title}</h3>
+            <p className="text-sm text-slate-500 mt-1">{body}</p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-6">
+          <button onClick={onCancel} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+          <button onClick={onConfirm} className="px-4 py-2 rounded-md bg-red-600 text-white text-sm hover:bg-red-700">確認刪除</button>
+        </div>
+      </div>
     </div>
   );
 }
