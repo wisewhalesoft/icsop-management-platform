@@ -91,6 +91,16 @@ Epic/Story: E07 / US-063
 - **下載未授權**：無可視權限角色略過 UI 直接呼叫下載 API→403，不產檔、不燒錄、不留稽核（操作即被拒）。見 [error-handling.md#permission](../error-handling.md#permission)。
 - **稽核寫入失敗不阻斷**：`LIFECYCLE_CHANGELOG_*` 寫入異常時不阻擋瀏覽，進補償佇列重試；稽核不可竄改（`AUDIT_IMMUTABLE`）見 [error-handling.md#audit](../error-handling.md#audit)。
 
+### 檔案動作載體遷移 delta（🔴 2026-08-26 真人回報） {#file-action-carrier-delta}
+
+- **AC-D12**：Given session 已逾時, When 點擊本 feature 之「下載新舊對照 PDF」（清單列與預覽模態**兩處入口**）, Then 使用者**不得**看到後端
+  JSON 錯誤被當成網頁呈現，而應被導回登入頁（[F001](F001-auth-login-session.md#session-lost-redirect-delta)
+  `AC-S1`／`AC-S5`）。載體由 `<a href>`（top-level navigation）改為代理串流
+  （`downloadViaBlob`／`openPdfViaBlob`）；**端點、燒錄與稽核行為逐項不變**，僅取得位元組之方式改變。
+  📝 已作廢（⚠ 不得復原）：`<a href={lifecycleTreeDiffDownloadUrl(lifecycleId, changeLogId)}>`（兩處）
+  🔴 兩處入口必須打**同一支**函式（`downloadLifecycleTreeDiff`）——只改其一即留下一個仍會顯示
+  整頁 JSON 的入口。本 feature 無列印動作。
+
 ## Related
 - **循環子分類規則權威**: [F040](F040-lifecycle-subcategory.md)（查詢下拉選項；事件之循環名稱＝join `LIFECYCLE` 取當前值，非快照，見 F040 AC-34）
 - Data: [LIFECYCLE](../data-model.md#lifecycle-entity)、[LIFECYCLE_NODE](../data-model.md#node-entity)、[LIFECYCLE_EDGE](../data-model.md#edge-entity)、[ICSOP_DOCUMENT](../data-model.md#document-entity)（掛載）、[AUDIT_LOG](../data-model.md#auditlog-entity)（`LIFECYCLE_CHANGELOG_*` 歸屬待架構師，見 OQ-E07-02）；**變更/快照實體（草案 `LIFECYCLE_CHANGE_LOG`、選採快照時另 `LIFECYCLE_SNAPSHOT`）為新實體、schema 待 system-architect（data-model 僅加指涉性註記，見 OQ-E07-05）**

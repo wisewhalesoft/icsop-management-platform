@@ -246,21 +246,51 @@ describe('ChangeHistoryPage — F037/F038', () => {
     expect(screen.getByTestId('watermark-overlay-after')).toHaveTextContent(WM);
   });
 
-  it('TS-LCC-D-009 表格列下載 href 改用 lifecycleTreeDiffDownloadUrl(lifecycleId, changeLogId)', async () => {
+  /**
+   * 🔴 2026-08-26 載體遷移：新舊對照 PDF 由 `<a href>` 改為代理串流
+   * （`downloadLifecycleTreeDiff`）。`<a href>` 是 top-level navigation——session 逾時時
+   * 後端回 401 JSON，瀏覽器把那份 JSON 當網頁畫出來，整個變更歷程頁被一頁 JSON 取代。
+   * 端點本身（lifecycleId, changeLogId 之對應）逐字不變，僅載體改變。
+   * 📝 已作廢（⚠ 不得復原）：
+   *   OLD> expect(endpoints.lifecycleTreeDiffDownloadUrl).toHaveBeenCalledWith('LC-SRC', 'lc1');
+   */
+  it('TS-LCC-D-009 表格列下載 → downloadLifecycleTreeDiff(lifecycleId, changeLogId)，非 <a href> 導覽', async () => {
     mockAuth('SysAdmin');
     render(<ChangeHistoryPage />);
     await userEvent.click(screen.getByRole('button', { name: /循環樹狀圖/ }));
     await waitFor(() => expect(screen.getByText('新增節點『撥款核准作業』')).toBeInTheDocument());
-    expect(endpoints.lifecycleTreeDiffDownloadUrl).toHaveBeenCalledWith('LC-SRC', 'lc1');
-    expect(endpoints.lifecycleTreeDownloadUrl).not.toHaveBeenCalled();
+    const rowDownload = screen.getByRole('button', { name: /下載/ });
+    expect(rowDownload).not.toHaveAttribute('href');
+    await userEvent.click(rowDownload);
+    await waitFor(() =>
+      expect(endpoints.downloadLifecycleTreeDiff).toHaveBeenCalledWith(
+        'LC-SRC',
+        'lc1',
+        expect.any(String),
+      ),
+    );
+    expect(endpoints.downloadLifecycleTree).not.toHaveBeenCalled();
   });
 
-  it('TS-LCC-D-010 Modal 下載按鈕文案「下載新舊對照 PDF」，href 為新端點', async () => {
+  /**
+   * 📝 已作廢（⚠ 不得復原，理由同 TS-LCC-D-009）：
+   *   OLD> const link = within(...).getByRole('link', { name: /下載新舊對照 PDF/ });
+   *   OLD> expect(link).toHaveAttribute('href', '/admin/change-history/lifecycles/LC-SRC/changes/lc1/tree-diff/download');
+   * 文案逐字不變；🔴 兩處入口（表格列與模態）必須打**同一支**函式，不得只改其一。
+   */
+  it('TS-LCC-D-010 Modal 下載按鈕文案「下載新舊對照 PDF」，走同一支代理串流函式', async () => {
     await openTreePreview();
-    const link = within(screen.getByRole('dialog')).getByRole('link', { name: /下載新舊對照 PDF/ });
-    expect(link).toHaveAttribute(
-      'href',
-      '/admin/change-history/lifecycles/LC-SRC/changes/lc1/tree-diff/download',
+    const btn = within(screen.getByRole('dialog')).getByRole('button', {
+      name: /下載新舊對照 PDF/,
+    });
+    expect(btn).not.toHaveAttribute('href');
+    await userEvent.click(btn);
+    await waitFor(() =>
+      expect(endpoints.downloadLifecycleTreeDiff).toHaveBeenCalledWith(
+        'LC-SRC',
+        'lc1',
+        expect.any(String),
+      ),
     );
   });
 

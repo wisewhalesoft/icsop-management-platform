@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import { downloadViaBlob } from './download-blob';
+import { downloadViaBlob, openPdfViaBlob } from './download-blob';
 import type {
   SessionUser,
   SelectAccountResponse,
@@ -362,6 +362,19 @@ export function lifecycleTreeDownloadUrl(lifecycleId: string): string {
 /** 列印用 URL（樹狀圖 PDF，內容層已燒錄浮水印；記錄 LIFECYCLE_PRINT）。 */
 export function lifecycleTreePrintUrl(lifecycleId: string): string {
   return `/admin/lifecycles/${lifecycleId}/tree-preview/print`;
+}
+
+/**
+ * F036 樹狀圖下載／列印（2026-08-26：由 `<a href>` 改為代理串流，理由同 `downloadDocumentFront`）。
+ * `<a href>` 之 top-level navigation 在 session 逾時時會把後端 401 JSON 當網頁畫出來。
+ */
+export function downloadLifecycleTree(lifecycleId: string, fallbackName: string): Promise<void> {
+  return downloadViaBlob(lifecycleTreeDownloadUrl(lifecycleId), fallbackName);
+}
+
+/** F036 樹狀圖列印：新分頁開啟已燒錄之 PDF（`win` 須由呼叫端同步開好，見 `openPdfViaBlob`）。 */
+export function printLifecycleTree(lifecycleId: string, win: Window | null): Promise<void> {
+  return openPdfViaBlob(lifecycleTreePrintUrl(lifecycleId), win);
 }
 
 /**
@@ -763,6 +776,18 @@ export function lifecycleTreeDiffDownloadUrl(lifecycleId: string, changeLogId: s
   return `/admin/change-history/lifecycles/${encodeURIComponent(lifecycleId)}/changes/${encodeURIComponent(changeLogId)}/tree-diff/download`;
 }
 
+/**
+ * F038 新舊對照 PDF 下載（2026-08-26：由 `<a href>` 改為代理串流，理由同 `downloadDocumentFront`）。
+ * 清單列與預覽模態兩處入口共用本函式——不得只改其一。
+ */
+export function downloadLifecycleTreeDiff(
+  lifecycleId: string,
+  changeLogId: string,
+  fallbackName: string,
+): Promise<void> {
+  return downloadViaBlob(lifecycleTreeDiffDownloadUrl(lifecycleId, changeLogId), fallbackName);
+}
+
 // ===== E06 前台瀏覽（F019） =====
 
 /**
@@ -854,6 +879,28 @@ export function documentDownloadUrl(documentId: string): string {
 /** 列印用 URL（內容層已燒錄浮水印）。 */
 export function documentPrintUrl(documentId: string): string {
   return `/public/documents/${documentId}/print`;
+}
+
+/**
+ * F020 前台**主文件下載**（內容層已燒錄浮水印，後端記 DOWNLOAD 稽核）。
+ *
+ * 🔴 2026-08-26：由 `<a href={documentDownloadUrl(id)}>` 改為 `downloadViaBlob`。原作法是
+ * top-level navigation——session 逾時（401）時瀏覽器把後端 JSON 錯誤**當網頁畫出來**，使用者
+ * 眼前是一整頁 `{"message":"AUTH_SESSION_EXPIRED",...}`（真人回報）。同一禁令早已寫在本檔其他
+ * 下載函式與 architecture-spec §10.1，唯獨前台詳情／檢視器這兩處主動作漏改。
+ */
+export function downloadDocumentFront(documentId: string, fallbackName: string): Promise<void> {
+  return downloadViaBlob(documentDownloadUrl(documentId), fallbackName);
+}
+
+/**
+ * F020 前台**列印**（內容層已燒錄浮水印，後端記 PRINT 稽核）：於新分頁開啟已燒錄之 PDF。
+ *
+ * `win` 須由呼叫端在 click handler 內**同步**以 `window.open('', '_blank')` 取得後傳入——理由與
+ * 失敗處置見 `openPdfViaBlob`。傳 `null`（分頁被封鎖）時擲 `POPUP_BLOCKED`，由呼叫端提示。
+ */
+export function printDocumentFront(documentId: string, win: Window | null): Promise<void> {
+  return openPdfViaBlob(documentPrintUrl(documentId), win);
 }
 
 // ===== E05 F018 使用表單管理（表單池） =====

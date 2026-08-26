@@ -137,8 +137,8 @@ describe('PublicDocumentDetailPage — 三類附屬檔案之浮水印標示（F0
     // 🔴 2026-08-16 移除：`downloadDocumentAppendix` 經查為死碼（無 production 呼叫端，同日刪除）。
     //    本行僅為 mock 準備，無任何斷言依賴之；前台附錄實走 `downloadDocumentAppendixFront`。
     //    OLD> `vi.mocked(api.downloadDocumentAppendix).mockResolvedValue({ url: 'blob:raw', expiresInSeconds: 300 });`
-    vi.mocked(api.documentDownloadUrl).mockReturnValue('/public/documents/doc-a/download');
-    vi.mocked(api.documentPrintUrl).mockReturnValue('/public/documents/doc-a/print');
+    vi.mocked(api.downloadDocumentFront).mockResolvedValue(undefined);
+    vi.mocked(api.printDocumentFront).mockResolvedValue(undefined);
     vi.stubGlobal('open', vi.fn());
     if (typeof URL.createObjectURL !== 'function') {
       Object.defineProperty(URL, 'createObjectURL', { value: vi.fn(() => 'blob:x'), writable: true });
@@ -227,8 +227,8 @@ describe('PublicDocumentDetailPage — 下載觸發方式（F020 AC-D3／AC-D3a�
     // 🔴 2026-08-16 移除：`downloadDocumentAppendix` 經查為死碼（無 production 呼叫端，同日刪除）。
     //    本行僅為 mock 準備，無任何斷言依賴之；前台附錄實走 `downloadDocumentAppendixFront`。
     //    OLD> `vi.mocked(api.downloadDocumentAppendix).mockResolvedValue({ url: 'blob:raw', expiresInSeconds: 300 });`
-    vi.mocked(api.documentDownloadUrl).mockReturnValue('/public/documents/doc-a/download');
-    vi.mocked(api.documentPrintUrl).mockReturnValue('/public/documents/doc-a/print');
+    vi.mocked(api.downloadDocumentFront).mockResolvedValue(undefined);
+    vi.mocked(api.printDocumentFront).mockResolvedValue(undefined);
     vi.stubGlobal('open', vi.fn());
     vi.stubGlobal('fetch', vi.fn(async () => new Response(new Blob([new Uint8Array([1, 2, 3])]), {
       status: 200,

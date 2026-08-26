@@ -104,8 +104,8 @@ beforeEach(() => {
   vi.resetAllMocks();
   mockAuth();
   vi.mocked(api.getOrgUnits).mockResolvedValue([]);
-  vi.mocked(api.documentDownloadUrl).mockImplementation((id: string) => `/public/documents/${id}/download`);
-  vi.mocked(api.documentPrintUrl).mockImplementation((id: string) => `/public/documents/${id}/print`);
+  vi.mocked(api.downloadDocumentFront).mockResolvedValue(undefined);
+  vi.mocked(api.printDocumentFront).mockResolvedValue(undefined);
   vi.mocked(api.getDocumentAppendices).mockResolvedValue([]);
 });
 
