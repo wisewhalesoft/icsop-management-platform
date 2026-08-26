@@ -28,6 +28,20 @@ Epic/Story: E06 / US-056（Phase 2）
 - Given 管理角色開啟前台頁, When 前台載入, Then 依管理者自身部門置頂排序（非模擬他人）。
 - Given 瀏覽器封鎖彈出視窗, When 開啟失敗, Then 提供替代提示。
 
+### 封鎖誤判修復 delta（🔴 2026-08-26 真人回報） {#popup-false-positive-delta}
+
+> 症狀：新分頁明明開起來了，側欄仍恆顯示「新視窗被瀏覽器封鎖，請允許彈出視窗後再試。」
+
+- **AC-P1（封鎖判定不得恆真）**：Given 使用者點擊「瀏覽文件網頁」且瀏覽器**未**封鎖彈出視窗,
+  When 新分頁成功開啟, Then **不得**出現封鎖提示。
+  🔴 根因：`window.open('/public','_blank','noopener,noreferrer')` —— HTML 規格明定 features 含
+  `noopener` 時 `window.open()` **一律回 `null`**（與是否被封鎖無關），故 `win === null` 恆成立。
+  修法＝移除 `noopener,noreferrer`（同源第一方無 reverse tabnabbing 暴露面，與 F036 樹狀圖預覽
+  入口同一裁決）；封鎖判定仍以 `win === null` 為準，語意自此才成立。
+  ⚠ **既有單元測試結構上測不到本條**：`TS-F022-001`／`TS-F022-004` 皆把 `window.open` 整個
+  spy 掉、回傳值由測試指定，真實回傳語意在那兩案中永遠不會被執行。回歸鎖定改以「features
+  引數不得含 `noopener`／`noreferrer`」之形狀斷言（`TS-F022-005`）。
+
 ## Error Scenarios
 - 彈出視窗被封鎖：見 [error-handling.md#public](../error-handling.md#public)。
 
