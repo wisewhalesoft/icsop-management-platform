@@ -1,5 +1,6 @@
 import { PDFDocument, PDFFont, PDFPage, rgb } from 'pdf-lib';
-import { TreeLayout } from './lifecycle-tree-layout';
+import { buildEdgeRoutes, TreeLayout } from './lifecycle-tree-layout';
+import { drawArrowHead } from './lifecycle-tree-pdf';
 import { LifecycleDiff } from './lifecycle-change-diff';
 import { asciiSafe, embedWatermarkFont, loadCjkFontBytes } from '../public/fonts/cjk-font';
 
@@ -115,12 +116,12 @@ export class PdfLibChangeHistoryTreeRenderer implements LifecycleChangeHistoryPd
     const nh = layout.nodeHeight;
     const posOf = new Map(layout.nodes.map((n) => [n.id, n]));
 
-    // 連線（直角，child 端朝下）。
-    for (const e of layout.edges) {
-      const s = posOf.get(e.sourceNodeId);
-      const t = posOf.get(e.targetNodeId);
-      if (!s || !t) continue;
-      const key = edgeKey(e.sourceNodeId, e.targetNodeId);
+    // 連線（直角，child 端朝下）：折線與箭頭取自 buildEdgeRoutes，與檢視器／樹圖 PDF 同一組座標。
+    for (const route of buildEdgeRoutes(layout)) {
+      const s = posOf.get(route.sourceNodeId);
+      const t = posOf.get(route.targetNodeId);
+      if (!s || !t || !route.points.length) continue;
+      const key = edgeKey(route.sourceNodeId, route.targetNodeId);
       let color = COLORS.edge;
       let thickness = 1.5;
       let dashArray: number[] | undefined;
@@ -131,16 +132,11 @@ export class PdfLibChangeHistoryTreeRenderer implements LifecycleChangeHistoryPd
         color = COLORS.edgeAdd;
         thickness = 3;
       }
-      const sx = pad + s.x + nw / 2;
-      const sy = toPageY(s.y + nh);
-      const tx = pad + t.x + nw / 2;
-      const ty = toPageY(t.y);
-      const midY = sy + (ty - sy) / 2;
-      const line = (x1: number, y1: number, x2: number, y2: number): void =>
-        page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness, color, dashArray });
-      line(sx, sy, sx, midY);
-      line(sx, midY, tx, midY);
-      line(tx, midY, tx, ty);
+      const pts = route.points.map((p) => ({ x: pad + p.x, y: toPageY(p.y) }));
+      for (let i = 0; i + 1 < pts.length; i += 1) {
+        page.drawLine({ start: pts[i], end: pts[i + 1], thickness, color, dashArray });
+      }
+      drawArrowHead(page, pts[pts.length - 1], color);
     }
 
     // 節點卡。

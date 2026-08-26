@@ -1,5 +1,5 @@
-import { PDFDocument, rgb } from 'pdf-lib';
-import { TreeLayout } from './lifecycle-tree-layout';
+import { PDFDocument, PDFPage, RGB, rgb } from 'pdf-lib';
+import { buildEdgeRoutes, TreeLayout } from './lifecycle-tree-layout';
 import { asciiSafe, embedWatermarkFont, loadCjkFontBytes } from '../public/fonts/cjk-font';
 
 /**
@@ -55,22 +55,15 @@ export class PdfLibTreeRenderer implements LifecycleTreePdfRenderer {
 
     const nw = layout.nodeWidth;
     const nh = layout.nodeHeight;
-    const posOf = new Map(layout.nodes.map((n) => [n.id, n]));
-
-    // 直角連線（child 端朝下）。
-    for (const e of layout.edges) {
-      const s = posOf.get(e.sourceNodeId);
-      const t = posOf.get(e.targetNodeId);
-      if (!s || !t) continue;
-      const sx = pad + s.x + nw / 2;
-      const sy = toPageY(s.y + nh);
-      const tx = pad + t.x + nw / 2;
-      const ty = toPageY(t.y);
-      const midY = sy + (ty - sy) / 2;
-      const grey = rgb(0.58, 0.64, 0.72);
-      page.drawLine({ start: { x: sx, y: sy }, end: { x: sx, y: midY }, thickness: 1.5, color: grey });
-      page.drawLine({ start: { x: sx, y: midY }, end: { x: tx, y: midY }, thickness: 1.5, color: grey });
-      page.drawLine({ start: { x: tx, y: midY }, end: { x: tx, y: ty }, thickness: 1.5, color: grey });
+    // 直角連線（child 端朝下）：折線與箭頭一律取自 buildEdgeRoutes，與檢視器同一組座標。
+    const grey = rgb(0.58, 0.64, 0.72);
+    for (const route of buildEdgeRoutes(layout)) {
+      const pts = route.points.map((p) => ({ x: pad + p.x, y: toPageY(p.y) }));
+      for (let i = 0; i + 1 < pts.length; i += 1) {
+        page.drawLine({ start: pts[i], end: pts[i + 1], thickness: 1.5, color: grey });
+      }
+      const tip = pts[pts.length - 1];
+      if (tip) drawArrowHead(page, tip, grey);
     }
 
     // 節點卡。
@@ -102,4 +95,20 @@ export class PdfLibTreeRenderer implements LifecycleTreePdfRenderer {
     const bytes = await pdf.save();
     return Buffer.from(bytes);
   }
+}
+
+/**
+ * 連線末端箭頭（child 端朝下）：與檢視器 SVG 之 marker 同形（8×6 實心三角）。
+ *
+ * 為何要有：F036 之下載／列印原本完全無箭頭，遇到交錯或跨層連線時方向與歸屬皆不可判讀
+ * （2026-08-26 樹狀圖連線缺陷第 ③ 項）。`drawSvgPath` 之 y 軸為 SVG 慣例（向下），故負值
+ * 在頁面上等於「往上」→ 尖端落在 tip、兩翼在其上方。
+ */
+export function drawArrowHead(page: PDFPage, tip: { x: number; y: number }, color: RGB): void {
+  page.drawSvgPath('M 0 0 L -4 -8 L 4 -8 Z', {
+    x: tip.x,
+    y: tip.y,
+    color,
+    borderWidth: 0,
+  });
 }
