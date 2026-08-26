@@ -44,7 +44,17 @@ class FakeDagStore implements DagStore {
     Object.assign(n, patch);
     return Promise.resolve(n);
   }
+  /** 各節點掛載份數 ＋ 操作順序記錄（供驗「刪節點前必先解除掛載」）。 */
+  mountedDocs = new Map<string, number>();
+  ops: string[] = [];
+  unmountNodeDocs(id: string): Promise<number> {
+    this.ops.push(`unmount:${id}`);
+    const n = this.mountedDocs.get(id) ?? 0;
+    this.mountedDocs.set(id, 0);
+    return Promise.resolve(n);
+  }
   deleteNodeWithEdges(id: string): Promise<void> {
+    this.ops.push(`delete:${id}`);
     this.nodes = this.nodes.filter((n) => n.id !== id);
     this.edges = this.edges.filter((e) => e.sourceNodeId !== id && e.targetNodeId !== id);
     return Promise.resolve();
@@ -111,6 +121,14 @@ describe('DagService（F008）', () => {
     await svc.deleteNode('A');
     expect(store.nodes.find((n) => n.id === 'A')).toBeUndefined();
     expect(store.edges.length).toBe(0);
+  });
+
+  it('刪除節點 → 先解除其文件掛載，再刪節點（不留懸空 nodeId）', async () => {
+    store.node('A');
+    store.mountedDocs.set('A', 3);
+    await svc.deleteNode('A');
+    expect(store.ops).toEqual(['unmount:A', 'delete:A']); // 順序：解除掛載必在刪節點之前
+    expect(store.mountedDocs.get('A')).toBe(0);
   });
 
   it('getGraph → 節點與邊', async () => {

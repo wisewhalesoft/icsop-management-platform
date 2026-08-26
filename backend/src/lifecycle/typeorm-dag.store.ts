@@ -3,6 +3,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import { Lifecycle } from '../database/entities/lifecycle.entity';
 import { LifecycleNode } from '../database/entities/lifecycle-node.entity';
 import { LifecycleEdge } from '../database/entities/lifecycle-edge.entity';
+import { IcsopDocument } from '../database/entities/icsop-document.entity';
 import {
   DagStore,
   NodeView,
@@ -126,7 +127,31 @@ export class TypeOrmDagStore implements DagStore {
     return this.updateNodeWith(ds.manager, nodeId, patch);
   }
 
+  /**
+   * 解除掛載於該節點之全部文件（nodeId → NULL），回傳受影響筆數。
+   * `ICSOP_DOCUMENT.nodeId` 無 FK 到 `LIFECYCLE_NODE`，故此清除必須由應用層負責（見 dag.store.ts）。
+   * `updatedAt` 一併更新，與單筆掛載寫入（TypeOrmNodeDocsStore.setDocNode）之語意一致。
+   */
+  private async unmountNodeDocsWith(m: EntityManager, nodeId: string): Promise<number> {
+    const res = await m
+      .getRepository(IcsopDocument)
+      .createQueryBuilder()
+      .update()
+      .set({ nodeId: null, updatedAt: new Date() })
+      .where('nodeId = :id', { id: nodeId })
+      .execute();
+    return res.affected ?? 0;
+  }
+
+  async unmountNodeDocs(nodeId: string): Promise<number> {
+    const ds = await this.init();
+    return this.unmountNodeDocsWith(ds.manager, nodeId);
+  }
+
   private async deleteNodeWithEdgesWith(m: EntityManager, nodeId: string): Promise<void> {
+    // 🔴 不變式：節點消失前先解除其文件掛載，否則 ICSOP_DOCUMENT.nodeId 成懸空值（孤兒掛載）。
+    // 置於刪節點之前且同交易內，服務層是否已先呼叫 unmountNodeDocs 皆冪等（第二次影響 0 列）。
+    await this.unmountNodeDocsWith(m, nodeId);
     await m
       .getRepository(LifecycleEdge)
       .createQueryBuilder()
@@ -186,6 +211,7 @@ export class TypeOrmDagStore implements DagStore {
         createNode: (lc, input) => this.createNodeWith(m, lc, input),
         updateNode: (id, patch) => this.updateNodeWith(m, id, patch),
         deleteNodeWithEdges: (id) => this.deleteNodeWithEdgesWith(m, id),
+        unmountNodeDocs: (id) => this.unmountNodeDocsWith(m, id),
         createEdge: (lc, s, t) => this.createEdgeWith(m, lc, s, t),
         deleteEdge: (id) => this.deleteEdgeWith(m, id),
         listNodes: (lc) => this.listNodesWith(m, lc),

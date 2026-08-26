@@ -31,6 +31,8 @@ export interface DagStructuralTx extends RecordsStructuralChange {
     patch: { name?: string | null; positionX?: number; positionY?: number },
   ): Promise<NodeView>;
   deleteNodeWithEdges(nodeId: string): Promise<void>;
+  /** 解除該節點之全部文件掛載，回傳筆數（選填能力；語意同 DagStore.unmountNodeDocs）。 */
+  unmountNodeDocs?(nodeId: string): Promise<number>;
   createEdge(lifecycleId: string, source: string, target: string): Promise<EdgeRow>;
   deleteEdge(edgeId: string): Promise<void>;
   listNodes(lifecycleId: string): Promise<NodeView[]>;

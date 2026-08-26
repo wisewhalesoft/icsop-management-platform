@@ -37,6 +37,13 @@ class FakeDag implements DagStore {
     Object.assign(n, patch);
     return { ...n };
   }
+  /** 各節點掛載份數（供驗 NODE_REMOVED 摘要之連動解除掛載註記）。 */
+  mountedDocs = new Map<string, number>();
+  async unmountNodeDocs(nodeId: string): Promise<number> {
+    const n = this.mountedDocs.get(nodeId) ?? 0;
+    this.mountedDocs.set(nodeId, 0);
+    return n;
+  }
   async deleteNodeWithEdges(nodeId: string): Promise<void> {
     this.nodes = this.nodes.filter((n) => n.id !== nodeId);
     this.edges = this.edges.filter((e) => e.sourceNodeId !== nodeId && e.targetNodeId !== nodeId);
@@ -111,6 +118,17 @@ describe('DagService F038 結構事件發射', () => {
       changeType: 'NODE_REMOVED',
       oldValue: '付款執行作業',
       summary: '移除節點『付款執行作業』（含其連線）',
+    });
+  });
+
+  it('deleteNode 連動解除掛載 → NODE_REMOVED 摘要註記份數', async () => {
+    const n = await svc.addNode('lc1', { name: '付款執行作業' }, actor);
+    store.mountedDocs.set(n.id, 2);
+    pub.events = [];
+    await svc.deleteNode(n.id, { lifecycleId: 'lc1', actor });
+    expect(pub.events[0]).toMatchObject({
+      changeType: 'NODE_REMOVED',
+      summary: '移除節點『付款執行作業』（含其連線，並解除 2 份文件掛載）',
     });
   });
 

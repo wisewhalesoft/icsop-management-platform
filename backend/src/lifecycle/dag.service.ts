@@ -159,15 +159,28 @@ export class DagService {
     });
   }
 
+  /**
+   * 刪除節點：**先解除其文件掛載、再刪節點與邊**，同一交易內完成。
+   *
+   * 🔴 `ICSOP_DOCUMENT.nodeId` 對 `LIFECYCLE_NODE` 無 FK，若不解除掛載，被刪節點的文件會留下懸空
+   * nodeId（孤兒掛載）——文件自畫布與樹狀圖消失，卻仍在他節點抽屜被判為「已掛載於其他節點」，
+   * 觸發節點名空白的改派警示。解除筆數寫入 NODE_REMOVED 摘要，使此連動於變更歷程可追。
+   */
   async deleteNode(nodeId: string, ctx: LifecycleEmitContext = {}): Promise<void> {
     await this.runChange<void>(async (m) => {
       let name: string | null = null;
       if (ctx.lifecycleId) {
         name = (await m.listNodes(ctx.lifecycleId)).find((n) => n.id === nodeId)?.name ?? null;
       }
+      // 選填能力；未提供之 fake → 0（store 之 deleteNodeWithEdges 仍為權威解除點）。
+      const unmounted = m.unmountNodeDocs ? await m.unmountNodeDocs(nodeId) : 0;
       await m.deleteNodeWithEdges(nodeId);
+      const summary =
+        unmounted > 0
+          ? `移除節點『${NODE_LABEL(name)}』（含其連線，並解除 ${unmounted} 份文件掛載）`
+          : `移除節點『${NODE_LABEL(name)}』（含其連線）`;
       const event = ctx.lifecycleId
-        ? this.buildEvent(ctx.lifecycleId, 'NODE_REMOVED', `移除節點『${NODE_LABEL(name)}』（含其連線）`, {
+        ? this.buildEvent(ctx.lifecycleId, 'NODE_REMOVED', summary, {
             oldValue: name,
             nodeId,
             actor: ctx.actor,
