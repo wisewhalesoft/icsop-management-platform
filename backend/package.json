@@ -44,7 +44,8 @@
     "setupFiles": [
       "<rootDir>/../test/jest-setup-tz.ts"
     ],
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "maxWorkers": 4
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.24",

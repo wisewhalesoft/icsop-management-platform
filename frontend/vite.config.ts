@@ -64,6 +64,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    // 16GB 筆電：限制 worker 數防記憶體耗盡（詳 ~/.claude/CLAUDE.md 資源限制）
+    poolOptions: { threads: { maxThreads: 4 }, forks: { maxForks: 4 } },
     setupFiles: ['./src/test/setup.ts'],
     css: false,
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
