@@ -25,6 +25,7 @@ import {
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { cycleCodeOf } from '../domain/cycle-codes';
+import { usageFormOptionLabel } from '../domain/usage-form-label';
 import {
   LifecycleIdentity,
   lifecycleDisplayName,
@@ -194,7 +195,8 @@ export function DocumentEditPage(): JSX.Element {
       void getUsageFormPool().then(setFormPool).catch(() => undefined);
       void getDocumentForms(id)
         .then((fs) => {
-          const opts = fs.map((f) => ({ value: f.id, label: f.name }));
+          // 已關聯表單之 chips 與下拉選項同一組字（含編號），否則同一頁上下兩處對同一份表單顯示不同字串。
+          const opts = fs.map((f) => ({ value: f.id, label: usageFormOptionLabel(f) }));
           setOrigForms(opts);
           setDraftForms(opts);
         })
@@ -284,8 +286,16 @@ export function DocumentEditPage(): JSX.Element {
     () => existing.filter((d) => d.id !== id).map((d) => ({ value: d.id, label: `${d.documentNumber} ${d.documentName}` })),
     [existing, id],
   );
+  /**
+   * F018 使用表單選項：label 一律經 `usageFormOptionLabel()`（`{編號} {名稱}`／無編號僅名稱），
+   * 與 F017 後台清單之「使用表單」篩選同一組字點。
+   *
+   * 🔴 2026-08-26 使用者回報：本處原本只給 `f.name`——池裡的編號早已存在（F018 `AC-D2`），
+   * 但新增／編輯文件時既看不到編號、也**搜不到編號**（`MultiSearchCombobox` 以 label 過濾），
+   * 同名不同編號之表單在此完全無法區分。
+   */
   const formOptions = useMemo<ComboOption[]>(
-    () => formPool.map((f) => ({ value: f.id, label: f.name })),
+    () => formPool.map((f) => ({ value: f.id, label: usageFormOptionLabel(f) })),
     [formPool],
   );
   const appendixOptions = useMemo<ComboOption[]>(
