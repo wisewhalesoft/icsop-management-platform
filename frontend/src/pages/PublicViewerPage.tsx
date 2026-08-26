@@ -60,7 +60,16 @@ const STANDARD_FONT_DATA_URL = '/pdfjs/standard_fonts/';
 interface LoadedPdf {
   numPages: number;
   getPage: (n: number) => Promise<{
-    getViewport: (o: { scale: number }) => { width: number; height: number; scale: number };
+    /**
+     * 頁面自身之 `/Rotate`（PDF 內嵌之頁面方向，非使用者操作）。
+     * 🔴 選填：pdf.js 恆提供，但測試替身可省略 ⇒ 消費端一律 `?? 0`。
+     */
+    rotate?: number;
+    getViewport: (o: { scale: number; rotation?: number }) => {
+      width: number;
+      height: number;
+      scale: number;
+    };
     render: (o: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => { promise: Promise<void> };
   }>;
   destroy: () => void;
@@ -76,6 +85,14 @@ export function PublicViewerPage(): JSX.Element {
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  /**
+   * 2026-08-26 UX ①：**逐頁**旋轉角（0/90/180/270，鍵＝頁碼）。
+   *
+   * 🔴 為何逐頁而非整份：使用者回報之情境是「某幾頁的方向為橫向」——整份共用一個角度時，
+   * 把橫向那幾頁轉正，其餘直向頁就全部躺下，來回翻頁得一直轉回去。切換文件時整份重置
+   * （見載入 effect），不跨文件殘留。
+   */
+  const [rotations, setRotations] = useState<Record<number, number>>({});
   // 浮水印/文件識別載入中（ux-audit-frontstage A-6；UX-10／UX-78）——與清單、詳情兩頁一致。
   const [loading, setLoading] = useState(true);
 
@@ -83,6 +100,14 @@ export function PublicViewerPage(): JSX.Element {
   const pdfRef = useRef<LoadedPdf | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [page, setPage] = useState(1);
+  /** 目前頁之旋轉角（未旋轉過即 0）。⚠ 必須宣告於渲染 effect 之前——它是依賴陣列之成員。 */
+  const rotation = rotations[page] ?? 0;
+  /** 旋轉：只動**目前頁**，正值＝順時針；恆正規化到 [0,360)。 */
+  const rotateBy = useCallback(
+    (delta: number): void =>
+      setRotations((prev) => ({ ...prev, [page]: (((prev[page] ?? 0) + delta) % 360 + 360) % 360 })),
+    [page],
+  );
   /** 位元組載入完成之訊號：驅動渲染 effect，且不把不可序列化的 pdf 物件塞進 state。 */
   const [pdfReady, setPdfReady] = useState(0);
   /** 受控動作（下載／列印）進行中旗標：每次核發皆寫一筆調閱稽核，故同一時間只受理一個。 */
@@ -176,6 +201,7 @@ export function PublicViewerPage(): JSX.Element {
         pdfRef.current = doc;
         setPageCount(doc.numPages);
         setPage(1);
+        setRotations({});
         setPdfReady((n) => n + 1);
       } catch (e) {
         if (active) setError((prev) => prev ?? msgOf(e));
@@ -205,7 +231,15 @@ export function PublicViewerPage(): JSX.Element {
       if (!active) return;
       const dpr = window.devicePixelRatio || 1;
       const outputScale = zoom * dpr;
-      const viewport = p.getViewport({ scale: outputScale });
+      /**
+       * 🔴 `rotation` 於 pdf.js 是**取代**頁面自身之 `/Rotate`（其預設值即 `page.rotate`），
+       * 不是疊加。只傳使用者角度會把本來就內嵌 90° 的頁面**轉回 0°**——扶正變成弄歪。
+       * 故一律相加後再交給 pdf.js（其內部自會正規化為 90 的倍數）。
+       */
+      const viewport = p.getViewport({
+        scale: outputScale,
+        rotation: (p.rotate ?? 0) + rotation,
+      });
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
       canvas.style.width = `${Math.floor(viewport.width / dpr)}px`;
@@ -218,7 +252,7 @@ export function PublicViewerPage(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [pdfReady, page, zoom]);
+  }, [pdfReady, page, zoom, rotation]);
 
   // 檢視者身分路徑（部 / 處室）：與前台清單／浮水印共用 buildOrgPath。
   useEffect(() => {
@@ -256,7 +290,9 @@ export function PublicViewerPage(): JSX.Element {
     return () => document.removeEventListener('keydown', onKey);
   }, [goPage, page]);
 
-  const canvasLabel = `文件預覽（第 ${page} 頁${pageCount > 0 ? `，共 ${pageCount} 頁` : ''}，浮水印已燒錄於內容層）`;
+  const canvasLabel = `文件預覽（第 ${page} 頁${pageCount > 0 ? `，共 ${pageCount} 頁` : ''}${
+    rotation !== 0 ? `，已旋轉 ${rotation}°` : ''
+  }，浮水印已燒錄於內容層）`;
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-700 flex flex-col">
@@ -398,6 +434,32 @@ export function PublicViewerPage(): JSX.Element {
             className="tap-target w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"
           >
             <Icon name="zoom-in" className="w-4 h-4" />
+          </button>
+          <div className="w-px h-5 bg-slate-200 mx-1 shrink-0" />
+
+          {/*
+            2026-08-26 UX ①：旋轉（逐頁）。文件中夾雜橫向頁時，於該頁轉正即可，其餘頁不受影響。
+            🔴 與縮放同一條路徑——以新 viewport **重新渲染**，不是對 canvas 施 CSS `transform`
+               （`AC-N8` 之同一理由：轉完仍須是向量重繪之清晰點陣，且 DOM 上不得出現縮放變形）。
+          */}
+          <button
+            onClick={() => rotateBy(-90)}
+            aria-label="向左旋轉 90 度"
+            title="向左旋轉 90°（僅本頁）"
+            className="tap-target w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"
+          >
+            <Icon name="rotate-ccw" className="w-4 h-4" />
+          </button>
+          <span data-testid="rotate-label" className="mono text-sm text-slate-500 w-10 text-center shrink-0">
+            {rotation}°
+          </span>
+          <button
+            onClick={() => rotateBy(90)}
+            aria-label="向右旋轉 90 度"
+            title="向右旋轉 90°（僅本頁）"
+            className="tap-target w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"
+          >
+            <Icon name="rotate-cw" className="w-4 h-4" />
           </button>
         </div>
       </header>

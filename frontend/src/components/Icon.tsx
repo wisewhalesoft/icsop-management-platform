@@ -4,7 +4,7 @@ import {
   ChevronRight, ChevronLeft, UserCircle, LogOut, ExternalLink, ArrowRight, ArrowLeft,
   LayoutGrid, Activity, Building2, Info, AlertCircle, AlertTriangle, Loader2,
   Search, PanelsTopLeft, LayoutDashboard, CheckCircle2, X, Plus, Inbox,
-  RotateCw, GitBranch, CircleDot, FileCheck2, FileX2, GitCommitVertical,
+  RotateCw, RotateCcw, GitBranch, CircleDot, FileCheck2, FileX2, GitCommitVertical,
   PlusCircle, Filter, FilePlus, FilePlus2, Paperclip, Save, Lock, Trash2,
   Download, Globe, UserSearch, FileSearch, FileBadge, Stamp,
   GitFork, ZoomIn, ZoomOut, Maximize, Printer,
@@ -67,6 +67,8 @@ const REGISTRY: Record<string, LucideIcon> = {
   plus: Plus,
   inbox: Inbox,
   'rotate-cw': RotateCw,
+  // 2026-08-26 UX ①：檢視器之逆時針旋轉鈕（橫向頁面轉正）。
+  'rotate-ccw': RotateCcw,
   'git-branch': GitBranch,
   'circle-dot': CircleDot,
   'file-check-2': FileCheck2,

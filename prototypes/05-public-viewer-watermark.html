@@ -85,6 +85,12 @@
     <button onclick="zoom(-0.1)" aria-label="縮小" title="縮小" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="zoom-out" class="w-4 h-4"></i></button>
     <span id="zoomLabel" class="mono text-sm text-slate-500 w-10 text-center shrink-0">100%</span>
     <button onclick="zoom(0.1)" aria-label="放大" title="放大" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="zoom-in" class="w-4 h-4"></i></button>
+    <div class="w-px h-5 bg-slate-200 mx-1 shrink-0"></div>
+    <!-- 2026-08-26 UX ①：旋轉（**逐頁**）。文件夾雜橫向頁時只轉那幾頁，其餘頁不受影響。
+         🔴 與縮放同一條路徑：以新方向**重新渲染**，#page / #pdfCanvas 全程不得帶 transform（AC-N8 同一理由）。 -->
+    <button onclick="rotateBy(-90)" aria-label="向左旋轉 90 度" title="向左旋轉 90°（僅本頁）" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></button>
+    <span id="rotateLabel" class="mono text-sm text-slate-500 w-10 text-center shrink-0">0°</span>
+    <button onclick="rotateBy(90)" aria-label="向右旋轉 90 度" title="向右旋轉 90°（僅本頁）" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="rotate-cw" class="w-4 h-4"></i></button>
   </div>
 </header>
 
@@ -184,6 +190,9 @@
 
   let CUR = 1;   // 目前頁碼（單頁翻頁）
   let Z   = 1;   // 縮放倍率
+  /* 2026-08-26 UX ①：**逐頁**旋轉角（鍵＝頁碼、值＝0/90/180/270）。整份共用一個角度時，
+     把橫向那幾頁轉正就會讓其餘直向頁全部躺下——使用者回報之情境正是「某幾頁為橫向」。 */
+  const ROT = {};
 
   /* 🔴 AC-N9 之渲染 seam：renderPage(pageNo, scale) 為**唯一**的渲染入口，且對外暴露呼叫紀錄供斷言。
      實作對應＝pdfjs-dist 之 page.render({ canvasContext, viewport })（architecture-spec §11.4：
@@ -191,27 +200,37 @@
   window.__pdfRenderCalls = [];
 
   function renderPage(pageNo, scale){
-    window.__pdfRenderCalls.push({ page: pageNo, scale: scale });
+    const rot = ROT[pageNo] || 0;
+    window.__pdfRenderCalls.push({ page: pageNo, scale: scale, rotation: rot });
 
     const cv  = document.getElementById('pdfCanvas');
     const dpr = window.devicePixelRatio || 1;
     // architecture-spec §11.2：outputScale = zoom × devicePixelRatio
     const outputScale = scale * dpr;
-    cv.width  = Math.floor(PAGE_W * outputScale);      // 點陣緩衝區（含 DPR 放大）
-    cv.height = Math.floor(PAGE_H * outputScale);
-    cv.style.width  = Math.floor(PAGE_W * outputScale / dpr) + 'px';   // CSS 佈局尺寸（僅依 zoom）
-    cv.style.height = Math.floor(PAGE_H * outputScale / dpr) + 'px';
+    // 旋轉 90/270 度時 viewport 之長寬互換（＝pdf.js getViewport({rotation}) 之行為）。
+    const swap = rot % 180 !== 0;
+    const vw = swap ? PAGE_H : PAGE_W;
+    const vh = swap ? PAGE_W : PAGE_H;
+    cv.width  = Math.floor(vw * outputScale);          // 點陣緩衝區（含 DPR 放大）
+    cv.height = Math.floor(vh * outputScale);
+    cv.style.width  = Math.floor(vw * outputScale / dpr) + 'px';       // CSS 佈局尺寸（僅依 zoom）
+    cv.style.height = Math.floor(vh * outputScale / dpr) + 'px';
 
     const ctx = cv.getContext('2d');
     ctx.setTransform(outputScale, 0, 0, outputScale, 0, 0);            // 之後一律以 CSS px 座標作畫
-    ctx.clearRect(0, 0, PAGE_W, PAGE_H);
+    ctx.clearRect(0, 0, vw, vh);
+    // 把座標系轉回「頁面自身」之 (0,0)–(PAGE_W,PAGE_H)：以下作畫全部不必知道有沒有轉過。
+    // 🔴 浮水印亦在此座標系內畫 ⇒ 跟著內容一起轉，與「燒錄於內容層」之語意一致（AC-N6）。
+    if(rot === 90){ ctx.translate(vw, 0);  ctx.rotate(Math.PI / 2); }
+    else if(rot === 180){ ctx.translate(vw, vh); ctx.rotate(Math.PI); }
+    else if(rot === 270){ ctx.translate(0, vh); ctx.rotate(-Math.PI / 2); }
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, PAGE_W, PAGE_H);
 
     drawContent(ctx, PAGES[pageNo - 1], pageNo);
     burnWatermark(ctx);                                                // ⬅ 浮水印畫進**像素**＝內容層（AC-N6）
 
-    cv.setAttribute('aria-label', `文件預覽（第 ${pageNo} 頁，共 ${PAGES.length} 頁，浮水印已燒錄於內容層）`);
+    cv.setAttribute('aria-label', `文件預覽（第 ${pageNo} 頁，共 ${PAGES.length} 頁${rot ? `，已旋轉 ${rot}°` : ''}，浮水印已燒錄於內容層）`);
     document.getElementById('page').setAttribute('data-viewer-page', String(pageNo));
   }
 
@@ -314,6 +333,16 @@
     renderPage(CUR, Z);                 // ⬅ 重新渲染，而非縮放既有點陣圖
   }
 
+  /* ===== 旋轉：僅作用於目前頁；與縮放同一條路徑（重新渲染，非 CSS transform） ===== */
+  function rotateBy(d){
+    ROT[CUR] = (((ROT[CUR] || 0) + d) % 360 + 360) % 360;   // 恆正規化到 [0,360)
+    syncRotate();
+    renderPage(CUR, Z);
+  }
+  function syncRotate(){
+    document.getElementById('rotateLabel').textContent = (ROT[CUR] || 0) + '°';
+  }
+
   /* ===== 單頁翻頁 ===== */
   function goPage(n){
     if(!Number.isFinite(n)) { syncPager(); return; }
@@ -321,6 +350,7 @@
     document.getElementById('stage').scrollTop = 0;
     if(next !== CUR){ CUR = next; renderPage(CUR, Z); }
     syncPager();
+    syncRotate();     // 角度標籤隨頁切換（逐頁記憶）
   }
   function syncPager(){
     document.getElementById('pageInput').value = String(CUR);
