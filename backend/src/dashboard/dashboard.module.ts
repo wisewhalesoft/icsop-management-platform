@@ -4,6 +4,8 @@ import { AuthModule } from '../auth/auth.module';
 import { DashboardController } from './dashboard.controller';
 import { DashboardSummaryService } from './dashboard-summary.service';
 import { makeTypeOrmDashboardCounts } from './dashboard-counts';
+import { DashboardActivityService } from './dashboard-activity.service';
+import { makeTypeOrmDashboardActivity } from './dashboard-activity.sources';
 
 /**
  * GAP-07-1 儀表板 KPI 模組。反循環：不匯入各功能模組，直接以 AppDataSource 自建唯讀 COUNT provider
@@ -18,6 +20,11 @@ import { makeTypeOrmDashboardCounts } from './dashboard-counts';
       provide: DashboardSummaryService,
       useFactory: (): DashboardSummaryService =>
         new DashboardSummaryService(makeTypeOrmDashboardCounts(AppDataSource)),
+    },
+    {
+      provide: DashboardActivityService,
+      useFactory: (): DashboardActivityService =>
+        new DashboardActivityService(makeTypeOrmDashboardActivity(AppDataSource)),
     },
   ],
 })
