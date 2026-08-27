@@ -32,7 +32,11 @@ prototypes：00（設計系統）、01（登入）、02（角色分流）、07�
 
 ## 誠實 gap / 刻意延後（不虛構資料）
 - **LoginPage 途徑 B（管理員帳密）**：後端未實作，原型 demo helper 為模擬 → 僅保留途徑 A（真實 SSO）。
-- **DashboardHome 待辦徽章／最近活動**：原型為示範資料，需各自功能之後端端點 → 僅保留角色過濾的快速進入卡片（真實導覽）。
+- ~~**DashboardHome 待辦徽章／最近活動**：原型為示範資料，需各自功能之後端端點 → 僅保留角色過濾的快速進入卡片（真實導覽）。~~
+  **已補齊**：待辦徽章接 `GET /admin/dashboard/summary`（GAP-07-1）；最近活動接 `GET /admin/dashboard/activity`
+  （2026-08-27，GAP-07-4）——五類事件各取自真實來源（`ICSOP_DOCUMENT.createdAt`／`SYNC_RUN`／
+  `ACCOUNT.disabledAt`／`LIFECYCLE_CHANGE_LOG`／`AUDIT_LOG` 文件下載），**於伺服端**依 F025 逐類過濾
+  （活動列承載 PII，不比照 KPI 之「回全量、前端挑」）。
 - **組織同步頁「總覽 KPI」「待確認異動」頁籤**：需 per-run 統計端點與 F006（org-change-alert-backend）→ 未納入；本頁範圍＝roadmap 指定之「同步紀錄表＋手動觸發＋輪詢」。
 - **前台瀏覽（/public）**：E06/F019 後續 epic → 佔位頁（誠實標示開發中）。
 - 其餘後台功能路由（帳號/循環/文件/…）→ `ModulePlaceholder`，待各自 /tdd 增量取代。
