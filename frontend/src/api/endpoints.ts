@@ -1185,6 +1185,14 @@ export function getDashboardSummary(): Promise<import('./types').DashboardSummar
   return apiFetch('/admin/dashboard/summary');
 }
 
+/** 後台儀表板「最近活動」（prototype 07 ACTIVITY；伺服端已依角色過濾，預設 5 列）。 */
+export function getDashboardActivity(
+  limit?: number,
+): Promise<import('./types').DashboardActivityItem[]> {
+  const qs = limit ? `?limit=${limit}` : '';
+  return apiFetch(`/admin/dashboard/activity${qs}`);
+}
+
 export function getDocIndexOverview(
   f: { state?: string; page?: number } = {},
 ): Promise<import('./types').DocIndexOverview> {

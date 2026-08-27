@@ -5,14 +5,17 @@ import { RoleBadge } from '../components/RoleBadge';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { visibleMenu, accessLabelFor } from '../domain/menu';
-import { getDashboardSummary } from '../api/endpoints';
-import type { DashboardSummary } from '../api/types';
+import { activityTimeLabel } from '../domain/activity-time';
+import { getDashboardActivity, getDashboardSummary } from '../api/endpoints';
+import type { DashboardActivityItem, DashboardSummary } from '../api/types';
 
 /**
  * 後台首頁 / 儀表板。版面與卡片樣式權威來源：prototypes/07-admin-shell.html。
  * 「快速進入功能區」卡片依角色過濾（等同側欄）並連往各功能路由。
  * KPI「待辦提示」列（GAP-07-1）依角色過濾，計數接真實端點 GET /admin/dashboard/summary
- * （原註記之示範資料已汰換為真實計數；失敗則顯 0，不阻斷儀表板）。「最近活動」仍待對應端點，暫不呈現。
+ * （原註記之示範資料已汰換為真實計數；失敗則顯 0，不阻斷儀表板）。
+ * 「最近活動」（GAP-07-4）接 GET /admin/dashboard/activity —— 過濾與文案皆在伺服端決定
+ * （活動列承載 PII），本頁僅依 kind 對映圖示／顏色並以 activityTimeLabel 顯示相對時間。
  */
 const CARD_DESC: Record<string, string> = {
   account: '建立/停用帳號、指派角色',
@@ -45,6 +48,26 @@ const KPI_CARDS: {
   { key: 'pendingPublish', label: '待公布的文件', icon: 'file-clock', color: '#047857', bg: '#D1FAE5', roles: ['ICSOPAdmin', 'Supervisor'] },
 ];
 
+/**
+ * 活動分類 → 圖示／顏色（prototype 07 之 ACTIVITY 五列，逐列對照）。
+ * 未知 kind（後端新增而前端未及更新）→ 中性 activity 圖示，仍顯示文字，不整列消失。
+ */
+const ACTIVITY_ICON: Record<string, { icon: string; color: string }> = {
+  DOCUMENT_CREATED: { icon: 'file-plus', color: '#365C97' },
+  ORG_SYNC_COMPLETED: { icon: 'refresh-cw', color: '#047857' },
+  ACCOUNT_DISABLED: { icon: 'user-x', color: '#B91C1C' },
+  LIFECYCLE_CHANGED: { icon: 'git-branch', color: '#365C97' },
+  DOCUMENT_DOWNLOADED: { icon: 'download', color: '#475569' },
+};
+const ACTIVITY_FALLBACK = { icon: 'activity', color: '#475569' };
+
+/** 副標之當日日期「2026-08-27（週四）」（prototype 07 歡迎區塊；GAP-07-3）。 */
+function todayLabel(now: Date = new Date()): string {
+  const two = (n: number): string => String(n).padStart(2, '0');
+  const week = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
+  return `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}（週${week}）`;
+}
+
 export function DashboardHome(): JSX.Element {
   const { user } = useAuth();
   const role = user?.roleCode;
@@ -52,6 +75,7 @@ export function DashboardHome(): JSX.Element {
   const kpis = KPI_CARDS.filter((k) => !!role && k.roles.includes(role));
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [activity, setActivity] = useState<DashboardActivityItem[]>([]);
   useEffect(() => {
     let alive = true;
     void getDashboardSummary()
@@ -60,6 +84,13 @@ export function DashboardHome(): JSX.Element {
       })
       .catch(() => {
         // 靜默：KPI 為輔助資訊，失敗顯 0，不阻斷儀表板。
+      });
+    void getDashboardActivity()
+      .then((rows) => {
+        if (alive) setActivity(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        // 靜默：最近活動為輔助資訊，失敗顯空狀態，不阻斷儀表板。
       });
     return () => {
       alive = false;
@@ -71,13 +102,16 @@ export function DashboardHome(): JSX.Element {
       <PageHeader breadcrumb={[{ label: 'ICSOP 管理後台' }, { label: '首頁' }]} title="後台首頁 / 儀表板" />
       <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
         <div>
+          {/* 歡迎詞用**姓名**（prototype「歡迎回來，李慧玲」）；姓名缺漏（手動帳號未填）才退回帳號。 */}
           <h1 className="text-2xl font-bold text-slate-900">
             歡迎回來，
-            <span className="mono">{user?.loginId}</span>
+            {user?.name ? <span>{user.name}</span> : <span className="mono">{user?.loginId}</span>}
           </h1>
           <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
             目前角色：
             <RoleBadge roleCode={role} />
+            <span aria-hidden="true">·</span>
+            <span className="mono">{todayLabel()}</span>
           </p>
         </div>
       </div>
@@ -150,6 +184,40 @@ export function DashboardHome(): JSX.Element {
                   <Icon name="arrow-right" className="w-3.5 h-3.5" />
                 </div>
               </Link>
+            );
+          })
+        )}
+      </div>
+
+      {/* 最近活動（prototype 07 ACTIVITY 區塊）；來源與可見範圍由伺服端依 F025 逐類過濾 */}
+      <h2 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
+        <Icon name="activity" className="w-4 h-4 text-slate-400" />
+        最近活動
+      </h2>
+      <div
+        role="list"
+        aria-label="最近活動"
+        className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100"
+      >
+        {activity.length === 0 ? (
+          <div className="px-4 py-8 text-sm text-slate-400 text-center">目前無最近活動</div>
+        ) : (
+          activity.map((a) => {
+            const look = ACTIVITY_ICON[a.kind] ?? ACTIVITY_FALLBACK;
+            return (
+              <div key={a.id} role="listitem" className="flex items-center gap-3 px-4 py-3">
+                {/* color 置於外層 span（比照 KPI 卡）：lucide 以 currentColor 描邊，Icon 不收 style */}
+                <span
+                  className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center shrink-0"
+                  style={{ color: look.color }}
+                >
+                  <Icon name={look.icon} className="w-4 h-4" />
+                </span>
+                <span className="text-sm text-slate-700 flex-1">{a.text}</span>
+                <span className="text-xs text-slate-400 mono shrink-0">
+                  {activityTimeLabel(a.occurredAt)}
+                </span>
+              </div>
             );
           })
         )}

@@ -972,3 +972,15 @@ export interface DashboardSummary {
   /** 待公布的文件（有效且進度中）。 */
   pendingPublish?: number;
 }
+
+/**
+ * 後台儀表板「最近活動」單列（GET /admin/dashboard/activity；鏡射後端 dashboard-activity.ts）。
+ * text 由伺服端組妥（角色過濾與文案同一處決定）；前端僅依 kind 決定圖示／顏色、依 occurredAt 顯示相對時間。
+ */
+export interface DashboardActivityItem {
+  id: string;
+  kind: string;
+  text: string;
+  /** ISO 8601（UTC）。 */
+  occurredAt: string;
+}
