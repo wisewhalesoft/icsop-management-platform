@@ -319,9 +319,9 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 |---|------|--------|------|------|----------|
 | 1 | 系統 UUID | id | 1 | 系統產生，唯讀 | 無（系統） |
 | 2 | 文件狀態 | status | 1 | `有效`/`失效`/`作廢`，預設有效；**清單顯示衍生**：有效＋公告日期已過→`已公告`、有效＋公告日期未到→`進度中`（不另存值） | ICSOPAdmin |
-| 3 | 制定公司 | draftingCompanyId | 1 | → ORG_UNIT（公司層級）**新增** | ICSOPAdmin |
+| 3 | 制定公司 | companyCode | 1 | 公司代碼（`AS`／`AD`／`AE`／`AJ`，← `COMPANY_FULL_NAMES`）；**顯示為公司主檔全稱**（和潤企業股份有限公司）。🔴 **2026-08-27 收斂**：原屬性名為 `draftingCompanyId`（→ ORG_UNIT 公司層級），該欄已 DROP——三家公司之 ROOT 代碼皆為 `'00000'`、AE 無 ROOT 列，值域只有 `'00000'` 與 `NULL`，分不出公司。本欄 NOT NULL，且為解析 `draftingDeptId`／`draftingSectionId`／`usingDeptIds`（各公司獨立編碼之 orgCode）之依據，亦參與 F041 可見性判定。 | ICSOPAdmin（**僅建立時**，見 F026 註） |
 | 4 | 制定部門 | draftingDeptId | 1 | → ORG_UNIT（部層級）**新增** | ICSOPAdmin |
-| 5 | 制定室別 | draftingSectionId | 1 | → ORG_UNIT（處/室層級）**新增**；三級可依組織階層由室別回溯部門/公司 | ICSOPAdmin |
+| 5 | 制定室別 | draftingSectionId | 1 | → ORG_UNIT（處/室層級）**新增**；部/室兩級可依組織階層由室別回溯部門（公司別另由 `companyCode` 承載） | ICSOPAdmin |
 | 6 | ICSOP 文件編號（程序書編號） | documentNumber | 1 | 人為定義，唯一（F013） | ICSOPAdmin |
 | 7 | 當責室長-主要 | primaryChiefId | 1 | → PERSON | ICSOPAdmin |
 | 8 | 當責室長-次要 | secondaryChiefIds | 0..* | → PERSON（DOC_SECONDARY_CHIEF） | ICSOPAdmin |

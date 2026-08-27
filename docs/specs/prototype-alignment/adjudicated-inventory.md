@@ -101,21 +101,38 @@ Every teammate: TDD (failing test first), quote prototype labels, keep baseline 
 > 這一節記錄「**明知與 prototype 不同、且經人類裁決保留**」的偏離。沒有這份紀錄，下一次比對
 > prototype 的人會把它當成 drift 修回去。
 
-### DEV-01（2026-08-26）編輯頁「制定公司」為唯讀列，非下拉
+### DEV-01（2026-08-26，2026-08-27 擴充）編輯頁「制定公司」為唯讀列，非下拉
 
 - **Prototype**：`prototypes/15-document-edit.html:438` 之 `{key:'company',label:'制定公司',type:'combo'}`
   ——與制定部門／制定室別同為三級連動下拉。
-- **實作**：`DocumentEditPage.tsx` 改為唯讀列（`FixedRow`），顯示文件所屬公司之全稱＋
+- **實作**：`DocumentEditPage.tsx` 改為唯讀列（`FixedRow`），顯示制定公司之**公司主檔全稱**＋
   「文件所屬公司於建立時決定，不可變更。」。建立頁（prototype 14）**不受影響**，仍為可選下拉。
-- **裁決人**：使用者，2026-08-26（在「(a) 改成唯讀顯示 vs (b) 維持可改」兩案中選 (a)）。
-- **理由**：B 階段（多公司）之後，`ICSOP_DOCUMENT.companyCode` 是文件的**歸屬鍵**——制定部門／
-  制定室別／使用部門存的都是各公司獨立編碼之 5 碼 `orgCode`，改公司會讓這些既有值整批指向
-  別家公司的單位，並直接影響 F041 之資料列可見性判定（安全性）。後端因此把 `companyCode`
-  列入 `EDIT_READONLY_PROPS`；前端若還留一個可改的下拉，就是一個按了不會生效的控制項。
-- **順帶修掉的既有缺陷**：舊版該下拉的**選項值是公司代碼**（`AS`），卻寫進 `draftingCompanyId`
-  ——那欄存的是該公司 ROOT 的 `orgCode`（`00000`），語意不同。凡是在編輯頁動過制定公司的文件，
-  該欄都被寫進了與建立頁不同語意的值（前台部門名稱因而解析不出來）。
-  ⚠ **既有資料未修**：若有文件的 `draftingCompanyId` 已被寫成公司代碼，需另行盤點修補。
-- **連帶**：制定部門下拉的 enable 條件由 `draftingCompanyId` 改看部門候選本身——舊寫法對
-  `draftingCompanyId` 為空的文件（建立時該公司無 ROOT 列，例如 AE）會把部門下拉永久鎖死。
-- **回歸鎖定**：`DocumentEditPage.test.tsx`「制定公司為唯讀列：顯示文件所屬公司、無下拉、不含「新值」欄」。
+- **裁決人**：使用者，2026-08-26（唯讀 vs 可改，選唯讀）；2026-08-27 追加裁定「只留制定公司一個欄位，
+  顯示公司全稱」。
+- **理由**：`companyCode` 是文件的歸屬鍵——制定部門／制定室別／使用部門存的都是各公司獨立編碼之 5 碼
+  `orgCode`，改公司會讓這些既有值整批指向別家公司的單位，並直接影響 F041 之資料列可見性判定（安全性）。
+  後端因此把 `companyCode` 列入 `EDIT_READONLY_PROPS`；前端若還留一個可改的下拉，就是一個按了不會生效
+  的控制項。權威見 [F026 註](../features/F026-role-field-matrix.md)、[F011](../features/F011-edit-with-comparison.md)。
+
+#### 2026-08-27 追加：`draftingCompanyId` 整欄移除，制定公司全站改顯示公司全稱
+
+DEV-01 原始版本只改編輯頁，因而製造出一個新的不一致：編輯頁那一列標著「制定公司」卻顯示公司全稱
+（和潤企業股份有限公司），而後台清單／前台清單／前台詳情三處標著同一個「制定公司」顯示的是
+`orgName(draftingCompanyId)`＝ROOT 單位名（和潤本部）。使用者裁定**收斂為一個欄位、且全稱是對的**：
+
+- `ICSOP_DOCUMENT.draftingCompanyId` 以 migration `1724803200000` **DROP**。該欄存的是該公司 ROOT 之
+  `orgCode`，而 AS／AD／AJ 三家的 ROOT 皆為 `'00000'`、**AE 根本沒有 ROOT 列**——值域只有 `'00000'`
+  與 `NULL`，零資訊量。實測 591 筆：455 筆 `'00000'`、136 筆 `NULL`、**無一筆帶公司代碼**（即編輯頁那個
+  會寫錯欄位的下拉，實際上從沒有人透過它動過制定公司，無須資料修補）。
+- 制定公司之顯示名改由 `resolveCompanyName(companyCode)` 解析（公司主檔全稱），套用於後台清單、
+  前台清單、前台詳情、後台唯讀頁、編輯頁唯讀列。**前後台的制定公司篩選下拉選項文字因此由「和潤本部」
+  變為「和潤企業股份有限公司」**——此為與 prototype 03／13 篩選器逐字規範之刻意偏離，一併記於此。
+- 篩選鍵由 `draftingCompanyId` 改為 `companyCode`（後台 `GET /admin/documents`、前台
+  `GET /public/documents` 之 query 參數同步改名，非只改語意——避免再出現「欄名與值語意不符」）。
+- `companyCode` **納入變更歷程**，標籤「制定公司」。此舉推翻 2026-08-26 當天的相反決定（當時排除的理由是
+  「與 `draftingCompanyId` 同源、不重複記一列」，該前提隨本次移除而消失）。舊鍵 `draftingCompanyId` 之
+  標籤對映**保留**——`DOCUMENT_CHANGE_LOG` 為 append-only，歷史列仍要顯示得出來。
+- 連帶修掉的既有缺陷：制定部門下拉的啟用條件原本看 `draftingCompanyId`，對該欄為空的文件（建立時該公司
+  無 ROOT 列，例如 AE）會**永久鎖死**部門下拉；改為看部門候選本身。
+- **回歸鎖定**：`DocumentEditPage.test.tsx`「制定公司為唯讀列…」、`document-field-write.spec.ts`
+  「`draftingCompanyId` 已不在表內」、`f014.itest.ts`／`changehistory.itest.ts`（真庫）。
