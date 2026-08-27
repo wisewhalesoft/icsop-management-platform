@@ -1037,6 +1037,23 @@ export function exportAppendixPool(
 }
 
 /**
+ * 🔵 GET /admin/usage-forms/export（F018 表單池匯出 CSV，`AC-X6`）。
+ * 帶入與清單畫面**相同**之篩選（`AC-X7`：範圍＝當前篩選之全部結果，非當前頁）。
+ * 🔴 走 `downloadViaBlob` 而非 `window.open`／`<a href>`：後者之導覽式請求會送
+ * `Accept: text/html` 而撞上 SPA fallback，使用者靜默拿到副檔名 `.csv`、內容是 app shell 的檔案
+ * （見 `download-blob.ts` 檔頭之明文禁令）。
+ */
+export function exportUsageFormPool(
+  f: { q?: string; format?: string } = {},
+): Promise<void> {
+  const qs = new URLSearchParams();
+  if (f.q) qs.set('q', f.q);
+  if (f.format) qs.set('format', f.format);
+  const q = qs.toString();
+  return downloadViaBlob(`/admin/usage-forms/export${q ? `?${q}` : ''}`, 'usage-forms.csv');
+}
+
+/**
  * POST /admin/appendices（multipart 上傳，欄位名 `files`；單/多檔皆可）。
  * 格式 FILE_FORMAT_NOT_ALLOWED（僅 xlsx/xls/pdf）、大小 FILE_SIZE_EXCEEDED（50MB）、
  * 名稱長度 APPENDIX_NAME_TOO_LONG（400 字元）由後端裁決。

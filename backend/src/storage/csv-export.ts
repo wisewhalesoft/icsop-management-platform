@@ -81,6 +81,27 @@ export function toCsvBuffer<T>(rows: readonly T[], cols: readonly CsvColumn<T>[]
 }
 
 /**
+ * `關聯文件編號` 欄之分隔符（2026-08-27 使用者裁決）：**半形分號**。
+ *
+ * 🔴 刻意不用逗號：逗號會觸發 RFC 4180 包覆逸出，使該格在原始 CSV 文字中被雙引號包住、
+ * 且欄內逗號與欄間逗號在肉眼上無從分辨——而本欄的用途正是讓人「一眼看出這份表單／附錄
+ * 被哪幾份文件引用」。分號在 CSV 中無特殊意義，不觸發任何逸出。
+ */
+export const LINKED_DOC_NUMBER_SEPARATOR = ';';
+
+/**
+ * 關聯文件精簡參照 → `關聯文件編號` 儲存格字串（F018／F039 兩處匯出**共用同一組規則**）。
+ *
+ * 列內順序＝呼叫端傳入之順序（即管理頁展開列所見之順序，值層＝畫面所見）；
+ * **0 筆 → 空儲存格**（非 `—`、非 `0`——`—` 是畫面的空值符號，落到 CSV 會被當成資料值）。
+ */
+export function joinLinkedDocumentNumbers(
+  documents: readonly { documentNumber: string }[] | undefined,
+): string {
+  return (documents ?? []).map((d) => d.documentNumber).join(LINKED_DOC_NUMBER_SEPARATOR);
+}
+
+/**
  * 台北時間（UTC+8）之顯式位移——與 `backend/src/public/watermark.ts` 之
  * `formatWatermarkTimestamp()` **完全相同的手法**。
  *

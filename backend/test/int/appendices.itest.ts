@@ -13,6 +13,9 @@ import { BLOB_STORE, BlobStore } from '../../src/storage/blob-store';
  * 清理：DOC_APPENDIX 由 harness.cleanupMarkers 依 marker 文件清除；APPENDIX_POOL 不綁 marker
  * 文件，故本檔以建立時取得之 id 於 afterAll 自行回收（含 blob）。
  */
+/** CSV 行終止符（RFC 4180）。以字元碼組出，避免跳脫序列在編輯／複製過程中被還原成真換行。 */
+const CRLF = String.fromCharCode(13, 10);
+
 describe('[int] 附錄管理 HTTP 契約 vs SOP', () => {
   let ctx: IntCtx;
   let docId: string;
@@ -21,6 +24,12 @@ describe('[int] 附錄管理 HTTP 契約 vs SOP', () => {
   const pdf = Buffer.from('%PDF-1.4 zzint appendix\n', 'utf8');
   // 刻意含中文（含「潤」等非 latin1 字元）：亂碼一旦復發，DB 落地即與此不符。
   const names = [`${MARK.doc}和潤企業永續報告書.pdf`, `${MARK.doc}管審會議紀錄.pdf`];
+  /**
+   * 🔵 `AC-X1`（2026-08-27）：批次上傳之附錄名稱＝**檔名去副檔名**。
+   * 📝 被推翻之原行為保留供追溯：`APPENDIX_POOL.name` 原為含副檔名之完整檔名。
+   * ⚠ 中文亂碼之鑑別力**未被削弱**——去掉的只有 `.pdf` 這段 ASCII，非 latin1 字元全數留在期望值裡。
+   */
+  const storedNames = names.map((n) => n.slice(0, -'.pdf'.length));
 
   beforeAll(async () => {
     ctx = await bootIntApp();
@@ -77,7 +86,29 @@ describe('[int] 附錄管理 HTTP 契約 vs SOP', () => {
       `SELECT [name] FROM [APPENDIX_POOL] WHERE [id] IN (@0,@1) ORDER BY [uploadedAt]`,
       createdAppendixIds,
     )) as Array<{ name: string }>;
-    expect(rows.map((r) => r.name)).toEqual(names);
+    expect(rows.map((r) => r.name)).toEqual(storedNames);
+  });
+
+  /**
+   * 🔵 `AC-X2`（2026-08-27）：匯出 CSV 之末欄「關聯文件編號」。
+   *
+   * 📌 **本案只在 [int] 層才有意義**：`documents[].documentNumber` 是 `APPENDIX_POOL ⋈ DOC_APPENDIX
+   * ⋈ ICSOP_DOCUMENT` 的真實 join 結果——unit 層以 FakeStore 直接餵好 `documents`，
+   * 「欄位真的 join 得到嗎」在那一層恆真。本案於關聯建立**之後**再跑一次匯出（見下方第二案）。
+   */
+  it('GET /admin/appendices/export → 200 text/csv、UTF-8 BOM、七欄逐字表頭', async () => {
+    const res = await ctx
+      .http()
+      .get('/admin/appendices/export')
+      .responseType('blob')
+      .set('Cookie', ctx.adminCookie);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.headers['content-disposition']).toMatch(/attachment; filename="appendices_\d{8}_\d{6}\.csv"/);
+    const buf = Buffer.from(res.body as Buffer);
+    expect([buf[0], buf[1], buf[2]]).toEqual([0xef, 0xbb, 0xbf]);
+    const lines = buf.subarray(3).toString('utf8').split(CRLF);
+    expect(lines[0]).toBe('附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數,關聯文件編號');
   });
 
   it('PUT 整組覆寫關聯 → 204 空 body，且 sortOrder 依序 1..N', async () => {
@@ -100,9 +131,38 @@ describe('[int] 附錄管理 HTTP 契約 vs SOP', () => {
         a.sortOrder,
       ]),
     ).toEqual([
-      [names[0], 1],
-      [names[1], 2],
+      [storedNames[0], 1],
+      [storedNames[1], 2],
     ]);
+  });
+
+  /**
+   * 🔵 `AC-X2`：關聯建立後再匯出——marker 附錄之末欄須為**真實 join 出來的文件編號**。
+   * 🔴 這是「關聯文件數（幾份）」與「關聯文件編號（哪幾份）」之區分點：只驗筆數的斷言，
+   *    在 join 取錯欄位（例如取到 `documentName` 或 `id`）時仍會全綠。
+   */
+  it('GET /admin/appendices/export → marker 列之「關聯文件編號」為真實 join 之文件編號', async () => {
+    const res = await ctx
+      .http()
+      .get('/admin/appendices/export')
+      .responseType('blob')
+      .set('Cookie', ctx.adminCookie);
+    expect(res.status).toBe(200);
+    const lines = Buffer.from(res.body as Buffer).subarray(3).toString('utf8').split(CRLF);
+    // 找不到時直接以「期望列 vs 全部 marker 列」呈現，避免只看到 `undefined` 而無從診斷。
+    const row = lines.find((l) => l.startsWith(storedNames[0]));
+    expect(row ?? lines.filter((l) => l.includes(MARK.doc)).join(' | ')).toContain(storedNames[0]);
+    const cells = (row as string).split(',');
+    expect(cells).toHaveLength(7);
+    // 關聯文件數＝「這個**附錄**被幾份文件引用」＝1（本測試只有一份 marker 文件），
+    // **不是**「這份文件有幾個附錄」（那才是 2）——兩者方向相反，別再看反。
+    expect(cells[5]).toBe('1');
+    const docNumber = (
+      (await AppDataSource.query(`SELECT [documentNumber] FROM [ICSOP_DOCUMENT] WHERE [id] = @0`, [
+        docId,
+      ])) as Array<{ documentNumber: string }>
+    )[0].documentNumber;
+    expect(cells[6]).toBe(docNumber);
   });
 
   it('DELETE 解除單一關聯 → 204 空 body，剩餘重編為 1', async () => {

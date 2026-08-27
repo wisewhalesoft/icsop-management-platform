@@ -1,4 +1,12 @@
 <!DOCTYPE html>
+<!-- 🔵 2026-08-27 使用者裁決 delta（人類閘門已通過）——本檔已套用（規格權威＝F039 AC-X1～AC-X3）：
+     ① 上傳 modal 之附錄名稱**自動帶入去副檔名之檔名主體**（AC-X1）；留空送出時後端 fallback 同此規則。
+        逐字文案同步：placeholder「留空則以檔名（不含副檔名）建檔」、
+        說明「選檔後自動帶入檔名（已去除副檔名）…」、多檔提示「各檔一律以其檔名（不含副檔名）建檔」。
+        🔒 使用者**自訂**之名稱一律逐字採用——即使含「.xlsx」，系統不得代為去除。
+     ② 匯出表頭由六欄擴為**七欄**（AC-X2）：末尾新增「關聯文件編號」，多份以**半形分號 `;`** 相接、
+        0 份為空儲存格（非「—」、非 0）。既有六欄之字面與相對順序一格不動。
+     🔒 匯出之權限／範圍／上限／檔名／不寫稽核，以及燒錄與稽核語意，一律逐字不變。 -->
 <!-- 🔵 2026-08-16 delta（人類閘門已通過）——本檔已套用：
      topbar 動作區新增「匯出」鈕（F039 AC-D4；icon 鍵 download、無障礙名稱「匯出」）。
      🔒 **本檔未新增任何編號欄位或欄**——F018 之「表單編號」delta **刻意不擴及附錄**
@@ -183,14 +191,14 @@
       </div>
       <!-- 名稱：僅單檔路徑提供（選填，留空 fallback 檔名） -->
       <div id="nameBlock">
-        <label class="block text-sm font-medium text-slate-700 mb-1">附錄名稱 <span class="text-xs font-normal text-slate-400">（選填；留空自動採用檔名）</span></label>
-        <input id="upName" type="text" maxlength="500" oninput="onNameInput()" placeholder="留空則以原始檔名建檔" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600" />
-        <p class="mt-1 text-[10px] text-slate-400">選檔後自動帶入檔名，可自行改寫；前後空白會自動去除，上限 400 字元。</p>
+        <label class="block text-sm font-medium text-slate-700 mb-1">附錄名稱 <span class="text-xs font-normal text-slate-400">（選填；留空自動採用檔名，不含副檔名）</span></label>
+        <input id="upName" type="text" maxlength="500" oninput="onNameInput()" placeholder="留空則以檔名（不含副檔名）建檔" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <p class="mt-1 text-[10px] text-slate-400">選檔後自動帶入檔名（已去除副檔名），可自行改寫；前後空白會自動去除，上限 400 字元。</p>
         <p id="upNameErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i><span>附錄名稱超過 400 字元上限（APPENDIX_NAME_TOO_LONG）。</span></p>
       </div>
       <div id="multiNameNote" class="hidden items-start gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
         <i data-lucide="files" class="w-3.5 h-3.5 mt-0.5 text-slate-400 shrink-0"></i>
-        <span>多檔上傳<strong class="text-slate-600">不提供自訂名稱</strong>，各檔一律以其原始檔名建檔。如需自訂名稱請改為單檔上傳。</span>
+        <span>多檔上傳<strong class="text-slate-600">不提供自訂名稱</strong>，各檔一律以其檔名（不含副檔名）建檔。如需自訂名稱請改為單檔上傳。</span>
       </div>
       <div class="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
         <i data-lucide="hard-drive" class="w-3.5 h-3.5 text-slate-400"></i>
@@ -377,8 +385,10 @@
       toast('error','符合條件之筆數為 '+rows.length+' 筆，超過匯出上限 '+EXPORT_ROW_LIMIT+' 筆，請縮小篩選條件','EXPORT_ROW_LIMIT_EXCEEDED · 400');
       return;
     }
+    /* 🔵 AC-X2（2026-08-27）：表頭末尾新增「關聯文件編號」（多份以半形分號相接、0 份為空格）。
+       📝 被取代之逐字表頭保留供追溯：OLD> 附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數 */
     toast('success','已匯出附錄清單（CSV，UTF-8 BOM）：共 '+rows.length+' 筆資料列＋1 列表頭；'
-      +'表頭＝附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數；檔名 appendices_20260816_143208.csv');
+      +'表頭＝附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數,關聯文件編號；檔名 appendices_20260816_143208.csv');
   }
   function renderTable(){
     const kw=(document.getElementById('kw').value||'').trim().toLowerCase();
@@ -459,6 +469,12 @@
     const m=document.getElementById('upModal');m.classList.remove('hidden');m.classList.add('flex');lucide.createIcons();
   }
   function closeUpload(){const m=document.getElementById('upModal');m.classList.add('hidden');m.classList.remove('flex');}
+  /* 🔵 AC-X1：去最後一個副檔名（與 backend `baseNameOf`／frontend `stripFileExtension` 同一演算法）。
+     邊界：無點／點在結尾／點在首位 → 一律回原字串（不得回空字串，否則等於清空輸入框）。 */
+  function stripExt(fileName){
+    const dot=fileName.lastIndexOf('.');
+    return (dot<=0||dot===fileName.length-1)?fileName:fileName.slice(0,dot);
+  }
   function hideNameErr(){const e=document.getElementById('upNameErr');e.classList.add('hidden');e.classList.remove('flex');document.getElementById('upName').classList.remove('border-red-500');}
   function showNameErr(){const e=document.getElementById('upNameErr');e.classList.remove('hidden');e.classList.add('flex');document.getElementById('upName').classList.add('border-red-500');lucide.createIcons();}
   function resetFilePreview(){
@@ -509,7 +525,9 @@
     // OQ-E10-01 裁定：單檔選檔後自動預填檔名（仍為選填，可清空 → fallback 檔名）；
     // 使用者已手動改寫過名稱者不覆寫（nameAuto=false）
     const nameEl=document.getElementById('upName');
-    if(picked.length===1 && nameAuto) nameEl.value=picked[0].name;
+    /* 🔵 AC-X1（2026-08-27）：自動帶入之名稱**去副檔名**。
+       📝 被推翻之原行為保留供追溯：OLD> nameEl.value=picked[0].name;（含副檔名） */
+    if(picked.length===1 && nameAuto) nameEl.value=stripExt(picked[0].name);
     if(picked.length>1){ nameEl.value=''; nameAuto=true; }
     hideNameErr(); syncNameBlock(); lucide.createIcons();
   }
@@ -519,8 +537,8 @@
   function submitUpload(){
     if(!picked.length){ showFileErr('請先選擇檔案（excel / pdf，可一次選取多個）。'); return; }
     if(picked.length===1){
-      // 單檔：名稱選填，trim 後為空 → fallback 原始檔名
-      const name=(document.getElementById('upName').value||'').trim() || picked[0].name;
+      // 單檔：名稱選填，trim 後為空 → fallback 檔名（去副檔名，AC-X1）
+      const name=(document.getElementById('upName').value||'').trim() || stripExt(picked[0].name);
       if(name.length>NAME_MAX){ showNameErr(); toast('error','附錄名稱（trim 後 '+name.length+' 字元）超過 400 字元上限','APPENDIX_NAME_TOO_LONG · 400'); return; }
       addAppendix(name,picked[0]);
       closeUpload(); renderTable();
@@ -533,7 +551,7 @@
     const n=picked.length;
     picked.forEach(p=>addAppendix(p.name,p));
     closeUpload(); renderTable();
-    toast('success','已上傳 '+n+' 個附錄（各以原始檔名建檔、配發 UUID，初始關聯 0 份）');
+    toast('success','已上傳 '+n+' 個附錄（各以檔名去副檔名建檔、配發 UUID，初始關聯 0 份）');
   }
 
   /* ===== remove protection（AC-10：≥1 份引用需二次確認）===== */

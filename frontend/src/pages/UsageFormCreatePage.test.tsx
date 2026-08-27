@@ -126,15 +126,25 @@ describe('UsageFormCreatePage — F018 D9 delta（AC-N41〜AC-N45、AC-N77、AC-
   });
 
   describe('遷移自 UsageFormManagementPage 之新增流程行為（原 modal 案，本頁承接）', () => {
-    it('名稱自動帶入檔名 → uploadUsageForms 攜帶名稱參數（原 TS-PS-F018-FE-001）', async () => {
+    /**
+     * 🔵 `AC-X1`（2026-08-27 使用者裁決）：自動帶入之名稱**不含副檔名**。
+     * 📝 被推翻之原期望逐字保留供追溯（⚠ 不得復原）：輸入框值與送出參數皆為 `放款覆核表.xlsx`。
+     */
+    it('🔵 AC-X1 名稱自動帶入檔名**去副檔名** → uploadUsageForms 攜帶該名稱（原 TS-PS-F018-FE-001）', async () => {
       renderPage();
       const file = xlsxFile('放款覆核表.xlsx');
       await userEvent.upload(screen.getByLabelText('選擇檔案'), file);
-      expect((screen.getByLabelText(/表單名稱/) as HTMLInputElement).value).toBe('放款覆核表.xlsx');
+      expect((screen.getByLabelText(/表單名稱/) as HTMLInputElement).value).toBe('放款覆核表');
       await userEvent.click(screen.getByRole('button', { name: '儲存' }));
       await waitFor(() =>
-        expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '放款覆核表.xlsx', '', []),
+        expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '放款覆核表', '', []),
       );
+    });
+
+    it('🔵 AC-X1 檔名含多個點 → 只去**最後一個**副檔名', async () => {
+      renderPage();
+      await userEvent.upload(screen.getByLabelText('選擇檔案'), xlsxFile('2026.Q3.對帳表.xlsx'));
+      expect((screen.getByLabelText(/表單名稱/) as HTMLInputElement).value).toBe('2026.Q3.對帳表');
     });
 
     it('使用者改寫名稱為自訂文字 → 以自訂名稱呼叫（原 TS-PS-F018-FE-002）', async () => {
@@ -202,7 +212,8 @@ describe('UsageFormCreatePage — F018 D9 delta（AC-N41〜AC-N45、AC-N77、AC-
     await userEvent.type(target, 'FM-001');
     await userEvent.click(screen.getByRole('button', { name: '儲存' }));
     await waitFor(() =>
-      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '放款覆核表.xlsx', 'FM-001', []),
+      // 🔵 AC-X1 連帶：自動帶入之名稱已去副檔名（本案之主題為「編號真的被送出」，不受影響）。
+      expect(endpoints.uploadUsageForms).toHaveBeenCalledWith([file], '放款覆核表', 'FM-001', []),
     );
   });
 

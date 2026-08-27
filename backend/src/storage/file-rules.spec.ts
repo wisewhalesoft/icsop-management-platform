@@ -1,8 +1,10 @@
 import {
+  ALLOWED_FORMATS,
   MAX_FILE_SIZE_BYTES,
   assertFormatAllowed,
   assertSizeWithinLimit,
-  ALLOWED_FORMATS,
+  baseNameOf,
+  extensionOf,
 } from './file-rules';
 
 /**
@@ -107,6 +109,37 @@ describe('file-rules（格式白名單 + 大小上限，純規則）', () => {
       expect(() =>
         assertFormatAllowed('XLS_SOURCE', { fileName, contentType: 'x' }),
       ).toThrow('FILE_FORMAT_NOT_ALLOWED');
+    });
+  });
+
+  /**
+   * 🔵 `AC-X1`／`AC-X3`（2026-08-27）：上傳後帶出之表單／附錄名稱不含副檔名。
+   * `baseNameOf` 為該規則之**唯一實作**（前端 `domain/file-name.ts` 為同一演算法之另一份）。
+   */
+  describe('baseNameOf（去最後一個副檔名）', () => {
+    it.each([
+      ['放款覆核表.xlsx', '放款覆核表'],
+      ['名詞定義說明.pdf', '名詞定義說明'],
+      ['A.XLSX', 'A'], // 大小寫不影響切點（只切最後一個點）
+    ])('%s → %s', (input, expected) => {
+      expect(baseNameOf(input)).toBe(expected);
+    });
+
+    it('多個點 → 只去**最後一個**副檔名', () => {
+      expect(baseNameOf('2026.Q3.對帳表.xlsx')).toBe('2026.Q3.對帳表');
+    });
+
+    it('🔒 與 extensionOf 互為反面：有副檔名時 base + "." + ext === 原字串（大小寫除外）', () => {
+      const f = '風險等級對照附表.xlsx';
+      expect(`${baseNameOf(f)}.${extensionOf(f)}`).toBe(f);
+    });
+
+    it.each([
+      ['報表', '報表'], // 無點
+      ['報表.', '報表.'], // 點在結尾（extensionOf 亦視為無副檔名）
+      ['.gitignore', '.gitignore'], // 點在首位＝隱藏檔，非副檔名
+    ])('邊界 %s → 原字串 %s（不得回傳空字串）', (input, expected) => {
+      expect(baseNameOf(input)).toBe(expected);
     });
   });
 

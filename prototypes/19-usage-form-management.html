@@ -1,4 +1,16 @@
 <!DOCTYPE html>
+<!-- 🔵 2026-08-27 使用者裁決 delta（人類閘門已通過）——本檔已套用（規格權威＝F018 AC-X1～AC-X10）：
+     ① 🔵 **topbar 動作區新增「匯出」鈕**（AC-X6；比照 24-appendix-management.html 之匯出鈕逐條同型）：
+        可見文字與 aria-label 皆逐字為「匯出」，icon 鍵 `download`，title 逐字「匯出表單清單（CSV）」。
+        📌 **匯出為讀取類動作**：SysAdmin 唯讀角色**允許匯出**，故本鈕**非** write-only
+           （Supervisor／DeptContact／User 於本頁本就被 blockOverlay 擋下）。
+     ② 匯出之表頭為**九欄**（AC-X4）：表單編號,表單名稱,制定部門,格式,大小,上傳者,上傳時間,關聯文件數,關聯文件編號。
+        ⚠「操作」欄不匯出；畫面之「上傳者 / 上傳時間」單欄於 CSV 拆為兩欄（與附錄匯出逐條相同）。
+        · 制定部門（AC-X5）＝與本頁 chip **同一組**祖鏈路徑標籤，多筆以全形頓號「、」相接；0 筆為空儲存格。
+        · 關聯文件編號（AC-X2）＝關聯文件之編號，多份以**半形分號 `;`** 相接；0 份為空儲存格（非「—」、非 0）。
+     ③ 匯出範圍＝**當前篩選之全部結果**（AC-X7，非當前頁）；>10,000 筆 → EXPORT_ROW_LIMIT_EXCEEDED · 400，
+        不產生任何檔案（AC-X8）；0 筆 → 僅含表頭列（AC-X9）。逐字回饋文案見 AC-X10。
+     🔒 本 delta **不新增任何篩選控制項**（沿用 AC-N47 之 ⚠），清單欄位、既有動作與其權限一律不變。 -->
 <!-- 🔵 2026-08-16 additive delta（人類閘門已通過）——本檔已套用（規格權威＝F018 AC-D1～AC-D10）：
      ① 表頭**新增首欄「表單編號」**（AC-D1）：由左至右逐字為
         表單編號／表單名稱／格式／大小／上傳者 / 上傳時間／關聯文件數／操作。
@@ -105,6 +117,11 @@
       <div class="font-semibold text-slate-900 text-sm truncate">使用表單（表單池）管理</div>
     </div>
     <div class="ml-auto flex items-center gap-2">
+      <!-- 🔵 AC-X6（2026-08-27 delta）：topbar 動作區之「匯出」鈕（icon 鍵 download，
+           與 24-appendix-management.html 之匯出鈕逐條同型）。
+           📌 **匯出為讀取類動作**：SysAdmin 唯讀角色**允許匯出**，故本鈕**非** write-only；
+              Supervisor／DeptContact／User 於本頁本就被 blockOverlay 擋下（403 PERMISSION_DENIED）。 -->
+      <button onclick="doExport()" aria-label="匯出" title="匯出表單清單（CSV）" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"><i data-lucide="download" class="w-4 h-4"></i>匯出</button>
       <!-- 🔴 AC-N41：導向獨立整頁（非彈窗）。可見文字逐字為「新增表單」（AC-N41 之 Given）。 -->
       <button onclick="gotoCreate()" data-create-usage-form aria-label="新增表單" class="write-only inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="plus" class="w-4 h-4"></i>新增表單</button>
       <div class="flex items-center gap-1.5 pl-2 border-l border-slate-200">
@@ -291,10 +308,32 @@
       : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style="color:#B91C1C;background:#FEE2E2"><i data-lucide="file-text" class="w-3 h-3"></i>pdf</span>`;
   }
 
+  /* 當前篩選之**全部結果**（非當前頁）——清單與匯出共用同一組條件（AC-X7）。 */
+  function currentRows(){
+    const kw=(document.getElementById('kw').value||'').trim().toLowerCase();
+    const fmt=document.getElementById('fFmt').value;
+    return FORMS.filter(f=> (!kw||f.name.toLowerCase().includes(kw)) && (!fmt||f.fmt===fmt));
+  }
+  /* ===== 🔵 AC-X4～AC-X10 表單池匯出（CSV）=====
+     · AC-X7 範圍＝當前篩選之全部結果（非當前頁）。
+     · AC-X4 表頭九欄：表單編號,表單名稱,制定部門,格式,大小,上傳者,上傳時間,關聯文件數,關聯文件編號
+       ⚠「操作」欄不匯出；畫面之「上傳者 / 上傳時間」單欄於 CSV 拆為兩欄。
+     · AC-X2 末欄「關聯文件編號」多份以**半形分號**相接（0 份 → 空儲存格）。
+     · AC-X8 超過 10,000 筆 → 400 EXPORT_ROW_LIMIT_EXCEEDED、不產生任何檔案（恰 10,000 通過）。 */
+  const EXPORT_ROW_LIMIT=10000;
+  function doExport(){
+    const rows=currentRows();
+    if(rows.length>EXPORT_ROW_LIMIT){
+      toast('error','符合條件之筆數為 '+rows.length+' 筆，超過匯出上限 '+EXPORT_ROW_LIMIT+' 筆，請縮小篩選條件','EXPORT_ROW_LIMIT_EXCEEDED · 400');
+      return;
+    }
+    toast('success','已匯出表單清單（CSV，UTF-8 BOM）：共 '+rows.length+' 筆資料列＋1 列表頭；'
+      +'表頭＝表單編號,表單名稱,制定部門,格式,大小,上傳者,上傳時間,關聯文件數,關聯文件編號；檔名 usage-forms_20260827_143208.csv');
+  }
   function renderTable(){
     const kw=(document.getElementById('kw').value||'').trim().toLowerCase();
     const fmt=document.getElementById('fFmt').value;
-    const rows=FORMS.filter(f=> (!kw||f.name.toLowerCase().includes(kw)) && (!fmt||f.fmt===fmt));
+    const rows=currentRows();
     document.getElementById('countText').textContent=`共 ${rows.length} 個表單`;
     document.getElementById('emptyState').classList.toggle('hidden',rows.length>0);
     document.getElementById('clearBtn').classList.toggle('hidden',!(kw||fmt));

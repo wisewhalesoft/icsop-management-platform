@@ -3,6 +3,8 @@ import { bootIntApp, shutdownIntApp, IntCtx, MARK } from './harness';
 import { AppDataSource } from '../../src/database/data-source';
 import { UsageFormPool } from '../../src/database/entities/usage-form-pool.entity';
 import { DocUsageForm } from '../../src/database/entities/doc-usage-form.entity';
+import { UsageFormDraftingDept } from '../../src/database/entities/usage-form-drafting-dept.entity';
+import { OrgUnit } from '../../src/database/entities/org-unit.entity';
 import { IcsopDocument } from '../../src/database/entities/icsop-document.entity';
 import { Lifecycle } from '../../src/database/entities/lifecycle.entity';
 import { BLOB_STORE, BlobStore } from '../../src/storage/blob-store';
@@ -19,11 +21,16 @@ import { BLOB_STORE, BlobStore } from '../../src/storage/blob-store';
  */
 const UF_MARK = 'ZZINT_UF_';
 
+/** CSV 行終止符（RFC 4180）。以字元碼組出，避免跳脫序列在編輯／複製過程中被還原成真換行。 */
+const CRLF = String.fromCharCode(13, 10);
+
 /** uf1 之真實位元組（代理串流須逐位元組回傳同一份內容）。 */
 const UF1_BYTES = Buffer.from('ZZINT usage-form payload', 'utf8');
 
 describe('[int] usage-form pool overview — join vs SOP', () => {
   let ctx: IntCtx;
+  /** 🔵 `AC-X5` fixture：自真庫取得之制定部門單位（查無 → 該組斷言自動降級，見各案）。 */
+  let deptUnit: OrgUnit | null = null;
   const formIds: string[] = [];
   /** 供 afterAll 清除實際寫入之 marker blob（比照 storage.itest.ts）。 */
   const formBlobPaths: string[] = [];
@@ -32,6 +39,10 @@ describe('[int] usage-form pool overview — join vs SOP', () => {
     const q = AppDataSource.query.bind(AppDataSource);
     const markerForms = `(SELECT [id] FROM [USAGE_FORM_POOL] WHERE [name] LIKE '${UF_MARK}%')`;
     await q(`DELETE FROM [DOC_USAGE_FORM] WHERE [formId] IN ${markerForms}`).catch(() => undefined);
+    // 🔵 `AC-X5` fixture 之制定部門列（FK → USAGE_FORM_POOL，須先於表單本身刪除）。
+    await q(
+      `DELETE FROM [USAGE_FORM_DRAFTING_DEPT] WHERE [formId] IN ${markerForms}`,
+    ).catch(() => undefined);
     await q(`DELETE FROM [USAGE_FORM_POOL] WHERE [name] LIKE '${UF_MARK}%'`).catch(() => undefined);
   }
 
@@ -101,6 +112,27 @@ describe('[int] usage-form pool overview — join vs SOP', () => {
 
     const linkRepo = AppDataSource.getRepository(DocUsageForm);
     await linkRepo.save(linkRepo.create({ documentId: doc.id, formId: uf1.id }));
+
+    /**
+     * 🔵 `AC-X5`：制定部門之 CSV 值＝**畫面所見之祖鏈路徑**，需真的把 `orgCode` 對到
+     * `ORG_UNIT`（依 `(companyCode, orgCode)`）並沿 `parentCode` 上溯。
+     * 取一筆**真實存在且有上層**之 AS 單位當 fixture——寫死代碼會在組織主檔異動後靜默失效。
+     */
+    const orgRepo = AppDataSource.getRepository(OrgUnit);
+    const withParent = await orgRepo.findOne({
+      where: { companyCode: 'AS', isActive: true },
+      order: { orgCode: 'ASC' },
+    });
+    deptUnit = (await orgRepo
+      .createQueryBuilder('u')
+      .where('u.companyCode = :c', { c: 'AS' })
+      .andWhere('u.parentCode IS NOT NULL')
+      .orderBy('u.orgCode', 'ASC')
+      .getOne()) ?? withParent;
+    if (deptUnit) {
+      const deptRepo = AppDataSource.getRepository(UsageFormDraftingDept);
+      await deptRepo.save(deptRepo.create({ formId: uf1.id, orgCode: deptUnit.orgCode }));
+    }
   }, 60000);
 
   afterAll(async () => {
@@ -174,5 +206,97 @@ describe('[int] usage-form pool overview — join vs SOP', () => {
       .get(`/admin/usage-forms/${formIds[1]}/download`)
       .set('Cookie', ctx.adminCookie);
     expect(res.status).toBe(404);
+  });
+
+  /**
+   * 🔵 `AC-X4`／`AC-X6`（2026-08-27）：表單池匯出（CSV）之端到端契約。
+   *
+   * 📌 **本案只在 [int] 層才有意義**：
+   *  ① 路由是否真的被註冊、`export` 是否被 `:formId` 遮蔽——unit 只看得到 metadata；
+   *  ② `Content-Type`／`Content-Disposition`／BOM 是否真的送到線路上；
+   *  ③ `關聯文件編號` 與 `制定部門` 兩欄是否真的 join／解析得到（unit 以替身餵好，恆真）。
+   */
+  it('GET /admin/usage-forms/export → 200 text/csv、UTF-8 BOM、九欄逐字表頭', async () => {
+    const res = await ctx
+      .http()
+      .get('/admin/usage-forms/export')
+      .responseType('blob')
+      .set('Cookie', ctx.adminCookie);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.headers['content-disposition']).toMatch(
+      /attachment; filename="usage-forms_\d{8}_\d{6}\.csv"/,
+    );
+    const buf = Buffer.from(res.body as Buffer);
+    expect([buf[0], buf[1], buf[2]]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(buf.subarray(3).toString('utf8').split(CRLF)[0]).toBe(
+      '表單編號,表單名稱,制定部門,格式,大小,上傳者,上傳時間,關聯文件數,關聯文件編號',
+    );
+  });
+
+  it('GET /admin/usage-forms/export → marker 列之「關聯文件編號」為真實 join 之文件編號', async () => {
+    const res = await ctx
+      .http()
+      .get('/admin/usage-forms/export')
+      .responseType('blob')
+      .set('Cookie', ctx.adminCookie);
+    const lines = Buffer.from(res.body as Buffer).subarray(3).toString('utf8').split(CRLF);
+    // 第 1 欄（表單編號）為空 ⇒ marker 列以 `,` 起始，其後為表單名稱。
+    const row = lines.find((l) => l.includes(`${UF_MARK}放款覆核表`));
+    // 找不到時以全部 marker 列呈現，避免只看到 `undefined` 而無從診斷。
+    expect(row ?? lines.filter((l) => l.includes(UF_MARK)).join(' | ')).toContain(
+      `${UF_MARK}放款覆核表`,
+    );
+    const cells = (row as string).split(',');
+    expect(cells).toHaveLength(9);
+    expect(cells[7]).toBe('1'); // 關聯文件數
+    expect(cells[8]).toBe(`${MARK.doc}UF-001`); // 關聯文件編號（真實 join）
+  });
+
+  /**
+   * 🔴 `AC-X5` 之接線驗證：`ORG_UNIT_LISTER` 於 `UsageFormsModule` 為 `useExisting`
+   * 綁定，**不受 TS 型別檢查**（本 repo 已有「port 與實作長期不同步、編譯期看不出來」之前科）。
+   * 接錯時第 3 欄會靜默退回代碼本身——本案即以「不等於代碼、且含該單位名稱」證偽。
+   */
+  it('GET /admin/usage-forms/export → 「制定部門」欄為解析後之名稱，非原始 orgCode', async () => {
+    if (!deptUnit) {
+      // 真庫無 AS 組織資料時不臆造期望值（本案僅在有資料時才具鑑別力）。
+      return;
+    }
+    const res = await ctx
+      .http()
+      .get('/admin/usage-forms/export')
+      .responseType('blob')
+      .set('Cookie', ctx.adminCookie);
+    const lines = Buffer.from(res.body as Buffer).subarray(3).toString('utf8').split(CRLF);
+    const row = lines.find((l) => l.includes(`${UF_MARK}放款覆核表`)) as string;
+    const cell = row.split(',')[2];
+    expect(cell).not.toBe('');
+    expect(cell).not.toBe(deptUnit.orgCode);
+    expect(cell).toContain(deptUnit.name);
+  });
+
+  it('匯出**不寫稽核**（管理存取，比照後台下載）', async () => {
+    const before = (
+      (await AppDataSource.query(
+        `SELECT COUNT(*) AS n FROM [AUDIT_LOG] WHERE [targetType] = 'USAGE_FORM'`,
+      )) as Array<{ n: number }>
+    )[0].n;
+    await ctx
+      .http()
+      .get('/admin/usage-forms/export')
+      .responseType('blob')
+      .set('Cookie', ctx.adminCookie);
+    const after = (
+      (await AppDataSource.query(
+        `SELECT COUNT(*) AS n FROM [AUDIT_LOG] WHERE [targetType] = 'USAGE_FORM'`,
+      )) as Array<{ n: number }>
+    )[0].n;
+    expect(after).toBe(before);
+  });
+
+  it('未登入 → 401（匯出亦受 session 守門）', async () => {
+    const res = await ctx.http().get('/admin/usage-forms/export');
+    expect(res.status).toBe(401);
   });
 });

@@ -181,7 +181,11 @@ describe('AppendixManagementPage — 附錄（附錄池）管理（F039，移植
     expect(within(row).getByText('未關聯')).toBeInTheDocument();
   });
 
-  it('AC-05/06 上傳合法 xlsx → 名稱自動帶入檔名 → uploadAppendix 攜帶名稱參數', async () => {
+  /**
+   * 🔵 `AC-X1`（2026-08-27 使用者裁決）：自動帶入之名稱**不含副檔名**。
+   * 📝 被推翻之原期望逐字保留供追溯（⚠ 不得復原）：輸入框值與送出參數皆為 `風險等級對照附表.xlsx`。
+   */
+  it('🔵 AC-X1 上傳合法 xlsx → 名稱自動帶入檔名**去副檔名** → uploadAppendix 攜帶該名稱', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
@@ -189,9 +193,19 @@ describe('AppendixManagementPage — 附錄（附錄池）管理（F039，移植
     const dialog = screen.getByRole('dialog', { name: '上傳附錄' });
     const file = xlsxFile('風險等級對照附表.xlsx');
     await userEvent.upload(within(dialog).getByLabelText('選擇檔案'), file);
-    expect((within(dialog).getByLabelText(/附錄名稱/) as HTMLInputElement).value).toBe('風險等級對照附表.xlsx');
+    expect((within(dialog).getByLabelText(/附錄名稱/) as HTMLInputElement).value).toBe('風險等級對照附表');
     await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
-    await waitFor(() => expect(endpoints.uploadAppendix).toHaveBeenCalledWith([file], '風險等級對照附表.xlsx'));
+    await waitFor(() => expect(endpoints.uploadAppendix).toHaveBeenCalledWith([file], '風險等級對照附表'));
+  });
+
+  it('🔵 AC-X1 檔名含多個點 → 只去**最後一個**副檔名', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /上傳附錄/ }));
+    const dialog = screen.getByRole('dialog', { name: '上傳附錄' });
+    await userEvent.upload(within(dialog).getByLabelText('選擇檔案'), xlsxFile('2026.Q3.對帳附表.xlsx'));
+    expect((within(dialog).getByLabelText(/附錄名稱/) as HTMLInputElement).value).toBe('2026.Q3.對帳附表');
   });
 
   it('AC-05 使用者改寫名稱為自訂文字 → 以自訂名稱呼叫', async () => {

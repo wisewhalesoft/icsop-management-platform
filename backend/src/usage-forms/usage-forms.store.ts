@@ -88,6 +88,30 @@ export interface UploaderOrgResolver {
   resolveOrgUnitName(companyCode: string, orgCode: string): Promise<string | null>;
 }
 
+/**
+ * 🔵 `AC-X5`（2026-08-27 匯出）：制定部門**標籤**解析所需之組織清單來源。
+ *
+ * 🔴 為何不沿用既有的 `UPLOADER_ORG_RESOLVER`：那支只回單一單位之 `name`，而畫面之制定部門
+ * chip 是**祖鏈路徑**（`orgAncestorPathLabel`），需要整份 `(orgCode, parentCode, name)` 才能上溯。
+ * 用 `name` 充數會讓 CSV 與畫面對同一筆資料給出兩種答案。
+ *
+ * 🔴 `companyCode` 為必要參數：`ORG_UNIT` 之唯一鍵為 `(companyCode, orgCode)`，
+ * 省略必然歧義（見 `OrgUnitReadStore` 之同段說明）。匯出端取**操作者 session 之公司**，
+ * 與前端 `/org-units`（`effectiveCompany(req)`）同一口徑，故畫面與 CSV 解析結果一致。
+ *
+ * 選填宣告沿用本 repo 慣例（不打爆既有 store 替身）；未提供／載入失敗 → 制定部門欄退回
+ * **顯示代碼本身**（與前端 `orgPathLabel` 查無時之 fallback 逐字一致），不阻斷匯出。
+ */
+export const ORG_UNIT_LISTER = Symbol('USAGE_FORM_ORG_UNIT_LISTER');
+export interface OrgUnitLite {
+  orgCode: string;
+  parentCode: string | null;
+  name: string;
+}
+export interface OrgUnitLister {
+  listOrgUnits(companyCode: string): Promise<OrgUnitLite[]>;
+}
+
 export interface FormPoolStore {
   create(input: CreateFormInput): Promise<UsageFormRecord>;
   findById(formId: string): Promise<UsageFormRecord | null>;

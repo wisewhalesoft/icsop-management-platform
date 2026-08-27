@@ -235,14 +235,30 @@ describe('AppendicesService（F039 附錄池管理）', () => {
       expect(rec.name).toBe('作業對照表');
     });
 
-    it('AC-06 未提供 name → fallback 原始檔名（含副檔名）', async () => {
+    /**
+     * 🔵 `AC-X1`（2026-08-27 使用者裁決）：fallback **去掉副檔名**。
+     * 📝 被推翻之原案逐字保留供追溯（⚠ 不得復原）：
+     *   OLD> it('AC-06 未提供 name → fallback 原始檔名（含副檔名）', …) → 期望 `風險等級對照附表.xlsx`
+     *   OLD> it('AC-06 name trim 後為空字串 → fallback 檔名', …)     → 期望 `對保作業附註.pdf`
+     */
+    it('🔵 AC-X1 未提供 name → fallback 檔名**去副檔名**', async () => {
       const rec = await svc.uploadAppendix(ICSOP_ADMIN, xlsx({ fileName: '風險等級對照附表.xlsx' }));
-      expect(rec.name).toBe('風險等級對照附表.xlsx');
+      expect(rec.name).toBe('風險等級對照附表');
     });
 
-    it('AC-06 name trim 後為空字串 → fallback 檔名', async () => {
+    it('🔵 AC-X1 name trim 後為空字串 → fallback 檔名去副檔名', async () => {
       const rec = await svc.uploadAppendix(ICSOP_ADMIN, xlsx({ fileName: '對保作業附註.pdf' }), '   ');
-      expect(rec.name).toBe('對保作業附註.pdf');
+      expect(rec.name).toBe('對保作業附註');
+    });
+
+    it('🔵 AC-X1 檔名含多個點 → 只去**最後一個**副檔名', async () => {
+      const rec = await svc.uploadAppendix(ICSOP_ADMIN, xlsx({ fileName: '2026.Q3.對帳附表.xlsx' }));
+      expect(rec.name).toBe('2026.Q3.對帳附表');
+    });
+
+    it('🔒 AC-X1 使用者**自訂**名稱一律逐字採用（即便寫了副檔名，也不代為去除）', async () => {
+      const rec = await svc.uploadAppendix(ICSOP_ADMIN, xlsx(), '對照表.xlsx');
+      expect(rec.name).toBe('對照表.xlsx');
     });
 
     it('AC-07 name trim 後恰 400 字元 → 成功且完整保留', async () => {
@@ -261,19 +277,34 @@ describe('AppendicesService（F039 附錄池管理）', () => {
       expect(blob.putCalls).toHaveLength(0);
     });
 
-    it('AC-07 未提供 name 但 fallback 檔名 > 400 字元 → 亦回 APPENDIX_NAME_TOO_LONG', async () => {
+    it('AC-07 未提供 name 但 fallback 檔名主體 > 400 字元 → 亦回 APPENDIX_NAME_TOO_LONG', async () => {
       const longName = 'あ'.repeat(401) + '.xlsx';
       await expect(svc.uploadAppendix(ICSOP_ADMIN, xlsx({ fileName: longName }))).rejects.toThrow(
         'APPENDIX_NAME_TOO_LONG',
       );
     });
 
-    it('Alt Flow：多檔路徑不接受自訂名稱，各檔一律以其檔名建檔', async () => {
+    /**
+     * 🔵 `AC-X3`：長度上限**於去副檔名後**量測——副檔名不佔 400 字元配額。
+     * 🔴 本案為 `AC-X1` 之真實行為區分點：主體恰 400 ＋ `.xlsx` 之全長為 405，
+     * 舊行為（含副檔名 fallback）必拒、新行為必收。若量測點被改回去除前，本案立紅。
+     */
+    it('🔵 AC-X3 檔名主體恰 400 字元 ＋ 副檔名 → 通過（副檔名不佔配額）', async () => {
+      const fileName = 'あ'.repeat(APPENDIX_NAME_MAX_LENGTH) + '.xlsx';
+      const rec = await svc.uploadAppendix(ICSOP_ADMIN, xlsx({ fileName }));
+      expect(rec.name).toHaveLength(400);
+    });
+
+    /**
+     * 🔵 `AC-X1`：多檔路徑之 fallback 同樣去副檔名。
+     * 📝 被推翻之原期望逐字保留供追溯：OLD> `['a.xlsx', 'b.pdf']`。
+     */
+    it('Alt Flow：多檔路徑不接受自訂名稱，各檔一律以其**去副檔名之檔名**建檔', async () => {
       const recs = await svc.uploadAppendices(ICSOP_ADMIN, [
         xlsx({ fileName: 'a.xlsx' }),
         xlsx({ fileName: 'b.pdf' }),
       ]);
-      expect(recs.map((r) => r.name)).toEqual(['a.xlsx', 'b.pdf']);
+      expect(recs.map((r) => r.name)).toEqual(['a', 'b']);
     });
   });
 
@@ -397,7 +428,8 @@ describe('AppendicesService（F039 附錄池管理）', () => {
       const f = await svc.uploadAppendix(ICSOP_ADMIN, xlsx({ fileName: 'a.xlsx' }));
       store.seedLinks(f.id, 2);
       const [item] = await svc.listPoolOverview(ICSOP_ADMIN);
-      expect(item).toMatchObject({ name: 'a.xlsx', format: 'xlsx', uploadedBy: 'admin1', docCount: 2 });
+      // 🔵 AC-X1 連帶：名稱不含副檔名；`format` 欄仍由副檔名決定（兩者為獨立欄位）。
+      expect(item).toMatchObject({ name: 'a', format: 'xlsx', uploadedBy: 'admin1', docCount: 2 });
       expect(item.size).toBeGreaterThan(0);
       expect(item.uploadedAt).toBeInstanceOf(Date);
     });
@@ -418,8 +450,9 @@ describe('AppendicesService（F039 附錄池管理）', () => {
         xlsx({ fileName: '名詞定義說明.pdf' }),
       ]);
       const pool = await svc.listPool(ICSOP_ADMIN);
-      expect(pool.filter((r) => r.name.includes('作業')).map((r) => r.name)).toEqual(['作業流程對照表.xlsx']);
-      expect(pool.filter((r) => r.format === 'pdf').map((r) => r.name)).toEqual(['名詞定義說明.pdf']);
+      // 🔵 AC-X1 連帶：名稱不含副檔名（篩選語意未變——關鍵字仍比對名稱、格式仍比對 format 欄）。
+      expect(pool.filter((r) => r.name.includes('作業')).map((r) => r.name)).toEqual(['作業流程對照表']);
+      expect(pool.filter((r) => r.format === 'pdf').map((r) => r.name)).toEqual(['名詞定義說明']);
     });
   });
 

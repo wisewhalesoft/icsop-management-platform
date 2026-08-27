@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!-- 🔵 2026-08-27 使用者裁決 delta（人類閘門已通過）——本檔已套用（規格權威＝F018 AC-X1）：
+     選檔後之「表單名稱」自動帶入**去副檔名之檔名主體**（`放款覆核表.xlsx` → `放款覆核表`）；
+     **已手動輸入者仍不覆蓋**（既有語意不變）。placeholder 改為逐字
+     「請輸入表單名稱（可沿用檔名，不含副檔名）」。
+     🔒 使用者自訂之名稱一律逐字採用；表單編號、制定部門與送出流程一律不變。 -->
 <!-- 🔴 2026-08-20 D9 delta · 使用表單「新增」整頁化（人類閘門已裁決）
      規格權威＝docs/specs/features/F018-usage-form-management.md#usage-form-page-delta（AC-N41～AC-N47、AC-N49）
               ＋ docs/specs/architecture-spec.md §11.10（決策 B10）
@@ -162,7 +167,7 @@
       </div>
       <div>
         <label for="upName" class="block text-sm font-medium text-slate-700 mb-1">表單名稱 <span class="text-red-500">*</span></label>
-        <input id="upName" type="text" placeholder="請輸入表單名稱（可沿用檔名）" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <input id="upName" type="text" placeholder="請輸入表單名稱（可沿用檔名，不含副檔名）" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600" />
         <p id="upNameErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>表單名稱不可為空。</p>
       </div>
     </div>
@@ -311,7 +316,9 @@
     document.getElementById('filePreviewIcon').setAttribute('data-lucide', fmt==='excel'?'file-spreadsheet':'file-text');
     document.getElementById('filePreviewName').textContent=name;
     document.getElementById('filePreviewFmt').innerHTML=fmtBadge(fmt);
-    if(!document.getElementById('upName').value.trim()) document.getElementById('upName').value=name;
+    /* 🔵 AC-X1（2026-08-27）：自動帶入之名稱**去副檔名**（已手動輸入者仍不覆蓋）。
+       📝 被推翻之原行為保留供追溯：OLD> document.getElementById('upName').value=name;（含副檔名） */
+    if(!document.getElementById('upName').value.trim()) document.getElementById('upName').value=stripExt(name);
     lucide.createIcons();
   }
 
@@ -329,6 +336,12 @@
   }
   function hideNumberErr(){const e=document.getElementById('upNumberErr');e.classList.add('hidden');e.classList.remove('flex');document.getElementById('upNumber').classList.remove('border-red-500');}
   function showNumberErr(msg){const e=document.getElementById('upNumberErr');e.querySelector('span').textContent=msg;e.classList.remove('hidden');e.classList.add('flex');document.getElementById('upNumber').classList.add('border-red-500');lucide.createIcons();}
+  /* 🔵 AC-X1：去最後一個副檔名（與 backend `baseNameOf`／frontend `stripFileExtension` 同一演算法）。
+     邊界：無點／點在結尾／點在首位 → 一律回原字串（不得回空字串，否則等於清空輸入框）。 */
+  function stripExt(fileName){
+    const dot=fileName.lastIndexOf('.');
+    return (dot<=0||dot===fileName.length-1)?fileName:fileName.slice(0,dot);
+  }
   function hideNameErr(){const e=document.getElementById('upNameErr');e.classList.add('hidden');e.classList.remove('flex');document.getElementById('upName').classList.remove('border-red-500');}
 
   /* ===== AC-N42 ④：取消 → 導回清單，且不送出任何寫入請求 ===== */

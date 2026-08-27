@@ -13,6 +13,7 @@ import { contentTypeOfFormat } from '../storage/content-disposition';
 import {
   assertFormatAllowed,
   assertSizeWithinLimit,
+  baseNameOf,
   extensionOf,
 } from '../storage/file-rules';
 import { assertCanWriteDocumentAsset } from '../storage/document-asset-authz';
@@ -28,6 +29,7 @@ import {
   assertExportRowLimit,
   exportFileName,
   formatExportTimestamp,
+  joinLinkedDocumentNumbers,
   toCsvBuffer,
 } from '../storage/csv-export';
 import { canPerform, FunctionKey } from '../rbac/function-matrix';
@@ -61,15 +63,19 @@ export const APPENDIX_NAME_MAX_LENGTH = 400;
 
 /**
  * 解析欲儲存之附錄名稱（純函式，AC-05／AC-06／AC-07）：
- * trim 後採用；未提供／空字串／純空白 → fallback 原始檔名（含副檔名）。
+ * trim 後採用；未提供／空字串／純空白 → fallback **去副檔名之檔名主體**。
  * 超出欄寬 → APPENDIX_NAME_TOO_LONG（400）。刻意於 **trim 後**量測（前後空白不佔配額）；
  * fallback 之檔名同樣受檢（AC-07 第三分句），避免超長檔名繞過驗證。
+ *
+ * 🔴 2026-08-27 使用者裁決（`AC-X1`）：fallback **去掉副檔名**（`baseNameOf`）。
+ * 📝 被推翻之原行為逐字保留供追溯：OLD> `fallback 原始檔名（含副檔名）`。
+ * ⚠ 長度上限**於去副檔名後量測**——副檔名不佔 400 字元配額（`AC-X3`）。
  */
 export function resolveAppendixName(
   name: string | undefined | null,
   fileName: string,
 ): string {
-  const resolved = (name ?? '').trim() || fileName;
+  const resolved = (name ?? '').trim() || baseNameOf(fileName);
   if (resolved.length > APPENDIX_NAME_MAX_LENGTH) {
     throw new BadRequestException(
       `APPENDIX_NAME_TOO_LONG: 附錄名稱長度上限為 ${APPENDIX_NAME_MAX_LENGTH} 字元`,
@@ -159,8 +165,13 @@ function matchesAppendixFilters(item: AppendixPoolItem, filters: AppendixExportF
 }
 
 /**
- * F039 匯出之六欄（`AC-D6` ②）。⚠ 畫面之「操作」欄**不匯出**；
+ * F039 匯出之**七欄**（`AC-D6` ②）。⚠ 畫面之「操作」欄**不匯出**；
  * 畫面之「上傳者 / 上傳時間」單欄於 CSV **拆為兩欄**。
+ *
+ * 🔵 2026-08-27 使用者裁決（`AC-X2`）：末尾新增「關聯文件編號」欄——「關聯文件數」只回答
+ * 「幾份」，回答不了「哪幾份」；後者原本只能逐列展開才看得到，在 CSV 裡等於看不到。
+ * 📝 被取代之欄集逐字保留供追溯：OLD> 六欄（`附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數`）。
+ * 🔒 既有六欄之字面與相對順序**一格不動**（新欄一律接在末尾，既有欄索引不位移）。
  */
 const APPENDIX_EXPORT_COLUMNS: CsvColumn<AppendixPoolItem>[] = [
   { header: '附錄名稱', value: (r) => r.name },
@@ -169,6 +180,7 @@ const APPENDIX_EXPORT_COLUMNS: CsvColumn<AppendixPoolItem>[] = [
   { header: '上傳者', value: (r) => r.uploadedByName ?? r.uploadedBy },
   { header: '上傳時間', value: (r) => formatExportTimestamp(r.uploadedAt) },
   { header: '關聯文件數', value: (r) => r.docCount },
+  { header: '關聯文件編號', value: (r) => joinLinkedDocumentNumbers(r.documents) },
 ];
 
 @Injectable()

@@ -7,9 +7,16 @@ import {
   overwriteUsageForm,
   deleteUsageForm,
   downloadPoolForm,
+  exportUsageFormPool,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
+import {
+  EXPORT_LIMIT_BADGE,
+  EXPORT_ROW_LIMIT,
+  countFromLimitError,
+  isExportLimitError,
+} from '../domain/export-feedback';
 import { Icon } from '../components/Icon';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT, isWatermarkSupportedFormat } from '../domain/watermark-note';
 import { PageHeader } from '../components/PageHeader';
@@ -175,6 +182,27 @@ export function UsageFormManagementPage(): JSX.Element {
     [toast],
   );
 
+  /**
+   * 🔵 `AC-X6`／`AC-X7`：匯出當前篩選之全部結果（非當前頁）。
+   * 逐條比照 F039 附錄池匯出之既有實作（`AppendixManagementPage.onExport`），
+   * **唯逐字文案不同**——本頁之量詞為「筆數」、限定詞為「篩選條件」，與該頁同型但各自成句。
+   */
+  const onExport = useCallback(async () => {
+    try {
+      await exportUsageFormPool({ q: keyword.trim() || undefined, format: fmtFilter || undefined });
+      toast.success('已匯出表單清單（CSV，UTF-8 BOM）');
+    } catch (e) {
+      if (isExportLimitError(e)) {
+        toast.error(
+          `符合條件之筆數為 ${countFromLimitError(e)} 筆，超過匯出上限 ${EXPORT_ROW_LIMIT} 筆，請縮小篩選條件`,
+          { code: EXPORT_LIMIT_BADGE },
+        );
+        return;
+      }
+      toast.error(e instanceof ApiError ? `匯出失敗：${e.code}` : '匯出失敗');
+    }
+  }, [keyword, fmtFilter, toast]);
+
   // ── 覆蓋 ──
   const onOverwriteClick = (form: UsageFormPoolItem): void => {
     setOverwriteTarget(form);
@@ -294,6 +322,20 @@ export function UsageFormManagementPage(): JSX.Element {
   return (
     <div className="space-y-4">
       <PageHeader breadcrumb={[{ label: '使用表單管理' }, { label: '表單池' }]} title="使用表單（表單池）管理">
+        {/*
+          🔵 `AC-X6`：topbar 動作區之「匯出」鈕（與 prototype 24 附錄管理逐條同型）。
+          🔴 **非** write-only——匯出屬讀取類動作，SysAdmin（唯讀）亦允許。
+        */}
+        <button
+          type="button"
+          onClick={() => void onExport()}
+          aria-label="匯出"
+          title="匯出表單清單（CSV）"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          <Icon name="download" className="w-4 h-4" />
+          匯出
+        </button>
         {/*
           🔴 F018 `AC-N41`／`AC-N77`：新增改為**導向獨立整頁**（非開 modal）；可見文字與
           `aria-label` 皆逐字為「新增表單」。

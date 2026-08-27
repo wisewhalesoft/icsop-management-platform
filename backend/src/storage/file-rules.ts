@@ -43,6 +43,27 @@ export function extensionOf(fileName: string): string {
 }
 
 /**
+ * 去除**最後一個**副檔名之檔名主體（純字串處理，不碰檔案系統）。
+ *
+ * 用途＝F018／F039 之「上傳後帶出之表單／附錄名稱」**不含副檔名**（2026-08-27 使用者裁決）：
+ * 名稱是給人看的識別字串，`.xlsx`／`.pdf` 已由「格式」欄逐列呈現，重複帶在名稱裡只是雜訊。
+ *
+ * 🔴 與 `extensionOf()` **共用同一個「什麼算副檔名」之判定**（`lastIndexOf('.')`），兩者刻意互為
+ * 反面：有副檔名時 `baseNameOf(x) + '.' + extensionOf(x) === x`。若兩處各寫一套判定，
+ * `.gitignore`／`報表.` 這類邊界必然於某一側漂移。
+ *
+ * 邊界（皆回傳原字串，**不得回傳空字串**——空名稱會讓 `resolve*Name()` 之 fallback 失去意義）：
+ *   - 無點（`報表`）→ `報表`；
+ *   - 點在結尾（`報表.`）→ `報表.`（`extensionOf` 亦視為無副檔名）；
+ *   - 點在首位（`.gitignore`）→ `.gitignore`（隱藏檔非「副檔名」）。
+ */
+export function baseNameOf(fileName: string): string {
+  const dot = fileName.lastIndexOf('.');
+  if (dot <= 0 || dot === fileName.length - 1) return fileName;
+  return fileName.slice(0, dot);
+}
+
+/**
  * 格式白名單判定（先於模板結構/引用數等後續判定）。
  * 以副檔名為權威（F027 明訂 .xls-only、排除 .xlsx，即便內容相符）。
  */

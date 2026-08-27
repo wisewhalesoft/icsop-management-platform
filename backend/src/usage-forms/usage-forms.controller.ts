@@ -83,6 +83,34 @@ export class UsageFormsController {
     return this.svc.listPoolOverview(req.sessionUser);
   }
 
+  /**
+   * 🔵 `AC-X6`（2026-08-27）：表單池匯出（CSV）。與 F039 之 `GET admin/appendices/export`
+   * 逐條同型——閘門為 `使用表單管理` **read**（匯出屬讀取類動作 ⇒ SysAdmin 唯讀亦允許），
+   * **不寫稽核**，接受與清單查詢**相同**之篩選參數。
+   *
+   * 🔴 宣告於 `admin/usage-forms/:formId` 系列之前，且 `export` 為**固定段**（非參數段）：
+   * Nest 依宣告順序比對，同段數之參數路由若先宣告會把 `export` 吃成 `:formId`。
+   * 本路由為 3 段而 `:formId/download` 為 4 段，本無歧義；順序仍與 `overview` 一致以免
+   * 日後新增 `GET admin/usage-forms/:formId` 時悄悄被遮蔽。
+   */
+  @Get('admin/usage-forms/export')
+  @RequirePermission(FunctionKey.USAGE_FORM_MANAGEMENT, 'read')
+  async exportPool(
+    @Req() req: RequestWithSession,
+    @Res() res: Response,
+    @Query('q') q?: string,
+    @Query('format') format?: string,
+  ): Promise<void> {
+    const { csv, fileName } = await this.svc.exportPool(req.sessionUser, {
+      q: q?.trim() || undefined,
+      format: format === 'excel' || format === 'pdf' ? format : undefined,
+    });
+    // 🔴 送 Buffer 而非 string：送字串會讓 Express 自行決定編碼，BOM 可能悄悄壞掉。
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(csv);
+  }
+
   @Post('admin/usage-forms')
   @RequirePermission(FunctionKey.USAGE_FORM_MANAGEMENT, 'read')
   @UseInterceptors(FilesInterceptor('files', 20, MULTIPART_OPTIONS))

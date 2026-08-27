@@ -39,7 +39,12 @@ import { FunctionKey, canPerform } from '../rbac/function-matrix';
 const ICSOP_ADMIN: SessionContext = { roleCode: 'ICSOPAdmin', accountId: 'admin-1' };
 const SYS_ADMIN: SessionContext = { roleCode: 'SysAdmin', accountId: 'sys-1' };
 
-const HEADER = '附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數';
+/**
+ * 🔵 `AC-X2`（2026-08-27）：表頭由六欄擴為**七欄**（末尾新增「關聯文件編號」）。
+ * 📝 被取代之逐字表頭保留供追溯（⚠ 不得復原）：
+ *   OLD> const HEADER = '附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數';
+ */
+const HEADER = '附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數,關聯文件編號';
 
 class FakeAuditRecorder implements AuditRecorder {
   events: AppendixAuditEvent[] = [];
@@ -154,25 +159,63 @@ describe('AppendicesService.exportPool（F039 AC-D4～AC-D11 附錄池匯出）'
       expect([csv[0], csv[1], csv[2]]).toEqual([0xef, 0xbb, 0xbf]);
     });
 
-    it('② 第 1 列表頭逐字為六欄（「操作」欄不匯出；「上傳者 / 上傳時間」拆為兩欄）', async () => {
+    it('② 第 1 列表頭逐字為七欄（「操作」欄不匯出；「上傳者 / 上傳時間」拆為兩欄）', async () => {
       const { svc } = makeSvc([itemOf(0)]);
       const { csv } = await svc.exportPool(ICSOP_ADMIN, {});
       expect(linesOf(csv)[0]).toBe(HEADER);
       expect(linesOf(csv)[0]).not.toContain('操作');
     });
 
-    it('② 每筆資料列恰六個儲存格，且「附錄名稱」「上傳者」「關聯文件數」為畫面所見值', async () => {
+    it('② 每筆資料列恰七個儲存格，且「附錄名稱」「上傳者」「關聯文件數」為畫面所見值', async () => {
       const { svc } = makeSvc([
         itemOf(0, { name: '名詞定義說明.pdf', uploadedByName: '陳彥廷', docCount: 3 }),
       ]);
       const cells = linesOf((await svc.exportPool(ICSOP_ADMIN, {})).csv)[1].split(',');
-      expect(cells).toHaveLength(6);
+      expect(cells).toHaveLength(7);
       expect(cells[0]).toBe('名詞定義說明.pdf');
       expect(cells[3]).toBe('陳彥廷');
       expect(cells[5]).toBe('3');
       // 大小／上傳時間之字面格式未入 AC，只約束「非空」（見檔頭 📌）。
       expect(cells[2].trim()).not.toBe('');
       expect(cells[4].trim()).not.toBe('');
+    });
+
+    /**
+     * 🔵 `AC-X2`：第 7 欄「關聯文件編號」＝關聯文件之 `documentNumber`，多份以**半形分號**相接、
+     * 順序即 `documents` 之順序（＝管理頁展開列所見）。0 份 → **空儲存格**（非 `—`、非 `0`）。
+     * 🔴 本組案子是「數 vs 哪幾份」之區分點：只驗 `關聯文件數` 的斷言在本欄錯漏時仍會全綠。
+     */
+    it('🔵 AC-X2 多份關聯 → 第 7 欄以 `;` 相接，順序與 documents 一致', async () => {
+      const { svc } = makeSvc([
+        itemOf(0, {
+          docCount: 2,
+          documents: [
+            { id: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業' },
+            { id: 'd2', documentNumber: 'ICSOP-SRC-102-2-03', documentName: '對保作業' },
+          ],
+        }),
+      ]);
+      const cells = linesOf((await svc.exportPool(ICSOP_ADMIN, {})).csv)[1].split(',');
+      expect(cells[6]).toBe('ICSOP-SRC-101-1-01;ICSOP-SRC-102-2-03');
+    });
+
+    it('🔵 AC-X2 單份關聯 → 第 7 欄為該編號本身（不附分隔符）', async () => {
+      const { svc } = makeSvc([
+        itemOf(0, {
+          docCount: 1,
+          documents: [{ id: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: 'x' }],
+        }),
+      ]);
+      expect(linesOf((await svc.exportPool(ICSOP_ADMIN, {})).csv)[1].split(',')[6]).toBe(
+        'ICSOP-SRC-101-1-01',
+      );
+    });
+
+    it('🔵 AC-X2 0 份關聯 → 第 7 欄為**空儲存格**（非 `—`、非 `0`）', async () => {
+      const { svc } = makeSvc([itemOf(0, { docCount: 0, documents: [] })]);
+      const cells = linesOf((await svc.exportPool(ICSOP_ADMIN, {})).csv)[1].split(',');
+      expect(cells[6]).toBe('');
+      expect(cells).toHaveLength(7); // 末欄為空仍須佔位，不得整欄消失
     });
 
     it('③ 含 `,`／`"` 之附錄名稱依 RFC 4180 包覆逸出', async () => {

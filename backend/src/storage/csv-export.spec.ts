@@ -1,8 +1,10 @@
 import {
   CsvColumn,
   EXPORT_ROW_LIMIT,
+  LINKED_DOC_NUMBER_SEPARATOR,
   assertExportRowLimit,
   exportFileName,
+  joinLinkedDocumentNumbers,
   toCsvBuffer,
 } from './csv-export';
 
@@ -265,5 +267,43 @@ describe('csv-export 共用產生器（error-handling.md#export；F037/F038/F039
         else process.env.TZ = original;
       }
     });
+  });
+});
+
+/**
+ * 🔵 `AC-X2`（2026-08-27）：`關聯文件編號` 欄之共用組字——F018 表單池與 F039 附錄池
+ * 兩處匯出共用同一函式（各寫一份必然於分隔符或空值呈現上漂移）。
+ */
+describe('joinLinkedDocumentNumbers（關聯文件編號欄）', () => {
+  it('分隔符逐字為半形分號 `;`', () => {
+    expect(LINKED_DOC_NUMBER_SEPARATOR).toBe(';');
+  });
+
+  it('多筆 → 以 `;` 相接，且**順序即傳入順序**（＝管理頁展開列所見之順序）', () => {
+    expect(
+      joinLinkedDocumentNumbers([
+        { documentNumber: 'ICSOP-SRC-101-1-01' },
+        { documentNumber: 'ICSOP-SRC-102-2-03' },
+      ]),
+    ).toBe('ICSOP-SRC-101-1-01;ICSOP-SRC-102-2-03');
+  });
+
+  it('單筆 → 不附任何分隔符', () => {
+    expect(joinLinkedDocumentNumbers([{ documentNumber: 'ICSOP-SRC-101-1-01' }])).toBe(
+      'ICSOP-SRC-101-1-01',
+    );
+  });
+
+  it.each([[[]], [undefined]])('0 筆／undefined → 空字串（**非** `—`、非 `0`）', (docs) => {
+    expect(joinLinkedDocumentNumbers(docs as undefined)).toBe('');
+  });
+
+  it('🔒 分號不觸發 RFC 4180 包覆：整格於 CSV 中維持裸字串（無雙引號）', () => {
+    const cols: CsvColumn<{ n: string }>[] = [{ header: '關聯文件編號', value: (r) => r.n }];
+    const joined = joinLinkedDocumentNumbers([
+      { documentNumber: 'A-1' },
+      { documentNumber: 'B-2' },
+    ]);
+    expect(linesOf(toCsvBuffer([{ n: joined }], cols))[1]).toBe('A-1;B-2');
   });
 });

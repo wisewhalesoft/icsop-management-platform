@@ -13,6 +13,7 @@ import { contentTypeOfFormat } from '../storage/content-disposition';
 import {
   assertFormatAllowed,
   assertSizeWithinLimit,
+  baseNameOf,
   extensionOf,
 } from '../storage/file-rules';
 import { assertCanWriteDocumentAsset } from '../storage/document-asset-authz';
@@ -22,6 +23,15 @@ import {
   formNumberCompareKey,
   normalizeFormNumber,
 } from './form-number';
+import {
+  CsvColumn,
+  assertExportRowLimit,
+  exportFileName,
+  formatExportTimestamp,
+  joinLinkedDocumentNumbers,
+  toCsvBuffer,
+} from '../storage/csv-export';
+import { orgAncestorPathLabel } from '../org-directory/org-path';
 import { canPerform, FunctionKey } from '../rbac/function-matrix';
 import { FieldKey } from '../rbac/field-matrix';
 import { SessionContext, UploadFile } from '../attachments/attachments.service';
@@ -36,6 +46,9 @@ import {
   AuditRecorder,
   FORM_POOL_STORE,
   FormPoolStore,
+  ORG_UNIT_LISTER,
+  OrgUnitLister,
+  OrgUnitLite,
   UPLOADER_DIRECTORY,
   UploaderInfo,
   UPLOADER_ORG_RESOLVER,
@@ -52,12 +65,17 @@ export const SHARED_OVERWRITE_MIN_REFS = 2;
 export const USAGE_FORM_NAME_MAX_LENGTH = 400;
 
 /**
- * 解析欲儲存之表單名稱（純函式）：trim 後採用；未提供／空字串／純空白 → fallback 檔名。
+ * 解析欲儲存之表單名稱（純函式）：trim 後採用；未提供／空字串／純空白 → fallback
+ * **去副檔名之檔名主體**。
  * 超出欄寬 → USAGE_FORM_NAME_TOO_LONG（400）。刻意於 **trim 後**量測，前後空白不佔配額；
  * fallback 之檔名同樣受檢，避免超長檔名繞過驗證後於 MSSQL driver 拋未分類例外。
+ *
+ * 🔴 2026-08-27 使用者裁決（`AC-X1`）：fallback **去掉副檔名**（`baseNameOf`）。
+ * 📝 被推翻之原行為逐字保留供追溯：OLD> `未提供／空字串／純空白 → fallback 檔名`（含副檔名）。
+ * ⚠ 長度上限**於去副檔名後量測**——副檔名不佔 400 字元配額（`AC-X3`）。
  */
 export function resolveUsageFormName(name: string | undefined | null, fileName: string): string {
-  const resolved = (name ?? '').trim() || fileName;
+  const resolved = (name ?? '').trim() || baseNameOf(fileName);
   if (resolved.length > USAGE_FORM_NAME_MAX_LENGTH) {
     throw new BadRequestException(
       `USAGE_FORM_NAME_TOO_LONG: 表單名稱長度上限為 ${USAGE_FORM_NAME_MAX_LENGTH} 字元`,
@@ -122,6 +140,76 @@ export function buildFormBlobPath(fileName: string): string {
   return `usage-forms/${randomUUID()}${ext ? '.' + ext : ''}`;
 }
 
+/** 匯出結果（controller 據此設定 Content-Disposition 並 `res.send(buffer)`）。 */
+export interface UsageFormExportResult {
+  csv: Buffer;
+  fileName: string;
+}
+
+/**
+ * 匯出之篩選條件——**與管理頁清單之篩選同一組**（`AC-X7`：匯出範圍＝當前篩選之全部結果）。
+ * `format` 之 `excel` 涵蓋 `xlsx`／`xls`（與畫面之格式篩選同一分類）。
+ * ⚠ 管理頁**無**制定部門篩選器（`AC-N47` 之 ⚠），故此處刻意不加該鍵。
+ */
+export interface UsageFormExportFilters {
+  q?: string;
+  format?: 'excel' | 'pdf' | '';
+}
+
+/** 檔案大小之顯示格式——與前端 `domain/usage-form-format.ts#formatSize()` 同值（值層＝畫面所見）。 */
+function formatSizeLabel(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/** 名稱關鍵字（不分大小寫）＋ 格式分類之 AND 比對（與清單頁 `rows` 之 filter 同一語意）。 */
+function matchesUsageFormFilters(
+  item: UsageFormPoolItem,
+  filters: UsageFormExportFilters,
+): boolean {
+  const q = (filters.q ?? '').trim().toLowerCase();
+  if (q && !item.name.toLowerCase().includes(q)) return false;
+  if (filters.format === 'pdf' && item.format !== 'pdf') return false;
+  if (filters.format === 'excel' && item.format !== 'xlsx' && item.format !== 'xls') return false;
+  return true;
+}
+
+/**
+ * 制定部門多筆之分隔符——**全形頓號**，與清單頁儲存格逐字相同（`AC-N47`）。
+ * ⚠ 與「關聯文件編號」之半形分號刻意不同：兩欄的分隔符各自對齊各自的畫面呈現。
+ */
+const DRAFTING_DEPT_SEPARATOR = '、';
+
+/**
+ * 🔵 `AC-X4`（2026-08-27）：F018 表單池匯出之**九欄**。
+ *
+ * 對位管理頁清單（prototype 19）之可見欄，兩處刻意差異與 F039 附錄匯出**逐條相同**：
+ *   ⚠ 畫面之「操作」欄**不匯出**；
+ *   ⚠ 畫面之「上傳者 / 上傳時間」單欄於 CSV **拆為兩欄**；
+ *   🔵 末尾新增「關聯文件編號」欄（「關聯文件數」只回答幾份、回答不了哪幾份）。
+ *
+ * 🔒 「制定部門」空集合 → **空儲存格**，不是畫面上的 `—`（U+2014）：`—` 是畫面的空值符號，
+ * 落到 CSV 會被試算表當成一個資料值（排序／篩選時與真值混在一起）。
+ */
+function usageFormExportColumns(
+  deptLabel: (orgCode: string) => string,
+): CsvColumn<UsageFormPoolItem>[] {
+  return [
+    { header: '表單編號', value: (r) => r.formNumber ?? '' },
+    { header: '表單名稱', value: (r) => r.name },
+    {
+      header: '制定部門',
+      value: (r) => (r.draftingDeptCodes ?? []).map(deptLabel).join(DRAFTING_DEPT_SEPARATOR),
+    },
+    { header: '格式', value: (r) => r.format },
+    { header: '大小', value: (r) => formatSizeLabel(r.size) },
+    { header: '上傳者', value: (r) => r.uploadedByName ?? r.uploadedBy },
+    { header: '上傳時間', value: (r) => formatExportTimestamp(r.uploadedAt) },
+    { header: '關聯文件數', value: (r) => r.docCount },
+    { header: '關聯文件編號', value: (r) => joinLinkedDocumentNumbers(r.documents) },
+  ];
+}
+
 /**
  * F018 使用表單管理（表單池 + 文件多對多）。
  *
@@ -157,7 +245,68 @@ export class UsageFormsService {
      */
     @Inject(WATERMARK_BURNER)
     private readonly burner?: WatermarkBurner,
+    /**
+     * 🔵 `AC-X5`：匯出之制定部門標籤解析（`orgCode` → 祖鏈路徑，與畫面 chip 同一演算法）。
+     * **選填**：未注入 → 制定部門欄退回顯示代碼本身（與前端查無時之 fallback 逐字一致），
+     * 匯出不中斷。此處與燒錄器不同、刻意保留 `@Optional()`——缺它只是標籤退化為代碼，
+     * 不會產生「使用者以為有、其實沒有」那類靜默錯誤。
+     */
+    @Optional()
+    @Inject(ORG_UNIT_LISTER)
+    private readonly orgUnits?: OrgUnitLister,
   ) {}
+
+  /**
+   * 🔵 `AC-X4`～`AC-X9`（2026-08-27）：表單池匯出（CSV）。
+   *
+   * 與 F039 附錄池匯出（`AppendicesService.exportPool`）**逐條同型**：
+   * 範圍＝當前篩選之**全部結果**（非當前頁）；列序即 `listPoolOverview()` 之列序（畫面當前排序）；
+   * 閘門沿用 `assertCanRead`（匯出屬讀取類動作，SysAdmin 唯讀**允許**）；**不寫稽核**
+   * （管理存取，比照後台下載）；>10,000 → 400 `EXPORT_ROW_LIMIT_EXCEEDED` 且不產生任何檔案。
+   *
+   * 📌 沿用 load-all：表單池為**有界**集合（百量級），10,000 上限即為天花板，不需 SQL 下推
+   * （架構 §10.4 ④ 之表格：只有兩張 append-only 變更日誌表需要 COUNT 下推）。
+   */
+  async exportPool(
+    session: (SessionContext & { companyCode?: string }) | undefined,
+    filters: UsageFormExportFilters,
+  ): Promise<UsageFormExportResult> {
+    this.assertCanRead(session?.roleCode);
+    const items = await this.store.listPoolOverview();
+    await this.enrichUploaders(items);
+    await this.enrichDraftingDepts(items);
+    const rows = items.filter((it) => matchesUsageFormFilters(it, filters));
+    // 🔴 上限檢查必須在組 CSV 之前（AC 明訂「不產生任何檔案」）。
+    assertExportRowLimit(rows.length);
+    const deptLabel = await this.draftingDeptLabeler(session?.companyCode, rows);
+    return {
+      csv: toCsvBuffer(rows, usageFormExportColumns(deptLabel)),
+      fileName: exportFileName('usage-forms', new Date()),
+    };
+  }
+
+  /**
+   * 制定部門 `orgCode` → 畫面所見標籤之解析器（**每次匯出只查一次組織清單**，逐列 O(1)）。
+   *
+   * 無 lister／無公司／清單載入失敗／該公司無任何制定部門代碼 → 一律回「原樣代碼」之恆等函式：
+   * 匯出是讀取路徑，組織主檔查詢失敗不應讓整份 CSV 產不出來。
+   */
+  private async draftingDeptLabeler(
+    companyCode: string | undefined,
+    rows: readonly UsageFormPoolItem[],
+  ): Promise<(orgCode: string) => string> {
+    const identity = (orgCode: string): string => orgCode;
+    const needed = rows.some((r) => (r.draftingDeptCodes ?? []).length > 0);
+    if (!this.orgUnits || !companyCode || !needed) return identity;
+    let units: OrgUnitLite[];
+    try {
+      units = await this.orgUnits.listOrgUnits(companyCode);
+    } catch {
+      return identity;
+    }
+    const byCode = new Map(units.map((u) => [u.orgCode, u]));
+    return (orgCode) => orgAncestorPathLabel(byCode, orgCode);
+  }
 
   /**
    * 上傳單一表單至表單池（建立，初始關聯數 0）。

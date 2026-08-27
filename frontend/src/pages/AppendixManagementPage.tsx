@@ -17,6 +17,7 @@ import {
   isExportLimitError,
 } from '../domain/export-feedback';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
+import { stripFileExtension } from '../domain/file-name';
 import { Icon } from '../components/Icon';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT, isWatermarkSupportedFormat } from '../domain/watermark-note';
 import { PageHeader } from '../components/PageHeader';
@@ -245,8 +246,13 @@ export function AppendixManagementPage(): JSX.Element {
     }
     setUploadErr(null);
     setUploadFiles(picked);
-    // 單檔：選檔後自動帶入檔名（仍為選填，可清空 → fallback 檔名）；多檔：不提供自訂名稱。
-    setUploadName(picked.length === 1 ? picked[0].name : '');
+    /**
+     * 單檔：選檔後自動帶入**去副檔名之檔名**（仍為選填，可清空 → 後端 fallback 同樣去副檔名）；
+     * 多檔：不提供自訂名稱。
+     * 🔵 `AC-X1`（2026-08-27 使用者裁決）——📝 被推翻之原行為逐字保留供追溯：
+     *   OLD> `setUploadName(picked.length === 1 ? picked[0].name : '');`（帶入含副檔名之全名）
+     */
+    setUploadName(picked.length === 1 ? stripFileExtension(picked[0].name) : '');
   };
   const submitUpload = async (): Promise<void> => {
     if (uploadFiles.length === 0) {
@@ -260,10 +266,11 @@ export function AppendixManagementPage(): JSX.Element {
       // 多檔不接受自訂名稱（F039 Alt Flow）；單檔留空則由後端 fallback 原始檔名（AC-06）。
       await uploadAppendix(uploadFiles, multi ? undefined : name || undefined);
       setUploadOpen(false);
+      // 🔵 `AC-X1`：回饋所述之名稱須與**實際建檔之名稱**一致（兩者皆去副檔名）。
       toast.success(
         multi
-          ? `已上傳 ${uploadFiles.length} 個附錄（各以原始檔名建檔，初始關聯 0 份）`
-          : `已上傳附錄「${name || uploadFiles[0].name}」（初始關聯 0 份）`,
+          ? `已上傳 ${uploadFiles.length} 個附錄（各以檔名去副檔名建檔，初始關聯 0 份）`
+          : `已上傳附錄「${name || stripFileExtension(uploadFiles[0].name)}」（初始關聯 0 份）`,
       );
       await load();
     } catch (e) {
@@ -608,7 +615,7 @@ export function AppendixManagementPage(): JSX.Element {
                   <Icon name="files" className="w-3.5 h-3.5 mt-0.5 text-slate-400 shrink-0" />
                   <span>
                     多檔上傳<strong className="text-slate-600">不提供自訂名稱</strong>
-                    ，各檔一律以其原始檔名建檔。如需自訂名稱請改為單檔上傳。
+                    ，各檔一律以其檔名（不含副檔名）建檔。如需自訂名稱請改為單檔上傳。
                   </span>
                 </div>
               ) : (
@@ -616,7 +623,7 @@ export function AppendixManagementPage(): JSX.Element {
                   <label htmlFor="ax-upload-name" className="block text-sm font-medium text-slate-700 mb-1">
                     附錄名稱{' '}
                     <span className="text-xs font-normal text-slate-400">
-                      （選填；留空自動採用檔名）
+                      （選填；留空自動採用檔名，不含副檔名）
                     </span>
                   </label>
                   <input
@@ -625,11 +632,11 @@ export function AppendixManagementPage(): JSX.Element {
                     maxLength={500}
                     value={uploadName}
                     onChange={(e) => setUploadName(e.target.value)}
-                    placeholder="留空則以原始檔名建檔"
+                    placeholder="留空則以檔名（不含副檔名）建檔"
                     className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
                   />
                   <p className="mt-1 text-[10px] text-slate-400">
-                    選檔後自動帶入檔名，可自行改寫；前後空白會自動去除，上限 400 字元。
+                    選檔後自動帶入檔名（已去除副檔名），可自行改寫；前後空白會自動去除，上限 400 字元。
                   </p>
                 </div>
               )}

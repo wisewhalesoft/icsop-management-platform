@@ -71,6 +71,39 @@ export function resolveDepartmentFullName(
 }
 
 /**
+ * 「祖鏈路徑」標籤——自 Root 沿 `parentCode` 逐層下探至該單位，各層 `name` 以 ` / ` 相接。
+ *
+ * ⚠ **與同檔 `buildOrgPath()` 是兩套刻意不同的演算法，不得「順手統一」**：
+ *   - `buildOrgPath()`＝人資契約 §8.2／§8.3 之「部 / 處室」兩段式（捨本部層、部層取 `descFull`、
+ *     處室取 `DESC_CHI` 末段），用於**帳號／浮水印之「部門」欄**；
+ *   - 本函式＝**完整祖鏈**（含本部層），用於 F018 制定部門之候選標籤與 chip。
+ *  兩者在同一筆 `orgCode` 上會給出不同字串，這是規格要求。
+ *
+ * 🔴 **本函式存在之理由**＝與 `frontend/src/components/DraftingDeptPicker.tsx#orgPathLabel`
+ * 為同一演算法之兩份實作（跨 package 無法共用原始碼）。F018 制定部門在**畫面**與**匯出 CSV**
+ * 兩處都要呈現同一個標籤；若後端另編一套（例如只取單位自身 `name`），同一份資料就會有
+ * 「畫面一種、CSV 另一種」兩個答案——這正是本 repo 2026-08-14 部門欄格式回歸的形狀。
+ * ⚠ 任一側調整分隔符／上溯規則／fallback，另一側必須同步。
+ *
+ * fallback：查無該代碼（主檔已無此歷史單位）→ 回傳**代碼本身**，與前端逐字一致
+ * （不顯示 `undefined`、不留空）。循環守衛以 `seen` 避免資料異常造成無窮迴圈。
+ */
+export function orgAncestorPathLabel(
+  byCode: ReadonlyMap<string, { orgCode: string; parentCode: string | null; name: string }>,
+  orgCode: string,
+): string {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  let cur = byCode.get(orgCode);
+  while (cur && !seen.has(cur.orgCode)) {
+    seen.add(cur.orgCode);
+    parts.unshift(cur.name);
+    cur = cur.parentCode ? byCode.get(cur.parentCode) : undefined;
+  }
+  return parts.length ? parts.join(ORG_PATH_SEPARATOR) : orgCode;
+}
+
+/**
  * 以**預先建好之 `orgCode → 單位` 索引**求路徑。
  * 熱路徑（清單富化）專用：呼叫端每家公司只建一次索引，逐列查表為 O(1)，不逐列回查 DB。
  */

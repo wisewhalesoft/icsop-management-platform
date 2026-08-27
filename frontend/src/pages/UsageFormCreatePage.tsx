@@ -8,6 +8,7 @@ import {
   FILE_FORMAT_NOT_ALLOWED_MESSAGE,
   FILE_REQUIRED_MESSAGE,
 } from '../domain/usage-form-format';
+import { stripFileExtension } from '../domain/file-name';
 import {
   errorCodeOf,
   formNumberErrorMessage,
@@ -132,8 +133,12 @@ export function UsageFormCreatePage(): JSX.Element {
     }
     setFileErr(null);
     setFile(picked);
-    // 名稱自動帶入檔名；**已手動輸入者不覆蓋**（prototype 19a `applyPick()` 同語意）。
-    if (!name.trim()) setName(picked.name);
+    /**
+     * 名稱自動帶入**去副檔名之檔名**；**已手動輸入者不覆蓋**（prototype 19a `applyPick()` 同語意）。
+     * 🔵 `AC-X1`（2026-08-27 使用者裁決）——📝 被推翻之原行為逐字保留供追溯：
+     *   OLD> `if (!name.trim()) setName(picked.name);`（帶入含副檔名之全名）
+     */
+    if (!name.trim()) setName(stripFileExtension(picked.name));
   };
 
   const onCancel = (): void => {
@@ -308,7 +313,7 @@ export function UsageFormCreatePage(): JSX.Element {
                 setName(e.target.value);
                 if (e.target.value.trim()) setNameErr(false);
               }}
-              placeholder="請輸入表單名稱（可沿用檔名）"
+              placeholder="請輸入表單名稱（可沿用檔名，不含副檔名）"
               className={`w-full px-3 py-2 rounded-md border text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 ${
                 nameErr ? 'border-red-500' : 'border-slate-300'
               }`}

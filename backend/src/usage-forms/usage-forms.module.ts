@@ -6,6 +6,7 @@ import { StorageModule } from '../storage/storage.module';
 import { AuditModule } from '../audit/audit.module';
 import { OrgDirectoryModule } from '../org-directory/org-directory.module';
 import { NameResolutionService } from '../org-directory/name-resolution.service';
+import { OrgDirectoryService } from '../org-directory/org-directory.service';
 import { WatermarkBurnerModule } from '../public/watermark-burner.module';
 import {
   WATERMARK_BURNER,
@@ -16,6 +17,7 @@ import { UsageFormsService } from './usage-forms.service';
 import {
   AUDIT_RECORDER,
   FORM_POOL_STORE,
+  ORG_UNIT_LISTER,
   UPLOADER_DIRECTORY,
   UPLOADER_ORG_RESOLVER,
 } from './usage-forms.store';
@@ -56,6 +58,12 @@ import { AuditWriterRecorder } from './audit-writer-recorder.adapter';
       useFactory: () => new TypeOrmUploaderDirectory(AppDataSource),
     },
     { provide: UPLOADER_ORG_RESOLVER, useExisting: NameResolutionService },
+    /**
+     * 🔵 `AC-X5`：匯出之制定部門標籤解析（整份組織清單 → 祖鏈路徑）。
+     * `OrgDirectoryService.listOrgUnits(companyCode, opts?)` 結構相容 `OrgUnitLister`
+     * （`OrgUnitRecord` 為 `OrgUnitLite` 之超集；尾端選填參數不影響可指派性）。
+     */
+    { provide: ORG_UNIT_LISTER, useExisting: OrgDirectoryService },
     /** F018 `AC-D11`／`AC-D22` ③：前台使用表單之燒錄與可見性判定（同一 token，說明見附錄模組）。 */
     // 🔴 §11.5：改由 `WatermarkBurnerModule` 之 `WatermarkBurnerService` 直接提供，
     // 不再間接經過 `PublicModule` 之 `WatermarkService`。

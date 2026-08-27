@@ -209,19 +209,43 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
       expect(rec.name).toBe('貸款覆核申請表');
     });
 
-    it('TS-PS-F018-002 未提供 name（undefined）→ fallback 檔名（既有行為回歸）', async () => {
+    /**
+     * 🔵 `AC-X1`（2026-08-27 使用者裁決）：fallback **去掉副檔名**。
+     * 📝 被推翻之原期望逐字保留供追溯（⚠ 不得復原）：三案皆期望 `放款覆核表.xlsx`。
+     */
+    it('TS-PS-F018-002 未提供 name（undefined）→ fallback 檔名**去副檔名**', async () => {
       const rec = await svc.uploadForm(ICSOP_ADMIN, xlsx({ fileName: '放款覆核表.xlsx' }));
-      expect(rec.name).toBe('放款覆核表.xlsx');
+      expect(rec.name).toBe('放款覆核表');
     });
 
-    it('TS-PS-F018-003 name 為空字串 → 視為未提供，fallback 檔名', async () => {
+    it('TS-PS-F018-003 name 為空字串 → 視為未提供，fallback 檔名去副檔名', async () => {
       const rec = await svc.uploadForm(ICSOP_ADMIN, xlsx({ fileName: '放款覆核表.xlsx' }), '');
+      expect(rec.name).toBe('放款覆核表');
+    });
+
+    it('TS-PS-F018-004 name 為純空白 → trim 後為空 → fallback 檔名去副檔名', async () => {
+      const rec = await svc.uploadForm(ICSOP_ADMIN, xlsx({ fileName: '放款覆核表.xlsx' }), '   ');
+      expect(rec.name).toBe('放款覆核表');
+    });
+
+    it('🔵 AC-X1 檔名含多個點 → 只去**最後一個**副檔名', async () => {
+      const rec = await svc.uploadForm(ICSOP_ADMIN, xlsx({ fileName: '2026.Q3.對帳表.xlsx' }));
+      expect(rec.name).toBe('2026.Q3.對帳表');
+    });
+
+    it('🔒 AC-X1 使用者**自訂**名稱一律逐字採用（即便寫了副檔名，也不代為去除）', async () => {
+      const rec = await svc.uploadForm(ICSOP_ADMIN, xlsx(), '放款覆核表.xlsx');
       expect(rec.name).toBe('放款覆核表.xlsx');
     });
 
-    it('TS-PS-F018-004 name 為純空白 → trim 後為空 → fallback 檔名', async () => {
-      const rec = await svc.uploadForm(ICSOP_ADMIN, xlsx({ fileName: '放款覆核表.xlsx' }), '   ');
-      expect(rec.name).toBe('放款覆核表.xlsx');
+    /**
+     * 🔵 `AC-X3`：長度上限**於去副檔名後**量測（副檔名不佔 400 字元配額）。
+     * 主體恰 400 ＋ `.xlsx` 之全長為 405 ⇒ 舊行為必拒、新行為必收，為真實行為區分點。
+     */
+    it('🔵 AC-X3 檔名主體恰 400 字元 ＋ 副檔名 → 通過（副檔名不佔配額）', async () => {
+      const fileName = 'あ'.repeat(USAGE_FORM_NAME_MAX_LENGTH) + '.xlsx';
+      const rec = await svc.uploadForm(ICSOP_ADMIN, xlsx({ fileName }));
+      expect(rec.name).toHaveLength(400);
     });
 
     it('TS-PS-F018-005 name 前後含空白 → 儲存值已 trim', async () => {
@@ -254,13 +278,17 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
       expect(rec.name).toHaveLength(400);
     });
 
-    it('TS-PS-F018-008 批次上傳 → 不接受 name，各記錄沿用各自檔名', async () => {
+    /**
+     * 🔵 `AC-X1`：批次路徑之 fallback 同樣去副檔名。
+     * 📝 被推翻之原期望逐字保留供追溯：OLD> `['a.xlsx', 'b.pdf', 'c.xls']`。
+     */
+    it('TS-PS-F018-008 批次上傳 → 不接受 name，各記錄沿用各自**去副檔名之檔名**', async () => {
       const recs = await svc.uploadForms(ICSOP_ADMIN, [
         xlsx({ fileName: 'a.xlsx' }),
         xlsx({ fileName: 'b.pdf' }),
         xlsx({ fileName: 'c.xls' }),
       ]);
-      expect(recs.map((r) => r.name)).toEqual(['a.xlsx', 'b.pdf', 'c.xls']);
+      expect(recs.map((r) => r.name)).toEqual(['a', 'b', 'c']);
     });
 
     it('TS-PS-F018-009 覆蓋上傳不接受 name → 覆蓋後表單名稱維持原值', async () => {
@@ -270,7 +298,7 @@ describe('UsageFormsService（F018 使用表單管理）', () => {
         f.id,
         xlsx({ fileName: '進件申請書_v2.xlsx' }),
       );
-      expect(updated.name).toBe('進件申請書.xlsx'); // 檔名已換、表單名稱不變
+      expect(updated.name).toBe('進件申請書'); // 檔名已換、表單名稱不變
       expect(updated.blobPath).not.toBe(f.blobPath);
     });
 
