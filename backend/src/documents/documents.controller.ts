@@ -29,6 +29,8 @@ function actorOf(req: RequestWithSession): DocumentActor {
     accountId: s?.accountId ?? null,
     name: s?.name ?? null,
     employeeNo: s?.employeeNo ?? null,
+    // 🔴 B 階段（多公司）：建立文件未指定「制定公司」時之歸屬來源（自家公司）。
+    companyCode: s?.companyCode ?? null,
   };
 }
 

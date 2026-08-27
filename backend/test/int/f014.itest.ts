@@ -81,10 +81,51 @@ describe('[int] F014 制定組織/當責室長/使用部門 create-side vs SOP',
     );
     expect(chiefs.map((r: { employeeNo: string }) => r.employeeNo)).toEqual(['20053', '20541']);
     const depts = await AppDataSource.query(
-      `SELECT [orgCode] FROM [DOC_USING_DEPT] WHERE [documentId]=@0 ORDER BY [orgCode]`,
+      `SELECT [orgCode], [companyCode] FROM [DOC_USING_DEPT] WHERE [documentId]=@0 ORDER BY [orgCode]`,
       [id],
     );
     expect(depts.map((r: { orgCode: string }) => r.orgCode)).toEqual(['A2000', 'B0000']);
+
+    // 🔴 B 階段（多公司）：`ICSOP_DOCUMENT.companyCode` 與 `DOC_USING_DEPT.companyCode`
+    // 皆為 NOT NULL；酬載未帶「制定公司」時歸屬操作者所屬公司，且使用部門逐列恆等同其文件。
+    // （此二欄之寫入路徑曾整段未接線：建立文件必 500，設了使用部門則連編輯也 500。）
+    const [doc] = await AppDataSource.query(
+      `SELECT [companyCode] FROM [ICSOP_DOCUMENT] WHERE [id]=@0`,
+      [id],
+    );
+    expect(doc.companyCode).toBeTruthy();
+    expect(depts.map((r: { companyCode: string }) => r.companyCode)).toEqual([
+      doc.companyCode,
+      doc.companyCode,
+    ]);
+  });
+
+  it('酬載指定 companyCode → 文件與使用部門逐列落地該公司（非操作者所屬公司）', async () => {
+    const c = await ctx
+      .http()
+      .post('/admin/documents')
+      .set('Cookie', ctx.adminCookie)
+      .send({
+        lifecycleId,
+        status: 'active',
+        documentNumber: `${num}-co`,
+        documentName: 'ZZINT F014 指定公司',
+        companyCode: 'AD',
+        usingDeptIds: ['A2000'],
+      });
+    expect([200, 201]).toContain(c.status);
+    const id = c.body.id as string;
+
+    const [doc] = await AppDataSource.query(
+      `SELECT [companyCode] FROM [ICSOP_DOCUMENT] WHERE [id]=@0`,
+      [id],
+    );
+    expect(doc.companyCode).toBe('AD');
+    const depts = await AppDataSource.query(
+      `SELECT [companyCode] FROM [DOC_USING_DEPT] WHERE [documentId]=@0`,
+      [id],
+    );
+    expect(depts.map((r: { companyCode: string }) => r.companyCode)).toEqual(['AD']);
   });
 
   it('未提供多值 → GET 回空集合（次要室長/使用部門允許為空）', async () => {
@@ -167,6 +208,23 @@ describe('[int] F014 制定組織/當責室長/使用部門 create-side vs SOP',
       const g = await ctx.http().get(`/admin/documents/${id}`).set('Cookie', ctx.adminCookie);
       expect(g.body.usingDeptIds).toEqual([]);
       expect(await deptsOf(id)).toHaveLength(0);
+    });
+
+    it('PATCH 使用部門（replace-set）→ 新列之 companyCode 沿用該文件之公司（NOT NULL）', async () => {
+      const id = await create({ companyCode: 'AD', usingDeptIds: ['A2000'] });
+      const p = await ctx
+        .http()
+        .patch(`/admin/documents/${id}`)
+        .set('Cookie', ctx.adminCookie)
+        .send({ usingDeptIds: ['B0000', 'C0000'] });
+      expect([200, 204]).toContain(p.status);
+
+      const rows = await AppDataSource.query(
+        `SELECT [orgCode], [companyCode] FROM [DOC_USING_DEPT] WHERE [documentId]=@0 ORDER BY [orgCode]`,
+        [id],
+      );
+      expect(rows.map((r: { orgCode: string }) => r.orgCode)).toEqual(['B0000', 'C0000']);
+      expect(rows.map((r: { companyCode: string }) => r.companyCode)).toEqual(['AD', 'AD']);
     });
 
     it('TS-E-B-003 PATCH 未帶多值鍵 → 真表列不受影響', async () => {

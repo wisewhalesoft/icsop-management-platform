@@ -12,6 +12,13 @@ export interface CreateDocumentInput {
   status: DocumentStatus;
   documentNumber: string;
   documentName: string;
+  /**
+   * 🔴 B 階段（多公司）：文件所屬公司（`ICSOP_DOCUMENT.companyCode`，**NOT NULL 且無 default**）。
+   * 由 service 解析後恆為具體值（建立酬載之「制定公司」→ 無則退回操作者所屬公司），store 直接落地。
+   * ⚠ 不得省略：未帶值之 INSERT 會被 SQL Server 以「Cannot insert the value NULL」擋下（→ 500）。
+   * 語意與 `draftingCompanyId` 分離：本欄為公司代碼（`AS`／`AD`…），後者為該公司 ROOT 之 `orgCode`。
+   */
+  companyCode: string;
   /** 制定公司/部門/室別＝ORG_UNIT.orgCode（業務鍵，非 UUID；與名稱解析 findByOrgCode 一致，F014）。 */
   draftingCompanyId?: string | null;
   draftingDeptId?: string | null;
@@ -29,8 +36,7 @@ export interface CreateDocumentInput {
 
 export interface DocumentView extends CreateDocumentInput {
   id: string;
-  /** 🔴 B 階段（多公司）：文件所屬公司（見 `DocumentListItem.companyCode`）。 */
-  companyCode: string;
+  // companyCode 由 CreateDocumentInput 繼承（見該處說明；建立與檢視為同一個必填值）。
   nodeId: string | null;
   /** F014：單筆讀取一律回明確集合（可為空陣列），供編輯頁載入次要室長/使用部門。 */
   secondaryChiefIds: string[];

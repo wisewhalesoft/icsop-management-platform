@@ -83,8 +83,8 @@ class FakeStore implements DocumentStore {
     this.created.push(input);
     const d: DocumentView = {
       id: `doc-${this.seq++}`,
-      companyCode: 'AS',
       nodeId: null,
+      // companyCode 由 input 帶入（service 已解析為具體值），此處不再預設 'AS'。
       ...input,
       secondaryChiefIds: input.secondaryChiefIds ?? [],
       usingDeptIds: input.usingDeptIds ?? [],
@@ -130,6 +130,8 @@ class FakeStore implements DocumentStore {
 const CORE = {
   lifecycleId: 'lc-consumer',
   status: 'active',
+  // 🔴 B 階段（多公司）：`ICSOP_DOCUMENT.companyCode` 為 NOT NULL，建立酬載恆帶此欄。
+  companyCode: 'AS',
   documentNumber: 'ICSOP-SRC-101-1-01',
   documentName: '車輛分期進件作業',
 };

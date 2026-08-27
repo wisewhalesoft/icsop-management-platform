@@ -17,9 +17,11 @@ describe('DocumentsController body 貫穿', () => {
       accountId: 'acc-1',
       name: '李慧玲',
       employeeNo: '20233',
+      companyCode: 'AS',
     },
   } as RequestWithSession;
-  const actor = { accountId: 'acc-1', name: '李慧玲', employeeNo: '20233' };
+  // 🔴 B 階段（多公司）：actor 另攜 companyCode——建立文件未指定「制定公司」時之歸屬來源。
+  const actor = { accountId: 'acc-1', name: '李慧玲', employeeNo: '20233', companyCode: 'AS' };
 
   beforeEach(() => {
     svc = { setStatus: jest.fn(), update: jest.fn(), create: jest.fn() };

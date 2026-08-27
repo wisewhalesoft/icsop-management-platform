@@ -9,6 +9,14 @@ import { FieldKey, canWriteField } from '../rbac/field-matrix';
 export const FIELD_KEY_BY_PROP: Record<string, string> = {
   id: FieldKey.SYSTEM_UUID,
   status: FieldKey.DOCUMENT_STATUS,
+  /**
+   * 🔴 B 階段（多公司）：文件所屬公司代碼。與 `draftingCompanyId` **同源於建立頁同一個
+   * 「制定公司」下拉**（一個選擇寫兩欄：公司代碼 ＋ 該公司 ROOT 之 orgCode），故共用同一欄位鍵
+   * ——權限語意逐格相同（ICSOPAdmin 可寫、其餘四角色寫入 → 403），不另立矩陣列。
+   * ⚠ 未列於本表者一律歸 ignored 並自 clean 剔除；漏列會使該欄靜默消失（本欄曾因此
+   * 從未抵達 store，NOT NULL 之 `ICSOP_DOCUMENT.companyCode` 於 INSERT 時爆 500）。
+   */
+  companyCode: FieldKey.ESTABLISH_COMPANY,
   draftingCompanyId: FieldKey.ESTABLISH_COMPANY,
   draftingDeptId: FieldKey.ESTABLISH_DEPT,
   draftingSectionId: FieldKey.ESTABLISH_SECTION,

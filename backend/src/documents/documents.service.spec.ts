@@ -174,8 +174,8 @@ class FakeStore implements DocumentStore {
     this.created.push(input);
     const d: DocumentView = {
       id: `doc-${this.seq++}`,
-      companyCode: 'AS',
       nodeId: null,
+      // companyCode 由 input 帶入（service 已解析為具體值），此處不再預設 'AS'。
       ...input,
       secondaryChiefIds: input.secondaryChiefIds ?? [],
       usingDeptIds: input.usingDeptIds ?? [],
@@ -248,6 +248,8 @@ class FakeStore implements DocumentStore {
 const CORE = {
   lifecycleId: 'lc1',
   status: 'active',
+  // 🔴 B 階段（多公司）：建立頁「制定公司」下拉之公司代碼；`ICSOP_DOCUMENT.companyCode` 為 NOT NULL。
+  companyCode: 'AS',
   documentNumber: 'ICSOP-SRC-101-1-01',
   documentName: '車輛分期進件作業',
 };
@@ -1284,6 +1286,7 @@ describe('DB 唯一鍵違反映射（F013 併發第二保險）', () => {
   const CORE2 = {
     lifecycleId: 'lc1',
     status: 'active',
+    companyCode: 'AS',
     documentNumber: 'ICSOP-SRC-101-1-99',
     documentName: '併發測試',
   };
@@ -1314,6 +1317,70 @@ describe('DB 唯一鍵違反映射（F013 併發第二保險）', () => {
       'DOCUMENT_NUMBER_DUPLICATE',
     );
     expect(store.created).toHaveLength(0);
+  });
+});
+
+/**
+ * 🔴 B 階段（多公司）：文件所屬公司（`ICSOP_DOCUMENT.companyCode`）之解析與貫穿。
+ *
+ * 迴歸背景：migration 為 `ICSOP_DOCUMENT` 與 `DOC_USING_DEPT` 補上 NOT NULL 的 `companyCode`，
+ * 但寫入路徑從未接線——`companyCode` 未列於 FIELD_KEY_BY_PROP（被當未知欄丟棄）、store 之
+ * `repo.create()` 也未帶此欄。結果：**每一次建立文件都 500**，而只要設定了「使用部門」，
+ * `DOC_USING_DEPT` 的 INSERT 亦以同一原因失敗（建立與編輯皆然）。
+ */
+describe('DocumentsService.create 文件所屬公司（B 階段多公司）', () => {
+  let store: FakeStore;
+  let pub: FakePublisher;
+  let svc: DocumentsService;
+  /** 操作者屬 AD；用於驗證「酬載優先、未帶才退回操作者公司」而非兩者混淆。 */
+  const actorAD = { accountId: 'acc-9', name: '王小明', employeeNo: '30001', companyCode: 'AD' };
+  /** CORE 去掉 companyCode（模擬建立頁未選「制定公司」——該欄標示為選填）。 */
+  const coreNoCompany = (): Record<string, unknown> => {
+    const c: Record<string, unknown> = { ...CORE };
+    delete c.companyCode;
+    return c;
+  };
+  beforeEach(() => {
+    store = new FakeStore();
+    pub = new FakePublisher();
+    svc = new DocumentsService(store, pub);
+  });
+
+  it('酬載帶 companyCode → 原值貫穿至 store（不被操作者所屬公司蓋掉）', async () => {
+    await svc.create('ICSOPAdmin', { ...CORE, companyCode: 'AJ' }, actorAD);
+    expect(store.created[0].companyCode).toBe('AJ');
+  });
+
+  it('酬載未帶 companyCode → 退回操作者所屬公司（建立頁「制定公司」為選填）', async () => {
+    await svc.create('ICSOPAdmin', coreNoCompany(), actorAD);
+    expect(store.created[0].companyCode).toBe('AD');
+  });
+
+  it('酬載為純空白 → 視同未提供，退回操作者所屬公司', async () => {
+    await svc.create('ICSOPAdmin', { ...CORE, companyCode: '  ' }, actorAD);
+    expect(store.created[0].companyCode).toBe('AD');
+  });
+
+  it('酬載與操作者皆無公司 → 400 DOCUMENT_COMPANY_REQUIRED，且不落地任何文件', async () => {
+    await expect(svc.create('ICSOPAdmin', coreNoCompany())).rejects.toThrow(
+      'DOCUMENT_COMPANY_REQUIRED',
+    );
+    expect(store.created).toHaveLength(0);
+    expect(pub.events).toHaveLength(0);
+  });
+
+  it('companyCode 恆不入 CREATE 變更事件（與「制定公司」同源，不重複記一列）', async () => {
+    await svc.create('ICSOPAdmin', { ...CORE, draftingCompanyId: '00000' }, actorAD);
+    const fields = pub.events[0].changes!.map((c) => c.field);
+    expect(fields).not.toContain('companyCode');
+    expect(fields).toContain('draftingCompanyId');
+  });
+
+  it('編輯端帶 companyCode → 靜默剔除（比照 nodeId），不進 patch、不記變更', async () => {
+    const d = store.seedDoc({ companyCode: 'AS' });
+    await svc.update('ICSOPAdmin', d.id, { companyCode: 'AD', documentName: '改名' }, actorAD);
+    expect(store.updated[0].patch).not.toHaveProperty('companyCode');
+    expect(store.docs[0].companyCode).toBe('AS');
   });
 });
 

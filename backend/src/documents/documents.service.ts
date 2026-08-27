@@ -47,8 +47,22 @@ import {
   buildCreateChangeDeltas,
 } from './document-change-event';
 
-/** 編輯端一律唯讀之欄位（節點寫入僅經 F009 節點抽屜，F026）。 */
-const EDIT_READONLY_PROPS = new Set(['nodeId']);
+/**
+ * 編輯端一律唯讀之欄位：
+ *  - `nodeId`：節點寫入僅經 F009 節點抽屜（F026）。
+ *  - `companyCode`：🔴 文件所屬公司於**建立時**決定即固定。改動它會使既有
+ *    `draftingDeptId`／`draftingSectionId`／`DOC_USING_DEPT.orgCode`（皆為各公司獨立編碼之
+ *    5 碼 orgCode）整批指向別家公司之單位，並直接影響 F041 之資料列可見性判定。
+ *    故此處靜默剔除（比照 nodeId）而非落地，編輯頁亦不送此鍵。
+ */
+const EDIT_READONLY_PROPS = new Set(['nodeId', 'companyCode']);
+
+/** 公司代碼正規化：非字串或去空白後為空 → undefined（＝未提供，交由下一順位來源）。 */
+function pickCompanyCode(v: unknown): string | undefined {
+  if (typeof v !== 'string') return undefined;
+  const s = v.trim();
+  return s === '' ? undefined : s;
+}
 
 /**
  * 變更事件之操作者身分快照（F037）。由 controller 自 SessionUser 帶入；
@@ -58,6 +72,11 @@ export interface DocumentActor {
   accountId?: string | null;
   name?: string | null;
   employeeNo?: string | null;
+  /**
+   * 🔴 B 階段（多公司）：操作者所屬公司（← `SessionUser.companyCode`）。
+   * 建立文件時，酬載未帶「制定公司」則以此為 `ICSOP_DOCUMENT.companyCode` 之歸屬來源。
+   */
+  companyCode?: string | null;
 }
 
 /**
@@ -147,10 +166,21 @@ export class DocumentsService {
       throw new ConflictException('DOCUMENT_NUMBER_DUPLICATE');
     }
 
+    // 🔴 B 階段（多公司）：解析文件所屬公司（`ICSOP_DOCUMENT.companyCode`，NOT NULL）。
+    //   ① 酬載之「制定公司」選擇（建立頁該欄標示「選填」）
+    //   ② 未選 → 操作者所屬公司（自家公司；等同建立前之單公司語意）
+    // 兩者皆無（無 session 之直呼）→ 400。刻意**不**放行 undefined：DB 會以
+    // 「Cannot insert the value NULL」擋下，對使用者呈現為無從解讀的 500。
+    const companyCode = pickCompanyCode(clean.companyCode) ?? pickCompanyCode(actor?.companyCode);
+    if (!companyCode) {
+      throw new BadRequestException('DOCUMENT_COMPANY_REQUIRED');
+    }
+
     // F014 多值欄位（次要室長 employeeNo／使用部門 orgCode）：正規化為明確集合（可空）後落地。
     const input: CreateDocumentInput = {
-      ...(clean as Omit<CreateDocumentInput, 'status'>),
+      ...(clean as Omit<CreateDocumentInput, 'status' | 'companyCode'>),
       status: status as DocumentStatus,
+      companyCode,
       documentNumber,
       secondaryChiefIds: normalizeIdList(clean.secondaryChiefIds),
       usingDeptIds: normalizeIdList(clean.usingDeptIds),
@@ -169,7 +199,15 @@ export class DocumentsService {
     // F010 建立稽核事件（CREATE）。刻意置於 409/欄位權限攔截之後——建立失敗不應產生任何變更事件
     // （比照 update()/setStatus() 之「失敗不發事件」慣例）。逐已填欄位一列（oldValue=null）。
     // publish 為 fan-out（CompositeDocumentChangePublisher）之附加副作用，已逐訂閱者 try/catch，此處不重複包裹。
-    const deltas = buildCreateChangeDeltas(input as unknown as Record<string, unknown>);
+    // 🔴 `companyCode` 不入變更歷程：它與「制定公司」（`draftingCompanyId`）源自建立頁
+    // **同一個下拉**，另記一列等於同一次選擇留兩筆；且欄名標籤為前後端各一份之鏡射
+    // （`change-history/change-labels.ts` ／ `ChangeHistoryPage.tsx`），新增可見欄位須兩處同步。
+    // 本欄定位為系統歸屬鍵（決定用哪家公司解析 orgCode），非使用者眼中的獨立業務欄位。
+    const loggableFields: Record<string, unknown> = {
+      ...(input as unknown as Record<string, unknown>),
+    };
+    delete loggableFields.companyCode;
+    const deltas = buildCreateChangeDeltas(loggableFields);
     await this.publisher.publish({
       documentId: created.id,
       changeType: 'CREATE',

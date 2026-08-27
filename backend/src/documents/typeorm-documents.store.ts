@@ -143,6 +143,8 @@ export class TypeOrmDocumentStore implements DocumentStore {
       const repo = m.getRepository(IcsopDocument);
       const doc = await repo.save(
         repo.create({
+          // 🔴 B 階段（多公司）：NOT NULL 且無 default，漏帶 → SQL Server 直接擋下 INSERT。
+          companyCode: input.companyCode,
           status: input.status,
           documentNumber: input.documentNumber,
           documentName: input.documentName,
@@ -167,9 +169,12 @@ export class TypeOrmDocumentStore implements DocumentStore {
         );
       }
       if (usingDeptIds.length > 0) {
+        // 🔴 使用部門之 companyCode 恆等同其文件（doc-using-dept.entity 之不變式），且為 NOT NULL。
         await m.getRepository(DocUsingDept).save(
           usingDeptIds.map((orgCode) =>
-            m.getRepository(DocUsingDept).create({ documentId: doc.id, orgCode }),
+            m
+              .getRepository(DocUsingDept)
+              .create({ documentId: doc.id, companyCode: input.companyCode, orgCode }),
           ),
         );
       }
@@ -390,6 +395,12 @@ export class TypeOrmDocumentStore implements DocumentStore {
       const repo = m.getRepository(IcsopDocument);
       await repo.update({ id }, set);
 
+      // 純量覆寫後之現況列。刻意提前到多值 replace-set **之前**取得：`DOC_USING_DEPT.companyCode`
+      // 為 NOT NULL 且恆等同其文件（entity 不變式），需自本列取值——順道省去原本置於方法尾端的
+      // 第二次 findOne（同一交易內、同一列，值相同）。
+      const row = await repo.findOne({ where: { id } });
+      if (!row) throw new Error('DOCUMENT_NOT_FOUND');
+
       // F014 編輯側多值持久化：帶鍵才動（未帶鍵＝不觸碰既有集合）。
       // 採 delete-then-insert 全量取代（非差集）：關聯列 id 為代理鍵、無下游 FK 參照，
       // 且前端隨 PATCH 整批送出，全量取代最單純、無邊界遺漏。
@@ -409,13 +420,13 @@ export class TypeOrmDocumentStore implements DocumentStore {
         const depts = normalizeIdList(patch.usingDeptIds);
         if (depts.length > 0) {
           await deptRepo.save(
-            depts.map((orgCode) => deptRepo.create({ documentId: id, orgCode })),
+            depts.map((orgCode) =>
+              deptRepo.create({ documentId: id, companyCode: row.companyCode, orgCode }),
+            ),
           );
         }
       }
 
-      const row = await repo.findOne({ where: { id } });
-      if (!row) throw new Error('DOCUMENT_NOT_FOUND');
       const mv = await TypeOrmDocumentStore.loadMultiValue(m, id);
       return TypeOrmDocumentStore.toView(row, mv.secondaryChiefIds, mv.usingDeptIds);
     });
