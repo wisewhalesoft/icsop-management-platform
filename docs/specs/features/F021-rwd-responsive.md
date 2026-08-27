@@ -49,8 +49,8 @@ Epic/Story: E06 / US-055
 - **AC-N60**（render-level 之代表性斷言）：Given 三個前台頁面渲染完成, When 檢視下列代表性節點之 `className`, Then 逐項成立——
   | 頁面 | 節點 | 期望 class |
   |---|---|---|
-  | `PublicListPage` | 清單卡片之**內容摘要**文字節點 | 含 `text-base`、**不含** `text-sm`／`text-xs` |
-  | `PublicListPage` | 清單頂部**範圍說明句**（`#scopeNotice`，[F019](F019-public-list-browsing.md) `AC-U7`） | 含 `text-sm`、**不含** `text-xs` |
+  | `PublicListPage` | 清單卡片之**內容摘要**文字節點（🔴 2026-08-27 起位於**書名副標題**、不再是 `<dl>` 之一列——[F019](F019-public-list-browsing.md#ux-20260827-public-delta) `AC-Y5`；掛鉤 `data-summary` 與本列要求**逐字不變**） | 含 `text-base`、**不含** `text-sm`／`text-xs` |
+  | ~~`PublicListPage`~~（📝 **本列已無載體**） | ~~清單頂部**範圍說明句**（`#scopeNotice`，[F019](F019-public-list-browsing.md) `AC-U7`）~~ 🔴 說明列已於 **2026-08-27 整條移除**（`AC-Y1`；`AC-U7` 一併作廢） | ~~含 `text-sm`、**不含** `text-xs`~~ ⇒ 改為斷言**該節點不存在**（本 delta 之字級要求對它失效，非放寬） |
   | `PublicDocumentDetailPage` | 附件／附錄／使用表單列之**浮水印註記**（`data-wm-note`，[F020](F020-watermark.md) `AC-D7`） | 含 `text-sm`、**不含** `text-xs` |
   | `PublicViewerPage` | **安全資訊帶**（`浮水印由伺服器端…` 之容器，`PublicViewerPage.tsx:198`） | 含 `text-sm`、**不含** `text-xs` |
   📌 **本條為 `AC-N59` 之補強**：source-level 只能證明「舊 class 消失」，render-level 才能證明「新 class 確實落在使用者看得到的節點上」。兩條缺一不可。<br>📌 **表列節點以外之字級屬設計裁量**——只要滿足 `AC-N59` 之全域約束即可。

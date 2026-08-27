@@ -293,7 +293,7 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 - 回應**不得包含任何文件欄位**（`documentNumber`／`documentName`／`draftingDeptName`／`usingDeptNames`／`contentSummary` 等），亦不得回傳任何 PDF 位元組（[F041](features/F041-user-subtype-business-scope.md) AC-20／AC-25／AC-26）。
 - 錯誤訊息文案**不得**因「文件不存在」與「文件存在但不在你部門」而不同——否則以文案差異即可還原存在性，架空本裁決之目的（[F041](features/F041-user-subtype-business-scope.md) AC-21）。
 - **清單路徑不套用本節**——過濾屬正常查詢行為，回傳較少結果，**非錯誤**；空結果顯示既有「查無符合結果」空狀態（見 [#public](#public)）。
-- **孤兒帳號**（`orgCode` 缺值或查無）之業務使用者：清單為空、所有文件不可見（deny-by-default），**非錯誤**、不提示「您的部門資料異常」；**前台清單頂部說明句亦沿用業務子分類之同一句 `SCOPE_NOTICE_BUSINESS`、不另立第三句**（[F041](features/F041-user-subtype-business-scope.md) AC-40）——避免以錯誤訊息或文案差異區分「無文件」與「帳號異常」。
+- **孤兒帳號**（`orgCode` 缺值或查無）之業務使用者：清單為空、所有文件不可見（deny-by-default），**非錯誤**、不提示「您的部門資料異常」；🔴 **2026-08-27 起前台清單頂部已無任何範圍說明句**（說明列整條移除，[F019](features/F019-public-list-browsing.md#ux-20260827-public-delta) `AC-Y1`；`AC-40` 一併作廢）——**本節之要求未鬆動、只是達成方式改變**：原以「孤兒帳號沿用業務句、不另立第三句」達成，現以「任何帳號都沒有說明句」達成；孤兒帳號畫面上**不得**補上任何替代提示。<br>📝 OLD> 「**前台清單頂部說明句亦沿用業務子分類之同一句 `SCOPE_NOTICE_BUSINESS`、不另立第三句**（[F041](features/F041-user-subtype-business-scope.md) AC-40）」——避免以錯誤訊息或文案差異區分「無文件」與「帳號異常」。
 
 ### ✅ 不記錄拒絕稽核事件（`OQ-E08-10` → 選項 A，2026-08-11 定案）
 

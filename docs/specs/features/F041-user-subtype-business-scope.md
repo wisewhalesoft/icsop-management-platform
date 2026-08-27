@@ -72,7 +72,7 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
 | 可見性判定函式 | `isDocVisibleToViewer` | 純函式，`(usingDeptIds, viewer)` → `boolean`（見 AC-05～AC-13） |
 | 前端顯示函式 | `userSubtypeLabel` | 前端純函式，`unknown` → `'業務' \| '其他'`（見 AC-31） |
 | 前端適用性函式 | `isSubtypeApplicable` | 前端純函式，`roleCode` → `boolean`；僅 `'User'` 回 `true`（見 AC-32） |
-| 前端說明句常數 | `SCOPE_NOTICE_OTHER`／`SCOPE_NOTICE_BUSINESS` | 前台清單頂部說明句之逐字文案；權威＝`prototypes/03-public-list.html`（DOM 掛鉤 `#scopeNotice`）。**孤兒帳號沿用 `SCOPE_NOTICE_BUSINESS`、不另立第三句**（見 AC-40） |
+| ~~前端說明句常數~~（📝 2026-08-27 移除） | ~~`SCOPE_NOTICE_OTHER`／`SCOPE_NOTICE_BUSINESS`~~ | 🔴 **兩條常數已隨頂部說明列整條移除**（[F019](F019-public-list-browsing.md#ux-20260827-public-delta) `AC-Y1`）；原逐字文案以 `OLD>` 保留於 `frontend/src/domain/user-subtype.ts` 與 `prototypes/03-public-list.html`。**本列保留於命名鎖定表僅為追溯**——不得再新建同名常數 |
 | 錯誤碼 | `DOCUMENT_NOT_FOUND`（404） | **已定案（OQ-E06-03 → 選項 A，2026-08-11 人類裁決）**：拒絕一律回既有 `DOCUMENT_NOT_FOUND`（404），**非** `PERMISSION_DENIED`（403）——刻意隱藏資源存在性。**不新增錯誤碼**，見 [error-handling.md#dept-restriction](../error-handling.md#dept-restriction) |
 
 ### 🔴 明確禁止新增之物（重用宣示）
@@ -219,14 +219,14 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
 
 - **AC-31**：Given 輸入分別為 `'business'`、`'other'`、`null`、`undefined`、`'unknown'`，When 呼叫 `userSubtypeLabel`，Then 依序回傳 `'業務'`、`'其他'`、`'其他'`、`'其他'`、`'其他'`。
 - **AC-32**：Given 5 種角色代碼，When 逐一呼叫 `isSubtypeApplicable`，Then 僅 `'User'` 回 `true`，`'SysAdmin'`／`'ICSOPAdmin'`／`'Supervisor'`／`'DeptContact'` 皆回 `false`（帳號管理之角色指派 modal 依此決定是否呈現子分類選擇器，見 [F003](F003-account-role-management.md) delta）。
-- **AC-33**（✅ 已定案：OQ-E08-07 4c → 選項 A）：Given 前台清單頁收到**空結果**（`items: []`、`total: 0`），When 渲染，Then 顯示既有**空狀態**文案 **`查無符合結果`**（逐字），**不因使用者子分類而分支為不同文案**。<br>⚠ **切勿與 AC-40 混為一談**：AC-33 管的是「查無結果時的**空狀態**」（不分支），AC-40 管的是「清單頂部的**範圍說明句**」（分支）。兩者為不同 DOM 位置之不同字串，同一畫面可同時出現（業務使用者查無結果時：頂部為 `SCOPE_NOTICE_BUSINESS`、清單區為 `查無符合結果`）。
+- **AC-33**（✅ 已定案：OQ-E08-07 4c → 選項 A）：Given 前台清單頁收到**空結果**（`items: []`、`total: 0`），When 渲染，Then 顯示既有**空狀態**文案 **`查無符合結果`**（逐字），**不因使用者子分類而分支為不同文案**。<br>🔴 **2026-08-27 更新**：`AC-40` 已作廢（說明列整條移除，[F019](F019-public-list-browsing.md#ux-20260827-public-delta) `AC-Y1`）⇒ **空狀態文案自此是該畫面上唯一的說明**，本條之要求不變、且更不可被「順手」一起拿掉（`AC-Y2` 之落點之一）。<br>📝 OLD> 「⚠ **切勿與 AC-40 混為一談**：AC-33 管的是「查無結果時的**空狀態**」（不分支），AC-40 管的是「清單頂部的**範圍說明句**」（分支）。兩者為不同 DOM 位置之不同字串，同一畫面可同時出現（業務使用者查無結果時：頂部為 `SCOPE_NOTICE_BUSINESS`、清單區為 `查無符合結果`）。」
 
-- **AC-40**（**2026-08-11 人類閘門唯一實質新增**）：Given 前台清單頁之頂部說明句（DOM 掛鉤 `#scopeNotice`），When 依 viewer 渲染，Then 其文字內容逐字為：
+- **AC-40**（📝 **已作廢——2026-08-27 使用者裁決：前台清單頂部說明列整條移除**；權威改為 [F019](F019-public-list-browsing.md#ux-20260827-public-delta) `AC-Y1`）：<br>🔴 **本條之載體 `#scopeNotice` 已不存在**，兩條逐字文案常數（`SCOPE_NOTICE_OTHER`／`SCOPE_NOTICE_BUSINESS`）亦已自 `frontend/src/domain/user-subtype.ts` 與 `prototypes/03-public-list.html` 移除（原文以 `OLD>` 保留供追溯）。<br>🔒 **本條被推翻的只是「說明句」這個呈現**——`AC-12`～`AC-19`（可見範圍限縮）、`AC-33`（空狀態不分支）**逐字仍然有效**，見 `AC-Y2` 之零漣漪鎖。<br>🔴 **孤兒帳號之處置要求未鬆動**：原以「沿用業務句、不另立第三句」達成「不得以文案差異宣告帳號異常」（[error-handling.md#dept-restriction](../error-handling.md#dept-restriction)），現改由「任何帳號都沒有說明句」達成；孤兒帳號畫面上**不得**新增任何替代提示。<br>📝 **OLD>**（2026-08-11～2026-08-27 之原條文，逐字保留）：Given 前台清單頁之頂部說明句（DOM 掛鉤 `#scopeNotice`），When 依 viewer 渲染，Then 其文字內容逐字為：
   - **受限者**（`isDeptScopedViewer(viewer) === true`，即 `roleCode='User'` 且 `userSubtype='business'`）→ `SCOPE_NOTICE_BUSINESS`：<br>`業務使用者僅顯示「已公告」且使用部門為您所屬部門（含其下所有單位）之文件（進度中/失效/作廢由後端過濾隱藏）；其餘部門之文件不在您的瀏覽範圍內，如需調閱請洽該部門窗口。`
   - **非受限者**（「其他」子分類或任一非 `'User'` 角色）→ `SCOPE_NOTICE_OTHER`（**既有文案，一字未改**）：<br>`一般使用者僅顯示「已公告」文件（進度中/失效/作廢由後端過濾隱藏）；您所屬部門相關文件會自動置頂。`
   - **孤兒帳號**（受限者且 `orgCode` 為 `null`／`''`）→ **沿用 `SCOPE_NOTICE_BUSINESS`，不另立第三句**。<br>📌 **此為刻意設計、非遺漏**：若為孤兒帳號另寫專屬文案（如「您的部門資料異常」），等同以**文案差異**向使用者宣告其帳號狀態，與 [error-handling.md#dept-restriction](../error-handling.md#dept-restriction)「不得以錯誤訊息區分『無文件』與『帳號異常』」之既有要求直接牴觸；且孤兒帳號之可見範圍在語意上確實就是「使用部門為您所屬部門之文件」（其所屬部門為空集合），同一句話仍然成立。
 
-  逐字文案之權威＝`prototypes/03-public-list.html` 之具名常數 `SCOPE_NOTICE_OTHER`／`SCOPE_NOTICE_BUSINESS`；前端實作**須以常數持有、不得於 JSX 內散落字面字串**（供 vitest 直接 import 斷言，避免測試複製一份字串而與 prototype 漂移）。
+  逐字文案之權威＝`prototypes/03-public-list.html` 之具名常數 `SCOPE_NOTICE_OTHER`／`SCOPE_NOTICE_BUSINESS`；前端實作**須以常數持有、不得於 JSX 內散落字面字串**（供 vitest 直接 import 斷言，避免測試複製一份字串而與 prototype 漂移）。（📝 以上為 `AC-40` 之作廢原文，至此結束。）
 
 ### F2. 前端呈現面之 AC 缺口修補（2026-08-11 補訂，AC-41～AC-46） {#f2-fidelity-gap}
 
@@ -340,8 +340,8 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
 |---|---|---|
 | 業務使用者直連不相符文件之詳情 URL | **404 `DOCUMENT_NOT_FOUND`**（既有碼，✅ OQ-E06-03 定案） | 不新增錯誤碼。回應不得含任何文件欄位（AC-20）；錯誤訊息文案須與「文件確實不存在」逐字相同（AC-21） |
 | 業務使用者請求不相符文件之檢視器／PDF／下載／列印 | 同上 **404 `DOCUMENT_NOT_FOUND`** | 不產生浮水印、不燒錄、不回傳位元組（AC-25／AC-26）；**不寫任何稽核**（AC-27／AC-28） |
-| 業務使用者之清單／篩選結果為空 | **非錯誤** | 清單區顯示「查無符合結果」空狀態（AC-33）；**頂部說明句仍為 `SCOPE_NOTICE_BUSINESS`**（AC-40，兩者為不同 DOM 位置之不同字串） |
-| 業務使用者為孤兒帳號 | **非錯誤** | 清單為空、所有文件不可見（AC-12）；**不**回權限錯誤、**不**提示「您的部門資料異常」、**頂部說明句沿用 `SCOPE_NOTICE_BUSINESS` 不另立第三句**（AC-40）——避免以錯誤訊息或文案差異區分「無文件」與「帳號異常」 |
+| 業務使用者之清單／篩選結果為空 | **非錯誤** | 清單區顯示「查無符合結果」空狀態（AC-33）。<br>📝 OLD> 「**頂部說明句仍為 `SCOPE_NOTICE_BUSINESS`**（AC-40，兩者為不同 DOM 位置之不同字串）」——說明列已於 2026-08-27 移除（`AC-Y1`） |
+| 業務使用者為孤兒帳號 | **非錯誤** | 清單為空、所有文件不可見（AC-12）；**不**回權限錯誤、**不**提示「您的部門資料異常」——避免以錯誤訊息或文案差異區分「無文件」與「帳號異常」。<br>🔴 2026-08-27 起**畫面上沒有任何範圍說明句**（`AC-Y1`），該不可區分性因此更強、亦不得補回任何替代提示。<br>📝 OLD> 「**頂部說明句沿用 `SCOPE_NOTICE_BUSINESS` 不另立第三句**（AC-40）」 |
 | `userSubtype` 讀到未知值 | **非錯誤** | 收斂為 `'other'`（AC-02）；寫入端由 DB `CHECK` 約束拒絕 |
 
 語意、已明確接受之代價與否決選項之追溯：見 [error-handling.md#dept-restriction](../error-handling.md#dept-restriction)（已由兩案並陳收斂為 404 單案）。
@@ -362,4 +362,4 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
   | `prototypes/04-public-document-detail.html` | 直連不相符 URL 之 404 拒絕畫面（不透明覆蓋、無任何文件欄位、文案不因成因而異）、不寫稽核、05 檢視器不需改檔 | AC-20／AC-21、AC-25～AC-28、**AC-46** |
   | `prototypes/08-account-management.html` | ①指派角色 modal 子分類選擇器（含預選與說明文字）②清單「角色」欄子分類徽章 ③編輯帳號 modal「目前角色」顯示子分類；建立帳號預設 `'other'`；`20088 陳彥廷` 保留值 persona | AC-31／AC-32、AC-35／AC-36、**AC-41～AC-44** |
   | `prototypes/18-permission-matrix.html` | F041 註記橫幅（子分類非第 6 種角色）；兩份矩陣 5 欄逐格不變 | AC-37／AC-38、**AC-45** |
-- **逐字文案權威**：`SCOPE_NOTICE_OTHER`／`SCOPE_NOTICE_BUSINESS` 定義於 `prototypes/03-public-list.html`（AC-40）；`SUBTYPE_DESC` 定義於 `prototypes/08-account-management.html`（AC-44）；404 畫面文案定義於 `prototypes/04-public-document-detail.html`（AC-46）
+- **逐字文案權威**：~~`SCOPE_NOTICE_OTHER`／`SCOPE_NOTICE_BUSINESS` 定義於 `prototypes/03-public-list.html`（AC-40）~~ 📝 **已移除（2026-08-27，`AC-Y1`）**；`SUBTYPE_DESC` 定義於 `prototypes/08-account-management.html`（AC-44）；404 畫面文案定義於 `prototypes/04-public-document-detail.html`（AC-46）
