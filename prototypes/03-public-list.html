@@ -2,7 +2,8 @@
 <!-- 🔴 D9 delta · 前台字級整體上移一階（2026-08-20 使用者裁決 · OQ-D9-12 選項 A／OQ-D9-13 選項 A；F021 AC-N59～AC-N62）
      本檔已套用：正文 text-sm → text-base（16px）、輔助說明（原 12px 級距）→ text-sm（14px）；原 11px 之任意字級一併收斂為 text-sm。
      🔴 本檔不得再出現 12px caption 級距之 class，亦不得以任意像素值（text-方括號寫法）繞過（AC-N59 之 source-level 負向斷言）。
-     🔴 AC-N60 代表性節點：清單卡片之「內容摘要」文字節點含 text-base（data-summary）；頂部範圍說明句 #scopeNotice 含 text-sm（14px）。
+     🔴 AC-N60 代表性節點：清單卡片之「內容摘要」文字節點含 text-base（data-summary；🔴 2026-08-27 起改位於書名副標題，字級要求不變）。
+     📝 OLD> 「頂部範圍說明句 #scopeNotice 含 text-sm（14px）」——該節點已於 2026-08-27 整條移除（F019 AC-Y1），本檔已無此載體。
      🔒 適用範圍**僅前台三頁**（03／04／05）；後台 prototype 與 00-design-system 之字級 tokens 表**逐字不動**（AC-N61）。 -->
 <!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
      本檔已套用：「循環」篩選之選項值由名稱字串改為 lifecycleId、顯示改以 lifecycleDisplayName 呈現；詳情之「循環別」同步。
@@ -18,8 +19,9 @@
        OQ-E08-07 4c → A 空狀態沿用既有「查無符合結果」逐字，**不因子分類分支**
        OQ-E08-08 → 孤兒帳號 deny-by-default（清單為空、非錯誤、不提示帳號異常）
        AC-02 → 未知 userSubtype 收斂為 'other'（fail-open）
-     **頂部說明句於業務視角換為專屬文案**（2026-08-11 人類裁決新增；逐字內容＝ SCOPE_NOTICE_BUSINESS，
-     下游 test-generator 會逐字斷言）——空狀態文案仍為「查無符合結果」逐字、不分支。
+     📝 **已推翻（2026-08-27，F019 AC-Y1）**：OLD> 「**頂部說明句於業務視角換為專屬文案**（2026-08-11 人類裁決新增；
+     逐字內容＝ SCOPE_NOTICE_BUSINESS，下游 test-generator 會逐字斷言）」——說明列整條移除，已無載體。
+     空狀態文案不受影響：仍為「查無符合結果」逐字、不分支。
      規格權威＝docs/specs/features/F041-user-subtype-business-scope.md（AC-12～AC-19、AC-33）
      ⚠ 上列 4b 之**載體（使用部門下拉）已於 2026-08-16 delta 移除**；4b 之裁決本身未被推翻，
        其精神改由 F019 AC-D5 承接（五項新下拉之選項來源必須先經 isDocVisibleToViewer 過濾）。 -->
@@ -29,14 +31,28 @@
      ② **移除**「使用部門」篩選器與其預留選項文字（AC-D1）。
      ③ 行動版底部 sheet 呈現同一 6 項、同一順序（AC-D1）。
      ④ 清單卡欄位改為九項；<dl> 標籤順序＝制定公司／制定部門／制定室別／版次／公告日期／內容摘要；
+        （🔴 2026-08-27 AC-Y5 就地改寫為**八項**／<dl> **五列**——內容摘要改為書名副標題、不再是 <dl> 之一列。）
         **移除**「使用部門：」與「循環別：」兩個標籤與使用部門逐段高亮（AC-D8／AC-D12）。
      ⑤ 「清除篩選」涵蓋新增之四項（AC-D3）。
      ⑥ 「當責室長」比對範圍＝**主要 ∪ 次要**（AC-D7；與後台 F017 AC-D7 為同一語意之兩處斷言）。
-     🔒 **文案回歸鎖定（AC-D10／OQ-D18-06）**：SCOPE_NOTICE_BUSINESS／SCOPE_NOTICE_OTHER 兩條常數、
-        置頂區標題「您部門相關文件」、其餘區標題「其他文件」、空狀態「查無符合結果」——
-        五者逐字與本 delta 導入前完全相同。**縱使說明句內文提及「使用部門」而該欄位已不再顯示於卡片，
-        仍不得修改**（說明句解釋的是「可見範圍」，非「畫面上有哪個欄位」）。
+     🔒 **文案回歸鎖定（AC-D10／OQ-D18-06；🔴 2026-08-27 由五條縮為三條）**：置頂區標題「您部門相關文件」、
+        其餘區標題「其他文件」、空狀態「查無符合結果」——三者逐字與本 delta 導入前完全相同。
+        📝 OLD>（已推翻之前兩條）「SCOPE_NOTICE_BUSINESS／SCOPE_NOTICE_OTHER 兩條常數……**縱使說明句內文提及
+        「使用部門」而該欄位已不再顯示於卡片，仍不得修改**」——兩條說明句已隨說明列整條移除（AC-Y1）。
      🔒 **不顯示 ≠ 不判定**（AC-D11／AC-D13）：`use` 欄位保留於資料層，置頂機制與 F041 可見性判定不變。 -->
+<!-- 🔴 2026-08-27 前台瀏覽 UX delta（使用者裁決；規格權威＝F019 AC-Y1～AC-Y6）——本檔已套用：
+     ① 頂部藍色範圍說明列（#scopeNotice）**整條移除**，含業務子分類專屬句（AC-Y1）。
+        ⇒ 推翻 F041 AC-40 與上方 🔒 AC-D10 文案鎖定中之 SCOPE_NOTICE_OTHER／SCOPE_NOTICE_BUSINESS 兩條；
+          其餘三條（「您部門相關文件」「其他文件」「查無符合結果」）**逐字仍鎖**。
+        🔴 移除的是「說明句」這個呈現，**可見範圍與置頂判定一字不動**（AC-Y2）：業務子分類仍只見使用部門
+          相符（子樹）之已公告文件，孤兒帳號仍 deny-by-default、仍只見「查無符合結果」（不以文案區分
+          「無文件」與「帳號異常」，error-handling.md#dept-restriction 之共通要求由「不另立文案」達成）。
+     ② 六項篩選之字級**拉齊**（AC-Y3／AC-Y4）：label 一律 text-sm、控制項本體一律 text-base；本檔之
+        controlHtml 原就兩型同值，本 delta 之修正落在實作端（五項 combobox 由後台密度改為前台密度）。
+        ⚠ 方向為「把五項拉齊到 `狀態`」，**不得**反向把 `狀態` 縮小（前台字級一階，F021 OQ-D9-13）。
+     ③ 內容摘要改為書名之**副標題**：緊接 <h3> 之後、位於 <dl> **之外**，且**移除「內容摘要：」標籤**
+        ⇒ 卡片欄位標籤集合由九項降為**八項**、<dl> 由六列降為**五列**（AC-Y5，就地改寫上方 ④）。
+        掛鉤 data-summary 與 text-base 逐字沿用（AC-Y6）；無摘要時整個節點不渲染（不留空行、不以 — 佔位）。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -117,12 +133,12 @@
     </div>
   </div>
 
-  <!-- info note — 🟢 F041：文案依子分類切換（容器/字級/色彩沿用既有樣式，未新增元件）
-       其他子分類＝既有文案逐字不變；業務子分類＝2026-08-11 人類裁決新增之專屬文案（見 SCOPE_NOTICE_*） -->
-  <div class="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-sm text-primary-700 mb-4">
-    <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
-    <span id="scopeNotice"></span>
-  </div>
+  <!-- 📝 已移除：info note（#scopeNotice）——🔴 2026-08-27 使用者裁決，F019 AC-Y1。
+       OLD> <div class="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-sm text-primary-700 mb-4">
+       OLD>   <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
+       OLD>   <span id="scopeNotice"></span>
+       OLD> </div>
+       ⚠ 移除＝**節點不存在**，不得改以 hidden／sr-only 保留。 -->
 
   <!-- Pinned section -->
   <section id="pinnedWrap" class="mb-6">
@@ -211,24 +227,23 @@
   const VIEWER = { roleCode:'User', userSubtype:'other', scope: USER_SCOPE };
   const inScope = use => isUsingDeptMatched(use, VIEWER.scope);   // 置頂判定＝與可見性判定同一份實作（AC-10）
 
-  /* ===== 🟢 頂部說明句（依子分類切換）——2026-08-11 人類閘門新增之裁決 =====
-     下列兩條字串為**逐字定稿之 UI 文案權威**（下游 test-generator 會逐字斷言），修改前須經人類再裁決。
-     · 其他子分類：沿用本 delta 導入前之既有文案，一字未改（F019 AC-U5 回歸鎖定）。
-     · 業務子分類：專屬文案，須讓使用者理解「這是受限範圍」而非「全公司就這些」，並給出後續動作。
-       孤兒帳號（部門資料缺值）之業務使用者**沿用同一條**——不得因帳號異常而換句，
-       否則以文案差異即可區分「無文件」與「帳號異常」（error-handling.md#dept-restriction 共通要求）。
-     ⚠ 空狀態文案不在本裁決範圍：仍為「查無符合結果」逐字、不因子分類分支（OQ-E08-07 4c 裁決 A）。 */
-  const SCOPE_NOTICE_OTHER   = '一般使用者僅顯示「已公告」文件（進度中/失效/作廢由後端過濾隱藏）；您所屬部門相關文件會自動置頂。';
-  const SCOPE_NOTICE_BUSINESS = '業務使用者僅顯示「已公告」且使用部門為您所屬部門（含其下所有單位）之文件（進度中/失效/作廢由後端過濾隱藏）；其餘部門之文件不在您的瀏覽範圍內，如需調閱請洽該部門窗口。';
+  /* ===== 📝 已推翻：頂部說明句（依子分類切換）——2026-08-11 人類閘門裁決，2026-08-27 使用者裁決整條移除 =====
+     🔴 F019 AC-Y1：說明列已無載體，兩條常數一併移除；下方 VIEWER_MODES 之 notice 欄亦隨之刪除。
+     📝 被推翻之逐字文案保留供追溯（**不得**因「原型還留著字串」而在實作端復活）：
+       OLD> const SCOPE_NOTICE_OTHER   = '一般使用者僅顯示「已公告」文件（進度中/失效/作廢由後端過濾隱藏）；您所屬部門相關文件會自動置頂。';
+       OLD> const SCOPE_NOTICE_BUSINESS = '業務使用者僅顯示「已公告」且使用部門為您所屬部門（含其下所有單位）之文件（進度中/失效/作廢由後端過濾隱藏）；其餘部門之文件不在您的瀏覽範圍內，如需調閱請洽該部門窗口。';
+     🔴 孤兒帳號之「不得以文案區分『無文件』與『帳號異常』」（error-handling.md#dept-restriction）**仍然成立**——
+        原以「兩種業務帳號沿用同一句」達成，現以「任何帳號都沒有說明句」達成，要求未鬆動。
+     ⚠ 空狀態文案不受影響：仍為「查無符合結果」逐字、不因子分類分支（OQ-E08-07 4c 裁決 A）。 */
 
   /* 原型示範用：三種 viewer 視角（非正式 UI，實作時不得移植） */
   const VIEWER_MODES = {
-    other:    { userSubtype:'other',    scope:USER_SCOPE, dept:'營運管理部 / 審查室', notice:SCOPE_NOTICE_OTHER,
+    other:    { userSubtype:'other',    scope:USER_SCOPE, dept:'營運管理部 / 審查室',
                 note:'子分類「其他」＝本 delta 導入前之行為：使用部門僅影響置頂排序、不影響可見性（F041 AC-13／AC-19）。' },
-    business: { userSubtype:'business', scope:USER_SCOPE, dept:'營運管理部 / 審查室', notice:SCOPE_NOTICE_BUSINESS,
-                note:'子分類「業務」＝僅可見「使用部門相符（子樹展開）」之已公告文件；全部結果落在置頂區、其餘區恆空＝預期退化非缺陷（F041 AC-14／AC-15）。使用部門下拉不限縮（4b 裁決 A）；選到範圍外單位時交集為空、顯示既有空狀態、非錯誤。頂部說明句換為業務專屬文案（2026-08-11 裁決）。' },
-    orphan:   { userSubtype:'business', scope:[],         dept:'—',                   notice:SCOPE_NOTICE_BUSINESS,
-                note:'孤兒帳號（部門資料缺值）＝deny-by-default，清單為空且非錯誤，沿用既有「查無符合結果」空狀態、不提示帳號異常（F041 AC-12／AC-33）；頂部說明句亦與一般業務使用者相同，不另換句。' }
+    business: { userSubtype:'business', scope:USER_SCOPE, dept:'營運管理部 / 審查室',
+                note:'子分類「業務」＝僅可見「使用部門相符（子樹展開）」之已公告文件；全部結果落在置頂區、其餘區恆空＝預期退化非缺陷（F041 AC-14／AC-15）。使用部門下拉不限縮（4b 裁決 A）；選到範圍外單位時交集為空、顯示既有空狀態、非錯誤。（📝 2026-08-27 起已無頂部說明句——F019 AC-Y1；限縮行為本身不變。）' },
+    orphan:   { userSubtype:'business', scope:[],         dept:'—',
+                note:'孤兒帳號（部門資料缺值）＝deny-by-default，清單為空且非錯誤，沿用既有「查無符合結果」空狀態、不提示帳號異常（F041 AC-12／AC-33）。（📝 2026-08-27 起已無頂部說明句——原以「與一般業務使用者同句」達成之不可區分性，現以「都沒有說明句」達成。）' }
   };
   function setViewer(mode){
     const m = VIEWER_MODES[mode] || VIEWER_MODES.other;
@@ -236,7 +251,6 @@
     VIEWER.scope = m.scope;
     document.body.dataset.viewerSubtype = normalizeUserSubtype(VIEWER.userSubtype);
     document.getElementById('hdrDept').textContent = m.dept;
-    document.getElementById('scopeNotice').textContent = m.notice;
     document.getElementById('viewerNote').textContent = m.note;
     // 🔴 AC-D5：切換視角後**重建**五項下拉之選項——選項來源須經 isDocVisibleToViewer 過濾，
     // 故視角改變時選項集合亦隨之收斂（下拉選項本身不得洩漏他部門文件之存在）。
@@ -377,10 +391,12 @@
   }
   function esc(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
 
-  /* 🔴 F019 AC-D8（2026-08-16 delta）：清單卡之欄位標籤集合**恰為九項**——
-     程序書編號／程序書書名／內容摘要／文件狀態／制定公司／制定部門／制定室別／版次／公告日期。
+  /* 🔴 F019 AC-D8（2026-08-16 delta；🔴 2026-08-27 AC-Y5 就地改寫）：清單卡之**欄位標籤**集合恰為**八項**——
+     程序書編號／程序書書名／文件狀態／制定公司／制定部門／制定室別／版次／公告日期
+     （內容摘要仍顯示，但**已無標籤**：它是書名的副標題，不再是一個「欄位」）。
      編號、書名、狀態徽章維持於卡片標頭、位置不變；<dl> 區塊之標籤順序逐字為
-     制定公司：／制定部門：／制定室別：／版次：／公告日期：／內容摘要：。
+     制定公司：／制定部門：／制定室別：／版次：／公告日期：（**五列**）。
+     📝 OLD>（2026-08-16～2026-08-27）標籤集合九項含「內容摘要」，<dl> 六列、末列為「內容摘要：」。
      🔴 卡片 DOM **不得出現**「使用部門：」與「循環別：」兩個標籤（AC-D8 雙重 queryByText 斷言）。
      📌 「使用部門逐段高亮」（G-PUB-016）隨欄位移除一併移除——此為 AC-D12 已接受之代價。
      版次以等寬字（mono）呈現，格式 {YY}'{NN}。 */
@@ -392,6 +408,7 @@
             <span class="mono text-sm text-slate-500">${d.n}</span>${statusPill(d.status)}
           </div>
           <h3 class="font-semibold text-slate-900 mt-1 leading-snug">${esc(d.name)}</h3>
+          ${d.summary?`<p class="text-slate-500 text-base mt-1 leading-snug" data-summary>${esc(d.summary)}</p>`:''}
         </div>
         <i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 shrink-0"></i>
       </div>
@@ -401,7 +418,6 @@
         <div><dt class="text-slate-400 inline">制定室別：</dt><dd class="text-slate-600 inline">${d.section?esc(d.section):'<span class="text-slate-300" title="此部之下無處/室，制定組織掛於部層">—</span>'}</dd></div>
         <div><dt class="text-slate-400 inline">版次：</dt><dd class="text-slate-600 inline mono">${esc(d.edition)}</dd></div>
         <div class="col-span-2"><dt class="text-slate-400 inline">公告日期：</dt><dd class="text-slate-600 inline mono">${d.date}</dd></div>
-        ${d.summary?`<div class="col-span-2 text-base"><dt class="text-slate-400 inline">內容摘要：</dt><dd class="text-slate-500 inline text-base" data-summary>${esc(d.summary)}</dd></div>`:''}
       </dl>
     </article>`;
   }

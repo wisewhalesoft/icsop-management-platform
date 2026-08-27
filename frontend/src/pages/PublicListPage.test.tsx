@@ -117,7 +117,8 @@ function renderPage() {
  * 2026-08-20 D9 delta（缺失／變更 delta 第 6 項）—— 前台字級上移一階，render-level 代表性斷言。
  * 權威：`docs/specs/features/F021-rwd-responsive.md#d9-typography-delta` `AC-N60`；
  * 掛鉤與字級由 `prototypes/03-public-list.html` 檔頭 AC-N60 註記逐字授權
- * （`data-summary` 含 `text-base`；`#scopeNotice` 含 `text-sm`）。
+ * （`data-summary` 含 `text-base`；📝 OLD> 「`#scopeNotice` 含 `text-sm`」——該節點已於 2026-08-27
+ * 隨頂部說明列整條移除，F019 `AC-Y1`；`AC-N60` 之該列表格改記「已無載體」）。
  * source-scan 半（`AC-N59`）另置於 `frontend/src/pages/typography-d9.test.ts`，本檔補其
  * render-level 半——source-scan 只能證明「舊 class 消失」，本檔證明「新 class 落在使用者
  * 看得到的節點上」。
@@ -135,24 +136,90 @@ describe('PublicListPage — F021 D9 delta 字級（AC-N60）', () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     const summary = document.querySelector('[data-summary]');
-    expect(summary, '找不到 data-summary 節點（prototypes/03-public-list.html:404 之權威掛鉤）').not.toBeNull();
+    expect(summary, '找不到 data-summary 節點（prototypes/03-public-list.html 之權威掛鉤）').not.toBeNull();
     expect(summary!.className).toMatch(/\btext-base\b/);
     expect(summary!.className).not.toMatch(/\btext-sm\b/);
     expect(summary!.className).not.toMatch(/\btext-xs\b/);
   });
 
-  it('AC-N60 清單頂部範圍說明句（data-testid="scope-notice"）含 text-sm、不含 text-xs', async () => {
-    // 選擇器依本 repo 既有慣例：prototype id `#scopeNotice` → 實作端 `data-testid="scope-notice"`
-    // （見 `PublicListPage.userSubtype.test.tsx` 檔頭「`hiddenNote`→`hidden-note`」換算慣例）。
+  /**
+   * 📝 OLD> it('AC-N60 清單頂部範圍說明句（data-testid="scope-notice"）含 text-sm、不含 text-xs')
+   * 🔴 就地改寫（**不刪除**）：說明列已於 2026-08-27 整條移除（F019 `AC-Y1`），該條之載體不存在
+   *    ⇒ 原斷言必然轉紅，且它一轉紅就會誘人「把節點加回去讓測試變綠」。本條改為背書新行為。
+   *    節點不存在之逐字證明另置於 `PublicListPage.userSubtype.test.tsx`（四種 viewer 形狀皆驗）。
+   */
+  it('AC-N60 之說明列該列已無載體：data-testid="scope-notice" 不存在（不得為了字級斷言而復活）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
-    const notice = screen.getByTestId('scope-notice');
-    // 字級 class 落於權威（prototypes/03-public-list.html:122）之外層容器，非 span 本身；
-    // 若實作將 class 直接掛在 testid 節點本身亦應通過（取兩者聯集）。
-    const container = (notice.closest('div') as HTMLElement | null) ?? notice;
-    const cls = `${notice.className} ${container.className}`;
-    expect(cls).toMatch(/\btext-sm\b/);
-    expect(cls).not.toMatch(/\btext-xs\b/);
+    expect(screen.queryByTestId('scope-notice')).toBeNull();
+  });
+});
+
+/**
+ * 🔴 F019 `AC-Y3`／`AC-Y5`／`AC-Y6`（2026-08-27 使用者裁決）——前台清單之三項 UX 修正。
+ * 權威：`docs/specs/features/F019-public-list-browsing.md#ux-20260827-public-delta`
+ *      ＋ `prototypes/03-public-list.html`（controlHtml 之 label／控制項字級；card() 之副標題）。
+ */
+describe('PublicListPage — 2026-08-27 前台瀏覽 UX delta（AC-Y3／AC-Y5／AC-Y6）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth();
+    vi.mocked(api.getOrgUnits).mockResolvedValue(ORG_UNITS);
+    vi.mocked(api.getPublicDocuments).mockResolvedValue(pageOf([docItem({})]));
+    stubFilterOptions();
+  });
+
+  /**
+   * `AC-Y3`：六項篩選（五 combobox ＋ 原生 select `狀態`）之字級**必須同值**。
+   * 🔴 斷言形狀刻意為「集合大小為 1 且該值逐字為前台一階」——只斷言 `狀態` 是 text-sm 的話，
+   *    把五項 combobox 一起縮小成 text-[11px] 的實作也會綠（那正是使用者回報的相反解法）。
+   */
+  it('AC-Y3 桌機篩選列六項之 label 字級同值，且逐字為前台一階 text-sm（非後台 text-[11px]）', async () => {
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    const bar = screen.getByTestId('filter-bar');
+    const labels = Array.from(bar.querySelectorAll('label'));
+    expect(labels.map((l) => l.textContent?.trim())).toEqual([
+      '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '循環別',
+    ]);
+    const sizes = new Set(
+      labels.map((l) => (l.className.match(/text-(?:\[[^\]]+\]|[a-z]+)/) ?? ['(無)'])[0]),
+    );
+    expect(sizes, `六項 label 字級不一致：${[...sizes].join('／')}`).toEqual(new Set(['text-sm']));
+  });
+
+  it('AC-Y3 桌機篩選列六項之控制項本體字級同值，且逐字為前台一階 text-base', async () => {
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    const bar = screen.getByTestId('filter-bar');
+    const controls = Array.from(bar.querySelectorAll('input[role="combobox"], select'));
+    expect(controls).toHaveLength(6);
+    const sizes = new Set(
+      controls.map((c) => (c.className.match(/text-(?:\[[^\]]+\]|[a-z]+)/) ?? ['(無)'])[0]),
+    );
+    expect(sizes, `六項控制項字級不一致：${[...sizes].join('／')}`).toEqual(new Set(['text-base']));
+  });
+
+  it('AC-Y5 內容摘要為書名之副標題：位於 <h3> 之後、<dl> 之外，且無「內容摘要：」標籤', async () => {
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    const card = document.querySelector('article')!;
+    const summary = card.querySelector('[data-summary]')!;
+    const heading = card.querySelector('h3')!;
+    expect(summary).not.toBeNull();
+    expect(card.querySelector('dl')!.contains(summary)).toBe(false); // 不在 <dl> 內
+    // 標題在前、摘要緊隨其後（DOM 順序＝視覺順序；副標題不得跑到卡片其他位置）
+    expect(heading.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(heading.parentElement).toBe(summary.parentElement);
+    expect(screen.queryByText('內容摘要：')).toBeNull();
+  });
+
+  it('AC-Y6 無內容摘要之文件 → 副標題節點整個不渲染（不留空節點、不以 — 佔位）', async () => {
+    vi.mocked(api.getPublicDocuments).mockResolvedValue(pageOf([docItem({ contentSummary: null })]));
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    const card = document.querySelector('article')!;
+    expect(card.querySelector('[data-summary]')).toBeNull();
   });
 });
 

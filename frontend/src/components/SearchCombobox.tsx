@@ -32,10 +32,20 @@ interface SingleProps {
   /**
    * 版面密度（G-DOC-005）：
    *  `form`（預設）＝表單欄位樣式（prototype 14：label text-sm/slate-700、icon w-4、input pl-9）。
-   *  `filter`＝清單篩選格緊湊樣式（prototype 13：label text-[11px]/slate-500、icon w-3.5、input pl-8）。
-   * 預設 form 使既有表單呼叫端零回歸；清單篩選（DocumentListPage）由頁面端改傳 filter。
+   *  `filter`＝**後台**清單篩選格緊湊樣式（prototype 13：label text-[11px]/slate-500、icon w-3.5、input pl-8）。
+   *  `filter-public`＝**前台**清單篩選格（prototype 03：label text-sm/slate-500、icon w-3.5、
+   *    input pl-8 ＋ **text-base／rounded-lg**）——版面密度同 `filter`，字級與圓角為前台一階。
+   * 預設 form 使既有表單呼叫端零回歸；後台清單篩選（DocumentListPage）傳 filter。
+   *
+   * 🔴 `filter-public` 之由來（F019 `AC-Y3`，2026-08-27 使用者裁決）：前台清單之六項篩選中，
+   *    `狀態` 為頁面自繪之原生 select（前台字級 text-sm label ＋ text-base 控制項），其餘五項走本
+   *    元件之 `filter`（後台字級 text-[11px] ＋ text-sm）⇒ 同一列出現兩種字級。修法方向為
+   *    **把五項拉齊到 `狀態`**（前台字級一階，F021 `OQ-D9-13`），**不得**反向把 `狀態` 縮小。
+   * ⚠ 新增變體而非就地改 `filter`：`filter` 為後台 prototype 13 之權威密度，且 F021 `AC-N61` ①
+   *    以「後台仍含 text-[11px]／text-xs」為偵測跨全專案 find-replace 之回歸鎖
+   *    （`DocumentListPage.test.tsx` 之 `text-[11px]` 斷言即該鎖之落點）。
    */
-  density?: 'form' | 'filter';
+  density?: 'form' | 'filter' | 'filter-public';
 }
 
 /**
@@ -67,10 +77,14 @@ export function SearchCombobox({
     return q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
   }, [dirty, query, options]);
 
-  const filter = density === 'filter';
-  const labelCls = filter
-    ? 'block text-[11px] font-medium text-slate-500 mb-1'
-    : 'block text-sm font-medium text-slate-700 mb-1';
+  // 前台篩選格＝密度同 filter（icon w-3.5、input pl-8），但字級與圓角走前台一階（prototype 03）。
+  const front = density === 'filter-public';
+  const filter = density === 'filter' || front;
+  const labelCls = front
+    ? 'block text-sm font-medium text-slate-500 mb-1'
+    : filter
+      ? 'block text-[11px] font-medium text-slate-500 mb-1'
+      : 'block text-sm font-medium text-slate-700 mb-1';
   const iconCls = filter
     ? 'w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2'
     : 'w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2';
@@ -78,6 +92,10 @@ export function SearchCombobox({
   const inputPad = filter
     ? `pl-8 ${showClear ? 'pr-7' : 'pr-3'}`
     : `pl-9 ${showClear ? 'pr-7' : 'pr-3'}`;
+  /** 前台一階：控制項本體 text-base ＋ rounded-lg（prototype 03 之 combo input 與 `狀態` select 逐字同值）。 */
+  const inputSize = front ? 'rounded-lg text-base' : 'rounded-md text-sm';
+  /** 下拉清單之字級隨控制項（prototype 03 之 `{id}_list` ＝ rounded-md ＋ text-base）。 */
+  const listSize = front ? 'text-base' : 'text-sm';
 
   return (
     <div>
@@ -108,7 +126,7 @@ export function SearchCombobox({
             setDirty(false);
             setQuery('');
           }}
-          className={`w-full ${inputPad} py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 disabled:bg-slate-50 disabled:text-slate-400`}
+          className={`w-full ${inputPad} py-2 ${inputSize} border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 disabled:bg-slate-50 disabled:text-slate-400`}
         />
         {showClear && (
           <button
@@ -130,7 +148,7 @@ export function SearchCombobox({
         {open && !disabled && (
           <div
             role="listbox"
-            className="absolute z-20 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg text-sm"
+            className={`absolute z-20 mt-1 w-full max-h-52 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg ${listSize}`}
           >
             {filtered.length ? (
               filtered.map((o) => (

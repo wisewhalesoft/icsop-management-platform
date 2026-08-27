@@ -6,12 +6,6 @@ import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
 import { SearchCombobox } from '../components/SearchCombobox';
 import { buildOrgPath } from '../domain/org-path';
-import {
-  isSubtypeApplicable,
-  normalizeUserSubtype,
-  SCOPE_NOTICE_BUSINESS,
-  SCOPE_NOTICE_OTHER,
-} from '../domain/user-subtype';
 import type {
   PublicListItem,
   PublicListPage as PublicPage,
@@ -37,6 +31,14 @@ const EMPTY_FILTER_OPTIONS: PublicFilterOptions = {
  * 制定室別／當責室長／狀態／循環別（前五項中的五個可搜尋下拉，`狀態` 維持原生 select 且為
  * 裝飾性 no-op）；「使用部門」篩選器與卡片之「使用部門」「循環別」兩列**一併移除**。
  * 置頂判定仍以使用部門為據（後端 `pinned` 旗標）——「不顯示 ≠ 不判定」。
+ *
+ * 🔴 2026-08-27 前台瀏覽 UX delta（F019 `AC-Y1`～`AC-Y6`；使用者裁決）：
+ *   ① 頂部藍色範圍說明列**整條移除**（含業務子分類專屬句）——推翻 F041 `AC-40`；可見範圍與置頂
+ *      行為一字不動（`AC-Y2`）。
+ *   ② 六項篩選之字級拉齊為前台一階（label `text-sm`、控制項 `text-base`）——五項 combobox 改用
+ *      `density="filter-public"`，`狀態` 為基準、不得反向縮小（`AC-Y3`／`AC-Y4`）。
+ *   ③ 內容摘要改為書名之**副標題**（`<h3>` 之後、`<dl>` 之外），並移除「內容摘要：」標籤
+ *      ⇒ 卡片欄位標籤集合九項→八項（`AC-Y5`／`AC-Y6`）。
  */
 const msgOf = (e: unknown): string =>
   e instanceof ApiError ? e.code : e instanceof Error ? e.message : '載入失敗';
@@ -235,14 +237,16 @@ export function PublicListPage(): JSX.Element {
   const orgPath = useMemo(() => buildOrgPath(orgUnits, user?.orgCode), [orgUnits, user?.orgCode]);
 
   /**
-   * F041 AC-40：頂部範圍說明句依 viewer 分支。受限者＝`isDeptScopedViewer` 之語意
-   * （roleCode='User' 且子分類正規化後為 business）——與後端 `rbac/viewer-scope.ts` 同一判定，
-   * 不新增第二套規則。孤兒帳號（orgCode 為 null／''）刻意不特判，沿用 SCOPE_NOTICE_BUSINESS。
+   * 📝 **已移除：頂部範圍說明句**（F019 `AC-Y1`，2026-08-27 使用者裁決——整條說明列移除）。
+   * 原為 F041 `AC-40` 之依 viewer 分支說明句（`SCOPE_NOTICE_OTHER`／`SCOPE_NOTICE_BUSINESS`）：
+   *   OLD> const scopeNotice =
+   *   OLD>   isSubtypeApplicable(user?.roleCode) && normalizeUserSubtype(user?.userSubtype) === 'business'
+   *   OLD>     ? SCOPE_NOTICE_BUSINESS
+   *   OLD>     : SCOPE_NOTICE_OTHER;
+   * 🔴 **僅移除「說明句」這個呈現，可見範圍之判定一字未動**（`AC-Y2`）：後端 `rbac/viewer-scope.ts`
+   *    仍以 roleCode='User' ＋ 子分類 business 限縮結果集、`pinned` 仍以使用部門判定，孤兒帳號仍
+   *    deny-by-default 且只見既有空狀態「查無符合結果」（不以文案區分「無文件」與「帳號異常」）。
    */
-  const scopeNotice =
-    isSubtypeApplicable(user?.roleCode) && normalizeUserSubtype(user?.userSubtype) === 'business'
-      ? SCOPE_NOTICE_BUSINESS
-      : SCOPE_NOTICE_OTHER;
 
   /**
    * `AC-D1`：六項篩選之單一定義（桌面與行動 sheet **共用同一份順序與標籤**）——
@@ -263,6 +267,11 @@ export function PublicListPage(): JSX.Element {
   /**
    * `狀態` 維持既有**原生 select** 且為裝飾性 no-op（基底條件已鎖「已公告」，OQ-F019-04）——
    * `AC-D2` 明文不得改為 combobox。
+   *
+   * 🔴 `AC-Y3`（2026-08-27 使用者裁決）：本項之 label／控制項字級即**前台六項篩選之共同基準**
+   *    （label `text-sm`、控制項 `text-base`／`rounded-lg`，逐字＝prototypes/03-public-list.html
+   *    之 `controlHtml`）。其餘五項改以 `density="filter-public"` 拉齊；**本項不得反向縮小**——
+   *    縮小等於在前台複製後台字級，牴觸 F021 `OQ-D9-13`（前台各級距上移一階）。
    */
   const statusSelect = (scope: string): JSX.Element => (
     <div key="status">
@@ -291,7 +300,7 @@ export function PublicListPage(): JSX.Element {
           id={`${scope}_${f.key}`}
           label={f.label}
           ariaLabel={f.label}
-          density="filter"
+          density="filter-public"
           placeholder="全部"
           options={[...f.options]}
           value={f.value}
@@ -385,12 +394,13 @@ export function PublicListPage(): JSX.Element {
           </div>
         </div>
 
-        {/* info note — F041 AC-40：頂部範圍說明句依 viewer 分支（容器/字級/色彩沿用既有樣式，未新增元件）。
-            ⚠ 與 AC-33 之空狀態文案「查無符合結果」為不同 DOM 位置之不同字串，業務使用者查無結果時兩者同時出現。 */}
-        <div className="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-sm text-primary-700 mb-4">
-          <Icon name="info" className="w-4 h-4 shrink-0 mt-0.5" />
-          <span data-testid="scope-notice">{scopeNotice}</span>
-        </div>
+        {/* 📝 已移除：頂部藍色 info note（`data-testid="scope-notice"`）——F019 `AC-Y1`。
+            OLD> <div className="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-sm text-primary-700 mb-4">
+            OLD>   <Icon name="info" className="w-4 h-4 shrink-0 mt-0.5" />
+            OLD>   <span data-testid="scope-notice">{scopeNotice}</span>
+            OLD> </div>
+            ⚠ 移除＝**節點不存在**，不得改以 `hidden`／`sr-only` 保留（那是「看不到但還在」）。
+            空狀態文案「查無符合結果」為另一 DOM 位置之另一字串，不受本項影響（F041 `AC-33` 仍有效）。 */}
 
         {/*
           載入骨架（ux-audit-frontstage B-3；UX-19）：以三張與 DocCard 等高、同版面的
@@ -597,11 +607,25 @@ function DocCard({ doc, onOpen }: { doc: PublicListItem; onOpen: () => void }): 
             </span>
           </div>
           <h3 className="font-semibold text-slate-900 mt-1 leading-snug">{doc.documentName}</h3>
+          {/*
+            🔴 `AC-Y5`／`AC-Y6`（2026-08-27 使用者裁決）：內容摘要改為**書名之副標題**——緊接
+            `<h3>` 之後、位於 `<dl>` **之外**，且**不再有「內容摘要：」標籤**（欄位標籤集合九項→八項）。
+            掛鉤 `data-summary` 與字級 `text-base` 逐字沿用（F021 `AC-N60` 之代表性節點，位置改變、
+            字級要求不變）；無摘要時整個節點不渲染（不留空行、不以 `—` 佔位）。
+            OLD>（原位於 <dl> 末列）<dt className="text-slate-400 inline">內容摘要：</dt>
+          */}
+          {doc.contentSummary && (
+            <p className="text-slate-500 text-base mt-1 leading-snug" data-summary="">
+              {doc.contentSummary}
+            </p>
+          )}
         </div>
         <Icon name="chevron-right" className="w-5 h-5 text-slate-300 shrink-0" />
       </div>
       {/*
-        `AC-D8`：<dl> 標籤順序逐字為 制定公司／制定部門／制定室別／版次／公告日期／內容摘要。
+        `AC-D8`（🔴 2026-08-27 `AC-Y5` 就地改寫）：<dl> 標籤順序逐字為
+        制定公司／制定部門／制定室別／版次／公告日期（**五列**）。
+        OLD> 制定公司／制定部門／制定室別／版次／公告日期／內容摘要（六列）。
         🔴 「使用部門：」與「循環別：」兩列已移除（雙重 queryByText 反向斷言）；
         「使用部門逐段高亮」（G-PUB-016）隨該欄位一併移除，為 `AC-D12` 已接受之代價。
       */}
@@ -634,18 +658,7 @@ function DocCard({ doc, onOpen }: { doc: PublicListItem; onOpen: () => void }): 
             {doc.announcedDate ? doc.announcedDate.slice(0, 10) : '—'}
           </dd>
         </div>
-        {/*
-          AC-N60（F021 D9 delta）：內容摘要為前台字級之代表性節點，逐字含 text-base；
-          掛鉤 data-summary 之權威＝prototypes/03-public-list.html:404。
-        */}
-        {doc.contentSummary && (
-          <div className="col-span-2 text-base">
-            <dt className="text-slate-400 inline">內容摘要：</dt>
-            <dd className="text-slate-500 inline text-base" data-summary="">
-              {doc.contentSummary}
-            </dd>
-          </div>
-        )}
+        {/* 📝 內容摘要已移出 <dl>，改為書名副標題（`AC-Y5`）——見上方標頭區之 data-summary 節點。 */}
       </dl>
     </article>
   );

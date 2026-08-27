@@ -4,12 +4,14 @@
  * 權威：
  *   · docs/specs/features/F019-public-list-browsing.md
  *     `AC-D1`（篩選器組成與順序）／`AC-D2`（五項為可搜尋下拉）／`AC-D3`（清除篩選）／
- *     `AC-D8`（清單卡九項欄位與 `<dl>` 標籤順序）／`AC-D10`（🔒 文案回歸鎖定）／
- *     `AC-D14`（逐字文案與空值呈現）
+ *     `AC-D8`（清單卡欄位與 `<dl>` 標籤順序；🔴 2026-08-27 `AC-Y5` 就地改寫為**八項／五列**）／
+ *     `AC-D10`（🔒 文案回歸鎖定；🔴 2026-08-27 `AC-Y1` 就地縮減為**三條**）／
+ *     `AC-D14`（逐字文案與空值呈現）／`AC-Y1`～`AC-Y6`（2026-08-27 前台瀏覽 UX delta）
  *   · prototypes/03-public-list.html
  *     第 87-96 行（`filterBar` 桌面篩選列）／第 307-323 行（`FILTERS` 六項與型態）／
  *     第 328-348 行（combobox 與原生 select 之 DOM）／第 375-402 行（卡片 `<dl>` 六列）／
- *     第 216-217 行（`SCOPE_NOTICE_*`）／第 126、135、143 行（兩區塊標題與空狀態）
+ *     （📝 OLD> 「第 216-217 行（`SCOPE_NOTICE_*`）」——兩條說明句已隨說明列整條移除，`AC-Y1`）
+ *     第 126、135、143 行（兩區塊標題與空狀態，逐字仍鎖）
  *   · docs/specs/architecture-spec.md §10.6（filter-options 端點與 Option 形狀）
  *
  * 📌 **本檔所釘住之新前端契約**（由 test-generator 定，供 tdd-implementation 對齊；spec 未規定者）：
@@ -23,7 +25,6 @@ import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { PublicListPage } from './PublicListPage';
-import { SCOPE_NOTICE_BUSINESS, SCOPE_NOTICE_OTHER } from '../domain/user-subtype';
 import * as authHook from '../auth/useAuth';
 import * as api from '../api/endpoints';
 import type { PublicListItem, PublicListPage as PublicPage, OrgUnitRecord } from '../api/types';
@@ -39,8 +40,12 @@ vi.mock('react-router-dom', async (orig) => {
 const FILTER_LABELS = ['制定公司', '制定部門', '制定室別', '當責室長', '狀態', '循環別'] as const;
 /** `AC-D2`：其中五項為可搜尋下拉（combobox）；`狀態` 維持既有原生 select。 */
 const COMBO_LABELS = ['制定公司', '制定部門', '制定室別', '當責室長', '循環別'] as const;
-/** `AC-D8`：`<dl>` 區塊之標籤順序（逐字，含全形冒號）。 */
-const DL_LABELS = ['制定公司：', '制定部門：', '制定室別：', '版次：', '公告日期：', '內容摘要：'] as const;
+/**
+ * `AC-D8`：`<dl>` 區塊之標籤順序（逐字，含全形冒號）。
+ * 🔴 2026-08-27 `AC-Y5` 就地改寫為**五列**——內容摘要已改為書名副標題、不再是 `<dl>` 之一列。
+ * 📝 OLD> `['制定公司：', '制定部門：', '制定室別：', '版次：', '公告日期：', '內容摘要：']`
+ */
+const DL_LABELS = ['制定公司：', '制定部門：', '制定室別：', '版次：', '公告日期：'] as const;
 
 const FILTER_OPTIONS = {
   draftingCompanies: [{ value: 'CO-1', label: '和潤企業股份有限公司' }],
@@ -476,8 +481,9 @@ describe('F019 AC-D3：清除篩選涵蓋 6 項與關鍵字', () => {
   });
 });
 
-describe('F019 AC-D8：清單卡欄位恰九項、`<dl>` 標籤順序逐字', () => {
-  it('TS-F019-D8-001 `<dl>` 標籤順序逐字為 制定公司／制定部門／制定室別／版次／公告日期／內容摘要', async () => {
+describe('F019 AC-D8：清單卡欄位恰八項、`<dl>` 標籤順序逐字（🔴 AC-Y5 就地改寫）', () => {
+  /* 📝 OLD> it('TS-F019-D8-001 `<dl>` 標籤順序逐字為 制定公司／制定部門／制定室別／版次／公告日期／內容摘要') */
+  it('TS-F019-D8-001 `<dl>` 標籤順序逐字為 制定公司／制定部門／制定室別／版次／公告日期（內容摘要已移出）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     const card = within(screen.getByTestId('rest-list')).getByText('車輛分期進件作業').closest('article')!;
@@ -501,6 +507,18 @@ describe('F019 AC-D8：清單卡欄位恰九項、`<dl>` 標籤順序逐字', ()
     await screen.findByText('車輛分期進件作業');
     expect(screen.queryByText('使用部門：')).toBeNull();
     expect(screen.queryByText('循環別：')).toBeNull();
+  });
+
+  /**
+   * 🔴 `AC-Y5`（2026-08-27 使用者裁決）：內容摘要改為書名副標題 ⇒「內容摘要：」標籤一併移除。
+   * 與上一條同型之反向斷言：摘要**文字仍在**（下一條驗），只是不再以「欄位」形式呈現。
+   */
+  it('TS-F019-D8-005 🔴 卡片 DOM 不得出現「內容摘要：」標籤（AC-Y5：改為副標題、非欄位）', async () => {
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    expect(screen.queryByText('內容摘要：')).toBeNull();
+    // 反向對照：摘要文字本身**必須還在**——否則「把整段摘要刪掉」也會讓上一行綠。
+    expect(document.querySelector('[data-summary]')?.textContent).toContain('進件收件與資格初審流程。');
   });
 
   it('TS-F019-D8-004 版次以等寬字（mono）呈現，格式 {YY}\'{NN}', async () => {
@@ -549,7 +567,7 @@ describe('F019 AC-D14：逐字文案與空值呈現', () => {
     const card = within(screen.getByTestId('rest-list')).getByText('車輛分期進件作業').closest('article')!;
     const dts = Array.from(card.querySelectorAll('dt')).map((el) => el.textContent?.trim());
     const dds = Array.from(card.querySelectorAll('dd')).map((el) => el.textContent?.trim());
-    expect(dts).toEqual([...DL_LABELS]); // 九項標籤之存在性在有空值時仍成立
+    expect(dts).toEqual([...DL_LABELS]); // 五列標籤之存在性在有空值時仍成立（📝 OLD> 九項）
     const valueOf = (label: string): string | undefined => dds[dts.indexOf(label)];
 
     expect(valueOf('制定公司：')).toBe('—'); // 空 → em dash
@@ -559,20 +577,27 @@ describe('F019 AC-D14：逐字文案與空值呈現', () => {
   });
 });
 
-describe('F019 AC-D10：🔒 五條逐字文案回歸鎖定（OQ-D18-06）', () => {
-  it('TS-F019-D10-001 「其他」子分類之頂部說明句逐字為 SCOPE_NOTICE_OTHER（一字未改）', async () => {
-    renderPage();
-    await screen.findByText('車輛分期進件作業');
-    expect(screen.getByText(SCOPE_NOTICE_OTHER)).toBeInTheDocument();
-  });
-
-  it('TS-F019-D10-002 「業務」子分類之頂部說明句逐字為 SCOPE_NOTICE_BUSINESS（縱使內文提及「使用部門」亦不得修改）', async () => {
-    mockAuth('business');
-    renderPage();
-    await screen.findByText('車輛分期進件作業');
-    expect(screen.getByText(SCOPE_NOTICE_BUSINESS)).toBeInTheDocument();
-    // 說明句解釋的是「可見範圍」，非「畫面上有哪個欄位」——內文之「使用部門」字樣為刻意保留。
-    expect(SCOPE_NOTICE_BUSINESS).toContain('使用部門');
+describe('F019 AC-D10：🔒 三條逐字文案回歸鎖定（OQ-D18-06；🔴 AC-Y1 由五條縮為三條）', () => {
+  /**
+   * 📝 OLD> it('TS-F019-D10-001 「其他」子分類之頂部說明句逐字為 SCOPE_NOTICE_OTHER（一字未改）')
+   * 📝 OLD> it('TS-F019-D10-002 「業務」子分類之頂部說明句逐字為 SCOPE_NOTICE_BUSINESS（縱使內文提及「使用部門」亦不得修改）')
+   * 🔴 兩條說明句已隨頂部說明列整條移除（`AC-Y1`，2026-08-27 使用者裁決）⇒ 文案鎖定由五條縮為三條。
+   *    兩條就地合併改寫為**反向鎖**：兩句逐字片段皆不得再出現於任一子分類之畫面。
+   *    逐字片段刻意留在本檔（而非 import 常數）——常數已移除，且要證的正是「這串字不該回來」。
+   */
+  it('TS-F019-D10-001 🔴 兩條被推翻之說明句逐字皆不得再出現（其他／業務子分類皆然）', async () => {
+    const removedOther =
+      '一般使用者僅顯示「已公告」文件（進度中/失效/作廢由後端過濾隱藏）；您所屬部門相關文件會自動置頂。';
+    const removedBusiness =
+      '業務使用者僅顯示「已公告」且使用部門為您所屬部門（含其下所有單位）之文件（進度中/失效/作廢由後端過濾隱藏）；其餘部門之文件不在您的瀏覽範圍內，如需調閱請洽該部門窗口。';
+    for (const subtype of ['other', 'business']) {
+      mockAuth(subtype);
+      const { unmount } = renderPage();
+      await screen.findByText('車輛分期進件作業');
+      expect(screen.queryByText(removedOther)).toBeNull();
+      expect(screen.queryByText(removedBusiness)).toBeNull();
+      unmount();
+    }
   });
 
   it('TS-F019-D10-003 置頂區標題含逐字 `您部門相關文件`、其餘區標題含逐字 `其他文件`', async () => {
