@@ -5,6 +5,7 @@ import { LifecycleTreePreviewPage } from './LifecycleTreePreviewPage';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import type { SessionUser, LifecycleView, LifecycleTreePreview } from '../api/types';
+import { WATERMARK_FONT_SIZE } from '../domain/watermark-style';
 
 /**
  * F036 樹狀圖預覽之三層式浮水印 —— 🔒 **綠燈回歸鎖定**（Lane L2）。
@@ -113,18 +114,63 @@ describe('🔒 LifecycleTreePreviewPage 三層式浮水印（§10.14 共用化�
    * 定稿為 `#334155` @ `0.30`。權威：`docs/specs/features/F020-watermark.md#d9-watermark-delta`
    * `AC-N2`（本頁為表列 4 處有效載體之一，🔒 `AC-N66` 正向鎖定：本頁渲染 HTML DAG 節點、
    * 無內容層可燒錄，疊加層是唯一浮水印載體，不受 `AC-N7`——僅限 `PublicViewerPage`——影響）。
-   * 📝 被推翻之現行值逐字保留供追溯：`#64748B` ＋ `opacity: 0.12`（`LifecycleTreePreviewPage.tsx:509,516`）。
+   * 🔴 2026-08-27 就地改寫（使用者裁決 UX ①「顏色淡一點點」）：色值 slate-700 → **slate-600**
+   *    （`#475569`，對比度 ≈1.613 ≥ 就地下修後之 `AC-N1` 門檻 1.60）；不透明度 `0.30` 不動。
+   * 📝 被推翻之值逐字保留供追溯：OLD> `#334155`（slate-700）｜OLD> `#64748B` ＋ `opacity: 0.12`。
    * 📌 CSS 慣例參考＝`prototypes/22-lifecycle-tree-preview.html:46-47`
    *    （`.wm-layer{opacity:.30}`／`.wm-layer span{color:#334155}`）——同時檢查疊加層容器與
    *    文字節點兩處之聯集，不臆測實作是否逐字沿用該分佈。
    */
-  it('🔴 浮水印疊加：色值 #334155（rgb(51, 65, 85)）／不透明度 0.30（AC-N2）', async () => {
+  it('🔴 浮水印疊加：色值 #475569（rgb(71, 85, 105)）／不透明度 0.30（AC-N2）', async () => {
     renderAt();
     const overlay = await screen.findByTestId('watermark-overlay');
     const tile = (await screen.findAllByTestId('watermark-text'))[0];
     const opacity = tile.style.opacity || overlay.style.opacity;
     const color = tile.style.color || overlay.style.color;
     expect(opacity, '不透明度既非疊加層亦非文字節點之 inline style').toBe('0.3');
-    expect(color, '色值既非疊加層亦非文字節點之 inline style').toBe('rgb(51, 65, 85)');
+    expect(color, '色值既非疊加層亦非文字節點之 inline style').toBe('rgb(71, 85, 105)');
+    expect(color, '📝 已作廢之 slate-700 不得殘留').not.toBe('rgb(51, 65, 85)');
+  });
+});
+
+/**
+ * 🔴 2026-08-27 使用者裁決 —— UX ①（字級放大）與 UX ②（疊加層滿版）於**本頁 DOM** 之落地契約。
+ *
+ * 幾何本身之數學在 `frontend/src/domain/watermark-overlay-geometry.test.ts`（純函式、可餵極寬畫板）；
+ * 本區塊只釘「頁面確實用了那套幾何」——兩者缺一，都會讓「函式算對了但頁面沒接線」這種
+ * 本 repo 已踩過的缺陷形狀重演。
+ */
+describe('🔴 UX ①／② —— 浮水印疊加層之字級與滿版幾何（LifecycleTreePreviewPage）', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockAuth();
+    vi.mocked(endpoints.getLifecycleTreePreview).mockResolvedValue(PREVIEW);
+    vi.mocked(endpoints.getLifecycles).mockResolvedValue(CYCLES);
+    vi.mocked(endpoints.lifecycleTreeDownloadUrl).mockReturnValue('/dl');
+    vi.mocked(endpoints.lifecycleTreePrintUrl).mockReturnValue('/pr');
+  });
+
+  it('UX ①：tile 字級取自具名常數 WATERMARK_FONT_SIZE（16px；OLD> 14px 之字面值）', async () => {
+    renderAt();
+    const tile = (await screen.findAllByTestId('watermark-text'))[0];
+    expect(tile.style.fontSize).toBe(`${WATERMARK_FONT_SIZE}px`);
+    expect(tile.style.fontSize, '📝 已作廢之 14px 不得殘留').not.toBe('14px');
+  });
+
+  it('🔴 UX ②：疊加層為正方形、且自行裁切溢出（不得再以 inset 撐開）', async () => {
+    renderAt();
+    const overlay = await screen.findByTestId('watermark-overlay');
+    expect(overlay.style.width).not.toBe('');
+    expect(overlay.style.width).toBe(overlay.style.height);
+    expect(overlay.style.overflow).toBe('hidden');
+    expect(overlay.style.transform).toBe('rotate(-45deg)');
+  });
+
+  it('🔴 UX ② 負向回歸鎖：不得復原 inset:-40% ＋ flex-wrap 置中之舊寫法', async () => {
+    renderAt();
+    const overlay = await screen.findByTestId('watermark-overlay');
+    expect(overlay.style.inset).toBe('');
+    expect(overlay.style.alignContent).not.toBe('center');
+    expect(overlay.style.flexWrap).not.toBe('wrap');
   });
 });

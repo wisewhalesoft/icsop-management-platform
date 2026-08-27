@@ -161,7 +161,8 @@ describe('ChangeHistoryPage · DiffBoard 三層式浮水印（F038 #17）', () =
 
   /**
    * 🔴 2026-08-20 D9 delta（`OQ-D9-01`／`OQ-D9-02`／`OQ-D9-31`）——浮水印加深：色值／不透明度
-   * 定稿為 `#334155` @ `0.30`（對比度 ≈1.716:1 ≥ 1.70 之 `AC-N1` 門檻）。
+   * 🔴 2026-08-27 就地改寫（使用者裁決 UX ①「顏色淡一點點」）：定稿為 `#475569` @ `0.30`
+   * （對比度 ≈1.613:1 ≥ 就地下修後之 `AC-N1` 門檻 1.60）。📝 OLD> `#334155` @ `0.30`（≈1.716）。
    * 權威：`docs/specs/features/F020-watermark.md#d9-watermark-delta` `AC-N2`（本頁為表列 4 處
    * 有效載體之一，🔒 `AC-N66` 正向鎖定：本頁渲染 HTML、無內容層可燒錄，疊加層是唯一浮水印載體，
    * 不受 `AC-N7`（僅限 `PublicViewerPage`）影響）。
@@ -171,7 +172,7 @@ describe('ChangeHistoryPage · DiffBoard 三層式浮水印（F038 #17）', () =
    *    與文字節點兩處之聯集。
    */
   it.each(['before', 'after'])(
-    '🔴 %s 欄之浮水印疊加：色值 #334155（rgb(51, 65, 85)）／不透明度 0.30（AC-N2）',
+    '🔴 %s 欄之浮水印疊加：色值 #475569（rgb(71, 85, 105)）／不透明度 0.30（AC-N2）',
     async (side) => {
       await openTreePreview();
       const overlay = screen.getByTestId(`watermark-overlay-${side}`);
@@ -179,7 +180,8 @@ describe('ChangeHistoryPage · DiffBoard 三層式浮水印（F038 #17）', () =
       const opacity = tile.style.opacity || overlay.style.opacity;
       const color = tile.style.color || overlay.style.color;
       expect(opacity, `${side} 欄之不透明度既非疊加層亦非文字節點之 inline style`).toBe('0.3');
-      expect(color, `${side} 欄之色值既非疊加層亦非文字節點之 inline style`).toBe('rgb(51, 65, 85)');
+      expect(color, `${side} 欄之色值既非疊加層亦非文字節點之 inline style`).toBe('rgb(71, 85, 105)');
+      expect(color, '📝 已作廢之 slate-700 不得殘留').not.toBe('rgb(51, 65, 85)');
     },
   );
 

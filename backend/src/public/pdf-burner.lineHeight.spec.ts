@@ -37,16 +37,20 @@ describe('AC-T1 單一定稿常數（後端半）', () => {
 });
 
 describe('AC-T2／AC-T4 各載體逐字定稿值（後端 PDF 燒錄）', () => {
-  it('WATERMARK_FONT_SIZE 逐字為 12', () => {
-    expect(WATERMARK_FONT_SIZE).toBe(12);
+  /**
+   * 🔴 2026-08-27 就地改寫（使用者裁決 UX ①「浮水印文字字放大一點點」）：字級 `12` → `14`。
+   * 📝 已作廢（⚠ 不得用於斷言）：OLD> `12`。
+   */
+  it('WATERMARK_FONT_SIZE 逐字為 14（OLD> 12）', () => {
+    expect(WATERMARK_FONT_SIZE).toBe(14);
   });
 
   it('WATERMARK_LINE_HEIGHT 逐字為 2（無單位倍數）', () => {
     expect(WATERMARK_LINE_HEIGHT).toBe(2);
   });
 
-  it('WATERMARK_LINE_STEP 逐字為 24（＝ WATERMARK_FONT_SIZE(12) × WATERMARK_LINE_HEIGHT(2)）', () => {
-    expect(WATERMARK_LINE_STEP).toBe(24);
+  it('WATERMARK_LINE_STEP 逐字為 28（＝ WATERMARK_FONT_SIZE(14) × WATERMARK_LINE_HEIGHT(2)）', () => {
+    expect(WATERMARK_LINE_STEP).toBe(28);
   });
 
   /**
@@ -55,13 +59,24 @@ describe('AC-T2／AC-T4 各載體逐字定稿值（後端 PDF 燒錄）', () => 
    * 曾一度進入 `AC-T4`，其算術失誤（於 size=12 僅 1.667 倍、非 2.0 倍）已於第三輪就地改寫。
    * 只鎖 `15` 的話，實作者若照第一輪 AC 寫出 `20` 一樣會綠——這正是本條要防的事。
    */
-  it('🔴 負向回歸鎖：WATERMARK_LINE_STEP 既不等於 15（delta 前原始值）也不等於 20（第一輪已作廢定稿值）', () => {
+  it('🔴 負向回歸鎖：WATERMARK_LINE_STEP 不等於 15（delta 前原始值）、20（第一輪已作廢定稿值）、24（字級 12 之已作廢值）', () => {
     expect(WATERMARK_LINE_STEP).not.toBe(15);
     expect(WATERMARK_LINE_STEP).not.toBe(20);
+    expect(WATERMARK_LINE_STEP).not.toBe(24);
   });
 
-  it('WATERMARK_TILE_STEP_Y 逐字為 198（OLD> 180，因行距 15→24 需 +18 維持 tile 間隙不變）', () => {
-    expect(WATERMARK_TILE_STEP_Y).toBe(198);
+  /**
+   * 🔴 不變式（跨歷次調整恆真）：tile 間隙 ＝ `stepY − (2 × LINE_STEP + FONT_SIZE)` ＝ **138**。
+   * 180−42、198−60、208−70 三者皆為 138——這條比「等於某個字面值」更能擋住「重新挑一個
+   * 看起來差不多的密度」之退化。
+   * 📝 已作廢（⚠ 不得用於斷言）：OLD> 180；OLD> 198。
+   */
+  it('WATERMARK_TILE_STEP_Y 逐字為 208（OLD> 198，因字級 12→14 使三行區塊 +10 而需維持 tile 間隙不變）', () => {
+    expect(WATERMARK_TILE_STEP_Y).toBe(208);
+  });
+
+  it('🔴 tile 間隙不變式：stepY − (2 × LINE_STEP + FONT_SIZE) 恆為 138', () => {
+    expect(WATERMARK_TILE_STEP_Y - (2 * WATERMARK_LINE_STEP + WATERMARK_FONT_SIZE)).toBe(138);
   });
 
   it('WATERMARK_TILE_STEP_X 逐字維持 260（水平方向未受行距影響）', () => {

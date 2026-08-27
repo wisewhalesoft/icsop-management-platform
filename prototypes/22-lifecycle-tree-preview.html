@@ -80,15 +80,28 @@
   #boardSizer{margin:0 auto;transition:width .15s ease,height .15s ease;}
   #stage{cursor:grab;user-select:none;}
   #stage.panning{cursor:grabbing;}
-  /* diagonal tiled watermark overlay — 字串格式與 05-public-viewer-watermark 完全一致（45°, 14px, 機密聲明另起一行）
-     🔴 F020 AC-N2（2026-08-20 定稿，逐字照抄不得自行發明）：色值 #334155 @ opacity 0.30
-        （有效色 rgb(193.8,198.0,204.0)、與白底對比度 ≈ 1.716:1，滿足 AC-N1 之 ≥ 1.70）。
+  /* diagonal tiled watermark overlay — 字串格式與 05-public-viewer-watermark 完全一致（45°, 機密聲明另起一行）
+     🔴 F020 AC-N2（🔴 2026-08-27 使用者裁決 UX ① 就地改寫）：色值 #475569（slate-600）@ opacity 0.30
+        （有效色 rgb(199.8,204.0,210.0)、與白底對比度 ≈ 1.613:1，滿足就地下修後之 AC-N1 門檻 ≥ 1.60）、
+        字級 14px → 16px。
+        📝 已作廢（⚠ 不得用於斷言）：OLD> #334155 @ 0.30（≈1.716:1）、OLD> font-size:14px。
      🔒 AC-N66 正向斷言：本頁渲染的是 HTML 而非 PDF、**沒有內容層可燒錄**，DOM 疊加層是其唯一浮水印載體 ⇒
-        **不得**因 05 之 AC-N7 移除疊加層而順手一併刪除本層。*/
-  .wm-layer{position:absolute;inset:-40%;pointer-events:none;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;transform:rotate(-45deg);opacity:.30;user-select:none;z-index:5;}
+        **不得**因 05 之 AC-N7 移除疊加層而順手一併刪除本層。
+
+     🔴 2026-08-27 使用者裁決 UX ②：**疊加層必須滿版**（使用者回報「樹狀圖比螢幕寬時浮水印只集中在中間」）。
+        📝 已作廢（⚠ 不得復原）：OLD> .wm-layer{inset:-40%;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;}
+        根因是幾何、不是密度：inset:-40% 讓疊加層為畫板的 1.8W × 1.8H（**兩邊各自**等比放大），
+        但旋轉 45° 後要蓋住原矩形，**兩軸半徑都必須 ≥ (W + H)/2 × cos45°**。長寬比一拉開（寬圖 W ≫ H），
+        1.8H 遠小於該值 ⇒ 疊加層退化成一條斜向細帶，畫板左右兩端整片落在帶外。
+        改法：邊長 (W + H) × cos45° 之**正方形**、以畫板中心為中心（旋轉原點即中心），
+        內容改**逐列 flex-nowrap**由左上角鋪起，溢出由 .wm-layer 自身 overflow:hidden 裁掉。
+        ⚠ 不得改回 flex-wrap：tile 寬度由內容決定，wrap 之下每列排得下幾枚無從預期，
+          最後一列排不滿即右緣一條空白（旋轉後就是一條斜白帶）。 */
+  .wm-layer{position:absolute;pointer-events:none;overflow:hidden;transform:rotate(-45deg);opacity:.30;user-select:none;z-index:5;}
+  .wm-row{display:flex;flex-wrap:nowrap;}
   /* 🔴 F020 行高定稿（2026-08-21 使用者裁決）：三行式浮水印之 DOM 疊加層 line-height ＝ **2.0**（全域）。
      📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> line-height:1.6 */
-  .wm-layer span{color:#334155;font-size:14px;white-space:nowrap;padding:22px 30px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:2.0;}
+  .wm-layer span{color:#475569;font-size:16px;flex-shrink:0;white-space:nowrap;padding:22px 30px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:2.0;}
   /* DAG nodes */
   .node{position:absolute;cursor:pointer;transition:opacity .15s;}
   .node .nbody{background:#fff;border:1.5px solid #E2E8F0;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.05);padding:8px 11px;transition:border-color .15s,box-shadow .15s,background .15s;}
@@ -236,11 +249,29 @@
   const WM_TIME   = '2026-07-16 14:32:08';
   const WM = `${WM_DATA}-${WM_NOTICE}-${WM_TIME}`;
   document.getElementById('wmString').textContent = WM + '  （時區 UTC+8）';
+  /* 🔴 UX ②（2026-08-27）：正方形疊加層 ＋ 鋪滿式列欄。推導見 .wm-layer 之 CSS 註解。
+     📝 已作廢（⚠ 不得復原）：OLD> const count=Math.min(220,Math.max(60,Math.round(area/14000)));（面積推枚數） */
+  const WM_FONT=16, WM_LH=2.0, WM_PAD_X=30, WM_PAD_Y=22, WM_MAX_TILES=2000;
+  function wmTileWidth(lines){
+    /* 刻意**低估**：估寬偏小只是多鋪幾枚（被 overflow 裁掉，無害），偏大就是右緣一條沒有浮水印的空白。 */
+    const w=(s)=>Array.from(s).reduce((a,ch)=>a+(ch.codePointAt(0)>0x2E7F?WM_FONT*0.95:WM_FONT*0.55),0);
+    return Math.max(1, Math.max(...lines.map(w)) + WM_PAD_X*2);
+  }
   function fillWatermark(){
     const b=document.getElementById('board');
-    const area=(b.clientWidth||760)*(b.clientHeight||1000);
-    const count=Math.min(220,Math.max(60,Math.round(area/14000)));
-    document.getElementById('wmLayer').innerHTML = Array.from({length:count}).map(()=>`<span>${WM_DATA}<br>${WM_NOTICE}<br>${WM_TIME}</span>`).join('');
+    const bw=b.clientWidth||760, bh=b.clientHeight||1000;
+    const lines=[WM_DATA,WM_NOTICE,WM_TIME];
+    const size=Math.ceil((bw+bh)*Math.SQRT1_2)+2;
+    const tileW=wmTileWidth(lines), tileH=lines.length*WM_FONT*WM_LH + WM_PAD_Y*2;
+    let cols=Math.ceil(size/tileW)+1, rows=Math.ceil(size/tileH)+1;   /* 一律多算一格 */
+    if(cols*rows>WM_MAX_TILES){ const k=Math.sqrt(WM_MAX_TILES/(cols*rows)); cols=Math.max(1,Math.floor(cols*k)); rows=Math.max(1,Math.floor(rows*k)); }
+    const layer=document.getElementById('wmLayer');
+    layer.style.width=layer.style.height=size+'px';
+    layer.style.left=Math.round((bw-size)/2)+'px';
+    layer.style.top=Math.round((bh-size)/2)+'px';
+    const tile=`<span>${WM_DATA}<br>${WM_NOTICE}<br>${WM_TIME}</span>`;
+    const row=`<div class="wm-row">${tile.repeat(cols)}</div>`;
+    layer.innerHTML=row.repeat(rows);
   }
 
   /* ===== F040 顯示名稱純函式（全站同一實作）===== */

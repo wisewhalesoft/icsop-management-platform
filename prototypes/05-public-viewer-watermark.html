@@ -18,8 +18,10 @@
         它不是疊加圖層，而是「所見浮水印字串之可讀對照」，也是 AC-N6 燒錄字串於前端唯一可斷言之投影。
      ⑥ AC-N8：縮放**不得**以 CSS scale() 達成 ⇒ #page 全程不設 transform；
         AC-N9：縮放改變即以新倍率**重新渲染**（renderPage(page, zoom) 再次被呼叫，參數為新倍率）。
-     ⑦ AC-N2：燒錄浮水印之色值／不透明度＝**#334155 @ 0.30**（定稿值，逐字照抄不得自行發明；
-        有效色 rgb(193.8,198.0,204.0)、與白底對比度 ≈ 1.716:1，滿足 AC-N1 之 ≥ 1.70）。
+     ⑦ AC-N2：燒錄浮水印之色值／不透明度＝**#475569 @ 0.30**（🔴 2026-08-27 使用者裁決 UX ① 就地改寫；
+        定稿值，逐字照抄不得自行發明；有效色 rgb(199.8,204.0,210.0)、與白底對比度 ≈ 1.613:1，
+        滿足就地下修後之 AC-N1 門檻 ≥ 1.60）。
+        📝 已作廢（⚠ 不得用於斷言）：OLD> #334155 @ 0.30（≈1.716:1，門檻 ≥ 1.70）。
      ⑧ F021 AC-N59～AC-N62：前台字級上移一階（正文 text-sm→text-base；12px caption 級距→text-sm）；本檔不得再出現 12px caption 級距之 class。
 
      🔴 ui-ux-designer 之裁量（architecture-spec §11.2 明文交付本角色定案）＝**單頁翻頁（single-page paging）**，
@@ -289,22 +291,24 @@
     return y;
   }
 
-  /* ===== 🔴 浮水印燒錄（AC-N2 定稿值：#334155 @ opacity 0.30）=====
+  /* ===== 🔴 浮水印燒錄（AC-N2 定稿值：#475569 @ opacity 0.30；2026-08-27 使用者裁決 UX ①）=====
+     📝 已作廢（⚠ 不得用於斷言）：OLD> #334155（slate-700）；OLD> WM_FONT_SIZE 14。
      ⚠ 這是**內容層**：畫在 canvas 像素上，不是 DOM 疊加層。AC-N7 已移除 DOM 疊加層。
      ⚠ 色值與不透明度為定稿常數，**不得自行挑選近似色**——test-generator 會對此數值建立約束。 */
-  const WM_COLOR = '#334155';
+  const WM_COLOR = '#475569';
   const WM_OPACITY = 0.30;
   /* 🔴 三行式浮水印之行高定稿（2026-08-21 使用者裁決 · 全域）＝ **字級的 2.0 倍**。
-     本檔為 canvas 內容層 ⇒「行高」落地為 fillText 的每行 y 位移：WM_FONT_SIZE(14) × 2.0 ＝ **28px**。
-     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> 每行位移 22px（22 ÷ 14 ≈ 1.571）。
-     ⚠ **stepY 必須同步放大**：三行區塊的墨跡高度＝ascent + 2×行距 + descent，行距 22→28 使區塊
-        長高 2 × 6 ＝ **12px**；stepY 若維持 132，相鄰 tile 的縱向間隙會被吃掉整整 12px 而變得相黏。
-        故 stepY 132 → **144**（＝132 + 12），tile 間隙與裁決前**完全相同**——這是把行距長出來的高度
-        原數補回去，不是重新挑一個「看起來差不多」的密度。stepX 不受行高影響，維持 560。
-     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> stepY = 132。 */
-  const WM_FONT_SIZE = 14;
+     本檔為 canvas 內容層 ⇒「行高」落地為 fillText 的每行 y 位移：WM_FONT_SIZE(16) × 2.0 ＝ **32px**。
+     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> 每行位移 22px（22 ÷ 14 ≈ 1.571）；OLD> 28px（字級 14）。
+     ⚠ **stepY 必須同步放大**：三行區塊的墨跡高度＝ascent + 2×行距 + descent。維持
+        「間隙＝stepY −（2×行距 + 字級）」不變之規則：
+          · 行距 22→28（字級 14 不變）：區塊 +12 ⇒ stepY 132 → 144；
+          · 🔴 2026-08-27 UX ①（字級 14→16 ⇒ 行距 28→32）：區塊 70→80（+10）⇒ stepY 144 → **154**。
+        這是把長出來的高度原數補回去，不是重新挑一個「看起來差不多」的密度。stepX 不受影響，維持 560。
+     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> stepY = 132；OLD> stepY = 144；OLD> WM_FONT_SIZE = 14。 */
+  const WM_FONT_SIZE = 16;
   const WM_LINE_HEIGHT = 2.0;                              // 全域定稿值（DOM 疊加層之 line-height 同值）
-  const WM_LINE_STEP = WM_FONT_SIZE * WM_LINE_HEIGHT;      // ＝ 28
+  const WM_LINE_STEP = WM_FONT_SIZE * WM_LINE_HEIGHT;      // ＝ 32
   function burnWatermark(ctx){
     const lines = toDisplayLines();     // AC-N68：恰 3 行
     ctx.save();
@@ -314,7 +318,7 @@
     ctx.textAlign = 'center';
     ctx.translate(PAGE_W/2, PAGE_H/2);
     ctx.rotate(-Math.PI/4);             // 對角 45°
-    const stepX = 560, stepY = 144, span = 1.35;
+    const stepX = 560, stepY = 154, span = 1.35;
     for(let gy = -PAGE_H*span; gy <= PAGE_H*span; gy += stepY){
       for(let gx = -PAGE_W*span; gx <= PAGE_W*span; gx += stepX){
         lines.forEach((ln, i) => ctx.fillText(ln, gx, gy + i*WM_LINE_STEP));

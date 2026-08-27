@@ -19,6 +19,7 @@ import { PageHeader, TopbarActions } from '../components/PageHeader';
 import { watermarkLines } from '../domain/watermark-lines';
 import {
   WATERMARK_COLOR,
+  WATERMARK_FONT_SIZE,
   WATERMARK_LINE_HEIGHT,
   WATERMARK_OPACITY,
 } from '../domain/watermark-style';
@@ -1047,7 +1048,7 @@ function DiffBoard({
             key={i}
             data-testid="watermark-text"
             className="mono"
-            style={{ color: WATERMARK_COLOR, fontSize: 14, padding: '20px 26px', textAlign: 'center', lineHeight: WATERMARK_LINE_HEIGHT }}
+            style={{ color: WATERMARK_COLOR, fontSize: WATERMARK_FONT_SIZE, padding: '20px 26px', textAlign: 'center', lineHeight: WATERMARK_LINE_HEIGHT }}
           >
             {watermarkLines(watermark).map((line, j) => (
               <span key={j} style={{ display: 'block' }}>

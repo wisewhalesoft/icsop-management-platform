@@ -17,8 +17,10 @@ import { Icon } from '../components/Icon';
 import { watermarkLines } from '../domain/watermark-lines';
 import {
   WATERMARK_COLOR,
+  WATERMARK_FONT_SIZE,
   WATERMARK_LINE_HEIGHT,
   WATERMARK_OPACITY,
+  watermarkOverlayGeometry,
 } from '../domain/watermark-style';
 import { openedAsPopup } from './opened-as-popup';
 import { beginPan, panExceeded, panScroll, type PanOrigin } from './tree-pan';
@@ -145,6 +147,13 @@ function jumpLabel(n: number): string {
 
 /** F036 `AC-T15` #9：節點 `title` 屬性（單擊／雙擊兩種行為之提示）。 */
 const NODE_TITLE = '單擊＝標示所有下游節點；雙擊＝檢視此節點與其下游節點之程序書清單';
+
+/**
+ * 單枚浮水印 tile 之內距（px；沿用 `prototypes/22-*` 之 `.wm-layer span{padding:22px 30px}`）。
+ * 🔴 具名一份：`watermarkOverlayGeometry()` 用它推算 tile 尺寸，JSX 用它套 `padding`——
+ * 兩處若各寫一份字面值，改一邊就會算出鋪不滿（或多鋪一大截）的列欄數而沒有測試會紅。
+ */
+const WM_TILE_PAD = { x: 30, y: 22 } as const;
 
 export function LifecycleTreePreviewPage(): JSX.Element {
   const { id = '' } = useParams();
@@ -485,7 +494,14 @@ export function LifecycleTreePreviewPage(): JSX.Element {
   const wmLines = data ? watermarkLines(data.watermark) : [];
   const boardW = layout?.boardWidth ?? 320;
   const boardH = layout?.boardHeight ?? 320;
-  const wmCount = Math.min(160, Math.max(40, Math.round((boardW * boardH) / 16000)));
+  /**
+   * 🔴 UX ②（2026-08-27 使用者裁決）：疊加層改為「以畫板中心為中心之正方形」＋鋪滿式列欄，
+   * 取代 `inset:-40%` ＋ 由面積推估之固定枚數。寬圖上舊寫法旋轉後只覆蓋中央一條斜帶
+   * ——幾何推導見 `watermarkOverlayGeometry()` 之註解。
+   * 📝 已作廢（⚠ 不得復原）：
+   *    OLD> `const wmCount = Math.min(160, Math.max(40, Math.round((boardW * boardH) / 16000)));`
+   */
+  const wmGeom = watermarkOverlayGeometry(boardW, boardH, wmLines, WM_TILE_PAD);
   const selectedNode = layout?.nodes.find((n) => n.id === selected) ?? null;
   const drawerNode = layout?.nodes.find((n) => n.id === drawerNodeId) ?? null;
   const today = new Date();
@@ -770,23 +786,32 @@ export function LifecycleTreePreviewPage(): JSX.Element {
               })}
             </div>
 
-            {/* watermark overlay（疊於樹狀圖之上，不擋點擊）*/}
+            {/*
+              watermark overlay（疊於樹狀圖之上，不擋點擊）。
+              🔴 UX ②：正方形疊加層 ＋ 逐列 `flex-nowrap`，溢出由本層 `overflow:hidden` 裁掉。
+                 **不得**改回 `flex-wrap: wrap` ＋ 固定枚數——tile 寬度由內容決定，wrap 之下每列
+                 究竟排得下幾枚無從預期，最後一列排不滿即右緣一條空白（旋轉後就是一條斜白帶）。
+            */}
             <div
               data-testid="watermark-overlay"
               aria-hidden="true"
-              style={{ position: 'absolute', inset: '-40%', pointerEvents: 'none', display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', transform: 'rotate(-45deg)', opacity: WATERMARK_OPACITY, userSelect: 'none', zIndex: 5 }}
+              style={{ position: 'absolute', left: wmGeom.offsetX, top: wmGeom.offsetY, width: wmGeom.size, height: wmGeom.size, overflow: 'hidden', pointerEvents: 'none', transform: 'rotate(-45deg)', opacity: WATERMARK_OPACITY, userSelect: 'none', zIndex: 5 }}
             >
-              {Array.from({ length: wmCount }).map((_, i) => (
-                <span
-                  key={i}
-                  data-testid="watermark-text"
-                  className="mono"
-                  style={{ color: WATERMARK_COLOR, fontSize: 14, whiteSpace: 'nowrap', padding: '22px 30px', fontWeight: 500, textAlign: 'center', lineHeight: WATERMARK_LINE_HEIGHT }}
-                >
-                  {wmLines.map((ln, j) => (
-                    <span key={j} style={{ display: 'block' }}>{ln}</span>
+              {Array.from({ length: wmGeom.rows }).map((_, r) => (
+                <div key={r} style={{ display: 'flex', flexWrap: 'nowrap' }}>
+                  {Array.from({ length: wmGeom.cols }).map((_, c) => (
+                    <span
+                      key={c}
+                      data-testid="watermark-text"
+                      className="mono"
+                      style={{ color: WATERMARK_COLOR, fontSize: WATERMARK_FONT_SIZE, flexShrink: 0, whiteSpace: 'nowrap', padding: `${WM_TILE_PAD.y}px ${WM_TILE_PAD.x}px`, fontWeight: 500, textAlign: 'center', lineHeight: WATERMARK_LINE_HEIGHT }}
+                    >
+                      {wmLines.map((ln, j) => (
+                        <span key={j} style={{ display: 'block' }}>{ln}</span>
+                      ))}
+                    </span>
                   ))}
-                </span>
+                </div>
               ))}
             </div>
           </div>
