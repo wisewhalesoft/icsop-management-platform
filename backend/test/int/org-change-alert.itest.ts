@@ -111,6 +111,8 @@ describe('[int] F006 組織異動待確認提示 vs SOP', () => {
     const docRepo = AppDataSource.getRepository(IcsopDocument);
     const doc = await docRepo.save(
       docRepo.create({
+        // 🔴 B 階段（多公司）：`ICSOP_DOCUMENT.companyCode` 為 NOT NULL，直塞 entity 之 fixture 須自帶。
+        companyCode: 'AS',
         status: 'active',
         documentNumber,
         documentName: 'ZZINT F006 提示測試文件',
@@ -129,6 +131,8 @@ describe('[int] F006 組織異動待確認提示 vs SOP', () => {
     const run = await runRepo.save(
       runRepo.create({
         id: randomUUID(),
+        // 🔴 B 階段（多公司）：`SYNC_RUN.compid` 為 NOT NULL（同步互斥鎖與水位改 per-company）。
+        compid: 'AS',
         triggerType: 'manual',
         status: 'success',
         changeCount: 3,
@@ -388,6 +392,8 @@ describe('[int] F006 組織異動待確認提示 vs SOP', () => {
     await runRepo.save(
       runRepo.create({
         id: randomUUID(),
+        // 🔴 B 階段（多公司）：`SYNC_RUN.compid` 為 NOT NULL（同步互斥鎖與水位改 per-company）。
+        compid: 'AS',
         triggerType: 'manual',
         status: 'success',
         changeCount: 5,

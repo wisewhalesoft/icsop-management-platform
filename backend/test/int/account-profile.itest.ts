@@ -194,7 +194,13 @@ describe('[int] F003 手動帳號基本資料 delta（AC-P14／AC-P20／AC-P21 +
     });
   });
 
-  describe('AC-P20 建立／編輯手動帳號之權限（write＝SysAdmin，唯讀／無皆 403）', () => {
+  /**
+   * 🔴 2026-08-25 角色自動化 delta（Q4.1）：「帳號管理」之 ICSOPAdmin 由 `READ` 升為 `CRUD`
+   * （權威＝`rbac/function-matrix.ts` 之 `ACCOUNT_MANAGEMENT` 列，F025 矩陣同步更新）。
+   * 本 describe 原標題為「write＝SysAdmin，唯讀／無皆 403」，其中 ICSOPAdmin 兩案已被該裁定推翻；
+   * 主管／部門窗口／一般使用者（`NONE`）與未登入（401）逐案不變。
+   */
+  describe('AC-P20 建立／編輯手動帳號之權限（write＝SysAdmin ＋ ICSOPAdmin，其餘 403）', () => {
     it('SysAdmin 可建立', async () => {
       const res = await ctx
         .http()
@@ -204,13 +210,18 @@ describe('[int] F003 手動帳號基本資料 delta（AC-P14／AC-P20／AC-P21 +
       expect(res.status).toBe(201);
     });
 
-    it('ICSOPAdmin（唯讀）建立 → 403', async () => {
+    it('ICSOPAdmin 亦可建立（2026-08-25 角色自動化 delta Q4.1：READ → CRUD）', async () => {
       const res = await ctx
         .http()
         .post('/admin/accounts')
         .set('Cookie', ctx.adminCookie)
-        .send({ loginId: `${MARK.acct}p20b`, password: 'x', roleCode: 'User', name: 'X' });
-      expect(res.status).toBe(403);
+        .send({
+          loginId: `${MARK.acct}p20b`,
+          password: 'Zz@2026Pw',
+          roleCode: 'User',
+          name: 'ZZINT P20B',
+        });
+      expect(res.status).toBe(201);
     });
 
     it.each([
@@ -243,13 +254,13 @@ describe('[int] F003 手動帳號基本資料 delta（AC-P14／AC-P20／AC-P21 +
       expect([200, 204]).toContain(res.status);
     });
 
-    it('ICSOPAdmin（唯讀）編輯 → 403', async () => {
+    it('ICSOPAdmin 亦可編輯（同 Q4.1 裁定）', async () => {
       const res = await ctx
         .http()
         .patch(`/admin/accounts/${manualTargetId}`)
         .set('Cookie', ctx.adminCookie)
-        .send({ name: '改' });
-      expect(res.status).toBe(403);
+        .send({ name: 'ZZINT PATCH by ICSOPAdmin' });
+      expect([200, 204]).toContain(res.status);
     });
 
     it.each([
@@ -411,19 +422,29 @@ describe('[int] F003 手動帳號基本資料 delta（AC-P14／AC-P20／AC-P21 +
       const rows = (list.body.items ?? list.body) as { loginId: string; company?: string | null }[];
       const row = rows.find((r) => r.loginId === loginId);
       expect(row).toBeDefined();
-      // AC-P15「本輪內容」：AE → 和潤電能；操作者(SysAdmin)所屬 AS → 和潤企業股份有限公司。
-      // 現行實作若對全列套用操作者公司之單一值，此列會誤顯示「和潤企業股份有限公司」。
-      expect(row!.company).toBe('和潤電能');
+      // 🔴 AE 全稱於 2026-08-24（上游契約 v2.0 實測）更正為「和潤電能股份有限公司」——
+      // v1.0 誤植為「和潤電能」，漏了「股份有限公司」（見 org-directory/company-name.ts）。
+      // 本斷言之真正標的不變：**逐列以該列自身公司解析**，而非對全列套用操作者(AS)之公司名。
+      expect(row!.company).toBe('和潤電能股份有限公司');
       expect(row!.company).not.toBe('和潤企業股份有限公司');
     });
   });
 
-  describe('AC-P26 部門候選為空之呈現（AE 尚無 ORG_UNIT 同步資料，屬資料現實非錯誤）', () => {
-    it('GET /org-units?companyCode=AE（既有端點，不受本 delta 影響）→ 200 空陣列', async () => {
+  describe('AC-P26 部門候選之呈現與「無部門亦可建立」', () => {
+    /**
+     * 🔴 本案原斷言「AE → 200 **空陣列**」，前提是「ORG_UNIT 僅同步 AS」（見檔頭之資料事實註記）。
+     * 該前提已於 2026-08-25 消失：AD／AE／AJ 皆已同步組織資料。斷言「某公司沒有資料」本就是把
+     * **當下的資料現實**寫死進測試，同步一開就必然失效；改為釘住真正的不變式——
+     * **本端點以 companyCode 為範圍，不得回傳他公司之列**（`ORG_UNIT` 唯一鍵為 `(companyCode, orgCode)`，
+     * 各公司 orgCode 獨立編碼、字串可能相同，混列會讓部門下拉列出別家公司的單位）。
+     * 「部門候選為空」之呈現本身由下一案（orgCode=null 仍可建立）涵蓋，與資料多寡無關。
+     */
+    it('GET /org-units?companyCode=AE → 200 且逐列皆屬 AE（不外洩他公司之列）', async () => {
       const res = await ctx.http().get('/org-units?companyCode=AE').set('Cookie', sysadminCookie);
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
-      expect(res.body.length).toBe(0);
+      const rows = res.body as { companyCode: string }[];
+      expect(rows.every((r) => r.companyCode === 'AE')).toBe(true);
     });
 
     it('AC-P26 於 AE 公司（部門候選為空）仍可建立成功，orgCode=null', async () => {

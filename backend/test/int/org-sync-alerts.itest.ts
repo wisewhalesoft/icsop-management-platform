@@ -161,6 +161,8 @@ describe('[int] F005 離職者相關警示（orgsync-alerts）vs SOP', () => {
     const run = await runRepo.save(
       runRepo.create({
         id: randomUUID(),
+        // 🔴 B 階段（多公司）：`SYNC_RUN.compid` 為 NOT NULL（同步互斥鎖與水位改 per-company）。
+        compid: 'AS',
         triggerType: 'manual',
         status: 'success',
         changeCount: 0,
@@ -192,10 +194,16 @@ describe('[int] F005 離職者相關警示（orgsync-alerts）vs SOP', () => {
       `SELECT [name] FROM sys.indexes
        WHERE object_id = OBJECT_ID('ORG_CHANGE_ALERT') AND [name] LIKE 'UQ_ORG_CHANGE_ALERT_login_%'`,
     )) as Array<{ name: string }>;
-    expect(idx.map((r) => r.name).sort()).toEqual([
-      'UQ_ORG_CHANGE_ALERT_login_disappeared',
-      'UQ_ORG_CHANGE_ALERT_login_inconsistency',
-    ]);
+    // 🔴 改為 arrayContaining（原為精確集合比對）：2026-08-25 角色自動化之
+    // `1724630400000-alert-role-downgrade` 新增了第三個同前綴索引
+    // `UQ_ORG_CHANGE_ALERT_login_role_downgrade`。本案之標的是 **F005 這兩個索引存在**，
+    // 精確集合比對會讓「日後新增任何 alertKind」都必然弄紅這一案，屬誤報而非防護。
+    expect(idx.map((r) => r.name).sort()).toEqual(
+      expect.arrayContaining([
+        'UQ_ORG_CHANGE_ALERT_login_disappeared',
+        'UQ_ORG_CHANGE_ALERT_login_inconsistency',
+      ]),
+    );
   });
 
   it('TS-ORGALERT-002 filtered unique 阻擋重複 pending（DATA_INCONSISTENCY）', async () => {
@@ -342,7 +350,15 @@ describe('[int] F005 離職者相關警示（orgsync-alerts）vs SOP', () => {
     )) as Array<{ payload: string }>;
     const mine = outbox
       .map((r) => JSON.parse(r.payload) as { targetType: string; actionType: string; targetName: string | null; accountId: string })
-      .filter((p) => p.targetType === 'ORG_CHANGE_ALERT' && p.actionType === 'ALERT_RESOLVED' && p.targetName === '資料不一致（EMPSTS/RESIGNDT）');
+      // 🔴 標籤已於 `0d75800`（換上游人員主來源）由上游欄名改為中文：
+      //    `資料不一致（EMPSTS/RESIGNDT）` → `資料不一致（在職狀態／離職日）`
+      //    （權威＝`org-change-alert.service.ts` 之 `DATA_INCONSISTENCY` case；
+      //     亦符合 error-handling.md#export「代碼欄一律輸出畫面所見之中文標籤」之通則）。
+      // ⚠ 本案讀的是 **Outbox pending**，而 `ScheduledAuditRetryService` 每 5 分鐘會把
+      //    pending 搬進 AUDIT_LOG 並清掉——排程若正好在 resolve 與本查詢之間觸發，本案會偽紅。
+      //    ORG_CHANGE_ALERT 於 AUDIT_LOG 無對象 id 落地欄（見上方註記），改查 AUDIT_LOG 就無法
+      //    鎖定是哪一筆，故維持讀 Outbox；偽紅時重跑即可。
+      .filter((p) => p.targetType === 'ORG_CHANGE_ALERT' && p.actionType === 'ALERT_RESOLVED' && p.targetName === '資料不一致（在職狀態／離職日）');
     expect(mine.length).toBeGreaterThanOrEqual(1);
     expect(mine[0].targetName).not.toBe('掛於已關閉部門');
   });

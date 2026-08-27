@@ -97,6 +97,8 @@ describe('[int] Bug 2 時區語意 — TypeORM(useUTC) 與 tedious 標準預設�
     const repo = AppDataSource.getRepository(SyncRun);
     const saved = await repo.save(
       repo.create({
+        // 🔴 B 階段（多公司）：`SYNC_RUN.compid` 為 NOT NULL。
+        compid: 'AS',
         triggerType: 'manual',
         status: 'success',
         startedAt: new Date('2026-08-01T21:00:00.000Z'),

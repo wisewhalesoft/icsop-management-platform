@@ -49,6 +49,8 @@ describe('[int] usage-form pool overview — join vs SOP', () => {
     const docRepo = AppDataSource.getRepository(IcsopDocument);
     const doc = await docRepo.save(
       docRepo.create({
+        // 🔴 B 階段（多公司）：`ICSOP_DOCUMENT.companyCode` 為 NOT NULL，直塞 entity 之 fixture 須自帶。
+        companyCode: 'AS',
         status: 'active',
         documentNumber: `${MARK.doc}UF-001`,
         documentName: 'ZZINT 使用表單關聯測試文件',
