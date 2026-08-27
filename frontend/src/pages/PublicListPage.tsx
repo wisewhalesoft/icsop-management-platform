@@ -52,7 +52,7 @@ export function PublicListPage(): JSX.Element {
    */
   const [searchParams, setSearchParams] = useSearchParams();
   const keyword = searchParams.get('q') ?? '';
-  const draftingCompanyId = searchParams.get('co') ?? '';
+  const companyCode = searchParams.get('co') ?? '';
   /**
    * 🔴 刻意**不沿用** `dept` 一名：舊 `dept` 之語意為「使用部門」。新篩選列已無使用部門、
    * 改為「制定部門」——沿用舊名會讓既有已分享出去的網址（`/public?dept=JA000`）在使用者
@@ -94,7 +94,7 @@ export function PublicListPage(): JSX.Element {
     setLoading(true);
     getPublicDocuments({
       keyword: keyword.trim() || undefined,
-      draftingCompanyId: draftingCompanyId || undefined,
+      companyCode: companyCode || undefined,
       draftingDeptId: draftingDeptId || undefined,
       draftingSectionId: draftingSectionId || undefined,
       chiefId: chiefId || undefined,
@@ -116,14 +116,14 @@ export function PublicListPage(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [keyword, draftingCompanyId, draftingDeptId, draftingSectionId, chiefId, lifecycleId, page]);
+  }, [keyword, companyCode, draftingDeptId, draftingSectionId, chiefId, lifecycleId, page]);
 
   const items = data?.items ?? [];
   const pinned = items.filter((i) => i.pinned);
   const rest = items.filter((i) => !i.pinned);
   const total = data?.total ?? 0;
   const hiddenCount = data?.hiddenCount ?? 0;
-  const selected = { draftingCompanyId, draftingDeptId, draftingSectionId, chiefId, lifecycleId };
+  const selected = { companyCode, draftingDeptId, draftingSectionId, chiefId, lifecycleId };
   const hasSelectFilters = Object.values(selected).some(Boolean);
   const hasFilters = Boolean(keyword) || hasSelectFilters;
 
@@ -252,7 +252,7 @@ export function PublicListPage(): JSX.Element {
     | { kind: 'combo'; key: string; label: string; value: string; options: PublicFilterOptions[keyof PublicFilterOptions] }
     | { kind: 'select'; key: string; label: string }
   > = [
-    { kind: 'combo', key: 'co', label: '制定公司', value: draftingCompanyId, options: filterOptions.draftingCompanies },
+    { kind: 'combo', key: 'co', label: '制定公司', value: companyCode, options: filterOptions.draftingCompanies },
     { kind: 'combo', key: 'mkdept', label: '制定部門', value: draftingDeptId, options: filterOptions.draftingDepts },
     { kind: 'combo', key: 'section', label: '制定室別', value: draftingSectionId, options: filterOptions.draftingSections },
     { kind: 'combo', key: 'chief', label: '當責室長', value: chiefId, options: filterOptions.chiefs },

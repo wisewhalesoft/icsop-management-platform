@@ -48,7 +48,6 @@ describe('[int] F014 制定組織/當責室長/使用部門 create-side vs SOP',
       status: 'active',
       documentNumber: num,
       documentName: 'ZZINT F014 制定組織',
-      draftingCompanyId: '00000',
       draftingDeptId: 'A2000',
       draftingSectionId: 'A2100',
       primaryChiefId: '20050',
@@ -67,7 +66,8 @@ describe('[int] F014 制定組織/當責室長/使用部門 create-side vs SOP',
     // GET /:id 回傳制定組織 + 多值集合。
     const g = await ctx.http().get(`/admin/documents/${id}`).set('Cookie', ctx.adminCookie);
     expect(g.status).toBe(200);
-    expect(g.body.draftingCompanyId).toBe('00000');
+    // 🔴 2026-08-27 裁定：制定公司即 companyCode（`draftingCompanyId` 已自 DB 與 API 移除）。
+    expect(g.body.companyCode).toBe('AS');
     expect(g.body.draftingDeptId).toBe('A2000');
     expect(g.body.draftingSectionId).toBe('A2100');
     expect(g.body.primaryChiefId).toBe('20050');
@@ -138,14 +138,14 @@ describe('[int] F014 制定組織/當責室長/使用部門 create-side vs SOP',
         status: 'active',
         documentNumber: `${num}-empty`,
         documentName: 'ZZINT F014 空多值',
-        draftingCompanyId: '00000',
-      });
+        });
     expect([200, 201]).toContain(c.status);
     const g = await ctx.http().get(`/admin/documents/${c.body.id}`).set('Cookie', ctx.adminCookie);
     expect(g.status).toBe(200);
     expect(g.body.secondaryChiefIds).toEqual([]);
     expect(g.body.usingDeptIds).toEqual([]);
-    expect(g.body.draftingCompanyId).toBe('00000');
+    // 🔴 2026-08-27 裁定：制定公司即 companyCode（`draftingCompanyId` 已自 DB 與 API 移除）。
+    expect(g.body.companyCode).toBe('AS');
   });
 
   /**

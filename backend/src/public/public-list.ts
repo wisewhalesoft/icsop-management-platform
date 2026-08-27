@@ -34,8 +34,7 @@ export interface PublicDocItem {
   /** 🔴 B 階段（多公司）：文件所屬公司（← ICSOP_DOCUMENT.companyCode）。 */
   companyCode: string;
   draftingDeptId: string | null;
-  /** 2026-08-16 delta（§10.6）：以下五欄 additive 新增，供新五項篩選與卡片欄位。 */
-  draftingCompanyId: string | null;
+  /** 2026-08-16 delta（§10.6）：以下四欄 additive 新增，供新五項篩選與卡片欄位。 */
   draftingSectionId: string | null;
   primaryChiefId: string | null;
   /** 次要當責室長員編集合（DOC_SECONDARY_CHIEF）；「當責室長」篩選＝主要 ∪ 次要。 */
@@ -55,8 +54,12 @@ export interface PublicDocItem {
  */
 export interface PublicListFilters {
   keyword?: string;
-  /** 制定公司 id（等值）。 */
-  draftingCompanyId?: string;
+  /**
+   * 🔴 制定公司＝**公司代碼**（`AS`／`AD`…，等值比對），2026-08-27 裁定。
+   * 原以 `draftingCompanyId`（該公司 ROOT 之 orgCode）承載——三家公司之 ROOT 皆為 `'00000'`，
+   * 拿它當篩選鍵根本分不出公司；且該欄除了 `'00000'` 就是 NULL，零資訊量，已整個移除。
+   */
+  companyCode?: string;
   /** 制定部門 orgCode（等值，非子樹展開）。 */
   draftingDeptId?: string;
   /** 制定室別 orgCode（等值）。 */
@@ -161,7 +164,7 @@ export function visibleCandidates(
  */
 export function matchesPublicFilters(item: PublicDocItem, filters: PublicListFilters): boolean {
   return (
-    (!filters.draftingCompanyId || item.draftingCompanyId === filters.draftingCompanyId) &&
+    (!filters.companyCode || item.companyCode === filters.companyCode) &&
     (!filters.draftingDeptId || item.draftingDeptId === filters.draftingDeptId) &&
     (!filters.draftingSectionId || item.draftingSectionId === filters.draftingSectionId) &&
     matchesChiefFilter(item, filters.chiefId) &&
@@ -215,7 +218,8 @@ export function buildFilterOptions(
 ): PublicFilterOptions {
   const cands = visibleCandidates(items, viewer, today);
   return {
-    draftingCompanies: distinctOptions(cands, (d) => [d.draftingCompanyId]),
+    // 制定公司之選項值＝公司代碼；label 由服務層以公司主檔全稱覆寫（見 distinctOptions 之 fallback 註記）。
+    draftingCompanies: distinctOptions(cands, (d) => [d.companyCode]),
     draftingDepts: distinctOptions(cands, (d) => [d.draftingDeptId]),
     draftingSections: distinctOptions(cands, (d) => [d.draftingSectionId]),
     chiefs: distinctOptions(cands, (d) => [d.primaryChiefId, ...d.secondaryChiefIds]),

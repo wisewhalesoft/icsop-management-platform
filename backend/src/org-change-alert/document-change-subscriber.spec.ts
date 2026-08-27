@@ -52,11 +52,12 @@ function subscriberWith(): {
 }
 
 describe('affectedFieldsFromEvent（欄位對映）', () => {
-  it('制定組織三欄與當責室長-主要 → 對映 FieldKey', () => {
+  it('制定公司（companyCode）＋制定部門/室別＋當責室長-主要 → 對映 FieldKey', () => {
     const fields = affectedFieldsFromEvent(
       event({
         changes: [
-          { field: 'draftingCompanyId', oldValue: 'A0000', newValue: 'B0000' },
+          // 🔴 2026-08-27 裁定：制定公司之屬性名改為 `companyCode`（`draftingCompanyId` 已移除）。
+          { field: 'companyCode', oldValue: 'AS', newValue: 'AD' },
           { field: 'draftingDeptId', oldValue: 'JA000', newValue: 'JB000' },
           { field: 'draftingSectionId', oldValue: 'JAB00', newValue: 'JAC00' },
           { field: 'primaryChiefId', oldValue: 'E001', newValue: 'E002' },

@@ -96,6 +96,8 @@ const FIELD_LABEL: Record<string, string> = {
   documentName: '程序書書名',
   documentNumber: '文件編號',
   lifecycleId: '所屬循環',
+  // 🔴 2026-08-27 裁定：制定公司即 companyCode；舊鍵保留（變更歷程為 append-only，歷史列仍在）。
+  companyCode: '制定公司',
   draftingCompanyId: '制定公司',
   draftingDeptId: '制定部門',
   draftingSectionId: '制定室別',
@@ -134,6 +136,7 @@ function valLabel(field: string, v: string | null): string {
 //    附件由 backend-batch 以 field='attachment' 發佈（F037）。CREATE 事件為 F010 加項，
 //    原型無此概念 → hybrid：changeType='CREATE' 顯示「建立」（additive 超集），其餘依 field。
 const SOURCE_OF_FIELD: Record<string, string> = {
+  companyCode: '制定組織',
   draftingCompanyId: '制定組織',
   draftingDeptId: '制定組織',
   draftingSectionId: '制定組織',

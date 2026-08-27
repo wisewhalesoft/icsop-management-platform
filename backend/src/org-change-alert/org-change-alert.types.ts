@@ -76,7 +76,6 @@ export interface DocumentAlertRef {
   documentId: string;
   documentNumber: string;
   documentName: string;
-  draftingCompanyId: string | null;
   draftingDeptId: string | null;
   draftingSectionId: string | null;
   primaryChiefId: string | null;

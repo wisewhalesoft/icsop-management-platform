@@ -31,9 +31,11 @@ describe('document-field-write（F026 欄位面 enforcement）', () => {
    * 而靜默丟棄，前端送出的公司代碼從未抵達 store；`ICSOP_DOCUMENT.companyCode` 為 NOT NULL，
    * INSERT 因而被 SQL Server 擋下（使用者看到 500）。本組測試把「有對映」釘死。
    */
-  it('companyCode 對映至「制定公司」（與 draftingCompanyId 同源於同一個下拉，共用欄位鍵）', () => {
+  it('companyCode 對映至「制定公司」，且 draftingCompanyId 已不在表內（2026-08-27 裁定）', () => {
     expect(FIELD_KEY_BY_PROP.companyCode).toBe('制定公司');
-    expect(FIELD_KEY_BY_PROP.companyCode).toBe(FIELD_KEY_BY_PROP.draftingCompanyId);
+    // 制定公司收斂為單一欄位；舊的 `draftingCompanyId` 已自 DB 與 API 整個移除，
+    // 白名單也必須跟著移除——留著等於仍放行一個寫了不會生效的欄位。
+    expect(FIELD_KEY_BY_PROP.draftingCompanyId).toBeUndefined();
   });
 
   it('companyCode：ICSOPAdmin writable、其餘角色 forbidden（不得落入 ignored）', () => {

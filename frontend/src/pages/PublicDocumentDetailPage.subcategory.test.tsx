@@ -46,7 +46,6 @@ function detailOf(over: Partial<PublicDocumentDetail> = {}): PublicDocumentDetai
     lifecycleName: '銷售及收款循環（消金）',
     nodeId: 'n1',
     nodeName: '進件作業',
-    draftingCompanyId: 'C',
     draftingCompanyName: '和潤企業股份有限公司',
     draftingDeptId: 'D',
     draftingDeptName: '企劃部',

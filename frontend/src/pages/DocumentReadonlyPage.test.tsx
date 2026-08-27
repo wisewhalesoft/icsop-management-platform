@@ -31,7 +31,7 @@ function mockAuth(roleCode: string) {
 const VIEW: DocumentView = {
   id: 'd1', companyCode: 'AS', status: 'active', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業',
   lifecycleId: 'lc1', nodeId: 'node1', nodeName: '進件作業',
-  draftingCompanyId: '00000', draftingDeptId: 'A2000', draftingSectionId: 'A2100',
+  draftingDeptId: 'A2000', draftingSectionId: 'A2100',
   primaryChiefId: '20050', secondaryChiefIds: ['20053'], usingDeptIds: ['A2100'],
   edition: "26'01", announcedDate: '2026-01-01T00:00:00.000Z', contentSummary: '規範車輛分期案件之進件收件流程。',
 };

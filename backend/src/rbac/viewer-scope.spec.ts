@@ -24,7 +24,7 @@ import type { RoleCode } from './function-matrix';
  *
  * 📝 **2026-08-16 純機械補欄（F019 delta 之型別漣漪；`tdd-implementation` 申訴 #2，lead 已驗證）**：
  * `PublicDocItem` 依 architecture-spec §10.6 additive 新增五個**必填**欄
- * （`draftingCompanyId`／`draftingSectionId`／`primaryChiefId`／`secondaryChiefIds`／`edition`），
+ * （`companyCode`／`draftingSectionId`／`primaryChiefId`／`secondaryChiefIds`／`edition`），
  * 本工廠未同步補齊即 `TS2739`，**整個 suite 無法編譯**。
  *
  * ⚠ 五欄**不得**改為選填：環自身之 `public-list-filter-options.spec.ts` 之
@@ -46,7 +46,6 @@ function doc(usingDepts: UsingDeptRef[], companyCode = 'AS'): PublicDocItem {
     usingDepts,
     companyCode,
     draftingDeptId: null,
-    draftingCompanyId: null,
     draftingSectionId: null,
     primaryChiefId: null,
     secondaryChiefIds: [],

@@ -26,7 +26,7 @@ const VIEW: DocumentView = {
   id: 'd1', companyCode: 'AS', status: 'active',
   documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業',
   lifecycleId: 'lc1', nodeId: null, nodeName: null,
-  draftingCompanyId: null, draftingDeptId: null, draftingSectionId: null,
+  draftingDeptId: null, draftingSectionId: null,
   primaryChiefId: null, secondaryChiefIds: [], usingDeptIds: [],
   edition: null, announcedDate: null, contentSummary: null,
 };

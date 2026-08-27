@@ -31,9 +31,13 @@ export function docFieldKey(documentId: string, affectedField: string): string {
   return `${documentId}|${affectedField}`;
 }
 
-/** 制定組織三欄之屬性 → FieldKey 對照（使用部門另為多值，單獨處理）。 */
+/**
+ * 制定組織之 orgCode 欄位 → FieldKey 對照（使用部門另為多值，單獨處理）。
+ * 🔴 2026-08-27 裁定：制定公司改以 `companyCode`（公司代碼）承載、`draftingCompanyId` 已移除，
+ * 因此**不再列於此**——本表偵測的是「ORG_UNIT 單位異動連帶影響文件」，公司代碼不是組織單位、
+ * 也不會因組織同步而變動。原本列在這裡的 `draftingCompanyId` 恆為 `'00000'` 或 NULL，近乎死碼。
+ */
 const ORG_PROP_FIELD: ReadonlyArray<[keyof DocumentAlertRef, string]> = [
-  ['draftingCompanyId', FieldKey.ESTABLISH_COMPANY],
   ['draftingDeptId', FieldKey.ESTABLISH_DEPT],
   ['draftingSectionId', FieldKey.ESTABLISH_SECTION],
 ];

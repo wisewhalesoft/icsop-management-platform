@@ -35,7 +35,7 @@ function doc(over: Partial<DocumentListItem>): DocumentListItem {
   return {
     id: 'd0', status: 'active', documentNumber: '', documentName: '',
     lifecycleId: 'lc1', lifecycleName: '銷售及收款循環', nodeId: null,
-    draftingCompanyId: null, draftingDeptId: null, draftingSectionId: null,
+    draftingDeptId: null, draftingSectionId: null,
     draftingCompanyName: null, draftingDeptName: null, draftingSectionName: null,
     primaryChiefId: null, primaryChiefName: null, secondaryChiefIds: [], hasOjt: false,
     edition: null, announcedDate: null, contentSummary: null,
@@ -366,7 +366,6 @@ describe('DocumentCreatePage — STEP3 制定組織與當責室長（F014，移�
           // 🔴 B 階段（多公司）：兩者語意分離——`companyCode` 為公司代碼（新欄位），
           // `draftingCompanyId` 維持 `ORG_UNIT.orgCode`（該公司之 ROOT 節點）。
           companyCode: 'AS',
-          draftingCompanyId: '00000',
           draftingDeptId: 'A2000',
           draftingSectionId: 'A2100',
           primaryChiefId: '20050',

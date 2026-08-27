@@ -1,4 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { resolveCompanyName } from '../org-directory/company-name';
 import { DocumentStatus } from '../documents/document-status';
 import { DisplayStatus, deriveDisplayStatus } from '../documents/display-status';
 import {
@@ -42,7 +43,6 @@ export interface PublicDocumentDetailDto {
   lifecycleName: string | null;
   nodeId: string | null;
   nodeName: string | null;
-  draftingCompanyId: string | null;
   draftingCompanyName: string | null;
   draftingDeptId: string | null;
   draftingDeptName: string | null;
@@ -109,7 +109,8 @@ export class PublicDocumentDetailService {
     // 組織名稱（僅制定三級；去重、單次批次解析）。未命中 → null。
     // AC-D12：使用部門已自對外 DTO 移除 ⇒ 不再為其解析名稱。
     const orgCodes = new Set<string>();
-    for (const c of [raw.draftingCompanyId, raw.draftingDeptId, raw.draftingSectionId]) {
+    // 🔴 制定公司不在此列：其名稱來自公司主檔全稱（`resolveCompanyName`），非 ORG_UNIT。
+    for (const c of [raw.draftingDeptId, raw.draftingSectionId]) {
       if (c) orgCodes.add(c);
     }
     const orgNames = new Map<string, string | null>();
@@ -140,8 +141,8 @@ export class PublicDocumentDetailService {
       lifecycleName: raw.lifecycleName,
       nodeId: raw.nodeId,
       nodeName: raw.nodeName,
-      draftingCompanyId: raw.draftingCompanyId,
-      draftingCompanyName: orgName(raw.draftingCompanyId),
+      // 🔴 2026-08-27 裁定：制定公司＝文件所屬公司，顯示為公司主檔全稱。
+      draftingCompanyName: resolveCompanyName(raw.companyCode),
       draftingDeptId: raw.draftingDeptId,
       draftingDeptName: orgName(raw.draftingDeptId),
       draftingSectionId: raw.draftingSectionId,

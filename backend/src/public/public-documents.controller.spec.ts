@@ -61,20 +61,20 @@ describe('PublicDocumentsController — 守門鏈與委派（F019）', () => {
    *    而後端仍據以過濾——`AC-D1` 表面滿足而該能力靜默續存（§10.9 明文否決之狀態）。
    *
    * 📌 **本輪之 controller 位置參數契約**（由 test-generator 定，供 tdd-implementation 對齊）：
-   *    OLD> `list(req, keyword, draftingCompanyId, draftingDeptId, draftingSectionId, chiefId, status, lifecycleId, page, pageSize)`
+   *    OLD> `list(req, keyword, companyCode, draftingDeptId, draftingSectionId, chiefId, status, lifecycleId, page, pageSize)`
    *    ——`keyword` 維持首位（既有），其後依 `AC-D1` 之 UI 逐字順序排列。
    */
   it('list：viewer（含 orgCode）取自 session；六項篩選/分頁委派服務，deptCode 已不存在', async () => {
     const svc = fakeSvc();
     const req = { sessionUser: { roleCode: 'User', orgCode: 'JAC00' } } as never;
     await new PublicDocumentsController(svc, fakeDetailSvc()).list(
-      req, '審查', 'CO-1', 'JA000', 'JAC00', 'E001', '有效', 'lc1', '2', '25',
+      req, '審查', 'AS', 'JA000', 'JAC00', 'E001', '有效', 'lc1', '2', '25',
     );
     expect(svc.list).toHaveBeenCalledWith(
       expect.objectContaining({ roleCode: 'User', orgCode: 'JAC00' }),
       {
         keyword: '審查',
-        draftingCompanyId: 'CO-1',
+        companyCode: 'AS',
         draftingDeptId: 'JA000',
         draftingSectionId: 'JAC00',
         chiefId: 'E001',
@@ -96,7 +96,7 @@ describe('PublicDocumentsController — 守門鏈與委派（F019）', () => {
       expect.objectContaining({ roleCode: 'SysAdmin', orgCode: null }),
       {
         keyword: undefined,
-        draftingCompanyId: undefined,
+        companyCode: undefined,
         draftingDeptId: undefined,
         draftingSectionId: undefined,
         chiefId: undefined,

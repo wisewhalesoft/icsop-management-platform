@@ -47,7 +47,6 @@ const DOC_DEFAULTS: PublicDocItem = {
     usingDepts: depts([]),
     companyCode: 'AS',
     draftingDeptId: null,
-    draftingCompanyId: null,
     draftingSectionId: null,
     primaryChiefId: null,
     secondaryChiefIds: [],
@@ -65,20 +64,20 @@ const OTHER: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'J
 
 /**
  * `AC-D4`：制定公司／制定部門／制定室別／循環別皆為**等值比對**，比對鍵為
- * `draftingCompanyId`／`draftingDeptId`／`draftingSectionId`／`lifecycleId`（**非顯示名稱字串**）。
+ * `companyCode`／`draftingDeptId`／`draftingSectionId`／`lifecycleId`（**非顯示名稱字串**）。
  */
 describe('F019 AC-D4：四項篩選為 id 等值比對（非顯示名稱）', () => {
   const rows = [
     doc({
       id: 'hit',
-      draftingCompanyId: 'CO-1',
+      companyCode: 'AS',
       draftingDeptId: 'JA000',
       draftingSectionId: 'JAC00',
       lifecycleId: 'lc1',
     }),
     doc({
       id: 'miss',
-      draftingCompanyId: 'CO-2',
+      companyCode: 'AD',
       draftingDeptId: 'JB000',
       draftingSectionId: 'JBB00',
       lifecycleId: 'lc2',
@@ -86,7 +85,7 @@ describe('F019 AC-D4：四項篩選為 id 等值比對（非顯示名稱）', ()
   ];
 
   it.each<[keyof PublicListFilters, string]>([
-    ['draftingCompanyId', 'CO-1'],
+    ['companyCode', 'AS'],
     ['draftingDeptId', 'JA000'],
     ['draftingSectionId', 'JAC00'],
     ['lifecycleId', 'lc1'],
@@ -103,14 +102,22 @@ describe('F019 AC-D4：四項篩選為 id 等值比對（非顯示名稱）', ()
   it('TS-F019-D4-003 比對鍵為 id 而非顯示名稱：以名稱字串為篩選值一律不命中', () => {
     // 制定公司之顯示名稱（例：和潤企業股份有限公司）不得成為有效比對鍵——
     // 名稱由 NameResolutionService 解析，同名不同 id 為可達狀態（§10.6 明訂 value 恆為 id/code）。
-    const page = buildPublicList(rows, OTHER, { draftingCompanyId: '和潤企業股份有限公司' }, TODAY);
+    const page = buildPublicList(rows, OTHER, { companyCode: '和潤企業股份有限公司' }, TODAY);
     expect(page.items).toEqual([]);
   });
 
+  /**
+   * 🔴 2026-08-27 裁定後，制定公司之比對鍵改為 `companyCode`（NOT NULL），原「該欄為 null 之
+   * 文件」情境已不可能存在；本案改以仍可為 null 的**制定室別**承載同一個不變式
+   * （空值列不得因為別人有值就被誤納）。
+   */
   it('TS-F019-D4-004 值為空字串／null 之文件不因空篩選值被誤納', () => {
-    const rowsWithNull = [doc({ id: 'null-co', draftingCompanyId: null }), doc({ id: 'co', draftingCompanyId: 'CO-1' })];
-    const page = buildPublicList(rowsWithNull, OTHER, { draftingCompanyId: 'CO-1' }, TODAY);
-    expect(page.items.map((d) => d.id)).toEqual(['co']);
+    const rowsWithNull = [
+      doc({ id: 'null-sec', draftingSectionId: null }),
+      doc({ id: 'sec', draftingSectionId: 'JAC00' }),
+    ];
+    const page = buildPublicList(rowsWithNull, OTHER, { draftingSectionId: 'JAC00' }, TODAY);
+    expect(page.items.map((d) => d.id)).toEqual(['sec']);
   });
 
   it('TS-F019-D4-005 `狀態` 維持既有裝飾性 no-op（基底條件已鎖「已公告」，OQ-F019-04）', () => {
@@ -158,7 +165,7 @@ describe('F019 AC-D6：六項篩選 ＋ 關鍵字為 AND 交集', () => {
   const full = doc({
     id: 'full',
     documentName: '車輛分期進件作業',
-    draftingCompanyId: 'CO-1',
+    companyCode: 'AS',
     draftingDeptId: 'JA000',
     draftingSectionId: 'JAC00',
     primaryChiefId: 'E001',
@@ -167,14 +174,14 @@ describe('F019 AC-D6：六項篩選 ＋ 關鍵字為 AND 交集', () => {
   const partial = doc({
     id: 'partial',
     documentName: '車輛分期對保作業',
-    draftingCompanyId: 'CO-1',
+    companyCode: 'AS',
     draftingDeptId: 'JA000',
     draftingSectionId: 'JAD00', // 制定室別不同
     primaryChiefId: 'E001',
     lifecycleId: 'lc1',
   });
   const ALL: PublicListFilters = {
-    draftingCompanyId: 'CO-1',
+    companyCode: 'AS',
     draftingDeptId: 'JA000',
     draftingSectionId: 'JAC00',
     chiefId: 'E001',

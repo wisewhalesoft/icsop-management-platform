@@ -43,7 +43,6 @@ const DOC_DEFAULTS: PublicDocItem = {
     usingDepts: depts([]),
     companyCode: 'AS',
     draftingDeptId: null,
-    draftingCompanyId: null,
     draftingSectionId: null,
     primaryChiefId: null,
     secondaryChiefIds: [],
@@ -64,14 +63,13 @@ const values = (opts: ReadonlyArray<{ value: string }>): string[] => opts.map((o
 
 /**
  * `AC-D5` 之核心 fixture：池中僅有一筆使用部門為 `JAD00`（對業務@JAC00 不相符）之已公告文件，
- * 其 `draftingCompanyId='C9'`。業務 viewer 取得之「制定公司」選項**不得含 `C9`**。
+ * 其 `companyCode='C9'`。業務 viewer 取得之「制定公司」選項**不得含 `C9`**。
  */
 const LEAK_POOL: PublicDocItem[] = [
   doc({
     id: 'visible',
     usingDepts: depts(['JAC00']),
-    companyCode: 'AS',
-    draftingCompanyId: 'C1',
+    companyCode: 'C1',
     draftingDeptId: 'JA000',
     draftingSectionId: 'JAC00',
     primaryChiefId: 'E001',
@@ -80,8 +78,7 @@ const LEAK_POOL: PublicDocItem[] = [
   doc({
     id: 'hidden',
     usingDepts: depts(['JAD00']),
-    companyCode: 'AS',
-    draftingCompanyId: 'C9',
+    companyCode: 'C9',
     draftingDeptId: 'JD000',
     draftingSectionId: 'JAD00',
     primaryChiefId: 'E900',
@@ -91,7 +88,7 @@ const LEAK_POOL: PublicDocItem[] = [
 ];
 
 describe('F019 AC-D5：選項來源＝全域 distinct，且先經 isDocVisibleToViewer 過濾', () => {
-  it('TS-F019-D5-101 業務@JAC00：不相符文件之 draftingCompanyId「C9」不得出現於選項', () => {
+  it('TS-F019-D5-101 業務@JAC00：不相符文件之 companyCode「C9」不得出現於選項', () => {
     const opts = buildFilterOptions(LEAK_POOL, BUSINESS, TODAY);
     expect(opts.draftingCompanies.some((o) => o.value === 'C9')).toBe(false);
     expect(values(opts.draftingCompanies)).toEqual(['C1']);
@@ -125,10 +122,10 @@ describe('F019 AC-D5：選項來源＝全域 distinct，且先經 isDocVisibleTo
 
   it('TS-F019-D5-105 非已公告文件（進度中／失效／作廢）之衍生值不得進入選項', () => {
     const pool = [
-      doc({ id: 'ip', status: 'active', announcedDate: '2099-01-01', draftingCompanyId: 'C-IP' }),
-      doc({ id: 'ina', status: 'inactive', draftingCompanyId: 'C-INA' }),
-      doc({ id: 'void', status: 'void', draftingCompanyId: 'C-VOID' }),
-      doc({ id: 'ann', status: 'active', announcedDate: '2026-01-01', draftingCompanyId: 'C-OK' }),
+      doc({ id: 'ip', status: 'active', announcedDate: '2099-01-01', companyCode: 'C-IP' }),
+      doc({ id: 'ina', status: 'inactive', companyCode: 'C-INA' }),
+      doc({ id: 'void', status: 'void', companyCode: 'C-VOID' }),
+      doc({ id: 'ann', status: 'active', announcedDate: '2026-01-01', companyCode: 'C-OK' }),
     ];
     expect(values(buildFilterOptions(pool, OTHER, TODAY).draftingCompanies)).toEqual(['C-OK']);
   });
@@ -137,7 +134,7 @@ describe('F019 AC-D5：選項來源＝全域 distinct，且先經 isDocVisibleTo
     // 已在清單側施加篩選（只留 C1）之後，選項側仍須回傳全部可見值（C1 ＋ C9）。
     // ⚠ 結構面（handler 收不到 filters）另由 `public-filter-options.controller.spec.ts`
     //   `TS-F019-D5-205`（handler arity === 1）把關；此處為行為面之直接佐證。
-    const filtered = buildPublicList(LEAK_POOL, OTHER, { draftingCompanyId: 'C1' }, TODAY);
+    const filtered = buildPublicList(LEAK_POOL, OTHER, { companyCode: 'C1' }, TODAY);
     expect(filtered.items.map((d) => d.id)).toEqual(['visible']);
 
     const opts = buildFilterOptions(LEAK_POOL, OTHER, TODAY);
@@ -146,17 +143,17 @@ describe('F019 AC-D5：選項來源＝全域 distinct，且先經 isDocVisibleTo
 
   it('TS-F019-D5-107 空值（null／空字串）不得成為選項', () => {
     const pool = [
-      doc({ id: 'a', draftingSectionId: null, draftingCompanyId: 'C1' }),
-      doc({ id: 'b', draftingSectionId: '', draftingCompanyId: 'C1' }),
-      doc({ id: 'c', draftingSectionId: 'JAC00', draftingCompanyId: 'C1' }),
+      doc({ id: 'a', draftingSectionId: null, companyCode: 'C1' }),
+      doc({ id: 'b', draftingSectionId: '', companyCode: 'C1' }),
+      doc({ id: 'c', draftingSectionId: 'JAC00', companyCode: 'C1' }),
     ];
     expect(values(buildFilterOptions(pool, OTHER, TODAY).draftingSections)).toEqual(['JAC00']);
   });
 
   it('TS-F019-D5-108 重複值僅出現一次（distinct）', () => {
     const pool = [
-      doc({ id: 'a', draftingCompanyId: 'C1', lifecycleId: 'lc1' }),
-      doc({ id: 'b', draftingCompanyId: 'C1', lifecycleId: 'lc1' }),
+      doc({ id: 'a', companyCode: 'C1', lifecycleId: 'lc1' }),
+      doc({ id: 'b', companyCode: 'C1', lifecycleId: 'lc1' }),
     ];
     const opts = buildFilterOptions(pool, OTHER, TODAY);
     expect(opts.draftingCompanies).toHaveLength(1);
@@ -174,7 +171,7 @@ describe('F019 AC-D5：選項來源＝全域 distinct，且先經 isDocVisibleTo
       const opts = buildFilterOptions(LEAK_POOL, viewer, TODAY);
       const distinct = (pick: (d: PublicDocItem) => Array<string | null>): string[] =>
         [...new Set(cands.flatMap(pick).filter((v): v is string => !!v))].sort();
-      expect(values(opts.draftingCompanies)).toEqual(distinct((d) => [d.draftingCompanyId]));
+      expect(values(opts.draftingCompanies)).toEqual(distinct((d) => [d.companyCode]));
       expect(values(opts.draftingDepts)).toEqual(distinct((d) => [d.draftingDeptId]));
       expect(values(opts.draftingSections)).toEqual(distinct((d) => [d.draftingSectionId]));
       expect(values(opts.chiefs)).toEqual(distinct((d) => [d.primaryChiefId, ...d.secondaryChiefIds]));
@@ -204,7 +201,7 @@ describe('F019 AC-D7：「當責室長」選項＝可見文件之 primaryChiefId
 
 /**
  * `AC-D5` ／ §10.6「回傳形狀」：`Option = { value, label }`，**`value` 恆為 id／code**
- * （`draftingCompanyId`／`draftingDeptId`／`draftingSectionId`／`employeeNo`／`lifecycleId`），
+ * （`companyCode`／`draftingDeptId`／`draftingSectionId`／`employeeNo`／`lifecycleId`），
  * **不得**為顯示名稱——`AC-D4` 已鎖定比對鍵為 id。
  *
  * 📌 純函式層只斷言 §10.6 明訂之部分：`value` 為 id、未解析時 `label` fallback 為 code。
@@ -217,7 +214,7 @@ describe('F019 AC-D5：Option 形狀（value 恆為 id／code；未解析時 lab
     const pool = [
       doc({
         id: 'a',
-        draftingCompanyId: 'C1',
+        companyCode: 'C1',
         draftingDeptId: 'JA000',
         draftingSectionId: 'JAC00',
         primaryChiefId: 'E001',
@@ -233,7 +230,7 @@ describe('F019 AC-D5：Option 形狀（value 恆為 id／code；未解析時 lab
   });
 
   it('TS-F019-D5-111 label 一律為非空字串，且不得為 `null`／`undefined` 之字面（不顯示佔位字）', () => {
-    const pool = [doc({ id: 'a', draftingCompanyId: 'C1', lifecycleId: 'lc1' })];
+    const pool = [doc({ id: 'a', companyCode: 'C1', lifecycleId: 'lc1' })];
     const opts = buildFilterOptions(pool, OTHER, TODAY);
     for (const group of Object.values(opts)) {
       for (const o of group) {
@@ -314,19 +311,20 @@ describe('F019 AC-D5：PublicDocumentsService.filterOptions（服務層組裝與
       id: 'a',
       usingDepts: depts(['JAC00']),
       companyCode: 'AS',
-      draftingCompanyId: '00000',
       draftingDeptId: 'JA000',
       draftingSectionId: 'JAC00',
       primaryChiefId: 'E001',
       lifecycleId: 'lc1',
     }),
   ];
-  const NAMES = { '00000': '和潤企業股份有限公司', JA000: '營運管理部', JAC00: '審查室' };
+  // 🔴 制定公司之 label 不再經 OrgNameResolver（改由公司主檔全稱解析），故本表不含公司。
+  const NAMES = { JA000: '營運管理部', JAC00: '審查室' };
 
   it('TS-F019-D5-301 三組組織選項之 label 由既有 OrgNameResolver 解析，value 仍為 code', async () => {
     const svc = new PublicDocumentsService(new OptStore(pool), resolverOf(NAMES), () => TODAY);
     const opts = await svc.filterOptions(OTHER);
-    expect(opts.draftingCompanies).toEqual([{ value: '00000', label: '和潤企業股份有限公司' }]);
+    // 制定公司：value＝公司代碼、label＝公司主檔全稱（2026-08-27 裁定）。
+    expect(opts.draftingCompanies).toEqual([{ value: 'AS', label: '和潤企業股份有限公司' }]);
     expect(opts.draftingDepts).toEqual([{ value: 'JA000', label: '營運管理部' }]);
     expect(opts.draftingSections).toEqual([{ value: 'JAC00', label: '審查室' }]);
   });
@@ -334,8 +332,16 @@ describe('F019 AC-D5：PublicDocumentsService.filterOptions（服務層組裝與
   it('TS-F019-D5-302 名稱未命中 → label fallback 為 code（不得為 null／undefined／空字串）', async () => {
     const svc = new PublicDocumentsService(new OptStore(pool), resolverOf({}), () => TODAY);
     const opts = await svc.filterOptions(OTHER);
-    expect(opts.draftingCompanies).toEqual([{ value: '00000', label: '00000' }]);
     expect(opts.draftingSections).toEqual([{ value: 'JAC00', label: 'JAC00' }]);
+    // 🔴 制定公司不經 OrgNameResolver ⇒ 空 resolver 不影響其 label；
+    //    要落到 fallback 得是**公司主檔查無之代碼**。
+    expect(opts.draftingCompanies).toEqual([{ value: 'AS', label: '和潤企業股份有限公司' }]);
+    const unknown = await new PublicDocumentsService(
+      new OptStore([doc({ id: 'x', usingDepts: depts(['JAC00']), companyCode: 'ZZ' })]),
+      resolverOf({}),
+      () => TODAY,
+    ).filterOptions(OTHER);
+    expect(unknown.draftingCompanies).toEqual([{ value: 'ZZ', label: 'ZZ' }]);
   });
 
   it('TS-F019-D5-303 🔴 服務層亦經可見性過濾：業務@JAC00 取不到不相符文件之衍生值', async () => {
@@ -416,8 +422,7 @@ describe('F019 AC-D5：PublicDocumentsService.filterOptions（服務層組裝與
       doc({
         id: 'a',
         usingDepts: depts(['JAC00']),
-        companyCode: 'AS',
-        draftingCompanyId: 'C1',
+        companyCode: 'C1',
         primaryChiefId: 'E001',
         lifecycleId: 'lc1',
         lifecycleName: 'Zulu 循環',
@@ -425,8 +430,7 @@ describe('F019 AC-D5：PublicDocumentsService.filterOptions（服務層組裝與
       doc({
         id: 'b',
         usingDepts: depts(['JAC00']),
-        companyCode: 'AS',
-        draftingCompanyId: 'C2',
+        companyCode: 'C2',
         primaryChiefId: 'E002',
         lifecycleId: 'lc2',
         lifecycleName: 'Alpha 循環',
@@ -436,11 +440,13 @@ describe('F019 AC-D5：PublicDocumentsService.filterOptions（服務層組裝與
       new OptStore(sortPool),
       // 🔴 標籤刻意用 ASCII：value 序為 C1<C2、E001<E002、lc1<lc2，label 序三組皆恰好相反，
       // 故本條能區分「依 value 排」與「依 label 排」，且不依賴 CJK collation。
-      resolverOf({ C1: 'Zeta 事業處', C2: 'Alpha 事業處' }, { E001: 'Zoe', E002: 'Adam' }),
+      resolverOf({}, { E001: 'Zoe', E002: 'Adam' }),
       () => TODAY,
     );
     const opts = await svc.filterOptions(OTHER);
-    expect(opts.draftingCompanies.map((o) => o.label)).toEqual(['Alpha 事業處', 'Zeta 事業處']);
+    // 🔴 制定公司已自本案移除：其 label 改由公司主檔全稱決定，四家全稱皆為中文，
+    //    要構造「value 序與 label 序相反」必然得依賴 CJK collation——正是本案註記要避開的。
+    //    「依 label 排序」之規則仍由下列兩組（ASCII 標籤）鎖定，涵蓋同一段程式碼路徑。
     expect(opts.chiefs.map((o) => o.label)).toEqual(['Adam', 'Zoe']);
     expect(opts.lifecycles.map((o) => o.label)).toEqual(['Alpha 循環', 'Zulu 循環']);
   });

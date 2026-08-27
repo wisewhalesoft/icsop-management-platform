@@ -90,7 +90,6 @@ export class TypeOrmDocumentStore implements DocumentStore {
       lifecycleId: d.lifecycleId,
       nodeId: d.nodeId,
       companyCode: d.companyCode,
-      draftingCompanyId: d.draftingCompanyId,
       draftingDeptId: d.draftingDeptId,
       draftingSectionId: d.draftingSectionId,
       primaryChiefId: d.primaryChiefId,
@@ -149,7 +148,6 @@ export class TypeOrmDocumentStore implements DocumentStore {
           documentNumber: input.documentNumber,
           documentName: input.documentName,
           lifecycleId: input.lifecycleId,
-          draftingCompanyId: input.draftingCompanyId ?? null,
           draftingDeptId: input.draftingDeptId ?? null,
           draftingSectionId: input.draftingSectionId ?? null,
           primaryChiefId: input.primaryChiefId ?? null,
@@ -195,7 +193,7 @@ export class TypeOrmDocumentStore implements DocumentStore {
     if (filters.lifecycleId) qb.andWhere('d.lifecycleId = :lc', { lc: filters.lifecycleId });
     if (filters.documentNumber) qb.andWhere('d.documentNumber = :dn', { dn: filters.documentNumber });
     if (filters.documentName) qb.andWhere('d.documentName = :dname', { dname: filters.documentName });
-    if (filters.draftingCompanyId) qb.andWhere('d.draftingCompanyId = :co', { co: filters.draftingCompanyId });
+    if (filters.companyCode) qb.andWhere('d.companyCode = :co', { co: filters.companyCode });
     if (filters.draftingDeptId) qb.andWhere('d.draftingDeptId = :dept', { dept: filters.draftingDeptId });
     if (filters.draftingSectionId) qb.andWhere('d.draftingSectionId = :sec', { sec: filters.draftingSectionId });
     if (filters.primaryChiefId) qb.andWhere('d.primaryChiefId = :chief', { chief: filters.primaryChiefId });
@@ -274,7 +272,6 @@ export class TypeOrmDocumentStore implements DocumentStore {
       lifecycleName: nameMap.get(d.lifecycleId) ?? null,
       nodeId: d.nodeId,
       companyCode: d.companyCode,
-      draftingCompanyId: d.draftingCompanyId,
       draftingDeptId: d.draftingDeptId,
       draftingSectionId: d.draftingSectionId,
       draftingCompanyName: null,
@@ -380,7 +377,6 @@ export class TypeOrmDocumentStore implements DocumentStore {
         'status',
         'documentNumber',
         'documentName',
-        'draftingCompanyId',
         'draftingDeptId',
         'draftingSectionId',
         'primaryChiefId',

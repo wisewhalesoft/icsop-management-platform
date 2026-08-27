@@ -72,7 +72,6 @@ const ITEM_DEFAULTS: PublicDocItem = {
     usingDepts: depts([]),
     companyCode: 'AS',
     draftingDeptId: null,
-    draftingCompanyId: null,
     draftingSectionId: null,
     primaryChiefId: null,
     secondaryChiefIds: [],

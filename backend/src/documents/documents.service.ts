@@ -1,3 +1,4 @@
+import { resolveCompanyName } from '../org-directory/company-name';
 import {
   BadRequestException,
   ConflictException,
@@ -199,15 +200,13 @@ export class DocumentsService {
     // F010 建立稽核事件（CREATE）。刻意置於 409/欄位權限攔截之後——建立失敗不應產生任何變更事件
     // （比照 update()/setStatus() 之「失敗不發事件」慣例）。逐已填欄位一列（oldValue=null）。
     // publish 為 fan-out（CompositeDocumentChangePublisher）之附加副作用，已逐訂閱者 try/catch，此處不重複包裹。
-    // 🔴 `companyCode` 不入變更歷程：它與「制定公司」（`draftingCompanyId`）源自建立頁
-    // **同一個下拉**，另記一列等於同一次選擇留兩筆；且欄名標籤為前後端各一份之鏡射
-    // （`change-history/change-labels.ts` ／ `ChangeHistoryPage.tsx`），新增可見欄位須兩處同步。
-    // 本欄定位為系統歸屬鍵（決定用哪家公司解析 orgCode），非使用者眼中的獨立業務欄位。
-    const loggableFields: Record<string, unknown> = {
-      ...(input as unknown as Record<string, unknown>),
-    };
-    delete loggableFields.companyCode;
-    const deltas = buildCreateChangeDeltas(loggableFields);
+    // 🔴 `companyCode` **納入**變更歷程，標籤為「制定公司」（`change-labels.ts` ／
+    // 前端 `ChangeHistoryPage.tsx` 兩份鏡射皆已補上）。
+    // 📝 已作廢（⚠ 不得復原）：本處一度把 `companyCode` 自 delta 排除，理由是「與制定公司
+    //    （`draftingCompanyId`）同源、不重複記一列」。2026-08-27 裁定把 `draftingCompanyId`
+    //    整個移除、制定公司即 `companyCode` 之後，該理由不再成立——再排除就等於**建立文件
+    //    時選了哪家公司完全不留紀錄**。
+    const deltas = buildCreateChangeDeltas(input as unknown as Record<string, unknown>);
     await this.publisher.publish({
       documentId: created.id,
       changeType: 'CREATE',
@@ -429,7 +428,7 @@ export class DocumentsService {
 
     const orgKeys = new Map<string, { companyCode: string; orgCode: string }>();
     for (const it of items) {
-      for (const c of [it.draftingCompanyId, it.draftingDeptId, it.draftingSectionId]) {
+      for (const c of [it.draftingDeptId, it.draftingSectionId]) {
         if (c) orgKeys.set(key(it.companyCode, c), { companyCode: it.companyCode, orgCode: c });
       }
     }
@@ -459,7 +458,9 @@ export class DocumentsService {
     for (const it of items) {
       const orgName = (c: string | null): string | null =>
         c ? (orgNames.get(key(it.companyCode, c)) ?? null) : null;
-      it.draftingCompanyName = orgName(it.draftingCompanyId);
+      // 🔴 2026-08-27 裁定：制定公司＝文件所屬公司，顯示為公司主檔**全稱**
+      //    （和潤企業股份有限公司），不再是該公司 ROOT 之 ORG_UNIT 名（和潤本部）。
+      it.draftingCompanyName = resolveCompanyName(it.companyCode);
       it.draftingDeptName = orgName(it.draftingDeptId);
       it.draftingSectionName = orgName(it.draftingSectionId);
       it.primaryChiefName = it.primaryChiefId
@@ -480,7 +481,7 @@ export class DocumentsService {
       doc.nodeId && this.nodeNameStore
         ? await this.nodeNameStore.findNameById(doc.nodeId)
         : null;
-    return { ...doc, nodeName };
+    return { ...doc, nodeName, companyName: resolveCompanyName(doc.companyCode) };
   }
 
   /**

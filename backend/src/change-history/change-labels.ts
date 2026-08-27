@@ -17,6 +17,9 @@ const FIELD_LABEL: Record<string, string> = {
   documentName: '程序書書名',
   documentNumber: '文件編號',
   lifecycleId: '所屬循環',
+  // 🔴 2026-08-27 裁定：制定公司即 `companyCode`。`draftingCompanyId` 已移除，但**歷史列仍在**
+  //    （DOCUMENT_CHANGE_LOG 為 append-only），故舊鍵保留對映，兩者同標籤。
+  companyCode: '制定公司',
   draftingCompanyId: '制定公司',
   draftingDeptId: '制定部門',
   draftingSectionId: '制定室別',
@@ -39,6 +42,7 @@ const FIELD_LABEL: Record<string, string> = {
 
 /** 來源分類（由 `field` 推導；`CREATE` 事件優先）——與前端 `sourceOf()` 同一規則。 */
 const SOURCE_OF_FIELD: Record<string, string> = {
+  companyCode: '制定組織',
   draftingCompanyId: '制定組織',
   draftingDeptId: '制定組織',
   draftingSectionId: '制定組織',

@@ -16,11 +16,12 @@ export interface CreateDocumentInput {
    * 🔴 B 階段（多公司）：文件所屬公司（`ICSOP_DOCUMENT.companyCode`，**NOT NULL 且無 default**）。
    * 由 service 解析後恆為具體值（建立酬載之「制定公司」→ 無則退回操作者所屬公司），store 直接落地。
    * ⚠ 不得省略：未帶值之 INSERT 會被 SQL Server 以「Cannot insert the value NULL」擋下（→ 500）。
-   * 語意與 `draftingCompanyId` 分離：本欄為公司代碼（`AS`／`AD`…），後者為該公司 ROOT 之 `orgCode`。
+   * 🔴 2026-08-27 裁定：**「制定公司」即本欄**。原先另有一個 `draftingCompanyId`（該公司 ROOT 之
+   * `orgCode`）承載制定公司，但 AS／AD／AJ 三家之 ROOT 皆為 `'00000'`、AE 更無 ROOT 列——該欄
+   * 除了 `'00000'` 就是 NULL，零資訊量，已整個移除。制定公司之顯示名＝公司主檔全稱。
    */
   companyCode: string;
   /** 制定公司/部門/室別＝ORG_UNIT.orgCode（業務鍵，非 UUID；與名稱解析 findByOrgCode 一致，F014）。 */
-  draftingCompanyId?: string | null;
   draftingDeptId?: string | null;
   draftingSectionId?: string | null;
   /** 當責室長-主要＝員工編號（employeeNo）。 */
@@ -50,6 +51,11 @@ export interface DocumentView extends CreateDocumentInput {
  */
 export interface DocumentDetailView extends DocumentView {
   nodeName: string | null;
+  /**
+   * 制定公司之顯示名（公司主檔全稱，如「和潤企業股份有限公司」）；未知代碼 → null。
+   * 由 service 解析後附上，使編輯頁／唯讀頁不必各自再拿一份公司主檔對照。
+   */
+  companyName: string | null;
 }
 
 /** F017 清單富化：某文件之單筆次要室長參照（documentId + employeeNo）。 */
@@ -88,7 +94,8 @@ export interface DocumentListFilters {
   /** 精確篩選（F017 下拉）。 */
   documentNumber?: string;
   documentName?: string;
-  draftingCompanyId?: string;
+  /** 制定公司＝公司代碼（等值比對）。 */
+  companyCode?: string;
   draftingDeptId?: string;
   draftingSectionId?: string;
   primaryChiefId?: string;
@@ -136,7 +143,6 @@ export interface DocumentListItem {
   lifecycleId: string;
   lifecycleName: string | null;
   nodeId: string | null;
-  draftingCompanyId: string | null;
   draftingDeptId: string | null;
   draftingSectionId: string | null;
   /** F017 名稱解析（org-foundation NameResolutionService；查無→null，前端顯示「—」）。 */

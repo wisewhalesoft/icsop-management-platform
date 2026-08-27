@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { resolveCompanyName } from '../org-directory/company-name';
 import { DocumentStatus } from '../documents/document-status';
 import { DisplayStatus, deriveDisplayStatus } from '../documents/display-status';
 import {
@@ -137,7 +138,8 @@ export class PublicDocumentsService {
     //    F041 業務子分類可見性與置頂），故裸 orgCode 不足以識別單位。
     const pairs = new Map<string, { companyCode: string; code: string }>();
     for (const it of result.items) {
-      for (const c of [it.draftingCompanyId, it.draftingDeptId, it.draftingSectionId]) {
+      // 🔴 制定公司不在此列：其名稱來自**公司主檔全稱**（`resolveCompanyName`），非 ORG_UNIT。
+      for (const c of [it.draftingDeptId, it.draftingSectionId]) {
         if (c) pairs.set(pairKey(it.companyCode, c), { companyCode: it.companyCode, code: c });
       }
     }
@@ -170,7 +172,7 @@ export class PublicDocumentsService {
     const cands = visibleCandidates(items, viewer, this.clock());
     const orgPairs = new Map<string, { companyCode: string; code: string }>();
     for (const d of cands) {
-      for (const c of [d.draftingCompanyId, d.draftingDeptId, d.draftingSectionId]) {
+      for (const c of [d.draftingDeptId, d.draftingSectionId]) {
         if (c) orgPairs.set(pairKey(d.companyCode, c), { companyCode: d.companyCode, code: c });
       }
     }
@@ -222,9 +224,14 @@ export class PublicDocumentsService {
         // 畫面上看不出任何規律。排序落在解析之後才排得到使用者實際看見的字。
         .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'));
 
+    // 制定公司之 label＝公司主檔全稱（選項 value 為公司代碼）；與 ORG_UNIT 名稱解析無關。
+    const companyNames = new Map<string, string | null>(
+      opts.draftingCompanies.map((o) => [o.value, resolveCompanyName(o.value)]),
+    );
+
     return {
       ...opts,
-      draftingCompanies: label(opts.draftingCompanies, nameMap),
+      draftingCompanies: label(opts.draftingCompanies, companyNames),
       draftingDepts: label(opts.draftingDepts, nameMap),
       draftingSections: label(opts.draftingSections, nameMap),
       chiefs: label(opts.chiefs, chiefNames),
@@ -288,7 +295,9 @@ export class PublicDocumentsService {
       lifecycleName: it.lifecycleName,
       draftingDeptId: it.draftingDeptId,
       draftingDeptName: resolve(it.companyCode, it.draftingDeptId),
-      draftingCompanyName: resolve(it.companyCode, it.draftingCompanyId),
+      // 🔴 2026-08-27 裁定：制定公司＝文件所屬公司，顯示為公司主檔**全稱**
+      //    （和潤企業股份有限公司），不再是該公司 ROOT 之 ORG_UNIT 名（和潤本部）。
+      draftingCompanyName: resolveCompanyName(it.companyCode),
       draftingSectionName: resolve(it.companyCode, it.draftingSectionId),
       edition: it.edition,
       status: it.status,

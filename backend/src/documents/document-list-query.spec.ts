@@ -22,7 +22,6 @@ function item(over: Partial<DocumentListItem>): DocumentListItem {
     lifecycleId: 'lc',
     lifecycleName: null,
     nodeId: null,
-    draftingCompanyId: null,
     draftingDeptId: null,
     draftingSectionId: null,
     draftingCompanyName: null,
@@ -90,8 +89,9 @@ describe('applyDocumentQuery（F017 篩選/排序/分頁純函式）', () => {
   });
 
   it('TS-F017-006 依制定公司精確篩選', () => {
-    const rows = [item({ id: 'A', draftingCompanyId: 'coX' }), item({ id: 'B', draftingCompanyId: 'coY' })];
-    expect(applyDocumentQuery(rows, { draftingCompanyId: 'coX' }, TODAY).items.map((x) => x.id)).toEqual(['A']);
+    // 🔴 2026-08-27 裁定：制定公司之比對鍵改為 `companyCode`（公司代碼）。
+    const rows = [item({ id: 'A', companyCode: 'AS' }), item({ id: 'B', companyCode: 'AD' })];
+    expect(applyDocumentQuery(rows, { companyCode: 'AS' }, TODAY).items.map((x) => x.id)).toEqual(['A']);
   });
 
   it('TS-F017-007 依當責室長 primaryChiefId 精確篩選（既有期望值不反轉，AC-D7 為嚴格超集）', () => {

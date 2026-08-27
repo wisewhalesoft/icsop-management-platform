@@ -117,9 +117,8 @@ export function DocumentCreatePage(): JSX.Element {
    * 🔴 B 階段（多公司）：本狀態承載的是**公司代碼**（`AS`／`AD`…），非 `ORG_UNIT.orgCode`。
    * 舊版以 ROOT 節點之 orgCode（`00000`）充當，兩種語意混用；`ICSOP_DOCUMENT` 於 B 階段
    * 新增 `companyCode` 欄位後即應分離：
-   *  - `companyCode`（本狀態）→ 送出至新欄位，決定文件所屬公司。
-   *  - `draftingCompanyId` → 維持原語意（`ORG_UNIT.orgCode`，該公司之 ROOT 節點），
-   *    由所選公司之組織資料推導；該公司無 ROOT 列（如 AE）時留空，**不得**以公司代碼頂替。
+   *  - `companyCode`（本狀態）→ 決定文件所屬公司，**即「制定公司」本身**（2026-08-27 裁定）。
+   *  - 原先並存的 `draftingCompanyId`（該公司 ROOT 之 orgCode）已整個移除。
    */
   const [companyCode, setCompanyCode] = useState('');
   const [draftingDeptId, setDraftingDeptId] = useState('');
@@ -242,16 +241,6 @@ export function DocumentCreatePage(): JSX.Element {
     },
     [orgByCode],
   );
-  /**
-   * 該公司之 ROOT 節點 orgCode（供 `draftingCompanyId` 欄位）。
-   * 🔴 查無 ROOT 列（實測 AE 即為此情形，`ROOT_N=0`）→ `null`，該欄留空；
-   *    **不得**以公司代碼頂替——那正是 B 階段前混用兩種語意所造成的問題。
-   */
-  const draftingRootCode = useMemo<string | null>(
-    () => orgUnits.find((u) => u.tier === 'ROOT')?.orgCode ?? null,
-    [orgUnits],
-  );
-
   // 🔴 B 階段：來源為公司主檔（companyCode↔companyName），非 org-unit 之 ROOT 列。
   const companyOptions = useMemo<ComboOption[]>(
     () => companies.map((c) => ({ value: c.companyCode, label: c.companyName })),
@@ -412,9 +401,9 @@ export function DocumentCreatePage(): JSX.Element {
         ...(announcedDate ? { announcedDate } : {}),
         ...(contentSummary.trim() ? { contentSummary: contentSummary.trim() } : {}),
         // F014 制定組織/當責室長/使用部門（皆選填；空值不送出，由後端正規化為空集合）。
+        // 🔴 2026-08-27 裁定：制定公司只剩 companyCode 一欄（原本同時送出的
+        //    `draftingCompanyId`＝該公司 ROOT 之 orgCode 已自 DB 與 API 移除）。
         ...(companyCode ? { companyCode } : {}),
-        // `draftingCompanyId` 維持原語意（該公司之 ROOT 節點 orgCode）；無 ROOT 列則不送。
-        ...(draftingRootCode ? { draftingCompanyId: draftingRootCode } : {}),
         ...(draftingDeptId ? { draftingDeptId } : {}),
         ...(draftingSectionId ? { draftingSectionId } : {}),
         ...(primaryChief ? { primaryChiefId: primaryChief.value } : {}),

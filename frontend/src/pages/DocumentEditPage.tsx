@@ -7,7 +7,6 @@ import {
   getDocuments,
   getLifecycles,
   getOrgUnits,
-  getCompanies,
   searchPersons,
   getUsageFormPool,
   getDocumentForms,
@@ -47,7 +46,6 @@ import type {
   DocumentListItem,
   LifecycleView,
   OrgUnitRecord,
-  CompanyRecord,
   PersonRecord,
   UsageFormRecord,
   DocumentAttachmentRecord,
@@ -85,7 +83,6 @@ interface Draft {
   edition: string;
   announcedDate: string;
   contentSummary: string;
-  draftingCompanyId: string;
   draftingDeptId: string;
   draftingSectionId: string;
   primaryChiefId: string;
@@ -105,7 +102,6 @@ function draftOf(v: DocumentView, links: string[]): Draft {
     edition: v.edition ?? '',
     announcedDate: v.announcedDate ? v.announcedDate.slice(0, 10) : '',
     contentSummary: v.contentSummary ?? '',
-    draftingCompanyId: v.draftingCompanyId ?? '',
     draftingDeptId: v.draftingDeptId ?? '',
     draftingSectionId: v.draftingSectionId ?? '',
     primaryChiefId: v.primaryChiefId ?? '',
@@ -156,8 +152,6 @@ export function DocumentEditPage(): JSX.Element {
   const [lcSubId, setLcSubId] = useState('');
   const [subErr, setSubErr] = useState(false);
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
-  /** 🔴 B 階段（多公司）：公司主檔，供制定公司下拉（取代 org-unit 之 ROOT 列）。 */
-  const [companies, setCompanies] = useState<CompanyRecord[]>([]);
   const [existing, setExisting] = useState<DocumentListItem[]>([]);
   const [personResults, setPersonResults] = useState<ComboOption[]>([]);
   const [primaryChiefOrig, setPrimaryChiefOrig] = useState<ComboOption | null>(null);
@@ -190,7 +184,6 @@ export function DocumentEditPage(): JSX.Element {
       // 🔴 B 階段（多公司）：以**文件自身之 companyCode** 載入組織，不可無參數呼叫
       // （那會取登入者自己公司的組織，替他公司文件編輯時部門下拉會列錯公司的部門）。
       void Promise.resolve(getOrgUnits(v.companyCode)).then((rows) => setOrgUnits(rows ?? [])).catch(() => undefined);
-      void Promise.resolve(getCompanies()).then((rows) => setCompanies(rows ?? [])).catch(() => undefined);
       void getDocuments({ pageSize: 2000 }).then((p) => setExisting(p.items)).catch(() => undefined);
       void getUsageFormPool().then(setFormPool).catch(() => undefined);
       void getDocumentForms(id)
@@ -268,19 +261,12 @@ export function DocumentEditPage(): JSX.Element {
   const orgName = useCallback((code: string) => orgByCode.get(code)?.name ?? code, [orgByCode]);
   // 🔴 B 階段：來源為公司主檔，非 org-unit 之 ROOT 列（四家 ROOT 代碼皆為 `00000`、AE 無 ROOT 列）。
   /**
-   * 🔴 B 階段（多公司）：文件所屬公司之**顯示名稱**（不是下拉選項）。
-   * 文件的 `companyCode` 於建立時決定即固定（後端 `EDIT_READONLY_PROPS` 亦靜默剔除此鍵），
-   * 因為改公司會讓既有的制定部門／室別／使用部門（皆為各公司獨立編碼之 5 碼 orgCode）
-   * 整批指向別家公司的單位，並直接影響 F041 的資料列可見性判定。
-   * 公司主檔尚未載入或查無該代碼時退回顯示代碼本身（不留白）。
+   * 🔴 制定公司之顯示名（公司主檔全稱）。制定公司即文件之 `companyCode`，於建立時決定即固定
+   * ——改公司會讓既有的制定部門／室別／使用部門（皆為各公司獨立編碼之 5 碼 orgCode）整批指向
+   * 別家公司的單位，並直接影響 F041 之資料列可見性判定（後端 `EDIT_READONLY_PROPS` 亦剔除此鍵）。
+   * 名稱由後端 `GET /admin/documents/:id` 解析後附上（`companyName`），前端不再自備一份公司主檔。
    */
-  const companyName = useMemo(
-    () =>
-      companies.find((c) => c.companyCode === view?.companyCode)?.companyName ??
-      view?.companyCode ??
-      '—',
-    [companies, view],
-  );
+  const companyName = view?.companyName ?? view?.companyCode ?? '—';
   const deptOptions = useMemo<ComboOption[]>(
     () => orgUnits.filter((u) => u.tier === 'DEPARTMENT').map((u) => ({ value: u.orgCode, label: u.name })),
     [orgUnits],

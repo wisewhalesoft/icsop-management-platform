@@ -27,7 +27,6 @@ function doc(over: Partial<DocumentAlertRef> = {}): DocumentAlertRef {
     documentId: 'D1',
     documentNumber: 'ICSOP-SRC-101-1-01',
     documentName: '車輛分期進件作業',
-    draftingCompanyId: null,
     draftingDeptId: null,
     draftingSectionId: null,
     primaryChiefId: null,
@@ -344,8 +343,13 @@ describe('generateDocumentFieldAlerts — 制定組織／使用部門（§3.3）
     expect(out[0].afterValue).toContain('企業金融室');
   });
 
+  /**
+   * 🔴 2026-08-27 裁定：制定公司改以 `companyCode`（公司代碼）承載、`draftingCompanyId` 已移除，
+   * 因此**不再列於此**——本表偵測的是「ORG_UNIT 單位異動連帶影響文件」，公司代碼不是組織單位，
+   * 也不會因組織同步而變動。原本的 `draftingCompanyId` 恆為 `'00000'` 或 NULL，近乎死碼。
+   * 📝 已作廢（⚠ 不得復原）：OLD> `['draftingCompanyId', FieldKey.ESTABLISH_COMPANY],`
+   */
   it.each([
-    ['draftingCompanyId', FieldKey.ESTABLISH_COMPANY],
     ['draftingDeptId', FieldKey.ESTABLISH_DEPT],
     ['draftingSectionId', FieldKey.ESTABLISH_SECTION],
   ] as const)(

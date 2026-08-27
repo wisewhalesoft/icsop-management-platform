@@ -31,7 +31,7 @@ function mockAuth(roleCode: string) {
 const doc = (over: Partial<DocumentListItem>): DocumentListItem => ({
   id: 'd', status: 'active', documentNumber: 'N', documentName: '名', lifecycleId: 'lc',
   lifecycleName: '銷售及收款循環', nodeId: 'node1',
-  draftingCompanyId: '00000', draftingDeptId: 'A2000', draftingSectionId: 'A2100',
+  draftingDeptId: 'A2000', draftingSectionId: 'A2100',
   draftingCompanyName: '和潤企業股份有限公司', draftingDeptName: '企劃部', draftingSectionName: '車輛行銷室',
   primaryChiefId: '20050', primaryChiefName: '陳彥廷',
   // 🔴 2026-08-16 delta（F017 AC-D2／AC-D5／AC-D7；架構 §10.12 列富化）：additive 兩欄

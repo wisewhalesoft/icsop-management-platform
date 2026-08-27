@@ -52,7 +52,7 @@ export function applyDocumentQuery(
     if (filters.status && !matchesStatusFilter(r, filters.status, today)) return false;
     if (filters.documentNumber && r.documentNumber !== filters.documentNumber) return false;
     if (filters.documentName && r.documentName !== filters.documentName) return false;
-    if (filters.draftingCompanyId && r.draftingCompanyId !== filters.draftingCompanyId) return false;
+    if (filters.companyCode && r.companyCode !== filters.companyCode) return false;
     if (filters.draftingDeptId && r.draftingDeptId !== filters.draftingDeptId) return false;
     if (filters.draftingSectionId && r.draftingSectionId !== filters.draftingSectionId) return false;
     // F017 AC-T40 子樹篩選：已由服務層展開之節點 id 集合。與既有篩選為 AND（僅縮小結果集）；

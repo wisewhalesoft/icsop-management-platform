@@ -221,7 +221,11 @@ export interface DocumentListItem {
   lifecycleId: string;
   lifecycleName: string | null;
   nodeId: string | null;
-  draftingCompanyId: string | null;
+  /**
+   * 🔴 2026-08-27 裁定：制定公司即 `companyCode`，顯示名為公司主檔**全稱**。
+   * 原有的 `draftingCompanyId`（該公司 ROOT 之 orgCode）已自 DB 與 API 整個移除——
+   * 三家公司之 ROOT 皆為 '00000'、AE 更無 ROOT 列，該欄零資訊量。
+   */
   draftingDeptId: string | null;
   draftingSectionId: string | null;
   /** F017 名稱解析（org-foundation NameResolutionService；查無→null，前端顯示「—」）。 */
@@ -288,7 +292,8 @@ export interface DocumentFilters {
   keyword?: string;
   documentNumber?: string;
   documentName?: string;
-  draftingCompanyId?: string;
+  /** 制定公司＝公司代碼（等值）。 */
+  companyCode?: string;
   draftingDeptId?: string;
   draftingSectionId?: string;
   primaryChiefId?: string;
@@ -327,7 +332,8 @@ export interface DocumentView {
   nodeId: string | null;
   /** G-DOC-205/301 所屬節點名（GET /admin/documents/:id 回；nodeId→LIFECYCLE_NODE.name；無→null）。 */
   nodeName?: string | null;
-  draftingCompanyId: string | null;
+  /** 制定公司之顯示名（公司主檔全稱）；未知代碼 → null。GET /admin/documents/:id 回。 */
+  companyName?: string | null;
   draftingDeptId: string | null;
   draftingSectionId: string | null;
   primaryChiefId: string | null;
@@ -590,7 +596,6 @@ export interface PublicDocumentDetail {
   lifecycleName: string | null;
   nodeId: string | null;
   nodeName: string | null;
-  draftingCompanyId: string | null;
   draftingCompanyName: string | null;
   draftingDeptId: string | null;
   draftingDeptName: string | null;
@@ -620,7 +625,8 @@ export interface PublicListFilters {
    * 🔴 2026-08-16 delta（F019 `AC-D1`）：`deptCode`（使用部門篩選）**已移除**；
    * 改為制定三級＋當責室長之 id 等值比對。
    */
-  draftingCompanyId?: string;
+  /** 制定公司＝公司代碼（等值）。 */
+  companyCode?: string;
   draftingDeptId?: string;
   draftingSectionId?: string;
   /** 當責室長員編（後端比對主要 ∪ 次要）。 */

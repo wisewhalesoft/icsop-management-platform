@@ -31,7 +31,7 @@ class FakeStore implements Partial<DocumentStore> {
     const d: DocumentListItem = {
       id: `doc-${this.seq++}`, companyCode: 'AS', status: 'active', documentNumber: 'N', documentName: '書名',
       lifecycleId: 'lc1', lifecycleName: null, nodeId: null,
-      draftingCompanyId: null, draftingDeptId: null, draftingSectionId: null,
+      draftingDeptId: null, draftingSectionId: null,
       draftingCompanyName: null, draftingDeptName: null, draftingSectionName: null,
       primaryChiefId: null, primaryChiefName: null,
       secondaryChiefCount: 0, secondaryChiefNames: [], secondaryChiefIds: [], hasOjt: false,

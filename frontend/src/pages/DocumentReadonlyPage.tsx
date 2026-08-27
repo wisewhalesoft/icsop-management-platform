@@ -420,7 +420,7 @@ export function DocumentReadonlyPage(): JSX.Element {
   const ROWS: { label: string; note?: string; value: React.ReactNode }[] = [
     { label: '系統 UUID', note: '系統產生', value: <span className="mono text-slate-500">{view.id}</span> },
     { label: '文件狀態', value: <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${sm.cls}`}>{sm.label}</span> },
-    { label: '制定公司', value: orgName(view.draftingCompanyId) },
+    { label: '制定公司', value: view.companyName ?? view.companyCode },
     { label: '制定部門', value: orgName(view.draftingDeptId) },
     { label: '制定室別', value: orgName(view.draftingSectionId) },
     { label: '程序書編號', value: <span className="mono">{view.documentNumber}</span> },

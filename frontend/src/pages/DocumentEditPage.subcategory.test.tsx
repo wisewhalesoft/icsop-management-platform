@@ -61,7 +61,6 @@ const viewOn = (lifecycleId: string): DocumentView => ({
   nodeId: null,
   // DocumentView 忠實鏡射後端 toView（一律填值），故此四欄為必填 string | null——
   // 不得為了本 fixture 把 production 型別放寬為 optional。
-  draftingCompanyId: null,
   draftingDeptId: null,
   draftingSectionId: null,
   primaryChiefId: null,
@@ -75,7 +74,7 @@ const viewOn = (lifecycleId: string): DocumentView => ({
 const listItem = (o: Partial<DocumentListItem>): DocumentListItem => ({
   id: 'x', status: 'active', documentNumber: 'N', documentName: '名', lifecycleId: 'lc1',
   lifecycleName: '銷售及收款循環（消金）', nodeId: null,
-  draftingCompanyId: null, draftingDeptId: null, draftingSectionId: null,
+  draftingDeptId: null, draftingSectionId: null,
   draftingCompanyName: null, draftingDeptName: null, draftingSectionName: null,
   primaryChiefId: null, primaryChiefName: null, edition: null, announcedDate: null,
   contentSummary: null, icsopPdfBlobPath: null, icsopPdfFileName: null, links: [], ...o,

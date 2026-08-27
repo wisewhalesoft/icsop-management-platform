@@ -197,7 +197,7 @@ class FakeStore implements DocumentStore {
     const rows: DocumentListItem[] = this.docs.map((d) => ({
       id: d.id, companyCode: d.companyCode, status: d.status, documentNumber: d.documentNumber, documentName: d.documentName,
       lifecycleId: d.lifecycleId, lifecycleName: null, nodeId: d.nodeId,
-      draftingCompanyId: d.draftingCompanyId ?? null, draftingDeptId: d.draftingDeptId ?? null,
+      draftingDeptId: d.draftingDeptId ?? null,
       draftingSectionId: d.draftingSectionId ?? null,
       draftingCompanyName: null, draftingDeptName: null, draftingSectionName: null,
       primaryChiefId: d.primaryChiefId ?? null, primaryChiefName: null,
@@ -361,7 +361,7 @@ describe('DocumentsService.create 制定組織/當責室長/使用部門（F014 
       usingDeptIds: ['A2000', 'B0000'],
     });
     // 純量制定組織/主要室長
-    expect(store.created[0].draftingCompanyId).toBe('00000');
+    expect(store.created[0].companyCode).toBe('AS');
     expect(store.created[0].draftingDeptId).toBe('A2000');
     expect(store.created[0].draftingSectionId).toBe('A2100');
     expect(store.created[0].primaryChiefId).toBe('20050');
@@ -413,7 +413,7 @@ describe('DocumentsService.create 制定組織/當責室長/使用部門（F014 
       usingDeptIds: ['A2000', 'B0000'],
     });
     const view = await svc.getDocument(created.id);
-    expect(view.draftingCompanyId).toBe('00000');
+    expect(view.companyName).toBe('和潤企業股份有限公司'); // 制定公司＝companyCode 解析之全稱
     expect(view.draftingDeptId).toBe('A2000');
     expect(view.secondaryChiefIds).toEqual(['20053']);
     expect(view.usingDeptIds).toEqual(['A2000', 'B0000']);
@@ -794,17 +794,17 @@ describe('DocumentsService.listDocuments 名稱解析＋分頁（F017）', () =>
     );
   });
 
-  it('TS-F017-001 制定公司/部門/室別 id → 解析為顯示名稱', async () => {
-    resolver.orgNames.set('org-co', '和潤企業');
+  it('TS-F017-001 制定公司/部門/室別 → 解析為顯示名稱', async () => {
     resolver.orgNames.set('org-dept', '企劃部');
     resolver.orgNames.set('org-sec', '車輛行銷室');
     store.seedDoc({
-      draftingCompanyId: 'org-co',
       draftingDeptId: 'org-dept',
       draftingSectionId: 'org-sec',
     });
     const page = await svc.listDocuments({});
-    expect(page.items[0].draftingCompanyName).toBe('和潤企業');
+    // 🔴 2026-08-27 裁定：制定公司名＝公司主檔**全稱**（由 companyCode 解析），
+    //    不再是該公司 ROOT 之 ORG_UNIT 名；故不需 resolver 也解得出來。
+    expect(page.items[0].draftingCompanyName).toBe('和潤企業股份有限公司');
     expect(page.items[0].draftingDeptName).toBe('企劃部');
     expect(page.items[0].draftingSectionName).toBe('車輛行銷室');
   });
@@ -857,7 +857,7 @@ describe('DocumentsService.listDocuments 名稱解析＋分頁（F017）', () =>
 
   it('無 resolver 時（純 store 建構）名稱保持 null（graceful）', async () => {
     const bare = new DocumentsService(store);
-    store.seedDoc({ draftingCompanyId: 'org-co', primaryChiefId: 'E1' });
+    store.seedDoc({ primaryChiefId: 'E1' });
     const page = await bare.listDocuments({});
     expect(page.items[0].draftingCompanyName).toBeNull();
     expect(page.items[0].primaryChiefName).toBeNull();
@@ -1369,11 +1369,16 @@ describe('DocumentsService.create 文件所屬公司（B 階段多公司）', ()
     expect(pub.events).toHaveLength(0);
   });
 
-  it('companyCode 恆不入 CREATE 變更事件（與「制定公司」同源，不重複記一列）', async () => {
-    await svc.create('ICSOPAdmin', { ...CORE, draftingCompanyId: '00000' }, actorAD);
-    const fields = pub.events[0].changes!.map((c) => c.field);
-    expect(fields).not.toContain('companyCode');
-    expect(fields).toContain('draftingCompanyId');
+  /**
+   * 🔴 2026-08-27 裁定推翻前一版：制定公司即 `companyCode`（`draftingCompanyId` 已整個移除），
+   * 因此它**必須**進變更歷程——否則「建立文件時選了哪家公司」完全不留紀錄。
+   * 📝 已作廢（⚠ 不得復原）：OLD> `expect(fields).not.toContain('companyCode')`。
+   */
+  it('companyCode 納入 CREATE 變更事件（標籤為「制定公司」）', async () => {
+    await svc.create('ICSOPAdmin', { ...CORE }, actorAD);
+    const changes = pub.events[0].changes!;
+    expect(changes.map((c) => c.field)).toContain('companyCode');
+    expect(changes).toContainEqual({ field: 'companyCode', oldValue: null, newValue: 'AS' });
   });
 
   it('編輯端帶 companyCode → 靜默剔除（比照 nodeId），不進 patch、不記變更', async () => {
@@ -1415,7 +1420,8 @@ describe('DocumentsService.create 建立稽核事件（A）', () => {
   it('TS-DCL-A-007 事件 changes 內容與 4 必填一致（逐欄位 new-value，oldValue null）', async () => {
     await svc.create('ICSOPAdmin', { ...CORE }, actor);
     const changes = pub.events[0].changes!;
-    expect(changes).toHaveLength(4);
+    // 4 必填 ＋ companyCode（制定公司，2026-08-27 起納入變更歷程）＝ 5 列。
+    expect(changes).toHaveLength(5);
     expect(changes).toEqual(
       expect.arrayContaining([
         { field: 'lifecycleId', oldValue: null, newValue: 'lc1' },
@@ -1431,7 +1437,6 @@ describe('DocumentsService.create 建立稽核事件（A）', () => {
       'ICSOPAdmin',
       {
         ...CORE,
-        draftingCompanyId: 'org-co',
         primaryChiefId: '20053',
         secondaryChiefIds: ['20541'],
         usingDeptIds: ['A2000'],
@@ -1471,7 +1476,7 @@ describe('DocumentsService.create 建立稽核事件（A）', () => {
 
   it('空陣列多值欄不落噪音列（服務層整合，僅 4 必填時 changes=4）', async () => {
     await svc.create('ICSOPAdmin', { ...CORE, secondaryChiefIds: [], usingDeptIds: [] }, actor);
-    expect(pub.events[0].changes).toHaveLength(4);
+    expect(pub.events[0].changes).toHaveLength(5); // 4 必填 ＋ companyCode
   });
 });
 

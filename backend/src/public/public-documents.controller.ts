@@ -34,7 +34,7 @@ export class PublicDocumentsController {
   list(
     @Req() req: RequestWithSession,
     @Query('keyword') keyword?: string,
-    @Query('draftingCompanyId') draftingCompanyId?: string,
+    @Query('companyCode') companyCode?: string,
     @Query('draftingDeptId') draftingDeptId?: string,
     @Query('draftingSectionId') draftingSectionId?: string,
     @Query('chiefId') chiefId?: string,
@@ -47,7 +47,7 @@ export class PublicDocumentsController {
     const viewer = toViewerScope(req.sessionUser);
     const filters: PublicListFilters = {
       keyword: keyword?.trim() || undefined,
-      draftingCompanyId: draftingCompanyId?.trim() || undefined,
+      companyCode: companyCode?.trim() || undefined,
       draftingDeptId: draftingDeptId?.trim() || undefined,
       draftingSectionId: draftingSectionId?.trim() || undefined,
       chiefId: chiefId?.trim() || undefined,

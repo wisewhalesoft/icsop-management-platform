@@ -14,7 +14,7 @@ import { OrgChangeAlertService } from './org-change-alert.service';
  * Route A 屆時自動涵蓋此二類提示，無需再改本檔（刻意不針對現況行為做任何暫時性繞道）。
  */
 export const FIELD_KEY_BY_PROP: Readonly<Record<string, string>> = {
-  draftingCompanyId: FieldKey.ESTABLISH_COMPANY,
+  companyCode: FieldKey.ESTABLISH_COMPANY,
   draftingDeptId: FieldKey.ESTABLISH_DEPT,
   draftingSectionId: FieldKey.ESTABLISH_SECTION,
   primaryChiefId: FieldKey.CHIEF_PRIMARY,

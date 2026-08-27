@@ -415,7 +415,7 @@ export function getDocuments(f: DocumentFilters = {}): Promise<DocumentListPage>
   if (f.keyword) qs.set('keyword', f.keyword);
   if (f.documentNumber) qs.set('documentNumber', f.documentNumber);
   if (f.documentName) qs.set('documentName', f.documentName);
-  if (f.draftingCompanyId) qs.set('draftingCompanyId', f.draftingCompanyId);
+  if (f.companyCode) qs.set('companyCode', f.companyCode);
   if (f.draftingDeptId) qs.set('draftingDeptId', f.draftingDeptId);
   if (f.draftingSectionId) qs.set('draftingSectionId', f.draftingSectionId);
   if (f.primaryChiefId) qs.set('primaryChiefId', f.primaryChiefId);
@@ -798,7 +798,7 @@ export function getPublicDocuments(f: PublicListFilters = {}): Promise<PublicLis
   const qs = new URLSearchParams();
   if (f.keyword) qs.set('keyword', f.keyword);
   // 🔴 2026-08-16 delta（架構 A9 §10.9 之三處第 3 處）：`deptCode` 已不再送出。
-  if (f.draftingCompanyId) qs.set('draftingCompanyId', f.draftingCompanyId);
+  if (f.companyCode) qs.set('companyCode', f.companyCode);
   if (f.draftingDeptId) qs.set('draftingDeptId', f.draftingDeptId);
   if (f.draftingSectionId) qs.set('draftingSectionId', f.draftingSectionId);
   if (f.chiefId) qs.set('chiefId', f.chiefId);

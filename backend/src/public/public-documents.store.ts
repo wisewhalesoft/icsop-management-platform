@@ -46,7 +46,6 @@ export interface PublicDocDetail {
   lifecycleName: string | null;
   nodeId: string | null;
   nodeName: string | null;
-  draftingCompanyId: string | null;
   draftingDeptId: string | null;
   draftingSectionId: string | null;
   primaryChiefId: string | null;

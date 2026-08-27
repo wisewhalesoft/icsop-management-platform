@@ -62,7 +62,7 @@ function mockAuth(roleCode = 'ICSOPAdmin'): void {
 const doc = (over: Partial<DocumentListItem>): DocumentListItem => ({
   id: 'd', status: 'active', documentNumber: 'N', documentName: '名', lifecycleId: 'lc1',
   lifecycleName: '銷售及收款循環', nodeId: 'node1',
-  draftingCompanyId: '00000', draftingDeptId: 'A2000', draftingSectionId: 'A2100',
+  draftingDeptId: 'A2000', draftingSectionId: 'A2100',
   draftingCompanyName: '和潤企業股份有限公司', draftingDeptName: '企劃部', draftingSectionName: '車輛行銷室',
   primaryChiefId: '20050', primaryChiefName: '陳彥廷',
   secondaryChiefCount: 0, secondaryChiefNames: [], secondaryChiefIds: [], hasOjt: false,

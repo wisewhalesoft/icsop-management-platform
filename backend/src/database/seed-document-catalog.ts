@@ -150,7 +150,6 @@ async function seedDocumentCatalog(): Promise<void> {
         id: true,
         documentNumber: true,
         status: true,
-        draftingCompanyId: true,
         draftingDeptId: true,
         draftingSectionId: true,
         primaryChiefId: true,
@@ -164,7 +163,10 @@ async function seedDocumentCatalog(): Promise<void> {
     const now = new Date();
 
     for (const r of catalog.records) {
-      const companyId = resolveOrg('company', r.companyLabel);
+      // 🔴 2026-08-27 裁定：制定公司＝`ICSOP_DOCUMENT.companyCode`（公司代碼，NOT NULL）。
+      //    原本解析為該公司 ROOT 之 orgCode 寫入 `draftingCompanyId`，該欄已移除。
+      //    catalog 之來源為 AS 一家（上線以來僅同步過該公司），故逐列固定為 'AS'。
+      const companyCode = 'AS';
       const deptId = resolveOrg('dept', r.companyLabel && r.deptLabel ? `${r.companyLabel}|${r.deptLabel}` : null);
       const sectionId = resolveOrg(
         'section',
@@ -184,7 +186,7 @@ async function seedDocumentCatalog(): Promise<void> {
             contentSummary: r.contentSummary,
             lifecycleId: lcById.get(lifecycleKey(r.lifecycleName, r.lifecycleSubcategory))!,
             nodeId: null,
-            draftingCompanyId: companyId,
+            companyCode,
             draftingDeptId: deptId,
             draftingSectionId: sectionId,
             primaryChiefId: chiefId,
@@ -200,7 +202,6 @@ async function seedDocumentCatalog(): Promise<void> {
 
       // 已存在：只補 NULL，不覆寫既有值（保護人工編輯）。
       const patch: Partial<IcsopDocument> = {};
-      if (found.draftingCompanyId === null && companyId) patch.draftingCompanyId = companyId;
       if (found.draftingDeptId === null && deptId) patch.draftingDeptId = deptId;
       if (found.draftingSectionId === null && sectionId) patch.draftingSectionId = sectionId;
       if (found.primaryChiefId === null && chiefId) patch.primaryChiefId = chiefId;

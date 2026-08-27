@@ -163,9 +163,13 @@ describe('[int] change-history F037/F038 vs SOP', () => {
       `SELECT [field] FROM [DOCUMENT_CHANGE_LOG] WHERE [documentId] = @0 AND [changeType] = 'CREATE'`,
       [id],
     );
-    expect(rows.length).toBe(4);
+    // 🔴 2026-08-27 裁定：制定公司即 `companyCode`，且**必入**變更歷程（否則建立時選了
+    //    哪家公司完全不留紀錄）。故 4 必填 ＋ companyCode ＝ 5 列；「無空值噪音列」之標的不變。
+    expect(rows.length).toBe(5);
     const fields = rows.map((r: { field: string }) => r.field).sort();
-    expect(fields).toEqual(['documentName', 'documentNumber', 'lifecycleId', 'status'].sort());
+    expect(fields).toEqual(
+      ['companyCode', 'documentName', 'documentNumber', 'lifecycleId', 'status'].sort(),
+    );
   });
 
   it('TS-DCL-E-003 建立事件可經 GET /admin/change-history/documents?doc= 查得', async () => {

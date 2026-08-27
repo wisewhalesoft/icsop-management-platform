@@ -53,7 +53,7 @@ export class DocumentsController {
       keyword: q.keyword?.trim() || undefined,
       documentNumber: q.documentNumber || undefined,
       documentName: q.documentName || undefined,
-      draftingCompanyId: q.draftingCompanyId || undefined,
+      companyCode: q.companyCode || undefined,
       draftingDeptId: q.draftingDeptId || undefined,
       draftingSectionId: q.draftingSectionId || undefined,
       primaryChiefId: q.primaryChiefId || undefined,

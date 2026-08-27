@@ -29,9 +29,9 @@ function mockAuth(roleCode: string) {
 }
 
 const VIEW: DocumentView = {
-  id: 'd1', companyCode: 'AS', status: 'active', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業',
+  id: 'd1', companyCode: 'AS', companyName: '和潤企業股份有限公司', status: 'active', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業',
   lifecycleId: 'lc1', nodeId: 'node1', nodeName: '進件作業',
-  draftingCompanyId: '00000', draftingDeptId: 'A2000', draftingSectionId: 'A2100',
+  draftingDeptId: 'A2000', draftingSectionId: 'A2100',
   primaryChiefId: '20050', secondaryChiefIds: ['20053'], usingDeptIds: ['A2100'],
   edition: "26'01", announcedDate: '2026-01-01T00:00:00.000Z', contentSummary: '摘要',
 };
@@ -55,7 +55,7 @@ const ORG: OrgUnitRecord[] = [
 const listItem = (o: Partial<DocumentListItem>): DocumentListItem => ({
   id: 'x', status: 'active', documentNumber: 'N', documentName: '名', lifecycleId: 'lc1',
   lifecycleName: '銷售及收款循環', nodeId: null,
-  draftingCompanyId: null, draftingDeptId: null, draftingSectionId: null,
+  draftingDeptId: null, draftingSectionId: null,
   draftingCompanyName: null, draftingDeptName: null, draftingSectionName: null,
   primaryChiefId: null, primaryChiefName: null, secondaryChiefIds: [], hasOjt: false,
   edition: null, announcedDate: null, contentSummary: null,
@@ -593,10 +593,8 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
      */
     it('制定公司為唯讀列：顯示文件所屬公司、無下拉、不含「新值」欄', async () => {
       mockAuth('ICSOPAdmin');
-      vi.mocked(endpoints.getCompanies).mockResolvedValue([
-        { companyCode: 'AS', companyName: '和潤企業股份有限公司' },
-        { companyCode: 'AD', companyName: '和運租車股份有限公司' },
-      ]);
+      // 制定公司之顯示名由後端隨 GET /admin/documents/:id 附上（`companyName`），
+      // 前端不再自備一份公司主檔（原本此處需 mock getCompanies）。
       renderPage();
       await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
 

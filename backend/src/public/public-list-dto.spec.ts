@@ -89,7 +89,6 @@ const ITEM_DEFAULTS: PublicDocItem = {
   usingDepts: depts(['JAC00']),
   companyCode: 'AS',
   draftingDeptId: 'JA000',
-  draftingCompanyId: '00000',
   draftingSectionId: 'JAC00',
   primaryChiefId: 'E001',
   secondaryChiefIds: [],
@@ -115,7 +114,6 @@ const DETAIL_BASE: PublicDocDetail = {
   lifecycleName: null,
   nodeId: null,
   nodeName: null,
-  draftingCompanyId: '00000',
   draftingDeptId: 'JA000',
   draftingSectionId: 'JAC00',
   primaryChiefId: null,
@@ -192,7 +190,7 @@ describe('F019 AC-D12：前台清單 DTO 移除使用部門兩欄', () => {
    *    不能是空白；DTO 之欄位值則以 `null` 表達「未解析」，由前端渲染為 `—`（`AC-D14` ②）。
    */
   it('TS-F019-D12-005 名稱解析未命中 → 清單 DTO 之值與詳情 DTO 逐字相同（不得為 undefined／字面 "null"）', async () => {
-    const UNRESOLVED = { draftingCompanyId: 'ZZZ', draftingDeptId: 'XXX', draftingSectionId: 'YYY' };
+    const UNRESOLVED = { draftingDeptId: 'XXX', draftingSectionId: 'YYY' };
     const listDto = (
       await new PublicDocumentsService(
         new FakeStore([item(UNRESOLVED)]),
@@ -207,7 +205,10 @@ describe('F019 AC-D12：前台清單 DTO 移除使用部門兩欄', () => {
       clock,
     ).detail('doc-1', VIEWER);
 
-    for (const key of ['draftingCompanyName', 'draftingDeptName', 'draftingSectionName'] as const) {
+    // 🔴 `draftingCompanyName` 已自本迴圈移除：2026-08-27 裁定後它由**公司主檔全稱**解析，
+    //    不再經 OrgNameResolver，因此不存在「解析未命中」這個狀態（查無代碼才會是 null，
+    //    而 fixture 之 companyCode 為有效代碼）。清單／詳情逐字一致之不變式改由下二欄承載。
+    for (const key of ['draftingDeptName', 'draftingSectionName'] as const) {
       expect(listDto[key]).not.toBeUndefined();
       expect(listDto[key]).not.toBe('null');
       expect(listDto[key]).toBe(detailDto[key]);

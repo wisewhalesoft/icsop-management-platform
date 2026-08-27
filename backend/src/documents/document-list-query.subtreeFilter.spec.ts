@@ -23,7 +23,7 @@ function item(over: Partial<DocumentListItem>): DocumentListItem {
   return {
     id: 'id', companyCode: 'AS', status: 'active' as DocumentStatus, documentNumber: 'N', documentName: '書名',
     lifecycleId: 'lc', lifecycleName: null, nodeId: null,
-    draftingCompanyId: null, draftingDeptId: null, draftingSectionId: null,
+    draftingDeptId: null, draftingSectionId: null,
     draftingCompanyName: null, draftingDeptName: null, draftingSectionName: null,
     primaryChiefId: null, primaryChiefName: null,
     secondaryChiefCount: 0, secondaryChiefNames: [], secondaryChiefIds: [], hasOjt: false,

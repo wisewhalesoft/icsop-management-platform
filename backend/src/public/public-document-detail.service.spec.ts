@@ -33,7 +33,6 @@ function detail(over: Partial<PublicDocDetail> = {}): PublicDocDetail {
     lifecycleName: '車貸循環',
     nodeId: 'node-1',
     nodeName: '審查節點',
-    draftingCompanyId: '00000',
     draftingDeptId: 'JA000',
     draftingSectionId: 'JAC00',
     primaryChiefId: '20053',
@@ -91,7 +90,8 @@ describe('PublicDocumentDetailService（G-PUB-020）', () => {
     expect(dto.displayStatus).toBe('announced');
     expect(dto.lifecycleName).toBe('車貸循環');
     expect(dto.nodeName).toBe('審查節點');
-    expect(dto.draftingCompanyName).toBe('和潤企業');
+    // 🔴 2026-08-27 裁定：制定公司名＝公司主檔全稱（由 companyCode 解析），非 ORG_UNIT 名。
+    expect(dto.draftingCompanyName).toBe('和潤企業股份有限公司');
     expect(dto.draftingDeptName).toBe('營運管理部');
     expect(dto.draftingSectionName).toBe('審查室');
     expect(dto.primaryChiefName).toBe('王主管');
@@ -133,7 +133,9 @@ describe('PublicDocumentDetailService（G-PUB-020）', () => {
       () => TODAY,
     );
     const dto = await svc.detail('doc-1', UNRESTRICTED_VIEWER);
-    expect(dto.draftingCompanyName).toBeNull();
+    // 🔴 制定公司名不再經 OrgNameResolver（改由公司主檔全稱），故空 resolver 不影響它；
+    //    fixture 之 companyCode 為有效代碼 ⇒ 仍解得出全稱。真正查無的公司代碼才會是 null。
+    expect(dto.draftingCompanyName).toBe('和潤企業股份有限公司');
     expect(dto.primaryChiefName).toBeNull();
     expect(Object.prototype.hasOwnProperty.call(dto, 'usingDeptNames')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(dto, 'secondaryChiefNames')).toBe(false);

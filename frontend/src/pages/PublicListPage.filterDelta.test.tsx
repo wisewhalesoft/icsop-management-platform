@@ -462,7 +462,6 @@ describe('F019 AC-D3：清除篩選涵蓋 6 項與關鍵字', () => {
       expect(api.getPublicDocuments).toHaveBeenLastCalledWith(
         expect.objectContaining({
           keyword: undefined,
-          draftingCompanyId: undefined,
           draftingDeptId: undefined,
           draftingSectionId: undefined,
           chiefId: undefined,

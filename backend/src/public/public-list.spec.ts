@@ -26,7 +26,7 @@ function viewerOf(orgCode: string | null): ViewerScope {
  * 測試用文件工廠（僅設定與斷言相關欄位）。
  *
  * 🔴 2026-08-16 delta（F019 AC-D4／AC-D7／AC-D12；architecture-spec §10.6）：`PublicDocItem`
- * additive 新增五欄 `draftingCompanyId`／`draftingSectionId`／`primaryChiefId`／
+ * additive 新增五欄 `companyCode`／`draftingSectionId`／`primaryChiefId`／
  * `secondaryChiefIds`／`edition`。`usingDeptIds` **保留**（AC-D12 明訂內部型別不變，
  * 置頂與 F041 可見性判定所需；只有對外 DTO 移除）。
  */
@@ -48,7 +48,6 @@ const DOC_DEFAULTS: PublicDocItem = {
     usingDepts: [],
     companyCode: 'AS',
     draftingDeptId: null,
-    draftingCompanyId: null,
     draftingSectionId: null,
     primaryChiefId: null,
     secondaryChiefIds: [],
@@ -361,7 +360,7 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
       documentNumber: 'ICSOP-AD-001',
       documentName: '審查作業',
       usingDepts: depts(['JAD00']), // 業務@JAC00 不可見
-      draftingCompanyId: 'C9',
+      companyCode: 'C9',
       draftingDeptId: 'JAD00',
       draftingSectionId: 'JADA0',
       primaryChiefId: 'E001',
@@ -372,7 +371,7 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
     const combos: Array<Record<string, string>> = [
       {},
       { keyword: '審查' },
-      { draftingCompanyId: 'C9' },
+      { companyCode: 'C9' },
       { draftingDeptId: 'JAD00' },
       { draftingSectionId: 'JADA0' },
       { chiefId: 'E001' },
@@ -380,7 +379,7 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
       { lifecycleId: 'L1' },
       {
         keyword: '審查',
-        draftingCompanyId: 'C9',
+        companyCode: 'C9',
         draftingDeptId: 'JAD00',
         draftingSectionId: 'JADA0',
         chiefId: 'E001',
@@ -437,12 +436,12 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
    */
   it('AC-19（回歸鎖定）非 User 角色 viewer → 新五項篩選語意與「其他」子分類逐欄相同', () => {
     const items = [
-      doc({ id: 'hit', usingDepts: depts(['JAD00']), draftingCompanyId: 'C1', primaryChiefId: 'E001' }),
-      doc({ id: 'miss', usingDepts: depts(['JAD00']), draftingCompanyId: 'C2', primaryChiefId: 'E001' }),
+      doc({ id: 'hit', usingDepts: depts(['JAD00']), companyCode: 'C1', primaryChiefId: 'E001' }),
+      doc({ id: 'miss', usingDepts: depts(['JAD00']), companyCode: 'C2', primaryChiefId: 'E001' }),
     ];
     const admin: ViewerScope = { roleCode: 'ICSOPAdmin', userSubtype: 'other', orgCode: 'JAC00', companyCode: 'AS' };
     const other: ViewerScope = { roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00', companyCode: 'AS' };
-    const filters = { draftingCompanyId: 'C1', chiefId: 'E001' };
+    const filters = { companyCode: 'C1', chiefId: 'E001' };
     const a = buildPublicList(items, admin, filters, TODAY);
     const b = buildPublicList(items, other, filters, TODAY);
     expect(a.items.map((d) => d.id)).toEqual(['hit']);
