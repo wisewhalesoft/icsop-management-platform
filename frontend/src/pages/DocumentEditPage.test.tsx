@@ -576,12 +576,38 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
       mockAuth('ICSOPAdmin');
       renderPage();
       await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
-      // 制定公司目前值＝orgName('00000')＝'和潤本部'，位於全寬對照列（grid-cols-12）中。
-      const cur = await screen.findByText('和潤本部');
+      // 制定部門目前值＝orgName('A2000')＝'企劃部'，位於全寬對照列（grid-cols-12）中。
+      // （改以制定部門為探針：制定公司自 2026-08-26 起為唯讀列，本就不該有「新值」欄。）
+      const cur = await screen.findByText('企劃部');
       const field = cur.closest('.grid.grid-cols-12') as HTMLElement;
       expect(field).not.toBeNull();
       expect(within(field).getByText('目前值')).toBeInTheDocument();
       expect(within(field).getByText('新值')).toBeInTheDocument();
+    });
+
+    /**
+     * 🔴 B 階段（多公司）：制定公司於建立時決定即固定。
+     * 舊版此處是一個以**公司代碼**（'AS'）為選項值的下拉，卻寫進 `draftingCompanyId`
+     * ——那個欄位存的是該公司 ROOT 的 orgCode（'00000'），語意不同；於是在編輯頁動過
+     * 制定公司的文件，該欄會存進與建立頁不同語意的值，前台部門名稱因而解析不出來。
+     */
+    it('制定公司為唯讀列：顯示文件所屬公司、無下拉、不含「新值」欄', async () => {
+      mockAuth('ICSOPAdmin');
+      vi.mocked(endpoints.getCompanies).mockResolvedValue([
+        { companyCode: 'AS', companyName: '和潤企業股份有限公司' },
+        { companyCode: 'AD', companyName: '和運租車股份有限公司' },
+      ]);
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+
+      const value = await screen.findByText('和潤企業股份有限公司');
+      const row = value.closest('.grid.grid-cols-12') as HTMLElement;
+      expect(row).not.toBeNull();
+      expect(within(row).getByText('制定公司')).toBeInTheDocument();
+      expect(within(row).queryByText('新值')).not.toBeInTheDocument();
+      expect(within(row).getByText('文件所屬公司於建立時決定，不可變更。')).toBeInTheDocument();
+      // 舊的制定公司下拉已不存在。
+      expect(document.getElementById('edCompany')).toBeNull();
     });
 
     it('G-DOC-204 唯讀角色：連結點/使用表單改唯讀 chips，無搜尋輸入框', async () => {

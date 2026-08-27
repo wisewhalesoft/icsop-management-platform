@@ -93,3 +93,29 @@ Every teammate: TDD (failing test first), quote prototype labels, keep baseline 
 1. **SYS-1 toast.** design-system §2/§6.5 *mandates* a toast system; inline-notice is documented stopgap debt (F006-impl.md:139), never ratified. **Build a minimal global toast (~7+ pages migrate) or formally ratify inline-notice (amend the design doc)?** Team leans build.
 2. **G-ADM-001 最後活動 (lastActivityAt).** Architected (architecture-spec §5.3) but never built — stateless sliding-JWT means no activity timestamp exists anywhere. Options: **(a)** add a DB column + write path (reopens the write-amplification tradeoff the arch spec chose to avoid); **(b)** `lastLoginAt` written once per login (cheap, honest — analyst's recommendation); **(c)** approximate via `MAX(AUDIT_LOG.occurredAt)` (undercounts login-only / admin-CRUD → *misleading* dormancy — team advises against); **(d)** drop the column from this pass. Real new-feature scope, not a restoration.
 3. **Cycle CODE (G-LC-019/020/029).** `Lifecycle` has no `code` column and no upstream value source; prototype's SRC/PUC/… are demo placeholders. **Add a `code` column + assign the real AS lifecycle codes (someone must supply the values), or drop cycle-code display from scope?**
+
+---
+
+## 事後追加之 DEVIATION-KEEP（不得由後續 alignment pass 還原）
+
+> 這一節記錄「**明知與 prototype 不同、且經人類裁決保留**」的偏離。沒有這份紀錄，下一次比對
+> prototype 的人會把它當成 drift 修回去。
+
+### DEV-01（2026-08-26）編輯頁「制定公司」為唯讀列，非下拉
+
+- **Prototype**：`prototypes/15-document-edit.html:438` 之 `{key:'company',label:'制定公司',type:'combo'}`
+  ——與制定部門／制定室別同為三級連動下拉。
+- **實作**：`DocumentEditPage.tsx` 改為唯讀列（`FixedRow`），顯示文件所屬公司之全稱＋
+  「文件所屬公司於建立時決定，不可變更。」。建立頁（prototype 14）**不受影響**，仍為可選下拉。
+- **裁決人**：使用者，2026-08-26（在「(a) 改成唯讀顯示 vs (b) 維持可改」兩案中選 (a)）。
+- **理由**：B 階段（多公司）之後，`ICSOP_DOCUMENT.companyCode` 是文件的**歸屬鍵**——制定部門／
+  制定室別／使用部門存的都是各公司獨立編碼之 5 碼 `orgCode`，改公司會讓這些既有值整批指向
+  別家公司的單位，並直接影響 F041 之資料列可見性判定（安全性）。後端因此把 `companyCode`
+  列入 `EDIT_READONLY_PROPS`；前端若還留一個可改的下拉，就是一個按了不會生效的控制項。
+- **順帶修掉的既有缺陷**：舊版該下拉的**選項值是公司代碼**（`AS`），卻寫進 `draftingCompanyId`
+  ——那欄存的是該公司 ROOT 的 `orgCode`（`00000`），語意不同。凡是在編輯頁動過制定公司的文件，
+  該欄都被寫進了與建立頁不同語意的值（前台部門名稱因而解析不出來）。
+  ⚠ **既有資料未修**：若有文件的 `draftingCompanyId` 已被寫成公司代碼，需另行盤點修補。
+- **連帶**：制定部門下拉的 enable 條件由 `draftingCompanyId` 改看部門候選本身——舊寫法對
+  `draftingCompanyId` 為空的文件（建立時該公司無 ROOT 列，例如 AE）會把部門下拉永久鎖死。
+- **回歸鎖定**：`DocumentEditPage.test.tsx`「制定公司為唯讀列：顯示文件所屬公司、無下拉、不含「新值」欄」。

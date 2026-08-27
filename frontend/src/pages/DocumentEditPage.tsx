@@ -267,9 +267,19 @@ export function DocumentEditPage(): JSX.Element {
   );
   const orgName = useCallback((code: string) => orgByCode.get(code)?.name ?? code, [orgByCode]);
   // 🔴 B 階段：來源為公司主檔，非 org-unit 之 ROOT 列（四家 ROOT 代碼皆為 `00000`、AE 無 ROOT 列）。
-  const companyOptions = useMemo<ComboOption[]>(
-    () => companies.map((c) => ({ value: c.companyCode, label: c.companyName })),
-    [companies],
+  /**
+   * 🔴 B 階段（多公司）：文件所屬公司之**顯示名稱**（不是下拉選項）。
+   * 文件的 `companyCode` 於建立時決定即固定（後端 `EDIT_READONLY_PROPS` 亦靜默剔除此鍵），
+   * 因為改公司會讓既有的制定部門／室別／使用部門（皆為各公司獨立編碼之 5 碼 orgCode）
+   * 整批指向別家公司的單位，並直接影響 F041 的資料列可見性判定。
+   * 公司主檔尚未載入或查無該代碼時退回顯示代碼本身（不留白）。
+   */
+  const companyName = useMemo(
+    () =>
+      companies.find((c) => c.companyCode === view?.companyCode)?.companyName ??
+      view?.companyCode ??
+      '—',
+    [companies, view],
   );
   const deptOptions = useMemo<ComboOption[]>(
     () => orgUnits.filter((u) => u.tier === 'DEPARTMENT').map((u) => ({ value: u.orgCode, label: u.name })),
@@ -336,9 +346,6 @@ export function DocumentEditPage(): JSX.Element {
     setDraft((d) => (d && orig ? { ...d, edition: orig.edition } : d));
     setEditionResetKey((k) => k + 1);
   }, [orig]);
-  const onCompanyChange = useCallback((v: string) => {
-    setDraft((d) => (d ? { ...d, draftingCompanyId: v, draftingDeptId: '', draftingSectionId: '' } : d));
-  }, []);
   const onDeptChange = useCallback((v: string) => {
     setDraft((d) => (d ? { ...d, draftingDeptId: v, draftingSectionId: '' } : d));
   }, []);
@@ -549,7 +556,8 @@ export function DocumentEditPage(): JSX.Element {
     if (changed('edition')) patch.edition = draft.edition || null;
     if (changed('announcedDate')) patch.announcedDate = draft.announcedDate || null;
     if (changed('contentSummary')) patch.contentSummary = draft.contentSummary || null;
-    if (changed('draftingCompanyId')) patch.draftingCompanyId = draft.draftingCompanyId || null;
+    // `draftingCompanyId` 不在編輯範圍：它是「制定公司」的衍生值（該公司 ROOT 之 orgCode），
+    // 而制定公司於建立時決定即固定（見 companyName 之說明），故本頁無從變更、也不送出。
     if (changed('draftingDeptId')) patch.draftingDeptId = draft.draftingDeptId || null;
     if (changed('draftingSectionId')) patch.draftingSectionId = draft.draftingSectionId || null;
     if (changed('primaryChiefId')) patch.primaryChiefId = draft.primaryChiefId || null;
@@ -807,13 +815,16 @@ export function DocumentEditPage(): JSX.Element {
           <Icon name="building-2" className="w-4 h-4 text-primary-600" />
           <h2 className="font-semibold text-slate-900">制定組織與當責室長</h2>
         </div>
-        <p className="text-xs text-slate-400 mb-3">制定組織為三級相依（由上而下）：公司 → 部門 → 室別；變更上層將清空下層。當責室長保留。</p>
+        <p className="text-xs text-slate-400 mb-3">文件所屬公司於建立時決定，不可變更；制定部門 → 制定室別為二級相依，變更部門將清空室別。當責室長保留。</p>
         <div className="space-y-4">
-          <ComboDiff label="制定公司" changed={changed('draftingCompanyId')} currentText={orig.draftingCompanyId ? orgName(orig.draftingCompanyId) : '—'}>
-            <SearchCombobox id="edCompany" label={<span className="sr-only">制定公司</span>} options={companyOptions} value={draft.draftingCompanyId} onChange={onCompanyChange} disabled={ro} placeholder="搜尋制定公司…" />
-          </ComboDiff>
+          <FixedRow label="制定公司" value={companyName} hint="文件所屬公司於建立時決定，不可變更。" />
           <ComboDiff label="制定部門" changed={changed('draftingDeptId')} currentText={orig.draftingDeptId ? orgName(orig.draftingDeptId) : '—'}>
-            <SearchCombobox id="edDept" label={<span className="sr-only">制定部門</span>} options={deptOptions} value={draft.draftingDeptId} onChange={onDeptChange} disabled={ro || !draft.draftingCompanyId} placeholder={draft.draftingCompanyId ? '搜尋制定部門…' : '請先選擇制定公司'} />
+            {/*
+              閘門改看**部門候選本身**，不再看 `draftingCompanyId`：組織資料是以文件自身的
+              companyCode 載入的，公司恆已確定。舊寫法對 `draftingCompanyId` 為空的文件
+              （建立時該公司無 ROOT 列，例如 AE）會把部門下拉永久鎖死。
+            */}
+            <SearchCombobox id="edDept" label={<span className="sr-only">制定部門</span>} options={deptOptions} value={draft.draftingDeptId} onChange={onDeptChange} disabled={ro || deptOptions.length === 0} placeholder={deptOptions.length === 0 ? '此公司尚無組織資料' : '搜尋制定部門…'} />
           </ComboDiff>
           <ComboDiff label="制定室別" changed={changed('draftingSectionId')} currentText={orig.draftingSectionId ? orgName(orig.draftingSectionId) : '—'}>
             <SearchCombobox id="edSection" label={<span className="sr-only">制定室別</span>} options={sectionOptions} value={draft.draftingSectionId} onChange={(v) => set('draftingSectionId', v)} disabled={ro || !draft.draftingDeptId || sectionOptions.length === 0} placeholder={!draft.draftingDeptId ? '請先選擇制定部門' : sectionOptions.length === 0 ? '此部之下無處/室（留空）' : '搜尋制定室別…'} />
@@ -1241,6 +1252,26 @@ function ComboDiff({ label, changed, currentText, children }: {
           <div className="text-[10px] text-primary-600 mb-1">新值</div>
           {children}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 建立時決定即固定之欄位列。沿用 ComboDiff 的 12 欄骨架與標籤欄樣式（同一段落內視覺不跳），
+ * 但**刻意不給「目前值／新值」兩欄**——這個欄位沒有「新值」可言，擺一個新值欄會誤導。
+ */
+function FixedRow({ label, value, hint }: {
+  label: string; value: string; hint: string;
+}): JSX.Element {
+  return (
+    <div className="grid grid-cols-12 gap-3 items-start py-3 px-2 -mx-2 border-b border-slate-100 rounded-lg">
+      <div className="col-span-12 sm:col-span-3">
+        <span className="text-sm font-medium text-slate-700">{label}</span>
+      </div>
+      <div className="col-span-12 sm:col-span-9">
+        <div className="text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 truncate">{value}</div>
+        <p className="text-xs text-slate-400 mt-1">{hint}</p>
       </div>
     </div>
   );
