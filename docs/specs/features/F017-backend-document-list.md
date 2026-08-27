@@ -1,5 +1,5 @@
 # F017: 後台文件清單與搜尋
-Priority: P0-MVP | Status: 🟡 實作（unit 綠；14 欄清單＋9 篩選＋排序分頁；**「檔案」與「連結點程序書」兩欄之後端富化與前端渲染已補**（doc-seams，批次注入不 N+1）；int 已寫未跑，見 implementation-logs/doc-seams-impl.md）｜**循環子分類顯示 delta：🟢 APPROVED（2026-08-07）**｜**連結點程序書欄摺疊 delta：🟢 APPROVED（2026-08-18 使用者裁決，AC-E1～AC-E9）** | Last Updated: 2026-08-18
+Priority: P0-MVP | Status: 🟡 實作（unit 綠；14 欄清單＋9 篩選＋排序分頁；**「檔案」與「連結點程序書」兩欄之後端富化與前端渲染已補**（doc-seams，批次注入不 N+1）；int 已寫未跑，見 implementation-logs/doc-seams-impl.md）｜**循環子分類顯示 delta：🟢 APPROVED（2026-08-07）**｜**連結點程序書欄摺疊 delta：🟢 APPROVED（2026-08-18 使用者裁決，AC-E1～AC-E9）**｜**連結點無 PDF 事前標示 delta：🟢 APPROVED（2026-08-27 使用者裁決，AC-E10～AC-E14；已實作）** | Last Updated: 2026-08-27
 Epic/Story: E04 / US-037
 
 > **2026-08-07 additive delta**：第 14 欄「循環別」之顯示與其可搜尋下拉之選項，須反映循環子分類。規則權威＝[F040](F040-lifecycle-subcategory.md)；欄位數、篩選數與既有條款皆不變。
@@ -9,6 +9,7 @@ Epic/Story: E04 / US-037
 > ⚠ **另含兩處既有語意之擴充**：① `程序書書名內`（使用者原文之「內」字）＝等值下拉 ＋ contains 輸入之**雙行為**（OQ-D18-12）；② `當責室長` 比對範圍由**僅主要**擴為**主要∪次要**（OQ-D18-08，與 [F019](F019-public-list-browsing.md) `AC-D7` 為同一語意之兩處斷言，**不得只改一處**）。
 > **🔵 2026-08-21 additive delta（使用者裁決；三項裁決第 3 項）——節點子樹 deep link 篩選**：`GET /admin/documents` 新增 `nodeSubtreeId` 篩選參數（**恆與 `lifecycleId` 成對**），語意＝同一循環且掛載節點 ∈ 該節點子樹；本頁以**可清除的 chip** 呈現。**本 delta 之 AC 編號採 `AC-T#`**（`AC-T40`～`AC-T48`），權威見 [§節點子樹篩選（deep link）delta](#subtree-filter-delta)。
 > 🔒 **子樹為第 14 個篩選來源但不進那 13 項**——`AC-D1`／`AC-D2`／`AC-D9`／`AC-D10`／`AC-N40` ② 逐字續為有效；本 delta 僅**就地擴充 `AC-D8`**（清除全部篩選須連 chip 一起清）。上游入口＝[F036](F036-lifecycle-tree-preview.md#subtree-drawer-delta) 之子樹抽屜導向鈕。
+> **🔴 2026-08-27 缺失 delta（使用者回報：「在清單頁點擊下載連結點程序書時，出現無法下載的問題」）——連結點無 PDF 之事前標示**：實測查證後判定**下載機制本身沒有壞**，壞的是第 12 欄把每個連結點一律畫成可下載的按鈕，而多數目標根本沒有上傳 ICSOP PDF（591 份中僅 7 份有）。新行為＝後端補 `targetHasPdf`、無 PDF 者改以**無檔案態**（`file-x-2` ＋ 灰，仍可點可 focus）事前標示、點擊之提示改為說明原因。**摺疊行為（`AC-E1`～`AC-E6`／`AC-E8`）、下載路徑（`AC-E7`）、欄位集合與 13 項篩選一律不變。** 逐條見 [§連結點無 PDF 事前標示 delta](#link-no-pdf-delta)（`AC-E10`～`AC-E14`）。
 
 ## Description
 後台以分頁清單檢視所有 ICSOP 文件，頂部呈現 3 張統計卡，提供 **13 個**篩選（其中 10 項為可搜尋下拉，另有公告日期區間、程序書書名內之雙行為欄、OJT 三值下拉）與依編號/公告日期排序。<br>📝 **2026-08-16 使用者裁決推翻，理由：使用者明列 13 項篩選條件（缺失 delta 第 9 項）**——原條文為「提供 **9 個**可搜尋下拉篩選」。清單顯示 14 欄（UI 顯示標籤，實體名維持「ICSOP 文件」）。狀態欄依「公告日期」衍生顯示（已公告/進度中/失效/作廢，見 F012）。與前台清單邏輯不同：**後台不套用「使用部門置頂」規則**，預設依最後更新時間或編號排序。未指派節點文件明顯標示。19 欄位權威定義見 [data-model.md](../data-model.md#document-entity)。
@@ -138,11 +139,26 @@ Epic/Story: E04 / US-037
 - **AC-E4**（就地展開、非浮層）：Given 收合態之 `+N`, When 點擊（或以鍵盤觸發）, Then **該列就地展開**（in-place），該格改為逐列列出**全部 N 個**連結（含第一顆），每列逐字結構為 `編號 · 書名 · 下載鈕`；第一列尾端之「收合」鈕與 `+N` 為**同一顆 toggle**（`aria-expanded="true"`、`aria-label` 逐字 `收合連結點程序書`），再次觸發即回到收合態。<br>🔴 **不得**改以 popover／dropdown 浮層實作：表格外層為 `overflow-x-auto` ＋ `rounded-xl overflow-hidden`，絕對定位浮層會被裁切。
 - **AC-E5**（展開狀態逐列獨立且不錯位）：Given 展開列 A, When 檢視同頁其他列, Then 其餘各列維持收合態之一行高（展開只影響被觸發的那一列），且**可同時展開多列**。Given 已展開列 A, When 改變任一篩選、清除全部篩選或換頁而重繪清單, Then 展開狀態**不得**落到其他列上——狀態鍵須為**列身分**（prototype 為文件編號 `d.num`、實作為 `documentId`），**不得**為列索引。
 - **AC-E6**（篩選命中者排第一顆）：Given `連結點程序書` 篩選已選定某目標文件、某列因擁有指向該目標之連結而入選, When 呈現該列收合態, Then **命中的那一筆排為第一顆**（＝收合態唯一可見的那顆），其餘依原順序接續於 `+N` 之內。<br>🔒 本條**只改顯示順序**：`連結點程序書` 篩選之**比對語意本身完全不變**（既有 `linkTargetId` 語意，見 `AC-D2` 第 9 列）。
-- **AC-E7**（下載路徑不變）：Given 收合態之 pill 或展開態任一列之下載鈕, When 點擊, Then 一律走**既有受控（稽核）下載路徑**——取目標文件之附件清單 → 取其 `ICSOP_PDF` → 同一支代理串流下載端點（[F020](F020-watermark.md#front-burn-scope-delta) `AC-D3a` 後台側；⚠ **2026-08-20 起該端點亦燒錄浮水印**，見 [F020 §backend-burn-delta](F020-watermark.md#backend-burn-delta) `AC-N14`）〔📝 本連結原誤指不存在之 `F020-watermark-viewer.md`，2026-08-20 順手更正，語意未變〕；**不得**新增第二條下載路徑，浮水印與否仍由伺服器端決定、前端不帶旗標。目標文件無 ICSOP PDF／取用失敗時，以既有錯誤提示（toast）呈現且不崩潰。
+- **AC-E7**（下載路徑不變）：Given 收合態之 pill 或展開態任一列之下載鈕, When 點擊, Then 一律走**既有受控（稽核）下載路徑**——取目標文件之附件清單 → 取其 `ICSOP_PDF` → 同一支代理串流下載端點（[F020](F020-watermark.md#front-burn-scope-delta) `AC-D3a` 後台側；⚠ **2026-08-20 起該端點亦燒錄浮水印**，見 [F020 §backend-burn-delta](F020-watermark.md#backend-burn-delta) `AC-N14`）〔📝 本連結原誤指不存在之 `F020-watermark-viewer.md`，2026-08-20 順手更正，語意未變〕；**不得**新增第二條下載路徑，浮水印與否仍由伺服器端決定、前端不帶旗標。目標文件無 ICSOP PDF／取用失敗時，以既有錯誤提示（toast）呈現且不崩潰。<br>📝 **2026-08-27 就地精確化**：本條末句之「目標文件無 ICSOP PDF」自該日起**只涵蓋 `targetHasPdf` 未知（缺鍵）或載入後才失效之殘餘情形**——已知無 PDF 者於**點擊之前**即以無檔案態呈現、且點擊之提示須說明原因，權威＝[§連結點無 PDF 事前標示 delta](#link-no-pdf-delta)（`AC-E10`～`AC-E13`）。**下載路徑本身逐字不變**（本條前半全文續為有效）。
 - **AC-E8**（DOM 契約；供約束環定位，權威＝prototype）：Given 第 12 欄渲染完成, When 檢視 DOM, Then 下列屬性逐字成立——收合態／展開態之容器帶 `data-link-cell`、`data-link-count="{N}"`、`data-link-expanded="false|true"`；toggle 鈕帶 `data-link-toggle="{列身分鍵}"`；展開態每一連結列帶 `data-link-item`。<br>📌 **本條之存在理由**：同 `AC-D10`——本輪約束環為簡化版（僅 vitest／jest，Playwright 僅驗表頭），未入 AC 之選擇器只能由 test-generator 臆造，測出來之物會與畫面對不上。
 - **AC-E9**（🔒 回歸鎖定）：Given 本 delta 實作完成, When 檢視清單, Then **14 欄之欄位集合與由左至右順序不變**、**第 12 欄以外之 13 欄顯示規則逐項不變**、3 張統計卡／13 項篩選（含各項比對語意）／排序／分頁行為一律不變；既有 AC 與 `AC-S1`／`AC-S2`／`AC-D1`～`AC-D10` 除 `AC-D9` 就「第 12 欄顯示規則」一項之範圍外，全數維持綠燈。<br>📝 **2026-08-20 範圍縮減**：本條之「14 欄之欄位集合與由左至右順序不變」自該日起同 `AC-D9` 改讀為「**既有 14 欄**之集合與其**相對**順序不變」——最左新增之「OJT」圖示欄不視為違反（`OQ-D9-25` 選項 A，權威＝`AC-N37`～`AC-N40`）。
 
+### 連結點無 PDF 事前標示 delta（🔴 2026-08-27 使用者回報缺失；權威＝`prototypes/13-document-list.html` 檔頭 2026-08-27 區塊 ⑩～⑬） {#link-no-pdf-delta}
+
+> **缺失原文**（使用者回報）：「ICSOP 文件管理：在清單頁點擊下載連結點程序書時，出現無法下載的問題」。
+> **成因（2026-08-27 dev 環境實測查證，非推測）**：下載機制**本身沒有壞**——對已上傳 ICSOP PDF 之目標實跑兩段流程（`GET /admin/documents/{id}/attachments` → `GET /documents/attachments/download`）回 `200`／`application/pdf`／2,144,214 bytes（已燒錄浮水印）。真正失敗的是**目標文件根本沒有上傳 ICSOP PDF**：附件清單回 `[]` ⇒ 前端走到「找不到 `ICSOP_PDF`」分支，只丟一句沒有原因的 `無法下載「{編號} {書名}」`。實測資料：591 份程序書僅 **7 份**有 ICSOP PDF；15 筆連結中 **11 筆**之目標無 PDF；5 個有連結的列裡有 **3 列**之「收合態唯一看得到的那顆 pill」一點就失敗。
+> **判定**：這不是下載端點的缺陷，而是**第 12 欄承諾了它多數時候做不到的事**——清單回應（`DocumentLinkView`）從未帶過「目標有沒有 PDF」，所以 UI 無從事前標示，使用者只能點下去才知道，而且知道的還只是「無法下載」四個字。同頁「檔案」欄早有正確前例：沒有 PDF 就顯示 `—`，不畫下載鈕。
+> **裁決**（2026-08-27 使用者核可，選項＝「事前標示＋說明原因」）：① 後端補 `targetHasPdf`；② 無 PDF 之連結點改為**無檔案態**（仍可點、可 focus）；③ 點擊之提示改為說明原因。**不**改變 pill 之動作語意（維持「下載」，不改成「前往該文件」），亦不動下載路徑。
+> **本 delta 之 AC 編號沿用 `AC-E#` 序列**（接於 `AC-E9` 之後，自 `AC-E10` 起），與 `AC-S#`／`AC-D#`／`AC-N#`／`AC-T#` 區隔、不重號。
+
+- **AC-E10**（後端補「目標有無 ICSOP PDF」）：Given 後台清單 `GET /admin/documents` 與 `GET /admin/documents/:id/links` 之回應, When 檢視其 `links[]` 元素, Then 每個元素帶 `targetHasPdf`：目標文件**有** `ICSOP_PDF` 附件 → `true`；**無** → `false`。<br>🔴 **不得引入 N+1**：本欄須以**固定次數**之批次查詢取得（手法同 `hasOjt` 之 `findManyByType` 批次），往返數與列數／連結數無關——與 `AC-N40` 之效能前提同一條紅線。<br>⚠ **`undefined` ≠ `false`**：附件來源不可用（未注入 attachmentStore）時**須省略本鍵**（＝未知），**不得**降級寫成 `false`。此處刻意與同檔 `hasOjt` 之「缺鍵視同 `false`」相反，理由見 `AC-E12`。
+- **AC-E11**（無檔案態之呈現與可操作性）：Given 某連結點之 `targetHasPdf === false`, When 呈現其收合態 pill 或展開態之按鈕, Then ① 圖示為 `file-x-2`、文字色為 `text-slate-400`（沿用同頁「無 OJT」之既有語彙，**不得**引入新圖示或新色票）；② 其 `title` 逐字為 `連結點程序書：{編號} {書名}（尚未上傳 ICSOP PDF，無法下載）`；③ **仍為真正的 `<button>`**——可 focus、可鍵盤 Enter／Space 觸發、可觸控，且**不得**帶 `disabled`、**不得**改成 `<span>`；④ 點擊時**不呼叫**任何附件或下載端點，只顯示逐字為 `「{編號} {書名}」尚未上傳 ICSOP PDF，無法下載` 之 toast。<br>📌 **③ 之存在理由**：F024 匯出鈕已就同一件事裁定過——`disabled` 的鈕不能 focus、讀不到 tooltip、觸控裝置上按了毫無反應，使用者只會覺得「壞了」，而不是「這份還沒上傳」。事前提示**不得**以 `disabled` 實作。
+- **AC-E12**（未知一律當成有 PDF）：Given 某連結點之 `targetHasPdf` 為 `undefined`（缺鍵；舊版回應或附件來源不可用）, When 呈現該連結點, Then 其外觀與行為**逐字等同 `true`**（既有可下載之 pill／下載鈕，`title` 仍為 `下載連結點程序書：{編號} {書名}`），點擊仍走 `AC-E7` 之既有下載路徑；若該路徑最終取不到 PDF，其 toast 亦須為 `AC-E11` ④ 之逐字說明字串（不再是泛用之「無法下載」）。<br>📌 **本條之存在理由**：猜錯的代價不對稱。把「其實下載得到」的連結點標成不可下載是**新製造**的缺失（使用者從此不會去點）；把「其實沒有」的畫成可下載，最壞只是退回本 delta 前的行為，而且點下去仍有說明。
+- **AC-E13**（DOM 契約；供約束環定位，權威＝prototype）：Given 第 12 欄渲染完成, When 檢視 DOM, Then 無檔案態之按鈕帶 `data-link-no-pdf`；`targetHasPdf` 為 `true` 或 `undefined` 之按鈕**不得**帶此屬性。<br>📌 **本條之存在理由**：同 `AC-D10`／`AC-E8`／`AC-N39`。
+- **AC-E14**（🔒 回歸鎖定）：Given 本 delta 實作完成, When 檢視清單, Then ① **15 欄之欄位集合與由左至右順序逐字不變**；② 第 12 欄之**三態、恆一行高、`+N` 摺疊、就地展開、逐列獨立之展開狀態、篩選命中者排第一顆**（`AC-E1`～`AC-E6`）與 `AC-E8` 之 DOM 契約**逐項不變**——本 delta **只換 pill／下載鈕之兩種樣態，不動摺疊行為**；特別是**無檔案態之列高須與有 PDF 之列完全相等**（`AC-E1` 之恆一行高不因新樣態而破）；③ `AC-E7` 之下載路徑（附件清單 → `ICSOP_PDF` → 同一支代理串流端點）逐字不變，**不得**新增第二條下載路徑；④ 13 項篩選（含 `連結點程序書` 之比對語意）／3 張統計卡／排序／分頁行為一律不變；⑤ 🔴 回應形狀之既有欄位逐字不變——`targetHasPdf` 為 `DocumentLinkView` 之 **additive 選填欄**，既有消費者忽略未知欄位即可。
+
 ### OJT 圖示欄 delta（🔵 2026-08-20 使用者裁決；缺失／變更 delta 第 9 項） {#ojt-icon-column-delta}
+
 
 > 前提裁決（逐題紀錄見 [open-questions §D9](../open-questions.md#d9--2026-08-20-缺失變更-delta來源stories2026-08-20-defect-delta-9md)）：
 > **`OQ-D9-25`→選項 A**（清單**新增獨立欄**置於最左；表格已有 `overflow-x-auto` 可吸收欄寬）〔lead 預設〕｜

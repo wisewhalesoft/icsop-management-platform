@@ -70,6 +70,13 @@
 > **閘門**：frontend `tsc --noEmit` exit 0、frontend vitest **83 files／1179 tests 全綠**（含新增 11 案）。prototype 以**真實 Chrome 量測**驗收：收合態 15 列一律 **57px 等高**、展開列 169px 且**其他列不變**、焦點回到同一顆 toggle、以第 6 個連結篩選時它被排到唯一可見的第一顆。
 > ⚠ **React 頁尚未做真瀏覽器煙霧測試**（需登入態；jsdom 不做版面計算，量不到列高，故 `AC-E1` 於單元層以其**成因**斷言：不得 `flex-wrap`、須 `whitespace-nowrap`、N ≥ 2 只渲染一顆 pill）。亦**尚未部署**至 testicsop。
 
+> **🔴 2026-08-27 使用者回報「在清單頁點擊下載連結點程序書時，出現無法下載」，已修**：**下載機制本身沒有壞**——先在 dev 實跑查證，對已上傳 PDF 之目標走完兩段流程（`GET /admin/documents/{id}/attachments` → `GET /documents/attachments/download`）回 `200`／`application/pdf`／2,144,214 bytes（已燒錄浮水印）。真正的缺陷是**第 12 欄把每個連結點一律畫成可下載的按鈕**，而清單回應從未帶過「目標有沒有 PDF」：591 份程序書僅 **7 份**有 ICSOP PDF、15 筆連結中 **11 筆**之目標無 PDF、5 個有連結的列裡有 **3 列**之「收合態唯一看得到的那顆 pill」一點就失敗，且只換到一句沒有原因的「無法下載」。
+> **裁決**（使用者核可，選項＝「事前標示＋說明原因」；另兩個被否決的選項為「只改錯誤訊息」與「無 PDF 時改為前往該文件」——後者會變更 `AC-E7` 所定之 pill 動作語意）。
+> **落地**：`prototypes/13-document-list.html`（權威，先改；檔頭新增 2026-08-27 區塊 ⑩～⑬，示範載體＝唯一不在 DOCS 內的連結目標 `ICSOP-SRC-102-1-01`）→ [F017](features/F017-backend-document-list.md) §連結點無 PDF 事前標示 delta **`AC-E10`～`AC-E14`**（沿用 `AC-E#` 序列）→ 後端 `DocumentLinkView.targetHasPdf`（`documents.service.ts` 之 `enrichLinks`／`getDocumentLinks` 共用同一支批次查詢）→ `frontend/src/pages/DocumentListPage.tsx`（`LinkCell` 兩態）→ 測試（backend 5 案、frontend 6 案）。
+> ⚠ **`undefined` 刻意不等於 `false`**（`AC-E12`，與同表 `hasOjt` 之「缺鍵視同 false」相反）：猜錯的代價不對稱——把「其實下載得到」的連結點標成不可下載是**新製造**的缺失，反之最壞只是退回本 delta 前的行為。
+> **閘門**：backend `tsc` exit 0 ＋ jest **174 suites／2658 tests 全綠**、frontend `tsc` exit 0 ＋ vitest **107 files／1516 tests 全綠**（含新增 11 案）。新增之 3 條無檔案態案例已以「把判定改回恆 false」反向確認會紅（非假綠）。
+> **真瀏覽器實跑驗收**（重建 image ＋ `--force-recreate` 後）：API 逐筆 `targetHasPdf` 與資料庫事實一致（11 false／4 true）；無檔案態之 pill 可 focus、非 `disabled`、點擊之附件端點呼叫數為 **0**、toast 逐字為說明句；收合態各連結格高度一律 **30px**（`AC-E1` 恆一行高未破）；有 PDF 之 pill 仍走完 fetch → Blob → `<a download>` 全程（檔名正確）。
+
 > **🔴 2026-08-11 後續：上述「簡易 ring 無 fidelity」之風險已實際兌現。** 使用者於實際環境發現帳號清單「角色」欄未渲染子分類徽章——**本輪第一個逃出約束環的真實缺陷**。
 > 根因為 **AC 未覆蓋 prototype 檔頭已明列之項目**（環只依 AC 建，AC 沒寫到就不存在）＋ **無 fidelity 測試**（唯一不依賴 AC 完整性的防線缺席）。
 > spec 層已補 [F041 §F2 AC-41～AC-46](features/F041-user-subtype-business-scope.md#f2-fidelity-gap) 並同步 4 條 delta；同類掃描另揪出 4 處同類缺口（含權限矩陣頁註記橫幅完全未實作）。完整教訓與可推廣結論見 [§F041 升 ✅ 待辦](#f041-to-done) 之「已知教訓」節。實作細節見 [implementation-log/F041-impl.md](implementation-log/F041-impl.md)；升 ✅ 之可執行清單見 [§F041 升 ✅ 待辦](#f041-to-done)。
