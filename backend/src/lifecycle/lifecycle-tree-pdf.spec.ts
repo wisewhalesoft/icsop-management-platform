@@ -1,7 +1,17 @@
-import { PDFDocument } from 'pdf-lib';
-import { A4, PRINT_PAGE_CONST, PdfLibTreeRenderer, tileCount } from './lifecycle-tree-pdf';
-import { buildTreeLayout } from './lifecycle-tree-layout';
-import { buildPrintGeometry } from './lifecycle-tree-print-layout';
+import { PDFDocument, PDFFont, PDFPage } from 'pdf-lib';
+import {
+  A4,
+  PRINT_PAGE_CONST,
+  PdfLibTreeRenderer,
+  drawVerticalNode,
+  tileCount,
+} from './lifecycle-tree-pdf';
+import { buildTreeLayout, LaidOutNode } from './lifecycle-tree-layout';
+import {
+  PRINT_TREE_CONST,
+  buildPrintGeometry,
+  verticalNodeColumns,
+} from './lifecycle-tree-print-layout';
 
 /**
  * 基底樹圖 PDF 渲染 smoke（組合正確性）。真實中文可讀性/位元組視覺驗證＝[integration]
@@ -161,5 +171,75 @@ describe('tileCount — 分頁格數（重疊帶）', () => {
   it('🔴 重疊 ≥ 格寬時不得無窮分頁（step 夾在 1 以上）', () => {
     expect(tileCount(1000, 100, 100)).toBeGreaterThan(1);
     expect(Number.isFinite(tileCount(1000, 100, 500))).toBe(true);
+  });
+});
+
+/**
+ * 🔴 2026-08-27 使用者裁決（UX ③）：直排節點之**換欄方向改為往 x 軸正向（由左至右）**。
+ *
+ * 📝 已作廢（⚠ 不得復原）：OLD> 第一欄畫在**最右**、往左換欄（中文直排由右至左之古典慣例）。
+ *
+ * 📌 為何以假 page 記錄 `drawText` 而非讀 PDF 位元組：欄位 x 座標是本裁決之**唯一**可觀測量，
+ *    位元組層取回文字位置需要 PDF 解析器（本 repo 之 [integration] 範疇）；假體讓「往哪邊換欄」
+ *    這件事在單元層就有斷言載體，不必等到有人把 PDF 印出來才發現讀序反了。
+ */
+describe('drawVerticalNode — 直排節點之換欄方向（UX ③）', () => {
+  /**
+   * 10 字，`LINES_CAP=8` ⇒ 2 欄 × 5 字。
+   * ⚠ **刻意選用無重複字之名稱**：本檔以「字元 → drawText 之 x」反查欄位，名稱若含重複字
+   * （如「擔保品設定與對保作業」之兩個『保』），`find` 只會命中第一枚而使反查串欄。
+   */
+  const NAME = '擔保品設定對照作業表';
+
+  /** 只收集 `drawText` 之假 page（`drawVerticalNode` 僅用到這一個方法）。 */
+  function recordingPage(): { page: PDFPage; calls: { text: string; x: number }[] } {
+    const calls: { text: string; x: number }[] = [];
+    const page = {
+      drawText: (text: string, o: { x: number }): void => {
+        calls.push({ text, x: o.x });
+      },
+    } as unknown as PDFPage;
+    return { page, calls };
+  }
+
+  function draw(): { columns: string[][]; xOf: (ch: string) => number } {
+    const { page, calls } = recordingPage();
+    const n: LaidOutNode = { id: 'a', name: NAME, docCount: 0, x: 0, y: 0, level: 0 };
+    drawVerticalNode(page, {
+      n,
+      px: (x) => x,
+      py: (y) => y,
+      scale: 1,
+      // 空 font ⇒ widthOfTextAtSize 不存在 ⇒ textWidth 之 try/catch 退化為概略估算（每字等寬）。
+      font: {} as PDFFont,
+      safe: (t) => t,
+      nw: buildPrintGeometry([{ id: 'a', name: NAME, docCount: 0 }]).NODE_W,
+    });
+    const xOf = (ch: string): number => {
+      const hit = calls.find((c) => c.text === ch);
+      if (!hit) throw new Error(`未繪出字元 ${ch}`);
+      return hit.x;
+    };
+    return { columns: verticalNodeColumns(NAME), xOf };
+  }
+
+  it('🔴 第一欄在最左、第二欄往右（x 遞增）', () => {
+    const { columns, xOf } = draw();
+    expect(columns).toHaveLength(2);
+    expect(xOf(columns[0][0])).toBeLessThan(xOf(columns[1][0]));
+  });
+
+  it('🔴 負向回歸鎖：第一欄不得在最右（已作廢之由右至左）', () => {
+    const { columns, xOf } = draw();
+    expect(xOf(columns[0][0])).not.toBeGreaterThan(xOf(columns[1][0]));
+  });
+
+  it('相鄰欄之欄距恰為 COL_W，且同欄內各字 x 相同（1 字 1 行往下走）', () => {
+    const { columns, xOf } = draw();
+    expect(xOf(columns[1][0]) - xOf(columns[0][0])).toBeCloseTo(PRINT_TREE_CONST.COL_W, 6);
+    for (const col of columns) {
+      const xs = new Set(col.map(xOf));
+      expect(xs.size).toBe(1);
+    }
   });
 });

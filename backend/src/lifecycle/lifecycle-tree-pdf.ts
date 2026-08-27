@@ -264,10 +264,15 @@ export class PdfLibTreeRenderer implements LifecycleTreePdfRenderer {
 }
 
 /**
- * 直排節點：名稱 1 字 1 行、長名分欄（**由右至左**，中文直排慣例），底部一列「N份」
+ * 直排節點：名稱 1 字 1 行、長名分欄（**由左至右**，往 x 軸正向換欄），底部一列「N份」
  * （卡片僅 40pt 寬，容不下「掛載 N 份程序書」）。
+ *
+ * 🔴 **2026-08-27 使用者裁決（UX ③）：換欄方向改為往右**。
+ * 📝 已作廢（⚠ 不得復原）：OLD> `colX = blockLeft + (columns.length - 1 - col) * COL_W`
+ *    ——第一欄畫在**最右**（中文直排由右至左之古典排版慣例）。使用者裁定本系統之節點名多為
+ *    現代混排（含英數與專有名詞），由右至左反而讀不順，一律改為與橫排同向之由左至右。
  */
-function drawVerticalNode(
+export function drawVerticalNode(
   page: PDFPage,
   o: {
     n: TreeLayout['nodes'][number];
@@ -287,8 +292,8 @@ function drawVerticalNode(
   const blockLeft = n.x + (nw - blockW) / 2;
 
   columns.forEach((chars, col) => {
-    // 🔴 第一行在**最右**：由右至左才是直排的閱讀順序，由左至右會把名稱讀反。
-    const colX = blockLeft + (columns.length - 1 - col) * C.COL_W;
+    // 🔴 第一欄在**最左**，往 x 軸正向換欄（2026-08-27 使用者裁決 UX ③）。
+    const colX = blockLeft + col * C.COL_W;
     chars.forEach((ch, i) => {
       const text = safe(ch);
       const w = textWidth(font, text, C.NAME_FONT);
