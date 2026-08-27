@@ -7,6 +7,7 @@ Epic/Story: E03 / US-025
 > ⚠ **既有「單擊＝標示下游」行為完全保留、不得變更**（AC-D6）；抽屜為 **[F009](F009-node-drawer-maintenance.md) 節點抽屜之唯讀孿生**，**不得復用其可寫版本**，且其資料來源端點之權限閘門**沿用 F036「循環管理」read（含 Supervisor 全公司唯讀）**，**不得誤用 [F009](F009-node-drawer-maintenance.md) 之 ICSOPAdmin 寫入閘門**（AC-D5）。
 > 📌 **[F038](F038-lifecycle-tree-change-history.md) 之新舊樹狀圖 diff 預覽不支援雙擊**（OQ-D18-19 裁決＝否），見 [F038](F038-lifecycle-tree-change-history.md) `AC-D3`。
 > **🔴 2026-08-21 CHANGE delta（使用者裁決；三項裁決第 2／3 項）——抽屜擴為子樹 ＋ 子樹 deep link**：雙擊抽屜由「本節點」擴為「**本節點 ＋ 其所有下游節點**」並依節點分組；抽屜 footer 新增導向鈕，導向 `/admin/documents?lifecycleId=..&nodeSubtreeId=..`（後端子樹篩選參數之權威＝[F017](F017-backend-document-list.md#subtree-filter-delta)）。**本 delta 之 AC 編號採 `AC-T#`**（`AC-T10`～`AC-T27`），權威見 [§抽屜擴為子樹 ＋ 子樹 deep link delta](#subtree-drawer-delta)。
+> **🔴 2026-08-27 UX delta（使用者裁決；三項之第 ②③ 項）**：② 樹狀圖預覽之**浮水印疊加層須滿版**（畫板比螢幕寬時不得只覆蓋中央一條斜帶）；③ 下載／列印之**直排節點換欄方向改為往 x 軸正向（往右）**。**AC 編號沿用 `AC-T#` 接續 `AC-T49` 往下編**（`AC-T50`／`AC-T51`），權威見 [§2026-08-27 UX delta](#ux-20260827-delta)。①（全域浮水印色值／字級）之權威在 [F020](F020-watermark.md#d9-watermark-delta) `AC-N1`／`AC-N2`／`AC-T2`／`AC-T4`。
 > 🔴 **本 delta 就地修訂了 `AC-D9`／`AC-D4`／`AC-D7`／`AC-D3b`／`AC-D3c` 五處既有條文**（副標題語意、格式化函式不再共用、徽章重繪之比對對象、`aria-label`、工具列提示句、唯讀之唯一例外、空狀態觸發條件、opener 述詞收斂）——**皆為修訂而非回歸**，舊字面已於各條以 `OLD>` 標記保留，**不得再用於斷言**。
 
 > 由**兩個後台入口**開啟新頁（viewer 風格，`22-lifecycle-tree-preview.html`）以唯讀檢視某循環之 DAG 結構：(1)「循環管理」清單（`10-lifecycle-list`）每列「狀態」欄右側之樹狀圖圖示；(2)「ICSOP 文件（程序書）清單」（`13-document-list`，[F017](F017-backend-document-list.md)）每列之樹狀圖圖示，以 `?cycle=<該文件所屬循環代碼>` 帶入該文件所屬循環為預選。屬「循環管理」之**唯讀子能力**：可視角色與範圍**沿用 F025「循環管理」唯讀列**（不新增權限矩陣列）。
@@ -290,6 +291,21 @@ Epic/Story: E03 / US-025
   📝 已作廢（⚠ 不得復原）：`<a href={lifecycleTreeDownloadUrl(id)}>`／`<a href={lifecycleTreePrintUrl(id)} target="_blank">`
   ⚠ 列印之新分頁須於 click handler 內、任何 `await` **之前**同步 `window.open('', '_blank')` 取得，
   否則會被彈出視窗封鎖器擋下。
+
+### 2026-08-27 UX delta（🔴 使用者裁決；三項之第 ②③ 項） {#ux-20260827-delta}
+
+- **AC-T50**（🔴 **浮水印疊加層須滿版**——UX ②）：Given 任一循環之樹狀圖預覽已渲染（畫板寬 `W`、高 `H`，含 `W ≫ H` 之寬圖）, When 檢視浮水印疊加層之幾何, Then 其**旋轉後之矩形涵蓋畫板四角**——即疊加層為**邊長 ≥ `(W + H) × cos45°` 之正方形**且**以畫板中心為中心**（`transform: rotate(-45deg)` 之原點即中心）。
+  <br>🔴 **根因為幾何、不是密度**（本條之立條理由，不得刪）：已作廢之 `inset: -40%` 使疊加層為 `1.8W × 1.8H`（**兩邊各自**等比放大）；但旋轉 45° 後要蓋住原矩形，**兩軸半徑都必須 ≥ `(W + H)/2 × cos45°`**（畫板四角 `(±W/2, ±H/2)` 逆旋轉 45° 後為 `(0.707(x − y), 0.707(x + y))`，其極值即該值）。長寬比一拉開，`1.8H` 遠小於該值 ⇒ 疊加層退化成一條斜向細帶。例：`4000 × 600` 之畫板於 `y = 0` 這條線上只覆蓋 `x ∈ [−764, 764]`，而畫板是 `[−2000, 2000]`。**使用者所見之「浮水印只集中在中間」即此。**
+  <br>📌 **驗證載體**：純函式單元測試（幾何計算），以**畫板四角是否落在旋轉後之疊加層內**為斷言——**不得**退化為「tile 枚數 > 某個數」：舊實作之 `wmCount` 一直有值，只是那些 tile 全落在畫板外，該形狀的斷言**永遠不會紅**。另須一條**負向對照**，把已作廢之 `1.8W × 1.8H` 幾何餵進同一套判定並斷言其於極寬圖上失敗。
+  <br>📌 **鋪滿之落地契約**：tile 由**左上角起逐列鋪滿**（列內 `flex-wrap: nowrap`），溢出由疊加層自身之 `overflow: hidden` 裁掉；列欄數之推算須**低估 tile 尺寸並各多算一格**（估小只是多鋪幾枚被裁掉，估大就是右緣一條沒有浮水印的空白）。<br>⚠ **不得**改回 `flex-wrap: wrap` ＋ `align-content: center` ＋ 固定枚數——tile 寬度由內容決定，wrap 之下每列排得下幾枚無從預期，最後一列排不滿即右緣一條空白（旋轉後就是一條斜白帶）。
+  <br>📝 已作廢（⚠ 不得復原）：OLD> `inset: '-40%'` ＋ `display:flex; flexWrap:'wrap'; alignContent:'center'; justifyContent:'center'` ＋ `wmCount = Math.min(160, Math.max(40, Math.round((boardW * boardH) / 16000)))`。
+  <br>🔒 **不影響**：疊加層之色值／不透明度／行高（[F020](F020-watermark.md) `AC-N2`／`AC-T2` 之定稿值）、`data-testid="watermark-overlay"`／`watermark-text` 兩個掛鉤（`AC-N66` 之正向鎖定）、三行式拆行（`AC-N68`）。
+  <br>⚠ **本條僅適用 `LifecycleTreePreviewPage`**。[F038](F038-lifecycle-tree-change-history.md) 之 `DiffBoard` 迷你畫板同屬 `inset:-40%` 寫法，**本輪裁決未涵蓋**（使用者所提為樹狀圖預覽頁）；其畫板為 modal 內之小圖，長寬比未拉開故未顯形。**日後若要一併收斂，須另行入 AC，不得逕自順手改。**
+
+- **AC-T51**（🔴 **直排節點之換欄方向改為往右**——UX ③）：Given 下載／列印路徑之列印幾何（`textOrientation: 'vertical'`，節點名 1 字 1 行）, When 某節點名長度超過 `LINES_CAP` 而需分欄, Then **第一欄畫在最左、後續欄往 x 軸正向（右）遞增**——`verticalNodeColumns()` 之回傳 `[0]` 為最左欄，相鄰欄之 x 差恰為 `PRINT_TREE_CONST.COL_W`，且同欄內各字之 x 相同。
+  <br>📝 已作廢（⚠ 不得復原）：OLD> `colX = blockLeft + (columns.length - 1 - col) * COL_W`——第一欄畫在**最右**、往左換欄（中文直排由右至左之古典排版慣例，2026-08-26 UX ④ 之原始實作）。**推翻理由（使用者裁決）**：本系統之節點名多為含英數與專有名詞之現代混排，由右至左反而讀不順。
+  <br>📌 **驗證載體**：以假 `PDFPage` 收集 `drawText` 之 x 座標（`drawVerticalNode` 僅用到該方法）——欄位 x 是本裁決之**唯一**可觀測量，位元組層取回文字位置需 PDF 解析器（[integration] 範疇）。須含**負向回歸鎖**（第一欄不得在最右）。
+  <br>🔒 **不影響**：`verticalNodeLines()` 之逐字拆行與截斷、`buildPrintGeometry()` 之節點寬高與全圖統一高度、A4 縮放分頁（2026-08-26 UX ④ 之另一半），以及**畫面幾何**（`TREE_LAYOUT_CONST`，橫排）。
 
 ## Related
 - **循環子分類規則權威**: [F040](F040-lifecycle-subcategory.md)（標題／切換器顯示、稽核名稱快照、`?cycle` 收斂為 `lifecycleId`）
