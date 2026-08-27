@@ -1,8 +1,10 @@
 # F018: 使用表單管理
-Priority: P1 | Status: Implemented（unit-green；真 Azure Blob＋multipart＋下載稽核接真 AuditWriter；**前端管理頁已實作**（prototype 19 移植）；表單池總覽/個別下載端點（int 已備未跑）；**自訂表單名稱已接線**（public-seams：上傳 multipart 選填 `name`，trim／空值 fallback 檔名／上限 400 字＝`USAGE_FORM_NAME_TOO_LONG`；批次與覆蓋刻意不接受）；剩真 Azure 私有容器直存拒絕＝[integration]） | Last Updated: 2026-07-24
+Priority: P1 | Status: Implemented（unit-green；真 Azure Blob＋multipart＋下載稽核接真 AuditWriter；**前端管理頁已實作**（prototype 19 移植）；表單池總覽/個別下載端點（int 已備未跑）；**自訂表單名稱已接線**（public-seams：上傳 multipart 選填 `name`，trim／空值 fallback 檔名／上限 400 字＝`USAGE_FORM_NAME_TOO_LONG`；批次與覆蓋刻意不接受）；剩真 Azure 私有容器直存拒絕＝[integration]）｜**檔名／表單池匯出 delta：🟢 APPROVED（2026-08-27 使用者裁決，`AC-X1`～`AC-X10`；已實作）** | Last Updated: 2026-08-27
 Epic/Story: E05 / US-040, US-041, US-042
 
 > 合併理由：表單池管理（US-042）、上傳/移除（US-040）與前/後台關聯清單呈現與下載（US-041）為同一表單生命週期，共用同一組 API。
+>
+> **🔵 2026-08-27 使用者裁決 delta——表單名稱去副檔名 ＋ 表單池匯出（CSV）**：① 上傳檔案後帶出之表單名稱**不含副檔名**（`AC-X1`／`AC-X3`）；② **使用表單管理頁新增匯出功能**，比照 [F039](F039-appendix-management.md#export-delta) 附錄池匯出（`AC-X4`～`AC-X10`）；③ 匯出表格含「關聯文件編號」欄，多份以**半形分號**相接（`AC-X2`）。逐條見 [§檔名與表單池匯出 delta](#name-and-export-column-delta)。**本 delta 之 AC 編號採 `AC-X#`**，與既有 `AC-D#`／`AC-N#`／`AC-P#` 區隔、不重號。<br>⚠ 本檔既有一處以 `AC-E8` 指稱之交叉引用（見 §usage-form-page-delta 之共同載體註記）**不屬本檔之 AC 空間**，本 delta 刻意避開 `AC-E#` 以免與之混淆。
 >
 > **🔵 2026-08-16 additive delta（使用者裁決；缺失／變更 delta 第 18 項）——使用表單新增「表單編號」欄位**：`USAGE_FORM_POOL` 新增**選填、唯一**之 `formNumber`（供管理員設定），並呈現於使用表單管理頁清單與上傳／編輯表單。**本 delta 之 AC 編號採 `AC-D#`**（D＝2026-08-16 defect delta）。
 > ⚠ **本項為 2026-08-16 delta 中唯一需 schema 變更＋migration 者**。加欄之前，須先**償還 `OQ-E10-05`**（`USAGE_FORM_POOL`／`DOC_USAGE_FORM` 尚未登錄於 data-model）——已於 [data-model.md#usage-form-entity](../data-model.md#usage-form-entity) 補登錄實體本體後再加欄，避免出現「只有新欄、沒有本體」之殘缺定義。
@@ -217,12 +219,30 @@ Epic/Story: E05 / US-040, US-041, US-042
   - ② 該區塊另顯示一句換檔引導，其文字**含逐字片段** **`需要換檔請回`** 與 **`使用該列之「更新／覆蓋上傳」`**，且**含逐字字串 `USAGE_FORM_OVERWRITE_SHARED`**；該句並明示**本頁儲存不會觸發該警示**。<br>🔴 **本子條之必要性**：`AC-N48` 規定「檔案不可於本頁更換」，但**未規定要告訴使用者去哪裡換**——只鎖住而不指路，使用者會誤以為系統不支援換檔。此句同時是 `AC-N49`「不得觸發 `USAGE_FORM_OVERWRITE_SHARED`」在畫面上的說明。
   - ③ 🔴 **負向斷言——原型專用之記錄切換器不得出現於實作**：`19b` 之 `[data-prototype-demo="true"]` 容器與其 DOM id **`demoForm`** 之 `<select>` **僅為 prototype 覆核用**（供在單一靜態檔內展示「有編號／無編號／0 筆制定部門」三種狀態）。實作端以**路由參數**取得被編輯之表單 ⇒ `container.querySelector('[data-prototype-demo]') === null` **且** `container.querySelector('#demoForm') === null` 逐字成立。<br>🔴 **本子條所防之失誤形狀**：prototype 之示範用控制項被連同版面一起移植進正式頁面——那會讓任何使用者在編輯頁**任意切換到別人的表單**。此類「示範腳手架外洩」正是靜態 prototype 移植最常見之污染，**必須以負向 AC 攔截**。
 
+### 檔名與表單池匯出 delta（🔵 2026-08-27 使用者裁決；與 [F039](F039-appendix-management.md#name-and-export-column-delta) 同一次裁決） {#name-and-export-column-delta}
+
+> **使用者原文**：「1. 上傳檔案後，帶出來的表單名稱與附錄名稱不需要有副檔名（直接用字串處理拿掉）2. 表單管理也增加如附錄管理一樣的匯出功能 3. 匯出表格增加一欄關聯文件編號，多份時以 `;` 隔開」。
+> **成因**：① 名稱之 fallback 與新增頁之自動帶入皆採**完整檔名**，故清單每列的表單名稱尾巴都掛著 `.xlsx`／`.pdf`，而同一列右邊就有「格式」欄在說同一件事；② [F039](F039-appendix-management.md#export-delta) 已於 2026-08-16 為附錄池加上匯出，**同構的表單池卻沒有**——兩個結構逐項同構的管理頁，一個匯得出來、一個匯不出來。
+> 🔒 **本 delta 不動**：格式白名單、大小上限、`formNumber` 之全部語意（唯一性／長度／驗證順序）、制定部門之 replace-set 語意、覆蓋／移除門檻、燒錄與稽核、既有清單欄位與篩選，一律逐字不變。**特別是本 delta 不新增任何篩選控制項**（沿用 `AC-N47` 之 ⚠）。
+
+- **AC-X1**（表單名稱之 fallback 去副檔名）：Given 上傳表單, When 未提供 `name`／提供空字串／提供純空白, Then 落地之 `USAGE_FORM_POOL.name` ＝**檔名去除最後一個副檔名**之主體（`放款覆核表.xlsx` → `放款覆核表`）；**多檔批次路徑同此規則**。<br>邊界：無點／點在結尾／點在首位（`.gitignore`）→ **一律回原字串**，不得產生空名稱。<br>🔒 **使用者自訂之名稱一律逐字採用**——即使含 `.xlsx`，系統**不得**代為去除。<br>🔒 **覆蓋上傳仍不改名稱**（既有語意）：以 `進件申請書_v2.xlsx` 覆蓋 `進件申請書`，名稱維持 `進件申請書`。<br>📌 **新增頁之自動帶入同步**（權威＝`prototypes/19a-usage-form-create.html`）：選檔後帶入之值為去副檔名之主體，**已手動輸入者仍不覆蓋**（既有語意不變）；placeholder 改為逐字 `請輸入表單名稱（可沿用檔名，不含副檔名）`。
+- **AC-X2**（匯出之「關聯文件編號」欄；與 [F039](F039-appendix-management.md#name-and-export-column-delta) `AC-X2` **同一規則**）：Given 某表單關聯 N 份文件, When 檢視匯出 CSV 之末欄, Then 為該 N 份文件之 `documentNumber`，以**半形分號 `;`** 相接、**順序即管理頁展開列所見之順序**；N=0 → **空儲存格**（非 `—`、非 `0`）。<br>🔴 **分隔符刻意不用逗號**（理由見 F039 同條）。🔴 **兩處匯出必須共用同一組字函式**——各寫一份必然於分隔符或空值呈現上漂移。
+- **AC-X3**（名稱長度上限之量測點）：Given fallback 之檔名主體長度恰 400、完整檔名含副檔名為 405, When 上傳, Then **通過**（副檔名不佔 `nvarchar(400)` 配額）；主體 401 → 仍為 `USAGE_FORM_NAME_TOO_LONG`（400）。
+- **AC-X4**（匯出之 CSV 格式與**九欄**逐字表頭）：Given 表單池匯出, When 檢視位元組, Then ① 以 UTF-8 BOM（`EF BB BF`）開頭；② 第 1 列逐字為 `表單編號,表單名稱,制定部門,格式,大小,上傳者,上傳時間,關聯文件數,關聯文件編號`；③ 含 `,`／`"` 之值依 RFC 4180 包覆逸出；④ 資料列序**與畫面當前排序一致**。<br>⚠ 兩處刻意差異，與 F039 `AC-D6` 逐條相同：畫面之「操作」欄**不匯出**；畫面之「上傳者 / 上傳時間」單欄於 CSV **拆為兩欄**。<br>🔒 `表單編號` 未設定（`null`）→ **空儲存格**，不得輸出字面 `null`。
+- **AC-X5**（「制定部門」欄之值＝畫面所見）：Given 某表單有 N 個制定部門, When 檢視 CSV 第 3 欄, Then 為各部門之**祖鏈路徑標籤**（自 Root 沿 `parentCode` 上溯、各層名稱以 ` / ` 相接，與清單頁 chip **同一演算法**），多筆以**全形頓號 `、`** 相接（與清單頁儲存格逐字相同）；N=0 → **空儲存格**（非畫面之 `—`）。<br>🔴 解析以**操作者 session 之公司**查 `ORG_UNIT`——`(companyCode, orgCode)` 才是唯一鍵，跨公司同代碼是不同單位。<br>🔒 **降級而非中斷**：組織主檔查無該代碼／未注入解析來源／查詢失敗 → 該項退回顯示**代碼本身**（與前端 `orgPathLabel` 查無時之 fallback 逐字一致），匯出**不得**因此失敗。<br>🔴 **效能**：整份匯出**只查一次**組織主檔，逐列查表為 O(1)，不得引入 N+1。
+- **AC-X6**（匯出動作與權限）：Given ICSOPAdmin 或 SysAdmin 進入使用表單管理頁, When 檢視 **topbar 動作區**, Then 存在可見文字與 `aria-label` 皆逐字為 `匯出` 之按鈕（icon 鍵 `download`，`title` 逐字 `匯出表單清單（CSV）`）。<br>🔴 **匯出屬讀取類動作**：SysAdmin（唯讀）**允許**匯出，該鈕**非** write-only；Supervisor／DeptContact／User 於本頁本就被封鎖（403 `PERMISSION_DENIED`），亦不得呼叫匯出端點。<br>端點＝`GET /admin/usage-forms/export`，閘門為功能 `使用表單管理` **read**，**不寫稽核**（管理存取，比照後台下載）。<br>🔴 路由須宣告於 `admin/usage-forms/:formId…` **之前**：`export` 為固定段，參數路由先宣告會把它吃成 `:formId`。
+- **AC-X7**（匯出範圍＝當前篩選之**全部結果**）：Given 已套用關鍵字／格式篩選, When 匯出, Then 帶入與清單查詢**相同**之篩選參數，範圍為符合該篩選之**全部結果**（非當前頁）；未套用任何篩選 → 兩鍵皆不帶（不得送出空字串當成篩選值）。
+- **AC-X8**（筆數上限）：Given 符合條件之筆數 > 10,000, When 匯出, Then 回 400 `EXPORT_ROW_LIMIT_EXCEEDED` 且**不產生任何檔案**；恰 10,000 → 通過（邊界值含）。
+- **AC-X9**（空結果與檔名）：Given 0 筆, When 匯出, Then 產生**僅含表頭列**之 CSV（非錯誤、非空檔）。檔名形狀為 `usage-forms_{YYYYMMDD}_{HHmmss}.csv`（時間為 UTC+8）。CSV 注入前綴（`=`／`+`／`-`／`@`／Tab／CR 起始之值加單引號前綴）沿用共用產生器之既有規則，**表頭列不套用**。
+- **AC-X10**（使用者可見回饋之逐字文案）：Given 匯出成功, Then 回饋以逐字片段 `已匯出表單清單（CSV，UTF-8 BOM）` 起始。Given 超限, Then 回饋逐字為 `符合條件之筆數為 {N} 筆，超過匯出上限 10000 筆，請縮小篩選條件` ＋ 錯誤碼標記 `EXPORT_ROW_LIMIT_EXCEEDED · 400`。<br>⚠ 與 [F037](F037-document-change-history.md)／[F038](F038-lifecycle-tree-change-history.md) 之句式差異為**刻意**（該兩處量詞為「事件」、限定詞為「查詢條件」）；本頁與 [F039](F039-appendix-management.md) 同型（「筆數」＋「篩選條件」）。其他錯誤 → `匯出失敗：{code}`。
+
 ## Interface Contract（端點） {#interface-contract}
 
 > ⚠ **本檔歷來無完整端點表**（行為與資料契約以 Main Flow ＋ AC 描述，端點形狀由 system-architect 決定）。本節**僅登錄 2026-08-16 追加裁決所新增之單一端點**，不追溯補齊既有端點；既有上傳／覆蓋／移除／關聯／下載之端點形狀維持現況、不受本節影響。
 
 | 方法 | 路徑（**待 system-architect 確認，不綁死**） | 權限閘門 | 說明 |
 |---|---|---|---|
+| GET | `/admin/usage-forms/export` | 功能 `使用表單管理` read | **（2026-08-27 新增）** 匯出表單池清單為 CSV；接受與 `GET /admin/usage-forms/overview` **相同之篩選參數**（關鍵字 `q`／格式 `format`），範圍＝符合該篩選之**全部結果**（非當前頁）；超過 10,000 筆回 400 `EXPORT_ROW_LIMIT_EXCEEDED`。**不寫稽核**（管理存取，比照後台下載）。九欄表頭與各欄之值見 `AC-X4`／`AC-X5`／`AC-X2`。<br>🔴 **須宣告於 `:formId` 系列之前**（`export` 為固定段） |
 | PATCH | `/admin/usage-forms/:formId/number`〔建議形狀〕 | 功能 `使用表單管理` read ＋ 欄位 `使用表單` write | **（2026-08-16 新增）編號專用更新端點**：body 僅接受 `{ formNumber: string \| null }`；trim 後空值收斂為 `null`。**只更新 `formNumber`**——`blobPath`／`format`／`size`／`name`／`uploadedBy`／`uploadedAt` 與 Blob 檔案位元組**皆不得被讀取或寫入**（`AC-D20`）。驗證沿用 [#usage-form-number](../error-handling.md#usage-form-number)（長度先於唯一性、唯一性**排除自身列**）；**不寫稽核**。 |
 
 - 🔴 **刻意採「編號專用端點」而非併入既有覆蓋端點**：併入 `PUT /admin/usage-forms/:formId`（覆蓋上傳）會使「改編號」與「換檔案」共用同一條 multipart 路徑，必然要求送出檔案、並觸發 `USAGE_FORM_OVERWRITE_SHARED` 二次確認——此即人類閘門**已否決之替代方案**（見 [§「編輯編號」動作](#edit-number-action) 之裁決註記）。

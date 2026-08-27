@@ -1,5 +1,5 @@
 # F039: 附錄管理
-Priority: P1 | Status: Draft（規格已依 E10 stories 定稿；待 system-architect → ui-ux-designer → 人類閘門 → 實作） | Last Updated: 2026-08-06
+Priority: P1 | Status: Draft（規格已依 E10 stories 定稿；待 system-architect → ui-ux-designer → 人類閘門 → 實作）｜**檔名／匯出欄 delta：🟢 APPROVED（2026-08-27 使用者裁決，`AC-X1`～`AC-X3`；已實作）** | Last Updated: 2026-08-27
 Epic/Story: E10 / US-100, US-101, US-102
 
 > **權威來源**：[E10 epic-brief](../../stories/epics/E10-appendix/epic-brief.md)、[US-100](../../stories/epics/E10-appendix/US-100-appendix-upload.md)、[US-101](../../stories/epics/E10-appendix/US-101-appendix-document-association.md)、[US-102](../../stories/epics/E10-appendix/US-102-appendix-pool-management.md)。
@@ -8,6 +8,7 @@ Epic/Story: E10 / US-100, US-101, US-102
 > 凡涉排序之條款皆非鏡射 F018，須逐條實作與驗證。
 >
 > **🔴 2026-08-16 delta（使用者裁決；缺失／變更 delta 第 5b／14 項）**：① **前台**下載之 PDF 格式附錄**改為燒錄浮水印**（推翻本檔既有定案，見 [§前台附錄下載燒錄](#front-burn-delta)）；② 附錄管理頁**新增匯出清單功能**（CSV，見 [§附錄池匯出](#export-delta)）。**本 delta 之 AC 編號採 `AC-D#`**（D＝2026-08-16 defect delta），與本檔既有 `AC-01`～`AC-34` 之編號空間區隔、不重號。
+> **🔵 2026-08-27 使用者裁決 delta——附錄名稱去副檔名 ＋ 匯出新增「關聯文件編號」欄**：① 上傳檔案後帶出之附錄名稱**不含副檔名**（`AC-X1`）；② 匯出 CSV 末尾新增第 7 欄「關聯文件編號」，多份以**半形分號**相接（`AC-X2`）。逐條見 [§檔名與匯出欄 delta](#name-and-export-column-delta)。**本 delta 之 AC 編號採 `AC-X#`**，與既有 `AC-01`～`AC-34`／`AC-D#`／`AC-F#`／`AC-N#` 區隔、不重號。**與 [F018](F018-usage-form-management.md#name-and-export-column-delta) 為同一次裁決之兩處落點**（同一規則，兩個 feature 各自成條，不得只改一處）。
 > 🔴 **後台附錄管理頁之個別下載（`GET /admin/appendices/:appendixId/download`）維持 RAW、不燒錄、不寫稽核，一字不改**——使用者裁定「只做前台，後台維持 RAW」，[F026](F026-role-field-matrix.md) OQ-FM-01（2026-07-24）**維持有效**；缺失 delta 第 15 項（後台附錄下載燒錄）**明確不做**。
 
 ## Description
@@ -202,6 +203,16 @@ ICSOP 文件建立/編輯時，自附錄池**可搜尋多選**關聯附錄（**�
 - **AC-N57**（後台附錄下載寫稽核）：Given `AC-N56` 之下載成功, When 檢視稽核, Then `AUDIT_LOG` **恰新增一筆**：`targetType='APPENDIX'`、`actionType='DOWNLOAD'`、`appendixId`＝該附錄 id、**`documentId` 為 `null`**（附錄池管理頁之下載不隸屬任何文件——此為 [data-model](../data-model.md#auditlog-entity) 「`targetType=APPENDIX` 時 `documentId` 必填」之**明列例外**，已就地登錄）、身分快照＝操作者本人、`watermarkSnapshot` 於 PDF（已燒錄）時落值、非 PDF 時為 `null`。<br>🔒 **既有 AC-27**（**前台**下載寫稽核，`documentId` 必填）**逐字不變**；本條為後台側之新增列。
 - **AC-N58**（🔒 前台附錄行為零漣漪）：Given 本 delta 實作完成, When 執行前台附錄下載之全部既有 AC（`AC-D1`／`AC-D2`／AC-27／AC-28／AC-29／AC-30／AC-34）與附錄池匯出之 `AC-D4`～`AC-D13`, Then **全數維持綠燈、期望值一字未改**——本 delta **只加後台下載，不動前台、不動匯出、不動附錄池 CRUD 與排序**。<br>🔒 **權限矩陣不變**：`AC-31`／`AC-32`／`AC-33`（ICSOPAdmin CRUD／SysAdmin 唯讀但可下載可匯出／Supervisor・DeptContact・User 對 `/admin/appendices*` 一律 403）**逐字不變**——「後台下載改為燒錄」**不改變誰能下載**，僅改變下載到的位元組與是否寫稽核。
 
+### 檔名與匯出欄 delta（🔵 2026-08-27 使用者裁決；與 [F018](F018-usage-form-management.md#name-and-export-column-delta) 同一次裁決） {#name-and-export-column-delta}
+
+> **使用者原文**：「1. 上傳檔案後，帶出來的表單名稱與附錄名稱不需要有副檔名（直接用字串處理拿掉）… 3. 匯出表格增加一欄關聯文件編號，多份時以 `;` 隔開」。
+> **成因**：`AC-06` 之 fallback 與上傳 modal 之自動帶入皆採**完整檔名**，故清單上每一列的附錄名稱尾巴都掛著 `.xlsx`／`.pdf`——而同一列右邊就有「格式」欄在說同一件事。**匯出**則只有「關聯文件數」（幾份），沒有「哪幾份」；後者原本只能逐列展開才看得到，落到 CSV 等於看不到。
+> 🔒 **本 delta 不動**：格式白名單、大小上限、覆蓋／移除門檻與其二次確認、多對多與 `sortOrder` 語意、燒錄與稽核、匯出之權限／範圍／上限／檔名，一律逐字不變。
+
+- **AC-X1**（附錄名稱之 fallback 去副檔名；**推翻 `AC-06` 之 fallback 字面**）：Given 上傳附錄, When 未提供 `name`／提供空字串／提供純空白, Then 落地之 `APPENDIX_POOL.name` ＝**檔名去除最後一個副檔名**之主體（`風險等級對照附表.xlsx` → `風險等級對照附表`）；**多檔批次路徑同此規則**（各檔各自去副檔名）。<br>邊界：無點（`報表`）／點在結尾（`報表.`）／點在首位（`.gitignore`）→ **一律回原字串**，不得產生空名稱。<br>🔒 **使用者自訂之名稱一律逐字採用**——即使其中含 `.xlsx`，系統**不得**代為去除（去副檔名只作用於 fallback 與自動帶入，不作用於人所輸入的字）。<br>📝 **被推翻之原字面保留供追溯**：`AC-06` 之「fallback 原始檔名（含副檔名）」。<br>📌 **上傳 modal 之自動帶入同步**（權威＝`prototypes/24-appendix-management.html`）：選檔後帶入之值亦為去副檔名之主體；相關逐字提示改為「留空則以檔名（不含副檔名）建檔」、「選檔後自動帶入檔名（已去除副檔名）…」、多檔提示「各檔一律以其檔名（不含副檔名）建檔」。
+- **AC-X2**（匯出新增第 7 欄「關聯文件編號」；**就地擴充 `AC-D6` ②**）：Given 附錄池匯出, When 檢視 CSV 第 1 列, Then 逐字為 `附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數,關聯文件編號`（**既有六欄之字面與相對順序一格不動**，新欄一律接在末尾）。Given 某附錄關聯 N 份文件, When 檢視其第 7 欄, Then 為該 N 份文件之 `documentNumber`，以**半形分號 `;`** 相接，**順序即管理頁展開列所見之順序**；N=0 → **空儲存格**（**非** `—`、**非** `0`——`—` 是畫面的空值符號，落到 CSV 會被試算表當成一個資料值）。<br>🔴 **分隔符刻意不用逗號**：逗號會觸發 RFC 4180 包覆逸出，使欄內逗號與欄間逗號在肉眼上無從分辨，而本欄的用途正是讓人一眼看出被哪幾份文件引用。分號在 CSV 中無特殊意義、不觸發任何逸出。<br>📝 **被取代之欄集保留供追溯**：六欄（`附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數`）。
+- **AC-X3**（名稱長度上限之量測點）：Given fallback 之檔名主體長度恰為 400、其完整檔名含副檔名為 405, When 上傳, Then **通過**（副檔名不佔 `nvarchar(400)` 配額）；主體 401 → 仍為 `APPENDIX_NAME_TOO_LONG`（400）。<br>📌 本條為 `AC-X1` 之**真實行為區分點**：舊行為（含副檔名 fallback）必拒、新行為必收，量測點若被改回去除前，本條立刻證偽。
+
 ### Story AC ↔ 本規格 AC 對照（完整性檢核）
 
 | Story | Story AC | 本規格 AC |
@@ -260,7 +271,7 @@ ICSOP 文件建立/編輯時，自附錄池**可搜尋多選**關聯附錄（**�
 | PUT | `/admin/appendices/:appendixId` | 同上 | 覆蓋上傳（欄位名 `file`；`?confirmed=true` 放行共用警示）。**不改名稱** |
 | DELETE | `/admin/appendices/:appendixId` | 同上 | 自池移除（`?confirmed=true` 一併解除全部關聯） |
 | GET | `/admin/appendices/:appendixId/download` | 功能 `附錄管理` read | 🔴 **2026-08-20 改寫（`OQ-D9-08` 選項 B）**：後台個別下載**代理串流**；`format = pdf` 者**於伺服器端燒錄浮水印後回傳**、非 PDF 維持原檔；**寫入 `targetType='APPENDIX'`／`actionType='DOWNLOAD'` 之調閱稽核**（`documentId` 為 `null`——本路徑不隸屬任何文件）。**無例外角色**（`OQ-D9-09` 選項 B）。<br>📝 **被推翻之原條文逐字保留供追溯**：「後台個別下載（核發短效期 URL；管理存取，**不寫稽核、不燒錄浮水印**，比照 F026 OQ-FM-01）。🔴 **2026-08-16 經使用者再次確認維持不變**——缺失 delta 第 15 項（後台附錄下載燒錄）**明確裁定不做**；本列一字不改（AC-D3 回歸鎖定）」 |
-| GET | `/admin/appendices/export` | 功能 `附錄管理` read | **（2026-08-16 新增）** 匯出附錄池清單為 CSV；接受與 `GET /admin/appendices/overview` **相同之篩選參數**（關鍵字／格式），匯出範圍＝符合該篩選之**全部結果**（非僅當前頁）；超過 10,000 筆回 400 `EXPORT_ROW_LIMIT_EXCEEDED`。**不寫稽核**（管理存取，比照後台下載） |
+| GET | `/admin/appendices/export` | 功能 `附錄管理` read | **（2026-08-16 新增）** 匯出附錄池清單為 CSV；接受與 `GET /admin/appendices/overview` **相同之篩選參數**（關鍵字／格式），匯出範圍＝符合該篩選之**全部結果**（非僅當前頁）；超過 10,000 筆回 400 `EXPORT_ROW_LIMIT_EXCEEDED`。**不寫稽核**（管理存取，比照後台下載）。<br>🔵 **2026-08-27 就地擴充**：表頭由六欄擴為**七欄**（末尾新增 `關聯文件編號`），見 `AC-X2`；其餘（權限／範圍／上限／檔名／不寫稽核）逐字不變 |
 | POST | `/admin/documents/:documentId/appendices` | 同寫入 | **附加**關聯：body `{ appendixIds: string[] }`，依陣列順序接續現有最大 `sortOrder` 之後；已存在之關聯忽略且其 `sortOrder` 不變 |
 | PUT | `/admin/documents/:documentId/appendices` | 同寫入 | **取代整組關聯並依陣列索引重寫 `sortOrder`（1-based）**；建立／編輯畫面送出「已選＋排序」最終狀態之權威路徑（delete-then-insert replace-set，單一交易，比照 [F014](F014-accountable-dept-chief.md) 多值欄位既有模式） |
 | DELETE | `/admin/documents/:documentId/appendices/:appendixId` | 同寫入 | 解除單一關聯；附錄仍留於池中，剩餘關聯重新編號為連續 1..N |

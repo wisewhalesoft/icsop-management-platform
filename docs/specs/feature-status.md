@@ -77,6 +77,15 @@
 > **閘門**：backend `tsc` exit 0 ＋ jest **174 suites／2658 tests 全綠**、frontend `tsc` exit 0 ＋ vitest **107 files／1516 tests 全綠**（含新增 11 案）。新增之 3 條無檔案態案例已以「把判定改回恆 false」反向確認會紅（非假綠）。
 > **真瀏覽器實跑驗收**（重建 image ＋ `--force-recreate` 後）：API 逐筆 `targetHasPdf` 與資料庫事實一致（11 false／4 true）；無檔案態之 pill 可 focus、非 `disabled`、點擊之附件端點呼叫數為 **0**、toast 逐字為說明句；收合態各連結格高度一律 **30px**（`AC-E1` 恆一行高未破）；有 PDF 之 pill 仍走完 fetch → Blob → `<a download>` 全程（檔名正確）。
 
+> **🔵 2026-08-27 使用者裁決三項（表單／附錄管理），已實作**：① 上傳檔案後帶出之**表單名稱與附錄名稱不含副檔名**（純字串處理）；② **使用表單管理頁新增匯出功能**，比照附錄管理；③ **匯出表格新增「關聯文件編號」欄**，多份以半形分號 `;` 相接。
+> **落地**：`prototypes/19-usage-form-management.html`／`19a-usage-form-create.html`／`24-appendix-management.html`（權威，先改；三檔檔頭皆新增 2026-08-27 區塊）→ [F018](features/F018-usage-form-management.md#name-and-export-column-delta) §檔名與表單池匯出 delta **`AC-X1`～`AC-X10`** ＋ [F039](features/F039-appendix-management.md#name-and-export-column-delta) §檔名與匯出欄 delta **`AC-X1`～`AC-X3`**（新前綴 `AC-X#`；⚠ **刻意不用 `AC-E#`** ——F017 已持有 `AC-E1`～`AC-E14`，而 F018 內另有一處以 `AC-E8` 指稱他檔之交叉引用，沿用必生歧義）→ 後端（`storage/file-rules.ts#baseNameOf`、`storage/csv-export.ts#joinLinkedDocumentNumbers`、`usage-forms.service.ts#exportPool`、`GET /admin/usage-forms/export`）→ 前端（`domain/file-name.ts#stripFileExtension`、兩頁之自動帶入、`UsageFormManagementPage` 匯出鈕）。
+> **兩處刻意的分隔符不一致**：「關聯文件編號」用**半形分號**（逗號會觸發 RFC 4180 包覆，欄內逗號與欄間逗號在肉眼上無從分辨，而本欄的用途正是一眼看出被哪幾份文件引用）；「制定部門」用**全形頓號**（與清單頁儲存格逐字相同）。兩者各自對齊各自的畫面呈現，不得統一。
+> **「制定部門」欄之解析為本輪最大的一塊**：清單頁之 chip 是**祖鏈路徑**（沿 `parentCode` 上溯、` / ` 相接），後端原本沒有同一套算法（既有 `buildOrgPath` 是人資契約 §8.2／§8.3 的「部 / 處室」兩段式，**答案不同**）。若後端另編一套（例如只取單位自身 `name`），同一筆資料就會「畫面一種、CSV 另一種」——正是本 repo 2026-08-14 部門欄格式回歸的形狀。故新增 `org-path.ts#orgAncestorPathLabel`（與前端 `DraftingDeptPicker#orgPathLabel` 明文互為兩份實作），並以 `ORG_UNIT_LISTER` port（`useExisting: OrgDirectoryService`）取整份組織清單、**整份匯出只查一次**。
+> ⚠ **`useExisting` 綁定不受 TS 型別檢查**（本 repo 已有「port 與實作長期不同步、編譯期看不出來」之前科），故該接線**只在 int 層證得到**：新增之整合案以「第 3 欄不等於原始 `orgCode` 且包含該單位名稱」證偽——接錯時該欄會靜默退回代碼本身，單元層永遠看不見。
+> **閘門**：backend `tsc` exit 0 ＋ jest **175 suites／2721 tests 全綠**、frontend `tsc` exit 0 ＋ vitest **109 files／1540 tests 全綠**、`npm run deps:check` 無違規、**`npm run test:int --runInBand` vs 真 SOP DB＋真 Azure Blob：21 suites／172 tests 全綠**（新增 7 案：兩支匯出端點之 `text/csv`＋BOM＋逐字表頭、`關聯文件編號` 為真實 join 之編號、`制定部門` 為解析後名稱、匯出不寫稽核、未登入 401）。<br>⚠ **整合測試必須 `--runInBand`**：`appendices.itest` 之 marker 清理會刪掉 `usage-form-pool.itest` 剛建立的 marker 文件，`--maxWorkers=2` 下兩者交錯即 FK 違反（本輪實際踩到）。
+> **本輪改到既有綠測之處**（皆為 delta 之預期，非回歸）：附錄／表單之 fallback 名稱斷言 11 處、附錄匯出表頭與儲存格數 3 處、`appendices.itest` 之 DB 落地名稱 3 處——原期望值皆逐字保留於 `OLD>` 註記。
+> ⚠ **尚未部署**至 testicsop／正式站，亦**未做真瀏覽器煙霧測試**（依本 repo 反覆踩過的教訓，此缺口必須明講）。
+
 > **🔴 2026-08-11 後續：上述「簡易 ring 無 fidelity」之風險已實際兌現。** 使用者於實際環境發現帳號清單「角色」欄未渲染子分類徽章——**本輪第一個逃出約束環的真實缺陷**。
 > 根因為 **AC 未覆蓋 prototype 檔頭已明列之項目**（環只依 AC 建，AC 沒寫到就不存在）＋ **無 fidelity 測試**（唯一不依賴 AC 完整性的防線缺席）。
 > spec 層已補 [F041 §F2 AC-41～AC-46](features/F041-user-subtype-business-scope.md#f2-fidelity-gap) 並同步 4 條 delta；同類掃描另揪出 4 處同類缺口（含權限矩陣頁註記橫幅完全未實作）。完整教訓與可推廣結論見 [§F041 升 ✅ 待辦](#f041-to-done) 之「已知教訓」節。實作細節見 [implementation-log/F041-impl.md](implementation-log/F041-impl.md)；升 ✅ 之可執行清單見 [§F041 升 ✅ 待辦](#f041-to-done)。
