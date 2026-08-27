@@ -16,7 +16,7 @@ import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { lifecycleDisplayName } from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
 import { PageHeader, TopbarActions } from '../components/PageHeader';
-import { watermarkLines } from '../domain/watermark-lines';
+import { watermarkPresentation } from '../domain/watermark-lines';
 import {
   WATERMARK_COLOR,
   WATERMARK_FONT_SIZE,
@@ -1048,15 +1048,30 @@ function DiffBoard({
             key={i}
             data-testid="watermark-text"
             className="mono"
-            style={{ color: WATERMARK_COLOR, fontSize: WATERMARK_FONT_SIZE, padding: '20px 26px', textAlign: 'center', lineHeight: WATERMARK_LINE_HEIGHT }}
+            /* 內距隨字級同倍放大（`y` 於第三輪再放大，與 `LifecycleTreePreviewPage` 之 WM_TILE_PAD 同比例）。
+               📝 已作廢：OLD> `padding: '20px 26px'`（字級 16px）｜OLD> `'40px 52px'`。 */
+            style={{ color: WATERMARK_COLOR, fontSize: WATERMARK_FONT_SIZE, padding: '140px 60px', textAlign: 'center', lineHeight: WATERMARK_LINE_HEIGHT }}
           >
-            {watermarkLines(watermark).map((line, j) => (
+            {watermarkPresentation(watermark).tiled.map((line, j) => (
               <span key={j} style={{ display: 'block' }}>
                 {line}
               </span>
             ))}
           </span>
         ))}
+        {/*
+          🔴 UX（2026-08-27 第三輪）：固定機密聲明**只在正中央出現一次**，不隨 tile 重複。
+          置於疊加層內 ⇒ 繼承同一個 `rotate(-45deg)` 與 `opacity`。
+        */}
+        {watermarkPresentation(watermark).centre && (
+          <span
+            data-testid={`watermark-confidentiality-${side}`}
+            className="mono"
+            style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', color: WATERMARK_COLOR, fontSize: WATERMARK_FONT_SIZE, whiteSpace: 'nowrap', textAlign: 'center', lineHeight: WATERMARK_LINE_HEIGHT }}
+          >
+            {watermarkPresentation(watermark).centre}
+          </span>
+        )}
       </div>
     </div>
   );

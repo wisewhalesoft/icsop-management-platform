@@ -29,14 +29,18 @@
   body.sb-collapsed .sb-label{display:none;}
   body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
   /* diagonal tiled watermark（字串格式同 05／22：45°, 14px, 機密聲明另起一行）
-     🔴 F020 AC-N2（🔴 2026-08-27 使用者裁決 UX ① 就地改寫）：色值 #475569（slate-600）@ opacity 0.30
-        （對比度 ≈ 1.613:1 ≥ 就地下修後之門檻 1.60）、字級 14px → 16px。
-        📝 已作廢（⚠ 不得用於斷言）：OLD> #334155 @ 0.30（≈1.716:1）、OLD> font-size:14px。
+     🔴 F020 AC-N2（🔴 2026-08-27 第二輪裁決就地改寫，比照 reference/企金撥款作業調整.pdf 之量測值）：
+        色值 #7C7C7C（中性灰）@ opacity **0.30**（🔴 第三輪「再透明一點」；對比度 ≈ 1.429:1，
+        AC-N1 門檻同步下修為 ≥ 1.40）、字級 16px → 32px、內距 → 140/60。
+     🔴 第三輪：**固定機密聲明只在正中央出現一次**，tile 只重複「身分列＋時間戳」兩行。
+        📝 已作廢（⚠ 不得用於斷言）：OLD> #334155／#475569 @ 0.30、OLD> font-size:14px／16px。
      🔒 AC-N66 正向斷言：本頁渲染 HTML（diff 表格／DAG 節點）而非 PDF，無內容層可燒錄 ⇒ 疊加層必須保留。*/
   .wm-layer{position:absolute;inset:-40%;pointer-events:none;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;transform:rotate(-45deg);opacity:.30;user-select:none;z-index:5;}
+  /* 🔴 第三輪：固定機密聲明只畫一次，置於疊加層正中央。 */
+  .wm-centre{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#7C7C7C;font-size:32px;white-space:nowrap;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:2.0;}
   /* 🔴 F020 行高定稿（2026-08-21 使用者裁決）：三行式浮水印之 DOM 疊加層 line-height ＝ **2.0**（全域）。
      📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> line-height:1.6 */
-  .wm-layer span{color:#475569;font-size:16px;white-space:nowrap;padding:20px 26px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:2.0;}
+  .wm-layer span{color:#7C7C7C;font-size:32px;white-space:nowrap;padding:140px 60px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:2.0;}
   /* mini DAG（沿用 22 節點視覺 + 直角箭頭）*/
   .dagboard{position:relative;background:#F8FAFC;background-image:radial-gradient(#E7EDF5 1px,transparent 1px);background-size:20px 20px;border-radius:10px;}
   .mnode{position:absolute;z-index:2;}

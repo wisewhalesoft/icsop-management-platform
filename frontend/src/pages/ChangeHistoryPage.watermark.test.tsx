@@ -111,41 +111,50 @@ describe('ChangeHistoryPage · DiffBoard 三層式浮水印（F038 #17）', () =
     vi.mocked(endpoints.lifecycleTreeDiffDownloadUrl).mockReturnValue('/x');
   });
 
+  /**
+   * 🔴 2026-08-27 第三輪就地改寫：**機密聲明只在正中央出現一次**，tile 只重複兩行。
+   * 📝 已作廢（⚠ 不得復原）：OLD> 每枚 tile 斷言 toEqual([IDENTITY, CONF, TIME])。
+   */
   it.each(['before', 'after'])(
-    '🔴 %s 欄之每枚浮水印呈現為**三行**（①身分列 ②機密聲明 ③時間戳），非單行線性字串',
+    '🔴 %s 欄之每枚 tile 呈現為**兩行**（①身分列 ②時間戳），非單行線性字串',
     async (side) => {
       await openTreePreview();
       const overlay = screen.getByTestId(`watermark-overlay-${side}`);
-      const tiles = Array.from(overlay.children) as HTMLElement[];
+      const tiles = screen.getAllByTestId('watermark-text').filter((t) => overlay.contains(t));
       expect(tiles.length).toBeGreaterThan(0);
       for (const tile of tiles) {
-        expect(renderedLines(tile)).toEqual([IDENTITY, CONF, TIME]);
+        expect(renderedLines(tile)).toEqual([IDENTITY, TIME]);
       }
     },
   );
 
-  it('🔴 機密聲明自成一行（不與身分列或時間戳同行）', async () => {
+  it.each(['before', 'after'])('🔴 %s 欄之機密聲明恰一份、位於正中央', async (side) => {
     await openTreePreview();
-    const tile = screen.getByTestId('watermark-overlay-before').children[0] as HTMLElement;
-    const lines = renderedLines(tile);
-    expect(lines).toHaveLength(3);
-    expect(lines[1]).toBe(CONF);
-    expect(lines[0]).not.toContain(CONF);
-    expect(lines[2]).not.toContain(CONF);
+    const centre = screen.getByTestId(`watermark-confidentiality-${side}`);
+    expect(centre).toHaveTextContent(CONF);
+    expect(centre.style.left).toBe('50%');
+    expect(centre.style.top).toBe('50%');
+  });
+
+  it('🔴 負向回歸鎖：機密聲明不得出現在任何一枚 tile 內', async () => {
+    await openTreePreview();
+    for (const tile of screen.getAllByTestId('watermark-text')) {
+      expect(tile.textContent ?? '').not.toContain(CONF);
+    }
   });
 
   it('🔴 身分列必含員工編號與姓名（#17 之欄位不完整半）', async () => {
     await openTreePreview();
-    const tile = screen.getByTestId('watermark-overlay-before').children[0] as HTMLElement;
+    const tile = screen.getAllByTestId('watermark-text')[0];
     expect(renderedLines(tile)[0]).toContain('20233');
     expect(renderedLines(tile)[0]).toContain('李慧玲');
   });
 
-  it('🔴 §10.14：tile 之 `white-space: nowrap` 不得**單獨**套在承載三行文字之節點上（會壓成一行）', async () => {
+  it('🔴 §10.14：tile 之 `white-space: nowrap` 不得**單獨**套在承載多行文字之節點上（會壓成一行）', async () => {
     await openTreePreview();
-    const tile = screen.getByTestId('watermark-overlay-before').children[0] as HTMLElement;
-    const hasBlockChildren = Array.from(tile.children).length >= 3;
-    const hasBr = tile.querySelectorAll('br').length >= 2;
+    const tile = screen.getAllByTestId('watermark-text')[0];
+    const hasBlockChildren = Array.from(tile.children).length >= 2;
+    const hasBr = tile.querySelectorAll('br').length >= 1;
     // nowrap 只有在「已經以 <br> 或 block 子元素明確分行」時才無害（比照 LifecycleTreePreviewPage）。
     if (tile.style.whiteSpace === 'nowrap') {
       expect(hasBlockChildren || hasBr).toBe(true);
@@ -153,16 +162,19 @@ describe('ChangeHistoryPage · DiffBoard 三層式浮水印（F038 #17）', () =
     expect(hasBlockChildren || hasBr).toBe(true);
   });
 
-  it('🔒 拆行為純顯示層轉換：三行以 `-` 接回即為後端回傳之線性快照', async () => {
+  it('🔒 拆行為純顯示層轉換：tile 兩行與中央聲明接回即為後端回傳之線性快照', async () => {
     await openTreePreview();
-    const tile = screen.getByTestId('watermark-overlay-before').children[0] as HTMLElement;
-    expect(renderedLines(tile).join('-')).toBe(WM);
+    const tile = screen.getAllByTestId('watermark-text')[0];
+    const centre = screen.getByTestId('watermark-confidentiality-before').textContent ?? '';
+    const [a, b] = renderedLines(tile);
+    expect([a, centre, b].join('-')).toBe(WM);
   });
 
   /**
    * 🔴 2026-08-20 D9 delta（`OQ-D9-01`／`OQ-D9-02`／`OQ-D9-31`）——浮水印加深：色值／不透明度
-   * 🔴 2026-08-27 就地改寫（使用者裁決 UX ①「顏色淡一點點」）：定稿為 `#475569` @ `0.30`
-   * （對比度 ≈1.613:1 ≥ 就地下修後之 `AC-N1` 門檻 1.60）。📝 OLD> `#334155` @ `0.30`（≈1.716）。
+   * 🔴 2026-08-27 第二輪就地改寫（比照 `reference/企金撥款作業調整.pdf` 之像素量測）：
+   * 定稿為中性灰 `#7C7C7C` @ `0.388`（對比度 ≈1.603:1 ≥ `AC-N1` 門檻 1.60；門檻不動）。
+   * 📝 OLD> `#475569` @ `0.30`（≈1.613）｜OLD> `#334155` @ `0.30`（≈1.716）。
    * 權威：`docs/specs/features/F020-watermark.md#d9-watermark-delta` `AC-N2`（本頁為表列 4 處
    * 有效載體之一，🔒 `AC-N66` 正向鎖定：本頁渲染 HTML、無內容層可燒錄，疊加層是唯一浮水印載體，
    * 不受 `AC-N7`（僅限 `PublicViewerPage`）影響）。
@@ -172,16 +184,18 @@ describe('ChangeHistoryPage · DiffBoard 三層式浮水印（F038 #17）', () =
    *    與文字節點兩處之聯集。
    */
   it.each(['before', 'after'])(
-    '🔴 %s 欄之浮水印疊加：色值 #475569（rgb(71, 85, 105)）／不透明度 0.30（AC-N2）',
+    '🔴 %s 欄之浮水印疊加：色值 #7C7C7C（rgb(124, 124, 124)）／不透明度 0.30（AC-N2）',
     async (side) => {
       await openTreePreview();
       const overlay = screen.getByTestId(`watermark-overlay-${side}`);
-      const tile = overlay.children[0] as HTMLElement;
+      const tile = screen.getAllByTestId('watermark-text').filter((t) => overlay.contains(t))[0];
       const opacity = tile.style.opacity || overlay.style.opacity;
       const color = tile.style.color || overlay.style.color;
       expect(opacity, `${side} 欄之不透明度既非疊加層亦非文字節點之 inline style`).toBe('0.3');
-      expect(color, `${side} 欄之色值既非疊加層亦非文字節點之 inline style`).toBe('rgb(71, 85, 105)');
+      expect(opacity, '📝 已作廢之 0.388 不得殘留').not.toBe('0.388');
+      expect(color, `${side} 欄之色值既非疊加層亦非文字節點之 inline style`).toBe('rgb(124, 124, 124)');
       expect(color, '📝 已作廢之 slate-700 不得殘留').not.toBe('rgb(51, 65, 85)');
+      expect(color, '📝 已作廢之 slate-600 不得殘留').not.toBe('rgb(71, 85, 105)');
     },
   );
 

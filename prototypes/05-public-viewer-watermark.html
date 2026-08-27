@@ -18,10 +18,13 @@
         它不是疊加圖層，而是「所見浮水印字串之可讀對照」，也是 AC-N6 燒錄字串於前端唯一可斷言之投影。
      ⑥ AC-N8：縮放**不得**以 CSS scale() 達成 ⇒ #page 全程不設 transform；
         AC-N9：縮放改變即以新倍率**重新渲染**（renderPage(page, zoom) 再次被呼叫，參數為新倍率）。
-     ⑦ AC-N2：燒錄浮水印之色值／不透明度＝**#475569 @ 0.30**（🔴 2026-08-27 使用者裁決 UX ① 就地改寫；
-        定稿值，逐字照抄不得自行發明；有效色 rgb(199.8,204.0,210.0)、與白底對比度 ≈ 1.613:1，
-        滿足就地下修後之 AC-N1 門檻 ≥ 1.60）。
-        📝 已作廢（⚠ 不得用於斷言）：OLD> #334155 @ 0.30（≈1.716:1，門檻 ≥ 1.70）。
+     ⑦ AC-N2：燒錄浮水印之色值／不透明度＝**#7C7C7C @ 0.30**（🔴 2026-08-27 第三輪「再透明一點」；
+        色值比照 reference/企金撥款作業調整.pdf 之像素量測；定稿值，逐字照抄不得自行發明；
+        對比度 ≈ 1.429:1，AC-N1 門檻同步下修為 ≥ 1.40）。
+        🔴 第三輪：**固定機密聲明只在頁面正中央燒錄一次**，平鋪只重複「身分列＋時間戳」兩行；
+        平鋪改於**旋轉後之座標系**鋪排（舊的頁面軸格點會在對角鄰居處疊字）。
+        📝 已作廢（⚠ 不得用於斷言）：OLD> #334155 @ 0.30（≈1.716:1，門檻 ≥ 1.70）、
+           OLD> #475569 @ 0.30（≈1.613:1）、OLD> #7C7C7C @ 0.388（≈1.603:1）。
      ⑧ F021 AC-N59～AC-N62：前台字級上移一階（正文 text-sm→text-base；12px caption 級距→text-sm）；本檔不得再出現 12px caption 級距之 class。
 
      🔴 ui-ux-designer 之裁量（architecture-spec §11.2 明文交付本角色定案）＝**單頁翻頁（single-page paging）**，
@@ -291,26 +294,40 @@
     return y;
   }
 
-  /* ===== 🔴 浮水印燒錄（AC-N2 定稿值：#475569 @ opacity 0.30；2026-08-27 使用者裁決 UX ①）=====
-     📝 已作廢（⚠ 不得用於斷言）：OLD> #334155（slate-700）；OLD> WM_FONT_SIZE 14。
+  /* ===== 🔴 浮水印燒錄（AC-N2 定稿值：#7C7C7C 中性灰 @ opacity 0.388；2026-08-27 第二輪裁決）=====
+     📝 已作廢（⚠ 不得用於斷言）：OLD> #334155（slate-700）／#475569（slate-600）@ 0.30；
+        OLD> WM_FONT_SIZE 14／16。
      ⚠ 這是**內容層**：畫在 canvas 像素上，不是 DOM 疊加層。AC-N7 已移除 DOM 疊加層。
      ⚠ 色值與不透明度為定稿常數，**不得自行挑選近似色**——test-generator 會對此數值建立約束。 */
-  const WM_COLOR = '#475569';
+  const WM_COLOR = '#7C7C7C';
   const WM_OPACITY = 0.30;
   /* 🔴 三行式浮水印之行高定稿（2026-08-21 使用者裁決 · 全域）＝ **字級的 2.0 倍**。
-     本檔為 canvas 內容層 ⇒「行高」落地為 fillText 的每行 y 位移：WM_FONT_SIZE(16) × 2.0 ＝ **32px**。
-     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> 每行位移 22px（22 ÷ 14 ≈ 1.571）；OLD> 28px（字級 14）。
-     ⚠ **stepY 必須同步放大**：三行區塊的墨跡高度＝ascent + 2×行距 + descent。維持
-        「間隙＝stepY −（2×行距 + 字級）」不變之規則：
-          · 行距 22→28（字級 14 不變）：區塊 +12 ⇒ stepY 132 → 144；
-          · 🔴 2026-08-27 UX ①（字級 14→16 ⇒ 行距 28→32）：區塊 70→80（+10）⇒ stepY 144 → **154**。
-        這是把長出來的高度原數補回去，不是重新挑一個「看起來差不多」的密度。stepX 不受影響，維持 560。
-     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> stepY = 132；OLD> stepY = 144；OLD> WM_FONT_SIZE = 14。 */
-  const WM_FONT_SIZE = 16;
+     本檔為 canvas 內容層 ⇒「行高」落地為 fillText 的每行 y 位移：WM_FONT_SIZE(32) × 2.0 ＝ **64px**。
+     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> 每行位移 22px（22 ÷ 14 ≈ 1.571）；OLD> 28px（字級 14）；
+        OLD> 32px（字級 16）。
+     ⚠ **stepY 必須同步放大**：三行區塊的墨跡高度＝ascent + 2×行距 + descent。
+        規則沿革（與後端 pdf-burner.ts 同步）：
+          · 行距 22→28（字級 14 不變）：區塊 +12、**間隙固定** ⇒ stepY 132 → 144；
+          · 字級 14→16（行距 28→32）：區塊 70→80、間隙仍固定 ⇒ stepY 144 → 154；
+          · 🔴 2026-08-27 第二輪（字級 16→32 ⇒ 行距 32→64）：**間隙改為隨字級等比放大**
+            （74 × 2 ＝ 148），區塊 80→160 ⇒ stepY 154 → **308**。
+            字級放大一倍而間隙不動，整頁會比放大前更重，與「比照參考文件之稀疏感」相反。
+        stepX 同步 ×1.25（與後端 260→325 同一倍率）：560 → **700**。
+     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> stepY = 132／144／154；OLD> stepX = 560；
+        OLD> WM_FONT_SIZE = 14／16。 */
+  const WM_FONT_SIZE = 32;
   const WM_LINE_HEIGHT = 2.0;                              // 全域定稿值（DOM 疊加層之 line-height 同值）
-  const WM_LINE_STEP = WM_FONT_SIZE * WM_LINE_HEIGHT;      // ＝ 32
+  const WM_LINE_STEP = WM_FONT_SIZE * WM_LINE_HEIGHT;      // ＝ 64
+  /* 🔴 第三輪：tile 只鋪「身分列＋時間戳」；固定機密聲明改為正中央畫一次。
+     📝 已作廢（⚠ 不得復原）：OLD> lines.forEach(...) 每枚 tile 皆畫三行（含機密聲明）。
+
+     📌 本檔之平鋪**本來就是對的**——它先 translate 到頁面中心、rotate 45°，才在**旋轉後的座標系**
+        鋪 gx/gy。後端舊實作反而是在頁面座標軸上鋪、文字才旋轉，於是對角鄰居之平行線垂距只剩
+        |stepX − stepY| × cos45°，必然疊字。2026-08-27 第三輪已把後端改成與本檔同一套做法。 */
   function burnWatermark(ctx){
-    const lines = toDisplayLines();     // AC-N68：恰 3 行
+    const all = toDisplayLines();       // AC-N68：恰 3 行（契約不動）
+    const notice = all.find(l => l === WM_NOTICE) || null;
+    const lines = all.filter(l => l !== notice);   // 隨 tile 重複者＝身分列＋時間戳
     ctx.save();
     ctx.globalAlpha = WM_OPACITY;
     ctx.fillStyle = WM_COLOR;
@@ -318,12 +335,15 @@
     ctx.textAlign = 'center';
     ctx.translate(PAGE_W/2, PAGE_H/2);
     ctx.rotate(-Math.PI/4);             // 對角 45°
-    const stepX = 560, stepY = 154, span = 1.35;
+    /* stepY ＝ 行數 × 行距 ＋ 2 × 內距(140)；stepX ＝ 最長行寬 ＋ 2 × 內距(60)。
+       📝 已作廢：OLD> stepX 560／700、OLD> stepY 132／144／154／308（三行式）。 */
+    const stepX = 920, stepY = lines.length*WM_LINE_STEP + 280, span = 1.35;
     for(let gy = -PAGE_H*span; gy <= PAGE_H*span; gy += stepY){
       for(let gx = -PAGE_W*span; gx <= PAGE_W*span; gx += stepX){
         lines.forEach((ln, i) => ctx.fillText(ln, gx, gy + i*WM_LINE_STEP));
       }
     }
+    if(notice) ctx.fillText(notice, 0, 0);   // 🔴 只畫一次，正中央
     ctx.restore();
   }
 

@@ -14,7 +14,7 @@ import { printErrorMessage } from '../domain/print-error';
 import { lifecycleDisplayName } from '../domain/lifecycle-subcategory';
 import { roleMeta } from '../domain/roles';
 import { Icon } from '../components/Icon';
-import { watermarkLines } from '../domain/watermark-lines';
+import { watermarkPresentation } from '../domain/watermark-lines';
 import {
   WATERMARK_COLOR,
   WATERMARK_FONT_SIZE,
@@ -149,11 +149,16 @@ function jumpLabel(n: number): string {
 const NODE_TITLE = '單擊＝標示所有下游節點；雙擊＝檢視此節點與其下游節點之程序書清單';
 
 /**
- * 單枚浮水印 tile 之內距（px；沿用 `prototypes/22-*` 之 `.wm-layer span{padding:22px 30px}`）。
+ * 單枚浮水印 tile 之內距（px；與 `prototypes/22-*` 之 `.wm-layer span{padding}` 同值）。
  * 🔴 具名一份：`watermarkOverlayGeometry()` 用它推算 tile 尺寸，JSX 用它套 `padding`——
  * 兩處若各寫一份字面值，改一邊就會算出鋪不滿（或多鋪一大截）的列欄數而沒有測試會紅。
+ *
+ * 🔴 2026-08-27 第三輪裁決：`y` 由 `44` 放大為 `140`，與後端 `WATERMARK_TILE_PAD_Y` 之
+ * 「pad / 字級」比例相同（`4.375`；後端 `105 / 24`、前端 `140 / 32`）——「更貼近前端顯示方式」
+ * 在此不只是講法，是可核對的比例關係。`x` 之比例（`1.875`）本就相同，維持 `60`。
+ * 📝 已作廢（⚠ 不得用於斷言）：OLD> `{ x: 30, y: 22 }`（字級 16px）｜OLD> `{ x: 60, y: 44 }`。
  */
-const WM_TILE_PAD = { x: 30, y: 22 } as const;
+const WM_TILE_PAD = { x: 60, y: 140 } as const;
 
 export function LifecycleTreePreviewPage(): JSX.Element {
   const { id = '' } = useParams();
@@ -491,7 +496,14 @@ export function LifecycleTreePreviewPage(): JSX.Element {
     );
   }
 
-  const wmLines = data ? watermarkLines(data.watermark) : [];
+  /**
+   * 🔴 UX（2026-08-27 第三輪）：機密聲明只在畫板正中央出現一次，tile 只重複身分列與時間戳。
+   * 📝 已作廢（⚠ 不得復原）：OLD> `const wmLines = data ? watermarkLines(data.watermark) : [];`
+   *    ＋ 每枚 tile 皆渲染三行（含機密聲明）。
+   */
+  const { tiled: wmLines, centre: wmCentre } = data
+    ? watermarkPresentation(data.watermark)
+    : { tiled: [] as string[], centre: null };
   const boardW = layout?.boardWidth ?? 320;
   const boardH = layout?.boardHeight ?? 320;
   /**
@@ -813,6 +825,20 @@ export function LifecycleTreePreviewPage(): JSX.Element {
                   ))}
                 </div>
               ))}
+              {/*
+                🔴 UX（2026-08-27 第三輪）：固定機密聲明**只在正中央出現一次**。
+                置於疊加層內 ⇒ 繼承同一個 `rotate(-45deg)` 與 `opacity`，與 tile 同一片視覺。
+                疊加層之中心即畫板中心（見 `watermarkOverlayGeometry` 之推導）。
+              */}
+              {wmCentre && (
+                <span
+                  data-testid="watermark-confidentiality"
+                  className="mono"
+                  style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', color: WATERMARK_COLOR, fontSize: WATERMARK_FONT_SIZE, whiteSpace: 'nowrap', fontWeight: 500, textAlign: 'center', lineHeight: WATERMARK_LINE_HEIGHT }}
+                >
+                  {wmCentre}
+                </span>
+              )}
             </div>
           </div>
           </div>

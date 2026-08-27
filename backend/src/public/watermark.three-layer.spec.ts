@@ -1,4 +1,4 @@
-import { toDisplayLines } from './pdf-burner';
+import { splitWatermarkPresentation, toDisplayLines } from './pdf-burner';
 import { WATERMARK_CONFIDENTIALITY } from './watermark';
 import { WatermarkService, WatermarkOrgLookup, WatermarkSession } from './watermark.service';
 import { AuditAccessEvent, AuditWriter } from '../audit/audit.types';
@@ -151,5 +151,46 @@ describe('浮水印欄位不完整之處置（F020 #7／OQ-D18-14）', () => {
     const { snapshot } = await svcOf().buildSnapshot(BASE);
     expect(toDisplayLines(snapshot)[0]).toContain('王小明');
     expect(toDisplayLines(snapshot)[0]).toContain('E001');
+  });
+});
+
+/**
+ * 🔴 2026-08-27 第三輪使用者裁決：**機密聲明只在頁面正中央出現一次**（不再隨每枚 tile 重複）。
+ *
+ * 🔒 本區塊刻意與上方 `toDisplayLines` 之向量測試**同檔**：`splitWatermarkPresentation()` 是疊在
+ * `toDisplayLines()` 上的純呈現層分派，兩者的關係（可逆、機密聲明恰一條）必須在同一處被斷言，
+ * 否則「拆行對了但分派把時間戳丟進中央」這種錯法沒有任何測試會紅。
+ */
+describe('splitWatermarkPresentation（機密聲明只出現一次）', () => {
+  it.each(WATERMARK_LINE_VECTORS)(
+    '$label → tiled 恰兩行（身分列＋時間戳）、centre 為固定機密聲明',
+    ({ snapshot }) => {
+      const { tiled, centre } = splitWatermarkPresentation(snapshot);
+      expect(centre).toBe(WATERMARK_CONFIDENTIALITY);
+      expect(tiled).toHaveLength(2);
+      expect(tiled).not.toContain(WATERMARK_CONFIDENTIALITY);
+    },
+  );
+
+  /**
+   * 🔴 可逆性：`[tiled[0], centre, tiled[1]].join('-')` 恆等於原快照。
+   * 這是「呈現怎麼排」與「稽核記了什麼」不會漂移的唯一機器保證——少了它，日後有人為了版面
+   * 把某一欄從 tiled 拿掉，稽核快照仍然是對的，於是沒有任何測試會紅。
+   */
+  it.each(WATERMARK_LINE_VECTORS)('$label → 接回即為原快照（呈現層不得吃掉任何欄位）', ({ snapshot }) => {
+    const { tiled, centre } = splitWatermarkPresentation(snapshot);
+    expect([tiled[0], centre, tiled[1]].join('-')).toBe(snapshot);
+  });
+
+  it('🔒 toDisplayLines 本身不受影響（AC-N68 三層式契約一字不動）', () => {
+    for (const v of WATERMARK_LINE_VECTORS) {
+      expect(toDisplayLines(v.snapshot)).toEqual(v.lines);
+    }
+  });
+
+  it('非本系統快照（無機密聲明錨點）→ centre 為 null、全部歸 tiled（優雅降級）', () => {
+    const { tiled, centre } = splitWatermarkPresentation('不是浮水印的字串');
+    expect(centre).toBeNull();
+    expect(tiled).toEqual(['不是浮水印的字串']);
   });
 });

@@ -4,7 +4,7 @@ import {
   WATERMARK_LINE_HEIGHT,
   watermarkOverlayGeometry,
 } from './watermark-style';
-import { watermarkLines } from './watermark-lines';
+import { watermarkPresentation } from './watermark-lines';
 
 /**
  * 🔴 2026-08-27 使用者裁決（UX ②）：**樹狀圖之浮水印疊加層必須滿版**。
@@ -22,8 +22,10 @@ import { watermarkLines } from './watermark-lines';
 
 const CONF = '僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現';
 const WM = `E001-李慧玲-和潤企業股份有限公司-債權管理部-法催一室-${CONF}-2026-08-27 10:00:00 (UTC+8)`;
-const LINES = watermarkLines(WM);
-const PAD = { x: 30, y: 22 };
+/** 🔴 第三輪起 tile 只鋪兩行（機密聲明改為中央出現一次），幾何以 tiled 為輸入。 */
+const LINES = watermarkPresentation(WM).tiled;
+/** 與 `LifecycleTreePreviewPage` 之 `WM_TILE_PAD` 同值（2026-08-27 第二輪：隨字級 16→32 同倍放大）。 */
+const PAD = { x: 60, y: 140 };
 
 /** 疊加層之 `transform: rotate(-45deg)` 以自身中心為原點；判定改為把畫板角**逆旋轉**回疊加層座標系。 */
 function insideRotatedOverlay(
