@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AuditWriter } from '../audit/audit.types';
+import { resolveCompanyName } from '../org-directory/company-name';
 import { WatermarkSession } from '../public/watermark.service';
 import { PdfBurner } from '../public/pdf-burner';
 import { DagGraph } from './dag.store';
@@ -132,7 +133,11 @@ export class LifecycleChangeDiffService {
         actorId: session.accountId,
         actorName: session.name ?? null,
         employeeNo: session.employeeNo ?? null,
-        company: fields.companyFullName || null,
+        // 🔒 `AC-N13` ③（F020 D9 delta）：F024 調閱歷程之公司欄恆為**全稱**。
+        // ⚠ **不得**沿用 `fields.companyFullName`——該欄雖名為 FullName，值已依 `AC-N12`
+        // 改為浮水印用之**簡稱**（欄名未一併改，見 watermark-burner.service.ts §AC-N12）。
+        // 同一修正已存在於 `watermark-burner.service.ts` 的稽核組裝，本處與另二處當時漏改。
+        company: resolveCompanyName(session.companyCode) ?? null,
         department: fields.departmentFullName || null,
         section: fields.sectionName || null,
         roleCode: session.roleCode ?? null,

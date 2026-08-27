@@ -76,6 +76,13 @@ describe('[int] F024 調閱歷程查詢（audit-query）vs SOP', () => {
   const DENY_LOGIN = `${MARK.acct}aquser`;
   const VIEWER_EMP = '9987001';
   const COMPANY = '和潤企業股份有限公司';
+  /**
+   * 🔴 F020 `AC-N10`（2026-08-20 D9 delta）：**浮水印**之公司欄改用簡稱，
+   * 而 F024 調閱歷程之 `company` 欄仍為全稱（`AC-N13` 明訂不連帶變更已驗收功能）。
+   * 兩者刻意不同源（`COMPANY_SHORT_NAMES` vs `COMPANY_FULL_NAMES`），故此處必須是兩個常數
+   * ——共用一個會讓「浮水印用簡稱」這條裁定在測試上完全失去約束力。
+   */
+  const COMPANY_SHORT = '和潤企業';
 
   async function makePdf(): Promise<Buffer> {
     const pdf = await PDFDocument.create();
@@ -360,7 +367,9 @@ describe('[int] F024 調閱歷程查詢（audit-query）vs SOP', () => {
     );
     expect(view).toBeTruthy();
     expect(typeof view!.watermarkSnapshot).toBe('string');
-    expect(view!.watermarkSnapshot).toContain(COMPANY);
+    expect(view!.watermarkSnapshot).toContain(COMPANY_SHORT);
+    // 浮水印用簡稱 ⇒ 不得出現全稱（否則 AC-N10 等於沒生效）。
+    expect(view!.watermarkSnapshot).not.toContain(COMPANY);
     expect(view!.accountId).toBe(viewerAccountId);
     expect(view!.employeeNo).toBe(VIEWER_EMP);
     expect(view!.name).toBe('ZZINT 稽核測試員');
@@ -382,14 +391,28 @@ describe('[int] F024 調閱歷程查詢（audit-query）vs SOP', () => {
     expect(typeof row!.targetName).toBe('string');
   });
 
-  it('TS-AQ-INT-012 合成 orgCode（非真實 ORG_UNIT）之操作者 → department/section 優雅回傳 null', async () => {
+  /**
+   * 🔴 本案原斷言 department／section **皆為 null**。`section` 確實為 null（Z9AB0 無 ORG_UNIT 列
+   * ⇒ 取不到 tier／DESC_CHI），但 `department` 不是：`org-directory/org-path.ts` 之
+   * `departmentCodeCandidates()` 依上游契約 §8.2 有三段 fallback 鏈——部層（`LEFT(CODE,2)+'000'`）
+   * → 本部層（`LEFT(CODE,1)+'0000'`）→ **Root（`00000`）**。合成代碼前兩段查無，於是落到 Root，
+   * 回傳 Root 之 `descFull`。這是**規則使然而非缺陷**，原斷言與該 fallback 鏈相牴觸。
+   *
+   * 改為釘住規則本身（自 DB 取 Root 之 descFull 比對），不寫死公司名——否則組織一改名又會紅。
+   * 本案真正的標的（合成代碼不得讓查詢爆炸）仍然成立：HTTP 200、section 收合為 null。
+   */
+  it('TS-AQ-INT-012 合成 orgCode（非真實 ORG_UNIT）→ section 為 null，department 落到 §8.2 之 Root fallback', async () => {
     const r = await query(ctx.adminCookie, qs({ target: curNum, person: VIEWER_EMP }));
     const view = (r.body.items as Row[]).find(
       (i) => i.actionType === 'VIEW' && i.targetType === 'DOCUMENT',
     );
     expect(view).toBeTruthy();
-    expect(view!.department).toBeNull();
     expect(view!.section).toBeNull();
+
+    const [root] = (await AppDataSource.query(
+      `SELECT [descFull] FROM [ORG_UNIT] WHERE [companyCode]='AS' AND [orgCode]='00000'`,
+    )) as { descFull: string | null }[];
+    expect(view!.department).toBe(root?.descFull ?? null);
   });
 
   it('TS-017 [perf tripwire] ~300 雜訊列中以 target 鎖定 3 訊號列 → 恰 3 筆且寬鬆時間門檻內', async () => {

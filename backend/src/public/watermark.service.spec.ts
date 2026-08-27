@@ -322,6 +322,46 @@ describe('D9 delta — AC-N12：buildSnapshot 公司名稱欄改用短稱（消�
 });
 
 /**
+ * 🔴🔴 `AC-N13` ③ 之**消費點**驗證（2026-08-27 補洞）：D9 delta 把浮水印的公司欄改成簡稱，
+ * 但 F024 調閱歷程的公司欄必須維持**全稱**（`AC-N13` 明訂「不連帶變更已驗收功能」）。
+ *
+ * 當時只有 `watermark-burner.service.ts` 的稽核組裝做了這個區分，`watermark.service.ts` 之
+ * `audit()` 仍寫 `company: fields.companyFullName`——那個欄位雖名為 FullName，值已依 `AC-N12`
+ * 改成簡稱，於是 **VIEW／DOWNLOAD／PRINT 三種稽核列的公司欄全部退化成簡稱**，
+ * F024 畫面與其 CSV 一併受影響。整合測試 `access-history.itest.ts` TS-AQ-INT-010 抓到此事。
+ * 同型漏改另見 `lifecycle-preview.service.ts`／`lifecycle-change-diff.service.ts`。
+ *
+ * 🔒 這一組測試把「**同一次操作裡，浮水印用簡稱、稽核列用全稱**」釘死——兩者只要再被同一個
+ * 變數串起來就會紅。
+ */
+describe('AC-N13 ③ — 稽核列之公司欄為全稱，與浮水印之簡稱分離', () => {
+  it('VIEW：稽核 company＝全稱，同一次操作之 watermarkSnapshot 則含簡稱', async () => {
+    const { svc, audit } = makeService({});
+    const res = await svc.view(sessionOf({ companyCode: 'AS' }), 'doc-1');
+    expect(audit.events).toHaveLength(1);
+    expect(audit.events[0].company).toBe('和潤企業股份有限公司');
+    expect(res.watermark).toContain('和潤企業');
+    expect(res.watermark).not.toContain('和潤企業股份有限公司');
+  });
+
+  it('DOWNLOAD／PRINT：稽核 company 同為全稱（三個動作皆走同一個 audit()）', async () => {
+    const { svc, audit } = makeService({});
+    await svc.download(sessionOf({ companyCode: 'AE' }), 'doc-1');
+    await svc.print(sessionOf({ companyCode: 'AE' }), 'doc-1');
+    expect(audit.events.map((e) => e.company)).toEqual([
+      '和潤電能股份有限公司',
+      '和潤電能股份有限公司',
+    ]);
+  });
+
+  it('公司代碼查無 → 稽核 company 為 null（不得落簡稱、不得落空字串）', async () => {
+    const { svc, audit } = makeService({});
+    await svc.view(sessionOf({ companyCode: 'ZZ' }), 'doc-1');
+    expect(audit.events[0].company).toBeNull();
+  });
+});
+
+/**
  * F041 AC-25～AC-30（F020 delta AC-U1～AC-U5）：業務子分類使用者存取使用部門不相符之文件，
  * 於取得原始 PDF 之前（buildSnapshot 之前）即拒絕。權威：F041 spec §E；架構 §3.7 決策三(c)。
  * 業務子分類（新欄位）以 `sessionOf({ userSubtype: 'business', ... } as unknown as Partial<WatermarkSession>)`
