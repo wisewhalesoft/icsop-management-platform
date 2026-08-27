@@ -367,3 +367,157 @@ describe('F017 AC-E7：下載路徑不變（受控代理串流，非 SAS 導覽�
     expect(screen.getByText('消金審核作業')).toBeInTheDocument();
   });
 });
+
+/**
+ * 🔴 F017 `AC-E10`～`AC-E14`（2026-08-27 缺失 delta）——連結點無 PDF 之事前標示。
+ *
+ * 缺失原文（使用者回報）：「ICSOP 文件管理：在清單頁點擊下載連結點程序書時，出現無法下載的問題」。
+ * 成因（dev 實測查證，非推測）：下載端點**本身正常**（有 PDF 之目標實跑回 200／application/pdf），
+ * 失敗的是**目標文件根本沒上傳 ICSOP PDF**——591 份程序書僅 7 份有 PDF、15 筆連結中 11 筆之目標
+ * 無 PDF、5 個有連結的列裡有 3 列「收合態唯一看得到的那顆 pill」一點就失敗；而點下去只換到一句
+ * 沒有原因的「無法下載「{編號} {書名}」」。
+ *
+ * 本區塊之案例刻意**自帶 DOCS**（不動上方共用之 DOCS 常數），使既有 `AC-E1`～`AC-E9` 案例之
+ * 列數、篩選選項與統計數字完全不受影響。
+ */
+describe('F017 AC-E10～AC-E14：連結點無 ICSOP PDF 之事前標示', () => {
+  /** 目標尚未上傳 ICSOP PDF 者（prototype 13 之 LINK_NO_PDF 示範載體，逐字同編號）。 */
+  const T_NO = doc({
+    id: 'n1', documentNumber: 'ICSOP-SRC-102-1-01', documentName: '車輛分期對保作業',
+  });
+  const T_YES = doc({
+    id: 'n2', documentNumber: 'ICSOP-GCA-122-1-02', documentName: '子公司-永續報告書編制配合作業程序書',
+  });
+  /** `undefined` 一律當成有 PDF（`AC-E12`）；此處刻意**不帶** targetHasPdf 鍵。 */
+  const linkOf = (n: number, target: DocumentListItem, hasPdf?: boolean): DocumentLinkView => ({
+    ...link(n, target),
+    ...(hasPdf === undefined ? {} : { targetHasPdf: hasPdf }),
+  });
+
+  const ROW_MIX = doc({
+    id: 'n3', documentNumber: 'ICSOP-GCA-122-1-00', documentName: 'ICSOP管理作業程序書',
+    links: [linkOf(1, T_NO, false), linkOf(2, T_YES, true)],
+  });
+  const ROW_UNKNOWN = doc({
+    id: 'n4', documentNumber: 'ICSOP-GCA-100-1-00', documentName: '法遵管理作業程序書',
+    links: [linkOf(3, T_YES)],
+  });
+
+  const NO_PDF_TITLE = '連結點程序書：ICSOP-SRC-102-1-01 車輛分期對保作業（尚未上傳 ICSOP PDF，無法下載）';
+  const NO_PDF_MSG = '「ICSOP-SRC-102-1-01 車輛分期對保作業」尚未上傳 ICSOP PDF，無法下載';
+
+  beforeEach(() => {
+    vi.mocked(endpoints.getDocuments).mockResolvedValue(
+      pageOf([ROW_MIX, ROW_UNKNOWN, T_NO, T_YES]),
+    );
+  });
+
+  it('TS-F017-E11-001 targetHasPdf=false → 收合態為無檔案態：data-link-no-pdf ＋ 逐字 title，且仍是可 focus 之真按鈕', async () => {
+    renderPage();
+    await screen.findByText('ICSOP管理作業程序書');
+
+    const pill = within(rowOf('ICSOP管理作業程序書')).getByTitle(NO_PDF_TITLE);
+    expect(pill).toHaveAttribute('data-link-no-pdf');
+    expect(pill.tagName).toBe('BUTTON');
+    // 🔴 `AC-E11` ③：事前提示**不得**以 disabled 實作（F024 匯出鈕已裁定過同一件事）
+    expect(pill).not.toBeDisabled();
+    pill.focus();
+    expect(document.activeElement).toBe(pill);
+    // 可見文字仍恰為編號（`AC-E2` 之規則不因新樣態而破）
+    expect(pill).toHaveTextContent('ICSOP-SRC-102-1-01');
+    expect(pill).not.toHaveTextContent('車輛分期對保作業');
+  });
+
+  it('TS-F017-E11-002 點無檔案態 → toast 說明原因（非泛用「無法下載」），且不呼叫附件／下載端點', async () => {
+    renderPage();
+    await screen.findByText('ICSOP管理作業程序書');
+
+    await userEvent.click(within(rowOf('ICSOP管理作業程序書')).getByTitle(NO_PDF_TITLE));
+    expect(await screen.findByText(NO_PDF_MSG)).toBeInTheDocument();
+    expect(endpoints.getDocumentAttachments).not.toHaveBeenCalled();
+    expect(endpoints.downloadAttachment).not.toHaveBeenCalled();
+  });
+
+  it('TS-F017-E11-003 展開態逐列同樣分流：無 PDF 者為無檔案鈕、有 PDF 者仍為下載鈕', async () => {
+    renderPage();
+    await screen.findByText('ICSOP管理作業程序書');
+
+    await userEvent.click(toggleOf('ICSOP管理作業程序書')!);
+    const cell = cellOf('ICSOP管理作業程序書');
+    expect(cell.dataset.linkExpanded).toBe('true');
+
+    const items = cell.querySelectorAll('[data-link-item]');
+    expect(items).toHaveLength(2);
+    expect(items[0].querySelector('[data-link-no-pdf]')).not.toBeNull();
+    expect(items[1].querySelector('[data-link-no-pdf]')).toBeNull();
+    expect(
+      within(items[1] as HTMLElement).getByTitle(
+        '下載連結點程序書：ICSOP-GCA-122-1-02 子公司-永續報告書編制配合作業程序書',
+      ),
+    ).toBeInTheDocument();
+
+    await userEvent.click(within(items[0] as HTMLElement).getByTitle(NO_PDF_TITLE));
+    expect(await screen.findByText(NO_PDF_MSG)).toBeInTheDocument();
+    expect(endpoints.getDocumentAttachments).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 🔴 `AC-E12`：`undefined` **不等於** `false`。猜錯的代價不對稱——把下載得到的連結點標成
+   * 不可下載是新製造的缺失；反之最壞只是退回本 delta 前的行為，且點下去仍有說明。
+   */
+  it('TS-F017-E12-001 targetHasPdf 缺鍵 → 逐字等同既有可下載 pill，且點擊仍走既有下載路徑', async () => {
+    renderPage();
+    await screen.findByText('法遵管理作業程序書');
+
+    const pill = within(rowOf('法遵管理作業程序書')).getByTitle(
+      '下載連結點程序書：ICSOP-GCA-122-1-02 子公司-永續報告書編制配合作業程序書',
+    );
+    expect(pill).not.toHaveAttribute('data-link-no-pdf');
+
+    await userEvent.click(pill);
+    await waitFor(() => expect(endpoints.getDocumentAttachments).toHaveBeenCalledWith('n2'));
+    await waitFor(() =>
+      expect(endpoints.downloadAttachment).toHaveBeenCalledWith(
+        'documents/n2/icsop_pdf/x.pdf',
+        expect.any(String),
+      ),
+    );
+  });
+
+  it('TS-F017-E12-002 缺鍵但實際取不到 PDF → toast 亦為說明字串（不再是泛用「無法下載」）', async () => {
+    vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([]);
+    renderPage();
+    await screen.findByText('法遵管理作業程序書');
+
+    await userEvent.click(
+      within(rowOf('法遵管理作業程序書')).getByTitle(
+        '下載連結點程序書：ICSOP-GCA-122-1-02 子公司-永續報告書編制配合作業程序書',
+      ),
+    );
+    expect(
+      await screen.findByText(
+        '「ICSOP-GCA-122-1-02 子公司-永續報告書編制配合作業程序書」尚未上傳 ICSOP PDF，無法下載',
+      ),
+    ).toBeInTheDocument();
+    expect(endpoints.downloadAttachment).not.toHaveBeenCalled();
+  });
+
+  /** 🔒 `AC-E14`：本 delta 只換 pill 兩態，摺疊行為與 `AC-E8` 之 DOM 契約逐項不變。 */
+  it('TS-F017-E14-001 無檔案態不破摺疊契約：仍為第一顆 pill ＋ 可點的 `+1`、收合態 DOM 屬性不變', async () => {
+    renderPage();
+    await screen.findByText('ICSOP管理作業程序書');
+
+    const cell = cellOf('ICSOP管理作業程序書');
+    expect(cell.dataset.linkCount).toBe('2');
+    expect(cell.dataset.linkExpanded).toBe('false');
+    expect(cell.className).not.toContain('flex-wrap');
+    expect(cell.className).toContain('whitespace-nowrap');
+    expect(cell.querySelectorAll('button')).toHaveLength(2);
+
+    const badge = toggleOf('ICSOP管理作業程序書')!;
+    expect(badge.tagName).toBe('BUTTON');
+    expect(badge).toHaveTextContent('+1');
+    expect(badge).toHaveAttribute('aria-expanded', 'false');
+    expect(badge).toHaveAttribute('aria-label', '展開其餘 1 個連結點程序書');
+  });
+});

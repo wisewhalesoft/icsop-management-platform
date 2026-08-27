@@ -365,6 +365,13 @@ export interface DocumentLinkView {
   targetNumber: string | null;
   targetName: string | null;
   targetStatus: DocumentStatus | null;
+  /**
+   * F017 `AC-E10`～`AC-E12`（2026-08-27 delta）：目標文件是否已上傳 ICSOP PDF。
+   * ⚠ **`undefined` 不等於 `false`**：`false`＝已查證無 PDF → 畫成無檔案態；
+   * `undefined`＝未知（舊版回應）→ **一律當成有 PDF**，維持既有可下載外觀（`AC-E12`）。
+   * 猜錯的代價不對稱：把下載得到的標成不可下載是新製造的缺失，反之只是退回本 delta 前的行為。
+   */
+  targetHasPdf?: boolean;
 }
 
 /** F016 單份附件類型（覆蓋式，各文件各 1 份）。 */

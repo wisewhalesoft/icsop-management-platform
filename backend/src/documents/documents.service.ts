@@ -388,9 +388,14 @@ export class DocumentsService {
   }
 
   /**
-   * F017「連結點程序書」欄：批次補上各列之連結點摘要（目標編號/書名/目前狀態）。
-   * 兩次批次查詢（連結列＋目標摘要），與列數無關；無 linkStore → 保持空陣列。
+   * F017「連結點程序書」欄：批次補上各列之連結點摘要（目標編號/書名/目前狀態＋有無 ICSOP PDF）。
+   * 三次批次查詢（連結列＋目標摘要＋目標之 ICSOP PDF），與列數無關；無 linkStore → 保持空陣列。
    * 目標狀態為即時查詢（非連結建立當下之快照），與 getDocumentLinks 一致。
+   *
+   * 🔴 第三次查詢為 `AC-E10`（2026-08-27 delta）所需：`targetHasPdf`。手法與 `enrichOjt` 同型
+   * （固定次數之 `findManyByType` 批次，往返數與列數／連結數無關，非 N+1），故未違反
+   * `AC-N40` 之「不得引入 N+1」效能前提。無 attachmentStore → 該欄留 `undefined`（＝未知，
+   * 前端維持既有可下載外觀），**不得**降級寫成 `false`。
    */
   private async enrichLinks(items: DocumentListItem[]): Promise<void> {
     if (!this.linkStore || items.length === 0) return;
@@ -399,6 +404,7 @@ export class DocumentsService {
     const targetIds = [...new Set(links.map((l) => l.targetDocumentId))];
     const summaries = await this.store.findSummaries(targetIds);
     const byId = new Map(summaries.map((s) => [s.id, s]));
+    const withPdf = await this.targetsWithIcsopPdf(targetIds);
     const bySource = new Map<string, DocumentLinkView[]>();
     for (const l of links) {
       const t = byId.get(l.targetDocumentId);
@@ -408,12 +414,24 @@ export class DocumentsService {
         targetNumber: t?.documentNumber ?? null,
         targetName: t?.documentName ?? null,
         targetStatus: t?.status ?? null,
+        ...(withPdf ? { targetHasPdf: withPdf.has(l.targetDocumentId) } : {}),
       };
       const bucket = bySource.get(l.sourceDocumentId);
       if (bucket) bucket.push(view);
       else bySource.set(l.sourceDocumentId, [view]);
     }
     for (const it of items) it.links = bySource.get(it.id) ?? [];
+  }
+
+  /**
+   * `AC-E10`（2026-08-27 delta）：一次批次查出「這些目標文件之中，哪些已有 ICSOP PDF」。
+   * 無 attachmentStore（純建構子之單元測試替身）→ 回 `null`＝**未知**，呼叫端據此**省略**
+   * `targetHasPdf` 鍵，而非填 `false`：把未知寫成 `false` 會讓前端把下載得到的連結點標成不可下載。
+   */
+  private async targetsWithIcsopPdf(targetIds: string[]): Promise<Set<string> | null> {
+    if (!this.attachmentStore) return null;
+    const recs = await this.attachmentStore.findManyByType(targetIds, 'ICSOP_PDF');
+    return new Set(recs.map((r) => r.documentId));
   }
 
   /** 以 NameResolutionService 補上組織/室長顯示名稱（去重、批次，避免 N+1）。無 resolver → 保持 null。 */
@@ -668,10 +686,17 @@ export class DocumentsService {
     }
   }
 
-  /** F015：查詢某文件之連結點清單（單向；附目標編號/書名/目前狀態）。無 linkStore → 空陣列。 */
+  /**
+   * F015：查詢某文件之連結點清單（單向；附目標編號/書名/目前狀態）。無 linkStore → 空陣列。
+   * `AC-E10`（2026-08-27 delta）：同一份檢視型別另帶 `targetHasPdf`，與清單富化取同一份事實，
+   * 免得兩支端點對「同一個連結點下不下載得到」給出不同答案。
+   */
   async getDocumentLinks(sourceId: string): Promise<DocumentLinkView[]> {
     if (!this.linkStore) return [];
     const links = await this.linkStore.findBySource(sourceId);
+    const withPdf = await this.targetsWithIcsopPdf(
+      [...new Set(links.map((l) => l.targetDocumentId))],
+    );
     return Promise.all(
       links.map(async (l) => {
         const target = await this.store.findById(l.targetDocumentId);
@@ -681,6 +706,7 @@ export class DocumentsService {
           targetNumber: target?.documentNumber ?? null,
           targetName: target?.documentName ?? null,
           targetStatus: target?.status ?? null,
+          ...(withPdf ? { targetHasPdf: withPdf.has(l.targetDocumentId) } : {}),
         };
       }),
     );

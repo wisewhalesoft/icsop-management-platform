@@ -17,6 +17,19 @@ export interface DocumentLinkView {
   targetNumber: string | null;
   targetName: string | null;
   targetStatus: DocumentStatus | null;
+  /**
+   * F017 `AC-E10`（2026-08-27 delta）：目標文件是否已上傳 ICSOP PDF（＝該連結點是否**下載得到東西**）。
+   *
+   * 🔴 缺失成因：清單第 12 欄把每個連結點一律畫成「可下載」的按鈕，但這份回應**從未帶過**
+   * 「目標有沒有 PDF」——使用者只能點下去才知道，而 dev 實測 591 份程序書僅 7 份有 PDF、
+   * 15 筆連結中 11 筆之目標無 PDF ⇒ 多數點擊撞上一句沒有原因的「無法下載」。
+   *
+   * ⚠ **`undefined` 不等於 `false`**（與 `DocumentListItem.hasOjt` 之慣例刻意相反）：
+   * `false`＝已查證「目標沒有 PDF」→ 前端畫成無檔案態；`undefined`＝**未知**（舊版回應或未注入
+   * attachmentStore）→ 前端維持既有可下載外觀。如此最壞情況只是退回本 delta 前的行為，
+   * 不會把「其實下載得到」的連結點誤標成不可下載。
+   */
+  targetHasPdf?: boolean;
 }
 
 export interface DocumentLinkStore {

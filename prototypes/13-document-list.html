@@ -90,6 +90,32 @@
      視覺語彙：`+N` 與「收合」沿用同表 chiefCell(d) 之「主要 ＋ `+N` 徽章」色票與尺寸
        （`ml-1 inline-flex items-center px-1 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]`），
        另加可點擊之互動樣式（`hover:bg-slate-200 cursor-pointer`）與 focus ring；未引入新色票或新元件語彙。 -->
+<!-- 🔴 2026-08-27 缺失 delta（使用者回報：在清單頁點擊下載連結點程序書時，出現無法下載的問題）——本檔已套用。
+     ⚠ 本 delta **只動第 12 欄「連結點程序書」之 pill／下載鈕兩態**；欄位集合、由左至右順序、其餘 14 欄之顯示規則，
+       以及 3 張統計卡、13 項篩選（含比對語意）、排序、分頁、展開／收合行為（2026-08-18 之 ①～⑨）一律不變
+       ⇒ AC-D9／AC-E9／AC-N40 之回歸鎖定除「第 12 欄之 pill 兩態」一項外續為有效。
+     背景（dev 實測 2026-08-27，非推測）：下載端點本身正常（有 PDF 之目標實跑回 200／application/pdf／2.14MB）；
+           失敗的是**目標文件根本沒有上傳 ICSOP PDF**——591 份程序書只有 7 份有 PDF，15 筆連結中 11 筆之目標無 PDF，
+           5 個有連結的列裡有 3 列「收合態唯一看得到的那顆 pill」一點就失敗。舊行為把每個連結點一律畫成可下載的
+           下載鈕，點下去只丟一句沒有原因的「無法下載「{編號} {書名}」」⇒ UI 承諾了它多數時候做不到的事。
+     新行為（逐字；下游 spec AC-E10～AC-E13 以本段為權威）：
+       ⑩ 連結點**兩態**，依「目標文件是否已上傳 ICSOP PDF」（後端 `DocumentLinkView.targetHasPdf`）分流：
+          · **有 PDF（或未知）** → 逐字沿用 2026-08-18 之既有 pill／下載鈕（`download` 圖示、primary 色、
+            title `下載連結點程序書：{編號} {書名}`），行為與外觀**一字不動**。
+          · **無 PDF** → 改為**無檔案態**：圖示換 `file-x-2`、色票降為 `text-slate-400`（同表既有「無 OJT」之
+            語彙，未引入新圖示或新色票），title 逐字＝`連結點程序書：{編號} {書名}（尚未上傳 ICSOP PDF，無法下載）`。
+       ⑪ 無檔案態**仍是真正的 `<button>`**（可 focus、可鍵盤 Enter／Space、可觸控），**不得**用 `disabled`
+          或改成 `<span>`。理由同 ⑥，且 F024 匯出鈕已裁定過同一件事：`disabled` 的鈕不能 focus、讀不到
+          tooltip、觸控裝置上按了毫無反應 ⇒ 使用者只會覺得「壞了」，而不是「這份還沒上傳」。
+          點擊之回饋逐字＝`「{編號} {書名}」尚未上傳 ICSOP PDF，無法下載`（說明原因，不再是泛用的「無法下載」）。
+       ⑫ **未知（`targetHasPdf` 缺鍵）一律當成有 PDF**，維持既有可下載外觀——與同表「OJT」欄之「缺鍵視同 false」
+          刻意相反。理由：這裡猜錯的代價不對稱，把「其實下載得到」的連結點標成不可下載是**新製造**的缺失，
+          而把「其實沒有」的畫成可下載只是退回本 delta 前的行為（且點下去仍有 ⑪ 的說明）。
+       ⑬ DOM 契約（供約束環定位）：無檔案態之按鈕帶 `data-link-no-pdf`；有 PDF／未知態**不得**帶此屬性。
+     示範載體：`ICSOP-SRC-102-1-01 車輛分期對保作業`（LINK_NO_PDF）——它是本頁唯一**不在 DOCS 之內**的連結目標，
+       故標為「尚未上傳 PDF」不會與同列「檔案」欄的下載鈕自相矛盾。並刻意把它排到 6 連結那列的**第一顆**，
+       使收合態與展開態同時看得到兩種樣態；該列連結**數量與集合皆不變**（仍為 6 個、仍含最長編號
+       ICSOP-CIPS-104-1-01），僅顯示順序調整。勿「修正」為有 PDF——這是無檔案態唯一的示範載體。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -501,7 +527,7 @@
     {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'消金審核作業_v2.0.pdf',node:'撥款核准作業',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業'],date:'2025-12-01',lcId:'lc1',appx:['ax3','ax4','ax8'],forms:['uf3','uf4','uf8'],ojt:true},
     {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'企業金融授信作業_v1.0.pdf',node:'企金案件受理作業',num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。',links:[],date:'2026-06-01',lcId:'lc10',appx:[],forms:[]}  /* 🔵 AC-N38 ③ 示範：本列刻意**不帶 ojt 鍵**（模擬後端未回該鍵）⇒ 視同 false，渲染與 false 完全相同（file-x-2 ＋「無 OJT」、data-has-ojt="false"）。勿「修正」為 ojt:false——這是缺鍵路徑唯一的示範載體；篩選行為與 false 一致，統計卡與筆數不受影響。 */,
     {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期特約通路作業_v1.2.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',edition:"25'10",summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業','ICSOP-SRC-101-2-00 消金審核作業'],date:'2025-10-01',lcId:'lc1',appx:['ax1'],forms:['uf1'],ojt:false},
-    {company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],status:'有效',pdf:'車輛分期進件作業_v1.3.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',links:['ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-102-1-01 車輛分期對保作業','ICSOP-SRC-101-1-06 消費分期特約通路作業','ICSOP-PPC-101-2-02 消費分期產品政策及規範作業','ICSOP-PPC-101-1-03 消費分期-月目標設定作業','ICSOP-CIPS-104-1-01 使用者權限管理與覆核'],date:'2026-01-01',lcId:'lc1',appx:['ax1','ax2','ax8'],forms:['uf1','uf2','uf8'],ojt:true},
+    {company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],status:'有效',pdf:'車輛分期進件作業_v1.3.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',links:['ICSOP-SRC-102-1-01 車輛分期對保作業','ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-101-1-06 消費分期特約通路作業','ICSOP-PPC-101-2-02 消費分期產品政策及規範作業','ICSOP-PPC-101-1-03 消費分期-月目標設定作業','ICSOP-CIPS-104-1-01 使用者權限管理與覆核'],date:'2026-01-01',lcId:'lc1',appx:['ax1','ax2','ax8'],forms:['uf1','uf2','uf8'],ojt:true},
     {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期產品政策及規範作業_v1.0.pdf',node:null,num:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',edition:"26'03",summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。',links:[],date:'2026-09-01',lcId:'lc3',appx:[],forms:[],ojt:false},
     {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期月目標設定作業_v1.1.pdf',node:'目標制定作業',num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',edition:"26'04",summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。',links:[],date:'2026-08-15',lcId:'lc3',appx:[],forms:[],ojt:false},
     {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'費用請款作業_v2.1.pdf',node:'費用請款作業',num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。',links:[],date:'2026-05-01',lcId:'lc2',appx:[],forms:[],ojt:false},
@@ -715,18 +741,31 @@
     const hit=links.filter(l=>l===FILTER.link);
     return hit.length ? hit.concat(links.filter(l=>l!==FILTER.link)) : links;
   }
+  /* 🔴 2026-08-27 delta ⑩～⑬：連結點目標「有無 ICSOP PDF」之兩態。
+       LINK_NO_PDF＝目標尚未上傳 ICSOP PDF 之編號集合，是後端 DocumentLinkView.targetHasPdf === false
+       在本 prototype 的對應物（真實環境由附件表查得，591 份中僅 7 份有 PDF）。
+     ⚠ 集合內刻意只放**不在 DOCS 之內**的連結目標，否則同一份程序書會一邊在「檔案」欄有下載鈕、
+       一邊在別列的連結點被標成「尚未上傳」而自相矛盾。這是無檔案態唯一的示範載體，勿清空。 */
+  const LINK_NO_PDF=new Set(['ICSOP-SRC-102-1-01']);
+  const linkHasPdf=l=>!LINK_NO_PDF.has(linkNum(l));
   // 收合態之單顆 pill：可見文字＝編號；書名靠 title（不上清單，避免中文書名長度不定再度拉伸版面）
   function linkPill(l){
+    // ⑩⑪⑬ 無檔案態：file-x-2 ＋ text-slate-400（沿用同表「無 OJT」語彙），仍是可 focus 的真按鈕
+    if(!linkHasPdf(l)){
+      return `<button data-link-no-pdf onclick="dlLinkNoPdf('${esc(l)}')" title="連結點程序書：${esc(l)}（尚未上傳 ICSOP PDF，無法下載）" class="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-slate-100 text-slate-400 text-[11px]"><i data-lucide="file-x-2" class="w-3 h-3"></i>${esc(linkNum(l))}</button>`;
+    }
     return `<button onclick="dl('${esc(l)}',true)" title="下載連結點程序書：${esc(l)}" class="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px]"><i data-lucide="download" class="w-3 h-3"></i>${esc(linkNum(l))}</button>`;
   }
   // 展開態之單列：`編號 · 書名 · 下載鈕`（tail＝第一列尾端之「收合」鈕，其餘列為空字串）
   function linkRow(l,tail){
+    const btn = linkHasPdf(l)
+      ? `<button onclick="dl('${esc(l)}',true)" aria-label="下載連結點程序書：${esc(l)}" title="下載連結點程序書：${esc(l)}" class="w-6 h-6 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i></button>`
+      : `<button data-link-no-pdf onclick="dlLinkNoPdf('${esc(l)}')" aria-label="連結點程序書：${esc(l)}（尚未上傳 ICSOP PDF，無法下載）" title="連結點程序書：${esc(l)}（尚未上傳 ICSOP PDF，無法下載）" class="w-6 h-6 rounded hover:bg-slate-100 text-slate-400 flex items-center justify-center shrink-0"><i data-lucide="file-x-2" class="w-3.5 h-3.5"></i></button>`;
     return `<div class="flex items-center gap-1.5 whitespace-nowrap" data-link-item>`+
       `<span class="mono text-[11px] text-slate-600">${esc(linkNum(l))}</span>`+
       `<span class="text-slate-300 text-[11px]">·</span>`+
       `<span class="text-[11px] text-slate-600">${esc(linkName(l))}</span>`+
-      `<button onclick="dl('${esc(l)}',true)" aria-label="下載連結點程序書：${esc(l)}" title="下載連結點程序書：${esc(l)}" class="w-6 h-6 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i></button>`+
-      (tail||'')+`</div>`;
+      btn+(tail||'')+`</div>`;
   }
   function linkCell(d){
     const links=linkOrder(d.links||[]);
@@ -884,6 +923,9 @@
       ? '（伺服器端已將浮水印燒錄進 PDF 內容層，並寫入稽核 DOWNLOAD）'
       : '（此格式不支援浮水印，回傳原始檔位元組；仍寫入稽核 DOWNLOAD）'));
   }
+  /* ⑪ 無檔案態之點擊回饋：說明**原因**，不再是泛用的「無法下載」。
+        缺失原文即為此——舊行為只丟一句沒有原因的「無法下載「{編號} {書名}」」。 */
+  function dlLinkNoPdf(l){ toast('error','「'+l+'」尚未上傳 ICSOP PDF，無法下載'); }
   function viewDoc(n){ shellToast('檢視程序書 '+n+'（16-document-readonly）'); }
   function editDoc(n){ shellToast('編輯程序書 '+n+'（15-document-edit）'); }
   function createDoc(){ shellToast('建立新程序書（14-document-create）'); }

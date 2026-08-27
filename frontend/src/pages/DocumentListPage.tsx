@@ -68,6 +68,26 @@ const linkLabel = (l: DocumentLinkView): string =>
   `${linkNum(l)}${l.targetName ? ` ${l.targetName}` : ''}`;
 
 /**
+ * `AC-E12`（2026-08-27 delta）：**只有明確的 `false` 才是「無檔案」**；`undefined`（缺鍵、
+ * 舊版回應）一律當成有 PDF，維持既有可下載外觀。
+ * 🔴 **不得**寫成 `!l.targetHasPdf`——那會把「未知」也判成無檔案，等於把下載得到的連結點
+ * 全部標成不可下載（猜錯的代價不對稱，見 `AC-E12`）。
+ */
+const linkHasNoPdf = (l: DocumentLinkView): boolean => l.targetHasPdf === false;
+
+/** `AC-E11` ②：無檔案態之 tooltip（與 prototype 13 之 ⑩ 逐字相同）。 */
+const linkNoPdfTitle = (l: DocumentLinkView): string =>
+  `連結點程序書：${linkLabel(l)}（尚未上傳 ICSOP PDF，無法下載）`;
+
+/**
+ * `AC-E11` ④／`AC-E12`：說明**原因**之提示字串。
+ * 缺失原文即為此——舊行為只丟一句沒有原因的「無法下載「{編號} {書名}」」，
+ * 而 dev 實測 591 份程序書僅 7 份有 ICSOP PDF ⇒ 多數點擊都撞上那句話。
+ */
+const linkNoPdfMessage = (l: DocumentLinkView): string =>
+  `「${linkLabel(l)}」尚未上傳 ICSOP PDF，無法下載`;
+
+/**
  * `AC-E3` 之 `+N` 與「收合」共用之徽章樣式：色票與尺寸逐字沿用同一張表「當責室長」之
  * 次要室長徽章（prototype 13 `chiefCell`），僅追加「這是可點的按鈕」所需之互動樣式與 focus ring。
  */
@@ -330,7 +350,12 @@ export function DocumentListPage(): JSX.Element {
   /**
    * 連結點 pill：下載「目標文件」之 ICSOP PDF。
    * 先取目標文件之附件清單（同一 documentId 維度之既有端點），再走與「檔案」欄相同之受控下載。
-   * 目標無 ICSOP PDF／取用失敗 → 以既有錯誤提示呈現，不崩潰。
+   *
+   * 🔴 `AC-E11` ④（2026-08-27 delta）：**已知**無 PDF 者（`targetHasPdf === false`）根本不走到這裡——
+   * 那顆鈕已是無檔案態、點擊直接說明原因（見 `onLinkNoPdf`），**不打任何端點**。
+   * 本函式只處理 `true`／未知（`AC-E12`）；其中「未知但實際上沒有 PDF」之殘餘情形，提示字串
+   * 與無檔案態**共用同一句**（說明原因），不再是泛用之「無法下載」。
+   * 取用失敗（網路／權限）→ 仍為既有泛用錯誤提示，不崩潰。
    */
   const onDownloadLink = useCallback(
     async (l: DocumentLinkView) => {
@@ -339,7 +364,7 @@ export function DocumentListPage(): JSX.Element {
         const atts = await getDocumentAttachments(l.targetDocumentId);
         const pdf = atts.find((a) => a.type === 'ICSOP_PDF');
         if (!pdf) {
-          toast.error(`無法下載「${label}」`);
+          toast.error(linkNoPdfMessage(l));
           return;
         }
         await openBlob(pdf.blobPath, label);
@@ -348,6 +373,16 @@ export function DocumentListPage(): JSX.Element {
       }
     },
     [openBlob, toast],
+  );
+
+  /**
+   * `AC-E11` ④：無檔案態之點擊回饋——只說明原因，**不呼叫**附件或下載端點。
+   * 🔴 事前提示**不得**以 `disabled` 實作（F024 匯出鈕已就同一件事裁定過）：`disabled` 的鈕
+   * 不能 focus、讀不到 tooltip、觸控裝置上按了毫無反應 ⇒ 使用者只會覺得「壞了」。
+   */
+  const onLinkNoPdf = useCallback(
+    (l: DocumentLinkView) => toast.error(linkNoPdfMessage(l)),
+    [toast],
   );
 
   /**
@@ -856,6 +891,7 @@ export function DocumentListPage(): JSX.Element {
                         expanded={linkOpen.has(d.id)}
                         onToggle={toggleLink}
                         onDownload={onDownloadLink}
+                        onNoPdf={onLinkNoPdf}
                       />
                     </td>
                     <td className="px-3 py-3 text-slate-500 mono text-xs whitespace-nowrap">
@@ -925,13 +961,23 @@ export function DocumentListPage(): JSX.Element {
  *    若只用 `…`＋hover，被摺疊者無法點擊／鍵盤到不了／觸控看不到 ＝ 功能消失。
  * 🔴 展開為**就地展開**（`AC-E4`），**不得**改用 popover／dropdown 浮層：表格外層為
  *    `overflow-x-auto` ＋ `rounded-xl overflow-hidden`，絕對定位浮層會被裁切。
+ *
+ * 🔴 **2026-08-27 delta（`AC-E10`～`AC-E14`）：pill／下載鈕兩態**。
+ * 缺失回報＝「點擊下載連結點程序書時，出現無法下載」。實測查證：下載端點本身正常，壞的是
+ * **目標文件根本沒上傳 ICSOP PDF**（591 份僅 7 份有；15 筆連結中 11 筆之目標無 PDF），
+ * 而本欄把每個連結點一律畫成可下載的按鈕 ⇒ 使用者只能點下去，還只換到一句沒有原因的「無法下載」。
+ * 新行為＝`targetHasPdf === false` 者改為**無檔案態**（`file-x-2` ＋ `text-slate-400`，沿用同表
+ * 「無 OJT」語彙），tooltip 說明原因，點擊只提示、**不打端點**。
+ * 🔴 無檔案態仍是**可 focus 的真 `<button>`**，**不得**用 `disabled`（F024 匯出鈕已裁定過同一件事）。
+ * 🔴 `undefined` 一律當成有 PDF（`AC-E12`），故判定寫 `targetHasPdf === false`，**不得**寫 `!targetHasPdf`。
  */
-function LinkCell({ doc, filterLink, expanded, onToggle, onDownload }: {
+function LinkCell({ doc, filterLink, expanded, onToggle, onDownload, onNoPdf }: {
   doc: DocumentListItem;
   filterLink: string;
   expanded: boolean;
   onToggle: (id: string) => void;
   onDownload: (l: DocumentLinkView) => void;
+  onNoPdf: (l: DocumentLinkView) => void;
 }): JSX.Element {
   /**
    * `AC-E6`：`連結點程序書` 篩選命中者排第一顆（＝收合態唯一可見的那顆），否則使用者
@@ -959,14 +1005,26 @@ function LinkCell({ doc, filterLink, expanded, onToggle, onDownload }: {
         data-link-count={links.length}
         data-link-expanded="false"
       >
-        <button
-          onClick={() => onDownload(links[0])}
-          title={`下載連結點程序書：${linkLabel(links[0])}`}
-          className="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px]"
-        >
-          <Icon name="download" className="w-3 h-3" />
-          {linkNum(links[0])}
-        </button>
+        {linkHasNoPdf(links[0]) ? (
+          <button
+            data-link-no-pdf=""
+            onClick={() => onNoPdf(links[0])}
+            title={linkNoPdfTitle(links[0])}
+            className="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-slate-100 text-slate-400 text-[11px]"
+          >
+            <Icon name="file-x-2" className="w-3 h-3" />
+            {linkNum(links[0])}
+          </button>
+        ) : (
+          <button
+            onClick={() => onDownload(links[0])}
+            title={`下載連結點程序書：${linkLabel(links[0])}`}
+            className="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 hover:bg-primary-50 text-primary-600 text-[11px]"
+          >
+            <Icon name="download" className="w-3 h-3" />
+            {linkNum(links[0])}
+          </button>
+        )}
         {rest > 0 && (
           <button
             type="button"
@@ -991,13 +1049,25 @@ function LinkCell({ doc, filterLink, expanded, onToggle, onDownload }: {
           <span className="mono text-[11px] text-slate-600">{linkNum(l)}</span>
           <span className="text-slate-300 text-[11px]">·</span>
           <span className="text-[11px] text-slate-600">{l.targetName ?? ''}</span>
-          <button
-            onClick={() => onDownload(l)}
-            title={`下載連結點程序書：${linkLabel(l)}`}
-            className="w-6 h-6 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"
-          >
-            <Icon name="download" className="w-3.5 h-3.5" />
-          </button>
+          {linkHasNoPdf(l) ? (
+            <button
+              data-link-no-pdf=""
+              onClick={() => onNoPdf(l)}
+              aria-label={linkNoPdfTitle(l)}
+              title={linkNoPdfTitle(l)}
+              className="w-6 h-6 rounded hover:bg-slate-100 text-slate-400 flex items-center justify-center shrink-0"
+            >
+              <Icon name="file-x-2" className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <button
+              onClick={() => onDownload(l)}
+              title={`下載連結點程序書：${linkLabel(l)}`}
+              className="w-6 h-6 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center shrink-0"
+            >
+              <Icon name="download" className="w-3.5 h-3.5" />
+            </button>
+          )}
           {/* 第一列尾端之「收合」與收合態之 `+N` 為同一顆 toggle（`AC-E4`）。 */}
           {i === 0 && (
             <button

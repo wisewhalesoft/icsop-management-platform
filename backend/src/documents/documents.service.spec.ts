@@ -974,6 +974,87 @@ describe('DocumentsService.listDocuments 富化：檔案＋連結點（C）', ()
    * 隨列數增長，本斷言依然會抓到。經與 tdd-implementation 之申訴核對（實測 117/118 綠、唯獨此行
    * 因常數過時而紅、且窮舉其餘管道皆與既有約束互斥後），確認 `2` 為正確之新事實值。
    */
+  /**
+   * 🔴 F017 `AC-E10`～`AC-E12`（2026-08-27 缺失 delta）：連結點目標「有無 ICSOP PDF」。
+   *
+   * 缺失原文＝「在清單頁點擊下載連結點程序書時，出現無法下載的問題」。實測查證後判定下載端點
+   * 本身正常，壞的是**目標根本沒上傳 PDF**（591 份僅 7 份有），而本回應從未帶過該事實 ⇒ 前端
+   * 只能一律畫成可下載、讓使用者點下去撞一句沒有原因的「無法下載」。
+   */
+  it('TS-E10-001 連結目標有 ICSOP PDF → targetHasPdf 為 true', async () => {
+    const d1 = store.seedDoc({ documentNumber: 'D1' });
+    const d2 = store.seedDoc({ documentNumber: 'D2' });
+    attachments.seed(d2.id, 'ICSOP_PDF', { fileName: 'target.pdf' });
+    await links.add(d1.id, d2.id);
+    const page = await svc.listDocuments({});
+    expect(itemOf(page, d1.id).links[0].targetHasPdf).toBe(true);
+  });
+
+  it('TS-E10-002 連結目標無 ICSOP PDF（含僅有 OJT）→ targetHasPdf 為 false', async () => {
+    const d1 = store.seedDoc({ documentNumber: 'D1' });
+    const d2 = store.seedDoc({ documentNumber: 'D2' });
+    const d3 = store.seedDoc({ documentNumber: 'D3' });
+    attachments.seed(d3.id, 'OJT_SIGNIN', { fileName: 'ojt.pdf' });
+    await links.add(d1.id, d2.id);
+    await links.add(d1.id, d3.id);
+    const page = await svc.listDocuments({});
+    const byTarget = new Map(itemOf(page, d1.id).links.map((l) => [l.targetDocumentId, l]));
+    expect(byTarget.get(d2.id)!.targetHasPdf).toBe(false);
+    expect(byTarget.get(d3.id)!.targetHasPdf).toBe(false);
+  });
+
+  /**
+   * 🔴 `AC-E10` 之「`undefined` ≠ `false`」：附件來源不可用時**省略本鍵**（未知），
+   * 前端據此維持既有可下載外觀（`AC-E12`）。若此處退化為 `false`，全部連結點都會被標成
+   * 不可下載——那是**新製造**的缺失，比原缺失更糟。
+   */
+  it('TS-E10-003 未注入 attachmentStore → targetHasPdf 為 undefined（不得降級為 false）', async () => {
+    const bare = new DocumentsService(store, undefined, undefined, links);
+    const d1 = store.seedDoc({ documentNumber: 'D1' });
+    const d2 = store.seedDoc({ documentNumber: 'D2' });
+    await links.add(d1.id, d2.id);
+    const page = await bare.listDocuments({});
+    const view = itemOf(page, d1.id).links[0];
+    expect(view.targetDocumentId).toBe(d2.id);
+    expect(view.targetHasPdf).toBeUndefined();
+    expect('targetHasPdf' in view).toBe(false);
+  });
+
+  it('TS-E10-004 getDocumentLinks 與清單取同一份事實（同一連結點兩支端點答案一致）', async () => {
+    const d1 = store.seedDoc({ documentNumber: 'D1' });
+    const d2 = store.seedDoc({ documentNumber: 'D2' });
+    const d3 = store.seedDoc({ documentNumber: 'D3' });
+    attachments.seed(d2.id, 'ICSOP_PDF', { fileName: 'target.pdf' });
+    await links.add(d1.id, d2.id);
+    await links.add(d1.id, d3.id);
+    const view = await svc.getDocumentLinks(d1.id);
+    const byTarget = new Map(view.map((l) => [l.targetDocumentId, l]));
+    expect(byTarget.get(d2.id)!.targetHasPdf).toBe(true);
+    expect(byTarget.get(d3.id)!.targetHasPdf).toBe(false);
+  });
+
+  /**
+   * 🔴 `AC-E10` 之效能紅線：`targetHasPdf` 須以**固定次數**之批次查詢取得。
+   * 常數 `3`＝自身 ICSOP PDF ＋ OJT ＋ 連結目標之 ICSOP PDF；與列數／連結數皆無關。
+   */
+  it('TS-E10-005 targetHasPdf 為固定次數批次（連結數與列數增加，往返數不變）', async () => {
+    const d1 = store.seedDoc({ documentNumber: 'D1' });
+    for (let i = 0; i < 6; i++) {
+      const t = store.seedDoc({ documentNumber: `T-${i}` });
+      await links.add(d1.id, t.id);
+    }
+    const batchSpy = jest.spyOn(attachments, 'findManyByType');
+    const singleSpy = jest.spyOn(attachments, 'findSingle');
+    await svc.listDocuments({});
+    expect(batchSpy).toHaveBeenCalledTimes(3);
+    expect(singleSpy).not.toHaveBeenCalled();
+
+    batchSpy.mockClear();
+    for (let i = 0; i < 20; i++) store.seedDoc({ documentNumber: `X-${i}` });
+    await svc.listDocuments({});
+    expect(batchSpy).toHaveBeenCalledTimes(3);
+  });
+
   it('富化為批次查詢（不隨列數退化為 N+1）', async () => {
     for (let i = 0; i < 5; i++) store.seedDoc({ documentNumber: `N-${i}` });
     const batchSpy = jest.spyOn(attachments, 'findManyByType');
