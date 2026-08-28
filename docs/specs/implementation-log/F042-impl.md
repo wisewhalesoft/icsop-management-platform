@@ -173,6 +173,54 @@ reader）｜`ojt-progress/{ojt-progress.controller,ojt-progress.service}.ts`（�
 | 同上（**反向對照**） | 不存在之 id → `{totalUnits:0, completedOrgCodes:[]}`（優雅降級，非 500） |
 | `/public/documents/:id`（`AC-24`） | **200**，`ojtUsingUnitCount: 11`（**非 0**，證明 reader 確實接線）、`ojtCompletedUnits: []`（正確——dev 兩筆場次皆待歸位，依 `AC-26` ① 不使任何單位判定為已完成）|
 
+## 🔴 第三輪：`docCoverage` 節流（`OQ-E11-21`，2026-08-28）
+
+使用者實機揪出之規模缺陷修正。`getSummary(session, docScope?)` 新增第二參數，`docCoverage`
+由陣列改為受限切片物件 `{scope, maxRows, items, shown, hidden, totalDocuments, byState, incompleteTotal}`。
+
+**實作檔**：`ojt-progress.service.ts`（型別＋`sliceDocCoverage()` 等三個 module-level 純函式＋
+`recentSessions()` 決定性次鍵）｜`ojt-progress.controller.ts`（`@Query('docScope')`）。
+✅ 已確認 `docCoverage` 無跨模組消費端（grep 全 `src/` 除 `ojt-progress/` 外零命中）。
+
+**測試**：ojt-progress 6 suite **85 案全綠**（原 59）；全量 **182 suite / 2838 測試全綠**；
+整合 **22 suite / 178 測試全綠**。未動任何測試檔、無異議。
+
+**三條刻意寫進註解的不變式**：
+1. **過濾 → 排序 → 截斷，順序不得調換**（先截斷再排序＝取到「寫入順序」前 N 筆，
+   高覆蓋率文件會因剛好排前面而逃過截斷）。
+2. **統計欄一律取自 `population`、不取自 `filtered`／`items`**（假綠陷阱 9：上限摻進統計後，
+   三種範圍各得看似合理卻互相矛盾的數字）。
+3. **不加 `orphaned` 過濾且那不是遺漏**——孤兒天然不成列；多加一道會掩埋「為何這裡不需要」。
+
+**`docScope` 正規化**：缺值與未知值 → `incomplete`，經 `docCoverage.scope` 回聲；
+🔒 **只在服務層做一份**，controller 不重複驗（兩份規則遲早分歧）。
+
+### 🔴 真庫實打揭露之產品面缺陷（已裁決，待新規格）
+
+> **fixture 再怎麼設計都看不到，只有真資料會說話。**
+
+對 dev 真庫（`SOP`）實打端點之事實：
+- `totalDocuments=591`、`byState={all:0, partial:1, none:590}`、`hidden=576` ⇒ 節流確有必要。
+- **591 份文件中僅 4 份設有使用部門**（`SELECT COUNT(DISTINCT documentId) FROM DOC_USING_DEPT`）。
+  其餘 587 份 `totalUnits=0`，依 `AC-04` 歸為 `none`、覆蓋率 0/0 取 0 ⇒ **並列第一、占滿前 15 名**。
+- ⇒ **唯一一份真有訓練進度的文件（`partial`，0.5）排在第 591 名，預設範圍下永遠看不到**；
+  使用者看到的 15 筆全是「根本沒有訓練義務」的文件。
+- 五種 `docScope`（含缺值與 `bogus`）實打：正規化正確、HTTP 200 非 400，且
+  **跨五次請求之統計欄與 `coverage`／`deptRollup`／`recentSessions` 完全相同**
+  ⇒ 不變式在**真資料**上成立，不只在 fixture 上。
+
+**✅ 使用者裁決＝「拆成獨立統計 ＋ 沉底」**（2026-08-28）：`totalUnits===0` 自成一態
+（`未指定使用部門`，與「尚未開始」分離）、摘要行列份數、排序沉底不占名額、
+`僅未全部完成` 範圍不含它們、`incompleteTotal` 排除它們。
+⏸ **本棒暫緩**，待 ux-fix 定稿 prototype、sw-fix 寫入 `AC-14` 與端點契約（`byState` 可能加第四鍵）
+並更新約束環後再實作。**現行 182/182 ＋ 22/22 為有效基準線，不得先行改動。**
+
+### ⚠ 兩個**未被驗證**的上界（非「已驗證安全」）
+
+對 dev 真庫查證：`recentSessions` 30 天窗口內 **2 筆**，**把窗口整個拿掉也是 2 筆**
+⇒ 窗口目前排除不掉任何一列；前端「上限 8」更從未被觸碰。
+🔴 兩者在真實負載下之行為**仍屬未知**，收尾時須明確標示為「未被驗證的上界」。
+
 ## 部署面核對
 
 - 新端點皆在 `/admin/` 前綴下，nginx `location /admin/` 與 vite proxy 已覆蓋，**無新增頂層路由**
