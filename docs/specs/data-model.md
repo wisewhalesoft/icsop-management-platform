@@ -1,9 +1,9 @@
 ---
 spec-id: data-model
 title: 資料模型（概念層）
-version: 1.7
-date: 2026-08-20
-status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.5 之 ACCOUNT.userSubtype 段落為 🟢 APPROVED 2026-08-11 人類閘門通過**；**v1.6 之 USAGE_FORM_POOL／DOC_USAGE_FORM 補登錄與 `formNumber` 新欄為 2026-08-16 使用者裁決**；**v1.7 新增 [USAGE_FORM_DRAFTING_DEPT](#usage-form-drafting-dept) 實體＋`AUDIT_LOG` 兩項 additive 擴充，為 2026-08-20 使用者裁決（D9 delta）**；**v1.8 新增 [ACCOUNT.roleSource](#account-role-source) 欄位，為 2026-08-25 人類閘門通過之角色自動化 delta**）
+version: 1.10
+date: 2026-08-28
+status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.5 之 ACCOUNT.userSubtype 段落為 🟢 APPROVED 2026-08-11 人類閘門通過**；**v1.6 之 USAGE_FORM_POOL／DOC_USAGE_FORM 補登錄與 `formNumber` 新欄為 2026-08-16 使用者裁決**；**v1.7 新增 [USAGE_FORM_DRAFTING_DEPT](#usage-form-drafting-dept) 實體＋`AUDIT_LOG` 兩項 additive 擴充，為 2026-08-20 使用者裁決（D9 delta）**；**v1.8 新增 [ACCOUNT.roleSource](#account-role-source) 欄位，為 2026-08-25 人類閘門通過之角色自動化 delta**；**v1.9 新增 [OJT_SESSION](#ojt-session-entity) 實體草案＋`ICSOP_DOCUMENT` 第 17 欄改寫，為 2026-08-27 E11 OJT 進度管理（[F042](features/F042-ojt-progress-management.md)）Phase A 架構草案**；**🟢 v1.10（2026-08-28）人類閘門已對 E11 全部 16 題 OQ 裁決完畢，[OJT_SESSION](#ojt-session-entity) 段落全數收斂為定案**（`OQ-E11-01=C`／`02=C`／`03=B`／`04=A`／`05`～`07=B`／`09=A`／`10=A`／`11=A`／`13=B`／`16=B`；`OQ-E11-05`／`12`／`15` 為授權矩陣值域與 UI 篩選範圍，不影響資料模型本體）**）
 ---
 
 # 資料模型（Data Model）
@@ -20,6 +20,8 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 > **🔵 v1.6（2026-08-16）使用者裁決（缺失／變更 delta 第 18 項）**：① **補登錄 [USAGE_FORM_POOL](#usage-form-entity)／[DOC_USAGE_FORM](#doc-usage-form) 兩實體**（F018 早已實作，本文件此前缺漏——`OQ-E10-05` 就此**結案**）；② `USAGE_FORM_POOL` **新增選填欄 `formNumber`（表單編號）**——`nullable`、trim 後儲存、**唯一（不分大小寫、`null` 不參與比對）**、`nvarchar(100)`；既有列一律 `null`、不自動產生。權威規格見 [F018 §表單編號 delta](features/F018-usage-form-management.md#form-number-delta)。**本項為 2026-08-16 delta 中唯一需 migration 者**（MSSQL 須以 **filtered unique index `WHERE formNumber IS NOT NULL`** 實作）。**`APPENDIX_POOL` 刻意不比照新增編號欄**（OQ-D18-23）。
 > **🔴 v1.7（2026-08-20）使用者裁決（缺失／變更 delta 9 項之第 5／7／8 項）**：① **新增 [USAGE_FORM_DRAFTING_DEPT](#usage-form-drafting-dept)**（使用表單↔制定部門多對多，`OQ-D9-17` 選項 B＝比照 `DOC_USING_DEPT`）——**本輪唯一需 migration 者**；🔴 該表為**純 metadata**（`OQ-D9-18` 選項 A），**與結構同構之 `DOC_USING_DEPT` 用途相反**，四條回歸鎖定 AC 明文保護。② `AUDIT_LOG` **兩項 additive 擴充**（**皆不需 migration**——`actionType`／`targetType` 為無 CHECK 之 varchar）：**(a)** 新增 `actionType='ATTACHMENT_UPLOAD'` **＋ `targetType='DOCUMENT_ATTACHMENT'`**（主管／部門窗口之 OJT 上傳，`OQ-D9-23`；🔴 **`targetType` 為 2026-08-20 第二輪依 `OQ-D9-29` 裁決新增之第 8 個值**——刻意不沿用 `DOCUMENT`，否則 F024「文件」類會被非調閱事件污染且無從排除）；**(b)** **後台四條下載端點開始寫入本表**（`OQ-D9-10`，**推翻 `OQ-FM-01`「後台不寫稽核」**），沿用既有列舉、新增「表單池／附錄池管理頁下載之 `documentId` 為 `null`」之明列例外。**其餘實體與欄位皆不變。**
 > **v1.3（2026-08-06）新增 E10 附錄管理（F039）相關實體**：`APPENDIX_POOL`（附錄池）＋`DOC_APPENDIX`（文件↔附錄多對多關聯，**帶 `sortOrder`**）；併同 `AUDIT_LOG` 之 **additive 擴充**（`targetType` 新增 `APPENDIX`、新增 `appendixId` 參照欄）與 `ICSOP_DOCUMENT` 新增第 20 欄「附錄」。權威規格見 [F039](features/F039-appendix-management.md)。
+> **v1.9（2026-08-27）Phase A 架構草案（[F042](features/F042-ojt-progress-management.md)，system-architect 棒 3）**：新增 [OJT_SESSION](#ojt-session-entity) 實體（教育訓練場次記錄，`(documentId, orgCode)` 為歸屬鍵，每列可累積 0..* 筆場次；與 [DOC_USING_DEPT](#doc-using-dept) 之關係為**衍生 join、非 FK**）；[ICSOP_DOCUMENT](#document-entity) 第 17 欄「OJT 實體簽到表」改寫為**衍生聚合**（基數、資料來源、可寫角色三者皆變，原文逐字保留於註記）；[DOCUMENT_ATTACHMENT](#attachment-entity) 之 `OJT_SIGNIN` 型別去留、[AUDIT_LOG](#auditlog-entity) 之使用單位維度皆以兩／三案影響對照呈現（Phase A 紀律，9 題 BLOCKING OQ 未裁決）。**⚠ 檔頭 version/date 前次（v1.8 roleSource delta）未同步遞增，本次一併補正，v1.8 內容不受影響、逐字保留。→ 已於 v1.10 收斂為定案，見下方 v1.10 note。**
+> **🟢 v1.10（2026-08-28）人類閘門已對 E11 全部 16 題 OQ 裁決完畢，[OJT_SESSION](#ojt-session-entity) 段落收斂為定案**：`orgCode` 改為 **nullable**（`OQ-E11-01=C`：`NULL`＝既有單份 OJT 附件遷移之待歸位列，由 ICSOPAdmin 手動歸位）；新增 `orphanedAt` 欄（`OQ-E11-02=C`：使用部門移除時軟標記，不計統計、保留稽核回溯，重新掛回即清空復活）；`trainingDate` 必填、不可未來日（`OQ-E11-09=A`）；場次生命週期為 **append＋delete only，無 update 路徑**（`OQ-E11-04=A` 僅 ICSOPAdmin 可刪；`OQ-E11-16=B` 不可編輯）；`AUDIT_LOG` 使用單位維度定案為新立 `actionType='OJT_SESSION_UPLOAD'／'OJT_SESSION_DELETE'`＋`targetType='OJT_SESSION'`＋additive `orgCode` 欄（`OQ-E11-13=B`）；`DOCUMENT_ATTACHMENT.type='OJT_SIGNIN'` 定案為**完全移除**（`OQ-E11-11=A` 舊端點回 404＋`OQ-E11-01=C` 之遷移為完整所有權轉移）；TAB1 覆蓋率／rollup 查詢納入 `ORG_UNIT.isActive` 過濾（`OQ-E11-03=B`）與部層 rollup／30 天窗口（`OQ-E11-07=B`）。**原三案／兩案對照表降級保留為「已裁決＋其餘案代價紀錄」，供追溯。** 本輪僅動 `data-model.md`／`error-handling.md`／`diagrams/F042-ojt-progress*.mmd`，未觸及 F042.md／open-questions.md／feature-status.md（sw-ojt 並行回填）與 prototypes/（ux-ojt 並行）。
 
 ## 實體總覽
 
@@ -36,6 +38,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | ICSOP_DOCUMENT | ICSOP 文件（19 欄位主體＋F039 新增第 20 欄「附錄」） | 本系統 |
 | DOCUMENT_LINK | 文件連結點（文件間關聯） | 本系統 |
 | DOCUMENT_ATTACHMENT | 附件（ICSOP PDF / OJT；`type='USAGE_FORM'` 為池模型導入前之歷史型態） | 本系統（檔案於 Azure Blob） |
+| **OJT_SESSION** | 教育訓練場次記錄（`(documentId, orgCode)` 為歸屬鍵，每列 0..* 筆場次；取代 `DOCUMENT_ATTACHMENT.type='OJT_SIGNIN'` 之單份覆蓋模式，[F042](features/F042-ojt-progress-management.md)／E11，2026-08-27 Phase A 草案） | 本系統（檔案於 Azure Blob） |
 | USAGE_FORM_POOL | 使用表單池（跨文件共用，含選填唯一之 `formNumber`，F018） | 本系統（檔案於 Azure Blob） |
 | DOC_USAGE_FORM | 文件↔使用表單多對多關聯（**無** `sortOrder`，F018） | 本系統 |
 | **USAGE_FORM_DRAFTING_DEPT** | 使用表單↔**制定部門**多對多關聯（`formId, orgCode`，可任意層級、可複選；**純 metadata、不參與任何權限判定**，F018／2026-08-20 新增） | 本系統 |
@@ -333,7 +336,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | 14 | ICSOP PDF（檔案） | attachment(ICSOP_PDF) | 1 | Azure Blob，覆蓋式，提供下載 | ICSOPAdmin |
 | 15 | 使用表單 | attachment(USAGE_FORM) | 0..* | excel/pdf，Azure Blob | ICSOPAdmin |
 | 16 | 公告日期 | announcedDate | 1 | 日期**（原「發布日期 publishedDate」改名）**；決定有效文件顯示為已公告/進度中 | ICSOPAdmin |
-| 17 | OJT 實體簽到表 | attachment(OJT_SIGNIN) | 1 | pdf 或圖片，覆蓋式 | ICSOPAdmin |
+| 17 | OJT 實體簽到表 | hasOjt（衍生聚合，🔴 2026-08-27 F042 delta；📝 原文見下方註記） | 0..1（衍生布林；非附件基數） | 顯示「已完成 OJT 之使用單位清單」，來源＝[OJT_SESSION](#ojt-session-entity) 分組計數 vs [DOC_USING_DEPT](#doc-using-dept)；**不提供任何上傳/覆蓋操作入口**（[F042](features/F042-ojt-progress-management.md) `AC-04`／`AC-21`／`AC-22`） | 無（系統衍生） |
 | 18 | 文件名稱（程序書書名） | documentName | 1 | 人為定義之可讀標題，與編號分離；前台清單顯示、關鍵字搜尋涵蓋（OQ-DATA-01） | ICSOPAdmin |
 | 19 | 內容摘要 | contentSummary | 1 | 程序書內容摘要（可讀文字）**新增** | ICSOPAdmin |
 | 20 | 附錄 | appendixIds | 0..* | → APPENDIX_POOL（經 [DOC_APPENDIX](#doc-appendix)，**有序**，`sortOrder` 1..N）；excel/pdf，Azure Blob，跨文件共用**（F039 新增，2026-08-06）** | ICSOPAdmin |
@@ -345,6 +348,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - 版本策略：僅保存當前版本，覆蓋儲存，UUID 不變，不留歷史版本檔（F011）。
 - 「所屬節點」不在文件表單設定，一律經節點抽屜（F009）掛載/改派。
 - 欄位層級可寫/唯讀依 F026 矩陣；主管、部門窗口、**系統管理員**對所有欄位**皆唯讀**（定案），僅 ICSOPAdmin 可寫。
+- 🔴 **第 17 欄「OJT 實體簽到表」改寫為衍生聚合（2026-08-27，[F042](features/F042-ojt-progress-management.md)／E11 Phase A 草案，system-architect 棒 3）**：📝 **原文逐字保留供追溯**——「17｜OJT 實體簽到表｜attachment(OJT_SIGNIN)｜1｜pdf 或圖片，覆蓋式｜ICSOPAdmin」。⚠ **一併登錄既有殘留**：本表「可寫角色」欄自 2026-08-20 D9 delta（`OQ-D9-19`／`OQ-D9-20`，[F016](features/F016-pdf-ojt-attachment.md#ojt-role-open-delta) `AC-N28`）起，Supervisor／DeptContact 亦可經文件表單之破例入口寫入本附件，**但本表格自 2026-08-20 至今從未同步反映**（仍僅載 `ICSOPAdmin`）——屬既有文件缺口，本次一併登錄；因 F042 `AC-22` 已將該 D9 破例**連同 ICSOPAdmin 之原本可寫性一併收回**（詳見 F042 §既有行為反轉總表 甲節），此殘留缺口之更正意義僅止於**追溯記錄**、不影響現行欄位表之最終值（現行值已直接為「無（系統衍生）」）。
 - **相關功能**：F010、F011、F012、F013、F014、F015、F016、F017、F019、F020、F026。
 
 ### 附屬關聯表
@@ -381,7 +385,196 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - `USAGE_FORM` 多份（excel/pdf），個別新增/移除。
 - 存取須經權限驗證＋短效期憑證（SAS Token），禁止直接猜測網址存取（[NFR-002](nfr.md#security)）。
 - 檔案大小上限與允許格式清單為 open-questions。
+- 🟢 **`OJT_SIGNIN` 型別之去留（已裁決＝完全移除，2026-08-28，[F042](features/F042-ojt-progress-management.md)／E11）**：本文件所述之單份覆蓋式 `OJT_SIGNIN` 附件已被 F042 之「文件 × 使用單位」多場次模型取代（新資料落於 [OJT_SESSION](#ojt-session-entity)，非本表）。既有 `OJT_SIGNIN` 列經 `OQ-E11-01=C` 定案之遷移（1:1 所有權轉移至 `OJT_SESSION`）後**完全移除**（`OQ-E11-11=A`），詳見 [OJT_SESSION §既有資料遷移](#ojt-session-migration)。
 - **相關功能**：F016、F018、F020。
+
+## OJT 場次 OJT_SESSION {#ojt-session-entity}
+
+> 🟢 **2026-08-27 新增（Phase A 草案）／2026-08-28 收斂為定案（system-architect 棒 3）**：[F042](features/F042-ojt-progress-management.md)「OJT 進度管理」之場次記錄實體，取代 [DOCUMENT_ATTACHMENT](#attachment-entity) 之單份覆蓋式 `OJT_SIGNIN`。人類閘門已對 E11 全部 16 題 OQ 裁決完畢；本節之既有資料遷移、孤兒場次、稽核維度等資料層決策已收斂為定案（`OQ-E11-01=C`／`02=C`／`13=B` 等，逐節見下），未採用之選項降級保留於各節末供追溯。
+
+以「**一份 ICSOP 文件 × 一個使用單位**」為歸屬鍵，每列＝一次教育訓練場次事實（同一單位可累積 0..* 筆，F042 五項凍結裁決之 2）。
+
+| 屬性 | 說明 | 必填 |
+|------|------|------|
+| id | 系統 UUID | 是 |
+| documentId | 所屬文件（→ [ICSOP_DOCUMENT](#document-entity)，**FK ON DELETE CASCADE**——刪除文件時一併清除其全部場次，比照 [DOC_USING_DEPT](#doc-using-dept) 之既有 FK 慣例） | 是 |
+| companyCode | 所屬公司代碼（恆等同其文件之 `companyCode`；比照 [DOC_USING_DEPT](#doc-using-dept) 之 B 階段多公司不變式，避免跨公司比對誤中） | 是 |
+| orgCode | 使用單位之組織代碼（`VW_DEPT_SQL.CODE`）。**與 [DOC_USING_DEPT](#doc-using-dept) 之關係為衍生 join，非 FK**——理由見下方「與 DOC_USING_DEPT 之一致性策略」。🟢 **`nullable`（`OQ-E11-01=C` 定案）**：`NULL`＝既有單份 `OJT_SIGNIN` 附件遷移而來、尚未指派使用單位之「待歸位」列，由 ICSOPAdmin 手動歸位（`UPDATE`一次性填入實際值，單向、不可再改回 `NULL`）；正常登記流程（`AC-05`）建立之場次必為非 `NULL` | 否（唯遷移之待歸位列例外） |
+| orphanedAt | 🟢 **新增（`OQ-E11-02=C` 定案）**：該場次所屬單位自文件之使用部門移除之時間戳記。`NULL`＝目前仍是使用部門，或從未被移除，或已重新掛回（復活語意，見下方「孤兒場次」）；有值＝該時間點起已自使用部門移除，**不計入任何統計分子分母**，僅供稽核回溯 | 否 |
+| trainingDate | 訓練日期。🟢 **必填、不可為未來日（`OQ-E11-09=A` 定案）**。⚠ **遷移待歸位列之例外**：`OQ-E11-01=C` 之遷移列以既有附件之 `uploadedAt` 日期作**最佳近似值**（非真實訓練日期，來源已不可考）；因 `OQ-E11-16=B` 場次不可編輯，若近似值有誤，更正路徑為 ICSOPAdmin 依 `OQ-E11-04=A` 刪除該筆後另行登記正確資料 | 是（唯遷移待歸位列為近似值） |
+| fileName | 簽到表原始檔名 | 是 |
+| blobPath | Azure Blob 參照路徑。🟢 **路徑格式定案 `documents/{documentId}/ojt/{orgCode}/{uuid}.{ext}`（`OQ-E11-10=A`）**，僅適用**正常登記流程**新建立之場次；`OQ-E11-01=C` 遷移之待歸位列（`orgCode IS NULL`）**沿用遷移前之舊路徑格式**（`documents/{documentId}/ojt_signin/{uuid}.{ext}`，`attachments.service.ts` 既有 `buildAttachmentBlobPath()` 之既有輸出），**歸位時不搬移**——理由見下方「既有資料遷移」 | 是 |
+| contentType | MIME 類型 | 是 |
+| size | 檔案大小（bytes）。🟢 **上限定案沿用既有 `MAX_FILE_SIZE_BYTES`（50MB，`OQ-E04-06`／`OQ-E11-10=A`）** | 是 |
+| uploadedBy | 上傳者帳號（accountId） | 是 |
+| uploadedAt | 上傳時間 | 是 |
+
+- **索引**：`(documentId, orgCode)` 為**非唯一**索引（同一單位可累積多筆場次，與 [DOC_USING_DEPT](#doc-using-dept) 之複合**唯一**索引刻意不同）；供 TAB2 分組查詢與 `hasOjt` 富化之批次聚合（見下方「建議查詢形狀」）。
+- **🔴 拒絕之替代方案：不採 usage-forms／appendices 之池模型（多對多）**。[USAGE_FORM_POOL](#usage-form-entity)／[APPENDIX_POOL](#appendix-entity) 之池模型成立前提是「同一份檔案可被多份文件重用」；OJT 場次天生綁定單一 `(documentId, orgCode)`，同一場次紀錄**不存在**跨文件或跨單位重用之業務情境，池模型之多對多關聯表在此僅是無謂的間接層。
+
+### 與 DOC_USING_DEPT 之一致性策略：衍生 join，不建 FK 指向其列 id {#ojt-session-consistency}
+
+🔴 **本節為本實體最關鍵之取捨，逐字保留供後續實作對照**。
+
+- `OJT_SESSION.orgCode` 對 [DOC_USING_DEPT](#doc-using-dept) 之對應關係，一律以**值比對**（`OJT_SESSION.documentId = DOC_USING_DEPT.documentId AND OJT_SESSION.orgCode = DOC_USING_DEPT.orgCode`）成立，**不建 DB 層 FK 指向 `DOC_USING_DEPT.id`**。
+- **理由**：文件之使用部門編輯（`usingDeptIds` patch）採**delete-then-insert 全量取代**（`backend/src/documents/typeorm-documents.store.ts:413-424`）——每次編輯，既有全部 `DOC_USING_DEPT` 列（含其代理鍵 `id`）皆被刪除、以新列重建，即便本次編輯只增減其中一個單位。若 `OJT_SESSION` 以 FK 指向 `DOC_USING_DEPT.id`，任何一次使用部門編輯都會因 FK CASCADE 而**抹掉該文件全部使用單位之全部場次**——不論被編輯之單位是否涉及該場次——直接牴觸 F042 `AC-02`（場次為累加之歷史事實，不應因編輯另一個欄位而消失）。
+- 改以**值**比對後，`DOC_USING_DEPT` 代理鍵之每次重建完全不影響 `OJT_SESSION` 之存續：只要 `orgCode` 值仍在當下使用部門集合內，衍生 join 即天然成立；集合外之 `orgCode`（孤兒場次）之後續呈現依 `OQ-E11-02=C` 定案（軟標記，見下）。
+- **此設計之附帶效益**：`hasOjt` 聚合與 TAB2 之「單位是否仍在使用部門」判定天然一致（見下方查詢形狀之 `INNER JOIN`／`LEFT JOIN`），孤兒場次無論 `OQ-E11-02` 選哪一案，皆**不會**被誤計入 `hasOjt` 之完成分子（`INNER JOIN` 天然排除不在當下 `DOC_USING_DEPT` 集合內之 `orgCode`）。
+
+### 孤兒場次：OQ-E11-02 之資料層落地（🟢 已裁決＝(C) 軟標記） {#ojt-session-orphan}
+
+> 🟢 **2026-08-28 人類閘門裁決＝(C)**：使用部門移除時軟標記，不計統計、保留稽核回溯。以下先敘述定案之具體資料層動作，(A)／(B) 之代價紀錄降級保留於段末供追溯。
+
+當 ICSOPAdmin 編輯文件之 `usingDeptIds` 並送出新的使用部門集合時，`TypeOrmDocumentStore.update()` 的 `usingDeptIds` patch 交易（`typeorm-documents.store.ts:413-424`）除既有之 `DOC_USING_DEPT` delete-then-insert 外，**新增兩道 `OJT_SESSION` 副作用**（同一交易內，緊接 `DOC_USING_DEPT` 重建之後）：
+
+```sql
+-- 1) 孤兒化：不在新集合內、且尚未被標記過孤兒之場次
+UPDATE OJT_SESSION
+SET orphanedAt = SYSUTCDATETIME()
+WHERE documentId = :id
+  AND orgCode NOT IN (:newOrgCodes)
+  AND orgCode IS NOT NULL        -- 待歸位列（orgCode IS NULL）不受使用部門編輯影響
+  AND orphanedAt IS NULL;
+
+-- 2) 復活：重新回到新集合內、先前曾被孤兒化之場次（orphanedAt 清空）
+UPDATE OJT_SESSION
+SET orphanedAt = NULL
+WHERE documentId = :id
+  AND orgCode IN (:newOrgCodes)
+  AND orphanedAt IS NOT NULL;
+```
+
+- **不變式**：`orphanedAt IS NULL ⟺ orgCode ∈ 該文件當下之 DOC_USING_DEPT 集合`（`orgCode IS NULL` 之待歸位列除外，其孤兒化語意不適用，見上方「1)」之排除條件）。兩道 `UPDATE` 皆為冪等（重複套用同一新集合不改變結果），可安全地在每次 `usingDeptIds` patch 皆執行、不需先行 diff 比對舊值。
+- **查詢面影響**：`orphanedAt IS NOT NULL` 之列**明確排除**於 TAB1 覆蓋率／完成率分子分母（見下方「建議查詢形狀」）；TAB2 之進度列本就由 `DOC_USING_DEPT` 驅動（`LEFT JOIN`），孤兒場次不因 `orphanedAt` 而改變其「不產生進度列」之既有行為（`orphanedAt` 只用於**排除統計**，不用於**產生額外可見性**）；稽核回溯（如既有下載端點、未來若有的稽核查詢頁）不受 `orphanedAt` 影響，孤兒場次之既有 `AUDIT_LOG` 紀錄照舊可查。
+- **Blob 處置**：孤兒化**不**回收 Blob（與 (A) 硬刪之差異）——`blobPath` 隨場次列一併保留，僅在該場次日後被 ICSOPAdmin 依 `OQ-E11-04=A` 主動刪除時才回收。
+
+**其餘案代價紀錄（供追溯，未採用）**：
+- **(A) 硬刪場次＋Blob 檔**：需在 `usingDeptIds` patch 交易內對移除單位之場次執行實體 `DELETE`＋逐筆回收 Blob；代價＝已完成之教育訓練事實**無法回溯**，且既有 `AUDIT_LOG` 紀錄會指向已不存在之場次。**未採用**：與「場次為歷史事實」之產品前提直接衝突。
+- **(B) 孤兒保留、零額外程式碼**：`usingDeptIds` patch 完全不變，`OJT_SESSION` 列原樣留存但不可查詢排除。**未採用**：Blob 無限期累積且無法於統計層明確排除孤兒場次（僅能透過「不在 TAB2 產生進度列」間接隱藏，稽核追溯時無法區分「單位仍在使用」與「單位已移除但場次還在」）。
+
+### 既有 OJT_SIGNIN 資料遷移：OQ-E11-01 之資料層落地（🟢 已裁決＝(C) 待歸位） {#ojt-session-migration}
+
+> 🟢 **2026-08-28 人類閘門裁決＝(C)**：既有單份 OJT 檔標記為「待指派單位」，由 ICSOPAdmin 手動歸位。`orgCode` 已定案為 `nullable`（見上方欄位表），(C) 之互斥（`NOT NULL` 無法承載「待指派」狀態）已解除。以下為定案之具體遷移步驟；(A)／(B) 之代價紀錄降級保留於段末供追溯。
+
+**遷移步驟（單一資料遷移，`INSERT`＋`DELETE` 同交易，逐筆或集合式皆可）**：對每筆既有 `DOCUMENT_ATTACHMENT(type='OJT_SIGNIN')`：
+
+1. **`INSERT` 一筆 `OJT_SESSION`**（**1:1**，非依使用單位數展開）：`orgCode = NULL`（待歸位）、`companyCode` = 該文件之 `companyCode`、`trainingDate` = `DATE(該附件.uploadedAt)`（最佳近似值，見上方欄位表之遷移例外註記）、`fileName`／`contentType`／`size`／`uploadedBy`／`uploadedAt` 逐欄複製、`blobPath` **沿用原值不變**（同一 Blob 物件，所有權由 `DOCUMENT_ATTACHMENT` 移交 `OJT_SESSION`，非物理複製）。
+2. **`DELETE` 該筆 `DOCUMENT_ATTACHMENT`**——所有權完整轉移，避免同一 `blobPath` 被兩張表各自參照而在刪除路徑上產生「誰能回收這個 Blob」之歸屬爭議。**此為 (C) 案下不需要類似 [APPENDIX_POOL](#appendix-entity) `countLinks` 引用計數的關鍵原因**：1:1 遷移下每個 `blobPath` 恆為單一擁有者，日後刪除（`OQ-E11-04=A`）沿用既有「刪列即回收 blob」之單一擁有者假設即可。
+
+**「歸位」操作（ICSOPAdmin 專用，日常操作，非一次性遷移）**：
+
+```sql
+UPDATE OJT_SESSION
+SET orgCode = :assignedOrgCode
+WHERE id = :sessionId
+  AND orgCode IS NULL;   -- 僅允許對待歸位列生效，已歸位列不可再變更（單向）
+```
+
+- **不搬移 Blob**：歸位後 `blobPath` 仍維持遷移時沿用之舊格式（`documents/{documentId}/ojt_signin/{uuid}.{ext}`），**不**改寫為新制路徑（`documents/{documentId}/ojt/{orgCode}/{uuid}.{ext}`）。理由：①`blobPath` 之作用僅為 Blob 定址與可追溯性，系統內無任何程式路徑反解析其路徑字串以取得 `orgCode`（DB 欄位才是權威）；②搬移需要「複製新路徑＋刪舊路徑＋更新 DB」三步驟，任一步失敗即產生孤兒或遺失參照之風險，純屬不必要的複雜度；③歸位操作維持「單一 `UPDATE` 陳述式」之最簡形狀，不外溢至 Blob I/O。**新制路徑僅適用正常登記流程新建立之場次**——兩種路徑格式於歷史資料中永久並存，屬刻意之歷史標記，非缺陷。
+- **不是「編輯」**：`OQ-E11-16=B`（場次不可編輯）之範圍是**已歸位場次**之 `trainingDate`／檔案異動；「歸位」是待歸位列（`orgCode IS NULL`）之單次歸屬指派，屬 (C) 案專屬之一次性收斂操作，**不重新開放**一般場次之編輯能力——已歸位場次若 `trainingDate` 近似值有誤，更正路徑仍是「刪除＋重新登記」（`OQ-E11-04=A`），非「歸位再編輯」。
+- **1:1 之產品面後果（明文，非新開放問題）**：因遷移為 1:1（1 筆舊附件 → 1 筆待歸位場次 → 歸位後對應**恰 1 個**使用單位），若 ICSOPAdmin 判斷同一份舊簽到檔實際上適用於文件之**多個**使用單位，本設計**不支援**一次歸位對應多個單位——需為其餘單位另行透過正常登記流程（`AC-05`）新增獨立場次。此為 1:1 遷移形狀之直接後果，非本節之開放問題。
+- **待歸位列之可見性**：`orgCode IS NULL` 之列不會出現在 TAB2（`DOC_USING_DEPT` 驅動之 `LEFT JOIN` 對 `NULL` 恆不匹配）、不計入 `hasOjt`（`INNER JOIN` 同理天然排除，見下方查詢形狀）、不出現於 TAB1「最近完成」。資料層已具備 `WHERE orgCode IS NULL` 之查詢能力供待歸位工作台使用；工作台本身之端點/UI 落點不在本輪收斂範圍內。
+
+**其餘案代價紀錄（供追溯，未採用）**：
+- **(A) 複製為各使用單位之初始場次**：對每筆舊附件依其全部使用單位各插入一筆場次。**未採用**：憑空製造未經證實之完訓事實（一份簽到檔不能證明 N 個單位都辦過訓練），且 N 筆共用同一 `blobPath` 需要額外之引用計數機制。
+- **(B) 保留為文件層級 legacy，不搬遷**：`OJT_SESSION` 表自始為空。**未採用**：既有「已完成 OJT」之單位於新畫面上全部歸零顯示為未完成，使用者體驗倒退。
+
+### DOCUMENT_ATTACHMENT.type='OJT_SIGNIN' 列舉值去留：OQ-E11-11 之落地（🟢 已裁決＝完全移除）
+
+> 🟢 **2026-08-28 人類閘門裁決**：舊端點 `POST /admin/documents/:documentId/attachments/ojt` 移除、回 404（`OQ-E11-11=A`）。承上「既有資料遷移」之 1:1 所有權轉移機制（`INSERT OJT_SESSION` ＋ `DELETE DOCUMENT_ATTACHMENT` 同交易），遷移完成後**不會再有任何 `type='OJT_SIGNIN'` 之 `DOCUMENT_ATTACHMENT` 列存在**——故列舉值定案為**完全移除**（原兩案對照之 (A) 保留唯讀 legacy 已無資料可保留，故不成立；直接收斂為 (B)）。
+
+- **落地動作**：`SingleAttachmentType`（`attachments.store.ts`）之型別聯集移除 `'OJT_SIGNIN'`；`attachments.service.ts:43` 之 `LIST_ORDER` 移除 `'OJT_SIGNIN'`（後台文件表單附件清單不再呈現）；`FIELD_KEY_BY_TYPE`（`attachments.service.ts:77-80`）移除該分支；`file-rules.ts` 之 `FileCategory`／`ALLOWED_FORMATS['OJT_SIGNIN']` 亦一併移除（新場次之格式驗證改由 `OJT_SESSION` 上傳流程自行沿用同一份 pdf/jpg/png/50MB 規則，非透過本列舉）。
+- **與遷移之先後依賴**：本移除**必須晚於**「既有資料遷移」完成（移除發生於同一支資料遷移之 `DELETE` 步驟內，非另一支獨立 migration）——資料遷移與列舉退場為同一次資料層事件，非分兩批。
+
+### 建議查詢形狀（🔴 效能紅線：固定次數批次查詢，不得 N+1） {#ojt-session-query-shape}
+
+呼應 [F017](features/F017-backend-document-list.md#ojt-derived-semantics-delta) `AC-J15` 與本檔既有教訓（`backend/src/documents/documents.service.ts:376` `enrichOjt()` 現況即為「單次批次查詢，往返數與列數無關」之既有慣例）。**下列 Q1／Q2 供 F017 清單頁 `hasOjt` 富化與 F042 `AC-21`，範圍為 `DocumentsModule` 對頁面文件之批次查詢，不受 `OQ-E11-03`（TAB1 專屬之裁撤過濾）拘束**——F042 AC-17 明文將該題之效力限定於 TAB1 之 `AC-14`／`AC-15`，`hasOjt` 之計算不在其列：
+
+```sql
+-- Q1：頁面文件之「總使用單位數」（既有表，未變）
+SELECT documentId, COUNT(*) AS totalUnits
+FROM DOC_USING_DEPT
+WHERE documentId IN (:pageDocumentIds)
+GROUP BY documentId;
+
+-- Q2：頁面文件之「已完成單位數」——INNER JOIN 天然只計入「當下仍是使用部門」之場次，
+--     孤兒場次（orphanedAt 標記與否無關，因 orgCode 不再匹配任何 DOC_USING_DEPT 列而自動
+--     被排除）與待歸位場次（orgCode IS NULL，與任何值皆不匹配，含自身）皆自動排除，
+--     無需額外的 WHERE 過濾邏輯（OQ-E11-01=C／OQ-E11-02=C 皆已定案後，此性質確認成立）。
+SELECT s.documentId, COUNT(DISTINCT s.orgCode) AS completedUnits
+FROM OJT_SESSION s
+INNER JOIN DOC_USING_DEPT d
+  ON d.documentId = s.documentId AND d.orgCode = s.orgCode
+WHERE s.documentId IN (:pageDocumentIds)
+GROUP BY s.documentId;
+```
+
+兩次查詢皆與頁面列數無關（固定 2 次），於記憶體以 `Map<documentId, {totalUnits, completedUnits}>` 比對：`hasOjt = totalUnits > 0 && completedUnits >= totalUnits`（`totalUnits === 0` 之空集合規則見 F042 `AC-04` Edge Cases）。TAB2「已完成單位清單」（F042 `AC-21`）與清單頁 `hasOjt`（F017）**共用同一份底層事實**（`AC-04` 之明文要求），僅呈現形狀不同——建議由 `documents` 模組自建之 port 同時回傳 `completedOrgCodes: string[]`（而非只回傳布林），供兩處呈現各自取用，避免兩套獨立查詢／兩套獨立判定邏輯分岔（詳見 [F042 §架構設計](features/F042-ojt-progress-management.md#architecture)）。
+
+TAB2 之進度列（依使用單位分組、含場次數）建議形狀：
+
+```sql
+SELECT d.documentId, d.orgCode, COUNT(s.id) AS sessionCount
+FROM DOC_USING_DEPT d
+LEFT JOIN OJT_SESSION s
+  ON s.documentId = d.documentId AND s.orgCode = d.orgCode
+WHERE d.orgCode IN (:selectedOrgCodesOrAll)
+GROUP BY d.documentId, d.orgCode;
+```
+
+`LEFT JOIN`（非 `INNER`）——場次數為 0 之單位仍須產生一列「未完成」進度列（F042 `AC-11`）。孤兒場次與待歸位場次皆不因本查詢而額外過濾——`DOC_USING_DEPT` 本就只含當下之使用部門，`d.orgCode` 與 `s.orgCode` 之 join 天然排除兩者，無需 `orphanedAt IS NULL` 或 `orgCode IS NOT NULL` 之額外 `WHERE` 條件。
+
+**TAB1 儀表板（`OQ-E11-03=B` 裁撤不計分母 ＋ `OQ-E11-07=B` 部層 rollup／30 天窗口，🟢 已裁決）**——與上方 Q1／Q2 之關鍵差異：**加入 `ORG_UNIT.isActive` 過濾**，範圍**僅限 TAB1**（AC-14/AC-15/AC-16），不回頭套用於 Q1/Q2：
+
+```sql
+-- 覆蓋率（AC-14）：分母排除裁撤單位（OQ-E11-03=B）
+;WITH ActiveUnitCompletion AS (
+  SELECT d.documentId, d.orgCode,
+         CASE WHEN EXISTS (
+           SELECT 1 FROM OJT_SESSION s
+           WHERE s.documentId = d.documentId AND s.orgCode = d.orgCode
+         ) THEN 1 ELSE 0 END AS completed
+  FROM DOC_USING_DEPT d
+  INNER JOIN ORG_UNIT ou
+    ON ou.companyCode = d.companyCode AND ou.orgCode = d.orgCode
+  WHERE ou.isActive = 1   -- OQ-E11-03=B：裁撤單位不計入分母
+)
+SELECT documentId, COUNT(*) AS totalUnits, SUM(completed) AS completedUnits
+FROM ActiveUnitCompletion
+GROUP BY documentId;   -- 覆蓋率 = completedUnits/totalUnits；totalUnits=0 時呈現 0%（AC-14 既有規則）
+
+-- 處室／部門完成率 rollup（AC-15，OQ-E11-07=B：部層＝DEPARTMENT tier）
+-- 部層 ancestor 代碼＝LEFT(orgCode,2)+'000'（見 ORG_UNIT §階層來源之既有推導公式，
+-- 對 SECTION/SUBSECTION 層之 orgCode 皆成立）。同一 CTE 重用，僅改 GROUP BY 鍵。
+SELECT LEFT(orgCode, 2) + '000' AS deptOrgCode,
+       COUNT(*) AS totalUnits, SUM(completed) AS completedUnits
+FROM ActiveUnitCompletion
+GROUP BY LEFT(orgCode, 2) + '000';
+
+-- 最近完成之單位（AC-16，30 天窗口；🔴 PII 硬性防線：不 SELECT 上傳者姓名/員編，
+-- 僅單位/文件/日期層級聚合。窗口基準採 uploadedAt（AC-16 原文「近期新增場次」＝新增時點，
+-- 非 trainingDate）；不套用 isActive 過濾（OQ-E11-03 之效力範圍為 AC-14/AC-15，不含 AC-16）；
+-- 待歸位場次（orgCode IS NULL）明確排除——尚無確定單位，不應呈現於任何面向）
+SELECT s.documentId, doc.documentNumber, doc.documentName,
+       s.orgCode, ou.name AS orgName, s.trainingDate
+FROM OJT_SESSION s
+INNER JOIN ICSOP_DOCUMENT doc ON doc.id = s.documentId
+INNER JOIN ORG_UNIT ou ON ou.companyCode = s.companyCode AND ou.orgCode = s.orgCode
+WHERE s.orgCode IS NOT NULL
+  AND s.uploadedAt >= DATEADD(day, -30, SYSUTCDATETIME())
+ORDER BY s.uploadedAt DESC;
+```
+
+⚠ **部層 rollup 之已知邊界情形**：若文件之使用部門本身即指定於**本部（DIVISION）層級以上**（`AC-01` 允許任意層級），`LEFT(orgCode,2)+'000'` 對該類代碼會退化為其自身（本部代碼本就 `positions3-5='000'`），產生一個實際上橫跨多個部、無法唯一決定歸屬的「部層」桶——此為已知邊界情形，非計算錯誤；發生率待正式環境資料驗證（草案假設低機率，本節不預先設計額外分支）。
+
+### migration 策略
+
+- **timestamp `1724889600000`（🔒 已保留）**：`OJT_SESSION` 本體建表——欄位**已收斂為定案形狀**（`orgCode nullable`、`orphanedAt` 皆已裁決，**同批直接建入初始 `CREATE TABLE`**，不再需要事後 `ALTER TABLE` 補欄）＋`(documentId, orgCode)` 非唯一索引＋`documentId` FK ON DELETE CASCADE。**本輪仍不建檔**（Phase A／收斂皆屬規格階段，尚未進入實作棒）。
+- **既有資料遷移（`OQ-E11-01=C`）為獨立之另一支資料遷移**（`INSERT OJT_SESSION` ＋ `DELETE DOCUMENT_ATTACHMENT` 同交易，見上方「既有資料遷移」之定案步驟），邏輯上晚於建表——**timestamp 待實作棒依序取號，本輪仍不預先分配**。
+- **`AUDIT_LOG.orgCode` 加欄（`OQ-E11-13=B`）為另一支獨立 migration**（既有表、既有資料，additive nullable 欄位，無需前置盤點）——**timestamp 待實作棒依序取號，本輪仍不預先分配**。
+- ⚠ **本專案硬規（既有教訓，逐字重申）**：**單元測試全綠證明不了資料表存在，migration 寫完必須對真 SOP DB 實跑**（見 [USAGE_FORM_DRAFTING_DEPT](#usage-form-drafting-dept) 段落同一提醒）。
+
+- **相關功能**：F042（權威）、F016（被取代之單份附件模式）、F025（新功能鍵）、F023（稽核）。
 
 ## 使用表單池 USAGE_FORM_POOL {#usage-form-entity}
 
@@ -547,8 +740,9 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - **`ACCESS_HISTORY_EXPORT` 擴充（F024，2026-08-18，additive）**：F024 之「匯出文件調閱歷程」動作須寫本表一列（人類閘門裁決，`OQ-D18-26` ③；部分推翻 `OQ-E07-10` 之「meta-audit 全不納入」——**匯出記、查詢仍不記**，後者之殘留缺口見 `OQ-E07-12`）。**純新增字面值**，既有 11 種 `actionType` 之語意與落列規則皆不變（比照 `LIFECYCLE_DELETE`／`APPENDIX` 先例）。落列規則：`accountId` 與身分快照欄＝當前操作者、`watermarkSnapshot` 為 `null`（非浮水印動作）、`occurredAt`＝匯出當下之伺服器時間；超限（400）與無權（403）之被拒請求**不落列**。<br>✅ **不需 migration（2026-08-18 查證）**：`actionType` 為 `varchar(40)`、`targetType` 為 `varchar(30)`，**皆無 CHECK 約束**（`migrations/1721952000000-audit-log.ts`）⇒ 新字面值（含日後可能新增之 `targetType`）落得下。<br>⚠ **未定案**：本動作之 `targetType`／`targetId` 落點——現有 7 個 `targetType` 皆不適用，而 `buildAuditRow()` 於 `targetId` 缺值時必拋 `AUDIT_TARGET_REF_REQUIRED`。**交 system-architect 裁定**（見 [F024](features/F024-access-history-query.md#export-fix-delta) 提報事項 A1）。<br>📌 **F024 類型篩選歸屬**：**不新增第四種類型篩選值**；此列於 F024 查詢之「類型」欄依現行 fallback 顯示為「變更」（刻意接受，見 `AC-F13` 之自我遞迴效應註記）。
 - **`ATTACHMENT_UPLOAD` 擴充（F016，2026-08-20，additive）**：主管／部門窗口之 **OJT 附件上傳**須寫本表一列（`OQ-D9-23` 裁決）。**純新增 `actionType` 字面值**，既有 12 種 `actionType` 與 7 種 `targetType` 之語意與落列規則**皆不變**（比照 `LIFECYCLE_DELETE`／`APPENDIX`／`ACCESS_HISTORY_EXPORT` 之先例）。落列規則：**`targetType='DOCUMENT_ATTACHMENT'`**（🔴 **2026-08-20 第二輪就地修訂**；📝 原文為 `targetType='DOCUMENT'`，逐字保留供追溯）、`documentId`／`documentNumber` **條件必填**（⇒ `buildAuditRow()` 之 switch 須新增分支 **`DOCUMENT_ATTACHMENT → documentId`**，`targetId` **不會缺值**，與 `ACCESS_HISTORY_EXPORT` 之未決落點問題**不同型**）、身分快照欄＝**執行上傳之操作者本人**、`watermarkSnapshot` 為 **`null`**（非浮水印動作）、`source='DIRECT'`、`occurredAt`＝伺服器時間。<br>🔴 **為何另立 `targetType` 而非沿用 `DOCUMENT`（`OQ-D9-29` 裁決之直接後果，不得省略）**：沿用 `DOCUMENT` 會使本列落入 [F024](features/F024-access-history-query.md) 既有之「**文件**」類（`kindToTargetTypes('文件')`）⇒ **「文件調閱歷程」被非調閱之寫入事件污染且無從排除**。專屬 `targetType` 使「文件」類**天然不含它**（排除），並可經新增之「上傳」類**單獨篩出**（[F024](features/F024-access-history-query.md#d9-audit-view-delta) `AC-N69`）。<br>📌 **本表既有 7 種 `targetType` 之語意、落列規則與 `kindToTargetTypes` 之既有三組對映一格未動**——`DOCUMENT_ATTACHMENT` 為**純新增之第 8 個值**。<br>✅ **不需 migration**：`actionType` 為 `varchar(40)`、**無 CHECK 約束**（`migrations/1721952000000-audit-log.ts`，2026-08-18 已查證）。<br>📌 **[F024](features/F024-access-history-query.md) 類型篩選歸屬（🔴 2026-08-20 第二輪就地修訂）**：`targetType='DOCUMENT_ATTACHMENT'` ⇒ 落入**新增之第四種類型篩選值「上傳」**（`kindToTargetTypes('上傳') = ['DOCUMENT_ATTACHMENT']`；既有三組對映**逐字不變**）；「類型」欄之中文標籤為 **`上傳`**、「操作類型」欄為 **`附件上傳`**（前後端兩份對照表各補同一組鍵值，見 [F024](features/F024-access-history-query.md#d9-audit-view-delta) `AC-N53`／`AC-N69`）。<br>📝 **被修訂之原條文逐字保留供追溯**：「`targetType='DOCUMENT'` ⇒ 落入既有「**文件**」類（`kindToTargetTypes` 不變）；「操作類型」欄之中文標籤為 **`附件上傳`**（前後端兩份對照表各補同一組鍵值，見 `AC-N53`）。」<br>🔴 **角色不對稱（刻意，`OQ-D9-23` 之直接後果）**：**僅**主管／部門窗口之上傳寫入本表；**ICSOPAdmin 之附件上傳仍不寫**（`OQ-E01-09` 之既有落差本輪不償還）。⚠ 此不一致與「調閱歷程表承載寫入事件」之分類學衝突已提報為 [open-questions](open-questions.md) `OQ-D9-29`。
 - 🔴 **後台燒錄下載之稽核擴充（F020／F018／F039，2026-08-20，`OQ-D9-10`）**：後台四條下載端點自本日起**一律寫入本表**（推翻 `OQ-FM-01`「後台不寫稽核」之定案）。**不新增任何列舉值**——沿用既有 `actionType='DOWNLOAD'` 與 `targetType ∈ {DOCUMENT, USAGE_FORM, APPENDIX}`；`watermarkSnapshot` 之落值規則與前台完全相同（PDF 已燒錄 → 落值；非 PDF → `null`）。<br>📝 **被推翻之原條文逐字保留供追溯**（原載於 `APPENDIX` 擴充段）：「**後台下載一律不寫本表**（OQ-FM-01 維持有效），故不存在後台列。」<br>⚠ **本項為落列範圍之擴大，非 schema 變更——不需 migration。**<br>⚠ **前後台之列於本表無法區分**（無來源／通道欄）——已提報為 [open-questions](open-questions.md) `OQ-D9-30` `[CLARIFY]`；本輪假設＝不新增區分欄位。
+- 🟢 **OJT 進度使用單位維度（[F042](features/F042-ojt-progress-management.md)／E11，2026-08-28，人類閘門已裁決＝(B)）**：F042 場次登記／刪除寫入本表，`actionType` 新立 **`'OJT_SESSION_UPLOAD'`／`'OJT_SESSION_DELETE'`**（純新增字面值，`varchar(40)` 無 CHECK 約束，不需 migration，比照既有 `LIFECYCLE_DELETE`／`APPENDIX`／`ACCESS_HISTORY_EXPORT` 先例）＋`targetType` 新立 **`'OJT_SESSION'`**（第 9 個值，同樣純新增字面值不需 migration）；`targetId = OJT_SESSION.id`（場次本身即為被操作之對象，與 `DOCUMENT_ATTACHMENT` 家族之既有「以 `documentId` 為 `targetId`」慣例不同）。**新增 additive 欄位 `AUDIT_LOG.orgCode`（`varchar(10) NULL`）**承載使用單位——🔴 **與既有 D9 批「新增列舉值 ⇒ 不需 migration」不同型**：新增列舉字面值確實不需 migration（欄位既有、無 CHECK），但新增一個實體欄位屬 schema 變更，**必須有一支獨立 migration**（additive nullable、無需前置盤點，既有列一律 `NULL`；**timestamp 待實作棒依序取號，本輪仍不預先分配**）。刪除動作（`OQ-E11-04=A`，僅 ICSOPAdmin）使用獨立 `actionType='OJT_SESSION_DELETE'`，與登記動作區分，稽核上可清楚分辨「登記」與「撤銷登記」。⚠ **角色不對稱是否延續**（`AC-N32`／`AC-N52` 之 ICSOPAdmin 上傳不寫稽核先例是否比照本 Epic）為 `OQ-E11-13` 之 spec-writer 追加子項，本次收斂摘要未見明確覆核——**本節不預設**，以 [open-questions.md §E11](open-questions.md#e11-2026-08-27)（sw-ojt 並行回填之權威裁決記錄）為準。
 - 保留年限草案 ≥ 3 年（[NFR-003](nfr.md#audit-retention)，待確認）。
-- **相關功能**：F016（2026-08-20 起 OJT 上傳）、F018、F020、F023、F024、F034、F036、F037、F038、F039。
+- **相關功能**：F016（2026-08-20 起 OJT 上傳）、F018、F020、F023、F024、F034、F036、F037、F038、F039、**F042**（2026-08-27，🔵 Phase A 草案）。
 
 ---
 

@@ -331,6 +331,37 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 - **皆為呈現層或常數層變更，不產生任何新錯誤路徑**：色值／不透明度（`AC-N1`～`AC-N3`）、canvas 渲染（`AC-N4`～`AC-N9`）、公司簡稱（`AC-N10`～`AC-N13`）、前台字級（`AC-N59`～`AC-N62`）、清單圖示欄（`AC-N37`～`AC-N40`）**一律不新增錯誤碼、不改變任何 API 契約**。
 - **公司簡稱查無**：沿用 `resolveCompanyName` 之既有寬容處置——回 `null` 並由 [F020](features/F020-watermark.md) §8.4 之分隔符收合規則吸收，**不拋錯、不回退為全稱**（[F020](features/F020-watermark.md#d9-watermark-delta) `AC-N12`）。
 
+## OJT 進度管理（🟢 **已裁決 — 2026-08-28，人類閘門已對 E11 全部 16 題 OQ 裁決完畢**） {#ojt-progress}
+
+> 權威＝[F042](features/F042-ojt-progress-management.md)；逐題見 [open-questions §E11](open-questions.md#e11-2026-08-27)。本節依 `OQ-E11-04=A`（僅 ICSOPAdmin 可刪、寫稽核）／`OQ-E11-09=A`（訓練日期必填、不可未來日）／`OQ-E11-16=B`（不可編輯）／`OQ-E11-01=C`（既有單份 OJT 檔標「待指派單位」，見 [data-model.md §既有資料遷移](data-model.md#ojt-session-migration)）收斂定稿。
+> 🔒 **檔案類一律沿用既有 `FILE_*` 錯誤碼、不新增**（見 [#file](#file)）——場次之簽到表檔案與 [F016](features/F016-pdf-ojt-attachment.md) 之附件共用同一套格式／大小／存取規則（沿用既有清單、≤50MB，`OQ-E11-10=A`）。
+> 🔒 **權限類一律沿用 `PERMISSION_DENIED`（403，路由層）**（見 [#permission](#permission)）——本 feature **不採** [#dept-restriction](#dept-restriction) 之 404 隱藏存在性例外，該例外於 `OQ-E06-03` 定案時已明文「本系統唯一之此類例外、不推廣」。
+> 🔒 **後台下載燒錄政策延伸**：場次簽到檔若為 `pdf` 格式，其後台下載沿用既有 D9 已定案之政策（`OQ-D9-08`，[F016](features/F016-pdf-ojt-attachment.md#ojt-role-open-delta) `AC-N14`～`AC-N19`：一律燒錄浮水印、一律寫調閱稽核）——既有已裁決政策之延伸套用，**不新增任何錯誤碼**。
+
+### 錯誤碼
+
+> 🔒 **職權分工（2026-08-28 與 sw-ojt／ux-ojt 核對確認）**：**本表為錯誤碼字面與 HTTP 狀態碼之單一權威**；**使用者可見訊息之逐字文案另由 prototype 25 定稿，權威＝[F042 §6 ⑬](features/F042-ojt-progress-management.md#prototype-25-dom-contract)**（ux-ojt 定稿）。本表**刻意不重複收錄逐字訊息**——同一組文案若在兩處各打一份，其中一處日後修訂而另一處未同步，即為分歧之起點（本 repo 已多次記載此類缺陷之成因）；下游實作訊息文案時請直接引用 F042 §6 ⑬，不得照抄本表舊版曾列出之示意句。
+
+| 錯誤碼 | HTTP | 觸發情境 | 依據 |
+|---|---|---|---|
+| `OJT_SESSION_NOT_FOUND` | 404 | 刪除或下載某場次之簽到檔時，該場次不存在或已被刪除；「歸位」（見下）指定之 `sessionId` 不存在 | `OQ-E11-04=A`（刪除）／[data-model.md §既有資料遷移](data-model.md#ojt-session-migration)（歸位） |
+| `OJT_ORG_NOT_USING_DEPT` | 400 | ① 對不存在之進度列新增場次；② 「歸位」指定之單位非該文件之使用部門；③ 「歸位」時未選任何單位（`orgCode` 空值／未提供，見下方規則說明——與②同一碼，非另立） | [F042](features/F042-ojt-progress-management.md) `AC-01`（列粒度依使用部門原樣）／`AC-26`（歸位） |
+| `OJT_TRAINING_DATE_REQUIRED` | 400 | 訓練日期缺漏 | `OQ-E11-09=A`（必填） |
+| `OJT_TRAINING_DATE_FUTURE` | 400 | 訓練日期晚於今日 | `OQ-E11-09=A`（不可未來日） |
+| `OJT_SESSION_ALREADY_ASSIGNED` | 409 | 對 `orgCode` 已非 `NULL`（已歸位）之場次再次執行「歸位」操作（`UPDATE ... WHERE orgCode IS NULL` 命中 0 筆） | [data-model.md §既有資料遷移](data-model.md#ojt-session-migration)（歸位單向、不可逆） |
+
+- **`OJT_ORG_NOT_USING_DEPT` 用於「歸位」未選單位之理由（回應 sw-ojt 提報之②）**：後端對「單位是否為該文件使用部門」之驗證為**單一成員資格檢查**——`orgCode ∈ 該文件之 DOC_USING_DEPT 集合`。空值／未提供之 `orgCode` 天然不是任何集合的成員，**該檢查本身即自然涵蓋「未選」情境，不需要為此另立一道獨立的必填檢查分支**，故**沿用同一錯誤碼、不新增碼**（比照本檔一貫之「能沿用既有碼就不新增」原則）。<br>⚠ **後端不因此取代前端之必填檢查**：正常操作流程下，`<input>` 之 `required` 或送出前之 JS 檢查應攔在使用者實際送出空值之前；本碼之「未選」子情境是**防呆／繞過前端**（直接呼叫 API、瀏覽器擴充功能干預等）時之最後防線，非預期之主要觸發路徑。<br>📌 **同一機讀碼在不同呼叫情境下之人讀訊息不同**（新增場次情境 vs. 歸位情境，逐字見 F042 §6 ⑬）為刻意設計、非缺陷——機讀碼（給程式判斷用）與人讀訊息（給使用者看）本可依呼叫脈絡分離，兩者不需要一一對應。
+
+### 規則
+
+- **驗證失敗一律為 all-or-nothing**：訓練日期或檔案任一驗證失敗時，**不建立任何場次紀錄、不寫入任何 Blob**（[F042](features/F042-ojt-progress-management.md) `AC-09`）。<br>⚠ **部分成功為缺陷**：若先寫 Blob 再驗日期，失敗時會留下一個沒有任何紀錄指向它的孤兒檔案。
+- **稽核寫入失敗不阻斷場次建立／刪除**：進補償佇列重試，沿用 [#audit](#audit) 之既有規則、**不新增錯誤碼**（[F042](features/F042-ojt-progress-management.md) `AC-18`）。
+- **場次之簽到檔於 Blob 中不存在**（參照指向空氣）：下載時回 `FILE_ACCESS_DENIED`／404（沿用 [#file](#file)）；🔒 **該場次紀錄本身不因此消失，該列亦不退回「未完成」**——場次紀錄與檔案可用性為兩個正交維度。
+- **`OJT_ORG_NOT_USING_DEPT` 為 400 而非 403 之理由**：這不是權限問題（[F042](features/F042-ojt-progress-management.md) `AC-08` 明文不限權責範圍），而是**輸入指向了一個不存在的進度列**——用 403 會讓操作者以為是自己權限不足而去申請權限，實際上該單位根本不在這份文件的使用部門裡。
+- **刪除（`OQ-E11-04=A`）僅 ICSOPAdmin**：其餘角色（含 Supervisor／DeptContact，儘管其可新增場次）呼叫刪除端點一律 `PERMISSION_DENIED`（403，沿用 [#permission](#permission)，非本節新錯誤碼）。
+- **無編輯路徑（`OQ-E11-16=B`）**：場次一旦建立（含歸位後），`trainingDate`／檔案皆不可更正，**端點層級不存在**（非「回某錯誤碼拒絕」，而是根本無此路由）——與既有「裁決前不開放」之呈現方式相同，差異僅在於本題已**永久**如此定案，非暫時性 Phase A 限制。
+- **`OJT_SESSION_ALREADY_ASSIGNED` 之 409 選用理由**：比照本檔既有 `USAGE_FORM_NUMBER_DUPLICATE`、`LIFECYCLE_DUPLICATE` 等「操作與當前資源狀態衝突」之既有 409 慣例——並非輸入格式錯誤（400）亦非資源不存在（404），而是「資源存在但已不在可執行本操作之狀態」。
+
 ## 稽核 {#audit}
 
 - **記錄失敗不阻斷瀏覽**：稽核寫入暫時性失敗時，使用者仍可正常查看文件；失敗事件進**補償佇列**（outbox 類），服務恢復後重試補寫（F023 AC3、[NFR-003](nfr.md#audit-retention)）。

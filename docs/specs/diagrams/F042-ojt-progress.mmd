@@ -1,0 +1,77 @@
+%% F042 OJT 進度管理：場次登記／刪除／歸位流程與文件層衍生狀態之計算來源
+%% 已裁決（2026-08-28，人類閘門已對 E11 全部 16 題 OQ 裁決完畢）
+%% 與 data-model.md §OJT_SESSION 之設計一致（O＝OJT_SESSION，D＝DOC_USING_DEPT 之衍生 join 讀取，非 FK）。
+%% ER 增量圖見 F042-ojt-progress-er.mmd。
+sequenceDiagram
+    autonumber
+    actor U as 操作者（ICSOPAdmin／主管／部門窗口）
+    actor AD as ICSOPAdmin（刪除／歸位專用）
+    participant P as OJT 進度管理頁（TAB2 單位分組清單）
+    participant S as OJT 進度服務
+    participant D as DOC_USING_DEPT（使用部門）
+    participant O as OJT_SESSION（場次儲存）
+    participant B as Azure Blob
+    participant A as AUDIT_LOG
+
+    U->>P: 進入 TAB2
+    P->>S: 取得進度列與場次數
+    S->>D: 讀取各文件之使用部門（原樣，不展開子樹）
+    D-->>S: documentId × orgCode 清單
+    S->>O: 依 (documentId, orgCode) 聚合場次數（orgCode IS NULL 之待歸位列、orphanedAt 已標記之孤兒列皆不匹配）
+    O-->>S: 各列場次數
+    S-->>P: 進度列（完成＝場次數 ≥ 1）
+    P-->>U: 以使用單位分組呈現
+
+    U->>P: 於某列新增場次（訓練日期＋簽到檔）
+    P->>S: 送出登記
+    S->>S: 驗證訓練日期（必填、不可未來日，OQ-E11-09=A）
+    S->>S: 驗證檔案格式與大小（沿用既有清單，≤50MB，OQ-E11-10=A）
+    alt 驗證失敗
+        S-->>P: OJT_TRAINING_DATE_REQUIRED／OJT_TRAINING_DATE_FUTURE／FILE_*（不建立場次、不寫 Blob）
+        P-->>U: 就地提示
+    else 驗證通過
+        S->>B: 寫入簽到檔（路徑 documents/{documentId}/ojt/{orgCode}/{uuid}.ext）
+        B-->>S: blobPath
+        S->>O: 新增一筆場次（累加，不覆蓋既有場次；orgCode 非 NULL）
+        S->>A: 寫入稽核（actionType=OJT_SESSION_UPLOAD，targetType=OJT_SESSION，含 orgCode）
+        Note over S,A: 稽核寫入失敗不阻斷登記，進補償佇列
+        S-->>P: 成功
+        P-->>U: 該列狀態更新為「已完成」
+    end
+
+    AD->>P: 刪除某場次（僅 ICSOPAdmin，OQ-E11-04=A）
+    P->>S: 送出刪除
+    S->>S: 授權檢查（roleCode !== ICSOPAdmin → PERMISSION_DENIED）
+    S->>O: 查詢場次是否存在
+    alt 場次不存在
+        O-->>S: 查無
+        S-->>P: OJT_SESSION_NOT_FOUND（404）
+    else 場次存在
+        O-->>S: 場次記錄
+        S->>O: 刪除該筆場次
+        S->>B: 回收 blobPath
+        S->>A: 寫入稽核（actionType=OJT_SESSION_DELETE，targetType=OJT_SESSION）
+        Note over S,A: 稽核寫入失敗不阻斷刪除，進補償佇列
+        S-->>P: 成功
+        P-->>U: 該列場次數 -1（可能回退為「未完成」）
+    end
+
+    Note over AD,O: 歸位（OQ-E11-01=C 專屬，非一般編輯）：既有單份 OJT 附件遷移為 orgCode IS NULL 之待歸位列
+    AD->>P: 為待歸位場次指派使用單位
+    P->>S: 送出歸位（sessionId, assignedOrgCode）
+    S->>D: 驗證 assignedOrgCode 是否為該文件之使用部門
+    alt 非使用部門
+        D-->>S: 不匹配
+        S-->>P: OJT_ORG_NOT_USING_DEPT（400）
+    else 是使用部門
+        S->>O: UPDATE orgCode WHERE id=sessionId AND orgCode IS NULL
+        alt 已被歸位過（0 筆命中）
+            O-->>S: 0 筆
+            S-->>P: OJT_SESSION_ALREADY_ASSIGNED（409）
+        else 更新成功
+            O-->>S: 1 筆
+            Note over S,O: blobPath 不搬移，沿用遷移時之舊路徑格式（歷史標記）
+            S-->>P: 成功
+            P-->>U: 該場次自此參與統計（不追溯回填既有查詢快取）
+        end
+    end

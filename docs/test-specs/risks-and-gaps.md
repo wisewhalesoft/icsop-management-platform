@@ -1217,3 +1217,33 @@ docker compose -p icsop logs backend | grep -F "$SECRET"    # 伺服器日誌得
    `orgCode` 原始欄位）一併掃入，誤判合法資料為缺陷；已收斂為只掃「顯示欄」（`companyName`／
    `orgName`／`roleName`／`loginId`）之字面值。
 若未做這道驗證，這兩處會使實作端在**做對的情況下**仍收到假紅燈，浪費 tdd-implementation 之除錯時間。
+
+## F042 OJT 進度管理（2026-08-28；棒 5 建環，簡化版約束環＝僅 backend jest ＋ frontend vitest）
+
+> 權威：[F042](../specs/features/F042-ojt-progress-management.md) `AC-01`～`AC-29`；六檔 delta `AC-J1`～`AC-J26`；`prototypes/04`／`13`／`14`／`15`／`16`／`17`／`25`。
+> 本輪無 Playwright／Stryker／dependency-cruiser，AC-28 之 DOM 契約與逐字文案本身即為前端唯一防線。
+> 建環方式：四條並行 fork（backend-new／backend-rewrite／frontend-new／frontend-rewrite），各自對實作全盲，事後由本檔作者統一實跑驗證。
+
+### 甲. 本環已涵蓋（可由機器裁決）
+
+新增 `backend/src/ojt-progress/`（`ojt-progress.rows.spec.ts`／`.sessions.spec.ts`／`.summary.spec.ts`／`.orphan.spec.ts`／`.migration.spec.ts`／`.controller-routes.spec.ts`）涵蓋 `AC-01`～`AC-03`、`AC-05`～`AC-20`、`AC-25`、`AC-26`；`backend/src/rbac/function-matrix.spec.ts`（新增區塊）涵蓋 `AC-27`／`AC-J16`～`J18`。既有檔改寫涵蓋 `AC-04`／`AC-J1`／`AC-J2`／`AC-J4`～`J9`／`AC-J12`～`J15`／`AC-J22`／`AC-J23`（`field-matrix.spec.ts`／`documents.service.spec.ts`／`document-list-query.spec.ts`／`attachments.service.spec.ts`／`attachments-controller-routes.spec.ts`／`access-history-labels.spec.ts`）。前端新增 `OjtProgressPage.test.tsx`（`AC-11`～`AC-20`、`AC-25`、`AC-26`、`AC-28` 之全部 DOM 契約）、`menu.test.ts`／`function-matrix.test.ts`（`AC-27`、`AC-28⑮` 之 `受限CRUD` 徽章）、`endpoints.ojtProgress.test.ts`（8 個新端點函式之呼叫契約）；既有檔改寫涵蓋 `AC-J4`／`J10`／`J11`（`DocumentReadonlyPage.test.tsx`／`DocumentEditPage.test.tsx`）、`AC-23`（`DocumentCreatePage.test.tsx`）、`AC-J13`／`J14`（`DocumentListPage.test.tsx`／`.filterDelta.test.tsx`）、`AC-J22`～`J24`（`AccessHistoryPage.test.tsx`）、`AC-24`／F020 `AC-J26`（`PublicDocumentDetailPage.test.tsx`／`.watermark.test.tsx`）、`AC-J16`（`PermissionMatrixPage.test.tsx`）、`AC-J7`／`J8`（`field-matrix.test.ts` 前端鏡射）。
+
+**實跑驗證結果（2026-08-28，本檔作者）**：backend `npx jest --maxWorkers=4` 全量 181 個 suite，恰 12 個轉紅（5 支新 `ojt-progress/*` ＋ `function-matrix.spec.ts`／`field-matrix.spec.ts`／`documents.service.spec.ts`／`document-list-query.spec.ts`／`attachments.service.spec.ts`／`attachments-controller-routes.spec.ts`／`access-history-labels.spec.ts`），其餘 169 個 suite（2642 個既有測試）逐一核對**零波及**；frontend `npx vitest run --maxWorkers=4` 全量 112 個 suite，恰 13 個轉紅（上列新增與改寫之全部檔案），其餘 99 個 suite（1524 個既有測試）零波及。全部轉紅之逐案原因皆為「功能未實作」（import 找不到模組、方法不存在、DOM 元素找不到、逐字值不符），非測試自身寫錯。
+
+### 乙. 本環刻意保留／未臆造之缺口（記錄，不阻擋建環）
+
+| # | 缺口 | 說明 | 現況處置 |
+|---|---|---|---|
+| D-OJT-01 | `AC-09③`（單檔限制）僅能以型別簽章正面示範（`addSession` 之檔案參數為單一物件而非陣列），無法在後端單元層構造「傳入多檔」之負向執行期案例 | 若實作將簽章改為接受陣列，TS 型別即會在呼叫端擋下（編譯期），執行期斷言反而測不出比型別更弱的東西；本輪已於 `ojt-progress.sessions.spec.ts` 之型別簽章與註解明文此限制。 | 未臆造執行期負向案；型別本身即為約束，供 code review 核對。 |
+| D-OJT-02 | `applyDocumentQuery` 之既有 `filters` 型別是否已含／應含 `ojtStatus`（或另一鍵名）供 `document-list-query.spec.ts` 之 AC-J14 篩選測試呼叫 | 對實作全盲，無法讀生產碼確認既有 `DocumentFilters` 型別之欄位命名；本輪依 AC-J12 之 `hasOjt→ojtStatus` 改名邏輯類推同名篩選鍵，測試呼叫處以 `as any` 繞過型別檢查並於檔頭明文記錄此為推測、非讀碼所得。 | 若 tdd-implementation 採用不同鍵名，屬合理仲裁項——改鍵名、不弱化「四值篩選語意正確」之斷言本身。 |
+| D-OJT-03 | `DocumentsService` 建構子第 6 個位置參數（`OjtCompletionReader`）之注入順序／型別，及 `endpoints.getDocumentOjtCompletion`（`DocumentReadonlyPage.test.tsx`）、`ojtCompletedUnits`／`ojtUsingUnitCount`（`PublicDocumentDetailPage.test.tsx`）三個新增介面之確切命名 | 皆為架構文件已定調方向（§二 `OjtCompletionReader` 介面、AC-21/AC-24 之「共用同一套規則」要求）下之具體命名選擇，非讀生產碼決定。 | 已於各自檔案之標頭註解逐一標明「本檔作者之合理設計選擇」；仲裁時改名稱／簽章即可，行為斷言本身（三值聯集邏輯、PII 負向掃描、無下載入口）不隨命名而動搖。 |
+| D-OJT-04 | TAB1 儀表板「分母為零」之提示文案、`AC-15` 之 `[data-rollup-invariant]` 完整句子，未逐字定案（僅 prototype 25 之資料驅動句型，非固定字串） | `AC-14`／`AC-15` 原文本就未要求逐字，只要求「明確之提示」與「列數不變之不變式」；`OjtProgressPage.test.tsx` 已改以「不含 `NaN`」與「數字一致性重新推導」取代逐字比對，鑑別力不受影響。 | 未臆造逐字文案；若下游希望鎖定字面，屬另案追加。 |
+| D-OJT-05 | `PublicDocumentDetailPage.test.tsx` 移除 `OJT 實體簽到表` 該筆 `<dt>` 欄位列後，欄位總數 18→17，其容器語意（該筆是否原為獨立欄位或附件區之一部分）未經 prototype 04 逐字覆核確認 | prototype 04 已改版但本檔作者未能於本輪逐一核對其欄位容器邊界（page 14/15/16 之欄位容器與 04 之呈現不完全同構）。 | 已於測試檔標頭註記為判斷，非確定值；若欄位總數之期望有誤，屬測試面之仲裁項，不影響 `AC-24` 核心（唯讀衍生清單存在、無下載入口、無 PII）之斷言效力。 |
+| D-OJT-06 | `AccessHistoryPage.test.tsx` 既有 `TS-AQ-FE-001`（操作類型色票 pill）未擴充新增之 `OJT_SESSION_UPLOAD`／`OJT_SESSION_DELETE` 兩色（prototype 17 定為 sky／rose） | 既有測試僅對既有 4 類 actionType 之色票逐一鎖定，本輪未見同一模式要求逐色驗證；色票屬設計裁量（比照本檔既有 `AC-N38` 兩態圖示顏色不入 AC 之先例）。 | 刻意不補；若下游需要逐色回歸鎖，屬另案。 |
+| D-OJT-07 | `AC-16`／`AC-24` 之 PII 硬性防線，本環僅以「渲染輸出之 `textContent`／JSON 序列化不含特定姓名字串」之負向掃描把關，未覆蓋「後端回應本身是否夾帶了不該有的欄位」之型別層防線 | 已於 `ojt-progress.summary.spec.ts`（後端）與 `OjtProgressPage.test.tsx`／`PublicDocumentDetailPage.test.tsx`（前端）三處分層各自負向掃描，形成縱深防禦；但若實作在 API 回應型別中新增一個未預期的欄位（如 `uploaderName`）卻恰好前端沒有把它渲染出來，本環測不到「型別層已外洩但畫面沒顯示」之中間態。 | 已達 AC 明文要求之可測形狀（「渲染結果不含」），型別層防線非 AC 文字要求；記錄供未來若擴充儀表板時參考。 |
+
+### 丙. 建環時之查證方法論（本輪特有）
+
+1. **四條並行 fork、事後統一實跑**：backend-new／backend-rewrite／frontend-new／frontend-rewrite 四線各自對實作全盲、互不重疊檔案所有權，寫完後本檔作者親自對每一支新增／改寫檔逐一 `jest`／`vitest run` 驗證，再跑一次全量迴歸確認零波及範圍精確等於預期清單（見甲節之逐案核對）。
+2. **揪出並修正一處測試自身之缺陷（共用 `beforeEach` 之炸裂半徑）**：`DocumentReadonlyPage.test.tsx` 之 `setupMocks()` 為全檔共用 `beforeEach`，其中一行對尚不存在之 `endpoints.getDocumentOjtCompletion` 呼叫 `vi.mocked(...).mockResolvedValue(...)`——`vi.mock('../api/endpoints')` 只會自動 mock「當下真的存在」之具名匯出，對不存在者呼叫此鏈會直接 throw，炸裂**全檔 40 個測試**（含與 OJT 完全無關者）。以存在性防呆包一層（`typeof fn === 'function'` 才呼叫）修復後，轉紅範圍精確收斂為 22 個真正與 OJT 相關之案例，其餘 18 個不相關測試恢復綠燈。此為「讀 diff 看不出來、只有實跑整檔才驗得到」之一類缺陷，已記入 test-generator 之持久記憶供未來同型任務參考。
+3. **AC-20 之路由層負向鎖獨立於服務層之外**：`ojt-progress.sessions.spec.ts`（服務層）僅斷言 `OjtProgressService` 無編輯類方法，不足以擋住「controller 手滑把某方法掛在 `PATCH`／`PUT` 路由上」；另補 `ojt-progress.controller-routes.spec.ts`，以 Reflector 逐一掃描 controller 全部 handler 之 `PATH_METADATA`／`METHOD_METADATA`，斷言路由表中不存在符合條件之路由，並以「DELETE 端點確實存在」之正向對照防止「不可編輯」被誤讀為「不可刪除」。
