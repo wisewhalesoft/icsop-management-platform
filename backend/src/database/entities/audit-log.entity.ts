@@ -75,6 +75,17 @@ export class AuditLog {
   @Column({ type: 'uniqueidentifier', nullable: true })
   targetAccountId!: string | null;
 
+  /**
+   * 🔴 F042 E11 delta（`AC-18`，`OQ-E11-13=B`）：場次所屬之使用單位代碼
+   * （僅 targetType='OJT_SESSION' 之列非 null）。
+   *
+   * ⚠ **獨立 migration**（`1724976000000-audit-log-org-code`）——新增*欄位*與 D9 批之
+   * 「新增*列舉值* ⇒ 不需 migration」是不同型的變更。既有列一律 NULL，不需回填。
+   * 無 FK 至 ORG_UNIT——稽核為 append-only 事實，不得受組織後續裁撤／改組約束（比照既有參照欄）。
+   */
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  orgCode!: string | null;
+
   @Column({ type: 'nvarchar', length: 200, nullable: true })
   targetName!: string | null;
 
