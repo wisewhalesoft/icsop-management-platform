@@ -1,4 +1,29 @@
 <!DOCTYPE html>
+<!-- 🔴 2026-08-27 E11 delta（**Phase A DRAFT**；規格權威＝docs/specs/features/F042-ojt-progress-management.md
+     `AC-21`／`AC-22`＋§既有行為反轉總表 甲·乙節；F026 `AC-J7`～`AC-J11`、F016 `AC-J4`）——本檔已套用：
+     ① 🔴 **OJT 附件列改為唯讀衍生列**（`AC-21`）：該列不再是一份「本文件的 OJT 檔」，
+        改為列出**已完成 OJT 之使用單位名稱清單**（判定＝`AC-03`：該單位有至少一筆教育訓練場次）；
+        尚無單位完成時顯示明確提示（**非空白、非錯誤**）。掛鉤＝`data-ojt-derived`。
+        📌 **本列已無下載鈕**：新模型下簽到檔屬於**個別場次**（`documentId × orgCode × 場次`），
+           不再有一份文件層之 OJT 檔可供此處下載；逐場次下載入口在 `25-ojt-progress.html` 之 TAB2。
+     ② 🔴 **上傳入口全面移除**（`AC-22`）：`data-ojt-upload`／`data-ojt-upload-mode`／
+        `data-writable-attachment`／`data-ojt-empty`／`canWriteOjt()`／`uploadOjt()` 一併移除；
+        **四種 kind 之列自此全部帶 `data-readonly-attachment`**（F026 `AC-J11`：可寫列由「恰 1 個」反轉為「0 個」）。
+        🔒 `data-attachment-kind` 之四值本身**維持不變**——OJT 仍是一種附件類別，只是不再可寫。
+     ③ 🔴 **三條唯讀文案之處置**（F016 `AC-J4`／`AC-N74`）：
+        · `RO_NOTICE_FULL` — **逐字一字未改**，適用範圍自「僅系統管理員」擴為**三個唯讀角色皆適用**；
+        · `RO_NOTICE_OJT_EXCEPTION` — 其「唯一例外為 OJT…可上傳或覆蓋」**已為假** ⇒ 常數與分支移除；
+        · `FIELD_RO_NOTE` — 其「19 個欄位…唯一可寫項為 OJT」**已為假** ⇒ 逐字改寫（見 script 區）。
+        · 連帶：`ATTACH_NOTE_OJT` 之存在前提（有一項可寫）消失 ⇒ 移除，`ATTACH_NOTE_RO` 對全部角色適用；
+          `#attachTitle`／`#attachNote` 自此**不再依角色分支**（`AC-N74` ③ 之角色相依性就地失效）。
+        📌 全部被取代之字面**逐字保留於 `OLD>` 註解**供追溯（`grep -rn "OLD>"` 可完整列出）。
+     ④ 🔵 原型示範切換器 `#ojtStateSel` **語意改變**（仍為 prototype-only、仍不得移植）：
+        原為「已有 OJT／尚未上傳 OJT」（該文件是否有一份檔案）；
+        改為「已有完成單位／尚無單位完成」（衍生清單之兩態）——舊語意在新模型下已不存在。
+     🟢 **2026-08-28 人類閘門：`OQ-E11-12`＝(A) 已裁決**——F026 該列改**純衍生唯讀**、欄位鍵集合**維持 20**
+        （非整列移除）⇒ `FIELD_RO_NOTE` 之「全部 20 個欄位」**成立、定稿**。本檔自此無任何待裁決項。
+     🔒 **本 delta 之 diff 僅限 OJT 相關區塊**：16 列欄位表格、其餘三種 kind 之附件列、
+        側選單、topbar、下載與浮水印文案一律未動。 -->
 <!-- 🔴 2026-08-20 D9 delta（人類閘門已裁決；規格權威＝F016 §ojt-role-open-delta AC-N28～AC-N35
      ＋ F026 §ojt-write-exception-delta AC-N22～AC-N27 ＋ F020 AC-N14～AC-N20）——本檔已套用：
      ① 🔴 **OJT 簽到表破例**（OQ-D9-19 選項 A 推翻 F026 頂部定案 · OQ-D9-20 選項 A 僅此一欄）：
@@ -20,7 +45,10 @@
      ⑥ F020 AC-N20：各檔案列新增 data-wm-note（pdf →「檢視/下載將燒錄浮水印」；非 pdf →「此格式不支援浮水印」），
         並且**後台四類下載一律燒錄、一律寫稽核、無例外角色**（OQ-D9-08 B／OQ-D9-09 B／OQ-D9-10 A）
         ⇒ 原「附錄下載不燒錄浮水印、不寫調閱稽核」之文案已作廢並改寫。
-     ⑦ 🔴 **2026-08-21 補正（lead 裁定＝澄清而非新決策）：OJT「尚未上傳」空狀態之上傳入口**。
+     ⑦ 🛑 ~~**2026-08-21 補正（lead 裁定＝澄清而非新決策）：OJT「尚未上傳」空狀態之上傳入口**~~
+        🔴 **本項（連同 ①③④⑤ 之 OJT 可寫部分）已於 2026-08-27 由 E11 全面推翻**——見本檔最上方之
+           E11 delta 區塊；`data-ojt-empty`／`data-ojt-upload`／`data-writable-attachment` 於本檔已不存在。
+           **原文逐字保留於下，僅供追溯，不得據以恢復任何上傳入口。**
         原缺口＝`data-ojt-upload` 只長在**既有 OJT 之附件列**的模板裡 ⇒ 該文件**尚無任何 OJT** 時，
         主管／部門窗口畫面上**沒有任何上傳入口**，第一份 OJT 永遠傳不上去（使用者實測揪出）。
         📌 依據：AC-N28 之 Given 逐字含「目標文件存在**且無 OJT 附件**」，且 OQ-D9-19 逐字為
@@ -133,14 +161,20 @@
   <section class="bg-white border border-slate-200 rounded-xl p-5">
     <div class="flex items-center gap-2 mb-1"><i data-lucide="paperclip" class="w-4 h-4 text-primary-600"></i><h2 id="attachTitle" class="font-semibold text-slate-900">附件</h2>
       <!-- 🔴 原型專用狀態切換器（比照 19b 之 [data-prototype-demo="true"] 慣例）：讓覆核者在單一檔案內
-           同時看到「已有 OJT（可取代）」與「尚未上傳 OJT（可上傳第一份）」兩種狀態。
-           ⚠ **不得移植至實作**——實作之 OJT 有無由該文件之附件資料決定，非由畫面控制項決定。 -->
+           同時看到 OJT 唯讀衍生清單之「已有完成單位」與「尚無單位完成」兩種狀態。
+           ⚠ **不得移植至實作**——實作之衍生值由 `OJT_SESSION` × `DOC_USING_DEPT` 之聚合決定，
+              非由畫面控制項決定。
+           📌 **2026-08-27 E11 delta：本控制項之語意已改變**（原為「該文件是否有一份 OJT 檔」，
+              該語意在新模型下已不存在）。逐字保留原字面供追溯：
+              OLD> <label for="ojtStateSel">原型示範 · OJT 狀態</label>
+              OLD> <option value="present">已有 OJT（預設）</option>
+              OLD> <option value="absent">尚未上傳 OJT</option> -->
       <div data-prototype-demo="true" class="ml-auto flex items-center gap-1.5 text-[11px] text-slate-400">
         <i data-lucide="flask-conical" class="w-3.5 h-3.5 shrink-0"></i>
-        <label for="ojtStateSel" class="whitespace-nowrap">原型示範 · OJT 狀態</label>
+        <label for="ojtStateSel" class="whitespace-nowrap">原型示範 · OJT 完成狀態</label>
         <select id="ojtStateSel" onchange="setOjtState(this.value)" class="border border-slate-300 rounded px-1.5 py-0.5 bg-white text-slate-600">
-          <option value="present">已有 OJT（預設）</option>
-          <option value="absent">尚未上傳 OJT</option>
+          <option value="present">已有完成單位（預設）</option>
+          <option value="absent">尚無單位完成</option>
         </select>
       </div>
     </div>
@@ -161,6 +195,8 @@
     {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    /* 🟢 2026-08-28 F042 AC-27／OQ-E11-05=(A)：新功能列與側選單項（位置＝可寫管理群組之末，docindex 之後）。 */
+    {id:'ojtprogress',label:'OJT 進度管理',icon:'graduation-cap',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'受限CRUD',deptcontact:'受限CRUD'}},
     {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
     {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
     {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
@@ -237,33 +273,60 @@
     ].join('');
     lucide.createIcons();
   }
-  /* ===== 🔴 逐字文案常數（D9 定稿；test-generator 會逐字斷言，勿改寫）=====
-     RO_NOTICE_FULL      ＝**原句一字未改**，僅適用「系統管理員」——AC-N26 明訂其對 OJT 仍唯讀，
-                            故對該角色此句仍然為真，保留亦同時成為 AC-N26 之畫面載體。
-     RO_NOTICE_OJT_EXCEPTION ＝主管／部門窗口專用之改寫句（AC-N28 之 📝 要求）。
-     ⚠ 三個要點（擬稿理由，供覆核）：
-       (1) 前半沿用既有句型（「唯讀模式 ·」＋ FIELD_WRITE_FORBIDDEN）維持語氣一致、明示基底規則未變；
-       (2) **明講「19 個欄位」與「另兩類附件＋附錄」**，使 AC-N24／AC-N25 的界線在畫面上可讀，
-           而不是只講「除了 OJT 以外」——後者容易被讀成「附件區都放行了」；
-       (3) 明講「該次上傳會寫入稽核」，因為這是首次開放非管理角色之寫入路徑（AC-N31）。 */
+  /* ===== 🔴 逐字文案常數（test-generator 會逐字斷言，勿改寫）=====
+     RO_NOTICE_FULL ＝**原句一字未改**（D9 定稿），適用**主管／部門窗口／系統管理員三者**
+                      （2026-08-27 E11 delta：適用範圍自「僅系統管理員」擴大，句子本身未動）。
+     📝 **本段之 D9 原始擬稿理由已隨 OJT 例外收回而失效，逐字保留供追溯**（⚠ 不得據以恢復該例外）：
+        OLD> RO_NOTICE_FULL ＝原句一字未改，僅適用「系統管理員」——AC-N26 明訂其對 OJT 仍唯讀，
+        OLD>                  故對該角色此句仍然為真，保留亦同時成為 AC-N26 之畫面載體。
+        OLD> RO_NOTICE_OJT_EXCEPTION ＝主管／部門窗口專用之改寫句（AC-N28 之 📝 要求）。
+        OLD> ⚠ 三個要點（擬稿理由，供覆核）：
+        OLD>   (1) 前半沿用既有句型（「唯讀模式 ·」＋ FIELD_WRITE_FORBIDDEN）維持語氣一致、明示基底規則未變；
+        OLD>   (2) **明講「19 個欄位」與「另兩類附件＋附錄」**，使 AC-N24／AC-N25 的界線在畫面上可讀，
+        OLD>       而不是只講「除了 OJT 以外」——後者容易被讀成「附件區都放行了」；
+        OLD>   (3) 明講「該次上傳會寫入稽核」，因為這是首次開放非管理角色之寫入路徑（AC-N31）。 */
   const RO_NOTICE_FULL = '唯讀模式 · 此角色對 ICSOP 文件全欄位皆唯讀；附件可下載（燒錄浮水印），但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。';
-  const RO_NOTICE_OJT_EXCEPTION = '唯讀模式 · 此角色對 ICSOP 文件其餘 19 個欄位、ICSOP PDF、使用表單與附錄皆唯讀（FIELD_WRITE_FORBIDDEN）；唯一例外為「OJT 實體簽到表」，可上傳或覆蓋，該次上傳會寫入稽核。全部附件皆可下載（下載一律燒錄浮水印並寫入稽核）。';
-  const FIELD_RO_NOTE = '此區 19 個欄位對本角色一律唯讀（FIELD_WRITE_FORBIDDEN）；本頁唯一可寫項為下方附件區之「OJT 實體簽到表」。';
   const ATTACH_NOTE_RO  = '下載/列印時伺服器端燒錄浮水印並寫入稽核；本角色無任何上傳/取代入口。';
-  const ATTACH_NOTE_OJT = '下載/列印時伺服器端燒錄浮水印並寫入稽核。本角色僅「OJT 實體簽到表」一項可上傳/覆蓋，其餘各列皆為唯讀（見各列標記）。';
+  /* 🔴 **2026-08-27 E11 delta（F016 `AC-J4`／F026 `AC-J7`～`AC-J9`；F042 `AC-22`）**
+     `RO_NOTICE_FULL` 與 `ATTACH_NOTE_RO` **逐字一字未改**，但適用範圍改變：
+     · `RO_NOTICE_FULL` 自「僅系統管理員」擴為**主管／部門窗口／系統管理員三者皆適用**
+       （「不可上傳/取代」對三者同時為真）；
+     · `ATTACH_NOTE_RO` 與 `#attachTitle` 自此**不再依角色分支**——本頁對**任何角色**皆無寫入入口。
+     📝 **被移除之三個常數逐字保留供追溯**（⚠ **內容已為假，不得用於斷言或照抄**）：
+        OLD> const RO_NOTICE_OJT_EXCEPTION = '唯讀模式 · 此角色對 ICSOP 文件其餘 19 個欄位、ICSOP PDF、使用表單與附錄皆唯讀（FIELD_WRITE_FORBIDDEN）；唯一例外為「OJT 實體簽到表」，可上傳或覆蓋，該次上傳會寫入稽核。全部附件皆可下載（下載一律燒錄浮水印並寫入稽核）。'
+        OLD> const FIELD_RO_NOTE = '此區 19 個欄位對本角色一律唯讀（FIELD_WRITE_FORBIDDEN）；本頁唯一可寫項為下方附件區之「OJT 實體簽到表」。'
+        OLD> const ATTACH_NOTE_OJT = '下載/列印時伺服器端燒錄浮水印並寫入稽核。本角色僅「OJT 實體簽到表」一項可上傳/覆蓋，其餘各列皆為唯讀（見各列標記）。'
+     🔵 `FIELD_RO_NOTE` **就地改寫**（新值如下）：
+        · 「19 個欄位」→「全部 20 個欄位」（F026 `AC-J9`：措辭自「OJT 以外之 19 欄」回歸「全部 20 欄」）；
+          🟢 **數字 20 為 `OQ-E11-12`＝(A) 之裁決值**（欄位鍵集合維持 20、該列改純衍生唯讀）；已定稿。
+        · 「唯一可寫項為…OJT」→「無任何可寫項」（該例外已由 `AC-22` 收回）。
+        · **顯示範圍亦改變**：原僅對主管／部門窗口顯示（避免對系統管理員產生「有例外」之誤讀）；
+          該理由隨例外消失而不存在 ⇒ 改為**三個唯讀角色皆顯示**。 */
+  const FIELD_RO_NOTE = '此區全部 20 個欄位對本角色一律唯讀（FIELD_WRITE_FORBIDDEN）；本頁無任何可寫項。';
 
-  /* ===== 🔴 2026-08-21 補正：OJT 空狀態之逐字文案（designer 定稿；下游 AC 照抄）=====
-     ⚠ 三者皆為**空狀態專用**，與既有之「上傳／取代」語彙**刻意不同**——空狀態要明確是
-        「**新增第一份**」而非「取代」，否則畫面會暗示存在一份可被覆蓋的舊檔（實際上沒有）。
-     📌 `#roBanner` 之 RO_NOTICE_OJT_EXCEPTION 已逐字含「**可上傳或覆蓋**」，兩態皆為真，故**不需改寫**。
-     📌 `#attachTitle`／`#attachNote`（AC-N74 ③）由**角色**決定、與 OJT 有無無關 ⇒ 兩態逐字不變。 */
-  const OJT_EMPTY_TEXT        = '尚未上傳 OJT 實體簽到表';       // 空狀態說明句（三角色共用，與權限無關）
-  const OJT_UPLOAD_FIRST_TEXT = '上傳第一份';                    // 空狀態上傳鈕之可見文字
-  const OJT_UPLOAD_FIRST_ARIA = '上傳第一份 OJT 實體簽到表';     // 空狀態上傳鈕之 aria-label／title
+  /* ===== 🔴 OJT 唯讀衍生區之逐字文案（棒 4 定稿；權威＝prototype 25／F042 `AC-21`）=====
+     🔒 下列四個字面與 `15-document-edit` **逐字相同**（比照 `RO_NOTICE_FULL` 之共用慣例，
+        兩頁呈現同一份底層事實，不得各自重打）；任一頁要改，兩頁必須同批改。
+     🔒 `ojtDerivedSummary()` 與空狀態之判定**必須行使 `AC-03` 之同一套規則**
+        （單位有至少一筆場次即為已完成），**不得**另立第二套判定邏輯（`AC-04` 之明文要求）。
+     📝 **被取代之空狀態三常數逐字保留供追溯**（⚠ 其前提「可上傳第一份」已由 `AC-22` 收回）：
+        OLD> const OJT_EMPTY_TEXT        = '尚未上傳 OJT 實體簽到表';
+        OLD> const OJT_UPLOAD_FIRST_TEXT = '上傳第一份';
+        OLD> const OJT_UPLOAD_FIRST_ARIA = '上傳第一份 OJT 實體簽到表'; */
+  const OJT_DERIVED_BADGE      = '唯讀 · 衍生值';
+  const OJT_DERIVED_EMPTY      = '尚無任何使用單位完成 OJT';
+  const OJT_DERIVED_NOTE       = '本欄為唯讀衍生值——由各使用單位於「OJT 進度管理」登記之教育訓練場次彙總而得（該單位有至少一筆場次即為已完成）；本頁不提供任何上傳、取代或覆蓋入口。';
+  const OJT_PROGRESS_LINK_TEXT = '前往 OJT 進度管理';
+  function ojtDerivedSummary(done,total){ return `已完成 ${done}／${total} 個使用單位`; }
 
-  /* 🔴 原型示範用之 OJT 有無狀態（預設 true＝維持本檔原有之預設畫面，既有斷言不受影響）。
-     實作端由該文件是否已有 `type='OJT_SIGNIN'` 之附件決定，**不得移植 #ojtStateSel 控制項**。 */
-  let ojtPresent = true;
+  /* 🔴 原型示範用之衍生兩態（預設 true＝有已完成單位）。
+     實作端由 `OJT_SESSION` × `DOC_USING_DEPT` 之聚合決定，**不得移植 #ojtStateSel 控制項**。
+     📌 本檔之三個使用單位與完成情形（2 / 3）與 `15-document-edit`、以及
+        `25-ojt-progress.html` 之 D1（ICSOP-SRC-101-1-01）**刻意同源**，使三頁可交叉對照。
+     📝 OLD> let ojtPresent = true;   // 原語意＝該文件是否有一份 OJT 檔（新模型下已不存在） */
+  let ojtHasCompleted = true;
+  const OJT_DEMO_COMPLETED_IDX=[0,1];
+  function ojtCompletedUnits(){ return ojtHasCompleted ? doc.using.filter((_,i)=>OJT_DEMO_COMPLETED_IDX.includes(i)) : []; }
 
   /* ===== 🔵 浮水印註記（F020 AC-N20；與前台 04 同一組逐字文案，不得分歧）===== */
   const WM_BURN_TEXT        = '檢視/下載將燒錄浮水印';
@@ -274,16 +337,20 @@
       : `<span data-wm-note class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 shrink-0 whitespace-nowrap"><i data-lucide="info" class="w-3 h-3"></i>${WM_UNSUPPORTED_TEXT}</span>`;
   }
 
-  /* 🔴 AC-N23／AC-N26／AC-N27：OJT 欄之寫入解析。
-     可寫＝Supervisor／DeptContact（本 delta 新開放）＋ ICSOPAdmin（既有）；
-     **SysAdmin 唯讀**（AC-N26 明文排除）、**User 亦唯讀**（AC-N27，且其於本頁本就被封鎖）。 */
-  function canWriteOjt(){ return ['supervisor','deptcontact','icsop_admin'].includes(document.body.dataset.role); }
+  /* 🔴 **2026-08-27 E11 delta（F042 `AC-22`／F026 `AC-J11`）：`canWriteOjt()` 整個移除。**
+     本頁自此**對任何角色皆無可寫附件**（可寫列由「恰 1 個」反轉為「0 個」）。
+     📝 被移除之原判定逐字保留供追溯（⚠ **不得照抄回來**）：
+        OLD> // 🔴 AC-N23／AC-N26／AC-N27：OJT 欄之寫入解析。
+        OLD> //    可寫＝Supervisor／DeptContact（本 delta 新開放）＋ ICSOPAdmin（既有）；
+        OLD> //    **SysAdmin 唯讀**（AC-N26 明文排除）、**User 亦唯讀**（AC-N27，且其於本頁本就被封鎖）。
+        OLD> function canWriteOjt(){ return ['supervisor','deptcontact','icsop_admin'].includes(document.body.dataset.role); } */
 
   function renderAttach(){
     const items=[
       {kind:'icsop_pdf', ic:'file-text', c:'text-red-500',      label:'檔案（ICSOP PDF）', name:'車輛分期進件作業_v1.3.pdf',      fmt:'pdf'},
-      /* 🔴 2026-08-21：OJT 之**檔案列**只在已有 OJT 時存在；ojtPresent=false 時改以空狀態列遞補（見下方 splice）。 */
-      ...(ojtPresent?[{kind:'ojt', ic:'file-text', c:'text-red-500', label:'OJT 實體簽到表', name:'車輛分期進件作業_OJT簽到表.pdf', fmt:'pdf'}]:[]),
+      /* 🔴 2026-08-27 E11 delta：OJT 之**檔案列**已不存在（新模型下無文件層之 OJT 檔）；
+         其列序位置改由**唯讀衍生列**遞補（見下方 splice ＋ ojtDerivedRow()），兩者列序一致。
+         📝 OLD> ...(ojtPresent?[{kind:'ojt', ic:'file-text', c:'text-red-500', label:'OJT 實體簽到表', name:'車輛分期進件作業_OJT簽到表.pdf', fmt:'pdf'}]:[]), */
       {kind:'usageform', ic:'sheet',     c:'text-emerald-600',  label:'使用表單',          name:'進件申請書.xlsx',                fmt:'excel'},
       {kind:'usageform', ic:'sheet',     c:'text-emerald-600',  label:'使用表單',          name:'支票託收登記表.xlsx',            fmt:'excel'}
     ];
@@ -293,70 +360,73 @@
       label:'附錄', name:a.name, fmt:a.fmt==='excel'?'excel':'pdf', ord:i+1
     }));
 
-    const ojtWritable = canWriteOjt();
     const rows = items.map(f=>{
-      const writable = (f.kind==='ojt' && ojtWritable);
-      /* 🔒 AC-N24／AC-N25 之畫面載體：可寫項與唯讀項必須**看起來就不一樣**。
-         可寫＝primary 外框＋淡底＋「可上傳／覆蓋」徽章＋上傳鈕；其餘每一列一律掛「唯讀」鎖頭徽章。 */
-      const rowCls = writable ? 'border-primary-300 bg-primary-50/40' : 'border-slate-200';
-      const marker = writable
-        ? `<span data-writable-attachment class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary-600 text-white shrink-0 whitespace-nowrap"><i data-lucide="pencil" class="w-3 h-3"></i>可上傳／覆蓋</span>`
-        : `<span data-readonly-attachment class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0 whitespace-nowrap"><i data-lucide="lock" class="w-3 h-3"></i>唯讀</span>`;
-      /* 🔴 data-ojt-upload-mode（2026-08-21 新增，additive）：同一顆掛鉤在兩種狀態下語意不同，
-         由該屬性逐字宣告——`replace`＝已有 OJT（本列）／`create`＝空狀態列。值域恰兩者。 */
-      const upBtn = writable
-        ? `<button onclick="uploadOjt()" data-ojt-upload data-ojt-upload-mode="replace" aria-label="上傳／取代 OJT 實體簽到表" title="上傳／取代 OJT 實體簽到表" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 bg-white text-primary-700 text-xs hover:bg-primary-50 shrink-0"><i data-lucide="upload" class="w-3.5 h-3.5"></i>上傳／取代</button>`
-        : '';
+      /* 🔴 **2026-08-27 E11 delta（F026 `AC-J11`）：`writable` 分支整個移除。**
+         本頁**四種 kind 之列全部**帶 `data-readonly-attachment` ＋「唯讀」鎖頭徽章；
+         `[data-writable-attachment]` 於本頁**恆為 0 個**（原為「恰 1 個且其列 kind==='ojt'」）。
+         📝 被移除之原分支逐字保留供追溯（⚠ **不得照抄回來**）：
+            OLD> const writable = (f.kind==='ojt' && ojtWritable);
+            OLD> const rowCls = writable ? 'border-primary-300 bg-primary-50/40' : 'border-slate-200';
+            OLD> const marker = writable ? `<span data-writable-attachment …><i data-lucide="pencil" …></i>可上傳／覆蓋</span>` : …
+            OLD> const upBtn = writable ? `<button onclick="uploadOjt()" data-ojt-upload data-ojt-upload-mode="replace" aria-label="上傳／取代 OJT 實體簽到表" …>上傳／取代</button>` : '';
+         🔒 「唯讀」徽章之逐字值與 `data-readonly-attachment` 掛鉤**一字未動**。 */
+      const marker = `<span data-readonly-attachment class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0 whitespace-nowrap"><i data-lucide="lock" class="w-3 h-3"></i>唯讀</span>`;
       return `
-      <div class="flex items-center gap-3 rounded-lg border ${rowCls} px-3 py-2.5" data-attachment-kind="${f.kind}"${f.ord?` data-appendix-item data-appendix-order="${f.ord}"`:``}>
+      <div class="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5" data-attachment-kind="${f.kind}"${f.ord?` data-appendix-item data-appendix-order="${f.ord}"`:``}>
         ${f.ord?`<span class="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0">${f.ord}</span>`:``}
         <i data-lucide="${f.ic}" class="w-5 h-5 ${f.c} shrink-0"></i>
         <div class="min-w-0 flex-1"><div class="text-xs text-slate-400">${f.label}</div><div class="text-sm text-slate-700 truncate"${f.ord?` data-appendix-name`:``}>${f.name}</div></div>
         ${wmNote(f.fmt)}
         ${marker}
-        ${upBtn}
         <button onclick="download('${f.name}','${f.label}','${f.fmt}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
       </div>`;
     });
-    // 🔴 2026-08-21：無 OJT 時，空狀態列插在 ICSOP PDF 之後（＝OJT 原本的列序位置），兩種狀態之列序一致。
-    if(!ojtPresent) rows.splice(1,0,ojtEmptyRow());
+    // 🔴 2026-08-27 E11 delta：OJT 唯讀衍生列**恆存在**，插在 ICSOP PDF 之後（＝OJT 原本的列序位置）。
+    // 📝 OLD> if(!ojtPresent) rows.splice(1,0,ojtEmptyRow());
+    rows.splice(1,0,ojtDerivedRow());
     document.getElementById("attachList").innerHTML = rows.join('')
       + (doc.appendices.length?'':`<div data-appendix-empty class="flex items-center gap-2 rounded-lg border border-dashed border-slate-200 px-3 py-2.5 text-sm text-slate-400"><i data-lucide="paperclip" class="w-4 h-4 shrink-0"></i>無附錄</div>`);
-    const sel=document.getElementById('ojtStateSel'); if(sel) sel.value = ojtPresent?'present':'absent';
+    const sel=document.getElementById('ojtStateSel'); if(sel) sel.value = ojtHasCompleted?'present':'absent';
     lucide.createIcons();
   }
 
-  /* ===== 🔴 2026-08-21 補正：OJT「尚未上傳」空狀態列 =====
-     ⚠ 本列是「**第一份 OJT 的唯一入口**」——沒有它，主管／部門窗口對尚無 OJT 之文件永遠傳不上去。
-     🔒 **權限分支與既有檔案列完全同源**：`canWriteOjt()`（主管／部門窗口／ICSOPAdmin），
-        系統管理員與一般使用者**不得**出現上傳鈕（DOM 直接不產生該元素，非以 CSS 隱藏）。
-     🔒 掛鉤語意維持不變，使 AC-N75 🔴 之定位基礎在**兩種狀態皆成立**：
-        · 本列帶 `data-attachment-kind="ojt"` ⇒「唯一可寫項＝OJT」在空狀態同樣可機器定位；
-        · 可寫時帶 `data-writable-attachment`（仍恰 1 個）＋徽章逐字 `可上傳／覆蓋`
-          （AC-N75 ② 之逐字值，**刻意不改**：該徽章標示的是**權限**「可上傳、可覆蓋」，
-           非當下動作；動作語意由按鈕文案 `${OJT_UPLOAD_FIRST_TEXT}` 承擔）；
-        · 不可寫時帶 `data-readonly-attachment` ＋徽章逐字 `唯讀`。
-     📌 **本列刻意不帶 `data-wm-note`**（無檔案可下載、無浮水印可言）⇒ 凡以「每一附件列必有
-        `data-wm-note`」形狀斷言者（F020 AC-N20），請以 `[data-attachment-kind]:not([data-ojt-empty])`
-        排除本列；`data-ojt-empty` 即為該排除之機器掛鉤。 */
-  function ojtEmptyRow(){
-    const writable = canWriteOjt();
-    const marker = writable
-      ? `<span data-writable-attachment class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary-600 text-white shrink-0 whitespace-nowrap"><i data-lucide="pencil" class="w-3 h-3"></i>可上傳／覆蓋</span>`
-      : `<span data-readonly-attachment class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0 whitespace-nowrap"><i data-lucide="lock" class="w-3 h-3"></i>唯讀</span>`;
-    const upBtn = writable
-      ? `<button onclick="uploadOjt()" data-ojt-upload data-ojt-upload-mode="create" aria-label="${OJT_UPLOAD_FIRST_ARIA}" title="${OJT_UPLOAD_FIRST_ARIA}" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 bg-white text-primary-700 text-xs hover:bg-primary-50 shrink-0"><i data-lucide="upload" class="w-3.5 h-3.5"></i>${OJT_UPLOAD_FIRST_TEXT}</button>`
-      : '';
+  /* ===== 🔴 2026-08-27 E11 delta：OJT **唯讀衍生列**（取代 2026-08-21 之空狀態列）=====
+     本列呈現該文件目前**已完成 OJT 之使用單位名稱清單**（F042 `AC-21`）；
+     尚無單位完成時顯示 `OJT_DERIVED_EMPTY`（**非空白、非錯誤**）。
+     🔒 **本列無任何上傳、取代或覆蓋入口**（`AC-22`）——含 2026-08-20 起僅對主管／部門窗口
+        開放之破例入口亦一併移除；`[data-ojt-upload]` 於本頁**恆為 0 個**。
+     🔒 本列帶 `data-attachment-kind="ojt"`（四值本身不變，F026 `AC-J11`）＋ `data-readonly-attachment`。
+     🔒 `[data-ojt-progress-link]` 為**跨頁導覽連結，非上傳入口**——它不建立、不取代任何檔案，
+        `AC-22` 之負向斷言不受影響。連結文字對四種後台角色皆為真（系統管理員亦可檢視該頁）。
+     📌 **本列刻意不帶 `data-wm-note`**（本列無檔案可下載、無浮水印可言）⇒ 凡以「每一附件列必有
+        `data-wm-note`」形狀斷言者（F020 `AC-N20`），請以 `[data-attachment-kind]:not([data-ojt-derived])`
+        排除本列；`data-ojt-derived` 即為該排除之機器掛鉤（取代原先之 `data-ojt-empty`）。
+     📝 被取代之 `ojtEmptyRow()` 之關鍵字面逐字保留供追溯（⚠ **不得照抄回來**）：
+        OLD> data-ojt-empty ／ data-ojt-empty-text ／ data-ojt-upload-mode="create"
+        OLD> <div data-ojt-empty-text …>尚未上傳 OJT 實體簽到表</div>
+        OLD> <button … aria-label="上傳第一份 OJT 實體簽到表">上傳第一份</button> */
+  function ojtDerivedRow(){
+    const units=doc.using||[], done=ojtCompletedUnits();
+    const body = done.length
+      ? `<div data-ojt-derived-summary class="text-sm text-slate-700">${ojtDerivedSummary(done.length,units.length)}</div>
+         <ul data-ojt-completed-list class="mt-1 space-y-0.5">${done.map(u=>`<li data-ojt-completed-org class="flex items-start gap-1.5 text-sm text-slate-700"><i data-lucide="circle-check-big" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-emerald-600"></i><span>${u}</span></li>`).join('')}</ul>`
+      : `<div data-ojt-derived-empty class="flex items-center gap-1.5 text-sm text-slate-400"><i data-lucide="circle-dashed" class="w-4 h-4 shrink-0"></i>${OJT_DERIVED_EMPTY}</div>`;
     return `
-      <div class="flex items-center gap-3 rounded-lg border border-dashed ${writable?'border-primary-300 bg-primary-50/40':'border-slate-200'} px-3 py-2.5" data-attachment-kind="ojt" data-ojt-empty>
-        <i data-lucide="file-plus" class="w-5 h-5 ${writable?'text-primary-500':'text-slate-300'} shrink-0"></i>
-        <div class="min-w-0 flex-1"><div class="text-xs text-slate-400">OJT 實體簽到表</div><div data-ojt-empty-text class="text-sm text-slate-500 truncate">${OJT_EMPTY_TEXT}</div></div>
-        ${marker}
-        ${upBtn}
+      <div class="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2.5" data-attachment-kind="ojt" data-ojt-derived>
+        <i data-lucide="graduation-cap" class="w-5 h-5 text-slate-400 shrink-0 mt-0.5"></i>
+        <div class="min-w-0 flex-1">
+          <div class="text-xs text-slate-400">OJT 實體簽到表</div>
+          ${body}
+          <p data-ojt-derived-note class="mt-1.5 text-[11px] text-slate-500">${OJT_DERIVED_NOTE}</p>
+        </div>
+        <span data-ojt-derived-badge class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0 whitespace-nowrap">${OJT_DERIVED_BADGE}</span>
+        <span data-readonly-attachment class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0 whitespace-nowrap"><i data-lucide="lock" class="w-3 h-3"></i>唯讀</span>
+        <a href="25-ojt-progress.html" data-to="/admin/ojt-progress" data-ojt-progress-link class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 bg-white text-primary-700 text-xs hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-600 shrink-0"><i data-lucide="external-link" class="w-3.5 h-3.5"></i>${OJT_PROGRESS_LINK_TEXT}</a>
       </div>`;
   }
-  /* 原型專用：切換 OJT 有無兩態（不得移植至實作，見 #ojtStateSel 之註解） */
-  function setOjtState(v){ ojtPresent = (v!=='absent'); renderAttach(); }
+  /* 原型專用：切換衍生清單之兩態（不得移植至實作，見 #ojtStateSel 之註解）
+     📝 OLD> function setOjtState(v){ ojtPresent = (v!=='absent'); renderAttach(); } */
+  function setOjtState(v){ ojtHasCompleted = (v!=='absent'); renderAttach(); }
 
   /* 🔴 F020 AC-N14～AC-N18（OQ-D9-08 選項 B）：後台四類下載自 2026-08-20 起**一律燒錄浮水印**、
      **一律寫調閱稽核**、**無例外角色**（含 ICSOPAdmin，OQ-D9-09 選項 B ＝不保留任何原始檔下載路徑）。
@@ -374,41 +444,19 @@
     }
   }
 
-  /* 🔴 AC-N28／AC-N29／AC-N31／AC-N32：OJT 上傳（可覆蓋、無版本歷史）＋ **角色不對稱稽核**。
-     ⚠ 不對稱是刻意寫成可測之明文（AC-N32），非實作自由裁量：
-        主管／部門窗口之上傳**寫** AUDIT_LOG；ICSOPAdmin 之相同操作**不寫**（OQ-E01-09 本輪不償還）。
-     ⚠ AC-N30：**不限權責範圍**——不得新增任何子樹範圍檢查。
-     ⚠ AC-N35：格式／大小驗證與覆蓋語意逐字不變、不因角色而異，不新增任何錯誤碼。 */
-  function uploadOjt(){
-    if(!canWriteOjt()){ toast('error','此角色對「OJT 簽到表」為唯讀','FIELD_WRITE_FORBIDDEN · 403'); return; }
-    const r=document.body.dataset.role;
-    const audited = (r==='supervisor'||r==='deptcontact');
-    /* 🔴 2026-08-21：空狀態（尚無 OJT）＝**新增第一份**，無舊檔可覆蓋 ⇒ **不問覆蓋二次確認**。
-       覆蓋確認只在真的會毀掉一份既有檔案時才出現；空狀態問「覆蓋既有？」是假前提。
-       ⚠ AC-N35 未受影響：格式／大小驗證與錯誤碼一律不變、不因狀態或角色而異，本路徑不新增任何錯誤碼。 */
-    if(!ojtPresent){ firstUploadOjt(audited); return; }
-    openOjtConfirm(audited);
-  }
-  function firstUploadOjt(audited){
-    ojtPresent = true;                 // 原型：上傳後即進入「已有 OJT」狀態，可續看到「上傳／取代」入口
-    renderAttach();
-    if(audited){
-      toast('success','已上傳「OJT 實體簽到表」（本文件之第一份；日後重新上傳即覆蓋、不保留歷史版本）；已寫入稽核 ATTACHMENT_UPLOAD · DOCUMENT_ATTACHMENT');
-    } else {
-      toast('success','已上傳「OJT 實體簽到表」（本文件之第一份；日後重新上傳即覆蓋、不保留歷史版本）。⚠ ICSOP 管理員之附件上傳目前不寫稽核（OQ-E01-09 之既有落差，本輪不償還）');
-    }
-  }
-  function openOjtConfirm(audited){
-    const ok = confirmLike('覆蓋既有 OJT 實體簽到表？','重新上傳即覆蓋舊檔（F016 既有語意：不保留歷史版本、舊檔不再可經文件記錄存取）。');
-    if(!ok) return;
-    if(audited){
-      toast('success','已上傳並覆蓋「OJT 實體簽到表」（不保留歷史版本）；已寫入稽核 ATTACHMENT_UPLOAD · DOCUMENT_ATTACHMENT');
-    } else {
-      toast('success','已上傳並覆蓋「OJT 實體簽到表」（不保留歷史版本）。⚠ ICSOP 管理員之附件上傳目前不寫稽核（OQ-E01-09 之既有落差，本輪不償還）');
-    }
-  }
-  // 原型用之簡化二次確認（實作以既有 confirm modal 元件承接；本頁原無 confirm 元件）
-  function confirmLike(title,body){ return window.confirm(title + String.fromCharCode(10) + body); }
+  /* 🔴 **2026-08-27 E11 delta（F042 `AC-22`；反轉 F016 `AC-N28`／`AC-N29`／`AC-N31`／`AC-N32`）**
+     本頁之 OJT 上傳路徑（`uploadOjt()`／`firstUploadOjt()`／`openOjtConfirm()`／`confirmLike()`）
+     **整段移除**——含 2026-08-20 起僅對主管／部門窗口開放之破例入口與其角色不對稱稽核。
+     ⚠ **移除之理由是「模型改變使該例外之載體不復存在」，不是「主管／部門窗口不該登記 OJT」**——
+        後者為使用者原始需求，由 F042 `AC-05` 於 `25-ojt-progress.html` 承接（且改為多場次累加）。
+     📝 被移除之顯示字面逐字保留供追溯（⚠ **其覆蓋語意已由 `AC-02` 反轉，不得照抄回來**）：
+        OLD> toast: 此角色對「OJT 簽到表」為唯讀（FIELD_WRITE_FORBIDDEN · 403）
+        OLD> confirm 標題: 覆蓋既有 OJT 實體簽到表？
+        OLD> confirm 內文: 重新上傳即覆蓋舊檔（F016 既有語意：不保留歷史版本、舊檔不再可經文件記錄存取）。
+        OLD> toast: 已上傳「OJT 實體簽到表」（本文件之第一份；日後重新上傳即覆蓋、不保留歷史版本）；已寫入稽核 ATTACHMENT_UPLOAD · DOCUMENT_ATTACHMENT
+        OLD> toast: 已上傳「OJT 實體簽到表」（本文件之第一份；日後重新上傳即覆蓋、不保留歷史版本）。⚠ ICSOP 管理員之附件上傳目前不寫稽核（OQ-E01-09 之既有落差，本輪不償還）
+        OLD> toast: 已上傳並覆蓋「OJT 實體簽到表」（不保留歷史版本）；已寫入稽核 ATTACHMENT_UPLOAD · DOCUMENT_ATTACHMENT
+        OLD> toast: 已上傳並覆蓋「OJT 實體簽到表」（不保留歷史版本）。⚠ ICSOP 管理員之附件上傳目前不寫稽核（OQ-E01-09 之既有落差，本輪不償還） */
 
   function jumpNode(){shellToast('跳轉至 DAG 畫布檢視所屬節點（11 / 12）');}
   function jumpLink(){shellToast('跳轉至連結目標文件詳情');}
@@ -418,20 +466,24 @@
     document.body.dataset.role=r;
     const blocked=(r==='user');
     const admin=(r==='icsop_admin');
-    const ojtRole=(r==='supervisor'||r==='deptcontact');   // 🔴 本 delta 唯一被開放寫入之兩個角色
     const ro=(r==='supervisor'||r==='deptcontact'||r==='sysadmin');
     document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
     document.getElementById('roBanner').classList.toggle('hidden',!ro);
     document.getElementById('roBanner').classList.toggle('flex',ro);
-    /* 🔴 AC-N28 之 📝：原句對主管／部門窗口已不再為真 ⇒ 換成 RO_NOTICE_OJT_EXCEPTION；
-       🔒 AC-N26：對系統管理員原句**仍然為真** ⇒ 逐字保留 RO_NOTICE_FULL。 */
-    document.getElementById('roText').textContent = ojtRole ? RO_NOTICE_OJT_EXCEPTION : RO_NOTICE_FULL;
-    // AC-N24 之欄位側明示（僅對被開放 OJT 的兩個角色顯示，避免對 sysadmin 產生「有例外」之誤讀）
+    /* 🔴 **2026-08-27 E11 delta**：三處角色分支同時收斂（理由見常數區與檔頭 ③）。
+       📝 OLD> const ojtRole=(r==='supervisor'||r==='deptcontact');   // 🔴 本 delta 唯一被開放寫入之兩個角色
+       📝 OLD> document.getElementById('roText').textContent = ojtRole ? RO_NOTICE_OJT_EXCEPTION : RO_NOTICE_FULL;
+       📝 OLD> frn.classList.toggle('hidden',!ojtRole); frn.classList.toggle('flex',ojtRole);
+       📝 OLD> document.getElementById('attachTitle').textContent = canWriteOjt()?'附件':'附件（僅下載）';
+       📝 OLD> document.getElementById('attachNote').textContent  = canWriteOjt()?ATTACH_NOTE_OJT:ATTACH_NOTE_RO; */
+    document.getElementById('roText').textContent = RO_NOTICE_FULL;
+    // 欄位側明示：改為對**三個唯讀角色**皆顯示（原僅兩個；限縮之理由隨 OJT 例外消失而不存在）
     const frn=document.getElementById('fieldRoNote');
-    frn.classList.toggle('hidden',!ojtRole); frn.classList.toggle('flex',ojtRole);
+    frn.classList.toggle('hidden',!ro); frn.classList.toggle('flex',ro);
     frn.querySelector('span').textContent=FIELD_RO_NOTE;
-    document.getElementById('attachTitle').textContent = canWriteOjt()?'附件':'附件（僅下載）';
-    document.getElementById('attachNote').textContent  = canWriteOjt()?ATTACH_NOTE_OJT:ATTACH_NOTE_RO;
+    // 本頁對**任何角色**皆無寫入入口 ⇒ 標題與說明不再依角色分支
+    document.getElementById('attachTitle').textContent = '附件（僅下載）';
+    document.getElementById('attachNote').textContent  = ATTACH_NOTE_RO;
     document.getElementById('adminNote').classList.toggle('hidden',!admin);
     document.getElementById('adminNote').classList.toggle('flex',admin);
     document.getElementById('editEntry').classList.toggle('hidden',!admin);

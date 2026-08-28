@@ -281,6 +281,8 @@
     {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    /* 🟢 2026-08-28 F042 AC-27／OQ-E11-05=(A)：新功能列與側選單項（位置＝可寫管理群組之末，docindex 之後）。 */
+    {id:'ojtprogress',label:'OJT 進度管理',icon:'graduation-cap',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'受限CRUD',deptcontact:'受限CRUD'}},
     {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
     {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
     {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},

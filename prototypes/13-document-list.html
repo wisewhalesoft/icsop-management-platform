@@ -1,10 +1,51 @@
 <!DOCTYPE html>
+<!-- 🛑 ~~2026-08-27 E11 delta（**版面不動**）：…本欄之兩態圖示／文案、`data-ojt-cell`／`data-has-ojt` 掛鉤與 OJT 三值篩選於 **OQ-E11-06 (A) 案**下**一字不動**…~~
+     🔴 **本段之 (A) 案前提已於 2026-08-28 人類閘門裁決 `OQ-E11-06`＝(B) 案而失效**，原文逐字保留於上供追溯，見下方新段。 -->
+<!-- 🔴 2026-08-28 E11 delta（**人類閘門已裁決 `OQ-E11-06`＝(B) 案：四值含「部分完成」**）——本檔已套用。
+     規格權威＝docs/specs/features/F042-ojt-progress-management.md `AC-04`＋§反轉總表 丙節（F017 `AC-J12`～`AC-J14`）。
+     ① 🔴 **`hasOjt` 語意改為衍生三態**（原語意＝是否曾上傳 1 份 `OJT_SIGNIN` 附件，已作廢）：
+        依「該文件之**全部使用單位**中已完成 OJT 之比例」分三態——
+        **全部完成**／**部分完成（≥1 但非全部）**／**尚未開始（0 個）**。
+        🔒 **空集合（文件未指定任何使用部門）明文歸入「尚未開始」**（`AC-04`：`every()` 對空陣列回 `true`
+           是語言預設，必須覆寫；把「一個單位都沒指定」畫成「全部完成」會使畫面說謊）。
+        🔒 **缺鍵（後端未回該鍵）亦歸入「尚未開始」**——`AC-N38` ③ 之既有規則語意延續，
+           只是其落點由「視同 false」改為「視同 none」。缺鍵示範載體之列**維持不動**（見 DOCS 註解）。
+     ② 🔴 **第 1 欄由兩態改三態**（棒 4 定稿，下游 AC 逐字照抄）：
+        | 狀態 | icon 鍵 | title／aria-label 逐字 | 色票 |
+        | 全部完成 | `file-check-2`（**既有鍵不變**） | `已全部完成` | `text-emerald-600`（不變） |
+        | 部分完成 | `file-minus-2`（**新增，同 `-2` 檔案家族**） | `部分完成` | `text-amber-500` |
+        | 尚未開始 | `file-x-2`（**既有鍵不變**） | `尚未開始` | `text-slate-300`（不變） |
+        📌 **選 `file-minus-2` 而非 `file-clock` 之理由**：check／minus／x 是同一個 `file-*-2` 家族、
+           同一視覺重量，三者並排即讀成「全部→部分→無」的三級量尺；`file-clock` 讀起來是「等待中／逾期」，
+           那是時間語意，與「幾個單位辦過」無關。且此選法**不動既有兩個 icon 鍵**，只新增一個。
+     ③ 🔴 **篩選下拉由三值改四值**（`AC-D5`／`AC-D10` 連帶）：
+        `全部`（預設，不施加限制）／`已全部完成`／`部分完成`／`尚未開始`。
+        🔒 **沿用 `AC-N38` 的既有設計原則：欄位顯示的字面 ≡ 篩選選項的字面**（三態文案與三個非「全部」
+           選項逐字相同），使「篩選出來的東西」與「欄位顯示的東西」用同一組詞；**不得**另造「已上傳／未上傳」。
+        📝 被取代之三值逐字保留供追溯：OLD> 全部／有 OJT／無 OJT
+     ④ 🔴 **DOM 契約 `data-has-ojt` 值域改為三值 `all`／`partial`／`none`**（`AC-N39` 之語意改寫）。
+        🔒 **定位掛鉤 `data-ojt-cell` 一字未動**——「找到那一格」的方式向下相容，改變的只是格子裡的值。
+        🔴 **刻意不沿用 `"true"`／`"false"` 兩個舊字面**（不寫成 `true|partial|false`），理由：
+           舊字面在新模型下**語意已窄化**——`"false"` 原本涵蓋「所有非完成」，現在只剩「尚未開始」，
+           「部分完成」被排除在外。若保留舊字面，既有斷言 `data-has-ojt="false"` 會**繼續通過但少驗一態**
+           （典型的假綠）；改成全新的三個字面，則舊斷言**當場配對到 0 個元素、明顯失敗**。
+           **在「悄悄變窄」與「大聲壞掉」之間，本 repo 一律選大聲壞掉。**
+        📝 OLD> data-has-ojt="true|false"（"true"＝有 OJT／"false"＝無 OJT 或缺鍵）
+     ⑤ **假資料**：`ojt` 欄位值域由 `true|false|缺鍵` 改為 `'all'|'partial'|'none'|缺鍵`。
+        `ICSOP-SRC-101-1-01`（2/3）與 `ICSOP-SRC-101-2-00`（2/2）之值**由 `25-ojt-progress.html` 之
+        同編號文件反推**，兩檔不得分歧；另補 `ICSOP-SRC-101-1-06` 為第二筆「部分完成」，
+        使該態不是單列孤例（篩選示範需要 ≥2 列）。
+     🔒 **本 delta 僅動第 1 欄與其篩選**：15 欄之欄位集合／由左至右順序／其餘 14 欄之顯示規則、
+        3 張統計卡、其餘 12 項篩選、排序與分頁行為**一律不變**。 -->
 <!-- 🔵 2026-08-20 D9 delta（人類閘門已裁決）——本檔已套用：
      ① **最左新增「OJT」圖示欄**（F017 AC-N37～AC-N40；OQ-D9-25 選項 A＝新增獨立欄置於最左）：
         清單由 14 欄改為 **15 欄**；既有 14 欄之集合、相對順序與各欄顯示規則**逐項不變**
         （AC-D9／AC-E9 之「欄位集合」鎖定已就地縮減範圍以容納本欄）。
-        兩態圖示 file-check-2／file-x-2，title 與 aria-label 逐字沿用既有篩選下拉之「有 OJT」／「無 OJT」（OQ-D9-26）。
-        DOM 契約 data-ojt-cell ＋ data-has-ojt="true|false"；**缺鍵（undefined）視同 false**（AC-N38 ③）。
+        ~~兩態圖示 file-check-2／file-x-2，title 與 aria-label 逐字沿用既有篩選下拉之「有 OJT」／「無 OJT」（OQ-D9-26）。
+        DOM 契約 data-ojt-cell ＋ data-has-ojt="true|false"；**缺鍵（undefined）視同 false**（AC-N38 ③）。~~
+        🛑 **上兩行已於 2026-08-28 由 `OQ-E11-06`＝(B) 案推翻**（兩態→三態、`true|false`→`all|partial|none`），
+           見本檔最上方之 E11 delta 區塊。**原文逐字保留，不得據以恢復兩態渲染。**
+           🔒 惟「本欄位於最左、可見文字為 `OJT`、缺鍵不得渲染成空白／—／null」三點**續為有效**。
         🔒 本 delta **只加顯示欄、不動篩選**：既有 13 項篩選之組成、順序與比對語意一字不動（AC-N40 ②）。
      ② **各檔案列新增浮水印註記 data-wm-note**（F020 AC-N20；OQ-D9-08 選項 B ＋ OQ-D9-33）：
         後台四類下載自 2026-08-20 起**一律燒錄浮水印並寫調閱稽核、無例外角色**（OQ-FM-01／OQ-D18-01 正式失效），
@@ -46,7 +87,8 @@
      制定公司／制定部門／制定室別／當責室長／狀態／程序書編號／程序書書名內／公告日期／
      連結點程序書／附錄／使用表單／OJT／循環別。
        · `公告日期` ＝起～迄區間（閉區間、兩端可空、announcedDate 為 null 者於任一端有值時排除，AC-D4）
-       · `OJT` ＝三值固定下拉（全部／有 OJT／無 OJT，AC-D5）
+       · ~~`OJT` ＝三值固定下拉（全部／有 OJT／無 OJT，AC-D5）~~ 🛑 **已於 2026-08-28 由 `OQ-E11-06`＝(B) 案
+         改為四值固定下拉（全部／已全部完成／部分完成／尚未開始）**，見檔頭 E11 delta ③；原文逐字保留供追溯
        · `附錄`／`使用表單` ＝可搜尋下拉選具體一份（值＝appendixId／formId，AC-D6）
          使用表單之選項 label ＝ `{編號} {名稱}`、無編號者僅名稱（F018 AC-D8）
        · `程序書書名內` ＝可搜尋下拉（等值）＋可直接輸入（contains、不分大小寫）之**雙行為**（AC-D3）；
@@ -102,13 +144,15 @@
        ⑩ 連結點**兩態**，依「目標文件是否已上傳 ICSOP PDF」（後端 `DocumentLinkView.targetHasPdf`）分流：
           · **有 PDF（或未知）** → 逐字沿用 2026-08-18 之既有 pill／下載鈕（`download` 圖示、primary 色、
             title `下載連結點程序書：{編號} {書名}`），行為與外觀**一字不動**。
-          · **無 PDF** → 改為**無檔案態**：圖示換 `file-x-2`、色票降為 `text-slate-400`（同表既有「無 OJT」之
-            語彙，未引入新圖示或新色票），title 逐字＝`連結點程序書：{編號} {書名}（尚未上傳 ICSOP PDF，無法下載）`。
+          · **無 PDF** → 改為**無檔案態**：圖示換 `file-x-2`、色票降為 `text-slate-400`（同表既有 OJT 欄
+            「無」態之語彙，未引入新圖示或新色票），title 逐字＝`連結點程序書：{編號} {書名}（尚未上傳 ICSOP PDF，無法下載）`。
+            📌 2026-08-28 就地更正：本句原寫「同表既有『無 OJT』之語彙」，該逐字標籤已由 `OQ-E11-06`＝(B) 案
+               改為「尚未開始」⇒ 改以「OJT 欄『無』態」指稱。**所引用的 `file-x-2` 與色票本身未變**。
        ⑪ 無檔案態**仍是真正的 `<button>`**（可 focus、可鍵盤 Enter／Space、可觸控），**不得**用 `disabled`
           或改成 `<span>`。理由同 ⑥，且 F024 匯出鈕已裁定過同一件事：`disabled` 的鈕不能 focus、讀不到
           tooltip、觸控裝置上按了毫無反應 ⇒ 使用者只會覺得「壞了」，而不是「這份還沒上傳」。
           點擊之回饋逐字＝`「{編號} {書名}」尚未上傳 ICSOP PDF，無法下載`（說明原因，不再是泛用的「無法下載」）。
-       ⑫ **未知（`targetHasPdf` 缺鍵）一律當成有 PDF**，維持既有可下載外觀——與同表「OJT」欄之「缺鍵視同 false」
+       ⑫ **未知（`targetHasPdf` 缺鍵）一律當成有 PDF**，維持既有可下載外觀——與同表「OJT」欄之「缺鍵視同尚未開始」
           刻意相反。理由：這裡猜錯的代價不對稱，把「其實下載得到」的連結點標成不可下載是**新製造**的缺失，
           而把「其實沒有」的畫成可下載只是退回本 delta 前的行為（且點下去仍有 ⑪ 的說明）。
        ⑬ DOM 契約（供約束環定位）：無檔案態之按鈕帶 `data-link-no-pdf`；有 PDF／未知態**不得**帶此屬性。
@@ -362,6 +406,8 @@
     {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    /* 🟢 2026-08-28 F042 AC-27／OQ-E11-05=(A)：新功能列與側選單項（位置＝可寫管理群組之末，docindex 之後）。 */
+    {id:'ojtprogress',label:'OJT 進度管理',icon:'graduation-cap',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'受限CRUD',deptcontact:'受限CRUD'}},
     {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
     {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
     {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
@@ -524,21 +570,25 @@
        （22 的 lc1 有 8 份、本檔只有其中 3 份 ＋ 1 份 22 沒有的失效舊版）⇒ 跳轉後的筆數仍會小於抽屜的 N。
        見檔頭「已知且刻意不在本輪對齊之落差」。 */
   const DOCS=[
-    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'消金審核作業_v2.0.pdf',node:'撥款核准作業',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業'],date:'2025-12-01',lcId:'lc1',appx:['ax3','ax4','ax8'],forms:['uf3','uf4','uf8'],ojt:true},
-    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'企業金融授信作業_v1.0.pdf',node:'企金案件受理作業',num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。',links:[],date:'2026-06-01',lcId:'lc10',appx:[],forms:[]}  /* 🔵 AC-N38 ③ 示範：本列刻意**不帶 ojt 鍵**（模擬後端未回該鍵）⇒ 視同 false，渲染與 false 完全相同（file-x-2 ＋「無 OJT」、data-has-ojt="false"）。勿「修正」為 ojt:false——這是缺鍵路徑唯一的示範載體；篩選行為與 false 一致，統計卡與筆數不受影響。 */,
-    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期特約通路作業_v1.2.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',edition:"25'10",summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業','ICSOP-SRC-101-2-00 消金審核作業'],date:'2025-10-01',lcId:'lc1',appx:['ax1'],forms:['uf1'],ojt:false},
-    {company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],status:'有效',pdf:'車輛分期進件作業_v1.3.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',links:['ICSOP-SRC-102-1-01 車輛分期對保作業','ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-101-1-06 消費分期特約通路作業','ICSOP-PPC-101-2-02 消費分期產品政策及規範作業','ICSOP-PPC-101-1-03 消費分期-月目標設定作業','ICSOP-CIPS-104-1-01 使用者權限管理與覆核'],date:'2026-01-01',lcId:'lc1',appx:['ax1','ax2','ax8'],forms:['uf1','uf2','uf8'],ojt:true},
-    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期產品政策及規範作業_v1.0.pdf',node:null,num:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',edition:"26'03",summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。',links:[],date:'2026-09-01',lcId:'lc3',appx:[],forms:[],ojt:false},
-    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期月目標設定作業_v1.1.pdf',node:'目標制定作業',num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',edition:"26'04",summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。',links:[],date:'2026-08-15',lcId:'lc3',appx:[],forms:[],ojt:false},
-    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'費用請款作業_v2.1.pdf',node:'費用請款作業',num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。',links:[],date:'2026-05-01',lcId:'lc2',appx:[],forms:[],ojt:false},
-    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'有效',pdf:'招募管理作業_v1.4.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-02',name:'招募管理作業',edition:"25'09",summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。',links:[],date:'2025-10-01',lcId:'lc4',appx:['ax7'],forms:[],ojt:true},
-    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'短期投資買賣保管及會計作業_v1.0.pdf',node:'短期投資作業',num:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',edition:"26'05",summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。',links:[],date:'2026-10-01',lcId:'lc7',appx:[],forms:[],ojt:false},
-    {company:'和潤企業股份有限公司',dept:'經企公關部',section:'法遵及公司治理室',chief:'劉家瑋（經企公關部 法遵及公司治理室 室長）',sec:[],status:'有效',pdf:'法遵作業_v1.2.pdf',node:'法遵作業',num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。',links:[],date:'2026-03-01',lcId:'lc9',appx:[],forms:[],ojt:false},
-    {company:'和潤企業股份有限公司',dept:'管理部',section:'總務室',chief:'蔡明哲（管理部 總務室 室長）',sec:[],status:'有效',pdf:'不動產請購採購驗收作業_v1.0.pdf',node:'資產管理作業',num:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',edition:"25'08",summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。',links:[],date:'2025-10-01',lcId:'lc6',appx:[],forms:[],ojt:false},
-    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'銀行融資作業_v1.1.pdf',node:'銀行融資作業',num:'ICSOP-FC-101-1-00',name:'銀行融資作業',edition:"26'01",summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。',links:[],date:'2026-02-01',lcId:'lc5',appx:[],forms:[],ojt:false},
-    {company:'和潤企業股份有限公司',dept:'資訊部',section:'應用發展室',chief:'許志偉（資訊部 應用發展室 室長）',sec:[],status:'有效',pdf:'使用者權限管理與覆核_v1.3.pdf',node:'使用者權限管理',num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',edition:"26'01",summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。',links:[],date:'2026-04-01',lcId:'lc8',appx:[],forms:[],ojt:false},
-    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'失效',pdf:'消費分期進件作業_舊版.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',edition:"24'03",summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。',links:[],date:'2025-05-01',lcId:'lc1',appx:[],forms:['uf1'],ojt:false},
-    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'作廢',pdf:'任用管理作業_作廢.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',edition:"24'01",summary:'（作廢）任用管理作業，因組織調整不再適用。',links:[],date:'2025-04-01',lcId:'lc4',appx:[],forms:[],ojt:false}
+    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'消金審核作業_v2.0.pdf',node:'撥款核准作業',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業'],date:'2025-12-01',lcId:'lc1',appx:['ax3','ax4','ax8'],forms:['uf3','uf4','uf8'],ojt:'all'},
+    {company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],status:'有效',pdf:'企業金融授信作業_v1.0.pdf',node:'企金案件受理作業',num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。',links:[],date:'2026-06-01',lcId:'lc10',appx:[],forms:[]}  /* 🔴 AC-N38 ③ 示範（**2026-08-28 就地更新為 (B) 案三態語彙；本列之資料一格未動、仍不帶 ojt 鍵**）：
+     本列刻意**不帶 ojt 鍵**（模擬後端未回該鍵）⇒ 收斂為 `'none'`，渲染與 `ojt:'none'` 完全相同
+     （file-x-2 ＋「尚未開始」、data-has-ojt="none"）。勿「修正」為 ojt:'none'——這是缺鍵路徑唯一的示範載體；
+     篩選行為與 `'none'` 一致，統計卡與筆數不受影響。
+     📝 OLD> ⇒ 視同 false，渲染與 false 完全相同（file-x-2 ＋「無 OJT」、data-has-ojt="false"）。勿「修正」為 ojt:false */,
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期特約通路作業_v1.2.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',edition:"25'10",summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。',links:['ICSOP-SRC-101-1-01 車輛分期進件作業','ICSOP-SRC-101-2-00 消金審核作業'],date:'2025-10-01',lcId:'lc1',appx:['ax1'],forms:['uf1'],ojt:'partial'},
+    {company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],status:'有效',pdf:'車輛分期進件作業_v1.3.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。',links:['ICSOP-SRC-102-1-01 車輛分期對保作業','ICSOP-SRC-101-2-00 消金審核作業','ICSOP-SRC-101-1-06 消費分期特約通路作業','ICSOP-PPC-101-2-02 消費分期產品政策及規範作業','ICSOP-PPC-101-1-03 消費分期-月目標設定作業','ICSOP-CIPS-104-1-01 使用者權限管理與覆核'],date:'2026-01-01',lcId:'lc1',appx:['ax1','ax2','ax8'],forms:['uf1','uf2','uf8'],ojt:'partial'},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期產品政策及規範作業_v1.0.pdf',node:null,num:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',edition:"26'03",summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。',links:[],date:'2026-09-01',lcId:'lc3',appx:[],forms:[],ojt:'none'},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'有效',pdf:'消費分期月目標設定作業_v1.1.pdf',node:'目標制定作業',num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',edition:"26'04",summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。',links:[],date:'2026-08-15',lcId:'lc3',appx:[],forms:[],ojt:'none'},
+    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'費用請款作業_v2.1.pdf',node:'費用請款作業',num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。',links:[],date:'2026-05-01',lcId:'lc2',appx:[],forms:[],ojt:'none'},
+    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'有效',pdf:'招募管理作業_v1.4.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-02',name:'招募管理作業',edition:"25'09",summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。',links:[],date:'2025-10-01',lcId:'lc4',appx:['ax7'],forms:[],ojt:'all'},
+    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'短期投資買賣保管及會計作業_v1.0.pdf',node:'短期投資作業',num:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',edition:"26'05",summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。',links:[],date:'2026-10-01',lcId:'lc7',appx:[],forms:[],ojt:'none'},
+    {company:'和潤企業股份有限公司',dept:'經企公關部',section:'法遵及公司治理室',chief:'劉家瑋（經企公關部 法遵及公司治理室 室長）',sec:[],status:'有效',pdf:'法遵作業_v1.2.pdf',node:'法遵作業',num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。',links:[],date:'2026-03-01',lcId:'lc9',appx:[],forms:[],ojt:'none'},
+    {company:'和潤企業股份有限公司',dept:'管理部',section:'總務室',chief:'蔡明哲（管理部 總務室 室長）',sec:[],status:'有效',pdf:'不動產請購採購驗收作業_v1.0.pdf',node:'資產管理作業',num:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',edition:"25'08",summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。',links:[],date:'2025-10-01',lcId:'lc6',appx:[],forms:[],ojt:'none'},
+    {company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],status:'有效',pdf:'銀行融資作業_v1.1.pdf',node:'銀行融資作業',num:'ICSOP-FC-101-1-00',name:'銀行融資作業',edition:"26'01",summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。',links:[],date:'2026-02-01',lcId:'lc5',appx:[],forms:[],ojt:'none'},
+    {company:'和潤企業股份有限公司',dept:'資訊部',section:'應用發展室',chief:'許志偉（資訊部 應用發展室 室長）',sec:[],status:'有效',pdf:'使用者權限管理與覆核_v1.3.pdf',node:'使用者權限管理',num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',edition:"26'01",summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。',links:[],date:'2026-04-01',lcId:'lc8',appx:[],forms:[],ojt:'none'},
+    {company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],status:'失效',pdf:'消費分期進件作業_舊版.pdf',node:'進件作業',num:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',edition:"24'03",summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。',links:[],date:'2025-05-01',lcId:'lc1',appx:[],forms:['uf1'],ojt:'none'},
+    {company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],status:'作廢',pdf:'任用管理作業_作廢.pdf',node:'任用與異動管理',num:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',edition:"24'01",summary:'（作廢）任用管理作業，因組織調整不再適用。',links:[],date:'2025-04-01',lcId:'lc4',appx:[],forms:[],ojt:'none'}
   ];
 
   /* ===== 衍生狀態 ===== */
@@ -603,8 +653,13 @@
     // 附錄／使用表單＝選具體一份；值分別為 appendixId／formId（非名稱字串）
     {key:'appx',   label:'附錄',          type:'combo', opts:()=>APPENDIX_POOL.map(a=>a.id),   optLabel:id=>apxName(id)},
     {key:'form',   label:'使用表單',      type:'combo', opts:()=>USAGE_FORM_POOL.map(f=>f.id), optLabel:id=>formLabel(id)},
-    // AC-D5：三值下拉，選項文字逐字為 `全部`（預設，不施加限制）／`有 OJT`／`無 OJT`
-    {key:'ojt',    label:'OJT',           type:'select',opts:()=>[{v:'全部',t:'全部'},{v:'有 OJT',t:'有 OJT'},{v:'無 OJT',t:'無 OJT'}]},
+    /* 🔴 `AC-D5`／`AC-D10`（2026-08-28 `OQ-E11-06`＝(B) 案）：**四值**下拉，選項文字逐字為
+       `全部`（預設，不施加限制）／`已全部完成`／`部分完成`／`尚未開始`。
+       🔒 後三者**直接引用欄位渲染用的同一組常數**（`OJT_STATE_*_TEXT`），不另行重打字面——
+          「欄位顯示 ≡ 篩選選項」是 `AC-N38` 的既有設計原則，各打一次就是讓兩者日後漂移的入口。
+          （`opts` 為惰性函式，於渲染時才求值，故引用宣告在後方的常數不會踩到 TDZ。）
+       📝 OLD> opts:()=>[{v:'全部',t:'全部'},{v:'有 OJT',t:'有 OJT'},{v:'無 OJT',t:'無 OJT'}] */
+    {key:'ojt',    label:'OJT',           type:'select',opts:()=>[{v:'全部',t:'全部'},{v:OJT_STATE_ALL_TEXT,t:OJT_STATE_ALL_TEXT},{v:OJT_STATE_PARTIAL_TEXT,t:OJT_STATE_PARTIAL_TEXT},{v:OJT_STATE_NONE_TEXT,t:OJT_STATE_NONE_TEXT}]},
     // 循環別：選項值＝lifecycleId、顯示＝lifecycleDisplayName（F040 AC-31／F017 AC-S2）
     // 「銷售及收款循環（消金／企金／子公司）」為三個相異選項，選定其一僅回傳該具體循環之文件
     {key:'cycle',  label:'循環別',        type:'combo', opts:()=>LIFECYCLE_POOL.map(l=>l.id),  optLabel:id=>lcName(id)}
@@ -687,21 +742,31 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
 
   /* ===== 表格 ===== */
-  /* ===== 🔵 最左「OJT」圖示欄（F017 AC-N37～AC-N40；2026-08-20 D9 delta，OQ-D9-25 選項 A／OQ-D9-26 選項 A）=====
-     · 三種輸入 → **兩種**視覺：hasOjt===true → file-check-2 ＋「有 OJT」；
-       hasOjt===false **與缺鍵（undefined）** → 皆為 file-x-2 ＋「無 OJT」
-       （AC-N38 ③：缺鍵視同 false，**不得**渲染為空白／—／null／第三種視覺狀態）。
-     · 兩態字面刻意逐字沿用既有 OJT 篩選下拉之選項文字（AC-D5 之「有 OJT」／「無 OJT」），
+  /* ===== 🔴 最左「OJT」圖示欄（F017 `AC-J13`；2026-08-28 `OQ-E11-06`＝(B) 案，三態）=====
+     · 四種輸入 → **三種**視覺：`'all'` → file-check-2 ＋「已全部完成」；`'partial'` → file-minus-2 ＋「部分完成」；
+       `'none'` **與缺鍵（undefined）** → 皆為 file-x-2 ＋「尚未開始」
+       （`AC-N38` ③ 之規則語意延續：缺鍵**不得**渲染為空白／—／null／第四種視覺狀態）。
+     · 三態字面刻意逐字沿用 OJT 篩選下拉之三個非「全部」選項（`AC-D5` 新四值），
        使畫面上「篩選出來的東西」與「欄位顯示的東西」用同一組詞；**不得**另造「已上傳／未上傳」。
-     · DOM 契約（AC-N39）：儲存格帶 data-ojt-cell，並帶 data-has-ojt="true" 或 "false"（缺鍵一律 "false"）。
-     · icon 鍵 file-check-2／file-x-2 皆為既有鍵、不新增圖示；兩態之顏色差異屬設計裁量、不入 AC。
-     🔒 AC-N40：本 delta **只加顯示欄、不動篩選**——既有 OJT 三值篩選下拉（全部／有 OJT／無 OJT）一字不動。 */
+     · DOM 契約（`AC-N39` 語意改寫）：儲存格帶 `data-ojt-cell`（**定位方式一字未動**），
+       並帶 `data-has-ojt="all"｜"partial"｜"none"`（缺鍵一律 `"none"`）。
+       🔴 **不沿用舊字面 `"true"`／`"false"`**——理由見檔頭 ④（悄悄變窄 vs 大聲壞掉）。
+     · icon 鍵：`file-check-2`／`file-x-2` **為既有鍵、一字未動**，僅新增 `file-minus-2`；三態顏色屬設計裁量。
+     📝 OLD> const has = d.ojt === true; icon = has?'file-check-2':'file-x-2'; label = has?'有 OJT':'無 OJT';
+     📝 OLD> data-has-ojt="${has?'true':'false'}" */
+  const OJT_STATE_ALL_TEXT     = '已全部完成';   // 逐字，欄位 title/aria-label 與篩選選項共用
+  const OJT_STATE_PARTIAL_TEXT = '部分完成';     // 同上
+  const OJT_STATE_NONE_TEXT    = '尚未開始';     // 同上
+  const OJT_STATE = {
+    all:     {icon:'file-check-2', text:OJT_STATE_ALL_TEXT,     cls:'text-emerald-600'},
+    partial: {icon:'file-minus-2', text:OJT_STATE_PARTIAL_TEXT, cls:'text-amber-500'},
+    none:    {icon:'file-x-2',     text:OJT_STATE_NONE_TEXT,    cls:'text-slate-300'}
+  };
+  /* 🔒 缺鍵與任何非三值之輸入一律收斂為 'none'（單一收斂點，避免各處各自判斷而漂移）。 */
+  function ojtStateOf(d){ return OJT_STATE[d.ojt] ? d.ojt : 'none'; }
   function ojtCell(d){
-    const has = d.ojt === true;                       // undefined 與 false 皆落入 else 分支
-    const icon  = has ? 'file-check-2' : 'file-x-2';
-    const label = has ? '有 OJT' : '無 OJT';
-    const cls   = has ? 'text-emerald-600' : 'text-slate-300';
-    return `<td class="px-3 py-3" data-ojt-cell data-has-ojt="${has?'true':'false'}"><i data-lucide="${icon}" class="w-4 h-4 ${cls}" title="${label}" aria-label="${label}" role="img"></i></td>`;
+    const st = ojtStateOf(d), s = OJT_STATE[st];
+    return `<td class="px-3 py-3" data-ojt-cell data-has-ojt="${st}"><i data-lucide="${s.icon}" class="w-4 h-4 ${s.cls}" title="${s.text}" aria-label="${s.text}" role="img"></i></td>`;
   }
   /* ===== 🔵 後台檔案列之浮水印註記（F020 AC-N20；2026-08-20 OQ-D9-08／OQ-D9-33 裁決）=====
      後台四類下載自 2026-08-20 起**一律燒錄浮水印並寫調閱稽核**（OQ-FM-01／OQ-D18-01 正式失效）⇒
@@ -821,8 +886,12 @@
       if(FILTER.appx && !(d.appx||[]).includes(FILTER.appx)) return false;                 // 10 DOC_APPENDIX 含該 appendixId
       if(FILTER.form && !(d.forms||[]).includes(FILTER.form)) return false;                // 11 DOC_USAGE_FORM 含該 formId
       // 12 AC-D5：OJT 三值（存在／不存在 DOCUMENT_ATTACHMENT.type='OJT_SIGNIN'）
-      if(FILTER.ojt==='有 OJT' && !d.ojt) return false;
-      if(FILTER.ojt==='無 OJT' && d.ojt) return false;
+      /* 🔴 12 OJT（2026-08-28 `OQ-E11-06`＝(B) 案）：四值篩選，比對語意＝**衍生三態之等值比對**。
+         🔒 走 `ojtStateOf()` 這個唯一收斂點（缺鍵→'none'），使「篩選看到的」與「欄位畫出來的」
+            必然一致——兩處各自判斷正是舊寫法 `!d.ojt`／`d.ojt` 會把 'none' 與 'partial' 混為一談之處。
+         📝 OLD> if(FILTER.ojt==='有 OJT' && !d.ojt) return false;
+         📝 OLD> if(FILTER.ojt==='無 OJT' && d.ojt) return false; */
+      if(FILTER.ojt!=='全部' && OJT_STATE[ojtStateOf(d)].text!==FILTER.ojt) return false;
       if(FILTER.cycle && d.lcId!==FILTER.cycle) return false;   // 13 以 lifecycleId 比對：同名另一子分類之文件不納入
       /* 🔴 2026-08-21 裁決 3：節點子樹篩選。**不是**第 14 項篩選，而是由 deep link 帶入的獨立條件，
          與上列 13 項為 AND。比對＝同一 lifecycleId 且掛載節點落在子樹節點集合內。

@@ -1,4 +1,26 @@
 <!DOCTYPE html>
+<!-- 🟢 2026-08-28 E11 delta（人類閘門已裁決 `OQ-E11-13`＝(B)、`OQ-E11-04`＝(A)；`OQ-E11-17` 覆核核可）
+     ——本檔已套用。規格權威＝F024 §ojt-progress-audit-view-delta `AC-J22`／F023 `AC-J19`～`AC-J21`。
+     ① 🔴 **「類型」篩選新增第五種類型值「OJT 場次」**（targetType=`OJT_SESSION`）：
+        置於既有四者之後，**既有四者之字面與相對順序一字不動**（沿用 `AC-N69` ② 之既有作法）。
+        ⚠ **`AC-N69` ① 之「類型值恰為四種、控制項共 5 個 option」已被本裁決推翻** ⇒ 現為
+           **五種類型值＋既有「全部類型」預設項，控制項共 6 個 option**。已回報 sw-ojt 更新該條。
+     ② 🔴 **兩個新 actionType 之中文標籤（棒 4 定稿）**：
+        `OJT_SESSION_UPLOAD` → `場次登記`／`OJT_SESSION_DELETE` → `場次刪除`。
+        🔴 **刪除事件歸類為「OJT 場次」，絕不得歸為「上傳」**——稽核上必須分得出「登記」與
+           「撤銷登記」，把 DELETE 塞進「上傳」會使該區分在查詢層面消失。
+        📌 兩者刻意**不沿用**既有 `ATTACHMENT_UPLOAD`／`附件上傳`（`OQ-E11-13`＝(B)：新立而非沿用）。
+     ③ 🔴 **角色不對稱不延續**（`OQ-E11-13`＝(B) 明文推翻 `AC-N32`／`AC-N52`）：場次登記對
+        **ICSOPAdmin／主管／部門窗口三者皆寫稽核** ⇒ 本頁**刻意新增一筆 ICSOP 管理員的場次登記列**，
+        作為「不對稱已不存在」之畫面載體。⚠ 這與下方「上傳」區塊「刻意沒有 ICSOP 管理員列」之
+        既有註解**方向相反**，兩者並存是正確的：舊 `ATTACHMENT_UPLOAD` 路徑之不對稱本輪未償還。
+     ④ **場次刪除僅 ICSOPAdmin**（`OQ-E11-04`＝(A)）⇒ 示範之 DELETE 列其角色必為 ICSOP 管理員。
+     ⑤ **新事件非浮水印動作** ⇒ `watermarkSnapshot` 為 null、明細之「當次浮水印快照」區留空
+        （`hasWm()` 已一併排除兩個新 actionType；否則畫面會替一個從未產生浮水印的動作**編造**一組快照）。
+     🔒 **本 delta 僅動：類型 select、`ACT_STYLE`／`KIND_STYLE` 對照、`hasWm()`、示範假資料。**
+        11 欄表頭、查詢篩選其餘組成、30 天預設、RBAC、分頁、匯出行為一律未動。
+     🔒 既有兩筆「上傳」示範列**刻意保留**：那是舊模型下**確實發生過**的歷史事件，稽核為 append-only；
+        雖然該路徑已由 F042 `AC-22` 移除、日後不再產生新列，但既有紀錄不得因此消失。**勿刪**。 -->
 <!-- 🔴 2026-08-20 D9 delta（人類閘門已裁決）——本檔已套用（規格權威＝F024 §d9-audit-view-delta
      AC-N53／AC-N54／AC-N69／AC-N70 ＋ F020 AC-N10～AC-N13）：
      ① 🔴 **「類型」篩選新增第四種類型值「上傳」**（AC-N69；OQ-D9-29 裁決之核心兌現，手段見 OQ-D9-34）：
@@ -109,8 +131,11 @@
           <option value="文件">文件</option>
           <option value="循環">循環</option>
           <option value="變更">變更</option>
-          <!-- 🔴 AC-N69 ②：本 delta 新增之第四種類型值，**置於既有三者之後**，既有三者字面與相對順序不變 -->
+          <!-- 🔴 AC-N69 ②：2026-08-20 D9 delta 新增之第四種類型值，**置於既有三者之後**，既有三者字面與相對順序不變 -->
           <option value="上傳">上傳</option>
+          <!-- 🟢 2026-08-28 E11 delta：第五種類型值（targetType=OJT_SESSION），同樣**置於既有四者之後**，
+               既有四者之字面與相對順序一字不動。控制項自此共 6 個 option（含「全部類型」）。 -->
+          <option value="OJT 場次">OJT 場次</option>
         </select>
       </div>
       <div>
@@ -193,6 +218,8 @@
     {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    /* 🟢 2026-08-28 F042 AC-27／OQ-E11-05=(A)：新功能列與側選單項（位置＝可寫管理群組之末，docindex 之後）。 */
+    {id:'ojtprogress',label:'OJT 進度管理',icon:'graduation-cap',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'受限CRUD',deptcontact:'受限CRUD'}},
     {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
     {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
     {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
@@ -248,7 +275,18 @@
        watermarkSnapshot = null（非浮水印動作）⇒ 明細之「當次浮水印快照」區必須留空。
        ⚠ AC-N32 之角色不對稱：**ICSOPAdmin 之相同上傳不寫稽核**，故本頁刻意**沒有**一筆 ICSOP 管理員的上傳列。 */
     {kind:'上傳',name:'陳彥廷',emp:'20088',company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',role:'主管',num:'ICSOP-SRC-101-1-01',doc:'OJT 實體簽到表上傳（覆蓋）',act:'ATTACHMENT_UPLOAD',time:'2026-07-16 17:02:55'},
-    {kind:'上傳',name:'林建宏',emp:'20521',company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',role:'部門窗口',num:'ICSOP-SRC-101-2-00',doc:'OJT 實體簽到表上傳（新增）',act:'ATTACHMENT_UPLOAD',time:'2026-07-13 09:41:26'}
+    {kind:'上傳',name:'林建宏',emp:'20521',company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',role:'部門窗口',num:'ICSOP-SRC-101-2-00',doc:'OJT 實體簽到表上傳（新增）',act:'ATTACHMENT_UPLOAD',time:'2026-07-13 09:41:26'},
+    /* 🟢 OJT 場次（`AC-J22`；2026-08-28 E11 delta）——actionType=`OJT_SESSION_UPLOAD`／`OJT_SESSION_DELETE`、
+       targetType=`OJT_SESSION`、watermarkSnapshot=null（非浮水印動作）。
+       🔴 **使用單位為本 Epic 唯一新增的稽核維度**，但 F024 本輪**不新增欄位**（`OQ-E11-13` ②，比照
+          `AC-N54` 對 `OQ-D9-30` 之既有處置）⇒ 於既有「說明」欄之文字中承載，使它在畫面上讀得到，
+          而不是讓「是哪個單位的」在查詢介面上徹底消失。
+       🔴 第 1 列刻意為 **ICSOP 管理員**：`OQ-E11-13`＝(B) 之「角色不對稱不延續」在畫面上的唯一載體。 */
+    {kind:'OJT 場次',name:'李慧玲',emp:'20233',company:'和潤企業股份有限公司',dept:'債權管理部',section:'法催一室',role:'ICSOP 管理員',num:'ICSOP-SRC-101-1-01',doc:'OJT 場次登記（營運管理部 / 審查室 · 訓練日期 2026-06-18）',act:'OJT_SESSION_UPLOAD',time:'2026-07-16 18:24:05'},
+    {kind:'OJT 場次',name:'陳彥廷',emp:'20088',company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',role:'主管',num:'ICSOP-SRC-101-2-00',doc:'OJT 場次登記（信用審查部 / 企金室 · 訓練日期 2026-08-12）',act:'OJT_SESSION_UPLOAD',time:'2026-07-15 11:08:33'},
+    /* 🔴 刪除示範：`OQ-E11-04`＝(A) 僅 ICSOPAdmin 可刪 ⇒ 角色必為 ICSOP 管理員；
+       且其「類型」為 `OJT 場次`（**不是**「上傳」）——這正是本 delta 要能被查出來的區分。 */
+    {kind:'OJT 場次',name:'李慧玲',emp:'20233',company:'和潤企業股份有限公司',dept:'債權管理部',section:'法催一室',role:'ICSOP 管理員',num:'ICSOP-SRC-101-1-01',doc:'OJT 場次刪除（供應商金融部 / 醫療一課 · 訓練日期 2026-05-20）',act:'OJT_SESSION_DELETE',time:'2026-07-14 16:47:52'}
   ];
   const ACT_STYLE={
     VIEW:['slate','檢視'],DOWNLOAD:['blue','下載'],PRINT:['violet','列印'],
@@ -256,9 +294,15 @@
     CHANGE_LOG_VIEW:['amber','文件變更歷程檢視'],LIFECYCLE_CHANGELOG_VIEW:['amber','循環變更歷程檢視'],
     LIFECYCLE_CHANGELOG_DOWNLOAD:['amber','新舊樹狀圖下載'],
     // 🔴 AC-N53：中文標籤逐字為「附件上傳」（actionTypeLabel('ATTACHMENT_UPLOAD') === '附件上傳'）
-    ATTACHMENT_UPLOAD:['violet','附件上傳']
+    ATTACHMENT_UPLOAD:['violet','附件上傳'],
+    /* 🟢 `AC-J22`（2026-08-28）：兩個新 actionType 之中文標籤（棒 4 定稿，下游逐字照抄）。
+       🔴 刪除刻意用 rose 色，與登記在視覺上就分得開——稽核頁最常被問的問題是
+          「這筆到底是登記還是撤銷」，靠讀 8 個字元的英文常數分辨太慢。 */
+    OJT_SESSION_UPLOAD:['sky','場次登記'],
+    OJT_SESSION_DELETE:['rose','場次刪除']
   };
-  const KIND_STYLE={'文件':'slate','循環':'emerald','變更':'amber','上傳':'violet'};
+  // 🟢 2026-08-28：第五種類型值之色票（sky，與既有四者皆不同）
+  const KIND_STYLE={'文件':'slate','循環':'emerald','變更':'amber','上傳':'violet','OJT 場次':'sky'};
   /* 🔴 F020 AC-N10～AC-N13（2026-08-20）：浮水印組字之「公司名稱」欄＝**簡稱**（AC-N12），
      🔒 而本頁「公司」欄與 CSV 匯出值**仍為全稱**（AC-N13 ③）——兩者刻意不同源，勿「統一」。
      INV-C2（AC-N11）：短稱表鍵集合 ≡ 全稱表鍵集合。 */
@@ -268,8 +312,13 @@
     const code=Object.keys(COMPANY_FULL_NAMES).find(c=>COMPANY_FULL_NAMES[c]===full);
     return code ? COMPANY_SHORT_NAMES[code] : '';   // 查無 → 留空並套用 §8.4 收合（不得輸出 null、不得回退為全稱）
   }
-  // 🔴 AC-N53：非浮水印之動作類型（附件上傳）其 watermarkSnapshot 為 null ⇒ 明細該欄留空
-  function hasWm(r){ return r.act!=='ATTACHMENT_UPLOAD'; }
+  /* 🔴 AC-N53 ＋ `AC-J22`：**非浮水印動作**之 watermarkSnapshot 為 null ⇒ 明細該欄留空。
+     🔴 2026-08-28：兩個新 actionType **必須一併列入**，否則畫面會替一個從未產生浮水印的動作
+        （登記／刪除一筆場次紀錄）**編造**一組浮水印字串——那是系統陳述一件沒有發生的事。
+     📌 收成一份清單而非串接 `&&`：日後再加非浮水印動作時只會改這一個地方。
+     📝 OLD> function hasWm(r){ return r.act!=='ATTACHMENT_UPLOAD'; } */
+  const NON_WATERMARK_ACTIONS=['ATTACHMENT_UPLOAD','OJT_SESSION_UPLOAD','OJT_SESSION_DELETE'];
+  function hasWm(r){ return !NON_WATERMARK_ACTIONS.includes(r.act); }
   // §8.4：無處/室者 section 留空，分隔符自動收合（不得出現 '--'）；與 PDF 燒錄同一組字邏輯
   function wm(r){return [r.emp,r.name,companyShortOf(r.company),r.dept,r.section,'僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現',r.time].filter(p=>p!==''&&p!=null).join('-');}
   let expandedIdx=-1;

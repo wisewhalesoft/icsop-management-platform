@@ -1,4 +1,20 @@
 <!DOCTYPE html>
+<!-- 🟢 2026-08-28 E11 delta（人類閘門已裁決 `OQ-E11-14`＝(A)）——本檔已套用。
+     規格權威＝docs/specs/features/F042-ojt-progress-management.md `AC-24`（＋`AC-21` 之同一套判定規則）。
+     ① 🔴 **「OJT 實體簽到表」欄位列改為唯讀衍生**：不再顯示一份文件層的簽到表檔名，
+        改為列出該文件目前**已完成 OJT 之使用單位名稱清單**（判定＝`AC-03`）。
+        尚無單位完成時顯示明確提示（**非空白、非錯誤**）。
+     ② 🔴 **附件區之 OJT 項目整個移除**：新模型下簽到表屬於**個別場次**（`documentId × orgCode × 場次`），
+        不再有一份「本文件的 OJT 檔」可供前台下載。前台**不提供任何場次檔案之下載入口**——
+        簽到表是出席紀錄，逐場次檔案僅於後台「OJT 進度管理」由具權限角色取用。
+     ③ 連帶移除原型專用之「示範：切換 OJT 格式 pdf／jpg」控制項與 `OJT_PDF` 旗標（其對象已不存在）。
+     🔴 **⚠ 連帶失效（已回報，需 spec 側處置）**：F020 `AC-D2`「非 PDF 之列顯示『此格式不支援浮水印』」
+        原本在**附件區**的唯一載體就是 OJT 的 jpg 分支（見原 `toggleOjtFormat` 之註解）。
+        本 delta 後附件區只剩恆為 pdf 的 ICSOP PDF ⇒ 該文案在附件區不再出現。
+        🔒 該逐字文案本身**仍在本頁**（使用表單區與附錄區之 .xlsx 列皆仍呈現），故「本頁存在該文案」
+           之斷言不受影響；但若有 AC 以**附件區**為範圍斷言它，該條需就地改範圍。
+     🔒 **本 delta 之 diff 僅限 OJT 區塊**：其餘欄位列之集合／順序／逐字標籤、使用表單區、附錄區、
+        連結點區、浮水印文案常數、拒絕面板與 F041 判定一律未動。 -->
 <!-- 🔴 D9 delta · 前台字級整體上移一階（2026-08-20 使用者裁決 · OQ-D9-12／OQ-D9-13；F021 AC-N59～AC-N62）
      本檔已套用：正文 text-sm → text-base（16px）、輔助說明（原 12px 級距）→ text-sm（14px）；原 10px 之任意字級一併收斂為 text-sm
      （附錄序號徽章之圓形容器同步由 w-5 h-5 放大為 w-6 h-6，否則 14px 數字溢出）。
@@ -112,7 +128,8 @@
     <div class="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
       <i data-lucide="paperclip" class="w-4 h-4 text-primary-600"></i>
       <h2 class="font-semibold text-slate-900 text-base">附件</h2>
-      <button onclick="toggleOjtFormat()" class="ml-auto text-sm text-slate-400 hover:text-primary-600 underline decoration-dotted underline-offset-2">示範：切換 OJT 格式 pdf／jpg</button>
+      <!-- 📝 OLD> <button onclick="toggleOjtFormat()" …>示範：切換 OJT 格式 pdf／jpg</button>
+           已隨附件區之 OJT 項目移除（其切換對象不復存在）。 -->
     </div>
     <div id="attachments" class="p-4 grid sm:grid-cols-2 gap-3"></div>
   </section>
@@ -192,6 +209,39 @@
   function lifecycleDisplayName(lc){ if(!lc) return ''; const s=normalizeSubcategory(lc.subcategory); return s?`${lc.name}（${s}）`:lc.name; }
   // 本文件所屬之具體循環（lifecycleId lc1）＝「銷售及收款循環（消金）」
   const LIFECYCLE = {id:'lc1', name:'銷售及收款循環', subcategory:'消金'};
+  /* ===== 🟢 OJT 唯讀衍生清單（`AC-24`／`AC-21` 同一套判定規則）=====
+     🔒 兩個逐字文案與後台 `15`／`16` **完全相同**（同一份底層事實的三種載體，不得各自重打）；
+        任一處要改，三處必須同批改。
+     🔒 判定＝`AC-03`（該單位有至少一筆教育訓練場次即為已完成），與 `hasOjt` 共用同一套規則。
+     ⚠ 本區**只呈現單位名稱**——不得加入人員姓名、員工編號或受訓人數（小單位反推風險，
+        `OQ-E11-14` 裁決時已知悉：1–2 人的單位「已完成」實質等同揭露特定個人之受訓事實）。
+     📌 本頁之三個使用單位與「已完成 2／3」之情形與 `15`／`16`／`25` 之 ICSOP-SRC-101-1-01
+        刻意同源，四頁可交叉對照。 */
+  const OJT_DERIVED_EMPTY = '尚無任何使用單位完成 OJT';
+  function ojtDerivedSummary(done,total){ return '已完成 ' + done + '／' + total + ' 個使用單位'; }
+  const OJT_USING_UNITS = [
+    '營業二本部 / 營運管理部 / 審查室',
+    '風險管理服務本部 / 信用審查部',
+    '營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課'
+  ];
+  /* 原型示範用之已完成索引（前兩個）。實作端由 `OJT_SESSION` × `DOC_USING_DEPT` 之聚合決定，
+     **不得移植本常數**。 */
+  const OJT_COMPLETED_IDX = [0,1];
+  function ojtDerivedHtml(){
+    var done = OJT_USING_UNITS.filter(function(u,i){ return OJT_COMPLETED_IDX.indexOf(i) >= 0; });
+    if(!done.length){
+      return '<span data-ojt-derived-empty class="text-slate-400">' + OJT_DERIVED_EMPTY + '</span>';
+    }
+    var items = done.map(function(u){
+      return '<span data-ojt-completed-org class="flex items-start gap-1.5 text-slate-700">'
+        + '<i data-lucide="circle-check-big" class="w-4 h-4 mt-0.5 shrink-0 text-emerald-600"></i>'
+        + '<span>' + u + '</span></span>';
+    }).join('');
+    return '<span data-ojt-derived>'
+      + '<span data-ojt-derived-summary class="block text-slate-800">' + ojtDerivedSummary(done.length, OJT_USING_UNITS.length) + '</span>'
+      + '<span data-ojt-completed-list class="mt-1 block space-y-0.5">' + items + '</span>'
+      + '</span>';
+  }
   const FIELDS = [
     ['系統 UUID', '<span class="mono text-slate-500">a3f81c22-9e04-4b7a-8f2d-e2c9d1748e2f</span>'],
     ['文件狀態', '<span class="px-2 py-0.5 rounded-full text-sm font-medium" style="color:#047857;background:#D1FAE5">有效</span>'],
@@ -219,7 +269,9 @@
     ['檔案（ICSOP PDF）', '車輛分期進件作業_v1.3.pdf <span class="text-slate-400 text-sm">（見附件）</span>'],
     ['使用表單', '2 份 <span class="text-slate-400 text-sm">（見下方）</span>'],
     ['附錄', '<span id="fieldAppendix">3 份 <span class="text-slate-400 text-sm">（見下方）</span></span>'],
-    ['OJT 實體簽到表', '車輛分期進件作業_OJT簽到表.pdf <span class="text-slate-400 text-sm">（見附件）</span>'],
+    /* 🟢 `AC-24`／`OQ-E11-14`＝(A)：本列改為**唯讀衍生之已完成單位清單**。
+       📝 OLD> ['OJT 實體簽到表', '車輛分期進件作業_OJT簽到表.pdf <span class="text-slate-400 text-sm">（見附件）</span>'] */
+    ['OJT 實體簽到表', ojtDerivedHtml()],
     ['連結點程序書', '2 筆 <span class="text-slate-400 text-sm">（見下方）</span>']
   ];
   document.getElementById('fields').innerHTML = FIELDS.map(([k,v])=>`
@@ -244,16 +296,20 @@
       : `<span data-wm-note class="inline-flex items-center gap-1 text-sm text-amber-700"><i data-lucide="info" class="w-3 h-3"></i>${WM_UNSUPPORTED_TEXT}</span>`;
   }
 
-  /* 附件（ICSOP PDF ＋ OJT 實體簽到表）——三類附屬檔案之第一類，適用同一規則、同一文案。
-     ICSOP PDF 恆為 pdf；OJT 實體簽到表之白名單為 pdf/jpg/jpeg/png，故**可能為非 PDF**，
-     下方示範切換即為 F020 AC-D2「非 PDF 之列顯示此格式不支援浮水印」於附件類之載體。 */
-  let OJT_PDF = true;
+  /* 附件（僅 ICSOP PDF）——三類附屬檔案之第一類，適用同一規則、同一文案。
+     🟢 **2026-08-28 E11 delta**：OJT 實體簽到表已自本區移除（見檔頭 ②）。
+     📝 被移除之原文與其註解逐字保留供追溯（⚠ **不得照抄回來**）：
+        OLD> 附件（ICSOP PDF ＋ OJT 實體簽到表）——三類附屬檔案之第一類，適用同一規則、同一文案。
+        OLD> ICSOP PDF 恆為 pdf；OJT 實體簽到表之白名單為 pdf/jpg/jpeg/png，故**可能為非 PDF**，
+        OLD> 下方示範切換即為 F020 AC-D2「非 PDF 之列顯示此格式不支援浮水印」於附件類之載體。
+        OLD> let OJT_PDF = true;
+        OLD> OJT_PDF ? {name:'車輛分期進件作業_OJT簽到表.pdf', kind:'OJT 實體簽到表', icon:'file-text', color:'text-red-500', wmSupported:true, act:'OJT 簽到表'}
+        OLD>         : {name:'車輛分期進件作業_OJT簽到表.jpg', kind:'OJT 實體簽到表', icon:'image', color:'text-sky-600', wmSupported:false, act:'OJT 簽到表'}
+     🔴 **連帶失效**：本區自此只剩恆為 pdf 的 ICSOP PDF ⇒ F020 `AC-D2` 之「此格式不支援浮水印」
+        在**附件區**不再有載體（該文案於使用表單區與附錄區仍在）。已於檔頭與交付報告中提報。 */
   function renderAttachments(){
     const ATT = [
-      {name:'車輛分期進件作業_v1.3.pdf', kind:'ICSOP PDF', icon:'file-text', color:'text-red-500', wmSupported:true, act:'ICSOP PDF'},
-      OJT_PDF
-        ? {name:'車輛分期進件作業_OJT簽到表.pdf', kind:'OJT 實體簽到表', icon:'file-text', color:'text-red-500', wmSupported:true,  act:'OJT 簽到表'}
-        : {name:'車輛分期進件作業_OJT簽到表.jpg', kind:'OJT 實體簽到表', icon:'image',     color:'text-sky-600',  wmSupported:false, act:'OJT 簽到表'}
+      {name:'車輛分期進件作業_v1.3.pdf', kind:'ICSOP PDF', icon:'file-text', color:'text-red-500', wmSupported:true, act:'ICSOP PDF'}
     ];
     document.getElementById('attachments').innerHTML = ATT.map(a=>`
       <div data-attachment-item class="flex items-center gap-3 border border-slate-200 rounded-lg p-3">
@@ -263,7 +319,8 @@
       </div>`).join('');
     lucide.createIcons();
   }
-  function toggleOjtFormat(){ OJT_PDF=!OJT_PDF; renderAttachments(); }
+  /* 📝 OLD> function toggleOjtFormat(){ OJT_PDF=!OJT_PDF; renderAttachments(); }
+     已隨附件區之 OJT 項目移除（切換對象不復存在）。 */
 
   // wmSupported ＝ 伺服器端旗標（＝ format === 'pdf'，由上傳時白名單驗證之伺服器端事實決定）
   const FORMS = [

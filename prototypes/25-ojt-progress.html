@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<!-- 🟢 2026-08-28 · E11 OJT 進度管理（**人類閘門已裁決**；本檔已依裁決收斂）
+     規格權威＝docs/specs/features/F042-ojt-progress-management.md（AC-01～AC-29）
+     ＋ docs/specs/open-questions.md §E11。
+
+     ══════ 🟢 E11 全部 16 題人類裁決（2026-08-28，已全數套用）══════
+     ✅ `01`＝(C) 舊檔標記「待指派單位」，由 ICSOPAdmin 手動歸位 → TAB2 待歸位區
+     ✅ `02`＝(C) 使用部門移除 → 場次**軟標記保留**（`orphanedAt`）、不計統計、保留回溯、重掛回自動復活 → TAB2 孤兒列
+     ✅ `03`＝(B) 裁撤單位**不計入**覆蓋率分母
+     ✅ `04`＝(A) **僅 ICSOPAdmin 可刪除場次**，寫稽核
+     ✅ `05`＝(A) SysAdmin `READ`／ICSOPAdmin `CRUD`／Supervisor·DeptContact `RESTRICTED_CRUD`（僅新增）／User `NONE`
+     ✅ `06`＝(B) 文件層改**四值**（含「部分完成」）——主落點 `13`，本檔 TAB1 區一同步採用
+     ✅ `07`＝(B) rollup 至**部層**；覆蓋率＝已完成列數 ÷ 總列數；「最近完成」窗口＝**30 天**
+     ✅ `08`＝(A) 建立頁改提示卡（落點 `14`）
+     ✅ `09`＝(A) 訓練日期**必填**、**不可未來日**、**單檔**
+     ✅ `10`＝(A) 沿用 pdf／jpg／jpeg／png、單檔 ≤ 50MB ⇒ **不新增錯誤碼**
+     ✅ `11`＝(A) 舊端點直接移除回 404（與本原型無關）
+     ✅ `12`＝(A) F026 該列改純衍生唯讀、欄位鍵集合維持 **20**（落點 `16`）
+     ✅ `13`＝(B) 新立 `OJT_SESSION_UPLOAD`／`OJT_SESSION_DELETE`；**角色不對稱不延續**（三角色皆寫稽核）
+     ✅ `14`＝(A) 前台詳情頁唯讀顯示已完成單位清單（落點 `04`）
+     ✅ `15`＝(A) TAB2 篩選＝「單位搜尋」＋「完成狀態」兩項
+     ✅ `16`＝(B) **不可編輯**場次（更正路徑＝刪除後重新登記）
+     📌 撰稿當下 `docs/specs/open-questions.md` §E11 由 sw-ojt 並行回填中；
+        **若日後 open-questions 與本段有出入，一律以 open-questions 為準。**
+
+     ══════ 🔴 一處與交辦字面刻意不同（已回報並經 lead 裁定接受）══════
+     交辦要求「TAB2 完成狀態篩選對齊 `13` 的四值逐字」，本檔**維持二值**（`已完成`／`尚未完成`）。
+     理由：本頁一列＝一個「文件 × 使用單位」，其完成與否依 `AC-03` 為「場次數 ≥ 1」——**本質二值**；
+     照字面搬四值會產生一個**永遠回 0 筆的死選項**。四值詞彙改放於 TAB1 區一「依文件逐筆」表
+     （那裡一列才是一份文件，與 `13` 同主體），三態 icon 與逐字文案與 `13` 共用同一組。
+
+     ══════ `OQ-E11-04`(A) ＋ `OQ-E11-16`(B) 之組合檢查（F042 `AC-20` ⚠ 之對應）══════
+     F042 `AC-20` 曾警告：若 `04` 裁為 (C)「不可刪除」，則 `16` **必須**為 (A)「可編輯」，
+     否則誤登記之場次永無更正路徑。本次裁決為 **04=(A) 可刪除 ＋ 16=(B) 不可編輯**，
+     ⇒ **更正路徑存在且唯一＝「刪除後重新登記」**（由 ICSOPAdmin 執行），該警告不成立。
+     本檔之刪除確認文案已明講此路徑，避免使用者以為登記錯了就補救不了。
+
+     ══════ 本檔之權威地位（與既有 prototype 同一慣例）══════
+     · **本檔為版面／文案／DOM 掛鉤之權威**：實作（`OjtProgressPage`）以本檔為準；
+       本檔所寫之每一個 `data-*` 掛鉤與每一句逐字文案，皆會成為 F042 `AC-28` 之 DOM 契約斷言標的。
+       逐字清單見 F042 §prototype 25 DOM 掛鉤對照（棒 4 已回寫）。
+     · ✅ **本檔已無任何「待裁決」區塊**：16 題全數裁決並套用，全部呈現值皆為定稿值或裁決值,
+       test-generator 得逕行建環（唯一例外＝下方明列之原型專用控制項）。
+       逐字文案與 DOM 掛鉤之完整對照見 F042 §prototype 25 DOM 掛鉤對照。
+
+     ══════ 本頁承載之 AC ══════
+     AC-01（列粒度＝使用部門原樣、不展開子樹）｜AC-02（場次累加非覆蓋）｜AC-03（完成＝場次數≥1）
+     AC-05（三角色可新增場次）｜AC-06（SysAdmin 全頁唯讀）｜AC-07（User 403）｜AC-08（不限權責範圍）
+     AC-09／AC-10（場次欄位與檔案驗證）｜AC-11（TAB2 單位分組）｜AC-12（展開場次明細）｜AC-13（篩選）
+     AC-14／AC-15／AC-16（TAB1 三區＋🔴 PII 硬性防線）｜AC-17（裁撤單位分母）｜AC-27（新側選單項）｜AC-28（DOM 契約）
+
+     ══════ 🔴 本頁最容易寫錯的三處（逐字保留，供覆核與下游 AC 引用）══════
+     ① **AC-01 vs AC-15 為兩個不同階段，禁止統一**：TAB2 之「列產生」依 `DOC_USING_DEPT` **原樣**，
+        `JA000`（部層）與 `JAC00`（其下處室）同為使用單位時**各自一列、互不相干**——`JAC00` 已辦訓練
+        **不會**使 `JA000` 列變成「已完成」。本檔之 D5（ICSOP-PPC-201-1-03）即為此情境之現場示範。
+        TAB1 區二之「部門完成率」則允許在**統計階段**彙總——本檔以 `deptCodeOf()`
+        （原型專用之字串前綴函式）示意，**刻意不呼叫、也不暗示重用 `isWithinSubtree`**
+        （F042 AC-29 ①／F041 INV-4：該判定式與其既有測試不得因本 feature 變動）。
+        📌 AC-15 之建議斷言形狀「列數不因 rollup 而改變」已做成**畫面上可讀的一行**（區二頁尾）。
+     ② **AC-16 PII 硬性防線**：區三「最近完成 OJT 的單位」**只渲染 文件／單位／日期**三者，
+        **不得**出現上傳者姓名或員工編號。本檔之場次 fixture **刻意帶有真實形狀之姓名**
+        （`uploader` 欄），使「區三 textContent 不含該姓名」成為一條真正有鑑別力的負向斷言。
+        ⚠ 上傳者姓名於 **TAB2 場次明細**（AC-12）中**得以呈現**——該處是逐筆操作紀錄而非聚合看板，
+        兩者刻意不同，**不得**互相對齊。
+     ③ **角色閘門以 DOM 不產生元素表達，非 CSS 隱藏**：SysAdmin 之「新增場次」鈕
+        **完全不進 DOM**（`canAddSession()` 於樣板層決定），故 `querySelectorAll('[data-add-session]').length === 0`
+        對該角色成立。本頁**刻意不使用** `.write-only` class（該手法為 `display:none`，元素仍在 DOM 內，
+        會使上述斷言退化為假綠）。
+
+     ══════ 側選單新項之位置（🔵 建議，由閘門定案）══════
+     新項 `OJT 進度管理`（🔒 命名鎖定表逐字，**不得**寫成「OJT 管理」「教育訓練管理」）
+     置於 `文件索引管理` 與 `文件調閱歷程` 之間（`frontend/src/domain/menu.ts` 之第 7 項）。
+     理由：menu.ts 現有順序為「管理／可寫類（帳號→循環→文件→使用表單→附錄→文件索引）」在前、
+     「歷程／唯讀類（調閱歷程→變更歷程）」在後、系統類（組織同步→系統參數）殿後；
+     本功能屬可寫之管理類且以文件為軸，故置於可寫群組之末。⚠ **位置為建議，非裁決**。
+     圖示鍵建議 `graduation-cap`（教育訓練語意；與既有 10 項圖示無重複）。
+     五角色格值採 OQ-E11-05 建議案 (A)：SysAdmin 唯讀／ICSOPAdmin CRUD／Supervisor·DeptContact 可寫／User 無。
+     ⚠ **OQ-E11-05 之值域缺口**：現行五值無一精確表達「可新增但不可刪改」，本檔以 `CRUD` 暫代
+        Supervisor／DeptContact 之側欄徽章——**該徽章字面待該題裁決後定稿**。
+
+     ══════ 原型專用控制項（🔴 不得移植至實作）══════
+     · `#roleSel`（五角色 persona 切換器）——實作之角色來自 session。
+     · `#demoStateSel`（正常／載入中／查無資料／載入失敗 四態切換）——實作之狀態來自 API 生命週期。
+     兩者皆標 `data-prototype-demo="true"`（比照 16／19b 之既有慣例）。
+
+     ══════ 開放與未開放（明文，防實作自行增刪）══════
+     · ✅ **場次刪除已開放**（`AC-19`／`OQ-E11-04`＝(A)）：**僅 ICSOPAdmin**，二次確認，寫稽核。
+       🔴 主管／部門窗口／系統管理員之刪除鈕**完全不進 DOM**（與「新增場次」同一手法，非 CSS 隱藏）
+          ⇒ 對該三角色 `querySelectorAll('[data-session-delete]').length === 0`。
+       ⚠ **刪除鈕與新增鈕之角色集合刻意不同**（新增＝3 角色／刪除＝1 角色），
+          實作**不得**把兩者收斂成同一個 `canWrite()` 述詞——那會把刪除權一併發給主管與部門窗口。
+     · 🚫 **場次編輯仍不開放**（`AC-20`／`OQ-E11-16`＝(B)）：**端點不存在、UI 無任何入口**，
+       更正路徑＝刪除後重新登記。本檔**刻意不畫**任何編輯控制項
+       ⇒ `querySelectorAll('[data-session-edit]').length === 0` 對**全部五角色**成立。
+     · ✅ **舊資料「待歸位」已開放**（`AC-26`／`OQ-E11-01`＝(C)）：見 TAB2 之待歸位區。
+     🔒 後台字級逐字沿用既有後台頁（F021 AC-N61 ①：僅前台三頁放大，後台一律不改）。 -->
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OJT 進度管理 · 後台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;color:#334155;background:#FFFFFF;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  /* 🔴 本頁**刻意不定義** .write-only／.ojt-write 之類的 CSS 隱藏規則——
+     角色閘門一律以「DOM 不產生該元素」表達（見檔頭 ③）。 */
+  /* admin shell sidebar */
+  #sidebar{width:240px;transition:width .2s ease;}
+  body{padding-left:240px;transition:padding-left .2s ease;}
+  body.sb-collapsed{padding-left:60px;}
+  body.sb-collapsed #sidebar{width:60px;}
+  body.sb-collapsed .sb-label{display:none;}
+  body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
+</style>
+</head>
+<body data-role="icsop_admin" class="min-h-screen">
+
+<!-- ===== Admin shell sidebar ===== -->
+<aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-50 bg-white border-r border-slate-200 flex flex-col">
+  <a href="07-admin-shell.html" data-to="/admin" aria-label="回到後台首頁" title="回到後台首頁" class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
+  </a>
+  <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
+  <div class="border-t border-slate-200 p-2 shrink-0">
+    <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
+      <i data-lucide="external-link" class="w-4 h-4 shrink-0"></i><span class="sb-label truncate">瀏覽文件網頁</span></button>
+  </div>
+</aside>
+
+<!-- Top bar -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200">
+  <div class="h-14 px-4 flex items-center gap-3">
+    <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
+    <div class="leading-tight min-w-0">
+      <div class="text-xs text-slate-400 flex items-center gap-1"><a href="25-ojt-progress.html" data-to="/admin/ojt-progress" class="hover:text-primary-700 hover:underline focus:outline-none focus:ring-2 focus:ring-primary-600 rounded">OJT 進度管理</a><i data-lucide="chevron-right" class="w-3 h-3"></i><span id="crumbTab">儀表板</span></div>
+      <div class="font-semibold text-slate-900 text-sm truncate">OJT 進度管理</div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <!-- 🔴 原型專用：版面狀態切換（正常／載入中／查無資料／載入失敗）。不得移植至實作。 -->
+      <div data-prototype-demo="true" class="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-400 pr-2 border-r border-slate-200">
+        <i data-lucide="flask-conical" class="w-3.5 h-3.5 shrink-0"></i>
+        <label for="demoStateSel" class="whitespace-nowrap">原型示範 · 版面狀態</label>
+        <select id="demoStateSel" onchange="setDemoState(this.value)" class="border border-slate-300 rounded px-1.5 py-0.5 bg-white text-slate-600">
+          <option value="ready">正常（預設）</option>
+          <option value="loading">載入中</option>
+          <option value="empty">查無資料</option>
+          <option value="error">載入失敗</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-1.5 pl-1">
+        <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+        <!-- 🔴 原型專用：五角色 persona 切換器（比照 16 之 #roleSel）。不得移植至實作。 -->
+        <select id="roleSel" data-prototype-demo="true" onchange="setRole(this.value)" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
+          <option value="icsop_admin">ICSOP 管理員</option>
+          <option value="supervisor">主管</option>
+          <option value="deptcontact">部門窗口</option>
+          <option value="sysadmin">系統管理員（唯讀）</option>
+          <option value="user">一般使用者</option>
+        </select>
+      </div>
+      <div class="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200"><i data-lucide="user-circle" class="w-4 h-4"></i><span id="userName">陳管理</span></div>
+      <button title="登出" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+  <!-- readonly banner（AC-06：SysAdmin 可查全部內容、任一寫入端點 403） -->
+  <div id="roBanner" class="hidden bg-cyan-50 border-t border-cyan-200 text-cyan-800 text-sm px-4 py-2 items-center gap-2">
+    <i data-lucide="eye" class="w-4 h-4"></i><span id="roText"></span>
+  </div>
+</header>
+
+<!-- blocked overlay（AC-07：一般使用者直接輸入本頁 URL → 路由層 403 PERMISSION_DENIED；
+     🔒 **不**採 F041 之 404 隱藏存在性例外——該例外明文不推廣。） -->
+<div id="blockOverlay" class="hidden fixed inset-0 z-40 bg-slate-50/90 backdrop-blur-sm flex items-center justify-center">
+  <div class="text-center max-w-xs">
+    <div class="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="lock" class="w-7 h-7 text-red-500"></i></div>
+    <h3 class="font-semibold text-slate-900">無 OJT 進度管理權限</h3>
+    <p class="text-sm text-slate-500 mt-1" id="blockMsg"></p>
+    <p class="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+  </div>
+</div>
+
+<!-- ===== TAB bar（比照 09-org-sync-management 之 border-b-2 樣式）===== -->
+<div class="bg-white border-b border-slate-200 px-4">
+  <div role="tablist" aria-label="OJT 進度管理分頁" class="flex text-sm">
+    <button id="tabbtn-dashboard" role="tab" aria-selected="true" aria-controls="panel-dashboard" data-ojt-tab="dashboard" onclick="switchTab('dashboard')" onkeydown="onTabKey(event)" class="px-4 py-3 font-medium border-b-2 border-primary-600 text-primary-700 flex items-center gap-1.5"><i data-lucide="layout-dashboard" class="w-4 h-4"></i>儀表板</button>
+    <button id="tabbtn-sessions" role="tab" aria-selected="false" aria-controls="panel-sessions" data-ojt-tab="sessions" onclick="switchTab('sessions')" onkeydown="onTabKey(event)" class="px-4 py-3 font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-1.5"><i data-lucide="list-tree" class="w-4 h-4"></i>OJT 資料清單</button>
+  </div>
+</div>
+
+<main class="px-4 py-6">
+
+  <!-- ============ 共用：載入中／載入失敗（原型示範）============ -->
+  <div id="stateLoading" data-ojt-state="loading" class="hidden">
+    <div class="animate-pulse space-y-4">
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div class="h-20 rounded-xl bg-slate-100"></div><div class="h-20 rounded-xl bg-slate-100"></div><div class="h-20 rounded-xl bg-slate-100"></div><div class="h-20 rounded-xl bg-slate-100"></div><div class="h-20 rounded-xl bg-slate-100"></div>
+      </div>
+      <div class="h-48 rounded-xl bg-slate-100"></div>
+      <div class="h-32 rounded-xl bg-slate-100"></div>
+    </div>
+    <p class="mt-4 text-sm text-slate-400 flex items-center gap-2"><i data-lucide="loader-circle" class="w-4 h-4"></i><span>載入 OJT 進度資料中…</span></p>
+  </div>
+  <div id="stateError" data-ojt-state="error" class="hidden">
+    <div class="max-w-md mx-auto text-center py-16">
+      <div class="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="cloud-alert" class="w-7 h-7 text-red-500"></i></div>
+      <h3 class="font-semibold text-slate-900">OJT 進度資料載入失敗</h3>
+      <p id="errText" class="text-sm text-slate-500 mt-1"></p>
+      <p class="text-xs mono text-slate-400 mt-2">INTERNAL_ERROR · 500</p>
+      <button onclick="setDemoState('ready')" class="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"><i data-lucide="rotate-cw" class="w-4 h-4"></i>重新載入</button>
+    </div>
+  </div>
+
+  <!-- ============================ TAB1 · 儀表板 ============================ -->
+  <div id="panel-dashboard" role="tabpanel" tabindex="0" aria-labelledby="tabbtn-dashboard" data-ojt-panel="dashboard" class="space-y-5">
+
+    <!-- ─── 區一 · 文件-訓練覆蓋率（AC-14）─── -->
+    <!-- 🟢 `OQ-E11-07`＝(B) 已裁決：覆蓋率＝**已完成列數 ÷ 總列數**；呈現粒度＝**兩者皆有**
+         （上方 KPI 卡為總覽比率、下方表格為依文件逐筆）。本區已依此定稿。
+         🟢 `OQ-E11-03`＝(B) 已裁決：**裁撤單位不計入分母**——本區全部數字（KPI、逐筆表、下方區二）
+            一律以 `coverageRows()`（＝排除 `inactive` 之列）為母體。
+            📝 被推翻之前一版做法逐字保留供追溯：OLD> 兩案並陳（計入 8/13 與不計入 8/12 同時顯示、不預先選邊）
+         🟢 `OQ-E11-06`＝(B) 已裁決：文件層改**四值**（含「部分完成」）⇒ 逐筆表新增「狀態」欄，
+            其 icon 鍵與逐字文案與 `13-document-list.html` 之第 1 欄**共用同一組**（見 script 區 `OJT_DOC_STATE`）。
+         🔒 不隨任何裁決改變者：某文件 3 個使用單位中 2 個完成 ⇒ 須反映 2 / 3；全部未完成 ⇒ 呈現 0%（非錯誤、非空白）。 -->
+    <section data-ojt-section="coverage" class="bg-white border border-slate-200 rounded-xl p-5">
+      <div class="flex items-center gap-2 mb-1">
+        <i data-lucide="target" class="w-4 h-4 text-primary-600"></i>
+        <h2 class="font-semibold text-slate-900">文件-訓練覆蓋率</h2>
+        <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">OQ-E11-07 已裁決 (B)</span>
+      </div>
+      <p class="text-xs text-slate-400 mb-4 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>最小追蹤單位＝<strong class="text-slate-500">一份 ICSOP 文件 × 一個使用單位</strong>；該列有至少一筆教育訓練場次即為「已完成」。</span></p>
+      <div id="kpiRow" class="grid grid-cols-2 lg:grid-cols-5 gap-3"></div>
+      <p id="inactiveNote" class="mt-3 text-xs text-slate-500 flex items-start gap-1.5"><i data-lucide="triangle-alert" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-500"></i><span></span></p>
+
+      <div class="mt-5 border-t border-slate-100 pt-4">
+        <div class="text-xs font-medium text-slate-500 mb-2">依文件逐筆</div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm min-w-[640px]">
+            <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+              <tr>
+                <th class="text-left font-medium px-4 py-2.5">程序書編號</th>
+                <th class="text-left font-medium px-4 py-2.5">程序書書名</th>
+                <th class="text-left font-medium px-4 py-2.5">狀態</th>
+                <th class="text-left font-medium px-4 py-2.5">已完成 / 使用單位</th>
+                <th class="text-left font-medium px-4 py-2.5">覆蓋率</th>
+              </tr>
+            </thead>
+            <tbody id="docCoverageBody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── 區二 · 部門完成率（AC-15）─── -->
+    <!-- 🟢 `OQ-E11-07`＝(B) 已裁決：**彙總至部層**（非處室、非兩者皆呈現）。本區已依此定稿。
+         🟢 `OQ-E11-03`＝(B)：母體同區一，**排除裁撤單位之列** ⇒ 若某部之列全數為裁撤單位，該部整列消失。
+         🔴 本原型之彙總以 `deptCodeOf()`（原型專用之 5 碼前綴函式）示意，
+            **刻意不呼叫、也不暗示重用 `isWithinSubtree`**（F042 AC-29 ①／F041 INV-4）。
+         🔒 不隨該題裁決改變者（AC-15 之建議斷言形狀）：**列數不因 rollup 而改變**——
+            彙總是統計階段的行為，不得回頭把 AC-01 之列展開。本區頁尾之一行即為該不變式之畫面載體。 -->
+    <section data-ojt-section="rollup" class="bg-white border border-slate-200 rounded-xl p-5">
+      <div class="flex items-center gap-2 mb-1">
+        <i data-lucide="building-2" class="w-4 h-4 text-primary-600"></i>
+        <h2 class="font-semibold text-slate-900">部門完成率</h2>
+        <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">已裁決 · 彙總至部層</span>
+      </div>
+      <p class="text-xs text-slate-400 mb-4 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>將各使用單位之進度列彙總至其所屬<strong class="text-slate-500">部層</strong>呈現（建議案）。<strong class="text-slate-500">彙總僅發生於統計階段</strong>——TAB2 之進度列仍依使用部門原樣、不展開子樹。</span></p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm min-w-[680px]">
+          <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="text-left font-medium px-4 py-2.5">部</th>
+              <th class="text-left font-medium px-4 py-2.5">代碼</th>
+              <th class="text-left font-medium px-4 py-2.5">已完成 / 進度列</th>
+              <th class="text-left font-medium px-4 py-2.5">完成率</th>
+            </tr>
+          </thead>
+          <tbody id="rollupBody" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+      <p id="rollupInvariant" data-rollup-invariant class="mt-3 text-xs text-slate-500 flex items-start gap-1.5"><i data-lucide="shield-check" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-500"></i><span></span></p>
+    </section>
+
+    <!-- ─── 區三 · 最近完成 OJT 的單位（AC-16）─── -->
+    <!-- 🔴 **PII 硬性防線（不隨 OQ-E11-07 之其他子項裁決放寬）**：本區只渲染
+            「文件編號／程序書書名」「使用單位」「最近場次日期」三者，
+            **不得**出現受訓人員或上傳者之姓名、員工編號或其他個人識別資訊。
+            ⚠ 本檔之 SESSIONS fixture 刻意帶 `uploader` 姓名（如「王志明」），
+               使「本區 textContent 不含該姓名」成為一條有鑑別力的負向斷言（AC-16 之可測形狀）。
+            ⚠ 上傳者姓名於 **TAB2 場次明細**（AC-12）中得以呈現——兩者刻意不同，不得互相對齊。
+         🟢 `OQ-E11-07`＝(B) 已裁決：**時間窗口＝近 30 天**（`RECENT_WINDOW_DAYS`）。筆數上限＝不設，全部列出。
+         📌 本區之母體**刻意不排除裁撤單位**——`OQ-E11-03`(B) 管的是**覆蓋率分母**，本區是「最近發生了什麼」
+            的事實列表；把一個裁撤前確實辦過訓練的單位從動態中抹掉，等於讓畫面否認一件發生過的事。 -->
+    <section data-ojt-section="recent" class="bg-white border border-slate-200 rounded-xl p-5">
+      <div class="flex items-center gap-2 mb-1">
+        <i data-lucide="clock" class="w-4 h-4 text-primary-600"></i>
+        <h2 class="font-semibold text-slate-900">最近完成 OJT 的單位</h2>
+        <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">已裁決 · 近 30 天</span>
+      </div>
+      <p class="text-xs text-slate-400 mb-4 flex items-start gap-1.5"><i data-lucide="shield" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span data-pii-note>本區僅呈現單位／文件／日期層級之聚合資訊，<strong class="text-slate-500">不揭露個別受訓人員之姓名或員工編號</strong>。</span></p>
+      <div id="recentList" class="space-y-2"></div>
+    </section>
+  </div>
+
+  <!-- ======================= TAB2 · OJT 資料清單 ======================= -->
+  <div id="panel-sessions" role="tabpanel" tabindex="0" aria-labelledby="tabbtn-sessions" data-ojt-panel="sessions" class="hidden space-y-4">
+
+    <div class="flex items-start gap-2 text-sm text-slate-500">
+      <i data-lucide="info" class="w-4 h-4 mt-0.5 text-slate-400 shrink-0"></i>
+      <p>以<strong class="text-slate-600">使用單位</strong>為群組，列出該單位涉及之各份 ICSOP 文件之進度列。每列可累積多筆教育訓練場次（<strong class="text-slate-600">累加、非覆蓋</strong>）；同一文件之上下層單位<strong class="text-slate-600">各自為獨立一列、完成狀態互不影響</strong>。</p>
+    </div>
+
+    <!-- 篩選（AC-13）-->
+    <!-- 🟢 `OQ-E11-15`＝(A) 已裁決：篩選項目集合**恰兩項**＝「單位搜尋」＋「完成狀態」。
+         🔴 **完成狀態維持二值（`已完成`／`尚未完成`），刻意不採用 `13` 的四值**——理由見 script 區
+            `STATUS_FILTER` 之註解（本頁一列＝一個「文件×單位」，其完成與否由場次數決定，**本質二值**；
+            塞一個「部分完成」選項進來會產生一個永遠回 0 筆的死選項）。 -->
+    <div data-ojt-filter-bar class="flex flex-wrap items-center gap-2">
+      <div class="relative flex-1 min-w-[220px]">
+        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        <input id="fOrg" data-ojt-filter="org" oninput="renderRows()" type="search" placeholder="搜尋使用單位（名稱或代碼）…" aria-label="搜尋使用單位" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600" />
+      </div>
+      <!-- 🔴 **完成狀態為二值，刻意不採用 `13` 的四值**（棒 4 判斷，已回報 lead 覆核）：
+           本頁一列＝一個「文件 × 使用單位」，其完成與否由 `AC-03` 定義為「場次數 ≥ 1」——**本質二值**，
+           不存在「部分完成」的中間態（一個單位對一份文件，要嘛辦過訓練、要嘛沒有）。
+           若照字面把 `13` 的四值搬進來，「部分完成」會成為一個**永遠回 0 筆的死選項**，
+           而畫面上一個選了必定落空的篩選條件，比少一個選項更糟。
+           🔒 兩個字面 `已完成`／`尚未完成` 逐字取自 F042 `AC-03`，並與本頁
+              `[data-completion-badge]` 之徽章文案**同源**（篩選詞彙 ≡ 欄位詞彙，沿用 `AC-N38` 之原則）。
+           📌 `13` 的四值詞彙在本頁的正確落點＝**TAB1 區一之「依文件逐筆」表**（那裡一列才是一份文件），
+              該處已採用逐字相同的三態文案。 -->
+      <select id="fStatus" data-ojt-filter="status" onchange="renderRows()" aria-label="完成狀態" class="px-3 py-2 rounded-md border border-slate-300 text-sm bg-white">
+        <option value="">所有完成狀態</option>
+        <option value="completed">已完成</option>
+        <option value="pending">尚未完成</option>
+      </select>
+      <button id="clearBtn" onclick="clearFilters()" class="hidden px-3 py-2 rounded-md text-sm text-primary-600 hover:bg-primary-50">清除</button>
+      <span id="rowCountText" data-ojt-row-count class="ml-auto text-sm text-slate-500"></span>
+      <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">OQ-E11-15 已裁決 (A)</span>
+    </div>
+
+    <!-- ===== 🟢 待歸位（`AC-26`／`OQ-E11-01`＝(C)）=====
+         舊模型之 `DOCUMENT_ATTACHMENT.type='OJT_SIGNIN'` 只掛在文件上、**沒有使用單位**，
+         故遷移後無法直接成為任何一列進度列之場次 ⇒ 標記「待指派單位」，由 ICSOPAdmin 逐筆歸位。
+         🔴 **本區刻意不參與篩選、也不計入上方之列數**：它不是進度列（沒有單位、沒有完成狀態），
+            混進去會讓「共 N 列」與畫面上看得到的東西對不起來。已於區塊內明文說明。
+         🔴 **全部後台角色皆可看見本區**（含 SysAdmin——`AC-06` 明訂其可檢視全部內容），
+            但**指派鈕僅 ICSOPAdmin 進 DOM**。
+         🔒 歸位完畢後本區**整個消失**（非空狀態）——遷移是一次性工作，留一個永久的空框
+            會讓人以為系統壞了或還有待辦。 -->
+    <div id="pendingBlock" data-ojt-pending-block class="hidden"></div>
+
+    <div id="groupList" class="space-y-3"></div>
+
+    <div id="rowsEmpty" data-ojt-state="empty" class="hidden text-center py-14 bg-white border border-slate-200 rounded-xl">
+      <i data-lucide="inbox" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+      <p id="rowsEmptyText" class="text-slate-500 text-sm"></p>
+      <p id="rowsEmptyHint" class="text-slate-400 text-xs mt-1"></p>
+    </div>
+  </div>
+</main>
+
+<!-- ===== 新增場次 modal（Main Flow D；AC-02／AC-09／AC-10）===== -->
+<div id="addModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div data-add-session-modal class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-semibold text-slate-900">新增教育訓練場次</h3>
+      <button onclick="closeAdd()" aria-label="關閉" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p id="addTarget" data-add-session-target class="text-xs text-slate-500 mb-4"></p>
+    <div class="space-y-4">
+      <div>
+        <label for="addDate" class="block text-sm font-medium text-slate-700 mb-1">訓練日期 <span class="text-red-500">*</span></label>
+        <input id="addDate" data-session-date-input type="date" max="2026-08-28" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <!-- 🟢 `OQ-E11-09`＝(A) 已裁決：訓練日期**必填**、**不可未來日**、**單檔**。
+             `max` 屬性僅為瀏覽器層便利，
+             ⚠ **驗證仍由送出時之 validate() 執行**（不倚賴 max 屬性，否則規則在鍵盤輸入下不可達，
+                且 API 直呼完全繞得過去）。 -->
+        <p class="mt-1 text-[10px] text-slate-400">場次記錄的是<strong class="text-slate-500">已發生</strong>之教育訓練事實，故不接受未來日期。同一單位同一日可登記多場次（如上下午兩梯），系統不做同日去重。</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">簽到表檔案 <span class="text-red-500">*</span></label>
+        <input id="addFile" data-session-file-input type="file" accept=".pdf,.jpg,.jpeg,.png" class="hidden" onchange="onAddFileInput(this)" />
+        <button type="button" onclick="document.getElementById('addFile').click()" class="w-full border border-dashed border-slate-300 rounded-lg px-4 py-5 flex flex-col items-center gap-1 text-slate-500 hover:border-primary-400 hover:bg-primary-50/40">
+          <i data-lucide="upload-cloud" class="w-6 h-6 text-slate-400"></i>
+          <span class="text-sm">點此選擇簽到表檔案</span>
+          <span class="text-xs text-slate-400">支援格式：pdf / jpg / jpeg / png；單檔上限 50 MB</span>
+        </button>
+        <!-- demo pickers（無需真實檔案即可示範驗證；比照 24-appendix-management 之既有慣例） -->
+        <div class="flex flex-wrap gap-1.5 mt-2">
+          <span class="text-xs text-slate-400">示範選檔：</span>
+          <button type="button" onclick="pickDemo('ok')" class="text-xs px-2 py-0.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50">OJT簽到表_20260827.pdf</button>
+          <button type="button" onclick="pickDemo('img')" class="text-xs px-2 py-0.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50">簽到表照片.jpg</button>
+          <button type="button" onclick="pickDemo('badfmt')" class="text-xs px-2 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50">簽到表.docx（不支援）</button>
+          <button type="button" onclick="pickDemo('oversize')" class="text-xs px-2 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50">51 MB（超過上限）</button>
+        </div>
+        <div id="addPreview" class="hidden mt-2 flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+          <i id="addPreviewIcon" data-lucide="file" class="w-4 h-4 text-slate-500 shrink-0"></i>
+          <span id="addPreviewName" class="text-slate-700 truncate flex-1"></span>
+          <span id="addPreviewSize" class="text-xs text-slate-400 mono shrink-0"></span>
+        </div>
+        <!-- 🟢 `OQ-E11-10`＝(A) 已裁決：沿用既有 pdf／jpg／jpeg／png、單檔 ≤ 50MB
+             （`OQ-E04-06` 定案值）⇒ **不新增任何錯誤碼**，`FILE_FORMAT_NOT_ALLOWED`／
+             `FILE_SIZE_EXCEEDED` 逐字適用。 -->
+      </div>
+      <p id="addErr" data-session-error class="hidden text-xs text-red-600 items-start gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span></span></p>
+      <div class="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
+        <i data-lucide="layers" class="w-3.5 h-3.5 mt-0.5 text-slate-400 shrink-0"></i>
+        <span>本場次<strong class="text-slate-600">累加</strong>於該列既有場次之下，<strong class="text-slate-600">不覆蓋、不取代</strong>既有任何一筆；既有簽到檔仍可下載。驗證失敗時<strong class="text-slate-600">不建立任何場次紀錄、不寫入任何檔案</strong>。</span>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeAdd()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button data-session-submit onclick="submitAdd()" class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">送出</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 指派使用單位 modal（`AC-26`／`OQ-E11-01`＝(C)；僅 ICSOPAdmin）===== -->
+<div id="assignModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div data-assign-modal class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-semibold text-slate-900">指派使用單位</h3>
+      <button onclick="closeAssign()" aria-label="關閉" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p id="assignTarget" data-assign-target class="text-xs text-slate-500 mb-4"></p>
+    <div class="space-y-4">
+      <div>
+        <label for="assignOrg" class="block text-sm font-medium text-slate-700 mb-1">使用單位 <span class="text-red-500">*</span></label>
+        <select id="assignOrg" data-assign-org-select class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"></select>
+        <p class="mt-1 text-[10px] text-slate-400">只列出<strong class="text-slate-500">本文件之「文件使用部門」</strong>；指派到非使用部門之單位會被後端擋下（OJT_ORG_NOT_USING_DEPT）。</p>
+      </div>
+      <div>
+        <label for="assignDate" class="block text-sm font-medium text-slate-700 mb-1">訓練日期 <span class="text-red-500">*</span></label>
+        <input id="assignDate" data-assign-date-input type="date" max="2026-08-28" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600" />
+        <!-- 🔴 **刻意不以「原上傳時間」自動帶入訓練日期**：舊模型只記錄「檔案何時被上傳」，
+             從未記錄「訓練何時舉辦」。把上傳日當訓練日填進去，等於把一個系統從來不知道的事實
+             寫成紀錄——正是本 Epic 反覆要避免的「系統陳述了一件沒有發生的事」。
+             原上傳時間僅以**參考資訊**呈現於上方目標摘要，由 ICSOPAdmin 自行判斷後輸入。 -->
+        <p class="mt-1 text-[10px] text-slate-400">舊資料<strong class="text-slate-500">未記錄訓練日期</strong>（舊模型只存檔案上傳時間），故須由您補填；上方之原上傳時間僅供參考，<strong class="text-slate-500">不會自動帶入</strong>。</p>
+      </div>
+      <p id="assignErr" data-assign-error class="hidden text-xs text-red-600 items-start gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span></span></p>
+      <div class="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
+        <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 text-slate-400 shrink-0"></i>
+        <span>歸位後，此筆舊資料將成為該「文件 × 使用單位」之<strong class="text-slate-600">一筆正式場次</strong>，原簽到表檔案沿用、不重新上傳。<strong class="text-slate-600">一筆舊資料只能指派給一個單位</strong>——一份檔案不能證明多個單位都辦過訓練；若該文件有多個單位各自辦過，其餘單位請各自登記自己的場次。</span>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeAssign()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button data-assign-submit onclick="submitAssign()" class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">確認歸位</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 二次確認 modal（場次刪除；比照 24-appendix-management 之既有形狀）===== -->
+<div id="confirmModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div data-confirm-modal class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <div class="flex items-start gap-3">
+      <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center shrink-0"><i data-lucide="alert-triangle" class="w-5 h-5 text-red-500"></i></div>
+      <div class="min-w-0"><h3 class="font-semibold text-slate-900" id="cfTitle"></h3><p class="text-sm text-slate-500 mt-1" id="cfBody"></p></div>
+    </div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeConfirm()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button id="cfOk" data-confirm-ok class="px-4 py-2 rounded-md bg-red-600 text-white text-sm hover:bg-red-700">確認</button>
+    </div>
+  </div>
+</div>
+
+<div id="toastWrap" class="fixed top-16 right-4 z-[60] space-y-2"></div>
+
+<script>
+  /* ===== admin shell sidebar =====
+     🔵 新項 `ojtprogress`（位置為建議，見檔頭）。命名鎖定表逐字＝`OJT 進度管理`。 */
+  const MENU=[
+    {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
+    {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    /* 🟢 F042 `AC-27`＋`OQ-E11-05`＝(A) 已裁決：
+       SysAdmin `READ`／ICSOPAdmin `CRUD`／Supervisor·DeptContact **`RESTRICTED_CRUD`（僅新增）**／User `NONE`。
+       🔒 徽章字面 `受限CRUD` **比照既有 `RESTRICTED_CRUD` 前例逐字沿用**——該值域於 2026-08-25
+          角色自動化 delta（`OQ-RA-03`）引入，既有唯一載體＝`18-permission-matrix.html` 之
+          「角色指派」列（`['角色指派',['CRUD','受限CRUD','無','無','無'],…]`）。**不得**另造「可新增」等新詞。
+       📌 `RESTRICTED_CRUD` 於**功能層**等同 `CRUD`（`canPerform(...,'write')` 回 true，
+          見 `frontend/src/domain/function-matrix.ts`），其「僅新增、不可刪改」之限制落在**端點內部**——
+          本頁之對應載體即 `canDeleteSession()`（僅 ICSOPAdmin），與 `canAddSession()`（三角色）分開。
+       📝 OLD> supervisor:'CRUD',deptcontact:'CRUD'（暫代值，當時 OQ-E11-05 未裁決） */
+    {id:'ojtprogress',label:'OJT 進度管理',icon:'graduation-cap',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'受限CRUD',deptcontact:'受限CRUD'}},
+    {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
+  ];
+  const CURRENT_MODULE='ojtprogress';
+  /* 🔵 F002 AC-D1／AC-D5：側欄最上方「首頁」項。刻意**不放進 MENU**——它不對映任何 F025 功能鍵、
+     不經 canPerform 過濾，F025 功能矩陣逐格未動、未新增「首頁」列（AC-D5 回歸鎖定）。 */
+  const HOME_ITEM={id:'home',label:'首頁',icon:'layout-dashboard',route:'/admin',href:'07-admin-shell.html'};
+  function renderSidebar(){
+    const role=document.body.dataset.role;
+    const items=MENU.filter(m=>m.roles[role]);
+    const showHome = role!=='user', homeActive = CURRENT_MODULE==='home';
+    const homeHtml = showHome ? `<a href="${HOME_ITEM.href}" data-to="${HOME_ITEM.route}" title="${HOME_ITEM.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${homeActive?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${HOME_ITEM.icon}" class="w-4 h-4 shrink-0 ${homeActive?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${HOME_ITEM.label}</span></a>` : '';
+    document.getElementById('sidebarNav').innerHTML = homeHtml + (items.length? items.map(m=>{
+      const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
+      return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`);
+    lucide.createIcons();
+  }
+  function navTo(id,label){
+    if(id==='usageform'&&CURRENT_MODULE!=='usageform'){location.href='19-usage-form-management.html';return false;}
+    if(id==='appendix'&&CURRENT_MODULE!=='appendix'){location.href='24-appendix-management.html';return false;}
+    if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;}
+    if(id==='document'&&CURRENT_MODULE!=='document'){location.href='13-document-list.html';return false;}
+    shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型：對應頁面）')); return false;
+  }
+  function toggleSidebar(){ document.body.classList.toggle('sb-collapsed'); }
+  function openPublic(){ shellToast('已於新視窗開啟前台瀏覽頁（03-public-list）'); }
+  function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
+
+  /* ===================== 🔴 逐字文案常數（棒 4 定稿；下游 AC 照抄，勿改寫）=====================
+     F042 `AC-28` ①～⑥ 之落點。凡此處之常數皆為**不隨任何 OQ 裁決改變**之逐字值；
+     受 OQ 影響者（如時間窗口天數、篩選項目集合）刻意**不**做成常數，避免被誤讀為已定案。 */
+  const TAB_DASHBOARD_TEXT   = '儀表板';                    // AC-28 ①：TAB1 之可見文字
+  const TAB_SESSIONS_TEXT    = 'OJT 資料清單';               // AC-28 ①：TAB2 之可見文字
+  const SEC_COVERAGE_TITLE   = '文件-訓練覆蓋率';            // AC-28 ②：TAB1 區一標題（半形連字號，與 F042 Main Flow 逐字一致）
+  /* 🟢 **2026-08-28 lead 核准之標題修正**：`OQ-E11-07`＝(B) 裁定 rollup **只到部層**，
+     原標題同時提「處室」會讓畫面承諾一個實際不存在的彙總層級。
+     🔒 新字面與本區表頭「部」及全站既有用詞（`制定部門`／`文件使用部門`）一致。
+     ⚠ 本字面原為**逐字照抄 F042 Main Flow §B.4 之區塊名** ⇒ 改動後 spec 正文需同步
+        （lead 已通知 sw-ojt 改 Main Flow §B.4 與 F042 §6 逐字文案表）。
+     📝 OLD> const SEC_ROLLUP_TITLE = '處室／部門完成率';   // 原值，含已不成立的「處室」 */
+  const SEC_ROLLUP_TITLE     = '部門完成率';                 // AC-28 ②：TAB1 區二標題
+  const SEC_RECENT_TITLE     = '最近完成 OJT 的單位';        // AC-28 ②：TAB1 區三標題
+  /* AC-28 ③：進度列完成／未完成兩態之 icon 鍵與無障礙名稱。
+     🔒 兩個字面直接取自 F042 `AC-03` 之判定用語（「已完成」／「尚未完成」），不另造詞。 */
+  const BADGE_COMPLETED_TEXT = '已完成';
+  const BADGE_PENDING_TEXT   = '尚未完成';
+  const BADGE_COMPLETED_ICON = 'circle-check-big';
+  /* 🟢 `AC-25`／`OQ-E11-02`＝(C) 之孤兒列逐字文案（棒 4 定稿）。
+     🔒 **刻意不動完成徽章本身**：該單位確實辦過訓練，那是既成事實；
+        改變的只是「這一列還算不算在追蹤範圍內」⇒ 用一則獨立的灰字註記表達，
+        而不是把徽章改成第三種狀態（那會讓人以為訓練紀錄失效了）。 */
+  const ORPHAN_NOTE_TEXT = '單位已移出使用部門，不計統計';
+  const BADGE_PENDING_ICON   = 'circle-dashed';
+  /* AC-28 ④：「新增場次」動作之可見文字與 aria-label。
+     可見文字刻意簡短（列內空間有限）；aria-label 補上「為哪一列」之脈絡，
+     使同一畫面上的多顆同名鈕對螢幕閱讀器可區辨。 */
+  const ADD_SESSION_TEXT = '新增場次';
+  function addSessionAria(documentNumber,orgName){ return `新增教育訓練場次（${documentNumber} · ${orgName}）`; }
+  /* AC-28 ⑤：場次登記表單之欄位 label 與錯誤提示（逐字）。 */
+  const FIELD_TRAINING_DATE_LABEL = '訓練日期';
+  const FIELD_SIGNIN_FILE_LABEL   = '簽到表檔案';
+  const ERR_DATE_REQUIRED  = '請選擇訓練日期。';
+  const ERR_DATE_FUTURE    = '訓練日期不得晚於今日；場次記錄的是已發生之教育訓練事實。';
+  const ERR_FILE_REQUIRED  = '請選擇簽到表檔案（pdf / jpg / jpeg / png，單檔 ≤ 50 MB）。';
+  /* AC-28 ⑥：空狀態文案（AC-12／AC-14／AC-16／AC-13 各自之空狀態）。
+     🔒 四者皆為「明確之空狀態提示」，**非空白、非錯誤**——F042 Edge Cases 之明文要求。 */
+  const EMPTY_SESSIONS_TEXT = '此單位尚未登記任何教育訓練場次';        // AC-12：場次數 0 之列展開後
+  const EMPTY_RECENT_TEXT   = '此時間窗口內尚無新登記之教育訓練場次';  // AC-16：區三之空窗口
+  const EMPTY_ROWS_TEXT     = '查無符合條件的進度列';                  // AC-13：篩選無結果
+  const EMPTY_ALL_TEXT      = '目前沒有任何 OJT 進度列';               // 全域空（無任何文件指定使用單位）
+  /* 🔴 全域空狀態之補充提示：進度列**由文件之使用部門衍生**，不是在本頁建立的。
+     沒有列時，本頁**沒有、也不應該有**任何「新增進度列」入口——正確的補救路徑在文件表單。
+     ⚠ 少了這一句，畫面會變成「一個列都沒有、也看不出該去哪裡」之死路。 */
+  const EMPTY_ALL_HINT      = '進度列由各 ICSOP 文件之「文件使用部門」衍生而得，無法於本頁建立；請先至「ICSOP 文件管理」為文件指定使用部門。';
+  const RO_NOTICE_SYSADMIN  = '唯讀模式 · 系統管理員可檢視儀表板與 OJT 資料清單之全部內容，並下載簽到表；無法新增教育訓練場次（PERMISSION_DENIED）。';
+  /* 🔵 浮水印註記（F020 AC-N20；與 04／16／24 同一組逐字文案，不得分歧）。
+     場次簽到檔之後台下載沿用 D9 已定案之後台燒錄政策（OQ-D9-08 選項 B），非本 feature 新開之題。 */
+  /* 🟢 `AC-18`／`OQ-E11-13`＝(B) 已裁決：**新立兩個 actionType**，不沿用 `ATTACHMENT_UPLOAD`。
+     🔴 **角色不對稱不延續**（推翻 F016 `AC-N32`／F023 `AC-N52` 之既有落差）：
+        新增場次之**三個角色（ICSOPAdmin／Supervisor／DeptContact）一律寫稽核**。
+        理由：`OQ-D9-23` 當初的不對稱理由是「首次開放非管理角色之寫入路徑」，
+        而本 feature 的場次登記對三種角色**都**是新路徑 ⇒ 該理由已不適用；
+        若仍分角色，會出現「同一頁面同一按鈕，換個人按就不留痕」。
+     🔒 兩個字面為 `OQ-E11-13`(B) 之裁決值，下游逐字沿用。 */
+  const AUDIT_SESSION_UPLOAD = 'OJT_SESSION_UPLOAD';
+  const AUDIT_SESSION_DELETE = 'OJT_SESSION_DELETE';
+  const WM_BURN_TEXT        = '檢視/下載將燒錄浮水印';
+  const WM_UNSUPPORTED_TEXT = '此格式不支援浮水印';
+
+  /* ===================== 檔案規則（依 OQ-E11-10 建議案 (A)；沿用既有值 ===================== */
+  const MAX_BYTES = 52428800;                       // 50 MB（OQ-E04-06 定案值，恰 50MB 通過）
+  const ALLOWED_EXT = ['pdf','jpg','jpeg','png'];
+  const TODAY = '2026-08-28';                       // 原型固定「今日」，使未來日驗證可重現
+  const RECENT_WINDOW_DAYS = 30;                    // 🟢 `OQ-E11-07`＝(B) 已裁決值（近 30 天）
+
+  /* ===================== 組織資料（真實形狀之 5 碼 orgCode）=====================
+     取自 08-account-management 之 ORG_UNITS 樣本（上游 VW_PERSONNEL_SQL 實測形狀：
+     Root 00000／本部 A0000／部 AN000／處室 ANA00／課 BJAA0）。
+     `path` ＝ buildOrgPath 之輸出形狀（部層 DESC_FULL ＋ 自身最末段，以 ' / ' 相接）。 */
+  const ORGS={
+    'ABA00':{path:'資訊部 / 應用發展室',        inactive:true },  // 🔵 裁撤示範（AC-17 / OQ-E11-03）
+    'BAA00':{path:'企劃部 / 車輛行銷室'},
+    'BJA00':{path:'供應商金融部 / 北區綜合處'},
+    'BJAA0':{path:'供應商金融部 / 醫療一課'},
+    'CA000':{path:'信用審查部'},
+    'CAA00':{path:'信用審查部 / 企金室'},
+    'CDB00':{path:'債權管理部 / 法催一室'},
+    'DAA00':{path:'作業服務部 / 文管室'},
+    'DAB00':{path:'作業服務部 / 客服室'},   // 🟢 孤兒列示範用（曾為 d1 之使用部門，後被移出）
+    'JA000':{path:'營運管理部'},
+    'JAC00':{path:'營運管理部 / 審查室'}
+  };
+  const DEPT_NAME={'AB000':'資訊部','BA000':'企劃部','BJ000':'供應商金融部','CA000':'信用審查部','CD000':'債權管理部','DA000':'作業服務部','JA000':'營運管理部'};
+  function orgName(code){ return (ORGS[code]&&ORGS[code].path)||code; }
+  function orgInactive(code){ return !!(ORGS[code]&&ORGS[code].inactive); }
+  /* 🔴 原型專用之部層推導（5 碼代碼之前兩碼＋'000'）。
+     **刻意不呼叫、也不暗示重用 `isWithinSubtree`**——該判定式服務的是權限與置頂，
+     本處服務的是統計彙總；F042 AC-29 ① 明文禁止把兩套語意統一。
+     🟢 `OQ-E11-07`＝(B) 已裁決＝**彙總至部層**；是否重用既有判定式**未被要求**，本檔維持自建、不碰 `isWithinSubtree`。 */
+  function deptCodeOf(orgCode){ return orgCode.slice(0,2)+'000'; }
+
+  /* ===================== 假資料 =====================
+     🔴 D1 之三個使用單位與 15／16 之 `doc.using` **刻意同源**（營運管理部/審查室、信用審查部、
+        供應商金融部/醫療一課），且完成情形同為 **2 / 3**——使「文件表單之唯讀衍生清單」
+        與「本頁 TAB2 之列」在覆核時可交叉對照，不致出現兩份 mock 語料互相矛盾。
+     🔴 D5 為 **AC-01 之現場示範**：`JA000`（部層）與 `JAC00`（其下處室）同為使用單位 ⇒
+        各自獨立一列；`JAC00` 已完成**不會**使 `JA000` 列變成已完成。 */
+  const DOCS=[
+    {id:'d1',number:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',    using:['JAC00','CA000','BJAA0']},
+    {id:'d2',number:'ICSOP-SRC-101-2-00',name:'消金審核作業',        using:['CA000','CAA00']},
+    {id:'d3',number:'ICSOP-SRC-102-1-01',name:'車輛分期對保作業',    using:['DAA00','JAC00']},
+    {id:'d4',number:'ICSOP-SRC-104-1-05',name:'作服撥款作業（車輛）',using:['DAA00']},
+    {id:'d5',number:'ICSOP-PPC-201-1-03',name:'供應商付款作業',      using:['JA000','JAC00','ABA00']},
+    {id:'d6',number:'ICSOP-PPC-201-2-01',name:'應付帳款覆核作業',    using:['CDB00','BAA00']}
+  ];
+  /* 場次 fixture。
+     🔴 `uploader` 為**真實形狀之姓名**，刻意保留：
+        · TAB2 場次明細（AC-12）**呈現**它；
+        · TAB1 區三（AC-16）**不得**呈現它 ⇒ 「區三 textContent 不含『王志明』」為有鑑別力之負向斷言。
+     🔴 s9／s10 為**同一列、同一訓練日期之兩筆場次**（上下午兩梯）——F042 Edge Cases 明文
+        「允許、系統不做同日去重」；去重會使真實事實被靜默吞掉。 */
+  let seq=10;
+  let SESSIONS=[
+    {id:'s1', docId:'d1', org:'JAC00', date:'2026-03-05', uploader:'王志明', file:'車輛分期進件作業_審查室_OJT簽到表_20260305.pdf', fmt:'pdf'},
+    {id:'s2', docId:'d1', org:'JAC00', date:'2026-06-18', uploader:'王志明', file:'車輛分期進件作業_審查室_OJT簽到表_20260618.pdf', fmt:'pdf'},
+    {id:'s3', docId:'d1', org:'CA000', date:'2026-05-20', uploader:'林建宏', file:'車輛分期進件作業_信審部_OJT簽到表_20260520.pdf', fmt:'pdf'},
+    {id:'s4', docId:'d2', org:'CA000', date:'2026-04-02', uploader:'林建宏', file:'消金審核作業_信審部_OJT簽到表_20260402.pdf', fmt:'pdf'},
+    {id:'s5', docId:'d2', org:'CAA00', date:'2026-08-12', uploader:'林建宏', file:'消金審核作業_企金室_OJT簽到表_20260812.pdf', fmt:'pdf'},
+    {id:'s6', docId:'d3', org:'DAA00', date:'2026-08-20', uploader:'張家豪', file:'車輛分期對保作業_文管室_OJT簽到表_20260820.pdf', fmt:'pdf'},
+    {id:'s7', docId:'d5', org:'JAC00', date:'2026-08-25', uploader:'王志明', file:'供應商付款作業_審查室_OJT簽到表_20260825.pdf', fmt:'pdf'},
+    {id:'s8', docId:'d6', org:'CDB00', date:'2026-07-30', uploader:'李慧玲', file:'應付帳款覆核作業_法催一室_OJT簽到表_20260730.pdf', fmt:'pdf'},
+    {id:'s9', docId:'d6', org:'BAA00', date:'2026-02-14', uploader:'陳彥廷', file:'應付帳款覆核作業_車輛行銷室_OJT簽到表_20260214_上午梯.pdf', fmt:'pdf'},
+    {id:'s10',docId:'d6', org:'BAA00', date:'2026-02-14', uploader:'陳彥廷', file:'應付帳款覆核作業_車輛行銷室_簽到表_20260214_下午梯.jpg', fmt:'jpg'},
+    /* 🟢 `AC-25`／`OQ-E11-02`＝(C) 之孤兒列示範：`DAB00` **不在** d1 的 `using` 內
+       （曾是使用部門、後來被移出）⇒ 本筆場次仍保留、仍可下載、仍留稽核回溯，但**不計入任何統計**。
+       📌 日期刻意早於 30 天窗口，使「孤兒列是否該出現在區三」不會被 fixture 偷偷替裁決者決定；
+          本檔之規則已明文寫在 renderRecent()（孤兒列不進區三），與此無關。 */
+    {id:'s11',docId:'d1', org:'DAB00', date:'2025-12-10', uploader:'周立群', file:'車輛分期進件作業_客服室_OJT簽到表_20251210.pdf', fmt:'pdf'}
+  ];
+
+  /* ===================== 🟢 舊資料「待歸位」fixture（`AC-26`／`OQ-E11-01`＝(C)）=====================
+     每筆＝舊模型下掛在某文件上之單份 `OJT_SIGNIN` 附件。**沒有 orgCode、也沒有 trainingDate**
+     （舊模型從未記錄「訓練何時舉辦」，只記錄「檔案何時被上傳」）——這正是本題必須人工歸位的原因，
+     也是 (A) 案「複製為各使用單位之初始場次」被否決的原因：一份檔案不能證明 N 個單位都辦過訓練。
+     📌 兩筆刻意挑不同情境：L1 之文件目前 0/1（歸位後會變 1/1＝已全部完成，狀態變化看得見）；
+        L2 之文件目前 2/3（歸位到唯一未完成的 BJAA0 後會變 3/3）。 */
+  let LEGACY=[
+    {id:'lg1', docId:'d4', file:'作服撥款作業_OJT簽到表.pdf',      fmt:'pdf', uploadedBy:'張家豪', uploadedAt:'2025-11-14 09:32'},
+    {id:'lg2', docId:'d1', file:'車輛分期進件作業_OJT簽到表.pdf',  fmt:'pdf', uploadedBy:'陳彥廷', uploadedAt:'2026-02-03 16:05'}
+  ];
+
+  /* ===================== 衍生（AC-01／AC-03／AC-04）=====================
+     🔴 進度列**不物化**（棒 3 已裁定）：由 DOC_USING_DEPT × OJT_SESSION 於查詢時衍生。
+     🔴 列產生**原樣採用** doc.using，**不展開子樹**（AC-01 之負向鎖定）。 */
+  function sessionsOf(docId,org){
+    return SESSIONS.filter(s=>s.docId===docId&&s.org===org)
+                   .slice().sort((a,b)=>a.date<b.date?-1:(a.date>b.date?1:0));
+  }
+  function allRows(){
+    const out=[];
+    DOCS.forEach(d=>{
+      d.using.forEach(org=>{
+        const ss=sessionsOf(d.id,org);
+        out.push({key:d.id+'__'+org, docId:d.id, number:d.number, docName:d.name, org,
+                  orgLabel:orgName(org), inactive:orgInactive(org), orphaned:false,
+                  sessions:ss, count:ss.length, completed:ss.length>=1});
+      });
+      /* 🟢 `AC-25`／`OQ-E11-02`＝(C) 已裁決：使用部門被移出後，其場次**軟標記保留**
+         （不硬刪、不刪 Blob），**不計統計**、保留稽核回溯；**該單位日後重新掛回即自動復活**。
+         🔴 **孤兒列刻意用「推導」而非「另存一份旗標」**：凡 `(docId, org)` 有場次、但 `org` 已不在
+            該文件之 `using` 內者，即為孤兒列。這樣「重新掛回即復活」是**演算法的必然結果**
+            而不是另一段要記得寫的還原邏輯——把 org 加回 `using`，這一列下一次渲染就自動變回正常列。
+            （實作端對應 `orphanedAt` 欄位；判定式仍應是「是否仍在 DOC_USING_DEPT 內」，不得改以
+              旗標為唯一真相，否則旗標與使用部門清單會各說各話。） */
+      const orphanOrgs=[...new Set(SESSIONS.filter(s=>s.docId===d.id&&!d.using.includes(s.org)).map(s=>s.org))].sort();
+      orphanOrgs.forEach(org=>{
+        const ss=sessionsOf(d.id,org);
+        out.push({key:d.id+'__'+org, docId:d.id, number:d.number, docName:d.name, org,
+                  orgLabel:orgName(org), inactive:orgInactive(org), orphaned:true,
+                  sessions:ss, count:ss.length, completed:ss.length>=1});
+      });
+    });
+    return out;
+  }
+  /* 🟢 `OQ-E11-03`＝(B) 已裁決：**裁撤單位不計入覆蓋率分母**。
+     本函式是 TAB1 全部三個統計區（區一 KPI、區一逐筆、區二 rollup）的**唯一母體來源**——
+     🔒 三處共用同一個 filter，不各自寫一次，否則三個數字會各自漂移。
+     🟢 排除兩種列：**已裁撤單位**（`OQ-E11-03`＝(B)）與**孤兒列**（`OQ-E11-02`＝(C)「不計統計」）。
+     ⚠ **TAB2 與區三刻意不使用本函式**：TAB2 仍呈現裁撤單位之列且仍可新增場次
+        （F042 Edge Cases 明文：TAB2 之呈現不隨本題裁決改變）；區三是事實列表，理由見其區塊註解。 */
+  function coverageRows(){ return allRows().filter(r=>!r.inactive && !r.orphaned); }
+
+  /* 🟢 `OQ-E11-06`＝(B) 已裁決：文件層由二值改**三值**（`all`／`partial`／`none`）。
+     🔒 icon 鍵與逐字文案**與 `13-document-list.html` 第 1 欄逐字相同**（兩檔呈現同一個衍生值之
+        兩種載體，不得分歧）；`13` 為該組文案之來源，任一檔要改，兩檔必須同批改。
+     🔒 空集合（文件未指定任何使用部門）與「0 個完成」**同歸 `none`**——`AC-04` 明文覆寫
+        「`every()` 對空陣列回 `true`」之語言預設，否則畫面會把「一個單位都沒指定」畫成「全部完成」。 */
+  const OJT_DOC_STATE_ALL_TEXT     = '已全部完成';
+  const OJT_DOC_STATE_PARTIAL_TEXT = '部分完成';
+  const OJT_DOC_STATE_NONE_TEXT    = '尚未開始';
+  const OJT_DOC_STATE = {
+    all:     {icon:'file-check-2', text:OJT_DOC_STATE_ALL_TEXT,     cls:'text-emerald-600'},
+    partial: {icon:'file-minus-2', text:OJT_DOC_STATE_PARTIAL_TEXT, cls:'text-amber-500'},
+    none:    {icon:'file-x-2',     text:OJT_DOC_STATE_NONE_TEXT,    cls:'text-slate-300'}
+  };
+  function docStateOf(total,done){ return (total===0||done===0) ? 'none' : (done>=total ? 'all' : 'partial'); }
+
+  function docCoverage(){
+    const rows=coverageRows();
+    return DOCS.map(d=>{
+      const mine=rows.filter(r=>r.docId===d.id);
+      const done=mine.filter(r=>r.completed).length;
+      return {number:d.number, name:d.name, total:mine.length, done,
+              state: docStateOf(mine.length,done),
+              pct: mine.length? Math.round(done/mine.length*100) : 0};
+    });
+  }
+  function pctOf(done,total){ return total? Math.round(done/total*100) : 0; }
+  function daysBetween(a,b){ return Math.round((Date.parse(b)-Date.parse(a))/86400000); }
+
+  /* ===================== 角色（AC-05／AC-06／AC-07）===================== */
+  /* 🔴 可新增場次之角色＝ICSOPAdmin／Supervisor／DeptContact（AC-05）。
+     SysAdmin **可查全部內容、寫入一律 403**（AC-06）；User 全頁 403（AC-07）。
+     🔒 **不限權責範圍**（AC-08，沿用 OQ-D9-21）——本判定**只看角色**，
+        不看操作者 orgCode 與目標列之關係，亦**不得**於此新增任何子樹範圍檢查。 */
+  function canAddSession(){ return ['icsop_admin','supervisor','deptcontact'].includes(document.body.dataset.role); }
+
+  /* ===================== 分頁切換 ===================== */
+  let currentTab='dashboard';
+  function switchTab(t){
+    currentTab=t;
+    [['dashboard',TAB_DASHBOARD_TEXT],['sessions',TAB_SESSIONS_TEXT]].forEach(([k,label])=>{
+      const btn=document.getElementById('tabbtn-'+k), on=(k===t);
+      btn.className='px-4 py-3 font-medium border-b-2 flex items-center gap-1.5 '+(on?'border-primary-600 text-primary-700':'border-transparent text-slate-500 hover:text-slate-700');
+      btn.setAttribute('aria-selected', on?'true':'false');
+      if(on) document.getElementById('crumbTab').textContent=label;
+    });
+    applyDemoState();
+    lucide.createIcons();
+  }
+  function onTabKey(e){
+    if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight') return;
+    e.preventDefault();
+    const next=(currentTab==='dashboard')?'sessions':'dashboard';
+    switchTab(next); document.getElementById('tabbtn-'+next).focus();
+  }
+
+  /* ===================== 版面狀態（原型示範）===================== */
+  let demoState='ready';
+  function setDemoState(v){ demoState=v; const sel=document.getElementById('demoStateSel'); if(sel) sel.value=v; applyDemoState(); }
+  function applyDemoState(){
+    const loading=demoState==='loading', error=demoState==='error';
+    document.getElementById('stateLoading').classList.toggle('hidden',!loading);
+    document.getElementById('stateError').classList.toggle('hidden',!error);
+    document.getElementById('errText').textContent='無法取得 OJT 進度資料，請稍後再試；若持續發生請聯絡系統管理員。';
+    const showPanel=!loading&&!error;
+    document.getElementById('panel-dashboard').classList.toggle('hidden',!(showPanel&&currentTab==='dashboard'));
+    document.getElementById('panel-sessions').classList.toggle('hidden',!(showPanel&&currentTab==='sessions'));
+    if(showPanel) renderAll();
+    lucide.createIcons();
+  }
+  /* 🔵 「查無資料」態＝資料集為空（非篩選結果為空）：以清空 DOCS 之衍生列模擬。 */
+  function isEmptyDemo(){ return demoState==='empty'; }
+
+  /* ===================== TAB1 · 區一 ===================== */
+  function renderCoverage(){
+    // 🟢 OQ-E11-03=(B)：母體＝coverageRows()（已排除裁撤單位之列）
+    const rows=isEmptyDemo()?[]:coverageRows();
+    const total=rows.length, done=rows.filter(r=>r.completed).length;
+    const excluded=isEmptyDemo()?0:(allRows().length-rows.length);
+    const exInactive=isEmptyDemo()?0:allRows().filter(r=>r.inactive&&!r.orphaned).length;
+    const exOrphan  =isEmptyDemo()?0:allRows().filter(r=>r.orphaned).length;
+    const kpi=[
+      {k:'documents', label:'追蹤中文件',            value:isEmptyDemo()?0:DOCS.length, unit:'份',  icon:'file-text'},
+      {k:'rows',      label:'進度列（文件 × 使用單位）',value:total,                       unit:'列',  icon:'list-tree'},
+      {k:'completed', label:BADGE_COMPLETED_TEXT,    value:done,                        unit:'列',  icon:BADGE_COMPLETED_ICON},
+      {k:'pending',   label:BADGE_PENDING_TEXT,      value:total-done,                  unit:'列',  icon:BADGE_PENDING_ICON},
+      {k:'rate',      label:'整體覆蓋率',            value:pctOf(done,total),           unit:'%',   icon:'target'}
+    ];
+    document.getElementById('kpiRow').innerHTML=kpi.map(c=>`
+      <div data-coverage-kpi="${c.k}" class="rounded-xl border border-slate-200 px-4 py-3">
+        <div class="flex items-center gap-1.5 text-xs text-slate-500"><i data-lucide="${c.icon}" class="w-3.5 h-3.5 text-slate-400"></i>${c.label}</div>
+        <div class="mt-1 flex items-baseline gap-1"><span data-coverage-kpi-value class="text-2xl font-semibold text-slate-900 mono">${c.value}</span><span class="text-xs text-slate-400">${c.unit}</span></div>
+      </div>`).join('');
+
+    /* 🟢 AC-17／`OQ-E11-03`＝(B) 已裁決：**不計入**。
+       🔴 排除是一種「數字說了謊的機會」——被排除的列在 TAB2 仍然看得見，若此處不明說有幾列被排除，
+          使用者會自己去數 TAB2 的列然後發現對不起來。故**恆顯示排除筆數**（含 0 筆時的明確說明）。
+       📝 OLD> 兩個數字同時呈現（計入 X/Y、不計入 A/B），何者為權威依 OQ-E11-03 裁決——本頁兩者並陳，不預先選邊。 */
+    document.getElementById('inactiveNote').querySelector('span').innerHTML =
+      excluded>0
+        ? `覆蓋率為 <span class="mono">${done} / ${total}</span>（<span class="mono">${pctOf(done,total)}%</span>）；本次共排除 <span class="mono">${excluded}</span> 列——<strong class="text-slate-600">已裁撤單位</strong> ${exInactive} 列、<strong class="text-slate-600">單位已移出使用部門</strong> ${exOrphan} 列。被排除之進度列於「OJT 資料清單」分頁<strong class="text-slate-600">仍然呈現</strong>（裁撤單位仍可新增場次；已移出者不可），故兩處列數不相等屬正常。`
+        : `覆蓋率為 <span class="mono">${done} / ${total}</span>（<span class="mono">${pctOf(done,total)}%</span>）；已裁撤單位與已移出使用部門之單位<strong class="text-slate-600">皆不計入</strong>，目前無任何進度列因此被排除。`;
+
+    const cov=isEmptyDemo()?[]:docCoverage();
+    document.getElementById('docCoverageBody').innerHTML = cov.length? cov.map(c=>`
+      <tr data-doc-coverage-row="${c.number}" class="hover:bg-slate-50">
+        <td class="px-4 py-2.5 mono text-xs text-slate-600 whitespace-nowrap">${c.number}</td>
+        <td class="px-4 py-2.5 text-slate-800">${c.name}</td>
+        <td class="px-4 py-2.5" data-doc-ojt-state="${c.state}">${docStateChip(c.state)}</td>
+        <td class="px-4 py-2.5"><span data-doc-coverage-ratio class="mono text-slate-700">${c.done} / ${c.total}</span></td>
+        <td class="px-4 py-2.5">
+          <div class="flex items-center gap-2">
+            <div class="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full ${c.pct===100?'bg-emerald-500':(c.pct===0?'bg-slate-300':'bg-primary-500')}" style="width:${c.pct}%"></div></div>
+            <span data-doc-coverage-pct class="mono text-xs ${c.pct===100?'text-emerald-700':'text-slate-600'}">${c.pct}%</span>
+          </div>
+        </td>
+      </tr>`).join('')
+      : `<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-400">${EMPTY_ALL_TEXT}</td></tr>`;
+  }
+  /* 文件層三態晶片：icon 鍵與逐字文案與 `13` 第 1 欄共用（見 OJT_DOC_STATE 之註解）。 */
+  function docStateChip(st){
+    const x=OJT_DOC_STATE[st];
+    return `<span data-doc-ojt-state-chip class="inline-flex items-center gap-1 text-xs whitespace-nowrap ${x.cls}"><i data-lucide="${x.icon}" class="w-3.5 h-3.5" aria-hidden="true"></i>${x.text}</span>`;
+  }
+
+  /* ===================== TAB1 · 區二 ===================== */
+  function renderRollup(){
+    // 🟢 OQ-E11-03=(B)：與區一共用同一個母體（排除裁撤單位之列）
+    const rows=isEmptyDemo()?[]:coverageRows();
+    const byDept=new Map();
+    rows.forEach(r=>{
+      const dc=deptCodeOf(r.org);
+      if(!byDept.has(dc)) byDept.set(dc,{code:dc,name:DEPT_NAME[dc]||dc,total:0,done:0});
+      const g=byDept.get(dc); g.total++; if(r.completed)g.done++;
+    });
+    const list=Array.from(byDept.values()).sort((a,b)=>a.code.localeCompare(b.code));
+    document.getElementById('rollupBody').innerHTML = list.length? list.map(g=>{
+      const pct=pctOf(g.done,g.total);
+      return `<tr data-rollup-row="${g.code}" class="hover:bg-slate-50">
+        <td class="px-4 py-2.5 text-slate-800">${g.name}</td>
+        <td class="px-4 py-2.5 mono text-xs text-slate-500">${g.code}</td>
+        <td class="px-4 py-2.5"><span data-rollup-ratio class="mono text-slate-700">${g.done} / ${g.total}</span></td>
+        <td class="px-4 py-2.5">
+          <div class="flex items-center gap-2">
+            <div class="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full ${pct===100?'bg-emerald-500':(pct===0?'bg-slate-300':'bg-primary-500')}" style="width:${pct}%"></div></div>
+            <span data-rollup-rate class="mono text-xs ${pct===100?'text-emerald-700':'text-slate-600'}">${pct}%</span>
+          </div>
+        </td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="4" class="px-4 py-8 text-center text-sm text-slate-400">${EMPTY_ALL_TEXT}</td></tr>`;
+
+    /* 🔒 AC-15 之不變式（建議斷言形狀）之畫面載體：彙總前後之列數必須相等。 */
+    const sum=list.reduce((a,g)=>a+g.total,0);
+    document.getElementById('rollupInvariant').querySelector('span').innerHTML =
+      `彙總自 <span class="mono">${rows.length}</span> 列進度列（已排除裁撤單位），分入 <span class="mono">${list.length}</span> 個部；各部列數合計 <span class="mono">${sum}</span> — <strong class="text-slate-600">列數不因彙總而改變</strong>（彙總只發生於統計階段，不回頭展開 TAB2 之列）。`;
+  }
+
+  /* ===================== TAB1 · 區三 =====================
+     🔴 PII 硬性防線：本函式**只**讀取 r.number／r.docName／r.orgLabel／s.date，
+        **不得**讀取 s.uploader。任何在此加入上傳者姓名之修改皆違反 AC-16。 */
+  function renderRecent(){
+    const rows=isEmptyDemo()?[]:allRows();
+    const recent=[];
+    rows.forEach(r=>{
+      if(!r.completed) return;
+      /* 🟢 `OQ-E11-02`＝(C)：孤兒列**不進本區**。理由與「不計統計」同源——本區追蹤的是
+         「還在追的單位最近有沒有進度」，一個已不再是使用部門的單位不在追蹤範圍內。
+         ⚠ 這是**規則**，不是 fixture 的巧合：即使孤兒場次之日期落在窗口內也不會出現。 */
+      if(r.orphaned) return;
+      const last=r.sessions[r.sessions.length-1];
+      const age=daysBetween(last.date,TODAY);
+      if(age>=0&&age<=RECENT_WINDOW_DAYS) recent.push({row:r,date:last.date,age});
+    });
+    recent.sort((a,b)=>a.date<b.date?1:(a.date>b.date?-1:0));
+    const host=document.getElementById('recentList');
+    if(!recent.length){
+      host.innerHTML=`<div data-recent-empty class="flex items-center gap-2 rounded-lg border border-dashed border-slate-200 px-3 py-6 justify-center text-sm text-slate-400"><i data-lucide="calendar-off" class="w-4 h-4 shrink-0"></i>${EMPTY_RECENT_TEXT}</div>`;
+      lucide.createIcons(); return;
+    }
+    host.innerHTML=recent.map(x=>`
+      <div data-recent-row="${x.row.key}" class="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5">
+        <i data-lucide="circle-check-big" class="w-5 h-5 text-emerald-600 shrink-0"></i>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 min-w-0">
+            <span data-recent-doc class="mono text-xs text-slate-500 shrink-0">${x.row.number}</span>
+            <span class="text-sm text-slate-800 truncate">${x.row.docName}</span>
+          </div>
+          <div data-recent-org class="text-xs text-slate-500 mt-0.5 flex items-center gap-1"><i data-lucide="building-2" class="w-3 h-3 text-slate-400"></i>${x.row.orgLabel}<span class="mono text-slate-400">（${x.row.org}）</span></div>
+        </div>
+        <div class="text-right shrink-0">
+          <div data-recent-date class="mono text-sm text-slate-700">${x.date}</div>
+          <div class="text-[10px] text-slate-400">${x.age===0?'今日':x.age+' 天前'}</div>
+        </div>
+      </div>`).join('');
+    lucide.createIcons();
+  }
+
+  /* ===================== TAB2 · 單位分組清單 ===================== */
+  const expanded=new Set();      // 已展開之進度列 key
+  const collapsedGroups=new Set(); // 已收合之群組 orgCode
+
+  function filteredRows(){
+    if(isEmptyDemo()) return [];
+    const kw=(document.getElementById('fOrg').value||'').trim().toLowerCase();
+    const st=document.getElementById('fStatus').value;
+    return allRows().filter(r=>{
+      if(kw && !(r.orgLabel.toLowerCase().includes(kw) || r.org.toLowerCase().includes(kw))) return false;
+      if(st==='completed' && !r.completed) return false;
+      if(st==='pending'   &&  r.completed) return false;
+      return true;
+    });
+  }
+  function clearFilters(){ document.getElementById('fOrg').value=''; document.getElementById('fStatus').value=''; renderRows(); }
+
+  function completionBadge(completed){
+    return completed
+      ? `<span data-completion-badge="completed" aria-label="${BADGE_COMPLETED_TEXT}" title="${BADGE_COMPLETED_TEXT}" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style="color:#047857;background:#D1FAE5"><i data-lucide="${BADGE_COMPLETED_ICON}" class="w-3 h-3"></i>${BADGE_COMPLETED_TEXT}</span>`
+      : `<span data-completion-badge="pending" aria-label="${BADGE_PENDING_TEXT}" title="${BADGE_PENDING_TEXT}" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500"><i data-lucide="${BADGE_PENDING_ICON}" class="w-3 h-3"></i>${BADGE_PENDING_TEXT}</span>`;
+  }
+  function wmNote(fmt){
+    return fmt==='pdf'
+      ? `<span data-wm-note class="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0 whitespace-nowrap">${WM_BURN_TEXT}</span>`
+      : `<span data-wm-note class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 shrink-0 whitespace-nowrap"><i data-lucide="info" class="w-3 h-3"></i>${WM_UNSUPPORTED_TEXT}</span>`;
+  }
+
+  function renderRows(){
+    const rows=filteredRows();
+    const kw=(document.getElementById('fOrg').value||'').trim();
+    const st=document.getElementById('fStatus').value;
+    document.getElementById('clearBtn').classList.toggle('hidden',!(kw||st));
+    document.getElementById('rowCountText').textContent=`共 ${rows.length} 列進度列 · ${rows.filter(r=>r.completed).length} 列${BADGE_COMPLETED_TEXT}`;
+
+    const emptyBox=document.getElementById('rowsEmpty');
+    emptyBox.classList.toggle('hidden',rows.length>0);
+    if(!rows.length){
+      const filtered=!!(kw||st);
+      document.getElementById('rowsEmptyText').textContent = filtered?EMPTY_ROWS_TEXT:EMPTY_ALL_TEXT;
+      /* 🔴 未套用篩選卻無列 ⇒ 補上「進度列從哪裡來」之提示（見 EMPTY_ALL_HINT 之註解）。 */
+      document.getElementById('rowsEmptyHint').textContent = filtered?'':EMPTY_ALL_HINT;
+      document.getElementById('groupList').innerHTML='';
+      lucide.createIcons(); return;
+    }
+
+    // 以使用單位分組（AC-11）；群組依 orgCode 昇冪，組內依程序書編號昇冪 → 順序具決定性
+    const byOrg=new Map();
+    rows.forEach(r=>{ if(!byOrg.has(r.org)) byOrg.set(r.org,[]); byOrg.get(r.org).push(r); });
+    const groups=Array.from(byOrg.keys()).sort().map(code=>({
+      code, label:orgName(code), inactive:orgInactive(code),
+      rows:byOrg.get(code).slice().sort((a,b)=>a.number.localeCompare(b.number))
+    }));
+
+    document.getElementById('groupList').innerHTML=groups.map(g=>{
+      const done=g.rows.filter(r=>r.completed).length, open=!collapsedGroups.has(g.code);
+      return `
+      <section data-progress-group="${g.code}" class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <button onclick="toggleGroup('${g.code}')" aria-expanded="${open}" class="w-full flex items-center gap-2 px-4 py-3 bg-slate-50/70 hover:bg-slate-100/70 text-left">
+          <i data-lucide="chevron-${open?'down':'right'}" class="w-4 h-4 text-slate-400 shrink-0"></i>
+          <i data-lucide="building-2" class="w-4 h-4 text-primary-600 shrink-0"></i>
+          <span data-progress-group-name class="font-medium text-slate-800 truncate">${g.label}</span>
+          <span data-progress-group-code class="mono text-xs text-slate-400 shrink-0">${g.code}</span>
+          ${g.inactive?`<span data-org-inactive class="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 shrink-0 whitespace-nowrap">已裁撤</span>`:''}
+          <span class="ml-auto text-xs text-slate-500 shrink-0"><span class="mono">${done} / ${g.rows.length}</span> 列${BADGE_COMPLETED_TEXT}</span>
+        </button>
+        ${open?`<div class="divide-y divide-slate-100">${g.rows.map(r=>progressRow(r)).join('')}</div>`:''}
+      </section>`;
+    }).join('');
+    lucide.createIcons();
+  }
+
+  function progressRow(r){
+    const open=expanded.has(r.key);
+    /* 🔴 AC-05／AC-06：「新增場次」鈕於不可寫角色**完全不進 DOM**（非 CSS 隱藏）。 */
+    /* 🟢 `OQ-E11-02`＝(C)：孤兒列**不得**有「新增場次」入口——該單位已非本文件之使用部門，
+       後端會以 `OJT_ORG_NOT_USING_DEPT`（400）擋下；畫面上給一顆按不出結果的鈕是欺騙。
+       🔒 既有場次仍**可展開、可下載**（保留回溯），只是不能再累加。 */
+    const addBtn = (canAddSession() && !r.orphaned)
+      ? `<button data-add-session="${r.key}" onclick="openAdd('${r.key}')" aria-label="${addSessionAria(r.number,r.orgLabel)}" title="${addSessionAria(r.number,r.orgLabel)}" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 bg-white text-primary-700 text-xs hover:bg-primary-50 shrink-0"><i data-lucide="plus" class="w-3.5 h-3.5"></i>${ADD_SESSION_TEXT}</button>`
+      : '';
+    return `
+    <div data-progress-row="${r.key}" data-progress-doc="${r.docId}" data-progress-org="${r.org}">
+      <div class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
+        <button data-progress-expand="${r.key}" onclick="toggleRow('${r.key}')" aria-expanded="${open}" aria-label="${open?'收合':'展開'}場次明細（${r.number} · ${r.orgLabel}）" title="${open?'收合場次明細':'展開場次明細'}" class="w-7 h-7 rounded hover:bg-slate-100 text-slate-500 flex items-center justify-center shrink-0"><i data-lucide="chevron-${open?'up':'down'}" class="w-4 h-4"></i></button>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 min-w-0">
+            <span data-progress-doc-number class="mono text-xs text-slate-500 shrink-0">${r.number}</span>
+            <span data-progress-doc-name class="text-sm text-slate-800 truncate">${r.docName}</span>
+          </div>
+        </div>
+        ${completionBadge(r.completed)}
+        ${r.orphaned?`<span data-row-orphaned class="inline-flex items-center gap-1 text-xs text-slate-400 shrink-0 whitespace-nowrap"><i data-lucide="map-pin-off" class="w-3.5 h-3.5"></i>${ORPHAN_NOTE_TEXT}</span>`:''}
+        <span data-session-count="${r.count}" class="inline-flex items-center gap-1 text-xs text-slate-500 shrink-0"><i data-lucide="calendar-check" class="w-3.5 h-3.5 text-slate-400"></i>${r.count} 場次</span>
+        ${addBtn}
+      </div>
+      ${open?sessionDetail(r):''}
+    </div>`;
+  }
+
+  /* AC-12：展開後呈現**全部**場次之明細（訓練日期、上傳者、檔案可下載）；
+     場次數 0 之列展開後呈現明確之空狀態提示，**非空白或錯誤**。
+     ⚠ 上傳者姓名於此**得以呈現**（逐筆操作紀錄）；TAB1 區三（聚合看板）則不得——AC-16。 */
+  function sessionDetail(r){
+    if(!r.sessions.length){
+      return `<div data-session-detail="${r.key}" class="bg-slate-50/70 px-4 py-4 border-t border-slate-100">
+        <div data-session-empty class="flex items-center gap-2 justify-center text-sm text-slate-400 py-3"><i data-lucide="calendar-off" class="w-4 h-4 shrink-0"></i>${EMPTY_SESSIONS_TEXT}</div>
+      </div>`;
+    }
+    return `<div data-session-detail="${r.key}" class="bg-slate-50/70 px-4 py-3 border-t border-slate-100">
+      <div class="text-xs text-slate-500 mb-2 flex items-center gap-1"><i data-lucide="corner-down-right" class="w-3.5 h-3.5"></i>教育訓練場次（${r.sessions.length}）</div>
+      <div class="flex flex-col gap-1.5">
+        ${r.sessions.map(s=>`
+        <div data-session-row="${s.id}" class="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2">
+          <i data-lucide="calendar-check" class="w-4 h-4 text-primary-600 shrink-0"></i>
+          <span data-session-date class="mono text-xs text-slate-700 shrink-0">${s.date}</span>
+          <span data-session-uploader class="text-xs text-slate-500 shrink-0">${s.uploader}</span>
+          <span data-session-file class="text-sm text-slate-700 truncate flex-1">${s.file}</span>
+          ${wmNote(s.fmt)}
+          <button data-session-download="${s.id}" onclick="downloadSession('${s.id}')" aria-label="下載簽到表（${s.date} · ${s.file}）" title="下載簽到表" class="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
+          ${deleteBtn(s)}
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  /* ===================== 🟢 場次刪除（`AC-19`／`OQ-E11-04`＝(A)）=====================
+     **僅 ICSOPAdmin 可刪**、二次確認、寫稽核。
+     🔴 **與 `canAddSession()` 刻意是兩個不同的述詞、兩個不同的角色集合**（新增 3 角色／刪除 1 角色）。
+        實作**不得**把兩者收斂成一個 `canWrite()`——那會把刪除權一併發給主管與部門窗口，
+        而這正是本題裁決 (A) 而非 (B)「上傳者本人亦可刪」所要避免的。
+     🔴 不可寫角色之刪除鈕**完全不進 DOM**（非 CSS 隱藏），使
+        `querySelectorAll('[data-session-delete]').length === 0` 對其餘四角色為真斷言。
+     🚫 **無編輯入口**（`OQ-E11-16`＝(B)）：本頁不存在 `[data-session-edit]`。 */
+  function canDeleteSession(){ return document.body.dataset.role==='icsop_admin'; }
+  const DELETE_SESSION_TEXT = '刪除';
+  function deleteSessionAria(date,file){ return `刪除教育訓練場次（${date} · ${file}）`; }
+  function deleteBtn(s){
+    /* ⚠ aria-label **必須帶檔名**：同一列可有「同一天的兩梯」（上下午各一場，系統不做同日去重），
+       只帶日期會使兩顆刪除鈕對螢幕閱讀器完全同名、無從分辨要刪哪一筆。 */
+    return canDeleteSession()
+      ? `<button data-session-delete="${s.id}" onclick="askDeleteSession('${s.id}')" aria-label="${deleteSessionAria(s.date,s.file)}" title="${deleteSessionAria(s.date,s.file)}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-red-200 text-red-600 text-xs hover:bg-red-50 shrink-0"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i>${DELETE_SESSION_TEXT}</button>`
+      : '';
+  }
+  const DEL_CONFIRM_TITLE = '刪除此教育訓練場次？';
+  /* 🔴 內文**依實際後果分三種**，不是兩種——單一句子在其中某一情況必為假：
+       ① 一般列 · 最後一筆 → 該列退回「尚未完成」（列仍在）
+       ② 一般列 · 尚有其他場次 → 仍為「已完成」
+       ③ **孤兒列 · 最後一筆** → 🔴 該列**整列自清單消失**（孤兒列是由「還有場次」推導出來的，
+          最後一筆刪掉就沒有任何東西撐著它了），且因該單位已非使用部門，**無法重新登記**
+          ⇒ ①的「退回尚未完成」與「刪除後重新登記」兩句對它**都是假的**，必須分開講。
+     🔴 ①② 末句明講更正路徑——`OQ-E11-16`＝(B) 不開放編輯，使用者若不知道「刪掉再登記一次」
+        就是唯一更正方式，會以為登記錯了就補救不了；③ 則必須明說**沒有**這條路。 */
+  function delConfirmBody(isLast,isOrphan){
+    if(isOrphan && isLast){
+      return '刪除後此場次紀錄與其簽到表檔案將無法復原。此為該列最後一筆場次，且該使用單位已移出本文件之使用部門，'
+           + '刪除後此列將自清單中消失、無法再重新登記（該單位已非使用部門）。此操作會寫入稽核。';
+    }
+    return (isLast
+      ? '刪除後此場次紀錄與其簽到表檔案將無法復原。此為該列最後一筆場次，刪除後該使用單位對本文件之狀態將退回「尚未完成」。'
+      : '刪除後此場次紀錄與其簽到表檔案將無法復原。該列尚有其他場次，刪除後仍為「已完成」。')
+      + '此操作會寫入稽核。場次不提供編輯，如需更正請刪除後重新登記。';
+  }
+  const DEL_CONFIRM_OK_TEXT = '確認刪除';
+  function askDeleteSession(id){
+    if(!canDeleteSession()){ toast('error','僅 ICSOP 管理員可刪除教育訓練場次','PERMISSION_DENIED · 403'); return; }
+    const s=SESSIONS.find(x=>x.id===id);
+    if(!s){ toast('error','找不到指定的教育訓練場次（可能已被移除），請重新整理','OJT_SESSION_NOT_FOUND · 404'); return; }
+    const siblings=SESSIONS.filter(x=>x.docId===s.docId&&x.org===s.org).length;
+    const row=findRow(s.docId+'__'+s.org);
+    openConfirm(DEL_CONFIRM_TITLE, delConfirmBody(siblings<=1, !!(row&&row.orphaned)), DEL_CONFIRM_OK_TEXT, ()=>doDeleteSession(id));
+  }
+  function doDeleteSession(id){
+    const s=SESSIONS.find(x=>x.id===id); if(!s) return;
+    const key=s.docId+'__'+s.org;
+    SESSIONS=SESSIONS.filter(x=>x.id!==id);
+    renderAll();
+    /* 🔴 **刪除後該列可能已不存在**：孤兒列是由「(docId,org) 尚有場次」推導出來的，
+       刪掉最後一筆就沒有任何東西撐著它 ⇒ `findRow()` 回 null。
+       ⚠ 這裡原本直接讀 `now.count`，對孤兒列之最後一筆會 TypeError（實測踩到）。
+       一般列不會有這個問題（它由 `DOC_USING_DEPT` 撐著，場次歸零只是變「尚未完成」）。 */
+    const now=findRow(key);
+    if(!now){
+      toast('success','已刪除 '+s.date+' 之教育訓練場次；該單位已移出本文件之使用部門且已無其他場次，此列已自清單移除。已寫入稽核 '+AUDIT_SESSION_DELETE+'（含使用單位 '+s.org+'）。');
+      return;
+    }
+    toast('success','已刪除 '+s.date+' 之教育訓練場次；該列場次數為 '+now.count+'，狀態為「'+(now.completed?BADGE_COMPLETED_TEXT:BADGE_PENDING_TEXT)+'」。已寫入稽核 '+AUDIT_SESSION_DELETE+'（含使用單位 '+s.org+'）。');
+  }
+
+  function toggleGroup(code){ if(collapsedGroups.has(code))collapsedGroups.delete(code); else collapsedGroups.add(code); renderRows(); }
+  function toggleRow(key){
+    if(expanded.has(key))expanded.delete(key); else expanded.add(key);
+    renderRows();
+    // 重繪後把焦點還給同一顆展開鈕（否則鍵盤使用者會被丟回文件開頭）
+    const btn=document.querySelector(`[data-progress-expand="${key}"]`); if(btn)btn.focus();
+  }
+  function findRow(key){ return allRows().find(r=>r.key===key)||null; }
+  /* 🔴 D9 既有政策之延伸套用（OQ-D9-08 選項 B）：後台下載一律燒錄浮水印（PDF）、一律寫調閱稽核、
+     無例外角色；非 PDF 走策略 A（維持原檔位元組、不燒錄，但同樣寫稽核）。非本 feature 新開之題。 */
+  function downloadSession(id){
+    const s=SESSIONS.find(x=>x.id===id);
+    if(!s){ toast('error','找不到指定的教育訓練場次（可能已被移除），請重新整理','OJT_SESSION_NOT_FOUND · 404'); return; }
+    if(s.fmt==='pdf') toast('success','已下載「'+s.file+'」（伺服器端已將浮水印燒錄進 PDF 內容層，身分為您本人；並寫入稽核 DOWNLOAD）');
+    else              toast('success','已下載「'+s.file+'」（此格式不支援浮水印，回傳原始檔位元組；仍寫入稽核 DOWNLOAD）');
+  }
+
+  /* ===================== 新增場次 modal ===================== */
+  const DEMO_FILES={
+    ok:{name:'OJT簽到表_20260827.pdf', bytes:184320},
+    img:{name:'簽到表照片.jpg',        bytes:2097152},
+    badfmt:{name:'簽到表.docx',        bytes:24576},
+    oversize:{name:'OJT簽到表_掃描版.pdf', bytes:53477376}
+  };
+  let addTargetKey=null, addPicked=null;
+
+  function openAdd(key){
+    /* 🔒 二次防線：即使有人以 DevTools 造出按鈕，服務層仍須擋下（AC-06 之 403 由路由層負責）。 */
+    if(!canAddSession()){ toast('error','此角色對「OJT 進度管理」為唯讀，無法新增教育訓練場次','PERMISSION_DENIED · 403'); return; }
+    const r=findRow(key); if(!r){ toast('error','找不到指定的進度列，請重新整理清單','OJT_ORG_NOT_USING_DEPT · 400'); return; }
+    addTargetKey=key; addPicked=null;
+    document.getElementById('addDate').value='';
+    resetAddPreview(); hideAddErr();
+    document.getElementById('addTarget').innerHTML=
+      `<span class="mono text-slate-600">${r.number}</span> ${r.docName} · 使用單位 <strong class="text-slate-700">${r.orgLabel}</strong><span class="mono text-slate-400">（${r.org}）</span> · 目前 <span class="mono">${r.count}</span> 場次`;
+    const m=document.getElementById('addModal'); m.classList.remove('hidden'); m.classList.add('flex');
+    lucide.createIcons(); document.getElementById('addDate').focus();
+  }
+  function closeAdd(){ const m=document.getElementById('addModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+  function hideAddErr(){ const e=document.getElementById('addErr'); e.classList.add('hidden'); e.classList.remove('flex'); }
+  function showAddErr(msg,code){
+    const e=document.getElementById('addErr'); e.classList.remove('hidden'); e.classList.add('flex');
+    e.querySelector('span').textContent=msg; lucide.createIcons();
+    if(code) toast('error',msg,code);
+  }
+  function resetAddPreview(){ document.getElementById('addPreview').classList.add('hidden'); }
+  function extOf(name){ return (name.split('.').pop()||'').toLowerCase(); }
+  function fmtSize(b){ return b>=1048576 ? (b/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(b/1024))+' KB'; }
+  function onAddFileInput(input){ const f=input.files&&input.files[0]; input.value=''; if(!f)return; applyPick({name:f.name,bytes:f.size}); }
+  function pickDemo(kind){ const d=DEMO_FILES[kind]; applyPick({name:d.name,bytes:d.bytes}); }
+  function applyPick(file){
+    hideAddErr();
+    const ext=extOf(file.name), size=fmtSize(file.bytes);
+    const pv=document.getElementById('addPreview'); pv.classList.remove('hidden'); pv.classList.add('flex');
+    document.getElementById('addPreviewIcon').setAttribute('data-lucide', ext==='pdf'?'file-text':(ALLOWED_EXT.includes(ext)?'image':'file-x'));
+    document.getElementById('addPreviewName').textContent=file.name;
+    document.getElementById('addPreviewSize').textContent=size;
+    /* AC-10：格式／大小違反時回**既有**錯誤碼（FILE_FORMAT_NOT_ALLOWED／FILE_SIZE_EXCEEDED），
+       **不新增任何錯誤碼**（error-handling.md#file 逐字適用）。 */
+    if(!ALLOWED_EXT.includes(ext)){
+      addPicked=null;
+      showAddErr('「'+file.name+'」格式不支援，僅允許 pdf / jpg / jpeg / png；本次不建立任何場次紀錄。','FILE_FORMAT_NOT_ALLOWED · 400');
+    } else if(file.bytes>MAX_BYTES){
+      addPicked=null;
+      showAddErr('「'+file.name+'」為 '+size+'，超過單檔上限 50 MB；本次不建立任何場次紀錄。','FILE_SIZE_EXCEEDED · 400');
+    } else {
+      addPicked={name:file.name, fmt:(ext==='pdf'?'pdf':ext)};
+    }
+    lucide.createIcons();
+  }
+  function submitAdd(){
+    const r=findRow(addTargetKey); if(!r){ closeAdd(); toast('error','找不到指定的進度列','OJT_ORG_NOT_USING_DEPT · 400'); return; }
+    const date=(document.getElementById('addDate').value||'').trim();
+    /* 🟢 `AC-09`／`OQ-E11-09`＝(A) 已裁決：訓練日期必填、不可未來日、單檔。
+       🔒 不隨裁決改變者：驗證失敗時提示**具體原因**，且**不建立任何場次紀錄、不寫入任何 Blob**
+          （部分成功為缺陷）——故三項檢查全部先跑完再談建立。 */
+    if(!date){ showAddErr(ERR_DATE_REQUIRED,'OJT_TRAINING_DATE_REQUIRED · 400'); return; }
+    /* 🔴 錯誤碼字面之權威＝`docs/specs/error-handling.md#ojt-progress`（sa-ojt 定稿），**不是本檔**。
+       本檔之權威是**可見文案與 DOM 掛鉤**，兩者職權不同。
+       📝 OLD> OJT_TRAINING_DATE_IN_FUTURE（棒 4 暫定值，比定稿多一個 `IN_`；sw-ojt 於 2026-08-28 揪出）
+       ⚠ 差一個 `IN_` 沒有人會一眼看出來，但下游會照著它讀到的那一份寫，整合時才炸。 */
+    if(date>TODAY){ showAddErr(ERR_DATE_FUTURE,'OJT_TRAINING_DATE_FUTURE · 400'); return; }
+    if(!addPicked){ showAddErr(ERR_FILE_REQUIRED); return; }
+    /* 🔴 AC-02：**累加**，不覆蓋、不取代該列既有之其他場次。 */
+    SESSIONS.push({id:'s'+(++seq), docId:r.docId, org:r.org, date, uploader:currentUserName(), file:addPicked.name, fmt:addPicked.fmt});
+    expanded.add(r.key);
+    closeAdd(); renderAll();
+    const now=findRow(r.key);
+    toast('success','已為「'+r.orgLabel+'」新增 1 筆教育訓練場次（'+date+'）；該列場次數為 '+now.count+' 且狀態為「'+BADGE_COMPLETED_TEXT+'」。既有場次未被取代、簽到檔仍可下載。已寫入稽核 '+AUDIT_SESSION_UPLOAD+'（含使用單位 '+r.org+'）。');
+  }
+
+  /* ===================== 角色 ===================== */
+  function currentUserName(){
+    return {icsop_admin:'陳管理', supervisor:'王主管', deptcontact:'李窗口', sysadmin:'吳系管', user:'一般使用者'}[document.body.dataset.role]||'—';
+  }
+  function setRole(r){
+    document.body.dataset.role=r;
+    const blocked=(r==='user');            // AC-07
+    const ro=(r==='sysadmin');             // AC-06
+    document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
+    document.getElementById('roBanner').classList.toggle('hidden',!ro);
+    document.getElementById('roBanner').classList.toggle('flex',ro);
+    document.getElementById('roText').textContent=RO_NOTICE_SYSADMIN;
+    if(blocked){
+      document.getElementById('blockMsg').textContent='一般使用者無「OJT 進度管理」存取權（側選單亦不呈現本項）。';
+      closeAdd(); closeAssign(); closeConfirm();
+    }
+    document.getElementById('userName').textContent=currentUserName();
+    renderAll(); renderSidebar(); lucide.createIcons();
+  }
+
+  /* ===================== 🟢 待歸位區（`AC-26`／`OQ-E11-01`＝(C)）===================== */
+  function canAssignPending(){ return document.body.dataset.role==='icsop_admin'; }
+  const PENDING_TITLE_TEXT  = '待歸位（尚未指派使用單位）';
+  const PENDING_NOTE_TEXT   = '下列為自舊制遷移而來之 OJT 簽到表，舊制只把檔案掛在文件上、未記錄使用單位與訓練日期，因此尚無法計入任何一列進度。請由 ICSOP 管理員逐筆指派使用單位並補填訓練日期後，才會成為該列之正式場次。';
+  const PENDING_SCOPE_TEXT  = '本區不列入上方之進度列數統計，也不受篩選條件影響。';
+  const ASSIGN_ACTION_TEXT  = '指派單位';
+  function assignAria(number,file){ return `為舊資料指派使用單位（${number} · ${file}）`; }
+  function docById(id){ return DOCS.find(d=>d.id===id)||null; }
+
+  function renderPending(){
+    const host=document.getElementById('pendingBlock');
+    const items=isEmptyDemo()?[]:LEGACY;
+    // 🔒 歸位完畢 ⇒ 整區消失（非空狀態）
+    host.classList.toggle('hidden',items.length===0);
+    if(!items.length){ host.innerHTML=''; return; }
+    host.innerHTML=`
+      <section class="bg-white border border-amber-300 rounded-xl overflow-hidden">
+        <div class="flex items-center gap-2 px-4 py-3 bg-amber-50 border-b border-amber-200">
+          <i data-lucide="archive-restore" class="w-4 h-4 text-amber-600 shrink-0"></i>
+          <span data-pending-title class="font-medium text-amber-900">${PENDING_TITLE_TEXT}</span>
+          <span data-pending-count="${items.length}" class="ml-auto text-xs text-amber-800 shrink-0"><span class="mono">${items.length}</span> 筆</span>
+        </div>
+        <div class="px-4 py-3 border-b border-slate-100">
+          <p data-pending-note class="text-xs text-slate-500">${PENDING_NOTE_TEXT}</p>
+          <p data-pending-scope-note class="mt-1 text-[11px] text-slate-400">${PENDING_SCOPE_TEXT}</p>
+        </div>
+        <div class="divide-y divide-slate-100">${items.map(l=>pendingRow(l)).join('')}</div>
+      </section>`;
+    lucide.createIcons();
+  }
+  function pendingRow(l){
+    const d=docById(l.docId);
+    /* 🔴 指派鈕僅 ICSOPAdmin 進 DOM（非 CSS 隱藏），其餘角色看得到資料、看不到動作。 */
+    const btn = canAssignPending()
+      ? `<button data-assign-org="${l.id}" onclick="openAssign('${l.id}')" aria-label="${assignAria(d.number,l.file)}" title="${assignAria(d.number,l.file)}" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-amber-300 bg-white text-amber-700 text-xs hover:bg-amber-50 shrink-0"><i data-lucide="file-input" class="w-3.5 h-3.5"></i>${ASSIGN_ACTION_TEXT}</button>`
+      : '';
+    return `
+      <div data-pending-row="${l.id}" class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
+        <i data-lucide="file-text" class="w-4 h-4 text-red-500 shrink-0"></i>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 min-w-0">
+            <span data-pending-doc class="mono text-xs text-slate-500 shrink-0">${d.number}</span>
+            <span class="text-sm text-slate-800 truncate">${d.name}</span>
+          </div>
+          <div class="text-xs text-slate-500 mt-0.5 flex items-center gap-2 min-w-0">
+            <span data-pending-file class="truncate">${l.file}</span>
+          </div>
+        </div>
+        <div class="text-right shrink-0 hidden sm:block">
+          <div data-pending-uploader class="text-xs text-slate-500">${l.uploadedBy}</div>
+          <div data-pending-uploaded-at class="mono text-[10px] text-slate-400">${l.uploadedAt}</div>
+        </div>
+        ${wmNote(l.fmt)}
+        <button data-pending-download="${l.id}" onclick="downloadPending('${l.id}')" aria-label="下載舊資料簽到表（${l.file}）" title="下載簽到表" class="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
+        ${btn}
+      </div>`;
+  }
+  function downloadPending(id){
+    // 🔒 下載路徑維持 404：這裡問的是「這筆紀錄還在不在」，與「是否已歸位」是兩件事
+    const l=LEGACY.find(x=>x.id===id); if(!l){ toast('error','找不到指定的待歸位資料','OJT_SESSION_NOT_FOUND · 404'); return; }
+    toast('success','已下載「'+l.file+'」（伺服器端已將浮水印燒錄進 PDF 內容層，身分為您本人；並寫入稽核 DOWNLOAD）');
+  }
+
+  let assignTargetId=null;
+  /* 🔴 **「待歸位項目不在了」有兩種原因，錯誤碼不同**（error-handling.md#ojt-progress 定稿）：
+       · **已被他人歸位** → `OJT_SESSION_ALREADY_ASSIGNED`（409）——歸位是**單向不可逆**之操作
+         （`UPDATE … WHERE orgCode IS NULL` 命中 0 筆）。多位 ICSOPAdmin 同時處理同一批舊資料時，
+         這是**最可能**發生的那一種，故本原型之守衛採此碼。
+       · 該場次紀錄整筆被刪除 → `OJT_SESSION_NOT_FOUND`（404）——本原型無此路徑（待歸位項目
+         只會因成功歸位而離開清單），故不做示範，但實作端兩者必須分開回。
+     📝 OLD> 兩處守衛皆回 `OJT_SESSION_NOT_FOUND · 404`（棒 4 初版，寫在 409 這個碼定稿之前）。 */
+  const ERR_ALREADY_ASSIGNED = '此筆舊資料已由其他管理員完成單位歸位，請重新整理清單。';
+  function openAssign(id){
+    if(!canAssignPending()){ toast('error','僅 ICSOP 管理員可指派舊資料之使用單位','PERMISSION_DENIED · 403'); return; }
+    const l=LEGACY.find(x=>x.id===id); if(!l){ toast('error',ERR_ALREADY_ASSIGNED,'OJT_SESSION_ALREADY_ASSIGNED · 409'); return; }
+    const d=docById(l.docId);
+    assignTargetId=id;
+    hideAssignErr();
+    document.getElementById('assignDate').value='';
+    const sel=document.getElementById('assignOrg');
+    /* 🔴 選項僅列本文件之使用部門（`AC-01` 之原樣清單、不展開子樹）。
+       ⚠ 若某文件之使用部門為空，此處會是空清單＝**無法歸位之死路**；正確補救在文件表單
+          （先為該文件指定使用部門），故空清單時明說原因而非只給一個空下拉。 */
+    const opts=(d.using||[]);
+    sel.innerHTML = opts.length
+      ? `<option value="">請選擇使用單位</option>`+opts.map(c=>`<option value="${c}">${orgName(c)}（${c}）${orgInactive(c)?' · 已裁撤':''}</option>`).join('')
+      : `<option value="">此文件尚未指定任何使用部門，無法歸位</option>`;
+    sel.disabled = opts.length===0;
+    document.getElementById('assignTarget').innerHTML=
+      `<span class="mono text-slate-600">${d.number}</span> ${d.name} · 檔案 <strong class="text-slate-700">${l.file}</strong><br/>原上傳者 ${l.uploadedBy} · 原上傳時間 <span class="mono">${l.uploadedAt}</span>（<strong class="text-slate-600">非訓練日期</strong>，僅供參考）`;
+    const m=document.getElementById('assignModal'); m.classList.remove('hidden'); m.classList.add('flex');
+    lucide.createIcons(); sel.focus();
+  }
+  function closeAssign(){ const m=document.getElementById('assignModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+  function hideAssignErr(){ const e=document.getElementById('assignErr'); e.classList.add('hidden'); e.classList.remove('flex'); }
+  function showAssignErr(msg,code){
+    const e=document.getElementById('assignErr'); e.classList.remove('hidden'); e.classList.add('flex');
+    e.querySelector('span').textContent=msg; lucide.createIcons();
+    if(code) toast('error',msg,code);
+  }
+  const ERR_ASSIGN_ORG_REQUIRED = '請選擇要歸位的使用單位。';
+  function submitAssign(){
+    const l=LEGACY.find(x=>x.id===assignTargetId);
+    if(!l){ closeAssign(); toast('error',ERR_ALREADY_ASSIGNED,'OJT_SESSION_ALREADY_ASSIGNED · 409'); return; }   // 🔴 見 openAssign 之註解
+    const org=(document.getElementById('assignOrg').value||'').trim();
+    const date=(document.getElementById('assignDate').value||'').trim();
+    if(!org){  showAssignErr(ERR_ASSIGN_ORG_REQUIRED,'OJT_ORG_NOT_USING_DEPT · 400'); return; }
+    if(!date){ showAssignErr(ERR_DATE_REQUIRED,'OJT_TRAINING_DATE_REQUIRED · 400'); return; }
+    if(date>TODAY){ showAssignErr(ERR_DATE_FUTURE,'OJT_TRAINING_DATE_FUTURE · 400'); return; }   // 🔴 同上：權威＝error-handling.md
+    // 歸位＝成為該列之一筆正式場次；沿用原檔與原上傳者（**不是**現在這位操作者上傳的）
+    SESSIONS.push({id:'s'+(++seq), docId:l.docId, org, date, uploader:l.uploadedBy, file:l.file, fmt:l.fmt});
+    LEGACY=LEGACY.filter(x=>x.id!==l.id);
+    expanded.add(l.docId+'__'+org);
+    closeAssign(); renderAll();
+    const now=findRow(l.docId+'__'+org);
+    toast('success','已將舊資料歸位至「'+orgName(org)+'」（訓練日期 '+date+'）；該列場次數為 '+now.count+'，狀態為「'+BADGE_COMPLETED_TEXT+'」。已寫入稽核 '+AUDIT_SESSION_UPLOAD+'（含使用單位 '+org+'）。');
+  }
+
+  /* ===================== 二次確認（場次刪除共用）===================== */
+  function openConfirm(title,body,okLabel,onOk){
+    document.getElementById('cfTitle').textContent=title;
+    document.getElementById('cfBody').textContent=body;
+    const m=document.getElementById('confirmModal'); m.classList.remove('hidden'); m.classList.add('flex');
+    // 重新綁定：cloneNode 移除前一次的 listener，避免累積多個 onOk
+    const ok=document.getElementById('cfOk'); const clone=ok.cloneNode(true); ok.parentNode.replaceChild(clone,ok);
+    clone.textContent=okLabel||'確認';
+    clone.addEventListener('click',()=>{closeConfirm();onOk();});
+    lucide.createIcons();
+  }
+  function closeConfirm(){ const m=document.getElementById('confirmModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+
+  function renderAll(){ renderCoverage(); renderRollup(); renderRecent(); renderPending(); renderRows(); lucide.createIcons(); }
+
+  /* ===================== toast ===================== */
+  function toast(type,msg,code){
+    const map={success:['circle-check-big','#059669'],error:['alert-circle','#DC2626'],info:['info','#365C97']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><div><span class="text-slate-700">${msg}</span>${code?`<div class="text-[10px] mono text-slate-400 mt-0.5">${code}</div>`:''}</div>`;
+    document.getElementById('toastWrap').appendChild(el); lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4200);
+  }
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeAdd(); closeAssign(); closeConfirm(); } });
+
+  // init
+  setRole('icsop_admin'); switchTab('dashboard'); lucide.createIcons();
+</script>
+</body>
+</html>

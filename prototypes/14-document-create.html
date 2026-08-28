@@ -253,7 +253,10 @@
       <span class="step-badge w-5 h-5 rounded-full bg-slate-300 text-white text-[11px] font-bold flex items-center justify-center shrink-0">4</span>
       <i data-lucide="paperclip" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">附件與關聯文件</h2>
     </div>
-    <p class="text-xs text-slate-400 mb-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i>允許格式：ICSOP PDF／OJT＝.pdf/.jpg/.png、ICSOP 原始檔＝.xls、使用表單＝.xlsx/.xls/.pdf；單檔上限 50MB（OQ-E04-06 定案）。</p>
+    <!-- 🔵 2026-08-27 E11 delta（連帶修正，**非新決策**）：本句原列舉「ICSOP PDF／OJT＝.pdf/.jpg/.png」，
+         但本頁自本 delta 起**不再上傳 OJT** ⇒ 留著會使畫面陳述一件不會發生的事。故就地移除 OJT 之列舉，
+         其餘兩類之字面與上限值逐字不動。📌 OLD> 允許格式：ICSOP PDF／OJT＝.pdf/.jpg/.png、ICSOP 原始檔＝.xls、使用表單＝.xlsx/.xls/.pdf；單檔上限 50MB（OQ-E04-06 定案）。 -->
+    <p class="text-xs text-slate-400 mb-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i>允許格式：ICSOP PDF＝.pdf/.jpg/.png、ICSOP 原始檔＝.xls、使用表單＝.xlsx/.xls/.pdf；單檔上限 50MB（OQ-E04-06 定案）。</p>
     <!-- OQ-E09-10 定案：ICSOP PDF（呈現用）與 .xls 原件（AI 檢索來源）＝兩個各自獨立的手動上傳，系統不自動轉檔 -->
     <div class="flex items-start gap-2 rounded-lg border border-primary-200 bg-primary-50/40 px-3 py-2.5 mb-4 text-[11px] text-slate-600">
       <i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0 text-primary-600"></i>
@@ -270,11 +273,26 @@
         <div class="text-sm font-medium text-slate-700">上傳 ICSOP 原始檔（.xls，1 份）</div>
         <div id="xlsName" class="text-xs text-slate-400 mt-1">尚未選擇 · .xls（AI 檢索來源）</div>
       </button>
-      <button onclick="fakeUpload('OJT 簽到表')" class="border border-dashed border-slate-300 rounded-lg p-4 text-center hover:bg-slate-50">
-        <i data-lucide="upload" class="w-6 h-6 text-slate-400 mx-auto mb-1.5"></i>
-        <div class="text-sm font-medium text-slate-600">上傳 OJT 簽到表（1 份）</div>
-        <div id="ojtName" class="text-xs text-slate-400 mt-1">尚未選擇 · .pdf/.jpg/.png</div>
-      </button>
+      <!-- 🔵 2026-08-27 E11 delta（**依 OQ-E11-08 裁決後定稿**；建議案 (A)＝移除上傳卡、改顯示提示）
+           規格權威＝docs/specs/features/F042-ojt-progress-management.md `AC-23`（＋`AC-22` 之全面移除）。
+           🔴 模型已改變：OJT 自「文件之單份覆蓋式附件」改為「文件 × 使用單位 × 0..* 場次」，
+              建立頁之卡片形狀已無法承載新模型（此時使用部門甚至尚未存檔）⇒ 上傳入口整個移除。
+           📌 被移除之原上傳卡逐字保留供追溯（⚠ **不得用於斷言或照抄**；沿用本 repo 之 `OLD>` 標記慣例，
+              使 `grep -rn "OLD>"` 可完整列出已作廢字面）：
+              OLD> <button onclick="fakeUpload('OJT 簽到表')" class="border border-dashed border-slate-300 rounded-lg p-4 text-center hover:bg-slate-50">
+              OLD>   <i data-lucide="upload" class="w-6 h-6 text-slate-400 mx-auto mb-1.5"></i>
+              OLD>   <div class="text-sm font-medium text-slate-600">上傳 OJT 簽到表（1 份）</div>
+              OLD>   <div id="ojtName" class="text-xs text-slate-400 mt-1">尚未選擇 · .pdf/.jpg/.png</div>
+              OLD> </button>
+           🔒 本卡**不是**上傳入口：`AC-22`／`AC-23` 之負向斷言
+              （`[data-ojt-upload]` 與 `[data-writable-attachment]` 於本頁皆為 0 個）於此成立。
+           🔒 三欄 grid、其餘兩張上傳卡（ICSOP PDF／ICSOP 原始檔 .xls）逐字不動。 -->
+      <div data-ojt-create-hint class="border border-dashed border-slate-200 bg-slate-50/60 rounded-lg p-4 text-center">
+        <i data-lucide="graduation-cap" class="w-6 h-6 text-slate-400 mx-auto mb-1.5"></i>
+        <div class="text-sm font-medium text-slate-600">OJT 實體簽到表</div>
+        <div data-ojt-create-hint-text class="text-xs text-slate-500 mt-1">儲存後至 OJT 進度管理登記</div>
+        <div class="text-[10px] text-slate-400 mt-1.5 leading-relaxed">建立時不上傳；各「文件使用部門」之教育訓練場次於「OJT 進度管理」逐一登記，可累積多筆。</div>
+      </div>
     </div>
     <p class="text-[11px] text-slate-500 mt-2 flex items-start gap-1.5"><i data-lucide="sparkles" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-500"></i>.xls 供 AI <strong>chunk 提取／索引</strong>（F028/F029）；不符 ICSOP 標準五表模板將於抽取階段阻擋並提示（<span class="mono">XLS_TEMPLATE_INVALID</span>）。</p>
     <!-- 使用表單（自「使用表單管理」表單池選取，可搜尋多選）-->
@@ -324,6 +342,8 @@
     {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    /* 🟢 2026-08-28 F042 AC-27／OQ-E11-05=(A)：新功能列與側選單項（位置＝可寫管理群組之末，docindex 之後）。 */
+    {id:'ojtprogress',label:'OJT 進度管理',icon:'graduation-cap',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'受限CRUD',deptcontact:'受限CRUD'}},
     {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
     {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
     {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
@@ -603,8 +623,13 @@
       toast('success','已選擇 ICSOP 原始檔 .xls；儲存時保存原件並觸發 AI chunk 提取／索引（與 ICSOP PDF 各自獨立、不自動轉檔）');
       return;
     }
-    const map={'ICSOP PDF':['pdfName','車輛分期進件作業_v1.3.pdf'],'OJT 簽到表':['ojtName','車輛分期進件作業_OJT簽到表.pdf']};
-    const [el,name]=map[kind]||['ojtName','檔案.pdf'];
+    /* 🔵 2026-08-27 E11 delta（連帶修正）：OJT 上傳卡已移除 ⇒ `#ojtName` 不再存在。
+       原 map 之 'OJT 簽到表' 條目與以 'ojtName' 為 fallback 皆已成為**指向不存在元素之死路**
+       （真被走到會在 getElementById(null) 上直接 throw）⇒ 兩者一併改掉。
+       📌 OLD> const map={'ICSOP PDF':['pdfName','車輛分期進件作業_v1.3.pdf'],'OJT 簽到表':['ojtName','車輛分期進件作業_OJT簽到表.pdf']};
+       📌 OLD> const [el,name]=map[kind]||['ojtName','檔案.pdf']; */
+    const map={'ICSOP PDF':['pdfName','車輛分期進件作業_v1.3.pdf']};
+    const [el,name]=map[kind]||['pdfName','檔案.pdf'];
     document.getElementById(el).textContent='已選擇：'+name;
     document.getElementById(el).classList.add('text-emerald-600');
     toast('success','已選擇「'+kind+'」（儲存時存 Blob）');
