@@ -8,6 +8,10 @@ last_updated: 2026-08-21
 
 # F017 `AC-N37`～`AC-N40`：`hasOjt` 富化 — 實作日誌
 
+> 🔴 本檔所載 `hasOjt` 富化已於 2026-08-28 被 F042 整段反轉（`hasOjt`→`ojtStatus` 三值、來源改 `DOC_USING_DEPT`×`OJT_SESSION` 聚合），見 [docs/specs/implementation-log/F042-impl.md](../specs/implementation-log/F042-impl.md)。
+>
+> 📝 **以下原文一字不動**，保留供追溯當時之缺陷與根因分析（比照 D9 就地標註慣例）。
+
 ## 缺陷與根因
 
 使用者實測揪出：文件清單頁「有 OJT／無 OJT」圖示**永遠顯示「無 OJT」**。
