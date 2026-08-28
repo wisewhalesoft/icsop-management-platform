@@ -93,6 +93,34 @@ describe('actionTypeLabel（AC-F5 ②：操作類型代碼 → 中文標籤，CS
     expect(out).toBe('附件上傳');
     expect(out).not.toContain('ATTACHMENT_UPLOAD');
   });
+
+  /**
+   * 🔴 F042 E11 delta（2026-08-27／28，`OQ-E11-13`→B）：`OJT_SESSION_UPLOAD`／
+   * `OJT_SESSION_DELETE` 為本輪新增之獨立 actionType（取代 D9 批之 `ATTACHMENT_UPLOAD`），
+   * 逐字標籤已由 ux-ojt 定稿於 `prototypes/17-access-history.html`。
+   * 權威：docs/specs/features/F024-access-history-query.md#ojt-progress-audit-view-delta
+   *   `AC-J22`。
+   * 🔒 舊 `ATTACHMENT_UPLOAD`→`附件上傳` 之對照（上方既有測試）append-only 續留，不得移除。
+   */
+  it('AC-J22 actionTypeLabel(OJT_SESSION_UPLOAD) → 場次登記（只出標籤，不含代碼）', () => {
+    const out = actionTypeLabel('OJT_SESSION_UPLOAD');
+    expect(out).toBe('場次登記');
+    expect(out).not.toContain('OJT_SESSION_UPLOAD');
+  });
+
+  it('AC-J22 actionTypeLabel(OJT_SESSION_DELETE) → 場次刪除（只出標籤，不含代碼）', () => {
+    const out = actionTypeLabel('OJT_SESSION_DELETE');
+    expect(out).toBe('場次刪除');
+    expect(out).not.toContain('OJT_SESSION_DELETE');
+  });
+
+  /**
+   * 🔴 AC-J22①之硬性要求：兩個標籤必須互異——把「登記」與「刪除」標成同一個詞，等於在畫面上
+   * 抹掉兩者之差別。本斷言獨立於上方兩條逐字斷言存在：字面日後若改，互異性才是要保住的東西。
+   */
+  it('AC-J22① actionTypeLabel(OJT_SESSION_UPLOAD) 與 actionTypeLabel(OJT_SESSION_DELETE) 必須互異', () => {
+    expect(actionTypeLabel('OJT_SESSION_UPLOAD')).not.toBe(actionTypeLabel('OJT_SESSION_DELETE'));
+  });
 });
 
 describe('auditKindLabel（AC-F5 ③：targetType → 類型欄三值之一）', () => {
@@ -130,5 +158,20 @@ describe('auditKindLabel（AC-F5 ③：targetType → 類型欄三值之一）',
   it('AC-N53 DOCUMENT_ATTACHMENT（本 delta 新增之 targetType）→ 上傳（不得落入「其餘→變更」通則）', () => {
     expect(auditKindLabel('DOCUMENT_ATTACHMENT')).toBe('上傳');
     expect(auditKindLabel('DOCUMENT_ATTACHMENT')).not.toBe('變更');
+  });
+
+  /**
+   * 🔴 F042 E11 delta（2026-08-27／28）：`OJT_SESSION` 為第 9 個 targetType（`OQ-E11-17` 覆核
+   * 核可），F024「類型」值由四種增為五種。刻意**不沿用**既有「上傳」類（`DOCUMENT_ATTACHMENT`）
+   * ——沿用會使 `OJT_SESSION_DELETE` 於畫面上顯示為「上傳」，且場次不是 `DOCUMENT_ATTACHMENT`，
+   * `targetType→targetId` 對映沿用舊值等同指鹿為馬。權威：
+   * docs/specs/features/F024-access-history-query.md#ojt-progress-audit-view-delta `AC-J23`。
+   * 🔒 既有 `DOCUMENT_ATTACHMENT`→`上傳` 之對照（上方既有測試）append-only 續留、不得移除
+   * （`AUDIT_LOG` 為 append-only，2026-08-20～E11 上線期間之歷史列永久存在且本頁仍須渲染）。
+   */
+  it('AC-J23 auditKindLabel(OJT_SESSION) → OJT 場次（第五類型值，不得落入「上傳」或「其餘→變更」通則）', () => {
+    expect(auditKindLabel('OJT_SESSION')).toBe('OJT 場次');
+    expect(auditKindLabel('OJT_SESSION')).not.toBe('上傳');
+    expect(auditKindLabel('OJT_SESSION')).not.toBe('變更');
   });
 });

@@ -38,7 +38,12 @@ export type AuditTargetType =
   // 🔴 2026-08-25 角色自動化 delta（裁定 Q4.5）：帳號之角色／子分類異動。
   // targetId＝被異動之帳號 id，經 buildAuditRow 落至 AUDIT_LOG.targetAccountId。
   // 刻意獨立於既有四個參照欄——角色異動不是調閱，混入任一既有 targetType 會污染 F024 查詢。
-  | 'ACCOUNT';
+  | 'ACCOUNT'
+  // 🔴 F042 E11 delta（2026-08-28，`OQ-E11-13=B` ＋ `OQ-E11-17` 覆核核可）：教育訓練場次之
+  // 新增／刪除。**第 9 個值**；targetId＝OJT_SESSION.id（場次為第一等資源）。
+  // 刻意**不**沿用 'DOCUMENT_ATTACHMENT'——場次不是附件，沿用會使 `OJT_SESSION_DELETE`
+  // 在 F024「類型」欄顯示為「上傳」，且 targetId→targetAccountId 之對映等同指鹿為馬。
+  | 'OJT_SESSION';
 
 /** 操作類型（data-model AUDIT_LOG.actionType，逐字沿用 F036/F037/F038 spec 命名）。 */
 export type AuditActionType =
@@ -66,7 +71,13 @@ export type AuditActionType =
   // 🔴 2026-08-25 角色自動化 delta：角色／子分類異動。
   // 涵蓋**兩種來源**：管理員手動指派（F003 assignRole）與同步之自動推導（F004 角色推導階段）。
   // 兩者以 actorId 區分——自動推導無操作者，故落系統帳號哨兵；語意差異記於 targetName 快照。
-  | 'ROLE_ASSIGNED';
+  | 'ROLE_ASSIGNED'
+  // 🔴 F042 E11 delta（`AC-18`／`AC-19`，`OQ-E11-13=B`）：教育訓練場次之登記與刪除。
+  // **兩個獨立值**，明文不得與 'ATTACHMENT_UPLOAD' 或任何既有調閱動作共用。
+  // ⚠ D9 批 `AC-N32` 之「ICSOPAdmin 不寫稽核」角色不對稱於新路徑**整條作廢**——
+  // 三種可寫角色（ICSOPAdmin／Supervisor／DeptContact）一律寫入。
+  | 'OJT_SESSION_UPLOAD'
+  | 'OJT_SESSION_DELETE';
 
 /** 調閱來源（E09 US-097），預設 DIRECT。 */
 export type AuditSource = 'DIRECT' | 'AI_QA';
@@ -220,6 +231,27 @@ export interface AccountRoleAuditEvent extends AuditEventBase {
   actionType: 'ROLE_ASSIGNED';
 }
 
+/**
+ * 🔴 教育訓練場次之登記／刪除（F042 `AC-18`／`AC-19`，E11 delta）。第 11 個變體；
+ * 既有 10 個變體之形狀逐字不動。
+ *
+ * `targetId`＝`OJT_SESSION.id`；`documentId`／`orgCode` 為本變體**額外攜帶**之兩個維度
+ * （比照 `AppendixAuditEvent` 之既有作法——判別聯集允許個別變體帶額外欄位）。
+ * 🔴 `orgCode` 為本 delta 之 additive 欄位：沒有它，稽核只能回答「哪份文件的場次動了」，
+ * 回答不了「哪個使用單位的」——而使用單位正是本 feature 的最小追蹤單位。
+ * 🔒 `watermarkSnapshot` 以型別鎖為 `null`——登記／刪除**非浮水印動作**（`AC-18` 明訂），
+ * 不依賴呼叫端記得傳 null。
+ */
+export interface OjtSessionAuditEvent extends AuditEventBase {
+  targetType: 'OJT_SESSION';
+  actionType: 'OJT_SESSION_UPLOAD' | 'OJT_SESSION_DELETE';
+  /** 場次所屬文件（buildAuditRow 之本分支直接落至 AUDIT_LOG.documentId）。 */
+  documentId: string;
+  /** 場次所屬使用單位（落至 AUDIT_LOG.orgCode，本 delta 之 additive 欄）。 */
+  orgCode: string;
+  watermarkSnapshot?: null;
+}
+
 export type AuditAccessEvent =
   | DocumentAuditEvent
   | UsageFormAuditEvent
@@ -230,7 +262,8 @@ export type AuditAccessEvent =
   | AppendixAuditEvent
   | AccessHistoryExportAuditEvent
   | DocumentAttachmentAuditEvent
-  | AccountRoleAuditEvent;
+  | AccountRoleAuditEvent
+  | OjtSessionAuditEvent;
 
 /**
  * 已物化之稽核列（append-only）。同時作為 AUDIT_LOG 落地列與 F024 查詢結果列。
@@ -265,6 +298,18 @@ export interface AuditRow {
    * 不另開選填先例。所有建構點（buildAuditRow／TypeOrmAuditStore.toRow）皆顯式填值。
    */
   targetAccountId: string | null;
+  /**
+   * 🔴 F042 E11 delta（`AC-18`，`OQ-E11-13=B`）：場次所屬之使用單位代碼
+   * （僅 targetType='OJT_SESSION' 之列非 null）。**獨立 migration**（新增*欄位*，
+   * 與 D9 批「新增*列舉值* ⇒ 不需 migration」不同型）。
+   *
+   * ⚠ **宣告為選填（`?`）而非比照 `documentId`／`appendixId`／`targetAccountId` 之
+   * 「必填、顯式帶 null」既有慣例**——本欄係對一個已上線且被多處以物件字面值建構之型別
+   * 加欄；改必填會使既有建構點（含不屬本 feature 之測試檔）全數編譯失敗。
+   * 生產端之兩個建構點（`buildAuditRow`／`TypeOrmAuditStore.toRow`）仍**顯式填值**，
+   * 故實際落地列恆有本鍵。
+   */
+  orgCode?: string | null;
   /** 對象名稱／說明快照（供 F024 明細；非 data-model 現有欄，見 impl log flag）。 */
   targetName: string | null;
   watermarkSnapshot: string | null;
@@ -278,7 +323,12 @@ export interface AuditRow {
  * 🔴 D9 delta（`AC-N69`，`OQ-D9-34`）：additive 新增第四值「上傳」→ `DOCUMENT_ATTACHMENT`。
  * 既有三值之對映**逐字不變**（「文件」天然不含上傳事件——分類學污染防線之「排除」面）。
  */
-export type AuditKind = '文件' | '循環' | '變更' | '上傳';
+/**
+ * 🔴 F042 E11 delta（`AC-J23`，`OQ-E11-17` 覆核核可）：additive 新增第五值「OJT 場次」→
+ * `OJT_SESSION`。既有四值之對映**逐字不變**——「上傳」仍獨佔 `DOCUMENT_ATTACHMENT`
+ * （`AUDIT_LOG` 為 append-only，E11 上線前之歷史上傳列永久存在且本頁仍須渲染）。
+ */
+export type AuditKind = '文件' | '循環' | '變更' | '上傳' | 'OJT 場次';
 
 /**
  * 已正規化之查詢規格（OQ-AQ-01）。將 AuditQueryFilters 收斂為「可下推至 SQL WHERE/ORDER/OFFSET」之形狀：

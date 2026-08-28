@@ -52,6 +52,12 @@ export const FunctionKey = {
   // F039 附錄管理（E10 / US-102 AC5）。字串逐字採 F025 矩陣列名「附錄管理」，
   // 刻意不沿用使用表單之「文件使用表單管理」句型（F039 spec 命名鎖定表）。
   APPENDIX_MANAGEMENT: '附錄管理',
+  // 🔴 F042 OJT 進度管理（E11 / US-103～105，`AC-27`／`OQ-E11-05=A`）。字串逐字採 F042 §命名鎖定表
+  // 之「OJT 進度管理」，**不得**改寫為「OJT 管理」「教育訓練管理」等同義詞（跨層識別碼 churn）。
+  // ⚠ 本列明文打破 F025 `AC-N36`「不新增功能列」之鎖定——例外成立之理由見 F025 `AC-J17`：
+  // `AC-N36` 禁止的是「為了讓欄位破例通過而動功能矩陣」，本 feature 是一個**獨立側選單項與獨立
+  // 端點群**，沒有既有功能鍵可掛靠，兩者是不同的事。
+  OJT_PROGRESS_MANAGEMENT: 'OJT 進度管理',
   DOCUMENT_INDEX_MANAGEMENT: '文件索引管理',
   DOCUMENT_ACCESS_HISTORY: '文件調閱歷程查詢',
   DOCUMENT_CHANGE_HISTORY: '文件變更歷程',
@@ -108,6 +114,23 @@ export const FUNCTION_MATRIX: Record<string, Row> = {
   [FunctionKey.ICSOP_DOCUMENT_MANAGEMENT]: row('READ', 'CRUD', 'READ', 'READ', 'NONE'),
   [FunctionKey.USAGE_FORM_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.APPENDIX_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
+  /**
+   * 🔴 F042 `AC-27`（`OQ-E11-05=A`）：新增第 14 列。
+   *
+   * `受限CRUD` 於本列之語意＝**僅可新增場次、不可刪除**（`AC-05`／`AC-19`），與「角色指派」列之
+   * 「不得指派 SysAdmin／ICSOPAdmin」語意**互不相同**——兩處共用同一個列舉值純屬功能層粗粒度
+   * 授權之巧合重用。🔴 **明文禁止抽出「受限CRUD 通用檢查函式」**：`canPerform()` 不知道、也不
+   * 應該知道「受限」具體限制的是什麼，抽共用會把兩種互不相干的業務規則錯誤地耦合在一起。
+   * ⚠ 刪除之限制由 `OjtProgressService` 之端點層另一道 `roleCode === 'ICSOPAdmin'` 檢查把關，
+   * 本矩陣格值**擋不住它**（`AC-19` 之核心警語）。
+   */
+  [FunctionKey.OJT_PROGRESS_MANAGEMENT]: row(
+    'READ',
+    'CRUD',
+    'RESTRICTED_CRUD',
+    'RESTRICTED_CRUD',
+    'NONE',
+  ),
   [FunctionKey.DOCUMENT_INDEX_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.DOCUMENT_ACCESS_HISTORY]: row('READ', 'READ', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.DOCUMENT_CHANGE_HISTORY]: row('READ', 'READ', 'NONE', 'NONE', 'NONE'),

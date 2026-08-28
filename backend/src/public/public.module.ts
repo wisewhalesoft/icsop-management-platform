@@ -10,6 +10,7 @@ import { StorageModule } from '../storage/storage.module';
 import { BLOB_STORE, BlobStore } from '../storage/blob-store';
 import { AuditModule } from '../audit/audit.module';
 import { AuditWriterService } from '../audit/audit-writer.service';
+import { TypeOrmOjtCompletionReader } from '../documents/typeorm-ojt-completion.reader';
 import { PUBLIC_DOCUMENT_STORE, PublicDocumentStore } from './public-documents.store';
 import { TypeOrmPublicDocumentStore } from './typeorm-public-documents.store';
 import {
@@ -78,8 +79,21 @@ import { AttachmentPdfSource } from './typeorm-watermark.sources';
     { provide: DETAIL_NAME_RESOLVER, useExisting: NameResolutionService },
     {
       provide: PublicDocumentDetailService,
+      /**
+       * 🔴 F042 `AC-24`：第 4 個引數為 OJT 完成事實之唯讀窄 port。
+       * **反循環**：本模組自建 `TypeOrmOjtCompletionReader`（同 `AppDataSource` 單例），
+       * **不 import** `DocumentsModule`／`OjtProgressModule`——比照本模組既有之窄 adapter 慣例。
+       * ⚠ **漏掉這個引數不會有任何測試轉紅**：service 對它是選填、缺之即降級為空清單，
+       * 前台會永遠顯示「尚無任何使用單位完成 OJT」而不報錯（本 repo 已記錄之
+       * 「宣告了欄位卻沒接線、值人間蒸發」同型缺陷）。
+       */
       useFactory: (store: PublicDocumentStore, names: DetailNameResolver) =>
-        new PublicDocumentDetailService(store, names, () => new Date()),
+        new PublicDocumentDetailService(
+          store,
+          names,
+          () => new Date(),
+          new TypeOrmOjtCompletionReader(AppDataSource),
+        ),
       inject: [PUBLIC_DOCUMENT_STORE, DETAIL_NAME_RESOLVER],
     },
     // ── F020 浮水印 ──

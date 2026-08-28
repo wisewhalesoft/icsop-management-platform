@@ -70,21 +70,15 @@ export class AttachmentsController {
     );
   }
 
-  @Post('admin/documents/:documentId/attachments/ojt')
-  @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
-  @UseInterceptors(FileInterceptor('file', MULTIPART_OPTIONS))
-  uploadOjt(
-    @Req() req: RequestWithSession,
-    @Param('documentId') documentId: string,
-    @UploadedFile() file: MulterUploadedFile,
-  ) {
-    return this.svc.uploadSingle(
-      req.sessionUser,
-      documentId,
-      'OJT_SIGNIN',
-      toUploadFile(file),
-    );
-  }
+  /**
+   * 📝 **`POST admin/documents/:documentId/attachments/ojt`（`uploadOjt`）已於 2026-08-28
+   * 隨 F042 移除**（`OQ-E11-11=A`；F016 `AC-J2`）——**直接移除、回 404**，非 403、非 410。
+   *
+   * handler 不存在 ⇒ 該路徑不可能被路由命中，任何角色呼叫皆落至 NestJS 預設 404
+   * （**不經過 RBAC guard**，因為根本沒有 handler 可比對）。
+   * OJT 之登記能力整批搬遷至獨立管理頁「OJT 進度管理」
+   * （`POST /admin/ojt-progress/rows/:documentId/:orgCode/sessions`，F042 `AC-05`）。
+   */
 
   /** 受控下載（前後台共用；全角色 READ）。未登入由 SessionGuard 擋（服務層另有 FILE_ACCESS_DENIED 防線）。 */
   /**

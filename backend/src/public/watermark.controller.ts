@@ -101,21 +101,16 @@ export class WatermarkController {
   }
 
   /**
-   * F020 `AC-D8`：前台 **OJT 簽到表**下載。OJT 白名單含 jpg／png，故非 PDF 者依策略 A
-   * （`AC-D2`）回原始檔位元組、不轉檔——該分支由 `WatermarkService.burnIfPdf` 統一判定。
+   * 📝 **本處原有 `downloadOjt`（`GET :id/attachments/ojt/download`），已整條移除**——逐字見
+   * git 歷史。🔴 F042 E11（[F020](../../../docs/specs/features/F020-watermark.md) `AC-J26`
+   * ／[F042](../../../docs/specs/features/F042-ojt-progress-management.md) `AC-24`）：
+   * **前台不提供 OJT 場次檔下載**——簽到表為出席紀錄，與 `AC-16` 之 PII 防線同源，
+   * 故燒錄／不燒錄之規則**自始不適用於場次檔之前台路徑**（該路徑不存在）。
+   * 🔒 前台詳情頁之 OJT 區改為**純衍生唯讀清單**（已完成單位名稱），無下載入口。
    */
-  @Get(':id/attachments/ojt/download')
-  @RequirePermission(FunctionKey.DOCUMENT_DOWNLOAD_PRINT, 'read')
-  async downloadOjt(
-    @Req() req: RequestWithSession,
-    @Param('id') id: string,
-    @Res() res: Response,
-  ): Promise<void> {
-    await this.sendAttachment(req, id, 'OJT_SIGNIN', res);
-  }
 
   /**
-   * 兩個附件端點之共用出口（差別僅在 `type`，不各寫一份串流碼）。
+   * 附件端點之共用出口（不與其他路徑各寫一份串流碼）。
    *
    * `AC-D3a`：前台一律**代理串流**——body 即檔案位元組本身，不核發 SAS URL、不 3xx 轉址。
    * 燒錄與否、快照取得、F041 可見性判定與調閱稽核**全在 `svc.downloadAttachment` 內**完成
@@ -125,7 +120,7 @@ export class WatermarkController {
   private async sendAttachment(
     req: RequestWithSession,
     documentId: string,
-    type: 'ICSOP_PDF' | 'OJT_SIGNIN',
+    type: 'ICSOP_PDF',
     res: Response,
   ): Promise<void> {
     const { bytes, fileName } = await this.svc.downloadAttachment(

@@ -216,28 +216,24 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
       expect(rec.uploadedAt).toBeInstanceOf(Date);
     });
 
-    it('TS-002 jpg 作為 OJT → 成功建立 OJT_SIGNIN 列', async () => {
-      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', {
-        fileName: 'signin.jpg',
-        contentType: 'image/jpeg',
-        size: 1024,
-      });
-      expect(rec.type).toBe('OJT_SIGNIN');
-      expect(blob.putCalls).toHaveLength(1);
-    });
-
-    it('TS-003 png 作為 OJT → 成功', async () => {
-      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', {
-        fileName: 'signin.png',
-        contentType: 'image/png',
-        size: 1024,
-      });
-      expect(rec.type).toBe('OJT_SIGNIN');
-    });
-
-    it('TS-004 pdf 作為 OJT → 成功（OJT 格式雙軌）', async () => {
-      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' }));
-      expect(rec.type).toBe('OJT_SIGNIN');
+    /**
+     * 🔴 F042 E11 delta（`AC-J1`／`AC-J2`）：`OJT_SIGNIN` 已整條自 `SingleAttachmentType`
+     * 移除（`OQ-E11-11`→A，舊端點直接移除回 404；`OQ-E11-01`→C，既有資料 1:1 遷移至
+     * `OJT_SESSION`）——TS-002／TS-003／TS-004 原測「jpg／png／pdf 作為 OJT 皆可成功建立
+     * `OJT_SIGNIN` 列」，其標的（透過本服務以 `'OJT_SIGNIN'` 類型上傳）已不復存在，非「行為改變」
+     * 而是「該類型本身消失」，故整段移除（非弱化保留）。
+     * 📝 原三案逐字保留供追溯：OLD> TS-002 jpg 作為 OJT → 成功建立 OJT_SIGNIN 列／
+     * OLD> TS-003 png 作為 OJT → 成功／OLD> TS-004 pdf 作為 OJT → 成功（OJT 格式雙軌）。
+     * 🔒 jpg／png／pdf 之格式白名單本身（`file-rules.ts`）**未變**——場次上傳（`OJT_SESSION`）
+     * 沿用同一套規則，該覆蓋率由 F042 `AC-10` 承接（backend/src/ojt-progress/ 之測試，非本檔）。
+     */
+    it('AC-J1／AC-J2（負向）SingleAttachmentType 編譯期不再含 "OJT_SIGNIN"（型別鎖，非執行期斷言）', () => {
+      // ⚠ 目前仍為 'ICSOP_PDF' | 'OJT_SIGNIN' ⇒ 下列指派現為型別合法、與期望相反（TS2322 之
+      // 反向鎖：一旦 tdd-implementation 移除 'OJT_SIGNIN'，OjtStillValid 變為 false，
+      // 指派通過；移除前，OjtStillValid 為 true，指派 `false` 立即編譯錯 ⇒ 本案之紅燈即為預期。
+      type OjtStillValid = 'OJT_SIGNIN' extends SingleAttachmentType ? true : false;
+      const ojtRemoved: OjtStillValid = false;
+      expect(ojtRemoved).toBe(false);
     });
   });
 
@@ -298,16 +294,10 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
       expect(blob.putCalls).toHaveLength(0);
     });
 
-    it('TS-006 docx 作為 OJT → FILE_FORMAT_NOT_ALLOWED', async () => {
-      await expect(
-        svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', {
-          fileName: 'x.docx',
-          contentType: 'application/vnd.openxmlformats',
-          size: 10,
-        }),
-      ).rejects.toThrow('FILE_FORMAT_NOT_ALLOWED');
-      expect(store.rows).toHaveLength(0);
-    });
+    // 🔴 AC-J1／AC-J2：TS-006（docx 作為 OJT → FILE_FORMAT_NOT_ALLOWED）已隨 'OJT_SIGNIN'
+    // 類型整條移除而失去標的——ICSOP_PDF 之格式白名單負向案已由 TS-005（exe）涵蓋，場次上傳之
+    // 格式驗證覆蓋率移交 F042 AC-10（backend/src/ojt-progress/ 之測試）。
+    // 📝 OLD> it('TS-006 docx 作為 OJT → FILE_FORMAT_NOT_ALLOWED', ...)（逐字見本檔 git 歷史）
   });
 
   describe('大小上限（邊界）', () => {
@@ -338,30 +328,28 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
       expect(blob.deleteCalls).toContain(a); // 孤兒回收
     });
 
-    it('TS-010 重新上傳新 OJT → 覆蓋（同一列、新 blobPath）', async () => {
-      const r1 = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', pdf({ fileName: 'o1.pdf' }));
-      const r2 = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', pdf({ fileName: 'o2.pdf' }));
+    /**
+     * 🔴 F042 E11 delta（`AC-J1`，`AC-N29`／`AC-N35` 覆蓋子句之反轉）：TS-010（「重新上傳新
+     * OJT → 覆蓋，同一列、新 blobPath」）之期望值**整條反轉**——新模型下同一「文件 × 使用單位」
+     * 之場次為**累加**（F042 `AC-02`），不存在任何「以 type='OJT_SIGNIN' 為鍵之
+     * upsert／replace」路徑。該覆蓋語意之測試標的（`AttachmentsService.uploadSingle('OJT_SIGNIN')`）
+     * 本身已隨端點移除而消失，累加語意之正向覆蓋率移交 F042 `AC-02`（backend/src/ojt-progress/）。
+     * 📝 OLD> it('TS-010 重新上傳新 OJT → 覆蓋（同一列、新 blobPath）', ...)（逐字見本檔 git 歷史）
+     */
+    it('AC-J1（負向）不存在任何以 OJT_SIGNIN 為鍵之覆蓋路徑——本服務僅剩 ICSOP_PDF 單一可覆蓋類型', async () => {
+      // 🔒 ICSOP_PDF 之覆蓋語意逐字不變（TS-009 已鎖），本案僅補強「不再有第二個可覆蓋類型」。
+      const r1 = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf({ fileName: 'p1.pdf' }));
+      const r2 = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf({ fileName: 'p2.pdf' }));
       expect(r2.id).toBe(r1.id);
-      expect(r2.blobPath).not.toBe(r1.blobPath);
-      expect(blob.deleteCalls).toContain(r1.blobPath);
-    });
-
-    it('TS-011 更新 OJT 不影響既有 ICSOP PDF（欄位互相獨立）', async () => {
-      const p = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf({ fileName: 'p.pdf' }));
-      await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', pdf({ fileName: 'o1.pdf' }));
-      await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', pdf({ fileName: 'o2.pdf' }));
-      const pdfNow = await svc.getAttachmentRef(DOC, 'ICSOP_PDF');
-      expect(pdfNow?.blobPath).toBe(p.blobPath); // 未被觸碰
-      expect(blob.deleteCalls).not.toContain(p.blobPath);
+      expect(store.rows.filter((r) => r.documentId === DOC)).toHaveLength(1);
     });
   });
 
   describe('RBAC — 上傳（寫入）', () => {
-    it('TS-012 ICSOPAdmin 上傳任一附件 → 允許', async () => {
+    it('TS-012 ICSOPAdmin 上傳附件 → 允許（🔴 AC-J1／AC-J2：OJT 半案已隨類型移除，僅剩 ICSOP_PDF 可測）', async () => {
       await expect(svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf())).resolves.toBeDefined();
-      await expect(
-        svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', pdf({ fileName: 'o.pdf' })),
-      ).resolves.toBeDefined();
+      // 📝 OLD> 第二行原斷言 svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', ...) 允許——
+      // 'OJT_SIGNIN' 已非合法類型，該路徑之覆蓋率移交 F042 AC-05（backend/src/ojt-progress/）。
     });
 
     it.each([
@@ -383,108 +371,47 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
   });
 
   /**
-   * 🔴 D9 delta（2026-08-20，缺失／變更 delta 第 8 項；`OQ-D9-19`～`OQ-D9-24`）：OJT 簽到表上傳
-   * 開放主管／部門窗口——**推翻 F026 頂部定案，推翻範圍嚴格限於 OJT 一欄**。
-   * 權威：docs/specs/features/F016-pdf-ojt-attachment.md#ojt-role-open-delta `AC-N28`～`AC-N35`；
-   * architecture-spec.md §11.8（服務層授權判定不需改動，矩陣本身已是資料驅動查表——本描述區塊
-   * 之上傳測試因此天然依賴 `field-matrix.ts` 之 `OJT_WRITABLE` 常數，見 `rbac/field-matrix.spec.ts`
-   * `AC-N22`～`AC-N27`）。
+   * 🔴🔴 F042 E11 delta（2026-08-27／28）：D9 批之「OJT 簽到表上傳角色開放」（`AC-N28`～`AC-N35`）
+   * **整段作廢**——舊端點 `POST /admin/documents/:documentId/attachments/ojt`（即本檔之
+   * `svc.uploadSingle(session, documentId, 'OJT_SIGNIN', file)`）已直接移除、回 404
+   * （`OQ-E11-11`→A），OJT 之登記能力整批搬遷至獨立管理頁「OJT 進度管理」
+   * （`backend/src/ojt-progress/`，F042 `AC-05`）。
+   * 權威：docs/specs/features/F016-pdf-ojt-attachment.md#ojt-progress-supersede-delta
+   *   `AC-J1`～`AC-J6`；docs/specs/features/F042-ojt-progress-management.md `AC-22`。
    *
-   * 📌 端點不變：仍為既有 `POST /admin/documents/:documentId/attachments/ojt`（即本檔之
-   * `svc.uploadSingle(session, documentId, 'OJT_SIGNIN', file)`），路由層閘門維持
-   * `ICSOP_DOCUMENT_MANAGEMENT` read（對 Supervisor/DeptContact 本即通過）——實際放行/攔阻
-   * 全由服務層 `assertCanWriteDocumentAsset` 依矩陣格值判定，本區塊之測試因此直接呼叫
-   * `svc.uploadSingle`（不重複測路由層 metadata，那屬 controller-routes 之既有覆蓋範圍）。
+   * 🔴 逐條處置對照（單一真相來源＝F042 §既有行為反轉總表 甲節）：
+   *   `AC-N28`（2xx 成功）——**整條作廢**：其期望值掛在已不存在之端點上，無可成立之讀法。
+   *   `AC-N29`（可覆蓋）——**已反轉**於本檔「覆蓋語意」describe 之 TS-010 重寫（`AC-J1`）。
+   *   `AC-N30`（不限權責範圍，負向鎖定）——**語意延續、落點搬遷**：`Supervisor`／`DeptContact`
+   *     不限 orgCode 之負向鎖定由 F042 `AC-08` 逐字承接，其新測試落在
+   *     `backend/src/ojt-progress/ojt-progress.rows.spec.ts`（不在本檔）。
+   *   `AC-N31`（寫稽核）／`AC-N32`（ICSOPAdmin 角色不對稱）——**整條作廢**：其端點已移除；
+   *     新路徑之稽核落列（`OJT_SESSION_UPLOAD`，**三角色一律寫入、不對稱已終止**）由 F042
+   *     `AC-18`／`AC-J19`／`AC-J21` 承接，新測試落在 `ojt-progress.sessions.spec.ts`（不在本檔）。
+   *   `AC-N33`（ICSOP PDF 上傳仍拒）——🔒 **不在作廢之列，逐字保留於下方**：其**理由基礎**
+   *     （「與 AC-N28 為相鄰路由、期望值相反」）隨 AC-N28 作廢而消失，但期望值本身
+   *     （403 `FIELD_WRITE_FORBIDDEN`）從未被任何裁決推翻，`AC-J5` 明文要求就地重述而非刪除。
+   *   `AC-N34`（SysAdmin／User 上傳 OJT 之兩種 403）——**整條作廢**：期望值掛在已不存在之端點上；
+   *     新端點側由 F042 `AC-06`／`AC-07` 承接。
+   *   `AC-N35`（格式／大小驗證不因角色而異）——**反轉（覆蓋部分）＋語意改寫（驗證部分）**：
+   *     驗證邏輯本身逐字沿用至新端點（F042 `AC-10`），新測試落在 `ojt-progress.sessions.spec.ts`。
+   *
+   * 🔴 `AC-J6`（本 feature 之非 OJT 範圍零漣漪）：本 describe 之全部既有非 OJT 案例
+   * （ICSOP PDF 上傳／格式驗證／覆蓋／`FILE_ACCESS_DENIED` 等）須維持綠燈——ICSOP PDF「1 份、
+   * 重傳即覆蓋」語意逐字不變，**該欄位未改為場次制**，兩者刻意不同構。
    */
-  describe('D9 delta — OJT 簽到表上傳角色開放（AC-N28～AC-N35）', () => {
-    it('AC-N28 Supervisor 上傳 OJT（合法 pdf，目標文件無既有 OJT）→ 成功，不回 FIELD_WRITE_FORBIDDEN／PERMISSION_DENIED', async () => {
-      const rec = await svc.uploadSingle(SUP_SESSION, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' }));
-      expect(rec.type).toBe('OJT_SIGNIN');
-      expect(blob.putCalls).toHaveLength(1);
-    });
-
-    it('AC-N28 DeptContact 上傳 OJT（合法 jpg）→ 成功', async () => {
-      const rec = await svc.uploadSingle(DC_SESSION, DOC, 'OJT_SIGNIN', {
-        fileName: 'signin.jpg',
-        contentType: 'image/jpeg',
-        size: 1024,
-      });
-      expect(rec.type).toBe('OJT_SIGNIN');
-    });
-
-    it('AC-N29 可覆蓋既有 OJT（不論原上傳者為 ICSOPAdmin 或他人）：Supervisor 覆蓋 ICSOPAdmin 上傳之 OJT → 成功、恆 1 份、無版本歷史', async () => {
-      const r1 = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', pdf({ fileName: 'by-admin.pdf' }));
-      const r2 = await svc.uploadSingle(SUP_SESSION, DOC, 'OJT_SIGNIN', pdf({ fileName: 'by-sup.pdf' }));
-      expect(r2.id).toBe(r1.id); // 同一列覆蓋
-      expect(r2.blobPath).not.toBe(r1.blobPath);
-      const current = await svc.getAttachmentRef(DOC, 'OJT_SIGNIN');
-      expect(current?.blobPath).toBe(r2.blobPath);
-      expect(await store.findByBlobPath(r1.blobPath)).toBeNull(); // 舊參照失效、無版本歷史
-    });
-
+  describe('F042 E11 delta — OJT 上傳端點取代（AC-J1／AC-J2／AC-J5／AC-J6）', () => {
     /**
-     * 🔴 AC-N30（不限權責範圍，`OQ-D9-21` 選項 A，負向鎖定）：Supervisor 之 `orgCode` 與目標文件
-     * 完全無交集，仍必須成功——實作不得新增任何子樹範圍檢查（`isWithinSubtree` 或同義判定）於此路徑。
-     */
-    it('AC-N30 Supervisor（orgCode 與文件毫無關聯）上傳該文件之 OJT → 仍然成功（不得新增子樹範圍檢查）', async () => {
-      const unrelated: SessionContext & WatermarkSession = {
-        accountId: 'sup-unrelated',
-        roleCode: 'Supervisor',
-        employeeNo: 'S999',
-        name: '無關主管',
-        companyCode: 'AS',
-        orgCode: 'ZZ999', // 與 DOC 之當責室長/使用部門毫無交集之任意代碼
-      };
-      const rec = await svc.uploadSingle(unrelated, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' }));
-      expect(rec.type).toBe('OJT_SIGNIN');
-    });
-
-    /**
-     * AC-N31（🔴 寫入稽核）——與 F023 `AC-N50` 同一份契約：`actionType='ATTACHMENT_UPLOAD'`、
-     * `targetType='DOCUMENT_ATTACHMENT'`（🔴 2026-08-20 第二輪就地修訂，`OQ-D9-29`；非 `DOCUMENT`）、
-     * `documentId` 落列、身分快照＝執行上傳者本人、`watermarkSnapshot=null`（非浮水印動作）。
-     */
-    it('AC-N31 Supervisor 上傳 OJT 成功 → AUDIT_LOG 恰新增一筆，actionType=ATTACHMENT_UPLOAD／targetType=DOCUMENT_ATTACHMENT', async () => {
-      const { svc: svcD9, auditWriter } = makeD9Harness();
-      await svcD9.uploadSingle(SUP_SESSION, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' }));
-
-      expect(auditWriter.events).toHaveLength(1);
-      const e = auditWriter.events[0];
-      expect(e.actionType).toBe('ATTACHMENT_UPLOAD');
-      expect(e.targetType).toBe('DOCUMENT_ATTACHMENT');
-      expect(e.targetId).toBe(DOC);
-      expect(e.watermarkSnapshot).toBeNull();
-      expect(e.actorId).toBe('sup-1');
-    });
-
-    it('AC-N31 DeptContact 上傳 OJT 成功 → 同樣寫稽核（身分快照為部門窗口本人）', async () => {
-      const { svc: svcD9, auditWriter, watermark } = makeD9Harness();
-      await svcD9.uploadSingle(DC_SESSION, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' }));
-
-      expect(auditWriter.events).toHaveLength(1);
-      const { fields } = await watermark.buildSnapshot(DC_SESSION);
-      expect(auditWriter.events[0].employeeNo).toBe(fields.employeeNo);
-    });
-
-    /**
-     * 🔴 AC-N32（角色不對稱，`OQ-D9-23` 之直接後果，已提報 `OQ-D9-29`）：ICSOPAdmin 執行完全相同
-     * 之上傳操作 → 不寫入任何 AUDIT_LOG 列。本條刻意把不對稱寫成可測之明文，非實作者之自由裁量。
-     */
-    it('AC-N32（🔴 角色不對稱）ICSOPAdmin 上傳 OJT 成功 → 不寫入任何 AUDIT_LOG 列（AuditWriter 完全未被呼叫）', async () => {
-      const { svc: svcD9, auditWriter } = makeD9Harness();
-      await svcD9.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' }));
-
-      expect(auditWriter.events).toHaveLength(0);
-    });
-
-    /**
-     * 🔴 AC-N33（🔒 ICSOP PDF 上傳仍拒——回歸鎖定，同一支 controller 上兩條相鄰路由、期望值相反）：
-     * 這正是「開一個洞、鬆一片牆」最可能發生之處——同一 describe 內對照 OJT（放行）與 ICSOP PDF（仍拒）。
+     * 🔴 AC-N33（🔒 ICSOP PDF 上傳仍拒——回歸鎖定，逐字保留）：`AC-J5` 明文「本條之新理由
+     * （原理由已失效，故必須就地重述）：`AC-N33` 原以『與 AC-N28 為相鄰路由、期望值相反』為存在
+     * 理由；AC-N28 作廢後該對照消失，但『主管／部門窗口不得寫 ICSOP PDF』本身從未被任何裁決推翻。
+     * 不重述就會被下一位讀者判為『隨 D9 批一起作廢』而順手刪掉——那是『鬆一片牆』之另一種形狀」。
+     * 🔒 本測試之斷言內容一字未改，僅上方 describe 之落點與理由已更新。
      */
     it.each([
       ['Supervisor', SUP_SESSION as SessionContext],
       ['DeptContact', DC_SESSION as SessionContext],
-    ])('AC-N33 %s 上傳/取代 ICSOP PDF（非 OJT）→ 仍為 FIELD_WRITE_FORBIDDEN，不寫入 Blob、不建立附件、不寫稽核', async (_label, session) => {
+    ])('AC-N33／AC-J5 %s 上傳/取代 ICSOP PDF → 仍為 FIELD_WRITE_FORBIDDEN，不寫入 Blob、不建立附件、不寫稽核', async (_label, session) => {
       const { svc: svcD9, blob: blobD9, store: storeD9, auditWriter } = makeD9Harness();
       await expect(svcD9.uploadSingle(session, DOC, 'ICSOP_PDF', pdf())).rejects.toThrow(
         'FIELD_WRITE_FORBIDDEN',
@@ -494,34 +421,18 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
       expect(auditWriter.events).toHaveLength(0);
     });
 
-    it('AC-N34 系統管理員上傳 OJT → FIELD_WRITE_FORBIDDEN（OQ-D9-24 明文排除，不因 D9 而放行）', async () => {
-      await expect(
-        svc.uploadSingle({ roleCode: 'SysAdmin', accountId: 'sys-1' }, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' })),
-      ).rejects.toThrow('FIELD_WRITE_FORBIDDEN');
-    });
-
-    it('AC-N34 一般使用者上傳 OJT → PERMISSION_DENIED（路由層，功能面無存取）', async () => {
-      await expect(
-        svc.uploadSingle({ roleCode: 'User', accountId: 'u1' }, DOC, 'OJT_SIGNIN', pdf({ fileName: 'signin.pdf' })),
-      ).rejects.toThrow('PERMISSION_DENIED');
-    });
-
-    it('AC-N35 🔒 既有驗證不因角色而異：Supervisor 上傳不允許格式（exe）→ FILE_FORMAT_NOT_ALLOWED，不建立、未 put', async () => {
-      await expect(
-        svc.uploadSingle(SUP_SESSION, DOC, 'OJT_SIGNIN', {
-          fileName: 'x.exe',
-          contentType: 'application/x-msdownload',
-          size: 10,
-        }),
-      ).rejects.toThrow('FILE_FORMAT_NOT_ALLOWED');
-      expect(blob.putCalls).toHaveLength(0);
-    });
-
-    it('AC-N35 🔒 既有驗證不因角色而異：DeptContact 上傳超過大小上限 → FILE_SIZE_EXCEEDED，未 put', async () => {
-      await expect(
-        svc.uploadSingle(DC_SESSION, DOC, 'OJT_SIGNIN', pdf({ size: MAX_FILE_SIZE_BYTES + 1 })),
-      ).rejects.toThrow('FILE_SIZE_EXCEEDED');
-      expect(blob.putCalls).toHaveLength(0);
+    /**
+     * 🔴 AC-J2（可測形狀，本檔服務層側之補強）：本服務不再暴露任何以 'OJT_SIGNIN' 為類型參數之
+     * 上傳路徑——與本檔上方「上傳成功路徑」describe 內之型別鎖（`AC-J1／AC-J2`）為同一枚硬幣
+     * 之兩面，此處另從「呼叫端角度」複驗一次：任何角色（含曾經開放之 Supervisor／DeptContact）
+     * 呼叫 uploadSingle 時，'OJT_SIGNIN' 已非合法之第三參數字面值。
+     * 📌 路由層之「五種角色呼叫皆回 404」可測形狀（路由表中不存在該路徑）由
+     * `attachments-controller-routes.spec.ts` 承接（本檔僅持有 service 層之型別/行為斷言）。
+     */
+    it('AC-J2（型別鎖，複驗）SingleAttachmentType 已不含 "OJT_SIGNIN"——與上方「上傳成功路徑」之型別鎖同一不變式', () => {
+      type OjtStillValid = 'OJT_SIGNIN' extends SingleAttachmentType ? true : false;
+      const ojtRemoved: OjtStillValid = false;
+      expect(ojtRemoved).toBe(false);
     });
   });
 
@@ -582,15 +493,24 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
      * 🔒 §10.3：`Content-Type` 取自**已驗證之檔名副檔名**，不得取 `ATTACHMENT.contentType`
      * （該欄源自 multipart 之客戶端宣告）——否則上傳者可宣告「我這份 PDF 不是 PDF」。
      */
-    it('TS-021 Content-Type 依副檔名判定，不採上傳時之客戶端宣告', async () => {
+    /**
+     * 🔴 F042 E11 delta（`AC-J1`／`AC-J2`）：原案以 'OJT_SIGNIN' 上傳 .png 檔（藉此示範「副檔名
+     * 與客戶端宣告不一致」）——'OJT_SIGNIN' 已非合法類型，且 'ICSOP_PDF' 僅接受 pdf 副檔名，
+     * 故本案改以「檔名副檔名為 .pdf、客戶端卻宣告 image/png」之組合示範同一不變式（伺服器端
+     * 一律以副檔名為權威，不採客戶端宣告），繼續證明 §10.3 之保護對唯一僅存之 SingleAttachmentType
+     * （'ICSOP_PDF'）依然成立。
+     * 📝 OLD> it('TS-021 Content-Type 依副檔名判定，不採上傳時之客戶端宣告', ...)（以 OJT_SIGNIN／
+     * .png 為載體，逐字見本檔 git 歷史）
+     */
+    it('TS-021 Content-Type 依副檔名判定，不採上傳時之客戶端宣告（載體改為 ICSOP_PDF，唯一僅存之 SingleAttachmentType）', async () => {
       const rec = await svc.uploadSingle(
         ICSOP_ADMIN,
         DOC,
-        'OJT_SIGNIN',
-        pdf({ fileName: '簽到表.png', contentType: 'application/pdf' }),
+        'ICSOP_PDF',
+        pdf({ fileName: '簽到表.pdf', contentType: 'image/png' }),
       );
       const out = await svc.downloadAttachmentRaw({ roleCode: 'ICSOPAdmin', accountId: 'a' }, rec.blobPath);
-      expect(out.contentType).toBe('image/png');
+      expect(out.contentType).toBe('application/pdf');
     });
   });
 
@@ -659,20 +579,17 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
       );
     });
 
-    it('AC-N15 策略 A 於後台亦適用：非 PDF（xlsx）附件不受本 delta 影響 → burnPdf 呼叫次數為 0、位元組不變', async () => {
-      const { svc, blob, pdfBurner } = makeD9Harness();
-      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', {
-        fileName: 'signin.png',
-        contentType: 'image/png',
-        size: 1024,
-      });
-      const original = blob.blobs.get(rec.blobPath)!.content;
-
-      const out = await svc.downloadAttachmentRaw(SUP_SESSION, rec.blobPath);
-
-      expect(pdfBurner.calls).toHaveLength(0);
-      expect(out.bytes.equals(original)).toBe(true);
-    });
+    /**
+     * 🔴 F042 E11 delta（`AC-J1`／`AC-J2`）：原案以 'OJT_SIGNIN'（png）示範「策略 A 於後台亦適用
+     * 於非 PDF 附件」——'OJT_SIGNIN' 已非合法類型，且本檔僅存之 `SingleAttachmentType`
+     * （'ICSOP_PDF'）恆為 PDF，無法在本檔內建構「非 PDF 之 ICSOP_PDF 列」此一矛盾情境。
+     * 策略 A（非 PDF 不燒錄）之覆蓋率並未消失，改由下列兩處承接：
+     *   ① 既有 `usage-forms.service.spec.ts`／`appendices.service.spec.ts`（xlsx 附件，早已涵蓋）；
+     *   ② 場次簽到檔（可為 jpg/png/pdf）之策略 A 行為，由 F042 `AC-10`／後台燒錄延伸政策承接，
+     *      新測試落在 `backend/src/ojt-progress/ojt-progress.sessions.spec.ts`（不在本檔）。
+     * 📝 OLD> it('AC-N15 策略 A 於後台亦適用：非 PDF（xlsx）附件不受本 delta 影響 → burnPdf 呼叫
+     * 次數為 0、位元組不變', ...)（以 OJT_SIGNIN／png 為載體，逐字見本檔 git 歷史）
+     */
 
     /**
      * 🔴 AC-N16（無例外角色，`OQ-D9-09` 選項 B）：四種後台角色 × 皆須為 1 次燒錄，不得有任一角色為 0
@@ -726,19 +643,16 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
       expect(e.watermarkSnapshot).toBe(pdfBurner.calls[0].snapshot);
     });
 
-    it('AC-N17 非 PDF 下載成功 → 同樣寫入稽核，惟 watermarkSnapshot 為 null（燒錄與否不改變稽核義務）', async () => {
-      const { svc, auditWriter } = makeD9Harness();
-      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'OJT_SIGNIN', {
-        fileName: 'signin.png',
-        contentType: 'image/png',
-        size: 1024,
-      });
-
-      await svc.downloadAttachmentRaw(SUP_SESSION, rec.blobPath);
-
-      expect(auditWriter.events).toHaveLength(1);
-      expect(auditWriter.events[0].watermarkSnapshot).toBeNull();
-    });
+    /**
+     * 🔴 F042 E11 delta（`AC-J1`／`AC-J2`）：原案以 'OJT_SIGNIN'（png）示範「非 PDF 下載仍寫稽核、
+     * watermarkSnapshot 為 null」——'OJT_SIGNIN' 已非合法類型，本檔僅存類型（'ICSOP_PDF'）恆為
+     * PDF、無法建構「非 PDF 之 ICSOP_PDF」情境。該不變式（非 PDF 下載仍寫稽核）之覆蓋率移交：
+     *   ① 既有 `usage-forms.service.spec.ts`／`appendices.service.spec.ts`（xlsx，早已涵蓋）；
+     *   ② 場次簽到檔下載（可為 jpg/png/pdf）由 F042 `AC-18` 承接，新測試落在
+     *      `backend/src/ojt-progress/ojt-progress.sessions.spec.ts`（不在本檔）。
+     * 📝 OLD> it('AC-N17 非 PDF 下載成功 → 同樣寫入稽核，惟 watermarkSnapshot 為 null（燒錄與否
+     * 不改變稽核義務）', ...)（以 OJT_SIGNIN／png 為載體，逐字見本檔 git 歷史）
+     */
 
     it('🔒 AC-N19 前台側零漣漪：既有受控下載之未登入拒絕（FILE_ACCESS_DENIED）語意不變，且不燒錄不寫稽核', async () => {
       const { svc, auditWriter, pdfBurner } = makeD9Harness();
@@ -785,14 +699,21 @@ describe('AttachmentsService.listForDocument（附件列表，A）', () => {
       uploadedAt: new Date(),
     });
 
-  it('TS-A-001 兩類附件皆已上傳 → 依固定順序（ICSOP_PDF→OJT_SIGNIN）回傳兩筆', async () => {
-    // 底層插入序刻意相反，驗證回傳順序由服務層固定、非取決於 store。
-    await seed('doc-1', 'OJT_SIGNIN', 'ojt.pdf');
+  /**
+   * 🔴 F042 E11 delta（`AC-J1`／`AC-J2`）：原案示範「ICSOP_PDF／OJT_SIGNIN 兩類皆已上傳時，
+   * 依固定順序回傳兩筆」——`SingleAttachmentType` 已收斂為僅存 'ICSOP_PDF' 單一值
+   * （`OJT_SIGNIN` 型別聯集移除；`data-model.md` §DOCUMENT_ATTACHMENT 定案），「固定順序回傳
+   * 兩類附件」之情境已不可建構（本服務至多回傳 1 筆）。改為斷言：本服務對單一文件之附件列表
+   * 恆為**至多 1 筆**（`LIST_ORDER` 之常數集合現僅含 'ICSOP_PDF'）。
+   * 📝 OLD> it('TS-A-001 兩類附件皆已上傳 → 依固定順序（ICSOP_PDF→OJT_SIGNIN）回傳兩筆', ...)
+   * （逐字見本檔 git 歷史）
+   */
+  it('TS-A-001（AC-J1／AC-J2 改寫）本服務僅存 ICSOP_PDF 單一 SingleAttachmentType → 單一文件之附件列表至多 1 筆', async () => {
     await seed('doc-1', 'ICSOP_PDF', 'sop.pdf');
     const list = await svc.listForDocument(ICSOP_ADMIN, 'doc-1');
-    expect(list).toHaveLength(2);
-    expect(list.map((r) => r.type)).toEqual(['ICSOP_PDF', 'OJT_SIGNIN']);
-    expect(list.map((r) => r.fileName)).toEqual(['sop.pdf', 'ojt.pdf']);
+    expect(list).toHaveLength(1);
+    expect(list.map((r) => r.type)).toEqual(['ICSOP_PDF']);
+    expect(list.map((r) => r.fileName)).toEqual(['sop.pdf']);
   });
 
   it('TS-A-002 僅上傳其中一類 → 僅回傳該筆', async () => {

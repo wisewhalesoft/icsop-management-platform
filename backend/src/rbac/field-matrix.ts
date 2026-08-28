@@ -66,26 +66,52 @@ const ICSOP_WRITABLE: Row = {
 };
 
 /**
- * 🔴 OJT 簽到表**專屬**列（F026 `AC-N22`，2026-08-20 D9 delta；`OQ-D9-19`／`OQ-D9-20`）：
- * 主管／部門窗口可寫，其餘三格與 `ICSOP_WRITABLE` 逐格相同。
+ * 📝 **`OJT_WRITABLE` 已於 2026-08-28 隨 F042 移除**（`AC-J7`／`AC-J8`，落點＝
+ * F026 §OJT 簽到表收回唯讀 delta）。原內容逐字保留於此供追溯：
  *
- * **推翻範圍嚴格限於本列兩格**（`AC-N22`：20 欄 × 5 角色＝100 格，本輪僅 2 格改值）——
- * F026 頂部定案「主管、部門窗口、系統管理員對所有文件欄位皆唯讀」對其餘 19 欄逐字仍然成立。
+ * ```
+ * const OJT_WRITABLE: Row = {
+ *   SysAdmin: 'FORBIDDEN', ICSOPAdmin: 'WRITABLE',
+ *   Supervisor: 'WRITABLE', DeptContact: 'WRITABLE', User: 'FORBIDDEN',
+ * };
+ * ```
  *
- * 🔴 **為何新增一個具名 `Row` 常數而非在 `canWriteField()` 寫 `if` 特例**：矩陣本身已是
- * 「欄位鍵 → Row」之資料驅動查表結構，改變行為只需改資料。呼叫鏈
- * （`canWriteField` → `assertCanWriteDocumentAsset` → `AttachmentsService.uploadSingle`）
- * **一個字元都不需要動**，`AC-N24`（19 欄回歸鎖定）之防護因此是**結構性**成立而非紀律性成立：
- * 其餘 19 個欄位鍵仍指向原本的 `Row` 常數物件，不可能被本次改動波及。
+ * D9 批（2026-08-20，`OQ-D9-19`／`OQ-D9-20`）曾為此欄開放 Supervisor／DeptContact 可寫，是
+ * 本系統首次、也是唯一一次之欄位層破例；F042 **把這個唯一的例外收回**。
  *
- * ⚠ `AC-N26`／`AC-N27`：SysAdmin 與 User 對 OJT 仍為 `FORBIDDEN`（`OQ-D9-24` 明文排除）。
+ * 🔴 **收回之理由不是推翻「主管／部門窗口需要能登記 OJT」之原始需求**——該需求由 F042 `AC-05`
+ * 之獨立管理頁（`OJT 進度管理`）承接；而是**模型本身已改變**（單份覆蓋式 → 多使用單位 × 多場次），
+ * 文件表單之欄位形狀已無法承載新模型。
  * ⚠ 前端鏡射 `frontend/src/domain/field-matrix.ts` 須同步（§11.11 #24：兩份鏡射無自動交叉比對）。
  */
-const OJT_WRITABLE: Row = {
+
+/**
+ * 🔴 F042 `AC-J7` ②／`AC-J8`（`OQ-E11-12`→A）：OJT 簽到表為**純衍生唯讀**欄——
+ * **五角色全數 `FORBIDDEN`**（含 `ICSOPAdmin`），其值由 `OJT_SESSION` 聚合衍生（`AC-04`），
+ * 文件表單**無任何寫入入口**（`AC-22` 明文含 `ICSOPAdmin`）。
+ *
+ * 🔴 **為何自成一列、不共用 `ICSOP_WRITABLE`**：後者之 `ICSOPAdmin` 為 `WRITABLE`。
+ * `AC-J8` 明文指出反轉時最可能之失誤即「只把主管／部門窗口兩格改回唯讀，卻讓 `ICSOPAdmin`
+ * 之『可寫』留著」——那會在文件表單上重新長出一個**僅對 ICSOPAdmin 可見**之上傳入口。
+ *
+ * 🔴 **分類為 `FORBIDDEN` 而非 `IGNORE`**（裁決連帶確定）：`IGNORE` 為靜默忽略（比照「系統
+ * UUID」列），`FORBIDDEN` 為回 403 `FIELD_WRITE_FORBIDDEN`；`AC-J9` 之 40 案斷言
+ * （「一律回 403」）**只在 `FORBIDDEN` 下成立**。
+ *
+ * ⚠ **格值之語意與 D9 前不同**：D9 前是「尚未開放」，此後是「無人可寫、值由系統衍生」。
+ * `FieldWriteOutcome` 三值表達不了這個差異，屬矩陣資料層之已知侷限——矩陣只回答「能不能寫」，
+ * 不回答「為什麼」。
+ *
+ * 📌 **`AC-J7` ③ 之「與 D9 導入前逐格相同」與本列不符，且 ③ 為誤**：D9 導入前本欄指向
+ * `ICSOP_WRITABLE`（`ICSOPAdmin: 'WRITABLE'`，可由 git 歷史逐字查證），與 ② 之「五格全數
+ * 唯讀」差在 `ICSOPAdmin` 一格。②／`AC-J8` 為裁決明文且反覆申明，故以之為準；③ 之陳述
+ * 已回報 lead 更正。
+ */
+const OJT_DERIVED_READONLY: Row = {
   SysAdmin: 'FORBIDDEN',
-  ICSOPAdmin: 'WRITABLE',
-  Supervisor: 'WRITABLE', // ← 本次唯一改值之兩格
-  DeptContact: 'WRITABLE', // ←
+  ICSOPAdmin: 'FORBIDDEN',
+  Supervisor: 'FORBIDDEN',
+  DeptContact: 'FORBIDDEN',
   User: 'FORBIDDEN',
 };
 
@@ -124,8 +150,10 @@ export const FIELD_MATRIX: Record<string, Row> = {
   // F039：附錄（多）與使用表單（多）完全比照——ICSOPAdmin 可寫、其餘四角色唯讀（可下載）。
   [FieldKey.APPENDICES]: ICSOP_WRITABLE,
   [FieldKey.ANNOUNCE_DATE]: ICSOP_WRITABLE,
-  // 🔴 D9 delta（`AC-N22`）：本輪唯一改指向之列——由 ICSOP_WRITABLE 改為 OJT_WRITABLE。
-  [FieldKey.OJT_SIGNIN]: OJT_WRITABLE,
+  // 🔴 F042 delta（`AC-J7` ②／`AC-J8`）：本輪唯一改指向之列——由 OJT_WRITABLE 改為專屬之
+  // OJT_DERIVED_READONLY（**五格全 FORBIDDEN，含 ICSOPAdmin**）。D9 之 Supervisor／DeptContact
+  // 破例收回，且該欄自此為純衍生唯讀；欄位鍵集合仍為 20，不縮減。
+  [FieldKey.OJT_SIGNIN]: OJT_DERIVED_READONLY,
   [FieldKey.DOCUMENT_NAME]: ICSOP_WRITABLE,
   [FieldKey.CONTENT_SUMMARY]: ICSOP_WRITABLE,
 };

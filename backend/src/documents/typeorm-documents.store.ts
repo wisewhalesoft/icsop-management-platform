@@ -233,6 +233,34 @@ export class TypeOrmDocumentStore implements DocumentStore {
         { uf: filters.formId },
       );
     }
+    /*
+     * 🔴 F017 `AC-J14`（2026-08-28 E11 delta）：OJT 篩選之四值下推。
+     *
+     * 📝 被推翻之原語意逐字保留供追溯：OLD> 「存在／不存在 `DOCUMENT_ATTACHMENT.type='OJT_SIGNIN'`」。
+     *
+     * 🔒 兩個計數子查詢之口徑必須與 `TypeOrmOjtCompletionReader` 之 Q1／Q2 **逐字同源**——
+     * 篩選與顯示若各算一套，會出現「選了『部分完成』卻篩出一列顯示為『已全部完成』」。
+     *   · 分母：`DOC_USING_DEPT` 列數，**不套 `isActive` 過濾**（`AC-17` 之封閉界線）。
+     *   · 分子：`INNER JOIN DOC_USING_DEPT` 之 DISTINCT orgCode——天然排除孤兒場次
+     *     （orgCode 已不在當下集合）與待歸位列（orgCode IS NULL 恆不匹配）。
+     * 🔒 三值之布林條件與純函式 `deriveOjtStatus()` 逐條對應（含空集合 ⇒ `none` 之覆寫）：
+     *   none    ⇔ completed = 0（涵蓋 total = 0）
+     *   all     ⇔ total > 0 AND completed >= total
+     *   partial ⇔ completed > 0 AND completed < total
+     */
+    if (filters.ojtStatus) {
+      const total = `(SELECT COUNT(*) FROM DOC_USING_DEPT ud WHERE ud.documentId = d.id)`;
+      const completed =
+        `(SELECT COUNT(DISTINCT s.orgCode) FROM OJT_SESSION s ` +
+        `INNER JOIN DOC_USING_DEPT ud2 ON ud2.documentId = s.documentId AND ud2.orgCode = s.orgCode ` +
+        `WHERE s.documentId = d.id)`;
+      if (filters.ojtStatus === 'none') qb.andWhere(`${completed} = 0`);
+      else if (filters.ojtStatus === 'all') {
+        qb.andWhere(`${total} > 0 AND ${completed} >= ${total}`);
+      } else if (filters.ojtStatus === 'partial') {
+        qb.andWhere(`${completed} > 0 AND ${completed} < ${total}`);
+      }
+    }
     if (filters.keyword) {
       qb.andWhere('(d.documentNumber LIKE :kw OR d.documentName LIKE :kw)', {
         kw: `%${filters.keyword}%`,

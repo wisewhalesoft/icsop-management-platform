@@ -28,6 +28,10 @@ export function kindToTargetTypes(kind: AuditKind): AuditTargetType[] {
     // 本 case 是**篩出**面；兩面必須各自成立（只驗其一不足以證明另一面）。
     case '上傳':
       return ['DOCUMENT_ATTACHMENT'];
+    // 🔴 F042 E11 delta（`AC-J23`）：第五種類型篩選值，**獨佔** OJT_SESSION。
+    // 🔒 上方四個既有分支一格未動——「上傳」仍獨佔 DOCUMENT_ATTACHMENT（歷史列之載體）。
+    case 'OJT 場次':
+      return ['OJT_SESSION'];
   }
 }
 

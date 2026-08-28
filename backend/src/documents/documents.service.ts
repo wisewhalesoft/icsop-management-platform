@@ -22,6 +22,12 @@ import {
   DocumentListPage,
 } from './documents.store';
 import { NODE_NAME_STORE, NodeNameStore } from './node-name.store';
+import {
+  OJT_COMPLETION_READER,
+  OjtCompletionReader,
+  OjtCompletionSummary,
+  deriveOjtStatus,
+} from './ojt-completion.reader';
 import { LIFECYCLE_STORE, LifecycleStore } from '../lifecycle/lifecycle.store';
 import { DAG_STORE, DagStore } from '../lifecycle/dag.store';
 import { resolveSubtreeFilter } from './subtree-filter';
@@ -119,6 +125,16 @@ export class DocumentsService {
     @Optional()
     @Inject(DAG_STORE)
     private readonly dagStore?: DagStore,
+    /**
+     * 🔴 F042／F017 `AC-J12`（E11 delta）：文件層 OJT 三值衍生狀態之唯讀來源。
+     * 反循環：本模組**自建** `TypeOrmOjtCompletionReader`（同 AppDataSource 單例），
+     * **不匯入 `OjtProgressModule`**——比照同模組既有之 ATTACHMENT_STORE／NODE_NAME_STORE
+     * ／LIFECYCLE_STORE 慣例（架構 §二）。
+     * 選填以免打爆既有純 store 單測（無 → `ojtStatus` 一律降級為 `'none'`，不拋錯）。
+     */
+    @Optional()
+    @Inject(OJT_COMPLETION_READER)
+    private readonly ojtCompletionReader?: OjtCompletionReader,
   ) {
     // 預設 no-op 綁定（決策 A）：seam 存在但不落地，rag/F037 併回後覆寫。
     this.publisher = publisher ?? new NoopDocumentChangePublisher();
@@ -361,29 +377,31 @@ export class DocumentsService {
   }
 
   /**
-   * F017 `AC-N37`～`AC-N40`「OJT」圖示欄：批次補上各列是否有 OJT 簽到表附件。
+   * 🔴 F042 `AC-04`／F017 `AC-J12`～`AC-J13`「OJT」欄：批次補上各列之**三值衍生狀態**。
    *
-   * ⚠ architecture-spec §10.12 原假設「`icsopPdfBlobPath` 之既有批次查詢同一次即可取得
-   * `hasOjt`，零額外往返」——該假設不成立：`enrichIcsopPdf` 之查詢係依附件型別過濾
-   * （`'ICSOP_PDF'`），`OJT_SIGNIN` 從未被查出，故本欄此前恆為 `undefined`。
-   * 本方法補上第二次**固定次數**之批次查詢（`'OJT_SIGNIN'`）：往返數與列數無關（非 N+1），
-   * 與 `enrichLinks` 之「兩次批次查詢」慣例同型。
+   * 📝 **舊實作逐字保留供追溯**：OLD> 以 `attachmentStore.findManyByType(ids,'OJT_SIGNIN')`
+   * 判定「該文件是否曾上傳過 1 份 OJT 附件」，賦值於 `hasOjt: boolean`。
+   * 該語意已隨模型重構整條作廢——`OJT_SIGNIN` 附件類型本身已不存在（`AC-J1`／`AC-J2`），
+   * 且新問題不是「有沒有傳過檔」而是「**每個使用單位**辦沒辦過訓練」。
    *
-   * `hasOjt` 一律顯式賦值為布林（無附件／無 attachmentStore→`false`，非省略鍵），
-   * 與姊妹富化欄位「無資料＝顯式空值」之既有慣例一致。
-   * OJT 不落「檔案」欄（prototype 13 之「檔案」欄僅呈現 ICSOP PDF），故與 `enrichIcsopPdf` 分離。
+   * 🔴 **降級值為 `'none'` 而非沿用舊值 `false`**（`AC-J12`）：未注入 reader 時仍顯式賦值，
+   * 沿用姊妹富化欄位「無資料＝顯式空值、非省略鍵」之既有慣例。省略鍵會讓「從未計算」
+   * 這個病灶對測試完全隱形——那正是本欄上一輪的缺陷形狀。
+   *
+   * 🔴 **效能紅線（`AC-J15` ⑤）**：本方法對 reader 恰呼叫 **1 次**（reader 內部為固定 2 次
+   * 批次查詢），往返數與列數無關；與 `enrichIcsopPdf`／`enrichLinks` 之既有批次慣例同型。
+   *
+   * 🔒 三值之推導委派 `deriveOjtStatus()`——與 `AC-21`「已完成單位清單」共用同一次查詢與
+   * 同一套規則（`AC-04` 明文要求，不得各自實作）。
    */
   private async enrichOjt(items: DocumentListItem[]): Promise<void> {
     if (items.length === 0) return;
-    const recs = this.attachmentStore
-      ? await this.attachmentStore.findManyByType(
-          items.map((i) => i.id),
-          'OJT_SIGNIN',
-        )
-      : [];
-    const withOjt = new Set(recs.map((r) => r.documentId));
+    const completion = this.ojtCompletionReader
+      ? await this.ojtCompletionReader.getCompletionByDocument(items.map((i) => i.id))
+      : new Map<string, OjtCompletionSummary>();
     for (const it of items) {
-      it.hasOjt = withOjt.has(it.id);
+      const c = completion.get(it.id);
+      it.ojtStatus = deriveOjtStatus(c?.totalUnits ?? 0, c?.completedOrgCodes.length ?? 0);
     }
   }
 
@@ -442,7 +460,7 @@ export class DocumentsService {
     // 🔴 B 階段（多公司）：解析鍵一律為 **(companyCode, code) 複合鍵**，不得再以裸 code 扁平化。
     // 一頁清單可能橫跨多家公司，而 orgCode／employeeNo 皆僅在單一公司內唯一——扁平化會使
     // 某公司之部門名或室長姓名被誤植到另一公司的文件列（靜默錯誤）。
-    const key = (companyCode: string, code: string): string => `${companyCode} ${code}`;
+    const key = (companyCode: string, code: string): string => `${companyCode}\u0000${code}`;
 
     const orgKeys = new Map<string, { companyCode: string; orgCode: string }>();
     for (const it of items) {
@@ -684,6 +702,25 @@ export class DocumentsService {
       }
       throw e;
     }
+  }
+
+  /**
+   * F042 `AC-21`：單一文件之「已完成 OJT 之使用單位」唯讀衍生事實，供後台唯讀頁／編輯頁之
+   * OJT 區塊（`GET /admin/documents/:id/ojt-completion`）。
+   *
+   * 🔒 **與 `AC-04` 之清單頁三值狀態共用同一個 port、同一套規則**（`AC-04` 明文「不得各自
+   * 實作」）——此處刻意重用 `getCompletionByDocument`（批次介面傳單一 id）而**不另寫**一支
+   * 單筆查詢：同一份底層事實若各算一次，遲早出現「清單說已全部完成、詳情頁卻列不滿」。
+   *
+   * 🔴 未注入 reader 時降級為 `totalUnits: 0` ＋ 空清單（**不拋錯**），沿用本服務既有富化路徑
+   * 之優雅降級慣例——前端據此顯示空狀態提示（`AC-21` 明文：非空白、非錯誤）。
+   */
+  async getDocumentOjtCompletion(
+    documentId: string,
+  ): Promise<OjtCompletionSummary> {
+    if (!this.ojtCompletionReader) return { totalUnits: 0, completedOrgCodes: [] };
+    const byDoc = await this.ojtCompletionReader.getCompletionByDocument([documentId]);
+    return byDoc.get(documentId) ?? { totalUnits: 0, completedOrgCodes: [] };
   }
 
   /**

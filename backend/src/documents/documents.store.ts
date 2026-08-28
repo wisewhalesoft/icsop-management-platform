@@ -2,6 +2,7 @@ import { NumberHolder } from './document-rules';
 import { DocumentStatus } from './document-status';
 import { DocumentLinkView } from './document-link.store';
 import { LifecycleIdentity } from '../lifecycle/lifecycle-subcategory';
+import { OjtCompletionStatus } from './ojt-completion.reader';
 
 /** 文件資料存取邊界（可注入 mock/TypeORM）。E04-1 僅需建立與編號唯一性查詢。 */
 export const DOCUMENT_STORE = Symbol('DOCUMENT_STORE');
@@ -109,6 +110,13 @@ export interface DocumentListFilters {
   appendixId?: string;
   formId?: string;
   /**
+   * 🔴 F017 `AC-J14`（2026-08-28 E11 delta）：OJT 篩選由三值（`全部`／`有 OJT`／`無 OJT`）
+   * 改**四值**——`全部`（不提供本鍵／空字串）＋ 三值聯集之 `all`／`partial`／`none`。
+   * 🔒 與 F042 TAB2（`AC-13`）之**三值**「完成狀態」篩選刻意不同：本鍵比對**文件層三態**，
+   * TAB2 比對**列自身之二態**。⚠ 兩軸不得互相對齊。
+   */
+  ojtStatus?: OjtCompletionStatus | '';
+  /**
    * F017 `AC-T40`（2026-08-21 delta，架構決策 C3）：**子樹解析之根節點 id**。
    * 恆與 `lifecycleId` 成對；任一缺席／無法解析 ⇒ 靜默 no-op（`AC-T41`）。
    * 🔴 由**服務層**解析為 `nodeIdIn`；store 不承擔圖走訪。
@@ -164,8 +172,22 @@ export interface DocumentListItem {
    */
   secondaryChiefIds?: string[];
   /**
-   * F017 `AC-D5`（2026-08-16 delta）：是否有 OJT 簽到表。`DOCUMENT_ATTACHMENT` 之批次查詢
-   * 已存在於 `icsopPdfBlobPath` 之富化路徑，同一次查詢即可取得（§10.12）。缺鍵＝無 OJT。
+   * 🔴 F042／F017 `AC-J12`（2026-08-28 E11 delta）：文件層之 OJT **三值衍生狀態**。
+   * 值＝該文件之全部使用單位是否皆已完成 OJT，來源＝`DOC_USING_DEPT` × `OJT_SESSION` 之聚合
+   * （非「是否上傳過一份附件」）。空使用單位集合 ⇒ `'none'`（`AC-04` 明文覆寫 `every([])` 恆真）。
+   *
+   * 🔴 **由 `hasOjt: boolean` 改名而來，不是命名美學而是真值強制風險**：`has` 前綴承載三值字串時，
+   * 既有寫法 `if (item.hasOjt)` 對 `'partial'` 與 `'all'` 同為 truthy，兩種狀態會靜默合流。
+   * 📝 原欄位逐字保留供追溯：OLD> `hasOjt?: boolean;`（來源＝`findManyByType(ids,'OJT_SIGNIN')`）。
+   */
+  ojtStatus?: OjtCompletionStatus;
+  /**
+   * @deprecated F042 `AC-J12` 已改由 `ojtStatus` 承載，本欄自 E11 起**永不賦值**（恆為 `undefined`）。
+   *
+   * 🔴 **保留理由是相容而非行為**：`DocumentListItem` 為跨模組共享型別，多處既有測試與工廠函式
+   * 仍在其物件字面量中寫入 `hasOjt`；欄位一旦自型別移除，那些字面量會觸發 TS2353（多餘屬性檢查）
+   * 而整檔編譯失敗——即 `AC-D9`「既有欄位一欄未刪」之保護對象。
+   * 🔒 真值強制風險不因保留而回歸：本欄恆為 `undefined`（falsy），三值狀態一律只走 `ojtStatus`。
    */
   hasOjt?: boolean;
   edition: string | null;

@@ -39,8 +39,13 @@ import { AuditWriter } from '../audit/audit.types';
 import { AuditWriterService } from '../audit/audit-writer.service';
 import { formatOfFileName } from '../public/watermark';
 
-/** 列表之固定回傳順序（供前端渲染順序穩定、避免依賴 store 插入序）。 */
-const LIST_ORDER: SingleAttachmentType[] = ['ICSOP_PDF', 'OJT_SIGNIN'];
+/**
+ * 列表之固定回傳順序（供前端渲染順序穩定、避免依賴 store 插入序）。
+ * 🔴 F042 E11 delta（`AC-J1`／`AC-J2`）：`'OJT_SIGNIN'` 已移除——OJT 改為「文件 × 使用單位」
+ * 多場次模型（`OJT_SESSION`，`backend/src/ojt-progress/`），不再是本表之附件類別。
+ * 📝 原值逐字保留供追溯：OLD> `['ICSOP_PDF', 'OJT_SIGNIN']`。
+ */
+const LIST_ORDER: SingleAttachmentType[] = ['ICSOP_PDF'];
 
 /** 呼叫者 session 上下文（roleCode 授權判定；accountId 記錄 uploadedBy）。 */
 export interface SessionContext {
@@ -74,9 +79,12 @@ export interface AttachmentDownloadBytes {
   contentType: string;
 }
 
+// 🔴 F042 E11 delta（`AC-J1`／`AC-J2`）：`OJT_SIGNIN` 分支已移除（見 LIST_ORDER 之說明）。
+// 📝 原分支逐字保留供追溯：OLD> `OJT_SIGNIN: FieldKey.OJT_SIGNIN,`。
+// 🔒 `FieldKey.OJT_SIGNIN` 本身**不移除**——欄位鍵集合仍為 20（F026 `AC-J7`），該欄自此為
+// 五角色皆唯讀之純衍生欄，只是不再有任何附件上傳路徑消費此對照。
 const FIELD_KEY_BY_TYPE: Record<SingleAttachmentType, string> = {
   ICSOP_PDF: FieldKey.ICSOP_PDF,
-  OJT_SIGNIN: FieldKey.OJT_SIGNIN,
 };
 
 /**
@@ -231,42 +239,17 @@ export class AttachmentsService {
         );
       }
     }
-    // 9) 🔴 D9 delta（F016 `AC-N31`／`AC-N32`；F023 `AC-N50`）：**OJT 簽到表**之上傳於
-    //    **主管／部門窗口**執行時寫入一筆 `AUDIT_LOG`。
+    // 9) 📝 **D9 之 OJT 上傳稽核（`auditOjtUpload`）已於 2026-08-28 隨 F042 移除**
+    //    （`AC-J1`／`AC-J2`；反轉總表 甲節：`AC-N31`／`AC-N32` **整條作廢**）。
     //
-    //    🔴 **角色不對稱是明文要求，不是實作裁量**（`AC-N32`）：ICSOPAdmin 執行完全相同之上傳
-    //    **不**寫入任何列——本事件之存在理由是「D9 破例開放之角色，其寫入行為需可追溯」，
-    //    ICSOPAdmin 之上傳屬既有職掌內的日常維護。
-    //    🔴 `type === 'OJT_SIGNIN'` 之守衛確保 ICSOP PDF 上傳（同一方法之另一分支）完全不受影響
-    //    （`AC-N33` 回歸鎖定：對這兩個角色仍無條件 `FIELD_WRITE_FORBIDDEN`，根本走不到這裡）。
-    //    落點在 service 層、緊接授權判定與寫入成功之後，與欄位矩陣判定同一次角色讀取——
-    //    寫在 controller 會讓「判角色」這件事分居兩處而漂移（§11.8）。
-    await this.auditOjtUpload(session, documentId, type);
+    //    移除之理由：該方法之唯一觸發條件為 `type === 'OJT_SIGNIN'`，而該類型本身已自
+    //    `SingleAttachmentType` 移除 ⇒ 守衛恆為真、整段成為不可達碼。
+    //    🔴 **`AC-N32` 之角色不對稱（ICSOPAdmin 不寫稽核）並非「搬遷」而是「作廢」**——
+    //    新路徑（`OjtProgressService.addSession`，`AC-18`）對三種可寫角色**一律**寫入
+    //    `OJT_SESSION_UPLOAD`，無任何角色不對稱。
+    //    ⚠ `OQ-E01-09` 之既有稽核落差**仍不償還**——它活在 **ICSOP PDF** 之上傳路徑上
+    //    （本方法之另一分支，至今無稽核），與本 delta 無關，不得順手一併「補上」。
     return record;
-  }
-
-  /** `AC-N31`／`AC-N32`：OJT 上傳之稽核（僅主管／部門窗口；非浮水印動作故快照為 null）。 */
-  private async auditOjtUpload(
-    session: AttachmentSession | undefined,
-    documentId: string,
-    type: SingleAttachmentType,
-  ): Promise<void> {
-    if (type !== 'OJT_SIGNIN') return;
-    const role = session?.roleCode;
-    if (role !== 'Supervisor' && role !== 'DeptContact') return;
-    if (!this.auditWriter) return;
-    const identity = await resolveAuditIdentity(this.burner, session as WatermarkSession);
-    await this.auditWriter.recordAccess({
-      targetType: 'DOCUMENT_ATTACHMENT',
-      actionType: 'ATTACHMENT_UPLOAD',
-      targetId: documentId,
-      actorId: session?.accountId ?? '',
-      actorName: session?.name ?? null,
-      ...identity,
-      // 上傳非浮水印動作（`AC-N31`）——型別已鎖為 null，此處為顯式落值而非省略。
-      watermarkSnapshot: null,
-      occurredAt: new Date(),
-    });
   }
 
   /**

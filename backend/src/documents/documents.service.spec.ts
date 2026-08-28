@@ -899,13 +899,20 @@ describe('DocumentsService.listDocuments 富化：檔案＋連結點（C）', ()
     expect(itemOf(page, d2.id).icsopPdfFileName).toBeNull();
   });
 
-  it('TS-C-003 僅有 OJT 附件 → 不落入「檔案」欄（該欄僅承載 ICSOP PDF）', async () => {
-    const d3 = store.seedDoc({ documentNumber: 'D3' });
-    attachments.seed(d3.id, 'OJT_SIGNIN', { fileName: 'ojt.pdf' });
-    const page = await svc.listDocuments({});
-    expect(itemOf(page, d3.id).icsopPdfBlobPath).toBeNull();
-    expect(itemOf(page, d3.id).icsopPdfFileName).toBeNull();
-  });
+  /**
+   * 🔴 F042 仲裁修正（test-generator 仲裁 2026-08-28，申訴 2）：原案以
+   * `attachments.seed(d3.id, 'OJT_SIGNIN', ...)` 建構「文件有一筆非 ICSOP_PDF 之附件」情境，
+   * 藉此證明本欄僅承載 ICSOP_PDF、不因存在其他類型附件而誤填。
+   * `'OJT_SIGNIN'` 已依 [F016](../../docs/specs/features/F016-pdf-ojt-attachment.md#ojt-progress-supersede-delta)
+   * `AC-J1`／`AC-J2` 自 `SingleAttachmentType` 整條移除（見 `attachments.service.spec.ts` 之型別鎖），
+   * `SingleAttachmentType` 現僅存 `'ICSOP_PDF'` 一值 ⇒ 呼叫 `attachments.seed(d3.id, 'OJT_SIGNIN', ...)`
+   * 為 TS2345，使整檔編譯失敗（非因缺實作而紅）。本案之標的（「存在一筆非 ICSOP_PDF 類型附件」）
+   * 已因型別收斂為單一值而**無法經由本 store 之公開介面建構**——與 `attachments.service.spec.ts`
+   * `AC-J1`／`AC-J2` 對 `TS-002`～`TS-004`／`TS-006`／`TS-010` 等案之處置同型（標的消失，非弱化保留），
+   * 故整案移除。TS-C-002（無任何附件 → null）已涵蓋「非 ICSOP_PDF」之退化情形（該情形現與「無附件」
+   * 不可再區分，因為已無第二個 `SingleAttachmentType` 值可用於區分兩者）。
+   * 📝 OLD> it('TS-C-003 僅有 OJT 附件 → 不落入「檔案」欄（該欄僅承載 ICSOP PDF）', ...)（逐字見本檔 git 歷史）
+   */
 
   it('TS-C-004 清單項含連結點摘要（目標編號/書名/目前狀態）', async () => {
     const d1 = store.seedDoc({ documentNumber: 'D1' });
@@ -990,11 +997,19 @@ describe('DocumentsService.listDocuments 富化：檔案＋連結點（C）', ()
     expect(itemOf(page, d1.id).links[0].targetHasPdf).toBe(true);
   });
 
-  it('TS-E10-002 連結目標無 ICSOP PDF（含僅有 OJT）→ targetHasPdf 為 false', async () => {
+  /**
+   * 🔴 F042 仲裁修正（test-generator 仲裁 2026-08-28，申訴 2）：原案之 d3 以
+   * `attachments.seed(d3.id, 'OJT_SIGNIN', ...)` 示範「連結目標僅有 OJT 附件（非 ICSOP_PDF）
+   * → targetHasPdf 仍為 false」——`'OJT_SIGNIN'` 已依 `AC-J1`／`AC-J2` 自 `SingleAttachmentType`
+   * 整條移除（理由與處置同 TS-C-003），該情境已無法經由本 store 建構，故 d3 改為「完全無附件」，
+   * `targetHasPdf === false` 之期望值本身不變（非弱化）。本案仍保留其原有之獨立驗證價值——
+   * 同一批 `page.items` 中兩個不同連結目標（d2／d3）之 `targetHasPdf` 皆須各自正確為 false，
+   * 確保 `byTarget` 之逐目標對映不因批次富化而彼此串味。
+   */
+  it('TS-E10-002 連結目標無 ICSOP PDF（含完全無附件）→ targetHasPdf 為 false', async () => {
     const d1 = store.seedDoc({ documentNumber: 'D1' });
     const d2 = store.seedDoc({ documentNumber: 'D2' });
     const d3 = store.seedDoc({ documentNumber: 'D3' });
-    attachments.seed(d3.id, 'OJT_SIGNIN', { fileName: 'ojt.pdf' });
     await links.add(d1.id, d2.id);
     await links.add(d1.id, d3.id);
     const page = await svc.listDocuments({});
@@ -1034,8 +1049,19 @@ describe('DocumentsService.listDocuments 富化：檔案＋連結點（C）', ()
   });
 
   /**
-   * 🔴 `AC-E10` 之效能紅線：`targetHasPdf` 須以**固定次數**之批次查詢取得。
-   * 常數 `3`＝自身 ICSOP PDF ＋ OJT ＋ 連結目標之 ICSOP PDF；與列數／連結數皆無關。
+   * 🔴 F042 仲裁修正（test-generator 仲裁 2026-08-28，申訴 5）：本案與下一案之常數為
+   * `OJT_SIGNIN` 仍是 `SingleAttachmentType` 一員時代之舊事實值（`git blame` 證實兩案分別於
+   * 2026-08-27／2026-08-21 寫定，皆早於本輪 F042 對該型別之整條移除，逐字未動過）。
+   * 原註解「常數 3＝自身 ICSOP PDF ＋ OJT ＋ 連結目標之 ICSOP PDF」中之「OJT」項，即
+   * `attachments.findManyByType(ids,'OJT_SIGNIN')`（舊 hasOjt 布林富化之批次查詢）——該查詢
+   * 已隨 `AC-J1`／`AC-J2` 之型別收斂而不復存在，`ojtStatus` 三態改由全新 port
+   * `OjtCompletionReader.getCompletionByDocument()`（見下方「D 節」）取得，不再經由
+   * `attachments.findManyByType` 查詢。故固定批次次數由 3 降為 2（僅存「自身 ICSOP PDF」＋
+   * 「連結目標之 ICSOP PDF」）。維持**精確固定次數**之 pin（非鬆綁為 `toBeGreaterThan(0)`
+   * 或移除斷言）——若日後退化為隨列數／連結數增長，本斷言依然會抓到；若日後又有人把
+   * `OjtCompletionReader` 之查詢誤接回 `attachments.findManyByType`，本斷言同樣會抓到
+   * （該情形下次數會變回 3，與本案之 2 不符）。比照本檔既有之同型「常數更正」先例
+   * （見上方 C 節「🔴 2026-08-21 常數更正（`1`→`2`）」）。
    */
   it('TS-E10-005 targetHasPdf 為固定次數批次（連結數與列數增加，往返數不變）', async () => {
     const d1 = store.seedDoc({ documentNumber: 'D1' });
@@ -1046,15 +1072,21 @@ describe('DocumentsService.listDocuments 富化：檔案＋連結點（C）', ()
     const batchSpy = jest.spyOn(attachments, 'findManyByType');
     const singleSpy = jest.spyOn(attachments, 'findSingle');
     await svc.listDocuments({});
-    expect(batchSpy).toHaveBeenCalledTimes(3);
+    expect(batchSpy).toHaveBeenCalledTimes(2);
     expect(singleSpy).not.toHaveBeenCalled();
 
     batchSpy.mockClear();
     for (let i = 0; i < 20; i++) store.seedDoc({ documentNumber: `X-${i}` });
     await svc.listDocuments({});
-    expect(batchSpy).toHaveBeenCalledTimes(3);
+    expect(batchSpy).toHaveBeenCalledTimes(2);
   });
 
+  /**
+   * 🔴 F042 仲裁修正（test-generator 仲裁 2026-08-28，申訴 5）：本案不含任何連結（links 為空），
+   * 故 `batchSpy` 原本只計「自身 ICSOP PDF」＋「自身 OJT_SIGNIN」（`hasOjt` 舊布林富化）兩次。
+   * 後者已隨 `OJT_SIGNIN` 型別移除、`ojtStatus` 改由 `OjtCompletionReader` 取得而消失，
+   * 故固定批次次數由 2 降為 1（僅存「自身 ICSOP PDF」）。精確固定次數之 pin 不鬆綁，理由同上案。
+   */
   it('富化為批次查詢（不隨列數退化為 N+1）', async () => {
     for (let i = 0; i < 5; i++) store.seedDoc({ documentNumber: `N-${i}` });
     const batchSpy = jest.spyOn(attachments, 'findManyByType');
@@ -1062,7 +1094,7 @@ describe('DocumentsService.listDocuments 富化：檔案＋連結點（C）', ()
     const singleSpy = jest.spyOn(attachments, 'findSingle');
     const bySourceSpy = jest.spyOn(links, 'findBySource');
     await svc.listDocuments({});
-    expect(batchSpy).toHaveBeenCalledTimes(2);
+    expect(batchSpy).toHaveBeenCalledTimes(1);
     expect(linkSpy).toHaveBeenCalledTimes(1);
     expect(singleSpy).not.toHaveBeenCalled();
     expect(bySourceSpy).not.toHaveBeenCalled();
@@ -1070,125 +1102,220 @@ describe('DocumentsService.listDocuments 富化：檔案＋連結點（C）', ()
 });
 
 /**
- * D 節：OJT 圖示欄之 hasOjt 富化（2026-08-20 D9 缺失／變更 delta；F017 `AC-N37`～`AC-N40`）。
+ * D 節：OJT 圖示欄之衍生狀態富化（2026-08-27／28 F042／E11 delta；權威＝
+ * docs/specs/features/F042-ojt-progress-management.md `AC-04`，落點＝
+ * docs/specs/features/F017-backend-document-list.md#ojt-derived-semantics-delta
+ * `AC-J12`／`AC-J13`／`AC-J15`）。
  *
- * ⚠ 缺陷紀錄（team-lead 定位；architecture-spec §10.12 之假設不成立）：
- * §10.12 原假設「`DOCUMENT_ATTACHMENT` 之批次 `In(docIds)` 查詢已存在於 `icsopPdfBlobPath` 之
- * 富化路徑，同一次查詢即可取得 `hasOjt`，零額外往返」——但該查詢（見上方 C 節
- * `attachments.findManyByType(ids, 'ICSOP_PDF')`）係**依附件型別過濾**，`OJT_SIGNIN` 從未被
- * 查出。`DocumentListItem.hasOjt` 於全 `backend/src` 只有介面上一個選填宣告，沒有任何地方計算／
- * 賦值，故現況恆為 `undefined`。前端因此「有 OJT／無 OJT」圖示永遠顯示「無 OJT」。
+ * 🔴 本節整段取代 D9 批（`AC-N37`～`AC-N40`）之 hasOjt 富化描述——計算來源與型別皆已改變：
+ *   舊：`hasOjt: boolean`，來源＝`attachments.findManyByType(ids,'OJT_SIGNIN')`（單一附件存在性）。
+ *   新：`ojtStatus: 'all' | 'partial' | 'none'`，來源＝跨 `DOC_USING_DEPT` × `OJT_SESSION`
+ *       之聚合衍生值（該文件之全部使用單位是否皆已完成 OJT）。
  *
- * 📌 本節「無 OJT」情境採用之判準（回覆 team-lead 之詢問）：hasOjt 嚴格斷言為 **`false`**
- * （而非僅 falsy、亦非允許 `undefined`）。理由：
- *   ① 與既有姊妹富化欄位 `icsopPdfBlobPath`／`icsopPdfFileName` 之既有慣例一致——兩者「無資料」
- *      時明確賦值為 `null`（見上方 TS-C-002），並非省略鍵；富化欄位「不存在＝顯式空值」為本檔
- *      既有慣例，`hasOjt` 沒有理由自成一格改採省略鍵。
- *   ② 更關鍵：若改用 `toBeFalsy()`，現況缺陷（恆為 `undefined`）在「反向」案例會**巧合通過**
- *      （`undefined` 亦為 falsy）——這正是本 repo 已知之「初值＝目標值」型 fixture 陷阱，會讓
- *      「從未計算」這個真正病灶對測試完全隱形。只有嚴格 `toBe(false)` 才能讓反向案例在修復前
- *      正確地紅。
- *   `AC-N38`③「`hasOjt === undefined` 視同 `false`」是**前端**對（可能退化的）API 回應之防禦性
- *   容錯寫法，不代表後端修復後仍可繼續省略此鍵——兩者是不同層級的關注點。
+ * 🔴 欄位改名理由（非命名美學，是真值強制風險，`AC-J12` 逐字）：`has` 前綴之布林式命名在三值
+ * 字串下會使 `if (item.hasOjt)` 對 `'partial'` 與 `'all'` 同為 truthy，兩種狀態靜默合流——
+ * 與本 repo 已知之 `every([])` 恆真、`hasOjt === undefined` 視同 `false` 屬同一類陷阱。
  *
- * ⚠ 測試接縫（供 lead／實作者知悉，非本節缺口）：`hasOjt` 之計算層級比照 `icsopPdfBlobPath`
- * 富化——僅透過 `AttachmentStore` 介面驗證（`DocumentsService.listDocuments()` 呼叫端），不觸及
- * `typeorm-documents.store.ts` 之實際 SQL 查詢實作（本輪為簡化版環，僅 jest，無真庫 int 測試）。
- * 若實作選擇修改 `findManyByType()` 之簽章（例如改吃型別陣列）而非新增第二次呼叫，下方
- * `FakeAttachmentStore`（定義於本檔頂部 C 節之前）之既有單型別簽章可能需要同步調整——此為
- * 介面形狀變動，屬於「測試看起來錯誤」之申訴管道，不由 tdd-implementation 自行更動本檔。
+ * 🔴 計算層級改由新 port `OjtCompletionReader` 提供（架構 §二，非本檔臆造）：
+ *   `interface OjtCompletionReader {
+ *      getCompletionByDocument(documentIds: string[]):
+ *        Promise<Map<string, { totalUnits: number; completedOrgCodes: string[] }>>;
+ *    }`
+ * 同時回傳 `completedOrgCodes`（供 F042 `AC-21` 已完成單位清單）與可推導之
+ * `totalUnits`／`completedOrgCodes.length`（供本欄之三值狀態）——`AC-04` 明文要求兩處呈現
+ * 共用同一次查詢與同一套規則，不得各自實作。
+ *
+ * ⚠ 測試接縫（供 lead／實作者知悉，非本節缺口；🔴 2026-08-28 test-generator 仲裁修正，申訴 6）：
+ * `DocumentsService` 建構子現有簽章實為 **8 個既有位置參數**——
+ * `(store, publisher?, nameResolver?, linkStore?, attachmentStore?, nodeNameStore?,
+ * lifecycleStore?, dagStore?)`：第 6 位（`nodeNameStore`）已由既有綠測試佔用
+ * （`documents.service.spec.ts` G-DOC-205/301：`new DocumentsService(store, undefined,
+ * undefined, undefined, undefined, nodeStore)`）；第 7／8 位（`lifecycleStore`／`dagStore`）
+ * 已由 `documents.service.subtreeFilter.spec.ts:82-87` 佔用。📝 本檔頭原判斷「既有 5 個位置
+ * 參數」為 Phase A 之疏漏（未 grep 全檔既有建構呼叫即下筆），已更正。
+ * 本節比照既有 `attachmentStore` 之「選填注入」慣例，改於**第 9 個位置參數**注入
+ * `OjtCompletionReader`（`new DocumentsService(store, undefined, undefined, undefined,
+ * attachments, undefined, undefined, undefined, ojtReader)`）——**建構子目前尚無第 9 個參數，
+ * 本節之 import／建構呼叫預期編譯期即紅**（`Expected 0-8 arguments, but got 9`），此為本節之
+ * 預期紅燈，須待實作補上該參數才會轉綠。
+ * 若實作選擇不同之注入位置或改用具名選項物件，屬「測試看起來錯誤」之申訴管道，不由
+ * tdd-implementation 自行更動本檔。
  */
-describe('DocumentsService.listDocuments 富化：OJT 圖示欄 hasOjt（D，AC-N37～AC-N40）', () => {
+/** 架構 §二已定案之 port 形狀（非本檔臆造，見上方檔頭）。 */
+interface FakeOjtCompletionReaderResult {
+  totalUnits: number;
+  completedOrgCodes: string[];
+}
+interface OjtCompletionReaderLike {
+  getCompletionByDocument(
+    documentIds: string[],
+  ): Promise<Map<string, FakeOjtCompletionReaderResult>>;
+}
+class FakeOjtCompletionReader implements OjtCompletionReaderLike {
+  private byDoc = new Map<string, FakeOjtCompletionReaderResult>();
+  seed(documentId: string, result: FakeOjtCompletionReaderResult) {
+    this.byDoc.set(documentId, result);
+  }
+  async getCompletionByDocument(
+    documentIds: string[],
+  ): Promise<Map<string, FakeOjtCompletionReaderResult>> {
+    const out = new Map<string, FakeOjtCompletionReaderResult>();
+    for (const id of documentIds) {
+      out.set(id, this.byDoc.get(id) ?? { totalUnits: 0, completedOrgCodes: [] });
+    }
+    return out;
+  }
+}
+
+describe('DocumentsService.listDocuments 富化：OJT 衍生狀態 ojtStatus（AC-04／AC-J12／AC-J13／AC-J15）', () => {
   let store: FakeStore;
   let attachments: FakeAttachmentStore;
+  let ojtReader: FakeOjtCompletionReader;
   let svc: DocumentsService;
   beforeEach(() => {
     store = new FakeStore();
     attachments = new FakeAttachmentStore();
-    svc = new DocumentsService(store, undefined, undefined, undefined, attachments);
+    ojtReader = new FakeOjtCompletionReader();
+    // 🔴 第 9 個位置參數（見檔頭說明，2026-08-28 仲裁修正）——目前必為編譯紅燈，屬預期。
+    svc = new DocumentsService(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      attachments,
+      undefined,
+      undefined,
+      undefined,
+      ojtReader as unknown as never,
+    );
   });
   const itemOf = (page: DocumentListPage, id: string) => page.items.find((i) => i.id === id)!;
 
-  it('TS-N37-001 文件有 OJT_SIGNIN 附件 → hasOjt 嚴格為 true', async () => {
-    const d = store.seedDoc({ documentNumber: 'OJT-1' });
-    attachments.seed(d.id, 'OJT_SIGNIN', { fileName: 'ojt.pdf' });
+  it('AC-J12 全部使用單位皆完成 → ojtStatus 嚴格為 "all"', async () => {
+    const d = store.seedDoc({ documentNumber: 'OJT-ALL' });
+    ojtReader.seed(d.id, { totalUnits: 3, completedOrgCodes: ['A1000', 'A2000', 'A3000'] });
     const page = await svc.listDocuments({});
-    expect(itemOf(page, d.id).hasOjt).toBe(true);
+    expect((itemOf(page, d.id) as any).ojtStatus).toBe('all');
   });
 
-  it('TS-N37-002 文件無任何附件 → hasOjt 嚴格為 false（非 undefined，判準見檔頭說明）', async () => {
-    const d = store.seedDoc({ documentNumber: 'NO-OJT' });
+  it('AC-J12／AC-J13（🔴 新三態之核心案）1–2 個使用單位完成、非全部 → ojtStatus 嚴格為 "partial"（三值聯集之新增狀態，D9 批之二值年代不存在此案）', async () => {
+    const d = store.seedDoc({ documentNumber: 'OJT-PARTIAL' });
+    ojtReader.seed(d.id, { totalUnits: 3, completedOrgCodes: ['A1000', 'A2000'] });
     const page = await svc.listDocuments({});
-    expect(itemOf(page, d.id).hasOjt).toBe(false);
+    expect((itemOf(page, d.id) as any).ojtStatus).toBe('partial');
   });
 
-  it('TS-N37-003 文件僅有 ICSOP_PDF（無 OJT）→ hasOjt 為 false，且與「檔案」欄互不干擾', async () => {
+  it('AC-J12 0 個使用單位完成 → ojtStatus 嚴格為 "none"（非 undefined，判準見檔頭說明）', async () => {
+    const d = store.seedDoc({ documentNumber: 'OJT-NONE' });
+    ojtReader.seed(d.id, { totalUnits: 3, completedOrgCodes: [] });
+    const page = await svc.listDocuments({});
+    expect((itemOf(page, d.id) as any).ojtStatus).toBe('none');
+  });
+
+  it('AC-04（🔴 明文覆寫空集合全稱量詞恆真）使用單位集合為空（totalUnits=0）→ ojtStatus 為 "none"，不得為 "all"', async () => {
+    const d = store.seedDoc({ documentNumber: 'OJT-EMPTY-UNITS' });
+    ojtReader.seed(d.id, { totalUnits: 0, completedOrgCodes: [] });
+    const page = await svc.listDocuments({});
+    // ⚠ every([]) === true 是 JS 語言預設行為；AC-04 明文要求覆寫為 'none'，
+    // 若實作未覆寫、天真地以 completed>=total 判定，空集合會被誤判為 'all'。
+    expect((itemOf(page, d.id) as any).ojtStatus).toBe('none');
+    expect((itemOf(page, d.id) as any).ojtStatus).not.toBe('all');
+  });
+
+  it('AC-J12（🔒 回歸鎖定）文件僅有 ICSOP_PDF、與 OJT 完全無關 → ojtStatus 之計算與「檔案」欄互不干擾', async () => {
     const d = store.seedDoc({ documentNumber: 'PDF-ONLY' });
     attachments.seed(d.id, 'ICSOP_PDF', {
       fileName: 'sop.pdf',
       blobPath: 'documents/x/icsop_pdf/a.pdf',
     });
+    ojtReader.seed(d.id, { totalUnits: 0, completedOrgCodes: [] });
     const page = await svc.listDocuments({});
-    expect(itemOf(page, d.id).hasOjt).toBe(false);
+    expect((itemOf(page, d.id) as any).ojtStatus).toBe('none');
     expect(itemOf(page, d.id).icsopPdfBlobPath).toBe('documents/x/icsop_pdf/a.pdf');
     expect(itemOf(page, d.id).icsopPdfFileName).toBe('sop.pdf');
   });
 
-  it('TS-N37-004（🔒 回歸鎖定）文件僅有 OJT_SIGNIN（無 ICSOP_PDF）→「檔案」欄仍為 null（prototype 13 之「檔案」欄僅承載 ICSOP PDF）', async () => {
-    const d = store.seedDoc({ documentNumber: 'OJT-ONLY' });
-    attachments.seed(d.id, 'OJT_SIGNIN', { fileName: 'ojt.pdf' });
-    const page = await svc.listDocuments({});
-    expect(itemOf(page, d.id).icsopPdfBlobPath).toBeNull();
-    expect(itemOf(page, d.id).icsopPdfFileName).toBeNull();
-    expect(itemOf(page, d.id).hasOjt).toBe(true);
-  });
-
-  it('TS-N37-005（🔴 鑑別力核心）同一份清單混合有 OJT 與無 OJT 之文件 → 兩者 hasOjt 值不同', async () => {
-    // 若實作永遠回 false（或永遠回 undefined／永遠回 true），以下兩行至少一行必為紅——
+  it('AC-J12（🔴 鑑別力核心）同一份清單混合 all／partial／none 三種文件 → 三者 ojtStatus 值互不相同', async () => {
+    // 若實作永遠回同一個值（或永遠回 undefined），以下三行至少一行必為紅——
     // 避免「只驗單一情境」讓「永遠回同一個值」之偽實作矇混過關。
-    const withOjt = store.seedDoc({ documentNumber: 'MIX-A' });
-    const withoutOjt = store.seedDoc({ documentNumber: 'MIX-B' });
-    attachments.seed(withOjt.id, 'OJT_SIGNIN', { fileName: 'ojt.pdf' });
+    const all = store.seedDoc({ documentNumber: 'MIX-ALL' });
+    const partial = store.seedDoc({ documentNumber: 'MIX-PARTIAL' });
+    const none = store.seedDoc({ documentNumber: 'MIX-NONE' });
+    ojtReader.seed(all.id, { totalUnits: 2, completedOrgCodes: ['A1000', 'A2000'] });
+    ojtReader.seed(partial.id, { totalUnits: 2, completedOrgCodes: ['A1000'] });
+    ojtReader.seed(none.id, { totalUnits: 2, completedOrgCodes: [] });
     const page = await svc.listDocuments({});
-    expect(itemOf(page, withOjt.id).hasOjt).toBe(true);
-    expect(itemOf(page, withoutOjt.id).hasOjt).toBe(false);
+    expect((itemOf(page, all.id) as any).ojtStatus).toBe('all');
+    expect((itemOf(page, partial.id) as any).ojtStatus).toBe('partial');
+    expect((itemOf(page, none.id) as any).ojtStatus).toBe('none');
   });
 
-  it('TS-N37-006 未注入 attachmentStore → 優雅降級為 false（不拋錯，比照 icsopPdfBlobPath 之 null 降級慣例）', async () => {
+  it('AC-J12 未注入 ojtCompletionReader → 優雅降級為 "none"（不拋錯，比照 icsopPdfBlobPath 之 null 降級慣例；🔴 舊行為降級值為 false，新行為降級值為 "none"，不得沿用舊值）', async () => {
     const bare = new DocumentsService(store);
     const d = store.seedDoc({ documentNumber: 'BARE' });
     const page = await bare.listDocuments({});
-    expect(itemOf(page, d.id).hasOjt).toBe(false);
+    expect((itemOf(page, d.id) as any).ojtStatus).toBe('none');
   });
 
-  it('TS-N37-007（🔒 不得 N+1）hasOjt 富化不得逐列查詢——多筆文件下 findSingle 仍為 0 次呼叫', async () => {
-    const withOjt = store.seedDoc({ documentNumber: 'N1' });
-    for (let i = 0; i < 4; i++) store.seedDoc({ documentNumber: `N${i + 2}` });
-    attachments.seed(withOjt.id, 'OJT_SIGNIN', { fileName: 'ojt.pdf' });
-    const singleSpy = jest.spyOn(attachments, 'findSingle');
-    await svc.listDocuments({});
-    expect(singleSpy).not.toHaveBeenCalled();
-  });
-
-  it('TS-N37-008（🔒 不得 N+1，列數不變性）批次查詢呼叫次數不隨文件筆數增長', async () => {
-    const batchSpy = jest.spyOn(attachments, 'findManyByType');
+  it('AC-J15⑤（🔒 不得 N+1，效能紅線）ojtStatus 富化不得逐列查詢——多筆文件下 getCompletionByDocument 仍固定呼叫次數，不隨列數增長', async () => {
+    const readerSpy = jest.spyOn(ojtReader, 'getCompletionByDocument');
 
     const small = new FakeStore();
     small.seedDoc({ documentNumber: 'S1' });
-    const svcSmall = new DocumentsService(small, undefined, undefined, undefined, attachments);
+    const svcSmall = new DocumentsService(
+      small,
+      undefined,
+      undefined,
+      undefined,
+      attachments,
+      undefined,
+      undefined,
+      undefined,
+      ojtReader as unknown as never,
+    );
     await svcSmall.listDocuments({});
-    const callsSmall = batchSpy.mock.calls.length;
-    batchSpy.mockClear();
+    const callsSmall = readerSpy.mock.calls.length;
+    readerSpy.mockClear();
 
     const big = new FakeStore();
     for (let i = 0; i < 20; i++) big.seedDoc({ documentNumber: `B${i}` });
-    const svcBig = new DocumentsService(big, undefined, undefined, undefined, attachments);
+    const svcBig = new DocumentsService(
+      big,
+      undefined,
+      undefined,
+      undefined,
+      attachments,
+      undefined,
+      undefined,
+      undefined,
+      ojtReader as unknown as never,
+    );
     await svcBig.listDocuments({});
-    const callsBig = batchSpy.mock.calls.length;
+    const callsBig = readerSpy.mock.calls.length;
 
-    // 呼叫次數應與文件筆數無關（不論實作是併入既有批次查詢或新增第二個固定次數的批次查詢，
-    // 只要不隨列數增長即為合格；本斷言刻意不預設具體數字，以容納兩種實作路線）。
+    // 呼叫次數應與文件筆數無關——data-model.md 建議形狀為固定 2 次批次查詢（Q1 總單位數、
+    // Q2 已完成單位數），但本測試刻意不預設具體數字（只驗「不隨列數增長」），以容納
+    // 「併入單一 port 方法」或「port 內部自行組裝 2 次查詢」兩種實作路線皆能通過。
     expect(callsBig).toBe(callsSmall);
+  });
+
+  /**
+   * 🔴 AC-04 之明文要求：本值與 `AC-21`「已完成單位清單」必須共用同一套規則，不得各自實作。
+   * 可測形狀（防第二套邏輯）：同一次 `getCompletionByDocument` 回傳，`ojtStatus` 之推導
+   * 與 `completedOrgCodes.length` 之大小關係必須逐案一致——`partial` 恆對應
+   * `0 < completedOrgCodes.length < totalUnits`，不得出現兩者矛盾之組合。
+   */
+  it('AC-04 ojtStatus 與底層 completedOrgCodes 計數必須邏輯一致（防「兩套獨立判定邏輯」分岔）', async () => {
+    const d = store.seedDoc({ documentNumber: 'CONSISTENCY' });
+    ojtReader.seed(d.id, { totalUnits: 3, completedOrgCodes: ['A1000', 'A2000'] });
+    const page = await svc.listDocuments({});
+    const status = (itemOf(page, d.id) as any).ojtStatus;
+    expect(status).toBe('partial');
+    // completedOrgCodes.length (2) 介於 0 與 totalUnits (3) 之間 ⇒ 與 'partial' 一致。
+    const completion = await ojtReader.getCompletionByDocument([d.id]);
+    const { totalUnits, completedOrgCodes } = completion.get(d.id)!;
+    expect(completedOrgCodes.length).toBeGreaterThan(0);
+    expect(completedOrgCodes.length).toBeLessThan(totalUnits);
   });
 });
 

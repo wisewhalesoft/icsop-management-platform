@@ -26,6 +26,7 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
   let formId: string | null = null;
   let appendixId: string | null = null;
   let targetAccountId: string | null = null;
+  let orgCode: string | null = null;
 
   switch (event.targetType) {
     case 'DOCUMENT':
@@ -64,6 +65,13 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
     case 'ACCOUNT':
       targetAccountId = event.targetId;
       break;
+    // 🔴 F042 E11 delta（`AC-18`／`AC-19`）：場次事件之 targetId＝OJT_SESSION.id（不落任一
+    // 既有參照欄——場次不是文件、不是附件），另落 documentId 與本 delta 新增之 orgCode 兩維。
+    case 'OJT_SESSION':
+      documentId = event.documentId;
+      documentNumber = event.targetNumber ?? null;
+      orgCode = event.orgCode;
+      break;
   }
 
   return {
@@ -84,6 +92,7 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
     formId,
     appendixId,
     targetAccountId,
+    orgCode,
     targetName: event.targetName ?? null,
     watermarkSnapshot: event.watermarkSnapshot ?? null,
     occurredAt: event.occurredAt,

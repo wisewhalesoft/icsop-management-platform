@@ -19,6 +19,8 @@ import { DOCUMENT_CHANGE_PUBLISHER, DocumentChangePublisher } from './document-c
 import { CompositeDocumentChangePublisher } from './composite-document-change-publisher';
 import { ChangeHistoryModule } from '../change-history/change-history.module';
 import { DocumentChangeLogPublisher } from '../change-history/document-change-log-publisher';
+import { OJT_COMPLETION_READER, OjtCompletionReader } from './ojt-completion.reader';
+import { TypeOrmOjtCompletionReader } from './typeorm-ojt-completion.reader';
 import { ATTACHMENT_STORE, AttachmentStore } from '../attachments/attachments.store';
 import { TypeOrmAttachmentStore } from '../attachments/typeorm-attachments.store';
 import { OrgChangeAlertModule } from '../org-change-alert/org-change-alert.module';
@@ -69,6 +71,15 @@ import { OrgChangeAlertAutoResolveSubscriber } from '../org-change-alert/documen
     {
       provide: DAG_STORE,
       useFactory: (): DagStore => new TypeOrmDagStore(AppDataSource),
+    },
+    // 🔴 F042 `AC-04`／F017 `AC-J12`：文件層 OJT 三值衍生狀態之唯讀來源。
+    // 反循環：於本模組自建 adapter（唯讀直讀 OJT_SESSION／DOC_USING_DEPT），**不匯入
+    // OjtProgressModule**——比照上方 ATTACHMENT_STORE／NODE_NAME_STORE／LIFECYCLE_STORE
+    // 之既有慣例。反方向（OjtProgressModule 需文件與使用部門資料）同樣自建窄 adapter，
+    // 兩邊皆不互相 import ⇒ 循環相依在結構上不可能。
+    {
+      provide: OJT_COMPLETION_READER,
+      useFactory: (): OjtCompletionReader => new TypeOrmOjtCompletionReader(AppDataSource),
     },
     // 決策 B（F037）＋F006：seam 由單一綁定改為 fan-out（Composite）——
     //  1) DocumentChangeLogPublisher：持久化為 DOCUMENT_CHANGE_LOG（變更歷程）。

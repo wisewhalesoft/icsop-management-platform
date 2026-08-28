@@ -64,11 +64,19 @@ describe('AttachmentsController — 共用下載端點閘門收斂（F020 AC-D6�
     expect(canPerform('User', FunctionKey.DOCUMENT_DOWNLOAD_PRINT, 'read')).toBe(true);
   });
 
-  it('🔒 F025 矩陣逐格不變：三個上傳/列表 handler 之閘門維持 ICSOP_DOCUMENT_MANAGEMENT read', () => {
+  /**
+   * 🔴 F042 仲裁修正（test-generator 仲裁 2026-08-28，申訴 3）：原陣列含
+   * `AttachmentsController.prototype.uploadOjt`——該 handler 已依 F016 `AC-J2`（權威：
+   * docs/specs/features/F016-pdf-ojt-attachment.md#ojt-progress-supersede-delta）整支移除，
+   * 直接引用其 `prototype` 成員在編譯期即 TS2339（非因缺實作而紅），使本檔全部案例一併編譯失敗。
+   * 「三個」改「兩個」——`uploadOjt` 之移除本身已由
+   * `attachments-controller-routes.spec.ts`（`AC-J2` 之 `toBeUndefined()`）鎖定，本檔僅保留
+   * 對「仍存在之 handler」之閘門逐格不變回歸鎖，非弱化。
+   */
+  it('🔒 F025 矩陣逐格不變：兩個上傳/列表 handler 之閘門維持 ICSOP_DOCUMENT_MANAGEMENT read', () => {
     for (const h of [
       AttachmentsController.prototype.listAttachments,
       AttachmentsController.prototype.uploadIcsopPdf,
-      AttachmentsController.prototype.uploadOjt,
     ]) {
       const meta = reflector.get<RequiredPermission>(REQUIRE_PERMISSION_KEY, h);
       expect(meta.functionKey).toBe(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT);

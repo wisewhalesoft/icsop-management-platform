@@ -22,10 +22,14 @@ export class AttachmentPdfSource implements WatermarkPdfSource {
   /**
    * F020 `AC-D3`（2026-08-16 delta）：前台附件下載之原始位元組＋檔名。
    * 檔名為 §10.3 之格式判定依據（`DOCUMENT_ATTACHMENT` 無 `format` 欄，故以副檔名為之）。
+   *
+   * 📝 原簽章逐字保留供追溯：OLD> `type: 'ICSOP_PDF' | 'OJT_SIGNIN'`。
+   * 🔴 F042 E11（`AC-J26`）：前台之 OJT 下載路徑已整條移除，且 `'OJT_SIGNIN'` 已非合法之
+   * `SingleAttachmentType`（`AC-J1`／`AC-J2`）。
    */
   async getAttachmentBytes(
     documentId: string,
-    type: 'ICSOP_PDF' | 'OJT_SIGNIN',
+    type: 'ICSOP_PDF',
   ): Promise<{ bytes: Buffer; fileName: string } | null> {
     const ref = await this.attachments.getAttachmentRef(documentId, type);
     if (!ref) return null;

@@ -10,24 +10,33 @@ import {
 import { FunctionKey, canPerform } from '../rbac/function-matrix';
 
 /**
- * F020 `AC-D8` —— 前台附件下載之**兩個專屬端點**之 route-metadata 約束。
+ * F020 `AC-D8` —— 前台附件下載之**一個專屬端點**之 route-metadata 約束。
  *
  * 權威：`docs/specs/features/F020-watermark.md` `AC-D8`（2026-08-16 補訂，起因為 ringC 提報之
- * `G-L2-02`：這兩個端點之 handler 名稱與權限閘門原未入任何 AC）＋ `architecture-spec.md` §10.1。
+ * `G-L2-02`：該端點之 handler 名稱與權限閘門原未入任何 AC）＋ `architecture-spec.md` §10.1。
  *
  * | 方法 | 路徑 | 閘門 | handler |
  * |---|---|---|---|
  * | GET | `/public/documents/:documentId/attachments/icsop-pdf/download` | `下載列印文件` read | `downloadIcsopPdf` |
- * | GET | `/public/documents/:documentId/attachments/ojt/download`       | `下載列印文件` read | `downloadOjt` |
+ *
+ * 🔴 F042 仲裁修正（test-generator 仲裁 2026-08-28，申訴 7）：`AC-D8` 原表（2026-08-16 補訂）
+ * 之第二列 `GET .../attachments/ojt/download`（`downloadOjt`）已依
+ * [F020](../../docs/specs/features/F020-watermark.md#ojt-frontstage-note-delta) `AC-J26`
+ * 明文作廢——「前台不提供 OJT 場次檔下載（[F042](../../docs/specs/features/F042-ojt-progress-management.md)
+ * `AC-24`）：簽到表為出席紀錄，與 `AC-16` 之 PII 防線同源 ⇒ 本檔之燒錄／不燒錄規則自始不適用於
+ * 場次檔之前台路徑（**該路徑不存在**）」。實測確認：`icsop-pdf` 半案（含掃描器自我守護案）全綠、
+ * `ojt` 半案 5 案全紅、皆為 `hits.length===0`——掃描器本身有效，純粹是該路徑真的不存在。
+ * `CASES` 移除 `ojt` 列，其餘（`icsop-pdf` 之閘門、handler 名、`AC-D6` 誤用防呆、五角色逐格）
+ * 逐字不動。
  *
  * 🔴 **本檔存在之理由（真缺陷已自環中逃逸）**：前端 `endpoints.ts` 之 `downloadPublicAttachment()`
- * 早已呼叫這兩條路徑、`PublicDocumentDetailPage` 亦已接上，但**後端從未實作** ⇒ 實測回
+ * 早已呼叫 `icsop-pdf` 該路徑、`PublicDocumentDetailPage` 亦已接上，但**後端從未實作** ⇒ 實測回
  * 404 `application/json`。使用者第 5a 項因此從「下載得到但沒浮水印」惡化為「下載不了」。
  * 全綠之原因：前端測試 mock 掉 `downloadPublicAttachment`；後端只測燒錄服務、無 controller 暴露；
  * `AC-D3` 只斷言「不呼叫舊的 `downloadAttachment`」——那條確實滿足。**沒有任何測試跨越前後端邊界。**
  * 通則層之防線另見 `frontend/src/api/endpoint-contract.test.ts`。
  *
- * ⚠ 對實作全盲：撰寫時兩條 route 皆不存在，故本檔為**預期紅燈**，implementer 實作後轉綠。
+ * ⚠ 對實作全盲：撰寫時該 route 尚不存在，故本檔為**預期紅燈**，implementer 實作後轉綠。
  * ⚠ 刻意**不綁定 handler 落在哪個 class**：以 `PATH_METADATA` 於全部 `public/documents` 前綴之
  *    controller 中搜尋（`:param` 名稱正規化，因參數命名非可觀測契約）。若以 class 綁定，
  *    implementer 換一個 controller 承載就會紅得不是原因。
@@ -71,12 +80,9 @@ function effectivePermission(hit: Hit): RequiredPermission | undefined {
   );
 }
 
-const CASES = [
-  { type: 'icsop-pdf', handler: 'downloadIcsopPdf' },
-  { type: 'ojt', handler: 'downloadOjt' },
-] as const;
+const CASES = [{ type: 'icsop-pdf', handler: 'downloadIcsopPdf' }] as const;
 
-describe('F020 AC-D8 — 前台附件下載之兩個專屬端點（route-metadata）', () => {
+describe('F020 AC-D8 — 前台附件下載之一個專屬端點（route-metadata）', () => {
   /**
    * 🔒 掃描器自我守護：若 `PATH_METADATA` 之讀法或 controller 前綴慣例日後改變，
    * 下面兩組斷言會「查無 handler」而紅——但那是**掃描器壞了**，不是端點沒實作。

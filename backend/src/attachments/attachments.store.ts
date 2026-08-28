@@ -6,7 +6,17 @@
 export const ATTACHMENT_STORE = Symbol('ATTACHMENT_STORE');
 
 /** 單份附件類型（覆蓋式）。 */
-export type SingleAttachmentType = 'ICSOP_PDF' | 'OJT_SIGNIN';
+/**
+ * 🔴 F042 E11 delta（`AC-J1`／`AC-J2`，`OQ-E11-11=A`／`OQ-E11-01=C`）：`'OJT_SIGNIN'` 已移除。
+ * 既有 `OJT_SIGNIN` 列經 migration `1724889600000` 之 1:1 所有權轉移遷移至 `OJT_SESSION`
+ * （`INSERT` ＋ `DELETE` 同交易）後，本表不再有任何該型別之列。
+ * 📝 原值逐字保留供追溯：OLD> `export type SingleAttachmentType = 'ICSOP_PDF' | 'OJT_SIGNIN';`
+ *
+ * ⚠ **前台受控下載路徑（`public/watermark.service.ts`）之型別聯集刻意未同步收斂**：該路徑
+ * 以自己宣告之字面聯集讀 `DOCUMENT_ATTACHMENT`，遷移後查無列即回 404，行為正確且其既有
+ * 路由 metadata 測試（`public-attachment-download.routes.spec.ts`）不受影響（零漣漪）。
+ */
+export type SingleAttachmentType = 'ICSOP_PDF';
 
 export interface DocumentAttachmentRecord {
   id: string;

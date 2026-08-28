@@ -31,12 +31,16 @@ export type {
 export interface WatermarkPdfSource {
   getOriginalPdf(documentId: string): Promise<Buffer | null>;
   /**
-   * F020 `AC-D3`：前台 OJT 簽到表之原始位元組與檔名（architecture-spec §10.1）。
-   * 選填能力——未提供時 `downloadAttachment('OJT_SIGNIN')` 回 404，不降級為別的附件。
+   * F020 `AC-D3`：前台附件之原始位元組與檔名（architecture-spec §10.1）。
+   * 選填能力——未提供時 `downloadAttachment()` 回 404，不降級為別的附件。
+   *
+   * 📝 原簽章逐字保留供追溯：OLD> `type: 'ICSOP_PDF' | 'OJT_SIGNIN'`。
+   * 🔴 F042 E11（`AC-J26`／`AC-24`）：`'OJT_SIGNIN'` 已自 `SingleAttachmentType` 整條移除，
+   * 且**前台自始不提供 OJT 場次檔下載**（簽到表為出席紀錄，與 `AC-16` 之 PII 防線同源）。
    */
   getAttachmentBytes?(
     documentId: string,
-    type: 'ICSOP_PDF' | 'OJT_SIGNIN',
+    type: 'ICSOP_PDF',
   ): Promise<{ bytes: Buffer; fileName: string } | null>;
 }
 export const WATERMARK_PDF_SOURCE = Symbol('WATERMARK_PDF_SOURCE');
@@ -156,18 +160,22 @@ export class WatermarkService {
   }
 
   /**
-   * F020 `AC-D3`：**前台專屬**附件下載（`ICSOP_PDF`／`OJT_SIGNIN`）。
+   * F020 `AC-D3`：**前台專屬**附件下載（`ICSOP_PDF`）。
    *
    * 🔴 與 `download()` **共用同一條管線**——`loadDocMeta → assertDocVisible → buildSnapshot →
-   * 取原始位元組 → (pdf ? burnPdf : 原檔) → audit`。差別僅在「取原始位元組」之來源，
-   * 以及非 PDF（OJT 可為 jpg／png）走策略 A 之原檔直通。
+   * 取原始位元組 → (pdf ? burnPdf : 原檔) → audit`。差別僅在「取原始位元組」之來源。
    * 🔴 `blobPath` 由伺服器自 `(documentId, type)` 反查，**不接受客戶端傳入**——「前台／後台」是
    * 授權語意，不得建立在可由客戶端控制的輸入上（§10.1 之方案 B／C 已明確否決）。
+   *
+   * 📝 原簽章逐字保留供追溯：OLD> `type: 'ICSOP_PDF' | 'OJT_SIGNIN'`。
+   * 🔴 F042 E11（`AC-J26`）：OJT 半案已隨「前台不提供場次檔下載」整條移除。
+   * 🔒 `burnIfPdf` 之策略 A（非 PDF 回原檔直通）**本身完全不變**，其前台載體改由使用表單區／
+   * 附錄區之 `.xlsx` 列承載——⚠ 規則還在，變的只是「在前台哪一區找得到它」。
    */
   async downloadAttachment(
     session: WatermarkSession,
     documentId: string,
-    type: 'ICSOP_PDF' | 'OJT_SIGNIN',
+    type: 'ICSOP_PDF',
   ): Promise<{ bytes: Buffer; fileName: string; snapshot: string | null }> {
     const meta = await this.burnerSvc.loadDocMeta(documentId);
     this.burnerSvc.assertDocVisible(session, meta);

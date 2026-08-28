@@ -63,6 +63,13 @@ export class DocumentsController {
       //    與前端 getDocuments() 之同型缺漏合起來，使該兩項篩選端到端完全無作用（靜默無錯誤）。
       appendixId: q.appendixId || undefined,
       formId: q.formId || undefined,
+      // 🔴 F017 `AC-J14`（2026-08-28 E11 delta）：OJT 篩選之四值。`全部`＝不帶本參數；
+      // 其餘三值須為三值聯集之成員，非成員一律視同「全部」（fail-open 為既有篩選慣例：
+      // 未知篩選值不應把整頁清單篩成空，那會讓使用者以為資料不見了）。
+      ojtStatus:
+        q.ojtStatus === 'all' || q.ojtStatus === 'partial' || q.ojtStatus === 'none'
+          ? q.ojtStatus
+          : undefined,
       // F017 AC-T40／AC-T43（2026-08-21 delta）：前端**原樣**帶上兩參數，子樹展開由服務層負責。
       nodeSubtreeId: q.nodeSubtreeId || undefined,
       sortBy:
@@ -86,6 +93,23 @@ export class DocumentsController {
   @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
   getLinks(@Param('id') id: string) {
     return this.svc.getDocumentLinks(id);
+  }
+
+  /**
+   * F042 `AC-21`：某文件「已完成 OJT 之使用單位」唯讀衍生清單，供唯讀頁／編輯頁之 OJT 區塊。
+   *
+   * 🔴 **閘門刻意為 `ICSOP_DOCUMENT_MANAGEMENT read`，不是 `OJT_PROGRESS_MANAGEMENT`**：
+   * 本區塊是**文件頁的一部分**，其可見範圍必須等同該頁之進入條件；`OJT_PROGRESS_MANAGEMENT`
+   * 對 `User` 為 `NONE`，沿用它會讓能開文件頁的角色在頁內拿到 403、區塊永久顯示空狀態
+   * ——兩個功能鍵之可見範圍不同，不可因「都跟 OJT 有關」而混用。
+   *
+   * 🔒 不遮蔽 `@Get(':id')`：`:id/ojt-completion` 為兩段路徑，與單段之 `:id` 不同構
+   * （比照上方 `:id/links` 之既有共存）。
+   */
+  @Get(':id/ojt-completion')
+  @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
+  getOjtCompletion(@Param('id') id: string) {
+    return this.svc.getDocumentOjtCompletion(id);
   }
 
   @Post()

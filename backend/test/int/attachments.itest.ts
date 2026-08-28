@@ -53,7 +53,20 @@ describe('[int] attachments 列表端點 vs SOP', () => {
     await shutdownIntApp(ctx);
   });
 
-  it('TS-E-A-001 上傳 ICSOP PDF＋OJT → GET 列表回兩筆，與 DOCUMENT_ATTACHMENT 落地一致', async () => {
+  /**
+   * 🔴 F042 仲裁修正（test-generator 仲裁 2026-08-28，申訴 8）：原案另上傳一筆
+   * `POST .../attachments/ojt` 並斷言列表回 `['ICSOP_PDF','OJT_SIGNIN']`——該端點已依
+   * [F016](../../docs/specs/features/F016-pdf-ojt-attachment.md#ojt-progress-supersede-delta)
+   * `AC-J2`（`OQ-E11-11`→A）整支移除、回 404（非 403、非 410），`OJT_SIGNIN` 亦已依
+   * [data-model.md](../../docs/specs/data-model.md#attachment-entity) v1.10 自 `DOCUMENT_ATTACHMENT.type`
+   * 列舉值完全移除（非「保留供 legacy」）。該半案之標的已無法經由此端點建構，處置手法同
+   * `backend/src/attachments/attachments.service.spec.ts` 之 TS-002～TS-004／TS-006／TS-010、
+   * `backend/src/documents/documents.service.spec.ts` 之 TS-C-003：去 OJT 半案，縮為單一
+   * `ICSOP_PDF` 案，`DOCUMENT_ATTACHMENT` 落地一致性之驗證價值不變（僅剩一筆時仍逐欄核對）。
+   * 📝 OLD> it('TS-E-A-001 上傳 ICSOP PDF＋OJT → GET 列表回兩筆，與 DOCUMENT_ATTACHMENT 落地一致', ...)
+   * （逐字見本檔 git 歷史）
+   */
+  it('TS-E-A-001 上傳 ICSOP PDF → GET 列表回一筆，與 DOCUMENT_ATTACHMENT 落地一致', async () => {
     const up1 = await ctx
       .http()
       .post(`/admin/documents/${docId}/attachments/icsop-pdf`)
@@ -62,36 +75,26 @@ describe('[int] attachments 列表端點 vs SOP', () => {
     expect([200, 201]).toContain(up1.status);
     uploadedBlobs.push(up1.body.blobPath);
 
-    const up2 = await ctx
-      .http()
-      .post(`/admin/documents/${docId}/attachments/ojt`)
-      .set('Cookie', ctx.adminCookie)
-      .attach('file', pdfBuffer, { filename: 'zzint-ojt.pdf', contentType: 'application/pdf' });
-    expect([200, 201]).toContain(up2.status);
-    uploadedBlobs.push(up2.body.blobPath);
-
     const g = await ctx
       .http()
       .get(`/admin/documents/${docId}/attachments`)
       .set('Cookie', ctx.adminCookie);
     expect(g.status).toBe(200);
     expect(Array.isArray(g.body)).toBe(true);
-    expect(g.body).toHaveLength(2);
-    expect(g.body.map((a: { type: string }) => a.type)).toEqual(['ICSOP_PDF', 'OJT_SIGNIN']);
+    expect(g.body).toHaveLength(1);
+    expect(g.body.map((a: { type: string }) => a.type)).toEqual(['ICSOP_PDF']);
     expect(g.body[0].fileName).toBe('zzint-sop.pdf');
-    expect(g.body[1].fileName).toBe('zzint-ojt.pdf');
 
-    // 直查真表：兩列存在且 blobPath 與回應一致。
+    // 直查真表：該列存在且 blobPath 與回應一致。
     const rows = await AppDataSource.query(
       `SELECT [type],[blobPath] FROM [DOCUMENT_ATTACHMENT] WHERE [documentId]=@0 ORDER BY [type]`,
       [docId],
     );
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(1);
     const byType = new Map(
       (rows as { type: string; blobPath: string }[]).map((r) => [r.type, r.blobPath]),
     );
     expect(byType.get('ICSOP_PDF')).toBe(g.body[0].blobPath);
-    expect(byType.get('OJT_SIGNIN')).toBe(g.body[1].blobPath);
   });
 
   it('TS-E-A-002 文件存在但未上傳任何附件 → 200 空陣列', async () => {

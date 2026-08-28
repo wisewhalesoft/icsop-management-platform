@@ -60,7 +60,14 @@ const ACTION_TYPE_LABEL: Readonly<Record<string, string>> = {
   // 本 delta 新增（`AC-F13`）：匯出動作本身之稽核列亦會出現在後續查詢／匯出結果中。
   ACCESS_HISTORY_EXPORT: '調閱歷程匯出',
   // 🔴 D9 delta（`AC-N53`／`AC-N50`，`OQ-D9-29`）：OJT 簽到表上傳事件。
+  // 🔒 F042 上線後本代碼**不再產生新列**，但對照**不得移除**——`AUDIT_LOG` 為 append-only，
+  // 2026-08-20～E11 上線期間之歷史列永久存在且本頁仍須渲染（`AC-J22` 明訂）。
   ATTACHMENT_UPLOAD: '附件上傳',
+  // 🔴 F042 E11 delta（`AC-J22`，`OQ-E11-13=B`）：教育訓練場次之登記與刪除，逐字取自
+  // `prototypes/17-access-history.html`。⚠ **兩者必須互異**——把「登記」與「刪除」標成同一個
+  // 詞，等於在畫面上抹掉兩者之差別（`AC-J22` ① 之硬性要求）。
+  OJT_SESSION_UPLOAD: '場次登記',
+  OJT_SESSION_DELETE: '場次刪除',
 };
 
 export function actionTypeLabel(actionType: string): string {
@@ -76,9 +83,15 @@ export function actionTypeLabel(actionType: string): string {
  *    CSV 與畫面保持一致優先，兩處同時錯優於兩處各自錯不同方向。
  *    本 delta 新增之 `ACCESS_HISTORY` 亦落入「其餘 → 變更」之通則（`AC-F13` 自我遞迴效應）。
  */
-export function auditKindLabel(targetType: string): '文件' | '循環' | '變更' | '上傳' {
+export function auditKindLabel(
+  targetType: string,
+): '文件' | '循環' | '變更' | '上傳' | 'OJT 場次' {
   if (targetType === 'DOCUMENT' || targetType === 'USAGE_FORM') return '文件';
   if (targetType === 'LIFECYCLE') return '循環';
+  // 🔴 F042 E11 delta（`AC-J23`）：第五個類型值。與 `DOCUMENT_ATTACHMENT` 同理，**必須**置於
+  // 下方 `return '變更'` 之前——落入通則會使場次事件在「類型」欄顯示為「變更」，與新增之
+  // 「OJT 場次」篩選值自相矛盾。刻意**不**沿用「上傳」：刪除事件顯示為「上傳」是說謊。
+  if (targetType === 'OJT_SESSION') return 'OJT 場次';
   // 🔴 D9 delta（`AC-N53`）：`DOCUMENT_ATTACHMENT` **不得**落入下方「其餘 → 變更」之通則——
   // 那會使上傳事件在「類型」欄顯示為「變更」，與 `AC-N69` 新增之「上傳」篩選值自相矛盾
   // （選了「上傳」篩出來的列，類型欄卻寫「變更」）。故本判斷必須置於 return '變更' 之前。

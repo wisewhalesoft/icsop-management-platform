@@ -314,3 +314,70 @@ describe('F017 AC-D9：清單列型別為 additive（既有欄位一欄未刪）
     expect(lock).toBe(true);
   });
 });
+
+/**
+ * 🔴 F042 E11 delta（2026-08-27／28）：`OJT` 篩選由三值（`全部`／`有 OJT`／`無 OJT`）改**四值**
+ * （`全部`／`已全部完成`／`部分完成`／`尚未開始`）。權威＝
+ * docs/specs/features/F017-backend-document-list.md#ojt-derived-semantics-delta `AC-J14`
+ * （四值逐字取自 `prototypes/13-document-list.html`，本檔僅測比對語意、不重打字面）。
+ *
+ * ⚠ 本檔目前**無法確認** `applyDocumentQuery` 之既有 `filters` 型別是否已含 `ojtStatus`（或
+ * `ojt`）鍵——本節未讀取生產碼決定鍵名，依 `AC-J12`（`hasOjt` → `ojtStatus` 之欄位改名原則）
+ * 類比選用 `ojtStatus` 作為篩選鍵名，比對值採三值聯集之原始值（`'all'|'partial'|'none'`），
+ * 與 `matchesStatusFilter` 系列測試「同時接受原始值與衍生顯示值」之既有慣例類比但不強求相同
+ * 手法。**若實作方對鍵名有異議，屬合理仲裁項——仲裁時改鍵名，不弱化本節斷言之比對語意**
+ * （AC-J14 之核心：四值中三個非「全部」之值各需一個可命中之案例）。
+ *
+ * 🔴 舊 fixture（「文件 A 有 `OJT_SIGNIN` 附件、文件 B 無」）在新模型下不再可建構，本節改以
+ * 三筆文件（全部完成／部分完成／尚未開始）驅動——此為 `AC-J14` 明文之預期轉紅／重寫範圍，
+ * 非本節之缺陷。
+ */
+describe('applyDocumentQuery OJT 篩選（F017 AC-J14：三值改四值）', () => {
+  // 🔴 不修改共用 item() 之型別新增鍵（避免波及其餘既有測試），改用局部 builder 附加 ojtStatus。
+  function itemWithOjtStatus(
+    id: string,
+    ojtStatus: 'all' | 'partial' | 'none',
+  ): DocumentListItem {
+    return { ...item({ id }), ojtStatus } as unknown as DocumentListItem;
+  }
+
+  const allDone = itemWithOjtStatus('OJT-ALL', 'all');
+  const partialDone = itemWithOjtStatus('OJT-PARTIAL', 'partial');
+  const noneDone = itemWithOjtStatus('OJT-NONE', 'none');
+  const rows = [allDone, partialDone, noneDone];
+
+  it('AC-J14 篩選值「已全部完成」（ojtStatus="all"）→ 僅回傳全部完成之文件', () => {
+    const r = applyDocumentQuery(rows, { ojtStatus: 'all' } as any, TODAY);
+    expect(r.items.map((x) => x.id)).toEqual(['OJT-ALL']);
+  });
+
+  it('AC-J14（🔴 三值聯集之新增狀態，D9 批之二值年代無法建構此案）篩選值「部分完成」（ojtStatus="partial"）→ 僅回傳部分完成之文件', () => {
+    const r = applyDocumentQuery(rows, { ojtStatus: 'partial' } as any, TODAY);
+    expect(r.items.map((x) => x.id)).toEqual(['OJT-PARTIAL']);
+  });
+
+  it('AC-J14 篩選值「尚未開始」（ojtStatus="none"）→ 僅回傳尚未開始之文件', () => {
+    const r = applyDocumentQuery(rows, { ojtStatus: 'none' } as any, TODAY);
+    expect(r.items.map((x) => x.id)).toEqual(['OJT-NONE']);
+  });
+
+  it('AC-J14 未提供 ojtStatus 篩選（等同「全部」預設值）→ 不施加限制，三筆皆回傳', () => {
+    const r = applyDocumentQuery(rows, {} as any, TODAY);
+    expect(r.items.map((x) => x.id).sort()).toEqual(['OJT-ALL', 'OJT-NONE', 'OJT-PARTIAL'].sort());
+  });
+
+  /**
+   * 🔒 AC-J14：TAB2（F042 `AC-13`）之「完成狀態」篩選為**三值**（比對列自身之二態 + 全部），
+   * 刻意與本條之**四值**（比對文件層三態 + 全部）不同——兩軸不得互相對齊。本檔（F017 清單頁）
+   * 僅測本條之四值語意，不涉及 F042 TAB2 之篩選（那是獨立管理頁之測試範圍，非本檔）。
+   */
+  it('AC-J14（🔒 回歸鎖定）其餘篩選之比對語意不受本條影響——依制定部門篩選仍逐字精確比對', () => {
+    const rowsWithDept = [
+      item({ id: 'D1', draftingDeptId: 'deptX' }),
+      item({ id: 'D2', draftingDeptId: 'deptY' }),
+    ];
+    expect(
+      applyDocumentQuery(rowsWithDept, { draftingDeptId: 'deptX' }, TODAY).items.map((x) => x.id),
+    ).toEqual(['D1']);
+  });
+});

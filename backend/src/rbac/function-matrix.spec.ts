@@ -7,6 +7,14 @@ import {
 } from './function-matrix';
 
 /**
+ * 🔴 F042 仲裁修正（test-generator 仲裁 2026-08-28，申訴 1）：本檔頂層 `expected`／
+ * `toHaveLength(13)` 原與下方「F042 AC-27／AC-J16～AC-J18」區塊之 `toHaveLength(14)`
+ * 互斥——同一個 `FUNCTION_MATRIX` 不可能恰有 13 個鍵又恰有 14 個鍵，其中一方永遠為紅，
+ * 且非因缺實作而紅（`OJT_PROGRESS_MANAGEMENT` 一旦補上，本區塊反而轉紅）。
+ * 補上第 14 列（`AC-J16` 定值格值）＋改 13→14，使兩區塊收斂為同一組事實。
+ */
+
+/**
  * F025 角色×功能矩陣：資料逐格對照 + 純判定 canPerform。
  * 權威來源：docs/specs/features/F025-role-function-matrix.md（角色×功能矩陣即權威值）。
  * 中文權限值對映：CRUD→'CRUD'、唯讀/全部唯讀→'READ'、無→'NONE'、可/可（浮水印）→'READ'（普遍可存取列，僅讀取型動作）。
@@ -44,13 +52,15 @@ describe('F025 FUNCTION_MATRIX 逐格對照 spec', () => {
     [FunctionKey.PUBLIC_BROWSING]: R('READ', 'READ', 'READ', 'READ', 'READ'),
     [FunctionKey.DOCUMENT_DOWNLOAD_PRINT]: R('READ', 'READ', 'READ', 'READ', 'READ'),
     [FunctionKey.SYSTEM_PARAMETER]: R('CRUD', 'NONE', 'NONE', 'NONE', 'NONE'),
+    // 🔴 F042 AC-27／AC-J16：新增獨立功能列「OJT 進度管理」，置於既有 13 列之後（14→14）。
+    [FunctionKey.OJT_PROGRESS_MANAGEMENT]: R('READ', 'CRUD', 'RESTRICTED_CRUD', 'RESTRICTED_CRUD', 'NONE'),
   };
 
-  it('矩陣恰含 13 個功能列，且鍵集合與 spec 一致（F039 新增「附錄管理」）', () => {
+  it('矩陣恰含 14 個功能列，且鍵集合與 spec 一致（F039 新增「附錄管理」／F042 新增「OJT 進度管理」）', () => {
     expect(Object.keys(FUNCTION_MATRIX).sort()).toEqual(
       Object.keys(expected).sort(),
     );
-    expect(Object.keys(FUNCTION_MATRIX)).toHaveLength(13);
+    expect(Object.keys(FUNCTION_MATRIX)).toHaveLength(14);
   });
 
   it('F039 附錄管理：功能鍵字面值鎖定為「附錄管理」（spec 命名鎖定表，逐字不得改寫）', () => {
@@ -159,5 +169,77 @@ describe('F041 AC-37：canPerform 不受一般使用者子分類影響', () => {
       expect(canPerform('User', key, 'read')).toBe(false);
       expect(canPerform('User', key, 'write')).toBe(false);
     }
+  });
+});
+
+/**
+ * F042 OJT 進度管理 — 新增獨立功能列（`AC-27`／`OQ-E11-05=A`）；
+ * `AC-N36`（2026-08-20「不新增功能列」鎖定）之明文打破，見
+ * F025 §OJT 進度管理功能列 delta `AC-J16`／`AC-J17`／`AC-J18`。
+ *
+ * ⚠ 對實作全盲：`FunctionKey.OJT_PROGRESS_MANAGEMENT` 尚不存在——本區塊之 import 使用即
+ * 本環之預期紅燈（`FunctionKey` 物件目前無此鍵，TS 會於編譯期報錯）。
+ *
+ * 🔒 既有 13 列之期望值於此逐字硬寫（不動態衍生自 FUNCTION_MATRIX 本身），
+ * 避免「新列加入後基準跟著變動」使回歸檢查失去鑑別力（AC-J18 之核心防線）。
+ */
+describe('F042 AC-27／AC-J16～AC-J18：新增功能列「OJT 進度管理」', () => {
+  const PRE_EXISTING_13: Record<string, Record<RoleCode, Permission>> = {
+    [FunctionKey.ACCOUNT_MANAGEMENT]: R('CRUD', 'CRUD', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.ROLE_ASSIGNMENT]: R('CRUD', 'RESTRICTED_CRUD', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.LIFECYCLE_MANAGEMENT]: R('READ', 'CRUD', 'READ', 'NONE', 'NONE'),
+    [FunctionKey.ICSOP_DOCUMENT_MANAGEMENT]: R('READ', 'CRUD', 'READ', 'READ', 'NONE'),
+    [FunctionKey.USAGE_FORM_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.APPENDIX_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.DOCUMENT_INDEX_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.DOCUMENT_ACCESS_HISTORY]: R('READ', 'READ', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.DOCUMENT_CHANGE_HISTORY]: R('READ', 'READ', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.ORG_SYNC_MANAGEMENT]: R('CRUD', 'READ', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.PUBLIC_BROWSING]: R('READ', 'READ', 'READ', 'READ', 'READ'),
+    [FunctionKey.DOCUMENT_DOWNLOAD_PRINT]: R('READ', 'READ', 'READ', 'READ', 'READ'),
+    [FunctionKey.SYSTEM_PARAMETER]: R('CRUD', 'NONE', 'NONE', 'NONE', 'NONE'),
+  };
+
+  it('AC-J16 功能鍵字面值鎖定為「OJT 進度管理」', () => {
+    expect(FunctionKey.OJT_PROGRESS_MANAGEMENT).toBe('OJT 進度管理');
+  });
+
+  it('AC-27 功能鍵集合恰新增 1 個，總數 13→14', () => {
+    expect(Object.keys(FUNCTION_MATRIX)).toHaveLength(14);
+    expect(Object.keys(FUNCTION_MATRIX)).toContain(FunctionKey.OJT_PROGRESS_MANAGEMENT);
+  });
+
+  it('AC-27 新列之五角色格值逐字為：SysAdmin=READ／ICSOPAdmin=CRUD／Supervisor=RESTRICTED_CRUD／DeptContact=RESTRICTED_CRUD／User=NONE', () => {
+    expect(FUNCTION_MATRIX[FunctionKey.OJT_PROGRESS_MANAGEMENT]).toEqual(
+      R('READ', 'CRUD', 'RESTRICTED_CRUD', 'RESTRICTED_CRUD', 'NONE'),
+    );
+  });
+
+  it('AC-J16 canPerform：Supervisor／DeptContact 於功能層之 write 判定為允許（受限CRUD 於 canPerform 語意等同 CRUD，「僅可新增不可刪除」由端點層另行把關，非本函式職責）', () => {
+    expect(canPerform('Supervisor', FunctionKey.OJT_PROGRESS_MANAGEMENT, 'write')).toBe(true);
+    expect(canPerform('DeptContact', FunctionKey.OJT_PROGRESS_MANAGEMENT, 'write')).toBe(true);
+  });
+
+  it('AC-06 canPerform：SysAdmin 唯讀（read=true, write=false）', () => {
+    expect(canPerform('SysAdmin', FunctionKey.OJT_PROGRESS_MANAGEMENT, 'read')).toBe(true);
+    expect(canPerform('SysAdmin', FunctionKey.OJT_PROGRESS_MANAGEMENT, 'write')).toBe(false);
+  });
+
+  it('AC-07 canPerform：User 全無（read=false, write=false）', () => {
+    expect(canPerform('User', FunctionKey.OJT_PROGRESS_MANAGEMENT, 'read')).toBe(false);
+    expect(canPerform('User', FunctionKey.OJT_PROGRESS_MANAGEMENT, 'write')).toBe(false);
+  });
+
+  it.each(Object.keys(PRE_EXISTING_13))(
+    'AC-J18 既有 13 列之回歸鎖定：%s 之五角色格值與新列導入前逐字相同（不得因新增一列而順手鬆動相鄰列，特別是 ICSOP 文件管理列對主管/部門窗口仍為唯讀）',
+    (fn) => {
+      expect(FUNCTION_MATRIX[fn]).toEqual(PRE_EXISTING_13[fn]);
+    },
+  );
+
+  it('AC-J17 可測形狀：新增者恰為「OJT 進度管理」，不得出現任何名為「OJT 上傳」「OJT 附件」之列', () => {
+    const keys = Object.keys(FUNCTION_MATRIX);
+    expect(keys).not.toContain('OJT 上傳');
+    expect(keys).not.toContain('OJT 附件');
   });
 });

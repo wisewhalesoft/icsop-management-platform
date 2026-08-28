@@ -278,3 +278,91 @@ describe('F041 AC-20～AC-24：業務子分類詳情直連可見性檢查', () =
     await expect(svc.detail('doc-1', bizViewer)).rejects.toThrow('DOCUMENT_NOT_FOUND');
   });
 });
+
+/**
+ * 🔴 F042 仲裁補案（test-generator 仲裁 2026-08-28，lead 提報之靜默洞）：`PublicDocDetail` DTO
+ * 之 `ojtCompletedUnits`（已完成 OJT 之使用單位名稱清單，`AC-24`）／`ojtUsingUnitCount`
+ * （使用單位總數，供衍生區摘要，如「X／Y 個使用單位已完成」）此前**無任何測試會使其轉紅**——
+ * 契約測試（`endpoint-contract.test.ts`）只驗 URL 存在性、前端元件測試 mock 掉 endpoints，
+ * 兩者皆繞過了「這兩欄的值到底算不算對」這件事，上線表現是前台恆顯「尚無任何使用單位完成」
+ * 之恆假畫面（denominator/numerator 皆可能是死值而無人發現）。
+ *
+ * 🔒 **與 `AC-21`（後台）同源**：兩者共用同一個 port
+ * `getCompletionByDocument(documentIds): Promise<Map<string,{totalUnits, completedOrgCodes}>>`
+ * （形狀比照 `documents.service.spec.ts` D 節之 `OjtCompletionReaderLike`，非本檔臆造——
+ * 藉 `PublicDocumentDetailService` 建構子第 4 個位置參數注入，第三參數 `clock` 為既有選填
+ * 參數，故新參數順延至第 4 位而非插隊）。
+ *
+ * ⚠ **判別力關鍵**：fixture 之 orgCode 與其解析後名稱**故意不同**（`JA000`≠`營運管理部`、
+ * `JB000`≠`業務部`）——若寫成 code===name 的退化 fixture，「回傳原始 orgCode」與「回傳
+ * 已解析名稱」兩種寫法會巧合一致，無法揪出「忘記呼叫 resolveOrgUnitName、直接把 orgCode
+ * 塞進 `ojtCompletedUnits`」這個真實可能發生的缺陷（比照本檔既有慣例：`已公告文件 → 回 19
+ * 欄詳情` 一案亦以 code≠name 之 fixture 驗證各名稱解析欄）。
+ */
+describe('F042 AC-24：前台詳情頁 OJT 唯讀衍生欄（ojtCompletedUnits／ojtUsingUnitCount）', () => {
+  interface OjtCompletionReaderLike {
+    getCompletionByDocument(
+      documentIds: string[],
+    ): Promise<Map<string, { totalUnits: number; completedOrgCodes: string[] }>>;
+  }
+  class FakeOjtCompletionReader implements OjtCompletionReaderLike {
+    private byDoc = new Map<string, { totalUnits: number; completedOrgCodes: string[] }>();
+    calls: string[][] = [];
+    seed(documentId: string, result: { totalUnits: number; completedOrgCodes: string[] }) {
+      this.byDoc.set(documentId, result);
+    }
+    async getCompletionByDocument(documentIds: string[]) {
+      this.calls.push([...documentIds]);
+      const out = new Map<string, { totalUnits: number; completedOrgCodes: string[] }>();
+      for (const id of documentIds) {
+        out.set(id, this.byDoc.get(id) ?? { totalUnits: 0, completedOrgCodes: [] });
+      }
+      return out;
+    }
+  }
+
+  it('有完成單位時 → ojtCompletedUnits 為已解析之單位名稱清單（非原始 orgCode）、ojtUsingUnitCount 為使用單位總數', async () => {
+    const ojt = new FakeOjtCompletionReader();
+    ojt.seed('doc-1', { totalUnits: 2, completedOrgCodes: ['JA000', 'JB000'] });
+    const svc = new PublicDocumentDetailService(
+      new FakeStore(detail({ usingDepts: depts(['JA000', 'JB000']) })),
+      fakeNames({ JA000: '營運管理部', JB000: '業務部' }),
+      () => TODAY,
+      ojt,
+    );
+    const dto = await svc.detail('doc-1', UNRESTRICTED_VIEWER);
+    expect(dto.ojtCompletedUnits).toEqual(['營運管理部', '業務部']);
+    expect(dto.ojtUsingUnitCount).toBe(2);
+    // 🔒 批次查詢、恰以本文件 id 呼叫一次——防兩欄因查詢從未真正發生而恆假（denominator/list 死值）。
+    expect(ojt.calls).toEqual([['doc-1']]);
+  });
+
+  it('部分完成時 → ojtCompletedUnits 僅含已完成之單位名稱（非全部使用單位），ojtUsingUnitCount 仍為總數（非已完成數）', async () => {
+    const ojt = new FakeOjtCompletionReader();
+    ojt.seed('doc-1', { totalUnits: 2, completedOrgCodes: ['JA000'] });
+    const svc = new PublicDocumentDetailService(
+      new FakeStore(detail({ usingDepts: depts(['JA000', 'JB000']) })),
+      fakeNames({ JA000: '營運管理部', JB000: '業務部' }),
+      () => TODAY,
+      ojt,
+    );
+    const dto = await svc.detail('doc-1', UNRESTRICTED_VIEWER);
+    expect(dto.ojtCompletedUnits).toEqual(['營運管理部']);
+    expect(dto.ojtCompletedUnits).not.toContain('業務部');
+    expect(dto.ojtUsingUnitCount).toBe(2);
+  });
+
+  it('無任何使用單位時 → ojtCompletedUnits 為空陣列、ojtUsingUnitCount 為 0（非省略、非 null、非拋錯）', async () => {
+    const ojt = new FakeOjtCompletionReader();
+    ojt.seed('doc-1', { totalUnits: 0, completedOrgCodes: [] });
+    const svc = new PublicDocumentDetailService(
+      new FakeStore(detail({ usingDepts: [] })),
+      fakeNames(),
+      () => TODAY,
+      ojt,
+    );
+    const dto = await svc.detail('doc-1', UNRESTRICTED_VIEWER);
+    expect(dto.ojtCompletedUnits).toEqual([]);
+    expect(dto.ojtUsingUnitCount).toBe(0);
+  });
+});

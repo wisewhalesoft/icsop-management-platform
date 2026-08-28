@@ -55,6 +55,11 @@ export function applyDocumentQuery(
     if (filters.companyCode && r.companyCode !== filters.companyCode) return false;
     if (filters.draftingDeptId && r.draftingDeptId !== filters.draftingDeptId) return false;
     if (filters.draftingSectionId && r.draftingSectionId !== filters.draftingSectionId) return false;
+    // 🔴 F017 `AC-J14`（2026-08-28 E11 delta）：OJT 篩選由三值改**四值**。
+    // 「全部」＝不提供本鍵／空字串 ⇒ 不施加限制；其餘三值對**文件層三態**逐字等值比對。
+    // 📝 被推翻之原語意逐字保留供追溯：OLD> 「存在／不存在 `DOCUMENT_ATTACHMENT.type='OJT_SIGNIN'`」
+    // ——該 fixture 形狀（「文件 A 有 OJT_SIGNIN 附件」）在新模型下已不可建構。
+    if (filters.ojtStatus && r.ojtStatus !== filters.ojtStatus) return false;
     // F017 AC-T40 子樹篩選：已由服務層展開之節點 id 集合。與既有篩選為 AND（僅縮小結果集）；
     // 未指派節點者（nodeId=null）一律排除——等價於 SQL `IN` 對 NULL 恆不匹配。
     // 空陣列視同未施加篩選（架構 §12.3：nodeIds.length 為 0 時不下推 IN）。

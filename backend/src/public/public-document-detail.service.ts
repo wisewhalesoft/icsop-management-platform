@@ -1,5 +1,9 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { resolveCompanyName } from '../org-directory/company-name';
+import {
+  OJT_COMPLETION_READER,
+  OjtCompletionReader,
+} from '../documents/ojt-completion.reader';
 import { DocumentStatus } from '../documents/document-status';
 import { DisplayStatus, deriveDisplayStatus } from '../documents/display-status';
 import {
@@ -70,6 +74,17 @@ export interface PublicDocumentDetailDto {
   attachments: (PublicDetailAttachment & { watermarkSupported: boolean })[];
   usageForms: (PublicDetailUsageForm & { watermarkSupported: boolean })[];
   links: PublicDetailLink[];
+  /**
+   * 🔴 F042 `AC-24`（`OQ-E11-14`→A）：前台**唯讀**呈現「已完成 OJT 之使用單位名稱清單」。
+   *
+   * 🔴 **僅單位層級，不揭露個人**——與 `AC-16` 之 PII 防線同源：本欄**不含**上傳者姓名／員編，
+   * 亦**不含**任何簽到表檔案之 `blobPath` 或下載入口（簽到表載有個別受訓人員簽名，
+   * 揭露「哪些單位完成了」是管理資訊，揭露「誰簽了名」不是）。
+   * 🔒 判定與後台 `AC-21`／清單頁 `AC-04` **同源**（共用 `OjtCompletionReader` 單一 port）。
+   */
+  ojtCompletedUnits: string[];
+  /** `AC-24`：該文件使用單位總數，供前台呈現「N / M 個單位已完成」之分母。 */
+  ojtUsingUnitCount: number;
 }
 
 /**
@@ -85,6 +100,16 @@ export class PublicDocumentDetailService {
     @Inject(PUBLIC_DOCUMENT_STORE) private readonly store: PublicDocumentStore,
     @Inject(DETAIL_NAME_RESOLVER) private readonly names: DetailNameResolver,
     private readonly clock: () => Date = () => new Date(),
+    /**
+     * F042 `AC-24`：文件層 OJT 完成事實之唯讀窄 port。
+     * 🔴 **選填且置於末位**：本服務已有 14 處既有測試以位置參數建構（2～3 個引數），
+     * 新增必填參數會全數打爆；未注入時降級為空清單（前台顯示空狀態，非錯誤）。
+     * 🔴 **反循環**：`PublicModule` 自建 `TypeOrmOjtCompletionReader`，**不 import**
+     * `DocumentsModule`／`OjtProgressModule`（比照本模組既有之窄 adapter 慣例）。
+     */
+    @Optional()
+    @Inject(OJT_COMPLETION_READER)
+    private readonly ojtCompletion?: OjtCompletionReader,
   ) {}
 
   /**
@@ -131,6 +156,24 @@ export class PublicDocumentDetailService {
       ? await this.names.resolvePersonNames(raw.companyCode, [raw.primaryChiefId])
       : new Map<string, string>();
 
+    /**
+     * F042 `AC-24`：已完成 OJT 之使用單位**名稱**清單（唯讀衍生，單位層級）。
+     * 🔒 判定來源與後台 `AC-21`／清單頁 `AC-04` 為同一個 port ⇒ 三處呈現不會分岔。
+     * 🔴 未注入 reader → 空清單（前台顯示空狀態提示，非錯誤、非空白）。
+     * ⚠ 名稱查無時 fallback 為 orgCode 本身，**不靜默丟棄該單位**——少列一個單位會讓使用者
+     * 以為那個單位沒完成訓練，比顯示一組代碼更糟。
+     */
+    const completion = this.ojtCompletion
+      ? await this.ojtCompletion.getCompletionByDocument([raw.id])
+      : null;
+    const completedOrgCodes = completion?.get(raw.id)?.completedOrgCodes ?? [];
+    const ojtCompletedUnits: string[] = [];
+    for (const code of completedOrgCodes) {
+      ojtCompletedUnits.push(
+        (await this.names.resolveOrgUnitName(raw.companyCode, code)) ?? code,
+      );
+    }
+
     return {
       id: raw.id,
       status: raw.status,
@@ -164,6 +207,8 @@ export class PublicDocumentDetailService {
         watermarkSupported: supportsWatermark(f.format),
       })),
       links: raw.links,
+      ojtCompletedUnits,
+      ojtUsingUnitCount: raw.usingDepts.length,
     };
   }
 
