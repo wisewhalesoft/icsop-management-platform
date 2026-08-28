@@ -169,6 +169,7 @@ status: draft
 > **範圍為三項**：**甲**＝TAB1 **區一**逐筆表之節流（backend＋frontend）｜**乙**＝其前端呈現與 `AC-28` ⑰ 版面契約｜**乙-2**＝TAB1 **區三**「最近完成」之同型節流（**純前端，backend 形狀不變**）。
 > 🔒 **規格權威**：[F042 `AC-14`](../../specs/features/F042-ojt-progress-management.md)（區一：節流七項 ＋ 四道負向鎖定）／`AC-16`（區三：節流八項）／`AC-28` ⑯⑰⑱／[§架構設計 一-2](../../specs/features/F042-ojt-progress-management.md#architecture)（端點契約 ＋ 區三「形狀不動」之對照決策）／[§prototype 25 §2·§6](../../specs/features/F042-ojt-progress-management.md#prototype-25-dom-contract)（區一 7 組 ＋ 區三 1 組新掛鉤與全部新逐字）。**逐字值一律自 §6 取，不得自行改寫字面。**
 > 🔴 **兩區刻意不同、不得互相對齊之四點**（照搬即為缺陷）：上限 **15 vs 8**／**有 vs 無**捲軸／**有 vs 無**顯示範圍控制項／截斷句**有 vs 無**名詞變體。
+> 🔴 **2026-08-28 第二輪修正（`OQ-E11-22`，第四種呈現態）已使本節數處過期**——📝 **本節原文一律逐字保留**，其過期處已於各表就地補一列 🔴 更正；**完整之第二輪測試方向見 [§三-3](#round2-unassigned)**。⚠ **本節與 §三-3 必須一起讀**：`OQ-E11-21` 之七項節流與四道負向鎖定**續為有效**，第二輪是**增列一種呈現態**、不是修訂或回退。
 
 ### 甲、測試方向（backend jest）
 
@@ -183,6 +184,7 @@ status: draft
 | `hidden` 之值 | `hidden === 該 scope 完整母體筆數 − shown`，且恆 ≥ 0；母體 ≤ 15 之範圍 ⇒ `hidden === 0` |
 | 🔒 **口徑分歧鎖定（`AC-14` 母體口徑鎖）** | 含裁撤單位之文件 ⇒ 其 `totalUnits` **含該裁撤單位**（不套 `isActive`），而 `coverage.denominator` **不含**該列 ⇒ **各文件 `totalUnits` 之合計 ＞ `coverage.denominator`，差額恰為裁撤列數**。**須有一案明文鎖住此差異**，否則下一位讀者會判為 bug 並統一口徑。<br>🔴 **兩個方向各建一案**（ux-fix 已對兩者各做注入驗證）：① 把 `isActive` 過濾**套回**逐筆表；② **反向**把 KPI 改成不過濾 |
 | 🔴 **孤兒「天然不成列」而非被過濾** | 建一組「某 `orgCode` 已自 `DOC_USING_DEPT` 移除、但其場次仍在」之 fixture ⇒ 該列**不出現**於 `docCoverage.items`、亦**不計入** `totalUnits`。🔒 **實作不應為此加一道 `orphaned` 過濾**（列由 `DOC_USING_DEPT` 驅動，加了會讓下一位讀者以為孤兒本來會混進來）。⚠ **誤把孤兒算進去時它會把分子與分母一起灌大**（原型注入：`d1` 由 `2 / 3` 變 `3 / 4`）——**只驗覆蓋率百分比看起來合理抓不到**，須斷言 `totalUnits`／`completedUnits` 兩者 |
+| 🔴 **上表四列已過期（2026-08-28 第二輪）** | 📝 **原文逐字保留**；就地更正＝① **`docScope` 三值 → 恰四值**（增 `unassigned`），且 `incomplete` 之集合**收窄為 `totalUnits > 0 && state !== 'all'`**；② **排序鍵由兩段 → 三段**（**有無訓練義務 → 覆蓋率 → 編號**）⇒ 🔴 **上表「`totalUnits === 0` 之文件視為 0%（排在最前）」一句自本輪起為錯**——該退化值仍是 `0%`，但**一律沉底**；③ **不變式 ③ 失效** ⇒ `incompleteTotal === byState.partial + byState.none − byState.unassigned`；④ **`byState` 增第四鍵 `unassigned`**，計數恆取自完整母體之斷言須**四種 `docScope` 各跑一次**（原為三種）。**逐項建環形狀見 [§三-3](#round2-unassigned) 甲** |
 
 ### 乙、測試方向（frontend vitest）
 
@@ -200,6 +202,7 @@ status: draft
 | 導向 TAB2 入口 | `[data-doc-coverage-more]` **恆存在**（截斷與未截斷兩態各一案）；點擊後 ⇒ 切至 TAB2 ＋ 完成狀態 select 值為 `尚未完成` ＋ **單位關鍵字被清空**。🔒 **負向**：TAB2 篩選項仍**恰兩項**、完成狀態仍**恰三個 `option`**（`AC-13` 未動） |
 | 捲軸容器 | `role="region"` ＋ `aria-label` 逐字 ＋ `tabindex="0"`（WCAG 2.1.1；🔴 **`tabindex` 缺失只在鍵盤操作時才看得出來，須明文斷言**） |
 | `AC-28` ⑰ 版面契約 | 唯讀 bar 掛在 `AppShell` 之 `TopbarBanner` 插槽（`<header>` 內）、分頁列掛在 `BelowTopbar`（`</header>` 之後、`<main>` 之前）。🔒 **負向**：`OrgSyncPage`／`PermissionMatrixPage` 之分頁列**仍在 `<main>` 內部**（防「新插槽好用就全部改用」之範圍擴大） |
+| 🔴 **上表三列已過期（2026-08-28 第二輪）** | 📝 **原文逐字保留**；就地更正＝① **`option` 恰 3 個 → 恰 4 個**（值域增 `unassigned`，🔒 預設仍 `incomplete`）；② **摘要行五片段 → 七片段、且分屬兩個 `<div>` 行**（增 `-tracked`／`-unassigned`）；③ **截斷句之三個名詞變體 → 四個**，且 `unassigned` 範圍之**排序描述**與**「去哪看」**兩處**另行分岔**；④ **範圍空狀態兩句 → 三句**。🔴 **上表其餘各列（`-total` 不得跟著切片走、口徑說明行、逐元素三態斷言、上限不得硬寫、導向入口、捲軸容器、`AC-28` ⑰）一字未改、續為有效**。**逐項建環形狀見 [§三-3](#round2-unassigned) 乙** |
 
 ### 乙-2、測試方向：**區三「最近完成」之節流**（`AC-16` ①～⑧／`AC-28` ⑱）
 
@@ -236,6 +239,7 @@ status: draft
 | `frontend/src/pages/OjtProgressPage.test.tsx` | 🔴 **`summaryFixture`／`docCoverageRow` 兩個 helper 之形狀必改**（`:59`／`:70`／`:77`／`:178`-`:181`／`:204`）；🔒 **`:186`-`:193` 之逐元素三態斷言為正確形狀、保留**；⚠ **`:204` 之分母為零案**（`docCoverage: []`）須改為新形狀且**維持其三種錯誤形狀（`NaN`／`0%`／`100%`）之案例** | `AC-14`／`AC-28` ⑯ |
 | `frontend/src/components/AppShell.tsx`／`PageHeader.tsx` 之既有測試 | 兩個新 portal 插槽（`TopbarBanner`／`BelowTopbar`）之掛載點；🔒 **既有 `TopbarActions`／`PageHeader` 之斷言不得改期望值** | `AC-28` ⑰ |
 | `frontend/src/pages/OjtProgressPage.tsx`／`.test.tsx`（**區三**） | 區三改為**取前 8 筆 ＋ 截斷告知**；🔒 **後端 `recentSessions` 形狀不變**（上限為純呈現層切片，見 §一-2 末段）⇒ **backend 側無轉紅**。⚠ **既有區三之列數斷言 7 → 8 為唯一需更新之舊斷言**（語料是「改既有場次日期移進窗口」，**非新增場次**）；🔒 **`AC-16` 之既有 PII 負向斷言不得改動、亦不得刪除** | `AC-16`／`AC-28` ⑱ |
+| 🔴 **2026-08-28 第二輪之增量轉紅（見 [§三-3](#round2-unassigned) 丙）** | 🔒 **上表全部條目續為有效**；第二輪**另**使下列轉紅：backend `docCoverage` 之 `docScope` 值域與 `byState` 形狀、**排序鍵**、`incompleteTotal` 之算式；frontend **三處會連動**（摘要行之 `['all','partial','none'].map()`／`incompleteTotal` 之顯示／`DOC_COVERAGE_TRUNC_NOUN` 名詞表），環側之「`option` 恰 3 個」與「三個 scope 名詞變體」**兩案必須一起改** | `AC-14` ⑧～⑮／`AC-28` ⑲ |
 
 ### 丁、🔴 本輪特有之假綠陷阱（承 §三 戊，續編）
 
@@ -251,6 +255,70 @@ status: draft
 18. **🔴 兩個分母被「修成一致」而測試仍綠**：逐筆表 `totalUnits` 含裁撤單位、KPI `denominator` 排除 ⇒ 合計必然差一個裁撤列數（57 vs 56）。若有人把任一邊改成另一邊，**該邊自己的斷言仍會綠**（數字內部一致），只有跨口徑的比較案會紅。⇒ **兩個方向各建一案**（套回 isActive／反向拿掉 isActive），並斷言 `[data-doc-coverage-basis-note]` 存在——**那行說明是這條規則在畫面上的唯一承載點，被刪掉就沒有人知道差 1 是刻意的**。
 19. **🔴 把「孤兒不進分母」實作成一道過濾**：後端之列由 `DOC_USING_DEPT` 驅動 ⇒ 孤兒**天然不成列**，加一道 `orphaned` 過濾雖不改變結果，卻會讓下一位讀者以為孤兒本來會混進來而去「維護」它。⚠ **真正要防的是反向**：誤把孤兒算進分母時，它會把**分子與分母一起**灌大（`d1` 由 `2 / 3` 變 `3 / 4`）⇒ **覆蓋率百分比看起來仍合理**，須斷言 `totalUnits`／`completedUnits` 兩者而非只驗百分比。
 20. **🔴 把區一的形狀照搬到區三**：兩區之上限（15 vs 8）、有無捲軸、有無顯示範圍控制項、截斷句有無名詞變體**四點皆刻意不同**（`AC-28` ⑱）。⚠ **「同一形狀之缺陷」不等於「同一組定值」**——照搬會建出四條與 prototype 不符的斷言。
+
+## 三-3、🔴 2026-08-28 第二輪修正（`OQ-E11-22`）：「未指定使用部門」第四態之測試方向與預期轉紅 {#round2-unassigned}
+
+> **本節之性質**：`OQ-E11-21`（節流）**上線後**由使用者實機檢視所回報之**第二個**缺陷之定稿。🔴 **成因與上一輪不同**：上一輪是**規模**（600 列把區二／區三推出視窗），本輪是**退化值**——真庫 **591 份文件中 587 份 `totalUnits = 0`**，其覆蓋率退化為 `0 / 0`⇒`0%`，**與「有使用部門卻一列都沒完成」共用同一個排序鍵** ⇒ 依升冪＋上限 15，**前 15 名被無義務文件整批占滿**，唯一一份真有進度落差的文件排到第 591 名。
+> 🔒 **規格權威**：[F042 `AC-14`](../../specs/features/F042-ojt-progress-management.md)（第四態 ⑧～⑮ ＋ 三道負向鎖定）／`AC-28` ⑲／[§架構設計 一-2](../../specs/features/F042-ojt-progress-management.md#architecture)（`docScope` 四值、`byState.unassigned`、🔴 **不變式 ③′**）／[§prototype 25 §2·§6](../../specs/features/F042-ojt-progress-management.md#prototype-25-dom-contract)（3 組新掛鉤與 ⑲ 群列之全部新逐字）。**逐字值一律自 §6 ⑲ 取，不得自行改寫字面。**
+> 🔴 **本節之最高優先斷言（缺了它，本輪等於沒修）**：以「**無義務文件份數 > `maxRows`、另有至少一份有義務且覆蓋率 < 100% 之文件**」之 fixture 驅動 `docScope='all'` ⇒ **該有義務文件必須出現在 `items` 內**。⚠ **只驗「恰 15 筆」「排序非遞減」「第四態畫得出來」三者全綠，沉底缺失仍在**——那正是缺陷當時的狀態。
+
+### 甲、測試方向（backend jest）
+
+| 標的 | 建環形狀 |
+|---|---|
+| `docScope` **四值** × 切片 | 四值各請求一次；`incomplete` ⇒ `items` 全為 **`totalUnits > 0 && state !== 'all'`**（🔴 **必須有一份 `totalUnits = 0` 之文件在母體內、且不出現於此範圍**——原三值時代之斷言抓不到）；`completed` ⇒ 全為 `state === 'all'`；**`unassigned` ⇒ 全為 `totalUnits === 0`**；`all` ⇒ 不過濾（**含**無義務者） |
+| `docScope` 正規化（🔒 規則未變、合法值域多一個） | 缺值／未知值 ⇒ `docCoverage.scope === 'incomplete'`；🔴 **`?docScope=unassigned` 必須被接受並回聲 `'unassigned'`**——⚠ 若實作之白名單漏更新，本值會被**當成未知值靜默正規化回 `incomplete`**，畫面看起來「切了沒反應」；**只驗「沒有 500」抓不到** |
+| 🔴 **排序沉底（本輪核心）** | ① `docScope='all'` ⇒ `items` 中**任何 `totalUnits === 0` 之列，其索引必大於所有 `totalUnits > 0` 之列**；② **可達性斷言**（見上方最高優先）：無義務者 > `maxRows` 時，有義務且未完成之文件**仍在 `items` 內**；③ 三段排序鍵**逐對驗**：義務段相同者比覆蓋率（非遞減）、覆蓋率相同者比 `documentNumber`（昇冪） |
+| 🔴 **`unassigned` 範圍之排序** | 該範圍全部列之 `totalUnits === 0`（第一、二段排序鍵皆相同）⇒ **實際順序＝`documentNumber` 昇冪**，須逐對斷言。⚠ **此為截斷句宣稱「依程序書編號昇冪排序」之背書**——句子與實際排序不一致即為假話 |
+| 🔴 **不變式 ③′（就地更正）** | `incompleteTotal === byState.partial + byState.none − byState.unassigned`。🔴 **必須以「母體含至少一份 `totalUnits = 0`」之 fixture 驅動**——⚠ **舊式 `=== partial + none` 在無義務文件為 0 時同樣全綠**（那正是它上一輪為真的原因），**單靠既有語料無鑑別力** |
+| 🔴 **不變式 ④ 續為真、且不得誤加第四鍵** | `byState.all + byState.partial + byState.none === totalDocuments`（🔴 **不含 `byState.unassigned`**——它是 `byState.none` 之**子集**）。**另建一條負向案**：斷言 `byState.all + partial + none + unassigned !== totalDocuments`（母體含無義務者時），使「四鍵相加」之實作立刻紅 |
+| **新增不變式 ⑤⑥** | ⑤ `byState.unassigned <= byState.none`（子集關係）；⑥ `totalDocuments − byState.unassigned` ＝ 前端 `[data-doc-coverage-tracked]`（🔒 **端點不另給 `tracked` 欄**，此為前端減法） |
+| 🔴 **計數恆取自完整母體（範圍由三種擴為四種）** | **四種 `docScope` 各請求一次** ⇒ `totalDocuments`／`byState`（**含 `unassigned`**）／`incompleteTotal` **四組值完全相同**；且 `coverage.*`／`deptRollup`／`recentSessions` 亦完全相同 |
+| 🔒 **`AC-04` 三態未被本輪改動（回歸鎖）** | `totalUnits === 0` 之文件於 `items[].state` **仍為 `'none'`**（🔴 **不得出現 `'unassigned'` 之 state 值**）；🔒 既有 `ojt-progress.summary.spec.ts` 之三態斷言**期望值不得改** |
+| 🔒 **口徑與孤兒之既有鎖一字未改** | 逐筆表 `totalUnits` 含裁撤單位／孤兒天然不成列／`coverage.denominator` 排除裁撤——🔒 **上一輪之全部案續存、期望值不得改** |
+
+### 乙、測試方向（frontend vitest）
+
+| 標的 | 建環形狀 |
+|---|---|
+| 顯示範圍控制項（🔴 **就地更正**） | `[data-doc-coverage-scope]` 之 `option` **恰 4 個**，值與可見文字逐字＝§6 ⑲（🔒 **順序**＝`僅未全部完成`／`僅已全部完成`／`僅未指定使用部門`／`全部文件`）；**預設仍選中 `incomplete`**；🔒 其 `aria-label` **逐字未改** |
+| 🔴 **第四態之列（三條一組，缺一即漏）** | 以 `totalUnits = 0` 之列斷言：**(a)** 該 `<tr>` 帶 **`[data-doc-no-using-dept]`**（無值屬性）；**(b)** 其 `[data-doc-ojt-state]` 之值為 **`none`**（🔴 **不是 `unassigned`**）；**(c)** 其 `[data-doc-ojt-state-chip]` 之逐字為 `未指定使用部門`。⚠ **(a)(b) 必須同時成立、不得寫成互斥斷言**——`AC-04` 說它是 `none`，區一說它沒有訓練義務，**兩者都是事實** |
+| 🔴 **值域負向案（防「順手改成四值」）** | `querySelectorAll('[data-doc-ojt-state="unassigned"]').length === 0`；且 `[data-doc-no-using-dept]` **僅**出現於 `totalUnits = 0` 之列（**進 DOM／不進 DOM**，🔴 **非 CSS 隱藏**） |
+| 🔴 **比值與百分比之退化值** | `totalUnits = 0` 之列：`[data-doc-coverage-ratio]` 逐字為 **`—`**（**非 `0 / 0`**）、`[data-doc-coverage-pct]` 逐字為 **`—`**（**非 `0%`**）且**該格不含進度條元素**。⚠ **只驗 `ratio` 不驗 `pct` 會放行「比值 `—` 但仍畫一條 0% 的灰條」之半套實作** |
+| 摘要行**七**片段、**兩行**（🔴 **就地更正**） | 🔴 **逐掛鉤斷言**（既有紀律未變）：上行 `[data-doc-coverage-total]`／**`[data-doc-coverage-tracked]`**／**`[data-doc-coverage-unassigned]`**；下行三個 `[data-doc-coverage-stat]` ＋ `[data-doc-coverage-incomplete]`。🔴 **兩條加總關係各建一案**：`tracked + unassigned === total`、`stat.all + stat.partial + stat.none === tracked`。🔒 **仍明文禁止對 `[data-doc-coverage-summary]` 整行 `textContent` 下逐字斷言**（各 `<span>` 間無空白字元）。<br>**兩行結構之可觀測形狀**＝`[data-doc-coverage-summary]` 恰 **2** 個元素子節點，各自所含掛鉤集合如上（🔵 **行容器與「已指定使用部門者之細分：」標籤無專屬掛鉤——已回報 ux-fix，環側不得自行造掛鉤**） |
+| 🔴 **`-tracked`／`-unassigned` 不得跟著切片走** | 兩者之屬性值在**四種 `docScope` 下必須完全相同**（＝完整母體）。⚠ **與上一輪 `-total` 同型之陷阱**：跟著切片走時每個單一畫面的數字看起來都合理，只有跨範圍比較才看得出來 |
+| 🔴 **`incompleteTotal` 之顯示（三處連動之一）** | `[data-doc-coverage-incomplete]` 之值＝`partial` ＋ **有義務之** `none`（現行語料 **21**），🔴 **不等於 `byState.partial + byState.none`**（＝39）。**須以「母體含無義務文件」之 fixture 驅動**，否則兩種算式皆綠 |
+| 🔴 **摘要行下行不得由 `Object.keys(byState)` 驅動（三處連動之二）** | `[data-doc-coverage-stat]` **恰 3 個**（`all`／`partial`／`none`），🔴 **不得出現 `[data-doc-coverage-stat="unassigned"]`**——它有自己的掛鉤與自己的行。⚠ 改用 `Object.keys()` 會多長一個片段，並使「三態之和 === tracked」失去意義 |
+| 🔴 **截斷名詞表四個變體（三處連動之三）** | 四個 `scope` 各建一案，名詞逐字＝§6 ⑲。🔴 **環側之「`option` 恰 3 個」與「三個 scope 名詞變體」兩案必須一起改**——只改其一會出現「改了選項卻沒改名詞表」之半套（`unassigned` 範圍會落到 `undefined` 名詞或沿用錯的名詞） |
+| 🔴 **`unassigned` 範圍之截斷句兩處分岔** | **(a) 排序描述**＝`本表依程序書編號昇冪排序`（🔴 **不得**出現「依覆蓋率」字樣——該範圍下所有列之覆蓋率皆為 `—`，那句是假話）；**(b) 去處**＝`完整清單與使用部門之設定請至「ICSOP 文件管理」。`（🔴 **不得**導向「OJT 資料清單」）。**另三個範圍之逐字須斷言含括號段** `（未指定使用部門之文件一律排在最後）` |
+| 範圍空狀態**三句**（🔴 **就地更正**） | 增 `[data-doc-coverage-empty="unassigned"]` → `所有文件皆已指定使用部門`；🔒 `incomplete`／`completed` 兩句、`all` 恆空字串、共用補充提示**一字未改**；🔒 **三句皆以 fixture 驅動**（prototype 語料下皆不可達） |
+| 🔒 **上一輪之全部案續為有效** | `-total` 不得跟著切片走／口徑說明行 `[data-doc-coverage-basis-note]` 必須存在／逐元素三態斷言／上限不得硬寫（兩組 `maxRows`）／導向入口恆存在／捲軸容器 `role`＋`aria-label`＋`tabindex`／切換＝重新請求（🔴 **本輪多一個 `docScope=unassigned` 之請求案**）——🔒 **期望值不得改** |
+| 🔒 **`prototypes/13`／`DocumentListPage` 之零漣漪（負向）** | OJT 篩選仍**恰 4 個 `option`**（`全部` ＋ 三態逐字）、圖示欄仍**恰 3 種**狀態值；🔒 `ojtStatusView()`／`OJT_DOC_STATE` **無第四鍵**（`AC-J14` 之既有斷言**期望值不得改**）。⚠ **這是本輪最可能被「順手做對稱」破壞的地方**，須有正向鎖定案 |
+
+### 丙、🔴 預期轉紅清單（第二輪之增量；🔒 §三-2 丙之全部條目續為有效）
+
+> 🔒 **全部轉紅皆為本次修正之預期、非回歸**：一律**就地改寫為新形狀之背書、不得刪除**。
+> ⚠ **逐案數量須由 test-generator 於建環時實測補齊**（本表為檔案層級盤點）。
+
+| 檔案 | 預期轉紅範圍 | 依據 |
+|---|---|---|
+| `backend/src/ojt-progress/ojt-progress.service.ts` | `docScope` 白名單三值 → 四值；切片排序鍵兩段 → **三段（沉底）**；`incompleteTotal` 之算式（**排除無義務者**）；`byState` 增第四鍵 `unassigned` | `AC-14` ⑨⑩⑪／§一-2 |
+| `backend/src/ojt-progress/ojt-progress.summary.spec.ts`／`ojt-progress.test-support.ts` | 🔴 **凡以「三值 `docScope`」「兩段排序」「`incompleteTotal === partial + none`」為期望之案必然轉紅**；Fake／builder 需能造出 `totalUnits = 0` 之文件（🔴 **上一輪語料 34 份全部有使用部門 ⇒ 既有 fixture 對本輪之缺陷零鑑別力**） | §一-2 不變式 ③′ |
+| `backend/src/ojt-progress/ojt-progress.controller*.spec.ts` | `docScope` 之合法值域與正規化（`unassigned` 須被接受並回聲，🔴 **不得靜默退回 `incomplete`**） | `AC-14` ⑨ |
+| `frontend/src/api/types.ts`／`endpoints.ts` | `docScope` 之型別聯集（三值 → 四值）；`byState` 之型別（增 `unassigned`） | §一-2 |
+| `frontend/src/pages/OjtProgressPage.tsx` | 🔴 **三處會連動**：① 摘要行之 `['all','partial','none'].map()`（🔒 **維持寫死三值**，但摘要行**改為兩行**且上行新增兩個片段）；② `incompleteTotal` 之顯示（語意改變，值改由端點之新算式來）；③ `DOC_COVERAGE_TRUNC_NOUN` 名詞表（**原恰三 scope 一一對應** → 四個）。另加：第四態晶片與其專屬常數、`data-doc-no-using-dept`、比值／百分比之 `—`、`option` 第四個、範圍空狀態第三句、截斷句兩處分岔 | `AC-14` ⑧～⑮／`AC-28` ⑲ |
+| `frontend/src/pages/OjtProgressPage.test.tsx` | 🔴 **「`option` 恰 3 個」與「三個 scope 名詞變體」兩案必須一起改**（只改其一＝半套）；摘要行片段數 5 → 7、結構一行 → 兩行；`summaryFixture`／`docCoverageRow` 兩 helper 需能造 `totalUnits = 0` 之列；🔒 **既有逐元素三態斷言、`-total`／口徑說明行之案不得刪** | `AC-28` ⑲ |
+| `frontend/src/domain/ojt-status-view.ts`／`DocumentListPage*.tsx` | ✅ **不受影響、應無轉紅**——🔴 **若此處轉紅，即為本輪負向鎖定 ② 被違反之訊號**（有人把第四鍵加進共用常數）。🔒 **`AC-J14` 之既有斷言期望值不得改** | `AC-14` 負向鎖定 ② |
+| **（無）`coverage`／`deptRollup`／`recentSessions`** | ✅ **不受影響、無轉紅**——本輪**不改任何統計口徑**；🔴 **若它們轉紅，即為「把第四態的處置滲進統計」之訊號** | `AC-14` 本輪未改動清單 ② |
+
+### 丁、🔴 第二輪特有之假綠陷阱（承 §三-2 丁，續編）
+
+21. **🔴 「拆了態卻沒沉底」——本輪最容易只做一半**：把第四態的**視覺**做出來（chip、`—`、`data-doc-no-using-dept`）而**排序鍵沒改**時，**全部呈現層斷言都綠**，畫面上也看得到一種新的狀態——但前 15 名照樣被 587 份無義務文件占滿，**缺陷原封不動**。⇒ **必須有一條「有義務且未完成之文件在無義務者 > `maxRows` 時仍出現在 `items` 內」之可達性斷言**，而不是只驗態分得出來。
+22. **🔴 既有語料對本輪之缺陷零鑑別力**：上一輪之 34 份文件**全部都有使用部門** ⇒ `byState.unassigned` 恆為 0 ⇒ **舊不變式 `incompleteTotal === partial + none` 與新式 ③′ 在該語料下同時為真**、`incomplete` 之新舊集合定義也給出同一個答案。**凡本輪之案，fixture 必須含至少一份 `totalUnits = 0` 之文件**（且驗沉底時須 > `maxRows` 份），否則寫的是一條永遠不會紅的斷言。📌 **本形狀可推廣**：**一條在舊語料下恆真的新不變式，等於沒有這條不變式。**
+23. **🔴 把 `byState` 四鍵相加**：`byState.unassigned` 是 `byState.none` 之**子集**、不是第四個互斥類 ⇒ `all + partial + none + unassigned` 會多算一次（現行語料 70 vs 52）。⚠ **危險在於它「看起來像個 partition」**：四個鍵並列在同一個物件裡，下一個人很自然會加總。⇒ **不變式 ④ 須明文只含三鍵**，並另建一條「四鍵相加 !== totalDocuments」之負向案。
+24. **🔴 「順手做對稱」把第四鍵加進共用三態常數**：`data-doc-ojt-state` 增為四值、或 `ojtStatusView()`／`OJT_DOC_STATE` 加第四鍵時，**區一自己的測試會更好寫、也會全綠**——代價是漣漪到 `prototypes/13` 之圖示欄與四值篩選（**兩張表度量的東西不同**）。⇒ 須同時有：區一之「`[data-doc-ojt-state]` 值為 `none` 且帶 `[data-doc-no-using-dept]`」正向案、`[data-doc-ojt-state="unassigned"]` 之負向案、以及**文件清單頁四選項／三狀態值之零漣漪鎖**。
+25. **🔴 半套之名詞表**：改了 `option` 值域卻沒改 `DOC_COVERAGE_TRUNC_NOUN`（原**恰三 scope 一一對應**）時，`unassigned` 範圍之截斷句會落到 `undefined` 或沿用錯名詞——⚠ **而該範圍在真庫下必定截斷**（587 > 15）⇒ **這句錯字會是真庫上最常被看到的一句**。⇒ **四個範圍之截斷句各建一案**，且「`option` 恰 4 個」與「四個名詞變體」**兩案一起改**。
+26. **🔴 `unassigned` 範圍之截斷句照抄另外三句**：該範圍下所有列之覆蓋率皆為 `—`，**「依覆蓋率由低至高排序」是假話**；且「完整清單請至『OJT 資料清單』」會把使用者送去**一個必定空白的地方**（沒有使用部門就沒有進度列）。⇒ **兩處分岔各建一案**，且負向斷言該範圍之截斷句**不含**「覆蓋率」與「OJT 資料清單」兩個字串。
 
 ## 四、開放設計問題（交回 lead／棒 3）
 

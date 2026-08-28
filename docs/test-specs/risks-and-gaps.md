@@ -1247,3 +1247,31 @@ docker compose -p icsop logs backend | grep -F "$SECRET"    # 伺服器日誌得
 1. **四條並行 fork、事後統一實跑**：backend-new／backend-rewrite／frontend-new／frontend-rewrite 四線各自對實作全盲、互不重疊檔案所有權，寫完後本檔作者親自對每一支新增／改寫檔逐一 `jest`／`vitest run` 驗證，再跑一次全量迴歸確認零波及範圍精確等於預期清單（見甲節之逐案核對）。
 2. **揪出並修正一處測試自身之缺陷（共用 `beforeEach` 之炸裂半徑）**：`DocumentReadonlyPage.test.tsx` 之 `setupMocks()` 為全檔共用 `beforeEach`，其中一行對尚不存在之 `endpoints.getDocumentOjtCompletion` 呼叫 `vi.mocked(...).mockResolvedValue(...)`——`vi.mock('../api/endpoints')` 只會自動 mock「當下真的存在」之具名匯出，對不存在者呼叫此鏈會直接 throw，炸裂**全檔 40 個測試**（含與 OJT 完全無關者）。以存在性防呆包一層（`typeof fn === 'function'` 才呼叫）修復後，轉紅範圍精確收斂為 22 個真正與 OJT 相關之案例，其餘 18 個不相關測試恢復綠燈。此為「讀 diff 看不出來、只有實跑整檔才驗得到」之一類缺陷，已記入 test-generator 之持久記憶供未來同型任務參考。
 3. **AC-20 之路由層負向鎖獨立於服務層之外**：`ojt-progress.sessions.spec.ts`（服務層）僅斷言 `OjtProgressService` 無編輯類方法，不足以擋住「controller 手滑把某方法掛在 `PATCH`／`PUT` 路由上」；另補 `ojt-progress.controller-routes.spec.ts`，以 Reflector 逐一掃描 controller 全部 handler 之 `PATH_METADATA`／`METHOD_METADATA`，斷言路由表中不存在符合條件之路由，並以「DELETE 端點確實存在」之正向對照防止「不可編輯」被誤讀為「不可刪除」。
+
+## F042 第二輪節流修正（2026-08-28；`OQ-E11-22`，「未指定使用部門」第四態）
+
+> 權威：[F042](../specs/features/F042-ojt-progress-management.md) `AC-14` ⑧～⑮ ＋ 三道負向鎖定／`AC-28` ⑲／§架構設計 一-2（`docScope` 四值、`byState.unassigned`、不變式 ③′）／§prototype 25 §2·§6 ⑲ 群列。承上一則之簡化版約束環（僅 backend jest ＋ frontend vitest），本輪為就地增列，非重建。
+
+### 甲. 本環已涵蓋（可由機器裁決）
+
+`backend/src/ojt-progress/ojt-progress.test-support.ts`（`OjtDocScope` 增 `'unassigned'`、`byState` 增第四鍵）＋ `ojt-progress.summary.spec.ts`（新增 `AC-14 ⑧～⑮` describe 區塊，含判準、四值切片、沉底排序之直接背書、不變式 ③′／④／⑤、母體口徑鎖延伸至四種 `docScope`；就地改寫既有「四條不變式」與「假綠陷阱 9」兩案之 `byState` 精確鍵集合與公式）；`frontend/src/pages/OjtProgressPage.test.tsx`（新增 `B-2b` describe 區塊，含 `[data-doc-no-using-dept]` 正負向案、值域三值負向鎖、比值退化呈現、摘要行兩行結構與兩掛鉤、下行 `stat=none` 高風險假綠攔截、四種 `docScope` 之 `-tracked`／`-unassigned` 母體口徑鎖、`unassigned` 範圍截斷句兩處分岔、切換範圍即重新請求；就地改寫既有 `select 4 個 option`、截斷句名詞 it.each、範圍空狀態 it.each 三案）。
+
+**實跑驗證結果（2026-08-28，本檔作者）**：
+- backend：`npx jest src/ojt-progress --maxWorkers=2` ⇒ `ojt-progress.summary.spec.ts` 因 production `ojt-progress.service.ts` 自身之 `OjtDocScope`／`byState` 型別仍為舊三值形狀而**全檔編譯紅**（0 test ran，共 12 處 TS2345／TS2339，逐點對應本輪新增之 `'unassigned'` 呼叫與 `byState.unassigned` 存取），其餘 5 支既有 `ojt-progress/*.spec.ts`（59 個測試）**零波及**——確認本輪之編譯紅範圍精確侷限於本檔，符合「對實作全盲、紅因為未實作」之預期，非測試自相矛盾。
+- frontend：`npx vitest run --maxWorkers=4 src/pages/OjtProgressPage.test.tsx` ⇒ 88 個測試中恰 15 個轉紅（本輪新增／就地改寫之全部案例），其餘 73 個既有案例（含上一輪節流之全部案例）**零波及**；15 個紅燈之失敗訊息逐一核對皆為「元素找不到／文字不符／`option` 值域不含 `unassigned`」之功能未實作型失敗，非 `ReferenceError`（唯一一次 `manyRows` 作用域誤用已於建環過程中自行抓出並修正）。
+
+### 乙. 本環刻意保留之缺口（記錄，不阻擋建環）
+
+| # | 缺口 | 說明 | 現況處置 |
+|---|---|---|---|
+| D-OJT-08 | `AC-28⑲` 第四態視覺之 icon 鍵（`circle-slash`，刻意跳出 `file-*-2` 家族）與色票（`text-slate-500`，刻意不比照 `none` 之 `text-slate-300`）未建立 DOM 層斷言 | `OjtProgressPage.test.tsx` 全檔既有慣例（含上一輪三態晶片測試）自始未對任何 Tailwind class 或 icon 元件之內部渲染細節建立斷言，僅鎖 `textContent`／`aria-label`／掛鉤屬性；本輪沿用同一紀律，以晶片逐字「未指定使用部門」（與既有三態文案互斥、已具鑑別力）作為視覺區隔之可測替身。 | 未臆造 className 斷言；`textContent` 已能區辨四態、行為層無漏洞。若下游需要色彩對比之回歸鎖，屬另案（且與既有之 `text-slate-300`／WCAG AA 1.7:1 議題同屬「待裁之既有議題」，本輪未動）。 |
+| D-OJT-09 | `⑫`「不畫進度條」之機器判準以「該列 DOM 中無任何帶 `[style]` 屬性之元素」表達，非直接斷言某個特定進度條元件不存在 | 現行 prototype 之進度條為行內 `style="width:{pct}%"`，本репо無其他版面用途之行內 style 慣例；本判準為 AC 文字（「不畫進度條」）之最貼近機器可測形狀，惟若下游實作日後為其他目的（如 hover 動畫）於同一列加入行內 style，本斷言會出現與本輪無關之假紅。 | 已於測試檔就地註解此判準之推導依據；若未來出現非進度條之行內 style 需求，屬測試面之仲裁項（改為更窄的選擇器，不弱化「無進度條」本身）。 |
+| D-OJT-10 | `⑨` 之「切換至 unassigned 範圍即發出新請求」案，在 `<select>` 尚無 `unassigned` 之 `<option>` 前，`fireEvent.change` 對不存在之值只會使 jsdom 將 `.value` 正規化為空字串，該案之紅燈訊息（`expected [''] to include 'unassigned'`）看似與其他請求類斷言之紅燈形狀不同 | 此為「4th option 尚未存在」之自然副作用、非測試邏輯錯誤——一旦實作補上該 `option`，同一段程式碼即可正確驅動並驗證真正的請求參數，無需改寫本案。 | 不視為缺口需處置，僅記錄以利日後排查「這條紅燈看起來怪」時不誤判為測試寫錯。 |
+
+### 丁. 常設閘門追補：`GET /admin/ojt-progress/summary` 之 `test:int`（2026-08-28，team-lead 交辦）
+
+backend 實作完成、無異議後，team-lead 指出本端點已兩次只靠真 HTTP 才抓到缺陷（① controller 回應信封／DTO 欄位未接值；② 本輪之退化值排名），此前僅靠一次性探針（`bootIntApp()` 對真庫）驗證、跑完即刪，未納入常設閘門。已補 `backend/test/int/ojt-progress-summary.itest.ts`（4 節：A 六種 `docScope` 之 HTTP 表面＋母體口徑鎖＋不變式③′④⑤＋切片結構＋各 scope 過濾述詞＋401；B 沉底之核心回歸背書；C `byState.unassigned` 之端到端 delta 驗證）。
+
+**設計原則（依 team-lead 建議）**：斷言**不變式與結構**，不對真庫絕對數字下硬編期望——資料量隨時間變動不會使其無故轉紅，但退化值排名／統計口徑外洩這類缺陷仍會被抓到。唯一無法只靠既有真庫資料驗證的性質（沉底是否真的保護住一份會被大量無義務文件淹沒的有義務文件；`totalUnits===0` 之計數是否真的 +1）改用**本檔自建之 marker 文件 + 建立前後 delta**，不依賴真庫當下之無義務文件數量（587+）剛好等於某個值。
+
+**實跑驗證**：`npx jest --config test/jest-int.json ojt-progress-summary` 單檔 10/10 綠；`npx jest --config test/jest-int.json` 全量 **23 suite／188 測試**（原 22/178 ＋本檔 1 suite／10 測試）全綠，零波及其餘 22 支既有 itest。
