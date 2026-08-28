@@ -14,7 +14,6 @@ import {
   getAppendixPool,
   replaceDocumentAppendices,
   uploadIcsopPdf,
-  uploadOjtAttachment,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
@@ -130,7 +129,6 @@ export function DocumentCreatePage(): JSX.Element {
 
   // STEP4 附件與關聯文件（F010/F016/F015/F018）。
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [ojtFile, setOjtFile] = useState<File | null>(null);
   const [formPool, setFormPool] = useState<UsageFormRecord[]>([]);
   const [selectedForms, setSelectedForms] = useState<ComboOption[]>([]);
   // F039 附錄：已選清單為**有序**清單（新選取者加入末位，以上移／下移調整；不支援拖曳）。
@@ -362,7 +360,6 @@ export function DocumentCreatePage(): JSX.Element {
     setUsingDepts([]);
     setPersonResults([]);
     setPdfFile(null);
-    setOjtFile(null);
     setSelectedForms([]);
     setSelectedAppendices([]);
     setSelectedLinks([]);
@@ -414,7 +411,6 @@ export function DocumentCreatePage(): JSX.Element {
       const newId = created?.id;
       if (newId) {
         if (pdfFile) await uploadIcsopPdf(newId, pdfFile);
-        if (ojtFile) await uploadOjtAttachment(newId, ojtFile);
         if (selectedForms.length) await linkUsageForms(newId, selectedForms.map((f) => f.value));
         // F039（architecture-spec §3.6 決策二）：以畫面最終順序**整組覆寫**（PUT replace-set），
         // sortOrder 由後端依陣列索引重寫為 1..N；刻意不走 POST 附加端點。
@@ -447,7 +443,6 @@ export function DocumentCreatePage(): JSX.Element {
     secondaryChiefs,
     usingDepts,
     pdfFile,
-    ojtFile,
     selectedForms,
     selectedAppendices,
     selectedLinks,
@@ -820,7 +815,7 @@ export function DocumentCreatePage(): JSX.Element {
         </div>
         <p className="text-xs text-slate-400 mb-3 flex items-center gap-1.5">
           <Icon name="info" className="w-3.5 h-3.5" />
-          允許格式：ICSOP PDF／OJT＝.pdf/.jpg/.png、ICSOP 原始檔＝.xls、使用表單＝.xlsx/.xls/.pdf；單檔上限 50MB（OQ-E04-06 定案）。
+          允許格式：ICSOP PDF＝.pdf/.jpg/.png、ICSOP 原始檔＝.xls、使用表單＝.xlsx/.xls/.pdf；單檔上限 50MB（OQ-E04-06 定案）。
         </p>
         <div className="flex items-start gap-2 rounded-lg border border-primary-200 bg-primary-50/40 px-3 py-2.5 mb-4 text-[11px] text-slate-600">
           <Icon name="info" className="w-4 h-4 mt-0.5 shrink-0 text-primary-600" />
@@ -848,15 +843,29 @@ export function DocumentCreatePage(): JSX.Element {
             <div className="text-sm font-medium text-slate-500">上傳 ICSOP 原始檔（.xls，1 份）</div>
             <div className="text-xs text-slate-400 mt-1">待 AI 索引管線就緒（F027/F029）</div>
           </div>
-          <UploadCard
-            iconName="upload"
-            iconClass="text-slate-400"
-            title="上傳 OJT 簽到表（1 份）"
-            accept=".pdf,.jpg,.jpeg,.png"
-            hint="尚未選擇 · .pdf/.jpg/.png"
-            file={ojtFile}
-            onSelect={setOjtFile}
-          />
+          {/*
+            🔴 F042 `AC-23`（`OQ-E11-08`→A）：原「上傳 OJT 簽到表（1 份）」上傳卡已移除，改為
+            **唯讀提示卡**。🔒 刻意**不是** `<button>`——做成按鈕讀起來仍像一個上傳入口，而本頁
+            自此不提供任何 OJT 寫入路徑（`AC-22`／`AC-23` 之負向斷言：`[data-ojt-upload]` 與
+            `[data-writable-attachment]` 於本頁皆為 0 個）。
+            📝 被取代之原卡逐字保留供追溯：`<UploadCard iconName="upload" iconClass="text-slate-400"
+               title="上傳 OJT 簽到表（1 份）" accept=".pdf,.jpg,.jpeg,.png"
+               hint="尚未選擇 · .pdf/.jpg/.png" file={ojtFile} onSelect={setOjtFile} />`。
+            版面權威＝`prototypes/14-document-create.html`（三欄 grid 之第三格，其餘兩張卡逐字不動）。
+          */}
+          <div
+            data-ojt-create-hint
+            className="border border-dashed border-slate-200 bg-slate-50/60 rounded-lg p-4 text-center"
+          >
+            <Icon name="graduation-cap" className="w-6 h-6 text-slate-400 mx-auto mb-1.5" />
+            <div className="text-sm font-medium text-slate-600">OJT 實體簽到表</div>
+            <div data-ojt-create-hint-text className="text-xs text-slate-500 mt-1">
+              儲存後至 OJT 進度管理登記
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1.5 leading-relaxed">
+              建立時不上傳；各「文件使用部門」之教育訓練場次於「OJT 進度管理」逐一登記，可累積多筆。
+            </div>
+          </div>
         </div>
         <p className="text-[11px] text-slate-500 mt-2 flex items-start gap-1.5">
           <Icon name="sparkles" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-500" />

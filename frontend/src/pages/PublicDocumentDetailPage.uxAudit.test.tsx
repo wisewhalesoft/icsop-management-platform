@@ -57,9 +57,9 @@ function detailOf(over: Partial<PublicDocumentDetail> = {}): PublicDocumentDetai
     edition: "26'01",
     announcedDate: '2026-01-01T00:00:00.000Z',
     contentSummary: '規範車輛分期案件之進件收件流程。',
+    // 🔴 [2026-08-28 E11] AC-J1／AC-01=(C)：DOCUMENT_ATTACHMENT.type 已不含 'OJT_SIGNIN'。
     attachments: [
       { type: 'ICSOP_PDF', fileName: '車輛分期進件作業_v1.3.pdf', blobPath: 'blob/icsop.pdf' },
-      { type: 'OJT_SIGNIN', fileName: '車輛分期進件作業_OJT簽到表.pdf', blobPath: 'blob/ojt.pdf' },
     ],
     usageForms: [{ id: 'f1', name: '進件申請書.xlsx', format: 'xlsx' }],
     links: [],

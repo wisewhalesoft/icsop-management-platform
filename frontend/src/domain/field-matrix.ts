@@ -6,7 +6,8 @@ import type { RoleCode } from './function-matrix';
  * 用途：權限矩陣唯讀顯示頁（prototypes/18）。真正 enforcement 於文件 CRUD 端點（F010/F011）。
  *
  * 定案：ICSOPAdmin 為唯一可寫；SysAdmin/主管/部門窗口/一般使用者對所有文件欄位皆唯讀（拒寫）。
- * 🔴 2026-08-20 D9 delta 推翻上句之一格：「OJT 簽到表」對主管／部門窗口改為可寫（見 OJT_WRITABLE）。
+ * 🔴 2026-08-28 F042 delta（`AC-J7`）收回 D9 之唯一破例：「OJT 簽到表」改為純衍生唯讀，
+ *   五角色（含 ICSOPAdmin）皆 FORBIDDEN（見 OJT_DERIVED_READONLY）。
  * 系統產生欄位（系統 UUID）一律忽略傳入值（IGNORE）。
  */
 export type FieldWriteOutcome = 'WRITABLE' | 'FORBIDDEN' | 'IGNORE';
@@ -49,18 +50,26 @@ const ICSOP_WRITABLE: Row = {
 };
 
 /**
- * 🔴 2026-08-20 D9 delta（`OQ-D9-19`／`OQ-D9-20`，使用者裁決）——「OJT 簽到表」破例列。
- * 主管／部門窗口由 FORBIDDEN 改為 WRITABLE；系統管理員（`OQ-D9-24`）與一般使用者維持 FORBIDDEN。
- * ⚠ 這是**唯一**一列破例（AC-N22 恰兩格改值）；其餘 19 欄仍共用 ICSOP_WRITABLE，
- *   不得為求「一致」而把本列併回 ICSOP_WRITABLE 或反向擴大 ICSOP_WRITABLE——
- *   AC-N24 之防護對象正是「開一個洞、鬆一片牆」。
- * 權威＝docs/specs/features/F026-role-field-matrix.md#ojt-write-exception-delta。
+ * 🔴 2026-08-28 F042 E11 delta（`AC-J7`／`AC-J8`，權威＝
+ * docs/specs/features/F026-role-field-matrix.md#ojt-field-retire-delta）——「OJT 簽到表」列改為
+ * **純衍生唯讀**：五角色（含 ICSOPAdmin）皆 FORBIDDEN。
+ *
+ * 📝 被反轉之 D9 破例列（2026-08-20，`OQ-D9-19`／`OQ-D9-20`）逐字保留供追溯：
+ *   const OJT_WRITABLE: Row = {
+ *     SysAdmin: 'FORBIDDEN', ICSOPAdmin: 'WRITABLE',
+ *     Supervisor: 'WRITABLE', DeptContact: 'WRITABLE', User: 'FORBIDDEN',
+ *   };
+ *
+ * ⚠ 本列**刻意不併回 `ICSOP_WRITABLE`**：該共用列之 ICSOPAdmin 為 WRITABLE，而 `AC-J8` 明文
+ * 「五角色逐一呼叫皆回 FORBIDDEN」，並指名反轉後最可能之失誤即「只改兩格、卻讓 ICSOPAdmin 之
+ * 可寫留著」——那會使文件表單重新長出一個僅對 ICSOPAdmin 可見之上傳入口（違反 F042 `AC-22`）。
+ * outcome 分類為 FORBIDDEN（回 403）而非 IGNORE（靜默忽略，比照「系統 UUID」列）。
  */
-const OJT_WRITABLE: Row = {
+const OJT_DERIVED_READONLY: Row = {
   SysAdmin: 'FORBIDDEN',
-  ICSOPAdmin: 'WRITABLE',
-  Supervisor: 'WRITABLE',
-  DeptContact: 'WRITABLE',
+  ICSOPAdmin: 'FORBIDDEN',
+  Supervisor: 'FORBIDDEN',
+  DeptContact: 'FORBIDDEN',
   User: 'FORBIDDEN',
 };
 
@@ -92,7 +101,7 @@ export const FIELD_MATRIX: Record<string, Row> = {
   [FieldKey.USAGE_FORMS]: ICSOP_WRITABLE,
   [FieldKey.APPENDICES]: ICSOP_WRITABLE,
   [FieldKey.ANNOUNCE_DATE]: ICSOP_WRITABLE,
-  [FieldKey.OJT_SIGNIN]: OJT_WRITABLE,
+  [FieldKey.OJT_SIGNIN]: OJT_DERIVED_READONLY,
   [FieldKey.DOCUMENT_NAME]: ICSOP_WRITABLE,
   [FieldKey.CONTENT_SUMMARY]: ICSOP_WRITABLE,
 };

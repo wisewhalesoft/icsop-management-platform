@@ -12,6 +12,7 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT } from '../domain/watermark-note';
+import { OJT_FILTER_OPTIONS, ojtStatusValue, ojtStatusView } from '../domain/ojt-status-view';
 import { TREE_PREVIEW_WINDOW_NAME } from './LifecycleTreePreviewPage';
 import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, type ComboOption } from '../components/SearchCombobox';
@@ -23,6 +24,7 @@ import type {
   AppendixRecord,
   DocumentListItem,
   DocumentLinkView,
+  OjtDocumentStatus,
   SubtreeFilterDescriptor,
   UsageFormRecord,
 } from '../api/types';
@@ -133,8 +135,16 @@ const EMPTY_FILTERS: Record<FilterKey, string> = {
 const uniq = (a: (string | null | undefined)[]): string[] =>
   [...new Set(a.filter((x): x is string => !!x))];
 
-/** `AC-D5` OJT 三值之逐字選項（`全部` 即不施加限制）。 */
-const OJT_OPTIONS = ['全部', '有 OJT', '無 OJT'] as const;
+/**
+ * `AC-J14`（2026-08-28 F042 delta，`OQ-E11-06`→B）：OJT 篩選由三值改**四值**——
+ * `全部` ＋ 文件層三態之逐字文案（`全部` 即不施加限制）。
+ * 🔒 三個狀態之字面**與欄位 icon 之 aria-label 同源**（`ojt-status-view.ts`，篩選詞彙 ≡ 欄位詞彙）。
+ * 📝 被反轉之原三值逐字保留供追溯：OLD> `['全部', '有 OJT', '無 OJT']`。
+ */
+const OJT_OPTIONS = [OJT_ALL, ...OJT_FILTER_OPTIONS.map((o) => o.value)];
+
+/** 篩選選項文案 → 三值狀態（`全部` 不在此表，代表不施加限制）。 */
+const OJT_OPTION_STATUS = new Map(OJT_FILTER_OPTIONS.map((o) => [o.value, o.status]));
 
 /** ISO 時間戳 → `YYYY-MM-DD`（僅取日期段，供閉區間字串比較）。 */
 const dayOf = (iso: string | null): string | null => (iso ? iso.slice(0, 10) : null);
@@ -494,7 +504,10 @@ export function DocumentListPage(): JSX.Element {
         if (filters.dateFrom && day < filters.dateFrom) return false;
         if (filters.dateTo && day > filters.dateTo) return false;
       }
-      if (filters.ojt !== OJT_ALL && !!d.hasOjt !== (filters.ojt === '有 OJT')) return false;
+      // `AC-J14`：四值比對文件層三態；缺鍵視同 `none`（與欄位 icon 之降級同一條規則）。
+      if (filters.ojt !== OJT_ALL && ojtStatusValue(d.ojtStatus) !== OJT_OPTION_STATUS.get(filters.ojt)) {
+        return false;
+      }
       if (filters.link && (!linkTargetSet || !linkTargetSet.has(d.id))) return false;
       if (filters.appendix && (!appendixSet || !appendixSet.has(d.id))) return false;
       if (filters.form && (!formSet || !formSet.has(d.id))) return false;
@@ -789,7 +802,7 @@ export function DocumentListPage(): JSX.Element {
                 const meta = DISPLAY_META[disp];
                 return (
                   <tr key={d.id} className="hover:bg-slate-50 align-top">
-                    <OjtCell hasOjt={d.hasOjt} />
+                    <OjtCell status={d.ojtStatus} />
                     <td className="px-3 py-3 text-slate-600 whitespace-nowrap">{d.draftingCompanyName ?? '—'}</td>
                     <td className="px-3 py-3 text-slate-600 whitespace-nowrap">{d.draftingDeptName ?? '—'}</td>
                     <td className="px-3 py-3 text-slate-600 whitespace-nowrap">
@@ -1090,30 +1103,30 @@ function LinkCell({ doc, filterLink, expanded, onToggle, onDownload, onNoPdf }: 
 }
 
 /**
- * 🔵 最左「OJT」圖示欄（F017 `AC-N37`～`AC-N40`；2026-08-20 D9 delta，`OQ-D9-25` 選項 A／`OQ-D9-26` 選項 A）。
+ * 🔵 最左「OJT」圖示欄（F017 `AC-J13`／`AC-J14`；2026-08-28 F042 delta，`OQ-E11-06`→B）。
  *
- * · 三種輸入 → **兩種**視覺：`hasOjt === true` → `file-check-2` ＋「有 OJT」；
- *   `false` **與缺鍵（undefined）** → 皆為 `file-x-2` ＋「無 OJT」
- *   （`AC-N38` ③：缺鍵視同 false，**不得**渲染為空白／—／null／第三種視覺狀態）。
- * · 兩態字面逐字沿用既有 OJT 篩選下拉之選項文字（`AC-D5`），**不得**另造「已上傳／未上傳」。
- * · DOM 契約（`AC-N39`）：儲存格帶 `data-ojt-cell`，並帶 `data-has-ojt="true"|"false"`（缺鍵一律 `"false"`）。
- * 🔒 `AC-N40`：本 delta **只加顯示欄、不動篩選**。
- * 版面權威＝`prototypes/13-document-list.html:548-553`。
+ * · **三態**：`all` → `file-check-2`＋「已全部完成」；`partial` → `file-minus-2`＋「部分完成」
+ *   （本 delta 新增之 icon 鍵）；`none` → `file-x-2`＋「尚未開始」。
+ *   缺鍵（`undefined`）視同 `none`，**不得**渲染為空白／—／null／第四種視覺狀態。
+ * · 🔴 `data-has-ojt` 值域**完全改換**為 `all|partial|none`，`"true"`／`"false"` **不保留**——
+ *   若讓 `"true"` 兼指 `all`，既有斷言會繼續通過但語意已從「有 OJT」悄悄變窄為「全部完成」＝假綠。
+ * · 📝 被反轉之原二態（`AC-N38`～`AC-N40`）：`hasOjt===true`→「有 OJT」／否則「無 OJT」。
+ * · 三態文案與 icon 鍵收斂於 `domain/ojt-status-view.ts`，與 OJT 進度管理頁共用同一份。
+ * 版面權威＝`prototypes/13-document-list.html`。
  */
-function OjtCell({ hasOjt }: { hasOjt: boolean | undefined }): JSX.Element {
-  const has = hasOjt === true; // undefined 與 false 皆落入 else 分支
-  const label = has ? '有 OJT' : '無 OJT';
+function OjtCell({ status }: { status: OjtDocumentStatus | undefined }): JSX.Element {
+  const view = ojtStatusView(status);
   return (
-    <td className="px-3 py-3" data-ojt-cell="" data-has-ojt={has ? 'true' : 'false'}>
-      <span className="inline-flex items-center" title={label} aria-label={label} role="img">
-        <Icon name={has ? 'file-check-2' : 'file-x-2'} className={`w-4 h-4 ${has ? 'text-emerald-600' : 'text-slate-300'}`} />
+    <td className="px-3 py-3" data-ojt-cell="" data-has-ojt={ojtStatusValue(status)}>
+      <span className="inline-flex items-center" title={view.text} aria-label={view.text} role="img">
+        <Icon name={view.icon} className={`w-4 h-4 ${view.className}`} />
         {/*
-          `AC-N38` ③「不得渲染為空白」之文字載體：外層 `role="img"` 已使 AT 將本節點視為葉節點
+          「不得渲染為空白」之文字載體：外層 `role="img"` 已使 AT 將本節點視為葉節點
           （僅唸 `aria-label`、不重複唸子孫），故此 `sr-only` 不造成重複播報，純粹讓「這一格
           到底有沒有內容」在不依賴圖示字型／SVG 的情境下仍可判定。視覺上與 prototype 之
           icon-only 儲存格完全相同（`sr-only` 為視覺隱藏）。
         */}
-        <span className="sr-only">{label}</span>
+        <span className="sr-only">{view.text}</span>
       </span>
     </td>
   );

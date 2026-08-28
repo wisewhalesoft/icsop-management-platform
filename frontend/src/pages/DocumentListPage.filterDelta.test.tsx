@@ -65,7 +65,8 @@ const doc = (over: Partial<DocumentListItem>): DocumentListItem => ({
   draftingDeptId: 'A2000', draftingSectionId: 'A2100',
   draftingCompanyName: '和潤企業股份有限公司', draftingDeptName: '企劃部', draftingSectionName: '車輛行銷室',
   primaryChiefId: '20050', primaryChiefName: '陳彥廷',
-  secondaryChiefCount: 0, secondaryChiefNames: [], secondaryChiefIds: [], hasOjt: false,
+  // 🔴 [2026-08-28 E11] AC-J12：hasOjt(boolean) 改名 ojtStatus（三值聯集 'all'|'partial'|'none'）。
+  secondaryChiefCount: 0, secondaryChiefNames: [], secondaryChiefIds: [], ojtStatus: 'none',
   edition: "26'01", announcedDate: '2026-01-15T00:00:00.000Z', contentSummary: '摘要',
   icsopPdfBlobPath: null, icsopPdfFileName: null, links: [], ...over,
 });
@@ -99,24 +100,24 @@ const DOCS: DocumentListItem[] = [
     // 它就不會出現；以此把 `AC-D7`「選項＝主要 ∪ 次要」與舊行為區分開（避免巧合綠）。
     primaryChiefId: 'E009', primaryChiefName: '陳彥廷', secondaryChiefIds: ['E001', 'E555'],
     secondaryChiefCount: 2, secondaryChiefNames: ['林建宏', '王志文'],
-    announcedDate: '2026-01-01T00:00:00.000Z', hasOjt: true, lifecycleId: 'lc1',
+    announcedDate: '2026-01-01T00:00:00.000Z', ojtStatus: 'all', lifecycleId: 'lc1',
   }),
   doc({
     id: 'd2', documentNumber: 'ICSOP-PPC-101-2-02', documentName: '機車分期進件作業',
     primaryChiefId: 'E001', primaryChiefName: '林建宏', secondaryChiefIds: [],
-    announcedDate: '2026-01-15T00:00:00.000Z', hasOjt: false, lifecycleId: 'lc2',
+    announcedDate: '2026-01-15T00:00:00.000Z', ojtStatus: 'partial', lifecycleId: 'lc2',
     lifecycleName: '產品企劃循環',
   }),
   doc({
     id: 'd3', documentNumber: 'ICSOP-GCA-100-2-00', documentName: '法遵作業',
     primaryChiefId: 'E077', primaryChiefName: '劉家瑋', secondaryChiefIds: [],
-    announcedDate: '2026-02-01T00:00:00.000Z', hasOjt: false, lifecycleId: 'lc3',
+    announcedDate: '2026-02-01T00:00:00.000Z', ojtStatus: 'none', lifecycleId: 'lc3',
     lifecycleName: '管理性控制作業',
   }),
   doc({
     id: 'd4', documentNumber: 'ICSOP-LWC-101-1-02', documentName: '招募管理作業',
     primaryChiefId: 'E100', primaryChiefName: '周淑芬', secondaryChiefIds: [],
-    announcedDate: null, hasOjt: false, lifecycleId: 'lc4', lifecycleName: '薪工循環',
+    announcedDate: null, ojtStatus: 'none', lifecycleId: 'lc4', lifecycleName: '薪工循環',
   }),
 ];
 
@@ -257,12 +258,20 @@ describe('F017 AC-D10：篩選區之逐字文案與選擇器契約', () => {
     expect(status.value).toBe('');
   });
 
-  it('TS-F017-D10-006 `OJT` 下拉之三選項逐字為 `全部`／`有 OJT`／`無 OJT`', async () => {
+  /**
+   * 🔴 [2026-08-28 E11] `AC-J14`（[F017#ojt-derived-semantics-delta]）：`OQ-E11-06`→B 四值改寫，
+   * `AC-D10` 之「OJT 下拉三選項」列相應改為四選項（其餘 12 列逐字不變，本 delta 只動 OJT 一項）。
+   * 📝 被反轉之原斷言逐字保留供追溯：
+   *   OLD> expect(...).toEqual(['全部', '有 OJT', '無 OJT']);
+   */
+  it('TS-F017-D10-006（AC-J14）`OJT` 下拉之四選項逐字為 `全部`／`已全部完成`／`部分完成`／`尚未開始`', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     const ojt = control('OJT') as HTMLSelectElement;
     expect(ojt.tagName).toBe('SELECT');
-    expect(Array.from(ojt.options).map((o) => o.textContent?.trim())).toEqual(['全部', '有 OJT', '無 OJT']);
+    expect(Array.from(ojt.options).map((o) => o.textContent?.trim())).toEqual([
+      '全部', '已全部完成', '部分完成', '尚未開始',
+    ]);
   });
 
   it('TS-F017-D10-007 `公告日期` 為 role=group（aria-label `公告日期`）＋ 兩個 type=date 輸入', async () => {
@@ -430,21 +439,42 @@ describe('F017 AC-D4：公告日期閉區間與邊界', () => {
   });
 });
 
-describe('F017 AC-D5：OJT 三值', () => {
-  it('TS-F017-D5-001 `全部` → A、B 皆回傳；`有 OJT` → 僅有附件者；`無 OJT` → 僅無附件者', async () => {
+/**
+ * 🔴 [2026-08-28 E11] `AC-J14`：舊 fixture（「文件 A 有 `OJT_SIGNIN` 附件、文件 B 無」）在新模型下
+ * 不再可建構——`DOCS` 已改為 d1=all／d2=partial／d3=d4=none（見本檔上方 fixture）。四值中三個
+ * 非「全部」之值各需至少一案可命中。
+ * 📝 被反轉之原案（僅二值 有OJT／無OJT）逐字保留供追溯。
+ */
+describe('F017 AC-J14：OJT 四值篩選', () => {
+  it('TS-F017-D5-001（改寫）`全部` → 四筆皆回傳；`已全部完成`／`部分完成`／`尚未開始` 各自僅回傳對應之文件', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     const ojt = control('OJT') as HTMLSelectElement;
 
     expect(visibleDocNames()).toHaveLength(DOCS.length); // 預設「全部」
 
-    await userEvent.selectOptions(ojt, '有 OJT');
+    await userEvent.selectOptions(ojt, '已全部完成');
     await waitFor(() => expect(screen.queryByText('機車分期進件作業')).toBeNull());
-    expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument(); // hasOjt: true
+    expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument(); // d1: ojtStatus='all'
 
-    await userEvent.selectOptions(ojt, '無 OJT');
+    await userEvent.selectOptions(ojt, '部分完成');
     await waitFor(() => expect(screen.queryByText('車輛分期進件作業')).toBeNull());
-    expect(screen.getByText('機車分期進件作業')).toBeInTheDocument();
+    expect(screen.getByText('機車分期進件作業')).toBeInTheDocument(); // d2: ojtStatus='partial'
+
+    await userEvent.selectOptions(ojt, '尚未開始');
+    await waitFor(() => expect(screen.queryByText('機車分期進件作業')).toBeNull());
+    expect(screen.getByText('法遵作業')).toBeInTheDocument(); // d3: ojtStatus='none'
+    expect(screen.getByText('招募管理作業')).toBeInTheDocument(); // d4: ojtStatus='none'
+  });
+
+  it('（AC-J14 負向：與 AC-13 之 TAB2 三值刻意不同，本測試僅鎖本頁）選「部分完成」不得誤回傳 all／none 之文件', async () => {
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    await userEvent.selectOptions(control('OJT') as HTMLSelectElement, '部分完成');
+    await waitFor(() => expect(screen.getByText('機車分期進件作業')).toBeInTheDocument());
+    expect(screen.queryByText('法遵作業')).not.toBeInTheDocument();
+    expect(screen.queryByText('招募管理作業')).not.toBeInTheDocument();
+    expect(screen.queryByText('車輛分期進件作業')).not.toBeInTheDocument();
   });
 });
 
@@ -540,7 +570,7 @@ describe('F017 AC-D8：清除全部篩選', () => {
     await screen.findByText('車輛分期進件作業');
     await pick('制定部門', '企劃部');
     await userEvent.type(control('程序書書名內'), '進件');
-    await userEvent.selectOptions(control('OJT') as HTMLSelectElement, '有 OJT');
+    await userEvent.selectOptions(control('OJT') as HTMLSelectElement, '已全部完成');
     await userEvent.type(within(control('公告日期')).getByLabelText('公告日期 起日'), '2026-01-01');
 
     await userEvent.click(screen.getByText('清除全部篩選'));
@@ -562,8 +592,8 @@ describe('F017 AC-D2：多項並用為 AND', () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     await pick('當責室長', '林建宏');
-    await userEvent.selectOptions(control('OJT') as HTMLSelectElement, '有 OJT');
-    await waitFor(() => expect(screen.queryByText('機車分期進件作業')).toBeNull()); // 室長命中但無 OJT
+    await userEvent.selectOptions(control('OJT') as HTMLSelectElement, '已全部完成');
+    await waitFor(() => expect(screen.queryByText('機車分期進件作業')).toBeNull()); // 室長命中但 OJT 為 partial，非 all
     expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument();
   });
 
@@ -571,7 +601,7 @@ describe('F017 AC-D2：多項並用為 AND', () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     await pick('當責室長', '劉家瑋');
-    await userEvent.selectOptions(control('OJT') as HTMLSelectElement, '有 OJT');
+    await userEvent.selectOptions(control('OJT') as HTMLSelectElement, '已全部完成');
     await waitFor(() => expect(rowNames().filter(Boolean)).toHaveLength(0));
     // 🔴 補強：原案只有「0 列 ＋ 無 alert」，未驗空狀態本身確實呈現（逐字取自 prototype 13 `#emptyState`）。
     expect(screen.getByText('查無符合結果')).toBeInTheDocument();

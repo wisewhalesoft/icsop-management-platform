@@ -50,9 +50,15 @@ function detailOf(over: Partial<PublicDocumentDetail> = {}): PublicDocumentDetai
     edition: "26'01",
     announcedDate: '2026-01-01T00:00:00.000Z',
     contentSummary: '規範車輛分期案件之進件收件、資格初審與建檔流程。',
+    /**
+     * 🔴 [2026-08-28 E11] `AC-J26`：附件區已移除 OJT 項（`OJT_SIGNIN` 型別自 `DOCUMENT_ATTACHMENT`
+     * 完全移除，`AC-01=(C)` 已裁決）。前台之 OJT 呈現改為獨立唯讀衍生區塊，見下方
+     * `describe('AC-24：前台 OJT 唯讀衍生（prototype 04）')`。
+     * 📝 被移除之原 fixture 逐字保留供追溯：
+     *   OLD> { type: 'OJT_SIGNIN', fileName: '車輛分期進件作業_OJT簽到表.pdf', blobPath: 'blob/ojt.pdf' },
+     */
     attachments: [
       { type: 'ICSOP_PDF', fileName: '車輛分期進件作業_v1.3.pdf', blobPath: 'blob/icsop.pdf' },
-      { type: 'OJT_SIGNIN', fileName: '車輛分期進件作業_OJT簽到表.pdf', blobPath: 'blob/ojt.pdf' },
     ],
     usageForms: [
       { id: 'f1', name: '進件申請書.xlsx', format: 'xlsx' },
@@ -62,6 +68,15 @@ function detailOf(over: Partial<PublicDocumentDetail> = {}): PublicDocumentDetai
       { targetDocumentId: 't1', targetNumber: 'ICSOP-SRC-101-2-00', targetName: '消金審核作業', targetStatus: 'active' },
       { targetDocumentId: 't2', targetNumber: 'ICSOP-SRC-102-1-01', targetName: '車輛分期對保作業（舊）', targetStatus: 'void' },
     ],
+    /**
+     * 🔴 [2026-08-28 E11] `AC-24`（[F042] 前台唯讀衍生所需資料）：本檔作者依 `AC-21`「與後台
+     * 同源」之要求，選擇比照本頁既有「單次回應內含全部欄位」慣例（本函式其餘欄位皆隨同一次
+     * `getPublicDocumentDetail` 取得，未另呼叫附加端點），新增 additive 欄位承載已完成單位清單
+     * 與總使用單位數。欄位名為本檔作者依慣例類比選定、非規格逐字鎖定；若下游實作採獨立端點
+     * 而非本回應之 additive 欄位，屬合理仲裁項（應改寫呼叫方式，不得弱化斷言語意）。
+     */
+    ojtCompletedUnits: [] as string[],
+    ojtUsingUnitCount: 0,
     ...over,
   };
 }
@@ -165,11 +180,20 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
      * 🔴 2026-08-17 delta（`AC-D15`）：`當責室長-次要` 自本清單移除（19 → 18 列）。
      * 其餘 18 列之集合、順序與逐字標籤一律不變。
      */
+    /**
+     * 🔴 [2026-08-28 E11] `AC-J26`／`AC-24`：`OJT 實體簽到表` 列已自本欄位序列移除——OJT 不再是
+     * 一份「附件」，而是獨立之唯讀衍生區塊（`[data-ojt-derived]`，見下方 `AC-24` describe），
+     * 不再佔用本欄位清單之一個 `<dt>` 項。18 列 → 17 列。
+     * ⚠ 本檔作者對「該衍生區塊是否仍以 `<dt>` 形式呈現於同一欄位清單內」持保留——prototype 04
+     * 未明確標示其確切容器語意，若實作將其放回本欄位清單（as another `<dt>`），此案將需要
+     * 補一個新 label，屬合理仲裁項。
+     * 📝 被移除之原陣列項逐字保留供追溯：OLD> 'OJT 實體簽到表',（原列於 '附錄' 之後）
+     */
     const DETAIL_FIELD_LABELS = [
       '系統 UUID', '文件狀態', '制定公司', '制定部門', '制定室別',
       '程序書編號', '程序書書名', '當責室長-主要',
       '版次', '循環別', '所屬節點', '內容摘要', '公告日期',
-      '檔案（ICSOP PDF）', '使用表單', '附錄', 'OJT 實體簽到表', '連結點程序書',
+      '檔案（ICSOP PDF）', '使用表單', '附錄', '連結點程序書',
     ];
 
     it('TS-F019-D9-001 不存在標籤為 `文件使用部門` 之欄位列', async () => {
@@ -185,7 +209,7 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
       expect(screen.queryByText(/選上層自動涵蓋其下所有單位/)).toBeNull();
     });
 
-    it('TS-F019-D9-003 其餘欄位列之集合與順序逐字不變（18 列）', async () => {
+    it('TS-F019-D9-003 其餘欄位列之集合與順序逐字不變（AC-J26 起 17 列，OJT 已移出本清單）', async () => {
       renderDetail();
       await screen.findByRole('heading', { name: '車輛分期進件作業' });
       const dts = Array.from(screen.getByTestId('field-list').querySelectorAll('dt')).map(
@@ -269,13 +293,21 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
    *    之 `kind:'ICSOP PDF'`／`kind:'OJT 實體簽到表'`，於 `:253` 渲染為獨立於 `wmNote()` 之元素）。
    * 🔒 `downloadAttachment(blobPath)` helper **本身保留不動**——後台三頁續以之取 RAW（`OQ-FM-01`）。
    */
-  it('附件區呈現 ICSOP PDF 與 OJT 之類別標籤；下載走前台代理串流端點＋toast', async () => {
+  /**
+   * 🔴 [2026-08-28 E11] `AC-J26`：附件區已不含 OJT 項，`downloadPublicAttachment` 之 `type`
+   * 參數自此僅剩 `'icsop-pdf'` 一種前台會實際觸發之值——原案之 OJT 反向鑑別力守衛段落移除，
+   * 其鑑別力目的（避免路徑判別參數被寫死）改由下方 `AC-24` 之「前台無任何 OJT 下載入口」負向
+   * 案承接（不同形狀，但同樣防止「type 被忽略／寫死」之風險——若實作忽略 type 而讓 OJT 也能觸發
+   * 下載，該負向案會捕捉到）。
+   * 📝 被移除之 OJT 下載鑑別力段落逐字保留供追溯（見本檔 git 歷史）。
+   */
+  it('附件區呈現 ICSOP PDF 之類別標籤（OJT 已不在附件區）；下載走前台代理串流端點＋toast', async () => {
     vi.mocked(api.downloadPublicAttachment).mockResolvedValue(undefined);
     renderDetail();
     await screen.findByRole('heading', { name: '車輛分期進件作業' });
     const atts = within(screen.getByTestId('attachment-list'));
     expect(atts.getByText('ICSOP PDF')).toBeInTheDocument();
-    expect(atts.getByText('OJT 實體簽到表')).toBeInTheDocument();
+    expect(atts.queryByText('OJT 實體簽到表')).not.toBeInTheDocument();
 
     await userEvent.click(atts.getByRole('button', { name: '下載 車輛分期進件作業_v1.3.pdf' }));
     await waitFor(() =>
@@ -286,17 +318,67 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
       ),
     );
     expect(await screen.findByText(/已開始下載/)).toBeInTheDocument();
+  });
 
-    // 鑑別力守衛（遷移時補訂）：`type` 為新增之路徑判別參數，若被寫死為 `'icsop-pdf'`，
-    // 上一段斷言仍會綠 ⇒ 以 OJT 列反向釘住兩列不得共用同一 type。
-    await userEvent.click(atts.getByRole('button', { name: '下載 車輛分期進件作業_OJT簽到表.pdf' }));
-    await waitFor(() =>
-      expect(api.downloadPublicAttachment).toHaveBeenCalledWith(
-        'a3f81c22-9e04-4b7a-8f2d-e2c9d1748e2f',
-        'ojt',
-        '車輛分期進件作業_OJT簽到表.pdf',
-      ),
-    );
+  /**
+   * 🔴 [2026-08-28 E11] `AC-24`（`OQ-E11-14`→A）：前台文件詳情頁唯讀顯示已完成 OJT 之使用單位
+   * 清單（單位／日期層級，不揭個人），與後台 `AC-21` 之判定同源。權威 DOM 掛鉤＝`prototypes/04`：
+   * `[data-ojt-derived]`／`[data-ojt-derived-summary]`／`[data-ojt-completed-list]`／
+   * `[data-ojt-completed-org]`／`[data-ojt-derived-empty]`。
+   */
+  describe('AC-24：前台 OJT 唯讀衍生（prototype 04）', () => {
+    it('尚無任何單位完成 → [data-ojt-derived-empty] 逐字「尚無任何使用單位完成 OJT」', async () => {
+      vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(
+        detailOf({ ojtCompletedUnits: [], ojtUsingUnitCount: 2 }),
+      );
+      renderDetail();
+      await screen.findByRole('heading', { name: '車輛分期進件作業' });
+      const empty = document.querySelector('[data-ojt-derived-empty]');
+      expect(empty, '找不到 [data-ojt-derived-empty]').not.toBeNull();
+      expect(empty!.textContent).toBe('尚無任何使用單位完成 OJT');
+      expect(document.querySelectorAll('[data-ojt-completed-org]')).toHaveLength(0);
+    });
+
+    it('已有單位完成 → [data-ojt-derived-summary] 逐字「已完成 {done}／{total} 個使用單位」＋逐項列出完成單位', async () => {
+      vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(
+        detailOf({ ojtCompletedUnits: ['審查室', '企金室'], ojtUsingUnitCount: 3 }),
+      );
+      renderDetail();
+      await screen.findByRole('heading', { name: '車輛分期進件作業' });
+      const summary = document.querySelector('[data-ojt-derived-summary]');
+      expect(summary, '找不到 [data-ojt-derived-summary]').not.toBeNull();
+      expect(summary!.textContent).toBe('已完成 2／3 個使用單位');
+      const items = document.querySelectorAll('[data-ojt-completed-org]');
+      expect(items).toHaveLength(2);
+      expect(document.querySelector('[data-ojt-derived-empty]')).toBeNull();
+    });
+
+    /**
+     * 🔴 `AC-24`：前台**不提供**任何 OJT 場次檔案之下載或檢視入口——簽到表載有個別受訓人員之
+     * 簽名，與 `AC-16` 之 PII 防線同源；前台揭露「哪些單位完成了」是管理資訊，揭露「誰簽了名」
+     * 不是。
+     */
+    it('🔴 負向：[data-ojt-derived] 內不得有任何下載／檢視控制項（無簽到表下載入口）', async () => {
+      vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(
+        detailOf({ ojtCompletedUnits: ['審查室'], ojtUsingUnitCount: 1 }),
+      );
+      renderDetail();
+      await screen.findByRole('heading', { name: '車輛分期進件作業' });
+      const ojtBlock = document.querySelector('[data-ojt-derived]');
+      expect(ojtBlock, '找不到 [data-ojt-derived]').not.toBeNull();
+      expect(ojtBlock!.querySelectorAll('button, a[href]')).toHaveLength(0);
+    });
+
+    it('（AC-24／AC-16 同源之 PII 防線延伸）已完成單位摘要不得包含任何員工編號格式字串', async () => {
+      vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(
+        detailOf({ ojtCompletedUnits: ['審查室'], ojtUsingUnitCount: 1 }),
+      );
+      renderDetail();
+      await screen.findByRole('heading', { name: '車輛分期進件作業' });
+      const ojtBlock = document.querySelector('[data-ojt-derived]') as HTMLElement;
+      // 員工編號格式（5 碼數字）不應出現於本區塊之任何文字內容。
+      expect(ojtBlock.textContent ?? '').not.toMatch(/\b\d{5}\b/);
+    });
   });
 
   /**

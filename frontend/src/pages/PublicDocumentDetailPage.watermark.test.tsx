@@ -81,18 +81,20 @@ function detailOf(over: Partial<PublicDocumentDetail> = {}): PublicDocumentDetai
     edition: "26'01",
     announcedDate: '2026-01-01T00:00:00.000Z',
     contentSummary: '規範車輛分期案件之進件收件、資格初審與建檔流程。',
+    /**
+     * 🔴 [2026-08-28 E11] `AC-J26`（[F020#ojt-frontstage-note-delta]）：`prototypes/04` 已移除
+     * 附件區之 OJT 項（改由獨立 `[data-ojt-derived]` 唯讀衍生區塊呈現，見
+     * `PublicDocumentDetailPage.test.tsx` 之 AC-24 案）——`attachments` 陣列自此僅含 ICSOP_PDF，
+     * 型別聯集若同步移除 `'OJT_SIGNIN'` 字面值，此陣列即完全不再有 OJT 分支可放。
+     * 📝 被移除之原 fixture 逐字保留供追溯：
+     *   OLD> { type: 'OJT_SIGNIN', fileName: '車輛分期進件作業_OJT簽到表.jpg', blobPath: 'documents/doc-a/OJT_SIGNIN/u2.jpg', watermarkSupported: false },
+     */
     attachments: [
       {
         type: 'ICSOP_PDF',
         fileName: '車輛分期進件作業_v1.3.pdf',
         blobPath: 'documents/doc-a/ICSOP_PDF/u1.pdf',
         watermarkSupported: true,
-      },
-      {
-        type: 'OJT_SIGNIN',
-        fileName: '車輛分期進件作業_OJT簽到表.jpg',
-        blobPath: 'documents/doc-a/OJT_SIGNIN/u2.jpg',
-        watermarkSupported: false,
       },
     ],
     usageForms: [
@@ -148,14 +150,16 @@ describe('PublicDocumentDetailPage — 三類附屬檔案之浮水印標示（F0
 
   it('AC-D7 ③ 三類清單各有其列選擇器：`data-attachment-item`／`data-usage-form-item`／`data-appendix-item`', async () => {
     renderDetail();
-    await waitFor(() => expect(rows('[data-attachment-item]').length).toBe(2));
+    // 🔴 AC-J26：attachments 已收斂為僅 ICSOP_PDF 一筆（OJT 已移出附件區），計數 2→1。
+    await waitFor(() => expect(rows('[data-attachment-item]').length).toBe(1));
     expect(rows('[data-usage-form-item]')).toHaveLength(2);
     expect(rows('[data-appendix-item]')).toHaveLength(2);
   });
 
   it('AC-D7 ① 三類清單之**每一列**皆帶一個 `data-wm-note` 註記元素', async () => {
     renderDetail();
-    await waitFor(() => expect(rows('[data-attachment-item]').length).toBe(2));
+    // 🔴 AC-J26：attachments 已收斂為僅 ICSOP_PDF 一筆（OJT 已移出附件區），計數 2→1。
+    await waitFor(() => expect(rows('[data-attachment-item]').length).toBe(1));
     for (const sel of ['[data-attachment-item]', '[data-usage-form-item]', '[data-appendix-item]']) {
       for (const row of rows(sel)) {
         expect(row.querySelectorAll('[data-wm-note]')).toHaveLength(1);
@@ -165,7 +169,8 @@ describe('PublicDocumentDetailPage — 三類附屬檔案之浮水印標示（F0
 
   it('AC-D7 ①② PDF 列顯示逐字正向文案 `檢視/下載將燒錄浮水印`，且**不得**出現負向文案', async () => {
     renderDetail();
-    await waitFor(() => expect(rows('[data-attachment-item]').length).toBe(2));
+    // 🔴 AC-J26：attachments 已收斂為僅 ICSOP_PDF 一筆（OJT 已移出附件區），計數 2→1。
+    await waitFor(() => expect(rows('[data-attachment-item]').length).toBe(1));
     const pdfRows = [
       rows('[data-attachment-item]')[0], // ICSOP PDF
       rows('[data-usage-form-item]')[1], // 對保通知書.pdf
@@ -177,11 +182,16 @@ describe('PublicDocumentDetailPage — 三類附屬檔案之浮水印標示（F0
     }
   });
 
-  it('AC-D2／AC-D7 ① 非 PDF 列顯示逐字負向文案 `此格式不支援浮水印`（三類共用同一文案，不得分歧）', async () => {
+  /**
+   * 🔴 [2026-08-28 E11] `AC-J26`：本案原以 OJT 之 .jpg 列作為 `此格式不支援浮水印` 之其中一個
+   * 載體——該列已隨附件區移除 OJT 項而不存在。策略 A 與其逐字文案本身完全不變、續為有效，
+   * 只是「在前台哪一區找得到它」改變：自此由**使用表單區／附錄區**之非 PDF 列（本案已含
+   * 進件申請書.xlsx／作業流程對照表.xlsx 兩者）承載，斷言之定位點就地改寫、不刪除。
+   */
+  it('AC-D2／AC-D7 ①（AC-J26 定位點已改）非 PDF 列顯示逐字負向文案 `此格式不支援浮水印`（載體改為使用表單／附錄區）', async () => {
     renderDetail();
-    await waitFor(() => expect(rows('[data-attachment-item]').length).toBe(2));
+    await waitFor(() => expect(rows('[data-attachment-item]').length).toBe(1));
     const nonPdfRows = [
-      rows('[data-attachment-item]')[1], // OJT .jpg
       rows('[data-usage-form-item]')[0], // 進件申請書.xlsx
       rows('[data-appendix-item]')[0], // 作業流程對照表.xlsx
     ];
@@ -243,7 +253,8 @@ describe('PublicDocumentDetailPage — 下載觸發方式（F020 AC-D3／AC-D3a�
 
   it('🔴 AC-D3 前台下載附件**不得**呼叫後台共用之 SAS helper `downloadAttachment`（#5a 之根因）', async () => {
     renderDetail();
-    await waitFor(() => expect(rows('[data-attachment-item]').length).toBe(2));
+    // 🔴 AC-J26：attachments 已收斂為僅 ICSOP_PDF 一筆（OJT 已移出附件區），計數 2→1。
+    await waitFor(() => expect(rows('[data-attachment-item]').length).toBe(1));
     const btn = within(rows('[data-attachment-item]')[0]).getByRole('button', { name: /下載/ });
     await userEvent.click(btn);
     expect(api.downloadAttachment).not.toHaveBeenCalled();
@@ -251,7 +262,8 @@ describe('PublicDocumentDetailPage — 下載觸發方式（F020 AC-D3／AC-D3a�
 
   it('🔴 AC-D3a 三類下載控制項皆為 `<button>`；列內不得有指向下載端點之 `<a href>`（SPA fallback 陷阱）', async () => {
     renderDetail();
-    await waitFor(() => expect(rows('[data-attachment-item]').length).toBe(2));
+    // 🔴 AC-J26：attachments 已收斂為僅 ICSOP_PDF 一筆（OJT 已移出附件區），計數 2→1。
+    await waitFor(() => expect(rows('[data-attachment-item]').length).toBe(1));
     for (const sel of ['[data-attachment-item]', '[data-usage-form-item]', '[data-appendix-item]']) {
       for (const row of rows(sel)) {
         expect(within(row).getByRole('button', { name: /下載/ }).tagName).toBe('BUTTON');

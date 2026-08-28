@@ -400,14 +400,28 @@ describe('DocumentCreatePage — STEP4 附件與關聯文件（F016/F018/F015，
     mockAuth('ICSOPAdmin');
   });
 
-  it('渲染 STEP4：附件上傳卡、使用表單、文件連結點', async () => {
+  /**
+   * 🔴 [2026-08-28 E11] `AC-23`（`OQ-E11-08`→A）：建立頁之「上傳 OJT 簽到表（1 份）」卡已移除，
+   * 改為唯讀提示卡 `[data-ojt-create-hint]`（🔒 刻意不是 `<button>`，否則讀起來仍像一個上傳
+   * 入口）＋ `[data-ojt-create-hint-text]` 逐字「儲存後至 OJT 進度管理登記」。
+   * 📝 被取代之原斷言逐字保留供追溯：
+   *   OLD> expect(screen.getByLabelText(/上傳 OJT 簽到表/)).toBeInTheDocument();
+   */
+  it('渲染 STEP4：附件上傳卡（僅 ICSOP PDF）、使用表單、文件連結點；OJT 卡已改為唯讀提示卡（AC-23）', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
     expect(screen.getByText('附件與關聯文件')).toBeInTheDocument();
     expect(screen.getByLabelText(/上傳 ICSOP PDF/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/上傳 OJT 簽到表/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/上傳 OJT 簽到表/)).not.toBeInTheDocument();
     expect(screen.getByLabelText(/使用表單/)).toBeInTheDocument();
     expect(screen.getByLabelText(/文件連結點/)).toBeInTheDocument();
+
+    const hint = document.querySelector('[data-ojt-create-hint]');
+    expect(hint, '找不到 [data-ojt-create-hint]').not.toBeNull();
+    expect(hint!.tagName).not.toBe('BUTTON');
+    const hintText = document.querySelector('[data-ojt-create-hint-text]');
+    expect(hintText, '找不到 [data-ojt-create-hint-text]').not.toBeNull();
+    expect(hintText!.textContent).toBe('儲存後至 OJT 進度管理登記');
   });
 
   it('選取使用表單與連結點 → 建立後以新文件 id 關聯表單並整批送出連結', async () => {

@@ -74,6 +74,30 @@ const UPLOAD_ROW = {
 };
 
 /**
+ * 🔴 [2026-08-28 E11] `AC-J22`／`AC-J23`（[F024#ojt-progress-audit-view-delta]；權威＝
+ * `prototypes/17-access-history.html`）：F042 場次登記／刪除寫入本表，新立
+ * `targetType='OJT_SESSION'`（第 9 個值）＋兩個新 `actionType`。「使用單位」不新增欄位，
+ * 承載於既有「對象名稱／說明」欄之文字（本檔以 `targetName` 欄位模擬，格式如
+ * `OJT 場次登記（營運管理部 / 審查室 · 訓練日期 2026-06-18）`，逐字取自 prototypes/17 定稿）。
+ */
+const OJT_UPLOAD_ROW = {
+  id: 'r9', accountId: 'a9', employeeNo: '20233', name: '李慧玲',
+  company: '和潤企業股份有限公司', department: '債權管理部', section: '法催一室', roleCode: 'ICSOPAdmin',
+  targetType: 'OJT_SESSION', actionType: 'OJT_SESSION_UPLOAD',
+  documentId: 'd9', documentNumber: 'ICSOP-SRC-101-1-01',
+  lifecycleId: null, lifecycleName: null, formId: null,
+  targetName: 'OJT 場次登記（營運管理部 / 審查室 · 訓練日期 2026-06-18）',
+  watermarkSnapshot: null, occurredAt: '2026-07-16T18:24:05.000Z', source: 'DIRECT',
+};
+const OJT_DELETE_ROW = {
+  ...OJT_UPLOAD_ROW,
+  id: 'r10', accountId: 'a9', employeeNo: '20233', name: '李慧玲', roleCode: 'ICSOPAdmin',
+  actionType: 'OJT_SESSION_DELETE',
+  targetName: 'OJT 場次刪除（供應商金融部 / 醫療一課 · 訓練日期 2026-05-20）',
+  occurredAt: '2026-07-14T16:47:52.000Z',
+};
+
+/**
  * 2026-08-20 D9 delta（缺失／變更 delta 第 5／8 項之連動）—— 新增之稽核事件（後台燒錄下載、
  * OJT 上傳）於查詢／匯出之呈現。權威：`docs/specs/features/F024-access-history-query.md
  * #d9-audit-view-delta`（`AC-N53`／`AC-N54`／`AC-N69`／`AC-N70`）＋ `#prototype 17`（`AC-N80`／
@@ -138,13 +162,101 @@ describe('AccessHistoryPage — D9 delta：上傳事件呈現與排除／篩出�
     );
   });
 
-  it('AC-N69 🔴 篩選控制項之類型值恰為四種＋預設「全部」共 5 個 option，「上傳」置於既有三者之後', async () => {
+  /**
+   * 🔴 [2026-08-28 E11] `AC-J23`（`OQ-E11-17` 覆核核可）：類型值集合由四種增為**五種**、控制項
+   * 連同預設項共 **6 個** option（原「恰四種／5 個」已就地推翻）。既有四者之字面與相對順序
+   * 逐字不動，`OJT 場次` 置於其後。
+   * 📝 被反轉之原斷言逐字保留供追溯：
+   *   OLD> expect(values).toEqual(['全部', '文件', '循環', '變更', '上傳']);
+   */
+  it('AC-N69→AC-J23 🔴 篩選控制項之類型值恰為五種＋預設「全部」共 6 個 option，「OJT 場次」置於既有四者之後', async () => {
     vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([DOC_ROW]));
     render(<AccessHistoryPage />);
     await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
     const select = screen.getByLabelText('類型') as HTMLSelectElement;
     const values = Array.from(select.options).map((o) => o.value);
-    expect(values).toEqual(['全部', '文件', '循環', '變更', '上傳']);
+    expect(values).toEqual(['全部', '文件', '循環', '變更', '上傳', 'OJT 場次']);
+  });
+
+  /**
+   * 🔴 `AC-J23`：新事件必須可「排除」與「篩出」——兩者是兩件事，須各自斷言（沿用 `AC-N69` 之
+   * 既有明文）。「類型＝文件」不含 OJT 場次事件（排除）；「類型＝OJT 場次」不含一般調閱事件
+   * （篩出）。
+   */
+  it('AC-J23① 類型＝文件 → 僅回傳文件類、不含 OJT 場次事件（排除）', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([DOC_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText('類型'), '文件');
+    await waitFor(() =>
+      expect(endpoints.getAccessHistory).toHaveBeenCalledWith(expect.objectContaining({ kind: '文件' })),
+    );
+  });
+
+  it('AC-J23② 類型＝OJT 場次 → 以 kind=OJT 場次 重新查詢（篩出），兩個新 actionType 同屬本類型皆回傳', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([OJT_UPLOAD_ROW, OJT_DELETE_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getAllByText('李慧玲').length).toBeGreaterThan(0));
+    await userEvent.selectOptions(screen.getByLabelText('類型'), 'OJT 場次');
+    await waitFor(() =>
+      expect(endpoints.getAccessHistory).toHaveBeenCalledWith(expect.objectContaining({ kind: 'OJT 場次' })),
+    );
+  });
+
+  it('AC-J22① OJT_SESSION_UPLOAD → 場次登記；OJT_SESSION_DELETE → 場次刪除（兩標籤互異，硬性要求）', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([OJT_UPLOAD_ROW, OJT_DELETE_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getAllByText('李慧玲').length).toBeGreaterThan(0));
+    expect(screen.getByText(/OJT_SESSION_UPLOAD · 場次登記/)).toBeInTheDocument();
+    expect(screen.getByText(/OJT_SESSION_DELETE · 場次刪除/)).toBeInTheDocument();
+    // 互異性本身為硬性要求（AC-J22①）：字面日後若改，這條才是真正要保住的東西。
+    const uploadLabel = screen.getByText(/OJT_SESSION_UPLOAD · /).textContent;
+    const deleteLabel = screen.getByText(/OJT_SESSION_DELETE · /).textContent;
+    expect(uploadLabel).not.toBe(deleteLabel);
+  });
+
+  it('AC-J23 OJT_SESSION 之「類型」欄逐字為「OJT 場次」，明確不得落入既有「上傳」類（AC-N69 之分類學污染同型風險）', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([OJT_UPLOAD_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getAllByText('李慧玲').length).toBeGreaterThan(0));
+    const row = screen.getAllByText('李慧玲')[0].closest('tr') as HTMLElement;
+    expect(within(row).getByText('OJT 場次')).toBeInTheDocument();
+    expect(within(row).queryByText('上傳')).not.toBeInTheDocument();
+  });
+
+  it('AC-J25 使用單位不新增欄位，承載於「對象」欄文字（可被既有文件搜尋框搜到）', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([OJT_UPLOAD_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getAllByText('李慧玲').length).toBeGreaterThan(0));
+    expect(
+      screen.getByText(/OJT 場次登記（營運管理部 \/ 審查室 · 訓練日期 2026-06-18）/),
+    ).toBeInTheDocument();
+  });
+
+  it('AC-J25／AC-N80 兩個新 actionType 之浮水印快照欄皆留空，文字逐字「（此動作類型無浮水印，該欄留空）」', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([OJT_UPLOAD_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getAllByText('李慧玲').length).toBeGreaterThan(0));
+    await userEvent.click(screen.getAllByText('李慧玲')[0]);
+    await waitFor(() => {
+      const el = document.querySelector('[data-wm-snapshot]');
+      expect(el, '找不到 data-wm-snapshot 節點').not.toBeNull();
+      expect(el!.textContent).toBe('（此動作類型無浮水印，該欄留空）');
+    });
+  });
+
+  /**
+   * 🔒 append-only 回歸鎖定：AUDIT_LOG 為 append-only，2026-08-20～E11 上線期間之
+   * `ATTACHMENT_UPLOAD` 歷史列永久存在，本頁仍須渲染得出它——新增 OJT 事件時最容易「順手清乾淨」
+   * 而使歷史列渲染成空白。
+   */
+  it('🔒 既有 ATTACHMENT_UPLOAD 之「上傳」類標籤與對映，於新增 OJT 場次類型後仍不得移除（append-only 歷史）', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([UPLOAD_ROW, OJT_UPLOAD_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('林建宏')).toBeInTheDocument());
+    const uploadRow = screen.getByText('林建宏').closest('tr') as HTMLElement;
+    expect(within(uploadRow).getByText('上傳')).toBeInTheDocument();
+    expect(within(uploadRow).getByText('ATTACHMENT_UPLOAD · 附件上傳')).toBeInTheDocument();
   });
 
   /**

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import {
   getDocument,
@@ -18,7 +18,6 @@ import {
   linkUsageForms,
   unlinkUsageForm,
   uploadIcsopPdf,
-  uploadOjtAttachment,
   downloadAttachment,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
@@ -35,7 +34,11 @@ import {
 } from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT } from '../domain/watermark-note';
-import { canWriteOjt } from '../domain/readonly-notice';
+import {
+  OjtDerivedBlock,
+  OJT_PROGRESS_LINK_TEXT,
+  loadOjtCompletion,
+} from '../components/OjtDerivedBlock';
 import { EditionInput } from '../components/EditionInput';
 import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, MultiSearchCombobox, type ComboOption } from '../components/SearchCombobox';
@@ -157,6 +160,11 @@ export function DocumentEditPage(): JSX.Element {
   const [primaryChiefOrig, setPrimaryChiefOrig] = useState<ComboOption | null>(null);
   const [secondaryChiefOrig, setSecondaryChiefOrig] = useState<ComboOption[]>([]);
   const [attachments, setAttachments] = useState<DocumentAttachmentRecord[]>([]);
+  /**
+   * F042 `AC-21`：已完成 OJT 之使用單位（唯讀衍生，與唯讀頁及清單頁三值狀態同源）。
+   * 載入失敗一律降級為空集合——本區塊為唯讀資訊，不應讓它的失敗擋住整頁編輯。
+   */
+  const [ojtCompletedOrgs, setOjtCompletedOrgs] = useState<string[]>([]);
   const [formPool, setFormPool] = useState<UsageFormRecord[]>([]);
   const [origForms, setOrigForms] = useState<ComboOption[]>([]);
   const [draftForms, setDraftForms] = useState<ComboOption[]>([]);
@@ -204,6 +212,7 @@ export function DocumentEditPage(): JSX.Element {
         })
         .catch(() => undefined);
       void getDocumentAttachments(id).then(setAttachments).catch(() => undefined);
+      void loadOjtCompletion(id, setOjtCompletedOrgs);
       // 解析當責室長-主要之顯示名稱（單筆讀取僅回員編）。
       if (v.primaryChiefId) {
         void searchPersons(v.primaryChiefId, 5)
@@ -588,11 +597,20 @@ export function DocumentEditPage(): JSX.Element {
     }
   }, [draft, orig, canWrite, suffix, dupHit, lcSelection, changed, formsChanged, origForms, draftForms, appendicesChanged, draftAppendices, id, statusReason, toast]);
 
+  /**
+   * ICSOP PDF 之覆蓋式上傳。
+   * 🔴 F042 `AC-J11`③（2026-08-28）：原本用來分派 `pdf`／`ojt` 兩條上傳路徑之 `kind` 參數
+   * **已隨 OJT 分支一併移除**——編輯頁不再提供任何 OJT 上傳、取代或覆蓋入口（含 ICSOPAdmin），
+   * 登記入口整批搬至「OJT 進度管理」（`AC-05`）。留一個只剩單一合法值的 `kind` 參數，讀起來
+   * 仍像「這裡還有第二種上傳」，與 `AC-J10`「不得殘留恆空之擴充點」同一理由。
+   * 📝 被移除之原分支逐字保留供追溯：
+   * `const rec = kind === 'pdf' ? await uploadIcsopPdf(id, file) : await uploadOjtAttachment(id, file);`
+   */
   const onUpload = useCallback(
-    async (kind: 'pdf' | 'ojt', file: File | null) => {
+    async (file: File | null) => {
       if (!file) return;
       try {
-        const rec = kind === 'pdf' ? await uploadIcsopPdf(id, file) : await uploadOjtAttachment(id, file);
+        const rec = await uploadIcsopPdf(id, file);
         // 覆蓋式：以新列取代同型別之舊列（維持卡片顯示最新檔名/blobPath）。
         setAttachments((prev) => [...prev.filter((a) => a.type !== rec.type), rec]);
         toast.success(`已上傳「${file.name}」（覆蓋式；舊檔不再可存取）`);
@@ -1016,37 +1034,33 @@ export function DocumentEditPage(): JSX.Element {
             accept=".pdf,.jpg,.jpeg,.png"
             canReplace={!ro}
             writeHook="icsop_pdf"
-            writeClass="write-only"
             replaceAriaLabel="取代 ICSOP PDF"
             existing={attachments.find((a) => a.type === 'ICSOP_PDF') ?? null}
             onDownload={onDownloadAttachment}
-            onSelect={(f) => void onUpload('pdf', f)}
+            onSelect={(f) => void onUpload(f)}
           />
-          <ReplaceCard
-            title="OJT 實體簽到表（1 份，覆蓋式）"
-            accept=".pdf,.jpg,.jpeg,.png"
-            /*
-              🔴 F026 `AC-N23`（2026-08-20 `OQ-D9-19`／`OQ-D9-20`）：OJT 為主管／部門窗口之
-              **唯一**可寫項；判定取自 `FIELD_MATRIX`（單一權威），不在此另寫角色白名單。
-            */
-            canReplace={canWriteOjt(role)}
-            writeHook="ojt"
-            writeClass="ojt-write"
-            replaceAriaLabel="取代 OJT 簽到表"
-            ojtUpload
-            titleBadge={
-              canWriteOjt(role) ? (
-                <span
-                  data-ojt-exception=""
-                  className="ojt-write text-[10px] px-1.5 py-0.5 rounded bg-primary-600 text-white whitespace-nowrap"
-                >
-                  主管／部門窗口亦可寫
-                </span>
-              ) : undefined
+          {/*
+            🔴 F042 `AC-J10`／`AC-J11`（2026-08-28）：原「OJT 實體簽到表（1 份，覆蓋式）」
+            `ReplaceCard` 已整張移除——`data-attachment-write="ojt"`／`data-ojt-upload`／
+            `data-ojt-exception`／`.ojt-write` 於本頁自此皆為 0 個，五角色皆同（含 ICSOPAdmin）。
+            取而代之者為與唯讀頁**同源**之唯讀衍生區塊（`AC-21`），其內不得帶任何寫入型掛鉤。
+            📝 被移除之原卡逐字保留供追溯：`canReplace={canWriteOjt(role)}` ＋ `writeHook="ojt"`
+               ＋ `writeClass="ojt-write"` ＋ `ojtUpload` ＋ `titleBadge`（`data-ojt-exception`
+               徽章「主管／部門窗口亦可寫」）＋ `onSelect={(f) => void onUpload('ojt', f)}`。
+          */}
+          <OjtDerivedBlock
+            completedUnits={ojtCompletedOrgs}
+            totalUnits={draft.usingDeptIds.length}
+            progressLink={
+              <Link
+                data-ojt-progress-link=""
+                to="/admin/ojt-progress"
+                className="inline-flex items-center gap-1 text-xs text-primary-600 hover:underline shrink-0"
+              >
+                <Icon name="external-link" className="w-3.5 h-3.5" />
+                {OJT_PROGRESS_LINK_TEXT}
+              </Link>
             }
-            existing={attachments.find((a) => a.type === 'OJT_SIGNIN') ?? null}
-            onDownload={onDownloadAttachment}
-            onSelect={(f) => void onUpload('ojt', f)}
           />
           {/*
             ICSOP 原始檔 .xls：保存待 AI 索引管線（F027/F029）就緒；本輪停用（比照建立頁佔位卡，copy 一致）。
@@ -1325,36 +1339,34 @@ function ReadonlyChips({ values, emptyText }: {
  * 附件卡（prototype 15）：現有檔名 ＋ 浮水印註記 ＋「下載」＋「取代」。
  * 尚未上傳 → 無檔名列與下載鈕；無寫入權之角色 → 無「取代」入口。
  *
- * 🔴 **`writeHook`／`writeClass` 為 F026 `AC-N76` ④ 之逐元素掛鉤，兩者必須成對且不得混用**：
- *  · `icsop_pdf`／`xls` → `write-only`（僅 ICSOP 管理員之牆）
- *  · `ojt`            → `ojt-write`（2026-08-20 新開放主管／部門窗口之**唯一**破口）
- * ⚠ **不得**把 OJT 取代鈕併入 `write-only`「順手統一」——一旦 `write-only` 之角色條件為兩角色
- *   放寬，ICSOP PDF 取代鈕與 `.xls` 上傳鈕會**一起對主管放行**（`AC-N25` 第三輪擴充明文禁令）。
+ * 🔴 **`writeHook` 為 F026 `AC-N76` ④ 之逐元素掛鉤**：`icsop_pdf`／`xls` → `write-only`
+ * （僅 ICSOP 管理員之牆）。該逐元素斷言由 lead 於 2026-08-20 第四輪特別授權，**專門用來擋
+ * 「有人把 `.write-only` 整個刪掉」之失誤**，與 OJT 無關 ⇒ **不得**因 OJT 破例收回而順手一併刪除。
+ *
+ * 🔴 F042 `AC-J10`（2026-08-28）：`writeClass`／`ojtUpload`／`titleBadge` 三個參數與
+ * `.ojt-write` 這條 class **已整批移除**——OJT 卡本身已不存在，留著一條恆空的 class 選擇器，
+ * 下一位讀者無從判斷是「刻意保留的擴充點」還是「刪漏的殘留」（`AC-J10` 明文）。
+ * 📝 被移除之原參數逐字保留供追溯：
+ * `writeClass: 'write-only' | 'ojt-write'`／`ojtUpload?: boolean`（另掛 `data-ojt-upload`）／
+ * `titleBadge?: JSX.Element`（承載 `data-ojt-exception` 徽章「主管／部門窗口亦可寫」）。
  */
 function ReplaceCard({
-  title, accept, canReplace, writeHook, writeClass, replaceAriaLabel, ojtUpload, titleBadge,
+  title, accept, canReplace, writeHook, replaceAriaLabel,
   existing, onDownload, onSelect,
 }: {
   title: string;
   accept: string;
-  /** 該角色對本附件是否可寫（`icsop_pdf` ＝ ICSOPAdmin；`ojt` ＝ ICSOPAdmin／主管／部門窗口）。 */
+  /** 該角色對本附件是否可寫（`icsop_pdf`／`xls` ＝ ICSOPAdmin）。 */
   canReplace: boolean;
-  writeHook: 'icsop_pdf' | 'ojt';
-  writeClass: 'write-only' | 'ojt-write';
+  writeHook: 'icsop_pdf' | 'xls';
   replaceAriaLabel: string;
-  /** OJT 專屬：另掛 `data-ojt-upload`（`AC-N76` ④、`AC-N75` ④）。 */
-  ojtUpload?: boolean;
-  titleBadge?: JSX.Element;
   existing: DocumentAttachmentRecord | null;
   onDownload: (a: DocumentAttachmentRecord) => void;
   onSelect: (f: File | null) => void;
 }): JSX.Element {
   return (
     <div className="border border-slate-200 rounded-lg p-3">
-      <div className="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1.5">
-        {title}
-        {titleBadge}
-      </div>
+      <div className="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1.5">{title}</div>
       {existing && (
         <div className="flex items-center gap-2">
           <Icon name="file-text" className="w-5 h-5 text-red-500" />
@@ -1374,9 +1386,8 @@ function ReplaceCard({
         {canReplace && (
           <label
             data-attachment-write={writeHook}
-            {...(ojtUpload ? { 'data-ojt-upload': '' } : {})}
             aria-label={replaceAriaLabel}
-            className={`${writeClass} inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 cursor-pointer`}
+            className="write-only inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 cursor-pointer"
           >
             <Icon name="upload" className="w-3.5 h-3.5" />取代
             <input type="file" accept={accept} aria-label={`上傳取代 ${title}`} className="hidden" onChange={(e) => onSelect(e.target.files?.[0] ?? null)} />

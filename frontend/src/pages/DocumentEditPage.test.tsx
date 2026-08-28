@@ -469,25 +469,30 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
   });
 
   /**
-   * 🔴 2026-08-20 D9 delta 第三輪（`AC-N76`；lead 追認之超範圍改動）—— 編輯頁 `.ojt-write` 隔離
-   * 契約與逐元素 `data-attachment-write` 掛鉤。權威：
-   * `docs/specs/features/F026-role-field-matrix.md#ojt-write-exception-delta` `AC-N25`（第三輪
-   * 擴充 ①②③）／`AC-N76`；DOM 值域＝`prototypes/15-document-edit.html:231,241,249`。
+   * 🔴 [2026-08-28 E11] `AC-J10`／`AC-J11`（[F026#ojt-field-retire-delta]）：F042 收回 OJT 一欄之
+   * 唯一破例——編輯頁之 OJT 取代鈕、`.ojt-write` class、`[data-ojt-exception]` 徽章、
+   * `[data-attachment-write="ojt"]` 整個移除。`.ojt-write` 這條 CSS class 亦應自實作一併移除
+   * （留著一條恆空的 class 選擇器，下一位讀者無從判斷是「刻意保留的擴充點」還是「刪漏的殘留」，
+   * `AC-J10` 明文）。
+   * 🔴 **`AC-N76`④ 之逐元素斷言原為 3 條（xls／icsop_pdf／ojt），本 delta 縮為 2 條，不得縮為 0
+   * 條**——xls／icsop_pdf 兩者與 OJT 無關，是 lead 於 2026-08-20 第四輪特別授權、專門用來擋
+   * 「有人把 `.write-only` 整個刪掉」之失誤（`AC-J11`⑤），絕不可因本 delta 整條作廢而順手一併
+   * 刪除。
    * 🔴 **不得**以 `offsetParent === null`／`toBeVisible()` 斷言可見性（jsdom 不做版面計算，
-   * 該類斷言恆真無鑑別力）——一律以 class 指派與 `data-*` 掛鉤斷言（`AC-N25` 明文禁令）。
+   * 該類斷言恆真無鑑別力）——一律以 class 指派與 `data-*` 掛鉤斷言（沿用既有 `AC-N25` 明文禁令）。
+   * 📝 `AC-N76`／`AC-N25` 第三輪擴充之原逐字條文保留於本檔 git 歷史供追溯，本 describe 已就地
+   * 改寫為新行為之背書，不刪除。
    */
-  describe('OJT 上傳破例：編輯頁 .ojt-write 隔離契約（AC-N25 第三輪擴充／AC-N76）', () => {
-    const OJT_ATT: DocumentAttachmentRecord = {
-      id: 'a2', documentId: 'd1', type: 'OJT_SIGNIN', fileName: 'ojt_v1.pdf',
-      blobPath: 'documents/d1/ojt_signin/x.pdf', contentType: 'application/pdf', size: 512,
-      uploadedBy: 'admin', uploadedAt: '2026-06-01T00:00:00.000Z',
-    };
-
+  describe('OJT 唯讀衍生：編輯頁不再有任何 OJT 寫入入口（AC-J10／AC-J11）', () => {
     beforeEach(() => {
-      vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([ICSOP_PDF, OJT_ATT]);
+      vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([ICSOP_PDF]);
     });
 
-    it('AC-N76④ 逐元素斷言：xls／icsop_pdf 之 data-attachment-write 帶 write-only、不含 ojt-write', async () => {
+    /**
+     * 🔒 `AC-J11`⑤ 最易誤刪項：與 OJT 無關之兩顆鈕（`.xls` 上傳鈕／ICSOP PDF 取代鈕）之
+     * `write-only` 逐元素斷言必須保留、不得因整條 `AC-N76` 作廢而一併刪除。
+     */
+    it('AC-J11⑤（🔒 與 OJT 無關，不得刪除）逐元素斷言：xls／icsop_pdf 之 data-attachment-write 帶 write-only、不含 ojt-write', async () => {
       mockAuth('ICSOPAdmin');
       renderPage();
       await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
@@ -495,59 +500,58 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
       const icsopPdf = document.querySelector('[data-attachment-write="icsop_pdf"]');
       expect(xls, '找不到 data-attachment-write="xls"').not.toBeNull();
       expect(icsopPdf, '找不到 data-attachment-write="icsop_pdf"').not.toBeNull();
+      expect(document.querySelectorAll('[data-attachment-write="xls"]')).toHaveLength(1);
+      expect(document.querySelectorAll('[data-attachment-write="icsop_pdf"]')).toHaveLength(1);
       for (const el of [xls, icsopPdf]) {
         expect(el!.className).toMatch(/\bwrite-only\b/);
         expect(el!.className).not.toMatch(/\bojt-write\b/);
       }
     });
 
-    it('AC-N76④ 逐元素斷言：OJT 之 data-attachment-write 帶 ojt-write、不含 write-only；且 data-ojt-upload 恰 1 個', async () => {
+    it('AC-J11③④ [data-attachment-write="ojt"]／[data-ojt-upload]／[data-ojt-exception] 皆恰 0 個（ICSOPAdmin 亦然）', async () => {
       mockAuth('ICSOPAdmin');
       renderPage();
       await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
-      const ojt = document.querySelector('[data-attachment-write="ojt"]');
-      expect(ojt, '找不到 data-attachment-write="ojt"').not.toBeNull();
-      expect(ojt!.className).toMatch(/\bojt-write\b/);
-      expect(ojt!.className).not.toMatch(/\bwrite-only\b/);
-      expect(ojt!.hasAttribute('data-ojt-upload')).toBe(true);
-      expect(document.querySelectorAll('[data-ojt-upload]')).toHaveLength(1);
-    });
-
-    it('AC-N25③ 集合式互斥：.ojt-write 與 .write-only 之結果集合交集為空', async () => {
-      mockAuth('ICSOPAdmin');
-      renderPage();
-      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
-      const ojtWrite = new Set(Array.from(document.querySelectorAll('.ojt-write')));
-      const writeOnly = new Set(Array.from(document.querySelectorAll('.write-only')));
-      const intersection = [...ojtWrite].filter((el) => writeOnly.has(el));
-      expect(intersection).toEqual([]);
-    });
-
-    it('AC-N76② OJT 區塊標題旁徽章（data-ojt-exception）逐字文案「主管／部門窗口亦可寫」', async () => {
-      mockAuth('ICSOPAdmin');
-      renderPage();
-      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
-      const badge = document.querySelector('[data-ojt-exception]');
-      expect(badge, '找不到 data-ojt-exception 徽章').not.toBeNull();
-      expect(badge!.textContent).toBe('主管／部門窗口亦可寫');
+      expect(document.querySelectorAll('[data-attachment-write="ojt"]')).toHaveLength(0);
+      expect(document.querySelectorAll('[data-ojt-upload]')).toHaveLength(0);
+      expect(document.querySelectorAll('[data-ojt-exception]')).toHaveLength(0);
     });
 
     /**
-     * `AC-N25` 第三輪擴充 ①②③（正面：對 Supervisor／DeptContact 渲染時之 class 指派）。
-     * 🔴 本頁現行對 Supervisor 之寫入控制項一律以 `.write-only`（僅 ICSOPAdmin 可見）機制隱藏——
-     * `.ojt-write` 條件須擴大納入 Supervisor／DeptContact，使該角色能看到 OJT 取代鈕本身。
+     * `AC-J10`②：`.ojt-write` 集合互斥斷言（原 `AC-N25` 第三輪擴充③）若照原樣保留，會因
+     * `.ojt-write` 恆為空集合而「空集合與任何集合之交集恆為空」，斷言**恆真而無鑑別力**——
+     * 本 repo 已明文禁止之假綠同型（`offsetParent===null`）。故本條**整段作廢**、改為直接斷言
+     * `.ojt-write` 之查詢結果集合本身恰為 0（而非再驗一次一個永遠成立的交集）。
      */
-    it('AC-N25①②③ Supervisor 渲染時：OJT 取代鈕仍帶 ojt-write（非依角色從 DOM 移除），且集合式互斥依然成立', async () => {
-      mockAuth('Supervisor');
+    it('AC-J10②（🔴 假綠陷阱：原互斥斷言已恆真、整段作廢）.ojt-write 查詢結果恰為 0 個，不得殘留恆空之隔離 class', async () => {
+      mockAuth('ICSOPAdmin');
       renderPage();
       await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
-      const ojt = document.querySelector('[data-attachment-write="ojt"]');
-      expect(ojt, 'Supervisor 渲染下找不到 OJT 取代鈕（data-attachment-write="ojt"）').not.toBeNull();
-      expect(ojt!.className).toMatch(/\bojt-write\b/);
-      const icsopPdf = document.querySelector('[data-attachment-write="icsop_pdf"]');
-      // ICSOP PDF 取代鈕即便存在於 DOM（.write-only 隱藏），其 class 仍不得含 ojt-write。
-      if (icsopPdf) expect(icsopPdf.className).not.toMatch(/\bojt-write\b/);
+      expect(document.querySelectorAll('.ojt-write')).toHaveLength(0);
     });
+
+    it('AC-J11 新增正面斷言：編輯頁亦顯示與唯讀頁同源之 [data-ojt-derived]（data-attachment-kind="ojt"，唯讀衍生）', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      const ojtBlock = document.querySelector('[data-ojt-derived]');
+      expect(ojtBlock, '找不到 [data-ojt-derived]').not.toBeNull();
+      expect(ojtBlock!.getAttribute('data-attachment-kind')).toBe('ojt');
+      // 唯讀衍生區塊本身不得帶任何寫入型掛鉤。
+      expect(ojtBlock!.querySelector('[data-attachment-write]')).toBeNull();
+      expect(ojtBlock!.querySelector('[data-ojt-upload]')).toBeNull();
+    });
+
+    it.each(['ICSOPAdmin', 'Supervisor', 'DeptContact', 'SysAdmin'] as const)(
+      'AC-J10／AC-J11 %s 渲染時：無 OJT 取代鈕，恰 0 個（角色不再影響，五角色皆同）',
+      async (role) => {
+        mockAuth(role);
+        renderPage();
+        await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+        expect(document.querySelectorAll('[data-attachment-write="ojt"]')).toHaveLength(0);
+        expect(document.querySelectorAll('[data-ojt-exception]')).toHaveLength(0);
+      },
+    );
   });
 
   describe('prototype-alignment 修復（G-DOC-201..212）', () => {

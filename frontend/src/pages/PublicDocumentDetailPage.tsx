@@ -15,6 +15,7 @@ import {
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT } from '../domain/watermark-note';
+import { OjtDerivedBlock } from '../components/OjtDerivedBlock';
 import { printErrorMessage } from '../domain/print-error';
 import { buildOrgPath } from '../domain/org-path';
 import type {
@@ -276,11 +277,10 @@ export function PublicDocumentDetailPage(): JSX.Element {
             onDownloadAttachment={(att) =>
               void runDownload(
                 () =>
-                  downloadPublicAttachment(
-                    detail.id,
-                    att.type === 'ICSOP_PDF' ? 'icsop-pdf' : 'ojt',
-                    att.fileName,
-                  ),
+                  // 🔴 F042 `AC-J26`：前台附件區已無 OJT 列、後端 `downloadOjt` 路由亦已移除
+                  // ⇒ `type` 收斂為唯一值。📝 原分支逐字保留供追溯：
+                  // `att.type === 'ICSOP_PDF' ? 'icsop-pdf' : 'ojt'`（該 `'ojt'` 側已成死鏈）。
+                  downloadPublicAttachment(detail.id, 'icsop-pdf', att.fileName),
                 att.fileName,
                 `att:${att.blobPath}`,
               )
@@ -397,7 +397,6 @@ function DetailBody({
   downloadKey: string | null;
 }): JSX.Element {
   const icsopPdf = findAttachment(detail.attachments, 'ICSOP_PDF');
-  const ojt = findAttachment(detail.attachments, 'OJT_SIGNIN');
   // 任一下載／列印進行中即鎖住全部（每次核發都寫一筆調閱稽核，重複點擊＝重複稽核，見 runDownload）。
   const busy = downloadKey !== null;
   const announced = detail.announcedDate ? detail.announcedDate.slice(0, 10) : DASH;
@@ -520,20 +519,35 @@ function DetailBody({
             {appendices.length} 份{' '}
             <span className="text-slate-400 text-sm">（見下方）</span>
           </Field>
-          <Field label="OJT 實體簽到表">
-            {ojt ? (
-              <>
-                {ojt.fileName} <span className="text-slate-400 text-sm">（見附件）</span>
-              </>
-            ) : (
-              DASH
-            )}
-          </Field>
+          {/*
+            🔴 F042 `AC-J26`／`AC-24`（2026-08-28）：`OJT 實體簽到表` 欄位列已自本欄位清單移除
+            （18 列 → 17 列）——OJT 不再是一份「附件」，改由下方獨立之唯讀衍生區塊呈現
+            「已完成 OJT 之使用單位清單」。
+            📝 被移除之原欄位列逐字保留供追溯：
+               `<Field label="OJT 實體簽到表">{ojt ? <>{ojt.fileName}（見附件）</> : DASH}</Field>`
+          */}
           <Field label="連結點程序書">
             {detail.links.length} 筆{' '}
             <span className="text-slate-400 text-sm">（見下方）</span>
           </Field>
         </dl>
+      </section>
+
+      {/*
+        🔴 F042 `AC-24`：OJT 唯讀衍生區塊——列出已完成 OJT 之使用單位，與後台 `AC-21` 同源。
+        🔒 **獨立於欄位清單之外**（非再一個 `<dt>`）：它呈現的是「哪些單位辦過訓練」這一組聚合
+        事實，與其餘欄位之「這份文件的某個屬性」不同層級；並使 `AC-J26` 之「欄位清單 17 列」
+        與本區塊互不干擾。
+        🔴 **本區塊內不得有任何下載／檢視控制項**（無 `button`、無 `a[href]`）：簽到表載有個別
+        受訓人員之簽名，與 `AC-16` 之 PII 防線同源——揭露「哪些單位完成了」是管理資訊，
+        揭露「誰簽了名」不是。說明句亦刻意略去（其內容指向前台使用者無權進入的後台頁面）。
+      */}
+      <section className="mb-5">
+        <OjtDerivedBlock
+          completedUnits={detail.ojtCompletedUnits ?? []}
+          totalUnits={detail.ojtUsingUnitCount ?? 0}
+          showNote={false}
+        />
       </section>
 
       {/* 附件 */}
@@ -555,11 +569,8 @@ function DetailBody({
                   <div className="text-base text-slate-800 truncate">{att.fileName}</div>
                   <div className="text-sm text-slate-400 flex items-center gap-1.5 flex-wrap">
                     <span>
-                      {att.type === 'ICSOP_PDF'
-                        ? 'ICSOP PDF'
-                        : att.type === 'OJT_SIGNIN'
-                          ? 'OJT 實體簽到表'
-                          : '附件'}
+                      {/* F042 `AC-J1`：`OJT_SIGNIN` 已非合法附件型別，該分支一併移除。 */}
+                      {att.type === 'ICSOP_PDF' ? 'ICSOP PDF' : '附件'}
                     </span>
                     <span aria-hidden="true">·</span>
                     <WatermarkNote supported={att.watermarkSupported} />

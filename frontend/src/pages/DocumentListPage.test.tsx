@@ -35,7 +35,10 @@ const doc = (over: Partial<DocumentListItem>): DocumentListItem => ({
   draftingCompanyName: '和潤企業股份有限公司', draftingDeptName: '企劃部', draftingSectionName: '車輛行銷室',
   primaryChiefId: '20050', primaryChiefName: '陳彥廷',
   // 🔴 2026-08-16 delta（F017 AC-D2／AC-D5／AC-D7；架構 §10.12 列富化）：additive 兩欄
-  secondaryChiefIds: [], hasOjt: false,
+  // 🔴 [2026-08-28 E11] `AC-J12`：`hasOjt: boolean` 改名為 `ojtStatus`，型別由布林改三值聯集
+  // `'all'|'partial'|'none'`（`OQ-E11-06`→B）。空使用單位集合／缺鍵 → `'none'`（AC-04 明文覆寫
+  // `every([])===true` 之語言預設）。
+  secondaryChiefIds: [], ojtStatus: 'none',
   edition: "26'01", announcedDate: '2020-01-01T00:00:00.000Z', contentSummary: '摘要',
   icsopPdfBlobPath: null, icsopPdfFileName: null, links: [], ...over,
 });
@@ -175,15 +178,20 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
   });
 
   /**
-   * 2026-08-20 D9 delta（缺失／變更 delta 第 9 項）—— OJT 圖示欄三態渲染與 DOM 契約。
-   * 權威：`docs/specs/features/F017-backend-document-list.md#ojt-icon-column-delta`
-   *  （`AC-N38`／`AC-N39`／`AC-N40`）。資料已就緒（`hasOjt`），本 delta 純前端顯示變更。
+   * 🔴 [2026-08-28 E11] `AC-J13`／`AC-J14`（[F017#ojt-derived-semantics-delta]）：
+   * `OQ-E11-06`→**B**（四值含「部分完成」）——原「不得渲染第三種視覺狀態」（`AC-N38`③）已被
+   * 明確推翻。`ojtStatus` 三值 `'all'|'partial'|'none'`，逐字文案與 icon 鍵權威＝
+   * `prototypes/13-document-list.html`（已於本檔上方原型讀取確認定稿）。
+   * 🔴 `data-has-ojt` 值域**完全改換**，`"true"`／`"false"` 不保留——舊值域斷言會配對 0 個元素
+   * 而「大聲失敗」，這是刻意設計：若保留 `"true"` 兼指 `all`，既有斷言會繼續通過但語意已從
+   * 「有 OJT」悄悄變窄為「全部完成」＝假綠。
    */
-  describe('OJT 圖示欄（D9 delta，AC-N37～AC-N40）', () => {
+  describe('OJT 圖示欄（AC-J13／AC-J14；已反轉 AC-N38～AC-N40）', () => {
     const OJT_DOCS: DocumentListItem[] = [
-      doc({ id: 'o-true', documentNumber: 'N-T', documentName: '有OJT文件', hasOjt: true }),
-      doc({ id: 'o-false', documentNumber: 'N-F', documentName: '無OJT文件', hasOjt: false }),
-      doc({ id: 'o-undef', documentNumber: 'N-U', documentName: '缺鍵OJT文件', hasOjt: undefined }),
+      doc({ id: 'o-all', documentNumber: 'N-A', documentName: '已全部完成文件', ojtStatus: 'all' }),
+      doc({ id: 'o-partial', documentNumber: 'N-P', documentName: '部分完成文件', ojtStatus: 'partial' }),
+      doc({ id: 'o-none', documentNumber: 'N-N', documentName: '尚未開始文件', ojtStatus: 'none' }),
+      doc({ id: 'o-undef', documentNumber: 'N-U', documentName: '缺鍵OJT文件', ojtStatus: undefined }),
     ];
 
     beforeEach(() => {
@@ -191,67 +199,107 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
       vi.mocked(endpoints.getDocuments).mockResolvedValue(page(OJT_DOCS));
     });
 
-    it('AC-N39 每列之 OJT 儲存格帶 data-ojt-cell', async () => {
+    it('每列之 OJT 儲存格帶 data-ojt-cell（掛鉤名逐字不變，AC-J13②）', async () => {
       renderPage();
-      await waitFor(() => expect(screen.getByText('有OJT文件')).toBeInTheDocument());
-      for (const name of ['有OJT文件', '無OJT文件', '缺鍵OJT文件']) {
+      await waitFor(() => expect(screen.getByText('已全部完成文件')).toBeInTheDocument());
+      for (const name of ['已全部完成文件', '部分完成文件', '尚未開始文件', '缺鍵OJT文件']) {
         const cell = rowOf(name).querySelector('[data-ojt-cell]');
         expect(cell, `${name} 之列找不到 data-ojt-cell 儲存格`).not.toBeNull();
       }
     });
 
-    it('AC-N38① hasOjt=true → title／aria-label 逐字為「有 OJT」；AC-N39 data-has-ojt="true"', async () => {
+    it('ojtStatus=all → icon 鍵 file-check-2、title／aria-label 逐字「已全部完成」；data-has-ojt="all"', async () => {
       renderPage();
-      await waitFor(() => expect(screen.getByText('有OJT文件')).toBeInTheDocument());
-      const cell = rowOf('有OJT文件').querySelector('[data-ojt-cell]') as HTMLElement;
-      expect(cell.getAttribute('data-has-ojt')).toBe('true');
+      await waitFor(() => expect(screen.getByText('已全部完成文件')).toBeInTheDocument());
+      const cell = rowOf('已全部完成文件').querySelector('[data-ojt-cell]') as HTMLElement;
+      expect(cell.getAttribute('data-has-ojt')).toBe('all');
       const marker = cell.querySelector('[title], [aria-label]') as HTMLElement;
       expect(marker, '找不到帶 title/aria-label 之圖示元素').not.toBeNull();
-      expect(marker.getAttribute('title') ?? marker.textContent).toMatch(/有 OJT/);
-      expect(marker.getAttribute('aria-label')).toBe('有 OJT');
+      expect(marker.getAttribute('aria-label')).toBe('已全部完成');
     });
 
-    it('AC-N38② hasOjt=false → title／aria-label 逐字為「無 OJT」；AC-N39 data-has-ojt="false"', async () => {
+    it('（🔴 新三態核心）ojtStatus=partial → icon 鍵 file-minus-2（新鍵）、title／aria-label 逐字「部分完成」；data-has-ojt="partial"', async () => {
       renderPage();
-      await waitFor(() => expect(screen.getByText('無OJT文件')).toBeInTheDocument());
-      const cell = rowOf('無OJT文件').querySelector('[data-ojt-cell]') as HTMLElement;
-      expect(cell.getAttribute('data-has-ojt')).toBe('false');
+      await waitFor(() => expect(screen.getByText('部分完成文件')).toBeInTheDocument());
+      const cell = rowOf('部分完成文件').querySelector('[data-ojt-cell]') as HTMLElement;
+      expect(cell.getAttribute('data-has-ojt')).toBe('partial');
       const marker = cell.querySelector('[title], [aria-label]') as HTMLElement;
-      expect(marker.getAttribute('aria-label')).toBe('無 OJT');
+      expect(marker.getAttribute('aria-label')).toBe('部分完成');
     });
 
-    it('AC-N38③ hasOjt 缺鍵（undefined）→ 視同 false（file-x-2／「無 OJT」），非空白或第三種狀態', async () => {
+    it('ojtStatus=none → icon 鍵 file-x-2、title／aria-label 逐字「尚未開始」；data-has-ojt="none"', async () => {
+      renderPage();
+      await waitFor(() => expect(screen.getByText('尚未開始文件')).toBeInTheDocument());
+      const cell = rowOf('尚未開始文件').querySelector('[data-ojt-cell]') as HTMLElement;
+      expect(cell.getAttribute('data-has-ojt')).toBe('none');
+      const marker = cell.querySelector('[title], [aria-label]') as HTMLElement;
+      expect(marker.getAttribute('aria-label')).toBe('尚未開始');
+    });
+
+    it('ojtStatus 缺鍵（undefined）→ 視同 none（file-x-2／「尚未開始」），非空白或第四種狀態', async () => {
       renderPage();
       await waitFor(() => expect(screen.getByText('缺鍵OJT文件')).toBeInTheDocument());
       const cell = rowOf('缺鍵OJT文件').querySelector('[data-ojt-cell]') as HTMLElement;
-      expect(cell.getAttribute('data-has-ojt')).toBe('false');
+      expect(cell.getAttribute('data-has-ojt')).toBe('none');
       const marker = cell.querySelector('[title], [aria-label]') as HTMLElement;
-      expect(marker.getAttribute('aria-label')).toBe('無 OJT');
-      // 不得渲染為空白／—／null
+      expect(marker.getAttribute('aria-label')).toBe('尚未開始');
       expect(cell.textContent?.trim()).not.toBe('');
       expect(cell.textContent?.trim()).not.toBe('—');
     });
 
-    it('AC-N38 兩態之無障礙名稱互不相同（鑑別力守衛：防止兩態渲染成相同文案）', async () => {
+    it('三態之無障礙名稱兩兩互不相同（鑑別力守衛：防止任兩態渲染成相同文案）', async () => {
       renderPage();
-      await waitFor(() => expect(screen.getByText('有OJT文件')).toBeInTheDocument());
-      const trueMarker = rowOf('有OJT文件').querySelector('[data-ojt-cell] [aria-label]') as HTMLElement;
-      const falseMarker = rowOf('無OJT文件').querySelector('[data-ojt-cell] [aria-label]') as HTMLElement;
-      expect(trueMarker.getAttribute('aria-label')).not.toBe(falseMarker.getAttribute('aria-label'));
+      await waitFor(() => expect(screen.getByText('已全部完成文件')).toBeInTheDocument());
+      const allMarker = rowOf('已全部完成文件').querySelector('[data-ojt-cell] [aria-label]') as HTMLElement;
+      const partialMarker = rowOf('部分完成文件').querySelector('[data-ojt-cell] [aria-label]') as HTMLElement;
+      const noneMarker = rowOf('尚未開始文件').querySelector('[data-ojt-cell] [aria-label]') as HTMLElement;
+      const labels = [allMarker, partialMarker, noneMarker].map((m) => m.getAttribute('aria-label'));
+      expect(new Set(labels).size).toBe(3);
     });
 
-    it('AC-N40② 既有 OJT 篩選下拉（全部／有 OJT／無 OJT）逐字不動——本 delta 只加顯示欄、不動篩選', async () => {
+    /**
+     * 🔴 舊值域 `"true"`／`"false"` 之負向斷言：`AC-J13` 明文「刻意不留 true/false」——若實作
+     * 保留舊值並讓 `"true"` 兼指 `all`，本斷言之語意仍成立（舊值從未出現），但下方之正面斷言
+     * （`data-has-ojt="all"`）才是真正抓得到「兼指」失誤的那一條，本案僅補一道守衛。
+     */
+    it.each(['已全部完成文件', '部分完成文件', '尚未開始文件'])(
+      '%s：data-has-ojt 不得為舊值域 "true"／"false"',
+      async (name) => {
+        renderPage();
+        await waitFor(() => expect(screen.getByText(name)).toBeInTheDocument());
+        const cell = rowOf(name).querySelector('[data-ojt-cell]') as HTMLElement;
+        expect(cell.getAttribute('data-has-ojt')).not.toBe('true');
+        expect(cell.getAttribute('data-has-ojt')).not.toBe('false');
+      },
+    );
+
+    /**
+     * 🔴 `AC-J14`：篩選下拉由三值改四值，逐字為 `全部`／`已全部完成`／`部分完成`／`尚未開始`。
+     * 📝 被反轉之原斷言逐字保留供追溯：
+     *   OLD> expect(optionTexts).toEqual(['全部', '有 OJT', '無 OJT']);
+     */
+    it('AC-J14 OJT 篩選下拉改四值：全部／已全部完成／部分完成／尚未開始（逐字與順序）', async () => {
       renderPage();
-      await waitFor(() => expect(screen.getByText('有OJT文件')).toBeInTheDocument());
-      // 精確比對（非 /OJT/ 子字串）：避免命中新增之 OJT 圖示 aria-label「有 OJT」／「無 OJT」。
+      await waitFor(() => expect(screen.getByText('已全部完成文件')).toBeInTheDocument());
+      // 精確比對（非 /OJT/ 子字串）：避免命中新增之 OJT 圖示 aria-label。
       const ojtFilter = screen.getByLabelText(/^OJT$/) as HTMLSelectElement;
       const optionTexts = Array.from(ojtFilter.options).map((o) => o.textContent?.trim());
-      expect(optionTexts).toEqual(['全部', '有 OJT', '無 OJT']);
+      expect(optionTexts).toEqual(['全部', '已全部完成', '部分完成', '尚未開始']);
     });
 
-    it('AC-N40④ 不得新增後端查詢：hasOjt 隨既有一次批次查詢取得，getDocuments 僅呼叫一次', async () => {
+    it('AC-J14 選「部分完成」→ 僅回傳 ojtStatus=partial 之文件（新 fixture，舊「文件 A 有 OJT_SIGNIN 附件」之 fixture 已不可建構）', async () => {
       renderPage();
-      await waitFor(() => expect(screen.getByText('有OJT文件')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('已全部完成文件')).toBeInTheDocument());
+      const ojtFilter = screen.getByLabelText(/^OJT$/) as HTMLSelectElement;
+      await userEvent.selectOptions(ojtFilter, '部分完成');
+      await waitFor(() => expect(screen.getByText('部分完成文件')).toBeInTheDocument());
+      expect(screen.queryByText('已全部完成文件')).not.toBeInTheDocument();
+      expect(screen.queryByText('尚未開始文件')).not.toBeInTheDocument();
+    });
+
+    it('AC-J15④ 不得新增後端查詢：ojtStatus 隨既有一次批次查詢取得，getDocuments 僅呼叫一次', async () => {
+      renderPage();
+      await waitFor(() => expect(screen.getByText('已全部完成文件')).toBeInTheDocument());
       expect(endpoints.getDocuments).toHaveBeenCalledTimes(1);
     });
   });

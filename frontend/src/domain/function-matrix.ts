@@ -43,6 +43,9 @@ export const FunctionKey = {
   USAGE_FORM_MANAGEMENT: '文件使用表單管理',
   // F039 附錄管理（E10 / US-102 AC5）；逐字採 F025 矩陣列名，刻意不沿用使用表單之句型。
   APPENDIX_MANAGEMENT: '附錄管理',
+  // F042 OJT 進度管理（E11 / US-103～105，AC-27／AC-J16）。逐字採 F042 §命名鎖定表之
+  // 「OJT 進度管理」，不得改寫為「OJT 管理」「教育訓練管理」等同義詞（跨層識別碼 churn）。
+  OJT_PROGRESS_MANAGEMENT: 'OJT 進度管理',
   DOCUMENT_INDEX_MANAGEMENT: '文件索引管理',
   DOCUMENT_ACCESS_HISTORY: '文件調閱歷程查詢',
   DOCUMENT_CHANGE_HISTORY: '文件變更歷程',
@@ -80,6 +83,9 @@ export const FUNCTION_MATRIX: Record<string, Row> = {
   [FunctionKey.ICSOP_DOCUMENT_MANAGEMENT]: row('READ', 'CRUD', 'READ', 'READ', 'NONE'),
   [FunctionKey.USAGE_FORM_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.APPENDIX_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
+  // 🔴 F042 AC-27：`受限CRUD` 於本列之語意＝僅可新增場次、不可刪除；刪除之限制由端點層另一道
+  // ICSOPAdmin 檢查把關，本矩陣格值擋不住它（AC-19）。
+  [FunctionKey.OJT_PROGRESS_MANAGEMENT]: row('READ', 'CRUD', 'RESTRICTED_CRUD', 'RESTRICTED_CRUD', 'NONE'),
   [FunctionKey.DOCUMENT_INDEX_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.DOCUMENT_ACCESS_HISTORY]: row('READ', 'READ', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.DOCUMENT_CHANGE_HISTORY]: row('READ', 'READ', 'NONE', 'NONE', 'NONE'),

@@ -153,6 +153,23 @@ describe('PermissionMatrixPage — RBAC 矩陣唯讀顯示（F025/F026）', () =
     expect(await screen.findByText(/程式碼層級/)).toBeInTheDocument();
   });
 
+  /**
+   * 🔴 [2026-08-28 E11] `AC-J16`（[F025#ojt-progress-function-key-delta]）：`FUNCTION_MATRIX`
+   * 新增恰一個功能鍵「OJT 進度管理」，13 列→14 列。下方既有 `anti-drift` 測試為**動態**逐列比對
+   * （`FUNC_DISPLAY.length` 對 `Object.entries(FUNCTION_MATRIX).length`），一旦兩者同步新增本列，
+   * 該測試會**自動**涵蓋新列（含 `受限CRUD` 之分類——`classifyCell('受限CRUD')` 已由既有「角色
+   * 指派」列驗證過，非本列新開之邏輯路徑）。本案僅另外**顯式**釘住第 14 列之 label 與五格逐字，
+   * 供直接追溯（anti-drift 只驗兩表互相一致，不驗其值本身是否為 spec 定案值）。
+   */
+  it('AC-J16 FUNCTION_MATRIX 恰新增 1 個功能鍵「OJT 進度管理」，第 14 列格值逐字為 唯讀／CRUD／受限CRUD／受限CRUD／無', () => {
+    const keys = Object.keys(FUNCTION_MATRIX);
+    expect(keys).toHaveLength(14);
+    expect(FUNC_DISPLAY).toHaveLength(14);
+    const ojtRow = FUNC_DISPLAY.find((d) => d.label === 'OJT 進度管理');
+    expect(ojtRow, '找不到 FUNC_DISPLAY 之「OJT 進度管理」列').toBeTruthy();
+    expect(ojtRow!.cells).toEqual(['唯讀', 'CRUD', '受限CRUD', '受限CRUD', '無']);
+  });
+
   it('anti-drift：FUNC_DISPLAY 存取面與 FUNCTION_MATRIX 一致', () => {
     const enumRows = Object.entries(FUNCTION_MATRIX);
     expect(FUNC_DISPLAY.length).toBe(enumRows.length);

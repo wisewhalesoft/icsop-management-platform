@@ -36,6 +36,10 @@ const KIND_ALL = '全部';
 function rowKind(targetType: string): AuditKind {
   if (targetType === 'DOCUMENT' || targetType === 'USAGE_FORM') return '文件';
   if (targetType === 'LIFECYCLE') return '循環';
+  // 🔴 F042 `AC-J23`：第五個類型值。與 `DOCUMENT_ATTACHMENT` 同理，**必須**置於下方
+  //    `return '變更'` 之前——落入通則會使場次事件在「類型」欄顯示為「變更」，與新增之
+  //    「OJT 場次」篩選值自相矛盾。刻意**不**沿用「上傳」：刪除事件顯示為「上傳」是說謊。
+  if (targetType === 'OJT_SESSION') return 'OJT 場次';
   // 🔴 F024 `AC-N53`：OJT 上傳事件之專屬 targetType（`OQ-D9-29` 之核心——
   //    它必須**不落入「文件」類**，否則「文件調閱歷程」會被非調閱事件污染且無從排除。
   if (targetType === 'DOCUMENT_ATTACHMENT') return '上傳';
@@ -56,6 +60,11 @@ const ACT_LABEL: Record<string, string> = {
   // 🔴 F024 `AC-N53`：中文標籤逐字為「附件上傳」；與 backend/src/audit/access-history-labels.ts
   //    之 ACTION_TYPE_LABEL **兩份逐字相同**（前後端無共用 package 之既定處置）。
   ATTACHMENT_UPLOAD: '附件上傳',
+  // 🔴 F042 `AC-J22`（`OQ-E11-13`=B）：教育訓練場次之登記與刪除，逐字取自 prototypes/17；
+  //    與 backend/src/audit/access-history-labels.ts 之 ACTION_TYPE_LABEL **兩份逐字相同**。
+  //    ⚠ **兩者必須互異**——把「登記」與「刪除」標成同一個詞，等於在畫面上抹掉兩者之差別。
+  OJT_SESSION_UPLOAD: '場次登記',
+  OJT_SESSION_DELETE: '場次刪除',
 };
 
 const KIND_TONE: Record<AuditKind, string> = {
@@ -64,6 +73,8 @@ const KIND_TONE: Record<AuditKind, string> = {
   變更: 'bg-amber-50 text-amber-700 border-amber-100',
   // prototypes/17-access-history.html:261 之 KIND_STYLE（色票屬設計裁量、不入 AC）。
   上傳: 'bg-violet-50 text-violet-700 border-violet-100',
+  // F042：第五類型之色票（設計裁量、不入 AC）。
+  'OJT 場次': 'bg-sky-50 text-sky-700 border-sky-100',
 };
 
 /**
@@ -84,6 +95,8 @@ const ACT_TONE: Record<string, string> = {
   LIFECYCLE_CHANGELOG_DOWNLOAD: 'bg-amber-50 text-amber-700 border-amber-100',
   // prototypes/17-access-history.html:259 之 ACT_STYLE（violet；色票屬設計裁量、不入 AC）。
   ATTACHMENT_UPLOAD: 'bg-violet-50 text-violet-700 border-violet-100',
+  OJT_SESSION_UPLOAD: 'bg-sky-50 text-sky-700 border-sky-100',
+  OJT_SESSION_DELETE: 'bg-rose-50 text-rose-700 border-rose-100',
 };
 function actTone(actionType: string): string {
   return ACT_TONE[actionType] ?? ACT_TONE_SLATE;
@@ -332,9 +345,10 @@ export function AccessHistoryPage(): JSX.Element {
               className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"
             >
               {/*
-                🔴 F024 `AC-N69`（`OQ-D9-35` 定案讀法）：**類型值恰為四種**（文件／循環／變更／上傳），
-                控制項連同既有預設項共 **5 個 option**；`上傳` 置於既有三者**之後**，
-                既有三者與預設項之字面與相對順序逐字不變。
+                🔴 F042 `AC-J23`（`OQ-E11-17` 覆核核可）：**類型值恰為五種**（文件／循環／變更／
+                上傳／OJT 場次），控制項連同既有預設項共 **6 個 option**；`OJT 場次` 置於既有
+                四者**之後**，既有四者與預設項之字面與相對順序逐字不變。
+                📝 被反轉之原條文逐字保留供追溯：`AC-N69`「類型值恰為四種、共 5 個 option」。
                 📌 預設項之 `value` 為 `全部`（非空字串）＝「不施加類型限制」之哨兵，
                    於 `buildFilters()` 中被略去、不送入 API；其**可見文字仍為「全部類型」**。
               */}
@@ -343,6 +357,7 @@ export function AccessHistoryPage(): JSX.Element {
               <option value="循環">循環</option>
               <option value="變更">變更</option>
               <option value="上傳">上傳</option>
+              <option value="OJT 場次">OJT 場次</option>
             </select>
           </div>
           <div>
@@ -497,7 +512,19 @@ export function AccessHistoryPage(): JSX.Element {
                           {k}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 mono text-slate-600">{targetPrimary(r)}</td>
+                      <td className="px-4 py-2.5 mono text-slate-600">
+                        {targetPrimary(r)}
+                        {/*
+                          🔴 F042 `AC-J25`：場次事件之**使用單位**不另立欄位，承載於既有「對象名稱／
+                          說明」之文字。該文字原本只在展開列可見，但對 OJT 場次而言它是唯一能分辨
+                          「是哪個單位辦的訓練」之資訊——收合列只剩文件編號，等於同一份文件的多筆
+                          場次在清單上長得一模一樣。故**僅對場次事件**於收合列一併呈現；
+                          其餘類型之收合列逐字不變（其 targetName 為文件／循環名稱，已由編號代表）。
+                        */}
+                        {r.targetType === 'OJT_SESSION' && r.targetName && (
+                          <span className="block text-xs text-slate-500 font-sans">{r.targetName}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5">
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs border ${actTone(r.actionType)}`}
