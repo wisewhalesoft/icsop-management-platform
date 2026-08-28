@@ -23,6 +23,54 @@
      📌 撰稿當下 `docs/specs/open-questions.md` §E11 由 sw-ojt 並行回填中；
         **若日後 open-questions 與本段有出入，一律以 open-questions 為準。**
 
+     ══════ 🔴 2026-08-28 追加：TAB1 區一「依文件逐筆」表之**節流改版** ══════
+     **本輪不改任何裁決、不改任何統計口徑**，只解決一個**真實資料才暴露的規模問題**：
+     dev 環境有近 600 份 ICSOP 文件，而逐筆表原本**無分頁、無筆數上限、無捲軸高度**
+     ⇒ 該區塊會變成 600 列的巨長表，把區二／區三推出視窗外。原型當時只有 6 份假資料，
+     問題被假資料整個藏住 ⇒ 本輪同時把 DOCS 補到 **34 份**（未完成 21 份 > 上限 15，
+     **預設就看得見截斷提示**），使下一個人一開檔就看得到節流機制在運作。
+
+     · **顯示範圍（三值）**：`僅未全部完成`（🔒 **預設**，使用者裁定「預設只顯未完成」）／
+       `僅已全部完成`／`全部文件`。控制項＝`[data-doc-coverage-scope]`。
+     · **筆數上限** `DOC_COVERAGE_MAX_ROWS` ＝ **15**（三種範圍一律適用；取值理由見其常數註解）。
+     · **固定高度內部捲軸** `max-h-[380px]` ＋ `sticky` 表頭 ＋ 可聚焦之 `role="region"`。
+     · **摘要行** `[data-doc-coverage-summary]`：三態份數並陳（`[data-doc-coverage-stat]`）。
+     · **截斷告知** `[data-doc-coverage-truncation]`：🔴 **本 repo 明文禁止靜默 top-N**——
+       不說就等於謊稱本表已涵蓋全部。未截斷時該元素**完全不進 DOM**（非 CSS 隱藏）。
+     · **導向 TAB2 之入口** `[data-doc-coverage-more]`：切到 TAB2 並把既有之「完成狀態」
+       設為既有之 `尚未完成` ⇒ 🔒 **未新增任何 TAB2 篩選項**（`AC-13` 恰兩項不變）。
+     · **區三之筆數上限**（lead 追加交辦）：`RECENT_MAX_ROWS` ＝ **8**，同樣以
+       `[data-recent-truncation]`（＋`data-recent-total`／`data-recent-hidden`）明說截斷；
+       🔒 **不加捲軸**（上限已封住高度）、🔒 **30 天窗口／PII 硬防線／孤兒排除／不排除裁撤單位四條不變**。
+     · **2026-08-28 第三輪收斂（sw-fix 撰寫 AC 時查出）**：① `docCoverage()` 之母體改依正文
+       **不套 `isActive` 過濾**（原為 prototype 單方偏離，後端與環早已依正文）；
+       ② 摘要行補 `[data-doc-coverage-total]` 專屬掛鉤；③ 新增 `[data-doc-coverage-basis-note]`
+       說明兩處分母刻意不同（否則 57 vs 56 會被讀成 bug）。
+
+     🔒 **明確未改動者**（本輪之負向鎖定，覆核時請逐項確認）：
+       ① **統計口徑**：KPI 五張卡、`#inactiveNote`、區二、區三**一律以完整母體計算**，
+          不受顯示範圍與上限影響。⚠ 把上限套進統計 ⇒ 覆蓋率會變成「前 15 份的覆蓋率」。
+       ② **區二／區三／TAB2 之程式碼一行未動**（其呈現之數字因語料變大而變大，屬必然連帶）。
+       ③ **d1～d6 與 s1～s11 之 fixture 一個位元組未改**（僅 d6／s11 尾端補逗號）——
+          既有示範情境（13/15/16 同源之 2/3、AC-01 部層 vs 處室、同日兩梯、裁撤列、孤兒列、
+          LEGACY 之 d4／d1）全部保留。
+
+     🔴 **四值詞彙之載體未失守**（`OQ-E11-20` ① 裁決之理由所繫）：該裁決之立論是
+     「逐筆表是文件層四值詞彙在 `25` 之唯一載體」。預設僅顯未完成會使 `已全部完成` 不產生任何列，
+     且排序為「覆蓋率由低至高」＋上限 15 ⇒ **連「全部文件」範圍下也排不進畫面**。
+     ⇒ 故顯示範圍**必須有第三個選項「僅已全部完成」**（13 份 ≤ 15，不截斷）。
+     ⚠ **斷言請釘 `[data-doc-ojt-state-chip]`／`[data-doc-ojt-state]`，不得用整區 textContent**
+        ——摘要行本身就含那三個字面，整區 textContent 之斷言會恆真（假綠）。
+
+     🔵 **本輪連帶發現，交由 lead／spec-writer 裁決（本檔未處理）**：
+       ✅ ① **區三「最近完成」之筆數上限——已於同日第二輪處理**（lead 追加交辦，見下方區塊）：
+          `RECENT_MAX_ROWS` ＝ **8** ＋ `[data-recent-truncation]`；30 天窗口與 PII 硬防線不變。
+       ② **TAB2 亦無分頁**，且群組**預設全展開**；本輪語料下已達 11 組 / 58 列。
+       ③ **`OJT_DOC_STATE.none.cls = text-slate-300`** 白底對比約 1.7:1（低於 WCAG AA 4.5:1）；
+          該色票與 `13` 共用且為鎖定常數 ⇒ **本檔不自行改**，僅在新增之摘要行把狀態色上在
+          `aria-hidden` 之 icon、文字改用 `text-slate-600`。列上晶片維持既有呈現。
+       🔵 ②③ 由 lead 交使用者裁決，本輪不動。
+
      ══════ 🔴 一處與交辦字面刻意不同（已回報並經 lead 裁定接受）══════
      交辦要求「TAB2 完成狀態篩選對齊 `13` 的四值逐字」，本檔**維持二值**（`已完成`／`尚未完成`）。
      理由：本頁一列＝一個「文件 × 使用單位」，其完成與否依 `AC-03` 為「場次數 ≥ 1」——**本質二值**；
@@ -227,8 +275,11 @@
     <!-- ─── 區一 · 文件-訓練覆蓋率（AC-14）─── -->
     <!-- 🟢 `OQ-E11-07`＝(B) 已裁決：覆蓋率＝**已完成列數 ÷ 總列數**；呈現粒度＝**兩者皆有**
          （上方 KPI 卡為總覽比率、下方表格為依文件逐筆）。本區已依此定稿。
-         🟢 `OQ-E11-03`＝(B) 已裁決：**裁撤單位不計入分母**——本區全部數字（KPI、逐筆表、下方區二）
-            一律以 `coverageRows()`（＝排除 `inactive` 之列）為母體。
+         🟢 `OQ-E11-03`＝(B) 已裁決：**裁撤單位不計入分母**——**KPI 與下方區二** 以
+            `coverageRows()`（＝排除 `inactive` 與孤兒之列）為母體。
+            🔴 **2026-08-28 訂正：逐筆表不在此列**——`AC-04`／`AC-14` 明訂其分母為該文件之
+               **全部**使用單位、不套 `isActive` 過濾。原註解把逐筆表寫進來是 prototype 單方偏離。
+               📝 OLD> 本區全部數字（KPI、逐筆表、下方區二）一律以 `coverageRows()` 為母體。
             📝 被推翻之前一版做法逐字保留供追溯：OLD> 兩案並陳（計入 8/13 與不計入 8/12 同時顯示、不預先選邊）
          🟢 `OQ-E11-06`＝(B) 已裁決：文件層改**四值**（含「部分完成」）⇒ 逐筆表新增「狀態」欄，
             其 icon 鍵與逐字文案與 `13-document-list.html` 之第 1 欄**共用同一組**（見 script 區 `OJT_DOC_STATE`）。
@@ -243,22 +294,81 @@
       <div id="kpiRow" class="grid grid-cols-2 lg:grid-cols-5 gap-3"></div>
       <p id="inactiveNote" class="mt-3 text-xs text-slate-500 flex items-start gap-1.5"><i data-lucide="triangle-alert" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-500"></i><span></span></p>
 
+      <!-- ─── 依文件逐筆（`AC-14` 之逐筆表）· 🔴 2026-08-28 節流改版 ───
+           **問題（真實資料才暴露）**：dev 環境有近 600 份 ICSOP 文件，而本表原本**無分頁、
+           無筆數上限、無捲軸高度** ⇒ 儀表板會被一張 600 列的表撐成無限長頁面，區二／區三被推出視窗外。
+           原型當時只有 6 份文件之假資料，把這個問題整個藏住了（本輪已把語料補到 34 份）。
+
+           ✅ **三道節流，全部落在畫面層** —— 🔒 **不改任何統計口徑**：KPI 五張卡、`#inactiveNote`、
+              區二、區三之數字**一律以各自之完整母體計算**，不受本表之顯示範圍與上限影響
+              （KPI 與區二用 `coverageRows()`；區三刻意用 `allRows()`，不排除裁撤單位）。
+              ⚠ 這是本改版最容易做錯的地方：把上限套進統計，覆蓋率就會變成「前 15 份的覆蓋率」。
+              ① **預設僅列出「尚未全部完成」之文件**（`partial` ＋ `none`）；顯示範圍另有
+                 「僅已全部完成」與「全部文件」兩個選項（三值，見 `SCOPE_FILTER`）。
+              ② **筆數上限 `DOC_COVERAGE_MAX_ROWS`（＝15），三種顯示範圍一律適用**
+                 —— 只在「僅未全部完成」下設上限，切到「全部文件」就又回到 600 列。
+              ③ **固定高度內部捲軸**（`max-h-[380px]` ＋ `sticky` 表頭），超出視高不把整頁撐長。
+
+           🔴 **不得靜默 top-N**：截斷時**必須**產生 `[data-doc-coverage-truncation]`，說清楚
+              **還有幾份沒列出**與**憑什麼是這 15 份**（排序規則）。只顯示前 N 筆而不說，
+              等於讓畫面謊稱本表已涵蓋全部文件。未截斷時該元素**完全不進 DOM**（非 CSS 隱藏）。
+
+           🔴 **四值詞彙之載體（`OQ-E11-20` ① 裁決之理由所繫，不得因本改版而失守）**：
+              該裁決明文「逐筆表是**文件層四值詞彙在 `25` 之唯一載體**」才否決了「逐筆交給 TAB2」之原案。
+              預設僅顯未完成 ⇒ `已全部完成` 這一態**不產生任何列**，故本檔以兩層保住它：
+              · **逐字層**：摘要行 `[data-doc-coverage-stat="all|partial|none"]` 三態並陳並帶份數，
+                其 icon／文案／色票**直接取自 `OJT_DOC_STATE`**（與列上晶片同一組常數，不另打一份）；
+              · **晶片層**：`[data-doc-ojt-state-chip]` 仍**只**長在列上；`all` 態之可達路徑
+                ＝把顯示範圍切成 **「僅已全部完成」**（本檔 fixture 下為 13 份）。
+              🔴 **為何非得有「僅已全部完成」這第三個選項**：本表排序為「覆蓋率由低至高」＋上限 15，
+                 ⇒ 「全部文件」之前 15 名**必然全是低覆蓋率者**，100% 的文件**永遠排不進畫面**。
+                 只有兩個選項時，`已全部完成` 之晶片在**任何**顯示範圍下都畫不出來——
+                 亦即 `OQ-E11-20` ① 所倚賴的「唯一載體」會被本節流改版整個做掉。
+                 📌 附帶效果：該範圍下 13 份 ≤ 上限 15 ⇒ **不截斷** ⇒ 提供一個「截斷提示不存在」之
+                    可達狀態，使 `[data-doc-coverage-truncation]` 之負向斷言有鑑別力（否則恆為截斷態）。
+              ⚠ **斷言必須釘在 `[data-doc-ojt-state-chip]`／`[data-doc-ojt-state]`，不得用整區 textContent**
+                 —— 摘要行本身就含那三個字面，整區 textContent 之斷言會恆真（假綠）。 -->
       <div class="mt-5 border-t border-slate-100 pt-4">
-        <div class="text-xs font-medium text-slate-500 mb-2">依文件逐筆</div>
-        <div class="overflow-x-auto">
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <div class="text-xs font-medium text-slate-500">依文件逐筆</div>
+          <!-- 🔒 顯示範圍**預設為「僅未全部完成」**（使用者裁定）。兩個 option 之逐字以本行為權威。
+               📌 用「未**全部**完成」而非「未完成」，是為了不與 TAB2 之列層級 `尚未完成`（`AC-03` 二值）
+                  及本表狀態欄之 `尚未開始` 混淆——本控制項濾的是**文件層**的「還沒全部做完」。 -->
+          <select id="covScope" data-doc-coverage-scope onchange="onCoverageScopeChange()" aria-label="依文件逐筆之顯示範圍" class="ml-auto px-2.5 py-1.5 rounded-md border border-slate-300 text-xs bg-white">
+            <option value="incomplete">僅未全部完成</option>
+            <option value="completed">僅已全部完成</option>
+            <option value="unassigned">僅未指定使用部門</option>
+            <option value="all">全部文件</option>
+          </select>
+          <!-- 導向 TAB2 之入口（恆存在，不只在截斷時才出現）。行為見 gotoSessionsPending()。 -->
+          <button data-doc-coverage-more onclick="gotoSessionsPending()" aria-label="至「OJT 資料清單」分頁，並將完成狀態篩選設為「尚未完成」" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-slate-300 text-xs text-primary-700 hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-600"><i data-lucide="list-tree" class="w-3.5 h-3.5"></i>至「OJT 資料清單」檢視尚未完成之進度列</button>
+        </div>
+        <div id="docCoverageSummary" data-doc-coverage-summary class="text-xs text-slate-500 mb-2 space-y-1"></div>
+        <!-- 🔴 口徑說明：本表分母與上方覆蓋率**刻意不同**（`AC-14` 末段之明文警語）。
+             少了這一行，使用者把各文件分母加起來（57）會對不上 KPI 的進度列數（56），
+             而那個差額正是被裁撤的 `ABA00`——沒有說明就會被讀成 bug。 -->
+        <p data-doc-coverage-basis-note class="text-xs text-slate-400 mb-2 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>本表之「已完成 / 使用單位」以該文件之<strong class="text-slate-500">全部</strong>使用單位為分母（<strong class="text-slate-500">含已裁撤單位</strong>），與上方覆蓋率之分母刻意不同：上方是「還追得動的部分」，本表是「這份文件的實際訓練狀況」。</span></p>
+        <!-- 🔒 固定高度捲軸容器：`tabindex="0"` 使其可被鍵盤聚焦後捲動（WCAG 2.1.1——
+             可捲動區域若不可聚焦，只用鍵盤的人看不到被捲軸藏起來的列）。
+             🔒 **高度 380px 是量出來的、不是湊的**：表頭 37px ＋ 每列約 41px ⇒ 可見約 8.4 列
+                ⇒ 第 9 列**露出約四成**。Chromium 之 overlay 捲軸平時隱形，若高度切在列邊界上，
+                畫面上就完全沒有「下面還有」的持續線索，使用者會以為表只有 9 列。 -->
+        <div role="region" aria-label="依文件逐筆之覆蓋率表格" tabindex="0" class="overflow-auto max-h-[380px] rounded-lg border border-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-600">
           <table class="w-full text-sm min-w-[640px]">
             <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
               <tr>
-                <th class="text-left font-medium px-4 py-2.5">程序書編號</th>
-                <th class="text-left font-medium px-4 py-2.5">程序書書名</th>
-                <th class="text-left font-medium px-4 py-2.5">狀態</th>
-                <th class="text-left font-medium px-4 py-2.5">已完成 / 使用單位</th>
-                <th class="text-left font-medium px-4 py-2.5">覆蓋率</th>
+                <th class="text-left font-medium px-4 py-2.5 sticky top-0 z-10 bg-slate-50">程序書編號</th>
+                <th class="text-left font-medium px-4 py-2.5 sticky top-0 z-10 bg-slate-50">程序書書名</th>
+                <th class="text-left font-medium px-4 py-2.5 sticky top-0 z-10 bg-slate-50">狀態</th>
+                <th class="text-left font-medium px-4 py-2.5 sticky top-0 z-10 bg-slate-50">已完成 / 使用單位</th>
+                <th class="text-left font-medium px-4 py-2.5 sticky top-0 z-10 bg-slate-50">覆蓋率</th>
               </tr>
             </thead>
             <tbody id="docCoverageBody" class="divide-y divide-slate-100"></tbody>
           </table>
         </div>
+        <!-- 截斷告知之宿主：未截斷時**內部完全空**（不留任何隱藏元素）。 -->
+        <div id="docCoverageTruncation"></div>
       </div>
     </section>
 
@@ -299,7 +409,12 @@
             ⚠ 本檔之 SESSIONS fixture 刻意帶 `uploader` 姓名（如「王志明」），
                使「本區 textContent 不含該姓名」成為一條有鑑別力的負向斷言（AC-16 之可測形狀）。
             ⚠ 上傳者姓名於 **TAB2 場次明細**（AC-12）中得以呈現——兩者刻意不同，不得互相對齊。
-         🟢 `OQ-E11-07`＝(B) 已裁決：**時間窗口＝近 30 天**（`RECENT_WINDOW_DAYS`）。筆數上限＝不設，全部列出。
+         🟢 `OQ-E11-07`＝(B) 已裁決：**時間窗口＝近 30 天**（`RECENT_WINDOW_DAYS`）。
+         🔴 **2026-08-28 追加筆數上限 `RECENT_MAX_ROWS`（＝8）**（原為「上限＝不設，全部列出」，
+            與區一逐筆表同一形狀之缺陷）。截斷時必須產生 `[data-recent-truncation]` 明說
+            「還有幾筆沒列出／憑什麼是這 8 筆／完整的去哪看」；未截斷時該元素**完全不進 DOM**。
+            🔒 上限**只作用於呈現**：30 天窗口、PII 硬防線、孤兒排除、不排除裁撤單位——四條一律不變。
+            📝 OLD> 筆數上限＝不設，全部列出。
          📌 本區之母體**刻意不排除裁撤單位**——`OQ-E11-03`(B) 管的是**覆蓋率分母**，本區是「最近發生了什麼」
             的事實列表；把一個裁撤前確實辦過訓練的單位從動態中抹掉，等於讓畫面否認一件發生過的事。 -->
     <section data-ojt-section="recent" class="bg-white border border-slate-200 rounded-xl p-5">
@@ -310,6 +425,8 @@
       </div>
       <p class="text-xs text-slate-400 mb-4 flex items-start gap-1.5"><i data-lucide="shield" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span data-pii-note>本區僅呈現單位／文件／日期層級之聚合資訊，<strong class="text-slate-500">不揭露個別受訓人員之姓名或員工編號</strong>。</span></p>
       <div id="recentList" class="space-y-2"></div>
+      <!-- 截斷告知之宿主：未截斷時**內部完全空**（不留任何隱藏元素）。 -->
+      <div id="recentTruncation"></div>
     </section>
   </div>
 
@@ -597,6 +714,82 @@
   const TODAY = '2026-08-28';                       // 原型固定「今日」，使未來日驗證可重現
   const RECENT_WINDOW_DAYS = 30;                    // 🟢 `OQ-E11-07`＝(B) 已裁決值（近 30 天）
 
+  /* ═════ 🔴 依文件逐筆表之節流參數與逐字文案（2026-08-28；見區一之區塊註解）═════
+     🔒 **上限之取值＝15**，理由與取捨（供 spec-writer 逐字沿用）——
+       · 下界（為何不是 10）：dev 有近 600 份文件，未完成者恆遠多於上限 ⇒ 上限的作用不是「剛好放得下」，
+         而是「一眼看得完的待辦頭部」。10 列在 400px 捲軸內連一個畫面都填不滿，本表會退化成一個
+         只能點去 TAB2 的按鈕，失去「就地掃一眼最急的幾份」之價值。
+       · 上界（為何不是 20）：區一只是儀表板三區之一。20 列在固定捲軸內約需捲三個畫面，
+         本區會從「摘要」變成「另一張清單」，把區二／區三推得更遠。
+       · 15 ≈ 400px 捲軸內可見約 9 列 ＋ 再捲一次即到底，捲軸把手長度看得出「還有一些」但不會沒完沒了。
+       · 🔴 **刻意不是每頁筆數**：本表**沒有分頁**（沒有第 2 頁可去）——15 是「只給你頭部」的上限，
+         不是分頁大小。取一個常見的分頁值（10／20／25）會誘導下一個人去補一組分頁控制項。
+     ⚠ **本值為畫面層上限，與任何統計口徑無關**——KPI／區二／區三一律用完整母體。 */
+  const DOC_COVERAGE_MAX_ROWS         = 15;
+  const DOC_COVERAGE_INCOMPLETE_LABEL = '尚未全部完成合計';
+  /* 顯示範圍造成之空狀態，**逐一個範圍一句**（不共用一句「查無資料」）：
+     🔒 `all` 恆為空字串——顯示範圍為「全部文件」時只要有文件就一定有列，該分支不可能被取用；
+        留一個空字串而非省略，是為了讓「三個範圍都有對應」這件事在程式碼上看得出來。
+     ⚠ 兩句在**本檔 fixture 下皆不可達**（13 份已完成／21 份未完成，兩邊都非 0）。
+        要建環驗它們請以 fixture 驅動，不要試圖在原型上操作出來。 */
+  const DOC_COVERAGE_EMPTY_BY_SCOPE   = {
+    incomplete: '所有文件之教育訓練皆已全部完成',
+    completed:  '尚無任何文件之教育訓練已全部完成',
+    unassigned: '所有文件皆已指定使用部門',
+    all:        ''
+  };
+  const DOC_COVERAGE_EMPTY_HINT       = '切換顯示範圍為「全部文件」可檢視全部文件之覆蓋率。';
+  /* 截斷提示之名詞隨顯示範圍而異（其餘句子完全相同 ⇒ 只分岔一個名詞，不寫兩句）。 */
+  const DOC_COVERAGE_TRUNC_NOUN       = {incomplete:'尚未全部完成之文件', completed:'已全部完成之文件', unassigned:'未指定使用部門之文件', all:'文件'};
+  /* 🔴 本句為「不得靜默 top-N」之載體：**三件事缺一不可**——還有幾份沒列出、
+     憑什麼是這 15 份（排序規則）、完整的東西去哪裡看。 */
+  /* 🔴 排序說明與「完整的去哪看」**皆依顯示範圍分岔**，兩處都不能只寫一種：
+     · 「僅未指定使用部門」範圍下所有列之覆蓋率皆為 `—`，講「依覆蓋率排序」是假的；
+     · 🔴 更重要：**該範圍不能把人導去「OJT 資料清單」**——那些文件沒有使用部門就沒有進度列，
+       過去只會看到空的。正確去處是「ICSOP 文件管理」（去把使用部門補上），
+       逐字與既有之 `EMPTY_ALL_HINT` 同源，不另造詞。 */
+  function docCoverageTruncationText(hidden,scope){
+    const unassigned = scope==='unassigned';
+    const order = unassigned
+      ? '本表依程序書編號昇冪排序'
+      : '本表依覆蓋率由低至高排序（未指定使用部門之文件一律排在最後），未列出者之覆蓋率均不低於已列出者';
+    const where = unassigned
+      ? '完整清單與使用部門之設定請至「ICSOP 文件管理」。'
+      : '完整清單請至「OJT 資料清單」分頁逐列檢視。';
+    return `本表僅列出前 ${DOC_COVERAGE_MAX_ROWS} 份，另有 ${hidden} 份${DOC_COVERAGE_TRUNC_NOUN[scope]}未列出；${order}。${where}`;
+  }
+
+  /* ═════ 🔴 區三「最近完成 OJT 的單位」之筆數上限（2026-08-28 lead 追加交辦）═════
+     **同一形狀的缺陷、相鄰區塊**：本區原本明文「筆數上限＝不設，全部列出」，僅靠 30 天窗口收斂；
+     600 份文件（本檔語料下已 56 列進度列）時，30 天內的完成筆數同樣會長到把整頁撐開。
+     🔒 **上限之取值＝8**，理由與取捨——
+       · **本區是脈動、不是待辦**：讀者要的是「訓練有在進行嗎、發生在哪些單位」，沒有逐筆處理的動作
+         ⇒ 上限可以比區一（待辦頭部，15）小。
+       · **視覺份量以「整區高度」對齊區一**（實測 @1440×900，非估值）：卡片 60px ＋ 間距 8px
+         ⇒ 每筆 68px；8 筆 ⇒ 清單 536px、**整區 696px**，與區一整區之 **746px** 相當（區二 411px）。
+         ⚠ **要比的是「整區」不是「內層清單」**：區一那 380px 是捲軸容器，其上還有 KPI 列與摘要行；
+            拿它去對本區的清單高度會低估本區約 300px（我第一版就是這樣估錯的）。
+       · 下界（為何不是 5 或 6）：本檔語料 30 天內有 12 筆，5～6 會讓**一半以上**落進提示裡，
+         本區退化成一句「還有一半沒給你看」；6 筆雖然剛好對齊區一的 400px 清單高度，
+         但那是對齊到錯的比較基準（見上一點）。
+       · 上界（為何不是 15）：本區每筆 68px，15 筆 ⇒ 清單 1004px、整區逾 1160px，
+         儀表板會變成兩張長清單；整頁高度（現為 2045px）會再多出約 470px。
+     🔒 **本區刻意不加捲軸**（與區一不同）：上限 8 已經把本區高度封住；
+        區一需要捲軸是因為 15 列 × 41px ＝ 650px 已超過合理之區塊高度，本區沒有這個問題，
+        多一層捲軸只是多一層 chrome。
+     🔴 **上限只作用於「呈現」，四條既有規則一律不變**：① 30 天窗口（`RECENT_WINDOW_DAYS`）；
+        ② PII 硬防線（不得出現上傳者／受訓人員姓名或員編）；③ 孤兒列不進本區；
+        ④ **不排除**裁撤單位（本區是事實列表，不是覆蓋率分母）。 */
+  const RECENT_MAX_ROWS = 8;
+  /* 🔴 與區一同一條規矩：**不得靜默 top-N**。三要素缺一不可——還有幾筆沒列出、
+     憑什麼是這 8 筆（排序規則）、完整的東西去哪裡看。
+     ⚠ 第三要素**刻意不承諾一個等價的畫面**：全站沒有「依日期排序之完成清單」這種頁面，
+        TAB2 是場次紀錄的所在地但**不依日期排序** ⇒ 文案明講「展開該進度列檢視」而非「看完整清單」，
+        免得使用者過去以後找不到對應的東西。 */
+  function recentTruncationText(total,hidden){
+    return `近 ${RECENT_WINDOW_DAYS} 天內共 ${total} 筆，本區僅列出最近 ${RECENT_MAX_ROWS} 筆、另有 ${hidden} 筆未列出；本區依最近一次訓練日期由新至舊排序，未列出者之日期均不晚於已列出者。各單位之完整場次紀錄請至「OJT 資料清單」分頁展開該進度列檢視。`;
+  }
+
   /* ===================== 組織資料（真實形狀之 5 碼 orgCode）=====================
      取自 08-account-management 之 ORG_UNITS 樣本（上游 VW_PERSONNEL_SQL 實測形狀：
      Root 00000／本部 A0000／部 AN000／處室 ANA00／課 BJAA0）。
@@ -635,7 +828,82 @@
     {id:'d3',number:'ICSOP-SRC-102-1-01',name:'車輛分期對保作業',    using:['DAA00','JAC00']},
     {id:'d4',number:'ICSOP-SRC-104-1-05',name:'作服撥款作業（車輛）',using:['DAA00']},
     {id:'d5',number:'ICSOP-PPC-201-1-03',name:'供應商付款作業',      using:['JA000','JAC00','ABA00']},
-    {id:'d6',number:'ICSOP-PPC-201-2-01',name:'應付帳款覆核作業',    using:['CDB00','BAA00']}
+    {id:'d6',number:'ICSOP-PPC-201-2-01',name:'應付帳款覆核作業',    using:['CDB00','BAA00']},
+    /* ═════ 🔴 2026-08-28 追加：規模示範語料（d7～d34，共 28 份）═════
+       **為什麼要這麼多筆**：dev 環境有近 600 份 ICSOP 文件，而本檔原本只有 6 份假資料，
+       使「區一逐筆表無分頁、無筆數上限、無捲軸高度」這個問題被假資料整個藏住——
+       6 列的表看起來完全正常，600 列的表會把儀表板撐成一張無限長的頁面。
+       ⇒ 語料補到 34 份（未完成 21 份 > 上限 15 ⇒ **預設就看得見截斷提示**），
+          下一個人一開檔就會看到節流機制在運作，而不是又看到一張「剛好放得下」的表。
+       🔒 **d1～d6 一個位元組都沒有動**：它們承載既有之示範情境（d1 與 13／15／16 同源之 2/3、
+          d5 之 AC-01 部層 vs 處室、d6 之同日兩梯場次、ABA00 裁撤列、DAB00 孤兒列、LEGACY 之 d4／d1），
+          全部保留。以下 28 份**只**追加規模，不改變任何既有示範。
+       🔒 **使用單位一律取自既有 ORGS 之 11 個代碼**（不新增組織）⇒ TAB2 之群組結構、
+          區二之 6 個部、區一之排除筆數（裁撤 1 ＋ 孤兒 1）**皆維持原狀**，只有數字變大。
+       🔒 **刻意不讓任何新文件使用 ABA00（裁撤）**，以保住 `#inactiveNote` 現有之「排除 2 列」示範。
+       📌 本檔之文件份數刻意多於 `13-document-list` 之樣本清單——兩檔語料本就不必等量
+          （`13` 是一頁清單樣本，本檔要示範的是規模）；d7 以後之編號皆不與 `13` 重複。 */
+    /* ── 尚未開始（none，11 份；無任何場次）── */
+    {id:'d7', number:'ICSOP-SRC-101-3-00', name:'車輛分期照會作業',    using:['CA000']},
+    {id:'d8', number:'ICSOP-SRC-102-2-00', name:'車輛分期撥款覆核作業',using:['DAA00','CA000']},
+    {id:'d9', number:'ICSOP-SRC-105-1-00', name:'中古車鑑價作業',      using:['BAA00']},
+    {id:'d10',number:'ICSOP-SRC-106-1-01', name:'車輛分期結案作業',    using:['DAA00']},
+    {id:'d11',number:'ICSOP-PPC-202-1-00', name:'供應商建檔作業',      using:['JA000','BJA00']},
+    {id:'d12',number:'ICSOP-PPC-203-1-02', name:'費用請款作業',        using:['JA000']},
+    {id:'d13',number:'ICSOP-LWC-102-1-00', name:'法務案件建檔作業',    using:['CDB00']},
+    {id:'d14',number:'ICSOP-LWC-103-1-01', name:'訴訟文件保管作業',    using:['CDB00','DAA00']},
+    {id:'d15',number:'ICSOP-PUC-102-1-00', name:'採購比價作業',        using:['JA000']},
+    {id:'d16',number:'ICSOP-IC-103-1-00',  name:'內控自評作業',        using:['CAA00']},
+    {id:'d17',number:'ICSOP-GCA-101-1-00', name:'法遵通報作業',        using:['CDB00']},
+    /* ── 部分完成（partial，6 份）── */
+    {id:'d18',number:'ICSOP-SRC-107-1-00', name:'車輛分期展延作業',    using:['CA000','CAA00','DAA00']},
+    {id:'d19',number:'ICSOP-SRC-108-1-01', name:'保險續保通知作業',    using:['DAA00','BAA00']},
+    {id:'d20',number:'ICSOP-PPC-204-1-00', name:'應付票據作業',        using:['JA000','JAC00','CDB00']},
+    {id:'d21',number:'ICSOP-FAC-102-1-00', name:'固定資產請購作業',    using:['JA000','DAA00']},
+    {id:'d22',number:'ICSOP-CIPS-105-1-00',name:'客訴處理作業',        using:['DAB00','CA000']},
+    {id:'d23',number:'ICSOP-FC-102-1-01',  name:'融資額度覆審作業',    using:['CA000','CAA00','BJAA0']},
+    /* ── 已全部完成（all，11 份）──
+       🔴 這 11 份是 `已全部完成` 這一態在本頁**唯一**的晶片載體。預設顯示範圍為「僅未全部完成」時
+          它們不產生任何列 ⇒ 該態之可達路徑＝把顯示範圍切成「全部文件」（見區一之區塊註解）。 */
+    {id:'d24',number:'ICSOP-SRC-109-1-00', name:'對保文件回收作業',    using:['DAA00']},
+    {id:'d25',number:'ICSOP-SRC-110-1-02', name:'分期契約歸檔作業',    using:['DAA00','JAC00']},
+    {id:'d26',number:'ICSOP-PPC-205-1-01', name:'請款單審核作業',      using:['JA000']},
+    {id:'d27',number:'ICSOP-PPC-206-1-00', name:'廠商付款排程作業',    using:['BJA00','JA000']},
+    {id:'d28',number:'ICSOP-LWC-104-1-00', name:'債權轉催作業',        using:['CDB00']},
+    {id:'d29',number:'ICSOP-LWC-105-1-01', name:'和解案件審核作業',    using:['CDB00','CA000']},
+    {id:'d30',number:'ICSOP-PUC-103-1-00', name:'供應商評鑑作業',      using:['BJA00']},
+    {id:'d31',number:'ICSOP-IC-104-1-00',  name:'內控缺失追蹤作業',    using:['CAA00']},
+    {id:'d32',number:'ICSOP-GCA-102-1-01', name:'法遵教育訓練作業',    using:['CAA00','CA000']},
+    {id:'d33',number:'ICSOP-CIPS-106-1-00',name:'客戶資料維護作業',    using:['DAB00']},
+    {id:'d34',number:'ICSOP-FC-103-1-00',  name:'額度控管作業',        using:['BJAA0']},
+    /* ═════ 🔴 2026-08-28 追加：**未指定使用部門**之文件（d35～d52，共 18 份）═════
+       **為什麼要有這一批**：backend 對 dev 真庫實打後揭露——**591 份文件中有 587 份沒有設定使用部門**
+       （`totalUnits = 0`）。它們依 `AC-04` 判為 `none`、覆蓋率退化為 `0/0`⇒`0%`，於是**與真正「有義務卻
+       一列都沒完成」的文件共用同一個排序鍵**，並以壓倒性數量占滿前 15 名，把唯一一份真有進度落差的
+       文件擠到第 591 名——節流規則本身沒錯，但清單裡裝的全是根本沒有訓練義務的文件。
+       🔒 **18 份是刻意 > 上限 15**：這樣才證明得出「若不沉底，它們單靠自己就能占滿整張表」。
+          真實比例（99.3%）無法照搬進原型，但**只要 > 上限就足以重現該失效形狀**。
+       🔴 **本批文件不產生任何進度列**（`using` 為空）⇒ `allRows()`／`coverageRows()`／區二／區三／TAB2
+          之數字**一格都不會變**（仍為 58／56 列）。唯一受影響者＝以 `DOCS.length` 為值的
+          KPI「追蹤中文件」（34 → 52）——見該卡之連帶回報。 */
+    {id:'d35',number:'ICSOP-SRC-111-1-00', name:'車輛分期額度調整作業',using:[]},
+    {id:'d36',number:'ICSOP-SRC-112-1-00', name:'分期案件補件作業',    using:[]},
+    {id:'d37',number:'ICSOP-SRC-113-1-01', name:'車輛過戶作業',        using:[]},
+    {id:'d38',number:'ICSOP-PPC-207-1-00', name:'供應商合約管理作業',  using:[]},
+    {id:'d39',number:'ICSOP-PPC-208-1-00', name:'付款異常處理作業',    using:[]},
+    {id:'d40',number:'ICSOP-PPC-209-1-01', name:'預付款沖銷作業',      using:[]},
+    {id:'d41',number:'ICSOP-LWC-106-1-00', name:'支付命令聲請作業',    using:[]},
+    {id:'d42',number:'ICSOP-LWC-107-1-00', name:'強制執行作業',        using:[]},
+    {id:'d43',number:'ICSOP-PUC-104-1-00', name:'採購合約簽核作業',    using:[]},
+    {id:'d44',number:'ICSOP-PUC-105-1-01', name:'固定資產報廢作業',    using:[]},
+    {id:'d45',number:'ICSOP-IC-105-1-00',  name:'內部稽核作業',        using:[]},
+    {id:'d46',number:'ICSOP-IC-106-1-00',  name:'風險評估作業',        using:[]},
+    {id:'d47',number:'ICSOP-GCA-103-1-00', name:'洗錢防制通報作業',    using:[]},
+    {id:'d48',number:'ICSOP-GCA-104-1-01', name:'個資保護作業',        using:[]},
+    {id:'d49',number:'ICSOP-CIPS-107-1-00',name:'客戶身分驗證作業',    using:[]},
+    {id:'d50',number:'ICSOP-CIPS-108-1-00',name:'客訴升級處理作業',    using:[]},
+    {id:'d51',number:'ICSOP-FC-104-1-00',  name:'融資撥款作業',        using:[]},
+    {id:'d52',number:'ICSOP-FAC-103-1-00', name:'資產盤點作業',        using:[]}
   ];
   /* 場次 fixture。
      🔴 `uploader` 為**真實形狀之姓名**，刻意保留：
@@ -643,7 +911,11 @@
         · TAB1 區三（AC-16）**不得**呈現它 ⇒ 「區三 textContent 不含『王志明』」為有鑑別力之負向斷言。
      🔴 s9／s10 為**同一列、同一訓練日期之兩筆場次**（上下午兩梯）——F042 Edge Cases 明文
         「允許、系統不做同日去重」；去重會使真實事實被靜默吞掉。 */
-  let seq=10;
+  /* 🔴 **2026-08-28 就地修正之既有缺陷**：原值為 `10`，但 fixture 已存在 `s11`（孤兒列示範）
+     ⇒ 第一筆新增之場次會拿到重複的 `s11`，而 `doDeleteSession()` 是 `filter(x=>x.id!==id)`
+     ⇒ 刪其中一筆會把兩筆一起刪掉。本輪追加場次至 `s33`，故一併校正為 `33`。
+     🔒 規則：`seq` 必須恆等於 SESSIONS fixture 中最大的既有序號。 */
+  let seq=33;
   let SESSIONS=[
     {id:'s1', docId:'d1', org:'JAC00', date:'2026-03-05', uploader:'王志明', file:'車輛分期進件作業_審查室_OJT簽到表_20260305.pdf', fmt:'pdf'},
     {id:'s2', docId:'d1', org:'JAC00', date:'2026-06-18', uploader:'王志明', file:'車輛分期進件作業_審查室_OJT簽到表_20260618.pdf', fmt:'pdf'},
@@ -659,7 +931,45 @@
        （曾是使用部門、後來被移出）⇒ 本筆場次仍保留、仍可下載、仍留稽核回溯，但**不計入任何統計**。
        📌 日期刻意早於 30 天窗口，使「孤兒列是否該出現在區三」不會被 fixture 偷偷替裁決者決定；
           本檔之規則已明文寫在 renderRecent()（孤兒列不進區三），與此無關。 */
-    {id:'s11',docId:'d1', org:'DAB00', date:'2025-12-10', uploader:'周立群', file:'車輛分期進件作業_客服室_OJT簽到表_20251210.pdf', fmt:'pdf'}
+    {id:'s11',docId:'d1', org:'DAB00', date:'2025-12-10', uploader:'周立群', file:'車輛分期進件作業_客服室_OJT簽到表_20251210.pdf', fmt:'pdf'},
+    /* ═════ 🔴 2026-08-28 追加：規模示範語料之場次（s12～s33，共 22 筆）═════
+       僅服務於「讓 d18～d34 具備正確之完成狀態」，不新增任何示範情境。
+       🔒 **上傳者一律沿用既有六個姓名**——AC-16 之 PII 負向斷言掃的是整區 textContent，
+          多一個名字就多一個要維護的斷言標的，沒有任何好處。
+       🔒 **落在 30 天窗口內者恰 8 筆**（TODAY=2026-08-28 ⇒ 窗口起點 2026-07-29）：
+          `s19`(08-27)／`s23`(08-22)／`s21`(08-18)／`s22`(08-14)／`s28`(08-08)／`s29`(08-05)／
+          `s25`(08-01)／`s32`(07-31)；其餘一律早於窗口。
+          連同既有之 `s5`／`s6`／`s7`／`s8`，區三之母體由 4 列成長為 **12 列**（> 上限 8 ⇒ 預設即截斷）。
+       ⚠ **刻意不把新語料全部推出窗口外**——那會把「區三同樣沒有筆數上限」這件事再藏一次，
+          正是本輪要修的那種假資料。
+       🔒 **這 8 筆之日期是「移進來」的，不是新增的場次**：每一筆都是其 (文件×單位) 列的唯一場次，
+          且該列本來就已完成 ⇒ 改日期**不影響任何計數**（KPI／區一逐筆／區二 rollup／TAB2 列數與完成數），
+          只影響區三之成員資格與 TAB2 明細顯示之日期。⚠ 若要再調整區三之筆數，請沿用這個手法
+             （改已完成列之日期），**不要**新增場次——新增會動到 TAB2 之場次數與各處統計。 */
+    /* ── 部分完成之文件（各自只有部分使用單位辦過訓練）── */
+    {id:'s12',docId:'d18',org:'CA000', date:'2026-04-18', uploader:'林建宏', file:'車輛分期展延作業_信審部_OJT簽到表_20260418.pdf', fmt:'pdf'},
+    {id:'s13',docId:'d19',org:'DAA00', date:'2026-05-09', uploader:'張家豪', file:'保險續保通知作業_文管室_OJT簽到表_20260509.pdf', fmt:'pdf'},
+    {id:'s14',docId:'d20',org:'JAC00', date:'2026-06-24', uploader:'王志明', file:'應付票據作業_審查室_OJT簽到表_20260624.pdf', fmt:'pdf'},
+    {id:'s15',docId:'d21',org:'JA000', date:'2026-03-27', uploader:'王志明', file:'固定資產請購作業_營運管理部_OJT簽到表_20260327.pdf', fmt:'pdf'},
+    {id:'s16',docId:'d22',org:'DAB00', date:'2026-01-22', uploader:'周立群', file:'客訴處理作業_客服室_OJT簽到表_20260122.pdf', fmt:'pdf'},
+    {id:'s17',docId:'d23',org:'CA000', date:'2026-05-06', uploader:'林建宏', file:'融資額度覆審作業_信審部_OJT簽到表_20260506.pdf', fmt:'pdf'},
+    {id:'s18',docId:'d23',org:'CAA00', date:'2026-06-11', uploader:'林建宏', file:'融資額度覆審作業_企金室_OJT簽到表_20260611.pdf', fmt:'pdf'},
+    /* ── 已全部完成之文件 ── */
+    {id:'s19',docId:'d24',org:'DAA00', date:'2026-08-27', uploader:'張家豪', file:'對保文件回收作業_文管室_OJT簽到表_20260827.pdf', fmt:'pdf'},
+    {id:'s20',docId:'d25',org:'DAA00', date:'2026-05-15', uploader:'張家豪', file:'分期契約歸檔作業_文管室_OJT簽到表_20260515.pdf', fmt:'pdf'},
+    {id:'s21',docId:'d25',org:'JAC00', date:'2026-08-18', uploader:'王志明', file:'分期契約歸檔作業_審查室_OJT簽到表_20260818.pdf', fmt:'pdf'},
+    {id:'s22',docId:'d26',org:'JA000', date:'2026-08-14', uploader:'王志明', file:'請款單審核作業_營運管理部_OJT簽到表_20260814.pdf', fmt:'pdf'},
+    {id:'s23',docId:'d27',org:'BJA00', date:'2026-08-22', uploader:'陳彥廷', file:'廠商付款排程作業_北區綜合處_OJT簽到表_20260822.pdf', fmt:'pdf'},
+    {id:'s24',docId:'d27',org:'JA000', date:'2026-07-15', uploader:'王志明', file:'廠商付款排程作業_營運管理部_OJT簽到表_20260715.pdf', fmt:'pdf'},
+    {id:'s25',docId:'d28',org:'CDB00', date:'2026-08-01', uploader:'李慧玲', file:'債權轉催作業_法催一室_OJT簽到表_20260801.pdf', fmt:'pdf'},
+    {id:'s26',docId:'d29',org:'CDB00', date:'2026-04-23', uploader:'李慧玲', file:'和解案件審核作業_法催一室_OJT簽到表_20260423.pdf', fmt:'pdf'},
+    {id:'s27',docId:'d29',org:'CA000', date:'2026-06-30', uploader:'林建宏', file:'和解案件審核作業_信審部_OJT簽到表_20260630.pdf', fmt:'pdf'},
+    {id:'s28',docId:'d30',org:'BJA00', date:'2026-08-08', uploader:'陳彥廷', file:'供應商評鑑作業_北區綜合處_OJT簽到表_20260808.pdf', fmt:'pdf'},
+    {id:'s29',docId:'d31',org:'CAA00', date:'2026-08-05', uploader:'林建宏', file:'內控缺失追蹤作業_企金室_OJT簽到表_20260805.pdf', fmt:'pdf'},
+    {id:'s30',docId:'d32',org:'CAA00', date:'2026-05-28', uploader:'林建宏', file:'法遵教育訓練作業_企金室_OJT簽到表_20260528.pdf', fmt:'pdf'},
+    {id:'s31',docId:'d32',org:'CA000', date:'2026-07-07', uploader:'林建宏', file:'法遵教育訓練作業_信審部_OJT簽到表_20260707.pdf', fmt:'pdf'},
+    {id:'s32',docId:'d33',org:'DAB00', date:'2026-07-31', uploader:'周立群', file:'客戶資料維護作業_客服室_OJT簽到表_20260731.pdf', fmt:'pdf'},
+    {id:'s33',docId:'d34',org:'BJAA0', date:'2026-04-30', uploader:'陳彥廷', file:'額度控管作業_醫療一課_OJT簽到表_20260430.pdf', fmt:'pdf'}
   ];
 
   /* ===================== 🟢 舊資料「待歸位」fixture（`AC-26`／`OQ-E11-01`＝(C)）=====================
@@ -707,8 +1017,10 @@
     return out;
   }
   /* 🟢 `OQ-E11-03`＝(B) 已裁決：**裁撤單位不計入覆蓋率分母**。
-     本函式是 TAB1 全部三個統計區（區一 KPI、區一逐筆、區二 rollup）的**唯一母體來源**——
-     🔒 三處共用同一個 filter，不各自寫一次，否則三個數字會各自漂移。
+     🔴 **2026-08-28 訂正**：本函式是 **區一 KPI 與區二 rollup** 之母體來源（原註解含「區一逐筆」，已刪）。
+     ⚠ **區一逐筆表刻意不用本函式**——`AC-04`／`AC-14` 明訂其分母為該文件之全部使用單位、
+        **不套 `isActive` 過濾**（見 `docCoverage()` 之註解）。區三亦不用本函式（見其區塊註解）。
+     🔒 KPI 與 rollup 兩處共用同一個 filter，不各自寫一次，否則兩個數字會各自漂移。
      🟢 排除兩種列：**已裁撤單位**（`OQ-E11-03`＝(B)）與**孤兒列**（`OQ-E11-02`＝(C)「不計統計」）。
      ⚠ **TAB2 與區三刻意不使用本函式**：TAB2 仍呈現裁撤單位之列且仍可新增場次
         （F042 Edge Cases 明文：TAB2 之呈現不隨本題裁決改變）；區三是事實列表，理由見其區塊註解。 */
@@ -729,8 +1041,42 @@
   };
   function docStateOf(total,done){ return (total===0||done===0) ? 'none' : (done>=total ? 'all' : 'partial'); }
 
+  /* ═════ 🔴 「未指定使用部門」＝區一**專用**之第四種呈現態（2026-08-28）═════
+     🔒 **刻意不加進 `OJT_DOC_STATE`**：那組常數是與 `13-document-list` 共用的 `AC-04` 文件層三態，
+        加第四鍵會直接漣漪到 `13` 的圖示欄與四值篩選。**兩張表度量的東西不同**——
+        `13` 問「這份文件的訓練做完沒」（`totalUnits=0` 確實就是「尚未開始」），
+        區一問「哪些文件需要關注」（`totalUnits=0` 是**沒有義務**，不需要關注）。
+     🔒 因此 `data-doc-ojt-state` 之值域**維持 `all|partial|none` 三值不變**，
+        本態另以 `[data-doc-no-using-dept]`（無值屬性、僅在 `totalUnits=0` 時進 DOM）表達。
+        ⚠ 於是同一列可以同時是 `data-doc-ojt-state="none"` 且帶 `data-doc-no-using-dept`——
+           這**正是事實**：`AC-04` 說它是 `none`，區一說它沒有義務。兩者不衝突，也不得互相對齊。
+     🔴 圖示刻意**跳出 `file-*-2` 家族**（三態是同一把量尺上的三個刻度，本態在尺之外）；
+        `circle-slash` 為「不適用」之通用字形。色票用 `text-slate-500`（白底約 5:1，過 WCAG AA），
+        **刻意不比照 `none` 的 `text-slate-300`**（1.7:1、已列為待裁之既有議題）。 */
+  const DOC_UNASSIGNED_TEXT   = '未指定使用部門';
+  const DOC_UNASSIGNED_VISUAL = {icon:'circle-slash', text:DOC_UNASSIGNED_TEXT, cls:'text-slate-500'};
+  /* 區一之呈現態＝`AC-04` 三態 ＋ 「無義務」一態。**只在本頁用**，不外流。 */
+  function docViewState(c){ return c.total===0 ? 'unassigned' : c.state; }
+
+  /* 🔴 **2026-08-28 口徑訂正（sw-fix 於撰寫 AC 時查出；三方原本不一致）**
+     原本本函式取用 `coverageRows()`（已排除裁撤與孤兒），但 F042 正文 `AC-04`／`AC-14` 明訂：
+     **逐筆表呈現的是「文件層三態」，其分母為該文件之「全部」使用單位、不套 `isActive` 過濾**。
+     後端 `ojt-progress.service.ts` 之 `getSummary()` 與環 `ojt-progress.summary.spec.ts:227`
+     都依正文（`docCoverage` 用 `aggregated`、`coverage` 才用 `aggregated.filter(a=>a.active)`）
+     ⇒ 過去是 **prototype 單方偏離**，本輪改為與正文及實作一致。
+
+     🔴 **同頁兩個數字刻意不一致**（`AC-14` 末段之明文警語，**不得**為了「看起來一致」而統一任一邊）：
+       · 上方 KPI／`#inactiveNote`／區二 rollup ＝「**還追得動的部分**」⇒ 排除裁撤與孤兒（`AC-17`／`AC-25`）；
+       · 本表之「已完成 / 使用單位」＝「**這份文件的實際訓練狀況**」⇒ 分母含裁撤單位。
+       📌 若對本表也套裁撤過濾，同一份文件會因為某個單位被裁撤而**憑空變成「已全部完成」**——那是畫面說謊。
+       ⚠ 後果是**兩處數字加起來對不上**（各文件分母合計 57 vs KPI 之 56），這是刻意的，
+          故畫面上另有一行 `[data-doc-coverage-basis-note]` 明說，避免被讀成 bug。
+
+     🔒 **孤兒列仍排除**，但那不是一道「過濾」：孤兒列之 org 依定義**不在** `d.using` 內，
+        本來就不屬於該文件的使用單位分母。（後端因為列由 `DOC_USING_DEPT` 驅動，孤兒天然不成列；
+        本原型之 `allRows()` 會為 TAB2 另外合成孤兒列，故此處必須顯式濾掉，兩者結果等價。） */
   function docCoverage(){
-    const rows=coverageRows();
+    const rows=allRows().filter(r=>!r.orphaned);
     return DOCS.map(d=>{
       const mine=rows.filter(r=>r.docId===d.id);
       const done=mine.filter(r=>r.completed).length;
@@ -816,26 +1162,134 @@
         ? `覆蓋率為 <span class="mono">${done} / ${total}</span>（<span class="mono">${pctOf(done,total)}%</span>）；本次共排除 <span class="mono">${excluded}</span> 列——<strong class="text-slate-600">已裁撤單位</strong> ${exInactive} 列、<strong class="text-slate-600">單位已移出使用部門</strong> ${exOrphan} 列。被排除之進度列於「OJT 資料清單」分頁<strong class="text-slate-600">仍然呈現</strong>（裁撤單位仍可新增場次；已移出者不可），故兩處列數不相等屬正常。`
         : `覆蓋率為 <span class="mono">${done} / ${total}</span>（<span class="mono">${pctOf(done,total)}%</span>）；已裁撤單位與已移出使用部門之單位<strong class="text-slate-600">皆不計入</strong>，目前無任何進度列因此被排除。`;
 
-    const cov=isEmptyDemo()?[]:docCoverage();
-    document.getElementById('docCoverageBody').innerHTML = cov.length? cov.map(c=>`
-      <tr data-doc-coverage-row="${c.number}" class="hover:bg-slate-50">
-        <td class="px-4 py-2.5 mono text-xs text-slate-600 whitespace-nowrap">${c.number}</td>
-        <td class="px-4 py-2.5 text-slate-800">${c.name}</td>
-        <td class="px-4 py-2.5" data-doc-ojt-state="${c.state}">${docStateChip(c.state)}</td>
-        <td class="px-4 py-2.5"><span data-doc-coverage-ratio class="mono text-slate-700">${c.done} / ${c.total}</span></td>
-        <td class="px-4 py-2.5">
-          <div class="flex items-center gap-2">
-            <div class="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full ${c.pct===100?'bg-emerald-500':(c.pct===0?'bg-slate-300':'bg-primary-500')}" style="width:${c.pct}%"></div></div>
-            <span data-doc-coverage-pct class="mono text-xs ${c.pct===100?'text-emerald-700':'text-slate-600'}">${c.pct}%</span>
-          </div>
-        </td>
-      </tr>`).join('')
-      : `<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-400">${EMPTY_ALL_TEXT}</td></tr>`;
+    /* 逐筆表已抽成獨立函式（顯示範圍切換需要單獨重繪它，而不重算 KPI）。
+       🔒 上方 KPI 與 `#inactiveNote` 之母體維持 `coverageRows()` 全量，**不受逐筆表之上限影響**。 */
+    renderDocCoverageTable();
   }
   /* 文件層三態晶片：icon 鍵與逐字文案與 `13` 第 1 欄共用（見 OJT_DOC_STATE 之註解）。 */
   function docStateChip(st){
-    const x=OJT_DOC_STATE[st];
+    /* 🔒 第四態之視覺**不從 `OJT_DOC_STATE` 取**（那組是與 `13` 共用的三態常數，不得加鍵）。 */
+    const x=(st==='unassigned')?DOC_UNASSIGNED_VISUAL:OJT_DOC_STATE[st];
     return `<span data-doc-ojt-state-chip class="inline-flex items-center gap-1 text-xs whitespace-nowrap ${x.cls}"><i data-lucide="${x.icon}" class="w-3.5 h-3.5" aria-hidden="true"></i>${x.text}</span>`;
+  }
+
+  /* ═════ 🔴 依文件逐筆表之節流實作（2026-08-28）═════ */
+  /* 顯示範圍為**三值**。🔴 值 `all`（＝「全部文件」）與文件層狀態值 `all`（＝「已全部完成」）
+     **同字不同義**，故一律經由 `SCOPE_FILTER` 對照表取用，不寫成連續三元判斷式——
+     連續三元一旦被人順手改寫，兩個 `all` 會在無人察覺的情況下合流。 */
+  const SCOPE_FILTER = {
+    incomplete: c => c.total > 0 && c.state !== 'all',  // 部分完成 ＋ 尚未開始（**預設**；不含無義務者）
+    completed:  c => c.state === 'all',                 // 已全部完成（`total=0` 恆為 'none'，天然不入此集）
+    unassigned: c => c.total === 0,                     // 未指定使用部門（無訓練義務）
+    all:        () => true                              // 全部文件
+  };
+  function coverageScope(){
+    const v=(document.getElementById('covScope')||{}).value;
+    return Object.prototype.hasOwnProperty.call(SCOPE_FILTER,v) ? v : 'incomplete';
+  }
+  function onCoverageScopeChange(){ renderCoverage(); lucide.createIcons(); }
+
+  /* 導向 TAB2，並把既有之「完成狀態」篩選設為既有之 `尚未完成` 選項。
+     🔒 **不新增任何 TAB2 篩選項**——`AC-13`／`OQ-E11-15`=(A) 明訂 TAB2 篩選項目集合**恰兩項**。
+        本入口只是替使用者選了其中一個既有選項，落地後在畫面上看得見（select 顯示 `尚未完成`、
+        「清除」鈕出現）⇒ **不是隱形狀態**。
+     🔴 **刻意清空單位關鍵字**：使用者若稍早在 TAB2 打過字，沿用它會讓本入口承諾的
+        「尚未完成之進度列」少掉一截；清空是為了讓落地結果恰等於入口所宣稱的集合。
+     ⚠ **兩處粒度不同**：本表一列＝一份文件，TAB2 一列＝「文件 × 使用單位」⇒ 列數本就不相等
+        （區一 `#inactiveNote` 已有一句說明兩處列數不等屬正常，此處不重複打第二份）。 */
+  function gotoSessionsPending(){
+    document.getElementById('fOrg').value='';
+    document.getElementById('fStatus').value='pending';
+    switchTab('sessions');
+    document.getElementById('tabbtn-sessions').focus();
+  }
+
+  function renderDocCoverageTable(){
+    const cov=isEmptyDemo()?[]:docCoverage();
+    /* 🔴 `cnt` 依**區一之呈現態**計數（`docViewState`），不是依 `AC-04` 之三態：
+       `cnt.none` ＝「有使用部門、但一列都沒完成」，`cnt.unassigned` ＝「沒有使用部門」。
+       ⚠ `cnt.none + cnt.unassigned` 才等於 `AC-04` 口徑之 `byState.none`。 */
+    const cnt={all:0,partial:0,none:0,unassigned:0};
+    cov.forEach(c=>{ cnt[docViewState(c)]++; });
+    /* 🔴 `incompleteTotal` **必須排除無義務者**（使用者裁決）——本式天然滿足：
+       `cnt.none` 已只計有義務者，故無需另外扣除。 */
+    const incomplete=cnt.partial+cnt.none;
+    const scope=coverageScope();
+    const pool=cov.filter(SCOPE_FILTER[scope]);
+    /* 🔴 排序＝覆蓋率由低至高，同率者依程序書編號昇冪（順序具決定性、不依賴 fixture 之寫入順序）。
+       截斷之所以站得住腳全靠這個排序——被截掉的必定是覆蓋率較高者。
+       ⚠ 排序規則與截斷提示所宣稱的必須一致，否則那句提示就是假的。 */
+    /* 🔴 **沉底**：`totalUnits===0`（無訓練義務）一律排在所有有義務之文件之後，不得占用前 N 名額。
+       這是本輪的核心修正——真庫 587/591 份無義務文件之退化比值 `0/0`⇒`0%` 與「真的一列都沒完成」
+       共用同一個排序鍵，數量又壓倒性，於是把唯一有進度落差的文件擠到看不見的地方。 */
+    const obligationRank=c=>(c.total===0?1:0);
+    const sorted=pool.slice().sort((a,b)=>(obligationRank(a)-obligationRank(b))||(a.pct-b.pct)||a.number.localeCompare(b.number));
+    const shown=sorted.slice(0,DOC_COVERAGE_MAX_ROWS);
+    const hidden=sorted.length-shown.length;
+
+    /* 摘要行：三態之**逐字／icon／色票**直接取自 `OJT_DOC_STATE`（與列上晶片同一組常數）。
+       🔴 但**刻意不掛** `data-doc-ojt-state-chip`——否則整區 textContent 之斷言會被摘要行滿足，
+          變成一條對「列是否真的畫出來」零鑑別力的假綠斷言。
+       🔴 **狀態色只上在 icon、文字用 `text-slate-600`**：`OJT_DOC_STATE.none.cls` 為 `text-slate-300`
+          （白底對比約 1.7:1，遠低於 WCAG AA 之 4.5:1）。該色票是與 `13` 共用之鎖定常數、不得於此改動，
+          但**新載體不必沿用它的可讀性問題**——icon 為 `aria-hidden` 之裝飾，語意由文字承擔。
+          ⚠ 列上晶片（`docStateChip`）之整段著色為既有呈現，本輪**未動**；其對比不足屬既有議題，已回報。
+       🔒 摘要之三個份數恆為**全母體**之分佈，**不隨顯示範圍或上限改變**（它要回答的是
+          「總共長什麼樣」，不是「這張表現在畫了什麼」）。 */
+    const sum=document.getElementById('docCoverageSummary');
+    sum.setAttribute('data-doc-coverage-scope-value',scope);
+    sum.setAttribute('data-doc-coverage-shown',String(shown.length));
+    /* 🔴 摘要改為**兩列**：第一列切「有沒有訓練義務」，第二列才是有義務者之三態分佈。
+       ⚠ **四個數字必須構成一個可加總的分割**，否則讀者一加就對不上：
+          `tracked + unassigned = total`（52）且 `all + partial + none = tracked`（34）。
+       🔴 因此第二列之 `尚未開始` 顯示的是「**有義務**卻一列都沒完成」＝12，
+          **不等於** `AC-04` 口徑之 `byState.none`（＝30，含 18 份無義務者）。
+          ⇒ 端點契約需要一個 `unassignedDocuments` 欄位讓前端做這個減法，
+            且 F042 既有不變式 ③（`incompleteTotal === byState.partial + byState.none`）**已不成立**。
+            兩項皆已回報 sw-fix。 */
+    const unassignedCount=cnt.unassigned;
+    const trackedCount=cov.length-unassignedCount;
+    sum.innerHTML =
+      `<div class="flex flex-wrap items-center gap-x-4 gap-y-1">`
+      + `<span data-doc-coverage-total="${cov.length}">共 <span class="mono text-slate-700">${cov.length}</span> 份文件</span>`
+      + `<span data-doc-coverage-tracked="${trackedCount}">已指定使用部門 <span class="mono text-slate-700">${trackedCount}</span> 份</span>`
+      + `<span data-doc-coverage-unassigned="${unassignedCount}" class="inline-flex items-center gap-1 ${DOC_UNASSIGNED_VISUAL.cls}"><i data-lucide="${DOC_UNASSIGNED_VISUAL.icon}" class="w-3.5 h-3.5" aria-hidden="true"></i>${DOC_UNASSIGNED_TEXT} <span class="mono">${unassignedCount}</span> 份</span>`
+      + `</div><div class="flex flex-wrap items-center gap-x-4 gap-y-1">`
+      + `<span>已指定使用部門者之細分：</span>`
+      + ['all','partial','none'].map(k=>`<span data-doc-coverage-stat="${k}" class="inline-flex items-center gap-1 text-slate-600"><i data-lucide="${OJT_DOC_STATE[k].icon}" class="w-3.5 h-3.5 ${OJT_DOC_STATE[k].cls}" aria-hidden="true"></i>${OJT_DOC_STATE[k].text} <span class="mono">${cnt[k]}</span> 份</span>`).join('')
+      + `<span data-doc-coverage-incomplete="${incomplete}" class="text-slate-500">${DOC_COVERAGE_INCOMPLETE_LABEL} <span class="mono text-slate-700">${incomplete}</span> 份</span>`
+      + `</div>`;
+
+    /* 本表之空狀態分兩類，**互不相同、不得混用**：
+       ① 全無文件（含「查無資料」示範態）⇒ 沿用既有 `EMPTY_ALL_TEXT`（全域空）。
+       ② 有文件、但目前顯示範圍下無列 ⇒ 逐範圍一句（`DOC_COVERAGE_EMPTY_BY_SCOPE`）。
+       🔴 ② 屬**顯示範圍造成之空**（≒篩選型），刻意**不帶** `EMPTY_ALL_HINT`——
+          「進度列從哪裡來」那句只給全域空狀態；此處的列並非不存在，只是被顯示範圍濾掉了。 */
+    const noDocs=cov.length===0;
+    document.getElementById('docCoverageBody').innerHTML = shown.length
+      ? shown.map(c=>`
+      <tr data-doc-coverage-row="${c.number}"${c.total===0?' data-doc-no-using-dept':''} class="hover:bg-slate-50">
+        <td class="px-4 py-2.5 mono text-xs text-slate-600 whitespace-nowrap">${c.number}</td>
+        <td class="px-4 py-2.5 text-slate-800">${c.name}</td>
+        <td class="px-4 py-2.5" data-doc-ojt-state="${c.state}">${docStateChip(docViewState(c))}</td>
+        <td class="px-4 py-2.5"><span data-doc-coverage-ratio class="mono text-slate-700">${c.total===0?'—':`${c.done} / ${c.total}`}</span></td>
+        <td class="px-4 py-2.5">
+          ${c.total===0
+            ? `<span data-doc-coverage-pct class="mono text-xs text-slate-400">—</span>`
+            : `<div class="flex items-center gap-2">
+            <div class="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full ${c.pct===100?'bg-emerald-500':(c.pct===0?'bg-slate-300':'bg-primary-500')}" style="width:${c.pct}%"></div></div>
+            <span data-doc-coverage-pct class="mono text-xs ${c.pct===100?'text-emerald-700':'text-slate-600'}">${c.pct}%</span>
+          </div>`}
+        </td>
+      </tr>`).join('')
+      : `<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-400"><span data-doc-coverage-empty="${noDocs?'no-docs':scope}">${noDocs?EMPTY_ALL_TEXT:DOC_COVERAGE_EMPTY_BY_SCOPE[scope]}</span>${noDocs?'':`<span class="block mt-1 text-xs text-slate-400">${DOC_COVERAGE_EMPTY_HINT}</span>`}</td></tr>`;
+
+    /* 🔴 **不得靜默 top-N**：截斷時必須明說。未截斷時本元素**完全不進 DOM**（非 CSS 隱藏）⇒
+       `querySelectorAll('[data-doc-coverage-truncation]').length === 0` 是一條有鑑別力的負向斷言
+       （其可達狀態＝顯示範圍「僅已全部完成」，13 份 ≤ 上限 15）。 */
+    document.getElementById('docCoverageTruncation').innerHTML = hidden>0
+      ? `<p data-doc-coverage-truncation data-doc-coverage-hidden="${hidden}" class="mt-2 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700"><i data-lucide="triangle-alert" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>${docCoverageTruncationText(hidden,scope)}</span></p>`
+      : '';
   }
 
   /* ===================== TAB1 · 區二 ===================== */
@@ -888,11 +1342,18 @@
     });
     recent.sort((a,b)=>a.date<b.date?1:(a.date>b.date?-1:0));
     const host=document.getElementById('recentList');
+    const trHost=document.getElementById('recentTruncation');
     if(!recent.length){
       host.innerHTML=`<div data-recent-empty class="flex items-center gap-2 rounded-lg border border-dashed border-slate-200 px-3 py-6 justify-center text-sm text-slate-400"><i data-lucide="calendar-off" class="w-4 h-4 shrink-0"></i>${EMPTY_RECENT_TEXT}</div>`;
+      trHost.innerHTML='';
       lucide.createIcons(); return;
     }
-    host.innerHTML=recent.map(x=>`
+    /* 🔴 筆數上限（`RECENT_MAX_ROWS`）——見其常數註解。
+       🔒 **切片必須發生在排序之後**：先取前 N 再排序，會變成「隨機 N 筆裡最新的那幾筆」，
+          而截斷提示宣稱的是「最近的 N 筆」⇒ 那句話就成了假的。 */
+    const shown=recent.slice(0,RECENT_MAX_ROWS);
+    const hidden=recent.length-shown.length;
+    host.innerHTML=shown.map(x=>`
       <div data-recent-row="${x.row.key}" class="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5">
         <i data-lucide="circle-check-big" class="w-5 h-5 text-emerald-600 shrink-0"></i>
         <div class="min-w-0 flex-1">
@@ -907,6 +1368,13 @@
           <div class="text-[10px] text-slate-400">${x.age===0?'今日':x.age+' 天前'}</div>
         </div>
       </div>`).join('');
+    /* 🔒 未截斷時**完全不進 DOM**（非 CSS 隱藏）⇒
+       `querySelectorAll('[data-recent-truncation]').length === 0` 為有鑑別力之負向斷言。
+       ⚠ 其可達狀態：①「查無資料」示範態（母體 0 筆）；② ICSOPAdmin 刪除場次使窗口內筆數降至 8 以下。
+          本檔 fixture 之預設值（12 筆）刻意高於上限，使截斷提示**一開檔就看得到**。 */
+    trHost.innerHTML = hidden>0
+      ? `<p data-recent-truncation data-recent-total="${recent.length}" data-recent-hidden="${hidden}" class="mt-2 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700"><i data-lucide="triangle-alert" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>${recentTruncationText(recent.length,hidden)}</span></p>`
+      : '';
     lucide.createIcons();
   }
 
