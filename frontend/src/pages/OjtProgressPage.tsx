@@ -14,9 +14,10 @@ import {
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { ojtStatusView } from '../domain/ojt-status-view';
 import { Icon } from '../components/Icon';
-import { PageHeader } from '../components/PageHeader';
+import { BelowTopbar, PageHeader, TopbarBanner } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
 import type {
+  OjtDocScope,
   OjtPendingItem,
   OjtProgressRow,
   OjtProgressSummary,
@@ -33,6 +34,15 @@ import {
   BLOCKED_TITLE,
   DEL_CONFIRM_OK_TEXT,
   DEL_CONFIRM_TITLE,
+  DOC_COVERAGE_BASIS_NOTE,
+  DOC_COVERAGE_EMPTY_BY_SCOPE,
+  DOC_COVERAGE_EMPTY_HINT,
+  DOC_COVERAGE_INCOMPLETE_LABEL,
+  DOC_COVERAGE_MORE_ARIA,
+  DOC_COVERAGE_MORE_TEXT,
+  DOC_COVERAGE_REGION_LABEL,
+  DOC_COVERAGE_SCOPE_LABEL,
+  DOC_COVERAGE_SCOPE_OPTIONS,
   EMPTY_ALL_HINT,
   EMPTY_ALL_TEXT,
   EMPTY_RECENT_TEXT,
@@ -62,11 +72,14 @@ import {
   coveragePercent,
   delConfirmBody,
   deleteSessionAria,
+  docCoverageTruncationText,
   downloadSessionAria,
   exclusionNote,
   groupRowsByOrg,
+  recentTruncationText,
   rollupInvariantText,
   rowKeyOf,
+  sliceRecentSessions,
   todayIsoDate,
 } from './ojt-progress-view';
 
@@ -123,6 +136,12 @@ export function OjtProgressPage(): JSX.Element {
 
   const [tab, setTab] = useState<TabKey>('dashboard');
   const [summary, setSummary] = useState<OjtProgressSummary | null>(null);
+  /**
+   * `AC-28`⑯ 區一逐筆表之顯示範圍（預設「僅未全部完成」）。
+   * 🔴 **切換即重新請求**（見 `loadSummary` 之相依）——明文不得改為客端切換：客端切換必須先
+   * 取回全部 600 列，那正是本次節流要消滅的東西。
+   */
+  const [docScope, setDocScope] = useState<OjtDocScope>('incomplete');
   const [rows, setRows] = useState<OjtProgressRow[]>([]);
   const [pending, setPending] = useState<OjtPendingItem[]>([]);
   const [orgQuery, setOrgQuery] = useState('');
@@ -139,11 +158,11 @@ export function OjtProgressPage(): JSX.Element {
 
   const loadSummary = useCallback(async () => {
     try {
-      setSummary(await getOjtProgressSummary());
+      setSummary(await getOjtProgressSummary(docScope));
     } catch {
       setSummary(null);
     }
-  }, []);
+  }, [docScope]);
 
   const loadRows = useCallback(async () => {
     try {
@@ -163,11 +182,16 @@ export function OjtProgressPage(): JSX.Element {
     }
   }, []);
 
+  // 🔴 summary 與 pending 分開兩個 effect：切換顯示範圍只該重抓 summary，不該連帶重抓待歸位清單。
   useEffect(() => {
     if (!canRead) return;
     void loadSummary();
+  }, [canRead, loadSummary]);
+
+  useEffect(() => {
+    if (!canRead) return;
     void loadPending();
-  }, [canRead, loadSummary, loadPending]);
+  }, [canRead, loadPending]);
 
   useEffect(() => {
     if (!canRead) return;
@@ -310,6 +334,19 @@ export function OjtProgressPage(): JSX.Element {
   const groups = useMemo(() => groupRowsByOrg(rows), [rows]);
   const filtered = Boolean(orgQuery || status);
 
+  /**
+   * `AC-28`⑯ 導向 TAB2 之入口：切至 TAB2、把**既有**之完成狀態篩選設為「尚未完成」、
+   * 清空單位關鍵字。
+   * 🔒 **未新增任何 TAB2 篩選項**（`AC-13` 恰兩項、完成狀態恰三選項不變）——本入口只是替使用者
+   * 預先設好既有控制項，不是第三個篩選器。清空關鍵字是必要的：若沿用使用者上次輸入的單位，
+   * 從儀表板點過來會看到一份被暗中窄化的清單，而畫面上沒有任何線索說明為什麼。
+   */
+  const gotoSessionsPending = useCallback(() => {
+    setTab('sessions');
+    setStatus('pending');
+    setOrgQuery('');
+  }, []);
+
   // AC-07：一般使用者全頁 403（側選單亦不呈現本項）。
   if (!canRead) {
     return (
@@ -331,20 +368,35 @@ export function OjtProgressPage(): JSX.Element {
         title="OJT 進度管理"
       />
 
-      {/* AC-06：SysAdmin 唯讀橫幅（可查全部內容、任一寫入端點 403）。 */}
+      {/*
+        AC-06：SysAdmin 唯讀橫幅（可查全部內容、任一寫入端點 403）。
+        🔒 版面權威＝prototype 25 `#roBanner`（:177-179）：位於 `<header>` **內**、`border-t`、
+        左右滿版、無圓角，緊貼 topbar 底緣 ⇒ 經 `TopbarBanner` 投遞，**不畫在 `<main>` 裡**
+        （畫在 main 會變成左右內縮之四邊框圓角卡片）。
+      */}
       {!canWrite && (
-        <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2">
-          <Icon name="eye" className="w-4 h-4 shrink-0" />
-          <span>{RO_NOTICE_SYSADMIN}</span>
-        </div>
+        <TopbarBanner>
+          <div className="bg-cyan-50 border-t border-cyan-200 text-cyan-800 text-sm px-4 py-2 flex items-center gap-2">
+            <Icon name="eye" className="w-4 h-4 shrink-0" />
+            <span>{RO_NOTICE_SYSADMIN}</span>
+          </div>
+        </TopbarBanner>
       )}
 
-      <div className="bg-white border-b border-slate-200">
-        <div role="tablist" aria-label="OJT 進度管理分頁" className="flex text-sm">
-          <TabButton tabKey="dashboard" label={TAB_DASHBOARD_TEXT} icon="layout-dashboard" active={tab} onSelect={setTab} />
-          <TabButton tabKey="sessions" label={TAB_SESSIONS_TEXT} icon="list-tree" active={tab} onSelect={setTab} />
+      {/*
+        🔒 版面權威＝prototype 25 之 TAB bar（:194-199）：緊接 `</header>` 之後、左右滿版、
+        與 topbar 零間隙，內距由自身之 `px-4` 承擔 ⇒ 經 `BelowTopbar` 投遞至 `<main>` **之外**。
+        ⚠ 本頁是目前唯一把分頁列提到 main 之外的頁面；`OrgSyncPage`（09）與
+        `PermissionMatrixPage`（18）之分頁列在其 prototype 裡本就在 main 內部，不得比照改動。
+      */}
+      <BelowTopbar>
+        <div className="bg-white border-b border-slate-200 px-4">
+          <div role="tablist" aria-label="OJT 進度管理分頁" className="flex text-sm">
+            <TabButton tabKey="dashboard" label={TAB_DASHBOARD_TEXT} icon="layout-dashboard" active={tab} onSelect={setTab} />
+            <TabButton tabKey="sessions" label={TAB_SESSIONS_TEXT} icon="list-tree" active={tab} onSelect={setTab} />
+          </div>
         </div>
-      </div>
+      </BelowTopbar>
 
       {/* TAB1 儀表板（三區）。兩個 panel 恆在 DOM，非當前者以 hidden 隱藏（role=tabpanel 契約）。 */}
       <div
@@ -354,7 +406,12 @@ export function OjtProgressPage(): JSX.Element {
         data-ojt-panel="dashboard"
         className={tab === 'dashboard' ? 'space-y-5' : 'hidden'}
       >
-        <CoverageSection summary={summary} />
+        <CoverageSection
+          summary={summary}
+          docScope={docScope}
+          onScopeChange={setDocScope}
+          onGotoPending={gotoSessionsPending}
+        />
         <RollupSection summary={summary} />
         <RecentSection summary={summary} />
       </div>
@@ -552,13 +609,37 @@ function TabButton({
  * 🔴 分母為零時呈現「尚無可統計之進度列」——`0/0` 在 JS 為 `NaN`，直接渲染會出現 `NaN%`；
  * 退化為 `0%` 與「全部未完成」無從分辨，退化為 `100%` 更會謊報。三者皆須被排除。
  */
-function CoverageSection({ summary }: { summary: OjtProgressSummary | null }): JSX.Element {
+function CoverageSection({
+  summary,
+  docScope,
+  onScopeChange,
+  onGotoPending,
+}: {
+  summary: OjtProgressSummary | null;
+  docScope: OjtDocScope;
+  onScopeChange: (s: OjtDocScope) => void;
+  onGotoPending: () => void;
+}): JSX.Element {
   const numerator = summary?.coverage.numerator ?? 0;
   const denominator = summary?.coverage.denominator ?? 0;
   const pct = coveragePercent(numerator, denominator);
-  const docCoverage = summary?.docCoverage ?? [];
+  const slice = summary?.docCoverage;
+  const items = slice?.items ?? [];
+  /**
+   * 🔴 三態份數與總份數恆取自**完整母體**（`byState`／`totalDocuments`），**不是** `items.length`
+   * ——摘要要回答的是「總共長什麼樣」，不是「這張表現在畫了什麼」。把切片套進統計，
+   * 覆蓋率就會退化成「前 15 份的覆蓋率」。
+   */
+  const byState = slice?.byState ?? { all: 0, partial: 0, none: 0 };
+  const totalDocuments = slice?.totalDocuments ?? 0;
+  /**
+   * 🔴 摘要行與空狀態之範圍一律取自**回應**（`slice.scope`），不是本地的 `docScope` state：
+   * 切換範圍是一次往返請求，在回應抵達前兩者會不一致，讀 state 會讓畫面宣稱一個伺服器還沒
+   * 確認的範圍（例如摘要說「全部文件」但列還是上一批）。回應未到時才退回 state 作為初值。
+   */
+  const shownScope = slice?.scope ?? docScope;
   const kpis: { key: string; label: string; value: string; unit: string; icon: string }[] = [
-    { key: 'documents', label: '追蹤中文件', value: String(docCoverage.length), unit: '份', icon: 'file-text' },
+    { key: 'documents', label: '追蹤中文件', value: String(totalDocuments), unit: '份', icon: 'file-text' },
     { key: 'rows', label: '進度列（文件 × 使用單位）', value: String(denominator), unit: '列', icon: 'list-tree' },
     { key: 'completed', label: BADGE_COMPLETED_TEXT, value: String(numerator), unit: '列', icon: BADGE_COMPLETED_ICON },
     { key: 'pending', label: BADGE_PENDING_TEXT, value: String(denominator - numerator), unit: '列', icon: BADGE_PENDING_ICON },
@@ -601,20 +682,97 @@ function CoverageSection({ summary }: { summary: OjtProgressSummary | null }): J
       </p>
 
       <div className="mt-5 border-t border-slate-100 pt-4">
-        <div className="text-xs font-medium text-slate-500 mb-2">依文件逐筆</div>
-        <div className="overflow-x-auto">
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <div className="text-xs font-medium text-slate-500">依文件逐筆</div>
+          {/* 🔒 顯示範圍預設「僅未全部完成」；切換即重新請求（非客端過濾）。 */}
+          <select
+            data-doc-coverage-scope
+            aria-label={DOC_COVERAGE_SCOPE_LABEL}
+            value={docScope}
+            onChange={(e) => onScopeChange(e.target.value as OjtDocScope)}
+            className="ml-auto px-2.5 py-1.5 rounded-md border border-slate-300 text-xs bg-white"
+          >
+            {DOC_COVERAGE_SCOPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.text}</option>
+            ))}
+          </select>
+          {/* 導向 TAB2 之入口：**恆存在**，不只在截斷時才出現。 */}
+          <button
+            data-doc-coverage-more
+            onClick={onGotoPending}
+            aria-label={DOC_COVERAGE_MORE_ARIA}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-slate-300 text-xs text-primary-700 hover:bg-primary-50"
+          >
+            <Icon name="list-tree" className="w-3.5 h-3.5" />
+            {DOC_COVERAGE_MORE_TEXT}
+          </button>
+        </div>
+
+        {/*
+          摘要行：三態份數並陳。🔴 **刻意不掛** `data-doc-ojt-state-chip`——否則整區 textContent
+          之斷言會被摘要行滿足，變成一條對「列是否真的畫出來」零鑑別力的假綠斷言。
+          🔴 狀態色只上在 `aria-hidden` 之 icon、文字用 `text-slate-600`：`none` 之色票為
+          `text-slate-300`（白底對比約 1.7:1，低於 WCAG AA），該色票與清單頁共用、不得於此改動，
+          但新載體不必沿用它的可讀性問題。
+        */}
+        <p
+          data-doc-coverage-summary
+          data-doc-coverage-scope-value={shownScope}
+          data-doc-coverage-shown={items.length}
+          className="text-xs text-slate-500 mb-2 flex flex-wrap items-center gap-x-4 gap-y-1"
+        >
+          <span data-doc-coverage-total={totalDocuments}>
+            {'共 '}
+            <span className="mono text-slate-700">{totalDocuments}</span>
+            {' 份文件'}
+          </span>
+          {(['all', 'partial', 'none'] as const).map((k) => {
+            const view = ojtStatusView(k);
+            return (
+              <span key={k} data-doc-coverage-stat={k} className="inline-flex items-center gap-1 text-slate-600">
+                <Icon name={view.icon} className={`w-3.5 h-3.5 ${view.className}`} aria-hidden />
+                {`${view.text} `}
+                <span className="mono">{byState[k]}</span>
+                {' 份'}
+              </span>
+            );
+          })}
+          <span data-doc-coverage-incomplete={slice?.incompleteTotal ?? 0} className="text-slate-500">
+            {`${DOC_COVERAGE_INCOMPLETE_LABEL} `}
+            <span className="mono text-slate-700">{slice?.incompleteTotal ?? 0}</span>
+            {' 份'}
+          </span>
+        </p>
+
+        <p data-doc-coverage-basis-note className="text-xs text-slate-400 mb-2 flex items-start gap-1.5">
+          <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span>{DOC_COVERAGE_BASIS_NOTE}</span>
+        </p>
+
+        {/*
+          🔒 固定高度捲軸容器：`tabindex="0"` 使其可被鍵盤聚焦後捲動（WCAG 2.1.1——可捲動區域
+          若不可聚焦，只用鍵盤的人看不到被捲軸藏起來的列）。高度 380px 對應約 8.4 列，
+          使第 9 列露出約四成：Chromium 之 overlay 捲軸平時隱形，若切在列邊界上就完全沒有
+          「下面還有」的線索。
+        */}
+        <div
+          role="region"
+          aria-label={DOC_COVERAGE_REGION_LABEL}
+          tabIndex={0}
+          className="overflow-auto max-h-[380px] rounded-lg border border-slate-100"
+        >
           <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
               <tr>
-                <th className="text-left font-medium px-4 py-2.5">程序書編號</th>
-                <th className="text-left font-medium px-4 py-2.5">程序書書名</th>
-                <th className="text-left font-medium px-4 py-2.5">狀態</th>
-                <th className="text-left font-medium px-4 py-2.5">已完成 / 使用單位</th>
-                <th className="text-left font-medium px-4 py-2.5">覆蓋率</th>
+                <th className="text-left font-medium px-4 py-2.5 sticky top-0 z-10 bg-slate-50">程序書編號</th>
+                <th className="text-left font-medium px-4 py-2.5 sticky top-0 z-10 bg-slate-50">程序書書名</th>
+                <th className="text-left font-medium px-4 py-2.5 sticky top-0 z-10 bg-slate-50">狀態</th>
+                <th className="text-left font-medium px-4 py-2.5 sticky top-0 z-10 bg-slate-50">已完成 / 使用單位</th>
+                <th className="text-left font-medium px-4 py-2.5 sticky top-0 z-10 bg-slate-50">覆蓋率</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {docCoverage.map((c) => {
+              {items.map((c) => {
                 const view = ojtStatusView(c.state);
                 const rowPct = coveragePercent(c.completedUnits, c.totalUnits) ?? 0;
                 return (
@@ -636,16 +794,56 @@ function CoverageSection({ summary }: { summary: OjtProgressSummary | null }): J
                   </tr>
                 );
               })}
-              {docCoverage.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-400">{EMPTY_ALL_TEXT}</td>
-                </tr>
-              )}
+              {items.length === 0 && <DocCoverageEmptyRow scope={shownScope} noRows={denominator === 0} />}
             </tbody>
           </table>
         </div>
+
+        {/*
+          🔴 **不得靜默 top-N**：截斷時必須明說「還有幾份沒列出／憑什麼是這 N 份／完整的去哪看」。
+          未截斷（`hidden === 0`）時本元素**完全不進 DOM**（非 CSS 隱藏）——CSS 隱藏會讓
+          「未截斷」與「截斷了但沒說」在 DOM 上長得一樣。
+        */}
+        {(slice?.hidden ?? 0) > 0 && (
+          <p
+            data-doc-coverage-truncation
+            data-doc-coverage-hidden={slice!.hidden}
+            className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700"
+          >
+            <Icon name="alert-triangle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            <span>{docCoverageTruncationText(slice!.maxRows, slice!.hidden, slice!.scope)}</span>
+          </p>
+        )}
       </div>
     </section>
+  );
+}
+
+/**
+ * 區一逐筆表之空狀態——**分兩類、互不混用**：
+ * ① **全域無任何進度列**（`noRows`）⇒ 沿用既有 `EMPTY_ALL_TEXT`，且**不帶**範圍補充提示。
+ * ② **有進度列、但目前顯示範圍下無列** ⇒ 逐範圍一句 ＋ 共用之「切換顯示範圍」提示。
+ *
+ * 🔴 判別依據為 `coverage.denominator === 0`（＝一列進度列都沒有），**不是**文件數：
+ * ① 之逐字文案本身講的就是「目前沒有任何 OJT **進度列**」，以進度列數判別才與該句一致；
+ * 而「有進度列卻在某個顯示範圍下無列」正是 ② 要描述的狀態。
+ * 🔴 ② **刻意不帶** `EMPTY_ALL_HINT`（「進度列從哪裡來」那句）——那句只給全域空狀態；
+ * 此處的列並非不存在，只是被顯示範圍濾掉了。
+ */
+function DocCoverageEmptyRow({ scope, noRows }: { scope: OjtDocScope; noRows: boolean }): JSX.Element {
+  return (
+    <tr>
+      <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-400">
+        {noRows ? (
+          <span data-doc-coverage-empty="no-docs">{EMPTY_ALL_TEXT}</span>
+        ) : (
+          <span data-doc-coverage-empty={scope}>
+            {DOC_COVERAGE_EMPTY_BY_SCOPE[scope]}
+            <span className="block mt-1 text-xs text-slate-400">{DOC_COVERAGE_EMPTY_HINT}</span>
+          </span>
+        )}
+      </td>
+    </tr>
   );
 }
 
@@ -720,9 +918,17 @@ function RollupSection({ summary }: { summary: OjtProgressSummary | null }): JSX
  * **不得**出現受訓人員或上傳者之姓名、員工編號或其他個人識別資訊。
  * ⚠ 上傳者姓名於 TAB2 場次明細中得以呈現——那是逐筆操作紀錄而非聚合看板，兩者刻意不同，
  * 不得互相對齊。
+ *
+ * 🔴 `OQ-E11-21` 節流：呈現上限 8 筆，為**純前端呈現層切片**（後端回應形狀未動，仍是 30 天
+ * 窗口內之全部）。🔒 **不加捲軸**（上限已把整區高度封住）、**無顯示範圍控制項**——與區一
+ * 刻意不同，不得因為「區一有就順手補一個」而對齊。
  */
 function RecentSection({ summary }: { summary: OjtProgressSummary | null }): JSX.Element {
-  const list = summary?.recentSessions ?? [];
+  const all = summary?.recentSessions ?? [];
+  // 🔴 先排序、後切片：後端不保證陣列順序即日期序，直接切前 8 會取到「陣列前 8 筆」而非
+  //    「最新 8 筆」——筆數斷言仍會全綠，只有日期方向會露餡。
+  const list = sliceRecentSessions(all);
+  const hidden = all.length - list.length;
   return (
     <section data-ojt-section="recent" className="bg-white border border-slate-200 rounded-xl p-5">
       <div className="flex items-center gap-2 mb-1">
@@ -768,6 +974,22 @@ function RecentSection({ summary }: { summary: OjtProgressSummary | null }): JSX
           ))
         )}
       </div>
+      {/*
+        🔴 與區一同一條規矩：**不得靜默 top-N**。未截斷時本元素**完全不進 DOM**（非 CSS 隱藏）。
+        ⚠ 末句刻意**不承諾一個等價的畫面**——全站沒有「依日期排序之完成清單」，TAB2 是場次紀錄
+        的所在地但不依日期排序 ⇒ 明講「展開該進度列檢視」而非「查看完整清單」。
+      */}
+      {hidden > 0 && (
+        <p
+          data-recent-truncation
+          data-recent-total={all.length}
+          data-recent-hidden={hidden}
+          className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700"
+        >
+          <Icon name="alert-triangle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span>{recentTruncationText(all.length, hidden)}</span>
+        </p>
+      )}
     </section>
   );
 }

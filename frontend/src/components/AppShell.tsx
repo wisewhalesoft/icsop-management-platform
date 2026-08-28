@@ -18,6 +18,9 @@ export function AppShell(): JSX.Element {
   // topbar 之 per-page 掛載節點（breadcrumb+title / 動作按鈕）；PageHeader 以 portal 注入。
   const [titleEl, setTitleEl] = useState<HTMLElement | null>(null);
   const [actionsEl, setActionsEl] = useState<HTMLElement | null>(null);
+  // F042：兩個 full-bleed 插槽之掛載點（見下方 JSX 之註解與 PageHeader 之 TopbarBanner／BelowTopbar）。
+  const [headerBottomEl, setHeaderBottomEl] = useState<HTMLElement | null>(null);
+  const [belowHeaderEl, setBelowHeaderEl] = useState<HTMLElement | null>(null);
   const role = user?.roleCode;
   const items = visibleMenu(role);
   const sidebarW = collapsed ? 60 : 240;
@@ -199,10 +202,25 @@ export function AppShell(): JSX.Element {
               </button>
             </div>
           </div>
+          {/*
+            F042：full-bleed 橫幅掛載點（`<header>` **內**）——頁面經 `TopbarBanner` 投遞之 strip
+            會緊貼 topbar 底緣、左右滿版（prototype 25 `#roBanner`）。無人投遞時為零高度空 div。
+          */}
+          <div ref={setHeaderBottomEl} />
         </header>
 
+        {/*
+          F042：full-bleed chrome 掛載點（`</header>` 之後、`<main>` 之前）——頁面經 `BelowTopbar`
+          投遞之分頁列會與 topbar 零間隙且左右滿版（prototype 25 之 TAB bar）。
+          ⚠ 刻意置於 `<main className="px-4 py-6">` **之外**：放進 main 會被其左右內距與上方留白
+          吃掉，那正是本插槽要解決的問題。
+        */}
+        <div ref={setBelowHeaderEl} />
+
         <main className="px-4 py-6">
-          <TopbarSlotsContext.Provider value={{ titleEl, actionsEl }}>
+          <TopbarSlotsContext.Provider
+            value={{ titleEl, actionsEl, headerBottomEl, belowHeaderEl }}
+          >
             <Outlet />
           </TopbarSlotsContext.Provider>
         </main>

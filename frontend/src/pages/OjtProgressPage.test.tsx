@@ -57,24 +57,72 @@ const renderPage = () =>
  * 已同步補入 `docs/specs/features/F042-ojt-progress-management.md` §架構設計端點表，防再犯。
  */
 const docCoverageRow = (over: Partial<{
-  documentNumber: string; documentName: string; state: 'all' | 'partial' | 'none'; completedUnits: number; totalUnits: number;
+  documentId: string; documentNumber: string; documentName: string; state: 'all' | 'partial' | 'none'; completedUnits: number; totalUnits: number;
 }>) => ({
-  documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業',
+  documentId: 'd-cov-1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業',
   state: 'partial' as const, completedUnits: 2, totalUnits: 3, ...over,
 });
 
+/**
+ * 🔴 F042 節流修正（test-generator 建環 2026-08-28，`OQ-E11-21`）：`docCoverage` 由陣列改為
+ * 物件——`{ scope, maxRows, items, shown, hidden, totalDocuments, byState, incompleteTotal }`
+ * （§架構設計 一-2，刻意的 loud break）。本 helper 由 `items` 自動推導預設之計數欄（母體＝
+ * 傳入之 items 本身、`scope` 預設為 `incomplete`、`hidden` 預設 0），個別測試可用 `over` 覆寫
+ * 任一計數欄以模擬「母體大於呈現切片」之情境（節流測試之核心）。
+ */
+function docCoverageSlice(
+  items: ReturnType<typeof docCoverageRow>[],
+  over: Partial<{
+    scope: 'incomplete' | 'completed' | 'all';
+    maxRows: number;
+    shown: number;
+    hidden: number;
+    totalDocuments: number;
+    byState: { all: number; partial: number; none: number };
+    incompleteTotal: number;
+  }> = {},
+) {
+  const byState = { all: 0, partial: 0, none: 0 };
+  for (const it of items) byState[it.state] += 1;
+  return {
+    scope: 'incomplete' as const,
+    maxRows: 15,
+    items,
+    shown: items.length,
+    hidden: 0,
+    totalDocuments: items.length,
+    byState,
+    incompleteTotal: byState.partial + byState.none,
+    ...over,
+  };
+}
+
+/**
+ * 🔴 F042 仲裁補強（test-generator 仲裁 2026-08-28，ti-fe-ojt 主動回報之靜默洞）：`deptRollup`
+ * 原型別含 `rate` 欄，且本檔每一筆 fixture 皆顯式提供該值——但查證 `prototypes/25-ojt-progress.html`
+ * `renderRollup()`（:842-865）之 `pct=pctOf(g.done,g.total)`，逐部之百分比**恆為前端由
+ * `done`／`total` 推導**（`pctOf(done,total){ return total? Math.round(done/total*100) : 0; }`，
+ * :742），prototype 之資料模型本身**沒有** rollup 層級的 `rate` 欄；`docs/specs/data-model.md`
+ * §建議查詢形狀之部門 rollup SQL（AC-15）同樣只 `SELECT ... AS totalUnits, ... AS completedUnits`，
+ * 無 `rate` 別名。故 backend 真實回應之 `deptRollup` 陣列**不含** `rate`——先前 fixture 之
+ * `rate: 100`／`rate: 0` 等值純屬本檔臆造，且無任何斷言檢查 `[data-rollup-rate]` 之百分比文字，
+ * 使「元件直接讀取 `g.rate`（backend 未送、恆為 `undefined`）而印出 `undefined%`」這個真實發生過
+ * 之缺陷（ti-fe-ojt 已依 canonical 形狀比對主動修正，非本環測出）完全逃出約束環。
+ * 移除 fixture 之 `rate` 欄（貼合真實回應形狀）＋補上 `[data-rollup-rate]` 之正面斷言（見下方
+ * `AC-15 rollup 列數不變性` 案），逼百分比必須由 `done`／`total` 現場推導才能轉綠。
+ */
 const summaryFixture = (over: Partial<{
   coverage: { numerator: number; denominator: number; rate?: number; excludedInactive?: number; excludedOrphaned?: number };
-  deptRollup: Array<{ deptOrgCode: string; deptName: string; totalUnits: number; completedUnits: number; rate: number }>;
+  deptRollup: Array<{ deptOrgCode: string; deptName: string; totalUnits: number; completedUnits: number }>;
   recentSessions: Array<{ documentId: string; documentNumber: string; documentName: string; orgCode: string; orgName: string; trainingDate: string }>;
-  docCoverage: ReturnType<typeof docCoverageRow>[];
+  docCoverage: ReturnType<typeof docCoverageSlice>;
 }> = {}) => ({
   coverage: { numerator: 2, denominator: 3, rate: 67, excludedInactive: 0, excludedOrphaned: 0 },
-  deptRollup: [{ deptOrgCode: 'JA000', deptName: '營運管理部', totalUnits: 3, completedUnits: 2, rate: 67 }],
+  deptRollup: [{ deptOrgCode: 'JA000', deptName: '營運管理部', totalUnits: 3, completedUnits: 2 }],
   recentSessions: [
     { documentId: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業', orgCode: 'JAC00', orgName: '審查室', trainingDate: '2026-08-20' },
   ],
-  docCoverage: [docCoverageRow({})],
+  docCoverage: docCoverageSlice([docCoverageRow({})]),
   ...over,
 });
 
@@ -175,11 +223,11 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
     it('AC-04：三態文件逐筆列 chip（已全部完成／部分完成／尚未開始）', async () => {
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
         summaryFixture({
-          docCoverage: [
-            docCoverageRow({ documentNumber: 'D-ALL', state: 'all', completedUnits: 3, totalUnits: 3 }),
-            docCoverageRow({ documentNumber: 'D-PARTIAL', state: 'partial', completedUnits: 1, totalUnits: 3 }),
-            docCoverageRow({ documentNumber: 'D-NONE', state: 'none', completedUnits: 0, totalUnits: 3 }),
-          ],
+          docCoverage: docCoverageSlice([
+            docCoverageRow({ documentId: 'd-all', documentNumber: 'D-ALL', state: 'all', completedUnits: 3, totalUnits: 3 }),
+            docCoverageRow({ documentId: 'd-partial', documentNumber: 'D-PARTIAL', state: 'partial', completedUnits: 1, totalUnits: 3 }),
+            docCoverageRow({ documentId: 'd-none', documentNumber: 'D-NONE', state: 'none', completedUnits: 0, totalUnits: 3 }),
+          ], { scope: 'all' }),
         }),
       );
       renderPage();
@@ -201,7 +249,7 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
      */
     it('AC-14 分母為零 → 呈現「尚無可統計」訊息，不得出現 NaN／NaN%／逕自呈現 0%／100%', async () => {
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
-        summaryFixture({ coverage: { numerator: 0, denominator: 0, rate: undefined }, docCoverage: [] }),
+        summaryFixture({ coverage: { numerator: 0, denominator: 0, rate: undefined }, docCoverage: docCoverageSlice([]) }),
       );
       renderPage();
       await waitFor(() => {
@@ -227,12 +275,12 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
      * AC-15 建議斷言形狀：列數不因 rollup 而改變——彙總前列數（來自各部之 completedUnits/totalUnits
      * 加總）須等於 fixture 餵入之 rollup 分母總和，防止實作在「列產生階段」偷偷展開 AC-01 之列。
      */
-    it('AC-15 rollup 列數不變性：各部 totalUnits 加總＝彙總前之進度列總數', async () => {
+    it('AC-15 rollup 列數不變性：各部 totalUnits 加總＝彙總前之進度列總數；百分比由 done/total 現場推導（非讀取 API 未送之 rate 欄，round 取整）', async () => {
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
         summaryFixture({
           deptRollup: [
-            { deptOrgCode: 'JA000', deptName: '營運管理部', totalUnits: 2, completedUnits: 2, rate: 100 },
-            { deptOrgCode: 'CA000', deptName: '信用審查部', totalUnits: 1, completedUnits: 0, rate: 0 },
+            { deptOrgCode: 'JA000', deptName: '營運管理部', totalUnits: 2, completedUnits: 2 },
+            { deptOrgCode: 'CA000', deptName: '信用審查部', totalUnits: 3, completedUnits: 2 },
           ],
         }),
       );
@@ -240,18 +288,22 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       await waitFor(() => expect(document.querySelectorAll('[data-rollup-row]').length).toBe(2));
       // data-rollup-ratio 格式為「已完成 / 進度列」（prototype 25：${g.done} / ${g.total}）。
       const ratios = [...document.querySelectorAll('[data-rollup-ratio]')].map((el) => el.textContent);
-      expect(ratios).toEqual(['2 / 2', '0 / 1']);
+      expect(ratios).toEqual(['2 / 2', '2 / 3']);
+      // 🔴 百分比文字：fixture 未提供 rate，元件必須自行以 pctOf(done,total)=Math.round(done/total*100)
+      // 推導；100% 與 2/3→67%（非 66% 或 66.67%，驗證 round 而非 floor）兩案互不相同，具鑑別力。
+      const rates = [...document.querySelectorAll('[data-rollup-rate]')].map((el) => el.textContent);
+      expect(rates).toEqual(['100%', '67%']);
       const invariantEl = document.querySelector('[data-rollup-invariant]') as HTMLElement;
       expect(invariantEl).not.toBeNull();
-      // 各部 totalUnits 加總 = 2+1 = 3，須與不變式之敘述數字一致（本檔以文字含有 "3" 之寬鬆檢查，
+      // 各部 totalUnits 加總 = 2+3 = 5，須與不變式之敘述數字一致（本檔以文字含有 "5" 之寬鬆檢查，
       // 因逐字句為資料驅動之完整敘述，非固定字面——見 F042 §prototype 25 §2「data-rollup-invariant」）。
-      expect(invariantEl.textContent).toMatch(/3/);
+      expect(invariantEl.textContent).toMatch(/5/);
     });
 
     it('AC-15 本部層／公司層單位自成一組、不排除（OQ-E11-20②）', async () => {
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
         summaryFixture({
-          deptRollup: [{ deptOrgCode: 'JA000', deptName: '營運管理部', totalUnits: 1, completedUnits: 1, rate: 100 }],
+          deptRollup: [{ deptOrgCode: 'JA000', deptName: '營運管理部', totalUnits: 1, completedUnits: 1 }],
         }),
       );
       renderPage();
@@ -320,6 +372,368 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
         expect(sec.textContent).toContain('已裁撤單位');
         expect(sec.textContent).toContain('單位已移出使用部門');
       });
+    });
+  });
+
+  /**
+   * ===================== B-2. TAB1 區一逐筆表之節流（OQ-E11-21，AC-14 節流七項＋四道負向鎖定，AC-28⑯） =====================
+   * 🔴 使用者實機檢視回報：dev 環境近 600 份文件下，本表原本無上限，把整個儀表板撐成 600 列
+   * 巨長頁面。定稿＝「預設僅未全部完成 ＋ 上限 15 ＋ 三值顯示範圍 ＋ 截斷告知（三要素）」。
+   * 逐字值與掛鉤權威：F042-ojt-progress-management.md §6 ⑯ 群列；測試方向：F042-test.md §三-2 乙。
+   */
+  describe('B-2. TAB1 區一逐筆表節流（OQ-E11-21／AC-14 節流／AC-28⑯）', () => {
+    /** 建 N 份文件之 docCoverageRow 陣列，覆蓋率遞增（0%→100%），供上限與排序測試。 */
+    function manyRows(n: number, over: (i: number) => Partial<Parameters<typeof docCoverageRow>[0]> = () => ({})) {
+      return Array.from({ length: n }, (_, i) =>
+        docCoverageRow({
+          documentId: `d${i}`,
+          documentNumber: `N${String(i).padStart(2, '0')}`,
+          state: 'none',
+          completedUnits: 0,
+          totalUnits: 1,
+          ...over(i),
+        }),
+      );
+    }
+
+    it('AC-28⑯ 顯示範圍 select：option 恰 3 個，值與可見文字逐字＝incomplete/僅未全部完成、completed/僅已全部完成、all/全部文件；預設選中 incomplete；aria-label 逐字「依文件逐筆之顯示範圍」', async () => {
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-scope]')).not.toBeNull());
+      const sel = document.querySelector('[data-doc-coverage-scope]') as HTMLSelectElement;
+      expect(sel.getAttribute('aria-label')).toBe('依文件逐筆之顯示範圍');
+      const opts = [...sel.options].map((o) => ({ value: o.value, text: o.textContent }));
+      expect(opts).toEqual([
+        { value: 'incomplete', text: '僅未全部完成' },
+        { value: 'completed', text: '僅已全部完成' },
+        { value: 'all', text: '全部文件' },
+      ]);
+      expect(sel.value).toBe('incomplete');
+    });
+
+    /**
+     * 🔴 假綠陷阱 10（F042-test.md §三-2 丁）：若日後把顯示範圍簡化為二值，本表仍能正常渲染、
+     * 截斷告知仍會出現、其餘既有斷言仍綠——上一案（option 恰 3 個）與本案（completed 範圍下
+     * 截斷不存在）合力擋住這個退化：completed 是全檔唯一「截斷提示不存在」之可達狀態，
+     * 二值化會使這條負向案恆為截斷態、失去鑑別力。
+     */
+    it('🔴 假綠陷阱 10 防線：docScope=completed 之範圍（母體 ≤15）⇒ [data-doc-coverage-truncation] 不進 DOM', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({ docCoverage: docCoverageSlice(manyRows(3, () => ({ state: 'all', completedUnits: 1 })), { scope: 'completed' }) }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-summary]')).not.toBeNull());
+      expect(document.querySelectorAll('[data-doc-coverage-truncation]')).toHaveLength(0);
+    });
+
+    /**
+     * 🔴 假綠陷阱 13（客端切換之假綠）：以「畫面列數改變」斷言切換行為時，先取 600 列再於
+     * 客端過濾之實作同樣通過。斷言標的必須是「發出一次帶新 docScope 之請求」。
+     */
+    it('🔴 假綠陷阱 13 防線：切換顯示範圍 ⇒ 發出一次帶新 docScope 之 GET /admin/ojt-progress/summary（非客端切換）', async () => {
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-scope]')).not.toBeNull());
+      const callsBefore = vi.mocked(endpoints.getOjtProgressSummary).mock.calls.length;
+      const sel = document.querySelector('[data-doc-coverage-scope]') as HTMLSelectElement;
+      fireEvent.change(sel, { target: { value: 'completed' } });
+      await waitFor(() => expect(vi.mocked(endpoints.getOjtProgressSummary).mock.calls.length).toBeGreaterThan(callsBefore));
+      const lastCall = vi.mocked(endpoints.getOjtProgressSummary).mock.calls.at(-1);
+      expect(lastCall).toContain('completed');
+    });
+
+    /**
+     * 🔴 假綠陷阱 12（摘要行整行 textContent 斷言）：`[data-doc-coverage-summary]` 之整行串接
+     * 恆含三個狀態字面 ⇒ 整區斷言恆真、零鑑別力；且各 span 之間無空白字元，整行逐字斷言本身
+     * 也對不上。一律逐掛鉤斷言。
+     */
+    it('AC-28⑯ 摘要行五片段逐掛鉤斷言（禁止整行 textContent 逐字比對）', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({
+          docCoverage: docCoverageSlice(
+            [
+              ...manyRows(2, (i) => ({ documentId: `all${i}`, state: 'all', completedUnits: 1, totalUnits: 1 })),
+              ...manyRows(3, (i) => ({ documentId: `partial${i}`, state: 'partial', completedUnits: 1, totalUnits: 2 })),
+              ...manyRows(4, (i) => ({ documentId: `none${i}`, state: 'none', completedUnits: 0, totalUnits: 1 })),
+            ],
+            { scope: 'all', totalDocuments: 9, byState: { all: 2, partial: 3, none: 4 }, incompleteTotal: 7 },
+          ),
+        }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-summary]')).not.toBeNull());
+      const summaryEl = document.querySelector('[data-doc-coverage-summary]') as HTMLElement;
+      expect(summaryEl.getAttribute('data-doc-coverage-scope-value')).toBe('all');
+      expect(summaryEl.getAttribute('data-doc-coverage-shown')).toBe('9');
+      expect(document.querySelector('[data-doc-coverage-total="9"]')?.textContent).toBe('共 9 份文件');
+      expect(document.querySelector('[data-doc-coverage-stat="all"]')?.textContent).toBe('已全部完成 2 份');
+      expect(document.querySelector('[data-doc-coverage-stat="partial"]')?.textContent).toBe('部分完成 3 份');
+      expect(document.querySelector('[data-doc-coverage-stat="none"]')?.textContent).toBe('尚未開始 4 份');
+      expect(document.querySelector('[data-doc-coverage-incomplete="7"]')?.textContent).toBe('尚未全部完成合計 7 份');
+      // 🔴 -total 若跟著切片走即為缺陷（ux-fix 之注入驗證）：totalDocuments 必須是完整母體 9，非本次切片之 items.length。
+      expect(document.querySelector('[data-doc-coverage-total]')?.getAttribute('data-doc-coverage-total')).toBe('9');
+    });
+
+    /**
+     * 🔴 假綠陷阱 14（CSS 隱藏之假綠）：`toBeVisible()` 之否定在 jsdom 下不可靠且會放行 CSS
+     * 隱藏實作。斷言必須是「完全不進 DOM」。
+     */
+    /**
+     * 🔴 仲裁修正（test-generator 仲裁 2026-08-28，ti-fe-ojt 申訴屬實）：原案在同一個 `it` 內
+     * 呼叫兩次 `renderPage()`，但 RTL 之 `cleanup()` 僅掛在 `afterEach`（`src/test/setup.ts`），
+     * 不會在同一測試內之兩次 `render()` 之間執行——第一次渲染之樹（其 `[data-doc-coverage-
+     * truncation]` 已被本案自己斷言存在）不會被移除，第二次渲染只是疊加一棵新樹，故末段之
+     * 全域 `querySelectorAll(...).toHaveLength(0)` 恆 ≥ 1，不存在任何實作能同時滿足前後兩段。
+     * 拆為兩個獨立 `it`（正向／負向），比照本檔既有之區三同型負向案（獨立成案）之風格。
+     */
+    it('截斷告知：hidden>0 ⇒ 存在且三要素齊備（假綠陷阱14 正向對照）', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({
+          docCoverage: docCoverageSlice(manyRows(15), {
+            scope: 'incomplete', maxRows: 15, shown: 15, hidden: 6, totalDocuments: 21, byState: { all: 0, partial: 0, none: 21 }, incompleteTotal: 21,
+          }),
+        }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-truncation]')).not.toBeNull());
+      const trunc = document.querySelector('[data-doc-coverage-truncation]') as HTMLElement;
+      expect(trunc.getAttribute('data-doc-coverage-hidden')).toBe('6');
+      expect(trunc.textContent).toContain('本表僅列出前 15 份');
+      expect(trunc.textContent).toContain('另有 6 份');
+      expect(trunc.textContent).toContain('依覆蓋率由低至高排序');
+      expect(trunc.textContent).toContain('OJT 資料清單');
+    });
+
+    it('截斷告知：hidden===0 ⇒ 完全不進 DOM（非 CSS 隱藏，假綠陷阱14）', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({ docCoverage: docCoverageSlice(manyRows(5), { hidden: 0, totalDocuments: 5, byState: { all: 0, partial: 0, none: 5 }, incompleteTotal: 5 }) }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelectorAll('[data-doc-coverage-row]').length).toBeGreaterThan(0));
+      expect(document.querySelectorAll('[data-doc-coverage-truncation]')).toHaveLength(0);
+    });
+
+    it.each([
+      ['incomplete', '尚未全部完成之文件'],
+      ['completed', '已全部完成之文件'],
+      ['all', '文件'],
+    ] as const)('截斷句之 {名詞} 變體——scope=%s ⇒ 名詞為「%s」（其餘句子完全相同）', async (scope, noun) => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({ docCoverage: docCoverageSlice(manyRows(15), { scope, hidden: 2, totalDocuments: 17 }) }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-truncation]')).not.toBeNull());
+      expect(document.querySelector('[data-doc-coverage-truncation]')?.textContent).toContain(`另有 2 份${noun}未列出`);
+    });
+
+    /**
+     * 🔴 假綠陷阱 11（截斷上限硬寫於前端）：只用 maxRows:15 一組 fixture 時，「讀回應」與
+     * 「硬寫 15」兩種實作皆綠。必須以第二組 maxRows（如 3）驗證數字跟著回應變。
+     */
+    it('🔴 假綠陷阱 11 防線：截斷句之上限數字取自回應之 docCoverage.maxRows（非前端硬寫 15）——第二組 maxRows=3 驗證', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({ docCoverage: docCoverageSlice(manyRows(3), { maxRows: 3, hidden: 2, totalDocuments: 5 }) }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-truncation]')).not.toBeNull());
+      expect(document.querySelector('[data-doc-coverage-truncation]')?.textContent).toContain('本表僅列出前 3 份');
+      expect(document.querySelector('[data-doc-coverage-truncation]')?.textContent).not.toContain('本表僅列出前 15 份');
+    });
+
+    it.each([
+      ['incomplete', '所有文件之教育訓練皆已全部完成'],
+      ['completed', '尚無任何文件之教育訓練已全部完成'],
+    ] as const)('範圍空狀態逐字（scope=%s）：「%s」＋共用補充提示；與全域空狀態 no-docs 互不相同', async (scope, text) => {
+      /**
+       * 🔴 仲裁修正（test-generator 仲裁 2026-08-28，ti-fe-ojt 提報）：原 fixture 於 `incomplete`
+       * 分支誤用 `totalDocuments: 0`（＋ `byState` 全零），把「21 份文件皆已全部完成、`incomplete`
+       * 範圍下自然無項目可顯示」誤寫成「系統中根本沒有文件」——後者才是 `no-docs`（全域無任何
+       * 進度列）之真正觸發條件，兩者不可混淆。且 `incomplete`／`completed` 兩分支之 `byState`
+       * 原本互相寫反（`completed` 空狀態卻標 `all: 21`，等同宣告 21 份文件皆已完成，與「completed
+       * 範圍下查無項目」自相矛盾）。改為兩分支皆 `totalDocuments: 21`（真有文件、只是不match
+       * 當前範圍），`byState` 依各自語意正確設定；`coverage.denominator` 沿用預設值 3（非 0，
+       * 確保不會意外觸發 no-docs 之判準——no-docs 之真正觸發條件為「系統無任何有效進度列」，
+       * 非「本次篩選範圍恰無項目」，兩者刻意不同）。
+       */
+      const byState = scope === 'incomplete' ? { all: 21, partial: 0, none: 0 } : { all: 0, partial: 13, none: 8 };
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({ docCoverage: docCoverageSlice([], { scope, totalDocuments: 21, byState, incompleteTotal: byState.partial + byState.none }) }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector(`[data-doc-coverage-empty="${scope}"]`)).not.toBeNull());
+      const empty = document.querySelector(`[data-doc-coverage-empty="${scope}"]`) as HTMLElement;
+      expect(empty.textContent).toContain(text);
+      expect(empty.textContent).toContain('切換顯示範圍為「全部文件」可檢視全部文件之覆蓋率。');
+      // 🔴 範圍空狀態刻意不帶「進度列從哪裡來」那句——那句只給全域無任何進度列（TAB2）之空狀態。
+      expect(empty.textContent).not.toContain('進度列由各 ICSOP 文件之「文件使用部門」衍生而得');
+      expect(document.querySelector('[data-doc-coverage-empty="no-docs"]')).toBeNull();
+    });
+
+    it('導向 TAB2 入口：恆存在（未截斷案）；點擊 ⇒ 切至 TAB2、完成狀態設為「尚未完成」、單位關鍵字清空；TAB2 篩選項仍恰兩項', async () => {
+      const user = userEvent.setup();
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({ docCoverage: docCoverageSlice(manyRows(2)) }), // 未截斷（母體=2 < 15）
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-more]')).not.toBeNull());
+      const more = document.querySelector('[data-doc-coverage-more]') as HTMLElement;
+      expect(more.textContent).toBe('至「OJT 資料清單」檢視尚未完成之進度列');
+      expect(more.getAttribute('aria-label')).toBe('至「OJT 資料清單」分頁，並將完成狀態篩選設為「尚未完成」');
+
+      await user.click(more);
+      await waitFor(() => expect(document.querySelector('[data-ojt-tab="sessions"]')?.getAttribute('aria-selected')).toBe('true'));
+      const statusSelect = document.querySelector('[data-ojt-filter="status"]') as HTMLSelectElement;
+      const orgInput = document.querySelector('[data-ojt-filter="org"]') as HTMLInputElement;
+      expect(statusSelect.value).toBe('pending'); // 「尚未完成」選項之底層值，比照 AC-13 之既有三值
+      expect(orgInput.value).toBe('');
+      // 🔒 未新增任何 TAB2 篩選項。
+      expect(document.querySelectorAll('[data-ojt-filter]')).toHaveLength(2);
+      expect([...statusSelect.options]).toHaveLength(3);
+    });
+
+    it('捲軸容器：role="region"＋aria-label 逐字「依文件逐筆之覆蓋率表格」＋tabindex="0"（WCAG 2.1.1）', async () => {
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[role="region"][aria-label="依文件逐筆之覆蓋率表格"]')).not.toBeNull());
+      const region = document.querySelector('[role="region"][aria-label="依文件逐筆之覆蓋率表格"]') as HTMLElement;
+      expect(region.getAttribute('tabindex')).toBe('0');
+    });
+
+    it('口徑說明行 [data-doc-coverage-basis-note]：必要載體，位置＝摘要行下方、表格上方，不得掛 chip 掛鉤', async () => {
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-basis-note]')).not.toBeNull());
+      const note = document.querySelector('[data-doc-coverage-basis-note]') as HTMLElement;
+      expect(note.textContent).toBe(
+        '本表之「已完成 / 使用單位」以該文件之全部使用單位為分母（含已裁撤單位），與上方覆蓋率之分母刻意不同：上方是「還追得動的部分」，本表是「這份文件的實際訓練狀況」。',
+      );
+      expect(note.querySelector('[data-doc-ojt-state-chip]')).toBeNull();
+      // 位置順序：summary → basis-note → 表格捲軸容器。
+      const summaryEl = document.querySelector('[data-doc-coverage-summary]') as HTMLElement;
+      const region = document.querySelector('[role="region"][aria-label="依文件逐筆之覆蓋率表格"]') as HTMLElement;
+      expect(summaryEl.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(note.compareDocumentPosition(region) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    /**
+     * 🔴 母體 > 15 之上限與排序（依 F042-test.md §三-2 甲之 backend 斷言形狀的前端對應——前端不
+     * 重算排序，只驗「伺服器回傳之 items 依序渲染」，真正之排序正確性由 backend 環把關）。
+     */
+    it('母體 > 15（伺服器已切片）⇒ 恰渲染 15 列，逐列依回應順序渲染（前端不重排、不二次過濾）', async () => {
+      const rows = manyRows(15, (i) => ({ documentNumber: `SVR${String(i).padStart(2, '0')}` }));
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({ docCoverage: docCoverageSlice(rows, { hidden: 6, totalDocuments: 21 }) }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelectorAll('[data-doc-coverage-row]').length).toBe(15));
+      const renderedOrder = [...document.querySelectorAll('[data-doc-coverage-row]')].map((el) => el.getAttribute('data-doc-coverage-row'));
+      expect(renderedOrder).toEqual(rows.map((r) => r.documentNumber));
+    });
+  });
+
+  /**
+   * ===================== B-3. TAB1 區三「最近完成」之節流（OQ-E11-21，AC-16 節流八項，AC-28⑱） =====================
+   * 🔒 後端 `recentSessions` 形狀不變（仍回傳 30 天窗口內之全部，未動）——上限 8 為**純前端呈現層
+   * 切片**（§架構設計 一-2 末段）。🔴 與區一刻意不同、不得互相對齊：上限 8 vs 15／無 vs 有捲軸／
+   * 無 vs 有顯示範圍控制項／截斷句無 vs 有名詞變體。
+   */
+  describe('B-3. TAB1 區三節流（OQ-E11-21／AC-16 節流／AC-28⑱）', () => {
+    /** 12 筆 30 天窗口內之場次，array 順序刻意打散（非日期排序），驗證「排序在切片之前」。 */
+    function twelveRecentSessions() {
+      const dates = [
+        '2026-08-18', '2026-08-27', '2026-08-16', '2026-08-25', '2026-08-22', '2026-08-20',
+        '2026-08-24', '2026-08-19', '2026-08-23', '2026-08-17', '2026-08-26', '2026-08-21',
+      ];
+      return dates.map((trainingDate, i) => ({
+        documentId: `d${i}`, documentNumber: `N${String(i).padStart(2, '0')}`, documentName: `文件-${i}`,
+        orgCode: `ORG${i}`, orgName: `單位${i}`, trainingDate,
+      }));
+    }
+
+    it('上限與筆數：母體（30 天窗口）> 8 ⇒ [data-recent-row] 恰 8 個', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(summaryFixture({ recentSessions: twelveRecentSessions() }));
+      renderPage();
+      await waitFor(() => expect(document.querySelectorAll('[data-recent-row]').length).toBe(8));
+    });
+
+    /**
+     * 🔴 假綠陷阱 15（區三取錯哪 8 筆之筆數假綠，ux-fix 已實跑注入證實）：把 slice(0,N) 換成
+     * slice(-N)（取最舊 8 筆）時，筆數斷言仍全綠，只有日期序列之非遞增斷言與首尾列斷言會紅。
+     * 「保留的是最新 8 筆」必須是一條獨立於筆數之方向斷言。
+     */
+    it('🔴 假綠陷阱 15 防線：日期序列非遞增（保留最新 8 筆，非任意 8 筆）；首列為最新、尾列為第 8 新（非最舊）', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(summaryFixture({ recentSessions: twelveRecentSessions() }));
+      renderPage();
+      await waitFor(() => expect(document.querySelectorAll('[data-recent-row]').length).toBe(8));
+      const dates = [...document.querySelectorAll('[data-recent-date]')].map((el) => el.textContent ?? '');
+      for (let i = 1; i < dates.length; i++) {
+        expect(dates[i] <= dates[i - 1]).toBe(true); // 非遞增
+      }
+      const rows = [...document.querySelectorAll('[data-recent-row]')].map((el) => el.getAttribute('data-recent-row'));
+      // 12 筆中最新 8 筆之日期（由新到舊）：27,26,25,24,23,22,21,20 → 對應 i=1,10,3,6,8,4,11,5。
+      expect(rows[0]).toBe('d1__ORG1'); // 2026-08-27，全體最新
+      expect(rows[7]).toBe('d5__ORG5'); // 2026-08-20，第 8 新（非最舊之 08-16）
+      expect(rows).not.toContain('d2__ORG2'); // 2026-08-16，全體最舊，必須被截掉
+    });
+
+    it('🔴 排序在切片之前：最舊者即使在資料陣列順序上排最前，仍不得因此擠進呈現之 8 筆', async () => {
+      const sessions = twelveRecentSessions(); // dates[0] = '2026-08-18'，非全體最舊（08-16 才是）；改造成最舊者排陣列第一筆
+      const oldest = sessions.find((s) => s.trainingDate === '2026-08-16')!;
+      const reordered = [oldest, ...sessions.filter((s) => s.trainingDate !== '2026-08-16')];
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(summaryFixture({ recentSessions: reordered }));
+      renderPage();
+      await waitFor(() => expect(document.querySelectorAll('[data-recent-row]').length).toBe(8));
+      const rows = [...document.querySelectorAll('[data-recent-row]')].map((el) => el.getAttribute('data-recent-row'));
+      expect(rows).not.toContain(`${oldest.documentId}__${oldest.orgCode}`);
+    });
+
+    it('截斷告知：存在時三要素齊備，逐字比對現行語料之完整句（12 筆／8 筆／4 筆）；末句逐字鎖，不得改寫為「查看完整清單」', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(summaryFixture({ recentSessions: twelveRecentSessions() }));
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-recent-truncation]')).not.toBeNull());
+      const trunc = document.querySelector('[data-recent-truncation]') as HTMLElement;
+      expect(trunc.getAttribute('data-recent-total')).toBe('12');
+      expect(trunc.getAttribute('data-recent-hidden')).toBe('4');
+      expect(trunc.textContent).toBe(
+        '近 30 天內共 12 筆，本區僅列出最近 8 筆、另有 4 筆未列出；本區依最近一次訓練日期由新至舊排序，未列出者之日期均不晚於已列出者。各單位之完整場次紀錄請至「OJT 資料清單」分頁展開該進度列檢視。',
+      );
+      expect(trunc.textContent).toContain('展開該進度列檢視');
+      expect(trunc.textContent).not.toContain('查看完整清單');
+    });
+
+    /**
+     * 🔴 假綠陷阱 14 之區三變體：宿主 `<div id="recentTruncation">` 未截斷時仍在（innerHTML 為
+     * 空字串）——不得以「宿主不存在」為斷言標的，必須驗證「掛鉤本身不進 DOM」。
+     */
+    it('🔴 未截斷之負向案（母體 ≤ 8）：[data-recent-truncation] 完全不進 DOM（非 CSS 隱藏，假綠陷阱14 之區三變體）', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({
+          recentSessions: [
+            { documentId: 'd1', documentNumber: 'N01', documentName: '文件一', orgCode: 'A', orgName: '單位A', trainingDate: '2026-08-27' },
+          ],
+        }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-recent-row]')).not.toBeNull());
+      expect(document.querySelectorAll('[data-recent-truncation]')).toHaveLength(0);
+    });
+
+    it('🔒 正向案：不排除裁撤單位（本區為事實列表，非覆蓋率分母，防範圍擴大）', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({
+          recentSessions: [
+            { documentId: 'd1', documentNumber: 'N01', documentName: '裁撤單位之文件', orgCode: 'INACTIVE01', orgName: '已裁撤室', trainingDate: '2026-08-20' },
+          ],
+        }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-recent-row]')).not.toBeNull());
+      expect(document.querySelector('[data-recent-row="d1__INACTIVE01"]')).not.toBeNull();
+    });
+
+    it('🔒 負向：本區無捲軸容器（role="region"）、無任何顯示範圍或篩選控制項（防「區一有就順手補一個」）', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(summaryFixture({ recentSessions: twelveRecentSessions() }));
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-ojt-section="recent"]')).not.toBeNull());
+      const sec = document.querySelector('[data-ojt-section="recent"]') as HTMLElement;
+      expect(sec.querySelector('[role="region"]')).toBeNull();
+      expect(sec.querySelector('select')).toBeNull();
     });
   });
 

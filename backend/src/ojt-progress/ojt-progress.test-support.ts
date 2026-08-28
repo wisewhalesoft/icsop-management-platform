@@ -83,6 +83,36 @@ export interface OjtDocCoverageRow {
   completedUnits: number;
 }
 
+/**
+ * 🔴 `OQ-E11-21`（2026-08-28 節流修正）：`docScope` 恰三值，逐字對應顯示範圍
+ * （F042 `AC-14` ①／§架構設計 一-2）。`incomplete` 為伺服器正規化後之預設值。
+ */
+export type OjtDocScope = 'incomplete' | 'completed' | 'all';
+
+/**
+ * 🔴 `docCoverage` 之新形狀（陣列→物件，刻意的 loud break，見 §架構設計 一-2）。
+ * `items` 為受限切片（依 `docScope` 過濾 → 覆蓋率昇冪排序、同率依 `documentNumber` 昇冪 →
+ * 取前 `maxRows` 筆）；`totalDocuments`／`byState`／`incompleteTotal` 恆取自完整母體、
+ * 與 `docScope`／`maxRows` 無關（四條不變式見 §架構設計 一-2）。
+ */
+export interface OjtDocCoverageSlice {
+  /** 伺服器正規化後實際套用之範圍（缺值／未知值一律正規化為 'incomplete'，本欄回聲）。 */
+  scope: OjtDocScope;
+  /** 伺服器所套用之筆數上限（現值 15）。 */
+  maxRows: number;
+  items: OjtDocCoverageRow[];
+  /** ＝ items.length。 */
+  shown: number;
+  /** 該 scope 完整母體筆數 − shown，恆 ≥ 0。 */
+  hidden: number;
+  /** 全部 ICSOP 文件份數（完整母體，不受 docScope／maxRows 影響）。 */
+  totalDocuments: number;
+  /** 文件層三態份數（完整母體）。 */
+  byState: { all: number; partial: number; none: number };
+  /** 尚未全部完成合計（＝byState.partial + byState.none，完整母體）。 */
+  incompleteTotal: number;
+}
+
 export interface OjtSummary {
   coverage: {
     numerator: number;
@@ -92,7 +122,7 @@ export interface OjtSummary {
     excludedInactive: number;
     excludedOrphaned: number;
   };
-  docCoverage: OjtDocCoverageRow[];
+  docCoverage: OjtDocCoverageSlice;
   deptRollup: { deptOrgCode: string; deptName: string; totalUnits: number; completedUnits: number }[];
   /** AC-16：僅單位/文件/日期層級，明文不含上傳者姓名或員工編號。 */
   recentSessions: {

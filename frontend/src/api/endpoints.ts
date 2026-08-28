@@ -37,6 +37,7 @@ import type {
   OjtSessionView,
   OjtPendingItem,
   OjtProgressSummary,
+  OjtDocScope,
 } from './types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -1246,9 +1247,16 @@ export function reindexDocument(
  * 吸收掉，而不是由測試大聲失敗——那正是本 repo 反覆踩到的「兩側全綠、線上壞掉」形狀。
  */
 
-/** GET /admin/ojt-progress/summary（TAB1 儀表板三區；`AC-14`／`AC-15`／`AC-16`）。 */
-export function getOjtProgressSummary(): Promise<OjtProgressSummary> {
-  return apiFetch('/admin/ojt-progress/summary');
+/**
+ * GET /admin/ojt-progress/summary（TAB1 儀表板三區；`AC-14`／`AC-15`／`AC-16`）。
+ *
+ * 🔴 `docScope`（`OQ-E11-21`）：區一逐筆表之顯示範圍，**帶進 query 交由伺服器切片**。
+ * 切換範圍 ⇒ **重新請求**，明文**不得**改為客端切換——客端切換就必須先取回全部 600 列，
+ * 那正是本次節流要消滅的東西。省略時不帶 query（伺服器套用預設 `incomplete`）。
+ */
+export function getOjtProgressSummary(docScope?: OjtDocScope): Promise<OjtProgressSummary> {
+  const q = docScope ? `?docScope=${encodeURIComponent(docScope)}` : '';
+  return apiFetch(`/admin/ojt-progress/summary${q}`);
 }
 
 /**

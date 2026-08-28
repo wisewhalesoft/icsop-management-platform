@@ -23,6 +23,20 @@ export interface BreadcrumbSegment {
 export interface TopbarSlots {
   titleEl: HTMLElement | null;
   actionsEl: HTMLElement | null;
+  /**
+   * 🔴 F042：**full-bleed 橫幅**插槽——位於 `<header>` **內部**、h-14 那一列之後，故其
+   * `border-t` 會緊貼 topbar 底緣、左右滿版無圓角（prototype 25 `#roBanner`，:177-179）。
+   *
+   * ⚠ **選填**：既有三個測試檔以 `value={{ titleEl, actionsEl }}` 建構本 context，改為必填會使
+   * `tsc --noEmit` 紅在測試檔上（實作端無法修測試）。未提供時消費端退回 inline 呈現。
+   */
+  headerBottomEl?: HTMLElement | null;
+  /**
+   * 🔴 F042：**full-bleed chrome** 插槽——緊接 `</header>` 之後、`<main class="px-4 py-6">` 之前，
+   * 故與 topbar 零間隙且左右滿版（prototype 25 之 TAB bar，:194-199）。
+   * ⚠ 同上，選填。
+   */
+  belowHeaderEl?: HTMLElement | null;
 }
 export const TopbarSlotsContext = createContext<TopbarSlots | null>(null);
 
@@ -43,6 +57,35 @@ export function TopbarActions({ children }: { children: ReactNode }): JSX.Elemen
   const slots = useContext(TopbarSlotsContext);
   if (!slots?.actionsEl) return <div className="flex items-center gap-2">{children}</div>;
   return <>{createPortal(children, slots.actionsEl)}</>;
+}
+
+/**
+ * 🔴 F042：把 **full-bleed 橫幅**（如 SysAdmin 唯讀 strip）投遞到 topbar 底緣（`<header>` 內）。
+ *
+ * 為何需要它：admin shell 之 `<main>` 帶 `px-4 py-6`，頁面把橫幅畫在 `<main>` 裡會變成**左右
+ * 內縮、上方多出 24px 空隙的圓角卡片**，而 prototype 25 要的是**貼著 topbar 底緣、左右滿版、
+ * 只有 `border-t` 的 strip**。此差異純粹來自「畫在哪一層 DOM」，無法靠 class 補救。
+ *
+ * 🔒 **fallback 刻意是裸 `<>{children}</>`**（不像 `TopbarActions` 包一層 flex div）：本插槽投遞的
+ * 是自帶版面之 full-bleed 元素，外面再包一層容器會讓單元測試看到與正式環境不同的 DOM 結構。
+ */
+export function TopbarBanner({ children }: { children: ReactNode }): JSX.Element {
+  const slots = useContext(TopbarSlotsContext);
+  if (!slots?.headerBottomEl) return <>{children}</>;
+  return <>{createPortal(children, slots.headerBottomEl)}</>;
+}
+
+/**
+ * 🔴 F042：把 **full-bleed chrome**（如 prototype 25 之 TAB bar）投遞到 `</header>` 與 `<main>` 之間。
+ *
+ * ⚠ **本插槽不是給所有分頁列用的**：`OrgSyncPage`（prototype 09）與 `PermissionMatrixPage`
+ * （prototype 18）之分頁列在其各自 prototype 裡**本來就在 `<main>` 內部**，那是正確的、不得改。
+ * `prototypes/25-ojt-progress.html` 是目前唯一把分頁列提到 `<main>` 之外、與 topbar 相連的頁面。
+ */
+export function BelowTopbar({ children }: { children: ReactNode }): JSX.Element {
+  const slots = useContext(TopbarSlotsContext);
+  if (!slots?.belowHeaderEl) return <>{children}</>;
+  return <>{createPortal(children, slots.belowHeaderEl)}</>;
 }
 
 export function PageHeader({

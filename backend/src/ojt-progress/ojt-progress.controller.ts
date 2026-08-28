@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
-import { OjtProgressService } from './ojt-progress.service';
+import { OjtProgressService, OjtDocScope } from './ojt-progress.service';
 import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { RequirePermission } from '../rbac/require-permission.decorator';
@@ -47,11 +47,22 @@ import { attachmentDisposition } from '../storage/content-disposition';
 export class OjtProgressController {
   constructor(private readonly svc: OjtProgressService) {}
 
-  /** TAB1 儀表板三區（`AC-14`／`AC-15`／`AC-16`）。 */
+  /**
+   * TAB1 儀表板三區（`AC-14`／`AC-15`／`AC-16`）。
+   *
+   * 🔒 `docScope` 為區一逐筆表之顯示範圍（`incomplete`｜`completed`｜`all`）。
+   * **本層不驗值、不回 400**——缺值與未知值由服務層統一正規化為 `incomplete`，
+   * 並經回應之 `docCoverage.scope` 回聲，使正規化結果可觀測。
+   * ⚠ 若在此先擋掉未知值，正規化規則就會有兩份（controller 一份、service 一份），
+   * 那正是兩處遲早分歧的起點。
+   */
   @Get('admin/ojt-progress/summary')
   @RequirePermission(FunctionKey.OJT_PROGRESS_MANAGEMENT, 'read')
-  getSummary(@Req() req: RequestWithSession) {
-    return this.svc.getSummary(req.sessionUser);
+  getSummary(
+    @Req() req: RequestWithSession,
+    @Query('docScope') docScope?: string,
+  ) {
+    return this.svc.getSummary(req.sessionUser, docScope as OjtDocScope | undefined);
   }
 
   /**

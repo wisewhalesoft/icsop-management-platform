@@ -102,6 +102,43 @@ export interface OjtDocCoverageRow {
   completedUnits: number;
 }
 
+/**
+ * 🔴 `OQ-E11-21`（2026-08-28 節流修正）：區一逐筆表之顯示範圍，恰三值。
+ * 🔒 **`incomplete` 為伺服器正規化後之預設**——缺值與未知值一律落到它，並於
+ * `OjtDocCoverageSlice.scope` 回聲，使正規化結果**可觀測**（故不回 400）。
+ */
+export type OjtDocScope = 'incomplete' | 'completed' | 'all';
+
+/** 伺服器所套用之逐筆表筆數上限（`AC-14` 節流）。 */
+export const DOC_COVERAGE_MAX_ROWS = 15;
+
+/**
+ * 🔴 區一逐筆表之**受限切片**（陣列 → 物件，刻意的 loud break，見 §架構設計 一-2）。
+ *
+ * 🔴 **本型別最重要的一條**：`totalDocuments`／`byState`／`incompleteTotal` 恆取自
+ * **完整母體**，與 `scope`／`maxRows` **完全無關**——只有 `items`／`shown`／`hidden` 隨切片而動。
+ * ⚠ 把上限或範圍摻進統計，是本輪 ux-fix 已犯過一次的錯：三種範圍各得 15／13／15，
+ * **每個單一畫面看起來都合理，只有跨範圍比較才抓得到**（假綠陷阱 9）。
+ */
+export interface OjtDocCoverageSlice {
+  /** 實際套用之範圍（正規化後之值，供前端回聲顯示）。 */
+  scope: OjtDocScope;
+  /** 伺服器所套用之筆數上限。 */
+  maxRows: number;
+  /** 受限切片：過濾 → 排序 → 截斷（🔴 三步順序不得調換）。 */
+  items: OjtDocCoverageRow[];
+  /** ＝ `items.length`。 */
+  shown: number;
+  /** 該 `scope` 之完整母體筆數 − `shown`，恆 ≥ 0。 */
+  hidden: number;
+  /** 全部 ICSOP 文件份數（**完整母體**）。 */
+  totalDocuments: number;
+  /** 文件層三態份數（**完整母體**）。 */
+  byState: { all: number; partial: number; none: number };
+  /** 尚未全部完成合計（＝`byState.partial + byState.none`，**完整母體**）。 */
+  incompleteTotal: number;
+}
+
 export interface OjtSummary {
   coverage: {
     numerator: number;
@@ -112,7 +149,7 @@ export interface OjtSummary {
     excludedInactive: number;
     excludedOrphaned: number;
   };
-  docCoverage: OjtDocCoverageRow[];
+  docCoverage: OjtDocCoverageSlice;
   deptRollup: {
     deptOrgCode: string;
     deptName: string;
@@ -182,6 +219,75 @@ function rowKey(documentId: string, orgCode: string): string {
 
 function includesCi(haystack: string, needle: string): boolean {
   return haystack.toLowerCase().includes(needle.toLowerCase());
+}
+
+/**
+ * 🔒 `docScope` 正規化：缺值與**任何**未知值一律落到 `'incomplete'`。
+ * 🔴 **不拋 400**——正規化結果經 `OjtDocCoverageSlice.scope` 回聲而**可觀測**，
+ * 使用者看得到實際套用的是哪個範圍；對一個純呈現用的查詢參數而言，
+ * 靜默降級才是問題，回聲式降級不是。
+ */
+function normalizeDocScope(raw: unknown): OjtDocScope {
+  return raw === 'completed' || raw === 'all' ? raw : 'incomplete';
+}
+
+/** 覆蓋率（`totalUnits === 0` ⇒ 0，避免除以零）。 */
+function coverageRatioOf(r: OjtDocCoverageRow): number {
+  return r.totalUnits === 0 ? 0 : r.completedUnits / r.totalUnits;
+}
+
+/**
+ * 區一逐筆表之切片（純函式，`AC-14` 節流）。
+ *
+ * 🔴 **三步順序不得調換：過濾 → 排序 → 截斷。**
+ *  · 先截斷再排序 ⇒ 取到的是「寫入順序」的前 N 筆，高覆蓋率文件會因為剛好排在前面而逃過截斷，
+ *    使用者看到的「最需要關注的文件」其實是隨機的一批。
+ *  · 先排序再過濾雖然結果相同，卻要對整個母體排序後再丟掉大半，白做工。
+ *
+ * 🔴 **統計欄一律取自 `population`，不取自 `filtered`／`items`**——這是本次修正的核心：
+ * 把上限或範圍摻進統計，三種範圍會各自得到看似合理、實則互相矛盾的數字。
+ *
+ * 🔒 排序＝覆蓋率**昇冪**（最需要關注者在前），同率以 `documentNumber` 昇冪 tie-break，
+ * 使輸出**決定性**（同率文件之相對順序不隨母體寫入順序而變）。
+ */
+function sliceDocCoverage(
+  population: OjtDocCoverageRow[],
+  rawScope: unknown,
+  maxRows: number = DOC_COVERAGE_MAX_ROWS,
+): OjtDocCoverageSlice {
+  const scope = normalizeDocScope(rawScope);
+
+  const byState = {
+    all: population.filter((r) => r.state === 'all').length,
+    partial: population.filter((r) => r.state === 'partial').length,
+    none: population.filter((r) => r.state === 'none').length,
+  };
+
+  // ① 過濾
+  const filtered = population.filter((r) => {
+    if (scope === 'completed') return r.state === 'all';
+    if (scope === 'incomplete') return r.state !== 'all';
+    return true; // 'all'：不過濾
+  });
+  // ② 排序（覆蓋率昇冪；同率 documentNumber 昇冪）
+  const sorted = [...filtered].sort(
+    (a, b) =>
+      coverageRatioOf(a) - coverageRatioOf(b) ||
+      a.documentNumber.localeCompare(b.documentNumber),
+  );
+  // ③ 截斷
+  const items = sorted.slice(0, maxRows);
+
+  return {
+    scope,
+    maxRows,
+    items,
+    shown: items.length,
+    hidden: filtered.length - items.length,
+    totalDocuments: population.length,
+    byState,
+    incompleteTotal: byState.partial + byState.none,
+  };
 }
 
 /** 內部聚合中間形狀（同時服務 TAB1 三區與 TAB2 之列）。 */
@@ -389,7 +495,10 @@ export class OjtProgressService {
    * ⚠ **不得**為了「看起來一致」而把任一邊改成另一邊——欄位要的是「實際狀況」，統計要的是
    * 「還追得動的部分」。
    */
-  async getSummary(session: OjtSessionContext | undefined): Promise<OjtSummary> {
+  async getSummary(
+    session: OjtSessionContext | undefined,
+    docScope?: OjtDocScope,
+  ): Promise<OjtSummary> {
     this.assertCanRead(session?.roleCode);
     const aggregated = await this.aggregate();
 
@@ -401,7 +510,14 @@ export class OjtProgressService {
       if (bucket) bucket.push(a);
       else byDoc.set(a.documentId, [a]);
     }
-    const docCoverage: OjtDocCoverageRow[] = docs.map((d) => {
+    /**
+     * 🔴 **完整母體**（population）：全部文件逐筆，**未經任何 scope／上限切片**。
+     * 🔒 **不套 `isActive` 過濾**（`AC-04`／`AC-14` 母體口徑鎖）——裁撤單位之文件仍計入本表。
+     * ⚠ **亦不套「孤兒」過濾，且那不是遺漏**：孤兒依定義已不在 `DOC_USING_DEPT` 集合內，
+     * `aggregate()` 之列由該集合驅動 ⇒ 孤兒**天然不成列**。多加一道 `orphaned` 過濾不只冗餘，
+     * 還會掩埋「為何這裡不需要過濾」這個正確理解，使後人以為它是一道可調整的旋鈕。
+     */
+    const population: OjtDocCoverageRow[] = docs.map((d) => {
       const own = byDoc.get(d.id) ?? [];
       const completedUnits = own.filter((a) => a.completed).length;
       return {
@@ -413,6 +529,7 @@ export class OjtProgressService {
         completedUnits,
       };
     });
+    const docCoverage = sliceDocCoverage(population, docScope);
 
     // ── 區一 · 總覽比率（有效列＝排除裁撤單位；孤兒場次因列由使用部門集合驅動而天然不在其中）──
     const valid = aggregated.filter((a) => a.active);
@@ -493,7 +610,19 @@ export class OjtProgressService {
         trainingDate: s.trainingDate,
       });
     }
-    return out.sort((a, b) => b.trainingDate.localeCompare(a.trainingDate));
+    /**
+     * 🔴 **決定性 tie-break**（`documentNumber` → `orgCode` 次鍵）：`trainingDate` 只到「日」，
+     * 同日多筆極常見。若同日順序取決於 store 回傳順序，前端切前 8 筆呈現時，
+     * **第 8／9 筆同日者每次請求顯示哪一筆會跳動**——資料完全沒變，畫面卻自己動了。
+     * 🔒 **穩定性不等於可斷言性**：`AC-16` 明文禁止對同日順序建立斷言，本次鍵不與之衝突——
+     * 它讓輸出可重現，而非讓某個特定順序成為契約。
+     */
+    return out.sort(
+      (a, b) =>
+        b.trainingDate.localeCompare(a.trainingDate) ||
+        a.documentNumber.localeCompare(b.documentNumber) ||
+        a.orgCode.localeCompare(b.orgCode),
+    );
   }
 
   // ══════════ AC-26 待歸位工作台 ══════════

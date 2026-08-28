@@ -1,4 +1,4 @@
-import type { OjtProgressRow } from '../api/types';
+import type { OjtDocScope, OjtProgressRow } from '../api/types';
 
 /**
  * F042 OJT 進度管理之**逐字文案常數與純規則**（自 `OjtProgressPage.tsx` 抽出，使頁面元件
@@ -207,4 +207,118 @@ export function rollupInvariantText(deptCount: number, summedUnits: number): str
 /** 伺服器當日（`YYYY-MM-DD`，UTC）——與後端 `serverToday()` 同一基準，見其註解之時區血訓。 */
 export function todayIsoDate(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10);
+}
+
+// ══════════ `OQ-E11-21` 節流：區一「依文件逐筆」表（`AC-28`⑯） ══════════
+
+/**
+ * 顯示範圍之三值（逐字取自 prototype 25 之 `#covScope`）。
+ * 📌 用「未**全部**完成」而非「未完成」，是為了不與 TAB2 之列層級 `尚未完成`（`AC-03` 二值）
+ * 及本表狀態欄之 `尚未開始` 混淆——本控制項濾的是**文件層**的「還沒全部做完」。
+ */
+export const DOC_COVERAGE_SCOPE_LABEL = '依文件逐筆之顯示範圍';
+export const DOC_COVERAGE_SCOPE_OPTIONS: readonly { value: OjtDocScope; text: string }[] = [
+  { value: 'incomplete', text: '僅未全部完成' },
+  { value: 'completed', text: '僅已全部完成' },
+  { value: 'all', text: '全部文件' },
+];
+
+export const DOC_COVERAGE_INCOMPLETE_LABEL = '尚未全部完成合計';
+
+/**
+ * 顯示範圍造成之空狀態，**逐一個範圍一句**（不共用一句「查無資料」）。
+ * 🔒 `all` 恆為空字串——顯示範圍為「全部文件」時只要有文件就一定有列，該分支不可能被取用；
+ * 留一個空字串而非省略，是為了讓「三個範圍都有對應」這件事在程式碼上看得出來。
+ */
+export const DOC_COVERAGE_EMPTY_BY_SCOPE: Record<OjtDocScope, string> = {
+  incomplete: '所有文件之教育訓練皆已全部完成',
+  completed: '尚無任何文件之教育訓練已全部完成',
+  all: '',
+};
+
+/**
+ * 🔴 範圍空狀態之補充提示。**刻意不帶** `EMPTY_ALL_HINT`（「進度列從哪裡來」那句）——
+ * 那句只給全域空狀態；此處的列並非不存在，只是被顯示範圍濾掉了。
+ */
+export const DOC_COVERAGE_EMPTY_HINT = '切換顯示範圍為「全部文件」可檢視全部文件之覆蓋率。';
+
+/** 截斷句之名詞隨顯示範圍而異（其餘句子完全相同 ⇒ 只分岔一個名詞，不寫三句）。 */
+const DOC_COVERAGE_TRUNC_NOUN: Record<OjtDocScope, string> = {
+  incomplete: '尚未全部完成之文件',
+  completed: '已全部完成之文件',
+  all: '文件',
+};
+
+/**
+ * 🔴 **不得靜默 top-N** 之載體：**三件事缺一不可**——還有幾份沒列出、憑什麼是這 N 份
+ * （排序規則）、完整的東西去哪裡看。只顯示前 N 筆而不說，等於讓畫面謊稱本表已涵蓋全部文件。
+ * 🔴 `maxRows` **由呼叫端自回應傳入**，不得硬寫 15。
+ */
+export function docCoverageTruncationText(
+  maxRows: number,
+  hidden: number,
+  scope: OjtDocScope,
+): string {
+  return (
+    `本表僅列出前 ${maxRows} 份，另有 ${hidden} 份${DOC_COVERAGE_TRUNC_NOUN[scope]}未列出；` +
+    '本表依覆蓋率由低至高排序，未列出者之覆蓋率均不低於已列出者。完整清單請至「OJT 資料清單」分頁逐列檢視。'
+  );
+}
+
+/**
+ * 🔴 口徑說明行：本表分母與上方覆蓋率**刻意不同**（`AC-14` 末段之明文警語）。
+ * 少了這一行，使用者把各文件分母加起來會對不上 KPI 的進度列數，而那個差額正是被裁撤的單位
+ * ——沒有說明就會被讀成 bug。
+ */
+export const DOC_COVERAGE_BASIS_NOTE =
+  '本表之「已完成 / 使用單位」以該文件之全部使用單位為分母（含已裁撤單位），與上方覆蓋率之分母刻意不同：上方是「還追得動的部分」，本表是「這份文件的實際訓練狀況」。';
+
+/** 導向 TAB2 之入口（**恆存在**，不只在截斷時才出現）。 */
+export const DOC_COVERAGE_MORE_TEXT = '至「OJT 資料清單」檢視尚未完成之進度列';
+export const DOC_COVERAGE_MORE_ARIA = '至「OJT 資料清單」分頁，並將完成狀態篩選設為「尚未完成」';
+
+/** 捲軸容器之無障礙名稱（`tabindex=0` 使其可被鍵盤聚焦後捲動，WCAG 2.1.1）。 */
+export const DOC_COVERAGE_REGION_LABEL = '依文件逐筆之覆蓋率表格';
+
+// ══════════ `OQ-E11-21` 節流：區三「最近完成 OJT 的單位」（`AC-28`⑱） ══════════
+
+/**
+ * 🔴 區三之筆數上限＝**8**，**純前端呈現層切片**（後端 `recentSessions` 形狀不變，仍回 30 天
+ * 窗口內之全部）。
+ *
+ * 🔴 與區一刻意不同、**不得互相對齊**：上限 8 vs 15／**無捲軸** vs 有捲軸／無顯示範圍控制項
+ * vs 有／截斷句無名詞變體 vs 有。本區是「脈動」不是「待辦」——讀者要的是「訓練有在進行嗎」，
+ * 沒有逐筆處理的動作，故上限可比區一小；上限已把整區高度封住，再加一層捲軸只是多一層 chrome。
+ * 🔒 上限**只作用於呈現**：30 天窗口、PII 硬防線、孤兒排除、**不排除裁撤單位**——四條一律不變。
+ */
+export const RECENT_MAX_ROWS = 8;
+
+/** 區三之時間窗口天數（與後端 `RECENT_WINDOW_DAYS` 同值，僅供文案代入）。 */
+export const RECENT_WINDOW_DAYS = 30;
+
+/**
+ * 🔴 與區一同一條規矩：**不得靜默 top-N**，三要素缺一不可。
+ * ⚠ 第三要素**刻意不承諾一個等價的畫面**：全站沒有「依日期排序之完成清單」這種頁面，TAB2 是
+ * 場次紀錄的所在地但**不依日期排序** ⇒ 文案明講「展開該進度列檢視」而非「看完整清單」，
+ * 免得使用者過去以後找不到對應的東西。
+ */
+export function recentTruncationText(total: number, hidden: number): string {
+  return (
+    `近 ${RECENT_WINDOW_DAYS} 天內共 ${total} 筆，本區僅列出最近 ${RECENT_MAX_ROWS} 筆、另有 ${hidden} 筆未列出；` +
+    '本區依最近一次訓練日期由新至舊排序，未列出者之日期均不晚於已列出者。' +
+    '各單位之完整場次紀錄請至「OJT 資料清單」分頁展開該進度列檢視。'
+  );
+}
+
+/**
+ * 區三之呈現切片：**先依訓練日期由新至舊排序、再切前 8 筆**。
+ *
+ * 🔴 **排序必須在切片之前**：後端不保證陣列順序即日期序，直接 `slice(0, 8)` 會取到「陣列前
+ * 8 筆」而非「最新 8 筆」——筆數斷言仍會全綠，只有日期方向會露餡（假綠陷阱 15）。
+ * 🔒 以 `[...list]` 複製後排序，不就地改動呼叫端之陣列。
+ */
+export function sliceRecentSessions<T extends { trainingDate: string }>(list: T[]): T[] {
+  return [...list]
+    .sort((a, b) => b.trainingDate.localeCompare(a.trainingDate))
+    .slice(0, RECENT_MAX_ROWS);
 }

@@ -1088,6 +1088,34 @@ export interface OjtDocCoverageRow {
   completedUnits: number;
 }
 
+/** `AC-28`⑯ 區一逐筆表之顯示範圍（三值，預設 `incomplete`）。 */
+export type OjtDocScope = 'incomplete' | 'completed' | 'all';
+
+/**
+ * 🔴 `OQ-E11-21`（2026-08-28 節流修正）：`docCoverage` 由**陣列改為物件**（刻意的 loud break）。
+ *
+ * 起因＝使用者實機檢視：dev 近 600 份文件下本表無上限，把整個儀表板撐成 600 列的巨長頁面。
+ * 定稿＝「預設僅未全部完成 ＋ 上限 15 ＋ 三值顯示範圍 ＋ 截斷告知」，**切片由伺服器完成**。
+ *
+ * 🔴 **`items` 是切片、其餘計數是母體**：`byState`／`totalDocuments`／`incompleteTotal` 恆為
+ * **完整母體**之分佈，不隨顯示範圍或上限改變——它們要回答的是「總共長什麼樣」，不是
+ * 「這張表現在畫了什麼」。把上限套進統計會使覆蓋率退化成「前 15 份的覆蓋率」。
+ */
+export interface OjtDocCoverageSlice {
+  scope: OjtDocScope;
+  /** 本次切片之筆數上限。🔴 前端渲染截斷句時**必須讀本欄、不得硬寫 15**。 */
+  maxRows: number;
+  /** 已切片之列（前端**不重排、不二次過濾**，逐列依序渲染）。 */
+  items: OjtDocCoverageRow[];
+  shown: number;
+  /** 未列出之筆數；`0` ⇒ 截斷告知**完全不進 DOM**（非 CSS 隱藏）。 */
+  hidden: number;
+  /** 完整母體之文件總數（**非**本次切片之 `items.length`）。 */
+  totalDocuments: number;
+  byState: { all: number; partial: number; none: number };
+  incompleteTotal: number;
+}
+
 /**
  * TAB1 儀表板三區之單一回應（`AC-14`／`AC-15`／`AC-16`）。
  * 🔒 欄名於 2026-08-28 由 lead 裁定**以後端現行形狀為 canonical**（前端環已同步遷移）；
@@ -1109,14 +1137,21 @@ export interface OjtProgressSummary {
     excludedInactive?: number;
     excludedOrphaned?: number;
   };
-  docCoverage: OjtDocCoverageRow[];
+  docCoverage: OjtDocCoverageSlice;
+  /**
+   * `AC-15` 部門完成率。
+   * 🔴 **本層級刻意沒有 `rate` 欄**：`data-model.md` 之部門 rollup SQL 只別名 `totalUnits`／
+   * `completedUnits`，prototype 25 `renderRollup()` 亦一律以 `pctOf(done,total)` 現場推導 ⇒
+   * 完成率由前端自 `completedUnits`／`totalUnits` 算出（與區一覆蓋率共用同一個 `coveragePercent()`，
+   * 全頁只有一個百分比推導點）。
+   * 📝 我曾一度在此宣告 `rate?: number`——那是宣告了一個 API 永遠不會送的欄位，且我原本直接
+   * 渲染 `{g.rate}%` 會印出 `undefined%`。留著一個恆空的欄位與留著恆空的擴充點同型，已移除。
+   */
   deptRollup: {
     deptOrgCode: string;
     deptName: string;
     totalUnits: number;
     completedUnits: number;
-    /** 後端不回本欄；前端一律自 `completedUnits`／`totalUnits` 推導（同上之單一推導點原則）。 */
-    rate?: number;
   }[];
   /** 🔴 `AC-16` PII 硬防線：僅單位／文件／日期層級，明文不含上傳者姓名或員工編號。 */
   recentSessions: {
