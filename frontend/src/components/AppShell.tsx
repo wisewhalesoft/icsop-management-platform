@@ -102,7 +102,13 @@ export function AppShell(): JSX.Element {
           )}
           {items.map((m) => {
             const acc = accessLabelFor(role, m.functionKey);
-            const readOnly = acc === '唯讀';
+            /**
+             * 🔴 F042 `AC-28`⑮：徽章值域自此為三種——`唯讀`／`受限CRUD`／無（完整 CRUD 不加徽章）。
+             * `受限CRUD` **不得**落回「無徽章」：主管／部門窗口對「OJT 進度管理」確實可寫（可新增
+             * 場次）但不可刪除，那是一個使用者需要先知道的限制，畫面不說就只能靠試出來。
+             * 📝 被取代之原判定逐字保留供追溯：`const readOnly = acc === '唯讀';`。
+             */
+            const badge = acc === '唯讀' || acc === '受限CRUD' ? acc : null;
             return (
               <NavLink
                 key={m.id}
@@ -129,9 +135,9 @@ export function AppShell(): JSX.Element {
                     {!collapsed && (
                       <span className="flex-1 truncate">{m.label}</span>
                     )}
-                    {!collapsed && readOnly && (
-                      <span className="text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">
-                        唯讀
+                    {!collapsed && badge && (
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500 whitespace-nowrap">
+                        {badge}
                       </span>
                     )}
                   </>

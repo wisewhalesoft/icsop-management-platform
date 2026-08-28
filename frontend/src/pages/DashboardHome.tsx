@@ -23,6 +23,7 @@ const CARD_DESC: Record<string, string> = {
   document: '文件新增與維護、狀態、附件、連結點',
   usageform: 'excel/pdf 表單上傳與文件關聯',
   docindex: 'AI 提取結果預覽、索引狀態與重新索引',
+  ojtprogress: '各使用單位教育訓練場次登記與完成率總覽',
   audit: '查看/下載/列印稽核查詢',
   changehistory: '欄位 before/after diff、循環樹狀圖新舊對照',
   orgsync: '每日組織同步、異動待確認',
@@ -154,7 +155,13 @@ export function DashboardHome(): JSX.Element {
         ) : (
           cards.map((c) => {
             const acc = accessLabelFor(role, c.functionKey);
-            const editable = acc === 'CRUD';
+            /**
+             * 🔴 F042 `AC-28`⑮：`受限CRUD` **不得**落入 `唯讀` 分支——主管／部門窗口對
+             * 「OJT 進度管理」確實可寫（可新增場次），把卡片標成「唯讀」是畫面說謊。
+             * 📝 被取代之原判定逐字保留供追溯：`const editable = acc === 'CRUD';` ＋ 二分支
+             *    （`可編輯` / `唯讀`）。
+             */
+            const cardBadge = acc === 'CRUD' ? '可編輯' : (acc ?? '唯讀');
             return (
               <Link
                 key={c.id}
@@ -165,15 +172,15 @@ export function DashboardHome(): JSX.Element {
                   <span className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center">
                     <Icon name={c.icon} className="w-5 h-5 text-primary-600" />
                   </span>
-                  {editable ? (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">
-                      可編輯
-                    </span>
-                  ) : (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
-                      唯讀
-                    </span>
-                  )}
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap ${
+                      cardBadge === '唯讀'
+                        ? 'bg-slate-100 text-slate-500'
+                        : 'bg-primary-50 text-primary-700'
+                    }`}
+                  >
+                    {cardBadge}
+                  </span>
                 </div>
                 <h3 className="font-semibold text-slate-900 mt-3 group-hover:text-primary-700">
                   {c.label}

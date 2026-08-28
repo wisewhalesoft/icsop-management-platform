@@ -32,6 +32,11 @@ import type {
   ResolutionKind,
   OrgChangeAlertView,
   OrgSyncMonthlySummary,
+  OjtRowFilters,
+  OjtProgressRow,
+  OjtSessionView,
+  OjtPendingItem,
+  OjtProgressSummary,
 } from './types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -501,20 +506,16 @@ export function uploadIcsopPdf(
   );
 }
 
-/** POST /admin/documents/:documentId/attachments/ojt（F016 OJT 簽到表覆蓋式上傳）。 */
-export function uploadOjtAttachment(
-  documentId: string,
-  file: File,
-): Promise<DocumentAttachmentRecord> {
-  return uploadFile<DocumentAttachmentRecord>(
-    `/admin/documents/${documentId}/attachments/ojt`,
-    file,
-  );
-}
+/**
+ * 📝 **`uploadOjtAttachment`（`POST /admin/documents/:id/attachments/ojt`）已於 2026-08-28 移除**
+ * ——F042 `AC-J2`：後端該路由已整條移除、現回 404；留著即為**死鏈**（呼叫端在 UI 上看得到
+ * 一個按鈕，按下去必定失敗）。OJT 之登記入口為 `addOjtSession()`（見 §E11 區）。
+ */
 
 /**
  * GET /admin/documents/:documentId/attachments（F016 附件清單，ICSOP文件管理 read）。
- * 固定序 ICSOP_PDF→OJT_SIGNIN，缺者不列；查無文件→404 DOCUMENT_NOT_FOUND。
+ * 🔴 F042 `AC-J1`：型別已收斂為僅 `ICSOP_PDF`（OJT 不再是附件）。缺者不列；
+ * 查無文件→404 DOCUMENT_NOT_FOUND。
  */
 export function getDocumentAttachments(
   documentId: string,
@@ -1162,13 +1163,17 @@ export function downloadDocumentAppendixFront(
 }
 
 /**
- * F020 `AC-D3`：**前台專屬**附件下載端點（`icsop-pdf`／`ojt`）。
+ * F020 `AC-D3`：**前台專屬**附件下載端點。
  * 🔴 路徑**不接受客戶端傳入 `blobPath`**——伺服器自 `(documentId, type)` 反查儲存位置；
  * 「前台／後台」是授權語意，不得建立在可由客戶端控制的輸入上（§10.1 之方案 B／C 已明確否決）。
+ *
+ * 🔴 F042 `AC-J26`（2026-08-28）：`type` 由 `'icsop-pdf' | 'ojt'` **收斂為僅 `'icsop-pdf'`**——
+ * 後端之 `downloadOjt` 路由已整條移除（前台不提供 OJT 場次檔下載，簽到表為出席紀錄，
+ * 與 `AC-16` 之 PII 防線同源）。留著 `'ojt'` 即為指向 404 之死鏈。
  */
 export function downloadPublicAttachment(
   documentId: string,
-  type: 'icsop-pdf' | 'ojt',
+  type: 'icsop-pdf',
   fallbackName: string,
 ): Promise<void> {
   return downloadViaBlob(
@@ -1224,4 +1229,128 @@ export function reindexDocument(
   return apiFetch(`/admin/doc-index/${encodeURIComponent(documentId)}/reindex`, {
     method: 'POST',
   });
+}
+
+// ===== E11 F042 OJT 進度管理 =====
+
+/**
+ * 🔴 **本區已無任何形狀正規化**（2026-08-28 兩側全部對齊）。
+ *
+ * 曾經存在過兩層 shim，都已整批移除：① 三個清單端點原本回**裸陣列**，後端已改回其
+ * §架構設計端點表本即定義之 `{ items, total }`／`{ sessions }` 信封；② `summary` 之欄位命名
+ * 兩環互斥，lead 已裁定**以後端現行形狀為 canonical**（`coverage.excludedInactive`／
+ * `excludedOrphaned` 扁平掛在 `coverage` 下、`docCoverage.totalUnits`／`completedUnits`
+ * 逐字取自 data-model §建議查詢形狀），前端環之 fixture 已由 test-generator 同步遷移。
+ *
+ * 🔒 **不要為了保險而把 shim 加回來**：留著「兩種都吃」會讓日後真正的形狀漂移被 shim 靜默
+ * 吸收掉，而不是由測試大聲失敗——那正是本 repo 反覆踩到的「兩側全綠、線上壞掉」形狀。
+ */
+
+/** GET /admin/ojt-progress/summary（TAB1 儀表板三區；`AC-14`／`AC-15`／`AC-16`）。 */
+export function getOjtProgressSummary(): Promise<OjtProgressSummary> {
+  return apiFetch('/admin/ojt-progress/summary');
+}
+
+/**
+ * GET /admin/ojt-progress/rows（TAB2 進度列＋**恰兩項**篩選；`AC-11`／`AC-13`）。
+ * `completionStatus` 比對「列自身」之二態（`AC-03`）；省略即「所有完成狀態」，不施加限制。
+ */
+export function getOjtProgressRows(
+  f: OjtRowFilters = {},
+): Promise<{ items: OjtProgressRow[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (f.orgQuery) qs.set('orgQuery', f.orgQuery);
+  if (f.completionStatus) qs.set('completionStatus', f.completionStatus);
+  const q = qs.toString();
+  return apiFetch(`/admin/ojt-progress/rows${q ? `?${q}` : ''}`);
+}
+
+/** GET /admin/ojt-progress/rows/:documentId/:orgCode/sessions（展開列之場次明細；`AC-12`）。 */
+export function getOjtProgressRowSessions(
+  documentId: string,
+  orgCode: string,
+): Promise<{ sessions: OjtSessionView[] }> {
+  return apiFetch(
+    `/admin/ojt-progress/rows/${encodeURIComponent(documentId)}/${encodeURIComponent(orgCode)}/sessions`,
+  );
+}
+
+/**
+ * POST /admin/ojt-progress/rows/:documentId/:orgCode/sessions（新增場次；`AC-02`／`AC-09`／`AC-10`）。
+ * multipart 單檔，欄位名恰為 `file`——**不得**用 `files`，那會誤導為多檔上傳而與「一次登記恰對應
+ * 一個簽到表檔案」直接矛盾。不設 Content-Type，交瀏覽器帶 multipart boundary。
+ */
+export function addOjtSession(
+  documentId: string,
+  orgCode: string,
+  input: { trainingDate: string; file: File },
+): Promise<OjtSessionView> {
+  const form = new FormData();
+  form.append('trainingDate', input.trainingDate);
+  form.append('file', input.file);
+  return apiFetch<OjtSessionView>(
+    `/admin/ojt-progress/rows/${encodeURIComponent(documentId)}/${encodeURIComponent(orgCode)}/sessions`,
+    { method: 'POST', body: form },
+  );
+}
+
+/**
+ * GET /admin/ojt-progress/sessions/:sessionId/download（簽到表下載，代理串流）。
+ * 🔴 以 `downloadViaBlob` 觸發，不得用 `window.open`／`<a href>`（§10.1 明文禁令：
+ * top-level navigation 之 `Accept: text/html` 會撞 SPA fallback，使用者拿到 app shell）。
+ */
+export function downloadOjtSession(sessionId: string, fallbackName: string): Promise<void> {
+  return downloadViaBlob(
+    `/admin/ojt-progress/sessions/${encodeURIComponent(sessionId)}/download`,
+    fallbackName,
+  );
+}
+
+/**
+ * DELETE /admin/ojt-progress/sessions/:sessionId（`AC-19`，204）。
+ * 本函式不做角色判斷——把關在端點層（服務層另一道 `ICSOPAdmin` 檢查）。
+ */
+export function deleteOjtSession(sessionId: string): Promise<void> {
+  return apiFetch<void>(`/admin/ojt-progress/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * GET /admin/ojt-progress/pending（`AC-26` 待歸位工作台；歸位完畢後自然清空）。
+ * 每筆帶 `documentNumber`／`documentName`（後端 2026-08-28 補上富化），故待歸位區不再顯示裸 UUID。
+ */
+export function getOjtProgressPending(): Promise<{ items: OjtPendingItem[] }> {
+  return apiFetch('/admin/ojt-progress/pending');
+}
+
+/**
+ * POST /admin/ojt-progress/pending/:sessionId/assign（`AC-26` 歸位；僅 ICSOPAdmin，單向不可逆）。
+ * 🔒 路徑刻意含 `pending/` 前綴而非通用之 `PATCH sessions/:id`——後者等於從側門把
+ * `AC-20`（場次不可編輯）打開。
+ */
+export function assignOjtPendingSession(
+  sessionId: string,
+  body: { orgCode: string; trainingDate: string },
+): Promise<OjtSessionView> {
+  return apiFetch<OjtSessionView>(
+    `/admin/ojt-progress/pending/${encodeURIComponent(sessionId)}/assign`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+/**
+ * GET /admin/documents/:documentId/ojt-completion（`AC-21`：文件表單／唯讀頁之 OJT 唯讀衍生區塊）。
+ *
+ * 🔴 與 `AC-04` 之文件層三值狀態**共用同一套規則**（後端 `OjtCompletionReader` 單一 port），
+ * 不得各自實作——同一份底層事實的兩種呈現各算一次，遲早出現「清單說已全部完成、詳情頁卻列不滿」。
+ */
+export function getDocumentOjtCompletion(
+  documentId: string,
+): Promise<{ completedOrgCodes: string[]; totalUnits?: number }> {
+  return apiFetch(`/admin/documents/${encodeURIComponent(documentId)}/ojt-completion`);
 }

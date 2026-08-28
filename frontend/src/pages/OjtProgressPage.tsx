@@ -1,0 +1,1141 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../auth/useAuth';
+import { ApiError } from '../api/client';
+import {
+  addOjtSession,
+  assignOjtPendingSession,
+  deleteOjtSession,
+  downloadOjtSession,
+  getOjtProgressPending,
+  getOjtProgressRowSessions,
+  getOjtProgressRows,
+  getOjtProgressSummary,
+} from '../api/endpoints';
+import { canPerform, FunctionKey } from '../domain/function-matrix';
+import { ojtStatusView } from '../domain/ojt-status-view';
+import { Icon } from '../components/Icon';
+import { PageHeader } from '../components/PageHeader';
+import { useToast } from '../components/useToast';
+import type {
+  OjtPendingItem,
+  OjtProgressRow,
+  OjtProgressSummary,
+  OjtSessionView,
+} from '../api/types';
+import {
+  ADD_SESSION_TEXT,
+  ASSIGN_ACTION_TEXT,
+  BADGE_COMPLETED_ICON,
+  BADGE_COMPLETED_TEXT,
+  BADGE_PENDING_ICON,
+  BADGE_PENDING_TEXT,
+  BLOCKED_MSG,
+  BLOCKED_TITLE,
+  DEL_CONFIRM_OK_TEXT,
+  DEL_CONFIRM_TITLE,
+  EMPTY_ALL_HINT,
+  EMPTY_ALL_TEXT,
+  EMPTY_RECENT_TEXT,
+  EMPTY_ROWS_TEXT,
+  EMPTY_SESSIONS_TEXT,
+  ERR_DATE_FUTURE,
+  ERR_DATE_REQUIRED,
+  ERR_FILE_REQUIRED,
+  FIELD_SIGNIN_FILE_LABEL,
+  FIELD_TRAINING_DATE_LABEL,
+  NO_STATISTICS_TEXT,
+  ORG_INACTIVE_TEXT,
+  ORPHAN_NOTE_TEXT,
+  PENDING_NOTE_TEXT,
+  PENDING_SCOPE_TEXT,
+  PENDING_TITLE_TEXT,
+  PII_NOTE_SEGMENTS,
+  RO_NOTICE_SYSADMIN,
+  SEC_COVERAGE_TITLE,
+  SEC_RECENT_TITLE,
+  SEC_ROLLUP_TITLE,
+  TAB_DASHBOARD_TEXT,
+  TAB_SESSIONS_TEXT,
+  addSessionAria,
+  canAddSession,
+  canManageSessions,
+  coveragePercent,
+  delConfirmBody,
+  deleteSessionAria,
+  downloadSessionAria,
+  exclusionNote,
+  groupRowsByOrg,
+  rollupInvariantText,
+  rowKeyOf,
+  todayIsoDate,
+} from './ojt-progress-view';
+
+/**
+ * F042 OJT 進度管理（E11 / US-103＋US-104）——後台獨立管理頁。
+ *
+ * 版面／文案／DOM 掛鉤之權威來源：`prototypes/25-ojt-progress.html`
+ * （TAB1 儀表板三區、TAB2 以使用單位分組之進度列、待歸位區、三個 modal）。
+ * 逐字文案與純規則集中於 `ojt-progress-view.ts`，本檔只負責渲染與資料流。
+ *
+ * 端點（皆 `/admin/ojt-progress/`）：GET summary｜GET rows｜GET rows/:d/:o/sessions｜
+ * POST 同路徑（multipart 單檔）｜GET sessions/:id/download｜DELETE sessions/:id｜
+ * GET pending｜POST pending/:id/assign。
+ *
+ * RBAC（`AC-05`／`AC-06`／`AC-07`／`AC-19`）：
+ *  · ICSOPAdmin／Supervisor／DeptContact 可新增場次（`受限CRUD` 於功能層等同可寫）
+ *  · SysAdmin 唯讀——寫入型控制項**不進 DOM**（非 CSS 隱藏）
+ *  · User 全頁 403（不採 F041 之 404 隱藏存在性例外，該例外明文不推廣）
+ *  · 🔴 刪除與歸位僅 ICSOPAdmin——矩陣之 `受限CRUD` 格值**擋不住它**，端點層另有一道檢查；
+ *    前端據同一條件決定控制項是否進 DOM。
+ *  · 🔒 `AC-08`：可否新增**只看角色**，不看操作者 orgCode 與目標列之關係，
+ *    本檔**不得**出現任何子樹範圍判定。
+ */
+type TabKey = 'dashboard' | 'sessions';
+
+interface AddTarget {
+  documentId: string;
+  orgCode: string;
+  documentNumber: string;
+  documentName: string;
+  orgName: string;
+}
+
+interface ConfirmState {
+  sessionId: string;
+  body: string;
+}
+
+interface AssignState {
+  item: OjtPendingItem;
+  orgCode: string;
+  trainingDate: string;
+  error: string | null;
+}
+
+export function OjtProgressPage(): JSX.Element {
+  const { user } = useAuth();
+  const toast = useToast();
+  const role = user?.roleCode;
+  const canRead = canPerform(role, FunctionKey.OJT_PROGRESS_MANAGEMENT, 'read');
+  const canWrite = canPerform(role, FunctionKey.OJT_PROGRESS_MANAGEMENT, 'write');
+  const mayAdd = canAddSession(role);
+  const mayManage = canManageSessions(role);
+
+  const [tab, setTab] = useState<TabKey>('dashboard');
+  const [summary, setSummary] = useState<OjtProgressSummary | null>(null);
+  const [rows, setRows] = useState<OjtProgressRow[]>([]);
+  const [pending, setPending] = useState<OjtPendingItem[]>([]);
+  const [orgQuery, setOrgQuery] = useState('');
+  const [status, setStatus] = useState<'' | 'completed' | 'pending'>('');
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const [sessionsByRow, setSessionsByRow] = useState<Record<string, OjtSessionView[]>>({});
+
+  const [addTarget, setAddTarget] = useState<AddTarget | null>(null);
+  const [addDate, setAddDate] = useState('');
+  const [addFile, setAddFile] = useState<File | null>(null);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [assign, setAssign] = useState<AssignState | null>(null);
+
+  const loadSummary = useCallback(async () => {
+    try {
+      setSummary(await getOjtProgressSummary());
+    } catch {
+      setSummary(null);
+    }
+  }, []);
+
+  const loadRows = useCallback(async () => {
+    try {
+      const res = await getOjtProgressRows({ orgQuery: orgQuery || undefined, completionStatus: status });
+      setRows(res.items);
+    } catch {
+      setRows([]);
+    }
+  }, [orgQuery, status]);
+
+  const loadPending = useCallback(async () => {
+    try {
+      const res = await getOjtProgressPending();
+      setPending(res.items);
+    } catch {
+      setPending([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!canRead) return;
+    void loadSummary();
+    void loadPending();
+  }, [canRead, loadSummary, loadPending]);
+
+  useEffect(() => {
+    if (!canRead) return;
+    void loadRows();
+  }, [canRead, loadRows]);
+
+  const reloadRowSessions = useCallback(async (documentId: string, orgCode: string) => {
+    const key = rowKeyOf(documentId, orgCode);
+    const res = await getOjtProgressRowSessions(documentId, orgCode);
+    setSessionsByRow((prev) => ({ ...prev, [key]: res.sessions }));
+  }, []);
+
+  const onToggleRow = useCallback(
+    async (row: OjtProgressRow) => {
+      const key = rowKeyOf(row.documentId, row.orgCode);
+      if (expanded.includes(key)) {
+        setExpanded((prev) => prev.filter((k) => k !== key));
+        return;
+      }
+      setExpanded((prev) => [...prev, key]);
+      await reloadRowSessions(row.documentId, row.orgCode).catch(() => {
+        setSessionsByRow((prev) => ({ ...prev, [key]: [] }));
+      });
+    },
+    [expanded, reloadRowSessions],
+  );
+
+  const onDownload = useCallback(
+    async (s: OjtSessionView) => {
+      try {
+        await downloadOjtSession(s.id, s.fileName);
+      } catch (e) {
+        toast.error(e instanceof ApiError ? `下載失敗：${e.code}` : '下載失敗');
+      }
+    },
+    [toast],
+  );
+
+  /**
+   * `AC-19` 刪除之二次確認。三種措辭由 `delConfirmBody()` 決定（一般列尚有其他場次／一般列
+   * 最後一筆／孤兒列最後一筆），**不得合流**——孤兒列刪完即整列消失且無法重新登記。
+   */
+  const askDelete = useCallback(
+    (row: OjtProgressRow, s: OjtSessionView) => {
+      const key = rowKeyOf(row.documentId, row.orgCode);
+      const siblings = sessionsByRow[key]?.length ?? 0;
+      setConfirm({ sessionId: s.id, body: delConfirmBody(siblings <= 1, row.orphaned) });
+    },
+    [sessionsByRow],
+  );
+
+  const onConfirmDelete = useCallback(async () => {
+    if (!confirm) return;
+    try {
+      await deleteOjtSession(confirm.sessionId);
+      setConfirm(null);
+      await Promise.all([loadRows(), loadSummary()]);
+      toast.success('已刪除該筆教育訓練場次；此操作已寫入稽核。');
+    } catch (e) {
+      setConfirm(null);
+      toast.error(e instanceof ApiError ? `刪除失敗：${e.code}` : '刪除失敗');
+    }
+  }, [confirm, loadRows, loadSummary, toast]);
+
+  const openAdd = useCallback((row: OjtProgressRow) => {
+    setAddTarget({
+      documentId: row.documentId,
+      orgCode: row.orgCode,
+      documentNumber: row.documentNumber,
+      documentName: row.documentName,
+      orgName: row.orgName,
+    });
+    setAddDate('');
+    setAddFile(null);
+    setAddError(null);
+  }, []);
+
+  /**
+   * `AC-09` 之驗證順序：日期必填 → 不可未來日 → 檔案必選。
+   * 🔴 驗證由送出時執行、**不倚賴 `<input max>` 屬性**——後者在鍵盤輸入下不可達，API 直呼
+   * 更是完全繞得過去（前端非唯一防線，後端亦有同一組檢查）。
+   */
+  const onSubmitAdd = useCallback(async () => {
+    if (!addTarget) return;
+    if (!addDate) {
+      setAddError(ERR_DATE_REQUIRED);
+      return;
+    }
+    if (addDate > todayIsoDate()) {
+      setAddError(ERR_DATE_FUTURE);
+      return;
+    }
+    if (!addFile) {
+      setAddError(ERR_FILE_REQUIRED);
+      return;
+    }
+    try {
+      await addOjtSession(addTarget.documentId, addTarget.orgCode, {
+        trainingDate: addDate,
+        file: addFile,
+      });
+      const target = addTarget;
+      setAddTarget(null);
+      setAddError(null);
+      await Promise.all([loadRows(), loadSummary()]);
+      if (expanded.includes(rowKeyOf(target.documentId, target.orgCode))) {
+        await reloadRowSessions(target.documentId, target.orgCode).catch(() => undefined);
+      }
+      toast.success(
+        `已為「${target.orgName}」新增 1 筆教育訓練場次（${addDate}）；既有場次未被取代。已寫入稽核。`,
+      );
+    } catch (e) {
+      setAddError(e instanceof ApiError ? `登記失敗：${e.code}` : '登記失敗');
+    }
+  }, [addDate, addFile, addTarget, expanded, loadRows, loadSummary, reloadRowSessions, toast]);
+
+  const onSubmitAssign = useCallback(async () => {
+    if (!assign) return;
+    if (!assign.orgCode) {
+      setAssign({ ...assign, error: '請選擇使用單位。' });
+      return;
+    }
+    if (!assign.trainingDate) {
+      setAssign({ ...assign, error: ERR_DATE_REQUIRED });
+      return;
+    }
+    try {
+      await assignOjtPendingSession(assign.item.id, {
+        orgCode: assign.orgCode,
+        trainingDate: assign.trainingDate,
+      });
+      setAssign(null);
+      await Promise.all([loadRows(), loadSummary(), loadPending()]);
+      toast.success('已歸位：此筆舊資料已成為該「文件 × 使用單位」之正式場次。');
+    } catch (e) {
+      setAssign({ ...assign, error: e instanceof ApiError ? `歸位失敗：${e.code}` : '歸位失敗' });
+    }
+  }, [assign, loadPending, loadRows, loadSummary, toast]);
+
+  const groups = useMemo(() => groupRowsByOrg(rows), [rows]);
+  const filtered = Boolean(orgQuery || status);
+
+  // AC-07：一般使用者全頁 403（側選單亦不呈現本項）。
+  if (!canRead) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl px-6 py-16 text-center">
+        <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3">
+          <Icon name="lock" className="w-7 h-7 text-red-500" />
+        </div>
+        <h1 className="font-semibold text-slate-900">{BLOCKED_TITLE}</h1>
+        <p className="text-sm text-slate-500 mt-1">{BLOCKED_MSG}</p>
+        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        breadcrumb={[{ label: 'OJT 進度管理' }, { label: tab === 'dashboard' ? TAB_DASHBOARD_TEXT : TAB_SESSIONS_TEXT }]}
+        title="OJT 進度管理"
+      />
+
+      {/* AC-06：SysAdmin 唯讀橫幅（可查全部內容、任一寫入端點 403）。 */}
+      {!canWrite && (
+        <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2">
+          <Icon name="eye" className="w-4 h-4 shrink-0" />
+          <span>{RO_NOTICE_SYSADMIN}</span>
+        </div>
+      )}
+
+      <div className="bg-white border-b border-slate-200">
+        <div role="tablist" aria-label="OJT 進度管理分頁" className="flex text-sm">
+          <TabButton tabKey="dashboard" label={TAB_DASHBOARD_TEXT} icon="layout-dashboard" active={tab} onSelect={setTab} />
+          <TabButton tabKey="sessions" label={TAB_SESSIONS_TEXT} icon="list-tree" active={tab} onSelect={setTab} />
+        </div>
+      </div>
+
+      {/* TAB1 儀表板（三區）。兩個 panel 恆在 DOM，非當前者以 hidden 隱藏（role=tabpanel 契約）。 */}
+      <div
+        role="tabpanel"
+        tabIndex={0}
+        aria-labelledby="ojt-tabbtn-dashboard"
+        data-ojt-panel="dashboard"
+        className={tab === 'dashboard' ? 'space-y-5' : 'hidden'}
+      >
+        <CoverageSection summary={summary} />
+        <RollupSection summary={summary} />
+        <RecentSection summary={summary} />
+      </div>
+
+      {/* TAB2 以使用單位分組之資料清單。 */}
+      <div
+        role="tabpanel"
+        tabIndex={0}
+        aria-labelledby="ojt-tabbtn-sessions"
+        data-ojt-panel="sessions"
+        className={tab === 'sessions' ? 'space-y-4' : 'hidden'}
+      >
+        <div className="flex items-start gap-2 text-sm text-slate-500">
+          <Icon name="info" className="w-4 h-4 mt-0.5 text-slate-400 shrink-0" />
+          <p>
+            以使用單位為群組，列出該單位涉及之各份 ICSOP 文件之進度列。每列可累積多筆教育訓練場次（累加、非覆蓋）；同一文件之上下層單位各自為獨立一列、完成狀態互不影響。
+          </p>
+        </div>
+
+        {/* AC-13：篩選恰兩項（單位搜尋＋完成狀態）。完成狀態恰三選項——列層級恆為二態，
+            清單頁之「部分完成」在此會是永遠回 0 筆的死選項，刻意不放。 */}
+        <div data-ojt-filter-bar className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[220px]">
+            <Icon name="search" className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              data-ojt-filter="org"
+              type="search"
+              value={orgQuery}
+              onChange={(e) => setOrgQuery(e.target.value)}
+              placeholder="搜尋使用單位（名稱或代碼）…"
+              aria-label="搜尋使用單位"
+              className="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            />
+          </div>
+          <select
+            data-ojt-filter="status"
+            aria-label="完成狀態"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as '' | 'completed' | 'pending')}
+            className="px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"
+          >
+            <option value="">所有完成狀態</option>
+            <option value="completed">{BADGE_COMPLETED_TEXT}</option>
+            <option value="pending">{BADGE_PENDING_TEXT}</option>
+          </select>
+          {filtered && (
+            <button
+              onClick={() => {
+                setOrgQuery('');
+                setStatus('');
+              }}
+              className="px-3 py-2 rounded-md text-sm text-primary-600 hover:bg-primary-50"
+            >
+              清除
+            </button>
+          )}
+          <span data-ojt-row-count className="ml-auto text-sm text-slate-500">
+            {`共 ${rows.length} 列進度列 · ${rows.filter((r) => r.completed).length} 列${BADGE_COMPLETED_TEXT}`}
+          </span>
+        </div>
+
+        {/* AC-26 待歸位區：歸位完畢後**整區消失**（非空狀態）——遷移是一次性工作，
+            留一個永久的空框會讓人以為系統壞了或還有待辦。 */}
+        {pending.length > 0 && (
+          <PendingBlock items={pending} mayAssign={mayManage} onAssign={(item) => setAssign({ item, orgCode: '', trainingDate: '', error: null })} />
+        )}
+
+        {groups.map((g) => (
+          <section key={g.code} data-progress-group={g.code} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100">
+              <Icon name="building-2" className="w-4 h-4 text-slate-400 shrink-0" />
+              <span data-progress-group-name className="font-medium text-slate-800 truncate">{g.label}</span>
+              <span data-progress-group-code className="mono text-xs text-slate-400 shrink-0">{g.code}</span>
+              {g.inactive && (
+                <span data-org-inactive className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 shrink-0 whitespace-nowrap">
+                  {ORG_INACTIVE_TEXT}
+                </span>
+              )}
+            </div>
+            <div className="divide-y divide-slate-100">
+              {g.rows.map((r) => (
+                <ProgressRow
+                  key={rowKeyOf(r.documentId, r.orgCode)}
+                  row={r}
+                  expanded={expanded.includes(rowKeyOf(r.documentId, r.orgCode))}
+                  sessions={sessionsByRow[rowKeyOf(r.documentId, r.orgCode)]}
+                  mayAdd={mayAdd}
+                  mayDelete={mayManage}
+                  onToggle={() => void onToggleRow(r)}
+                  onAdd={() => openAdd(r)}
+                  onDownload={(s) => void onDownload(s)}
+                  onDelete={(s) => askDelete(r, s)}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+
+        {rows.length === 0 && (
+          <div data-ojt-state="empty" className="text-center py-14 bg-white border border-slate-200 rounded-xl">
+            <Icon name="inbox" className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+            <p className="text-slate-500 text-sm">{filtered ? EMPTY_ROWS_TEXT : EMPTY_ALL_TEXT}</p>
+            {!filtered && <p className="text-slate-400 text-xs mt-1">{EMPTY_ALL_HINT}</p>}
+          </div>
+        )}
+      </div>
+
+      {addTarget && (
+        <AddSessionModal
+          target={addTarget}
+          date={addDate}
+          file={addFile}
+          error={addError}
+          onDate={setAddDate}
+          onFile={setAddFile}
+          onClose={() => setAddTarget(null)}
+          onSubmit={() => void onSubmitAdd()}
+        />
+      )}
+
+      {assign && (
+        <AssignModal
+          state={assign}
+          onChange={setAssign}
+          onClose={() => setAssign(null)}
+          onSubmit={() => void onSubmitAssign()}
+        />
+      )}
+
+      {confirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div data-confirm-modal className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                <Icon name="alert-triangle" className="w-5 h-5 text-red-500" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-semibold text-slate-900">{DEL_CONFIRM_TITLE}</h3>
+                <p className="text-sm text-slate-500 mt-1">{confirm.body}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button onClick={() => setConfirm(null)} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">
+                取消
+              </button>
+              <button
+                data-confirm-ok
+                onClick={() => void onConfirmDelete()}
+                className="px-4 py-2 rounded-md bg-red-600 text-white text-sm hover:bg-red-700"
+              >
+                {DEL_CONFIRM_OK_TEXT}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TabButton({
+  tabKey,
+  label,
+  icon,
+  active,
+  onSelect,
+}: {
+  tabKey: TabKey;
+  label: string;
+  icon: string;
+  active: TabKey;
+  onSelect: (t: TabKey) => void;
+}): JSX.Element {
+  const on = active === tabKey;
+  return (
+    <button
+      id={`ojt-tabbtn-${tabKey}`}
+      role="tab"
+      aria-selected={on ? 'true' : 'false'}
+      aria-controls={`ojt-panel-${tabKey}`}
+      data-ojt-tab={tabKey}
+      onClick={() => onSelect(tabKey)}
+      className={`px-4 py-3 font-medium border-b-2 flex items-center gap-1.5 ${
+        on ? 'border-primary-600 text-primary-700' : 'border-transparent text-slate-500 hover:text-slate-700'
+      }`}
+    >
+      <Icon name={icon} className="w-4 h-4" />
+      {label}
+    </button>
+  );
+}
+
+/**
+ * TAB1 區一 · 文件-訓練覆蓋率（`AC-14`／`AC-17`）。
+ * 🔴 分母為零時呈現「尚無可統計之進度列」——`0/0` 在 JS 為 `NaN`，直接渲染會出現 `NaN%`；
+ * 退化為 `0%` 與「全部未完成」無從分辨，退化為 `100%` 更會謊報。三者皆須被排除。
+ */
+function CoverageSection({ summary }: { summary: OjtProgressSummary | null }): JSX.Element {
+  const numerator = summary?.coverage.numerator ?? 0;
+  const denominator = summary?.coverage.denominator ?? 0;
+  const pct = coveragePercent(numerator, denominator);
+  const docCoverage = summary?.docCoverage ?? [];
+  const kpis: { key: string; label: string; value: string; unit: string; icon: string }[] = [
+    { key: 'documents', label: '追蹤中文件', value: String(docCoverage.length), unit: '份', icon: 'file-text' },
+    { key: 'rows', label: '進度列（文件 × 使用單位）', value: String(denominator), unit: '列', icon: 'list-tree' },
+    { key: 'completed', label: BADGE_COMPLETED_TEXT, value: String(numerator), unit: '列', icon: BADGE_COMPLETED_ICON },
+    { key: 'pending', label: BADGE_PENDING_TEXT, value: String(denominator - numerator), unit: '列', icon: BADGE_PENDING_ICON },
+    { key: 'rate', label: '整體覆蓋率', value: pct === null ? NO_STATISTICS_TEXT : `${pct}%`, unit: '', icon: 'target' },
+  ];
+
+  return (
+    <section data-ojt-section="coverage" className="bg-white border border-slate-200 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Icon name="target" className="w-4 h-4 text-primary-600" />
+        <h2 className="font-semibold text-slate-900">{SEC_COVERAGE_TITLE}</h2>
+      </div>
+      <p className="text-xs text-slate-400 mb-4">
+        最小追蹤單位＝一份 ICSOP 文件 × 一個使用單位；該列有至少一筆教育訓練場次即為「已完成」。
+      </p>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {kpis.map((c) => (
+          <div key={c.key} data-coverage-kpi={c.key} className="rounded-xl border border-slate-200 px-4 py-3">
+            <div className="flex items-center gap-1.5 text-xs text-slate-500">
+              <Icon name={c.icon} className="w-3.5 h-3.5 text-slate-400" />
+              {c.label}
+            </div>
+            <div className="mt-1 flex items-baseline gap-1">
+              <span data-coverage-kpi-value className="text-2xl font-semibold text-slate-900 mono">{c.value}</span>
+              {c.unit && <span className="text-xs text-slate-400">{c.unit}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-slate-500 flex items-start gap-1.5">
+        <Icon name="alert-triangle" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-500" />
+        <span data-coverage-exclusion-note>
+          {exclusionNote(
+            numerator,
+            denominator,
+            summary?.coverage.excludedInactive ?? 0,
+            summary?.coverage.excludedOrphaned ?? 0,
+          )}
+        </span>
+      </p>
+
+      <div className="mt-5 border-t border-slate-100 pt-4">
+        <div className="text-xs font-medium text-slate-500 mb-2">依文件逐筆</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
+            <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+              <tr>
+                <th className="text-left font-medium px-4 py-2.5">程序書編號</th>
+                <th className="text-left font-medium px-4 py-2.5">程序書書名</th>
+                <th className="text-left font-medium px-4 py-2.5">狀態</th>
+                <th className="text-left font-medium px-4 py-2.5">已完成 / 使用單位</th>
+                <th className="text-left font-medium px-4 py-2.5">覆蓋率</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {docCoverage.map((c) => {
+                const view = ojtStatusView(c.state);
+                const rowPct = coveragePercent(c.completedUnits, c.totalUnits) ?? 0;
+                return (
+                  <tr key={c.documentNumber} data-doc-coverage-row={c.documentNumber} data-doc-ojt-state={c.state} className="hover:bg-slate-50">
+                    <td className="px-4 py-2.5 mono text-xs text-slate-600 whitespace-nowrap">{c.documentNumber}</td>
+                    <td className="px-4 py-2.5 text-slate-800">{c.documentName}</td>
+                    <td className="px-4 py-2.5">
+                      <span data-doc-ojt-state-chip className={`inline-flex items-center gap-1 text-xs ${view.className}`} title={view.text}>
+                        <Icon name={view.icon} className="w-3.5 h-3.5" />
+                        {view.text}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span data-doc-coverage-ratio className="mono text-slate-700">{`${c.completedUnits} / ${c.totalUnits}`}</span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span data-doc-coverage-pct className="mono text-xs text-slate-600">{`${rowPct}%`}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {docCoverage.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-400">{EMPTY_ALL_TEXT}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * TAB1 區二 · 部門完成率（`AC-15`）。
+ * 🔒 **列數不因彙總而改變**——彙總是統計階段的行為，不得回頭把 `AC-01` 之列展開；
+ * 頁尾之不變式敘述即為該性質之畫面載體。
+ * 🔴 本部層／公司層之單位（無部層祖先）**自成一組、不排除**（`OQ-E11-20` ②）。
+ */
+function RollupSection({ summary }: { summary: OjtProgressSummary | null }): JSX.Element {
+  const list = summary?.deptRollup ?? [];
+  const summed = list.reduce((a, g) => a + g.totalUnits, 0);
+  return (
+    <section data-ojt-section="rollup" className="bg-white border border-slate-200 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Icon name="building-2" className="w-4 h-4 text-primary-600" />
+        <h2 className="font-semibold text-slate-900">{SEC_ROLLUP_TITLE}</h2>
+      </div>
+      <p className="text-xs text-slate-400 mb-4">
+        將各使用單位之進度列彙總至其所屬部層呈現；彙總僅發生於統計階段——清單分頁之進度列仍依使用部門原樣、不展開子樹。
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[680px]">
+          <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th className="text-left font-medium px-4 py-2.5">部</th>
+              <th className="text-left font-medium px-4 py-2.5">代碼</th>
+              <th className="text-left font-medium px-4 py-2.5">已完成 / 進度列</th>
+              <th className="text-left font-medium px-4 py-2.5">完成率</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {list.map((g) => (
+              <tr key={g.deptOrgCode} data-rollup-row={g.deptOrgCode} className="hover:bg-slate-50">
+                <td className="px-4 py-2.5 text-slate-800">{g.deptName}</td>
+                <td className="px-4 py-2.5 mono text-xs text-slate-500">{g.deptOrgCode}</td>
+                <td className="px-4 py-2.5">
+                  <span data-rollup-ratio className="mono text-slate-700">{`${g.completedUnits} / ${g.totalUnits}`}</span>
+                </td>
+                <td className="px-4 py-2.5">
+                  {/*
+                    🔴 完成率**自 `completedUnits`／`totalUnits` 推導**，不讀 `g.rate`——後端本支
+                    不回該欄，直接渲染會印出 `undefined%`。與區一之覆蓋率共用同一個
+                    `coveragePercent()`，全頁只有一個百分比推導點，兩處不可能分歧。
+                  */}
+                  <span data-rollup-rate className="mono text-xs text-slate-600">
+                    {`${coveragePercent(g.completedUnits, g.totalUnits) ?? 0}%`}
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {list.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-400">{EMPTY_ALL_TEXT}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-xs text-slate-500 flex items-start gap-1.5">
+        <Icon name="shield-check" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-500" />
+        <span data-rollup-invariant>{rollupInvariantText(list.length, summed)}</span>
+      </p>
+    </section>
+  );
+}
+
+/**
+ * TAB1 區三 · 最近完成 OJT 的單位（`AC-16`，近 30 天）。
+ *
+ * 🔴 **PII 硬性防線**：本區只渲染「文件編號／程序書書名」「使用單位」「最近場次日期」三者，
+ * **不得**出現受訓人員或上傳者之姓名、員工編號或其他個人識別資訊。
+ * ⚠ 上傳者姓名於 TAB2 場次明細中得以呈現——那是逐筆操作紀錄而非聚合看板，兩者刻意不同，
+ * 不得互相對齊。
+ */
+function RecentSection({ summary }: { summary: OjtProgressSummary | null }): JSX.Element {
+  const list = summary?.recentSessions ?? [];
+  return (
+    <section data-ojt-section="recent" className="bg-white border border-slate-200 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Icon name="clock" className="w-4 h-4 text-primary-600" />
+        <h2 className="font-semibold text-slate-900">{SEC_RECENT_TITLE}</h2>
+      </div>
+      <p className="text-xs text-slate-400 mb-4 flex items-start gap-1.5">
+        <Icon name="shield" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+        <span data-pii-note>
+          {PII_NOTE_SEGMENTS.map((seg) =>
+            seg.strong ? (
+              <strong key={seg.text} className="text-slate-500">{seg.text}</strong>
+            ) : (
+              <span key={seg.text}>{seg.text}</span>
+            ),
+          )}
+        </span>
+      </p>
+      <div className="space-y-2">
+        {list.length === 0 ? (
+          <div data-recent-empty className="flex items-center gap-2 rounded-lg border border-dashed border-slate-200 px-3 py-6 justify-center text-sm text-slate-400">
+            {EMPTY_RECENT_TEXT}
+          </div>
+        ) : (
+          list.map((x) => (
+            <div
+              key={`${x.documentId}__${x.orgCode}__${x.trainingDate}`}
+              data-recent-row={`${x.documentId}__${x.orgCode}`}
+              className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span data-recent-doc className="mono text-xs text-slate-500 shrink-0">{x.documentNumber}</span>
+                  <span className="text-sm text-slate-800 truncate">{x.documentName}</span>
+                </div>
+                <div data-recent-org className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                  <Icon name="building-2" className="w-3 h-3 text-slate-400" />
+                  {x.orgName}
+                </div>
+              </div>
+              <div data-recent-date className="mono text-sm text-slate-700 shrink-0">{x.trainingDate}</div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * TAB2 之單一進度列（`AC-11`／`AC-12`／`AC-19`／`AC-25`）。
+ *
+ * 🔴 寫入型控制項（新增場次／刪除場次）以**不進 DOM** 表達無權，非 CSS 隱藏。
+ * 🔴 孤兒列（單位已移出使用部門）**無新增入口**——即使角色可寫；該列已不在追蹤範圍內，
+ * 讓它還能長出新場次等於承認一個不存在的進度列。
+ * 🚫 `AC-20`：本元件永久不得出現任何 `[data-session-edit]`——場次不可編輯，更正之唯一路徑
+ * 是由 ICSOPAdmin 刪除後重新登記。
+ */
+function ProgressRow({
+  row,
+  expanded,
+  sessions,
+  mayAdd,
+  mayDelete,
+  onToggle,
+  onAdd,
+  onDownload,
+  onDelete,
+}: {
+  row: OjtProgressRow;
+  expanded: boolean;
+  sessions: OjtSessionView[] | undefined;
+  mayAdd: boolean;
+  mayDelete: boolean;
+  onToggle: () => void;
+  onAdd: () => void;
+  onDownload: (s: OjtSessionView) => void;
+  onDelete: (s: OjtSessionView) => void;
+}): JSX.Element {
+  const key = rowKeyOf(row.documentId, row.orgCode);
+  const badgeText = row.completed ? BADGE_COMPLETED_TEXT : BADGE_PENDING_TEXT;
+  return (
+    <div data-progress-row={key} data-progress-doc={row.documentId} data-progress-org={row.orgCode}>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <button
+          data-progress-expand={key}
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-label={`${expanded ? '收合' : '展開'}場次明細（${row.documentNumber} · ${row.orgName}）`}
+          className="w-7 h-7 rounded hover:bg-slate-100 text-slate-500 flex items-center justify-center shrink-0"
+        >
+          <Icon name={expanded ? 'chevron-up' : 'chevron-down'} className="w-4 h-4" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <span data-progress-doc-number className="mono text-xs text-slate-500 shrink-0">{row.documentNumber}</span>
+            <span data-progress-doc-name className="text-sm text-slate-800 truncate">{row.documentName}</span>
+          </div>
+        </div>
+        <span
+          data-completion-badge={row.completed ? 'completed' : 'pending'}
+          aria-label={badgeText}
+          title={badgeText}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${
+            row.completed ? 'text-emerald-700 bg-emerald-50' : 'bg-slate-100 text-slate-500'
+          }`}
+        >
+          <Icon name={row.completed ? BADGE_COMPLETED_ICON : BADGE_PENDING_ICON} className="w-3 h-3" />
+          {badgeText}
+        </span>
+        {row.orphaned && (
+          <span data-row-orphaned className="inline-flex items-center gap-1 text-xs text-slate-400 shrink-0 whitespace-nowrap">
+            {ORPHAN_NOTE_TEXT}
+          </span>
+        )}
+        <span data-session-count={row.sessionCount} className="inline-flex items-center gap-1 text-xs text-slate-500 shrink-0">
+          <Icon name="calendar-check" className="w-3.5 h-3.5 text-slate-400" />
+          {`${row.sessionCount} 場次`}
+        </span>
+        {mayAdd && !row.orphaned && (
+          <button
+            data-add-session={key}
+            onClick={onAdd}
+            aria-label={addSessionAria(row.documentNumber, row.orgName)}
+            title={addSessionAria(row.documentNumber, row.orgName)}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 bg-white text-primary-700 text-xs hover:bg-primary-50 shrink-0"
+          >
+            <Icon name="plus" className="w-3.5 h-3.5" />
+            {ADD_SESSION_TEXT}
+          </button>
+        )}
+      </div>
+
+      {expanded && (
+        <div data-session-detail={key} className="bg-slate-50/70 px-4 py-3 border-t border-slate-100">
+          {(sessions ?? []).length === 0 ? (
+            <div data-session-empty className="flex items-center gap-2 justify-center text-sm text-slate-400 py-3">
+              {EMPTY_SESSIONS_TEXT}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {(sessions ?? []).map((s) => (
+                <div key={s.id} data-session-row={s.id} className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2">
+                  <span data-session-date className="mono text-xs text-slate-700 shrink-0">{s.trainingDate}</span>
+                  <span data-session-uploader className="text-xs text-slate-500 shrink-0">{s.uploadedByName ?? '—'}</span>
+                  <span data-session-file className="text-sm text-slate-700 truncate flex-1">{s.fileName}</span>
+                  <button
+                    data-session-download={s.id}
+                    onClick={() => onDownload(s)}
+                    aria-label={downloadSessionAria(s.trainingDate, s.fileName)}
+                    title="下載簽到表"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"
+                  >
+                    <Icon name="download" className="w-3.5 h-3.5" />
+                    下載
+                  </button>
+                  {mayDelete && (
+                    <button
+                      data-session-delete={s.id}
+                      onClick={() => onDelete(s)}
+                      aria-label={deleteSessionAria(s.trainingDate, s.fileName)}
+                      title={deleteSessionAria(s.trainingDate, s.fileName)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-red-200 text-red-600 text-xs hover:bg-red-50 shrink-0"
+                    >
+                      <Icon name="trash-2" className="w-3.5 h-3.5" />
+                      刪除
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * `AC-26` 待歸位工作台。
+ * 🔴 本區**不參與篩選、也不計入列數**：它不是進度列（沒有單位、沒有完成狀態），混進去會讓
+ * 「共 N 列」與畫面上看得到的東西對不起來。
+ * 🔴 **全部後台角色皆可看見本區**（含 SysAdmin），但**指派鈕僅 ICSOPAdmin 進 DOM**。
+ */
+function PendingBlock({
+  items,
+  mayAssign,
+  onAssign,
+}: {
+  items: OjtPendingItem[];
+  mayAssign: boolean;
+  onAssign: (item: OjtPendingItem) => void;
+}): JSX.Element {
+  return (
+    <div data-ojt-pending-block className="bg-amber-50/60 border border-amber-200 rounded-xl overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-amber-200">
+        <Icon name="inbox" className="w-4 h-4 text-amber-700 shrink-0" />
+        <span data-pending-title className="font-medium text-amber-900">{PENDING_TITLE_TEXT}</span>
+        <span data-pending-count={items.length} className="ml-auto text-xs text-amber-800 shrink-0">
+          <span className="mono">{items.length}</span> 筆
+        </span>
+      </div>
+      <div className="px-4 py-3 bg-white/70 border-b border-amber-100">
+        <p data-pending-note className="text-xs text-slate-500">{PENDING_NOTE_TEXT}</p>
+        <p data-pending-scope-note className="mt-1 text-[11px] text-slate-400">{PENDING_SCOPE_TEXT}</p>
+      </div>
+      <div className="divide-y divide-amber-100 bg-white">
+        {items.map((l) => (
+          <div key={l.id} data-pending-row={l.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <span data-pending-doc className="mono text-xs text-slate-500 shrink-0">
+                  {l.documentNumber ?? l.documentId}
+                </span>
+                <span className="text-sm text-slate-800 truncate">{l.documentName ?? ''}</span>
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1 min-w-0">
+                <Icon name="paperclip" className="w-3 h-3 text-slate-400 shrink-0" />
+                <span data-pending-file className="truncate">{l.fileName}</span>
+              </div>
+            </div>
+            {mayAssign && (
+              <button
+                data-assign-org={l.id}
+                onClick={() => onAssign(l)}
+                aria-label={`指派使用單位（${l.documentNumber ?? l.documentId} · ${l.fileName}）`}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-amber-300 bg-white text-amber-700 text-xs hover:bg-amber-50 shrink-0"
+              >
+                <Icon name="file-input" className="w-3.5 h-3.5" />
+                {ASSIGN_ACTION_TEXT}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 新增教育訓練場次 modal（`AC-02`／`AC-09`／`AC-10`）。 */
+function AddSessionModal({
+  target,
+  date,
+  file,
+  error,
+  onDate,
+  onFile,
+  onClose,
+  onSubmit,
+}: {
+  target: AddTarget;
+  date: string;
+  file: File | null;
+  error: string | null;
+  onDate: (v: string) => void;
+  onFile: (f: File | null) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}): JSX.Element {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div data-add-session-modal className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-semibold text-slate-900">新增教育訓練場次</h3>
+          <button onClick={onClose} aria-label="關閉" className="text-slate-400 hover:text-slate-600">
+            <Icon name="x" className="w-5 h-5" />
+          </button>
+        </div>
+        <p data-add-session-target className="text-xs text-slate-500 mb-4">
+          {`${target.documentNumber} · ${target.documentName} · ${target.orgName}（${target.orgCode}）`}
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="ojt-add-date" className="block text-sm font-medium text-slate-700 mb-1">
+              <span>{FIELD_TRAINING_DATE_LABEL}</span> <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="ojt-add-date"
+              data-session-date-input
+              type="date"
+              value={date}
+              onChange={(e) => onDate(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            />
+            <p className="mt-1 text-[10px] text-slate-400">
+              場次記錄的是已發生之教育訓練事實，故不接受未來日期。同一單位同一日可登記多場次（如上下午兩梯），系統不做同日去重。
+            </p>
+          </div>
+          <div>
+            <div className="block text-sm font-medium text-slate-700 mb-1">
+              <span>{FIELD_SIGNIN_FILE_LABEL}</span> <span className="text-red-500">*</span>
+            </div>
+            <input
+              data-session-file-input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              aria-label={FIELD_SIGNIN_FILE_LABEL}
+              className="hidden"
+              onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+            />
+            <button
+              type="button"
+              onClick={(e) => (e.currentTarget.previousElementSibling as HTMLInputElement | null)?.click()}
+              className="w-full border border-dashed border-slate-300 rounded-lg px-4 py-5 flex flex-col items-center gap-1 text-slate-500 hover:border-primary-400"
+            >
+              <Icon name="upload-cloud" className="w-6 h-6 text-slate-400" />
+              <span className="text-sm">{file ? `已選擇：${file.name}` : '點此選擇簽到表檔案'}</span>
+              <span className="text-xs text-slate-400">支援格式：pdf / jpg / jpeg / png；單檔上限 50 MB</span>
+            </button>
+          </div>
+          {error && (
+            <p data-session-error className="text-xs text-red-600 flex items-start gap-1">
+              <Icon name="alert-circle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </p>
+          )}
+          <div className="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
+            <Icon name="layers" className="w-3.5 h-3.5 mt-0.5 text-slate-400 shrink-0" />
+            <span>
+              本場次累加於該列既有場次之下，不覆蓋、不取代既有任何一筆；既有簽到檔仍可下載。驗證失敗時不建立任何場次紀錄、不寫入任何檔案。
+            </span>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-6">
+          <button onClick={onClose} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">
+            取消
+          </button>
+          <button data-session-submit onClick={onSubmit} className="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">
+            送出
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * `AC-26` 指派使用單位 modal（僅 ICSOPAdmin；單向不可逆）。
+ * 🔴 **刻意不以「原上傳時間」自動帶入訓練日期**：舊模型只記錄「檔案何時被上傳」，從未記錄
+ * 「訓練何時舉辦」。把上傳日當訓練日填進去，等於把一個系統從來不知道的事實寫成紀錄。
+ */
+function AssignModal({
+  state,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  state: AssignState;
+  onChange: (s: AssignState) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}): JSX.Element {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div data-assign-modal className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-semibold text-slate-900">指派使用單位</h3>
+          <button onClick={onClose} aria-label="關閉" className="text-slate-400 hover:text-slate-600">
+            <Icon name="x" className="w-5 h-5" />
+          </button>
+        </div>
+        <p data-assign-target className="text-xs text-slate-500 mb-4">
+          {`${state.item.documentNumber ?? state.item.documentId} · ${state.item.fileName}`}
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="ojt-assign-org" className="block text-sm font-medium text-slate-700 mb-1">
+              使用單位 <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="ojt-assign-org"
+              data-assign-org-input
+              value={state.orgCode}
+              onChange={(e) => onChange({ ...state, orgCode: e.target.value })}
+              placeholder="使用部門代碼（如 JAC00）"
+              className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
+            />
+            <p className="mt-1 text-[10px] text-slate-400">
+              只接受本文件之「文件使用部門」；指派到非使用部門之單位會被後端擋下（OJT_ORG_NOT_USING_DEPT）。
+            </p>
+          </div>
+          <div>
+            <label htmlFor="ojt-assign-date" className="block text-sm font-medium text-slate-700 mb-1">
+              訓練日期 <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="ojt-assign-date"
+              data-assign-date-input
+              type="date"
+              value={state.trainingDate}
+              onChange={(e) => onChange({ ...state, trainingDate: e.target.value })}
+              className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            />
+            <p className="mt-1 text-[10px] text-slate-400">
+              舊資料未記錄訓練日期（舊模型只存檔案上傳時間），故須由您補填；原上傳時間僅供參考，不會自動帶入。
+            </p>
+          </div>
+          {state.error && (
+            <p data-assign-error className="text-xs text-red-600 flex items-start gap-1">
+              <Icon name="alert-circle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              <span>{state.error}</span>
+            </p>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 mt-6">
+          <button onClick={onClose} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">
+            取消
+          </button>
+          <button data-assign-submit onClick={onSubmit} className="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">
+            確認歸位
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

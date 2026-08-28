@@ -18,6 +18,9 @@ import {
   AlertOctagon, BadgeCheck, SquarePen,
   EyeOff, SlidersHorizontal, FileX, ListFilter,
   FileClock,
+  // F042 OJT 進度管理（prototypes/25 之 data-lucide 值；`file-minus-2` 為清單頁三態新增之鍵）。
+  GraduationCap, FileMinus2, ListTree, Target, CircleCheckBig, CircleDashed,
+  CalendarCheck, FileInput,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -72,7 +75,17 @@ const REGISTRY: Record<string, LucideIcon> = {
   'git-branch': GitBranch,
   'circle-dot': CircleDot,
   'file-check-2': FileCheck2,
+  // F042 `AC-J13`：清單頁 OJT 欄三態之中間態「部分完成」（本 delta 新增之鍵）。
+  'file-minus-2': FileMinus2,
   'file-x-2': FileX2,
+  // F042 OJT 進度管理（側選單項＋prototype 25 之各區圖示）。
+  'graduation-cap': GraduationCap,
+  'list-tree': ListTree,
+  target: Target,
+  'circle-check-big': CircleCheckBig,
+  'circle-dashed': CircleDashed,
+  'calendar-check': CalendarCheck,
+  'file-input': FileInput,
   'git-commit-vertical': GitCommitVertical,
   'plus-circle': PlusCircle,
   filter: Filter,

@@ -20,6 +20,7 @@ import { PermissionMatrixPage } from './pages/PermissionMatrixPage';
 import { AccessHistoryPage } from './pages/AccessHistoryPage';
 import { ChangeHistoryPage } from './pages/ChangeHistoryPage';
 import { DocIndexPage } from './pages/DocIndexPage';
+import { OjtProgressPage } from './pages/OjtProgressPage';
 import { UsageFormManagementPage } from './pages/UsageFormManagementPage';
 import { UsageFormCreatePage } from './pages/UsageFormCreatePage';
 import { UsageFormEditPage } from './pages/UsageFormEditPage';
@@ -118,6 +119,8 @@ export function AppRoutes(): JSX.Element {
           <Route path="access-history" element={<AccessHistoryPage />} />
           <Route path="change-history" element={<ChangeHistoryPage />} />
           <Route path="doc-index" element={<DocIndexPage />} />
+          {/* F042 OJT 進度管理（E11）：獨立側選單項，TAB1 儀表板＋TAB2 資料清單。 */}
+          <Route path="ojt-progress" element={<OjtProgressPage />} />
           <Route path="settings" element={<PermissionMatrixPage />} />
           {/* 後續功能增量將以實頁取代下列佔位 */}
           <Route path="*" element={<ModulePlaceholder />} />

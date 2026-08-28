@@ -18,12 +18,20 @@ import { FunctionKey, FUNCTION_MATRIX } from './function-matrix';
  */
 const ALL_ROLES = ['SysAdmin', 'ICSOPAdmin', 'Supervisor', 'DeptContact', 'User'] as const;
 
+/**
+ * 🔴 F042 仲裁修正（test-generator 仲裁 2026-08-28，frontend ring 異議二）：`TS-D1-010` 之
+ * 規模守衛（`toHaveLength(13)` ×2）與 F025 `AC-J16`／F042 `AC-27`（矩陣新增第 14 列
+ * `OJT_PROGRESS_MANAGEMENT`）互斥——本檔為「新增功能鍵不得污染 MENU／連帶未被本輪 ring
+ * 清單觸碰」之連坐盲區（`git log` 確認本檔未被本輪任何 F042 commit 改過）。13→14（兩處），
+ * 標題同步更正；本案之真正標的（「首頁不得進入矩陣」——`not.toContain('首頁')`、鍵集合與
+ * `FUNCTION_MATRIX` 逐字一致）之鑑別力一格未減。
+ */
 describe('F002 AC-D5 — 「首頁」不得進入 F025 功能矩陣', () => {
-  it('TS-D1-010 FUNCTION_MATRIX 之功能鍵集合仍為 13 個，且不含「首頁」', () => {
+  it('TS-D1-010 FUNCTION_MATRIX 之功能鍵集合仍為 14 個，且不含「首頁」', () => {
     const keys = Object.values(FunctionKey);
-    expect(keys).toHaveLength(13);
+    expect(keys).toHaveLength(14);
     expect(keys).not.toContain('首頁');
-    expect(Object.keys(FUNCTION_MATRIX)).toHaveLength(13);
+    expect(Object.keys(FUNCTION_MATRIX)).toHaveLength(14);
     expect(Object.keys(FUNCTION_MATRIX).sort()).toEqual([...keys].sort());
   });
 

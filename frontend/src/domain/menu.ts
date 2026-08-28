@@ -1,7 +1,9 @@
 import {
+  FUNCTION_MATRIX,
   FunctionKey,
   canPerform,
   type FunctionKeyValue,
+  type RoleCode,
 } from './function-matrix';
 
 /**
@@ -25,6 +27,7 @@ export const MENU: readonly MenuItem[] = [
   { id: 'usageform', label: '使用表單管理', icon: 'files', functionKey: FunctionKey.USAGE_FORM_MANAGEMENT, route: '/admin/usage-forms' },
   { id: 'appendix', label: '附錄管理', icon: 'paperclip', functionKey: FunctionKey.APPENDIX_MANAGEMENT, route: '/admin/appendices' },
   { id: 'docindex', label: '文件索引管理', icon: 'database', functionKey: FunctionKey.DOCUMENT_INDEX_MANAGEMENT, route: '/admin/doc-index' },
+  { id: 'ojtprogress', label: 'OJT 進度管理', icon: 'graduation-cap', functionKey: FunctionKey.OJT_PROGRESS_MANAGEMENT, route: '/admin/ojt-progress' },
   { id: 'audit', label: '文件調閱歷程', icon: 'history', functionKey: FunctionKey.DOCUMENT_ACCESS_HISTORY, route: '/admin/access-history' },
   { id: 'changehistory', label: '文件變更歷程', icon: 'git-compare', functionKey: FunctionKey.DOCUMENT_CHANGE_HISTORY, route: '/admin/change-history' },
   { id: 'orgsync', label: '組織人員異動管理', icon: 'refresh-cw', functionKey: FunctionKey.ORG_SYNC_MANAGEMENT, route: '/admin/org-sync' },
@@ -36,11 +39,19 @@ export function visibleMenu(roleCode: string | undefined): MenuItem[] {
   return MENU.filter((m) => canPerform(roleCode, m.functionKey, 'read'));
 }
 
-/** 側欄/卡片存取徽章：可寫→'CRUD'、僅讀→'唯讀'、無權→null。 */
+/**
+ * 側欄/卡片存取徽章：受限可寫→'受限CRUD'、可寫→'CRUD'、僅讀→'唯讀'、無權→null。
+ *
+ * 🔴 F042 AC-28⑮：`RESTRICTED_CRUD` 於 `canPerform(...,'write')` 恆為 true，若不先行判別
+ * 會被收斂回 'CRUD'；徽章須逐字呈現 '受限CRUD'（比照 prototype 18「角色指派」列之呈現）。
+ */
 export function accessLabelFor(
   roleCode: string | undefined,
   functionKey: string,
-): 'CRUD' | '唯讀' | null {
+): 'CRUD' | '受限CRUD' | '唯讀' | null {
+  if (FUNCTION_MATRIX[functionKey]?.[roleCode as RoleCode] === 'RESTRICTED_CRUD') {
+    return '受限CRUD';
+  }
   if (canPerform(roleCode, functionKey, 'write')) return 'CRUD';
   if (canPerform(roleCode, functionKey, 'read')) return '唯讀';
   return null;

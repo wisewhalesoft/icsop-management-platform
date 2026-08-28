@@ -213,6 +213,12 @@ export interface NodeDrawerData {
 /** ICSOP 文件（E04）。狀態為儲存值（active/inactive/void）；衍生已公告/進度中由前端計算。 */
 export type DocumentStatus = 'active' | 'inactive' | 'void';
 
+/**
+ * F042 `AC-04` 文件層 OJT 三值衍生狀態（鏡射後端 `OjtCompletionStatus`）。
+ * 逐字顯示文案與 icon 鍵之權威＝`prototypes/13-document-list.html`（見 `ojt-status-view.ts`）。
+ */
+export type OjtDocumentStatus = 'all' | 'partial' | 'none';
+
 export interface DocumentListItem {
   id: string;
   status: DocumentStatus;
@@ -241,8 +247,19 @@ export interface DocumentListItem {
   secondaryChiefNames?: string[];
   /** F017 `AC-D7`（2026-08-16 delta）：次要當責室長之**員編**（篩選比對鍵；顯示用的是 Names）。 */
   secondaryChiefIds?: string[];
-  /** F017 `AC-D5`（2026-08-16 delta）：是否有 OJT 簽到表（後端列富化）。缺鍵＝無。 */
+  /**
+   * @deprecated 🔴 F042 `AC-J12`（2026-08-28）：語意已由 `ojtStatus` 承接，後端**永不賦值**。
+   * 保留為選填欄位純為型別相容（既有測試之物件字面量仍寫有本鍵，移除會觸發 TS2353 多餘屬性檢查）。
+   * 📝 原註解逐字保留供追溯：F017 `AC-D5`（2026-08-16 delta）：是否有 OJT 簽到表（後端列富化）。缺鍵＝無。
+   */
   hasOjt?: boolean;
+  /**
+   * 🔴 F042 `AC-04`／`AC-J12`（`OQ-E11-06`→B）：文件層 OJT 三值衍生狀態，取代原布林 `hasOjt`。
+   * `all`＝全部使用單位皆完成｜`partial`＝1..N-1 個完成｜`none`＝0 個完成**或使用單位集合為空**。
+   * 🔴 改名非命名美學：`has` 前綴在三值字串下會使 `if (item.hasOjt)` 對 `'partial'` 與 `'all'`
+   * 同為 truthy，兩種狀態就此靜默合流。缺鍵（undefined）視同 `none`。
+   */
+  ojtStatus?: OjtDocumentStatus;
   edition: string | null;
   announcedDate: string | null;
   contentSummary: string | null;
@@ -375,7 +392,13 @@ export interface DocumentLinkView {
 }
 
 /** F016 單份附件類型（覆蓋式，各文件各 1 份）。 */
-export type SingleAttachmentType = 'ICSOP_PDF' | 'OJT_SIGNIN';
+/**
+ * 🔴 F042 `AC-J1`（2026-08-28）：`'OJT_SIGNIN'` 已自 `DOCUMENT_ATTACHMENT.type` **完全移除**
+ * （`OQ-E11-01`→C：既有列 1:1 遷移為 `OJT_SESSION` 之待歸位場次）——OJT 自此不是一份「附件」，
+ * 而是各使用單位登記之教育訓練場次彙總而得之衍生值。後端型別已同步收斂。
+ * 📝 原型別逐字保留供追溯：OLD> `export type SingleAttachmentType = 'ICSOP_PDF' | 'OJT_SIGNIN';`
+ */
+export type SingleAttachmentType = 'ICSOP_PDF';
 
 /** F016 附件記錄（上傳端點回傳；鏡射後端 DocumentAttachmentRecord）。 */
 export interface DocumentAttachmentRecord {
@@ -411,7 +434,12 @@ export interface UsageFormRecord {
  * （↔ `targetType='DOCUMENT_ATTACHMENT'`）——使 OJT 上傳事件既可**自「文件」類排除**、
  * 亦可**單獨篩出**。既有三者之字面與相對順序逐字不變。
  */
-export type AuditKind = '文件' | '循環' | '變更' | '上傳';
+/**
+ * 🔴 F042 `AC-J23`（`OQ-E11-17` 覆核核可）：類型值由四種增為**五種**，第五值逐字為 `OJT 場次`。
+ * 🔒 刻意**不**沿用既有之 `上傳`——場次事件含**刪除**，把刪除顯示成「上傳」是說謊。
+ * 📝 原型別逐字保留供追溯：OLD> `export type AuditKind = '文件' | '循環' | '變更' | '上傳';`
+ */
+export type AuditKind = '文件' | '循環' | '變更' | '上傳' | 'OJT 場次';
 
 /**
  * 稽核調閱列（GET /admin/access-history）。鏡射後端 audit.types AuditRow；
@@ -623,6 +651,16 @@ export interface PublicDocumentDetail {
   attachments: PublicDetailAttachment[];
   usageForms: PublicDetailUsageForm[];
   links: PublicDetailLink[];
+  /**
+   * 🔴 F042 `AC-24`（`OQ-E11-14`→A）：前台文件詳情頁唯讀顯示已完成 OJT 之**使用單位名稱**清單，
+   * 與後台 `AC-21` 之判定同源（單位／日期層級，**不揭個人**）。
+   * 🔴 前台**不提供**任何 OJT 場次檔之下載或檢視入口——簽到表載有個別受訓人員之簽名，與
+   * `AC-16` 之 PII 防線同源：揭露「哪些單位完成了」是管理資訊，揭露「誰簽了名」不是。
+   * additive 選填以免打爆既有 fixture（缺鍵＝尚無任何單位完成）。
+   */
+  ojtCompletedUnits?: string[];
+  /** `AC-24` 之分母：該文件之使用單位總數（缺鍵→0）。 */
+  ojtUsingUnitCount?: number;
 }
 
 /** 前台清單篩選（皆選填）。 */
@@ -983,4 +1021,110 @@ export interface DashboardActivityItem {
   text: string;
   /** ISO 8601（UTC）。 */
   occurredAt: string;
+}
+
+// ===== E11 F042 OJT 進度管理 =====
+
+/** TAB2 之**恰兩項**篩選（`AC-13`）。`completionStatus` 省略＝所有完成狀態，不施加限制。 */
+export interface OjtRowFilters {
+  orgQuery?: string;
+  /**
+   * 🔴 恰二態（`AC-03`：列層級恆為二態），明文**不含** `'partial'`——列層級沒有那個狀態，
+   * 放進來會是一個永遠選不出任何結果的死選項。與清單頁之四值（文件層）刻意不同，不得對齊。
+   */
+  completionStatus?: '' | 'completed' | 'pending';
+}
+
+/** TAB2 之單一進度列（最小追蹤單位＝`documentId × orgCode`；`AC-01` 不展開子樹）。 */
+export interface OjtProgressRow {
+  documentId: string;
+  documentNumber: string;
+  documentName: string;
+  orgCode: string;
+  orgName: string;
+  sessionCount: number;
+  /** `AC-03`：場次數 ≥ 1 即完成（不依訓練日期是否已過、不依檔案是否可下載）。 */
+  completed: boolean;
+  /** 該單位已被組織同步標記為裁撤（`AC-17`）。⚠ 僅供呈現——仍呈現、仍可新增場次。 */
+  inactive: boolean;
+  /** 該列 `orgCode` 已不在文件當下之使用部門集合內（`AC-25`：不計統計、不可新增場次）。 */
+  orphaned: boolean;
+}
+
+/** 單一場次明細（`AC-12`）。⚠ 上傳者姓名於此得以呈現，但 TAB1 區三（聚合看板）明文不得。 */
+export interface OjtSessionView {
+  id: string;
+  /** `YYYY-MM-DD`（日曆日，不帶時刻）。 */
+  trainingDate: string;
+  fileName: string;
+  uploadedByName: string | null;
+  /** ISO 8601（UTC）。 */
+  uploadedAt: string;
+}
+
+/** `AC-26` 待歸位項（舊制 1:1 遷移而來，`orgCode IS NULL`、訓練日期未知）。 */
+export interface OjtPendingItem {
+  id: string;
+  documentId: string;
+  documentNumber?: string;
+  documentName?: string;
+  fileName: string;
+  /** 🔴 舊模型只存「檔案何時被上傳」、從未記錄「訓練何時舉辦」⇒ 恆為 null，須由 ICSOPAdmin 補填。 */
+  trainingDate: string | null;
+  uploadedAt: string;
+}
+
+/**
+ * TAB1 區一之「依文件逐筆」列（`AC-04` 三值狀態＋已完成／使用單位數）。
+ * 🔒 欄名 `totalUnits`／`completedUnits` 逐字取自 `docs/specs/data-model.md` §建議查詢形狀
+ * （`COUNT(*) AS totalUnits, SUM(completed) AS completedUnits`），非任一側臆造。
+ */
+export interface OjtDocCoverageRow {
+  documentId?: string;
+  documentNumber: string;
+  documentName: string;
+  state: OjtDocumentStatus;
+  totalUnits: number;
+  completedUnits: number;
+}
+
+/**
+ * TAB1 儀表板三區之單一回應（`AC-14`／`AC-15`／`AC-16`）。
+ * 🔒 欄名於 2026-08-28 由 lead 裁定**以後端現行形狀為 canonical**（前端環已同步遷移）；
+ * 原先前端側之 `exclusion.inactiveCount`／`orphanedCount` 與 `docCoverage.total`／`done`
+ * 已作廢——排除計數扁平掛在 `coverage` 下，與 `numerator`／`denominator`／`rate` 同層同風格。
+ */
+export interface OjtProgressSummary {
+  coverage: {
+    numerator: number;
+    denominator: number;
+    /**
+     * 🔴 `denominator===0` 時後端**省略本鍵**（不是回 0、也不是 null）。
+     * ⚠ 消費端**不得**寫成 `rate ?? 0`——那會把「無資料」渲染成「0% 全未完成」，而 `AC-14`
+     * 明文要求兩者在畫面上必須分得出來。本前端一律以 `numerator`／`denominator` 自行推導
+     * （`coveragePercent()` 回 `null` 即空狀態），故本欄宣告但不消費，留作契約完整性。
+     */
+    rate?: number;
+    /** `AC-17`：自分母排除之列數，依兩個原因分列（缺鍵→視為 0）。 */
+    excludedInactive?: number;
+    excludedOrphaned?: number;
+  };
+  docCoverage: OjtDocCoverageRow[];
+  deptRollup: {
+    deptOrgCode: string;
+    deptName: string;
+    totalUnits: number;
+    completedUnits: number;
+    /** 後端不回本欄；前端一律自 `completedUnits`／`totalUnits` 推導（同上之單一推導點原則）。 */
+    rate?: number;
+  }[];
+  /** 🔴 `AC-16` PII 硬防線：僅單位／文件／日期層級，明文不含上傳者姓名或員工編號。 */
+  recentSessions: {
+    documentId: string;
+    documentNumber: string;
+    documentName: string;
+    orgCode: string;
+    orgName: string;
+    trainingDate: string;
+  }[];
 }
