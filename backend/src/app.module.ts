@@ -18,6 +18,7 @@ import { IngestionModule } from './ingestion/ingestion.module';
 import { ChangeHistoryModule } from './change-history/change-history.module';
 import { OrgChangeAlertModule } from './org-change-alert/org-change-alert.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { OjtProgressModule } from './ojt-progress/ojt-progress.module';
 
 @Module({
   imports: [
@@ -45,6 +46,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
     OrgChangeAlertModule,
     // GAP-07-1 後台儀表板 KPI 彙總（唯讀 COUNT；反循環自建 provider）。
     DashboardModule,
+    // F042 OJT 進度管理（「文件 × 使用單位」多場次模型；獨立側選單項與端點群）。
+    OjtProgressModule,
   ],
   controllers: [AppController],
 })
