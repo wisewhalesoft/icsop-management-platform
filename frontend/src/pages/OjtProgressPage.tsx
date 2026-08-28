@@ -35,14 +35,19 @@ import {
   DEL_CONFIRM_OK_TEXT,
   DEL_CONFIRM_TITLE,
   DOC_COVERAGE_BASIS_NOTE,
+  DOC_COVERAGE_BREAKDOWN_LABEL,
   DOC_COVERAGE_EMPTY_BY_SCOPE,
   DOC_COVERAGE_EMPTY_HINT,
   DOC_COVERAGE_INCOMPLETE_LABEL,
   DOC_COVERAGE_MORE_ARIA,
   DOC_COVERAGE_MORE_TEXT,
+  DOC_COVERAGE_NA_TEXT,
   DOC_COVERAGE_REGION_LABEL,
   DOC_COVERAGE_SCOPE_LABEL,
   DOC_COVERAGE_SCOPE_OPTIONS,
+  DOC_COVERAGE_TRACKED_LABEL,
+  DOC_UNASSIGNED_TEXT,
+  DOC_UNASSIGNED_VISUAL,
   EMPTY_ALL_HINT,
   EMPTY_ALL_TEXT,
   EMPTY_RECENT_TEXT,
@@ -72,6 +77,9 @@ import {
   coveragePercent,
   delConfirmBody,
   deleteSessionAria,
+  docCoverageBarClass,
+  docCoverageBreakdown,
+  docCoverageRowView,
   docCoverageTruncationText,
   downloadSessionAria,
   exclusionNote,
@@ -630,8 +638,15 @@ function CoverageSection({
    * ——摘要要回答的是「總共長什麼樣」，不是「這張表現在畫了什麼」。把切片套進統計，
    * 覆蓋率就會退化成「前 15 份的覆蓋率」。
    */
-  const byState = slice?.byState ?? { all: 0, partial: 0, none: 0 };
+  const byState = slice?.byState ?? { all: 0, partial: 0, none: 0, unassigned: 0 };
   const totalDocuments = slice?.totalDocuments ?? 0;
+  /**
+   * 🔴 `AC-14` ⑬ 摘要行兩行之四個數字（`OQ-E11-22`）。**唯一的推導點**在
+   * `docCoverageBreakdown()`——下行之「尚未開始」是 `byState.none − byState.unassigned`
+   * （**有義務**卻一列都沒完成），直接渲染 `byState.none` 會把 587 份沒有訓練義務的文件
+   * 宣告成待辦。
+   */
+  const breakdown = docCoverageBreakdown(totalDocuments, byState);
   /**
    * 🔴 摘要行與空狀態之範圍一律取自**回應**（`slice.scope`），不是本地的 `docScope` state：
    * 切換範圍是一次往返請求，在回應抵達前兩者會不一致，讀 state 會讓畫面宣稱一個伺服器還沒
@@ -715,34 +730,55 @@ function CoverageSection({
           `text-slate-300`（白底對比約 1.7:1，低於 WCAG AA），該色票與清單頁共用、不得於此改動，
           但新載體不必沿用它的可讀性問題。
         */}
-        <p
+        <div
           data-doc-coverage-summary
           data-doc-coverage-scope-value={shownScope}
           data-doc-coverage-shown={items.length}
-          className="text-xs text-slate-500 mb-2 flex flex-wrap items-center gap-x-4 gap-y-1"
+          className="text-xs text-slate-500 mb-2 space-y-1"
         >
-          <span data-doc-coverage-total={totalDocuments}>
-            {'共 '}
-            <span className="mono text-slate-700">{totalDocuments}</span>
-            {' 份文件'}
-          </span>
-          {(['all', 'partial', 'none'] as const).map((k) => {
-            const view = ojtStatusView(k);
-            return (
-              <span key={k} data-doc-coverage-stat={k} className="inline-flex items-center gap-1 text-slate-600">
-                <Icon name={view.icon} className={`w-3.5 h-3.5 ${view.className}`} aria-hidden />
-                {`${view.text} `}
-                <span className="mono">{byState[k]}</span>
-                {' 份'}
-              </span>
-            );
-          })}
-          <span data-doc-coverage-incomplete={slice?.incompleteTotal ?? 0} className="text-slate-500">
-            {`${DOC_COVERAGE_INCOMPLETE_LABEL} `}
-            <span className="mono text-slate-700">{slice?.incompleteTotal ?? 0}</span>
-            {' 份'}
-          </span>
-        </p>
+          {/* 上行：切「有沒有訓練義務」。🔒 `tracked + unassigned === totalDocuments`。 */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span data-doc-coverage-total={totalDocuments}>
+              {'共 '}
+              <span className="mono text-slate-700">{totalDocuments}</span>
+              {' 份文件'}
+            </span>
+            <span data-doc-coverage-tracked={breakdown.tracked}>
+              {`${DOC_COVERAGE_TRACKED_LABEL} `}
+              <span className="mono text-slate-700">{breakdown.tracked}</span>
+              {' 份'}
+            </span>
+            <span
+              data-doc-coverage-unassigned={breakdown.unassigned}
+              className={`inline-flex items-center gap-1 ${DOC_UNASSIGNED_VISUAL.className}`}
+            >
+              <Icon name={DOC_UNASSIGNED_VISUAL.icon} className="w-3.5 h-3.5" aria-hidden />
+              {`${DOC_UNASSIGNED_TEXT} `}
+              <span className="mono">{breakdown.unassigned}</span>
+              {' 份'}
+            </span>
+          </div>
+          {/* 下行：有義務者之三態分佈。🔒 `stat.all + stat.partial + stat.none === tracked`。 */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span>{DOC_COVERAGE_BREAKDOWN_LABEL}</span>
+            {(['all', 'partial', 'none'] as const).map((k) => {
+              const view = ojtStatusView(k);
+              return (
+                <span key={k} data-doc-coverage-stat={k} className="inline-flex items-center gap-1 text-slate-600">
+                  <Icon name={view.icon} className={`w-3.5 h-3.5 ${view.className}`} aria-hidden />
+                  {`${view.text} `}
+                  <span className="mono">{breakdown.stat[k]}</span>
+                  {' 份'}
+                </span>
+              );
+            })}
+            <span data-doc-coverage-incomplete={slice?.incompleteTotal ?? 0} className="text-slate-500">
+              {`${DOC_COVERAGE_INCOMPLETE_LABEL} `}
+              <span className="mono text-slate-700">{slice?.incompleteTotal ?? 0}</span>
+              {' 份'}
+            </span>
+          </div>
+        </div>
 
         <p data-doc-coverage-basis-note className="text-xs text-slate-400 mb-2 flex items-start gap-1.5">
           <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
@@ -773,23 +809,58 @@ function CoverageSection({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {items.map((c) => {
-                const view = ojtStatusView(c.state);
+                /**
+                 * 🔴 `AC-14` ⑧ 之單一判準＝`totalUnits === 0`（該文件未指定任何使用部門 ⇒
+                 * **沒有訓練義務**）。本態是**區一之呈現態**，不是 `AC-04` 的第四個狀態值。
+                 */
+                const noUsingDept = c.totalUnits === 0;
+                const view = docCoverageRowView(c);
                 const rowPct = coveragePercent(c.completedUnits, c.totalUnits) ?? 0;
                 return (
-                  <tr key={c.documentNumber} data-doc-coverage-row={c.documentNumber} data-doc-ojt-state={c.state} className="hover:bg-slate-50">
+                  <tr
+                    key={c.documentNumber}
+                    data-doc-coverage-row={c.documentNumber}
+                    /*
+                      🔴 本輪負向鎖定 ①：值域**維持** `all｜partial｜none` 三值——無義務列於此
+                      仍為 `none`（`AC-04` 口徑），第四態只由 `[data-doc-no-using-dept]` 表達。
+                      ⚠ 同一列同時具備兩者**正是事實**（`AC-04` 說它是 `none`，區一說它沒有
+                      訓練義務），兩者不衝突、不得互相對齊。
+                    */
+                    data-doc-ojt-state={c.state}
+                    // 🔒 無值屬性，且**僅在 `totalUnits === 0` 時進 DOM**（非 CSS 隱藏）。
+                    {...(noUsingDept ? { 'data-doc-no-using-dept': '' } : {})}
+                    className="hover:bg-slate-50"
+                  >
                     <td className="px-4 py-2.5 mono text-xs text-slate-600 whitespace-nowrap">{c.documentNumber}</td>
                     <td className="px-4 py-2.5 text-slate-800">{c.documentName}</td>
                     <td className="px-4 py-2.5">
-                      <span data-doc-ojt-state-chip className={`inline-flex items-center gap-1 text-xs ${view.className}`} title={view.text}>
+                      <span data-doc-ojt-state-chip className={`inline-flex items-center gap-1 text-xs whitespace-nowrap ${view.className}`} title={view.text}>
                         <Icon name={view.icon} className="w-3.5 h-3.5" />
                         {view.text}
                       </span>
                     </td>
+                    {/*
+                      🔴 `AC-14` ⑫：退化值不得照畫——`0 / 0` 與 `0%` 都在宣稱一個不存在的量測
+                      結果，兩欄一律呈現 `—`。
+                    */}
                     <td className="px-4 py-2.5">
-                      <span data-doc-coverage-ratio className="mono text-slate-700">{`${c.completedUnits} / ${c.totalUnits}`}</span>
+                      <span data-doc-coverage-ratio className="mono text-slate-700">
+                        {noUsingDept ? DOC_COVERAGE_NA_TEXT : `${c.completedUnits} / ${c.totalUnits}`}
+                      </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span data-doc-coverage-pct className="mono text-xs text-slate-600">{`${rowPct}%`}</span>
+                      {noUsingDept ? (
+                        <span data-doc-coverage-pct className="mono text-xs text-slate-400">{DOC_COVERAGE_NA_TEXT}</span>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                            <div className={`h-full ${docCoverageBarClass(rowPct)}`} style={{ width: `${rowPct}%` }} />
+                          </div>
+                          <span data-doc-coverage-pct className={`mono text-xs ${rowPct === 100 ? 'text-emerald-700' : 'text-slate-600'}`}>
+                            {`${rowPct}%`}
+                          </span>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );

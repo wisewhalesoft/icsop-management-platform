@@ -69,21 +69,29 @@ const docCoverageRow = (over: Partial<{
  * （§架構設計 一-2，刻意的 loud break）。本 helper 由 `items` 自動推導預設之計數欄（母體＝
  * 傳入之 items 本身、`scope` 預設為 `incomplete`、`hidden` 預設 0），個別測試可用 `over` 覆寫
  * 任一計數欄以模擬「母體大於呈現切片」之情境（節流測試之核心）。
+ *
+ * 🔴 就地改寫（`OQ-E11-22` 第二輪，2026-08-28）：`scope` 值域增 `'unassigned'`；`byState` 增
+ * 第四鍵 `unassigned`（依 `items[].totalUnits===0` 自動推導，`none` 之子集、非第四個互斥
+ * 類）；`incompleteTotal` 之預設公式就地更正為 ③′（`partial + none − unassigned`，原式
+ * `partial + none` 已於本輪起不成立）。
  */
 function docCoverageSlice(
   items: ReturnType<typeof docCoverageRow>[],
   over: Partial<{
-    scope: 'incomplete' | 'completed' | 'all';
+    scope: 'incomplete' | 'completed' | 'unassigned' | 'all';
     maxRows: number;
     shown: number;
     hidden: number;
     totalDocuments: number;
-    byState: { all: number; partial: number; none: number };
+    byState: { all: number; partial: number; none: number; unassigned: number };
     incompleteTotal: number;
   }> = {},
 ) {
-  const byState = { all: 0, partial: 0, none: 0 };
-  for (const it of items) byState[it.state] += 1;
+  const byState = { all: 0, partial: 0, none: 0, unassigned: 0 };
+  for (const it of items) {
+    byState[it.state] += 1;
+    if (it.totalUnits === 0) byState.unassigned += 1;
+  }
   return {
     scope: 'incomplete' as const,
     maxRows: 15,
@@ -92,7 +100,7 @@ function docCoverageSlice(
     hidden: 0,
     totalDocuments: items.length,
     byState,
-    incompleteTotal: byState.partial + byState.none,
+    incompleteTotal: byState.partial + byState.none - byState.unassigned,
     ...over,
   };
 }
@@ -396,7 +404,13 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       );
     }
 
-    it('AC-28⑯ 顯示範圍 select：option 恰 3 個，值與可見文字逐字＝incomplete/僅未全部完成、completed/僅已全部完成、all/全部文件；預設選中 incomplete；aria-label 逐字「依文件逐筆之顯示範圍」', async () => {
+    /**
+     * 🔴 就地改寫（`OQ-E11-22` 第二輪，2026-08-28）：`option` 由恰 3 個增為恰 4 個（新增
+     * `unassigned`／「僅未指定使用部門」，順序落在 `completed` 之後、`all` 之前）——與
+     * 「截斷句名詞表由三變體增為四變體」兩案必須一起改，否則會出現「改了選項卻沒改名詞表」
+     * 之半套（見下方 it.each 案）。
+     */
+    it('AC-28⑲ 顯示範圍 select：option 恰 4 個，新增 unassigned/僅未指定使用部門（順序＝incomplete/completed/unassigned/all）；預設仍選中 incomplete；aria-label 一字未改', async () => {
       renderPage();
       await waitFor(() => expect(document.querySelector('[data-doc-coverage-scope]')).not.toBeNull());
       const sel = document.querySelector('[data-doc-coverage-scope]') as HTMLSelectElement;
@@ -405,6 +419,7 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       expect(opts).toEqual([
         { value: 'incomplete', text: '僅未全部完成' },
         { value: 'completed', text: '僅已全部完成' },
+        { value: 'unassigned', text: '僅未指定使用部門' },
         { value: 'all', text: '全部文件' },
       ]);
       expect(sel.value).toBe('incomplete');
@@ -454,7 +469,7 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
               ...manyRows(3, (i) => ({ documentId: `partial${i}`, state: 'partial', completedUnits: 1, totalUnits: 2 })),
               ...manyRows(4, (i) => ({ documentId: `none${i}`, state: 'none', completedUnits: 0, totalUnits: 1 })),
             ],
-            { scope: 'all', totalDocuments: 9, byState: { all: 2, partial: 3, none: 4 }, incompleteTotal: 7 },
+            { scope: 'all', totalDocuments: 9, byState: { all: 2, partial: 3, none: 4, unassigned: 0 }, incompleteTotal: 7 },
           ),
         }),
       );
@@ -488,7 +503,7 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
         summaryFixture({
           docCoverage: docCoverageSlice(manyRows(15), {
-            scope: 'incomplete', maxRows: 15, shown: 15, hidden: 6, totalDocuments: 21, byState: { all: 0, partial: 0, none: 21 }, incompleteTotal: 21,
+            scope: 'incomplete', maxRows: 15, shown: 15, hidden: 6, totalDocuments: 21, byState: { all: 0, partial: 0, none: 21, unassigned: 0 }, incompleteTotal: 21,
           }),
         }),
       );
@@ -504,16 +519,18 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
 
     it('截斷告知：hidden===0 ⇒ 完全不進 DOM（非 CSS 隱藏，假綠陷阱14）', async () => {
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
-        summaryFixture({ docCoverage: docCoverageSlice(manyRows(5), { hidden: 0, totalDocuments: 5, byState: { all: 0, partial: 0, none: 5 }, incompleteTotal: 5 }) }),
+        summaryFixture({ docCoverage: docCoverageSlice(manyRows(5), { hidden: 0, totalDocuments: 5, byState: { all: 0, partial: 0, none: 5, unassigned: 0 }, incompleteTotal: 5 }) }),
       );
       renderPage();
       await waitFor(() => expect(document.querySelectorAll('[data-doc-coverage-row]').length).toBeGreaterThan(0));
       expect(document.querySelectorAll('[data-doc-coverage-truncation]')).toHaveLength(0);
     });
 
+    // 🔴 就地改寫（`OQ-E11-22` 第二輪）：名詞表由三變體增為恰四個，與上方 select 之 4 個 option 一起改。
     it.each([
       ['incomplete', '尚未全部完成之文件'],
       ['completed', '已全部完成之文件'],
+      ['unassigned', '未指定使用部門之文件'],
       ['all', '文件'],
     ] as const)('截斷句之 {名詞} 變體——scope=%s ⇒ 名詞為「%s」（其餘句子完全相同）', async (scope, noun) => {
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
@@ -538,9 +555,11 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       expect(document.querySelector('[data-doc-coverage-truncation]')?.textContent).not.toContain('本表僅列出前 15 份');
     });
 
+    // 🔴 就地改寫（`OQ-E11-22` 第二輪）：範圍空狀態由兩句增為三句，新增 unassigned →「所有文件皆已指定使用部門」。
     it.each([
       ['incomplete', '所有文件之教育訓練皆已全部完成'],
       ['completed', '尚無任何文件之教育訓練已全部完成'],
+      ['unassigned', '所有文件皆已指定使用部門'],
     ] as const)('範圍空狀態逐字（scope=%s）：「%s」＋共用補充提示；與全域空狀態 no-docs 互不相同', async (scope, text) => {
       /**
        * 🔴 仲裁修正（test-generator 仲裁 2026-08-28，ti-fe-ojt 提報）：原 fixture 於 `incomplete`
@@ -552,10 +571,21 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
        * 當前範圍），`byState` 依各自語意正確設定；`coverage.denominator` 沿用預設值 3（非 0，
        * 確保不會意外觸發 no-docs 之判準——no-docs 之真正觸發條件為「系統無任何有效進度列」，
        * 非「本次篩選範圍恰無項目」，兩者刻意不同）。
+       *
+       * 🔴 就地改寫（`OQ-E11-22` 第二輪）：新增 `unassigned` 分支——該範圍下查無項目，代表母體中
+       * 沒有任何 `totalUnits=0` 之文件（`byState.unassigned` 為 0），21 份文件均為 `incomplete`／
+       * `completed` 之組合（13/8，恰對應下方 ⑬ 案外之另一組合理拆分，具體數字不影響本案斷言）。
        */
-      const byState = scope === 'incomplete' ? { all: 21, partial: 0, none: 0 } : { all: 0, partial: 13, none: 8 };
+      const byState =
+        scope === 'incomplete' ? { all: 21, partial: 0, none: 0, unassigned: 0 }
+        : scope === 'completed' ? { all: 0, partial: 13, none: 8, unassigned: 0 }
+        : { all: 13, partial: 8, none: 0, unassigned: 0 };
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
-        summaryFixture({ docCoverage: docCoverageSlice([], { scope, totalDocuments: 21, byState, incompleteTotal: byState.partial + byState.none }) }),
+        summaryFixture({
+          docCoverage: docCoverageSlice([], {
+            scope, totalDocuments: 21, byState, incompleteTotal: byState.partial + byState.none - byState.unassigned,
+          }),
+        }),
       );
       renderPage();
       await waitFor(() => expect(document.querySelector(`[data-doc-coverage-empty="${scope}"]`)).not.toBeNull());
@@ -624,6 +654,219 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       await waitFor(() => expect(document.querySelectorAll('[data-doc-coverage-row]').length).toBe(15));
       const renderedOrder = [...document.querySelectorAll('[data-doc-coverage-row]')].map((el) => el.getAttribute('data-doc-coverage-row'));
       expect(renderedOrder).toEqual(rows.map((r) => r.documentNumber));
+    });
+  });
+
+  /**
+   * ===================== B-2b. TAB1 區一第四態「未指定使用部門」（OQ-E11-22，AC-14 ⑧～⑮，AC-28⑲） =====================
+   * 🔴 使用者實機檢視回報：backend 對 dev 真庫實打揭露 591 份文件中 587 份 `totalUnits=0`
+   * （未指定使用部門），其覆蓋率退化為 `0/0`⇒`0%`，與「有使用部門卻一列都沒完成」共用同一個
+   * 排序鍵、數量壓倒性 ⇒ 上一輪節流之升冪排序把前 15 名整批占滿。裁決＝拆成獨立一態 ＋ 排序
+   * 沉底 ＋ 不計入未完成合計。🔒 上一輪節流之七項與四道負向鎖定原文一字未動（B-2 全數保留）。
+   * 逐字值與掛鉤權威：F042-ojt-progress-management.md §6 ⑲ 群列；測試方向：F042-test.md §三-3 乙。
+   */
+  describe('B-2b. TAB1 區一第四態「未指定使用部門」（OQ-E11-22／AC-14 ⑧～⑮／AC-28⑲）', () => {
+    const unassignedRow = (over: Partial<Parameters<typeof docCoverageRow>[0]> = {}) =>
+      docCoverageRow({ state: 'none', completedUnits: 0, totalUnits: 0, ...over });
+
+    /** 建 N 份 totalUnits=0（未指定使用部門）之文件——本區塊局部版之 B-2 `manyRows`（不同 describe 作用域）。 */
+    function manyUnassignedRows(n: number, over: (i: number) => Partial<Parameters<typeof docCoverageRow>[0]> = () => ({})) {
+      return Array.from({ length: n }, (_, i) =>
+        unassignedRow({ documentId: `u${i}`, documentNumber: `U${String(i).padStart(2, '0')}`, ...over(i) }),
+      );
+    }
+
+    /**
+     * 🔴 負向鎖定①（F042 AC-14 本輪負向鎖定①）：`data-doc-ojt-state` 值域維持三值，第四態另以
+     * `[data-doc-no-using-dept]`（無值屬性）表達；同一列可同時是 `data-doc-ojt-state="none"`
+     * 且帶本屬性——這正是事實，(a)(b) 必須同時成立、不得寫成互斥斷言。
+     */
+    it('⑧⑨ 第四態列：<tr> 帶 [data-doc-no-using-dept]（無值屬性）且 [data-doc-ojt-state]="none"（不是 "unassigned"）；晶片逐字「未指定使用部門」', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({
+          docCoverage: docCoverageSlice(
+            [unassignedRow({ documentId: 'd-u1', documentNumber: 'D-UNASSIGNED' })],
+            { scope: 'all', totalDocuments: 1, byState: { all: 0, partial: 0, none: 1, unassigned: 1 }, incompleteTotal: 0 },
+          ),
+        }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-row="D-UNASSIGNED"]')).not.toBeNull());
+      const row = document.querySelector('[data-doc-coverage-row="D-UNASSIGNED"]') as HTMLElement;
+      expect(row.hasAttribute('data-doc-no-using-dept')).toBe(true);
+      expect(row.getAttribute('data-doc-ojt-state')).toBe('none');
+      expect(row.querySelector('[data-doc-ojt-state-chip]')?.textContent).toBe('未指定使用部門');
+    });
+
+    it('🔴 值域負向案：querySelectorAll(\'[data-doc-ojt-state="unassigned"]\').length === 0（值域明文禁止增為四值）', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({
+          docCoverage: docCoverageSlice(
+            [unassignedRow({ documentId: 'd-u1', documentNumber: 'D-U1' })],
+            { scope: 'all', totalDocuments: 1, byState: { all: 0, partial: 0, none: 1, unassigned: 1 }, incompleteTotal: 0 },
+          ),
+        }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-row="D-U1"]')).not.toBeNull());
+      expect(document.querySelectorAll('[data-doc-ojt-state="unassigned"]')).toHaveLength(0);
+    });
+
+    it('[data-doc-no-using-dept] 僅出現於 totalUnits=0 之列（進 DOM／不進 DOM，非 CSS 隱藏）', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({
+          docCoverage: docCoverageSlice(
+            [
+              docCoverageRow({ documentId: 'd-normal', documentNumber: 'D-NORMAL', state: 'partial', completedUnits: 1, totalUnits: 2 }),
+              unassignedRow({ documentId: 'd-u1', documentNumber: 'D-U1' }),
+            ],
+            { scope: 'all' },
+          ),
+        }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-row="D-NORMAL"]')).not.toBeNull());
+      expect(document.querySelector('[data-doc-coverage-row="D-NORMAL"]')?.hasAttribute('data-doc-no-using-dept')).toBe(false);
+      expect(document.querySelector('[data-doc-coverage-row="D-U1"]')?.hasAttribute('data-doc-no-using-dept')).toBe(true);
+    });
+
+    it('⑫ 第四態之比值與百分比欄呈現「—」（非 "0 / 0"、非 "0%"），且不畫進度條', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({ docCoverage: docCoverageSlice([unassignedRow({ documentId: 'd-u1', documentNumber: 'D-U1' })], { scope: 'all' }) }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-row="D-U1"]')).not.toBeNull());
+      const row = document.querySelector('[data-doc-coverage-row="D-U1"]') as HTMLElement;
+      expect(row.querySelector('[data-doc-coverage-ratio]')?.textContent).toBe('—');
+      expect(row.querySelector('[data-doc-coverage-pct]')?.textContent).toBe('—');
+      // 不畫進度條：本列不得含任何以行內 style 驅動寬度之元素——見下一案之正向對照，
+      // 兩案合力才使本斷言具鑑別力（只驗負向，實作把有義務列的進度條也一併拿掉照樣通過）。
+      expect(row.querySelectorAll('[style]')).toHaveLength(0);
+    });
+
+    /**
+     * 🔴 正向對照（team-lead 交辦，2026-08-28）：上一案僅驗「無義務列不畫進度條」，若實作把
+     * 「有義務列的進度條」也一併拿掉，上一案仍然全綠——`1b71595` 起 React 端確實未畫覆蓋率進度條
+     * （prototype 25 對有義務之列會畫 `w-24 h-1.5` ＋ `style="width:{pct}%"`），此 fidelity 落差
+     * 曾靜默一整輪，因為環從未斷言「進度條存在」，只斷言過「（無義務列）不存在」。本案補上正向
+     * 存在性與寬度反映覆蓋率之斷言，使上一案之負向斷言重新具有鑑別力。
+     */
+    it('🔴 正向對照：有義務之列（totalUnits>0）必須畫出覆蓋率進度條，且其寬度反映覆蓋率百分比', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({
+          docCoverage: docCoverageSlice(
+            [docCoverageRow({ documentId: 'd-p1', documentNumber: 'D-P1', state: 'partial', completedUnits: 1, totalUnits: 4 })], // 25%
+            { scope: 'all' },
+          ),
+        }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-row="D-P1"]')).not.toBeNull());
+      const row = document.querySelector('[data-doc-coverage-row="D-P1"]') as HTMLElement;
+      expect(row.querySelector('[data-doc-coverage-pct]')?.textContent).toBe('25%');
+      const bar = row.querySelector('[style]') as HTMLElement | null;
+      expect(bar, '有義務之列必須含至少一個以行內 style 呈現寬度之進度條元素（prototype 25：w-24 h-1.5 內層 div，style="width:{pct}%"）').not.toBeNull();
+      expect(bar?.style.width).toBe('25%');
+    });
+
+    it('⑬ 摘要行兩行結構：[data-doc-coverage-summary] 恰 2 個元素子節點', async () => {
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-summary]')).not.toBeNull());
+      const summaryEl = document.querySelector('[data-doc-coverage-summary]') as HTMLElement;
+      expect(summaryEl.children).toHaveLength(2);
+    });
+
+    it('⑬ 摘要行上行新增兩掛鉤：[data-doc-coverage-tracked]／[data-doc-coverage-unassigned] 逐字與加總關係 tracked+unassigned===total（34+18=52）', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({
+          docCoverage: docCoverageSlice([unassignedRow({})], {
+            scope: 'all', totalDocuments: 52, byState: { all: 13, partial: 9, none: 30, unassigned: 18 }, incompleteTotal: 21,
+          }),
+        }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-summary]')).not.toBeNull());
+      expect(document.querySelector('[data-doc-coverage-total="52"]')?.textContent).toBe('共 52 份文件');
+      expect(document.querySelector('[data-doc-coverage-tracked="34"]')?.textContent).toBe('已指定使用部門 34 份');
+      expect(document.querySelector('[data-doc-coverage-unassigned="18"]')?.textContent).toBe('未指定使用部門 18 份');
+    });
+
+    /**
+     * 🔴 高風險假綠陷阱（team lead 交辦）：摘要行下行之 [data-doc-coverage-stat="none"] 顯示的是
+     * 「有義務卻一列都沒完成」（12），刻意不等於端點之 byState.none（30，含 18 份無義務者）。若
+     * 實作直接渲染 byState.none，畫面會顯示「尚未開始 30 份」——本案讓這個錯誤紅。加總關係
+     * stat.all+partial+none===tracked（13+9+12=34）一併驗證。
+     */
+    it('🔴 下行「尚未開始」顯示之份數＝byState.none−byState.unassigned（12），不得直接渲染 byState.none（30）', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({
+          docCoverage: docCoverageSlice([unassignedRow({})], {
+            scope: 'all', totalDocuments: 52, byState: { all: 13, partial: 9, none: 30, unassigned: 18 }, incompleteTotal: 21,
+          }),
+        }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-stat="none"]')).not.toBeNull());
+      expect(document.querySelector('[data-doc-coverage-stat="all"]')?.textContent).toBe('已全部完成 13 份');
+      expect(document.querySelector('[data-doc-coverage-stat="partial"]')?.textContent).toBe('部分完成 9 份');
+      expect(document.querySelector('[data-doc-coverage-stat="none"]')?.textContent).toBe('尚未開始 12 份');
+      expect(document.querySelector('[data-doc-coverage-stat="none"]')?.textContent).not.toBe('尚未開始 30 份');
+      // 🔒 下行恰 3 個 -stat，不得多出 [data-doc-coverage-stat="unassigned"]（那有自己的掛鉤與自己的行）。
+      expect(document.querySelectorAll('[data-doc-coverage-stat]')).toHaveLength(3);
+      expect(document.querySelector('[data-doc-coverage-stat="unassigned"]')).toBeNull();
+    });
+
+    it.each(['incomplete', 'completed', 'unassigned', 'all'] as const)(
+      '🔴 -tracked／-unassigned 不得跟著切片走：docScope=%s 下屬性值仍為完整母體（34／18）',
+      async (scope) => {
+        vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+          summaryFixture({
+            docCoverage: docCoverageSlice([unassignedRow({})], {
+              scope, totalDocuments: 52, byState: { all: 13, partial: 9, none: 30, unassigned: 18 }, incompleteTotal: 21,
+            }),
+          }),
+        );
+        renderPage();
+        await waitFor(() => expect(document.querySelector('[data-doc-coverage-tracked]')).not.toBeNull());
+        expect(document.querySelector('[data-doc-coverage-tracked]')?.getAttribute('data-doc-coverage-tracked')).toBe('34');
+        expect(document.querySelector('[data-doc-coverage-unassigned]')?.getAttribute('data-doc-coverage-unassigned')).toBe('18');
+      },
+    );
+
+    /**
+     * ⑭ unassigned 範圍之截斷句兩處分岔（實質內容改變、非文案潤飾）：(a) 排序描述改為
+     * 「依程序書編號昇冪排序」，不得宣稱「依覆蓋率」——該範圍下所有列之覆蓋率皆為「—」，那是
+     * 假話；(b) 完整清單導向「ICSOP 文件管理」，不得導向「OJT 資料清單」——這些文件沒有使用
+     * 部門就沒有進度列，過去只會看到空的。
+     */
+    it('⑭ unassigned 範圍之截斷句兩處分岔：排序描述改為「依程序書編號昇冪排序」；完整清單導向「ICSOP 文件管理」（非「OJT 資料清單」）', async () => {
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
+        summaryFixture({
+          docCoverage: docCoverageSlice(
+            manyUnassignedRows(15),
+            { scope: 'unassigned', hidden: 3, totalDocuments: 52, byState: { all: 13, partial: 9, none: 30, unassigned: 18 }, incompleteTotal: 21 },
+          ),
+        }),
+      );
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-truncation]')).not.toBeNull());
+      const text = document.querySelector('[data-doc-coverage-truncation]')?.textContent ?? '';
+      expect(text).toContain('本表依程序書編號昇冪排序');
+      expect(text).not.toContain('依覆蓋率');
+      expect(text).toContain('請至「ICSOP 文件管理」');
+      expect(text).not.toContain('OJT 資料清單');
+      expect(text).toContain('另有 3 份未指定使用部門之文件未列出');
+    });
+
+    it('⑨ 切換至 unassigned 範圍 ⇒ 發出一次帶 docScope=unassigned 之 GET /admin/ojt-progress/summary（非客端切換）', async () => {
+      renderPage();
+      await waitFor(() => expect(document.querySelector('[data-doc-coverage-scope]')).not.toBeNull());
+      const callsBefore = vi.mocked(endpoints.getOjtProgressSummary).mock.calls.length;
+      const sel = document.querySelector('[data-doc-coverage-scope]') as HTMLSelectElement;
+      fireEvent.change(sel, { target: { value: 'unassigned' } });
+      await waitFor(() => expect(vi.mocked(endpoints.getOjtProgressSummary).mock.calls.length).toBeGreaterThan(callsBefore));
+      const lastCall = vi.mocked(endpoints.getOjtProgressSummary).mock.calls.at(-1);
+      expect(lastCall).toContain('unassigned');
     });
   });
 

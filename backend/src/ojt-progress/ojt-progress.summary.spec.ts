@@ -350,17 +350,25 @@ describe('AC-14 節流（OQ-E11-21）：docScope 三值切片 ＋ 完整母體�
     expect(summary.docCoverage.items.some((r) => r.documentId === 'd-high')).toBe(false);
   });
 
-  it('🔴 四條不變式：shown===items.length／shown<=maxRows／incompleteTotal===byState.partial+byState.none／byState 三值加總===totalDocuments', async () => {
+  /**
+   * 🔴 就地改寫（`OQ-E11-22` 第二輪，2026-08-28）：`byState` 增第四鍵 `unassigned`
+   * （此語料恆為 0，因 `seedFiveStateDocs` 之 5 份文件皆有使用部門）——`toEqual` 為精確鍵集合
+   * 比對，實作一旦補上第四鍵而本案未同步更新，會**永遠**卡在「多一個鍵」而紅，故就地補上
+   * `unassigned: 0`。不變式 ③ 之公式改採 ③′（本語料下 `unassigned=0`，新舊公式數值相同、
+   * 但斷言必須釘新公式——舊公式在有 `unassigned>0` 語料時會給錯答案，見下方 `AC-14 ⑪` 之
+   * 分歧案）。
+   */
+  it('🔴 四條不變式：shown===items.length／shown<=maxRows／incompleteTotal===byState.partial+byState.none−byState.unassigned／byState 三值加總===totalDocuments', async () => {
     const { svc, usingDept, orgDirectory, sessionStore } = makeService();
     seedFiveStateDocs(usingDept, orgDirectory, sessionStore);
     const summary = await svc.getSummary(ICSOP_ADMIN, 'all');
     const dc = summary.docCoverage;
     expect(dc.shown).toBe(dc.items.length);
     expect(dc.shown).toBeLessThanOrEqual(dc.maxRows);
-    expect(dc.incompleteTotal).toBe(dc.byState.partial + dc.byState.none);
+    expect(dc.incompleteTotal).toBe(dc.byState.partial + dc.byState.none - dc.byState.unassigned);
     expect(dc.byState.all + dc.byState.partial + dc.byState.none).toBe(dc.totalDocuments);
     expect(dc.totalDocuments).toBe(5);
-    expect(dc.byState).toEqual({ all: 2, partial: 1, none: 2 });
+    expect(dc.byState).toEqual({ all: 2, partial: 1, none: 2, unassigned: 0 });
     expect(dc.incompleteTotal).toBe(3);
   });
 
@@ -368,6 +376,10 @@ describe('AC-14 節流（OQ-E11-21）：docScope 三值切片 ＋ 完整母體�
    * 🔴 假綠陷阱 9（F042-test.md §三-2 丁）：只驗「items 恰 15 筆」與「覆蓋率是個數字」時，
    * 把上限套進統計之錯誤實作一樣全綠——分母悄悄變成 15。必須以「三種 docScope 之統計欄位
    * 完全相同」為斷言標的，且涵蓋 coverage／deptRollup／recentSessions，不只 docCoverage 本身。
+   */
+  /**
+   * 🔴 就地改寫（`OQ-E11-22` 第二輪）：範圍由三種擴為四種（增 `unassigned`），`byState` 之
+   * `toEqual` 精確比對補上 `unassigned: 0`（本案語料全數有使用部門）。
    */
   it('🔴 假綠陷阱 9：計數恆取自完整母體——三種 docScope 各請求一次，totalDocuments/byState/incompleteTotal 完全相同，coverage/deptRollup/recentSessions 亦不受影響', async () => {
     const { svc, usingDept, orgDirectory, sessionStore } = makeService();
@@ -380,20 +392,24 @@ describe('AC-14 節流（OQ-E11-21）：docScope 三值切片 ＋ 完整母體�
     }
     const incomplete = await svc.getSummary(ICSOP_ADMIN, 'incomplete');
     const completed = await svc.getSummary(ICSOP_ADMIN, 'completed');
+    const unassigned = await svc.getSummary(ICSOP_ADMIN, 'unassigned');
     const all = await svc.getSummary(ICSOP_ADMIN, 'all');
 
-    for (const s of [incomplete, completed, all]) {
+    for (const s of [incomplete, completed, unassigned, all]) {
       expect(s.docCoverage.totalDocuments).toBe(20);
-      expect(s.docCoverage.byState).toEqual({ all: 8, partial: 5, none: 7 });
+      expect(s.docCoverage.byState).toEqual({ all: 8, partial: 5, none: 7, unassigned: 0 });
       expect(s.docCoverage.incompleteTotal).toBe(12);
     }
     // coverage／deptRollup／recentSessions 三區之統計與 docScope 完全無關（該參數僅影響 docCoverage.items 之呈現切片）。
     expect(incomplete.coverage).toEqual(completed.coverage);
     expect(incomplete.coverage).toEqual(all.coverage);
+    expect(incomplete.coverage).toEqual(unassigned.coverage);
     expect(incomplete.deptRollup).toEqual(completed.deptRollup);
     expect(incomplete.deptRollup).toEqual(all.deptRollup);
+    expect(incomplete.deptRollup).toEqual(unassigned.deptRollup);
     expect(incomplete.recentSessions).toEqual(completed.recentSessions);
     expect(incomplete.recentSessions).toEqual(all.recentSessions);
+    expect(incomplete.recentSessions).toEqual(unassigned.recentSessions);
   });
 
   it('hidden 之值：完整母體筆數 − shown，恆 ≥ 0；母體 ≤ 15 之範圍 ⇒ hidden === 0', async () => {
@@ -423,5 +439,189 @@ describe('AC-14 節流（OQ-E11-21）：docScope 三值切片 ＋ 完整母體�
     expect(summary.docCoverage.items[0]).toMatchObject({ documentId: 'd1', state: 'none', totalUnits: 1 });
     // coverage：排除裁撤單位 ⇒ 分母為 0，與上方兩個數字刻意不同口徑。
     expect(summary.coverage.denominator).toBe(0);
+  });
+});
+
+/**
+ * 🔴 F042 第二輪節流修正（`OQ-E11-22`，2026-08-28 使用者實機驗收）：真庫 591 份 ICSOP 文件中
+ * 587 份 `totalUnits = 0`（未指定使用部門），其覆蓋率退化為 `0 / 0`⇒`0%`，與「有使用部門卻一列
+ * 都沒完成」共用同一個排序鍵、數量又壓倒性 ⇒ 上一輪之升冪排序把前 15 名整批占滿，唯一一份真有
+ * 進度落差的文件排到第 591 名、預設範圍下永遠看不到。裁決＝拆成獨立一態 ＋ 排序沉底 ＋ 不計入
+ * incompleteTotal。
+ * 權威：F042 `AC-14` ⑧～⑮ ＋ 三道負向鎖定／§架構設計 一-2（`docScope` 四值、`byState.unassigned`、
+ * 不變式 ③′）；測試方向：docs/test-specs/features/F042-test.md §三-3 甲；假綠陷阱 22～26（同檔
+ * 丁節）。
+ *
+ * ⚠ 對實作全盲：`OjtDocScope` 尚不含 `'unassigned'`、`byState` 尚不含第四鍵——本區塊之呼叫與
+ * 斷言預期編譯期／執行期皆紅。
+ */
+describe('AC-14 ⑧～⑮ 未指定使用部門（第四種呈現態，OQ-E11-22）', () => {
+  /** 建一份 totalUnits=0（未指定使用部門）之文件——不種入任何使用單位。 */
+  function seedUnassignedDoc(usingDept: FakeUsingDeptChecker, id: string, documentNumber: string): void {
+    usingDept.seedDoc({ id, documentNumber, documentName: `文件-${documentNumber}`, companyCode: 'AS', usingDeptIds: [] });
+  }
+
+  it('⑧ 判準恰為 totalUnits===0：state 仍為 "none"（AC-04 一格未動，非第四個 state 值），並計入 byState.unassigned', async () => {
+    const { svc, usingDept } = makeService();
+    seedUnassignedDoc(usingDept, 'd-u1', 'N-U1');
+    const summary = await svc.getSummary(ICSOP_ADMIN, 'all');
+    const item = summary.docCoverage.items.find((i) => i.documentId === 'd-u1')!;
+    expect(item.state).toBe('none');
+    expect(item.totalUnits).toBe(0);
+    expect(item.completedUnits).toBe(0);
+    expect(summary.docCoverage.byState.unassigned).toBe(1);
+  });
+
+  it('⑨ docScope=unassigned ⇒ items 恰為 totalUnits===0 之文件，scope 回聲 "unassigned"（正向過濾，與 all 之「不過濾」不同型）', async () => {
+    const { svc, usingDept, orgDirectory, sessionStore } = makeService();
+    seedUnassignedDoc(usingDept, 'd-u1', 'N-U1');
+    seedUnassignedDoc(usingDept, 'd-u2', 'N-U2');
+    seedDocWithRatio(usingDept, orgDirectory, sessionStore, 'd-p1', 'N-P1', 2, 1);
+    const summary = await svc.getSummary(ICSOP_ADMIN, 'unassigned');
+    expect(summary.docCoverage.scope).toBe('unassigned');
+    expect(summary.docCoverage.items.map((i) => i.documentId).sort()).toEqual(['d-u1', 'd-u2']);
+    expect(summary.docCoverage.items.every((i) => i.totalUnits === 0)).toBe(true);
+  });
+
+  it('🔴 ?docScope=unassigned 必須被接受並回聲，不得被當成未知值靜默正規化回 incomplete', async () => {
+    const { svc } = makeService();
+    const summary = await svc.getSummary(ICSOP_ADMIN, 'unassigned');
+    expect(summary.docCoverage.scope).toBe('unassigned');
+  });
+
+  it('⑨ incomplete 之集合定義同步收窄為 totalUnits>0 && state!=="all"：未指定使用部門文件不得出現於此範圍', async () => {
+    const { svc, usingDept, orgDirectory, sessionStore } = makeService();
+    seedUnassignedDoc(usingDept, 'd-u1', 'N-U1');
+    seedDocWithRatio(usingDept, orgDirectory, sessionStore, 'd-n1', 'N-N1', 1, 0); // 有義務、未完成
+    const summary = await svc.getSummary(ICSOP_ADMIN, 'incomplete');
+    expect(summary.docCoverage.items.map((i) => i.documentId)).toEqual(['d-n1']);
+  });
+
+  it('⑨ completed 之集合定義一字未動：未指定使用部門文件天然不入此集（totalUnits=0 恆為 none）', async () => {
+    const { svc, usingDept, orgDirectory, sessionStore } = makeService();
+    seedUnassignedDoc(usingDept, 'd-u1', 'N-U1');
+    seedDocWithRatio(usingDept, orgDirectory, sessionStore, 'd-a1', 'N-A1', 1, 1);
+    const summary = await svc.getSummary(ICSOP_ADMIN, 'completed');
+    expect(summary.docCoverage.items.map((i) => i.documentId)).toEqual(['d-a1']);
+  });
+
+  /**
+   * 🔴 核心修正之直接背書（⑩，§架構設計 一-2 之斷言形狀）：只驗「恰 maxRows 筆」與「排序非
+   * 遞減」都擋不住沉底缺失——無義務者之退化覆蓋率與真正未完成者共用同一個排序鍵，兩種錯誤
+   * 實作在只驗這兩點時都會全綠。必須直接斷言「唯一有進度落差的有義務文件」出現在 items 內。
+   */
+  it('⑩ 排序沉底（核心修正）：20 份無義務文件（>maxRows）+ 1 份有義務且未完成之文件 ⇒ 該文件必須出現在 docScope=all 之 items 內', async () => {
+    const { svc, usingDept, orgDirectory, sessionStore } = makeService();
+    for (let i = 0; i < 20; i++) seedUnassignedDoc(usingDept, `d-u${i}`, `N-U${String(i).padStart(2, '0')}`);
+    seedDocWithRatio(usingDept, orgDirectory, sessionStore, 'd-needs-attention', 'Z-NEEDS-ATTN', 3, 1); // partial，唯一有進度落差者
+    const summary = await svc.getSummary(ICSOP_ADMIN, 'all');
+    expect(summary.docCoverage.items).toHaveLength(15); // maxRows
+    expect(summary.docCoverage.items.some((i) => i.documentId === 'd-needs-attention')).toBe(true);
+    // 沉底成立時，15 個名額中僅 14 個會是無義務文件（第 15 個名額讓給有義務者）。
+    expect(summary.docCoverage.items.filter((i) => i.totalUnits === 0)).toHaveLength(14);
+  });
+
+  it('⑩ unassigned 範圍下之排序：所有列 totalUnits 皆為 0（沉底鍵與覆蓋率鍵皆相同）⇒ 實際順序退化為 documentNumber 昇冪', async () => {
+    const { svc, usingDept } = makeService();
+    seedUnassignedDoc(usingDept, 'd-z', 'Z-LAST');
+    seedUnassignedDoc(usingDept, 'd-a', 'A-FIRST');
+    seedUnassignedDoc(usingDept, 'd-m', 'M-MID');
+    const summary = await svc.getSummary(ICSOP_ADMIN, 'unassigned');
+    expect(summary.docCoverage.items.map((i) => i.documentNumber)).toEqual(['A-FIRST', 'M-MID', 'Z-LAST']);
+  });
+
+  it('母體(unassigned) > maxRows ⇒ shown===15、hidden===5，逐一依 documentNumber 昇冪切片', async () => {
+    const { svc, usingDept } = makeService();
+    for (let i = 0; i < 20; i++) seedUnassignedDoc(usingDept, `d${i}`, `N${String(i).padStart(2, '0')}`);
+    const summary = await svc.getSummary(ICSOP_ADMIN, 'unassigned');
+    expect(summary.docCoverage.shown).toBe(15);
+    expect(summary.docCoverage.hidden).toBe(5);
+    expect(summary.docCoverage.items.map((i) => i.documentNumber)).toEqual(
+      Array.from({ length: 15 }, (_, i) => `N${String(i).padStart(2, '0')}`),
+    );
+  });
+
+  /**
+   * 🔴 假綠陷阱 22（F042-test.md §三-3 丁）：既有語料（上一輪 34 份文件全部有使用部門）對本輪
+   * 缺陷零鑑別力——`byState.unassigned` 恆為 0 時，舊公式（`partial+none`）與新公式③′在該語料
+   * 下給出同一個答案。本案必須以「母體含至少一份 totalUnits=0」之 fixture 驅動，且明確斷言
+   * 新舊公式分歧（新公式排除無義務者、舊公式不排除），逼「忘了扣 unassigned」之實作紅。
+   */
+  it('⑪ ③′ 不變式：incompleteTotal 排除無義務者（母體含 unassigned>0，新舊公式必須分歧）', async () => {
+    const { svc, usingDept, orgDirectory, sessionStore } = makeService();
+    seedDocWithRatio(usingDept, orgDirectory, sessionStore, 'd-all-1', 'N-ALL-1', 1, 1);
+    seedDocWithRatio(usingDept, orgDirectory, sessionStore, 'd-partial-1', 'N-PARTIAL-1', 2, 1);
+    seedDocWithRatio(usingDept, orgDirectory, sessionStore, 'd-none-1', 'N-NONE-1', 1, 0); // 有義務、未完成
+    seedUnassignedDoc(usingDept, 'd-u1', 'N-U1');
+    seedUnassignedDoc(usingDept, 'd-u2', 'N-U2');
+    seedUnassignedDoc(usingDept, 'd-u3', 'N-U3');
+    const summary = await svc.getSummary(ICSOP_ADMIN, 'all');
+    const dc = summary.docCoverage;
+    expect(dc.byState).toEqual({ all: 1, partial: 1, none: 4, unassigned: 3 }); // none = 1(有義務)+3(無義務)
+    expect(dc.incompleteTotal).toBe(2); // ③′：1(partial) + 4(none) − 3(unassigned) = 2
+    expect(dc.incompleteTotal).not.toBe(dc.byState.partial + dc.byState.none); // 舊公式會誤給 5
+  });
+
+  it('不變式④續為真、byState.unassigned 不得加入三態之和（防「四鍵相加」之算術陷阱，假綠陷阱 23）', async () => {
+    const { svc, usingDept, orgDirectory, sessionStore } = makeService();
+    seedDocWithRatio(usingDept, orgDirectory, sessionStore, 'd-all-1', 'N-ALL-1', 1, 1);
+    seedUnassignedDoc(usingDept, 'd-u1', 'N-U1');
+    seedUnassignedDoc(usingDept, 'd-u2', 'N-U2');
+    const summary = await svc.getSummary(ICSOP_ADMIN, 'all');
+    const dc = summary.docCoverage;
+    expect(dc.byState.all + dc.byState.partial + dc.byState.none).toBe(dc.totalDocuments); // 1+0+2=3
+    expect(dc.byState.all + dc.byState.partial + dc.byState.none + dc.byState.unassigned).not.toBe(dc.totalDocuments); // 3+2=5≠3
+  });
+
+  it('⑤ byState.unassigned ≤ byState.none（子集關係之機讀形式）', async () => {
+    const { svc, usingDept, orgDirectory, sessionStore } = makeService();
+    seedDocWithRatio(usingDept, orgDirectory, sessionStore, 'd-none-1', 'N-NONE-1', 1, 0);
+    seedUnassignedDoc(usingDept, 'd-u1', 'N-U1');
+    const summary = await svc.getSummary(ICSOP_ADMIN, 'all');
+    expect(summary.docCoverage.byState.unassigned).toBeLessThanOrEqual(summary.docCoverage.byState.none);
+  });
+
+  /**
+   * 🔴 假綠陷阱 9 之延伸（母體口徑鎖，範圍由三種擴為四種）：四種 docScope 各請求一次，
+   * totalDocuments／byState（含 unassigned）／incompleteTotal 四組值須完全相同；coverage／
+   * deptRollup／recentSessions 三區之統計亦不受影響。
+   */
+  it('🔴 假綠陷阱 9 延伸：四種 docScope 之完整母體計數（含 byState.unassigned）完全相同', async () => {
+    const { svc, usingDept, orgDirectory, sessionStore } = makeService();
+    seedDocWithRatio(usingDept, orgDirectory, sessionStore, 'd-all-1', 'N-ALL-1', 1, 1);
+    seedDocWithRatio(usingDept, orgDirectory, sessionStore, 'd-partial-1', 'N-PARTIAL-1', 2, 1);
+    for (let i = 0; i < 20; i++) seedUnassignedDoc(usingDept, `d-u${i}`, `N-U${String(i).padStart(2, '0')}`); // 母體 > maxRows
+
+    const incomplete = await svc.getSummary(ICSOP_ADMIN, 'incomplete');
+    const completed = await svc.getSummary(ICSOP_ADMIN, 'completed');
+    const unassigned = await svc.getSummary(ICSOP_ADMIN, 'unassigned');
+    const all = await svc.getSummary(ICSOP_ADMIN, 'all');
+
+    for (const s of [incomplete, completed, unassigned, all]) {
+      expect(s.docCoverage.totalDocuments).toBe(22);
+      expect(s.docCoverage.byState).toEqual({ all: 1, partial: 1, none: 20, unassigned: 20 });
+      expect(s.docCoverage.incompleteTotal).toBe(1); // 1(partial) + 20(none) − 20(unassigned) = 1
+    }
+    expect(incomplete.coverage).toEqual(unassigned.coverage);
+    expect(incomplete.deptRollup).toEqual(unassigned.deptRollup);
+    expect(incomplete.recentSessions).toEqual(unassigned.recentSessions);
+  });
+
+  it('⑫ 比值欄退化值之後端側背書：totalUnits===0 之文件恆有 completedUnits===0（前端據此呈現「—」、不畫進度條）', async () => {
+    const { svc, usingDept } = makeService();
+    seedUnassignedDoc(usingDept, 'd-u1', 'N-U1');
+    const summary = await svc.getSummary(ICSOP_ADMIN, 'unassigned');
+    expect(summary.docCoverage.items[0]).toMatchObject({ totalUnits: 0, completedUnits: 0, state: 'none' });
+  });
+
+  it('🔒 AC-04 三態未被本輪改動（回歸鎖）：totalUnits===0 之文件於 items[].state 仍為 "none"，不得出現 "unassigned" 之 state 值', async () => {
+    const { svc, usingDept, orgDirectory, sessionStore } = makeService();
+    seedUnassignedDoc(usingDept, 'd-u1', 'N-U1');
+    seedDocWithRatio(usingDept, orgDirectory, sessionStore, 'd-a1', 'N-A1', 1, 1);
+    seedDocWithRatio(usingDept, orgDirectory, sessionStore, 'd-p1', 'N-P1', 2, 1);
+    const summary = await svc.getSummary(ICSOP_ADMIN, 'all');
+    const states = summary.docCoverage.items.map((i) => i.state);
+    expect(states.every((s) => s === 'all' || s === 'partial' || s === 'none')).toBe(true);
+    expect(states).not.toContain('unassigned');
   });
 });

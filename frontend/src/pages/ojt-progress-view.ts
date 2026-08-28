@@ -1,4 +1,5 @@
-import type { OjtDocScope, OjtProgressRow } from '../api/types';
+import type { OjtDocScope, OjtDocumentStatus, OjtProgressRow } from '../api/types';
+import { ojtStatusView, type OjtStatusView } from '../domain/ojt-status-view';
 
 /**
  * F042 OJT 進度管理之**逐字文案常數與純規則**（自 `OjtProgressPage.tsx` 抽出，使頁面元件
@@ -217,13 +218,110 @@ export function todayIsoDate(now: Date = new Date()): string {
  * 及本表狀態欄之 `尚未開始` 混淆——本控制項濾的是**文件層**的「還沒全部做完」。
  */
 export const DOC_COVERAGE_SCOPE_LABEL = '依文件逐筆之顯示範圍';
+/**
+ * 🔴 `AC-28`⑲（`OQ-E11-22`）：由三個 `option` 增為**恰四個**，`unassigned` 落在 `completed`
+ * 之後、`all` 之前；🔒 第一個仍為預設，`aria-label` 一字未改。
+ */
 export const DOC_COVERAGE_SCOPE_OPTIONS: readonly { value: OjtDocScope; text: string }[] = [
   { value: 'incomplete', text: '僅未全部完成' },
   { value: 'completed', text: '僅已全部完成' },
+  { value: 'unassigned', text: '僅未指定使用部門' },
   { value: 'all', text: '全部文件' },
 ];
 
 export const DOC_COVERAGE_INCOMPLETE_LABEL = '尚未全部完成合計';
+
+// ══════════ `OQ-E11-22` 第四種呈現態「未指定使用部門」（`AC-14` ⑧～⑮／`AC-28`⑲） ══════════
+
+/**
+ * 🔴 **區一專屬**之第四種呈現態（`AC-14` 本輪負向鎖定 ②／③）。
+ *
+ * 🔒 **刻意不加進 `domain/ojt-status-view.ts`**：那組是與 `prototypes/13`（文件清單頁）共用之
+ * `AC-04` 文件層三態載體，加第四鍵會直接漣漪到清單頁之圖示欄與四值篩選（`AC-J13`／`AC-J14`）。
+ * **兩張表度量的東西不同**——清單頁問「這份文件的訓練做完沒」（`totalUnits === 0` 確實就是
+ * 「尚未開始」），區一問「哪些文件需要關注」（`totalUnits === 0` 是**沒有義務**、不需要關注）。
+ * 故本態之視覺**另立一份常數、不外流**。
+ *
+ * 🔴 icon 刻意跳出 `file-*-2` 家族（三態是同一把量尺上的三個刻度，本態**在尺之外**）；
+ * 色票 `text-slate-500`（白底約 5:1，過 WCAG AA），**刻意不比照** `none` 之 `text-slate-300`
+ * （約 1.7:1，屬與清單頁共用之待裁既有議題）——新載體不必繼承既有載體的可讀性問題。
+ */
+export const DOC_UNASSIGNED_TEXT = '未指定使用部門';
+export const DOC_UNASSIGNED_VISUAL: OjtStatusView = {
+  icon: 'circle-slash',
+  text: DOC_UNASSIGNED_TEXT,
+  className: 'text-slate-500',
+};
+
+/**
+ * 逐筆表一列之呈現態視覺：`totalUnits === 0` ⇒ 第四態，否則沿用 `AC-04` 三態。
+ * 🔒 **只影響晶片之視覺與逐字**——該列之 `data-doc-ojt-state` 仍為 `state` 本身（三值），
+ * 第四態另以 `[data-doc-no-using-dept]` 表達，兩者不互斥（`AC-14` 本輪負向鎖定 ①）。
+ */
+export function docCoverageRowView(row: { state: OjtDocumentStatus; totalUnits: number }): OjtStatusView {
+  return row.totalUnits === 0 ? DOC_UNASSIGNED_VISUAL : ojtStatusView(row.state);
+}
+
+/**
+ * `AC-14` ⑫：`totalUnits === 0` 之比值與百分比欄。
+ * 🔴 `0 / 0` 與 `0%` 都在宣稱一個**不存在的量測結果**——與總覽比率之「分母為零不得退化為
+ * `0%`／`NaN`／`100%`」是同一條規則在逐列層級的落點。
+ */
+export const DOC_COVERAGE_NA_TEXT = '—';
+
+/**
+ * 逐筆表覆蓋率欄之進度條填色（prototype 25 `renderDocCoverageTable()` 逐字）。
+ * 🔴 三檔而非連續色階：`100%` 綠（做完了）／`0%` 灰（還沒開始，不該用「進行中」的顏色宣稱有進度）／
+ * 其餘 primary。🔒 `totalUnits === 0` 之列**根本不畫條**（`AC-14` ⑫），故本函式不處理該情形——
+ * 呼叫端必須先分岔，不能靠傳 `0` 進來蒙混（那會畫出一條寬度 0 的灰條＝仍在宣稱「量測過、結果是 0」）。
+ */
+export function docCoverageBarClass(pct: number): string {
+  if (pct === 100) return 'bg-emerald-500';
+  if (pct === 0) return 'bg-slate-300';
+  return 'bg-primary-500';
+}
+
+/** `AC-14` ⑬ 摘要行**上行**之新片段標籤（下行之標籤見 `DOC_COVERAGE_BREAKDOWN_LABEL`）。 */
+export const DOC_COVERAGE_TRACKED_LABEL = '已指定使用部門';
+
+/**
+ * `AC-14` ⑬ 摘要行**下行**之標籤。
+ * 🔴 **本句不是裝飾**：下行之「尚未開始 {n} 份」顯示的是「**有義務**卻一列都沒完成」，
+ * 刻意不等於 `AC-04` 口徑之 `byState.none`（含無義務者）；少了這句，讀者會把兩者當成同一個數
+ * 而判為 bug。
+ */
+export const DOC_COVERAGE_BREAKDOWN_LABEL = '已指定使用部門者之細分：';
+
+/** 摘要行兩行之四個數字（🔒 恆為**完整母體**之分佈，不隨顯示範圍或上限改變）。 */
+export interface DocCoverageBreakdown {
+  /** 已指定使用部門之份數（＝`totalDocuments − unassigned`）。 */
+  tracked: number;
+  /** 未指定使用部門之份數（＝`byState.unassigned`）。 */
+  unassigned: number;
+  /** 下行三態之份數；🔴 `none` 已扣除無義務者。 */
+  stat: Record<'all' | 'partial' | 'none', number>;
+}
+
+/**
+ * `AC-14` ⑬ 之唯一推導點——四個數字必須構成一個**可加總之分割**：
+ * `tracked + unassigned === totalDocuments` 且 `stat.all + stat.partial + stat.none === tracked`。
+ *
+ * 🔴 **`stat.none` 必須現場減去 `unassigned`，不得直接渲染 `byState.none`**：後者為 `AC-04`
+ * 口徑（**含**無義務者），直接畫上去會讓畫面宣告一批數量級錯誤的待辦（真庫 587 份）。
+ * 🔒 缺鍵之 `unassigned` 一律以 `0` 解讀（舊快取／部署落差之回應仍只有三鍵，此時退化為
+ * 本輪之前的行為，而非顯示 `NaN`）。
+ */
+export function docCoverageBreakdown(
+  totalDocuments: number,
+  byState: { all: number; partial: number; none: number; unassigned?: number },
+): DocCoverageBreakdown {
+  const unassigned = byState.unassigned ?? 0;
+  return {
+    tracked: totalDocuments - unassigned,
+    unassigned,
+    stat: { all: byState.all, partial: byState.partial, none: byState.none - unassigned },
+  };
+}
 
 /**
  * 顯示範圍造成之空狀態，**逐一個範圍一句**（不共用一句「查無資料」）。
@@ -233,6 +331,7 @@ export const DOC_COVERAGE_INCOMPLETE_LABEL = '尚未全部完成合計';
 export const DOC_COVERAGE_EMPTY_BY_SCOPE: Record<OjtDocScope, string> = {
   incomplete: '所有文件之教育訓練皆已全部完成',
   completed: '尚無任何文件之教育訓練已全部完成',
+  unassigned: '所有文件皆已指定使用部門',
   all: '',
 };
 
@@ -242,17 +341,45 @@ export const DOC_COVERAGE_EMPTY_BY_SCOPE: Record<OjtDocScope, string> = {
  */
 export const DOC_COVERAGE_EMPTY_HINT = '切換顯示範圍為「全部文件」可檢視全部文件之覆蓋率。';
 
-/** 截斷句之名詞隨顯示範圍而異（其餘句子完全相同 ⇒ 只分岔一個名詞，不寫三句）。 */
+/** 截斷句之名詞隨顯示範圍而異（其餘句子完全相同 ⇒ 只分岔一個名詞，不寫四句）。 */
 const DOC_COVERAGE_TRUNC_NOUN: Record<OjtDocScope, string> = {
   incomplete: '尚未全部完成之文件',
   completed: '已全部完成之文件',
+  unassigned: '未指定使用部門之文件',
   all: '文件',
+};
+
+/**
+ * 🔴 `AC-14` ⑭(a)：排序描述之兩個變體。`unassigned` 範圍下所有列之覆蓋率皆為 `—`，
+ * 宣稱「依覆蓋率排序」是**假話** ⇒ 另寫一句；其餘三個範圍沿用原句，僅補入一個括號段
+ * （`OQ-E11-22` 之排序沉底），使那句話與實際排序鍵仍然一致。
+ */
+const DOC_COVERAGE_TRUNC_ORDER: Record<OjtDocScope, string> = {
+  incomplete: '本表依覆蓋率由低至高排序（未指定使用部門之文件一律排在最後），未列出者之覆蓋率均不低於已列出者',
+  completed: '本表依覆蓋率由低至高排序（未指定使用部門之文件一律排在最後），未列出者之覆蓋率均不低於已列出者',
+  unassigned: '本表依程序書編號昇冪排序',
+  all: '本表依覆蓋率由低至高排序（未指定使用部門之文件一律排在最後），未列出者之覆蓋率均不低於已列出者',
+};
+
+/**
+ * 🔴 `AC-14` ⑭(b)：「完整的去哪看」之兩個變體，**實質內容改變、非文案潤飾**。
+ * `unassigned` 範圍之文件沒有使用部門 ⇒ 沒有進度列，把人導去「OJT 資料清單」只會看到空的；
+ * 正確去處是去把使用部門補上（與 `EMPTY_ALL_HINT` 指向同一個頁面，不另造詞）。
+ */
+const DOC_COVERAGE_TRUNC_WHERE: Record<OjtDocScope, string> = {
+  incomplete: '完整清單請至「OJT 資料清單」分頁逐列檢視。',
+  completed: '完整清單請至「OJT 資料清單」分頁逐列檢視。',
+  unassigned: '完整清單與使用部門之設定請至「ICSOP 文件管理」。',
+  all: '完整清單請至「OJT 資料清單」分頁逐列檢視。',
 };
 
 /**
  * 🔴 **不得靜默 top-N** 之載體：**三件事缺一不可**——還有幾份沒列出、憑什麼是這 N 份
  * （排序規則）、完整的東西去哪裡看。只顯示前 N 筆而不說，等於讓畫面謊稱本表已涵蓋全部文件。
  * 🔴 `maxRows` **由呼叫端自回應傳入**，不得硬寫 15。
+ * 🔴 四個範圍共用同一骨架，**恰三處**隨範圍分岔（名詞／排序描述／去處）——三張對照表逐一列出
+ * 四個鍵，而非寫成 `scope === 'unassigned' ? … : …` 之三元式：三元式一旦有人補第五個範圍，
+ * 它會靜默落進 else 分支並宣稱一句假話，對照表則會由 `Record<OjtDocScope, …>` 直接編譯失敗。
  */
 export function docCoverageTruncationText(
   maxRows: number,
@@ -261,7 +388,7 @@ export function docCoverageTruncationText(
 ): string {
   return (
     `本表僅列出前 ${maxRows} 份，另有 ${hidden} 份${DOC_COVERAGE_TRUNC_NOUN[scope]}未列出；` +
-    '本表依覆蓋率由低至高排序，未列出者之覆蓋率均不低於已列出者。完整清單請至「OJT 資料清單」分頁逐列檢視。'
+    `${DOC_COVERAGE_TRUNC_ORDER[scope]}。${DOC_COVERAGE_TRUNC_WHERE[scope]}`
   );
 }
 

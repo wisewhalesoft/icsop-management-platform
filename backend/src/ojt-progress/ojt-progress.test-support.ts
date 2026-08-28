@@ -84,16 +84,21 @@ export interface OjtDocCoverageRow {
 }
 
 /**
- * 🔴 `OQ-E11-21`（2026-08-28 節流修正）：`docScope` 恰三值，逐字對應顯示範圍
- * （F042 `AC-14` ①／§架構設計 一-2）。`incomplete` 為伺服器正規化後之預設值。
+ * 🔴 `OQ-E11-21`（2026-08-28 節流修正）＋ `OQ-E11-22`（2026-08-28 第二輪，第四種呈現態）：
+ * `docScope` 自第二輪起為**恰四值**，逐字對應顯示範圍（F042 `AC-14` ①⑨／§架構設計 一-2）。
+ * `incomplete` 為伺服器正規化後之預設值；`incomplete` 之集合定義同步收窄為
+ * `totalUnits > 0 && state !== 'all'`（不含無義務者）。`unassigned` 為**正向**過濾
+ * （`totalUnits === 0`），與 `all`（不過濾）不同型。
  */
-export type OjtDocScope = 'incomplete' | 'completed' | 'all';
+export type OjtDocScope = 'incomplete' | 'completed' | 'unassigned' | 'all';
 
 /**
  * 🔴 `docCoverage` 之新形狀（陣列→物件，刻意的 loud break，見 §架構設計 一-2）。
- * `items` 為受限切片（依 `docScope` 過濾 → 覆蓋率昇冪排序、同率依 `documentNumber` 昇冪 →
- * 取前 `maxRows` 筆）；`totalDocuments`／`byState`／`incompleteTotal` 恆取自完整母體、
- * 與 `docScope`／`maxRows` 無關（四條不變式見 §架構設計 一-2）。
+ * `items` 為受限切片（依 `docScope` 過濾 → **三段排序鍵**：① 有無訓練義務（`totalUnits===0`
+ * 者一律在後，2026-08-28 第二輪沉底修正）→ ② 覆蓋率昇冪 → ③ `documentNumber` 昇冪 → 取前
+ * `maxRows` 筆）；`totalDocuments`／`byState`／`incompleteTotal` 恆取自完整母體、與
+ * `docScope`／`maxRows` 無關（四條不變式見 §架構設計 一-2；`incompleteTotal` 之公式已於
+ * 第二輪就地更正為 ③′，見該欄位註解）。
  */
 export interface OjtDocCoverageSlice {
   /** 伺服器正規化後實際套用之範圍（缺值／未知值一律正規化為 'incomplete'，本欄回聲）。 */
@@ -107,9 +112,18 @@ export interface OjtDocCoverageSlice {
   hidden: number;
   /** 全部 ICSOP 文件份數（完整母體，不受 docScope／maxRows 影響）。 */
   totalDocuments: number;
-  /** 文件層三態份數（完整母體）。 */
-  byState: { all: number; partial: number; none: number };
-  /** 尚未全部完成合計（＝byState.partial + byState.none，完整母體）。 */
+  /**
+   * 文件層三態份數（完整母體，`AC-04` 口徑，`none` 天然含無義務者）＋ `unassigned`（🔴
+   * 2026-08-28 第二輪新增之第四鍵：`totalUnits===0` 之份數，`none` 之**子集**、非第四個互斥
+   * 類——四鍵相加 **不得** 等於 `totalDocuments`，見不變式④之負向案）。
+   */
+  byState: { all: number; partial: number; none: number; unassigned: number };
+  /**
+   * 尚未全部完成合計（完整母體）。🔴 不變式已就地更正為 ③′：
+   * `incompleteTotal === byState.partial + byState.none − byState.unassigned`
+   * （原式 `partial + none` 已於第二輪起不成立——`none` 含無義務者，而本欄依使用者裁決
+   * 排除他們）。
+   */
   incompleteTotal: number;
 }
 

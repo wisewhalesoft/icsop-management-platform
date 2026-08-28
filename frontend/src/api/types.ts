@@ -1088,8 +1088,15 @@ export interface OjtDocCoverageRow {
   completedUnits: number;
 }
 
-/** `AC-28`⑯ 區一逐筆表之顯示範圍（三值，預設 `incomplete`）。 */
-export type OjtDocScope = 'incomplete' | 'completed' | 'all';
+/**
+ * `AC-28`⑯／⑲ 區一逐筆表之顯示範圍（**四值**，預設 `incomplete`）。
+ *
+ * 🔴 `OQ-E11-22`（2026-08-28 第二輪）新增 `unassigned`（＝`totalUnits === 0`、**無訓練義務**）。
+ * 🔒 `incomplete` 之集合同步收窄為 `totalUnits > 0 && state !== 'all'`（不含無義務者）；
+ * `completed`（`state === 'all'`）之定義**一字未動**——`totalUnits === 0` 依 `AC-04` 恆為
+ * `none`，天然不入該集，不需要也不得為此另加排除。切片與排序皆由伺服器完成，前端不重排。
+ */
+export type OjtDocScope = 'incomplete' | 'completed' | 'unassigned' | 'all';
 
 /**
  * 🔴 `OQ-E11-21`（2026-08-28 節流修正）：`docCoverage` 由**陣列改為物件**（刻意的 loud break）。
@@ -1112,7 +1119,22 @@ export interface OjtDocCoverageSlice {
   hidden: number;
   /** 完整母體之文件總數（**非**本次切片之 `items.length`）。 */
   totalDocuments: number;
-  byState: { all: number; partial: number; none: number };
+  /**
+   * 🔴 `AC-04` 口徑之三態分佈 ＋ `OQ-E11-22` 新增之第四鍵 `unassigned`。
+   *
+   * 🔴 `unassigned` 是 `none` 的**子集**、不是第四個互斥類：一份 `totalUnits === 0` 的文件
+   * 依 `AC-04` 仍然是 `none`，同時又落在 `unassigned` 內 ⇒ 三態份數**不得**直接相加當作總數。
+   * 區一摘要行下行之「尚未開始」＝`none − unassigned`（有義務卻一列都沒完成），與本欄之
+   * `none` 刻意不同（`AC-14` ⑬）。
+   * 🔒 宣告為**選填**：既有測試與舊快取之回應可能只有三鍵，缺鍵一律以 `0` 解讀
+   * （`docCoverageBreakdown()` 為全頁唯一之解讀點）。
+   */
+  byState: { all: number; partial: number; none: number; unassigned?: number };
+  /**
+   * 「尚未全部完成」之份數。
+   * 🔴 `AC-14` ⑪：**排除無義務者** ⇒ 不變式自 `OQ-E11-22` 起為
+   * `incompleteTotal === byState.partial + byState.none − byState.unassigned`（原式已不成立）。
+   */
   incompleteTotal: number;
 }
 

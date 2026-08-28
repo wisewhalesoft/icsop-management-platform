@@ -21,6 +21,8 @@ import {
   // F042 OJT 進度管理（prototypes/25 之 data-lucide 值；`file-minus-2` 為清單頁三態新增之鍵）。
   GraduationCap, FileMinus2, ListTree, Target, CircleCheckBig, CircleDashed,
   CalendarCheck, FileInput,
+  // F042 `OQ-E11-22`：區一逐筆表第四態「未指定使用部門」之專屬圖示（刻意跳出 `file-*-2` 家族）。
+  CircleSlash,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -86,6 +88,8 @@ const REGISTRY: Record<string, LucideIcon> = {
   'circle-dashed': CircleDashed,
   'calendar-check': CalendarCheck,
   'file-input': FileInput,
+  // F042 `OQ-E11-22` 第四態「未指定使用部門」＝「不適用」之通用字形，非三態量尺上的刻度。
+  'circle-slash': CircleSlash,
   'git-commit-vertical': GitCommitVertical,
   'plus-circle': PlusCircle,
   filter: Filter,

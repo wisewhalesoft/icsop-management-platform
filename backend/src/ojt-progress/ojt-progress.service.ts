@@ -103,11 +103,15 @@ export interface OjtDocCoverageRow {
 }
 
 /**
- * 🔴 `OQ-E11-21`（2026-08-28 節流修正）：區一逐筆表之顯示範圍，恰三值。
+ * 🔴 `OQ-E11-21`（2026-08-28 節流修正）：區一逐筆表之顯示範圍。
  * 🔒 **`incomplete` 為伺服器正規化後之預設**——缺值與未知值一律落到它，並於
  * `OjtDocCoverageSlice.scope` 回聲，使正規化結果**可觀測**（故不回 400）。
+ *
+ * 🔴 `OQ-E11-22`（2026-08-28 第二輪）：值域由三值增為**恰四值**，新增 `'unassigned'`
+ * （未指定使用部門、**無訓練義務**者，`totalUnits === 0`）。
+ * ⚠ **`unassigned` 與 `all` 不同型**：`all` 是「不過濾」，`unassigned` 是一道**正向**過濾。
  */
-export type OjtDocScope = 'incomplete' | 'completed' | 'all';
+export type OjtDocScope = 'incomplete' | 'completed' | 'unassigned' | 'all';
 
 /** 伺服器所套用之逐筆表筆數上限（`AC-14` 節流）。 */
 export const DOC_COVERAGE_MAX_ROWS = 15;
@@ -133,9 +137,22 @@ export interface OjtDocCoverageSlice {
   hidden: number;
   /** 全部 ICSOP 文件份數（**完整母體**）。 */
   totalDocuments: number;
-  /** 文件層三態份數（**完整母體**）。 */
-  byState: { all: number; partial: number; none: number };
-  /** 尚未全部完成合計（＝`byState.partial + byState.none`，**完整母體**）。 */
+  /**
+   * 文件層三態份數（**完整母體**）＋第四鍵 `unassigned`（`OQ-E11-22`）。
+   *
+   * 🔴 **`unassigned` 是 `none` 之子集、不是第四個互斥類**（`totalUnits === 0` 依 `AC-04`
+   * 恆為 `none`）⇒ 不變式 ④ 之和**只加前三鍵**：`all + partial + none === totalDocuments`。
+   * ⚠ 四鍵相加是本輪最容易犯的算術錯誤（會把 `unassigned` 重複計一次）。
+   */
+  byState: { all: number; partial: number; none: number; unassigned: number };
+  /**
+   * 尚未全部完成合計（**完整母體**）＝**有使用部門卻尚未全部完成**之份數。
+   *
+   * 🔴 不變式 ③′（`OQ-E11-22` 就地更正）：`incompleteTotal === byState.partial +
+   * byState.none − byState.unassigned`。原式（`partial + none`）自本輪起**不成立**——
+   * `byState.none` 為 `AC-04` 口徑（**含**無義務者），而本欄依使用者裁決**排除**它們。
+   * ⚠ 原式在上一輪為真只是因為當時語料無任何 `totalUnits === 0` 之文件，不是普遍關係。
+   */
   incompleteTotal: number;
 }
 
@@ -228,7 +245,19 @@ function includesCi(haystack: string, needle: string): boolean {
  * 靜默降級才是問題，回聲式降級不是。
  */
 function normalizeDocScope(raw: unknown): OjtDocScope {
-  return raw === 'completed' || raw === 'all' ? raw : 'incomplete';
+  return raw === 'completed' || raw === 'unassigned' || raw === 'all' ? raw : 'incomplete';
+}
+
+/**
+ * 🔴 `AC-14` ⑧（`OQ-E11-22`）：「無訓練義務」之**單一判準**——該文件未指定任何使用部門。
+ *
+ * 🔴 **本態不是「進度差」，是「不適用」**：區一問的是「哪些文件需要關注」，一份沒有使用
+ * 部門的文件不需要關注（要處理的是去補使用部門，不是去登記場次）。
+ * ⚠ **與 `AC-04` 之關係**：`AC-04` 口徑下它**仍然是 `none`**（`state` 值不變、不新增第四個
+ * 狀態值），本述詞只用於**區一之呈現態**（範圍過濾／沉底排序／`incompleteTotal` 之扣除）。
+ */
+function hasNoTrainingObligation(r: OjtDocCoverageRow): boolean {
+  return r.totalUnits === 0;
 }
 
 /** 覆蓋率（`totalUnits === 0` ⇒ 0，避免除以零）。 */
@@ -247,8 +276,11 @@ function coverageRatioOf(r: OjtDocCoverageRow): number {
  * 🔴 **統計欄一律取自 `population`，不取自 `filtered`／`items`**——這是本次修正的核心：
  * 把上限或範圍摻進統計，三種範圍會各自得到看似合理、實則互相矛盾的數字。
  *
- * 🔒 排序＝覆蓋率**昇冪**（最需要關注者在前），同率以 `documentNumber` 昇冪 tie-break，
+ * 🔒 排序＝**三段鍵**（`OQ-E11-22` 就地更正）：**(1) 有無訓練義務**（`totalUnits === 0` 者
+ * 一律在後）→ **(2) 覆蓋率昇冪**（最需要關注者在前）→ **(3) `documentNumber` 昇冪**，
  * 使輸出**決定性**（同率文件之相對順序不隨母體寫入順序而變）。
+ * 🔴 `totalUnits === 0` 之覆蓋率仍是 `0`，只是第 (1) 段先把它推到最後 ⇒ **不得再據舊註解
+ * 推論「無義務者排最前」**。
  */
 function sliceDocCoverage(
   population: OjtDocCoverageRow[],
@@ -261,17 +293,27 @@ function sliceDocCoverage(
     all: population.filter((r) => r.state === 'all').length,
     partial: population.filter((r) => r.state === 'partial').length,
     none: population.filter((r) => r.state === 'none').length,
+    // 🔴 `none` 之**子集**（`AC-04` 口徑下無義務者恆為 `none`），非第四個互斥類。
+    unassigned: population.filter(hasNoTrainingObligation).length,
   };
 
   // ① 過濾
   const filtered = population.filter((r) => {
     if (scope === 'completed') return r.state === 'all';
-    if (scope === 'incomplete') return r.state !== 'all';
+    // 🔴 `incomplete` 之集合定義已收窄（`AC-14` ⑨）：「僅未全部完成」**不含**無義務者
+    // ——它們沒有「未完成」可言。
+    if (scope === 'incomplete') return !hasNoTrainingObligation(r) && r.state !== 'all';
+    // 🔴 正向過濾（與 `all` 之「不過濾」不同型）。
+    if (scope === 'unassigned') return hasNoTrainingObligation(r);
     return true; // 'all'：不過濾
   });
-  // ② 排序（覆蓋率昇冪；同率 documentNumber 昇冪）
+  // ② 排序（三段鍵：沉底 → 覆蓋率昇冪 → documentNumber 昇冪）
   const sorted = [...filtered].sort(
     (a, b) =>
+      // 🔴 第 (1) 段（`AC-14` ⑩，本輪之核心修正）：無義務者一律沉底，**不得占用前 maxRows
+      // 名額**。⚠ 只拆出第四態而不改排序等於沒修——`0 / 0`⇒`0%` 與「真的一列都沒完成」
+      // 共用同一個覆蓋率鍵，而無義務者在真庫佔 587/591 ⇒ 前 15 名照樣被整批占滿。
+      Number(hasNoTrainingObligation(a)) - Number(hasNoTrainingObligation(b)) ||
       coverageRatioOf(a) - coverageRatioOf(b) ||
       a.documentNumber.localeCompare(b.documentNumber),
   );
@@ -286,7 +328,9 @@ function sliceDocCoverage(
     hidden: filtered.length - items.length,
     totalDocuments: population.length,
     byState,
-    incompleteTotal: byState.partial + byState.none,
+    // 🔴 不變式 ③′（`AC-14` ⑪）：扣掉無義務者。把 587 份沒有訓練義務的文件計入「尚未全部
+    // 完成」，等於在畫面上宣告 587 件待辦——那是一個數量級錯誤的行動號召。
+    incompleteTotal: byState.partial + byState.none - byState.unassigned,
   };
 }
 
