@@ -132,6 +132,20 @@
   </div>
 </main>
 
+<!-- 🔵 2026-08-31：角色推導一次性放行之二次確認（版式沿用 08 之 confirmModal，勿另立第二種樣式） -->
+<div id="confirmModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <div class="flex items-start gap-3">
+      <div class="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0"><i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600"></i></div>
+      <div><h3 class="font-semibold text-slate-900" id="cfTitle"></h3><p class="text-sm text-slate-500 mt-1" id="cfBody"></p></div>
+    </div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeConfirm()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button id="cfOk" class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">確認套用</button>
+    </div>
+  </div>
+</div>
+
 <!-- toast -->
 <div id="toastWrap" class="fixed top-16 right-4 z-[60] space-y-2"></div>
 
@@ -177,7 +191,11 @@
   let syncing=false;
   let lastSync={time:'2026-07-16 06:00:12',trigger:'scheduled',result:'success',count:12};
   let history=[
-    {start:'2026-07-16 06:00:00',end:'2026-07-16 06:00:12',trigger:'scheduled',result:'success',count:12},
+    // 🔵 2026-08-31：角色推導因變更量超過閾值而**整批未套用**。同步本身成功（帳號/組織已更新），
+    //    但角色與子分類停在舊值。此事實必須看得見——半夜排程跳過時沒人在看畫面，
+    //    故落在 SYNC_RUN 上、於歷程列常駐呈現，而非只存在於觸發當下的回應。
+    {start:'2026-07-16 06:00:00',end:'2026-07-16 06:00:12',trigger:'scheduled',result:'success',count:12,
+     roleSkipped:true,roleChangeCount:602,roleBase:1124},
     {start:'2026-07-15 06:00:00',end:'2026-07-15 06:00:09',trigger:'scheduled',result:'success',count:5},
     {start:'2026-07-14 14:22:03',end:'2026-07-14 14:22:03',trigger:'manual',result:'failed',count:0,error:'SYNC_SOURCE_UNAVAILABLE：組織來源 View 連線逾時（重試 3 次後失敗），已保留同步前既有資料不變。'},
     {start:'2026-07-14 06:00:00',end:'2026-07-14 06:00:07',trigger:'scheduled',result:'success',count:0},
@@ -234,6 +252,8 @@
         ? `<span class="px-2 py-0.5 rounded-full text-xs text-emerald-700 bg-emerald-50 border border-emerald-100">成功</span>`
         : `<span class="px-2 py-0.5 rounded-full text-xs text-red-700 bg-red-50 border border-red-100">失敗</span>`;
       const expandBtn=h.result==='failed'?`<button onclick="toggleErr(${i})" class="text-xs text-primary-600 hover:underline">展開錯誤</button>`:'';
+      // 🔵 角色推導被跳過：常駐提示 ＋ write-only 之一次性放行鈕（僅系統管理員；ICSOP 管理員唯讀看得到但按不到）
+      const pct=h.roleSkipped?((h.roleChangeCount/h.roleBase)*100).toFixed(1):null;
       let row=`<tr class="hover:bg-slate-50">
         <td class="px-4 py-2.5 mono text-xs text-slate-600">${h.start}</td>
         <td class="px-4 py-2.5 mono text-xs text-slate-600">${h.end}</td>
@@ -241,12 +261,45 @@
         <td class="px-4 py-2.5">${resultCell}</td>
         <td class="px-4 py-2.5 text-left font-medium">${h.count}</td>
         <td class="px-4 py-2.5 text-left">${expandBtn}</td></tr>`;
+      if(h.roleSkipped) row+=`<tr><td colspan="6" class="px-4 pb-3 pt-0">
+        <div class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 flex items-start gap-2">
+          <i data-lucide="alert-triangle" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>
+          <div class="flex-1 min-w-0">
+            <div><span class="font-medium">角色推導已跳過</span>：本次將變更 ${h.roleChangeCount}/${h.roleBase} 筆（${pct}%），超過閾值 5.0%，**整批未套用**。帳號與組織資料已同步成功，僅角色與子分類停在舊值。</div>
+            <div class="mt-0.5 text-amber-700">閾值用於偵測「上游職稱改名致大量帳號靜默失去限縮」，故不自動放行；確認本次變更量合理後可手動套用。</div>
+          </div>
+          <button onclick="askApplyRole(${i})" class="write-only shrink-0 px-2.5 py-1 rounded border border-amber-300 bg-white text-xs font-medium text-amber-800 hover:bg-amber-100">本次仍要套用</button>
+        </div></td></tr>`;
       if(h.result==='failed') row+=`<tr id="err-${i}" class="hidden"><td colspan="6" class="px-4 pb-3 pt-0"><div class="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2 flex items-start gap-1.5"><i data-lucide="alert-octagon" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>${h.error}</span></div></td></tr>`;
       return row;
     }).join('');
     lucide.createIcons();
   }
   function toggleErr(i){document.getElementById('err-'+i).classList.toggle('hidden');}
+
+  /* 🔵 一次性放行角色推導（僅系統管理員；F025「組織人員異動管理」write）。
+     ⚠ 刻意**不提供閾值輸入框**：那等於把一次性放寬變成隨手可填 100% 的常駐開關，
+       而本閾值是「上游職稱改名致 288 人（21%）靜默失去限縮」之唯一偵測管道。
+       畫面只呈現本次實測筆數，由管理員就事論事地確認；放行僅對該次執行有效。 */
+  let pendingRoleApply=-1;
+  function askApplyRole(i){
+    const h=history[i]; pendingRoleApply=i;
+    const pct=((h.roleChangeCount/h.roleBase)*100).toFixed(1);
+    document.getElementById('cfTitle').textContent='套用本次角色推導？';
+    document.getElementById('cfBody').innerHTML=
+      `將對 <b>${h.roleChangeCount}</b> 筆帳號（共 ${h.roleBase} 筆，${pct}%）寫入角色與子分類變更。`+
+      `<br>升級與子分類直接套用；<b>降級不自動執行</b>，僅產生待確認提示。`+
+      `<br class="mb-1"><span class="text-amber-700">本次放行僅對這一次執行有效，閾值設定不變。</span>`;
+    document.getElementById('cfOk').onclick=doApplyRole;
+    const m=document.getElementById('confirmModal');
+    m.classList.remove('hidden'); m.classList.add('flex'); lucide.createIcons();
+  }
+  function doApplyRole(){
+    const h=history[pendingRoleApply]; closeConfirm();
+    h.roleSkipped=false; renderHistory();
+    toast('success','已套用角色推導：'+h.roleChangeCount+' 筆角色/子分類已更新（降級另列待確認）');
+  }
+  function closeConfirm(){const m=document.getElementById('confirmModal');m.classList.add('hidden');m.classList.remove('flex');}
 
   function renderAlerts(){
     const pend=alerts.filter(a=>a.status==='pending');
