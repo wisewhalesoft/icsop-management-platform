@@ -408,3 +408,90 @@ status: draft
 ## 🔴 已知殘留風險（比照既有 `AC-T40 ④` 之處置，登錄於 risks-and-gaps.md）
 
 真實 `TypeOrmDocumentStore`（SQL 層）目前也未實作 `appendixId`／`formId` 之 `EXISTS` 子查詢（team-lead 已查證 `typeorm-documents.store.ts` 零命中）；本輪環之 `documents.service.appendixFormFilters.spec.ts` 僅以 FakeStore 驗證「服務層正確轉發」，**不驗證真實 SQL 之交集正確性**——本 repo 對 `TypeOrmDocumentStore` 從無單元測試先例（含既有已運作之 `linkTargetId` 樣板亦無），真實 SQL 正確性需 int 測試或容器內驗證，非本輪環涵蓋範圍。
+
+---
+
+# 🔵 清單匯出（CSV）delta 之約束環（2026-08-31；`AC-X1`～`AC-X17`） {#export-delta-ring}
+
+> **簡化版環**：僅 backend jest ＋ frontend vitest 單元／元件測試，**無 Playwright、無 e2e、無整合測試、無 Stryker**。
+> ⇒ **AC 是唯一防線，本節所列之測試就是全部的環。**
+>
+> **權威**：`docs/specs/features/F017-backend-document-list.md` §export-delta（`AC-X1`～`AC-X17`）＋
+> `docs/specs/architecture-spec.md` 第 13 章（決策 D1–D4、§13.4 斷言形狀、§13.5 盲區）＋
+> `docs/specs/error-handling.md#export`（v1.9，五處匯出共用）＋ `prototypes/13-document-list.html`
+> （匯出鈕 L270-277、`filteredRows()` L920-936、匯出實作 L1015-1092）。
+
+## 建了哪些檔案
+
+| 檔案 | 層級 | 涵蓋 |
+|---|---|---|
+| `backend/src/documents/documents.export.service.spec.ts` | unit | `AC-X1`（BOM／14 欄表頭／RFC 4180／CRLF）｜`AC-X2`（空值、`—`、注入前綴六種字元）｜`AC-X3`＋`AC-X11` ③（**十四欄逐格值**，單一列 fixture）｜`AC-X4`（三值標籤＋鑑別力）｜`AC-X5`（頓號／去重／員編 fallback）｜`AC-X6`（分號／跳過 `targetNumber===null`／命中排第一）｜`AC-X7`（🔴 台北 00:00–08:00 窗口之時區鐵則）｜`AC-X8`（`YYYY-MM-DD` ＋ UTC 16:00 差一天判別案）｜`AC-X11` ②（🔴 fake **逆序**回傳 → CSV 仍為請求原序）｜`AC-X13`（0 筆僅表頭、檔名 scope）｜`AC-X15`（1 筆 vs 50 筆之呼叫次數快照相等；`pageSize`＝`EXPORT_ROW_LIMIT`；filters 不含任何篩選鍵）｜`AC-X17` ④邊界 |
+| `backend/src/documents/documents.export.controller.spec.ts` | unit（端點層） | §Interface Contract（`@Post('export')`、POST）｜`AC-X10`（閘門 `read`、四角色允許／User 403、不寫稽核、矩陣逐格回歸）｜`AC-X11` ⑤（`res.send(Buffer)`）｜`AC-X13`（`Content-Type`／`Content-Disposition`）｜**`AC-X12`＋`AC-X17` 之單點檢查落點**（① 型別 → ② 長度 → ③ 空陣列 → ④ 查無，含「非陣列取 `.length` 恆偽」之順序判別案） |
+| `backend/src/documents/export-link-order.spec.ts` | unit（純函式） | `AC-X6` 之後端排序函式 `orderLinksForExport()`；🔴 **跨執行環境向量之後端側** |
+| `backend/src/documents/ojt-status-label.spec.ts` | unit（純資料） | `AC-X4` 之 `OJT_STATUS_LABEL`；🔴 **跨執行環境向量之後端側**；值域恰 3 且封閉 |
+| `backend/src/documents/documents.export.zero-ripple.spec.ts` | unit（靜態掃描＋回歸） | `AC-X16` ⑦（全庫不得出現第二個 BOM 常數／第二份注入前綴表／第二個 `EXPORT_ROW_LIMIT` 宣告）｜`AC-X16` ⑨（全庫不得出現 `EXPORT_IDS_INVALID`）｜`csv-export.ts` 既有函式行為回歸 |
+| `backend/src/main.export-bodyparser-order.spec.ts` | unit（**靜態字面掃描**） | `AC-X12` 第三條陷阱／§13.2 ⑦ 之四行 body-parser 設定：`bodyParser: false`、路由範圍 `json({limit:'1mb'})`、全域 `json()`、全域 `urlencoded()` 之**存在與相對順序**，＋ `OQ-X-04` 之放寬範圍負向鎖（`1mb` 恰一次且與匯出路徑同行、全域 parser 不得帶 `limit`）。🔴 **只驗原始碼字面、不驗執行期行為**——`isMiddlewareApplied()` 函式名比對陷阱、413、multipart 回歸三者本檔一律測不到，`X-GAP-1` 之部署前 smoke **維持必做、不得降級** |
+| `frontend/src/pages/DocumentListPage.export.test.tsx` | component | `AC-X9`（topbar portal、逐字文案／`title`／icon 鍵、位於「建立程序書」之左、四角色皆可見、非 write-only、不得 `disabled`）｜`AC-X11` ①②（🔴 **120 筆 3 頁 ＋ OJT 篩選命中 80 筆**之 fixture，使 `all`／`filtered`／`pageRows` 三者相異；排序後匯出）｜`AC-X13`（0 筆仍可按、送空陣列）｜`AC-X14`（三種回饋逐字）｜`AC-X16` ①②③④ 回歸 |
+| `frontend/src/api/download-blob.export.test.ts` | unit | `AC-X14`（`downloadViaBlob()` additive 第三參數：POST＋`application/json`，`Accept` 不變；禁 `postDownloadViaBlob`）｜`AC-X16` ⑩ (ii)（**既有 2 參數呼叫端行為逐字不變**之回歸鎖定）｜§Interface Contract（`exportDocumentList()` body **恰兩鍵**、不得夾帶篩選鍵） |
+| `frontend/src/pages/DocumentListPage.exportVectors.test.ts` | unit（純函式） | `AC-X4`／`AC-X6` 之**跨執行環境向量前端側**（`ojtStatusView().text`、`orderedLinks()`），與後端兩檔使用**同一組常數** |
+
+## AC ↔ 約束對照
+
+| AC | 落地檔案（層級） |
+|---|---|
+| `AC-X1` ①②③④⑤ | `documents.export.service.spec.ts`（BOM／表頭／逸出／CRLF／列序）＋ `documents.export.controller.spec.ts`（位元組層 BOM 與表頭） |
+| `AC-X2` ①②③④ | `documents.export.service.spec.ts` |
+| `AC-X3`（14 欄逐欄） | `documents.export.service.spec.ts`（`AC-X11` ③ 之單一列 14 格逐字案 ＋ 各欄專屬 describe） |
+| `AC-X4` | `ojt-status-label.spec.ts`（後端向量）＋ `DocumentListPage.exportVectors.test.ts`（前端向量）＋ `documents.export.service.spec.ts`（匯出路徑之接線與三值鑑別力） |
+| `AC-X5` | `documents.export.service.spec.ts` |
+| `AC-X6` | `export-link-order.spec.ts`（後端純函式）＋ `DocumentListPage.exportVectors.test.ts`（前端純函式，同向量）＋ `documents.export.service.spec.ts`（匯出路徑之接線） |
+| `AC-X7` | `documents.export.service.spec.ts`（含 🔴 台北 01:00 之時區鐵則案） |
+| `AC-X8` | `documents.export.service.spec.ts`（含 UTC 16:30 之差一天判別案 ＋ `formatExportTimestamp(...).slice(0,10)` 等式） |
+| `AC-X9` | `DocumentListPage.export.test.tsx` |
+| `AC-X10` | `documents.export.controller.spec.ts`（metadata ＋ `canPerform` 五角色 ＋ 不寫稽核）＋ `DocumentListPage.export.test.tsx`（User 被擋） |
+| `AC-X11` ① | `DocumentListPage.export.test.tsx`（三者相異 fixture） |
+| `AC-X11` ② | `documents.export.service.spec.ts`（後端不重排）＋ `DocumentListPage.export.test.tsx`（前端送出當前排序之序） |
+| `AC-X11` ③ | `documents.export.service.spec.ts`（14 格逐字） |
+| `AC-X11` ⑤ | `documents.export.controller.spec.ts`（`res.send(Buffer)`）＋ service（回傳型別為 Buffer） |
+| `AC-X12` | `documents.export.controller.spec.ts`（>10,000 拒絕、任何 DB 查詢之前、單點）＋ service（恰 10,000 通過）＋ `DocumentListPage.export.test.tsx`（前端不得擋、不得 `disabled`） |
+| `AC-X12` 第三條陷阱（`main.ts`） | `main.export-bodyparser-order.spec.ts`（**靜態字面順序**，保證邊界見該檔檔頭） |
+| `AC-X13` | `documents.export.service.spec.ts`（僅表頭、檔名）＋ controller（標頭）＋ 前端（0 筆仍可按） |
+| `AC-X14` | `DocumentListPage.export.test.tsx`（三種逐字回饋）＋ `download-blob.export.test.ts`（下載途徑與 additive 參數） |
+| `AC-X15` | `documents.export.service.spec.ts`（呼叫次數快照、load-all、無寫入） |
+| `AC-X16` ①②③④ | `DocumentListPage.export.test.tsx` |
+| `AC-X16` ⑤ | `documents.export.service.spec.ts`（filters 不含任何篩選鍵、`store.list` 恰一次） |
+| `AC-X16` ⑥⑦⑨ | `documents.export.zero-ripple.spec.ts` |
+| `AC-X16` ⑧ | `documents.export.controller.spec.ts`（`canPerform` 逐格） |
+| `AC-X16` ⑩ (ii) | `download-blob.export.test.ts`（既有 2 參數呼叫端回歸） |
+| `AC-X17` ①②③④ | `documents.export.controller.spec.ts`（含順序判別案與「空陣列 vs 缺鍵不得合流」判別案） |
+
+## 本環所訂之契約（規格未定、由本環釘住；實作若採不同形狀請走 mailbox 申訴）
+
+| # | 契約 | 依據 |
+|---|---|---|
+| 1 | `DocumentsService.exportDocuments(documentIds, linkTargetId?)` 回傳 `{ csv: Buffer; fileName: string }` | 逐字同型於既有 `AppendicesService.exportPool()`／`UsageFormsService.exportPool()`（architecture §13.2 ③⑥「完全同型」） |
+| 2 | `orderLinksForExport()` 落於 `backend/src/documents/export-link-order.ts` | architecture §13.3 (ii) 只定「`backend/src/documents/` 之獨立純函式檔」，未定檔名 |
+| 3 | `@Post('export')` handler 之位置參數為 `(body, res)` | 比照既有 `AccessHistoryController.exportHistory(..., res)`（`@Res()` 置末）；handler **名稱**由測試以 `PATH_METADATA` 路徑字面定位，不敏感 |
+| 4 | `frontend` 之 `orderedLinks(links, filterLink)` 由 `DocumentListPage.tsx` 匯出 | architecture §13.3 (ii) 逐字明訂（⚠ 與 `AC-X6`「前端不需為本 delta 改動任何程式」相衝，見 risks-and-gaps） |
+
+| 5 | 🔵 **lead 裁決（2026-08-31）**：公告日期欄用既有 `formatExportTimestamp(...).slice(0,10)`，**不新增 `formatExportDate()`**，`csv-export.ts` **一行未改** | 解 `X-CONFLICT-2` 之僵局（兩案都不採、走第三條）；已編碼於 `documents.export.zero-ripple.spec.ts` 之負向鎖 |
+
+## 紅燈結果（已實跑，2026-08-31）
+
+- **backend**：`npm test -- --maxWorkers=4` ⇒ **189 suites / 3036 tests**（基線 183/2925 ＋ 本環 6 suites/111 tests）。
+  **5 failed suites / 95 failed tests**；**基線 183 suites 全數維持綠、2925 個既有測試零波及**（2941 passed ＝ 2925 ＋ 本環 16 個刻意之綠）。
+  紅因逐檔：`documents.export.service.spec.ts` 51 紅（`exportDocuments is not a function`）｜`documents.export.controller.spec.ts` 21 紅（找不到 `@Post('export')` handler）｜`ojt-status-label.spec.ts` 6 紅（`OJT_STATUS_LABEL` 為 `undefined`）｜`export-link-order.spec.ts` 7 紅（模組尚未存在）｜`main.export-bodyparser-order.spec.ts` 8 紅（`main.ts` 尚未改造；其「🔒 自證」案綠）。
+  `documents.export.zero-ripple.spec.ts` **11/11 綠**（含 lead 裁決後新增之 `formatExportDate` 負向鎖）——它是**綠燈回歸守衛**（基線已實測：`backend/src` 之四種樣式目前僅存在於 `storage/csv-export.ts`），只在有人分岔第二份產生器或新增錯誤碼時轉紅。
+- **frontend**：`npm test -- --maxWorkers=4` ⇒ **116 files / 1774 tests**（基線 113/1723 ＋ 本環 3 files/51 tests）。
+  **3 failed files / 34 failed tests**；**基線 113 files 全數維持綠、1723 個既有測試零波及**（1740 passed ＝ 1723 ＋ 本環 17 個刻意之綠）。
+  紅因逐檔：`DocumentListPage.export.test.tsx` 19 紅（`Unable to find button 匯出`，且各案之前置條件——篩選至 80 筆、排序、空狀態——皆已成功執行）｜`download-blob.export.test.ts` 9 紅（第三參數被忽略／`exportDocumentList` 未匯出）｜`DocumentListPage.exportVectors.test.ts` 6 紅（`orderedLinks` 未匯出）。
+  刻意之綠：`AC-X16` 之零漣漪回歸鎖定、跨執行環境向量之**前端側**（前端標籤本即正確，紅的是後端側）、各檔之「🔒 自證」案。
+
+## 本環刻意不做之事（皆為避免假綠，非遺漏）
+
+1. **`AC-X12` 之 >10,000 錯誤路徑不經畫面觸發**——`LOAD_SIZE = 2000 < EXPORT_ROW_LIMIT = 10000` 使該路徑在畫面上**結構上不可達**；經畫面驅動的測試會是一條**永遠跑不到卻恆綠**的測試。改由 controller 直接呼叫端點驗。
+2. **`AC-X12`／`AC-X17` 之驗證斷言只落在 controller 檔一處**——`AC-X12` 明訂「🔒 不得有第二處檢查」；若 service 檔與 controller 檔各驗一次，無論實作把檢查點放哪，其中一處必然為紅。
+3. **不重複斷言 `cell()`／`toCsvBuffer()` 之個別行為**（§13.4 (iv)：已由既有 `csv-export.spec.ts` 覆蓋）——只驗「匯出路徑確實走同一個產生器」之接線。
+4. **不為 `backend/src/main.ts` 之 body-parser 撰寫任何『執行期行為』測試**（§13.5 #1 #2、`AC-X12` 第三條陷阱）——`bootstrap()` 無單元測試、body-parser 完全不在單元路徑上，寫了只會給「已驗」的錯覺。
+   📝 **2026-08-31 lead 批准之追加**：改為補一支**靜態原始碼字面順序掃描**（`main.export-bodyparser-order.spec.ts`），理由＝該檔目前之回歸網為**零**，而「四行寫錯順序／漏寫」是它日後被改動時**唯一**會出聲的東西。🔴 **其保證邊界已逐字寫在測試名稱（「（靜態字面，非執行期）」）與檔頭**，且 `X-GAP-1` 於 risks-and-gaps **維持登錄不得降級**——部署前 smoke 仍為必做。
+   ✅ **已驗本掃描可被滿足**（非因 regex 寫錯而永久紅燈）：以 architecture §13.2 ⑦ 之逐字程式碼區塊為輸入跑過一次性驗證，12 項判準全數命中。

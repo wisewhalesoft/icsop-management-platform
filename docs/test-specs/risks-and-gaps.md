@@ -1275,3 +1275,40 @@ backend 實作完成、無異議後，team-lead 指出本端點已兩次只靠�
 **設計原則（依 team-lead 建議）**：斷言**不變式與結構**，不對真庫絕對數字下硬編期望——資料量隨時間變動不會使其無故轉紅，但退化值排名／統計口徑外洩這類缺陷仍會被抓到。唯一無法只靠既有真庫資料驗證的性質（沉底是否真的保護住一份會被大量無義務文件淹沒的有義務文件；`totalUnits===0` 之計數是否真的 +1）改用**本檔自建之 marker 文件 + 建立前後 delta**，不依賴真庫當下之無義務文件數量（587+）剛好等於某個值。
 
 **實跑驗證**：`npx jest --config test/jest-int.json ojt-progress-summary` 單檔 10/10 綠；`npx jest --config test/jest-int.json` 全量 **23 suite／188 測試**（原 22/178 ＋本檔 1 suite／10 測試）全綠，零波及其餘 22 支既有 itest。
+
+---
+
+## F017 清單匯出（CSV）delta（2026-08-31；`AC-X1`～`AC-X17`，簡化版約束環＝僅 backend jest ＋ frontend vitest） {#f017-export}
+
+> 權威：[F017 §export-delta](../specs/features/F017-backend-document-list.md#export-delta)｜[architecture-spec §13](../specs/architecture-spec.md#ch13-f017-export)｜[error-handling #export](../specs/error-handling.md#export)｜`prototypes/13-document-list.html`。
+> 環之清單與 AC 對照見 [F017-test.md §export-delta-ring](features/F017-test.md#export-delta-ring)。
+
+### 甲. 🔴 規格衝突（需人類／spec-writer 裁決，本環未自行改寫任何 AC）
+
+| # | 衝突 | 兩造逐字 | 本環之處置 |
+|---|---|---|---|
+| X-CONFLICT-1 | **前端是否需為本 delta 改動程式**（`AC-X6` vs architecture §13.3 (ii)／§13.7） | `AC-X6`：「前端側之等價斷言**已存在**——`DocumentListPage.linkCell.test.tsx:317`……**前端不需為本 delta 改動任何程式。**」；`AC-X16` ⑩：「必須觸及之既有程式路徑**恰兩處**」（`main.ts`＋`download-blob.ts`）。<br>architecture §13.3 (ii)：「🔴 前端側**須配合一處行為恆等之抽取**……該邏輯現為 `LinkCell` 內之 `useMemo` inline 運算式，**必須就地抽為同檔匯出之純函式** `orderedLinks(links, filterLink)`，**否則該 AC 之斷言標的不存在**」；§13.7 列為**三處**。 | ⚠ **`AC-X6` 自身之「可測形狀」（「前端 `orderedLinks` 與後端 `orderLinksForExport()` **逐案輸出相等**」）在不抽取時無載體**——既有 `linkCell.test.tsx:317` 斷言的是**渲染後之 pill 順序與 tooltip 文字**，不是函式輸出，無法與後端函式做「逐案輸出相等」之機器比對。本環**採 architecture §13.3 (ii)**：`DocumentListPage.exportVectors.test.ts` 要求 `orderedLinks` 為同檔匯出之純函式。<br>✅ **2026-08-31 lead 已裁決＝採 architecture**（實地確認 `DocumentListPage.tsx:1001-1006` 之排序為 `LinkCell` 內部 inline `useMemo`、既有 `linkCell.test.tsx:317` 只驗渲染後 pill 順序與 tooltip，確實無法與後端函式逐案比對 ⇒ **可測形狀才是要守的東西**）。另引同 delta 內之先例：ui-ux-designer 於 prototype 即把 13 項篩選抽為 `filteredRows()` 供渲染與匯出共用，使不變式**構造上成立**而非兩份實作碰巧一致——前端此處為同一手法。⇒ **本環之 `orderedLinks` describe（6 條）保留、一格未動**；`AC-X16` ⑩ 之「恰兩處」由 lead 轉請 spec-writer 改為三處（文件更新，非行為變更）。 |
+| X-CONFLICT-2 | **`formatExportDate()` 是否存在**（`AC-X8`／`AC-X16` ⑦ vs architecture §13.3 (iii)／§13.6） | `AC-X8`：「✅ **落點已定案**（architecture-spec §13.3 (iii)）：後端新增 `export function formatExportDate(value): string`，落於 `backend/src/storage/csv-export.ts`」；`AC-X16` ⑦：「本 delta 對該檔之唯一改動為**新增 `formatExportDate()` 之 additive export**」（📝 該條已為此**就地放寬**）。<br>architecture §13.3 (iii)：「📝 **本章初稿之表述已作廢**……`OLD>` 後端新增 `formatExportDate()`……**作廢理由＝與 `AC-X16` ⑦ 直接相衝**（該條要求 `git diff` 於 `csv-export.ts` 為空）」；§13.6 列入**被否決之替代方案**；§13.7 零漣漪表亦寫「`csv-export.ts` **完全未被修改**」。 | ⚠ **兩份文件互相引用對方之舊版本而交錯**：spec 為此放寬了 `AC-X16` ⑦、architecture 卻依 `AC-X16` ⑦ 之**放寬前字面**否決了該函式。<br>本環**不編碼受爭議之結構**，只編碼兩案皆滿足之**可觀察等式**（`AC-X8` 自身之「可驗證之等式」）：CSV 該儲存格 ≡ `formatExportTimestamp(announcedDate).slice(0, 10)`，並另有 `2026-06-10T16:30Z → 2026-06-11` 之差一天判別案。⇒ 實作採「新增 `formatExportDate()`」或「直接呼叫既有函式」皆可通過，**行為約束一格不減**。需裁決者僅為「`csv-export.ts` 是否允許被改動」這件事本身。<br>✅ **2026-08-31 lead 已裁決＝兩案都不採、走第三條**：實作直接用 `formatExportTimestamp(announcedDate).slice(0,10)`，**不新增 `formatExportDate()`**，`csv-export.ts` **維持一行未改** ⇒ 同時滿足三件事——`AC-X16` ⑦ 可回到**未放寬**之嚴格字面、不產生第二份 `toTaipei()` 位移（那正是當初放寬所要防的）、而本環編碼之等式本來就是這個式子。**值層測試一格未動**；另於 `documents.export.zero-ripple.spec.ts` 新增一條負向鎖（`csv-export.ts` 不得匯出 `formatExportDate`，且全庫不得有第二份 `formatExportDate` 落點）。 |
+
+### 乙. 規格未定、由本環釘住之契約（非缺口，但屬「測試看起來錯了」之申訴面）
+
+見 [F017-test.md §export-delta-ring](features/F017-test.md#export-delta-ring) 之「本環所訂之契約」表（4 項：service 回傳形狀、`orderLinksForExport` 檔名、handler 參數順序、前端 `orderedLinks` 匯出）。四者皆已於各測試檔頭逐字註記「若實作採不同形狀請走 mailbox 申訴，不得自行改測試」。
+
+### 丙. 🔴 本輪環原理上測不到者（部署前 smoke 之必做項）
+
+| # | 項目 | 為何測不到 | 建議之兌現手段 |
+|---|---|---|---|
+| X-GAP-1 | **`backend/src/main.ts` 之 body-parser 路由範圍設定**（`AC-X12` 第三條陷阱、architecture §13.2 ⑦／§13.5 #1） | `bootstrap()` 無單元測試；controller 單測直接呼叫方法，body-parser **完全不在路徑上**。三種失敗形狀（不放寬 → `assertExportRowLimit` 成為不可達程式碼；只放寬全域 → 範圍過大；**只掛路由 parser 而不設 `bodyParser: false` → 全站其餘 JSON 路由之 `req.body` 變 `undefined`**）**兩端單元測試皆全綠**。<br>🔴 **本環刻意不為它寫任何「執行期行為」測試**（lead 明示）：寫了只會給「已驗」的錯覺。📝 2026-08-31 改以**靜態字面掃描**補上（見右欄），其保證邊界不含上列三種失敗形狀。 | 部署前 smoke **兩支都要打**：① 一支**非匯出**之 POST（如建立文件，48 bytes 級小 body）；② 一支 **≥ 2,000 筆 id** 之匯出 POST。另建議上傳一份 multipart 檔案（§13.5 #2）。<br>✅ **2026-08-31 lead 批准並已補**：`backend/src/main.export-bodyparser-order.spec.ts`（四行之存在與相對順序 ＋ `OQ-X-04` 放寬範圍之負向鎖）。<br>🔴🔴 **本列維持登錄、不得因該檔轉綠而降級**——該掃描驗的是**原始碼字面**，抓得到「四行寫錯順序／漏寫／全域被順手放寬」，但 ① `isMiddlewareApplied()` 之函式名比對陷阱、② 413 與 100 KB 分層是否真的生效、③ multipart 真實上傳路徑之回歸，**三者一律抓不到**。其保證邊界已逐字寫入該檔之檔頭與**每一條測試名稱**（「（靜態字面，非執行期）」），使任何人看到綠燈即知其邊界。**部署前 smoke 三支仍為必做項。** |
+| X-GAP-2 | **POST 下載經 nginx 兩層代理後之完整性**（§13.5 #3） | `Content-Disposition` 檔名與「`Accept: application/octet-stream` 不觸發 SPA fallback」屬部署面。 | 🔵 **部分已自動涵蓋**：既有 `frontend/src/api/proxy-file-endpoint-coverage.test.ts` 會**自動掃出**新增之 `/admin/documents/export` 並要求 `vite.config.ts` 之 `spaBypass` 與 `frontend/nginx.conf` 之 regex location **各有一條真的 match 得到它**（`^/admin/.+/(download|export|print|pdf)$` 已涵蓋）。⇒ 代理白名單有回歸網，**真實下載並開啟檔案**仍須瀏覽器實測一次。 |
+| X-GAP-3 | **`store.list({ pageSize: EXPORT_ROW_LIMIT })` 對真實 MSSQL 之單頁取回**（§13.5 #4） | 單元層只能斷言呼叫參數。 | 風險低（`OFFSET 0 FETCH 10000` 為既有 `list()` 之同一條路徑，清單頁已在跑 `pageSize: 2000`）；建議納入下一輪 `test:int`。 |
+
+### 丁. 已明文不建案者（AC 明訂不可達／未給可測形狀，本環不臆造）
+
+| # | 項目 | 理由 |
+|---|---|---|
+| X-NOASSERT-1 | `AC-X2` ② 之「資料本身即為 `—`」情境 | `—` 是**前端渲染層**之空值佔位符，後端 `DocumentListItem` 之任何欄位在真實路徑上皆**不可能**為該字面。本環以「十欄之 `null` → 空儲存格」＋「任一儲存格不得含 `—`」編碼其可觀察意圖；**不**要求實作新增一條「把 `—` 換成空字串」之規則（`csv-export.ts` 之 `cell()` 無此規則，且 `AC-X16` ⑦ 禁止為此改動該檔）。 |
+| X-NOASSERT-2 | `AC-X12` 之「前端事前提示文字」 | AC 只說前端**得**顯示事前提示、未給任何逐字文案；且該情境（`filtered.length > 10000`）因 `LOAD_SIZE = 2000` 在畫面上**結構上不可達**。⇒ 不臆造文案、不建案；本環只鎖其**負向**面（不得擋下請求、不得 `disabled`）。 |
+| X-NOASSERT-3 | `linkTargetId` 為**非字串型別**時之處置 | `AC-X17` 🔒 只列舉「缺席／空字串／指向不存在之文件」三種不視為錯誤之情形，未涵蓋型別錯誤。本環只驗那三種。 |
+| X-NOASSERT-4 | `AC-X5` 之去重鍵在「主要 fallback 為員編、次要解析出同一人姓名」時之行為 | AC 之去重規則為「同一**姓名**同時出現於主要與次要 → 去重」，未定義「員編 fallback 與姓名混用」時之比對鍵。本環只建 AC 明文之姓名層去重案。 |
+| X-NOASSERT-5 | `AC-X15` 之「**依序**呼叫五個既有私有方法」 | 私有方法無法直接斷言。本環以其**可觀察副作用**（store／resolver／attachment／link／ojt-reader 之呼叫次數在 1 筆與 50 筆之間**完全相同**，且 `store.list` 恰一次）編碼「沿用既有批次注入路徑、不得新增第二條富化路徑」之意圖；**呼叫順序本身未被鎖定**。 |
+| X-NOASSERT-6 | `AC-X14` 成功回饋之「其後可附筆數等資訊」 | AC 明文「該部分不逐字約束」⇒ 只以 `startsWith` 鎖起始片段。 |
