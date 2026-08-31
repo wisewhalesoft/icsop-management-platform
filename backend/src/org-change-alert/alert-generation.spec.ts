@@ -90,6 +90,7 @@ function acct(over: Partial<NormalizedAccount> = {}): NormalizedAccount {
     hireDate: null,
     managerEmpNo: null,
     jobTitleCode: null,
+    jobPositionCode: null,
     upstreamModifiedAt: NOW,
     ...over,
   };

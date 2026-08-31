@@ -2,9 +2,11 @@ import {
   classifyOrgUnit,
   classifyAccount,
   classifyJobTitle,
+  classifyJobPosition,
   ExistingOrgUnit,
   ExistingAccount,
   ExistingJobTitle,
+  ExistingJobPosition,
 } from './change-classification';
 import { NormalizedOrgUnit, NormalizedAccount } from './normalization';
 
@@ -51,6 +53,7 @@ const srcAcc = (over: Partial<NormalizedAccount> = {}): NormalizedAccount => ({
   hireDate: new Date('2015-03-01T00:00:00Z'),
   managerEmpNo: 'E9999',
   jobTitleCode: null,
+  jobPositionCode: null,
   upstreamModifiedAt: new Date('2026-07-09T00:00:00Z'),
   ...over,
 });
@@ -146,9 +149,9 @@ describe('classifyAccount', () => {
 });
 
 
-/** 職稱（G-ADM-001）。代碼比對納入 classifyAccount；對照主檔本身以 classifyJobTitle 分類。 */
+/** 職稱＝資位（G-ADM-001 第 5 欄）。代碼比對納入 classifyAccount；對照主檔以 classifyJobTitle 分類。 */
 describe('classifyAccount — jobTitleCode 納入比對', () => {
-  it('僅職稱代碼變動 → update（職位異動必須反映）', () => {
+  it('僅職稱代碼變動 → update（資位異動必須反映）', () => {
     const kind = classifyAccount(
       srcAcc({ jobTitleCode: 'F01' }),
       localAcc({ jobTitleCode: 'J01' }),
@@ -172,6 +175,77 @@ describe('classifyAccount — jobTitleCode 納入比對', () => {
     const local = localAcc();
     delete (local as { jobTitleCode?: string | null }).jobTitleCode;
     expect(classifyAccount(srcAcc({ jobTitleCode: null }), local)).toBe('noop');
+  });
+});
+
+/**
+ * 職位（G-ADM-001 第 6 欄，2026-08-31 加欄）。
+ * 🔴 本組之存在理由：漏列此欄於比對 ⇒ 全部既有列判 noop ⇒ **連 SYNC_FULL_RESYNC=1 之全量重同步
+ *    都回填不了**（值寫不進 DB，畫面永遠「—」）。與 jobTitleCode／descFull 是同一顆雷。
+ */
+describe('classifyAccount — jobPositionCode 納入比對', () => {
+  it('僅職位代碼變動 → update（職位異動必須反映）', () => {
+    expect(
+      classifyAccount(
+        srcAcc({ jobPositionCode: 'C04' }),
+        localAcc({ jobPositionCode: 'N03' }),
+      ),
+    ).toBe('update');
+  });
+
+  it('加欄後既有列為 null、上游有值 → update（使既有帳號可經全量重同步回填）', () => {
+    expect(
+      classifyAccount(
+        srcAcc({ jobPositionCode: 'N03' }),
+        localAcc({ jobPositionCode: null }),
+      ),
+    ).toBe('update');
+  });
+
+  it('兩端同值 → noop（不造成無謂寫入放大）', () => {
+    expect(
+      classifyAccount(
+        srcAcc({ jobPositionCode: 'N03' }),
+        localAcc({ jobPositionCode: 'N03' }),
+      ),
+    ).toBe('noop');
+  });
+
+  it('本地替身省略此欄（undefined）且上游為 null → noop', () => {
+    const local = localAcc();
+    delete (local as { jobPositionCode?: string | null }).jobPositionCode;
+    expect(classifyAccount(srcAcc({ jobPositionCode: null }), local)).toBe('noop');
+  });
+
+  it('僅職位變、資位不變 → 仍為 update（兩維度互不遮蔽）', () => {
+    expect(
+      classifyAccount(
+        srcAcc({ jobTitleCode: 'I01', jobPositionCode: 'C04' }),
+        localAcc({ jobTitleCode: 'I01', jobPositionCode: 'N03' }),
+      ),
+    ).toBe('update');
+  });
+});
+
+describe('classifyJobPosition（對照主檔）', () => {
+  const local = (over: Partial<ExistingJobPosition> = {}): ExistingJobPosition => ({
+    companyCode: 'AS',
+    code: 'N03',
+    name: '營業一般職',
+    ...over,
+  });
+  const src = { companyCode: 'AS', code: 'N03', name: '營業一般職' };
+
+  it('本地無此列 → create', () => {
+    expect(classifyJobPosition(src, null)).toBe('create');
+  });
+
+  it('名稱不同 → update', () => {
+    expect(classifyJobPosition(src, local({ name: '營業職' }))).toBe('update');
+  });
+
+  it('完全相同 → noop', () => {
+    expect(classifyJobPosition(src, local())).toBe('noop');
   });
 });
 

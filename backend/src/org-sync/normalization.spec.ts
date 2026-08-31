@@ -3,10 +3,12 @@ import {
   normalizeAccount,
   dedupeAccountsByStableKey,
   normalizeJobTitle,
+  normalizeJobPosition,
   DirtyRowError,
   RawDept,
   RawAccount,
   RawJobTitle,
+  RawJobPosition,
 } from './normalization';
 
 /**
@@ -166,8 +168,8 @@ describe('normalizeAccount（v2.0：VW_PERSONNEL_SQL）', () => {
 
 
 /**
- * 職稱（G-ADM-001「職位」欄）。代碼取自 VW_PERSONNEL_SQL.TITLE_CODE；名稱另由 VW_PERSONAL_JOB
- * 對照主檔攝入（契約 §5.4）。
+ * 職稱＝畫面「資位」欄（G-ADM-001 第 5 欄）。代碼取自 VW_PERSONNEL_SQL.TITLE_CODE；
+ * 名稱另由 VW_PERSONAL_JOB 對照主檔攝入（契約 §5.4.1）。
  */
 describe('normalizeAccount — jobTitleCode（← TITLE_CODE）', () => {
   const raw = (over: Partial<RawAccount> = {}): RawAccount => ({
@@ -190,8 +192,82 @@ describe('normalizeAccount — jobTitleCode（← TITLE_CODE）', () => {
     ['null', null],
     ['空字串', ''],
     ['僅空白', '   '],
-  ])('%s → null（不使該列成髒；職位僅為顯示欄位）', (_l, v) => {
+  ])('%s → null（不使該列成髒；資位僅為顯示欄位）', (_l, v) => {
     expect(normalizeAccount(raw({ TITLE_CODE: v }), now).jobTitleCode).toBeNull();
+  });
+});
+
+/**
+ * 職位（G-ADM-001 第 6 欄）。代碼取自 VW_PERSONNEL_SQL.JOB_CODE；名稱另由 VW_JOB_FUN
+ * 對照主檔攝入（契約 §5.4.2）。
+ *
+ * 🔴 `JOB_CODE` 於 `RawDept` 為部門主管員編、於 `RawAccount` 為職位代碼——**同名異義**。
+ *    以下兩個 describe 併存即為該區分之回歸護欄（normalizeDept 之對映見上方 managerEmpNo 測試）。
+ */
+describe('normalizeAccount — jobPositionCode（← JOB_CODE）', () => {
+  const raw = (over: Partial<RawAccount> = {}): RawAccount => ({
+    COMPID: 'AS',
+    NO: 'AS0001',
+    MTDT: '2026-07-09T00:00:00Z',
+    ...over,
+  });
+
+  it('帶出職位代碼', () => {
+    expect(normalizeAccount(raw({ JOB_CODE: 'N03' }), now).jobPositionCode).toBe('N03');
+  });
+
+  it('前後空白修剪', () => {
+    expect(normalizeAccount(raw({ JOB_CODE: ' M03 ' }), now).jobPositionCode).toBe('M03');
+  });
+
+  it('與 jobTitleCode 各自獨立（兩個維度不得互相汙染）', () => {
+    const a = normalizeAccount(raw({ TITLE_CODE: 'I01', JOB_CODE: 'N03' }), now);
+    expect(a.jobTitleCode).toBe('I01');
+    expect(a.jobPositionCode).toBe('N03');
+  });
+
+  it.each([
+    ['缺欄', undefined],
+    ['null', null],
+    ['空字串', ''],
+    ['僅空白', '   '],
+  ])('%s → null（不使該列成髒；職位僅為顯示欄位）', (_l, v) => {
+    expect(normalizeAccount(raw({ JOB_CODE: v }), now).jobPositionCode).toBeNull();
+  });
+});
+
+describe('normalizeJobPosition（VW_JOB_FUN → JOB_POSITION 對照列）', () => {
+  const raw = (over: Partial<RawJobPosition> = {}): RawJobPosition => ({
+    COMPID: 'AS',
+    CODE: 'N03',
+    DESC_CHI: '營業一般職',
+    ...over,
+  });
+
+  it('三欄正規化', () => {
+    expect(normalizeJobPosition(raw())).toEqual({
+      companyCode: 'AS',
+      code: 'N03',
+      name: '營業一般職',
+    });
+  });
+
+  it('修剪前後空白', () => {
+    expect(normalizeJobPosition(raw({ CODE: ' N03 ', DESC_CHI: ' 營業一般職 ' }))).toEqual({
+      companyCode: 'AS',
+      code: 'N03',
+      name: '營業一般職',
+    });
+  });
+
+  it.each([
+    ['CODE 缺漏', { CODE: '' }],
+    ['COMPID 缺漏', { COMPID: '  ' }],
+    ['DESC_CHI 缺漏', { DESC_CHI: null }],
+  ])('%s → DirtyRowError（該列跳過，不中斷整批）', (_l, over) => {
+    expect(() => normalizeJobPosition(raw(over as Partial<RawJobPosition>))).toThrow(
+      DirtyRowError,
+    );
   });
 });
 

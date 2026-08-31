@@ -6,6 +6,8 @@ import {
   buildPersonnelActiveIdsQuery,
   buildDeptQuery,
   buildJobTitleQuery,
+  buildJobPositionQuery,
+  JOB_POSITION_COLUMNS,
   assertNoForbiddenColumns,
   FORBIDDEN_PERSONAL_JOB_COLUMNS,
   JOB_TITLE_COLUMNS,
@@ -16,14 +18,15 @@ import {
  * OPENQUERY 下推查詢建構（upstream-hr-source-contract.md §1 下推、§3.4 密碼欄禁讀、§5 欄位對應）。
  * 硬約束：
  *  - 一律包在 OPENQUERY([linkedServer], '...')，不得整表拉回本地。
- *  - VW_PERSONNEL_SQL 僅選白名單 10 欄（v2.0）；ID_NO／ACCOUNT 等禁欄不得出現於查詢字串。
+ *  - VW_PERSONNEL_SQL 僅選白名單 11 欄（v2.0；2026-08-31 加入 JOB_CODE）；
+ *    ID_NO／ACCOUNT 等禁欄不得出現於查詢字串。
  */
 
 const ref: UpstreamRef = { linkedServer: 'APYHFC23', remoteDb: 'HR2' };
 
 describe('白名單常數（v2.0：VW_PERSONNEL_SQL）', () => {
-  it('恰為 10 欄', () => {
-    expect(WHITELIST_PERSONNEL_COLUMNS).toHaveLength(10);
+  it('恰為 11 欄', () => {
+    expect(WHITELIST_PERSONNEL_COLUMNS).toHaveLength(11);
   });
 
   it('包含穩定鍵、在職判定欄與增量欄', () => {
@@ -38,6 +41,9 @@ describe('白名單常數（v2.0：VW_PERSONNEL_SQL）', () => {
         'REHIRE_DATE',
         'DIRECT_BOSS',
         'TITLE_CODE',
+        // 🔴 職位代碼（2026-08-31）。與 DEPT_COLUMNS 之 JOB_CODE 同名但語意不同
+        //    （後者＝部門主管員編），兩者皆為合法來源、皆不得列入禁欄。
+        'JOB_CODE',
         'MTDT',
       ]),
     );
@@ -240,5 +246,43 @@ describe('assertNoForbiddenColumns — VW_PERSONAL_JOB 個資欄', () => {
     expect(() =>
       assertNoForbiddenColumns('SELECT JTITLE_ID, ID_NUMBER FROM x'),
     ).toThrow();
+  });
+});
+
+describe('buildJobPositionQuery（職位對照主檔，契約 §5.4.2）', () => {
+  it('包在 OPENQUERY、存取 VW_JOB_FUN、無 SELECT *', () => {
+    const sql = buildJobPositionQuery(ref);
+    expect(sql).toContain('OPENQUERY([APYHFC23]');
+    expect(sql).toContain('[HR2].[dbo].[VW_JOB_FUN]');
+    expect(sql).not.toMatch(/SELECT\s+\*/i);
+  });
+
+  it('僅取 COMPID / CODE / DESC_CHI 三欄', () => {
+    const sql = buildJobPositionQuery(ref);
+    for (const col of JOB_POSITION_COLUMNS) expect(sql).toContain(col);
+    expect(JOB_POSITION_COLUMNS).toHaveLength(3);
+  });
+
+  it('不取 DESC_ENG 與異動軌跡欄（本系統不需要）', () => {
+    const sql = buildJobPositionQuery(ref);
+    for (const col of ['DESC_ENG', 'CRTUSERID', 'MTUSERID', 'CRTPGMID']) {
+      expect(sql).not.toContain(col);
+    }
+  });
+
+  it('不以 COMPID 過濾（全量 73 列，成本可忽略）', () => {
+    expect(buildJobPositionQuery(ref)).not.toMatch(/COMPID=/);
+  });
+
+  it('不加 END_DT 過濾（view 定義已內建，且該 view 無此欄）', () => {
+    expect(buildJobPositionQuery(ref)).not.toContain('END_DT');
+  });
+
+  it('不需 DISTINCT（該 view 逐「代碼」一列，非逐人）', () => {
+    expect(buildJobPositionQuery(ref)).not.toMatch(/SELECT DISTINCT/);
+  });
+
+  it('通過禁欄斷言', () => {
+    expect(() => assertNoForbiddenColumns(buildJobPositionQuery(ref))).not.toThrow();
   });
 });

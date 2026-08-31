@@ -38,14 +38,23 @@ export interface ExistingAccount {
   hireDate: Date | null;
   managerEmpNo: string | null;
   /**
-   * 職稱代碼。⚠ 選填（`?`）以相容既有測試替身之物件字面值；比對時以 `?? null` 收斂，
-   * 使 undefined 與 null 視為相等，不致讓省略此欄的替身誤觸 update。
+   * 職稱（畫面「資位」）代碼。⚠ 選填（`?`）以相容既有測試替身之物件字面值；比對時以 `?? null`
+   * 收斂，使 undefined 與 null 視為相等，不致讓省略此欄的替身誤觸 update。
    */
   jobTitleCode?: string | null;
+  /** 職位代碼。選填之理由同 `jobTitleCode`。 */
+  jobPositionCode?: string | null;
 }
 
-/** 本地既有職稱對照列（僅上游擁有欄位）。 */
+/** 本地既有職稱（資位）對照列（僅上游擁有欄位）。 */
 export interface ExistingJobTitle {
+  companyCode: string;
+  code: string;
+  name: string;
+}
+
+/** 本地既有職位對照列（僅上游擁有欄位）。 */
+export interface ExistingJobPosition {
   companyCode: string;
   code: string;
   name: string;
@@ -92,6 +101,9 @@ export function classifyAccount(
       // jobTitleCode 納入比對：否則加欄後既有列（NULL）之回填永遠不觸發（誤判 noop），
       // 與 descFull 於 classifyOrgUnit 之處置同理。
       (source.jobTitleCode ?? null) !== (local.jobTitleCode ?? null) ||
+      // jobPositionCode 同理（2026-08-31 加欄）。漏列＝全部既有列判 noop，
+      // 連 SYNC_FULL_RESYNC=1 之全量重同步都回填不了。
+      (source.jobPositionCode ?? null) !== (local.jobPositionCode ?? null) ||
       !eqDate(source.resignDate, local.resignDate) ||
       !eqDate(source.hireDate, local.hireDate);
     return changed ? 'update' : 'noop';
@@ -110,6 +122,15 @@ export function classifyAccount(
 export function classifyJobTitle(
   source: { companyCode: string; code: string; name: string },
   local: ExistingJobTitle | null,
+): OrgChangeKind {
+  if (local === null) return 'create';
+  return source.name !== local.name ? 'update' : 'noop';
+}
+
+/** 職位對照列分類。語意與處置與 `classifyJobTitle` 完全相同（含刻意不刪除）。 */
+export function classifyJobPosition(
+  source: { companyCode: string; code: string; name: string },
+  local: ExistingJobPosition | null,
 ): OrgChangeKind {
   if (local === null) return 'create';
   return source.name !== local.name ? 'update' : 'noop';

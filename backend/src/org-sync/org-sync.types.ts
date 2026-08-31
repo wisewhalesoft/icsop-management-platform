@@ -14,14 +14,17 @@ import {
   RawDept,
   RawAccount,
   RawJobTitle,
+  RawJobPosition,
   NormalizedOrgUnit,
   NormalizedAccount,
   NormalizedJobTitle,
+  NormalizedJobPosition,
 } from './normalization';
 import {
   ExistingOrgUnit,
   ExistingAccount,
   ExistingJobTitle,
+  ExistingJobPosition,
 } from './change-classification';
 
 export type TriggerType = 'scheduled' | 'manual';
@@ -51,13 +54,18 @@ export interface UpstreamOrgReader {
   /** 消失閾值用：本次來源之在職穩定鍵集合（v2.0：`NO`，判定見契約 §6）。 */
   /** 在職者之穩定鍵集合（v2.0：`NO`），供消失閾值保護。 */
   readActiveAccountLoginIds(compid: string): Promise<string[]>;
-  /** VW_PERSONNEL_SQL 白名單 10 欄（v2.0）；sinceMtdt=null 為首次全量。含離職者，供停用判定。 */
+  /** VW_PERSONNEL_SQL 白名單 11 欄（v2.0）；sinceMtdt=null 為首次全量。含離職者，供停用判定。 */
   readAccountChanges(compid: string, sinceMtdt: Date | null): Promise<RawAccount[]>;
   /**
-   * 職稱對照主檔（VW_PERSONAL_JOB distinct 三欄，全公司範圍、非增量；實測 109 列）。
+   * 職稱（資位）對照主檔（VW_PERSONAL_JOB distinct 三欄，全公司範圍、非增量；實測 109 列）。
    * ⚠ 選填：未實作此方法之既有替身（手建測試 reader）仍可運作，同步時視為「無對照可更新」。
    */
   readJobTitles?(): Promise<RawJobTitle[]>;
+  /**
+   * 職位對照主檔（VW_JOB_FUN 三欄，全公司範圍、非增量；實測四家 73 列）。
+   * ⚠ 選填之理由同 `readJobTitles`。
+   */
+  readJobPositions?(): Promise<RawJobPosition[]>;
 }
 
 export interface AccountDisableWrite {
@@ -75,11 +83,14 @@ export interface SyncPlan {
   accountUpdates: NormalizedAccount[];
   accountDisables: AccountDisableWrite[];
   /**
-   * 職稱對照主檔異動。⚠ 選填：既有測試替身之 plan 字面值無需補此二鍵；
+   * 職稱（資位）對照主檔異動。⚠ 選填：既有測試替身之 plan 字面值無需補此二鍵；
    * store 端一律以 `?? []` 收斂。
    */
   jobTitleCreates?: NormalizedJobTitle[];
   jobTitleUpdates?: NormalizedJobTitle[];
+  /** 職位對照主檔異動。選填之處置同上。 */
+  jobPositionCreates?: NormalizedJobPosition[];
+  jobPositionUpdates?: NormalizedJobPosition[];
 }
 
 export interface FinishSyncRunPatch {
@@ -128,10 +139,12 @@ export interface OrgSyncStore {
    */
   findExistingAccounts(compid: string): Promise<Map<string, ExistingAccount>>;
   /**
-   * 既有職稱對照列，key 由 jobTitleKey(companyCode, code) 產生（以 | 分隔；上游 COMPID／
+   * 既有職稱（資位）對照列，key 由 jobTitleKey(companyCode, code) 產生（以 | 分隔；上游 COMPID／
    * JTITLE_ID 皆為英數代碼，不含此字元，故無歧義）。⚠ 選填：未實作之替身視為「本地無對照」。
    */
   findJobTitles?(): Promise<Map<string, ExistingJobTitle>>;
+  /** 既有職位對照列，key 由 jobPositionKey(companyCode, code) 產生。選填之處置同上。 */
+  findJobPositions?(): Promise<Map<string, ExistingJobPosition>>;
   /** 於單一交易套用 plan（失敗須整批回滾，AC3）。 */
   applySync(compid: string, plan: SyncPlan): Promise<void>;
   /**
@@ -211,10 +224,12 @@ export interface SyncStats {
   disappearedCount: number;
   disappearedRatio: number;
   /**
-   * 本次寫入之職稱對照列數（create+update）。選填：刻意不計入 changeCount
+   * 本次寫入之職稱（資位）對照列數（create+update）。選填：刻意不計入 changeCount
    * （主檔維護非組織/帳號異動，計入會扭曲 F006 KPI 語意），僅供可觀測性。
    */
   jobTitlesUpserted?: number;
+  /** 本次寫入之職位對照列數（create+update）。處置同 `jobTitlesUpserted`。 */
+  jobPositionsUpserted?: number;
   /** 🔴 角色自動化 delta：本次自動執行之角色升級筆數。 */
   roleUpgrades?: number;
   /** 🔴 本次自動寫入之子分類變更筆數。 */

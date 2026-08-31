@@ -14,18 +14,22 @@ import {
   normalizeDept,
   normalizeAccount,
   normalizeJobTitle,
+  normalizeJobPosition,
   dedupeAccountsByStableKey,
   NormalizedOrgUnit,
   NormalizedAccount,
   NormalizedJobTitle,
+  NormalizedJobPosition,
   DirtyRowError,
 } from './normalization';
 import {
   classifyOrgUnit,
   classifyAccount,
   classifyJobTitle,
+  classifyJobPosition,
 } from './change-classification';
 import { jobTitleKey } from '../org-directory/job-title-directory';
+import { jobPositionKey } from '../org-directory/job-position-directory';
 import {
   computeDisappeared,
   DEFAULT_DISAPPEARED_THRESHOLD,
@@ -170,9 +174,12 @@ export class OrgSyncService {
           }
         }
       }
-      // --- 3.5 職稱對照主檔（G-ADM-001「職位」欄） ---
+      // --- 3.5 職稱對照主檔（G-ADM-001「資位」欄） ---
       const { creates: jobTitleCreates, updates: jobTitleUpdates } =
         await this.planJobTitles(stats, warnings);
+      // --- 3.6 職位對照主檔（G-ADM-001「職位」欄） ---
+      const { creates: jobPositionCreates, updates: jobPositionUpdates } =
+        await this.planJobPositions(stats, warnings);
 
       const existingOrg = await this.store.findOrgUnits(this.compid);
       const orgCreates: NormalizedOrgUnit[] = [];
@@ -293,6 +300,8 @@ export class OrgSyncService {
         accountDisables,
         jobTitleCreates,
         jobTitleUpdates,
+        jobPositionCreates,
+        jobPositionUpdates,
       };
       try {
         await this.store.applySync(this.compid, plan);
@@ -498,6 +507,60 @@ export class OrgSyncService {
     } catch (e) {
       warnings.push(
         `職稱對照主檔同步略過（不影響本次同步結果）：${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
+    return { creates, updates };
+  }
+
+  /**
+   * 職位對照主檔（← VW_JOB_FUN）之異動規劃。供帳號清單「職位」欄之代碼→名稱解析。
+   *
+   * 三項刻意設計與 `planJobTitles` 完全相同（非阻斷／同鍵去重／不計入 changeCount），
+   * 理由亦相同——見該方法之註解。差異只有一處：
+   *
+   * ⚠ 上游 `VW_JOB_FUN` 逐「代碼」一列（非逐人），實測 `(COMPID, CODE)` 即為唯一鍵
+   *   （2026-08-31：四家 73 列 / 73 組鍵）。仍保留同鍵去重，理由同 planJobTitles：
+   *   那是資料現況而非上游保證，撞鍵會使 UQ 違反而拖垮整筆帳號同步交易。
+   *
+   * reader/store 未實作對應方法（既有手建替身）→ 整段跳過，回空計畫。
+   */
+  private async planJobPositions(
+    stats: SyncStats,
+    warnings: string[],
+  ): Promise<{ creates: NormalizedJobPosition[]; updates: NormalizedJobPosition[] }> {
+    const creates: NormalizedJobPosition[] = [];
+    const updates: NormalizedJobPosition[] = [];
+    if (!this.reader.readJobPositions || !this.store.findJobPositions) {
+      return { creates, updates };
+    }
+    try {
+      const rawPositions = await this.reader.readJobPositions();
+      const existing = await this.store.findJobPositions();
+      const seen = new Set<string>();
+      for (const raw of rawPositions) {
+        try {
+          const p = normalizeJobPosition(raw);
+          const key = jobPositionKey(p.companyCode, p.code);
+          if (seen.has(key)) continue; // 同鍵去重（見上）
+          seen.add(key);
+          const kind = classifyJobPosition(p, existing.get(key) ?? null);
+          if (kind === 'create') creates.push(p);
+          else if (kind === 'update') updates.push(p);
+        } catch (e) {
+          if (e instanceof DirtyRowError) {
+            stats.dirtyRows++;
+            warnings.push(`髒職位對照資料略過：${e.message}`);
+          } else {
+            throw e;
+          }
+        }
+      }
+      stats.jobPositionsUpserted = creates.length + updates.length;
+    } catch (e) {
+      warnings.push(
+        `職位對照主檔同步略過（不影響本次同步結果）：${
           e instanceof Error ? e.message : String(e)
         }`,
       );

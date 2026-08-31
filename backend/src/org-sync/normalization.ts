@@ -1,7 +1,7 @@
 /**
  * 上游原始列 → 正規化模型（純邏輯，無 IO）
  *
- * 欄位對應：upstream-hr-source-contract.md §5.1（VW_DEPT_SQL）／§5.2（VW_PERSONNEL_SQL 白名單 10 欄，v2.0）。
+ * 欄位對應：upstream-hr-source-contract.md §5.1（VW_DEPT_SQL）／§5.2（VW_PERSONNEL_SQL 白名單 11 欄，v2.0）。
  * 髒資料防禦（F004 Edge Cases / TC-010-03）：單筆型別/格式不符 → 拋 DirtyRowError，
  * 由同步服務跳過該筆並記警告，不影響其他正常筆數。
  */
@@ -32,13 +32,15 @@ export interface RawDept {
   COMPID: string;
   DESC_CHI: string;
   DESC_FULL?: string | null;
-  JOB_CODE?: string | null; // 實為 MANGER_EMPNO
+  // 🔴 實為 MANGER_EMPNO（部門主管員編）。**與 RawAccount.JOB_CODE 同名、語意完全不同**
+  //    （後者＝該員之職位代碼）。兩者分屬不同 view，不可互相推論、不可共用對映。
+  JOB_CODE?: string | null;
   CLOSE_DATE: Date | string;
   ESTABLISHED_DATE?: Date | string | null;
 }
 
 /**
- * VW_PERSONNEL_SQL 白名單 10 欄原始列（v2.0；絕不含 ID_NO／ACCOUNT 等禁欄）。
+ * VW_PERSONNEL_SQL 白名單 11 欄原始列（v2.0；絕不含 ID_NO／ACCOUNT 等禁欄）。
  *
  * ⚠ 欄名陷阱（契約 §3.1／§3.3）——本型別**刻意不宣告**下列欄位，使誤用成為編譯期錯誤：
  * `NAME`（銀行名稱，非人名）、`DIV_CODE`（薪資部門，非組織部門）、`HIRE_DATE`（年資起算日，非到職日）。
@@ -57,11 +59,17 @@ export interface RawAccount {
   /** 🔴 到職日。不是 `HIRE_DATE`。 */
   REHIRE_DATE?: Date | string | null;
   DIRECT_BOSS?: string | null;
+  /** 職稱（畫面「資位」）代碼。 */
   TITLE_CODE?: string | null;
+  /**
+   * 🔴 職位代碼（畫面「職位」）。**不是**部門主管員編——`RawDept.JOB_CODE` 才是那個，
+   * 兩者同名異義（契約 §3.1 之欄名陷阱同一類）。名稱由 VW_JOB_FUN 對照主檔解析。
+   */
+  JOB_CODE?: string | null;
   MTDT: Date | string;
 }
 
-/** VW_PERSONAL_JOB 職稱對照原始列（僅三欄；絕不含 ID_NUMBER 等個資）。 */
+/** VW_PERSONAL_JOB 職稱（資位）對照原始列（僅三欄；絕不含 ID_NUMBER 等個資）。 */
 export interface RawJobTitle {
   COMPID: string;
   JTITLE_ID: string;
@@ -69,6 +77,19 @@ export interface RawJobTitle {
 }
 
 export interface NormalizedJobTitle {
+  companyCode: string;
+  code: string;
+  name: string;
+}
+
+/** VW_JOB_FUN 職位對照原始列（僅三欄；該 view 為代碼主檔，無個資）。 */
+export interface RawJobPosition {
+  COMPID: string;
+  CODE: string;
+  DESC_CHI?: string | null;
+}
+
+export interface NormalizedJobPosition {
   companyCode: string;
   code: string;
   name: string;
@@ -105,8 +126,11 @@ export interface NormalizedAccount {
   resignDate: Date | null;
   hireDate: Date | null;
   managerEmpNo: string | null;
-  // 職稱代碼（← TITLE_CODE）。名稱由 JOB_TITLE 對照表解析，不落於帳號列。
+  // 職稱＝畫面「資位」之代碼（← TITLE_CODE）。名稱由 JOB_TITLE 對照表解析，不落於帳號列。
   jobTitleCode: string | null;
+  // 畫面「職位」之代碼（← JOB_CODE）。名稱由 JOB_POSITION 對照表解析，不落於帳號列
+  // （理由同 jobTitleCode：上游改名不需 backfill 帳號）。
+  jobPositionCode: string | null;
   // 可為 null：哨兵/Invalid/超出 MSSQL 可儲存範圍之 MTDT 經 normalizeUpstreamDate 收斂為 null。
   upstreamModifiedAt: Date | null;
 }
@@ -195,6 +219,7 @@ export function normalizeAccount(raw: RawAccount, now: Date): NormalizedAccount 
     hireDate: normalizeUpstreamDate(raw.REHIRE_DATE),
     managerEmpNo: nullableStr(raw.DIRECT_BOSS),
     jobTitleCode: nullableStr(raw.TITLE_CODE),
+    jobPositionCode: nullableStr(raw.JOB_CODE),
     upstreamModifiedAt: normalizeUpstreamDate(raw.MTDT),
   };
 }
@@ -245,5 +270,19 @@ export function normalizeJobTitle(raw: RawJobTitle): NormalizedJobTitle {
   if (companyCode === null) throw new DirtyRowError('COMPID 缺漏', code);
   const name = nullableStr(raw.JTITLE_NM);
   if (name === null) throw new DirtyRowError('JTITLE_NM 缺漏', code);
+  return { companyCode, code, name };
+}
+
+/**
+ * 職位對照列正規化（← VW_JOB_FUN）。處置與 normalizeJobTitle 完全一致：缺任一必要欄
+ * → DirtyRowError（該列跳過、記警告），少一列只會使少數帳號之職位顯示「—」。
+ */
+export function normalizeJobPosition(raw: RawJobPosition): NormalizedJobPosition {
+  const code = nullableStr(raw.CODE);
+  if (code === null) throw new DirtyRowError('CODE 缺漏（對照鍵不可缺）');
+  const companyCode = nullableStr(raw.COMPID);
+  if (companyCode === null) throw new DirtyRowError('COMPID 缺漏', code);
+  const name = nullableStr(raw.DESC_CHI);
+  if (name === null) throw new DirtyRowError('DESC_CHI 缺漏', code);
   return { companyCode, code, name };
 }

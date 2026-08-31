@@ -12,12 +12,15 @@ import {
   ExistingOrgUnit,
   ExistingAccount,
   ExistingJobTitle,
+  ExistingJobPosition,
 } from './change-classification';
 import { OrgUnit } from '../database/entities/org-unit.entity';
 import { Account } from '../database/entities/account.entity';
 import { JobTitle } from '../database/entities/job-title.entity';
+import { JobPosition } from '../database/entities/job-position.entity';
 import { SyncRun } from '../database/entities/sync-run.entity';
 import { jobTitleKey } from '../org-directory/job-title-directory';
+import { jobPositionKey } from '../org-directory/job-position-directory';
 import type { DerivationAccount, RoleDerivationPlan } from './role-derivation';
 
 /**
@@ -136,6 +139,8 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
         // 必須帶出：classifyAccount 已納入 jobTitleCode 比對，缺此欄會使既有列（NULL）
         // 每次同步都被判為 update（無謂寫入放大），且加欄後之回填無從驗證。
         jobTitleCode: a.jobTitleCode,
+        // 同上（jobPositionCode 亦已納入 classifyAccount 比對）。
+        jobPositionCode: a.jobPositionCode,
       });
     }
     return m;
@@ -151,6 +156,21 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
         companyCode: t.companyCode,
         code: t.code,
         name: t.name,
+      });
+    }
+    return m;
+  }
+
+  async findJobPositions(): Promise<Map<string, ExistingJobPosition>> {
+    const ds = await this.ensureInit();
+    // 全公司範圍（帳號清單跨公司可見，逐列以該列 companyCode 解析）；實測 73 列。
+    const rows = await ds.getRepository(JobPosition).find();
+    const m = new Map<string, ExistingJobPosition>();
+    for (const p of rows) {
+      m.set(jobPositionKey(p.companyCode, p.code), {
+        companyCode: p.companyCode,
+        code: p.code,
+        name: p.name,
       });
     }
     return m;
@@ -296,7 +316,28 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
         );
       }
 
-      // ACCOUNT insert 為 14 欄；AS 首次同步可達 ~2771 列 → 必須切批（否則 39k 參數超限）。
+      // 職位對照主檔（同樣先於帳號寫入，使同批新帳號之 jobPositionCode 立即可解析）。
+      const positionRows = (plan.jobPositionCreates ?? []).map((p) => ({
+        id: randomUUID(),
+        companyCode: p.companyCode,
+        code: p.code,
+        name: p.name,
+      }));
+      if (positionRows.length > 0) {
+        const positionFields = Object.keys(positionRows[0]).length;
+        for (const batch of chunkByParamBudget(positionRows, positionFields)) {
+          await manager.insert(JobPosition, batch);
+        }
+      }
+      for (const p of plan.jobPositionUpdates ?? []) {
+        await manager.update(
+          JobPosition,
+          { companyCode: p.companyCode, code: p.code },
+          { name: p.name },
+        );
+      }
+
+      // ACCOUNT insert 為 15 欄；AS 首次同步可達 ~2771 列 → 必須切批（否則 39k 參數超限）。
       const accRows = plan.accountCreates.map((a) => ({
         id: randomUUID(),
         companyCode: a.companyCode,
@@ -307,6 +348,7 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
         orgCode: a.orgCode,
         managerEmpNo: a.managerEmpNo,
         jobTitleCode: a.jobTitleCode,
+        jobPositionCode: a.jobPositionCode,
         resignDate: a.resignDate,
         hireDate: a.hireDate,
         upstreamModifiedAt: a.upstreamModifiedAt,
@@ -331,6 +373,7 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
             orgCode: a.orgCode,
             managerEmpNo: a.managerEmpNo,
             jobTitleCode: a.jobTitleCode,
+            jobPositionCode: a.jobPositionCode,
             resignDate: a.resignDate,
             hireDate: a.hireDate,
             upstreamModifiedAt: a.upstreamModifiedAt,

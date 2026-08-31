@@ -8,13 +8,20 @@ import {
   TriggerType,
   SyncRunSummary,
 } from './org-sync.types';
-import { RawDept, RawAccount, RawJobTitle } from './normalization';
+import {
+  RawDept,
+  RawAccount,
+  RawJobTitle,
+  RawJobPosition,
+} from './normalization';
 import {
   ExistingOrgUnit,
   ExistingAccount,
   ExistingJobTitle,
+  ExistingJobPosition,
 } from './change-classification';
 import { jobTitleKey } from '../org-directory/job-title-directory';
+import { jobPositionKey } from '../org-directory/job-position-directory';
 
 /**
  * 同步引擎整合測試（mock reader / store）。
@@ -584,7 +591,7 @@ describe('OrgSyncService.recentRuns', () => {
 
 
 /**
- * 職稱對照主檔攝入（G-ADM-001「職位」欄）。契約 §5.4。
+ * 職稱（資位）對照主檔攝入（G-ADM-001 第 5 欄）。契約 §5.4.1。
  * 關鍵不變式：對照表為**顯示用**附屬資料，任何情況都不得使帳號同步失敗。
  */
 describe('職稱對照主檔（planJobTitles）', () => {
@@ -711,6 +718,153 @@ describe('職稱對照主檔（planJobTitles）', () => {
     reader.changes = [rawAcc({ NO: 'AS0001', TITLE_CODE: 'J01' })];
     await svc.run('manual');
     expect(store.applied[0].accountCreates[0].jobTitleCode).toBe('J01');
+  });
+});
+
+
+/**
+ * 職位對照主檔攝入（G-ADM-001 第 6 欄，2026-08-31）。契約 §5.4.2。
+ * 不變式與資位完全相同：顯示用附屬資料，任何情況都不得使帳號同步失敗。
+ */
+describe('職位對照主檔（planJobPositions）', () => {
+  class PositionReader extends FakeReader {
+    positions: RawJobPosition[] = [];
+    failPositions = false;
+    readJobPositions(): Promise<RawJobPosition[]> {
+      if (this.failPositions) return Promise.reject(new Error('OPENQUERY timeout'));
+      return Promise.resolve(this.positions);
+    }
+  }
+  class PositionStore extends FakeStore {
+    jobPositions = new Map<string, ExistingJobPosition>();
+    findJobPositions(): Promise<Map<string, ExistingJobPosition>> {
+      return Promise.resolve(new Map(this.jobPositions));
+    }
+  }
+
+  const rawPosition = (over: Partial<RawJobPosition> = {}): RawJobPosition => ({
+    COMPID: 'AS',
+    CODE: 'N03',
+    DESC_CHI: '營業一般職',
+    ...over,
+  });
+
+  function setup(): {
+    reader: PositionReader;
+    store: PositionStore;
+    svc: OrgSyncService;
+  } {
+    const reader = new PositionReader();
+    const store = new PositionStore();
+    reader.depts = [rawDept({ CODE: 'JAC00' })];
+    return { reader, store, svc: makeService(reader, store) };
+  }
+
+  it('本地無對照 → 全數進 jobPositionCreates', async () => {
+    const { reader, store, svc } = setup();
+    reader.positions = [rawPosition(), rawPosition({ CODE: 'M03', DESC_CHI: '事務一般職' })];
+    const res = await svc.run('manual');
+    expect(res.status).toBe('success');
+    expect(store.applied[0].jobPositionCreates).toEqual([
+      { companyCode: 'AS', code: 'N03', name: '營業一般職' },
+      { companyCode: 'AS', code: 'M03', name: '事務一般職' },
+    ]);
+    expect(res.stats.jobPositionsUpserted).toBe(2);
+  });
+
+  it('上游改名 → 進 jobPositionUpdates；同名 → noop', async () => {
+    const { reader, store, svc } = setup();
+    store.jobPositions.set(jobPositionKey('AS', 'N03'), {
+      companyCode: 'AS',
+      code: 'N03',
+      name: '營業一般職',
+    });
+    store.jobPositions.set(jobPositionKey('AS', 'C04'), {
+      companyCode: 'AS',
+      code: 'C04',
+      name: '處長',
+    });
+    reader.positions = [
+      rawPosition(),
+      rawPosition({ CODE: 'C04', DESC_CHI: '資深處長' }),
+    ];
+    await svc.run('manual');
+    expect(store.applied[0].jobPositionCreates).toEqual([]);
+    expect(store.applied[0].jobPositionUpdates).toEqual([
+      { companyCode: 'AS', code: 'C04', name: '資深處長' },
+    ]);
+  });
+
+  it('🔴 跨公司同代碼各自成列（C04：AS＝處長／AD＝部長，不得互相覆蓋）', async () => {
+    const { reader, store, svc } = setup();
+    reader.positions = [
+      rawPosition({ CODE: 'C04', DESC_CHI: '處長' }),
+      rawPosition({ COMPID: 'AD', CODE: 'C04', DESC_CHI: '部長' }),
+    ];
+    await svc.run('manual');
+    expect(store.applied[0].jobPositionCreates).toEqual([
+      { companyCode: 'AS', code: 'C04', name: '處長' },
+      { companyCode: 'AD', code: 'C04', name: '部長' },
+    ]);
+  });
+
+  it('🔴 同鍵重複列 → 去重取先到者（避免 UQ 違反拖垮整筆交易）', async () => {
+    const { reader, store, svc } = setup();
+    reader.positions = [rawPosition(), rawPosition({ DESC_CHI: '營業職' })];
+    const res = await svc.run('manual');
+    expect(res.status).toBe('success');
+    expect(store.applied[0].jobPositionCreates).toEqual([
+      { companyCode: 'AS', code: 'N03', name: '營業一般職' },
+    ]);
+  });
+
+  it('髒列（缺名稱）跳過並記警告，其餘照常寫入', async () => {
+    const { reader, store, svc } = setup();
+    reader.positions = [
+      rawPosition({ DESC_CHI: null }),
+      rawPosition({ CODE: 'M03', DESC_CHI: '事務一般職' }),
+    ];
+    const res = await svc.run('manual');
+    expect(res.status).toBe('success');
+    expect(store.applied[0].jobPositionCreates).toEqual([
+      { companyCode: 'AS', code: 'M03', name: '事務一般職' },
+    ]);
+    expect(res.warnings.some((w) => w.includes('髒職位對照資料'))).toBe(true);
+  });
+
+  it('🔴 對照主檔取回失敗 → 同步仍 success（非阻斷），僅記警告', async () => {
+    const { reader, store, svc } = setup();
+    reader.failPositions = true;
+    reader.changes = [rawAcc({ NO: 'AS0001' })];
+    const res = await svc.run('manual');
+    expect(res.status).toBe('success');
+    expect(res.warnings.some((w) => w.includes('職位對照主檔同步略過'))).toBe(true);
+    expect(store.applied[0].accountCreates).toHaveLength(1);
+  });
+
+  it('reader/store 未實作對應方法（既有替身）→ 整段跳過，同步照常', async () => {
+    const reader = new FakeReader();
+    const store = new FakeStore();
+    reader.depts = [rawDept({ CODE: 'JAC00' })];
+    reader.changes = [rawAcc({ NO: 'AS0001' })];
+    const res = await makeService(reader, store).run('manual');
+    expect(res.status).toBe('success');
+    expect(store.applied[0].jobPositionCreates).toEqual([]);
+    expect(res.stats.jobPositionsUpserted).toBeUndefined();
+  });
+
+  it('對照異動不計入 changeCount', async () => {
+    const { reader, svc } = setup();
+    reader.positions = [rawPosition(), rawPosition({ CODE: 'M03', DESC_CHI: '事務一般職' })];
+    const res = await svc.run('manual');
+    expect(res.changeCount).toBe(1); // 僅 orgCreates 之 JAC00
+  });
+
+  it('帳號之 jobPositionCode 由 JOB_CODE 帶入同步計畫', async () => {
+    const { reader, store, svc } = setup();
+    reader.changes = [rawAcc({ NO: 'AS0001', JOB_CODE: 'N03' })];
+    await svc.run('manual');
+    expect(store.applied[0].accountCreates[0].jobPositionCode).toBe('N03');
   });
 });
 

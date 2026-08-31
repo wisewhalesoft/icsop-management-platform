@@ -1,12 +1,18 @@
 import * as sql from 'mssql';
 import { UpstreamOrgReader } from './org-sync.types';
-import { RawDept, RawAccount, RawJobTitle } from './normalization';
+import {
+  RawDept,
+  RawAccount,
+  RawJobTitle,
+  RawJobPosition,
+} from './normalization';
 import {
   UpstreamRef,
   buildDeptQuery,
   buildPersonnelActiveIdsQuery,
   buildPersonnelIncrementalQuery,
   buildJobTitleQuery,
+  buildJobPositionQuery,
   assertNoForbiddenColumns,
 } from './upstream-queries';
 
@@ -85,9 +91,14 @@ export class MssqlUpstreamOrgReader implements UpstreamOrgReader {
     );
   }
 
-  /** 職稱對照主檔（全公司 distinct 三欄；非增量，實測 109 列）。 */
+  /** 職稱（資位）對照主檔（全公司 distinct 三欄；非增量，實測 109 列）。 */
   async readJobTitles(): Promise<RawJobTitle[]> {
     return this.query<RawJobTitle>(buildJobTitleQuery(this.cfg.ref));
+  }
+
+  /** 職位對照主檔（全公司三欄；非增量，實測四家 73 列）。 */
+  async readJobPositions(): Promise<RawJobPosition[]> {
+    return this.query<RawJobPosition>(buildJobPositionQuery(this.cfg.ref));
   }
 
   async close(): Promise<void> {

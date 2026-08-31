@@ -68,7 +68,7 @@ async function runOneCompany(
   log('\n[推導後各 tier 分布]');
   for (const r of rows) log(`  ${r.tier.padEnd(11)} ${r.cnt}`);
 
-  // 職稱（G-ADM-001「職位」欄）：對照主檔筆數 + 帳號側之解析覆蓋率。
+  // 職稱（G-ADM-001「資位」欄）：對照主檔筆數 + 帳號側之解析覆蓋率。
   // 覆蓋率以 JOB_TITLE 之「本公司優先、跨公司 fallback」兩段式比對計算，與讀取端規則一致。
   log('\n[職稱對照（JOB_TITLE）]');
   log(`  本次寫入對照列：${res.stats.jobTitlesUpserted ?? 0}`);
@@ -90,6 +90,32 @@ async function runOneCompany(
   if (ts) {
     const pct = ts.total > 0 ? ((ts.resolvable / ts.total) * 100).toFixed(2) : '0.00';
     log(`  在職上游帳號 ${ts.total}／有代碼 ${ts.withCode}／可解析出名稱 ${ts.resolvable}（${pct}%）`);
+  }
+
+  // 職位（G-ADM-001「職位」欄）：對照主檔筆數 + 帳號側之解析覆蓋率。
+  // 🔴 覆蓋率必須以 **(companyCode, code) 複合鍵** join——職位不做跨公司 fallback，
+  //    若比照上方職稱僅以 code join，跨公司同碼（如 C04：AS 處長／AD 部長）會虛報成命中。
+  log('\n[職位對照（JOB_POSITION）]');
+  log(`  本次寫入對照列：${res.stats.jobPositionsUpserted ?? 0}`);
+  const positionStats: Array<{ total: number; withCode: number; resolvable: number }> =
+    await AppDataSource.query(
+      `SELECT
+         COUNT(*) AS total,
+         SUM(CASE WHEN a.jobPositionCode IS NOT NULL THEN 1 ELSE 0 END) AS withCode,
+         SUM(CASE WHEN p.code IS NULL THEN 0 ELSE 1 END) AS resolvable
+       FROM [ACCOUNT] a
+       LEFT JOIN [JOB_POSITION] p
+         ON p.code = a.jobPositionCode AND p.companyCode = a.companyCode
+       WHERE a.companyCode = @0 AND a.source = 'upstream' AND a.status = 'active'`,
+      [compid],
+    );
+  const ps = positionStats[0];
+  if (ps) {
+    const pct = ps.total > 0 ? ((ps.resolvable / ps.total) * 100).toFixed(2) : '0.00';
+    log(`  在職上游帳號 ${ps.total}／有代碼 ${ps.withCode}／可解析出名稱 ${ps.resolvable}（${pct}%）`);
+    if (ps.total > 0 && ps.withCode === 0) {
+      log('  ⚠ 有代碼者為 0：加欄後之回填不會自然發生，請執行 SYNC_FULL_RESYNC=1 npm run sync:once');
+    }
   }
 
   if (res.warnings.length > 0) {

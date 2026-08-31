@@ -4,7 +4,7 @@
  * 硬約束（upstream-hr-source-contract.md §1 / §3.4 / §5）：
  *  - linked server 之 is_collation_compatible=False → 一律以 OPENQUERY([linkedServer], '...')
  *    將彙總/過濾下推至對端執行，不得整表拉回本地比對。
- *  - VW_PERSONNEL_SQL 僅選白名單 10 欄；🔴 ID_NO（身分證字號）／ACCOUNT（銀行帳號）等禁欄
+ *  - VW_PERSONNEL_SQL 僅選白名單 11 欄；🔴 ID_NO（身分證字號）／ACCOUNT（銀行帳號）等禁欄
  *    永不出現於查詢字串。
  *  - 因 OPENQUERY 之對端 SQL 為「字串字面值」無法參數化，compid/日期等以嚴格驗證＋跳脫防注入。
  */
@@ -15,7 +15,8 @@ export interface UpstreamRef {
 }
 
 /**
- * VW_PERSONNEL_SQL → ACCOUNT 白名單 **10 欄**（§5.2，v2.0）。順序固定，供測試與稽核比對。
+ * VW_PERSONNEL_SQL → ACCOUNT 白名單 **11 欄**（§5.2，v2.0；2026-08-31 加入 `JOB_CODE`）。
+ * 順序固定，供測試與稽核比對。
  *
  * 🔴 該 view 共 40 欄，含身分證字號、金融個資與第三人聯絡資料，逐欄白名單為強制要求。
  * ⚠ `NO` 同時供應 `loginId` 與 `employeeNo`；`RESIGN_DATE` 同時供應 `isActive` 與 `resignDate`。
@@ -34,9 +35,15 @@ export const WHITELIST_PERSONNEL_COLUMNS = [
   // 🔴 不是 HIRE_DATE —— 那是年資起算日（契約 §3.3）。
   'REHIRE_DATE',
   'DIRECT_BOSS',
-  // 職稱代碼（G-ADM-001「職位」欄）。刻意取代碼而非名稱：名稱由 VW_PERSONAL_JOB 對照主檔
+  // 職稱代碼（G-ADM-001「**資位**」欄）。刻意取代碼而非名稱：名稱由 VW_PERSONAL_JOB 對照主檔
   // 解析（見 JOB_TITLE_COLUMNS），使上游改名不需 backfill 帳號。實測空值率 0（四家 1,362 筆）。
   'TITLE_CODE',
+  // 🔴 職位代碼（G-ADM-001「**職位**」欄，2026-08-31 加入）。名稱由 VW_JOB_FUN 對照主檔解析，
+  //    見 JOB_POSITION_COLUMNS。⚠ **與 DEPT_COLUMNS 之 `JOB_CODE` 同名但語意完全不同**：
+  //    `VW_DEPT_SQL.JOB_CODE` ＝部門主管員編（MANGER_EMPNO，F014 來源），
+  //    `VW_PERSONNEL_SQL.JOB_CODE` ＝該員之職位代碼。兩者不可互相推論。
+  //    實測 2026-08-31：四家在職 1,362 筆 NULL 0／空字串 0。
+  'JOB_CODE',
   'MTDT',
 ] as const;
 
@@ -45,6 +52,16 @@ export const WHITELIST_PERSONNEL_COLUMNS = [
  * ⚠ 該 view 另含 `ID_NUMBER`（身分證字號）等高敏感個資，一律不取；見 FORBIDDEN_PERSONAL_JOB_COLUMNS。
  */
 export const JOB_TITLE_COLUMNS = ['COMPID', 'JTITLE_ID', 'JTITLE_NM'] as const;
+
+/**
+ * VW_JOB_FUN → JOB_POSITION 對照主檔僅取 3 欄（§5.4.2）。
+ *
+ * ⚠ 該 view 是「職級／職務名稱」主檔（2026-08-25 正式環境實查更正），內容為
+ * 董事長／總經理／本部長／部長／處長／室長／營業一般職／事務一般職／臨時人員 等——
+ * 即畫面之「職位」。**不是**「職務功能」定義主檔（契約 §5.4 曾誤載）。
+ * 其餘欄位（`DESC_ENG` 與六個異動軌跡欄）本系統不需要，一律不取。
+ */
+export const JOB_POSITION_COLUMNS = ['COMPID', 'CODE', 'DESC_CHI'] as const;
 
 /** VW_DEPT_SQL → ORG_UNIT 使用欄位（§5.1；JOB_CODE 實為 MANGER_EMPNO）。 */
 export const DEPT_COLUMNS = [
@@ -69,9 +86,11 @@ export const DEPT_COLUMNS = [
  *  - `HIRE_DATE` **不會**誤中白名單之 `REHIRE_DATE`（`E` 與 `H` 皆為 word char，無字界）
  *  - `NAME` **不會**誤中白名單之 `NAME_IN_CHINESE`（`_` 為 word char，無字界）
  *  - `ID_NO` 與白名單之 `NO` 互不誤中
- * 🔴 **不得**將 `JOB_CODE` 列入：`VW_DEPT_SQL` 之 `JOB_CODE`（＝部門主管員編，F014 合法來源）
- *    同名，列入會使 `buildDeptQuery` 自身觸發斷言。純屬「不需要」而非「不得讀」之欄位
- *    （`AREA_CODE`／`JOB_LEVEL_CODE`／`EMPTP_CODE` 等）一律不列入，由白名單負責排除。
+ * 🔴 **不得**將 `JOB_CODE` 列入：該欄名在兩支 view 皆為**合法來源**，語意卻不同——
+ *    `VW_DEPT_SQL.JOB_CODE` ＝部門主管員編（F014），`VW_PERSONNEL_SQL.JOB_CODE` ＝職位代碼
+ *    （G-ADM-001「職位」欄，2026-08-31 起）。列入會使 `buildDeptQuery` 與人員查詢
+ *    雙雙觸發斷言。純屬「不需要」而非「不得讀」之欄位（`AREA_CODE`／`JOB_LEVEL_CODE`／
+ *    `EMPTP_CODE` 等）一律不列入，由白名單負責排除。
  */
 export const FORBIDDEN_PERSONNEL_COLUMNS = [
   'ID_NO', // 身分證字號
@@ -239,6 +258,31 @@ export function buildJobTitleQuery(ref: UpstreamRef): string {
   const inner =
     `SELECT DISTINCT ${colList} FROM [${ref.remoteDb}].[dbo].[VW_PERSONAL_JOB] ` +
     `WHERE JTITLE_NM IS NOT NULL`;
+  const escaped = inner.replace(/'/g, "''");
+  const sql = `SELECT ${colList} FROM OPENQUERY([${ref.linkedServer}], '${escaped}') AS src`;
+  assertNoForbiddenColumns(sql);
+  return sql;
+}
+
+/**
+ * 職位對照主檔全量取回（VW_JOB_FUN 三欄；實測四家 73 列，成本極低）。
+ *
+ * ⚠ **不以 COMPID 過濾**：解析端雖為「本公司精確命中」（見下），但主檔本身取全量可使
+ *   日後擴充公司不需改查詢；73 列之傳輸成本可忽略。
+ * ⚠ **無 DISTINCT**：該 view 逐「代碼」一列（非逐人），`(COMPID, CODE)` 實測即為唯一鍵
+ *   （2026-08-31 實查：四家 73 列 / 73 組鍵，同公司內零歧義）。
+ * ⚠ **無需 END_DT 過濾**：該 view 定義本身已內建 `END_DT >= GETDATE()`（契約 §2），
+ *   取回者恆為有效列；view 本身亦無 `END_DT` 欄可過濾。
+ *
+ * 🔴 **解析端絕不得做跨公司 fallback**（與 `buildJobTitleQuery` 之職稱刻意不同）：
+ *   同一代碼跨公司語意可**相反**——實測 `D04` 在 AS＝營業經理、在 AD＝科長；
+ *   `C04` 在 AD＝部長、他家＝處長（2026-08-31 實查共 7 碼歧義：
+ *   B01／B03／C04／D04／D05／M03／N03）。fallback 會顯示出**錯誤職位**，
+ *   比顯示「—」嚴重得多。見 job-position-directory.ts。
+ */
+export function buildJobPositionQuery(ref: UpstreamRef): string {
+  const colList = JOB_POSITION_COLUMNS.join(', ');
+  const inner = `SELECT ${colList} FROM [${ref.remoteDb}].[dbo].[VW_JOB_FUN]`;
   const escaped = inner.replace(/'/g, "''");
   const sql = `SELECT ${colList} FROM OPENQUERY([${ref.linkedServer}], '${escaped}') AS src`;
   assertNoForbiddenColumns(sql);

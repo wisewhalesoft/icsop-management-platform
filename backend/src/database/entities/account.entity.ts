@@ -76,12 +76,23 @@ export class Account {
   managerEmpNo!: string | null; // ← DIRECTOR（直屬主管員編）
 
   /**
-   * 職稱代碼（← VW_HPMUSER.JOBTITLEID，白名單第 12 欄）。名稱不落此表，改由 JOB_TITLE
-   * 對照表解析（與 orgCode→ORG_UNIT.name 同一模式），避免上游職稱改名時需 backfill 全部帳號。
-   * 上游實測（2026-08-12，AS 在職 1,115 筆）：空值 0、36 種代碼、經兩段式解析 100% 命中。
+   * 職稱代碼＝畫面之「**資位**」欄（← `VW_PERSONNEL_SQL.TITLE_CODE`，白名單欄；
+   * v1.0 舊來源為 `VW_HPMUSER.JOBTITLEID`）。名稱不落此表，改由 JOB_TITLE 對照表解析
+   * （與 orgCode→ORG_UNIT.name 同一模式），避免上游改名時需 backfill 全部帳號。
+   * 上游實測（2026-08-24，四家在職 1,362 筆）：空值 0、本公司對照命中率 100%。
    */
   @Column({ type: 'varchar', length: 10, nullable: true })
   jobTitleCode!: string | null;
+
+  /**
+   * 職位代碼＝畫面之「**職位**」欄（← `VW_PERSONNEL_SQL.JOB_CODE`）。名稱不落此表，
+   * 改由 JOB_POSITION 對照表解析（理由同 `jobTitleCode`）。
+   * 🔴 該上游欄名與 `VW_DEPT_SQL.JOB_CODE`（＝部門主管員編）**同名異義**，不可互推。
+   * 上游實測（2026-08-31，四家在職 1,362 筆）：NULL 0／空字串 0；
+   * `(companyCode, code)` 精確命中 1,356/1,362（AS 之 `B20` 6 筆於主檔查無 → 顯示「—」）。
+   */
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  jobPositionCode!: string | null;
 
   // 承載上游日期：改用 datetime2（範圍 0001–9999），涵蓋所有合法日期，避免 datetime（1753–9999）
   // 之「Out of range」（2026-07-21 實跑抓到）。另於 mapper 以 normalizeUpstreamDate 收斂哨兵/異常值。
