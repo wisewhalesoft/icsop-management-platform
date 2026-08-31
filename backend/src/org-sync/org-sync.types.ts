@@ -45,6 +45,14 @@ export interface SyncRunSummary {
   changeCount: number;
   errorCode: string | null;
   errorMessage: string | null;
+  /**
+   * 角色推導是否因變更量超過閾值而**整批未套用**（2026-08-31 delta）。
+   * 供前端於同步歷程常駐呈現，並據以顯示「本次仍要套用」之一次性放行鈕。
+   * 歷史列（migration 之前）恆為 false，兩個數字為 null。
+   */
+  roleDerivationSkipped: boolean;
+  roleChangeCount: number | null;
+  roleDerivationBase: number | null;
 }
 
 /** 上游唯讀來源（一律 OPENQUERY 下推）。 */
@@ -105,6 +113,11 @@ export interface FinishSyncRunPatch {
   accountsCreated?: number;
   accountsUpdated?: number;
   accountsDisabled?: number;
+  // --- 2026-08-31 delta：角色推導被閾值跳過之事實與數字（同為「多落地已算出之 stats」）。
+  //     ⚠ 必須落地：常態觸發為每日排程，只留在 SyncResult 等同於無人知曉。
+  roleDerivationSkipped?: boolean;
+  roleChangeCount?: number | null;
+  roleDerivationBase?: number | null;
 }
 
 /** 本地寫入端（含互斥鎖：以「進行中之 SYNC_RUN」實現）。 */
@@ -238,6 +251,10 @@ export interface SyncStats {
   roleDowngradeAlerts?: number;
   /** 🔴 推導因超過變更閾值而**整批未套用**（裁定 Q4.3／OQ-RA-01）。 */
   roleDerivationSkipped?: boolean;
+  /** 本次會被寫入之角色/子分類變更數（分子）。不論是否跳過皆記錄，供畫面呈現實際筆數。 */
+  roleChangeCount?: number;
+  /** 本次納入推導之帳號數（分母，roleSource='derived'）。 */
+  roleDerivationBase?: number;
 }
 
 export interface SyncResult {

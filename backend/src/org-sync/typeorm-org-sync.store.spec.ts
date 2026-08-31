@@ -193,7 +193,7 @@ describe('TypeOrmOrgSyncStore.listRecentRuns', () => {
     expect(findArgs()).toEqual({ order: { startedAt: 'DESC' }, take: 7 });
   });
 
-  it('投影為 SyncRunSummary（8 欄；不含 watermark/triggeredBy）', async () => {
+  it('投影為 SyncRunSummary（11 欄；不含 watermark/triggeredBy）', async () => {
     const started = new Date('2026-07-21T02:00:00Z');
     const ended = new Date('2026-07-21T02:03:00Z');
     const { store } = makeStore([
@@ -220,6 +220,10 @@ describe('TypeOrmOrgSyncStore.listRecentRuns', () => {
       changeCount: 12,
       errorCode: null,
       errorMessage: null,
+      // 2026-08-31 delta：角色推導之事實與數字（歷史列為 false/null）。
+      roleDerivationSkipped: false,
+      roleChangeCount: null,
+      roleDerivationBase: null,
     });
     // 敏感/內部欄位不得外洩
     expect(summary).not.toHaveProperty('watermark');

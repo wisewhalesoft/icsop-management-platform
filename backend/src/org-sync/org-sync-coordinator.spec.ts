@@ -92,6 +92,48 @@ describe('OrgSyncCoordinator.runAll', () => {
     expect(svcAS.run).toHaveBeenCalledWith('manual', 'admin1', { fullResync: true });
   });
 
+  /**
+   * 🔵 2026-08-31 delta：`onlyCompid` 使畫面之「本次仍要套用」只重跑被跳過的那一家。
+   * 不限縮的話，無上限的放行值會一併套到其餘公司——它們早已套用過，沒有理由陪著暴露。
+   */
+  describe('onlyCompid（一次性放行之公司限縮）', () => {
+    it('只跑指定公司，其餘公司之 run() 完全未被呼叫', async () => {
+      const svcAS = fakeService('AS', okResult('AS'));
+      const svcAD = fakeService('AD', okResult('AD'));
+      const coordinator = new OrgSyncCoordinator([svcAS, svcAD], {} as OrgSyncStore);
+
+      const results = await coordinator.runAll('manual', 'admin1', {
+        applyRoleDerivation: true,
+        onlyCompid: 'AD',
+      });
+
+      expect(svcAS.run).not.toHaveBeenCalled();
+      expect(svcAD.run).toHaveBeenCalledWith('manual', 'admin1', {
+        applyRoleDerivation: true,
+      });
+      expect(results.map((r) => r.compid)).toEqual(['AD']);
+    });
+
+    it('🔴 onlyCompid 不得洩漏進 run() 之選項（那是協調層的事，不是引擎的事）', async () => {
+      const svcAS = fakeService('AS', okResult('AS'));
+      const coordinator = new OrgSyncCoordinator([svcAS], {} as OrgSyncStore);
+
+      await coordinator.runAll('manual', 'admin1', { onlyCompid: 'AS' });
+
+      expect(svcAS.run).toHaveBeenCalledWith('manual', 'admin1', {});
+    });
+
+    it('指定不存在之公司 → 回空陣列（呼叫端據以回 400，不誤跑全部）', async () => {
+      const svcAS = fakeService('AS', okResult('AS'));
+      const coordinator = new OrgSyncCoordinator([svcAS], {} as OrgSyncStore);
+
+      await expect(
+        coordinator.runAll('manual', 'admin1', { onlyCompid: 'ZZ' }),
+      ).resolves.toEqual([]);
+      expect(svcAS.run).not.toHaveBeenCalled();
+    });
+  });
+
   it('空公司清單 → 回傳空陣列（不拋錯）', async () => {
     const coordinator = new OrgSyncCoordinator([], {} as OrgSyncStore);
     await expect(coordinator.runAll('manual', null)).resolves.toEqual([]);
@@ -111,6 +153,9 @@ describe('OrgSyncCoordinator.recentRuns', () => {
         changeCount: 3,
         errorCode: null,
         errorMessage: null,
+        roleDerivationSkipped: false,
+        roleChangeCount: null,
+        roleDerivationBase: null,
       },
     ];
     const listRecentRuns = jest.fn().mockResolvedValue(sample);

@@ -56,7 +56,10 @@ export const ORG_SYNC_STORE = Symbol('ORG_SYNC_STORE');
             new OrgSyncService(
               reader,
               store,
-              // undefined → 服務層沿用 DEFAULT_DISAPPEARED_THRESHOLD（5%）。
+              // undefined → 服務層沿用 DEFAULT_DISAPPEARED_THRESHOLD（10%，2026-08-31 校準）。
+              // ⚠ 此處**刻意不接** roleChangeThreshold：角色變更閾值之覆寫僅供 CLI
+              //   （sync:once）之一次性全量套用，不開放給畫面按鈕與每日排程，
+              //   避免「一次性放寬」變成長期生效而讓角色被靜默大量改寫。
               { compid, disappearedThreshold },
               alerts,
             ),

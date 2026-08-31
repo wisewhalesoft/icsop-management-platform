@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { OrgSyncCoordinator } from './org-sync-coordinator';
 import { SyncResult, SyncRunSummary } from './org-sync.types';
 import { SessionGuard, RequestWithSession } from '../auth/session.guard';
@@ -25,12 +34,35 @@ export class OrgSyncController {
     private readonly alerts: OrgChangeAlertService,
   ) {}
 
-  /** B 階段：手動觸發同步全部設定之公司（依序），回傳各公司之個別結果。 */
+  /**
+   * B 階段：手動觸發同步全部設定之公司（依序），回傳各公司之個別結果。
+   *
+   * 🔵 2026-08-31 delta：可選 body `{ applyRoleDerivation, compid }`——系統管理員於同步歷程
+   * 看到「角色推導已跳過 N/M」後，就該筆實測筆數二次確認、放行**該次**推導。
+   *
+   * ⚠ 刻意**不接受閾值數字**：畫面若能填百分比，一次性放寬會退化為隨手填 100% 的常駐開關，
+   *   而該閾值是「上游職稱改名致大量帳號靜默失去限縮」之唯一偵測管道（裁定 Q4.6）。
+   *   布林只表達「本次已由人確認」，閾值設定不變、下次同步自動回到 5%。
+   * ⚠ 放行時 `compid` 為**必填**：不限縮的話會把無上限的窗口一併套到其餘公司。
+   *
+   * 權限不變（`組織人員異動管理` write＝僅系統管理員），不新增 F025 功能鍵。
+   */
   @Post('run')
   @RequirePermission(FunctionKey.ORG_SYNC_MANAGEMENT, 'write')
-  trigger(@Req() req: RequestWithSession): Promise<SyncResult[]> {
+  trigger(
+    @Req() req: RequestWithSession,
+    @Body() body?: { applyRoleDerivation?: boolean; compid?: string },
+  ): Promise<SyncResult[]> {
     const triggeredBy = req.sessionUser?.loginId ?? null;
-    return this.coordinator.runAll('manual', triggeredBy);
+    const applyRoleDerivation = body?.applyRoleDerivation === true;
+    const onlyCompid = body?.compid?.trim() || undefined;
+    if (applyRoleDerivation && !onlyCompid) {
+      throw new BadRequestException('VALIDATION_ERROR');
+    }
+    return this.coordinator.runAll('manual', triggeredBy, {
+      applyRoleDerivation,
+      onlyCompid,
+    });
   }
 
   /**

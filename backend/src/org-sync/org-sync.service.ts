@@ -54,6 +54,23 @@ export interface OrgSyncOptions {
   now?: () => Date;
 }
 
+/**
+ * 單次執行之選項（**非設定**）。沿用既有 `fullResync` 之通道：這些是「這一次要怎麼跑」，
+ * 刻意不放進 `OrgSyncOptions`（那是建構時綁定的長期設定）。
+ */
+export interface OrgSyncRunOptions {
+  fullResync?: boolean;
+  /**
+   * 🔵 2026-08-31：本次**放行角色推導**（由系統管理員於畫面二次確認後帶入）。
+   *
+   * ⚠ 語意是「這一次不設上限」而非「把閾值改成某個值」——刻意不讓呼叫端傳數字：
+   *   畫面若提供閾值輸入框，一次性放寬會退化為隨手填 100% 的常駐開關，而本閾值是
+   *   「上游職稱改名致大量帳號靜默失去限縮」之唯一偵測管道（裁定 Q4.6）。
+   * ⚠ 僅對該次 `run()` 有效，不改變 `this.roleThreshold`，下次同步自動回到 5%。
+   */
+  applyRoleDerivation?: boolean;
+}
+
 /** 同步進行中（互斥）。對外回 409 SYNC_IN_PROGRESS。 */
 export class SyncInProgressError extends ConflictException {
   constructor() {
@@ -126,7 +143,7 @@ export class OrgSyncService {
   async run(
     triggerType: TriggerType,
     triggeredBy?: string | null,
-    opts: { fullResync?: boolean } = {},
+    opts: OrgSyncRunOptions = {},
   ): Promise<SyncResult> {
     if (await this.store.hasRunningSyncRun(this.compid)) {
       throw new SyncInProgressError();
@@ -354,17 +371,34 @@ export class OrgSyncService {
           // 🔴 閾值（裁定 Q4.3）：分母為本次納入推導者（roleSource='derived'），
           //    分子為**會被寫入**之變更（升級＋子分類）——子分類必須計入，否則
           //    「上游職稱改名致數百人靜默失去限縮」完全沒有偵測管道（delta §七第 1 項）。
+          // 🔵 2026-08-31：本次數字一律落地（不論是否跳過），使同步歷程說得出
+          //    「這次推導動了幾筆／分母多少」——畫面之二次確認需要實際筆數，不能只給比例。
+          stats.roleChangeCount = rolePlan.writeCount;
+          stats.roleDerivationBase = derivAccounts.length;
+
+          // 🔵 `opts.applyRoleDerivation`＝系統管理員已於畫面就本次實測筆數二次確認 ⇒ 本次不設上限。
+          //    刻意以布林而非數字表達（見 OrgSyncRunOptions），且**不寫回 this.roleThreshold**：
+          //    放行僅此一次，下次同步自動回到 5%。
+          const effectiveRoleThreshold = opts.applyRoleDerivation ? 1 : this.roleThreshold;
           if (
-            roleChangeRatioExceeded(rolePlan, derivAccounts.length, this.roleThreshold)
+            roleChangeRatioExceeded(rolePlan, derivAccounts.length, effectiveRoleThreshold)
           ) {
             stats.roleDerivationSkipped = true;
             warnings.push(
               `角色推導變更量 ${rolePlan.writeCount}/${derivAccounts.length} ` +
                 `超過閾值 ${(this.roleThreshold * 100).toFixed(1)}%，**整批未套用**。` +
-                `帳號資料同步本身已成功。若為首次全量套用，請依 OQ-RA-01 以 ` +
-                `SYNC_ROLE_CHANGE_THRESHOLD 一次性放寬後重跑，跑完務必移除該變數。`,
+                `帳號資料同步本身已成功。可於「組織人員異動管理」之同步歷程確認筆數後，` +
+                `以「本次仍要套用」放行（僅該次有效）；CLI 則為 SYNC_ROLE_CHANGE_THRESHOLD。`,
             );
           } else {
+            if (opts.applyRoleDerivation) {
+              warnings.push(
+                `🔴 本次角色推導由操作者${triggeredBy ? `（${triggeredBy}）` : ''}` +
+                  `確認放行：變更量 ${rolePlan.writeCount}/${derivAccounts.length}` +
+                  `（${((rolePlan.writeCount / Math.max(derivAccounts.length, 1)) * 100).toFixed(1)}%）` +
+                  `已超過閾值 ${(this.roleThreshold * 100).toFixed(1)}% 仍予套用。閾值設定未變更。`,
+              );
+            }
             await this.store.applyRoleDerivation(this.compid, rolePlan);
             // 裁定 Q1.3：降級不自動執行，改由步驟 7 產生 ROLE_DOWNGRADE_PENDING 待審告警。
             // ⚠ **僅在推導確實套用時才採計**——閾值跳過時整個計畫都不可信，
@@ -402,6 +436,10 @@ export class OrgSyncService {
         accountsCreated: stats.accountsCreated,
         accountsUpdated: stats.accountsUpdated,
         accountsDisabled: stats.accountsDisabled,
+        // 2026-08-31 delta：角色推導之事實與數字一併落地（見 migration 1725148800000）。
+        roleDerivationSkipped: stats.roleDerivationSkipped ?? false,
+        roleChangeCount: stats.roleChangeCount ?? null,
+        roleDerivationBase: stats.roleDerivationBase ?? null,
       });
 
       // --- 7. F006 組織異動待確認提示（非阻斷；失敗僅記警告，同步結果維持 success） ---

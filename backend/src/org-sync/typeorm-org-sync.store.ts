@@ -74,6 +74,12 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
       accountsCreated: patch.accountsCreated ?? 0,
       accountsUpdated: patch.accountsUpdated ?? 0,
       accountsDisabled: patch.accountsDisabled ?? 0,
+      // 2026-08-31 delta：跳過旗標未帶（失敗收尾）→ false；兩個數字未帶 → null
+      //   （與 KPI 三欄之「未帶落 0」刻意不同：那三欄之 0 是真實語意「本次沒有」，
+      //    而「本次推導動了 0 筆」與「本次根本沒跑到推導」是兩件事，不可混為 0）。
+      roleDerivationSkipped: patch.roleDerivationSkipped ?? false,
+      roleChangeCount: patch.roleChangeCount ?? null,
+      roleDerivationBase: patch.roleDerivationBase ?? null,
     };
     if (patch.watermark !== undefined) update.watermark = patch.watermark;
     await ds.getRepository(SyncRun).update({ id }, update);
@@ -192,6 +198,11 @@ export class TypeOrmOrgSyncStore implements OrgSyncStore {
       changeCount: r.changeCount,
       errorCode: r.errorCode,
       errorMessage: r.errorMessage,
+      // 2026-08-31 delta：bit 於 mssql driver 回 boolean；歷史列（migration 之前）之
+      // DEFAULT 0 已由 migration 回填，故 ?? false 僅為型別收斂，非掩蓋 null。
+      roleDerivationSkipped: r.roleDerivationSkipped ?? false,
+      roleChangeCount: r.roleChangeCount ?? null,
+      roleDerivationBase: r.roleDerivationBase ?? null,
     }));
   }
 

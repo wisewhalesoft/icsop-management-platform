@@ -57,4 +57,18 @@ export class SyncRun {
 
   @Column({ type: 'int', nullable: true })
   accountsDisabled!: number | null;
+
+  // --- 2026-08-31 delta：角色推導是否因變更量超過閾值而**整批未套用**。
+  //     落地理由見 migration 1725148800000：常態是每日 02:00 排程，跳過時無人在看畫面，
+  //     只留在 SyncResult 等同於沒人知道。三欄同為「多落地已算出之 stats」，不新增計算。
+  @Column({ type: 'bit', default: false })
+  roleDerivationSkipped!: boolean;
+
+  /** 本次會被寫入之角色/子分類變更數（分子）。 */
+  @Column({ type: 'int', nullable: true })
+  roleChangeCount!: number | null;
+
+  /** 本次納入推導之帳號數（分母，roleSource='derived'）。 */
+  @Column({ type: 'int', nullable: true })
+  roleDerivationBase!: number | null;
 }

@@ -220,6 +220,80 @@ describe('[pipeline] 角色推導接進同步', () => {
     expect(res.warnings.join('\n')).toMatch(/SYNC_ROLE_CHANGE_THRESHOLD/);
   });
 
+  /**
+   * 🔵 2026-08-31 delta：畫面之一次性放行（`opts.applyRoleDerivation`）。
+   *
+   * 與上面那條「建構時放寬 roleChangeThreshold」的差別，正是本組要釘住的東西：
+   * 前者是**設定**（整個 service 生命週期都寬鬆），後者是**這一次**（下次自動回到 5%）。
+   * 系統管理員按下畫面按鈕走的是後者——否則一次確認會變成長期失去護欄。
+   */
+  describe('opts.applyRoleDerivation（畫面一次性放行）', () => {
+    const twentyChanges = (store: FakeStore): void => {
+      store.derivAccounts = Array.from({ length: 20 }, (_, i) =>
+        derivAcc({ id: `a${i}`, loginId: `2000${i}`, jobTitleCode: 'J01' }),
+      );
+    };
+
+    it('帶 applyRoleDerivation → 同一批資料改為套用（等效於放寬，但不動設定）', async () => {
+      const reader = new FakeReader();
+      const store = new FakeStore();
+      seed(store, reader);
+      twentyChanges(store);
+
+      const res = await svc(reader, store).run('manual', 'sysadmin1', {
+        applyRoleDerivation: true,
+      });
+
+      expect(res.status).toBe('success');
+      expect(store.appliedDerivation).toHaveLength(1);
+      expect(store.appliedDerivation[0]!.subtypeChanges).toHaveLength(20);
+      expect(res.stats.roleDerivationSkipped).toBeUndefined();
+    });
+
+    it('🔴 放行僅對該次有效：同一實例再跑一次（不帶 opts）→ 又被跳過', async () => {
+      const reader = new FakeReader();
+      const store = new FakeStore();
+      seed(store, reader);
+      twentyChanges(store);
+      const service = svc(reader, store);
+
+      await service.run('manual', 'sysadmin1', { applyRoleDerivation: true });
+      expect(store.appliedDerivation).toHaveLength(1);
+
+      const second = await service.run('manual', 'sysadmin1');
+      expect(second.stats.roleDerivationSkipped).toBe(true);
+      expect(store.appliedDerivation).toHaveLength(1); // 未再寫入
+    });
+
+    it('放行時 warnings 記錄操作者與實際比例（供事後追溯誰放行了什麼）', async () => {
+      const reader = new FakeReader();
+      const store = new FakeStore();
+      seed(store, reader);
+      twentyChanges(store);
+
+      const res = await svc(reader, store).run('manual', 'sysadmin1', {
+        applyRoleDerivation: true,
+      });
+
+      const joined = res.warnings.join(' | ');
+      expect(joined).toMatch(/確認放行/);
+      expect(joined).toMatch(/sysadmin1/);
+      expect(joined).toMatch(/20\/20/);
+    });
+
+    it('🔴 筆數一律落地（跳過時亦然）——畫面之二次確認需要實際筆數，不能只給比例', async () => {
+      const reader = new FakeReader();
+      const store = new FakeStore();
+      seed(store, reader);
+      twentyChanges(store);
+
+      const skipped = await svc(reader, store).run('manual', 'tester');
+      expect(skipped.stats.roleDerivationSkipped).toBe(true);
+      expect(skipped.stats.roleChangeCount).toBe(20);
+      expect(skipped.stats.roleDerivationBase).toBe(20);
+    });
+  });
+
   it('🔴 閾值一次性放寬 → 同一批資料改為套用（OQ-RA-01 之首次全量套用路徑）', async () => {
     const reader = new FakeReader();
     const store = new FakeStore();

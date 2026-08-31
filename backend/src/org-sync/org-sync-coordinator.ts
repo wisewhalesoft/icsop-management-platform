@@ -1,5 +1,10 @@
 import { OrgSyncStore, SyncResult, SyncRunSummary, TriggerType } from './org-sync.types';
-import { OrgSyncService, SyncInProgressError, clampRunsLimit } from './org-sync.service';
+import {
+  OrgSyncService,
+  OrgSyncRunOptions,
+  SyncInProgressError,
+  clampRunsLimit,
+} from './org-sync.service';
 
 /**
  * 多公司同步協調層（B 階段，開放 AD／AE／AJ）。
@@ -36,12 +41,19 @@ export class OrgSyncCoordinator {
   async runAll(
     triggerType: TriggerType,
     triggeredBy?: string | null,
-    opts: { fullResync?: boolean } = {},
+    opts: OrgSyncRunOptions & { onlyCompid?: string } = {},
   ): Promise<SyncResult[]> {
     const results: SyncResult[] = [];
-    for (const svc of this.services) {
+    // 🔵 2026-08-31：`onlyCompid` 使畫面之「本次仍要套用」只重跑**被跳過的那一家**。
+    //    不限縮的話，放行值會一併套到其餘公司——它們早已套用過、日常變更量是個位數百分比，
+    //    沒有理由把它們也暴露在無上限的窗口下。查無該公司 → 回空陣列（呼叫端據以回 400）。
+    const { onlyCompid, ...runOpts } = opts;
+    const targets = onlyCompid
+      ? this.services.filter((s) => s.getCompid() === onlyCompid)
+      : this.services;
+    for (const svc of targets) {
       try {
-        results.push(await svc.run(triggerType, triggeredBy, opts));
+        results.push(await svc.run(triggerType, triggeredBy, runOpts));
       } catch (e) {
         results.push({
           runId: '',

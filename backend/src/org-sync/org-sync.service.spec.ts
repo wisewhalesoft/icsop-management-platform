@@ -196,6 +196,9 @@ class FakeStore implements OrgSyncStore {
         changeCount: r.patch?.changeCount ?? 0,
         errorCode: r.patch?.errorCode ?? null,
         errorMessage: r.patch?.errorMessage ?? null,
+        roleDerivationSkipped: r.patch?.roleDerivationSkipped ?? false,
+        roleChangeCount: r.patch?.roleChangeCount ?? null,
+        roleDerivationBase: r.patch?.roleDerivationBase ?? null,
       }));
     return Promise.resolve(summaries);
   }
@@ -538,6 +541,9 @@ describe('OrgSyncService.recentRuns', () => {
       changeCount: 3,
       errorCode: null,
       errorMessage: null,
+      roleDerivationSkipped: false,
+      roleChangeCount: null,
+      roleDerivationBase: null,
     },
   ];
 

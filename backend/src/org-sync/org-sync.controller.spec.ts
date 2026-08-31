@@ -64,8 +64,79 @@ describe('OrgSyncController.trigger（B 階段：多公司，回傳陣列）', (
     const controller = new OrgSyncController(coordinator, alertsStub());
 
     const res = await controller.trigger(req);
-    expect(runAll).toHaveBeenCalledWith('manual', 'sysadmin1');
+    // 2026-08-31 delta：第三參數為每次執行之選項；未帶 body ⇒ 不放行、不限縮公司。
+    expect(runAll).toHaveBeenCalledWith('manual', 'sysadmin1', {
+      applyRoleDerivation: false,
+      onlyCompid: undefined,
+    });
     expect(res).toEqual([okResult]);
+  });
+
+  /**
+   * 🔵 2026-08-31 delta：角色推導之一次性放行（系統管理員於同步歷程二次確認後帶入）。
+   * 權限不變（`組織人員異動管理` write＝僅系統管理員），故本組只驗 payload 契約。
+   */
+  describe('applyRoleDerivation（一次性放行）', () => {
+    it('帶 applyRoleDerivation + compid → 透傳給協調層', async () => {
+      const runAll = jest.fn().mockResolvedValue([okResult]);
+      const controller = new OrgSyncController(
+        { runAll } as unknown as OrgSyncCoordinator,
+        alertsStub(),
+      );
+
+      await controller.trigger(req, { applyRoleDerivation: true, compid: 'AS' });
+
+      expect(runAll).toHaveBeenCalledWith('manual', 'sysadmin1', {
+        applyRoleDerivation: true,
+        onlyCompid: 'AS',
+      });
+    });
+
+    it('🔴 放行但未帶 compid → 400 VALIDATION_ERROR，不呼叫協調層', async () => {
+      const runAll = jest.fn();
+      const controller = new OrgSyncController(
+        { runAll } as unknown as OrgSyncCoordinator,
+        alertsStub(),
+      );
+
+      expect(() => controller.trigger(req, { applyRoleDerivation: true })).toThrow(
+        'VALIDATION_ERROR',
+      );
+      expect(runAll).not.toHaveBeenCalled();
+    });
+
+    it('🔴 不得以數字表達：body 之閾值欄位一律被忽略（無閾值輸入管道）', async () => {
+      const runAll = jest.fn().mockResolvedValue([okResult]);
+      const controller = new OrgSyncController(
+        { runAll } as unknown as OrgSyncCoordinator,
+        alertsStub(),
+      );
+
+      await controller.trigger(req, {
+        compid: 'AS',
+        applyRoleDerivation: true,
+        // 呼叫端若試圖夾帶閾值，controller 不認得此鍵、不得有任何作用。
+        roleChangeThreshold: 1,
+      } as unknown as { applyRoleDerivation?: boolean; compid?: string });
+
+      expect(runAll).toHaveBeenCalledWith('manual', 'sysadmin1', {
+        applyRoleDerivation: true,
+        onlyCompid: 'AS',
+      });
+    });
+
+    it('compid 僅空白 → 視為未帶（放行時即 400）', async () => {
+      const runAll = jest.fn();
+      const controller = new OrgSyncController(
+        { runAll } as unknown as OrgSyncCoordinator,
+        alertsStub(),
+      );
+
+      expect(() =>
+        controller.trigger(req, { applyRoleDerivation: true, compid: '   ' }),
+      ).toThrow('VALIDATION_ERROR');
+      expect(runAll).not.toHaveBeenCalled();
+    });
   });
 
   it('單一公司互斥中 → 該公司於陣列中為 SYNC_IN_PROGRESS 失敗項，不影響其餘公司', async () => {
@@ -99,6 +170,9 @@ const SAMPLE_RUNS: SyncRunSummary[] = [
     changeCount: 4,
     errorCode: null,
     errorMessage: null,
+    roleDerivationSkipped: false,
+    roleChangeCount: null,
+    roleDerivationBase: null,
   },
 ];
 
