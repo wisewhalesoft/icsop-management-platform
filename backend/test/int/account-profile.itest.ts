@@ -1,6 +1,7 @@
 import { bootIntApp, shutdownIntApp, IntCtx, MARK } from './harness';
 import { AppDataSource } from '../../src/database/data-source';
 import { Account } from '../../src/database/entities/account.entity';
+import { JobPosition } from '../../src/database/entities/job-position.entity';
 import { hashPassword } from '../../src/accounts/password';
 
 /**
@@ -632,6 +633,181 @@ describe('[int] F003 手動帳號基本資料 delta（AC-P14／AC-P20／AC-P21 +
       expect(row!.department).toBeTruthy();
       expect(row!.department).toMatch(/審查室/);
       expect(row!.title).toBe('經理');
+    });
+  });
+
+  /**
+   * 🔵 2026-08-31 資位／職位拆欄 delta（AC-P28～AC-P33）之端到端驗證。
+   *
+   * 本組刻意放在 int 層而非單元層的三件事（單元測試證明不了）：
+   *  ① `1725062400000-account-job-position` 之 migration **真的跑過**（表與欄存在）；
+   *  ② `jobPositionCode` 一路寫進 DB **沒有人間蒸發**——store 之欄位白名單漏列時，
+   *     API 會回 201、單元測試（FakeStore 直接回傳 seed 物件）也會綠，但值不會落地；
+   *  ③ 端點真的掛上、代理與 RBAC 生效。
+   */
+  describe('AC-P28～AC-P33 職位（JOB_POSITION）端到端 vs SOP', () => {
+    const POS_MARK = 'ZZ';
+    const posRepo = (): ReturnType<typeof AppDataSource.getRepository> =>
+      AppDataSource.getRepository(JobPosition);
+
+    beforeAll(async () => {
+      const repo = posRepo();
+      await repo.save([
+        repo.create({ companyCode: 'AS', code: 'ZZ1', name: 'ZZINT 處長' }),
+        repo.create({ companyCode: 'AS', code: 'ZZ2', name: 'ZZINT 營業一般職' }),
+        // 🔴 同代碼、他公司、語意不同：用以證明**不做跨公司 fallback**（AC-P28／AC-P30）。
+        repo.create({ companyCode: 'AD', code: 'ZZ9', name: 'ZZINT 部長' }),
+      ]);
+    });
+
+    afterAll(async () => {
+      await posRepo()
+        .createQueryBuilder()
+        .delete()
+        .where('code LIKE :p', { p: `${POS_MARK}%` })
+        .execute();
+    });
+
+    describe('AC-P29 GET /job-positions', () => {
+      it('SysAdmin 可讀：回應為 { companyCode, code, name }[]，依 code 昇冪，且僅該公司之列', async () => {
+        const res = await ctx
+          .http()
+          .get('/job-positions?companyCode=AS')
+          .set('Cookie', sysadminCookie);
+        expect(res.status).toBe(200);
+        const body = res.body as { companyCode: string; code: string; name: string }[];
+        expect(body.length).toBeGreaterThan(0);
+        for (const row of body) expect(row.companyCode).toBe('AS');
+        const codes = body.map((r) => r.code);
+        expect(codes).toEqual([...codes].sort((a, b) => a.localeCompare(b)));
+        expect(codes).toEqual(expect.arrayContaining(['ZZ1', 'ZZ2']));
+      });
+
+      it('未帶 companyCode → 預設為操作者 session 之 companyCode（AS）', async () => {
+        const res = await ctx.http().get('/job-positions').set('Cookie', sysadminCookie);
+        expect(res.status).toBe(200);
+        for (const row of res.body as { companyCode: string }[]) {
+          expect(row.companyCode).toBe('AS');
+        }
+      });
+
+      it('🔴 companyCode 精確過濾：AD 之結果不含 AS 之列（絕不跨公司 fallback）', async () => {
+        const res = await ctx
+          .http()
+          .get('/job-positions?companyCode=AD')
+          .set('Cookie', sysadminCookie);
+        expect(res.status).toBe(200);
+        const body = res.body as { companyCode: string; code: string }[];
+        for (const row of body) expect(row.companyCode).toBe('AD');
+        expect(body.map((r) => r.code)).not.toContain('ZZ1');
+      });
+
+      it('ICSOPAdmin 可讀（唯讀角色，read 權限仍在）', async () => {
+        const res = await ctx
+          .http()
+          .get('/job-positions?companyCode=AS')
+          .set('Cookie', ctx.adminCookie);
+        expect(res.status).toBe(200);
+      });
+
+      it.each([
+        ['主管', () => supervisorCookie],
+        ['部門窗口', () => deptCookie],
+        ['一般使用者', () => userCookie],
+      ])('%s 呼叫 → 403', async (_label, cookieFn) => {
+        const res = await ctx
+          .http()
+          .get('/job-positions?companyCode=AS')
+          .set('Cookie', cookieFn());
+        expect(res.status).toBe(403);
+      });
+
+      it('未登入 → 401', async () => {
+        const res = await ctx.http().get('/job-positions?companyCode=AS');
+        expect(res.status).toBe(401);
+      });
+    });
+
+    describe('AC-P30／AC-P33 jobPositionCode 之落地與驗證', () => {
+      it('🔴 建立帶 jobPositionCode → 201 且值**確實寫入 DB**（欄位白名單漏列時本斷言會紅）', async () => {
+        const loginId = `${MARK.acct}p30a`;
+        const res = await ctx
+          .http()
+          .post('/admin/accounts')
+          .set('Cookie', sysadminCookie)
+          .send({
+            loginId,
+            password: 'Zzint-Pw-1',
+            roleCode: 'User',
+            name: 'ZZINT P30',
+            companyCode: 'AS',
+            jobPositionCode: 'ZZ1',
+          });
+        expect(res.status).toBe(201);
+        const saved = await AppDataSource.getRepository(Account).findOneBy({ loginId });
+        expect(saved).not.toBeNull();
+        expect(saved!.jobPositionCode).toBe('ZZ1');
+      });
+
+      it('清單之 position 以 (該列公司, 代碼) 解析出名稱', async () => {
+        const list = await ctx.http().get('/admin/accounts').set('Cookie', sysadminCookie);
+        const rows = (list.body.items ?? list.body) as {
+          loginId: string;
+          position?: string | null;
+        }[];
+        const row = rows.find((r) => r.loginId === `${MARK.acct}p30a`);
+        expect(row).toBeDefined();
+        expect(row!.position).toBe('ZZINT 處長');
+      });
+
+      it('代碼不存在 → 400 ACCOUNT_JOB_POSITION_INVALID，不建立', async () => {
+        const loginId = `${MARK.acct}p30b`;
+        const res = await ctx
+          .http()
+          .post('/admin/accounts')
+          .set('Cookie', sysadminCookie)
+          .send({
+            loginId,
+            password: 'Zzint-Pw-1',
+            roleCode: 'User',
+            name: 'ZZINT P30b',
+            companyCode: 'AS',
+            jobPositionCode: 'ZZZZ',
+          });
+        expect(res.status).toBe(400);
+        expect(JSON.stringify(res.body)).toContain('ACCOUNT_JOB_POSITION_INVALID');
+        expect(await AppDataSource.getRepository(Account).findOneBy({ loginId })).toBeNull();
+      });
+
+      it('🔴 代碼僅存在於他公司（AD/ZZ9）→ 仍 400（寫入驗證亦無 fallback）', async () => {
+        const res = await ctx
+          .http()
+          .post('/admin/accounts')
+          .set('Cookie', sysadminCookie)
+          .send({
+            loginId: `${MARK.acct}p30c`,
+            password: 'Zzint-Pw-1',
+            roleCode: 'User',
+            name: 'ZZINT P30c',
+            companyCode: 'AS',
+            jobPositionCode: 'ZZ9',
+          });
+        expect(res.status).toBe(400);
+        expect(JSON.stringify(res.body)).toContain('ACCOUNT_JOB_POSITION_INVALID');
+      });
+
+      it('編輯：明確傳 null → 清空（DB 實測）', async () => {
+        const loginId = `${MARK.acct}p30a`;
+        const acc = await AppDataSource.getRepository(Account).findOneBy({ loginId });
+        const res = await ctx
+          .http()
+          .patch(`/admin/accounts/${acc!.id}`)
+          .set('Cookie', sysadminCookie)
+          .send({ jobPositionCode: null });
+        expect(res.status).toBe(200);
+        const after = await AppDataSource.getRepository(Account).findOneBy({ loginId });
+        expect(after!.jobPositionCode).toBeNull();
+      });
     });
   });
 });

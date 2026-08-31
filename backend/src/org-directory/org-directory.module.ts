@@ -5,9 +5,14 @@ import { RbacModule } from '../rbac/rbac.module';
 import { PERSON_STORE, PersonStore } from './person-directory';
 import { ORG_UNIT_READ_STORE, OrgUnitReadStore } from './org-unit-read';
 import { JOB_TITLE_READ_STORE, JobTitleReadStore } from './job-title-directory';
+import {
+  JOB_POSITION_READ_STORE,
+  JobPositionReadStore,
+} from './job-position-directory';
 import { TypeOrmPersonStore } from './typeorm-person.store';
 import { TypeOrmOrgUnitReadStore } from './typeorm-org-unit-read.store';
 import { TypeOrmJobTitleStore } from './typeorm-job-title.store';
+import { TypeOrmJobPositionStore } from './typeorm-job-position.store';
 import { NameResolutionService } from './name-resolution.service';
 import { OrgDirectoryService } from './org-directory.service';
 import {
@@ -17,6 +22,7 @@ import {
 import {
   CompanyReadController,
   JobTitleReadController,
+  JobPositionReadController,
 } from './master-data.controller';
 
 /**
@@ -30,13 +36,14 @@ import {
  */
 @Module({
   imports: [AuthModule, RbacModule],
-  // F003 AC-P14／AC-P15：職位／公司主檔讀取端點（帳號管理 read 權限；就近置於本模組，
-  // 重用既有 JOB_TITLE_READ_STORE 與靜態 COMPANY_FULL_NAMES，不新增表／store／migration）。
+  // F003 AC-P14／AC-P15／AC-P29：資位／公司／職位主檔讀取端點（帳號管理 read 權限；
+  // 就近置於本模組，重用既有 store 與靜態 COMPANY_FULL_NAMES）。
   controllers: [
     OrgUnitReadController,
     PersonReadController,
     CompanyReadController,
     JobTitleReadController,
+    JobPositionReadController,
   ],
   providers: [
     {
@@ -50,9 +57,15 @@ import {
         new TypeOrmOrgUnitReadStore(AppDataSource),
     },
     {
-      // 職稱對照（G-ADM-001「職位」欄）。不帶 SYNC_COMPID：跨公司 fallback 需要全表。
+      // 職稱對照（G-ADM-001「資位」欄）。不帶 SYNC_COMPID：跨公司 fallback 需要全表。
       provide: JOB_TITLE_READ_STORE,
       useFactory: (): JobTitleReadStore => new TypeOrmJobTitleStore(AppDataSource),
+    },
+    {
+      // 職位對照（G-ADM-001「職位」欄）。不帶 SYNC_COMPID：清單跨公司可見，逐列解析需全表。
+      provide: JOB_POSITION_READ_STORE,
+      useFactory: (): JobPositionReadStore =>
+        new TypeOrmJobPositionStore(AppDataSource),
     },
     {
       provide: NameResolutionService,
@@ -74,6 +87,7 @@ import {
     PERSON_STORE,
     ORG_UNIT_READ_STORE,
     JOB_TITLE_READ_STORE,
+    JOB_POSITION_READ_STORE,
   ],
 })
 export class OrgDirectoryModule {}

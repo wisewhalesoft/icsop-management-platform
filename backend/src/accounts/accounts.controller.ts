@@ -29,7 +29,11 @@ interface CreateBody {
   name?: string | null;
   companyCode?: string;
   orgCode?: string | null;
+  /** 資位（AC-P7）。 */
   jobTitleCode?: string | null;
+  /** 職位（AC-P30）。⚠ 漏列於本介面**或**下方 create() 之逐鍵轉呈，值會靜默消失
+   *  （API 仍回 201、單元測試仍綠，只有 DB 是 null）——2026-08-31 整合測試實測踩到。 */
+  jobPositionCode?: string | null;
 }
 
 /** 編輯帳號之 request body（F003 AC-P9）。欄位缺席＝不變更；明確傳 null＝清空。 */
@@ -39,6 +43,7 @@ interface UpdateBody {
   companyCode?: string;
   orgCode?: string | null;
   jobTitleCode?: string | null;
+  jobPositionCode?: string | null;
 }
 
 /**
@@ -89,6 +94,7 @@ export class AccountsController {
       companyCode: body.companyCode,
       orgCode: body.orgCode,
       jobTitleCode: body.jobTitleCode,
+      jobPositionCode: body.jobPositionCode,
     });
   }
 

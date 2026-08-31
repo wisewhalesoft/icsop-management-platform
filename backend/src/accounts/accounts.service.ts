@@ -40,6 +40,12 @@ import {
   jobTitleKey,
 } from '../org-directory/job-title-directory';
 import {
+  JOB_POSITION_READ_STORE,
+  JobPositionReadStore,
+  buildJobPositionResolver,
+  jobPositionKey,
+} from '../org-directory/job-position-directory';
+import {
   isSelectableCompany,
   resolveCompanyName,
 } from '../org-directory/company-name';
@@ -55,26 +61,33 @@ export interface CreateManualInput {
   companyCode?: string;
   /** F003 AC-P6：選填部門代碼（主檔下拉）。 */
   orgCode?: string | null;
-  /** F003 AC-P7：選填職位代碼（主檔下拉）。 */
+  /** F003 AC-P7：選填資位代碼（主檔下拉）。 */
   jobTitleCode?: string | null;
+  /** F003 AC-P30：選填職位代碼（主檔下拉）。 */
+  jobPositionCode?: string | null;
 }
 
-/** F003 AC-P9：編輯 payload。欄位缺席＝不變更；`orgCode`／`jobTitleCode` 明確傳 `null`＝清空。 */
+/**
+ * F003 AC-P9：編輯 payload。欄位缺席＝不變更；`orgCode`／`jobTitleCode`／`jobPositionCode`
+ * 明確傳 `null`＝清空。
+ */
 export interface UpdateAccountInput {
   name?: string | null;
   password?: string;
   companyCode?: string;
   orgCode?: string | null;
   jobTitleCode?: string | null;
+  jobPositionCode?: string | null;
 }
 
-/** F003 AC-P11：上游帳號唯讀之欄位集合（含明確傳 `null` 之清空意圖）。 */
+/** F003 AC-P11／AC-P32：上游帳號唯讀之欄位集合（含明確傳 `null` 之清空意圖）。 */
 const UPSTREAM_READONLY_KEYS = [
   'name',
   'password',
   'companyCode',
   'orgCode',
   'jobTitleCode',
+  'jobPositionCode',
 ] as const;
 
 /**
@@ -106,7 +119,7 @@ export class AccountsService {
     @Optional()
     @Inject(ORG_UNIT_READ_STORE)
     private readonly orgUnits?: OrgUnitReadStore,
-    // 選填：JOB_TITLE 對照 store，供清單解析 職位 名稱。缺（手建 spec）→ 優雅降級（title=null）。
+    // 選填：JOB_TITLE 對照 store，供清單解析 資位 名稱。缺（手建 spec）→ 優雅降級（title=null）。
     @Optional()
     @Inject(JOB_TITLE_READ_STORE)
     private readonly jobTitles?: JobTitleReadStore,
@@ -117,6 +130,12 @@ export class AccountsService {
     @Optional()
     @Inject(ACCOUNT_AUDIT_RECORDER)
     private readonly auditRecorder?: AccountAuditRecorder,
+    // 選填：JOB_POSITION 對照 store，供清單解析 職位 名稱。缺 → 優雅降級（position=null）。
+    // ⚠ **刻意置於建構子末位**：既有十餘處單元測試以位置參數建構本服務，插在中間會使
+    //   既有替身（如稽核 recorder）被錯位注入——那種錯誤只會在執行期以「型別對不上」現形。
+    @Optional()
+    @Inject(JOB_POSITION_READ_STORE)
+    private readonly jobPositions?: JobPositionReadStore,
   ) {}
 
   /**
@@ -130,7 +149,10 @@ export class AccountsService {
    *    （AC-P23d ＋ AC-P17，格式如 `營運管理部 / 審查室`；未命中 → `null`）
    *    ——`ORG_UNIT` 之唯一鍵為 `(companyCode, orgCode)`，不同公司可有相同 `orgCode` 但不同單位。
    *    每個出現於本頁之公司各查一次 `listByCompany`（公司數 ≤ SELECTABLE_COMPANIES 之大小，無 N+1）。
-   *  - title＝`resolveTitle(row.companyCode, row.jobTitleCode)`（AC-P23e）。
+   *  - title（資位）＝`resolveTitle(row.companyCode, row.jobTitleCode)`（AC-P23e）。
+   *  - position（職位）＝`resolvePosition(row.companyCode, row.jobPositionCode)`（AC-P28）。
+   *    🔴 職位之解析為**單段精確**，查無即 `null`——同代碼跨公司語意可相反，
+   *    不得比照資位做跨公司 fallback（見 job-position-directory 檔頭）。
    *  - lastLoginAt 由 store 直接帶出。
    *
    * 第一參數 `companyCode`（操作者公司）僅作為 store 呼叫慣例保留，**不再用於過濾**。
@@ -144,6 +166,9 @@ export class AccountsService {
     const resolveTitle = this.jobTitles
       ? buildJobTitleResolver(await this.jobTitles.listAll())
       : null;
+    const resolvePosition = this.jobPositions
+      ? buildJobPositionResolver(await this.jobPositions.listAll())
+      : null;
     return rows.map((r) => ({
       ...r,
       company: resolveCompanyName(r.companyCode),
@@ -152,6 +177,9 @@ export class AccountsService {
           ? (deptByCompanyOrg.get(orgUnitKey(r.companyCode, r.orgCode)) ?? null)
           : null,
       title: resolveTitle ? resolveTitle(r.companyCode, r.jobTitleCode) : null,
+      position: resolvePosition
+        ? resolvePosition(r.companyCode, r.jobPositionCode)
+        : null,
     }));
   }
 
@@ -208,8 +236,9 @@ export class AccountsService {
    * 驗證順序固定不可調換（AC-P8）：
    *  ① 必填／長度（`VALIDATION_ERROR`, 400）→ ② 角色（`ROLE_INVALID`, 400）→
    *  ③ 公司（`ACCOUNT_COMPANY_CODE_INVALID`, 400）→ ④ 部門（`ACCOUNT_ORG_CODE_INVALID`, 400）→
-   *  ⑤ 職位（`ACCOUNT_JOB_TITLE_INVALID`, 400）→ ⑥ 帳號唯一性（`ACCOUNT_USERNAME_EXISTS`, 409）。
-   * ③④⑤ 係插入於既有 ②⑥ 之間，既有兩者之相對順序不變。
+   *  ⑤ 資位（`ACCOUNT_JOB_TITLE_INVALID`, 400）→ ⑥ 職位（`ACCOUNT_JOB_POSITION_INVALID`, 400）
+   *  → ⑦ 帳號唯一性（`ACCOUNT_USERNAME_EXISTS`, 409）。
+   * ⑥ 係插入於 ⑤ 之後（AC-P30），既有各項之相對順序不變。
    */
   async createManual(
     companyCode: string,
@@ -219,6 +248,7 @@ export class AccountsService {
     const name = normalizeAccountName(input.name);
     const orgCode = normalizeAccountCode(input.orgCode);
     const jobTitleCode = normalizeAccountCode(input.jobTitleCode);
+    const jobPositionCode = normalizeAccountCode(input.jobPositionCode);
     // AC-P5：未提供 → 以操作者 session 之公司寫入；提供（含空字串）→ 以送入值為準並驗證有效性。
     const companyProvided = input.companyCode !== undefined && input.companyCode !== null;
     const targetCompany = companyProvided ? input.companyCode!.trim() : companyCode;
@@ -227,7 +257,13 @@ export class AccountsService {
     if (name === null || name.length === 0) {
       throw new BadRequestException('VALIDATION_ERROR');
     }
-    assertProfileLengths(name, companyProvided ? targetCompany : null, orgCode, jobTitleCode);
+    assertProfileLengths(
+      name,
+      companyProvided ? targetCompany : null,
+      orgCode,
+      jobTitleCode,
+      jobPositionCode,
+    );
 
     // ② 角色（既有行為，順序不變）。
     if (!isValidRole(input.roleCode)) throw new BadRequestException('ROLE_INVALID');
@@ -237,11 +273,12 @@ export class AccountsService {
       throw new BadRequestException('ACCOUNT_COMPANY_CODE_INVALID');
     }
 
-    // ④⑤ 部門／職位有效性，一律以**本次寫入之** companyCode 為範圍（非操作者公司）。
+    // ④⑤⑥ 部門／資位／職位有效性，一律以**本次寫入之** companyCode 為範圍（非操作者公司）。
     await this.assertOrgCodeValid(targetCompany, orgCode);
     await this.assertJobTitleValid(targetCompany, jobTitleCode);
+    await this.assertJobPositionValid(targetCompany, jobPositionCode);
 
-    // ⑥ 帳號唯一性（AC-P24：範圍擴為全部公司；store 未提供全域查詢時退回既有 per-company）。
+    // ⑦ 帳號唯一性（AC-P24：範圍擴為全部公司；store 未提供全域查詢時退回既有 per-company）。
     if (await this.loginIdTaken(targetCompany, input.loginId)) {
       throw new ConflictException('ACCOUNT_USERNAME_EXISTS');
     }
@@ -254,6 +291,7 @@ export class AccountsService {
       passwordHash: hashPassword(input.password),
       orgCode,
       jobTitleCode,
+      jobPositionCode,
       // AC-U3：手動建立未指定子分類 → 'other'（預設不限縮）。
       userSubtype: 'other',
     });
@@ -370,11 +408,15 @@ export class AccountsService {
     const companyProvided = input.companyCode !== undefined;
     const orgProvided = input.orgCode !== undefined;
     const jobTitleProvided = input.jobTitleCode !== undefined;
+    const jobPositionProvided = input.jobPositionCode !== undefined;
 
     // AC-P2：正規化先於驗證。
     const name = nameProvided ? normalizeAccountName(input.name) : null;
     const orgCode = orgProvided ? normalizeAccountCode(input.orgCode) : null;
     const jobTitleCode = jobTitleProvided ? normalizeAccountCode(input.jobTitleCode) : null;
+    const jobPositionCode = jobPositionProvided
+      ? normalizeAccountCode(input.jobPositionCode)
+      : null;
     const targetCompany = companyProvided ? input.companyCode!.trim() : acc.companyCode;
     const companyChanged = companyProvided && targetCompany !== acc.companyCode;
 
@@ -388,10 +430,14 @@ export class AccountsService {
       companyProvided ? targetCompany : null,
       orgCode,
       jobTitleCode,
+      jobPositionCode,
     );
-    // AC-P10b：公司一變更，舊部門／職位代碼必然失效 → 兩者須於同一請求明確出現（值可為
-    // 合法代碼或 null）。嚴禁靜默沿用舊值（會在 DB 留下跨公司髒代碼）。
-    if (companyChanged && (!orgProvided || !jobTitleProvided)) {
+    // AC-P10b：公司一變更，舊部門／資位／職位代碼必然失效 → 三者須於同一請求明確出現
+    // （值可為合法代碼或 null）。嚴禁靜默沿用舊值（會在 DB 留下跨公司髒代碼）。
+    if (
+      companyChanged &&
+      (!orgProvided || !jobTitleProvided || !jobPositionProvided)
+    ) {
       throw new BadRequestException('VALIDATION_ERROR');
     }
 
@@ -400,9 +446,13 @@ export class AccountsService {
       throw new BadRequestException('ACCOUNT_COMPANY_CODE_INVALID');
     }
 
-    // 4)5) 部門／職位一律以**變更後之** companyCode 為範圍驗證（AC-P6／AC-P7／AC-P10b）。
+    // 4)5)6) 部門／資位／職位一律以**變更後之** companyCode 為範圍驗證
+    //        （AC-P6／AC-P7／AC-P30／AC-P10b）。
     if (orgProvided) await this.assertOrgCodeValid(targetCompany, orgCode);
     if (jobTitleProvided) await this.assertJobTitleValid(targetCompany, jobTitleCode);
+    if (jobPositionProvided) {
+      await this.assertJobPositionValid(targetCompany, jobPositionCode);
+    }
 
     // 6) AC-P10a：變更後之 (companyCode, loginId) 已為他帳號佔用 → 409，且不寫入任何欄位。
     //    ⚠ 比對範圍為**變更後之單一公司**（對應 DB 唯一鍵 UQ_ACCOUNT_company_login＝per-company），
@@ -419,6 +469,7 @@ export class AccountsService {
     if (companyProvided) patch.companyCode = targetCompany;
     if (orgProvided) patch.orgCode = orgCode;
     if (jobTitleProvided) patch.jobTitleCode = jobTitleCode;
+    if (jobPositionProvided) patch.jobPositionCode = jobPositionCode;
     return this.store.updateById(id, patch);
   }
 
@@ -443,7 +494,8 @@ export class AccountsService {
   }
 
   /**
-   * AC-P7：`jobTitleCode` 非 null 時，`(companyCode, code)` 必須**精確相等**命中一筆 `JOB_TITLE`。
+   * AC-P7：`jobTitleCode`（資位）非 null 時，`(companyCode, code)` 必須**精確相等**命中一筆
+   * `JOB_TITLE`。
    * ⚠ 寫入驗證刻意**不採**顯示端之兩段式跨公司 fallback（OQ-E01-08 記錄此不對稱）。
    * 無 JOB_TITLE store（手建 spec）→ 略過（同上之優雅降級）。
    */
@@ -456,6 +508,25 @@ export class AccountsService {
     const wanted = jobTitleKey(companyCode, jobTitleCode);
     if (!rows.some((r) => jobTitleKey(r.companyCode, r.code) === wanted)) {
       throw new BadRequestException('ACCOUNT_JOB_TITLE_INVALID');
+    }
+  }
+
+  /**
+   * AC-P30：`jobPositionCode` 非 null 時，`(companyCode, code)` 必須**精確相等**命中一筆
+   * `JOB_POSITION`。
+   * ⚠ 此處與顯示端（`buildJobPositionResolver`）為**完全同一規則**——職位無 fallback 版本，
+   *   故不存在資位那種「顯示寬鬆、寫入嚴格」之不對稱（OQ-E01-08）。
+   * 無 JOB_POSITION store（手建 spec）→ 略過（同上之優雅降級）。
+   */
+  private async assertJobPositionValid(
+    companyCode: string,
+    jobPositionCode: string | null,
+  ): Promise<void> {
+    if (jobPositionCode === null || !this.jobPositions) return;
+    const rows = await this.jobPositions.listAll();
+    const wanted = jobPositionKey(companyCode, jobPositionCode);
+    if (!rows.some((r) => jobPositionKey(r.companyCode, r.code) === wanted)) {
+      throw new BadRequestException('ACCOUNT_JOB_POSITION_INVALID');
     }
   }
 
@@ -476,18 +547,20 @@ function orgUnitKey(companyCode: string, orgCode: string): string {
   return `${companyCode}|${orgCode}`;
 }
 
-/** AC-P4：四欄之 trim 後長度上限（任一超限即 `VALIDATION_ERROR`）。`null`＝未提供、不檢查。 */
+/** AC-P4：五欄之 trim 後長度上限（任一超限即 `VALIDATION_ERROR`）。`null`＝未提供、不檢查。 */
 function assertProfileLengths(
   name: string | null,
   companyCode: string | null,
   orgCode: string | null,
   jobTitleCode: string | null,
+  jobPositionCode: string | null,
 ): void {
   if (
     exceedsLength(name, ACCOUNT_NAME_MAX_LENGTH) ||
     exceedsLength(companyCode, ACCOUNT_CODE_MAX_LENGTH) ||
     exceedsLength(orgCode, ACCOUNT_CODE_MAX_LENGTH) ||
-    exceedsLength(jobTitleCode, ACCOUNT_CODE_MAX_LENGTH)
+    exceedsLength(jobTitleCode, ACCOUNT_CODE_MAX_LENGTH) ||
+    exceedsLength(jobPositionCode, ACCOUNT_CODE_MAX_LENGTH)
   ) {
     throw new BadRequestException('VALIDATION_ERROR');
   }

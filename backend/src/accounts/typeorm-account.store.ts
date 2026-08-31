@@ -33,6 +33,7 @@ export class TypeOrmAccountStore implements AccountStore {
       email: a.email,
       orgCode: a.orgCode,
       jobTitleCode: a.jobTitleCode,
+      jobPositionCode: a.jobPositionCode,
       roleCode: a.roleCode,
       status: a.status,
       source: a.source,
@@ -99,9 +100,10 @@ export class TypeOrmAccountStore implements AccountStore {
       // 🔴 手動建立＝管理員於建立當下即指派角色 ⇒ 一律 'manual'，同步之推導永不覆寫。
       roleSource: 'manual',
       passwordHash: input.passwordHash,
-      // F003 AC-P1：部門／職位（已由服務層正規化，空字串不落地）。
+      // F003 AC-P1／AC-P30：部門／資位／職位（已由服務層正規化，空字串不落地）。
       orgCode: input.orgCode ?? null,
       jobTitleCode: input.jobTitleCode ?? null,
+      jobPositionCode: input.jobPositionCode ?? null,
       // F003 AC-U3：手動建立之預設子分類（entity 亦有 DB default 'other'，此處顯式寫入）。
       userSubtype: input.userSubtype ?? 'other',
       source: 'manual',

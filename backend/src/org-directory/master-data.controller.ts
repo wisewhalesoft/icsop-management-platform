@@ -4,6 +4,11 @@ import {
   JobTitleReadStore,
   JobTitleRecord,
 } from './job-title-directory';
+import {
+  JOB_POSITION_READ_STORE,
+  JobPositionReadStore,
+  JobPositionRecord,
+} from './job-position-directory';
 import { CompanyOption, listSelectableCompanies } from './company-name';
 import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
@@ -30,8 +35,11 @@ export class CompanyReadController {
 }
 
 /**
- * 職位主檔（F003 `AC-P14`）。讀 F004 已同步之 `JOB_TITLE`（`JOB_TITLE_READ_STORE` 由本模組
+ * 資位主檔（F003 `AC-P14`）。讀 F004 已同步之 `JOB_TITLE`（`JOB_TITLE_READ_STORE` 由本模組
  * 既有提供，**不需新表、不需新 store**）。
+ *
+ * ⚠ 端點路徑與型別維持 `job-titles`／`JobTitleRecord`：識別子對齊上游 `TITLE_CODE`／
+ * `JTITLE_NM`，僅**畫面文案**為「資位」（2026-08-31 更名裁決）。
  *
  * ⚠ 依 `companyCode` **精確過濾**、不做顯示端之兩段式跨公司 fallback——與 `AC-P7` 之寫入驗證
  * 必須是同一集合，否則會出現「下拉選得到但存檔被拒」。
@@ -51,6 +59,36 @@ export class JobTitleReadController {
     @Req() req: RequestWithSession,
     @Query('companyCode') companyCode?: string,
   ): Promise<JobTitleRecord[]> {
+    const target = companyCode?.trim() || req.sessionUser!.companyCode;
+    const rows = await this.store.listAll();
+    return rows
+      .filter((r) => r.companyCode === target)
+      .sort((a, b) => a.code.localeCompare(b.code));
+  }
+}
+
+/**
+ * 職位主檔（F003 `AC-P29`）。讀 F004 已同步之 `JOB_POSITION`（← `VW_JOB_FUN`）。
+ *
+ * ⚠ 依 `companyCode` **精確過濾**——此處與 `JobTitleReadController` 之理由相同（下拉與
+ * `AC-P30` 寫入驗證必須同一集合），但對職位而言更是**唯一正確**的作法：同代碼跨公司語意
+ * 可相反（`D04` AS＝營業經理／AD＝科長），跨公司候選會讓人選到語意完全不同的職位。
+ * RBAC 同 `CompanyReadController`。
+ */
+@Controller('job-positions')
+@UseGuards(SessionGuard, RolePermissionGuard)
+@RequirePermission(FunctionKey.ACCOUNT_MANAGEMENT, 'read')
+export class JobPositionReadController {
+  constructor(
+    @Inject(JOB_POSITION_READ_STORE) private readonly store: JobPositionReadStore,
+  ) {}
+
+  /** `companyCode` 選填；未帶時預設＝操作者 session 之公司。依 `code` 昇冪。 */
+  @Get()
+  async list(
+    @Req() req: RequestWithSession,
+    @Query('companyCode') companyCode?: string,
+  ): Promise<JobPositionRecord[]> {
     const target = companyCode?.trim() || req.sessionUser!.companyCode;
     const rows = await this.store.listAll();
     return rows

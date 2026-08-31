@@ -12,6 +12,10 @@ import {
   JobTitleReadStore,
   JobTitleRecord,
 } from '../org-directory/job-title-directory';
+import {
+  JobPositionReadStore,
+  JobPositionRecord,
+} from '../org-directory/job-position-directory';
 
 /**
  * F003 手動帳號基本資料 delta（姓名／公司／部門／職位；2026-08-14 使用者直接裁定）。
@@ -166,6 +170,8 @@ type ManualUpdatePayload = {
   companyCode?: string;
   orgCode?: string | null;
   jobTitleCode?: string | null;
+  /** 🔵 2026-08-31 AC-P31：換公司時與 orgCode／jobTitleCode 同為必須重新給值之欄位。 */
+  jobPositionCode?: string | null;
 };
 
 describe('AccountsService — F003 手動帳號基本資料 delta', () => {
@@ -535,14 +541,14 @@ describe('AccountsService — F003 手動帳號基本資料 delta', () => {
           orgCode: 'ASA00',
           jobTitleCode: 'D01',
         });
-        const v = await updateAccount(a.id, { companyCode: 'AE', orgCode: null, jobTitleCode: null });
+        const v = await updateAccount(a.id, { companyCode: 'AE', orgCode: null, jobTitleCode: null, jobPositionCode: null });
         expect((v as unknown as { companyCode?: string }).companyCode).toBe('AE');
       });
 
       it('AC-P10 companyCode 不存在於 SELECTABLE_COMPANIES → 400 ACCOUNT_COMPANY_CODE_INVALID', async () => {
         const a = store.seed({ loginId: 'F2', source: 'manual', companyCode: 'AS' });
         await expect(
-          updateAccount(a.id, { companyCode: 'ZZ', orgCode: null, jobTitleCode: null }),
+          updateAccount(a.id, { companyCode: 'ZZ', orgCode: null, jobTitleCode: null, jobPositionCode: null }),
         ).rejects.toThrow('ACCOUNT_COMPANY_CODE_INVALID');
       });
 
@@ -562,7 +568,7 @@ describe('AccountsService — F003 手動帳號基本資料 delta', () => {
           orgCode: 'ASA00',
         });
         await expect(
-          updateAccount(a.id, { companyCode: 'AE', orgCode: null, jobTitleCode: null }),
+          updateAccount(a.id, { companyCode: 'AE', orgCode: null, jobTitleCode: null, jobPositionCode: null }),
         ).rejects.toThrow('ACCOUNT_USERNAME_EXISTS');
         const rec = store.rows.find((r) => r.id === a.id)!;
         expect(rec.companyCode).toBe('AS'); // 未寫入，原值保留
@@ -590,9 +596,9 @@ describe('AccountsService — F003 手動帳號基本資料 delta', () => {
         ).rejects.toThrow('VALIDATION_ERROR');
       });
 
-      it('AC-P10b 變更 companyCode 且兩者皆已明確提供（含皆為 null）→ 依新 companyCode 驗證後允許', async () => {
+      it('AC-P10b 變更 companyCode 且三者皆已明確提供（含皆為 null；🔵 AC-P31 起含 jobPositionCode）→ 依新 companyCode 驗證後允許', async () => {
         const a = store.seed({ loginId: 'F7', source: 'manual', companyCode: 'AS' });
-        const v = await updateAccount(a.id, { companyCode: 'AE', orgCode: null, jobTitleCode: null });
+        const v = await updateAccount(a.id, { companyCode: 'AE', orgCode: null, jobTitleCode: null, jobPositionCode: null });
         expect((v as unknown as { companyCode?: string }).companyCode).toBe('AE');
         expect(v.orgCode).toBeNull();
       });
@@ -817,6 +823,244 @@ describe('AccountsService — F003 手動帳號基本資料 delta', () => {
           orgCode: 'X0000', // 存在，但僅屬於 AE，本次建立為 AS 帳號
         } as unknown as Parameters<AccountsService['createManual']>[1]),
       ).rejects.toThrow('ACCOUNT_ORG_CODE_INVALID');
+    });
+  });
+});
+
+/**
+ * 🔵 2026-08-31 資位／職位拆欄 delta（F003 `AC-P28`～`AC-P33`）。
+ *
+ * 本組之核心不變式：**職位（`jobPositionCode` → `JOB_POSITION`）之解析與寫入驗證皆為
+ * 「本公司精確命中」，兩端同一集合、皆不得跨公司 fallback**——與資位（`jobTitleCode`）
+ * 之「顯示兩段式／寫入精確」不對稱刻意不同。fixture 之 `C04` 取自上游實查真值
+ * （AS＝處長、AD＝部長，語意相反），故一旦有人替職位加上 fallback，本組會立刻紅。
+ */
+describe('AccountsService — F003 資位／職位拆欄 delta（AC-P28～AC-P33）', () => {
+  const JOB_TITLES_2: JobTitleRecord[] = [{ companyCode: 'AS', code: 'D01', name: '經理' }];
+  const JOB_POSITIONS: JobPositionRecord[] = [
+    { companyCode: 'AS', code: 'N03', name: '營業一般職' },
+    { companyCode: 'AS', code: 'C04', name: '處長' },
+    // 🔴 同代碼、他公司、語意相反（實查真值）。跨公司 fallback 一旦存在，AS 帳號會解析成「部長」。
+    { companyCode: 'AD', code: 'C04', name: '部長' },
+    // 僅存在於他公司之代碼，供寫入驗證之負面案例。
+    { companyCode: 'AD', code: 'D06', name: '代理科長' },
+  ];
+
+  function fakeJobPositions(rows: JobPositionRecord[]): JobPositionReadStore {
+    return { listAll: () => Promise.resolve(rows) };
+  }
+
+  let store: FakeStore;
+  let svc: AccountsService;
+
+  beforeEach(() => {
+    store = new FakeStore();
+    svc = new AccountsService(
+      store,
+      fakeOrgUnits([]),
+      fakeJobTitles(JOB_TITLES_2),
+      undefined,
+      fakeJobPositions(JOB_POSITIONS),
+    );
+  });
+
+  type CreatePayload = Parameters<AccountsService['createManual']>[1];
+  type UpdatePayload = Parameters<AccountsService['updateAccount']>[1];
+  const create = (p: Record<string, unknown>): ReturnType<AccountsService['createManual']> =>
+    svc.createManual('AS', p as unknown as CreatePayload);
+  const update = (
+    id: string,
+    p: Record<string, unknown>,
+  ): ReturnType<AccountsService['updateAccount']> =>
+    svc.updateAccount(id, p as unknown as UpdatePayload);
+
+  describe('AC-P30 建立／編輯之寫入與驗證', () => {
+    it('合法 jobPositionCode → 寫入', async () => {
+      const v = await create({
+        loginId: '40001',
+        password: 'x',
+        roleCode: 'User',
+        name: '甲',
+        jobPositionCode: 'N03',
+      });
+      expect((v as unknown as { jobPositionCode?: string | null }).jobPositionCode).toBe('N03');
+    });
+
+    it('AC-P2 空字串／純空白 → null（空字串不得落地）', async () => {
+      const v = await create({
+        loginId: '40002',
+        password: 'x',
+        roleCode: 'User',
+        name: '乙',
+        jobPositionCode: '   ',
+      });
+      expect((v as unknown as { jobPositionCode?: string | null }).jobPositionCode).toBeNull();
+    });
+
+    it('代碼不存在 → ACCOUNT_JOB_POSITION_INVALID', async () => {
+      await expect(
+        create({
+          loginId: '40003',
+          password: 'x',
+          roleCode: 'User',
+          name: '丙',
+          jobPositionCode: 'ZZZ',
+        }),
+      ).rejects.toThrow('ACCOUNT_JOB_POSITION_INVALID');
+    });
+
+    it('🔴 代碼僅存在於他公司（AD/D06）→ 仍 ACCOUNT_JOB_POSITION_INVALID（不得跨公司 fallback）', async () => {
+      await expect(
+        create({
+          loginId: '40004',
+          password: 'x',
+          roleCode: 'User',
+          name: '丁',
+          jobPositionCode: 'D06',
+        }),
+      ).rejects.toThrow('ACCOUNT_JOB_POSITION_INVALID');
+    });
+
+    it('AC-P4 長度 > 10 → VALIDATION_ERROR（先於代碼有效性）', async () => {
+      await expect(
+        create({
+          loginId: '40005',
+          password: 'x',
+          roleCode: 'User',
+          name: '戊',
+          jobPositionCode: 'A'.repeat(11),
+        }),
+      ).rejects.toThrow('VALIDATION_ERROR');
+    });
+
+    it('AC-P8 驗證順序：資位與職位同時非法 → 回資位之錯誤碼（⑤ 先於 ⑥）', async () => {
+      await expect(
+        create({
+          loginId: '40006',
+          password: 'x',
+          roleCode: 'User',
+          name: '己',
+          jobTitleCode: 'ZZZ',
+          jobPositionCode: 'ZZZ',
+        }),
+      ).rejects.toThrow('ACCOUNT_JOB_TITLE_INVALID');
+    });
+
+    it('AC-P9 編輯：明確傳 null → 清空；缺席 → 不變更', async () => {
+      const a = await create({
+        loginId: '40007',
+        password: 'x',
+        roleCode: 'User',
+        name: '庚',
+        jobPositionCode: 'N03',
+      });
+      const kept = await update(a.id, { name: '庚庚' });
+      expect((kept as unknown as { jobPositionCode?: string | null }).jobPositionCode).toBe('N03');
+      const cleared = await update(a.id, { jobPositionCode: null });
+      expect(
+        (cleared as unknown as { jobPositionCode?: string | null }).jobPositionCode,
+      ).toBeNull();
+    });
+  });
+});
+
+describe('AccountsService — 資位／職位拆欄 delta（續：連動、唯讀、清單富化）', () => {
+  const JOB_TITLES_2: JobTitleRecord[] = [{ companyCode: 'AS', code: 'D01', name: '經理' }];
+  const JOB_POSITIONS: JobPositionRecord[] = [
+    { companyCode: 'AS', code: 'N03', name: '營業一般職' },
+    { companyCode: 'AS', code: 'C04', name: '處長' },
+    { companyCode: 'AD', code: 'C04', name: '部長' },
+  ];
+  function fakeJobPositions(rows: JobPositionRecord[]): JobPositionReadStore {
+    return { listAll: () => Promise.resolve(rows) };
+  }
+  /** 清單跨公司可見（AC-P23a）：忽略 companyCode 參數，直接回全部列。 */
+  class CrossCompanyStore extends FakeStore {
+    list(): Promise<AccountView[]> {
+      return Promise.resolve([...this.rows]);
+    }
+  }
+  const build = (s: AccountStore): AccountsService =>
+    new AccountsService(
+      s,
+      fakeOrgUnits([]),
+      fakeJobTitles(JOB_TITLES_2),
+      undefined,
+      fakeJobPositions(JOB_POSITIONS),
+    );
+  const setPos = (row: unknown, code: string): void => {
+    (row as { jobPositionCode: string }).jobPositionCode = code;
+  };
+
+  describe('AC-P31 換公司須三者同送（AC-P10b 之擴充）', () => {
+    it('變更 companyCode 但缺 jobPositionCode → VALIDATION_ERROR', async () => {
+      const s = new FakeStore();
+      const svc = build(s);
+      const a = s.seed({ loginId: '40010', source: 'manual' });
+      await expect(
+        svc.updateAccount(a.id, {
+          companyCode: 'AE',
+          orgCode: null,
+          jobTitleCode: null,
+        } as unknown as Parameters<AccountsService['updateAccount']>[1]),
+      ).rejects.toThrow('VALIDATION_ERROR');
+    });
+
+    it('三者同送（皆 null）→ 成功', async () => {
+      const s = new FakeStore();
+      const svc = build(s);
+      const a = s.seed({ loginId: '40011', source: 'manual' });
+      const v = await svc.updateAccount(a.id, {
+        companyCode: 'AE',
+        orgCode: null,
+        jobTitleCode: null,
+        jobPositionCode: null,
+      } as unknown as Parameters<AccountsService['updateAccount']>[1]);
+      expect((v as unknown as { companyCode?: string }).companyCode).toBe('AE');
+    });
+  });
+
+  describe('AC-P32 上游帳號之職位唯讀', () => {
+    it.each([
+      ['帶入代碼', 'N03'],
+      ['明確傳 null（清空意圖）', null],
+    ])('upstream 帳號之 payload 含 jobPositionCode（%s）→ ACCOUNT_UPSTREAM_READONLY', async (_l, v) => {
+      const s = new FakeStore();
+      const svc = build(s);
+      const a = s.seed({ loginId: 'UP1', source: 'upstream' });
+      await expect(
+        svc.updateAccount(a.id, { jobPositionCode: v } as unknown as Parameters<
+          AccountsService['updateAccount']
+        >[1]),
+      ).rejects.toThrow('ACCOUNT_UPSTREAM_READONLY');
+    });
+  });
+
+  describe('AC-P28 清單富化 — position 逐列以該列公司精確解析', () => {
+    it('🔴 AS 與 AD 兩列同持 C04 → 各自解析為「處長」與「部長」（語意相反，不得共用公司）', async () => {
+      const s = new CrossCompanyStore();
+      s.seed({ companyCode: 'AS', loginId: 'AS1' });
+      s.seed({ companyCode: 'AD', loginId: 'AD1' });
+      setPos(s.rows[0], 'C04');
+      setPos(s.rows[1], 'C04');
+      const rows = await build(s).listAccounts('AS', {});
+      expect(rows.find((r) => r.loginId === 'AS1')!.position).toBe('處長');
+      expect(rows.find((r) => r.loginId === 'AD1')!.position).toBe('部長');
+    });
+
+    it('查無對照（實查之 B20）→ null（前端顯示「—」，AC-P18）', async () => {
+      const s = new CrossCompanyStore();
+      s.seed({ companyCode: 'AS', loginId: 'AS2' });
+      setPos(s.rows[0], 'B20');
+      expect((await build(s).listAccounts('AS', {}))[0].position).toBeNull();
+    });
+
+    it('未接 JOB_POSITION store（手建替身）→ position 一律 null，不拋錯（優雅降級）', async () => {
+      const s = new CrossCompanyStore();
+      s.seed({ companyCode: 'AS', loginId: 'AS3' });
+      setPos(s.rows[0], 'N03');
+      const svc = new AccountsService(s, fakeOrgUnits([]), fakeJobTitles(JOB_TITLES_2));
+      expect((await svc.listAccounts('AS', {}))[0].position).toBeNull();
     });
   });
 });

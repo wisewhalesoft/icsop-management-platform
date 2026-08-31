@@ -29,10 +29,15 @@ export interface AccountView {
   email: string | null;
   orgCode: string | null;
   /**
-   * 職稱代碼（← VW_HPMUSER.JOBTITLEID）。名稱由服務層以 JOB_TITLE 對照解析為 `title`
-   * （與 orgCode→department 同一模式）。刻意選填以相容既有測試替身。
+   * 職稱代碼＝畫面之「**資位**」（← `VW_PERSONNEL_SQL.TITLE_CODE`）。名稱由服務層以
+   * JOB_TITLE 對照解析為 `title`（與 orgCode→department 同一模式）。選填以相容既有測試替身。
    */
   jobTitleCode?: string | null;
+  /**
+   * 職位代碼（← `VW_PERSONNEL_SQL.JOB_CODE`）。名稱由服務層以 JOB_POSITION 對照解析為
+   * `position`。選填之理由同上。
+   */
+  jobPositionCode?: string | null;
   roleCode: string;
   status: string;
   source: string;
@@ -53,15 +58,18 @@ export interface AccountView {
 }
 
 /**
- * 清單列（GET /admin/accounts）：AccountView 疊加服務層解析之 公司/部門/職位 名稱
+ * 清單列（GET /admin/accounts）：AccountView 疊加服務層解析之 公司/部門/資位/職位 名稱
  * （company＝resolveCompanyName(companyCode)；department＝orgCode 對應之 ORG_UNIT 名稱；
- * title＝jobTitleCode 對應之 JOB_TITLE 名稱，見 job-title-directory 之兩段式解析）。
+ * title＝jobTitleCode 對應之 JOB_TITLE 名稱，見 job-title-directory 之兩段式解析；
+ * position＝jobPositionCode 對應之 JOB_POSITION 名稱，見 job-position-directory 之**單段精確**解析）。
  */
 export interface AccountListItem extends AccountView {
   company: string | null;
   department: string | null;
-  /** 職位名稱（prototype 08 第 5 欄）。查無對照 → null（前端顯示「—」）。 */
+  /** 資位名稱（prototype 08 第 5 欄）。查無對照 → null（前端顯示「—」）。 */
   title: string | null;
+  /** 職位名稱（prototype 08 第 6 欄）。查無對照 → null（前端顯示「—」）。 */
+  position: string | null;
 }
 
 /** findById 回傳之核心欄位（含判定所需之 companyCode/source/現行角色）。 */
@@ -77,8 +85,10 @@ export interface CreateAccountInput {
   passwordHash: string;
   /** F003 AC-P1：部門代碼（已經 AC-P2 正規化，空字串不得落地 → null）。 */
   orgCode?: string | null;
-  /** F003 AC-P1：職位代碼（已經 AC-P2 正規化，空字串不得落地 → null）。 */
+  /** F003 AC-P1：資位代碼（已經 AC-P2 正規化，空字串不得落地 → null）。 */
   jobTitleCode?: string | null;
+  /** F003 AC-P30：職位代碼（已經 AC-P2 正規化，空字串不得落地 → null）。 */
+  jobPositionCode?: string | null;
   /** F003 AC-U3：手動建立之預設子分類（`'other'`，不限縮）。 */
   userSubtype?: string;
 }
@@ -106,6 +116,8 @@ export interface UpdateAccountPatch {
   orgCode?: string | null;
   /** F003 AC-P9：明確傳 null＝清空；缺席＝不變更（不出現於 patch）。 */
   jobTitleCode?: string | null;
+  /** F003 AC-P30：明確傳 null＝清空；缺席＝不變更（不出現於 patch）。 */
+  jobPositionCode?: string | null;
 }
 
 export interface AccountStore {
