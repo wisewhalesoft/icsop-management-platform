@@ -1,12 +1,13 @@
 import {
   computeDisappeared,
   disappearedRatioExceeded,
+  DEFAULT_DISAPPEARED_THRESHOLD,
 } from './disappeared-threshold';
 
 /**
  * 消失筆數閾值保護（upstream-hr-source-contract.md §7.3 / F004 AC / US-010 AC5）。
  * prevActiveIds＝上次同步之在職帳號；currActiveIds＝本次來源之在職帳號集合。
- * 「上次存在、本次消失」比例 > 閾值（草案 5%）→ 中止同步、不停用任何帳號。
+ * 「上次存在、本次消失」比例 > 閾值（**10%**，2026-08-31 裁定；原草案 5%）→ 中止同步、不停用任何帳號。
  */
 
 function ids(prefix: string, n: number): string[] {
@@ -61,9 +62,11 @@ describe('disappearedRatioExceeded（閾值 0.05）', () => {
     expect(disappearedRatioExceeded([], [], 0.05)).toBe(false);
   });
 
-  it('預設閾值＝0.05', () => {
+  it('預設閾值＝0.10（2026-08-31 由 0.05 調整）', () => {
     const prev = ids('p', 1000);
-    expect(disappearedRatioExceeded(prev, prev.slice(60))).toBe(true);
+    expect(DEFAULT_DISAPPEARED_THRESHOLD).toBe(0.1);
+    expect(disappearedRatioExceeded(prev, prev.slice(120))).toBe(true); // 12% > 10%
+    expect(disappearedRatioExceeded(prev, prev.slice(60))).toBe(false); // 6% ≤ 10%（AS 現況 6.6%）
     expect(disappearedRatioExceeded(prev, prev.slice(20))).toBe(false);
   });
 });

@@ -74,7 +74,7 @@ Epic/Story: E02 / US-010, US-011
 - 首次同步或 `MTDT` 水位遺失：帳號改為全量取回，其餘流程不變。
 
 ## Edge Cases
-- **消失筆數閾值保護（防大規模誤停用）**：單次同步若「上次存在、本次消失」之在職帳號比例超過閾值（草案 **5%**），**立即中止同步並告警系統管理員，不執行任何停用**，`SYNC_RUN` 記為 `failed`＋原因 `DISAPPEARED_RATIO_EXCEEDED`。理由：上游 `VW_PERSONNEL_SQL` 之 `INNER JOIN`（`HREMPMF` ⨝ `HRDEPTMF`）會在員工 `DEPTID` 於部門主檔查無時**靜默吞掉整筆**，人員憑空消失不等於離職（契約 §3.2／§7.3）。
+- **消失筆數閾值保護（防大規模誤停用）**：單次同步若「上次存在、本次消失」之在職帳號比例超過閾值（**10%**；🔵 2026-08-31 由草案 5% 調整，理由見下方 AC 與契約 §7.3），**立即中止同步並告警系統管理員，不執行任何停用**，`SYNC_RUN` 記為 `failed`＋原因 `DISAPPEARED_RATIO_EXCEEDED`。理由：上游 `VW_PERSONNEL_SQL` 之 `INNER JOIN`（`HREMPMF` ⨝ `HRDEPTMF`）會在員工 `DEPTID` 於部門主檔查無時**靜默吞掉整筆**，人員憑空消失不等於離職（契約 §3.2／§7.3）。
 - **孤兒部門**（`VW_HPMUSER.DEPTID` 於部門主檔查無）：記錄警告並保留該帳號（不停用、不中止）。實測 AS 孤兒率 **0.0%**，但 AD 22.1%／AE 65.7%／AJ 84.9%，**多公司擴充前必須先處理**（契約 §7.3、§10.1）。
 - 髒資料（型別不符）：中止該筆寫入並記警告，不影響其他正常筆數。
 - 手動與排程並發：互斥鎖確保僅一個執行。
@@ -98,8 +98,9 @@ Epic/Story: E02 / US-010, US-011
 - Given 非系統管理員, When 呼叫手動同步 API, Then 回 403（F025）。
 - Given 部門代碼為 `JAC00`, When 同步推導階層, Then `tier`＝處/室、`parentCode`＝`JA000`（部層）、`codePrefix`＝`JAC`，且推導不參考 `P_DEPTID`／`TOP_DEPTID`／`S_DEPTID`。
 - Given 部門代碼為 `JCHA0`（第 4 碼有值）, When 同步推導階層, Then `tier`＝課，`ORG_UNIT` 完整保存 5 層不壓縮。
-- Given 上次同步在職帳號 1,000 筆, When 本次同步有 60 筆（6% > 5%）在職帳號自來源消失, Then 中止同步、不停用任何帳號、`SYNC_RUN` 記 `failed` 並告警系統管理員。
-- Given 本次同步有 20 筆（2% ≤ 5%）在職帳號消失, When 同步, Then 正常進行後續離職判定流程。
+- Given 上次同步在職帳號 1,000 筆, When 本次同步有 120 筆（12% > 10%）在職帳號自來源消失, Then 中止同步、不停用任何帳號、`SYNC_RUN` 記 `failed` 並告警系統管理員。
+- Given 本次同步有 20 筆（2% ≤ 10%）在職帳號消失, When 同步, Then 正常進行後續離職判定流程。
+- 🔵 **閾值為何是 10%（2026-08-31 使用者裁定）**：AS 有 **74 筆永久性「消失」帳號**（16 轉調他家且新公司帳號已啟用／6 他家亦離職／52 為 v1.0 `VW_HPMUSER` 污染殘留之 RPA・外部事務所・保留號・測試帳號，全部從未登入）。依上方「絕不以來源消失逕行判定為離職」，同步**不會**停用它們，故 AS 之消失比例恆為 6.6%（74/1124）——5% 閾值使 AS 每次同步必然中止（2026-08-24 起連續失敗 11 次、7 天未同步），「每次都擋」等同於沒有護欄。<br>⚠ **代價**：AS 之觸發點為 112 人，其中 74 個名額已被上述幽靈帳號長期佔用，真實上游異常需再多消失 **39 人**才會被擋下。那 74 筆若日後清理，應一併考慮把閾值調回較嚴格水準。
 - Given 帳號之 `DEPTID` 於 `VW_DEPT_SQL` 查無（孤兒）, When 同步, Then 保留該帳號、記錄警告，不停用亦不中止同步。
 - Given 同步查詢執行, When 對上游進行彙總或過濾, Then 該述詞以 `OPENQUERY` 下推至對端執行（不得整表拉回本地端比對）。
 - Given 同步讀取 `VW_HPMUSER`, When 組裝查詢, Then 僅選取白名單 12 欄，`USERPW`／`DEFAULTPW` 不出現於查詢、回應或任何日誌。
@@ -124,4 +125,4 @@ Epic/Story: E02 / US-010, US-011
 - Data: [ORG_UNIT](../data-model.md#orgunit-entity), [PERSON](../data-model.md#person-entity), [SYNC_RUN](../data-model.md#syncrun-entity)
 - Blocks: [F005](F005-auto-disable-departed.md), [F006](F006-org-change-alert-backend.md), [F014](F014-accountable-dept-chief.md), [F019](F019-public-list-browsing.md), [F026](F026-role-field-matrix.md), [F033](F033-permission-aware-retrieval.md)
 - 定案: OQ-E02-01（View schema → 見來源契約）, OQ-E02-02（排程 02:00 UTC+8、失敗 3 次遞增間隔重試）
-- OQ: OQ-E02-05（通知管道）；消失筆數閾值 5% 為草案值，待上線觀測後校準（契約 §7.3）
+- OQ: OQ-E02-05（通知管道）；消失筆數閾值已於 2026-08-31 依實際觀測由草案 5% 校準為 **10%**（契約 §7.3）

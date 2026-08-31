@@ -349,14 +349,16 @@ describe('OrgSyncService.run', () => {
     expect(store.orgUnits.get('JAC00')?.descFull).toBe('營運管理部審查室');
   });
 
-  it('閾值中止：消失 6% → failed + DISAPPEARED_RATIO_EXCEEDED，不停用任何帳號、不套用任何異動', async () => {
+  it('閾值中止：消失 12% → failed + DISAPPEARED_RATIO_EXCEEDED，不停用任何帳號、不套用任何異動', async () => {
     const reader = new FakeReader();
     reader.depts = [rawDept({ CODE: 'JAC00' })];
     const store = new FakeStore();
     // 種 1000 筆在職本地帳號
     for (let i = 0; i < 1000; i++) seedActiveAccount(store, { loginId: `u${i}` });
-    // 來源只回報 940 筆在職（60 筆消失＝6%）
-    reader.activeIds = Array.from({ length: 940 }, (_, i) => `u${i + 60}`);
+    // 來源只回報 880 筆在職（120 筆消失＝12% > 10%）。
+    // 🔵 2026-08-31：預設閾值由 5% 調整為 10%（見 disappeared-threshold.ts 檔頭之裁定理由），
+    //    原本 6% 之樣本已落在放行區間，故本案例改用 12%。
+    reader.activeIds = Array.from({ length: 880 }, (_, i) => `u${i + 120}`);
     // 即使 changes 帶了離職，也不得執行（已中止）
     reader.changes = [rawAcc({ NO: 'u0', RESIGN_DATE: RESIGNED })];
 
