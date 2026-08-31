@@ -80,6 +80,13 @@ export function OrgSyncPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  /**
+   * 🔵 2026-08-31：角色推導一次性放行之二次確認對象（null＝未開啟）。
+   * ⚠ 刻意不提供閾值輸入欄位——畫面若能填百分比，一次性放寬會退化為隨手填 100% 的常駐開關，
+   *   而該閾值是「上游職稱改名致大量帳號靜默失去限縮」之唯一偵測管道（裁定 Q4.6）。
+   *   此處只呈現該次實測筆數，由管理員就事論事地確認。
+   */
+  const [roleApplyTarget, setRoleApplyTarget] = useState<SyncRunSummary | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -142,6 +149,42 @@ export function OrgSyncPage(): JSX.Element {
    * `org-sync-coordinator.ts`），故此處**不會**再因單一公司忙碌而整批進 catch；
    * catch 僅保留給真正未預期之請求層失敗（網路、認證等）。
    */
+  /**
+   * 🔵 角色推導一次性放行（AC-D_ROLE）：只重跑**該筆所屬公司**，並帶 applyRoleDerivation。
+   *
+   * ⚠ 帶 compid 是必要的：不限縮的話，無上限的放行會一併套到其餘公司——它們早已套用過、
+   *   日常變更量是個位數百分比，沒有理由陪著暴露在無上限的窗口下（後端亦以 400 強制）。
+   * 放行僅對這一次執行有效，閾值設定不變；下次同步（含每日排程）自動回到 5%。
+   */
+  const onApplyRoleDerivation = useCallback(
+    async (run: SyncRunSummary) => {
+      setRoleApplyTarget(null);
+      setTriggering(true);
+      try {
+        const results = await triggerOrgSync({
+          applyRoleDerivation: true,
+          compid: run.compid,
+        });
+        const applied = results.find((r) => r.compid === run.compid);
+        if (applied && applied.status === 'success' && !applied.stats.roleDerivationSkipped) {
+          toast.success(
+            `已套用 ${companyLabel(run.compid)} 之角色推導（降級另列待確認）`,
+          );
+        } else {
+          toast.error(`${companyLabel(run.compid)} 角色推導未套用，請查看同步歷程`);
+        }
+      } catch (e) {
+        toast.error(e instanceof ApiError ? `套用失敗：${e.code}` : '套用失敗');
+      } finally {
+        setTriggering(false);
+        await load();
+        await loadAlerts();
+        await loadSummary();
+      }
+    },
+    [load, loadAlerts, loadSummary, toast],
+  );
+
   const onTrigger = useCallback(async () => {
     setTriggering(true);
     toast.info('已啟動手動同步…（互斥鎖已取得）');
@@ -426,6 +469,52 @@ export function OrgSyncPage(): JSX.Element {
                               )}
                             </td>
                           </tr>
+                          {/*
+                            🔵 角色推導被閾值跳過：常駐呈現（非展開才看得到）。
+                            此列存在的理由＝同步本身是 success，管理員在綠燈旁邊看不出
+                            數百筆角色變更被丟棄；半夜排程更無人在場，故必須自己說出來。
+                          */}
+                          {r.roleDerivationSkipped && (
+                            <tr>
+                              <td colSpan={7} className="px-4 pb-3 pt-0">
+                                <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 flex items-start gap-2">
+                                  <Icon
+                                    name="alert-triangle"
+                                    className="w-3.5 h-3.5 mt-0.5 shrink-0"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div>
+                                      <span className="font-medium">角色推導已跳過</span>
+                                      {r.roleChangeCount !== null &&
+                                      r.roleDerivationBase !== null ? (
+                                        <>
+                                          ：本次將變更 {r.roleChangeCount}/
+                                          {r.roleDerivationBase} 筆（
+                                          {ratioPct(r.roleChangeCount, r.roleDerivationBase)}
+                                          ），超過閾值而整批未套用。
+                                        </>
+                                      ) : (
+                                        '：本次變更量超過閾值，整批未套用。'
+                                      )}
+                                      帳號與組織資料已同步成功，僅角色與子分類停在舊值。
+                                    </div>
+                                    <div className="mt-0.5 text-amber-700">
+                                      閾值用於偵測「上游職稱改名致大量帳號靜默失去限縮」，故不自動放行；確認本次變更量合理後可手動套用。
+                                    </div>
+                                  </div>
+                                  {canWrite && (
+                                    <button
+                                      onClick={() => setRoleApplyTarget(r)}
+                                      disabled={triggering}
+                                      className="shrink-0 px-2.5 py-1 rounded border border-amber-300 bg-white text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                                    >
+                                      本次仍要套用
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
                           {failed && isOpen && r.errorMessage && (
                             <tr>
                               <td colSpan={7} className="px-4 pb-3 pt-0">
@@ -476,8 +565,78 @@ export function OrgSyncPage(): JSX.Element {
           </div>
         )}
       </div>
+
+      {/*
+        🔵 角色推導一次性放行之二次確認。版式沿用 prototype 09 之 confirmModal
+        （與 08 同一形狀，不另立第二種樣式）。
+      */}
+      {roleApplyTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div
+            role="dialog"
+            aria-labelledby="roleApplyTitle"
+            className="bg-white rounded-xl shadow-xl w-full max-w-md p-6"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+                <Icon name="alert-triangle" className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 id="roleApplyTitle" className="font-semibold text-slate-900">
+                  套用本次角色推導？
+                </h3>
+                <div className="text-sm text-slate-500 mt-1 space-y-1">
+                  <p>
+                    將對{' '}
+                    <b>
+                      {roleApplyTarget.roleChangeCount ?? '?'}
+                    </b>{' '}
+                    筆帳號（共 {roleApplyTarget.roleDerivationBase ?? '?'} 筆，
+                    {roleApplyTarget.roleChangeCount !== null &&
+                    roleApplyTarget.roleDerivationBase !== null
+                      ? ratioPct(
+                          roleApplyTarget.roleChangeCount,
+                          roleApplyTarget.roleDerivationBase,
+                        )
+                      : '—'}
+                    ）寫入角色與子分類變更，範圍限
+                    {companyLabel(roleApplyTarget.compid)}。
+                  </p>
+                  <p>
+                    升級與子分類直接套用；<b>降級不自動執行</b>，僅產生待確認提示。
+                  </p>
+                  <p className="text-amber-700">
+                    本次放行僅對這一次執行有效，閾值設定不變。
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => setRoleApplyTarget(null)}
+                className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => void onApplyRoleDerivation(roleApplyTarget)}
+                disabled={triggering}
+                className="px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700 disabled:opacity-50"
+              >
+                確認套用
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+/** 比例呈現（一位小數）。分母為 0 → 「—」，不讓 NaN 出現在畫面上。 */
+function ratioPct(count: number, base: number): string {
+  if (base <= 0) return '—';
+  return `${((count / base) * 100).toFixed(1)}%`;
 }
 
 /** before → after 事實快照（line-through 舊值 → amber 新值）；DOCUMENT_FIELD 與 F005 兩類共用。 */

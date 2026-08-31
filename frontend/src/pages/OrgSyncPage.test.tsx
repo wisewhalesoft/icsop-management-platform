@@ -33,8 +33,8 @@ function mockAuth(roleCode: string) {
 }
 
 const RUNS: SyncRunSummary[] = [
-  { id: 'r1', compid: 'AS', triggerType: 'scheduled', status: 'success', startedAt: '2026-07-15T22:00:00.000Z', endedAt: '2026-07-15T22:00:12.000Z', changeCount: 12, errorCode: null, errorMessage: null },
-  { id: 'r0', compid: 'AS', triggerType: 'manual', status: 'failed', startedAt: '2026-07-14T06:22:03.000Z', endedAt: '2026-07-14T06:22:03.000Z', changeCount: 0, errorCode: 'SYNC_SOURCE_UNAVAILABLE', errorMessage: '組織來源 View 連線逾時' },
+  { id: 'r1', compid: 'AS', triggerType: 'scheduled', status: 'success', startedAt: '2026-07-15T22:00:00.000Z', endedAt: '2026-07-15T22:00:12.000Z', changeCount: 12, errorCode: null, errorMessage: null, roleDerivationSkipped: false, roleChangeCount: null, roleDerivationBase: null },
+  { id: 'r0', compid: 'AS', triggerType: 'manual', status: 'failed', startedAt: '2026-07-14T06:22:03.000Z', endedAt: '2026-07-14T06:22:03.000Z', changeCount: 0, errorCode: 'SYNC_SOURCE_UNAVAILABLE', errorMessage: '組織來源 View 連線逾時', roleDerivationSkipped: false, roleChangeCount: null, roleDerivationBase: null },
 ];
 
 /** B 階段（多公司）：公司主檔，供頁面解析 compid → 公司名稱（`getCompanies` 之測試替身）。 */
@@ -198,6 +198,98 @@ describe('OrgSyncPage — 同步狀態/歷史（US-011 回歸，移入頁籤後�
     // 總覽 KPI 與待確認清單不可見
     expect(screen.queryByText('新增人員')).not.toBeInTheDocument();
     expect(screen.queryByText('目前無待確認組織異動')).not.toBeInTheDocument();
+  });
+
+  /**
+   * 🔵 2026-08-31 delta：角色推導被閾值跳過之常駐呈現與一次性放行。
+   *
+   * 本組要釘住的核心：同步是 **success**，管理員在綠燈旁邊看不出數百筆角色變更被丟棄；
+   * 每日 02:00 排程跳過時更無人在場。故此事實必須來自**已落地的歷程列**（而非觸發當下的
+   * 暫時回應），且放行按鈕僅系統管理員可見。
+   */
+  describe('角色推導被跳過之呈現與一次性放行', () => {
+    const SKIPPED: SyncRunSummary = {
+      id: 'r-skip', compid: 'AS', triggerType: 'scheduled', status: 'success',
+      startedAt: '2026-08-31T02:00:00.000Z', endedAt: '2026-08-31T02:00:20.000Z',
+      changeCount: 1050, errorCode: null, errorMessage: null,
+      roleDerivationSkipped: true, roleChangeCount: 602, roleDerivationBase: 1124,
+    };
+
+    it('🔴 status=success 之列仍常駐顯示「角色推導已跳過」與實際筆數（不需展開）', async () => {
+      mockAuth('SysAdmin');
+      vi.mocked(endpoints.getOrgSyncRuns).mockResolvedValue([SKIPPED]);
+      renderPage();
+      await waitFor(() => expect(screen.getByRole('button', { name: '同步歷史' })).toBeInTheDocument());
+      await switchTab('同步歷史');
+
+      const table = within(screen.getByRole('table'));
+      expect(table.getByText('角色推導已跳過')).toBeInTheDocument();
+      expect(table.getByText(/602\/1124/)).toBeInTheDocument();
+      expect(table.getByText(/53\.6%/)).toBeInTheDocument();
+      // 同步本身仍是成功——這正是「綠燈掩蓋問題」的情境
+      expect(table.getByText('成功')).toBeInTheDocument();
+    });
+
+    it('ICSOPAdmin（唯讀）看得到事實，但沒有放行按鈕', async () => {
+      mockAuth('ICSOPAdmin');
+      vi.mocked(endpoints.getOrgSyncRuns).mockResolvedValue([SKIPPED]);
+      renderPage();
+      await waitFor(() => expect(screen.getByRole('button', { name: '同步歷史' })).toBeInTheDocument());
+      await switchTab('同步歷史');
+
+      expect(screen.getByText('角色推導已跳過')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '本次仍要套用' })).not.toBeInTheDocument();
+    });
+
+    it('系統管理員按「本次仍要套用」→ 二次確認顯示筆數與公司，確認後帶 compid 放行', async () => {
+      mockAuth('SysAdmin');
+      vi.mocked(endpoints.getOrgSyncRuns).mockResolvedValue([SKIPPED]);
+      vi.mocked(endpoints.triggerOrgSync).mockResolvedValue([
+        { ...OK_RESULT[0]!, compid: 'AS' },
+      ]);
+      renderPage();
+      await waitFor(() => expect(screen.getByRole('button', { name: '同步歷史' })).toBeInTheDocument());
+      await switchTab('同步歷史');
+
+      await userEvent.click(screen.getByRole('button', { name: '本次仍要套用' }));
+      const dialog = screen.getByRole('dialog', { name: /套用本次角色推導/ });
+      expect(within(dialog).getByText(/602/)).toBeInTheDocument();
+      expect(within(dialog).getByText(/1124/)).toBeInTheDocument();
+      // 🔴 放行僅此一次、閾值不變——此逐字說明是本功能之安全性前提，不得移除
+      expect(within(dialog).getByText(/本次放行僅對這一次執行有效，閾值設定不變/)).toBeInTheDocument();
+
+      await userEvent.click(within(dialog).getByRole('button', { name: '確認套用' }));
+      await waitFor(() =>
+        expect(vi.mocked(endpoints.triggerOrgSync)).toHaveBeenCalledWith({
+          applyRoleDerivation: true,
+          compid: 'AS',
+        }),
+      );
+    });
+
+    it('取消 → 不呼叫任何同步端點', async () => {
+      mockAuth('SysAdmin');
+      vi.mocked(endpoints.getOrgSyncRuns).mockResolvedValue([SKIPPED]);
+      renderPage();
+      await waitFor(() => expect(screen.getByRole('button', { name: '同步歷史' })).toBeInTheDocument());
+      await switchTab('同步歷史');
+
+      await userEvent.click(screen.getByRole('button', { name: '本次仍要套用' }));
+      await userEvent.click(screen.getByRole('button', { name: '取消' }));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(vi.mocked(endpoints.triggerOrgSync)).not.toHaveBeenCalled();
+    });
+
+    it('未被跳過之列 → 不顯示提示與按鈕（不得對正常列製造噪音）', async () => {
+      mockAuth('SysAdmin');
+      renderPage(); // 預設 RUNS 兩列皆 roleDerivationSkipped=false
+      await waitFor(() => expect(screen.getByRole('button', { name: '同步歷史' })).toBeInTheDocument());
+      await switchTab('同步歷史');
+
+      expect(screen.queryByText('角色推導已跳過')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '本次仍要套用' })).not.toBeInTheDocument();
+    });
   });
 
   it('SysAdmin 顯示「立即同步」按鈕', async () => {

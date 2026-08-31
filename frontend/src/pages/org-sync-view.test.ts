@@ -21,6 +21,9 @@ const run = (over: Partial<SyncRunSummary>): SyncRunSummary => ({
   changeCount: 12,
   errorCode: null,
   errorMessage: null,
+  roleDerivationSkipped: false,
+  roleChangeCount: null,
+  roleDerivationBase: null,
   ...over,
 });
 

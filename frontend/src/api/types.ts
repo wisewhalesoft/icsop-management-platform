@@ -868,6 +868,16 @@ export interface SyncRunSummary {
   changeCount: number;
   errorCode: string | null;
   errorMessage: string | null;
+  /**
+   * 🔵 2026-08-31：角色推導是否因變更量超過閾值而**整批未套用**。
+   * 落在 SYNC_RUN 而非僅存於觸發回應——常態觸發是每日 02:00 排程，跳過時無人在看畫面，
+   * 只留在回應等同於沒人知道（實測 AS 602/1124 被靜默丟棄）。
+   */
+  roleDerivationSkipped: boolean;
+  /** 本次會被寫入之角色/子分類變更數（分子）；歷史列為 null。 */
+  roleChangeCount: number | null;
+  /** 本次納入推導之帳號數（分母）；歷史列為 null。 */
+  roleDerivationBase: number | null;
 }
 
 export interface SyncStats {
@@ -882,6 +892,13 @@ export interface SyncStats {
   dirtyRows: number;
   disappearedCount: number;
   disappearedRatio: number;
+  /**
+   * 🔵 2026-08-31：本次角色推導是否因變更量超過閾值而整批未套用。
+   * 選填——既有替身與歷史回應可能不帶此鍵；判定一律以 `=== true` 收斂。
+   */
+  roleDerivationSkipped?: boolean;
+  roleChangeCount?: number;
+  roleDerivationBase?: number;
 }
 
 /** POST /admin/org-sync/run 回傳陣列之單筆（B 階段：一筆對應一家公司）。 */

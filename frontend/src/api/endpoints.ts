@@ -93,9 +93,22 @@ export function getOrgSyncRuns(limit?: number): Promise<SyncRunSummary[]> {
  * POST /admin/org-sync/run（手動同步，僅 SysAdmin）。
  * B 階段（多公司）：回傳**陣列**，每筆為一家設定公司之結果；單一公司互斥中不再使整批 409，
  * 而是該公司於陣列中回傳 `errorCode:'SYNC_IN_PROGRESS'` 之 failed 項，其餘公司照常執行。
+ *
+ * 🔵 2026-08-31：`body.applyRoleDerivation` ＝系統管理員於同步歷程就實測筆數二次確認後，
+ * 放行**該次**角色推導；此時 `compid` 為必填（後端 400 VALIDATION_ERROR），避免把無上限的
+ * 窗口一併套到其餘公司。⚠ 刻意**無閾值參數**——畫面若能填百分比，一次性放寬會退化為
+ * 隨手填 100% 的常駐開關，而該閾值是「上游職稱改名致大量帳號靜默失去限縮」之唯一偵測管道。
  */
-export function triggerOrgSync(): Promise<SyncResult[]> {
-  return apiFetch<SyncResult[]>('/admin/org-sync/run', { method: 'POST' });
+export function triggerOrgSync(body?: {
+  applyRoleDerivation: true;
+  compid: string;
+}): Promise<SyncResult[]> {
+  return apiFetch<SyncResult[]>('/admin/org-sync/run', {
+    method: 'POST',
+    ...(body
+      ? { headers: JSON_HEADERS, body: JSON.stringify(body) }
+      : {}),
+  });
 }
 
 // ===== F006 組織異動待確認提示 =====
