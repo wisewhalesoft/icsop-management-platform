@@ -9,8 +9,10 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { DocumentsService, DocumentActor } from './documents.service';
 import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
@@ -110,6 +112,49 @@ export class DocumentsController {
   @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
   getOjtCompletion(@Param('id') id: string) {
     return this.svc.getDocumentOjtCompletion(id);
+  }
+
+  /**
+   * F017 §清單匯出（CSV）delta：`POST /admin/documents/export`（`AC-X9`～`AC-X17`，架構 §13.2）。
+   *
+   * 🔴 **閘門為 `read` 而非 `write`，POST 不改變此事**：`RolePermissionGuard` 只看 `@RequirePermission`
+   * 之**第二個引數**。本頁矩陣對 SysAdmin／Supervisor／DeptContact 皆為**唯讀**，改成 `'write'`
+   * 會使三種角色連匯出都不能用；而為了讓它通過而把矩陣格值改成 CRUD，等同把整個文件管理模組對
+   * 三者開放寫入。兩種改法皆為回歸，不是整理。
+   * 📌 採 POST 純為「查詢對象集合放不進 URL」——本端點**無任何副作用**（不寫稽核、不寫任何資料表），
+   * 與 `AppendicesService.exportPool()`／`UsageFormsService.exportPool()` 完全同型。
+   *
+   * 🔴 **驗證順序即實作順序，不可顛倒**（`AC-X17`）：① 型別 → ②（service 內）長度上限 →
+   * ③ 空陣列走成功路徑 → ④ 查無之 id 靜默略過。
+   * ① 必須**先於** ②：長度檢查以「`documentIds` 是陣列」為前提，順序顛倒會對非陣列輸入取 `.length`
+   * 而得 `undefined`，`undefined > 10000` 恆為偽 ⇒ **驗證靜默通過**，畸形請求一路走到組 CSV。
+   * ① **不得**退化為「視同空陣列」：那會讓畸形 body 產生一份**看似成功**的僅表頭 CSV，與「0 筆符合」
+   * 逐位元組相同 ⇒ 沒有任何測試能區分兩者（本 repo 反覆付出代價的靜默失敗形狀）。
+   * 🔴 成員非字串一律**整批拒絕**，明文禁止靜默 `typeof` 過濾：被過濾之成員會使 CSV 列數變短，而該
+   * 現象與 ④ 之「該文件已被刪除」在輸出上完全無從區辨。
+   * 🔒 ① **不適用於 `linkTargetId`**：該鍵為選填，缺席／空字串／指向不存在之文件一律不視為錯誤
+   * ——其唯一用途是欄內排序，無命中即原樣回傳。
+   * 🔒 錯誤碼沿用既有 `VALIDATION_ERROR`（同 controller 之 `setStatus()` 已在用），本 delta 不新增任何碼。
+   */
+  @Post('export')
+  @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
+  async exportList(
+    @Body() body: { documentIds?: unknown; linkTargetId?: unknown },
+    @Res() res: Response,
+  ): Promise<void> {
+    const ids = body?.documentIds;
+    if (!Array.isArray(ids) || ids.some((v) => typeof v !== 'string')) {
+      throw new BadRequestException('VALIDATION_ERROR');
+    }
+    const linkTargetId =
+      typeof body?.linkTargetId === 'string' && body.linkTargetId !== ''
+        ? body.linkTargetId
+        : undefined;
+    const { csv, fileName } = await this.svc.exportDocuments(ids as string[], linkTargetId);
+    // 🔴 送 Buffer 而非 string：送字串會讓 Express 自行決定編碼，BOM 會悄悄壞掉而測試仍可能綠。
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(csv);
   }
 
   @Post()

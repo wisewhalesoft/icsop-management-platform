@@ -46,6 +46,13 @@ import {
 } from './document-link.store';
 import { ATTACHMENT_STORE, AttachmentStore } from '../attachments/attachments.store';
 import {
+  EXPORT_ROW_LIMIT,
+  assertExportRowLimit,
+  exportFileName,
+  toCsvBuffer,
+} from '../storage/csv-export';
+import { buildDocumentExportColumns } from './document-export-columns';
+import {
   DOCUMENT_CHANGE_PUBLISHER,
   DocumentChangePublisher,
   DocumentFieldDelta,
@@ -305,12 +312,70 @@ export class DocumentsService {
     const page = await this.store.list(
       subtree ? { ...filters, nodeIdIn: subtree.nodeIds } : filters,
     );
-    await this.enrichNames(page.items);
-    await this.enrichSecondaryChiefs(page.items);
-    await this.enrichIcsopPdf(page.items);
-    await this.enrichOjt(page.items);
-    await this.enrichLinks(page.items);
+    await this.enrichListItems(page.items);
     return { ...page, subtreeFilter: subtree?.descriptor ?? null };
+  }
+
+  /**
+   * 清單列之五個既有批次富化（順序固定），供清單查詢與 F017 匯出**兩處共用同一段程式碼**。
+   *
+   * 🔴 各為**固定次數**之批次查詢，往返數與列數無關（`AC-X15`／`AC-J15` ⑤／NFR-001）——
+   * 逐列查一次是最直覺的寫法，即 N+1。
+   * 🔒 抽為一處而非兩處各寫五行，使「匯出的值一定是清單的值」由**同一段程式碼**保證，
+   * 而非由紀律保證（`AC-X15` 之建議形狀）。
+   */
+  private async enrichListItems(items: DocumentListItem[]): Promise<void> {
+    await this.enrichNames(items);
+    await this.enrichSecondaryChiefs(items);
+    await this.enrichIcsopPdf(items);
+    await this.enrichOjt(items);
+    await this.enrichLinks(items);
+  }
+
+  /**
+   * F017 §清單匯出（CSV）delta：以**前端送來之文件 id 清單**產生 CSV（`AC-X1`～`AC-X17`）。
+   *
+   * 🔴 **後端完全不重跑篩選、不重跑排序**（架構決策 D1 乙案）：本頁 13 項篩選全部在瀏覽器端施加，
+   * 且前後端之篩選語言不同構（前端比對**顯示名稱**、後端比對 **id／代碼**），兩項篩選後端根本沒有
+   * 參數，三項篩選在前端是「先取 id 集合再交集」——由後端重跑一次必然漂移成兩套語意，而兩邊
+   * 單元測試各自為真、交集無人驗（本 repo F024 匯出鈕已踩過之假綠形狀）。
+   *
+   * 讀取路徑（架構 §13.3，四步，順序不可顛倒）：
+   *  ① **取工作集**——`store.list({ pageSize: EXPORT_ROW_LIMIT })`，**不帶任何篩選**（load-all）；
+   *  ② **交集**——以請求之 id 建 `Set`，查無之 id **靜默略過**（`AC-X17` ④，不回 404、不中止）；
+   *  ③ **重排**——依請求之 id **原序**重排（重複成員只取首次出現之位置）；
+   *  ④ **富化**——對**重排後之列**（非整個工作集）呼叫與清單完全相同之 `enrichListItems()`。
+   *
+   * 🔴 步驟 ① 之 `pageSize` 取 `EXPORT_ROW_LIMIT`（10,000）而非畫面之 `LOAD_SIZE`（2,000），使匯出之
+   * 載入天花板**不低於**畫面之載入天花板 ⇒「匯出恆等於畫面所見、不多也不少」在畫面自身被截斷時仍成立。
+   * 🔴 列序由**服務層**以請求之 id 原序重排（`Map<id, item>`），**不得**沿用 store／DB 之回傳順序
+   * ——那是本裁決全部價值之所在。
+   * 🔒 `DocumentStore` 介面一格未動（不新增 store 方法、不新增 `DocumentListFilters` 欄位）。
+   * 🔒 **無副作用**：不寫稽核、不寫任何資料表（同 `AppendicesService.exportPool()`／`UsageFormsService.exportPool()`）。
+   */
+  async exportDocuments(
+    documentIds: string[],
+    linkTargetId?: string,
+  ): Promise<{ csv: Buffer; fileName: string }> {
+    // 🔒 上限之**單點**檢查，且在任何 DB 查詢之前（`AC-X12`；本裁決下 id 清單長度即符合條件之筆數）。
+    assertExportRowLimit(documentIds.length);
+    const page = await this.store.list({ pageSize: EXPORT_ROW_LIMIT });
+    const byId = new Map(page.items.map((it) => [it.id, it]));
+    const rows: DocumentListItem[] = [];
+    const taken = new Set<string>();
+    for (const id of documentIds) {
+      if (taken.has(id)) continue;
+      taken.add(id);
+      const item = byId.get(id);
+      if (item) rows.push(item);
+    }
+    await this.enrichListItems(rows);
+    // 🔴 `now` 取一次並同時供「狀態」欄之今日基準與檔名時間戳；一份檔案內不得有兩個「現在」。
+    const now = new Date();
+    return {
+      csv: toCsvBuffer(rows, buildDocumentExportColumns(linkTargetId, now)),
+      fileName: exportFileName('documents', now),
+    };
   }
 
   /**

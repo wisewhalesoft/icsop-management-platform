@@ -34,6 +34,27 @@ export interface OjtCompletionSummary {
   completedOrgCodes: string[];
 }
 
+/**
+ * F017 `AC-X4`（架構 §13.3 (i)）：三值 → **畫面所見中文標籤**之對照表，供清單匯出（CSV）第 1 欄。
+ *
+ * 🔴 **落點刻意與 `OjtCompletionStatus`／`deriveOjtStatus()` 同檔**：判定與其標籤放同一處，
+ * 使「新增第四種狀態」這件事在**一個檔案內**就撞到兩處；分置兩檔時只會撞到一處。
+ *
+ * 🔴 **前端 `frontend/src/domain/ojt-status-view.ts` 之 `VIEWS[*].text` 為權威，本表與其逐字相同**。
+ * 本 repo 前後端為兩個獨立 TS 專案、無共用 package ⇒「只有一份」在架構上不可達；本輪之機器可驗
+ * 約束為「兩份逐字相同」（兩端各對同一組 3 列固定向量斷言），比照 `watermarkLines()`
+ * （architecture-spec §10.14）與 `change-labels.ts` 之既有處置。
+ *
+ * 🔒 **值域恰 3 個且封閉，不得引入第四個鍵**（`OQ-E11-22` 已明文鎖定同一組三值）。
+ * 🔴 CSV **不得**輸出列舉代碼 `all`／`partial`／`none`（error-handling.md#export 值層通則：
+ * 列舉／代碼欄一律輸出畫面所見之中文標籤）；`data-has-ojt` 之三值域為 DOM 掛鉤、非顯示值。
+ */
+export const OJT_STATUS_LABEL: Record<OjtCompletionStatus, string> = {
+  all: '已全部完成',
+  partial: '部分完成',
+  none: '尚未開始',
+};
+
 export const OJT_COMPLETION_READER = Symbol('OJT_COMPLETION_READER');
 
 export interface OjtCompletionReader {
