@@ -160,6 +160,54 @@
        故標為「尚未上傳 PDF」不會與同列「檔案」欄的下載鈕自相矛盾。並刻意把它排到 6 連結那列的**第一顆**，
        使收合態與展開態同時看得到兩種樣態；該列連結**數量與集合皆不變**（仍為 6 個、仍含最長編號
        ICSOP-CIPS-104-1-01），僅顯示順序調整。勿「修正」為有 PDF——這是無檔案態唯一的示範載體。 -->
+<!-- 🔵 2026-08-31 清單匯出（CSV）delta（人類閘門已通過）——本檔已套用（規格權威＝F017 `AC-X1`～`AC-X16`）：
+     使用者原文「ICSOP 文件管理：比照使用表單管理/附錄管理，新增匯出功能。」
+     ① **topbar 動作區新增一顆「匯出」鈕**（`AC-X9`）：可見文字與 `aria-label` 皆逐字 `匯出`、
+        `title` 逐字 `匯出程序書清單（CSV）`、icon 鍵 `download`、**位置在「建立程序書」鈕之左側**
+        （比照 24-appendix-management.html 之「匯出」在「上傳附錄」之左、9-usage-form-management.html
+        之「匯出」在「新增表單」之左；外框 class 逐字沿用該兩處，未引入新樣式語彙）。
+        🔴 **本鈕非 write-only**：匯出屬**讀取類動作**。本頁 F025 矩陣為
+           系統管理員 `唯讀`／ICSOP 管理員 `CRUD`／主管 `唯讀`／部門窗口 `唯讀`／一般使用者 `無`
+           ⇒ **四種進得來的角色皆可見、可按**（`AC-X9` 逐字斷言：`getByLabelText('匯出')` 於四種角色下皆非 null）。
+           **不得**加 `write-only` class——加了會使三種唯讀角色**連匯出都看不到**；一般使用者本就被
+           blockOverlay 擋下（`PERMISSION_DENIED · 403`），不需靠隱藏本鈕達成。
+           ⚠ 與 19／24 兩頁之可匯出角色集合**刻意不同**（那兩頁 Supervisor／DeptContact 本就 403），
+             差異來自 F025 矩陣既有之列值，**不得**為了「多處一致」而收緊本頁。
+        🔒 既有「建立程序書」鈕之 `write-only` 行為**一字不動**（`queryByText('建立程序書')` 仍僅 ICSOPAdmin 非 null）。
+     ② **匯出範圍＝當前 13 項篩選 ＋ 節點子樹 chip 套用後之全部結果**（`AC-X11` ①），**非**當前頁之 50 筆；
+        **列序＝畫面當前排序**（`AC-X11` ②）——本頁未提供排序控制項，故即 DOCS 原序，與畫面由上而下相同。
+        實作上把 renderTable() 原本內嵌之篩選**原封不動抽成 `filteredRows()`**，渲染與匯出**共用同一份判定**；
+        🔴 **不得**為匯出另寫第二套篩選——兩套語意必然漂移，且兩邊單元測試各自為真、交集無人驗
+           （本 repo F024 匯出鈕已踩過的假綠形狀）。
+     ③ **CSV 十四欄**（`AC-X1` ②，逐字表頭）＝畫面 15 欄**去掉「樹狀圖」**：
+        `OJT,制定公司,制定部門,制定室別,當責室長,狀態,檔案,程序書編號,程序書書名,版次,內容摘要,連結點程序書,公告日期,循環別`
+        🔴 **「樹狀圖」欄仍留在畫面上**（`AC-X16` ①）——它只是**無資料值可落地**的導覽圖示（點擊開啟 22），
+           故不匯出；**不得**被順手移除。
+     ④ 值層規則（`AC-X2`～`AC-X8`，收斂於 `csvCell()`／`exportRow()` 兩個單一落點）：
+        以 UTF-8 BOM（`EF BB BF`）起始；表頭列與每一資料列（**含最末一列**）之終止符皆為 CRLF；
+        含 `,`／`"`／換行之值以雙引號包覆、內部 `"` 逸出為 `""`（RFC 4180；`內容摘要` 為最可能觸發者）；
+        以 `=`／`+`／`-`／`@`／Tab／CR 開頭之**值**前置一個半形單引號後**再**包覆（順序不可顛倒，**表頭列不適用**）；
+        畫面顯示 `—` 之空值欄一律輸出**空儲存格**（`—` 是畫面佔位符、不是資料）；
+        `OJT` 輸出三值中文標籤 `已全部完成`／`部分完成`／`尚未開始`（缺鍵＝`尚未開始`，**非**空儲存格、**不得**輸出 `all`／`partial`／`none`）；
+        `當責室長`＝主要 ∪ 次要、以**全形頓號 `、`** 相接並**去重**（與畫面 `+N` 之 tooltip 同一組名字，CSV 展開為完整清單）；
+        `連結點程序書`＝各目標之**編號**以**半形分號 `;`** 相接、命中 `連結點程序書` 篩選者排第一顆、0 個為空儲存格（**非** `—`、**非** `0`）；
+        `狀態` 為**衍生**顯示標籤（`已公告`／`進度中`／`失效`／`作廢`，**不得**輸出儲存值）；
+        `檔案` 為該文件自身之 ICSOP PDF 檔名；`公告日期` 為 `YYYY-MM-DD`（**不附時分秒**）；`循環別` 含子分類。
+        🔒 **不得**於任何儲存格輸出圖示／徽章／按鈕之痕跡（`程序書編號` 欄之「尚未指派節點」警示圖示、
+           `程序書書名` 欄之「編輯」鉛筆鈕**皆不落地**——它們是畫面元件，不是值）。
+     ⑤ 回饋逐字（`AC-X14`）：成功**以** `已匯出程序書清單（CSV，UTF-8 BOM）` **起始**（其後之筆數等資訊不逐字約束）；
+        超限為 `符合條件之筆數為 {N} 筆，超過匯出上限 10000 筆，請縮小篩選條件` ＋**同一回饋容器內**之
+        `EXPORT_ROW_LIMIT_EXCEEDED · 400`；0 筆仍產生**僅含表頭列**之 CSV（非錯誤、非空檔，`AC-X13`）。
+        📌 量詞／限定詞刻意為「**筆數**」＋「**篩選**條件」（與畫面既有之「共 {N} 筆」、篩選卡標題
+           `篩選條件`、按鈕 `清除全部篩選` 對齊），與 F037／F038 之「事件」＋「查詢條件」**刻意不同**，不得互相對齊。
+     🔒 **零漣漪（`AC-X16`）：本 delta 只加一顆鈕與一條匯出路徑**——15 欄之欄位集合／由左至右順序／各欄顯示規則、
+        13 項篩選之組成／順序／比對語意／值域、節點子樹 chip、3 張統計卡、排序、分頁、空狀態 `查無符合結果`、
+        第 12 欄之摺疊與無檔案態、唯讀 banner，**一格未動**；「清除全部篩選」之涵蓋範圍亦不因本鈕而改變。
+     ⚠ **本檔 mock 語料中無任何以 `=`／`+`／`-`／`@`／Tab／CR 開頭之欄值** ⇒ `AC-X2` ③ 之注入前綴
+        在本頁**無可達之示範載體**。**刻意不補示範列**：DOCS 多一列會使 `程序書編號`／`程序書書名`／
+        `制定部門` 等 combobox 之**選項值域**多出項目，直接牵觸 `AC-X16` ② 之「不改任何既有控制項之值域」，
+        並連帶改動 3 張統計卡與「共 {N} 筆」。該規則之正確性改由 `csvCell()` 這個**單一收斂點**承載
+        ⇒ 下游 AC 應對 `csvCell()` 之輸入／輸出逐案斷言，**不要**依賴畫面上某一列。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -219,6 +267,13 @@
       <div class="font-semibold text-slate-900 text-sm truncate">後台程序書清單</div>
     </div>
     <div class="ml-auto flex items-center gap-2">
+      <!-- 🔵 F017 `AC-X9`（2026-08-31 匯出 delta）：topbar 動作區之「匯出」鈕，**位置在「建立程序書」之左**。
+           逐字＝可見文字與 `aria-label` 皆為 `匯出`、`title` 為 `匯出程序書清單（CSV）`、icon 鍵 `download`
+           （外框 class 逐字沿用 24-appendix-management.html／19-usage-form-management.html 之同型匯出鈕）。
+           📌 **匯出為讀取類動作**：本頁 F025 矩陣之系統管理員／主管／部門窗口三者雖皆為**唯讀**，
+              仍**看得到也按得下**本鈕 ⇒ 本鈕**非** write-only（加了 write-only 會使三種角色連匯出都不能用）；
+              一般使用者於本頁本就被 blockOverlay 擋下（`PERMISSION_DENIED · 403`）。 -->
+      <button onclick="doExport()" aria-label="匯出" title="匯出程序書清單（CSV）" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"><i data-lucide="download" class="w-4 h-4"></i>匯出</button>
       <button onclick="createDoc()" class="write-only inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="plus" class="w-4 h-4"></i>建立程序書</button>
       <div class="flex items-center gap-1.5 pl-2 border-l border-slate-200">
         <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
@@ -862,9 +917,16 @@
     return `<span title="${esc(d.chief)}" class="text-slate-700">${esc(shortName(d.chief))}</span>${sec}`;
   }
 
-  function renderTable(){
+  /* 🔵 2026-08-31 匯出 delta（F017 `AC-X11`）：本函式為 renderTable() 原本**內嵌**之 13 項篩選
+     ＋節點子樹條件**原封不動抽出**，判定邏輯一行未改（比對語意、順序、AND 關係逐字相同）。
+     抽出之唯一目的：讓「畫面所見的列集合」與「匯出的列集合」共用**同一份**判定
+     ⇒ `AC-X11` 之三項不變式（① 列集合＝篩選後全部列、② 列序＝畫面當前排序、③ 一一對應同序不多不少）
+       在本檔為**構造上成立**，而非靠兩份實作碰巧一致。
+     🔴 **不得**為匯出另寫第二套篩選——兩套語意必然漂移，且兩邊各自為真、交集無人驗。
+     📌 列序＝DOCS 之原序（本頁未提供排序控制項），與畫面第 1 頁至最末頁由上而下之順序相同。 */
+  function filteredRows(){
     /* 🔴 F017 AC-D2：13 項之比對語意；未提供者不施加限制；多項並用為 AND。 */
-    const rows=DOCS.filter(d=>{
+    return DOCS.filter(d=>{
       const ds=derived(d);
       if(FILTER.company && d.company!==FILTER.company) return false;                       // 1 等值
       if(FILTER.dept && d.dept!==FILTER.dept) return false;                                // 2 等值
@@ -902,6 +964,10 @@
       }
       return true;
     });
+  }
+
+  function renderTable(){
+    const rows=filteredRows();   // 🔵 AC-X11：與 doExport() 共用之**唯一**篩選落點
     // 統計卡片（衍生數，依目前篩選結果）
     document.getElementById('statTotal').textContent=rows.length;
     document.getElementById('statPub').textContent=rows.filter(d=>derived(d)==='已公告').length;
@@ -944,6 +1010,84 @@
       </tr>`;
     }).join('');
     lucide.createIcons();
+  }
+
+  /* ===== 🔵 2026-08-31 清單匯出（CSV）（F017 `AC-X1`～`AC-X14`；逐字規格見檔頭同日區塊）=====
+     範圍＝`filteredRows()`（當前 13 項篩選 ＋ 節點子樹 chip 套用後之**全部**結果，非當前頁之 50 筆），
+     列序＝該函式之輸出序（＝畫面由上而下之順序）。**本頁不另寫第二套篩選。** */
+  const EXPORT_ROW_LIMIT=10000;
+  /* `AC-X1` ② 十四欄逐字表頭＝畫面 15 欄**去掉「樹狀圖」**（該欄為導覽圖示、無資料值可落地；
+     🔴 該欄**仍留在畫面上**，`AC-X16` ①）。
+     🔒 表頭列**不套用**注入前綴（`AC-X2` ③ 之範圍限定），故本陣列即為檔案第 1 列之逐字內容。 */
+  const EXPORT_HEADER=['OJT','制定公司','制定部門','制定室別','當責室長','狀態','檔案','程序書編號','程序書書名','版次','內容摘要','連結點程序書','公告日期','循環別'];
+  /* 🔴 兩個分隔符**刻意不同、不得統一**（`AC-X5`／`AC-X6`）：
+       · `當責室長` 用**全形頓號**——畫面既有載體即以 `、` 相接（次要室長之 title），值層對齊畫面；
+       · `連結點程序書` 用**半形分號**——避免與**編號**字面（含 `-`）混淆。 */
+  const CHIEF_NAME_SEPARATOR='、';
+  const LINKED_DOC_NUMBER_SEPARATOR=';';
+  const CSV_INJECTION_PREFIX_CHARS=['=','+','-','@','\t','\r'];
+  /* 🔴 `AC-X2` 值層通則之**單一收斂點**（各處各自 escape 正是分隔符／空值呈現漂移之來源）：
+       ① `null`／`undefined` → 空儲存格（**不得**輸出字面 `null`／`undefined`）；
+       ② 畫面之 `—`（U+2014）是空值**佔位符**、不是資料 → 空儲存格；
+       ③ 注入前綴**先**加、RFC 4180 包覆**後**做（順序顛倒會使前導單引號跑到引號外而失效）。
+     ⚠ 本項使「CSV 儲存格值 ＝ 畫面所見字串」**不再恆成立**——以那六種字元開頭者相差一個前導單引號；
+       不以其開頭者為恆等（本檔 mock 語料全數落在恆等側，見檔頭 ⚠）。 */
+  function csvCell(v){
+    if(v==null) return '';
+    let t=String(v);
+    if(t==='—') return '';
+    if(t && CSV_INJECTION_PREFIX_CHARS.includes(t[0])) t="'"+t;
+    return /[",\r\n]/.test(t) ? '"'+t.replace(/"/g,'""')+'"' : t;
+  }
+  /* `AC-X5`：主要 ∪ 次要、全形頓號相接、**去重**（沿用同表 chiefCell(d) 之 shortName 與 uniq，
+     故 CSV 之姓名與畫面／tooltip 為同一組字；畫面因欄寬收合為「主要 +N」，CSV 展開為完整清單）。 */
+  function exportChiefValue(d){ return uniq([shortName(d.chief),...(d.sec||[]).map(shortName)]).join(CHIEF_NAME_SEPARATOR); }
+  /* `AC-X6`：目標**編號**以半形分號相接；順序**沿用畫面之 linkOrder()**（命中篩選者排第一顆），
+     不另寫第二套排序；查無編號者跳過（**不得**產生 `;;` 或前／後綴分號）；0 個 → 空儲存格。
+     🔒 不輸出書名、不輸出有無 PDF——畫面該格之可見文字本即只有編號。 */
+  function exportLinkValue(d){ return linkOrder(d.links||[]).map(linkNum).filter(n=>!!n).join(LINKED_DOC_NUMBER_SEPARATOR); }
+  /* `AC-X3` 十四欄之值層語意（欄序同 EXPORT_HEADER）。
+     🔒 每一格皆為**值**，不含任何圖示／徽章／按鈕之痕跡。 */
+  function exportRow(d){
+    return [
+      OJT_STATE[ojtStateOf(d)].text,   //  1 OJT        `AC-X4` 三值中文標籤；缺鍵→`尚未開始`（**非**空儲存格）
+      d.company,                       //  2 制定公司
+      d.dept,                          //  3 制定部門
+      d.section,                       //  4 制定室別   畫面 `—` → 空儲存格
+      exportChiefValue(d),             //  5 當責室長   `AC-X5`
+      derived(d),                      //  6 狀態       `AC-X7` 衍生顯示標籤，非儲存值
+      d.pdf,                           //  7 檔案       該文件自身之 ICSOP PDF 檔名
+      d.num,                           //  8 程序書編號（必填、恆非空；不含「尚未指派節點」警示圖示）
+      d.name,                          //  9 程序書書名（必填、恆非空；不含「編輯」鉛筆鈕）
+      d.edition,                       // 10 版次
+      d.summary,                       // 11 內容摘要   **全文不截斷**（畫面之 truncate 為 CSS 視覺截斷）
+      exportLinkValue(d),              // 12 連結點程序書 `AC-X6`
+      d.date,                          // 13 公告日期   `AC-X8` `YYYY-MM-DD`，**不附時分秒**
+      lcName(d.lcId)                   // 14 循環別     含子分類（＝ lifecycleDisplayName()，與畫面同一函式）
+    ];
+  }
+  /* `AC-X1` ①④：UTF-8 BOM 起始；表頭列與每一資料列（**含最末一列**）皆以 CRLF 終止。
+     `AC-X13`：0 筆 → 僅含表頭列之 CSV（非錯誤、非空檔）。 */
+  function buildExportCsv(rows){
+    const lines=[EXPORT_HEADER.join(',')].concat(rows.map(d=>exportRow(d).map(csvCell).join(',')));
+    return '\uFEFF'+lines.join('\r\n')+'\r\n';
+  }
+  function doExport(){
+    const rows=filteredRows();                        // `AC-X11` ①：當前篩選之**全部**結果
+    if(rows.length>EXPORT_ROW_LIMIT){                  // `AC-X12`：超限不產生任何檔案、不回傳部分結果
+      toast('error','符合條件之筆數為 '+rows.length+' 筆，超過匯出上限 '+EXPORT_ROW_LIMIT+' 筆，請縮小篩選條件','EXPORT_ROW_LIMIT_EXCEEDED · 400');
+      return;
+    }
+    const csv=buildExportCsv(rows);
+    /* 📌 prototype 之「產生」止於**位元組本身**：把完整 CSV 印到 console 供逐位元組核對
+       （表頭逐字、BOM、CRLF、RFC 4180 逸出、注入前綴），**刻意不觸發實際下載**——
+       比照 19／24 兩處同型匯出之 prototype 行為。真實前端之下載途徑必須走 `downloadViaBlob()`
+       （fetch → Blob → 程式化 `<a download>`），**不得**用 `window.open`／`<a href>`（`AC-X14`）：
+       導覽式請求會送 `Accept: text/html` 撞上 SPA fallback，使用者**靜默**拿到一個副檔名 .csv、
+       內容是 app shell 的檔案（本 repo 2026-07-25 已踩過同型 bug）。 */
+    console.log(csv);
+    toast('success','已匯出程序書清單（CSV，UTF-8 BOM）：共 '+rows.length+' 筆資料列＋1 列表頭；'
+      +'表頭＝'+EXPORT_HEADER.join(',')+'；檔名 documents_20260831_143208.csv');
   }
 
   /* 樹狀圖圖示 → 直接開啟循環樹狀圖預覽頁（22），帶入該程序書之**具體**循環。
