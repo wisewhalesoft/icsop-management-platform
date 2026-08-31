@@ -2,6 +2,23 @@ import { ApiError } from './client';
 import { notifySessionLost } from './session-lost';
 
 /**
+ * `downloadViaBlob()` 之**選填**請求覆寫（F017 `AC-X14`，additive）。
+ *
+ * 🔴 **additive 之意義**：既有全部呼叫端只傳兩個參數，`init` 為 `undefined` 時行為**逐字不變**
+ * （GET、無 body、無 `Content-Type`）。之所以是「加第三個參數」而非另寫一份
+ * `postDownloadViaBlob()`：後者會把本檔的三條防線各複製一份——(i) `Accept` 不得為 `text/html`、
+ * (ii) 檔名優先取 `Content-Disposition`、(iii) 錯誤走 `extractDownloadError()` ＋
+ * `notifySessionLost()`——**三者各多一個漂移點**。
+ *
+ * 有 `body` 時於**同一次** `fetch` 加上 `Content-Type: application/json` 並序列化為 JSON
+ * （不得先探再送：兩次請求會讓後端各算一次，也讓 401 之處置分岔）。
+ */
+export interface DownloadInit {
+  method?: string;
+  body?: unknown;
+}
+
+/**
  * 以 `fetch → Blob → object URL → 程式化 <a download>` 觸發下載。
  *
  * 🔴 為何**不得**用 `window.open(url)` 或 `<a href>`（architecture-spec §10.1 之明文禁令）：
@@ -12,13 +29,23 @@ import { notifySessionLost } from './session-lost';
  *
  * 檔名優先取 `Content-Disposition`；解析失敗才用呼叫端提供之 fallback。
  */
-export async function downloadViaBlob(path: string, fallbackName: string): Promise<void> {
+export async function downloadViaBlob(
+  path: string,
+  fallbackName: string,
+  init?: DownloadInit,
+): Promise<void> {
   let res: Response;
+  const hasBody = init?.body !== undefined;
   try {
     res = await fetch(path, {
       credentials: 'include',
-      // 🔴 關鍵：不送 text/html，故不觸發 SPA fallback。
-      headers: { Accept: 'application/octet-stream' },
+      ...(init?.method ? { method: init.method } : {}),
+      headers: {
+        // 🔴 關鍵：不送 text/html，故不觸發 SPA fallback。POST 路徑亦**維持不變**。
+        Accept: 'application/octet-stream',
+        ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(hasBody ? { body: JSON.stringify(init?.body) } : {}),
     });
   } catch (e) {
     throw new ApiError(0, 'NETWORK_ERROR', e instanceof Error ? e.message : String(e));

@@ -1073,6 +1073,32 @@ export function exportAppendixPool(
 }
 
 /**
+ * 🔵 POST /admin/documents/export（F017 後台程序書清單匯出 CSV，`AC-X9`～`AC-X17`）。
+ *
+ * 🔴 **body 恰兩鍵** `{ documentIds; linkTargetId? }`，**不得夾帶任何篩選鍵**（架構決策 D1 乙案）：
+ * 本頁 13 項篩選全部在瀏覽器端施加，且前後端之篩選語言不同構（前端比對顯示名稱、後端比對 id／代碼），
+ * 兩項篩選後端根本沒有參數 ⇒ 帶篩選參數等於要求後端重寫一套必然漂移的篩選。故送的是**結果本身**
+ * （`filtered.map(d => d.id)`，非 `pageRows`、非 `all`），後端不重跑篩選、不重跑排序。
+ *
+ * 🔴 採 **POST** 是因為「查詢對象集合放不進 URL」，不代表狀態變更——本端點無任何副作用
+ * （不寫稽核、不寫任何資料表），其閘門仍為 `ICSOP文件管理` 之 **read**。
+ * 🔴 走 `downloadViaBlob` 而非 `window.open`／`<a href>`：後者之導覽式請求會送 `Accept: text/html`
+ * 而撞上 SPA fallback，使用者靜默拿到副檔名 `.csv`、內容是 app shell 的檔案。
+ *
+ * @param linkTargetId `連結點程序書` 篩選之命中目標（選填）。**僅供第 12 欄之欄內排序**
+ *   （命中者排第一顆），不參與任何篩選判定。
+ */
+export function exportDocumentList(
+  documentIds: string[],
+  linkTargetId?: string,
+): Promise<void> {
+  return downloadViaBlob('/admin/documents/export', 'documents.csv', {
+    method: 'POST',
+    body: linkTargetId ? { documentIds, linkTargetId } : { documentIds },
+  });
+}
+
+/**
  * 🔵 GET /admin/usage-forms/export（F018 表單池匯出 CSV，`AC-X6`）。
  * 帶入與清單畫面**相同**之篩選（`AC-X7`：範圍＝當前篩選之全部結果，非當前頁）。
  * 🔴 走 `downloadViaBlob` 而非 `window.open`／`<a href>`：後者之導覽式請求會送

@@ -7,8 +7,15 @@ import {
   downloadAttachment,
   getAppendixPool,
   getUsageFormPool,
+  exportDocumentList,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
+import {
+  EXPORT_LIMIT_BADGE,
+  EXPORT_ROW_LIMIT,
+  countFromLimitError,
+  isExportLimitError,
+} from '../domain/export-feedback';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT } from '../domain/watermark-note';
@@ -76,6 +83,28 @@ const linkLabel = (l: DocumentLinkView): string =>
  * 全部標成不可下載（猜錯的代價不對稱，見 `AC-E12`）。
  */
 const linkHasNoPdf = (l: DocumentLinkView): boolean => l.targetHasPdf === false;
+
+/**
+ * `AC-E6`／`AC-X6`：`連結點程序書` 之**顯示順序**——篩選命中者排第一顆（＝收合態唯一可見的
+ * 那顆），否則使用者看不出這列為什麼被篩出來；未套用篩選或本列無命中則**原樣**。
+ * 命中／未命中兩段內部各自維持原相對順序（穩定排序）。
+ *
+ * 🔴 **就地抽為同檔匯出之純函式，是為了讓後端匯出之 `orderLinksForExport()` 有可綁定的對象**
+ * （`AC-X6`：對同一組輸入，兩端逐案輸出相等）。前後端為兩個獨立 TS 專案、無共用 package ⇒
+ * 「只有一份」在架構上不可達，兩端各對同一組固定向量斷言是唯一可機器驗證的形狀；不抽出來的話
+ * 前端這一側漂移**沒有任何機制會攔**。**行為恆等、無渲染差異。**
+ *
+ * ⚠ 本函式**只重排顯示順序**，篩選之比對判定完全不變（`filters.link` 之值＝目標文件 `id`）。
+ */
+export function orderedLinks(
+  links: readonly DocumentLinkView[],
+  filterLink: string,
+): DocumentLinkView[] {
+  if (!filterLink) return [...links];
+  const hit = links.filter((l) => l.targetDocumentId === filterLink);
+  if (hit.length === 0) return [...links];
+  return [...hit, ...links.filter((l) => l.targetDocumentId !== filterLink)];
+}
 
 /** `AC-E11` ②：無檔案態之 tooltip（與 prototype 13 之 ⑩ 逐字相同）。 */
 const linkNoPdfTitle = (l: DocumentLinkView): string =>
@@ -623,6 +652,37 @@ export function DocumentListPage(): JSX.Element {
     [filtered, clampedPage],
   );
 
+  /**
+   * F017 `AC-X11`／`AC-X14`：匯出**當前篩選之全部結果**（CSV）。
+   *
+   * 🔴 送出之集合恆為 `filtered`——**不是** `pageRows`（那只有當前頁 50 筆）、**不是** `all`
+   * （那是未套篩選的完整工作集）。列序即 `filtered` 之序（＝畫面由第 1 頁至最末頁由上而下之順序），
+   * 後端依此原序重排、不重跑任何排序。
+   * 🔴 `filtered` 為 0 筆時**照樣送出空陣列**：後端回 200 ＋ 僅表頭列的檔案，那是誠實的；
+   * 「請求壞掉」與「0 筆符合」必須由不同路徑產生（後端對缺鍵／非陣列回 `VALIDATION_ERROR`）。
+   * 🔴 **前端不得執行筆數上限檢查、不得 `disabled` 匯出鈕**：提示與檢查一旦合流，後端之錯誤路徑
+   * 就再也跑不到（且本頁 `LOAD_SIZE`＝2000 < 上限 10000，該路徑在本頁結構上本就不可達）。
+   * 📌 逐字回饋句式為**本頁專屬**（量詞「筆數」＋限定詞「篩選條件」）——與變更歷程兩 tab 之
+   * 「事件」／「查詢條件」刻意不同，不得互相對齊。
+   */
+  const onExport = useCallback(async () => {
+    const documentIds = filtered.map((d) => d.id);
+    try {
+      // 第二引數僅供第 12 欄之欄內排序（命中者排第一顆），不參與任何篩選判定。
+      await exportDocumentList(documentIds, filters.link || undefined);
+      toast.success(`已匯出程序書清單（CSV，UTF-8 BOM）：共 ${documentIds.length} 筆`);
+    } catch (e) {
+      if (isExportLimitError(e)) {
+        toast.error(
+          `符合條件之筆數為 ${countFromLimitError(e)} 筆，超過匯出上限 ${EXPORT_ROW_LIMIT} 筆，請縮小篩選條件`,
+          { code: EXPORT_LIMIT_BADGE },
+        );
+        return;
+      }
+      toast.error(e instanceof ApiError ? `匯出失敗：${e.code}` : '匯出失敗');
+    }
+  }, [filtered, filters.link, toast]);
+
   if (!canRead) {
     return (
       <div className="bg-white border border-slate-200 rounded-xl px-6 py-16 text-center">
@@ -638,6 +698,24 @@ export function DocumentListPage(): JSX.Element {
   return (
     <div className="space-y-4">
       <PageHeader breadcrumb={[{ label: 'ICSOP 文件管理' }, { label: '程序書清單' }]} title="後台程序書清單">
+        {/*
+          F017 `AC-X9`：topbar 動作區之「匯出」鈕，**位置在「建立程序書」之左**
+          （比照 prototype 24 之「匯出」在「上傳附錄」之左）。
+          🔴 **非** write-only——匯出屬讀取類動作，本頁之系統管理員／主管／部門窗口三者雖皆為
+             **唯讀**，仍看得到也按得下；套上 `canWrite` 會使三種角色連匯出都不能用。
+             一般使用者於本頁本就被上方 `!canRead` 之 403 區塊擋下，不會走到這裡。
+          🔴 **不得 `disabled`**：0 筆時亦可按（得到一份只有表頭的檔案是誠實的）；disabled 的鈕
+             不能 focus、讀不到 tooltip、觸控裝置上按了毫無反應，使用者只會覺得「壞了」。
+        */}
+        <button
+          onClick={() => void onExport()}
+          aria-label="匯出"
+          title="匯出程序書清單（CSV）"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          <Icon name="download" className="w-4 h-4" />
+          匯出
+        </button>
         {canWrite && (
           <button
             onClick={() => navigate('/admin/documents/new')}
@@ -992,18 +1070,8 @@ function LinkCell({ doc, filterLink, expanded, onToggle, onDownload, onNoPdf }: 
   onDownload: (l: DocumentLinkView) => void;
   onNoPdf: (l: DocumentLinkView) => void;
 }): JSX.Element {
-  /**
-   * `AC-E6`：`連結點程序書` 篩選命中者排第一顆（＝收合態唯一可見的那顆），否則使用者
-   * 看不出這列為什麼被篩出來。⚠ 本段**只重排顯示順序**，篩選之比對判定完全不變
-   * （`filters.link` 之值＝目標文件 `id`，語意見 `AC-D2` 第 9 列）。
-   */
-  const links = useMemo(() => {
-    if (!filterLink) return doc.links;
-    const hit = doc.links.filter((l) => l.targetDocumentId === filterLink);
-    return hit.length
-      ? [...hit, ...doc.links.filter((l) => l.targetDocumentId !== filterLink)]
-      : doc.links;
-  }, [doc.links, filterLink]);
+  /** `AC-E6`：順序委派同檔之 `orderedLinks()` 純函式（其亦為後端匯出排序之綁定對象，`AC-X6`）。 */
+  const links = useMemo(() => orderedLinks(doc.links, filterLink), [doc.links, filterLink]);
 
   if (!links.length) return <span className="text-slate-300">—</span>;
 
