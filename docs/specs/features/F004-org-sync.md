@@ -119,6 +119,33 @@ Epic/Story: E02 / US-010, US-011
 - 來源不可用/格式錯誤/互斥/髒資料/重試通知：見 [error-handling.md#sync](../error-handling.md#sync)、[NFR-006](../nfr.md#integration)。
 - 消失筆數超過閾值（`DISAPPEARED_RATIO_EXCEEDED`）：中止同步、不停用、告警系統管理員，見 [error-handling.md#sync](../error-handling.md#sync)。
 
+#### 🔵 2026-08-31 delta：角色推導被跳過之呈現與一次性放行（`AC-RD1`～`AC-RD5`，使用者裁定）
+
+> **背景**：角色變更閾值（5%，`Q4.3`）被觸發時，同步本身仍為 **success**，`stats.roleDerivationSkipped`
+> 只存在於**觸發當下**之 `SyncResult`。但常態觸發是每日 02:00 排程——跳過發生時沒有任何人在看畫面，
+> 隔天管理員看到的只有一列綠色的「成功」。實測 AS 602/1124（53.6%）被靜默丟棄，畫面完全無感，
+> 且唯一的放行手段是 CLI 環境變數（`SYNC_ROLE_CHANGE_THRESHOLD`），管理員無從自助。
+
+- **AC-RD1（事實必須落地）**：Given 任一次同步之角色推導因變更量超過閾值而整批未套用, When 該次
+  `SYNC_RUN` 收尾, Then `roleDerivationSkipped=true`、`roleChangeCount`（分子＝會被寫入之角色/子分類
+  變更數）與 `roleDerivationBase`（分母＝納入推導之帳號數）一併落地（migration `1725148800000`）。
+  ⚠ 兩個數字**不論是否跳過皆記錄**——畫面之二次確認需要實際筆數，只給比例不足以判斷。
+- **AC-RD2（常駐呈現）**：Given 同步歷程之某列 `roleDerivationSkipped=true`, When 渲染,
+  Then 該列下方**常駐**顯示「角色推導已跳過：N/M（X%）」與說明（不需展開、不論 status 為
+  success），並明示「帳號與組織資料已同步成功，僅角色與子分類停在舊值」。
+- **AC-RD3（一次性放行；僅系統管理員）**：Given 具「組織人員異動管理」write 之使用者（＝僅系統
+  管理員）, When 於該列按「本次仍要套用」並於二次確認框確認, Then 以
+  `POST /admin/org-sync/run { applyRoleDerivation: true, compid }` 重跑**該公司**並套用推導；
+  Given ICSOPAdmin（唯讀）, Then 看得到 `AC-RD2` 之事實但**無按鈕**。本 delta **不新增 F025 功能鍵**。
+- **AC-RD4（🔴 不得提供閾值輸入）**：Given 放行之請求契約, Then 僅接受布林 `applyRoleDerivation`，
+  **不接受任何閾值數字**；呼叫端夾帶之閾值欄位一律忽略。理由：畫面若能填百分比，一次性放寬會退化為
+  隨手填 100% 的常駐開關，而該閾值是「上游職稱改名致大量帳號靜默失去限縮」之**唯一偵測管道**
+  （`Q4.6`）。Given 放行但未帶 `compid`, Then 回 **400 `VALIDATION_ERROR`**——不限縮公司會把無上限的
+  窗口一併套到其餘公司。
+- **AC-RD5（放行僅此一次）**：Given 放行成功之後的下一次同步（含每日排程）, When 變更量仍超過閾值,
+  Then **再次跳過**——放行不改變閾值設定、不寫入任何持久化開關。放行當次之 `warnings` 須記錄操作者
+  與實際比例，供事後追溯。
+
 ## Related
 - **來源契約: [upstream-hr-source-contract.md](../upstream-hr-source-contract.md)**（§1 拓撲與 `OPENQUERY`、§3.4 密碼欄禁讀、§3.5 階層前綴推導、§5 欄位對應、§7 同步策略與消失保護、§10 範圍決策）
 - Diagram: [../diagrams/F004-org-sync.mmd](../diagrams/F004-org-sync.mmd)
@@ -126,3 +153,4 @@ Epic/Story: E02 / US-010, US-011
 - Blocks: [F005](F005-auto-disable-departed.md), [F006](F006-org-change-alert-backend.md), [F014](F014-accountable-dept-chief.md), [F019](F019-public-list-browsing.md), [F026](F026-role-field-matrix.md), [F033](F033-permission-aware-retrieval.md)
 - 定案: OQ-E02-01（View schema → 見來源契約）, OQ-E02-02（排程 02:00 UTC+8、失敗 3 次遞增間隔重試）
 - OQ: OQ-E02-05（通知管道）；消失筆數閾值已於 2026-08-31 依實際觀測由草案 5% 校準為 **10%**（契約 §7.3）
+- OQ-RA-01（首次全量套用之閾值放寬）自 2026-08-31 起**不再只能走 CLI**：系統管理員可於「組織人員異動管理」自助放行（`AC-RD3`）。角色變更閾值本身**維持 5%、不得永久調高**（`Q4.6`）
