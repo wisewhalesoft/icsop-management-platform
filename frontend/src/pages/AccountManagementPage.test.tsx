@@ -48,9 +48,9 @@ function mockAuth(roleCode: string) {
 }
 
 const ROWS: AccountView[] = [
-  { id: 'a1', loginId: '20233', employeeNo: null, name: '李慧玲', email: null, orgCode: null, roleCode: 'ICSOPAdmin', status: 'active', source: 'manual', disableReason: null, company: '和潤企業股份有限公司', department: '債權管理部 / 法催一室', title: '內控管理師', lastLoginAt: '2026-07-16T08:40:00Z' },
+  { id: 'a1', loginId: '20233', employeeNo: null, name: '李慧玲', email: null, orgCode: null, roleCode: 'ICSOPAdmin', status: 'active', source: 'manual', disableReason: null, company: '和潤企業股份有限公司', department: '債權管理部 / 法催一室', title: '內控管理師', position: '事務一般職', lastLoginAt: '2026-07-16T08:40:00Z' },
   { id: 'a2', loginId: '22345', employeeNo: null, name: '王小明', email: null, orgCode: null, roleCode: 'User', status: 'active', source: 'upstream', disableReason: null },
-  { id: 'a3', loginId: '20321', employeeNo: null, name: '周立群', email: null, orgCode: null, roleCode: 'User', status: 'disabled', source: 'upstream', disableReason: 'departed', company: '和潤企業股份有限公司', department: '作業服務部 / 客服室', title: null, lastLoginAt: '2026-06-30T22:14:00Z' },
+  { id: 'a3', loginId: '20321', employeeNo: null, name: '周立群', email: null, orgCode: null, roleCode: 'User', status: 'disabled', source: 'upstream', disableReason: 'departed', company: '和潤企業股份有限公司', department: '作業服務部 / 客服室', title: null, position: null, lastLoginAt: '2026-06-30T22:14:00Z' },
 ];
 
 describe('AccountManagementPage — F003 帳號與角色管理', () => {
@@ -172,7 +172,7 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
       within(dialog).getByText('上游同步帳號，姓名由上游系統維護。'),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByText('上游同步帳號，公司／部門／職位由上游系統維護。'),
+      within(dialog).getByText('上游同步帳號，公司／部門／資位／職位由上游系統維護。'),
     ).toBeInTheDocument();
   });
 
@@ -208,24 +208,30 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
     );
   });
 
-  it('G-ADM-001 清單還原 公司/部門/職位/最後登入 欄', async () => {
+  it('G-ADM-001 清單還原 公司/部門/資位/職位/最後登入 欄', async () => {
     mockAuth('SysAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
-    // 欄位標題（prototype 08 之 10 欄）
+    // 欄位標題（prototype 08 之 11 欄；🔵 AC-P28：資位與職位相鄰且順序固定）
     expect(screen.getByText('公司')).toBeInTheDocument();
     expect(screen.getByText('部門')).toBeInTheDocument();
+    expect(screen.getByText('資位')).toBeInTheDocument();
     expect(screen.getByText('職位')).toBeInTheDocument();
     expect(screen.getByText('最後登入')).toBeInTheDocument();
-    // 李慧玲列之公司/部門/職位/最後登入值
+    const heads = Array.from(document.querySelectorAll('thead th')).map((th) => th.textContent);
+    expect(heads).toEqual([
+      '姓名', '帳號', '公司', '部門', '資位', '職位', '來源', '角色', '狀態', '最後登入', '操作',
+    ]);
+    // 李慧玲列之公司/部門/資位/職位/最後登入值
     const row = screen.getByText('李慧玲').closest('tr')!;
     expect(within(row).getByText('債權管理部 / 法催一室')).toBeInTheDocument();
     expect(within(row).getByText('內控管理師')).toBeInTheDocument();
+    expect(within(row).getByText('事務一般職')).toBeInTheDocument();
     expect(within(row).getByText(/2026-07-16/)).toBeInTheDocument();
     expect(within(row).getAllByText('和潤企業股份有限公司').length).toBeGreaterThan(0);
   });
 
-  it('職位為 null（上游對照查無）→ 顯示破折號，不顯示空白或 null', async () => {
+  it('資位為 null（上游對照查無）→ 顯示破折號，不顯示空白或 null', async () => {
     mockAuth('SysAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('周立群')).toBeInTheDocument());
@@ -545,6 +551,16 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
       { companyCode: 'AS', code: 'D01', name: '經理' },
       { companyCode: 'AE', code: 'M01', name: '電能工程師' },
     ];
+    /**
+     * 🔵 AC-P29 職位主檔（← VW_JOB_FUN）。取上游實查真值：`C04` 於 AS＝處長、於 AD＝部長
+     * （語意相反）——本 fixture 之 AE 刻意不含 `C04`，使「跨公司 fallback 一旦存在就會顯示
+     * 他公司職位」成為可被斷言的失效模式。
+     */
+    const JOB_POSITIONS = [
+      { companyCode: 'AS', code: 'C04', name: '處長' },
+      { companyCode: 'AS', code: 'N03', name: '營業一般職' },
+      { companyCode: 'AE', code: 'M03', name: '事務一般職' },
+    ];
     const COMPANIES = [
       { companyCode: 'AS', companyName: '和潤企業股份有限公司' },
       { companyCode: 'AE', companyName: '和潤電能' },
@@ -554,9 +570,10 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
       vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
       vi.mocked(endpoints.getOrgUnits).mockResolvedValue(ORG_UNITS_MULTI);
       vi.mocked(endpoints.getJobTitles).mockResolvedValue(JOB_TITLES);
+      vi.mocked(endpoints.getJobPositions).mockResolvedValue(JOB_POSITIONS);
     });
 
-    it('AC-P16 建立 modal：切換公司後，已選部門與職位皆清空，候選重新以新公司計算', async () => {
+    it('AC-P16 建立 modal：切換公司後，已選部門與資位皆清空，候選重新以新公司計算', async () => {
       mockAuth('SysAdmin');
       renderPage();
       await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
@@ -566,7 +583,7 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
       const orgSel = within(dialog).getByLabelText(/部門/) as HTMLSelectElement;
       await userEvent.selectOptions(orgSel, 'JAC00');
       expect(orgSel.value).toBe('JAC00');
-      const jobSel = within(dialog).getByLabelText(/職位/) as HTMLSelectElement;
+      const jobSel = within(dialog).getByLabelText(/資位/) as HTMLSelectElement;
       await userEvent.selectOptions(jobSel, 'D01');
       expect(jobSel.value).toBe('D01');
 
@@ -577,7 +594,7 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
       expect(jobSel.value).toBe('');
       // AE 無 ORG_UNIT（AC-P26）→ 部門候選應重新計算為空，不得殘留 AS 之審查室選項
       expect(within(orgSel).queryByText('營運管理部 / 審查室')).not.toBeInTheDocument();
-      // 職位候選重新以 AE 計算：AS 之「經理」不應出現，AE 之「電能工程師」應出現
+      // 資位候選重新以 AE 計算：AS 之「經理」不應出現，AE 之「電能工程師」應出現
       expect(within(jobSel).queryByText('經理')).not.toBeInTheDocument();
       expect(within(jobSel).getByText('電能工程師')).toBeInTheDocument();
     });
@@ -638,7 +655,7 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
       const companySel = within(dialog).getByLabelText(/公司/) as HTMLSelectElement;
       expect(companySel.value).toBe('AE'); // 該帳號自身之公司，非操作者之 AS
       expect(companySel).not.toBeDisabled();
-      const jobSel = within(dialog).getByLabelText(/職位/) as HTMLSelectElement;
+      const jobSel = within(dialog).getByLabelText(/資位/) as HTMLSelectElement;
       expect(jobSel.value).toBe('M01');
       expect(jobSel).not.toBeDisabled();
       // 部門欄之停用原因＝AC-P26 資料現實，不得顯示上游唯讀提示（該帳號為 manual，不應觸發）。
@@ -679,7 +696,7 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
       expect(within(dialog).queryByText('此公司尚未同步組織主檔，暫無部門可選；可留空建立，清單顯示「—」。')).not.toBeInTheDocument();
     });
 
-    it('AC-P19 編輯 upstream 帳號：公司／部門／職位（連同姓名／密碼）四欄皆唯讀', async () => {
+    it('AC-P19／AC-P32 編輯 upstream 帳號：公司／部門／資位／職位（連同姓名／密碼）皆唯讀', async () => {
       mockAuth('SysAdmin');
       renderPage(); // 預設 ROWS 之 a2（王小明）為 upstream
       await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
@@ -688,7 +705,114 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
       const dialog = screen.getByRole('dialog', { name: /編輯帳號/ });
       expect(within(dialog).getByLabelText(/公司/)).toBeDisabled();
       expect(within(dialog).getByLabelText(/部門/)).toBeDisabled();
+      expect(within(dialog).getByLabelText(/資位/)).toBeDisabled();
       expect(within(dialog).getByLabelText(/職位/)).toBeDisabled();
+    });
+
+    /* ===== 🔵 2026-08-31 資位／職位拆欄 delta（AC-P28～AC-P32） ===== */
+
+    it('AC-P29 建立 modal：職位候選＝該公司之 JOB_POSITION，依 code 昇冪，且不含他公司之代碼', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: /建立帳號/ }));
+      const dialog = screen.getByRole('dialog', { name: /建立手動帳號/ });
+      const posSel = within(dialog).getByLabelText(/職位/) as HTMLSelectElement;
+      // 預選公司＝操作者之 AS：候選為 C04／N03（＋未設定空選項），不得出現 AE 之「事務一般職」
+      const labels = Array.from(posSel.options).map((o) => o.textContent);
+      expect(labels).toEqual(['未設定', '處長', '營業一般職']);
+      expect(within(posSel).queryByText('事務一般職')).not.toBeInTheDocument();
+    });
+
+    it('AC-P31 建立 modal：切換公司後，職位之已選值一併清空、候選以新公司重算（三連動）', async () => {
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: /建立帳號/ }));
+      const dialog = screen.getByRole('dialog', { name: /建立手動帳號/ });
+      const posSel = within(dialog).getByLabelText(/職位/) as HTMLSelectElement;
+      await userEvent.selectOptions(posSel, 'C04');
+      expect(posSel.value).toBe('C04');
+
+      await userEvent.selectOptions(
+        within(dialog).getByLabelText(/公司/) as HTMLSelectElement,
+        'AE',
+      );
+      expect(posSel.value).toBe(''); // 已選值清空
+      await waitFor(() =>
+        expect(within(posSel).getByText('事務一般職')).toBeInTheDocument(),
+      );
+      // 🔴 AS 之 C04（處長）不得殘留：跨公司同碼語意可相反，殘留＝顯示錯誤職位
+      expect(within(posSel).queryByText('處長')).not.toBeInTheDocument();
+    });
+
+    it('AC-P30 建立送出：jobPositionCode 一併送出；未選 → null（空字串不得落地）', async () => {
+      mockAuth('SysAdmin');
+      vi.mocked(endpoints.createAccount).mockResolvedValue({} as never);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: /建立帳號/ }));
+      const dialog = screen.getByRole('dialog', { name: /建立手動帳號/ });
+      await userEvent.type(within(dialog).getByLabelText(/帳號/), '30099');
+      await userEvent.type(within(dialog).getByLabelText(/初始密碼/), 'pw');
+      await userEvent.type(within(dialog).getByLabelText(/姓名/), '新人');
+      await userEvent.selectOptions(
+        within(dialog).getByLabelText(/職位/) as HTMLSelectElement,
+        'N03',
+      );
+      await userEvent.click(within(dialog).getByRole('button', { name: '建立' }));
+      await waitFor(() =>
+        expect(vi.mocked(endpoints.createAccount)).toHaveBeenCalledWith(
+          expect.objectContaining({ jobPositionCode: 'N03' }),
+        ),
+      );
+    });
+
+    it('AC-P31 編輯送出：公司／部門／資位／職位四者同送（不得只送三者）', async () => {
+      mockAuth('SysAdmin');
+      vi.mocked(endpoints.updateAccount).mockResolvedValue({} as never);
+      const manualAS = {
+        id: 'm-as2', loginId: '30020', employeeNo: null, name: '陳小美', email: null,
+        orgCode: 'JAC00', roleCode: 'User', status: 'active', source: 'manual', disableReason: null,
+        company: '和潤企業股份有限公司', department: '營運管理部審查室', title: null,
+        position: '處長', companyCode: 'AS', jobTitleCode: null, jobPositionCode: 'C04',
+      } as unknown as AccountView;
+      vi.mocked(endpoints.getAccounts).mockResolvedValue([manualAS]);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('陳小美')).toBeInTheDocument());
+      const row = screen.getByText('陳小美').closest('tr')!;
+      await userEvent.click(within(row).getByRole('button', { name: '編輯' }));
+      const dialog = screen.getByRole('dialog', { name: /編輯帳號/ });
+      // AC-P19：職位以現值預填
+      expect((within(dialog).getByLabelText(/職位/) as HTMLSelectElement).value).toBe('C04');
+      await userEvent.click(within(dialog).getByRole('button', { name: '儲存' }));
+      await waitFor(() =>
+        expect(vi.mocked(endpoints.updateAccount)).toHaveBeenCalledWith(
+          'm-as2',
+          expect.objectContaining({
+            companyCode: 'AS',
+            orgCode: 'JAC00',
+            jobTitleCode: null,
+            jobPositionCode: 'C04',
+          }),
+        ),
+      );
+    });
+
+    it('AC-P28 清單：職位為 null（上游代碼查無對照，如實查之 B20）→ 顯示「—」', async () => {
+      mockAuth('SysAdmin');
+      const noPos = {
+        id: 'np1', loginId: '20521', employeeNo: null, name: '林建宏', email: null,
+        orgCode: null, roleCode: 'User', status: 'active', source: 'upstream', disableReason: null,
+        company: '和潤企業股份有限公司', department: '信用審查部 / 企金室',
+        title: '資深專員', position: null, companyCode: 'AS', jobPositionCode: 'B20',
+      } as unknown as AccountView;
+      vi.mocked(endpoints.getAccounts).mockResolvedValue([noPos]);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('林建宏')).toBeInTheDocument());
+      const row = screen.getByText('林建宏').closest('tr')!;
+      expect(within(row).getByText('資深專員')).toBeInTheDocument(); // 資位仍有值
+      expect(within(row).getAllByText('—').length).toBeGreaterThan(0); // 職位為「—」
     });
 
     it('建立 modal：姓名留空送出 → 顯示行內錯誤「必要欄位缺漏」（沿用既有帳號留空之逐字錯誤文案），不呼叫 createAccount', async () => {

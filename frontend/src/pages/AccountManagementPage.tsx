@@ -9,6 +9,7 @@ import {
   getCompanies,
   getOrgUnits,
   getJobTitles,
+  getJobPositions,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey, ROLE_CODES } from '../domain/function-matrix';
@@ -25,7 +26,9 @@ import {
   ORG_EMPTY_NOTICE,
   PROFILE_UNSET_LABEL,
   jobOptionsFor,
+  jobPositionOptionsFor,
   mergeJobTitles,
+  mergeJobPositions,
   normalizeProfileCode,
   orgOptionsFor,
   unitsOf,
@@ -38,6 +41,7 @@ import { useToast } from '../components/useToast';
 import type {
   AccountView,
   CompanyRecord,
+  JobPositionRecord,
   JobTitleRecord,
   OrgUnitRecord,
 } from '../api/types';
@@ -216,31 +220,37 @@ function asArray<T>(v: readonly T[] | null | undefined): T[] {
   return Array.isArray(v) ? [...v] : [];
 }
 
-/** F003 delta：建立/編輯 modal 共用之基本資料三欄狀態（皆為**代碼**，空字串＝未設定）。 */
+/** F003 delta：建立/編輯 modal 共用之基本資料四欄狀態（皆為**代碼**，空字串＝未設定）。 */
 interface ProfileValue {
   companyCode: string;
   orgCode: string;
+  /** 資位（JOB_TITLE.code）。 */
   jobTitleCode: string;
+  /** 職位（JOB_POSITION.code；AC-P31）。 */
+  jobPositionCode: string;
 }
 
-/** 三欄所需之主檔（由頁面層載入一次後往下傳，避免各 modal 各自重抓）。 */
+/** 四欄所需之主檔（由頁面層載入一次後往下傳，避免各 modal 各自重抓）。 */
 interface ProfileMaster {
   companies: CompanyRecord[];
   orgUnits: OrgUnitRecord[];
   jobTitles: JobTitleRecord[];
-  /** 首次選到某公司時補抓該公司之職稱（AC-P14 之 `?companyCode=`）；已抓過即 no-op。 */
+  jobPositions: JobPositionRecord[];
+  /** 首次選到某公司時補抓該公司之資位（AC-P14 之 `?companyCode=`）；已抓過即 no-op。 */
   ensureJobTitles: (companyCode: string) => void;
+  /** 同上，補抓該公司之職位（AC-P29 之 `?companyCode=`）。 */
+  ensureJobPositions: (companyCode: string) => void;
   /** 🔴 B 階段（多公司）：同上，補抓該公司之組織（`GET /org-units?companyCode=`）。 */
   ensureOrgUnits: (companyCode: string) => void;
 }
 
 /**
- * 公司／部門／職位三欄（F003 delta AC-P13～AC-P17／AC-P19／AC-P26）。
+ * 公司／部門／資位／職位四欄（F003 delta AC-P13～AC-P17／AC-P19／AC-P26／AC-P29～AC-P32）。
  * 建立與編輯 modal **共用本元件**——prototype 兩處為逐字相同之 `fillCompanySelect`／`fillOrgSelect`／
  * `fillJobSelect` 呼叫（`prototypes/08-account-management.html:551-552`／`:588-590`），共用即不可能各自漂移。
  *
- * 🔵 AC-P16 雙連動：公司值一變更，部門與職位之**已選值皆清空**、候選皆以新公司重算
- *    （對應後端 AC-P10b「變更公司須於同請求重新給值、嚴禁靜默沿用舊代碼」）。
+ * 🔵 AC-P16／AC-P31 三連動：公司值一變更，部門／資位／職位之**已選值皆清空**、候選皆以新公司
+ *    重算（對應後端 AC-P10b「變更公司須於同請求重新給值、嚴禁靜默沿用舊代碼」）。
  * 🔵 AC-P17：部門選項文字一律由 `buildOrgPath(該公司之 units, orgCode)` 產生——`buildOrgPath` 之簽章
  *    刻意不變，複合鍵（AC-P23d）由本呼叫端先以 `unitsOf` 收斂後負責。
  * ⚠ 停用狀態一律由 props 推導（React 每次開啟皆重新掛載），故不存在 prototype 之
@@ -263,7 +273,15 @@ function ProfileFields({
   companyHint?: string;
   jobHint?: string;
 }): JSX.Element {
-  const { companies, orgUnits, jobTitles, ensureJobTitles, ensureOrgUnits } = master;
+  const {
+    companies,
+    orgUnits,
+    jobTitles,
+    jobPositions,
+    ensureJobTitles,
+    ensureJobPositions,
+    ensureOrgUnits,
+  } = master;
   const companyUnits = useMemo(
     () => unitsOf(orgUnits, value.companyCode),
     [orgUnits, value.companyCode],
@@ -276,12 +294,22 @@ function ProfileFields({
     () => jobOptionsFor(jobTitles, value.companyCode),
     [jobTitles, value.companyCode],
   );
+  const positionOptions = useMemo(
+    () => jobPositionOptionsFor(jobPositions, value.companyCode),
+    [jobPositions, value.companyCode],
+  );
 
   useEffect(() => {
     ensureJobTitles(value.companyCode);
+    ensureJobPositions(value.companyCode);
     // 🔴 B 階段：組織亦須逐公司補抓，否則他公司帳號之部門下拉恆為空（見 ensureOrgUnits）。
     ensureOrgUnits(value.companyCode);
-  }, [ensureJobTitles, ensureOrgUnits, value.companyCode]);
+  }, [
+    ensureJobTitles,
+    ensureJobPositions,
+    ensureOrgUnits,
+    value.companyCode,
+  ]);
 
   // AC-P26：該公司無 ORG_UNIT → 部門下拉停用＋空狀態說明；**不阻擋建立**（orgCode 送 null）。
   const orgEmpty = value.companyCode !== '' && orgOptions.length === 0;
@@ -289,6 +317,8 @@ function ProfileFields({
     `w-full px-3 py-2 rounded-md border border-slate-300 text-sm ${disabled ? 'bg-slate-50' : 'bg-white'}`;
   const orgDisabled = readOnly || value.companyCode === '' || orgOptions.length === 0;
   const jobDisabled = readOnly || value.companyCode === '';
+  // AC-P26 之「候選為空亦不停用」同樣適用於職位：僅公司無值時停用。
+  const positionDisabled = readOnly || value.companyCode === '';
 
   return (
     <>
@@ -301,8 +331,13 @@ function ProfileFields({
           value={value.companyCode}
           disabled={readOnly}
           onChange={(e) =>
-            // AC-P16：換公司 → 部門與職位之已選值雙雙清空
-            onChange({ companyCode: e.target.value, orgCode: '', jobTitleCode: '' })
+            // AC-P16／AC-P31：換公司 → 部門／資位／職位之已選值三者皆清空
+            onChange({
+              companyCode: e.target.value,
+              orgCode: '',
+              jobTitleCode: '',
+              jobPositionCode: '',
+            })
           }
           className={selectClass(readOnly)}
         >
@@ -336,7 +371,7 @@ function ProfileFields({
       </div>
       <div>
         <label htmlFor={`${idPrefix}Job`} className="block text-sm font-medium text-slate-700 mb-1">
-          職位
+          資位
         </label>
         <select
           id={`${idPrefix}Job`}
@@ -349,6 +384,25 @@ function ProfileFields({
           {jobOptions.map((j) => (
             <option key={j.code} value={j.code}>
               {j.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}Position`} className="block text-sm font-medium text-slate-700 mb-1">
+          職位
+        </label>
+        <select
+          id={`${idPrefix}Position`}
+          value={value.jobPositionCode}
+          disabled={positionDisabled}
+          onChange={(e) => onChange({ ...value, jobPositionCode: e.target.value })}
+          className={selectClass(positionDisabled)}
+        >
+          <option value="">{PROFILE_UNSET_LABEL}</option>
+          {positionOptions.map((p) => (
+            <option key={p.code} value={p.code}>
+              {p.name}
             </option>
           ))}
         </select>
@@ -374,12 +428,14 @@ export function AccountManagementPage(): JSX.Element {
   const [fRole, setFRole] = useState('');
   const [fStatus, setFStatus] = useState('');
 
-  // F003 delta：公司／部門／職位之主檔（AC-P13／AC-P14／AC-P15）。載入失敗一律降級為空集合——
-  // 三欄皆為選填，主檔不可用時仍應能建立帳號（只是無候選可選），不得使整頁壞掉。
+  // F003 delta：公司／部門／資位／職位之主檔（AC-P13／AC-P14／AC-P15／AC-P29）。載入失敗一律
+  // 降級為空集合——四欄皆為選填，主檔不可用時仍應能建立帳號（只是無候選可選），不得使整頁壞掉。
   const [companies, setCompanies] = useState<CompanyRecord[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
   const [jobTitles, setJobTitles] = useState<JobTitleRecord[]>([]);
+  const [jobPositions, setJobPositions] = useState<JobPositionRecord[]>([]);
   const loadedJobCompanies = useRef<Set<string>>(new Set());
+  const loadedPositionCompanies = useRef<Set<string>>(new Set());
   /** 🔴 B 階段（多公司）：已載入組織之公司集合（比照 loadedJobCompanies 之累積模式）。 */
   const loadedOrgCompanies = useRef<Set<string>>(new Set());
 
@@ -411,7 +467,7 @@ export function AccountManagementPage(): JSX.Element {
   }, [canRead, load]);
 
   /**
-   * AC-P14：首次選到某公司時補抓該公司之職稱（`GET /job-titles?companyCode=`），累積去重後共用。
+   * AC-P14：首次選到某公司時補抓該公司之資位（`GET /job-titles?companyCode=`），累積去重後共用。
    * 回應仍以 `companyCode` 於前端再過濾一次（`jobOptionsFor`）——複合鍵為顯示與寫入之唯一權威，
    * 不倚賴後端過濾之副作用（AC-P23e）。
    */
@@ -420,6 +476,21 @@ export function AccountManagementPage(): JSX.Element {
     loadedJobCompanies.current.add(companyCode);
     void Promise.resolve(getJobTitles(companyCode))
       .then((rows) => setJobTitles((prev) => mergeJobTitles(prev, asArray(rows))))
+      .catch(() => undefined);
+  }, []);
+
+  /**
+   * AC-P29：首次選到某公司時補抓該公司之職位（`GET /job-positions?companyCode=`）。
+   * 模式與 `ensureJobTitles` 相同；🔴 但候選**絕不可**跨公司共用（同代碼跨公司語意可相反），
+   * 故 `jobPositionOptionsFor` 於前端再以 companyCode 精確過濾一次。
+   */
+  const ensureJobPositions = useCallback((companyCode: string) => {
+    if (!companyCode || loadedPositionCompanies.current.has(companyCode)) return;
+    loadedPositionCompanies.current.add(companyCode);
+    void Promise.resolve(getJobPositions(companyCode))
+      .then((rows) =>
+        setJobPositions((prev) => mergeJobPositions(prev, asArray(rows))),
+      )
       .catch(() => undefined);
   }, []);
 
@@ -464,9 +535,29 @@ export function AccountManagementPage(): JSX.Element {
     if (canRead) ensureJobTitles(user?.companyCode ?? '');
   }, [canRead, user?.companyCode, ensureJobTitles]);
 
+  useEffect(() => {
+    if (canRead) ensureJobPositions(user?.companyCode ?? '');
+  }, [canRead, user?.companyCode, ensureJobPositions]);
+
   const profileMaster = useMemo<ProfileMaster>(
-    () => ({ companies, orgUnits, jobTitles, ensureJobTitles, ensureOrgUnits }),
-    [companies, orgUnits, jobTitles, ensureJobTitles, ensureOrgUnits],
+    () => ({
+      companies,
+      orgUnits,
+      jobTitles,
+      jobPositions,
+      ensureJobTitles,
+      ensureJobPositions,
+      ensureOrgUnits,
+    }),
+    [
+      companies,
+      orgUnits,
+      jobTitles,
+      jobPositions,
+      ensureJobTitles,
+      ensureJobPositions,
+      ensureOrgUnits,
+    ],
   );
 
   const shown = useMemo(() => {
@@ -560,13 +651,14 @@ export function AccountManagementPage(): JSX.Element {
       {/* table */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[1020px]">
+          <table className="w-full text-sm min-w-[1120px]">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
               <tr>
                 <th className="text-left font-medium px-3 py-2.5">姓名</th>
                 <th className="text-left font-medium px-3 py-2.5">帳號</th>
                 <th className="text-left font-medium px-3 py-2.5">公司</th>
                 <th className="text-left font-medium px-3 py-2.5">部門</th>
+                <th className="text-left font-medium px-3 py-2.5">資位</th>
                 <th className="text-left font-medium px-3 py-2.5">職位</th>
                 <th className="text-left font-medium px-3 py-2.5">來源</th>
                 <th className="text-left font-medium px-3 py-2.5">角色</th>
@@ -589,7 +681,10 @@ export function AccountManagementPage(): JSX.Element {
                     <div className="truncate max-w-[200px]" title={a.department ?? '—'}>{a.department ?? '—'}</div>
                   </td>
                   <td className="px-3 py-2.5 text-slate-500">
-                    <div className="truncate max-w-[200px]" title={a.title ?? '—'}>{a.title ?? '—'}</div>
+                    <div className="truncate max-w-[140px]" title={a.title ?? '—'}>{a.title ?? '—'}</div>
+                  </td>
+                  <td className="px-3 py-2.5 text-slate-500">
+                    <div className="truncate max-w-[140px]" title={a.position ?? '—'}>{a.position ?? '—'}</div>
                   </td>
                   <td className="px-3 py-2.5"><SourceBadge source={a.source} /></td>
                   <td className="px-3 py-2.5">
@@ -770,11 +865,12 @@ function CreateModal({
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
-  // AC-P5：公司欄預選**操作者所屬公司**（可改選他公司）；部門／職位起始為未設定。
+  // AC-P5：公司欄預選**操作者所屬公司**（可改選他公司）；部門／資位／職位起始為未設定。
   const [profile, setProfile] = useState<ProfileValue>({
     companyCode: defaultCompanyCode,
     orgCode: '',
     jobTitleCode: '',
+    jobPositionCode: '',
   });
   const [roleCode, setRoleCode] = useState('ICSOPAdmin');
   const [busy, setBusy] = useState(false);
@@ -793,10 +889,11 @@ function CreateModal({
         password,
         roleCode,
         name: name.trim(),
-        // AC-P2：orgCode／jobTitleCode 空字串一律收斂為 null（空字串不得落地）。
+        // AC-P2：orgCode／jobTitleCode／jobPositionCode 空字串一律收斂為 null（空字串不得落地）。
         companyCode: profile.companyCode || undefined,
         orgCode: normalizeProfileCode(profile.orgCode),
         jobTitleCode: normalizeProfileCode(profile.jobTitleCode),
+        jobPositionCode: normalizeProfileCode(profile.jobPositionCode),
       });
       onCreated();
     } catch (e) {
@@ -826,8 +923,8 @@ function CreateModal({
             value={password}
             onChange={setPassword}
           />
-          {/* F003 delta AC-P3／AC-P13～AC-P17：姓名必填；公司為可跨公司改選之完整下拉；
-              部門與職位由公司連動（AC-P16），三者皆選填。 */}
+          {/* F003 delta AC-P3／AC-P13～AC-P17／AC-P29～AC-P31：姓名必填；公司為可跨公司改選之
+              完整下拉；部門／資位／職位由公司連動（AC-P16），四者皆選填。 */}
           <div>
             <label htmlFor="cName" className="block text-sm font-medium text-slate-700 mb-1">
               姓名 <span className="text-red-500">*</span>
@@ -847,8 +944,8 @@ function CreateModal({
             onChange={setProfile}
             master={master}
             readOnly={false}
-            companyHint="預設為您所屬公司，可改選其他公司；變更後部門與職位須重新選擇。"
-            jobHint="公司／部門／職位為選填；留空者於清單顯示「—」。"
+            companyHint="預設為您所屬公司，可改選其他公司；變更後部門、資位與職位須重新選擇。"
+            jobHint="公司／部門／資位／職位為選填；留空者於清單顯示「—」。"
           />
           <div>
             <label htmlFor="cRole" className="block text-sm font-medium text-slate-700 mb-1">
@@ -889,16 +986,18 @@ function EditModal({
   const upstream = target.source === 'upstream';
   const [name, setName] = useState(target.name ?? '');
   const [password, setPassword] = useState('');
-  // AC-P19：三欄以該帳號**現值**預填——公司為該帳號自身之 companyCode（非操作者之公司）。
+  // AC-P19：四欄以該帳號**現值**預填——公司為該帳號自身之 companyCode（非操作者之公司）。
   const [profile, setProfile] = useState<ProfileValue>({
     companyCode: target.companyCode ?? '',
     orgCode: target.orgCode ?? '',
     jobTitleCode: target.jobTitleCode ?? '',
+    jobPositionCode: target.jobPositionCode ?? '',
   });
   const [busy, setBusy] = useState(false);
 
   async function submit(): Promise<void> {
-    // 上游帳號姓名/密碼/公司/部門/職位皆唯讀 → 無可儲存欄位，直接關閉（後端亦以 AC-P11 為權威）。
+    // 上游帳號姓名/密碼/公司/部門/資位/職位皆唯讀 → 無可儲存欄位，直接關閉
+    // （後端亦以 AC-P11／AC-P32 為權威）。
     if (upstream) {
       onClose();
       return;
@@ -908,13 +1007,14 @@ function EditModal({
       await updateAccount(target.id, {
         name: name.trim(),
         password: password || undefined,
-        // AC-P10b：公司／部門／職位一律**三者同送**（雙連動已保證不會殘留他公司代碼）。
+        // AC-P10b：公司／部門／資位／職位一律**四者同送**（三連動已保證不會殘留他公司代碼）。
         // 公司主檔不可用（載入失敗 → 下拉無值）時整組缺席＝不變更（AC-P9），避免誤把現值清空。
         ...(profile.companyCode
           ? {
               companyCode: profile.companyCode,
               orgCode: normalizeProfileCode(profile.orgCode),
               jobTitleCode: normalizeProfileCode(profile.jobTitleCode),
+              jobPositionCode: normalizeProfileCode(profile.jobPositionCode),
             }
           : {}),
       });
@@ -940,8 +1040,8 @@ function EditModal({
               <p className="text-[10px] text-slate-400 mt-1">上游同步帳號，姓名由上游系統維護。</p>
             )}
           </div>
-          {/* F003 delta AC-P19：公司／部門／職位以現值預填；manual 四欄皆可編輯（公司為可改選之完整
-              下拉，AC-P10）；upstream 連同姓名一律 disabled（AC-P11，後端為權威）。 */}
+          {/* F003 delta AC-P19：公司／部門／資位／職位以現值預填；manual 五欄皆可編輯（公司為可改選
+              之完整下拉，AC-P10）；upstream 連同姓名一律 disabled（AC-P11／AC-P32，後端為權威）。 */}
           <ProfileFields
             idPrefix="e"
             value={profile}
@@ -949,9 +1049,13 @@ function EditModal({
             master={master}
             readOnly={upstream}
             companyHint={
-              upstream ? undefined : '變更公司後，部門與職位須重新選擇（舊代碼於新公司不適用）。'
+              upstream
+                ? undefined
+                : '變更公司後，部門、資位與職位須重新選擇（舊代碼於新公司不適用）。'
             }
-            jobHint={upstream ? '上游同步帳號，公司／部門／職位由上游系統維護。' : undefined}
+            jobHint={
+              upstream ? '上游同步帳號，公司／部門／資位／職位由上游系統維護。' : undefined
+            }
           />
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">目前角色</label>

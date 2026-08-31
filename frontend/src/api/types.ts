@@ -64,10 +64,16 @@ export interface AccountView {
   /** 部門名（GET /admin/accounts 清單富化；orgCode→ORG_UNIT 名）。 */
   department?: string | null;
   /**
-   * 職位名（清單富化；jobTitleCode→JOB_TITLE 名，見後端 job-title-directory 之兩段式解析）。
+   * 資位名（清單富化；jobTitleCode→JOB_TITLE 名，見後端 job-title-directory 之兩段式解析）。
    * 單筆建立/編輯回傳不含 → undefined；查無對照 → null（皆顯示「—」）。
    */
   title?: string | null;
+  /**
+   * 職位名（清單富化；jobPositionCode→JOB_POSITION 名）。
+   * 🔴 後端解析為**單段精確**（(companyCode, code) 命中才有值）——同代碼跨公司語意可相反，
+   * 刻意不做資位那種跨公司 fallback。單筆建立/編輯回傳不含 → undefined；查無 → null（顯示「—」）。
+   */
+  position?: string | null;
   /**
    * F041 一般使用者子分類（'business' / 'other'）。供角色指派 modal 預選現值；
    * 非 User 角色亦可能保有此值（AC-36 休眠但保留），呈現與否由 isSubtypeApplicable 決定。
@@ -75,11 +81,13 @@ export interface AccountView {
   userSubtype?: string | null;
   /**
    * F003 delta AC-P19：該帳號自身之公司代碼（**非**操作者之公司）。編輯 modal 之公司欄以此預填，
-   * 部門／職位之候選與解析亦以此為 (companyCode, code) 複合鍵之前半（AC-P23d／AC-P23e）。
+   * 部門／資位／職位之候選與解析亦以此為 (companyCode, code) 複合鍵之前半（AC-P23d／AC-P23e／AC-P28）。
    */
   companyCode?: string;
-  /** F003 delta AC-P19：職位代碼（JOB_TITLE.code）。編輯 modal 之職位欄以此預填；null＝未設定。 */
+  /** F003 delta AC-P19：資位代碼（JOB_TITLE.code）。編輯 modal 之資位欄以此預填；null＝未設定。 */
   jobTitleCode?: string | null;
+  /** F003 delta AC-P31：職位代碼（JOB_POSITION.code）。編輯 modal 之職位欄以此預填；null＝未設定。 */
+  jobPositionCode?: string | null;
 }
 
 export interface AccountFilters {
@@ -723,11 +731,22 @@ export interface CompanyRecord {
 }
 
 /**
- * 職稱（GET /job-titles；F003 delta AC-P14）。唯一鍵為 (companyCode, code) 複合鍵——
+ * 職稱＝畫面「資位」（GET /job-titles；F003 delta AC-P14）。唯一鍵為 (companyCode, code) 複合鍵——
  * 跨公司可有相同 code 但不同 name（如 AE 之 C01＝高級協理 vs AS 之 C01＝協理），
  * 故候選與解析一律以複合鍵比對，不得僅以 code 比對（AC-P23e）。
  */
 export interface JobTitleRecord {
+  companyCode: string;
+  code: string;
+  name: string;
+}
+
+/**
+ * 職位（GET /job-positions；F003 delta AC-P29）。唯一鍵同為 (companyCode, code) 複合鍵，
+ * 但比資位更嚴格：跨公司同代碼之語意可**相反**（實測 D04 在 AS＝營業經理、在 AD＝科長；
+ * C04 在 AD＝部長、他家＝處長），故候選與解析**絕不可**跨公司 fallback（AC-P28）。
+ */
+export interface JobPositionRecord {
   companyCode: string;
   code: string;
   name: string;

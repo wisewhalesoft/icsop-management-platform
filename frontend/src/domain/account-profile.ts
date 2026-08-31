@@ -1,23 +1,29 @@
 /**
- * F003 手動帳號基本資料（公司／部門／職位）— 前端純函式與逐字文案常數。
+ * F003 手動帳號基本資料（公司／部門／資位／職位）— 前端純函式與逐字文案常數。
  *
  * 規格權威：docs/specs/features/F003-account-role-management.md#manual-account-profile
  *          （AC-P13／AC-P14／AC-P16／AC-P17／AC-P23b／AC-P26）
  * 文案權威：prototypes/08-account-management.html 之具名常數
  *          `COMPANY_ALL_LABEL`（:335）／`ORG_EMPTY_NOTICE`（:339）／`PROFILE_UNSET_LABEL`（:330）。
  *
- * ⚠ 部門與職位之解析鍵一律為 **(companyCode, code) 複合鍵**（AC-P23d／AC-P23e）——不同公司可有
- *   相同 `orgCode`／`code` 但不同單位/職稱名（如 AE 之 `C01`＝高級協理 vs AS 之 `C01`＝協理），
- *   僅以代碼比對會解析出他公司的名稱。本檔全部候選函式皆以 `companyCode` 為第一過濾條件。
+ * ⚠ 部門／資位／職位之解析鍵一律為 **(companyCode, code) 複合鍵**（AC-P23d／AC-P23e／AC-P28）
+ *   ——不同公司可有相同 `orgCode`／`code` 但不同單位/名稱（如 AE 之 `C01`＝高級協理 vs AS 之
+ *   `C01`＝協理），僅以代碼比對會解析出他公司的名稱。本檔全部候選函式皆以 `companyCode` 為第一
+ *   過濾條件。🔴 職位尤甚：跨公司同代碼語意可**相反**（`D04` 在 AS＝營業經理、在 AD＝科長）。
  * ⚠ 部門顯示字串**不在本檔產生**：一律由 `domain/org-path.ts` 之 `buildOrgPath` 負責（AC-P17，
  *   全站唯一之組織路徑算法）。呼叫端須先以 `unitsOf` 取該公司之 units 再傳入——`buildOrgPath`
  *   之簽章刻意不變（prototype :372-376 同一處置），複合鍵由呼叫端負責。
  */
 
-import type { JobTitleRecord, OrgUnitRecord } from '../api/types';
+import type {
+  JobPositionRecord,
+  JobTitleRecord,
+  OrgUnitRecord,
+} from '../api/types';
 
 /**
- * AC-P19：`orgCode`／`jobTitleCode` 為 `null` 時，部門／職位下拉所選之空選項文字。
+ * AC-P19：`orgCode`／`jobTitleCode`／`jobPositionCode` 為 `null` 時，部門／資位／職位下拉
+ * 所選之空選項文字。
  * 選項 value 為空字串，送出前經 `normalizeProfileCode` 收斂為 `null`（AC-P2）。
  */
 export const PROFILE_UNSET_LABEL = '未設定';
@@ -63,7 +69,7 @@ export function orgOptionsFor(
 }
 
 /**
- * 職位下拉之候選（AC-P14／AC-P16）：該公司之 `JOB_TITLE`，依 `code` 昇冪。
+ * 資位下拉之候選（AC-P14／AC-P16）：該公司之 `JOB_TITLE`，依 `code` 昇冪。
  * ⚠ 以 `companyCode` **精確**過濾，不做顯示端之兩段式跨公司 fallback（與 AC-P7 之寫入驗證同一集合）。
  */
 export function jobOptionsFor(
@@ -90,7 +96,32 @@ export function mergeJobTitles(
 }
 
 /**
- * AC-P2：`orgCode`／`jobTitleCode` 之送出正規化——trim 後為空字串者一律收斂為 `null`
+ * 職位下拉之候選（AC-P29／AC-P31）：該公司之 `JOB_POSITION`，依 `code` 昇冪。
+ * 🔴 以 `companyCode` **精確**過濾——此處不只是「與寫入驗證同一集合」（AC-P30），
+ * 更因跨公司同代碼語意可相反，混入他公司候選會讓人選到語意完全不同的職位。
+ */
+export function jobPositionOptionsFor(
+  positions: readonly JobPositionRecord[],
+  companyCode: string | null | undefined,
+): JobPositionRecord[] {
+  if (!companyCode) return [];
+  return positions
+    .filter((p) => p.companyCode === companyCode)
+    .sort((a, b) => a.code.localeCompare(b.code));
+}
+
+/** 累積多次 `GET /job-positions?companyCode=` 之結果，去重規則同 `mergeJobTitles`。 */
+export function mergeJobPositions(
+  prev: readonly JobPositionRecord[],
+  next: readonly JobPositionRecord[],
+): JobPositionRecord[] {
+  const byKey = new Map(prev.map((p) => [`${p.companyCode}\0${p.code}`, p]));
+  for (const p of next) byKey.set(`${p.companyCode}\0${p.code}`, p);
+  return Array.from(byKey.values());
+}
+
+/**
+ * AC-P2：`orgCode`／`jobTitleCode`／`jobPositionCode` 之送出正規化——trim 後為空字串者一律收斂為 `null`
  * （**空字串不得落地**，比照 F040 `normalizeSubcategory` 之慣例）。
  */
 export function normalizeProfileCode(v: string | null | undefined): string | null {

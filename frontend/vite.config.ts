@@ -46,12 +46,14 @@ export default defineConfig({
       '/public': { target: BACKEND_TARGET, changeOrigin: true, bypass: spaBypass },
       // /org-units 純後端 API（無同名 SPA 路由）→ 直接代理。前台部門篩選與文件建立/編輯 org 下拉來源。
       '/org-units': { target: BACKEND_TARGET, changeOrigin: true },
-      // /companies、/job-titles 純後端 API（無同名 SPA 路由）→ 直接代理。F003 手動帳號基本資料之
-      // 公司／職位主檔（AC-P15／AC-P14）：建立/編輯帳號之公司下拉、職位下拉與清單公司篩選器之唯一來源。
+      // /companies、/job-titles、/job-positions 純後端 API（無同名 SPA 路由）→ 直接代理。
+      // F003 手動帳號基本資料之 公司／資位／職位主檔（AC-P15／AC-P14／AC-P29）：建立/編輯帳號之
+      // 公司下拉、資位下拉、職位下拉與清單公司篩選器之唯一來源。
       // 漏代理時 fetch 收到 index.html，JSON 解析失敗被 .catch 收斂為空陣列 → 三處下拉「永遠沒有選項」
       // 且無任何錯誤訊息（與 /persons 同一坑，本專案已踩過三次）。
       '/companies': { target: BACKEND_TARGET, changeOrigin: true },
       '/job-titles': { target: BACKEND_TARGET, changeOrigin: true },
+      '/job-positions': { target: BACKEND_TARGET, changeOrigin: true },
       // /persons 純後端 API → 直接代理。F014 當責室長候選之唯一來源；漏代理時 fetch 收到 index.html，
       // JSON 解析失敗被 .catch 收斂為空陣列 → 下拉「永遠查無人員」且無錯誤訊息（實測踩到）。
       '/persons': { target: BACKEND_TARGET, changeOrigin: true },
