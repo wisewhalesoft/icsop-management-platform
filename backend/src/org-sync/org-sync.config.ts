@@ -10,7 +10,7 @@ export const SYNC_COMPIDS: readonly string[] = ['AS', 'AD', 'AE', 'AJ'];
 
 /**
  * 消失筆數閾值之**臨時覆寫**（`SYNC_DISAPPEARED_THRESHOLD`，0–1 之小數；未設 → `undefined`
- * ＝沿用 `DEFAULT_DISAPPEARED_THRESHOLD` 5%，契約 §7.3）。
+ * ＝沿用 `DEFAULT_DISAPPEARED_THRESHOLD` **10%**，契約 §7.3；2026-08-31 由草案 5% 校準）。
  *
  * 🔴 **僅供一次性切換作業**，平時**不得**設定於任何 `.env`：
  *   換人員主來源（契約 v2.0 §3.7）當下，本地在職集合來自舊來源、來源在職集合來自新來源，
