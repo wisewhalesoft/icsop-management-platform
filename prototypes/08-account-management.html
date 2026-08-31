@@ -10,7 +10,16 @@
          維持原值、日後改回一般使用者即沿用——示範 persona（陳彥廷）見 accounts 註解
        AC-02 → 未知 userSubtype 收斂為 'other'（fail-open，安全性由 DB NOT NULL + CHECK 保證）
      規格權威＝docs/specs/features/F041-user-subtype-business-scope.md -->
-<!-- 🔴 F003 手動帳號基本資料 delta（姓名／公司／部門／職位；2026-08-14 使用者直接裁定）
+<!-- 🔴 2026-08-31 資位／職位拆欄 delta（AC-P28～AC-P33，使用者裁定）：
+     ① 原「職位」欄之語意實為**資位**（職等：業務專員／辦事員／副理…，← VW_PERSONAL_JOB.JTITLE_NM），
+        已就地更名為「資位」；識別子（jobTitleCode／JOB_TITLE）維持不變，僅畫面文案改。
+     ② 新增真正的「職位」欄（職務位置：營業一般職／室長／處長…），
+        ← VW_PERSONNEL_SQL.JOB_CODE 對照 VW_JOB_FUN.(COMPID, CODE) → DESC_CHI。
+     ③ 清單 10 → 11 欄（資位／職位相鄰），min-w 1020 → 1120，兩欄各收至 max-w-[140px]。
+     ④ 建立／編輯 modal 新增「職位」下拉；公司連動由雙連動擴為**三連動**。
+     🔴 職位解析**單段精確、禁止跨公司 fallback**（同碼跨公司語意可相反），見 JOB_POSITIONS 註解。
+
+     🔴 F003 手動帳號基本資料 delta（姓名／公司／部門／職位；2026-08-14 使用者直接裁定）
      本檔已套用：①「建立手動帳號」modal 新增 姓名（必填）／公司／部門／職位（皆為主檔下拉、後三者選填）；
      ②「編輯帳號」modal 依 AC-P19 加上同三欄並以現值預填，source='upstream' 者連同姓名一律唯讀；
      ③ 建立流程之 `（待同步姓名）`／`（待同步）` 佔位字串**已作廢移除**，留空者於清單顯示「—」（AC-P18）。
@@ -126,13 +135,14 @@
 
   <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
-      <table id="acctTable" class="w-full text-sm min-w-[1020px]">
+      <table id="acctTable" class="w-full text-sm min-w-[1120px]">
         <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
           <tr>
             <th class="text-left font-medium px-3 py-2.5">姓名</th>
             <th class="text-left font-medium px-3 py-2.5">帳號</th>
             <th class="text-left font-medium px-3 py-2.5">公司</th>
             <th class="text-left font-medium px-3 py-2.5">部門</th>
+            <th class="text-left font-medium px-3 py-2.5">資位</th>
             <th class="text-left font-medium px-3 py-2.5">職位</th>
             <th class="text-left font-medium px-3 py-2.5">來源</th>
             <th class="text-left font-medium px-3 py-2.5">角色</th>
@@ -168,19 +178,22 @@
       <div><label class="block text-sm font-medium text-slate-700 mb-1">初始密碼 <span class="text-red-500">*</span></label>
         <div class="relative"><input id="cPw" type="password" value="Init@2026" class="w-full px-3 py-2 pr-10 rounded-md border border-slate-300 text-sm" />
           <button onclick="togglePw()" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><i id="pwIcon" data-lucide="eye" class="w-4 h-4"></i></button></div></div>
-      <!-- 🔴 F003 AC-P3／AC-P13～AC-P17：姓名必填；公司單一選項且鎖定；部門由公司連動；職位取自職稱主檔 -->
+      <!-- 🔴 F003 AC-P3／AC-P13～AC-P17／AC-P29～AC-P31：姓名必填；部門／資位／職位皆由公司連動；
+           資位取自職稱主檔（JOB_TITLE），職位取自職位主檔（JOB_POSITION ← VW_JOB_FUN） -->
       <div><label class="block text-sm font-medium text-slate-700 mb-1">姓名 <span class="text-red-500">*</span></label>
         <input id="cName" maxlength="30" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="例：陳美惠（上限 30 字）" />
         <p id="cNameErr" class="hidden mt-1 text-xs text-red-600 items-center gap-1"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i><span></span></p></div>
       <div><label class="block text-sm font-medium text-slate-700 mb-1">公司</label>
         <select id="cCompany" onchange="syncProfileOptions('c')" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"></select>
-        <p class="text-[10px] text-slate-400 mt-1">預設為您所屬公司，可改選其他公司；變更後部門與職位須重新選擇。</p></div>
+        <p class="text-[10px] text-slate-400 mt-1">預設為您所屬公司，可改選其他公司；變更後部門、資位與職位須重新選擇。</p></div>
       <div><label class="block text-sm font-medium text-slate-700 mb-1">部門</label>
         <select id="cOrg" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"></select>
         <p id="cOrgEmpty" class="hidden text-[10px] text-slate-400 mt-1"></p></div>
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">資位</label>
+        <select id="cJob" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"></select></div>
       <div><label class="block text-sm font-medium text-slate-700 mb-1">職位</label>
-        <select id="cJob" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"></select>
-        <p class="text-[10px] text-slate-400 mt-1">公司／部門／職位為選填；留空者於清單顯示「—」。</p></div>
+        <select id="cPosition" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"></select>
+        <p class="text-[10px] text-slate-400 mt-1">公司／部門／資位／職位為選填；留空者於清單顯示「—」。</p></div>
       <div><label class="block text-sm font-medium text-slate-700 mb-1">指派角色 <span class="text-red-500">*</span></label>
         <select id="cRole" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white">
           <option value="icsop_admin">ICSOP 管理員</option><option value="sysadmin">系統管理員</option><option value="supervisor">主管</option><option value="deptcontact">部門窗口</option><option value="user">一般使用者</option>
@@ -203,16 +216,18 @@
       <div><label class="block text-sm font-medium text-slate-700 mb-1">姓名</label>
         <input id="eName" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" />
         <p id="eNameHint" class="hidden text-[10px] text-slate-400 mt-1">上游同步帳號，姓名由上游系統維護。</p></div>
-      <!-- 🔴 F003 AC-P19：公司／部門／職位以現值預填；公司恆不可變更（AC-P10）；上游帳號連同姓名一律唯讀（AC-P11） -->
+      <!-- 🔴 F003 AC-P19：公司／部門／資位／職位以現值預填；上游帳號連同姓名一律唯讀（AC-P11／AC-P32） -->
       <div><label class="block text-sm font-medium text-slate-700 mb-1">公司</label>
         <select id="eCompany" onchange="syncProfileOptions('e')" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"></select>
-        <p id="eCompanyHint" class="text-[10px] text-slate-400 mt-1">變更公司後，部門與職位須重新選擇（舊代碼於新公司不適用）。</p></div>
+        <p id="eCompanyHint" class="text-[10px] text-slate-400 mt-1">變更公司後，部門、資位與職位須重新選擇（舊代碼於新公司不適用）。</p></div>
       <div><label class="block text-sm font-medium text-slate-700 mb-1">部門</label>
         <select id="eOrg" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"></select>
         <p id="eOrgEmpty" class="hidden text-[10px] text-slate-400 mt-1"></p></div>
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">資位</label>
+        <select id="eJob" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"></select></div>
       <div><label class="block text-sm font-medium text-slate-700 mb-1">職位</label>
-        <select id="eJob" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"></select>
-        <p id="eProfileHint" class="hidden text-[10px] text-slate-400 mt-1">上游同步帳號，公司／部門／職位由上游系統維護。</p></div>
+        <select id="ePosition" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"></select>
+        <p id="eProfileHint" class="hidden text-[10px] text-slate-400 mt-1">上游同步帳號，公司／部門／資位／職位由上游系統維護。</p></div>
       <div><label class="block text-sm font-medium text-slate-700 mb-1">目前角色</label>
         <div id="eRole"></div>
         <p class="text-[10px] text-slate-400 mt-1">如需變更角色，請使用清單的「指派角色」。</p></div>
@@ -439,12 +454,50 @@
     return fallback?fallback.name:null;
   }
 
+  /* JOB_POSITION 樣本（← VW_JOB_FUN；2026-08-31 上游實查之真實代碼與名稱，四家共 73 列）。
+     移植自 backend/src/org-directory/job-position-directory.ts。
+     🔴 **解析為單段精確、無跨公司 fallback**——與上面的資位刻意不同：同代碼跨公司語意可**相反**，
+        實查如 `C04` 在 AS／AE＝處長、在 AD＝**部長**；`D04` 在 AS＝營業經理、在 AD＝**科長**；
+        `B03` 在 AS／AE＝部長、在 AD＝處長。資位 fallback 最壞是顯示他公司的同義職稱，
+        職位 fallback 會顯示**錯誤的職位**，比顯示「—」嚴重得多。
+     ⚠ 本 prototype 僅含 AS／AE 兩家（SELECTABLE_COMPANIES），這兩家恰好無同碼異義；
+        歧義來自 AD——故此處看不到衝突**不代表可以放寬**，請勿把解析改成 fallback。 */
+  const JOB_POSITIONS=[
+    {companyCode:'AS',code:'A03',name:'董事長'},
+    {companyCode:'AS',code:'A06',name:'總經理'},
+    {companyCode:'AS',code:'B01',name:'本部長'},
+    {companyCode:'AS',code:'B03',name:'部長'},
+    {companyCode:'AS',code:'C03',name:'室長'},
+    {companyCode:'AS',code:'C04',name:'處長'},
+    {companyCode:'AS',code:'D04',name:'營業經理'},
+    {companyCode:'AS',code:'E02',name:'營業襄理'},
+    {companyCode:'AS',code:'E03',name:'營業課長'},
+    {companyCode:'AS',code:'M03',name:'事務一般職'},
+    {companyCode:'AS',code:'N03',name:'營業一般職'},
+    {companyCode:'AS',code:'P02',name:'臨時人員'},
+    {companyCode:'AE',code:'A11',name:'協理'},
+    {companyCode:'AE',code:'C03',name:'室長'},
+    {companyCode:'AE',code:'M03',name:'事務一般職'},
+    {companyCode:'AE',code:'N03',name:'營業一般職'}
+  ];
+  /* AC-P28：本公司精確命中才有值；查無一律 null（顯示「—」），**不得** fallback。
+     實查未命中僅 AS 之 `B20`（6 人），該代碼於四家主檔皆不存在，縱使開放 fallback 亦無從命中。 */
+  function resolveJobPosition(companyCode,code){
+    const c=(code||'').trim(); const cc=(companyCode||'').trim();
+    if(!c||!cc)return null;
+    const exact=JOB_POSITIONS.find(p=>p.companyCode===cc&&p.code===c);
+    return exact?exact.name:null;
+  }
+
   /* 下拉候選（AC-P13／AC-P14／AC-P16：候選集合為 companyCode 之純函式） */
   function orgOptionsFor(companyCode){
     return unitsOf(companyCode).filter(u=>u.tier!=='ROOT').slice().sort((a,b)=>a.orgCode.localeCompare(b.orgCode));
   }
   function jobOptionsFor(companyCode){
     return JOB_TITLES.filter(j=>j.companyCode===companyCode).slice().sort((a,b)=>a.code.localeCompare(b.code));
+  }
+  function jobPositionOptionsFor(companyCode){
+    return JOB_POSITIONS.filter(p=>p.companyCode===companyCode).slice().sort((a,b)=>a.code.localeCompare(b.code));
   }
   function setSelectTone(sel){sel.classList.toggle('bg-slate-50',sel.disabled);sel.classList.toggle('bg-white',!sel.disabled);}
   function fillCompanySelect(sel,companyCode){
@@ -467,16 +520,24 @@
     const opts=companyCode?jobOptionsFor(companyCode):[];
     sel.innerHTML=`<option value="">${PROFILE_UNSET_LABEL}</option>`+opts.map(j=>`<option value="${j.code}">${j.name}</option>`).join('');
     sel.value=cur&&opts.some(j=>j.code===cur)?cur:'';                   // AC-P16：不得殘留他公司之 jobTitleCode
-    sel.disabled=!companyCode;                                          // AC-P26：職位不受「候選為空」之限，僅公司無值時停用
+    sel.disabled=!companyCode;                                          // AC-P26：資位不受「候選為空」之限，僅公司無值時停用
     setSelectTone(sel);
   }
-  /* 🔵 公司 → 部門＋職位**雙連動**（AC-P16）：公司值一變更，兩者候選皆以新公司重算、已選值皆清空。
-     此即後端 AC-P10b「變更公司須於同請求重新給值、嚴禁靜默沿用舊代碼」在畫面上的對應行為——
-     兩欄一律隨表單送出，故送出時必然攜帶新公司範圍下的值（合法代碼或 null）。 */
+  function fillPositionSelect(sel,companyCode,cur){
+    const opts=companyCode?jobPositionOptionsFor(companyCode):[];
+    sel.innerHTML=`<option value="">${PROFILE_UNSET_LABEL}</option>`+opts.map(p=>`<option value="${p.code}">${p.name}</option>`).join('');
+    sel.value=cur&&opts.some(p=>p.code===cur)?cur:'';                   // AC-P31：不得殘留他公司之 jobPositionCode
+    sel.disabled=!companyCode;                                          // 同資位：僅公司無值時停用
+    setSelectTone(sel);
+  }
+  /* 🔵 公司 → 部門＋資位＋職位**三連動**（AC-P16／AC-P31）：公司值一變更，三者候選皆以新公司
+     重算、已選值皆清空。此即後端 AC-P10b「變更公司須於同請求重新給值、嚴禁靜默沿用舊代碼」
+     在畫面上的對應行為——三欄一律隨表單送出，故送出時必然攜帶新公司範圍下的值（合法代碼或 null）。 */
   function syncProfileOptions(prefix){
     const cc=document.getElementById(prefix+'Company').value;
     fillOrgSelect(document.getElementById(prefix+'Org'),cc,'',document.getElementById(prefix+'OrgEmpty'));
     fillJobSelect(document.getElementById(prefix+'Job'),cc,'');
+    fillPositionSelect(document.getElementById(prefix+'Position'),cc,'');
   }
 
   let accounts=[
@@ -486,25 +547,25 @@
     // 🔴 F003 delta：companyCode／orgCode／jobTitleCode 為 ACCOUNT 之代碼欄（編輯 modal 之預填來源）；
     //    co／dept／title 為清單富化之顯示字串（＝AccountView 之 company／department／title），
     //    由代碼經 resolveCompanyName／buildOrgPath／resolveJobTitle 解析而得，二者恆一致。
-    {u:'20001',name:'黃俊傑',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'ABA00',dept:'資訊部 / 應用發展室',jobTitleCode:'J01',title:'系統管理師',src:'manual',role:'sysadmin',status:'active',subtype:'other',last:'2026-07-16 09:12'},
-    {u:'20233',name:'李慧玲',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'CDB00',dept:'債權管理部 / 法催一室',jobTitleCode:'K01',title:'內控管理師',src:'manual',role:'icsop_admin',status:'active',subtype:'other',last:'2026-07-16 08:40'},
+    {u:'20001',name:'黃俊傑',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'ABA00',dept:'資訊部 / 應用發展室',jobTitleCode:'J01',title:'系統管理師',jobPositionCode:'M03',position:'事務一般職',src:'manual',role:'sysadmin',status:'active',subtype:'other',last:'2026-07-16 09:12'},
+    {u:'20233',name:'李慧玲',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'CDB00',dept:'債權管理部 / 法催一室',jobTitleCode:'K01',title:'內控管理師',jobPositionCode:'M03',position:'事務一般職',src:'manual',role:'icsop_admin',status:'active',subtype:'other',last:'2026-07-16 08:40'},
     // 業務子分類之示範 persona（＝03 前台清單之登入者，兩檔一致）
-    {u:'22345',name:'王小明',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'JAC00',dept:'營運管理部 / 審查室',jobTitleCode:'I01',title:'業務專員',src:'upstream',role:'user',status:'active',subtype:'business',last:'2026-07-16 10:02'},
+    {u:'22345',name:'王小明',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'JAC00',dept:'營運管理部 / 審查室',jobTitleCode:'I01',title:'業務專員',jobPositionCode:'N03',position:'營業一般職',src:'upstream',role:'user',status:'active',subtype:'business',last:'2026-07-16 10:02'},
     // 🟢 AC-36／F003 AC-U5 示範（2026-08-11 裁決：**保留不清空**）：此帳號為主管，但保有先前身為
     // 一般使用者時所指派之 'business'。該值保留且不顯示（INV-2）；於「指派角色」改回一般使用者時
     // 重新生效並預選「業務」——此即已定案之「舊設定沿用」行為，本 persona 為其唯一可操作示範，勿移除。
-    {u:'20088',name:'陳彥廷',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'BAA00',dept:'企劃部 / 車輛行銷室',jobTitleCode:'E01',title:'室長',src:'upstream',role:'supervisor',status:'active',subtype:'business',last:'2026-07-15 17:20'},
-    {u:'20877',name:'張家豪',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'DAA00',dept:'作業服務部 / 文管室',jobTitleCode:'E01',title:'室長',src:'upstream',role:'supervisor',status:'active',subtype:'other',last:'2026-07-15 16:30'},
-    {u:'20521',name:'林建宏',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'CAA00',dept:'信用審查部 / 企金室',jobTitleCode:'G01',title:'資深專員',src:'upstream',role:'deptcontact',status:'active',subtype:'other',last:'2026-07-15 14:05'},
-    {u:'21002',name:'吳佩珊',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'AC000',dept:'財會部',jobTitleCode:'H01',title:'專員',src:'upstream',role:'deptcontact',status:'active',subtype:'other',last:'2026-07-15 11:22'},
-    {u:'20321',name:'周立群',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'DAB00',dept:'作業服務部 / 客服室',jobTitleCode:'H01',title:'專員',src:'upstream',role:'user',status:'disabled',reason:'departed',subtype:'other',last:'2026-06-30 22:14'},
+    {u:'20088',name:'陳彥廷',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'BAA00',dept:'企劃部 / 車輛行銷室',jobTitleCode:'E01',title:'室長',jobPositionCode:'C03',position:'室長',src:'upstream',role:'supervisor',status:'active',subtype:'business',last:'2026-07-15 17:20'},
+    {u:'20877',name:'張家豪',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'DAA00',dept:'作業服務部 / 文管室',jobTitleCode:'E01',title:'室長',jobPositionCode:'C03',position:'室長',src:'upstream',role:'supervisor',status:'active',subtype:'other',last:'2026-07-15 16:30'},
+    {u:'20521',name:'林建宏',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'CAA00',dept:'信用審查部 / 企金室',jobTitleCode:'G01',title:'資深專員',jobPositionCode:'B20',position:null,src:'upstream',role:'deptcontact',status:'active',subtype:'other',last:'2026-07-15 14:05'},
+    {u:'21002',name:'吳佩珊',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'AC000',dept:'財會部',jobTitleCode:'H01',title:'專員',jobPositionCode:'M03',position:'事務一般職',src:'upstream',role:'deptcontact',status:'active',subtype:'other',last:'2026-07-15 11:22'},
+    {u:'20321',name:'周立群',companyCode:'AS',co:'和潤企業股份有限公司',orgCode:'DAB00',dept:'作業服務部 / 客服室',jobTitleCode:'H01',title:'專員',jobPositionCode:'M03',position:'事務一般職',src:'upstream',role:'user',status:'disabled',reason:'departed',subtype:'other',last:'2026-06-30 22:14'},
     /* 🔵 跨公司示範 persona（AC-P23a：清單已移除租戶過濾，AS 的操作者看得到 AE 的帳號）。
        兩筆皆為 src:'manual'——組織同步只涵蓋 AS（SYNC_COMPID='AS'），非 AS 公司之帳號只可能手動建立。
        兩筆 orgCode 皆為 null：AE 無 ORG_UNIT（AC-P26），部門欄顯示「—」，此為資料現實非錯誤。
        何雅雯之 C01 是 AC-P23e 的活體檢查：以該列公司（AE）解析＝「高級協理」，
        若誤以操作者公司（AS）解析會顯示「協理」——兩者肉眼可辨，勿把她的職位改成不歧義的代碼。 */
-    {u:'30017',name:'蔡宗翰',companyCode:'AE',co:'和潤電能',orgCode:null,dept:null,jobTitleCode:'M01',title:'電能工程師',src:'manual',role:'user',status:'active',subtype:'other',last:'2026-08-13 15:48'},
-    {u:'30042',name:'何雅雯',companyCode:'AE',co:'和潤電能',orgCode:null,dept:null,jobTitleCode:'C01',title:'高級協理',src:'manual',role:'deptcontact',status:'active',subtype:'other',last:'2026-08-13 11:05'}
+    {u:'30017',name:'蔡宗翰',companyCode:'AE',co:'和潤電能',orgCode:null,dept:null,jobTitleCode:'M01',title:'電能工程師',jobPositionCode:'M03',position:'事務一般職',src:'manual',role:'user',status:'active',subtype:'other',last:'2026-08-13 15:48'},
+    {u:'30042',name:'何雅雯',companyCode:'AE',co:'和潤電能',orgCode:null,dept:null,jobTitleCode:'C01',title:'高級協理',jobPositionCode:'A11',position:'協理',src:'manual',role:'deptcontact',status:'active',subtype:'other',last:'2026-08-13 11:05'}
   ];
 
   function roleBadge(code){const [l,c]=ROLE_META[code];return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-white" style="background:${c}">${l}</span>`;}
@@ -539,7 +600,8 @@
         <td class="px-3 py-2.5 mono text-slate-600">${a.u}</td>
         <td class="px-3 py-2.5 text-slate-600"><div class="truncate max-w-[200px]" title="${a.co||'—'}">${a.co||'—'}</div></td>
         <td class="px-3 py-2.5 text-slate-500"><div class="truncate max-w-[200px]" title="${a.dept||'—'}">${a.dept||'—'}</div></td>
-        <td class="px-3 py-2.5 text-slate-500"><div class="truncate max-w-[200px]" title="${a.title||'—'}">${a.title||'—'}</div></td>
+        <td class="px-3 py-2.5 text-slate-500"><div class="truncate max-w-[140px]" title="${a.title||'—'}">${a.title||'—'}</div></td>
+        <td class="px-3 py-2.5 text-slate-500"><div class="truncate max-w-[140px]" title="${a.position||'—'}">${a.position||'—'}</div></td>
         <td class="px-3 py-2.5">${srcBadge(a.src)}</td>
         <td class="px-3 py-2.5"><div class="flex items-center gap-1.5">${roleBadge(a.role)}${isSubtypeApplicable(a.role)?subtypeBadge(a.subtype):''}</div></td>
         <td class="px-3 py-2.5">${statusBadge(a)}</td>
@@ -571,16 +633,18 @@
     if(!nm){nErr.querySelector('span').textContent='必要欄位缺漏';nErr.classList.remove('hidden');nErr.classList.add('flex');return;}  // AC-P3
     // 🔵 AC-P24：唯一性比對範圍為**全部公司**（不以 companyCode 收斂）——登入解析須能單以 loginId 定位帳號
     if(accounts.some(a=>a.u===u)){err.querySelector('span').textContent='帳號名稱已存在（ACCOUNT_USERNAME_EXISTS）';err.classList.remove('hidden');err.classList.add('flex');return;}
-    // 🔴 AC-P2：orgCode／jobTitleCode 空字串一律收斂為 null（空字串不得落地）
+    // 🔴 AC-P2：orgCode／jobTitleCode／jobPositionCode 空字串一律收斂為 null（空字串不得落地）
     const companyCode=document.getElementById('cCompany').value;
     const orgCode=document.getElementById('cOrg').value||null;
     const jobTitleCode=document.getElementById('cJob').value||null;
+    const jobPositionCode=document.getElementById('cPosition').value||null;
     // 🔴 F041 AC-35／F003 AC-U3：建立時未指定子分類 → 預設 'other'（預設不限縮）
     // 🔴 F003 AC-P18：留空者顯示「—」（由 render 處理），**不再寫入「（待同步）」佔位字串**
     // 🔵 AC-P23c/d/e：三個顯示字串一律以**該列自身之 companyCode** 解析（非操作者公司）
     accounts.unshift({u,name:nm,companyCode,co:resolveCompanyName(companyCode),
       orgCode,dept:resolveOrgPath(companyCode,orgCode),
       jobTitleCode,title:resolveJobTitle(companyCode,jobTitleCode),
+      jobPositionCode,position:resolveJobPosition(companyCode,jobPositionCode),
       src:'manual',role:document.getElementById('cRole').value,status:'active',subtype:'other',last:'剛剛'});
     closeCreate();render();toast('success','已建立帳號 '+u+'（密碼加鹽雜湊儲存）');
   }
@@ -591,14 +655,16 @@
     document.getElementById('eUser').textContent=a.u;
     const nm=document.getElementById('eName');nm.value=a.name;nm.readOnly=upstream;nm.classList.toggle('bg-slate-50',upstream);
     document.getElementById('eNameHint').classList.toggle('hidden',!upstream);
-    // 🔴 F003 AC-P19：公司／部門／職位以現值預填（null → 「未設定」空選項）；上游帳號一律唯讀（AC-P11）
-    const cs=document.getElementById('eCompany'), os=document.getElementById('eOrg'), js=document.getElementById('eJob');
+    // 🔴 F003 AC-P19：公司／部門／資位／職位以現值預填（null → 「未設定」空選項）；上游一律唯讀（AC-P11）
+    const cs=document.getElementById('eCompany'), os=document.getElementById('eOrg'), js=document.getElementById('eJob'),
+          ps=document.getElementById('ePosition');
     // 🔵 AC-P19：公司欄預選**該帳號自身**之 companyCode（非操作者公司）；manual 可改選（AC-P10）
     fillCompanySelect(cs,a.companyCode);
     fillOrgSelect(os,a.companyCode,a.orgCode||'',document.getElementById('eOrgEmpty'));
     fillJobSelect(js,a.companyCode,a.jobTitleCode||'');
-    // upstream：四欄全數唯讀（AC-P11）；此處只會「加上」停用，不會解除 AC-P26 造成的停用
-    [cs,os,js].forEach(s=>{if(upstream)s.disabled=true;setSelectTone(s);});
+    fillPositionSelect(ps,a.companyCode,a.jobPositionCode||'');
+    // upstream：五欄全數唯讀（AC-P11／AC-P32）；此處只會「加上」停用，不會解除 AC-P26 造成的停用
+    [cs,os,js,ps].forEach(s=>{if(upstream)s.disabled=true;setSelectTone(s);});
     document.getElementById('eCompanyHint').classList.toggle('hidden',upstream);
     document.getElementById('eProfileHint').classList.toggle('hidden',!upstream);
     // 🔴 F041：一般使用者一併顯示目前子分類（INV-2：其餘 4 種角色不顯示）
@@ -610,17 +676,21 @@
   function closeEdit(){hide('editModal');}
   function toggleEPw(){const i=document.getElementById('ePw'),ic=document.getElementById('ePwIcon');const s=i.type==='password';i.type=s?'text':'password';ic.setAttribute('data-lucide',s?'eye-off':'eye');lucide.createIcons();}
   function submitEdit(){const a=accounts[editTarget];
-    // 🔴 F003 AC-P11：source='upstream' 之姓名／密碼／部門／職位一律不送出（後端為權威，前端僅輔助）
+    // 🔴 F003 AC-P11／AC-P32：source='upstream' 之姓名／密碼／部門／資位／職位一律不送出
+    //    （後端為權威，前端僅輔助）
     if(a.src!=='upstream'){
       if(document.getElementById('eName').value.trim())a.name=document.getElementById('eName').value.trim();  // AC-P9：姓名不可清空
-      // 🔵 AC-P10：公司可變更。AC-P10b：部門與職位必於同一次送出重新給值（雙連動已於換公司時清空），
-      //    故此處三者一併寫入、**絕不沿用舊代碼**；顯示字串一律以新公司解析（AC-P23c/d/e）。
+      // 🔵 AC-P10：公司可變更。AC-P10b：部門／資位／職位必於同一次送出重新給值（三連動已於換公司
+      //    時清空），故此處四者一併寫入、**絕不沿用舊代碼**；顯示字串一律以新公司解析
+      //    （AC-P23c/d/e／AC-P28）。
       a.companyCode=document.getElementById('eCompany').value;
       a.co=resolveCompanyName(a.companyCode);
       a.orgCode=document.getElementById('eOrg').value||null;            // AC-P2／AC-P9：空選項＝清為 null
       a.dept=resolveOrgPath(a.companyCode,a.orgCode);
       a.jobTitleCode=document.getElementById('eJob').value||null;
       a.title=resolveJobTitle(a.companyCode,a.jobTitleCode);
+      a.jobPositionCode=document.getElementById('ePosition').value||null;
+      a.position=resolveJobPosition(a.companyCode,a.jobPositionCode);
     }
     const pw=document.getElementById('ePw').value.trim();
     closeEdit();render();
