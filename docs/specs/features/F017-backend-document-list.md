@@ -1,5 +1,5 @@
 # F017: 後台文件清單與搜尋
-Priority: P0-MVP | Status: 🟡 實作（unit 綠；14 欄清單＋9 篩選＋排序分頁；**「檔案」與「連結點程序書」兩欄之後端富化與前端渲染已補**（doc-seams，批次注入不 N+1）；int 已寫未跑，見 implementation-logs/doc-seams-impl.md）｜**循環子分類顯示 delta：🟢 APPROVED（2026-08-07）**｜**連結點程序書欄摺疊 delta：🟢 APPROVED（2026-08-18 使用者裁決，AC-E1～AC-E9）**｜**連結點無 PDF 事前標示 delta：🟢 APPROVED（2026-08-27 使用者裁決，AC-E10～AC-E14；已實作）** | Last Updated: 2026-08-27
+Priority: P0-MVP | Status: 🟡 實作（unit 綠；14 欄清單＋9 篩選＋排序分頁；**「檔案」與「連結點程序書」兩欄之後端富化與前端渲染已補**（doc-seams，批次注入不 N+1）；int 已寫未跑，見 implementation-logs/doc-seams-impl.md）｜**循環子分類顯示 delta：🟢 APPROVED（2026-08-07）**｜**連結點程序書欄摺疊 delta：🟢 APPROVED（2026-08-18 使用者裁決，AC-E1～AC-E9）**｜**連結點無 PDF 事前標示 delta：🟢 APPROVED（2026-08-27 使用者裁決，AC-E10～AC-E14；已實作）**｜**清單匯出（CSV）delta：🟢 APPROVED（2026-08-31 使用者裁決，`AC-X1`～`AC-X17`；規格層完成、實作未開始）** | Last Updated: 2026-08-31
 Epic/Story: E04 / US-037
 
 > **2026-08-07 additive delta**：第 14 欄「循環別」之顯示與其可搜尋下拉之選項，須反映循環子分類。規則權威＝[F040](F040-lifecycle-subcategory.md)；欄位數、篩選數與既有條款皆不變。
@@ -10,6 +10,11 @@ Epic/Story: E04 / US-037
 > **🔵 2026-08-21 additive delta（使用者裁決；三項裁決第 3 項）——節點子樹 deep link 篩選**：`GET /admin/documents` 新增 `nodeSubtreeId` 篩選參數（**恆與 `lifecycleId` 成對**），語意＝同一循環且掛載節點 ∈ 該節點子樹；本頁以**可清除的 chip** 呈現。**本 delta 之 AC 編號採 `AC-T#`**（`AC-T40`～`AC-T48`），權威見 [§節點子樹篩選（deep link）delta](#subtree-filter-delta)。
 > 🔒 **子樹為第 14 個篩選來源但不進那 13 項**——`AC-D1`／`AC-D2`／`AC-D9`／`AC-D10`／`AC-N40` ② 逐字續為有效；本 delta 僅**就地擴充 `AC-D8`**（清除全部篩選須連 chip 一起清）。上游入口＝[F036](F036-lifecycle-tree-preview.md#subtree-drawer-delta) 之子樹抽屜導向鈕。
 > **🔴 2026-08-27 缺失 delta（使用者回報：「在清單頁點擊下載連結點程序書時，出現無法下載的問題」）——連結點無 PDF 之事前標示**：實測查證後判定**下載機制本身沒有壞**，壞的是第 12 欄把每個連結點一律畫成可下載的按鈕，而多數目標根本沒有上傳 ICSOP PDF（591 份中僅 7 份有）。新行為＝後端補 `targetHasPdf`、無 PDF 者改以**無檔案態**（`file-x-2` ＋ 灰，仍可點可 focus）事前標示、點擊之提示改為說明原因。**摺疊行為（`AC-E1`～`AC-E6`／`AC-E8`）、下載路徑（`AC-E7`）、欄位集合與 13 項篩選一律不變。** 逐條見 [§連結點無 PDF 事前標示 delta](#link-no-pdf-delta)（`AC-E10`～`AC-E14`）。
+> **🔵 2026-08-31 additive delta（使用者裁決）——文件管理清單新增「匯出（CSV）」**：使用者原文「ICSOP 文件管理：比照使用表單管理/附錄管理，新增匯出功能。」本頁 topbar 動作區新增「匯出」鈕，將**當前篩選之全部結果**（非當前頁）輸出為 CSV。**欄位＝畫面 15 欄去掉「樹狀圖」＝14 欄**（使用者裁決；樹狀圖欄只是導覽圖示、無資料值可落地，比照 [F039](F039-appendix-management.md#export-delta) `AC-D6` 之「操作欄不匯出」）。**15 欄之欄位集合與順序、13 項篩選、子樹 chip、統計卡／排序／分頁一律不變**——本 delta **只加一顆鈕與一支端點，不動畫面上任何既有物件**。逐條見 [§清單匯出（CSV）delta](#export-delta)（`AC-X1`～`AC-X17`）。**本 delta 之 AC 編號採 `AC-X#`**（與 [F018](F018-usage-form-management.md#name-and-export-column-delta)／[F039](F039-appendix-management.md#name-and-export-column-delta) 之同型匯出 delta 呼應），與本檔既有 `AC-S#`／`AC-D#`／`AC-E#`／`AC-J#`／`AC-N#`／`AC-T#`／`AC-U3` 區隔、不重號（⚠ 本檔另有一處交叉引用之 `AC-F17` 屬 [F024](F024-access-history-query.md) 之 AC 空間，非本檔所有）。
+> 🔴 **「匯出範圍如何攜帶」之原設想已於 2026-08-31 由 lead 實測後撤回**（原設想＝比照 [F018](F018-usage-form-management.md#name-and-export-column-delta) `AC-X7` 送 13 項篩選之逐字查詢參數）：本頁為**客端篩選模型**——13 項篩選全部在瀏覽器端施加、前後端之篩選語言不同構（顯示名稱 vs id／代碼）、其中兩項後端根本沒有參數、另三項在前端是「先取 id 集合再交集」。⇒ **`AC-X11` 只鎖可觀察之列集合與列序**（列集合＝篩選＋chip 套用後之全部列、列序＝畫面當前排序、CSV 一一對應同序）。四項查證事實與被撤回之原表述逐字保留於 `AC-X11`。
+> ✅ **`OQ-X-01` 已於 2026-08-31 由 system-architect 定案＝乙案**：**`POST /admin/documents/export`**，body 恰兩鍵 **`{ documentIds: string[]; linkTargetId?: string }`**，**後端完全不重跑任何篩選與排序**，14 欄值層 100% 由後端解析（權威＝`architecture-spec.md` §13 決策 D1～D4）。[§Interface Contract](#interface-contract) 之方法、路徑與兩個鍵名皆已回填。
+> 🔒 **本 delta 不新增任何錯誤碼**（`AC-X16` ⑨ 逐字有效）：畸形 body 沿用**既有** `VALIDATION_ERROR`（`AC-X17` ①）。⚠ 同日曾短暫改為新增碼 `EXPORT_IDS_INVALID`，已由 lead 撤回；被撤回之該案與架構初稿之「視同空陣列 → 200 ＋ 僅表頭列」兩者之否決理由，逐字保留於 `AC-X17`。
+> 🔴 **時區鐵則（`AC-X7`／`AC-X8`）**：`toTaipei()` **只用於格式化輸出、一律不用於比較**——`狀態` 欄之「今日」基準恆為 `new Date()`，對其套 `toTaipei()` 會在台北 00:00–08:00 之窗口使 CSV 與畫面互相矛盾，**而固定時鐘之 fixture 完全測不到**。
 
 ## Description
 後台以分頁清單檢視所有 ICSOP 文件，頂部呈現 3 張統計卡，提供 **13 個**篩選（其中 10 項為可搜尋下拉，另有公告日期區間、程序書書名內之雙行為欄、OJT 三值下拉）與依編號/公告日期排序。<br>📝 **2026-08-16 使用者裁決推翻，理由：使用者明列 13 項篩選條件（缺失 delta 第 9 項）**——原條文為「提供 **9 個**可搜尋下拉篩選」。清單顯示 14 欄（UI 顯示標籤，實體名維持「ICSOP 文件」）。狀態欄依「公告日期」衍生顯示（已公告/進度中/失效/作廢，見 F012）。與前台清單邏輯不同：**後台不套用「使用部門置頂」規則**，預設依最後更新時間或編號排序。未指派節點文件明顯標示。19 欄位權威定義見 [data-model.md](../data-model.md#document-entity)。
@@ -271,9 +276,211 @@ Epic/Story: E04 / US-037
   <br>📌 **`OJT` 之預設值 `全部` 仍不計入該判定**（既有規則不變）。
 - **AC-T48**（🔒 回歸鎖定）：Given 本 delta 實作完成, When 檢視清單, Then ① **15 欄之欄位集合與由左至右順序逐字不變**（`AC-D9`／`AC-E9`／`AC-N40` ①）；② **13 項篩選之組成、順序與比對語意逐字不變**（`AC-D1`／`AC-D2`／`AC-N40` ②）；③ 篩選區之文案與選擇器契約（`AC-D10`）逐字不變；④ 3 張統計卡、排序、分頁、空狀態 `查無符合結果` 之行為不變；⑤ 未帶兩參數時，本頁之呈現與行為與本 delta 導入前**完全相同**（含首屏**不得**先閃一次未篩選之完整清單——子樹狀態須於首次渲染前決定）；⑥ 🔴 **回應形狀之既有五個頂層欄位 `items`／`total`／`page`／`pageSize`／`hasNext` 逐字不變**——`subtreeFilter` 為 **additive 第 6 欄**，既有消費者忽略未知欄位即可（本專案前端以具名欄位存取，非嚴格 schema 驗證）。**不得**把 `subtreeFilter` 塞進 `items` 之元素或改動任何既有欄位之型別。
 
+### 清單匯出（CSV）delta（🔵 2026-08-31 使用者裁決；比照 [F018](F018-usage-form-management.md#name-and-export-column-delta)／[F039](F039-appendix-management.md#export-delta) 兩處匯出） {#export-delta}
+
+> **使用者原文**：「ICSOP 文件管理：比照使用表單管理/附錄管理，新增匯出功能。」
+> **前提裁決（使用者，2026-08-31）**：匯出欄位＝**畫面 15 欄去掉「樹狀圖」＝14 欄**（表頭逐字見 `AC-X1` ②）。**理由**＝「樹狀圖」欄只是**導覽圖示**（點擊跳至 [F036](F036-lifecycle-tree-preview.md) 循環樹狀圖預覽），**無資料值可落地**——比照 [F039](F039-appendix-management.md#export-delta) `AC-D6` ② 之「操作欄不匯出」。
+> **規則權威＝[error-handling.md#export](../error-handling.md#export)**：該節之適用範圍自本日起由**三處**（F037／F038／F039）＋F024 之**四處**擴為**五處**，本處為第五處。🔒 **既有四處之規則與逐字文案一字不改**——本處向共用規則對齊，不得反過來。
+> **產生器權威＝`backend/src/storage/csv-export.ts`**（`toCsvBuffer`／BOM／CRLF／RFC 4180／注入前綴／`assertExportRowLimit`／`EXPORT_ROW_LIMIT`／`exportFileName`／`formatExportTimestamp`／`joinLinkedDocumentNumbers`／`toTaipei`）——**只用、不改、不分岔出第二份產生器**。
+> 🔒 **本 delta 不動**：15 欄之欄位集合與順序、13 項篩選之組成／順序／比對語意、節點子樹 chip、3 張統計卡、排序、分頁、空狀態、第 12 欄之摺疊與無檔案態，一律逐字不變（`AC-X16`）。
+
+#### CSV 格式與欄位
+
+- **AC-X1**（🔴 CSV 格式與**十四欄**逐字表頭）：Given 匯出成功, When 檢視檔案位元組, Then ——
+  - ① 其位元組**以 UTF-8 BOM（`EF BB BF`）開頭**（缺失即為 Excel 開啟中文亂碼之經典成因）；
+  - ② 第 1 列為表頭，其欄位由左至右**逐字**為 `OJT,制定公司,制定部門,制定室別,當責室長,狀態,檔案,程序書編號,程序書書名,版次,內容摘要,連結點程序書,公告日期,循環別`（**14 欄**）；
+  - ③ 欄值含 `,`／`"`／換行時以雙引號包覆並將內部 `"` 逸出為 `""`（RFC 4180）；⚠ **內容摘要為最可能觸發本規則之欄**（自由文字，可含逗號與換行）；
+  - ④ 表頭列與每一資料列（**含最末一列**）之終止符皆為 **CRLF（`\r\n`）**；
+  - ⑤ **資料列序＝畫面當前排序**（`AC-X11` ② 之列序不變式），與畫面第 1 頁至最末頁由上而下之順序相同。
+  - 🔴 **兩處與畫面之刻意差異，逐條明列**（皆為使用者裁決或既有慣例，**非疏漏**）：<br>　**(a)「樹狀圖」欄不匯出**——畫面第 8 欄為導覽圖示，無資料值（使用者 2026-08-31 裁決；同型於 F039 `AC-D6` ② 之「操作」欄）。<br>　**(b) 畫面之「當責室長 +N」於 CSV 展開為完整清單**——畫面因欄寬只顯示主要室長＋`+{N}` 徽章（次要姓名僅在 `title` tooltip），CSV 為**存查用途**故必須把 tooltip 內容展開（逐字規則見 `AC-X5`）。
+  - 🔒 **表頭列不套用注入前綴**（`AC-X2` ③ 之範圍限定），故 ② 之逐字斷言不受注入防護影響。
+
+- **AC-X2**（🔴 值層通則）：Given 匯出成功, When 檢視任一資料列之任一儲存格, Then ——
+  - ① **`null`／`undefined` 一律輸出空儲存格**，**不得**輸出字面 `null`／`undefined`；
+  - ② **畫面顯示 `—`（U+2014）之空值欄，CSV 一律輸出空儲存格**——`—` 是畫面的空值佔位符而非資料，落到 CSV 會被試算表當成一個資料值（**沿用** [F024](F024-access-history-query.md#export-fix-delta) `AC-F15` ③ 與 [F039](F039-appendix-management.md#name-and-export-column-delta) `AC-X2` 之既有裁決，**不另立規則**）。適用於 `制定公司`／`制定部門`／`制定室別`／`當責室長`／`檔案`／`版次`／`內容摘要`／`連結點程序書`／`公告日期`／`循環別` 十欄；
+  - ③ **CSV 注入前綴**：值之**第一個字元**為 `=`／`+`／`-`／`@`／Tab（`\t`）／CR（`\r`）者，於最前面加一個半形單引號 `'`，**再**套用 ② 之 RFC 4180 包覆逸出（順序不可顛倒）；**表頭列不適用**。<br>⚠ **對值層斷言之影響（test-generator 必讀）**：本項使「CSV 儲存格值 ＝ 畫面所見字串」**不再恆成立**——以該六種字元開頭者相差一個前導 `'`。`AC-X3` 之各欄期望值一律讀作「畫面所見字串**經本項轉換後**之結果」；不以該六種字元開頭者，轉換為恆等（絕大多數案例）。<br>📌 **本頁之真實注入面**：`程序書書名`／`內容摘要`／`版次` 皆為 ICSOPAdmin 可自由輸入之字串。<br>📌 **可測性註記（2026-08-31，ui-ux-designer 回報 prototype 無可達載體）**：本條之驗證載體在**函式／元件層**，**不得**要求 `prototypes/13-document-list.html` 或畫面上存在示範列。現行 591 份程序書中**無任一筆**以該六種字元開頭，補一列示範資料會改動既有 combobox 之值域，牴觸 `AC-X16` ②（13 項篩選之組成與值域逐字不變）——該理由經 spec-writer 覆核為正當。**斷言方式**：直接對 CSV 產生器餵入以 `=`／`+`／`-`／`@`／Tab／CR 開頭之欄值，驗其輸出帶前導 `'`。
+  - ④ **不得**於任何儲存格輸出圖示、徽章或按鈕之痕跡——`程序書編號` 欄之「尚未指派節點」警示圖示（`alert-triangle`）與 `程序書書名` 欄之「編輯」鉛筆鈕**皆不落地**（它們是畫面元件，不是值）。
+
+- **AC-X3**（🔴 十四欄之值層語意；**逐欄逐字**）：Given 某文件之清單列, When 產生其 CSV 資料列, Then 各欄之值恰為下表所列（欄序同 `AC-X1` ②）——
+
+  | # | 表頭 | 值 | 來源欄位 | 空值 |
+  |---|---|---|---|---|
+  | 1 | `OJT` | 文件層三值之**畫面所見中文標籤**（`已全部完成`／`部分完成`／`尚未開始`），見 `AC-X4` | `DocumentListItem.ojtStatus` | 缺鍵（`undefined`）→ **`尚未開始`**（**非**空儲存格） |
+  | 2 | `制定公司` | 公司主檔全稱，與畫面該欄逐字相同 | `draftingCompanyName` | `null` → 空儲存格 |
+  | 3 | `制定部門` | 部門名稱，與畫面該欄逐字相同 | `draftingDeptName` | `null` → 空儲存格 |
+  | 4 | `制定室別` | 室別名稱，與畫面該欄逐字相同 | `draftingSectionName` | `null` → 空儲存格 |
+  | 5 | `當責室長` | **主要 ∪ 次要**姓名，以**全形頓號 `、`** 相接，見 `AC-X5` | `primaryChiefName`／`primaryChiefId`／`secondaryChiefNames` | 皆無 → 空儲存格 |
+  | 6 | `狀態` | **衍生顯示標籤**（`已公告`／`進度中`／`失效`／`作廢`），見 `AC-X7` | `deriveDisplayStatus()` ＋ `DISPLAY_LABEL` | 恆有值 |
+  | 7 | `檔案` | 該文件自身之 **ICSOP PDF 檔名**（與畫面下載鈕 `title` 之 `下載 {fileName}` 同一個 `{fileName}`），見下方 ✅ 覆核註記 | `icsopPdfFileName` | 無附件 → 空儲存格 |
+  | 8 | `程序書編號` | `documentNumber` 原值 | `documentNumber` | 必填，恆非空 |
+  | 9 | `程序書書名` | `documentName` 原值 | `documentName` | 必填，恆非空 |
+  | 10 | `版次` | `edition` 原值（如 `26'01`） | `edition` | `null` → 空儲存格 |
+  | 11 | `內容摘要` | **全文，不截斷**（畫面之 `truncate` 為 CSS 視覺截斷，其 DOM 文字與 `title` 本即全文 ⇒ **不構成值層差異**） | `contentSummary` | `null` → 空儲存格 |
+  | 12 | `連結點程序書` | 各連結點目標之 `documentNumber`，以**半形分號 `;`** 相接，見 `AC-X6` | `links[].targetNumber` | 0 筆 → 空儲存格（**非** `—`、**非** `0`） |
+  | 13 | `公告日期` | `YYYY-MM-DD`（UTC+8），見 `AC-X8` | `announcedDate` | `null` → 空儲存格 |
+  | 14 | `循環別` | 循環顯示名（含子分類時為 `名稱（子分類）`），與畫面該欄逐字相同 | `lifecycleName`（＝ `lifecycleDisplayName()` 之輸出，`AC-S1` 不變） | `null` → 空儲存格 |
+
+  🔒 **本表不新增任何後端欄位**——十四欄之值**全部**取自既有之 `DocumentListItem` 型別（`backend/src/documents/documents.store.ts`），本 delta **不擴充該型別、不擴充 `GET /admin/documents` 之回應形狀**。
+  - ✅ **第 7 欄「檔案」之覆核結論（2026-08-31 定稿；architecture-spec §13.7 交回項 ③ 已結案）**：值為 **`icsopPdfFileName`（檔名字串）**，**非** `有`／空白之二值。**依據**：使用者親自確認之範例資料列，該欄逐字為 **`ICSOP-001_v3.pdf`**——是檔名，不是有無旗標。<br>📝 **被否決之替代選項逐字保留供追溯**：「輸出 `有`／空白之二值」（architecture-spec §13.7 ③ 所列之 alternative）。**否決理由**：使用者之範例已直接排除它；且畫面該格之下載鈕 `title` 本即為 `下載 {fileName}`，檔名才是該格承載之資訊，二值會使匯出比畫面更貧乏。<br>⚠ **畫面該格無可見文字（只有一顆圖示鈕）**，故本欄是全表**唯一**「CSV 值取自畫面元素之 `title` 而非其可見文字」者——此為刻意，理由如上。
+  - 🔴 **十四欄全部由後端解析，本 delta 前端不新增任何顯示規則**（architecture-spec §13.3）——**不得**由前端把畫面上算好的字串塞進請求，那會使匯出與清單成為兩條各自可漂移的路徑。
+
+- **AC-X4**（🔴 `OJT` 欄之三值中文標籤 ＋ 兩份對照表逐字相同）：Given 三份文件之 `ojtStatus` 分別為 `'all'`／`'partial'`／`'none'`, When 匯出, Then 其 `OJT` 欄之值**逐字**為 `已全部完成`／`部分完成`／`尚未開始`；Given `ojtStatus` 缺鍵（`undefined`）, Then 為 **`尚未開始`**（＝ `none`，與 `AC-J13` 之「缺鍵視同 `none`」同一條規則，**不得**輸出空儲存格）。
+  - 🔴 **對照表之單一權威為 `frontend/src/domain/ojt-status-view.ts`**（`AC-J13` 已定稿），惟本 repo **前後端為兩個獨立 TS 專案、無共用 package** ⇒ 「只有一份」在本輪**架構上不可達**（[error-handling.md#export](../error-handling.md#export) 值層通則之既有註記）。**本輪之機器可驗約束為「兩份逐字相同」**：後端新增之三值→中文標籤對照表，其三個字面與 `ojt-status-view.ts` 之 `VIEWS[*].text` **逐字相同**。<br>📌 **沿用既有處置，不創新模式**：同 `watermarkLines()`（architecture-spec §10.14）與 `change-labels.ts`（[F038](F038-lifecycle-tree-change-history.md#export-delta) `AC-D7` ④）之兩份並存＋逐字相同不變式。<br>✅ **落點已定案（`OQ-X-02` 結案；architecture-spec §13.3 (i)）**：後端 `export const OJT_STATUS_LABEL: Record<OjtCompletionStatus, string>` 落於 **`backend/src/documents/ojt-completion.reader.ts`**——與 `OjtCompletionStatus` 型別及 `deriveOjtStatus()` **同檔**，該檔已是全站唯一之三值判定點。<br>📝 **spec-writer 原建議「與 `csv-export.ts` 同層之純模組」已被取代**，理由（採納）：判定與其標籤放同一檔，使「新增第四種狀態」這件事在**一個檔案內**就撞到兩處，而分置兩檔時只會撞到一處。<br>🔒 **值域恰 3 個且封閉**——**不得**於後端引入第四個鍵（`OQ-E11-22` 已明文鎖定 `ojtStatusView()`／`OJT_DOC_STATE` 不得新增第四鍵，本表與其為同一組三值）。<br>🔴 **綁定之斷言形狀**：兩端各對**同一組 3 列固定向量**斷言——後端 `OJT_STATUS_LABEL[s]`、前端 `ojtStatusView(s).text`；值域封閉故該向量即完整列舉，任一端漂移即該端自己紅燈。
+  - 🔴 **不得輸出列舉代碼**：`all`／`partial`／`none` **不得**出現於 CSV（[error-handling.md#export](../error-handling.md#export) 值層通則：「列舉／代碼欄一律輸出畫面所見之中文標籤」）。
+  - 🔒 **`data-has-ojt` 之三值域（`all`／`partial`／`none`）為 DOM 掛鉤、非顯示值**，兩者不得混用（`AC-J13`）。
+
+- **AC-X5**（🔴 `當責室長` 欄＝主要 ∪ 次要，全形頓號相接）：Given 某文件之 `primaryChiefName = '王小明'`、`secondaryChiefNames = ['李大華','張三']`, When 匯出, Then 該欄之值**逐字**為 `王小明、李大華、張三`（**全形頓號 `、`**，前後**無空白**）；順序為**主要在前、次要依既有陣列順序在後**。
+  - Given `primaryChiefName` 為 `null` 而 `primaryChiefId = 'E001'`, Then 主要位置以**員編** `E001` 代入（**與畫面 `primaryChiefName ?? primaryChiefId` 之 fallback 完全相同**）；Given 兩者皆為 `null` 且無次要, Then 為**空儲存格**。<br>📌 **可測性註記（2026-08-31，ui-ux-designer 回報 prototype 無可達載體）**：本條之驗證載體在**函式／元件層**，**不得**要求 `prototypes/13-document-list.html` 或畫面上存在示範列。現行資料中**無任一筆**姓名解析失敗之列（fallback 分支在真實資料上不可達），補一列示範資料會改動既有 combobox 之值域，牴觸 `AC-X16` ②（13 項篩選之組成與值域逐字不變）——該理由經 spec-writer 覆核為正當。**斷言方式**：以 `primaryChiefName = null` 之 fixture 直接驅動欄值函式。
+  - Given 同一姓名同時出現於主要與次要, Then **去重**（與畫面 `chiefValues()` 之 `uniq` 同一規則），該姓名只出現一次。
+  - 🔴 **分隔符恆為全形頓號 `、`，且明文禁止使用半形逗號 `,`**：<br>　① **禁用逗號之理由（不得省略）**——逗號會觸發 RFC 4180 之引號包覆與逸出，使該格在原始 CSV 文字中被雙引號包住，**欄內逗號與欄間逗號在肉眼上無從分辨**；而本欄之用途正是讓人一眼看出這份文件由哪幾位室長當責。理由與 `csv-export.ts` 之 `LINKED_DOC_NUMBER_SEPARATOR` 既有裁決**逐字相同**（[F039](F039-appendix-management.md#name-and-export-column-delta) `AC-X2`）。<br>　② **為何是頓號而非分號**——本欄之畫面既有載體即以 `、` 相接（`title="次要：{names.join('、')}"`），值層對齊畫面；`連結點程序書` 欄用半形分號則是為了與**編號**之字面不混淆（`AC-X6`）。<br>　🔒 **兩欄之分隔符不同為刻意，不得統一**；兩者皆非逗號亦為刻意。
+  - ✅ **本條為 architecture-spec §13.7 交回項 ② 之定稿**：該章只裁定「後端解析、來源＝`primaryChiefName ?? primaryChiefId` ＋ `secondaryChiefNames[]`」，逐字規則屬本 AC；本條之四項（主要∪次要／全形頓號／去重／員編 fallback）與該章之建議一致，**採納並就此定案**。
+  - 📌 **本欄之匯出值恆為畫面之嚴格超集**（畫面收合為 `王小明 +2`）——理由已載於 `AC-X1` ⑤ (b)。
+
+- **AC-X6**（🔴 `連結點程序書` 欄＝共用 `joinLinkedDocumentNumbers()`）：Given 某文件關聯 N 個連結點, When 匯出, Then 該欄之值為該 N 個目標之 `documentNumber`，以**半形分號 `;`** 相接（前後**無空白**）；N=0 → **空儲存格**（**非** `—`、**非** `0`）。
+  - 🔴 **必須共用** `backend/src/storage/csv-export.ts` 之既有 `joinLinkedDocumentNumbers()` 與 `LINKED_DOC_NUMBER_SEPARATOR`——[F018](F018-usage-form-management.md#name-and-export-column-delta) `AC-X2` 與 [F039](F039-appendix-management.md#name-and-export-column-delta) `AC-X2` 已明訂「兩處匯出不得各寫一份」，**本處為第三處**；各寫一份必然於分隔符或空值呈現上漂移。
+  - **順序＝畫面該儲存格展開後所見之順序**：未套用 `連結點程序書` 篩選時＝ `links[]` 之既有順序；已套用時＝**命中者排第一顆**、其餘順序不變（穩定排序，兩段內部各自維持原相對順序；`AC-E6` 之既有語意）。<br>✅ **落點已定案**（architecture-spec §13.3 (ii)）：後端純函式 `orderLinksForExport(links, 命中之目標文件 id?)` 落於 `backend/src/documents/` 之獨立純函式檔；未提供命中值或無命中 → **原樣回傳**。<br>🔴 **可測形狀（防第二套排序邏輯）**：對同一組 `(links, 命中之目標文件 id)` 輸入，前端 `orderedLinks()` 與後端 `orderLinksForExport()` **逐案輸出相等**（比照 [F026](F026-role-field-matrix.md) `AC-U3`、本檔 `AC-J12` 之既有慣例）。
+  - 🔴 **前端須就此改動一處（行為恆等之抽出，約 6 行）**：目前該排序是 `LinkCell` **內部之 inline `useMemo`**（`frontend/src/pages/DocumentListPage.tsx:1000-1006`），**未匯出、沒有可斷言的對象**。⇒ 須**行為恆等**抽出為 `DocumentListPage.tsx` 匯出之**純函式** `orderedLinks(links, filterLink)`，由 `LinkCell` 呼叫。**行為一字不改**，故既有渲染測試不預期轉紅。
+  - 📝 **被推翻之原句逐字保留供追溯**：`OLD>` 「**前端側之等價斷言已存在**——`frontend/src/pages/DocumentListPage.linkCell.test.tsx:317`（`F017 AC-E6：連結點程序書 篩選命中者排第一顆`）…**前端不需為本 delta 改動任何程式。**」
+  - 🔴 **推翻理由（spec-writer 實地覆核，與 lead 裁決一致）——原句與本條自己的可測形狀互相矛盾**：`linkCell.test.tsx:317` 之斷言層級是**渲染後之 DOM**（`cell.textContent` 含某編號、`cell.dataset.linkCount === '6'`、toggle 之 `+5` 與 `title`），**不是函式輸出** ⇒ **無法與後端函式「逐案輸出相等」**。以它充當前端側綁定，等於宣稱一條**根本比對不起來**的不變式。
+  - 🔒 **不抽的代價**：後端 `orderLinksForExport()` 將**沒有任何前端側綁定**，兩份排序規則漂移時**無人攔**（architecture-spec §13.5 #5 已明文警告）。
+  - 📌 **同 delta 內已有先例**：ui-ux-designer 於 prototype 即以同一手法把 13 項篩選抽為 `filteredRows()`，使渲染與匯出**共用同一份判定** ⇒ 不變式**由結構成立**，而非兩份實作碰巧一致。
+  - 🔒 **抽出之範圍嚴格限於「把既有 `useMemo` 之內容原樣搬進一個具名匯出函式」**：`LinkCell` 之渲染、`AC-E1`～`AC-E14` 之全部行為、`data-*` 掛鉤逐字不變（`AC-X16` ④）。<br>⚠ **承認一個張力並明文接受**：畫面**收合態**只顯示第一顆 pill ＋ `+N`，CSV 則輸出全部 N 個編號 ⇒ 本欄之比較基準是**展開態**——與 `joinLinkedDocumentNumbers()` 既有明文（「列內順序＝管理頁**展開列**所見之順序」）及 F018／F039 之基準**一致**，非本頁特例。<br>🔒 **該命中值僅供欄內排序，不得被用於任何篩選判定**（後端在本 delta 中不重跑任何篩選，`AC-X11`）。
+  - 🔴 **目標查無編號者不計入**：`targetNumber === null` 之連結點（目標已刪除）**跳過**，**不得**輸出空字串而產生 `;;` 或前／後綴分號。<br>📌 **可測性註記（2026-08-31，ui-ux-designer 回報 prototype 無可達載體）**：本條之驗證載體在**函式／元件層**，**不得**要求 `prototypes/13-document-list.html` 或畫面上存在示範列。現行 15 筆連結之目標**全部存在**（`targetNumber === null` 於真實資料上不可達），補一列示範資料會改動既有 combobox 之值域，牴觸 `AC-X16` ②（13 項篩選之組成與值域逐字不變）——該理由經 spec-writer 覆核為正當。**斷言方式**：以含 `targetNumber: null` 成員之 `links` 陣列直接驅動 `joinLinkedDocumentNumbers()`／排序函式。
+  - 🔒 **不輸出書名、不輸出 `targetHasPdf`**——畫面該格之可見文字本即只有編號（`AC-E2`：書名只在 tooltip），值層對齊畫面。
+
+- **AC-X7**（🔴 `狀態` 欄＝衍生顯示標籤，非儲存值）：Given 三份文件之 `status`／`announcedDate` 分別為（`active`／昨日）、（`active`／明日）、（`inactive`／任意）, When 匯出, Then 其 `狀態` 欄之值**逐字**為 `已公告`／`進度中`／`失效`；`status = 'void'` → `作廢`。
+  - 🔴 **不得輸出儲存值** `active`／`inactive`／`void`（[error-handling.md#export](../error-handling.md#export) 值層通則）。
+  - **判定必須共用** `backend/src/documents/display-status.ts` 之 `deriveDisplayStatus()` ＋ `DISPLAY_LABEL`（該模組已為前後端各自之權威來源），**不得**於匯出路徑另寫一份 if/else。
+  - 🔴 **「今日」之基準＝ `new Date()`，明文禁止對其套用 `toTaipei()`**（**本條為逐字禁令，不得改寫**）：<br>　**理由**：`deriveDisplayStatus()` 比較的是 **`getTime()`（絕對瞬間）**，**與行程時區無關** ⇒ `today` 只需是「現在」這個時間點，**不需要、也不可以**做任何時區位移。<br>　**若誤對 `today` 套 `toTaipei()`**（＝把「現在」硬推後 8 小時），則**台北時間 00:00–08:00 這個窗口內**，公告日期為「今天」之文件會被算成 `已公告`，而**畫面同時說 `進度中`** ⇒ 同一份文件，CSV 與畫面**互相矛盾**。<br>　⚠ **固定時鐘之 fixture 完全測不到**：測試只要把 `now` 釘在台北 08:00 之後（絕大多數人寫測試時的直覺值），兩種寫法**結果相同、測試全綠**。這與本 repo 2026-08-14／15 之 MSSQL 時區 bug 是**同一類錯誤**（讀寫對稱故容器一路正確、天真測試兩種設定都會過）。<br>　🔒 **可測形狀**：以**釘死於台北時間 00:00–08:00 之間**的 `now`（例如 UTC `2026-06-09T17:00:00Z` ＝台北 `2026-06-10 01:00`）＋ `announcedDate = 2026-06-10` 建案例，斷言 `狀態` 欄為 **`進度中`**（若實作對 `today` 套了 `toTaipei()`，此案例會得到 `已公告` 而紅燈）。
+  - 🔴 **本 delta 之時區鐵則（一句話，涵蓋全部十四欄）**：**`toTaipei()` 只用於「格式化輸出」（`公告日期` 欄之 `YYYY-MM-DD`，`AC-X8`），一律不用於「比較」**（本欄之 `today` 判定）。**兩者不得混用。**
+
+- **AC-X8**（🔴 `公告日期` 欄＝`YYYY-MM-DD`，**不附時分秒**）：Given 某文件之 `announcedDate` 於 UTC+8 為 `2026-06-10`, When 匯出, Then 該欄之值**逐字**為 `2026-06-10`；`null` → 空儲存格。
+  - ✅ **落點已定案（2026-08-31 lead 裁決；🔴 兩案皆不採，走第三條）**：**直接沿用既有 `formatExportTimestamp()` 並取其前 10 字元**——**不新增 `formatExportDate()`**，`backend/src/storage/csv-export.ts` **一行未改**。
+    - 📝 **被否決之兩案，逐字保留供追溯**：`OLD>` ① spec-writer 案——「後端新增 `export function formatExportDate(value): string`，落於 `backend/src/storage/csv-export.ts`；此為對該檔之 **additive export**，`AC-X16` ⑦ 已就地放行」；`OLD>` ② architecture 案——依 `AC-X16` ⑦ 之**放寬前**字面否決該函式，但未給出替代之取值途徑。
+    - 🔴 **僵局之成因（值得記下）**：兩份文件**各自引用對方的舊版本**——本 AC 為了容納 `formatExportDate()` 而放寬了 `AC-X16` ⑦，architecture 卻依 `AC-X16` ⑦ 放寬**前**的字面否決該函式。**兩邊都不是錯的，只是看的是不同時刻的同一條鎖。**
+    - ✅ **第三條同時滿足三件事**：① `AC-X16` ⑦ 得以**回到未放寬之嚴格字面**（`csv-export.ts` 未被修改）；② **不產生第二份 `toTaipei()` 位移**——那正是當初放寬所要防的東西，如今由「根本不新增函式」直接達成，比放寬更強；③ 與下方之可觀察等式**本來就是同一個式子**，約束環無須改寫。
+  - **可驗證之等式（本條之驗證形狀）**：該儲存格 **＝ `formatExportTimestamp(announcedDate).slice(0, 10)`**。`null`／空值 → `formatExportTimestamp()` 既有行為回空字串，`.slice(0,10)` 仍為空字串 ⇒ **空儲存格**（與 `AC-X3` 第 13 列一致，無須額外分支）。🔴 **不得**使用 `toLocaleDateString`／`toLocaleString('zh-TW')`、亦**不得**對 ISO 字串直接 `.slice(0,10)`——後者於 UTC 16:00 之後會**差一天**，且該錯誤在開發機（UTC+8）與容器（UTC）會各自呈現不同結果**而兩邊測試都會綠**（本 repo 2026-08-14／15 MSSQL 時區 bug 之同一形狀）。
+  - ⚠ **本條與 [F039](F039-appendix-management.md#export-delta) `AC-D13` ③ 之「上傳時間拆到秒」刻意不同，此差異經 spec-writer 判定並在此明列理由**：F039 之 `uploadedAt` 是**時間戳**（每次覆蓋皆更新，日期粒度不足以區分同日多次覆蓋）；本欄之 `announcedDate` 是**日期欄**（[data-model](../data-model.md#document-entity) 之粒度即為日），畫面本身亦只呈現日期，**補上 `00:00:00` 等於憑空捏造不存在的精確度**。⇒ **維持 `YYYY-MM-DD`**，與 [error-handling.md#export](../error-handling.md#export) 之「時間戳欄一律 `YYYY-MM-DD HH:mm:ss`」不衝突（本欄非時間戳欄）。
+
+#### 匯出動作、權限與端點
+
+- **AC-X9**（🔴 匯出鈕之位置、逐字文案與選擇器）：Given 任一**可進入本頁**之角色（`AC-X10`）載入後台文件清單頁, When 檢視 **topbar 動作區**（`PageHeader` 之 children，admin shell 版面契約＝頁面動作鈕一律在 topbar 右側）, Then 存在一顆按鈕，其**可見文字**與 **`aria-label`** 皆**逐字**為 `匯出`、**`title` 逐字**為 `匯出程序書清單（CSV）`、**icon 鍵**為 `download`；其**位置在「建立程序書」鈕之前（左側）**（比照 `prototypes/24-appendix-management.html` 之「匯出」在「上傳附錄」之左）。
+  - 🔴 **該鈕非 write-only**：Given 角色為 SysAdmin／Supervisor／DeptContact（三者對本頁皆為**唯讀**）, When 渲染, Then 該鈕**仍存在且可觸發**——**不得**套用 `.write-only`／`canWrite` 條件式渲染。<br>📌 **理由**：匯出屬**讀取類動作**（[error-handling.md#export](../error-handling.md#export) 之權限段落已明訂「唯讀角色允許匯出」；同 [F039](F039-appendix-management.md#export-delta) `AC-D4`／[F018](F018-usage-form-management.md#name-and-export-column-delta) `AC-X6`）。
+  - **逐字斷言**：`getByLabelText('匯出')` 於 ICSOPAdmin **與** SysAdmin／Supervisor／DeptContact 四種角色下**皆非 `null`**；`queryByText('建立程序書')` 僅於 ICSOPAdmin 下非 `null`（**既有 `canWrite` 行為不變**）。
+  - 🔒 **本頁既有之唯讀 banner、統計卡、篩選卡一律不動**——本 delta 只在 topbar 加一顆鈕。
+
+- **AC-X10**（🔴 權限：誰可匯出、誰 403）：Given [F025](F025-role-function-matrix.md) 之 `ICSOP 文件管理` 列（**逐格不變**：系統管理員 `唯讀`／ICSOP 管理員 `CRUD`／主管 `唯讀`／部門窗口 `唯讀`／一般使用者 `無`；🔴 **已對程式碼覆核**：`backend/src/rbac/function-matrix.ts:114` 之 `row('READ','CRUD','READ','READ','NONE')`，其參數順序由同檔 `:74-80` 之 `row()` 宣告釘死為**系統管理員／ICSOP管理員／主管／部門窗口／一般使用者**，與 F025 表格欄序及 `:97` 之文件註解三者一致）, When 各角色呼叫匯出端點, Then ——
+  - **ICSOPAdmin／SysAdmin／Supervisor／DeptContact 四者皆允許**（`'read'` 閘門本即通過）；
+  - **User（一般使用者）** → **403 `PERMISSION_DENIED`**（路由層，比照本頁清單端點之既有行為）。
+  - 🔴 **閘門必須為功能 `ICSOP文件管理`（`FunctionKey.ICSOP_DOCUMENT_MANAGEMENT`）之 `'read'`，不得改為 `'write'`**——本矩陣對 SysAdmin／Supervisor／DeptContact 皆為**唯讀**，改成 `'write'` 會使**三種角色連匯出都不能用**；而若為了讓它通過而改矩陣格值為 CRUD，等同**把整個文件管理模組對三者開放寫入**。**兩種改法皆為回歸，不是整理**（逐字沿用 [F025](F025-role-function-matrix.md) `AC-N36` 之既有論證形狀）。<br>🔴 **本條在本 delta 特別容易被違反，因為 `OQ-X-01` 已定案採 `POST`**（`@RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')`）：「POST ⇒ write」是直覺反射——**HTTP 方法不決定閘門**，`RolePermissionGuard` 只看 `@RequirePermission` 之**第二個引數**，而該引數**恆為 `'read'`**。<br>📌 **POST 於此不代表狀態變更**：本端點**無任何副作用**（不寫稽核、不寫任何資料表），與 `AppendicesService.exportPool()`／`UsageFormsService.exportPool()` 完全同型（兩者亦只呼叫 `assertCanRead()`）；採 POST 純為「查詢對象集合放不進 URL」（`AC-X11`）。**相同 body 產生相同位元組**（除檔名內之時間戳外），重送不產生額外效果。
+  - 🔴 **本頁之可匯出角色集合與 [F018](F018-usage-form-management.md#name-and-export-column-delta) `AC-X6`／[F039](F039-appendix-management.md#export-delta) `AC-D4` 刻意不同**（那兩頁只有 ICSOPAdmin＋SysAdmin——`function-matrix.ts:115-116` 之 `USAGE_FORM_MANAGEMENT`／`APPENDIX_MANAGEMENT` 皆為 `row('READ','CRUD','NONE','NONE','NONE')`，Supervisor／DeptContact 於該兩頁本就 403）——差異來自 F025 矩陣既有之列值，**非本 delta 之裁量**，**不得**為了「多處一致」而收緊本頁。<br>🔴 **明文禁止照抄** [F039](F039-appendix-management.md#export-delta) `AC-D4` 之句子「Given 角色為 Supervisor／DeptContact／User 直接呼叫匯出端點, Then 回 403 `PERMISSION_DENIED`」——**該句在本 feature 是錯的**（本頁 Supervisor 與 DeptContact 皆有 `READ`）。同型 delta 之措辭可照抄，**矩陣事實不可照抄**。
+  - **不寫稽核**：匯出**不寫入 `AUDIT_LOG`**（管理存取，比照本頁既有查詢與 [F039](F039-appendix-management.md#export-delta) 附錄池匯出）；[F023](F023-audit-logging.md)／[F024](F024-access-history-query.md) **不需 delta**、`actionType`／`targetType` 列舉**不新增任何值**。
+
+- **AC-X11**（🔴 匯出範圍＝**當前篩選之全部結果**；**本條只鎖可觀察行為，機制不入 AC**）：Given 文件池共 591 筆、每頁 50 筆且目前位於第 1 頁、已套用任意組合之篩選使符合者為 80 筆, When 點擊匯出, Then 產生之 CSV **恰含 80 筆資料列**（＋1 列表頭），**非**當前頁之 50 筆；Given 未套用任何篩選, Then 含全部 591 筆。
+  - 🔴 **本條之三項不變式（無論端點形狀走哪一案皆成立，這才是本 delta 真正要鎖的東西）**：<br>　① **列集合**＝畫面**當前 13 項篩選 ＋ 節點子樹 chip** 套用後之**全部列**（＝畫面「共 {N} 筆」所計數之同一集合），**非**當前頁之 50 筆；<br>　② **列序**＝畫面當前排序（`sortBy`／`sortDir` 套用後、由第 1 頁至最末頁由上而下之順序）；<br>　③ CSV 資料列與該集合**一一對應、同序、不多不少**（`AC-X1` ⑤）。
+  - ✅ **機制已定案（`OQ-X-01` → 乙案；architecture-spec §13 決策 D1～D4）**：前端把**畫面當前結果之文件 id 清單**（＝ `DocumentListPage.tsx` 之 `filtered.map(d => d.id)`，**不是** `pageRows`、**不是** `all`）連同**選填之連結點命中值**送給後端；🔴 **後端完全不重跑任何篩選、不重跑任何排序**。端點形狀見 [§Interface Contract](#interface-contract)。
+  - 🔴 **可測形狀（三條，互不可替代；防的是三種不同的假綠）**：
+    - **① 送對了集合**（前端）：spy 匯出 API，斷言其所收之 id 陣列**逐字等於** `filtered.map(d => d.id)`。<br>⚠ **fixture 必須使 `filtered`／`pageRows`／`all` 三者相異**（至少 3 頁資料 ＋ 一項生效之篩選）——**單頁無篩選之 fixture 下該斷言對三者皆成立＝零鑑別力之假綠**。
+    - **② 保住了順序**（後端）：以 store fake **刻意回傳與請求相反之順序**，斷言 CSV 資料列順序 ＝ 請求之 `documentIds` 順序。<br>⚠ **fake 若依序回傳，「有沒有重排」完全測不出來**——fake **必須主動打亂**。<br>📌 **可測性註記（2026-08-31，ui-ux-designer 回報 prototype 無可達載體）**：本項之驗證載體在 **service／函式層**（store fake ＋ CSV 位元組），**不得**要求 `prototypes/13-document-list.html` 或畫面上示範「排序後之匯出」——prototype 之排序為靜態版面示意、不驅動任何匯出路徑，補示範列亦會改動既有值域而牴觸 `AC-X16` ②。前端側只需斷言「送出之陣列逐字等於 `filtered.map(d => d.id)`」（本 AC ①），**排序正確與否由後端向量負責**。
+    - **③ 每格的值對**（後端）：以**單一列 fixture**、14 欄各給一個有鑑別力之值（`ojtStatus='partial'`／`draftingSectionName=null`／`secondaryChiefNames` 非空／`announcedDate` 跨日邊界／`contentSummary` 長於畫面截斷寬度／`links` 三筆且命中第三筆／`icsopPdfFileName=null`），斷言 14 個儲存格逐字。
+    - 📌 **①② 是在證明「結構保證沒被實作破壞」，③ 才是在建立保證**——只寫 ③ 會讓「送錯陣列」與「忘了重排」**全綠通過**。
+  - 🔴 **「列集合相同」為結構保證、且其缺口方向安全**：後端只輸出 id ∈ 請求清單之列 ⇒ **CSV 多出畫面沒有的列在結構上不可能**；唯一缺口為「載入清單與按下匯出之間該文件被刪」⇒ **CSV ⊆ 畫面**（該列靜默略過，`AC-X17` ④）。
+  - 🔴 **下列五項為端點之恆定約束**：① 閘門為功能 `ICSOP文件管理` **`read`**（`AC-X10`）；② **不寫稽核**；③ 上限 10,000（`AC-X12`）；④ 檔名 `documents_{YYYYMMDD}_{HHmmss}.csv`（`AC-X13`）；⑤ 回應 body 必須為 `toCsvBuffer()` 之 **Buffer**（`res.send(buffer)`，**不得** `res.send(string)`——會讓 Express 自行決定編碼，BOM 悄悄壞掉而測試仍可能綠，`csv-export.ts` 檔頭之明文警告）。
+  - 📝 **被撤回之原表述，逐字保留供追溯**（lead 2026-08-31 原信第 4 點，已由 lead 於同日實測後自行撤回；`OQ-X-01` 之甲案即其形式化，已被架構裁決否決）：<br>　OLD> 「**匯出範圍＝當前篩選之全部結果（非當前頁）**：須明列**全部 13 項篩選 ＋ 節點子樹 `nodeSubtreeId`／`lifecycleId`** 之逐字參數鍵名皆須帶入，且未套用者不得送空字串。」
+  - 🔴 **撤回理由（spec-writer 與 lead 各自獨立實地查證，結論一致；四項事實）**：<br>　**(a) 本頁 13 項篩選全部在瀏覽器端施加**——`DocumentListPage.tsx:230` 只以 `{ pageSize: 2000, ...subtreeParams }` 取一次完整工作集進 `all` state，13 項篩選、關鍵字與排序皆於 `filtered` 之 `useMemo`（`:483-517`）客端運算；後端只收到 `pageSize` 與子樹兩參數。<br>　**(b) 前後端之篩選語言不同構**——前端以**顯示名稱**比對（`draftingCompanyName`／`draftingDeptName`／`draftingSectionName`／`chiefValues()` 之姓名／`statusValue()` 之衍生標籤，`:487-499`），後端以 **id／代碼**比對（`companyCode`／`draftingDeptId`／`draftingSectionId`／`primaryChiefId`，`documents.controller.ts:47-84`＋`document-list-query.ts`）。**兩者不是同一個篩選，不能只靠改參數名對接**；且同一部門名稱可對應多家公司之不同 `orgCode`（跨公司同名不同單位），單值代碼參數會**靜默漏列**。<br>　**(c) 兩項後端根本沒有參數**——`公告日期` 閉區間（前端 `:501-506`）與 `程序書書名內` 之 **contains** 雙行為（`document-list-query.ts:54` 之 `documentName` 為**等值**，contains 只存在於前端 `:493`）。<br>　**(d) 三項篩選在前端是「先取 id 集合再交集」**——`連結點程序書`／`附錄`／`使用表單` 各自另發一支 `getDocuments({linkTargetId|appendixId|formId})` 取回文件 id 集合，再於客端交集（`:246-303`），**不是單次查詢內的條件**。<br>　⇒ 若照原表述逐字寫成「由後端重跑同一組篩選」，會產生**端到端不可達之規格**：實作端只能二選一——在後端**重寫一套名稱式篩選**（兩套語意必然漂移，且單元測試兩邊各自為真、交集無人驗＝本 repo [F024](F024-access-history-query.md#export-fix-delta) 匯出鈕已踩過之假綠形狀），或**悄悄只帶部分參數**（＝本檔 `AC-D2` 第 10／11 列附錄／表單篩選漏映射、端到端靜默無作用那個坑之重演）。**故本 AC 只鎖可觀察之列集合與列序，機制交由架構裁決。**
+  - ⚠ **已知邊界（既有缺口，非本 delta 造成）**：畫面本身以 `LOAD_SIZE = 2000`（`DocumentListPage.tsx:51`）取工作集，文件總數若超過 2,000，**清單頁本身即已截斷**（統計卡、篩選、排序、分頁全部只看那 2,000 筆）；本 delta 之三項不變式仍成立——匯出**恆等於畫面所見**，不多也不少，**不引入新的不一致**。該既有限制登錄為 [open-questions.md](../open-questions.md#x-2026-08-31) `OQ-X-03`，**本 delta 明確不修**。
+
+- **AC-X12**（🔴 匯出筆數上限）：Given 符合當前篩選之結果為 **10,001** 筆, When 匯出, Then 回 **400 `EXPORT_ROW_LIMIT_EXCEEDED`**（訊息含**實際筆數**與上限值 10,000 並提示縮小條件），**不產生任何檔案、不回傳部分結果**；Given 恰為 **10,000** 筆, Then 匯出成功（**邊界值含**）。
+  - **必須共用** `csv-export.ts` 之 `assertExportRowLimit()`，且**必須單點執行**（該函式之訊息已把實際筆數排在上限值之前，供前端 `countFromLimitError()` 取第一個數字）。
+  - 🔴 **檢查點＝後端、id 清單之長度、任何 DB 查詢之前**（architecture-spec §13.2 ④）。<br>📌 **這相對 [F018](F018-usage-form-management.md#name-and-export-column-delta) `AC-X8`／[F039](F039-appendix-management.md#export-delta) `AC-D8`（於篩選後檢查 `rows.length`）是檢查點前移，但語意完全相同**——在本裁決下該長度**即是**符合條件之筆數，不需要先查再數。🔒 **不得有第二處檢查。**
+  - 🔴 **前端不得執行本檢查**：前端**得**（比照 [F024](F024-access-history-query.md#export-fix-delta) `AC-F19`）於結果數超過上限時顯示**事前提示文字**，但那是**提示**、**不是檢查**——**不得因此擋下請求、不得 `disabled` 匯出鈕**。「提示」與「執行檢查」一旦合流，後端之錯誤路徑就再也跑不到，**本 AC 也就永遠測不到真的**。
+  - 🔴 **可測性註記（不得省略；test-generator 必讀）**：`LOAD_SIZE = 2000`（`DocumentListPage.tsx:51`）< `EXPORT_ROW_LIMIT = 10000` ⇒ 本 AC 之錯誤路徑**在本頁結構上不可達**。**本 AC 只能以「直接呼叫端點／service」之方式驗證，不得經由畫面觸發**——經畫面驅動的測試會寫成一條**永遠跑不到卻恆綠**的測試。<br>⚠ **另一條會使本路徑不可達的東西在後端**：`backend/src/main.ts` 之 body-parser 預設上限為 **100 KB**，而 10,000 個 id 之請求約 **400 KB** ⇒ 未提高上限時，請求會在 body-parser 就被擋成 **413**，`assertExportRowLimit()` 成為**不可達程式碼**，而**兩端單元測試都會綠**（controller 單測直接呼叫方法，body-parser 不在路徑上）。✅ **處置已定案（`OQ-X-04`；2026-08-31 第二輪，lead 退回全域方案後改裁）＝只對匯出路徑放寬**：`NestFactory.create(AppModule, { bodyParser: false })` ＋ `app.use('/admin/documents/export', json({ limit: '1mb' }))` ＋ `app.use(json())` ＋ `app.use(urlencoded({ extended: true }))`（**順序不可顛倒**）⇒ **全站其餘 JSON endpoint 之 payload 面維持框架預設 100 KB、一格未放寬**。
+  - 🔴 **第三條同型陷阱（architecture 實跑揪出，2026-08-31；本條為其規格側登錄）**：**只掛路由範圍 parser 而未同時設 `bodyParser: false`，會讓全站其餘 JSON 路由之 `req.body` 變成 `undefined`**——Nest 之 `isMiddlewareApplied()` 係按**函式名** `jsonParser` 比對，見到自行掛載者即**不再掛上內建 parser**，於是連 48 bytes 的請求都 500。⚠ **且兩端單元測試全綠**（controller 單測直接呼叫方法，body-parser 根本不在路徑上）。<br>🔒 **三條陷阱同屬一類**：不放寬上限 → `assertExportRowLimit()` 不可達；只放寬全域 → 範圍過大（已被 lead 退回）；只掛路由 parser 而不關內建 → **全站 POST／PATCH 全壞**。**三者皆只能以真環境 smoke 兌現**（architecture-spec §13.5 #1 #2），本輪環原理上測不到。
+
+- **AC-X13**（空結果與檔名）：Given 當前篩選之結果為 **0 筆**（畫面呈現空狀態 `查無符合結果`）, When 點擊匯出, Then 回 **200** 並產生**僅含表頭列**之 CSV（**非錯誤、非空檔**）——即 `AC-X1` ② 之十四欄表頭 ＋ 一個 CRLF。<br>Given 匯出成功, When 檢視 `Content-Disposition` 之 `filename`, Then 其形狀為 **`documents_{YYYYMMDD}_{HHmmss}.csv`**（伺服器時間，**UTC+8**，共用 `exportFileName('documents', now)`）；`Content-Type` 為 `text/csv; charset=utf-8`。<br>📌 **scope 字面為 `documents`**，與既有 `appendices`／`usage-forms` 及變更歷程各 scope 並列、不重複。
+  - 🔴 **0 筆時匯出鈕仍可按、不得事前擋下**：**不得**以 `disabled` 阻止（[F024](F024-access-history-query.md#export-fix-delta) 匯出鈕已就同一件事裁定過——`disabled` 的鈕不能 focus、讀不到 tooltip、觸控裝置上按了毫無反應，使用者只會覺得「壞了」）。**得到一份只有表頭的檔案是誠實的。**
+
+- **AC-X14**（🔴 使用者可見回饋之逐字文案）：Given 匯出成功, When 檢視回饋, Then 其文字**以逐字片段 `已匯出程序書清單（CSV，UTF-8 BOM）` 起始**（其後可附筆數等資訊，該部分不逐字約束）。<br>Given 符合筆數超過上限, When 檢視錯誤回饋, Then ① 其文字**含逐字片段** `符合條件之筆數為 {N} 筆，超過匯出上限 10000 筆，請縮小篩選條件`（`{N}` 為實際筆數，取自 `countFromLimitError()`）；② 字串 **`EXPORT_ROW_LIMIT_EXCEEDED · 400`**（＝既有共用常數 `EXPORT_LIMIT_BADGE`）出現於**同一個回饋容器內**。<br>Given 其他錯誤, Then 回饋逐字為 `匯出失敗：{code}`（沿用 [F018](F018-usage-form-management.md#name-and-export-column-delta) `AC-X10`／[F039](F039-appendix-management.md#export-delta) `AC-D12` 之既有句式）。
+  - 🔴 **量詞／限定詞之裁定＝「筆數」＋「篩選條件」（與 [F039](F039-appendix-management.md#export-delta)／[F018](F018-usage-form-management.md#name-and-export-column-delta) 同型，與 [F037](F037-document-change-history.md#export-delta)／[F038](F038-lifecycle-tree-change-history.md#export-delta) 之「事件」＋「查詢條件」刻意不同）**。**理由（spec-writer 裁定，不得省略）**：① 本頁之計數單位在**畫面上已逐字寫著「共 {N} 筆」**（篩選卡右側）與統計卡「程序書數量（總數）」——回饋若改口說「事件」，與使用者眼前的字對不上；② 本頁之縮小手段就叫「**篩選**條件」（篩選卡標題逐字 `篩選條件`、按鈕逐字 `清除全部篩選`），而 F037／F038 之對應載體是「查詢」；③ 本頁與附錄／表單池同為**篩選式清單**，三者同型。<br>🔒 **五處匯出之回饋句不得互相對齊為同一句**（各自之量詞與限定詞為刻意差異）。
+  - **匯出鈕之下載途徑**：必須走 `downloadViaBlob()` 之等價路徑（`fetch` → `Blob` → 程式化 `<a download>`），**不得**用 `window.open`／`<a href>`——後者之導覽式請求會送 `Accept: text/html` 而撞上 SPA fallback，使用者**靜默**拿到一個副檔名 `.csv`、內容是 app shell 的檔案（`frontend/src/api/download-blob.ts` 檔頭之明文禁令，本 repo 2026-07-25 已踩過同型 bug）。✅ **本端點採 `POST`（`OQ-X-01` 已定案）** ⇒ `downloadViaBlob()` **新增第三個選填參數**（`init?: { method?; body? }`，**additive**——既有全部呼叫端只傳兩個參數，`init` 為 `undefined` 時行為**逐字不變**）；有 `body` 時於**同一次** `fetch` 加上 `method: 'POST'` 與 `Content-Type: application/json`，🔒 **`Accept: application/octet-stream` 維持不變**。<br>🔴 **明文禁止另寫一份 `postDownloadViaBlob()`**：那會把 `download-blob.ts` 之三條防線各複製一份——(i) `Accept` 不得為 `text/html`、(ii) 檔名優先取 `Content-Disposition`、(iii) 錯誤走 `extractDownloadError()` ＋ `notifySessionLost()`——**三者各多一個漂移點**。
+
+- **AC-X17**（🔴 請求驗證與**檢查順序**；🔒 **全部沿用既有錯誤碼，本 delta 不新增任何碼**）：Given 呼叫匯出端點, When 後端處理請求, Then **依下表之順序**判定（**順序即實作順序，不可顛倒**）——
+
+  | 序 | 條件 | 結果 |
+  |---|---|---|
+  | ① | `documentIds` **缺席**／**非陣列**／**任一成員非字串** | **400 `VALIDATION_ERROR`**（**既有錯誤碼，非新增**），**整批拒絕**、**不產生任何檔案、不執行任何 DB 查詢** |
+  | ② | `documentIds.length` **> 10,000** | **400 `EXPORT_ROW_LIMIT_EXCEEDED`**（訊息由**既有** `assertExportRowLimit(documentIds.length)` 產生，`{N}` 內插實際筆數且**排在上限值之前**；`AC-X12`） |
+  | ③ | `documentIds.length` **=== 0** | **200**，回傳**僅含表頭列**之 CSV（非錯誤、非空檔；`AC-X13`） |
+  | ④ | 某 id 於 DB 已不存在（載入清單與按下匯出之間被刪除） | **靜默略過該列**，其餘照常輸出——**不回 404、不中止整份匯出**；CSV 資料列數 ＝ `documentIds.length` − 查無筆數 |
+
+  - 🔴 **① 沿用既有 `VALIDATION_ERROR`，本 delta 不新增任何錯誤碼**（`AC-X16` ⑨ 逐字續為有效、**未開任何例外**）。**依據**：`VALIDATION_ERROR` 為既有實作常數，語意即「請求 body 不合法」，且 **`DocumentsController.setStatus()` 已在同一個 controller 內使用之**（`documents.controller.ts` 之 `throw new BadRequestException('VALIDATION_ERROR')`）⇒ 同 controller、同語意、零新增碼、零 AC 例外，且錯誤仍可定位。
+  - 🔴 **① 必須回一個明確之錯誤，不得靜默通過**：<br>　📝 **被否決之替代方案，逐字保留供追溯**：`OLD>` 「`body.ids` 缺席／非陣列 → **視同空陣列**（→ 走 ③，200 ＋ 僅表頭列）」（architecture-spec §13.2 ④ 第 1 列之修訂稿）。<br>　**否決理由（lead 2026-08-31 裁決）**：畸形 body 會退化成一份**看似成功**的僅表頭 CSV——「請求壞掉」與「0 筆符合」產生**逐位元組相同**之輸出 ⇒ **沒有任何測試能區分兩者**，使用者拿到檔案卻沒有任何訊號說它是壞的，而真正的病灶（前端送錯 body）**對兩端單元測試完全隱形**。這正是本 repo 反覆付出代價的靜默失敗形狀（`AC-D2` 第 10／11 列附錄／表單篩選漏映射端到端無作用、`AC-E10` 之「`undefined` ≠ `false`」、migration 白名單漏欄致「值人間蒸發」皆屬同一類）。<br>　📝 **另一被撤回之方案，逐字保留供追溯**：`OLD>` 「**400 `EXPORT_IDS_INVALID`**（🆕 本 delta 新增之錯誤碼）」。**撤回理由**：新增碼與 `AC-X16` ⑨ 相衝，而該鎖**無需為此開例外**——既有 `VALIDATION_ERROR` 已完全滿足需求。
+  - 🔴 **① 之型別驗證必須先於 ② 之長度上限（本條最有價值處，與錯誤碼字面無關）**：長度檢查以「`documentIds` 是陣列」為前提，順序顛倒會對非陣列輸入取 `.length` 而得到 `undefined`，`undefined > 10000` **比較恆為偽** ⇒ **驗證靜默通過**，畸形請求一路走到組 CSV。
+  - 🔴 **成員非字串一律整批拒絕，明文禁止靜默 `typeof` 過濾**（2026-08-31 lead 裁決）：<br>　📝 **被否決之替代方案，逐字保留供追溯**：`OLD>` 「`documentIds` 之**成員非字串** → 以 `typeof === 'string'` **過濾**該成員，**不整批拒絕**、**不回錯誤**」（architecture-spec §13.2 ④ 之表述，spec-writer 亦曾一度以「已知殘留風險」接受之）。<br>　**否決理由**：被過濾之成員會使 CSV 列數比預期短，而該現象與 ④ 之「該文件已被刪除」**在輸出上完全無從區辨** ⇒ 又一個「壞掉」與「正常」長得一模一樣的靜默失敗，與 ① 所要防的是**同一件事**。既然已為缺席／非陣列建了一條會出聲的路徑，把成員層的同類錯誤導向同一條路徑**沒有額外成本**，卻少一個看不見的洞。<br>　📌 **代價確實極小**：本端點之唯一呼叫端是我方前端，`documentIds` 來自 `filtered.map(d => d.id)`（型別上恆為 `string`）⇒ 正常路徑**永遠不會**觸發本項；它只在前端送錯時出現，而那正是我們最需要它出聲的時候。
+  - **邊界**：`documentIds` 成員**重複**時，依請求順序輸出且**僅輸出一次**（取首次出現之位置）；成員為**空字串**為合法字串 ⇒ **不觸發 ①**，而落入 ④ 之查無並被靜默略過。
+  - 🔒 **① 不適用於 `linkTargetId`**：該鍵為**選填**，缺席、為空字串或指向不存在之文件時**一律不視為錯誤**——其唯一用途是欄內排序，無命中即原樣回傳（`AC-X6`）。**不得**為它新增任何錯誤碼或驗證分支。
+
+#### 效能與回歸鎖定
+
+- **AC-X15**（🔴 效能：名稱解析與連結點富化不得 N+1）：Given 匯出 591 筆文件, When 量測 store／name-resolver 之查詢呼叫次數, Then 其次數**與匯出筆數無關**（固定值，與匯出 1 筆時相同）——匯出必須沿用 `DocumentsService.listDocuments()` 之**既有批次注入路徑**：依序呼叫**與清單完全相同**之五個既有私有方法 `enrichNames` → `enrichSecondaryChiefs` → `enrichIcsopPdf` → `enrichOjt` → `enrichLinks`（各為固定次數之批次查詢），**不得**逐列查詢、**不得**新增第二條富化路徑。
+  - 📌 **建議（非必須）**：把該五行抽為私有 `enrichListItems(items)` 供清單與匯出兩處呼叫，使「匯出的值一定是清單的值」由**同一段程式碼**保證而非由紀律保證。⚠ 若實跑後既有 `documents.service.spec.ts` 因此轉紅，**正確處置是放棄抽取、於匯出路徑逐一呼叫同樣五個方法**（保證仍在，只是由紀律承擔）。
+  - ✅ **讀取路徑已定案（architecture-spec §13.3；四步，順序不可顛倒）**：① **取工作集**——`store.list({ pageSize: EXPORT_ROW_LIMIT })`，**不帶任何篩選**（本 delta 之匯出為 load-all）；② **交集**——以請求之 id 建 `Set`，自工作集取命中者，查無之 id 直接略過（`AC-X17` ④）；③ **重排**——以 `Map<id, item>` 依請求之 id **原序**重排；④ **富化**——對**重排後之列**（非整個工作集）依序呼叫上列五個既有 enrich。<br>🔒 **`DocumentStore` 介面一格未動**：**不新增任何 store 方法、不新增任何 `DocumentListFilters` 欄位** ⇒ `list()`／`applyDocumentQuery()` 一行未改（`AC-X16` ②⑤）。<br>📝 **spec-writer 初稿之讀取路徑已作廢，逐字保留供追溯**：`OLD>` 「`DocumentStore` 新增**選填**成員 `findListItemsByIds?(ids)`；TypeORM 實作以 `chunkByParamBudget(keys, 1, 1000)` 切批以避開 MSSQL 2,100 參數硬上限」。**採納修訂之理由**：load-all ＋ 記憶體交集使 `DocumentStore` **完全不需改動**，比「新增選填成員」更強地滿足零漣漪；且步驟 ① 為**單一**查詢，不存在參數上限問題。
+  - 🔴 **步驟 ① 之 `pageSize` 取 `EXPORT_ROW_LIMIT`（10,000）而非 `LOAD_SIZE`（2,000）**：使匯出之載入天花板**不低於**畫面之載入天花板，`AC-X11` 之「匯出恆等於畫面所見、不多也不少」在畫面自身被 `LOAD_SIZE` 截斷時**仍成立**（`OQ-X-03` 之既有缺口不因匯出而擴大）。
+  - 🔴 **列序由服務層以請求之 id 原序重排**（`Map<id, item>`），**不得**沿用 store 或 DB 之回傳順序——那是本裁決全部價值之所在（`AC-X11` 可測形狀 ②）。
+  - 📌 **本 delta 之匯出為 load-all**（文件為有界集合，正式站約 591 份），此為**刻意**——`AC-X11` 之範圍即「當前篩選之全部結果」，分批串流反而使「一次交易內之一致快照」變複雜而無實益。
+  - ⚠ **最可能靜默退化之處**：`enrichOjt` 之三值聚合（跨 `DOC_USING_DEPT` × 場次）與 `enrichLinks` 之三次批次查詢——**逐列查一次是最直覺的寫法，即 N+1**，同時違反 [NFR-001](../nfr.md#performance)、`AC-J15` ⑤ 與 `AC-E10` 之同一條紅線。
+  - 🔴 **名稱解析必須依公司分組批次**（`documents.service.ts` 之既有處置）：員編僅在單一公司內唯一，混批解析會把某公司員工的姓名誤植到另一公司的文件列上——匯出是**存查用途**，該錯誤落到 CSV 後會被當成事實。
+
+- **AC-X16**（🔒 **零漣漪回歸鎖定**）：Given 本 delta 實作完成, When 檢視系統, Then 下列**全數維持綠燈、期望值一字未改**——
+  - ① **本頁 15 欄之欄位集合、由左至右順序與各欄顯示規則逐字不變**（`AC-N37`／`AC-D9`／`AC-E9`／`AC-E14` ①／`AC-N40` ①／`AC-T48` ①／`AC-J15` ①）；**特別是「樹狀圖」欄仍存在於畫面**——它只是不匯出（`AC-X1` ⑤ (a)），**不得**被順手移除；
+  - ② **13 項篩選之組成、順序、比對語意與 `AC-D10` 之文案／選擇器契約逐字不變**（`AC-D1`／`AC-D2`／`AC-D3`／`AC-D4`／`AC-D6`／`AC-D7`／`AC-J14`）——本 delta **不新增任何篩選控制項、不改任何既有控制項之值域**；
+  - ③ **節點子樹 chip 之全部行為不變**（`AC-T40`～`AC-T48`，含 `AC-T46` 之清除方向性不對稱）；**「清除全部篩選」不因新增匯出鈕而改變其涵蓋範圍**；
+  - ④ **3 張統計卡、排序、分頁、空狀態 `查無符合結果`、第 12 欄之摺疊與無檔案態（`AC-E1`～`AC-E14`）一律不變**；
+  - ⑤ **`GET /admin/documents` 之回應形狀與六個頂層欄位（`items`／`total`／`page`／`pageSize`／`hasNext`／`subtreeFilter`）逐字不變**——本 delta **不擴充 `DocumentListItem`、不新增任何後端查詢參數**；且 **`applyDocumentQuery()`／`DocumentListFilters`／`typeorm-documents.store.ts` 之篩選段落一行未改**（後端不重跑篩選，`AC-X11`）。<br>🔒 **`DocumentStore` 介面亦一格未動**——匯出以 `store.list({ pageSize: EXPORT_ROW_LIMIT })` 取工作集後於記憶體交集，**不新增任何 store 方法**（`AC-X15`）。
+  - ⑥ **[F018](F018-usage-form-management.md#name-and-export-column-delta)（`AC-X4`～`AC-X10`）／[F039](F039-appendix-management.md#export-delta)（`AC-D4`～`AC-D13`）／[F024](F024-access-history-query.md#export-fix-delta)（`AC-F1`～`AC-F19`）／[F037](F037-document-change-history.md#export-delta)／[F038](F038-lifecycle-tree-change-history.md#export-delta) 之匯出行為一字不變**——含其表頭、欄集、檔名 scope、回饋句式與權限；
+  - ⑦ 🔒 **`backend/src/storage/csv-export.ts` 未被修改**（`git diff` 於該檔為空）——本 delta 只**呼叫**其既有匯出函式（`toCsvBuffer`／`assertExportRowLimit`／`exportFileName`／`joinLinkedDocumentNumbers`／`formatExportTimestamp`／`toTaipei`／`EXPORT_ROW_LIMIT`／`LINKED_DOC_NUMBER_SEPARATOR`），**不新增亦不改動該檔之任何 export**；**不得**為本頁分岔出第二份 CSV 產生器；**全庫 grep 不得出現第二個 BOM 常數、第二份注入前綴表、第二個 `EXPORT_ROW_LIMIT` 字面值**（[F039](F039-appendix-management.md#export-delta) `AC-D10` 之既有負向鎖定）。<br>📝 **本項曾於同日短暫放寬為「既有函式行為一字未改 ＋ 唯一改動為 `formatExportDate()` 之 additive export」，已由 lead 裁決恢復為上列嚴格字面**，兩次轉折逐字保留供追溯。<br>🔴 **恢復之依據（本項因此比放寬前更強，而非只是回到原點）**：放寬之目的是避免「該函式被另置一檔 ⇒ 兩份 `toTaipei()` 位移各自漂移」；改採 **`formatExportTimestamp(announcedDate).slice(0, 10)`**（`AC-X8`）後**根本不新增任何函式**，該風險由**結構**消滅而非由放寬容納。<br>✅ **已有機器鎖守住**：`documents.export.zero-ripple.spec.ts` 之負向鎖——`csv-export.ts` **不得**匯出 `formatExportDate`、全庫 `backend/src` **不得**出現第二份落點。
+  - ⑧ **[F025](F025-role-function-matrix.md) 功能矩陣逐格不變、[F026](F026-role-field-matrix.md) 欄位矩陣逐格不變**——匯出沿用既有 `ICSOP 文件管理` 功能列，**不新增任何矩陣列**（`AC-X10`）；
+  - ⑨ **不新增任何錯誤碼**——`EXPORT_ROW_LIMIT_EXCEEDED`／`VALIDATION_ERROR`／`PERMISSION_DENIED` **三者皆為既有碼且語意不變**（`AC-X17`）。<br>📝 **本項曾於同日短暫被推翻（改為「恰新增一個錯誤碼 `EXPORT_IDS_INVALID`」），已由 lead 撤回並復原為原字面**，往返過程逐字保留供追溯。<br>🔴 **復原之依據（本項因此比先前更強，而非只是回到原點）**：乙案之請求 body 確實需要一個明確之驗證失敗代碼，但**該需求由既有 `VALIDATION_ERROR` 完全滿足**——它是既有實作常數、語意即「請求 body 不合法」，且 `DocumentsController.setStatus()` 已在同一個 controller 內使用之。⇒ **「需要明確錯誤」與「不新增錯誤碼」兩者並不衝突**，先前之推翻建立在「非新增不可」這個未經查證的前提上。<br>🔒 **本項自此為硬鎖**：本 delta **不得**新增任何錯誤碼；若日後出現既有碼確實無法表達之情形，須先證明**全部既有碼皆不適用**再談例外。
+  - ⑩ **必須觸及之既有程式路徑恰三處，三者皆為 additive 或行為恆等，且既有測試皆不預期轉紅**：<br>　(i) `backend/src/main.ts` 之 bootstrap（`bodyParser: false` ＋ 自行掛回全域 parser ＋ **僅對 `/admin/documents/export` 放寬至 `1mb`**；`OQ-X-04` 已定案，**全站其餘 endpoint 之 payload 面一格未動**；`bootstrap()` 無單元測試，DI smoke 走 `AppModule` 不經 `main.ts`）；<br>　(ii) `frontend/src/api/download-blob.ts` 之第三個**選填**參數（`AC-X14`；`init` 為 `undefined` 時**既有全部呼叫端行為逐字不變**）；<br>　(iii) `frontend/src/pages/DocumentListPage.tsx` 之 **`orderedLinks()` 行為恆等抽出**（`AC-X6`；把 `LinkCell` 內既有 inline `useMemo` 原樣搬進一個具名匯出純函式，**輸出一字不變** ⇒ 既有渲染測試全綠）。<br>　**除此三處與新增檔外，不得觸及任何既有程式路徑。**<br>📝 **本項曾寫為「恰兩處」（缺 (iii)），已於同日就地更正**——(iii) 係因 `AC-X6` 之可測形狀需要一個**可斷言的前端對象**而必要，逐字理由見 `AC-X6`。<br>📝 **另一度列入之第三處已隨讀取路徑改版而消失，逐字保留供追溯**：`OLD>` 「`DocumentStore` 之**選填**成員（既有 fake 不實作亦通過型別檢查）」——現行讀取路徑為 load-all ＋ 記憶體交集，**`DocumentStore` 介面一格未動**（`AC-X15`）。
+
+## Interface Contract（端點） {#interface-contract}
+
+> ⚠ **本檔歷來無完整端點表**（清單之行為與資料契約以 Main Flow ＋ AC 描述，端點形狀由 system-architect 決定）。本節**僅登錄 2026-08-31 匯出 delta 所新增之單一端點**，不追溯補齊既有端點；`GET /admin/documents`／`GET /admin/documents/:id`／`:id/links`／`:id/ojt-completion` 等既有端點之形狀維持現況、不受本節影響。
+
+> ✅ **`OQ-X-01` 已於 2026-08-31 由 system-architect 定案（採乙案）**，本表之「方法」與「路徑」兩格已回填；權威＝`architecture-spec.md` §13（決策 D1～D4）。
+
+| 方法 | 路徑 | 權限閘門 | 語意與回應 |
+|---|---|---|---|
+| **POST** | `/admin/documents/export` | 功能 `ICSOP文件管理`（`FunctionKey.ICSOP_DOCUMENT_MANAGEMENT`）**`read`** | **（2026-08-31 新增）** 匯出後台文件清單為 CSV。**範圍＝畫面當前 13 項篩選 ＋ 節點子樹 chip 套用後之全部列**（非當前頁），**列序＝畫面當前排序**（`AC-X11` 之三項不變式）。回 `Content-Type: text/csv; charset=utf-8` ＋ `Content-Disposition: attachment; filename="documents_{YYYYMMDD}_{HHmmss}.csv"`（`AC-X13`），body 為 `toCsvBuffer()` 之 **Buffer**。驗證與檢查順序見 `AC-X17`（`VALIDATION_ERROR`（型別）→ `EXPORT_ROW_LIMIT_EXCEEDED`（長度）→ 0 筆僅表頭 → 查無靜默略過）。**不寫稽核**（`AC-X10`）。十四欄之表頭與各欄之值見 `AC-X1`／`AC-X3`。 |
+
+**Request body — ✅ 恰兩鍵，逐字鍵名已定案**：`{ documentIds: string[]; linkTargetId?: string }`
+
+| # | 逐字鍵名 | 必填 | 型別 | 說明 |
+|---|---|---|---|---|
+| 1 | **`documentIds`** | ✅ | `string[]` | ＝畫面 `filtered` 之逐列 id（13 項篩選 ＋ 子樹 chip 施加後、排序後、**分頁前**）。**順序即 CSV 列序**（`AC-X11` ②）。🔴 **不是 `pageRows`、不是 `all`** |
+| 2 | **`linkTargetId`** | ⬜ 選填 | `string` | ＝畫面 `filters.link` 之值。**唯一用途＝第 12 欄之欄內順序**（`AC-E6` 命中者排第一顆，`AC-X6`）；未套用該篩選時省略。🔒 **不得被用於任何篩選判定** |
+
+- ✅ **鍵名定案為 `documentIds`／`linkTargetId`**（逐字同 architecture-spec §13.2 ③ 之 `documentIds: string[]`，該章為本契約之權威）。<br>📝 **被否決之字面逐字保留供追溯**：`OLD>` `ids`（架構初稿與 lead 2026-08-31 轉交文所用；spec-writer 完工回報則一度用過 `documentIds`——**三份文件曾同時存在兩種寫法**，本次收斂為單一字面）。<br>**否決理由（已由 spec-writer 實地查證，非採信）**：① **本 repo 之 wire 層 id 鍵一律 entity-qualified**（`linkTargetId`／`appendixId`／`formId`／`nodeIdIn`／`secondaryChiefIds`／`usingDeptIds`／`targetDocumentId`…），全庫 `backend/src` 與 `frontend/src` grep **無任何裸 `documentIds` 作為 DTO／查詢鍵之前例**（僅見於一個前端測試檔之 fixture 物件字面量，非契約）；② **同一個 body 內之 `linkTargetId` 本身也是一個文件 id**，裸 `documentIds` 與它並置時讀者無從判斷兩者是不是同一種東西；③ `documentIds` 於 `backend/src` 已有既有用例（如 `findSecondaryChiefsByDocumentIds(documentIds)`）。
+- 🔒 **語意契約**：恰兩鍵、`documentIds` 必填且順序即列序、`linkTargetId` 選填且僅供排序——**多送任何一個篩選鍵即違反本契約**（多一個篩選鍵，就等於在後端開了一扇「也許該重跑一下篩選」的門，而那正是本裁決要關掉的東西）。
+- **驗證**：`documentIds` 缺席／非陣列 → **400 `VALIDATION_ERROR`**（既有碼）；**任一成員非字串亦同**（整批拒絕，🔴 禁止靜默 `typeof` 過濾）；`linkTargetId` 無論何值**皆不觸發驗證錯誤**。逐列見 `AC-X17`。
+- 🔴 **閘門為 `'read'`，`POST` 不改變此事**（`AC-X10`）：`RolePermissionGuard` 只看 `@RequirePermission` 之**第二個引數**。改成 `'write'` 會讓 **SysAdmin／Supervisor／DeptContact 三種唯讀角色連匯出都不能用**。
+- 🔴 **為何是 POST 而非 GET**（architecture-spec §13.2 ①，前兩條為硬性）：① **URL 容量**——上限 10,000 個 36 字元 uniqueidentifier ＋ 分隔符 ≈ **370 KB**，而 nginx `large_client_header_buffers` 預設 `4 8k`、本站前門（`infra/edge/*.conf`）與前端 nginx（`frontend/nginx.conf`）皆未調高 ⇒ 414／400，且錯誤訊息與「匯出」毫無關聯；即使以今日 591 份計亦已達 **≈ 22 KB**，早已超出預設 header 預算，**無任何編碼能把 10,000 個相異 UUID 壓進可用之 URL 長度**。② **語意誠實**——body 是「查詢對象集合」，POST 於此表達的是「查詢太大，放不進 URL」。③ **無副作用**——不寫稽核、不寫任何資料表，與 `AppendicesService.exportPool()`／`UsageFormsService.exportPool()` 完全同型。
+- 📝 **路由遮蔽風險：本裁決採 POST，故該風險不適用**（architecture-spec §13.2 ②）。<br>**被推翻之前提逐字保留供追溯**：OLD> 「🔴 若改採 `GET`，該路由**必須宣告於 `@Get(':id')` 之前**（`export` 為固定段，參數路由先宣告會把它吃成 `:id`）」。<br>**推翻依據**：`DocumentsController` 現有路由為 `@Get()`／`@Get(':id')`／`@Get(':id/links')`／`@Get(':id/ojt-completion')`／`@Post()`／`@Patch(':id')`／`@Patch(':id/status')` ⇒ **無任何 `@Post(':id')` 單段參數路由**，`@Post('export')` 今日**不可能**被遮蔽（`@Post()` 為零段路由，與單段之 `export` 不同構）。<br>🔴 **仍應遵守之紀律（面向未來，非今日之修復）**：`@Post('export')` **緊接 `@Post()` 之後**宣告；**日後若有人新增 `@Post(':id')` 系列路由，必須宣告於 `@Post('export')` 之後**。此紀律須以註解就地記錄於 controller（比照 `usage-forms.controller.ts:91-95` 之既有明文）。
+- 🔴 **body-parser 上限（✅ 已定案，`OQ-X-04`）**：`backend/src/main.ts` 現行沿用 `body-parser` 預設之 **100 KB** JSON 上限，而 10,000 筆之 body ≈ **400 KB**、2,000 筆（`LOAD_SIZE` 天花板）≈ **80 KB（僅餘 20% 餘裕）** ⇒ 不放寬則 `assertExportRowLimit()` 成為**不可達程式碼**（請求先被擋成 413，而兩端單元測試都會綠）。**裁決＝只對本端點路徑放寬至 `1mb`**（`app.use('/admin/documents/export', json({ limit: '1mb' }))`），**全站其餘 endpoint 維持預設 100 KB**。<br>📝 **被 lead 退回之原案逐字保留供追溯**：`OLD>` 「於 `main.ts` 顯式提高**全域** JSON body 上限至 `1mb`」——退回理由＝全站 payload 面放寬 10 倍以服務單一端點，範圍與收益不成比例。<br>⚠ **掛載路徑是字面 URL path、非 Nest 路由** ⇒ 不跟隨 `setGlobalPrefix()`；且 `bodyParser: false` 後**必須自行掛回**全域 `json`／`urlencoded`（順序不可顛倒）。此為 bootstrap 結構變更，其回歸**完全落在部署前 smoke**（本輪環原理上測不到，architecture-spec §13.5 #1 #2）。
+- 🔒 **無論如何**：`GET /admin/documents` 之端點、參數與回應形狀**逐字不變**（`AC-X16` ⑤）；`backend/src/storage/csv-export.ts` **一行未改**——本端點只呼叫其既有匯出函式，`公告日期` 欄取 `formatExportTimestamp(announcedDate).slice(0, 10)`（`AC-X8`／`AC-X16` ⑦）。
+
 ## Error Scenarios
 - 空結果/搜尋跳脫：見 [error-handling.md#public](../error-handling.md#public)。分頁效能見 [NFR-001](../nfr.md#performance)。
 - **子樹參數殘缺／無法解析**：**不視為錯誤**——靜默 no-op、HTTP `200`、不顯示 chip（`AC-T41`）；不寫任何稽核、不產生錯誤碼。
+- **匯出（2026-08-31 delta）**：規則權威＝[error-handling.md#export](../error-handling.md#export)（五處匯出共用）。🔴 **不新增任何錯誤碼**——下列三者**皆為既有碼**（`AC-X16` ⑨）。**檢查順序＝ `AC-X17` 之逐列表，不可顛倒。**
+
+  | 錯誤碼 | HTTP | 觸發情境 |
+  |---|---|---|
+  | `VALIDATION_ERROR` | 400 | **既有碼**（`DocumentsController.setStatus()` 已在用，同 controller 同語意）。匯出請求之 **`documentIds` 缺席／非陣列／任一成員非字串**（整批拒絕）；**不產生任何檔案、不執行任何 DB 查詢**（`AC-X17` ①）。📝 **被撤回之 `OLD>` `EXPORT_IDS_INVALID`（新增碼）** 與 **`OLD>` 「視同空陣列 → 200 ＋ 僅表頭列」** 兩案之否決理由見 `AC-X17` |
+  | `EXPORT_ROW_LIMIT_EXCEEDED` | 400 | **既有共用碼**。匯出筆數 **> 10,000**；**不產生任何檔案、不回傳部分結果**；恰 10,000 通過（`AC-X12`／`AC-X17` ②）。使用者可見文案見 `AC-X14` |
+  | `PERMISSION_DENIED` | 403 | **既有碼**。**一般使用者（User）** 呼叫匯出端點（路由層；ICSOPAdmin／SysAdmin／Supervisor／DeptContact 四者皆允許，`AC-X10`） |
+
+  🔒 **不產生錯誤碼之三種情形**（`AC-X17` ③④、`AC-X6`）：`documentIds.length` 為 0（回 200 僅表頭）、某 id 查無（靜默略過）、`linkTargetId` 缺席或無命中（原樣排序）。
 
 ## Related
 - Data: [ICSOP_DOCUMENT（19 欄位）](../data-model.md#document-entity)
@@ -284,4 +491,11 @@ Epic/Story: E04 / US-037
 - 對比前台: [F019](F019-public-list-browsing.md)（後台不套用部門置頂；**「當責室長」比對語意兩處必須一致，見 `AC-D7`**）
 - **2026-08-20 使用者裁決（D9 delta）**: `OQ-D9-25`（新增獨立欄置於最左）／`OQ-D9-26`（沿用 `有 OJT`／`無 OJT` 字面）。見 [§OJT 圖示欄 delta](#ojt-icon-column-delta)。**⚠ 待 ui-ux-designer**：`prototypes/13-document-list.html` 表頭最左新增 `OJT` 欄並依 `AC-N38`／`AC-N39` 逐字實作兩態圖示與 DOM 掛鉤。
 - **2026-08-16 使用者裁決**: OQ-D18-08／10／11／12／13（見 [§篩選 9 → 13 項 delta](#filter-13-delta)）。新增篩選之資料來源：[F039](F039-appendix-management.md)（附錄）、[F018](F018-usage-form-management.md)（使用表單，含 `formNumber` 顯示字串）、[F016](F016-pdf-ojt-attachment.md)（OJT）。
+- **2026-08-31 使用者裁決（清單匯出 CSV）**: 匯出欄位＝**畫面 15 欄去掉「樹狀圖」＝14 欄**。見 [§清單匯出（CSV）delta](#export-delta)（`AC-X1`～`AC-X17`）＋ [§Interface Contract](#interface-contract)。共用規則權威＝[error-handling.md#export](../error-handling.md#export)（v1.9 起為**五處**）；產生器＝`backend/src/storage/csv-export.ts`（**只用不改**）；同型兩處＝[F018](F018-usage-form-management.md#name-and-export-column-delta) `AC-X4`～`AC-X10`／[F039](F039-appendix-management.md#export-delta) `AC-D4`～`AC-D13`。
+  - **⚠ 待 ui-ux-designer（本 delta 新增）**：`prototypes/13-document-list.html` 之 topbar 動作區新增「匯出」鈕——可見文字與 `aria-label` 逐字 `匯出`、`title` 逐字 `匯出程序書清單（CSV）`、icon 鍵 `download`、**置於 `建立程序書` 鈕之左**、**不得**加 `.write-only`（`AC-X9`）。版型逐字樣板＝`prototypes/24-appendix-management.html:86`。
+  - ✅ **system-architect 已定案（2026-08-31，`architecture-spec.md` §13 決策 D1～D4）**：① `OQ-X-01` → **乙案**（`POST /admin/documents/export`，body 恰兩鍵，後端不重跑篩選與排序）；② `OQ-X-02` → OJT 三值標籤表落於 `backend/src/documents/ojt-completion.reader.ts`（與 `deriveOjtStatus()` 同檔，`AC-X4`）；③ 連結點排序純函式 `orderLinksForExport()` 落於 `backend/src/documents/`（`AC-X6`；🔴 **前端須配套抽出 `orderedLinks()` 為匯出純函式**，否則本條之「逐案輸出相等」沒有可斷言對象）；④ 讀取路徑＝load-all ＋ 記憶體交集 ＋ 依請求順序重排，**`DocumentStore` 介面一格未動**（`AC-X15`）；⑤ `downloadViaBlob()` 新增第三個選填參數（`AC-X14`）；⑥ `公告日期` 欄之取值＝既有 `formatExportTimestamp().slice(0, 10)`，**不新增 `formatExportDate()`**、`csv-export.ts` 一行未改（`AC-X8`，2026-08-31 lead 就地改裁）。
+  - ✅ **body 鍵名已定案為 `documentIds`／`linkTargetId`**（`OQ-X-01` 之殘留項結案，逐字同 architecture-spec §13.2 ③；裸 `ids` 不採——全庫無裸 `ids` 作為 wire 鍵之前例，理由見 [§Interface Contract](#interface-contract)）。**規格側全檔已無第二種寫法。**
+  - ✅ **畸形 body 之處置已由 lead 裁決（2026-08-31）＝既有 `VALIDATION_ERROR`**：兩個被否決之方案——架構初稿之「視同空陣列 → 200 ＋ 僅表頭列」（靜默失敗）與短暫採用之新增碼 `EXPORT_IDS_INVALID`（與 `AC-X16` ⑨ 相衝且非必要）——其字面與否決理由逐字保留於 `AC-X17`。⇒ **architecture-spec §13.2 ④ 第 1 列、§13.6 之被否決清單、[open-questions §✅ 裁決](../open-questions.md#x-arch-decisions) 三處須同步改為 `VALIDATION_ERROR`**（該三處非 spec-writer 所有）。
+  - ✅ **`AC-X7` 之「今日」基準已依 architecture-spec §13.7 交回項覆核並改寫**：`new Date()`，**明文禁止對其套用 `toTaipei()`**；含台北 00:00–08:00 窗口之可測形狀（`AC-X7`）。
+  - **🔴 待 lead 核准**：`backend/src/main.ts` 之 body-parser JSON 上限 100 KB → 1 MB（`OQ-X-04`）——**不核准則 `AC-X12` 之上限錯誤路徑成為不可達程式碼，而兩端單元測試都會綠**。
 - **待 system-architect（本 delta 新增）**：① 13 項篩選之後端下推策略（現況為前端於完整工作集上客端篩選＋`linkTargetId` 例外查詢；新增之附錄／使用表單／OJT／日期區間是否一併下推至 SQL，關乎 [NFR-001](../nfr.md#performance)）；② 「當責室長」主要∪次要之 `DOC_SECONDARY_CHIEF` join 策略（須與 [F019](F019-public-list-browsing.md) `AC-D7` 共用同一實作）；③ 篩選選項來源端點（後台無可見性過濾義務，與前台 [F019](F019-public-list-browsing.md) `AC-D5` 之端點是否共用）。
