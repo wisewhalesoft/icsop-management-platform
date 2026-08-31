@@ -31,7 +31,8 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | PERSON | 人員（含員工編號、職級、在職狀態） | 上游 MSSQL View（唯讀來源），本系統僅鏡射 |
 | ROLE | 5 種固定角色列舉 | 程式碼層級固定值 |
 | ACCOUNT | 登入帳號（手動 / 上游兩來源） | 本系統 |
-| JOB_TITLE | 職稱代碼→名稱對照主檔（供帳號清單「職位」欄） | 上游 MSSQL View（唯讀來源），本系統僅鏡射 |
+| JOB_TITLE | 職稱代碼→名稱對照主檔（供帳號清單「**資位**」欄） | 上游 MSSQL View（唯讀來源），本系統僅鏡射 |
+| JOB_POSITION | 職位代碼→名稱對照主檔（供帳號清單「**職位**」欄） | 上游 MSSQL View（唯讀來源），本系統僅鏡射 |
 | LIFECYCLE | 循環（Life Cycle）池 | 本系統 |
 | LIFECYCLE_NODE | 循環內 DAG 節點 | 本系統 |
 | LIFECYCLE_EDGE | 循環內 DAG 有向邊 | 本系統 |
@@ -145,7 +146,8 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | resignDate | 離職日（← `RESIGNDT`；哨兵 `9999-12-31` ＝未離職） | 否 |
 | hireDate | 到職日（← `HIREDT`） | 否 |
 | managerEmpNo | 直屬主管員工編號（← `DIRECTOR`） | 否 |
-| jobTitleCode | **職稱代碼**（← `JOBTITLEID`）。⚠ 存代碼不存名稱——名稱由 [JOB_TITLE](#job-title-entity) 對照解析，避免上游改名時需 backfill 全部帳號（帳號增量以 `MTDT` 為水位，僅主檔改名不會觸發帳號重寫）。2026-08-12 實測：AS 在職 1,115 筆空值 0 | 否 |
+| jobTitleCode | **職稱代碼＝畫面「資位」**（← `VW_PERSONNEL_SQL.TITLE_CODE`；v1.0 舊來源為 `JOBTITLEID`）。⚠ 存代碼不存名稱——名稱由 [JOB_TITLE](#job-title-entity) 對照解析，避免上游改名時需 backfill 全部帳號（帳號增量以 `MTDT` 為水位，僅主檔改名不會觸發帳號重寫）。2026-08-24 實測：四家在職 1,362 筆空值 0 | 否 |
+| jobPositionCode | **職位代碼**（← `VW_PERSONNEL_SQL.JOB_CODE`）。🔴 該上游欄名與 `VW_DEPT_SQL.JOB_CODE`（＝部門主管員編）**同名異義**。存代碼不存名稱之理由同上，名稱由 [JOB_POSITION](#job-position-entity) 對照解析。2026-08-31 實測：四家在職 1,362 筆 NULL 0／空字串 0 | 否 |
 | upstreamModifiedAt | 上游最後異動時間（← `MTDT`），**增量同步依據** | 否 |
 | passwordHash | bcrypt/argon2 加鹽雜湊（**僅手動帳號有值**；上游密碼欄嚴禁落地，見下） | 否 |
 | source | `manual`(手動建立) / `upstream`(上游同步) | 是 |
@@ -218,7 +220,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - 本表 `passwordHash` **僅供手動建立之管理員帳號使用**，與上游密碼欄無任何關聯，不得由上游寫入。
 
 - 手動帳號與上游帳號**共用同一資料表**，以 `source` 區分（US-005）；手動帳號之 `companyCode`／`loginId` 由本系統自行指派，不與上游衝突。
-- **手動帳號之 `name`／`orgCode`／`jobTitleCode` 由 [F003](features/F003-account-role-management.md) 之建立/編輯 modal 維護**（`AC-P1`～`AC-P12`，2026-08-14 delta）：`name` 於手動建立為**必填**（trim 後非空、≤ 30）；`orgCode`／`jobTitleCode` 選填，留空一律存 `null`（空字串不得落地），且須為 [ORG_UNIT](#orgunit-entity)／[JOB_TITLE](#job-title-entity) 主檔內、且與該帳號 `companyCode` 相符之代碼；`companyCode`（NOT NULL）**可於建立與編輯時跨公司選擇**（🔵 2026-08-14 使用者裁決 `OQ-E01-07`；候選＝`SELECTABLE_COMPANIES` ≡ `COMPANY_FULL_NAMES` 之鍵集合，見 F003 `AC-P5`／`AC-P10`／`AC-P15`）。**本規則不新增任何欄位、不需 migration**（四欄皆已存在）。上游帳號之同四欄維持唯讀（`OQ-E01-03`，違反回 `ACCOUNT_UPSTREAM_READONLY`）。
+- **手動帳號之 `name`／`orgCode`／`jobTitleCode`／`jobPositionCode` 由 [F003](features/F003-account-role-management.md) 之建立/編輯 modal 維護**（`AC-P1`～`AC-P12`，2026-08-14 delta）：`name` 於手動建立為**必填**（trim 後非空、≤ 30）；`orgCode`／`jobTitleCode` 選填，留空一律存 `null`（空字串不得落地），且須為 [ORG_UNIT](#orgunit-entity)／[JOB_TITLE](#job-title-entity) 主檔內、且與該帳號 `companyCode` 相符之代碼；`companyCode`（NOT NULL）**可於建立與編輯時跨公司選擇**（🔵 2026-08-14 使用者裁決 `OQ-E01-07`；候選＝`SELECTABLE_COMPANIES` ≡ `COMPANY_FULL_NAMES` 之鍵集合，見 F003 `AC-P5`／`AC-P10`／`AC-P15`）。**本規則不新增任何欄位、不需 migration**（四欄皆已存在）。上游帳號之同四欄維持唯讀（`OQ-E01-03`，違反回 `ACCOUNT_UPSTREAM_READONLY`）。
 - **跨公司帳號之連帶不變式（F003 `AC-P23`～`AC-P27`）**：① 手動帳號之 `loginId` 為 **全域唯一**（跨全部公司；DB 唯一鍵仍為 `(companyCode, loginId)`，全域性由應用層保證，**不新增索引**）；② 由 `orgCode`／`jobTitleCode` 解析名稱時，**必須以 `(companyCode, orgCode)`／`(companyCode, jobTitleCode)` 複合鍵為之**——[ORG_UNIT](#orgunit-entity) 與 [JOB_TITLE](#job-title-entity) 之唯一鍵皆為複合鍵，不同公司可存在相同代碼但不同單位/職稱，僅以代碼比對將解析出他公司之名稱；③ `ORG_UNIT` 目前僅同步 `AS`（`SYNC_COMPID`），故非 `AS` 之帳號其 `orgCode` 恆為 `null`，屬資料現實而非錯誤。
 - 上游帳號的姓名/部門等以同步結果為準（見 [open-questions](open-questions.md)）。
 - 帳號停用為**軟刪除**，不可實體刪除（維持稽核外鍵完整性）。
@@ -228,7 +230,11 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 ## 職稱對照 JOB_TITLE {#job-title-entity}
 
 ← `VW_PERSONAL_JOB` 之 `(COMPID, JTITLE_ID, JTITLE_NM)`（契約 [§5.4.1](upstream-hr-source-contract.md)）。
-供帳號管理清單「職位」欄（prototype 08 第 5 欄）之代碼→名稱解析。由 F004 組織同步一併攝入。
+供帳號管理清單「**資位**」欄（prototype 08 第 5 欄）之代碼→名稱解析。由 F004 組織同步一併攝入。
+
+> ⚠ **表名與欄名維持 `JOB_TITLE`／`jobTitleCode`**（對齊上游 `TITLE_CODE`／`JTITLE_NM`），
+> 2026-08-31 僅將**畫面文案**由「職位」更名為「資位」——真正的「職位」另有來源，
+> 見 [JOB_POSITION](#job-position-entity)。二者為正交維度，勿混用。
 
 | 屬性 | 說明 | 必填 |
 |------|------|------|
@@ -242,7 +248,28 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
   （AS：54／54，零歧義）。
 - **解析為兩段式**：本公司優先 → 查無再跨公司 fallback（固定取 `companyCode` 字典序最小者以保確定性）。
   實測 AS 在職 1,115 筆命中率 100%（僅第一段為 99.10%）。
-- ⚠ **不刪除本地已無對應之列**：上游移除某代碼時，既有帳號仍可能引用它，刪除會使歷史帳號之職位顯示驟失。
+- ⚠ **不刪除本地已無對應之列**：上游移除某代碼時，既有帳號仍可能引用它，刪除會使歷史帳號之資位顯示驟失。
+
+## 職位對照 JOB_POSITION {#job-position-entity}
+
+← `VW_JOB_FUN` 之 `(COMPID, CODE, DESC_CHI)`（契約 [§5.4.2](upstream-hr-source-contract.md)）。
+供帳號管理清單「**職位**」欄（prototype 08 第 6 欄）之代碼→名稱解析。由 F004 組織同步一併攝入。
+
+| 屬性 | 說明 | 必填 |
+|------|------|------|
+| id | 系統 UUID（內部代理鍵） | 是 |
+| companyCode | 公司代碼（← `COMPID`） | 是 |
+| code | 職位代碼（← `CODE`），對應 `ACCOUNT.jobPositionCode` | 是 |
+| name | 職位名稱（← `DESC_CHI`；營業一般職／事務一般職／室長／處長／部長…） | 是 |
+
+- **唯一鍵＝`(companyCode, code)`**（2026-08-31 實測：四家 73 列／73 組鍵，同公司內零歧義）。
+- 🔴 **解析為單段精確，禁止跨公司 fallback**——這是與 [JOB_TITLE](#job-title-entity) 之**刻意差異**：
+  同代碼跨公司語意可**相反**（實測 `C04` 在 AS／AE＝處長、在 AD＝部長；`D04` 在 AS＝營業經理、
+  在 AD＝科長；`B03` 在 AS／AE＝部長、在 AD＝處長）。資位 fallback 最壞是顯示他公司同義職稱，
+  職位 fallback 會顯示**錯誤的職位**。查無 → `null`（畫面「—」，F003 `AC-P18`）。
+- 實測命中率（四家在職 1,362 筆）：**1,356／1,362＝99.56%**；未命中僅 AS 之 `B20`（6 人），
+  該代碼於四家主檔皆不存在，故縱使開放 fallback 亦無從命中。
+- ⚠ **不刪除本地已無對應之列**：理由同 [JOB_TITLE](#job-title-entity)。
 
 ## 循環 LIFECYCLE {#lifecycle-entity}
 

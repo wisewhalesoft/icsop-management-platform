@@ -97,8 +97,8 @@ Epic/Story: E01 / US-005, US-006
 - **AC-P4（長度上限，對齊 entity）**：Given trim 後長度 `name` > 30 或 `companyCode` > 10 或 `orgCode` > 10 或 `jobTitleCode` > 10（任一成立）, When 建立或編輯, Then 回 **400 `VALIDATION_ERROR`**，不寫入。（`loginId` ≤ 20 為既有限制，行為不變。）
 - **AC-P5（公司欄＝可跨公司選擇；🔵 2026-08-14 使用者裁決，取代初稿之「鎖定操作者公司」）**：公司欄之候選集合＝**全部有效公司**（`SELECTABLE_COMPANIES`，見 `AC-P15`），**不限操作者所屬公司**。Given payload **未提供** `companyCode`, Then 以**操作者 session 之 `companyCode`** 寫入（預設值，仍為最常見情境）；Given 提供且存在於 `SELECTABLE_COMPANIES`, Then 以該值寫入，**縱使不等於操作者所屬公司亦允許**；Given 提供但**不存在於** `SELECTABLE_COMPANIES`（含空字串、未知代碼、已結束之公司如 `AC`）, Then 回 **400 `ACCOUNT_COMPANY_CODE_INVALID`**，不建立。<br>📝 錯誤碼語意由「非本人公司」改為「**非有效公司**」（`error-handling.md` 已同步）。跨公司之連帶處置見 `AC-P23`（清單）／`AC-P24`（唯一性）／`AC-P25`（登入）／`AC-P26`（部門候選為空）。裁決紀錄見 [open-questions.md](../open-questions.md) `OQ-E01-07`。
 - **AC-P6（部門代碼有效性）**：Given `orgCode` 非 `null`, When 建立或編輯, Then 必須存在一筆 `ORG_UNIT` 同時滿足 `orgCode` 相等**且** `companyCode` 等於該帳號之 `companyCode`；不存在 → 回 **400 `ACCOUNT_ORG_CODE_INVALID`**，不寫入。Given `orgCode` 為 `null`, Then 略過本驗證、寫入 `null`。<br>⚠ **刻意不檢查 `isActive`**：下拉候選僅列 active（`AC-P13`），但既有帳號之部門可能於組織同步後被停用，若寫入端要求 active，將使該帳號**連姓名都無法再儲存**。
-- **AC-P7（職位代碼有效性）**：Given `jobTitleCode` 非 `null`, When 建立或編輯, Then 必須存在一筆 `JOB_TITLE` 之 `(companyCode, code)` 與「該帳號之 `companyCode`＋送入之 `jobTitleCode`」**精確相等**；不存在 → 回 **400 `ACCOUNT_JOB_TITLE_INVALID`**，不寫入。<br>⚠ 寫入驗證**刻意不採**顯示端之兩段式跨公司 fallback（[data-model.md#job-title-entity](../data-model.md#job-title-entity)）——手動帳號之下拉僅列本公司代碼（`AC-P14`），不受影響；不對稱之追溯見 `OQ-E01-08`。
-- **AC-P8（驗證順序，固定不可調換）**：Given 一次請求同時違反多項規則, When 送出, Then **僅**回序位最前者之錯誤碼：① 必填／格式／長度（`VALIDATION_ERROR`, 400）→ ② 角色合法性（`ROLE_INVALID`, 400）→ ③ 公司（`ACCOUNT_COMPANY_CODE_INVALID`, 400）→ ④ 部門（`ACCOUNT_ORG_CODE_INVALID`, 400）→ ⑤ 職位（`ACCOUNT_JOB_TITLE_INVALID`, 400）→ ⑥ 帳號唯一性（`ACCOUNT_USERNAME_EXISTS`, 409）。③④⑤ 係**插入於既有 ② 與 ⑥ 之間**，既有兩者之相對順序不變（例：角色非法＋帳號重複，仍回 `ROLE_INVALID`）。
+- **AC-P7（資位代碼有效性）**：Given `jobTitleCode` 非 `null`, When 建立或編輯, Then 必須存在一筆 `JOB_TITLE` 之 `(companyCode, code)` 與「該帳號之 `companyCode`＋送入之 `jobTitleCode`」**精確相等**；不存在 → 回 **400 `ACCOUNT_JOB_TITLE_INVALID`**，不寫入。<br>⚠ 寫入驗證**刻意不採**顯示端之兩段式跨公司 fallback（[data-model.md#job-title-entity](../data-model.md#job-title-entity)）——手動帳號之下拉僅列本公司代碼（`AC-P14`），不受影響；不對稱之追溯見 `OQ-E01-08`。
+- **AC-P8（驗證順序，固定不可調換）**：Given 一次請求同時違反多項規則, When 送出, Then **僅**回序位最前者之錯誤碼：① 必填／格式／長度（`VALIDATION_ERROR`, 400）→ ② 角色合法性（`ROLE_INVALID`, 400）→ ③ 公司（`ACCOUNT_COMPANY_CODE_INVALID`, 400）→ ④ 部門（`ACCOUNT_ORG_CODE_INVALID`, 400）→ ⑤ 資位（`ACCOUNT_JOB_TITLE_INVALID`, 400）→ **⑥ 職位（`ACCOUNT_JOB_POSITION_INVALID`, 400；2026-08-31 `AC-P30`）** → ⑦ 帳號唯一性（`ACCOUNT_USERNAME_EXISTS`, 409）。③④⑤ 係**插入於既有 ② 與 ⑦ 之間**、⑥ 插入於 ⑤ 之後，既有各項之相對順序皆不變（例：角色非法＋帳號重複，仍回 `ROLE_INVALID`）。
 
 #### 編輯（PATCH `/admin/accounts/:id`）
 
@@ -133,7 +133,7 @@ Epic/Story: E01 / US-005, US-006
 
 #### 前端行為（可由 vitest 元件測試直接斷言）
 
-- **AC-P16（公司 → 部門＋職位 雙連動；🔵 2026-08-14 依 AC-P5 擴充，原僅涵蓋部門）**：Given 部門與職位下拉之候選集合, When 計算, Then **兩者皆**為 `companyCode` 之純函式（分別僅含該公司之 `ORG_UNIT`／`JOB_TITLE`）；Given 公司欄之值由 A 變更為 B, Then 部門欄**與職位欄**之已選值**皆清空**（不得殘留 A 公司之 `orgCode`／`jobTitleCode`，與後端 `AC-P10b` 之強制重新給值同一意圖）且候選重新以 B 計算；Given 公司欄無值, Then 部門與職位下拉皆為 `disabled`。
+- **AC-P16（公司 → 部門＋資位 雙連動；🔵 2026-08-14 依 AC-P5 擴充，原僅涵蓋部門；🔵 2026-08-31 由 `AC-P31` 再擴為含職位之三連動）**：Given 部門與職位下拉之候選集合, When 計算, Then **兩者皆**為 `companyCode` 之純函式（分別僅含該公司之 `ORG_UNIT`／`JOB_TITLE`）；Given 公司欄之值由 A 變更為 B, Then 部門欄**與職位欄**之已選值**皆清空**（不得殘留 A 公司之 `orgCode`／`jobTitleCode`，與後端 `AC-P10b` 之強制重新給值同一意圖）且候選重新以 B 計算；Given 公司欄無值, Then 部門與職位下拉皆為 `disabled`。
 - **AC-P17（部門選項之顯示字串）**：Given 部門下拉渲染, When 產生每一選項, Then 其文字＝`buildOrgPath(units, orgCode)`（既有 `frontend/src/domain/org-path.ts`，全站唯一之組織路徑算法）、其 value＝`orgCode`；**不得**於本頁另建第二套組織名稱組字邏輯。
 - **AC-P18（留空之清單顯示）**：Given 某帳號之 `name`／`orgCode`／`jobTitleCode` 為 `null`（或代碼查無對照）, When 渲染帳號清單, Then 對應之「姓名」「部門」「職位」欄一律顯示 **`—`**（既有 `AccountManagementPage` 規則）；**不得**出現 `（待同步）`／`（待同步姓名）` 等佔位字串——該字串為 prototype 08 建立流程之暫時佔位，本 delta 後應自 prototype 移除。「公司」欄之值＝`resolveCompanyName(**該列自身之** companyCode)`（見 `AC-P23c`——跨公司後**不得**對全列套用同一值），查無對映才顯示 `—`（於 `AC-P15` INV-C1 成立時不可達）。
 - **AC-P19（編輯 modal 之預填與唯讀；🔵 2026-08-14 依 AC-P10 調整公司欄）**：Given 開啟「編輯帳號」modal, Then 姓名／公司／部門／職位四欄以該帳號**現值預填**（`orgCode`／`jobTitleCode` 為 `null` 時選取「未設定」之空選項；公司欄預選該帳號自身之 `companyCode`，**非**操作者之公司）；Given 該帳號 `source='manual'`, Then 四欄**皆可編輯**（含公司欄，為可改選之完整下拉）；Given `source='upstream'`, Then 四欄與密碼欄皆 `disabled` 並沿用既有上游提示文案（既有姓名欄唯讀規則之延伸，版面權威＝`prototypes/08-account-management.html`）。
@@ -142,7 +142,7 @@ Epic/Story: E01 / US-005, US-006
 
 - **AC-P20（權限）**：建立與編輯手動帳號＝「帳號管理」**write**（[F025](F025-role-function-matrix.md) 矩陣：系統管理員 CRUD／ICSOP管理員唯讀／主管・部門窗口・一般使用者無）。Given ICSOPAdmin 呼叫 `POST /admin/accounts` 或 `PATCH /admin/accounts/:id`, Then 回 **403 `PERMISSION_DENIED`**（唯讀）；Given 主管／部門窗口／一般使用者呼叫, Then 回 **403 `PERMISSION_DENIED`**；Given 未登入, Then 回 **401 `AUTH_SESSION_EXPIRED`**。本 delta **不改動 [F025](F025-role-function-matrix.md) 任一格值、不新增功能鍵**。
 - **AC-P21（稽核：不寫入）**：Given 建立或編輯手動帳號成功, When 交易完成, Then **不寫入任何 `AUDIT_LOG` 列**、`AuditWriter` **完全未被呼叫**——`AUDIT_LOG.targetType` 之列舉**不含 `ACCOUNT`**（[data-model.md#auditlog-entity](../data-model.md#auditlog-entity)），[F023](F023-audit-logging.md) 之範圍限文件／使用表單／附錄／循環／變更歷程／組織異動提示。故本 delta **完全不觸及稽核子系統**（比照 [F041](F041-user-subtype-business-scope.md) `OQ-E08-10` 之處置）。<br>📝 本檔 Main Flow 第 3 點「停用帳號…記錄稽核」與上述 schema 之落差為**既存**（非本 delta 新增），追溯見 `OQ-E01-09`。
-- **AC-P22（無 schema 變更）**：Given 本 delta 之全部 AC, When 實作, Then **不新增任何 migration**——四欄皆已存在：`name` `nvarchar(30) NULL`、`companyCode` `varchar(10) NOT NULL`、`orgCode` `varchar(10) NULL`（皆於 `1721520000000-baseline-auth-org`）、`jobTitleCode` `varchar(10) NULL`（於 `1723852800000-account-job-title`）。Given 實作完成後執行 `migration:show`, Then 無新增之待執行項。
+- **AC-P22（無 schema 變更；⚠ 僅適用 2026-08-14 delta，已由 `AC-P33` 就 2026-08-31 delta 局部推翻）**：Given 本 delta 之全部 AC, When 實作, Then **不新增任何 migration**——四欄皆已存在：`name` `nvarchar(30) NULL`、`companyCode` `varchar(10) NOT NULL`、`orgCode` `varchar(10) NULL`（皆於 `1721520000000-baseline-auth-org`）、`jobTitleCode` `varchar(10) NULL`（於 `1723852800000-account-job-title`）。Given 實作完成後執行 `migration:show`, Then 無新增之待執行項。
 
 #### 跨公司之連帶處置（🔵 2026-08-14 使用者裁決之漣漪，AC-P23～AC-P27）
 
@@ -153,18 +153,65 @@ Epic/Story: E01 / US-005, US-006
   - **AC-P23b（新增公司篩選）**：清單查詢新增選填 `companyCode` 篩選參數（比照既有 `source`／`roleCode`／`status`／`keyword` 之慣例）；Given 帶 `companyCode=X`, Then 僅回該公司之帳號；Given 未帶, Then 回全部公司。前端於既有篩選列新增「公司」下拉（選項＝`GET /companies` ＋不限縮之預設項，其逐字文案為 **`所有公司`**，以具名常數 `COMPANY_ALL_LABEL` 持有供測試 import 斷言），樣式與文案句式比照既有三個篩選器（`所有來源`／`所有角色`／`所有狀態`）。<br>📝 初稿誤寫為「全部」，與既有三者之「所有…」句式不一致；**2026-08-14 裁定採 `所有公司`**。<br>✅ **prototype 已同步（2026-08-14）**：`prototypes/08-account-management.html` 之 `COMPANY_ALL_LABEL` 已為 `所有公司`，與本 AC 一致。
   - **AC-P23c（公司名稱逐列解析）**：清單之 `company` 欄位必須以**該列自身之 `companyCode`** 解析（`resolveCompanyName(row.companyCode)`），**不得**以操作者公司對全列套用同一值。〔現行實作為全列共用單一值，跨公司後即為錯誤來源〕
   - **AC-P23d（部門名稱以複合鍵解析）**：`department` 之解析鍵必須為 **`(row.companyCode, row.orgCode)`**，不得僅以 `orgCode` 比對——`ORG_UNIT` 之唯一鍵為 `(companyCode, orgCode)`，不同公司可存在**相同 `orgCode` 但不同單位**，僅以 `orgCode` 比對將解析出他公司的部門名稱。查無 → `null`（顯示 `—`，`AC-P18`）。
-  - **AC-P23e（職位名稱以該列公司解析）**：`title` 之解析必須傳入**該列之 `companyCode`**（`resolveTitle(row.companyCode, row.jobTitleCode)`），不得傳入操作者公司。〔現行實作傳入操作者公司，跨公司後會落到兩段式解析之 fallback 分支而顯示他公司職稱名〕
+  - **AC-P23e（資位名稱以該列公司解析）**：`title` 之解析必須傳入**該列之 `companyCode`**（`resolveTitle(row.companyCode, row.jobTitleCode)`），不得傳入操作者公司。〔現行實作傳入操作者公司，跨公司後會落到兩段式解析之 fallback 分支而顯示他公司職稱名〕
 - **AC-P24（`loginId` 唯一性擴為全域）**：手動帳號建立之唯一性檢查範圍由「所選公司內」擴為 **全部公司**。Given 送入之 `loginId` 已存在於**任一**公司之任一帳號（含上游同步帳號）, When 建立, Then 回 **409 `ACCOUNT_USERNAME_EXISTS`**，不建立。<br>理由：`AC-P25` 之登入解析須能單以 `loginId` 定位帳號；全域唯一使「命中多筆」不可達，是最簡潔且無歧義之保證。⚠ 這是**比既有更嚴格之超集**——既有「同公司重複 → 409」之行為與測試完全不變，僅新增「他公司同名 → 409」。DB 唯一鍵 `(companyCode, loginId)` **不變、不需 migration**（全域唯一由應用層保證）。<br>⚠ **應用層保證於並發下非絕對**（read-then-write，DB 僅強制 per-company 唯一）：此限制為**刻意接受**——手動建帳為低頻管理操作，且 `AC-P10a` 即為其安全網。若日後需 DB 層強制全域唯一，須新增 `loginId` 之篩選式唯一索引（`WHERE source='manual'`），屬 additive migration、另案評估，**本輪不做**。
 - **AC-P25（帳密登入須能解析跨公司帳號）**：⚠ **本條為本裁決最嚴重之漣漪**——現行途徑 B 以 `(DEFAULT_COMPANY_CODE ?? 'AS', loginId)` 定位帳號，且登入頁**不送 `companyCode`**；若不修訂，於 `AE` 建立之手動帳號**建立後永遠無法登入**（重演本檔檔頭所載、已閉合過一次之「建立→登入死鏈」）。<br>Given 以 `AE` 建立之啟用手動帳號與正確密碼, When 於登入頁送出帳密（**不帶** `companyCode`）, Then **登入成功**並核發 session，其 `SessionUser.companyCode` 為 `AE`。解析規則與登入頁契約（不新增公司選擇器）之權威定義見 [F001](F001-auth-login-session.md) `AC-C1`／`AC-C2`。
 - **AC-P26（部門候選為空之呈現）**：`ORG_UNIT` 目前僅同步 `AS`（`SYNC_COMPID='AS'`，[F004](F004-org-sync.md)），故選擇 `AS` 以外之公司時**部門候選必為空集合**——此為資料現實，**非錯誤、不得阻擋建立**。Given 所選公司之 `GET /org-units?companyCode=` 回空陣列, When 渲染部門下拉, Then 呈現停用（`disabled`）之下拉並顯示空狀態說明（逐字內容由 prototype 08 定稿），`orgCode` 送出為 `null`；Given 此情況下送出建立, Then **正常建立成功**（`orgCode=null`，清單顯示 `—`）。職位下拉**不受此限**——`JOB_TITLE` 刻意不以 `COMPID` 過濾攝入（跨公司 fallback 需要全表），實測含多家公司之對照列。
 - **AC-P27（既有依賴 `companyCode` 之下游不受破壞）**：Given 任一以 `AS` 建立或同步之帳號, When 執行本 delta 前後之同一操作（登入、清單、浮水印、部門/職位解析、[F041](F041-user-subtype-business-scope.md) 業務子分類範圍判定）, Then 結果**逐項相同**。跨公司僅為**新增可達狀態**，不得改變任何既有 `AS` 路徑之行為（此為本組 AC 之回歸護欄）。
 
+#### 🔵 2026-08-31 資位／職位拆欄 delta（AC-P28～AC-P33，使用者裁定）
+
+> **背景**：既有「職位」欄（`jobTitleCode` → `JOB_TITLE.name`）之語意實為**資位**（職等：業務專員／
+> 辦事員／副理…），已就地更名為「資位」；真正的**職位**（職務位置：營業一般職／事務一般職／室長／
+> 處長…）另有來源 —— `VW_PERSONNEL_SQL.JOB_CODE` 對照 `VW_JOB_FUN.(COMPID, CODE)` → `DESC_CHI`
+> （契約 §5.4.2）。二者為**正交維度**（實測 AS：資位「副理」× 職位「室長」16 人、
+> 資位「課長」× 職位「處長」12 人）。
+>
+> **命名範圍（裁定）**：內部識別子 `ACCOUNT.jobTitleCode`／`JOB_TITLE`／API `title` 一律**不改名**
+> （對齊上游 `TITLE_CODE`／`JTITLE_NM`），本次只改**畫面文案**與規格用語。新欄位一律以
+> `jobPosition*` 命名。
+
+- **AC-P28（清單「職位」欄）**：Given 帳號清單（`GET /admin/accounts`）, When 渲染, Then 表頭為
+  姓名／帳號／公司／部門／**資位**／**職位**／來源／角色／狀態／最後登入（＋write 角色之操作），
+  「職位」緊鄰「資位」之右；其值＝以 **`(該列自身之 companyCode, jobPositionCode)` 精確命中**之
+  `JOB_POSITION.name`。🔴 **不得跨公司 fallback**（與資位之 `AC-P23e` 兩段式刻意不同）——同代碼跨公司
+  語意可**相反**（實測 `C04` 在 AS＝處長、在 AD＝部長；`D04` 在 AS＝營業經理、在 AD＝科長）。
+  Given 代碼為 `null` 或查無對照, Then 顯示 **`—`**（沿用 `AC-P18`；實測 AS 之 `B20` 6 人即此情形）。
+- **AC-P29（職位主檔＝新增 `GET /job-positions`）**：Given 具「帳號管理」read 權限之使用者
+  （SysAdmin／ICSOPAdmin）, When 呼叫 `GET /job-positions?companyCode={code}`（`companyCode` 選填，
+  未帶時預設＝操作者 session 之 `companyCode`）, Then 回 `{ companyCode, code, name }[]`，
+  **依 `companyCode` 精確過濾**且依 `code` 昇冪；Given 主管／部門窗口／一般使用者呼叫, Then 回
+  **403 `PERMISSION_DENIED`**；Given 未登入, Then 回 **401 `AUTH_SESSION_EXPIRED`**（RBAC 與端點形狀
+  逐項比照 `AC-P14`，**不新增 F025 功能鍵**）。
+- **AC-P30（`jobPositionCode` 之寫入與驗證）**：Given 建立／編輯手動帳號之 payload 含 `jobPositionCode`,
+  When 送出, Then 經 `AC-P2` 正規化（trim 後空字串 → `null`）後寫入；非 `null` 時必須存在一筆
+  `JOB_POSITION` 之 `(companyCode, code)` 與「該帳號之 `companyCode`＋送入之 `jobPositionCode`」
+  **精確相等**，否則回 **400 `ACCOUNT_JOB_POSITION_INVALID`**、不寫入。
+  驗證順序（`AC-P8` 之擴充）：⑤ 資位（`ACCOUNT_JOB_TITLE_INVALID`）→ **⑥ 職位
+  （`ACCOUNT_JOB_POSITION_INVALID`）** → ⑦ 唯一性（`ACCOUNT_USERNAME_EXISTS`）；既有各項相對順序不變。
+  ⚠ 此處**不存在**資位那種「顯示寬鬆、寫入嚴格」之不對稱（`OQ-E01-08`）——職位兩端皆為精確。
+- **AC-P31（公司 → 部門＋資位＋職位 三連動；擴充 `AC-P16`）**：Given 三者之候選集合, When 計算,
+  Then 皆為 `companyCode` 之純函式；Given 公司欄之值由 A 變更為 B, Then 部門／資位／**職位**之已選值
+  **三者皆清空**且候選以 B 重算；Given 公司欄無值, Then 三個下拉皆 `disabled`。
+  對應後端 `AC-P10b` 之強制重新給值——**該規則同步擴為三者**：變更 `companyCode` 時
+  `orgCode`／`jobTitleCode`／`jobPositionCode` 必須於同一請求一併給值，缺一即 `VALIDATION_ERROR`。
+  ⚠ 職位下拉不受 `AC-P26`「候選為空即停用」之限（同資位），僅公司無值時停用。
+- **AC-P32（上游帳號之職位亦唯讀；擴充 `AC-P11`）**：Given `source='upstream'` 之帳號, When
+  `PATCH /admin/accounts/:id` 之 payload 出現 `jobPositionCode`（含明確傳 `null` 之清空意圖）, Then 回
+  **403 `ACCOUNT_UPSTREAM_READONLY`**，不寫入任何欄位；編輯 modal 之職位下拉一併 `disabled`。
+- **AC-P33（本 delta **有** schema 變更；推翻 `AC-P22`）**：Given 本組 AC, When 實作, Then 需
+  **一個 additive migration**（`1725062400000-account-job-position`）：`ACCOUNT.jobPositionCode
+  varchar(10) NULL` ＋ `JOB_POSITION` 表（`(companyCode, code)` 唯一索引）。
+  🔴 **既有列不會自動回填**：帳號同步為增量（`MTDT > watermark`），必須執行一次
+  `SYNC_FULL_RESYNC=1 npm run sync:once`；且 `classifyAccount` 必須納入 `jobPositionCode` 比對，
+  否則全量重同步亦會整批判為 noop（見 [F004](F004-org-sync.md) 與契約 §5.4.2）。
+
 ## Error Scenarios
 - 帳號重複/上游唯讀/非法角色/自我降級：見 [error-handling.md#auth](../error-handling.md#auth)（`ACCOUNT_USERNAME_EXISTS`, `ACCOUNT_UPSTREAM_READONLY`, `ROLE_INVALID`, `ROLE_SELF_DOWNGRADE_BLOCKED`）。
-- 手動帳號基本資料（姓名／公司／部門／職位）之必填、長度、代碼有效性與驗證順序：見 [error-handling.md#account-profile](../error-handling.md#account-profile)（`VALIDATION_ERROR`, `ACCOUNT_COMPANY_CODE_INVALID`, `ACCOUNT_ORG_CODE_INVALID`, `ACCOUNT_JOB_TITLE_INVALID`, `ACCOUNT_UPSTREAM_READONLY`）。
+- 手動帳號基本資料（姓名／公司／部門／資位／職位）之必填、長度、代碼有效性與驗證順序：見 [error-handling.md#account-profile](../error-handling.md#account-profile)（`VALIDATION_ERROR`, `ACCOUNT_COMPANY_CODE_INVALID`, `ACCOUNT_ORG_CODE_INVALID`, `ACCOUNT_JOB_TITLE_INVALID`, `ACCOUNT_JOB_POSITION_INVALID`, `ACCOUNT_UPSTREAM_READONLY`）。
 
 ## Related
-- Data: [ACCOUNT](../data-model.md#account-entity), [ROLE](../data-model.md#role-entity), [ORG_UNIT](../data-model.md#orgunit-entity)（部門下拉來源）, [JOB_TITLE](../data-model.md#job-title-entity)（職位下拉來源）
+- Data: [ACCOUNT](../data-model.md#account-entity), [ROLE](../data-model.md#role-entity), [ORG_UNIT](../data-model.md#orgunit-entity)（部門下拉來源）, [JOB_TITLE](../data-model.md#job-title-entity)（**資位**下拉來源）, [JOB_POSITION](../data-model.md#job-position-entity)（**職位**下拉來源，`AC-P29`）
 - Depends on: [F025 角色×功能矩陣](F025-role-function-matrix.md)
 - Related: [F005 離職停用](F005-auto-disable-departed.md)（session 撤銷機制共用）
 - **跨公司手動帳號之帳密登入解析**: [F001](F001-auth-login-session.md) `AC-C1`～`AC-C3`（`AC-P25` 之權威定義；不修訂則他公司帳號建立後無法登入）

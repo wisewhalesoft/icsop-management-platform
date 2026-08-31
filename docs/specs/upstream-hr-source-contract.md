@@ -61,7 +61,7 @@ ICSOP 後端  ──►  172.20.202.193 (APYHFC16, SQL Server 2016 Standard 13.0
 | 組織階層 | `VW_DEPT_SQL` | `HRDEPTMF` | 無（原 `WHERE COMPID IN ('AS','AR','BF')` 已被註解） |
 | **人員主檔（v2.0 主來源）** | **`VW_PERSONNEL_SQL`** | `HREMPMF` + 3 表 join | **`INNER JOIN HRDEPTMF`**，見 §3.2 |
 | 職稱／職務功能指派 | `VW_PERSONAL_JOB` | `HREMPMF` + 3 表 join | 無 |
-| **職級／職務名稱定義** 🔴 | `VW_JOB_FUN` | `HRJFUNMF` | `END_DT >= GETDATE()` |
+| **職位（職級／職務名稱）定義** 🔴 | `VW_JOB_FUN` | `HRJFUNMF` | `END_DT >= GETDATE()`（view 內建，本系統不另加過濾） |
 | ~~帳號／在職狀態~~（v2.0 起**不採用**） | ~~`VW_HPMUSER`~~ 🔴 | `PORTAL_HPMUSER` | 無（`SELECT *`）；見 §3.7 |
 
 **為何以 `VW_PERSONNEL_SQL` 為人員主來源（2026-08-24 定案，推翻 v1.0）**：上游單位確認 `VW_HPMUSER` 各公司皆混入不該出現的員工，而 `VW_PERSONNEL_SQL` 是**公司各系統取用人事資料的共同基礎**。v1.0 以 `VW_HPMUSER` 提供 `USERID`／`EMPSTS` 為由選用它，但那兩欄的價值建立在母體正確的前提上——前提不成立時，欄位齊全反而使錯誤資料看起來可信。
@@ -212,9 +212,9 @@ view 內註解明載（2013-12-27 應和潤需求）：
 | `effectiveFrom` | `ESTABLISHED_DATE` | |
 | `isActive` | `CLOSE_DATE > GETDATE()` | 見 §4 |
 
-### 5.2 `ACCOUNT` ← `VW_PERSONNEL_SQL`（白名單，共 10 欄；v2.0 改寫）
+### 5.2 `ACCOUNT` ← `VW_PERSONNEL_SQL`（白名單，共 11 欄；v2.0 改寫，2026-08-31 加入 `JOB_CODE`）
 
-該 view 共 **40 欄**，ICSOP 僅取下列 10 欄。2026-08-24 實測四家在職 1,362 筆，白名單欄位**空值率全為 0**（`EMAIL` 除外，AS 有 1 筆）。
+該 view 共 **40 欄**，ICSOP 僅取下列 11 欄。2026-08-24 實測四家在職 1,362 筆，白名單欄位**空值率全為 0**（`EMAIL` 除外，AS 有 1 筆）；2026-08-31 補測 `JOB_CODE` 亦為 NULL 0／空字串 0。
 
 | ICSOP | 上游 | 備註 |
 |---|---|---|
@@ -228,10 +228,11 @@ view 內註解明載（2013-12-27 應和潤需求）：
 | `resignDate` | `RESIGN_DATE` | 語意＝**最後在職日**（2026-08-24 上游確認）；9999-12-31 ＝未離職 |
 | `hireDate` | **`REHIRE_DATE`** | 🔴 **不是 `HIRE_DATE`**（那是年資起算日，見 §3.3） |
 | `managerEmpNo` | **`DIRECT_BOSS`** | |
-| `jobTitleCode` | **`TITLE_CODE`** | 職稱代碼（非名稱）；名稱由 §5.4 對照主檔解析。實測四家對照**命中率 100%** |
+| `jobTitleCode` | **`TITLE_CODE`** | 職稱代碼＝畫面之「**資位**」（非名稱）；名稱由 §5.4.1 對照主檔解析。實測四家對照**命中率 100%** |
+| `jobPositionCode` | **`JOB_CODE`** | 職位代碼＝畫面之「**職位**」（非名稱）；名稱由 §5.4.2 對照主檔解析。🔴 **與 `VW_DEPT_SQL.JOB_CODE`（＝部門主管員編，§5.1）同名異義**，切勿互推。實測 `(COMPID, CODE)` 精確命中 **1,356/1,362＝99.56%** |
 | `lastModifiedAt` | `MTDT` | 增量同步依據；欄名與舊來源相同，語意亦相同 |
 
-> 表列 12 行但白名單為 **10 欄**：`NO` 供應 `loginId`／`employeeNo` 兩個目的，`RESIGN_DATE` 供應 `isActive`／`resignDate` 兩個目的。
+> 表列 13 行但白名單為 **11 欄**：`NO` 供應 `loginId`／`employeeNo` 兩個目的，`RESIGN_DATE` 供應 `isActive`／`resignDate` 兩個目的。
 
 #### 🔴 明確排除（不得讀取）
 
@@ -244,7 +245,7 @@ view 內註解明載（2013-12-27 應和潤需求）：
 | **第三人個資** | `CONTACTER`、`CONTACTER_REL`、`CONTACT_PHONE`（緊急聯絡人） |
 | **特種／敏感個資** | `ABORIGINAL`、`MARRIAGE_STATUS`、`DEPENDENCE`、`BIRTHDAY`、`NATIONALITY`、`SEX`、`BIRTH_PLACE` |
 | **聯絡個資** | `LEGAL_PHONE`、`LEGAL_ADDRESS`、`CURRENT_PHONE`、`CURRENT_ADDRESS` |
-| **其他非必要** | `INS_CON_ID`、`INS_CON_REMARK`、`NAME_IN_ENGLISH`、`REMARK`、`OLDDPT`、`EMPTP_CODE`、`JOB_LEVEL_CODE`、`AREA_CODE`、`JOB_CODE`、`DEPT_SDT` |
+| **其他非必要** | `INS_CON_ID`、`INS_CON_REMARK`、`NAME_IN_ENGLISH`、`REMARK`、`OLDDPT`、`EMPTP_CODE`、`JOB_LEVEL_CODE`、`AREA_CODE`、`DEPT_SDT`<br>🔵 `JOB_CODE` 已於 2026-08-31 **自本列移出、改列為白名單第 11 欄**（見上表 `jobPositionCode`）——原判定「非必要」係基於「`VW_JOB_FUN` 是職務功能主檔、與人員側無對應鍵」之誤解，2026-08-25 更正後該路徑成立 |
 | **⚠ 陷阱欄（存在但語意錯，禁用）** | `DIV_CODE`（薪資部門）、`HIRE_DATE`（年資起算日） |
 
 > ⚠️ **`assertNoForbiddenColumns` 需以字界比對**：新來源之 `ID_NO` 是舊 `VW_PERSONAL_JOB.ID_NUMBER` 之外的**另一個**欄名，兩者皆須列入；字界比對可避免 `ID_NO` 誤中 `ID_NUMBER`（反之亦然）。
@@ -259,7 +260,13 @@ view 內註解明載（2013-12-27 應和潤需求）：
 | `companyShortName` | `COMPSIMPNM` |
 | `isActive` | `COMPENDDT > GETDATE()` |
 
-### 5.4 職稱／職級
+### 5.4 資位（職稱）／職位（職級）
+
+> 🔵 **2026-08-31 用語與範圍更正（使用者裁定）**：本節原稱之「職稱」（`JTITLE_NM`：業務專員／
+> 辦事員／副理…）語意實為**資位**（職等），畫面欄位已更名為「資位」；真正的**職位**（職務位置：
+> 營業一般職／事務一般職／室長／處長／部長…）取自 `VW_PERSONNEL_SQL.JOB_CODE` 對照 `VW_JOB_FUN`，
+> 見新增之 §5.4.2。二者為**正交維度**——實測 AS 在職 1,051 人中，資位「副理」× 職位「室長」16 人、
+> 資位「課長」× 職位「處長」12 人，同資位對應多種職位、反之亦然。
 
 > 🔴 **2026-08-25 正式環境實查更正（本節原標題為「職稱／職務功能」，記載有誤）**，見
 > [`docs/stories/2026-08-25-role-automation-delta.md`](../stories/2026-08-25-role-automation-delta.md)。
@@ -272,8 +279,10 @@ view 內註解明載（2013-12-27 應和潤需求）：
   ⚠ **一碼多名跨公司成立且語意可相反**：`D04` 在 AS＝「營業經理」、在 AD＝「科長」；`C04` 在 AD＝「部長」、他家＝「處長」。
   任何以本表為基礎之對照**必須以 `(COMPID, CODE)` 為鍵**。
 - `VW_PERSONAL_JOB.JFUN_NM` 之值域與 `VW_JOB_FUN.DESC_CHI` **逐筆 100% 命中**（含 `代理科長`／`處長代行`／
-  `營業副理(消)`／`借調主管職` 等冷僻值），證實兩者為同一字典。**但本系統未採用**——該欄長在
+  `營業副理(消)`／`借調主管職` 等冷僻值），證實兩者為同一字典。**該欄本身仍不採用**——它長在
   `VW_PERSONAL_JOB` 上，受 §5.4.1「`EMPNO` 非唯一、無法安全 join 至 `ACCOUNT`」之同一限制。
+  🔵 **但這不代表整條職位路徑不可行**（2026-08-31 更正）：人員側另有 `VW_PERSONNEL_SQL.JOB_CODE`
+  自帶職位代碼，與 `TITLE_CODE` 完全同一手法即可繞開該 join——見 §5.4.2。
 - 🔴 **`VW_PERSONNEL_SQL.JOB_LEVEL_CODE` 已排除，不得用於任何判定**：實測在職者空白率
   AD 98.8%（166/168）／AE 93.8%／AJ 96.3%／AS 81.7%（858/1050），
   且其值為純數字（`003`／`004`／`10`）與 `VW_JOB_FUN.CODE`（`A03`／`N03`）**編碼體系不同**，無從對照。
@@ -327,6 +336,61 @@ view 內註解明載（2013-12-27 應和潤需求）：
 
 實作對應：`ACCOUNT.jobTitleCode`／`JOB_TITLE` 表（migration `1723852800000-account-job-title`）、
 查詢建構 `buildJobTitleQuery`、解析 `backend/src/org-directory/job-title-directory.ts`。
+
+#### 5.4.2 `JOB_POSITION` ← `VW_JOB_FUN`（職位對照主檔，2026-08-31 定案並實作）
+
+> 畫面「職位」欄之來源。人員側對應鍵＝**`VW_PERSONNEL_SQL.JOB_CODE`**（§5.2），與 §5.4.1 之
+> `TITLE_CODE` 為完全相同的手法：人員自身即帶代碼，故繞開 `VW_PERSONAL_JOB` 之 `EMPNO` join 限制。
+
+| ICSOP | 上游 | 備註 |
+|---|---|---|
+| `companyCode` | `COMPID` | 對照鍵之一（**必要**，見下方歧義說明） |
+| `code` | `CODE` | 對應 `ACCOUNT.jobPositionCode` |
+| `name` | `DESC_CHI` | 顯示名稱（營業一般職／事務一般職／室長／處長／部長…） |
+
+**取用方式**：`SELECT COMPID, CODE, DESC_CHI FROM VW_JOB_FUN`，全公司全量、非增量。
+該 view 逐「代碼」一列（非逐人），四家共 **73 列**，故不需 `DISTINCT`、不需分頁。
+**不另加 `END_DT` 過濾**——view 定義本身已內建 `END_DT >= GETDATE()`（§2），且該 view 亦無 `END_DT` 欄。
+其餘欄位（`DESC_ENG` 與六個異動軌跡欄）不取。
+
+**🔴 解析必須「本公司精確命中、查無即空」，嚴禁跨公司 fallback**——這是與 §5.4.1（資位，兩段式含
+fallback）之**刻意差異**。2026-08-31 實查四家 73 列中，**7 個代碼跨公司一碼多名且語意可相反**：
+
+| 代碼 | AS | AE | AD |
+|---|---|---|---|
+| `B01` | 本部長 | 本部長 | **本處長** |
+| `B03` | 部長 | 部長 | **處長** |
+| `C04` | 處長 | 處長 | **部長** |
+| `D04` | **營業經理** | —（無此碼） | **科長** |
+| `M03` | 事務一般職 | 事務一般職 | **事務職** |
+| `N03` | 營業一般職 | 營業一般職 | **營業職** |
+
+資位之 fallback 最壞情況是顯示他公司的同義職稱；職位之 fallback 會把「科長」顯示成「營業經理」
+——**顯示錯誤的職位比顯示「—」嚴重得多**。
+
+**實測數字（2026-08-31，dev `ZZIPPROD` → `[APYHFC23].[HR2]`）**：
+
+| 項目 | AS | AD | AE | AJ | 合計 |
+|---|---|---|---|---|---|
+| 在職者 | 1,051 | 163 | 17 | 131 | 1,362 |
+| `JOB_CODE` NULL／空字串 | 0 | 0 | 0 | 0 | **0** |
+| `(COMPID, CODE)` 未命中 | 6 | 0 | 0 | 0 | **6（99.56% 命中）** |
+| `VW_JOB_FUN` 列數 | 23 | 11 | 18 | 21 | **73** |
+| 其中無人使用之死代碼 | 6 | 3 | 11 | 4 | 24 |
+
+- **唯一未命中之代碼＝AS 的 `B20`（6 人）**：該代碼於四家 `VW_JOB_FUN` 中**皆不存在**，
+  故縱使開放跨公司 fallback 亦無從命中 → 這 6 人之職位欄顯示「—」（F003 `AC-P18`）。
+  ⚠ 此為**上游主檔缺列**，非本系統缺陷；若日後上游補上該代碼，下次同步即自動生效、無需改碼。
+- ⚠ 本次實查於 **dev** 進行（個資已遮罩，但代碼欄非遮罩對象）。在職母體 1,362 與 §10.2 記載一致、
+  `VW_JOB_FUN` 73 列亦與 §10.2 之「職務功能（有效）」欄一致（正式環境 2026-08-25 實查為 75 列），
+  故結構與命中率結論可用；正式站上線前建議以同一組查詢複跑一次。
+
+> 🔴 **加欄後之回填不會自然發生**（同 §5.4.1 之陷阱）：必須 `SYNC_FULL_RESYNC=1 npm run sync:once`，
+> 且 `classifyAccount` 已將 `jobPositionCode` 納入比對——漏列會使全部既有列判為 noop，
+> 連全量重同步都寫不進去。
+
+實作對應：`ACCOUNT.jobPositionCode`／`JOB_POSITION` 表（migration `1725062400000-account-job-position`）、
+查詢建構 `buildJobPositionQuery`、解析 `backend/src/org-directory/job-position-directory.ts`。
 
 ---
 
@@ -546,7 +610,7 @@ AS 有效組織實測為 **5 層**（層級判定見 §3.5，一律由代碼前�
 | 有效部門 | **114** | **184** | 184（不變） |
 | 組織階層深度 | **5 層**（本部 5／部 24／處室 57／課 27） | 最深 5 層 | — |
 | 職稱種類 | — | 63 | 63 |
-| 職務功能（有效） | 23 | 73 | 73 |
+| 職位代碼（`VW_JOB_FUN` 有效列） | 23 | 73 | 73 |
 | 帳號異動量（近 30 天） | — | **待重新量測** | ~~2,277~~ |
 
 > 🔴 **v2.0 之使用者規模比 v1.0 更小**（1,362 < 2,430）——擴充為四家公司後總量反而下降，因為 v1.0 的 2,430 含 `VW_HPMUSER` 之污染列（§3.7）。

@@ -136,6 +136,11 @@
 
 **P0-MVP 尚未完成者（優先盯）**：F001 F003 F005 F007 F010 F012 F013 F016 F017 F019 F020 F023 F024 F026 F027 F028 F029 F030 F036，以及 Phase 3 之 F032 F033 F034 F035，**與 F041（規格 🟢 APPROVED、實作 🟡 unit-green＋migration 已落真庫，**待重建 image 部署＋瀏覽器實測**，見 [§F041 升 ✅ 待辦](#f041-to-done)）**。
 
+> **🔵 2026-08-31 資位／職位拆欄 delta（F003 `AC-P28`～`AC-P33`；使用者裁定）**：既有「職位」欄語意實為**資位**（`jobTitleCode` → `JOB_TITLE`），畫面就地更名；新增真正的「職位」欄 ← `VW_PERSONNEL_SQL.JOB_CODE` 對照 `VW_JOB_FUN`（契約 §5.4.2）。F003／F004 之既有 AC 全數未動、狀態維持 ✅。
+> **實作與驗證皆已完成**：backend 183 suites／2914 綠、frontend 113 檔／1718 綠、`test:int` 23 suites／201 綠（含對真 SOP DB 之新測項）、migration `1725062400000` 已對真庫實跑、DI smoke PASSED、對真上游跑過同步（`JOB_POSITION` 落地 73 列）。
+> ⚠ **整合測試再次揪出單元測試看不見的缺陷**：`accounts.controller.ts` 之 request body 白名單漏列 `jobPositionCode` → API 回 201、單元測試全綠，但值不會落地（第三次踩到同一類「值人間蒸發」）。
+> ⚠ **dev 之帳號回填僅 AD／AE／AJ 完成（311/311，100%）；AS 之 1,124 筆仍為 NULL**——`SYNC_FULL_RESYNC=1` 於 AS 被**既有**之 `DISAPPEARED_RATIO_EXCEEDED`（74/1124＝6.6% > 5%）中止。該 74 人為 2026-08-25 起既存、待人類裁決之項目，**與本 delta 無關**，不得為了回填而放寬閾值。
+
 ---
 
 ## 逐功能狀態
