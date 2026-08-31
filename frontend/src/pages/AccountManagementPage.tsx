@@ -441,8 +441,8 @@ export function AccountManagementPage(): JSX.Element {
     void Promise.resolve(getOrgUnits(companyCode))
       .then((rows) =>
         setOrgUnits((prev) => {
-          const byKey = new Map(prev.map((u) => [`${u.companyCode} ${u.orgCode}`, u]));
-          for (const u of asArray(rows)) byKey.set(`${u.companyCode} ${u.orgCode}`, u);
+          const byKey = new Map(prev.map((u) => [`${u.companyCode}\0${u.orgCode}`, u]));
+          for (const u of asArray(rows)) byKey.set(`${u.companyCode}\0${u.orgCode}`, u);
           return [...byKey.values()];
         }),
       )
