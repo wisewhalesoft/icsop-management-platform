@@ -65,7 +65,11 @@ export interface AddOjtSessionInput {
 
 /** TAB2 之**恰兩項**篩選（`AC-13`）。 */
 export interface OjtRowFilters {
-  /** ① 單位搜尋：比對使用單位名稱或代碼（不分大小寫之子字串）。 */
+  /**
+   * ① 單位搜尋：比對使用單位**全名**或代碼（不分大小寫之子字串）。
+   * 🔴 全名自 2026-09-01 起為 `公司簡稱 / 部 / 處室` ⇒ 打「和潤企業」「財務會計部」「財管室」
+   * 任一段皆可命中，不需另立公司篩選項（`AC-13` 之「恰兩項」因而不變）。
+   */
   orgQuery?: string;
   /**
    * ② 完成狀態：**恰三值**（空字串＝所有完成狀態）。
@@ -82,7 +86,14 @@ export interface OjtProgressRow {
   documentId: string;
   documentNumber: string;
   documentName: string;
+  /**
+   * 🔴 2026-09-01：該列所屬公司（＝文件之 `companyCode`）。**`orgCode` 單獨不足以識別一個
+   * 單位**——5 碼代碼各公司獨立編碼，`ORG_UNIT` 之唯一鍵為 `(companyCode, orgCode)`。
+   * 前端之群組鍵亦須為此兩者之複合，否則不同公司之同碼單位會被併成同一組。
+   */
+  companyCode: string;
   orgCode: string;
+  /** 單位全名：**`公司簡稱 / 部 / 處室`**（`OjtOrgDirectory.nameOf` 之單一組裝點）。 */
   orgName: string;
   /** 該單位已被組織同步標記為裁撤（`AC-17`）。⚠ **僅供呈現**——本頁不因此隱藏列或禁止新增。 */
   inactive: boolean;
@@ -176,7 +187,10 @@ export interface OjtSummary {
   };
   docCoverage: OjtDocCoverageSlice;
   deptRollup: {
+    /** 🔴 2026-09-01：分組鍵為 `(companyCode, deptOrgCode)`，非 `deptOrgCode` 單獨。 */
+    companyCode: string;
     deptOrgCode: string;
+    /** `公司簡稱 / 部`（部層無處室段，`buildOrgPath` 自動收合）。 */
     deptName: string;
     totalUnits: number;
     completedUnits: number;
@@ -186,7 +200,9 @@ export interface OjtSummary {
     documentId: string;
     documentNumber: string;
     documentName: string;
+    companyCode: string;
     orgCode: string;
+    /** 單位全名：`公司簡稱 / 部 / 處室`（與 TAB2 進度列同一組裝點）。 */
     orgName: string;
     trainingDate: string;
   }[];
@@ -347,6 +363,8 @@ interface AggregatedRow {
   documentId: string;
   documentNumber: string;
   documentName: string;
+  /** 文件所屬公司；與 `orgCode` 成對才足以識別一個單位（見 `OjtOrgDirectory`）。 */
+  companyCode: string;
   orgCode: string;
   sessionCount: number;
   completed: boolean;
@@ -508,8 +526,9 @@ export class OjtProgressService {
         documentId: a.documentId,
         documentNumber: a.documentNumber,
         documentName: a.documentName,
+        companyCode: a.companyCode,
         orgCode: a.orgCode,
-        orgName: await this.orgDirectory.nameOf(a.orgCode),
+        orgName: await this.orgDirectory.nameOf(a.companyCode, a.orgCode),
         inactive: !a.active,
         // 列來自使用部門集合 ⇒ 依集合成員關係判定，恆為非孤兒（**不讀 `orphanedAt` 旗標**）。
         orphaned: false,
@@ -599,24 +618,45 @@ export class OjtProgressService {
     if (denominator > 0) coverage.rate = Math.round((numerator / denominator) * 100);
 
     // ── 區二 · 部門完成率（rollup 至部層；🔴 彙總發生於統計階段，列產生階段一律不展開）──
-    const groups = new Map<string, { totalUnits: number; completedUnits: number }>();
+    /**
+     * 🔴 分組鍵為 `(companyCode, deptCode)` 之複合鍵，**不是 `deptCode` 單獨**（2026-09-01）：
+     * 各公司之 5 碼代碼獨立編碼，AS 的 `BA000`（車輛分期營業一部）與 AJ 的 `BA000`
+     * （商用車輛一部）是兩個不同的部。以單鍵分組會把兩家的進度列加總進同一列，
+     * 分子分母都變大、完成率卻看起來「正常」——這是最難用眼睛抓到的一種錯。
+     */
+    const groups = new Map<
+      string,
+      { companyCode: string; deptOrgCode: string; totalUnits: number; completedUnits: number }
+    >();
     for (const a of valid) {
-      const dept = deptCodeOf(a.orgCode);
-      const g = groups.get(dept) ?? { totalUnits: 0, completedUnits: 0 };
+      const deptOrgCode = deptCodeOf(a.orgCode);
+      const key = `${a.companyCode}__${deptOrgCode}`;
+      const g = groups.get(key) ?? {
+        companyCode: a.companyCode,
+        deptOrgCode,
+        totalUnits: 0,
+        completedUnits: 0,
+      };
       g.totalUnits += 1;
       if (a.completed) g.completedUnits += 1;
-      groups.set(dept, g);
+      groups.set(key, g);
     }
     const deptRollup: OjtSummary['deptRollup'] = [];
-    for (const [deptOrgCode, g] of groups) {
+    for (const g of groups.values()) {
       deptRollup.push({
-        deptOrgCode,
-        deptName: await this.orgDirectory.nameOf(deptOrgCode),
+        companyCode: g.companyCode,
+        deptOrgCode: g.deptOrgCode,
+        deptName: await this.orgDirectory.nameOf(g.companyCode, g.deptOrgCode),
         totalUnits: g.totalUnits,
         completedUnits: g.completedUnits,
       });
     }
-    deptRollup.sort((a, b) => a.deptOrgCode.localeCompare(b.deptOrgCode));
+    // 排序鍵同步補上公司，使跨公司之同碼部有決定性的相對順序。
+    deptRollup.sort(
+      (a, b) =>
+        a.companyCode.localeCompare(b.companyCode) ||
+        a.deptOrgCode.localeCompare(b.deptOrgCode),
+    );
 
     return {
       coverage,
@@ -657,8 +697,11 @@ export class OjtProgressService {
         documentId: doc.id,
         documentNumber: doc.documentNumber,
         documentName: doc.documentName,
+        // 🔴 取**文件**之公司別（與進度列同源），不取 `s.companyCode`——場次列之該欄是
+        // 寫入當下之快照，文件改掛公司時兩者會分歧，而本區塊要的是「這一列現在屬於誰」。
+        companyCode: doc.companyCode,
         orgCode: s.orgCode,
-        orgName: await this.orgDirectory.nameOf(s.orgCode),
+        orgName: await this.orgDirectory.nameOf(doc.companyCode, s.orgCode),
         trainingDate: s.trainingDate,
       });
     }
@@ -854,10 +897,12 @@ export class OjtProgressService {
           documentId: d.id,
           documentNumber: d.documentNumber,
           documentName: d.documentName,
+          companyCode: d.companyCode,
           orgCode,
           sessionCount,
           completed: sessionCount > 0,
-          active: await this.orgDirectory.isActive(orgCode),
+          // 🔴 必須帶公司別：他公司之同碼單位若為裁撤，本列會無聲地自覆蓋率分母消失。
+          active: await this.orgDirectory.isActive(d.companyCode, orgCode),
         });
       }
     }

@@ -92,12 +92,33 @@ export const OJT_ORG_DIRECTORY = Symbol('OJT_ORG_DIRECTORY');
 
 /**
  * 組織名稱與裁撤狀態之唯讀來源（`AC-17` 之 `isActive` 過濾來源）。
- * 🔒 查無之 orgCode：`isActive` 預設 `true`（fail-open——把查不到的單位當成裁撤，會讓它
+ *
+ * 🔴 **`companyCode` 為兩支方法之必要參數，刻意不給預設值**（2026-09-01 修正）：`orgCode` 是
+ * 5 碼部門代碼、**每家公司各自從 `00000` 獨立編碼**，`ORG_UNIT` 之真實唯一鍵為
+ * `(companyCode, orgCode)`（`org-unit.entity.ts` 之 `IX_ORG_UNIT_company_code`）。單以
+ * `orgCode` 查詢在多公司資料共存後**必然歧義**，且兩種失敗都是靜默的：查到別家公司的部門
+ * （顯示錯誤名稱）或查無（顯示空白）。dev 實測 42 個 orgCode 跨公司重複，其中 2 列進度列
+ * 之單位名稱確實顯示成他公司之部門（`BA000` 顯示 AJ「商用車輛一部」而非 AS「車輛分期營一」）。
+ * ⚠ 更嚴重的是 `isActive`：他公司之同碼單位若為裁撤，該列會**無聲地**自覆蓋率分母消失。
+ * 📌 本專案已於 `org-directory/org-unit-read.ts#OrgUnitReadStore.findByOrgCode` 對同一形狀
+ * 立下必填規範，本介面為當時漏接之最後一處。**不得**為呼叫端方便而加回預設公司——
+ * 預設值正是該缺陷的成因（未接上公司別之呼叫點必須編譯失敗，才不會漏改）。
+ *
+ * 🔒 查無時之兩個 fail-open 維持不變：`isActive` 預設 `true`（把查不到的單位當成裁撤，會讓它
  * 從覆蓋率分母裡憑空消失，那是隱藏而非清理）；`nameOf` 退回代碼本身（不留白）。
  */
 export interface OjtOrgDirectory {
-  isActive(orgCode: string): Promise<boolean>;
-  nameOf(orgCode: string): Promise<string>;
+  isActive(companyCode: string, orgCode: string): Promise<boolean>;
+  /**
+   * 單位之顯示全名：**`公司簡稱 / 部 / 處室`**（例：`和潤企業 / 財務會計部 / 財管室`）。
+   *
+   * 🔴 後兩段**必須**取自全站唯一之組織路徑演算法 `org-directory/org-path.ts#buildOrgPath`
+   * （部層取 `descFull` 全名、處室取 `DESC_CHI` 末段），**不得**改用 `ORG_UNIT.name` 簡稱自組
+   * ——那會讓本頁成為第二種部門格式（本 repo 2026-08-14 已發生過一次的回歸形狀）。
+   * 公司段取**簡稱**（`company-name.ts#resolveCompanyShortName`）：全稱「和潤企業股份有限
+   * 公司」在群組標題會擠掉真正要看的部室名。
+   */
+  nameOf(companyCode: string, orgCode: string): Promise<string>;
 }
 
 export const OJT_AUDIT_RECORDER = Symbol('OJT_AUDIT_RECORDER');

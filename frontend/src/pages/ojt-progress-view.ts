@@ -133,26 +133,52 @@ export function canManageSessions(roleCode: string | undefined): boolean {
   return roleCode === 'ICSOPAdmin';
 }
 
-/** 以使用單位分組（`AC-11`）：群組依 orgCode 昇冪、組內依程序書編號昇冪 ⇒ 順序具決定性。 */
+/**
+ * 以使用單位分組（`AC-11`）：群組依 `公司 → orgCode` 昇冪、組內依程序書編號昇冪
+ * ⇒ 順序具決定性。
+ *
+ * 🔴 **分組鍵為 `(companyCode, orgCode)` 之複合鍵**（2026-09-01 缺陷修正）：5 碼部門代碼
+ * 各公司獨立編碼（dev 實測四家間 42 個重複碼），以 `orgCode` 單獨分組會把不同公司的兩個部
+ * 併成同一組，且群組名取 `list[0].orgName` ⇒ **整組掛上其中一家的名字**，另一家的列就這樣
+ * 靜靜地被歸錯了。
+ */
 export interface OjtRowGroup {
+  /** 複合鍵 `${companyCode}__${orgCode}`（React key 與 DOM 群組識別用）。 */
+  key: string;
+  /** 該群組之公司代碼。 */
+  companyCode: string;
+  /**
+   * 該群組之部門代碼。
+   * ⚠ **不是唯一鍵**——跨公司可重複；需要唯一識別時一律用 `key`。
+   */
   code: string;
+  /** 顯示名稱：`公司簡稱 / 部 / 處室`（後端組裝，前端不再拼字）。 */
   label: string;
   inactive: boolean;
   rows: OjtProgressRow[];
 }
 
+/** 群組之複合鍵（與後端 `(companyCode, orgCode)` 之識別口徑一致）。 */
+export function orgGroupKeyOf(companyCode: string, orgCode: string): string {
+  return `${companyCode}__${orgCode}`;
+}
+
 export function groupRowsByOrg(rows: OjtProgressRow[]): OjtRowGroup[] {
   const byOrg = new Map<string, OjtProgressRow[]>();
   for (const r of rows) {
-    const list = byOrg.get(r.orgCode);
+    const key = orgGroupKeyOf(r.companyCode, r.orgCode);
+    const list = byOrg.get(key);
     if (list) list.push(r);
-    else byOrg.set(r.orgCode, [r]);
+    else byOrg.set(key, [r]);
   }
-  return [...byOrg.keys()].sort().map((code) => {
-    const list = byOrg.get(code) ?? [];
+  return [...byOrg.keys()].sort().map((key) => {
+    const list = byOrg.get(key) ?? [];
+    const head = list[0];
     return {
-      code,
-      label: list[0]?.orgName ?? code,
+      key,
+      companyCode: head?.companyCode ?? '',
+      code: head?.orgCode ?? key,
+      label: head?.orgName ?? head?.orgCode ?? key,
       inactive: list.some((r) => r.inactive),
       rows: [...list].sort((a, b) => a.documentNumber.localeCompare(b.documentNumber)),
     };

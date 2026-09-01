@@ -63,7 +63,10 @@ export interface OjtProgressRow {
   documentId: string;
   documentNumber: string;
   documentName: string;
+  /** 該列所屬公司（＝文件之 companyCode）；與 orgCode 成對才足以識別一個單位。 */
+  companyCode: string;
   orgCode: string;
+  /** `公司簡稱 / 部 / 處室`。 */
   orgName: string;
   inactive: boolean;
   orphaned: boolean;
@@ -137,12 +140,13 @@ export interface OjtSummary {
     excludedOrphaned: number;
   };
   docCoverage: OjtDocCoverageSlice;
-  deptRollup: { deptOrgCode: string; deptName: string; totalUnits: number; completedUnits: number }[];
+  deptRollup: { companyCode: string; deptOrgCode: string; deptName: string; totalUnits: number; completedUnits: number }[];
   /** AC-16：僅單位/文件/日期層級，明文不含上傳者姓名或員工編號。 */
   recentSessions: {
     documentId: string;
     documentNumber: string;
     documentName: string;
+    companyCode: string;
     orgCode: string;
     orgName: string;
     trainingDate: string;
@@ -171,10 +175,19 @@ export interface FixtureDoc {
 }
 
 export interface FixtureOrg {
+  /**
+   * 🔴 選填、預設 `FIXTURE_COMPANY`（'AS'）——既有 seed 呼叫點（單一公司語料）一格未動。
+   * 需要建構「跨公司同碼」情境時**顯式給值**，見 `ojt-progress.rows.spec.ts` 之
+   * 「同碼不同公司」案。
+   */
+  companyCode?: string;
   orgCode: string;
   name: string;
   isActive: boolean;
 }
+
+/** 既有 fixture 之預設公司（全部 seedDoc 皆為 'AS'，與之對齊）。 */
+export const FIXTURE_COMPANY = 'AS';
 
 // ══════════════════════════ Fakes ══════════════════════════
 
@@ -219,21 +232,31 @@ export class FakeUsingDeptChecker {
   }
 }
 
-/** 組織資料 port（orgCode → 名稱／isActive，AC-17 之裁撤過濾來源）。 */
+/**
+ * 組織資料 port（`(companyCode, orgCode)` → 名稱／isActive，AC-17 之裁撤過濾來源）。
+ *
+ * 🔴 **索引鍵為複合鍵，且刻意沒有「查不到就退回同碼任一公司」之寬容分支**（2026-09-01）：
+ * 那道寬容正是 production adapter 曾經的缺陷本體（`orgCode` 單鍵 Map、他公司之列覆蓋本公司）。
+ * 假體若比真體寬容，跨公司誤取就永遠測不出來——環會綠，畫面照樣顯示別家公司的部門。
+ */
 export class FakeOrgDirectory {
   orgs = new Map<string, FixtureOrg>();
 
+  private static key(companyCode: string, orgCode: string): string {
+    return `${companyCode}__${orgCode}`;
+  }
+
   seedOrg(org: FixtureOrg): FixtureOrg {
-    this.orgs.set(org.orgCode, org);
+    this.orgs.set(FakeOrgDirectory.key(org.companyCode ?? FIXTURE_COMPANY, org.orgCode), org);
     return org;
   }
 
-  isActive(orgCode: string): Promise<boolean> {
-    return Promise.resolve(this.orgs.get(orgCode)?.isActive ?? true);
+  isActive(companyCode: string, orgCode: string): Promise<boolean> {
+    return Promise.resolve(this.orgs.get(FakeOrgDirectory.key(companyCode, orgCode))?.isActive ?? true);
   }
 
-  nameOf(orgCode: string): Promise<string> {
-    return Promise.resolve(this.orgs.get(orgCode)?.name ?? orgCode);
+  nameOf(companyCode: string, orgCode: string): Promise<string> {
+    return Promise.resolve(this.orgs.get(FakeOrgDirectory.key(companyCode, orgCode))?.name ?? orgCode);
   }
 }
 

@@ -24,8 +24,14 @@
 
 import { OrgUnitRecord } from './org-unit-read';
 
-/** 分隔符（逐字，非變數）——與 prototype 及前端 `org-path.ts` 一致。 */
-const ORG_PATH_SEPARATOR = ' / ';
+/**
+ * 分隔符（逐字，非變數）——與 prototype 及前端 `org-path.ts` 一致。
+ *
+ * 🔴 **對外 export**（2026-09-01）：F042 OJT 進度管理之單位標籤需在本演算法之結果前再冠一段
+ * 公司簡稱（`公司 / 部 / 處室`）。若該處自行寫死 `' / '`，同一個畫面上的分隔符就有了第二個
+ * 定義點——本檔開頭那段「兩份實作須同步維護」的警語，講的正是這種漂移。
+ */
+export const ORG_PATH_SEPARATOR = ' / ';
 
 /** 是否為可呈現之非空字串。 */
 function present(v: string | null | undefined): v is string {

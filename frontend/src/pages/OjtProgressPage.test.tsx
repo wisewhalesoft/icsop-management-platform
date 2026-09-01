@@ -121,14 +121,14 @@ function docCoverageSlice(
  */
 const summaryFixture = (over: Partial<{
   coverage: { numerator: number; denominator: number; rate?: number; excludedInactive?: number; excludedOrphaned?: number };
-  deptRollup: Array<{ deptOrgCode: string; deptName: string; totalUnits: number; completedUnits: number }>;
-  recentSessions: Array<{ documentId: string; documentNumber: string; documentName: string; orgCode: string; orgName: string; trainingDate: string }>;
+  deptRollup: Array<{ companyCode: string; deptOrgCode: string; deptName: string; totalUnits: number; completedUnits: number }>;
+  recentSessions: Array<{ documentId: string; documentNumber: string; documentName: string; companyCode: string; orgCode: string; orgName: string; trainingDate: string }>;
   docCoverage: ReturnType<typeof docCoverageSlice>;
 }> = {}) => ({
   coverage: { numerator: 2, denominator: 3, rate: 67, excludedInactive: 0, excludedOrphaned: 0 },
-  deptRollup: [{ deptOrgCode: 'JA000', deptName: '營運管理部', totalUnits: 3, completedUnits: 2 }],
+  deptRollup: [{ companyCode: 'AS', deptOrgCode: 'JA000', deptName: '營運管理部', totalUnits: 3, completedUnits: 2 }],
   recentSessions: [
-    { documentId: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業', orgCode: 'JAC00', orgName: '審查室', trainingDate: '2026-08-20' },
+    { documentId: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業', companyCode: 'AS', orgCode: 'JAC00', orgName: '審查室', trainingDate: '2026-08-20' },
   ],
   docCoverage: docCoverageSlice([docCoverageRow({})]),
   ...over,
@@ -136,11 +136,11 @@ const summaryFixture = (over: Partial<{
 
 const rowFixture = (over: Partial<{
   documentId: string; documentNumber: string; documentName: string;
-  orgCode: string; orgName: string; sessionCount: number; completed: boolean;
+  companyCode: string; orgCode: string; orgName: string; sessionCount: number; completed: boolean;
   inactive: boolean; orphaned: boolean;
 }> = {}) => ({
   documentId: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業',
-  orgCode: 'JAC00', orgName: '審查室', sessionCount: 1, completed: true,
+  companyCode: 'AS', orgCode: 'JAC00', orgName: '審查室', sessionCount: 1, completed: true,
   inactive: false, orphaned: false,
   ...over,
 });
@@ -287,8 +287,8 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
         summaryFixture({
           deptRollup: [
-            { deptOrgCode: 'JA000', deptName: '營運管理部', totalUnits: 2, completedUnits: 2 },
-            { deptOrgCode: 'CA000', deptName: '信用審查部', totalUnits: 3, completedUnits: 2 },
+            { companyCode: 'AS', deptOrgCode: 'JA000', deptName: '營運管理部', totalUnits: 2, completedUnits: 2 },
+            { companyCode: 'AS', deptOrgCode: 'CA000', deptName: '信用審查部', totalUnits: 3, completedUnits: 2 },
           ],
         }),
       );
@@ -311,7 +311,7 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
     it('AC-15 本部層／公司層單位自成一組、不排除（OQ-E11-20②）', async () => {
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
         summaryFixture({
-          deptRollup: [{ deptOrgCode: 'JA000', deptName: '營運管理部', totalUnits: 1, completedUnits: 1 }],
+          deptRollup: [{ companyCode: 'AS', deptOrgCode: 'JA000', deptName: '營運管理部', totalUnits: 1, completedUnits: 1 }],
         }),
       );
       renderPage();
@@ -885,7 +885,7 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       ];
       return dates.map((trainingDate, i) => ({
         documentId: `d${i}`, documentNumber: `N${String(i).padStart(2, '0')}`, documentName: `文件-${i}`,
-        orgCode: `ORG${i}`, orgName: `單位${i}`, trainingDate,
+        companyCode: 'AS', orgCode: `ORG${i}`, orgName: `單位${i}`, trainingDate,
       }));
     }
 
@@ -948,7 +948,7 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
         summaryFixture({
           recentSessions: [
-            { documentId: 'd1', documentNumber: 'N01', documentName: '文件一', orgCode: 'A', orgName: '單位A', trainingDate: '2026-08-27' },
+            { documentId: 'd1', documentNumber: 'N01', documentName: '文件一', companyCode: 'AS', orgCode: 'A', orgName: '單位A', trainingDate: '2026-08-27' },
           ],
         }),
       );
@@ -961,7 +961,7 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
         summaryFixture({
           recentSessions: [
-            { documentId: 'd1', documentNumber: 'N01', documentName: '裁撤單位之文件', orgCode: 'INACTIVE01', orgName: '已裁撤室', trainingDate: '2026-08-20' },
+            { documentId: 'd1', documentNumber: 'N01', documentName: '裁撤單位之文件', companyCode: 'AS', orgCode: 'INACTIVE01', orgName: '已裁撤室', trainingDate: '2026-08-20' },
           ],
         }),
       );

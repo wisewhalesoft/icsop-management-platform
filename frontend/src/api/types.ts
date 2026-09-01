@@ -1076,7 +1076,14 @@ export interface OjtProgressRow {
   documentId: string;
   documentNumber: string;
   documentName: string;
+  /**
+   * 🔴 2026-09-01：該列所屬公司（＝文件之 `companyCode`）。**分組鍵必須是
+   * `(companyCode, orgCode)` 之複合鍵**——5 碼部門代碼各公司獨立編碼，dev 實測四家間有 42 個
+   * 重複碼；以 `orgCode` 單獨分組會把不同公司的兩個部併成同一個群組。
+   */
+  companyCode: string;
   orgCode: string;
+  /** 使用單位**全名**：`公司簡稱 / 部 / 處室`（後端 `OjtOrgDirectory.nameOf` 之單一組裝點）。 */
   orgName: string;
   sessionCount: number;
   /** `AC-03`：場次數 ≥ 1 即完成（不依訓練日期是否已過、不依檔案是否可下載）。 */
@@ -1206,7 +1213,10 @@ export interface OjtProgressSummary {
    * 渲染 `{g.rate}%` 會印出 `undefined%`。留著一個恆空的欄位與留著恆空的擴充點同型，已移除。
    */
   deptRollup: {
+    /** 🔴 2026-09-01：分組鍵為 `(companyCode, deptOrgCode)`，非 `deptOrgCode` 單獨。 */
+    companyCode: string;
     deptOrgCode: string;
+    /** `公司簡稱 / 部`。 */
     deptName: string;
     totalUnits: number;
     completedUnits: number;
@@ -1216,7 +1226,9 @@ export interface OjtProgressSummary {
     documentId: string;
     documentNumber: string;
     documentName: string;
+    companyCode: string;
     orgCode: string;
+    /** `公司簡稱 / 部 / 處室`（與 TAB2 進度列同一組裝點）。 */
     orgName: string;
     trainingDate: string;
   }[];

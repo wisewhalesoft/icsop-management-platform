@@ -488,7 +488,10 @@ export function OjtProgressPage(): JSX.Element {
         )}
 
         {groups.map((g) => (
-          <section key={g.code} data-progress-group={g.code} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          /* 🔴 React key 用複合鍵 `g.key`（跨公司同碼時 `g.code` 會重複 ⇒ 兩組會被 React
+             視為同一個節點而錯位）；`data-progress-group` 之值維持 `orgCode`（prototype 25 之
+             既有 DOM 契約，不變更），公司別以**新增**之 `data-progress-group-company` 表達。 */
+          <section key={g.key} data-progress-group={g.code} data-progress-group-company={g.companyCode} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100">
               <Icon name="building-2" className="w-4 h-4 text-slate-400 shrink-0" />
               <span data-progress-group-name className="font-medium text-slate-800 truncate">{g.label}</span>
@@ -948,7 +951,8 @@ function RollupSection({ summary }: { summary: OjtProgressSummary | null }): JSX
           </thead>
           <tbody className="divide-y divide-slate-100">
             {list.map((g) => (
-              <tr key={g.deptOrgCode} data-rollup-row={g.deptOrgCode} className="hover:bg-slate-50">
+              /* React key 補上公司別（同上理由）；`data-rollup-row` 之值維持部代碼。 */
+              <tr key={`${g.companyCode}__${g.deptOrgCode}`} data-rollup-row={g.deptOrgCode} data-rollup-company={g.companyCode} className="hover:bg-slate-50">
                 <td className="px-4 py-2.5 text-slate-800">{g.deptName}</td>
                 <td className="px-4 py-2.5 mono text-xs text-slate-500">{g.deptOrgCode}</td>
                 <td className="px-4 py-2.5">
