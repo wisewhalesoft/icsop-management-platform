@@ -6,6 +6,7 @@ import {
   UpdateLifecyclePatch,
 } from './lifecycle.store';
 import { AuditAccessEvent, AuditWriter } from '../audit/audit.types';
+import { AuditIdentityService } from '../audit/audit-identity.service';
 
 class FakeAudit implements AuditWriter {
   events: AuditAccessEvent[] = [];
@@ -27,7 +28,27 @@ const ACTOR: LifecycleAuditActor = {
   actorName: '李慧玲',
   employeeNo: 'E001',
   roleCode: 'ICSOPAdmin',
+  // 🔴 2026-09-01 delta：公司／部門／處室之解析原料（服務層經 AuditIdentityService 解析）。
+  companyCode: 'AS',
+  orgCode: 'A1210',
 };
+
+/** ORG_UNIT 假體（部層 DESC_FULL ＋ 處室 DESC_CHI 末段）。 */
+function identityService(): AuditIdentityService {
+  return new AuditIdentityService({
+    async findByOrgCode(companyCode, orgCode) {
+      const rows: Record<string, { tier: string; name: string; descFull: string | null }> = {
+        'AS:A1210': { tier: 'SECTION', name: '營運管理部/審查室', descFull: null },
+        'AS:A1000': { tier: 'DEPARTMENT', name: '營運管理部', descFull: '營運管理部' },
+      };
+      const row = rows[`${companyCode}:${orgCode}`];
+      return row ? ({ companyCode, orgCode, ...row } as never) : null;
+    },
+    async listByCompany() {
+      return [];
+    },
+  });
+}
 
 class FakeStore implements LifecycleStore {
   seq = 1;
@@ -175,6 +196,27 @@ describe('LifecycleService（F007）', () => {
       expect(ev.targetNumber).toBe('待刪循環');
       expect(ev.actorId).toBe('AS22455');
       expect(ev.occurredAt).toBe(T0);
+    });
+
+    /**
+     * 🔴 2026-09-01 delta：`LIFECYCLE_DELETE` 之公司／部門／處室三欄此前**從未落值**——
+     * 同一個人刪一條循環，在 F024 調閱歷程上會比他檢視同一條循環少三欄。
+     */
+    it('🔴 身分快照六欄齊全（公司全稱／部門全名／處室），與檢視、下載列一致', async () => {
+      const wired = new LifecycleService(store, audit, () => T0, identityService());
+      const lc = store.seed({ name: '待刪循環' });
+
+      await wired.deleteLifecycle(lc.id, ACTOR);
+
+      expect(audit.events).toHaveLength(1);
+      expect(audit.events[0]).toMatchObject({
+        actorName: '李慧玲',
+        employeeNo: 'E001',
+        company: '和潤企業股份有限公司',
+        department: '營運管理部',
+        section: '審查室',
+        roleCode: 'ICSOPAdmin',
+      });
     });
 
     it('仍有掛載被拒 → 不刪除、不記稽核', async () => {

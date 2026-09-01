@@ -25,6 +25,11 @@ export function toLifecycleAuditActor(u: SessionUser): LifecycleAuditActor {
     actorName: u.name ?? null,
     employeeNo: u.employeeNo ?? null,
     roleCode: u.roleCode ?? null,
+    // 🔴 2026-09-01 delta：公司／部門／處室之解析原料（服務層經 `AuditIdentityService`
+    // 解析為全稱與部門全名）。此處刻意仍傳**代碼**——解析需查 ORG_UNIT，是有 IO 的動作，
+    // 不屬於這個純函式的職責。
+    companyCode: u.companyCode ?? null,
+    orgCode: u.orgCode ?? null,
   };
 }
 

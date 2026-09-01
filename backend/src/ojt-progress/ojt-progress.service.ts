@@ -47,6 +47,14 @@ export interface OjtSessionContext {
   accountId?: string | null;
   name?: string | null;
   employeeNo?: string | null;
+  /**
+   * 🔴 2026-09-01 delta（additive 選填）：稽核身分快照之公司／部門／處室三欄所需。
+   * 缺此兩欄時 `OJT_SESSION_UPLOAD`／`OJT_SESSION_DELETE` 之稽核列在 F024 調閱歷程
+   * 公司／部門／處室**恆為空白**（dev 實測 2／2）。controller 傳入之 `SessionUser`
+   * 本就攜帶兩者，故無呼叫端需要改動。
+   */
+  companyCode?: string | null;
+  orgCode?: string | null;
 }
 
 /** 新增場次之輸入（`AC-09` ③：**單一** file，非陣列——多檔在型別層即不可建構）。 */
@@ -895,6 +903,12 @@ export class OjtProgressService {
       accountId: session?.accountId ?? '',
       name: session?.name ?? null,
       employeeNo: session?.employeeNo ?? null,
+      // 🔴 2026-09-01 delta：**操作者**之公司／部門／處室三欄之解析原料（轉接器經
+      // `AuditIdentityService` 解析為全稱與部門全名，本層不自行推導）。
+      // ⚠ 與上方 `orgCode`（場次所屬**使用單位**）是兩個不同維度，故冠 `actor` 前綴。
+      actorCompanyCode: session?.companyCode ?? null,
+      actorOrgCode: session?.orgCode ?? null,
+      actorRoleCode: session?.roleCode ?? null,
       // 登記／刪除非浮水印動作（`AC-18`）——型別已鎖為 null，此處為顯式落值而非省略。
       watermarkSnapshot: null,
       sessionId: record.id,

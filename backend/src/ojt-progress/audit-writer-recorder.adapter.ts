@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AuditIdentityService } from '../audit/audit-identity.service';
 import { AuditWriterService } from '../audit/audit-writer.service';
 import { OjtAuditEvent, OjtAuditRecorder } from './ojt-progress.store';
 
@@ -13,22 +14,37 @@ import { OjtAuditEvent, OjtAuditRecorder } from './ojt-progress.store';
  *   - orgCode     ：🔴 本 delta 之 additive 欄——沒有它，稽核只能回答「哪份文件的場次動了」，
  *                   回答不了「哪個使用單位的」，而使用單位正是本 feature 的最小追蹤單位
  *
- * 🔴 **身分快照六欄逐一顯式轉送**（`?? null`）：本 repo 已於 2026-08-21 記取
- * appendices 轉接器「服務層算對了、adapter 在轉送前把欄位丟掉」之缺口——該類缺口
- * 因為單元測試以替身 recorder 驗證服務層、且 `AuditAccessEvent` 各欄皆選填而
- * **編譯期與測試期雙雙無感**。此處逐欄寫出即為該教訓之落實。
+ * 🔴 **身分快照六欄一律經 `AuditIdentityService` 解析**（2026-09-01 delta）。
+ *
+ * ⚠ 本檔上一版的檔頭寫著「身分快照六欄逐一顯式轉送」，實際只轉送了 `actorName` 與
+ * `employeeNo` 兩欄——公司／部門／處室／角色四欄從未落值（dev 實測：`OJT_SESSION_UPLOAD`
+ * 之 2 列四欄全空）。註解寫了不等於程式做了；本輪把該承諾改成一次方法呼叫，
+ * 使「六欄齊不齊」不再取決於這份清單有沒有人維護。
  *
  * 🔴 `watermarkSnapshot` 恆為 `null`：登記／刪除**非浮水印動作**（`AC-18` 明訂），
  * 型別已鎖死，此處為**顯式斷言**而非預設值。
  *
- * ⚠ 本模組**不**注入 `WatermarkBurnerService` 解析身分快照（不同於附錄／使用表單之下載路徑）：
- * 場次登記不燒錄浮水印，沒有「浮水印身分」這個概念可解析；快照欄一律取自呼叫者 session。
+ * ⚠ 本模組**不**注入 `WatermarkBurnerService`（不同於附錄／使用表單之下載路徑）：
+ * 場次登記不燒錄浮水印，沒有「浮水印身分」這個概念可解析；六欄一律取自呼叫者 session
+ * ＋ ORG_UNIT 解析，與其餘十個稽核寫入點同一來源。
  */
 @Injectable()
 export class OjtAuditWriterRecorder implements OjtAuditRecorder {
-  constructor(private readonly writer: AuditWriterService) {}
+  constructor(
+    private readonly writer: AuditWriterService,
+    private readonly identity: AuditIdentityService,
+  ) {}
 
   async record(event: OjtAuditEvent): Promise<void> {
+    const identity = await this.identity.resolve({
+      name: event.name,
+      employeeNo: event.employeeNo,
+      // ⚠ `event.orgCode` 是場次所屬**使用單位**，不是操作者所屬單位——此處必須用
+      //   `actorOrgCode`，用錯會把辦訓練的單位寫成操作者的部門。
+      companyCode: event.actorCompanyCode,
+      orgCode: event.actorOrgCode,
+      roleCode: event.actorRoleCode,
+    });
     await this.writer.recordAccess({
       targetType: 'OJT_SESSION',
       actionType: event.actionType,
@@ -39,8 +55,12 @@ export class OjtAuditWriterRecorder implements OjtAuditRecorder {
       orgCode: event.orgCode,
       targetNumber: event.documentNumber || null,
       actorId: event.accountId,
-      actorName: event.name ?? null,
-      employeeNo: event.employeeNo ?? null,
+      actorName: identity.actorName,
+      employeeNo: identity.employeeNo,
+      company: identity.company,
+      department: identity.department,
+      section: identity.section,
+      roleCode: identity.roleCode,
       watermarkSnapshot: null,
       occurredAt: new Date(),
     });
