@@ -5,6 +5,7 @@ import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { RequirePermission } from '../rbac/require-permission.decorator';
 import { FunctionKey } from '../rbac/function-matrix';
+import { AuditIdentityService } from '../audit/audit-identity.service';
 
 const STATUSES: AlertStatus[] = ['pending', 'resolved'];
 const RESOLUTION_KINDS: ResolutionKind[] = ['FIELD_UPDATED', 'NO_CHANGE_NEEDED'];
@@ -18,7 +19,10 @@ const RESOLUTION_KINDS: ResolutionKind[] = ['FIELD_UPDATED', 'NO_CHANGE_NEEDED']
 @Controller('admin/org-change-alerts')
 @UseGuards(SessionGuard, RolePermissionGuard)
 export class OrgChangeAlertController {
-  constructor(private readonly svc: OrgChangeAlertService) {}
+  constructor(
+    private readonly svc: OrgChangeAlertService,
+    private readonly identity: AuditIdentityService,
+  ) {}
 
   /** 提示清單（預設 pending；已處理清單供稽核/除錯查詢）。 */
   @Get()
@@ -34,22 +38,21 @@ export class OrgChangeAlertController {
    */
   @Patch(':id/resolve')
   @RequirePermission(FunctionKey.ORG_SYNC_MANAGEMENT, 'write')
-  resolve(
+  async resolve(
     @Param('id') id: string,
     @Body() body: { resolutionKind?: ResolutionKind } | undefined,
     @Req() req: RequestWithSession,
   ): Promise<AlertRow> {
     const u = req.sessionUser;
     const kind = RESOLUTION_KINDS.find((v) => v === body?.resolutionKind);
+    // 🔴 2026-09-01 delta：本處曾傳 `company: u?.companyCode`——公司**代碼**（`AS`）而非全稱，
+    // 使 F024 調閱歷程之公司欄在 `ALERT_RESOLVED` 列顯示 `AS`、其餘動作顯示
+    // 「和潤企業股份有限公司」（dev 實測 97 列全為代碼）；部門／處室則從未帶過。
+    // 六欄一律改由唯一組裝點解析（公司恆為全稱，`AC-N13` ③）。
+    const { actorName, ...snapshot } = await this.identity.resolve(u);
     return this.svc.resolve(
       id,
-      {
-        accountId: u?.accountId ?? null,
-        name: u?.name ?? null,
-        employeeNo: u?.employeeNo ?? null,
-        roleCode: u?.roleCode ?? null,
-        company: u?.companyCode ?? null,
-      },
+      { accountId: u?.accountId ?? null, name: actorName, ...snapshot },
       kind,
     );
   }

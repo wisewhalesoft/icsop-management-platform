@@ -10,6 +10,7 @@ import {
   CreateAccountInput,
   UpdateAccountPatch,
 } from './accounts.store';
+import { AuditIdentityService } from '../audit/audit-identity.service';
 
 /**
  * 角色變更稽核（🔴 2026-08-25 角色自動化 delta，裁定 `Q4.5`）。
@@ -137,15 +138,63 @@ describe('assignRole 之稽核寫入', () => {
     expect(spy.events[0]!.summary).toBe('Supervisor → User（子分類：業務）');
   });
 
-  it('逐欄轉送操作者身分快照（appendices 轉接器曾漏轉六欄之同型缺口，見 adapter 檔頭）', async () => {
+  /**
+   * 🔴 2026-09-01 delta：本案例原本斷言 `actorCompany === 'AS'`、`actorDepartment === 'ANA00'`
+   * ——也就是把**代碼**寫進 `AUDIT_LOG` 這件事**釘成了預期行為**。
+   *
+   * 那兩格在 F024 調閱歷程分別是「公司」與「部門」欄，其餘十個稽核寫入點落的是
+   * 「和潤企業股份有限公司」與部門全名（dev 實測：`ROLE_ASSIGNED` 之 23 列公司欄全為 `AS`）。
+   * 同一個人在同一張表上看到兩種公司寫法，正是使用者回報的現象。測試鎖住了錯的那一半，
+   * 於是修正必須連同本斷言一起改——這也是為什麼「測試綠」證明不了「顯示正確」。
+   */
+  it('逐欄轉送操作者身分快照，且公司欄為**全稱**、部門欄不得落 orgCode', async () => {
     store.seed({ id: 'acc-1', roleCode: 'User' });
     await svc.assignRole('acc-1', ACTOR, 'Supervisor');
     const e = spy.events[0]!;
     expect(e.actorName).toBe('李管理');
     expect(e.actorEmployeeNo).toBe('22455');
-    expect(e.actorCompany).toBe('AS');
-    expect(e.actorDepartment).toBe('ANA00');
+    expect(e.actorCompany).toBe('和潤企業股份有限公司');
+    expect(e.actorCompany).not.toBe('AS');
     expect(e.actorRoleCode).toBe('SysAdmin');
+    // 無 AuditIdentityService（本 describe 之純建構替身）⇒ 部門需查 ORG_UNIT，無從解析 ⇒ null。
+    // 🔴 關鍵是**不得回填 orgCode**：留白是誠實的，寫代碼是說謊。
+    expect(e.actorDepartment).toBeNull();
+    expect(e.actorDepartment).not.toBe('ANA00');
+  });
+
+  /**
+   * 接上 `AuditIdentityService`（正式 DI 之形狀）→ 部門／處室解析為名稱。
+   */
+  it('🔴 接上身分組裝點 → 部門為部層全名、處室為 DESC_CHI 末段（非代碼）', async () => {
+    const orgs = {
+      async findByOrgCode(companyCode: string, orgCode: string) {
+        const rows: Record<string, { tier: string; name: string; descFull: string | null }> = {
+          'AS:ANA00': { tier: 'SECTION', name: '稽核部/內稽室', descFull: null },
+          'AS:AN000': { tier: 'DEPARTMENT', name: '稽核部', descFull: '稽核部' },
+        };
+        const row = rows[`${companyCode}:${orgCode}`];
+        return row ? ({ companyCode, orgCode, ...row } as never) : null;
+      },
+      async listByCompany() {
+        return [];
+      },
+    };
+    const wired = new AccountsService(
+      store,
+      undefined,
+      undefined,
+      spy,
+      undefined,
+      new AuditIdentityService(orgs),
+    );
+    store.seed({ id: 'acc-1', roleCode: 'User' });
+
+    await wired.assignRole('acc-1', ACTOR, 'Supervisor');
+
+    const e = spy.events[0]!;
+    expect(e.actorCompany).toBe('和潤企業股份有限公司');
+    expect(e.actorDepartment).toBe('稽核部');
+    expect(e.actorSection).toBe('內稽室');
   });
 
   it('操作者快照缺漏 → 落 null，不拋錯（既有呼叫端與測試替身僅帶 companyCode/loginId）', async () => {
