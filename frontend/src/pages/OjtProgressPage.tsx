@@ -46,6 +46,9 @@ import {
   DOC_COVERAGE_SCOPE_LABEL,
   DOC_COVERAGE_SCOPE_OPTIONS,
   DOC_COVERAGE_TRACKED_LABEL,
+  DOC_GROUP_BASIS_NOTE_TEXT,
+  DOC_SEARCH_ARIA_TEXT,
+  DOC_SEARCH_PLACEHOLDER_TEXT,
   DOC_UNASSIGNED_TEXT,
   DOC_UNASSIGNED_VISUAL,
   EMPTY_ALL_HINT,
@@ -58,6 +61,9 @@ import {
   ERR_FILE_REQUIRED,
   FIELD_SIGNIN_FILE_LABEL,
   FIELD_TRAINING_DATE_LABEL,
+  GROUP_MODE_ARIA_TEXT,
+  GROUP_MODE_DOC_TEXT,
+  GROUP_MODE_ORG_TEXT,
   NO_STATISTICS_TEXT,
   ORG_INACTIVE_TEXT,
   ORPHAN_NOTE_TEXT,
@@ -81,14 +87,21 @@ import {
   docCoverageBreakdown,
   docCoverageRowView,
   docCoverageTruncationText,
+  docGroupPercentText,
+  docGroupRatioText,
+  docGroupToggleAria,
+  docGroupsOf,
   downloadSessionAria,
   exclusionNote,
   groupRowsByOrg,
+  matchesDocKeyword,
   recentTruncationText,
   rollupInvariantText,
   rowKeyOf,
   sliceRecentSessions,
   todayIsoDate,
+  type OjtDocGroup,
+  type OjtGroupMode,
 } from './ojt-progress-view';
 
 /**
@@ -154,7 +167,17 @@ export function OjtProgressPage(): JSX.Element {
   const [pending, setPending] = useState<OjtPendingItem[]>([]);
   const [orgQuery, setOrgQuery] = useState('');
   const [status, setStatus] = useState<'' | 'completed' | 'pending'>('');
+  /**
+   * `AC-30` 分組模式（🔒 預設 `org` ＝現況一格不改）與 `AC-33`② 之文件搜尋關鍵字。
+   * 🔴 兩者**刻意不進 `loadRows` 之相依**——`GET /admin/ojt-progress/rows` 已回傳完整、未分頁
+   * 之進度列（見 §架構設計 一），分組與文件搜尋純為前端呈現決策；為它們再打一次 API，等於把
+   * 一個呈現決策做成一次網路往返（`AC-30` 明文禁止，斷言形狀＝切換前後呼叫次數相同）。
+   */
+  const [groupMode, setGroupMode] = useState<OjtGroupMode>('org');
+  const [docQuery, setDocQuery] = useState('');
   const [expanded, setExpanded] = useState<string[]>([]);
+  /** `AC-33`①：**已展開**之文件群組（🔒 預設全部折疊 ⇒ 初值為空陣列，非「全部展開再收合」）。 */
+  const [expandedDocs, setExpandedDocs] = useState<string[]>([]);
   const [sessionsByRow, setSessionsByRow] = useState<Record<string, OjtSessionView[]>>({});
 
   const [addTarget, setAddTarget] = useState<AddTarget | null>(null);
@@ -226,6 +249,29 @@ export function OjtProgressPage(): JSX.Element {
     },
     [expanded, reloadRowSessions],
   );
+
+  /**
+   * `AC-33`① 文件群組之折疊／展開。
+   * 🔴 **展開才渲染組內列**（渲染端以 `expandedDocs.includes()` 短路），未展開時該群組之
+   * `[data-progress-row]` **完全不進 DOM**——非 CSS 隱藏、非 `hidden` 屬性。正式站 591 份文件
+   * 若都指定了使用部門，群組數逼近文件數；CSS 隱藏省不掉任何一個節點的建立成本。
+   */
+  const onToggleDocGroup = useCallback((documentId: string) => {
+    setExpandedDocs((prev) =>
+      prev.includes(documentId) ? prev.filter((id) => id !== documentId) : [...prev, documentId],
+    );
+  }, []);
+
+  /**
+   * `AC-30` 分組模式切換。
+   * 🔴 切回 `org` 時**清空文件關鍵字**（`AC-33`②）——理由與 `AC-14`⑦ 之既有處置同源：一個
+   * 看不見的條件仍在過濾列，就是畫面說謊；不清空會讓使用者切回單位模式後看到一個比實際小的
+   * 集合，而畫面上找不到任何解釋。
+   */
+  const onChangeGroupMode = useCallback((mode: OjtGroupMode) => {
+    setGroupMode(mode);
+    if (mode === 'org') setDocQuery('');
+  }, []);
 
   const onDownload = useCallback(
     async (s: OjtSessionView) => {
@@ -339,8 +385,62 @@ export function OjtProgressPage(): JSX.Element {
     }
   }, [assign, loadPending, loadRows, loadSummary, toast]);
 
-  const groups = useMemo(() => groupRowsByOrg(rows), [rows]);
-  const filtered = Boolean(orgQuery || status);
+  /**
+   * 🔴 `AC-32` 之「**當下呈現之列**」——兩種模式之群組與空狀態的**單一推導點**。
+   *
+   * · **完成狀態**：伺服器已依 `completionStatus` 過濾，此處**再套一次同一個述詞**。`completed`
+   *   是列上的一個布林欄，客端重套是精確且冪等的（伺服器正常時為 no-op），但它保證群組標題之
+   *   `已完成 X / 共 Y 單位` 與畫面上真正列出的那些列**永遠是同一個集合**——兩個數字各自從
+   *   不同集合算出來，正是本頁最容易長出的那種「畫面說謊」。
+   * · 🔒 **單位關鍵字刻意不在此重套**：其比對語意（名稱／代碼之正規化）住在後端，客端另打一份
+   *   只會在兩份語意漂移時，把伺服器刻意命中的列悄悄濾掉。
+   * · **文件搜尋**：`AC-33`② 之純前端條件，🔒 只在 `document` 模式生效——`org` 模式下關鍵字
+   *   已於切換時清空，此處再加一道結構性保險。
+   */
+  const displayedRows = useMemo(() => {
+    const byStatus = status ? rows.filter((r) => r.completed === (status === 'completed')) : rows;
+    return groupMode === 'document'
+      ? byStatus.filter((r) => matchesDocKeyword(r, docQuery))
+      : byStatus;
+  }, [rows, status, groupMode, docQuery]);
+
+  /**
+   * 🔒 `AC-31` 兩種群組容器**互斥渲染**：非當前模式者連推導都不做（回空陣列）⇒ 另一種
+   * `[data-*-group]` 恰 0 個在結構上成立，而不是靠渲染端多寫一個條件。
+   */
+  const groups = useMemo(
+    () => (groupMode === 'org' ? groupRowsByOrg(displayedRows) : []),
+    [groupMode, displayedRows],
+  );
+  const docGroups = useMemo<OjtDocGroup[]>(
+    () => (groupMode === 'document' ? docGroupsOf(displayedRows) : []),
+    [groupMode, displayedRows],
+  );
+  const filtered = Boolean(orgQuery || status || (groupMode === 'document' && docQuery.trim()));
+
+  /**
+   * 一列進度列之渲染（兩種分組模式**共用同一份**）。
+   * 🔒 `AC-31`④／`AC-36`：組內列之掛鉤與行為（展開場次／新增／下載／刪除、角色守門、孤兒列
+   * 規則）在文件分組模式下**一格不改**——共用同一個渲染點，是「不會有第二份行為悄悄漂走」
+   * 在程式碼上唯一看得出來的保證。
+   */
+  const renderRow = (r: OjtProgressRow): JSX.Element => {
+    const key = rowKeyOf(r.documentId, r.orgCode);
+    return (
+      <ProgressRow
+        key={key}
+        row={r}
+        expanded={expanded.includes(key)}
+        sessions={sessionsByRow[key]}
+        mayAdd={mayAdd}
+        mayDelete={mayManage}
+        onToggle={() => void onToggleRow(r)}
+        onAdd={() => openAdd(r)}
+        onDownload={(s) => void onDownload(s)}
+        onDelete={(s) => askDelete(r, s)}
+      />
+    );
+  };
 
   /**
    * `AC-28`⑯ 導向 TAB2 之入口：切至 TAB2、把**既有**之完成狀態篩選設為「尚未完成」、
@@ -465,11 +565,41 @@ export function OjtProgressPage(): JSX.Element {
             <option value="completed">{BADGE_COMPLETED_TEXT}</option>
             <option value="pending">{BADGE_PENDING_TEXT}</option>
           </select>
+          {/* `AC-30` 分組模式（恰二態）。
+              🔴 **不掛 `data-ojt-filter`**——它不移除任何列，只改變列的組織方式；算成第三個
+              篩選會直接推翻 `OQ-E11-15`→A 之既有裁決，且弄破 `AC-13`「篩選恰兩項」之既有鎖。 */}
+          <select
+            data-ojt-group-mode
+            aria-label={GROUP_MODE_ARIA_TEXT}
+            value={groupMode}
+            onChange={(e) => onChangeGroupMode(e.target.value as OjtGroupMode)}
+            className="px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"
+          >
+            <option value="org">{GROUP_MODE_ORG_TEXT}</option>
+            <option value="document">{GROUP_MODE_DOC_TEXT}</option>
+          </select>
+          {/* `AC-33`② 文件搜尋：🔒 僅 document 模式**進 DOM**（org 模式完全不進，非 CSS 隱藏），
+              🔴 同樣不掛 `data-ojt-filter`。 */}
+          {groupMode === 'document' && (
+            <div className="relative flex-1 min-w-[220px]">
+              <Icon name="search" className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                data-ojt-doc-search
+                type="search"
+                value={docQuery}
+                onChange={(e) => setDocQuery(e.target.value)}
+                placeholder={DOC_SEARCH_PLACEHOLDER_TEXT}
+                aria-label={DOC_SEARCH_ARIA_TEXT}
+                className="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              />
+            </div>
+          )}
           {filtered && (
             <button
               onClick={() => {
                 setOrgQuery('');
                 setStatus('');
+                setDocQuery('');
               }}
               className="px-3 py-2 rounded-md text-sm text-primary-600 hover:bg-primary-50"
             >
@@ -502,26 +632,54 @@ export function OjtProgressPage(): JSX.Element {
                 </span>
               )}
             </div>
-            <div className="divide-y divide-slate-100">
-              {g.rows.map((r) => (
-                <ProgressRow
-                  key={rowKeyOf(r.documentId, r.orgCode)}
-                  row={r}
-                  expanded={expanded.includes(rowKeyOf(r.documentId, r.orgCode))}
-                  sessions={sessionsByRow[rowKeyOf(r.documentId, r.orgCode)]}
-                  mayAdd={mayAdd}
-                  mayDelete={mayManage}
-                  onToggle={() => void onToggleRow(r)}
-                  onAdd={() => openAdd(r)}
-                  onDownload={(s) => void onDownload(s)}
-                  onDelete={(s) => askDelete(r, s)}
-                />
-              ))}
-            </div>
+            <div className="divide-y divide-slate-100">{g.rows.map(renderRow)}</div>
           </section>
         ))}
 
-        {rows.length === 0 && (
+        {/* `AC-32` 口徑說明行：🔒 全頁恰 1 個、僅 document 模式進 DOM。
+            🔴 **必要載體、非裝飾**——處置比照同頁既有之 `[data-doc-coverage-basis-note]`：同一頁
+            並置兩個口徑不同的數字，沒有這一行，使用者一對帳就會把正常現象讀成 bug。 */}
+        {groupMode === 'document' && (
+          <p data-doc-group-basis-note className="text-xs text-slate-400 flex items-start gap-1.5">
+            <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            <span>{DOC_GROUP_BASIS_NOTE_TEXT}</span>
+          </p>
+        )}
+
+        {docGroups.map((g) => {
+          const open = expandedDocs.includes(g.documentId);
+          return (
+            /* 🔒 群組鍵＝`documentId`（非文件編號、非書名）：書名非唯一，以書名分組會把兩份
+               不同文件併成一組而憑空少掉一份文件。 */
+            <section key={g.documentId} data-doc-group={g.documentId} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <button
+                data-doc-group-toggle={g.documentId}
+                onClick={() => onToggleDocGroup(g.documentId)}
+                aria-expanded={open}
+                aria-label={docGroupToggleAria(g.documentNumber, g.documentName)}
+                className={`w-full flex items-center gap-2 px-4 py-3 bg-slate-50 text-left hover:bg-slate-100 ${
+                  open ? 'border-b border-slate-100' : ''
+                }`}
+              >
+                <Icon name={open ? 'chevron-up' : 'chevron-down'} className="w-4 h-4 text-slate-400 shrink-0" />
+                <span data-doc-group-number className="mono text-xs text-slate-500 shrink-0">{g.documentNumber}</span>
+                <span data-doc-group-name className="font-medium text-slate-800 truncate">{g.documentName}</span>
+                {/* 🔴 X／Y 取自**當下呈現之列**（含裁撤與孤兒），不得改讀 TAB1 之 docCoverage；
+                    百分比一律走 `docGroupPercentText`（其內部委派既有 `coveragePercent`）。 */}
+                <span data-doc-group-ratio className="ml-auto text-xs text-slate-500 shrink-0 whitespace-nowrap">
+                  {docGroupRatioText(g.done, g.total)}
+                </span>
+                <span data-doc-group-pct className="text-xs font-medium text-slate-700 shrink-0 whitespace-nowrap">
+                  {docGroupPercentText(g.done, g.total)}
+                </span>
+              </button>
+              {/* 🔴 `AC-33`①：**展開才渲染**——收合時組內列完全不進 DOM（非 CSS 隱藏）。 */}
+              {open && <div className="divide-y divide-slate-100">{g.rows.map(renderRow)}</div>}
+            </section>
+          );
+        })}
+
+        {displayedRows.length === 0 && (
           <div data-ojt-state="empty" className="text-center py-14 bg-white border border-slate-200 rounded-xl">
             <Icon name="inbox" className="w-10 h-10 text-slate-300 mx-auto mb-2" />
             <p className="text-slate-500 text-sm">{filtered ? EMPTY_ROWS_TEXT : EMPTY_ALL_TEXT}</p>

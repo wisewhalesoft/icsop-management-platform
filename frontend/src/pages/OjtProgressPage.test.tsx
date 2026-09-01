@@ -7,6 +7,25 @@ import { ToastProvider } from '../components/useToast';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import type { SessionUser } from '../api/types';
+/**
+ * 🔴 2026-09-01（`AC-30`～`AC-36`）：TAB2 分組模式之逐字文案與百分比推導點，一律自
+ * `ojt-progress-view` **import 常數／函式**作斷言，**不在本檔硬寫中文文案字面**——
+ * 其逐字鎖只存在於 `ojt-progress-view.test.ts` §一（全環唯一一份）。同一組文案在兩處
+ * 各打一份即為分歧之起點（本規格集之既有原則，`AC-35`）。
+ */
+import {
+  GROUP_MODE_ORG_TEXT,
+  GROUP_MODE_DOC_TEXT,
+  GROUP_MODE_ARIA_TEXT,
+  DOC_SEARCH_ARIA_TEXT,
+  DOC_SEARCH_PLACEHOLDER_TEXT,
+  DOC_GROUP_BASIS_NOTE_TEXT,
+  docGroupRatioText,
+  docGroupPercentText,
+  EMPTY_ROWS_TEXT,
+  EMPTY_ALL_TEXT,
+  EMPTY_ALL_HINT,
+} from './ojt-progress-view';
 
 /**
  * F042 OJT 進度管理 — 後台獨立管理頁（AC-01~AC-29，DOM 契約權威＝prototypes/25-ojt-progress.html）。
@@ -1369,6 +1388,387 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       await user.click(document.querySelector('[data-ojt-tab="sessions"]') as HTMLElement);
       await waitFor(() => expect(document.querySelector('[data-progress-row]')).not.toBeNull());
       expect(document.querySelectorAll('[data-add-session]').length).toBe(0);
+    });
+  });
+
+  /**
+   * ===================== F. TAB2 第二種分組模式「以文件分組」（AC-30～AC-36／AC-28⑳） =====================
+   * 🔴 2026-09-01 人類核可之需求：TAB2 恆以使用單位為群組（`AC-11`），要回答「這一份文件，各使用
+   * 單位辦得如何」得把同一份文件散落在各單位群組下的列逐一湊起來。本輪新增分組模式切換（恰二態），
+   * 🔒 **預設仍為「以使用單位分組」＝現況一格不改**（`AC-36` 之零漣漪鎖）。
+   * 權威：F042-ojt-progress-management.md §九（`AC-30`～`AC-36`）＋ §3-B（掛鉤）＋ §6 ⑳（逐字）。
+   *
+   * ⚠ 對實作全盲：`[data-ojt-group-mode]` 等 8 組掛鉤與 `ojt-progress-view` 之新符號皆尚不存在
+   * ⇒ 本 describe 全紅即為本環之預期紅燈。
+   *
+   * 🔴 **本 describe 之三個防假綠設計（本 repo 反覆踩過的形狀，逐條對應）**：
+   *   ① **折疊驗「不進 DOM」、且配正向對照**——同一份語料在 `org` 模式下先斷言渲染出 3 列，
+   *      再切到 `document` 模式斷言 0 列。少了正向那半句，「列根本沒載進來」與「列被折疊起來」
+   *      在斷言上無從分辨，該負向斷言退化為恆真（假綠）。
+   *   ② **口徑語料刻意分岔**——`d-cal` 在 TAB2 有 3 列（含 1 列孤兒、1 列裁撤、2 列已完成），
+   *      而 `summaryFixture` 之 `docCoverage` 對同一份文件給 `1 / 2`。⚠ **只放裁撤列造不出差異**：
+   *      `AC-04`／`docCoverage` 同樣不套 `isActive` 過濾，兩邊會剛好相等 ⇒ 那條斷言等於沒寫。
+   *      **真正的分岔在孤兒列**（`docCoverage` 之列由 `DOC_USING_DEPT` 驅動，孤兒天然不成列）。
+   *   ③ **中文文案字面一律不寫在本檔**——逐字鎖只在 `ojt-progress-view.test.ts` §一（全環唯一
+   *      一份），本檔一律 import 常數（`AC-35`）。
+   */
+  describe('F. TAB2 以文件分組（AC-30～AC-36／AC-28⑳）', () => {
+    const CAL_DOC_ID = 'd-cal';
+    const CAL_DOC_NUMBER = 'ICSOP-CAL-002';
+    const CAL_DOC_NAME = '徵信作業要點';
+    const OTHER_DOC_ID = 'd-abc';
+    const OTHER_DOC_NUMBER = 'ICSOP-ABC-001';
+    const OTHER_DOC_NAME = '車輛分期進件作業';
+
+    /**
+     * 🔴 口徑分岔語料（`AC-32` 之核心）：同一份文件 `d-cal` 在 TAB2 有 **3 列**、其中 2 列已完成
+     * ⇒ TAB2 口徑為 `2 / 3`（67%）；而 `docCoverage` 對同一份文件為 `1 / 2`（50%）。
+     * 🔒 列之順序刻意亂序（C／A／B），使 `AC-34` 之組內排序斷言真的在驗排序而非驗輸入順序。
+     */
+    const calRows = () => [
+      rowFixture({
+        documentId: CAL_DOC_ID, documentNumber: CAL_DOC_NUMBER, documentName: CAL_DOC_NAME,
+        companyCode: 'AS', orgCode: 'CCC00', orgName: '和潤企業 / 財務會計部 / C 室',
+        sessionCount: 1, completed: true, orphaned: true,
+      }),
+      rowFixture({
+        documentId: CAL_DOC_ID, documentNumber: CAL_DOC_NUMBER, documentName: CAL_DOC_NAME,
+        companyCode: 'AS', orgCode: 'AAA00', orgName: '和潤企業 / 財務會計部 / A 室',
+        sessionCount: 1, completed: true,
+      }),
+      rowFixture({
+        documentId: CAL_DOC_ID, documentNumber: CAL_DOC_NUMBER, documentName: CAL_DOC_NAME,
+        companyCode: 'AS', orgCode: 'BBB00', orgName: '和潤企業 / 財務會計部 / B 室',
+        sessionCount: 0, completed: false, inactive: true,
+      }),
+    ];
+
+    /** 兩份文件之語料；🔒 編號刻意讓亂序輸入（CAL 在前）與排序後（ABC 在前）不同（`AC-34`）。 */
+    const twoDocRows = () => [
+      ...calRows(),
+      rowFixture({
+        documentId: OTHER_DOC_ID, documentNumber: OTHER_DOC_NUMBER, documentName: OTHER_DOC_NAME,
+        companyCode: 'AS', orgCode: 'ZZZ00', orgName: '和潤企業 / 營運管理部 / Z 室',
+        sessionCount: 0, completed: false,
+      }),
+    ];
+
+    /** 🔴 TAB1 之 `docCoverage` 對 `d-cal` 給 `1 / 2`——與 TAB2 之 `2 / 3` 刻意不同口徑。 */
+    const calSummary = () =>
+      summaryFixture({
+        docCoverage: docCoverageSlice(
+          [docCoverageRow({
+            documentId: CAL_DOC_ID, documentNumber: CAL_DOC_NUMBER, documentName: CAL_DOC_NAME,
+            state: 'partial', completedUnits: 1, totalUnits: 2,
+          })],
+          { scope: 'all' },
+        ),
+      });
+
+    async function gotoSessionsTab(rows = calRows()) {
+      vi.mocked(endpoints.getOjtProgressRows).mockResolvedValue({ items: rows, total: rows.length });
+      vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(calSummary());
+      const user = userEvent.setup();
+      renderPage();
+      await waitFor(() => expect(screen.getByText('文件-訓練覆蓋率')).toBeInTheDocument());
+      await user.click(document.querySelector('[data-ojt-tab="sessions"]') as HTMLElement);
+      await waitFor(() => expect(document.querySelector('[data-ojt-filter-bar]')).toBeInTheDocument());
+      return user;
+    }
+
+    const groupMode = () => document.querySelector('[data-ojt-group-mode]') as HTMLSelectElement;
+    const docSearch = () => document.querySelector('[data-ojt-doc-search]') as HTMLInputElement;
+    const calGroup = () => document.querySelector(`[data-doc-group="${CAL_DOC_ID}"]`) as HTMLElement;
+    const calToggle = () => document.querySelector(`[data-doc-group-toggle="${CAL_DOC_ID}"]`) as HTMLElement;
+
+    /** 切換分組模式；等待點刻意落在 select 自身之值（空語料下亦適用，不預設一定畫得出群組）。 */
+    async function switchTo(mode: 'org' | 'document') {
+      fireEvent.change(groupMode(), { target: { value: mode } });
+      await waitFor(() => expect(groupMode().value).toBe(mode));
+    }
+
+    // ---------- F-1. 分組模式切換（AC-30／AC-36） ----------
+
+    it('AC-30 分組模式控制項：恰兩個 option（逐字＝具名常數）、預設 org；🔴 不得掛 data-ojt-filter（AC-13「篩選恰兩項」為既有鎖）', async () => {
+      await gotoSessionsTab();
+      const sel = groupMode();
+      expect(sel).not.toBeNull();
+      expect(sel.getAttribute('aria-label')).toBe(GROUP_MODE_ARIA_TEXT);
+      expect([...sel.options].map((o) => ({ value: o.value, text: o.textContent }))).toEqual([
+        { value: 'org', text: GROUP_MODE_ORG_TEXT },
+        { value: 'document', text: GROUP_MODE_DOC_TEXT },
+      ]);
+      expect(sel.value).toBe('org');
+      // 🔴 它不是篩選：不移除任何列，只改列的組織方式；算成第三個篩選會直接推翻 OQ-E11-15→A。
+      expect(sel.hasAttribute('data-ojt-filter')).toBe(false);
+      expect(document.querySelectorAll('[data-ojt-filter]')).toHaveLength(2);
+    });
+
+    it('AC-30／AC-31 兩種群組容器互斥渲染（各自先以正向斷言確立當下模式之群組存在）', async () => {
+      await gotoSessionsTab();
+      await waitFor(() => expect(document.querySelector('[data-progress-group="AAA00"]')).not.toBeNull());
+      expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(0);
+      await switchTo('document');
+      await waitFor(() => expect(calGroup()).not.toBeNull());
+      expect(document.querySelectorAll('[data-progress-group]')).toHaveLength(0);
+    });
+
+    /**
+     * 🔴 `AC-30`：分組純為前端行為——`GET /admin/ojt-progress/rows` 已回傳完整、未分頁之列。
+     * 為分組再打一次 API，等於把一個純呈現決策做成一次網路往返。
+     * 🔒 先斷言 `before > 0`：否則「切換前後次數相同」在兩邊都是 0 時恆真（假綠）。
+     */
+    it('🔴 AC-30 切換分組模式不重新請求 rows（同一份資料來源）', async () => {
+      await gotoSessionsTab();
+      const before = vi.mocked(endpoints.getOjtProgressRows).mock.calls.length;
+      expect(before).toBeGreaterThan(0);
+      await switchTo('document');
+      await waitFor(() => expect(calGroup()).not.toBeNull());
+      expect(vi.mocked(endpoints.getOjtProgressRows).mock.calls.length).toBe(before);
+    });
+
+    it('AC-36 [data-ojt-row-count] 之文字不因分組模式改變（同一批列、同一口徑）', async () => {
+      await gotoSessionsTab();
+      await waitFor(() => expect(document.querySelector('[data-ojt-row-count]')?.textContent).toBeTruthy());
+      const before = document.querySelector('[data-ojt-row-count]')?.textContent;
+      await switchTo('document');
+      await waitFor(() => expect(calGroup()).not.toBeNull());
+      expect(document.querySelector('[data-ojt-row-count]')?.textContent).toBe(before);
+    });
+
+    // ---------- F-2. 群組形狀與口徑（AC-31／AC-32） ----------
+
+    it('AC-31② 群組標題：文件編號與書名各有專屬掛鉤', async () => {
+      await gotoSessionsTab();
+      await switchTo('document');
+      await waitFor(() => expect(calGroup()).not.toBeNull());
+      expect(calGroup().querySelector('[data-doc-group-number]')?.textContent).toBe(CAL_DOC_NUMBER);
+      expect(calGroup().querySelector('[data-doc-group-name]')?.textContent).toBe(CAL_DOC_NAME);
+    });
+
+    it('🔴 AC-32 口徑鎖：完成度取自 TAB2 當下呈現之列（2 / 3），非 docCoverage 之 1 / 2', async () => {
+      await gotoSessionsTab();
+      await switchTo('document');
+      await waitFor(() => expect(calGroup()).not.toBeNull());
+      const ratio = calGroup().querySelector('[data-doc-group-ratio]') as HTMLElement;
+      expect(ratio, '文件群組缺 [data-doc-group-ratio] 完成度載體').not.toBeNull();
+      expect(ratio.textContent).toBe(docGroupRatioText(2, 3));
+      // 🔴 負向（上一句已確立載體存在，故具鑑別力）：讀 docCoverage 就會落在 1 / 2。
+      expect(ratio.textContent).not.toBe(docGroupRatioText(1, 2));
+    });
+
+    it('🔴 AC-32 百分比＝docGroupPercentText（其內部委派既有 coveragePercent，全頁單一推導點）：2/3 ⇒ 67%，非 docCoverage 之 1/2 ⇒ 50%', async () => {
+      await gotoSessionsTab();
+      await switchTo('document');
+      await waitFor(() => expect(calGroup()).not.toBeNull());
+      const pct = calGroup().querySelector('[data-doc-group-pct]') as HTMLElement;
+      expect(pct, '文件群組缺 [data-doc-group-pct] 百分比載體').not.toBeNull();
+      expect(pct.textContent).toBe(docGroupPercentText(2, 3));
+      expect(pct.textContent).not.toBe(docGroupPercentText(1, 2));
+    });
+
+    it('AC-32 口徑說明行：🔒 全頁恰 1 個、逐字＝常數；🔒 僅 document 模式進 DOM', async () => {
+      await gotoSessionsTab();
+      await waitFor(() => expect(document.querySelector('[data-progress-group="AAA00"]')).not.toBeNull());
+      expect(document.querySelectorAll('[data-doc-group-basis-note]')).toHaveLength(0);
+      await switchTo('document');
+      await waitFor(() => expect(document.querySelector('[data-doc-group-basis-note]')).not.toBeNull());
+      expect(document.querySelectorAll('[data-doc-group-basis-note]')).toHaveLength(1);
+      expect(document.querySelector('[data-doc-group-basis-note]')?.textContent).toBe(DOC_GROUP_BASIS_NOTE_TEXT);
+    });
+
+    /**
+     * 🔴 `AC-32` 之「**當下呈現之列**」：既有兩項篩選在 document 模式下持續生效（`AC-30`），
+     * 且完成度必須跟著呈現集合走——若實作以「未篩選之全部列」計算，本案即紅。
+     */
+    it('🔴 AC-32「當下呈現之列」：完成狀態篩選為「已完成」⇒ 完成度改為 2 / 2（100%）', async () => {
+      await gotoSessionsTab();
+      await switchTo('document');
+      await waitFor(() => expect(calGroup()).not.toBeNull());
+      const ratioText = () => calGroup().querySelector('[data-doc-group-ratio]')?.textContent;
+      expect(ratioText()).toBe(docGroupRatioText(2, 3)); // 正向：未篩選時之口徑
+      const statusSelect = document.querySelector('[data-ojt-filter="status"]') as HTMLSelectElement;
+      const completedOpt = [...statusSelect.options].find((o) => o.textContent === '已完成');
+      expect(completedOpt, '完成狀態篩選缺「已完成」選項（AC-13 之既有三值）').toBeTruthy();
+      fireEvent.change(statusSelect, { target: { value: completedOpt!.value } });
+      await waitFor(() => expect(ratioText()).toBe(docGroupRatioText(2, 2)));
+      expect(calGroup().querySelector('[data-doc-group-pct]')?.textContent).toBe(docGroupPercentText(2, 2));
+    });
+
+    // ---------- F-3. 規模收斂之硬需求 ①：預設折疊、展開才渲染（AC-33①） ----------
+
+    /**
+     * 🔴 本輪唯一要消除的缺陷：正式站 591 份文件若都指定了使用部門，群組數逼近文件數 ⇒ 一次
+     * 渲染近 600 組與其全部列。斷言必須是「**完全不進 DOM**」——只驗 CSS class 或
+     * `toBeVisible()` 之否定，該效能缺陷會整個逃掉。
+     * 🔒 正向對照（同一份語料在 org 模式為 3 列）使本負向斷言具鑑別力。
+     */
+    it('🔴 AC-33① 預設折疊：群組進 DOM 但組內列完全不進 DOM（正向對照：同語料在 org 模式為 3 列）', async () => {
+      await gotoSessionsTab();
+      await waitFor(() => expect(document.querySelectorAll('[data-progress-row]')).toHaveLength(3));
+      await switchTo('document');
+      await waitFor(() => expect(calGroup()).not.toBeNull());
+      expect(calToggle(), '文件群組缺 [data-doc-group-toggle] 折疊控制項').not.toBeNull();
+      expect(calToggle().getAttribute('aria-expanded')).toBe('false');
+      expect(document.querySelectorAll('[data-progress-row]')).toHaveLength(0);
+    });
+
+    it('AC-33①／AC-34 展開才渲染：aria-expanded 轉 true、組內 3 列進 DOM，且依 orgName 昇冪', async () => {
+      const user = await gotoSessionsTab();
+      await switchTo('document');
+      await waitFor(() => expect(calToggle()).not.toBeNull());
+      await user.click(calToggle());
+      await waitFor(() => expect(document.querySelectorAll('[data-progress-row]')).toHaveLength(3));
+      expect(calToggle().getAttribute('aria-expanded')).toBe('true');
+      // A 室／B 室／C 室 ⇒ AAA00／BBB00／CCC00；語料刻意以 C／A／B 之順序餵入。
+      expect(
+        [...document.querySelectorAll('[data-progress-row]')].map((el) => el.getAttribute('data-progress-row')),
+      ).toEqual([`${CAL_DOC_ID}__AAA00`, `${CAL_DOC_ID}__BBB00`, `${CAL_DOC_ID}__CCC00`]);
+    });
+
+    it('AC-33① 再點一次收合 ⇒ 組內列再次自 DOM 移除（非 CSS 隱藏）', async () => {
+      const user = await gotoSessionsTab();
+      await switchTo('document');
+      await waitFor(() => expect(calToggle()).not.toBeNull());
+      await user.click(calToggle());
+      await waitFor(() => expect(document.querySelectorAll('[data-progress-row]')).toHaveLength(3)); // 正向
+      await user.click(calToggle());
+      await waitFor(() => expect(document.querySelectorAll('[data-progress-row]')).toHaveLength(0));
+      expect(calToggle().getAttribute('aria-expanded')).toBe('false');
+    });
+
+    /**
+     * 🔒 理由同 `AC-28`⑩（下載鈕之 `aria-label` 必須帶檔名）：591 組之折疊鈕若無從分辨，
+     * 螢幕閱讀器與 `getByRole` 皆點不到正確的那一顆。🔵 完整句型為設計裁量、不入約束。
+     */
+    it('AC-33① 折疊鈕之 aria-label 須含該文件之程序書編號（多群組時可資分辨）', async () => {
+      await gotoSessionsTab();
+      await switchTo('document');
+      await waitFor(() => expect(calToggle()).not.toBeNull());
+      const aria = calToggle().getAttribute('aria-label') ?? '';
+      expect(aria).not.toBe('');
+      expect(aria).toContain(CAL_DOC_NUMBER);
+    });
+
+    it('AC-31④ 展開後之組內列沿用既有進度列之全部掛鉤與行為（含孤兒列之既有規則，一格不改）', async () => {
+      const user = await gotoSessionsTab();
+      await switchTo('document');
+      await waitFor(() => expect(calToggle()).not.toBeNull());
+      await user.click(calToggle());
+      await waitFor(() => expect(document.querySelector(`[data-progress-row="${CAL_DOC_ID}__AAA00"]`)).not.toBeNull());
+      const r = document.querySelector(`[data-progress-row="${CAL_DOC_ID}__AAA00"]`) as HTMLElement;
+      expect(r.getAttribute('data-progress-doc')).toBe(CAL_DOC_ID);
+      expect(r.getAttribute('data-progress-org')).toBe('AAA00');
+      expect(r.querySelector('[data-progress-doc-number]')).not.toBeNull();
+      expect(r.querySelector('[data-progress-doc-name]')).not.toBeNull();
+      expect(r.querySelector('[data-completion-badge]')).not.toBeNull();
+      expect(r.querySelector('[data-session-count]')).not.toBeNull();
+      expect(r.querySelector('[data-progress-expand]')).not.toBeNull();
+      expect(r.querySelector('[data-add-session]'), 'ICSOPAdmin 之一般列應有新增場次入口').not.toBeNull();
+      // 🔒 AC-25 孤兒列之既有規則在本模式下亦不變（上一句之正向對照使本負向具鑑別力）。
+      const orphan = document.querySelector(`[data-progress-row="${CAL_DOC_ID}__CCC00"]`) as HTMLElement;
+      expect(orphan.querySelector('[data-row-orphaned]')).not.toBeNull();
+      expect(orphan.querySelector('[data-add-session]')).toBeNull();
+    });
+
+    // ---------- F-4. 規模收斂之硬需求 ②：文件搜尋（AC-33②） ----------
+
+    it('AC-33② 文件搜尋：🔒 僅 document 模式進 DOM；aria-label／placeholder 逐字＝常數；🔴 不得掛 data-ojt-filter', async () => {
+      await gotoSessionsTab();
+      await waitFor(() => expect(document.querySelector('[data-ojt-filter="org"]')).not.toBeNull());
+      expect(document.querySelectorAll('[data-ojt-doc-search]')).toHaveLength(0);
+      await switchTo('document');
+      await waitFor(() => expect(docSearch()).not.toBeNull());
+      expect(docSearch().getAttribute('aria-label')).toBe(DOC_SEARCH_ARIA_TEXT);
+      expect(docSearch().getAttribute('placeholder')).toBe(DOC_SEARCH_PLACEHOLDER_TEXT);
+      expect(docSearch().hasAttribute('data-ojt-filter')).toBe(false);
+      expect(document.querySelectorAll('[data-ojt-filter]')).toHaveLength(2);
+    });
+
+    it('AC-33② 比對文件編號之不分大小寫子字串（先正向確立兩組皆在）', async () => {
+      await gotoSessionsTab(twoDocRows());
+      await switchTo('document');
+      await waitFor(() => expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(2));
+      fireEvent.change(docSearch(), { target: { value: 'icsop-cal' } });
+      await waitFor(() => expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(1));
+      expect(calGroup()).not.toBeNull();
+      expect(document.querySelector(`[data-doc-group="${OTHER_DOC_ID}"]`)).toBeNull();
+    });
+
+    it('AC-33② 比對書名之子字串', async () => {
+      await gotoSessionsTab(twoDocRows());
+      await switchTo('document');
+      await waitFor(() => expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(2));
+      fireEvent.change(docSearch(), { target: { value: '徵信' } });
+      await waitFor(() => expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(1));
+      expect(calGroup()).not.toBeNull();
+    });
+
+    it('AC-33②／AC-35 文件搜尋無命中 ⇒ 沿用既有 EMPTY_ROWS_TEXT，不另造詞；與全域空狀態互不相同', async () => {
+      await gotoSessionsTab(twoDocRows());
+      await switchTo('document');
+      await waitFor(() => expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(2));
+      fireEvent.change(docSearch(), { target: { value: 'ZZZ-NO-SUCH-DOC' } });
+      await waitFor(() => expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(0));
+      expect(screen.getByText(EMPTY_ROWS_TEXT)).toBeInTheDocument();
+      // 🔴 篩選無結果 ≠ 全域無列：兩者刻意為不同字串、不得混用（AC-13 之既有規則）。
+      expect(screen.queryByText(EMPTY_ALL_TEXT)).toBeNull();
+    });
+
+    /**
+     * 🔴 `AC-33②`：切回 `org` 模式時清空關鍵字——理由與 `AC-14`⑦ 之既有處置同源：一個看不見
+     * 的條件仍在過濾列，就是畫面說謊。
+     */
+    it('🔴 AC-33② 切回 org 模式 ⇒ 文件搜尋不進 DOM 且關鍵字已清空（看不見的條件不得繼續過濾）', async () => {
+      await gotoSessionsTab(twoDocRows());
+      await switchTo('document');
+      await waitFor(() => expect(docSearch()).not.toBeNull());
+      fireEvent.change(docSearch(), { target: { value: '徵信' } });
+      await waitFor(() => expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(1)); // 正向：關鍵字確實生效過
+      await switchTo('org');
+      await waitFor(() => expect(document.querySelectorAll('[data-progress-group]').length).toBeGreaterThan(0));
+      expect(document.querySelectorAll('[data-ojt-doc-search]')).toHaveLength(0);
+      expect(document.querySelectorAll('[data-progress-row]')).toHaveLength(4); // 四列全在，關鍵字未殘留生效
+      await switchTo('document');
+      await waitFor(() => expect(docSearch()).not.toBeNull());
+      expect(docSearch().value).toBe('');
+      expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(2);
+    });
+
+    // ---------- F-5. 排序、空狀態與零漣漪（AC-34／AC-35／AC-36） ----------
+
+    it('AC-34 文件群組依 documentNumber 昇冪（語料刻意亂序：CAL 先進、ABC 後進）', async () => {
+      await gotoSessionsTab(twoDocRows());
+      await switchTo('document');
+      await waitFor(() => expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(2));
+      expect(
+        [...document.querySelectorAll('[data-doc-group]')].map((el) => el.getAttribute('data-doc-group')),
+      ).toEqual([OTHER_DOC_ID, CAL_DOC_ID]);
+    });
+
+    it('AC-35 document 模式、全域無任何進度列 ⇒ 沿用 EMPTY_ALL_TEXT ＋ EMPTY_ALL_HINT（不另造詞）', async () => {
+      await gotoSessionsTab([]);
+      expect(groupMode(), '分組模式控制項應恆存在於篩選列（不因無列而消失）').not.toBeNull();
+      await switchTo('document');
+      await waitFor(() => expect(screen.getByText(EMPTY_ALL_TEXT)).toBeInTheDocument());
+      expect(screen.getByText(EMPTY_ALL_HINT)).toBeInTheDocument();
+      expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(0);
+    });
+
+    it('AC-36 往返鎖：org → document → org 之後，既有掛鉤之值與數量與從未切換過時相同', async () => {
+      await gotoSessionsTab();
+      await waitFor(() => expect(document.querySelectorAll('[data-progress-group]')).toHaveLength(3));
+      const snapshot = () =>
+        [...document.querySelectorAll('[data-progress-group]')].map((el) => el.getAttribute('data-progress-group'));
+      const before = snapshot();
+      expect(before).toEqual(['AAA00', 'BBB00', 'CCC00']);
+      await switchTo('document');
+      await waitFor(() => expect(calGroup()).not.toBeNull());
+      await switchTo('org');
+      await waitFor(() => expect(document.querySelectorAll('[data-progress-group]')).toHaveLength(3));
+      expect(snapshot()).toEqual(before);
+      expect(document.querySelectorAll('[data-progress-row]')).toHaveLength(3);
+      expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(0);
     });
   });
 });

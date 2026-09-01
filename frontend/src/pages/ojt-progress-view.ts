@@ -475,3 +475,134 @@ export function sliceRecentSessions<T extends { trainingDate: string }>(list: T[
     .sort((a, b) => b.trainingDate.localeCompare(a.trainingDate))
     .slice(0, RECENT_MAX_ROWS);
 }
+
+// ══════════ TAB2 第二種分組模式「以文件分組」（`AC-30`～`AC-36`／`AC-28`⑳） ══════════
+
+/**
+ * 分組模式之值域（**恰二值**）。
+ * 🔒 `org` 為預設＝現況一格不改；`document` 為本輪新增。
+ * 🔴 **它不是第三個篩選**——不移除任何列，只改變列裝進哪一種盒子；故其控制項**不掛**
+ * `data-ojt-filter`（`AC-13` 之「篩選恰兩項」為既有鎖，兩種模式下該掛鉤恆為 2 個）。
+ */
+export type OjtGroupMode = 'org' | 'document';
+
+/** `AC-28`⑳：分組模式 `select` 之兩個 option 與其 `aria-label`（逐字，`option` 順序即此順序）。 */
+export const GROUP_MODE_ORG_TEXT = '以使用單位分組';
+export const GROUP_MODE_DOC_TEXT = '以文件分組';
+export const GROUP_MODE_ARIA_TEXT = '資料清單之分組方式';
+
+/**
+ * `AC-33`②：文件搜尋之無障礙名稱與 placeholder。
+ * 🔒 placeholder 句尾為**單一刪節號 `…`**，比照既有之「搜尋使用單位（名稱或代碼）…」——
+ * 兩個搜尋框並置於同一列，句型不一致會被讀成兩種不同性質的控制項。
+ */
+export const DOC_SEARCH_ARIA_TEXT = '搜尋文件';
+export const DOC_SEARCH_PLACEHOLDER_TEXT = '搜尋文件（編號或書名）…';
+
+/**
+ * `AC-32` 之**必要載體**（非裝飾）：本區之 X／Y 與儀表板「文件-訓練覆蓋率」**刻意不同口徑**。
+ * 🔴 處置比照同頁既有之 `DOC_COVERAGE_BASIS_NOTE`（同一種問題之既有解法）：同一頁並置兩個口徑
+ * 不同的數字，沒有這一行，使用者一對帳就會把正常現象讀成 bug。
+ * 📌 差異之來源**不是**裁撤單位（`docCoverage` 同樣不套 `isActive` 過濾，兩邊會剛好相等），
+ * 而是**孤兒列**：`docCoverage` 之列由 `DOC_USING_DEPT` 驅動 ⇒ 孤兒天然不成列，TAB2 則另行呈現。
+ */
+export const DOC_GROUP_BASIS_NOTE_TEXT =
+  '本區各文件之「已完成 X / 共 Y 單位」取自本清單當下呈現之進度列（含已裁撤單位與已移出使用部門之單位），與儀表板「文件-訓練覆蓋率」之口徑刻意不同；兩處數字不相等屬正常，請勿互相對帳。';
+
+/** 以文件分組之一個群組（`AC-31`）。 */
+export interface OjtDocGroup {
+  /** 🔴 分組鍵＝`documentId`。**不是書名**——書名非唯一，以書名分組會把兩份不同文件併成
+   *  一組而**憑空少掉一份文件**（本 repo 之「畫面說謊」既有形狀）。 */
+  documentId: string;
+  documentNumber: string;
+  documentName: string;
+  /** 該文件在**當下呈現之列**中 `completed === true` 者之列數（`AC-32` 之 X）。 */
+  done: number;
+  /** 該文件**當下呈現之列**之總列數，🔴 **含 `inactive` 與 `orphaned`**（`AC-32` 之 Y）。 */
+  total: number;
+  rows: OjtProgressRow[];
+}
+
+/**
+ * 以文件分組（`AC-31`／`AC-32`／`AC-34`）。
+ *
+ * 🔴 **`done`／`total` 一律取自傳入之列本身**——呼叫端傳進來的就是「當下呈現之列」（既有兩項
+ * 篩選與文件搜尋套用後之結果）。**不得**改讀 TAB1 之 `docCoverage[].completedUnits`／
+ * `totalUnits`：兩者刻意不同口徑，混用會讓同一份文件在兩個分頁上各說一個數字。
+ *
+ * 🔴 **不複製、不改寫任何一列**：`rows` 內為**原物件參照**。分組只決定「列裝進哪個盒子」，
+ * 一旦在此順手補欄位／改欄位，列本身就成了兩份真相。
+ *
+ * 🔴 **排序須具決定性**（`AC-34`）：群組依 `documentNumber` 昇冪、組內依 `orgName` 昇冪。
+ * 📌 `orgName` 之值為「公司簡稱 / 部 / 處室」全名 ⇒ 依其昇冪即天然先依公司再依部、處室分群，
+ * **不需要也不得另建一套跨公司之排序鍵**。
+ */
+export function docGroupsOf(rows: OjtProgressRow[]): OjtDocGroup[] {
+  const byDoc = new Map<string, OjtProgressRow[]>();
+  for (const r of rows) {
+    const list = byDoc.get(r.documentId);
+    if (list) list.push(r);
+    else byDoc.set(r.documentId, [r]);
+  }
+  return [...byDoc.entries()]
+    .map(([documentId, list]) => ({
+      documentId,
+      documentNumber: list[0]?.documentNumber ?? '',
+      documentName: list[0]?.documentName ?? '',
+      done: list.filter((r) => r.completed).length,
+      total: list.length,
+      // 🔒 `[...list]` 複製的是**陣列**、不是列——排序不就地改動呼叫端之陣列，列仍為原參照。
+      rows: [...list].sort((a, b) => a.orgName.localeCompare(b.orgName)),
+    }))
+    .sort((a, b) => a.documentNumber.localeCompare(b.documentNumber));
+}
+
+/**
+ * `AC-33`②：文件搜尋之比對規則——`documentNumber` 或 `documentName` 之**不分大小寫子字串**。
+ * 🔴 `trim()` 後為空字串 ⇒ **視為不過濾**（一律 `true`）：使用者按了空白鍵就整份清單消失，
+ * 是比「沒有搜尋功能」更難理解的畫面。
+ */
+export function matchesDocKeyword(
+  r: Pick<OjtProgressRow, 'documentNumber' | 'documentName'>,
+  keyword: string,
+): boolean {
+  const kw = keyword.trim().toLowerCase();
+  if (kw === '') return true;
+  return (
+    r.documentNumber.toLowerCase().includes(kw) || r.documentName.toLowerCase().includes(kw)
+  );
+}
+
+/**
+ * 文件群組標題之完成度（`AC-31`③）。
+ * 🔴 **半形斜線**，與 `[data-doc-coverage-ratio]` 之 `{n} / {n}` 同家族；
+ * ⚠ 與文件表單側 `[data-ojt-derived-summary]` 之**全形 `／`** 刻意不同——那是另一頁之既有文案，
+ * 不得為了「看起來一致」而互相對齊。
+ */
+export function docGroupRatioText(done: number, total: number): string {
+  return `已完成 ${done} / 共 ${total} 單位`;
+}
+
+/**
+ * 文件群組百分比之**顯示字串**（`AC-32`）。
+ *
+ * 🔴 **內部一律委派既有 `coveragePercent`**——全頁只有一個百分比推導點。本頁已發生過的真實
+ * 缺陷形狀有二：(a) 另打一份 `Math.round(...)`（兩份會各自漂移）；(b) 讀一個 API 未送的 `rate`
+ * 欄而印出 `undefined%`。
+ * 🔴 分母為 0 ⇒ `coveragePercent` 回 `null` ⇒ 換成 `NO_STATISTICS_TEXT`：`NaN%`／`null%` 是壞掉、
+ * `0%` 與「全部未完成」無從分辨、`100%` 更是謊報。
+ * 📌 該分支於元件層**不可達**（群組是「因為有列」才存在的，`Y ≥ 1` 恆成立）⇒ 其唯一載體在此。
+ */
+export function docGroupPercentText(done: number, total: number): string {
+  const pct = coveragePercent(done, total);
+  return pct === null ? NO_STATISTICS_TEXT : `${pct}%`;
+}
+
+/**
+ * 折疊鈕之 `aria-label`（🔵 完整句型為設計裁量，🔒 但**須含程序書編號**）。
+ * 📌 理由同 `AC-28`⑩ 之下載鈕：正式站 591 份文件 ⇒ 近 600 顆折疊鈕，若無從分辨，螢幕閱讀器
+ * 與 `getByRole` 皆點不到正確的那一顆。
+ */
+export function docGroupToggleAria(documentNumber: string, documentName: string): string {
+  return `展開／收合此文件之進度列（${documentNumber} · ${documentName}）`;
+}
