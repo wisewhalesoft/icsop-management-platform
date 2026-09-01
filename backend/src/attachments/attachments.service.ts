@@ -227,8 +227,11 @@ export class AttachmentsService {
           ],
           documentNumber: doc?.documentNumber ?? null,
           actorId: session?.accountId ?? null,
-          actorName: null,
-          actorEmployeeNo: null,
+          // 🔴 2026-09-01 delta：這兩欄曾寫死 `null`，使「附件已替換」在 F037 文件變更歷程之
+          // 「操作人」欄顯示為 `—（—）`（dev 實測 6 列），而同一個人改其他欄位時顯示正常。
+          // session 本就攜帶兩者，寫死 null 沒有任何理由。
+          actorName: session?.name ?? null,
+          actorEmployeeNo: session?.employeeNo ?? null,
           occurredAt: new Date(),
         });
       } catch (err) {
