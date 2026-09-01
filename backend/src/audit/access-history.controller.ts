@@ -23,7 +23,7 @@ import {
   toCsvBuffer,
 } from '../storage/csv-export';
 import { actionTypeLabel, auditKindLabel, roleLabel } from './access-history-labels';
-import { resolveCompanyName } from '../org-directory/company-name';
+import { AuditIdentityService } from './audit-identity.service';
 
 /**
  * F024 文件調閱歷程查詢（唯讀後台）。守門鏈 SessionGuard→RolePermissionGuard。
@@ -106,7 +106,10 @@ function sessionOf(res: Response): SessionUser | undefined {
 export class AccessHistoryController {
   private readonly logger = new Logger(AccessHistoryController.name);
 
-  constructor(private readonly writer: AuditWriterService) {}
+  constructor(
+    private readonly writer: AuditWriterService,
+    private readonly identity: AuditIdentityService,
+  ) {}
 
   @Get()
   @RequirePermission(FunctionKey.DOCUMENT_ACCESS_HISTORY, 'read')
@@ -190,17 +193,21 @@ export class AccessHistoryController {
   private async recordExportAudit(res: Response, now: Date): Promise<void> {
     const s = sessionOf(res);
     try {
+      // 🔴 2026-09-01 delta：`department`／`section` 曾在此寫死 `null`（dev 實測 74／74 之
+      // `ACCESS_HISTORY_EXPORT` 列部門與處室全空），使匯出者自己那一列在本頁上比他的其他
+      // 動作少兩欄。身分快照改由唯一組裝點解析（六欄一致），本 handler 不再自行決定哪幾欄有值。
+      const identity = await this.identity.resolve(s);
       await this.writer.recordAccess({
         targetType: 'ACCESS_HISTORY',
         actionType: 'ACCESS_HISTORY_EXPORT',
         targetId: ACCESS_HISTORY_EXPORT_TARGET_ID,
         actorId: s?.accountId ?? '',
-        actorName: s?.name ?? null,
-        employeeNo: s?.employeeNo ?? null,
-        company: resolveCompanyName(s?.companyCode),
-        department: null,
-        section: null,
-        roleCode: s?.roleCode ?? null,
+        actorName: identity.actorName,
+        employeeNo: identity.employeeNo,
+        company: identity.company,
+        department: identity.department,
+        section: identity.section,
+        roleCode: identity.roleCode,
         targetNumber: null,
         targetName: null,
         // 非浮水印動作（`AC-F13` ④）。

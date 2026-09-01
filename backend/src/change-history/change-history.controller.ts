@@ -4,6 +4,7 @@ import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { RequirePermission } from '../rbac/require-permission.decorator';
 import { FunctionKey } from '../rbac/function-matrix';
+import { AuditIdentityService } from '../audit/audit-identity.service';
 import {
   ChangeHistoryActor,
   DocumentChangeHistoryService,
@@ -22,15 +23,26 @@ function sendCsv(res: Response, { csv, fileName }: ChangeExportResult): void {
   res.send(csv);
 }
 
-/** 自 SessionUser 取檢視稽核之操作者身分快照。 */
-function actorOf(req: RequestWithSession): ChangeHistoryActor {
+/**
+ * 🔴 2026-09-01 delta：`actorOf()` 曾是本檔之**同步**自由函式，只組
+ * `accountId`／`name`／`employeeNo`／`roleCode` 四欄——`ChangeHistoryActor` 另外三欄
+ * （`company`／`department`／`section`）從宣告日起就沒有任何呼叫端填過，於是本檔寫出的每一列
+ * `CHANGE_LOG_VIEW`／`LIFECYCLE_CHANGELOG_VIEW` 在 F024 調閱歷程之公司／部門／處室三欄
+ * **恆為空白**（dev 實測 180／180 與 14／14，皆 100%）。
+ *
+ * 三欄選填 ⇒ 編譯期不示警；controller 之單元測試以假 service 驗「有沒有轉呼叫」，
+ * 不看事件內容 ⇒ 測試期亦無感。修法是把「身分快照怎麼組」交給唯一組裝點
+ * （`AuditIdentityService`），而不是在此再補三行。
+ *
+ * ⚠ 因需查 ORG_UNIT 解析部門／處室，本函式改為 **async**，四個呼叫端一律 `await`。
+ */
+async function actorOf(
+  identity: AuditIdentityService,
+  req: RequestWithSession,
+): Promise<ChangeHistoryActor> {
   const s = req.sessionUser;
-  return {
-    accountId: s?.accountId ?? '',
-    name: s?.name ?? null,
-    employeeNo: s?.employeeNo ?? null,
-    roleCode: s?.roleCode ?? null,
-  };
+  const { actorName, ...snapshot } = await identity.resolve(s);
+  return { accountId: s?.accountId ?? '', name: actorName, ...snapshot };
 }
 
 /**
@@ -70,6 +82,7 @@ export class ChangeHistoryController {
   constructor(
     private readonly docs: DocumentChangeHistoryService,
     private readonly lifecycles: LifecycleChangeHistoryService,
+    private readonly identity: AuditIdentityService,
   ) {}
 
   @Get('documents')
@@ -92,16 +105,19 @@ export class ChangeHistoryController {
     @Res() res: Response,
     @Query() q: Record<string, string | undefined>,
   ): Promise<void> {
-    sendCsv(res, await this.docs.exportChanges(documentFiltersOf(q), actorOf(req)));
+    sendCsv(
+      res,
+      await this.docs.exportChanges(documentFiltersOf(q), await actorOf(this.identity, req)),
+    );
   }
 
   @Get('documents/:documentId')
   @RequirePermission(FunctionKey.DOCUMENT_CHANGE_HISTORY, 'read')
-  viewDocumentChanges(
+  async viewDocumentChanges(
     @Req() req: RequestWithSession,
     @Param('documentId') documentId: string,
   ) {
-    return this.docs.viewDocument(documentId, actorOf(req));
+    return this.docs.viewDocument(documentId, await actorOf(this.identity, req));
   }
 
   @Get('lifecycles')
@@ -118,16 +134,26 @@ export class ChangeHistoryController {
     @Res() res: Response,
     @Query() q: Record<string, string | undefined>,
   ): Promise<void> {
-    sendCsv(res, await this.lifecycles.exportChanges(lifecycleFiltersOf(q), actorOf(req)));
+    sendCsv(
+      res,
+      await this.lifecycles.exportChanges(
+        lifecycleFiltersOf(q),
+        await actorOf(this.identity, req),
+      ),
+    );
   }
 
   @Get('lifecycles/:lifecycleId')
   @RequirePermission(FunctionKey.DOCUMENT_CHANGE_HISTORY, 'read')
-  viewLifecycleChanges(
+  async viewLifecycleChanges(
     @Req() req: RequestWithSession,
     @Param('lifecycleId') lifecycleId: string,
     @Query('name') name?: string,
   ) {
-    return this.lifecycles.viewLifecycle(lifecycleId, name ?? null, actorOf(req));
+    return this.lifecycles.viewLifecycle(
+      lifecycleId,
+      name ?? null,
+      await actorOf(this.identity, req),
+    );
   }
 }
