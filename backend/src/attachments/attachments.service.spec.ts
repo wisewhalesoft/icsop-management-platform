@@ -258,6 +258,28 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
       expect(e.actorId).toBe('admin1');
     });
 
+    /**
+     * 🔴 2026-09-01 delta：`actorName`／`actorEmployeeNo` 曾在本路徑**寫死 `null`**，
+     * 使「附件已替換」在 F037 文件變更歷程之「操作人」欄顯示為 `—（—）`（dev 實測 6 列），
+     * 而同一個人改其他欄位時顯示正常。session 本就攜帶兩者，寫死 null 沒有任何理由。
+     */
+    it('🔴 操作人快照取自 session（此前寫死 null，致變更歷程「操作人」欄顯示 —（—））', async () => {
+      const pub = new FakePublisher();
+      const svc2 = new AttachmentsService(blob, store, undefined, pub);
+      const session = {
+        ...ICSOP_ADMIN,
+        name: '李慧玲',
+        employeeNo: '20233',
+      } as typeof ICSOP_ADMIN;
+
+      await svc2.uploadSingle(session, DOC, 'ICSOP_PDF', pdf({ fileName: 'v1.pdf' }));
+      await svc2.uploadSingle(session, DOC, 'ICSOP_PDF', pdf({ fileName: 'v2.pdf' }));
+
+      expect(pub.events).toHaveLength(1);
+      expect(pub.events[0].actorName).toBe('李慧玲');
+      expect(pub.events[0].actorEmployeeNo).toBe('20233');
+    });
+
     it('首次上傳（無既有附件）→ 不發變更事件', async () => {
       const pub = new FakePublisher();
       const svc2 = new AttachmentsService(blob, store, undefined, pub);

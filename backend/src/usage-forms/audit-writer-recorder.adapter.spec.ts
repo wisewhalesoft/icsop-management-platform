@@ -106,4 +106,29 @@ describe('AuditWriterRecorder（使用表單稽核 → 真實 AuditWriter 轉接
 
     expect(writer.calls[0].watermarkSnapshot).toBeNull();
   });
+  /**
+   * 🔴 2026-09-01 delta：**第七欄——姓名**。
+   *
+   * 上一個案例的標題寫著「六個身分/快照欄位必須完整轉送」，而它列舉的六欄裡**沒有姓名**——
+   * `AUDIT_LOG.name` 於本路徑因此恆為 null（dev 實測 92／92，100%），F024 調閱歷程之
+   * 「操作人員」欄整欄空白，偏偏員編／公司／部門／處室都有值。
+   *
+   * 這是 2026-08-21 修補時「照著清單補、清單本身漏了一項」的形狀：既有測試逐字驗證了那份
+   * 清單，於是清單的漏項同時也是測試的漏項。本案例把姓名釘進同一道環。
+   */
+  it('🔴 操作人員姓名（actorName）必須轉送——2026-08-21 之「六欄」清單漏列之第七欄', async () => {
+    await recorder.record({
+      targetType: 'USAGE_FORM',
+      actionType: 'DOWNLOAD',
+      formId: 'form-42',
+      documentId: 'doc-7',
+      accountId: 'acct-9',
+      actorName: '王小明',
+    } as never);
+
+    expect(writer.calls).toHaveLength(1);
+    // 正向半句先確立載體存在，避免恆真之否定斷言：
+    expect(writer.calls[0].actorName).toBe('王小明');
+    expect(writer.calls[0].actorName).not.toBeNull();
+  });
 });

@@ -5,6 +5,7 @@ import { ExecutionContext, ForbiddenException, RequestMethod } from '@nestjs/com
 import { PATH_METADATA, METHOD_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { AccessHistoryController } from './access-history.controller';
+import { AuditIdentityService } from './audit-identity.service';
 import { AuditWriterService } from './audit-writer.service';
 import { AuditRow, Page } from './audit.types';
 import { EXPORT_ROW_LIMIT } from '../storage/csv-export';
@@ -97,6 +98,26 @@ function csvLines(buf: Buffer): string[] {
   return buf.subarray(3).toString('utf8').replace(/\r?\n$/, '').split(/\r?\n/);
 }
 
+/**
+ * 🔴 2026-09-01 delta：`AccessHistoryController` 新增第二個相依（身分快照六欄之唯一組裝點）。
+ * 本替身以**真實** `AuditIdentityService` 搭配可控之 ORG_UNIT 假體建構——不用 jest mock，
+ * 因為本檔多數案例根本沒有 session（`fakeRes()` 無 `req`），期望值是「六欄皆 null」，
+ * 而那正是真實服務對 `undefined` 之行為；用 mock 反而會把該行為換成臆造值。
+ */
+function fakeIdentity(
+  rows: Record<string, { tier: string; name: string; descFull: string | null }> = {},
+): AuditIdentityService {
+  return new AuditIdentityService({
+    async findByOrgCode(companyCode, orgCode) {
+      const row = rows[`${companyCode}:${orgCode}`];
+      return row ? ({ companyCode, orgCode, ...row } as never) : null;
+    },
+    async listByCompany() {
+      return [];
+    },
+  });
+}
+
 const HEADER =
   '操作人員,員工編號,公司,部門,處/室,角色,類型,對象（文件／循環）,操作類型,操作時間';
 
@@ -104,7 +125,7 @@ describe('AccessHistoryController（委派 AuditWriter.queryHistory）', () => {
   it('query → 以解析後 filters 委派 queryHistory 並回傳分頁', async () => {
     const queryHistory = jest.fn().mockResolvedValue(pageOf([]));
     const svc = { queryHistory } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
 
     await controller.query('文件', '王小明', 'ICSOP-A', '2026-07-01', '2026-07-31', '2', '50');
 
@@ -135,7 +156,7 @@ describe('AccessHistoryController（委派 AuditWriter.queryHistory）', () => {
     const queryHistory = jest.fn().mockResolvedValue(pageOf([auditRow()]));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
 
     await controller.exportHistory(
@@ -254,7 +275,7 @@ describe('AccessHistoryController.exportHistory（AC-F2 端點契約）', () => 
     const queryHistory = jest.fn().mockResolvedValue(pageOf(rows, total));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     return { controller, res, recordAccess };
   }
@@ -299,7 +320,7 @@ describe('AccessHistoryController.exportHistory（AC-F4 表頭）', () => {
     const queryHistory = jest.fn().mockResolvedValue(pageOf([auditRow()]));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     const buf = res.send.mock.calls[0][0] as Buffer;
@@ -318,7 +339,7 @@ describe('AccessHistoryController.exportHistory（AC-F5 值層：中文標籤）
     const queryHistory = jest.fn().mockResolvedValue(pageOf(rows));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     return csvLines(res.send.mock.calls[0][0] as Buffer);
@@ -425,7 +446,7 @@ describe('AccessHistoryController.exportHistory（AC-F6 時間戳）', () => {
       .mockResolvedValue(pageOf([auditRow({ occurredAt: new Date('2026-07-16T06:32:08.000Z') })]));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     const lines = csvLines(res.send.mock.calls[0][0] as Buffer);
@@ -444,7 +465,7 @@ describe('AccessHistoryController.exportHistory（AC-F6 時間戳）', () => {
           .mockResolvedValue(pageOf([auditRow({ occurredAt: new Date('2026-07-16T06:32:08.000Z') })]));
         const recordAccess = jest.fn().mockResolvedValue(undefined);
         const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-        const controller = new AccessHistoryController(svc);
+        const controller = new AccessHistoryController(svc, fakeIdentity());
         const res = fakeRes();
         await controller.exportHistory('', '', '', '', '', res as unknown as never);
         return csvLines(res.send.mock.calls[0][0] as Buffer)[1].split(',')[9];
@@ -469,7 +490,7 @@ describe('AccessHistoryController.exportHistory（AC-F7 範圍與列序）', () 
     const queryHistory = jest.fn().mockResolvedValue(pageOf(rows, 3));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     const lines = csvLines(res.send.mock.calls[0][0] as Buffer);
@@ -483,7 +504,7 @@ describe('AccessHistoryController.exportHistory（AC-F8 筆數上限）', () => 
     const queryHistory = jest.fn().mockResolvedValue(pageOf([auditRow()], EXPORT_ROW_LIMIT));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await expect(
       controller.exportHistory('', '', '', '', '', res as unknown as never),
@@ -495,7 +516,7 @@ describe('AccessHistoryController.exportHistory（AC-F8 筆數上限）', () => 
     const queryHistory = jest.fn().mockResolvedValue(pageOf([], EXPORT_ROW_LIMIT + 1));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await expect(
       controller.exportHistory('', '', '', '', '', res as unknown as never),
@@ -508,7 +529,7 @@ describe('AccessHistoryController.exportHistory（AC-F8 筆數上限）', () => 
     const queryHistory = jest.fn().mockResolvedValue(pageOf([], 12_345));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await expect(
       controller.exportHistory('', '', '', '', '', res as unknown as never),
@@ -543,7 +564,7 @@ describe('AccessHistoryController.exportHistory（AC-F10 CSV 注入防護）', (
       .mockResolvedValue(pageOf([auditRow({ name: '=cmd|"/c calc"!A1' })]));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     const body = (res.send.mock.calls[0][0] as Buffer).subarray(3).toString('utf8');
@@ -558,7 +579,7 @@ describe('AccessHistoryController.exportHistory（AC-F10 CSV 注入防護）', (
       .mockResolvedValue(pageOf([auditRow({ documentNumber: '+1234=SUM(A1)' })]));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     const lines = csvLines(res.send.mock.calls[0][0] as Buffer);
@@ -570,7 +591,7 @@ describe('AccessHistoryController.exportHistory（AC-F10 CSV 注入防護）', (
     const queryHistory = jest.fn().mockResolvedValue(pageOf([auditRow({ name: '=x' })]));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     const lines = csvLines(res.send.mock.calls[0][0] as Buffer);
@@ -584,7 +605,7 @@ describe('AccessHistoryController.exportHistory（AC-F11 空結果）', () => {
     const queryHistory = jest.fn().mockResolvedValue(pageOf([], 0));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await expect(
       controller.exportHistory('', '', '', '', '', res as unknown as never),
@@ -607,7 +628,7 @@ describe('AccessHistoryController.exportHistory（AC-F13 匯出動作記稽核�
     const queryHistory = jest.fn().mockResolvedValue(pageOf(items, total));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     return { recordAccess };
@@ -646,7 +667,7 @@ describe('AccessHistoryController.exportHistory（AC-F13 匯出動作記稽核�
     const queryHistory = jest.fn().mockResolvedValue(pageOf([], EXPORT_ROW_LIMIT + 1));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await expect(
       controller.exportHistory('', '', '', '', '', res as unknown as never),
@@ -662,7 +683,7 @@ describe('AccessHistoryController.exportHistory（AC-F13 匯出動作記稽核�
     const queryHistory = jest.fn().mockResolvedValue(pageOf([auditRow()], 1));
     const recordAccess = jest.fn().mockRejectedValue(new Error('AUDIT_IO_TEMPORARILY_UNAVAILABLE'));
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await expect(
       controller.exportHistory('', '', '', '', '', res as unknown as never),
@@ -686,7 +707,7 @@ describe('AccessHistoryController.exportHistory（AC-F14 明細專屬欄不匯�
     const queryHistory = jest.fn().mockResolvedValue(pageOf([auditRow()], 1));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     const lines = csvLines(res.send.mock.calls[0][0] as Buffer);
@@ -709,7 +730,7 @@ describe('AccessHistoryController.exportHistory（AC-F14 明細專屬欄不匯�
       );
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     const text = (res.send.mock.calls[0][0] as Buffer).toString('utf8');
@@ -723,7 +744,7 @@ describe('AccessHistoryController.exportHistory（AC-F15 非文件類型與明�
     const queryHistory = jest.fn().mockResolvedValue(pageOf([auditRow()], 1));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     const lines = csvLines(res.send.mock.calls[0][0] as Buffer);
@@ -749,7 +770,7 @@ describe('AccessHistoryController.exportHistory（AC-F15 非文件類型與明�
     );
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     const lines = csvLines(res.send.mock.calls[0][0] as Buffer);
@@ -776,7 +797,7 @@ describe('AccessHistoryController.exportHistory（AC-F15 非文件類型與明�
     );
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     const lines = csvLines(res.send.mock.calls[0][0] as Buffer);
@@ -791,7 +812,7 @@ describe('AccessHistoryController.exportHistory（AC-F15 非文件類型與明�
       .mockResolvedValue(pageOf([auditRow({ section: null, roleCode: null })], 1));
     const recordAccess = jest.fn().mockResolvedValue(undefined);
     const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
-    const controller = new AccessHistoryController(svc);
+    const controller = new AccessHistoryController(svc, fakeIdentity());
     const res = fakeRes();
     await controller.exportHistory('', '', '', '', '', res as unknown as never);
     const lines = csvLines(res.send.mock.calls[0][0] as Buffer);
@@ -799,5 +820,105 @@ describe('AccessHistoryController.exportHistory（AC-F15 非文件類型與明�
     expect(cells[4]).toBe(''); // 處/室欄
     expect(cells[5]).toBe(''); // 角色欄
     expect(lines[1]).not.toContain('—');
+  });
+});
+
+/**
+ * 🔴 2026-09-01 delta：匯出動作自身之稽核列，其身分快照六欄。
+ *
+ * 修復前本 handler 把 `department`／`section` 寫死為 `null`（dev 實測 74／74 之
+ * `ACCESS_HISTORY_EXPORT` 列部門與處室全空）——同一個人在 F024 調閱歷程上，
+ * 「他匯出過一次」那一列比「他看過一份文件」那一列少兩欄，看起來像資料壞掉。
+ */
+describe('AccessHistoryController.exportHistory — 匯出稽核之身分快照六欄', () => {
+  /** 帶 session 之假 Response（handler 依端點契約不收 `@Req()`，經 `res.req` 取 session）。 */
+  function resWithSession(sessionUser: Partial<SessionUser>): FakeRes {
+    const res = fakeRes() as FakeRes & { req: unknown };
+    res.req = { sessionUser };
+    return res;
+  }
+
+  const ORG = {
+    'AS:A1210': { tier: 'SECTION', name: '營運管理部/審查室', descFull: null },
+    'AS:A1000': { tier: 'DEPARTMENT', name: '營運管理部', descFull: '營運管理部' },
+  };
+
+  it('🔴 六欄齊全（含部門與處室——修復前此二欄寫死 null）', async () => {
+    const queryHistory = jest.fn().mockResolvedValue(pageOf([auditRow()], 1));
+    const recordAccess = jest.fn().mockResolvedValue(undefined);
+    const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
+    const controller = new AccessHistoryController(svc, fakeIdentity(ORG));
+    const res = resWithSession({
+      accountId: 'acc-1',
+      name: '李慧玲',
+      employeeNo: 'E123',
+      companyCode: 'AS',
+      orgCode: 'A1210',
+      roleCode: 'ICSOPAdmin',
+    });
+
+    await controller.exportHistory('', '', '', '', '', res as unknown as never);
+
+    expect(recordAccess).toHaveBeenCalledTimes(1);
+    expect(recordAccess.mock.calls[0][0]).toMatchObject({
+      actorId: 'acc-1',
+      actorName: '李慧玲',
+      employeeNo: 'E123',
+      company: '和潤企業股份有限公司',
+      department: '營運管理部',
+      section: '審查室',
+      roleCode: 'ICSOPAdmin',
+    });
+  });
+
+  it('公司欄為全稱（`AC-N13` ③），不得退化為代碼', async () => {
+    const queryHistory = jest.fn().mockResolvedValue(pageOf([auditRow()], 1));
+    const recordAccess = jest.fn().mockResolvedValue(undefined);
+    const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
+    const controller = new AccessHistoryController(svc, fakeIdentity(ORG));
+
+    await controller.exportHistory(
+      '',
+      '',
+      '',
+      '',
+      '',
+      resWithSession({ companyCode: 'AS', orgCode: 'A1210' }) as unknown as never,
+    );
+
+    const { company } = recordAccess.mock.calls[0][0];
+    expect(company).toBe('和潤企業股份有限公司');
+    expect(company).not.toBe('AS');
+  });
+
+  it('匯出者未掛組織 → 部門／處室為 null，其餘四欄照常（稽核不得因此整列消失）', async () => {
+    const queryHistory = jest.fn().mockResolvedValue(pageOf([auditRow()], 1));
+    const recordAccess = jest.fn().mockResolvedValue(undefined);
+    const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
+    const controller = new AccessHistoryController(svc, fakeIdentity(ORG));
+
+    await controller.exportHistory(
+      '',
+      '',
+      '',
+      '',
+      '',
+      resWithSession({
+        accountId: 'acc-2',
+        name: '王小明',
+        companyCode: 'AS',
+        orgCode: null,
+        roleCode: 'SysAdmin',
+      }) as unknown as never,
+    );
+
+    expect(recordAccess).toHaveBeenCalledTimes(1);
+    expect(recordAccess.mock.calls[0][0]).toMatchObject({
+      actorName: '王小明',
+      company: '和潤企業股份有限公司',
+      department: null,
+      section: null,
+      roleCode: 'SysAdmin',
+    });
   });
 });

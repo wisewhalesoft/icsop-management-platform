@@ -260,6 +260,18 @@ export class WatermarkBurnerService implements WatermarkBurner {
  * 規格要求，不是不一致。
  */
 export interface WatermarkAuditIdentity {
+  /**
+   * 🔴 2026-09-01 delta：`AUDIT_LOG.name`（操作人員）。
+   *
+   * **既有缺口之修正**：本介面過去只有五欄、獨缺姓名，而 `appendices`／`usage-forms` 兩支
+   * 轉接器又只轉送 `actorId` ⇒ 使用表單下載與附錄下載之稽核列「操作人員」欄
+   * **恆為空白**（dev 實測 92／92 與 9／9，皆 100%），偏偏員編／公司／部門／處室都有值，
+   * 於是同一個人在 F024 調閱歷程上看起來「有時候有名字、有時候沒有」。
+   *
+   * ⚠ 欄名為 `actorName`（非 `name`）：與 `AuditAccessEvent` 之欄名一致，使呼叫端可直接
+   * `...identity` 展開而不需逐欄改名——改名正是上一輪漏掉這一欄的機會所在。
+   */
+  actorName: string | null;
   employeeNo: string | null;
   company: string | null;
   department: string | null;
@@ -285,6 +297,7 @@ export async function resolveAuditIdentity(
   if (!burner) return {};
   const { fields } = await burner.buildSnapshot(session);
   return {
+    actorName: session.name ?? null,
     employeeNo: session.employeeNo ?? null,
     // 🔒 AC-N13 ③：全稱（非 fields.companyFullName——那已依 AC-N12 改為簡稱）。
     company: resolveCompanyName(session.companyCode) ?? null,

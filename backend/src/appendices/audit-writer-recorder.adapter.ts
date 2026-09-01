@@ -47,6 +47,8 @@ export class AuditWriterRecorder implements AuditRecorder {
       // AC-N57：後台池管理頁脈絡無所屬文件 ⇒ null（前台仍為該次下載之來源文件 id）。
       documentId: event.documentId ?? null,
       actorId: event.accountId,
+      // 🔴 2026-09-01 delta：姓名為 2026-08-21 那批「六欄逐一轉送」之漏網（見事件型別註解）。
+      actorName: event.actorName ?? null,
       employeeNo: event.employeeNo ?? null,
       company: event.company ?? null,
       department: event.department ?? null,

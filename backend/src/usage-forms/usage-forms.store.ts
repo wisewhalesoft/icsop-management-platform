@@ -183,6 +183,11 @@ export interface UsageFormAuditEvent {
    *
    * additive 選填：既有呼叫端（不帶身分欄者）不需同步改動，型別上仍合法。
    */
+  /**
+   * 🔴 2026-09-01 delta：操作人員姓名。2026-08-21 補上其餘五欄時**獨漏這一欄**，
+   * 使本路徑之 `AUDIT_LOG.name` 恆為 null（dev 實測 92／92）。
+   */
+  actorName?: string | null;
   employeeNo?: string | null;
   company?: string | null;
   department?: string | null;

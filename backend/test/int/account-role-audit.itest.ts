@@ -89,16 +89,28 @@ describe('[int] 角色變更稽核接線 (F003 Q4.5) vs SOP', () => {
     expect(row.targetName).toBe('User → Supervisor');
   });
 
-  it('身分快照逐欄落地（appendices 轉接器曾整批漏轉之同型缺口，本檔為其防線）', async () => {
+  /**
+   * 🔴 2026-09-01 delta：本案例原本斷言 `company === 'AS'`——把**公司代碼**落進
+   * `AUDIT_LOG.company` 這件事釘成了預期行為，而該欄正是 F024 調閱歷程之「公司」欄，
+   * 其餘十個稽核寫入點落的是全稱。同一個人在同一張表上看到兩種公司寫法，
+   * 就是使用者回報的「有的紀錄正常、有的不正常」。
+   *
+   * 本案例同時是 `AuditIdentityService` **真實 DI 接線**之唯一證明：單元測試以替身建構
+   * `AccountsService`，走的是無 DI 之降級分支；只有本檔跑的是完整 `AppModule`。
+   */
+  it('身分快照逐欄落地，且公司欄為全稱（非代碼）', async () => {
     const rows: Array<Record<string, unknown>> = await AppDataSource.query(
-      `SELECT TOP 1 [name], [employeeNo], [company], [roleCode]
+      `SELECT TOP 1 [name], [employeeNo], [company], [department], [roleCode]
          FROM [AUDIT_LOG] WHERE [targetAccountId] = @0 ORDER BY [occurredAt] DESC`,
       [targetId],
     );
     const row = rows[0]!;
     expect(row.name).toBe('ZZINT 系統管理員');
     expect(row.employeeNo).toBe('99001');
-    expect(row.company).toBe('AS');
+    expect(row.company).toBe('和潤企業股份有限公司');
+    expect(row.company).not.toBe('AS');
+    // 🔴 部門欄不得回填 orgCode——留白是誠實的，寫代碼是說謊（本測試帳號未掛組織 ⇒ null）。
+    expect(row.department).not.toBe('ANA00');
     expect(row.roleCode).toBe('SysAdmin');
   });
 

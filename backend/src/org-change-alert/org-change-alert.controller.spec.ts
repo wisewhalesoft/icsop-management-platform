@@ -9,6 +9,29 @@ import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { SessionUser } from '../auth/session-token.service';
 import { FieldKey } from '../rbac/field-matrix';
+import { AuditIdentityService } from '../audit/audit-identity.service';
+
+/**
+ * 🔴 2026-09-01 delta：新增之身分快照組裝點（`AUDIT_LOG` 六欄）。以**真實**服務搭配
+ * 可控之 ORG_UNIT 假體建構，使「公司取全稱、部門取部層 DESC_FULL、處室取 DESC_CHI 末段」
+ * 之規則在本檔亦為真值，而非 mock 出來的臆造值。
+ */
+function fakeIdentity(): AuditIdentityService {
+  return new AuditIdentityService({
+    async findByOrgCode(companyCode, orgCode) {
+      const rows: Record<string, { tier: string; name: string; descFull: string | null }> = {
+        'AS:A1210': { tier: 'SECTION', name: '營運管理部/審查室', descFull: null },
+        'AS:A1000': { tier: 'DEPARTMENT', name: '營運管理部', descFull: '營運管理部' },
+      };
+      const row = rows[`${companyCode}:${orgCode}`];
+      return row ? ({ companyCode, orgCode, ...row } as never) : null;
+    },
+    async listByCompany() {
+      return [];
+    },
+  });
+}
+
 
 /**
  * F006 §3.7 查詢端點／§3.8 處理端點／§3.9 RBAC。
@@ -49,6 +72,8 @@ const icsopAdmin: SessionUser = {
   accountId: 'acc-1',
   name: '李慧玲',
   employeeNo: 'E123',
+  // 🔴 2026-09-01 delta：身分快照之部門／處室由 orgCode 解析而來（fakeIdentity 之 ORG_UNIT 假體）。
+  orgCode: 'A1210',
 };
 const req = { sessionUser: icsopAdmin } as RequestWithSession;
 
@@ -66,7 +91,10 @@ describe('OrgChangeAlertController.list', () => {
       }),
     ];
     const listByStatus = jest.fn().mockResolvedValue(rows);
-    const c = new OrgChangeAlertController({ listByStatus } as unknown as OrgChangeAlertService);
+    const c = new OrgChangeAlertController(
+      { listByStatus } as unknown as OrgChangeAlertService,
+      fakeIdentity(),
+    );
 
     const res = await c.list('pending');
 
@@ -107,7 +135,10 @@ describe('OrgChangeAlertController.list', () => {
       }),
     ];
     const listByStatus = jest.fn().mockResolvedValue(rows);
-    const c = new OrgChangeAlertController({ listByStatus } as unknown as OrgChangeAlertService);
+    const c = new OrgChangeAlertController(
+      { listByStatus } as unknown as OrgChangeAlertService,
+      fakeIdentity(),
+    );
 
     const res = await c.list('pending');
 
@@ -127,7 +158,10 @@ describe('OrgChangeAlertController.list', () => {
 
   it('未帶 status → 預設 pending', async () => {
     const listByStatus = jest.fn().mockResolvedValue([]);
-    const c = new OrgChangeAlertController({ listByStatus } as unknown as OrgChangeAlertService);
+    const c = new OrgChangeAlertController(
+      { listByStatus } as unknown as OrgChangeAlertService,
+      fakeIdentity(),
+    );
 
     await c.list(undefined);
 
@@ -144,7 +178,10 @@ describe('OrgChangeAlertController.list', () => {
         resolvedAt,
       }),
     ]);
-    const c = new OrgChangeAlertController({ listByStatus } as unknown as OrgChangeAlertService);
+    const c = new OrgChangeAlertController(
+      { listByStatus } as unknown as OrgChangeAlertService,
+      fakeIdentity(),
+    );
 
     const res = await c.list('resolved');
 
@@ -159,14 +196,20 @@ describe('OrgChangeAlertController.list', () => {
 
   it('TS-F006-036 無 pending → 200 空陣列（非 404）', async () => {
     const listByStatus = jest.fn().mockResolvedValue([]);
-    const c = new OrgChangeAlertController({ listByStatus } as unknown as OrgChangeAlertService);
+    const c = new OrgChangeAlertController(
+      { listByStatus } as unknown as OrgChangeAlertService,
+      fakeIdentity(),
+    );
 
     await expect(c.list('pending')).resolves.toEqual([]);
   });
 
   it('不合法之 status 值 → 收斂為 pending（不外拋、不查詢未知狀態）', async () => {
     const listByStatus = jest.fn().mockResolvedValue([]);
-    const c = new OrgChangeAlertController({ listByStatus } as unknown as OrgChangeAlertService);
+    const c = new OrgChangeAlertController(
+      { listByStatus } as unknown as OrgChangeAlertService,
+      fakeIdentity(),
+    );
 
     await c.list('bogus');
 
@@ -177,7 +220,10 @@ describe('OrgChangeAlertController.list', () => {
 describe('OrgChangeAlertController.resolve', () => {
   it('TS-F006-040 委派 service.resolve 並帶入呼叫者身分快照（預設 NO_CHANGE_NEEDED）', async () => {
     const resolve = jest.fn().mockResolvedValue(row({ status: 'resolved' }));
-    const c = new OrgChangeAlertController({ resolve } as unknown as OrgChangeAlertService);
+    const c = new OrgChangeAlertController(
+      { resolve } as unknown as OrgChangeAlertService,
+      fakeIdentity(),
+    );
 
     await c.resolve('a1', {}, req);
 
@@ -188,6 +234,11 @@ describe('OrgChangeAlertController.resolve', () => {
         name: '李慧玲',
         employeeNo: 'E123',
         roleCode: 'ICSOPAdmin',
+        // 🔴 2026-09-01 delta 之回歸鎖定：本處曾下傳 `company: u.companyCode`（＝`AS`），
+        // 使 F024 調閱歷程之 `ALERT_RESOLVED` 列公司欄顯示代碼、與同一人的其他動作不一致。
+        company: '和潤企業股份有限公司',
+        department: '營運管理部',
+        section: '審查室',
       }),
       undefined,
     );
@@ -195,7 +246,10 @@ describe('OrgChangeAlertController.resolve', () => {
 
   it('TS-F006-048 body 顯式 FIELD_UPDATED → 原樣下傳', async () => {
     const resolve = jest.fn().mockResolvedValue(row({ status: 'resolved' }));
-    const c = new OrgChangeAlertController({ resolve } as unknown as OrgChangeAlertService);
+    const c = new OrgChangeAlertController(
+      { resolve } as unknown as OrgChangeAlertService,
+      fakeIdentity(),
+    );
 
     await c.resolve('a1', { resolutionKind: 'FIELD_UPDATED' }, req);
 
@@ -204,7 +258,10 @@ describe('OrgChangeAlertController.resolve', () => {
 
   it('不合法之 resolutionKind → 視為未指定（交 service 用預設值）', async () => {
     const resolve = jest.fn().mockResolvedValue(row({ status: 'resolved' }));
-    const c = new OrgChangeAlertController({ resolve } as unknown as OrgChangeAlertService);
+    const c = new OrgChangeAlertController(
+      { resolve } as unknown as OrgChangeAlertService,
+      fakeIdentity(),
+    );
 
     await c.resolve('a1', { resolutionKind: 'BOGUS' as never }, req);
 

@@ -50,6 +50,10 @@ import {
   resolveCompanyName,
 } from '../org-directory/company-name';
 import { normalizeUserSubtype } from '../rbac/viewer-scope';
+import {
+  AuditIdentityService,
+  AuditIdentitySnapshot,
+} from '../audit/audit-identity.service';
 
 export interface CreateManualInput {
   loginId: string;
@@ -136,7 +140,35 @@ export class AccountsService {
     @Optional()
     @Inject(JOB_POSITION_READ_STORE)
     private readonly jobPositions?: JobPositionReadStore,
+    // 🔴 2026-09-01 delta：`AUDIT_LOG` 身分快照六欄之唯一組裝點。
+    // ⚠ 同樣**置於建構子末位**（理由見上一個參數之註解）。缺（純建構單元測試）→
+    //   `auditIdentityOf()` 以純函式降級，公司欄仍取全稱、絕不退化為代碼。
+    @Optional()
+    private readonly auditIdentity?: AuditIdentityService,
   ) {}
+
+  /**
+   * 角色變更稽核之操作者身分快照（2026-09-01 delta）。
+   *
+   * 🔴 本方法取代了原本就地展開之 `actorCompany: actor.companyCode`／
+   * `actorDepartment: actor.orgCode` 兩行——那兩行把**代碼**（`AS`／`A1200`）寫進了
+   * F024 調閱歷程之公司欄與部門欄（dev 實測 23／23 之 `ROLE_ASSIGNED` 列公司欄為 `AS`），
+   * 而同一個人的檢視／下載列顯示的是「和潤企業股份有限公司」與部門全名。
+   *
+   * 無 DI 時之降級：公司仍經 `resolveCompanyName()` 取全稱（純函式、無 IO）；
+   * 部門／處室需查 ORG_UNIT，無從解析 ⇒ `null`（留空，**不得**回填代碼）。
+   */
+  private async auditIdentityOf(actor: AccountIdentity): Promise<AuditIdentitySnapshot> {
+    if (this.auditIdentity) return this.auditIdentity.resolve(actor);
+    return {
+      actorName: actor.name ?? null,
+      employeeNo: actor.employeeNo ?? null,
+      company: resolveCompanyName(actor.companyCode),
+      department: null,
+      section: null,
+      roleCode: actor.roleCode ?? null,
+    };
+  }
 
   /**
    * 清單（G-ADM-001）：於 store 列上疊加 公司/部門/職位 名稱。
@@ -349,15 +381,17 @@ export class AccountsService {
     // 與既有各 recordDownload 之「權限/歸屬把關在前、成功才寫」慣例一致。
     // ⚠ 刻意記錄「舊 → 新」而非僅記新值：F024 明細須能自證當時發生了什麼變化，
     //   而帳號之現值日後還會再變，回查現值無法還原當時。
+    const identity = await this.auditIdentityOf(actor);
     await this.auditRecorder?.record({
       accountId: id,
       summary: buildRoleChangeSummary(previousRole, newRole, patch.userSubtype),
       actorAccountId: actor.accountId ?? '',
-      actorName: actor.name ?? null,
-      actorEmployeeNo: actor.employeeNo ?? null,
-      actorCompany: actor.companyCode,
-      actorDepartment: actor.orgCode ?? null,
-      actorRoleCode: actor.roleCode ?? null,
+      actorName: identity.actorName,
+      actorEmployeeNo: identity.employeeNo,
+      actorCompany: identity.company,
+      actorDepartment: identity.department,
+      actorSection: identity.section,
+      actorRoleCode: identity.roleCode,
     });
     return updated;
   }

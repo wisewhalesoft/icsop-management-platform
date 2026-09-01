@@ -4,6 +4,7 @@ import { AuthModule } from '../auth/auth.module';
 import { RbacModule } from '../rbac/rbac.module';
 import { AuditModule } from '../audit/audit.module';
 import { AuditWriterService } from '../audit/audit-writer.service';
+import { AuditIdentityService } from '../audit/audit-identity.service';
 import { PublicModule } from '../public/public.module';
 import { WatermarkService } from '../public/watermark.service';
 import { PDF_BURNER, PdfBurner, PdfLibBurner } from '../public/pdf-burner';
@@ -76,9 +77,13 @@ import {
     },
     {
       provide: LifecycleService,
-      useFactory: (store: LifecycleStore, audit: AuditWriterService): LifecycleService =>
-        new LifecycleService(store, audit, () => new Date()),
-      inject: [LIFECYCLE_STORE, AuditWriterService],
+      useFactory: (
+        store: LifecycleStore,
+        audit: AuditWriterService,
+        identity: AuditIdentityService,
+      ): LifecycleService =>
+        new LifecycleService(store, audit, () => new Date(), identity),
+      inject: [LIFECYCLE_STORE, AuditWriterService, AuditIdentityService],
     },
     {
       provide: DAG_STORE,

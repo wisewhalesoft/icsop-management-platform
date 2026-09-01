@@ -114,6 +114,17 @@ export interface OjtAuditEvent {
   accountId: string;
   name?: string | null;
   employeeNo?: string | null;
+  /**
+   * 🔴 2026-09-01 delta（additive 選填）：**操作者**身分快照之解析原料。代碼留在事件層，
+   * 由轉接器經 `AuditIdentityService` 解析為公司全稱／部門全名／處室——
+   * 代碼絕不直接落進 `AUDIT_LOG`（`ROLE_ASSIGNED` 之既有缺陷形狀）。
+   *
+   * 🔴 三欄一律冠 `actor` 前綴：本介面既有之 `orgCode` 是**場次所屬使用單位**，
+   * 與「操作者所屬單位」是兩個不同的維度，同名會讓稽核把辦訓練的單位寫成操作者的部門。
+   */
+  actorCompanyCode?: string | null;
+  actorOrgCode?: string | null;
+  actorRoleCode?: string | null;
   watermarkSnapshot: null;
   /** 場次 id（`AUDIT_LOG.targetId`）。供 adapter 落值；記憶體假體忽略之。 */
   sessionId?: string;
