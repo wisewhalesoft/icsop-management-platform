@@ -68,8 +68,14 @@ describe('LifecycleListPage — F007 循環池', () => {
     expect(screen.getAllByRole('button', { name: '編輯' }).length).toBeGreaterThan(0);
   });
 
-  it('Supervisor 唯讀：無新增、無編輯、顯示唯讀說明', async () => {
-    mockAuth('Supervisor');
+  /**
+   * 🔴 2026-09-02 人類裁決：主管之循環管理由「唯讀」改為「無」⇒ 本案之「唯讀角色」
+   * 改由 **SysAdmin** 承載（矩陣上循環管理唯一之 `READ` 角色）。
+   * 📝 原案逐字：`mockAuth('Supervisor')`。⚠ 本案驗的是**唯讀呈現**，不是「主管」這個角色；
+   * 換掉承載角色後性質一格未變，主管自此落在「無權限」那一案。
+   */
+  it('SysAdmin 唯讀：無新增、無編輯、顯示唯讀說明', async () => {
+    mockAuth('SysAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('銷售及收款循環')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /新增循環/ })).not.toBeInTheDocument();
@@ -173,7 +179,7 @@ describe('LifecycleListPage — F007 循環池', () => {
    *    本案以「恰兩個引數」把它鎖住——多帶第三個 features 字串即紅。
    */
   it('每列樹狀圖圖示 → 開新分頁至 viewer 路由（唯讀，讀權即可見）', async () => {
-    mockAuth('Supervisor'); // 唯讀角色亦可見樹狀圖入口
+    mockAuth('SysAdmin'); // 🔴 2026-09-02：唯讀角色改由 SysAdmin 承載（主管已無循環管理權）
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
     renderPage();
     await waitFor(() => expect(screen.getByText('銷售及收款循環')).toBeInTheDocument());
@@ -185,7 +191,7 @@ describe('LifecycleListPage — F007 循環池', () => {
 
   // ===== prototype-alignment G-LC-001..006 + SYS-1 toast（prototypes/10-lifecycle-list.html）=====
   it('G-LC-001 唯讀 banner 使用 eye 圖示（非 user-circle）', async () => {
-    mockAuth('Supervisor');
+    mockAuth('SysAdmin'); // 🔴 2026-09-02：唯讀角色改由 SysAdmin 承載
     const { container } = renderPage();
     await waitFor(() => expect(screen.getByText('銷售及收款循環')).toBeInTheDocument());
     expect(screen.getByText(/唯讀模式/)).toBeInTheDocument();

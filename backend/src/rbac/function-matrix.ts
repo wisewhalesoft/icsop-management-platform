@@ -93,7 +93,7 @@ const row = (
  * |----------------------------|-----------|-------------|--------|----------|-----------|
  * | 帳號管理                    | CRUD      | **CRUD**🔴  | 無     | 無       | 無        |
  * | 角色指派                    | CRUD      | **受限CRUD**🔴| 無   | 無       | 無        |
- * | 循環管理（DAG）             | 唯讀      | CRUD        | 唯讀   | 無       | 無        |
+ * | 循環管理（DAG）             | 唯讀      | CRUD        | **無**🔴| 無       | 無        |
  * | ICSOP 文件管理              | 唯讀      | CRUD        | 唯讀   | 唯讀     | 無        |
  * | 文件使用表單管理            | 唯讀      | CRUD        | 無     | 無       | 無        |
  * | 附錄管理                    | 唯讀      | CRUD        | 無     | 無       | 無        |
@@ -110,7 +110,16 @@ export const FUNCTION_MATRIX: Record<string, Row> = {
   [FunctionKey.ACCOUNT_MANAGEMENT]: row('CRUD', 'CRUD', 'NONE', 'NONE', 'NONE'),
   // 🔴 2026-08-25 角色自動化 delta（Q4.1b／OQ-RA-03）：ICSOPAdmin 由 'NONE' 改為 'RESTRICTED_CRUD'。
   [FunctionKey.ROLE_ASSIGNMENT]: row('CRUD', 'RESTRICTED_CRUD', 'NONE', 'NONE', 'NONE'),
-  [FunctionKey.LIFECYCLE_MANAGEMENT]: row('READ', 'CRUD', 'READ', 'NONE', 'NONE'),
+  /**
+   * 🔴 2026-09-02 人類裁決：**主管由「唯讀」改為「無」**（`'READ'` → `'NONE'`）。
+   * 循環管理（DAG）自此為 SysAdmin 唯讀／ICSOPAdmin CRUD 之二人功能。
+   * ⚠ 本格同時是 F036 循環樹狀圖預覽之閘門（`lifecycle-preview.controller.ts` 三個端點皆
+   * `LIFECYCLE_MANAGEMENT read`）⇒ 主管自本輪起亦不可預覽樹狀圖；後台文件清單之「樹狀圖」欄
+   * 依同一格值決定是否進 DOM（`DocumentListPage`），故主管／部門窗口兩者皆不再看到該欄
+   * ——部門窗口本來就是 `'NONE'`，先前卻看得到按鈕、點下去必 403，本輪一併修掉那條死鏈。
+   * 📝 原值逐字保留供追溯：OLD> row('READ', 'CRUD', 'READ', 'NONE', 'NONE')
+   */
+  [FunctionKey.LIFECYCLE_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.ICSOP_DOCUMENT_MANAGEMENT]: row('READ', 'CRUD', 'READ', 'READ', 'NONE'),
   [FunctionKey.USAGE_FORM_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.APPENDIX_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),

@@ -75,14 +75,21 @@ describe('NodeDocsController — 節點文件清單端點之路由/RBAC metadata
 describe('NodeDocsController — AC-D5 逐角色守門結果', () => {
   const guard = new RolePermissionGuard(new Reflector());
 
-  it.each(['SysAdmin', 'ICSOPAdmin', 'Supervisor'])(
-    'TS-D8-013 %s（循環管理唯讀以上）→ 節點文件清單放行（Supervisor 為本條之關鍵案例）',
+  /**
+   * 🔴 2026-09-02 人類裁決：**主管之循環管理由「唯讀」改為「無」** ⇒ Supervisor 自本案
+   * 移至下一案（403）。本端點之閘門 `LIFECYCLE_MANAGEMENT read` 一格未動，改變的是矩陣格值。
+   * 📝 原案逐字保留供追溯：
+   *   it.each(['SysAdmin', 'ICSOPAdmin', 'Supervisor'])(
+   *     'TS-D8-013 %s（循環管理唯讀以上）→ 節點文件清單放行（Supervisor 為本條之關鍵案例）', ...)
+   */
+  it.each(['SysAdmin', 'ICSOPAdmin'])(
+    'TS-D8-013 %s（循環管理唯讀以上）→ 節點文件清單放行',
     (roleCode) => {
       expect(guard.canActivate(ctxFor('listDocuments', { roleCode }))).toBe(true);
     },
   );
 
-  it.each(['DeptContact', 'User'])('TS-D8-014 %s → 403 PERMISSION_DENIED', (roleCode) => {
+  it.each(['Supervisor', 'DeptContact', 'User'])('TS-D8-014 %s → 403 PERMISSION_DENIED', (roleCode) => {
     expect(() => guard.canActivate(ctxFor('listDocuments', { roleCode }))).toThrow(
       ForbiddenException,
     );

@@ -79,7 +79,9 @@ export const FUNCTION_MATRIX: Record<string, Row> = {
   // 🔴 2026-08-25 角色自動化 delta（Q4.1／Q4.1b）——須與後端 rbac/function-matrix.ts 逐格一致。
   [FunctionKey.ACCOUNT_MANAGEMENT]: row('CRUD', 'CRUD', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.ROLE_ASSIGNMENT]: row('CRUD', 'RESTRICTED_CRUD', 'NONE', 'NONE', 'NONE'),
-  [FunctionKey.LIFECYCLE_MANAGEMENT]: row('READ', 'CRUD', 'READ', 'NONE', 'NONE'),
+  // 🔴 2026-09-02 人類裁決：主管由 'READ' 改為 'NONE'（權威＝後端同名檔案之同一列）。
+  // 📝 原值逐字保留供追溯：OLD> row('READ', 'CRUD', 'READ', 'NONE', 'NONE')
+  [FunctionKey.LIFECYCLE_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.ICSOP_DOCUMENT_MANAGEMENT]: row('READ', 'CRUD', 'READ', 'READ', 'NONE'),
   [FunctionKey.USAGE_FORM_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.APPENDIX_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),

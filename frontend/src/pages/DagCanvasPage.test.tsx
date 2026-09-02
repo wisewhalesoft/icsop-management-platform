@@ -65,15 +65,22 @@ describe('DagCanvasPage — F008 DAG 畫布', () => {
     expect(screen.getByRole('button', { name: /刪除節點/ })).toBeInTheDocument();
   });
 
-  it('Supervisor 唯讀：無工具列、顯示唯讀說明', async () => {
-    mockAuth('Supervisor');
+  /**
+   * 🔴 2026-09-02 人類裁決：主管之循環管理由「唯讀」改為「無」⇒ 本案之「唯讀角色」
+   * 改由 **SysAdmin** 承載（矩陣上循環管理唯一之 `READ` 角色）。
+   * 📝 原案逐字：`mockAuth('Supervisor')`。⚠ 本案驗的是**唯讀呈現**，不是「主管」這個角色；
+   * 換掉承載角色後性質一格未變，主管自此落在「無權限」那一案。
+   */
+  it('SysAdmin 唯讀：無工具列、顯示唯讀說明', async () => {
+    mockAuth('SysAdmin');
     renderCanvas();
     await waitFor(() => expect(screen.getByText(/唯讀模式/)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /新增節點/ })).not.toBeInTheDocument();
   });
 
-  it('無循環管理權限（DeptContact）→ 403', () => {
-    mockAuth('DeptContact');
+  // 🔴 2026-09-02：Supervisor 併入本案（原在上一案之唯讀分支）。
+  it.each(['Supervisor', 'DeptContact'])('無循環管理權限（%s）→ 403', (roleCode) => {
+    mockAuth(roleCode as 'Supervisor');
     renderCanvas();
     expect(screen.getByText(/無循環管理權限/)).toBeInTheDocument();
   });
@@ -99,8 +106,9 @@ describe('DagCanvasPage — F008 DAG 畫布', () => {
     expect(screen.queryByText(/DAG_CYCLE_DETECTED）/)).not.toBeInTheDocument();
   });
 
+  // 🔴 2026-09-02：唯讀角色改由 SysAdmin 承載（理由同上）。
   it('G-LC-014 唯讀 banner 使用 eye 圖示', async () => {
-    mockAuth('Supervisor');
+    mockAuth('SysAdmin');
     const { container } = renderCanvas();
     await waitFor(() => expect(screen.getByText(/唯讀模式/)).toBeInTheDocument());
     expect(container.querySelector('.lucide-eye')).toBeTruthy();

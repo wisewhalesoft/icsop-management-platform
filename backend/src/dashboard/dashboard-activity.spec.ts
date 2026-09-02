@@ -25,11 +25,18 @@ describe('visibleActivityKinds（F025 逐類角色過濾）', () => {
     expect(visibleActivityKinds('ICSOPAdmin')).toEqual([...ACTIVITY_KINDS]);
   });
 
-  it('主管僅見文件建立與循環變更（無帳號／同步／調閱權）', () => {
-    expect(visibleActivityKinds('Supervisor')).toEqual([
-      'DOCUMENT_CREATED',
-      'LIFECYCLE_CHANGED',
-    ]);
+  /**
+   * 🔴 2026-09-02 人類裁決：**主管之循環管理由「唯讀」改為「無」** ⇒ 主管之動態來源
+   * 隨之少掉 `LIFECYCLE_CHANGED`（本檔之過濾一律走 `FUNCTION_MATRIX`，未另建權限表）。
+   * 📝 原案逐字保留供追溯：
+   *   it('主管僅見文件建立與循環變更（無帳號／同步／調閱權）', ...)
+   *     expect(visibleActivityKinds('Supervisor')).toEqual(['DOCUMENT_CREATED', 'LIFECYCLE_CHANGED']);
+   * ⚠ 主管與部門窗口自本輪起可見來源相同（皆僅 `DOCUMENT_CREATED`）——兩案**刻意各自保留**，
+   * 不合併成一個 `it.each`：它們是兩條獨立裁決碰巧此刻同值，合併會讓下次任一邊調整時
+   * 另一邊被靜默地一起改掉。
+   */
+  it('主管僅見文件建立（循環管理已改為 NONE，無帳號／同步／調閱權）', () => {
+    expect(visibleActivityKinds('Supervisor')).toEqual(['DOCUMENT_CREATED']);
   });
 
   it('部門窗口僅見文件建立（循環管理為 NONE）', () => {
@@ -149,11 +156,17 @@ describe('DashboardActivityService', () => {
     ]);
   });
 
+  /**
+   * 🔴 2026-09-02 人類裁決之連動：主管少掉 `LIFECYCLE_CHANGED` 來源。
+   * 🔒 本案真正鑑別的是 `calls`——「未授權來源**根本不被查詢**」而非查完再過濾；
+   * 該性質一格未動，只是授權集合小了一項。
+   * 📝 原期望值逐字保留供追溯：OLD> ['DOCUMENT_CREATED', 'LIFECYCLE_CHANGED']（兩處）
+   */
   it('主管 → 未授權來源根本不被查詢（非查完再過濾）', async () => {
     const svc = new DashboardActivityService(providers());
     const rows = await svc.getRecent('Supervisor', 5);
-    expect(rows.map((r) => r.kind)).toEqual(['DOCUMENT_CREATED', 'LIFECYCLE_CHANGED']);
-    expect(calls).toEqual(['DOCUMENT_CREATED', 'LIFECYCLE_CHANGED']);
+    expect(rows.map((r) => r.kind)).toEqual(['DOCUMENT_CREATED']);
+    expect(calls).toEqual(['DOCUMENT_CREATED']);
   });
 
   it('一般使用者／未登入 → 空陣列且完全不查詢', async () => {

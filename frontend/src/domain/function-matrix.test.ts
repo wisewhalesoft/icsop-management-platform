@@ -61,8 +61,10 @@ describe('function-matrix（前端鏡射）', () => {
     expect(FUNCTION_MATRIX[FunctionKey.ROLE_ASSIGNMENT]).toEqual({
       SysAdmin: 'CRUD', ICSOPAdmin: 'RESTRICTED_CRUD', Supervisor: 'NONE', DeptContact: 'NONE', User: 'NONE',
     });
+    // 🔴 2026-09-02 人類裁決：主管 'READ' → 'NONE'（循環管理自主管權限移除）。
+    // 📝 原期望值逐字保留供追溯：OLD> Supervisor: 'READ'
     expect(FUNCTION_MATRIX[FunctionKey.LIFECYCLE_MANAGEMENT]).toEqual({
-      SysAdmin: 'READ', ICSOPAdmin: 'CRUD', Supervisor: 'READ', DeptContact: 'NONE', User: 'NONE',
+      SysAdmin: 'READ', ICSOPAdmin: 'CRUD', Supervisor: 'NONE', DeptContact: 'NONE', User: 'NONE',
     });
     // 🔴 本列為本 delta 最易「順手一併放寬」之處：主管／部門窗口對 ICSOP 文件管理仍唯讀。
     expect(FUNCTION_MATRIX[FunctionKey.ICSOP_DOCUMENT_MANAGEMENT]).toEqual({

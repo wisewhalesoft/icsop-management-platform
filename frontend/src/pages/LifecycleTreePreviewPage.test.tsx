@@ -104,7 +104,7 @@ describe('LifecycleTreePreviewPage — F036 循環樹狀圖預覽', () => {
   });
 
   it('根節點下游涵蓋全部後代', async () => {
-    mockAuth('Supervisor');
+    mockAuth('SysAdmin'); // 🔴 2026-09-02：主管已無循環管理權，唯讀角色改由 SysAdmin 承載
     renderAt();
     await waitFor(() => expect(screen.getByTestId('tree-node-a1')).toBeInTheDocument());
     await userEvent.click(screen.getByTestId('tree-node-a1'));

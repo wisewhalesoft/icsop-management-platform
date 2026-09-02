@@ -74,16 +74,43 @@ describe('LifecycleChangeDiffController RBAC（§C.4 刻意不對稱）', () => 
     },
   );
 
-  it('TS-LCC-C-008（對照鎖定）同一 Supervisor：F036 tree-preview 放行、F038 tree-diff 封鎖', () => {
+  /**
+   * 🔴 2026-09-02 人類裁決之直接後果：**本案原本的語料已失去鑑別力**。
+   *
+   * 原案以「同一個 Supervisor 在 F036 放行、在 F038 封鎖」來鎖住「兩者刻意掛不同 functionKey」。
+   * 主管之循環管理由 `READ` 改為 `NONE` 後，`LIFECYCLE_MANAGEMENT read` 與
+   * `DOCUMENT_CHANGE_HISTORY read` 之**可通過角色集合恰好相同**（皆為 SysAdmin／ICSOPAdmin）
+   * ⇒ 任何以角色為語料的對照，兩邊都會給出同一個答案，該斷言即等於沒寫
+   * （本 repo 已命名之假綠形狀：**建環語料無鑑別力**）。
+   *
+   * 🔴 **不得把本案刪掉了事**：它保護的性質仍然成立且仍然重要——兩個端點掛的是**不同的
+   * 功能鍵**，只是這一輪它們的角色集合碰巧重合；日後任一邊之矩陣列調整，兩者就會再度分岔。
+   * ⇒ 改以**結構**斷言（各自掛哪一個 `functionKey`）承載同一條性質，並顯式記下「集合此刻相同」
+   * 這個事實，使下一個讀到這裡的人不會誤以為兩者本來就是同一道閘門。
+   *
+   * 📝 原案逐字保留供追溯：
+   *   it('TS-LCC-C-008（對照鎖定）同一 Supervisor：F036 tree-preview 放行、F038 tree-diff 封鎖', ...)
+   *     expect(guard.canActivate(ctxFor(LifecyclePreviewController, Preview.download, 'Supervisor'))).toBe(true);
+   *     expect(() => guard.canActivate(ctxFor(LifecycleChangeDiffController, P.download, 'Supervisor'))).toThrow('PERMISSION_DENIED');
+   */
+  it('TS-LCC-C-008（對照鎖定）F036 與 F038 掛的是不同 functionKey（角色集合此刻相同，故不得以角色作對照）', () => {
+    const reflector = new Reflector();
     const Preview = LifecyclePreviewController.prototype;
-    // F036：LIFECYCLE_MANAGEMENT read（含 Supervisor）→ 放行
     expect(
-      guard.canActivate(ctxFor(LifecyclePreviewController, Preview.download, 'Supervisor')),
-    ).toBe(true);
-    // F038：DOCUMENT_CHANGE_HISTORY read（排除 Supervisor）→ 封鎖
-    expect(() =>
-      guard.canActivate(ctxFor(LifecycleChangeDiffController, P.download, 'Supervisor')),
-    ).toThrow('PERMISSION_DENIED');
+      reflector.get<RequiredPermission>(REQUIRE_PERMISSION_KEY, Preview.download).functionKey,
+    ).toBe(FunctionKey.LIFECYCLE_MANAGEMENT);
+    expect(
+      reflector.get<RequiredPermission>(REQUIRE_PERMISSION_KEY, P.download).functionKey,
+    ).toBe(FunctionKey.DOCUMENT_CHANGE_HISTORY);
+    // 兩者此刻對 Supervisor 皆封鎖——顯式寫出，使「集合重合」是被記錄的事實，而非被忽略的巧合。
+    for (const [klass, handler] of [
+      [LifecyclePreviewController, Preview.download],
+      [LifecycleChangeDiffController, P.download],
+    ] as const) {
+      expect(() => guard.canActivate(ctxFor(klass, handler, 'Supervisor'))).toThrow(
+        'PERMISSION_DENIED',
+      );
+    }
   });
 });
 

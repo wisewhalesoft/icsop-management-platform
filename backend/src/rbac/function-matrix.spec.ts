@@ -41,7 +41,11 @@ describe('F025 FUNCTION_MATRIX 逐格對照 spec', () => {
     [FunctionKey.ACCOUNT_MANAGEMENT]: R('CRUD', 'CRUD', 'NONE', 'NONE', 'NONE'),
     // 🔴 2026-08-25 角色自動化 delta（Q4.1b／OQ-RA-03）：ICSOPAdmin 'NONE' → 'RESTRICTED_CRUD'。
     [FunctionKey.ROLE_ASSIGNMENT]: R('CRUD', 'RESTRICTED_CRUD', 'NONE', 'NONE', 'NONE'),
-    [FunctionKey.LIFECYCLE_MANAGEMENT]: R('READ', 'CRUD', 'READ', 'NONE', 'NONE'),
+    /**
+     * 🔴 2026-09-02 人類裁決：主管 `'READ'` → `'NONE'`（循環管理自主管權限移除）。
+     * 📝 原值逐字保留供追溯：OLD> R('READ', 'CRUD', 'READ', 'NONE', 'NONE')
+     */
+    [FunctionKey.LIFECYCLE_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
     [FunctionKey.ICSOP_DOCUMENT_MANAGEMENT]: R('READ', 'CRUD', 'READ', 'READ', 'NONE'),
     [FunctionKey.USAGE_FORM_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
     [FunctionKey.APPENDIX_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
@@ -78,8 +82,15 @@ describe('F025 FUNCTION_MATRIX 逐格對照 spec', () => {
 
 describe('F025 canPerform 純判定', () => {
   // 代表性格子（任務指定）
-  it('主管 循環管理 read=true / write=false（唯讀）', () => {
-    expect(canPerform('Supervisor', FunctionKey.LIFECYCLE_MANAGEMENT, 'read')).toBe(true);
+  /**
+   * 🔴 2026-09-02 人類裁決：**主管之循環管理由「唯讀」改為「無」**。
+   * 📝 原案逐字保留供追溯：
+   *   it('主管 循環管理 read=true / write=false（唯讀）', ...)
+   * ⚠ 本案鑑別的是 `read` 那一半：`write` 本來就是 `false`，只改它一行的實作
+   * （例如改成 `'READ'` 以外的任何非 CRUD 值）不會被拓出來。
+   */
+  it('主管 循環管理 read=false / write=false（無存取權）', () => {
+    expect(canPerform('Supervisor', FunctionKey.LIFECYCLE_MANAGEMENT, 'read')).toBe(false);
     expect(canPerform('Supervisor', FunctionKey.LIFECYCLE_MANAGEMENT, 'write')).toBe(false);
   });
 
@@ -187,7 +198,11 @@ describe('F042 AC-27／AC-J16～AC-J18：新增功能列「OJT 進度管理」',
   const PRE_EXISTING_13: Record<string, Record<RoleCode, Permission>> = {
     [FunctionKey.ACCOUNT_MANAGEMENT]: R('CRUD', 'CRUD', 'NONE', 'NONE', 'NONE'),
     [FunctionKey.ROLE_ASSIGNMENT]: R('CRUD', 'RESTRICTED_CRUD', 'NONE', 'NONE', 'NONE'),
-    [FunctionKey.LIFECYCLE_MANAGEMENT]: R('READ', 'CRUD', 'READ', 'NONE', 'NONE'),
+    /**
+     * 🔴 2026-09-02 人類裁決：主管 `'READ'` → `'NONE'`（循環管理自主管權限移除）。
+     * 📝 原值逐字保留供追溯：OLD> R('READ', 'CRUD', 'READ', 'NONE', 'NONE')
+     */
+    [FunctionKey.LIFECYCLE_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
     [FunctionKey.ICSOP_DOCUMENT_MANAGEMENT]: R('READ', 'CRUD', 'READ', 'READ', 'NONE'),
     [FunctionKey.USAGE_FORM_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
     [FunctionKey.APPENDIX_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),

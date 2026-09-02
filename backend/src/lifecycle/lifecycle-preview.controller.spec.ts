@@ -57,18 +57,27 @@ describe('LifecyclePreviewController — 守門鏈與 RBAC（F036）', () => {
     expect(guards).toContain(RolePermissionGuard);
   });
 
-  it('可視角色（SysAdmin/ICSOPAdmin/Supervisor）→ preview/download/print 皆放行', () => {
+  /**
+   * 🔴 2026-09-02 人類裁決：**主管之循環管理由「唯讀」改為「無」** ⇒ 本三個端點之閘門
+   * （`LIFECYCLE_MANAGEMENT read`）對主管改為封鎖，Supervisor 自「可視角色」移至下一案。
+   * 📝 原案逐字保留供追溯：
+   *   it('可視角色（SysAdmin/ICSOPAdmin/Supervisor）→ preview/download/print 皆放行', ...)
+   *   for (const roleCode of ['SysAdmin', 'ICSOPAdmin', 'Supervisor']) { ... }
+   *   it('DeptContact / User → preview/download/print 一律 403（含直接呼叫 API）', ...)
+   *   for (const roleCode of ['DeptContact', 'User']) { ... }
+   */
+  it('可視角色（SysAdmin/ICSOPAdmin）→ preview/download/print 皆放行', () => {
     const guard = new RolePermissionGuard(new Reflector());
-    for (const roleCode of ['SysAdmin', 'ICSOPAdmin', 'Supervisor']) {
+    for (const roleCode of ['SysAdmin', 'ICSOPAdmin']) {
       for (const m of ['preview', 'download', 'print']) {
         expect(guard.canActivate(ctxFor(m, { roleCode }))).toBe(true);
       }
     }
   });
 
-  it('DeptContact / User → preview/download/print 一律 403（含直接呼叫 API）', () => {
+  it('Supervisor / DeptContact / User → preview/download/print 一律 403（含直接呼叫 API）', () => {
     const guard = new RolePermissionGuard(new Reflector());
-    for (const roleCode of ['DeptContact', 'User']) {
+    for (const roleCode of ['Supervisor', 'DeptContact', 'User']) {
       for (const m of ['preview', 'download', 'print']) {
         expect(() => guard.canActivate(ctxFor(m, { roleCode }))).toThrow(ForbiddenException);
       }

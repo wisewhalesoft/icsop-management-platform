@@ -49,12 +49,20 @@ describe('AppShell — 後台外殼側欄角色過濾（F002）', () => {
     }
   });
 
-  it('Supervisor 側欄僅顯示循環管理與 ICSOP 文件管理', () => {
+  /**
+   * 🔴 2026-09-02 人類裁決：主管之循環管理由「唯讀」改為「無」。
+   * 📝 原案逐字保留供追溯：
+   *   it('Supervisor 側欄僅顯示循環管理與 ICSOP 文件管理', ...)
+   *     expect(within(nav).getByText('循環管理')).toBeInTheDocument();
+   * 🔴 反轉後**必須有一條正向斷言**（ICSOP 文件管理仍在）與新的負向斷言並存——
+   * 只留 `not.toBeInTheDocument()` 會在側欄整個沒渲染時也綠（本 repo 已命名之「恆真負向斷言」）。
+   */
+  it('Supervisor 側欄顯示 ICSOP 文件管理，且不再顯示循環管理', () => {
     mockAuth('Supervisor');
     renderShell();
     const nav = screen.getByRole('navigation', { name: '功能選單' });
-    expect(within(nav).getByText('循環管理')).toBeInTheDocument();
     expect(within(nav).getByText('ICSOP 文件管理')).toBeInTheDocument();
+    expect(within(nav).queryByText('循環管理')).not.toBeInTheDocument();
     expect(within(nav).queryByText('帳號管理')).not.toBeInTheDocument();
     expect(within(nav).queryByText('組織人員異動管理')).not.toBeInTheDocument();
   });

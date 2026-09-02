@@ -2,6 +2,8 @@
 Priority: P0-MVP | Status: 🟡 Implemented (unit-green; **CJK 燒錄字型已補**（@pdf-lib/fontkit + Noto Sans TC，樹圖 renderer + F020 burner 共用，見 implementation-log/F036-impl.md）; 第二入口＋真實 PDF/幾何/效能＝[integration]) | Last Updated: 2026-07-23
 Epic/Story: E03 / US-025
 
+> 🔴 **2026-09-02 delta（人類裁決）——Supervisor 自本 feature 之可視角色移除**：權威＝[F025](F025-role-function-matrix.md) 之「循環管理（DAG）」列，主管由「唯讀」改為「無」。本頁之閘門（`循環管理` **read**）一格未動，改變的是矩陣格值 ⇒ **預覽／下載／列印三端點、節點抽屜（`AC-D5`）與子樹文件清單對主管一律 403**，可視角色收斂為 **SysAdmin／ICSOPAdmin**。<br>⚠ **本檔下方多處條文仍寫著「Supervisor 全公司唯讀」（含 `AC-D5` 之核心警語）——那些是 `OQ-E08-03` 時期之定案，逐字保留供追溯，但自本 delta 起於角色集合上已被取代**；`AC-D5` 所保護的性質（**閘門是 `循環管理 read`，不得誤用 [F009](F009-node-drawer-maintenance.md) 之 ICSOPAdmin 寫入閘門**）**仍然完全成立且仍然重要**，只是它此刻放行的角色少了一個。<br>🔴 **建環注意（語料鑑別力）**：本輪之後 `循環管理 read` 與 `文件變更歷程 read` 之可通過角色集合**恰好相同**（皆 SysAdmin／ICSOPAdmin）⇒ 以角色作 F036/F038 對照之斷言**自本輪起零鑑別力**，須改以「兩端點掛的是不同 `functionKey`」之結構斷言承載（已於 `lifecycle-change-diff.controller.spec.ts` 就地改寫並留下逐字原文）。
+
 > **2026-08-07 additive delta（🟢 APPROVED（2026-08-07 人類閘門通過））**：頁首標題、循環切換器選項與 `AUDIT_LOG.lifecycleName` 快照須含子分類；第二入口之查詢參數須由業務代碼收斂為 `lifecycleId`。規則權威＝[F040](F040-lifecycle-subcategory.md)；唯讀性、浮水印、權限與其餘既有條款皆不變。
 > **🔵 2026-08-16 additive delta（使用者裁決；缺失／變更 delta 第 8 項）——節點雙擊顯示文件清單**：於樹狀圖節點新增 `dblclick` 互動，以**唯讀側抽屜**列出該節點所掛載之程序書清單。**本 delta 之 AC 編號採 `AC-D#`**（D＝2026-08-16 defect delta），與既有 `AC-S#` 批次區隔。
 > ⚠ **既有「單擊＝標示下游」行為完全保留、不得變更**（AC-D6）；抽屜為 **[F009](F009-node-drawer-maintenance.md) 節點抽屜之唯讀孿生**，**不得復用其可寫版本**，且其資料來源端點之權限閘門**沿用 F036「循環管理」read（含 Supervisor 全公司唯讀）**，**不得誤用 [F009](F009-node-drawer-maintenance.md) 之 ICSOPAdmin 寫入閘門**（AC-D5）。

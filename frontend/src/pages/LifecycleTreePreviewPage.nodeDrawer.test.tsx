@@ -326,7 +326,7 @@ describe('LifecycleTreePreviewPage — F036 AC-D7／AC-D9 空狀態與節點徽�
     vi.mocked(endpoints.lifecycleTreeDownloadUrl).mockImplementation((id) => `/x/${id}`);
     vi.mocked(endpoints.lifecycleTreePrintUrl).mockImplementation((id) => `/y/${id}`);
     vi.mocked(endpoints.getLifecycleNodeSubtreeDocuments).mockResolvedValue(emptySubtree('a3'));
-    mockAuth('Supervisor');
+    mockAuth('SysAdmin'); // 🔴 2026-09-02：主管已無循環管理權，唯讀角色改由 SysAdmin 承載
   });
 
   it('TS-D8-033 AC-D7／AC-D9 子樹合計 0 之節點雙擊 → 抽屜仍開啟並顯示 data-node-doc-empty 之逐字空狀態', async () => {

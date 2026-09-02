@@ -66,7 +66,9 @@ export const FUNC_DISPLAY: MatrixDisplayRow[] = [
     note: '經帳號管理 modal 執行、非獨立側選單頁；ICSOP管理員不得指派系統管理員／ICSOP管理員',
     cells: ['CRUD', '受限CRUD', '無', '無', '無'],
   },
-  { label: '循環管理（DAG）', cells: ['唯讀', 'CRUD', '唯讀', '無', '無'] },
+  // 🔴 2026-09-02 人類裁決：主管由「唯讀」改為「無」（權威＝ backend rbac/function-matrix.ts）。
+  // 📝 原值逐字保留供追溯：OLD> cells: ['唯讀', 'CRUD', '唯讀', '無', '無']
+  { label: '循環管理（DAG）', cells: ['唯讀', 'CRUD', '無', '無', '無'] },
   { label: 'ICSOP 文件管理', cells: ['唯讀', 'CRUD', '唯讀', '唯讀', '無'] },
   { label: '文件使用表單管理', cells: ['唯讀', 'CRUD', '無', '無', '無'] },
   { label: '附錄管理', cells: ['唯讀', 'CRUD', '無', '無', '無'] },

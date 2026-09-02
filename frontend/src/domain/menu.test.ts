@@ -57,9 +57,17 @@ describe('menu — 後台選單角色過濾', () => {
    * read 通過）⇒ 側選單須新增可見；既有唯二可見項（循環管理／ICSOP 文件管理，或 DeptContact
    * 之 ICSOP 文件管理）維持不變，只新增這一項。
    */
-  it('Supervisor 見循環管理／ICSOP 文件管理／OJT 進度管理（AC-27 新增）', () => {
+  /**
+   * 🔴 2026-09-02 人類裁決：主管之循環管理由「唯讀」改為「無」⇒ 側選單少掉 `lifecycle`。
+   * 📝 原案逐字保留供追溯：
+   *   it('Supervisor 見循環管理／ICSOP 文件管理／OJT 進度管理（AC-27 新增）', ...)
+   *     expect(visibleMenu('Supervisor').map((m) => m.id)).toEqual(['lifecycle', 'document', 'ojtprogress']);
+   * 🔒 斷言形狀維持 `toEqual` 之**有序全等**（非 `toContain`）：主管少一項的同時若多長出
+   * 別的項目，仍必須翻紅。
+   */
+  it('Supervisor 見 ICSOP 文件管理／OJT 進度管理（循環管理已移除）', () => {
     expect(visibleMenu('Supervisor').map((m) => m.id)).toEqual([
-      'lifecycle', 'document', 'ojtprogress',
+      'document', 'ojtprogress',
     ]);
   });
 

@@ -92,14 +92,21 @@ describe('NodeDocsController — AC-T25 逐角色守門結果（子樹端點）'
   const guard = new RolePermissionGuard(new Reflector());
   const subtreeFn = () => findHandlerByPath('subtree-documents')?.fn;
 
-  it.each(['SysAdmin', 'ICSOPAdmin', 'Supervisor'])(
-    'TS-T25-R04 %s（循環管理唯讀以上）→ 子樹文件清單放行（Supervisor 為本條之關鍵案例，OQ-E08-03）',
+  /**
+   * 🔴 2026-09-02 人類裁決：**主管之循環管理由「唯讀」改為「無」** ⇒ Supervisor 自本案
+   * 移至下一案（403）。
+   * 📝 原案逐字保留供追溯：
+   *   it.each(['SysAdmin', 'ICSOPAdmin', 'Supervisor'])(
+   *     'TS-T25-R04 %s（循環管理唯讀以上）→ 子樹文件清單放行（Supervisor 為本條之關鍵案例，OQ-E08-03）', ...)
+   */
+  it.each(['SysAdmin', 'ICSOPAdmin'])(
+    'TS-T25-R04 %s（循環管理唯讀以上）→ 子樹文件清單放行（OQ-E08-03）',
     (roleCode) => {
       expect(guard.canActivate(ctxForFn(subtreeFn(), { roleCode }))).toBe(true);
     },
   );
 
-  it.each(['DeptContact', 'User'])('TS-T25-R05 %s → 403 PERMISSION_DENIED（AC-T25 ③）', (roleCode) => {
+  it.each(['Supervisor', 'DeptContact', 'User'])('TS-T25-R05 %s → 403 PERMISSION_DENIED（AC-T25 ③）', (roleCode) => {
     expect(() => guard.canActivate(ctxForFn(subtreeFn(), { roleCode }))).toThrow(ForbiddenException);
   });
 
