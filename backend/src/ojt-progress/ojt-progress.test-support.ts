@@ -38,6 +38,8 @@ export interface OjtSessionRecord {
   /** 有值＝該單位已自使用部門移除（AC-25，`OQ-E11-02=C`）。 */
   orphanedAt: Date | null;
   trainingDate: string; // 'YYYY-MM-DD'
+  /** 🔴 F042 第五輪：登記當下之訓練基準版次快照（`null` ＝該文件無版次概念）。 */
+  edition: string | null;
   fileName: string;
   blobPath: string;
   contentType: string;
@@ -71,7 +73,13 @@ export interface OjtProgressRow {
   inactive: boolean;
   orphaned: boolean;
   sessionCount: number;
-  completed: boolean; // AC-03：場次數 ≥ 1
+  /** 🔴 F042 第五輪：符合當下訓練基準版次之場次數。 */
+  currentEditionSessionCount: number;
+  completed: boolean; // AC-03：場次數 ≥ 1（第五輪起：**符合當下訓練基準版次**之場次數 ≥ 1）
+  /** 🔴 F042 第五輪：文件之訓練基準版次／當下版次／公告日期。 */
+  trainingEdition: string | null;
+  documentEdition: string | null;
+  announcedDate: string | null;
 }
 
 export type OjtDocState = 'all' | 'partial' | 'none';
@@ -172,6 +180,14 @@ export interface FixtureDoc {
   documentName: string;
   companyCode: string;
   usingDeptIds: string[];
+  /**
+   * 🔴 F042 第五輪，三者皆**選填**（既有 seed 呼叫點一格未動 ⇒ 皆退化為 `null`，
+   * 即「沒有版次概念」之情形，完成判定行為與第五輪之前完全相同）。
+   * 需要建構「改版後要求重訓」情境時**顯式給值**（見 `ojt-progress.edition.spec.ts`）。
+   */
+  edition?: string | null;
+  ojtTrainingEdition?: string | null;
+  announcedDate?: string | null;
 }
 
 export interface FixtureOrg {
@@ -219,16 +235,42 @@ export class FakeUsingDeptChecker {
     return Promise.resolve((this.docs.get(documentId)?.usingDeptIds ?? []).includes(orgCode));
   }
 
+  /** fixture 之選填三欄 → 明確 `null`（假體不得比真體寬容：真體之欄位恆有值）。 */
+  private static meta(d: FixtureDoc): {
+    id: string;
+    documentNumber: string;
+    documentName: string;
+    companyCode: string;
+    edition: string | null;
+    ojtTrainingEdition: string | null;
+    announcedDate: string | null;
+  } {
+    return {
+      id: d.id,
+      documentNumber: d.documentNumber,
+      documentName: d.documentName,
+      companyCode: d.companyCode,
+      edition: d.edition ?? null,
+      ojtTrainingEdition: d.ojtTrainingEdition ?? null,
+      announcedDate: d.announcedDate ?? null,
+    };
+  }
+
   getDocumentMeta(
     documentId: string,
-  ): Promise<{ id: string; documentNumber: string; documentName: string; companyCode: string } | null> {
+  ): Promise<ReturnType<typeof FakeUsingDeptChecker['meta']> | null> {
     const d = this.docs.get(documentId);
-    return Promise.resolve(d ? { id: d.id, documentNumber: d.documentNumber, documentName: d.documentName, companyCode: d.companyCode } : null);
+    return Promise.resolve(d ? FakeUsingDeptChecker.meta(d) : null);
   }
 
   /** 全部文件（供 summary 之 docCoverage／rollup 聚合使用）。 */
-  listAllDocs(): Promise<FixtureDoc[]> {
-    return Promise.resolve([...this.docs.values()]);
+  listAllDocs(): Promise<(ReturnType<typeof FakeUsingDeptChecker['meta']> & { usingDeptIds: string[] })[]> {
+    return Promise.resolve(
+      [...this.docs.values()].map((d) => ({
+        ...FakeUsingDeptChecker.meta(d),
+        usingDeptIds: d.usingDeptIds,
+      })),
+    );
   }
 }
 

@@ -4,6 +4,34 @@ import { DocUsingDept } from '../database/entities/doc-using-dept.entity';
 import { OjtDocumentMeta, OjtUsingDeptChecker } from './ojt-progress.store';
 
 /**
+ * 🔴 兩支方法之 `select` 必須是**同一份清單**（F042 第五輪新增之三欄尤其如此）：
+ * 兩處各列一份時，只補其中一處會使「單筆查得到版次、清單查不到」這種依查詢路徑而異的
+ * 半吊子行為出現——本 repo 之「值人間蒸發」家族的又一種形狀。
+ */
+const DOC_META_COLUMNS = {
+  id: true,
+  documentNumber: true,
+  documentName: true,
+  companyCode: true,
+  edition: true,
+  ojtTrainingEdition: true,
+  announcedDate: true,
+} as const;
+
+/** entity 列 → `OjtDocumentMeta`（`announcedDate` 之 `Date` 於此正規化為 ISO 字串）。 */
+function toMeta(d: IcsopDocument): OjtDocumentMeta {
+  return {
+    id: d.id,
+    documentNumber: d.documentNumber,
+    documentName: d.documentName,
+    companyCode: d.companyCode,
+    edition: d.edition,
+    ojtTrainingEdition: d.ojtTrainingEdition,
+    announcedDate: d.announcedDate ? d.announcedDate.toISOString() : null,
+  };
+}
+
+/**
  * 文件存在性 ＋ 使用部門集合之 TypeORM 實作。
  *
  * 反循環（比照 `appendices/typeorm-document-existence.checker.ts` 之既有慣例）：
@@ -46,16 +74,9 @@ export class TypeOrmOjtUsingDeptChecker implements OjtUsingDeptChecker {
     const ds = await this.init();
     const d = await ds.getRepository(IcsopDocument).findOne({
       where: { id: documentId },
-      select: { id: true, documentNumber: true, documentName: true, companyCode: true },
+      select: DOC_META_COLUMNS,
     });
-    return d
-      ? {
-          id: d.id,
-          documentNumber: d.documentNumber,
-          documentName: d.documentName,
-          companyCode: d.companyCode,
-        }
-      : null;
+    return d ? toMeta(d) : null;
   }
 
   /**
@@ -65,9 +86,7 @@ export class TypeOrmOjtUsingDeptChecker implements OjtUsingDeptChecker {
    */
   async listAllDocs(): Promise<(OjtDocumentMeta & { usingDeptIds: string[] })[]> {
     const ds = await this.init();
-    const docs = await ds.getRepository(IcsopDocument).find({
-      select: { id: true, documentNumber: true, documentName: true, companyCode: true },
-    });
+    const docs = await ds.getRepository(IcsopDocument).find({ select: DOC_META_COLUMNS });
     if (docs.length === 0) return [];
     const links = await ds.getRepository(DocUsingDept).find({
       where: { documentId: In(docs.map((d) => d.id)) },
@@ -79,12 +98,6 @@ export class TypeOrmOjtUsingDeptChecker implements OjtUsingDeptChecker {
       if (bucket) bucket.push(l.orgCode);
       else byDoc.set(l.documentId, [l.orgCode]);
     }
-    return docs.map((d) => ({
-      id: d.id,
-      documentNumber: d.documentNumber,
-      documentName: d.documentName,
-      companyCode: d.companyCode,
-      usingDeptIds: byDoc.get(d.id) ?? [],
-    }));
+    return docs.map((d) => ({ ...toMeta(d), usingDeptIds: byDoc.get(d.id) ?? [] }));
   }
 }

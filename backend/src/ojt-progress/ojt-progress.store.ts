@@ -20,6 +20,11 @@ export interface OjtSessionRecord {
   orphanedAt: Date | null;
   /** `YYYY-MM-DD`（日曆日，不帶時刻）。 */
   trainingDate: string;
+  /**
+   * 🔴 F042 第五輪：登記當下之**訓練基準版次快照**（`ICSOP_DOCUMENT.ojtTrainingEdition`）。
+   * `null` ＝該文件當時沒有版次概念（591 份中 584 份如此），與基準之 `null` 相符。
+   */
+  edition: string | null;
   fileName: string;
   blobPath: string;
   contentType: string;
@@ -69,6 +74,23 @@ export interface OjtDocumentMeta {
   documentNumber: string;
   documentName: string;
   companyCode: string;
+  /**
+   * 🔴 F042 第五輪：文件**當下之版次**（`ICSOP_DOCUMENT.edition`，供畫面呈現）。
+   * ⚠ **不是完成判定之依據**——判定用的是下一欄。兩者在「改版但不要求重訓」時**刻意不相等**。
+   */
+  edition: string | null;
+  /**
+   * 🔴 F042 第五輪：**OJT 訓練基準版次**（`ICSOP_DOCUMENT.ojtTrainingEdition`）——
+   * 完成判定與新場次快照皆取本欄。
+   */
+  ojtTrainingEdition: string | null;
+  /**
+   * 🔴 F042 第五輪：公告日期（`ICSOP_DOCUMENT.announcedDate`，ISO 字串或 `null`）。
+   * 應完成訓練日期＝**公告日期 + 1 個月**（人類需求 2026-09-02），其**推導點在前端**
+   * （`ojt-progress-view.ts#trainingDueDate`），本欄只負責如實把原料送過去——
+   * 後端另算一份「到期日」會使同一個日期在兩層各有一套加月規則。
+   */
+  announcedDate: string | null;
 }
 
 /**

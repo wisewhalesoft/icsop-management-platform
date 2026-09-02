@@ -41,6 +41,8 @@ function seedPending(sessionStore: FakeOjtSessionStore, over: Partial<OjtSession
     companyCode: 'AS',
     orphanedAt: null,
     trainingDate: '2026-02-03',
+    // 🔴 F042 第五輪 additive 欄：遷移之待歸位列同樣為 `null`（既有案期望值一格未改）。
+    edition: null,
     fileName: 'legacy.pdf',
     blobPath: 'documents/d1/ojt_signin/x.pdf', // 舊格式路徑（遷移前既有）
     contentType: 'application/pdf',

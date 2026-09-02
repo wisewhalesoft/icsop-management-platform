@@ -103,9 +103,31 @@ export interface OjtProgressRow {
    * 依集合成員關係、不依 `orphanedAt` 旗標」這件事在回應形狀上是可觀測的（`AC-25`）。
    */
   orphaned: boolean;
+  /** 該列**全部版次**之場次總數（含舊版次，供「N 場次」之呈現）。 */
   sessionCount: number;
-  /** `AC-03`：場次數 ≥ 1 即完成。🔒 **列層級恆為二態**。 */
+  /**
+   * 🔴 F042 第五輪：該列**符合當下訓練基準版次**之場次數。
+   * `completed` 即 `currentEditionSessionCount > 0`；兩者並陳使「有場次卻未完成」
+   * （＝舊版次辦過、改版後要求重訓）在回應形狀上**可觀測**，而不是只剩一個布林讓人猜。
+   */
+  currentEditionSessionCount: number;
+  /**
+   * `AC-03` + F042 第五輪：**符合當下訓練基準版次**之場次數 ≥ 1 即完成。
+   * 🔒 **列層級恆為二態**（版次不改變態數，只改變哪些場次算數）。
+   */
   completed: boolean;
+  /**
+   * 🔴 F042 第五輪：該文件之 **OJT 訓練基準版次**（完成判定所依據者）。
+   * ⚠ 與 `documentEdition` 在「改版但不要求重訓」時**刻意不同**。
+   */
+  trainingEdition: string | null;
+  /** 🔴 F042 第五輪：該文件**當下之版次**（呈現用）。 */
+  documentEdition: string | null;
+  /**
+   * 🔴 F042 第五輪：該文件之公告日期（ISO 或 `null`）。
+   * 應完成訓練日期（＝公告日期 + 1 個月）之**推導在前端**，本欄只送原料（見 store 契約之註）。
+   */
+  announcedDate: string | null;
 }
 
 export type OjtDocState = 'all' | 'partial' | 'none';
@@ -367,8 +389,32 @@ interface AggregatedRow {
   companyCode: string;
   orgCode: string;
   sessionCount: number;
+  /** 🔴 F042 第五輪：符合當下訓練基準版次之場次數（`completed` 之唯一來源）。 */
+  currentEditionSessionCount: number;
   completed: boolean;
   active: boolean;
+  /** 🔴 F042 第五輪：文件之訓練基準版次／當下版次／公告日期（呈現與判定之原料）。 */
+  trainingEdition: string | null;
+  documentEdition: string | null;
+  announcedDate: string | null;
+}
+
+/**
+ * 🔴 F042 第五輪 · **全站唯一之「這一筆場次算不算數」判定點**（純函式）。
+ *
+ * 相符 ⟺ 場次快照之版次等於文件當下之訓練基準版次；**`null` 對 `null` 亦相符**——
+ * 591 份文件中 584 份未填版次，若把 `null` 當成「不明版次」而一律判不符，上線當天所有
+ * 已完成的列會整批翻紅。
+ *
+ * 🔒 **不做任何「新舊」比較**：版次字串 `{YY}'{NN}` 沒有可靠的全序（跨年度、手動編號、
+ * 空值），任何 `>` 比較都會在某些真實值上給出錯誤答案。本模型只問「等不等於基準」，
+ * 基準之推進由 ICSOP 管理員於改版時逐次裁決（`documents.service` 之改版裁決分支）。
+ */
+export function sessionMatchesEdition(
+  sessionEdition: string | null,
+  trainingEdition: string | null,
+): boolean {
+  return (sessionEdition ?? null) === (trainingEdition ?? null);
 }
 
 // ══════════════════════════ 服務 ══════════════════════════
@@ -447,6 +493,10 @@ export class OjtProgressService {
       companyCode: doc.companyCode,
       orphanedAt: null,
       trainingDate,
+      // 🔴 F042 第五輪：快照**訓練基準版次**（`doc.ojtTrainingEdition`），刻意**不是**
+      // `doc.edition`——改版但裁決「不需重訓」時基準停在舊值，快照當下版次會使這筆剛登記的
+      // 場次與基準不符，登記完卻仍顯示「尚未完成」。
+      edition: doc.ojtTrainingEdition,
       fileName: file.fileName,
       blobPath,
       contentType: file.contentType,
@@ -533,7 +583,11 @@ export class OjtProgressService {
         // 列來自使用部門集合 ⇒ 依集合成員關係判定，恆為非孤兒（**不讀 `orphanedAt` 旗標**）。
         orphaned: false,
         sessionCount: a.sessionCount,
+        currentEditionSessionCount: a.currentEditionSessionCount,
         completed: a.completed,
+        trainingEdition: a.trainingEdition,
+        documentEdition: a.documentEdition,
+        announcedDate: a.announcedDate,
       });
     }
 
@@ -882,17 +936,32 @@ export class OjtProgressService {
     const docs = await this.usingDept.listAllDocs();
     const sessions = await this.sessions.listAll();
 
+    /**
+     * 🔴 F042 第五輪：計數自單一數字改為**兩個**——總場次數（呈現）與符合當下訓練
+     * 基準版次之場次數（判定）。⚠ 兩者**不得**合流成一個：合流後「這個單位辦過訓練，
+     * 但那是改版前的事」在畫面上就沒有任何載體，使用者只會看到「0 場次」而以為紀錄不見了。
+     * 版次基準逐文件查表，故計數迴圈需先備妥 documentId → trainingEdition 之對照。
+     */
+    const trainingEditionByDoc = new Map<string, string | null>(
+      docs.map((d) => [d.id, d.ojtTrainingEdition]),
+    );
     const counts = new Map<string, number>();
+    const currentCounts = new Map<string, number>();
     for (const s of sessions) {
       if (s.orgCode === null) continue; // 待歸位列不計入任何進度列
       const k = rowKey(s.documentId, s.orgCode);
       counts.set(k, (counts.get(k) ?? 0) + 1);
+      if (sessionMatchesEdition(s.edition, trainingEditionByDoc.get(s.documentId) ?? null)) {
+        currentCounts.set(k, (currentCounts.get(k) ?? 0) + 1);
+      }
     }
 
     const out: AggregatedRow[] = [];
     for (const d of docs) {
       for (const orgCode of d.usingDeptIds) {
-        const sessionCount = counts.get(rowKey(d.id, orgCode)) ?? 0;
+        const k = rowKey(d.id, orgCode);
+        const sessionCount = counts.get(k) ?? 0;
+        const currentEditionSessionCount = currentCounts.get(k) ?? 0;
         out.push({
           documentId: d.id,
           documentNumber: d.documentNumber,
@@ -900,9 +969,15 @@ export class OjtProgressService {
           companyCode: d.companyCode,
           orgCode,
           sessionCount,
-          completed: sessionCount > 0,
+          currentEditionSessionCount,
+          // 🔴 判定改讀**當下版次之場次數**（原為 `sessionCount > 0`）：改版並要求重訓後，
+          // 舊版次之場次仍在（歷史事實不抹除）但不再使該列成為已完成。
+          completed: currentEditionSessionCount > 0,
           // 🔴 必須帶公司別：他公司之同碼單位若為裁撤，本列會無聲地自覆蓋率分母消失。
           active: await this.orgDirectory.isActive(d.companyCode, orgCode),
+          trainingEdition: d.ojtTrainingEdition,
+          documentEdition: d.edition,
+          announcedDate: d.announcedDate,
         });
       }
     }

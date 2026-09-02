@@ -53,14 +53,27 @@ export class TypeOrmOjtCompletionReader implements OjtCompletionReader {
       }
     }
 
-    // Q2：各文件之「已完成單位代碼」（分子；DISTINCT——同一單位辦兩場仍只算完成一次）。
+    /**
+     * Q2：各文件之「已完成單位代碼」（分子；DISTINCT——同一單位辦兩場仍只算完成一次）。
+     *
+     * 🔴 F042 第五輪：`INNER JOIN ICSOP_DOCUMENT` ＋ 版次相符條件——**只有快照版次等於
+     * 該文件當下訓練基準版次之場次才算數**（改版並要求重訓後，舊版次場次不再使該列完成）。
+     * ⚠ `s.edition = d.ojtTrainingEdition` 在兩者皆 `NULL` 時於 SQL 為 **UNKNOWN 而非 TRUE**
+     * （三值邏輯），而 591 份文件中 584 份之版次為 `NULL` ⇒ 少了 `IS NULL` 那半句，後台清單
+     * 之 OJT 欄會**整批退回「尚未開始」**。此處與應用層之 `sessionMatchesEdition()`
+     * （`ojt-progress.service.ts`）為同一條規則之兩份實作，兩者對 `NULL` 之處置必須一致。
+     */
     for (const batch of chunkByParamBudget(ids, 1, 1000)) {
       const rows: { documentId: string; orgCode: string }[] = await ds.query(
         `SELECT DISTINCT s.documentId AS documentId, s.orgCode AS orgCode
            FROM OJT_SESSION s
            INNER JOIN DOC_USING_DEPT ud
               ON ud.documentId = s.documentId AND ud.orgCode = s.orgCode
-          WHERE s.documentId IN (${batch.map((_, i) => `@${i}`).join(',')})`,
+           INNER JOIN ICSOP_DOCUMENT d
+              ON d.id = s.documentId
+          WHERE s.documentId IN (${batch.map((_, i) => `@${i}`).join(',')})
+            AND (s.edition = d.ojtTrainingEdition
+                 OR (s.edition IS NULL AND d.ojtTrainingEdition IS NULL))`,
         batch,
       );
       for (const r of rows) {

@@ -41,6 +41,7 @@ export class TypeOrmOjtSessionStore implements OjtSessionStore {
       companyCode: e.companyCode,
       orphanedAt: e.orphanedAt,
       trainingDate: TypeOrmOjtSessionStore.ymd(e.trainingDate),
+      edition: e.edition,
       fileName: e.fileName,
       blobPath: e.blobPath,
       contentType: e.contentType,
@@ -80,6 +81,10 @@ export class TypeOrmOjtSessionStore implements OjtSessionStore {
       companyCode: input.companyCode,
       orphanedAt: input.orphanedAt,
       trainingDate: input.trainingDate,
+      // 🔴 F042 第五輪：訓練基準版次快照。⚠ 漏列本鍵即為本 repo 已犯過三次之
+      // 「值人間蒸發」形狀——欄位存在、insert 不帶，寫進去恆為 NULL，而完成判定會因此
+      // 在文件有版次時整批失準（且單元假 store 完全測不出來）。
+      edition: input.edition,
       fileName: input.fileName,
       blobPath: input.blobPath,
       contentType: input.contentType,

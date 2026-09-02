@@ -39,6 +39,9 @@ function seedSession(sessionStore: FakeOjtSessionStore, over: Partial<OjtSession
     companyCode: 'AS',
     orphanedAt: null,
     trainingDate: '2026-06-01',
+    // 🔴 F042 第五輪 additive 欄：既有案一律 `null`（＝文件亦無版次）⇒ 版次相符、
+    // 完成判定與第五輪之前**逐案完全相同**（本欄不是為了改變既有期望值而加的）。
+    edition: null,
     fileName: 'signin.pdf',
     blobPath: 'documents/d1/ojt/JAC00/x.pdf',
     contentType: 'application/pdf',
