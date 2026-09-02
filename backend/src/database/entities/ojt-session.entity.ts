@@ -63,6 +63,22 @@ export class OjtSession {
   @Column({ type: 'date' })
   trainingDate!: string;
 
+  /**
+   * 🔴 F042 第五輪（2026-09-02）：登記當下之 **OJT 訓練基準版次快照**
+   * （＝`ICSOP_DOCUMENT.ojtTrainingEdition`，**不是** `edition`）。
+   *
+   * 完成判定＝該列存在 `edition` 與文件當下 `ojtTrainingEdition` **相符**之場次
+   * （`null` 對 `null` 亦相符——591 份文件中僅 7 份填了版次，全 `null` 之退化情形必須是
+   * 「照舊全部算數」而非「全部失效」）。
+   * 🔴 **快照的是基準版次、不是文件當下版次**：改版但裁決「不需重訓」時 `ojtTrainingEdition`
+   * 停在舊值，此時新登記之場次若快照 `edition`（新版次）就會與基準不符 ⇒ 一個剛辦完訓練的
+   * 單位仍顯示「尚未完成」。兩者只有在「需重訓」時才相等，平時可以不等。
+   * ⚠ **既有列由 migration 回填為其文件當下之 `edition`**（人類裁決：既有場次視為當下版次），
+   * 使既有已完成之列不會在上線當天整批翻紅。
+   */
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  edition!: string | null;
+
   @Column({ type: 'nvarchar', length: 400 })
   fileName!: string;
 

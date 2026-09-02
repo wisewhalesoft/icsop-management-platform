@@ -23,6 +23,9 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 > **v1.9（2026-08-27）Phase A 架構草案（[F042](features/F042-ojt-progress-management.md)，system-architect 棒 3）**：新增 [OJT_SESSION](#ojt-session-entity) 實體（教育訓練場次記錄，`(documentId, orgCode)` 為歸屬鍵，每列可累積 0..* 筆場次；與 [DOC_USING_DEPT](#doc-using-dept) 之關係為**衍生 join、非 FK**）；[ICSOP_DOCUMENT](#document-entity) 第 17 欄「OJT 實體簽到表」改寫為**衍生聚合**（基數、資料來源、可寫角色三者皆變，原文逐字保留於註記）；[DOCUMENT_ATTACHMENT](#attachment-entity) 之 `OJT_SIGNIN` 型別去留、[AUDIT_LOG](#auditlog-entity) 之使用單位維度皆以兩／三案影響對照呈現（Phase A 紀律，9 題 BLOCKING OQ 未裁決）。**⚠ 檔頭 version/date 前次（v1.8 roleSource delta）未同步遞增，本次一併補正，v1.8 內容不受影響、逐字保留。→ 已於 v1.10 收斂為定案，見下方 v1.10 note。**
 > **🟢 v1.10（2026-08-28）人類閘門已對 E11 全部 16 題 OQ 裁決完畢，[OJT_SESSION](#ojt-session-entity) 段落收斂為定案**：`orgCode` 改為 **nullable**（`OQ-E11-01=C`：`NULL`＝既有單份 OJT 附件遷移之待歸位列，由 ICSOPAdmin 手動歸位）；新增 `orphanedAt` 欄（`OQ-E11-02=C`：使用部門移除時軟標記，不計統計、保留稽核回溯，重新掛回即清空復活）；`trainingDate` 必填、不可未來日（`OQ-E11-09=A`）；場次生命週期為 **append＋delete only，無 update 路徑**（`OQ-E11-04=A` 僅 ICSOPAdmin 可刪；`OQ-E11-16=B` 不可編輯）；`AUDIT_LOG` 使用單位維度定案為新立 `actionType='OJT_SESSION_UPLOAD'／'OJT_SESSION_DELETE'`＋`targetType='OJT_SESSION'`＋additive `orgCode` 欄（`OQ-E11-13=B`）；`DOCUMENT_ATTACHMENT.type='OJT_SIGNIN'` 定案為**完全移除**（`OQ-E11-11=A` 舊端點回 404＋`OQ-E11-01=C` 之遷移為完整所有權轉移）；TAB1 覆蓋率／rollup 查詢納入 `ORG_UNIT.isActive` 過濾（`OQ-E11-03=B`）與部層 rollup／30 天窗口（`OQ-E11-07=B`）。**原三案／兩案對照表降級保留為「已裁決＋其餘案代價紀錄」，供追溯。** 本輪僅動 `data-model.md`／`error-handling.md`／`diagrams/F042-ojt-progress*.mmd`，未觸及 F042.md／open-questions.md／feature-status.md（sw-ojt 並行回填）與 prototypes/（ux-ojt 並行）。
 
+> **🔴 v1.11（2026-09-02）人類裁決——OJT 進度追蹤細緻到文件版本**：兩張表各新增一個 **additive** 欄位——[ICSOP_DOCUMENT](#document-entity) 之 **`ojtTrainingEdition`**（**OJT 訓練基準版次**＝各使用單位目前必須完成訓練的那個版次）與 [OJT_SESSION](#ojt-session-entity) 之 **`edition`**（登記當下之基準版次快照）。**完成判定自本輪起為「該列存在 `OJT_SESSION.edition` 與其文件 `ojtTrainingEdition` 相符之場次」**（`NULL` 對 `NULL` 亦相符），取代原本之「場次數 ≥ 1」。<br>🔴 **`ojtTrainingEdition` 刻意與 `edition`（版次）分成兩欄、不共用一欄**：改版**不必然**要求重新訓練——由 ICSOP 管理員於編輯時逐次裁決（[F011](features/F011-edit-with-comparison.md) 之改版問句）。共用一欄等於強制「改版＝全部單位重訓」，而人類明文要求那是一個**問句**、不是規則。⇒ 要求重訓時基準跟進新版次（既有場次因版次不符而失效，但**紀錄完整保留**）；不要求時基準不動（既有場次繼續算數）。<br>🔴 **兩欄皆須回填、且回填值刻意不同**：文件 `ojtTrainingEdition := edition`；場次 `edition := 其文件之 edition`（人類裁決：**既有場次視為當下版次**）。⚠ **不回填等於上線當天一批已完成的列無聲翻紅**。<br>🔒 **`OJT_SESSION` 之 append＋delete only（無 update 路徑）一格未動**——新欄於 `INSERT` 時一次寫定，之後不再變動；推進的是**文件端的基準**，不是回頭改場次。
+
+
 ## 實體總覽
 
 | 實體 | 說明 | 資料擁有權 |
@@ -357,6 +360,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | 8 | 當責室長-次要 | secondaryChiefIds | 0..* | → PERSON（DOC_SECONDARY_CHIEF） | ICSOPAdmin |
 | 9 | 文件使用部門 | usingDeptIds | 1..* | → ORG_UNIT（DOC_USING_DEPT）；前台排序/權限檢索用 | ICSOPAdmin |
 | 10 | 版次 | edition | 1 | 兩段式字串 `{YY}'{NN}`（年度＇序號，如 `26'01`）**（原「人為版本號 manualVersion」改）** | ICSOPAdmin |
+| — | （系統欄）OJT 訓練基準版次 | ojtTrainingEdition | 1 | 🔴 **v1.11（2026-09-02）新增**：各使用單位目前必須完成訓練的那個版次。**非 19／20 欄業務欄位之一，不出現在文件表單與 F026 欄位矩陣上**——它是系統的記帳欄，唯一寫入點為建立（＝當下版次）與編輯時之「改版是否要求重新訓練」裁決分支 | 系統（無人可直接寫） |
 | 11 | 所屬循環（循環別） | lifecycleId | 1 | → LIFECYCLE，建立時必填 | ICSOPAdmin |
 | 12 | 所屬節點 | nodeId | 0..1 | → LIFECYCLE_NODE，**唯一權威寫入路徑＝節點抽屜 F009**，可為未指派 | ICSOPAdmin（僅經節點抽屜） |
 | 13 | ICSOP 文件連結點（連結點程序書） | links | 0..* | → DOCUMENT_LINK，提供下載 | ICSOPAdmin |
@@ -429,6 +433,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | orgCode | 使用單位之組織代碼（`VW_DEPT_SQL.CODE`）。**與 [DOC_USING_DEPT](#doc-using-dept) 之關係為衍生 join，非 FK**——理由見下方「與 DOC_USING_DEPT 之一致性策略」。🟢 **`nullable`（`OQ-E11-01=C` 定案）**：`NULL`＝既有單份 `OJT_SIGNIN` 附件遷移而來、尚未指派使用單位之「待歸位」列，由 ICSOPAdmin 手動歸位（`UPDATE`一次性填入實際值，單向、不可再改回 `NULL`）；正常登記流程（`AC-05`）建立之場次必為非 `NULL` | 否（唯遷移之待歸位列例外） |
 | orphanedAt | 🟢 **新增（`OQ-E11-02=C` 定案）**：該場次所屬單位自文件之使用部門移除之時間戳記。`NULL`＝目前仍是使用部門，或從未被移除，或已重新掛回（復活語意，見下方「孤兒場次」）；有值＝該時間點起已自使用部門移除，**不計入任何統計分子分母**，僅供稽核回溯 | 否 |
 | trainingDate | 訓練日期。🟢 **必填、不可為未來日（`OQ-E11-09=A` 定案）**。⚠ **遷移待歸位列之例外**：`OQ-E11-01=C` 之遷移列以既有附件之 `uploadedAt` 日期作**最佳近似值**（非真實訓練日期，來源已不可考）；因 `OQ-E11-16=B` 場次不可編輯，若近似值有誤，更正路徑為 ICSOPAdmin 依 `OQ-E11-04=A` 刪除該筆後另行登記正確資料 | 是（唯遷移待歸位列為近似值） |
+| edition | 🔴 **v1.11（2026-09-02）新增**：登記當下之 **OJT 訓練基準版次快照**（＝該文件當時之 `ojtTrainingEdition`，**不是** `edition`）。完成判定即以本欄與文件當下之 `ojtTrainingEdition` 比對（`NULL` 對 `NULL` 亦相符）。⚠ **快照的是基準、不是文件當下版次**——改版但裁決「不需重訓」時基準停在舊值，若快照文件當下版次，這筆剛登記的場次會與基準不符，登記完卻仍顯示「尚未完成」。既有列由 migration 回填為其文件當下之 `edition` | 否（`NULL` ＝該文件無版次概念） |
 | fileName | 簽到表原始檔名 | 是 |
 | blobPath | Azure Blob 參照路徑。🟢 **路徑格式定案 `documents/{documentId}/ojt/{orgCode}/{uuid}.{ext}`（`OQ-E11-10=A`）**，僅適用**正常登記流程**新建立之場次；`OQ-E11-01=C` 遷移之待歸位列（`orgCode IS NULL`）**沿用遷移前之舊路徑格式**（`documents/{documentId}/ojt_signin/{uuid}.{ext}`，`attachments.service.ts` 既有 `buildAttachmentBlobPath()` 之既有輸出），**歸位時不搬移**——理由見下方「既有資料遷移」 | 是 |
 | contentType | MIME 類型 | 是 |

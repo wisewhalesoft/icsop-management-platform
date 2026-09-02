@@ -51,6 +51,20 @@ export class IcsopDocument {
   @Column({ type: 'varchar', length: 20, nullable: true })
   edition!: string | null; // 版次 {YY}'{NN}
 
+  /**
+   * 🔴 F042 第五輪（2026-09-02）：**OJT 訓練基準版次**——「各使用單位目前必須完成訓練的那個
+   * 版次」。`OJT_SESSION.edition` 與本欄相符之場次才算數（`null` 與 `null` 亦視為相符）。
+   *
+   * 🔴 **刻意與 `edition` 分成兩欄、不共用一欄**：改版不必然要求重新訓練（由 ICSOP 管理員於
+   * 編輯時逐次裁決）。共用一欄等於強制「改版＝全部單位重訓」，而人類明文要求那是一個**問句**，
+   * 不是規則。⇒ 要求重訓時本欄跟進新版次（既有場次因版次不符而失效）；不要求時本欄不動
+   * （既有場次繼續算數，新登記之場次亦快照本欄而非 `edition`）。
+   * 🔒 **非使用者可寫欄位**：不在 `FIELD_KEY_BY_PROP` 白名單內 ⇒ 客戶端直接送本鍵一律被
+   * `classifyFields` 歸為未知欄而丟棄；唯一寫入點是 `documents.service` 之改版裁決分支。
+   */
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  ojtTrainingEdition!: string | null;
+
   @Column({ type: 'datetime2', nullable: true })
   announcedDate!: Date | null; // 公告日期（決定已公告/進度中衍生）
 
