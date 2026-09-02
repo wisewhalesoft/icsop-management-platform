@@ -358,6 +358,65 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
     expect(screen.getByText(/無程序書管理權限/)).toBeInTheDocument();
   });
 
+  /**
+   * 🔴 2026-09-02 人類裁決：**「樹狀圖」欄對主管／部門窗口隱藏**。
+   *
+   * 🔒 判定源自 `LIFECYCLE_MANAGEMENT read`（該欄之真正閘門，F036 預覽端點所用）——
+   * 主管本輪由 `READ` 改為 `NONE`；部門窗口本來就是 `NONE`，先前卻看得到按鈕、點下去必 403
+   * （**既有死鏈**），本輪一併修掉。
+   *
+   * 🔴 **三條斷言紀律**：
+   *  (a) 表頭 `<th>` 與列 `<td>` **必須同進退**——只隱藏其中一邊，整張表會錯位一格，
+   *      而「按鈕不見了」這條斷言對錯位**完全無感**。⇒ 以「表頭欄數 == 每列儲存格數」鎖住。
+   *  (b) 負向斷言之前先有正向半句（清單確實有列出文件），否則整頁 403 時亦恆真。
+   *  (c) 可見角色之對偶案必須**同時**存在，防「乾脆全部拿掉」之過度修正。
+   */
+  describe('樹狀圖欄之角色可見性（2026-09-02 人類裁決）', () => {
+    const treeBtn = () =>
+      screen.queryByRole('button', { name: '車輛分期進件作業 循環樹狀圖預覽' });
+    const headerCount = () => document.querySelectorAll('table thead th').length;
+    const firstRowCellCount = () =>
+      document.querySelectorAll('table tbody tr')[0]!.querySelectorAll('td').length;
+
+    it.each(['ICSOPAdmin', 'SysAdmin'])('%s：樹狀圖欄仍在（表頭＋列各一格）', async (role) => {
+      mockAuth(role);
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      expect(treeBtn()).toBeInTheDocument();
+      expect(document.querySelectorAll('table thead th')[7]!.textContent).toBe('樹狀圖');
+      expect(headerCount()).toBe(firstRowCellCount());
+    });
+
+    it.each(['Supervisor', 'DeptContact'])(
+      '%s：樹狀圖欄**完全不進 DOM**（表頭與列同步少一格，不錯位）',
+      async (role) => {
+        mockAuth(role);
+        renderPage();
+        // (b) 正向半句：清單確實有列出文件。
+        await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+        expect(treeBtn()).toBeNull();
+        expect(
+          [...document.querySelectorAll('table thead th')].map((th) => th.textContent),
+        ).not.toContain('樹狀圖');
+        // (a) 表頭與列同進退。
+        expect(headerCount()).toBe(firstRowCellCount());
+      },
+    );
+
+    it('可見與不可見角色之欄數恰差 1（不是整欄群組被砍掉）', async () => {
+      mockAuth('ICSOPAdmin');
+      const { unmount } = renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      const withTree = headerCount();
+      unmount();
+
+      mockAuth('Supervisor');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      expect(headerCount()).toBe(withTree - 1);
+    });
+  });
+
   it('點書名導向檢視、點編輯導向編輯頁', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();

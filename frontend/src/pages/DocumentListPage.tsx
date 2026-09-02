@@ -221,6 +221,17 @@ export function DocumentListPage(): JSX.Element {
   const role = user?.roleCode;
   const canRead = canPerform(role, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read');
   const canWrite = canPerform(role, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'write');
+  /**
+   * 🔴 2026-09-02 人類裁決：「樹狀圖」欄**對主管／部門窗口隱藏**。
+   *
+   * 🔒 判定刻意**不寫成角色清單**，而是讀該欄真正的閘門——`LIFECYCLE_MANAGEMENT read`
+   * （F036 之三個預覽端點皆以它把關）。兩者同源之後：
+   *  · 主管本輪由 `READ` 改為 `NONE` ⇒ 欄位隨之消失，不需要在此重複裁決一次；
+   *  · 部門窗口本來就是 `NONE`，先前卻看得到按鈕、點下去必 403（**既有死鏈**），一併修掉。
+   * ⚠ 寫成 `role !== 'Supervisor' && role !== 'DeptContact'` 也能過測，但下次矩陣一動，
+   * 這裡就會與真正的授權分家——那正是「畫面上有一顆一定會 403 的按鈕」的成因。
+   */
+  const canSeeTree = canPerform(role, FunctionKey.LIFECYCLE_MANAGEMENT, 'read');
   const toast = useToast();
   const today = useMemo(() => new Date(), []);
 
@@ -864,7 +875,9 @@ export function DocumentListPage(): JSX.Element {
                 <th className="text-left font-medium px-3 py-2.5 min-w-[118px]">當責室長</th>
                 <th className="text-left font-medium px-3 py-2.5 min-w-[90px]">狀態</th>
                 <th className="text-left font-medium px-3 py-2.5 min-w-[160px]">檔案</th>
-                <th className="text-left font-medium px-3 py-2.5 min-w-[62px]">樹狀圖</th>
+                {/* 🔴 無循環管理讀取權者（主管／部門窗口）：本欄**完全不進 DOM**——
+                    非 CSS 隱藏，且 `<th>` 與每列之 `<td>` 必須同進退，否則整張表會錯位一格。 */}
+                {canSeeTree && <th className="text-left font-medium px-3 py-2.5 min-w-[62px]">樹狀圖</th>}
                 <SortHeader label="程序書編號" active={sortBy === 'documentNumber'} dir={sortDir} onClick={() => toggleSort('documentNumber')} className="min-w-[152px]" />
                 <th className="text-left font-medium px-3 py-2.5 min-w-[176px]">程序書書名</th>
                 <th className="text-left font-medium px-3 py-2.5 min-w-[74px]">版次</th>
@@ -919,6 +932,7 @@ export function DocumentListPage(): JSX.Element {
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
+                    {canSeeTree && (
                     <td className="px-3 py-3">
                       <button
                         /**
@@ -942,6 +956,7 @@ export function DocumentListPage(): JSX.Element {
                         <Icon name="workflow" className="w-4 h-4" />
                       </button>
                     </td>
+                    )}
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-1.5">
                         <span className="mono text-xs text-slate-600">{d.documentNumber}</span>
