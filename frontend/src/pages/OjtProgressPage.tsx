@@ -420,9 +420,11 @@ export function OjtProgressPage(): JSX.Element {
 
   /**
    * 一列進度列之渲染（兩種分組模式**共用同一份**）。
-   * 🔒 `AC-31`④／`AC-36`：組內列之掛鉤與行為（展開場次／新增／下載／刪除、角色守門、孤兒列
-   * 規則）在文件分組模式下**一格不改**——共用同一個渲染點，是「不會有第二份行為悄悄漂走」
+   * 🔒 `AC-31`④／`AC-36`：組內列之**行為與互動掛鉤**（展開場次／新增／下載／刪除、角色守門、
+   * 孤兒列規則）在文件分組模式下**一格不改**——共用同一個渲染點，是「不會有第二份行為悄悄漂走」
    * 在程式碼上唯一看得出來的保證。
+   * 🔴 `AC-31`④-a：但列之**主標籤**必須隨分組維度切換，故把 `groupMode` 一路帶進 `ProgressRow`
+   * 以**參數**區分身分呈現——⚠ **不得**為此複製出第二份列元件：那正是「兩邊行為悄悄漂走」之起點。
    */
   const renderRow = (r: OjtProgressRow): JSX.Element => {
     const key = rowKeyOf(r.documentId, r.orgCode);
@@ -430,6 +432,7 @@ export function OjtProgressPage(): JSX.Element {
       <ProgressRow
         key={key}
         row={r}
+        groupMode={groupMode}
         expanded={expanded.includes(key)}
         sessions={sessionsByRow[key]}
         mayAdd={mayAdd}
@@ -1235,9 +1238,16 @@ function RecentSection({ summary }: { summary: OjtProgressSummary | null }): JSX
  * 讓它還能長出新場次等於承認一個不存在的進度列。
  * 🚫 `AC-20`：本元件永久不得出現任何 `[data-session-edit]`——場次不可編輯，更正之唯一路徑
  * 是由 ICSOPAdmin 刪除後重新登記。
+ *
+ * 🔴 `AC-31`④-a／④-b（2026-09-02 實機缺陷之修正）：列之**主標籤是哪一個維度，取決於群組是哪一個
+ * 維度**——群組＝單位時列說明「哪一份文件」，群組＝文件時列說明「哪一個使用單位」。原先兩種模式
+ * 都印文件編號／書名，於文件分組下同一組每一列都變成群組標題的複本，使用者根本看不出那是哪個單位。
+ * ⚠ 上一輪的環只驗了列「有沒有進 DOM」與列的「行為」，沒有任何一條在問「這一列說明的是哪一個
+ * 實體」，所以那個實作 100% 全綠——分組畫面的環，至少要有一條逐列比對列自身身分的斷言。
  */
 function ProgressRow({
   row,
+  groupMode,
   expanded,
   sessions,
   mayAdd,
@@ -1248,6 +1258,7 @@ function ProgressRow({
   onDelete,
 }: {
   row: OjtProgressRow;
+  groupMode: OjtGroupMode;
   expanded: boolean;
   sessions: OjtSessionView[] | undefined;
   mayAdd: boolean;
@@ -1272,9 +1283,22 @@ function ProgressRow({
           <Icon name={expanded ? 'chevron-up' : 'chevron-down'} className="w-4 h-4" />
         </button>
         <div className="min-w-0 flex-1">
+          {/* 🔴 `AC-31`④-a／④-b：主標籤隨分組維度切換，且**非當前維度那一組完全不進 DOM**
+              （非 CSS 隱藏、非 `hidden`）——群組標題已經說過的事情，列再印一次就是純噪音。
+              🔒 單位名／代碼之呈現語彙刻意與 org 模式群組標題之 `[data-progress-group-name]`／
+              `[data-progress-group-code]` 逐字相同：同一個維度在兩處呈現，各造一種寫法即為分歧起點。 */}
           <div className="flex items-center gap-2 min-w-0">
-            <span data-progress-doc-number className="mono text-xs text-slate-500 shrink-0">{row.documentNumber}</span>
-            <span data-progress-doc-name className="text-sm text-slate-800 truncate">{row.documentName}</span>
+            {groupMode === 'document' ? (
+              <>
+                <span data-progress-org-name className="font-medium text-slate-800 truncate">{row.orgName}</span>
+                <span data-progress-org-code className="mono text-xs text-slate-400 shrink-0">{row.orgCode}</span>
+              </>
+            ) : (
+              <>
+                <span data-progress-doc-number className="mono text-xs text-slate-500 shrink-0">{row.documentNumber}</span>
+                <span data-progress-doc-name className="text-sm text-slate-800 truncate">{row.documentName}</span>
+              </>
+            )}
           </div>
         </div>
         <span

@@ -1650,7 +1650,7 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       expect(aria).toContain(CAL_DOC_NUMBER);
     });
 
-    it('AC-31④ 展開後之組內列沿用既有進度列之全部掛鉤與行為（含孤兒列之既有規則，一格不改）', async () => {
+    it('AC-31④ 展開後之組內列沿用既有進度列之「行為與互動掛鉤」（含孤兒列之既有規則）；🔴 2026-09-02 就地修訂：doc 編號／書名不再進 DOM', async () => {
       const user = await gotoSessionsTab();
       await switchTo('document');
       await waitFor(() => expect(calToggle()).not.toBeNull());
@@ -1659,8 +1659,18 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       const r = document.querySelector(`[data-progress-row="${CAL_DOC_ID}__AAA00"]`) as HTMLElement;
       expect(r.getAttribute('data-progress-doc')).toBe(CAL_DOC_ID);
       expect(r.getAttribute('data-progress-org')).toBe('AAA00');
-      expect(r.querySelector('[data-progress-doc-number]')).not.toBeNull();
-      expect(r.querySelector('[data-progress-doc-name]')).not.toBeNull();
+      /**
+       * 🔴 **2026-09-02 就地修訂（lead 裁決放行）**：`document` 模式下群組標題已經是那份文件，
+       * 列再重複一次是純噪音 ⇒ 兩掛鉤於本模式**完全不進 DOM**（`AC-31` ④-b）。
+       * 📝 **原文逐字保留供追溯**：
+       *   `expect(r.querySelector('[data-progress-doc-number]')).not.toBeNull();`
+       *   `expect(r.querySelector('[data-progress-doc-name]')).not.toBeNull();`
+       * ⚠ **那兩行生自 `AC-31` ④ 已確認寫錯之原條文**，斷言的正是使用者實測抱怨的那個行為
+       * ＝「測試把缺陷釘成預期行為」，並非「既有已驗收行為」；「既有案不得刪改」之紀律保護的是
+       * **先前已驗證過**的行為，不保護由錯誤條文生出的斷言。🔒 放行範圍僅限這兩行。
+       */
+      expect(r.querySelector('[data-progress-doc-number]')).toBeNull();
+      expect(r.querySelector('[data-progress-doc-name]')).toBeNull();
       expect(r.querySelector('[data-completion-badge]')).not.toBeNull();
       expect(r.querySelector('[data-session-count]')).not.toBeNull();
       expect(r.querySelector('[data-progress-expand]')).not.toBeNull();
@@ -1769,6 +1779,253 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       expect(snapshot()).toEqual(before);
       expect(document.querySelectorAll('[data-progress-row]')).toHaveLength(3);
       expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(0);
+    });
+
+    // ---------- F-6. 列的身分維度（AC-31 ④-a／④-b／④-c；2026-09-02 就地修訂之落點） ----------
+
+    /**
+     * 🔴 **本區為 2026-09-02 缺陷修正之環**——使用者實機揪出：切到「以文件分組」、展開群組後，
+     * **第二層每一列顯示的都是與群組標題相同的程序書名，看不出那一列是哪一個使用單位**。
+     * 根因在規格：`AC-31` ④ 原文「組內列沿用既有進度列之全部行為與掛鉤，**一格不改**」，
+     * 而既有列之主標籤恆為 `[data-progress-doc-number]`＋`[data-progress-doc-name]`——那在 `org`
+     * 模式下是對的（群組＝單位、列＝文件），到了 `document` 模式群組標題已經是那份文件 ⇒ 每一列
+     * 重複同一個書名，真正該當主標籤的 `orgName` 整個沒出現。**實作者照字面做完全正確。**
+     *
+     * 🔴 **上一輪 22＋22 案為什麼全綠卻沒抓到（本區之核心教訓）**——它們鎖住了兩件事：
+     *   ① 列**有沒有**進 DOM（`AC-33`① 之折疊／展開）；② 列的**行為**對不對（展開場次／新增／
+     *   下載／刪除／角色守門／孤兒列規則）。**沒有任何一條斷言在問「這一列說明的是哪一個實體」**
+     *   ⇒ 一個把群組內每一列都印成同一個字串的實作，可以 **100% 通過既有的環**。
+     *
+     * ⚠ **與 `AC-32` 之假綠形狀刻意區辨、不得混為一談**：那一個是**語料無鑑別力**（只放「裁撤
+     *   單位」時 TAB2 與 `docCoverage` 恆相等，斷言等於沒寫）；本區是**斷言少了一整個維度**
+     *   ——語料本身完全沒問題（`calRows()` 三列之 `orgName` 天生互異：A 室／B 室／C 室），
+     *   只是**沒有人去讀它**。
+     *
+     * 📌 **可推廣之檢查**：凡「把一批項目分組呈現」之畫面，環至少要有一條斷言**逐列比對列自身的
+     *   身分**，且該身分之語料須**組內互異且至少 3 列**；只驗數量與行為的環，對「每一列都印同一
+     *   個東西」完全無感。
+     */
+    describe('F-6. 組內列之身分維度（AC-31 ④-a／④-b／④-c ＋ org 模式對偶回歸）', () => {
+      /** 🔒 期望值一律自 `calRows()` 語料**推導**、不在本區另打一份（防語料與期望值分歧）。 */
+      const calRowOf = (orgCode: string) => {
+        const r = calRows().find((x) => x.orgCode === orgCode);
+        if (!r) throw new Error(`語料缺少 orgCode=${orgCode} 之列`);
+        return r;
+      };
+
+      const rowsOfCalGroup = () =>
+        [...calGroup().querySelectorAll('[data-progress-row]')] as HTMLElement[];
+
+      /** 切到 document 模式並展開 `d-cal` 群組（組內 3 列，`orgName` 互異）。 */
+      async function expandCalGroup() {
+        const user = await gotoSessionsTab();
+        await switchTo('document');
+        await waitFor(() => expect(calToggle()).not.toBeNull());
+        await user.click(calToggle());
+        await waitFor(() => expect(rowsOfCalGroup()).toHaveLength(3));
+        return user;
+      }
+
+      // ----- ④-a 正向：列說明的是「哪一個使用單位」 -----
+
+      /**
+       * 🔴 **本環之第一斷言**：逐列比對，且以**有序陣列** `toEqual`——
+       * ⚠ 不得寫成「群組內有出現任一單位名」：那條在「三列都印第一列名字」之實作下仍會過。
+       * 🔒 期望之 `code` 同時對帳列鍵之後半（`{documentId}__{orgCode}`），確保不是印了別列的單位。
+       */
+      it('🔴 AC-31 ④-a 正向（逐列）：組內三列各自呈現「自己的」使用單位全名與 5 碼代碼', async () => {
+        await expandCalGroup();
+        expect(
+          rowsOfCalGroup().map((r) => ({
+            key: r.getAttribute('data-progress-row'),
+            name: r.querySelector('[data-progress-org-name]')?.textContent ?? null,
+            code: r.querySelector('[data-progress-org-code]')?.textContent ?? null,
+          })),
+        ).toEqual([
+          { key: `${CAL_DOC_ID}__AAA00`, name: calRowOf('AAA00').orgName, code: 'AAA00' },
+          { key: `${CAL_DOC_ID}__BBB00`, name: calRowOf('BBB00').orgName, code: 'BBB00' },
+          { key: `${CAL_DOC_ID}__CCC00`, name: calRowOf('CCC00').orgName, code: 'CCC00' },
+        ]);
+      });
+
+      it('AC-31 ④-a 主標籤載體每列恰 1 個（不得一列掛兩份，亦不得只有第一列有）', async () => {
+        await expandCalGroup();
+        for (const r of rowsOfCalGroup()) {
+          expect(
+            r.querySelectorAll('[data-progress-org-name]'),
+            `列 ${r.getAttribute('data-progress-row')} 之 [data-progress-org-name] 應恰 1 個`,
+          ).toHaveLength(1);
+          expect(r.querySelectorAll('[data-progress-org-code]')).toHaveLength(1);
+        }
+      });
+
+      /**
+       * 🔴 負向（上一案已以正向確立載體存在，故本案具鑑別力）：
+       *   (a) 三列之主標籤**兩兩相異**——直接推翻「每一列都印同一個字串」。
+       *   (b) 沒有任何一列以**群組標題**（書名／文件編號）為自己的身分——推翻本次之實際缺陷形狀。
+       */
+      it('🔴 AC-31 ④-a 負向：三列主標籤兩兩相異，且沒有任何一列以群組標題（書名／編號）為身分', async () => {
+        await expandCalGroup();
+        const labels = rowsOfCalGroup().map(
+          (r) => r.querySelector('[data-progress-org-name]')?.textContent ?? '',
+        );
+        expect(labels.filter((t) => t !== '')).toHaveLength(3);
+        expect(new Set(labels).size, `三列之主標籤應互異，實得 ${JSON.stringify(labels)}`).toBe(3);
+        for (const t of labels) {
+          expect(t).not.toBe(CAL_DOC_NAME);
+          expect(t).not.toBe(CAL_DOC_NUMBER);
+        }
+      });
+
+      // ----- ④-c 書名不得以列為單位增生 -----
+
+      /**
+       * 🔴 `AC-31` ④-c（2026-09-02 收回強形式）：同一 `[data-doc-group]` 內，文字恰等於書名之
+       * **葉節點**元素**恰 1 個**——即群組標題 `[data-doc-group-name]` 本身。
+       * 📌 **本條為本輪缺陷之直接負向鎖**：把群組內每一列都印成書名的實作，其計數會增生為
+       *   `1 + 列數` ⇒ 立即翻紅。
+       * 🔒 只數葉節點：包住群組標題的外層容器其 `textContent` 亦等於書名，計入會造成假紅。
+       */
+      it('🔴 AC-31 ④-c 負向：書名於群組內恰 1 處（群組標題），不隨列數增生', async () => {
+        await expandCalGroup();
+        expect(calGroup().querySelector('[data-doc-group-name]')?.textContent).toBe(CAL_DOC_NAME);
+        const nodes = [...calGroup().querySelectorAll('*')]
+          .filter((el) => el.children.length === 0 && el.textContent?.trim() === CAL_DOC_NAME)
+          .map((el) => el.outerHTML);
+        expect(nodes, '書名於群組內恰 1 處（群組標題本身），不得隨列數增生').toHaveLength(1);
+      });
+
+      // ----- ④-b document 模式下列不再重複文件編號／書名 -----
+
+      /**
+       * 🔴 `AC-31` ④-b（2026-09-02 人類裁決後之定值）：`document` 模式下列上之
+       * `[data-progress-doc-number]`／`[data-progress-doc-name]` **完全不進 DOM**（非 CSS 隱藏）
+       * ⇒ `[data-progress-org-name]`／`[data-progress-org-code]` 為列之**唯一**主標籤。
+       * 📌 **理由**：群組標題已經是那份文件，列再重複一次是純噪音（使用者原話：「第二層**應該會是
+       *   使用單位的名稱**」）；「保留但降為次要脈絡位」之折衷已被明確否決。
+       * 🔒 **本案必須配 `org` 模式之正向對照**（同一份語料在 `org` 模式下兩掛鉤存在且值為各列自己的
+       *   文件）：否則「兩掛鉤根本沒實作」與「本模式刻意不渲染」在斷言上無從分辨，負向退化為恆真。
+       * 🔒 列之識別**屬性**（列鍵／`data-progress-doc`／`data-progress-org`）**一格不動**——它們是
+       *   識別屬性、不是可見文字，移掉會打斷既有之展開／新增／下載／刪除行為與其定位。
+       */
+      it('🔴 AC-31 ④-b：document 模式下列不再重複文件編號／書名（完全不進 DOM；先以 org 模式正向對照）', async () => {
+        // ── 正向對照（org 模式）：兩掛鉤存在，且值為各列自己的文件 ──
+        const user = await gotoSessionsTab();
+        await waitFor(() => expect(document.querySelectorAll('[data-progress-row]')).toHaveLength(3));
+        for (const r of [...document.querySelectorAll('[data-progress-row]')] as HTMLElement[]) {
+          expect(r.querySelector('[data-progress-doc-number]')?.textContent).toContain(CAL_DOC_NUMBER);
+          expect(r.querySelector('[data-progress-doc-name]')?.textContent).toContain(CAL_DOC_NAME);
+        }
+        // ── 負向（document 模式、群組已展開）：兩掛鉤完全不進 DOM ──
+        await switchTo('document');
+        await waitFor(() => expect(calToggle()).not.toBeNull());
+        await user.click(calToggle());
+        await waitFor(() => expect(rowsOfCalGroup()).toHaveLength(3));
+        expect(
+          document.querySelectorAll('[data-progress-doc-number]'),
+          'document 模式下列不得重複群組標題之文件編號',
+        ).toHaveLength(0);
+        expect(
+          document.querySelectorAll('[data-progress-doc-name]'),
+          'document 模式下列不得重複群組標題之書名',
+        ).toHaveLength(0);
+        // 🔒 識別屬性一格不動（定位用之屬性，不是可見文字）。
+        for (const r of rowsOfCalGroup()) {
+          const key = r.getAttribute('data-progress-row') ?? '';
+          expect(r.getAttribute('data-progress-doc')).toBe(CAL_DOC_ID);
+          expect(r.getAttribute('data-progress-org')).toBe(key.split('__')[1]);
+        }
+      });
+
+      // ----- 🔒 org 模式之對偶回歸（防修過頭把兩邊對調） -----
+
+      const DUAL_ORG_CODE = 'DDD00';
+      const DUAL_ORG_NAME = '和潤企業 / 財務會計部 / D 室';
+
+      /**
+       * 🔒 對偶語料：**同一個使用單位、三份不同文件**（與 `calRows()` 恰好相反的形狀）。
+       * 🔒 輸入刻意亂序（ZZZ／AAA／MMM），使組內排序斷言真的在驗排序而非驗輸入順序。
+       */
+      const threeDocsOneOrg = () =>
+        [
+          ['d-z', 'ICSOP-ZZZ-003', '車輛貸款覆審作業'],
+          ['d-a', 'ICSOP-AAA-001', '徵信作業要點'],
+          ['d-m', 'ICSOP-MMM-002', '債權管理作業'],
+        ].map(([documentId, documentNumber, documentName]) =>
+          rowFixture({
+            documentId,
+            documentNumber,
+            documentName,
+            companyCode: 'AS',
+            orgCode: DUAL_ORG_CODE,
+            orgName: DUAL_ORG_NAME,
+            sessionCount: 1,
+            completed: true,
+          }),
+        );
+
+      /**
+       * 🔒 **對偶回歸（`AC-36` 對偶鎖）**：`org` 模式下群組＝單位、列＝文件 ⇒ 各列之主標籤仍是
+       * **自己的**文件編號／書名。
+       * 🔴 **必須斷言「值」而非只斷言「掛鉤存在」**——既有之 `not.toBeNull()` 對「元素還在、
+       * 印的內容換了」完全無感，正是本次缺陷逃出環的同一形狀（只是方向相反）。
+       */
+      it('🔒 對偶回歸：org 模式下同一單位群組內，各列仍呈現「自己的」文件編號／書名（值，非僅掛鉤存在）', async () => {
+        await gotoSessionsTab(threeDocsOneOrg());
+        await waitFor(() =>
+          expect(document.querySelector(`[data-progress-group="${DUAL_ORG_CODE}"]`)).not.toBeNull(),
+        );
+        const group = document.querySelector(`[data-progress-group="${DUAL_ORG_CODE}"]`) as HTMLElement;
+        const rows = [...group.querySelectorAll('[data-progress-row]')] as HTMLElement[];
+        expect(rows).toHaveLength(3);
+        const seen = rows.map((r) => ({
+          key: r.getAttribute('data-progress-row'),
+          number: r.querySelector('[data-progress-doc-number]')?.textContent ?? null,
+          name: r.querySelector('[data-progress-doc-name]')?.textContent ?? null,
+        }));
+        // 🔒 組內依程序書編號昇冪（§3 既有規則；語料以 ZZZ／AAA／MMM 亂序餵入）。
+        expect(seen.map((x) => x.key)).toEqual([
+          `d-a__${DUAL_ORG_CODE}`,
+          `d-m__${DUAL_ORG_CODE}`,
+          `d-z__${DUAL_ORG_CODE}`,
+        ]);
+        expect(seen[0].number).toContain('ICSOP-AAA-001');
+        expect(seen[1].number).toContain('ICSOP-MMM-002');
+        expect(seen[2].number).toContain('ICSOP-ZZZ-003');
+        expect(seen[0].name).toContain('徵信作業要點');
+        expect(seen[1].name).toContain('債權管理作業');
+        expect(seen[2].name).toContain('車輛貸款覆審作業');
+        // 🔴 三列之書名兩兩相異：把列主標籤改成印單位名（三列必然相同）即在此翻紅。
+        expect(new Set(seen.map((x) => x.name)).size).toBe(3);
+        // 🔒 單位之身分留在群組標題，不得下放到每一列（否則是同一個缺陷的另一個方向）。
+        expect(group.querySelector('[data-progress-group-name]')?.textContent).toContain(DUAL_ORG_NAME);
+        expect(group.querySelector('[data-progress-group-code]')?.textContent).toContain(DUAL_ORG_CODE);
+      });
+
+      it('🔒 AC-36 對偶鎖：org 模式下 [data-progress-org-name]／[data-progress-org-code] 完全不進 DOM', async () => {
+        await gotoSessionsTab(threeDocsOneOrg());
+        await waitFor(() => expect(document.querySelectorAll('[data-progress-row]')).toHaveLength(3));
+        expect(document.querySelectorAll('[data-progress-org-name]')).toHaveLength(0);
+        expect(document.querySelectorAll('[data-progress-org-code]')).toHaveLength(0);
+      });
+
+      /**
+       * 🔒 往返鎖之身分維度版（`AC-36`）：`org` → `document` → `org` 之後，`org` 模式之列身分
+       * 掛鉤仍不進 DOM、列之書名仍為各自之書名（防「切過一次就殘留」）。
+       */
+      it('🔒 AC-36 往返後之身分維度：org → document → org，org 模式之列身分仍為文件、新掛鉤仍為 0', async () => {
+        await gotoSessionsTab(threeDocsOneOrg());
+        await waitFor(() => expect(document.querySelectorAll('[data-progress-row]')).toHaveLength(3));
+        await switchTo('document');
+        await waitFor(() => expect(document.querySelectorAll('[data-doc-group]')).toHaveLength(3));
+        await switchTo('org');
+        await waitFor(() => expect(document.querySelectorAll('[data-progress-row]')).toHaveLength(3));
+        expect(document.querySelectorAll('[data-progress-org-name]')).toHaveLength(0);
+        const names = [...document.querySelectorAll('[data-progress-row]')].map(
+          (r) => r.querySelector('[data-progress-doc-name]')?.textContent ?? '',
+        );
+        expect(new Set(names).size).toBe(3);
+      });
     });
   });
 });
