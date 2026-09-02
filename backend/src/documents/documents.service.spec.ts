@@ -1888,3 +1888,110 @@ describe('文件變更事件 fan-out 安全性（A-012 / C-001）', () => {
     return { accountId: 'acc-1', name: '李慧玲', employeeNo: '20233' };
   }
 });
+
+/**
+ * F042 第五輪（2026-09-02 人類裁決）：**改版時詢問 ICSOP 管理員是否要求重新進行 OJT 訓練**。
+ *
+ * 模型：`ICSOP_DOCUMENT.ojtTrainingEdition`（訓練基準版次）僅在「版次**真的變了** ∧ 管理員答
+ * 『要求重新訓練』」時推進到新版次；其餘任何情形一格不動。
+ *
+ * 🔴 **四條斷言紀律**：
+ *  (a) 「答否 ⇒ 基準不動」必須以 `'ojtTrainingEdition' in patch` 之**鍵不存在**斷言，
+ *      而非只驗值——寫入一個等於現值的值同樣「看起來沒變」，卻會在並行編輯下覆蓋別人的推進。
+ *  (b) 「沒改版次時送 true 亦無效」是一條**負向鎖**：少了它，一個把旗標當成「隨時可按的全部
+ *      重來按鈕」的實作可以通過其餘每一條。
+ *  (c) 旗標**不得**被當成文件欄位落地（它不在 `FIELD_KEY_BY_PROP` 白名單內）。
+ *  (d) 基準版次**不得**進變更歷程——它是 `edition` 變更的系統性後果，而 `edition` 已經記了一列。
+ */
+describe('DocumentsService.update — F042 改版重訓裁決（ojtRetrainRequired）', () => {
+  let store: FakeStore;
+  let pub: FakePublisher;
+  let svc: DocumentsService;
+  beforeEach(() => {
+    store = new FakeStore();
+    pub = new FakePublisher();
+    svc = new DocumentsService(store, pub);
+  });
+
+  /** 起始狀態：版次 25'01、基準亦為 25'01（＝上一次改版時要求過重訓，或自建立以來未改版）。 */
+  const seed = () => store.seedDoc({ edition: "25'01", ojtTrainingEdition: "25'01" });
+
+  it('改版 ＋ 答「要求重新訓練」→ patch 之 ojtTrainingEdition 推進為新版次', async () => {
+    const d = seed();
+    await svc.update('ICSOPAdmin', d.id, { edition: "26'01", ojtRetrainRequired: true });
+    expect(store.updated[0]!.patch.edition).toBe("26'01");
+    expect(store.updated[0]!.patch.ojtTrainingEdition).toBe("26'01");
+  });
+
+  it('改版 ＋ 答「不需重新訓練」（未帶鍵）→ patch **完全不含** ojtTrainingEdition（基準原封不動）', async () => {
+    const d = seed();
+    await svc.update('ICSOPAdmin', d.id, { edition: "26'01" });
+    expect(store.updated[0]!.patch.edition).toBe("26'01");
+    // (a) 驗鍵不存在，而非驗值相等。
+    expect('ojtTrainingEdition' in store.updated[0]!.patch).toBe(false);
+  });
+
+  it('改版 ＋ 顯式 ojtRetrainRequired: false → 同樣完全不含 ojtTrainingEdition', async () => {
+    const d = seed();
+    await svc.update('ICSOPAdmin', d.id, { edition: "26'01", ojtRetrainRequired: false });
+    expect('ojtTrainingEdition' in store.updated[0]!.patch).toBe(false);
+  });
+
+  /**
+   * (b) 🔴 **負向鎖**：沒改版次時送 `true` 一律無效。
+   * 📌 「要求重訓」在本模型裡是**改版的一個屬性**，不是一顆隨時可按的「全部單位重來」按鈕
+   * ——那會讓人一次點掉全公司的訓練完成狀態。
+   */
+  it('未變更版次卻送 ojtRetrainRequired: true → 無效（patch 不含 ojtTrainingEdition）', async () => {
+    const d = seed();
+    await svc.update('ICSOPAdmin', d.id, { documentName: '改名', ojtRetrainRequired: true });
+    // 正向半句：本次確實有送出一個變更（否則本斷言在「什麼都沒送」時恆真）。
+    expect(store.updated[0]!.patch.documentName).toBe('改名');
+    expect('ojtTrainingEdition' in store.updated[0]!.patch).toBe(false);
+  });
+
+  it('版次送同值（未實際變更）＋ true → 無效', async () => {
+    const d = seed();
+    await svc.update('ICSOPAdmin', d.id, {
+      edition: "25'01",
+      documentName: '改名',
+      ojtRetrainRequired: true,
+    });
+    expect('ojtTrainingEdition' in store.updated[0]!.patch).toBe(false);
+  });
+
+  it('版次清空為 null ＋ 要求重訓 → 基準亦推進為 null（「這份文件不再有版次概念」）', async () => {
+    const d = seed();
+    await svc.update('ICSOPAdmin', d.id, { edition: null, ojtRetrainRequired: true });
+    expect(store.updated[0]!.patch.ojtTrainingEdition).toBeNull();
+  });
+
+  /** (c) 旗標本身是控制參數，不得被當成文件欄位落地。 */
+  it('ojtRetrainRequired 本身不得落入 patch（非文件欄位）', async () => {
+    const d = seed();
+    await svc.update('ICSOPAdmin', d.id, { edition: "26'01", ojtRetrainRequired: true });
+    expect('ojtRetrainRequired' in store.updated[0]!.patch).toBe(false);
+  });
+
+  /** (d) 基準版次不進變更歷程；`edition` 那一列照舊。 */
+  it('變更歷程只記 edition、不記 ojtTrainingEdition', async () => {
+    const d = seed();
+    await svc.update('ICSOPAdmin', d.id, { edition: "26'01", ojtRetrainRequired: true });
+    const evt = pub.events.at(-1)!;
+    expect(evt.changedFields).toContain('edition');
+    expect(evt.changedFields).not.toContain('ojtTrainingEdition');
+    expect((evt.changes ?? []).map((c) => c.field)).toContain('edition');
+    expect((evt.changes ?? []).map((c) => c.field)).not.toContain('ojtTrainingEdition');
+  });
+
+  /** 建立文件時，基準版次＝建立當下之版次（否則第一次登記的場次立刻就對不上）。 */
+  it('建立文件 → ojtTrainingEdition 落為建立當下之版次', async () => {
+    await svc.create('ICSOPAdmin', { ...CORE, edition: "26'01" });
+    expect(store.created[0]!.ojtTrainingEdition).toBe("26'01");
+  });
+
+  it('建立文件未填版次 → ojtTrainingEdition 為 null', async () => {
+    await svc.create('ICSOPAdmin', { ...CORE });
+    expect(store.created[0]!.ojtTrainingEdition).toBeNull();
+  });
+});

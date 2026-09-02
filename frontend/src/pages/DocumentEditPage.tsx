@@ -173,6 +173,15 @@ export function DocumentEditPage(): JSX.Element {
   const [origAppendices, setOrigAppendices] = useState<ComboOption[]>([]);
   const [draftAppendices, setDraftAppendices] = useState<ComboOption[]>([]);
   const [busy, setBusy] = useState(false);
+  /**
+   * 🔴 F042 第五輪（2026-09-02 人類裁決）：**改版時須詢問 ICSOP 管理員是否要求重新訓練**。
+   * `true` ＝確認對話框開啟中（本次 PATCH 含版次變更、尚未取得裁決）。
+   *
+   * 🔒 **問句而非規則**：改版不必然要求各使用單位重跑一次 OJT，所以系統不自行決定；
+   * 答「是」才把 OJT 訓練基準版次推進到新版次（既有場次隨之失效、各列回到「尚未完成」），
+   * 答「否」則完成狀態一格不動。
+   */
+  const [retrainAsk, setRetrainAsk] = useState(false);
   /** F012 切換原因（選填；僅於狀態實際變更時顯示，儲存/取消/回原狀態時清空）。prototype 15 statusReasonWrap。 */
   const [statusReason, setStatusReason] = useState('');
   /** G-DOC-202 作廢確認 modal（切換為「作廢」屬破壞性動作，需二次確認）。 */
@@ -520,25 +529,47 @@ export function DocumentEditPage(): JSX.Element {
     toast.info('已取消變更，欄位回復為編輯前原值');
   }, [orig, origForms, origAppendices, toast]);
 
-  const save = useCallback(async () => {
-    if (!draft || !orig || !canWrite) return;
+  /**
+   * 送出前之三道驗證（必填 4 核心／子分類未選具體／編號重複）。
+   *
+   * 🔴 **抽成共用函式而非留在送出流程裡**（2026-09-02）：F042 第五輪起，版次變更會先跳出
+   * 改版重訓問句；若驗證仍只發生在問句**之後**，一個「必填沒填 ＋ 改了版次」的表單會先要使用者
+   * 回答一個關於重訓的問題，答完才告訴他表單根本還不能送。⇒ 問句之前先跑同一組驗證。
+   * 🔒 **同一份實作被呼叫兩次，不是兩份實作**：`save()`（開問句前）與 `performSave()`
+   * （實際送出前，含未經問句之直接送出路徑）共用本函式。
+   */
+  const validateBeforeSubmit = useCallback((): boolean => {
+    if (!draft) return false;
     // 必填 4 核心。
     setSubErr(false);
     if (!suffix.trim() || !draft.documentName.trim() || !draft.lifecycleId || !draft.status) {
       toast.error('必填欄位未填寫（循環別／文件狀態／程序書編號／書名）');
-      return;
+      return false;
     }
     // F011 AC-S1／AC-21：名稱底下設有子分類而未選到具體子分類 → 阻擋儲存，原文件資料完全不變。
     if (!lcSelection.ok) {
       setSubErr(true);
       // prototype 15 之內嵌提示（行 519）與 toast（行 803）**共用同一句話**，為已裁決之設計，逐字保留。
       toast.error('此循環名稱底下設有子分類，請選擇具體子分類後再送出');
-      return;
+      return false;
     }
     if (dupHit) {
       toast.error(`此編號已被「${STATUS_LABEL[dupHit.status]}」文件（${dupHit.documentName}）佔用（DOCUMENT_NUMBER_DUPLICATE）`);
-      return;
+      return false;
     }
+    return true;
+  }, [draft, suffix, lcSelection, dupHit, toast]);
+
+  /**
+   * 實際送出。`retrainRequired` 僅在本次含**版次變更**時有意義：
+   *  · `true`  → 隨 PATCH 送出 `ojtRetrainRequired: true`，後端把 OJT 訓練基準版次推進到新版次。
+   *  · `false` → **不送該鍵**（後端預設即「不動基準版次」）。
+   * 🔒 未改版次時恆傳 `false`——它不是一顆可以隨時按的「全部單位重來」按鈕
+   * （後端另有 `editionChanged` 之守衛，前端不是唯一防線）。
+   */
+  const performSave = useCallback(async (retrainRequired: boolean) => {
+    if (!draft || !orig || !canWrite) return;
+    if (!validateBeforeSubmit()) return;
     const patch: Record<string, unknown> = {};
     if (changed('status')) {
       patch.status = draft.status;
@@ -548,7 +579,11 @@ export function DocumentEditPage(): JSX.Element {
     }
     if (changed('documentNumber')) patch.documentNumber = draft.documentNumber;
     if (changed('documentName')) patch.documentName = draft.documentName.trim();
-    if (changed('edition')) patch.edition = draft.edition || null;
+    if (changed('edition')) {
+      patch.edition = draft.edition || null;
+      // 🔴 只在版次真的變了、且管理員答「是」時才帶鍵（見 performSave 之註）。
+      if (retrainRequired) patch.ojtRetrainRequired = true;
+    }
     if (changed('announcedDate')) patch.announcedDate = draft.announcedDate || null;
     if (changed('contentSummary')) patch.contentSummary = draft.contentSummary || null;
     // `draftingCompanyId` 不在編輯範圍：它是「制定公司」的衍生值（該公司 ROOT 之 orgCode），
@@ -595,7 +630,33 @@ export function DocumentEditPage(): JSX.Element {
     } finally {
       setBusy(false);
     }
-  }, [draft, orig, canWrite, suffix, dupHit, lcSelection, changed, formsChanged, origForms, draftForms, appendicesChanged, draftAppendices, id, statusReason, toast]);
+  }, [draft, orig, canWrite, validateBeforeSubmit, changed, formsChanged, origForms, draftForms, appendicesChanged, draftAppendices, id, statusReason, toast]);
+
+  /**
+   * 儲存鈕之進入點：本次若含**版次變更**，先問「是否要求重新進行 OJT 訓練」再送出；
+   * 否則直接送出。
+   * 🔒 對話框**只在版次真的變了時**進 DOM——每次儲存都跳一個問句，使用者三次之後就會
+   * 不看內容直接點掉，那條問句也就等於不存在了。
+   */
+  const save = useCallback(async () => {
+    if (!draft || !orig || !canWrite) return;
+    if (changed('edition')) {
+      // 🔴 先驗證再問——不讓使用者回答完重訓問題才發現表單根本還不能送（見 validateBeforeSubmit）。
+      if (!validateBeforeSubmit()) return;
+      setRetrainAsk(true);
+      return;
+    }
+    await performSave(false);
+  }, [draft, orig, canWrite, changed, validateBeforeSubmit, performSave]);
+
+  /** 對話框之兩個出口（是／否）——關窗後以該裁決送出。 */
+  const answerRetrain = useCallback(
+    async (retrainRequired: boolean) => {
+      setRetrainAsk(false);
+      await performSave(retrainRequired);
+    },
+    [performSave],
+  );
 
   /**
    * ICSOP PDF 之覆蓋式上傳。
@@ -1191,9 +1252,63 @@ export function DocumentEditPage(): JSX.Element {
           </div>
         </div>
       )}
+
+      {/*
+        🔴 F042 第五輪（2026-09-02 人類裁決）：改版時詢問是否要求各使用單位重新進行 OJT 訓練。
+        🔒 **兩個出口皆會送出**（沒有「取消儲存」那一支）：這是一個關於本次改版的**分類問題**，
+        不是一道確認關卡；把它做成三選一，等於在每一次改版之前多插一個可以按錯的岔路。
+        使用者若不想儲存，路徑仍是既有的「取消」鈕（回復編輯前原值）。
+      */}
+      {retrainAsk && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div data-retrain-modal className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+                <Icon name="graduation-cap" className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-semibold text-slate-900">{RETRAIN_ASK_TITLE}</h3>
+                <p className="text-sm text-slate-500 mt-1">{RETRAIN_ASK_BODY}</p>
+                <p className="text-xs text-slate-400 mt-2">{RETRAIN_ASK_NOTE}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                data-retrain-no
+                onClick={() => void answerRetrain(false)}
+                disabled={busy}
+                className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50 disabled:opacity-50"
+              >
+                {RETRAIN_ANSWER_NO}
+              </button>
+              <button
+                data-retrain-yes
+                onClick={() => void answerRetrain(true)}
+                disabled={busy}
+                className="px-4 py-2 rounded-md bg-amber-600 text-white text-sm hover:bg-amber-700 disabled:opacity-50"
+              >
+                {RETRAIN_ANSWER_YES}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+/**
+ * 🔴 F042 第五輪：改版重訓問句之逐字文案（具名常數，測試 import 之、不硬寫中文字面）。
+ * 🔒 兩個答案之措辭刻意**各自說出後果**，而不是「是／否」——使用者要決定的是全公司各使用
+ * 單位要不要重跑一次教育訓練，只給「是／否」等於要求他先自行推導後果。
+ */
+export const RETRAIN_ASK_TITLE = '本次改版是否要求重新進行 OJT 訓練？';
+export const RETRAIN_ASK_BODY =
+  '版次已變更。若本次改版之內容需要各使用單位重新受訓，請選「要求重新訓練」——OJT 進度將以新版次重新追蹤，各使用單位之完成狀態會回到「尚未完成」，既有場次紀錄仍完整保留為歷史（依版次分組呈現）。';
+export const RETRAIN_ASK_NOTE =
+  '若本次僅為錯字更正、格式調整等不影響作業方式之修訂，請選「不需重新訓練」：既有完成狀態一格不變。';
+export const RETRAIN_ANSWER_YES = '要求重新訓練';
+export const RETRAIN_ANSWER_NO = '不需重新訓練';
 
 /** 目前值／新值並列之通用列（scalar 欄位）。 */
 function DiffRow({

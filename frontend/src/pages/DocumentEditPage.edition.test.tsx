@@ -272,6 +272,13 @@ describe('F011 AC-D6／AC-D8：儲存值格式與既有儲存語意', () => {
    * 修法：本案改以不同之起始版次（`25'09`），使 `26'01` 成為真正的變更。
    * 🔒 只改本案之起始狀態，`AC-D6` 之期望值（送出之 `edition` 恰為 `26'01`）一字未動。
    */
+  /**
+   * 🔴 2026-09-02 人類裁決（F042 第五輪）：**版次變更時先詢問是否要求重新進行 OJT 訓練**
+   * ⇒ 按「儲存」不再直接送出，中間多一個 `[data-retrain-modal]`。
+   * 🔒 本案問的仍是「送出之 `edition` 值」，故一律走「不需重新訓練」那個出口
+   * （`[data-retrain-no]`）——它**不帶** `ojtRetrainRequired` 鍵，PATCH 之其餘內容與本輪之前
+   * 逐字相同 ⇒ 期望值一字未動。要求重訓那條路徑另由本檔之新案覆蓋。
+   */
   it('TS-F011-D6-001 年度 "26"、序號 "1" → 送出之 edition 恰為 26\'01', async () => {
     vi.mocked(endpoints.getDocument).mockResolvedValue({ ...VIEW, edition: "25'09" });
     renderPage();
@@ -282,6 +289,9 @@ describe('F011 AC-D6／AC-D8：儲存值格式與既有儲存語意', () => {
     await userEvent.type(seqInput(), '1');
     await userEvent.tab(); // blur 補零
     await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+    // 🔴 版次變更 ⇒ 先出現改版重訓問句；本案走「不需重新訓練」出口（見上方註）。
+    await waitFor(() => expect(document.querySelector('[data-retrain-modal]')).not.toBeNull());
+    await userEvent.click(document.querySelector('[data-retrain-no]') as HTMLElement);
     await waitFor(() =>
       expect(endpoints.updateDocument).toHaveBeenCalledWith(
         'd1',
@@ -297,8 +307,80 @@ describe('F011 AC-D6／AC-D8：儲存值格式與既有儲存語意', () => {
     await userEvent.type(seqInput(), '02');
     await userEvent.tab();
     await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+    // 🔴 2026-09-02：版次變更 ⇒ 先答改版重訓問句（見本檔 TS-F011-D6-001 之註）。
+    await waitFor(() => expect(document.querySelector('[data-retrain-modal]')).not.toBeNull());
+    await userEvent.click(document.querySelector('[data-retrain-no]') as HTMLElement);
     await waitFor(() => expect(endpoints.updateDocument).toHaveBeenCalled());
     expect(vi.mocked(endpoints.updateDocument).mock.calls[0][0]).toBe('d1');
+  });
+
+  /**
+   * 🔴 F042 第五輪之新案：改版重訓問句之**兩個出口各送出什麼**。
+   * 🔒 兩案共用同一組操作，只差最後點哪一顆——差異因此只可能來自那一顆按鈕。
+   */
+  it('F042 改版重訓：答「要求重新訓練」→ PATCH 帶 ojtRetrainRequired: true', async () => {
+    renderPage();
+    await waitFor(() => expect(seqInput()).toBeInTheDocument());
+    await userEvent.clear(seqInput());
+    await userEvent.type(seqInput(), '02');
+    await userEvent.tab();
+    await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+    await waitFor(() => expect(document.querySelector('[data-retrain-modal]')).not.toBeNull());
+    await userEvent.click(document.querySelector('[data-retrain-yes]') as HTMLElement);
+    await waitFor(() => expect(endpoints.updateDocument).toHaveBeenCalled());
+    expect(vi.mocked(endpoints.updateDocument).mock.calls[0][1]).toMatchObject({
+      ojtRetrainRequired: true,
+    });
+  });
+
+  it('F042 改版重訓：答「不需重新訓練」→ PATCH **完全不帶** ojtRetrainRequired 鍵', async () => {
+    renderPage();
+    await waitFor(() => expect(seqInput()).toBeInTheDocument());
+    await userEvent.clear(seqInput());
+    await userEvent.type(seqInput(), '02');
+    await userEvent.tab();
+    await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+    await waitFor(() => expect(document.querySelector('[data-retrain-modal]')).not.toBeNull());
+    await userEvent.click(document.querySelector('[data-retrain-no]') as HTMLElement);
+    await waitFor(() => expect(endpoints.updateDocument).toHaveBeenCalled());
+    const patch = vi.mocked(endpoints.updateDocument).mock.calls[0][1] as Record<string, unknown>;
+    // 🔴 正向半句先確立載體存在（本次確實有送出版次變更），否則「沒有該鍵」在
+    // 「整個 patch 是空物件」時亦恆真。
+    expect(patch).toMatchObject({ edition: expect.any(String) });
+    expect('ojtRetrainRequired' in patch).toBe(false);
+  });
+
+  /**
+   * 🔴 **順序鎖**：表單無效時，問句**不得**先出現。
+   * 📌 少了本案，一個「先問再驗」的實作會讓使用者回答完一個關於重訓的問題，
+   * 才被告知表單根本還不能送——而那個問題的答案還會被整個丟掉。
+   */
+  it('F042 改版重訓：表單無效（書名清空）＋改版次 → 先報錯、**不出現問句**、不送出', async () => {
+    renderPage();
+    await waitFor(() => expect(seqInput()).toBeInTheDocument());
+    await userEvent.clear(screen.getByLabelText(/文件名稱/));
+    await userEvent.clear(seqInput());
+    await userEvent.type(seqInput(), '02');
+    await userEvent.tab();
+    await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+    expect(document.querySelector('[data-retrain-modal]')).toBeNull();
+    expect(endpoints.updateDocument).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 🔴 對偶鎖：**沒改版次就不該出現問句**。
+   * 📌 少了本案，一個「每次儲存都跳問句」的實作可以通過上面每一條。
+   */
+  it('F042 改版重訓：未變更版次之儲存 → 不出現問句，直接送出', async () => {
+    renderPage();
+    await waitFor(() => expect(seqInput()).toBeInTheDocument());
+    // 🔴 改一個**版次以外**的欄位——否則 patch 為空、本頁本來就不會呼叫 updateDocument，
+    // 「沒有問句」會在「根本沒有送出」時恆真（無鑑別力之假綠）。
+    await userEvent.clear(screen.getByLabelText(/文件名稱/));
+    await userEvent.type(screen.getByLabelText(/文件名稱/), '改過的名稱');
+    await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+    await waitFor(() => expect(endpoints.updateDocument).toHaveBeenCalled());
+    expect(document.querySelector('[data-retrain-modal]')).toBeNull();
   });
 });
 

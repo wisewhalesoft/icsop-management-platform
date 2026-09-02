@@ -96,6 +96,8 @@ export class TypeOrmDocumentStore implements DocumentStore {
       secondaryChiefIds,
       usingDeptIds,
       edition: d.edition,
+      // 🔴 F042 第五輪：編輯頁需要它才能判斷「改版是否已要求重訓」（唯讀呈現，不可寫）。
+      ojtTrainingEdition: d.ojtTrainingEdition,
       announcedDate: d.announcedDate,
       contentSummary: d.contentSummary,
     };
@@ -152,6 +154,8 @@ export class TypeOrmDocumentStore implements DocumentStore {
           draftingSectionId: input.draftingSectionId ?? null,
           primaryChiefId: input.primaryChiefId ?? null,
           edition: input.edition ?? null,
+          // 🔴 F042 第五輪：建立時之訓練基準版次（service 已解析為當下版次）。
+          ojtTrainingEdition: input.ojtTrainingEdition ?? null,
           announcedDate: coerceDate(input.announcedDate),
           contentSummary: input.contentSummary ?? null,
           nodeId: null,
@@ -409,6 +413,9 @@ export class TypeOrmDocumentStore implements DocumentStore {
         'draftingSectionId',
         'primaryChiefId',
         'edition',
+        // 🔴 F042 第五輪：**必須列於本白名單**——漏列時 service 算好的新基準版次會在
+        // 這一行靜默蒸發（本 repo 之既有缺陷家族），改版要求重訓將完全沒有效果。
+        'ojtTrainingEdition',
         'contentSummary',
       ] as (keyof DocumentPatch)[]
     ).forEach(assign);

@@ -212,7 +212,14 @@ export class DocumentsService {
     // F013 併發第二保險：DB filtered unique index 違反 → 映射 409（不洩漏原始 DB 訊息）。
     let created: DocumentView;
     try {
-      created = await this.store.create(input);
+      created = await this.store.create({
+        ...input,
+        // 🔴 F042 第五輪：建立時之 **OJT 訓練基準版次＝建立當下之版次**。
+        // ⚠ 刻意在此賦值而**不**併入上方之 `input`：`buildCreateChangeDeltas(input)` 逐欄產生
+        // CREATE 變更列，帶進去會讓變更歷程多出一列使用者從未填過的欄位。基準版次是系統的
+        // 記帳欄，不是使用者填的資料。
+        ojtTrainingEdition: input.edition ?? null,
+      });
     } catch (e) {
       if (isUniqueConstraintViolation(e)) {
         throw new ConflictException('DOCUMENT_NUMBER_DUPLICATE');
@@ -638,6 +645,23 @@ export class DocumentsService {
     const reason =
       typeof payload.reason === 'string' ? (payload.reason as string) : undefined;
 
+    /**
+     * 1d) 🔴 F042 第五輪（2026-09-02 人類裁決）：**改版是否要求各使用單位重新進行 OJT 訓練**。
+     *
+     * 與 `reason` 同一形狀——**控制旗標、不是文件欄位**，故自原始 `payload` 讀取
+     * （`classifyFields` 會把它歸為未知欄而自 `clean` 剔除，那正是我們要的：它不該被當成
+     * 一個可寫欄位落進 `ICSOP_DOCUMENT`）。
+     *
+     * 🔴 **只在版次真的變了才生效**：`'edition' in clean` 且新舊值不同。沒改版次卻送
+     * `ojtRetrainRequired:true` 一律無效——「要求重訓」在本模型裡是**改版的一個屬性**，
+     * 不是一顆隨時可按的「全部單位重來」按鈕（那會讓人一次點掉全公司的訓練紀錄狀態）。
+     * 🔒 **選 `false`／未帶鍵 ⇒ 基準版次不動**：既有場次繼續算數，完成狀態一格不變。
+     */
+    const editionChanged =
+      'edition' in clean &&
+      toFieldValueString(clean.edition) !== toFieldValueString(current.edition);
+    const retrainRequired = editionChanged && payload.ojtRetrainRequired === true;
+
     // 2) F010 必填：合併現值後檢核（partial patch 只影響被觸及之必填欄）。
     const merged = { ...current, ...clean } as Record<string, unknown>;
     if (missingRequired(merged).length > 0) {
@@ -673,6 +697,16 @@ export class DocumentsService {
     // 5) 覆寫（不留歷史）；併發 DB 唯一鍵違反 → 映射 409。
     //    ruling 2（Option B）：patch 含狀態變更時走共用狀態核心——切回「有效」重驗編號唯一性（F013，
     //    即使未同時改編號），並發 STATUS 事件（承載 reason）。持久化仍為整批 store.update（同一次 PATCH）。
+    /**
+     * 🔴 持久化用之酬載＝`clean` ＋（要求重訓時）新的訓練基準版次。
+     * ⚠ **刻意與 `clean` 分成兩個變數**：下方之版本對照 diff 與變更事件一律以 `clean` 為準，
+     * 使 `ojtTrainingEdition` **不進**變更歷程——它是 `edition` 變更的一個系統性後果，
+     * 而 `edition` 那一列已經記了。多記一列只會讓使用者在歷程裡看到兩個長得很像的版次欄位。
+     */
+    const persistPatch: Record<string, unknown> = retrainRequired
+      ? { ...clean, ojtTrainingEdition: (clean.edition as string | null) ?? null }
+      : clean;
+
     let updated: DocumentView;
     if ('status' in clean) {
       const resultingNumber = (
@@ -687,12 +721,12 @@ export class DocumentsService {
         reason,
         actor,
         persist: async () => {
-          persisted = await this.persistUpdate(id, clean as DocumentPatch);
+          persisted = await this.persistUpdate(id, persistPatch as DocumentPatch);
         },
       });
       updated = persisted!;
     } else {
-      updated = await this.persistUpdate(id, clean as DocumentPatch);
+      updated = await this.persistUpdate(id, persistPatch as DocumentPatch);
     }
 
     // 5b) F015 連結點差集同步（新增/移除；單向 source=id）。

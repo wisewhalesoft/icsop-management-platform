@@ -32,6 +32,17 @@ export interface CreateDocumentInput {
   /** F014 多值：文件使用部門（ORG_UNIT.orgCode 集合，DOC_USING_DEPT；允許為空）。 */
   usingDeptIds?: string[] | null;
   edition?: string | null;
+  /**
+   * 🔴 F042 第五輪（2026-09-02）：**OJT 訓練基準版次**（`ICSOP_DOCUMENT.ojtTrainingEdition`）
+   * ——各使用單位目前必須完成訓練的那個版次。
+   *
+   * 🔒 **不是使用者可寫欄位**：不在 `FIELD_KEY_BY_PROP` 白名單內 ⇒ 客戶端直接送本鍵會被
+   * `classifyFields` 當成未知欄丟棄。唯二寫入點皆在 `documents.service`——建立時取當下版次、
+   * 編輯時之「改版是否要求重新訓練」裁決分支。
+   * ⚠ 落在本介面（而非另建一張表）是刻意的：它是**文件的一個屬性**，與 `edition` 同生共死；
+   * 另立一張 `OJT_DOC_BASELINE` 只會多一個必須跟著文件刪除而清理的參照。
+   */
+  ojtTrainingEdition?: string | null;
   announcedDate?: Date | null;
   contentSummary?: string | null;
 }
