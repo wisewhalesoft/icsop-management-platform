@@ -157,10 +157,21 @@ const rowFixture = (over: Partial<{
   documentId: string; documentNumber: string; documentName: string;
   companyCode: string; orgCode: string; orgName: string; sessionCount: number; completed: boolean;
   inactive: boolean; orphaned: boolean;
+  // 🔴 F042 第五輪 additive 欄（版次追蹤／應完成訓練日期）。
+  currentEditionSessionCount: number; trainingEdition: string | null;
+  documentEdition: string | null; announcedDate: string | null;
 }> = {}) => ({
   documentId: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業',
   companyCode: 'AS', orgCode: 'JAC00', orgName: '審查室', sessionCount: 1, completed: true,
   inactive: false, orphaned: false,
+  /**
+   * 🔴 F042 第五輪 additive 欄之預設：**與既有語意等價**——`sessionCount` 之場次全數
+   * 符合當下基準版次（皆為 `null` 版次），故既有案之 `completed`／徽章／統計期望值**一格未改**。
+   * ⚠ 個別案若覆寫 `sessionCount`，記得**一併**覆寫 `currentEditionSessionCount`；
+   * 只改前者會造出一列「有場次但全是舊版」之語料，那是第五輪新增之情境、不是既有案的意思。
+   */
+  currentEditionSessionCount: 1, trainingEdition: null,
+  documentEdition: null, announcedDate: null,
   ...over,
 });
 
@@ -1001,11 +1012,25 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
 
   // ===================== C. TAB2 資料清單（AC-01/03/11/12/13/17/25／AC-28③④） =====================
   describe('C. TAB2 單位分組清單', () => {
+    /**
+     * 🔴 2026-09-02 人類裁決：**儀表板分頁對主管／部門窗口隱藏** ⇒ 本輔助函式不得再
+     * 假設「一定要先看到儀表板、再點分頁鈕」。
+     * 🔒 改為**條件式切換**：儀表板分頁鈕存在才點（ICSOPAdmin／SysAdmin），
+     * 不存在時本來就已經在 TAB2（主管／部門窗口之初始分頁）。
+     * ⚠ **不改成「一律不點」**：對看得到儀表板的角色而言，「點了才到 TAB2」正是既有行為，
+     * 拿掉那一步會讓本檔多數既有案不再經過分頁切換這條路徑。
+     * 📝 原逐字保留供追溯：
+     *   await waitFor(() => expect(screen.getByText('文件-訓練覆蓋率')).toBeInTheDocument());
+     *   await user.click(document.querySelector('[data-ojt-tab="sessions"]') as HTMLElement);
+     */
     async function gotoSessionsTab() {
       const user = userEvent.setup();
       renderPage();
-      await waitFor(() => expect(screen.getByText('文件-訓練覆蓋率')).toBeInTheDocument());
-      await user.click(document.querySelector('[data-ojt-tab="sessions"]') as HTMLElement);
+      await waitFor(() => expect(document.querySelector('[data-ojt-tab="sessions"]')).not.toBeNull());
+      if (document.querySelector('[data-ojt-tab="dashboard"]')) {
+        await waitFor(() => expect(screen.getByText('文件-訓練覆蓋率')).toBeInTheDocument());
+        await user.click(document.querySelector('[data-ojt-tab="sessions"]') as HTMLElement);
+      }
       await waitFor(() => expect(document.querySelector('[data-ojt-filter-bar]')).toBeInTheDocument());
     }
 
@@ -1207,11 +1232,20 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
         mockAuth(role);
         const user = userEvent.setup();
         renderPage();
-        await waitFor(() => expect(screen.getByText('文件-訓練覆蓋率')).toBeInTheDocument());
-        await user.click(document.querySelector('[data-ojt-tab="sessions"]') as HTMLElement);
+        /**
+         * 🔴 2026-09-02：儀表板分頁對主管／部門窗口隱藏 ⇒ 切換分頁改為條件式
+         * （理由與逐字原文見本檔 `gotoSessionsTab` 之註）。
+         */
+        await waitFor(() => expect(document.querySelector('[data-ojt-tab="sessions"]')).not.toBeNull());
+        if (document.querySelector('[data-ojt-tab="dashboard"]')) {
+          await waitFor(() => expect(screen.getByText('文件-訓練覆蓋率')).toBeInTheDocument());
+          await user.click(document.querySelector('[data-ojt-tab="sessions"]') as HTMLElement);
+        }
         await waitFor(() => expect(document.querySelector('[data-progress-row]')).not.toBeNull());
         await user.click(document.querySelector('[data-progress-expand="d1__JAC00"]') as HTMLElement);
-        await waitFor(() => expect(document.querySelectorAll('[data-session-delete]').length).toBe(0));
+        // 🔴 正向半句：場次列確實有進 DOM——否則「刪除鈕 0 個」在整個明細區沒渲染時亦恆真。
+        await waitFor(() => expect(document.querySelectorAll('[data-session-row]').length).toBe(1));
+        expect(document.querySelectorAll('[data-session-delete]').length).toBe(0);
       },
     );
 
@@ -1465,13 +1499,27 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
         ),
       });
 
+    /**
+     * 🔴 2026-09-02 人類裁決：**儀表板分頁對主管／部門窗口隱藏** ⇒ 本輔助函式不得再
+     * 假設「一定要先看到儀表板、再點分頁鈕」。
+     * 🔒 改為**條件式切換**：儀表板分頁鈕存在才點（ICSOPAdmin／SysAdmin），
+     * 不存在時本來就已經在 TAB2（主管／部門窗口之初始分頁）。
+     * ⚠ **不改成「一律不點」**：對看得到儀表板的角色而言，「點了才到 TAB2」正是既有行為，
+     * 拿掉那一步會讓本檔多數既有案不再經過分頁切換這條路徑。
+     * 📝 原逐字保留供追溯：
+     *   await waitFor(() => expect(screen.getByText('文件-訓練覆蓋率')).toBeInTheDocument());
+     *   await user.click(document.querySelector('[data-ojt-tab="sessions"]') as HTMLElement);
+     */
     async function gotoSessionsTab(rows = calRows()) {
       vi.mocked(endpoints.getOjtProgressRows).mockResolvedValue({ items: rows, total: rows.length });
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(calSummary());
       const user = userEvent.setup();
       renderPage();
-      await waitFor(() => expect(screen.getByText('文件-訓練覆蓋率')).toBeInTheDocument());
-      await user.click(document.querySelector('[data-ojt-tab="sessions"]') as HTMLElement);
+      await waitFor(() => expect(document.querySelector('[data-ojt-tab="sessions"]')).not.toBeNull());
+      if (document.querySelector('[data-ojt-tab="dashboard"]')) {
+        await waitFor(() => expect(screen.getByText('文件-訓練覆蓋率')).toBeInTheDocument());
+        await user.click(document.querySelector('[data-ojt-tab="sessions"]') as HTMLElement);
+      }
       await waitFor(() => expect(document.querySelector('[data-ojt-filter-bar]')).toBeInTheDocument());
       return user;
     }

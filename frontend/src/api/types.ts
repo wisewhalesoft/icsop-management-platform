@@ -1085,9 +1085,28 @@ export interface OjtProgressRow {
   orgCode: string;
   /** 使用單位**全名**：`公司簡稱 / 部 / 處室`（後端 `OjtOrgDirectory.nameOf` 之單一組裝點）。 */
   orgName: string;
+  /** 該列**全部版次**之場次總數（含舊版次；「N 場次」之來源）。 */
   sessionCount: number;
-  /** `AC-03`：場次數 ≥ 1 即完成（不依訓練日期是否已過、不依檔案是否可下載）。 */
+  /**
+   * 🔴 F042 第五輪：符合**當下訓練基準版次**之場次數。
+   * `sessionCount > 0 && currentEditionSessionCount === 0` ＝「辦過訓練，但那是改版前的事」
+   * ——本頁據此呈現「需重新訓練」而非只給一個看不出原因的「尚未完成」。
+   */
+  currentEditionSessionCount: number;
+  /**
+   * `AC-03` ＋ F042 第五輪：**符合當下訓練基準版次**之場次數 ≥ 1 即完成
+   * （不依訓練日期是否已過、不依檔案是否可下載）。
+   */
   completed: boolean;
+  /** 🔴 F042 第五輪：該文件之 OJT 訓練基準版次（`null` ＝無版次概念）。 */
+  trainingEdition: string | null;
+  /** 🔴 F042 第五輪：該文件**當下之版次**；與 `trainingEdition` 可以刻意不同。 */
+  documentEdition: string | null;
+  /**
+   * 🔴 F042 第五輪：該文件之公告日期（ISO 或 `null`）。
+   * **應完成訓練日期＝本值 + 1 個月**，其唯一推導點為 `ojt-progress-view.ts#trainingDueDate`。
+   */
+  announcedDate: string | null;
   /** 該單位已被組織同步標記為裁撤（`AC-17`）。⚠ 僅供呈現——仍呈現、仍可新增場次。 */
   inactive: boolean;
   /** 該列 `orgCode` 已不在文件當下之使用部門集合內（`AC-25`：不計統計、不可新增場次）。 */
@@ -1099,6 +1118,12 @@ export interface OjtSessionView {
   id: string;
   /** `YYYY-MM-DD`（日曆日，不帶時刻）。 */
   trainingDate: string;
+  /**
+   * 🔴 F042 第五輪：該場次登記當下之**訓練基準版次快照**。
+   * 場次明細依本欄分組呈現（當下版次展開、其餘版次收合）。
+   * ⚠ **選填**：第五輪之前寫成之測試 fixture 不帶本鍵，一律以 `null` 解讀。
+   */
+  edition?: string | null;
   fileName: string;
   uploadedByName: string | null;
   /** ISO 8601（UTC）。 */

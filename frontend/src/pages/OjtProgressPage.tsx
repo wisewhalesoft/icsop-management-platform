@@ -78,9 +78,24 @@ import {
   TAB_DASHBOARD_TEXT,
   TAB_SESSIONS_TEXT,
   addSessionAria,
+  DUE_DATE_LABEL,
+  DUE_DATE_TITLE,
+  DUE_DATE_UNKNOWN_TEXT,
+  DUE_DATE_UNKNOWN_TITLE,
+  EDITION_CURRENT_BADGE_TEXT,
+  EDITION_OUTDATED_BADGE_TEXT,
+  EMPTY_CURRENT_EDITION_TEXT,
+  RETRAIN_NOTE_TEXT,
   canAddSession,
   canManageSessions,
+  canViewDashboard,
   coveragePercent,
+  dueDateText,
+  editionGroupCountText,
+  editionGroupToggleAria,
+  editionText,
+  groupSessionsByEdition,
+  rowEditionText,
   delConfirmBody,
   deleteSessionAria,
   docCoverageBarClass,
@@ -155,7 +170,13 @@ export function OjtProgressPage(): JSX.Element {
   const mayAdd = canAddSession(role);
   const mayManage = canManageSessions(role);
 
-  const [tab, setTab] = useState<TabKey>('dashboard');
+  /**
+   * 🔴 2026-09-02 人類裁決：**儀表板分頁對主管／部門窗口隱藏**。
+   * 🔒 判定集中於 `canViewDashboard()`（純函式），本檔不散落角色字面。
+   */
+  const mayViewDashboard = canViewDashboard(role);
+  /** 🔴 看不到儀表板者之初始分頁即 `sessions`——否則他們會落在一個不存在的分頁上而看到空白。 */
+  const [tab, setTab] = useState<TabKey>(mayViewDashboard ? 'dashboard' : 'sessions');
   const [summary, setSummary] = useState<OjtProgressSummary | null>(null);
   /**
    * `AC-28`⑯ 區一逐筆表之顯示範圍（預設「僅未全部完成」）。
@@ -214,10 +235,12 @@ export function OjtProgressPage(): JSX.Element {
   }, []);
 
   // 🔴 summary 與 pending 分開兩個 effect：切換顯示範圍只該重抓 summary，不該連帶重抓待歸位清單。
+  // 🔴 看不到儀表板者**完全不發** `GET summary`：那是一次純浪費的往返（591 份文件之全池
+  // 聚合），且畫面上沒有任何載體會用到它。
   useEffect(() => {
-    if (!canRead) return;
+    if (!canRead || !mayViewDashboard) return;
     void loadSummary();
-  }, [canRead, loadSummary]);
+  }, [canRead, mayViewDashboard, loadSummary]);
 
   useEffect(() => {
     if (!canRead) return;
@@ -475,7 +498,10 @@ export function OjtProgressPage(): JSX.Element {
   return (
     <div className="space-y-4">
       <PageHeader
-        breadcrumb={[{ label: 'OJT 進度管理' }, { label: tab === 'dashboard' ? TAB_DASHBOARD_TEXT : TAB_SESSIONS_TEXT }]}
+        breadcrumb={[
+          { label: 'OJT 進度管理' },
+          { label: tab === 'dashboard' ? TAB_DASHBOARD_TEXT : TAB_SESSIONS_TEXT },
+        ]}
         title="OJT 進度管理"
       />
 
@@ -503,29 +529,36 @@ export function OjtProgressPage(): JSX.Element {
       <BelowTopbar>
         <div className="bg-white border-b border-slate-200 px-4">
           <div role="tablist" aria-label="OJT 進度管理分頁" className="flex text-sm">
-            <TabButton tabKey="dashboard" label={TAB_DASHBOARD_TEXT} icon="layout-dashboard" active={tab} onSelect={setTab} />
+            {/* 🔴 主管／部門窗口：儀表板分頁鈕**完全不進 DOM**（非 disabled、非 CSS 隱藏）
+                ——一顆按得到卻沒有內容的分頁鈕，比沒有那顆鈕更難理解。 */}
+            {mayViewDashboard && (
+              <TabButton tabKey="dashboard" label={TAB_DASHBOARD_TEXT} icon="layout-dashboard" active={tab} onSelect={setTab} />
+            )}
             <TabButton tabKey="sessions" label={TAB_SESSIONS_TEXT} icon="list-tree" active={tab} onSelect={setTab} />
           </div>
         </div>
       </BelowTopbar>
 
-      {/* TAB1 儀表板（三區）。兩個 panel 恆在 DOM，非當前者以 hidden 隱藏（role=tabpanel 契約）。 */}
-      <div
-        role="tabpanel"
-        tabIndex={0}
-        aria-labelledby="ojt-tabbtn-dashboard"
-        data-ojt-panel="dashboard"
-        className={tab === 'dashboard' ? 'space-y-5' : 'hidden'}
-      >
-        <CoverageSection
-          summary={summary}
-          docScope={docScope}
-          onScopeChange={setDocScope}
-          onGotoPending={gotoSessionsPending}
-        />
-        <RollupSection summary={summary} />
-        <RecentSection summary={summary} />
-      </div>
+      {/* TAB1 儀表板（三區）。可見角色下兩個 panel 恆在 DOM，非當前者以 hidden 隱藏
+          （role=tabpanel 契約）；🔴 對主管／部門窗口則**整個 panel 不進 DOM**。 */}
+      {mayViewDashboard && (
+        <div
+          role="tabpanel"
+          tabIndex={0}
+          aria-labelledby="ojt-tabbtn-dashboard"
+          data-ojt-panel="dashboard"
+          className={tab === 'dashboard' ? 'space-y-5' : 'hidden'}
+        >
+          <CoverageSection
+            summary={summary}
+            docScope={docScope}
+            onScopeChange={setDocScope}
+            onGotoPending={gotoSessionsPending}
+          />
+          <RollupSection summary={summary} />
+          <RecentSection summary={summary} />
+        </div>
+      )}
 
       {/* TAB2 以使用單位分組之資料清單。 */}
       <div
@@ -667,6 +700,9 @@ export function OjtProgressPage(): JSX.Element {
                 <Icon name={open ? 'chevron-up' : 'chevron-down'} className="w-4 h-4 text-slate-400 shrink-0" />
                 <span data-doc-group-number className="mono text-xs text-slate-500 shrink-0">{g.documentNumber}</span>
                 <span data-doc-group-name className="font-medium text-slate-800 truncate">{g.documentName}</span>
+                {/* 🔴 應完成訓練日期緊接**程序書名之後**（人類需求 2026-09-02）。
+                    org 模式之對應載體在列上（`ProgressRow`），兩處共用同一個 `dueDateText()`。 */}
+                <DueDateChip announcedDate={g.announcedDate} />
                 {/* 🔴 X／Y 取自**當下呈現之列**（含裁撤與孤兒），不得改讀 TAB1 之 docCoverage；
                     百分比一律走 `docGroupPercentText`（其內部委派既有 `coveragePercent`）。 */}
                 <span data-doc-group-ratio className="ml-auto text-xs text-slate-500 shrink-0 whitespace-nowrap">
@@ -1270,6 +1306,11 @@ function ProgressRow({
 }): JSX.Element {
   const key = rowKeyOf(row.documentId, row.orgCode);
   const badgeText = row.completed ? BADGE_COMPLETED_TEXT : BADGE_PENDING_TEXT;
+  /**
+   * 🔴 「辦過訓練，但不是這一版」＝有場次、卻沒有任何一場符合當下訓練基準版次。
+   * 🔒 判定讀**後端送來的兩個計數**，不在前端重算——完成判定之口徑只能有一個來源。
+   */
+  const needsRetrain = row.sessionCount > 0 && row.currentEditionSessionCount === 0;
   return (
     <div data-progress-row={key} data-progress-doc={row.documentId} data-progress-org={row.orgCode}>
       <div className="flex items-center gap-3 px-4 py-3">
@@ -1297,8 +1338,21 @@ function ProgressRow({
               <>
                 <span data-progress-doc-number className="mono text-xs text-slate-500 shrink-0">{row.documentNumber}</span>
                 <span data-progress-doc-name className="text-sm text-slate-800 truncate">{row.documentName}</span>
+                {/* 🔴 應完成訓練日期緊接**程序書名之後**（人類需求 2026-09-02）。
+                    🔒 僅 `org` 模式進 DOM——`document` 模式之列不印書名（`AC-31` ④-b），
+                    書名旁的那個日期自然也該待在群組標題那一份（見 `[data-doc-group-name]` 之後）。 */}
+                <DueDateChip announcedDate={row.announcedDate} />
               </>
             )}
+            {/* 🔴 F042 第五輪：列上之版次標籤。**兩種分組模式皆進 DOM**——版次是這一列
+                「在追蹤哪一版」的說明，與列的身分維度（單位／文件）是兩回事。 */}
+            <span
+              data-progress-edition={row.trainingEdition ?? ''}
+              title={`此列以「${editionText(row.trainingEdition)}」為訓練基準版次`}
+              className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0 whitespace-nowrap"
+            >
+              {rowEditionText(row.trainingEdition)}
+            </span>
           </div>
         </div>
         <span
@@ -1315,6 +1369,15 @@ function ProgressRow({
         {row.orphaned && (
           <span data-row-orphaned className="inline-flex items-center gap-1 text-xs text-slate-400 shrink-0 whitespace-nowrap">
             {ORPHAN_NOTE_TEXT}
+          </span>
+        )}
+        {/* 🔴 F042 第五輪：「辦過訓練，但那是改版前的事」。
+            🔒 **完成徽章一格不動**（處置同 `ORPHAN_NOTE_TEXT`）：徽章照實說「尚未完成」，
+            由本註記說明**為什麼**——做成第三種徽章態會讓人以為舊場次的紀錄失效了。 */}
+        {needsRetrain && (
+          <span data-row-retrain className="inline-flex items-center gap-1 text-xs text-amber-700 shrink-0 whitespace-nowrap">
+            <Icon name="rotate-ccw" className="w-3.5 h-3.5" />
+            {RETRAIN_NOTE_TEXT}
           </span>
         )}
         <span data-session-count={row.sessionCount} className="inline-flex items-center gap-1 text-xs text-slate-500 shrink-0">
@@ -1342,41 +1405,180 @@ function ProgressRow({
               {EMPTY_SESSIONS_TEXT}
             </div>
           ) : (
-            <div className="space-y-2">
-              {(sessions ?? []).map((s) => (
-                <div key={s.id} data-session-row={s.id} className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2">
-                  <span data-session-date className="mono text-xs text-slate-700 shrink-0">{s.trainingDate}</span>
-                  <span data-session-uploader className="text-xs text-slate-500 shrink-0">{s.uploadedByName ?? '—'}</span>
-                  <span data-session-file className="text-sm text-slate-700 truncate flex-1">{s.fileName}</span>
-                  <button
-                    data-session-download={s.id}
-                    onClick={() => onDownload(s)}
-                    aria-label={downloadSessionAria(s.trainingDate, s.fileName)}
-                    title="下載簽到表"
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"
-                  >
-                    <Icon name="download" className="w-3.5 h-3.5" />
-                    下載
-                  </button>
-                  {mayDelete && (
-                    <button
-                      data-session-delete={s.id}
-                      onClick={() => onDelete(s)}
-                      aria-label={deleteSessionAria(s.trainingDate, s.fileName)}
-                      title={deleteSessionAria(s.trainingDate, s.fileName)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-red-200 text-red-600 text-xs hover:bg-red-50 shrink-0"
-                    >
-                      <Icon name="trash-2" className="w-3.5 h-3.5" />
-                      刪除
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+            <SessionsByEdition
+              sessions={sessions ?? []}
+              trainingEdition={row.trainingEdition}
+              mayDelete={mayDelete}
+              onDownload={onDownload}
+              onDelete={onDelete}
+            />
           )}
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * 🔴 F042 第五輪（2026-09-02）：場次明細之**版次分組**——「版本太多時只顯示新版、
+ * 其他先收合」（人類需求逐字）。
+ *
+ * 🔒 **當下訓練基準版次那一組恆展開且恆存在**（即使一場都沒有，見 `groupSessionsByEdition`
+ * 之註）；其餘版次群組**預設收合，且收合時其 `[data-session-row]` 完全不進 DOM**——
+ * 處置與 `AC-33`① 之文件群組折疊同一形狀（CSS 隱藏省不掉任何一個節點的建立成本）。
+ * 🔒 **場次列本身之渲染一格不改**：同一份 `SessionRow`，四種行為（下載／刪除／角色守門／
+ * aria 文案）在兩種群組下**共用同一個渲染點**——這是「不會有第二份行為悄悄漂走」在程式碼上
+ * 唯一看得出來的保證（本 feature 於 2026-09-02 已因複製第二份列而踩過一次）。
+ */
+function SessionsByEdition({
+  sessions,
+  trainingEdition,
+  mayDelete,
+  onDownload,
+  onDelete,
+}: {
+  sessions: OjtSessionView[];
+  trainingEdition: string | null;
+  mayDelete: boolean;
+  onDownload: (s: OjtSessionView) => void;
+  onDelete: (s: OjtSessionView) => void;
+}): JSX.Element {
+  const groups = useMemo(
+    () => groupSessionsByEdition(sessions, trainingEdition),
+    [sessions, trainingEdition],
+  );
+  /** 已展開之**舊版次**群組（當下版次不由本 state 管——它恆展開）。 */
+  const [openOld, setOpenOld] = useState<string[]>([]);
+
+  return (
+    <div className="space-y-3">
+      {groups.map((g) => {
+        const open = g.current || openOld.includes(g.key);
+        return (
+          <section key={g.key} data-session-edition-group={g.key} data-session-edition-current={g.current ? '' : undefined}>
+            <div className="flex items-center gap-2 mb-1.5">
+              {/* 🔴 當下版次之標題**不是按鈕**（它不可收合）：一顆點了沒反應的折疊鈕，
+                  比沒有折疊鈕更糟。舊版次才給折疊鈕。 */}
+              {g.current ? (
+                <span className="inline-flex items-center gap-1.5 text-xs">
+                  <Icon name="chevron-down" className="w-3.5 h-3.5 text-slate-300" aria-hidden />
+                  <span data-session-edition-label className="mono text-slate-700">{editionText(g.edition)}</span>
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] whitespace-nowrap">
+                    {EDITION_CURRENT_BADGE_TEXT}
+                  </span>
+                </span>
+              ) : (
+                <button
+                  data-session-edition-toggle={g.key}
+                  onClick={() =>
+                    setOpenOld((prev) =>
+                      prev.includes(g.key) ? prev.filter((k) => k !== g.key) : [...prev, g.key],
+                    )
+                  }
+                  aria-expanded={open}
+                  aria-label={editionGroupToggleAria(g.edition, g.sessions.length)}
+                  className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700"
+                >
+                  <Icon name={open ? 'chevron-up' : 'chevron-down'} className="w-3.5 h-3.5" />
+                  <span data-session-edition-label className="mono">{editionText(g.edition)}</span>
+                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] whitespace-nowrap">
+                    {EDITION_OUTDATED_BADGE_TEXT}
+                  </span>
+                </button>
+              )}
+              <span data-session-edition-count={g.sessions.length} className="ml-auto text-[11px] text-slate-400 shrink-0">
+                {editionGroupCountText(g.sessions.length)}
+              </span>
+            </div>
+            {/* 🔴 收合時組內場次列**完全不進 DOM**（非 CSS 隱藏、非 `hidden` 屬性）。 */}
+            {open &&
+              (g.sessions.length === 0 ? (
+                <div data-session-edition-empty className="flex items-center justify-center text-xs text-slate-400 py-2">
+                  {EMPTY_CURRENT_EDITION_TEXT}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {g.sessions.map((s) => (
+                    <SessionRow
+                      key={s.id}
+                      session={s}
+                      mayDelete={mayDelete}
+                      onDownload={onDownload}
+                      onDelete={onDelete}
+                    />
+                  ))}
+                </div>
+              ))}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 單一場次列（🔒 兩種版次群組共用同一份，見 `SessionsByEdition` 之註）。 */
+function SessionRow({
+  session: s,
+  mayDelete,
+  onDownload,
+  onDelete,
+}: {
+  session: OjtSessionView;
+  mayDelete: boolean;
+  onDownload: (s: OjtSessionView) => void;
+  onDelete: (s: OjtSessionView) => void;
+}): JSX.Element {
+  return (
+    <div data-session-row={s.id} className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2">
+      <span data-session-date className="mono text-xs text-slate-700 shrink-0">{s.trainingDate}</span>
+      <span data-session-uploader className="text-xs text-slate-500 shrink-0">{s.uploadedByName ?? '—'}</span>
+      <span data-session-file className="text-sm text-slate-700 truncate flex-1">{s.fileName}</span>
+      <button
+        data-session-download={s.id}
+        onClick={() => onDownload(s)}
+        aria-label={downloadSessionAria(s.trainingDate, s.fileName)}
+        title="下載簽到表"
+        className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"
+      >
+        <Icon name="download" className="w-3.5 h-3.5" />
+        下載
+      </button>
+      {mayDelete && (
+        <button
+          data-session-delete={s.id}
+          onClick={() => onDelete(s)}
+          aria-label={deleteSessionAria(s.trainingDate, s.fileName)}
+          title={deleteSessionAria(s.trainingDate, s.fileName)}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-red-200 text-red-600 text-xs hover:bg-red-50 shrink-0"
+        >
+          <Icon name="trash-2" className="w-3.5 h-3.5" />
+          刪除
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 🔴 F042 第五輪：**應完成訓練日期**（＝公告日期 + 1 個月）之單一渲染點。
+ * 🔒 兩處呈現（org 模式之列、document 模式之群組標題）共用本元件——同一個日期在兩處
+ * 各寫一份格式，就是分歧的起點。無公告日期時仍**進 DOM**（呈現 `—` ＋解釋用 `title`）：
+ * 整個消失會讓使用者以為這份文件沒有訓練期限，而事實是「還沒有人設公告日期」。
+ */
+function DueDateChip({ announcedDate }: { announcedDate: string | null }): JSX.Element {
+  const text = dueDateText(announcedDate);
+  const known = text !== DUE_DATE_UNKNOWN_TEXT;
+  return (
+    <span
+      data-training-due={known ? text : ''}
+      title={known ? DUE_DATE_TITLE : DUE_DATE_UNKNOWN_TITLE}
+      className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap ${
+        known ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-400'
+      }`}
+    >
+      <Icon name="calendar-clock" className="w-3 h-3" aria-hidden />
+      {`${DUE_DATE_LABEL} ${text}`}
+    </span>
   );
 }
 

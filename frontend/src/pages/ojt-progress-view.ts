@@ -516,6 +516,14 @@ export interface OjtDocGroup {
   documentId: string;
   documentNumber: string;
   documentName: string;
+  /**
+   * 🔴 F042 第五輪：該文件之公告日期（應完成訓練日期之原料）與版次。
+   * 🔒 **取自組內第一列**（比照既有之 `documentNumber`／`documentName`）——三者皆為
+   * **文件層**屬性，同一份文件之全部列上必然相同；此處不是「挑一列的值」，是「讀文件的值」。
+   */
+  announcedDate: string | null;
+  trainingEdition: string | null;
+  documentEdition: string | null;
   /** 該文件在**當下呈現之列**中 `completed === true` 者之列數（`AC-32` 之 X）。 */
   done: number;
   /** 該文件**當下呈現之列**之總列數，🔴 **含 `inactive` 與 `orphaned`**（`AC-32` 之 Y）。 */
@@ -549,6 +557,9 @@ export function docGroupsOf(rows: OjtProgressRow[]): OjtDocGroup[] {
       documentId,
       documentNumber: list[0]?.documentNumber ?? '',
       documentName: list[0]?.documentName ?? '',
+      announcedDate: list[0]?.announcedDate ?? null,
+      trainingEdition: list[0]?.trainingEdition ?? null,
+      documentEdition: list[0]?.documentEdition ?? null,
       done: list.filter((r) => r.completed).length,
       total: list.length,
       // 🔒 `[...list]` 複製的是**陣列**、不是列——排序不就地改動呼叫端之陣列，列仍為原參照。
@@ -606,3 +617,164 @@ export function docGroupPercentText(done: number, total: number): string {
 export function docGroupToggleAria(documentNumber: string, documentName: string): string {
   return `展開／收合此文件之進度列（${documentNumber} · ${documentName}）`;
 }
+
+// ══════════ F042 第五輪（2026-09-02）：儀表板可見性／應完成訓練日期／版次分組 ══════════
+
+/**
+ * 可檢視 TAB1「儀表板」之角色（2026-09-02 人類裁決：**對主管／部門窗口隱藏**）。
+ *
+ * 🔴 **與 `canAddSession()` 刻意不合流**：那一支答的是「誰能登記場次」（含主管／部門窗口），
+ * 本支答的是「誰看得到全公司的統計看板」——兩個問題的答案這一輪起**不同**，合流會讓
+ * 下次任一邊調整時另一邊被靜默地一起改掉。
+ * 🔒 **前端可見性、不是授權邊界**：`GET /admin/ojt-progress/summary` 之閘門仍是既有之
+ * `OJT_PROGRESS_MANAGEMENT read`（主管／部門窗口本就看得到 TAB2 的全部列，儀表板不多揭露
+ * 任何一列資料）。此處隱藏的是一個**對他們沒有用處的分頁**，不是一道防線。
+ */
+export function canViewDashboard(roleCode: string | undefined): boolean {
+  return roleCode === 'ICSOPAdmin' || roleCode === 'SysAdmin';
+}
+
+/** `AC-28`㉑：應完成訓練日期之標籤與未知值（`公告日期 + 1 個月`）。 */
+export const DUE_DATE_LABEL = '應完成訓練';
+export const DUE_DATE_UNKNOWN_TEXT = '—';
+export const DUE_DATE_TITLE = '應完成訓練日期＝公告日期 + 1 個月';
+export const DUE_DATE_UNKNOWN_TITLE = '此文件尚未設定公告日期，無從推算應完成訓練日期';
+
+/**
+ * 應完成訓練日期＝**公告日期 + 1 個月**（人類需求 2026-09-02）。
+ * 回 `YYYY-MM-DD`；無公告日期（或值不可解析）→ `null`。
+ *
+ * 🔴 **全站唯一之推導點**（後端刻意只送 `announcedDate` 原料，不另算一份到期日）：
+ * 同一個日期在兩層各算一次，遲早會在月底那幾天給出兩個不同的答案。
+ *
+ * 🔴 **月底之溢位刻意夾回當月最後一日**（`1/31 + 1 月` → `2/28`，非 JS `Date` 預設的 `3/3`）：
+ * 天真作法是 `d.setMonth(d.getMonth() + 1)`，它在來源日超過目標月天數時**自動跨到下個月**
+ * ——那會讓 1 月 31 日公告的文件之期限顯示成 3 月 3 日，比使用者預期晚了整整三天，
+ * 且只有在一年中少數幾天才看得出來（正是最不容易被發現的那種錯）。
+ *
+ * 🔴 **一律以 UTC 拆解**（比照 `todayIsoDate()`）：`announcedDate` 為後端送來之 ISO 字串，
+ * 用本地時區方法拆會使 UTC+8 開發機與 UTC 容器在 00:00–08:00 得出差一天的日期。
+ */
+export function trainingDueDate(announcedDate: string | null | undefined): string | null {
+  if (!announcedDate) return null;
+  const d = new Date(announcedDate);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  const day = d.getUTCDate();
+  // 目標月之最後一日（`Date.UTC(y, m + 2, 0)` ＝下下個月的第 0 天 ＝下個月的最後一天）。
+  const lastDayOfTargetMonth = new Date(Date.UTC(y, m + 2, 0)).getUTCDate();
+  const due = new Date(Date.UTC(y, m + 1, Math.min(day, lastDayOfTargetMonth)));
+  return due.toISOString().slice(0, 10);
+}
+
+/** 應完成訓練日期之顯示字串（無公告日期 → `—`）。 */
+export function dueDateText(announcedDate: string | null | undefined): string {
+  return trainingDueDate(announcedDate) ?? DUE_DATE_UNKNOWN_TEXT;
+}
+
+// ── 版次（`AC-28`㉒） ──
+
+/** 無版次之文件／場次於畫面上之逐字呈現（`null` 不留白，也不假造一個版次字串）。 */
+export const EDITION_NONE_TEXT = '未設版次';
+/** 場次明細中「當下訓練基準版次」那一組之標記。 */
+export const EDITION_CURRENT_BADGE_TEXT = '目前版次';
+/** 場次明細中舊版次那一組之標記。 */
+export const EDITION_OUTDATED_BADGE_TEXT = '舊版次';
+
+/**
+ * 「辦過訓練，但那是改版前的事」之列註記（`sessionCount > 0 && currentEditionSessionCount === 0`）。
+ * 🔒 **刻意不動完成徽章本身**（處置比照既有之 `ORPHAN_NOTE_TEXT`）：徽章照實說「尚未完成」，
+ * 由一則獨立註記說明**為什麼**——把它做成第三種徽章狀態，會讓人以為舊場次的紀錄失效了。
+ */
+export const RETRAIN_NOTE_TEXT = '文件已改版，需重新訓練';
+
+/** 版次之顯示字串（`null` → `未設版次`）。 */
+export function editionText(edition: string | null | undefined): string {
+  return edition ?? EDITION_NONE_TEXT;
+}
+
+/** 列上之版次標籤（例：`版次 26'01`）。 */
+export function rowEditionText(edition: string | null | undefined): string {
+  return `版次 ${editionText(edition)}`;
+}
+
+/** 一個版次群組（場次明細之第二層）。 */
+export interface OjtSessionEditionGroup {
+  /** 群組鍵：版次值；`null` 統一以 `EDITION_NONE_KEY` 表示（DOM 屬性值不得為 `null`）。 */
+  key: string;
+  edition: string | null;
+  /** 是否為文件當下之訓練基準版次（⇒ 預設展開，且其場次即完成判定之依據）。 */
+  current: boolean;
+  sessions: OjtSessionEdition[];
+}
+
+/** `groupSessionsByEdition` 之最小輸入形狀（不綁死於 `OjtSessionView`，供純函式單測直接餵）。 */
+export interface OjtSessionEdition {
+  trainingDate: string;
+  edition?: string | null;
+}
+
+/** `null` 版次之 DOM 群組鍵（刻意是一個不可能與真實版次撞名的哨兵值）。 */
+export const EDITION_NONE_KEY = '__none__';
+
+/**
+ * 場次明細依**版次**分組（人類需求 2026-09-02：「版本太多時只顯示新版、其他先收合」）。
+ *
+ * 🔴 **當下訓練基準版次之群組恆為第一組且恆存在**——即使該版次一場都還沒辦（`sessions` 為
+ * 空陣列）。📌 **空群組是必要的**：改版並要求重訓後，該列的畫面上必須看得到「目前版次：
+ * 0 場」這件事；若「沒有場次就不長群組」，使用者只會看到一串舊版次的場次，完全讀不出
+ * 「現在這一版還沒人受訓」。
+ * 🔴 其餘版次群組依**該組最新訓練日期遞減**排序（近期改版之殘留在前），🔒 而**不是**依版次
+ * 字串排序——`{YY}'{NN}` 沒有可靠的全序（跨年度、手動編號、`null`），字串排序會給出看似有理
+ * 卻實際錯亂的順序。
+ * 🔒 組內場次依訓練日期遞增（沿用既有 `listByDocumentOrg` 之順序語意，不在此重新定義）。
+ */
+export function groupSessionsByEdition<T extends OjtSessionEdition>(
+  sessions: readonly T[],
+  trainingEdition: string | null,
+): { key: string; edition: string | null; current: boolean; sessions: T[] }[] {
+  const byEdition = new Map<string, T[]>();
+  for (const s of sessions) {
+    const key = s.edition ?? EDITION_NONE_KEY;
+    const bucket = byEdition.get(key);
+    if (bucket) bucket.push(s);
+    else byEdition.set(key, [s]);
+  }
+  const currentKey = trainingEdition ?? EDITION_NONE_KEY;
+  const currentSessions = [...(byEdition.get(currentKey) ?? [])].sort((a, b) =>
+    a.trainingDate.localeCompare(b.trainingDate),
+  );
+  byEdition.delete(currentKey);
+
+  const others = [...byEdition.entries()]
+    .map(([key, list]) => ({
+      key,
+      edition: key === EDITION_NONE_KEY ? null : key,
+      current: false,
+      sessions: [...list].sort((a, b) => a.trainingDate.localeCompare(b.trainingDate)),
+    }))
+    .sort((a, b) => {
+      const latest = (g: { sessions: T[] }): string =>
+        g.sessions.length === 0 ? '' : g.sessions[g.sessions.length - 1]!.trainingDate;
+      return latest(b).localeCompare(latest(a)) || a.key.localeCompare(b.key);
+    });
+
+  return [
+    { key: currentKey, edition: trainingEdition, current: true, sessions: currentSessions },
+    ...others,
+  ];
+}
+
+/** 版次群組標題之 `aria-label`（須含版次，否則同一列的多顆折疊鈕無從分辨）。 */
+export function editionGroupToggleAria(edition: string | null, count: number): string {
+  return `展開／收合此版次之場次（${editionText(edition)}，共 ${count} 場）`;
+}
+
+/** 版次群組標題右側之場次計數（逐字）。 */
+export function editionGroupCountText(count: number): string {
+  return `${count} 場次`;
+}
+
+/** 當下版次群組之空狀態（🔒 與既有 `EMPTY_SESSIONS_TEXT` 刻意不同句：那句說的是「整列一場都沒有」）。 */
+export const EMPTY_CURRENT_EDITION_TEXT = '此版次尚未登記任何教育訓練場次';

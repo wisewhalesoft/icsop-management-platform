@@ -51,6 +51,11 @@ const row = (over: Partial<OjtProgressRow> = {}): OjtProgressRow => ({
   completed: true,
   inactive: false,
   orphaned: false,
+  // 🔴 F042 第五輪 additive 欄；預設與既有語意等價（場次全數符合當下基準版次）。
+  currentEditionSessionCount: 1,
+  trainingEdition: null,
+  documentEdition: null,
+  announcedDate: null,
   ...over,
 });
 
