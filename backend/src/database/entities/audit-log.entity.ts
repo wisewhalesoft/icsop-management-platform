@@ -86,6 +86,23 @@ export class AuditLog {
   @Column({ type: 'varchar', length: 10, nullable: true })
   orgCode!: string | null;
 
+  /**
+   * 🔴 F043 決策 E3（architecture-spec §14.6.2）：業務/功能類別 id（僅
+   * targetType='BUSINESS_CATEGORY'／'BUSINESS_CATEGORY_CHANGE_LOG' 之列非 null）。
+   * 比照既有 `lifecycleId` 之定位——本功能為與循環平行、獨立之第二套分類軸。
+   * 無 FK（append-only 稽核事實，不受類別後續刪除約束）；不建索引（非既有查詢熱路徑之過濾鍵）。
+   */
+  @Column({ type: 'uniqueidentifier', nullable: true })
+  businessCategoryId!: string | null;
+
+  /**
+   * 🔴 F043 `AC-31`：掛載／移除事件之節點 id（僅 targetType='BUSINESS_CATEGORY' 且動作為
+   * `_DOC_MOUNTED`／`_DOC_UNMOUNTED` 之列非 null）。本功能獨有——循環側之掛載住在
+   * `ICSOP_DOCUMENT.nodeId`，從不落到稽核列上。
+   */
+  @Column({ type: 'uniqueidentifier', nullable: true })
+  nodeId!: string | null;
+
   @Column({ type: 'nvarchar', length: 200, nullable: true })
   targetName!: string | null;
 
