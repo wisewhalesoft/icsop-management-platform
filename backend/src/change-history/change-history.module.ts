@@ -28,6 +28,23 @@ import { DOCUMENT_NAME_LOOKUP, DocumentNameLookup } from './document-name-lookup
 import { TypeOrmDocumentNameLookup } from './typeorm-document-name-lookup';
 import { LIFECYCLE_DISPLAY_NAMES, LifecycleDisplayNames } from './lifecycle-display-names';
 import { TypeOrmLifecycleDisplayNames } from './typeorm-lifecycle-display-names';
+import {
+  BUSINESS_CATEGORY_CHANGE_LOG_STORE,
+  BusinessCategoryChangeLogStore,
+} from './business-category-change-log.store';
+import { TypeOrmBusinessCategoryChangeLogStore } from './typeorm-business-category-change-log.store';
+import {
+  BUSINESS_CATEGORY_SNAPSHOT_STORE,
+  BusinessCategorySnapshotStore,
+} from './business-category-snapshot.store';
+import { TypeOrmBusinessCategorySnapshotStore } from './typeorm-business-category-snapshot.store';
+import { BusinessCategoryChangeLogPublisher } from './business-category-change-log-publisher';
+import { BusinessCategoryChangeHistoryService } from './business-category-change-history.service';
+import {
+  BUSINESS_CATEGORY_DISPLAY_NAMES,
+  BusinessCategoryDisplayNames,
+} from './business-category-display-names';
+import { TypeOrmBusinessCategoryDisplayNames } from './typeorm-business-category-display-names';
 
 /**
  * F037/F038 文件變更歷程模組（獨立後台功能，共用 prototype 23-change-history）。
@@ -88,6 +105,39 @@ import { TypeOrmLifecycleDisplayNames } from './typeorm-lifecycle-display-names'
         new LifecycleChangeHistoryService(store, audit, () => new Date(), names),
       inject: [LIFECYCLE_CHANGE_LOG_STORE, AuditWriterService, LIFECYCLE_DISPLAY_NAMES],
     },
+    // ── F043 第三組資源：業務/功能類別結構變更歷程（決策 E1 之兩張平行表）──────────
+    {
+      provide: BUSINESS_CATEGORY_CHANGE_LOG_STORE,
+      useFactory: (): BusinessCategoryChangeLogStore =>
+        new TypeOrmBusinessCategoryChangeLogStore(AppDataSource),
+    },
+    {
+      provide: BUSINESS_CATEGORY_SNAPSHOT_STORE,
+      useFactory: (): BusinessCategorySnapshotStore =>
+        new TypeOrmBusinessCategorySnapshotStore(AppDataSource),
+    },
+    BusinessCategoryChangeLogPublisher,
+    {
+      // `AC-42` 匯出之「業務/功能類別」欄需當前顯示名稱；以獨立 token 自建唯讀 adapter，
+      // 維持與 `BusinessCategoriesModule` 之**單向依賴**（反循環，理由逐字同 LIFECYCLE 側）。
+      provide: BUSINESS_CATEGORY_DISPLAY_NAMES,
+      useFactory: (): BusinessCategoryDisplayNames =>
+        new TypeOrmBusinessCategoryDisplayNames(AppDataSource),
+    },
+    {
+      provide: BusinessCategoryChangeHistoryService,
+      useFactory: (
+        store: BusinessCategoryChangeLogStore,
+        audit: AuditWriterService,
+        names: BusinessCategoryDisplayNames,
+      ): BusinessCategoryChangeHistoryService =>
+        new BusinessCategoryChangeHistoryService(store, audit, () => new Date(), names),
+      inject: [
+        BUSINESS_CATEGORY_CHANGE_LOG_STORE,
+        AuditWriterService,
+        BUSINESS_CATEGORY_DISPLAY_NAMES,
+      ],
+    },
   ],
   // F038 新舊對照：LifecycleModule 之 LifecycleChangeDiffService 注入下列兩 store（單向依賴，避免循環）。
   exports: [
@@ -95,6 +145,11 @@ import { TypeOrmLifecycleDisplayNames } from './typeorm-lifecycle-display-names'
     LifecycleChangeLogPublisher,
     LIFECYCLE_CHANGE_LOG_STORE,
     LIFECYCLE_SNAPSHOT_STORE,
+    // F043 新舊對照：`BusinessCategoriesModule` 之 `BusinessCategoryChangeDiffService` 注入
+    // 下列兩 store，且以 `useExisting` 覆寫其 publisher seam（**單向依賴**，避免循環）。
+    BusinessCategoryChangeLogPublisher,
+    BUSINESS_CATEGORY_CHANGE_LOG_STORE,
+    BUSINESS_CATEGORY_SNAPSHOT_STORE,
   ],
 })
 export class ChangeHistoryModule {}
