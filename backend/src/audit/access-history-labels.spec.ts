@@ -174,4 +174,20 @@ describe('auditKindLabel（AC-F5 ③：targetType → 類型欄三值之一）',
     expect(auditKindLabel('OJT_SESSION')).not.toBe('上傳');
     expect(auditKindLabel('OJT_SESSION')).not.toBe('變更');
   });
+
+  /**
+   * F043 業務/功能類別管理 — architecture-spec.md §14.6.2 決策 E3：`'BUSINESS_CATEGORY'`→
+   * `'業務/功能類別'`（第六類型值，比照 `'LIFECYCLE'`→`'循環'` 之既有先例，不得落入「其餘→變更」
+   * 通則——這正是本檔既有 `OJT_SESSION` 案已示範過的「新增獨立分支，非沿用 catch-all」形狀）；
+   * `'BUSINESS_CATEGORY_CHANGE_LOG'`→比照 `'LIFECYCLE_CHANGE_LOG'` 併入「變更」一類（既有
+   * catch-all 天然涵蓋，屬零改動即應成立之回歸性斷言）。
+   */
+  it('F043 auditKindLabel(BUSINESS_CATEGORY) → 業務/功能類別（第六類型值，不得落入「其餘→變更」通則）', () => {
+    expect(auditKindLabel('BUSINESS_CATEGORY')).toBe('業務/功能類別');
+    expect(auditKindLabel('BUSINESS_CATEGORY')).not.toBe('變更');
+  });
+
+  it('F043 auditKindLabel(BUSINESS_CATEGORY_CHANGE_LOG) → 變更（比照 LIFECYCLE_CHANGE_LOG 併入既有「變更」類）', () => {
+    expect(auditKindLabel('BUSINESS_CATEGORY_CHANGE_LOG')).toBe('變更');
+  });
 });

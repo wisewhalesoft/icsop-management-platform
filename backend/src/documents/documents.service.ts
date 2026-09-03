@@ -53,6 +53,10 @@ import {
 } from '../storage/csv-export';
 import { buildDocumentExportColumns } from './document-export-columns';
 import {
+  BUSINESS_CATEGORY_DOCS_STORE,
+  BusinessCategoryDocsStore,
+} from '../business-categories/business-category-docs.store';
+import {
   DOCUMENT_CHANGE_PUBLISHER,
   DocumentChangePublisher,
   DocumentFieldDelta,
@@ -142,6 +146,15 @@ export class DocumentsService {
     @Optional()
     @Inject(OJT_COMPLETION_READER)
     private readonly ojtCompletionReader?: OjtCompletionReader,
+    /**
+     * 🔴 F017 `AC-B1`～`AC-B3`（F043 delta，決策 E5）：第 16 欄之唯讀來源。
+     * 反循環：**store token 對 store token**（`BusinessCategoriesModule` 匯出該 token），
+     * 非 Service 對 Service。選填以免打爆既有純 store 單測（無 → `businessCategories` 留
+     * `undefined`，既有行為完全不變）。
+     */
+    @Optional()
+    @Inject(BUSINESS_CATEGORY_DOCS_STORE)
+    private readonly businessCategoryDocsStore?: BusinessCategoryDocsStore,
   ) {
     // 預設 no-op 綁定（決策 A）：seam 存在但不落地，rag/F037 併回後覆寫。
     this.publisher = publisher ?? new NoopDocumentChangePublisher();
@@ -337,6 +350,32 @@ export class DocumentsService {
     await this.enrichIcsopPdf(items);
     await this.enrichOjt(items);
     await this.enrichLinks(items);
+    // 🔴 F017 `AC-B1`～`AC-B3`（F043 delta，決策 E5）：**第六步**——第 16 欄之類別 pill。
+    // 讀取路徑對 `store.list()`／`applyDocumentQuery()`／`DocumentStore` 介面**一行未改**，
+    // 僅 `DocumentListItem` 新增一個 additive 欄位。
+    await this.enrichBusinessCategories(items);
+  }
+
+  /**
+   * F043 決策 E5（architecture-spec §14.6.4）：以**單一批次查詢**取得各文件掛載之相異
+   * 業務/功能類別（`AC-B3` 去重規則由共用純函式 `groupBusinessCategoriesByDocument()` 負責）。
+   *
+   * 🔴 **防 N+1**：一次 `listCategoriesByDocumentIds()`，往返數與列數無關（同 `enrichLinks` 之慣例）。
+   * 🔴 **反循環**：注入的是 `BUSINESS_CATEGORY_DOCS_STORE`（**store token 對 store token**，
+   * 非 Service 對 Service），避免 `DocumentsModule ↔ BusinessCategoriesModule` 互相依賴——
+   * 比照同模組既有之 `ATTACHMENT_STORE`／`NODE_NAME_STORE`／`LIFECYCLE_STORE` 慣例。
+   * 未注入（既有純 store 單測）→ 本欄一律留 `undefined`，既有行為完全不變。
+   */
+  private async enrichBusinessCategories(items: DocumentListItem[]): Promise<void> {
+    const lookup = this.businessCategoryDocsStore?.listCategoriesByDocumentIds;
+    if (!this.businessCategoryDocsStore || !lookup || items.length === 0) return;
+    // 🔴 store 回傳之陣列**已依 `businessCategoryId` 去重**（`AC-B3`）——本層不再數列數、
+    // 也不重新排序（CSV 之碼位序由 `formatBusinessCategoriesForExport()` 這一層負責）。
+    const byDoc = await lookup.call(
+      this.businessCategoryDocsStore,
+      items.map((i) => i.id),
+    );
+    for (const it of items) it.businessCategories = byDoc.get(it.id) ?? [];
   }
 
   /**

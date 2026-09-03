@@ -58,6 +58,15 @@ export const FunctionKey = {
   // `AC-N36` 禁止的是「為了讓欄位破例通過而動功能矩陣」，本 feature 是一個**獨立側選單項與獨立
   // 端點群**，沒有既有功能鍵可掛靠，兩者是不同的事。
   OJT_PROGRESS_MANAGEMENT: 'OJT 進度管理',
+  /**
+   * 🔴 F043 業務/功能類別管理（E12 / US-106～108，`AC-43`／F025 `AC-B28`）。第 15 列。
+   * 字面逐字為 `業務/功能類別管理`（**半形斜線 `/`、前後無空白**，F043 §命名鎖定表）。
+   * 立條理由同 `OJT_PROGRESS_MANAGEMENT`：本 feature 是一個**獨立側選單項與獨立端點群**，
+   * 沒有既有功能鍵可掛靠。
+   * ⚠ **本鍵不是變更歷程之閘門**——第三個 tab 之五個端點掛 `DOCUMENT_CHANGE_HISTORY`
+   * （`AC-54`／架構 §14.5）；用錯會讓主管看到他不該看到的變更歷程。
+   */
+  BUSINESS_CATEGORY_MANAGEMENT: '業務/功能類別管理',
   DOCUMENT_INDEX_MANAGEMENT: '文件索引管理',
   DOCUMENT_ACCESS_HISTORY: '文件調閱歷程查詢',
   DOCUMENT_CHANGE_HISTORY: '文件變更歷程',
@@ -140,6 +149,16 @@ export const FUNCTION_MATRIX: Record<string, Row> = {
     'RESTRICTED_CRUD',
     'NONE',
   ),
+  /**
+   * 🔴 F043 `AC-43`／F025 `AC-B28`（2026-09-02 人類裁決）：新增第 15 列。
+   * 五格逐字＝唯讀／CRUD／唯讀／無／無。🔒 **值域不擴充**——三個格值皆為既有之
+   * `READ`／`CRUD`／`NONE`，不引入 `RESTRICTED_CRUD`（本功能無「可新增不可刪除」之細則）。
+   *
+   * 🔴 **與上方 `LIFECYCLE_MANAGEMENT` 列之主管欄刻意不對稱**（`AC-44`，同日兩項人類裁決）：
+   * 循環管理之 Supervisor 為 `'NONE'`、本列為 `'READ'`。日後最可能發生的「整理」是把兩列
+   * 對齊成同一個值——那會**同時違反兩條人類裁決**。兩格之成對斷言見 function-matrix.spec.ts。
+   */
+  [FunctionKey.BUSINESS_CATEGORY_MANAGEMENT]: row('READ', 'CRUD', 'READ', 'NONE', 'NONE'),
   [FunctionKey.DOCUMENT_INDEX_MANAGEMENT]: row('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.DOCUMENT_ACCESS_HISTORY]: row('READ', 'READ', 'NONE', 'NONE', 'NONE'),
   [FunctionKey.DOCUMENT_CHANGE_HISTORY]: row('READ', 'READ', 'NONE', 'NONE', 'NONE'),

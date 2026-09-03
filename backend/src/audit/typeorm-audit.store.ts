@@ -51,6 +51,10 @@ export class TypeOrmAuditStore implements AuditStore {
       appendixId: e.appendixId,
       targetAccountId: e.targetAccountId,
       orgCode: e.orgCode,
+      // 🔴 F043 決策 E3：兩個新參照欄（migration 1725494400000 之前寫入之列讀出為
+      // undefined／null，一律收斂為 null）。
+      businessCategoryId: e.businessCategoryId ?? null,
+      nodeId: e.nodeId ?? null,
       targetName: e.targetName,
       watermarkSnapshot: e.watermarkSnapshot,
       occurredAt: e.occurredAt,
@@ -83,6 +87,10 @@ export class TypeOrmAuditStore implements AuditStore {
       appendixId: row.appendixId,
       targetAccountId: row.targetAccountId,
       orgCode: row.orgCode ?? null,
+      // 🔴 F043 決策 E3：顯式帶值（缺鍵 → null），比照 orgCode 之既有寫法——
+      // 漏列於本白名單 ⇒ 值人間蒸發（本 repo 已三度付出代價之形狀）。
+      businessCategoryId: row.businessCategoryId ?? null,
+      nodeId: row.nodeId ?? null,
       targetName: row.targetName,
       watermarkSnapshot: row.watermarkSnapshot,
       occurredAt: row.occurredAt,

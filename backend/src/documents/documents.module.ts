@@ -25,6 +25,11 @@ import { ATTACHMENT_STORE, AttachmentStore } from '../attachments/attachments.st
 import { TypeOrmAttachmentStore } from '../attachments/typeorm-attachments.store';
 import { OrgChangeAlertModule } from '../org-change-alert/org-change-alert.module';
 import { OrgChangeAlertAutoResolveSubscriber } from '../org-change-alert/document-change-subscriber';
+import {
+  BUSINESS_CATEGORY_DOCS_STORE,
+  BusinessCategoryDocsStore,
+} from '../business-categories/business-category-docs.store';
+import { TypeOrmBusinessCategoryDocsStore } from '../business-categories/typeorm-business-category-docs.store';
 
 /**
  * ICSOP 文件模組（E04）。匯入 AuthModule（SessionGuard）、RbacModule（RolePermissionGuard）。
@@ -80,6 +85,15 @@ import { OrgChangeAlertAutoResolveSubscriber } from '../org-change-alert/documen
     {
       provide: OJT_COMPLETION_READER,
       useFactory: (): OjtCompletionReader => new TypeOrmOjtCompletionReader(AppDataSource),
+    },
+    // 🔴 F017 `AC-B1`～`AC-B3`（F043 delta，決策 E5）：第 16 欄「業務/功能類別」之唯讀來源。
+    // 反循環：於本模組**自建** store 實例（同 AppDataSource 單例），**不匯入
+    // BusinessCategoriesModule**——比照上方 ATTACHMENT_STORE／NODE_NAME_STORE／LIFECYCLE_STORE
+    // ／OJT_COMPLETION_READER 之既有慣例，不建立模組級 DI 邊界。
+    {
+      provide: BUSINESS_CATEGORY_DOCS_STORE,
+      useFactory: (): BusinessCategoryDocsStore =>
+        new TypeOrmBusinessCategoryDocsStore(AppDataSource),
     },
     // 決策 B（F037）＋F006：seam 由單一綁定改為 fan-out（Composite）——
     //  1) DocumentChangeLogPublisher：持久化為 DOCUMENT_CHANGE_LOG（變更歷程）。

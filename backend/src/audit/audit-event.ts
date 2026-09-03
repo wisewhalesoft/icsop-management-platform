@@ -27,6 +27,16 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
   let appendixId: string | null = null;
   let targetAccountId: string | null = null;
   let orgCode: string | null = null;
+  /**
+   * 🔴 F043 決策 E3：業務/功能類別之兩個新參照欄。既有 targetType 之列恆為 null
+   * （回歸鎖定：DOCUMENT 事件不得外洩本兩欄之誤值）。
+   * ⚠ **刻意不新增 `businessCategoryName` 欄**——類別之顯示名稱已由既有 `targetName`
+   * （＝呼叫端傳入之 `businessCategoryDisplayName` 輸出）承載，`AUDIT_LOG` 之 migration
+   * （§14.4 表 3）亦只新增 `businessCategoryId`／`nodeId` 兩欄。多開一個沒有 DB 載體的欄位，
+   * 只會產生一個永遠寫不進去的值。
+   */
+  let businessCategoryId: string | null = null;
+  let nodeId: string | null = null;
 
   switch (event.targetType) {
     case 'DOCUMENT':
@@ -72,6 +82,17 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
       documentNumber = event.targetNumber ?? null;
       orgCode = event.orgCode;
       break;
+    // 🔴 F043 E12 delta（決策 E3）：兩種 targetType 之 targetId 皆為 BUSINESS_CATEGORY.id。
+    // 掛載／移除事件另落 nodeId（本功能新欄）與 documentId（**沿用既有欄**，不新開）——
+    // `AC-31` 明訂三者皆須落地。其餘四種動作無節點脈絡，兩欄收斂為 null。
+    case 'BUSINESS_CATEGORY':
+      businessCategoryId = event.targetId;
+      nodeId = event.nodeId ?? null;
+      documentId = event.documentId ?? null;
+      break;
+    case 'BUSINESS_CATEGORY_CHANGE_LOG':
+      businessCategoryId = event.targetId;
+      break;
   }
 
   return {
@@ -93,6 +114,8 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
     appendixId,
     targetAccountId,
     orgCode,
+    businessCategoryId,
+    nodeId,
     targetName: event.targetName ?? null,
     watermarkSnapshot: event.watermarkSnapshot ?? null,
     occurredAt: event.occurredAt,

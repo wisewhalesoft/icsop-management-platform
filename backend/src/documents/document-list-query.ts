@@ -66,6 +66,15 @@ export function applyDocumentQuery(
     if (filters.nodeIdIn && filters.nodeIdIn.length > 0) {
       if (r.nodeId === null || !filters.nodeIdIn.includes(r.nodeId)) return false;
     }
+    /**
+     * F017 `AC-B7` ④（F043 delta）：第 14 項篩選「業務/功能類別」——**存在量詞，非等值**：
+     * 該文件至少存在一筆掛載，其節點所屬類別＝所選 `businessCategoryId`。
+     * 未掛任何類別（缺鍵或空陣列）→ 不命中任何 id 篩選；未提供本鍵 → 不施加限制。
+     */
+    if (filters.businessCategoryId) {
+      const owned = r.businessCategories ?? [];
+      if (!owned.some((c) => c.id === filters.businessCategoryId)) return false;
+    }
     // F017 AC-D7：比對範圍＝主要 ∪ 次要。與前台 public-list.ts **共用同一個函式**，
     // 故兩處不可能分歧（架構 §10.6／§10.11）。篩選鍵名 `primaryChiefId` 維持不改（既有 API 契約）。
     if (

@@ -41,14 +41,19 @@ describe('kindToTargetTypes', () => {
   /**
    * F039 附錄管理 — architecture-spec.md §3.6 決策三／AC-30：「文件」分支由
    * ['DOCUMENT','USAGE_FORM'] 擴充為 ['DOCUMENT','USAGE_FORM','APPENDIX']（additive，
-   * 僅擴充陣列成員，'循環'／'變更' 分支逐字不變）。
+   * 僅擴充陣列成員，'循環' 分支逐字不變）。
+   * 🔴 2026-09-02 impl-be 申訴 2（收斂修正）：本條原將「變更」鎖定恰 2 值，與下方 F043
+   * 區塊（決策 E3：additive 併入 BUSINESS_CATEGORY_CHANGE_LOG，2→3 值）互斥——本條之立條
+   * 主旨是「文件／循環分支不變」，非「變更恰 2 值」，故此處之「變更」陣列同步收斂為 3 值，
+   * 不損本條鑑別力（比照 rbac/function-matrix.spec.ts 同日之收斂處置）。
    */
-  it('文件→DOCUMENT/USAGE_FORM/APPENDIX、循環→LIFECYCLE、變更→兩種 CHANGE_LOG', () => {
+  it('文件→DOCUMENT/USAGE_FORM/APPENDIX、循環→LIFECYCLE、變更→三種 CHANGE_LOG（F043 起）', () => {
     expect(kindToTargetTypes('文件')).toEqual(['DOCUMENT', 'USAGE_FORM', 'APPENDIX']);
     expect(kindToTargetTypes('循環')).toEqual(['LIFECYCLE']);
     expect(kindToTargetTypes('變更')).toEqual([
       'DOCUMENT_CHANGE_LOG',
       'LIFECYCLE_CHANGE_LOG',
+      'BUSINESS_CATEGORY_CHANGE_LOG',
     ]);
   });
 
@@ -63,11 +68,37 @@ describe('kindToTargetTypes', () => {
     expect(kindToTargetTypes('上傳' as never)).toEqual(['DOCUMENT_ATTACHMENT']);
   });
 
-  it('AC-N69 🔒 回歸鎖定：「文件」分支逐字不變，天然不含 DOCUMENT_ATTACHMENT（既有三組對映一格未動）', () => {
+  it('AC-N69 🔒 回歸鎖定：「文件」分支逐字不變，天然不含 DOCUMENT_ATTACHMENT（既有三組對映一格未動；「變更」值域隨 F043 收斂為 3 值，見上方同日修正）', () => {
     expect(kindToTargetTypes('文件')).toEqual(['DOCUMENT', 'USAGE_FORM', 'APPENDIX']);
     expect(kindToTargetTypes('文件')).not.toContain('DOCUMENT_ATTACHMENT');
     expect(kindToTargetTypes('循環')).toEqual(['LIFECYCLE']);
-    expect(kindToTargetTypes('變更')).toEqual(['DOCUMENT_CHANGE_LOG', 'LIFECYCLE_CHANGE_LOG']);
+    expect(kindToTargetTypes('變更')).toEqual([
+      'DOCUMENT_CHANGE_LOG',
+      'LIFECYCLE_CHANGE_LOG',
+      'BUSINESS_CATEGORY_CHANGE_LOG',
+    ]);
+  });
+
+  /**
+   * F043 業務/功能類別管理 — architecture-spec.md §14.6.2 決策 E3：
+   * 新增第 6 種 kind「業務/功能類別」→ ['BUSINESS_CATEGORY']；既有「變更」分支由 2 值擴為 3 值
+   * （additive 併入 'BUSINESS_CATEGORY_CHANGE_LOG'，比照既有 kindToTargetTypes('循環') 目前僅映射
+   * ['LIFECYCLE']、LIFECYCLE_CHANGE_LOG 實際歸在「變更」kind 之既有結構——本功能同構跟進）。
+   */
+  it('F043 kindToTargetTypes(\'業務/功能類別\') = [\'BUSINESS_CATEGORY\']（新增第 6 種 kind）', () => {
+    expect(kindToTargetTypes('業務/功能類別' as never)).toEqual(['BUSINESS_CATEGORY']);
+  });
+
+  it('F043 §「變更」分支由 2 值擴為 3 值：additive 併入 BUSINESS_CATEGORY_CHANGE_LOG（既有兩值仍在）', () => {
+    const types = kindToTargetTypes('變更');
+    expect(types).toContain('DOCUMENT_CHANGE_LOG');
+    expect(types).toContain('LIFECYCLE_CHANGE_LOG');
+    expect(types).toContain('BUSINESS_CATEGORY_CHANGE_LOG');
+    expect(types).toHaveLength(3);
+  });
+
+  it('F043 🔒 回歸鎖定：「循環」分支逐字不變，仍僅映射 [\'LIFECYCLE\']（不因本 delta 混入 BUSINESS_CATEGORY）', () => {
+    expect(kindToTargetTypes('循環')).toEqual(['LIFECYCLE']);
   });
 });
 
@@ -138,6 +169,28 @@ describe('TS-F039-002（AC-30）類型＝文件 篩選 → APPENDIX 紀錄納入
     const page = resolveAuditQuery(rows, { kind: '文件' }, SCOPE);
     expect(page.total).toBe(3);
     expect(page.items.map((r) => r.targetType).sort()).toEqual(['APPENDIX', 'DOCUMENT', 'USAGE_FORM']);
+  });
+});
+
+describe('F043 業務/功能類別 kind 之排除／篩出（同時存在 1 筆文件調閱＋1 筆 BUSINESS_CATEGORY 檢視事件）', () => {
+  it('① 類型＝文件 → 僅回傳調閱紀錄，不含業務/功能類別事件（排除）', () => {
+    const rows = [
+      row({ targetType: 'DOCUMENT', actionType: 'VIEW', documentNumber: 'ICSOP-A' }),
+      row({ targetType: 'BUSINESS_CATEGORY' as never, actionType: 'BUSINESS_CATEGORY_VIEW' as never }),
+    ];
+    const page = resolveAuditQuery(rows, { kind: '文件' }, SCOPE);
+    expect(page.total).toBe(1);
+    expect(page.items[0].targetType).toBe('DOCUMENT');
+  });
+
+  it('② 類型＝業務/功能類別 → 僅回傳該類事件，不含調閱紀錄（篩出）', () => {
+    const rows = [
+      row({ targetType: 'DOCUMENT', actionType: 'VIEW', documentNumber: 'ICSOP-A' }),
+      row({ targetType: 'BUSINESS_CATEGORY' as never, actionType: 'BUSINESS_CATEGORY_VIEW' as never }),
+    ];
+    const page = resolveAuditQuery(rows, { kind: '業務/功能類別' as never }, SCOPE);
+    expect(page.total).toBe(1);
+    expect(page.items[0].targetType).toBe('BUSINESS_CATEGORY');
   });
 });
 

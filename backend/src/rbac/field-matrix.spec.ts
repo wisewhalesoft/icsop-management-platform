@@ -290,3 +290,23 @@ describe('F041 AC-38：canWriteField 不受一般使用者子分類影響', () =
     expect(canWriteField.length).toBe(2);
   });
 });
+
+/**
+ * F043 業務/功能類別管理 — AC-51（🔒 F026 不新增列，維持 20 列逐格不變，OQ-B-08 人類裁決）。
+ * 理由：業務/功能類別掛載不是文件欄位（住在別張關聯表 BUSINESS_CATEGORY_DOC），其寫入權限
+ * 已由 F025 功能矩陣把關（AC-45），不需在欄位矩陣疊出第二道較弱的閘門。
+ * 本區塊為回歸鎖定：F043 實作完成後，本檔上方既有「20 欄位」斷言仍應成立——此處另補一條
+ * 明確鎖定「不存在『業務/功能類別』鍵」之獨立斷言，避免僅靠總數不變而漏了「換了一個鍵」之情境。
+ */
+describe('F043 AC-51：FIELD_MATRIX 逐格不變、不新增「業務/功能類別」欄位列', () => {
+  it('欄位鍵集合仍為 20 個，不存在「業務/功能類別」鍵（AC-50：掛載連欄位都不是）', () => {
+    expect(Object.keys(FIELD_MATRIX)).toHaveLength(20);
+    expect(Object.keys(FIELD_MATRIX)).not.toContain('業務/功能類別');
+  });
+
+  it('既有 19 個業務欄位鍵逐字不變（總數守恆 ＋ 鍵集合守恆，非僅數字未變而暗中換了鍵）', () => {
+    expect(Object.keys(FIELD_MATRIX).sort()).toEqual(
+      [...BUSINESS_FIELDS, FieldKey.SYSTEM_UUID].sort(),
+    );
+  });
+});

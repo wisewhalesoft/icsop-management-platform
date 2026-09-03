@@ -66,9 +66,14 @@ interface ExportCapableService {
 const asExport = (svc: DocumentsService): ExportCapableService =>
   svc as unknown as ExportCapableService;
 
-/** `AC-X1` ②：十四欄逐字表頭（權威＝prototype 13 之 `EXPORT_HEADER`）。 */
-const HEADER =
+/**
+ * `AC-X1` ②：原十四欄逐字表頭（權威＝prototype 13 之 `EXPORT_HEADER`）。
+ * 🔴 2026-09-02 F043 delta（F017 `AC-B9` ①）：14 → **15** 欄，新欄「業務/功能類別」置於最末；
+ * 既有 14 個表頭字面與其順序一字不改（`AC-B11`）。舊常數逐字保留供追溯／單獨引用既有 14 欄語意。
+ */
+const HEADER_14 =
   'OJT,制定公司,制定部門,制定室別,當責室長,狀態,檔案,程序書編號,程序書書名,版次,內容摘要,連結點程序書,公告日期,循環別';
+const HEADER = `${HEADER_14},業務/功能類別`;
 
 /** `AC-X7` 可測形狀：釘死於**台北 00:00–08:00 窗口內**之「現在」（UTC 17:00 ＝台北隔日 01:00）。 */
 const NOW_TAIPEI_EARLY_MORNING = new Date('2026-06-09T17:00:00.000Z');
@@ -249,31 +254,67 @@ class FakeStore implements DocumentStore {
 
 // ── fixture 工廠 ────────────────────────────────────────────────────────
 
-const row = (over: Partial<DocumentListItem> & { id: string }): DocumentListItem => ({
-  companyCode: 'AS',
-  status: 'active',
-  documentNumber: `N-${over.id}`,
-  documentName: `書名-${over.id}`,
-  lifecycleId: 'lc1',
-  lifecycleName: '銷售及收款循環',
-  nodeId: null,
-  draftingDeptId: 'A2000',
-  draftingSectionId: null,
-  draftingCompanyName: null,
-  draftingDeptName: null,
-  draftingSectionName: null,
-  primaryChiefId: null,
-  primaryChiefName: null,
-  secondaryChiefCount: 0,
-  secondaryChiefNames: [],
-  edition: null,
-  announcedDate: null,
-  contentSummary: null,
-  icsopPdfBlobPath: null,
-  icsopPdfFileName: null,
-  links: [],
-  ...over,
-});
+/**
+ * 🔴 F043 delta：`businessCategories` 於本環撰寫時尚未存在於 `DocumentListItem`（決策 E5 之
+ * additive 欄，等實作補上）。`over` 之型別以本地交集顯式允許該鍵（非 `any`），使呼叫端仍有型別
+ * 檢查；回傳值以 `as unknown as DocumentListItem` 逐點繞過「多出一個既有型別沒有的屬性」之
+ * excess-property 檢查——刻意讓紅燈落在「實際存取該欄之斷言」上，而非整檔編譯紅吞掉既有測試。
+ */
+type RowOverride = Partial<DocumentListItem> & {
+  id: string;
+  businessCategories?: { id: string; displayName: string }[];
+};
+const row = (over: RowOverride): DocumentListItem =>
+  ({
+    companyCode: 'AS',
+    status: 'active',
+    documentNumber: `N-${over.id}`,
+    documentName: `書名-${over.id}`,
+    lifecycleId: 'lc1',
+    lifecycleName: '銷售及收款循環',
+    nodeId: null,
+    draftingDeptId: 'A2000',
+    draftingSectionId: null,
+    draftingCompanyName: null,
+    draftingDeptName: null,
+    draftingSectionName: null,
+    primaryChiefId: null,
+    primaryChiefName: null,
+    secondaryChiefCount: 0,
+    secondaryChiefNames: [],
+    edition: null,
+    announcedDate: null,
+    contentSummary: null,
+    icsopPdfBlobPath: null,
+    icsopPdfFileName: null,
+    links: [],
+    // 🔴 F043 delta（決策 E5）：additive 新增欄，預設無掛載（去重後之相異類別，依 displayName 排序）。
+    businessCategories: [] as { id: string; displayName: string }[],
+    ...over,
+  }) as unknown as DocumentListItem;
+
+/**
+ * F043 決策 E5：`BusinessCategoryDocsStore.listCategoriesByDocumentIds()` 之最小消費介面
+ * （§14.6.4 明文簽章：`(documentIds: string[]) => Promise<Map<string, {id,displayName}[]>>`）。
+ * 📌 本環所訂之契約：`DocumentsService` 建構子新增之第 10 個位置參數即消費此介面（未定精確型別名，
+ * 若實作採不同參數位置/型別名，請走 mailbox 申訴）。
+ */
+interface BusinessCategoryDocsLookup {
+  listCategoriesByDocumentIds(documentIds: string[]): Promise<Map<string, { id: string; displayName: string }[]>>;
+}
+class FakeBusinessCategoryDocsStore implements BusinessCategoryDocsLookup {
+  byDocument = new Map<string, { id: string; displayName: string }[]>();
+  calls = 0;
+  seed(documentId: string, categories: { id: string; displayName: string }[]): void {
+    this.byDocument.set(documentId, categories);
+  }
+  listCategoriesByDocumentIds(documentIds: string[]): Promise<Map<string, { id: string; displayName: string }[]>> {
+    this.calls += 1;
+    const out = new Map<string, { id: string; displayName: string }[]>();
+    for (const id of documentIds) out.set(id, this.byDocument.get(id) ?? []);
+    return Promise.resolve(out);
+  }
+}
 
 interface Harness {
   svc: DocumentsService;
@@ -282,16 +323,27 @@ interface Harness {
   attachments: FakeAttachmentStore;
   linkStore: FakeLinkStore;
   ojt: FakeOjtCompletionReader;
+  businessCategoryDocs: FakeBusinessCategoryDocsStore;
 }
 
-/** 建構子位置參數（既有簽章）：(store, publisher, nameResolver, linkStore, attachmentStore, nodeNameStore, lifecycleStore, dagStore, ojtCompletionReader)。 */
+/** 建構子位置參數（既有簽章＋F043 additive 第 10 參）：(store, publisher, nameResolver, linkStore, attachmentStore, nodeNameStore, lifecycleStore, dagStore, ojtCompletionReader, businessCategoryDocsLookup)。 */
 function makeHarness(): Harness {
   const store = new FakeStore();
   const names = new FakeNameResolver();
   const attachments = new FakeAttachmentStore();
   const linkStore = new FakeLinkStore();
   const ojt = new FakeOjtCompletionReader();
-  const svc = new DocumentsService(
+  const businessCategoryDocs = new FakeBusinessCategoryDocsStore();
+  /**
+   * 🔴 F043 delta：建構子第 10 參於本環撰寫時尚不存在（既有簽章僅 1–9 參，TS2554）。
+   * 以建構子型別本身之區域轉型繞過**參數個數**檢查（型別系統對 arity 之檢查無法用參數層級的
+   * `as` 繞過，須轉型建構子本身），刻意讓紅燈落在「業務類別確實被查詢/格式化」之個別斷言上，
+   * 而非整檔編譯紅吞掉本檔其餘 AC-X1～AC-X17 之既有測試。
+   */
+  const DocumentsServiceCtor = DocumentsService as unknown as new (
+    ...args: unknown[]
+  ) => DocumentsService;
+  const svc = new DocumentsServiceCtor(
     store,
     undefined,
     names as unknown as NameResolutionService,
@@ -301,8 +353,9 @@ function makeHarness(): Harness {
     undefined,
     undefined,
     ojt as unknown as never,
+    businessCategoryDocs,
   );
-  return { svc, store, names, attachments, linkStore, ojt };
+  return { svc, store, names, attachments, linkStore, ojt, businessCategoryDocs };
 }
 
 /** 位元組 → 原始文字（跳過 BOM，保留 CRLF 與引號，供 `AC-X1` ①③④ 之位元組層斷言）。 */
@@ -366,12 +419,15 @@ describe('F017 AC-X1／AC-X13：CSV 位元組格式、十四欄逐字表頭與�
     expect(Buffer.isBuffer(csv)).toBe(true);
   });
 
-  it('AC-X1 ② 第 1 列逐字為十四欄表頭（＝畫面 15 欄去掉「樹狀圖」）', async () => {
+  it('AC-X1 ②／AC-B9 ① 第 1 列逐字為十五欄表頭（＝畫面 16 欄去掉「樹狀圖」；14→15，新欄「業務/功能類別」置末）', async () => {
     const { svc, store } = makeHarness();
     store.seedRow(row({ id: 'd1' }));
     const { csv } = await asExport(svc).exportDocuments(['d1']);
     expect(rawText(csv).split('\r\n')[0]).toBe(HEADER);
-    expect(HEADER.split(',')).toHaveLength(14);
+    expect(HEADER.split(',')).toHaveLength(15);
+    expect(HEADER.endsWith(',業務/功能類別')).toBe(true);
+    // 既有 14 欄字面與順序一字不改（AC-B11 回歸鎖定）。
+    expect(HEADER.startsWith(HEADER_14 + ',')).toBe(true);
   });
 
   it('AC-X1 ⑤ (a)／AC-X16 ①「樹狀圖」不是欄——表頭不得出現該字面', async () => {
@@ -391,7 +447,7 @@ describe('F017 AC-X1／AC-X13：CSV 位元組格式、十四欄逐字表頭與�
     expect(text.replace(/\r\n/g, '')).not.toContain('\n');
   });
 
-  it('AC-X13 `documentIds` 為 0 筆 → 200 之僅含表頭列 CSV（非錯誤、非空檔）', async () => {
+  it('AC-X13 `documentIds` 為 0 筆 → 200 之僅含表頭列（十五欄）CSV（非錯誤、非空檔）', async () => {
     const { svc, store } = makeHarness();
     store.seedRow(row({ id: 'd1' }));
     const { csv } = await asExport(svc).exportDocuments([]);
@@ -498,6 +554,7 @@ describe('F017 AC-X15／AC-X16 ⑤：讀取路徑＝load-all，store 介面一�
         ojtReader: h.ojt.calls,
         resolveOrgUnitName: h.names.orgCalls,
         resolvePersonNames: h.names.personCalls,
+        businessCategoryDocs: h.businessCategoryDocs.calls,
       };
     };
     const one = await snapshot(1);
@@ -507,6 +564,8 @@ describe('F017 AC-X15／AC-X16 ⑤：讀取路徑＝load-all，store 介面一�
     expect(one.list).toBe(1);
     expect(one.ojtReader).toBe(1);
     expect(one.linksFindBySources).toBe(1);
+    // 🔴 F043 決策 E5：listCategoriesByDocumentIds 亦為單次批次查詢，不得隨列數線性成長。
+    expect(one.businessCategoryDocs).toBe(1);
   });
 
   it('🔒 匯出**無副作用**：不呼叫任何寫入型 store 方法（不寫稽核、不寫任何資料表）', async () => {
@@ -563,6 +622,11 @@ describe('F017 AC-X11 ③／AC-X3：十四欄逐格值（單一列 fixture，每
     h.store.seedSecondaryChief('dX', 'E001');
     h.store.seedSecondaryChief('dX', 'E002');
     h.ojt.seed('dX', { totalUnits: 3, completedOrgCodes: ['A1', 'A2'] }); // → partial
+    // 🔴 F043 AC-B9／AC-B3：兩個相異類別（碼位序：'帳' < '授' ⇒ 帳務處理 排在 授信 之前）。
+    h.businessCategoryDocs.seed('dX', [
+      { id: 'bc-credit', displayName: '授信（消金）' },
+      { id: 'bc-fin', displayName: '帳務處理' },
+    ]);
     const { csv } = await asExport(h.svc).exportDocuments(['dX'], 'd8');
     return dataRows(csv)[0];
   }
@@ -574,7 +638,7 @@ describe('F017 AC-X11 ③／AC-X3：十四欄逐格值（單一列 fixture，每
     jest.useRealTimers();
   });
 
-  it('AC-X11 ③ 十四個儲存格逐字（欄序同 AC-X1 ②）', async () => {
+  it('AC-X11 ③／AC-B9 十五個儲存格逐字（欄序同 AC-X1 ②；新第 15 欄之值為兩相異類別以全形頓號相接、依碼位序排列）', async () => {
     expect(await exportOneRow()).toEqual([
       '部分完成',                                   //  1 OJT           AC-X4
       '和潤企業股份有限公司',                        //  2 制定公司
@@ -590,6 +654,7 @@ describe('F017 AC-X11 ③／AC-X3：十四欄逐格值（單一列 fixture，每
       'ICSOP-CIPS-104-1-01;ICSOP-SRC-101-2-00;ICSOP-SRC-102-1-01', // 12 連結點 AC-X6
       '2026-06-10',                                // 13 公告日期      AC-X8
       '銷售及收款循環（子分類A）',                    // 14 循環別
+      '帳務處理、授信（消金）',                       // 15 業務/功能類別 AC-B9（碼位序：帳 < 授）
     ]);
   });
 
@@ -636,6 +701,65 @@ describe('F017 AC-X11 ③／AC-X3：十四欄逐格值（單一列 fixture，每
     h.store.seedRow(row({ id: 'dI', documentName: '=x' }));
     const { csv } = await asExport(h.svc).exportDocuments(['dI']);
     expect(rawText(csv).split('\r\n')[0]).toBe(HEADER);
+  });
+});
+
+/**
+ * F043 AC-B9／AC-B10（第 15 欄「業務/功能類別」值層規則）—— 本區塊只驗**接線**（匯出路徑確實
+ * 呼叫 `listCategoriesByDocumentIds` 並把結果正確格式化進第 15 欄），詳盡之純函式行為（碼位序、
+ * 禁 localeCompare、頓號分隔、去重）已窮盡於 `business-category-export-format.spec.ts`／
+ * `business-category-grouping.spec.ts`，本檔不重工。
+ */
+describe('F017 AC-B9／AC-B10：第 15 欄「業務/功能類別」接線', () => {
+  it('N=0（未掛載任何類別）→ 第 15 欄為空儲存格（🔴 非 `—`、非 `0`）', async () => {
+    const h = makeHarness();
+    h.store.seedRow(row({ id: 'd1' }));
+    const { csv } = await asExport(h.svc).exportDocuments(['d1']);
+    const cells = dataRows(csv)[0];
+    expect(cells).toHaveLength(15);
+    expect(cells[14]).toBe('');
+    expect(cells[14]).not.toBe('—');
+    expect(cells[14]).not.toBe('0');
+  });
+
+  it('AC-B3 依 categoryId 去重：同一份文件掛於同類別之 2 節點＋另一類別之 1 節點 → 第 15 欄僅列 2 個相異類別', async () => {
+    const h = makeHarness();
+    h.store.seedRow(row({ id: 'd1' }));
+    // listCategoriesByDocumentIds 之回傳形狀本身即為「去重後」之類別陣列（去重責任在 store 層，
+    // 見 business-category-grouping.spec.ts）；此處以已去重之兩筆模擬其正確輸出，驗證匯出路徑
+    // 忠實格式化該陣列，不重新引入任何列數。
+    h.businessCategoryDocs.seed('d1', [
+      { id: 'bc-credit', displayName: '授信' },
+      { id: 'bc-risk', displayName: '風險管理' },
+    ]);
+    const { csv } = await asExport(h.svc).exportDocuments(['d1']);
+    const cell = dataRows(csv)[0][14];
+    expect(cell.split('、')).toHaveLength(2);
+  });
+
+  it('🔴 順序忠實反映 listCategoriesByDocumentIds 之輸出並非重新以 localeCompare 排序（接線層不得偷加第二道排序）', async () => {
+    const h = makeHarness();
+    h.store.seedRow(row({ id: 'd1' }));
+    h.businessCategoryDocs.seed('d1', [
+      { id: 'a', displayName: '授信' },
+      { id: 'b', displayName: '風險管理' },
+      { id: 'c', displayName: '帳務處理' },
+    ]);
+    const { csv } = await asExport(h.svc).exportDocuments(['d1']);
+    const cell = dataRows(csv)[0][14];
+    const byCodePoint = ['授信', '風險管理', '帳務處理'].sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+    const byLocale = ['授信', '風險管理', '帳務處理'].sort((x, y) => x.localeCompare(y, 'zh-Hant'));
+    expect(byCodePoint).not.toEqual(byLocale); // 自證：本語料下兩序不同，具鑑別力
+    expect(cell).toBe(byCodePoint.join('、'));
+    expect(cell).not.toBe(byLocale.join('、'));
+  });
+
+  it('注入前綴：類別顯示名以 `=` 開頭 → 前置半形單引號（與其餘欄一致套用同一個 `cell()`）', async () => {
+    const h = makeHarness();
+    h.store.seedRow(row({ id: 'd1' }));
+    h.businessCategoryDocs.seed('d1', [{ id: 'bc-x', displayName: '=SUM(A1)' }]);
+    const { csv } = await asExport(h.svc).exportDocuments(['d1']);
+    expect(dataRows(csv)[0][14]).toBe("'=SUM(A1)");
   });
 });
 

@@ -139,6 +139,13 @@ export interface DocumentListFilters {
    * `AC-T40` ①「未指派節點者（`nodeId IS NULL`）一律排除」由 `IN` 對 `NULL` 恆不匹配之語意自動滿足。
    */
   nodeIdIn?: string[];
+  /**
+   * 🔴 F017 `AC-B6`／`AC-B7`（2026-09-02 F043 delta）：第 14 項篩選「業務/功能類別」。
+   * 值為 **`businessCategoryId`**（🔴 非名稱字串——同名不同子分類之兩個類別必須可分別被選取）。
+   * 比對語意為**存在量詞**：「該文件至少存在一筆掛載，其節點所屬類別 ＝ 所選 id」；
+   * 未提供者不施加限制；與其餘 13 項並用為 AND。
+   */
+  businessCategoryId?: string;
   sortBy?: DocumentSortBy;
   sortDir?: SortDir;
   /** 1-based 頁碼（預設 1）。 */
@@ -210,6 +217,16 @@ export interface DocumentListItem {
   icsopPdfFileName: string | null;
   /** F017「連結點程序書」欄：本文件之連結點摘要（0..*，目標編號/書名/目前狀態）。 */
   links: DocumentLinkView[];
+  /**
+   * 🔴 F017 `AC-B1`～`AC-B3`（2026-09-02 F043 delta，架構決策 E5）：本文件掛載之**相異**
+   * 業務/功能類別（依 `businessCategoryId` 去重、依 `businessCategoryDisplayName` 排序）。
+   *
+   * 🔒 **additive 且選填**：本欄由 `DocumentsService.enrichBusinessCategories()` 於富化階段填入，
+   * store 層不產出；未接線之既有純 store 單測缺鍵＝無掛載，行為完全不變（`AC-B11` ⑧）。
+   * 🔴 掛載為 **M:N**，住在 `BUSINESS_CATEGORY_DOC`——`ICSOP_DOCUMENT` **未新增任何欄位**
+   * （F043 `AC-50`）。
+   */
+  businessCategories?: { id: string; displayName: string }[];
 }
 
 /** F017 清單富化：連結目標之精簡摘要（批次查詢，避免逐列 N+1）。 */

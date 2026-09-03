@@ -43,7 +43,14 @@ export type AuditTargetType =
   // 新增／刪除。**第 9 個值**；targetId＝OJT_SESSION.id（場次為第一等資源）。
   // 刻意**不**沿用 'DOCUMENT_ATTACHMENT'——場次不是附件，沿用會使 `OJT_SESSION_DELETE`
   // 在 F024「類型」欄顯示為「上傳」，且 targetId→targetAccountId 之對映等同指鹿為馬。
-  | 'OJT_SESSION';
+  | 'OJT_SESSION'
+  // 🔴 F043 E12 delta（決策 E3，architecture-spec §14.6.2）：業務/功能類別之樹狀圖預覽／
+  // 下載／列印（浮水印動作）、類別刪除、以及**掛載／移除文件**（`AC-31`）。第 10 個值；
+  // targetId＝BUSINESS_CATEGORY.id。比照 'LIFECYCLE' 之定位（兩套平行、獨立之分類軸）。
+  | 'BUSINESS_CATEGORY'
+  // 🔴 F043 E12 delta：業務/功能類別結構變更歷程（第三個 tab）之檢視／下載。第 11 個值；
+  // targetId＝BUSINESS_CATEGORY.id。比照 'LIFECYCLE_CHANGE_LOG'。
+  | 'BUSINESS_CATEGORY_CHANGE_LOG';
 
 /** 操作類型（data-model AUDIT_LOG.actionType，逐字沿用 F036/F037/F038 spec 命名）。 */
 export type AuditActionType =
@@ -77,7 +84,19 @@ export type AuditActionType =
   // ⚠ D9 批 `AC-N32` 之「ICSOPAdmin 不寫稽核」角色不對稱於新路徑**整條作廢**——
   // 三種可寫角色（ICSOPAdmin／Supervisor／DeptContact）一律寫入。
   | 'OJT_SESSION_UPLOAD'
-  | 'OJT_SESSION_DELETE';
+  | 'OJT_SESSION_DELETE'
+  // 🔴 F043 E12 delta（決策 E3）：**8 個新值**。前四者比照循環側之
+  // LIFECYCLE_VIEW/_DOWNLOAD/_PRINT/_DELETE；`_DOC_MOUNTED`／`_DOC_UNMOUNTED` 為本功能獨有
+  // （`AC-31`：掛載與移除**各記一筆、不合併**，兩者 actionType 刻意相異）；末兩者比照
+  // LIFECYCLE_CHANGELOG_VIEW/_DOWNLOAD。
+  | 'BUSINESS_CATEGORY_VIEW'
+  | 'BUSINESS_CATEGORY_DOWNLOAD'
+  | 'BUSINESS_CATEGORY_PRINT'
+  | 'BUSINESS_CATEGORY_DELETE'
+  | 'BUSINESS_CATEGORY_DOC_MOUNTED'
+  | 'BUSINESS_CATEGORY_DOC_UNMOUNTED'
+  | 'BUSINESS_CATEGORY_CHANGELOG_VIEW'
+  | 'BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD';
 
 /** 調閱來源（E09 US-097），預設 DIRECT。 */
 export type AuditSource = 'DIRECT' | 'AI_QA';
@@ -252,6 +271,38 @@ export interface OjtSessionAuditEvent extends AuditEventBase {
   watermarkSnapshot?: null;
 }
 
+/**
+ * 🔴 業務/功能類別動作（F043 決策 E3，architecture-spec §14.6.2）。第 12 個變體；
+ * 既有 11 個變體之形狀逐字不動。`targetId`＝`BUSINESS_CATEGORY.id`。
+ *
+ * `nodeId`／`documentId` 為本變體**額外攜帶**之兩個維度（比照 `AppendixAuditEvent`／
+ * `OjtSessionAuditEvent` 之既有作法——判別聯集允許個別變體帶額外欄位）：
+ * 🔴 `AC-31` 要求掛載／移除事件必須落地 `businessCategoryId`／`nodeId`／`documentId` **三者**；
+ * VIEW／DOWNLOAD／PRINT／DELETE 四種動作無節點脈絡 ⇒ **選填**（比照
+ * `UsageFormAuditEvent.documentId` 之既有選填先例），非硬性要求呼叫端記得傳 null。
+ */
+export interface BusinessCategoryAuditEvent extends AuditEventBase {
+  targetType: 'BUSINESS_CATEGORY';
+  actionType:
+    | 'BUSINESS_CATEGORY_VIEW'
+    | 'BUSINESS_CATEGORY_DOWNLOAD'
+    | 'BUSINESS_CATEGORY_PRINT'
+    | 'BUSINESS_CATEGORY_DELETE'
+    | 'BUSINESS_CATEGORY_DOC_MOUNTED'
+    | 'BUSINESS_CATEGORY_DOC_UNMOUNTED';
+  nodeId?: string | null;
+  documentId?: string | null;
+}
+
+/**
+ * 🔴 業務/功能類別變更歷程檢視／下載（F043 決策 E3，無浮水印之 VIEW／有浮水印之 DOWNLOAD）。
+ * 第 13 個變體；`targetId`＝`BUSINESS_CATEGORY.id`。比照 `LifecycleChangeLogAuditEvent`。
+ */
+export interface BusinessCategoryChangeLogAuditEvent extends AuditEventBase {
+  targetType: 'BUSINESS_CATEGORY_CHANGE_LOG';
+  actionType: 'BUSINESS_CATEGORY_CHANGELOG_VIEW' | 'BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD';
+}
+
 export type AuditAccessEvent =
   | DocumentAuditEvent
   | UsageFormAuditEvent
@@ -263,7 +314,9 @@ export type AuditAccessEvent =
   | AccessHistoryExportAuditEvent
   | DocumentAttachmentAuditEvent
   | AccountRoleAuditEvent
-  | OjtSessionAuditEvent;
+  | OjtSessionAuditEvent
+  | BusinessCategoryAuditEvent
+  | BusinessCategoryChangeLogAuditEvent;
 
 /**
  * 已物化之稽核列（append-only）。同時作為 AUDIT_LOG 落地列與 F024 查詢結果列。
@@ -310,6 +363,20 @@ export interface AuditRow {
    * 故實際落地列恆有本鍵。
    */
   orgCode?: string | null;
+  /**
+   * 🔴 F043 E12 delta（決策 E3）：業務/功能類別 id（僅 targetType='BUSINESS_CATEGORY'／
+   * 'BUSINESS_CATEGORY_CHANGE_LOG' 之列非 null）。**獨立 migration**（新增*欄位*）。
+   *
+   * ⚠ 宣告為選填（`?`）而非比照 `documentId`／`appendixId`／`targetAccountId` 之「必填、顯式帶
+   * null」既有慣例——理由逐字同上方 `orgCode`：本欄係對一個已上線且被多處以物件字面值建構之
+   * 型別加欄，改必填會使既有建構點（含不屬本 feature 之測試檔）全數編譯失敗。
+   * 生產端之兩個建構點（`buildAuditRow`／`TypeOrmAuditStore.toRow`）仍**顯式填值**。
+   */
+  businessCategoryId?: string | null;
+  /**
+   * 🔴 F043 `AC-31`：掛載／移除事件之節點 id（僅該兩種動作之列非 null）。選填理由同上。
+   */
+  nodeId?: string | null;
   /** 對象名稱／說明快照（供 F024 明細；非 data-model 現有欄，見 impl log flag）。 */
   targetName: string | null;
   watermarkSnapshot: string | null;
@@ -328,7 +395,13 @@ export interface AuditRow {
  * `OJT_SESSION`。既有四值之對映**逐字不變**——「上傳」仍獨佔 `DOCUMENT_ATTACHMENT`
  * （`AUDIT_LOG` 為 append-only，E11 上線前之歷史上傳列永久存在且本頁仍須渲染）。
  */
-export type AuditKind = '文件' | '循環' | '變更' | '上傳' | 'OJT 場次';
+/**
+ * 🔴 F043 E12 delta（決策 E3，architecture-spec §14.6.2）：additive 新增**第六值**
+ * 「業務/功能類別」→ `BUSINESS_CATEGORY`。既有五值之對映**逐字不變**；
+ * `BUSINESS_CATEGORY_CHANGE_LOG` 比照 `LIFECYCLE_CHANGE_LOG` 併入既有之「變更」kind
+ * （該 case 之陣列因此由 2 值擴為 3 值，屬 additive）。
+ */
+export type AuditKind = '文件' | '循環' | '變更' | '上傳' | 'OJT 場次' | '業務/功能類別';
 
 /**
  * 已正規化之查詢規格（OQ-AQ-01）。將 AuditQueryFilters 收斂為「可下推至 SQL WHERE/ORDER/OFFSET」之形狀：

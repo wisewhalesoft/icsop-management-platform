@@ -56,15 +56,23 @@ describe('F025 FUNCTION_MATRIX 逐格對照 spec', () => {
     [FunctionKey.PUBLIC_BROWSING]: R('READ', 'READ', 'READ', 'READ', 'READ'),
     [FunctionKey.DOCUMENT_DOWNLOAD_PRINT]: R('READ', 'READ', 'READ', 'READ', 'READ'),
     [FunctionKey.SYSTEM_PARAMETER]: R('CRUD', 'NONE', 'NONE', 'NONE', 'NONE'),
-    // 🔴 F042 AC-27／AC-J16：新增獨立功能列「OJT 進度管理」，置於既有 13 列之後（14→14）。
+    // 🔴 F042 AC-27／AC-J16：新增獨立功能列「OJT 進度管理」，置於既有 13 列之後（13→14）。
     [FunctionKey.OJT_PROGRESS_MANAGEMENT]: R('READ', 'CRUD', 'RESTRICTED_CRUD', 'RESTRICTED_CRUD', 'NONE'),
+    /**
+     * 🔴 2026-09-02 impl-be 申訴 2（收斂修正）：本區塊之 `expected`／`toHaveLength(14)` 原與
+     * 下方「F043 AC-43／AC-B28」區塊之 `toHaveLength(15)` 互斥——同一個 FUNCTION_MATRIX 不可能
+     * 恰有 14 個鍵又恰有 15 個鍵，其中一方永遠為紅，且非因缺實作而紅（`BUSINESS_CATEGORY_
+     * MANAGEMENT` 一旦補上，本區塊反而轉紅，已由 impl-be 實跑證實）。比照 2026-08-28 F042 仲裁
+     * 之既有處置手法：補上第 15 列＋改 14→15，使兩區塊收斂為同一組事實。
+     */
+    [FunctionKey.BUSINESS_CATEGORY_MANAGEMENT]: R('READ', 'CRUD', 'READ', 'NONE', 'NONE'),
   };
 
-  it('矩陣恰含 14 個功能列，且鍵集合與 spec 一致（F039 新增「附錄管理」／F042 新增「OJT 進度管理」）', () => {
+  it('矩陣恰含 15 個功能列，且鍵集合與 spec 一致（F039 新增「附錄管理」／F042 新增「OJT 進度管理」／F043 新增「業務/功能類別管理」）', () => {
     expect(Object.keys(FUNCTION_MATRIX).sort()).toEqual(
       Object.keys(expected).sort(),
     );
-    expect(Object.keys(FUNCTION_MATRIX)).toHaveLength(14);
+    expect(Object.keys(FUNCTION_MATRIX)).toHaveLength(15);
   });
 
   it('F039 附錄管理：功能鍵字面值鎖定為「附錄管理」（spec 命名鎖定表，逐字不得改寫）', () => {
@@ -219,8 +227,16 @@ describe('F042 AC-27／AC-J16～AC-J18：新增功能列「OJT 進度管理」',
     expect(FunctionKey.OJT_PROGRESS_MANAGEMENT).toBe('OJT 進度管理');
   });
 
-  it('AC-27 功能鍵集合恰新增 1 個，總數 13→14', () => {
-    expect(Object.keys(FUNCTION_MATRIX)).toHaveLength(14);
+  /**
+   * 🔴 2026-09-02 impl-be 申訴 2（收斂修正，比照 2026-08-28 F042 仲裁之既有處置）：本條原
+   * `toHaveLength(14)` 與下方「F043 AC-43／AC-B28」區塊之 `toHaveLength(15)` 互斥——F043 於
+   * OJT 之後新增第 15 列「業務/功能類別管理」，屬合法之後續 additive delta（非本條「OJT 恰新增
+   * 1 個」之範圍內事實被推翻）。總數斷言收斂為當下之 15；「OJT 恰新增 1 個」之語意改由下方
+   * `PRE_EXISTING_13` 回歸鎖定（`AC-J18`）＋本條 `toContain` 共同守住，不再由「總數=14」單獨表達
+   * （該表達方式在任何後續 delta 新增列時都會過期，`AC-B28` 區塊已改採同一收斂手法）。
+   */
+  it('AC-27 功能鍵集合含「OJT 進度管理」（總數隨後續 delta 增長，現為 15：13 既有＋OJT＋F043 業務/功能類別管理）', () => {
+    expect(Object.keys(FUNCTION_MATRIX)).toHaveLength(15);
     expect(Object.keys(FUNCTION_MATRIX)).toContain(FunctionKey.OJT_PROGRESS_MANAGEMENT);
   });
 
@@ -256,5 +272,90 @@ describe('F042 AC-27／AC-J16～AC-J18：新增功能列「OJT 進度管理」',
     const keys = Object.keys(FUNCTION_MATRIX);
     expect(keys).not.toContain('OJT 上傳');
     expect(keys).not.toContain('OJT 附件');
+  });
+});
+
+/**
+ * F043 業務/功能類別管理 — 新增獨立功能列「業務/功能類別管理」（AC-43／AC-44／AC-B28／AC-B29）。
+ * 權威：docs/specs/features/F043-business-function-category.md AC-43／AC-44
+ *      ＋ docs/specs/features/F025-role-function-matrix.md#business-category-function-key-delta
+ *        AC-B28／AC-B29。
+ *
+ * ⚠ 對實作全盲：`FunctionKey.BUSINESS_CATEGORY_MANAGEMENT` 尚不存在——本區塊之 import 使用
+ * 即本環之預期紅燈。既有 15 列之期望值於此逐字硬寫（不動態衍生自 FUNCTION_MATRIX 本身），
+ * 比照 AC-J18 之既有防線，避免「新列加入後基準跟著變動」使回歸檢查失去鑑別力。
+ */
+describe('F043 AC-43／AC-B28：新增功能列「業務/功能類別管理」', () => {
+  const PRE_EXISTING_14: Record<string, Record<RoleCode, Permission>> = {
+    [FunctionKey.ACCOUNT_MANAGEMENT]: R('CRUD', 'CRUD', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.ROLE_ASSIGNMENT]: R('CRUD', 'RESTRICTED_CRUD', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.LIFECYCLE_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.ICSOP_DOCUMENT_MANAGEMENT]: R('READ', 'CRUD', 'READ', 'READ', 'NONE'),
+    [FunctionKey.USAGE_FORM_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.APPENDIX_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.DOCUMENT_INDEX_MANAGEMENT]: R('READ', 'CRUD', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.DOCUMENT_ACCESS_HISTORY]: R('READ', 'READ', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.DOCUMENT_CHANGE_HISTORY]: R('READ', 'READ', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.ORG_SYNC_MANAGEMENT]: R('CRUD', 'READ', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.PUBLIC_BROWSING]: R('READ', 'READ', 'READ', 'READ', 'READ'),
+    [FunctionKey.DOCUMENT_DOWNLOAD_PRINT]: R('READ', 'READ', 'READ', 'READ', 'READ'),
+    [FunctionKey.SYSTEM_PARAMETER]: R('CRUD', 'NONE', 'NONE', 'NONE', 'NONE'),
+    [FunctionKey.OJT_PROGRESS_MANAGEMENT]: R('READ', 'CRUD', 'RESTRICTED_CRUD', 'RESTRICTED_CRUD', 'NONE'),
+  };
+
+  it('功能鍵字面值鎖定為「業務/功能類別管理」（半形斜線、前後無空白）', () => {
+    expect(FunctionKey.BUSINESS_CATEGORY_MANAGEMENT).toBe('業務/功能類別管理');
+  });
+
+  it('AC-B28 功能鍵集合恰新增 1 個，總數 14→15', () => {
+    expect(Object.keys(FUNCTION_MATRIX)).toHaveLength(15);
+    expect(Object.keys(FUNCTION_MATRIX)).toContain(FunctionKey.BUSINESS_CATEGORY_MANAGEMENT);
+  });
+
+  it('AC-43／AC-B28 新列之五角色格值逐字為：SysAdmin=READ／ICSOPAdmin=CRUD／Supervisor=READ／DeptContact=NONE／User=NONE（值域不擴充，不引入 RESTRICTED_CRUD）', () => {
+    expect(FUNCTION_MATRIX[FunctionKey.BUSINESS_CATEGORY_MANAGEMENT]).toEqual(
+      R('READ', 'CRUD', 'READ', 'NONE', 'NONE'),
+    );
+  });
+
+  it('canPerform：ICSOPAdmin CRUD（read/write 皆 true）；SysAdmin／Supervisor 唯讀（read=true, write=false）；DeptContact／User 全無', () => {
+    expect(canPerform('ICSOPAdmin', FunctionKey.BUSINESS_CATEGORY_MANAGEMENT, 'read')).toBe(true);
+    expect(canPerform('ICSOPAdmin', FunctionKey.BUSINESS_CATEGORY_MANAGEMENT, 'write')).toBe(true);
+    expect(canPerform('SysAdmin', FunctionKey.BUSINESS_CATEGORY_MANAGEMENT, 'read')).toBe(true);
+    expect(canPerform('SysAdmin', FunctionKey.BUSINESS_CATEGORY_MANAGEMENT, 'write')).toBe(false);
+    expect(canPerform('Supervisor', FunctionKey.BUSINESS_CATEGORY_MANAGEMENT, 'read')).toBe(true);
+    expect(canPerform('Supervisor', FunctionKey.BUSINESS_CATEGORY_MANAGEMENT, 'write')).toBe(false);
+    expect(canPerform('DeptContact', FunctionKey.BUSINESS_CATEGORY_MANAGEMENT, 'read')).toBe(false);
+    expect(canPerform('User', FunctionKey.BUSINESS_CATEGORY_MANAGEMENT, 'read')).toBe(false);
+  });
+
+  it.each(Object.keys(PRE_EXISTING_14))(
+    'AC-B29 既有 14 列之回歸鎖定：%s 之五角色格值與新列導入前逐字相同',
+    (fn) => {
+      expect(FUNCTION_MATRIX[fn]).toEqual(PRE_EXISTING_14[fn]);
+    },
+  );
+
+  /**
+   * 🔴🔴 AC-44／AC-B29 之核心不對稱斷言（本 repo 對「語料無鑑別力」形狀之明文防線，2026-09-02）：
+   * 同一日的兩項人類裁決——一項把主管移出循環管理（本檔上方 LIFECYCLE_MANAGEMENT 之 Supervisor 已為
+   * 'NONE'）、另一項把主管放進業務/功能類別管理（本區塊之 Supervisor 為 'READ'）。日後最可能發生的
+   * 「整理」是把兩列對齊成同一個值——那會同時違反兩條人類裁決。本斷言直接比對這兩格，使任一方被
+   * 對齊時立即紅燈；🔴 驗證載體為 `backend/src/rbac/function-matrix.ts`，非 prototype（prototype 曾
+   * 落後於後端，見 F043 TD-B-02）。
+   */
+  it('🔴 AC-44／AC-B29 核心不對稱：循環管理（DAG）.Supervisor === NONE 且 業務/功能類別管理.Supervisor === READ（兩者刻意不同，非疏漏）', () => {
+    expect(FUNCTION_MATRIX[FunctionKey.LIFECYCLE_MANAGEMENT].Supervisor).toBe('NONE');
+    expect(FUNCTION_MATRIX[FunctionKey.BUSINESS_CATEGORY_MANAGEMENT].Supervisor).toBe('READ');
+    // 語料鑑別力自證：兩值確實不同（否則上兩句恆真、無鑑別力）。
+    expect(FUNCTION_MATRIX[FunctionKey.LIFECYCLE_MANAGEMENT].Supervisor).not.toBe(
+      FUNCTION_MATRIX[FunctionKey.BUSINESS_CATEGORY_MANAGEMENT].Supervisor,
+    );
+  });
+
+  it('角色集合仍為固定 5 種、不新增角色欄', () => {
+    expect(Object.keys(FUNCTION_MATRIX[FunctionKey.BUSINESS_CATEGORY_MANAGEMENT]).sort()).toEqual(
+      ['SysAdmin', 'ICSOPAdmin', 'Supervisor', 'DeptContact', 'User'].sort(),
+    );
   });
 });

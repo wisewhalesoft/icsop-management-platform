@@ -68,6 +68,17 @@ const ACTION_TYPE_LABEL: Readonly<Record<string, string>> = {
   // 詞，等於在畫面上抹掉兩者之差別（`AC-J22` ① 之硬性要求）。
   OJT_SESSION_UPLOAD: '場次登記',
   OJT_SESSION_DELETE: '場次刪除',
+  // 🔴 F043 E12 delta（決策 E3）：8 個新動作之中文標籤。
+  // ⚠ **掛載與移除必須互異**（`AC-31`／`AC-39` 之同一組理由）——把兩個相反的動作標成同一個
+  // 詞，等於在畫面上抹掉兩者之差別；本 repo 已於循環側之 change-labels 踩過該收斂。
+  BUSINESS_CATEGORY_VIEW: '業務/功能類別樹狀圖檢視',
+  BUSINESS_CATEGORY_DOWNLOAD: '業務/功能類別樹狀圖下載',
+  BUSINESS_CATEGORY_PRINT: '業務/功能類別樹狀圖列印',
+  BUSINESS_CATEGORY_DELETE: '業務/功能類別刪除',
+  BUSINESS_CATEGORY_DOC_MOUNTED: '新增掛載',
+  BUSINESS_CATEGORY_DOC_UNMOUNTED: '移除掛載',
+  BUSINESS_CATEGORY_CHANGELOG_VIEW: '業務/功能類別變更歷程檢視',
+  BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD: '業務/功能類別新舊樹狀圖下載',
 };
 
 export function actionTypeLabel(actionType: string): string {
@@ -85,9 +96,15 @@ export function actionTypeLabel(actionType: string): string {
  */
 export function auditKindLabel(
   targetType: string,
-): '文件' | '循環' | '變更' | '上傳' | 'OJT 場次' {
+): '文件' | '循環' | '變更' | '上傳' | 'OJT 場次' | '業務/功能類別' {
   if (targetType === 'DOCUMENT' || targetType === 'USAGE_FORM') return '文件';
   if (targetType === 'LIFECYCLE') return '循環';
+  // 🔴 F043 E12 delta（決策 E3）：第六個類型值。**必須**置於下方 `return '變更'` 之前——
+  // 落入通則會使類別事件在「類型」欄顯示為「變更」，與新增之「業務/功能類別」篩選值自相矛盾
+  // （選了該篩選、篩出來的列類型欄卻寫「變更」）。與 OJT_SESSION／DOCUMENT_ATTACHMENT 同型。
+  // 🔒 `BUSINESS_CATEGORY_CHANGE_LOG` **刻意**落入下方通則 → 「變更」，比照
+  // `LIFECYCLE_CHANGE_LOG` 之既有處置（零改動即應成立）。
+  if (targetType === 'BUSINESS_CATEGORY') return '業務/功能類別';
   // 🔴 F042 E11 delta（`AC-J23`）：第五個類型值。與 `DOCUMENT_ATTACHMENT` 同理，**必須**置於
   // 下方 `return '變更'` 之前——落入通則會使場次事件在「類型」欄顯示為「變更」，與新增之
   // 「OJT 場次」篩選值自相矛盾。刻意**不**沿用「上傳」：刪除事件顯示為「上傳」是說謊。

@@ -48,10 +48,17 @@ describe('resolveAuditQuerySpec — filters 正規化（下推規格）', () => 
     expect(spec.from).toBeUndefined();
   });
 
-  it('kind=變更 → targetTypes=兩種 CHANGE_LOG', () => {
+  /**
+   * 🔴 2026-09-02 F043 決策 E3（收斂修正，比照 access-history-filter.spec.ts 同日處置）：
+   * 「變更」kind 之 targetTypes 由 2 值擴為 3 值（additive 併入 BUSINESS_CATEGORY_CHANGE_LOG）——
+   * `resolveAuditQuerySpec` 與 `resolveAuditQuery`／`kindToTargetTypes` 共用同一正規化規則，
+   * 兩檔須同步收斂，否則 SQL 下推路徑與記憶體路徑對「變更」kind 之查詢結果會不一致。
+   */
+  it('kind=變更 → targetTypes=三種 CHANGE_LOG（F043 起，additive 併入 BUSINESS_CATEGORY_CHANGE_LOG）', () => {
     expect(resolveAuditQuerySpec({ kind: '變更' }).targetTypes).toEqual([
       'DOCUMENT_CHANGE_LOG',
       'LIFECYCLE_CHANGE_LOG',
+      'BUSINESS_CATEGORY_CHANGE_LOG',
     ]);
   });
 

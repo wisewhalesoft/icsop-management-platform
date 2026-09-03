@@ -3,6 +3,7 @@ import { DocumentListItem } from './documents.store';
 import { DISPLAY_LABEL, deriveDisplayStatus } from './display-status';
 import { OJT_STATUS_LABEL } from './ojt-completion.reader';
 import { orderLinksForExport } from './export-link-order';
+import { formatBusinessCategoriesForExport } from './business-category-export-format';
 
 /**
  * F017 §清單匯出（CSV）delta —— **十四欄之逐欄值層**（`AC-X1` ②／`AC-X3`／`AC-X4`～`AC-X8`）。
@@ -97,5 +98,21 @@ export function buildDocumentExportColumns(
     { header: '公告日期', value: (r) => formatExportTimestamp(r.announcedDate).slice(0, 10) },
     // 14 循環別：含子分類之顯示名（＝後端 `lifecycleDisplayName()` 之輸出，與畫面同一份字）。
     { header: '循環別', value: (r) => r.lifecycleName },
+    /**
+     * 15 業務/功能類別（🔴 F017 `AC-B9`，2026-09-02 F043 delta；14 → **15** 欄，新欄置於最末）。
+     *  · 值＝該文件之**相異類別**（去重規則同 `AC-B3`，已由 store 層完成）之
+     *    `businessCategoryDisplayName`，以**全形頓號 `、`** 相接、前後無空白；
+     *  · 順序**恆依 UTF-16 碼位序**（🔴 明文禁止 `localeCompare`，見
+     *    `business-category-export-format.ts` 檔頭之理由）；
+     *  · `N = 0` → **空儲存格**（非 `—`、非 `0`——`—` 是畫面之空值佔位符，不是資料）；
+     *  · 🔒 **不套用 `AC-B8` 之「命中者置前」**——本欄之 CSV 順序與請求、與畫面篩選狀態完全無關
+     *    （`AC-B10`：為一個排序細節再開一個匯出 body 鍵，代價高於收益）。此為本欄與第 12 欄之
+     *    刻意不同，非疏漏。
+     *  · 注入前綴由通則層之 `cell()` 統一處理，本欄不重複實作。
+     */
+    {
+      header: '業務/功能類別',
+      value: (r) => formatBusinessCategoriesForExport(r.businessCategories ?? []),
+    },
   ];
 }

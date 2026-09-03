@@ -49,8 +49,16 @@ import { EXPORT_ROW_LIMIT } from '../storage/csv-export';
  */
 
 const EXPORT_PATH = 'export';
+/**
+ * 🔴 2026-09-02 impl-be 申訴 2（第三處，收斂修正——比照同日對
+ * `documents.export.service.spec.ts`／`rbac/function-matrix.spec.ts`／
+ * `audit/access-history-filter.spec.ts` 之既有處置）：F043 `AC-B9` ① 將 CSV 表頭由 14→15 欄
+ * （新欄「業務/功能類別」置末，既有 14 欄字面/順序一字不改）。本檔為**端點層**之獨立表頭鎖定
+ * （與 service 層之 `documents.export.service.spec.ts` 各自持有一份常數），故須同步收斂，
+ * 否則兩檔對同一條 CSV 契約鎖定不同欄數，必有一方為紅。
+ */
 const HEADER =
-  'OJT,制定公司,制定部門,制定室別,當責室長,狀態,檔案,程序書編號,程序書書名,版次,內容摘要,連結點程序書,公告日期,循環別';
+  'OJT,制定公司,制定部門,制定室別,當責室長,狀態,檔案,程序書編號,程序書書名,版次,內容摘要,連結點程序書,公告日期,循環別,業務/功能類別';
 
 /** 以 `@Post(path)` 之路徑字面定位 handler（不把 handler 名稱寫死）。 */
 function handlerByPath(path: string): ((...args: unknown[]) => unknown) | undefined {
@@ -255,7 +263,7 @@ describe('F017 AC-X13／AC-X11 ⑤：回應標頭與位元組', () => {
     expect([buf[0], buf[1], buf[2]]).toEqual([0xef, 0xbb, 0xbf]);
   });
 
-  it('AC-X1 ② 第 1 列逐字為十四欄表頭', async () => {
+  it('AC-X1 ②／AC-B9 ① 第 1 列逐字為十五欄表頭（14→15，新欄「業務/功能類別」置末）', async () => {
     const h = makeHarness();
     await h.call({ documentIds: ['d1'] });
     expect(rawText(sentBuffer(h.res)).split('\r\n')[0]).toBe(HEADER);

@@ -197,3 +197,96 @@ describe('buildAuditRow — TS-F039-001 附錄（APPENDIX）下載事件', () =>
     expect(row.watermarkSnapshot).toBeNull();
   });
 });
+
+/**
+ * F043 業務/功能類別管理 — architecture-spec.md §14.6.2 決策 E3：additive 新增
+ * targetType='BUSINESS_CATEGORY'／'BUSINESS_CATEGORY_CHANGE_LOG'，新增 8 個 actionType，
+ * 且 AUDIT_LOG 新增 `businessCategoryId`（比照 `lifecycleId`）／`nodeId`（本功能獨有）兩欄。
+ * `documentId` 沿用既有欄（掛載/移除事件之 documentId 落於既有欄，非新欄）。
+ *
+ * ⚠ 對實作全盲：buildAuditRow 尚未認得 'BUSINESS_CATEGORY' 之 targetType——本區塊於本環撰寫時
+ * 之預期紅燈為「switch 落至 default 或拋出未知 targetType」，非既有 5＋1 種既有分支之改動。
+ */
+describe('buildAuditRow — F043 決策 E3：業務/功能類別（BUSINESS_CATEGORY）事件', () => {
+  const BC_VIEW = {
+    targetType: 'BUSINESS_CATEGORY',
+    actionType: 'BUSINESS_CATEGORY_VIEW',
+    actorId: 'acc-1',
+    actorName: '李慧玲',
+    employeeNo: '20233',
+    company: '和潤企業股份有限公司',
+    department: '債權管理部',
+    section: '法催一室',
+    roleCode: 'ICSOPAdmin',
+    targetId: 'bc-1',
+    targetNumber: '授信（消金）',
+    occurredAt: OCCURRED,
+    watermarkSnapshot: 'wm',
+  } as unknown as AuditAccessEvent;
+
+  it('BUSINESS_CATEGORY/BUSINESS_CATEGORY_VIEW → businessCategoryId=targetId、nodeId/documentId 皆為 null（無節點脈絡之既有動作）', () => {
+    const row = buildAuditRow(BC_VIEW) as unknown as Record<string, unknown>;
+    expect(row.targetType).toBe('BUSINESS_CATEGORY');
+    expect(row.actionType).toBe('BUSINESS_CATEGORY_VIEW');
+    expect(row.businessCategoryId).toBe('bc-1');
+    expect(row.nodeId ?? null).toBeNull();
+    expect(row.documentId ?? null).toBeNull();
+    expect(row.lifecycleId).toBeNull(); // 不得誤入既有 LIFECYCLE 對映分支
+  });
+
+  it('🔴 AC-31：BUSINESS_CATEGORY_DOC_MOUNTED → businessCategoryId／nodeId／documentId 三者皆落地（新增/移除掛載之必要脈絡）', () => {
+    const row = buildAuditRow({
+      ...BC_VIEW,
+      actionType: 'BUSINESS_CATEGORY_DOC_MOUNTED',
+      nodeId: 'n1',
+      documentId: 'd1',
+    } as unknown as AuditAccessEvent) as unknown as Record<string, unknown>;
+    expect(row.actionType).toBe('BUSINESS_CATEGORY_DOC_MOUNTED');
+    expect(row.businessCategoryId).toBe('bc-1');
+    expect(row.nodeId).toBe('n1');
+    expect(row.documentId).toBe('d1');
+  });
+
+  it('BUSINESS_CATEGORY_DOC_UNMOUNTED → 同一組欄位對映（掛載與移除共用同一映射規則）', () => {
+    const row = buildAuditRow({
+      ...BC_VIEW,
+      actionType: 'BUSINESS_CATEGORY_DOC_UNMOUNTED',
+      nodeId: 'n2',
+      documentId: 'd2',
+    } as unknown as AuditAccessEvent) as unknown as Record<string, unknown>;
+    expect(row.nodeId).toBe('n2');
+    expect(row.documentId).toBe('d2');
+  });
+
+  it('BUSINESS_CATEGORY_CHANGE_LOG/BUSINESS_CATEGORY_CHANGELOG_VIEW → businessCategoryId=targetId、無浮水印時收斂為 null（比照 LIFECYCLE_CHANGE_LOG 既有先例）', () => {
+    const row = buildAuditRow({
+      targetType: 'BUSINESS_CATEGORY_CHANGE_LOG',
+      actionType: 'BUSINESS_CATEGORY_CHANGELOG_VIEW',
+      actorId: 'a',
+      targetId: 'bc-1',
+      targetNumber: '授信（消金）',
+      occurredAt: OCCURRED,
+    } as unknown as AuditAccessEvent) as unknown as Record<string, unknown>;
+    expect(row.targetType).toBe('BUSINESS_CATEGORY_CHANGE_LOG');
+    expect(row.businessCategoryId).toBe('bc-1');
+    expect(row.watermarkSnapshot).toBeNull();
+  });
+
+  it('未帶 targetId → AUDIT_TARGET_REF_REQUIRED（比照既有 5 種 targetType 之條件必填規則）', () => {
+    expect(() =>
+      buildAuditRow({
+        targetType: 'BUSINESS_CATEGORY',
+        actionType: 'BUSINESS_CATEGORY_VIEW',
+        actorId: 'acc-1',
+        targetId: '',
+        occurredAt: OCCURRED,
+      } as unknown as AuditAccessEvent),
+    ).toThrow('AUDIT_TARGET_REF_REQUIRED');
+  });
+
+  it('DOCUMENT 事件（既有分支）不外洩 businessCategoryId／nodeId（回歸鎖定：既有分支未因本 delta 混入新欄之誤值）', () => {
+    const row = buildAuditRow(DOC_VIEW) as unknown as Record<string, unknown>;
+    expect(row.businessCategoryId ?? null).toBeNull();
+    expect(row.nodeId ?? null).toBeNull();
+  });
+});

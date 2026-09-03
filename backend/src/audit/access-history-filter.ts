@@ -21,8 +21,11 @@ export function kindToTargetTypes(kind: AuditKind): AuditTargetType[] {
       return ['DOCUMENT', 'USAGE_FORM', 'APPENDIX'];
     case '循環':
       return ['LIFECYCLE'];
+    // 🔴 F043 E12 delta（決策 E3）：本陣列由 2 值擴為 3 值（additive）——
+    // `BUSINESS_CATEGORY_CHANGE_LOG` 比照 `LIFECYCLE_CHANGE_LOG` 歸「變更」kind
+    // （後者本就不在「循環」kind 內，本功能**同構跟進**而非另創一套分類法）。
     case '變更':
-      return ['DOCUMENT_CHANGE_LOG', 'LIFECYCLE_CHANGE_LOG'];
+      return ['DOCUMENT_CHANGE_LOG', 'LIFECYCLE_CHANGE_LOG', 'BUSINESS_CATEGORY_CHANGE_LOG'];
     // 🔴 D9 delta（`AC-N69`，`OQ-D9-34`）：第四種類型篩選值，**獨佔** DOCUMENT_ATTACHMENT。
     // 🔒 上方三個既有分支一格未動——「文件」不含 DOCUMENT_ATTACHMENT 是**排除**面，
     // 本 case 是**篩出**面；兩面必須各自成立（只驗其一不足以證明另一面）。
@@ -32,6 +35,11 @@ export function kindToTargetTypes(kind: AuditKind): AuditTargetType[] {
     // 🔒 上方四個既有分支一格未動——「上傳」仍獨佔 DOCUMENT_ATTACHMENT（歷史列之載體）。
     case 'OJT 場次':
       return ['OJT_SESSION'];
+    // 🔴 F043 E12 delta（決策 E3）：第六種類型篩選值，**獨佔** BUSINESS_CATEGORY。
+    // 🔒 上方五個既有分支一格未動——「循環」仍僅映射 ['LIFECYCLE']（**排除**面），
+    // 本 case 是**篩出**面；兩面必須各自成立（只驗其一不足以證明另一面）。
+    case '業務/功能類別':
+      return ['BUSINESS_CATEGORY'];
   }
 }
 
