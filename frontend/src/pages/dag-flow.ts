@@ -1,5 +1,4 @@
 import * as Dagre from '@dagrejs/dagre';
-import type { DagGraph } from '../api/types';
 
 /** DAG 節點卡估算尺寸（供自動排列計算層距；與畫布卡片實際寬高相近即可）。 */
 export const NODE_W = 184;
@@ -29,7 +28,21 @@ export interface FlowEdge {
   type: 'step';
 }
 
-export function graphToFlow(graph: DagGraph): {
+/**
+ * 轉換所需之**最小圖形狀**（本函式實際只讀節點之 `id`／`name`／`positionX`／`positionY`／`docCount`
+ * 與邊之 `id`／`sourceNodeId`／`targetNodeId`）。
+ *
+ * 🔵 2026-09-02 F043（架構決策 E7 之「共用的是渲染演算法、不是頁面元件」）：業務/功能類別 DAG 畫布
+ * 與循環 DAG 畫布共用本轉換，但兩者之節點型別各帶自己的擁有者外鍵（`lifecycleId` vs
+ * `businessCategoryId`）。故此處把參數型別由 `DagGraph` **放寬為結構最小集**——`DagGraph` 天然滿足
+ * 它，既有呼叫端一行未改、**行為零變更**（純型別放寬）。🔒 刻意**不**改 `DagNode` 本身（`AC-49`）。
+ */
+export interface FlowGraphInput {
+  nodes: { id: string; name: string | null; positionX: number; positionY: number; docCount?: number }[];
+  edges: { id: string; sourceNodeId: string; targetNodeId: string }[];
+}
+
+export function graphToFlow(graph: FlowGraphInput): {
   nodes: FlowNode[];
   edges: FlowEdge[];
 } {

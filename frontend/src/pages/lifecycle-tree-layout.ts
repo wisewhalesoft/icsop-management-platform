@@ -1,5 +1,5 @@
 import Dagre from '@dagrejs/dagre';
-import type { DagNode, DagEdge } from '../api/types';
+import type { DagEdge } from '../api/types';
 
 /**
  * F036 循環樹狀圖檢視器之「上到下」分層佈局 ＋ 下游遍歷 — 純函式（無 React／無 DOM）。
@@ -48,7 +48,23 @@ export interface TreeLayout {
  * 供連線繞線（走廊、車道、跨層通道）使用。空圖 → 版面僅含邊界。端點不存在之邊先濾掉，
  * 否則 dagre 會替它自動長出一個幽靈節點。
  */
-export function buildTreeLayout(nodes: DagNode[], edges: DagEdge[]): TreeLayout {
+/**
+ * 佈局所需之**最小節點形狀**（本函式實際只讀 `id`／`name`／`docCount` 三個欄位）。
+ *
+ * 🔵 2026-09-02 F043（架構決策 E2／E7 之「共用的是渲染演算法、不是頁面元件」）：業務/功能類別
+ * 樹狀圖與循環樹狀圖共用本佈局函式，但兩者之節點型別各帶自己的擁有者外鍵（`lifecycleId` vs
+ * `businessCategoryId`）與各自的掛載計數欄名。故此處把參數型別由 `DagNode[]` **放寬為結構最小集**
+ * ——`DagNode` 天然滿足它，既有呼叫端一行未改、**行為零變更**（純型別放寬）。
+ * 🔒 刻意**不**改 `DagNode` 本身（`AC-49` 循環側零漣漪），也**不**要求呼叫端塞一個假的
+ * `lifecycleId: ''` 進來——那會讓業務類別的節點在型別上宣稱自己屬於某個循環。
+ */
+export interface TreeLayoutInputNode {
+  id: string;
+  name: string | null;
+  docCount?: number;
+}
+
+export function buildTreeLayout(nodes: TreeLayoutInputNode[], edges: DagEdge[]): TreeLayout {
   const idSet = new Set(nodes.map((n) => n.id));
   const kept = edges.filter((e) => idSet.has(e.sourceNodeId) && idSet.has(e.targetNodeId));
   if (!nodes.length) {

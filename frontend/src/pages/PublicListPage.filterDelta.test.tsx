@@ -129,7 +129,9 @@ function mockAuth(userSubtype: string | null = 'other'): void {
 
 const renderPage = () =>
   render(
-    <MemoryRouter initialEntries={['/public']}>
+    // 🔴 2026-09-02 F043 delta（`AC-B13`）連坐修正：不帶 mode 現預設樹狀圖，本檔測的是清單模式，
+    // 顯式帶 `?mode=list` 維持既有期望值（tdd-implementation 申訴）。
+    <MemoryRouter initialEntries={['/public?mode=list']}>
       <PublicListPage />
     </MemoryRouter>,
   );

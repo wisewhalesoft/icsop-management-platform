@@ -10,10 +10,17 @@ import {
   getLifecycles,
   getLifecycleTreeDiff,
   downloadLifecycleTreeDiff,
+  getBusinessCategories,
+  getBusinessCategoryChanges,
+  viewBusinessCategoryChanges,
+  getBusinessCategoryChangeDiff,
+  downloadBusinessCategoryTreeDiff,
+  exportBusinessCategoryChanges,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { lifecycleDisplayName } from '../domain/lifecycle-subcategory';
+import { businessCategoryDisplayName } from '../domain/business-category';
 import { Icon } from '../components/Icon';
 import { PageHeader, TopbarActions } from '../components/PageHeader';
 import { watermarkPresentation } from '../domain/watermark-lines';
@@ -31,6 +38,68 @@ import {
 } from '../domain/export-feedback';
 
 const msgOf = (e: unknown): string => (e instanceof ApiError ? e.code : '載入失敗');
+
+/**
+ * 🔴🔴 §A.10.3 **`PREVIEW_KIND` 分派契約**（下游必須實作之分派點，非實作註解）。
+ *
+ * 情境：`文件變更歷程` 之 **Tab 2（循環樹狀圖）與 Tab 3（業務/功能類別樹狀圖）共用同一個新舊對照
+ * 預覽 modal 與同一支 mini-DAG 渲染**（刻意不複製第二份 diff 呈現——兩份各自演化正是視覺分歧的
+ * 來源）。⇒ modal 內的「下載新舊對照 PDF」**必須依當前預覽之事件種類分派**到對應的下載動作與
+ * 對應的稽核家族：Tab 2 → `LIFECYCLE_CHANGELOG_DOWNLOAD`；Tab 3 → `BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD`。
+ *
+ * 🔴 **失敗形狀**：少了這個分派，Tab 3 的下載鈕會永遠去查循環側事件、查不到就**靜默無反應**
+ * ——按鈕在、可點、沒有任何錯誤，而**兩邊的單元測試各自都會綠**。
+ * 🔒 本函式為**唯一消費點**；`PREVIEW_KIND_*` 為兩個 tab 各自持有之具名旗標，全檔不得出現第二處判斷。
+ */
+export type PreviewKind = 'lifecycle' | 'business';
+const PREVIEW_KIND_LIFECYCLE: PreviewKind = 'lifecycle';
+const PREVIEW_KIND_BUSINESS: PreviewKind = 'business';
+
+function downloadFromModal(
+  kind: PreviewKind,
+  ownerId: string,
+  changeLogId: string,
+): Promise<void> {
+  return kind === 'lifecycle'
+    ? downloadLifecycleTreeDiff(ownerId, changeLogId, `tree-diff-${changeLogId}.pdf`)
+    : downloadBusinessCategoryTreeDiff(
+        ownerId,
+        changeLogId,
+        `business-category-tree-diff-${changeLogId}.pdf`,
+      );
+}
+
+/**
+ * 🔴 `AC-39`／§A.9.2 N16：Tab 3 之 `changeType` **封閉值域＝恰 7 個鍵**，各自之顯示字面逐字如下。
+ *
+ * 🔴 **`新增掛載` 與 `移除掛載` 是兩個相異值，明文禁止收斂為單一「文件掛載變更」**——
+ * 既有循環側之 `change-labels.ts` 把 `DOCUMENT_MOUNTED`／`DOCUMENT_REASSIGNED`／
+ * `DOCUMENT_UNMOUNTED` **三鍵映射到同一字串**；若本表照抄那張表，① 「恰 7 值」在顯示層即
+ * **不可觀察**、② 掛載與移除兩種相反事件在畫面與 CSV 上**輸出逐字相同**，任何想區分兩者的
+ * 斷言都會恆真。🔒 **既有 `change-labels.ts` 一行未改**（`AC-49`）——本功能新增自己的一張表。
+ * 🔴 值域中**不存在** `DOCUMENT_REASSIGNED`；字面中**不存在** `改派`、亦不存在 `文件掛載變更`
+ * （M:N 模型下把「移除 A ＋ 新增 B」記成一次改派會憑空捏造因果關係，`AC-30`）。
+ */
+export const BC_CHANGE_TYPES: Record<BusinessCategoryChangeType, string> = {
+  NODE_ADDED: '新增節點',
+  NODE_REMOVED: '移除節點',
+  NODE_RENAMED: '節點改名',
+  EDGE_ADDED: '新增連線',
+  EDGE_REMOVED: '移除連線',
+  DOCUMENT_MOUNTED: '新增掛載',
+  DOCUMENT_UNMOUNTED: '移除掛載',
+};
+
+/** Tab 3 事件徽章之配色（比照 Tab 2 之 `LC_TYPE`；新增綠、移除紅、其餘中性）。 */
+const BC_TYPE_TONE: Record<BusinessCategoryChangeType, { tone: string; icon: string }> = {
+  NODE_ADDED: { tone: 'emerald', icon: 'plus-circle' },
+  NODE_REMOVED: { tone: 'red', icon: 'minus-circle' },
+  NODE_RENAMED: { tone: 'amber', icon: 'square-pen' },
+  EDGE_ADDED: { tone: 'emerald', icon: 'spline' },
+  EDGE_REMOVED: { tone: 'red', icon: 'link-2-off' },
+  DOCUMENT_MOUNTED: { tone: 'primary', icon: 'file-check-2' },
+  DOCUMENT_UNMOUNTED: { tone: 'slate', icon: 'file-x-2' },
+};
 
 /** 匯出回饋（訊息 ＋ 錯誤碼標記；碼與訊息須同時可見，`error-handling.md#export`）。 */
 interface ExportFeedback {
@@ -73,13 +142,15 @@ function ExportFeedbackBox({ feedback }: { feedback: ExportFeedback }): JSX.Elem
   );
 }
 import type {
+  BusinessCategoryChangeType,
+  BusinessCategoryChangeView,
+  BusinessCategoryTreeDiff,
+  BusinessCategoryView,
   DocumentChangeView,
   LifecycleChangeView,
   LifecycleView,
   LifecycleTreeDiff,
   LifecycleDiff,
-  DagGraph,
-  DagNode,
   DagEdge,
 } from '../api/types';
 
@@ -171,6 +242,22 @@ function SrcBadge({ src }: { src: string }): JSX.Element {
   );
 }
 
+/**
+ * 🔵 2026-09-02 F043（§A.10.3）：Tab 2（循環樹狀圖）與 Tab 3（業務/功能類別樹狀圖）**共用同一個
+ * 新舊對照 modal 與同一支 mini-DAG 渲染**（刻意不複製第二份 diff 呈現——兩份各自演化正是視覺
+ * 分歧的來源）。兩者之節點型別各帶自己的擁有者外鍵（`lifecycleId` vs `businessCategoryId`），
+ * 而本區塊實際只讀 `id`／`name`／`docCount` ⇒ 以**結構最小集**承接，**行為零變更**。
+ */
+interface MiniGraphNode {
+  id: string;
+  name: string | null;
+  docCount?: number;
+}
+interface MiniGraph {
+  nodes: MiniGraphNode[];
+  edges: DagEdge[];
+}
+
 // ── prototype-23 mini DAG 佈局（獨立於 F036 viewer 之 176 尺度；逐值移植 layoutGraph/edgeD）。──
 const MINI = { NW: 142, NH: 54, HGAP: 176, VGAP: 104, MARGIN: 30 };
 interface MiniPos {
@@ -181,7 +268,7 @@ interface MiniPos {
   y: number;
 }
 function miniLayout(
-  nodes: DagNode[],
+  nodes: MiniGraphNode[],
   edges: DagEdge[],
 ): { nodes: MiniPos[]; edges: DagEdge[]; w: number; h: number } {
   const ids = nodes.map((n) => n.id);
@@ -323,11 +410,28 @@ function groupDoc(rows: DocumentChangeView[]): DocGroup[] {
 }
 
 
+type TabKey = 'doc' | 'tree' | 'business';
+
+/**
+ * `AC-40`：三個 tab 之逐字標籤與順序（🔒 前兩者一字不改，新 tab 置於**最後**）。
+ * 🔒 `業務/功能類別樹狀圖` 之字面**就地宣告於本檔**——與前台瀏覽模式切換器之同字標籤刻意
+ * **不共用常數**（架構 §14.8 命名碰撞警示：兩者只是碰巧同字，不是同一個業務概念）。
+ */
+const TABS: readonly { key: TabKey; label: string; icon: string }[] = [
+  { key: 'doc', label: 'ICSOP 程序書', icon: 'file-diff' },
+  { key: 'tree', label: '循環樹狀圖', icon: 'git-fork' },
+  { key: 'business', label: '業務/功能類別樹狀圖', icon: 'shapes' },
+];
+
 export function ChangeHistoryPage(): JSX.Element {
   const { user } = useAuth();
   const canRead = canPerform(user?.roleCode, FunctionKey.DOCUMENT_CHANGE_HISTORY, 'read');
 
-  const [sub, setSub] = useState<'doc' | 'tree'>('doc');
+  /**
+   * 🔵 `AC-40`（2026-09-02 F043 delta）：**恰三個** tab，新 tab 置於**最後**。
+   * 🔒 前兩者之標籤、順序與內容一字不改。
+   */
+  const [sub, setSub] = useState<TabKey>('doc');
 
   if (!canRead) {
     return (
@@ -353,30 +457,42 @@ export function ChangeHistoryPage(): JSX.Element {
         <Icon name="globe" className="w-4 h-4 mt-0.5 shrink-0" />
         <span>
           查詢範圍：<b>全公司</b>（僅系統管理員 / ICSOP 管理員可查；主管／部門窗口／一般使用者無權，OQ-E07-04 定案）。查詢/展開/預覽/下載均寫入{' '}
-          <span className="mono">CHANGE_LOG_VIEW</span> / <span className="mono">LIFECYCLE_CHANGELOG_*</span> 稽核。
+          <span className="mono">CHANGE_LOG_VIEW</span> / <span className="mono">LIFECYCLE_CHANGELOG_*</span> /{' '}
+          <span className="mono">BUSINESS_CATEGORY_CHANGELOG_*</span> 稽核。
         </span>
       </div>
 
-      {/* 次分頁 */}
-      <div className="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50">
-        {(['doc', 'tree'] as const).map((k) => {
-          const on = sub === k;
+      {/*
+        次分頁（`AC-40`：**恰三個**，逐字與順序 `ICSOP 程序書`／`循環樹狀圖`／`業務/功能類別樹狀圖`）。
+        🔴 §A.9.2 N14：本容器帶 `data-testid="change-history-tabs"` ——第三個 tab 之標籤與**前台**
+        瀏覽模式切換器之標籤**逐字相同但為兩個互不相干之載體**，任何斷言此標籤之測試必須**先限定
+        本容器**，明文禁止全域 `getByText('業務/功能類別樹狀圖')`。
+      */}
+      <div
+        data-testid="change-history-tabs"
+        data-change-history-tabs=""
+        className="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50"
+      >
+        {TABS.map((t) => {
+          const on = sub === t.key;
           return (
             <button
-              key={k}
-              onClick={() => setSub(k)}
+              key={t.key}
+              onClick={() => setSub(t.key)}
               className={`px-3.5 py-1.5 rounded-md text-sm font-medium inline-flex items-center gap-1.5 ${
                 on ? 'bg-white text-primary-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              <Icon name={k === 'doc' ? 'file-diff' : 'git-fork'} className="w-4 h-4" />
-              {k === 'doc' ? 'ICSOP 程序書' : '循環樹狀圖'}
+              <Icon name={t.icon} className="w-4 h-4" />
+              {t.label}
             </button>
           );
         })}
       </div>
 
-      {sub === 'doc' ? <DocTab /> : <TreeTab />}
+      {sub === 'doc' && <DocTab />}
+      {sub === 'tree' && <TreeTab />}
+      {sub === 'business' && <BusinessTab />}
     </div>
   );
 }
@@ -728,7 +844,8 @@ function TreeTab(): JSX.Element {
       setDownloadingId(changeLogId);
       setFeedback(null);
       try {
-        await downloadLifecycleTreeDiff(lifecycleId, changeLogId, `tree-diff-${changeLogId}.pdf`);
+        // 🔴 §A.10.3：經**唯一**分派點送出（Tab 2 之旗標為 `PREVIEW_KIND_LIFECYCLE`）。
+        await downloadFromModal(PREVIEW_KIND_LIFECYCLE, lifecycleId, changeLogId);
       } catch (e) {
         setFeedback({ tone: 'error', message: `下載失敗：${msgOf(e)}` });
       } finally {
@@ -910,6 +1027,293 @@ function TreeTab(): JSX.Element {
   );
 }
 
+// ==================== Tab 3：業務/功能類別樹狀圖（F043 §戊） ====================
+/**
+ * 🔵 F043 `AC-40`～`AC-42`：第三個 tab。結構逐項比照 Tab 2，但**資料、端點、錯誤語彙與稽核家族
+ * 全部是另一套**——本功能是與循環管理平行的第二套骨架，不是它的 delta。
+ *
+ * 🔴 `AC-54`：本 tab 之閘門屬於**它所在的頁面**（`文件變更歷程`），不屬於它所描述的對象
+ * （`業務/功能類別管理`）⇒ 主管對本頁整頁 403、**看不到任何一個 tab（含本 tab）**。
+ * 這在直覺上像是漏配權限，**它不是**——與 F038 循環樹狀圖變更歷程之既有處置完全同構。
+ */
+function BusinessTab(): JSX.Element {
+  const [cat, setCat] = useState('');
+  const [type, setType] = useState('');
+  const [person, setPerson] = useState('');
+  const [from, setFrom] = useState('');
+  const [rows, setRows] = useState<BusinessCategoryChangeView[]>([]);
+  const [categories, setCategories] = useState<BusinessCategoryView[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<ExportFeedback | null>(null);
+  const [preview, setPreview] = useState<{
+    event: BusinessCategoryChangeView;
+    data: BusinessCategoryTreeDiff;
+  } | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  /** 查詢與匯出**共用同一份條件組裝**（理由同前兩個 tab：兩處各組一份會匯出到與畫面不同的結果）。 */
+  const filters = useMemo(
+    () => ({
+      businessCategoryId: cat || undefined,
+      person: person.trim() || undefined,
+      from: from || undefined,
+    }),
+    [cat, person, from],
+  );
+
+  const load = useCallback(async () => {
+    try {
+      const res = await getBusinessCategoryChanges(filters);
+      const items = res?.items ?? [];
+      // AC-39：類型篩選以**顯示字面**比對（畫面所見即查詢值；7 個字面兩兩相異故無歧義）。
+      setRows(type ? items.filter((r) => BC_CHANGE_TYPES[r.changeType] === type) : items);
+      setError(null);
+    } catch (e) {
+      setError(msgOf(e));
+    }
+  }, [filters, type]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const list = await getBusinessCategories();
+        setCategories(Array.isArray(list) ? list : []);
+      } catch {
+        /* 下拉選項失敗不阻斷查詢 */
+      }
+    })();
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** AC-42：本 tab 之匯出為**第三個獨立控制項**（與前兩個 tab 共用同一句式與同一錯誤碼）。 */
+  const onExport = useCallback(async () => {
+    try {
+      await exportBusinessCategoryChanges(filters);
+      setFeedback({ tone: 'success', message: '已匯出業務/功能類別樹狀圖變更歷程（CSV，UTF-8 BOM）' });
+    } catch (e) {
+      setFeedback(exportFailureFeedback(e));
+    }
+  }, [filters]);
+
+  /**
+   * AC-41 預覽：先記 BUSINESS_CATEGORY_CHANGELOG_VIEW 稽核（沿用既有稽核呼叫點之形狀），
+   * 再取新舊快照對照。🔒 類別顯示名逐字取自事件本身（後端已組字），前端不再自行串接。
+   */
+  const openBcPreview = useCallback(async (ev: BusinessCategoryChangeView) => {
+    try {
+      await viewBusinessCategoryChanges(ev.businessCategoryId, ev.businessCategoryDisplayName);
+      const data = await getBusinessCategoryChangeDiff(ev.businessCategoryId, ev.id);
+      setPreview({ event: ev, data });
+    } catch (e) {
+      setError(msgOf(e));
+    }
+  }, []);
+
+  const onDownloadDiff = useCallback(
+    async (businessCategoryId: string, changeLogId: string): Promise<void> => {
+      if (downloadingId) return;
+      setDownloadingId(changeLogId);
+      setFeedback(null);
+      try {
+        // 🔴 §A.10.3：經**唯一**分派點送出（Tab 3 之旗標為 PREVIEW_KIND_BUSINESS）——
+        // 少了它，本鈕會去查循環側事件、查不到就靜默無反應。
+        await downloadFromModal(PREVIEW_KIND_BUSINESS, businessCategoryId, changeLogId);
+      } catch (e) {
+        setFeedback({ tone: 'error', message: `下載失敗：${msgOf(e)}` });
+      } finally {
+        setDownloadingId(null);
+      }
+    },
+    [downloadingId],
+  );
+
+  const clear = (): void => {
+    setCat('');
+    setType('');
+    setPerson('');
+    setFrom('');
+    void load();
+  };
+
+  return (
+    <section>
+      {/* AC-42／N18：第三個**獨立**匯出鈕；因只有掛載中的 tab 會投遞，「切 tab 時僅顯示當前 tab
+          之匯出鈕」自然成立，不需 hidden class。 */}
+      <TopbarActions>
+        <button
+          id="exportBusiness"
+          onClick={() => void onExport()}
+          aria-label="匯出"
+          title="匯出業務/功能類別樹狀圖變更歷程（CSV）"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          <Icon name="download" className="w-4 h-4" />
+          匯出
+        </button>
+      </TopbarActions>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div>
+            <label htmlFor="bqCat" className="block text-xs font-medium text-slate-500 mb-1">
+              業務/功能類別
+            </label>
+            {/* N17：**選項值＝businessCategoryId**、顯示＝businessCategoryDisplayName
+                （同名不同子分類為相異選項，代碼與名稱皆無法區分彼此）。 */}
+            <select
+              id="bqCat"
+              value={cat}
+              onChange={(e) => setCat(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"
+            >
+              <option value="">全部業務/功能類別</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {businessCategoryDisplayName(c)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="bqType" className="block text-xs font-medium text-slate-500 mb-1">
+              變更類型
+            </label>
+            <select
+              id="bqType"
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"
+            >
+              <option value="">全部類型</option>
+              {Object.values(BC_CHANGE_TYPES).map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Field label="操作人" id="bqPerson" value={person} onChange={setPerson} placeholder="李慧玲 / 20233" />
+          <DateField label="起始日期" id="bqFrom" value={from} onChange={setFrom} />
+        </div>
+        <div className="flex items-center gap-2 mt-3 flex-wrap">
+          <button
+            onClick={() => void load()}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
+          >
+            <Icon name="search" className="w-4 h-4" />
+            查詢
+          </button>
+          <button onClick={clear} className="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">
+            清除條件
+          </button>
+          <span className="ml-auto text-sm text-slate-500">共 {rows.length} 筆結構變更</span>
+        </div>
+      </div>
+
+      {feedback && <ExportFeedbackBox feedback={feedback} />}
+
+      {error && (
+        <div role="alert" className="mb-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
+          載入失敗 · <span className="mono">{error}</span>
+        </div>
+      )}
+
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[880px]">
+            <thead className="bg-slate-50 text-slate-500 text-xs">
+              <tr>
+                <th className="text-left font-medium px-4 py-2.5">業務/功能類別</th>
+                <th className="text-left font-medium px-4 py-2.5">變更類型</th>
+                <th className="text-left font-medium px-4 py-2.5">變更摘要</th>
+                <th className="text-left font-medium px-4 py-2.5">操作人</th>
+                <th className="text-left font-medium px-4 py-2.5">時間（新→舊）</th>
+                <th className="text-left font-medium px-4 py-2.5">預覽 / 下載</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((e) => {
+                const tone = BC_TYPE_TONE[e.changeType] ?? { tone: 'slate', icon: 'git-commit-vertical' };
+                return (
+                  <tr key={e.id} className="hover:bg-slate-50 align-top" data-bc-event-row={e.id}>
+                    <td className="px-4 py-3 text-slate-700" data-business-category-cell="">
+                      {e.businessCategoryDisplayName}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-${tone.tone}-50 text-${tone.tone}-700 border border-${tone.tone}-100`}
+                      >
+                        <Icon name={tone.icon} className="w-3.5 h-3.5" />
+                        {BC_CHANGE_TYPES[e.changeType] ?? e.changeType}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">{e.summary}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {e.actorName ?? '—'}
+                      <span className="text-slate-400 mono text-xs">（{e.actorEmployeeNo ?? '—'}）</span>
+                    </td>
+                    <td className="px-4 py-3 mono text-xs text-slate-500">{fmt(e.occurredAt)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3 text-sm whitespace-nowrap">
+                        <button
+                          onClick={() => void openBcPreview(e)}
+                          className="text-primary-600 hover:text-primary-700 hover:underline font-medium inline-flex items-center gap-1"
+                        >
+                          <Icon name="eye" className="w-4 h-4" />
+                          預覽
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void onDownloadDiff(e.businessCategoryId, e.id)}
+                          disabled={downloadingId !== null}
+                          aria-busy={downloadingId === e.id}
+                          className="text-slate-600 hover:text-primary-700 hover:underline inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline"
+                        >
+                          <Icon
+                            name={downloadingId === e.id ? 'loader-2' : 'download'}
+                            className={`w-4 h-4 ${downloadingId === e.id ? 'animate-spin' : ''}`}
+                          />
+                          下載
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {/* N19：逐字空狀態（比照 Tab 2 之「此循環尚無結構變更事件」）。 */}
+        {rows.length === 0 && (
+          <div className="text-center py-14">
+            <Icon name="shapes" className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+            <p className="text-slate-500">此業務/功能類別尚無結構變更事件</p>
+          </div>
+        )}
+      </div>
+      <p className="mt-3 text-xs text-slate-400 flex items-start gap-1.5">
+        <Icon name="shield-check" className="w-3.5 h-3.5 mt-0.5" />
+        「變更後 DAG＝本筆完整快照、變更前＝前一筆快照」；預覽/下載疊加或燒錄浮水印並寫入
+        <span className="mono">BUSINESS_CATEGORY_CHANGELOG_*</span> 稽核（F043 AC-41）。
+      </p>
+
+      {preview && (
+        <TreeDiffModal
+          title={preview.event.businessCategoryDisplayName}
+          event={preview.event}
+          data={preview.data}
+          ownerNoun="業務/功能類別"
+          auditFamily="BUSINESS_CATEGORY_CHANGELOG_VIEW"
+          onClose={() => setPreview(null)}
+          onDownload={() => void onDownloadDiff(preview.event.businessCategoryId, preview.event.id)}
+          downloading={downloadingId === preview.event.id}
+        />
+      )}
+    </section>
+  );
+}
+
 /** 某節點於某側（before/after）之 diff 分類（新增/移除/改名·掛載變更）。 */
 function nodeDiffOf(side: 'before' | 'after', nodeId: string, diff: LifecycleDiff): 'add' | 'remove' | 'amber' | null {
   if (side === 'before' && diff.rmNodes.includes(nodeId)) return 'remove';
@@ -938,12 +1342,18 @@ function DiffBoard({
   diff,
   watermark,
   testId,
+  ownerNoun = '循環',
 }: {
   side: 'before' | 'after';
-  graph: DagGraph;
+  graph: MiniGraph;
   diff: LifecycleDiff;
   watermark: string;
   testId: string;
+  /**
+   * 空 DAG 之說明句中之擁有者名詞。🔒 預設 `循環` ⇒ **循環側之逐字一字不改**（`AC-49`）；
+   * Tab 3 傳入 `業務/功能類別`，避免在類別畫面上說「循環第一筆結構事件」。
+   */
+  ownerNoun?: string;
 }): JSX.Element {
   const layout = useMemo(() => miniLayout(graph.nodes, graph.edges), [graph]);
   const posById = useMemo(() => new Map(layout.nodes.map((n) => [n.id, n])), [layout]);
@@ -958,7 +1368,7 @@ function DiffBoard({
       >
         <div className="text-slate-400 text-xs px-4 py-8">
           <Icon name="git-fork" className="w-8 h-8 mx-auto mb-1.5 text-slate-300" />
-          {side === 'before' ? '變更前為空 DAG（循環第一筆結構事件）' : '變更後為空 DAG'}
+          {side === 'before' ? `變更前為空 DAG（${ownerNoun}第一筆結構事件）` : '變更後為空 DAG'}
         </div>
       </div>
     );
@@ -1088,13 +1498,25 @@ function TreeDiffModal({
   onClose,
   onDownload,
   downloading,
+  ownerNoun = '循環',
+  auditFamily = 'LIFECYCLE_CHANGELOG_VIEW',
 }: {
   title: string;
-  event: LifecycleChangeView;
-  data: LifecycleTreeDiff;
+  /** 🔵 §A.10.3：Tab 2／Tab 3 **共用同一個 modal**，故以結構最小集承接兩種事件。 */
+  event: { summary: string };
+  data: {
+    before: MiniGraph;
+    after: MiniGraph;
+    diff: LifecycleDiff;
+    watermark: string;
+  };
   onClose: () => void;
   onDownload: () => void;
   downloading: boolean;
+  /** 空 DAG 說明句之擁有者名詞（預設 `循環` ⇒ 循環側逐字不變）。 */
+  ownerNoun?: string;
+  /** 稽核家族徽章（預設循環側之既有值 ⇒ 逐字不變；Tab 3 傳 `BUSINESS_CATEGORY_CHANGELOG_VIEW`）。 */
+  auditFamily?: string;
 }): JSX.Element {
   return (
     <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-900/45 p-4" role="dialog" aria-label="新舊樹狀圖對照預覽">
@@ -1125,7 +1547,7 @@ function TreeDiffModal({
           </span>
           <span className="ml-auto inline-flex items-center gap-1 text-primary-600">
             <Icon name="shield-check" className="w-3.5 h-3.5" />
-            本預覽已寫入 <span className="mono">LIFECYCLE_CHANGELOG_VIEW</span> 稽核
+            本預覽已寫入 <span className="mono">{auditFamily}</span> 稽核
           </span>
         </div>
 
@@ -1136,7 +1558,7 @@ function TreeDiffModal({
               <Icon name="clock" className="w-3.5 h-3.5" />變更前
             </div>
             <div className="border border-slate-200 rounded-lg overflow-auto" style={{ maxHeight: '52vh' }}>
-              <DiffBoard side="before" graph={data.before} diff={data.diff} watermark={data.watermark} testId="tree-board-before" />
+              <DiffBoard side="before" graph={data.before} diff={data.diff} watermark={data.watermark} testId="tree-board-before" ownerNoun={ownerNoun} />
             </div>
           </div>
           <div>
@@ -1144,7 +1566,7 @@ function TreeDiffModal({
               <Icon name="check-circle-2" className="w-3.5 h-3.5" />變更後（本筆快照）
             </div>
             <div className="border border-primary-200 rounded-lg overflow-auto" style={{ maxHeight: '52vh' }}>
-              <DiffBoard side="after" graph={data.after} diff={data.diff} watermark={data.watermark} testId="tree-board-after" />
+              <DiffBoard side="after" graph={data.after} diff={data.diff} watermark={data.watermark} testId="tree-board-after" ownerNoun={ownerNoun} />
             </div>
           </div>
         </div>

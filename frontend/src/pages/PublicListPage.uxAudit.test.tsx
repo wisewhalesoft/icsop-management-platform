@@ -103,9 +103,19 @@ function LocationProbe(): JSX.Element {
   return <div data-testid="loc-search">{loc.search}</div>;
 }
 
+/**
+ * 🔴 2026-09-02 F043 delta（`AC-B13`）連坐修正（tdd-implementation 申訴）：進入 `/public`
+ * 不帶 `mode` 現在預設為樹狀圖模式（`AC-B13`）。本檔全數案例測的是「文件清單模式」既有之
+ * URL-查詢狀態單一真相行為（B-1），與 `mode` 為**正交**之兩件事——顯式附加 `mode=list`
+ * 使本檔維持在清單模式下運作，既有斷言之期望值一律不改；唯一連帶調整見下方「清除篩選」案
+ * （見該案之就地註記，`mode` 不屬於「篩選」範疇，清除篩選不應連帶清掉它）。
+ */
+function withMode(entry: string): string {
+  return entry.includes('mode=') ? entry : `${entry}${entry.includes('?') ? '&' : '?'}mode=list`;
+}
 function renderPage(entry = '/public') {
   return render(
-    <MemoryRouter initialEntries={[entry]}>
+    <MemoryRouter initialEntries={[withMode(entry)]}>
       <PublicListPage />
       <LocationProbe />
     </MemoryRouter>,
@@ -212,13 +222,24 @@ describe('前台清單 · UX 稽核回歸', () => {
       );
     });
 
-    it('清除篩選同時清空網址參數', async () => {
+    /**
+     * 🔴 2026-09-02 F043 delta（`AC-B13`）連坐修正（tdd-implementation 申訴）：本案原斷言
+     * `loc-search` 於清除篩選後為**完全空字串**；`mode` 為本輪新增之**正交**查詢鍵
+     * （瀏覽模式，非篩選），不屬於「清除篩選」動作之管轄範圍，若其仍留在網址上並非缺陷。
+     * 就地改為驗證**不含任何篩選鍵**（原案真正保護的不變式），不對 `mode` 之去留下判斷。
+     */
+    it('清除篩選同時清空篩選相關網址參數（不含 mode，見上方就地註記）', async () => {
       const user = userEvent.setup();
       renderPage('/public?dept=JA000&cycle=lc1');
       await screen.findByText('車輛分期進件作業');
 
       await user.click(screen.getByRole('button', { name: '清除篩選' }));
-      await waitFor(() => expect(screen.getByTestId('loc-search').textContent).toBe(''));
+      await waitFor(() => {
+        const search = screen.getByTestId('loc-search').textContent ?? '';
+        for (const filterKey of ['dept', 'cycle', 'mkdept', 'co', 'section', 'chief', 'q', 'page']) {
+          expect(search, `清除篩選後不得殘留篩選鍵 ${filterKey}`).not.toContain(`${filterKey}=`);
+        }
+      });
     });
   });
 

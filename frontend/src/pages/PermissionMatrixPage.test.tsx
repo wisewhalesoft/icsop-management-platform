@@ -155,19 +155,52 @@ describe('PermissionMatrixPage — RBAC 矩陣唯讀顯示（F025/F026）', () =
 
   /**
    * 🔴 [2026-08-28 E11] `AC-J16`（[F025#ojt-progress-function-key-delta]）：`FUNCTION_MATRIX`
-   * 新增恰一個功能鍵「OJT 進度管理」，13 列→14 列。下方既有 `anti-drift` 測試為**動態**逐列比對
-   * （`FUNC_DISPLAY.length` 對 `Object.entries(FUNCTION_MATRIX).length`），一旦兩者同步新增本列，
+   * 新增恰一個功能鍵「OJT 進度管理」，13 列→14 列。
+   * 🔴 [2026-09-02 F043 delta 連坐修正，tdd-implementation 申訴]：`AC-43` 案（下方）再新增
+   * 「業務/功能類別管理」，14 列→15 列——本案之總列數斷言就地同步更新（14→15），非弱化，
+   * 其餘鑑別力（第 14 列 label 與五格逐字）一格不變。下方既有 `anti-drift` 測試為**動態**逐列比對
+   * （`FUNC_DISPLAY.length` 對 `Object.entries(FUNCTION_MATRIX).length`），一旦兩者同步新增新列，
    * 該測試會**自動**涵蓋新列（含 `受限CRUD` 之分類——`classifyCell('受限CRUD')` 已由既有「角色
    * 指派」列驗證過，非本列新開之邏輯路徑）。本案僅另外**顯式**釘住第 14 列之 label 與五格逐字，
    * 供直接追溯（anti-drift 只驗兩表互相一致，不驗其值本身是否為 spec 定案值）。
    */
   it('AC-J16 FUNCTION_MATRIX 恰新增 1 個功能鍵「OJT 進度管理」，第 14 列格值逐字為 唯讀／CRUD／受限CRUD／受限CRUD／無', () => {
     const keys = Object.keys(FUNCTION_MATRIX);
-    expect(keys).toHaveLength(14);
-    expect(FUNC_DISPLAY).toHaveLength(14);
+    expect(keys).toHaveLength(15);
+    expect(FUNC_DISPLAY).toHaveLength(15);
     const ojtRow = FUNC_DISPLAY.find((d) => d.label === 'OJT 進度管理');
     expect(ojtRow, '找不到 FUNC_DISPLAY 之「OJT 進度管理」列').toBeTruthy();
     expect(ojtRow!.cells).toEqual(['唯讀', 'CRUD', '受限CRUD', '受限CRUD', '無']);
+  });
+
+  /**
+   * 🔴 [2026-09-02 F043] `AC-43`（[F025#business-category-function-key-delta]）：`FUNCTION_MATRIX`
+   * 新增恰一個功能鍵「業務/功能類別管理」，14 列→15 列。下方既有 `anti-drift` 測試為**動態**逐列
+   * 比對，一旦兩者同步新增本列即自動涵蓋；本案另外**顯式**釘住第 15 列之 label 與五格逐字，
+   * 供直接追溯。
+   */
+  it('AC-43 FUNCTION_MATRIX 恰新增 1 個功能鍵「業務/功能類別管理」，第 15 列格值逐字為 唯讀／CRUD／唯讀／無／無', () => {
+    const keys = Object.keys(FUNCTION_MATRIX);
+    expect(keys).toHaveLength(15);
+    expect(FUNC_DISPLAY).toHaveLength(15);
+    const bcRow = FUNC_DISPLAY.find((d) => d.label === '業務/功能類別管理');
+    expect(bcRow, '找不到 FUNC_DISPLAY 之「業務/功能類別管理」列').toBeTruthy();
+    expect(bcRow!.cells).toEqual(['唯讀', 'CRUD', '唯讀', '無', '無']);
+  });
+
+  /**
+   * 🔴 AC-44：主管欄與「循環管理（DAG）」列刻意不同（同一頁面上兩列並列可對讀，見
+   * [F025 delta] `AC-B29`；驗證載體必須是 `FUNC_DISPLAY`／`FUNCTION_MATRIX`，不得取自
+   * prototype 18——曾落後，見 test-generator 記憶 `TD-B-02`）。
+   */
+  it('AC-44 循環管理（DAG）與業務/功能類別管理之主管欄刻意不同（不得對齊）', () => {
+    const lcRow = FUNC_DISPLAY.find((d) => d.label === '循環管理（DAG）');
+    const bcRow = FUNC_DISPLAY.find((d) => d.label === '業務/功能類別管理');
+    expect(lcRow, '找不到「循環管理（DAG）」列').toBeTruthy();
+    expect(bcRow, '找不到「業務/功能類別管理」列').toBeTruthy();
+    expect(lcRow!.cells[2]).toBe('無'); // Supervisor 欄，index 2（順序：系統管理員/ICSOP管理員/主管/部門窗口/一般使用者）
+    expect(bcRow!.cells[2]).toBe('唯讀');
+    expect(lcRow!.cells[2]).not.toBe(bcRow!.cells[2]);
   });
 
   it('anti-drift：FUNC_DISPLAY 存取面與 FUNCTION_MATRIX 一致', () => {

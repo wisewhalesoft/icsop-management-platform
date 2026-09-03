@@ -105,9 +105,15 @@ const ORG_UNITS: OrgUnitRecord[] = [
   { companyCode: 'AS', orgCode: 'JCHA0', codePrefix: 'JCHA', parentCode: 'JCH00', tier: 'SUBSECTION', name: '醫療一課', descFull: null, managerEmpNo: null, isActive: true },
 ];
 
+/**
+ * 🔴 2026-09-02 F043 delta（`AC-B13`）連坐修正（tdd-implementation 申訴）：進入 `/public`
+ * 不帶 `mode` 現在預設為**樹狀圖模式**（AC-B13），本檔全數案例測的是**文件清單模式**之既有行為
+ * ——顯式帶 `?mode=list` 以維持本檔既有期望值不變（比照 AC-B14 之查詢字串驅動），
+ * 而非放寬或改寫任何一條既有斷言。
+ */
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/public']}>
+    <MemoryRouter initialEntries={['/public?mode=list']}>
       <PublicListPage />
     </MemoryRouter>,
   );

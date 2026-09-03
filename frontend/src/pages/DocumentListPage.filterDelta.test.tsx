@@ -40,15 +40,19 @@ vi.mock('react-router-dom', async (orig) => {
 vi.mock('../api/endpoints');
 vi.mock('../auth/useAuth');
 
-/** `AC-D1`：13 項之逐字順序（桌面由左至右逐列換行；行動 sheet 由上而下）。 */
+/**
+ * `AC-D1`：13 項之逐字順序（桌面由左至右逐列換行；行動 sheet 由上而下）。
+ * 🔴 2026-09-02 F043 delta（`AC-B6`）連坐修正（tdd-implementation 申訴）：13→14 項，
+ * 「業務/功能類別」為新增之最末項（比照 `循環別` 之可搜尋 combobox 型態，`AC-B7`①）。
+ */
 const FILTER_LABELS = [
   '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '程序書編號', '程序書書名內',
-  '公告日期', '連結點程序書', '附錄', '使用表單', 'OJT', '循環別',
+  '公告日期', '連結點程序書', '附錄', '使用表單', 'OJT', '循環別', '業務/功能類別',
 ] as const;
-/** `AC-D2`：具 combobox 語意之 10 項（`狀態`／`OJT` 為固定值下拉、`公告日期` 為區間輸入）。 */
+/** `AC-D2`／`AC-B7`①：具 combobox 語意之 11 項（`狀態`／`OJT` 為固定值下拉、`公告日期` 為區間輸入）。 */
 const COMBO_LABELS = [
   '制定公司', '制定部門', '制定室別', '當責室長', '程序書編號', '程序書書名內',
-  '連結點程序書', '附錄', '使用表單', '循環別',
+  '連結點程序書', '附錄', '使用表單', '循環別', '業務/功能類別',
 ] as const;
 
 function mockAuth(roleCode = 'ICSOPAdmin'): void {
@@ -167,19 +171,24 @@ beforeEach(() => {
   vi.mocked(endpoints.getUsageFormPool).mockResolvedValue(FORMS);
 });
 
-describe('F017 AC-D1：篩選控制項恰 13 個、順序與無障礙名稱逐字', () => {
-  it('TS-F017-D1-001 桌面篩選區之控制項恰 13 個，由左至右順序逐字為 13 項標籤', async () => {
+/**
+ * 🔴 2026-09-02 F043 delta（`AC-B6`）連坐修正（tdd-implementation 申訴）：13→14 項。
+ * 本 describe 之標的（恰 N 個、逐字順序、無障礙名稱）之鑑別力一格未減，僅 N 與陣列內容
+ * 就地同步為新基準（`FILTER_LABELS` 已於檔頭更新，本處引用之亦隨之更新）。
+ */
+describe('F017 AC-D1：篩選控制項恰 14 個、順序與無障礙名稱逐字', () => {
+  it('TS-F017-D1-001 桌面篩選區之控制項恰 14 個，由左至右順序逐字為 14 項標籤', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
-    // 13 項＝10 個 combobox ＋ 2 個固定值 select ＋ 1 個 role=group 之日期區間
+    // 14 項＝11 個 combobox ＋ 2 個固定值 select ＋ 1 個 role=group 之日期區間
     const controls = Array.from(
       filterBar().querySelectorAll<HTMLElement>('input[role="combobox"], select, [role="group"]'),
     );
-    expect(controls).toHaveLength(13);
+    expect(controls).toHaveLength(14);
     expect(controls.map((el) => el.getAttribute('aria-label'))).toEqual([...FILTER_LABELS]);
   });
 
-  it('TS-F017-D1-002 13 項之無障礙名稱逐字可查', async () => {
+  it('TS-F017-D1-002 14 項之無障礙名稱逐字可查', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     for (const label of FILTER_LABELS) {
@@ -187,7 +196,7 @@ describe('F017 AC-D1：篩選控制項恰 13 個、順序與無障礙名稱逐�
     }
   });
 
-  it('TS-F017-D1-003 行動 sheet 呈現同 13 項、同順序（由上而下）', async () => {
+  it('TS-F017-D1-003 行動 sheet 呈現同 14 項、同順序（由上而下）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     await userEvent.click(mobileTrigger());
@@ -228,7 +237,7 @@ describe('F017 AC-D10：篩選區之逐字文案與選擇器契約', () => {
   it('TS-F017-D10-003b 清除鈕**僅於該篩選有值時可見**（無值時不得出現於無障礙樹）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
-    // 未選任何值 → 十個 combobox 之清除鈕皆不可見
+    // 未選任何值 → 十一個 combobox 之清除鈕皆不可見（🔴 F043 delta：10→11，含「業務/功能類別」）
     for (const label of COMBO_LABELS) {
       expect(within(filterBar()).queryByLabelText(`清除${label}`)).toBeNull();
     }
@@ -565,7 +574,7 @@ describe('F017 AC-D7：當責室長篩選＝主要 ∪ 次要（與前台同一�
 });
 
 describe('F017 AC-D8：清除全部篩選', () => {
-  it('TS-F017-D8-001 點擊後 13 項篩選與關鍵字同時清空、回復未篩選狀態與第 1 頁', async () => {
+  it('TS-F017-D8-001 點擊後 14 項篩選與關鍵字同時清空、回復未篩選狀態與第 1 頁', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     await pick('制定部門', '企劃部');

@@ -137,11 +137,16 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
    *   OLD>   expect(screen.getByRole('columnheader', { name: new RegExp(h) })).toBeInTheDocument();
    *   OLD> }
    */
-  it('15 欄表頭齊全（AC-N37：新增 OJT 圖示欄置於最左）', async () => {
+  /**
+   * 🔴 2026-09-02 F043 delta（`AC-B1`）連坐修正（tdd-implementation 申訴）：欄數再由 15→16，
+   * 新增之「業務/功能類別」欄置於**最右**（與 OJT 欄置於最左方向相反，各自 delta 明文規定）。
+   */
+  it('16 欄表頭齊全（AC-N37：OJT 圖示欄置於最左；AC-B1：業務/功能類別欄置於最右）', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
-    for (const h of ['OJT', '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖', '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別']) {
+    for (const h of ['OJT', '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖', '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別', '業務/功能類別']) {
+      // 注意：`h` 是傳給 RegExp 建構子之字串，`/` 於此無特殊意義，不需跳脫。
       expect(screen.getByRole('columnheader', { name: new RegExp(h) })).toBeInTheDocument();
     }
   });
@@ -156,24 +161,32 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
    *
    * 🔴 2026-08-20 D9 delta（`AC-N37`）：欄數擴充為 15，`OJT` 為新增之**第 1 欄**、其後 14 欄之
    * 集合與相對順序逐字不變（`AC-N40` ①）——本案就地擴充，不另立第二份。
+   * 🔴 2026-09-02 F043 delta（`AC-B1`）連坐修正（tdd-implementation 申訴）：欄數再擴充為 16，
+   * 「業務/功能類別」為新增之**最末欄**（第 16 欄），其前 15 欄之集合與相對順序逐字不變
+   * （`AC-B11` 回歸鎖定）——本案再次就地擴充，不另立第二份。
    * 📝 被取代之原斷言逐字保留供追溯：
    *   OLD> expect(headers).toHaveLength(14);
    *   OLD> expect(headers).toEqual([
    *   OLD>   '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖',
    *   OLD>   '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別',
    *   OLD> ]);
+   *   OLD> expect(headers).toHaveLength(15);
+   *   OLD> expect(headers).toEqual([
+   *   OLD>   'OJT', '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖',
+   *   OLD>   '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別',
+   *   OLD> ]);
    */
-  it('AC-D9／AC-N37 15 欄之表頭順序逐字鎖定（OJT 為新增之第 1 欄，其餘 14 欄僅動篩選、不動欄位）', async () => {
+  it('AC-D9／AC-N37／AC-B1 16 欄之表頭順序逐字鎖定（OJT 為第 1 欄、業務/功能類別為最末第 16 欄，中間 14 欄僅動篩選、不動欄位）', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
     const headers = screen
       .getAllByRole('columnheader')
       .map((th) => (th.textContent ?? '').replace(/[▲▼↑↓\s]/g, ''));
-    expect(headers).toHaveLength(15);
+    expect(headers).toHaveLength(16);
     expect(headers).toEqual([
       'OJT', '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖',
-      '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別',
+      '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別', '業務/功能類別',
     ]);
   });
 

@@ -6,6 +6,7 @@ import {
   getDocumentAttachments,
   downloadAttachment,
   getAppendixPool,
+  getBusinessCategories,
   getUsageFormPool,
   exportDocumentList,
 } from '../api/endpoints';
@@ -23,12 +24,15 @@ import { OJT_FILTER_OPTIONS, ojtStatusValue, ojtStatusView } from '../domain/ojt
 import { TREE_PREVIEW_WINDOW_NAME } from './LifecycleTreePreviewPage';
 import { PageHeader } from '../components/PageHeader';
 import { SearchCombobox, type ComboOption } from '../components/SearchCombobox';
+import { businessCategoryDisplayName } from '../domain/business-category';
 import { usageFormOptionLabel } from '../domain/usage-form-label';
 import { useToast } from '../components/useToast';
 import { formatDateTime } from './org-sync-view';
 import { deriveDisplayStatus, DISPLAY_LABEL, type DisplayStatus } from './document-display';
 import type {
   AppendixRecord,
+  BusinessCategoryRef,
+  BusinessCategoryView,
   DocumentListItem,
   DocumentLinkView,
   OjtDocumentStatus,
@@ -106,6 +110,49 @@ export function orderedLinks(
   return [...hit, ...links.filter((l) => l.targetDocumentId !== filterLink)];
 }
 
+/**
+ * 🔵 `AC-B3`／`AC-B8`（2026-09-02 F043 delta）：第 16 欄之**依 `businessCategoryId` 去重** ＋
+ * **篩選命中者排第一顆**。
+ *
+ * 🔴 **去重是本函式的核心**：後端回傳的是**掛載列**（同一份文件掛在同一類別之多個節點會有多筆
+ * 同 id 之項，F043 `AC-21`），而第 16 欄之 `N` 是**相異類別數**——誤數列數會讓「掛在同類別兩個
+ * 節點」的文件顯示 `+2` 而非 `+1`。
+ * 🔒 先去重（保留首次出現之相對順序）再置前，兩段內部各自維持原相對順序（穩定排序）。
+ * ⚠ 本函式**只重排顯示順序**，篩選之比對判定完全不變；🔴 CSV 第 15 欄**不套用**本置前規則
+ * （`AC-B10` 明文：CSV 恆依顯示名之碼位序，與請求、與畫面篩選狀態完全無關）。
+ */
+export function orderedBusinessCategories(
+  refs: readonly BusinessCategoryRef[] | undefined,
+  filterBc: string,
+): BusinessCategoryRef[] {
+  const seen = new Set<string>();
+  const uniqueRefs: BusinessCategoryRef[] = [];
+  for (const r of refs ?? []) {
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
+    uniqueRefs.push(r);
+  }
+  if (!filterBc) return uniqueRefs;
+  const hit = uniqueRefs.filter((r) => r.id === filterBc);
+  if (hit.length === 0) return uniqueRefs;
+  return [...hit, ...uniqueRefs.filter((r) => r.id !== filterBc)];
+}
+
+/**
+ * 🔵 `AC-B7` ③ 之**降級**選項來源：自當前工作集之掛載值衍生（依 id 去重、保留首見順序）。
+ * ⚠ 僅於類別池端點取用失敗／池為空時使用——**此路徑無法施加 `active` 過濾**（列上之
+ * additive 欄位不帶 status，決策 E5），故正常情況一律以池為準。
+ */
+function bcOptionsFromRows(rows: readonly DocumentListItem[]): ComboOption[] {
+  const seen = new Map<string, string>();
+  for (const d of rows) {
+    for (const b of d.businessCategories ?? []) {
+      if (!seen.has(b.id)) seen.set(b.id, b.displayName);
+    }
+  }
+  return [...seen].map(([value, label]) => ({ value, label }));
+}
+
 /** `AC-E11` ②：無檔案態之 tooltip（與 prototype 13 之 ⑩ 逐字相同）。 */
 const linkNoPdfTitle = (l: DocumentLinkView): string =>
   `連結點程序書：${linkLabel(l)}（尚未上傳 ICSOP PDF，無法下載）`;
@@ -126,7 +173,9 @@ const LINK_BADGE_CLS =
   'ml-1 inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] hover:bg-slate-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-600';
 
 type ComboKey =
-  | 'company' | 'dept' | 'section' | 'chief' | 'num' | 'name' | 'link' | 'appendix' | 'form' | 'cycle';
+  | 'company' | 'dept' | 'section' | 'chief' | 'num' | 'name' | 'link' | 'appendix' | 'form' | 'cycle'
+  // 🔵 F017 `AC-B6`（2026-09-02 F043 delta）：第 14 項篩選（值＝`businessCategoryId`）。
+  | 'bc';
 type FilterKey = ComboKey | 'status' | 'ojt' | 'dateFrom' | 'dateTo';
 type SortBy = '' | 'documentNumber' | 'announcedDate';
 
@@ -154,11 +203,20 @@ const FILTERS: FilterDef[] = [
   { kind: 'combo', key: 'form', label: '使用表單' },
   { kind: 'select', key: 'ojt', label: 'OJT' },
   { kind: 'combo', key: 'cycle', label: '循環別' },
+  /**
+   * 🔵 `AC-B6`／`AC-B7`（2026-09-02 F043 delta）：篩選 13 → **14 項**，新項置於**最末**。
+   * ① 型態＝可搜尋下拉（combobox，比照 `循環別`）；
+   * ② 選項顯示＝`businessCategoryDisplayName`、**選項值＝`businessCategoryId`**
+   *    （🔴 非 name 字串——同名不同子分類之兩個類別必須可分別被選取）；
+   * ④ 比對語意＝**存在量詞**（該文件至少存在一筆掛載，其節點所屬類別＝所選 id）。
+   * 🔒 既有 13 項之組成、順序與比對語意逐字不變（`AC-B11` ②）。
+   */
+  { kind: 'combo', key: 'bc', label: '業務/功能類別' },
 ];
 
 const EMPTY_FILTERS: Record<FilterKey, string> = {
   company: '', dept: '', section: '', chief: '', status: '', num: '', name: '',
-  dateFrom: '', dateTo: '', link: '', appendix: '', form: '', ojt: OJT_ALL, cycle: '',
+  dateFrom: '', dateTo: '', link: '', appendix: '', form: '', ojt: OJT_ALL, cycle: '', bc: '',
 };
 
 const uniq = (a: (string | null | undefined)[]): string[] =>
@@ -258,6 +316,14 @@ export function DocumentListPage(): JSX.Element {
   const [appendixSet, setAppendixSet] = useState<Set<string> | null>(null);
   const [formSet, setFormSet] = useState<Set<string> | null>(null);
   const [appendixPool, setAppendixPool] = useState<AppendixRecord[]>([]);
+  /**
+   * 🔵 `AC-B7` ③：第 14 項篩選之**預設選項集僅含 `status='active'` 之類別**。
+   * ⚠ 這件事**只有類別池端點知道**——`GET /admin/documents` 之 additive 欄位（決策 E5）
+   * 只帶 `{id, displayName}`、不帶 status，故選項來源必須是池而非列上的值。
+   * 🔒 取用失敗／池為空時降級為「自當前工作集之掛載值衍生」（其餘篩選仍可用，比照既有
+   * `loadPool` 之降級紀律）；⚠ 該降級路徑無法施加 ③ 之 active 過濾，見 implementation-log。
+   */
+  const [bcPool, setBcPool] = useState<BusinessCategoryView[]>([]);
   const [formPool, setFormPool] = useState<UsageFormRecord[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sortBy, setSortBy] = useState<SortBy>('');
@@ -359,6 +425,7 @@ export function DocumentListPage(): JSX.Element {
       }
     };
     void loadPool(getAppendixPool, setAppendixPool);
+    void loadPool(getBusinessCategories, setBcPool);
     void loadPool(getUsageFormPool, setFormPool);
   }, [canRead]);
 
@@ -367,6 +434,16 @@ export function DocumentListPage(): JSX.Element {
    * （🔴 **不得**為列索引——改篩選／換頁重繪後會把展開狀態落到別列上）。
    */
   const [linkOpen, setLinkOpen] = useState<Set<string>>(new Set());
+  /** `AC-B5`：第 16 欄之展開狀態亦以**列身分（`documentId`）為鍵**（不得為列索引）。 */
+  const [bcOpen, setBcOpen] = useState<Set<string>>(new Set());
+  const toggleBc = useCallback((id: string) => {
+    setBcOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
   const [focusLinkId, setFocusLinkId] = useState<string | null>(null);
   const toggleLink = useCallback((id: string) => {
     setLinkOpen((prev) => {
@@ -469,8 +546,14 @@ export function DocumentListPage(): JSX.Element {
       appendix: appendixPool.map((a) => ({ value: a.id, label: a.name })),
       // `AC-D8`（F018）：label ＝ `{編號} {名稱}`；無編號者僅名稱（共用純函式，不在此就地組字）。
       form: formPool.map((f) => ({ value: f.id, label: usageFormOptionLabel(f) })),
+      // `AC-B7` ②③：值＝businessCategoryId、顯示＝businessCategoryDisplayName；預設僅 active。
+      bc: bcPool.length
+        ? bcPool
+            .filter((b) => b.status === 'active')
+            .map((b) => ({ value: b.id, label: businessCategoryDisplayName(b) }))
+        : bcOptionsFromRows(all),
     };
-  }, [all, chiefValues, appendixPool, formPool]);
+  }, [all, chiefValues, appendixPool, formPool, bcPool]);
 
   const setFilter = useCallback((key: FilterKey, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -551,6 +634,8 @@ export function DocumentListPage(): JSX.Element {
       if (filters.link && (!linkTargetSet || !linkTargetSet.has(d.id))) return false;
       if (filters.appendix && (!appendixSet || !appendixSet.has(d.id))) return false;
       if (filters.form && (!formSet || !formSet.has(d.id))) return false;
+      // `AC-B7` ④：**存在量詞**（該文件至少存在一筆掛載，其節點所屬類別＝所選 id），非等值。
+      if (filters.bc && !(d.businessCategories ?? []).some((b) => b.id === filters.bc)) return false;
       return true;
     });
     if (sortBy) {
@@ -885,6 +970,9 @@ export function DocumentListPage(): JSX.Element {
                 <th className="text-left font-medium px-3 py-2.5 min-w-[108px]">連結點程序書</th>
                 <SortHeader label="公告日期" active={sortBy === 'announcedDate'} dir={sortDir} onClick={() => toggleSort('announcedDate')} className="min-w-[112px]" />
                 <th className="text-left font-medium px-3 py-2.5 min-w-[140px]">循環別</th>
+                {/* 🔵 `AC-B1`：畫面 15 → **16 欄**，新欄置於**最末**；表頭逐字 `業務/功能類別`
+                    （半形斜線、前後無空白）。🔒 既有第 0～14 欄之集合、相對順序與顯示規則逐項不變。 */}
+                <th className="text-left font-medium px-3 py-2.5 min-w-[168px]">業務/功能類別</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1006,6 +1094,14 @@ export function DocumentListPage(): JSX.Element {
                     {/* F017 AC-S1：lifecycleName 為後端已組合之顯示字串（含子分類），前端不再自行串接。 */}
                     <td className="px-3 py-3 text-slate-600 whitespace-nowrap" data-cycle-cell="">
                       {d.lifecycleName ?? '—'}
+                    </td>
+                    <td className="px-3 py-3">
+                      <BcCell
+                        doc={d}
+                        filterBc={filters.bc}
+                        expanded={bcOpen.has(d.id)}
+                        onToggle={toggleBc}
+                      />
                     </td>
                   </tr>
                 );
@@ -1172,6 +1268,99 @@ function LinkCell({ doc, filterLink, expanded, onToggle, onDownload, onNoPdf }: 
               aria-expanded={true}
               aria-label="收合連結點程序書"
               title="收合連結點程序書"
+              onClick={() => onToggle(doc.id)}
+              className={LINK_BADGE_CLS}
+            >
+              <Icon name="chevron-up" className="w-3 h-3" />
+              收合
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 🔵 第 16 欄「業務/功能類別」（`AC-B2`～`AC-B5`；呈現逐字比照第 12 欄之 pill＋`+N` 摺疊）。
+ *
+ * 🔴 **與第 12 欄之唯一刻意差異（`AC-B4`）**：類別 pill 是**純顯示**——`<span>`（**不是** `<a>`、
+ * **不是** `<button>`）、無 `onClick`、無 `href`、無 pointer cursor。
+ * 理由：第 12 欄之 pill 可點是因為「連結點程序書」背後有**可下載之 PDF**；類別背後**沒有檔案**，
+ * 而通往類別樹狀圖之導覽入口不在本頁（在類別池清單）。
+ * 🔒 **唯一可互動者為 `+{N−1}` 徽章**（展開／收合），與第 12 欄共用同一組 class。
+ * ④ 收合態**恆為一行高**（單行 flex ＋ `whitespace-nowrap`，**不得**加 `flex-wrap`）。
+ */
+function BcPill({ item }: { item: BusinessCategoryRef }): JSX.Element {
+  return (
+    <span
+      data-bc-pill={item.id}
+      className="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 bg-slate-50 text-slate-600 text-[11px]"
+    >
+      <Icon name="shapes" className="w-3 h-3 text-slate-400" />
+      {item.displayName}
+    </span>
+  );
+}
+
+function BcCell({ doc, filterBc, expanded, onToggle }: {
+  doc: DocumentListItem;
+  filterBc: string;
+  expanded: boolean;
+  onToggle: (id: string) => void;
+}): JSX.Element {
+  /** 去重與命中者置前一律委派同檔之 `orderedBusinessCategories()` 純函式（唯一判定點）。 */
+  const items = useMemo(
+    () => orderedBusinessCategories(doc.businessCategories, filterBc),
+    [doc.businessCategories, filterBc],
+  );
+
+  // `AC-B2`：0 個 → `—`（U+2014）；**不得**顯示 `0`、空白格或 `null`。
+  if (!items.length) return <span className="text-slate-300">—</span>;
+
+  const rest = items.length - 1;
+  const open = rest > 0 && expanded;
+
+  if (!open) {
+    return (
+      <div
+        className="flex items-center whitespace-nowrap"
+        data-bc-cell=""
+        data-bc-count={items.length}
+        data-bc-expanded="false"
+      >
+        <BcPill item={items[0]} />
+        {/* `AC-B3` ②：N=1 時**不出現** `+N`；③ N ≥ 2 時為第一顆 pill ＋ 可點的 `+{N−1}` 徽章。 */}
+        {rest > 0 && (
+          <button
+            type="button"
+            data-bc-toggle={doc.id}
+            aria-expanded={false}
+            aria-label={`展開其餘 ${rest} 個業務/功能類別`}
+            title={`其餘 ${rest} 個：${items.slice(1).map((b) => b.displayName).join('、')}`}
+            onClick={() => onToggle(doc.id)}
+            className={LINK_BADGE_CLS}
+          >
+            +{rest}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1" data-bc-cell="" data-bc-count={items.length} data-bc-expanded="true">
+      {items.map((b, i) => (
+        <div key={b.id} className="flex items-center gap-1.5 whitespace-nowrap" data-bc-item="">
+          <BcPill item={b} />
+          {/* 收合鈕與收合態之 `+N` 為同一顆 toggle。 */}
+          {i === 0 && (
+            <button
+              type="button"
+              data-bc-toggle={doc.id}
+              aria-expanded={true}
+              aria-label="收合業務/功能類別"
+              title="收合業務/功能類別"
               onClick={() => onToggle(doc.id)}
               className={LINK_BADGE_CLS}
             >

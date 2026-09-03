@@ -4,6 +4,7 @@ import { useAuth } from '../auth/useAuth';
 import { getPublicDocuments, getOrgUnits, getPublicFilterOptions } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
+import { PublicCategoryTreePage } from './PublicCategoryTreePage';
 import { SearchCombobox } from '../components/SearchCombobox';
 import { buildOrgPath } from '../domain/org-path';
 import type {
@@ -40,6 +41,29 @@ const EMPTY_FILTER_OPTIONS: PublicFilterOptions = {
  *   ③ 內容摘要改為書名之**副標題**（`<h3>` 之後、`<dl>` 之外），並移除「內容摘要：」標籤
  *      ⇒ 卡片欄位標籤集合九項→八項（`AC-Y5`／`AC-Y6`）。
  */
+/**
+ * 🔵 F019 `AC-B13`／`AC-B14`（F043 delta）：**單一具名述詞**——前台瀏覽模式之唯一解析點。
+ *
+ * `list` → list；`tree` → tree；**未帶／空值／任何不可辨識之值** → tree（`AC-B13` 之預設）。
+ * 🔴 不可辨識值**不是錯誤**：不得回錯誤、不得呈現空白畫面，一律靜默回退為預設。
+ * 🔒 全檔唯一：兩處各判一次，是「其中一處日後漏改」的溫床，而 `AC-B14` 對三個分支各有斷言。
+ */
+export type BrowseMode = 'tree' | 'list';
+const BROWSE_MODES: readonly BrowseMode[] = ['tree', 'list'];
+export function resolveBrowseMode(raw: string | null | undefined): BrowseMode {
+  return BROWSE_MODES.includes(raw as BrowseMode) ? (raw as BrowseMode) : 'tree';
+}
+
+/**
+ * `AC-B12`：**恰兩個**控制項、順序＝樹狀圖在前；可見文字與無障礙名稱逐字如下。
+ * 🔒 `業務/功能類別樹狀圖` 之字面**在本檔就地宣告**——與後台變更歷程第三個 tab 之同字標籤
+ * 刻意**不共用常數**（架構 §14.8 命名碰撞警示：兩者只是碰巧同字，不是同一個業務概念）。
+ */
+const BROWSE_MODE_TABS: readonly { mode: BrowseMode; label: string; icon: string }[] = [
+  { mode: 'tree', label: '業務/功能類別樹狀圖', icon: 'shapes' },
+  { mode: 'list', label: '文件清單', icon: 'list' },
+];
+
 const msgOf = (e: unknown): string =>
   e instanceof ApiError ? e.code : e instanceof Error ? e.message : '載入失敗';
 
@@ -53,6 +77,12 @@ export function PublicListPage(): JSX.Element {
    * 自詳情頁返回時保留原篩選與頁碼。元件內不另存一份 state 以免兩者失同步。
    */
   const [searchParams, setSearchParams] = useSearchParams();
+  /**
+   * `AC-B13`／`AC-B15`：模式以 **URL query 為唯一來源**——刻意**不**存進 `localStorage`／
+   * `sessionStorage`：記憶會使「預設為樹狀圖」這條人類明訂之規則在第二次造訪後不成立，
+   * 且該規則將無法以任何斷言觀察。
+   */
+  const mode = resolveBrowseMode(searchParams.get('mode'));
   const keyword = searchParams.get('q') ?? '';
   const companyCode = searchParams.get('co') ?? '';
   /**
@@ -91,7 +121,10 @@ export function PublicListPage(): JSX.Element {
   }, []);
 
   // 文件清單：篩選/分頁變更即重新查詢（後端權威排序/篩選）。
+  // 🔵 F043 delta：樹狀圖模式不取清單（該模式有自己的三個端點）——查詢條件與判定邏輯一字未動
+  //    （`AC-B24`），只是不在看不到清單的模式下白跑一趟查詢。
   useEffect(() => {
+    if (mode !== 'list') return;
     let active = true;
     setLoading(true);
     getPublicDocuments({
@@ -118,7 +151,7 @@ export function PublicListPage(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [keyword, companyCode, draftingDeptId, draftingSectionId, chiefId, lifecycleId, page]);
+  }, [mode, keyword, companyCode, draftingDeptId, draftingSectionId, chiefId, lifecycleId, page]);
 
   const items = data?.items ?? [];
   const pinned = items.filter((i) => i.pinned);
@@ -180,6 +213,15 @@ export function PublicListPage(): JSX.Element {
     [patchParams],
   );
   /**
+   * `AC-B12`／`AC-B15`：切換模式只改網址上的 `mode`，**不寫任何持久化儲存**。
+   * 🔴 `AC-B19`：無可用類別時切換器**仍可用**且**不得自動切至文件清單**——自動切換會使
+   * 「預設為樹狀圖」變得不可觀察（測試無法區分「預設是清單」與「預設是樹但自動切走了」）。
+   */
+  const onBrowseMode = useCallback(
+    (next: BrowseMode) => patchParams({ mode: next }),
+    [patchParams],
+  );
+  /**
    * `AC-D3`：清除涵蓋六項篩選與關鍵字（`狀態` 為 no-op，無狀態可清）。
    *
    * 🔴 同時重設搜尋框之本機顯示值：關鍵字送出經 300ms debounce，若使用者在 debounce 未觸發前
@@ -188,10 +230,19 @@ export function PublicListPage(): JSX.Element {
    */
   const clearFilters = useCallback(() => {
     setKwInput('');
-    // 本頁之網址參數**全部**都是查詢狀態（q／co／mkdept／section／chief／cycle／page），
-    // 故「清除篩選」＝整組清空。逐鍵刪除會在日後新增第七項篩選時漏刪，且會留下已停用之
-    // 舊參數（例如已被忽略的 `dept`）使網址看起來仍帶著條件。
-    setSearchParams(new URLSearchParams());
+    // 查詢狀態（q／co／mkdept／section／chief／cycle／page）＝**整組清空**。逐鍵刪除會在日後新增
+    // 第七項篩選時漏刪，且會留下已停用之舊參數（例如已被忽略的 `dept`）使網址看起來仍帶著條件。
+    //
+    // 🔵 F043 delta（2026-09-02）：🔴 **`mode` 例外——它不是查詢條件，是瀏覽模式**。
+    // 原本「本頁之網址參數全部都是查詢狀態」之前提自本 delta 起不再成立；整組清空會把正在看
+    // 文件清單的使用者**當場踢回樹狀圖模式**（`mode` 消失 ⇒ `resolveBrowseMode` 回預設 tree），
+    // 清單連同他剛按下的那顆「清除篩選」一起消失。🔒 `AC-B24`：清單模式之行為逐字不變。
+    setSearchParams((prev) => {
+      const kept = new URLSearchParams();
+      const m = prev.get('mode');
+      if (m) kept.set('mode', m);
+      return kept;
+    });
   }, [setSearchParams]);
 
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -309,6 +360,45 @@ export function PublicListPage(): JSX.Element {
       ),
     );
 
+  /**
+   * 🔵 F043／F019 `AC-B12`：**恰兩個**瀏覽模式切換控制項（樹狀圖在前、文件清單在後）。
+   * 🔒 可見文字＝`aria-label`＝逐字標籤；任一時刻**恰一個** `aria-pressed="true"`。
+   * 🔴 「業務/功能類別樹狀圖」這串字與**後台**「文件變更歷程」頁第三個 tab 之標籤逐字相同，
+   *    但為兩個互不相干之載體（不同頁面、不同閘門、不同語意，恰好撞了字面）——
+   *    🔒 **明文禁止**把兩處字面抽成同一個共用常數（架構 §14.8 命名碰撞警示）。
+   * 🔒 **同一份節點**供兩種模式使用（樹狀圖模式傳進 `PublicCategoryTreePage` 之控制列），
+   *    兩處各寫一份是「其中一處日後漏改」的溫床，而 `AC-B12` 對數量與逐字皆有斷言。
+   */
+  const modeSwitch = (
+    <div
+      data-browse-mode-switch=""
+      role="group"
+      aria-label="瀏覽模式"
+      className="inline-flex rounded-lg border border-slate-300 overflow-hidden shrink-0"
+    >
+      {BROWSE_MODE_TABS.map((t) => {
+        const on = mode === t.mode;
+        return (
+          <button
+            key={t.mode}
+            type="button"
+            data-browse-mode={t.mode}
+            aria-pressed={on}
+            aria-label={t.label}
+            onClick={() => onBrowseMode(t.mode)}
+            className={`px-3 py-2 text-base ${
+              on
+                ? 'bg-primary-600 text-white font-medium'
+                : 'bg-white text-slate-600 hover:bg-slate-50 border-l border-slate-300'
+            }`}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-white text-slate-700">
       {/* App bar */}
@@ -344,6 +434,22 @@ export function PublicListPage(): JSX.Element {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-5">
+        {/*
+          🔵 F043／F019 `AC-B12`：**恰兩個**瀏覽模式切換控制項（樹狀圖在前、文件清單在後）。
+          🔒 可見文字＝`aria-label`＝逐字標籤；任一時刻**恰一個** `aria-pressed="true"`。
+          🔴 「業務/功能類別樹狀圖」這串字與**後台**「文件變更歷程」頁第三個 tab 之標籤逐字相同，
+             但為兩個互不相干之載體（不同頁面、不同閘門、不同語意，恰好撞了字面）——
+             🔒 **明文禁止**把兩處字面抽成同一個共用常數（架構 §14.8 命名碰撞警示）：
+             它們不是同一個業務概念之兩處呈現，共用常數會讓任一方改字時被迫牽動另一方或漏改。
+        */}
+        {/* 版面：清單模式為獨立一列（prototype 03 之 `mb-3`）；樹狀圖模式則與類別下拉、縮放
+            同列（prototype 30 之控制列）——故於後者以 `modeSwitch` 傳入樹狀圖元件內部渲染。 */}
+        {mode === 'list' && <div className="mb-3">{modeSwitch}</div>}
+
+        {mode === 'tree' ? (
+          <PublicCategoryTreePage modeSwitch={modeSwitch} />
+        ) : (
+          <>
         {/* 搜尋 + 手機篩選觸發（lg 以下顯示觸發鈕，開啟底部面板） */}
         <div className="flex items-center gap-2 mb-3" data-testid="search-row">
           <div className="relative flex-1">
@@ -520,6 +626,8 @@ export function PublicListPage(): JSX.Element {
                 </button>
               </div>
             </div>
+          </>
+        )}
           </>
         )}
       </main>

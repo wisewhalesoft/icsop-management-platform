@@ -33,6 +33,20 @@ import { fileURLToPath } from 'node:url';
  *   故判別式為「**同一行**同時出現①列舉代碼 ②以引號完整包覆之六標籤之一，且該行非註解」——
  *   唯有真正的 `CODE: '標籤'` 對照表列符合。上述三個檔案皆**不**符合（下方 precision 守衛會證明）。
  *   🔒 **判別式不得為了讓任何案子轉綠而改鬆**——precision 守衛即為此而設。
+ *
+ * 🔴 2026-09-02 F043 delta（tdd-implementation 申訴後之修正）——**第二種假缺陷**：F043 之
+ *   `changeType`（`AC-39`）與本 AC 之列舉**刻意共用 5 個相同的（代碼, 標籤）對**
+ *   （`NODE_ADDED`／`NODE_REMOVED`／`NODE_RENAMED`／`EDGE_ADDED`／`EDGE_REMOVED` 五者之中文字面
+ *   兩軸逐字相同），唯獨 `DOCUMENT_*` 三者之處置**刻意相反**（F038 三對一收斂為
+ *   `文件掛載變更`；F043 明文禁止收斂、恰兩鍵 `新增掛載`／`移除掛載`、且不存在
+ *   `DOCUMENT_REASSIGNED`）。純粹以「單行同時含代碼＋六標籤之一」為判別式的天真掃描，會把
+ *   `backend/src/change-history/business-category-change-labels.ts`（F043 自己的、正確的表）
+ *   誤判為「殘缺的 F038 對照表」（5 列命中、3 個 `DOCUMENT_*` 缺）——這是**新的**表，不是舊表的
+ *   缺陷。**修法**：F038 軸之掃描**明文排除**以 `business-categor` 命名之檔案（本 repo 既有命名
+ *   慣例——`change-labels.ts` vs `business-category-change-labels.ts`，兩軸各自成表、互不相干），
+ *   並在下方新增**對稱之 F043 軸**（`BC_CANONICAL`／`BC AC-39`）掃描，鑑別力兩軸皆不打折：
+ *   F038 軸仍會抓到「F038 表被單邊改值」；F043 軸新抓到「F043 表被單邊改值，或誤收斂為
+ *   `文件掛載變更`／誤增 `DOCUMENT_REASSIGNED`」。
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -75,6 +89,9 @@ function walk(dir: string): string[] {
   }
   return out;
 }
+
+/** F043 自己的一組表，與 F038 之表為兩個相互獨立之軸（僅共用 5 個生成性代碼/標籤字面）。 */
+const BC_FILE_RE = /business-categor/i;
 
 function sourceFiles(): string[] {
   return ROOTS.flatMap(walk).filter(
@@ -138,6 +155,9 @@ const rel = (f: string) => relative(REPO_ROOT, f).replace(/\\/g, '/');
 describe('F038 AC-D7 ④：變更類型對照表之跨前後端一致性不變式', () => {
   const files = sourceFiles();
   const holders = files
+    // 🔴 F043 delta 修正：排除 F043 專屬之對照表檔（見上方檔頭「第二種假缺陷」說明）——
+    // 該類檔案不持有 F038 之表，只是與其共用 5 個生成性字面，不得被本軸之掃描採計。
+    .filter((f) => !BC_FILE_RE.test(f))
     .map((f) => ({ file: rel(f), rows: mappingRows(readFileSync(f, 'utf-8')) }))
     .filter((h) => h.rows.length >= MIN_ROWS)
     .sort((a, b) => a.file.localeCompare(b.file));
@@ -213,5 +233,157 @@ describe('F038 AC-D7 ④：變更類型對照表之跨前後端一致性不變�
         `其中出現 ${distinct.length} 種相異內容 ⇒ 兩端已漂移。` +
         rendered.map((r) => `\n--- ${r.file} ---\n${r.text}`).join(''),
     ).toHaveLength(1);
+  });
+});
+
+/**
+ * F043 `AC-39`／`AC-42` —— **本功能自己的一張「代碼 → 中文標籤」對照表**，恰 7 鍵、7 相異字面，
+ * 與上方 F038 之表為**兩個獨立的軸**（僅共用 5 個生成性代碼/標籤字面）。
+ *
+ * 沿用 F038 `AC-D7` ④ 之既有處置模式（「兩份逐字相同＋固定向量綁定」，本檔為其**結構層**對偶）——
+ * 非創新模式，見 F043 spec `AC-39` 之明文引用。
+ *
+ * 🔒 權威向量之來源（非取自實作）：`docs/specs/features/F043-business-function-category.md`
+ *   `AC-39`（`prototypes/23-change-history.html` 第三個 tab 之定稿字面，逐字沿用 `28` 節點抽屜之
+ *   掛載/移除措辭，見 F043 §naming-lock）。
+ *
+ * 🔴 恰 7 鍵、**不含** `DOCUMENT_REASSIGNED`；`DOCUMENT_MOUNTED`／`DOCUMENT_UNMOUNTED`
+ *   **明文禁止**收斂為 F038 之 `文件掛載變更`（`AC-39` 最重要之一句）。
+ *
+ * 掃描範圍刻意限縮為**已知之兩個真實載體**（`business-categor` 命名之後端檔＋前端
+ * `ChangeHistoryPage.tsx`），而非全 repo 掃描——理由與上方 F038 軸之修正對稱：若對全 repo 掃描，
+ * F038 之既有表（`change-labels.ts`／`ChangeHistoryPage.tsx` 之 F038 部分）會因共用 5 個生成性
+ * 字面而被誤判為「殘缺的 F043 表」，重演同一種假缺陷（僅方向相反）。
+ */
+describe('F043 AC-39／AC-42：業務/功能類別 changeType 對照表（獨立軸，恰 7 鍵）', () => {
+  /** 權威向量：F043 `AC-39`（7 鍵 7 相異標籤，不含 `DOCUMENT_REASSIGNED`）。 */
+  const BC_CANONICAL: ReadonlyArray<readonly [string, string]> = [
+    ['NODE_ADDED', '新增節點'],
+    ['NODE_REMOVED', '移除節點'],
+    ['NODE_RENAMED', '節點改名'],
+    ['EDGE_ADDED', '新增連線'],
+    ['EDGE_REMOVED', '移除連線'],
+    ['DOCUMENT_MOUNTED', '新增掛載'],
+    ['DOCUMENT_UNMOUNTED', '移除掛載'],
+  ];
+  const BC_CODES = BC_CANONICAL.map(([c]) => c);
+  const BC_LABELS = [...new Set(BC_CANONICAL.map(([, l]) => l))];
+  const BC_CODE_RE = new RegExp(`\\b(${BC_CODES.join('|')})\\b`);
+  const BC_QUOTED_LABEL_RE = new RegExp(`${Q}(${BC_LABELS.join('|')})${Q}`);
+  const BC_TOKEN_RE = new RegExp(
+    `\\b(?:${BC_CODES.join('|')})\\b|${Q}(?:${BC_LABELS.join('|')})${Q}`,
+    'g',
+  );
+  const BC_CANONICAL_TEXT = BC_CANONICAL.map(([c, l]) => `${c} = ${l}`).join('\n');
+
+  function isBcMappingRow(raw: string): boolean {
+    const line = raw.trim();
+    if (line.startsWith('*') || line.startsWith('//') || line.startsWith('/*')) return false;
+    return BC_CODE_RE.test(line) && BC_QUOTED_LABEL_RE.test(line);
+  }
+  function bcMappingRows(text: string): string[] {
+    return text.split(/\r?\n/).filter(isBcMappingRow);
+  }
+  function extractBcPairs(rows: string[]): Map<string, Set<string>> {
+    const map = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const tokens = (row.match(BC_TOKEN_RE) ?? []).map((t) =>
+        /^['"`]/.test(t)
+          ? { kind: 'label' as const, value: t.slice(1, -1) }
+          : { kind: 'code' as const, value: t },
+      );
+      for (let i = 0; i + 1 < tokens.length; i += 1) {
+        const a = tokens[i];
+        const b = tokens[i + 1];
+        if (a.kind === 'code' && b.kind === 'label') {
+          if (!map.has(a.value)) map.set(a.value, new Set());
+          map.get(a.value)!.add(b.value);
+          i += 1;
+        } else if (a.kind === 'label' && b.kind === 'code') {
+          if (!map.has(b.value)) map.set(b.value, new Set());
+          map.get(b.value)!.add(a.value);
+          i += 1;
+        }
+      }
+    }
+    return map;
+  }
+  function serializeBc(map: Map<string, Set<string>>): string {
+    return BC_CODES.map((c) => {
+      const labels = map.get(c);
+      return `${c} = ${labels && labels.size ? [...labels].sort().join('|') : '（缺）'}`;
+    }).join('\n');
+  }
+
+  /** 已知之兩個真實載體（見檔頭「掃描範圍刻意限縮」說明），而非全 repo 掃描。 */
+  const KNOWN_BC_HOLDER_PATHS = [
+    join(REPO_ROOT, 'backend', 'src', 'change-history', 'business-category-change-labels.ts'),
+    join(REPO_ROOT, 'frontend', 'src', 'pages', 'ChangeHistoryPage.tsx'),
+  ];
+  const bcHolders = KNOWN_BC_HOLDER_PATHS.filter((p) => {
+    try {
+      return statSync(p).isFile();
+    } catch {
+      return false;
+    }
+  }).map((p) => ({ file: rel(p), rows: bcMappingRows(readFileSync(p, 'utf-8')) }));
+
+  it('① 已知載體中至少一份持有本軸之對照表（掃描器有效性）', () => {
+    const withRows = bcHolders.filter((h) => h.rows.length >= MIN_ROWS);
+    expect(
+      withRows.length,
+      `已知載體：${bcHolders.map((h) => h.file).join('、')}（皆存在但尚無 ≥${MIN_ROWS} 列對照表——` +
+        `AC-39 尚未實作，屬預期之紅，非掃描器故障）`,
+    ).toBeGreaterThan(0);
+  });
+
+  it.each(
+    bcHolders.length
+      ? bcHolders.map((h) => [h.file, h.rows] as const)
+      : ([['（找不到已知載體檔案）', []]] as const),
+  )('🔴 %s 之對照表逐字等於 F043 權威向量（7 鍵 7 相異，不含 DOCUMENT_REASSIGNED）', (file, rows) => {
+    expect(rows.length, `${file}：對照表列數不足（AC-39 尚未實作或列數有異）`).toBeGreaterThanOrEqual(
+      MIN_ROWS,
+    );
+    expect(
+      serializeBc(extractBcPairs(rows)),
+      `${file} 之業務/功能類別 changeType 對照表與 F043 AC-39 權威向量不符——` +
+        `恰 7 鍵、7 相異字面、不含 DOCUMENT_REASSIGNED、DOCUMENT_MOUNTED/UNMOUNTED 不得收斂為「文件掛載變更」。`,
+    ).toBe(BC_CANONICAL_TEXT);
+  });
+
+  it('🔴 兩份對照表之間逐字相同（跨前後端不變式，比照 F038 AC-D7 ④ 之既有模式）', () => {
+    const withRows = bcHolders.filter((h) => h.rows.length >= MIN_ROWS);
+    const rendered = withRows.map((h) => ({ file: h.file, text: serializeBc(extractBcPairs(h.rows)) }));
+    const distinct = [...new Set(rendered.map((r) => r.text))];
+    expect(
+      distinct,
+      `對照表分佈於 ${withRows.length} 個模組：${withRows.map((h) => h.file).join('、')}。` +
+        `其中出現 ${distinct.length} 種相異內容 ⇒ 兩端已漂移。` +
+        rendered.map((r) => `\n--- ${r.file} ---\n${r.text}`).join(''),
+    ).toHaveLength(1);
+  });
+
+  /**
+   * 🔴 AC-39③（明文列出不存在的第 8 個值）：`DOCUMENT_REASSIGNED` 不得出現。
+   * 🔴 **刻意不透過 `isBcMappingRow` 過濾**——那個判別式本身要求該行含七鍵之一，一個真正的
+   *   第 8 鍵（`DOCUMENT_REASSIGNED`）依定義不在七鍵集合裡，若透過該判別式做負向掃描，
+   *   判別式會先把含第 8 鍵的那一行**排除在外**而讓斷言恆真（`AC-39` 明文警示之「只驗這七個
+   *   都在，對多了第8個完全無感」的具體重演）。故本案改為對整份檔案原始文字之逐行掃描
+   *   （僅排除註解行），範圍**僅限**後端專屬載體（`business-category-change-labels.ts`）——
+   *   `ChangeHistoryPage.tsx` 為 F038／F043 共用檔，其 F038 半部**合法持有** `文件掛載變更`
+   *   字面，故該檔之「不得收斂」不變式改由 `ChangeHistoryPage.businessCategory.test.tsx` 之
+   *   `BC_CHANGE_TYPES` 執行期物件直接斷言（比文字掃描更精確，見該檔 AC-39 區塊）。
+   */
+  it('🔴 後端專屬載體不得出現 DOCUMENT_REASSIGNED 字面（非註解）', () => {
+    const backendFile = bcHolders.find((h) => h.file.includes('business-category-change-labels.ts'));
+    if (!backendFile) return; // 檔案不存在時交由「掃描器有效性」案回報
+    const text = readFileSync(join(REPO_ROOT, backendFile.file), 'utf-8');
+    const hitLines = text.split(/\r?\n/).filter((raw) => {
+      const line = raw.trim();
+      if (line.startsWith('*') || line.startsWith('//') || line.startsWith('/*')) return false;
+      return /\bDOCUMENT_REASSIGNED\b/.test(line);
+    });
+    expect(hitLines, `${backendFile.file} 不得含 DOCUMENT_REASSIGNED（AC-39③ 明文禁止之第 8 個值）`).toEqual([]);
   });
 });

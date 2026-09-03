@@ -68,10 +68,15 @@ const OVER_LIMIT = (n: number) => `符合條件之筆數為 ${n} 筆，超過匯
 const ERROR_BADGE = 'EXPORT_ROW_LIMIT_EXCEEDED · 400';
 const FAILURE = (code: string) => `匯出失敗：${code}`;
 
-/** `AC-X16` ①：15 欄之逐字集合與由左至右順序（樹狀圖仍在畫面上，只是不匯出）。 */
+/**
+ * `AC-X16` ①：畫面欄之逐字集合與由左至右順序（樹狀圖仍在畫面上，只是不匯出）。
+ * 🔴 2026-09-02 F043 delta（`AC-B1`）連坐修正（tdd-implementation 申訴）：15→16 欄，
+ * 「業務/功能類別」為新增之最末欄——本檔為「本 delta 只在 topbar 加一顆鈕」之零漣漪回歸鎖定，
+ * F043 才是動了畫面欄集合的那個 delta，此處就地同步，非弱化本測試之鑑別力。
+ */
 const SCREEN_COLUMNS = [
   'OJT', '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '檔案', '樹狀圖',
-  '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別',
+  '程序書編號', '程序書書名', '版次', '內容摘要', '連結點程序書', '公告日期', '循環別', '業務/功能類別',
 ];
 
 function mockAuth(roleCode: string): void {
@@ -392,7 +397,12 @@ describe('F017 AC-X14：匯出之使用者可見回饋（逐字文案）', () =>
 });
 
 describe('🔒 F017 AC-X16：零漣漪回歸鎖定（本 delta 只在 topbar 加一顆鈕）', () => {
-  it('AC-X16 ① 表格 15 欄之集合與由左至右順序逐字不變——**特別是「樹狀圖」欄仍在畫面上**', async () => {
+  /**
+   * 🔴 2026-09-02 F043 delta（`AC-B1`）連坐修正（tdd-implementation 申訴）：15→16 欄。
+   * 本測試守護的不變式是「除本 export delta 之外，沒有東西動了畫面」——F043 是**另一個**
+   * 合法 delta 動的欄集合，此處就地同步為新的正確基準，並非放寬守衛本身。
+   */
+  it('AC-X16 ① 表格 16 欄之集合與由左至右順序逐字不變——**特別是「樹狀圖」欄仍在畫面上**', async () => {
     mockAuth('ICSOPAdmin');
     renderWithTopbar();
     await waitLoaded();
@@ -401,20 +411,24 @@ describe('🔒 F017 AC-X16：零漣漪回歸鎖定（本 delta 只在 topbar 加
     );
     expect(headers).toEqual(SCREEN_COLUMNS);
     expect(headers).toContain('樹狀圖');
-    expect(headers).toHaveLength(15);
+    expect(headers).toHaveLength(16);
   });
 
-  it('AC-X16 ② 13 項篩選之組成與順序逐字不變——本 delta 不新增任何篩選控制項', async () => {
+  /**
+   * 🔴 2026-09-02 F043 delta（`AC-B6`）連坐修正（tdd-implementation 申訴）：13→14 項篩選，
+   * 「業務/功能類別」為新增之最末項。
+   */
+  it('AC-X16 ② 14 項篩選之組成與順序逐字不變——F017 匯出 delta 本身不新增任何篩選控制項', async () => {
     mockAuth('ICSOPAdmin');
     renderWithTopbar();
     await waitLoaded();
     const controls = Array.from(
       filterBar().querySelectorAll<HTMLElement>('input[role="combobox"], select, [role="group"]'),
     );
-    expect(controls).toHaveLength(13);
+    expect(controls).toHaveLength(14);
     expect(controls.map((el) => el.getAttribute('aria-label'))).toEqual([
       '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '程序書編號', '程序書書名內',
-      '公告日期', '連結點程序書', '附錄', '使用表單', 'OJT', '循環別',
+      '公告日期', '連結點程序書', '附錄', '使用表單', 'OJT', '循環別', '業務/功能類別',
     ]);
   });
 
