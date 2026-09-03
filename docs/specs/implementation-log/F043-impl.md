@@ -166,7 +166,7 @@ DB 恰 4 列（2 節點 × 2 文件）無重複列 ⇒ 純顯示層缺陷。連�
 ## 未兌現／交棒事項（誠實列出）
 
 1. 🔴 **端點契約仰賴後端同步**：本前端依 `architecture-spec` §14.5 之路徑表實作。其中兩處**需與後端對帳**——
-   ① ✅ **已兌現（限定：2026-09-03 修正前之建置）**——抽屜載荷走
+   ① ✅ **已兌現（🟢 2026-09-03 限定語已解除，見本項末）**——抽屜載荷走
    `GET .../nodes/:nodeId/candidates`（後端 `BusinessCategoryDocsService.getDrawer()` 之回應形狀，
    前端函式名為 `getBusinessCategoryNodeDrawer`，**函式名與 URL 段刻意不同名**）。
    使用者於**真實瀏覽器**開啟節點抽屜並渲染出真實之已掛載與候選文件，證明 URL／回應形狀／前端
@@ -174,9 +174,17 @@ DB 恰 4 列（2 節點 × 2 文件）無重複列 ⇒ 純顯示層缺陷。連�
    ⚠ **本次候選排除修正變更了 `listCandidates` 簽章與 controller 呼叫點**
    （`business-category-docs.service.ts:137` 新增 `excludeDocumentIds`、
    `business-category-docs.controller.ts:75` 之呼叫點同步改動；前端側亦改了合併邏輯
-   `mergeDrawerDocs`），**修正後之建置尚未於瀏覽器複驗**；待 lead 完成實機複驗後方可移除此限定語。
+   `mergeDrawerDocs`）。
    🔴 立此限定語之理由：本 repo 反覆吃虧的形狀，正是「曾經驗過」被寫成「已驗過」，而中間有人
    改了那條路徑——寫明範圍，日後讀者才知道那份證據對應的是哪一版程式碼。
+
+   🟢 **2026-09-03 限定語解除**：三輪修正全數落地後，lead 重建容器（`--force-recreate`）並於
+   **真實瀏覽器**重新複驗同一條路徑，實測所見：
+   - 「目前掛載文件 **2 份**」，兩份各出現一次（原為 4 份、各兩次）；底部無「待送出：新增掛載 N 筆」正數
+   - 候選說明逐字為「候選＝全部 ICSOP 文件（共 **589** 份，分屬 **14** 個相異循環）…本清單分頁載入：
+     目前已載入 **20** 份」——`589 = 591 − 2`，總數已正確反映**本節點已掛載者被排除**；`14` 與
+     impl-be 對真庫實測之 ground truth（`COUNT(DISTINCT lifecycleId) = 14`）吻合
+   ⇒ 修正後之建置端到端走通，本項不再受建置版本限定。
    ② 後台樹狀圖預覽資料走 `GET /admin/business-categories/:id/tree`（§14.5 只列了 `/tree/download`／`/print`，
    預覽本體之路徑由本棒次依 `BusinessCategoryPreviewController.preview` 推定為同一 controller 之根路徑）。
    ③ 狀態切換走 `PATCH /admin/business-categories/:id`（body `{status}`）——§14.5 無獨立 `/status` 子路由。
