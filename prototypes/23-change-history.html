@@ -96,6 +96,9 @@
            切換 tab 時僅顯示當前 tab 之匯出鈕。icon 鍵 download，比照 17-access-history.html 之慣例。 -->
       <button id="exportDoc" onclick="exportDocTab()" aria-label="匯出" title="匯出 ICSOP 程序書變更歷程（CSV）" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"><i data-lucide="download" class="w-4 h-4"></i>匯出</button>
       <button id="exportTree" onclick="exportTreeTab()" aria-label="匯出" title="匯出循環樹狀圖變更歷程（CSV）" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"><i data-lucide="download" class="w-4 h-4"></i>匯出</button>
+      <!-- 🔵 2026-09-02 F043 `AC-42`：第三個 tab 之匯出鈕（**第三個獨立控制項**，不與前兩個合併；
+           匯出各自 tab 之查詢結果，規則向 error-handling.md#export 之共用規則對齊，本處為**第六處**）。 -->
+      <button id="exportBusiness" onclick="exportBusinessTab()" aria-label="匯出" title="匯出業務/功能類別樹狀圖變更歷程（CSV）" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"><i data-lucide="download" class="w-4 h-4"></i>匯出</button>
       <div class="flex items-center gap-1.5 pl-2 border-l border-slate-200">
         <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
         <select id="roleSel" onchange="setRole(this.value)" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
@@ -127,13 +130,21 @@
   <!-- scope note -->
   <div class="mb-4 flex items-start gap-2 rounded-lg px-3 py-2 text-sm border bg-primary-50 border-primary-100 text-primary-700">
     <i data-lucide="globe" class="w-4 h-4 mt-0.5 shrink-0"></i>
-    <span>查詢範圍：<b>全公司</b>（僅系統管理員 / ICSOP 管理員可查；主管／部門窗口／一般使用者無權，OQ-E07-04 定案）。查詢/展開/預覽/下載均寫入 <span class="mono">CHANGE_LOG_VIEW</span> / <span class="mono">LIFECYCLE_CHANGELOG_*</span> 稽核。</span>
+    <span>查詢範圍：<b>全公司</b>（僅系統管理員 / ICSOP 管理員可查；主管／部門窗口／一般使用者無權，OQ-E07-04 定案）。查詢/展開/預覽/下載均寫入 <span class="mono">CHANGE_LOG_VIEW</span> / <span class="mono">LIFECYCLE_CHANGELOG_*</span> / <span class="mono">BUSINESS_CATEGORY_CHANGELOG_*</span> 稽核。</span>
   </div>
 
   <!-- 次分頁：ICSOP 程序書 ｜ 循環樹狀圖 -->
-  <div class="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50 mb-4">
+  <!-- 🔵 2026-09-02 F043 `AC-40`／人類裁決 3：新增**第三個** tab，標籤逐字 `業務/功能類別樹狀圖`，置於既有兩個 tab **之後**。
+       🔒 前兩個 tab 之標籤、順序與內容**一字不改**。
+       🔴 **命名碰撞之處置**：本 tab 之標籤與 `30-public-category-tree.html` 前台模式切換器之標籤**逐字相同**，
+          但兩者是互不相干的載體（此處＝變更歷程之次分頁；彼處＝前台瀏覽模式）。⇒ 容器帶
+          `data-testid="change-history-tabs"` ＋ `data-change-history-tabs`，下游斷言請**先限定容器再查文字**，
+          不要用全域 getByText('業務/功能類別樹狀圖')（那會同時命中兩個不同頁面的元素）。
+          三個 tab 之列舉方式＝`[data-testid="change-history-tabs"] button`（DOM 順序即畫面順序）。 -->
+  <div data-testid="change-history-tabs" data-change-history-tabs class="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50 mb-4">
     <button id="stab-doc" onclick="switchSub('doc')" class="px-3.5 py-1.5 rounded-md text-sm font-medium inline-flex items-center gap-1.5"><i data-lucide="file-diff" class="w-4 h-4"></i>ICSOP 程序書</button>
     <button id="stab-tree" onclick="switchSub('tree')" class="px-3.5 py-1.5 rounded-md text-sm font-medium inline-flex items-center gap-1.5"><i data-lucide="git-fork" class="w-4 h-4"></i>循環樹狀圖</button>
+    <button id="stab-business" onclick="switchSub('business')" class="px-3.5 py-1.5 rounded-md text-sm font-medium inline-flex items-center gap-1.5"><i data-lucide="shapes" class="w-4 h-4"></i>業務/功能類別樹狀圖</button>
   </div>
 
   <!-- ============ Tab 1：ICSOP 程序書（欄位 before/after diff）============ -->
@@ -221,6 +232,48 @@
     </div>
     <p class="mt-3 text-xs text-slate-400 flex items-start gap-1.5"><i data-lucide="shield-check" class="w-3.5 h-3.5 mt-0.5"></i>「變更後 DAG＝本筆完整快照、變更前＝前一筆快照」（架構決策）；預覽/下載疊加或燒錄浮水印並寫入稽核（F038）。</p>
   </section>
+
+  <!-- ============ 🔵 Tab 3：業務/功能類別樹狀圖（新舊並列 + 下載）============
+       F043 `AC-38`～`AC-42`。版面／控制項／表格欄位逐項比照 Tab 2（循環樹狀圖），只換維度與詞彙。 -->
+  <section id="pane-business" class="hidden">
+    <div class="bg-white border border-slate-200 rounded-xl p-4 mb-4">
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div><label class="block text-xs font-medium text-slate-500 mb-1">業務/功能類別</label>
+          <select id="bqCat" onchange="renderBusiness()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"></select></div>
+        <div><label class="block text-xs font-medium text-slate-500 mb-1">變更類型</label>
+          <select id="bqType" onchange="renderBusiness()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"></select></div>
+        <div><label class="block text-xs font-medium text-slate-500 mb-1">操作人</label>
+          <input id="bqPerson" oninput="renderBusiness()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" placeholder="李慧玲 / 20233" /></div>
+        <div><label class="block text-xs font-medium text-slate-500 mb-1">起始日期</label>
+          <input id="bqFrom" type="date" oninput="renderBusiness()" class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm" /></div>
+      </div>
+      <div class="flex items-center gap-2 mt-3">
+        <button onclick="renderBusiness()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"><i data-lucide="search" class="w-4 h-4"></i>查詢</button>
+        <button onclick="clearBusiness()" class="px-4 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">清除條件</button>
+        <span id="businessCount" class="ml-auto text-sm text-slate-500"></span>
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm min-w-[880px]">
+          <thead class="bg-slate-50 text-slate-500 text-xs">
+            <tr>
+              <th class="text-left font-medium px-4 py-2.5">業務/功能類別</th>
+              <th class="text-left font-medium px-4 py-2.5">變更類型</th>
+              <th class="text-left font-medium px-4 py-2.5">變更摘要</th>
+              <th class="text-left font-medium px-4 py-2.5">操作人</th>
+              <th class="text-left font-medium px-4 py-2.5">時間（新→舊）</th>
+              <th class="text-left font-medium px-4 py-2.5">預覽 / 下載</th>
+            </tr>
+          </thead>
+          <tbody id="businessBody" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+      <div id="businessEmpty" class="hidden text-center py-14"><i data-lucide="shapes" class="w-12 h-12 text-slate-300 mx-auto mb-2"></i><p class="text-slate-500">此業務/功能類別尚無結構變更事件</p></div>
+    </div>
+    <p class="mt-3 text-xs text-slate-400 flex items-start gap-1.5"><i data-lucide="shield-check" class="w-3.5 h-3.5 mt-0.5"></i>「變更後 DAG＝本筆完整快照、變更前＝前一筆快照；無更早紀錄者變更前視為空 DAG」（F043 `AC-41`）；預覽/下載疊加或燒錄浮水印並寫入稽核。</p>
+  </section>
 </main>
 
 <!-- ===== 新舊樹狀圖並列預覽 modal ===== -->
@@ -267,7 +320,15 @@
   /* ===== admin shell sidebar（沿用 07/17）===== */
   const MENU=[
     {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
-    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    /* 🔴 2026-09-02 人類裁決（F025 delta）：「循環管理」自主管權限**移除**（唯讀 → 無）。
+       權威＝backend/src/rbac/function-matrix.ts 之 LIFECYCLE_MANAGEMENT（主管＝NONE）；本檔先前落後於已上線程式碼。
+       表達方式＝**移除 supervisor 鍵**（比照 settings 等主管無權項之既有寫法；renderSidebar 以 m.roles[role] 過濾）。
+       📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> supervisor:'唯讀'
+       🔴 與下一項「業務/功能類別管理」（supervisor:'唯讀'）**刻意不同**——同日兩項裁決，一移出一放進（F025 `AC-B29`）；
+          主管側欄自此**看得到「業務/功能類別管理」、看不到「循環管理」**，這個不對稱即該斷言之視覺權威。 */
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    /* 🔵 2026-09-02 F043 AC-43／人類裁決：新側選單項，**置於「循環管理」之後、「ICSOP 文件管理」之前**。 */
+    {id:'businesscategory',label:'業務/功能類別管理',icon:'shapes',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
     {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
     {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
@@ -540,8 +601,12 @@
   }
 
   let curEvent=null;
+  /* 🔵 2026-09-02 F043：Tab 2 與 Tab 3 **共用同一個 lcModal**，故需一個具名旗標記住現在預覽的是哪一種事件，
+     否則 modal 內的「下載新舊對照 PDF」會永遠去查 LC_EVENTS（Tab 3 的事件 id 查不到 ⇒ 靜默無反應）。
+     🔒 全檔只有這一個旗標，openPreview()／openBcPreview() 各自設定，downloadFromModal() 唯一消費。 */
+  let PREVIEW_KIND='lifecycle', curBcEvent=null;
   function openPreview(id){
-    const e=LC_EVENTS.find(x=>x.id===id); if(!e)return; curEvent=e;
+    const e=LC_EVENTS.find(x=>x.id===id); if(!e)return; curEvent=e; PREVIEW_KIND='lifecycle';
     document.getElementById('pvCyc').textContent=e.lcName;   // 快照值（含寫入當下之子分類）
     document.getElementById('pvSummary').textContent=e.summary;
     document.getElementById('pvWm').textContent='浮水印：'+WM_STR+'（UTC+8）';
@@ -552,20 +617,147 @@
   }
   function closePreview(){ const m=document.getElementById('lcModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
   function lcDownload(id){ const e=LC_EVENTS.find(x=>x.id===id); toast('success','已下載「'+e.lcName+'／'+e.summary+'」新舊對照 PDF（單一 PDF 兩頁）：伺服器端已將浮水印燒錄進 PDF 內容層（非僅前端疊加），並寫入 LIFECYCLE_CHANGELOG_DOWNLOAD 稽核'); }
-  function downloadFromModal(){ if(curEvent) lcDownload(curEvent.id); }
+  function downloadFromModal(){ if(PREVIEW_KIND==='business'){ if(curBcEvent) bcDownload(curBcEvent.id); return; } if(curEvent) lcDownload(curEvent.id); }
 
+  /* ================= 🔵 Tab 3：業務/功能類別樹狀圖 結構變更（F043 `AC-38`～`AC-42`）=================
+     🔒 顯示名稱之組合規則與 lifecycleDisplayName **逐字相同**（F043 `AC-06`）；normalizeSubcategory
+        **重用上方既有那一份**，不另寫第二個（F043 `AC-05`）。
+     🔒 查詢下拉之選項值＝businessCategoryId（**非**名稱字串——「授信」之消金／企金／子公司名稱相同）；
+        事件清單／預覽標題之顯示字串取自事件之 bcName **快照值**（寫入當下產生、事後不隨改名而改寫，比照 F038 `AC-S2`）。 */
+  const BUSINESS_CATEGORY_POOL=[
+    {id:'bc1',name:'授信',    subcategory:'消金'},
+    {id:'bc2',name:'授信',    subcategory:'企金'},
+    {id:'bc3',name:'風險管理',subcategory:null},
+    {id:'bc4',name:'帳務處理',subcategory:'子公司'},
+    {id:'bc5',name:'帳務處理',subcategory:'消金'},
+    {id:'bc6',name:'授信',    subcategory:'子公司'},
+    {id:'bc7',name:'帳務處理',subcategory:'企金'}
+  ];
+  function businessCategoryDisplayName(bc){ if(!bc) return ''; const s=normalizeSubcategory(bc.subcategory); return s?`${bc.name}（${s}）`:bc.name; }
+  /* 🔴 `AC-39`：changeType 之值域**恰 7 個**，且 `DOCUMENT_REASSIGNED`（改派）**不在其中**——
+     M:N 模型下沒有改派語意（`AC-30`：移除 A ＋ 新增 B 是兩個獨立事件，不得記成一次複合動作）。
+     ⚠ 本表刻意比 Tab 2（循環樹狀圖）之 6 個類型**多一個**：Tab 2 把掛載變更收成單一「文件掛載變更」，
+       本 tab 必須拆成「新增掛載」「移除掛載」兩個相異值，否則 7 值值域不可觀察。
+     ⚠ 兩個掛載類型之中文字面沿用 28 節點抽屜之詞彙（新增掛載／移除掛載），**為本 agent 定稿、尚未入 AC**。 */
+  const BC_CHANGE_TYPES=['新增節點','移除節點','節點改名','新增連線','移除連線','新增掛載','移除掛載'];
+  const BC_TYPE_STYLE={'新增節點':['emerald','plus-circle'],'移除節點':['red','minus-circle'],'節點改名':['amber','pencil'],'新增連線':['emerald','spline'],'移除連線':['red','spline'],'新增掛載':['emerald','file-stack'],'移除掛載':['red','file-stack']};
+  /* 各業務/功能類別之完整結構快照（節點名稱與掛載數與 26／27／28／29／30 之語料一致）。 */
+  const BC1_FULL={nodes:[N('p1','授信政策與額度管理',1),N('p2','徵信調查作業',1),N('p3','擔保品管理作業',1),N('p4','授信審核作業',2),N('p5','撥貸與帳務作業',1)],
+                  edges:[['p1','p2'],['p1','p3'],['p2','p4'],['p3','p4'],['p4','p5']]};
+  const BC2_FULL={nodes:[N('q1','企金授信受理作業',1),N('q2','企業徵信作業',1),N('q3','授信核決作業',1),N('q4','額度撥貸作業',0)],
+                  edges:[['q1','q2'],['q1','q3'],['q2','q4'],['q3','q4']]};
+  const BC3_FULL={nodes:[N('r1','風險辨識作業',1),N('r2','風險評估作業',1),N('r3','風險監控作業',1),N('r4','風險報告作業',1)],
+                  edges:[['r1','r2'],['r2','r3'],['r1','r3'],['r3','r4']]};
+  /* 🔴 語料鑑別力：七種 changeType **各至少出現一次**；跨 3 個相異類別（bc1／bc2／bc3）
+     ⇒「類別」篩選有無施加輸出不同。bev1 刻意示範「同一份文件加掛到同類別的第二個節點」，
+     其摘要明說「非改派」——這是本功能與循環管理最容易被誤讀成回歸的地方。 */
+  const BC_EVENTS=[
+    { id:'bev1', bcId:'bc1', bcName:'授信（消金）', type:'新增掛載', summary:'新增掛載：ICSOP-SRC-101-1-01 車輛分期進件作業 → 授信審核作業（該文件仍掛於本類別之「徵信調查作業」，非改派）', operator:'李慧玲', emp:'20233', time:'2026-09-01 16:05:22',
+      before:{nodes:[N('p1','授信政策與額度管理',1),N('p2','徵信調查作業',1),N('p3','擔保品管理作業',1),N('p4','授信審核作業',1),N('p5','撥貸與帳務作業',1)], edges:BC1_FULL.edges},
+      after:BC1_FULL, diff:{amberNodes:['p4']} },
+    { id:'bev2', bcId:'bc2', bcName:'授信（企金）', type:'新增節點', summary:'新增節點『額度撥貸作業』並接上連線', operator:'李慧玲', emp:'20233', time:'2026-08-30 09:05:18',
+      before:{nodes:[N('q1','企金授信受理作業',1),N('q2','企業徵信作業',1),N('q3','授信核決作業',1)], edges:[['q1','q2'],['q1','q3']]},
+      after:BC2_FULL, diff:{addNodes:['q4'], addEdges:[['q2','q4'],['q3','q4']]} },
+    { id:'bev3', bcId:'bc1', bcName:'授信（消金）', type:'新增連線', summary:'新增連線 擔保品管理作業 → 授信審核作業', operator:'李慧玲', emp:'20233', time:'2026-08-28 14:20:33',
+      before:{nodes:BC1_FULL.nodes, edges:[['p1','p2'],['p1','p3'],['p2','p4'],['p4','p5']]},
+      after:BC1_FULL, diff:{addEdges:[['p3','p4']]} },
+    { id:'bev4', bcId:'bc1', bcName:'授信（消金）', type:'節點改名', summary:'節點改名『徵信作業』→『徵信調查作業』', operator:'李慧玲', emp:'20233', time:'2026-08-27 11:42:09',
+      before:{nodes:[N('p1','授信政策與額度管理',1),N('p2','徵信作業',1),N('p3','擔保品管理作業',1),N('p4','授信審核作業',2),N('p5','撥貸與帳務作業',1)], edges:BC1_FULL.edges},
+      after:BC1_FULL, diff:{amberNodes:['p2']} },
+    { id:'bev5', bcId:'bc3', bcName:'風險管理', type:'移除掛載', summary:'移除掛載：ICSOP-SRC-101-1-05 進件作業-消費分期進件作業（舊版） ← 風險報告作業（該文件於其他類別之掛載不受影響）', operator:'李慧玲', emp:'20233', time:'2026-08-26 15:33:50',
+      before:{nodes:[N('r1','風險辨識作業',1),N('r2','風險評估作業',1),N('r3','風險監控作業',1),N('r4','風險報告作業',2)], edges:BC3_FULL.edges},
+      after:BC3_FULL, diff:{amberNodes:['r4']} },
+    { id:'bev6', bcId:'bc1', bcName:'授信（消金）', type:'移除節點', summary:'移除節點『擔保品初評作業』（含其連線；刪除後將一併移除 1 筆掛載關係）', operator:'李慧玲', emp:'20233', time:'2026-08-25 09:14:07',
+      before:{nodes:BC1_FULL.nodes.concat([N('p6','擔保品初評作業',1)]), edges:BC1_FULL.edges.concat([['p1','p6'],['p6','p4']])},
+      after:BC1_FULL, diff:{rmNodes:['p6'], rmEdges:[['p1','p6'],['p6','p4']]} },
+    { id:'bev7', bcId:'bc1', bcName:'授信（消金）', type:'移除連線', summary:'移除連線 授信政策與額度管理 → 授信審核作業', operator:'李慧玲', emp:'20233', time:'2026-08-24 10:02:11',
+      before:{nodes:BC1_FULL.nodes, edges:BC1_FULL.edges.concat([['p1','p4']])},
+      after:BC1_FULL, diff:{rmEdges:[['p1','p4']]} }
+  ];
+
+  // 選項值＝businessCategoryId、顯示＝businessCategoryDisplayName：授信之消金／企金／子公司為三個相異選項
+  function fillBcSel(){
+    document.getElementById('bqCat').innerHTML='<option value="">全部業務/功能類別</option>'+BUSINESS_CATEGORY_POOL.map(b=>`<option value="${b.id}">${businessCategoryDisplayName(b)}</option>`).join('');
+    document.getElementById('bqType').innerHTML='<option value="">全部類型</option>'+BC_CHANGE_TYPES.map(t=>`<option>${t}</option>`).join('');
+  }
+
+  function renderBusiness(){
+    if(!allowed())return;
+    const ct=document.getElementById('bqCat').value, ty=document.getElementById('bqType').value;
+    const pr=document.getElementById('bqPerson').value.trim().toLowerCase(), from=document.getElementById('bqFrom').value;
+    let rows=BC_EVENTS.filter(e=>{
+      if(ct && e.bcId!==ct) return false;   // 以 businessCategoryId 比對：同名另一子分類之事件不納入
+      if(ty && e.type!==ty) return false;
+      if(pr && !(e.operator.toLowerCase().includes(pr)||e.emp.toLowerCase().includes(pr))) return false;
+      if(from && e.time.slice(0,10) < from) return false;
+      return true;
+    }).sort((a,b)=>a.time<b.time?1:a.time>b.time?-1:0);
+    document.getElementById('businessCount').textContent=`共 ${rows.length} 筆結構變更`;
+    document.getElementById('businessEmpty').classList.toggle('hidden',rows.length>0);
+    document.getElementById('businessBody').innerHTML=rows.map(e=>{
+      const [c,ic]=BC_TYPE_STYLE[e.type]||['slate','git-commit-vertical'];
+      return `<tr class="hover:bg-slate-50 align-top" data-bc-event-row="${e.id}">
+        <td class="px-4 py-3 text-slate-700" data-business-category-cell>${esc(e.bcName)}<div class="mono text-[10px] text-slate-400">快照值</div></td>
+        <td class="px-4 py-3"><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-${c}-50 text-${c}-700 border border-${c}-100"><i data-lucide="${ic}" class="w-3.5 h-3.5"></i>${esc(e.type)}</span></td>
+        <td class="px-4 py-3 text-slate-700">${esc(e.summary)}</td>
+        <td class="px-4 py-3 text-slate-700">${esc(e.operator)}<span class="text-slate-400 mono text-xs">（${esc(e.emp)}）</span></td>
+        <td class="px-4 py-3 mono text-xs text-slate-500">${esc(e.time)}</td>
+        <td class="px-4 py-3">
+          <div class="flex items-center gap-3 text-sm whitespace-nowrap">
+            <button onclick="openBcPreview('${e.id}')" class="text-primary-600 hover:text-primary-700 hover:underline font-medium inline-flex items-center gap-1"><i data-lucide="eye" class="w-4 h-4"></i>預覽</button>
+            <button onclick="bcDownload('${e.id}')" class="text-slate-600 hover:text-primary-700 hover:underline inline-flex items-center gap-1"><i data-lucide="download" class="w-4 h-4"></i>下載</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+    lucide.createIcons();
+  }
+  function clearBusiness(){ document.getElementById('bqCat').value=''; document.getElementById('bqType').value=''; document.getElementById('bqPerson').value=''; document.getElementById('bqFrom').value=''; renderBusiness(); }
+
+  /* 預覽與下載**共用** Tab 2 之 lcModal 與 renderMiniDag()（同一套 mini DAG 佈局與 diff 標示）——
+     刻意不複製第二份預覽 modal：兩份 diff 呈現各自演化正是最容易產生視覺分歧的地方。
+     ⚠ 稽核家族為 BUSINESS_CATEGORY_CHANGELOG_*（**非** LIFECYCLE_CHANGELOG_*）；
+       具體 actionType／targetType 值待 system-architect 裁定（F043 `AC-31`），此處為 designer 暫定值。 */
+  function openBcPreview(id){
+    const e=BC_EVENTS.find(x=>x.id===id); if(!e)return;
+    PREVIEW_KIND='business'; curBcEvent=e;
+    document.getElementById('pvCyc').textContent=e.bcName;   // 快照值（含寫入當下之子分類）
+    document.getElementById('pvSummary').textContent=e.summary;
+    document.getElementById('pvWm').textContent='浮水印：'+WM_STR+'（UTC+8）';
+    renderMiniDag(document.getElementById('dagBefore'), e.before, 'before', e.diff);
+    renderMiniDag(document.getElementById('dagAfter'), e.after, 'after', e.diff);
+    const m=document.getElementById('lcModal'); m.classList.remove('hidden'); m.classList.add('flex');
+    toast('info','已開啟新舊樹狀圖預覽（已寫入 BUSINESS_CATEGORY_CHANGELOG_VIEW 稽核）');
+  }
+  function bcDownload(id){ const e=BC_EVENTS.find(x=>x.id===id); toast('success','已下載「'+e.bcName+'／'+e.summary+'」新舊對照 PDF（單一 PDF 兩頁）：伺服器端已將浮水印燒錄進 PDF 內容層（非僅前端疊加），並寫入 BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD 稽核'); }
+  /* `AC-42`：匯出規則**全數向 error-handling.md#export 之共用規則對齊**（本處為第六處），不得反過來；
+     🔴 **不新增任何錯誤碼**（沿用 EXPORT_ROW_LIMIT_EXCEEDED／VALIDATION_ERROR／PERMISSION_DENIED）。
+     ⚠ 列舉欄之值＝**畫面所見中文標籤**（NODE_ADDED → `新增節點` 等），與畫面共用同一份 BC_CHANGE_TYPES。 */
+  function exportBusinessTab(){
+    if(!allowed()) return;
+    const n=document.querySelectorAll('#businessBody tr').length;
+    if(n>EXPORT_ROW_LIMIT){ toast('error','符合條件之事件為 '+n+' 筆，超過匯出上限 '+EXPORT_ROW_LIMIT+' 筆，請縮小查詢條件','EXPORT_ROW_LIMIT_EXCEEDED · 400'); return; }
+    toast('success','已匯出業務/功能類別樹狀圖變更歷程（CSV，UTF-8 BOM）：表頭＝'
+      +'業務/功能類別,變更類型,變更摘要,操作人,時間（「預覽 / 下載」操作欄不匯出）；'
+      +'檔名 business_category_change_history_20260902_143208.csv；並記一筆 BUSINESS_CATEGORY_CHANGELOG_VIEW 稽核');
+  }
   /* ===== 次分頁切換 ===== */
   let SUB='doc';
+  /* 🔵 2026-09-02 F043 `AC-40`：由兩分頁擴為**三**分頁。既有兩個 tab 之 id／標籤／樣式一字不改，
+     本函式僅把 2 元切換擴為 3 元（pane、tab 樣式、匯出鈕三組陣列一起長到 3 個元素）。
+     📝 已作廢（僅供追溯，⚠ 不得用於斷言）：OLD> ['doc','tree'] 兩元陣列；OLD> if(s==='doc') renderDoc(); else renderTree(); */
   function switchSub(s){
     SUB=s;
     document.getElementById('pane-doc').classList.toggle('hidden',s!=='doc');
     document.getElementById('pane-tree').classList.toggle('hidden',s!=='tree');
-    ['doc','tree'].forEach(k=>{ const b=document.getElementById('stab-'+k); const on=k===s;
+    document.getElementById('pane-business').classList.toggle('hidden',s!=='business');
+    ['doc','tree','business'].forEach(k=>{ const b=document.getElementById('stab-'+k); const on=k===s;
       b.className='px-3.5 py-1.5 rounded-md text-sm font-medium inline-flex items-center gap-1.5 '+(on?'bg-white text-primary-700 shadow-sm':'text-slate-500 hover:text-slate-700'); });
-    // 兩個匯出鈕為獨立控制項；僅顯示當前 tab 之該鈕（F037 AC-D1／F038 AC-D1）
+    // 三個匯出鈕為獨立控制項；僅顯示當前 tab 之該鈕（F037 AC-D1／F038 AC-D1／F043 `AC-42`）
     document.getElementById('exportDoc').classList.toggle('hidden', s!=='doc');
     document.getElementById('exportTree').classList.toggle('hidden', s!=='tree');
-    if(s==='doc') renderDoc(); else renderTree();
+    document.getElementById('exportBusiness').classList.toggle('hidden', s!=='business');
+    if(s==='doc') renderDoc(); else if(s==='tree') renderTree(); else renderBusiness();
     lucide.createIcons();
   }
 
@@ -611,7 +803,7 @@
       deptcontact:'部門窗口對「變更歷程」為「無」，無法存取。',
       user:'一般使用者無後台存取權。'}[r];
     document.getElementById('topUser').textContent={sysadmin:'黃俊傑',icsop_admin:'李慧玲',supervisor:'陳彥廷',deptcontact:'林建宏',user:'王小明'}[r];
-    if(!blocked){ if(SUB==='doc')renderDoc(); else renderTree(); }
+    if(!blocked){ if(SUB==='doc')renderDoc(); else if(SUB==='tree')renderTree(); else renderBusiness(); }
     renderSidebar(); lucide.createIcons();
   }
 
@@ -629,7 +821,7 @@
 
   // safelist dynamic colors: bg-slate-50 text-slate-700 border-slate-100 bg-blue-50 text-blue-700 border-blue-100 bg-violet-50 text-violet-700 border-violet-100 bg-emerald-50 text-emerald-700 border-emerald-100 bg-red-50 text-red-700 border-red-100 bg-amber-50 text-amber-700 border-amber-100 bg-primary-50 text-primary-700 border-primary-100
   // init
-  fillCycSel(); switchSub('doc'); setRole('sysadmin'); renderSidebar(); lucide.createIcons();
+  fillCycSel(); fillBcSel(); switchSub('doc'); setRole('sysadmin'); renderSidebar(); lucide.createIcons();
 </script>
 </body>
 </html>

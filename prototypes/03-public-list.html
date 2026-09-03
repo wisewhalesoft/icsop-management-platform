@@ -53,6 +53,18 @@
      ③ 內容摘要改為書名之**副標題**：緊接 <h3> 之後、位於 <dl> **之外**，且**移除「內容摘要：」標籤**
         ⇒ 卡片欄位標籤集合由九項降為**八項**、<dl> 由六列降為**五列**（AC-Y5，就地改寫上方 ④）。
         掛鉤 data-summary 與 text-base 逐字沿用（AC-Y6）；無摘要時整個節點不渲染（不留空行、不以 — 佔位）。 -->
+<!-- 🔵 2026-09-02 F019 §業務/功能類別瀏覽模式 delta（`AC-B12`～`AC-B15`；DRAFT，權威＝F043）——本檔已套用。
+     前台瀏覽頁自本 delta 起有**恰兩個**模式：`業務/功能類別樹狀圖`（🔒 **預設**）與 `文件清單`（＝本頁現行畫面）。
+     🔒 **本檔既有內容一字未動**（六項篩選、置頂排序、卡片八項標籤欄位、空狀態 `查無符合結果`、
+        isDocVisibleToViewer／isPinned／已公告基底條件——`AC-B24` 全數逐字不變）；本 delta **只加**頂部切換器。
+     🔴 **原型之雙檔表示法**：實作端是**同一頁**依 `mode` 切換渲染；原型端拆為兩個檔——
+        本檔＝`文件清單` 模式，`30-business-category-tree` 之對應檔 `30-public-category-tree.html`＝`業務/功能類別樹狀圖` 模式。
+        故本檔於**解析出的模式為 tree 時會 `location.replace()` 到 30**，以使 `AC-B13`「預設＝樹狀圖」在原型上**真的可觀察**
+        （若只把切換器畫成「樹狀圖已選中」卻仍顯示清單，畫面與 aria-pressed 自相矛盾，等於沒有載體）。
+        📌 **要單獨檢視本頁版面時請開 `03-public-list.html?mode=list`**（不會轉址）。
+     🔒 `AC-B15` 模式**不跨 session 記憶**：本檔與 30 皆**不寫入** localStorage／sessionStorage／cookie。
+     🔒 `AC-B14` 三分支由**單一具名述詞** resolveBrowseMode() 決定：`list` → list；`tree` → tree；
+        **未帶／空值／任何不可辨識之值（如 `?mode=grid`）** → 一律視同 tree，不回錯誤、不呈現空白畫面。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -92,6 +104,36 @@
 </header>
 
 <main class="max-w-5xl mx-auto px-4 py-5">
+
+  <!-- 🔵 `AC-B12`：**恰兩個**瀏覽模式之切換控制項，可見文字與無障礙名稱逐字為
+       `業務/功能類別樹狀圖` 與 `文件清單`（半形斜線、前後無空白；順序＝樹狀圖在前）；
+       任一時刻**恰一個** aria-pressed="true"。🔒 **不得**出現第三種模式或「全部」之類的選項。 -->
+  <div data-browse-mode-switch role="group" aria-label="瀏覽模式" class="inline-flex rounded-lg border border-slate-300 overflow-hidden mb-3">
+    <button type="button" data-browse-mode="tree" aria-pressed="false" aria-label="業務/功能類別樹狀圖" onclick="switchMode('tree')"
+            class="px-3 py-2 text-base bg-white text-slate-600 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600">業務/功能類別樹狀圖</button>
+    <button type="button" data-browse-mode="list" aria-pressed="true" aria-label="文件清單" onclick="switchMode('list')"
+            class="px-3 py-2 text-base bg-primary-600 text-white font-medium border-l border-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-700">文件清單</button>
+  </div>
+  <script>
+    /* 🔒 `AC-B14`：模式解析之**單一具名述詞**（本檔與 30 同名同語意；切換器與初始渲染共用，全檔不得出現第二套）。
+       🔴 不可辨識分支必須以真的不在值域內的字串測（如 `?mode=grid`）；用空字串測不到值域檢查缺失。 */
+    const BROWSE_MODES=['tree','list'];
+    function resolveBrowseMode(raw){ return BROWSE_MODES.includes(raw) ? raw : 'tree'; }
+    const PROTOTYPE_TREE_HREF='30-public-category-tree.html?mode=tree';   // 實作端＝同一頁之 ?mode=tree
+    function switchMode(mode){
+      const m=resolveBrowseMode(mode);
+      if(m==='list') return;                    // 已在文件清單模式：不動任何狀態
+      location.href=PROTOTYPE_TREE_HREF;         // 🔒 `AC-B15`：不寫入任何儲存（不記憶模式）
+    }
+    /* 🔒 `AC-B13`：以任何方式進入（側欄／登入後導向／不帶 mode 之網址）皆以樹狀圖為預設。
+       原型以 replace（非 push）轉址，使上一頁仍是使用者真正的來源頁。 */
+    (function initMode(){
+      if(resolveBrowseMode(new URLSearchParams(location.search).get('mode'))==='tree'){
+        location.replace(PROTOTYPE_TREE_HREF);
+      }
+    })();
+  </script>
+
 
   <!-- Search + filter trigger -->
   <div class="flex items-center gap-2 mb-3">

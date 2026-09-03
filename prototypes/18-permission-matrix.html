@@ -157,7 +157,15 @@
   /* ===== admin shell sidebar ===== */
   const MENU=[
     {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'CRUD'}},
-    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    /* 🔴 2026-09-02 人類裁決（F025 delta）：「循環管理」自主管權限**移除**（唯讀 → 無）。
+       權威＝backend/src/rbac/function-matrix.ts 之 LIFECYCLE_MANAGEMENT（主管＝NONE）；本檔先前落後於已上線程式碼。
+       表達方式＝**移除 supervisor 鍵**（比照 settings 等主管無權項之既有寫法；renderSidebar 以 m.roles[role] 過濾）。
+       📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> supervisor:'唯讀'
+       🔴 與下一項「業務/功能類別管理」（supervisor:'唯讀'）**刻意不同**——同日兩項裁決，一移出一放進（F025 `AC-B29`）；
+          主管側欄自此**看得到「業務/功能類別管理」、看不到「循環管理」**，這個不對稱即該斷言之視覺權威。 */
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    /* 🔵 2026-09-02 F043 AC-43／人類裁決：新側選單項，**置於「循環管理」之後、「ICSOP 文件管理」之前**。 */
+    {id:'businesscategory',label:'業務/功能類別管理',icon:'shapes',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
     {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
     {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
@@ -196,7 +204,14 @@
   const FUNC_ROWS=[
     ['帳號管理',['CRUD','CRUD','無','無','無']],
     ['角色指派',['CRUD','受限CRUD','無','無','無'],'經帳號管理 modal 執行、非獨立側選單頁；ICSOP管理員不得指派系統管理員／ICSOP管理員'],
-    ['循環管理（DAG）',['唯讀','CRUD','唯讀','無','無']],
+    /* 🔴 2026-09-02 人類裁決（F025 delta）：**主管欄由「唯讀」改為「無」**。
+       權威＝backend/src/rbac/function-matrix.ts 之 LIFECYCLE_MANAGEMENT: row('READ','CRUD','NONE','NONE','NONE')
+       ——本 prototype 先前落後於已上線之程式碼。其餘四格一格未動。
+       📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> ['循環管理（DAG）',['唯讀','CRUD','唯讀','無','無']]
+       🔴 本列之主管欄（`無`）與下方「業務/功能類別管理」列之主管欄（`唯讀`）**刻意不同**——同日兩項人類裁決，
+          一項把主管移出循環管理、一項把主管放進業務/功能類別管理（F025 `AC-B29` 之成對斷言）。
+          ⚠ 日後最可能發生的「整理」就是把這兩格對齊成同一個值——那會同時違反兩條人類裁決。 */
+    ['循環管理（DAG）',['唯讀','CRUD','無','無','無']],
     ['ICSOP 文件管理',['唯讀','CRUD','唯讀','唯讀','無']],
     ['文件使用表單管理',['唯讀','CRUD','無','無','無']],
     ['附錄管理',['唯讀','CRUD','無','無','無']],
@@ -206,7 +221,17 @@
     ['組織人員異動管理',['CRUD','唯讀','無','無','無']],
     ['前台瀏覽',['可','可','可','可','可']],
     ['下載／列印文件',['可·浮水印','可·浮水印','可·浮水印','可·浮水印','可·浮水印']],
-    ['系統參數設定',['CRUD','無','無','無','無']]
+    ['系統參數設定',['CRUD','無','無','無','無']],
+    /* 🔴 2026-08-28 F042 `AC-27`（`OQ-E11-05`→A）：**補回**第 14 列（本 prototype 先前漏未同步）。
+       權威＝backend/src/rbac/function-matrix.ts 之 OJT_PROGRESS_MANAGEMENT: row('READ','CRUD','RESTRICTED_CRUD','RESTRICTED_CRUD','NONE')。
+       ⚠ 主管與部門窗口逐字為 **`受限CRUD`**（不是 `CRUD`）——「受限」於本列之語意＝**僅可新增場次、不可刪除**，
+         與「角色指派」列之「不得指派 SysAdmin／ICSOPAdmin」語意**互不相同**；`受限CRUD` 是「此處另有細則」之標記，
+         **不是一組固定的權限集合**，明文禁止把兩處收斂成共用判定式。 */
+    ['OJT 進度管理',['唯讀','CRUD','受限CRUD','受限CRUD','無'],'受限＝僅可新增場次、不可刪除（與「角色指派」列之「受限」語意不同，不得收斂為同一判定式）'],
+    /* 🔵 2026-09-02 F043 `AC-43`／F025 `AC-B28`（DRAFT，待人類閘門核准）：新增第 15 列，置於「OJT 進度管理」之後。
+       格值＝唯讀｜CRUD｜唯讀｜無｜無；🔒 值域不擴充（三個格值皆為既有之 `唯讀`／`CRUD`／`無`，不引入 `受限CRUD`）。
+       🔴 主管欄為 `唯讀`，與上方「循環管理（DAG）」列之 `無` **刻意不同**（見該列註解）。 */
+    ['業務/功能類別管理',['唯讀','CRUD','唯讀','無','無'],'🔵 F043 DRAFT：主管為「唯讀」，與「循環管理（DAG）」之「無」刻意不同（同日兩項人類裁決）']
   ];
   const FIELD_ROWS=[
     ['系統 UUID',['唯讀','唯讀','唯讀','唯讀','唯讀'],'系統產生'],

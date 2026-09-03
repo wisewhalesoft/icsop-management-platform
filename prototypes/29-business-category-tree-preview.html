@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<!-- 🔵 F043 業務/功能類別管理（DRAFT — 2026-09-02）：**後台類別樹狀圖預覽**，鏡射 22-lifecycle-tree-preview.html
+     之版面、結構、文案、浮水印疊加層、dagre 佈局、直角繞線、單擊標示下游、雙擊子樹唯讀抽屜、縮放與拖曳平移。
+     規格權威＝docs/specs/features/F043-business-function-category.md（§丁 AC-32～AC-37）。
+
+     🔒 22 一字不改（AC-49）；本頁為**平行第二套**結構。
+     🔒 AC-33 浮水印：本頁渲染 HTML、**無 PDF 內容層可燒錄** ⇒ DOM 疊加層是其唯一浮水印載體，
+        **明文禁止**比照 F020 AC-N7 對前台 PDF 檢視器所做之「移除疊加層」（該裁決之前提是該頁有內容層可燒錄）。
+        幾何要求同 F036 AC-T50：旋轉後之矩形須涵蓋畫板四角（非僅 inset 等比放大）。格式權威＝NFR-007。
+     🔒 AC-34 切換器：頂部類別切換器；選項顯示＝businessCategoryDisplayName、**選項值＝businessCategoryId**
+        （非名稱字串——同名不同子分類之兩個類別必須可分別被選取）；切換重繪、頁面框架不變、另記一筆檢視稽核。
+     🔒 AC-35 單擊標示全部下游／雙擊開**唯讀**子樹抽屜（不得含任何寫入元件、不得復用 §丙 之可寫抽屜）。
+     🔒 AC-36 下載／列印：伺服器端產生 PDF、浮水印**燒錄於內容層**，各記一筆獨立稽核；
+        載體＝代理串流（downloadViaBlob／openPdfViaBlob），不得用 <a href> top-level navigation（比照 F036 AC-T49）。
+
+     ═══ 🔴 與 22 之**刻意差異**（非疏漏，皆有出處）═══
+     ① **子樹抽屜不做跨節點去重**（AC-35 明文）：同一份程序書若掛在子樹內多個節點，**依節點分組各出現一次**；
+        而副標題之 N ＝**去重後之相異程序書數**。⇒ 兩個數字可以不同，**不得互相對齊**。
+        22 之處置相反（以編號去重、首次出現者勝），因為循環模型下一份文件只屬一個節點、跨組本不會重複。
+        📌 兩數不同時，抽屜另加一行**可見**說明（不是只寫在註解裡），否則下一個人會去「修」其中一邊。
+     ② **無「在文件管理中檢視這 N 份程序書」導向鈕**：13 之子樹 deep link 參數為
+        `lifecycleId` + `nodeSubtreeId`（循環專用），本功能在 13 上只有**類別層**的第 14 項篩選、
+        沒有節點子樹維度 ⇒ 沒有可導向的目標。**若人類要求此鈕，需先在 13 開一個類別節點子樹篩選參數**（見交付回報）。
+     ③ 頁首**無循環代碼**（22 之 `titleCode`，如 SRC）：業務/功能類別沒有 ICSOP 編號段之對應代碼。
+     ═════════════════════════════════════════════════════ -->
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>業務/功能類別樹狀圖預覽 · ICSOP</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<!-- 佈局：與 F008 DAG 畫布及前後端同一套（版本須與 package.json 釘死之 1.1.8 一致） -->
+<script src="https://unpkg.com/@dagrejs/dagre@1.1.8/dist/dagre.min.js"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;background:#F8FAFC;color:#334155;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  #stage{background:#E2E8F0;}
+  /* board = the "document" being viewed（幾何處置逐項沿用 22，理由見該檔註解） */
+  #board{background:#fff;background-image:radial-gradient(#EEF2F7 1px,transparent 1px);background-size:22px 22px;
+         box-shadow:0 4px 24px rgba(0,0,0,.08);position:relative;transform-origin:top left;transition:transform .15s ease;border-radius:12px;overflow:hidden;}
+  #boardSizer{margin:0 auto;transition:width .15s ease,height .15s ease;}
+  #stage{cursor:grab;user-select:none;}
+  #stage.panning{cursor:grabbing;}
+  /* diagonal tiled watermark overlay — 字串格式、色值、字級、內距、行高與 22／05 完全一致
+     🔒 F020 AC-N2／AC-N66：色值 #7C7C7C @ opacity .30、字級 32px、內距 140/60、line-height 2.0；
+        固定機密聲明只在正中央出現一次，tile 只重複「身分列＋時間戳」兩行。
+     🔒 疊加層必須滿版：邊長 (W + H) × cos45° 之**正方形**、以畫板中心為中心、逐列 flex-nowrap 鋪起，
+        溢出由 .wm-layer 自身 overflow:hidden 裁掉。⚠ 不得改回 flex-wrap（最後一列排不滿＝旋轉後一條斜白帶）。 */
+  .wm-layer{position:absolute;pointer-events:none;overflow:hidden;transform:rotate(-45deg);opacity:.30;user-select:none;z-index:5;}
+  .wm-row{display:flex;flex-wrap:nowrap;}
+  .wm-layer span{color:#7C7C7C;font-size:32px;flex-shrink:0;white-space:nowrap;padding:140px 60px;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:2.0;}
+  .wm-centre{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#7C7C7C;font-size:32px;white-space:nowrap;font-weight:500;font-family:'JetBrains Mono',monospace;text-align:center;line-height:2.0;}
+  /* DAG nodes */
+  .node{position:absolute;cursor:pointer;transition:opacity .15s;}
+  .node .nbody{background:#fff;border:1.5px solid #E2E8F0;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.05);padding:8px 11px;transition:border-color .15s,box-shadow .15s,background .15s;}
+  .node.hasdocs .nbody{border-left:4px solid #059669;}
+  .node.hl .nbody{border-color:#365C97;background:#EAF1FA;box-shadow:0 0 0 3px #CFDFF3;}
+  .node.sel .nbody{border-color:#2A4A7E;background:#EAF1FA;box-shadow:0 0 0 3px #98B6E4, 0 0 0 7px rgba(152,182,228,.28);}
+  .node.dim{opacity:.3;}
+  path.edge{stroke:#94A3B8;stroke-width:2;fill:none;transition:stroke .15s,stroke-width .15s,opacity .15s;}
+  path.edge.hl{stroke:#365C97;stroke-width:3;}
+  path.edge.dim{opacity:.18;}
+</style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+<!-- ===== App bar (viewer 樣式，不套後台側選單) ===== -->
+<header class="sticky top-0 z-30 bg-white border-b border-slate-200 shrink-0">
+  <div class="px-4 h-14 flex items-center gap-3">
+    <!-- 名稱與圖示依「如何進來的」分支（比照 22／F036 AC-D3）：自清單開出（有 opener）＝「關閉預覽」＋ x；
+         直接貼網址進來＝「返回業務/功能類別池」＋ arrow-left。實際文字由 initBackBtn() 於載入時決定。 -->
+    <button id="backBtn" onclick="goBack()" title="返回業務/功能類別池" aria-label="返回業務/功能類別池" class="text-slate-400 hover:text-slate-600 flex items-center"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="git-fork" class="w-5 h-5"></i></div>
+    <div class="leading-tight min-w-0">
+      <div class="text-xs text-slate-400">業務/功能類別樹狀圖預覽</div>
+      <div class="font-semibold text-slate-900 text-sm truncate"><span id="titleName">授信（消金）</span></div>
+    </div>
+    <div class="ml-auto hidden sm:flex items-center gap-2 text-sm text-slate-500">
+      <i data-lucide="user" class="w-4 h-4"></i><span>李慧玲</span><span class="text-slate-300">·</span><span>ICSOP 管理員</span>
+    </div>
+  </div>
+
+  <!-- toolbar：類別切換 + 縮放 + 下載/列印 -->
+  <div class="px-4 h-12 border-t border-slate-100 flex items-center gap-2 text-sm overflow-x-auto">
+    <label for="catSel" class="inline-flex items-center gap-1.5 text-slate-500 shrink-0"><i data-lucide="shapes" class="w-4 h-4"></i>業務/功能類別</label>
+    <select id="catSel" aria-label="業務/功能類別" onchange="loadCategory(this.value)" class="shrink-0 px-2.5 py-1.5 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"></select>
+    <div class="w-px h-5 bg-slate-200 mx-1 shrink-0"></div>
+    <button onclick="zoomBy(-0.1)" title="縮小" aria-label="縮小" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="zoom-out" class="w-4 h-4"></i></button>
+    <span id="zoomLabel" class="mono text-xs text-slate-500 w-10 text-center shrink-0">100%</span>
+    <button onclick="zoomBy(0.1)" title="放大" aria-label="放大" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="zoom-in" class="w-4 h-4"></i></button>
+    <button onclick="resetView()" title="重設縮放" aria-label="重設縮放" class="w-8 h-8 rounded-md hover:bg-slate-100 flex items-center justify-center shrink-0"><i data-lucide="maximize" class="w-4 h-4"></i></button>
+    <div class="w-px h-5 bg-slate-200 mx-1 shrink-0"></div>
+    <button onclick="doAction('DOWNLOAD')" title="下載此業務/功能類別樹狀圖（PDF，燒錄浮水印）" aria-label="下載" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="download" class="w-4 h-4"></i>下載</button>
+    <button onclick="doAction('PRINT')" title="列印此業務/功能類別樹狀圖（燒錄浮水印）" aria-label="列印" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0"><i data-lucide="printer" class="w-4 h-4"></i>列印</button>
+    <div class="w-px h-5 bg-slate-200 mx-1 shrink-0"></div>
+    <span class="text-xs text-slate-400 shrink-0 hidden md:inline">點節點＝醒目標示其所有下游節點；點空白處取消；<strong class="text-slate-500">雙擊節點＝檢視該節點與其下游節點之程序書清單</strong>；圖寬超出畫面時可<strong class="text-slate-500">按住拖曳平移</strong></span>
+  </div>
+</header>
+
+<!-- info note（比照 22：檢視已記錄稽核）-->
+<div class="px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700 flex items-start gap-2 shrink-0">
+  <i data-lucide="shield-check" class="w-4 h-4 shrink-0 mt-0.5"></i>
+  <span>本預覽已<strong>寫入調閱稽核（VIEW）</strong>；畫面疊加之浮水印由<strong>伺服器端</strong>依當下登入身分與時間動態產生，格式與稽核快照一致。<strong>下載／列印</strong>時將把浮水印<strong>燒錄進 PDF 內容層</strong>並各自記錄稽核。</span>
+</div>
+
+<!-- viewer stage（不得用 flex justify-center 置中畫板，理由見 22 之同段註解） -->
+<main id="stage" class="flex-1 overflow-auto p-4 sm:p-8">
+  <div id="boardSizer">
+  <div id="board">
+    <svg id="edges" style="position:absolute;inset:0;pointer-events:none;z-index:1;">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#94A3B8"></path></marker>
+        <marker id="arrowHl" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#365C97"></path></marker>
+      </defs>
+    </svg>
+    <div id="nodesLayer" style="position:absolute;inset:0;z-index:2;"></div>
+    <!-- AC-32：類別無任何節點 → 空狀態提示（**非錯誤畫面**）。逐字與前台 30 之 AC-B27 ① 同句。 -->
+    <div id="noNodesState" class="hidden absolute inset-0 z-[3] flex items-center justify-center">
+      <div class="text-center">
+        <i data-lucide="git-fork" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+        <p data-empty-no-nodes class="text-slate-500 text-sm">此類別尚未建立節點</p>
+        <p class="text-slate-400 text-xs mt-1">請至該類別之 DAG 畫布新增節點。</p>
+      </div>
+    </div>
+    <!-- watermark overlay（疊於樹狀圖之上，pointer-events:none 不擋點擊）-->
+    <div class="wm-layer" id="wmLayer"></div>
+  </div>
+  </div>
+</main>
+
+<!-- ===== AC-35：節點子樹「唯讀」側抽屜（雙擊節點開啟）=====
+     自畫布**右側**滑出、**非 modal**（無遮罩，不遮擋樹狀圖）。
+     🔒 **純唯讀**：本區塊內不得出現任何寫入類互動元件（新增／移除掛載／儲存／刪除），亦不得有 <input>／<select>。
+        它是 §丙 可寫抽屜之**唯讀孿生**，不得復用其可寫版本；資料端點閘門＝`業務/功能類別管理` **read**（AC-45）。
+     🔴 範圍＝**本節點 ＋ 全部下游節點（整個子樹）**、依節點分組；子樹集合 ≡ 單擊時醒目標示的那一組節點
+        （共用同一個 descendants()，全檔不存在第二份子樹走訪）。 -->
+<aside id="nodeDocDrawer" aria-hidden="true" aria-label="節點與其下游節點之程序書清單（唯讀）"
+       class="fixed right-0 top-0 bottom-0 z-40 w-full sm:w-[400px] bg-white border-l border-slate-200 shadow-2xl translate-x-full transition-transform duration-300 flex flex-col">
+  <div class="h-14 shrink-0 flex items-center gap-2 px-4 border-b border-slate-200">
+    <i data-lucide="file-stack" class="w-4 h-4 text-primary-600 shrink-0"></i>
+    <div class="min-w-0 flex-1">
+      <div id="ndTitle" class="font-semibold text-slate-900 text-sm truncate"></div>
+      <div id="ndCount" class="text-[11px] text-slate-400"></div>
+    </div>
+    <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">唯讀</span>
+    <button onclick="closeNodeDrawer()" aria-label="關閉" title="關閉（Esc）" class="w-8 h-8 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400 shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
+  </div>
+  <!-- 🔴 兩數不同時之**可見**說明行（差異 ①）：相異程序書數 vs 掛載列數。
+       空字串時整條自 DOM 消失（empty:hidden），不留空白列。 -->
+  <div id="ndDupNote" class="shrink-0 empty:hidden empty:py-0 empty:border-0 border-b border-amber-100 bg-amber-50 px-4 py-2 text-[11px] text-amber-800"></div>
+  <div id="ndBody" class="flex-1 overflow-y-auto"></div>
+  <div class="shrink-0 border-t border-slate-200 px-4 py-2.5 text-[11px] text-slate-400 flex items-start gap-1.5">
+    <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>
+    <span>點任一列可另開該程序書之<strong>後台唯讀詳情</strong>。本抽屜為唯讀檢視，不提供任何 DAG 編輯互動；開啟本抽屜<strong>不另記稽核事件</strong>。</span>
+  </div>
+</aside>
+
+<!-- selection chip -->
+<div id="selChip" class="hidden fixed left-1/2 -translate-x-1/2 bottom-5 z-40 items-center gap-2 px-4 py-2 rounded-full bg-slate-900 text-white text-sm shadow-lg">
+  <i data-lucide="git-fork" class="w-4 h-4 text-primary-300"></i>
+  <span id="selText"></span>
+  <button onclick="clearSel()" class="ml-1 inline-flex items-center gap-1 text-slate-300 hover:text-white"><i data-lucide="x" class="w-3.5 h-3.5"></i>取消</button>
+</div>
+
+<!-- watermark format caption（比照 22）-->
+<footer class="shrink-0 bg-white border-t border-slate-200 px-4 py-2.5">
+  <div class="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+    <span class="text-xs text-slate-400 shrink-0">浮水印格式（與稽核快照一致）：</span>
+    <code class="mono text-xs text-slate-600 truncate" id="wmString"></code>
+  </div>
+</footer>
+
+<div id="toastWrap" class="fixed top-20 right-4 z-50 space-y-2"></div>
+
+<script>
+  /* ===== 浮水印（格式、色值、字級、內距、行高與 22／05 完全一致；權威＝NFR-007／F020）===== */
+  const COMPANY_FULL_NAMES  = { AS:'和潤企業股份有限公司', AE:'和潤電能' };
+  const COMPANY_SHORT_NAMES = { AS:'和潤企業',             AE:'和潤電能' };
+  const WM_COMPANY = COMPANY_SHORT_NAMES.AS;
+  const WM_DATA   = `20233-李慧玲-${WM_COMPANY}-債權管理部-法催一室`;
+  const WM_NOTICE = '僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現';
+  const WM_TIME   = '2026-09-02 14:32:08';
+  const WM = `${WM_DATA}-${WM_NOTICE}-${WM_TIME}`;
+  document.getElementById('wmString').textContent = WM + '  （時區 UTC+8）';
+  const WM_FONT=32, WM_LH=2.0, WM_PAD_X=60, WM_PAD_Y=140, WM_MAX_TILES=2000;
+  function wmTileWidth(lines){
+    /* 刻意**低估**：估寬偏小只是多鋪幾枚（被 overflow 裁掉，無害），偏大就是右緣一條沒有浮水印的空白。 */
+    const w=(s)=>Array.from(s).reduce((a,ch)=>a+(ch.codePointAt(0)>0x2E7F?WM_FONT*0.95:WM_FONT*0.55),0);
+    return Math.max(1, Math.max(...lines.map(w)) + WM_PAD_X*2);
+  }
+  function fillWatermark(){
+    const b=document.getElementById('board');
+    const bw=b.clientWidth||760, bh=b.clientHeight||1000;
+    const lines=[WM_DATA,WM_TIME];
+    const size=Math.ceil((bw+bh)*Math.SQRT1_2)+2;
+    const tileW=wmTileWidth(lines), tileH=lines.length*WM_FONT*WM_LH + WM_PAD_Y*2;
+    let cols=Math.ceil(size/tileW)+1, rows=Math.ceil(size/tileH)+1;   /* 一律多算一格 */
+    if(cols*rows>WM_MAX_TILES){ const k=Math.sqrt(WM_MAX_TILES/(cols*rows)); cols=Math.max(1,Math.floor(cols*k)); rows=Math.max(1,Math.floor(rows*k)); }
+    const layer=document.getElementById('wmLayer');
+    layer.style.width=layer.style.height=size+'px';
+    layer.style.left=Math.round((bw-size)/2)+'px';
+    layer.style.top=Math.round((bh-size)/2)+'px';
+    const tile=`<span>${WM_DATA}<br>${WM_TIME}</span>`;
+    const row=`<div class="wm-row">${tile.repeat(cols)}</div>`;
+    layer.innerHTML=row.repeat(rows)+`<span class="wm-centre">${WM_NOTICE}</span>`;
+  }
+
+  /* ===== 顯示名稱純函式（規則與 F040 lifecycleDisplayName 逐字相同，AC-06）===== */
+  function normalizeSubcategory(v){ const s=(v==null?'':String(v)).trim(); return s?s:null; }
+  function businessCategoryDisplayName(bc){ if(!bc) return ''; const s=normalizeSubcategory(bc.subcategory); return s?`${bc.name}（${s}）`:bc.name; }
+
+  /* ===== 各業務/功能類別之節點、邊與掛載程序書（🔒 與 26／27／28／30／13 之語料逐筆一致）=====
+     ⚠ 本表以 **businessCategoryId 為鍵**（非名稱）——「授信」之消金／企金／子公司三者名稱相同，
+       名稱字串無法區分彼此（AC-34 之選項值必為 businessCategoryId 同理）。
+     🔴 M:N 語料（勿「修正」為單一歸屬）：
+       · ICSOP-SRC-101-1-01 出現於 bc1/p2、bc1/p4（**同類別兩節點**）、bc2/q3、bc3/r4、bc6/u1
+       · ICSOP-GCA-100-2-00 出現於 bc1/p3、bc2/q2、bc3/r3、bc4/s2（四個相異類別）
+       ⇒ bc1 自 p1 起之子樹：掛載列 6 筆、**相異程序書 5 份**（差異 ① 之示範語料，兩數刻意不同）。
+     🔴 bc7 刻意 **0 個節點**：AC-32 空狀態之唯一載體（新建立、尚未拉節點）。 */
+  const CATS={
+    bc1:{name:'授信', subcategory:'消金', nodes:[
+      {id:'p1',name:'授信政策與額度管理',docs:[{num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",status:'有效',date:'2025-12-01'}]},
+      {id:'p2',name:'徵信調查作業',docs:[{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]},
+      {id:'p3',name:'擔保品管理作業',docs:[{num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01'}]},
+      {id:'p4',name:'授信審核作業',docs:[{num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",status:'有效',date:'2026-06-01'},{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]},
+      {id:'p5',name:'撥貸與帳務作業',docs:[{num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",status:'有效',date:'2026-05-01'}]}],
+      edges:[['p1','p2'],['p1','p3'],['p2','p4'],['p3','p4'],['p4','p5']]},
+    bc2:{name:'授信', subcategory:'企金', nodes:[
+      {id:'q1',name:'企金授信受理作業',docs:[{num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",status:'有效',date:'2026-06-01'}]},
+      {id:'q2',name:'企業徵信作業',docs:[{num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01'}]},
+      {id:'q3',name:'授信核決作業',docs:[{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]},
+      {id:'q4',name:'額度撥貸作業',docs:[]}],
+      edges:[['q1','q2'],['q1','q3'],['q2','q4'],['q3','q4']]},
+    bc3:{name:'風險管理', subcategory:null, nodes:[
+      {id:'r1',name:'風險辨識作業',docs:[{num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',edition:"26'01",status:'有效',date:'2026-04-01'}]},
+      {id:'r2',name:'風險評估作業',docs:[{num:'ICSOP-FC-101-1-00',name:'銀行融資作業',edition:"26'01",status:'有效',date:'2026-02-01'}]},
+      {id:'r3',name:'風險監控作業',docs:[{num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01'}]},
+      {id:'r4',name:'風險報告作業',docs:[{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]}],
+      edges:[['r1','r2'],['r2','r3'],['r1','r3'],['r3','r4']]},
+    bc4:{name:'帳務處理', subcategory:'子公司', nodes:[
+      {id:'s1',name:'子公司帳務結算作業',docs:[{num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",status:'有效',date:'2026-05-01'}]},
+      {id:'s2',name:'子公司入帳覆核作業',docs:[{num:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',edition:"26'05",status:'有效',date:'2026-10-01'},{num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01'}]},
+      {id:'s3',name:'子公司報表產出作業',docs:[]}],
+      edges:[['s1','s2'],['s2','s3']]},
+    bc5:{name:'帳務處理', subcategory:'消金', nodes:[
+      {id:'t1',name:'消金帳務結算作業',docs:[]},
+      {id:'t2',name:'消金帳務覆核作業',docs:[]}],
+      edges:[['t1','t2']]},
+    bc6:{name:'授信', subcategory:'子公司', nodes:[
+      {id:'u1',name:'子公司授信受理作業',docs:[{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]},
+      {id:'u2',name:'子公司授信核決作業',docs:[]}],
+      edges:[['u1','u2']]},
+    bc7:{name:'帳務處理', subcategory:'企金', nodes:[], edges:[]}
+  };
+  const ORDER=['bc1','bc2','bc6','bc3','bc4','bc5','bc7'];
+  const DEFAULT_ID='bc1';
+
+  const NODE_W=176, NODE_H=62, HGAP=210, VGAP=132, MARGIN=48;
+  const board=document.getElementById('board'), svg=document.getElementById('edges'), nodesLayer=document.getElementById('nodesLayer');
+  let CUR=null, selected=null, zoom=1, cur=null;   /* 初次載入時 CUR 為 null ⇒ loadCategory() 不會誤記一筆『切換』稽核 */
+
+  /* AC-34：切換器選項顯示＝businessCategoryDisplayName（含子分類）、**選項值＝businessCategoryId**。
+     「授信」之消金／企金／子公司為三個相異選項，可分別開啟。 */
+  document.getElementById('catSel').innerHTML = ORDER.map(id=>`<option value="${id}">${businessCategoryDisplayName(CATS[id])}</option>`).join('');
+
+  /* ---- 由上而下分層佈局（dagre，與 F008 DAG 畫布及前後端同一套）---- */
+  function buildGraph(catId){
+    const cy=CATS[catId]; const nodes=cy.nodes, edges=cy.edges;
+    const adj={}; nodes.forEach(n=>{adj[n.id]=[];}); edges.forEach(([s,t])=>{adj[s].push(t);});
+    if(!nodes.length){ return {nodes,edges,adj,pos:{},level:{},boardW:760,boardH:420,routes:[],empty:true}; }
+
+    const gg=new dagre.graphlib.Graph().setDefaultEdgeLabel(()=>({}));
+    gg.setGraph({rankdir:'TB',nodesep:HGAP-NODE_W,ranksep:VGAP-NODE_H,marginx:MARGIN,marginy:MARGIN});
+    nodes.forEach(n=>gg.setNode(n.id,{width:NODE_W,height:NODE_H}));
+    edges.forEach(([s,t])=>gg.setEdge(s,t));
+    dagre.layout(gg);
+    const pos={}; nodes.forEach(n=>{const p=gg.node(n.id);
+      pos[n.id]={x:Math.round(p.x-NODE_W/2), y:Math.round(p.y-NODE_H/2)};});
+    const rankY=[...new Set(nodes.map(n=>pos[n.id].y))].sort((a,b)=>a-b);
+    const level={}; nodes.forEach(n=>{level[n.id]=rankY.indexOf(pos[n.id].y);});
+    const boardW=Math.max(...nodes.map(n=>pos[n.id].x+NODE_W))+MARGIN;
+    const boardH=Math.max(...nodes.map(n=>pos[n.id].y+NODE_H))+MARGIN;
+
+    const g={nodes,edges,adj,pos,level,boardW,boardH,empty:false};
+    g.routes=buildEdgeRoutes(g);
+    return g;
+  }
+
+  function descendants(id){ // id 及其所有下游（沿 child 邊遞移）
+    const set=new Set([id]); const stack=[id];
+    while(stack.length){const u=stack.pop(); (cur.adj[u]||[]).forEach(v=>{if(!set.has(v)){set.add(v);stack.push(v);}});}
+    return set;
+  }
+
+  /* ---- 連線繞線（演算法逐項沿用 22；推導與理由見該檔註解）---- */
+  const ROUTE={LANES:5,LANE_ORDER:[2,1,3,0,4],LANE_STEP:12,LANE_GAP:16,CHANNEL_CLEAR:10,CHANNEL_STEP:8,HOP_R:5};
+  function spreadOffset(i,k,step){ return k<2?0:(i-(k-1)/2)*step; }
+
+  function buildEdgeRoutes(g){
+    const corridorY=lv=>MARGIN+lv*VGAP-(VGAP-NODE_H)/2;
+    const work=g.edges.map(([s,t],idx)=>({idx,s,t,span:g.level[t]-g.level[s],sx:0,tx:0,cx:0,gapLo:0,gapHi:0,yA:0,yB:0}))
+      .filter(w=>g.pos[w.s]&&g.pos[w.t]);
+
+    work.forEach(w=>{ w.sx=g.pos[w.s].x+NODE_W/2; w.tx=g.pos[w.t].x+NODE_W/2; });
+
+    const longs=work.filter(w=>w.span>=2);
+    longs.forEach(w=>{
+      const blocks=g.nodes.filter(n=>g.level[n.id]>g.level[w.s]&&g.level[n.id]<g.level[w.t])
+        .map(n=>[g.pos[n.id].x-ROUTE.CHANNEL_CLEAR,g.pos[n.id].x+NODE_W+ROUTE.CHANNEL_CLEAR])
+        .sort((a,b)=>a[0]-b[0]);
+      const gaps=[]; let cursor=0;
+      blocks.forEach(([lo,hi])=>{ if(lo-cursor>ROUTE.CHANNEL_CLEAR*2) gaps.push([cursor,lo]); cursor=Math.max(cursor,hi); });
+      if(g.boardW-cursor>ROUTE.CHANNEL_CLEAR*2) gaps.push([cursor,g.boardW]);
+      if(!gaps.length){ w.cx=w.tx; w.gapLo=w.tx; w.gapHi=w.tx; return; }
+      const clampTo=gp=>Math.min(Math.max(w.tx,gp[0]+2),gp[1]-2);
+      let best=gaps[0];
+      gaps.forEach(gp=>{ if(Math.abs(clampTo(gp)-w.tx)<Math.abs(clampTo(best)-w.tx)) best=gp; });
+      w.cx=clampTo(best); w.gapLo=best[0]; w.gapHi=best[1];
+    });
+    const chan={}; longs.forEach(w=>{(chan[w.gapLo]=chan[w.gapLo]||[]).push(w);});
+    Object.keys(chan).forEach(k=>{
+      const gr=chan[k];
+      gr.forEach((w,i)=>{ w.cx=Math.min(Math.max(w.cx+spreadOffset(i,gr.length,ROUTE.CHANNEL_STEP),w.gapLo+2),w.gapHi-2); });
+    });
+
+    const corridors={};
+    const push=(lv,key,slot,lo,hi,w)=>{
+      const byKey=corridors[lv]=corridors[lv]||{};
+      const gr=byKey[key];
+      if(!gr){ byKey[key]={slot,lo,hi,idx:w.idx,ws:[w]}; return; }
+      gr.lo=Math.min(gr.lo,lo); gr.hi=Math.max(gr.hi,hi); gr.idx=Math.min(gr.idx,w.idx); gr.ws.push(w);
+    };
+    work.forEach(w=>{
+      if(w.span>=2){
+        push(g.level[w.s]+1,'A'+w.idx,'A',Math.min(w.sx,w.cx),Math.max(w.sx,w.cx),w);
+        push(g.level[w.t],'B'+w.idx,'B',Math.min(w.cx,w.tx),Math.max(w.cx,w.tx),w);
+      } else {
+        push(g.level[w.t],'S'+w.s,'B',Math.min(w.sx,w.tx),Math.max(w.sx,w.tx),w);
+      }
+    });
+    Object.keys(corridors).forEach(lv=>{
+      const lastHi=new Array(ROUTE.LANES).fill(-Infinity);
+      Object.keys(corridors[lv]).map(k=>corridors[lv][k])
+        .sort((a,b)=>a.lo-b.lo||a.hi-b.hi||a.idx-b.idx).forEach(gr=>{
+        let lane=ROUTE.LANE_ORDER.find(l=>lastHi[l]+ROUTE.LANE_GAP<=gr.lo);
+        if(lane===undefined) lane=ROUTE.LANE_ORDER.reduce((best,l)=>lastHi[l]<lastHi[best]?l:best,ROUTE.LANE_ORDER[0]);
+        lastHi[lane]=gr.hi;
+        const y=corridorY(+lv)+(lane-(ROUTE.LANES-1)/2)*ROUTE.LANE_STEP;
+        gr.ws.forEach(w=>{ if(gr.slot==='A') w.yA=y; else w.yB=y; });
+      });
+    });
+
+    const pts=g.edges.map(()=>[]);
+    work.forEach(w=>{
+      const sBottom=g.pos[w.s].y+NODE_H, tTop=g.pos[w.t].y;
+      pts[w.idx]=w.span>=2
+        ? [[w.sx,sBottom],[w.sx,w.yA],[w.cx,w.yA],[w.cx,w.yB],[w.tx,w.yB],[w.tx,tTop]]
+        : [[w.sx,sBottom],[w.sx,w.yB],[w.tx,w.yB],[w.tx,tTop]];
+    });
+
+    const verticals=[];
+    work.forEach(w=>{
+      const p=pts[w.idx];
+      for(let i=0;i+1<p.length;i++) if(p[i][0]===p[i+1][0])
+        verticals.push({x:p[i][0],lo:Math.min(p[i][1],p[i+1][1]),hi:Math.max(p[i][1],p[i+1][1]),s:w.s,t:w.t});
+    });
+    const out=g.edges.map(()=>({points:[],hops:[]}));
+    work.forEach(w=>{
+      const p=pts[w.idx], hops=[];
+      for(let i=0;i+1<p.length;i++){
+        const a=p[i], b=p[i+1];
+        if(a[1]!==b[1]){ hops.push([]); continue; }
+        const lo=Math.min(a[0],b[0]), hi=Math.max(a[0],b[0]);
+        const xs=verticals.filter(v=>v.s!==w.s&&v.t!==w.t&&v.x>lo+ROUTE.HOP_R&&v.x<hi-ROUTE.HOP_R
+                                     &&a[1]>v.lo+0.5&&a[1]<v.hi-0.5).map(v=>v.x).sort((m,n)=>m-n);
+        const merged=[];
+        xs.forEach(x=>{ if(!merged.length||x-merged[merged.length-1]>ROUTE.HOP_R*2) merged.push(x); });
+        hops.push(a[0]<=b[0]?merged:merged.reverse());
+      }
+      out[w.idx]={points:p,hops};
+    });
+    return out;
+  }
+
+  function edgeD(route){
+    const p=route.points, R=ROUTE.HOP_R;
+    if(!p.length) return '';
+    let d=`M ${p[0][0]} ${p[0][1]}`;
+    for(let i=0;i+1<p.length;i++){
+      const a=p[i], b=p[i+1], dir=b[0]>=a[0]?1:-1, bulge=a[1]-R*4/3;
+      (route.hops[i]||[]).forEach(x=>{
+        d+=` L ${x-R*dir} ${a[1]}`;
+        d+=` C ${x-R*dir} ${bulge} ${x+R*dir} ${bulge} ${x+R*dir} ${a[1]}`;
+      });
+      d+=` L ${b[0]} ${b[1]}`;
+    }
+    return d;
+  }
+
+  function renderCategory(){
+    board.style.width=cur.boardW+'px'; board.style.height=cur.boardH+'px'; syncSizer();
+    svg.setAttribute('width',cur.boardW); svg.setAttribute('height',cur.boardH);
+    svg.setAttribute('viewBox',`0 0 ${cur.boardW} ${cur.boardH}`);
+    document.getElementById('noNodesState').classList.toggle('hidden',!cur.empty);
+    // edges
+    [...svg.querySelectorAll('path.edge')].forEach(p=>p.remove());
+    cur.edges.forEach(([s,t],i)=>{
+      const pts=cur.routes[i];
+      if(!pts||!pts.points.length) return;
+      const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('class','edge'); p.dataset.s=s; p.dataset.t=t;
+      p.setAttribute('d',edgeD(pts)); p.setAttribute('marker-end','url(#arrow)');
+      svg.appendChild(p);
+    });
+    /* nodes — AC-32：每節點顯示**名稱與掛載程序書數**。
+       🔒 徽章逐字沿用 22 之兩個字面（`掛載 {N} 份程序書`／`尚未掛載程序書`）＝全站同一語彙；
+          數字另以 data-mounted-doc-count 提供機器可讀之值（0 亦成立，不必解析可見文字）。 */
+    nodesLayer.innerHTML=cur.nodes.map(n=>{
+      const p=cur.pos[n.id];
+      const cnt=n.docs.length;
+      return `<div class="node${cnt?' hasdocs':''}" data-id="${n.id}" data-mounted-doc-count="${cnt}" style="left:${p.x}px;top:${p.y}px;width:${NODE_W}px" onclick="onNodeClick(event,'${n.id}')" ondblclick="onNodeDblClick(event,'${n.id}')" role="button" tabindex="0" aria-label="節點 ${n.name}" title="單擊＝標示所有下游節點；雙擊＝檢視此節點與其下游節點之程序書清單">
+        <div class="nbody">
+          <div class="flex items-center gap-1.5">
+            <i data-lucide="git-commit-vertical" class="w-3.5 h-3.5 text-slate-300 shrink-0"></i>
+            <span class="font-medium text-slate-800 text-sm truncate">${n.name}</span>
+          </div>
+          <div class="mt-1 flex items-center gap-1 text-[11px] ${cnt?'text-emerald-600':'text-slate-400'}">
+            <i data-lucide="${cnt?'file-check-2':'file-x-2'}" class="w-3.5 h-3.5"></i>${cnt?('掛載 '+cnt+' 份程序書'):'尚未掛載程序書'}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    lucide.createIcons();
+    fillWatermark();
+    applyHighlight();
+  }
+
+  /* AC-34：切換重繪、頁面框架（浮水印、切換器、縮放）維持不變，並**另記一筆檢視稽核**。 */
+  function loadCategory(catId){
+    if(!CATS[catId]) catId=DEFAULT_ID;
+    const changed = CUR!==null && catId!==CUR;   // 初次載入不是『切換』
+    CUR=catId; selected=null;
+    closeNodeDrawer();          // 切換類別時關閉抽屜（節點集合已改變）
+    cur=buildGraph(catId);
+    document.getElementById('catSel').value=catId;
+    document.getElementById('titleName').textContent=businessCategoryDisplayName(CATS[catId]);
+    renderCategory();
+    const st=document.getElementById('stage'); st.scrollLeft=Math.max(0,(board.offsetWidth-st.clientWidth)/2);
+    if(changed) toast('info','已切換至「'+businessCategoryDisplayName(CATS[catId])+'」，並另記一筆檢視稽核（VIEW）');
+  }
+
+  /* ---- AC-35 單擊：醒目標示其及所有下游；其餘淡化；再點同節點/空白取消 ---- */
+  function onNodeClick(ev,id){ ev.stopPropagation(); if(panMoved)return; if(selected===id){ clearSel(); } else { selected=id; applyHighlight(); } }
+  function clearSel(){ selected=null; applyHighlight(); }
+
+  /* ---- AC-35 雙擊：**唯讀**子樹抽屜 ---- */
+  const TODAY='2026-09-02';
+  function derivedStatus(d){ if(d.status!=='有效') return d.status; return d.date<=TODAY?'已公告':'進度中'; }
+  function statusPill(s){
+    const map={'已公告':['#047857','#D1FAE5','megaphone'],'進度中':['#365C97','#EAF1FA','clock'],'失效':['#B45309','#FEF3C7','pause-circle'],'作廢':['#B91C1C','#FEE2E2','x-circle']};
+    const [t,b,ic]=map[s]||map['失效'];
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style="color:${t};background:${b}"><i data-lucide="${ic}" class="w-3 h-3"></i>${s}</span>`;
+  }
+  function onNodeDblClick(ev,id){
+    ev.stopPropagation(); ev.preventDefault();
+    if(!cur.nodes.some(x=>x.id===id)) return;   // 節點不屬於當前類別（切換後之殘留呼叫）→ 不動任何狀態
+    selected=id; applyHighlight();              // 單擊之標示於雙擊時先行觸發且保留
+    openNodeDrawer(id);
+  }
+  /* 分組順序：**本節點恆為第一組**；其餘依畫布上的視覺順序（pos.y 由上而下、同列再 pos.x 由左而右、
+     仍相同者以 id 字典序打破平手）。掛載 0 份之節點不產生分組；整個子樹皆 0 份時才顯示空狀態。 */
+  function subtreeNodeOrder(rootId){
+    const set=descendants(rootId);
+    const rest=[...set].filter(id=>id!==rootId).sort((a,b)=>{
+      const pa=cur.pos[a], pb=cur.pos[b];
+      return (pa.y-pb.y) || (pa.x-pb.x) || (a<b?-1:1);
+    });
+    return [rootId,...rest];
+  }
+  /* 🔴 差異 ①（AC-35 明文）：**不做跨節點去重**——同一份程序書掛在子樹內多個節點時，
+     於**每個節點下各出現一次**。這與 22 的處置相反，且是刻意的：M:N 模型下「這份文件也掛在
+     下游那個節點」本身就是使用者要看的事實，去重會把它藏起來。
+     組內排序＝程序書編號遞增（localeCompare），可重現、無隨機性。 */
+  function subtreeGroups(rootId){
+    const groups=[];
+    subtreeNodeOrder(rootId).forEach(id=>{
+      const n=cur.nodes.find(x=>x.id===id); if(!n) return;
+      const docs=(n.docs||[]).slice().sort((a,b)=>a.num.localeCompare(b.num));
+      if(!docs.length) return;                     // 0 份之節點不出現
+      groups.push({id, name:n.name, self:id===rootId, docs});
+    });
+    return groups;
+  }
+  function docRowHtml(d){
+    return `<button type="button" onclick="openDocReadonly('${d.num}')" data-node-doc-row data-doc-num="${d.num}"
+              class="w-full text-left px-4 py-3 hover:bg-primary-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="mono text-xs text-slate-500">${d.num}</span>${statusPill(derivedStatus(d))}
+        </div>
+        <div class="text-sm text-slate-800 mt-0.5">${d.name}</div>
+        <div class="mt-1 flex items-center gap-3 text-[11px] text-slate-400">
+          <span>版次 <span class="mono text-slate-600">${d.edition}</span></span>
+          <span>公告日期 <span class="mono text-slate-600">${d.date}</span></span>
+        </div>
+      </button>`;
+  }
+  /* 分組標題：逐字＝本節點 `{節點名稱}（本節點）`／其餘 `{節點名稱}`；右側份數徽章逐字＝`{N} 份`。
+     ⚠ 標題列為**純顯示**（<div>，非 button、非 details）——唯讀性質不容許在此長出可展開／可勾選之控制項。 */
+  function groupHtml(g){
+    const title = g.self ? `${g.name}（本節點）` : g.name;
+    return `<section data-node-group="${g.id}" data-node-group-self="${g.self}" data-node-group-count="${g.docs.length}">
+      <div data-node-group-title class="sticky top-0 z-10 bg-slate-50 border-y border-slate-200 px-4 py-1.5 flex items-center gap-1.5">
+        <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true"></i>
+        <span data-node-group-name class="text-xs font-semibold text-slate-700 truncate">${title}</span>
+        <span data-node-group-count-text class="ml-auto shrink-0 mono text-[11px] text-slate-500">${g.docs.length} 份</span>
+      </div>
+      <div class="divide-y divide-slate-100">${g.docs.map(docRowHtml).join('')}</div>
+    </section>`;
+  }
+  function openNodeDrawer(id){
+    const n=cur.nodes.find(x=>x.id===id); if(!n) return;
+    const groups=subtreeGroups(id);
+    const rows=groups.reduce((s,g)=>s+g.docs.length,0);               // 掛載列數（含跨節點重複）
+    const distinct=new Set(groups.flatMap(g=>g.docs.map(d=>d.num))).size;   // 相異程序書數
+    document.getElementById('ndTitle').textContent=n.name;
+    /* 🔴 副標題之 N ＝**去重後之相異程序書數**（AC-35 明文）；下方列數為掛載列數。
+       兩者不同是事實，**不得互相對齊**——但也**不得只寫在註解裡**，否則下一個人會去「修」其中一邊。
+       ⇒ 兩數不同時，另出一行**可見**說明（#ndDupNote）。 */
+    const cntEl=document.getElementById('ndCount');
+    cntEl.textContent=`子樹共 ${distinct} 份程序書`;
+    cntEl.setAttribute('data-subtree-distinct', String(distinct));
+    cntEl.setAttribute('data-subtree-rows', String(rows));
+    const note=document.getElementById('ndDupNote');
+    note.innerHTML = rows>distinct
+      ? `<span data-subtree-dup-note>此子樹共有 ${rows} 筆掛載紀錄、對應 ${distinct} 份相異程序書——同一份程序書掛在多個節點時，於各節點下各列一次（兩個數字不同為正常）。</span>`
+      : '';
+    document.getElementById('ndBody').innerHTML = rows
+      ? groups.map(groupHtml).join('')
+      : `<div data-node-doc-empty class="px-4 py-10 text-center text-sm text-slate-400">
+           <i data-lucide="file-x-2" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>此節點與其下游節點皆未掛載程序書
+         </div>`;
+    const dr=document.getElementById('nodeDocDrawer');
+    dr.classList.remove('translate-x-full'); dr.setAttribute('aria-hidden','false');
+    document.getElementById('ndBody').scrollTop=0;   // 換節點時回到第一組
+    lucide.createIcons();
+  }
+  function closeNodeDrawer(){
+    const dr=document.getElementById('nodeDocDrawer');
+    dr.classList.add('translate-x-full'); dr.setAttribute('aria-hidden','true');
+  }
+  function openDocReadonly(num){ location.href='16-document-readonly.html'; }      // /admin/documents/:id
+  function applyHighlight(){
+    const set = selected? descendants(selected) : null;
+    nodesLayer.querySelectorAll('.node').forEach(el=>{
+      const id=el.dataset.id;
+      el.classList.toggle('hl', !!set && set.has(id));
+      el.classList.toggle('sel', id===selected);
+      el.classList.toggle('dim', !!set && !set.has(id));
+    });
+    svg.querySelectorAll('path.edge').forEach(p=>{
+      const on = !!set && set.has(p.dataset.s) && set.has(p.dataset.t);
+      p.classList.toggle('hl', on); p.classList.toggle('dim', !!set && !on);
+      p.setAttribute('marker-end', on?'url(#arrowHl)':'url(#arrow)');
+    });
+    const chip=document.getElementById('selChip');
+    if(set){
+      const n=cur.nodes.find(x=>x.id===selected);
+      document.getElementById('selText').textContent=`已標示「${n.name}」及其 ${set.size-1} 個下游節點`;
+      chip.classList.remove('hidden'); chip.classList.add('flex');
+    }else{ chip.classList.add('hidden'); chip.classList.remove('flex'); }
+  }
+  document.getElementById('stage').addEventListener('click',()=>{ if(panMoved)return; if(selected)clearSel(); });
+
+  /* ---- 按住拖曳平移（處置逐項沿用 22）---- */
+  const PAN_CLICK_THRESHOLD=4;
+  let panOrigin=null, panMoved=false;
+  (function initPan(){
+    const st=document.getElementById('stage');
+    st.addEventListener('pointerdown', e=>{
+      if(e.pointerType!=='mouse' || e.button!==0) return;
+      panOrigin={x:e.clientX,y:e.clientY,sl:st.scrollLeft,st:st.scrollTop}; panMoved=false;
+      st.classList.add('panning');
+      window.addEventListener('pointermove',onMove);
+      window.addEventListener('pointerup',onUp);
+      window.addEventListener('pointercancel',onUp);
+    });
+    function onMove(e){
+      if(!panOrigin) return;
+      if(!panMoved && Math.abs(e.clientX-panOrigin.x)<=PAN_CLICK_THRESHOLD
+                   && Math.abs(e.clientY-panOrigin.y)<=PAN_CLICK_THRESHOLD) return;
+      panMoved=true;
+      st.scrollLeft=Math.max(0,panOrigin.sl-(e.clientX-panOrigin.x));
+      st.scrollTop =Math.max(0,panOrigin.st-(e.clientY-panOrigin.y));
+    }
+    function onUp(){
+      panOrigin=null; st.classList.remove('panning');
+      window.removeEventListener('pointermove',onMove);
+      window.removeEventListener('pointerup',onUp);
+      window.removeEventListener('pointercancel',onUp);
+    }
+  })();
+
+  /* ---- zoom ---- */
+  function applyZoom(){ board.style.transform='scale('+zoom+')'; syncSizer(); document.getElementById('zoomLabel').textContent=Math.round(zoom*100)+'%'; }
+  function syncSizer(){
+    const sz=document.getElementById('boardSizer');
+    sz.style.width=(cur.boardW*zoom)+'px'; sz.style.height=(cur.boardH*zoom)+'px';
+  }
+  function zoomBy(d){ zoom=Math.max(0.5,Math.min(1.8,+(zoom+d).toFixed(2))); applyZoom(); }
+  function resetView(){ zoom=1; applyZoom(); }
+
+  /* ===== 🔒 全檔**唯一**的 opener 偵測（比照 22 之第二輪裁決：所有消費者共用同一判斷）=====
+     消費者恰為兩處：goBack()／initBackBtn()。**不得再寫第二套**。 */
+  function openedAsPopup(){
+    try{ return !!(window.opener && !window.opener.closed); }
+    catch(e){ return false; }
+  }
+  function goBack(){
+    if(openedAsPopup()){ window.close(); }
+    setTimeout(function(){ location.href = '26-business-category-list.html'; }, 200);
+  }
+  function initBackBtn(){
+    const btn=document.getElementById('backBtn'); if(!btn) return;
+    const asPopup=openedAsPopup();
+    const label = asPopup ? '關閉預覽' : '返回業務/功能類別池';
+    btn.title=label; btn.setAttribute('aria-label',label);
+    btn.innerHTML='<i data-lucide="'+(asPopup?'x':'arrow-left')+'" class="w-5 h-5"></i>';
+  }
+
+  /* AC-36：下載／列印各記一筆**獨立**稽核（不合併計數）；檔案為伺服器端產生、浮水印燒錄於 PDF 內容層。
+     🔒 實作端之載體＝代理串流（downloadViaBlob／openPdfViaBlob），**不得**用 <a href> top-level navigation；
+        列印之新分頁須於 click handler 內、任何 await **之前**同步 window.open('', '_blank')。
+     AC-37：無可視權限角色（部門窗口／一般使用者）直接呼叫 API → 403 PERMISSION_DENIED，
+        **不產生檔案、不燒錄浮水印、不記錄稽核**。 */
+  function doAction(kind){
+    const label={DOWNLOAD:'下載',PRINT:'列印'}[kind]||kind;
+    const cat=document.getElementById('titleName')?.textContent||'';
+    toast('success',`已${label}「${cat}」業務/功能類別樹狀圖：伺服器端已將浮水印燒錄進 PDF 內容層（非僅前端疊加），並寫入 ${kind} 稽核紀錄`);
+  }
+
+  function toast(type,msg){
+    const map={success:['check-circle-2','#059669'],info:['info','#365C97'],error:['alert-circle','#DC2626']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><span class="text-slate-700">${msg}</span>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4000);
+  }
+  // Escape 先關抽屜（不動樹狀圖狀態）；抽屜已關閉時才沿用既有之取消標示行為
+  document.addEventListener('keydown',e=>{
+    if(e.key!=='Escape') return;
+    const dr=document.getElementById('nodeDocDrawer');
+    if(dr && !dr.classList.contains('translate-x-full')){ closeNodeDrawer(); return; }
+    if(selected) clearSel();
+  });
+
+  /* init：由 26（類別池）帶入的 ?businessCategoryId=<businessCategoryId> 為預設選中。
+     ⚠ 參數必為 businessCategoryId 而非名稱字串——「授信」之消金／企金／子公司名稱相同，
+       以名稱帶入將無法區分彼此（AC-34 同理）。 */
+  const qId=new URLSearchParams(location.search).get('businessCategoryId')||DEFAULT_ID;
+  loadCategory(CATS[qId]?qId:DEFAULT_ID);
+  initBackBtn(); lucide.createIcons();
+  window.addEventListener('resize',()=>{ const st=document.getElementById('stage'); st.scrollLeft=Math.max(0,(board.offsetWidth-st.clientWidth)/2); });
+</script>
+</body>
+</html>

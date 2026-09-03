@@ -369,7 +369,7 @@
   <!-- ===== 表格 ===== -->
   <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
-      <table class="doctbl w-full text-sm min-w-[1724px]">
+      <table class="doctbl w-full text-sm min-w-[1892px]">
         <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
           <tr>
             <!-- 🔵 AC-N37（2026-08-20 D9 delta）：第 1 個 th（最左）之可見文字逐字為 OJT；
@@ -381,7 +381,10 @@
             <th class="text-left font-medium px-3 py-2.5 min-w-[118px]">當責室長</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[90px]">狀態</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[160px]">檔案</th>
-            <th class="text-left font-medium px-3 py-2.5 min-w-[62px]">樹狀圖</th>
+            <!-- 🔴 2026-09-02 人類裁決：本欄對**無「循環管理（DAG）」讀取權**之角色（主管／部門窗口）
+                 **完全不進 DOM**——非 CSS 隱藏；`<th>` 與每列之 `<td>` **必須同進退**，否則整張表錯位一格。
+                 增刪由 syncTreeColumn() 於每次 renderTable() 時執行（見下方 canSeeTree()）。 -->
+            <th data-tree-col class="text-left font-medium px-3 py-2.5 min-w-[62px]">樹狀圖</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[152px]">程序書編號</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[176px]">程序書書名</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[74px]">版次</th>
@@ -389,6 +392,9 @@
             <th class="text-left font-medium px-3 py-2.5 min-w-[108px]">連結點程序書</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[112px]">公告日期</th>
             <th class="text-left font-medium px-3 py-2.5 min-w-[140px]">循環別</th>
+            <!-- 🔵 `AC-B1`（2026-09-02 F043 delta）：畫面 15 → **16 欄**，第 16 欄（最末）之表頭逐字為
+                 `業務/功能類別`（半形斜線、前後無空白）。🔒 既有第 0～14 欄之集合、相對順序與顯示規則逐項不變（`AC-B11`）。 -->
+            <th class="text-left font-medium px-3 py-2.5 min-w-[168px]">業務/功能類別</th>
           </tr>
         </thead>
         <tbody id="tbody" class="divide-y divide-slate-100"></tbody>
@@ -456,7 +462,15 @@
   /* ===== admin shell sidebar ===== */
   const MENU=[
     {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
-    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    /* 🔴 2026-09-02 人類裁決（F025 delta）：「循環管理」自主管權限**移除**（唯讀 → 無）。
+       權威＝backend/src/rbac/function-matrix.ts 之 LIFECYCLE_MANAGEMENT（主管＝NONE）；本檔先前落後於已上線程式碼。
+       表達方式＝**移除 supervisor 鍵**（比照 settings 等主管無權項之既有寫法；renderSidebar 以 m.roles[role] 過濾）。
+       📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> supervisor:'唯讀'
+       🔴 與下一項「業務/功能類別管理」（supervisor:'唯讀'）**刻意不同**——同日兩項裁決，一移出一放進（F025 `AC-B29`）；
+          主管側欄自此**看得到「業務/功能類別管理」、看不到「循環管理」**，這個不對稱即該斷言之視覺權威。 */
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    /* 🔵 2026-09-02 F043 AC-43／人類裁決：新側選單項，**置於「循環管理」之後、「ICSOP 文件管理」之前**。 */
+    {id:'businesscategory',label:'業務/功能類別管理',icon:'shapes',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
     {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
     {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
@@ -512,6 +526,45 @@
   function lifecycleDisplayName(lc){ if(!lc) return ''; const s=normalizeSubcategory(lc.subcategory); return s?`${lc.name}（${s}）`:lc.name; }
   const lcById=id=>LIFECYCLE_POOL.find(l=>l.id===id)||null;
   const lcName=id=>lifecycleDisplayName(lcById(id));
+  /* ===== 🔵 2026-09-02 F043／F017 `AC-B1`～`AC-B11` delta：業務/功能類別（第 16 欄 ＋ 第 14 項篩選 ＋ CSV 第 15 欄）=====
+     規格權威＝docs/specs/features/F043-business-function-category.md；本頁落點＝F017 §業務/功能類別欄 delta。
+     🔒 顯示名稱之組合規則與 lifecycleDisplayName **逐字相同**（F043 `AC-06` 之固定向量鎖住兩者不漂移）；
+        normalizeSubcategory **重用上方既有那一份**，不另寫第二個（F043 `AC-05`）。
+     🔒 池與掛載語料與 26／27／28／29／30 逐筆一致。bc5／bc6 為 status=inactive。 */
+  const BUSINESS_CATEGORY_POOL=[
+    {id:'bc1',name:'授信',    subcategory:'消金',  status:'active'},
+    {id:'bc2',name:'授信',    subcategory:'企金',  status:'active'},
+    {id:'bc3',name:'風險管理',subcategory:null,    status:'active'},
+    {id:'bc4',name:'帳務處理',subcategory:'子公司',status:'active'},
+    {id:'bc5',name:'帳務處理',subcategory:'消金',  status:'inactive'},
+    {id:'bc6',name:'授信',    subcategory:'子公司',status:'inactive'},
+    {id:'bc7',name:'帳務處理',subcategory:'企金',  status:'active'}
+  ];
+  function businessCategoryDisplayName(bc){ if(!bc) return ''; const s=normalizeSubcategory(bc.subcategory); return s?`${bc.name}（${s}）`:bc.name; }
+  const bcById=id=>BUSINESS_CATEGORY_POOL.find(b=>b.id===id)||null;
+  const bcName=id=>businessCategoryDisplayName(bcById(id));
+  /* BUSINESS_CATEGORY_DOC 之列（M:N join，唯一鍵僅 (nodeId, documentId)）——鍵＝程序書編號、值＝掛載列。
+     🔴 `AC-B3` 之語料鑑別力（**勿為了「乾淨」而拉平**）：
+       · ICSOP-SRC-101-1-01 有 **5 筆掛載列**、其中兩筆在**同一類別 bc1 的 p2／p4** ⇒ 相異類別數 N ＝ **4**
+         （只放「一類別一節點」之語料時，列數與類別數恆相等，去重斷言等於沒寫）；
+         且其一為 **bc6（停用）** ⇒ 驗證「停用類別之既有掛載仍出現在第 16 欄，但不入第 14 項篩選下拉」（`AC-B7` ③⚠）。
+       · ICSOP-GCA-100-2-00 有 4 個相異類別（皆 active）⇒ `+3` 之長尾語料。
+       · ICSOP-SRC-103-1-01／ICSOP-PUC-101-1-01 各 2 個 ⇒ `+1` 邊界（N ≥ 2 之最小值）。
+       · ICSOP-SRC-101-2-00／ICSOP-CIPS-104-1-01／ICSOP-FC-101-1-00／ICSOP-IC-102-1-00 各 1 個 ⇒ 單顆 pill、**不得**出現 `+0`。
+       · 其餘文件 0 個 ⇒ `—`（`AC-B2`）。 */
+  const BUSINESS_CATEGORY_DOC={
+    'ICSOP-SRC-101-2-00':[{cat:'bc1',node:'p1'}],
+    'ICSOP-SRC-101-1-01':[{cat:'bc1',node:'p2'},{cat:'bc1',node:'p4'},{cat:'bc2',node:'q3'},{cat:'bc3',node:'r4'},{cat:'bc6',node:'u1'}],
+    'ICSOP-GCA-100-2-00':[{cat:'bc1',node:'p3'},{cat:'bc2',node:'q2'},{cat:'bc3',node:'r3'},{cat:'bc4',node:'s2'}],
+    'ICSOP-SRC-103-1-01':[{cat:'bc1',node:'p4'},{cat:'bc2',node:'q1'}],
+    'ICSOP-PUC-101-1-01':[{cat:'bc1',node:'p5'},{cat:'bc4',node:'s1'}],
+    'ICSOP-CIPS-104-1-01':[{cat:'bc3',node:'r1'}],
+    'ICSOP-FC-101-1-00':[{cat:'bc3',node:'r2'}],
+    'ICSOP-IC-102-1-00':[{cat:'bc4',node:'s2'}]
+  };
+  /* 🔴 `AC-B3` 去重之**單一收斂點**：N ＝ **相異 businessCategoryId 數**，不是掛載列數。
+     渲染（第 16 欄）、篩選（第 14 項之存在量詞）、匯出（CSV 第 15 欄）三處一律走這一個函式。 */
+  function docCategoryIds(d){ return [...new Set((BUSINESS_CATEGORY_DOC[d.num]||[]).map(m=>m.cat))]; }
   // ICSOP 編號第 2 段＝循環代碼；查表鍵維持「循環名稱」，子分類不參與（F040 AC-28）
   const CYCLE_CODE={'銷售及收款循環':'SRC','採購及付款循環':'PUC','產品企劃循環':'PPC','薪工循環':'LWC','融資循環':'FC','不動產、廠房及設備循環':'FAC','投資循環':'IC','電腦化資訊系統控制作業':'CIPS','管理性控制作業':'GCA'};
   // 循環節點示意（由左至右流向，供樹狀圖預覽 highlight 所屬節點）
@@ -689,7 +742,7 @@
        select ＝ 固定值下拉（`狀態`、`OJT` 兩項——**非** combobox）
        range  ＝ 起／迄兩個日期輸入（`公告日期`——非下拉） */
   const uniq=a=>[...new Set(a)].filter(v=>v!==''&&v!=null);
-  const FILTER={company:'',dept:'',section:'',chief:'',status:'',num:'',name:'',dateFrom:'',dateTo:'',link:'',appx:'',form:'',ojt:'全部',cycle:''};
+  const FILTER={company:'',dept:'',section:'',chief:'',status:'',num:'',name:'',dateFrom:'',dateTo:'',link:'',appx:'',form:'',ojt:'全部',cycle:'',bc:''};   // 🔵 `AC-B6`：第 14 項（最末）
   // `程序書書名內` 之雙行為（AC-D3）：selected 值放 FILTER.name（等值、優先）；
   // 使用者直接輸入而未選取者放 NAME_TEXT（contains、不分大小寫）。清除選取後所留之輸入文字始生效。
   let NAME_TEXT='';
@@ -717,7 +770,16 @@
     {key:'ojt',    label:'OJT',           type:'select',opts:()=>[{v:'全部',t:'全部'},{v:OJT_STATE_ALL_TEXT,t:OJT_STATE_ALL_TEXT},{v:OJT_STATE_PARTIAL_TEXT,t:OJT_STATE_PARTIAL_TEXT},{v:OJT_STATE_NONE_TEXT,t:OJT_STATE_NONE_TEXT}]},
     // 循環別：選項值＝lifecycleId、顯示＝lifecycleDisplayName（F040 AC-31／F017 AC-S2）
     // 「銷售及收款循環（消金／企金／子公司）」為三個相異選項，選定其一僅回傳該具體循環之文件
-    {key:'cycle',  label:'循環別',        type:'combo', opts:()=>LIFECYCLE_POOL.map(l=>l.id),  optLabel:id=>lcName(id)}
+    {key:'cycle',  label:'循環別',        type:'combo', opts:()=>LIFECYCLE_POOL.map(l=>l.id),  optLabel:id=>lcName(id)},
+    /* 🔵 `AC-B6`／`AC-B7`（2026-09-02 F043 delta）：篩選 13 → **14 項**，新項置於最末。
+       ① 型態＝可搜尋下拉（combobox，比照 `循環別`）；
+       ② 選項顯示＝businessCategoryDisplayName、**選項值＝businessCategoryId**（🔴 非 name 字串——
+          同名不同子分類之兩個類別必須可分別被選取）；
+       ③ **預設選項集僅含 status='active' 之類別**（bc5／bc6 不入下拉）；
+       ⚠ ③ 與第 16 欄之呈現**刻意不同、不得對齊**：停用類別之既有掛載**仍會**出現在第 16 欄
+          （掛載關係並未消失；隱藏會使管理員無法理解「為何這個類別刪不掉」）。
+          顯示歷史事實 vs 不引導新篩選，是兩件不同的事。 */
+    {key:'bc',     label:'業務/功能類別',type:'combo', opts:()=>BUSINESS_CATEGORY_POOL.filter(b=>b.status==='active').map(b=>b.id), optLabel:id=>bcName(id)}
   ];
   const cbCfg=k=>FILTERS.find(f=>f.key===k);
   // 選項「值」與「顯示字串」分離：循環別＝lifecycleId／附錄＝appendixId／使用表單＝formId
@@ -819,6 +881,29 @@
   };
   /* 🔒 缺鍵與任何非三值之輸入一律收斂為 'none'（單一收斂點，避免各處各自判斷而漂移）。 */
   function ojtStateOf(d){ return OJT_STATE[d.ojt] ? d.ojt : 'none'; }
+  /* ===== 🔴 「樹狀圖」欄之可見性（2026-09-02 人類裁決；逐字對齊已上線之 DocumentListPage.tsx）=====
+     🔒 判定刻意**不寫成角色清單**，而是讀該欄真正的閘門——`LIFECYCLE_MANAGEMENT read`
+        （F036 之三個預覽端點皆以它把關）。本 prototype 以 MENU 之 `lifecycle` 項為該閘門之在地表述，
+        兩者同源之後：
+         · 主管本輪由 `唯讀` 改為 `無` ⇒ 欄位隨之消失，不需要在此重複裁決一次；
+         · 部門窗口本來就是「無」，先前卻看得到按鈕、點下去必 403（**既有死鏈**），一併修掉。
+     ⚠ 寫成 `role!=='supervisor' && role!=='deptcontact'` 也能過測，但下次矩陣一動，這裡就會與真正的
+        授權分家——那正是「畫面上有一顆一定會 403 的按鈕」的成因。（實作端逐字對應：
+        `const canSeeTree = canPerform(role, FunctionKey.LIFECYCLE_MANAGEMENT, 'read');`） */
+  const LIFECYCLE_MENU_ITEM = MENU.find(m => m.id === 'lifecycle');
+  function canSeeTree(){ return !!(LIFECYCLE_MENU_ITEM && LIFECYCLE_MENU_ITEM.roles[document.body.dataset.role]); }
+  const TREE_TH_HTML = '<th data-tree-col class="text-left font-medium px-3 py-2.5 min-w-[62px]">樹狀圖</th>';
+  /* 🔒 表頭與資料列同進退：本函式只管 `<th>`，`<td>` 由 renderTable() 之同一個 canSeeTree() 決定，
+     兩者共用同一個述詞 ⇒ 不可能一邊有一邊沒有。第 7 個 th（index 6）＝「檔案」，本欄恆插其後。 */
+  function syncTreeColumn(){
+    const head=document.querySelector('.doctbl thead tr'); if(!head) return;
+    const th=head.querySelector('[data-tree-col]');
+    if(canSeeTree()){ if(!th && head.children[6]) head.children[6].insertAdjacentHTML('afterend', TREE_TH_HTML); }
+    else if(th){ th.remove(); }
+  }
+  function treeCell(i){
+    return `<td class="px-3 py-3" data-tree-cell><button onclick="openTreePage(${i})" title="開啟循環樹狀圖預覽（22）" class="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"><i data-lucide="workflow" class="w-4 h-4"></i></button></td>`;
+  }
   function ojtCell(d){
     const st = ojtStateOf(d), s = OJT_STATE[st];
     return `<td class="px-3 py-3" data-ojt-cell data-has-ojt="${st}"><i data-lucide="${s.icon}" class="w-4 h-4 ${s.cls}" title="${s.text}" aria-label="${s.text}" role="img"></i></td>`;
@@ -912,6 +997,53 @@
     const btn=document.querySelector(`[data-link-toggle="${num}"]`);
     if(btn) btn.focus();
   }
+  /* ===== 🔵 第 16 欄「業務/功能類別」（`AC-B2`～`AC-B5`；呈現逐字比照第 12 欄之 pill＋`+N` 摺疊）=====
+     🔴 **與第 12 欄之唯一刻意差異（`AC-B4`）**：類別 pill 是**純顯示**——`<span>`（**不是** `<a>`、
+        **不是** `<button>`）、無 onClick、無 href、無 cursor-pointer、無 hover 變色。
+        理由：第 12 欄之 pill 可點是因為「連結點程序書」背後有**可下載之 PDF**；類別背後**沒有檔案**，
+        而通往類別樹狀圖之導覽入口不在本頁（在 26 類別池清單）。
+        🔒 **唯一可互動者為 `+{N−1}` 徽章**（展開／收合），它與第 12 欄之徽章共用同一組 class。
+     ④ 收合態**恆為一行高**（容器單行 flex ＋ whitespace-nowrap，**不得**加 flex-wrap）。 */
+  const BC_OPEN=new Set();   // key＝d.num（文件編號，非列索引）⇒ 改篩選／換頁後不會殘留到錯誤的列（`AC-B5`）
+  /* `AC-B8`：`業務/功能類別` 篩選有值時，把命中的那一顆排到第一顆（＝收合態唯一可見的那顆），
+     否則使用者看不出這列為什麼被篩出來。⚠ 只重排顯示順序，**不改變任何過濾判定**。
+     🔴 本重排**只適用於畫面**：CSV 第 15 欄恆依顯示名稱字典序（`AC-B10` 📌 之明文裁定），兩者刻意不同。 */
+  function bcOrder(ids){
+    if(!FILTER.bc) return ids;
+    const hit=ids.filter(id=>id===FILTER.bc);
+    return hit.length ? hit.concat(ids.filter(id=>id!==FILTER.bc)) : ids;
+  }
+  // 純顯示 pill：無 hover、無 cursor、非 button／anchor（`AC-B4`）
+  function bcPill(id){
+    return `<span data-bc-pill="${esc(id)}" class="inline-flex items-center gap-1 px-1.5 py-1 rounded border border-slate-200 bg-slate-50 text-slate-600 text-[11px]"><i data-lucide="shapes" class="w-3 h-3 text-slate-400"></i>${esc(bcName(id))}</span>`;
+  }
+  function bcRow(id,tail){
+    return `<div class="flex items-center gap-1.5 whitespace-nowrap" data-bc-item>`+bcPill(id)+(tail||'')+`</div>`;
+  }
+  function bcCell(d){
+    const ids=bcOrder(docCategoryIds(d));
+    if(!ids.length) return '<span class="text-slate-300">—</span>';   // `AC-B2` 0 個＝`—`（U+2014），非 0／空白／null
+    const n=ids.length, rest=n-1, open=n>1&&BC_OPEN.has(d.num);
+    if(!open){
+      // `AC-B3` ② N=1＝單顆 pill 且**不出現** `+N`；③ N ≥ 2＝第一顆 pill ＋ 可點的 `+{N−1}` 徽章
+      const more = n>1
+        ? `<button type="button" data-bc-toggle="${esc(d.num)}" aria-expanded="false" aria-label="展開其餘 ${rest} 個業務/功能類別" title="其餘 ${rest} 個：${esc(ids.slice(1).map(bcName).join('、'))}" onclick="toggleBc('${esc(d.num)}')" class="${LINK_BADGE_CLS}">+${rest}</button>`
+        : '';
+      return `<div class="flex items-center whitespace-nowrap" data-bc-cell data-bc-count="${n}" data-bc-expanded="false">${bcPill(ids[0])}${more}</div>`;
+    }
+    // 就地展開（非浮層）：逐列列出**全部**類別；收合鈕與 `+N` 為同一顆 toggle
+    const collapse=`<button type="button" data-bc-toggle="${esc(d.num)}" aria-expanded="true" aria-label="收合業務/功能類別" title="收合業務/功能類別" onclick="toggleBc('${esc(d.num)}')" class="${LINK_BADGE_CLS}"><i data-lucide="chevron-up" class="w-3 h-3"></i>收合</button>`;
+    return `<div class="space-y-1" data-bc-cell data-bc-count="${n}" data-bc-expanded="true">`+
+      ids.map((id,i)=>bcRow(id,i===0?collapse:'')).join('')+`</div>`;
+  }
+  /* 逐列獨立之展開／收合（比照第 12 欄之 toggleLinks）。重繪會摧毀原按鈕，故以 data-bc-toggle
+     把焦點還給同一顆 toggle，鍵盤操作（Enter／Space）才不會在展開後掉回 <body>。 */
+  function toggleBc(num){
+    if(BC_OPEN.has(num)) BC_OPEN.delete(num); else BC_OPEN.add(num);
+    renderTable();
+    const btn=document.querySelector(`[data-bc-toggle="${num}"]`);
+    if(btn) btn.focus();
+  }
   function chiefCell(d){
     const sec = d.sec.length? `<span title="次要：${esc(d.sec.map(shortName).join('、'))}" class="ml-1 inline-flex items-center px-1 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]">+${d.sec.length}</span>` : '';
     return `<span title="${esc(d.chief)}" class="text-slate-700">${esc(shortName(d.chief))}</span>${sec}`;
@@ -955,6 +1087,10 @@
          📝 OLD> if(FILTER.ojt==='無 OJT' && d.ojt) return false; */
       if(FILTER.ojt!=='全部' && OJT_STATE[ojtStateOf(d)].text!==FILTER.ojt) return false;
       if(FILTER.cycle && d.lcId!==FILTER.cycle) return false;   // 13 以 lifecycleId 比對：同名另一子分類之文件不納入
+      /* 14 🔵 `AC-B7` ④：比對語意＝「該文件**至少存在一筆**掛載，其節點所屬類別 ＝ 所選 businessCategoryId」
+         （**存在量詞**，非等值）；未提供者不施加限制；與其餘 13 項並用為 AND。
+         🔒 走 docCategoryIds() 這個唯一收斂點，使「篩選命中的」與「第 16 欄畫出來的」必然是同一組類別。 */
+      if(FILTER.bc && !docCategoryIds(d).includes(FILTER.bc)) return false;
       /* 🔴 2026-08-21 裁決 3：節點子樹篩選。**不是**第 14 項篩選，而是由 deep link 帶入的獨立條件，
          與上列 13 項為 AND。比對＝同一 lifecycleId 且掛載節點落在子樹節點集合內。
          未指派節點者（d.node 為 null）一律排除——它不屬於任何節點，自然不屬於任何子樹。 */
@@ -967,6 +1103,7 @@
   }
 
   function renderTable(){
+    syncTreeColumn();          // 🔴 表頭與資料列同進退（見 canSeeTree()）
     const rows=filteredRows();   // 🔵 AC-X11：與 doExport() 共用之**唯一**篩選落點
     // 統計卡片（衍生數，依目前篩選結果）
     document.getElementById('statTotal').textContent=rows.length;
@@ -994,7 +1131,7 @@
         <td class="px-3 py-3">${chiefCell(d)}</td>
         <td class="px-3 py-3">${statusPill(derived(d))}</td>
         <td class="px-3 py-3">${fileBtn(d.pdf,true)}${wmNote(d.pdf)}</td>
-        <td class="px-3 py-3"><button onclick="openTreePage(${i})" title="開啟循環樹狀圖預覽（22）" class="w-8 h-8 rounded hover:bg-primary-50 text-primary-600 flex items-center justify-center"><i data-lucide="workflow" class="w-4 h-4"></i></button></td>
+        ${canSeeTree()? treeCell(i) : ''}
         <td class="px-3 py-3"><div class="flex items-center gap-1.5"><span class="mono text-xs text-slate-600">${esc(d.num)}</span>${nodeWarn}</div></td>
         <td class="px-3 py-3">
           <div class="flex items-center gap-1.5">
@@ -1007,6 +1144,7 @@
         <td class="px-3 py-3">${linkCell(d)}</td>
         <td class="px-3 py-3 text-slate-500 mono text-xs">${esc(d.date)}</td>
         <td class="px-3 py-3 text-slate-600" data-cycle-cell>${esc(lcName(d.lcId))}</td>
+        <td class="px-3 py-3">${bcCell(d)}</td>
       </tr>`;
     }).join('');
     lucide.createIcons();
@@ -1019,12 +1157,17 @@
   /* `AC-X1` ② 十四欄逐字表頭＝畫面 15 欄**去掉「樹狀圖」**（該欄為導覽圖示、無資料值可落地；
      🔴 該欄**仍留在畫面上**，`AC-X16` ①）。
      🔒 表頭列**不套用**注入前綴（`AC-X2` ③ 之範圍限定），故本陣列即為檔案第 1 列之逐字內容。 */
-  const EXPORT_HEADER=['OJT','制定公司','制定部門','制定室別','當責室長','狀態','檔案','程序書編號','程序書書名','版次','內容摘要','連結點程序書','公告日期','循環別'];
+  /* 🔵 `AC-B9`（2026-09-02 F043 delta）：CSV **14 → 15 欄**，新欄置於最末；🔒 既有 14 個表頭字面與其順序一字不改。 */
+  const EXPORT_HEADER=['OJT','制定公司','制定部門','制定室別','當責室長','狀態','檔案','程序書編號','程序書書名','版次','內容摘要','連結點程序書','公告日期','循環別','業務/功能類別'];
   /* 🔴 兩個分隔符**刻意不同、不得統一**（`AC-X5`／`AC-X6`）：
        · `當責室長` 用**全形頓號**——畫面既有載體即以 `、` 相接（次要室長之 title），值層對齊畫面；
        · `連結點程序書` 用**半形分號**——避免與**編號**字面（含 `-`）混淆。 */
   const CHIEF_NAME_SEPARATOR='、';
   const LINKED_DOC_NUMBER_SEPARATOR=';';
+  /* 🔴 `AC-B9` (a)(b)：第 15 欄用**全形頓號**、**明文禁止半形逗號**（逗號會觸發 RFC 4180 包覆，
+     使欄內逗號與欄間逗號在肉眼上無從分辨）；不用半形分號是因為本欄之值是**中文顯示名**（同「當責室長」），
+     而 `;` 在本頁專用於**編號**類。🔒 **三欄之分隔符（`、`／`;`／`、`）之異同為刻意，不得統一。** */
+  const BUSINESS_CATEGORY_NAME_SEPARATOR='、';
   const CSV_INJECTION_PREFIX_CHARS=['=','+','-','@','\t','\r'];
   /* 🔴 `AC-X2` 值層通則之**單一收斂點**（各處各自 escape 正是分隔符／空值呈現漂移之來源）：
        ① `null`／`undefined` → 空儲存格（**不得**輸出字面 `null`／`undefined`）；
@@ -1048,6 +1191,18 @@
   function exportLinkValue(d){ return linkOrder(d.links||[]).map(linkNum).filter(n=>!!n).join(LINKED_DOC_NUMBER_SEPARATOR); }
   /* `AC-X3` 十四欄之值層語意（欄序同 EXPORT_HEADER）。
      🔒 每一格皆為**值**，不含任何圖示／徽章／按鈕之痕跡。 */
+  /* 🔴 `AC-B10` 📌 之明文裁定：CSV 第 15 欄之順序**不套用** `AC-B8` 之命中者置前，
+     改為**恆依 businessCategoryDisplayName 之字典序**（穩定、可斷言、與請求無關）——
+     因為 `POST /admin/documents/export` 之 body 必須維持**恰兩鍵**，沒有承載「命中類別」的地方。
+     ⚠ 此為本欄與第 12 欄（以 linkTargetId 承載命中值）之**刻意不同**，非疏漏。
+     值＝相異類別（去重規則同 `AC-B3`，共用 docCategoryIds()）之顯示名以全形頓號相接；0 個 → **空儲存格**
+     （🔴 非 `—`、非 `0`——`—` 是畫面之空值佔位符而非資料）。 */
+  function exportBusinessCategoryValue(d){
+    /* 🔴 字典序＝**碼位序**（a<b 之直接比較），刻意**不用** localeCompare：後者之中文定序由執行環境之
+       ICU 版本與 locale 決定（同一份資料在不同瀏覽器／Node 版本可能排出不同順序），與本欄
+       「穩定、可斷言、與請求無關」的立條理由直接衝突。 */
+    return docCategoryIds(d).map(bcName).sort((x,y)=>x<y?-1:(x>y?1:0)).join(BUSINESS_CATEGORY_NAME_SEPARATOR);
+  }
   function exportRow(d){
     return [
       OJT_STATE[ojtStateOf(d)].text,   //  1 OJT        `AC-X4` 三值中文標籤；缺鍵→`尚未開始`（**非**空儲存格）
@@ -1063,7 +1218,8 @@
       d.summary,                       // 11 內容摘要   **全文不截斷**（畫面之 truncate 為 CSS 視覺截斷）
       exportLinkValue(d),              // 12 連結點程序書 `AC-X6`
       d.date,                          // 13 公告日期   `AC-X8` `YYYY-MM-DD`，**不附時分秒**
-      lcName(d.lcId)                   // 14 循環別     含子分類（＝ lifecycleDisplayName()，與畫面同一函式）
+      lcName(d.lcId),                  // 14 循環別     含子分類（＝ lifecycleDisplayName()，與畫面同一函式）
+      exportBusinessCategoryValue(d)   // 15 業務/功能類別 `AC-B9`：去重後之顯示名、全形頓號相接、字典序、0 個為空儲存格
     ];
   }
   /* `AC-X1` ①④：UTF-8 BOM 起始；表頭列與每一資料列（**含最末一列**）皆以 CRLF 終止。
@@ -1151,6 +1307,7 @@
     document.getElementById('roBanner').classList.toggle('hidden',!ro);
     document.getElementById('roBanner').classList.toggle('flex',ro);
     if(blocked)document.getElementById('blockMsg').textContent={user:'一般使用者無後台存取權。'}[r];
+    renderTable();             // 🔴 「樹狀圖」欄依角色增刪 ⇒ 換角色必須重繪（否則欄位停在前一個角色的狀態）
     renderSidebar(); lucide.createIcons();
   }
 

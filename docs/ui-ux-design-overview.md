@@ -933,3 +933,314 @@ prototype 產出後，逐檔以下列方式驗證：
 ⚠ **一項供 test-generator 注意的環境差異**：Chromium 在來源分頁關閉後會把 `window.opener` **直接設為 `null`**，所以上表「opener 曾存在但已被關閉」實際是走 `openedAsPopup()` 的第 ① 種情形。`opener.closed === true` 這條分支在 Chromium 下量不到，屬**防禦性程式碼**（其他引擎會保留參照）⇒ 若要覆蓋它，請在 jsdom 以 `{ closed: true }` 的 opener 替身**明確建一個案例**，不要指望瀏覽器實測會走到。
 
 ⚠ **本輪驗證用的 Playwright 腳本是暫存的一次性檢查，不是約束環的一部分**——約束環由 test-generator 依 A.7.2／A.7.3 之逐字與掛鉤另行撰寫（vitest／jest）。
+
+---
+
+### A.8 2026-09-02 F043「業務/功能類別管理」— prototype 傳播紀錄（🔵 **DRAFT / awaiting-human-review**）
+
+> 規格權威＝[F043](specs/features/F043-business-function-category.md)（52 條 AC ＋ 命名鎖定表 ＋ 推翻總表）；
+> 跨檔 delta＝[F017 §業務/功能類別欄](specs/features/F017-backend-document-list.md#business-category-column-delta)（`AC-B1`～`AC-B11`）、
+> [F019 §業務/功能類別瀏覽模式](specs/features/F019-public-list-browsing.md#business-category-browse-delta)（`AC-B12`～`AC-B27`）、
+> [F025 §業務/功能類別管理功能列](specs/features/F025-role-function-matrix.md#business-category-function-key-delta)（`AC-B28`／`AC-B29`）。
+> 🔵 **spec 尚未經人類閘門核准**；本節之 prototype 亦為 DRAFT，供閘門審查與下游 test-generator 之視覺權威使用。
+
+#### A.8.0 人類已裁決之四項（設計時直接遵守，不再翻案）
+
+| # | 裁決 | 落點 |
+|---|---|---|
+| 1 | 側選單新項 `業務/功能類別管理` 置於 `循環管理` **之後**、`ICSOP 文件管理` **之前** | 全部 19 支帶 `MENU` 之後台 prototype ＋ `07` 之快速進入卡片 |
+| 2 | **前台樹狀圖模式不提供 PDF 下載／列印**（僅後台 `29` 有） | `30` 之 toolbar **無** download／printer 鈕（節點自 DOM 移除，非 disabled、非 CSS 隱藏） |
+| 3 | 類別結構變更歷程＝「文件變更歷程」頁**第三個 tab**，標籤逐字 `業務/功能類別樹狀圖`，置於既有兩 tab 之後 | 🔴 **本輪未落地**——`23-change-history.html` 不在本輪交付範圍，見 A.8.5 ① |
+| 4 | 前台預設模式＝`業務/功能類別樹狀圖`；另一模式標籤逐字 `文件清單` | `30` 與 `03` 之模式切換器（`resolveBrowseMode()` 單一述詞） |
+
+#### A.8.1 逐檔改動
+
+**新增 5 支（鏡射既有對等頁，版面／結構／文案／欄寬逐項還原）**
+
+| 檔案 | 鏡射來源 | 內容 |
+|---|---|---|
+| `prototypes/26-business-category-list.html` | `10-lifecycle-list` | 類別池清單（7 欄：業務/功能類別名稱／說明／狀態／節點數／掛載文件數／最後更新／操作）＋建立/編輯 modal（名稱＋**子分類**＋說明）＋三種驗證錯誤（順序固定）＋刪除保護／停用之不對稱 |
+| `prototypes/27-business-category-canvas.html` | `11-dag-canvas` | 類別 DAG 畫布（節點卡片／底部連線圓點／拖曳／mini-map／縮放／提示卡／角色分流）；專屬防環錯誤碼 |
+| `prototypes/28-business-category-node-drawer.html` | `12-node-drawer` | 節點抽屜（名稱／目前掛載／候選搜尋）；🔴 **兩處刻意差異見 A.8.2** |
+| `prototypes/29-business-category-tree-preview.html` | `22-lifecycle-tree-preview` | 後台樹狀圖預覽（dagre 佈局／直角繞線／浮水印疊加層／類別切換器／單擊標示下游／雙擊子樹唯讀抽屜／**下載＋列印**） |
+| `prototypes/30-public-category-tree.html` | `22` 之樹狀呈現 ＋ `03-public-list` 之前台外框 | 前台樹狀圖瀏覽模式（模式切換器／類別下拉／浮水印／可見性過濾／唯讀抽屜）；🔴 **無下載／列印** |
+
+**改版既有（一律只加、不改既有內容；已逐檔以 `git diff --numstat` 證明）**
+
+| 檔案 | 改動 | diff |
+|---|---|---|
+| `07`／`08`／`09`／`10`／`11`／`12`／`13`／`14`／`15`／`16`／`17`／`18`／`19`／`19a`／`19b`／`21`／`23`／`24`／`25` | `MENU` 陣列插入新項（含一行說明註解） | 各 **+2 / −0** |
+| `07-admin-shell.html` | 另加「快速進入功能區」卡片 | 合計 **+4 / −0** |
+| `13-document-list.html` | 第 16 欄／第 14 項篩選／CSV 第 15 欄／類別池與掛載語料 | **+125 / −5**（5 行為必要之就地改寫，逐行列於 A.8.3） |
+| `03-public-list.html` | 頂部模式切換器 ＋ `resolveBrowseMode()` ＋ 預設模式轉址 | **+42 / −0** |
+
+📌 **側選單傳播是必要而非額外**：`MENU` 陣列在 19 支 prototype 各有一份複本；只改 `07` 會讓其餘 18 頁的側欄少一項，人類逐頁比對時必然揪出。已用腳本證明**除插入的那 2 行外逐位元組相同**。
+
+#### A.8.2 🔴 `28` 與 `12` 之兩處刻意差異（本功能的存在理由，畫面上看得出來）
+
+| # | `12`（循環節點抽屜） | `28`（類別節點抽屜） | 出處 |
+|---|---|---|---|
+| ① 候選來源 | 僅**同循環**之文件（後端以 `lifecycleId` 過濾），畫面有「僅顯示所屬循環＝… 之文件」提示 | **全部 ICSOP 文件**（15 份、分屬 **9 個相異循環**），畫面提示逐字為「候選＝全部 ICSOP 文件…**不以循環過濾**」，且**每列候選標出其循環別**（純資訊 chip），使「沒有過濾」肉眼可見 | `AC-20`（推 1） |
+| ② 重複掛載之處置 | 警示（amber）＋ `NODE_DOC_ALREADY_ASSIGNED` ＋ 二次確認 ＋ 改派 | **無警示、無二次確認、無改派**；改為**純資訊**標示，逐字 `此文件另掛於：{類別}／{節點}`（中性 slate 色、不擋操作） | `AC-21`～`AC-23`（推 2） |
+
+🔴 **`28` 全檔明文禁止出現字串「已掛載於」與「改派」**——`AC-21` 之負向斷言（`queryByText(/已掛載於/) === null` **且** `queryByText(/改派/) === null`）以此為載體；已於瀏覽器實測 `document.body.innerText` 掃描通過。標示文字刻意用「**另**掛於」而非「已掛載於」，正是為了不撞上該斷言。
+
+#### A.8.3 `13-document-list` 之 5 行就地改寫（逐行說明，其餘 125 行皆為新增）
+
+| 原行 | 改為 | 理由 |
+|---|---|---|
+| `min-w-[1724px]` | `min-w-[1892px]` | 新增第 16 欄（`min-w-[168px]`）之必要連帶；非欄序／顯示規則變更 |
+| `const FILTER={…,cycle:''};` | `…,cycle:'',bc:''};` | 第 14 項篩選之狀態鍵 |
+| `{key:'cycle',…}`（陣列末項） | 同行加尾逗號 | 其後接第 14 項；該項**內容一字未動** |
+| `const EXPORT_HEADER=[…14 欄];` | 同陣列末加 `'業務/功能類別'` | CSV 14 → 15 欄；🔒 既有 14 個表頭字面與順序一字不改 |
+| `lcName(d.lcId)`（`exportRow` 末格） | 同行加尾逗號 | 其後接第 15 格 |
+
+#### A.8.4 新元件／新互動清單（下游會逐字斷言）
+
+| # | 元件／互動 | 逐字文案／DOM 契約 | 出處 |
+|---|---|---|---|
+| N1 | **不可點的類別 pill**（第 16 欄） | `<span data-bc-pill="{id}">`；🔴 **不是** `<a>`／`<button>`、無 `onClick`／`href`、`cursor !== pointer`、無 hover 變色。**唯一可互動者為 `+{N−1}` 徽章**（`data-bc-toggle`，與第 12 欄共用 `LINK_BADGE_CLS`） | `AC-B4` |
+| N2 | 第 16 欄摺疊 | 容器 `data-bc-cell` ＋ `data-bc-count="{N}"` ＋ `data-bc-expanded="true｜false"`；展開列 `data-bc-item`；收合態恆一行高 | `AC-B3` |
+| N3 | 第 14 項篩選（combobox） | 無障礙名稱逐字 `業務/功能類別`；選項顯示＝`businessCategoryDisplayName`、**選項值＝`businessCategoryId`**；預設選項集**僅 `active`** | `AC-B6`／`AC-B7` |
+| N4 | **模式切換器** | `[data-browse-mode-switch]` 內**恰兩個** `[data-browse-mode="tree"｜"list"]`；可見文字＝`aria-label`＝`業務/功能類別樹狀圖`／`文件清單`；任一時刻恰一個 `aria-pressed="true"` | `AC-B12` |
+| N5 | 模式解析述詞 | `resolveBrowseMode(raw)`：`list`→list；`tree`→tree；**未帶／空值／不可辨識** → tree。`03` 與 `30` 同名同語意、各自全檔唯一 | `AC-B13`／`AC-B14` |
+| N6 | **類別下拉**（前台） | `#catSel`，`aria-label="業務/功能類別"`；選項值＝`businessCategoryId`；納入條件＝`active` **且**「對該 viewer 至少一份可見文件」 | `AC-B17`／`AC-B18` |
+| N7 | 節點徽章之可見數 | 徽章兩個字面逐字沿用 `22`（`掛載 {N} 份程序書`／`尚未掛載程序書`）；數字另以 `data-visible-doc-count`（前台）／`data-mounted-doc-count`（後台）提供機器可讀值（**0 亦成立**） | `AC-B21`／`AC-32` |
+| N8 | 子樹抽屜之兩個數字 | `#ndCount` 帶 `data-subtree-distinct`（副標題之 N）＋ `data-subtree-rows`（列數）；兩數不同時另出**可見**說明行 `[data-subtree-dup-note]` | `AC-35` |
+| N9 | 前台唯讀抽屜（四欄） | `[data-node-doc-row]`；欄位＝程序書編號／書名／版次／公告日期（🔴 **無「狀態」欄**，與 `29` 之五欄刻意不同）；點列導向 `/public/documents/:id` | `AC-B20` |
+| N10 | 三句前台空狀態 | `[data-empty-no-nodes]`＝`此類別尚未建立節點`／`[data-node-doc-empty]`＝`此節點沒有您可檢視的程序書`／`[data-empty-no-categories]`＝`目前沒有可瀏覽的業務/功能類別` | `AC-B27` |
+| N11 | 抽屜兩句逐字空狀態（`28`） | `[data-mounted-empty]`＝`尚未掛載任何程序書`／`[data-candidate-empty]`＝`尚無可掛載文件` | `AC-28`／`AC-29` |
+| N12 | 刪除節點之逐字確認 | 內文**逐字含** `刪除後將一併移除 {N} 筆掛載關係`（N＝**掛載列數**，非相異文件數） | `AC-18` |
+| N13 | 純資訊「另掛於」標示 | `[data-also-mounted]`，逐字 `此文件另掛於：{類別}／{節點}`（多筆以全形頓號相接）；中性色、不擋操作 | `AC-21`～`AC-23` |
+
+#### A.8.5 🔴 本 agent 之設計裁量與提報（spec-writer 若要鎖定請補 AC；⚠ 者為需人類裁決之矛盾）
+
+① ⚠ **決 3 之第三個 tab 本輪無載體**：`23-change-history.html` 不在交付清單內，故 `AC-40`「存在**恰三個** tab、第三個標籤逐字 `業務/功能類別樹狀圖`」目前**沒有任何 prototype 畫面**。下游若據 `AC-40` 寫 fidelity 斷言，將無視覺權威可對。**建議追加一輪**（僅在 `23` 加第三個 tab ＋ 其查詢／新舊樹狀圖預覽／匯出）。
+
+② ⚠ **`AC-B27` ① 在前台為不可達分支**：`AC-B18` ② 規定「下拉僅納入對該 viewer 至少有一份可見文件之類別」，而「無任何節點」之類別必然 0 份掛載 ⇒ 0 份可見 ⇒ **永遠不會出現在下拉裡**，`此類別尚未建立節點` 這句話透過切換器**永遠看不到**。原型現以 `?businessCategoryId=bc7` 之 deep link 作為其唯一可達載體（`bc7` ＝ active、0 節點）。**請人類裁決**：(甲) 維持現狀並把該句之適用範圍明文限縮為 deep link；(乙) 放寬 `AC-B18` ②；(丙) 刪除 `AC-B27` ①。
+
+③ ⚠ **`AC-32`／`AC-B16` ③ 之節點徽章格式與 `22` 不一致**：兩條 AC 舉例為 `節點名稱 (3)`，但 lead 指示「鏡射 `22`」，而 `22` 之既有逐字為 `掛載 {N} 份程序書`／`尚未掛載程序書`。原型採後者（全站同一語彙），數字另以 `data-*` 提供。**請 spec-writer 就地把兩條 AC 之例示改為 `22` 之逐字**，或明文裁定新格式（若裁新格式，`22` 亦需同步改，那會踩到 `AC-49` 回歸鎖定）。
+
+④ ⚠ **`AC-44`／`AC-B29` 之不對稱在 prototype 上目前看不出來**：該對斷言要求 `循環管理（DAG）` 之主管欄＝`無`、`業務/功能類別管理` 之主管欄＝`唯讀`。但 [F025 2026-09-02 delta](specs/features/F025-role-function-matrix.md)（把主管移出循環管理）**尚未傳播到任何 prototype**——19 支的 `MENU` 仍為 `lifecycle: {supervisor:'唯讀'}`，`18-permission-matrix` 之 `FUNC_ROWS` 亦仍為 `['循環管理（DAG）',['唯讀','CRUD','唯讀','無','無']]`。本輪**刻意未動**（不在交付範圍、且屬另一批 delta）。⇒ 目前兩列的主管欄都是「唯讀」，**該對斷言之鑑別力在 prototype 層為零**。建議由負責那批 delta 的棒次一併處理。
+
+⑤ ⚠ **`18-permission-matrix` 之 `FUNC_ROWS` 已落後兩列**：現為 13 列，缺 `OJT 進度管理`（2026-08-28 新增）與本輪之 `業務/功能類別管理`。本輪只傳播了側選單、**未動 `FUNC_ROWS`**（補第 15 列而第 14 列仍缺，會製造更難讀的中間態）。`AC-43`／`AC-B28` 之矩陣列因此亦無 prototype 載體。
+
+⑥ **`26` 之「說明」欄為 lead 指定之新增欄**（`10` 沒有這一欄）——`AC-01`～`AC-14` 未提及該欄之顯示規則。原型以 `max-w-[300px] truncate` ＋ `title` 呈現、掛鉤 `data-business-category-desc`。
+
+⑦ **`29` 刻意沒有 `22` 的「在文件管理中檢視這 N 份程序書」導向鈕**：`13` 之子樹 deep link 參數為 `lifecycleId` + `nodeSubtreeId`（循環專用），本功能在 `13` 上只有**類別層**的第 14 項篩選、沒有節點子樹維度 ⇒ 沒有可導向的目標。若人類要此鈕，須先在 `13` 開一個類別節點子樹篩選參數（並連帶決定它與第 14 項篩選之關係）。
+
+⑧ **`29` 之子樹抽屜刻意不做跨節點去重**（`AC-35` 明文），與 `22` 之處置（以編號去重、首次出現者勝）相反。⇒ 同一份程序書可在多個分組中各出現一次，副標題之 N 為**去重後**之相異數。兩數不同時另出一行**可見**說明（`[data-subtree-dup-note]`），避免下一個人把其中一邊「修」掉。
+
+⑨ **`03` 於解析出的模式為 `tree` 時 `location.replace()` 到 `30`**：實作端是同一頁依 `mode` 切換渲染，原型端拆兩檔，這是讓 `AC-B13`「預設＝樹狀圖」在原型上**真的可觀察**的唯一辦法（若只把切換器畫成「樹狀圖已選中」卻仍顯示清單，畫面與 `aria-pressed` 自相矛盾）。📌 **要單獨檢視 `03` 版面時請開 `03-public-list.html?mode=list`**。
+
+⑩ **CSV 第 15 欄之排序改用碼位序、刻意不用 `localeCompare`**：`AC-B10` 📌 之立條理由是「穩定、可斷言、與請求無關」，而 `localeCompare` 之中文定序由執行環境之 ICU 版本與 locale 決定（實測 Chromium 與碼位序排出**不同**順序）。⇒ 若照字面用 `localeCompare`，該條 AC 的期望值會隨執行環境漂移。**建議 spec-writer 於 `AC-B9` ② 明文寫死「碼位序（code point order）」。**
+
+⑪ **`BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED`（`AC-24`）於正常 UI 路徑不可達**：已掛在本節點者只出現在「目前掛載文件」、不出現在候選 ⇒ 沒有可點兩次的入口；真實可達路徑＝兩位管理員並發送出。`28` 以一顆標了 `data-prototype-demo="true"` 的示範鈕作為該錯誤碼之可見載體（比照 `03` 之既有慣例，**實作時不得移植**）。
+
+⑫ **`26` 之「DAG 畫布」列動作直接導覽至 `27?businessCategoryId=`**（`10` 因 `11` 不吃參數而以 toast 代替）。屬導覽而非行為差異。
+
+⑬ **側選單項之 icon 為 `shapes`**（lucide），與 `循環管理` 之 `workflow` 區隔；`AC-43` 未規範 icon，屬設計裁量。
+
+#### A.8.6 示範語料（🔒 六支檔案逐筆一致，勿單邊修改）
+
+類別池 7 筆（名稱／子分類逐字採 F043 定稿詞彙 `授信`／`風險管理`／`帳務處理` × `消金`／`企金`／`子公司`）：
+
+| id | 顯示名稱 | status | 節點 | 相異文件 | 邊界用途 |
+|---|---|---|---|---|---|
+| `bc1` | `授信（消金）` | active | 5 | 5 | 主示範；子樹**掛載列 6 ≠ 相異 5**（`AC-35` 兩數不同之語料） |
+| `bc2` | `授信（企金）` | active | 4 | 3 | 同名不同子分類為相異選項 |
+| `bc3` | `風險管理` | active | 4 | 4 | **無子分類**（顯示不含括號） |
+| `bc4` | `帳務處理（子公司）` | active | 3 | 3 | — |
+| `bc5` | `帳務處理（消金）` | inactive | 2 | 0 | 停用且 0 掛載 ⇒ **可直接刪除**；子樹全 0 之空狀態 |
+| `bc6` | `授信（子公司）` | inactive | 2 | 1 | 停用**但有掛載** ⇒ 仍受刪除保護；其掛載仍現於第 16 欄、**不入**第 14 項下拉（`AC-B7` ③⚠） |
+| `bc7` | `帳務處理（企金）` | active | **0** | 0 | `AC-32`／`AC-B27` ① 空狀態之唯一載體 |
+
+M:N 之關鍵語料：
+
+- `ICSOP-SRC-101-1-01` → `bc1/p2`、`bc1/p4`（**同類別兩節點**）、`bc2/q3`、`bc3/r4`、`bc6/u1` ＝ **5 筆掛載列、4 個相異類別** ⇒ 第 16 欄 `+3`、去重斷言有鑑別力，且含一個**停用**類別。
+- `ICSOP-GCA-100-2-00` → `bc1/p3`、`bc2/q2`、`bc3/r3`、`bc4/s2` ＝ 4 個相異類別（皆 active）⇒ 第 16 欄 `+3` 之第二個長尾語料。
+- `ICSOP-SRC-103-1-01`／`ICSOP-PUC-101-1-01` 各 2 個 ⇒ `+1` 邊界；4 份各 1 個 ⇒ 單顆 pill 無 `+0`；其餘 7 份 0 個 ⇒ `—`。
+- 前台可見性（`30`）：`ICSOP-SRC-103-1-01`（使用部門＝風險管理服務本部 / 信用審查部）對**業務**視角不可見**且已掛載於類別節點** ⇒ `AC-B23` 之 tripwire；`bc1/p4` 掛 2 份僅 1 份可見（2 ≠ 1）、`bc1/p3` 掛 1 份 **0** 份可見 ⇒ `AC-B21` 有鑑別力；`ICSOP-IC-102-1-00` 公告日期 2026-10-01（未來）⇒ 對**所有**視角不可見。
+
+#### A.8.7 驗證紀錄（已實跑，非目視）
+
+以 Playwright（`e2e/node_modules`）＋本機靜態伺服器驅動 prototype，**74 項檢查全綠、0 console error / 0 page error**：
+
+| 範圍 | 檢查（節錄） |
+|---|---|
+| `26` | 7 欄表頭／6 列／顯示名稱含與不含括號／側選單位置（循環管理之後、文件管理之前）／刪除保護 `BUSINESS_CATEGORY_HAS_DOCUMENTS` 與「需先解除全部掛載」語意／**停用但有掛載者仍不可刪**／`DUPLICATE`（trim 後比對）／`SUBCATEGORY_CONFLICT`／`NAME_REQUIRED` **優先於** `DUPLICATE`／搜尋比對 `displayName`（`消金` 命中 2 筆）／主管唯讀 banner ＋ `.write-only` 全數 `display:none`／部門窗口 403 遮罩且側選單無此項 |
+| `27` | 標題 `授信（消金） · DAG 畫布`／`?businessCategoryId=bc3` → `風險管理 · DAG 畫布`（無括號）／5 節點／邊之 `d` 僅含 `M`/`L`（直角 elbow）／刪除節點逐字 `刪除後將一併移除 2 筆掛載關係`／**全頁 `innerText` 掃描無「循環」二字** |
+| `28` | `p4` 掛載 2 筆、候選 **13**（＝15 − 本節點 2）／候選跨 **9** 個相異循環／**`innerText` 無「已掛載於」、無「改派」**／`[data-also-mounted]` 存在／點候選即掛上（**無確認 modal**）／待送出提示分述「新增掛載 1 筆」／逐字空狀態 `尚未掛載任何程序書`、`尚無可掛載文件` |
+| `29` | 切換器 7 選項且值＝`businessCategoryId`、`授信` 三個相異選項／節點徽章逐字 `掛載 2 份程序書`／浮水印 tile 有內容、`.wm-centre` 恰 1 個、**computed `line-height ÷ font-size` = 2.0**／下載＋列印鈕存在／單擊 `p1` 標示 **5** 節點／雙擊 `p1` 副標題 `子樹共 5 份程序書`、`data-subtree-rows=6`、可見說明行含「6 筆掛載紀錄」、列數 **6**（不跨節點去重）、第一組 `data-node-group-self="true"`／抽屜 `input`+`select`+`textarea` 計數 **0**／`[data-subtree-jump]` **不存在**／`bc5` 空子樹空狀態且**無**說明行／`bc7` 逐字 `此類別尚未建立節點` |
+| `30` | **恰 2 個**模式控制項、逐字標籤與順序、預設 `tree` `aria-pressed="true"`／**無下載/列印鈕**（DOM 內 0 個）／浮水印存在／其他視角下拉 `bc1,bc2,bc3,bc4`／業務視角 `p4`=**1**（掛 2）、`p3`=**0**（掛 1）／`p3` 抽屜逐字 `此節點沒有您可檢視的程序書` 且**不含** `ICSOP-GCA-100-2-00`／`p4` 抽屜含 `ICSOP-SRC-101-1-01` 而**不含** `ICSOP-SRC-103-1-01`（`AC-B23` tripwire）／抽屜四欄**無狀態徽章**／孤兒帳號逐字 `目前沒有可瀏覽的業務/功能類別`、**切換器仍在且仍選樹狀圖、未自動轉址**／`?mode=list`→`03`、`?mode=tree`／`?mode=grid`／無參數→留在 `30`／`?businessCategoryId=bc7` → 逐字空狀態 |
+| `03` | 無 `mode` → 轉址至 `30?mode=tree`；`?mode=list` 留在本頁；恰 2 個控制項、`文件清單` 為選中態；**空狀態仍為 `查無符合結果`**；**六項篩選未變** |
+| `13` | 表頭 **16** 欄且第 16 欄逐字、**既有 15 欄逐字未變**／篩選 **14** 項且末項逐字／**列數仍 15**／0 個 → `—`、1 個無 `+N`、4 個 → `+3`、2 個 → `+1`／**pill 為 `<span>`、無 `href`／`onclick`、`cursor !== pointer`**／展開列出全部 4 顆、收合回一顆／**停用類別之掛載展開後仍呈現**／篩選下拉僅 `active`（`bc1,bc2,bc3,bc4,bc7`）／篩選＝存在量詞（`bc2` 命中 3 筆）／`AC-B8` 命中者排第一顆／CSV 表頭 15 欄逐字、第 15 欄全形頓號＋碼位序、0 個為**空儲存格** |
+| 全部 19 支既有頁 | 側選單順序逐頁比對：`業務/功能類別管理` 恆在 `循環管理` 之後、`ICSOP 文件管理` 之前（含 `16-document-readonly` 之縮減選單） |
+
+⚠ **本輪驗證用的 Playwright 腳本是暫存的一次性檢查，不是約束環的一部分**——約束環由 test-generator 依 A.8.4 之逐字與掛鉤另行撰寫。
+
+---
+
+### A.9 2026-09-02 F043 第二輪 — 載體缺口補齊 ＋ prototype 追上已上線程式碼（🔵 DRAFT）
+
+> 本節承接 [§A.8](#a8-2026-09-02-f043業務功能類別管理-prototype-傳播紀錄-draft--awaiting-human-review)。A.8.5 之提報事項經 lead 逐條裁定後，三項改由本輪落地、兩項交回 spec-writer 改條文。
+
+#### A.9.0 lead 之裁定
+
+| A.8.5 項次 | 裁定 | 本輪處置 |
+|---|---|---|
+| ① 決 3 第三個 tab 無載體 | **要做**（原交付清單漏列） | `23-change-history.html` 補第三個 tab |
+| ② `AC-B27①` 不可達 | **甲案**：維持條文，明文限縮適用範圍為 deep link | 交回 spec-writer；prototype 之 `?businessCategoryId=bc7` 載體**保留不動** |
+| ③ 節點徽章格式 | **採 prototype 之做法**（逐字沿用 `22`） | 交回 spec-writer 改 `AC-32`／`AC-B16③` 之例示；prototype 不動 |
+| ④ `AC-44`／`AC-B29` 鑑別力為零 | **要修**（prototype 落後於已上線程式碼，非超出範圍） | 19 支 MENU ＋ `07` CARDS ＋ `18` FUNC_ROWS |
+| ⑤ `18` FUNC_ROWS 落後兩列 | **要修，兩列一起補、不留中間態** | `18` 補 `OJT 進度管理` ＋ `業務/功能類別管理` |
+| ⑩ CSV 排序 localeCompare | **採納碼位序** | 交回 spec-writer 把「碼位序」寫死進 `AC-B9②`；prototype 已於 A.8 落地 |
+
+#### A.9.1 逐檔改動（全部只動資料陣列與 JS 連線，**未動任何版面或既有文案**）
+
+| 檔案 | 改動 | diff |
+|---|---|---|
+| `23-change-history.html` | 第三個 tab（標籤／pane／查詢／表格／預覽／匯出）＋ 三分頁切換 | **+201 / −9** |
+| `18-permission-matrix.html` | `FUNC_ROWS`：`循環管理（DAG）` 主管欄 `唯讀`→`無`；補回 `OJT 進度管理`；新增 `業務/功能類別管理` | **+28 / −3** |
+| `07-admin-shell.html` | MENU `lifecycle` 移除 `supervisor` 鍵 ＋ CARDS 同步 | **+15 / −2**（含 A.8 之 +4） |
+| 其餘 18 支帶 MENU 之後台頁 ＋ 本輪新增之 `26`／`27`／`28` | MENU `lifecycle` 移除 `supervisor` 鍵 | 各 **+9 / −1**（含 A.8 之 +2） |
+
+🔒 **被移除的行逐行審計**（`git diff -U0 | grep '^-'`，全域共 17 種）：19 條 MENU `lifecycle` 舊行、1 條 `07` CARDS 舊行、2 條 `18` 矩陣行、8 條 `23` 之 JS 連線行、5 條 `13` 之 A.8 既有改寫行。**沒有任何一行是版面或可見文案。**
+
+#### A.9.2 `23` 第三個 tab 之逐字與 DOM 契約
+
+| # | 項目 | 逐字／掛鉤 |
+|---|---|---|
+| N14 | tab 容器（🔴 命名碰撞之處置） | `[data-testid="change-history-tabs"]` ＋ `[data-change-history-tabs]`。**三個 tab 之列舉方式＝`[data-testid="change-history-tabs"] button`（DOM 順序即畫面順序）。**<br>🔴 本 tab 之標籤 `業務/功能類別樹狀圖` 與 `30-public-category-tree.html` 前台模式切換器之標籤**逐字相同但互不相干** ⇒ 下游斷言**必須先限定容器再查文字**，不得用全域 `getByText('業務/功能類別樹狀圖')`（會同時命中兩個不同頁面的元素）。 |
+| N15 | 三個 tab 之逐字與順序 | `ICSOP 程序書`／`循環樹狀圖`／`業務/功能類別樹狀圖`（🔒 前兩者之標籤、順序與內容一字不改，新 tab 置於**最後**）；id 分別為 `stab-doc`／`stab-tree`／`stab-business`，pane 為 `pane-doc`／`pane-tree`／`pane-business` |
+| N16 | `changeType` 值域（`AC-39`） | 常數 `BC_CHANGE_TYPES`，**恰 7 個**：`新增節點`／`移除節點`／`節點改名`／`新增連線`／`移除連線`／`新增掛載`／`移除掛載`。🔴 **不含**任何「改派」值。<br>⚠ 刻意比 Tab 2 的 6 個類型**多一個**：Tab 2 把掛載變更收成單一「文件掛載變更」，本 tab 必須拆成兩個相異值，否則 7 值值域不可觀察。<br>⚠ 兩個掛載類型之中文字面沿用 `28` 節點抽屜之詞彙，**為本 agent 定稿、尚未入任何 AC**（見 A.9.4 ①）。 |
+| N17 | 查詢控制項 | `#bqCat`（**選項值＝`businessCategoryId`**、顯示＝`businessCategoryDisplayName`）／`#bqType`／`#bqPerson`／`#bqFrom`；列 `[data-bc-event-row="{id}"]`、類別儲存格 `[data-business-category-cell]` |
+| N18 | 匯出（`AC-42`） | `#exportBusiness`（**第三個獨立控制項**，切 tab 時僅顯示當前 tab 之該鈕）；CSV 表頭逐字 `業務/功能類別,變更類型,變更摘要,操作人,時間`；檔名 `business_category_change_history_{YYYYMMDD}_{HHmmss}.csv`；🔒 規則向 `error-handling.md#export` 對齊（**第六處**）、**零新增錯誤碼** |
+| N19 | 空狀態 | `#businessEmpty` 逐字 `此業務/功能類別尚無結構變更事件`（比照 Tab 2 之 `此循環尚無結構變更事件`） |
+| N20 | 預覽 modal 之分派旗標 | Tab 2 與 Tab 3 **共用同一個 `#lcModal` 與 `renderMiniDag()`**（刻意不複製第二份 diff 呈現）⇒ 新增全檔唯一之具名旗標 `PREVIEW_KIND`（`'lifecycle'｜'business'`），`openPreview()`／`openBcPreview()` 各自設定、`downloadFromModal()` **唯一消費**。<br>🔴 沒有這個旗標，Tab 3 的下載鈕會永遠去查 `LC_EVENTS`、查不到就**靜默無反應**。 |
+| N21 | 稽核家族（暫定） | `BUSINESS_CATEGORY_CHANGELOG_VIEW`／`BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD`（**非** `LIFECYCLE_CHANGELOG_*`）。⚠ 具體 `actionType`／`targetType` 待 system-architect 裁定（F043 `AC-31`），此處為 designer 暫定值。 |
+
+**示範語料**：7 筆事件（`bev1`～`bev7`）跨 **3 個相異類別**（`bc1`／`bc2`／`bc3`），**七種 `changeType` 各至少出現一次** ⇒ 類別篩選與類型篩選皆有鑑別力。`bev1` 刻意示範「同一份文件加掛到**同類別的第二個節點**」，其摘要明說**「非改派」**——這是本功能最容易被誤讀成回歸的地方；`bev6` 之摘要含 `刪除後將一併移除 1 筆掛載關係`（`AC-18` 之歷程側鏡像）。
+
+#### A.9.3 主管視角之側欄不對稱（`AC-44`／`AC-B29` 之視覺權威）
+
+`循環管理` 之主管欄由 `唯讀` 改為 `無`，表達方式＝**移除 `supervisor` 鍵**（比照 `settings` 等主管無權項之既有寫法；`renderSidebar()` 以 `m.roles[role]` 過濾，**未發明新寫法**）。權威＝`backend/src/rbac/function-matrix.ts` 之 `LIFECYCLE_MANAGEMENT: row('READ','CRUD','NONE','NONE','NONE')`——**prototype 先前落後於已上線之程式碼**。
+
+⇒ **22 支後台頁在主管視角下之側欄項目一致為**：
+
+```
+["首頁", "業務/功能類別管理", "ICSOP 文件管理", "OJT 進度管理"]
+```
+
+🔴 **看得到「業務/功能類別管理」、看不到「循環管理」** —— 這個肉眼可見的不對稱，就是 `AC-B29` 成對斷言的視覺權威。修正前兩列皆為「唯讀」，該斷言在 prototype 層**鑑別力為零**（語料下正確與錯誤作法輸出相同、恆綠）。
+
+**`07` 之 CARDS 一併同步**（本 agent 判斷，非 lead 明列）：側欄不再對主管呈現「循環管理」，但儀表板「快速進入功能區」若仍呈現該卡片，主管會看到一張**點進去必 403 的卡片**——正是 F025 2026-09-02 delta ④ 已明文修過的「既有死鏈」形狀。修正後主管卡片為 `["業務/功能類別管理", "ICSOP 文件管理"]`。
+
+#### A.9.4 🔴 本輪之提報（spec-writer／後續棒次）
+
+① **兩個掛載類型之中文字面尚未入 AC**：`AC-42` ⚠ 要求「列舉欄之值＝畫面所見中文標籤（`NODE_ADDED` → `新增節點` 等）」但只給了 `NODE_ADDED` 一個例子。本輪定稿之七個字面見 N16，其中 `新增掛載`／`移除掛載` 為 designer 擬定（沿用 `28` 節點抽屜之詞彙，使「歷程看到的」與「抽屜做的」用同一組詞）。**請 spec-writer 把七個字面逐字寫進 `AC-39`／`AC-42`。**
+
+② **`23` 頂部說明橫幅之稽核家族清單未更新**：現逐字為「查詢/展開/預覽/下載均寫入 `CHANGE_LOG_VIEW` / `LIFECYCLE_CHANGELOG_*` 稽核」，未含 `BUSINESS_CATEGORY_CHANGELOG_*`。屬**既有可見文案**，本輪依紀律未動。請裁決是否補（補則為一次文案變更，需 spec 明文）。
+
+③ **`10`／`11`／`12` 之角色閘門仍讓主管以唯讀進入**：三檔之 `setRole()` 仍為 `blocked = (r==='deptcontact'||r==='user')`（`10` 為 `!['icsop_admin','supervisor','sysadmin'].includes(r)`），與新矩陣（主管＝`無`）不一致。本輪只依 lead 指示動 MENU **資料陣列**，未動這三處**判定邏輯**——它們屬 F025 2026-09-02 delta 之「連帶生效 ①②」（樹狀圖預覽／節點抽屜端點對主管改 403），應由負責那批 delta 的棒次一併處理。⚠ 現況：主管側欄看不到「循環管理」，但直接開 `10`／`11`／`12` 仍進得去（唯讀）。
+
+④ **`13` 之「樹狀圖」欄尚未對主管／部門窗口移出 DOM**：F025 2026-09-02 delta ④ 明文要求該欄「不進 DOM」。本輪未動（同 ③ 之理由：屬渲染邏輯而非資料陣列）。
+
+⑤ **`07` 之 CARDS 缺 `OJT 進度管理` 卡片**（既有缺口，非本輪造成）：MENU 有、CARDS 無。發現時一併記錄，未修。
+
+#### A.9.5 驗證紀錄（已實跑）
+
+同一份 Playwright 一次性檢查擴充後重跑：**178 項全綠、0 console error / 0 page error、0 failure**（A.8.7 之 74 項全數重跑仍綠）。本輪新增之關鍵檢查：
+
+| 範圍 | 檢查 |
+|---|---|
+| `18` | `FUNC_ROWS` **共 15 列**／`循環管理（DAG）`＝`唯讀\|CRUD\|無\|無\|無`／`OJT 進度管理`＝`唯讀\|CRUD\|受限CRUD\|受限CRUD\|無`（**受限CRUD 未被收斂成 CRUD**）／`業務/功能類別管理`＝`唯讀\|CRUD\|唯讀\|無\|無`／第 14、15 列順序為 OJT → 業務/功能類別管理且置最末／**成對不對稱斷言**（主管欄 `無` vs `唯讀`）／既有 13 列抽驗 4 列逐字未變／畫面確實渲染出新兩列 |
+| 側欄 × 22 支 | 逐頁切到主管視角：`循環管理` **消失**且 `業務/功能類別管理` **在**（預期值依該頁**預設 `data-role`** 決定——`16-document-readonly` 預設即為 `supervisor`） |
+| `07` | 主管卡片 `["業務/功能類別管理","ICSOP 文件管理"]`（**無**循環管理死鏈）；ICSOP 管理員卡片仍有循環管理 |
+| `23` | **恰三個 tab** 且前兩個逐字與順序未變、第三個逐字且置最後／容器 hook 存在／預設仍為第一個 tab 且僅顯示 `exportDoc`／切到第三個 tab 後僅該 pane 與該匯出鈕可見／事件 **7 筆**／`BC_CHANGE_TYPES` **恰 7 個**且**不含「改派」**／七種類型各至少出現一次／類別下拉值為 `bc*`、同名不同子分類為三個相異選項／類別篩選（`bc2` → 1 筆）與類型篩選（`新增掛載` → 1 筆）皆有鑑別力／掛載事件摘要含「非改派」／預覽 modal 開啟且標題為類別快照值、新舊兩張 mini DAG 皆渲染／**modal 下載鈕分派到 `BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD`**／匯出表頭逐字／**Tab 2 未回歸**（仍 6 筆、其 modal 下載仍為 `LIFECYCLE_CHANGELOG_DOWNLOAD`）／主管整頁 403（`文件變更歷程` 列一格未動） |
+
+---
+
+### A.10 2026-09-02 F043 第三輪 — prototype 追上已上線之權限行為（🔵 DRAFT）
+
+> 承接 [§A.9](#a9-2026-09-02-f043-第二輪--載體缺口補齊--prototype-追上已上線程式碼draft) 之 A.9.4 四項提報。lead 逐項查證**已上線程式碼**後裁定：第 3、4 項之落後者**只有 prototype**，程式碼本身是對的。
+
+#### A.10.0 lead 之查證結論（本節之權威來源）
+
+| A.9.4 項次 | lead 查證結果 | 本輪處置 |
+|---|---|---|
+| ① 七個 changeType 中文字面 | 轉 spec-writer 寫進 `AC-39`／`AC-42`，**照 prototype 的字面鎖定** | 不動 |
+| ② `23` 橫幅稽核家族清單 | **裁定要改**：橫幅敘述的是「寫入哪些稽核」，新增第三個 tab 後它變成**錯的敘述**，不補等於在畫面上留一句假話 | 追加第三個家族 |
+| ③ `10`／`11`／`12` 主管閘門 | 後端 `LifecycleController` 有 `@RequirePermission(LIFECYCLE_MANAGEMENT,'read')`、主管已是 `NONE` ⇒ **API 回 403，把關是有的**；前端 `AdminGuard` 只檢查「有沒有任何後台權限」、**刻意沒有逐路由閘門**（既有設計：前端隱藏僅為體驗，真正授權在後端）⇒ **不是程式碼漏洞，落後的只有 prototype** | 三檔改為擋下主管 |
+| ④ `13` 樹狀圖欄 | `frontend/src/pages/DocumentListPage.tsx:880` 已是 `{canSeeTree && <th …>樹狀圖</th>}`（225 行有該裁決之註解）⇒ **程式碼是對的，落後的只有 prototype** | `13` 逐字對齊 `canSeeTree` |
+| （回覆本 agent 之逾範圍提問） | **`07` CARDS 同步移除 `supervisor`＝正確，保留不用還原**；「同一個權限值在同一頁有兩份複本」本來就該一起改（`TD-B-02` 之教訓） | 保留 |
+
+#### A.10.1 逐檔改動
+
+| 檔案 | 改動 | diff |
+|---|---|---|
+| `10-lifecycle-list.html` | `setRole()` 主管由唯讀分支移入**阻擋**分支；`blockMsg` 增主管條目；角色選單標籤 | **+18 / −5** |
+| `11-dag-canvas.html` | 同上 | **+18 / −5** |
+| `12-node-drawer.html` | 同上 ＋ `openDrawer()` 之可開啟名單移除主管 | **+21 / −6** |
+| `13-document-list.html` | 「樹狀圖」欄依 `canSeeTree()` **增刪 DOM**（`<th>` 與 `<td>` 同進退）＋ 換角色重繪 | **+165 / −8**（含 A.8 之 +125/−5） |
+| `23-change-history.html` | 頂部橫幅追加第三個稽核家族 | **+202 / −10**（含 A.9 之 +201/−9） |
+
+🔒 **被移除的行逐行審計**（本輪新增 8 種）：3 條角色選單 `<option>`、3 條 `blocked=` 與 3 條 `ro=`、3 條 `blockMsg` map、1 條 `12` 之抽屜守衛、1 條 `13` 之 `<th>`、1 條 `13` 之列 `<td>`、1 條 `23` 之橫幅。
+
+⚠ **本輪有三處觸及可見文案／標記，逐處列明**（前兩輪皆為零）：
+1. **`10`／`11`／`12` 之角色選單標籤 `主管（唯讀）` → `主管`**（本 agent 判斷，未經 lead 明列）。理由＝主管改為擋下後，`（唯讀）` 是一句**與畫面矛盾的假話**；`主管` 之寫法**沿用同一個下拉既有的慣例**——無權角色不加後綴（`部門窗口`／`一般使用者` 本來就沒有後綴），**未發明新標籤**。⚠ `26`／`27`／`28` 之同一下拉**維持 `主管（唯讀）`**，因為主管對「業務/功能類別管理」確實是唯讀——這個對比本身即 `AC-B29` 的另一個可見載體。
+2. **`23` 之橫幅**（lead 明文裁定要改）：既有兩個家族之字面與前半段之角色敘述**逐字未動**，只在 `LIFECYCLE_CHANGELOG_*` 之後追加 ` / BUSINESS_CATEGORY_CHANGELOG_*`。
+3. **`13` 之「樹狀圖」`<th>`**：可見文字 `樹狀圖` 一字未改，只加 `data-tree-col` 定位鉤；列 `<td>` 之標記搬進 `treeCell(i)` 後**逐位元組相同**。
+
+#### A.10.2 `13` 之 `canSeeTree()`：判定來源刻意不是角色清單
+
+實作端逐字為 `const canSeeTree = canPerform(role, FunctionKey.LIFECYCLE_MANAGEMENT, 'read');`。prototype 以 `MENU` 之 `lifecycle` 項作為該閘門的在地表述：
+
+```js
+const LIFECYCLE_MENU_ITEM = MENU.find(m => m.id === 'lifecycle');
+function canSeeTree(){ return !!(LIFECYCLE_MENU_ITEM && LIFECYCLE_MENU_ITEM.roles[document.body.dataset.role]); }
+```
+
+🔴 **為何不寫 `role!=='supervisor' && role!=='deptcontact'`**（實作端註解已明文，prototype 同步保留）：那樣也能過測，但下次矩陣一動，這裡就與真正的授權分家——**那正是「畫面上有一顆一定會 403 的按鈕」的成因**。已用一條斷言把「同源」本身釘住：暫時刪掉 `MENU` 之 `icsop_admin` 鍵後 `canSeeTree()` 立刻由 `true` 變 `false`。
+
+**DOM 契約**：`<th data-tree-col>` 與每列 `<td data-tree-cell>` 由**同一個** `canSeeTree()` 決定 ⇒ 構造上不可能一邊有一邊沒有；`syncTreeColumn()` 於每次 `renderTable()` 開頭同步表頭，`setRole()` 追加 `renderTable()` 使增刪即時生效。🔴 **是增刪 DOM，不是 CSS 隱藏**——下游若以 `queryByText('樹狀圖') === null` 斷言，CSS 隱藏會恆真＝假綠。<br>🔒 **CSV 不受影響**：`EXPORT_HEADER` 本就不含「樹狀圖」（`AC-X1` ②：十四欄＝畫面欄去掉樹狀圖），本輪未動。
+
+#### A.10.3 🔴 N20 補強：`PREVIEW_KIND` 是**下游必須實作的分派點**，不是實作註解
+
+> lead 指示：「這種接縫是本專案最常漏測的形狀（兩邊各自為真、交集無人驗），請寫成下游必須實作的分派點。」
+
+**契約（下游實作與約束環皆須遵守）**：
+
+| 項目 | 內容 |
+|---|---|
+| 情境 | `文件變更歷程` 之 **Tab 2（循環樹狀圖）與 Tab 3（業務/功能類別樹狀圖）共用同一個新舊對照預覽 modal 與同一個 mini-DAG 渲染函式**（刻意不複製第二份 diff 呈現——兩份各自演化正是視覺分歧的來源）。 |
+| 必要條件 | 預覽 modal 內的「下載新舊對照 PDF」按鈕**必須依當前預覽之事件種類分派**到對應的下載動作與**對應的稽核家族**：Tab 2 → `LIFECYCLE_CHANGELOG_DOWNLOAD`；Tab 3 → `BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD`。 |
+| prototype 之落地 | 全檔唯一之具名旗標 `PREVIEW_KIND`（`'lifecycle'｜'business'`）；`openPreview()`／`openBcPreview()` **各自設定**，`downloadFromModal()` **唯一消費**。🔒 **不得出現第二個旗標或第二處判斷。** |
+| 🔴 失敗形狀 | 少了這個分派，Tab 3 的下載鈕會永遠去查 `LC_EVENTS`、**查不到就靜默無反應**——按鈕在、可點、沒有任何錯誤，**兩邊的單元測試各自都會綠**。 |
+| 📌 下游必寫之斷言（成對，缺一即無鑑別力） | ① 於 **Tab 3** 開預覽 → 點下載 → 斷言落在 `BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD`；② 於 **Tab 2** 開預覽 → 點下載 → 斷言落在 `LIFECYCLE_CHANGELOG_DOWNLOAD`。<br>🔴 **只驗其一等於沒驗**：只驗 ① 時，一個「永遠回 business」的錯誤實作照樣綠；只驗 ② 時，本缺陷（Tab 3 靜默無反應）完全偵測不到。**兩條必須在同一個測試檔內成對出現。** |
+
+#### A.10.4 主管視角之最終狀態（跨頁一致性）
+
+| 載體 | 主管所見 |
+|---|---|
+| 側欄（22 支） | `["首頁", "業務/功能類別管理", "ICSOP 文件管理", "OJT 進度管理"]`——**有業務/功能類別管理、無循環管理** |
+| `07` 快速進入卡片 | `["業務/功能類別管理", "ICSOP 文件管理"]`（無循環管理死鏈） |
+| `10`／`11`／`12` | **403 遮罩**，訊息逐字以 `主管對「循環管理（DAG）」為「無」` 起頭 |
+| `13` | **15 欄**（樹狀圖欄不進 DOM）；第 16 欄「業務/功能類別」仍在並成為最末欄 |
+| `18` 功能矩陣 | `循環管理（DAG）` 主管欄 `無`；`業務/功能類別管理` 主管欄 `唯讀` |
+| `23` | 整頁 403（`文件變更歷程` 列一格未動，三個 tab 皆看不到） |
+| `26`／`27`／`28`／`29` | 可進入、**唯讀**（角色選單標籤仍為 `主管（唯讀）`） |
+
+⇒ 同一位主管在同一套 prototype 內：**循環管理處處擋、業務/功能類別管理處處唯讀可看**。這條跨頁一致的不對稱即 `AC-44`／`AC-B29` 之視覺權威。
+
+#### A.10.5 驗證紀錄（已實跑）
+
+同一份 Playwright 一次性檢查再擴充後重跑：**217 項全綠、0 console error / 0 page error、0 failure**（前兩輪之 178 項全數重跑仍綠）。本輪新增：
+
+| 範圍 | 檢查 |
+|---|---|
+| `10`／`11`／`12`（各 6 項） | ICSOP 管理員未被擋／**主管被 403 遮罩擋下**／遮罩訊息以 `主管對「循環管理（DAG）」為「無」` 起頭／**主管不再落在唯讀分支**（`roBanner` 隱藏）／角色選單標籤為 `主管`（不再宣稱唯讀）／**系統管理員仍唯讀**（未被連帶收掉） |
+| `12` 額外 | 主管點節點**不開**抽屜；系統管理員點節點**仍可開**唯讀抽屜 |
+| `13`（12 項） | ICSOP 管理員 16 欄且第 8 欄為樹狀圖／主管與部門窗口各 **15 欄**、`[data-tree-col]` 與 `[data-tree-cell]` 計數皆 **0**（**不進 DOM**，非隱藏）／**每種角色下 `th` 數 ≡ 首列 `td` 數**（未錯位一格）／第 16 欄「業務/功能類別」在三種角色下皆在且為最末欄／切回 ICSOP 管理員**欄位長回且未重複**／**同源斷言**：暫時刪掉 `MENU` 的 `icsop_admin` 鍵後 `canSeeTree()` 由 `true` 變 `false`／CSV 表頭不含樹狀圖且仍 15 欄 |
+| `13` 定位方式修正 | 第 16 欄之索引改由**表頭反查**（樹狀圖欄會依角色增刪，硬編索引在角色切換後會指到別欄——這是本輪自己踩到並修掉的測試前提缺陷） |
+| `23`（3 項） | 橫幅含既有兩個家族（逐字未動）／已補上 `BUSINESS_CATEGORY_CHANGELOG_*`／前半段角色敘述逐字未動 |

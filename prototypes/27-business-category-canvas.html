@@ -1,12 +1,23 @@
 <!DOCTYPE html>
-<!-- 🟢 F040 循環子分類（APPROVED — 2026-08-07 人類閘門通過）
-     本檔已套用：頁首循環名稱改以 lifecycleDisplayName 呈現（含子分類）。DAG 節點/邊與防環邏輯完全不受子分類影響（DAG 恆屬單一 lifecycleId）。
-     規格權威＝docs/specs/features/F040-lifecycle-subcategory.md -->
+<!-- 🔵 F043 業務/功能類別管理（DRAFT — 2026-09-02）：**類別 DAG 畫布編輯頁**，鏡射 11-dag-canvas.html
+     之版面、結構、文案與互動（節點卡片、底部連線圓點、拖曳、mini-map、縮放、提示卡、角色分流）。
+     規格權威＝docs/specs/features/F043-business-function-category.md（§乙 AC-15～AC-19、AC-45／AC-46）。
+
+     🔒 11 一字不改（AC-49）；本頁為**平行第二套**結構。
+     🔴 **刻意使用專屬錯誤碼**（AC-16，理由不得刪）：BUSINESS_CATEGORY_SELF_LOOP／BUSINESS_CATEGORY_CYCLE_DETECTED，
+        **不沿用** DAG_SELF_LOOP／DAG_CYCLE_DETECTED——那兩碼之使用者可見訊息為「此連線會造成**循環結構**成環」，
+        而「循環」在本系統是**已被佔用的專有名詞**（LIFECYCLE）；沿用會讓本畫布宣稱使用者破壞了一個他根本
+        沒在編輯的東西。⚠ 本頁之成環訊息因此**不得出現「循環」二字**。
+     🔒 連線樣式＝**直角（orthogonal / elbow / step）箭頭**，與 11／22／23／29 全系統一致（非曲線，AC-15）。
+     🔒 AC-18 逐字：刪除已掛載 N ≥ 1 份文件之節點時，提示**逐字含** `刪除後將一併移除 {N} 筆掛載關係` 並二次確認。
+     🔒 AC-19：頁首標題＝businessCategoryDisplayName 之輸出（`授信（消金） · DAG 畫布`／無子分類則 `風險管理 · DAG 畫布`）。
+     📌 與 11 之差異（僅此一項，屬導覽而非行為）：本頁吃 `?businessCategoryId=`（26 之列與「新增」後皆帶入），
+        11 因 11 本身不吃參數而由 10 以 toast 代替。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>循環 DAG 畫布 · 後台</title>
+<title>業務/功能類別 DAG 畫布 · 後台</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = { theme: { extend: {
@@ -61,8 +72,8 @@
 <header class="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-3 shrink-0 z-20">
   <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600 shrink-0"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
   <div class="leading-tight min-w-0">
-    <div class="text-xs text-slate-400 flex items-center gap-1"><a href="10-lifecycle-list.html" data-to="/admin/lifecycles" class="hover:text-primary-700 hover:underline focus:outline-none focus:ring-2 focus:ring-primary-600 rounded">循環管理</a><i data-lucide="chevron-right" class="w-3 h-3"></i><span>DAG 畫布</span></div>
-    <div class="font-semibold text-slate-900 text-sm truncate" data-lifecycle-title>銷售及收款循環（消金） · DAG 畫布</div>
+    <div class="text-xs text-slate-400 flex items-center gap-1"><a href="26-business-category-list.html" data-to="/admin/business-categories" class="hover:text-primary-700 hover:underline focus:outline-none focus:ring-2 focus:ring-primary-600 rounded">業務/功能類別管理</a><i data-lucide="chevron-right" class="w-3 h-3"></i><span>DAG 畫布</span></div>
+    <div class="font-semibold text-slate-900 text-sm truncate" data-business-category-title>授信（消金） · DAG 畫布</div>
   </div>
 
   <div class="ml-auto flex items-center gap-2">
@@ -73,7 +84,7 @@
       <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
       <select id="roleSel" onchange="setRole(this.value)" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
         <option value="icsop_admin">ICSOP 管理員</option>
-        <option value="supervisor">主管</option>
+        <option value="supervisor">主管（唯讀）</option>
         <option value="sysadmin">系統管理員（唯讀）</option>
         <option value="deptcontact">部門窗口</option>
         <option value="user">一般使用者</option>
@@ -86,7 +97,7 @@
 
 <!-- readonly / blocked banners -->
 <div id="roBanner" class="hidden bg-cyan-50 border-b border-cyan-200 text-cyan-800 text-sm px-4 py-2 items-center gap-2">
-  <i data-lucide="eye" class="w-4 h-4"></i>唯讀模式 · 此角色僅可檢視循環節點與連線，無法編輯。
+  <i data-lucide="eye" class="w-4 h-4"></i>唯讀模式 · 此角色僅可檢視業務/功能類別之節點與連線，無法編輯。
 </div>
 
 <!-- Canvas region -->
@@ -109,8 +120,8 @@
   <div id="blockOverlay" class="hidden absolute inset-0 z-30 bg-slate-50/90 backdrop-blur-sm flex items-center justify-center">
     <div class="text-center max-w-xs">
       <div class="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="lock" class="w-7 h-7 text-red-500"></i></div>
-      <h3 class="font-semibold text-slate-900">無循環管理權限</h3>
-      <p class="text-sm text-slate-500 mt-1" id="blockMsg">此角色對「循環管理（DAG）」為「無」，無法存取此頁。</p>
+      <h3 class="font-semibold text-slate-900">無業務/功能類別管理權限</h3>
+      <p class="text-sm text-slate-500 mt-1" id="blockMsg">此角色對「業務/功能類別管理」為「無」，無法存取此頁。</p>
       <p class="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
     </div>
   </div>
@@ -178,7 +189,7 @@
     {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
     {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
   ];
-  const CURRENT_MODULE='lifecycle';
+  const CURRENT_MODULE='businesscategory';
   /* 🔵 F002 AC-D1／AC-D5（2026-08-16 delta）：側欄最上方「首頁」項。
      刻意**不放進 MENU**——它不對映任何 F025 功能鍵、不經 canPerform 過濾，
      F025 功能矩陣逐格未動、未新增「首頁」列（AC-D5 回歸鎖定）。 */
@@ -200,23 +211,73 @@
   function openPublic(){ shellToast('已於新視窗開啟前台瀏覽頁（03-public-list）'); }
   function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
 
+  /* ===== 顯示名稱純函式（全站同一實作；規則與 F040 lifecycleDisplayName 逐字相同，F043 AC-06）===== */
+  function normalizeSubcategory(v){ const s=(v==null?'':String(v)).trim(); return s?s:null; }
+  function businessCategoryDisplayName(bc){ if(!bc) return ''; const s=normalizeSubcategory(bc.subcategory); return s?`${bc.name}（${s}）`:bc.name; }
+
   const NODE_W=164, NODE_H=64;
-  let seq=8;
-  // 銷售及收款循環（SRC）作業群組節點：進件多 child、撥款多 parent、結束多 parent
-  let nodes=[
-    {id:'n1',name:'進件作業',x:568,y:30,docs:['ICSOP-SRC-101-1-01','ICSOP-SRC-101-2-00']},
-    {id:'n2',name:'簽約對保作業',x:360,y:166,docs:['ICSOP-SRC-102-1-01']},
-    {id:'n3',name:'擔保設定作業',x:776,y:166,docs:['ICSOP-SRC-103-1-01']},
-    {id:'n4',name:'撥款核准作業',x:568,y:302,docs:['ICSOP-SRC-104-1-01']},
-    {id:'n5',name:'案件執行作業',x:568,y:438,docs:['ICSOP-SRC-105-1-01']},
-    {id:'n6',name:'案件催收作業',x:360,y:574,docs:['ICSOP-SRC-106-1-01']},
-    {id:'n7',name:'案件結束作業',x:568,y:710,docs:['ICSOP-SRC-107-1-01']}
-  ];
-  let edges=[
-    {id:'e1',s:'n1',t:'n2'},{id:'e2',s:'n1',t:'n3'},
-    {id:'e3',s:'n2',t:'n4'},{id:'e4',s:'n3',t:'n4'},{id:'e5',s:'n4',t:'n5'},
-    {id:'e6',s:'n5',t:'n6'},{id:'e7',s:'n5',t:'n7'},{id:'e8',s:'n6',t:'n7'}
-  ];
+  /* ===== 各業務/功能類別之節點與邊（🔒 與 26／28／29／30／13 之語料逐筆一致）=====
+     ⚠ 掛載為 M:N：docs 陣列可在**不同類別、不同節點**重複出現同一個程序書編號，這是本功能的存在理由。
+       · ICSOP-SRC-101-1-01 掛在 bc1 的 p2 與 p4（同類別兩節點）＋ bc2 q3 ＋ bc3 r4 ＋ bc6 u1
+         ⇒ 5 筆掛載列、**4 個相異類別**（13 第 16 欄之去重語料，F017 AC-B3）
+       · ICSOP-GCA-100-2-00 掛在 bc1／bc2／bc3／bc4 四個相異類別 ⇒ 第 16 欄 `+3` 之長尾語料 */
+  const CATS={
+    bc1:{name:'授信',subcategory:'消金',status:'active',
+      nodes:[
+        {id:'p1',name:'授信政策與額度管理',x:568,y:30, docs:['ICSOP-SRC-101-2-00']},
+        {id:'p2',name:'徵信調查作業',      x:360,y:166,docs:['ICSOP-SRC-101-1-01']},
+        {id:'p3',name:'擔保品管理作業',    x:776,y:166,docs:['ICSOP-GCA-100-2-00']},
+        {id:'p4',name:'授信審核作業',      x:568,y:302,docs:['ICSOP-SRC-103-1-01','ICSOP-SRC-101-1-01']},
+        {id:'p5',name:'撥貸與帳務作業',    x:568,y:438,docs:['ICSOP-PUC-101-1-01']}
+      ],
+      edges:[{id:'ep1',s:'p1',t:'p2'},{id:'ep2',s:'p1',t:'p3'},{id:'ep3',s:'p2',t:'p4'},{id:'ep4',s:'p3',t:'p4'},{id:'ep5',s:'p4',t:'p5'}]},
+    bc2:{name:'授信',subcategory:'企金',status:'active',
+      nodes:[
+        {id:'q1',name:'企金授信受理作業',x:568,y:30, docs:['ICSOP-SRC-103-1-01']},
+        {id:'q2',name:'企業徵信作業',    x:360,y:166,docs:['ICSOP-GCA-100-2-00']},
+        {id:'q3',name:'授信核決作業',    x:776,y:166,docs:['ICSOP-SRC-101-1-01']},
+        {id:'q4',name:'額度撥貸作業',    x:568,y:302,docs:[]}
+      ],
+      edges:[{id:'eq1',s:'q1',t:'q2'},{id:'eq2',s:'q1',t:'q3'},{id:'eq3',s:'q2',t:'q4'},{id:'eq4',s:'q3',t:'q4'}]},
+    bc3:{name:'風險管理',subcategory:null,status:'active',
+      nodes:[
+        {id:'r1',name:'風險辨識作業',x:568,y:30, docs:['ICSOP-CIPS-104-1-01']},
+        {id:'r2',name:'風險評估作業',x:360,y:166,docs:['ICSOP-FC-101-1-00']},
+        {id:'r3',name:'風險監控作業',x:568,y:302,docs:['ICSOP-GCA-100-2-00']},
+        {id:'r4',name:'風險報告作業',x:568,y:438,docs:['ICSOP-SRC-101-1-01']}
+      ],
+      edges:[{id:'er1',s:'r1',t:'r2'},{id:'er2',s:'r2',t:'r3'},{id:'er3',s:'r1',t:'r3'},{id:'er4',s:'r3',t:'r4'}]},
+    bc4:{name:'帳務處理',subcategory:'子公司',status:'active',
+      nodes:[
+        {id:'s1',name:'子公司帳務結算作業',x:568,y:30, docs:['ICSOP-PUC-101-1-01']},
+        {id:'s2',name:'子公司入帳覆核作業',x:568,y:166,docs:['ICSOP-IC-102-1-00','ICSOP-GCA-100-2-00']},
+        {id:'s3',name:'子公司報表產出作業',x:568,y:302,docs:[]}
+      ],
+      edges:[{id:'es1',s:'s1',t:'s2'},{id:'es2',s:'s2',t:'s3'}]},
+    bc5:{name:'帳務處理',subcategory:'消金',status:'inactive',
+      nodes:[
+        {id:'t1',name:'消金帳務結算作業',x:568,y:30, docs:[]},
+        {id:'t2',name:'消金帳務覆核作業',x:568,y:166,docs:[]}
+      ],
+      edges:[{id:'et1',s:'t1',t:'t2'}]},
+    bc6:{name:'授信',subcategory:'子公司',status:'inactive',
+      nodes:[
+        {id:'u1',name:'子公司授信受理作業',x:568,y:30, docs:['ICSOP-SRC-101-1-01']},
+        {id:'u2',name:'子公司授信核決作業',x:568,y:166,docs:[]}
+      ],
+      edges:[{id:'eu1',s:'u1',t:'u2'}]}
+  };
+  const DEFAULT_ID='bc1';
+  const qId=new URLSearchParams(location.search).get('businessCategoryId')||DEFAULT_ID;
+  const CUR_ID=CATS[qId]?qId:DEFAULT_ID;
+  const CUR=CATS[CUR_ID];
+  // AC-19：頁首標題＝businessCategoryDisplayName 之輸出（無子分類者不含括號）
+  document.querySelector('[data-business-category-title]').textContent=businessCategoryDisplayName(CUR)+' · DAG 畫布';
+  document.title=businessCategoryDisplayName(CUR)+' DAG 畫布 · 後台';
+
+  let seq=100;
+  let nodes=CUR.nodes.map(n=>({...n,docs:[...n.docs]}));
+  let edges=CUR.edges.map(e=>({...e}));
   let selected=null, zoom=1;
   const world=document.getElementById('world'), svg=document.getElementById('edges');
 
@@ -253,7 +314,7 @@
     lucide.createIcons();
   }
 
-  // 直角 elbow（垂直→水平→垂直），全站 DAG 一致（比照 22/23；OQ-E03-09 定案）
+  // 直角 elbow（垂直→水平→垂直），全站 DAG 一致（比照 11/22/23/29；AC-15）
   function edgePath(s,t){
     const sx=s.x+NODE_W/2, sy=s.y+NODE_H, tx=t.x+NODE_W/2, ty=t.y;
     const my=sy+(ty-sy)/2;
@@ -341,11 +402,13 @@
     if(drag){drag=null;}
   });
 
+  /* AC-16／AC-17：前端即時基本防環提示 → **後端於交易內權威驗證**（本原型僅示意前端側）。
+     🔴 訊息**刻意不含「循環」二字**——見檔頭；錯誤碼亦為本功能專屬。 */
   function attemptEdge(s,t){
-    if(s===t){ toast('error','節點不可連向自己','DAG_SELF_LOOP'); return; }
+    if(s===t){ toast('error','節點不可連向自己','BUSINESS_CATEGORY_SELF_LOOP'); return; }
     if(edges.some(e=>e.s===s&&e.t===t)){ toast('info','此連線已存在'); return; }
     // adding s->t creates cycle if t can already reach s
-    if(reachable(t,s)){ toast('error','此連線會造成循環結構成環，請重新確認流程方向','DAG_CYCLE_DETECTED'); return; }
+    if(reachable(t,s)){ toast('error','此連線會使本業務/功能類別的結構成環，請重新確認方向','BUSINESS_CATEGORY_CYCLE_DETECTED'); return; }
     edges.push({id:'e'+(++seq), s, t});
     renderAll();
     toast('success','已建立連線：'+(nodeById(s).name)+' → '+(nodeById(t).name));
@@ -366,12 +429,15 @@
     if(isAdmin()){del.disabled=false;del.classList.remove('text-slate-400','cursor-not-allowed');del.classList.add('text-slate-700','hover:bg-slate-50');}
     renderMini();
   }
+  /* 🔒 AC-18 逐字：N ≥ 1 時提示**逐字含** `刪除後將一併移除 N 筆掛載關係`；確認後於同一交易內刪除
+     節點、其全部相關邊、其全部 BUSINESS_CATEGORY_DOC 列；取消則一筆未動。
+     ⚠ 此處之 N ＝ **本節點之掛載列數**（非相異文件數）——被刪掉的是「掛載關係」這些列。 */
   function deleteSelected(){
     if(!isAdmin()||!selected)return;
     const n=nodeById(selected);
-    const hasDocs=n.docs.length>0;
+    const cnt=n.docs.length;
     openConfirm('刪除節點「'+(n.name||'未命名節點')+'」？',
-      hasDocs? `此節點已掛載 ${n.docs.length} 份文件，刪除後將一併移除掛載關係，且相關連線會被移除。` : '刪除後相關連線將一併移除。',
+      cnt? `刪除後將一併移除 ${cnt} 筆掛載關係，且相關連線會被移除。被解除掛載之程序書本身不受影響（不刪除、不改狀態、其循環節點掛載一格不動）。` : '刪除後相關連線將一併移除。',
       ()=>{ nodes=nodes.filter(x=>x.id!==selected); edges=edges.filter(e=>e.s!==selected&&e.t!==selected); selected=null; document.getElementById('delBtn').disabled=true; renderAll(); toast('success','節點已刪除'); });
   }
   function save(){ if(!isAdmin())return; toast('success','DAG 已儲存（節點座標與連線已持久化）'); }
@@ -382,21 +448,16 @@
   function fitView(){zoom=1;applyZoom();document.getElementById('viewport').scrollTo({left:120,top:0,behavior:'smooth'});}
 
   /* ---- role ---- */
-  /* 🔴 2026-09-02 人類裁決（F025 delta）：「循環管理（DAG）」之主管欄由 `唯讀` 改為 `無`
-     ⇒ 主管由「唯讀進入」改為**擋下**（與 deptcontact／user 同一條擋法，未發明新寫法）。
-     權威＝backend/src/rbac/function-matrix.ts 之 LIFECYCLE_MANAGEMENT（主管＝NONE）；
-     後端 LifecycleController 以 @RequirePermission(LIFECYCLE_MANAGEMENT,'read') 把關，主管呼叫必得 403。
-     📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> 主管落在唯讀分支（roBanner）而非阻擋分支。 */
   function setRole(r){
     document.body.dataset.role=r;
-    const blocked=(r==='supervisor'||r==='deptcontact'||r==='user');
-    const ro=(r==='sysadmin');
+    const blocked=(r==='deptcontact'||r==='user');
+    const ro=(r==='supervisor'||r==='sysadmin');
     document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
     document.getElementById('roBanner').classList.toggle('hidden',!ro);
     document.getElementById('roBanner').classList.toggle('flex',ro);
     if(blocked){
-      const msg={supervisor:'主管對「循環管理（DAG）」為「無」（2026-09-02 人類裁決），無法存取此頁。',
-                 deptcontact:'部門窗口對「循環管理（DAG）」為「無」，無法存取此頁。',
+      const msg={
+                 deptcontact:'部門窗口對「業務/功能類別管理」為「無」，無法存取此頁。',
                  user:'一般使用者無後台存取權。'}[r];
       document.getElementById('blockMsg').textContent=msg;
     }

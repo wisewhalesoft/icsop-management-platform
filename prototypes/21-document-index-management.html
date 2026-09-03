@@ -167,7 +167,15 @@
   /* ===== admin shell sidebar（新增「文件索引管理」）===== */
   const MENU=[
     {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
-    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    /* 🔴 2026-09-02 人類裁決（F025 delta）：「循環管理」自主管權限**移除**（唯讀 → 無）。
+       權威＝backend/src/rbac/function-matrix.ts 之 LIFECYCLE_MANAGEMENT（主管＝NONE）；本檔先前落後於已上線程式碼。
+       表達方式＝**移除 supervisor 鍵**（比照 settings 等主管無權項之既有寫法；renderSidebar 以 m.roles[role] 過濾）。
+       📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> supervisor:'唯讀'
+       🔴 與下一項「業務/功能類別管理」（supervisor:'唯讀'）**刻意不同**——同日兩項裁決，一移出一放進（F025 `AC-B29`）；
+          主管側欄自此**看得到「業務/功能類別管理」、看不到「循環管理」**，這個不對稱即該斷言之視覺權威。 */
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    /* 🔵 2026-09-02 F043 AC-43／人類裁決：新側選單項，**置於「循環管理」之後、「ICSOP 文件管理」之前**。 */
+    {id:'businesscategory',label:'業務/功能類別管理',icon:'shapes',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
     {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
     {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
     {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},

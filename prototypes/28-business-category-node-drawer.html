@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<!-- 🔵 F043 業務/功能類別管理（DRAFT — 2026-09-02）：**節點抽屜維護**，鏡射 12-node-drawer.html
+     之版面、結構、文案與互動（畫布＋右側抽屜、節點名稱、目前掛載文件、候選文件搜尋、儲存/取消）。
+     規格權威＝docs/specs/features/F043-business-function-category.md（§丙 AC-20～AC-31）。
+
+     🔒 12 一字不改（AC-49）；本頁為**平行第二套**結構。
+     ═══ 🔴 與 12（循環節點抽屜）之**兩處刻意差異**——本功能的存在理由，畫面上必須看得出來 ═══
+     ① **候選文件＝全部 ICSOP 文件**（推翻 F009 之第 1 條限制，AC-20）
+        · 12 的候選以 `lifecycleId` 過濾（僅同循環之文件）；本頁**不以任何循環條件過濾**。
+        · 語料鑑別力：候選清單之 15 份文件分屬 **9 個相異循環**——若語料只有一個循環，
+          「有過濾」與「沒過濾」輸出相同，該斷言恆真、等於沒寫（AC-20 之明文要求）。
+        · 為讓「沒有過濾」在畫面上可見，每一列候選都標出其**循環別**（純資訊 chip）。
+     ② **無「已掛載於其他節點」警示、無二次確認、無改派語意**（推翻 F009 之第 2 條限制，AC-21～AC-23）
+        · 一份文件可同時掛在多個類別的多個節點；掛載與移除是兩個**各自獨立**的動作。
+        · 🔴 **本檔明文禁止出現字串「已掛載於」與「改派」**——AC-21 之負向斷言
+          （`queryByText(/已掛載於/) === null` 且 `queryByText(/改派/) === null`）以此為載體。
+        · 取而代之的是**純資訊**標示，逐字為 `此文件另掛於：{類別}／{節點}`（可多筆，以全形頓號相接）：
+          🔒 中性色（slate，非 amber/警示色）、**不擋操作**、**不需確認**、**點了就直接掛上**。
+     ═══════════════════════════════════════════════════════════════════════════════════════
+     🔒 逐字空狀態：候選為空 → `尚無可掛載文件`（AC-28）；本節點無掛載 → `尚未掛載任何程序書`（AC-29）。
+     🔒 AC-30：同一次抽屜操作中之掛載／移除各自為**獨立事件**（2 筆 DOCUMENT_MOUNTED ＋ 1 筆 DOCUMENT_UNMOUNTED），
+        **不得**產生任何 DOCUMENT_REASSIGNED（或等義之「改派」）事件類型。
+     🔒 INV-B4：本頁之任一操作**不讀、不寫、不清空** ICSOP_DOCUMENT.nodeId／lifecycleId（AC-23／AC-27）。 -->
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>業務/功能類別節點抽屜維護 · 後台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['Inter','Noto Sans TC','sans-serif'] },
+    colors: { primary: { 50:'#F3F7FC',100:'#EAF1FA',200:'#CFDFF3',300:'#98B6E4',400:'#6E96D4',500:'#4A72AE',600:'#365C97',700:'#2A4A7E' } }
+  }}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{font-family:'Inter','Noto Sans TC',sans-serif;color:#334155;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  #viewport{background:#F8FAFC;background-image:radial-gradient(#E2E8F0 1px,transparent 1px);background-size:22px 22px;}
+  .node{position:absolute;width:164px;cursor:pointer;}
+  .node .body{background:#fff;border:1.5px solid #E2E8F0;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:.15s;}
+  .node:hover .body{border-color:#98B6E4;}
+  .node.selected .body{border-color:#365C97;box-shadow:0 0 0 3px #CFDFF3;}
+  .node.has-docs .body{border-left:4px solid #059669;}
+  #drawer{transition:transform .3s ease;}
+  /* admin shell sidebar */
+  #sidebar{width:240px;transition:width .2s ease;}
+  body{padding-left:240px;transition:padding-left .2s ease;}
+  body.sb-collapsed{padding-left:60px;}
+  body.sb-collapsed #sidebar{width:60px;}
+  body.sb-collapsed .sb-label{display:none;}
+  body.sb-collapsed #sidebarNav .sb-item{justify-content:center;padding-left:0;padding-right:0;}
+</style>
+</head>
+<body data-role="icsop_admin" class="h-screen flex flex-col bg-white overflow-hidden sb-collapsed">
+
+<!-- ===== Admin shell sidebar ===== -->
+<aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-40 bg-white border-r border-slate-200 flex flex-col">
+  <a href="07-admin-shell.html" data-to="/admin" aria-label="回到後台首頁" title="回到後台首頁" class="h-14 flex items-center gap-2 px-3 border-b border-slate-200 shrink-0 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600">
+    <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
+    <span class="sb-label font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
+  </a>
+  <nav id="sidebarNav" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5"></nav>
+  <div class="border-t border-slate-200 p-2 shrink-0">
+    <button onclick="openPublic()" title="瀏覽文件網頁（開新視窗）" class="sb-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-50">
+      <i data-lucide="external-link" class="w-4 h-4 shrink-0"></i><span class="sb-label truncate">瀏覽文件網頁</span></button>
+  </div>
+</aside>
+
+<!-- ===== Topbar ===== -->
+<header class="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-3 shrink-0 z-20">
+  <button onclick="toggleSidebar()" title="收合/展開選單" class="text-slate-400 hover:text-slate-600 shrink-0"><i data-lucide="panel-left" class="w-5 h-5"></i></button>
+  <div class="leading-tight min-w-0">
+    <div class="text-xs text-slate-400 flex items-center gap-1"><a href="26-business-category-list.html" data-to="/admin/business-categories" class="hover:text-primary-700 hover:underline focus:outline-none focus:ring-2 focus:ring-primary-600 rounded">業務/功能類別管理</a><i data-lucide="chevron-right" class="w-3 h-3"></i><span>節點抽屜維護</span></div>
+    <div class="font-semibold text-slate-900 text-sm truncate" data-business-category-title>授信（消金） · 節點抽屜維護</div>
+  </div>
+  <div class="ml-auto flex items-center gap-2">
+    <div class="flex items-center gap-1.5">
+      <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+      <select id="roleSel" onchange="setRole(this.value)" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
+        <option value="icsop_admin">ICSOP 管理員</option>
+        <option value="supervisor">主管（唯讀）</option>
+        <option value="sysadmin">系統管理員（唯讀）</option>
+        <option value="deptcontact">部門窗口</option>
+        <option value="user">一般使用者</option>
+      </select>
+    </div>
+    <div class="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200"><i data-lucide="user-circle" class="w-4 h-4"></i><span>陳管理</span></div>
+    <button title="登出" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+  </div>
+</header>
+
+<div id="roBanner" class="hidden bg-cyan-50 border-b border-cyan-200 text-cyan-800 text-sm px-4 py-2 items-center gap-2">
+  <i data-lucide="eye" class="w-4 h-4"></i>唯讀模式 · 此角色僅可檢視掛載狀態，無法變更節點名稱或掛載。
+</div>
+
+<div class="flex-1 relative overflow-hidden">
+  <div id="viewport" class="absolute inset-0 overflow-auto">
+    <div id="world" style="position:relative;width:1100px;height:720px;">
+      <svg id="edges" width="1100" height="720" style="position:absolute;inset:0;pointer-events:none;">
+        <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#94A3B8"></path></marker></defs>
+      </svg>
+    </div>
+  </div>
+
+  <div class="absolute left-4 top-4 z-10 flex items-center gap-2 px-3 py-2 rounded-lg bg-white/90 border border-slate-200 shadow-sm text-xs text-slate-500 max-w-[240px]">
+    <i data-lucide="mouse-pointer-click" class="w-4 h-4 shrink-0 text-primary-600"></i><span>點擊任一節點開啟右側抽屜，維護名稱與掛載文件。</span>
+  </div>
+
+  <div id="blockOverlay" class="hidden absolute inset-0 z-30 bg-slate-50/90 backdrop-blur-sm flex items-center justify-center">
+    <div class="text-center max-w-xs">
+      <div class="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3"><i data-lucide="lock" class="w-7 h-7 text-red-500"></i></div>
+      <h3 class="font-semibold text-slate-900">無業務/功能類別管理權限</h3>
+      <p class="text-sm text-slate-500 mt-1" id="blockMsg"></p>
+      <p class="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+    </div>
+  </div>
+</div>
+
+<!-- Drawer -->
+<div id="drawerOverlay" class="fixed inset-0 z-40 hidden bg-slate-900/40" onclick="cancelDrawer()"></div>
+<aside id="drawer" class="fixed top-0 right-0 z-50 h-full w-[420px] max-w-full bg-white shadow-2xl translate-x-full flex flex-col">
+  <div class="h-14 border-b border-slate-200 flex items-center justify-between px-4 shrink-0">
+    <div class="flex items-center gap-2"><i data-lucide="git-commit-vertical" class="w-5 h-5 text-primary-600"></i><h3 class="font-semibold text-slate-900">節點維護</h3></div>
+    <button onclick="cancelDrawer()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+  </div>
+
+  <div class="flex-1 overflow-auto p-4 space-y-5">
+    <!-- name -->
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">節點名稱</label>
+      <input id="nodeName" oninput="onNameInput()" type="text" placeholder="輸入節點名稱"
+             class="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600" />
+      <p class="text-xs text-slate-400 mt-1">變更會即時反映於左側畫布。</p>
+    </div>
+
+    <!-- mounted -->
+    <div>
+      <div class="flex items-center justify-between mb-1.5">
+        <label class="text-sm font-medium text-slate-700">目前掛載文件</label>
+        <span id="mountCount" class="text-xs text-slate-400"></span>
+      </div>
+      <div id="mountedList" class="space-y-2"></div>
+    </div>
+
+    <!-- candidates -->
+    <div>
+      <div class="flex items-center justify-between mb-1.5">
+        <label class="text-sm font-medium text-slate-700">候選文件</label>
+      </div>
+      <!-- 🔴 差異 ①：候選＝全部 ICSOP 文件，**不以循環過濾**（AC-20）。
+           本段取代 12 的「僅顯示所屬循環＝… 之文件」提示——兩頁在此處刻意說相反的事。 -->
+      <div data-candidate-scope-note class="flex items-start gap-1.5 text-xs text-slate-400 mb-2">
+        <i data-lucide="layers" class="w-3.5 h-3.5 mt-0.5"></i>
+        <span>候選＝<span class="text-slate-600">全部 ICSOP 文件</span>（共 <span id="candTotal">0</span> 份，分屬 <span id="candCycleCount">0</span> 個相異循環）。<strong class="text-slate-500">不以循環過濾</strong>，也不因該文件已掛在其他節點或其他業務/功能類別而排除——一份文件可同時歸屬多個業務/功能類別。</span>
+      </div>
+      <div class="relative mb-2">
+        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+        <input id="candKw" oninput="renderDrawer()" placeholder="搜尋候選文件…" class="w-full pl-8 pr-3 py-1.5 rounded-md border border-slate-300 text-sm" />
+      </div>
+      <div id="candList" class="space-y-2"></div>
+    </div>
+
+    <!-- 🟡 原型示範區（比照 03 之 data-prototype-demo 慣例；**實作時不得移植此區塊**）
+         BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED（AC-24／INV-B6）在正常 UI 路徑上不可達
+         ——已掛在本節點者只出現在「目前掛載文件」、不出現在候選 ⇒ 沒有可點兩次的入口。
+         真實可達路徑＝兩位管理員並發送出同一筆。此鈕僅為讓該錯誤碼有一個可見載體。 -->
+    <div data-prototype-demo="true" class="write-only rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2.5">
+      <div class="text-[11px] text-slate-500">原型示範（非正式 UI）：<span class="mono">BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED</span> 於正常 UI 路徑不可達（並發送出才會發生）。</div>
+      <button type="button" onclick="demoAlreadyMounted()" class="mt-1.5 px-2.5 py-1 rounded border border-slate-300 bg-white text-xs text-slate-600 hover:bg-slate-100">示範：同節點重複掛載（409）</button>
+    </div>
+  </div>
+
+  <div class="border-t border-slate-200 p-3 flex items-center justify-between shrink-0 bg-white">
+    <span id="drawerHint" class="text-xs text-slate-400"></span>
+    <div class="flex gap-2">
+      <button onclick="cancelDrawer()" class="px-3 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">取消</button>
+      <button id="saveBtn" onclick="saveDrawer()" class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700">儲存並關閉</button>
+    </div>
+  </div>
+</aside>
+
+<div id="toastWrap" class="fixed top-16 right-4 z-[60] space-y-2"></div>
+
+<script>
+  /* ===== admin shell sidebar ===== */
+  const MENU=[
+    {id:'account',label:'帳號管理',icon:'users',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    /* 🔴 2026-09-02 人類裁決（F025 delta）：「循環管理」自主管權限**移除**（唯讀 → 無）。
+       權威＝backend/src/rbac/function-matrix.ts 之 LIFECYCLE_MANAGEMENT（主管＝NONE）；本檔先前落後於已上線程式碼。
+       表達方式＝**移除 supervisor 鍵**（比照 settings 等主管無權項之既有寫法；renderSidebar 以 m.roles[role] 過濾）。
+       📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> supervisor:'唯讀'
+       🔴 與下一項「業務/功能類別管理」（supervisor:'唯讀'）**刻意不同**——同日兩項裁決，一移出一放進（F025 `AC-B29`）；
+          主管側欄自此**看得到「業務/功能類別管理」、看不到「循環管理」**，這個不對稱即該斷言之視覺權威。 */
+    {id:'lifecycle',label:'循環管理',icon:'workflow',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    /* 🔵 2026-09-02 F043 AC-43／人類裁決：新側選單項，**置於「循環管理」之後、「ICSOP 文件管理」之前**。 */
+    {id:'businesscategory',label:'業務/功能類別管理',icon:'shapes',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
+    {id:'document',label:'ICSOP 文件管理',icon:'file-text',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
+    {id:'usageform',label:'使用表單管理',icon:'files',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'appendix',label:'附錄管理',icon:'paperclip',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    {id:'docindex',label:'文件索引管理',icon:'database',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
+    /* 🟢 2026-08-28 F042 AC-27／OQ-E11-05=(A)：新功能列與側選單項（位置＝可寫管理群組之末，docindex 之後）。 */
+    {id:'ojtprogress',label:'OJT 進度管理',icon:'graduation-cap',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'受限CRUD',deptcontact:'受限CRUD'}},
+    {id:'audit',label:'文件調閱歷程',icon:'history',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'changehistory',label:'文件變更歷程',icon:'git-compare',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
+    {id:'orgsync',label:'組織人員異動管理',icon:'refresh-cw',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
+    {id:'settings',label:'系統參數設定',icon:'settings',roles:{sysadmin:'CRUD'}}
+  ];
+  const CURRENT_MODULE='businesscategory';
+  /* 🔵 F002 AC-D1／AC-D5（2026-08-16 delta）：側欄最上方「首頁」項。
+     刻意**不放進 MENU**——它不對映任何 F025 功能鍵、不經 canPerform 過濾，
+     F025 功能矩陣逐格未動、未新增「首頁」列（AC-D5 回歸鎖定）。 */
+  const HOME_ITEM={id:'home',label:'首頁',icon:'layout-dashboard',route:'/admin',href:'07-admin-shell.html'};
+  function renderSidebar(){
+    const role=document.body.dataset.role;
+    const items=MENU.filter(m=>m.roles[role]);
+    // 🔵 F002 AC-D1（2026-08-16 delta）：「首頁」恆為第一項、不經 F025 角色過濾（四種管理類角色一律顯示）
+    const showHome = role!=='user', homeActive = CURRENT_MODULE==='home';
+    const homeHtml = showHome ? `<a href="${HOME_ITEM.href}" data-to="${HOME_ITEM.route}" title="${HOME_ITEM.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${homeActive?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${HOME_ITEM.icon}" class="w-4 h-4 shrink-0 ${homeActive?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${HOME_ITEM.label}</span></a>` : '';
+    document.getElementById('sidebarNav').innerHTML = homeHtml + (items.length? items.map(m=>{
+      const active=m.id===CURRENT_MODULE, acc=m.roles[role], ro=acc!=='CRUD';
+      return `<a href="#" onclick="return navTo('${m.id}','${m.label}')" title="${m.label}" class="sb-item flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${active?'bg-primary-50 text-primary-700 font-medium':'text-slate-600 hover:bg-slate-50'}"><i data-lucide="${m.icon}" class="w-4 h-4 shrink-0 ${active?'text-primary-600':'text-slate-400'}"></i><span class="sb-label flex-1 truncate">${m.label}</span>${ro?`<span class="sb-label text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:''}</a>`;
+    }).join('') : `<div class="sb-label px-2.5 py-3 text-xs text-slate-400">此角色無後台功能權限</div>`);
+    lucide.createIcons();
+  }
+  function navTo(id,label){ if(id==='changehistory'&&CURRENT_MODULE!=='changehistory'){location.href='23-change-history.html';return false;} shellToast(id===CURRENT_MODULE?('目前已在「'+label+'」功能區'):('導向「'+label+'」（原型本輪未含此頁）')); return false; }
+  function toggleSidebar(){ document.body.classList.toggle('sb-collapsed'); }
+  function openPublic(){ shellToast('已於新視窗開啟前台瀏覽頁（03-public-list）'); }
+  function shellToast(msg){ if(typeof toast==='function'){toast('info',msg);} else {alert(msg);} }
+
+  /* ===== 顯示名稱純函式（全站同一實作；規則與 F040 lifecycleDisplayName 逐字相同，AC-06）===== */
+  function normalizeSubcategory(v){ const s=(v==null?'':String(v)).trim(); return s?s:null; }
+  function businessCategoryDisplayName(bc){ if(!bc) return ''; const s=normalizeSubcategory(bc.subcategory); return s?`${bc.name}（${s}）`:bc.name; }
+
+  /* ===== 業務/功能類別池（🔒 與 26／27／29／30／13 之語料逐筆一致）===== */
+  const CATEGORY_POOL=[
+    {id:'bc1',name:'授信',    subcategory:'消金',  status:'active'},
+    {id:'bc2',name:'授信',    subcategory:'企金',  status:'active'},
+    {id:'bc3',name:'風險管理',subcategory:null,    status:'active'},
+    {id:'bc4',name:'帳務處理',subcategory:'子公司',status:'active'},
+    {id:'bc5',name:'帳務處理',subcategory:'消金',  status:'inactive'},
+    {id:'bc6',name:'授信',    subcategory:'子公司',status:'inactive'}
+  ];
+  const catById=id=>CATEGORY_POOL.find(c=>c.id===id)||null;
+  const catName=id=>businessCategoryDisplayName(catById(id));
+
+  const CUR_CAT='bc1';
+  document.querySelector('[data-business-category-title]').textContent=catName(CUR_CAT)+' · 節點抽屜維護';
+
+  const NODE_W=164,NODE_H=64;
+  // 授信（消金）之 DAG（節點集合與 27／29 逐筆一致；本頁座標比照 12 之 1100×720 畫布）
+  const nodes=[
+    {id:'p1',name:'授信政策與額度管理',x:468,y:20},
+    {id:'p2',name:'徵信調查作業',      x:270,y:170},
+    {id:'p3',name:'擔保品管理作業',    x:668,y:170},
+    {id:'p4',name:'授信審核作業',      x:468,y:320},
+    {id:'p5',name:'撥貸與帳務作業',    x:468,y:470}
+  ];
+  const edges=[['p1','p2'],['p1','p3'],['p2','p4'],['p3','p4'],['p4','p5']];
+
+  /* ===== 全部 ICSOP 文件（候選來源）=====
+     🔴 AC-20 之語料鑑別力：15 份文件分屬 **9 個相異循環**（銷售及收款循環之消金／企金為兩個
+        相異 lifecycleId）——若全部同屬一個循環，「有過濾」與「沒過濾」輸出相同，斷言恆真。
+     ⚠ 逐筆與 13-document-list 之 DOCS 對齊（同一份程序書在兩頁之編號、書名、循環別一致）。 */
+  const ALL_DOCS=[
+    {num:'ICSOP-SRC-101-2-00',name:'消金審核作業',              cycle:'銷售及收款循環（消金）'},
+    {num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',          cycle:'銷售及收款循環（企金）'},
+    {num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',      cycle:'銷售及收款循環（消金）'},
+    {num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',          cycle:'銷售及收款循環（消金）'},
+    {num:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',cycle:'產品企劃循環'},
+    {num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',   cycle:'產品企劃循環'},
+    {num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',         cycle:'採購及付款循環'},
+    {num:'ICSOP-LWC-101-1-02',name:'招募管理作業',              cycle:'薪工循環'},
+    {num:'ICSOP-IC-102-1-00', name:'短期投資買賣、保管及會計作業',cycle:'投資循環'},
+    {num:'ICSOP-GCA-100-2-00',name:'法遵作業',                  cycle:'管理性控制作業'},
+    {num:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',      cycle:'不動產、廠房及設備循環'},
+    {num:'ICSOP-FC-101-1-00', name:'銀行融資作業',              cycle:'融資循環'},
+    {num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',     cycle:'電腦化資訊系統控制作業'},
+    {num:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',cycle:'銷售及收款循環（消金）'},
+    {num:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',      cycle:'薪工循環'}
+  ];
+  const docByNum=n=>ALL_DOCS.find(d=>d.num===n)||{num:n,name:n,cycle:''};
+
+  /* ===== BUSINESS_CATEGORY_DOC（M:N join；唯一鍵僅 (nodeId, documentId)，INV-B6）=====
+     🔴 同一份 documentId 可出現多列：不同節點、不同類別皆合法（AC-21／AC-22）。
+       · ICSOP-SRC-101-1-01 → bc1/p2、bc1/p4（同類別兩節點）、bc2/q3、bc3/r4、bc6/u1（共 5 列、4 個相異類別）
+       · ICSOP-GCA-100-2-00 → bc1/p3、bc2/q2、bc3/r3、bc4/s2（4 個相異類別）
+     🔒 本表**不佔用** ICSOP_DOCUMENT 之任何欄位（INV-B4）；此處之其他類別列僅供產生
+        「此文件另掛於：…」之純資訊標示，本頁之操作只會增刪 (CUR_CAT, node) 之列。 */
+  const OTHER_CAT_NODE_NAMES={
+    q1:'企金授信受理作業',q2:'企業徵信作業',q3:'授信核決作業',q4:'額度撥貸作業',
+    r1:'風險辨識作業',r2:'風險評估作業',r3:'風險監控作業',r4:'風險報告作業',
+    s1:'子公司帳務結算作業',s2:'子公司入帳覆核作業',s3:'子公司報表產出作業',
+    t1:'消金帳務結算作業',t2:'消金帳務覆核作業',
+    u1:'子公司授信受理作業',u2:'子公司授信核決作業'
+  };
+  let MOUNTS=[
+    {cat:'bc1',node:'p1',num:'ICSOP-SRC-101-2-00'},
+    {cat:'bc1',node:'p2',num:'ICSOP-SRC-101-1-01'},
+    {cat:'bc1',node:'p3',num:'ICSOP-GCA-100-2-00'},
+    {cat:'bc1',node:'p4',num:'ICSOP-SRC-103-1-01'},
+    {cat:'bc1',node:'p4',num:'ICSOP-SRC-101-1-01'},
+    {cat:'bc1',node:'p5',num:'ICSOP-PUC-101-1-01'},
+    {cat:'bc2',node:'q1',num:'ICSOP-SRC-103-1-01'},
+    {cat:'bc2',node:'q2',num:'ICSOP-GCA-100-2-00'},
+    {cat:'bc2',node:'q3',num:'ICSOP-SRC-101-1-01'},
+    {cat:'bc3',node:'r1',num:'ICSOP-CIPS-104-1-01'},
+    {cat:'bc3',node:'r2',num:'ICSOP-FC-101-1-00'},
+    {cat:'bc3',node:'r3',num:'ICSOP-GCA-100-2-00'},
+    {cat:'bc3',node:'r4',num:'ICSOP-SRC-101-1-01'},
+    {cat:'bc4',node:'s1',num:'ICSOP-PUC-101-1-01'},
+    {cat:'bc4',node:'s2',num:'ICSOP-IC-102-1-00'},
+    {cat:'bc4',node:'s2',num:'ICSOP-GCA-100-2-00'},
+    {cat:'bc6',node:'u1',num:'ICSOP-SRC-101-1-01'}
+  ];
+  const nodeNameOf=(cat,nodeId)=> cat===CUR_CAT ? ((nodes.find(n=>n.id===nodeId)||{}).name||nodeId)
+                                                : (OTHER_CAT_NODE_NAMES[nodeId]||nodeId);
+
+  let currentNode=null, draft=null;   // draft = {name, mounts:[…CUR_CAT 之列…]}
+  const nodeById=id=>nodes.find(n=>n.id===id);
+  const isAdmin=()=>document.body.dataset.role==='icsop_admin';
+
+  /* canvas */
+  function renderCanvas(){
+    const svg=document.getElementById('edges');
+    [...svg.querySelectorAll('path.edge')].forEach(p=>p.remove());
+    edges.forEach(([s,t])=>{const a=nodeById(s),b=nodeById(t);
+      const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('class','edge');
+      // 直角 elbow（垂直→水平→垂直），與 11/12/22/27/29 一致
+      const sx=a.x+NODE_W/2,sy=a.y+NODE_H,tx=b.x+NODE_W/2,ty=b.y,my=sy+(ty-sy)/2;
+      p.setAttribute('d',`M ${sx} ${sy} L ${sx} ${my} L ${tx} ${my} L ${tx} ${ty}`);
+      p.setAttribute('fill','none');p.setAttribute('stroke','#94A3B8');p.setAttribute('stroke-width','2');p.setAttribute('marker-end','url(#arrow)');
+      svg.appendChild(p);});
+    const world=document.getElementById('world');
+    world.querySelectorAll('.node').forEach(n=>n.remove());
+    nodes.forEach(n=>{
+      const count=currentMounts().filter(m=>m.node===n.id).length;
+      const el=document.createElement('div');
+      el.className='node'+(currentNode===n.id?' selected':'')+(count?' has-docs':'');
+      el.style.left=n.x+'px';el.style.top=n.y+'px';el.dataset.id=n.id;
+      el.innerHTML=`<div class="body p-2.5">
+        <div class="flex items-center gap-1.5"><i data-lucide="circle-dot" class="w-3.5 h-3.5 text-slate-300"></i><span class="font-medium text-slate-800 text-sm truncate">${n.name}</span></div>
+        <div class="mt-1.5 flex items-center gap-1 text-[11px] ${count?'text-emerald-600':'text-slate-400'}"><i data-lucide="${count?'file-check-2':'file-x-2'}" class="w-3.5 h-3.5"></i>${count?'掛載 '+count+' 份文件':'尚未掛載文件'}</div>
+      </div>`;
+      el.addEventListener('click',()=>openDrawer(n.id));
+      world.appendChild(el);
+    });
+    lucide.createIcons();
+  }
+  // 畫布徽章之來源：抽屜開啟中以 draft 為準（即時反映未送出之變更），否則以已送出之 MOUNTS 為準
+  function currentMounts(){ return draft? draft.mounts : MOUNTS.filter(m=>m.cat===CUR_CAT); }
+
+  /* drawer */
+  function openDrawer(id){
+    if(!(isAdmin()||['supervisor','sysadmin'].includes(document.body.dataset.role))) return; // blocked roles can't
+    currentNode=id;
+    const n=nodeById(id);
+    draft={ name:n.name, mounts:MOUNTS.filter(m=>m.cat===CUR_CAT).map(m=>({...m})), added:0, removed:0 };
+    document.getElementById('nodeName').value=n.name;
+    document.getElementById('candTotal').textContent=ALL_DOCS.length;
+    document.getElementById('candCycleCount').textContent=new Set(ALL_DOCS.map(d=>d.cycle)).size;
+    const ro=!isAdmin();
+    document.getElementById('nodeName').disabled=ro;
+    document.getElementById('candKw').disabled=ro;
+    document.getElementById('saveBtn').style.display=ro?'none':'';
+    renderDrawer(); renderCanvas();
+    document.getElementById('drawerOverlay').classList.remove('hidden');
+    document.getElementById('drawer').classList.remove('translate-x-full');
+  }
+
+  function onNameInput(){ if(!isAdmin())return; draft.name=document.getElementById('nodeName').value;
+    const n=nodeById(currentNode); n.name=draft.name||'未命名節點'; renderCanvas(); }
+
+  /* 🔴 差異 ②之載體：**純資訊**標示「此文件另掛於：{類別}／{節點}」。
+     · 逐字**不含**「已掛載於」「改派」（AC-21 之負向斷言以此為前提）。
+     · 中性色（slate）、**不擋操作**、無二次確認——它只是告訴使用者這份文件還歸屬哪裡。
+     · 來源＝BUSINESS_CATEGORY_DOC 中**除本節點以外**的全部列（含本類別其他節點、含其他類別）。 */
+  function otherMountsOf(num){
+    return MOUNTS.filter(m=>m.num===num && !(m.cat===CUR_CAT && m.node===currentNode))
+      .map(m=>`${catName(m.cat)}／${nodeNameOf(m.cat,m.node)}`);
+  }
+  function alsoMountedHtml(num){
+    const list=otherMountsOf(num);
+    if(!list.length) return '';
+    return `<div data-also-mounted class="mt-1 flex items-start gap-1 text-[10px] text-slate-500">
+      <i data-lucide="link-2" class="w-3 h-3 mt-0.5 shrink-0 text-slate-400"></i>
+      <span>此文件另掛於：${list.join('、')}</span></div>`;
+  }
+
+  function mountedRow(m){
+    const d=docByNum(m.num);
+    return `<div data-mounted-row data-doc-num="${d.num}" class="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50/50 px-3 py-2">
+      <i data-lucide="file-check-2" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i>
+      <div class="min-w-0 flex-1"><div class="mono text-xs text-slate-500">${d.num}</div><div class="text-sm text-slate-800 truncate">${d.name}</div>${alsoMountedHtml(d.num)}</div>
+      ${isAdmin()?`<button onclick="unmount('${d.num}')" class="text-slate-400 hover:text-red-500 shrink-0" title="移除掛載" aria-label="移除掛載：${d.name}"><i data-lucide="x" class="w-4 h-4"></i></button>`:''}
+    </div>`;
+  }
+  function candidateRow(d){
+    return `<div data-candidate-row data-doc-num="${d.num}" class="flex items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 hover:border-primary-300 ${isAdmin()?'cursor-pointer':''}" ${isAdmin()?`onclick="mount('${d.num}')"`:''}>
+      <i data-lucide="file-text" class="w-4 h-4 text-slate-400 shrink-0 mt-0.5"></i>
+      <div class="min-w-0 flex-1">
+        <div class="mono text-xs text-slate-500">${d.num}</div>
+        <div class="text-sm text-slate-700 truncate">${d.name}</div>
+        <div class="mt-1 flex items-center gap-1 text-[10px] text-slate-400"><i data-lucide="workflow" class="w-3 h-3 shrink-0"></i><span data-candidate-cycle>循環別：${d.cycle}</span></div>
+        ${alsoMountedHtml(d.num)}
+      </div>
+      ${isAdmin()?'<i data-lucide="plus-circle" class="w-4 h-4 text-primary-600 shrink-0 mt-0.5"></i>':''}
+    </div>`;
+  }
+
+  function renderDrawer(){
+    const kw=(document.getElementById('candKw').value||'').toLowerCase();
+    const mounted=draft.mounts.filter(m=>m.node===currentNode);
+    const mountedNums=new Set(mounted.map(m=>m.num));
+    /* AC-20：候選＝**全部 ICSOP 文件**，僅排除「已在本節點掛載者」（它們在上方的『目前掛載文件』區）。
+       🔴 **不以 lifecycleId 過濾、不以是否掛在他處過濾**——這正是與 12 的第一處差異。
+       AC-28：搜尋比對＝documentNumber ∪ documentName 之 contains。 */
+    const cands=ALL_DOCS.filter(d=>!mountedNums.has(d.num))
+      .filter(d=>!kw || d.num.toLowerCase().includes(kw)||d.name.toLowerCase().includes(kw));
+    document.getElementById('mountCount').textContent=mounted.length+' 份';
+    // AC-29 逐字空狀態
+    document.getElementById('mountedList').innerHTML = mounted.length? mounted.map(mountedRow).join('')
+      : `<div data-mounted-empty class="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">尚未掛載任何程序書</div>`;
+    // AC-28 逐字空狀態
+    document.getElementById('candList').innerHTML = cands.length? cands.map(candidateRow).join('')
+      : `<div data-candidate-empty class="text-center border border-dashed border-slate-200 rounded-lg px-3 py-6">
+           <i data-lucide="inbox" class="w-8 h-8 text-slate-300 mx-auto mb-1.5"></i>
+           <p class="text-sm text-slate-500">尚無可掛載文件</p>
+           <p class="text-xs text-slate-400 mt-0.5">全部 ICSOP 文件皆已掛載於本節點</p></div>`;
+    /* AC-30：掛載與移除是**各自獨立**之動作 ⇒ 待送出提示分別計數，
+       🔒 **不得**出現任何「改派」字樣或把「移除 A ＋ 新增 B」記成一次複合動作。 */
+    const pending=draft.added+draft.removed;
+    document.getElementById('drawerHint').textContent = pending
+      ? `待送出：新增掛載 ${draft.added} 筆 · 移除掛載 ${draft.removed} 筆`
+      : '關閉即送出變更';
+    lucide.createIcons();
+  }
+
+  /* AC-21／AC-22／AC-23：選取候選 → **直接完成掛載**。無警示、無二次確認、無改派語意——
+     即使該文件已掛在本類別的其他節點、已掛在其他類別、或已有 ICSOP_DOCUMENT.nodeId（循環節點）。 */
+  function mount(num){
+    if(!isAdmin())return;
+    if(draft.mounts.some(m=>m.node===currentNode&&m.num===num)) return;   // 防呆：畫面上不可達
+    draft.mounts.push({cat:CUR_CAT,node:currentNode,num});
+    draft.added++;
+    renderDrawer(); renderCanvas();
+    toast('success','已掛載：'+docByNum(num).name);
+  }
+  /* AC-25：移除只影響那一筆——不影響文件本身，也不影響其在其他節點／其他類別之掛載。 */
+  function unmount(num){
+    if(!isAdmin())return;
+    const i=draft.mounts.findIndex(m=>m.node===currentNode&&m.num===num);
+    if(i<0) return;
+    draft.mounts.splice(i,1);
+    draft.removed++;
+    renderDrawer(); renderCanvas();
+    toast('info','已移除掛載：'+docByNum(num).name+'（其他節點／其他業務/功能類別之掛載不受影響）');
+  }
+  // 原型示範（非正式 UI）：AC-24／INV-B6 之錯誤碼載體
+  function demoAlreadyMounted(){
+    toast('error','此節點已掛載該程序書，不會產生第二筆掛載列','BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED · 409');
+  }
+
+  // committed node-name snapshot (source of truth for revert)
+  const COMMITTED_NAMES={}; nodes.forEach(n=>COMMITTED_NAMES[n.id]=n.name);
+
+  function saveDrawer(){
+    const added=draft.added, removed=draft.removed;
+    MOUNTS=MOUNTS.filter(m=>m.cat!==CUR_CAT).concat(draft.mounts.map(m=>({...m})));
+    const nid=currentNode, nm=draft.name||'未命名節點';
+    nodeById(nid).name=nm; COMMITTED_NAMES[nid]=nm;
+    closeDrawer(); renderCanvas();
+    /* 🔒 AC-30：訊息刻意逐項分述——掛載 N 筆、移除 M 筆各為獨立事件（DOCUMENT_MOUNTED／DOCUMENT_UNMOUNTED），
+       **不得**寫成「解除原節點並綁定新節點」之複合語意（那是 12 的單一歸屬模型才成立的說法）。 */
+    toast('success','已儲存：新增掛載 '+added+' 筆、移除掛載 '+removed+' 筆，各寫入獨立之結構變更事件（無改派事件類型）');
+  }
+  function cancelDrawer(){ // discard: revert live canvas name to last committed
+    if(currentNode) nodeById(currentNode).name=COMMITTED_NAMES[currentNode];
+    closeDrawer(); renderCanvas();
+  }
+  function closeDrawer(){document.getElementById('drawerOverlay').classList.add('hidden');document.getElementById('drawer').classList.add('translate-x-full');currentNode=null;draft=null;}
+
+  function setRole(r){
+    document.body.dataset.role=r;
+    const blocked=(r==='deptcontact'||r==='user');
+    const ro=(r==='supervisor'||r==='sysadmin');
+    document.getElementById('blockOverlay').classList.toggle('hidden',!blocked);
+    document.getElementById('roBanner').classList.toggle('hidden',!ro);
+    document.getElementById('roBanner').classList.toggle('flex',ro);
+    if(blocked){document.getElementById('blockMsg').textContent={deptcontact:'部門窗口對「業務/功能類別管理」為「無」。',user:'一般使用者無後台存取權。'}[r];}
+    closeDrawer(); renderCanvas(); renderSidebar(); lucide.createIcons();
+  }
+  function toast(type,msg,code){
+    const map={success:['check-circle-2','#059669'],error:['alert-circle','#DC2626'],info:['info','#365C97']};
+    const [ic,color]=map[type]||map.info;
+    const el=document.createElement('div');
+    el.className='flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm';
+    el.style.borderLeft='4px solid '+color;
+    el.innerHTML=`<i data-lucide="${ic}" class="w-4 h-4 mt-0.5" style="color:${color}"></i><div><span class="text-slate-700">${msg}</span>${code?`<div class="text-[10px] mono text-slate-400 mt-0.5">${code}</div>`:''}</div>`;
+    document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
+    setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4000);
+  }
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')cancelDrawer();});
+
+  renderCanvas(); renderSidebar();
+</script>
+</body>
+</html>
