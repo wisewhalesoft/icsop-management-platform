@@ -25,6 +25,55 @@ cd frontend && npx vitest run        → Test Files 131 passed (131)
 `PublicListPage.businessCategory`／`DocumentListPage.businessCategory`／
 `ChangeHistoryPage.businessCategory`）全綠；既有測試檔**零紅**。
 
+## 2026-09-03 第二輪修正（使用者實機揪出之真缺陷）
+
+**現象**：節點抽屜顯示「目前掛載文件 **4 份**」、同樣兩份文件各出現兩次，而畫布徽章寫「掛載 2 份文件」（正確）；
+DB 恰 4 列（2 節點 × 2 文件）無重複列 ⇒ 純顯示層缺陷。連帶症狀：載入後未做任何互動即顯示
+「待送出：新增掛載 2 筆」；React 另噴 `Encountered two children with the same key`。
+
+**根因**：`BusinessCategoryNodeDrawer` 沿用了 F009（單一歸屬模型）之前提「候選必不含已掛載於本節點者」。
+該前提在 M:N 下**不成立**——後端候選依 `AC-20` 為**全部 ICSOP 文件**、不排除本節點已掛載者，
+故 `[...mounted, ...candidates]` 會讓同一份文件出現兩筆同 `id` 之列。
+
+**修正（產品程式碼，未動任何測試）**：
+1. 新增具名純函式 `mergeDrawerDocs(mounted, candidates)`——以 `id` 為鍵合併，候選同 id 者**只補**其純資訊
+   欄位（循環別／另掛於），**不新增第二筆**；⇒ 掛載區與候選區對同一份文件恆只呈現一次，React key 亦唯一。
+2. 新增顯式 `baseline: Set<string>`（＝載入當下後端回傳之 `mounted` id 集合），`pending` 與送出之 diff
+   **一律以它為基準**，不再寄生於合併後清單上的 `wasMounted` 旗標。⇒ 無互動時 `added = 0`。
+3. 掛載區容器新增環要求之 DOM 契約 `data-mounted-list` ＋ `data-mounted-count`
+   （與可見之「{N} 份」同取 `mountedDocs.length`，不各算一次）。
+4. **不誤殺**：掛載於其他節點／其他類別之文件仍留在候選區並保留「此文件另掛於：{類別}／{節點}」。
+
+**實跑**：`BusinessCategoryNodeDrawer.test.tsx` 17/17 綠（含環新增之 5 條）；全套
+**131 檔／2040 測試全綠**；`tsc --noEmit` 0 error；輸出全文掃描 `same key` **0 次**。
+⚠ 後端側之對稱修正（候選排除本節點已掛載者）由 impl-be 進行；本前端去重為**第二道防線**，兩者正交。
+
+## 2026-09-03 第三輪修正（實機複驗揪出：候選統計取自當前頁）
+
+**現象**：抽屜候選區逐字顯示「候選＝**全部 ICSOP 文件**（共 **22** 份，分屬 **1** 個相異循環）」，
+而 dev 真庫 `SELECT COUNT(*) FROM ICSOP_DOCUMENT` ＝ **591**。
+
+**根因**：候選查詢在 store 層是**分頁**的（`.take(pageSize)`），而前端那句話的兩個數字由**當前頁**推導
+（`docs.length` 與 `new Set(docs.map(d => d.lifecycleName)).size`）。後端 controller **早就**回了
+`candidateTotal`，但前端從未接（`grep candidateTotal` 於 `endpoints.ts`／`types.ts`／抽屜元件全部落空）。
+
+🔴 **嚴重性不只是數字錯**：那句文案的用途是**證明候選不以循環過濾**（`AC-20`）；由當前頁推導只會看到
+**1 個循環**，於是一句用來**反證**的文案變成了**正證**——看起來正好像候選被循環過濾了。
+
+**修正（產品程式碼，未動任何測試）**：
+1. `api/types.ts`：`BusinessCategoryNodeDrawerData` 接上後端之 `candidateTotal`／`candidateLifecycleCount`
+   兩個**全量**統計欄位（已套排除與關鍵字、未分頁），並就地寫明「明文禁止由 `candidates.length` 或
+   `new Set(...)` 推導」及其後果。
+2. 抽屜元件：兩個數字**一律取自後端欄位**；移除由當前頁推導之 `candidateCycleCount`。
+3. **誠實揭露分頁**：新增第三個數字「目前已載入 {N} 份」（載入當下之 `candidates.length`，掛鉤
+   `data-candidate-loaded`），文案改為
+   「候選＝**全部 ICSOP 文件**（共 {總數} 份，分屬 {循環數} 個相異循環）。**不以循環過濾**，…。
+   本清單**分頁載入**：目前已載入 {N} 份，請用上方搜尋縮小範圍。」
+   ⚠ 舊文案只寫「共 N 份」而 N 取自當前頁，在真庫上是一句**假話**。
+
+**實跑**：`BusinessCategoryNodeDrawer.test.tsx` **21/21 綠**（含環新增之 3 條＋1 條自證）；全套
+**131 檔／2044 測試全綠**；`tsc --noEmit` 0 error；輸出全文掃描 `same key` 0 次。
+
 ## Test Results Summary（環之逐檔對應）
 
 | 環檔 | 主要 AC | 狀態 |
@@ -117,15 +166,44 @@ cd frontend && npx vitest run        → Test Files 131 passed (131)
 ## 未兌現／交棒事項（誠實列出）
 
 1. 🔴 **端點契約仰賴後端同步**：本前端依 `architecture-spec` §14.5 之路徑表實作。其中兩處**需與後端對帳**——
-   ① 抽屜載荷走 `GET .../nodes/:nodeId/candidates`（後端 `BusinessCategoryDocsService.getDrawer()` 之回應形狀，
-   前端函式名為 `getBusinessCategoryNodeDrawer`，**函式名與 URL 段刻意不同名**）；
+   ① ✅ **已兌現（限定：2026-09-03 修正前之建置）**——抽屜載荷走
+   `GET .../nodes/:nodeId/candidates`（後端 `BusinessCategoryDocsService.getDrawer()` 之回應形狀，
+   前端函式名為 `getBusinessCategoryNodeDrawer`，**函式名與 URL 段刻意不同名**）。
+   使用者於**真實瀏覽器**開啟節點抽屜並渲染出真實之已掛載與候選文件，證明 URL／回應形狀／前端
+   消費面端到端走通——那正是單元測試永遠測不到的一層（重複列缺陷即於該畫面顯現）。
+   ⚠ **本次候選排除修正變更了 `listCandidates` 簽章與 controller 呼叫點**
+   （`business-category-docs.service.ts:137` 新增 `excludeDocumentIds`、
+   `business-category-docs.controller.ts:75` 之呼叫點同步改動；前端側亦改了合併邏輯
+   `mergeDrawerDocs`），**修正後之建置尚未於瀏覽器複驗**；待 lead 完成實機複驗後方可移除此限定語。
+   🔴 立此限定語之理由：本 repo 反覆吃虧的形狀，正是「曾經驗過」被寫成「已驗過」，而中間有人
+   改了那條路徑——寫明範圍，日後讀者才知道那份證據對應的是哪一版程式碼。
    ② 後台樹狀圖預覽資料走 `GET /admin/business-categories/:id/tree`（§14.5 只列了 `/tree/download`／`/print`，
    預覽本體之路徑由本棒次依 `BusinessCategoryPreviewController.preview` 推定為同一 controller 之根路徑）。
    ③ 狀態切換走 `PATCH /admin/business-categories/:id`（body `{status}`）——§14.5 無獨立 `/status` 子路由。
-   **這三項單元測試永遠測不到**（端點被 mock），須以瀏覽器煙霧測試或整合層驗證。
-2. 🔴 **未做瀏覽器實機驗證**：本輪僅單元／元件測試與 `tsc`。本 repo 已多次記錄「兩端單元測試全綠但真瀏覽器壞掉」
-   之形狀（代理白名單、`Accept: text/html` 撞 SPA fallback、migration 未跑）。⚠ 特別是：
+   **這三項單元測試永遠測不到**（端點被 mock），須以瀏覽器煙霧測試或整合層驗證
+   ——① 已有上述**限定範圍**之實機證據，②③ 仍完全待驗。
+2. 🔴 **前端側未做瀏覽器實機驗證**：本棒次僅單元／元件測試與 `tsc`。本 repo 已多次記錄「兩端單元測試
+   全綠但真瀏覽器壞掉」之形狀（`Accept: text/html` 撞 SPA fallback、代理白名單漏列）。⚠ 仍待實機確認：
    前台樹狀圖之可見性過濾、下載／列印之代理串流、`/business-categories/:id/tree` 之 SPA fallback。
-3. 🔴 **migration 未跑、後端未上線** ⇒ 本前端目前無真實資料可打（F043 檔頭之三項驗收條件尚未滿足）。
+   ✅ **代理白名單已有結構性保證，非「未查證」**：`frontend/src/api/proxy-coverage.test.ts` 掃描後端全部
+   `@Controller` 之路由、取**第一段路徑**（`split('/')[0]`）並斷言 vite proxy 與 `nginx.conf` 各有對應設定；
+   `public/business-categories` 之第一段為 `public`、`admin/business-categories` 為 `admin`，兩者皆為既有鍵
+   ⇒ 自動涵蓋且該測試綠。**仍待實機確認的是渲染結果，不是白名單。**
+3. ✅ **已兌現（2026-09-03 由 team-lead 執行並附 `SELECT` 覆核）——migration 已跑、後端已上線**。
+   📝 原措辭逐字保留供追溯：`OLD>` 「🔴 **migration 未跑、後端未上線** ⇒ 本前端目前無真實資料可打
+   （F043 檔頭之三項驗收條件尚未滿足）。」證據摘要：
+   - 三支 migration 已對 **dev 真庫**實跑並 COMMIT（跑前 `migration:show` 顯示既有 46 支全已套用、待跑者恰為這 3 支）；
+   - 六張表全部存在；`UQ_BUSINESS_CATEGORY_name_subcategory (name, subcategory)`、
+     `UQ_BUSINESS_CATEGORY_DOC_node_document (nodeId, documentId)` 存在，且**不存在**
+     `(businessCategoryId, documentId)` 或單獨 `(documentId)` 之唯一鍵（INV-B6 之反面亦成立）；
+   - `FK_BUSINESS_CATEGORY_DOC_document` → `ON DELETE CASCADE`；`AUDIT_LOG` 之
+     `businessCategoryId`／`nodeId` 兩欄存在；
+   - 後端整合測試 **24 suites / 204 tests** 對真 SOP DB 全綠；
+   - 容器已 `--force-recreate` 重建、三個容器 healthy，啟動日誌顯示
+     `BusinessCategoryPreviewController`／`BusinessCategoryChangeDiffController`／
+     `PublicBusinessCategoryController` 三個新 controller 之路由全部掛上；
+   - 使用者已在**真實瀏覽器**建立類別「投資」與 11 個節點，並把同樣兩份文件掛到兩個不同節點
+     ——即上節「2026-09-03 第二輪修正」之缺陷來源（資料為真）。
+   ⇒ F043 檔頭三項驗收條件之 ①②③ 已滿足；本前端已有真實資料可打。
 4. `AC-B7` ③ 之 active 過濾在「類別池端點取用失敗」之降級路徑下不成立（見架構決策 4）。
 5. `AC-B9`（CSV 第 15 欄之位元組規則）為**後端**職責，前端僅維持 `AC-B10` 之「匯出呼叫恰兩引數」不變。

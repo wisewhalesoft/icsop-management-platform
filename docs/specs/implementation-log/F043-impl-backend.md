@@ -23,23 +23,97 @@ last_updated: 2026-09-03
 > ⚠ 仍**未做**之部分（不得視為已完成）見文末〈未兌現項目〉——主要為**瀏覽器實機煙霧測試**
 > 與 `/public/*` 代理白名單覆核。
 
-## 實跑證據（2026-09-03）
+## 實跑證據（2026-09-03，含候選排除修正後之最終數字）
 
 ```
 cd backend && npx tsc --noEmit             → 0 error（exit 0）
-cd backend && npx jest --maxWorkers=4      → Test Suites: 216 passed, 216 total
-                                             Tests:       3393 passed, 3393 total
-cd backend && npm run test:int             → Test Suites: 23 passed, 1 failed, 24 total
-                                             Tests:       203 passed, 1 failed, 204 total
-                                             （唯一紅燈＝既有 `lifecycle-changelog.itest.ts`
-                                               之 TS-LCC-E-006，**與本 feature 無關**，
-                                               歸因見〈既有 int-test 過期〉）
+cd backend && npx jest --maxWorkers=4      → Test Suites: 217 passed, 217 total
+                                             Tests:       3402 passed, 3402 total
+cd backend && npm run test:int             → Test Suites:  24 passed,  24 total
+                                             Tests:        204 passed, 204 total
 RED 基線（lead 實跑）                       → 21 suites 全紅，皆 TS2307 找不到模組
 ```
 
 🔴 **`test:int` 必須序列跑**（`test/jest-int.json` 已釘 `maxWorkers: 1`）：
 以 `--maxWorkers=2` 覆蓋會讓 **15 個 suite 一起紅**，但逐一單跑全部通過——共用真庫之跨 spec
 資料互相干擾，不是程式缺陷。派工單建議之 `-- --maxWorkers=2` 於本 repo 之整合層**不適用**。
+
+## 2026-09-03 候選排除修正（使用者實機揪出之真缺陷）
+
+**現象**：同兩份文件掛到兩個不同節點後，任一節點抽屜之「已掛載」顯示 **4 筆**（應為 2 筆，
+兩份各出現兩次）；畫布徽章「掛載 2 份文件」正確。DB 恰 4 列（2 節點 × 2 文件）、無重複列
+⇒ **資料層無誤**。
+
+**根因（接縫）**：候選查詢**不知道「本節點」是誰**——這是 `AC-20` 原始契約
+（`listCandidates(query)` 完全不收任何節點／類別參數）之副作用：為了徹底杜絕「以循環過濾」，
+連「排除已掛載於本節點者」這個**完全正交**的維度也被一併排除了。前端 `NodeDrawer` 又以
+`[...mounted, ...candidates]` 合併，那個互斥前提只在 F009 之單一掛載模型下成立，M:N 不成立。
+🔴 **兩側單元測試都看不到**：各自的 fixture 把兩份清單造成互斥。
+
+**修正**（三處，皆為 additive）：
+
+| 落點 | 改動 |
+|---|---|
+| `business-category-docs.store.ts` | `listCandidateDocs` 查詢新增**選填**鍵 `excludeDocumentIds?: string[]` |
+| `business-category-docs.service.ts` | `listCandidates(businessCategoryId, nodeId, query)`；內部呼叫既有 `listNodeMountedDocs()` 取本節點掛載 id 作為排除集 |
+| `typeorm-business-category-docs.store.ts` | SQL 層 `d.id NOT IN (...)`。⚠ **參數上限之處置見本檔〈一項對 lead 指示之技術更正〉**——切批在單一 statement 內幫不上忙，真正的界限來自語意上界。空陣列 → **完全不加條件**（`NOT IN ()` 在 SQL 中非法，語意上也不該排除任何東西） |
+
+🔒 **三條不變式皆已由環驗證**（`business-category-docs-candidates.service.spec.ts`，最終 15/15）：
+① 候選**仍不以 `lifecycleId` 過濾**（`excludeDocumentIds` 是一組文件 id，與循環維度正交；
+store 查詢型別上仍**不存在**任何循環相關鍵，`AC-20` 之 int-test 亦保持綠）；
+② **不誤殺**——掛在**同類別其他節點**或**其他類別**之文件**仍是候選**（`AC-21`／`AC-22` 之
+M:N 核心，誤殺即把模型悄悄改回單一歸屬）；
+③ 排除集為空時**行為與修正前完全相同**。
+
+📌 **立條理由**：依 `AC-24`，把已掛載於本節點的文件列為候選 ⇒ 使用者點下去**必然**回 409
+`BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED`。**提供一個必然失敗的動作**正是本 repo 反覆修過的
+死動作形狀（F024 匯出鈕同型）。
+
+## 2026-09-03 候選統計修正（同日第二個實機缺陷：`lifecycleCount`）
+
+**現象**：抽屜候選區文案顯示「候選＝全部 ICSOP 文件（共 **22** 份，分屬 **1** 個相異循環）」，
+真庫 `SELECT COUNT(*) FROM ICSOP_DOCUMENT` ＝ **591**。
+
+**根因**：候選查詢有分頁（`.take(pageSize)`），前端以**當前頁長度**冒充總數、以**當前頁**推導
+相異循環數。後端當時只回 `total`（其實已是全集）而未回循環數，前端只好自己算。
+
+🔴 **嚴重性不只是數字錯**：那句文案的用途是**反證候選未被循環過濾**，而它算出的「分屬 **1** 個
+相異循環」看起來正好像**被循環過濾了**——一句用來反證的文案變成了**正證**。這是比「數字不準」
+更壞的一種錯：它讓一個未被違反的 AC 看起來像被違反了。
+
+**修正**：`listCandidateDocs` 回傳新增**必填** `lifecycleCount`（＝過濾後、**未分頁**全集之
+`COUNT(DISTINCT lifecycleId)`）；service 透傳；controller 併為 `candidateLifecycleCount`。
+
+**SQL 為單一往返**（`typeorm-business-category-docs.store.ts`）：
+`filtered` CTE（套 keyword／exclude、未分頁）→ `stats` CTE 聚合 `COUNT(*)` 與
+`COUNT(DISTINCT lifecycleId)` → `paged` CTE 才套 `OFFSET/FETCH`，兩者以 `LEFT JOIN` 相接。
+- ⚠ **刻意不用 `COUNT(*) OVER ()` 視窗函式**：視窗值只存在於**回傳的列**上，該頁為空
+  （0 筆結果或頁碼超出末頁）時一列都沒有 ⇒ 統計值一併消失、只能謊報 0。
+  `stats` 為無 `GROUP BY` 之聚合、**恆回一列**，`LEFT JOIN` 保證結果至少一列。
+- ⚠ **刻意不用 `getManyAndCount()`**：它本身即兩趟（SELECT ＋ COUNT），再加一趟 DISTINCT 就是三趟。
+- `ICSOP_DOCUMENT.lifecycleId` 為 **NOT NULL** ⇒ `COUNT(DISTINCT ...)` 與環之 `new Set(...).size`
+  語意一致，不因 NULL 而分歧。
+
+**🔴 真庫驗證（單元測試以 fake store，證明不了這段 SQL）**：
+```
+GROUND_TRUTH  SELECT COUNT(*), COUNT(DISTINCT lifecycleId) FROM ICSOP_DOCUMENT → 591 / 14
+page1        items=20  total=591  lifecycleCount=14   ✅ 與 ground truth 相符
+page2        items=20  total=591  lifecycleCount=14   ✅ 換頁不變
+page9999     items= 0  total=591  lifecycleCount=14   ✅ 空頁仍正確（視窗函式寫法在此會謊報 0）
+exclude×3              total=588                       ✅ 排除後遞減
+keyword 逐一比對 ground truth：作業 591/14、授信 4/2、管理 92/10、ZZZ 0/0  ✅ 四組全 MATCH
+```
+（`作業` 命中全部 591 份係因每份程序書書名皆含該詞，非篩選失效——已以 ground truth 對照確認。）
+探針用完即刪，未留測試資料。
+
+### ⚠ 一項對 lead 指示之技術更正（已回報）
+派工單與我上一輪都以 `chunkByParamBudget` 切 `NOT IN`，**但那在此幫不上忙**：MSSQL 2100 參數
+上限是**每個 statement** 的，把一個 `NOT IN` 拆成多個 `AND` 相接之 `NOT IN` 仍在同一 statement、
+參數總量不變。真正的界限來自語意——排除清單是「**單一節點**已掛載之相異文件」，上界為
+`ICSOP_DOCUMENT` 總筆數（今日 591），且 `(nodeId, documentId)` 有唯一鍵故無重複列
+⇒ 今日結構上不可能逼近 2100。故改為單一 `NOT IN` 並就地標記觸發條件：
+🔴 **若日後文件總數逼近 ~2000**，須改以 `nodeId` 直接 `NOT EXISTS` 關聯 `BUSINESS_CATEGORY_DOC`
+（參數量恆為 1、與掛載數無關），但那需把 `nodeId` 加入本方法簽章，屬契約變更，本輪不做。
 
 ## 真庫實跑證據（2026-09-03，dev SOP DB）
 
@@ -68,10 +142,11 @@ AUDIT_LOG 新欄 → businessCategoryId (nullable), nodeId (nullable)  ✅ 決�
 （MSSQL 於 UNIQUE INDEX 視多個 NULL 為**相等**，恰符「同名之無子分類列至多一筆」之 INV-B1）；
 同名 ＋ 具體子分類 → **允許**（INV-B1 只擋同一組合，未過度限縮）。探針用完即刪，未留測試資料。
 
-## 既有 int-test 過期（🔴 非本 feature 造成，已舉證）
+## 既有 int-test 過期（🟢 已由測試作者修正；非本 feature 造成，舉證留存供追溯）
 
 `test/int/lifecycle-changelog.itest.ts` 之 **TS-LCC-E-006**：
-「Supervisor 對 F036 `tree-preview/download` → 200」實得 **403**。
+「Supervisor 對 F036 `tree-preview/download` → 200」曾實得 **403**。
+**本節之舉證促成該條期望值更新，現已全綠**（最終 `test:int` 為 24/24、204/204）。
 
 **歸因（三項皆為 `git` 可驗之事實，非推測）**：
 1. `git show HEAD:backend/src/rbac/function-matrix.ts` → `LIFECYCLE_MANAGEMENT` 於 **HEAD 即為**
@@ -85,7 +160,12 @@ AUDIT_LOG 新欄 → businessCategoryId (nullable), nodeId (nullable)  ✅ 決�
 ⇒ 該測試在 `880fcb5` 當下即已過期，只是**當時 DB 不可達、無人跑得到**。
 F042/F043 之文件本身已預告此連帶效果（`function-matrix.ts` 就地註解：
 「⚠ 本格同時是 F036 循環樹狀圖預覽之閘門 ⇒ 主管自本輪起亦不可預覽樹狀圖」）。
-🔴 **本 agent 不修測試**——交 lead 指派測試作者更新該條期望值（主管應為 403）。
+🔴 **本 agent 未修該測試**——依紀律交由測試作者更新期望值（主管應為 403），現已完成。
+
+📌 **可複用之教訓**：一個 feature 的人類裁決常連帶改到**別的 feature 的閘門格值**；若當下真庫
+不可達，該處的既有測試會**靜默過期**到下次連線才爆。整合層出現與本 feature 無關之紅燈時，
+先跑 `git show HEAD:<設定檔>`／`git diff HEAD -- <斷言的每個輸入>` 三步舉證再回報，
+不要先懷疑自己、更不要自己改測試。
 
 ## Test Results Summary（環之逐檔對應）
 
@@ -96,7 +176,8 @@ F042/F043 之文件本身已預告此連帶效果（`function-matrix.ts` 就地�
 | BE-03 | `business-categories/business-category.controller.spec.ts` | AC-45／AC-46 | PASS |
 | BE-04 | `business-categories/business-category-dag.service.spec.ts` | AC-15～AC-19（＋決策 E2 之 `classifyEdge` spy） | PASS |
 | BE-05 | `business-categories/business-category-dag.controller.spec.ts` | AC-45／AC-46 | PASS |
-| BE-06 | `business-categories/business-category-docs.service.spec.ts` | AC-20～AC-31（§丙 核心差異） | PASS |
+| BE-06 | `business-categories/business-category-docs.service.spec.ts` | AC-21～AC-27／AC-29～AC-31（§丙 核心差異；AC-20／AC-28 已遷出至 BE-31） | PASS |
+| BE-31 | `business-categories/business-category-docs-candidates.service.spec.ts` | AC-20／AC-28 ＋ 2026-09-03 兩個實機缺陷（候選排除三半鑑別、`lifecycleCount` 全集 vs 當前頁） | PASS |
 | BE-07 | `business-categories/business-category-docs.controller.spec.ts` | AC-37／AC-45／AC-46 | PASS |
 | BE-08 | `business-categories/business-category-preview.controller.spec.ts` | AC-32～AC-37／AC-53 ①／AC-54 ① | PASS |
 | BE-09 | `business-categories/business-category-change-diff.controller.spec.ts` | AC-41／AC-54 ② | PASS |
@@ -278,6 +359,8 @@ F042/F043 之文件本身已預告此連帶效果（`function-matrix.ts` 就地�
    本輪僅驗證約束存在）、#3（`AUDIT_LOG` 兩新欄之**真實落值**——欄位存在已驗，
    但實際寫入一筆掛載稽核後回查該兩欄尚未做）、#5（前台可見性過濾在**真實瀏覽器**下之表現）。
    #1（MSSQL 多重 NULL 語意）已於本輪消除。
-4. ⚠ **既有 `TS-LCC-E-006` 仍紅**（見〈既有 int-test 過期〉）：非本 feature 造成，
-   但在有人更新該條期望值之前，`npm run test:int` 不會是 24/24。
-5. ⚠ **前端（`frontend/`）不在本 agent 範圍**，其紀錄見 [`F043-impl.md`](F043-impl.md)。
+4. ⚠ **前端（`frontend/`）不在本 agent 範圍**，其紀錄見 [`F043-impl.md`](F043-impl.md)。
+   ⚠ 2026-09-03 之候選排除修正另有**前端側去重**由另一位實作者處理；後端已不再回傳
+   已掛載於本節點之候選，但前端之 `[...mounted, ...candidates]` 合併若仍保留，
+   對「同一份文件掛在**其他**節點」之情境仍會顯示在候選區——那是預期且正確的（M:N），
+   **不要**因此把後端的排除範圍擴大到其他節點。
