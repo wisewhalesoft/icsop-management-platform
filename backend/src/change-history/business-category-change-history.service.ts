@@ -28,9 +28,16 @@ import {
 /**
  * F043 `AC-42` 匯出之**五欄**（沿用循環樹狀圖 tab 之欄位結構，第三個 tab 同構）。
  * 「業務/功能類別」之值為已解析之顯示名稱（含子分類），**非 `businessCategoryId`**。
+ *
+ * 🔴 型別為 `string`（**非** `string | null`）：本欄**恆有值**——類別已刪除時退化為
+ * `已刪除之類別（{id 前 8 碼}）`，見 `resolveCategoryDisplayName`。
+ * ⚠ F017 `AC-B9` 之「N=0 → 空儲存格」規則**不適用於本欄**：那條規範的是「本文件掛了幾個類別」
+ * （0 個是正常狀態），而本欄之語意是「**這筆事件屬於哪一個類別**」——每筆事件必然屬於某個類別，
+ * 唯一的失效模式是該類別已被刪除，不是「本無所屬」。以型別把這件事鎖住，避免日後有人比照
+ * 那條規則把本欄改回容許空白。
  */
 type BusinessCategoryExportRow = BusinessCategoryChangeLogRow & {
-  businessCategoryDisplayName: string | null;
+  businessCategoryDisplayName: string;
 };
 
 /**
@@ -41,13 +48,44 @@ type BusinessCategoryExportRow = BusinessCategoryChangeLogRow & {
  * 查無（類別已刪除）→ 退回 id，使該列仍可被辨識而非顯示空白。
  */
 /**
- * 🔴 `businessCategoryDisplayName` 為**必然有值之字串**——解析不到名稱時退回 `businessCategoryId`
- * （見 `withDisplayNames`），故此處**不可為 `null`**。
- * 與上方匯出列之 `string | null` 刻意不同：匯出容許空儲存格，清單不得出現空白欄。
+ * 🔴 `businessCategoryDisplayName` 為**必然有值之字串**——類別已刪除而解析不到名稱時，
+ * 退化為 `已刪除之類別（{id 前 8 碼}）`（見 `resolveCategoryDisplayName`），
+ * 故此處**不可為 `null`**、亦**不可為裸 id**。
  */
 export type BusinessCategoryChangeView = BusinessCategoryChangeLogRow & {
   businessCategoryDisplayName: string;
 };
+
+/**
+ * 類別顯示名稱之**單一解析點**（清單／明細／匯出三處共用）。
+ *
+ * 🔴 **2026-09-03 使用者實機第三個缺陷**：查無時原本退回**裸 `businessCategoryId`**，
+ * 於是第三個 tab 之清單出現一串 `F7E525D6-5DA7-F111-80A2-00155DC92813`。
+ * 動機（不留空白、該列仍可辨識）本身沒錯，但輸出違反本檔自己的規則——「清單頁之
+ * 『業務/功能類別』欄**不得顯示裸 id**」。
+ *
+ * 🔴 **正式環境可達**：`AC-12` 明文允許「清空掛載後刪除類別」，而
+ * `BUSINESS_CATEGORY_CHANGE_LOG` 為 **append-only** ⇒ 該類別之歷程列永遠留著、
+ * `findDisplayNamesByIds` 從此查無 ⇒ 那些列**永遠**顯示 UUID。
+ *
+ * 🟢 **使用者裁決之逐字格式**：`已刪除之類別（{id 前 8 碼}）`（例：`已刪除之類別（F7E525D6）`）
+ * ——保留可追溯性（前 8 碼足以在多個已刪類別間區分），但不讓使用者看到無意義的完整 UUID。
+ *
+ * 🔴🔴 **與循環側（F038）刻意不對齊，不得「順手統一」**：`LifecycleChangeHistoryService`
+ * 對已刪除循環之同型路徑**仍為**退回裸 id。使用者本輪**僅**裁決修本功能。日後若有人以
+ * 「兩者行為應一致」為由把循環側也改掉，那是**未經裁決之變更**，且會牴觸 `AC-49`
+ * （循環管理之全部既有 AC 逐條不變、零漣漪）。
+ *
+ * 🔒 **三處呼叫端共用本函式**，使清單／明細／CSV 不可能各自漂移出三種寫法。
+ */
+export function resolveCategoryDisplayName(
+  businessCategoryId: string,
+  nameMap: ReadonlyMap<string, string>,
+): string {
+  const found = nameMap.get(businessCategoryId);
+  if (found !== undefined) return found;
+  return `已刪除之類別（${businessCategoryId.slice(0, 8)}）`;
+}
 
 const BC_EXPORT_COLUMNS: CsvColumn<BusinessCategoryExportRow>[] = [
   { header: '業務/功能類別', value: (r) => r.businessCategoryDisplayName },
@@ -115,7 +153,9 @@ export class BusinessCategoryChangeHistoryService {
       : new Map<string, string>();
     const items: BusinessCategoryExportRow[] = sorted.map((r) => ({
       ...r,
-      businessCategoryDisplayName: nameMap.get(r.businessCategoryId) ?? r.businessCategoryId,
+      // 🔴 匯出側與清單側**共用同一支解析**——CSV 是存查檔，裸 UUID 一旦匯出就永久留在
+      // 使用者已下載的檔案裡，比畫面上錯更難補救。
+      businessCategoryDisplayName: resolveCategoryDisplayName(r.businessCategoryId, nameMap),
     }));
 
     const csv = toCsvBuffer(items, BC_EXPORT_COLUMNS);
@@ -182,7 +222,7 @@ export class BusinessCategoryChangeHistoryService {
         : new Map<string, string>();
     return rows.map((r) => ({
       ...r,
-      businessCategoryDisplayName: nameMap.get(r.businessCategoryId) ?? r.businessCategoryId,
+      businessCategoryDisplayName: resolveCategoryDisplayName(r.businessCategoryId, nameMap),
     }));
   }
 

@@ -217,3 +217,75 @@ describe('BusinessCategoryChangeHistoryService.exportChanges（F043 AC-42）', (
     await expect(over.svc.exportChanges({}, ACTOR)).rejects.not.toThrow('BUSINESS_CATEGORY_EXPORT_ROW_LIMIT_EXCEEDED');
   });
 });
+
+/**
+ * 🔴🔴 2026-09-03 真缺陷修正（AC-42 匯出側，與上方 `queryChanges` 之同一 `withDisplayNames` 缺陷）：
+ * CSV 第一欄「業務/功能類別」查無對應類別（已刪除）時，不得輸出裸 UUID，亦**不得**輸出空儲存格
+ * （本欄之語意是「這筆事件變更的是哪個類別」，每一列必有 `businessCategoryId`，唯一失效模式是
+ * 「該類別已被刪除」——不是「本無所屬」，故不適用 F017 AC-B9 之「N=0→空儲存格」規則，該規則
+ * 服務的是不同語意：文件掛載 0 個類別。此處是同一函式 `withDisplayNames` 之另一個消費點，理應
+ * 輸出與畫面清單**相同**之退化文字，非留白。）
+ *
+ * 🔴 本區塊之 `names` 替身**獨立於**檔案上方既有 `makeSvc` 之預設替身（後者對每個 id 皆保底回填
+ * `授信（消金）`，刻意讓既有測試不因本次修正而變動——本區塊自建一組「未映射即省略」之替身，
+ * 不共用、不修改既有 `makeSvc`，避免動到既有斷言）。
+ */
+describe('BusinessCategoryChangeHistoryService.exportChanges — 2026-09-03 已刪除類別之顯示名稱退化（AC-42 匯出側）', () => {
+  const EXISTING_ID = 'BC-CREDIT';
+  const DELETED_ID = 'F7E525D6-5DA7-F111-80A2-00155DC92813'; // 逐字取自使用者實機回報之案例
+
+  function makeSvcWithOmittingNames(rows: BusinessCategoryChangeLogRow[], displayNameMap: Record<string, string>) {
+    const store = {
+      listAll: () => Promise.resolve(rows),
+      listByBusinessCategory: () => Promise.resolve(rows),
+      append: () => Promise.resolve(),
+      findById: () => Promise.resolve(null),
+      findPredecessor: () => Promise.resolve(null),
+      countByFilters: () => Promise.resolve(rows.length),
+      listByFilters: (_f: unknown, take: number) => Promise.resolve(rows.slice(0, take)),
+    } as unknown as BusinessCategoryChangeLogStore;
+    const audit = new FakeAudit();
+    const names = {
+      // 🔴 未映射之 id 不進入回傳 Map（模擬真實查無，非以預設值填充）——與檔案上方既有 makeSvc
+      // 之替身刻意不同，見本區塊檔頭說明。
+      findDisplayNamesByIds: (ids: string[]) =>
+        Promise.resolve(
+          new Map(ids.filter((id) => id in displayNameMap).map((id) => [id, displayNameMap[id]])),
+        ),
+    };
+    const svc = new BusinessCategoryChangeHistoryService(store, audit as unknown as AuditWriterService, () => T0, names);
+    return { svc, audit };
+  }
+
+  it('🔴 正向半句：類別存在時，CSV 第一欄為 businessCategoryDisplayName', async () => {
+    const { svc } = makeSvcWithOmittingNames([bcRow({ businessCategoryId: EXISTING_ID })], {
+      [EXISTING_ID]: '授信（消金）',
+    });
+    const line = linesOf((await svc.exportChanges({}, ACTOR)).csv)[1];
+    expect(line.startsWith('授信（消金）,')).toBe(true);
+  });
+
+  it('🔴🔴 退化半句：類別已刪除時，CSV 第一欄逐字為「已刪除之類別（{id 前 8 碼}）」；不得為裸 id、不得為空儲存格', async () => {
+    const { svc } = makeSvcWithOmittingNames([bcRow({ businessCategoryId: DELETED_ID })], {});
+    const line = linesOf((await svc.exportChanges({}, ACTOR)).csv)[1];
+    const firstCell = line.split(',')[0];
+    expect(firstCell).toBe('已刪除之類別（F7E525D6）');
+    expect(firstCell).not.toBe(DELETED_ID);
+    expect(firstCell).not.toBe('');
+  });
+
+  it('🔴 鑑別力：同一次匯出含存在與已刪除兩類別各一列，兩者輸出相異——不得一律退化、亦不得一律不退化', async () => {
+    const { svc } = makeSvcWithOmittingNames(
+      [
+        bcRow({ id: 'r1', businessCategoryId: EXISTING_ID, occurredAt: new Date('2026-09-02T14:00:00Z') }),
+        bcRow({ id: 'r2', businessCategoryId: DELETED_ID, occurredAt: new Date('2026-09-02T13:00:00Z') }),
+      ],
+      { [EXISTING_ID]: '授信（消金）' },
+    );
+    const rows = linesOf((await svc.exportChanges({}, ACTOR)).csv).slice(1);
+    const firstCells = rows.map((l) => l.split(',')[0]);
+    expect(firstCells).toContain('授信（消金）');
+    expect(firstCells).toContain('已刪除之類別（F7E525D6）');
+    expect(firstCells[0]).not.toBe(firstCells[1]);
+  });
+});
