@@ -19,6 +19,7 @@ import { ChangeHistoryModule } from './change-history/change-history.module';
 import { OrgChangeAlertModule } from './org-change-alert/org-change-alert.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { OjtProgressModule } from './ojt-progress/ojt-progress.module';
+import { BusinessCategoriesModule } from './business-categories/business-categories.module';
 
 @Module({
   imports: [
@@ -48,6 +49,8 @@ import { OjtProgressModule } from './ojt-progress/ojt-progress.module';
     DashboardModule,
     // F042 OJT 進度管理（「文件 × 使用單位」多場次模型；獨立側選單項與端點群）。
     OjtProgressModule,
+    // F043 業務/功能類別管理（E12：與循環平行、獨立之第二套 DAG 分類骨架；M:N 掛載＋前台瀏覽）。
+    BusinessCategoriesModule,
   ],
   controllers: [AppController],
 })
