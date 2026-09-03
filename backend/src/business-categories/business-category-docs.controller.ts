@@ -70,7 +70,9 @@ export class BusinessCategoryDocsController {
   ) {
     const [drawer, candidates] = await Promise.all([
       this.svc.getDrawer(businessCategoryId, nodeId),
-      this.svc.listCandidates({
+      // 🔴 候選須知道「本節點」是誰才排除得掉已掛載者（2026-09-03 修正）——
+      // 少了這兩個參數，抽屜會列出一份點下去必然 409 的文件（`AC-24`）。
+      this.svc.listCandidates(businessCategoryId, nodeId, {
         keyword,
         page: toPositiveInt(page, 1),
         pageSize: toPositiveInt(pageSize, DEFAULT_CANDIDATE_PAGE_SIZE),
@@ -80,7 +82,15 @@ export class BusinessCategoryDocsController {
       node: { id: drawer.node.id, name: drawer.node.name },
       mounted: drawer.mounted,
       candidates: candidates.items,
+      /**
+       * 🔴 `candidateTotal`／`candidateLifecycleCount` 為**全集**之統計（已套關鍵字與排除、
+       * **未分頁**），`candidates` 才是當前頁——畫面上「候選＝全部 ICSOP 文件（共 N 份，
+       * 分屬 M 個相異循環）」那句必須用這兩個數字，**不得**改用 `candidates.length` 或自
+       * `candidates` 推導循環數（那正是 2026-09-03 顯示「共 22 份、分屬 1 個相異循環」而
+       * 真庫實為 591 份的成因）。
+       */
       candidateTotal: candidates.total,
+      candidateLifecycleCount: candidates.lifecycleCount,
     };
   }
 

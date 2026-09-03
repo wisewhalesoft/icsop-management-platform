@@ -1344,7 +1344,23 @@ export interface BusinessCategoryCandidateDoc {
 export interface BusinessCategoryNodeDrawerData {
   node: { id: string; name: string | null };
   mounted: BusinessCategoryMountedDoc[];
+  /**
+   * 🔴 **當前頁**之候選（後端 `listCandidates` 有 `.take(pageSize)`），**不是全量**。
+   * 全量統計一律讀 `candidateTotal`／`candidateLifecycleCount`。
+   */
   candidates: BusinessCategoryCandidateDoc[];
+  /**
+   * 🔴 候選集合（已套排除與關鍵字、**未分頁**）之總筆數，由後端計算。
+   *
+   * 🔴 2026-09-03 真實缺陷回歸鎖：畫面上「候選＝全部 ICSOP 文件（共 N 份，分屬 M 個相異循環）」
+   * 那句的兩個數字**必須**取自本欄與下一欄，**明文禁止**由 `candidates.length` 或
+   * `new Set(candidates.map(c => c.lifecycleId))` 推導——那會在真庫（591 份）上顯示「共 22 份、
+   * 分屬 **1** 個相異循環」，而那句話的用途恰恰是**證明候選不以循環過濾**（`AC-20`）：
+   * 算成 1 個循環，等於用一句反證的文案講出了正證。
+   */
+  candidateTotal: number;
+  /** 候選集合（同上，未分頁）之 `COUNT(DISTINCT lifecycleId)`，由後端計算。 */
+  candidateLifecycleCount: number;
 }
 
 /** F043 §丁 後台樹狀圖預覽（GET .../tree-preview；`AC-32`／`AC-33`）。 */

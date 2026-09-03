@@ -120,19 +120,38 @@ export class BusinessCategoryDocsService {
   }
 
   /**
-   * `AC-20`／`AC-28`：候選文件（全部 ICSOP 文件；關鍵字比對 `documentNumber` ∪ `documentName`）。
-   * 系統中尚無任何文件 → `total = 0`（空狀態由前端呈現，**非錯誤**）。
+   * `AC-20`／`AC-28`：候選文件（全部 ICSOP 文件；關鍵字比對 `documentNumber` ∪ `documentName`），
+   * **排除已掛載於本節點者**。系統中尚無任何文件 → `total = 0`（空狀態由前端呈現，**非錯誤**）。
+   *
+   * 🔴 **2026-09-03 使用者實機揪出之真缺陷**：候選原本不知道「本節點」是誰，於是已掛在本節點的
+   * 文件也會列為候選——點下去必然回 409 `BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED`（`AC-24`），
+   * 而前端把 `mounted` 與 `candidates` 視為互斥兩份清單直接串接，該文件因此在抽屜裡出現兩次。
+   * 兩側單元測試都看不到，因為各自的 fixture 把兩份清單造成互斥。
+   *
+   * 🔒 **排除範圍嚴格限於本節點**（`businessCategoryId` + `nodeId` 這一格）：掛在**同類別其他
+   * 節點**或**其他類別**之文件**仍是候選**——那是 M:N 的核心（`AC-21`／`AC-22`），也正是使用者
+   * 要的功能；誤殺即把模型悄悄改回單一歸屬。
+   * 🔒 **與循環維度正交**：`excludeDocumentIds` 是一組文件 id，`AC-20`「候選不以循環過濾」
+   * 完全不受影響——store 之查詢型別上仍然**不存在**任何循環相關鍵。
+   *
+   * 🔴 **`total`／`lifecycleCount` 為「全集」尺度、`items` 為「當前頁」尺度**（2026-09-03
+   * 第二個實機缺陷）：前端曾以**當前頁長度**冒充總數、以**當前頁**推導相異循環數，畫面因此顯示
+   * 「共 22 份，分屬 1 個相異循環」（真庫實為 591 份）。
+   * ⚠ 那句文案的用途是**反證候選未被循環過濾**，算成「1 個循環」反而變成了**正證**——
+   * 一個看起來像功能正常、實則說反話的數字。三者一律由 store 於**同一次查詢**取得。
    */
-  async listCandidates(query: {
-    keyword?: string;
-    page: number;
-    pageSize: number;
-  }): Promise<{ items: CandidateDocRef[]; total: number }> {
+  async listCandidates(
+    businessCategoryId: string,
+    nodeId: string,
+    query: { keyword?: string; page: number; pageSize: number },
+  ): Promise<{ items: CandidateDocRef[]; total: number; lifecycleCount: number }> {
+    const mountedHere = await this.store.listNodeMountedDocs(businessCategoryId, nodeId);
     // 🔴 逐鍵顯式重建，使「本服務未偷渡任何循環過濾條件」在呼叫參數上可被直接斷言。
     return this.store.listCandidateDocs({
       keyword: query.keyword?.trim() || undefined,
       page: query.page,
       pageSize: query.pageSize,
+      excludeDocumentIds: mountedHere.map((d) => d.id),
     });
   }
 

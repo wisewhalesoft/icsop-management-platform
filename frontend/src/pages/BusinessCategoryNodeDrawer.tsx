@@ -8,7 +8,11 @@ import {
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/useToast';
-import type { BusinessCategoryOtherMount } from '../api/types';
+import type {
+  BusinessCategoryCandidateDoc,
+  BusinessCategoryMountedDoc,
+  BusinessCategoryOtherMount,
+} from '../api/types';
 
 /**
  * F043 §丙 業務/功能類別節點抽屜。版面權威＝`prototypes/28-business-category-node-drawer.html`
@@ -37,8 +41,49 @@ interface DDoc {
   lifecycleName: string | null;
   /** 已掛在其他類別／節點之清單（純資訊，`AC-21`～`AC-23`）。 */
   otherMounts: BusinessCategoryOtherMount[];
-  /** 載入當下是否已掛於本節點（供送出時 diff）。 */
-  wasMounted: boolean;
+}
+
+/**
+ * 🔴 **後端之 `candidates` 依 `AC-20` 為「全部 ICSOP 文件」，因此會包含已掛於本節點者**
+ * ——去重責任在前端。合併規則：以 `id` 為鍵，`mounted` 先入，候選同 id 者**只補上**其純資訊欄位
+ * （循環別、另掛於），**不新增第二筆**。
+ *
+ * 🔴 這正是 2026-09-03 使用者實機揪到的缺陷：F009 單一歸屬模型下「候選必不含已掛載者」之前提
+ * 在 M:N 下**不成立**，天真的 `[...mounted, ...candidates]` 會讓同一份文件在抽屜出現兩次
+ * （「目前掛載文件 4 份」而畫布徽章寫 2），並讓 React 噴 `two children with the same key`。
+ * ⚠ 合併時**不得**讓候選那一份覆蓋掉掛載身分——身分由 `baseline` 集合單獨承載，見 `baseline`。
+ */
+export function mergeDrawerDocs(
+  mounted: BusinessCategoryMountedDoc[],
+  candidates: BusinessCategoryCandidateDoc[],
+): DDoc[] {
+  const byId = new Map<string, DDoc>();
+  for (const m of mounted) {
+    byId.set(m.id, {
+      id: m.id,
+      number: m.documentNumber,
+      name: m.documentName,
+      lifecycleName: null,
+      otherMounts: [],
+    });
+  }
+  for (const c of candidates) {
+    const existing = byId.get(c.id);
+    if (existing) {
+      // 已掛於本節點者：只補純資訊欄位（移除掛載後它會回到候選區，那時才需要這些欄位）。
+      existing.lifecycleName = c.lifecycleName;
+      existing.otherMounts = c.otherMounts ?? [];
+      continue;
+    }
+    byId.set(c.id, {
+      id: c.id,
+      number: c.documentNumber,
+      name: c.documentName,
+      lifecycleName: c.lifecycleName,
+      otherMounts: c.otherMounts ?? [],
+    });
+  }
+  return [...byId.values()];
 }
 
 /** `AC-21`～`AC-23`／§A.8.4 N13：純資訊標示之逐字組字點（多筆以全形頓號相接）。 */
@@ -68,9 +113,24 @@ export function BusinessCategoryNodeDrawer({
   const [originalName, setOriginalName] = useState('');
   const [kw, setKw] = useState('');
   const [docs, setDocs] = useState<DDoc[]>([]);
+  /**
+   * 🔴 **已持久化之掛載集合**（載入當下後端回傳之 `mounted`）——`pending` 與送出之 diff **一律以它為基準**。
+   * ⚠ 刻意獨立於 `docs`：把「是不是已掛載」寄生在合併後的清單上，就會像本次缺陷那樣被重複列污染
+   * （載入後未做任何互動卻顯示「待送出：新增掛載 2 筆」）。
+   */
+  const [baseline, setBaseline] = useState<Set<string>>(new Set());
   /** 草稿：目前（含未送出之變更）掛於本節點之文件 id 集合。 */
   const [draft, setDraft] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  /**
+   * 🔴 候選之**全量統計**與**當前頁載入筆數**——三者皆為載入當下之事實，各自獨立持有。
+   * `candidateTotal`／`candidateLifecycleCount` **一律取自後端**（見 `BusinessCategoryNodeDrawerData`
+   * 之註解：由前端推導會把 591 份講成 22 份、把 7 個循環講成 1 個）；`candidateLoaded` 則是
+   * 誠實揭露「這份清單是分頁的」所需之另一個數字。
+   */
+  const [candidateTotal, setCandidateTotal] = useState<number | null>(null);
+  const [candidateLifecycleCount, setCandidateLifecycleCount] = useState<number | null>(null);
+  const [candidateLoaded, setCandidateLoaded] = useState(0);
   const [entered, setEntered] = useState(false);
   useEffect(() => {
     setEntered(true);
@@ -85,24 +145,13 @@ export function BusinessCategoryNodeDrawer({
         if (!alive) return;
         setName(d.node.name ?? '');
         setOriginalName(d.node.name ?? '');
-        const mounted: DDoc[] = d.mounted.map((m) => ({
-          id: m.id,
-          number: m.documentNumber,
-          name: m.documentName,
-          lifecycleName: null,
-          otherMounts: [],
-          wasMounted: true,
-        }));
-        const cands: DDoc[] = d.candidates.map((c) => ({
-          id: c.id,
-          number: c.documentNumber,
-          name: c.documentName,
-          lifecycleName: c.lifecycleName,
-          otherMounts: c.otherMounts ?? [],
-          wasMounted: false,
-        }));
-        setDocs([...mounted, ...cands]);
-        setDraft(new Set(mounted.map((m) => m.id)));
+        const mountedIds = new Set((d.mounted ?? []).map((m) => m.id));
+        setDocs(mergeDrawerDocs(d.mounted ?? [], d.candidates ?? []));
+        setBaseline(mountedIds);
+        setDraft(new Set(mountedIds));
+        setCandidateTotal(d.candidateTotal ?? null);
+        setCandidateLifecycleCount(d.candidateLifecycleCount ?? null);
+        setCandidateLoaded((d.candidates ?? []).length);
       } catch (e) {
         if (alive) toast.error(e instanceof ApiError ? e.code : '載入失敗');
       }
@@ -163,17 +212,13 @@ export function BusinessCategoryNodeDrawer({
       .filter((d) => !q || d.number.toLowerCase().includes(q) || d.name.toLowerCase().includes(q));
   }, [docs, draft, kw]);
 
-  /** 候選之循環別涵蓋數——純資訊，用來讓「沒有以循環過濾」在畫面上看得出來（`AC-20`）。 */
-  const candidateCycleCount = useMemo(
-    () => new Set(docs.filter((d) => d.lifecycleName).map((d) => d.lifecycleName)).size,
-    [docs],
-  );
-
   const pending = useMemo(() => {
-    const added = docs.filter((d) => draft.has(d.id) && !d.wasMounted).length;
-    const removed = docs.filter((d) => !draft.has(d.id) && d.wasMounted).length;
+    let added = 0;
+    let removed = 0;
+    for (const id of draft) if (!baseline.has(id)) added += 1;
+    for (const id of baseline) if (!draft.has(id)) removed += 1;
     return { added, removed };
-  }, [docs, draft]);
+  }, [baseline, draft]);
 
   /**
    * `AC-30`：掛載／移除各自為**獨立之原子動作**——逐筆送出，各寫入一筆結構變更事件；
@@ -181,8 +226,8 @@ export function BusinessCategoryNodeDrawer({
    */
   const save = useCallback(async () => {
     if (!canWrite) return;
-    const toUnmount = docs.filter((d) => d.wasMounted && !draft.has(d.id));
-    const toMount = docs.filter((d) => !d.wasMounted && draft.has(d.id));
+    const toUnmount = docs.filter((d) => baseline.has(d.id) && !draft.has(d.id));
+    const toMount = docs.filter((d) => !baseline.has(d.id) && draft.has(d.id));
     setSaving(true);
     try {
       if (name.trim() !== originalName.trim()) {
@@ -196,7 +241,7 @@ export function BusinessCategoryNodeDrawer({
       toast.error(e instanceof ApiError ? e.code : '儲存失敗');
       setSaving(false);
     }
-  }, [canWrite, docs, draft, name, originalName, businessCategoryId, nodeId, onChanged, onClose, toast]);
+  }, [canWrite, docs, draft, baseline, name, originalName, businessCategoryId, nodeId, onChanged, onClose, toast]);
 
   return (
     <>
@@ -238,7 +283,11 @@ export function BusinessCategoryNodeDrawer({
               <span className="text-sm font-medium text-slate-700">目前掛載文件</span>
               <span className="text-xs text-slate-400">{mountedDocs.length} 份</span>
             </div>
-            <div className="space-y-2">
+            {/*
+              🔵 環之新契約（`BusinessCategoryNodeDrawer.test.tsx`）：容器掛鉤 ＋ 機器可讀列數。
+              🔒 兩者與可見之「{N} 份」為**同一個** `mountedDocs.length`，不得各自算一次。
+            */}
+            <div className="space-y-2" data-mounted-list="" data-mounted-count={mountedDocs.length}>
               {mountedDocs.length > 0 ? (
                 mountedDocs.map((d) => (
                   <div key={d.id} className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/50 px-3 py-2">
@@ -275,13 +324,30 @@ export function BusinessCategoryNodeDrawer({
           <div>
             <span className="text-sm font-medium text-slate-700 mb-1.5 block">候選文件</span>
             {/* 🔴 差異 ①：本段取代 `12` 的「僅顯示所屬循環＝…」提示——兩頁在此處刻意說相反的事。 */}
+            {/*
+              🔴 兩個數字一律取自後端之**全量**統計；🔒 **明文禁止**改回 `docs.length` 或
+              `new Set(docs.map(...))`——本句的用途是**證明候選不以循環過濾**（`AC-20`），
+              由當前頁推導只會看到 1 個循環，反而像是「候選被循環過濾了」（2026-09-03 真實缺陷）。
+              ⚠ 候選是**分頁**的，故另外揭露「目前已載入」——舊文案只寫「共 N 份」而 N 取自當前頁，
+              在真庫上是一句假話。
+            */}
             <div data-candidate-scope-note="" className="flex items-start gap-1.5 text-xs text-slate-400 mb-2">
               <Icon name="layers" className="w-3.5 h-3.5 mt-0.5" />
               <span>
-                候選＝<span className="text-slate-600">全部 ICSOP 文件</span>（共 {docs.length} 份，分屬{' '}
-                {candidateCycleCount} 個相異循環）。
-                <strong className="text-slate-500">不以循環過濾</strong>
+                候選＝<span className="text-slate-600">全部 ICSOP 文件</span>
+                {candidateTotal !== null && candidateLifecycleCount !== null && (
+                  <>
+                    （共 <span className="text-slate-600">{candidateTotal}</span> 份，分屬{' '}
+                    <span className="text-slate-600">{candidateLifecycleCount}</span> 個相異循環）
+                  </>
+                )}
+                。<strong className="text-slate-500">不以循環過濾</strong>
                 ，也不因該文件已掛在其他節點或其他業務/功能類別而排除——一份文件可同時歸屬多個業務/功能類別。
+                本清單<strong className="text-slate-500">分頁載入</strong>：目前已載入{' '}
+                <span className="text-slate-600" data-candidate-loaded={candidateLoaded}>
+                  {candidateLoaded}
+                </span>{' '}
+                份，請用上方搜尋縮小範圍。
               </span>
             </div>
             <div className="relative mb-2">

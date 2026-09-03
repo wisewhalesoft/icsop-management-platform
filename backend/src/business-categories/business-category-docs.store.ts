@@ -71,12 +71,31 @@ export interface BusinessCategoryDocsStore {
   /**
    * 🔴 `AC-20` 之落地：候選＝全部 ICSOP 文件（分頁＋關鍵字）。簽章**不接受** `lifecycleId`／
    * `businessCategoryId` 之類的過濾參數——這不是「傳了但沒用」，而是介面上根本不存在該參數。
+   *
+   * `excludeDocumentIds`（2026-09-03 additive）：SQL 層 `documentId NOT IN (...)`。
+   * 🔴 **與循環維度正交，不是 `AC-20` 的破口**：它承載的是「本節點目前已掛載之文件 id」，
+   * 由服務層自 `listNodeMountedDocs()` 算出——把已掛載於本節點者列為候選，等於提供一個
+   * **點下去必然回 409 `BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED`** 的動作（`AC-24`），
+   * 那是本 repo 反覆修過的死動作形狀。
+   * 🔒 **只排除「本節點」**：掛在**同類別其他節點**或**其他類別**之文件**仍須為候選**——
+   * 那正是 M:N 的核心（`AC-21`／`AC-22`），誤殺即把模型悄悄改回單一歸屬。
+   * 未提供或空陣列 → 不排除任何文件（行為與新增本鍵之前完全相同）。
+   *
+   * 回傳之三個欄位分屬**兩種尺度**，混用即為 2026-09-03 之第二個實機缺陷：
+   *  · `items` ＝**當前頁**（已套 `page`／`pageSize`）；
+   *  · `total` ＝**全集**筆數（已套 keyword／exclude，**未分頁**）；
+   *  · `lifecycleCount` ＝**全集**之 `COUNT(DISTINCT lifecycleId)`（同上，**未分頁**）。
+   * 🔴 `lifecycleCount` 純為**統計輸出**，用來支撐畫面上「候選＝全部 ICSOP 文件（共 N 份，
+   * 分屬 M 個相異循環）」那句**反證候選未被循環過濾**的文案。它出現在**輸出**、不在**輸入**——
+   * 本查詢型別依然**不接受**任何循環相關之過濾鍵（`AC-20` 不受影響）。
+   * ⚠ 日後若有人把「後端會回報循環數」誤讀為「可以依循環篩選」，那是對本欄的誤讀。
    */
   listCandidateDocs(query: {
     keyword?: string;
     page: number;
     pageSize: number;
-  }): Promise<{ items: CandidateDocRef[]; total: number }>;
+    excludeDocumentIds?: string[];
+  }): Promise<{ items: CandidateDocRef[]; total: number; lifecycleCount: number }>;
   /**
    * 掛載一筆。INV-B6 由 DB 唯一鍵 ＋ 服務層之應用層預檢**雙保險**；底層唯一鍵違反時本方法
    * 拋出驅動層原始錯誤，由服務層轉譯為 `BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED`。

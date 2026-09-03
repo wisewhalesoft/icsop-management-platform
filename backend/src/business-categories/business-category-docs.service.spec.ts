@@ -69,13 +69,25 @@ class FakeStore implements BusinessCategoryDocsStore {
     const n = this.nodes.get(nodeId);
     return Promise.resolve(n && n.businessCategoryId === businessCategoryId ? n : null);
   }
-  listCandidateDocs(query: { keyword?: string; page: number; pageSize: number }): Promise<{ items: CandidateDocRef[]; total: number }> {
+  /**
+   * 🔴 2026-09-03：`BusinessCategoryDocsStore.listCandidateDocs` 之回傳型別新增必填
+   * `lifecycleCount`（契約詳見 `business-category-docs-candidates.service.spec.ts`，該檔為候選
+   * 查詢之唯一鑑別力載體）。本檔已不透過 `svc.listCandidates` 呼叫此方法（AC-20／AC-28 兩區塊已
+   * 遷出），此處僅為滿足 `implements BusinessCategoryDocsStore` 之型別要求而補齊欄位，回傳值不具
+   * 鑑別力（不驗證候選查詢本身）——真正的斷言在遷出後之專責檔案。
+   */
+  listCandidateDocs(query: {
+    keyword?: string;
+    page: number;
+    pageSize: number;
+    excludeDocumentIds?: string[];
+  }): Promise<{ items: CandidateDocRef[]; total: number; lifecycleCount: number }> {
     this.candidateCalls.push(query as Record<string, unknown>);
     const kw = query.keyword?.trim();
     const items = kw
       ? this.docs.filter((d) => d.documentNumber.includes(kw) || d.documentName.includes(kw))
       : this.docs;
-    return Promise.resolve({ items, total: items.length });
+    return Promise.resolve({ items, total: items.length, lifecycleCount: 0 });
   }
   mount(nodeId: string, documentId: string, mountedByAccountId: string, mountedAt: Date): Promise<void> {
     if (this.mounted.some((m) => m.nodeId === nodeId && m.documentId === documentId)) {
@@ -119,42 +131,9 @@ describe('BusinessCategoryDocsService（F043 §丙 節點掛載）', () => {
     store.node('m1', 'bc2');
   });
 
-  describe('AC-20 §推 1：候選不以循環過濾（全部 ICSOP 文件）', () => {
-    it('🔴 listCandidateDocs 之型別簽章本身不接受 lifecycleId／lifecycleIds／cycle 等鍵（結構性保證）', () => {
-      // @ts-expect-error — listCandidateDocs 之查詢型別不含 lifecycleId，傳入即編譯期錯誤。
-      store.listCandidateDocs({ lifecycleId: 'lc1', page: 1, pageSize: 10 });
-    });
-
-    it('候選查詢之實際呼叫參數物件不含 lifecycleId／lifecycleIds／cycle 等鍵（服務層未偷渡過濾條件）', async () => {
-      store.doc('D1');
-      await svc.listCandidates({ page: 1, pageSize: 10 });
-      expect(store.candidateCalls).toHaveLength(1);
-      const call = store.candidateCalls[0];
-      expect(call).not.toHaveProperty('lifecycleId');
-      expect(call).not.toHaveProperty('lifecycleIds');
-      expect(call).not.toHaveProperty('cycle');
-    });
-
-    it('🔴 語料鑑別力：5 份文件分屬 3 個不同循環（其一為 inactive 循環）之候選查詢，5 份全部出現（未經 FakeStore 過濾，證明服務層不施加額外過濾）', async () => {
-      // 語料本身標註各文件之循環歸屬僅供追溯，FakeStore/listCandidateDocs 之型別上並無此欄可過濾——
-      // 這正是 AC-20 要求的結構：候選端點連「以哪個循環過濾」這件事都做不到。
-      store.doc('D1'); // lifecycleId=lc-A（active）
-      store.doc('D2'); // lifecycleId=lc-B（active）
-      store.doc('D3'); // lifecycleId=lc-C（inactive 循環）
-      store.doc('D4'); // lifecycleId=lc-A
-      store.doc('D5'); // lifecycleId=lc-B
-      const result = await svc.listCandidates({ page: 1, pageSize: 10 });
-      expect(result.total).toBe(5);
-      expect(result.items.map((d) => d.id).sort()).toEqual(['D1', 'D2', 'D3', 'D4', 'D5']);
-    });
-
-    it('已掛載於他處之文件仍出現於候選（不以「是否已掛載於他處」過濾）', async () => {
-      store.doc('D1');
-      store.mount_('n2', 'D1'); // 已掛在另一節點
-      const result = await svc.listCandidates({ page: 1, pageSize: 10 });
-      expect(result.items.map((d) => d.id)).toContain('D1');
-    });
-  });
+  // 🔴 2026-09-03：原「AC-20 §推 1：候選不以循環過濾」區塊已遷出至
+  // business-category-docs-candidates.service.spec.ts（與新增之「候選須排除本節點已掛載」修正
+  // 合併改版——listCandidates 之契約新增 businessCategoryId／nodeId 兩個必要參數，見該檔檔頭）。
 
   describe('AC-21 §推 2 之一：同類別多節點', () => {
     it('D1 已掛於 N1，於 N2 再掛 D1 → 掛載成功，兩筆皆存在，無警示', async () => {
@@ -236,18 +215,8 @@ describe('BusinessCategoryDocsService（F043 §丙 節點掛載）', () => {
     });
   });
 
-  describe('AC-28 候選清單之搜尋', () => {
-    it('依 documentNumber∪documentName 之 contains 過濾', async () => {
-      store.doc('ICSOP-A', 'ICSOP-A', '授信作業');
-      store.doc('ICSOP-B', 'ICSOP-B', '風管作業');
-      const r = await svc.listCandidates({ keyword: '授信', page: 1, pageSize: 10 });
-      expect(r.items.map((d) => d.id)).toEqual(['ICSOP-A']);
-    });
-
-    it('系統中尚無任何 ICSOP 文件 → total=0（空狀態由前端呈現，非錯誤）', async () => {
-      await expect(svc.listCandidates({ page: 1, pageSize: 10 })).resolves.toMatchObject({ total: 0, items: [] });
-    });
-  });
+  // 🔴 2026-09-03：原「AC-28 候選清單之搜尋」區塊已遷出至
+  // business-category-docs-candidates.service.spec.ts（理由同上）。
 
   describe('AC-29 抽屜之已掛載清單', () => {
     it('回節點名稱與該節點目前掛載之文件清單（含程序書編號／書名）', async () => {

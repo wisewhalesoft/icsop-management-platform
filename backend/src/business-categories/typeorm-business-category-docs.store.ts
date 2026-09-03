@@ -66,46 +66,124 @@ export class TypeOrmBusinessCategoryDocsStore implements BusinessCategoryDocsSto
     return this.getNodeWith(ds.manager, businessCategoryId, nodeId);
   }
 
-  /** `AC-20`／`AC-28`：候選＝**全部** ICSOP 文件（關鍵字比對編號 ∪ 書名；分頁）。 */
+  /**
+   * `AC-20`／`AC-28`：候選＝**全部** ICSOP 文件（關鍵字比對編號 ∪ 書名；分頁），
+   * 排除 `excludeDocumentIds`（＝本節點已掛載者，見服務層）。
+   *
+   * 🔴 **`total`／`lifecycleCount` 必須是「全集」之統計、不是「當前頁」的**（2026-09-03 缺陷）。
+   * 本方法以**單一往返**同時取回三者：`stats` CTE 對**過濾後、未分頁**之全集聚合，
+   * `paged` CTE 才套 `OFFSET/FETCH`，兩者以 `LEFT JOIN` 相接。
+   * ⚠ **為何不用 `COUNT(*) OVER ()` 之視窗函式**：視窗值只存在於**回傳的列**上，當該頁為空
+   * （0 筆結果、或頁碼超出末頁）時一列都沒有 ⇒ 統計值一併消失，只能謊報 0。
+   * `stats` 為無 `GROUP BY` 之聚合，**恆回一列**，`LEFT JOIN` 因此保證結果至少一列，
+   * 空頁時該列之 `id` 為 `NULL`（下方據此判定為無 item），統計值依然正確。
+   * ⚠ **也不用 `getManyAndCount()`**：它本身就是兩趟（SELECT ＋ COUNT），再加一趟 DISTINCT 就是三趟。
+   */
   async listCandidateDocs(query: {
     keyword?: string;
     page: number;
     pageSize: number;
-  }): Promise<{ items: CandidateDocRef[]; total: number }> {
+    excludeDocumentIds?: string[];
+  }): Promise<{ items: CandidateDocRef[]; total: number; lifecycleCount: number }> {
     const ds = await this.init();
-    const qb = ds
-      .getRepository(IcsopDocument)
-      .createQueryBuilder('d')
-      // ⚠ `d.lifecycleId` 只是**被讀出來當作純資訊回傳**（`AC-20`）——
-      // 🔴 底下**沒有、也不得有**任何以它為條件之 `where`。
-      .select(['d.id', 'd.documentNumber', 'd.documentName', 'd.lifecycleId'])
-      .orderBy('d.documentNumber', 'ASC');
+    const params: unknown[] = [];
+    const conditions: string[] = [];
+
     const kw = query.keyword?.trim();
     if (kw) {
-      qb.andWhere('(d.documentNumber LIKE :kw OR d.documentName LIKE :kw)', { kw: `%${kw}%` });
+      const at = params.length;
+      params.push(`%${kw}%`, `%${kw}%`);
+      conditions.push(`(d.[documentNumber] LIKE @${at} OR d.[documentName] LIKE @${at + 1})`);
     }
-    const [rows, total] = await qb
-      .skip((Math.max(query.page, 1) - 1) * query.pageSize)
-      .take(query.pageSize)
-      .getManyAndCount();
+
+    /**
+     * 🔴 排除「已掛載於本節點」者（`AC-24`：列為候選＝提供一個必然 409 的死動作）。
+     *
+     * ⚠ **關於 MSSQL 2100 參數上限**：切批（`chunkByParamBudget`）在此**幫不上忙**——
+     * 該上限是**每個 statement** 的，把一個 `NOT IN` 拆成多個 `AND` 相接之 `NOT IN` 仍在
+     * 同一個 statement、參數總量不變。真正的界限來自語意：本清單是「**單一節點**已掛載之
+     * 相異文件」，其上界為 `ICSOP_DOCUMENT` 之總筆數（今日 591），且 `(nodeId, documentId)`
+     * 有唯一鍵故無重複列 ⇒ 今日結構上不可能逼近 2100。
+     * 🔴 **若日後文件總數逼近 ~2000**，本處須改為以 `nodeId` 直接 `NOT EXISTS` 關聯
+     * `BUSINESS_CATEGORY_DOC`（參數量恆為 1，與掛載數無關）——但那需要把 `nodeId` 加入本方法
+     * 之簽章，屬契約變更，故本輪不做、於此明文標記觸發條件。
+     * 🔒 空陣列 → **完全不加任何條件**（`NOT IN ()` 在 SQL 中非法，語意上也不該排除任何東西）。
+     */
+    const excluded = [...new Set((query.excludeDocumentIds ?? []).filter(Boolean))];
+    if (excluded.length > 0) {
+      const placeholders = excluded.map((id) => {
+        params.push(id);
+        return `@${params.length - 1}`;
+      });
+      conditions.push(`d.[id] NOT IN (${placeholders.join(',')})`);
+    }
+
+    const offsetAt = params.length;
+    params.push((Math.max(query.page, 1) - 1) * query.pageSize, query.pageSize);
+    // ⚠ `d.[lifecycleId]` 於下方僅被 **SELECT 出來**（純資訊回傳）與**聚合成統計**；
+    // 🔴 `WHERE` 子句由上方 `conditions` 組成，其中**沒有、也不得有**任何以它為條件之項目（`AC-20`）。
+    const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const rows = await ds.query(
+      `WITH filtered AS (
+         SELECT d.[id], d.[documentNumber], d.[documentName], d.[lifecycleId]
+           FROM [ICSOP_DOCUMENT] d
+           ${whereSql}
+       ),
+       stats AS (
+         SELECT COUNT(*) AS [total], COUNT(DISTINCT [lifecycleId]) AS [lifecycleCount]
+           FROM filtered
+       ),
+       paged AS (
+         SELECT [id], [documentNumber], [documentName], [lifecycleId]
+           FROM filtered
+          ORDER BY [documentNumber] ASC
+          OFFSET @${offsetAt} ROWS FETCH NEXT @${offsetAt + 1} ROWS ONLY
+       )
+       SELECT s.[total], s.[lifecycleCount],
+              p.[id], p.[documentNumber], p.[documentName], p.[lifecycleId]
+         FROM stats s
+         LEFT JOIN paged p ON 1 = 1
+        ORDER BY p.[documentNumber] ASC`,
+      params,
+    );
+
+    type Raw = {
+      total: number | string;
+      lifecycleCount: number | string;
+      id: string | null;
+      documentNumber: string | null;
+      documentName: string | null;
+      lifecycleId: string | null;
+    };
+    const raw = (rows ?? []) as Raw[];
+    // `stats` 恆回一列 ⇒ `raw[0]` 必存在；空頁時其 `id` 為 null（下方 filter 濾掉）。
+    const total = Number(raw[0]?.total ?? 0);
+    const lifecycleCount = Number(raw[0]?.lifecycleCount ?? 0);
+    const page = raw.filter((r): r is Raw & { id: string } => r.id !== null);
 
     // 🔴 兩段**純資訊**富化（`AC-20`：不參與過濾，只是讓抽屜能顯示「這份文件目前在哪裡」）。
     // 兩者皆為**固定次數之批次查詢**（往返數與候選筆數無關），非 N+1。
-    const ids = rows.map((d) => d.id);
     const [lifecycleNames, otherMounts] = await Promise.all([
-      this.lifecycleNamesByDocument(ds, rows),
-      this.otherMountsByDocument(ds, ids),
+      this.lifecycleNamesByDocument(
+        ds,
+        page.map((r) => ({ id: r.id, lifecycleId: r.lifecycleId })),
+      ),
+      this.otherMountsByDocument(
+        ds,
+        page.map((r) => r.id),
+      ),
     ]);
     return {
-      items: rows.map((d) => ({
-        id: d.id,
-        documentNumber: d.documentNumber,
-        documentName: d.documentName,
-        lifecycleId: d.lifecycleId ?? null,
-        lifecycleName: lifecycleNames.get(d.id) ?? null,
-        otherMounts: otherMounts.get(d.id) ?? [],
+      items: page.map((r) => ({
+        id: r.id,
+        documentNumber: r.documentNumber ?? '',
+        documentName: r.documentName ?? '',
+        lifecycleId: r.lifecycleId ?? null,
+        lifecycleName: lifecycleNames.get(r.id) ?? null,
+        otherMounts: otherMounts.get(r.id) ?? [],
       })),
       total,
+      lifecycleCount,
     };
   }
 
