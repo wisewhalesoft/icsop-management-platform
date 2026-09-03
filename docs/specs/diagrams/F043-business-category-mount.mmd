@@ -1,0 +1,45 @@
+%% F043 業務/功能類別：節點掛載之判定流 ＋ 兩套掛載互不干涉（INV-B4）
+%% 對應 features/F043-business-function-category.md AC-20～AC-31（丙、節點掛載）
+%% 🔵 DRAFT / awaiting-human-review（2026-09-02）——未經人類閘門核准前不得據以實作。
+%% 🔴 本圖之重點是「哪些檢查刻意不存在」：候選不以循環過濾（推 1）、無「已掛載於他處」警示與改派（推 2）。
+flowchart TD
+    START(["ICSOP 管理員於類別節點抽屜選取一份文件並掛載"]) --> CAND
+
+    subgraph CAND_G["候選文件之來源（推翻 F009 第 1 條限制）"]
+        CAND["候選 = 全部 ICSOP 文件（ICSOP_DOCUMENT 全表）"]
+        NOFILTER["🔴 不施加 lifecycleId 過濾\n🔴 不施加「是否已掛載於他處」過濾\n⇒ 不存在 NODE_DOC_LIFECYCLE_MISMATCH 之對應碼"]
+        CAND --- NOFILTER
+    end
+
+    CAND --> DUP{"BUSINESS_CATEGORY_DOC 已存在\n同一筆 (nodeId, documentId)？\n（INV-B6）"}
+    DUP -->|"是"| E_DUP["409 BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED\n不產生第二筆列"]
+    DUP -->|"否"| SKIP
+
+    subgraph SKIP_G["刻意不存在之檢查（推翻 F009 第 2 條限制）"]
+        SKIP["🔴 不檢查『此文件是否已掛在本類別的其他節點』→ 允許（AC-21）\n🔴 不檢查『此文件是否已掛在其他類別』→ 允許（AC-22）\n🔴 不檢查 ICSOP_DOCUMENT.nodeId（循環節點）→ 允許（AC-23）\n⇒ 無警示、無二次確認、無改派語意\n⇒ 不存在 NODE_DOC_ALREADY_ASSIGNED 之對應碼"]
+    end
+
+    SKIP --> WRITE["寫入一列 BUSINESS_CATEGORY_DOC\n(nodeId, documentId, mountedByAccountId, mountedAt)"]
+    WRITE --> LOG["同一交易內：\n結構變更事件 changeType = DOCUMENT_MOUNTED ＋ 配對快照\n（AC-38；值域恰 7 值、不含 DOCUMENT_REASSIGNED）"]
+    LOG --> AUDIT["稽核一筆（操作者身分快照＋businessCategoryId／nodeId／documentId）"]
+
+    UNMOUNT(["移除掛載"]) --> FIND{"該筆 (nodeId, documentId) 存在？"}
+    FIND -->|"否"| E_MISS["404 BUSINESS_CATEGORY_MOUNT_NOT_FOUND\n🔴 刻意不採靜默 200：\n否則『移除成功』與『移除了不存在的東西』\n產生逐位元組相同之回應，無測試可區分"]
+    FIND -->|"是"| DEL["刪除該一列（只有那一列）"]
+    DEL --> LOG2["結構變更事件 changeType = DOCUMENT_UNMOUNTED ＋ 快照\n🔴 掛載與移除為兩個各自獨立之原子動作\n不得合併記為一次 REASSIGNED（AC-30）"]
+
+    subgraph INV["🔴 INV-B4：兩套掛載互不干涉（雙向鎖定，AC-27／AC-48）"]
+        L1["ICSOP_DOCUMENT.nodeId（循環單一歸屬，F009 唯一權威寫入路徑）"]
+        L2["BUSINESS_CATEGORY_DOC（類別 M:N 掛載，本功能唯一寫入路徑）"]
+        L1 -.->|"本功能一律不讀、不寫、不清空"| L2
+        L2 -.->|"F009 之任一操作亦不影響本表任一列"| L1
+    end
+
+    WRITE --> INV
+    DEL --> INV
+
+    DOCDEL(["ICSOP 文件被刪除"]) --> CASCADE["其全部 BUSINESS_CATEGORY_DOC 列一併移除、不留孤兒列（AC-26）\n🔴 文件刪除不受本功能之刪除保護限制\n（保護對象是「類別」，不是文件）"]
+
+    CATDEL(["刪除業務/功能類別"]) --> HASDOC{"該類別仍有任何掛載列？"}
+    HASDOC -->|"是"| E_HAS["409 BUSINESS_CATEGORY_HAS_DOCUMENTS\n語意＝需先解除全部掛載才能刪除\n（停用 inactive 不受此限，可隨時執行）"]
+    HASDOC -->|"否"| CATOK["刪除類別（含其節點與邊）＋記錄稽核"]

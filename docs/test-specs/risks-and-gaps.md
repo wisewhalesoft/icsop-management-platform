@@ -1312,3 +1312,50 @@ backend 實作完成、無異議後，team-lead 指出本端點已兩次只靠�
 | X-NOASSERT-4 | `AC-X5` 之去重鍵在「主要 fallback 為員編、次要解析出同一人姓名」時之行為 | AC 之去重規則為「同一**姓名**同時出現於主要與次要 → 去重」，未定義「員編 fallback 與姓名混用」時之比對鍵。本環只建 AC 明文之姓名層去重案。 |
 | X-NOASSERT-5 | `AC-X15` 之「**依序**呼叫五個既有私有方法」 | 私有方法無法直接斷言。本環以其**可觀察副作用**（store／resolver／attachment／link／ojt-reader 之呼叫次數在 1 筆與 50 筆之間**完全相同**，且 `store.list` 恰一次）編碼「沿用既有批次注入路徑、不得新增第二條富化路徑」之意圖；**呼叫順序本身未被鎖定**。 |
 | X-NOASSERT-6 | `AC-X14` 成功回饋之「其後可附筆數等資訊」 | AC 明文「該部分不逐字約束」⇒ 只以 `startsWith` 鎖起始片段。 |
+
+---
+
+## F043 業務/功能類別管理（2026-09-02，frontend／vitest 線） {#f043-frontend}
+
+> 權威：[F043](../specs/features/F043-business-function-category.md)（52 條主 AC）＋三份跨檔 delta
+> （[F017](../specs/features/F017-backend-document-list.md#business-category-column-delta)／
+> [F019](../specs/features/F019-public-list-browsing.md#business-category-browse-delta)／
+> [F025](../specs/features/F025-role-function-matrix.md#business-category-function-key-delta)）。
+> 本節僅記錄**前端線**之缺口；後端服務層／DB 約束／稽核寫入等由 backend 線另章記錄。
+> 對照表見 [F043-test.md（frontend 線）](features/F043-test.md)。
+
+### 甲. 🔴 待人類／spec-writer 覆核之狀態疑點（本環未自行改寫任何 AC）
+
+| # | 疑點 | 說明 |
+|---|---|---|
+| BC-STATE-1 | F043 主檔（及三份跨檔 delta）之狀態列仍為「🔵 DRAFT / awaiting-human-review」 | team-lead 指派本任務時之原文陳述「規格與 prototype 已於 2026-09-02 通過人類閘門核准」，但 `F043-business-function-category.md`／`F017`／`F019`／`F025` 三份 delta 之文件開頭狀態列與各節旗標（如 §給人類閘門的審查清單）於 test-generator 讀取當下仍顯示 DRAFT、「仍待人類裁決 10 項 `[ASSUMPTION]`＋6 題 `OQ-B`」。**本環仍依 team-lead 指示建置**（10 項 `[ASSUMPTION]` 與 6 題 `OQ-B` 皆已有明文預設值寫入各 AC 正文，非憑空臆造），但狀態列本身之落差請 lead 核實是否為文件尚未同步更新。 |
+
+### 乙. 規格未定、由本環自行決定並已於各測試檔頭逐字註記之契約（非缺口，供 tdd-implementation 對照）
+
+| # | 契約 | 決定與理由 |
+|---|---|---|
+| BC-CONTRACT-1 | 端點函式命名（`api/endpoints.ts`） | F043 之 Interface Contract 僅定 REST 路徑，未定前端 client 函式名。本環依既有 `getLifecycles`／`getDagGraph`／`getNodeDrawer`／`mountNodeDoc`／`getLifecycleTreePreview`／`downloadLifecycleTree`／`getLifecycleNodeSubtreeDocuments`／`getLifecycleTreeDiff`／`downloadLifecycleTreeDiff` 之既有命名風格逐一類比延伸（如 `getBusinessCategories`／`getBusinessCategoryGraph`／`getBusinessCategoryNodeDrawer`／`mountBusinessCategoryDoc`／`getBusinessCategoryTreePreview`／`downloadBusinessCategoryTree`／`getBusinessCategorySubtreeDocuments`／`getBusinessCategoryChangeDiff`／`downloadBusinessCategoryTreeDiff` 等）。若與 tdd-implementation 之自然設計不同，屬合法申訴，test-generator 會依 mailbox 覆核並視情況改測試（不得由實作端逕自改測試）。 |
+| BC-CONTRACT-2 | `mountBusinessCategoryDoc`／`unmountBusinessCategoryDoc` 之引數恰三個（無 `confirm` 旗標） | AC-21～AC-23 明文「無警示、無二次確認、無改派語意」，故本環刻意**不**比照循環側 `mountNodeDoc(lifecycleId, nodeId, docId, confirm)` 之四引數簽章，改為三引數。`BusinessCategoryNodeDrawer.test.tsx` 已對此下顯式斷言（`mock.calls[0]).toHaveLength(3)`），供實作端與本契約對齊。 |
+| BC-CONTRACT-3 | 側選單圖示鍵 `shapes` | `AC-43` 未規範 icon（僅鎖列名與位置）；`shapes` 取自 `docs/ui-ux-design-overview.md` §A.8.5⑬（ui-ux-designer 之設計裁量，非 AC 鎖定）。比照既有 OJT 進度管理列之 `graduation-cap` 同型處置（取自 prototype 逐字、非憑空臆造）。 |
+| BC-CONTRACT-4 | 類別池清單「說明」欄之顯示規則（`data-business-category-desc`） | `AC-01`～`AC-14` 未規範該欄（`10-lifecycle-list` 原無此欄，為 lead 指定之新增欄，見 §A.8.5⑥）。本環僅鎖掛鉤存在，不鎖截斷字數或 `title` 內容。 |
+| BC-CONTRACT-5 | `getBusinessCategoryNodeDrawer` 回應之候選文件形狀（`otherMounts`） | AC-21～AC-23 僅定行為（無警示、純資訊標示），未定 DTO 欄位形狀。本環設計 `otherMounts: {businessCategoryDisplayName, nodeName}[]` 承載「此文件另掛於：{類別}／{節點}」（N13 之逐字模板）所需資訊；若實作以其他形狀（如扁平化字串）呈現同一資訊，測試斷言之目標為**畫面文字**而非該欄位本身，衝突風險低。 |
+
+### 丙. 🔴 本輪環原理上測不到，留待整合層／瀏覽器煙霧（比照既有 F040/F041/F042 delta 之範圍決定）
+
+| # | 項目 | 為何測不到 | 建議兌現手段 |
+|---|---|---|---|
+| BC-GAP-1 | `AC-B9`／`AC-42`：CSV 位元組內容（表頭字面、全形頓號、UTF-16 碼位序、空儲存格規則） | CSV 由**伺服器端**產生（`POST /admin/documents/export`／變更歷程匯出端點皆為「以 id 集合換回 Blob」），前端不組字、不組表頭。此規則之逐字驗收權威落在 backend 線之匯出向量測試，非本環（frontend）職責。 | backend 線之 `*.spec.ts` 匯出向量測試（比照既有 F017 匯出 delta 之 `csv-export.spec.ts` 模式）。 |
+| BC-GAP-2 | `AC-15`／`AC-16`：DAG 連線之直角（elbow）視覺樣式與後端交易內防環之互動 | jsdom 不做版面計算，且既有 `DagCanvasPage.test.tsx` 對 `@xyflow/react` 採輕量 stub（不渲染真實 SVG path），故連線之 `d` 屬性與拖曳連線之互動流程本輪未覆蓋（比照循環側既有測試之同一限制，非本 delta 新增之缺口）。 | 瀏覽器煙霧測試（已於 §A.8.7／§A.10.5 之 prototype Playwright 一次性檢查涵蓋視覺對齊，但**非約束環之一部分**，見 ui-ux 檔頭警語）。 |
+| BC-GAP-3 | `AC-53`②：前台路由表中不存在 `/public/business-categories/**/download`／`**/print` | 路由表之「不存在」屬 router 設定檔（`App.tsx` 或等效路由宣告）之靜態組態，非元件層可觀察行為；讀取該檔案以斷言屬產品程式碼，牴觸盲性原則。本環僅斷言 DOM 層之負向半句（無下載/列印按鈕）。 | 部署前 smoke：直接 `curl` 前台候選路徑確認 404／405，或全站路由靜態掃描（若日後建 Playwright fidelity 層，可在該層驗證）。 |
+| BC-GAP-4 | `AC-24`（並發同節點重複掛載）／`AC-25`（移除只影響那一筆，逐欄比對）／`AC-31`（掛載寫入稽核） | 三者皆為服務層／資料層之精確行為（並發、逐欄比對、稽核落值），前端元件測試以 mock 端點驅動，無法證明後端「確實」逐欄未動或確實少一筆掛載列——這些不變式必須在 backend 線之服務層或 int 測試中驗證。 | backend 線覆蓋；前端僅驗證 UI 呼叫端「送出正確引數」（見 `BusinessCategoryNodeDrawer.test.tsx`）。 |
+| BC-GAP-5 | `AC-26`（文件硬刪除之連動）之 DB 層 FK CASCADE 結構斷言 | AC 本文已明文「兌現形式為 DB 層結構斷言，不得建成呼叫刪除端點之整合測試」——與前端無關，本環未建任何相關測試。 | backend 線（entity metadata／migration SQL 斷言）。 |
+| BC-GAP-6 | `AC-B22`（deny-by-default 在查詢層）／`AC-B26`（樹狀圖瀏覽不寫稽核） | 兩者皆為後端查詢下推與稽核寫入之行為，前端元件測試餵入之 fixture 已假設後端已正確過濾，無法反向證明「後端真的沒有先取全量」。 | backend 線（服務層／int 測試）。 |
+
+### 丁. 已明文不建案者（AC 明訂不可達或今日無載體，本環不臆造）
+
+| # | 項目 | 理由 |
+|---|---|---|
+| BC-NOASSERT-1 | `AC-B27`①「下拉選到空類別」寫法 | `AC-B18`② 使 0 節點類別永遠不出現於下拉；spec 本文明文禁止以此寫法建案例。本環僅以 deep link `?businessCategoryId=` 建此案，另補一案證明該分支確實不在下拉選項中（`PublicCategoryTreePage.test.tsx`）。 |
+| BC-NOASSERT-2 | `AC-16`（DAG 防環之連線拖曳觸發路徑） | 既有 `@xyflow/react` stub 不支援模擬拖曳連線互動（比照循環側 `DagCanvasPage.test.tsx` 之既有限制），故防環錯誤碼之**前端顯示**（toast／inline 錯誤）未建案；服務層防環邏輯本身由 backend 線覆蓋。 |
+| BC-NOASSERT-3 | `AC-B25`／`AC-33` 之浮水印精確色值／透明度 | `NFR-007` 之四種既有情境表未列入 F043（本輪之第五種情境），F020 D9 delta 之 `#7C7C7C`／`0.30` 數值僅明文適用於已列出之四處既有載體。本環僅約束**格式一致性**（身分列＋時間戳兩行、機密聲明置中恰一次）與**幾何**（旋轉正方形、涵蓋四角），不臆造色值數字；若人類日後裁定套用相同色值，屬新增 AC，非本環之缺口。 |
+

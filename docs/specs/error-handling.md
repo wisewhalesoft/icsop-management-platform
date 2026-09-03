@@ -1,9 +1,9 @@
 ---
 spec-id: error-handling
 title: 錯誤處理與失敗模式
-version: 1.9
-date: 2026-08-20
-status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落與 3 個 `LIFECYCLE_*` 錯誤碼為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.3 之 [#dept-restriction](#dept-restriction) 段落為 🟢 APPROVED 2026-08-11 人類閘門通過——OQ-E06-03 定案為 404 `DOCUMENT_NOT_FOUND`、OQ-E08-10 定案為不記錄拒絕稽核，均沿用既有錯誤碼、不新增**；**v1.4 新增 [#account-profile](#account-profile) 段落與 3 個 `ACCOUNT_*_INVALID` 錯誤碼，對應 F003 手動帳號基本資料 delta，2026-08-14 使用者直接裁定**；**v1.5 同日第二次裁決——公司別可跨公司選擇：`ACCOUNT_COMPANY_CODE_INVALID` 語意放寬為「非有效公司」、`ACCOUNT_USERNAME_EXISTS` 比對範圍擴為全域，均不新增錯誤碼**；**v1.6 新增 [#export](#export) 與 [#usage-form-number](#usage-form-number) 兩段落與 3 個錯誤碼（`EXPORT_ROW_LIMIT_EXCEEDED`／`USAGE_FORM_NUMBER_DUPLICATE`／`USAGE_FORM_NUMBER_TOO_LONG`），對應 2026-08-16 缺失／變更 delta 第 14／16／18 項，使用者裁定**；**v1.7 新增 [#aad-authority-host](#aad-authority-host) 段落，對應 F001 `AC-E1`～`AC-E15` Azure AD endpoint host 覆寫 delta（2026-08-18 遠端環境防火牆對 canonical host 注入偽造 RST 之修復）——**擴充 `AUTH_OIDC_EXCHANGE_FAILED` 之適用階段至 `/auth/login`，並定義一類啟動期 fail-fast；**不新增任何錯誤碼**）；**v1.8 將 [#export](#export) 之適用範圍由三處擴為四處——新增 [F024](features/F024-access-history-query.md#export-fix-delta) 文件調閱歷程匯出（2026-08-18 人類閘門裁決 `OQ-D18-26` 選項 (a)），並解除該節原「F024 不在範圍」之範圍紀律；本節既有規則逐字不變、不新增任何錯誤碼*；**v1.9 為 2026-08-20 使用者裁決（D9 delta，缺失／變更 9 項）之連帶更新——新增 [#d9-delta](#d9-delta) 一節，🔴 **不新增任何錯誤碼**（本輪全數複用既有碼）**）
+version: 2.0
+date: 2026-09-02
+status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落與 3 個 `LIFECYCLE_*` 錯誤碼為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.3 之 [#dept-restriction](#dept-restriction) 段落為 🟢 APPROVED 2026-08-11 人類閘門通過——OQ-E06-03 定案為 404 `DOCUMENT_NOT_FOUND`、OQ-E08-10 定案為不記錄拒絕稽核，均沿用既有錯誤碼、不新增**；**v1.4 新增 [#account-profile](#account-profile) 段落與 3 個 `ACCOUNT_*_INVALID` 錯誤碼，對應 F003 手動帳號基本資料 delta，2026-08-14 使用者直接裁定**；**v1.5 同日第二次裁決——公司別可跨公司選擇：`ACCOUNT_COMPANY_CODE_INVALID` 語意放寬為「非有效公司」、`ACCOUNT_USERNAME_EXISTS` 比對範圍擴為全域，均不新增錯誤碼**；**v1.6 新增 [#export](#export) 與 [#usage-form-number](#usage-form-number) 兩段落與 3 個錯誤碼（`EXPORT_ROW_LIMIT_EXCEEDED`／`USAGE_FORM_NUMBER_DUPLICATE`／`USAGE_FORM_NUMBER_TOO_LONG`），對應 2026-08-16 缺失／變更 delta 第 14／16／18 項，使用者裁定**；**v1.7 新增 [#aad-authority-host](#aad-authority-host) 段落，對應 F001 `AC-E1`～`AC-E15` Azure AD endpoint host 覆寫 delta（2026-08-18 遠端環境防火牆對 canonical host 注入偽造 RST 之修復）——**擴充 `AUTH_OIDC_EXCHANGE_FAILED` 之適用階段至 `/auth/login`，並定義一類啟動期 fail-fast；**不新增任何錯誤碼**）；**v1.8 將 [#export](#export) 之適用範圍由三處擴為四處——新增 [F024](features/F024-access-history-query.md#export-fix-delta) 文件調閱歷程匯出（2026-08-18 人類閘門裁決 `OQ-D18-26` 選項 (a)），並解除該節原「F024 不在範圍」之範圍紀律；本節既有規則逐字不變、不新增任何錯誤碼*；**v1.9 為 2026-08-20 使用者裁決（D9 delta，缺失／變更 9 項）之連帶更新——新增 [#d9-delta](#d9-delta) 一節，🔴 **不新增任何錯誤碼**（本輪全數複用既有碼）**；🟢 **v2.0（2026-09-02）APPROVED（2026-09-02 人類閘門通過）——新增 [#business-category](#business-category) 一節與 11 個 `BUSINESS_CATEGORY_*` 錯誤碼**（[F043](features/F043-business-function-category.md)／E12 業務/功能類別管理）。權限類、匯出類、檔案類、文件層一律沿用既有碼、零新增；[#export](#export) 之適用範圍由**五處**擴為**六處**（**該節既有規則與逐字文案一字不改**）。🔴 **本節與 [#node-assign](#node-assign) 之掛載語意刻意相反**（候選不過濾 ＋ M:N 多重歸屬），逐條對照見該節第四小節；**[#node-assign](#node-assign) 與 [#dag](#dag) 之既有條文一字未改**）
 ---
 
 # 錯誤處理（Error Handling）
@@ -53,6 +53,17 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 | `LIFECYCLE_CHANGE_LOG_NOT_FOUND` | 404 | 找不到指定之循環結構變更事件（重建新舊樹狀圖／下載時） | F038 |
 | `NODE_DOC_LIFECYCLE_MISMATCH` | 400 | 文件不屬於此循環 | F009 |
 | `NODE_DOC_ALREADY_ASSIGNED` | 409（需二次確認） | 文件已掛載於節點 {name}，是否改派？ | F009 |
+| `BUSINESS_CATEGORY_NAME_REQUIRED` 🔵 | 400 | 業務/功能類別名稱不可為空 | F043 |
+| `BUSINESS_CATEGORY_DUPLICATE` 🔵 | 409 | 此業務/功能類別名稱與子分類之組合已存在（`subcategory` 為 null 之「無子分類」亦視為一種具體組合） | F043 |
+| `BUSINESS_CATEGORY_SUBCATEGORY_CONFLICT` 🔵 | 409 | 同一業務/功能類別名稱不可同時存在「無子分類」與「有子分類」之設定（雙向皆適用）；請先處理既有該筆 | F043 |
+| `BUSINESS_CATEGORY_HAS_DOCUMENTS` 🔵 | 409 | 此業務/功能類別仍有程序書掛載，**需先解除全部掛載才能刪除**（可改為停用） | F043 |
+| `BUSINESS_CATEGORY_SELF_LOOP` 🔵 | 409 | 節點不可連向自己 | F043 |
+| `BUSINESS_CATEGORY_CYCLE_DETECTED` 🔵 | 409 | 此連線會造成業務/功能類別結構成環，請重新確認流程方向 | F043 |
+| `BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED` 🔵 | 409 | 此程序書已掛載於本節點（🔴 **語意＝同一節點之重複掛載，非「已掛載於他處」**——掛在別的節點或別的類別一律**允許且無警示**） | F043 |
+| `BUSINESS_CATEGORY_NOT_FOUND` 🔵 | 404 | 找不到指定之業務/功能類別 | F043 |
+| `BUSINESS_CATEGORY_NODE_NOT_FOUND` 🔵 | 404 | 找不到節點（或該節點不屬於此業務/功能類別） | F043 |
+| `BUSINESS_CATEGORY_MOUNT_NOT_FOUND` 🔵 | 404 | 找不到要移除的掛載關係（可能已由他人移除） | F043 |
+| `BUSINESS_CATEGORY_CHANGE_LOG_NOT_FOUND` 🔵 | 404 | 找不到指定之業務/功能類別結構變更事件（重建新舊樹狀圖／下載時） | F043 |
 | `DOCUMENT_REQUIRED_FIELD_MISSING` | 400 | 必填欄位未填寫 | F010 |
 | `DOCUMENT_NOT_FOUND` | 404 | 找不到文件 | F011, F016 |
 | `DOCUMENT_PDF_NOT_FOUND` | 404 | 前台檢視器 VIEW/DOWNLOAD/PRINT 或 `getOriginalPdf` 查無文件之原始 PDF | F020 |
@@ -198,6 +209,52 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 - **重複掛載**：目標文件已屬其他節點時回 `NODE_DOC_ALREADY_ASSIGNED`（附原節點名稱），須**二次確認**方可改派。
 - **改派原子性**：於同一交易內「解除原節點掛載 + 綁定新節點」，避免中間態；並發改派以樂觀鎖/序列化避免競爭（F009）。
 
+## 業務/功能類別（池唯一性／DAG 防環／M:N 掛載）🟢 **APPROVED（2026-09-02 人類閘門通過）** {#business-category}
+
+> 🔵 **本節全段為 DRAFT**（2026-09-02），未經人類閘門核准前不得實作。對應 [F043](features/F043-business-function-category.md)／E12。
+> **本節新增 11 個 `BUSINESS_CATEGORY_*` 錯誤碼；權限類（`PERMISSION_DENIED`）、匯出類（`EXPORT_ROW_LIMIT_EXCEEDED`／`VALIDATION_ERROR`）、文件層（`DOCUMENT_NOT_FOUND`）一律沿用既有碼、零新增。**
+
+### 一、池之唯一性（比照 [#lifecycle-subcategory](#lifecycle-subcategory)，規則逐條對等）
+
+- **輸入正規化（先於一切驗證）**：`name` 與 `subcategory` 一律 trim；`subcategory` 於 trim 後為空字串、純空白或未提供者，一律收斂為 `null`。🔴 **重用 [F040](features/F040-lifecycle-subcategory.md) 之既有 `normalizeSubcategory` 純函式，明文禁止複製第二份**（該函式與循環領域零耦合；兩份初始碰巧相同 ⇒ 漂移前兩份都會綠，[F043](features/F043-business-function-category.md) `AC-05`）。**空字串不得落地**（[data-model INV-B3](data-model.md#business-category-uniqueness)）。
+- **驗證順序（固定，先後不可調換）**：① `BUSINESS_CATEGORY_NAME_REQUIRED`（名稱 trim 後為空，400）→ ② `BUSINESS_CATEGORY_DUPLICATE`（INV-B1，409）→ ③ `BUSINESS_CATEGORY_SUBCATEGORY_CONFLICT`（INV-B2，409）。名稱為空時**不得**先回任何唯一性錯誤（[F043](features/F043-business-function-category.md) `AC-09`）。
+- **`BUSINESS_CATEGORY_DUPLICATE`（409）**：`(name, subcategory)` 組合已存在。`subcategory = null` 亦視為單一具體值參與比對。**比對範圍涵蓋全部列、不分 `status`**（停用之類別仍參與比對，沿用 [F040](features/F040-lifecycle-subcategory.md) `OQ-E03-10` 之既有裁決，**不重開此題**）；**編輯時排除自身列**。並發下以 DB 唯一索引（MSSQL 視多個 NULL 為相等，恰符本語意）＋應用層驗證雙保險。
+- **`BUSINESS_CATEGORY_SUBCATEGORY_CONFLICT`（409）**：違反 INV-B2——同一名稱之「無子分類」列與「有子分類」列將並存。**雙向皆適用**。訊息須提示「請先處理既有該筆」（更名、補子分類或刪除），**不得**自動更動既有列。
+- 🔴 **比對範圍嚴格限於 `BUSINESS_CATEGORY` 一張表**：與 [LIFECYCLE](data-model.md#lifecycle-entity) **同名不衝突**，**明文禁止**任何跨表名稱比對（[F043](features/F043-business-function-category.md) `AC-04`）。
+- 🔴 **本節刻意**不**存在 `BUSINESS_CATEGORY_SUBCATEGORY_REQUIRED`**（與 [#lifecycle-subcategory](#lifecycle-subcategory) 之 `LIFECYCLE_SUBCATEGORY_REQUIRED` 之刻意不對稱，理由不得省略）：該碼服務的是「文件建立／編輯時必須**選到**一個具體循環」之路徑；本功能之掛載方向相反（**由類別節點挑文件**，文件端從不選類別），**沒有任何「只選到名稱層」之可達請求形狀** ⇒ 新增該碼會產生一段不可達程式碼與一條恆真之 AC（[F043](features/F043-business-function-category.md) `AC-10`）。[F017](features/F017-backend-document-list.md#business-category-column-delta) 之第 14 項篩選其選項值為 `businessCategoryId`（非名稱字串），故篩選端亦無此形狀。
+- **顯示一致性**：錯誤訊息、清單、下拉、標題與快照中之類別名稱一律使用 `businessCategoryDisplayName`（有子分類 → `名稱（子分類）`，全形括號無空白；無 → `名稱`）。
+
+### 二、刪除保護與停用（比照 [#dag](#dag) 之循環刪除保護）
+
+- **`BUSINESS_CATEGORY_HAS_DOCUMENTS`（409）**：仍有 [BUSINESS_CATEGORY_DOC](data-model.md#business-category-doc) 掛載列之類別不可刪除，語意＝**需先解除全部掛載才能刪除**（**非**「永不可刪」）；清空後即可刪除（含其節點／邊）。**停用（`inactive`）不受此限制**，可隨時執行。
+- **刪除節點**：連動移除其相關邊**與其全部掛載列**；若該節點已掛載 N 份文件，須先提示「刪除後將一併移除 {N} 筆掛載關係」並要求二次確認（[F043](features/F043-business-function-category.md) `AC-18`）。
+- **文件被刪除**：其全部掛載列一併移除、**不留孤兒列**；🔴 **文件刪除不受本節之刪除保護限制**——保護對象是**類別**，不是文件。
+
+### 三、DAG 防環
+
+- **`BUSINESS_CATEGORY_SELF_LOOP`（409）** 與 **`BUSINESS_CATEGORY_CYCLE_DETECTED`（409）** 皆於**後端交易內權威驗證**，即使前端已預覽亦以後端為準。
+- 🔴 **刻意不沿用 `DAG_SELF_LOOP`／`DAG_CYCLE_DETECTED`（理由不得省略）**：該兩碼於 [#dag](#dag) 之出處為 `F008`，且其使用者訊息含「此連線會造成**循環結構**成環」——「循環」在本系統是 `LIFECYCLE` 已佔用之**專有名詞**。沿用會使業務/功能類別畫布上的錯誤訊息宣稱使用者破壞了「循環結構」，指向一個他根本沒在編輯的東西。<br>📌 **共用的是演算法、不是錯誤碼**：可達性搜尋之純函式可與循環側共用（落點由 system-architect 定），但拋出的碼必須各自為政。
+
+### 四、M:N 掛載（🔴 本節與 [#node-assign](#node-assign) 之語意**刻意相反**，逐條對照）
+
+| [#node-assign](#node-assign)（循環，F009） | 本節（業務/功能類別，F043） | 理由 |
+|---|---|---|
+| **候選過濾**：後端以 `lifecycleId` 過濾，非同循環文件不出現 | 🔴 **候選＝全部 ICSOP 文件，不施加任何循環條件**；**不存在** `NODE_DOC_LIFECYCLE_MISMATCH` 之對應碼（該情境在本功能中**不存在**） | 使用者原文「文件(**不再需要限制循環**)可掛載於節點」——業務/功能類別是與循環**正交**之第二套分類軸 |
+| **重複掛載**：目標文件已屬其他節點 → `NODE_DOC_ALREADY_ASSIGNED` ＋ **二次確認** ＋ 交易內**改派** | 🔴 **無此語意**：掛在別的節點／別的類別／已有 `ICSOP_DOCUMENT.nodeId` 者，**一律允許、無警示、無二次確認、無改派**；**不存在** `NODE_DOC_ALREADY_ASSIGNED` 之對應碼 | 使用者原文「移除**一份文件只能掛在單一節點**的限制」——單一歸屬是「循環＝流程位置」之正確模型，類別是**標籤式歸類**，多重歸屬即需求本身 |
+| — | **`BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED`（409）**：🔴 **僅在「同一節點重複掛同一份文件」時觸發**（違反 INV-B6）。**不產生第二筆列**；並發下以 DB 唯一鍵＋應用層驗證雙保險，恰一筆成功、另一筆回本碼 | 防重複列，**不是**防多重歸屬 |
+| **改派原子性**：同一交易內「解除原節點＋綁定新節點」 | 🔴 **掛載與移除為兩個各自獨立之原子動作**；結構變更歷程之 `changeType` 值域**恰 7 值、不含 `DOCUMENT_REASSIGNED`** | 把「移除 A ＋ 新增 B」記成一次改派，會憑空捏造兩者間並不存在的因果關係，使歷程重建產生錯誤的中間態（[F043](features/F043-business-function-category.md) `AC-30`／`AC-39`） |
+
+- **`BUSINESS_CATEGORY_MOUNT_NOT_FOUND`（404）**：移除一筆不存在之掛載（重送、或他人已移除）。<br>🔴 **刻意不採靜默 200**（理由不得省略）：靜默會使「移除成功」與「移除了不存在的東西」產生**逐位元組相同**之回應——無測試可區分、無定位資訊。此為本 repo 反覆付出代價之**靜默失敗**形狀（同 [#export](#export) 之畸形 body 裁決）。
+- 🔴 **INV-B4（兩套掛載互不干涉）之錯誤面**：本節之任一操作**一律不寫** `ICSOP_DOCUMENT.nodeId`／`lifecycleId`；因此**不可能**因本節之操作而觸發 [#node-assign](#node-assign) 或 [#document](#document) 之任一錯誤碼。反之亦然。
+
+### 五、權限、匯出與稽核（🔒 零新增碼）
+
+- **權限**：功能鍵 `業務/功能類別管理`（[F025](features/F025-role-function-matrix.md#business-category-function-key-delta) 第 15 列＝`唯讀`｜`CRUD`｜`唯讀`｜`無`｜`無`）。無權者回 **403 `PERMISSION_DENIED`**（路由層，既有碼）。<br>🔴 **前台不受本功能列限制**：`/public/business-categories/*` 之閘門為「前台瀏覽」列（5 種角色皆為「可」）——部門窗口與一般使用者呼叫**前台**端點得 200、呼叫**後台**端點得 403（[F043](features/F043-business-function-category.md) `AC-47` 之成對斷言）。**兩者是不同維度，不得混為一談。**
+- **前台可見性**：樹狀圖模式之文件過濾**於查詢層施加**（比照 [#dept-restriction](#dept-restriction)／[F041](features/F041-user-subtype-business-scope.md)），文件層之拒絕仍為 **404 `DOCUMENT_NOT_FOUND`**（既有碼，隱藏存在性）。🔴 節點掛載數為**過濾後**之數字——顯示未過濾之總數等於揭露「存在幾份你看不到的文件」，與該既有裁決直接牴觸（[F019](features/F019-public-list-browsing.md#business-category-browse-delta) `AC-B21`）。
+- **`mode` 參數不可辨識不是錯誤**：前台瀏覽模式之 query 值不在值域內時**靜默回退為預設之樹狀圖模式**，不回錯誤碼、不呈現空白畫面（[F019](features/F019-public-list-browsing.md#business-category-browse-delta) `AC-B14`）。
+- **匯出**：結構變更歷程 tab 之 CSV 匯出**全數向 [#export](#export) 之共用規則對齊**——該節之適用範圍自本 delta 起由**五處**擴為**六處**（第六處＝[F043](features/F043-business-function-category.md) `AC-42`）。🔒 **既有五處之規則、逐字文案與錯誤碼一字不改**；本處**不新增任何錯誤碼**（沿用 `EXPORT_ROW_LIMIT_EXCEEDED`／`VALIDATION_ERROR`／`PERMISSION_DENIED`）。
+- **稽核寫入失敗不阻斷**：檢視／下載／列印之稽核寫入暫時異常時不阻擋操作，失敗進補償佇列重試補寫（比照 [#audit](#audit)）。**未授權之下載／列印則不產檔、不燒錄、不記稽核**（操作即被拒，非稽核失敗情境）。⚠ **稽核之 `actionType`／`targetType` 具體值待 system-architect 裁定**（[F043 §待 system-architect](features/F043-business-function-category.md#for-architect) 第 3 項）。
+
 ## 文件 CRUD 與唯一性 {#document}
 
 - **必填缺漏**：`DOCUMENT_REQUIRED_FIELD_MISSING`（建立時 4 項核心必填：所屬循環／循環別、文件狀態、文件編號、文件名稱），不產生記錄。
@@ -248,6 +305,8 @@ status: Draft（v1.2 之 [#lifecycle-subcategory](#lifecycle-subcategory) 段落
 > 對應 2026-08-16 使用者裁決之三處匯出：[F039 附錄池](features/F039-appendix-management.md#export-delta)（缺失 delta 第 14 項）、[F037 ICSOP 程序書變更歷程](features/F037-document-change-history.md#export-delta) 與 [F038 循環樹狀圖變更歷程](features/F038-lifecycle-tree-change-history.md#export-delta)（第 16 項）。三處**共用同一組規則與同一錯誤碼**，不得各自為政。
 > 🟢 **v1.8（2026-08-18 人類閘門裁決，`OQ-D18-26` 採選項 (a)）：本節之適用範圍擴為四處——新增 [F024 文件調閱歷程](features/F024-access-history-query.md#export-fix-delta)（`AC-F1`～`AC-F19`）。** 下方原「⚠ 範圍紀律：F024 不在本次範圍」之排除語句**已失效**（見該項之更新註記）。**本次不新增任何錯誤碼、不改動本節任何既有規則**——F024 向既有共用規則對齊，而非反過來。<br>⚠ **F024 有兩處刻意偏離「CSV 值＝畫面所見逐字」之不變式，均經人類認可、已於其 AC 明文載明「刻意不同、非疏漏」**：① 「操作類型」欄畫面為複合格式 `VIEW · 檢視`、CSV **只出中文標籤**（遵守本節之值層通則，通則優先於逐字比照畫面，`AC-F5` ②）；② 畫面顯示 `—` 之空值欄，CSV 輸出**空儲存格**（`—` 為視覺佔位符而非資料，`AC-F15` ③）。
 > 🔵 **v1.9（2026-08-31 使用者裁決）：本節之適用範圍再擴為五處——新增 [F017 後台文件清單](features/F017-backend-document-list.md#export-delta)（`AC-X1`～`AC-X17`）。** 使用者原文「ICSOP 文件管理：比照使用表單管理/附錄管理，新增匯出功能。」**本次不新增任何錯誤碼、不改動本節任何既有規則**——F017 向既有共用規則對齊，而非反過來；**既有四處之規則、逐字文案與錯誤碼一字不改**。乙案之請求 body 雖帶入外部可構造之結構化輸入，其驗證失敗**沿用既有 `VALIDATION_ERROR`**（見下方「匯出請求 body 之驗證」條目）。<br>📝 **本段曾於同日短暫改為「恰新增一個錯誤碼 `EXPORT_IDS_INVALID`」，已由 lead 撤回並復原**（逐字保留供追溯）——撤回理由＝該新增碼與 [F017](features/F017-backend-document-list.md#export-delta) `AC-X16` ⑨「不新增任何錯誤碼」相衝，而 `VALIDATION_ERROR` 既有且語意吻合，**無需為此開例外**。<br>📝 **就地更正一處計數**：上方 2026-08-16 之引言仍寫「三處」，而 v1.8 已將 F024 納入為第四處 ⇒ **本次新增者為第五處**（原引言之「三處」為當時之事實，逐字保留供追溯、不改寫）。<br>⚠ **F017 有一處刻意偏離「CSV 值＝畫面所見逐字」之不變式，已於其 AC 明文載明「刻意不同、非疏漏」**：畫面之「當責室長 +N」徽章（次要室長姓名僅在 tooltip）於 CSV **展開為主要∪次要之完整清單**，理由＝匯出為存查用途（[F017](features/F017-backend-document-list.md#export-delta) `AC-X1` ⑤ (b)／`AC-X5`）。<br>⚠ **另有一處與 [F039](features/F039-appendix-management.md#export-delta) `AC-D13` ③ 之刻意差異**：F017 之 `公告日期` 欄維持 **`YYYY-MM-DD`（不附時分秒）**——該欄為**日期欄**而非時間戳欄（粒度即為日），畫面本身亦只呈現日期，補上 `00:00:00` 等於憑空捏造精確度；本節「時間戳欄一律 `YYYY-MM-DD HH:mm:ss`」之通則**對本欄不適用、亦未被修改**（[F017](features/F017-backend-document-list.md#export-delta) `AC-X8`）。<br>🔴 **F017 為本節五處中唯一之「客端篩選」頁**——其 13 項篩選全部在瀏覽器端施加、前後端之篩選語言不同構（顯示名稱 vs id／代碼）、其中兩項（`公告日期` 區間、`程序書書名內` contains）後端根本無對應參數、另三項（`連結點程序書`／`附錄`／`使用表單`）於前端是「先取 id 集合再交集」。⇒ **本節「匯出範圍＝符合當前篩選／查詢條件之全部結果、列序與畫面當前排序一致」之語意逐字不變且仍為 F017 之唯一約束**，惟**該範圍以何種請求形狀攜帶屬架構裁決、不入本節**（✅ `OQ-X-01` 已於 2026-08-31 定案＝**`POST /admin/documents/export`，body 恰兩鍵（文件 id 清單 ＋ 選填之連結點命中值），後端完全不重跑任何篩選與排序**；權威＝architecture-spec §13。四項查證事實見 [F017](features/F017-backend-document-list.md#export-delta) `AC-X11`）。<br>⚠ **本節之「上限檢查」對 F017 之落點與其餘四處不同、語意相同**：其餘四處於**篩選後**檢查 `rows.length`，F017 於**後端、id 清單長度、任何 DB 查詢之前**檢查（在該形狀下該長度**即是**符合條件之筆數）。🔒 **不得有第二處檢查；前端得顯示事前提示，但不得因此擋下請求或 `disabled` 匯出鈕**——提示與檢查一旦合流，後端之錯誤路徑就再也跑不到（[F017](features/F017-backend-document-list.md#export-delta) `AC-X12`）。<br>⚠ **其餘四處之「帶入與清單查詢相同之篩選參數」句式（如 [F018](features/F018-usage-form-management.md#name-and-export-column-delta) `AC-X7`）不得逐字套用於 F017**——那四頁之篩選由後端施加，F017 不是；照抄會產生端到端不可達之規格。<br>🔴 **F017 之可匯出角色集合與其餘四處不同**：其功能列（`ICSOP 文件管理`）對 **SysAdmin／Supervisor／DeptContact 皆為唯讀** ⇒ 四種角色（含 ICSOPAdmin）皆可匯出，僅 **User** 回 403；此為 [F025](features/F025-role-function-matrix.md) 矩陣既有列值之結果，**非本節之權限規則有變**（本節「唯讀角色允許匯出」逐字不變）。
+
+> 🟢 **v2.0（2026-09-02，APPROVED——人類閘門通過）：本節之適用範圍再擴為六處——新增 [F043](features/F043-business-function-category.md) 業務/功能類別**結構變更歷程** tab 之匯出（`AC-42`）。** **本次不新增任何錯誤碼、不改動本節任何既有規則**——F043 向既有共用規則對齊，而非反過來；**既有五處之規則、逐字文案與錯誤碼一字不改**。<br>📌 **本處與 [F038](features/F038-lifecycle-tree-change-history.md#export-delta) 同型**（同為「結構變更事件清單」之匯出）⇒ 其列舉欄之中文標籤對照表沿用本節值層通則之既有處置（**兩份逐字相同**，非另建第三種模式）；⚠ **`changeType` 值域刻意少一個 `DOCUMENT_REASSIGNED`**（M:N 模型下無改派語意，[F043](features/F043-business-function-category.md) `AC-39`）——**照抄 F038 之七值＋改派共八值對照表即為缺陷**。<br>📝 **就地更正計數**：上方 2026-08-16 之引言仍寫「三處」、v1.9 寫「第五處」，皆為當時之事實，**逐字保留供追溯、不改寫**。
 
 - **`EXPORT_ROW_LIMIT_EXCEEDED`（400）**：符合當前篩選／查詢條件之筆數 **> 10,000** 時回本碼，訊息含上限值並提示縮小條件，**不產生任何檔案、不回傳部分結果**。**恰 10,000 筆通過**（邊界值含）。
   - **🔴 使用者可見呈現載體（2026-08-16 補訂）**：本碼之拒絕**必須以使用者可見之錯誤回饋呈現**（toast 或等效之 alert 區塊，`role="alert"` 或等效可存取角色）。其**逐字訊息由各 feature 定義**（[F037](features/F037-document-change-history.md#export-delta) `AC-D10`／[F038](features/F038-lifecycle-tree-change-history.md#export-delta) `AC-D6`／[F039](features/F039-appendix-management.md#export-delta) `AC-D12`／**[F024](features/F024-access-history-query.md#export-fix-delta) `AC-F9` ②（2026-08-18 新增）**／**[F017](features/F017-backend-document-list.md#export-delta) `AC-X14`（2026-08-31 新增）**）。

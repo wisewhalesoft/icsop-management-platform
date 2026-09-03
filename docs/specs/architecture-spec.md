@@ -1,9 +1,9 @@
 ---
 type: architecture-spec
-version: 1.11
-status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；**v1.7 新增之 §10.17 決策 A15（AAD authority host 覆寫，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）已實作並併入 main（commit `3448679`）；`AC-E4`（遠端端到端登入成功）已於 2026-08-18 由真人於遠端環境（DTTHFC01）實測兌現，證據見 §10 changelog v1.7a 與 §10.17（`OLD>` v1.7 原登錄：「唯 `AC-E4`（遠端端到端登入成功）尚待真人於遠端環境驗證，如實登錄為未兌現項」）**；**v1.8 新增之 §10.18 決策 A16（F024 匯出稽核與訊息共用之四項裁決，對應 [F024](features/F024-access-history-query.md#export-fix-delta) `AC-F13`／`AC-F5`／`AC-F9`／`AC-F7`～`AC-F8` 之提報事項 A1～A4）為 draft，待 tdd-implementation 落地**；**v1.10 新增之第 12 章「2026-08-21 三項裁決架構決策」為 draft，待 spec-writer 覆核 `AC-T14` 措辭範圍界定（§12.6）與 lead 核准舊端點退休（§12.2／§12.6）後方可交 tdd-implementation**；**v1.11 新增之第 13 章「2026-08-31 F017 清單匯出（CSV）架構決策」為 draft，待 spec-writer 覆核 `AC-X7` 之「今日」基準措辭（§13.7 ①，有 8 小時偏移之誤讀風險）後方可交 tdd-implementation；`main.ts` body-parser 已依 lead 2026-08-31 之退回**改裁為路由範圍**（§13.2 ⑦，無全域變更）、body 鍵名定案為 `documentIds`；本章已與 `AC-X1`～`AC-X16` 逐條對帳，初稿三處相衝者已依 AC 就地改正；畸形 body 之處置已依 lead 第三輪裁決改用**既有**碼 `VALIDATION_ERROR`（零新增碼，`AC-X16` ⑨ 不動）**；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
-last_updated: 2026-08-31
-covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038, F039, F040, F041]
+version: 1.12
+status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；**v1.7 新增之 §10.17 決策 A15（AAD authority host 覆寫，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）已實作並併入 main（commit `3448679`）；`AC-E4`（遠端端到端登入成功）已於 2026-08-18 由真人於遠端環境（DTTHFC01）實測兌現，證據見 §10 changelog v1.7a 與 §10.17（`OLD>` v1.7 原登錄：「唯 `AC-E4`（遠端端到端登入成功）尚待真人於遠端環境驗證，如實登錄為未兌現項」）**；**v1.8 新增之 §10.18 決策 A16（F024 匯出稽核與訊息共用之四項裁決，對應 [F024](features/F024-access-history-query.md#export-fix-delta) `AC-F13`／`AC-F5`／`AC-F9`／`AC-F7`～`AC-F8` 之提報事項 A1～A4）為 draft，待 tdd-implementation 落地**；**v1.10 新增之第 12 章「2026-08-21 三項裁決架構決策」為 draft，待 spec-writer 覆核 `AC-T14` 措辭範圍界定（§12.6）與 lead 核准舊端點退休（§12.2／§12.6）後方可交 tdd-implementation**；**v1.11 新增之第 13 章「2026-08-31 F017 清單匯出（CSV）架構決策」為 draft，待 spec-writer 覆核 `AC-X7` 之「今日」基準措辭（§13.7 ①，有 8 小時偏移之誤讀風險）後方可交 tdd-implementation；`main.ts` body-parser 已依 lead 2026-08-31 之退回**改裁為路由範圍**（§13.2 ⑦，無全域變更）、body 鍵名定案為 `documentIds`；本章已與 `AC-X1`～`AC-X16` 逐條對帳，初稿三處相衝者已依 AC 就地改正；畸形 body 之處置已依 lead 第三輪裁決改用**既有**碼 `VALIDATION_ERROR`（零新增碼，`AC-X16` ⑨ 不動）**；**v1.12（2026-09-02）新增第 14 章「F043 業務/功能類別管理架構決策」為 draft——`OQ-B-01`（🔴 唯一 BLOCKING）已裁定採乙案（新增 `BUSINESS_CATEGORY_CHANGE_LOG`／`BUSINESS_CATEGORY_SNAPSHOT` 兩張平行表，反漂移處置＝沿用既有「兩份逐字相同＋固定向量綁定」模式），F043 §待 system-architect 之其餘 8 項與 lead 直接指派之 1 項（`BUSINESS_CATEGORY_DOC` 不加冗餘 `businessCategoryId` 欄）已逐項裁定；新增一個模組 `BusinessCategoriesModule`，`LifecycleModule` 全部既有檔案零修改（僅 `dag-cycle.ts`／`lifecycle-tree-layout.ts`／`lifecycle-subcategory.ts` 三支純函式檔被唯讀重用）；待人類閘門核准 F043 全檔後方可交 tdd-implementation**；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
+last_updated: 2026-09-02
+covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038, F039, F040, F041, F043]
 ---
 
 # System Architecture Specification — ICSOP 文件管理平台
@@ -44,6 +44,8 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 
 > **v1.11（2026-08-31）新增第 13 章「F017 清單匯出（CSV）架構決策」**：回應 lead 指派之單一裁決題——[F017](features/F017-backend-document-list.md#export-delta) 文件管理清單新增匯出（CSV，14 欄）時**匯出端點之機制形狀**。**本章範圍刻意限縮為此一 delta**。核心決策：**D1** 採**乙案**（前端送出當前畫面結果之文件 id 清單，後端**完全不重跑篩選、不重跑排序**），否決甲案（GET ＋ 13 項篩選參數）與丙案（前端純客端產 CSV）；關鍵查證＝13 項篩選中**已有 8 項前後端同構**（`狀態` 與 `連結點`／`附錄`／`使用表單` 三項並非 lead 所述之不同構，前者後端本就以衍生顯示標籤比對、後三者本就是單一 `EXISTS` 子查詢），甲案真實缺口為 4 項而非 13 項——**但另有一條 lead 未列出且無法以參數消除之排序漂移軸**（前端原生字串比較／null 排最前 vs 後端 `localeCompare`／null 恆排最後），且前端 13 項篩選為 `useMemo` inline 邏輯、在本輪簡化環中**綁不上跨執行環境向量**。**D2** 端點 ＝ `POST /admin/documents/export`（POST 之硬性理由＝10000 個 UUID ≈ 370 KB 遠超 nginx 預設 header 預算；**推翻 lead 之路由遮蔽前提**——該風險只存在於 GET 版本，controller 無任何 `@Post(':id')`），並揭露一條單元測試原理上看不到的部署面缺陷：**Express body-parser 預設 100 KB 會使 `assertExportRowLimit` 成為不可達程式碼**，須於 `main.ts` 顯式提高至 `1mb`。**D3** 14 欄**全部由後端解析**（其中 `狀態` 之 `display-status.ts`、`公告日期` 之 `formatExportTimestamp()`、`連結點程序書` 之 `joinLinkedDocumentNumbers()` 皆為既有函式＝零新增），僅新增 2 個跨執行環境規則點（OJT 三值標籤表／連結點欄內順序純函式）並各以固定向量兩端綁定；讀取路徑為 **load-all ＋ id 集合交集 ＋ 依請求順序重排**，**`DocumentStore` 介面、`list()`／`applyDocumentQuery()`／`DocumentListFilters`、`csv-export.ts` 一律一行未改**。**D4** 把「畫面所見 ≡ CSV 內容」拆成四條子命題，其中三條由**結構**保證。**本版不新增模組、不改變架構風格、無 schema 變更、無 migration、不新增任何錯誤碼**；必須觸及之既有程式路徑恰三處（`main.ts` 之 body-parser 設定／`download-blob.ts` 之 additive 參數／`DocumentListPage.tsx` 之行為恆等抽取），三處皆不預期使既有測試轉紅（§13.7）。<br>🔴 **2026-08-31 第二輪修訂（lead 退回一項、命名對齊一項）**：① body-parser 由**全域**放寬（100 KB → 1 MB）改裁為**只對 `/admin/documents/export` 放寬**，全站其餘路由維持框架預設——連帶以對 `node_modules` 實跑之 probe 揪出一個**只有實跑才現形**的 Nest 陷阱：`express.json()` 之函式名為 `jsonParser`，撞上 `ExpressAdapter.isMiddlewareApplied()` 之**函式名比對**守衛 ⇒ 掛任何 `express.json()`（即使路由範圍）都會使 Nest **跳過註冊自己的全域 parser**，全站其餘 JSON 路由之 `req.body` 靜默變成 `undefined`（無錯誤、無 log、兩端單測全綠）⇒ 路由範圍寫法**仍必須** `bodyParser: false` ＋ 自行掛回全域 parser；② body 鍵名由 `ids` 定案為 **`documentIds`**（全庫 wire 層 id 鍵一律 entity-qualified，無裸 `ids` 前例）。兩處原表述皆以 `OLD>` 保留。<br>🔴 **本章與 spec-writer 同日並行產出之 `AC-X1`～`AC-X16` 已逐條對帳**：初稿三處與 AC 相衝者（新錯誤碼 `EXPORT_IDS_INVALID`／於 `csv-export.ts` 新增 `formatExportDate()`／`findListItemsByIds?()` 之 id 索取式讀取）**已依「以 AC 為準」就地改正，原表述以 `OLD>` 逐字保留**；另回報一項 AC 措辭風險（`AC-X7` 之「今日」基準若被讀成對 `today` 套 `toTaipei()` 會產生 8 小時偏移，且固定時鐘之 fixture 測不到），見 §13.7。
 
+> **v1.12（2026-09-02）新增第 14 章「F043 業務/功能類別管理架構決策」**：回應 lead 指派之 [F043](features/F043-business-function-category.md) 業務/功能類別管理（與循環管理平行、獨立之第二套 DAG 分類骨架，🟢 **APPROVED**，2026-09-02 人類閘門通過，三輪共 12 項裁決）之 9 項裁定（`OQ-B-01` 為唯一 BLOCKING 題 ＋ F043 §待 system-architect 之 7 項 ＋ lead 直接指派之 1 項）。核心決策：**E1**（`OQ-B-01`）採**乙案**——新增 `BUSINESS_CATEGORY_CHANGE_LOG`／`BUSINESS_CATEGORY_SNAPSHOT` 兩張平行表（維持 append-only 稽核級表之參照完整性，避免甲案「解除 FK」之不可逆代價），反漂移處置沿用本 repo 既有「兩份逐字相同＋同一組固定向量綁定」模式（`watermarkLines()`／`change-labels.ts`／`OJT_STATUS_LABEL` 之既有先例），逐一盤點後僅 `lifecycle-snapshot-builder.ts`／`lifecycle-change-diff.ts` 之純函式部分需要複製並綁定，DI 綁定之薄橋接層正常複製、無需綁定。**E2** 防環演算法（`dag-cycle.ts`）與樹狀佈局（`lifecycle-tree-layout.ts`）查證後確認零 LIFECYCLE 耦合，**直接重用**（import by path，零修改既有檔）。**E3**（`OQ-B-09`）新增 `AuditTargetType` `BUSINESS_CATEGORY`／`BUSINESS_CATEGORY_CHANGE_LOG` 與 8 個新 `AuditActionType`，`AUDIT_LOG` additive 新增 `businessCategoryId`／`nodeId` 兩欄；F024 kind 篩選由 5 種擴為 6 種（新增「業務/功能類別」，`BUSINESS_CATEGORY_CHANGE_LOG` 併入既有「變更」kind）。**E4／E5** 前台掛載數過濾與 F017 第 16 欄皆以單一 JOIN 查詢滿足、零 N+1；F017 匯出端點 body 維持第 13 章已鎖定之「恰兩鍵」契約不變，第 16 欄為 `GET /admin/documents` 之 additive 頂層欄位。**E6** `businessCategoryDisplayName` 以別名匯出 `lifecycleDisplayName`，不複製第二份實作。**E7** 前台/後台樹狀圖頁面元件不共用（業務綁定），但共用其底層渲染純函式。**E8** `BUSINESS_CATEGORY_DOC` 之刪除連動採混合處置——`documentId` 側 FK CASCADE（查證後確認今日休眠，`ICSOP_DOCUMENT` 從未被硬刪除，已列為交回 spec-writer 之待覆核項）、`nodeId` 側同交易顯式刪除（保留 `AC-18` 所需之刪除前計數）。**E9**（lead 指派）`BUSINESS_CATEGORY_DOC` **不**加冗餘 `businessCategoryId` 欄。**本版新增一個模組**（`BusinessCategoriesModule`，比照 `LifecycleModule` 結構）、**不改變架構風格**；`LifecycleModule`／F017 既有 15 欄／F019 `文件清單` 模式／F026 `FIELD_MATRIX`／`ICSOP_DOCUMENT` 欄位集合皆零修改（§14.12 零漣漪確認）；三支 migration 待人類閘門核准 F043 全檔後方可對真庫實跑。
+>
 ## Agent Loading Guide
 
 | Agent Role | Relevant Sections |
@@ -61,6 +63,7 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 | **2026-08-20 缺失／變更 Delta（9 項）工程** | **§11 全章**。依角色取用：**test-generator** → §11.11（單元測試盲區，決定哪些項目建不出有效 unit 約束）＋ §11.1／§11.5（`AC-N9` 渲染 seam、後台燒錄回歸鎖定之邊界）；**tdd-implementation** → §11.1–§11.10（pdf.js 選型與 canvas 縮放算法、`WATERMARK_BURNER` 抽出與模組接線、四端點燒錄改造、`AuditWriterRecorder` 修正、OJT 矩陣列、`USAGE_FORM_DRAFTING_DEPT` migration、使用表單整頁化端點）；**ui-ux-designer** → §11.1（canvas 佔位取代 iframe）、§11.6（前台字級 tokens 分層）、§11.9（整頁化版面）；**DevOps** → §11.2（pdf.js 靜態資產部署、cMap／standard fonts）、§11.10（migration 實跑）；**lead** → §11.12（分線與合併順序）、§11.13（須退回 spec-writer 之新 OQ，若有） |
 | **2026-08-21 三項裁決（子樹抽屜＋deep link）工程** | **§12 全章**。依角色取用：**test-generator** → §12.1（`descendants()` 綁定用固定測試向量 F1–F5，兩端皆須各建一組）＋ §12.4（單元測試盲區）；**tdd-implementation** → §12.2（新端點 `subtree-documents` 之回應形狀、`NodeDocsService`／`NodeDocsStore` 擴充、舊單節點端點退休）、§12.3（`subtreeFilter` 描述子之解析落點與 `DocumentListFilters.nodeIdIn`）；**spec-writer** → §12.6（`AC-T14` 措辭範圍界定之覆核請求，未自行改寫 AC）；**lead** → §12.5（被否決之替代方案）、§12.6（殘留風險與待覆核事項） |
 | **2026-08-31 F017 清單匯出（CSV）工程** | **§13 全章**。依角色取用：**test-generator** → §13.4（「畫面所見 ≡ CSV」之四條子命題與各自之斷言形狀，含兩個假綠陷阱之 fixture 要求）＋ §13.5（單元測試盲區）＋ §13.3 之三組跨執行環境向量；**tdd-implementation** → §13.2（端點契約：POST body 逐欄型別〔鍵名 `documentIds`〕、檢查順序與回應形狀、回應標頭、🔴 `main.ts` 之**路由範圍** body-parser ＋ 為何仍須 `bodyParser: false`、前端 `downloadViaBlob` additive 參數）、§13.3（14 欄值層落點、load-all ＋ 交集 ＋ 依請求順序重排之四步、富化管線共用、`AC-X7` 之 `today` 不得套 `toTaipei()`）；**spec-writer** → §13.7「交回 spec-writer」四項（新錯誤碼登錄、當責室長／檔案兩欄之 CSV 值逐字、`AC-X11` 形狀對帳）；**DevOps／lead** → §13.5 #1–#3（三項部署面盲區，本輪環原理上測不到）、§13.7「交回 lead」四項 |
+| **2026-09-02 F043 業務/功能類別管理工程** | **§14 全章**。依角色取用：**test-generator** → §14.10（單元測試盲區）＋ §14.1（`business-category-snapshot-builder.ts`／`business-category-change-diff.ts` 之兩端固定向量綁定，決策 E1）＋ §14.6.1（`AC-20` 語料鑑別力要求）；**tdd-implementation** → §14.2–§14.5（模組結構、store 介面、entity／migration、端點清單）、§14.6（決策 E2–E9 逐項落地細節）、§14.9（共用 vs 複製裁定表）；**ui-ux-designer** → §14.7（前台兩種瀏覽模式資料流）、§14.8（前端模組結構）、§14.6.6（前台/後台樹狀圖差異點）；**DevOps** → §14.4（三支 migration 之真庫實跑）；**spec-writer** → §14.12「交回 spec-writer」四項（`data-model.md` 已裁定回填、F017/F019 delta 之 Interface Contract 細節回填、`AC-26` 可達性覆核、`OQ-B-02` 對帳）；**lead** → §14.11（被否決之替代方案）、§14.12「交回 lead」四項 |
 | 一般使用者子分類（F041）工程 🟢 APPROVED | §3.7（`ViewerScope` 組出點／`rbac/viewer-scope.ts` 三純函式落點／四過濾接縫精確位置／前端接縫／10 題 OQ 裁決紀錄）、§4.10（`ACCOUNT.userSubtype` 資料落地／Migration／F004 upsert 鍵集合保證）、§5.11（清單／詳情／檢視器‑下載‑列印三條路徑之循序圖）、§6（NFR 對應擴充列）、§8（風險與拒絕替代方案）、§9（10 題 OQ 裁決紀錄）。**10 題 OQ 已於 2026-08-11 人類閘門全數依草案選項定案，可直接動工**；下游實作最容易漏的三處已於 §3.7 決策一/三(c) 明確標注（`@Req()` 新增、三處破壞性簽章遷移、`docMeta` 安全關鍵化） |
 
 ## Table of Contents
@@ -78,6 +81,7 @@ covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012,
 11. [2026-08-20 缺失／變更 Delta 架構決策（9 項）](#ch11-defect-delta-9)
 12. [2026-08-21 三項裁決架構決策](#ch12-t3-decisions)
 13. [2026-08-31 F017 清單匯出（CSV）架構決策](#ch13-f017-export)
+14. [2026-09-02 F043 業務/功能類別管理架構決策](#ch14-f043)
 
 ---
 
@@ -4441,5 +4445,683 @@ export function exportDocumentList(documentIds: string[], linkTargetId?: string)
 | ② | **§13.5 之三項部署面盲區（#1 #2 #3）需一次真環境驗證**——本輪環原理上測不到。建議與既有部署 smoke 併跑 |
 | ③ | 🔴 **既有缺口（非本 delta 引入，但本 delta 使其變得可見；已由 spec-writer 登錄為 `OQ-X-03`）**：`DocumentListPage.tsx` 之 `LOAD_SIZE = 2000` 使畫面工作集**天生封頂於 2000 筆**，且**畫面本身也早已在靜默截斷**（清單頁不會告訴使用者「還有 N 筆沒載入」）。今日 591 份，離上限尚遠、不阻塞本 delta。**架構側補一項後果**：`LOAD_SIZE(2000) < EXPORT_ROW_LIMIT(10000)` ⇒ 上限錯誤路徑在本頁**結構上不可達**，只能以直接呼叫 service／端點的方式驗證（`AC-X12` 📌 已就此明訂「斷言於 service 層施加」）。**交 lead 決定**是否另立一題處理清單頁之載入封頂 |
 | ④ | **匯出結果為 0 筆時仍可按鈕**、得到僅含表頭之檔案——`AC-X13` 與 `AC-X9`（匯出鈕非 write-only、不得條件式渲染）已就此定案，**無待辦**，此處僅列為對帳 |
+
+---
+
+## 14. 2026-09-02 F043 業務/功能類別管理架構決策 {#ch14-f043}
+
+> **來源**：spec-writer 產出之 [F043](features/F043-business-function-category.md)（**54 條 AC**，🟢 **APPROVED**——2026-09-02 人類閘門通過，三輪共 12 項裁決；`OQ-B-01`～`OQ-B-10` 10 題全數結案，12 項 `[ASSUMPTION]` 全數確認）。lead 指派本章裁定 [F043 §待 system-architect](features/F043-business-function-category.md#for-architect) 之 8 項，**加一項 lead 直接指派**（`BUSINESS_CATEGORY_DOC` 是否加冗餘 `businessCategoryId` 欄），**加一項** [data-model.md §business-category-change-log-decision](data-model.md#business-category-change-log-decision)（`OQ-B-01`，🔴 **本章唯一 BLOCKING 題**）。
+> 🔴 **核准的是規格，不是 migration 已跑**（與 F043 檔頭、`spec-index.md` banner 三處一致之警語）：本功能需三支 migration（§14.4：四張主表／兩張歷程表／`AUDIT_LOG` additive 欄），**每一支都必須對 dev 真庫實跑並以 `SELECT` 覆核六張表與索引語意才算兌現**——尤其 `(name, subcategory)` 唯一索引（MSSQL 多重 `NULL` 相等語意）與 `(nodeId, documentId)` 唯一鍵，單元測試全綠證明不了資料表存在（本 repo 已三度重演「少數功能 500、其餘正常」之缺 migration 特徵形狀）。
+> **範圍**：本章刻意限縮為 F043 之架構落地，**不重審**第 1–13 章之任一既有決策；F043 為與循環管理**平行、獨立**之第二套 DAG 分類骨架，不修改 `LIFECYCLE` 家族之任一既有程式碼路徑（[F043](features/F043-business-function-category.md) `AC-48`／`AC-49`）。
+> **編號空間**：本章之 `E1`–`E9` 為**架構決策**編號，與第 10 章 `A1`–`A16`、第 11 章 `B1`–`B10`、第 12 章 `C1`–`C3`、第 13 章 `D1`–`D4` 為五套互不相干之獨立編號空間（`E` 恰與 F043 所屬 Epic **E12** 之字首巧合疊合，純屬記憶輔助，非刻意編號規則）。
+> **本輪約束環**：僅 backend jest／frontend vitest 單元＋元件測試（沿用第 13 章之既有約束描述）；本章決策若產生只能在真實 DB／真實瀏覽器才驗得到的接縫，已於 §14.10 逐項標出。
+> 🟢 **人類閘門已於 2026-09-02 核准 F043 全檔（`APPROVED`），本章隨之解除 DRAFT，已可動工。**（比照 F043 檔頭之同一狀態）<br>📝 `OLD>` 「🔴 **本章全段為 DRAFT，未經人類閘門核准 F043 全檔前不得建立 migration、不得動工**」。<br>🔴 **惟核准的是規格、不是 migration 已跑**——本章之三支 migration 必須**對 dev 真庫實跑並覆核**才算兌現（單元測試全綠證明不了資料表存在），見 [F043 檔頭之實作前置警語](features/F043-business-function-category.md)。<br>⚠ **本行由 spec-writer 於 2026-09-02 依 lead 指派就地翻正狀態，本章其餘內容一字未動。**
+
+### 14.0 本章範圍與閱讀指引
+
+| 決策 | 節次 | 題目 | 阻塞誰 |
+|---|---|---|---|
+| **E1** 🔴 BLOCKING | §14.1 | `OQ-B-01`：變更歷程／快照資料表落點 | spec-writer（`data-model.md` 回填）、test-generator、tdd-implementation |
+| E2 | §14.6.1 | 防環演算法（`classifyEdge`／`isReachable`）與樹狀佈局（`buildTreeLayout`）之共用形狀 | tdd-implementation |
+| E3 | §14.6.2 | 稽核 `actionType`／`targetType`（`OQ-B-09`） | tdd-implementation、spec-writer（F024 kind 篩選回填） |
+| E4 | §14.6.3 | 前台端點查詢下推（不得 N+1） | tdd-implementation、test-generator |
+| E5 | §14.6.4 | F017 第 16 欄之取值路徑 | tdd-implementation、spec-writer（[F017 delta](features/F017-backend-document-list.md#business-category-column-delta) 回填） |
+| E6 | §14.6.5 | `businessCategoryDisplayName` 與 `lifecycleDisplayName` 是否收斂 | tdd-implementation |
+| E7 | §14.6.6 | 前台樹狀圖渲染元件之共用範圍 | tdd-implementation、ui-ux-designer |
+| E8 | §14.6.7 | `BUSINESS_CATEGORY_DOC` 之刪除連動（`AC-26`／`AC-18`） | tdd-implementation |
+| E9 | §14.6.8 | `BUSINESS_CATEGORY_DOC` 是否加冗餘 `businessCategoryId` 欄（lead 指派） | tdd-implementation |
+
+> 另有四節非「決策」但為交棒必讀：**§14.2** 模組結構與檔案清單、**§14.3** Store 邊界介面草案、**§14.4** Entity 與 Migration 規劃、**§14.5** 端點清單；**§14.7** 前台兩種瀏覽模式資料流、**§14.8** 前端模組結構、**§14.9** 共用 vs 複製裁定表、**§14.10** 單元測試盲區、**§14.11** 被否決之替代方案、**§14.12** 零漣漪確認與交回 spec-writer／lead 之事項。
+
+**本章對其他章節之關聯**：**新增一個模組**（`BusinessCategoriesModule`，比照 `LifecycleModule` 之結構，見 §14.2）；**不改變架構風格**（Modular Monolith 不動）；`ChangeHistoryModule`／`AuditModule`／`RbacModule`／`PublicModule` 四個既有模組**各有一組 additive 擴充**（新 store token、新 controller 端點、新 FunctionKey、新 `AuditTargetType`／`AuditActionType`），**LifecycleModule 之任一既有檔案零修改**（唯一被「讀」但不被「改」的既有檔案是 `dag-cycle.ts`／`lifecycle-tree-layout.ts`／`lifecycle-subcategory.ts` 三支純函式檔，見 §14.9）。**七張 DB 異動**：四張核心表（`BUSINESS_CATEGORY`／`_NODE`／`_EDGE`／`_DOC`）＋兩張變更歷程表（`_CHANGE_LOG`／`_SNAPSHOT`）＋ `AUDIT_LOG` 之兩個 additive 欄位（`businessCategoryId`／`nodeId`）。
+
+```mermaid
+graph LR
+    subgraph NEW["新增：BusinessCategoriesModule"]
+        BCStore["BusinessCategoryStore\n（池 CRUD）"]
+        BCDagStore["BusinessCategoryDagStore\n（節點／邊）"]
+        BCDocsStore["BusinessCategoryDocsStore\n（M:N 掛載）"]
+        BCPreview["BusinessCategoryTreePreviewService\n（樹狀圖／PDF／浮水印）"]
+        BCDiff["BusinessCategoryChangeDiffService\n（新舊對照／PDF）"]
+    end
+    subgraph EXIST_RO["既有：唯讀重用（零修改，直接 import）"]
+        DagCycle["lifecycle/dag-cycle.ts\nclassifyEdge／isReachable"]
+        TreeLayout["lifecycle/lifecycle-tree-layout.ts\nbuildTreeLayout"]
+        Subcat["lifecycle/lifecycle-subcategory.ts\nnormalizeSubcategory／lifecycleDisplayName"]
+    end
+    subgraph EXIST_EXT["既有模組：additive 擴充"]
+        ChangeHistory["ChangeHistoryModule\n+BusinessCategoryChangeLogStore\n+BusinessCategorySnapshotStore\n+BusinessCategoryChangeHistoryService"]
+        Audit["AuditModule / audit.types.ts\n+BUSINESS_CATEGORY(_CHANGE_LOG) targetType"]
+        Rbac["RbacModule / function-matrix.ts\n+BUSINESS_CATEGORY_MANAGEMENT"]
+        PublicMod["PublicModule\n（前台 3 端點掛在 BusinessCategoriesModule 內，\n僅重用 WatermarkService／viewer-scope）"]
+    end
+    BCDagStore -->|"import by path，零 DI"| DagCycle
+    BCPreview -->|"import by path，零 DI"| TreeLayout
+    BCDiff -->|"import by path，零 DI"| TreeLayout
+    BCStore -->|"import by path，零 DI"| Subcat
+    NEW --> ChangeHistory
+    NEW --> Audit
+    NEW --> Rbac
+    NEW -->|"注入 WatermarkService／viewer-scope（既有，單向）"| PublicMod
+    classDef reused fill:#e8f5e9,stroke:#2e7d32;
+    class DagCycle,TreeLayout,Subcat reused;
+```
+
+---
+
+### 14.1 決策 E1（`OQ-B-01`，🔴 BLOCKING）：變更歷程／快照資料表落點——**採乙案**（新增兩張平行表）
+
+#### 裁決：**乙案**——新增 `BUSINESS_CATEGORY_CHANGE_LOG`／`BUSINESS_CATEGORY_SNAPSHOT`，維持與 `LIFECYCLE_CHANGE_LOG`／`LIFECYCLE_SNAPSHOT` 逐一對稱之獨立結構
+
+獨立覆核 spec-writer 之建議後同意乙案，理由與 data-model.md 既有取捨表一致，補三點查證：
+
+1. **甲案之「解除 FK」代價是不可逆的**——`LIFECYCLE_CHANGE_LOG`／`LIFECYCLE_SNAPSHOT` 為 **append-only、DB 層已撤銷應用帳號 UPDATE／DELETE 權限**之稽核級資料（`backend/src/database/entities/lifecycle-change-log.entity.ts` 檔頭明文）。把 `lifecycleId` 改為 nullable 並解除其參照完整性，換來的是「一套查詢程式碼」，賠上的是「髒 `lifecycleId` 從此不會被 DB 擋下」——而這條資料完整性防線一旦鬆開，**沒有任何單元測試看得到它鬆開**（比照本 repo 已多次記錄之「靜默失敗」形狀——CJK 字型缺檔、時區偏移等既有教訓皆屬同一類：失敗發生在資料層，測試斷言卻停在服務層）。
+2. **`changeType` 值域本來就不共通**——`LIFECYCLE_CHANGE_LOG` 為 8 值（含 `DOCUMENT_REASSIGNED`），F043 為**刻意**恰 7 值（`AC-39`，M:N 模型下無改派語意）。多型化後，欄位型別（`varchar(30)`，無 DB CHECK）雖然「容納得下」兩套值域，但**任何一個值對某一半列而言恆為非法**，這是一種「型別上合法、語意上不合法」的落差，日後最容易被新讀者誤以為兩套 `changeType` 可以互通。獨立表則此落差**結構上不存在**——`BUSINESS_CATEGORY_CHANGE_LOG.changeType` 的值域就是恰好正確的 7 值，不需要額外文件說明「哪些值屬哪個 scope」。
+3. **既有查詢之索引與語意無需重新驗證**——`LifecycleChangeLogStore.findPredecessor(lifecycleId, before)` 之既有索引 `IX_LC_CHANGE_LOG_lifecycle_occurredAt` 命中路徑、既有 91 個 `AC-D#`／`AC-T#` 系列測試之查詢假設，皆**不需要**因多型化而重新驗證正確性——這是乙案「一欄未動、零風險」的具體內容，不是抽象修辭。
+
+一句話理由：**甲案把「一套程式碼」的收益，建立在「稽核級 append-only 表的參照完整性」這個不該被犧牲的東西上；乙案把代價（程式碼可能各自漂移）放在一個本輪就能以既有手法徹底封死的地方（見下）。**
+
+#### 反漂移處置——**沿用本 repo 既有之「兩份逐字相同 ＋ 同一組固定向量綁定」模式，不發明新模式**
+
+逐一盤點 `LIFECYCLE_CHANGE_LOG`／`LIFECYCLE_SNAPSHOT` 家族之「查詢／重建／diff」程式碼（`backend/src/lifecycle/lifecycle-snapshot-builder.ts`、`lifecycle-change-diff.ts`、`lifecycle-change-diff.service.ts`、`backend/src/change-history/lifecycle-change-log.store.ts`、`lifecycle-change-history.service.ts`），依「是否含 LIFECYCLE 專屬耦合」分兩類，處置不同：
+
+| 檔案（既有） | 是否含 LIFECYCLE 專屬耦合 | F043 對應處置 |
+|---|---|---|
+| `lifecycle-snapshot-builder.ts`（`buildSnapshotGraph`／`SnapshotGraph`／`SnapshotNode`） | **否**——輸入輸出皆為 `{id,name,positionX,positionY,docs:[{id,documentNumber}]}` 之泛型結構，零 LIFECYCLE 字面值、零錯誤碼 | 🔒 **複製一份** `business-category-snapshot-builder.ts`（逐字相同，僅識別字重命名），**以固定向量綁定**：給定同一組 `(nodes,edges,docsByNode)` 之泛型輸入，斷言 `buildSnapshotGraph(...)` 與 `buildBusinessCategorySnapshotGraph(...)` 之輸出於重命名鍵後**逐位元組相等**（比照 `AC-06` 對 `lifecycleDisplayName`／`businessCategoryDisplayName` 之既有綁定手法） |
+| `lifecycle-change-diff.ts` 之 `computeLifecycleDiff`（純函式部分） | **否**——僅操作 `SnapshotGraph`（add/rm/amber 三分類），零 LIFECYCLE 字面值、**不讀 `changeType`**（診斷結果純由節點/邊集合差異推導，與 8 值或 7 值之值域無關） | 🔒 **複製一份** `computeBusinessCategoryDiff(...)`（同檔 `business-category-change-diff.ts`），**同法**以固定向量綁定（給定同一組泛型 `before`/`after`，兩函式輸出逐位元組相等） |
+| `lifecycle-change-diff.ts` 之 `selectPredecessor`／`reconstructBeforeAfter`／`reconstructBeforeAfterForGroup` | **是**——參數型別直接綁定 `LifecycleChangeLogStore`／`LifecycleSnapshotStore`（特定 DI token） | ✅ **正常複製，不需固定向量綁定**——這段程式碼本質是「針對特定 store token 的薄橋接」，其正確性完全由上一列已綁定之純函式與各自模組的既有單元測試（store fake）保證；此處的「相似」是**表層語法相似**（同一段查前一筆、查快照的邏輯），不是「同一份業務規則兩處各自實作」，複製不構成漂移風險 |
+| `LifecycleChangeDiffService`／`LifecycleChangeHistoryService` | **是**——DI 建構子、`FunctionKey` 閘門、`AuditTargetType`、`lifecycleDisplayName` 皆為 LIFECYCLE 專屬 | ✅ 正常複製為 `BusinessCategoryChangeDiffService`／`BusinessCategoryChangeHistoryService`（見 §14.2），無需綁定——服務層之「正確性」定義本來就是「呼叫到正確的、已綁定之純函式」，這正是本裁決的設計意圖 |
+
+> 🔵 **一項非本輪動作、留供日後參考之技術觀察**：`buildSnapshotGraph` 與 `computeLifecycleDiff` 之核心邏輯（上表前兩列）在查證後確認**零 LIFECYCLE 耦合**，理論上可像 `dag-cycle.ts`（見 §14.6.1）一樣被抽為與領域無關之共用純模組、由兩套 DAG **直接 import 重用**（比 `AC-06` 沿用之「兩份綁定」更進一步）。惟 lead 之裁定範圍**明確要求「沿用既有『兩份逐字相同 ＋ 固定向量綁定』模式，不創新模式」**，本章遵照該指示，**不在本輪執行抽取**。因固定向量本身即是「兩函式輸出恆等」之逐位元組證明，**此路徑保持開放且零風險**——比照 `AC-06` 自身之後設宣告（「若 system-architect 裁定改為單一共用純函式，本條之斷言自動仍然成立」），日後若要合併，兩組固定向量測試本身即是遷移的安全網，不需要另外驗證。
+
+#### 落地檔案清單（新增，皆 append-only、DB 層 REVOKE UPDATE／DELETE，比照既有兩表）
+
+- `backend/src/database/entities/business-category-change-log.entity.ts`（比照 `lifecycle-change-log.entity.ts`）
+- `backend/src/database/entities/business-category-snapshot.entity.ts`（比照 `lifecycle-snapshot.entity.ts`）
+- `backend/src/change-history/business-category-change-log.store.ts` ＋ `typeorm-business-category-change-log.store.ts`
+- `backend/src/change-history/business-category-snapshot.store.ts` ＋ `typeorm-business-category-snapshot.store.ts`
+- `backend/src/change-history/business-category-change-history.service.ts`（查詢／匯出，比照 `lifecycle-change-history.service.ts`）
+- `backend/src/change-history/business-category-change-log-publisher.ts`（比照 `lifecycle-change-log-publisher.ts`）
+- `backend/src/change-history/business-category-display-names.ts` ＋ `typeorm-business-category-display-names.ts`（比照 `lifecycle-display-names.ts`——**維持 `ChangeHistoryModule → BusinessCategoriesModule` 單向依賴之既有理由逐字適用**：CSV「業務/功能類別」欄需要當前顯示名稱，若直接注入 `BusinessCategoryStore` 會造成模組互相依賴，故以獨立 token 自建唯讀 adapter）
+- `backend/src/lifecycle/business-category-snapshot-builder.ts`　⚠ **路徑刻意落在 `lifecycle/` 目錄**（見 §14.2 之模組放置理由）——複製自 `lifecycle-snapshot-builder.ts`，固定向量測試檔 `business-category-snapshot-builder.spec.ts` 與 `lifecycle-snapshot-builder.spec.ts` 各自新增一組「跨檔綁定」case
+- `backend/src/lifecycle/business-category-change-diff.ts`（同上，複製自 `lifecycle-change-diff.ts`）
+- `backend/src/business-categories/business-category-change-diff.service.ts` ＋ `.controller.ts`（比照 `lifecycle-change-diff.service.ts`／`.controller.ts`，見 §14.2）
+
+（Entity 完整欄位定義、migration 檔名與時間戳見 §14.4；`data-model.md` 之對應段落已就地改寫，見交付物清單。）
+
+---
+
+### 14.2 模組結構與檔案清單
+
+**模組放置理由**：F043 是與循環管理**結構同構、業務獨立**之第二套骨架——比照 `LifecycleModule` 自成一個 bounded context，**新增 `BusinessCategoriesModule`**（`backend/src/business-categories/`），而非塞進 `LifecycleModule`（會製造「循環管理模組裡混著非循環的東西」之認知負擔，且違反 F043 `AC-48`／`AC-49` 之「淨新增、零漣漪」精神）。**例外**：兩支「零 LIFECYCLE 耦合之純函式」（`business-category-snapshot-builder.ts`／`business-category-change-diff.ts`，見 §14.1）刻意放在既有 `backend/src/lifecycle/` 目錄，**與其被綁定的對象（`lifecycle-snapshot-builder.ts`／`lifecycle-change-diff.ts`）同目錄**——這比放進 `business-categories/` 更方便維護者一次看到兩份「必須維持逐位元組相等」的檔案，且不產生任何 import 方向問題（純函式檔本來就不掛 `@Module`）。
+
+| 新檔（`backend/src/business-categories/`） | 職責 | 對照既有 `backend/src/lifecycle/` |
+|---|---|---|
+| `business-categories.module.ts` | 模組定義、DI 接線 | `lifecycle.module.ts` |
+| `business-category.store.ts`（`BUSINESS_CATEGORY_STORE` token） | 池 CRUD 邊界介面 | `lifecycle.store.ts` |
+| `typeorm-business-category.store.ts` | TypeORM 實作 | `typeorm-lifecycle.store.ts` |
+| `business-category.service.ts` | 池 CRUD 業務邏輯（唯一性驗證、刪除保護） | `lifecycle.service.ts` |
+| `business-category.controller.ts` | `/admin/business-categories` 池 CRUD | `lifecycle.controller.ts` |
+| `business-category-dag.store.ts`（`BUSINESS_CATEGORY_DAG_STORE` token） | 節點／邊資料存取；**不含自有防環邏輯**，直接 import `../lifecycle/dag-cycle.ts` | `dag.store.ts` |
+| `typeorm-business-category-dag.store.ts` | TypeORM 實作 | `typeorm-dag.store.ts` |
+| `business-category-dag.service.ts` | 節點／邊 CRUD、防環判定（呼叫共用 `classifyEdge`）、`BUSINESS_CATEGORY_SELF_LOOP`／`_CYCLE_DETECTED` 之錯誤碼對映 | `dag.service.ts` |
+| `business-category-dag.controller.ts` | `/admin/business-categories/:id/nodes`／`/edges` | `dag.controller.ts` |
+| `business-category-docs.store.ts`（`BUSINESS_CATEGORY_DOCS_STORE` token） | M:N 掛載資料存取（候選查詢、掛載/移除、批次反查） | `node-docs.store.ts`（語意**刻意不同**，見 §14.3） |
+| `typeorm-business-category-docs.store.ts` | TypeORM 實作 | `typeorm-node-docs.store.ts` |
+| `business-category-docs.service.ts` | 掛載/移除業務邏輯（**無改派語意**，見 F043 §丙） | `node-docs.service.ts` |
+| `business-category-docs.controller.ts` | `/admin/business-categories/:id/nodes/:nodeId/{candidates,documents}` | `node-docs.controller.ts` |
+| `business-category-structural-change.ts` | 交易內結構變更操作面介面（`BusinessCategoryDagStructuralTx`／`BusinessCategoryDocsStructuralTx`） | `lifecycle-structural-change.ts` |
+| `business-category-structural-recorder.ts` | `recordStructuralChange()`，呼叫 `../lifecycle/business-category-snapshot-builder.ts` | `lifecycle-structural-recorder.ts` |
+| `business-category-change-event.ts` | `BusinessCategoryChangeType`（7 值）、`BusinessCategoryChangedEvent`、`BUSINESS_CATEGORY_CHANGE_PUBLISHER` token、Noop 綁定 | `lifecycle-change-event.ts` |
+| `business-category-subcategory.ts` | **重新匯出** `normalizeSubcategory`／`lifecycleDisplayName as businessCategoryDisplayName`（見 §14.6.5）；本檔**新增**唯一屬於本功能之邏輯——`checkBusinessCategoryUniqueness()`（`BUSINESS_CATEGORY_*` 錯誤碼版本） | `lifecycle-subcategory.ts` |
+| `business-category-preview.controller.ts` ＋ `.service.ts` | 後台樹狀圖預覽／PDF 下載列印（浮水印） | `lifecycle-preview.controller.ts`／`.service.ts` |
+| `business-category-change-diff.controller.ts` ＋ `.service.ts` | 第三個 tab 之新舊對照重建 ＋ 雙頁下載燒錄 | `lifecycle-change-diff.controller.ts`／`.service.ts` |
+| `public-business-category.controller.ts` ＋ `.service.ts` | 前台 3 端點（見 §14.5／§14.7） | 無對等（F009/F036 無前台面） |
+
+---
+
+### 14.3 Store 邊界介面草案
+
+比照既有三個 store 之「選填能力（`?`）＋ 未提供時降級」寫法。**與 `NodeDocsStore` 刻意不同之處**已於介面註解逐條標出（推 1／推 2 之落地）。
+
+```ts
+// business-category.store.ts —— 比照 lifecycle.store.ts
+export const BUSINESS_CATEGORY_STORE = Symbol('BUSINESS_CATEGORY_STORE');
+
+export type BusinessCategoryStatus = 'active' | 'inactive';
+
+export interface BusinessCategoryView {
+  id: string;
+  name: string;
+  subcategory: string | null;         // 恆為 null 或非空 trim 字串（INV-B3）
+  description: string | null;
+  status: BusinessCategoryStatus;
+  nodeCount: number;
+  /** 去重後之相異掛載文件數（AC 甲-3；SQL COUNT(DISTINCT documentId) 下推，非 JS 去重）。 */
+  mountedDocCount: number;
+  updatedAt: Date;
+}
+
+export interface CreateBusinessCategoryInput {
+  name: string;
+  subcategory: string | null;         // 服務層已以 normalizeSubcategory 正規化
+  description: string | null;
+}
+export interface UpdateBusinessCategoryPatch {
+  name?: string;
+  subcategory?: string | null;        // 三態：undefined=不改／null=清空／字串=設定
+  description?: string | null;
+  status?: BusinessCategoryStatus;
+}
+
+export interface BusinessCategoryStore {
+  list(): Promise<BusinessCategoryView[]>;
+  findById(id: string): Promise<BusinessCategoryView | null>;
+  create(input: CreateBusinessCategoryInput): Promise<BusinessCategoryView>;
+  update(id: string, patch: UpdateBusinessCategoryPatch): Promise<BusinessCategoryView>;
+  /** 刪除保護（AC-12）：該類別仍掛載之相異文件數；ICSOP_DOCUMENT/BUSINESS_CATEGORY_DOC 未建時回 0。 */
+  countMountedDocuments(id: string): Promise<number>;
+  /** 清單富化：全類別之掛載文件數（單次 GROUP BY，比照 countMountedByLifecycle）。 */
+  countMountedByCategory(): Promise<Map<string, number>>;
+  /** 刪除類別（含其節點/邊；掛載列已由呼叫端事前檢查為 0，見 AC-12）。 */
+  delete(id: string): Promise<void>;
+}
+```
+
+```ts
+// business-category-dag.store.ts —— 比照 dag.store.ts；防環演算法「不」在本檔（見 §14.6.1）
+export const BUSINESS_CATEGORY_DAG_STORE = Symbol('BUSINESS_CATEGORY_DAG_STORE');
+
+export interface BusinessCategoryNodeView {
+  id: string;
+  businessCategoryId: string;
+  name: string | null;
+  positionX: number;
+  positionY: number;
+  /** 掛載於此節點之相異文件數（listNodes 填入；比照 NodeView.docCount）。 */
+  docCount?: number;
+}
+export interface BusinessCategoryEdgeRow {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+}
+export interface BusinessCategoryGraph {
+  nodes: BusinessCategoryNodeView[];
+  edges: BusinessCategoryEdgeRow[];
+}
+
+export interface BusinessCategoryDagStore {
+  businessCategoryExists(businessCategoryId: string): Promise<boolean>;
+  listNodes(businessCategoryId: string): Promise<BusinessCategoryNodeView[]>;
+  listEdges(businessCategoryId: string): Promise<BusinessCategoryEdgeRow[]>;
+  nodeExists(businessCategoryId: string, nodeId: string): Promise<boolean>;
+  createNode(businessCategoryId: string, input: { name: string | null; positionX: number; positionY: number }): Promise<BusinessCategoryNodeView>;
+  updateNode(nodeId: string, patch: { name?: string | null; positionX?: number; positionY?: number }): Promise<BusinessCategoryNodeView>;
+  /**
+   * 刪除節點（AC-18）。🔴 與 DagStore.deleteNodeWithEdges 之關鍵差異：本方法之 TypeORM 實作
+   * 於**同一交易內**額外刪除該節點之全部 BUSINESS_CATEGORY_DOC 列（見 §14.6.7 決策 E8——
+   * nodeId 側刻意不用 DB FK CASCADE，改在此處同交易顯式 DELETE，理由見該節）。
+   */
+  deleteNodeWithEdges(nodeId: string): Promise<void>;
+  /** AC-18 刪除前確認提示所需之「將移除 N 筆掛載關係」計數（單次 COUNT，非事後比對）。 */
+  countNodeMounts(nodeId: string): Promise<number>;
+  createEdge(businessCategoryId: string, source: string, target: string): Promise<BusinessCategoryEdgeRow>;
+  deleteEdge(edgeId: string): Promise<void>;
+  /** 選填能力，語意同 DagStore.runStructuralChange（見 lifecycle-structural-change.ts 對等版本）。 */
+  runStructuralChange?<T>(work: (tx: import('./business-category-structural-change').BusinessCategoryDagStructuralTx) => Promise<T>): Promise<T>;
+}
+```
+
+```ts
+// business-category-docs.store.ts —— 比照 node-docs.store.ts；語意刻意相反（M:N，見 F043 §丙推翻總表）
+export const BUSINESS_CATEGORY_DOCS_STORE = Symbol('BUSINESS_CATEGORY_DOCS_STORE');
+
+export interface BusinessCategoryNodeInfo {
+  id: string;
+  businessCategoryId: string;
+  name: string | null;
+}
+/** 候選文件列（AC-20：全部 ICSOP 文件，🔴 不含 lifecycleId 過濾參數——介面上刻意不提供該欄位可過濾）。 */
+export interface CandidateDocRef {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+}
+/** 節點掛載之文件列（比照 NodeMountedDoc，逐字同形狀；不同來源表）。 */
+export interface CategoryMountedDoc {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+  edition: string | null;
+  status: string;
+  announcedDate: string | null;
+}
+
+export interface BusinessCategoryDocsStore {
+  getNode(businessCategoryId: string, nodeId: string): Promise<BusinessCategoryNodeInfo | null>;
+  /**
+   * 🔴 推 1 之落地：候選＝全部 ICSOP 文件（分頁＋關鍵字），簽章**不接受** lifecycleId／businessCategoryId
+   * 之類的過濾參數——這不是「傳了但沒用」，而是介面上根本不存在該參數（AC-20 之 spy 斷言的對象）。
+   */
+  listCandidateDocs(query: { keyword?: string; page: number; pageSize: number }): Promise<{ items: CandidateDocRef[]; total: number }>;
+  /** 掛載一筆（INV-B6 由 DB 唯一鍵 + 本方法之應用層預檢雙保險；違反時拋 BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED）。 */
+  mount(nodeId: string, documentId: string, mountedByAccountId: string, mountedAt: Date): Promise<void>;
+  /** 移除一筆；不存在回 false（服務層轉 404，🔴 不採靜默 200，AC-25／Edge Cases）。 */
+  unmount(nodeId: string, documentId: string): Promise<boolean>;
+  listNodeMountedDocs(businessCategoryId: string, nodeId: string): Promise<CategoryMountedDoc[]>;
+  /** 子樹抽屜批次版（比照 listNodesMountedDocs，避免逐節點查詢；AC-35）。 */
+  listNodesMountedDocs(businessCategoryId: string, nodeIds: string[]): Promise<Map<string, CategoryMountedDoc[]>>;
+  /** 選填能力，語意同 NodeDocsStore.runStructuralChange。 */
+  runStructuralChange?<T>(work: (tx: import('./business-category-structural-change').BusinessCategoryDocsStructuralTx) => Promise<T>): Promise<T>;
+}
+```
+
+> 🔴 **選填能力（`?`）之退化語意，逐一比照既有慣例**：`runStructuralChange` 未提供之 fake store → service 走「結構寫入 ＋ publisher.publish（no snapshot）」之退化路徑（既有純單元測試不驗證快照，行為不變，見 `lifecycle-structural-change.ts` 檔頭註解，逐字適用）；`countNodeMounts`／`listNodesMountedDocs` 為**新增之必要能力**（非選填）——與 `NodeDocsStore` 之對等方法不同，本功能沒有「先前版本未帶此能力」的既有 fake 需要相容，故直接宣告為必填，不多此一舉地選填。
+
+---
+
+### 14.4 Entity 與 Migration 規劃
+
+**三支 migration，時間戳接續既有序列最後一支 `1725235200000-ojt-training-edition.ts` 之後**：
+
+| # | 檔名 | 內容 | 對照既有先例 |
+|---|---|---|---|
+| 1 | `1725321600000-business-category.ts` | `CREATE TABLE` × 4：`BUSINESS_CATEGORY`／`BUSINESS_CATEGORY_NODE`／`BUSINESS_CATEGORY_EDGE`／`BUSINESS_CATEGORY_DOC`（同檔，一次遷移單元） | `1723507200000-appendix.ts`（`APPENDIX_POOL`＋`DOC_APPENDIX` 同檔） |
+| 2 | `1725408000000-business-category-change-log.ts` | `CREATE TABLE` × 2：`BUSINESS_CATEGORY_CHANGE_LOG`／`BUSINESS_CATEGORY_SNAPSHOT`（同檔，兩表 1:1 緊耦合，同批引入） | 結構比照 `1722729600000-lifecycle-change-log.ts`＋`1723161600000-lifecycle-snapshot.ts`（兩張表本身之欄位定義；本輪選擇同檔是因為兩表**同一功能批次首次引入**，不像 LIFECYCLE 側是分兩個既有既有 sprint 各自新增） |
+| 3 | `1725494400000-business-category-audit-columns.ts` | `AUDIT_LOG` 新增 `businessCategoryId uniqueidentifier NULL`／`nodeId uniqueidentifier NULL`（單一 `ALTER TABLE ADD`，既有列自動為 NULL，不需回填） | `1724976000000-audit-log-org-code.ts`（單欄位新增之既有寫法） |
+
+**表 1（核心結構）SQL 要點**：
+
+```sql
+CREATE TABLE [BUSINESS_CATEGORY] (
+  [id] uniqueidentifier NOT NULL CONSTRAINT [DF_BUSINESS_CATEGORY_id] DEFAULT NEWSEQUENTIALID(),
+  [name] nvarchar(100) NOT NULL,
+  [subcategory] nvarchar(100) NULL,
+  [description] nvarchar(500) NULL,
+  [status] varchar(10) NOT NULL CONSTRAINT [DF_BUSINESS_CATEGORY_status] DEFAULT 'active',
+  [createdAt] datetime2 NOT NULL,
+  [updatedAt] datetime2 NOT NULL,
+  CONSTRAINT [PK_BUSINESS_CATEGORY] PRIMARY KEY ([id])
+);
+-- INV-B1：MSSQL 視多個 NULL 為相等 ⇒ 對「同名之無子分類列至多一筆」恰好正確（比照 F040/LIFECYCLE 之既有結論）。
+-- 🔴 本表為新建空表，不需前置盤點清理（data-model.md 既有註記逐字適用）。
+CREATE UNIQUE INDEX [UQ_BUSINESS_CATEGORY_name_subcategory] ON [BUSINESS_CATEGORY] ([name],[subcategory]);
+
+CREATE TABLE [BUSINESS_CATEGORY_NODE] (
+  [id] uniqueidentifier NOT NULL CONSTRAINT [DF_BUSINESS_CATEGORY_NODE_id] DEFAULT NEWSEQUENTIALID(),
+  [businessCategoryId] uniqueidentifier NOT NULL,
+  [name] nvarchar(100) NULL,
+  [positionX] float NOT NULL CONSTRAINT [DF_BCN_positionX] DEFAULT 0,
+  [positionY] float NOT NULL CONSTRAINT [DF_BCN_positionY] DEFAULT 0,
+  CONSTRAINT [PK_BUSINESS_CATEGORY_NODE] PRIMARY KEY ([id])
+);
+CREATE INDEX [IX_BUSINESS_CATEGORY_NODE_businessCategoryId] ON [BUSINESS_CATEGORY_NODE] ([businessCategoryId]);
+
+CREATE TABLE [BUSINESS_CATEGORY_EDGE] (
+  [id] uniqueidentifier NOT NULL CONSTRAINT [DF_BUSINESS_CATEGORY_EDGE_id] DEFAULT NEWSEQUENTIALID(),
+  [businessCategoryId] uniqueidentifier NOT NULL,
+  [sourceNodeId] uniqueidentifier NOT NULL,
+  [targetNodeId] uniqueidentifier NOT NULL,
+  CONSTRAINT [PK_BUSINESS_CATEGORY_EDGE] PRIMARY KEY ([id])
+);
+CREATE INDEX [IX_BUSINESS_CATEGORY_EDGE_businessCategoryId] ON [BUSINESS_CATEGORY_EDGE] ([businessCategoryId]);
+-- 比照 LIFECYCLE_NODE／LIFECYCLE_EDGE：businessCategoryId／sourceNodeId／targetNodeId 不宣告 DB FK
+-- （既有 LIFECYCLE 家族之一貫寫法——entity 未見任何 FOREIGN KEY 宣告，完整性由服務層與交易邊界把關）。
+
+CREATE TABLE [BUSINESS_CATEGORY_DOC] (
+  [id] uniqueidentifier NOT NULL CONSTRAINT [DF_BUSINESS_CATEGORY_DOC_id] DEFAULT NEWSEQUENTIALID(),
+  [nodeId] uniqueidentifier NOT NULL,
+  [documentId] uniqueidentifier NOT NULL,
+  [mountedByAccountId] uniqueidentifier NOT NULL,
+  [mountedAt] datetime2 NOT NULL,
+  CONSTRAINT [PK_BUSINESS_CATEGORY_DOC] PRIMARY KEY ([id]),
+  -- 🔴 決策 E8（§14.6.7）：documentId 側建 FK CASCADE（今日休眠——ICSOP_DOCUMENT 從未被硬刪除，
+  -- 見 §14.6.7 查證——但零額外風險，且是決策 E9 判定「不需冗餘 businessCategoryId 欄」之防禦補強）。
+  CONSTRAINT [FK_BUSINESS_CATEGORY_DOC_document] FOREIGN KEY ([documentId])
+    REFERENCES [ICSOP_DOCUMENT]([id]) ON DELETE CASCADE
+);
+-- INV-B6：(nodeId, documentId) 唯一，僅此一個唯一鍵（🔴 不得另加 (businessCategoryId,documentId) 或 (documentId)）。
+CREATE UNIQUE INDEX [UQ_BUSINESS_CATEGORY_DOC_node_document] ON [BUSINESS_CATEGORY_DOC] ([nodeId],[documentId]);
+-- 決策 E4／E5（§14.6.3／§14.6.4）之熱路徑索引：依 documentId 批次反查、依 nodeId 取掛載清單。
+CREATE INDEX [IX_BUSINESS_CATEGORY_DOC_documentId] ON [BUSINESS_CATEGORY_DOC] ([documentId]);
+CREATE INDEX [IX_BUSINESS_CATEGORY_DOC_nodeId] ON [BUSINESS_CATEGORY_DOC] ([nodeId]);
+```
+
+`down()`：子表先於父表（`BUSINESS_CATEGORY_DOC`→`BUSINESS_CATEGORY_EDGE`→`BUSINESS_CATEGORY_NODE`→`BUSINESS_CATEGORY`），比照既有慣例。
+
+**表 2（變更歷程）**：欄位定義逐一比照 `LIFECYCLE_CHANGE_LOG`／`LIFECYCLE_SNAPSHOT`（見 §14.1 表格），僅 `lifecycleId`→`businessCategoryId`；`changeType` 仍為 `varchar(30)` **無 CHECK**（值域封閉性由 §14.2 之 `business-category-change-event.ts` TS 判別聯集把關，比照既有寫法）；DB 層 REVOKE UPDATE／DELETE 於 migration 尾端（`[integration]`，比照兩支既有表之既有作法）。
+
+**表 3（`AUDIT_LOG` 擴充）**：
+
+```sql
+ALTER TABLE [AUDIT_LOG] ADD [businessCategoryId] uniqueidentifier NULL;
+ALTER TABLE [AUDIT_LOG] ADD [nodeId] uniqueidentifier NULL;
+```
+
+不建索引（比照 `appendixId`／`orgCode` 之既有先例——非既有查詢熱路徑之過濾鍵；F024「對象」欄之查詢仍以 `targetType`＋`occurredAt` 之既有複合索引為主）。
+
+**⚠ Entity 白名單落點提醒**（本專案兩條血訓之第二條）：三支新 Entity（`BusinessCategory`／`BusinessCategoryNode`／`BusinessCategoryEdge`／`BusinessCategoryDoc`／`BusinessCategoryChangeLog`／`BusinessCategorySnapshot`）之全部欄位，**逐一列出於下列白名單並要求 tdd-implementation 逐項核對**：
+
+| 寫入路徑 | 必填欄位白名單（若漏列，值人間蒸發） |
+|---|---|
+| `BusinessCategoryStore.create()` | `name`／`subcategory`／`description`／`status`／`createdAt`／`updatedAt` |
+| `BusinessCategoryDagStore.createNode()` | `businessCategoryId`／`name`／`positionX`／`positionY` |
+| `BusinessCategoryDagStore.createEdge()` | `businessCategoryId`／`sourceNodeId`／`targetNodeId` |
+| `BusinessCategoryDocsStore.mount()` | `nodeId`／`documentId`／`mountedByAccountId`／`mountedAt` |
+| `recordStructuralChange()`（`business-category-structural-recorder.ts`） | `businessCategoryId`／`changeType`／`summary`／`oldValue`／`newValue`／`nodeId`／`actorId`／`actorName`／`actorEmployeeNo`／`occurredAt`／`snapshotId`（changeLog）＋ `businessCategoryId`／`changeLogId`／`nodesJson`／`edgesJson`／`capturedAt`（snapshot） |
+| `AuditWriterService.recordAccess()`（掛載／移除事件） | `targetType`／`actionType`／`targetId`(=documentId)／**`businessCategoryId`**／**`nodeId`**（AC-31 明訂三者皆須落地——`buildAuditRow()` 之新 `case` 必須把這兩個新欄從 event 帶到 row，見 §14.6.2） |
+
+---
+
+### 14.5 端點清單
+
+比照 `lifecycle`／`admin/change-history` 之既有路徑形狀。權威路由前綴 `/admin/business-categories`（後台）／`/public/business-categories`（前台）——F043 §Interface Contract 草案已與本表逐條核對，僅第 3 組（變更歷程）之閘門由本章確認（比照既有 `ChangeHistoryController` 之寫法，掛在同一 controller 而非新開）。
+
+| Method | 路徑 | 閘門 | 所在檔案 |
+|---|---|---|---|
+| GET | `/admin/business-categories` | `BUSINESS_CATEGORY_MANAGEMENT` read | `business-category.controller.ts` |
+| POST／PATCH／DELETE | `/admin/business-categories[/:id]` | write | 同上 |
+| GET | `/admin/business-categories/:id/graph` | read | `business-category-dag.controller.ts` |
+| POST／PATCH／DELETE | `/admin/business-categories/:id/nodes[/:nodeId]` | write | 同上 |
+| POST／DELETE | `/admin/business-categories/:id/edges[/:edgeId]` | write | 同上 |
+| GET | `/admin/business-categories/:id/nodes/:nodeId/candidates` | read | `business-category-docs.controller.ts` |
+| POST | `/admin/business-categories/:id/nodes/:nodeId/documents` | write | 同上 |
+| DELETE | `/admin/business-categories/:id/nodes/:nodeId/documents/:documentId` | write | 同上 |
+| GET | `/admin/business-categories/:id/nodes/:nodeId/subtree-documents` | read | 同上 |
+| GET | `/admin/business-categories/:id/tree/download`／`/print` | read（浮水印動作，見 §14.6.2） | `business-category-preview.controller.ts` |
+| **GET** | **`/admin/change-history/business-categories`** | `DOCUMENT_CHANGE_HISTORY` read（🔴 沿用既有列，見下方裁定） | `change-history.controller.ts`（既有檔 additive 擴充，非新檔） |
+| GET | `/admin/change-history/business-categories/export` | 同上 | 同上 |
+| GET | `/admin/change-history/business-categories/:changeLogId` | 同上 | 同上 |
+| GET | `/admin/change-history/business-categories/:businessCategoryId/changes/:changeLogId/tree-diff`／`/download` | `DOCUMENT_CHANGE_HISTORY` read（🔴 2026-09-02 lead 裁定改正，見下方裁定；`AC-54` ③ 明文） | `business-category-change-diff.controller.ts`（物理上掛於 `BusinessCategoriesModule`——避免 `ChangeHistoryModule` 反向 import 造成循環相依；URL 保留 `change-history` 家族前綴，比照既有 `lifecycle-change-diff.controller.ts:21` 之掛法逐字對稱） |
+| GET | `/public/business-categories` | 前台瀏覽（既有列，5 角色皆可） | `public-business-category.controller.ts` |
+| GET | `/public/business-categories/:id/graph` | 同上 | 同上 |
+| GET | `/public/business-categories/:id/nodes/:nodeId/documents` | 同上 | 同上 |
+
+🔒 **路由宣告順序紀律（供 tdd-implementation 對照落地，2026-09-02 lead 要求補充）**：`business-categories/export` **必須宣告於** `business-categories/:changeLogId` **之前**，否則 `export` 會被參數路由吃掉（Nest 依宣告順序比對路由，`:changeLogId` 這段會把字面 `export` 當成參數值收掉）。既有 `ChangeHistoryController` 之兩個 sibling 正是這樣排——`documents/export`（`:101`）宣告於 `documents/:documentId`（`:114`）之前、`lifecycles/export`（`:130`）宣告於 `lifecycles/:lifecycleId`（`:146`）之前；本表上方 `business-categories`／`business-categories/export`／`business-categories/:changeLogId` 三列之順序即依此排定，新增方法時比照。本 repo 對此有明文前例註解可逐字仿寫（`backend/src/public/public-documents.controller.ts:70`：「🔴 必須宣告於 `@Get(':id')` 之前，否則會被參數路由吃掉。」），tdd-implementation 落地新方法時請在其上方留下同一句提醒。
+
+> 📝 **OLD>（上表 diff／download 一列之原表述，2026-09-02 作廢，逐字保留供追溯）**：`| GET | /admin/business-categories/:id/changes/:changeLogId/diff／download | BUSINESS_CATEGORY_MANAGEMENT read | business-category-change-diff.controller.ts |`——**作廢理由**：① 該閘門會直接架空 `AC-54`（主管對業務/功能類別管理僅唯讀，若用該功能鍵守門，主管可直接呼叫 diff／download 取得變更歷程內容，而人類已明訂主管看不到任何一個 tab，`AC-54` ②）；② 路徑另掛 `/admin/business-categories/...` 前綴會使同一個 tab 之三個端點跨兩條守門鏈（list／export／單筆查詢已掛在 `/admin/change-history/business-categories*`），違反本節「一個守門鏈守一個頁面」之原則。經 test-generator 建環時揪出、lead 逐檔查證（`architecture-spec.md:4835`、F043 §Interface Contract、`lifecycle-change-diff.controller.ts:28,43` 三處）後裁定改正（2026-09-02）；本章覆核同意，無異議。<br>📝 **旁注（不影響本章任何內容）**：F043 §Interface Contract 草案曾一度將本組匯出寫作 `POST /admin/business-category-changes/export`（三邊收斂前之舊路徑家族），已由 spec-writer 就地改正為 `GET`；本章 §14.5 之 `business-categories/export` 列**自撰寫起即為 `GET`**（比照既有 `documents/export`／`lifecycles/export` 兩個 sibling），未曾誤寫為 `POST`，此處不需要、也沒有變更方法動詞。
+
+**變更歷程第三個 tab 之閘門裁定**：本章**確認**沿用「文件變更歷程」列（`FunctionKey.DOCUMENT_CHANGE_HISTORY`），與既有 `documents`／`lifecycles` 兩組端點**掛在同一個 `ChangeHistoryController`、同一把守門鏈**（`@Controller('admin/change-history')` ＋ `@UseGuards(SessionGuard, RolePermissionGuard)`，逐一方法各自 `@RequirePermission(FunctionKey.DOCUMENT_CHANGE_HISTORY, 'read')`，見 `change-history.controller.ts:79-158` 之既有寫法）——這是**結構事實而非新裁決**：tab 的可見性本來就必須與其所在頁面之權限一致（否則主管會看到一個只剩兩個 tab、其中一個是空殼的變更歷程頁）；F043 §Interface Contract 草案把此題列為待覆核（`OQ-B-02`），本章補上程式碼層之佐證，**最終定案仍循 F043 §人類閘網 OQ-B-02 之既有流程**（不越權替代人類裁決，僅確認技術可行性與既有結構相容）。**同一裁定延伸涵蓋 diff／download 兩端點**（2026-09-02 lead 裁定，見上表 `OLD>` 註記）——三個查詢/匯出端點與 diff/download 兩端點合計 5 個端點，共用同一把守門鏈、同一個閘門值，無分歧。
+
+---
+
+### 14.6 決策 E2～E9
+
+#### 14.6.1 決策 E2：防環演算法與樹狀佈局——**直接重用，不複製**
+
+`dag-cycle.ts`（`classifyEdge`／`isReachable`）與 `lifecycle-tree-layout.ts`（`buildTreeLayout`／`TreeGeometry`／`TREE_LAYOUT_CONST`）兩檔查證後確認**零 LIFECYCLE 專屬耦合**：
+
+- `Edge{sourceNodeId,targetNodeId}`、`EdgeVerdict='ok'|'self-loop'|'cycle'`——`classifyEdge()` 回傳的是**抽象判定結果**，不是錯誤碼；`BUSINESS_CATEGORY_SELF_LOOP`／`_CYCLE_DETECTED` 之對映**完全在 `BusinessCategoryDagService` 內部**完成（`switch (classifyEdge(edges, source, target)) { case 'self-loop': throw new BusinessCategorySelfLoopError(); ... }`），與 `DagService` 之對映邏輯並列但互不相干。這正是 `AC-16` 本身要求的形狀（「共用的是演算法，不是錯誤碼」）——本章的落地方式是**唯一**能同時滿足「零重複程式碼」與「零錯誤碼耦合」的做法。
+- `TreeLayoutNode{id,name,docCount}`／`TreeLayoutEdge{sourceNodeId,targetNodeId}`——`buildTreeLayout()` 之輸入輸出同樣零耦合，**前後端與 prototype 三方座標必須一致**之既有理由（dagre 版本鎖死）對 F043 之樹狀圖同樣成立，故沿用同一支函式而非另建一份，可**額外**省下一次「兩端版本鎖死」的維護點。
+
+裁定：`BusinessCategoryDagService`／`BusinessCategoryTreePreviewService`／`BusinessCategoryChangeDiffService` 一律 `import { classifyEdge, isReachable } from '../lifecycle/dag-cycle'` 與 `import { buildTreeLayout, TREE_LAYOUT_CONST } from '../lifecycle/lifecycle-tree-layout'`——**比照本 repo 既有之跨模組純函式匯入慣例**（`org-directory/org-path.ts`／`rbac/viewer-scope.ts` 等已建立之先例：直接以檔案路徑 import 零相依之純函式，不透過 NestJS DI、不加入 `@Module.imports`，因此**不產生任何模組相依圖上的邊**，`business-categories.module.ts` 不需 `imports: [LifecycleModule]`）。前端側同理直接 `import { buildTreeLayout } from '../pages/lifecycle-tree-layout'`（見 §14.8）。
+
+🔴 **明文禁止**修改 `dag-cycle.ts`／`lifecycle-tree-layout.ts` 之既有簽章或行為以「順便」支援本功能——查證後確認**兩檔案均無需任何修改**即可被 F043 直接消費，不存在需要動既有檔案的情境。
+
+#### 14.6.2 決策 E3（`OQ-B-09`）：稽核 `actionType`／`targetType`
+
+新增 **2 個 `AuditTargetType`**：
+
+- `'BUSINESS_CATEGORY'`——比照 `LifecycleAuditEvent`，涵蓋樹狀圖預覽／下載／列印（浮水印動作）與類別刪除（非浮水印）**及**掛載／移除（非浮水印，新增，`AC-31`）。
+- `'BUSINESS_CATEGORY_CHANGE_LOG'`——比照 `LifecycleChangeLogAuditEvent`，涵蓋第三個 tab 之檢視／下載。
+
+新增 **8 個 `AuditActionType`**：`BUSINESS_CATEGORY_VIEW`／`_DOWNLOAD`／`_PRINT`／`_DELETE`／`_DOC_MOUNTED`／`_DOC_UNMOUNTED`／`_CHANGELOG_VIEW`／`_CHANGELOG_DOWNLOAD`。
+
+```ts
+// audit.types.ts —— additive，既有變體形狀逐字不動
+export interface BusinessCategoryAuditEvent extends AuditEventBase {
+  targetType: 'BUSINESS_CATEGORY';
+  actionType:
+    | 'BUSINESS_CATEGORY_VIEW' | 'BUSINESS_CATEGORY_DOWNLOAD' | 'BUSINESS_CATEGORY_PRINT'
+    | 'BUSINESS_CATEGORY_DELETE'
+    | 'BUSINESS_CATEGORY_DOC_MOUNTED' | 'BUSINESS_CATEGORY_DOC_UNMOUNTED';
+  /**
+   * 🔴 AC-31：掛載／移除事件必須落地 nodeId／documentId；VIEW/DOWNLOAD/PRINT/DELETE 四種既有動作
+   * 無節點脈絡，選填（比照 UsageFormAuditEvent.documentId 之選填先例）。
+   */
+  nodeId?: string | null;
+  documentId?: string | null;
+}
+export interface BusinessCategoryChangeLogAuditEvent extends AuditEventBase {
+  targetType: 'BUSINESS_CATEGORY_CHANGE_LOG';
+  actionType: 'BUSINESS_CATEGORY_CHANGELOG_VIEW' | 'BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD';
+}
+```
+
+`buildAuditRow()`（`audit-event.ts`）新增兩個 `case`：
+
+```ts
+case 'BUSINESS_CATEGORY':
+case 'BUSINESS_CATEGORY_CHANGE_LOG':
+  businessCategoryId = event.targetId;
+  businessCategoryName = event.targetNumber ?? null;
+  break;
+```
+
+並在共用組裝段（`return { ... }`）新增 `businessCategoryId`／`nodeId: event.targetType === 'BUSINESS_CATEGORY' ? (event.nodeId ?? null) : null`／`documentId: ... (event.documentId ?? null)`——`AUDIT_LOG` 因此需要 **`businessCategoryId`（比照 `lifecycleId`）** 一欄（§14.4 migration 已含），加上既有 `documentId` 欄可直接複用（掛載/移除事件之 `documentId` 落在既有欄，不需新欄；`nodeId` 為本功能獨有，新欄，僅本功能非 null）。
+
+**F024 kind 篩選之精確落點**（查證 `access-history-filter.ts:17-35` 之既有 `kindToTargetTypes` 後確認，非臆測）：現行 5 種 kind 中 `'循環'` 目前**僅**映射 `['LIFECYCLE']`（`LIFECYCLE_CHANGE_LOG` 實際歸在 `'變更'` kind，與 `DOCUMENT_CHANGE_LOG` 並列）——F043 應**同構**跟進，而非另創一套分類法：
+
+```ts
+case '業務/功能類別':          // 第 6 種 kind（新增）
+  return ['BUSINESS_CATEGORY'];
+case '變更':                   // 既有 case，陣列由 2 值擴為 3 值
+  return ['DOCUMENT_CHANGE_LOG', 'LIFECYCLE_CHANGE_LOG', 'BUSINESS_CATEGORY_CHANGE_LOG'];
+```
+
+`access-history-labels.ts` 之 `targetType`→「類型」欄三值對照表**同步新增**：`'BUSINESS_CATEGORY'`→`'業務/功能類別'`（比照 `'LIFECYCLE'`→`'循環'`）、`'BUSINESS_CATEGORY_CHANGE_LOG'`→比照 `'LIFECYCLE_CHANGE_LOG'` 之既有對映（併入「變更」一類，本章未逐行讀取該檔完整內容，交 tdd-implementation 依既有寫法比照擴充）。
+
+#### 14.6.3 決策 E4：前台端點查詢下推（不得 N+1）
+
+`GET /public/business-categories/:id/graph` 之「各節點掛載數已套可見性過濾」——單一查詢取得整個類別之掛載明細，**於服務層一次性**套用 `isDocVisibleToViewer()`（`rbac/viewer-scope.ts`，既有純函式，F041 已建立），再於記憶體中 `GROUP BY nodeId` 計數：
+
+```ts
+// BusinessCategoryDocsStore 新增能力（單一 JOIN 查詢，非逐節點迴圈）
+listCategoryMountsForVisibility(businessCategoryId: string): Promise<Array<{
+  nodeId: string; documentId: string; announced: boolean; usingDepts: UsingDeptRef[];
+}>>;
+```
+
+實作為 `BUSINESS_CATEGORY_DOC ⋈ BUSINESS_CATEGORY_NODE ⋈ ICSOP_DOCUMENT`（取 `announcedDate`／`status` 判定 `isAnnounced`）＋批次反查 `DOC_USING_DEPT`（`documentId IN (...)`，比照既有 F041 清單富化之既有批次寫法），**單一類別**回傳全量（一個類別之掛載總數縱使無上限，量級仍遠小於全站文件數，OQ-B-05 已註記需真庫實測分佈，非本輪阻塞項）。服務層 `filter(isDocVisibleToViewer)` → `reduce` 依 `nodeId` 計數，總查詢次數**與節點數無關**（固定 2 次：主查詢 ＋ 批次 usingDepts 查詢）。
+
+#### 14.6.4 決策 E5：F017 第 16 欄之取值路徑——**additive 欄位，匯出 body 不變**
+
+**採 spec-writer 之強烈建議**：`GET /admin/documents` 回應**additive**新增 `businessCategories: {id, displayName}[]`（每列文件之掛載類別，依 `AC-B3` 以 `categoryId` 去重、依 `businessCategoryDisplayName` 字典序排序）；`POST /admin/documents/export` 之 body **不改動**（維持 §13.2③ 鎖定之「恰兩鍵 `documentIds`／`linkTargetId`」契約）。
+
+批次查詢（防 N+1，同一支方法供清單頁與匯出路徑共用）：
+
+```ts
+// BusinessCategoryDocsStore 新增能力
+listCategoriesByDocumentIds(documentIds: string[]): Promise<Map<string, Array<{ id: string; displayName: string }>>>;
+```
+
+單一查詢 `BUSINESS_CATEGORY_DOC ⋈ BUSINESS_CATEGORY_NODE ⋈ BUSINESS_CATEGORY WHERE documentId IN (:...documentIds)`，取回後於 JS 依 `(documentId, businessCategoryId)` 去重（`AC-B3`：同一類別掛在多個節點只呈現一顆 pill）並排序。`DocumentsService` 於既有 `enrichNames→…→enrichLinks` 五步富化管線**追加第六步** `enrichBusinessCategories`（比照既有富化步驟之寫法，讀取路徑對 §13.3 之 `list()`／`applyDocumentQuery()`／`DocumentStore` 介面**一行未改**，僅 `DocumentListItem` 新增一個 additive 欄位）；匯出路徑之 §13.3 步驟 4（「富化」）**自動涵蓋**本欄（同一支 `enrichBusinessCategories`，無需另開匯出專用查詢）。CSV 第 15 欄之多值串接沿用 A3（全形頓號 `、`）之既有推定，非本章裁定範圍。
+
+#### 14.6.5 決策 E6：`businessCategoryDisplayName` 與 `lifecycleDisplayName`——**收斂為單一實作，以別名匯出**
+
+`AC-06` 之固定向量本身已證明兩者對任意輸入輸出逐字相同；比對邏輯（有子分類 → `名稱（子分類）`，無 → `名稱`）**完全不含 LIFECYCLE 字面值**。裁定：**不複製第二份函式體**，`business-category-subcategory.ts` 直接：
+
+```ts
+export { normalizeSubcategory } from '../lifecycle/lifecycle-subcategory';
+export { lifecycleDisplayName as businessCategoryDisplayName } from '../lifecycle/lifecycle-subcategory';
+```
+
+`AC-06` 之固定向量測試因此**自動恆成立**（同一函式對自己恆等，如該 AC 自身後設宣告）——測試仍應保留（作為「本檔案確實重新匯出了正確的函式」之回歸鎖，防止日後有人誤植另一份實作）。前端 `domain/business-category.ts` 採同法：`export { lifecycleDisplayName as businessCategoryDisplayName } from './lifecycle-subcategory'`。
+
+#### 14.6.6 決策 E7：前台樹狀圖渲染元件之共用範圍
+
+**共用（直接 import，零複製）**：`buildTreeLayout()`／`TREE_LAYOUT_CONST`（前後端各一份既有副本，見決策 E2）、`dag-flow.ts` 之 `DagGraph↔ReactFlow` 轉換與直角箭頭渲染邏輯（查證 `frontend/src/pages/dag-flow.ts` 之型別消費面僅涉及 `id`／`name`／`docCount`／`positionX`／`positionY`／`sourceNodeId`／`targetNodeId`，**不**讀取 `lifecycleId`——理論上可與 `BusinessCategoryGraph` 直接相容；⚠ **需 tdd-implementation 於實作時逐行覆核 `../api/types.ts` 之 `DagGraph` 型別定義是否確實無 LIFECYCLE 專屬欄位耦合**，本章未窮盡讀取該檔全文，故列為「傾向共用、待覆核」而非「已證明共用」）、`lifecycle-tree-print-layout.ts`（列印直排版面）。
+
+**不共用（新建頁面元件）**：`BusinessCategoryTreePreviewPage.tsx`（後台唯讀預覽）與 `PublicCategoryTreePage.tsx`（前台）**皆為新檔**，不與 `LifecycleTreePreviewPage.tsx` 共用元件本體——理由與 `AC-16` 對防環演算法之立場一致（**共用的是渲染演算法，不是頁面元件**）：頁面元件承載路由、session、稽核呼叫、權限檢查、API 端點路徑等**業務綁定**，比照 §14.1 表格「純函式 vs DI/路由綁定薄橋接」之同一分類邏輯。
+
+前台版與後台版之**差異點**（決 3／`AC-B21`／待架構第 7 項要求明確界定）：
+1. **切換器選項範圍**：前台之類別下拉**僅列後端已過濾**之可見類別（`GET /public/business-categories` 本身即回傳過濾後清單，`AC-B18`）——前端**不需**額外邏輯排除不可見類別，deny-by-default 完全在後端達成（比照 §14.7）。
+2. **節點雙擊抽屜之文件連結**：前台指向 `/public/documents/:id`，後台指向 `/admin/documents/:id`——純字串路由差異，由各自頁面元件之 `linkTo()` helper 決定，不影響共用之 `buildTreeLayout`/`dag-flow` 渲染邏輯。
+3. **無下載/列印工具列**（A4 推定：前台本輪不提供 PDF 下載/列印），故 `PublicCategoryTreePage.tsx` 不含 `business-category-preview.controller.ts` 對應之呼叫端；後台版才有。
+
+#### 14.6.7 決策 E8：`BUSINESS_CATEGORY_DOC` 之刪除連動（`AC-26`／`AC-18`）——**混合處置：documentId 側 FK CASCADE，nodeId 側交易內顯式刪除**
+
+**documentId 側**：DB 層 `FK ... REFERENCES ICSOP_DOCUMENT(id) ON DELETE CASCADE`（§14.4 已列入 migration）。
+
+⚠ **查證結果須明白登錄**：grep `backend/src/documents/documents.store.ts`／`documents.service.ts`／`typeorm-documents.store.ts` 後確認，**目前系統中 `ICSOP_DOCUMENT` 之列從未被硬刪除**——文件僅透過 `status`（有效／失效／作廢）管理生命週期（`typeorm-documents.store.ts` 之 `.delete()` 呼叫僅用於次要之當責室長／使用部門關聯列，非文件本體）。`AC-26`「文件於掛載後被刪除」在**現行系統無可達路徑**。本裁決**仍**建 FK CASCADE，理由：① 零額外風險（今日休眠，不改變任何既有行為）；② 面向未來——若日後真的引入文件硬刪除，本表自動保持「不留孤兒列」之不變式，不需要任何人記得同步修改；③ 是決策 E9（§14.6.8）判定「不加冗餘 `businessCategoryId` 欄」時，佐證資料完整性可交給 DB 層而非服務層紀律的同一組理由。**此發現須交 spec-writer／lead 覆核**：`AC-26` 之情境若確認無可達路徑，建議標註為「面向未來之防禦性條文，非現行系統可測之行為」（見 §14.12）。
+
+**nodeId 側**：**不**建 FK CASCADE，改為 `BusinessCategoryDagStore.deleteNodeWithEdges()` 之 TypeORM 實作於**同一交易內**顯式 `DELETE FROM BUSINESS_CATEGORY_DOC WHERE nodeId = :nodeId`（比照既有 `DagStore.unmountNodeDocs?` 之「同交易顯式處理」既有模式，而非依賴 DB 層被動觸發）。理由：① `AC-18` 要求**刪除前**先算出「將移除 N 筆掛載關係」供二次確認提示——這是一個**主動查詢**（`countNodeMounts()`），FK CASCADE 不會、也不該替代這個使用者可見的確認流程；② 刪除動作、掛載列清除、結構變更事件（`NODE_REMOVED`＋快照）三者須在**同一 `runStructuralChange` 交易**內完成，顯式 SQL 語句在交易邊界的可見性與可測試性優於隱式 FK 觸發（單元測試可直接斷言 store 呼叫序列，FK CASCADE 之效果在 fake store 環境下無法被單元測試觀察到）。
+
+#### 14.6.8 決策 E9（lead 指派）：`BUSINESS_CATEGORY_DOC` 不加冗餘 `businessCategoryId` 欄
+
+**裁定：不加**。理由：
+
+1. **兩條已識別之「必須不 N+1」熱路徑（決策 E4／E5）皆已由單一 JOIN 查詢滿足**——`listCategoryMountsForVisibility()`／`listCategoriesByDocumentIds()` 均為 `BUSINESS_CATEGORY_DOC ⋈ BUSINESS_CATEGORY_NODE ⋈ BUSINESS_CATEGORY` 之三表 JOIN，`nodeId`／`businessCategoryId` 皆有索引（§14.4），MSSQL 於今日量級（591 份文件，單一類別掛載數上界待實測但預期同量級）之查詢規劃器可直接吃索引，**沒有被冗餘欄解決、卻解決不了的效能問題**。
+2. **加了就必須維護 data-model.md 已明文警告之不變式**——「與 `nodeId` 所屬類別恆一致」——而該不一致**在單元測試上不會顯現**（data-model.md 原文，本章查證後同意此風險評估）。省下一次 JOIN hop，換來一個只能靠紀律維持、測試看不到的第二真相來源，不划算。
+3. 若日後真庫實測顯示三表 JOIN 在極端掛載量下有效能問題（OQ-B-05 已標記待實測），補救路徑是**加索引或加快取**，而非反正規化——反正規化一旦引入就是永久的維護負擔，效能問題則可以在證據出現後再解。
+
+---
+
+### 14.7 前台兩種瀏覽模式資料流
+
+```mermaid
+graph TD
+    U(["前台使用者"]) --> Mode{"mode query 參數\n（缺省或不可辨識 → tree，AC-B14）"}
+    Mode -->|"mode=tree（預設）"| TreeFlow
+    Mode -->|"mode=list"| ListFlow["PublicListPage 既有邏輯\n（F019，一字不改）"]
+
+    subgraph TreeFlow["業務/功能類別樹狀圖模式"]
+        T1["GET /public/business-categories\n（僅回傳 active 且對本 viewer 至少一份可見文件之類別）"]
+        T2["GET /public/business-categories/:id/graph\n（節點/邊 + 過濾後掛載數，決策 E4）"]
+        T3["雙擊節點 → GET .../nodes/:nodeId/documents\n（deny-by-default，查詢層施加）"]
+        T1 --> T2 --> T3
+    end
+
+    subgraph GATE["後端查詢層之 deny-by-default（唯一施加點）"]
+        G1["已公告過濾：isAnnounced(item, today)\n（public-list.ts，既有）"]
+        G2["F041 業務子分類使用部門過濾：isDocVisibleToViewer(usingDepts, viewer)\n（rbac/viewer-scope.ts，既有）"]
+        G1 --> G2
+    end
+
+    T1 -.->|"套用"| GATE
+    T2 -.->|"套用（決策 E4 之批次查詢內）"| GATE
+    T3 -.->|"套用"| GATE
+
+    GATE --> POST1["前台不可見之類別/節點/文件\n一律不出現於回應，非以前端過濾隱藏"]
+```
+
+**F041 過濾之施加點**：與既有 F019 清單、F020 檢視器四方法之既有做法一致——**於後端查詢層**（`public-business-category.service.ts` 內），呼叫既有 `isDocVisibleToViewer(usingDepts, viewer)`（`rbac/viewer-scope.ts`，零修改）——`ViewerScope` 之組出點沿用既有 `toViewerScope(req.sessionUser)`（`SessionGuard` 每請求填入），**不新增**任何組出邏輯。`AC-B23`（兩種模式所能觸及之文件集合完全相同）由此**結構保證**：兩種模式之後端服務層呼叫**同一支** `isDocVisibleToViewer` 與**同一支** `isAnnounced`，樹狀圖模式沒有另開一條可見性判定的空間。
+
+---
+
+### 14.8 前端模組結構
+
+| 新／改檔（`frontend/src/`） | 職責 | 對照既有 |
+|---|---|---|
+| `domain/business-category.ts` | 重新匯出 `normalizeSubcategory`／`businessCategoryDisplayName`（決策 E6） | `domain/lifecycle-subcategory.ts` |
+| `pages/BusinessCategoryListPage.tsx` | 後台類別池清單（CRUD 入口） | `LifecycleListPage.tsx` |
+| `pages/BusinessCategoryDagCanvasPage.tsx` | 後台 DAG 畫布編輯頁；重用 `dag-flow.ts`（待覆核，決策 E7） | `DagCanvasPage.tsx` |
+| `pages/BusinessCategoryNodeDrawer.tsx` | 候選文件搜尋＋掛載／移除（🔴 無改派 UI、無二次確認警示，比照 F043 §丙推翻總表） | `NodeDrawer.tsx`（🔴 不共用元件本體——警示/改派 UI 邏輯是本功能明文不存在之東西，共用會把已推翻的 UI 帶進來） |
+| `pages/BusinessCategoryTreePreviewPage.tsx` | 後台唯讀樹狀圖預覽／PDF 下載列印／子樹抽屜 | `LifecycleTreePreviewPage.tsx`（決策 E7：不共用元件、共用底層佈局函式） |
+| `pages/PublicCategoryTreePage.tsx` | **新增**（無對等）；前台樹狀圖模式 | — |
+| `pages/PublicListPage.tsx` | **additive**：頂部模式切換器（`業務/功能類別樹狀圖`／`文件清單`），`mode` query 驅動渲染 `PublicCategoryTreePage` 或既有清單內容 | 既有檔，`文件清單` 模式一字不改（`AC-B24`） |
+| `pages/ChangeHistoryPage.tsx` | **additive**：第三個 tab `業務/功能類別樹狀圖`（🔴 2026-09-02 人類閘門動工後裁定之逐字標籤，**非**先前草稿之 `業務/功能類別`；見下方 ⚠ 命名碰撞警示） | 既有檔，前兩個 tab 一字不改（`AC-40`） |
+| `pages/DocumentListPage.tsx` | **additive**：第 16 欄 pill＋`+N`、第 14 項篩選、CSV 匯出納入第 15 欄 | 既有檔，既有 15 欄／13 項篩選一字不改 |
+| `domain/menu.ts` | **additive**：新增 `businesscategory` 項，`route: '/admin/business-categories'`，置於 `lifecycle` 項之後 | 既有檔 |
+| `domain/function-matrix.ts` | **additive**：`FunctionKey.BUSINESS_CATEGORY_MANAGEMENT = '業務/功能類別管理'`，`FUNCTION_MATRIX` 新增一列 `row('READ','CRUD','READ','NONE','NONE')` | 既有檔 |
+| `api/endpoints.ts` | **additive**：新增本功能全部端點之呼叫函式 | 既有檔 |
+
+> ⚠ **命名碰撞警示（2026-09-02，人類閘門裁定後新增）**：`ChangeHistoryPage.tsx` 第三個 tab 之標籤 `業務/功能類別樹狀圖`，與 `PublicListPage.tsx` 前台瀏覽模式切換器之標籤 `業務/功能類別樹狀圖`（[F019](features/F019-public-list-browsing.md#business-category-browse-delta) `AC-B12`）**逐字相同**，但是**兩個互不相干的載體**——不同頁面（`admin/change-history` vs `public`）、不同閘門（`FunctionKey.DOCUMENT_CHANGE_HISTORY` read vs 前台瀏覽、5 角色皆可）、不同角色集合（SysAdmin/ICSOPAdmin 唯讀 vs 全部 5 種角色）、不同語意（一個是「查詢過去結構變更事件」之 tab 名，一個是「當前瀏覽模式」之開關名，恰好撞了字面）。**約束（🔒 供 test-generator／tdd-implementation 遵守）**：<br>① 任何斷言此標籤之測試**必須先限定容器**（`within(changeHistoryTabsContainer).getByText(...)` 或等效之 scoped query），**禁止**對整個文件用全域 `getByText('業務/功能類別樹狀圖')`——兩個載體同時掛載於測試環境時（不太可能但非不可能，例如 Storybook 複合頁）會撞出重複元素而使查詢失敗或誤選；<br>② **禁止**把兩處字面值抽成同一個共用常數（如 `BUSINESS_CATEGORY_TREE_LABEL`）——這兩個標籤只是**碰巧同字**，不是同一個業務概念之兩處呈現（不像 `businessCategoryDisplayName` 那種「確實是同一件事」的情況，見決策 E6），共用常數會讓日後任一方因需求變動而必須改字時，被迫牽動另一方或漏改；各自的字面值各自宣告於各自頁面的檔案內。
+
+---
+
+### 14.9 共用 vs 複製之逐項裁定表
+
+| 既有純函式／模組 | 裁定 | 理由 |
+|---|---|---|
+| `lifecycle/dag-cycle.ts`（`classifyEdge`／`isReachable`） | 🟢 **直接重用**（import by path） | 零 LIFECYCLE 耦合；錯誤碼對映在呼叫端完成（決策 E2） |
+| `lifecycle/lifecycle-tree-layout.ts`（`buildTreeLayout`） | 🟢 **直接重用** | 同上（決策 E2） |
+| `lifecycle/lifecycle-tree-print-layout.ts` | 🟢 **直接重用** | 同上（列印排版，零耦合） |
+| `lifecycle/lifecycle-subcategory.ts`（`normalizeSubcategory`） | 🟢 **直接重用**（`AC-05` 明文鎖定） | 零耦合；F043 明文禁止複製第二份 |
+| `lifecycle/lifecycle-subcategory.ts`（`lifecycleDisplayName`） | 🟢 **直接重用**（別名匯出為 `businessCategoryDisplayName`） | 決策 E6：兩者證明恆等 |
+| `lifecycle-snapshot-builder.ts`（`buildSnapshotGraph`） | 🟡 **複製＋固定向量綁定** | 零耦合但遵循 lead 指定之既有反漂移模式（決策 E1），不做結構抽取 |
+| `lifecycle-change-diff.ts` 之 `computeLifecycleDiff` | 🟡 **複製＋固定向量綁定** | 同上 |
+| `lifecycle-change-diff.ts` 之 `reconstructBeforeAfter`／`selectPredecessor` | 🔴 **複製（不綁定）** | 與特定 store token 耦合，非漂移風險來源 |
+| `lifecycle.store.ts`／`dag.store.ts`／`node-docs.store.ts`（介面本體） | 🔴 **不重用**（新建對等介面） | store 介面即模組邊界之定義本身；`NodeDocsStore` 之語意（單一歸屬、改派）與本功能（M:N、無改派）**刻意相反**，共用介面會把已推翻之語意帶進型別系統 |
+| `dag-flow.ts`（前端） | 🟡 **傾向重用，待 tdd-implementation 覆核 `DagGraph` 型別耦合** | 本章未窮盡驗證 `api/types.ts` |
+| `NodeDrawer.tsx`／`LifecycleTreePreviewPage.tsx`（前端頁面元件） | 🔴 **不重用**（新建頁面） | 業務綁定（路由/API/警示 UI），且部分既有 UI（改派警示）是本功能明文不存在之行為 |
+
+🔴 **重申指導原則**（lead 交辦事項）：以上「🟢 直接重用」之三支既有檔案（`dag-cycle.ts`／`lifecycle-tree-layout.ts`／`lifecycle-subcategory.ts`）**經查證確認無需任何修改**即可被 F043 消費；本章**未**、也**不需要**變更這三支檔案之簽章或行為。
+
+---
+
+### 14.10 單元測試盲區（比照 §10.15／§11.11／§12.4／§13.5 格式）
+
+| # | 項目 | 盲區性質 | 說明 |
+|---|---|---|---|
+| 1 | **DB 層 UNIQUE INDEX 之 MSSQL 多重 NULL 相等語意（INV-B1）** | 🔴 **原理上測不到** | 單元測試以 fake store 驗證服務層邏輯，`CREATE UNIQUE INDEX ... ([name],[subcategory])` 之實際 MSSQL 行為（多個 NULL 視為相等）僅能於真庫驗證。比照本 repo 血訓：**寫完 migration 必須對真庫實跑**，單元測試全綠證明不了資料表存在或索引語意正確 |
+| 2 | **`BUSINESS_CATEGORY_DOC` FK CASCADE（documentId 側）之實際觸發** | 🔴 **原理上測不到，且現行系統無可達路徑** | 見決策 E8：`ICSOP_DOCUMENT` 從未被硬刪除，`AC-26` 之情境在單元測試層可以 mock 出來（store fake 模擬「文件刪除」事件），但 DB 層 FK CASCADE 本身之正確觸發**僅能真庫驗證**，而且今日無業務路徑會真正觸發它 |
+| 3 | **`AUDIT_LOG.businessCategoryId`／`nodeId` 兩新欄之落地** | 部分測得到 | `buildAuditRow()` 之對映邏輯可單元測試（純函式）；但 `AuditWriterService.recordAccess()` 是否確實把這兩欄寫進真實 DB 列，需整合層驗證（比照本 repo 血訓：NOT NULL/新欄若漏列於白名單過濾器會值人間蒸發——本例兩欄皆為 nullable，風險較低但仍建議 §14.4 白名單表逐項核對） |
+| 4 | **兩組固定向量綁定（決策 E1）是否確實兩端各自落地** | ✅ 環內可驗，但需 test-generator 主動確認 | `business-category-snapshot-builder.spec.ts`／`business-category-change-diff.spec.ts` 若只在一端建向量、未同時對照 `lifecycle-snapshot-builder.spec.ts`／`lifecycle-change-diff.spec.ts` 之既有向量，漂移不會被攔下 |
+| 5 | **前台樹狀圖之可見性過濾（決策 E4／§14.7）在真實瀏覽器下之表現** | 🔴 **原理上測不到** | 單元測試以 fake `isDocVisibleToViewer` 驗證邏輯正確；但整條路徑（SessionGuard 填入 `orgCode`/`companyCode` → 查詢層過濾 → 前端渲染節點掛載數）僅能瀏覽器煙霧測試驗證，比照本 repo 2026-07-25 之既有教訓 |
+| 6 | **`AC-20` 之「候選查詢參數不含 lifecycleId」斷言** | ✅ 環內可驗，但需語料鑑別力 | AC-20 本身已標注「3 個循環須至少 2 個相異且各有 ≥1 份文件」之語料要求，此處重申：測試語料若全部文件同屬一個循環，該斷言恆真、等於沒寫 |
+| 7 | **F017 第 16 欄之 CSV 位元組（決策 E5）** | ✅ 環內可驗 | 沿用 §13.4 之既有四條子命題手法（列集合／列序／逐格值／CSV 位元組規則），本輪僅新增一欄之值層規則，其餘三條子命題結構保證不變 |
+
+---
+
+### 14.11 被否決之替代方案（彙整）
+
+| 方案 | 否決理由 | 出處 |
+|---|---|---|
+| `OQ-B-01` 甲案：擴充 `LIFECYCLE_CHANGE_LOG`／`LIFECYCLE_SNAPSHOT` 為多型 | 解除 append-only 稽核級表之 FK 為不可逆代價；`changeType` 值域產生「型別合法、語意不合法」之落差 | §14.1 |
+| 為 `dag-cycle.ts`／`lifecycle-tree-layout.ts` 各建一份 F043 專屬複製 | 兩檔零 LIFECYCLE 耦合，複製只會製造無意義的第二份維護點；直接 import 零風險 | §14.6.1 |
+| 立即抽取 `buildSnapshotGraph`／`computeLifecycleDiff` 為共用泛型模組 | lead 明確指示「沿用既有『兩份逐字相同＋固定向量綁定』模式，不創新模式」；本輪遵照，抽取路徑保留為安全的日後選項 | §14.1 |
+| `BUSINESS_CATEGORY_DOC` 加冗餘 `businessCategoryId` 欄 | 兩條已識別熱路徑皆由單一 JOIN 滿足；冗餘欄之不變式在單元測試上不可觀察，維護風險大於效能收益（現無效能問題證據） | §14.6.8 |
+| `nodeId` 側亦採 FK CASCADE（不顯式刪除） | `AC-18` 需要**刪除前**之計數以驅動二次確認 UX，FK CASCADE 無法提供這個時序；顯式同交易刪除更利於單元測試觀察 | §14.6.7 |
+| F017 匯出端點 body 新增 `businessCategoryIds` 篩選鍵 | 牴觸 §13.2③ 已鎖定之「恰兩鍵」契約；本欄之值本就該由後端依 `documentIds` 自行 join 取得，與匯出範圍篩選無關 | §14.6.4 |
+| `NodeDocsStore`／`node-docs.store.ts` 直接擴充以支援 M:N 語意（不新建 `BusinessCategoryDocsStore`） | 該介面之既有語意（單一歸屬、改派、`NODE_DOC_ALREADY_ASSIGNED`）與本功能刻意相反；共用介面會讓型別系統同時容許兩種互斥語意，且既有 `NodeDocsService`／`F009` 全部既有測試之假設會被污染 | §14.3／§14.9 |
+| 變更歷程第三個 tab 另立獨立側選單頁與新 `FunctionKey` | 需另新增一列功能矩陣並回答其與「文件變更歷程」列之關係，成本高於收益；且與既有 `ChangeHistoryController` 之「一個守門鏈、多組資源」結構不一致 | §14.5 |
+
+---
+
+### 14.12 零漣漪確認與交回 spec-writer／lead 之事項
+
+#### 零漣漪確認
+
+| 保護對象 | 是否觸及 | 說明 |
+|---|---|---|
+| `LifecycleModule` 全部既有檔案 | ❌ 未動 | 僅被兩支純函式檔（`dag-cycle.ts`／`lifecycle-tree-layout.ts`）以唯讀 import 消費，簽章與行為零修改 |
+| `ICSOP_DOCUMENT` 欄位集合 | ❌ 未動 | `AC-50` 之明文要求；M:N 掛載僅存在於 `BUSINESS_CATEGORY_DOC` |
+| `F026` `FIELD_MATRIX` | ❌ 未動 | 沿用 `AC-51` 之結論（不新增列），本章未推翻該結論，仍待人類覆核（`OQ-B-08`，非本章職權範圍） |
+| `AUDIT_LOG` 既有欄位 | ❌ 未動 | 僅 additive 新增 `businessCategoryId`／`nodeId` 兩個 nullable 欄，既有查詢與索引不受影響 |
+| `access-history-filter.ts` 既有 5 種 kind 之既有 4 個 case | ❌ 未動 | 僅 `'變更'` case 之陣列由 2 值擴為 3 值（additive），`'文件'`／`'循環'`／`'上傳'`／`'OJT 場次'` 四個既有 case 一字不改 |
+| F017 既有 15 欄／13 項篩選／匯出 body 契約 | ❌ 未動 | 第 16 欄為 additive 頂層欄位；匯出 body 維持 §13.2③ 之恰兩鍵契約 |
+| F019 `文件清單` 模式 | ❌ 未動 | `AC-B24` 之明文要求；模式切換為新增之頂層開關，不改既有渲染路徑 |
+| `ChangeHistoryController` 既有 `documents`／`lifecycles` 兩組端點 | ❌ 未動 | 新增 `business-categories` 為並列之第三組方法，共用既有守門鏈設定，不修改既有路由宣告 |
+
+**必須觸及之既有程式路徑（三處，逐項說明為何無法避免）**：
+
+| # | 檔案 | 改動 | 為何無法避免 |
+|---|---|---|---|
+| 1 | `backend/src/audit/audit.types.ts`／`audit-event.ts` | 新增 2 個判別聯集變體＋`buildAuditRow()` 新增 2 個 `case` | additive 擴充既有 D 契約之既定手法（比照 F039／F042 加入時之既有先例），無法不觸碰這兩檔 |
+| 2 | `backend/src/audit/access-history-filter.ts`／`access-history-labels.ts` | `kindToTargetTypes` 新增 1 個 case＋既有 `'變更'` case 陣列擴充；標籤對照表新增 2 筆 | F024 類型篩選之既有單一真相來源，新增 kind 必然觸及此檔（比照 F042 `AC-J23` 加入 OJT 場次時之既有先例） |
+| 3 | `backend/src/change-history/change-history.controller.ts` | 新增 3 個方法（`business-categories`／`export`／`:id`），建構子新增注入 `BusinessCategoryChangeHistoryService` | 第三個 tab 之查詢/匯出端點比照既有 `documents`／`lifecycles` 掛在同一 controller（決策見 §14.5），無法另開新 controller 而不打破「一個守門鏈守一個頁面」之既有結構 |
+
+三處皆為 additive 擴充（新增 case／新增方法／新增建構子參數），**不預期使既有測試轉紅**。
+
+#### 交回 spec-writer
+
+| # | 事項 | 狀態 |
+|---|---|---|
+| ① | `data-model.md` §business-category-change-log-decision 之「⚠ 待裁定」已由本章裁定為**乙案**，並已就地改寫（見交付物清單），保留兩案取捨表供追溯 | ✅ 已裁定 |
+| ② | `F017 delta`（`AC-B1`～`AC-B11`）與 `F019 delta`（`AC-B12`～`AC-B27`）之 Interface Contract 段落，請回填決策 E5（`businessCategories` additive 欄位）與 §14.7（前台過濾施加點）之端點形狀細節 | ⏳ 待回填 |
+| ③ | 🔴 **`AC-26`（文件刪除連動）之情境查證結果**：現行系統 `ICSOP_DOCUMENT` 從未被硬刪除（見 §14.6.7） | 🟢 **已裁定**（2026-09-02，lead 採信查證，已請 spec-writer 將該條改標為「面向未來之防禦性條文」；§14.6.7 之 FK CASCADE 防禦性補強維持不變） |
+| ④ | `OQ-B-02`（變更歷程第三個 tab 之權限閘門）：本章確認**技術結構相容**沿用「文件變更歷程」列（既有 `ChangeHistoryController` 本就是「一組守門鏈、多組資源」之結構） | 🟢 **已裁定**（2026-09-02，人類閘門裁定沿用「文件變更歷程」列，與本章查證之結構相容） |
+| ⑤ | 🔴 **`AC-45` 與 `AC-54` 之間可能存在的內部矛盾，請 spec-writer 覆核**：`AC-45`（端點閘門）現行文字把「變更歷程查詢／匯出」列入**與清單／詳情／樹狀圖預覽同一組**「讀取類」端點，聲稱其閘門為 `BUSINESS_CATEGORY_MANAGEMENT` `read`；但**同日**、**較晚**之 `AC-54`（🟢 人類裁決）明訂變更歷程之閘門是「**文件變更歷程**」列（`DOCUMENT_CHANGE_HISTORY`），且主管對 `BUSINESS_CATEGORY_MANAGEMENT` 雖為唯讀，對變更歷程卻是整頁 403——若字面依 `AC-45` 實作，會**重新製造**本次 lead 已裁定改正的同一個 bug（主管可經 `BUSINESS_CATEGORY_MANAGEMENT` 唯讀權限直接看到變更歷程內容）。本章 §14.5 已依 `AC-54` 為準修正端點表；**建議 `AC-45` 之「變更歷程查詢／匯出」一項移出該讀取類清單，另以一句話明訂其閘門為 `DOCUMENT_CHANGE_HISTORY`（或直接引用 `AC-54`），避免兩條 AC 各自被不同下游 agent 採信而互相矛盾** | ⏳ **待覆核**（2026-09-02 本次修正 §14.5 時發現） |
+
+#### 交回 lead
+
+| # | 事項 |
+|---|---|
+| ① | **本章新增一個模組**（`BusinessCategoriesModule`）——這是本輪唯一之架構風格層級變動；其餘皆為既有模組之 additive 擴充，符合「Modular Monolith 不動」之全域約束 |
+| ② | §14.10 之 7 項單元測試盲區需於部署前 smoke 一併驗證，其中 #1／#2／#5 為原理上測不到之部署面缺口，建議與既有部署 smoke 併跑 |
+| ③ | 🔴 **`AC-26` 之可達性疑慮**（見「交回 spec-writer」③）：若確認無可達路徑，本章之 FK CASCADE 仍建議保留（零風險、面向未來），但 F043 該條之測試斷言形狀應調整為「以 store fake 模擬文件刪除事件」而非期待一個今日打不通的真實 API 路徑 |
+| ④ | 本章之 3 支 migration（§14.4）與既有兩條血訓完全對齊：① 皆待人類閘門核准後方可對真庫實跑；② Entity 白名單已逐一列出（§14.4 表格），供 tdd-implementation 逐項核對，避免「NOT NULL 欄漏列於 controller DTO 白名單 → 值人間蒸發」重演 |
 
 ---

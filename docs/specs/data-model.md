@@ -1,8 +1,8 @@
 ---
 spec-id: data-model
 title: 資料模型（概念層）
-version: 1.10
-date: 2026-08-28
+version: 1.12
+date: 2026-09-02
 status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 人類閘門通過；**v1.5 之 ACCOUNT.userSubtype 段落為 🟢 APPROVED 2026-08-11 人類閘門通過**；**v1.6 之 USAGE_FORM_POOL／DOC_USAGE_FORM 補登錄與 `formNumber` 新欄為 2026-08-16 使用者裁決**；**v1.7 新增 [USAGE_FORM_DRAFTING_DEPT](#usage-form-drafting-dept) 實體＋`AUDIT_LOG` 兩項 additive 擴充，為 2026-08-20 使用者裁決（D9 delta）**；**v1.8 新增 [ACCOUNT.roleSource](#account-role-source) 欄位，為 2026-08-25 人類閘門通過之角色自動化 delta**；**v1.9 新增 [OJT_SESSION](#ojt-session-entity) 實體草案＋`ICSOP_DOCUMENT` 第 17 欄改寫，為 2026-08-27 E11 OJT 進度管理（[F042](features/F042-ojt-progress-management.md)）Phase A 架構草案**；**🟢 v1.10（2026-08-28）人類閘門已對 E11 全部 16 題 OQ 裁決完畢，[OJT_SESSION](#ojt-session-entity) 段落全數收斂為定案**（`OQ-E11-01=C`／`02=C`／`03=B`／`04=A`／`05`～`07=B`／`09=A`／`10=A`／`11=A`／`13=B`／`16=B`；`OQ-E11-05`／`12`／`15` 為授權矩陣值域與 UI 篩選範圍，不影響資料模型本體）**）
 ---
 
@@ -25,6 +25,7 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 
 > **🔴 v1.11（2026-09-02）人類裁決——OJT 進度追蹤細緻到文件版本**：兩張表各新增一個 **additive** 欄位——[ICSOP_DOCUMENT](#document-entity) 之 **`ojtTrainingEdition`**（**OJT 訓練基準版次**＝各使用單位目前必須完成訓練的那個版次）與 [OJT_SESSION](#ojt-session-entity) 之 **`edition`**（登記當下之基準版次快照）。**完成判定自本輪起為「該列存在 `OJT_SESSION.edition` 與其文件 `ojtTrainingEdition` 相符之場次」**（`NULL` 對 `NULL` 亦相符），取代原本之「場次數 ≥ 1」。<br>🔴 **`ojtTrainingEdition` 刻意與 `edition`（版次）分成兩欄、不共用一欄**：改版**不必然**要求重新訓練——由 ICSOP 管理員於編輯時逐次裁決（[F011](features/F011-edit-with-comparison.md) 之改版問句）。共用一欄等於強制「改版＝全部單位重訓」，而人類明文要求那是一個**問句**、不是規則。⇒ 要求重訓時基準跟進新版次（既有場次因版次不符而失效，但**紀錄完整保留**）；不要求時基準不動（既有場次繼續算數）。<br>🔴 **兩欄皆須回填、且回填值刻意不同**：文件 `ojtTrainingEdition := edition`；場次 `edition := 其文件之 edition`（人類裁決：**既有場次視為當下版次**）。⚠ **不回填等於上線當天一批已完成的列無聲翻紅**。<br>🔒 **`OJT_SESSION` 之 append＋delete only（無 update 路徑）一格未動**——新欄於 `INSERT` 時一次寫定，之後不再變動；推進的是**文件端的基準**，不是回頭改場次。
 
+> 🟢 **v1.12（2026-09-02）APPROVED（2026-09-02 人類閘門通過）——業務/功能類別（E12／[F043](features/F043-business-function-category.md)）**：新增**四張表**——[BUSINESS_CATEGORY](#business-category-entity)（類別池，`(name, subcategory)` 為業務身分，INV-B1～INV-B3）／[BUSINESS_CATEGORY_NODE](#business-category-node)／[BUSINESS_CATEGORY_EDGE](#business-category-edge)（INV-B5 DAG 防環）／[BUSINESS_CATEGORY_DOC](#business-category-doc)（🔴 **M:N 掛載，`(nodeId, documentId)` 唯一**，INV-B6）。<br>🔴 **與 `LIFECYCLE` 家族平行、獨立、零耦合**：四張新表不參照循環相關實體；[ICSOP_DOCUMENT](#document-entity) **一欄未動**（**不新增** `businessCategoryId` 等任何欄位，[F043](features/F043-business-function-category.md) `AC-50`）——M:N 沒有任何單值欄位能表達它，加一個單值欄等於偷偷把模型改回單一歸屬。<br>🔴 **INV-B4（兩套掛載互不干涉）為本批最重要之不變式**：本功能之任一寫入不碰 `ICSOP_DOCUMENT.nodeId`／`lifecycleId`，反之亦然（雙向鎖定 [F043](features/F043-business-function-category.md) `AC-27`／`AC-48`）。<br>✅ **additive、零回填、無前置盤點**（四張皆為新建空表，唯一索引可於建表時一次建立）——⚠ **與同日 v1.11 之「兩欄皆須回填且回填值刻意不同」恰好相反，兩者不得互相套用**。<br>🟢 **變更歷程／快照之資料表落點已由 system-architect 裁定＝乙案**（`OQ-B-01`，[architecture-spec §14.1](architecture-spec.md#ch14-f043) 決策 E1）——**新增兩張平行表** [BUSINESS_CATEGORY_CHANGE_LOG](#businesscategorychangelog-entity)／[BUSINESS_CATEGORY_SNAPSHOT](#businesscategorysnapshot-entity)（欄位定義見該兩節；兩案取捨表保留於 [§落點](#business-category-change-log-decision) 供追溯）。既有 [LIFECYCLE_CHANGE_LOG](#lifecyclechangelog-entity)／[LIFECYCLE_SNAPSHOT](#lifecyclesnapshot-entity) **一欄未動**。<br>📝 **原措辭逐字保留供追溯**：`OLD>` 「⚠ 變更歷程／快照之資料表落點**本輪不敲定**，兩案取捨見 §待 system-architect 裁定（spec-writer 建議乙＝新增兩張平行表）。」<br>🔵 **本段全數為 DRAFT，未經人類閘門核准前不得建立 migration。**
 
 ## 實體總覽
 
@@ -39,6 +40,10 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 | LIFECYCLE | 循環（Life Cycle）池 | 本系統 |
 | LIFECYCLE_NODE | 循環內 DAG 節點 | 本系統 |
 | LIFECYCLE_EDGE | 循環內 DAG 有向邊 | 本系統 |
+| **BUSINESS_CATEGORY** 🔵 | 業務/功能類別池（與 `LIFECYCLE` **平行且獨立**之第二套 DAG 分類骨架，[F043](features/F043-business-function-category.md)／E12，2026-09-02 **DRAFT**） | 本系統 |
+| **BUSINESS_CATEGORY_NODE** 🔵 | 業務/功能類別內 DAG 節點 | 本系統 |
+| **BUSINESS_CATEGORY_EDGE** 🔵 | 業務/功能類別內 DAG 有向邊 | 本系統 |
+| **BUSINESS_CATEGORY_DOC** 🔵 | 節點↔ICSOP 文件之 **M:N** 掛載關聯（`(nodeId, documentId)` 唯一；🔴 **一份文件可掛多節點、多類別**——與 `ICSOP_DOCUMENT.nodeId` 之單一歸屬**互不干涉**） | 本系統 |
 | ICSOP_DOCUMENT | ICSOP 文件（19 欄位主體＋F039 新增第 20 欄「附錄」） | 本系統 |
 | DOCUMENT_LINK | 文件連結點（文件間關聯） | 本系統 |
 | DOCUMENT_ATTACHMENT | 附件（ICSOP PDF / OJT；`type='USAGE_FORM'` 為池模型導入前之歷史型態） | 本系統（檔案於 Azure Blob） |
@@ -343,6 +348,145 @@ status: Draft（v1.4 之 LIFECYCLE 子分類段落為 🟢 APPROVED 2026-08-07 �
 - **不變式（invariant）**：同一循環內所有邊構成有向無環圖（DAG）；禁止 self-loop 與任何成環。由 F008 於後端交易內權威驗證。
 - 支援節點多 parent / 多 child。
 - **相關功能**：F008。
+
+---
+
+# 業務/功能類別（E12／[F043](features/F043-business-function-category.md)，🟢 **APPROVED（2026-09-02 人類閘門通過）**，2026-09-02）
+
+> 🔵 **本區塊全段為 DRAFT**，未經人類閘門核准前不得建立 migration。權威規格＝[F043](features/F043-business-function-category.md)。
+> 🔴 **與循環（`LIFECYCLE` 家族）之關係＝平行、獨立、零耦合**：四張新表**不參照** `LIFECYCLE`／`LIFECYCLE_NODE`／`LIFECYCLE_EDGE`，亦**不在** `ICSOP_DOCUMENT` 上新增任何欄位（[F043](features/F043-business-function-category.md) `AC-50`）。兩套分類軸可對同一份文件同時成立。
+> 🔴 **本輪為 additive、無既有資料需回填**：四張表初始皆為空表；`ICSOP_DOCUMENT` 一欄未動，故**不需要任何回填**（與 2026-09-02 同日之 [v1.11 `ojtTrainingEdition`](#document-entity) 需雙向回填**恰好相反**，兩者不得互相套用）。
+
+## 業務/功能類別 BUSINESS_CATEGORY {#business-category-entity}
+
+**類別之業務身分＝`(name, subcategory)` 組合**（比照 [LIFECYCLE](#lifecycle-entity)／[F040](features/F040-lifecycle-subcategory.md)）：同一名稱下之不同子分類視為**彼此獨立的類別**，各自擁有獨立 UUID、獨立 DAG 結構與獨立文件掛載。
+
+| 屬性 | 說明 | 必填 |
+|------|------|------|
+| id | 系統 UUID | 是 |
+| name | 類別名稱（建議 `nvarchar(100)`，同 `LIFECYCLE.name`）；儲存前 trim | 是 |
+| subcategory | **子分類**（建議 `nvarchar(100)`，同 `name`）；與 `name` 併為業務身分。**無子分類時恆為 `null`，不得以空字串表示**；輸入之空白／空字串一律經**既有** `normalizeSubcategory` 正規化為 `null`（🔴 **重用 [F040](features/F040-lifecycle-subcategory.md) 之同一支純函式，不得複製第二份**，[F043](features/F043-business-function-category.md) `AC-05`） | 否 |
+| description | 說明 | 否 |
+| status | `active`(啟用) / `inactive`(停用) | 是 |
+| createdAt / updatedAt | 建立/更新時間 | 是 |
+
+### 唯一性不變式（[F043](features/F043-business-function-category.md)，2026-09-02） {#business-category-uniqueness}
+
+| ID | 不變式 | 違反時 |
+|---|---|---|
+| **INV-B1** | `(name, subcategory)` 組合於**本表**全表唯一；`subcategory = null` 視為單一具體值參與比對。**比對範圍涵蓋全部列、不分 `status`** | `BUSINESS_CATEGORY_DUPLICATE`（409） |
+| **INV-B2** | 對任一 `name`，其列集合**要麼恰為一筆 `subcategory = null`，要麼全部 `subcategory ≠ null`**，兩者不得並存（雙向禁止） | `BUSINESS_CATEGORY_SUBCATEGORY_CONFLICT`（409） |
+| **INV-B3** | `subcategory` 持久化值恆為 `null` 或非空之 trim 後字串 | 由服務層入口之 `normalizeSubcategory` 保證 |
+
+- 🔴 **唯一性比對嚴格限於本表**：`BUSINESS_CATEGORY` 與 [LIFECYCLE](#lifecycle-entity) 為**兩張獨立的表**，同名**不衝突**；**明文禁止**任何跨表名稱比對（[F043](features/F043-business-function-category.md) `AC-04`）。
+- **MSSQL 唯一索引與 NULL**：MSSQL 視多個 `NULL` 為相等，此語意對 INV-1 **恰好正確**（同名之「無子分類」列只能有一筆）——與 [LIFECYCLE 之既有處置](#lifecycle-unique-index-precheck) **逐字相同**。<br>✅ **本表無需前置盤點清理**（[LIFECYCLE](#lifecycle-unique-index-precheck) 當初必須盤點，是因為它是既有表且 `name` 原無唯一鍵）——本表為**新建空表**，唯一索引可於建表時一次建立。
+- **INV-B2 無法由單一唯一索引表達**（它是「同一 `name` 之列集合形狀」之約束，非列層唯一性），由**服務層權威保證**；DB 層是否另以 indexed view／trigger 二線強制屬實作選擇，不阻塞。
+- **顯示名稱**一律由純函式 `businessCategoryDisplayName({ name, subcategory })` 組合：有子分類 → `名稱（子分類）`（**全形括號、前後無空白**）；無 → `名稱`。其輸出與 `lifecycleDisplayName` 對同一輸入**逐字相同**（[F043](features/F043-business-function-category.md) `AC-06` 之固定向量不變式）。
+- **刪除保護**：仍有 [BUSINESS_CATEGORY_DOC](#business-category-doc) 掛載列時回 `BUSINESS_CATEGORY_HAS_DOCUMENTS`（409），語意＝**需先解除全部掛載才能刪除**；清空後刪除將一併移除其節點／邊。**停用（`inactive`）不受此限制**（[F043](features/F043-business-function-category.md) `AC-12`）。
+- **相關功能**：[F043](features/F043-business-function-category.md)、[F017](features/F017-backend-document-list.md#business-category-column-delta)、[F019](features/F019-public-list-browsing.md#business-category-browse-delta)、[F025](features/F025-role-function-matrix.md#business-category-function-key-delta)。
+
+## 業務/功能類別節點 BUSINESS_CATEGORY_NODE {#business-category-node}
+
+| 屬性 | 說明 | 必填 |
+|------|------|------|
+| id | 系統 UUID | 是 |
+| businessCategoryId | 所屬類別（→ [BUSINESS_CATEGORY](#business-category-entity)） | 是 |
+| name | 節點名稱（可先建立未命名，比照 [LIFECYCLE_NODE](#node-entity)） | 否 |
+| positionX / positionY | 畫布座標（top-down 佈局） | 是 |
+
+- 節點與文件為 **M:N**（經 [BUSINESS_CATEGORY_DOC](#business-category-doc)）——🔴 **與 [LIFECYCLE_NODE](#node-entity) 之「反向：一份文件僅屬一個節點」定案刻意相反**，理由見 [F043 §推翻總表](features/F043-business-function-category.md#override-table) 推 2。
+- 刪除節點連動刪除其相關邊**與其全部掛載列**（[F043](features/F043-business-function-category.md) `AC-18`）。
+- **相關功能**：[F043](features/F043-business-function-category.md)。
+
+## 業務/功能類別有向邊 BUSINESS_CATEGORY_EDGE {#business-category-edge}
+
+| 屬性 | 說明 | 必填 |
+|------|------|------|
+| id | 系統 UUID | 是 |
+| businessCategoryId | 所屬類別 | 是 |
+| sourceNodeId | 起點節點（parent） | 是 |
+| targetNodeId | 終點節點（child） | 是 |
+
+- **不變式 INV-B5**：同一類別內所有邊構成有向無環圖（DAG）；禁止 self-loop 與任何成環。由服務層**於後端交易內權威驗證**（比照 [LIFECYCLE_EDGE](#edge-entity)）。
+- 支援節點多 parent / 多 child。
+- 🔴 **違反時之錯誤碼刻意另立**：`BUSINESS_CATEGORY_SELF_LOOP`／`BUSINESS_CATEGORY_CYCLE_DETECTED`，**不沿用** `DAG_SELF_LOOP`／`DAG_CYCLE_DETECTED`——後者之使用者訊息含「**循環結構**」，而「循環」在本系統是已被 `LIFECYCLE` 佔用之專有名詞（[F043](features/F043-business-function-category.md) `AC-16` 之逐字理由）。**演算法可共用、錯誤碼不共用。**
+- **相關功能**：[F043](features/F043-business-function-category.md)。
+
+## 節點↔文件掛載 BUSINESS_CATEGORY_DOC {#business-category-doc}
+
+🔴 **本表是本功能與循環管理之結構差異所在**（人類裁決決 1，2026-09-02）。
+
+| 屬性 | 說明 | 必填 |
+|------|------|------|
+| id | 系統 UUID | 是 |
+| nodeId | 掛載之節點（→ [BUSINESS_CATEGORY_NODE](#business-category-node)） | 是 |
+| documentId | 掛載之文件（→ [ICSOP_DOCUMENT](#document-entity)） | 是 |
+| mountedByAccountId | 掛載操作者（→ ACCOUNT） | 是 |
+| mountedAt | 掛載時間（伺服器時間戳記） | 是 |
+
+| ID | 不變式 | 違反時 |
+|---|---|---|
+| **INV-B6** | `(nodeId, documentId)` 唯一。🔴 **這是本表唯一的唯一性約束**——**不得**另加 `(businessCategoryId, documentId)` 或 `(documentId)` 之唯一鍵（任一者都會把「一份文件可掛多節點／多類別」變回單一歸屬，**直接架空決 1**） | `BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED`（409） |
+| **INV-B4** | 🔴 **兩套掛載互不干涉**：對本表之任一寫入**一律不讀、不寫、不清空** `ICSOP_DOCUMENT.nodeId`／`lifecycleId`；反之 [F009](features/F009-node-drawer-maintenance.md) 之任一操作亦**不影響本表任一列** | 回歸缺陷（[F043](features/F043-business-function-category.md) `AC-27`／`AC-48` 之雙向鎖定） |
+
+- **無 `businessCategoryId` 冗餘欄**：類別可由 `nodeId` → `BUSINESS_CATEGORY_NODE.businessCategoryId` 推導。⚠ **若 system-architect 為查詢效能而反正規化加入該欄，必須同時定義「與 `nodeId` 所屬類別恆一致」之不變式與其維護點**——否則會出現「掛在 A 類別節點上、卻標記為 B 類別」之不可能狀態，而該不一致**在單元測試上不會顯現**。
+- **文件刪除之連動**：文件被刪除時，其全部本表列一併移除（FK `ON DELETE CASCADE` 或服務層同交易刪除，由 system-architect 定），**不留孤兒列**；🔴 **文件刪除不受本功能之刪除保護限制**——保護的對象是**類別**，不是文件（[F043](features/F043-business-function-category.md) `AC-26`）。
+- **索引建議**：`(documentId)` 需索引——[F017](features/F017-backend-document-list.md#business-category-column-delta) 第 16 欄與 CSV 第 15 欄為**依 `documentIds` 批次反查**之熱路徑（🔴 **效能紅線：不得 N+1**）。
+- **相關功能**：[F043](features/F043-business-function-category.md)、[F017](features/F017-backend-document-list.md#business-category-column-delta)、[F019](features/F019-public-list-browsing.md#business-category-browse-delta)。
+
+## 業務/功能類別結構變更歷程與快照之落點 {#business-category-change-log-decision}
+
+> 🟢 **system-architect 裁定完成（2026-09-02，`OQ-B-01`，architecture-spec.md 第 14 章決策 E1）**：[F043](features/F043-business-function-category.md) `AC-38`～`AC-42` 要求 append-only 之結構變更事件＋配對快照（比照 [F038](features/F038-lifecycle-tree-change-history.md)）。**裁定採乙案**——新增兩張平行表 [BUSINESS_CATEGORY_CHANGE_LOG](#businesscategorychangelog-entity)／[BUSINESS_CATEGORY_SNAPSHOT](#businesscategorysnapshot-entity)（本節下方已補上完整欄位定義）。兩案取捨表保留於下方供追溯，**不再阻擋實作**；本裁定仍待 F043 全檔人類閘門核准後方可建 migration。
+
+| 案 | 作法 | 優點 | 代價 |
+|---|---|---|---|
+| **甲** | **擴充既有** [LIFECYCLE_CHANGE_LOG](#lifecyclechangelog-entity)／[LIFECYCLE_SNAPSHOT](#lifecyclesnapshot-entity) 為**多型**：新增判別欄（如 `scopeType ∈ {LIFECYCLE, BUSINESS_CATEGORY}`）、`lifecycleId` 改為 nullable 並**解除其 FK → LIFECYCLE**、另加 nullable `businessCategoryId` | ① 只有一套查詢／重建／diff 程式碼，**結構上不可能漂移**；② 「文件變更歷程」頁三個 tab 共用同一資料路徑；③ 不新增表 | 🔴 ① 該表為 **append-only、DB 層已撤銷應用帳號 UPDATE／DELETE 權限**之稽核級資料，對其做 schema 變更之風險高於一般表；② **解除 FK ＝ 失去參照完整性**（此後任何 `lifecycleId` 髒值都不會被 DB 擋下）；③ 既有「變更前＝同 `lifecycleId` 之前一筆快照」查詢與其索引須全面改寫並重新驗證；④ `changeType` 值域須容納兩套（本功能**沒有** `DOCUMENT_REASSIGNED`，[F043](features/F043-business-function-category.md) `AC-39`）⇒ 值域對某一半恆為非法，需額外的「哪些值屬哪個 scope」規則 |
+| **乙** ✅ **system-architect 裁定採用**（2026-09-02） | **新增兩張平行表** `BUSINESS_CATEGORY_CHANGE_LOG`／`BUSINESS_CATEGORY_SNAPSHOT`（欄位結構比照，惟 `lifecycleId` → `businessCategoryId`、`changeType` 值域恰 7 值不含 `DOCUMENT_REASSIGNED`） | ① 既有 append-only 表**一欄未動、零風險**；② FK 與參照完整性完整保留；③ 各自之 `changeType` 值域封閉且**恰好正確**；④ migration 為純新建、可獨立回滾 | 🔴 ① **兩套近乎相同之查詢／重建／diff 程式碼可各自漂移**——須以本 repo 既有之「**兩份逐字相同 ＋ 同一組固定向量綁定**」處置約束（沿用 `watermarkLines()`／`change-labels.ts`／`OJT_STATUS_LABEL` 之模式，**不創新模式**）；② 表數量 +2 |
+
+- **spec-writer 之建議理由**：乙案之代價（程式碼重複）是**可用既有處置約束**的；甲案之代價（在稽核級 append-only 表上解除 FK）是**不可逆且無法以測試偵測**的——髒 `lifecycleId` 不會有任何一條斷言看得到它。
+- **system-architect 裁定理由（2026-09-02，補三點獨立查證，architecture-spec.md §14.1）**：① `LIFECYCLE_CHANGE_LOG`／`LIFECYCLE_SNAPSHOT` 為 append-only、DB 層已撤銷應用帳號 UPDATE／DELETE 權限之稽核級資料（`lifecycle-change-log.entity.ts`／`lifecycle-snapshot.entity.ts` 檔頭明文）——甲案「解除 FK」換來的是一套查詢程式碼，賠上的是一條沒有任何單元測試看得到鬆開的資料完整性防線；② `changeType` 值域本來就不共通（`LIFECYCLE_CHANGE_LOG` 8 值含 `DOCUMENT_REASSIGNED`，本功能刻意恰 7 值），多型化後會產生「型別合法、語意不合法」之落差；③ 既有 `LifecycleChangeLogStore.findPredecessor()` 之索引命中路徑與既有 `AC-D#`／`AC-T#` 系列測試之查詢假設，於乙案下**不需要**重新驗證正確性。反漂移處置（「兩套近乎相同之查詢／重建／diff 程式碼」）**沿用本 repo 既有之「兩份逐字相同 ＋ 同一組固定向量綁定」模式**（`watermarkLines()`／`change-labels.ts`／`OJT_STATUS_LABEL` 之既有先例），逐一盤點後僅 `lifecycle-snapshot-builder.ts` 之 `buildSnapshotGraph`／`lifecycle-change-diff.ts` 之 `computeLifecycleDiff`（皆為零 LIFECYCLE 耦合之純函式）需要複製並以固定向量綁定；`selectPredecessor`／`reconstructBeforeAfter`／服務層則因與特定 store token 耦合而正常複製、無需綁定。細節見 [architecture-spec.md §14.1](architecture-spec.md#ch14-f043)。
+- 🔴 **無論採何案，下列三項不變**：① 事件與快照**於同一交易內**寫入；② 事件列 append-only（DB 層撤銷 UPDATE／DELETE）；③ 快照為**自我完備之結構化 JSON**（節點＋邊＋**各節點之掛載文件清單**），重建時不需回查即時表。
+- ⚠ **快照之內容比 [LIFECYCLE_SNAPSHOT](#lifecyclesnapshot-entity) 多一層**：後者之 `nodesJson` 內含「掛載文件 `id`+`documentNumber` 清單」，本功能因 M:N 而**同一份文件可出現在多個節點之清單中**——這是事實、非重複資料，**不得去重成一份「本類別掛載文件清單」**（那會使「變更前後哪個節點多／少了誰」無從 diff）。
+
+### 業務/功能類別結構變更日誌 BUSINESS_CATEGORY_CHANGE_LOG {#businesscategorychangelog-entity}
+
+業務/功能類別 DAG 結構變更事件，**逐原子操作各一筆**（比照 [LIFECYCLE_CHANGE_LOG](#lifecyclechangelog-entity) 之既有模式）。⚠ **本節之欄位定義以 `backend/src/database/entities/lifecycle-change-log.entity.ts` 之現行實作欄位為準**（`summary`／`oldValue`／`newValue`／`actorId`／`actorName`／`actorEmployeeNo`／`occurredAt`），**非**上方 [LIFECYCLE_CHANGE_LOG](#lifecyclechangelog-entity) 段落文字所述之 `entityType`／`entityId`／`changedByAccountId`／`department`／`section`／`changedAt`——後者為 2026-08-08 裁定前之舊措辭，**與現行已上線之實作欄位不一致**，已於 [architecture-spec.md §14.12](architecture-spec.md#ch14-f043) 登錄為交回 spec-writer 之待覆核事項（建議一併校正 [LIFECYCLE_CHANGE_LOG](#lifecyclechangelog-entity) 段落文字，非本輪 F043 範圍）。
+
+| 屬性 | 說明 | 必填 |
+|------|------|------|
+| id | 系統 UUID（應用層 `randomUUID()` 明確給定） | 是 |
+| businessCategoryId | 所屬業務/功能類別（→ [BUSINESS_CATEGORY](#business-category-entity)）。**本表不存類別名稱**，顯示時 join 取當前值後經 `businessCategoryDisplayName` 組合（比照 `lifecycleId` 之既有處置） | 是 |
+| changeType | `NODE_ADDED` / `NODE_REMOVED` / `NODE_RENAMED` / `EDGE_ADDED` / `EDGE_REMOVED` / `DOCUMENT_MOUNTED` / `DOCUMENT_UNMOUNTED`——**恰 7 值，不含 `DOCUMENT_REASSIGNED`**（[F043](features/F043-business-function-category.md) `AC-39`：M:N 模型下掛載與移除為兩個各自獨立之原子動作，無改派語意） | 是 |
+| summary | 人類可讀之變更摘要 | 是 |
+| oldValue / newValue | 舊值／新值快照（節點舊名／新名等；無則 `null`） | 否 |
+| nodeId | 相關節點 id（供新舊樹重建定位；無則 `null`） | 否 |
+| actorId | 操作者帳號（→ ACCOUNT） | 否 |
+| actorName / actorEmployeeNo | 操作者身分快照 | 否 |
+| occurredAt | 伺服器時間戳記 | 是 |
+| snapshotId | → [BUSINESS_CATEGORY_SNAPSHOT](#businesscategorysnapshot-entity)，本次動作完成後之完整結構快照（1:1，同一交易內產生） | 是 |
+
+- **唯一寫入路徑**：`BusinessCategoriesModule`（新增/刪除節點/邊、節點改名、文件掛載/移除），於自身既有交易內同步寫入本表＋對應快照，不經 Outbox（比照 architecture-spec.md §5.9 之既有交易一致性模式）。
+- **重建「變更前」狀態**：取同 `businessCategoryId`、`occurredAt` 早於本筆之最近一筆本表紀錄之 `snapshotId`；若無更早紀錄（該類別第一筆事件），視為空 DAG。
+- **Append-only**：不可竄改，DB 層撤銷應用帳號 UPDATE／DELETE 權限（migration 落地，`[integration]`，比照 `LIFECYCLE_CHANGE_LOG`／`AUDIT_LOG` 之既有先例）。
+- **相關功能**：[F043](features/F043-business-function-category.md)。
+
+### 業務/功能類別結構快照 BUSINESS_CATEGORY_SNAPSHOT {#businesscategorysnapshot-entity}
+
+每筆 `BUSINESS_CATEGORY_CHANGE_LOG` 事件完成後之完整類別結構快照（節點＋邊＋各節點掛載文件清單，結構化資料非檔案），供 F043 第三個 tab 之新舊樹狀圖渲染直接讀取，不需重放（replay）運算。
+
+| 屬性 | 說明 | 必填 |
+|------|------|------|
+| id | 系統 UUID | 是 |
+| businessCategoryId | 所屬業務/功能類別 | 是 |
+| changeLogId | 回指產生此快照之事件（→ BUSINESS_CATEGORY_CHANGE_LOG，1:1，唯一索引把關，無 DB FK——理由同 [LIFECYCLE_SNAPSHOT](#lifecyclesnapshot-entity) 之既有處置：兩 UUID 皆於寫入前算好，避免雙向 1:1 插入順序死結） | 是 |
+| nodesJson | 當下節點集合快照（`id`／`name`／`positionX`／`positionY`／掛載文件 `id`+`documentNumber` 清單）。⚠ **M:N 差異**：同一份文件可出現在多個節點之清單中，**不得去重**（見上方裁定理由） | 是 |
+| edgesJson | 當下邊集合快照（`id`／`sourceNodeId`／`targetNodeId`） | 是 |
+| capturedAt | 快照時間（＝對應事件之 `occurredAt`） | 是 |
+
+- 為自我完備（self-contained）之結構化 JSON，F043 第三個 tab 預覽/下載渲染時不需回查 `BUSINESS_CATEGORY_NODE`／`BUSINESS_CATEGORY_EDGE`／`BUSINESS_CATEGORY_DOC` 即時表。
+- **相關功能**：[F043](features/F043-business-function-category.md)。
+
+---
 
 ## ICSOP 文件 ICSOP_DOCUMENT {#document-entity}
 
@@ -752,10 +896,12 @@ ORDER BY s.uploadedAt DESC;
 | employeeNo / name / department / section | 操作者身分快照（與浮水印同一來源） | 是 |
 | documentId / documentNumber | 被調閱文件（**條件必填**：`targetType∈{DOCUMENT, USAGE_FORM, APPENDIX, DOCUMENT_CHANGE_LOG}` 時必填，其餘為 null）。<br>🔴 **2026-08-20 新增之明列例外**：自**表單池管理頁**（`GET /admin/usage-forms/:formId/download`）或**附錄池管理頁**（`GET /admin/appendices/:appendixId/download`）之個別下載，其脈絡**不隸屬任何文件** ⇒ `targetType='USAGE_FORM'`／`'APPENDIX'` 而 `documentId` 為 **`null`**（`formId`／`appendixId` 仍必填）。見 [F020](features/F020-watermark.md#backend-burn-delta) `AC-N17`、[F023](features/F023-audit-logging.md#d9-audit-delta) `AC-N51`、[F039](features/F039-appendix-management.md#d9-backend-burn-delta) `AC-N57`。 | 否 |
 | lifecycleId / lifecycleName | 被調閱循環（**新增**；**條件必填**：`targetType∈{LIFECYCLE, LIFECYCLE_CHANGE_LOG}` 時必填，其餘為 null） | 否 |
-| targetType | `DOCUMENT` / `USAGE_FORM` / `APPENDIX`（**新增**，F039 附錄下載）/ **`DOCUMENT_ATTACHMENT`（🔴 2026-08-20 新增，F016 OJT 附件上傳；`documentId` 條件必填。刻意不沿用 `DOCUMENT`——見下方 `ATTACHMENT_UPLOAD` 擴充段之理由）**/ `LIFECYCLE`（F036 循環樹狀圖）/ `DOCUMENT_CHANGE_LOG`（F037 變更歷程）/ `LIFECYCLE_CHANGE_LOG`（F038 循環變更歷程）/ `ORG_CHANGE_ALERT`（F006 組織異動提示處理） | 是 |
+| **businessCategoryId / businessCategoryName** | 🔵 **新增**（F043，2026-09-02，DRAFT）。被調閱業務/功能類別（**條件必填**：`targetType∈{BUSINESS_CATEGORY, BUSINESS_CATEGORY_CHANGE_LOG}` 時必填，其餘為 null）；比照 `lifecycleId`／`lifecycleName` 之既有形狀 | 否 |
+| **nodeId** | 🔵 **新增**（F043，2026-09-02，DRAFT）。掛載／移除動作所涉之節點（**條件必填**：`targetType=BUSINESS_CATEGORY` 且 `actionType∈{BUSINESS_CATEGORY_DOC_MOUNTED, BUSINESS_CATEGORY_DOC_UNMOUNTED}` 時必填，其餘為 null；[F043](features/F043-business-function-category.md) `AC-31`） | 否 |
+| targetType | `DOCUMENT` / `USAGE_FORM` / `APPENDIX`（**新增**，F039 附錄下載）/ **`DOCUMENT_ATTACHMENT`（🔴 2026-08-20 新增，F016 OJT 附件上傳；`documentId` 條件必填。刻意不沿用 `DOCUMENT`——見下方 `ATTACHMENT_UPLOAD` 擴充段之理由）**/ `LIFECYCLE`（F036 循環樹狀圖）/ `DOCUMENT_CHANGE_LOG`（F037 變更歷程）/ `LIFECYCLE_CHANGE_LOG`（F038 循環變更歷程）/ `ORG_CHANGE_ALERT`（F006 組織異動提示處理）/ `ACCOUNT`（角色自動化異動）/ `OJT_SESSION`（F042 場次登記/刪除）/ 🔵 **`BUSINESS_CATEGORY`／`BUSINESS_CATEGORY_CHANGE_LOG`（新增，F043，2026-09-02，DRAFT，見下方擴充段） | 是 |
 | formId | 使用表單附件（targetType=USAGE_FORM 時） | 否 |
 | appendixId | 附錄池記錄（**新增**，→ APPENDIX_POOL；**條件必填**：`targetType=APPENDIX` 時必填，其餘為 null） | 否 |
-| actionType | `VIEW` / `DOWNLOAD` / `PRINT`（既有，`targetType=DOCUMENT/USAGE_FORM` 適用）／`DOWNLOAD`（**`targetType=APPENDIX` 之唯一合法動作**，F039）／`LIFECYCLE_VIEW` / `LIFECYCLE_DOWNLOAD` / `LIFECYCLE_PRINT`（`targetType=LIFECYCLE`，F036）／`CHANGE_LOG_VIEW`（`targetType=DOCUMENT_CHANGE_LOG`，F037）／`LIFECYCLE_CHANGELOG_VIEW` / `LIFECYCLE_CHANGELOG_DOWNLOAD`（`targetType=LIFECYCLE_CHANGE_LOG`，F038）／`ALERT_RESOLVED`（**新增**，`targetType=ORG_CHANGE_ALERT`，F006 提示解除）／**`ACCESS_HISTORY_EXPORT`（🔴 2026-08-18 新增，additive；F024 匯出文件調閱歷程，見 [F024](features/F024-access-history-query.md#export-fix-delta) `AC-F13`。⚠ 其 `targetType`／`targetId` 落點**待 system-architect 裁定**——現有 7 個 `targetType` 皆不適用，且 `buildAuditRow()` 對 `targetId` 為必填）** | 是 |
+| actionType | `VIEW` / `DOWNLOAD` / `PRINT`（既有，`targetType=DOCUMENT/USAGE_FORM` 適用）／`DOWNLOAD`（**`targetType=APPENDIX` 之唯一合法動作**，F039）／`LIFECYCLE_VIEW` / `LIFECYCLE_DOWNLOAD` / `LIFECYCLE_PRINT`（`targetType=LIFECYCLE`，F036）／`CHANGE_LOG_VIEW`（`targetType=DOCUMENT_CHANGE_LOG`，F037）／`LIFECYCLE_CHANGELOG_VIEW` / `LIFECYCLE_CHANGELOG_DOWNLOAD`（`targetType=LIFECYCLE_CHANGE_LOG`，F038）／`ALERT_RESOLVED`（**新增**，`targetType=ORG_CHANGE_ALERT`，F006 提示解除）／**`ACCESS_HISTORY_EXPORT`（🔴 2026-08-18 新增，additive；F024 匯出文件調閱歷程，見 [F024](features/F024-access-history-query.md#export-fix-delta) `AC-F13`。⚠ 其 `targetType`／`targetId` 落點**待 system-architect 裁定**——現有 7 個 `targetType` 皆不適用，且 `buildAuditRow()` 對 `targetId` 為必填）**／`ROLE_ASSIGNED`（角色自動化異動）／`OJT_SESSION_UPLOAD`／`OJT_SESSION_DELETE`（F042 場次）／🔵 **`BUSINESS_CATEGORY_VIEW`／`_DOWNLOAD`／`_PRINT`／`_DELETE`／`_DOC_MOUNTED`／`_DOC_UNMOUNTED`／`_CHANGELOG_VIEW`／`_CHANGELOG_DOWNLOAD`（新增，F043，2026-09-02，DRAFT，見下方擴充段） | 是 |
 | watermarkSnapshot | 當次浮水印完整字串快照（`DOWNLOAD`/`PRINT` 系列動作皆須填；純 `VIEW` 系列亦填，與檢視器疊加一致） | 是 |
 | occurredAt | 伺服器時間戳記 | 是 |
 | source | `DIRECT`(一般前台路徑) / `AI_QA`(經 AI 智慧問答導引)，預設 `DIRECT`（E09 US-097） | 是 |
@@ -773,8 +919,9 @@ ORDER BY s.uploadedAt DESC;
 - **`ATTACHMENT_UPLOAD` 擴充（F016，2026-08-20，additive）**：主管／部門窗口之 **OJT 附件上傳**須寫本表一列（`OQ-D9-23` 裁決）。**純新增 `actionType` 字面值**，既有 12 種 `actionType` 與 7 種 `targetType` 之語意與落列規則**皆不變**（比照 `LIFECYCLE_DELETE`／`APPENDIX`／`ACCESS_HISTORY_EXPORT` 之先例）。落列規則：**`targetType='DOCUMENT_ATTACHMENT'`**（🔴 **2026-08-20 第二輪就地修訂**；📝 原文為 `targetType='DOCUMENT'`，逐字保留供追溯）、`documentId`／`documentNumber` **條件必填**（⇒ `buildAuditRow()` 之 switch 須新增分支 **`DOCUMENT_ATTACHMENT → documentId`**，`targetId` **不會缺值**，與 `ACCESS_HISTORY_EXPORT` 之未決落點問題**不同型**）、身分快照欄＝**執行上傳之操作者本人**、`watermarkSnapshot` 為 **`null`**（非浮水印動作）、`source='DIRECT'`、`occurredAt`＝伺服器時間。<br>🔴 **為何另立 `targetType` 而非沿用 `DOCUMENT`（`OQ-D9-29` 裁決之直接後果，不得省略）**：沿用 `DOCUMENT` 會使本列落入 [F024](features/F024-access-history-query.md) 既有之「**文件**」類（`kindToTargetTypes('文件')`）⇒ **「文件調閱歷程」被非調閱之寫入事件污染且無從排除**。專屬 `targetType` 使「文件」類**天然不含它**（排除），並可經新增之「上傳」類**單獨篩出**（[F024](features/F024-access-history-query.md#d9-audit-view-delta) `AC-N69`）。<br>📌 **本表既有 7 種 `targetType` 之語意、落列規則與 `kindToTargetTypes` 之既有三組對映一格未動**——`DOCUMENT_ATTACHMENT` 為**純新增之第 8 個值**。<br>✅ **不需 migration**：`actionType` 為 `varchar(40)`、**無 CHECK 約束**（`migrations/1721952000000-audit-log.ts`，2026-08-18 已查證）。<br>📌 **[F024](features/F024-access-history-query.md) 類型篩選歸屬（🔴 2026-08-20 第二輪就地修訂）**：`targetType='DOCUMENT_ATTACHMENT'` ⇒ 落入**新增之第四種類型篩選值「上傳」**（`kindToTargetTypes('上傳') = ['DOCUMENT_ATTACHMENT']`；既有三組對映**逐字不變**）；「類型」欄之中文標籤為 **`上傳`**、「操作類型」欄為 **`附件上傳`**（前後端兩份對照表各補同一組鍵值，見 [F024](features/F024-access-history-query.md#d9-audit-view-delta) `AC-N53`／`AC-N69`）。<br>📝 **被修訂之原條文逐字保留供追溯**：「`targetType='DOCUMENT'` ⇒ 落入既有「**文件**」類（`kindToTargetTypes` 不變）；「操作類型」欄之中文標籤為 **`附件上傳`**（前後端兩份對照表各補同一組鍵值，見 `AC-N53`）。」<br>🔴 **角色不對稱（刻意，`OQ-D9-23` 之直接後果）**：**僅**主管／部門窗口之上傳寫入本表；**ICSOPAdmin 之附件上傳仍不寫**（`OQ-E01-09` 之既有落差本輪不償還）。⚠ 此不一致與「調閱歷程表承載寫入事件」之分類學衝突已提報為 [open-questions](open-questions.md) `OQ-D9-29`。
 - 🔴 **後台燒錄下載之稽核擴充（F020／F018／F039，2026-08-20，`OQ-D9-10`）**：後台四條下載端點自本日起**一律寫入本表**（推翻 `OQ-FM-01`「後台不寫稽核」之定案）。**不新增任何列舉值**——沿用既有 `actionType='DOWNLOAD'` 與 `targetType ∈ {DOCUMENT, USAGE_FORM, APPENDIX}`；`watermarkSnapshot` 之落值規則與前台完全相同（PDF 已燒錄 → 落值；非 PDF → `null`）。<br>📝 **被推翻之原條文逐字保留供追溯**（原載於 `APPENDIX` 擴充段）：「**後台下載一律不寫本表**（OQ-FM-01 維持有效），故不存在後台列。」<br>⚠ **本項為落列範圍之擴大，非 schema 變更——不需 migration。**<br>⚠ **前後台之列於本表無法區分**（無來源／通道欄）——已提報為 [open-questions](open-questions.md) `OQ-D9-30` `[CLARIFY]`；本輪假設＝不新增區分欄位。
 - 🟢 **OJT 進度使用單位維度（[F042](features/F042-ojt-progress-management.md)／E11，2026-08-28，人類閘門已裁決＝(B)）**：F042 場次登記／刪除寫入本表，`actionType` 新立 **`'OJT_SESSION_UPLOAD'`／`'OJT_SESSION_DELETE'`**（純新增字面值，`varchar(40)` 無 CHECK 約束，不需 migration，比照既有 `LIFECYCLE_DELETE`／`APPENDIX`／`ACCESS_HISTORY_EXPORT` 先例）＋`targetType` 新立 **`'OJT_SESSION'`**（第 9 個值，同樣純新增字面值不需 migration）；`targetId = OJT_SESSION.id`（場次本身即為被操作之對象，與 `DOCUMENT_ATTACHMENT` 家族之既有「以 `documentId` 為 `targetId`」慣例不同）。**新增 additive 欄位 `AUDIT_LOG.orgCode`（`varchar(10) NULL`）**承載使用單位——🔴 **與既有 D9 批「新增列舉值 ⇒ 不需 migration」不同型**：新增列舉字面值確實不需 migration（欄位既有、無 CHECK），但新增一個實體欄位屬 schema 變更，**必須有一支獨立 migration**（additive nullable、無需前置盤點，既有列一律 `NULL`；**timestamp 待實作棒依序取號，本輪仍不預先分配**）。刪除動作（`OQ-E11-04=A`，僅 ICSOPAdmin）使用獨立 `actionType='OJT_SESSION_DELETE'`，與登記動作區分，稽核上可清楚分辨「登記」與「撤銷登記」。⚠ **角色不對稱是否延續**（`AC-N32`／`AC-N52` 之 ICSOPAdmin 上傳不寫稽核先例是否比照本 Epic）為 `OQ-E11-13` 之 spec-writer 追加子項，本次收斂摘要未見明確覆核——**本節不預設**，以 [open-questions.md §E11](open-questions.md#e11-2026-08-27)（sw-ojt 並行回填之權威裁決記錄）為準。
+- 🟢 **`BUSINESS_CATEGORY`／`BUSINESS_CATEGORY_CHANGE_LOG` 擴充（F043／E12，2026-09-02，additive，APPROVED（2026-09-02 人類閘門通過），architecture-spec.md §14 決策 E3）**：F043 樹狀圖預覽／下載／列印／刪除／掛載／移除／第三個 tab 之檢視／下載須寫本表。**新增 2 個 `targetType` 字面值**（`BUSINESS_CATEGORY`／`BUSINESS_CATEGORY_CHANGE_LOG`，比照 `LIFECYCLE`／`LIFECYCLE_CHANGE_LOG` 之既有形狀）＋ **8 個 `actionType` 字面值**（`BUSINESS_CATEGORY_VIEW`／`_DOWNLOAD`／`_PRINT`／`_DELETE`／`_DOC_MOUNTED`／`_DOC_UNMOUNTED`／`_CHANGELOG_VIEW`／`_CHANGELOG_DOWNLOAD`）。**與既有純新增字面值之擴充不同——本項需要一支 migration**：`AUDIT_LOG` 新增 2 個實體欄位 `businessCategoryId uniqueidentifier NULL`／`nodeId uniqueidentifier NULL`（`targetType`／`actionType` 本身仍無 CHECK 約束、不需 migration；但這兩個新的**參照欄**是既有欄位集合所沒有的，比照 F042 之 `orgCode` 欄先例——「新增列舉值 ⇒ 不需 migration」與「新增欄位 ⇒ 需要 migration」為不同型的變更）。<br>**落列規則**：`BUSINESS_CATEGORY_VIEW`／`_DOWNLOAD`／`_PRINT`（浮水印動作，`watermarkSnapshot` 落值）／`_DELETE`（非浮水印）四者僅 `businessCategoryId` 必填；`_DOC_MOUNTED`／`_DOC_UNMOUNTED`（`AC-31`）**額外**要求 `nodeId` 與既有 `documentId` 欄（重用，非新欄）皆必填；`BUSINESS_CATEGORY_CHANGE_LOG` 之 `_CHANGELOG_VIEW`／`_CHANGELOG_DOWNLOAD` 僅 `businessCategoryId` 必填（比照 `LIFECYCLE_CHANGE_LOG` 之既有形狀）。<br>**`buildAuditRow` 之 switch 對映**須新增分支 `BUSINESS_CATEGORY → businessCategoryId`／`BUSINESS_CATEGORY_CHANGE_LOG → businessCategoryId`（比照 `LIFECYCLE`／`LIFECYCLE_CHANGE_LOG` 分支），並於掛載／移除分支額外落 `nodeId`／`documentId`（比照 `OJT_SESSION` 分支同時落 `documentId`／`orgCode` 之既有先例）。<br>**[F024](features/F024-access-history-query.md) 類型篩選歸屬**：`kindToTargetTypes` **新增第 6 種類型篩選值「業務/功能類別」**（`= ['BUSINESS_CATEGORY']`，比照 `'循環' = ['LIFECYCLE']` 之既有獨立分類）；`BUSINESS_CATEGORY_CHANGE_LOG` **併入既有「變更」類**（`kindToTargetTypes('變更')` 由 `['DOCUMENT_CHANGE_LOG', 'LIFECYCLE_CHANGE_LOG']` 擴為 `['DOCUMENT_CHANGE_LOG', 'LIFECYCLE_CHANGE_LOG', 'BUSINESS_CATEGORY_CHANGE_LOG']`，查證 `access-history-filter.ts` 現行寫法後確認 `LIFECYCLE_CHANGE_LOG` 本就歸屬「變更」類、非「循環」類，本項為同構跟進，非新裁決）。詳見 [architecture-spec.md §14.6.2](architecture-spec.md#ch14-f043)。
 - 保留年限草案 ≥ 3 年（[NFR-003](nfr.md#audit-retention)，待確認）。
-- **相關功能**：F016（2026-08-20 起 OJT 上傳）、F018、F020、F023、F024、F034、F036、F037、F038、F039、**F042**（2026-08-27，🔵 Phase A 草案）。
+- **相關功能**：F016（2026-08-20 起 OJT 上傳）、F018、F020、F023、F024、F034、F036、F037、F038、F039、F042（2026-08-27，🔵 Phase A 草案）、**F043**（2026-09-02，🔵 DRAFT）。
 
 ---
 

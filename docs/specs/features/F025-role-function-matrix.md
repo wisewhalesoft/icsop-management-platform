@@ -1,5 +1,5 @@
 # F025: 角色×功能權限矩陣
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-08-06
+Priority: P0-MVP | Status: Draft｜**業務/功能類別管理功能列 delta：🟢 APPROVED（2026-09-02 人類閘門通過）（`AC-B28`～`AC-B29`；權威＝[F043](F043-business-function-category.md)）** | Last Updated: 2026-09-02
 Epic/Story: E08 / US-070（附錄管理列：E10 / US-102 AC5）
 
 > **定案**：主管、部門窗口對 ICSOP 文件管理皆唯讀，僅 ICSOP 管理員可編輯；**系統管理員對循環管理／ICSOP 文件管理／文件使用表單管理為唯讀（比照主管，可查不可改）**；**主管無「文件使用表單管理」與「文件調閱歷程查詢」權限**。**主管對循環管理（DAG）為全公司唯讀**（2026-07-17 定案：原「唯讀（本部門相關）」反向放寬為「唯讀」＝全公司，與主管文件管理全公司唯讀一致；OQ-E08-03 定案、OQ-E03-06 收斂）。**「文件變更歷程」為獨立後台功能**（獨立側選單項，非「文件調閱歷程」子頁；兩 tab：ICSOP 程序書 [F037](F037-document-change-history.md)／循環樹狀圖 [F038](F038-lifecycle-tree-change-history.md)），權限為獨立一列：僅 SysAdmin／ICSOPAdmin 全公司唯讀、其餘無（OQ-E07-04 定案）。**新增「文件索引管理」權限列（[F031](F031-admin-index-visibility.md)）**：系統管理員 唯讀／ICSOP 管理員 CRUD／主管・部門窗口・一般使用者 無；該列涵蓋 RAG 提取結果預覽／索引狀態／重新索引（重抽），系統管理員唯讀係比照其對 ICSOP 文件管理／循環管理之唯讀原則（可查不可改）。**新增「附錄管理」權限列（[F039](F039-appendix-management.md)，2026-08-06）**：系統管理員 唯讀／ICSOP 管理員 CRUD／主管・部門窗口・一般使用者 無——與「文件使用表單管理」列**完全比照**（E10 epic 已與使用者確認附錄之權限模型同構）。**功能鍵字串定案為「附錄管理」**（逐字採用 [US-070](../../stories/epics/E08-permission-matrix/US-070-role-function-matrix.md) 矩陣列名；建議常數 `FunctionKey.APPENDIX_MANAGEMENT`），**刻意不沿用**使用表單之「文件使用表單管理」句型；既有「文件使用表單管理」列名維持不變（已實作、改名將造成跨層識別碼 churn）。**「角色指派」為「帳號管理」之 modal 內操作、非獨立側選單頁**（prototype 側選單已移除獨立項），惟權限矩陣仍將其列為獨立權限列（系統管理員 CRUD、其餘 無；ICSOP 管理員 對帳號管理為唯讀但**無**角色指派權）。其餘部分為分析師草案，待審核（見 OQ-E08-02）。以 RBAC 中介層（guard/middleware）於 API 層落實。
@@ -41,6 +41,8 @@ Epic/Story: E08 / US-070（附錄管理列：E10 / US-102 AC5）
 | 系統參數設定 | CRUD | 無 | 無 | 無 | 無 |
 
 > 🔴 **[2026-08-27 E11] 上表將新增第 14 列「`OJT 進度管理`」**（[F042](F042-ojt-progress-management.md) `AC-27`），置於既有 13 列之後——✅ **2026-08-28 裁決定值＝`唯讀`｜`CRUD`｜`受限CRUD`｜`受限CRUD`｜`無`**（`OQ-E11-05`→A），見 [§OJT 進度管理功能列 delta](#ojt-progress-function-key-delta) `AC-J16`。🔒 **既有 13 列 × 5 欄（65 格）逐格不變、角色仍為固定 5 種**（`AC-J18`）；⚠ 此為 `AC-N36`「不新增功能列」鎖定之**明文例外**，理由見 `AC-J17`。**上表現行 13 列逐字保留、待棒 3／棒 4 實作時始新增該列。**
+
+> 🔵 **[2026-09-02 E12] 上表將再新增第 15 列「`業務/功能類別管理`」**（逐字列名之權威＝[§業務/功能類別管理功能列 delta](#business-category-function-key-delta) `AC-B28`；規格權威＝[F043](F043-business-function-category.md)），置於 `OJT 進度管理` 之後——🔵 **DRAFT，格值＝`唯讀`｜`CRUD`｜`唯讀`｜`無`｜`無`**（使用者 2026-09-02 原文「開放給 ICSOP 管理員 CRUD，系統管理員 / 主管 唯讀」）。🔒 **既有 14 列 × 5 欄（70 格）逐格不變、角色仍為固定 5 種**（`AC-B29`）；🔴 **本列之主管欄（`唯讀`）與「循環管理（DAG）」列之主管欄（`無`）刻意不同**，理由與回歸鎖定見 `AC-B29`。**上表現行 13 列逐字保留、待人類閘門核准後始新增第 14／15 兩列。**
 
 ## Preconditions
 - 5 種角色已定義（F003）。
@@ -121,6 +123,28 @@ Epic/Story: E08 / US-070（附錄管理列：E10 / US-102 AC5）
 - **AC-J17**（🔴 **`AC-N36` 之例外為何成立**——本節之核心，不得省略）：Given 讀者比對 `AC-N36`（「不新增功能列」）與 `AC-J16`（新增一列）, When 判斷兩者是否矛盾, Then 依下列**明文區辨**——<br>　① **`AC-N36` 所禁止的是「為了讓一個欄位層破例通過而動功能矩陣」**：2026-08-20 之開放屬**欄位層**（[F026](F026-role-field-matrix.md)），其端點沿用既有 `ICSOP 文件管理` read 閘門，**本即有一列可掛靠**；當時若動矩陣，兩種改法皆為回歸（改閘門為 `'write'` ⇒ 兩角色連 OJT 都上傳不了；改矩陣格值為 CRUD ⇒ 整個文件管理模組對兩角色開放寫入）。<br>　② **[F042](F042-ojt-progress-management.md) 新增的是一個獨立功能**：獨立側選單項、獨立端點群、獨立於 `ICSOP 文件管理` 之權限語意（例：主管對 `ICSOP 文件管理` 為 `唯讀`，卻對本功能可寫）——**它沒有任何既有功能鍵可以掛靠**。若硬掛在 `ICSOP 文件管理` 之下，就會重演 ① 所述之兩種回歸。<br>　③ ⇒ **兩者是不同的事：`AC-N36` 禁止的是「不該新增時新增」，本 delta 是「非新增不可」。**<br>🔴 **可測形狀**：斷言 `FUNCTION_MATRIX` 之功能鍵集合**恰新增 1 個**、且新增者**恰為** `OJT 進度管理`——**不得**出現任何名為「OJT 上傳」「OJT 附件」之列（那才是 `AC-N36` 真正禁止的東西）。<br>⚠ **本條之存在是為了讓「打破鎖定」成為一個有紀錄、有理由、可覆核的決定**，而非讓 `AC-N36` 在下一輪被誰靜默刪掉。
 - **AC-J18**（🔒 既有 13 列之回歸鎖定）：Given [F042](F042-ojt-progress-management.md) 實作完成, When 逐格取 `FUNCTION_MATRIX` 之**既有 13 個功能鍵** × 5 種角色（共 65 格）之值, Then **與本 delta 導入前逐格相同**（**新列為第 14 列，總格數 65 → 70**）——特別是 **`ICSOP 文件管理` 列對主管／部門窗口仍為 `唯讀`**（**不得**因本功能對兩者可寫而順手一併放寬）；角色種類仍為固定 **5** 種、**不新增角色欄**。<br>🔴 **本條為本 delta 之「鬆一片牆」偵測器**：新增一列時最可能的失誤，是順手把相鄰的 `ICSOP 文件管理` 列一起改成 CRUD——那正是 [F026](F026-role-field-matrix.md) `AC-N24`／`AC-J9` 所要防止的同一個形狀，只是發生在功能層。<br>🔒 **`AC-U1`（F041 子分類不影響功能矩陣）之原始目的完全不變**：本 delta 之新增列與 `userSubtype` 無關，權限解析函式仍**不接受**子分類參數（`AC-U2` 逐字不變）；`AC-U1` 之「鍵集合亦未增減」子句**已因本 delta 失效**，就地改讀為「**除本 delta 新增之 `OJT 進度管理` 一列外**，鍵集合未增減」。<br>📌 **`AC-U4`（權限矩陣頁之 F041 註記橫幅）不受影響**，其逐字文案不變；惟 `prototypes/18-permission-matrix.html` 之功能矩陣需新增一列（**待棒 4**）。
 
+### 業務/功能類別管理功能列 delta（🟢 **APPROVED（2026-09-02 人類閘門通過）**，2026-09-02；權威＝[F043](F043-business-function-category.md)） {#business-category-function-key-delta}
+
+> 🔵 **本節為 DRAFT，未經人類閘門核准前不得實作。**
+> **使用者原文**：「此功能開放給 ICSOP 管理員 CRUD，系統管理員 / 主管 唯讀。」
+> **本 delta 之 AC 編號採 `AC-B#`**（`AC-B28`～`AC-B29`；同批之其餘條文落於 [F017](F017-backend-document-list.md#business-category-column-delta) `AC-B1`～`AC-B11` 與 [F019](F019-public-list-browsing.md#business-category-browse-delta) `AC-B12`～`AC-B27`）。
+> 🟢 **2026-09-02 同日第二輪人類裁決（4 項）已落章**：① **主管權限之刻意不對稱確認為本意**（`AC-B29` 之成對斷言維持原樣）；② 前台樹狀圖不提供 PDF 下載／列印（[F043](F043-business-function-category.md) `AC-53`）；③ **結構變更歷程＝「文件變更歷程」頁第三個 tab**（標籤逐字 `業務/功能類別樹狀圖`），**權限沿用本矩陣既有之 `文件變更歷程` 列 ⇒ 主管看不到**（[F043](F043-business-function-category.md) `AC-54`，`OQ-B-02` 結案）；④ **[F026](F026-role-field-matrix.md) 不新增列、維持 20 列逐格不變**（`OQ-B-08` 結案）。🔒 **本矩陣之既有 14 列一格未動**；本節仍只新增第 15 列。
+> 📌 **本節之例外性質**：`AC-N36`「不新增功能列」之鎖定已於 2026-08-27 由 [F042](F042-ojt-progress-management.md) `AC-J16`／`AC-J17` **明文打破並記錄理由**；本 delta 為**同一類例外之第二次**——[F043](F043-business-function-category.md) 為一個**獨立側選單項＋獨立端點群＋獨立權限語意**之新功能（例：主管對 `循環管理（DAG）` 為 `無`，卻對本功能為 `唯讀`），**沒有任何既有功能鍵可以掛靠**。`AC-J17` ③ 之區辨（「`AC-N36` 禁止的是**不該新增時新增**」）逐字適用於本節，不另行重述。
+
+- **AC-B28**（🔴 新增獨立功能列「業務/功能類別管理」）：Given [F043](F043-business-function-category.md) 實作完成, When 逐格取 `FUNCTION_MATRIX` 之值, Then 功能鍵集合**新增恰一個**——列名逐字為 **`業務/功能類別管理`**（🔒 鎖定字串，**半形斜線 `/`、前後無空白**；常數建議 `FunctionKey.BUSINESS_CATEGORY_MANAGEMENT`），置於既有 14 列之**後**（即第 15 列），其五角色之格值逐字為——
+
+  | 功能 | 系統管理員 | ICSOP管理員 | 主管 | 部門窗口 | 一般使用者 |
+  |------|-----------|-------------|------|----------|-----------|
+  | **業務/功能類別管理** 🔵 | **唯讀** | **CRUD** | **唯讀** | **無** | **無** |
+
+  🔒 **值域不擴充**：三個格值皆為既有之 `唯讀`／`CRUD`／`無`，**不引入** `受限CRUD`——本功能無「可新增不可刪除」之類的細則，全部寫入動作對 ICSOPAdmin 一律允許、對其餘四角色一律拒絕（[F043](F043-business-function-category.md) `AC-45`）。<br>🔒 **側選單相應新增恰一項**，🔴 **置於「循環管理」之下方**（使用者原文「在循環管理**下方**新增」），其可見性依本列格值（`無` ⇒ 部門窗口與一般使用者不呈現）。<br>🔴 **前台不受本列限制**：部門窗口與一般使用者雖對本列為 `無`，其**前台**之業務/功能類別樹狀圖瀏覽仍由「前台瀏覽」列（5 種角色皆為「可」）承接——**兩者是不同維度，不得混為一談**（[F043](F043-business-function-category.md) `AC-47` 之成對斷言：`/public/business-categories/*` 得 200、`/admin/business-categories/*` 得 403）。
+- **AC-B29**（🔒 既有 14 列之回歸鎖定 ＋ 🔴 **與「循環管理」列之刻意不對稱**）：Given [F043](F043-business-function-category.md) 實作完成, When 逐格取 `FUNCTION_MATRIX` 之**既有 14 個功能鍵** × 5 種角色（共 70 格）之值, Then **與本 delta 導入前逐格相同**（**新列為第 15 列，總格數 70 → 75**）；角色種類仍為固定 **5** 種、**不新增角色欄**。
+  - 🔴 **本 delta 之核心不對稱斷言（不得省略）**：`FUNCTION_MATRIX['循環管理（DAG）'].主管 === '無'` **且** `FUNCTION_MATRIX['業務/功能類別管理'].主管 === '唯讀'`。<br>　**兩者刻意不同、非疏漏**——**同一日（2026-09-02）的兩項人類裁決**：一項把主管**移出**循環管理（見本檔頂部 2026-09-02 delta），另一項把主管**放進**業務/功能類別管理（本節）。<br>　🟢 **2026-09-02 人類裁決確認**：spec-writer 曾提請人類覆核此不對稱是否為本意，**使用者本人已明確確認為本意**（[F043](F043-business-function-category.md) 決 5）；本斷言**維持原樣、不放寬**。<br>　⚠ **日後最可能發生的「整理」，是把這兩列的主管欄對齊成同一個值——那會同時違反兩條人類裁決。** 本條之斷言必須**明確比對這兩格**，使任一方被對齊時立即紅燈；🔴 **不得**以「兩個 DAG 功能的權限應該一樣」為由重構。
+  - 🟢 **主管之另一處刻意落差（決 7，2026-09-02，`OQ-B-02` → 甲案）**：主管對 `業務/功能類別管理` 為 **`唯讀`**，但對其**結構變更歷程**為 **`無`**——該歷程住在「文件變更歷程」頁之**第三個 tab**（標籤逐字 `業務/功能類別樹狀圖`），其閘門為**本矩陣既有之 `文件變更歷程` 列**（SysAdmin `唯讀`／ICSOPAdmin `唯讀`／**其餘 `無`**）⇒ **主管開啟該頁整頁 403，看不到任何一個 tab**。<br>　🔴 **此落差刻意、非漏配**（最容易被當成 bug 修掉之處）：變更歷程之閘門屬於**它所在的頁面**，不屬於**它所描述的對象**——與 [F038](F038-lifecycle-tree-change-history.md) 循環樹狀圖變更歷程之既有處置**完全同構**（`OQ-E07-04`）。被否決之乙案會讓主管進到一個只有第三個 tab 可看、前兩個 tab 皆 403 的半殘頁面。<br>　🔒 **`文件變更歷程` 列一格未動**；逐條可驗收之條文＝[F043](F043-business-function-category.md) `AC-54`。
+  - 🔒 **`AC-U1`／`AC-U2`（F041 子分類不影響功能矩陣）之原始目的完全不變**：本 delta 之新增列與 `userSubtype` 無關，權限解析函式仍**不接受**子分類參數。`AC-U1` 之「鍵集合亦未增減」子句已先後因 [F042](F042-ojt-progress-management.md) `AC-J18` 與本條失效，就地改讀為「**除 `OJT 進度管理` 與 `業務/功能類別管理` 兩列外**，鍵集合未增減」。**原條文逐字保留。**
+  - 🔒 **`AC-J16`／`AC-J18`（OJT 進度管理列）不受影響**：其列名、格值與 `受限CRUD` 之兩處消費語意**一格未動**；本 delta **不新增** `受限CRUD` 之第三處消費。
+  - 📌 **`AC-U4`（權限矩陣頁之 F041 註記橫幅）不受影響**，其逐字文案不變；惟 `prototypes/18-permission-matrix.html` 之功能矩陣需新增一列（**待 ui-ux-designer**，本輪不建檔）。
+
 ## Error Scenarios
 - 越權/範圍限縮：見 [error-handling.md#permission](../error-handling.md#permission)。
 - **業務子分類之前台使用部門限縮**（🟢 APPROVED）：屬**資料列層級過濾**，非本矩陣之功能層級授權；拒絕回 404 `DOCUMENT_NOT_FOUND`（非 403 `PERMISSION_DENIED`），見 [error-handling.md#dept-restriction](../error-handling.md#dept-restriction) 與 [F041](F041-user-subtype-business-scope.md)。
@@ -129,6 +153,7 @@ Epic/Story: E08 / US-070（附錄管理列：E10 / US-102 AC5）
 - Data: [ROLE](../data-model.md#role-entity), [ORG_UNIT](../data-model.md#orgunit-entity)
 - Depends on: [F003](F003-account-role-management.md); Blocks: 全系統寫入型操作
 - Related: [F026 角色×欄位矩陣](F026-role-field-matrix.md)；獨立功能「文件變更歷程」見 [F037](F037-document-change-history.md)／[F038](F038-lifecycle-tree-change-history.md)；功能列「附錄管理」之行為規格見 [F039](F039-appendix-management.md)
+- **2026-09-02 人類裁決（業務/功能類別管理，🔵 DRAFT）**：新增第 15 列「業務/功能類別管理」＝`唯讀`｜`CRUD`｜`唯讀`｜`無`｜`無`，行為規格見 [F043](F043-business-function-category.md)；落點＝[§業務/功能類別管理功能列 delta](#business-category-function-key-delta)（`AC-B28`／`AC-B29`）。🔴 **本列之主管欄與「循環管理（DAG）」列之主管欄刻意不同**（同日兩項裁決，一移出一放進），`AC-B29` 之成對斷言為其回歸鎖定。🔒 **[F026](F026-role-field-matrix.md) 不新增列**（理由見 [F043](F043-business-function-category.md) `AC-51`／`OQ-B-08`）。
 - **使用者子分類（業務／其他）規則權威**: [F041](F041-user-subtype-business-scope.md)（本矩陣不變之理由與 `AC-U1`～`AC-U3`；🟢 APPROVED 2026-08-11，OQ-E08-04 定案為選項 B）
 - **2026-08-20 使用者裁決（D9 delta）**：`OQ-D9-19`～`OQ-D9-24`（OJT 上傳開放主管／部門窗口）**不影響本矩陣**，見 [§D9 delta：功能矩陣不變之回歸鎖定](#d9-function-matrix-lock) `AC-N36`；行為權威＝[F016](F016-pdf-ojt-attachment.md#ojt-role-open-delta)、欄位矩陣權威＝[F026](F026-role-field-matrix.md#ojt-write-exception-delta)。
 - 定案: OQ-E08-01（SysAdmin 對文件為唯讀、無寫入權）；OQ-E08-03（主管循環管理全公司唯讀、雙入口一致——本次已將矩陣主管「循環管理」欄由「唯讀（本部門相關）」改為「唯讀」）；OQ-E07-04（新增獨立功能列「文件變更歷程」＝僅 SysAdmin／ICSOPAdmin 全公司唯讀，其餘無）。OQ: OQ-E08-02（矩陣其餘部分審核）。

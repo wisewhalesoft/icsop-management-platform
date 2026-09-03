@@ -1,0 +1,53 @@
+%% F043 業務/功能類別：資料模型 ER 增量圖（四張新表）
+%% 與 docs/specs/data-model.md §業務/功能類別 段落一致。
+%% 🔵 DRAFT / awaiting-human-review（2026-09-02）——未經人類閘門核准前不得建立 migration。
+%% 🔴 兩條由 ICSOP_DOCUMENT 出發的關係刻意並存且互不干涉（INV-B4）：
+%%    (a) ICSOP_DOCUMENT.nodeId → LIFECYCLE_NODE（循環，0..1 單一歸屬，F009 唯一權威寫入路徑）
+%%    (b) ICSOP_DOCUMENT ↔ BUSINESS_CATEGORY_NODE 經 BUSINESS_CATEGORY_DOC（類別，M:N）
+%% 🔴 ICSOP_DOCUMENT 一欄未新增（AC-50）——M:N 沒有任何單值欄位能表達它。
+%% ⚠ 變更歷程／快照表未列於本圖：其落點待 system-architect 裁定（見 data-model.md#business-category-change-log-decision）。
+erDiagram
+    BUSINESS_CATEGORY ||--o{ BUSINESS_CATEGORY_NODE : "節點（刪除類別前須先清空全部掛載）"
+    BUSINESS_CATEGORY ||--o{ BUSINESS_CATEGORY_EDGE : "有向邊（INV-B5：DAG，禁止 self-loop 與成環）"
+    BUSINESS_CATEGORY_NODE ||--o{ BUSINESS_CATEGORY_EDGE : "sourceNodeId / targetNodeId"
+    BUSINESS_CATEGORY_NODE ||--o{ BUSINESS_CATEGORY_DOC : "掛載（一節點可掛多份文件）"
+    ICSOP_DOCUMENT ||--o{ BUSINESS_CATEGORY_DOC : "M:N 掛載（一份文件可掛多節點／多類別；文件刪除時 CASCADE）"
+    LIFECYCLE_NODE |o--o{ ICSOP_DOCUMENT : "循環單一歸屬 nodeId（既有，本功能一格不動）"
+
+    BUSINESS_CATEGORY {
+        uuid id PK
+        nvarchar name "trim 後儲存；建議 nvarchar(100)"
+        nvarchar subcategory "nullable；無子分類恆為 null，不得為空字串（INV-B3）"
+        nvarchar description "nullable"
+        varchar status "active / inactive"
+        datetime createdAt
+        datetime updatedAt
+    }
+    BUSINESS_CATEGORY_NODE {
+        uuid id PK
+        uuid businessCategoryId FK
+        nvarchar name "nullable：可先建立未命名節點"
+        int positionX
+        int positionY
+    }
+    BUSINESS_CATEGORY_EDGE {
+        uuid id PK
+        uuid businessCategoryId FK
+        uuid sourceNodeId FK "parent"
+        uuid targetNodeId FK "child"
+    }
+    BUSINESS_CATEGORY_DOC {
+        uuid id PK
+        uuid nodeId FK "→ BUSINESS_CATEGORY_NODE"
+        uuid documentId FK "→ ICSOP_DOCUMENT，ON DELETE CASCADE"
+        uuid mountedByAccountId FK
+        datetime mountedAt
+    }
+    ICSOP_DOCUMENT {
+        uuid id PK "本功能一欄未新增（AC-50）"
+        uuid lifecycleId FK "既有：所屬循環，本功能不讀不寫（INV-B4）"
+        uuid nodeId FK "既有：所屬循環節點 0..1，本功能不讀不寫（INV-B4）"
+    }
+    LIFECYCLE_NODE {
+        uuid id PK "既有實體，本功能完全不參照"
+    }
