@@ -188,7 +188,20 @@ describe('[int] lifecycle-changelog F038 新舊對照 vs SOP', () => {
     expect(doc.getPageCount()).toBe(2);
   });
 
-  it('TS-LCC-E-006 §C.4 不對稱：Supervisor 對 tree-diff/download → 403；對 F036 tree-preview/download → 200', async () => {
+  /**
+   * 🔴 2026-09-03 收斂修正（lead 查證：本檔本輪一行未動，屬 2026-09-02 人類裁決之遺留，
+   * 上一輪無人跑過 test:int 故隨 commit c49ce4d 一併出去）：2026-09-02 人類裁決把「循環管理」
+   * 之主管權限由 `唯讀` 改為 `無`（`FunctionKey.LIFECYCLE_MANAGEMENT` 之 Supervisor 格值），
+   * 而 `F036 tree-preview/download` 之閘門正是 `LIFECYCLE_MANAGEMENT read`——本條原本斷言的
+   * 「不對稱」（主管看得到樹狀圖預覽、看不到變更歷程 diff）已因該裁決消失：主管現對**兩者皆** 403。
+   * 🔒 **保留成對形狀，只更正期望值**——不得只刪 `allowed` 那半退化成單邊斷言，否則會失去
+   * 「兩條路徑都被檢查過」之覆蓋（本 repo 已多次記錄之「刪一半负向斷言」形狀）。
+   * 📝 原標題與期望值逐字保留供追溯：
+   *   OLD> it('TS-LCC-E-006 §C.4 不對稱：Supervisor 對 tree-diff/download → 403；對 F036
+   *   tree-preview/download → 200', ...)
+   *   OLD>   expect(allowed.status).toBe(200);
+   */
+  it('TS-LCC-E-006 §C.4（2026-09-02 裁決後）：Supervisor 對 tree-diff/download 與 F036 tree-preview/download 皆 403（原不對稱已因主管循環管理權限收回而消失）', async () => {
     const supCookie = ctx.cookieFor(`${MARK.acct}sup`, 'AS', 'Supervisor');
     const denied = await ctx
       .http()
@@ -198,11 +211,11 @@ describe('[int] lifecycle-changelog F038 新舊對照 vs SOP', () => {
       .set('Cookie', supCookie);
     expect(denied.status).toBe(403);
 
-    const allowed = await ctx
+    const alsoDenied = await ctx
       .http()
       .get(`/admin/lifecycles/${lifecycleId}/tree-preview/download`)
       .set('Cookie', supCookie);
-    expect(allowed.status).toBe(200);
+    expect(alsoDenied.status).toBe(403);
   });
 
   it('TS-LCC-E-007 下載後 processOutboxRetry → AUDIT_LOG 有 LIFECYCLE_CHANGELOG_DOWNLOAD', async () => {
