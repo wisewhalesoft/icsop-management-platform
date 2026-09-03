@@ -23,6 +23,15 @@ export interface MenuItem {
 export const MENU: readonly MenuItem[] = [
   { id: 'account', label: '帳號管理', icon: 'users', functionKey: FunctionKey.ACCOUNT_MANAGEMENT, route: '/admin/accounts' },
   { id: 'lifecycle', label: '循環管理', icon: 'workflow', functionKey: FunctionKey.LIFECYCLE_MANAGEMENT, route: '/admin/lifecycles' },
+  /**
+   * 🔴 F043 `AC-43`／F025 `AC-B28`（2026-09-02 人類裁決）：新增恰一項，位置為 **AC 明文鎖定**
+   * ——「置於『循環管理』之下方」（使用者原文），故必須緊接 `lifecycle` 之後、`document` 之前。
+   * icon `shapes` 與「循環管理」之 `workflow` 區隔（設計裁量，取自
+   * `docs/ui-ux-design-overview.md` §A.8.5 ⑬；`AC-43` 未規範 icon）。
+   * 🔴 可見性由 `FUNCTION_MATRIX` 之同名列推導 ⇒ 主管**看得到本項、看不到「循環管理」**，
+   * 這條肉眼可見之不對稱即 `AC-44`／`AC-B29` 之視覺權威（§A.9.3）。
+   */
+  { id: 'businesscategory', label: '業務/功能類別管理', icon: 'shapes', functionKey: FunctionKey.BUSINESS_CATEGORY_MANAGEMENT, route: '/admin/business-categories' },
   { id: 'document', label: 'ICSOP 文件管理', icon: 'file-text', functionKey: FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, route: '/admin/documents' },
   { id: 'usageform', label: '使用表單管理', icon: 'files', functionKey: FunctionKey.USAGE_FORM_MANAGEMENT, route: '/admin/usage-forms' },
   { id: 'appendix', label: '附錄管理', icon: 'paperclip', functionKey: FunctionKey.APPENDIX_MANAGEMENT, route: '/admin/appendices' },

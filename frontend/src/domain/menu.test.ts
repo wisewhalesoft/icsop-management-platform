@@ -16,8 +16,8 @@ describe('menu — 後台選單角色過濾', () => {
    * 若日後裁量改變順序，本斷言可能連帶調整，不影響其鎖定之「恰 1 項」本質）。
    * 📝 OLD> 原逐字 10 項與 9 項計數/清單保留於本次修訂歷史（git blame），不再重打於此。
    */
-  it('MENU 11 項，每項對映一個功能鍵與路由（F042 新增「OJT 進度管理」）', () => {
-    expect(MENU).toHaveLength(11);
+  it('MENU 12 項，每項對映一個功能鍵與路由（F043 新增「業務/功能類別管理」）', () => {
+    expect(MENU).toHaveLength(12);
     for (const item of MENU) {
       expect(item.functionKey).toBeTruthy();
       expect(item.route).toMatch(/^\/admin\//);
@@ -35,21 +35,45 @@ describe('menu — 後台選單角色過濾', () => {
     expect(item.icon).toBe('graduation-cap'); // prototype 25 建議圖示鍵（設計裁量，非 AC 鎖定，取自 prototype 逐字）
   });
 
-  it('SysAdmin 見全部 11 項，OJT 進度管理置於 docindex 之後、audit 之前（prototype 25 之實際順序）', () => {
+  /**
+   * 🔴 2026-09-02 F043 delta（`AC-43`／`AC-B28`）：新增獨立側選單項「業務/功能類別管理」
+   * （`FunctionKey.BUSINESS_CATEGORY_MANAGEMENT`，五角色格值 唯讀/CRUD/唯讀/無/無）。
+   * 🔒 **位置為 AC 明文鎖定，非設計裁量**——`AC-43`／`AC-B28`：「置於『循環管理』之下方」
+   * （使用者原文「在循環管理下方新增」）。故本案不只驗恰新增一項，還驗其緊接於 `lifecycle` 之後。
+   * icon 鍵 `shapes` 取自 `docs/ui-ux-design-overview.md` §A.8.5 ⑬（設計裁量，非 AC 鎖定；
+   * 與「循環管理」之 `workflow` 圖示區隔）。
+   */
+  it('MENU 恰新增一項「業務/功能類別管理」，緊接於「循環管理」之下方，functionKey/route/icon 逐字正確（AC-43／AC-B28）', () => {
+    const items = MENU.filter((m) => m.id === 'businesscategory');
+    expect(items).toHaveLength(1);
+    const item = items[0];
+    expect(item.label).toBe('業務/功能類別管理'); // 🔒 命名鎖定表逐字，不得改寫
+    expect(item.functionKey).toBe(FunctionKey.BUSINESS_CATEGORY_MANAGEMENT);
+    expect(item.route).toBe('/admin/business-categories');
+    expect(item.icon).toBe('shapes');
+
+    const ids = MENU.map((m) => m.id);
+    const lifecycleIdx = ids.indexOf('lifecycle');
+    expect(lifecycleIdx).toBeGreaterThanOrEqual(0);
+    expect(ids[lifecycleIdx + 1]).toBe('businesscategory'); // 🔒 AC-43 明文鎖定之相對位置
+  });
+
+  it('SysAdmin 見全部 12 項，業務/功能類別管理緊接於循環管理之後（AC-43／AC-B28 之明文順序）', () => {
     expect(visibleMenu('SysAdmin').map((m) => m.id)).toEqual([
-      'account', 'lifecycle', 'document', 'usageform', 'appendix', 'docindex',
+      'account', 'lifecycle', 'businesscategory', 'document', 'usageform', 'appendix', 'docindex',
       'ojtprogress', 'audit', 'changehistory', 'orgsync', 'settings',
     ]);
   });
 
-  it('ICSOPAdmin 見 10 項（無系統參數設定；OJT 進度管理對其為 CRUD）', () => {
+  it('ICSOPAdmin 見 11 項（無系統參數設定；業務/功能類別管理對其為 CRUD）', () => {
     const ids = visibleMenu('ICSOPAdmin').map((m) => m.id);
     expect(ids).toContain('lifecycle');
+    expect(ids).toContain('businesscategory');
     expect(ids).toContain('orgsync');
     expect(ids).toContain('appendix');
     expect(ids).toContain('ojtprogress');
     expect(ids).not.toContain('settings');
-    expect(ids).toHaveLength(10);
+    expect(ids).toHaveLength(11);
   });
 
   /**
@@ -65,13 +89,25 @@ describe('menu — 後台選單角色過濾', () => {
    * 🔒 斷言形狀維持 `toEqual` 之**有序全等**（非 `toContain`）：主管少一項的同時若多長出
    * 別的項目，仍必須翻紅。
    */
-  it('Supervisor 見 ICSOP 文件管理／OJT 進度管理（循環管理已移除）', () => {
+  /**
+   * 🔴 2026-09-02 F043 delta（`AC-44`／`AC-B29`）：本案為該不對稱之**視覺權威**——
+   * 同一位主管，循環管理「處處擋」（已從側選單消失）、業務/功能類別管理「處處唯讀可看」
+   * （新增為可見）。這條肉眼可見的不對稱正是 `AC-B29` 成對斷言之落地（見
+   * `docs/ui-ux-design-overview.md` §A.9.3：「看得到『業務/功能類別管理』、看不到
+   * 『循環管理』」）。🔒 斷言形狀維持 `toEqual` 之**有序全等**（非 `toContain`）：主管新增一項的
+   * 同時若循環管理未被真正移除，或多長出別的項目，仍必須翻紅。
+   */
+  it('Supervisor 見 業務/功能類別管理／ICSOP 文件管理／OJT 進度管理（循環管理仍缺，業務/功能類別管理新增，AC-44／AC-B29）', () => {
     expect(visibleMenu('Supervisor').map((m) => m.id)).toEqual([
-      'document', 'ojtprogress',
+      'businesscategory', 'document', 'ojtprogress',
     ]);
   });
 
-  it('DeptContact 見 ICSOP 文件管理／OJT 進度管理（AC-27 新增）', () => {
+  /**
+   * 🔒 AC-43／AC-B28 表：部門窗口對「業務/功能類別管理」為「無」——回歸鎖定，
+   * 新功能列**不得**意外把部門窗口一併放行。
+   */
+  it('DeptContact 見 ICSOP 文件管理／OJT 進度管理（業務/功能類別管理對其為「無」，不得意外放行）', () => {
     expect(visibleMenu('DeptContact').map((m) => m.id)).toEqual([
       'document', 'ojtprogress',
     ]);

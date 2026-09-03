@@ -277,6 +277,16 @@ export interface DocumentListItem {
   icsopPdfFileName: string | null;
   /** F017「連結點程序書」欄：連結點摘要（0..*；空陣列→顯示「—」）。 */
   links: DocumentLinkView[];
+  /**
+   * 🔵 F043／F017 `AC-B1`～`AC-B5`（2026-09-02 delta，架構決策 E5）：第 16 欄「業務/功能類別」之
+   * **additive** 欄位——該文件之全部掛載列所屬類別（後端以單一 JOIN 取得，零 N+1）。
+   *
+   * 🔴 **可能含重複之 `id`**：一份文件掛在同一類別之多個節點時，後端回傳多筆同 id 之項
+   * （掛載列層級）；第 16 欄之 `N` 為**依 `id` 去重後之相異類別數**，非本陣列長度（`AC-B3`）。
+   * `displayName` 為後端 `businessCategoryDisplayName()` 之輸出（含子分類時為 `名稱（子分類）`），
+   * 前端不再自行組字。選填宣告：既有 fixture／呼叫端缺鍵時視同 0 個（顯示 `—`）。
+   */
+  businessCategories?: BusinessCategoryRef[];
 }
 
 /** F017 後端分頁結果（GET /admin/documents 回傳）。 */
@@ -1257,4 +1267,198 @@ export interface OjtProgressSummary {
     orgName: string;
     trainingDate: string;
   }[];
+}
+
+// ===== E12 業務/功能類別管理（F043；2026-09-02） =====
+
+/**
+ * F043 類別池列（GET /admin/business-categories）。
+ * 🔴 身分＝`(name, subcategory)` 之組合（INV-B1）；顯示一律經 `businessCategoryDisplayName`。
+ */
+export interface BusinessCategoryView {
+  id: string;
+  name: string;
+  /** 無子分類恆為 `null`（不得為空字串，INV-B3）。 */
+  subcategory: string | null;
+  description: string | null;
+  status: 'active' | 'inactive';
+  nodeCount: number;
+  /** 🔴 **去重後之相異文件數**（同一份文件掛在本類別多個節點只算一份），非掛載列數。 */
+  mountedDocCount: number;
+  updatedAt: string;
+}
+
+/** F043 建立／編輯之 payload（🔴 `subcategory` 之 trim 責任在服務層，`AC-05`）。 */
+export interface BusinessCategoryPayload {
+  name: string;
+  subcategory?: string;
+  description?: string;
+}
+
+/** F043 DAG 節點／邊（比照 `DagNode`／`DagEdge`，鍵名之 `lifecycleId` → `businessCategoryId`）。 */
+export interface BusinessCategoryNode {
+  id: string;
+  businessCategoryId: string;
+  name: string | null;
+  positionX: number;
+  positionY: number;
+  /** 本節點之掛載列數（畫布徽章與 `AC-18` 之刪除確認同取此值）。 */
+  docCount?: number;
+}
+export interface BusinessCategoryEdge {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+}
+export interface BusinessCategoryGraph {
+  nodes: BusinessCategoryNode[];
+  edges: BusinessCategoryEdge[];
+}
+
+/**
+ * F043 §丙 節點抽屜（GET .../nodes/:nodeId/drawer）。
+ * 🔴 與 F009 `NodeDrawerData` **刻意不共用型別**：`candidates` 之語意相反（本功能不以循環過濾，
+ * `AC-20`），且**沒有** `assignedNode`／改派語意（`AC-21`～`AC-23` 推翻）——共用會把已被推翻
+ * 之語意帶進型別系統。
+ */
+export interface BusinessCategoryMountedDoc {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+}
+export interface BusinessCategoryOtherMount {
+  /** 他處類別之顯示名稱（後端 `businessCategoryDisplayName()` 之輸出）。 */
+  businessCategoryDisplayName: string;
+  nodeName: string | null;
+}
+export interface BusinessCategoryCandidateDoc {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+  /** 🔴 **純資訊、不參與過濾**（`AC-20`）：候選＝全部 ICSOP 文件。 */
+  lifecycleId: string | null;
+  lifecycleName: string | null;
+  /** 已掛在其他類別／節點之清單（**純資訊**，`AC-21`～`AC-23`；`[]`＝未掛在別處）。 */
+  otherMounts: BusinessCategoryOtherMount[];
+}
+export interface BusinessCategoryNodeDrawerData {
+  node: { id: string; name: string | null };
+  mounted: BusinessCategoryMountedDoc[];
+  candidates: BusinessCategoryCandidateDoc[];
+}
+
+/** F043 §丁 後台樹狀圖預覽（GET .../tree-preview；`AC-32`／`AC-33`）。 */
+export interface BusinessCategoryPreviewNode {
+  id: string;
+  businessCategoryId: string;
+  name: string | null;
+  positionX: number;
+  positionY: number;
+  /** 🔴 後台為**全部**掛載數（前台之 `visibleDocCount` 語意不同，明文禁止共用同一屬性名）。 */
+  mountedDocCount: number;
+}
+export interface BusinessCategoryTreePreview {
+  businessCategory: { id: string; name: string; subcategory: string | null };
+  graph: { nodes: BusinessCategoryPreviewNode[]; edges: BusinessCategoryEdge[] };
+  /** 伺服器端組裝之浮水印快照（`AC-33`；前端不可自組）。 */
+  watermark: string;
+}
+
+/**
+ * F043 `AC-35` 子樹唯讀抽屜（GET .../nodes/:nodeId/subtree-documents）。
+ * 🔴 **不做跨節點去重**：同一份文件掛在子樹內多個節點會於各分組各出現一次；
+ * `totalCount` 為**去重後**之相異文件數 ⇒ 它與「列數」是兩個刻意不同的數字，不得互相對齊。
+ */
+export interface BusinessCategorySubtreeDoc {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+  edition: string | null;
+  status: DocumentStatus;
+  announcedDate: string | null;
+}
+export interface BusinessCategorySubtreeGroup {
+  nodeId: string;
+  nodeName: string | null;
+  documents: BusinessCategorySubtreeDoc[];
+}
+export interface BusinessCategorySubtreeDocuments {
+  nodeId: string;
+  /** 🔴 去重後之相異文件總數（副標題之 N），**非** Σ documents.length。 */
+  totalCount: number;
+  groups: BusinessCategorySubtreeGroup[];
+}
+
+/** F043 §己 前台樹狀圖瀏覽（F019 `AC-B16`～`AC-B23`）。 */
+export interface PublicBusinessCategoryListItem {
+  id: string;
+  name: string;
+  subcategory: string | null;
+}
+export interface PublicBusinessCategoryNode {
+  id: string;
+  businessCategoryId: string;
+  name: string | null;
+  positionX: number;
+  positionY: number;
+  /** 🔴 **套用可見性過濾後**之數字（`AC-B21`），與後台 `mountedDocCount` 語意不同。 */
+  visibleDocCount: number;
+}
+export interface PublicBusinessCategoryGraph {
+  businessCategory: { id: string; name: string; subcategory: string | null };
+  graph: { nodes: PublicBusinessCategoryNode[]; edges: BusinessCategoryEdge[] };
+  watermark: string;
+}
+/** 🔴 四欄，**無「狀態」欄**（與後台 `29` 之五欄刻意不同，§A.8.4 N9）。 */
+export interface PublicBusinessCategoryNodeDoc {
+  id: string;
+  documentNumber: string;
+  documentName: string;
+  edition: string | null;
+  announcedDate: string | null;
+}
+
+/** F043 §戊 結構變更歷程事件（第三個 tab；`AC-38`～`AC-42`）。 */
+export type BusinessCategoryChangeType =
+  | 'NODE_ADDED'
+  | 'NODE_REMOVED'
+  | 'NODE_RENAMED'
+  | 'EDGE_ADDED'
+  | 'EDGE_REMOVED'
+  | 'DOCUMENT_MOUNTED'
+  | 'DOCUMENT_UNMOUNTED';
+
+export interface BusinessCategoryChangeView {
+  id: string;
+  businessCategoryId: string;
+  /** 後端已組合之顯示字串（含子分類），前端不再自行串接。 */
+  businessCategoryDisplayName: string;
+  changeType: BusinessCategoryChangeType;
+  summary: string;
+  actorName: string | null;
+  actorEmployeeNo?: string | null;
+  occurredAt: string;
+}
+
+/** F043 `AC-41` 新舊對照（before＝前一筆快照或空 DAG；after＝本筆快照）。 */
+export interface BusinessCategoryTreeDiff {
+  businessCategory: { id: string; name: string; subcategory: string | null };
+  before: { nodes: BusinessCategoryPreviewNode[]; edges: BusinessCategoryEdge[] };
+  after: { nodes: BusinessCategoryPreviewNode[]; edges: BusinessCategoryEdge[] };
+  diff: LifecycleDiff;
+  watermark: string;
+}
+
+/** F043／F017 `AC-B3`：第 16 欄之類別參照（掛載列層級，可能含重複 id）。 */
+export interface BusinessCategoryRef {
+  id: string;
+  /** `businessCategoryDisplayName()` 之輸出（後端組字）。 */
+  displayName: string;
+}
+
+/** F043 §戊 事件查詢條件（第三個 tab；比照 `LifecycleChangeFilters`）。 */
+export interface BusinessCategoryChangeFilters {
+  businessCategoryId?: string;
+  person?: string;
+  from?: string;
 }

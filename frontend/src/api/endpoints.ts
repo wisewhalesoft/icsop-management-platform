@@ -39,6 +39,21 @@ import type {
   OjtPendingItem,
   OjtProgressSummary,
   OjtDocScope,
+  // F043 業務/功能類別管理（E12）。
+  BusinessCategoryView,
+  BusinessCategoryPayload,
+  BusinessCategoryNode,
+  BusinessCategoryEdge,
+  BusinessCategoryGraph,
+  BusinessCategoryNodeDrawerData,
+  BusinessCategoryTreePreview,
+  BusinessCategorySubtreeDocuments,
+  BusinessCategoryChangeView,
+  BusinessCategoryChangeFilters,
+  BusinessCategoryTreeDiff,
+  PublicBusinessCategoryListItem,
+  PublicBusinessCategoryGraph,
+  PublicBusinessCategoryNodeDoc,
 } from './types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -1421,4 +1436,330 @@ export function getDocumentOjtCompletion(
   documentId: string,
 ): Promise<{ completedOrgCodes: string[]; totalUnits?: number }> {
   return apiFetch(`/admin/documents/${encodeURIComponent(documentId)}/ojt-completion`);
+}
+
+// ===== E12 業務/功能類別管理（F043；2026-09-02） =====
+//
+// 🔒 路徑權威＝docs/specs/architecture-spec.md §14.5 之端點表（後台 `/admin/business-categories`、
+//    前台 `/public/business-categories`、變更歷程三端點與 diff／download 一律收在
+//    `/admin/change-history/business-categories*` 之下——後者為 2026-09-02 lead 裁定改正之路徑家族，
+//    **明文禁止**改回 `/admin/business-category-changes`／`/admin/business-categories/:id/changes`）。
+// 🔒 本組函式名為前端環（`BusinessCategory*.test.tsx`）之契約；⚠ `getBusinessCategoryNodeDrawer`
+//    對映之後端方法名為 `candidates`（路徑 `/nodes/:nodeId/candidates`），回應為完整抽屜載荷
+//    （`{ node, mounted, candidates }`，後端 `BusinessCategoryDocsService.getDrawer()`）——
+//    **函式名與 URL 段刻意不同名**，此處就地記錄，避免下一個人誤以為漏了端點。
+
+/** GET /admin/business-categories（類別池清單；BUSINESS_CATEGORY_MANAGEMENT read）。 */
+export function getBusinessCategories(): Promise<BusinessCategoryView[]> {
+  return apiFetch<BusinessCategoryView[]>('/admin/business-categories');
+}
+
+/**
+ * POST /admin/business-categories（建立；`AC-01`～`AC-10`）。
+ * 🔴 `subcategory` **原樣送出、前端不 trim**（`AC-05`：正規化之責任在服務層）——前端若先 trim
+ * 一次，服務層那條規則就再也沒有輸入可以觸發它，其測試將永遠測不到真實輸入。
+ * 錯誤碼：400 `BUSINESS_CATEGORY_NAME_REQUIRED`／409 `BUSINESS_CATEGORY_DUPLICATE`／
+ * 409 `BUSINESS_CATEGORY_SUBCATEGORY_CONFLICT`（驗證順序固定，`AC-09`）。
+ */
+export function createBusinessCategory(
+  body: BusinessCategoryPayload,
+): Promise<BusinessCategoryView> {
+  return apiFetch<BusinessCategoryView>('/admin/business-categories', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
+/** PATCH /admin/business-categories/:id（改名稱／子分類／說明；`AC-11`）。 */
+export function updateBusinessCategory(
+  id: string,
+  body: Partial<BusinessCategoryPayload>,
+): Promise<BusinessCategoryView> {
+  return apiFetch<BusinessCategoryView>(`/admin/business-categories/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * PATCH /admin/business-categories/:id（狀態切換）。
+ * 🔴 `AC-12` 之不對稱：**停用不受刪除保護限制**——仍有掛載之類別可以停用（既有節點／邊／掛載
+ * 關係完全不受影響），只有「刪除」才會回 `BUSINESS_CATEGORY_HAS_DOCUMENTS`。
+ * ⚠ 與 F007 不同，本功能**沒有**獨立的 `/status` 子路由（架構 §14.5 端點表：狀態由同一支 PATCH
+ * 承接），故不得比照 `setLifecycleStatus` 另打 `/status`。
+ */
+export function setBusinessCategoryStatus(
+  id: string,
+  status: 'active' | 'inactive',
+): Promise<BusinessCategoryView> {
+  return apiFetch<BusinessCategoryView>(`/admin/business-categories/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ status }),
+  });
+}
+
+/** DELETE /admin/business-categories/:id（仍有掛載 → 409 `BUSINESS_CATEGORY_HAS_DOCUMENTS`，`AC-12`）。 */
+export function deleteBusinessCategory(id: string): Promise<void> {
+  return apiFetch<void>(`/admin/business-categories/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+// ── §乙 DAG 節點／邊（`AC-15`～`AC-19`）──
+
+export function getBusinessCategoryGraph(
+  businessCategoryId: string,
+): Promise<BusinessCategoryGraph> {
+  return apiFetch<BusinessCategoryGraph>(
+    `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/graph`,
+  );
+}
+
+export function addBusinessCategoryNode(
+  businessCategoryId: string,
+  body: { name?: string | null; positionX?: number; positionY?: number },
+): Promise<BusinessCategoryNode> {
+  return apiFetch<BusinessCategoryNode>(
+    `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/nodes`,
+    { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) },
+  );
+}
+
+export function updateBusinessCategoryNode(
+  businessCategoryId: string,
+  nodeId: string,
+  body: { name?: string | null; positionX?: number; positionY?: number },
+): Promise<BusinessCategoryNode> {
+  return apiFetch<BusinessCategoryNode>(
+    `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/nodes/${encodeURIComponent(nodeId)}`,
+    { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) },
+  );
+}
+
+/** DELETE 節點：同一交易內連動刪除其邊與其全部掛載列（`AC-18`；二次確認由呼叫端負責）。 */
+export function deleteBusinessCategoryNode(
+  businessCategoryId: string,
+  nodeId: string,
+): Promise<void> {
+  return apiFetch<void>(
+    `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/nodes/${encodeURIComponent(nodeId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+/**
+ * 新增邊；🔴 `AC-16` 之**專屬**錯誤碼 409 `BUSINESS_CATEGORY_SELF_LOOP`／
+ * `BUSINESS_CATEGORY_CYCLE_DETECTED`——**不沿用** `DAG_*`（那兩碼之訊息稱「循環結構」，
+ * 而「循環」是本系統已被 LIFECYCLE 佔用之專有名詞）。
+ */
+export function addBusinessCategoryEdge(
+  businessCategoryId: string,
+  source: string,
+  target: string,
+): Promise<BusinessCategoryEdge> {
+  return apiFetch<BusinessCategoryEdge>(
+    `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/edges`,
+    { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ source, target }) },
+  );
+}
+
+export function deleteBusinessCategoryEdge(
+  businessCategoryId: string,
+  edgeId: string,
+): Promise<void> {
+  return apiFetch<void>(
+    `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/edges/${encodeURIComponent(edgeId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+// ── §丙 節點掛載抽屜（`AC-20`～`AC-30`）──
+
+/**
+ * GET .../nodes/:nodeId/candidates —— 抽屜完整載荷（節點／目前掛載／候選）。
+ * 🔴 `AC-20`：候選＝**全部 ICSOP 文件**，引數**恰為兩段路徑參數**，不得夾帶任何
+ * `lifecycleId`／`lifecycleIds`／`cycle` 之過濾鍵（本功能之候選不以循環過濾）。
+ */
+export function getBusinessCategoryNodeDrawer(
+  businessCategoryId: string,
+  nodeId: string,
+): Promise<BusinessCategoryNodeDrawerData> {
+  return apiFetch<BusinessCategoryNodeDrawerData>(
+    `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/nodes/${encodeURIComponent(nodeId)}/candidates`,
+  );
+}
+
+/**
+ * POST .../nodes/:nodeId/documents（掛載一份文件）。
+ * 🔴 `AC-21`～`AC-23`／`AC-30`：**恰三個引數、無 confirm 旗標**——本功能是 M:N，
+ * 「已掛在別處」不是需要確認的例外而是正常狀態；F009 之 `mountNodeDoc(..., confirm)` 第四引數
+ * 所服務的「改派」語意在本功能**明文不存在**，多帶一個旗標即把它偷渡回來。
+ */
+export function mountBusinessCategoryDoc(
+  businessCategoryId: string,
+  nodeId: string,
+  documentId: string,
+): Promise<void> {
+  return apiFetch<void>(
+    `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/nodes/${encodeURIComponent(nodeId)}/documents`,
+    { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ documentId }) },
+  );
+}
+
+/** DELETE .../documents/:documentId（`AC-25`：只影響那一筆，其餘掛載與文件本身一格不動）。 */
+export function unmountBusinessCategoryDoc(
+  businessCategoryId: string,
+  nodeId: string,
+  documentId: string,
+): Promise<void> {
+  return apiFetch<void>(
+    `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/nodes/${encodeURIComponent(nodeId)}/documents/${encodeURIComponent(documentId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+// ── §丁 後台樹狀圖預覽／下載／列印（`AC-32`～`AC-37`）──
+
+/** GET /admin/business-categories/:id/tree（唯讀圖資＋伺服器端浮水印快照，`AC-33`）。 */
+export function getBusinessCategoryTreePreview(
+  businessCategoryId: string,
+): Promise<BusinessCategoryTreePreview> {
+  return apiFetch<BusinessCategoryTreePreview>(
+    `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/tree`,
+  );
+}
+
+export function businessCategoryTreeDownloadUrl(businessCategoryId: string): string {
+  return `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/tree/download`;
+}
+export function businessCategoryTreePrintUrl(businessCategoryId: string): string {
+  return `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/tree/print`;
+}
+
+/**
+ * `AC-36`：下載／列印一律走**代理串流**（`downloadViaBlob`／`openPdfViaBlob`），
+ * 🔴 **不得**用 `<a href>` top-level navigation——session 逾時時瀏覽器會把後端 401 JSON 當網頁畫出來。
+ */
+export function downloadBusinessCategoryTree(
+  businessCategoryId: string,
+  fallbackName: string,
+): Promise<void> {
+  return downloadViaBlob(businessCategoryTreeDownloadUrl(businessCategoryId), fallbackName);
+}
+/** 列印：`win` 須由呼叫端於 click handler 內、任何 `await` 之前同步開好（`AC-36`）。 */
+export function printBusinessCategoryTree(
+  businessCategoryId: string,
+  win: Window | null,
+): Promise<void> {
+  return openPdfViaBlob(businessCategoryTreePrintUrl(businessCategoryId), win);
+}
+
+/** `AC-35` 子樹唯讀抽屜（分組／排序／去重全部由後端做）。 */
+export function getBusinessCategorySubtreeDocuments(
+  businessCategoryId: string,
+  nodeId: string,
+): Promise<BusinessCategorySubtreeDocuments> {
+  return apiFetch<BusinessCategorySubtreeDocuments>(
+    `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/nodes/${encodeURIComponent(nodeId)}/subtree-documents`,
+  );
+}
+
+// ── §己 前台樹狀圖瀏覽（F019 `AC-B16`～`AC-B27`；閘門＝前台瀏覽，5 角色皆可）──
+
+/** 🔴 `AC-B18`：清單已由**後端**過濾（active ∧ 對本 viewer 至少一份可見文件）；前端不再過濾。 */
+export function getPublicBusinessCategories(): Promise<PublicBusinessCategoryListItem[]> {
+  return apiFetch<PublicBusinessCategoryListItem[]>('/public/business-categories');
+}
+/** 🔴 `AC-B21`：節點掛載數已套可見性過濾（`visibleDocCount`），前端不得自行加總。 */
+export function getPublicBusinessCategoryGraph(
+  businessCategoryId: string,
+): Promise<PublicBusinessCategoryGraph> {
+  return apiFetch<PublicBusinessCategoryGraph>(
+    `/public/business-categories/${encodeURIComponent(businessCategoryId)}/graph`,
+  );
+}
+export function getPublicBusinessCategoryNodeDocuments(
+  businessCategoryId: string,
+  nodeId: string,
+): Promise<PublicBusinessCategoryNodeDoc[]> {
+  return apiFetch<PublicBusinessCategoryNodeDoc[]>(
+    `/public/business-categories/${encodeURIComponent(businessCategoryId)}/nodes/${encodeURIComponent(nodeId)}/documents`,
+  );
+}
+
+// ── §戊 結構變更歷程（「文件變更歷程」頁第三個 tab；`AC-38`～`AC-42`）──
+//
+// 🔒 三個查詢/匯出端點與 diff／download 一律掛在 `/admin/change-history/business-categories*`
+//    之下、共用「文件變更歷程」列之守門鏈（`AC-54`：主管對本頁整頁 403，看不到任何一個 tab）。
+
+function businessCategoryChangeQuery(f: BusinessCategoryChangeFilters): string {
+  const qs = new URLSearchParams();
+  if (f.businessCategoryId) qs.set('businessCategoryId', f.businessCategoryId);
+  if (f.person) qs.set('person', f.person);
+  if (f.from) qs.set('from', f.from);
+  const q = qs.toString();
+  return q ? `?${q}` : '';
+}
+
+export function getBusinessCategoryChanges(
+  f: BusinessCategoryChangeFilters = {},
+): Promise<{ items: BusinessCategoryChangeView[]; total: number }> {
+  return apiFetch(`/admin/change-history/business-categories${businessCategoryChangeQuery(f)}`);
+}
+
+/** `AC-42` 匯出 CSV（規則全數向 `error-handling.md#export` 之共用規則對齊；零新增錯誤碼）。 */
+export function exportBusinessCategoryChanges(
+  f: BusinessCategoryChangeFilters = {},
+): Promise<void> {
+  return downloadViaBlob(
+    `/admin/change-history/business-categories/export${businessCategoryChangeQuery(f)}`,
+    'business_category_change_history.csv',
+  );
+}
+
+/** 某類別之結構變更（＋記 `BUSINESS_CATEGORY_CHANGELOG_VIEW` 稽核；`name` 供稽核快照）。 */
+export function viewBusinessCategoryChanges(
+  businessCategoryId: string,
+  name?: string,
+): Promise<{ items: BusinessCategoryChangeView[] }> {
+  const q = name ? `?name=${encodeURIComponent(name)}` : '';
+  return apiFetch(
+    `/admin/change-history/business-categories/${encodeURIComponent(businessCategoryId)}${q}`,
+  );
+}
+
+/** `AC-41` 單筆事件之新舊結構＋diff＋浮水印（純資料、不記稽核）。 */
+export function getBusinessCategoryChangeDiff(
+  businessCategoryId: string,
+  changeLogId: string,
+): Promise<BusinessCategoryTreeDiff> {
+  return apiFetch(
+    `/admin/change-history/business-categories/${encodeURIComponent(businessCategoryId)}/changes/${encodeURIComponent(changeLogId)}/tree-diff`,
+  );
+}
+
+export function businessCategoryTreeDiffDownloadUrl(
+  businessCategoryId: string,
+  changeLogId: string,
+): string {
+  return `/admin/change-history/business-categories/${encodeURIComponent(businessCategoryId)}/changes/${encodeURIComponent(changeLogId)}/tree-diff/download`;
+}
+
+/**
+ * `AC-41` 新舊對照 PDF 下載（記 `BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD` 稽核）。
+ * 🔴 §A.10.3 之分派契約：Tab 2 之下載走 `downloadLifecycleTreeDiff`、Tab 3 走本函式——
+ * 少了分派，Tab 3 的下載鈕會去查循環側事件、查不到就**靜默無反應**（兩側單元測試各自都綠）。
+ */
+export function downloadBusinessCategoryTreeDiff(
+  businessCategoryId: string,
+  changeLogId: string,
+  fallbackName: string,
+): Promise<void> {
+  return downloadViaBlob(
+    businessCategoryTreeDiffDownloadUrl(businessCategoryId, changeLogId),
+    fallbackName,
+  );
 }

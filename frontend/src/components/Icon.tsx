@@ -23,6 +23,8 @@ import {
   CalendarCheck, CalendarClock, FileInput,
   // F042 `OQ-E11-22`：區一逐筆表第四態「未指定使用部門」之專屬圖示（刻意跳出 `file-*-2` 家族）。
   CircleSlash,
+  // F043 業務/功能類別管理側選單項之圖示（prototypes/26～28 之 MENU `icon:'shapes'`）。
+  Shapes,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -162,6 +164,8 @@ const REGISTRY: Record<string, LucideIcon> = {
   'sliders-horizontal': SlidersHorizontal,
   'file-x': FileX, // fix-admin G-ADM-027：文件索引「.xls 原件」無 cell（與既有 file-x-2 不同）
   'file-clock': FileClock, // GAP-07-1 儀表板「待公布的文件」KPI 卡（prototype 07 TODOS）
+  // F043 側選單「業務/功能類別管理」（prototypes/26-28 之 MENU icon；與循環管理之 workflow 區隔）
+  shapes: Shapes,
 };
 
 export interface IconProps {

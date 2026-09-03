@@ -46,6 +46,9 @@ export const FunctionKey = {
   // F042 OJT 進度管理（E11 / US-103～105，AC-27／AC-J16）。逐字採 F042 §命名鎖定表之
   // 「OJT 進度管理」，不得改寫為「OJT 管理」「教育訓練管理」等同義詞（跨層識別碼 churn）。
   OJT_PROGRESS_MANAGEMENT: 'OJT 進度管理',
+  // F043 業務/功能類別管理（E12 / US-106～108，AC-43／AC-B28）。逐字採 F043 §命名鎖定表之
+  // 「業務/功能類別管理」（半形斜線、前後無空白），不得同義改寫為「業務類別管理」等。
+  BUSINESS_CATEGORY_MANAGEMENT: '業務/功能類別管理',
   DOCUMENT_INDEX_MANAGEMENT: '文件索引管理',
   DOCUMENT_ACCESS_HISTORY: '文件調閱歷程查詢',
   DOCUMENT_CHANGE_HISTORY: '文件變更歷程',
@@ -95,6 +98,18 @@ export const FUNCTION_MATRIX: Record<string, Row> = {
   [FunctionKey.PUBLIC_BROWSING]: row('READ', 'READ', 'READ', 'READ', 'READ'),
   [FunctionKey.DOCUMENT_DOWNLOAD_PRINT]: row('READ', 'READ', 'READ', 'READ', 'READ'),
   [FunctionKey.SYSTEM_PARAMETER]: row('CRUD', 'NONE', 'NONE', 'NONE', 'NONE'),
+  /**
+   * 🔴 F043 `AC-43`／F025 `AC-B28`（2026-09-02 人類裁決）：新增恰一列，格值
+   * 唯讀／CRUD／唯讀／無／無。🔒 值域不擴充（不引入 `RESTRICTED_CRUD`——本功能無
+   * 「可新增不可刪除」之類細則）。位置＝**最末列**，逐列對齊
+   * `prototypes/18-permission-matrix.html` 之 `FUNC_ROWS`（本列置於 `OJT 進度管理` 之後）。
+   *
+   * 🔴 `AC-44`：本列之主管欄（`READ`）與上方 `LIFECYCLE_MANAGEMENT` 之主管欄（`NONE`）
+   * **刻意不同、非疏漏**——同一日之兩項人類裁決，一項把主管移出循環管理、一項把主管放進
+   * 業務/功能類別管理。⚠ 日後最可能發生的「整理」就是把這兩格對齊成同一個值，那會
+   * **同時違反兩條人類裁決**；`function-matrix.test.ts` 已有一條專門比對這兩格的斷言。
+   */
+  [FunctionKey.BUSINESS_CATEGORY_MANAGEMENT]: row('READ', 'CRUD', 'READ', 'NONE', 'NONE'),
 };
 
 /**

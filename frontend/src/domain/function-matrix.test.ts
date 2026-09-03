@@ -22,16 +22,48 @@ describe('function-matrix（前端鏡射）', () => {
 
   /**
    * 🔴 2026-08-28 F042 delta（AC-27／AC-J16）：新增功能鍵「OJT 進度管理」，矩陣列數 13→14。
+   * 🔴 2026-09-02 F043 delta（`AC-43`／`AC-B28`）就地再擴充：新增「業務/功能類別管理」，14→15。
    * 就地改寫（非回歸）——前端鏡射須與 backend/src/rbac/function-matrix.ts 逐格一致同步更新。
    */
-  it('矩陣含 14 功能，每列涵蓋全部 5 角色（F042 新增「OJT 進度管理」）', () => {
+  it('矩陣含 15 功能，每列涵蓋全部 5 角色（F043 新增「業務/功能類別管理」）', () => {
     const keys = Object.keys(FUNCTION_MATRIX);
-    expect(keys).toHaveLength(14);
+    expect(keys).toHaveLength(15);
     for (const key of keys) {
       expect(Object.keys(FUNCTION_MATRIX[key]).sort()).toEqual(
         [...ROLE_CODES].sort(),
       );
     }
+  });
+
+  /**
+   * AC-43／AC-B28：五角色格值逐字——系統管理員 `唯讀`｜ICSOP管理員 `CRUD`｜主管 `唯讀`｜
+   * 部門窗口 `無`｜一般使用者 `無`。🔒 值域不擴充（三者皆既有值，不引入 `受限CRUD`）。
+   */
+  it('AC-43／AC-B28 業務/功能類別管理：五角色格值逐字正確', () => {
+    expect(FUNCTION_MATRIX[FunctionKey.BUSINESS_CATEGORY_MANAGEMENT]).toEqual({
+      SysAdmin: 'READ',
+      ICSOPAdmin: 'CRUD',
+      Supervisor: 'READ',
+      DeptContact: 'NONE',
+      User: 'NONE',
+    });
+  });
+
+  /**
+   * 🔴 AC-44／AC-B29（本 delta 之核心不對稱斷言，不得省略）：同一日的兩項人類裁決——
+   * 一項把主管移出「循環管理（DAG）」（本檔已有之 `AC-J18` 案例鎖 `Supervisor: 'NONE'`）、
+   * 另一項把主管放進「業務/功能類別管理」（`Supervisor: 'READ'`）。**兩者刻意不同、非疏漏**，
+   * 驗證載體必須是本檔（`function-matrix.ts`），不得取自 prototype 18（曾落後，見
+   * `TD-B-02`：prototype 更新前兩列皆為「唯讀」，該對斷言在 prototype 層鑑別力為零）。
+   * 🔴 明文禁止「兩個 DAG 功能之權限應該一樣」而把兩者對齊。
+   */
+  it('AC-44／AC-B29 核心不對稱：循環管理（DAG）主管=無 且 業務/功能類別管理主管=唯讀（刻意不同，不得對齊）', () => {
+    expect(FUNCTION_MATRIX[FunctionKey.LIFECYCLE_MANAGEMENT].Supervisor).toBe('NONE');
+    expect(FUNCTION_MATRIX[FunctionKey.BUSINESS_CATEGORY_MANAGEMENT].Supervisor).toBe('READ');
+    // 自證：兩格確實不同值，非退化為恆真（例如若實作把兩者皆設為同一值，本行先紅）。
+    expect(FUNCTION_MATRIX[FunctionKey.LIFECYCLE_MANAGEMENT].Supervisor).not.toBe(
+      FUNCTION_MATRIX[FunctionKey.BUSINESS_CATEGORY_MANAGEMENT].Supervisor,
+    );
   });
 
   /**

@@ -30,6 +30,9 @@ import { PublicListPage } from './pages/PublicListPage';
 import { PublicDocumentDetailPage } from './pages/PublicDocumentDetailPage';
 import { PublicViewerPage } from './pages/PublicViewerPage';
 import { LifecycleTreePreviewPage } from './pages/LifecycleTreePreviewPage';
+import { BusinessCategoryListPage } from './pages/BusinessCategoryListPage';
+import { BusinessCategoryDagCanvasPage } from './pages/BusinessCategoryDagCanvasPage';
+import { BusinessCategoryTreePreviewPage } from './pages/BusinessCategoryTreePreviewPage';
 
 /** 全頁載入狀態（等待 /auth/me）。 */
 function FullPageLoading(): JSX.Element {
@@ -100,12 +103,20 @@ export function AppRoutes(): JSX.Element {
       <Route path="/public/documents/:id/view" element={<PublicViewerPage />} />
       {/* F036 循環樹狀圖預覽（viewer 風格，不套後台側選單；:id＝循環 UUID）。雙入口皆導向此路由。 */}
       <Route path="/lifecycles/:id/tree" element={<LifecycleTreePreviewPage />} />
+      {/* F043 §丁 業務/功能類別樹狀圖預覽（viewer 風格，不套後台側選單；:id＝類別 UUID）。 */}
+      <Route path="/business-categories/:id/tree" element={<BusinessCategoryTreePreviewPage />} />
       <Route element={<AdminGuard />}>
         <Route path="/admin" element={<AppShell />}>
           <Route index element={<DashboardHome />} />
           <Route path="accounts" element={<AccountManagementPage />} />
           <Route path="lifecycles" element={<LifecycleListPage />} />
           <Route path="lifecycles/:lifecycleId/canvas" element={<DagCanvasPage />} />
+          {/* F043 §甲／§乙 業務/功能類別管理（E12；側選單項置於「循環管理」之下方）。 */}
+          <Route path="business-categories" element={<BusinessCategoryListPage />} />
+          <Route
+            path="business-categories/:businessCategoryId/canvas"
+            element={<BusinessCategoryDagCanvasPage />}
+          />
           <Route path="documents" element={<DocumentListPage />} />
           <Route path="documents/new" element={<DocumentCreatePage />} />
           <Route path="documents/:id" element={<DocumentReadonlyPage />} />
