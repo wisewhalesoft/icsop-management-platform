@@ -405,16 +405,25 @@
     toast('success',`已${label}：所得位元組與畫面上這份預覽<strong>同為已燒錄浮水印之 PDF 內容層</strong>，並寫入 ${kind} 稽核紀錄`);
   }
 
-  /* ===== RWD：窄螢幕自動以「符合寬度」之倍率首次渲染（F021：手機 360px 不得內容截斷）=====
+  /* ===== 自動以「符合寬度」之倍率首次渲染（F021：手機 360px 不得內容截斷）=====
      ⚠ 仍是**依倍率重新渲染**（AC-N9），不是 CSS 縮放（AC-N8）——只是把初始倍率算成適合當前寬度。
-     使用者一旦手動縮放（userZoomed）即不再自動套用，避免旋轉螢幕時把使用者選的倍率蓋掉。 */
+     使用者一旦手動縮放（userZoomed）即不再自動套用，避免旋轉螢幕時把使用者選的倍率蓋掉。
+
+     🔵 2026-09-04 寬螢幕版面寬度 delta（使用者裁決；與 03／30 同一批）：
+        上限由 `Math.min(1, …)` 改為 `Math.min(ZOOM_MAX, …)`。
+        OLD> 只會**縮小**、不會放大——那是只為窄螢幕寫的，代價是寬螢幕永遠停在 100%：
+             1920px 螢幕上 A4（PAGE_W=595）只占畫面 31%，左右各空 655px。
+        NEW> 窄螢幕照舊縮小，寬螢幕放大到填滿可用寬度。
+        🔒 `ZOOM_MAX = 2` **不動**：它是 architecture-spec §11.2 之記憶體護欄（見上方 [PAGING] 註 2——
+           DPR=2、zoom=2 時 outputScale=4，單張 A4 之點陣緩衝區已達數千萬像素）。1920px 下
+           fit 會算出約 3.1 而被夾回 2（＝ 1190px 寬、約占畫面 62%），是刻意取捨，不是算錯。 */
   let userZoomed = false;
   function fitToWidth(){
     const stage = document.getElementById("stage");
     const cs = getComputedStyle(stage);
     const avail = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     if(avail <= 0) return;
-    const target = Math.max(ZOOM_MIN, Math.min(1, +(avail / PAGE_W).toFixed(2)));
+    const target = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, +(avail / PAGE_W).toFixed(2)));
     if(target === Z) return;
     Z = target;
     document.getElementById("zoomLabel").textContent = Math.round(Z*100) + "%";

@@ -282,4 +282,88 @@ describe('PublicViewerPage — F020 D9 delta：canvas 化檢視器（AC-N4〜AC-
     renderViewer();
     expect(await screen.findByRole('alert')).toHaveTextContent('DOCUMENT_PDF_NOT_FOUND');
   });
+
+  /**
+   * 🔵 2026-09-04 寬螢幕版面寬度 delta（使用者裁決）——「符合寬度」之初始倍率。
+   * 權威＝`prototypes/05-public-viewer-watermark.html` 之 `fitToWidth()`（上限已由 1 改為 ZOOM_MAX）。
+   *
+   * 🔴 為何要鎖**具體倍率**而非 `not.toBe(1)`：本頁 mock 之頁寬固定為 `600 * scale`，
+   *    舞台寬度亦由測試指定 ⇒ 期望倍率是可算出的唯一值。只斷言「不等於 1」的話，任何錯誤的
+   *    fit 算法（例如誤用高度、誤把 padding 加成減）都會照樣過關。
+   * 🔒 三個寬度合起來才有鑑別力：寬螢幕**放大**（本 delta 之新行為）、窄螢幕**縮小**
+   *    （F021 手機不得截斷，delta 前既有行為之回歸鎖）、以及夾在 ZOOM_MAX 之上界。
+   */
+  describe('AC-N8／AC-N9 之初始倍率＝符合寬度（2026-09-04 delta）', () => {
+    /** jsdom 之 clientWidth 恆為 0（未載入 CSS）⇒ 以 prototype 之量測點（#stage）注入寬度。 */
+    const withStageWidth = (px: number): (() => void) => {
+      const desc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+        configurable: true,
+        get(this: HTMLElement) {
+          return this.id === 'stage' ? px : 0;
+        },
+      });
+      return () => {
+        if (desc) Object.defineProperty(HTMLElement.prototype, 'clientWidth', desc);
+        else delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth;
+      };
+    };
+
+    const lastScale = (): number =>
+      pdfjsState.renderCalls[pdfjsState.renderCalls.length - 1].scale;
+
+    it('寬螢幕：舞台 900px、頁寬 600 ⇒ 首次渲染倍率＝1.5（不再固定 100%）', async () => {
+      const restore = withStageWidth(900);
+      try {
+        renderViewer();
+        await screen.findByTestId('watermark-format');
+        await waitFor(() => expect(lastScale()).toBe(1.5));
+        expect(screen.getByTestId('zoom-label')).toHaveTextContent('150%');
+      } finally {
+        restore();
+      }
+    });
+
+    it('窄螢幕：舞台 420px ⇒ 倍率縮小為 0.7（F021 手機不得內容截斷之回歸鎖）', async () => {
+      const restore = withStageWidth(420);
+      try {
+        renderViewer();
+        await screen.findByTestId('watermark-format');
+        await waitFor(() => expect(lastScale()).toBe(0.7));
+      } finally {
+        restore();
+      }
+    });
+
+    it('超寬螢幕：舞台 3000px ⇒ 夾在 ZOOM_MAX＝2（§11.2 記憶體護欄不得被 fit 繞過）', async () => {
+      const restore = withStageWidth(3000);
+      try {
+        renderViewer();
+        await screen.findByTestId('watermark-format');
+        await waitFor(() => expect(lastScale()).toBe(2));
+        expect(screen.getByTestId('zoom-label')).toHaveTextContent('200%');
+      } finally {
+        restore();
+      }
+    });
+
+    it('使用者手動縮放後，resize 不得把倍率蓋回 fit 值', async () => {
+      const restore = withStageWidth(900);
+      try {
+        renderViewer();
+        await screen.findByTestId('watermark-format');
+        await waitFor(() => expect(lastScale()).toBe(1.5));
+
+        await userEvent.click(screen.getByRole('button', { name: '縮小' }));
+        await waitFor(() => expect(screen.getByTestId('zoom-label')).toHaveTextContent('140%'));
+
+        window.dispatchEvent(new Event('resize'));
+        // 正向半句：倍率仍是使用者選的 1.4（若 fit 蓋回去，這裡會變成 1.5）。
+        await waitFor(() => expect(screen.getByTestId('zoom-label')).toHaveTextContent('140%'));
+        expect(lastScale()).toBe(1.4);
+      } finally {
+        restore();
+      }
+    });
+  });
 });

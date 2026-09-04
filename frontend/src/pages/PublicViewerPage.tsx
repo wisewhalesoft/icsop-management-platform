@@ -97,6 +97,16 @@ export function PublicViewerPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  /** 預覽舞台（量測「符合寬度」之可用寬度用）。 */
+  const stageRef = useRef<HTMLElement | null>(null);
+  /**
+   * 使用者是否手動縮放過。一旦為 true 就不再自動套用「符合寬度」——
+   * 否則轉螢幕／改視窗大小會把使用者選的倍率蓋掉（prototype 05 之 `userZoomed` 同語意）。
+   * 🔴 用 ref 而非 state：它只影響「要不要跑 fit」，本身不該觸發重新渲染。
+   */
+  const userZoomedRef = useRef(false);
+  /** 目前文件第 1 頁在 `scale: 1` 下之寬度（CSS px）；fit 之分母。 */
+  const basePageWidthRef = useRef(0);
   const pdfRef = useRef<LoadedPdf | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -202,6 +212,9 @@ export function PublicViewerPage(): JSX.Element {
         setPageCount(doc.numPages);
         setPage(1);
         setRotations({});
+        // 換文件＝重新開始：下一份文件仍須以「符合寬度」開場（與 rotations 同一批重置）。
+        userZoomedRef.current = false;
+        basePageWidthRef.current = 0;
         setPdfReady((n) => n + 1);
       } catch (e) {
         if (active) setError((prev) => prev ?? msgOf(e));
@@ -254,6 +267,59 @@ export function PublicViewerPage(): JSX.Element {
     };
   }, [pdfReady, page, zoom, rotation]);
 
+  /**
+   * 「符合寬度」之初始倍率（`prototypes/05-public-viewer-watermark.html` 之 `fitToWidth()`）。
+   *
+   * 🔴 2026-09-04 delta（使用者裁決）：原型此函式原本夾在 `Math.min(1, …)`——**只會縮小、
+   * 不會放大**，那是為了 F021「手機 360px 不得內容截斷」而寫的。代價是寬螢幕永遠停在 100%：
+   * 1920px 螢幕上 A4（595pt 寬）只占畫面 31%，左右各空 655px。上限改為 `ZOOM_MAX`，於是窄螢幕
+   * 照舊縮小、寬螢幕會放大到填滿可用寬度。
+   * 🔒 `ZOOM_MAX = 2` **不動**：它是 architecture-spec §11.2 之記憶體護欄（DPR=2、zoom=2 時
+   * outputScale=4，單張 A4 之點陣緩衝區已達數千萬像素），不是隨手挑的上限。1920px 下 fit 會
+   * 算出約 3.1 而被夾回 2，這是刻意的取捨，不是計算錯誤。
+   *
+   * 🔴 仍是 `AC-N8`／`AC-N9` 之同一條路徑：改的只是**初始倍率**，渲染依舊是以新倍率重新
+   * 呼叫 pdf.js，不是對 canvas 施 CSS `transform: scale()`。
+   */
+  const fitToWidth = useCallback((): void => {
+    const stage = stageRef.current;
+    const base = basePageWidthRef.current;
+    if (!stage || !(base > 0)) return;
+    const cs = getComputedStyle(stage);
+    const avail =
+      stage.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+    if (!(avail > 0)) return;
+    const target = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, +(avail / base).toFixed(2)));
+    setZoom((z) => (z === target ? z : target));
+  }, []);
+
+  /** 文件載入完成 → 量出第 1 頁之原寸寬度，並以「符合寬度」開場。 */
+  useEffect(() => {
+    if (pdfReady === 0) return;
+    let active = true;
+    void (async () => {
+      const doc = pdfRef.current;
+      if (!doc) return;
+      const p = await doc.getPage(1);
+      if (!active) return;
+      // 頁面自身之 /Rotate 要算進去：內嵌 90° 的頁面，其「寬度」是未旋轉時的高度。
+      basePageWidthRef.current = p.getViewport({ scale: 1, rotation: p.rotate ?? 0 }).width;
+      if (!userZoomedRef.current) fitToWidth();
+    })();
+    return () => {
+      active = false;
+    };
+  }, [pdfReady, fitToWidth]);
+
+  /** 視窗改變大小 → 未手動縮放過者重新 fit（prototype 05 之 resize 監聽）。 */
+  useEffect(() => {
+    const onResize = (): void => {
+      if (!userZoomedRef.current) fitToWidth();
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [fitToWidth]);
+
   // 檢視者身分路徑（部 / 處室）：與前台清單／浮水印共用 buildOrgPath。
   useEffect(() => {
     getOrgUnits()
@@ -265,8 +331,10 @@ export function PublicViewerPage(): JSX.Element {
     [orgUnits, user?.orgCode],
   );
 
-  const changeZoom = (delta: number): void =>
+  const changeZoom = (delta: number): void => {
+    userZoomedRef.current = true;
     setZoom((z) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, +(z + delta).toFixed(2))));
+  };
 
   /** 頁碼越界一律夾回合法範圍、不崩潰（`AC-N71`）。 */
   const goPage = useCallback(
@@ -495,7 +563,7 @@ export function PublicViewerPage(): JSX.Element {
         </span>
       </div>
 
-      <main id="stage" className="flex-1 overflow-auto p-4 sm:p-8">
+      <main id="stage" ref={stageRef} className="flex-1 overflow-auto p-4 sm:p-8">
         {/* 載入骨架：高度與實際預覽容器一致（75vh），避免載入完成時版面位移。 */}
         {loading && !error && (
           <div
