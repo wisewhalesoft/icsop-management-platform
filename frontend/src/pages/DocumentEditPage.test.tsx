@@ -36,6 +36,13 @@ const VIEW: DocumentView = {
   edition: "26'01", announcedDate: '2026-01-01T00:00:00.000Z', contentSummary: '摘要',
 };
 
+/** 公司主檔（`GET /companies`）＝制定公司下拉之來源。與建立頁同一份。 */
+const COMPANIES = [
+  { companyCode: 'AS', companyName: '和潤企業股份有限公司' },
+  { companyCode: 'AE', companyName: '和潤電能股份有限公司' },
+  { companyCode: 'AJ', companyName: '和勁企業股份有限公司' },
+];
+
 const LCS: LifecycleView[] = [
   { id: 'lc1', name: '銷售及收款循環', description: null, status: 'active', nodeCount: 3, updatedAt: '2026-06-01T00:00:00.000Z' },
   { id: 'lc2', name: '產品企劃循環', description: null, status: 'active', nodeCount: 2, updatedAt: '2026-06-01T00:00:00.000Z' },
@@ -109,6 +116,7 @@ function setupMocks() {
   vi.mocked(endpoints.getDocumentLinks).mockResolvedValue([]);
   vi.mocked(endpoints.getLifecycles).mockResolvedValue(LCS);
   vi.mocked(endpoints.getOrgUnits).mockResolvedValue(ORG);
+  vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
   vi.mocked(endpoints.getDocuments).mockResolvedValue(page(EXISTING));
   vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([]);
   vi.mocked(endpoints.getDocumentForms).mockResolvedValue([]);
@@ -590,26 +598,73 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
     });
 
     /**
-     * 🔴 B 階段（多公司）：制定公司於建立時決定即固定。
-     * 舊版此處是一個以**公司代碼**（'AS'）為選項值的下拉，卻寫進 `draftingCompanyId`
-     * ——那個欄位存的是該公司 ROOT 的 orgCode（'00000'），語意不同；於是在編輯頁動過
-     * 制定公司的文件，該欄會存進與建立頁不同語意的值，前台部門名稱因而解析不出來。
+     * 🔴 2026-09-04 人類裁決：制定公司**開放 ICSOP 管理員編輯**。
+     * 📝 已作廢（⚠ 不得復原）：
+     *    OLD> it('制定公司為唯讀列：顯示文件所屬公司、無下拉、不含「新值」欄')
+     *    OLD>   expect(within(row).queryByText('新值')).not.toBeInTheDocument();
+     *    OLD>   expect(within(row).getByText('文件所屬公司於建立時決定，不可變更。')).toBeInTheDocument();
+     *    OLD>   expect(document.getElementById('edCompany')).toBeNull();
+     *    推翻理由：程序書目錄清單匯入把 126 筆非和潤企業之文件記成和潤企業，唯讀代表這種錯誤
+     *    在畫面上永遠改不掉。舊版曾存在的真實缺陷（下拉值為公司代碼卻寫進語意不同的
+     *    `draftingCompanyId`）已隨該欄整個移除而消失，不構成繼續鎖死的理由。
      */
-    it('制定公司為唯讀列：顯示文件所屬公司、無下拉、不含「新值」欄', async () => {
+    it('制定公司為可編輯之對照列：下拉存在、目前值為公司全稱', async () => {
       mockAuth('ICSOPAdmin');
-      // 制定公司之顯示名由後端隨 GET /admin/documents/:id 附上（`companyName`），
-      // 前端不再自備一份公司主檔（原本此處需 mock getCompanies）。
       renderPage();
       await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
 
       const value = await screen.findByText('和潤企業股份有限公司');
       const row = value.closest('.grid.grid-cols-12') as HTMLElement;
       expect(row).not.toBeNull();
-      expect(within(row).getByText('制定公司')).toBeInTheDocument();
-      expect(within(row).queryByText('新值')).not.toBeInTheDocument();
-      expect(within(row).getByText('文件所屬公司於建立時決定，不可變更。')).toBeInTheDocument();
-      // 舊的制定公司下拉已不存在。
-      expect(document.getElementById('edCompany')).toBeNull();
+      // 「制定公司」在此列出現兩次：對照列標籤 ＋ 下拉之 sr-only label（後者即可編輯之證據）。
+      expect(within(row).getAllByText('制定公司')).toHaveLength(2);
+      expect(within(row).getByText('新值')).toBeInTheDocument();
+      const combo = document.getElementById('edCompany') as HTMLInputElement;
+      expect(combo).not.toBeNull();
+      expect(combo.disabled).toBe(false);
+    });
+
+    it('唯讀角色之制定公司下拉為 disabled（F026 欄位面不因開放編輯而放寬）', async () => {
+      mockAuth('Supervisor');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      const combo = document.getElementById('edCompany') as HTMLInputElement;
+      expect(combo).not.toBeNull();
+      expect(combo.disabled).toBe(true);
+    });
+
+    /**
+     * 🔴 三級相依之最上層：變更制定公司即清空制定部門／制定室別／文件使用部門。
+     * 三者存的都是**各公司獨立編碼**之 5 碼 orgCode（AS 的 `A2100` 與 AE 的 `A2100` 字串相同、
+     * 意義完全不同），沿用等於靜默指向新公司裡碰巧同碼的另一個單位。
+     */
+    it('變更制定公司 → 三個組織欄即時清空，並隨 PATCH 一併送出', async () => {
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
+      // 前提：三欄本來都有值（否則「清空」之斷言恆真）。
+      expect((document.getElementById('edDept') as HTMLInputElement).value).not.toBe('');
+      expect(await screen.findByRole('button', { name: `移除 ${A2100_PATH}` })).toBeInTheDocument();
+
+      await userEvent.click(document.getElementById('edCompany') as HTMLInputElement);
+      await userEvent.click(await screen.findByRole('option', { name: '和潤電能股份有限公司' }));
+
+      expect((document.getElementById('edDept') as HTMLInputElement).value).toBe('');
+      expect((document.getElementById('edSection') as HTMLInputElement).value).toBe('');
+      expect(screen.queryByRole('button', { name: `移除 ${A2100_PATH}` })).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: '儲存' }));
+      await waitFor(() =>
+        expect(endpoints.updateDocument).toHaveBeenCalledWith(
+          'd1',
+          expect.objectContaining({
+            companyCode: 'AE',
+            draftingDeptId: null,
+            draftingSectionId: null,
+            usingDeptIds: [],
+          }),
+        ),
+      );
     });
 
     it('G-DOC-204 唯讀角色：連結點/使用表單改唯讀 chips，無搜尋輸入框', async () => {

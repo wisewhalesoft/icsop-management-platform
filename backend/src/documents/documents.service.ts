@@ -68,12 +68,16 @@ import {
 /**
  * 編輯端一律唯讀之欄位：
  *  - `nodeId`：節點寫入僅經 F009 節點抽屜（F026）。
- *  - `companyCode`：🔴 文件所屬公司於**建立時**決定即固定。改動它會使既有
- *    `draftingDeptId`／`draftingSectionId`／`DOC_USING_DEPT.orgCode`（皆為各公司獨立編碼之
- *    5 碼 orgCode）整批指向別家公司之單位，並直接影響 F041 之資料列可見性判定。
- *    故此處靜默剔除（比照 nodeId）而非落地，編輯頁亦不送此鍵。
+ *
+ * 📝 已作廢（⚠ 不得復原）：`companyCode` 一度列於本集合，理由逐字為「文件所屬公司於**建立時**
+ *    決定即固定。改動它會使既有 `draftingDeptId`／`draftingSectionId`／`DOC_USING_DEPT.orgCode`
+ *    （皆為各公司獨立編碼之 5 碼 orgCode）整批指向別家公司之單位，並直接影響 F041 之資料列
+ *    可見性判定」。**2026-09-04 人類裁決推翻**：程序書目錄清單匯入把 126 筆非和潤企業之文件
+ *    記成和潤企業（見 migration `1725580800000`），而制定公司唯讀意味著這種錯誤**在畫面上
+ *    永遠改不掉**——鎖死擋掉「不小心改錯」的同時，也把「改正」一起擋掉了。
+ *    原理由所指的連動風險不因此消失，改由 `update()` 之 1e) 連動清空承接，而非鎖死欄位。
  */
-const EDIT_READONLY_PROPS = new Set(['nodeId', 'companyCode']);
+const EDIT_READONLY_PROPS = new Set(['nodeId']);
 
 /** 公司代碼正規化：非字串或去空白後為空 → undefined（＝未提供，交由下一順位來源）。 */
 function pickCompanyCode(v: unknown): string | undefined {
@@ -669,6 +673,33 @@ export class DocumentsService {
     }
     if ('usingDeptIds' in clean) {
       clean.usingDeptIds = normalizeIdList(clean.usingDeptIds);
+    }
+
+    /**
+     * 1e) 🔴 制定公司變更之**連動清空**（2026-09-04 開放編輯；見 `EDIT_READONLY_PROPS` 之註）。
+     *
+     * `draftingDeptId`／`draftingSectionId`／`usingDeptIds` 存的都是**裸 5 碼 orgCode**，而各
+     * 公司之 orgCode 各自從 `00000` 獨立編碼——AS 的 `AA000` 與 AJ 的 `AA000` 字串相同、意義
+     * 完全不同。改了公司卻留著舊值，那三欄會靜默指向新公司裡「碰巧同碼」的別的單位；
+     * `DOC_USING_DEPT` 更會被 store 以**新**公司代碼重新蓋章（見 `typeorm-documents.store.ts`
+     * 之 `companyCode: row.companyCode`），直接餵進 F041 之可見性判定（`isUsingDeptMatched`）。
+     *
+     * 故本次 PATCH 若改動公司，同一酬載**未明文重填**之組織欄一律清空（而非沿用舊值）；
+     * 明文重填者以呼叫端所送為準——與 create 路徑同一層信任（前端之公司下拉一變更即重載該
+     * 公司之部門候選；後端不另行查核候選是否屬於該公司，此點刻意與 create 一致，不在此處
+     * 單方面新增一條 create 沒有的驗證）。
+     */
+    if ('companyCode' in clean) {
+      const nextCompany = pickCompanyCode(clean.companyCode);
+      if (!nextCompany) {
+        throw new BadRequestException('DOCUMENT_COMPANY_REQUIRED');
+      }
+      clean.companyCode = nextCompany;
+      if (nextCompany !== current.companyCode) {
+        if (!('draftingDeptId' in clean)) clean.draftingDeptId = null;
+        if (!('draftingSectionId' in clean)) clean.draftingSectionId = null;
+        if (!('usingDeptIds' in clean)) clean.usingDeptIds = [];
+      }
     }
 
     // 1b) F015 連結點（決策：隨 PATCH 整批送出）：自 clean 抽出 links（非純量欄，另走連結 store）。

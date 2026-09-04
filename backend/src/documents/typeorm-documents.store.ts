@@ -409,6 +409,9 @@ export class TypeOrmDocumentStore implements DocumentStore {
         'status',
         'documentNumber',
         'documentName',
+        // 🔴 2026-09-04 開放編輯（制定公司）：**必須列於本白名單**——漏列時使用者在編輯頁改的
+        // 公司會在這一行靜默蒸發，畫面回舊值卻無任何錯誤（本 repo 之既有缺陷家族）。
+        'companyCode',
         'draftingDeptId',
         'draftingSectionId',
         'primaryChiefId',

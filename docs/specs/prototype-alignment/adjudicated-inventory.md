@@ -101,7 +101,7 @@ Every teammate: TDD (failing test first), quote prototype labels, keep baseline 
 > 這一節記錄「**明知與 prototype 不同、且經人類裁決保留**」的偏離。沒有這份紀錄，下一次比對
 > prototype 的人會把它當成 drift 修回去。
 
-### DEV-01（2026-08-26，2026-08-27 擴充）編輯頁「制定公司」為唯讀列，非下拉
+### DEV-01（2026-08-26，2026-08-27 擴充，🔴 2026-09-04 撤銷）編輯頁「制定公司」為唯讀列，非下拉
 
 - **Prototype**：`prototypes/15-document-edit.html:438` 之 `{key:'company',label:'制定公司',type:'combo'}`
   ——與制定部門／制定室別同為三級連動下拉。
@@ -113,6 +113,22 @@ Every teammate: TDD (failing test first), quote prototype labels, keep baseline 
   `orgCode`，改公司會讓這些既有值整批指向別家公司的單位，並直接影響 F041 之資料列可見性判定（安全性）。
   後端因此把 `companyCode` 列入 `EDIT_READONLY_PROPS`；前端若還留一個可改的下拉，就是一個按了不會生效
   的控制項。權威見 [F026 註](../features/F026-role-field-matrix.md)、[F011](../features/F011-edit-with-comparison.md)。
+
+> 🔴 **2026-09-04 使用者裁決撤銷本項偏離**：編輯頁「制定公司」改回**可編輯下拉**，
+> 與 prototype 15 之 `{key:'company',type:'combo'}` 重新一致（本節保留供追溯，勿據以修回唯讀）。
+>
+> **撤銷理由**：程序書目錄清單（`reference/程序書目錄清單(1150805).xlsx`）匯入時把 **126 筆**非和潤企業之
+> 文件（和潤電能 61／和勁企業 41／和潤興業 24）記成和潤企業——`seed-document-catalog.ts` 自 `37b987b` 起
+> 逐列寫死 `companyCode = 'AS'`。既有資料以 migration `1725580800000` 修補，但**唯讀代表這種錯誤在畫面上
+> 永遠改不掉**：鎖死擋掉「不小心改錯」的同時，也把「改正」一起擋掉了。
+>
+> **原理由（連動風險）未被否認**，改由連動清空承接而非鎖死欄位：變更制定公司時，同一次 PATCH 未明文
+> 重填之 `draftingDeptId`／`draftingSectionId`／`usingDeptIds` 一律清空（後端 `DocumentsService.update()`
+> 之 1e，前端 `onCompanyChange` 同步清空以即時反映）。後端獨立執行此規則，前端不是唯一防線。
+>
+> **回歸鎖定改為**：`DocumentEditPage.test.tsx`「制定公司為可編輯之對照列…」／「唯讀角色之制定公司下拉為
+> disabled」／「變更制定公司 → 三個組織欄即時清空，並隨 PATCH 一併送出」；
+> `documents.service.spec.ts` 之「編輯端帶 companyCode → 落地」及其四條連動清空案。
 
 #### 2026-08-27 追加：`draftingCompanyId` 整欄移除，制定公司全站改顯示公司全稱
 

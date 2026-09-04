@@ -7,6 +7,7 @@ import {
   getDocuments,
   getLifecycles,
   getOrgUnits,
+  getCompanies,
   searchPersons,
   getUsageFormPool,
   getDocumentForms,
@@ -49,6 +50,7 @@ import type {
   DocumentListItem,
   LifecycleView,
   OrgUnitRecord,
+  CompanyRecord,
   PersonRecord,
   UsageFormRecord,
   DocumentAttachmentRecord,
@@ -86,6 +88,12 @@ interface Draft {
   edition: string;
   announcedDate: string;
   contentSummary: string;
+  /**
+   * 🔴 制定公司＝文件之 `companyCode`（2026-09-04 起開放 ICSOP 管理員編輯）。
+   * 變更本欄即清空其下三個組織欄（見 `onCompanyChange`）——它們存的是各公司獨立編碼之
+   * 5 碼 orgCode，沿用到別家公司會靜默指向碰巧同碼的另一個單位。
+   */
+  companyCode: string;
   draftingDeptId: string;
   draftingSectionId: string;
   primaryChiefId: string;
@@ -105,6 +113,7 @@ function draftOf(v: DocumentView, links: string[]): Draft {
     edition: v.edition ?? '',
     announcedDate: v.announcedDate ? v.announcedDate.slice(0, 10) : '',
     contentSummary: v.contentSummary ?? '',
+    companyCode: v.companyCode,
     draftingDeptId: v.draftingDeptId ?? '',
     draftingSectionId: v.draftingSectionId ?? '',
     primaryChiefId: v.primaryChiefId ?? '',
@@ -155,6 +164,8 @@ export function DocumentEditPage(): JSX.Element {
   const [lcSubId, setLcSubId] = useState('');
   const [subErr, setSubErr] = useState(false);
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
+  /** 公司主檔（`GET /companies`）＝制定公司下拉之來源。與建立頁同一來源、同一決策。 */
+  const [companies, setCompanies] = useState<CompanyRecord[]>([]);
   const [existing, setExisting] = useState<DocumentListItem[]>([]);
   const [personResults, setPersonResults] = useState<ComboOption[]>([]);
   const [primaryChiefOrig, setPrimaryChiefOrig] = useState<ComboOption | null>(null);
@@ -198,9 +209,9 @@ export function DocumentEditPage(): JSX.Element {
       setDraft(copyDraft(d));
       // 輔助資料（失敗不阻擋主體）。
       void getLifecycles().then(setLifecycles).catch(() => undefined);
-      // 🔴 B 階段（多公司）：以**文件自身之 companyCode** 載入組織，不可無參數呼叫
-      // （那會取登入者自己公司的組織，替他公司文件編輯時部門下拉會列錯公司的部門）。
-      void Promise.resolve(getOrgUnits(v.companyCode)).then((rows) => setOrgUnits(rows ?? [])).catch(() => undefined);
+      // 🔴 公司主檔（制定公司下拉之來源）：非 org-unit 之 ROOT 列——四家 ROOT 代碼皆為
+      // `00000`、且 AE 根本沒有 ROOT 列（與建立頁同一決策）。
+      void Promise.resolve(getCompanies()).then((rows) => setCompanies(rows ?? [])).catch(() => undefined);
       void getDocuments({ pageSize: 2000 }).then((p) => setExisting(p.items)).catch(() => undefined);
       void getUsageFormPool().then(setFormPool).catch(() => undefined);
       void getDocumentForms(id)
@@ -256,6 +267,30 @@ export function DocumentEditPage(): JSX.Element {
     if (canRead) void load();
   }, [canRead, load]);
 
+  /**
+   * 🔴 組織資料依 **draft 之制定公司**載入（不是 `view.companyCode`）——制定公司自 2026-09-04
+   * 起可編輯，改了公司卻仍以文件原公司載入部門候選，使用者就只能從舊公司的部門裡挑，
+   * 等於把公司改成 A 卻只能配 B 公司的部門。未載入完成前公司為空 → 清空候選。
+   */
+  useEffect(() => {
+    const company = draft?.companyCode;
+    if (!canRead || !company) {
+      setOrgUnits([]);
+      return;
+    }
+    let cancelled = false;
+    void Promise.resolve(getOrgUnits(company))
+      .then((rows) => {
+        if (!cancelled) setOrgUnits(rows ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setOrgUnits([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canRead, draft?.companyCode]);
+
   // ===== 組織三級選項（公司 ROOT → 部 DEPARTMENT → 室 SECTION）與名稱解析 =====
   const orgByCode = useMemo(() => {
     const m = new Map<string, OrgUnitRecord>();
@@ -278,13 +313,25 @@ export function DocumentEditPage(): JSX.Element {
   );
   const orgName = useCallback((code: string) => orgByCode.get(code)?.name ?? code, [orgByCode]);
   // 🔴 B 階段：來源為公司主檔，非 org-unit 之 ROOT 列（四家 ROOT 代碼皆為 `00000`、AE 無 ROOT 列）。
+  /** 制定公司下拉之選項：value＝公司代碼、label＝公司主檔全稱（與建立頁逐字相同）。 */
+  const companyOptions = useMemo<ComboOption[]>(
+    () => companies.map((c) => ({ value: c.companyCode, label: c.companyName })),
+    [companies],
+  );
   /**
-   * 🔴 制定公司之顯示名（公司主檔全稱）。制定公司即文件之 `companyCode`，於建立時決定即固定
-   * ——改公司會讓既有的制定部門／室別／使用部門（皆為各公司獨立編碼之 5 碼 orgCode）整批指向
-   * 別家公司的單位，並直接影響 F041 之資料列可見性判定（後端 `EDIT_READONLY_PROPS` 亦剔除此鍵）。
-   * 名稱由後端 `GET /admin/documents/:id` 解析後附上（`companyName`），前端不再自備一份公司主檔。
+   * 制定公司之顯示名（公司主檔全稱）。優先自公司主檔解析 draft 之公司代碼——改了公司之後
+   * 後端回來的 `view.companyName` 還是舊值，直接沿用會讓唯讀角色與 diff 的「目前值」對不上。
+   * 公司主檔載入失敗時退回後端已解析之 `view.companyName`（`GET /admin/documents/:id` 附上）。
    */
-  const companyName = view?.companyName ?? view?.companyCode ?? '—';
+  const companyNameOf = useCallback(
+    (code: string | null | undefined): string => {
+      if (!code) return '—';
+      const hit = companies.find((c) => c.companyCode === code);
+      if (hit) return hit.companyName;
+      return code === view?.companyCode ? (view?.companyName ?? code) : code;
+    },
+    [companies, view?.companyCode, view?.companyName],
+  );
   const deptOptions = useMemo<ComboOption[]>(
     () => orgUnits.filter((u) => u.tier === 'DEPARTMENT').map((u) => ({ value: u.orgCode, label: u.name })),
     [orgUnits],
@@ -352,6 +399,17 @@ export function DocumentEditPage(): JSX.Element {
   }, [orig]);
   const onDeptChange = useCallback((v: string) => {
     setDraft((d) => (d ? { ...d, draftingDeptId: v, draftingSectionId: '' } : d));
+  }, []);
+  /**
+   * 🔴 制定公司變更＝**清空其下三個組織欄**（制定部門／制定室別／文件使用部門）。
+   * 那三欄存的是各公司獨立編碼之 5 碼 orgCode（AS 的 `AA000` 與 AJ 的 `AA000` 字串相同、
+   * 意義完全不同），沿用等於靜默指向新公司裡碰巧同碼的另一個單位。後端 `update()` 亦獨立
+   * 執行同一條規則（前端不是唯一防線），此處清空是為了讓畫面即時反映將被送出的內容。
+   */
+  const onCompanyChange = useCallback((v: string) => {
+    setDraft((d) =>
+      d ? { ...d, companyCode: v, draftingDeptId: '', draftingSectionId: '', usingDeptIds: [] } : d,
+    );
   }, []);
   /** 套用狀態：回到原狀態（未變更）時清空切換原因，避免殘留先前輸入（prototype 15 paintStatus 語意）。 */
   const applyStatus = useCallback(
@@ -586,8 +644,9 @@ export function DocumentEditPage(): JSX.Element {
     }
     if (changed('announcedDate')) patch.announcedDate = draft.announcedDate || null;
     if (changed('contentSummary')) patch.contentSummary = draft.contentSummary || null;
-    // `draftingCompanyId` 不在編輯範圍：它是「制定公司」的衍生值（該公司 ROOT 之 orgCode），
-    // 而制定公司於建立時決定即固定（見 companyName 之說明），故本頁無從變更、也不送出。
+    // 🔴 制定公司（2026-09-04 起可編輯）。改公司時 `onCompanyChange` 已把三個組織欄清空，
+    // 故下方三個 `changed(...)` 會自然把清空後的值一併送出（後端另有同一條連動規則把關）。
+    if (changed('companyCode')) patch.companyCode = draft.companyCode;
     if (changed('draftingDeptId')) patch.draftingDeptId = draft.draftingDeptId || null;
     if (changed('draftingSectionId')) patch.draftingSectionId = draft.draftingSectionId || null;
     if (changed('primaryChiefId')) patch.primaryChiefId = draft.primaryChiefId || null;
@@ -880,9 +939,16 @@ export function DocumentEditPage(): JSX.Element {
           <Icon name="building-2" className="w-4 h-4 text-primary-600" />
           <h2 className="font-semibold text-slate-900">制定組織與當責室長</h2>
         </div>
-        <p className="text-xs text-slate-400 mb-3">文件所屬公司於建立時決定，不可變更；制定部門 → 制定室別為二級相依，變更部門將清空室別。當責室長保留。</p>
+        <p className="text-xs text-slate-400 mb-3">制定公司 → 制定部門 → 制定室別為三級相依，變更上層將清空下層；變更制定公司另會清空「文件使用部門」（三者存的都是各公司獨立編碼之單位代碼）。當責室長保留。</p>
         <div className="space-y-4">
-          <FixedRow label="制定公司" value={companyName} hint="文件所屬公司於建立時決定，不可變更。" />
+          <ComboDiff label="制定公司" changed={changed('companyCode')} currentText={companyNameOf(orig.companyCode)}>
+            {/*
+              🔴 2026-09-04 起可編輯（原為 FixedRow「於建立時決定，不可變更」）：程序書目錄清單
+              匯入把 126 筆非和潤企業之文件記成和潤企業，而唯讀代表這種錯誤在畫面上永遠改不掉。
+              連動風險改由 onCompanyChange（前端）＋ 後端 update() 之連動清空承接。
+            */}
+            <SearchCombobox id="edCompany" label={<span className="sr-only">制定公司</span>} options={companyOptions} value={draft.companyCode} onChange={onCompanyChange} disabled={ro || companyOptions.length === 0} placeholder={companyOptions.length === 0 ? '無法載入公司清單' : '搜尋制定公司…'} />
+          </ComboDiff>
           <ComboDiff label="制定部門" changed={changed('draftingDeptId')} currentText={orig.draftingDeptId ? orgName(orig.draftingDeptId) : '—'}>
             {/*
               閘門改看**部門候選本身**，不再看 `draftingCompanyId`：組織資料是以文件自身的
@@ -1367,26 +1433,6 @@ function ComboDiff({ label, changed, currentText, children }: {
           <div className="text-[10px] text-primary-600 mb-1">新值</div>
           {children}
         </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * 建立時決定即固定之欄位列。沿用 ComboDiff 的 12 欄骨架與標籤欄樣式（同一段落內視覺不跳），
- * 但**刻意不給「目前值／新值」兩欄**——這個欄位沒有「新值」可言，擺一個新值欄會誤導。
- */
-function FixedRow({ label, value, hint }: {
-  label: string; value: string; hint: string;
-}): JSX.Element {
-  return (
-    <div className="grid grid-cols-12 gap-3 items-start py-3 px-2 -mx-2 border-b border-slate-100 rounded-lg">
-      <div className="col-span-12 sm:col-span-3">
-        <span className="text-sm font-medium text-slate-700">{label}</span>
-      </div>
-      <div className="col-span-12 sm:col-span-9">
-        <div className="text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 truncate">{value}</div>
-        <p className="text-xs text-slate-400 mt-1">{hint}</p>
       </div>
     </div>
   );

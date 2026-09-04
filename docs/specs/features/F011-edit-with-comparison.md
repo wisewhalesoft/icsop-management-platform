@@ -11,10 +11,18 @@ Epic/Story: E04 / US-031
 
 當前版本對照涵蓋所有可編輯欄位，以 [data-model.md 19 欄權威定義](../data-model.md#document-entity) 為準。
 
-> 🔴 **2026-08-27 收斂——「制定公司」不在編輯範圍**：制定公司之承載欄位已由 `draftingCompanyId` 改為
-> `companyCode`（見 [data-model](../data-model.md#document-entity) 第 3 欄與 [F026](F026-role-field-matrix.md) 註），
+> 🔴 **2026-09-04 人類裁決——「制定公司」納入編輯範圍**：制定公司之承載欄位為 `companyCode`
+> （見 [data-model](../data-model.md#document-entity) 第 3 欄與 [F026](F026-role-field-matrix.md) 註），
+> 編輯頁以與制定部門相同之**「目前值／新值」對照下拉**呈現（ICSOP 管理員可寫，其餘角色 disabled）。
+> **三級相依之最上層**：變更制定公司時，同一次 PATCH 未明文重填之 `draftingDeptId`／`draftingSectionId`／
+> `usingDeptIds` 一律清空——三者存的都是各公司獨立編碼之 5 碼 `orgCode`，沿用等於靜默指向新公司裡碰巧同碼
+> 的另一個單位（後端 `DocumentsService.update()` 之 1e 獨立執行此規則，前端不是唯一防線）。
+>
+> 📝 **被推翻之原條文逐字保留供追溯**：「🔴 **2026-08-27 收斂——「制定公司」不在編輯範圍**：……
 > 於建立時決定即固定。編輯頁以**唯讀列**呈現該欄（顯示公司主檔全稱），無「新值」欄、不進版本對照；
-> 後端 `EDIT_READONLY_PROPS` 亦靜默剔除此鍵。連帶：制定部門下拉之啟用條件改看部門候選本身
+> 後端 `EDIT_READONLY_PROPS` 亦靜默剔除此鍵。」推翻理由：程序書目錄清單匯入把 126 筆非和潤企業之文件
+> 記成和潤企業（migration `1725580800000`），唯讀代表這種錯誤在畫面上永遠改不掉。
+> 連帶（**仍成立**）：制定部門下拉之啟用條件看部門候選本身
 > （舊版看 `draftingCompanyId`，對該欄為空之文件會把部門下拉永久鎖死）。
 
 欄位調整後含 **制定部門、制定室別、內容摘要、版次（`{YY}'{NN}`，如 `26'01`）、公告日期**（原「當責部門」移除、「發布日期」改名「公告日期」、「人為版本號」改名「版次」；當責室長-主要/次要與使用部門保留）。

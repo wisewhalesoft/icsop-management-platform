@@ -1589,10 +1589,91 @@ describe('DocumentsService.create 文件所屬公司（B 階段多公司）', ()
     expect(changes).toContainEqual({ field: 'companyCode', oldValue: null, newValue: 'AS' });
   });
 
-  it('編輯端帶 companyCode → 靜默剔除（比照 nodeId），不進 patch、不記變更', async () => {
+  /**
+   * 🔴 2026-09-04 人類裁決推翻「編輯端唯讀」：程序書目錄清單匯入把 126 筆非和潤企業之文件
+   * 記成和潤企業（migration 1725580800000），而制定公司唯讀代表這種錯誤在畫面上永遠改不掉。
+   * 📝 已作廢（⚠ 不得復原）：
+   *    OLD> it('編輯端帶 companyCode → 靜默剔除（比照 nodeId），不進 patch、不記變更')
+   *    OLD>   expect(store.updated[0].patch).not.toHaveProperty('companyCode');
+   *    OLD>   expect(store.docs[0].companyCode).toBe('AS');
+   */
+  it('編輯端帶 companyCode → 落地（ICSOP 管理員可改正制定公司）', async () => {
     const d = store.seedDoc({ companyCode: 'AS' });
-    await svc.update('ICSOPAdmin', d.id, { companyCode: 'AD', documentName: '改名' }, actorAD);
-    expect(store.updated[0].patch).not.toHaveProperty('companyCode');
+    await svc.update('ICSOPAdmin', d.id, { companyCode: 'AE', documentName: '改名' }, actorAD);
+    expect(store.updated[0].patch).toHaveProperty('companyCode', 'AE');
+    expect(store.docs[0].companyCode).toBe('AE');
+  });
+
+  it('companyCode 之變更記入 CONTENT 變更事件（標籤為「制定公司」）', async () => {
+    const d = store.seedDoc({ companyCode: 'AS' });
+    await svc.update('ICSOPAdmin', d.id, { companyCode: 'AE' }, actorAD);
+    const ev = pub.events.find((e) => e.changeType === 'CONTENT')!;
+    expect(ev.changes).toContainEqual({ field: 'companyCode', oldValue: 'AS', newValue: 'AE' });
+  });
+
+  /**
+   * 🔴 連動清空：`draftingDeptId`／`draftingSectionId`／`usingDeptIds` 存的都是各公司獨立
+   * 編碼之 5 碼 orgCode，改了公司卻沿用舊值＝靜默指向新公司裡碰巧同碼的另一個單位，
+   * 且 `DOC_USING_DEPT` 會被 store 以**新**公司代碼重新蓋章後餵進 F041 之可見性判定。
+   */
+  it('公司變更且未明文重填 → 制定部門／室別清為 null、使用部門清為空集合', async () => {
+    const d = store.seedDoc({
+      companyCode: 'AS',
+      draftingDeptId: 'CC000',
+      draftingSectionId: 'CCC00',
+      usingDeptIds: ['CC000', 'CD000'],
+    });
+    await svc.update('ICSOPAdmin', d.id, { companyCode: 'AJ' }, actorAD);
+    const patch = store.updated[0].patch;
+    expect(patch.draftingDeptId).toBeNull();
+    expect(patch.draftingSectionId).toBeNull();
+    expect(patch.usingDeptIds).toEqual([]);
+  });
+
+  it('公司變更但同一酬載明文重填組織欄 → 以呼叫端所送為準（不被清空）', async () => {
+    const d = store.seedDoc({ companyCode: 'AS', draftingDeptId: 'CC000', usingDeptIds: ['CC000'] });
+    await svc.update(
+      'ICSOPAdmin',
+      d.id,
+      { companyCode: 'AJ', draftingDeptId: 'AD000', usingDeptIds: ['ADB00'] },
+      actorAD,
+    );
+    const patch = store.updated[0].patch;
+    expect(patch.draftingDeptId).toBe('AD000');
+    expect(patch.usingDeptIds).toEqual(['ADB00']);
+    // 未明文重填者仍清空（三欄各自判斷，不是「有帶任一欄就整組不清」）。
+    expect(patch.draftingSectionId).toBeNull();
+  });
+
+  it('送出與現值相同之 companyCode → 不視為變更，組織欄一律不動', async () => {
+    const d = store.seedDoc({
+      companyCode: 'AS',
+      draftingDeptId: 'CC000',
+      draftingSectionId: 'CCC00',
+      usingDeptIds: ['CC000'],
+    });
+    await svc.update('ICSOPAdmin', d.id, { companyCode: 'AS', documentName: '改名' }, actorAD);
+    const patch = store.updated[0].patch;
+    expect(patch).not.toHaveProperty('draftingDeptId');
+    expect(patch).not.toHaveProperty('draftingSectionId');
+    expect(patch).not.toHaveProperty('usingDeptIds');
+    expect(store.docs[0].draftingSectionId).toBe('CCC00');
+  });
+
+  it('編輯端之 companyCode 為純空白 → 400 DOCUMENT_COMPANY_REQUIRED（不得落地空字串）', async () => {
+    const d = store.seedDoc({ companyCode: 'AS' });
+    await expect(
+      svc.update('ICSOPAdmin', d.id, { companyCode: '  ' }, actorAD),
+    ).rejects.toThrow('DOCUMENT_COMPANY_REQUIRED');
+    expect(store.updated).toHaveLength(0);
+    expect(store.docs[0].companyCode).toBe('AS');
+  });
+
+  it('非 ICSOP 管理員寫 companyCode → FIELD_WRITE_FORBIDDEN（F026 欄位面不因開放編輯而放寬）', async () => {
+    const d = store.seedDoc({ companyCode: 'AS' });
+    await expect(
+      svc.update('SysAdmin', d.id, { companyCode: 'AE' }, actorAD),
+    ).rejects.toThrow('FIELD_WRITE_FORBIDDEN');
     expect(store.docs[0].companyCode).toBe('AS');
   });
 });
