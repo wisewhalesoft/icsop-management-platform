@@ -7,7 +7,7 @@
      ═══ 🔴 與 12（循環節點抽屜）之**兩處刻意差異**——本功能的存在理由，畫面上必須看得出來 ═══
      ① **候選文件＝全部 ICSOP 文件**（推翻 F009 之第 1 條限制，AC-20）
         · 12 的候選以 `lifecycleId` 過濾（僅同循環之文件）；本頁**不以任何循環條件過濾**。
-        · 語料鑑別力：候選清單之 15 份文件分屬 **9 個相異循環**——若語料只有一個循環，
+        · 語料鑑別力：候選清單之 591 份文件分屬 **11 個相異循環**——若語料只有一個循環，
           「有過濾」與「沒過濾」輸出相同，該斷言恆真、等於沒寫（AC-20 之明文要求）。
         · 為讓「沒有過濾」在畫面上可見，每一列候選都標出其**循環別**（純資訊 chip）。
      ② **無「已掛載於其他節點」警示、無二次確認、無改派語意**（推翻 F009 之第 2 條限制，AC-21～AC-23）
@@ -143,7 +143,9 @@
         <label class="text-sm font-medium text-slate-700">目前掛載文件</label>
         <span id="mountCount" class="text-xs text-slate-400"></span>
       </div>
-      <div id="mountedList" class="space-y-2"></div>
+      <!-- 🔵 2026-09-04 補畫：已上線之容器掛鉤 data-mounted-list／data-mounted-count（下游測試已在用）。
+           🔒 兩者與可見之「{N} 份」為**同一個** mounted.length，不得各自算一次；本行僅加屬性，可見輸出零變動。 -->
+      <div id="mountedList" class="space-y-2" data-mounted-list data-mounted-count="0"></div>
     </div>
 
     <!-- candidates -->
@@ -155,13 +157,31 @@
            本段取代 12 的「僅顯示所屬循環＝… 之文件」提示——兩頁在此處刻意說相反的事。 -->
       <div data-candidate-scope-note class="flex items-start gap-1.5 text-xs text-slate-400 mb-2">
         <i data-lucide="layers" class="w-3.5 h-3.5 mt-0.5"></i>
-        <span>候選＝<span class="text-slate-600">全部 ICSOP 文件</span>（共 <span id="candTotal">0</span> 份，分屬 <span id="candCycleCount">0</span> 個相異循環）。<strong class="text-slate-500">不以循環過濾</strong>，也不因該文件已掛在其他節點或其他業務/功能類別而排除——一份文件可同時歸屬多個業務/功能類別。</span>
+        <span>候選＝<span class="text-slate-600">全部 ICSOP 文件</span>（共 <span id="candTotal">0</span> 份，分屬 <span id="candCycleCount">0</span> 個相異循環）。<strong class="text-slate-500">不以循環過濾</strong>，也不因該文件已掛在其他節點或其他業務/功能類別而排除——一份文件可同時歸屬多個業務/功能類別。本清單<strong class="text-slate-500">分頁載入</strong>：目前已載入 <span class="text-slate-600" id="candLoaded" data-candidate-loaded="0">0</span> 份，請用上方搜尋縮小範圍，或按下方「載入更多」繼續瀏覽。</span>
       </div>
+      <!-- 🔵 2026-09-04 補畫（功能已上線，prototype 先前落後）：**循環別篩選**。
+           位置＝候選區說明文字之下、搜尋框之上（與已上線之 BusinessCategoryNodeDrawer.tsx 同序）。
+           🔒 預設值逐字 `全部循環`；其餘選項為各循環之**顯示名稱**（含子分類，如「銷售及收款循環（企金）」）。
+           🔒 選項**不顯示筆數**——沿用本 repo 唯一先例 23-change-history.html 之循環別下拉。
+           🔴 選定某循環後**下拉仍列出全部循環**（選項來源之基準刻意未套用本篩選）——否則使用者選錯就出不來。
+           🔴 這是**使用者主動**縮小範圍，與 AC-20 所禁之「系統靜默只給同循環文件」是兩件事；
+              未選時（''）不送出任何循環參數，行為與本篩選存在之前逐位元組相同。 -->
+      <div class="relative mb-2">
+        <i data-lucide="filter" class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+        <select id="candCyc" data-candidate-cycle-filter onchange="onCandCycleChange(this.value)" aria-label="循環別篩選"
+                class="w-full pl-8 pr-3 py-1.5 rounded-md border border-slate-300 text-sm bg-white">
+          <option value="">全部循環</option>
+        </select>
+      </div>
+      <div id="candFilterNote"></div>
       <div class="relative mb-2">
         <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
-        <input id="candKw" oninput="renderDrawer()" placeholder="搜尋候選文件…" class="w-full pl-8 pr-3 py-1.5 rounded-md border border-slate-300 text-sm" />
+        <input id="candKw" oninput="onCandKwInput()" placeholder="搜尋候選文件…" class="w-full pl-8 pr-3 py-1.5 rounded-md border border-slate-300 text-sm" />
       </div>
       <div id="candList" class="space-y-2"></div>
+      <!-- 🔵 2026-09-04 新增：候選之**分頁瀏覽**區（三態互斥，見 renderCandidatePager()）。
+           🔒 抽屜為右側面板、內容區垂直捲動 ⇒ 本區為**全寬單欄**，不佔任何橫向空間。 -->
+      <div id="candPager" class="mt-2"></div>
     </div>
 
     <!-- 🟡 原型示範區（比照 03 之 data-prototype-demo 慣例；**實作時不得移植此區塊**）
@@ -262,7 +282,7 @@
   const edges=[['p1','p2'],['p1','p3'],['p2','p4'],['p3','p4'],['p4','p5']];
 
   /* ===== 全部 ICSOP 文件（候選來源）=====
-     🔴 AC-20 之語料鑑別力：15 份文件分屬 **9 個相異循環**（銷售及收款循環之消金／企金為兩個
+     🔴 AC-20 之語料鑑別力：15 份文件分屬 **10 個相異循環**（銷售及收款循環之消金／企金為兩個
         相異 lifecycleId）——若全部同屬一個循環，「有過濾」與「沒過濾」輸出相同，斷言恆真。
      ⚠ 逐筆與 13-document-list 之 DOCS 對齊（同一份程序書在兩頁之編號、書名、循環別一致）。 */
   const ALL_DOCS=[
@@ -282,6 +302,51 @@
     {num:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',cycle:'銷售及收款循環（消金）'},
     {num:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',      cycle:'薪工循環'}
   ];
+  /* ═══ 🔵 2026-09-04：語料**規模化至 dev 真庫量級**（本輪新增；上方 15 列種子一格未動）═══
+     為何要做：prototype 先前只有 15 份文件，「589 份要怎麼瀏覽」這個問題在設計階段根本不會浮現
+     ——已連續造成三個實機才發現的缺陷。以下依 dev 真庫之實測分布（591 份）程式產生其餘 576 列。
+     ⚠ 上一段註解所述之「15 份文件分屬 10 個相異循環」僅描述**種子那 15 列**。
+       📝 2026-09-04 人類裁決 ⑥：原文誤植為 9，已就地更正（純註解、零執行期風險，留著會誤導下一個人）。
+          OLD> 🔴 AC-20 之語料鑑別力：15 份文件分屬 **9 個相異循環**
+          連帶：檔頭之同一段亦由「15 份／9 個」更新為規模化後之「591 份／11 個」。
+     🔴 **循環集合沿用本 repo 之 LIFECYCLE_POOL（11 個，見 10／13／23）**，非真庫之 14 個
+        ——真庫多出的 3 個是子分類差異，屬**語料集合落差**，已列為缺口回報，不在本輪就地發明。
+     🔒 文件編號第 2 段＝循環代碼，且候選依 documentNumber 排序 ⇒ **排序即依循環分群**；
+        生成序號一律 4 位（9001+），排在同代碼之 3 位種子（1xx）之後、寬度一致故字典序＝數值序。
+        ⇒ 第 1 頁（20 筆）全部落在同一個循環（CIPS）——這正是「循環別篩選」存在的理由，
+          在畫面上看得見。 */
+  const SCALE_ACTIONS=['受理','初審','覆核','核決','建檔','異動','查詢','對帳','結案','歸檔','控管','檢核','通報','監控','報表','設定','稽催','驗收','申請','註銷'];
+  const SCALE_SCOPES=['北區','中區','南區','線上','臨櫃'];
+  /* dev 真庫實測分布（依名稱分組）：銷售及收款 346／管理性控制 74／產品企劃 59／薪工 33／
+     電腦化資訊 25／投資 20／不動產 18／融資 11／採購及付款 5＝591。
+     n＝**扣除種子後**要產生的列數；銷售及收款之 346 依本 repo 之三個子分類拆為 268／52／26。 */
+  const SCALE_PLAN=[
+    {cycle:'電腦化資訊系統控制作業',  code:'CIPS',n:24, topics:['使用者權限','系統變更','資料備份','機房實體安全','資訊安全事件']},
+    {cycle:'不動產、廠房及設備循環',  code:'FAC', n:17, topics:['不動產','營業設備','車輛資產','租賃資產','資產盤點']},
+    {cycle:'融資循環',                code:'FC',  n:10, topics:['銀行額度','聯貸','商業本票','資金調度','利率避險']},
+    {cycle:'管理性控制作業',          code:'GCA', n:73, topics:['法令遵循','內部稽核','風險管理','董事會議事','關係人交易','資訊揭露','公司治理','舞弊防範']},
+    {cycle:'投資循環',                code:'IC',  n:19, topics:['短期投資','長期投資','子公司投資','投資評價','投資決策']},
+    {cycle:'薪工循環',                code:'LWC', n:31, topics:['招募','任用','考勤','薪資','獎金','教育訓練','離職']},
+    {cycle:'產品企劃循環',            code:'PPC', n:57, topics:['消費分期產品','車輛分期產品','企業金融產品','商品定價','通路企劃','市場調查']},
+    {cycle:'採購及付款循環',          code:'PUC', n:4,  topics:['費用請款','採購發包','供應商','付款']},
+    {cycle:'銷售及收款循環（消金）',  code:'SRC', n:264,topics:['車輛分期','消費分期','機車分期','二手車分期','特約通路','債權管理']},
+    {cycle:'銷售及收款循環（企金）',  code:'SRC', n:51, topics:['企業授信','企金徵信','企金擔保品','企金額度','企金撥貸']},
+    {cycle:'銷售及收款循環（子公司）',code:'SRC', n:26, topics:['子公司授信','子公司收款','子公司帳務','子公司通路']}
+  ];
+  (function buildScaleCorpus(){
+    const seqByCode={};
+    SCALE_PLAN.forEach(p=>{
+      for(let k=0;k<p.n;k++){
+        const seq=(seqByCode[p.code]=(seqByCode[p.code]||9000)+1);
+        const topic=p.topics[Math.floor(k/SCALE_ACTIONS.length)%p.topics.length];
+        const action=SCALE_ACTIONS[k%SCALE_ACTIONS.length];
+        const wrap=Math.floor(k/(SCALE_ACTIONS.length*p.topics.length));
+        ALL_DOCS.push({num:'ICSOP-'+p.code+'-'+seq+'-1-00',
+                       name:topic+action+'作業'+(wrap?'（'+SCALE_SCOPES[wrap%SCALE_SCOPES.length]+'）':''),
+                       cycle:p.cycle});
+      }
+    });
+  })();
   const docByNum=n=>ALL_DOCS.find(d=>d.num===n)||{num:n,name:n,cycle:''};
 
   /* ===== BUSINESS_CATEGORY_DOC（M:N join；唯一鍵僅 (nodeId, documentId)，INV-B6）=====
@@ -360,12 +425,24 @@
     currentNode=id;
     const n=nodeById(id);
     draft={ name:n.name, mounts:MOUNTS.filter(m=>m.cat===CUR_CAT).map(m=>({...m})), added:0, removed:0 };
+    /* 🔵 2026-09-04：分頁／篩選狀態於**每次開啟抽屜**重置（鏡射已上線 useEffect 之依賴
+       [businessCategoryId, nodeId]：換節點 ⇒ 篩選歸零、頁碼回第 1 頁）。
+       🔒 CAND.baseline＝**開啟當下**已掛於本節點者，等同後端之 excludeDocumentIds。 */
+    CAND.page=1; CAND.cycle=''; CAND.kw=''; CAND.loading=false;
+    if(CAND.timer){clearTimeout(CAND.timer);CAND.timer=null;}
+    if(CAND.latency){clearTimeout(CAND.latency);CAND.latency=null;}
+    document.getElementById('candKw').value='';
+    CAND.baseline=new Set(draft.mounts.filter(m=>m.node===currentNode).map(m=>m.num));
     document.getElementById('nodeName').value=n.name;
     document.getElementById('candTotal').textContent=ALL_DOCS.length;
     document.getElementById('candCycleCount').textContent=new Set(ALL_DOCS.map(d=>d.cycle)).size;
     const ro=!isAdmin();
     document.getElementById('nodeName').disabled=ro;
-    document.getElementById('candKw').disabled=ro;
+    /* 🔴 2026-09-04 人類裁決 決 B：**唯讀角色開放搜尋／篩選／翻頁**，只是不能掛載／移除。
+       理由＝與已上線之 React 一致（它從未 disable 這些控制項），且語料 591 份時
+       「只看得到 20 份」不叫「可檢視掛載狀態」——那句唯讀橫幅會變成假話。
+       📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> document.getElementById('candKw').disabled=ro;
+       🔒 本輪新增之 #candCyc 與 [data-candidate-load-more] 亦**刻意不 disable**，三者一致。 */
     document.getElementById('saveBtn').style.display=ro?'none':'';
     renderDrawer(); renderCanvas();
     document.getElementById('drawerOverlay').classList.remove('hidden');
@@ -412,25 +489,162 @@
     </div>`;
   }
 
+  /* ═══ 🔵 2026-09-04：候選之**分頁瀏覽**（本輪新增）═══════════════════════════════════
+     問題（使用者實機回報）：抽屜一次只載入 20 份；真庫最大的循環有 346 份 ⇒ 第 21 筆之後
+     「翻不到」，只能靠猜書名搜尋。後端早已支援 page／pageSize／keyword，缺的是前端的瀏覽手段。
+     形式＝**累積式「載入更多」**（非上一頁/下一頁、非無限捲動），理由見
+     docs/ui-ux-design-overview.md §A.11.2。
+     🔴 三態**互斥且窮盡**（候選非空時恰有其一）：
+        ① 尚有未載入 ⇒ 只有 [data-candidate-load-more]（＋已載入／總數／未載入數之說明行）
+        ② 載入中     ⇒ 只有 [data-candidate-loading]
+        ③ 已全部載入 ⇒ 只有 [data-candidate-all-loaded]，**按鈕自 DOM 移除**
+           （不是 disabled——「載完之後還留一顆按不動的按鈕」正是本輪要避免的）。 */
+  const CANDIDATE_PAGE_SIZE=20;   // 🔒 與後端 DEFAULT_CANDIDATE_PAGE_SIZE 同值
+  const CANDIDATE_LATENCY=450;    // 原型用：讓「載入中」這一態看得見（真實情境＝一次 GET 往返）
+  const CANDIDATE_DEBOUNCE=300;   // 關鍵字去抖動；每敲一個字不各送一次查詢
+  const CAND={page:1,cycle:'',kw:'',loading:false,baseline:new Set(),timer:null,latency:null};
+  const byCodepoint=(a,b)=> a<b?-1:a>b?1:0;   // 🔴 不用 localeCompare：中文定序隨執行環境 ICU 漂移
+
+  /* 鏡射後端 listCandidates()（typeorm-business-category-docs.store.ts）之三個**不同基準**：
+       · items          ＝ ORDER BY documentNumber ASC 之第 1..page 頁
+                           （原型直接回傳累積前綴＝客端逐頁累積之等價結果）
+       · total／lifecycleCount ＝ **已套用**使用者所選循環之全集統計
+       · lifecycles（下拉選項）＝ keyword／exclude 已套用、**使用者所選循環未套用**之全集分組
+     🔴 最後一項的基準不同，正是「選定某循環後下拉仍列出全部循環」的成因。 */
+  function queryCandidates(o){
+    const kw=(o.keyword||'').trim().toLowerCase();
+    const base=ALL_DOCS.filter(d=>!o.exclude.has(d.num))
+      .filter(d=>!kw||d.num.toLowerCase().includes(kw)||d.name.toLowerCase().includes(kw));
+    /* 🔴 2026-09-04 人類裁決 決 A：「下拉恆含使用者已選之循環」**由後端保證**（count 可為 0），
+       前端不做補回——修在資料來源，選項清單就只有一套規則；前端補回會讓「選項從哪來」
+       變成兩處組合而成。本函式即後端 listCandidates() 之鏡射，故保證寫在這裡。
+       失敗形狀（未加此保證時）：選了「融資循環」再打一個該循環無命中的關鍵字 ⇒ 選項消失、
+       <select> 顯示空白、連「全部循環」都選不回來。 */
+    const lcSet=new Set(base.map(d=>d.cycle));
+    if(o.cycle) lcSet.add(o.cycle);
+    const lifecycles=[...lcSet].sort(byCodepoint);
+    const filtered=o.cycle? base.filter(d=>d.cycle===o.cycle):base;
+    const sorted=filtered.slice().sort((a,b)=>byCodepoint(a.num,b.num));
+    return {items:sorted.slice(0,Math.max(o.page,1)*CANDIDATE_PAGE_SIZE),
+            total:filtered.length,
+            lifecycleCount:new Set(filtered.map(d=>d.cycle)).size,
+            lifecycles:lifecycles};
+  }
+
+  /* 態②之唯一入口。⚠ page 在**延遲結束後**才 ++：否則「載入中」期間清單已經長出新列，
+     那顆載入指示就成了裝飾。 */
+  function loadMoreCandidates(){
+    if(CAND.loading) return;
+    CAND.loading=true; renderDrawer();
+    CAND.latency=setTimeout(function(){ CAND.page++; CAND.loading=false; CAND.latency=null; renderDrawer(); },CANDIDATE_LATENCY);
+  }
+  /* 🔴 條件變動一律 **page → 1**（不保留已載入頁數），理由見 overview §A.11.3：
+     循環別與關鍵字都是**伺服器端查詢條件**，換條件＝換一個母體，
+     「已載入 N ／ 共 M 份」若跨母體沿用就不再自洽（N 甚至可能大於新的 M）。 */
+  function onCandCycleChange(v){ CAND.cycle=v; CAND.page=1; renderDrawer(); }
+  function onCandKwInput(){
+    if(CAND.timer) clearTimeout(CAND.timer);
+    CAND.timer=setTimeout(function(){ CAND.timer=null;
+      CAND.kw=document.getElementById('candKw').value||''; CAND.page=1; renderDrawer(); },CANDIDATE_DEBOUNCE);
+  }
+  /* ⚠ 原型簡化：條件變動在本檔是**即時**的（資料在本機）；真實情境同樣是一次 GET 往返，
+     沿用態② 之同一個 [data-candidate-loading]。刻意**不**在此處假造載入中——清單已經更新完畢
+     卻同時顯示「載入中」，會是一個與畫面矛盾的假狀態。 */
+
+  /* 🔴 選定某循環後下拉**仍列出全部循環**（lead 明文要求：否則使用者出不來）。
+     🔴 2026-09-04 人類裁決 決 A：本函式**照單全收** queryCandidates() 給的清單，
+       **不得**在此補回已選項——該保證住在資料來源（見 queryCandidates 之註解）。
+       📝 已作廢（僅供追溯，⚠ 不得復原）：
+          OLD> if(CAND.cycle&&opts.indexOf(CAND.cycle)<0) opts.push(CAND.cycle);
+     🔒 選項**不帶筆數**（23-change-history.html 之先例）。 */
+  function syncCycleOptions(list){
+    const sel=document.getElementById('candCyc');
+    const opts=list.slice();
+    const sig='|'+opts.join('|');
+    if(sel.dataset.sig!==sig){
+      sel.dataset.sig=sig;
+      sel.innerHTML='<option value="">全部循環</option>'+opts.map(function(c){return '<option value="'+c+'">'+c+'</option>';}).join('');
+    }
+    sel.value=CAND.cycle;
+  }
+
+  /* 選了循環之後，說明文字那兩個數字變成「套用篩選後」之值，與同一句的「不以循環過濾」
+     字面相衝突。此處以**另一個元素**就地說明兩者之別（既有那句一字未動）。 */
+  function renderCandidateFilterNote(){
+    document.getElementById('candFilterNote').innerHTML = CAND.cycle
+      ? '<div data-candidate-filter-active class="flex items-start gap-1 text-[11px] text-slate-500 mb-2">'
+        +'<i data-lucide="filter" class="w-3 h-3 mt-0.5 shrink-0 text-slate-400"></i>'
+        +'<span>目前僅列出<strong class="text-slate-600">'+CAND.cycle+'</strong>之文件——這是<strong class="text-slate-600">使用者主動</strong>縮小範圍，上方兩個數字亦為套用本篩選後之值；選回「全部循環」即回到全集。</span></div>'
+      : '';
+  }
+
+  /* 三態互斥之渲染。🔴 態③ 不得留下 [data-candidate-load-more]（DOM 移除，非 disabled）。 */
+  function renderCandidatePager(loaded,total){
+    const el=document.getElementById('candPager');
+    const remaining=Math.max(total-loaded,0);
+    el.dataset.candidateLoaded=loaded; el.dataset.candidateTotal=total;
+    el.dataset.candidateRemaining=remaining;
+    el.dataset.candidatePage=CAND.page; el.dataset.candidatePageSize=CANDIDATE_PAGE_SIZE;
+    if(!total){ el.innerHTML=''; return; }   // 候選為空 ⇒ 分頁區整區無內容（空狀態由 candList 承載）
+    if(CAND.loading){
+      el.innerHTML='<div data-candidate-loading class="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500">'
+        +'<i data-lucide="refresh-cw" class="w-4 h-4 animate-spin text-primary-600"></i>載入中…</div>';
+    } else if(remaining<=0){
+      el.innerHTML='<div data-candidate-all-loaded class="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-200 px-3 py-2.5 text-xs text-slate-400">'
+        +'<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-500"></i>已全部載入（共 '+total+' 份）</div>';
+    } else {
+      el.innerHTML='<button type="button" data-candidate-load-more onclick="loadMoreCandidates()" class="w-full flex items-center justify-center gap-1.5 rounded-lg border border-primary-300 bg-primary-50 px-3 py-2.5 text-sm font-medium text-primary-700 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-600">'
+        +'<i data-lucide="chevron-down" class="w-4 h-4"></i>載入更多</button>'
+        +'<div class="mt-1 text-center text-[11px] text-slate-400">已載入 <span class="text-slate-500">'+loaded+'</span> ／ '+total+' 份 · 尚有 <span class="text-slate-500">'+remaining+'</span> 份未載入</div>';
+    }
+    lucide.createIcons();
+  }
+
   function renderDrawer(){
-    const kw=(document.getElementById('candKw').value||'').toLowerCase();
+    /* 🔵 2026-09-04：改讀**已套用**之關鍵字（去抖動後才生效並重置頁碼），非輸入框當下值。
+       ⚠ 本函式只重寫 #candList／#candPager，不碰 #candKw ⇒ 輸入游標不受影響。 */
+    const kw=(CAND.kw||'').toLowerCase();
     const mounted=draft.mounts.filter(m=>m.node===currentNode);
     const mountedNums=new Set(mounted.map(m=>m.num));
     /* AC-20：候選＝**全部 ICSOP 文件**，僅排除「已在本節點掛載者」（它們在上方的『目前掛載文件』區）。
        🔴 **不以 lifecycleId 過濾、不以是否掛在他處過濾**——這正是與 12 的第一處差異。
        AC-28：搜尋比對＝documentNumber ∪ documentName 之 contains。 */
-    const cands=ALL_DOCS.filter(d=>!mountedNums.has(d.num))
-      .filter(d=>!kw || d.num.toLowerCase().includes(kw)||d.name.toLowerCase().includes(kw));
+    /* 🔵 2026-09-04：候選改由 queryCandidates() 供給（鏡射後端之 page／pageSize／keyword／
+       userSelectedLifecycleId 語意）。排除基準＝**開啟抽屜當下**已掛載者（CAND.baseline），
+       與後端 excludeDocumentIds 一致 ⇒ 本次操作中新掛上的只在前端濾掉、**不動 total**
+       （否則說明文字那個數字會隨每次點選跳動）。 */
+    const q=queryCandidates({exclude:CAND.baseline,keyword:kw,cycle:CAND.cycle,page:CAND.page});
+    /* 🔒 baseline 中**被本次移除**者要回得到候選區（鏡射已上線之
+       `visibleCandidateIds.has(id) || baseline.has(id)`）：繞過循環別篩選、仍受關鍵字約束，
+       且排在分頁結果之前（鏡射 mergeDrawerDocs 之「mounted 先入」順序）。 */
+    const restored=ALL_DOCS.filter(d=>CAND.baseline.has(d.num)&&!mountedNums.has(d.num)
+      &&(!kw||d.num.toLowerCase().includes(kw)||d.name.toLowerCase().includes(kw)));
+    const cands=restored.concat(q.items.filter(d=>!mountedNums.has(d.num)));
     document.getElementById('mountCount').textContent=mounted.length+' 份';
+    // 🔵 2026-09-04：與可見之「{N} 份」同源（同一個 mounted.length），不另算一次。
+    document.getElementById('mountedList').dataset.mountedCount=mounted.length;
     // AC-29 逐字空狀態
     document.getElementById('mountedList').innerHTML = mounted.length? mounted.map(mountedRow).join('')
       : `<div data-mounted-empty class="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">尚未掛載任何程序書</div>`;
     // AC-28 逐字空狀態
+    /* 🔴 2026-09-04：空狀態**分兩種**。AC-28 之逐字主句 `尚無可掛載文件` 兩種皆不變；
+       第二行原為 `全部 ICSOP 文件皆已掛載於本節點`——語料一到 591 份，只要有關鍵字或循環別
+       篩選，這句就是一句**假話**（清單空是因為篩選、不是因為全掛完了）。故改為條件式：
+       篩選造成的空 ⇒ 講篩選；真的全掛完 ⇒ 原句逐字保留。 */
+    const filteredEmpty=!!(kw||CAND.cycle);
     document.getElementById('candList').innerHTML = cands.length? cands.map(candidateRow).join('')
-      : `<div data-candidate-empty class="text-center border border-dashed border-slate-200 rounded-lg px-3 py-6">
+      : `<div data-candidate-empty data-candidate-empty-reason="${filteredEmpty?'filtered':'all-mounted'}" class="text-center border border-dashed border-slate-200 rounded-lg px-3 py-6">
            <i data-lucide="inbox" class="w-8 h-8 text-slate-300 mx-auto mb-1.5"></i>
            <p class="text-sm text-slate-500">尚無可掛載文件</p>
-           <p class="text-xs text-slate-400 mt-0.5">全部 ICSOP 文件皆已掛載於本節點</p></div>`;
+           <p class="text-xs text-slate-400 mt-0.5">${filteredEmpty?'目前的搜尋關鍵字或循環別篩選下沒有符合的文件——請調整關鍵字，或將循環別選回「全部循環」。':'全部 ICSOP 文件皆已掛載於本節點'}</p></div>`;
+    // 🔵 2026-09-04：說明文字之三個數字與下拉選項、分頁區，一律由**同一次查詢** q 供給。
+    document.getElementById('candTotal').textContent=q.total;
+    document.getElementById('candCycleCount').textContent=q.lifecycleCount;
+    const loadedEl=document.getElementById('candLoaded');
+    loadedEl.textContent=q.items.length; loadedEl.dataset.candidateLoaded=q.items.length;
+    syncCycleOptions(q.lifecycles);
+    renderCandidateFilterNote();
+    renderCandidatePager(q.items.length,q.total);
     /* AC-30：掛載與移除是**各自獨立**之動作 ⇒ 待送出提示分別計數，
        🔒 **不得**出現任何「改派」字樣或把「移除 A ＋ 新增 B」記成一次複合動作。 */
     const pending=draft.added+draft.removed;
