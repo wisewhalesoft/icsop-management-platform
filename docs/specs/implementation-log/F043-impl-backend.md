@@ -364,3 +364,133 @@ F042/F043 之文件本身已預告此連帶效果（`function-matrix.ts` 就地�
    已掛載於本節點之候選，但前端之 `[...mounted, ...candidates]` 合併若仍保留，
    對「同一份文件掛在**其他**節點」之情境仍會顯示在候選區——那是預期且正確的（M:N），
    **不要**因此把後端的排除範圍擴大到其他節點。
+
+---
+
+# 2026-09-03 第四輪 delta（後端）：候選之「循環別」篩選（`userSelectedLifecycleId`）
+
+> 環由 test-generator（`ring-cyclefilter`）於實作前撰寫並經 lead 查證為 RED；
+> 本輪**僅撰寫 production code，未新增／修改／弱化／刪除任何測試檔**（`git status` 中三個
+> 測試／規格檔之異動皆為 `ring-cyclefilter` 所為）。**本輪未向 ring 提出任何申訴**——
+> 環之契約與 prototype／既有慣例無互斥處，逐條可直接實作。
+
+## 為何要加（使用者實機發現）
+
+候選依 `documentNumber` 遞增排序，而文件編號第 2 段即循環代碼（`ICSOP-CIPS-101-1-00` →
+電腦化資訊系統控制作業循環）⇒ **依編號排序等同依循環分群**。真庫 591 份文件、14 個循環，
+抽屜無翻頁機制且只取第一頁 20 筆 ⇒ 第一頁 100% 落在字母序最前的那個循環（實測第一頁確為
+`ICSOP-CIPS-101-1-00`／`-1-03`／`-1-04`…），其餘 569 筆只能靠關鍵字搜到。
+使用者裁決：加「循環別」下拉，讓使用者自己選。
+
+## 🔒 與 `AC-20` 之明文分界（本輪最重要之一句）
+
+`AC-20` 禁的是「**系統靜默地**只給同循環文件」；**使用者主動縮小範圍**是另一回事。
+兩者在程式碼層面刻意長得不一樣：
+
+- 新鍵逐字為 **`userSelectedLifecycleId`**，從 query string → controller → service → store → SQL
+  **全鏈同名**，不叫 `lifecycleId`。
+- 🔒 既有兩條 `@ts-expect-error`（證明 `listCandidateDocs` 之查詢型別**不接受** `lifecycleId`）
+  **一格未動、依然成立**——本輪新增的是另一個名字的鍵，該結構性防線完全未被削弱。
+- 🔒 **無預設值、不得推導**：未帶入 ⇒ 不過濾，回應與本鍵存在之前逐位元組相同；
+  controller／service **皆不**從節點或類別補值（補值即是把 `AC-20` 從後門推翻）。
+
+## 兩個尺度刻意取自不同集合（鑑別力核心）
+
+| 輸出 | 基準集合 |
+|---|---|
+| `items`／`candidateTotal`／`candidateLifecycleCount` | keyword ＋ exclude ＋ **使用者所選循環**皆已套用 |
+| `candidateLifecycles`（下拉選項） | keyword ＋ exclude 已套用、**使用者所選循環未套用** |
+
+若下拉也用已篩選集合，使用者選了一個循環之後選單就只剩它自己——選錯就再也回不去。
+真庫實測：選「投資循環（和潤）」後 `candidateTotal` 8、`candidateLifecycleCount` 1，
+而 `candidateLifecycles` 仍為 **14** 組。
+
+## 單一往返（效能約束）
+
+沿用既有「`stats` 恆回一列 ＋ `LEFT JOIN paged`」之寫法，並把分組計數以 **`UNION ALL`**
+併入**同一次** `ds.query()`：
+
+```
+WITH base     -- keyword／exclude（🔴 無任何系統自行推導之循環條件）
+   , filtered -- base ＋ 使用者所選循環
+   , stats    -- 對 filtered 之 COUNT(*)／COUNT(DISTINCT lifecycleId)（恆回一列）
+   , paged    -- 對 filtered 之 OFFSET/FETCH
+   , groups   -- 對 base 之 GROUP BY lifecycleId（LEFT JOIN LIFECYCLE 取 name／subcategory）
+SELECT 0 AS rowKind, stats ⋈ paged  UNION ALL  SELECT 1 AS rowKind, groups
+```
+
+- ⚠ **兩段刻意不用 `LEFT JOIN` 相接**：`paged`（≤ pageSize 列）與 `groups`（相異循環數）是
+  兩個彼此無關的維度，join 起來是笛卡兒積；`UNION ALL` 讓總列數為「頁筆數 ＋ 循環數」而非相乘。
+- ⚠ 兩分支欄位以 `CAST(NULL AS ...)` 顯式對齊——裸 `NULL` 在 UNION 下被 MSSQL 推論為 `int`，
+  撞上 `uniqueidentifier`／`nvarchar` 欄位即轉型錯誤。
+- ⚠ **仍不用 `COUNT(*) OVER ()`**：空頁時視窗值一併消失、只能謊報 0（真庫實測 `page=9999`
+  仍正確回 `total=8`／`lifecycleCount=1`）。
+- ⚠ `displayName` 由 `lifecycleDisplayName()`（名稱＋子分類）產出，不是裸 `name`——
+  真庫確實有「投資循環（和潤）」與「投資循環（子公司）」兩個同名不同子分類之循環。
+- ⚠ `TRY_CONVERT(uniqueidentifier, @n)`：`lifecycleId` 為 `uniqueidentifier` 而本值來自
+  query string，非 GUID 字串直接比對會讓 MSSQL 拋轉型錯誤（**500**）。`TRY_CONVERT` 失敗回
+  `NULL` ⇒ 條件恆不成立 ⇒ 回 0 筆候選，而下拉選項仍完整、使用者可自行選回「全部循環」。
+
+## 檔案異動
+
+| 檔案 | 類型 | 說明 |
+|---|---|---|
+| `backend/src/business-categories/business-category-docs.store.ts` | modified | 新增 `CandidateLifecycleGroup` 型別；`listCandidateDocs` 查詢加**選填** `userSelectedLifecycleId`、回傳加**選填** `candidateLifecycles` |
+| `backend/src/business-categories/business-category-docs.service.ts` | modified | `listCandidates` 查詢加選填新鍵並逐字透傳；回傳補 `candidateLifecycles`（store 未提供 → `[]`，不另開查詢） |
+| `backend/src/business-categories/typeorm-business-category-docs.store.ts` | modified | 五段 CTE ＋ `UNION ALL` 之單一往返；`TRY_CONVERT` 防轉型 500 |
+| `backend/src/business-categories/business-category-docs.controller.ts` | modified | `@Query('userSelectedLifecycleId')` 承接並下傳；回應補 `candidateLifecycles` |
+
+🔒 **`candidateLifecycles` 於 store 介面上刻意為選填**：`business-category-docs.service.spec.ts`
+之既有 FakeStore（**不可編輯之測試檔**）回傳不含該欄，宣告為必填會使該檔編譯失敗。
+必填／選填之界線由不可編輯的測試檔字面量決定，不是由「後端一定會回」決定。
+
+## 真庫實跑驗證（丟棄式探針，用完即刪、未寫入任何資料）
+
+store 層逐格對 ground truth（`SELECT lifecycleId, COUNT(*) FROM ICSOP_DOCUMENT GROUP BY ...`）：
+
+```
+GT 文件總數 = 591 ／相異循環數 = 14
+[1] 無篩選      → items=20 total=591 lifecycleCount=14 groups=14；Σgroup.count=591；分組逐格比對不符 = 0
+[2] 選投資循環（和潤） → total=8（GT 8） lifecycleCount=1 groups=14（仍完整）；當前頁全部屬該循環 = true
+[3] 篩選＋keyword     → total=1 items=1 groups=1（keyword 亦套用於 groups）
+[4] 空頁 page=9999    → items=0 total=8 lifecycleCount=1 groups=14（統計未謊報 0）
+[5] 不存在之 GUID     → total=0 items=0 groups=14（下拉仍完整，使用者出得來）
+[6] 非 GUID 垃圾字串  → total=0 items=0，**未 500**
+[7] 排除 2 筆＋篩選   → total=6（8−2） Σgroup.count=589（591−2）
+```
+
+HTTP 層（真 SOP DB ＋ 真 guard／cookie，證明 query string 未在 controller 被丟掉）：
+
+```
+[HTTP-1] 200 candidateTotal=591 candidateLifecycleCount=14 candidateLifecycles.length=14
+         樣本 {"lifecycleId":"73804615-…","displayName":"投資循環（和潤）","count":8}
+[HTTP-2] 帶 userSelectedLifecycleId → candidateTotal=8 candidateLifecycleCount=1 candidateLifecycles.length=14
+[HTTP-3] 🔴 反向探針：不存在之 id → candidateTotal=0（若參數被丟掉會回 591）
+[HTTP-4] 非 GUID → status 200、candidateTotal=0（非 500）
+```
+
+## 閘門實跑輸出（2026-09-03）
+
+```
+cd backend  && npx tsc --noEmit         → 0 error（exit 0）
+cd backend  && npx jest --maxWorkers=4  → Test Suites: 218 passed, 218 total
+                                          Tests:       3419 passed, 3419 total
+cd backend  && npm run deps:check       → ✔ no dependency violations（398 modules / 1207 deps）
+cd backend  && npm run test:int         → Test Suites: 24 passed, 24 total
+                                          Tests:       204 passed, 204 total
+```
+
+（基準 218 suites / 3411 tests；+8 為本輪環新增之案例，既有測試**零紅、零退化**。）
+
+## 未兌現項目（誠實列出）
+
+1. 🔴 **無 int-test 覆蓋 `candidateLifecycles`／`userSelectedLifecycleId` 之 SQL 層**——
+   既有 `business-category-candidates.itest.ts` 只鎖 `AC-20`（候選未被循環過濾）與
+   `candidateTotal` 對真庫 `COUNT(*)`。本輪之真庫證據來自**丟棄式探針**（已刪除），
+   不是可重跑的回歸閘門。若要常態化，須由 test-generator 補寫 int-test（本 agent 不寫測試）。
+2. 🔴 **未做瀏覽器實機測試**（lead 表示將親自複驗）。
+3. ⚠ **未新增 controller 層 query string 解析測試**——依 lead 裁定 #2，比照既有
+   `keyword`／`page`／`pageSize` 同樣沒有 controller 案例之慣例，不破例。
+4. ⚠ **未處理「文件 `lifecycleId` 為 null」之邊界**——依 lead 裁定 #3，
+   `icsop-document.entity.ts:35` 為 `lifecycleId!: string`（非 nullable），該情境結構上不可達。
+5. ⚠ **未動 `docs/specs/features/F043-*.md`**——依 lead 裁定 #4，本 delta 之正式 AC 條文由 lead 補。

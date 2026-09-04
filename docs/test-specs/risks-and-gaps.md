@@ -1359,3 +1359,22 @@ backend 實作完成、無異議後，team-lead 指出本端點已兩次只靠�
 | BC-NOASSERT-2 | `AC-16`（DAG 防環之連線拖曳觸發路徑） | 既有 `@xyflow/react` stub 不支援模擬拖曳連線互動（比照循環側 `DagCanvasPage.test.tsx` 之既有限制），故防環錯誤碼之**前端顯示**（toast／inline 錯誤）未建案；服務層防環邏輯本身由 backend 線覆蓋。 |
 | BC-NOASSERT-3 | `AC-B25`／`AC-33` 之浮水印精確色值／透明度 | `NFR-007` 之四種既有情境表未列入 F043（本輪之第五種情境），F020 D9 delta 之 `#7C7C7C`／`0.30` 數值僅明文適用於已列出之四處既有載體。本環僅約束**格式一致性**（身分列＋時間戳兩行、機密聲明置中恰一次）與**幾何**（旋轉正方形、涵蓋四角），不臆造色值數字；若人類日後裁定套用相同色值，屬新增 AC，非本環之缺口。 |
 
+### F043 §丙 delta（2026-09-03，同日第三個真實需求）：候選之循環別篩選（`userSelectedLifecycleId`）
+
+> team-lead 於 mailbox 直接下達已裁定之設計（無正式 `AC-##`），因抽屜無翻頁機制、真庫 591 份文件
+> 分頁只取第一頁、字母序集中同循環而由使用者實機發現。本環（`business-category-docs-candidates.
+> service.spec.ts` 新增 describe 區塊＋`BusinessCategoryNodeDrawer.test.tsx` 新增 describe 區塊）
+> 已依此裁決建置，經實跑驗證：backend 3 條新增斷言紅（service 尚未讀取／透傳該鍵）、其餘 8 條
+> 新增與既有 15 條全綠；frontend 4 條新增全紅（`findByLabelText('循環別篩選')` timeout，下拉元件
+> 尚未實作）、既有 21 條全綠。
+
+> 🟢🔴 **2026-09-03 team-lead 已逐項裁定**（mailbox：查證 `@ts-expect-error` 防線 5 處完好、
+> `git diff` 既有斷言 0 條被刪，實作已進場）——下列四項已從「待決」轉為「已裁定」，非未解問題。
+
+| # | 項目 | 理由 |
+|---|---|---|
+| BC-NOASSERT-4 | 本 delta 於 `F043-business-function-category.md` 尚無正式 `AC-##` | 設計來自 team-lead mailbox 直接裁決（含精確鍵名 `userSelectedLifecycleId`、`candidateTotal`／`candidateLifecycleCount`／`candidateLifecycles` 之語意），非經 spec-writer 正式落地為條文。本環已依裁決內容建置並實跑驗證（詳見上方摘要）。🟢 **2026-09-03 已裁定：由 lead 於實作落地後補條文**——**已排程，非待決缺口**，責任在 lead，不需 test-generator 或 spec-writer 進一步跟進。 |
+| BC-NOASSERT-5 | HTTP 層 `?userSelectedLifecycleId=` 查詢字串解析（controller `@Query()`） | `business-category-docs.controller.spec.ts` 既有慣例僅測路由 metadata／RBAC 守門，不測 `keyword`／`page`／`pageSize` 等既有查詢參數之解析與透傳。🟢 **2026-09-03 已裁定：不補**——既有 `keyword`／`page`／`pageSize` 同樣沒有 controller 層案例，本次新增鍵**沿用既有慣例、不破例**，這是刻意維持的一致性，不是漏掉；service 層（透傳）與 frontend 端點呼叫引數（`getBusinessCategoryNodeDrawer` 第三引數）已個別覆蓋，中間之 HTTP query-string↔service 呼叫轉換留待 int-test／實機驗證（與既有三鍵同一命運，非本次新開的缺口）。 |
+| BC-NOASSERT-6 | 下拉選項是否於畫面上顯示 `candidateLifecycles[].count`（如「銷售及收款循環 (2)」） | 檢視既有循環篩選下拉之唯一先例（`ChangeHistoryPage.tsx:906`／`prototypes/23-change-history.html:524`）皆不於選項文字內附加筆數。🟢 **2026-09-03 已裁定：不顯示**——沿用本 repo 唯一先例之慣例；`count` 欄位本身仍須正確回傳（本環已鎖，且不因目前篩選而萎縮），只是 UI 層先不用，日後要加不需改契約（型別已含該欄）。 |
+| BC-NOASSERT-7 | 候選文件無 `lifecycleId`（`null`）時是否／如何併入 `candidateLifecycles` 分組 | 🔴 **2026-09-03 已裁定：不處理，因該情境結構上不可達**——lead 查證 `backend/src/database/entities/icsop-document.entity.ts:35`：`lifecycleId!: string; // → LIFECYCLE（建立時必填）`，非 nullable，故「候選文件無 `lifecycleId`」在目前資料模型下不存在真實個案。backend `business-category-docs-candidates.service.spec.ts` 之內部語料模型（`SeededDoc`）延續既有 FakeStore 設計、`lifecycleId` 為必填字串，正確反映此不可達性，非覆蓋率缺口。frontend fixture（`DRAWER` 之 `d6`，`lifecycleId: null`）屬 `CandidateDocRef`／`BusinessCategoryCandidateDoc` 型別層之防禦性可空設計（供 AC-20「純資訊 chip 不顯示」情境使用），與本欄位在 DB 層是否可能為 `null` 是兩件事，兩者不矛盾。 |
+

@@ -215,3 +215,71 @@ DB 恰 4 列（2 節點 × 2 文件）無重複列 ⇒ 純顯示層缺陷。連�
    ⇒ F043 檔頭三項驗收條件之 ①②③ 已滿足；本前端已有真實資料可打。
 4. `AC-B7` ③ 之 active 過濾在「類別池端點取用失敗」之降級路徑下不成立（見架構決策 4）。
 5. `AC-B9`（CSV 第 15 欄之位元組規則）為**後端**職責，前端僅維持 `AC-B10` 之「匯出呼叫恰兩引數」不變。
+
+---
+
+# 2026-09-03 第四輪 delta（前端）：候選之「循環別」篩選（`userSelectedLifecycleId`）
+
+> 環由 test-generator（`ring-cyclefilter`）於實作前撰寫並經 lead 查證為 RED；
+> 本輪**僅撰寫 production code，未新增／修改／弱化／刪除任何測試檔**。
+> **本輪未向 ring 提出任何申訴**。
+
+## 背景與 `AC-20` 之分界
+
+候選依 `documentNumber` 排序＝依循環分群（文件編號第 2 段即循環代碼），真庫 591 份／14 個循環，
+抽屜無翻頁且只取第一頁 20 筆 ⇒ 其餘 569 筆只能靠搜尋才到得了。使用者裁決：加「循環別」下拉。
+
+🔒 `AC-20` 禁的是「**系統靜默地**只給同循環文件」，**使用者主動選擇**是另一回事——故引數逐字為
+`userSelectedLifecycleId`（非 `lifecycleId`），且**未選時完全不帶第三引數**，
+既有「初載呼叫恰兩個引數」之結構性斷言一格未鬆動。
+
+## 檔案異動
+
+| 檔案 | 類型 | 說明 |
+|---|---|---|
+| `frontend/src/api/endpoints.ts` | modified | `getBusinessCategoryNodeDrawer(bcId, nodeId, userSelectedLifecycleId?)`；有值才 `qs.set(...)`，無值時 URL 逐字與從前相同 |
+| `frontend/src/api/types.ts` | modified | `BusinessCategoryNodeDrawerData` 加**選填** `candidateLifecycles`（未提供 ⇒ 只有「全部循環」；選填以免打爆既有不含該欄之測試字面量） |
+| `frontend/src/pages/BusinessCategoryNodeDrawer.tsx` | modified | 循環別下拉（`aria-label="循環別篩選"`、預設選項「全部循環」）、選取後重新查詢、候選可見集合收斂 |
+
+## 三個實作決定
+
+1. **下拉選項一律取自後端 `candidateLifecycles`，禁止由當前頁 `candidates` 推導**。
+   當前頁幾乎全部同一循環 ⇒ 由當前頁推導只會得到 1 個選項，恰好把本功能存在的理由
+   （**頁內看不到的循環也要選得到**）消滅掉。後端之 `candidateLifecycles` 是「未套用使用者
+   篩選」之全集分組，故選了某個循環之後其餘選項仍在，使用者出得來。
+2. **選項文字不顯示筆數**（依 lead 裁定 #1）——沿用本 repo 唯一先例
+   `ChangeHistoryPage.tsx` 之循環別下拉（`<option value="">全部循環</option>` ＋ 顯示名）。
+   後端仍正確回傳 `count`，只是 UI 先不顯示。
+3. 🔴 **重新查詢時不得整份取代狀態**（本輪唯一非環所鎖、但必要的防護）：
+   - `docs` 改為**累積**（以 id 併入），另以 `visibleCandidateIds`（＝當次回應之候選 id）
+     決定候選區顯示哪些 ⇒ 清單會隨篩選正確收斂，但使用者**已選未送出**的候選不會消失。
+   - 節點名稱／`baseline`／`draft` **只在首次載入時**建立（以 `loadedKey` ref 區分首載與重查）。
+   - 不這樣做的後果：使用者「先選了幾份候選、再換循環別去找更多」時，已選但不屬於新循環的
+     那幾份會從 `docs` 消失 ⇒ 既不顯示於「目前掛載文件」、送出時也不在 `toMount` 內，
+     成為**沒有任何錯誤訊息的靜默資料遺失**；同理，重查若覆寫 `name`，尚未送出的改名也會被吞掉。
+   - `baseline` 之成員亦視為可見候選：載入當時已掛於本節點者不在候選回應內，但使用者把它移除後
+     必須看得到、也才回得去（＝新增本篩選前之既有行為，一格未變）。
+
+## 閘門實跑輸出（2026-09-03）
+
+```
+cd frontend && npx tsc --noEmit  → 0 error（exit 0）
+cd frontend && npx vitest run    → Test Files  131 passed (131)
+                                   Tests      2048 passed (2048)
+```
+
+（基準 131 檔 / 2044 tests；+4 為本輪環新增之案例，既有測試**零紅、零退化**。）
+環之新區塊「F043 丙 delta：候選之循環別篩選」4 條全綠，`BusinessCategoryNodeDrawer.test.tsx`
+全檔 25 條全綠。
+
+## 未兌現項目（誠實列出）
+
+1. 🔴 **未做瀏覽器實機測試**（lead 表示將親自複驗）。元件測試 `vi.mock('../api/endpoints')`
+   把整個 API client 換掉 ⇒ **驗不到** `getBusinessCategoryNodeDrawer` 是否真的把
+   `userSelectedLifecycleId` 組進 URL；該段由後端棒次以**真 HTTP 反向探針**
+   （不存在之 id → `candidateTotal=0` 而非 591）補證，見 `F043-impl-backend.md`。
+2. ⚠ **未新增代理設定異動**：本 delta 只是既有 `/admin/...` 路由多一個 query 參數，
+   未新增任何頂層路由前綴 ⇒ `proxy-coverage.test.ts` 之結構性保證不受影響（該測試綠）。
+3. ⚠ 「換節點時篩選歸零」之路徑在現行 UI 下不可達（抽屜有全螢幕遮罩，開啟時點不到別的節點，
+   關閉即卸載），程式碼中仍以 `loadedKey` 顯式處理以免日後移除遮罩時留下潛伏 bug；
+   該路徑**無測試覆蓋**。

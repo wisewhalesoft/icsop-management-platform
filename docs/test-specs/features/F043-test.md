@@ -75,3 +75,22 @@
 ### 前端無法涵蓋、留給 backend 線或不可測之 AC
 
 見 [risks-and-gaps.md §F043（frontend）](../risks-and-gaps.md#f043-frontend)。
+
+---
+
+## §丙 delta（2026-09-03，同日第三個真實需求）：候選之循環別篩選（`userSelectedLifecycleId`）
+
+> 本節由 test-generator 於 2026-09-03 追加，涵蓋 team-lead mailbox 直接裁決之設計（尚無正式
+> `AC-##`，見 [risks-and-gaps.md `BC-NOASSERT-4`](../risks-and-gaps.md)）。背景：候選依
+> `documentNumber` 排序＝依循環分群，真庫 591 份文件、14 個循環，抽屜無翻頁機制、前端只取第一頁
+> ⇒ 第一頁幾乎全部集中在字母序最前之循環。使用者裁決：加「循環別」下拉，讓使用者自選要看哪個
+> 循環。🔒 與 `AC-20`（候選不以循環過濾）之明文分界：`AC-20` 禁的是「系統靜默地只依循環過濾」，
+> 使用者主動選擇是另一回事，故新引數逐字為 `userSelectedLifecycleId`（非 `lifecycleId`），既有
+> 兩條 `@ts-expect-error` 結構性防線原樣保留、逐字未動。
+
+| 檔案 | 涵蓋內容 | 備註 |
+|---|---|---|
+| `backend/src/business-categories/business-category-docs-candidates.service.spec.ts` | 新增 describe 區塊（8 條）：不傳／`undefined` 之回歸鎖、傳入後 items／total／lifecycleCount 收斂並與 excludeDocumentIds 同時生效、`candidateLifecycles` 鑑別力核心（篩選後仍列出全部循環選項）、`candidateLifecycles` 套用 keyword／exclude、鍵合法性正向測試（與既有負向 `@ts-expect-error` 並存）、服務層透傳接線可驗證、防 N+1 | 既有 15 條全綠；新增 8 條中 3 條紅（items/total/lifecycleCount 尚未套用篩選）、5 條綠（回歸鎖／已可經既有 passthrough 滿足／結構性自檢，非退化） |
+| `frontend/src/pages/BusinessCategoryNodeDrawer.test.tsx` | 新增 describe 區塊（4 條）：下拉存在且預設「全部循環」、選項恰 6 個且來自 `candidateLifecycles`（非當前頁 `candidates` 推導，鑑別力核心語料：當前頁僅 1 循環、`candidateLifecycles` 有 5 循環）、選取觸發重新查詢＋帶引數＋說明文字同步更新、選回「全部循環」可還原且呼叫引數恢復兩段路徑參數 | 既有 21 條全綠、新增 4 條全紅（`循環別篩選` 下拉尚未實作，`findByLabelText` timeout） |
+
+逐字文案（本檔作者依既有慣例決定，非既有 AC 明文）：預設選項「全部循環」比照 `ChangeHistoryPage.tsx:906`／`prototypes/23-change-history.html:524`；下拉之可存取標籤「循環別篩選」為本頁首見同型篩選器，逐字由本檔選定，若 impl-fe 自然設計不同屬合法申訴。
