@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- 🔵 F043／F019 delta（DRAFT — 2026-09-02）：**前台**「業務/功能類別樹狀圖」瀏覽模式。
      樹狀呈現鏡射 22／29（dagre 上到下佈局、直角繞線、浮水印疊加層、單擊標示下游、雙擊唯讀抽屜、縮放與拖曳平移）；
-     外框鏡射 03-public-list.html（前台 app bar、max-w-5xl 內容寬、text-base 尺度、data-prototype-demo 視角切換）。
+     外框鏡射 03-public-list.html（前台 app bar、max-w-5xl／2xl:max-w-7xl 內容寬、text-base 尺度、data-prototype-demo 視角切換）。
      規格權威＝docs/specs/features/F019-public-list-browsing.md §業務/功能類別瀏覽模式 delta（AC-B12～AC-B27）
      ＋ docs/specs/features/F043-business-function-category.md（決 3、AC-47）。
 
@@ -30,6 +30,13 @@
      🔒 AC-B20：抽屜每列四欄＝`程序書編號`／`程序書書名`／`版次`／`公告日期`（⚠ **無「狀態」欄**——
         前台只看得到已公告文件，狀態欄恆為同一值；29 之後台抽屜為五欄，兩者刻意不同）；
         點列導向**前台** `/public/documents/:id`（原型＝04-public-document-detail.html），**非** /admin/documents/:id。 -->
+<!-- 🔵 2026-09-04 寬螢幕版面寬度 delta（使用者裁決；與 03-public-list 同一批）——本檔已套用。
+     app bar／控制列／示範區／info note／footer 五條橫幅：`max-w-5xl` → `max-w-5xl 2xl:max-w-7xl`，
+     僅於 2xl（≥ 1536px）以上放寬；≤ 1440px 之所有斷點逐像素不變。
+     🔴 樹狀圖畫布 `<main id="stage">` **本來就沒有 max-w、本來就是全寬**（本 delta 一字未動它）——
+        這是本檔與 03 之刻意差異：橫幅維持可讀行寬並置中，畫布吃滿螢幕，否則寬樹必被切掉而只能拖曳。
+        實作端（PublicCategoryTreePage）原本被嵌進 PublicListPage 的 `max-w-5xl` <main> 而夾成 1024px，
+        1742px 寬的樹被切掉 750px——**那是實作偏離本檔**，修在前端。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -75,7 +82,7 @@
 
 <!-- App bar（逐項鏡射 03-public-list） -->
 <header class="sticky top-0 z-30 bg-white border-b border-slate-200 shrink-0">
-  <div class="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
+  <div class="max-w-5xl 2xl:max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
     <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
     <span class="font-bold text-slate-900 truncate">ICSOP 文件瀏覽</span>
     <div class="ml-auto flex items-center gap-3">
@@ -90,7 +97,7 @@
 
 <!-- 控制列：模式切換器（AC-B12）＋ 類別下拉（AC-B17）＋ 縮放 -->
 <div class="bg-white border-b border-slate-200 shrink-0">
-  <div class="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
+  <div class="max-w-5xl 2xl:max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
     <!-- 🔒 AC-B12：**恰兩個**控制項；可見文字＝無障礙名稱＝逐字標籤；順序＝樹狀圖在前。 -->
     <div data-browse-mode-switch role="group" aria-label="瀏覽模式" class="inline-flex rounded-lg border border-slate-300 overflow-hidden shrink-0">
       <button type="button" data-browse-mode="tree" aria-pressed="true" aria-label="業務/功能類別樹狀圖" onclick="switchMode('tree')"
@@ -115,7 +122,7 @@
 </div>
 
 <!-- 🟢 F041 已定案 · 原型示範控制（非正式 UI；實作時不得移植此區塊）——逐項鏡射 03 之同名區塊 -->
-<div class="max-w-5xl mx-auto w-full px-4 pt-3 shrink-0">
+<div class="max-w-5xl 2xl:max-w-7xl mx-auto w-full px-4 pt-3 shrink-0">
   <div data-prototype-demo="true" class="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-base text-emerald-800">
     <i data-lucide="badge-check" class="w-4 h-4 shrink-0 mt-0.5"></i>
     <div class="flex-1 min-w-0">
@@ -134,7 +141,7 @@
 </div>
 
 <!-- info note：🔴 本頁**不寫稽核**（AC-B26），故文案與 22／29 之「已寫入調閱稽核（VIEW）」刻意不同 -->
-<div class="max-w-5xl mx-auto w-full px-4 pt-3 shrink-0">
+<div class="max-w-5xl 2xl:max-w-7xl mx-auto w-full px-4 pt-3 shrink-0">
   <div class="rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-sm text-primary-700 flex items-start gap-2">
     <i data-lucide="shield-check" class="w-4 h-4 shrink-0 mt-0.5"></i>
     <span>本頁疊加之浮水印由<strong>伺服器端</strong>依當下登入身分與時間動態產生。瀏覽樹狀圖、切換類別與開啟節點清單<strong>不記錄調閱稽核</strong>；點入程序書開啟檢視器時才寫入一筆調閱稽核。</span>
@@ -203,7 +210,7 @@
 
 <!-- watermark format caption（比照 05／22／29）-->
 <footer class="shrink-0 bg-white border-t border-slate-200 px-4 py-2.5">
-  <div class="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+  <div class="max-w-5xl 2xl:max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
     <span class="text-xs text-slate-400 shrink-0">浮水印格式：</span>
     <code class="mono text-xs text-slate-600 truncate" id="wmString"></code>
   </div>

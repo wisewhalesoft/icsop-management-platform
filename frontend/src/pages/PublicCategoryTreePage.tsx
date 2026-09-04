@@ -8,6 +8,7 @@ import {
 import { ApiError } from '../api/client';
 import { businessCategoryDisplayName } from '../domain/business-category';
 import { Icon } from '../components/Icon';
+import { PUBLIC_SHELL_WIDTH } from './public-shell-width';
 import { watermarkPresentation } from '../domain/watermark-lines';
 import {
   WATERMARK_COLOR,
@@ -220,93 +221,105 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
   const noCategories = categoriesLoaded && categories.length === 0 && !currentId;
 
   return (
-    <section className="space-y-3">
+    <section>
       {/*
-        控制列（版面逐字取自 prototype 30 之同一列）：模式切換器（由 `PublicListPage` 以
-        `modeSwitch` 傳入，`AC-B12`）＋ 類別下拉（`AC-B17`）＋ 縮放。
-        🔴 `AC-53` ②：本列**刻意沒有**下載／列印鈕——節點自 DOM 移除（非 disabled、非 CSS 隱藏）；
-        該負向半句與後台預覽頁之正向半句（`AC-53` ①）成對存在，缺一即無鑑別力。
+        🔵 2026-09-04 寬螢幕版面寬度 delta（權威＝prototype 30 之同名 delta）：
+        橫幅（控制列／info note／空狀態）維持可讀行寬並置中——`PUBLIC_SHELL_WIDTH`，2xl 起 1280px；
+        🔴 但**畫布不套任何 max-w**（見下方 `<main>`）：prototype 30 之 `<main id="stage">`
+        本來就是全寬，寬樹一旦被夾住就只能靠拖曳平移找回被切掉的部分。
       */}
-      <div className="flex flex-wrap items-center gap-3">
-        {modeSwitch}
-        <div className="flex items-center gap-2 min-w-0">
-          <label htmlFor="catSel" className="text-base text-slate-500 shrink-0">
-            業務/功能類別
-          </label>
-          <select
-            id="catSel"
-            aria-label="業務/功能類別"
-            value={currentId ?? ''}
-            onChange={(e) => setCurrentId(e.target.value)}
-            disabled={categories.length === 0}
-            className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-base focus:outline-none focus:ring-2 focus:ring-primary-600"
-          >
-            {/* deep link 進入一個不在清單內之類別時，仍需一個對應選項供 select 有值可對。 */}
-            {currentId && !categories.some((c) => c.id === currentId) && (
-              <option value={currentId}>
-                {data ? businessCategoryDisplayName(data.businessCategory) : currentId}
-              </option>
-            )}
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {businessCategoryDisplayName(c)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="ml-auto flex items-center gap-1 shrink-0">
-          <button onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))} title="縮小" aria-label="縮小" className="w-9 h-9 rounded-md hover:bg-slate-100 flex items-center justify-center">
-            <Icon name="zoom-out" className="w-4 h-4" />
-          </button>
-          <span className="mono text-sm text-slate-500 w-11 text-center">{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom((z) => Math.min(1.8, +(z + 0.1).toFixed(2)))} title="放大" aria-label="放大" className="w-9 h-9 rounded-md hover:bg-slate-100 flex items-center justify-center">
-            <Icon name="zoom-in" className="w-4 h-4" />
-          </button>
-          <button onClick={() => setZoom(1)} title="重設縮放" aria-label="重設縮放" className="w-9 h-9 rounded-md hover:bg-slate-100 flex items-center justify-center">
-            <Icon name="maximize" className="w-4 h-4" />
-          </button>
-        </div>
-        <p className="w-full text-sm text-slate-400">
-          點節點＝醒目標示其所有下游節點；點空白處取消；
-          <strong className="text-slate-500">雙擊節點＝檢視該節點掛載之程序書</strong>
-          ；圖寬超出畫面時可<strong className="text-slate-500">按住拖曳平移</strong>。
-        </p>
-      </div>
-
-      {/*
-        info note：🔴 本頁**不寫稽核**（`AC-B26`），故文案與後台 `22`／`29` 之「已寫入調閱稽核（VIEW）」
-        刻意不同——瀏覽樹狀圖、切換類別與開啟節點清單皆不記錄，點入程序書開檢視器時才寫一筆。
-      */}
-      <div className="rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-sm text-primary-700 flex items-start gap-2">
-        <Icon name="shield-check" className="w-4 h-4 shrink-0 mt-0.5" />
-        <span>
-          本頁疊加之浮水印由<strong>伺服器端</strong>
-          依當下登入身分與時間動態產生。瀏覽樹狀圖、切換類別與開啟節點清單
-          <strong>不記錄調閱稽核</strong>；點入程序書開啟檢視器時才寫入一筆調閱稽核。
-        </span>
-      </div>
-
-      {error && (
-        <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-4 py-3">
-          載入失敗 · <span className="mono">{error}</span>
-        </div>
-      )}
-
-      {/* `AC-B27` ③：`AC-B18` 之類別集合為空 → 逐字空狀態；模式切換器仍可用、不自動切換模式。 */}
-      {noCategories && !error && (
-        <div className="bg-white border border-slate-200 rounded-xl px-6 py-16 text-center">
-          <Icon name="shapes" className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-          <p data-empty-no-categories="" className="text-slate-500">
-            目前沒有可瀏覽的業務/功能類別
+      <div className={`${PUBLIC_SHELL_WIDTH} mx-auto w-full px-4 py-5 space-y-3`}>
+        {/*
+          控制列（版面逐字取自 prototype 30 之同一列）：模式切換器（由 `PublicListPage` 以
+          `modeSwitch` 傳入，`AC-B12`）＋ 類別下拉（`AC-B17`）＋ 縮放。
+          🔴 `AC-53` ②：本列**刻意沒有**下載／列印鈕——節點自 DOM 移除（非 disabled、非 CSS 隱藏）；
+          該負向半句與後台預覽頁之正向半句（`AC-53` ①）成對存在，缺一即無鑑別力。
+        */}
+        <div className="flex flex-wrap items-center gap-3">
+          {modeSwitch}
+          <div className="flex items-center gap-2 min-w-0">
+            <label htmlFor="catSel" className="text-base text-slate-500 shrink-0">
+              業務/功能類別
+            </label>
+            <select
+              id="catSel"
+              aria-label="業務/功能類別"
+              value={currentId ?? ''}
+              onChange={(e) => setCurrentId(e.target.value)}
+              disabled={categories.length === 0}
+              className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-base focus:outline-none focus:ring-2 focus:ring-primary-600"
+            >
+              {/* deep link 進入一個不在清單內之類別時，仍需一個對應選項供 select 有值可對。 */}
+              {currentId && !categories.some((c) => c.id === currentId) && (
+                <option value={currentId}>
+                  {data ? businessCategoryDisplayName(data.businessCategory) : currentId}
+                </option>
+              )}
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {businessCategoryDisplayName(c)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="ml-auto flex items-center gap-1 shrink-0">
+            <button onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))} title="縮小" aria-label="縮小" className="w-9 h-9 rounded-md hover:bg-slate-100 flex items-center justify-center">
+              <Icon name="zoom-out" className="w-4 h-4" />
+            </button>
+            <span className="mono text-sm text-slate-500 w-11 text-center">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom((z) => Math.min(1.8, +(z + 0.1).toFixed(2)))} title="放大" aria-label="放大" className="w-9 h-9 rounded-md hover:bg-slate-100 flex items-center justify-center">
+              <Icon name="zoom-in" className="w-4 h-4" />
+            </button>
+            <button onClick={() => setZoom(1)} title="重設縮放" aria-label="重設縮放" className="w-9 h-9 rounded-md hover:bg-slate-100 flex items-center justify-center">
+              <Icon name="maximize" className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="w-full text-sm text-slate-400">
+            點節點＝醒目標示其所有下游節點；點空白處取消；
+            <strong className="text-slate-500">雙擊節點＝檢視該節點掛載之程序書</strong>
+            ；圖寬超出畫面時可<strong className="text-slate-500">按住拖曳平移</strong>。
           </p>
-          <p className="text-base text-slate-400 mt-1">您仍可切換至「文件清單」模式瀏覽文件。</p>
         </div>
-      )}
 
+        {/*
+          info note：🔴 本頁**不寫稽核**（`AC-B26`），故文案與後台 `22`／`29` 之「已寫入調閱稽核（VIEW）」
+          刻意不同——瀏覽樹狀圖、切換類別與開啟節點清單皆不記錄，點入程序書開檢視器時才寫一筆。
+        */}
+        <div className="rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-sm text-primary-700 flex items-start gap-2">
+          <Icon name="shield-check" className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            本頁疊加之浮水印由<strong>伺服器端</strong>
+            依當下登入身分與時間動態產生。瀏覽樹狀圖、切換類別與開啟節點清單
+            <strong>不記錄調閱稽核</strong>；點入程序書開啟檢視器時才寫入一筆調閱稽核。
+          </span>
+        </div>
+
+        {error && (
+          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-4 py-3">
+            載入失敗 · <span className="mono">{error}</span>
+          </div>
+        )}
+
+        {/* `AC-B27` ③：`AC-B18` 之類別集合為空 → 逐字空狀態；模式切換器仍可用、不自動切換模式。 */}
+        {noCategories && !error && (
+          <div className="bg-white border border-slate-200 rounded-xl px-6 py-16 text-center">
+            <Icon name="shapes" className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+            <p data-empty-no-categories="" className="text-slate-500">
+              目前沒有可瀏覽的業務/功能類別
+            </p>
+            <p className="text-base text-slate-400 mt-1">您仍可切換至「文件清單」模式瀏覽文件。</p>
+          </div>
+        )}
+      </div>
+
+      {/*
+        🔴 畫布**全寬、不套 `PUBLIC_SHELL_WIDTH`**（prototype 30 之 `<main id="stage">` 逐字如此）。
+        自帶 `px-4 pb-5`：本元件不再被 `PublicListPage` 之 `<main>` 包住，內距須由自己給。
+      */}
       <main
         ref={stageRef}
         data-testid="public-tree-stage"
-        className="overflow-auto select-none cursor-grab active:cursor-grabbing"
+        className="overflow-auto px-4 pb-5 select-none cursor-grab active:cursor-grabbing"
         onClick={onStageClick}
         onPointerDown={onStagePointerDown}
       >

@@ -5,6 +5,7 @@ import { getPublicDocuments, getOrgUnits, getPublicFilterOptions } from '../api/
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
 import { PublicCategoryTreePage } from './PublicCategoryTreePage';
+import { PUBLIC_SHELL_WIDTH } from './public-shell-width';
 import { SearchCombobox } from '../components/SearchCombobox';
 import { buildOrgPath } from '../domain/org-path';
 import type {
@@ -403,7 +404,7 @@ export function PublicListPage(): JSX.Element {
     <div className="min-h-screen bg-white text-slate-700">
       {/* App bar */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
+        <div className={`${PUBLIC_SHELL_WIDTH} mx-auto px-4 h-14 flex items-center gap-3`}>
           <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0">
             <Icon name="file-text" className="w-5 h-5" />
           </div>
@@ -433,23 +434,28 @@ export function PublicListPage(): JSX.Element {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-5">
-        {/*
-          🔵 F043／F019 `AC-B12`：**恰兩個**瀏覽模式切換控制項（樹狀圖在前、文件清單在後）。
-          🔒 可見文字＝`aria-label`＝逐字標籤；任一時刻**恰一個** `aria-pressed="true"`。
-          🔴 「業務/功能類別樹狀圖」這串字與**後台**「文件變更歷程」頁第三個 tab 之標籤逐字相同，
-             但為兩個互不相干之載體（不同頁面、不同閘門、不同語意，恰好撞了字面）——
-             🔒 **明文禁止**把兩處字面抽成同一個共用常數（架構 §14.8 命名碰撞警示）：
-             它們不是同一個業務概念之兩處呈現，共用常數會讓任一方改字時被迫牽動另一方或漏改。
-        */}
-        {/* 版面：清單模式為獨立一列（prototype 03 之 `mb-3`）；樹狀圖模式則與類別下拉、縮放
-            同列（prototype 30 之控制列）——故於後者以 `modeSwitch` 傳入樹狀圖元件內部渲染。 */}
-        {mode === 'list' && <div className="mb-3">{modeSwitch}</div>}
-
-        {mode === 'tree' ? (
-          <PublicCategoryTreePage modeSwitch={modeSwitch} />
-        ) : (
-          <>
+      {/*
+        🔵 F043／F019 `AC-B12`：**恰兩個**瀏覽模式切換控制項（樹狀圖在前、文件清單在後）。
+        🔒 可見文字＝`aria-label`＝逐字標籤；任一時刻**恰一個** `aria-pressed="true"`。
+        🔴 「業務/功能類別樹狀圖」這串字與**後台**「文件變更歷程」頁第三個 tab 之標籤逐字相同，
+           但為兩個互不相干之載體（不同頁面、不同閘門、不同語意，恰好撞了字面）——
+           🔒 **明文禁止**把兩處字面抽成同一個共用常數（架構 §14.8 命名碰撞警示）：
+           它們不是同一個業務概念之兩處呈現，共用常數會讓任一方改字時被迫牽動另一方或漏改。
+      */}
+      {/* 版面：清單模式為獨立一列（prototype 03 之 `mb-3`）；樹狀圖模式則與類別下拉、縮放
+          同列（prototype 30 之控制列）——故於後者以 `modeSwitch` 傳入樹狀圖元件內部渲染。 */}
+      {/*
+        🔵 2026-09-04 寬螢幕版面寬度 delta：`<main>` 之內容寬夾制**只套在清單模式**。
+        prototype 30 之 `<main id="stage">` 本來就沒有 `max-w`（橫幅置中、畫布全寬）；先前把樹狀圖
+        元件塞進本頁 `max-w-5xl` 之 `<main>`，等於把 1742px 寬的樹夾成 1024px 可視寬——被切掉的
+        750px 只能靠拖曳平移找回，而同一時間畫面左右各有 448px 是空的。故樹狀圖模式**不進 `<main>`**，
+        由 `PublicCategoryTreePage` 自帶版面（橫幅套 `PUBLIC_SHELL_WIDTH`、畫布全寬）。
+      */}
+      {mode === 'tree' ? (
+        <PublicCategoryTreePage modeSwitch={modeSwitch} />
+      ) : (
+        <main className={`${PUBLIC_SHELL_WIDTH} mx-auto px-4 py-5`}>
+          <div className="mb-3">{modeSwitch}</div>
         {/* 搜尋 + 手機篩選觸發（lg 以下顯示觸發鈕，開啟底部面板） */}
         <div className="flex items-center gap-2 mb-3" data-testid="search-row">
           <div className="relative flex-1">
@@ -484,7 +490,7 @@ export function PublicListPage(): JSX.Element {
 
         {/* 桌機篩選列（lg 顯示）：3 欄 grid 逐列換行，順序＝FILTERS（prototype 03 行 90-95）。 */}
         <div className="hidden lg:flex flex-col mb-4" data-testid="filter-bar">
-          <div className="grid grid-cols-3 gap-3">{filterControls('cbD')}</div>
+          <div className="grid grid-cols-3 2xl:grid-cols-6 gap-3">{filterControls('cbD')}</div>
           <div className="flex items-center gap-3 mt-2.5">
             {hasFilters && (
               <button
@@ -628,9 +634,8 @@ export function PublicListPage(): JSX.Element {
             </div>
           </>
         )}
-          </>
-        )}
-      </main>
+        </main>
+      )}
 
       {/* 手機底部篩選面板（設計系統 §6.1；lg 以下使用）。 */}
       {sheetOpen && (
@@ -737,7 +742,7 @@ function DocCard({ doc, onOpen }: { doc: PublicListItem; onOpen: () => void }): 
         🔴 「使用部門：」與「循環別：」兩列已移除（雙重 queryByText 反向斷言）；
         「使用部門逐段高亮」（G-PUB-016）隨該欄位一併移除，為 `AC-D12` 已接受之代價。
       */}
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 text-sm">
+      <dl className="grid grid-cols-2 2xl:grid-cols-3 gap-x-4 gap-y-1.5 mt-3 text-sm">
         <div>
           <dt className="text-slate-400 inline">制定公司：</dt>
           <dd className="text-slate-600 inline">{doc.draftingCompanyName ?? '—'}</dd>

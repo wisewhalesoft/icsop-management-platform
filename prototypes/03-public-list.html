@@ -65,6 +65,17 @@
      🔒 `AC-B15` 模式**不跨 session 記憶**：本檔與 30 皆**不寫入** localStorage／sessionStorage／cookie。
      🔒 `AC-B14` 三分支由**單一具名述詞** resolveBrowseMode() 決定：`list` → list；`tree` → tree；
         **未帶／空值／任何不可辨識之值（如 `?mode=grid`）** → 一律視同 tree，不回錯誤、不呈現空白畫面。 -->
+<!-- 🔵 2026-09-04 寬螢幕版面寬度 delta（使用者裁決；前台三頁共通）——本檔已套用。
+     問題：本檔原本一律 `max-w-5xl`（1024px）——在 06-rwd-showcase 定義之桌機基準線 1440px 下尚稱合理（71%），
+     但實機螢幕為 1920px 時只用到 53%，左右各空 448px。
+     修法：僅於 **2xl（≥1536px）** 以上放寬，≤ 1440px 之所有斷點（桌機基準線、平板、手機）**逐像素不變**：
+       ① app bar 與 <main>：`max-w-5xl` → `max-w-5xl 2xl:max-w-7xl`（1280px）。
+       ② 桌機篩選列 #filterBar：`grid-cols-3` → `grid-cols-3 2xl:grid-cols-6`（六項一列，少一列高度）。
+       ③ 卡片 <dl>：`grid-cols-2` → `grid-cols-2 2xl:grid-cols-3`（卡片變矮，不是只拉寬留白）。
+     🔒 **僅動寬度與欄數**：字級（D9 一階）、欄位集合、順序、文案、空狀態、可見性判定一字未動（AC-D10 三條文案鎖定仍成立）。
+     🔴 30-public-category-tree 之樹狀圖畫布（#stage）**本就是全寬**（無 max-w）；實作端曾將其嵌入本檔之
+        `max-w-5xl` <main> 而被夾成 1024px（樹寬 1742px 被切掉 750px 須拖曳）——那是**實作偏離原型**，
+        修在前端，不在本檔。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -90,7 +101,7 @@
 
 <!-- App bar -->
 <header class="sticky top-0 z-30 bg-white border-b border-slate-200">
-  <div class="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
+  <div class="max-w-5xl 2xl:max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
     <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0"><i data-lucide="file-text" class="w-5 h-5"></i></div>
     <span class="font-bold text-slate-900 truncate">ICSOP 文件瀏覽</span>
     <div class="ml-auto flex items-center gap-3">
@@ -103,7 +114,7 @@
   </div>
 </header>
 
-<main class="max-w-5xl mx-auto px-4 py-5">
+<main class="max-w-5xl 2xl:max-w-7xl mx-auto px-4 py-5">
 
   <!-- 🔵 `AC-B12`：**恰兩個**瀏覽模式之切換控制項，可見文字與無障礙名稱逐字為
        `業務/功能類別樹狀圖` 與 `文件清單`（半形斜線、前後無空白；順序＝樹狀圖在前）；
@@ -151,7 +162,7 @@
        制定公司／制定部門／制定室別／當責室長／狀態／循環別；六項之 aria-label ＝ 該逐字字串。
        🔴 已移除「使用部門」篩選器與其「所有…」預留選項文字（AC-D1 之雙重斷言）。 -->
   <div class="hidden lg:block mb-4">
-    <div id="filterBar" class="grid grid-cols-3 gap-3"></div>
+    <div id="filterBar" class="grid grid-cols-3 2xl:grid-cols-6 gap-3"></div>
     <div class="flex items-center gap-3 mt-2.5">
       <button id="clearBtnD" onclick="clearFilters()" class="hidden px-3 py-2 rounded-lg text-base text-primary-600 hover:bg-primary-50">清除篩選</button>
       <span class="ml-auto text-base text-slate-500" id="countText"></span>
@@ -454,7 +465,7 @@
         </div>
         <i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 shrink-0"></i>
       </div>
-      <dl class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 text-sm">
+      <dl class="grid grid-cols-2 2xl:grid-cols-3 gap-x-4 gap-y-1.5 mt-3 text-sm">
         <div><dt class="text-slate-400 inline">制定公司：</dt><dd class="text-slate-600 inline">${esc(d.company)}</dd></div>
         <div><dt class="text-slate-400 inline">制定部門：</dt><dd class="text-slate-600 inline">${esc(d.dept)}</dd></div>
         <div><dt class="text-slate-400 inline">制定室別：</dt><dd class="text-slate-600 inline">${d.section?esc(d.section):'<span class="text-slate-300" title="此部之下無處/室，制定組織掛於部層">—</span>'}</dd></div>
