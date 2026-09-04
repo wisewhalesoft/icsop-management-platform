@@ -174,7 +174,7 @@ export function BusinessCategoryNodeDrawer({
           : await getBusinessCategoryNodeDrawer(businessCategoryId, nodeId);
         if (!alive) return;
         const fresh = mergeDrawerDocs(d.mounted ?? [], d.candidates ?? []);
-        const key = `${businessCategoryId} ${nodeId}`;
+        const key = `${businessCategoryId}\0${nodeId}`;
         if (loadedKey.current !== key) {
           loadedKey.current = key;
           const mountedIds = new Set((d.mounted ?? []).map((m) => m.id));
