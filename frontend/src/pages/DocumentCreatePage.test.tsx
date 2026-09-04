@@ -591,3 +591,88 @@ describe('DocumentCreatePage — STEP4 附錄選取與排序（F039，移植 pro
     expect(endpoints.replaceDocumentAppendices).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * 🔴 2026-09-04（走 A）：制定部門／制定室別之下拉 label 改用 `orgUnitDisplayName`。
+ *
+ * 本檔既有的 `ORG` fixture 每筆 `name` 都已是乾淨值、`descFull` 皆為 null、SECTION 名亦無斜線
+ * ⇒ 在該語料下「label: u.name」與「label: orgUnitDisplayName(u)」輸出完全相同，既有 12 條
+ * STEP3 測試無法分辨兩種實作（真人 2026-09-04 於實機回報後才發現）。故本 describe **另備一份
+ * 取自 dev SOP 庫實測形態的髒語料**，三種可能實作各給不同答案。
+ */
+const DIRTY_ORG: OrgUnitRecord[] = [
+  org({ orgCode: '00000', parentCode: null, tier: 'ROOT', name: '和潤本部', descFull: '和潤本部' }),
+  // AS/JA000：name 為簡稱、descFull 為全名
+  org({ orgCode: 'JA000', parentCode: '00000', tier: 'DEPARTMENT', name: '營管部', descFull: '營運管理部' }),
+  // AS/AI000：name 只是缺了尾字
+  org({ orgCode: 'AI000', parentCode: '00000', tier: 'DEPARTMENT', name: '企劃', descFull: '企劃部' }),
+  // AS/JAC00：DESC_CHI 為「部段/室段」複合字串，DESC_FULL 為無分隔串接全名
+  org({ orgCode: 'JAC00', parentCode: 'JA000', tier: 'SECTION', name: '營管部/審查室', descFull: '營運管理部審查室' }),
+  org({ orgCode: 'JAB00', parentCode: 'JA000', tier: 'SECTION', name: '營管部/營發室', descFull: '營運管理部營運發展室' }),
+];
+
+describe('DocumentCreatePage — 制定部門／制定室別之顯示名（上游 DESC_CHI 命名不一致）', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(endpoints.getLifecycles).mockResolvedValue(LCS);
+    vi.mocked(endpoints.getDocuments).mockResolvedValue(page([]));
+    vi.mocked(endpoints.getOrgUnits).mockResolvedValue(DIRTY_ORG);
+    vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
+    vi.mocked(endpoints.searchPersons).mockResolvedValue([]);
+    vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([]);
+    vi.mocked(endpoints.getAppendixPool).mockResolvedValue([]);
+    mockAuth('ICSOPAdmin');
+  });
+
+  async function openDeptList(): Promise<void> {
+    await selectLifecycle('lc1');
+    await userEvent.click(screen.getByLabelText(/制定公司/));
+    await userEvent.click(await screen.findByRole('option', { name: '和潤企業股份有限公司' }));
+    await userEvent.click(screen.getByLabelText(/制定部門/));
+  }
+
+  it('制定部門選項顯示 DESC_FULL 全名，不顯示 DESC_CHI 簡稱', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await openDeptList();
+    expect(await screen.findByRole('option', { name: '營運管理部' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '企劃部' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '營管部' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '企劃' })).not.toBeInTheDocument();
+  });
+
+  it('制定室別選項顯示室之全名（不含部段前綴、亦非 DESC_FULL 串接全名、亦非末段簡稱）', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await openDeptList();
+    await userEvent.click(await screen.findByRole('option', { name: '營運管理部' }));
+    await userEvent.click(screen.getByLabelText(/制定室別/));
+
+    expect(await screen.findByRole('option', { name: '審查室' })).toBeInTheDocument();
+    // 🔴 A+：JAB00 之 DESC_FULL 尾段為「營運發展室」，DESC_CHI 末段則是簡稱「營發室」。
+    expect(screen.getByRole('option', { name: '營運發展室' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '營發室' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '營管部/審查室' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '營運管理部審查室' })).not.toBeInTheDocument();
+  });
+
+  it('送出之值仍為 orgCode（本次只改 label，不動送出契約）', async () => {
+    vi.mocked(endpoints.createDocument).mockResolvedValue({} as never);
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await openDeptList();
+    await userEvent.click(await screen.findByRole('option', { name: '營運管理部' }));
+    await userEvent.click(screen.getByLabelText(/制定室別/));
+    await userEvent.click(await screen.findByRole('option', { name: '審查室' }));
+
+    await userEvent.type(screen.getByLabelText(/ICSOP 文件編號/), '101-9-01');
+    await userEvent.type(screen.getByLabelText(/文件名稱/), '審查作業');
+    await userEvent.click(screen.getByRole('button', { name: '建立' }));
+
+    await waitFor(() =>
+      expect(endpoints.createDocument).toHaveBeenCalledWith(
+        expect.objectContaining({ draftingDeptId: 'JA000', draftingSectionId: 'JAC00' }),
+      ),
+    );
+  });
+});

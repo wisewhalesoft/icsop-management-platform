@@ -51,6 +51,10 @@ describe('NameResolutionService port 契約（多公司 companyCode 必要參數
     expect(NameResolutionService.prototype.resolveOrgUnitName.length).toBe(2);
   });
 
+  it('resolveOrgUnitDisplayName 之 arity 為 2（companyCode, orgCode）', () => {
+    expect(NameResolutionService.prototype.resolveOrgUnitDisplayName.length).toBe(2);
+  });
+
   it('resolvePersonNames 之 arity 為 2（companyCode, employeeNos）', () => {
     expect(NameResolutionService.prototype.resolvePersonNames.length).toBe(2);
   });

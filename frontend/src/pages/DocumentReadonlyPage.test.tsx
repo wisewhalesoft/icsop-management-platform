@@ -582,3 +582,55 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
     });
   });
 });
+
+/**
+ * 🔴 2026-09-04（走 A）：`制定部門`／`制定室別` 改顯示 `orgUnitDisplayName`。
+ *
+ * 本檔既有 `ORG` fixture（`企劃部`／`車輛行銷室`、`descFull` 全為 null）在新舊兩種實作下輸出
+ * 完全相同 ⇒ 既有斷言無鑑別力。此處另備一份 dev SOP 庫實測形態之髒語料。
+ *
+ * 🔒 **同時鎖住「哪些欄位刻意不變」**：OJT 唯讀衍生區塊之已完成單位仍走 `ORG_UNIT.name` 原
+ * 字串（與後端 `resolveOrgUnitName` 一致）。本次只換制定組織兩欄；若日後有人把兩者「順手
+ * 統一」，本案會翻紅，逼他先確認後端 `public-document-detail` 之 OJT 欄是否一併改。
+ */
+describe('DocumentReadonlyPage — 制定部門／制定室別之顯示名（上游 DESC_CHI 命名不一致）', () => {
+  const DIRTY_ORG: OrgUnitRecord[] = [
+    org({ orgCode: '00000', parentCode: null, tier: 'ROOT', name: '和潤本部', descFull: '和潤本部' }),
+    org({ orgCode: 'JA000', parentCode: '00000', tier: 'DEPARTMENT', name: '營管部', descFull: '營運管理部' }),
+    org({ orgCode: 'JAC00', parentCode: 'JA000', tier: 'SECTION', name: '營管部/審查室', descFull: '營運管理部審查室' }),
+  ];
+  const DIRTY_VIEW: DocumentView = {
+    ...VIEW,
+    draftingDeptId: 'JA000',
+    draftingSectionId: 'JAC00',
+    usingDeptIds: ['JAC00'],
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    setupMocks();
+    vi.mocked(endpoints.getDocument).mockResolvedValue(DIRTY_VIEW);
+    vi.mocked(endpoints.getOrgUnits).mockResolvedValue(DIRTY_ORG);
+    vi.stubGlobal('open', openMock);
+    mockAuth('Supervisor');
+  });
+
+  it('制定部門顯示 DESC_FULL 全名、制定室別顯示 DESC_CHI 末段', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+    expect(screen.getByText('營運管理部')).toBeInTheDocument();
+    expect(screen.getByText('審查室')).toBeInTheDocument();
+    // 三種可能實作互斥：DESC_CHI 原字串與 DESC_FULL 串接全名皆不得出現於制定兩欄。
+    expect(screen.queryByText('營管部')).not.toBeInTheDocument();
+    expect(screen.queryByText('營運管理部審查室')).not.toBeInTheDocument();
+  });
+
+  it('🔒 OJT 已完成單位刻意維持 ORG_UNIT.name 原字串（本次不改，與後端該欄一致）', async () => {
+    mockOjtCompletion({ completedOrgCodes: ['JAC00'] });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+    const items = document.querySelectorAll('[data-ojt-completed-org]');
+    expect(items).toHaveLength(1);
+    expect(items[0].textContent).toContain('營管部/審查室');
+  });
+});

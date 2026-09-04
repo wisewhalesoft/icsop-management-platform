@@ -16,6 +16,7 @@ import {
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
+import { orgUnitDisplayName } from '../domain/org-path';
 import { Icon } from '../components/Icon';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT, isWatermarkSupportedFormat } from '../domain/watermark-note';
 import {
@@ -164,7 +165,28 @@ export function DocumentReadonlyPage(): JSX.Element {
     for (const u of orgUnits) m.set(u.orgCode, u);
     return m;
   }, [orgUnits]);
+  /** 單位原字串（`ORG_UNIT.name` ← DESC_CHI）。F042 已完成 OJT 單位清單用，與後端該欄一致。 */
   const orgName = useCallback((code: string | null) => (code ? orgByCode.get(code)?.name ?? code : '—'), [orgByCode]);
+  /**
+   * `orgUnitDisplayName` 之部層查表（處/室需以部層 `descFull` 為前綴自 `descFull` 切出室全名）。
+   * 🔴 該參數為**必填**——設成選填的話，忘記傳的呼叫端會靜默退化回末段簡稱且測試照樣全綠。
+   */
+  const lookupOrg = useCallback(
+    (code: string) => orgByCode.get(code) ?? null,
+    [orgByCode],
+  );
+  /**
+   * 制定部門／制定室別之顯示名（部＝descFull 全名、處/室＝DESC_CHI 末段）。
+   * 🔴 與後端 `resolveOrgUnitDisplayName` 同一規則——本頁與後台清單頁必須顯示同一個字串。
+   */
+  const orgDisplayName = useCallback(
+    (code: string | null) => {
+      if (!code) return '—';
+      const u = orgByCode.get(code);
+      return u ? orgUnitDisplayName(u, lookupOrg) : code;
+    },
+    [orgByCode, lookupOrg],
+  );
   const orgPath = useCallback(
     (code: string): string => {
       const parts: string[] = [];
@@ -340,8 +362,8 @@ export function DocumentReadonlyPage(): JSX.Element {
     { label: '系統 UUID', note: '系統產生', value: <span className="mono text-slate-500">{view.id}</span> },
     { label: '文件狀態', value: <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${sm.cls}`}>{sm.label}</span> },
     { label: '制定公司', value: view.companyName ?? view.companyCode },
-    { label: '制定部門', value: orgName(view.draftingDeptId) },
-    { label: '制定室別', value: orgName(view.draftingSectionId) },
+    { label: '制定部門', value: orgDisplayName(view.draftingDeptId) },
+    { label: '制定室別', value: orgDisplayName(view.draftingSectionId) },
     { label: '程序書編號', value: <span className="mono">{view.documentNumber}</span> },
     { label: '程序書書名', value: view.documentName },
     { label: '版次', value: <span className="mono">{view.edition ?? '—'}</span> },

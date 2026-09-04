@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildOrgPath } from './org-path';
+import { buildOrgPath, departmentCodeOf, orgUnitDisplayName } from './org-path';
 import type { OrgUnitRecord } from '../api/types';
 
 /**
@@ -70,5 +70,78 @@ describe('buildOrgPath（部層 descFull ／ DESC_CHI 末段）', () => {
   it('TS-PS-PATH-008 DESC_CHI 無斜線 → 取該段本身（不誤判為空）', () => {
     const units = [unit({ orgCode: 'JAC00', tier: 'SECTION', name: '審查室' }), AS_UNITS[1]];
     expect(buildOrgPath(units, 'JAC00')).toBe('營運管理部 / 審查室');
+  });
+});
+
+/**
+ * `orgUnitDisplayName()`＝`制定部門`／`制定室別` 兩欄之顯示名（2026-09-04 走 A+）。
+ * ⚠ 與 `backend/src/org-directory/org-path.spec.ts` 為同一組語料之兩份斷言：後端負責清單／
+ * 詳情／CSV，前端負責下拉 label 與唯讀頁；兩側若分岔，同一筆文件在下拉與清單會顯示不同字串。
+ * 語料取自 dev SOP 庫 2026-09-04 實測列。
+ */
+describe('orgUnitDisplayName（制定部門／制定室別 顯示名）', () => {
+  /** 追加 dev 庫實測列：末段簡稱 ≠ 全名（作服/文管室 → 文案管理室），A 與 A+ 於此分岔。 */
+  const UNITS: OrgUnitRecord[] = [
+    ...AS_UNITS,
+    unit({ orgCode: 'CF000', tier: 'DEPARTMENT', name: '作業服務部', descFull: '作業服務部' }),
+    unit({
+      orgCode: 'CFA00',
+      tier: 'SECTION',
+      parentCode: 'CF000',
+      name: '作服/文管室',
+      descFull: '作業服務部文案管理室',
+    }),
+    unit({ orgCode: 'WAA00', tier: 'SECTION', name: '職安室', descFull: '職業安全衛生室' }),
+  ];
+  const byCode = new Map(UNITS.map((u) => [u.orgCode, u]));
+  const lookup = (code: string) => byCode.get(code) ?? null;
+  const display = (orgCode: string) => orgUnitDisplayName(byCode.get(orgCode)!, lookup);
+
+  it('departmentCodeOf 取 LEFT(CODE,2)+"000"', () => {
+    expect(departmentCodeOf('JAC00')).toBe('JA000');
+    expect(departmentCodeOf('JCHA0')).toBe('JC000');
+  });
+
+  it('部層 → descFull 全名（營管部 → 營運管理部）', () => {
+    expect(display('JA000')).toBe('營運管理部');
+    expect(display('JC000')).toBe('供應商金融部');
+  });
+
+  it('處室 → 自 descFull 切除部層前綴（既非 name 原字串、亦非 descFull 串接全名）', () => {
+    const jac = byCode.get('JAC00')!;
+    expect(display('JAC00')).toBe('審查室');
+    expect(display('JAC00')).not.toBe(jac.name);
+    expect(display('JAC00')).not.toBe(jac.descFull);
+    expect(display('JCH00')).toBe('北區綜合處');
+  });
+
+  it('🔴 得室之全名而非 DESC_CHI 末段簡稱（作服/文管室 → 文案管理室）', () => {
+    expect(display('CFA00')).toBe('文案管理室');
+    expect(display('CFA00')).not.toBe('文管室'); // ← 走 A（末段）之答案，本條即 A→A+ 之分界
+  });
+
+  it('部層列查無（WA000）→ 退回 DESC_CHI 末段', () => {
+    expect(display('WAA00')).toBe('職安室');
+  });
+
+  it('課層 descFull 為 null → 退回最末段（略過中間處層）', () => {
+    expect(display('JCHA0')).toBe('醫療一課');
+  });
+
+  it('部層 descFull 為 null → 退回 name（不留空）', () => {
+    expect(
+      orgUnitDisplayName(
+        unit({ orgCode: 'AN000', tier: 'DEPARTMENT', name: '管理', descFull: null }),
+        lookup,
+      ),
+    ).toBe('管理');
+  });
+
+  it('🔒 複合字串形態之處/室不得原樣輸出 DESC_CHI（退化即翻紅）', () => {
+    const compound = UNITS.filter(
+      (u) => (u.tier === 'SECTION' || u.tier === 'SUBSECTION') && u.name.includes('/'),
+    );
+    expect(compound.length).toBeGreaterThan(0);
+    for (const u of compound) expect(orgUnitDisplayName(u, lookup)).not.toBe(u.name);
   });
 });

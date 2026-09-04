@@ -28,6 +28,12 @@ export interface OrgNameResolver {
    * 🔴 B 階段（多公司）：`companyCode` 為**必要**第一參數——`orgCode` 各公司獨立編碼，
    * 字串可能相同卻是不同單位。
    *
+   * 🔴 2026-09-04：本 port 之組織名方法由 `resolveOrgUnitName` 換為
+   * `resolveOrgUnitDisplayName`——前台清單卡與六項篩選選項中的「制定部門／制定室別」皆為
+   * 制定組織欄，一律吃顯示名（部＝DESC_FULL 全名、處/室＝DESC_CHI 末段）。本服務不再有任何
+   * 需要原字串之處，故**不保留** `resolveOrgUnitName` 於此 port（留著等於留一條可被誤用回
+   * 舊格式的路）。
+   *
    * 📝 已作廢（⚠ 不得復原）：OLD> `resolveOrgUnitName(orgCode: string)`／
    * `resolvePersonNames(employeeNos: string[])`。本 port 與實作
    * （`NameResolutionService`，`fcce0a2` 已改為兩參數）**長期不同步**，而
@@ -35,7 +41,7 @@ export interface OrgNameResolver {
    * 第二參數恆為 `undefined`，前台清單與篩選選項一律 500（2026-08-26 真人回報）。
    * 回歸鎖＝`name-resolver-port.contract.spec.ts` 之編譯期可指派性斷言。
    */
-  resolveOrgUnitName(companyCode: string, orgCode: string): Promise<string | null>;
+  resolveOrgUnitDisplayName(companyCode: string, orgCode: string): Promise<string | null>;
   /** 批次 employeeNo → 姓名。未命中／無姓名之鍵**缺席**於 Map（呼叫端 fallback 為員編）。 */
   resolvePersonNames(
     companyCode: string,
@@ -248,7 +254,10 @@ export class PublicDocumentsService {
   ): Promise<Map<string, string | null>> {
     const map = new Map<string, string | null>();
     for (const { companyCode, code } of pairs) {
-      map.set(pairKey(companyCode, code), await this.names.resolveOrgUnitName(companyCode, code));
+      map.set(
+        pairKey(companyCode, code),
+        await this.names.resolveOrgUnitDisplayName(companyCode, code),
+      );
     }
     return map;
   }

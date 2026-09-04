@@ -85,7 +85,7 @@ class FakeNameResolver {
   personNames = new Map<string, string>();
   orgCalls = 0;
   personCalls = 0;
-  resolveOrgUnitName(_companyCode: string, code: string): Promise<string | null> {
+  resolveOrgUnitDisplayName(_companyCode: string, code: string): Promise<string | null> {
     this.orgCalls += 1;
     return Promise.resolve(this.orgNames.get(code) ?? null);
   }
@@ -552,7 +552,7 @@ describe('F017 AC-X15／AC-X16 ⑤：讀取路徑＝load-all，store 介面一�
         attachmentsFindManyByType: h.attachments.findManyByTypeCalls,
         linksFindBySources: h.linkStore.findBySourcesCalls,
         ojtReader: h.ojt.calls,
-        resolveOrgUnitName: h.names.orgCalls,
+        resolveOrgUnitDisplayName: h.names.orgCalls,
         resolvePersonNames: h.names.personCalls,
         businessCategoryDocs: h.businessCategoryDocs.calls,
       };

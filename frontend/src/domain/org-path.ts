@@ -44,6 +44,46 @@ export function deriveSectionName(tier: string, descChi: string | null | undefin
 }
 
 /**
+ * 單一組織單位之**顯示名**（`制定部門`／`制定室別` 兩欄專用；2026-09-04 定案，走 A+）。
+ *
+ * ⚠ 與 `backend/src/org-directory/org-path.ts#orgUnitDisplayName` 為**同一演算法之兩份實作**
+ * （跨 package 無法共用原始碼）：後端負責清單／詳情／CSV 之欄位值，前端負責新增／編輯頁之
+ * 下拉選項 label 與唯讀頁欄位值。任一側調整規則，另一側必須同步——否則同一個「制定室別」
+ * 在下拉裡是 `文案管理室`、存檔後清單卻顯示 `作服/文管室`。
+ *
+ * 規則：
+ *  - 部層以上（ROOT／DIVISION／DEPARTMENT）→ `descFull` 全名；無值才退回 `name`。
+ *  - 處/室、課（SECTION／SUBSECTION）→ 自身 `descFull` **切除部層 `descFull` 前綴**所得之尾段
+ *    （`營運管理部審查室` − `營運管理部` ＝ `審查室`）；切不出來才退回 `DESC_CHI` 末段。
+ *    🔴 不得改以 `/` split `descFull`：`AS/BAJ00` 之 `descFull` 本身帶斜線
+ *    （`車輛分期營業一部/台北營業三處`），切前綴後再去掉前導 `/` 才是正解。
+ *
+ * @param lookupDepartment 依 `orgCode` 取單位之查表函式；**必填**（選填會讓忘記傳的呼叫端靜默
+ *   退化回末段簡稱，且測試照樣全綠）。
+ */
+export function orgUnitDisplayName(
+  unit: { orgCode: string; tier: string; name: string; descFull: string | null },
+  lookupDepartment: (orgCode: string) => { descFull: string | null } | null | undefined,
+): string {
+  if (unit.tier === 'SECTION' || unit.tier === 'SUBSECTION') {
+    const deptFull = lookupDepartment(departmentCodeOf(unit.orgCode))?.descFull ?? null;
+    if (present(unit.descFull) && present(deptFull) && unit.descFull.startsWith(deptFull)) {
+      const tail = unit.descFull.slice(deptFull.length).replace(/^[/\s]+/, '').trim();
+      if (tail !== '') return tail;
+    }
+    const segment = deriveSectionName(unit.tier, unit.name);
+    if (present(segment)) return segment;
+  }
+  if (present(unit.descFull)) return unit.descFull.trim();
+  return present(unit.name) ? unit.name.trim() : '';
+}
+
+/** 部層代碼（`LEFT(CODE,2)+'000'`）。前綴切除只需部層，不走 `departmentCodeCandidates` 之 fallback 鏈。 */
+export function departmentCodeOf(orgCode: string): string {
+  return orgCode.slice(0, 2).padEnd(5, '0');
+}
+
+/**
  * 組出使用者部門路徑字串。
  *  - 無 orgCode → `null`（呼叫端不渲染部門欄）。
  *  - 組織清單尚未載入／API 失敗回退空陣列 → fallback 為 `orgCode` 本身（不顯示 undefined、不拋錯）。

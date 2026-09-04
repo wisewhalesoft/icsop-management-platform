@@ -24,6 +24,7 @@ import {
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { cycleCodeOf } from '../domain/cycle-codes';
+import { orgUnitDisplayName } from '../domain/org-path';
 import { usageFormOptionLabel } from '../domain/usage-form-label';
 import {
   LifecycleIdentity,
@@ -311,7 +312,25 @@ export function DocumentEditPage(): JSX.Element {
     },
     [orgByCode],
   );
-  const orgName = useCallback((code: string) => orgByCode.get(code)?.name ?? code, [orgByCode]);
+  /**
+   * `orgUnitDisplayName` 之部層查表（處/室需以部層 `descFull` 為前綴自 `descFull` 切出室全名）。
+   * 🔴 該參數為**必填**——設成選填的話，忘記傳的呼叫端會靜默退化回末段簡稱且測試照樣全綠。
+   */
+  const lookupOrg = useCallback(
+    (code: string) => orgByCode.get(code) ?? null,
+    [orgByCode],
+  );
+  /**
+   * 制定部門／制定室別之「目前值」欄。🔴 必須與同列下拉之 label 用同一套算法——兩邊分岔會讓
+   * 「目前值 / 新值」對照在**沒有改動**時看起來像改過（左 `營管部/審查室`、右 `審查室`）。
+   */
+  const orgName = useCallback(
+    (code: string) => {
+      const u = orgByCode.get(code);
+      return u ? orgUnitDisplayName(u, lookupOrg) : code;
+    },
+    [orgByCode, lookupOrg],
+  );
   // 🔴 B 階段：來源為公司主檔，非 org-unit 之 ROOT 列（四家 ROOT 代碼皆為 `00000`、AE 無 ROOT 列）。
   /** 制定公司下拉之選項：value＝公司代碼、label＝公司主檔全稱（與建立頁逐字相同）。 */
   const companyOptions = useMemo<ComboOption[]>(
@@ -332,16 +351,20 @@ export function DocumentEditPage(): JSX.Element {
     },
     [companies, view?.companyCode, view?.companyName],
   );
+  // 🔴 2026-09-04：見 `DocumentCreatePage` 同段註記（部＝descFull、處/室＝DESC_CHI 末段）。
   const deptOptions = useMemo<ComboOption[]>(
-    () => orgUnits.filter((u) => u.tier === 'DEPARTMENT').map((u) => ({ value: u.orgCode, label: u.name })),
-    [orgUnits],
+    () =>
+      orgUnits
+        .filter((u) => u.tier === 'DEPARTMENT')
+        .map((u) => ({ value: u.orgCode, label: orgUnitDisplayName(u, lookupOrg) })),
+    [orgUnits, lookupOrg],
   );
   const sectionOptions = useMemo<ComboOption[]>(
     () =>
       orgUnits
         .filter((u) => u.tier === 'SECTION' && u.parentCode === draft?.draftingDeptId)
-        .map((u) => ({ value: u.orgCode, label: u.name })),
-    [orgUnits, draft?.draftingDeptId],
+        .map((u) => ({ value: u.orgCode, label: orgUnitDisplayName(u, lookupOrg) })),
+    [orgUnits, draft?.draftingDeptId, lookupOrg],
   );
   const linkOptions = useMemo<ComboOption[]>(
     () => existing.filter((d) => d.id !== id).map((d) => ({ value: d.id, label: `${d.documentNumber} ${d.documentName}` })),

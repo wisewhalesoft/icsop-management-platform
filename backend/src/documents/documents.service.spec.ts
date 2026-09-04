@@ -67,7 +67,7 @@ class FakeNameResolver {
   personNames = new Map<string, string>();
   // 🔴 B 階段（多公司）：兩方法皆加 companyCode 首參（見 NameResolutionService）。
   // 替身之資料集屬單一公司，故僅需正確接參數順序；跨公司隔離另由 name-resolution.service.spec 驗證。
-  resolveOrgUnitName(_companyCode: string, code: string): Promise<string | null> {
+  resolveOrgUnitDisplayName(_companyCode: string, code: string): Promise<string | null> {
     return Promise.resolve(this.orgNames.get(code) ?? null);
   }
   resolvePersonNames(

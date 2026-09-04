@@ -67,6 +67,7 @@ function fakeNames(
   person: Record<string, string> = {},
 ): DetailNameResolver {
   return {
+    resolveOrgUnitDisplayName: (_companyCode, code) => Promise.resolve(org[code] ?? null),
     resolveOrgUnitName: (_companyCode, code) => Promise.resolve(org[code] ?? null),
     resolvePersonNames: (_companyCode, empNos) => {
       const m = new Map<string, string>();
@@ -150,6 +151,7 @@ describe('PublicDocumentDetailService（G-PUB-020）', () => {
     const svc = new PublicDocumentDetailService(
       new FakeStore(detail({ primaryChiefId: '20053', secondaryChiefIds: ['20541', '20999'] })),
       {
+        resolveOrgUnitDisplayName: () => Promise.resolve(null),
         resolveOrgUnitName: () => Promise.resolve(null),
         resolvePersonNames: (_companyCode: string, empNos: string[]) => {
           seen.push([...empNos]);
@@ -197,6 +199,12 @@ describe('F041 AC-20～AC-24：業務子分類詳情直連可見性檢查', () =
   function spyNames(): { resolver: DetailNameResolver; calls: { org: number; person: number } } {
     const calls = { org: 0, person: 0 };
     const resolver: DetailNameResolver = {
+      // 🔴 兩個組織名方法**都**計入 `calls.org`：AC-20 要斷言的是「拒絕時未做任何名稱解析」，
+      // 若只數其中一支，改用另一支的實作會讓這條斷言恆真（第七種假綠形狀）。
+      resolveOrgUnitDisplayName: (_companyCode: string, code: string) => {
+        calls.org += 1;
+        return Promise.resolve(code);
+      },
       resolveOrgUnitName: (_companyCode: string, code: string) => {
         calls.org += 1;
         return Promise.resolve(code);

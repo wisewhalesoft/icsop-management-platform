@@ -290,7 +290,7 @@ const resolverOf = (
   map: Record<string, string>,
   persons: Record<string, string> = {},
 ): OrgNameResolver => ({
-  resolveOrgUnitName: (companyCode, code) => {
+  resolveOrgUnitDisplayName: (companyCode, code) => {
     assertCompanyCode(companyCode);
     return Promise.resolve(map[code] ?? null);
   },

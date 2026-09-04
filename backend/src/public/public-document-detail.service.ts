@@ -22,6 +22,16 @@ import { formatOfFileName, supportsWatermark } from './watermark';
  * 本介面刻意維持「結構相容」，故上游簽章改變時此處必須跟著改，否則注入時型別不符。
  */
 export interface DetailNameResolver {
+  /**
+   * 🔴 2026-09-04：**制定部門／制定室別**兩欄改吃本方法（部＝DESC_FULL 全名、處/室＝DESC_CHI
+   * 末段）。同檔之 `resolveOrgUnitName`（原字串）**仍在使用**——F042 已完成 OJT 之使用單位清單
+   * 走該方法，兩者不可互換。
+   */
+  resolveOrgUnitDisplayName(
+    companyCode: string,
+    orgCode: string,
+  ): Promise<string | null>;
+  /** 單位原字串（`ORG_UNIT.name` ← DESC_CHI）。F042 已完成 OJT 單位清單用。 */
   resolveOrgUnitName(
     companyCode: string,
     orgCode: string,
@@ -141,7 +151,7 @@ export class PublicDocumentDetailService {
     const orgNames = new Map<string, string | null>();
     // 🔴 B 階段（多公司）：以文件自身之 companyCode 解析部門名稱，不得再以裸 orgCode 查。
     for (const c of orgCodes)
-      orgNames.set(c, await this.names.resolveOrgUnitName(raw.companyCode, c));
+      orgNames.set(c, await this.names.resolveOrgUnitDisplayName(raw.companyCode, c));
     const orgName = (code: string | null): string | null =>
       code ? (orgNames.get(code) ?? null) : null;
 

@@ -18,6 +18,7 @@ import {
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { cycleCodeOf } from '../domain/cycle-codes';
+import { orgUnitDisplayName } from '../domain/org-path';
 import { usageFormOptionLabel } from '../domain/usage-form-label';
 import {
   LifecycleIdentity,
@@ -239,21 +240,35 @@ export function DocumentCreatePage(): JSX.Element {
     },
     [orgByCode],
   );
+  /**
+   * `orgUnitDisplayName` 之部層查表（處/室需以部層 `descFull` 為前綴自 `descFull` 切出室全名）。
+   * 🔴 該參數為**必填**——設成選填的話，忘記傳的呼叫端會靜默退化回末段簡稱且測試照樣全綠。
+   */
+  const lookupOrg = useCallback(
+    (code: string) => orgByCode.get(code) ?? null,
+    [orgByCode],
+  );
   // 🔴 B 階段：來源為公司主檔（companyCode↔companyName），非 org-unit 之 ROOT 列。
   const companyOptions = useMemo<ComboOption[]>(
     () => companies.map((c) => ({ value: c.companyCode, label: c.companyName })),
     [companies],
   );
+  // 🔴 2026-09-04：label 改用 `orgUnitDisplayName`（部＝descFull 全名、處/室＝DESC_CHI 末段）。
+  // OLD> `label: u.name`＝上游 DESC_CHI 原字串，使下拉同時出現 `營管部`／`企劃`／`營管部/審查室`
+  // 三種形態，且與存檔後清單所見不一致（清單走後端 `resolveOrgUnitDisplayName`）。
   const deptOptions = useMemo<ComboOption[]>(
-    () => orgUnits.filter((u) => u.tier === 'DEPARTMENT').map((u) => ({ value: u.orgCode, label: u.name })),
-    [orgUnits],
+    () =>
+      orgUnits
+        .filter((u) => u.tier === 'DEPARTMENT')
+        .map((u) => ({ value: u.orgCode, label: orgUnitDisplayName(u, lookupOrg) })),
+    [orgUnits, lookupOrg],
   );
   const sectionOptions = useMemo<ComboOption[]>(
     () =>
       orgUnits
         .filter((u) => u.tier === 'SECTION' && u.parentCode === draftingDeptId)
-        .map((u) => ({ value: u.orgCode, label: u.name })),
-    [orgUnits, draftingDeptId],
+        .map((u) => ({ value: u.orgCode, label: orgUnitDisplayName(u, lookupOrg) })),
+    [orgUnits, draftingDeptId, lookupOrg],
   );
   const usingDeptOptions = useMemo<ComboOption[]>(
     () => orgUnits.map((u) => ({ value: u.orgCode, label: orgPath(u) })),

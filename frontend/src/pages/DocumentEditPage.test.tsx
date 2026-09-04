@@ -823,3 +823,62 @@ describe('DocumentEditPage — F039 附錄關聯與排序（移植 prototype 15�
     expect(names).toEqual(['作業流程對照表.xlsx', '名詞定義說明.pdf', '共用名詞附錄.xlsx']);
   });
 });
+
+/**
+ * 🔴 2026-09-04（走 A）：制定部門／制定室別之下拉 label 與「目前值」欄改用 `orgUnitDisplayName`。
+ *
+ * 本檔既有 `ORG`（`企劃部`／`車輛行銷室`、`descFull` 全為 null）在新舊實作下輸出相同 ⇒ 無鑑別力，
+ * 故另備 dev SOP 庫實測形態之髒語料。
+ *
+ * 🔒 **同時鎖住「目前值 / 新值」兩側必須同源**：本頁是全站唯一把兩個算法並排放在同一列的畫面，
+ * 若只改下拉 label 而漏掉 `currentText`，未改動之欄位會看起來像被改過（左 `營管部/審查室`、
+ * 右 `審查室`）——那是比顯示簡稱更糟的缺陷。
+ */
+describe('DocumentEditPage — 制定部門／制定室別之顯示名（上游 DESC_CHI 命名不一致）', () => {
+  const DIRTY_ORG: OrgUnitRecord[] = [
+    org({ orgCode: '00000', parentCode: null, tier: 'ROOT', name: '和潤本部', descFull: '和潤本部' }),
+    org({ orgCode: 'JA000', parentCode: '00000', tier: 'DEPARTMENT', name: '營管部', descFull: '營運管理部' }),
+    org({ orgCode: 'JAC00', parentCode: 'JA000', tier: 'SECTION', name: '營管部/審查室', descFull: '營運管理部審查室' }),
+    org({ orgCode: 'JAB00', parentCode: 'JA000', tier: 'SECTION', name: '營管部/營發室', descFull: '營運管理部營運發展室' }),
+  ];
+  const DIRTY_VIEW: DocumentView = {
+    ...VIEW,
+    draftingDeptId: 'JA000',
+    draftingSectionId: 'JAC00',
+    usingDeptIds: [],
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    setupMocks();
+    vi.mocked(endpoints.getDocument).mockResolvedValue(DIRTY_VIEW);
+    vi.mocked(endpoints.getOrgUnits).mockResolvedValue(DIRTY_ORG);
+    vi.stubGlobal('open', openMock);
+    mockAuth('ICSOPAdmin');
+  });
+
+  it('「目前值」欄顯示 DESC_FULL 全名／DESC_CHI 末段，不顯示原字串', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toHaveValue('車輛分期進件作業'));
+    expect(screen.getAllByText('營運管理部').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('審查室').length).toBeGreaterThan(0);
+    expect(screen.queryByText('營管部/審查室')).not.toBeInTheDocument();
+    expect(screen.queryByText('營運管理部審查室')).not.toBeInTheDocument();
+  });
+
+  it('🔒 「目前值」與同列下拉之 value 逐字相同（未改動時不得看起來像改過）', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toHaveValue('車輛分期進件作業'));
+    expect(screen.getByLabelText(/制定部門/)).toHaveValue('營運管理部');
+    expect(screen.getByLabelText(/制定室別/)).toHaveValue('審查室');
+  });
+
+  it('制定室別下拉選項列室之全名（非 DESC_CHI 原字串、非末段簡稱）', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toHaveValue('車輛分期進件作業'));
+    await userEvent.click(screen.getByLabelText(/制定室別/));
+    expect(await screen.findByRole('option', { name: '營運發展室' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '營發室' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '營管部/營發室' })).not.toBeInTheDocument();
+  });
+});

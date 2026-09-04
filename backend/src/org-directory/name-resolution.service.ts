@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PERSON_STORE, PersonStore } from './person-directory';
 import { ORG_UNIT_READ_STORE, OrgUnitReadStore } from './org-unit-read';
+import { departmentCodeOf, orgUnitDisplayName } from './org-path';
 
 /** 組織路徑分隔符（OQ-NAMERES-1 暫定 '/'；與契約 §8.2 浮水印「處/室」切分一致）。 */
 export const ORG_PATH_SEPARATOR = '/';
@@ -61,6 +62,34 @@ export class NameResolutionService {
   ): Promise<string | null> {
     const u = await this.orgUnits.findByOrgCode(companyCode, orgCode);
     return u ? u.name : null;
+  }
+
+  /**
+   * orgId → **`制定部門`／`制定室別` 欄之顯示名**（部＝`DESC_FULL` 全名；處/室＝`DESC_CHI` 末段）。
+   * 查無 → null。規則與理由見 `org-path.ts#orgUnitDisplayName`（2026-09-04 定案）。
+   *
+   * 🔴 **刻意與 `resolveOrgUnitName()` 併存、不合併**：後者回傳 `ORG_UNIT.name` 原字串，仍為
+   * 上傳者所屬部門（F018／F039 之 `uploadedByDept`）與 F042 已完成 OJT 單位清單之來源。那些欄
+   * 呈現的是「某人／某單位自己登記的名字」，與制定組織欄之取捨不同一件事；把兩者合流會讓
+   * 一次改動同時波及四個 feature 的顯示。
+   */
+  async resolveOrgUnitDisplayName(
+    companyCode: string,
+    orgCode: string,
+  ): Promise<string | null> {
+    const u = await this.orgUnits.findByOrgCode(companyCode, orgCode);
+    if (!u) return null;
+    /**
+     * 處/室、課才需要部層之 `descFull`（用於自 `DESC_FULL` 切除前綴）；部層以上只看自己，
+     * 不多打這一次查詢。查無部層列 → 傳回 `null`，純函式自動退回 `DESC_CHI` 末段
+     * （真庫實測：`AS/WAA00 職安室` 即無部層列，仍正確顯示）。
+     */
+    const deptCode = departmentCodeOf(orgCode);
+    const dept =
+      (u.tier === 'SECTION' || u.tier === 'SUBSECTION') && deptCode !== orgCode
+        ? await this.orgUnits.findByOrgCode(companyCode, deptCode)
+        : null;
+    return orgUnitDisplayName(u, (code) => (code === deptCode ? dept : null));
   }
 
   /**

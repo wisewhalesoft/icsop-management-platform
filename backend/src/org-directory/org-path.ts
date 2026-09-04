@@ -55,6 +55,72 @@ export function deriveSectionName(tier: string, descChi: string | null | undefin
 }
 
 /**
+ * 單一組織單位之**顯示名**（`制定部門`／`制定室別` 兩欄專用；2026-09-04 定案，走 A+）。
+ *
+ * ## 問題
+ * `ORG_UNIT.name` ← 上游 `VW_DEPT_SQL.DESC_CHI`，該欄**本身命名不一致**（2026-09-04 對 dev SOP
+ * 庫 139 筆 active 部/處室實查）：
+ *  - 部層 42 筆：20 筆等於全名（`作業服務部`）、9 筆缺尾字（`企劃` vs `企劃部`）、13 筆為簡稱
+ *    （`營管部` vs `營運管理部`、`車輛分期營一` vs `車輛分期營業一部`）。
+ *  - 處/室 97 筆：95 筆是「部段/室段」複合字串（`營管部/審查室`、`作服/文管室`），且部段之
+ *    簡寫程度自己也不一致；僅 2 筆無斜線。
+ * ⇒ 直接吐 `name` 會讓同一欄同時出現簡稱、缺字全名與複合路徑三種形態（真人 2026-09-04 回報）。
+ *
+ * ## 規則
+ *  - **部層以上**（ROOT／DIVISION／DEPARTMENT）→ `descFull` 全名；無值才退回 `name`。
+ *  - **處/室、課**（SECTION／SUBSECTION）→ 以**部層之 `descFull` 為前綴、自本單位 `descFull`
+ *    切除**所得之尾段（`營運管理部審查室` − `營運管理部` ＝ `審查室`）；切不出來才退回
+ *    `DESC_CHI` 末段。
+ *
+ * ## 為何處/室要繞這一圈（A → A+ 之升級理由，2026-09-04 真資料覆核後定案）
+ * 初版只取 `DESC_CHI` 末段（`作服/文管室` → `文管室`），確實去掉了重複的部段，但**末段本身仍是
+ * 簡稱**：制定部門欄變全名、制定室別欄全簡稱，兩欄粒度依舊不一致——使用者原本的抱怨只解了一半。
+ * 更嚴重的是**同名歧義**：`AS/CCC00`（信用審查部企金審查室）與 `AS/CDF00`（債權管理部企金催收室）
+ * 之 `DESC_CHI` 末段皆為 `企金室`，在同一欄**顯示完全相同**；改由 `DESC_FULL` 切前綴後分別為
+ * `企金審查室`／`企金催收室`，歧義消失。97 筆 active 處/室中 **95 筆**可如此切出，其餘 2 筆
+ * （`AE/NAA00` 之 `DESC_FULL` 與部名不同源、`AS/WAA00` 無部層列）自動退回末段、輸出不變。
+ *
+ * ⚠ **`DESC_FULL` 不可以 `/` 機械拆解**：處/室之 `DESC_FULL` 通常為**無分隔串接全名**
+ * （`營運管理部審查室`），但 `AS/BAJ00`／`AS/BAK00` 兩筆**帶了斜線**
+ * （`車輛分期營業一部/台北營業三處`）——故一律以「部層全名」為前綴整串切除，切完再去掉殘留之
+ * 前導 `/`，不得改成 split。
+ *
+ * @param lookupDepartment 依 `orgCode` 取回組織單位之查表函式。**刻意為必填**——設成選填的話，
+ *   忘記傳的呼叫端會靜默退化回「末段簡稱」而測試照樣全綠（本 repo 反覆踩過的假綠形狀）。
+ *   非 SECTION／SUBSECTION 之單位不會用到它，但仍需傳（呼叫端一律有現成的索引可用）。
+ *
+ * ⚠ 與 `buildOrgPath()`（帳號／浮水印之「部 / 處室」兩段式）及 `orgAncestorPathLabel()`
+ * （F018 之完整祖鏈）並列為三個**不同用途**之標籤函式，勿互相取代。
+ */
+export function orgUnitDisplayName(
+  unit: { orgCode: string; tier: string; name: string; descFull: string | null },
+  lookupDepartment: (orgCode: string) => { descFull: string | null } | null | undefined,
+): string {
+  if (unit.tier === 'SECTION' || unit.tier === 'SUBSECTION') {
+    const deptFull = lookupDepartment(departmentCodeOf(unit.orgCode))?.descFull ?? null;
+    if (present(unit.descFull) && present(deptFull) && unit.descFull.startsWith(deptFull)) {
+      // 切除部層全名前綴後，去掉可能殘留之前導分隔符（`車輛分期營業一部/台北營業三處` 之情形）。
+      const tail = unit.descFull.slice(deptFull.length).replace(/^[/\s]+/, '').trim();
+      if (tail !== '') return tail;
+    }
+    const segment = deriveSectionName(unit.tier, unit.name);
+    if (present(segment)) return segment;
+  }
+  if (present(unit.descFull)) return unit.descFull.trim();
+  return present(unit.name) ? unit.name.trim() : '';
+}
+
+/**
+ * 部層代碼（`LEFT(CODE,2)+'000'`，契約 §3.5）。
+ * 🔴 **刻意不走 `departmentCodeCandidates()` 的 fallback 鏈**：那條鏈（部層→本部層→Root）是為
+ * `buildOrgPath()` 的「部門」欄而設；用於前綴切除時，本部層／Root 之名稱**不可能**是某個處/室
+ * `DESC_FULL` 的前綴，多查兩次只是白費查詢。
+ */
+export function departmentCodeOf(orgCode: string): string {
+  return orgCode.slice(0, 2).padEnd(5, '0');
+}
+
+/**
  * 「部門」欄之部層代碼候選（依序 fallback）：部層（LEFT2+000）→ 本部層（LEFT1+0000）→ Root。
  * 契約 §8.2 之 fallback 鏈。
  */

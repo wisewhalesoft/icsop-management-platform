@@ -47,7 +47,7 @@ class FakeStore implements PublicDocumentStore {
  */
 function fakeResolver(map: Record<string, string> = {}): OrgNameResolver {
   return {
-    resolveOrgUnitName: (companyCode, code) => {
+    resolveOrgUnitDisplayName: (companyCode, code) => {
       if (typeof companyCode !== 'string' || companyCode.trim() === '') {
         throw new TypeError(
           `OrgNameResolver 第一參數必須為 companyCode（收到 ${JSON.stringify(companyCode)}）。`,
@@ -201,7 +201,11 @@ describe('F019 AC-D12：前台清單 DTO 移除使用部門兩欄', () => {
 
     const detailDto = await new PublicDocumentDetailService(
       new DetailStore({ ...DETAIL_BASE, ...UNRESOLVED }),
-      { resolveOrgUnitName: () => Promise.resolve(null), resolvePersonNames: () => Promise.resolve(new Map()) },
+      {
+        resolveOrgUnitDisplayName: () => Promise.resolve(null),
+        resolveOrgUnitName: () => Promise.resolve(null),
+        resolvePersonNames: () => Promise.resolve(new Map()),
+      },
       clock,
     ).detail('doc-1', VIEWER);
 

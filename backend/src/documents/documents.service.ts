@@ -586,7 +586,10 @@ export class DocumentsService {
     const orgNames = new Map<string, string | null>();
     await Promise.all(
       [...orgKeys].map(async ([k, v]) =>
-        orgNames.set(k, await resolver.resolveOrgUnitName(v.companyCode, v.orgCode)),
+        // 🔴 2026-09-04：改用 `resolveOrgUnitDisplayName`（部＝DESC_FULL 全名、處/室＝DESC_CHI
+        // 末段）。OLD> `resolveOrgUnitName`＝ORG_UNIT.name 原字串，使同一欄同時出現簡稱
+        // （`營管部`）、缺字全名（`企劃`）與複合路徑（`營管部/審查室`）三種形態。
+        orgNames.set(k, await resolver.resolveOrgUnitDisplayName(v.companyCode, v.orgCode)),
       ),
     );
 
