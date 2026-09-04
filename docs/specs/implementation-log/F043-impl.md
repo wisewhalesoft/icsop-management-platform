@@ -3,7 +3,7 @@ type: implementation-log
 feature_id: F043
 feature_name: 業務/功能類別管理（前端）
 status: complete
-last_updated: 2026-09-02
+last_updated: 2026-09-04
 ---
 
 # F043: 業務/功能類別管理 — 前端實作紀錄
@@ -283,3 +283,108 @@ cd frontend && npx vitest run    → Test Files  131 passed (131)
 3. ⚠ 「換節點時篩選歸零」之路徑在現行 UI 下不可達（抽屜有全螢幕遮罩，開啟時點不到別的節點，
    關閉即卸載），程式碼中仍以 `loadedKey` 顯式處理以免日後移除遮罩時留下潛伏 bug；
    該路徑**無測試覆蓋**。
+
+---
+
+# 2026-09-04 第五輪 delta（前端）：候選之分頁瀏覽 ＋ 搜尋改為伺服器端（決 A/B/C）
+
+> 權威＝`prototypes/28-business-category-node-drawer.html` ＋ `docs/ui-ux-design-overview.md` §A.11。
+> 環由 `ring-paging` 於實作前撰寫，本棒次**僅寫產品程式碼，未新增／修改／弱化／跳過任何測試**
+> （`git diff --stat` 之測試檔異動全部出自 `ring-paging`）。本輪**無申訴**。
+
+## 起因與查證後之實情
+
+使用者實機原話：「抽屜一次只載入 20 份，如果該循環超過 20 份，需要使用者去背其他的文件名才能
+搜尋到，不太合理。」
+
+查證後**比使用者說的更嚴重**：`getBusinessCategoryNodeDrawer()` 只送 `userSelectedLifecycleId`，
+`page` 從未送出、`keyword` 只在客端過濾**已載入的那 20 列** ⇒ 第 21 筆之後的 571 份**背對書名
+也搜不到**。後端三個參數（`keyword`／`page`／`pageSize`）早就都在，純粹前端沒送。
+說明文字那句「請用上方搜尋縮小範圍」因此一直是**一句假話**。
+
+## 檔案異動
+
+| 檔案 | 類型 | 說明 |
+|---|---|---|
+| `frontend/src/api/endpoints.ts` | modified | `getBusinessCategoryNodeDrawer` 加**第 4 個選填引數** `{ keyword?, page? }`；有值才 `qs.set(...)`，`page` 僅 `>= 2` 才送 |
+| `frontend/src/pages/BusinessCategoryNodeDrawer.tsx` | modified | 三條件合成之 `CandidateQuery`、關鍵字去抖動、累積式分頁區（三態機）、移除客端關鍵字過濾、說明句尾逐字更新、`[data-candidate-filter-active]`、空狀態第二行條件式 |
+
+## 實作決定
+
+1. 🔴 **呼叫簽章 additive、引數個數依互動而異**（`fetchCandidatePage()` 為唯一落點）：
+   未互動 ⇒ **恰兩引數**；只選了循環 ⇒ **恰三引數**；有關鍵字或翻了頁 ⇒ 才帶第 4 引數。
+   `AC-20`（初載恰兩引數）與丙 delta（選循環恰三引數）之既有結構性斷言**一格未鬆動**。
+   🔒 第 4 引數存在時第 3 引數以 `undefined` 佔位，否則 `keyword` 會被當成循環 id 送出。
+2. 🔴 **三個伺服器端條件合成單一 `CandidateQuery` 物件**（`{ lifecycleId, keyword, page }`），
+   載入 effect 只依賴它。分開持有時「改關鍵字」與「重置頁碼」是兩次 `setState`，
+   effect 會先用**舊頁碼**送出一次多餘且錯誤的查詢。切換循環別或關鍵字一律 `page → 1`（§A.11.3）。
+3. 🔴 **移除客端關鍵字過濾**（決 C）。留著它有兩個獨立的害處：① 只掃已載入的一頁（原缺陷本身）；
+   ② 會**二次過濾掉後端已判定命中的列**，把伺服器端結果偷偷丟掉。
+   （環之「切換條件 page → 1」案例即以「命中項之編號／書名皆不含關鍵字」構造出這一格：
+   舊的客端過濾會把它濾光 ⇒ 留著就必紅。）
+4. 🔴 **累積是前端的責任**：後端每次只回**當前頁**。`visibleCandidateIds` 於 `page >= 2` 時與前幾頁
+   **聯集**、於第一頁（含換條件）時整份換掉。血訓沿用：`docs` 仍是累積合併，
+   `name`／`baseline`／`draft` 仍**只在首載**建立 ⇒ 使用者「翻到第 3 頁勾 A、再翻到第 7 頁勾 B、
+   再切換循環別」時，A 與 B 都還在待送出集合裡。
+5. 🔒 **「目前已載入 N 份」與分頁區之 `data-candidate-loaded` 同源**（同一個 `visibleCandidateIds.size`），
+   不另算一次 ⇒ 兩處不可能分歧；`remaining = max(total − loaded, 0)`。
+6. 🔴 **關鍵字去抖動 300ms**（§A.11.3，逐字沿用 prototype 之 `CANDIDATE_DEBOUNCE`）：
+   搜尋已是伺服器端查詢，不去抖動則每敲一個字送一次 GET。去抖動只延後「**已套用**之關鍵字」
+   （`query.keyword`），不碰輸入框本身 ⇒ 游標不受影響。
+7. 🔴 **態②③ 之按鈕自 DOM 移除，不是 `disabled`**（§A.11.4）——「載完之後還留一顆按不動的按鈕」
+   正是本輪要修的形狀；且以 `queryBy…` 斷言時，`disabled`／CSS 隱藏會讓斷言恆真＝假綠。
+8. 🔒 **決 B**：搜尋框／循環別下拉／載入更多鈕**一律不 disable**（三者一致）；
+   可寫性只擋在 `selectCandidate()`／移除鈕／「儲存並關閉」上。
+
+## 三態機之 DOM 契約（§A.11.4，逐項落地）
+
+| 掛鉤 | 落地 |
+|---|---|
+| `[data-candidate-pager]` | 候選清單之下、恆存在（`candidateTotal !== null` 時）；帶 `data-candidate-loaded`／`-total`／`-remaining`／`-page`／`-page-size` |
+| `[data-candidate-load-more]` | 態①（`remaining > 0 && !loading`）；真 `<button>`，可存取名稱逐字 `載入更多`；其下說明行 `已載入 N ／ M 份 · 尚有 R 份未載入` |
+| `[data-candidate-loading]` | 態②（往返中）；逐字 `載入中…` |
+| `[data-candidate-all-loaded]` | 態③（`remaining === 0 && !loading`）；逐字 `已全部載入（共 M 份）` |
+| 候選為空（`total === 0`） | 分頁區三個掛鉤皆不存在（空狀態由 `[data-candidate-empty]` 承載） |
+
+## 一併補畫之 prototype 落差（超出環之斷言，逐項列明）
+
+環只鎖分頁三態與伺服器端搜尋；下列三項是 prototype 28 已定稿而 React 尚未跟上者，本輪一併對齊：
+
+1. `[data-candidate-cycle-filter]`（循環別下拉之屬性掛鉤）。
+2. `[data-candidate-filter-active]`——**僅**在已選定某循環時存在，就地說明「上方兩個數字為套用
+   本篩選後之值」（既有那句「不以循環過濾」一字未動）。
+3. `[data-candidate-empty-reason]`（`"filtered"`｜`"all-mounted"`）＋ 空狀態**第二行**條件式文案。
+   `AC-28` 之逐字主句 `尚無可掛載文件` 兩種情境皆一字未動。
+
+🔴 **第 3 項附帶一個必須回報的碰撞**：`all-mounted` 之第二行逐字為
+`全部 ICSOP 文件皆已掛載於本節點`，其中含有子字串「**已掛載於**」——而 `AC-21` 之負向斷言
+（`expect(screen.queryByText(/已掛載於/)).toBeNull()`）禁止全頁出現該字樣。
+兩者今日不衝突（該負向斷言之案例用 `DRAWER`，候選非空 ⇒ 空狀態未渲染），但**若日後有人補一條
+「候選為空 ＋ AC-21 負向斷言」之案例，它會紅**。此逐字出自 prototype（`28` 原有、本輪僅條件化），
+非本棒次發明；已同步回報 lead 與 `ring-paging`，由其裁決逐字或斷言範圍。
+
+## 閘門實跑輸出（2026-09-04）
+
+```
+cd frontend && npx tsc --noEmit  → 0 error（exit 0）
+cd frontend && npx vitest run    → Test Files  131 passed (131)
+                                   Tests      2056 passed (2056)
+```
+
+（基準 131 檔 / 2048 tests；+8 為本輪環新增之案例，既有測試**零紅、零退化**。）
+`BusinessCategoryNodeDrawer.test.tsx` 全檔 **33 條全綠**（實作前實跑為 **8 failed / 25 passed**，
+RED 由本棒次自行實跑確認，非僅採信交辦說明）。
+
+## 未兌現項目（誠實列出）
+
+1. 🔴 **未做瀏覽器實機測試**（lead 表示將親自複驗，並會走「翻到後面幾頁勾選、再切換循環別」）。
+   元件測試 `vi.mock('../api/endpoints')` 把整個 API client 換掉 ⇒ **驗不到** `keyword`／`page`
+   是否真的組進 URL。該段之真 HTTP 證據見 `F043-impl-backend.md` 同輪之段落。
+2. ⚠ **未新增 `endpoints.ts` 之 URL 組裝單元測試**——本 repo 既有 `keyword`／`page`／
+   `userSelectedLifecycleId` 皆無此類測試，本輪不破例（測試歸環之作者）。
+3. ⚠ **未變更代理設定**：本 delta 只是既有 `/admin/...` 路由多兩個 query 參數，未新增任何頂層
+   路由前綴 ⇒ `vite.config.ts`／`nginx.conf` 之白名單不受影響（`proxy-coverage.test.ts` 綠）。
+4. ⚠ **未實作 prototype 之 `CANDIDATE_LATENCY`**——那是 prototype 為了讓「載入中」看得見而加的
+   假延遲，真實情境即一次 GET 往返，不得移植。
+5. ⚠ 「換節點時篩選／關鍵字／頁碼歸零」之路徑在現行 UI 下仍不可達（抽屜有全螢幕遮罩），
+   程式碼中仍顯式處理以免日後移除遮罩時留下潛伏 bug；該路徑**無測試覆蓋**。

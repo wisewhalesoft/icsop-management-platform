@@ -395,3 +395,90 @@ describe('[int] F043 §丙 delta：candidateLifecycles／userSelectedLifecycleId
     }
   });
 });
+
+/**
+ * F043 delta（2026-09-04，同日第四個真實需求）—— **決 A**（team-lead mailbox 裁決）之 SQL 層
+ * 驗證：`candidateLifecycles` 恆含使用者已選之循環（`count` 可為 0），即使 `keyword` 把該循環之
+ * 候選全數濾掉。
+ *
+ * 🔴 **為何必須是 int-test（唯一能兌現本保證之處）**：單元測試（`business-category-docs-
+ * candidates.service.spec.ts`）以 FakeStore 證明「服務層之透傳不會把該保證濾掉」——但 FakeStore
+ * 是本檔（test-generator）自行維護之測試替身，其內建之保證邏輯**不是產品程式碼**；真正應補上
+ * 這個保證的地方是 `typeorm-business-category-docs.store.ts` 之 `groups` CTE（目前僅對 `base`
+ * 分組，沒有「使用者已選之循環若不在分組內就補一筆 count=0」之步驟）。本檔驅動真實 HTTP 端點
+ * （真 DB、真 SQL），是本保證唯一能兌現「未實作時必紅、實作後轉綠」之處。
+ *
+ * ⚠ 對實作全盲：期望值一律動態查真庫，不臆造或硬編循環 id；斷言與 SQL 之 CTE/UNION 實作細節
+ * 無關，換一種正確寫法（如改用 LEFT JOIN 或子查詢）仍應通過。
+ */
+describe('[int] F043 delta：決 A — candidateLifecycles 恆含使用者已選之循環（真 SOP DB）', () => {
+  let ctx: IntCtx;
+  let businessCategoryId: string;
+  let nodeId: string;
+  const BC_MARK_PREFIX = 'ZZINT_BC_DECISIONA_';
+  const categoryName = `${BC_MARK_PREFIX}${Date.now()}`;
+
+  beforeAll(async () => {
+    ctx = await bootIntApp();
+
+    const bcRes = await ctx
+      .http()
+      .post('/admin/business-categories')
+      .set('Cookie', ctx.adminCookie)
+      .send({ name: categoryName, subcategory: null, description: 'ZZINT F043 決 A' });
+    expect([200, 201]).toContain(bcRes.status);
+    businessCategoryId = bcRes.body.id;
+    expect(businessCategoryId).toBeTruthy();
+
+    const nodeRes = await ctx
+      .http()
+      .post(`/admin/business-categories/${businessCategoryId}/nodes`)
+      .set('Cookie', ctx.adminCookie)
+      .send({ name: 'ZZINT 決 A 測試節點' });
+    expect([200, 201]).toContain(nodeRes.status);
+    nodeId = nodeRes.body.id;
+    expect(nodeId).toBeTruthy();
+  }, 60000);
+
+  afterAll(async () => {
+    if (businessCategoryId) {
+      await AppDataSource.query(
+        `DELETE FROM [BUSINESS_CATEGORY_NODE] WHERE [businessCategoryId] = '${businessCategoryId}'`,
+      ).catch(() => undefined);
+      await AppDataSource.query(
+        `DELETE FROM [BUSINESS_CATEGORY] WHERE [id] = '${businessCategoryId}'`,
+      ).catch(() => undefined);
+    }
+    await shutdownIntApp(ctx);
+  }, 60000);
+
+  it('🔴 已選循環 X ＋ 全庫皆無命中之 keyword → candidateLifecycles 仍含 X（count 為 0），candidates=0、candidateTotal=0', async () => {
+    // 動態於真庫找一個確實存在候選文件之循環（任一 lifecycleId 皆可，只需「存在」）。
+    const [picked]: Array<{ lifecycleId: string }> = await AppDataSource.query(`
+      SELECT TOP 1 [lifecycleId] FROM [ICSOP_DOCUMENT] WHERE [lifecycleId] IS NOT NULL
+    `);
+    expect(picked).toBeTruthy();
+    const [{ name: expectedName, subcategory: expectedSubcategory }] = await AppDataSource.query(
+      `SELECT [name], [subcategory] FROM [LIFECYCLE] WHERE [id] = '${picked.lifecycleId}'`,
+    );
+
+    // 保證全庫無命中之關鍵字（帶隨機尾碼，避免真庫恰好存在同名文件）。
+    const noMatchKeyword = `ZZINT_NOMATCH_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    const r = await ctx
+      .http()
+      .get(`/admin/business-categories/${businessCategoryId}/nodes/${nodeId}/candidates`)
+      .query({ page: 1, pageSize: 20, keyword: noMatchKeyword, userSelectedLifecycleId: picked.lifecycleId })
+      .set('Cookie', ctx.adminCookie);
+    expect(r.status).toBe(200);
+    expect(r.body.candidates).toEqual([]);
+    expect(r.body.candidateTotal).toBe(0);
+
+    const groups: Array<{ lifecycleId: string; displayName: string; count: number }> = r.body.candidateLifecycles;
+    const picked_ = groups.find((g) => g.lifecycleId === picked.lifecycleId);
+    // 🔴 決 A 核心：即使 keyword 把候選全數濾掉，已選循環仍須出現於下拉選項來源（count=0）。
+    expect(picked_).toBeDefined();
+    expect(picked_!.count).toBe(0);
+    expect(picked_!.displayName).toBe(lifecycleDisplayName({ name: expectedName, subcategory: expectedSubcategory }));
+  });
+});

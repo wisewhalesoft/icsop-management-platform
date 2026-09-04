@@ -117,12 +117,20 @@ export class TypeOrmBusinessCategoryDocsStore implements BusinessCategoryDocsSto
      * 🔒 空陣列 → **完全不加任何條件**（`NOT IN ()` 在 SQL 中非法，語意上也不該排除任何東西）。
      */
     const excluded = [...new Set((query.excludeDocumentIds ?? []).filter(Boolean))];
+    /**
+     * 🔒 排除條件**另外單獨持有一份**：決 A 之 `selectedGroup`（見下方）要的是「**只套排除、
+     * 不套 keyword**」之集合——它的存在理由正是「keyword 把該循環的候選全數濾掉」，若名稱也
+     * 只能從已套 keyword 的集合取得，那個保證就永遠無從實現。
+     */
+    const excludeConditions: string[] = [];
     if (excluded.length > 0) {
       const placeholders = excluded.map((id) => {
         params.push(id);
         return `@${params.length - 1}`;
       });
-      conditions.push(`d.[id] NOT IN (${placeholders.join(',')})`);
+      const notIn = `d.[id] NOT IN (${placeholders.join(',')})`;
+      conditions.push(notIn);
+      excludeConditions.push(notIn);
     }
 
     /**
@@ -138,10 +146,50 @@ export class TypeOrmBusinessCategoryDocsStore implements BusinessCategoryDocsSto
      */
     const selectedLifecycleId = query.userSelectedLifecycleId?.trim() || undefined;
     let lifecycleWhereSql = '';
+    let selectedParamRef = '';
     if (selectedLifecycleId) {
       params.push(selectedLifecycleId);
-      lifecycleWhereSql = `WHERE [lifecycleId] = TRY_CONVERT(uniqueidentifier, @${params.length - 1})`;
+      selectedParamRef = `@${params.length - 1}`;
+      lifecycleWhereSql = `WHERE [lifecycleId] = TRY_CONVERT(uniqueidentifier, ${selectedParamRef})`;
     }
+
+    /**
+     * 🔴🔴 **決 A**（2026-09-04 使用者裁決）：`candidateLifecycles`（下拉選項之來源）**恆含
+     * 使用者目前所選之循環**，`count` 可為 0。
+     *
+     * 失敗形狀（未加本分支時）：選了「融資循環」再打一個該循環無命中之關鍵字 ⇒ `base` 被
+     * keyword 濾光 ⇒ `groups` 不再含該循環 ⇒ 前端 `<select value={已選}>` 找不到對應 option
+     * 而顯示**空白**，使用者連「全部循環」都選不回來——被自己的關鍵字鎖死在一個看不見的篩選裡。
+     *
+     * 🔴 **修在資料來源、不在前端補回**（裁決明文）：選項清單只有一套規則；前端補回會讓
+     * 「選項從哪來」變成兩處組合而成。
+     * 🔒 本 CTE **刻意不套 `keyword`**（那正是它存在的理由），但**仍套 `excluded`**：已排除之
+     * 文件不代表整個循環不存在，此處只用來解析顯示名稱，`groupCount` 恆為 0。
+     * 🔒 `NOT EXISTS (… groups …)`＝「只在該循環已被擠出分組時才補」——命中時 `groups` 本身
+     * 已有正確筆數，補一筆 0 會變成重複選項。
+     * 🔒 `DISTINCT` 而非 `TOP 1`：三個投影欄皆由 `lifecycleId` 函數決定（`LIFECYCLE.id` 為 PK），
+     * 故恰回一列且與資料列序無關（`TOP 1` 無 `ORDER BY` 則不具決定性）。
+     */
+    const excludeAndSql =
+      excludeConditions.length > 0 ? `AND ${excludeConditions.join(' AND ')}` : '';
+    const selectedGroupCteSql = selectedLifecycleId
+      ? `,
+       selectedGroup AS (
+         SELECT DISTINCT d.[lifecycleId], l.[name] AS [lifecycleName], l.[subcategory] AS [lifecycleSubcategory],
+                CAST(0 AS int) AS [groupCount]
+           FROM [ICSOP_DOCUMENT] d
+           LEFT JOIN [LIFECYCLE] l ON l.[id] = d.[lifecycleId]
+          WHERE d.[lifecycleId] = TRY_CONVERT(uniqueidentifier, ${selectedParamRef})
+            ${excludeAndSql}
+            AND NOT EXISTS (SELECT 1 FROM groups g2 WHERE g2.[lifecycleId] = d.[lifecycleId])
+       ),
+       allGroups AS (
+         SELECT [lifecycleId], [lifecycleName], [lifecycleSubcategory], [groupCount] FROM groups
+          UNION ALL
+         SELECT [lifecycleId], [lifecycleName], [lifecycleSubcategory], [groupCount] FROM selectedGroup
+       )`
+      : '';
+    const groupsSourceSql = selectedLifecycleId ? 'allGroups' : 'groups';
 
     const offsetAt = params.length;
     params.push((Math.max(query.page, 1) - 1) * query.pageSize, query.pageSize);
@@ -186,7 +234,7 @@ export class TypeOrmBusinessCategoryDocsStore implements BusinessCategoryDocsSto
            FROM base b
            LEFT JOIN [LIFECYCLE] l ON l.[id] = b.[lifecycleId]
           GROUP BY b.[lifecycleId], l.[name], l.[subcategory]
-       )
+       )${selectedGroupCteSql}
        SELECT 0 AS [rowKind], s.[total], s.[lifecycleCount],
               p.[id], p.[documentNumber], p.[documentName], p.[lifecycleId],
               CAST(NULL AS nvarchar(100)) AS [lifecycleName],
@@ -198,7 +246,7 @@ export class TypeOrmBusinessCategoryDocsStore implements BusinessCategoryDocsSto
        SELECT 1 AS [rowKind], CAST(NULL AS int), CAST(NULL AS int),
               CAST(NULL AS uniqueidentifier), CAST(NULL AS varchar(100)), CAST(NULL AS nvarchar(200)),
               g.[lifecycleId], g.[lifecycleName], g.[lifecycleSubcategory], g.[groupCount]
-         FROM groups g
+         FROM ${groupsSourceSql} g
         ORDER BY [rowKind] ASC, [documentNumber] ASC,
                  [lifecycleName] ASC, [lifecycleSubcategory] ASC, [lifecycleId] ASC`,
       params,

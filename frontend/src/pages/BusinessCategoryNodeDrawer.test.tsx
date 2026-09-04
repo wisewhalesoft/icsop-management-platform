@@ -14,7 +14,7 @@
  *    比照既有 `NodeDrawer.tsx` 之命名風格延伸）本輪尚不存在。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BusinessCategoryNodeDrawer } from './BusinessCategoryNodeDrawer';
 import { ToastProvider } from '../components/useToast';
@@ -48,13 +48,30 @@ interface BcNodeDrawerData {
    */
   candidateLifecycles?: { lifecycleId: string; displayName: string; count: number }[];
 }
+/**
+ * 🔴🔴 2026-09-04 F043 delta：候選之分頁瀏覽 + 伺服器端搜尋（決 C）之呼叫引數。
+ * 僅於實際輸入關鍵字或按「載入更多」時才帶入第 4 個選填引數；未互動之初載與既有循環別篩選
+ * （2026-09-03 delta）之兩／三引數呼叫維持原樣不變（既有 25 條斷言零漣漪）。
+ */
+interface DrawerFetchOpts {
+  keyword?: string;
+  /** 🔴 首頁（1）或未帶頁碼皆視為「第一頁」；`>=2` 僅由「載入更多」產生。 */
+  page?: number;
+}
 interface BusinessCategoryNodeDrawerEndpoints {
   /**
    * 🔴🔴 2026-09-03 第三個 delta：第三個選填引數 `userSelectedLifecycleId`——未選任何循環時
    * **不得**帶入（維持既有 `AC-20` 初載呼叫「恰兩個引數」之結構性斷言不退化），選取後之重新查詢
    * 才帶上（逐字鍵名對齊 backend 契約，見 `business-category-docs-candidates.service.spec.ts`）。
+   * 🔴🔴 2026-09-04 第四個 delta：新增第 4 個選填引數 `DrawerFetchOpts`（`keyword`／`page`），
+   * additive、不影響既有兩／三引數呼叫之結構性斷言。
    */
-  getBusinessCategoryNodeDrawer: (bcId: string, nodeId: string, userSelectedLifecycleId?: string) => Promise<BcNodeDrawerData>;
+  getBusinessCategoryNodeDrawer: (
+    bcId: string,
+    nodeId: string,
+    userSelectedLifecycleId?: string,
+    opts?: DrawerFetchOpts,
+  ) => Promise<BcNodeDrawerData>;
   mountBusinessCategoryDoc: (bcId: string, nodeId: string, documentId: string) => Promise<void>;
   unmountBusinessCategoryDoc: (bcId: string, nodeId: string, documentId: string) => Promise<void>;
   updateBusinessCategoryNode: (bcId: string, nodeId: string, patch: { name: string }) => Promise<unknown>;
@@ -158,17 +175,69 @@ describe('BusinessCategoryNodeDrawer — F043 丙：節點掛載', () => {
 
   /**
    * 🔴 AC-21～AC-23（推 2：無警示、無二次確認、無改派語意）——正向半句：已掛在他處者顯示
-   * 純資訊「此文件另掛於：風險管理／徵審作業」；負向半句：全頁不得出現「已掛載於」與「改派」。
-   * 本案之語料前提（d3 已有 otherMounts）確保負向斷言非恆真。
+   * 純資訊「此文件另掛於：風險管理／徵審作業」；負向半句：候選清單容器內不得出現「已掛載於」，
+   * 全頁不得出現「改派」。本案之語料前提（d3 已有 otherMounts）確保負向斷言非恆真。
+   *
+   * 🔴🔴 2026-09-04 lead 裁定之範圍收斂（impl-paging FYI 揭露之潛伏碰撞——非本輪缺陷、非新增
+   * 重工，兩項處置**不同**須分開寫明理由）：
+   * - **「已掛載於」收窄到候選清單容器內**：本 AC 真正要禁的是 F009 單一掛載模型之改派警示語
+   *   （「這份文件已掛載於**其他節點**，要不要改派？」），那是**逐候選列**才會出現的警示，容器
+   *   即其唯一可能出現之位置。空狀態（候選為空時）之「全部 ICSOP 文件皆已掛載於本節點」是對
+   *   語料的**事實陳述**（全部文件都掛在**本**節點），語意與 F009 警示語完全不同、合法存在、
+   *   出自 prototype 定稿逐字——原本之**全頁**掃描是用一個過寬的子字串當代理，對合法文案誤報；
+   *   改產品文案去閃避測試才是本末倒置，故收窄的是斷言範圍，不是文案。
+   * - **「改派」維持全頁掃描**：該詞沒有任何合法用途，全頁禁絕正確、不收窄。
+   * - **收窄後之正向半句**：先斷言候選清單容器（`getByRole('list')`——本抽屜之候選 `<ul>` 為
+   *   全元件內唯一一個 `role="list"` 元素，見下方唯一性自證）存在**且**至少 1 列，否則容器不
+   *   存在時容器內負向斷言恆真——正是本輪一直在防的形狀。
    */
-  it('AC-21～AC-23 已掛在他處之候選僅顯示中性資訊「此文件另掛於：風險管理／徵審作業」，全頁無「已掛載於」／「改派」字樣', async () => {
+  it('AC-21～AC-23 已掛在他處之候選僅顯示中性資訊「此文件另掛於：風險管理／徵審作業」，候選清單容器內無「已掛載於」（F009 警示語之唯一可能位置），全頁無「改派」', async () => {
     renderDrawer();
     await waitFor(() => expect(screen.getByText('ICSOP-GCA-100-1-00')).toBeInTheDocument());
     // 正向半句：資訊載體確實存在。
     expect(screen.getByText(/此文件另掛於：風險管理／徵審作業/)).toBeInTheDocument();
-    // 負向半句：建立在上一行「已有一筆既存掛載」之前提上，非恆真。
-    expect(screen.queryByText(/已掛載於/)).toBeNull();
+
+    // 正向半句（容器存在且非空）：`getByRole('list')` 本身在找不到／找到多個時即會 throw，
+    // 等同「容器須唯一存在」之斷言；再確認至少 1 列，避免容器存在但空無一物時負向斷言恆真。
+    const candidateList = screen.getByRole('list');
+    expect(within(candidateList).getAllByRole('listitem').length).toBeGreaterThan(0);
+    // 負向半句：收窄至候選清單容器——F009 警示語（「已掛載於其他節點，要不要改派？」）唯一
+    // 可能出現之位置；空狀態之合法「全部 ICSOP 文件皆已掛載於本節點」不在此容器內，不受影響。
+    expect(within(candidateList).queryByText(/已掛載於/)).toBeNull();
+    // 「改派」沒有任何合法用途，維持全頁掃描。
     expect(screen.queryByText(/改派/)).toBeNull();
+  });
+
+  /**
+   * 🔴 唯一性自證（供上一案之 `getByRole('list')` 範圍收斂佐證，非獨立 AC）：本抽屜元件內
+   * `role="list"`（`<ul>`）恰只有候選清單一處——「目前掛載文件」區塊為 `<div data-mounted-list>`
+   * 而非 `<ul>`，故 `getByRole('list')` 不會誤中別的清單。若日後有人在抽屜內新增第二個
+   * `<ul>`／`role="list"` 元素，`getByRole('list')` 會直接因「找到多個」而 throw，此案與上一案
+   * 皆會**紅**（正確之防呆），不會靜默失去鑑別力。
+   */
+  it('🔒 自證：候選清單為本抽屜元件內唯一之 role="list" 容器（佐證上一案之容器範圍收斂有效）', async () => {
+    renderDrawer();
+    await waitFor(() => expect(screen.getByText('ICSOP-SRC-102-1-01')).toBeInTheDocument());
+    expect(screen.getAllByRole('list')).toHaveLength(1);
+  });
+
+  /**
+   * 🔴🔴 2026-09-04 lead 裁定第 4 項：把「碰巧沒被抓到」轉為「明文允許」——候選為空**且非因
+   * 篩選**（真的全部掛完）時，空狀態第二行明確允許顯示合法文案「全部 ICSOP 文件皆已掛載於
+   * 本節點」（即上一案刻意排除在負向斷言之外的那句）。與 AC-28「篩選造成的空」情境（見
+   * `data-candidate-empty-reason="filtered"`）互斥，本案不重複覆蓋該分支。
+   */
+  it('候選為空且非因篩選（真的全掛完）→ 空狀態明確顯示合法文案「全部 ICSOP 文件皆已掛載於本節點」（AC-21 收窄後刻意允許之情境，非誤報）', async () => {
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mockResolvedValue({
+      ...DRAWER,
+      mounted: [],
+      candidates: [],
+      candidateTotal: 0,
+      candidateLifecycleCount: 0,
+    });
+    renderDrawer();
+    await waitFor(() => expect(screen.getByText('尚無可掛載文件')).toBeInTheDocument());
+    expect(screen.getByText('全部 ICSOP 文件皆已掛載於本節點')).toBeInTheDocument();
   });
 
   it('AC-21 選取已掛在他處之候選 → 直接完成掛載，不彈出任何確認對話框', async () => {
@@ -222,10 +291,29 @@ describe('BusinessCategoryNodeDrawer — F043 丙：節點掛載', () => {
     expect(screen.queryByRole('button', { name: '儲存並關閉' })).not.toBeInTheDocument();
   });
 
-  it('AC-28 候選區關鍵字搜尋（程序書編號）', async () => {
+  /**
+   * 🔴 2026-09-04 決 C 更新（就地修正，非新增重工）：搜尋改為**伺服器端查詢**——原斷言之
+   * 「輸入關鍵字後畫面正確收斂」仍逐字保留，但機制由客端過濾改為第二次網路呼叫；本行僅補上
+   * mock 之第二次回應與呼叫引數斷言，兩條既有斷言（SRC-102 消失／GCA-100 仍在）一字未動。
+   * 理由：`getBusinessCategoryNodeDrawer` 現在**不再**於單次回應內挾帶「全部候選」供客端過濾
+   * ——沿用舊機制（單一 `mockResolvedValue`、`userEvent.type` 觸發客端過濾）之測試在決 C 落地後
+   * 會對「keyword 是否真的送到後端」失去鑑別力（客端就地過濾 ≡ 伺服器端過濾在此語料下輸出相同）。
+   * 完整之伺服器端鑑別力核心案例（命中項刻意不在已載入頁內）見下方新 describe 區塊。
+   */
+  it('AC-28 候選區關鍵字搜尋（程序書編號）——2026-09-04 決 C：搜尋改為伺服器端查詢', async () => {
     renderDrawer();
     await waitFor(() => expect(screen.getByText('ICSOP-SRC-102-1-01')).toBeInTheDocument());
-    await userEvent.type(screen.getByLabelText(/搜尋候選/), 'GCA-100');
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mockResolvedValueOnce({
+      ...DRAWER,
+      candidates: DRAWER.candidates.filter((c) => c.documentNumber.includes('GCA-100')),
+      candidateTotal: 1,
+    });
+    fireEvent.change(screen.getByLabelText(/搜尋候選/), { target: { value: 'GCA-100' } });
+    await waitFor(() => {
+      const calls = vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mock.calls;
+      expect(calls.length, '搜尋應觸發第二次伺服器端查詢').toBeGreaterThanOrEqual(2);
+      expect(calls[calls.length - 1][3], '最後一次查詢引數應含 keyword').toMatchObject({ keyword: 'GCA-100' });
+    });
     await waitFor(() => expect(screen.queryByText('ICSOP-SRC-102-1-01')).not.toBeInTheDocument());
     expect(screen.getByText('ICSOP-GCA-100-1-00')).toBeInTheDocument();
   });
@@ -604,5 +692,227 @@ describe('🔴🔴 F043 丙 delta：候選之循環別篩選（userSelectedLifec
       expect(Number(m![1]), '選回「全部循環」後，「共 N 份」應還原為 candidateTotal（12）').toBe(12);
       expect(Number(m![2]), '選回「全部循環」後，「分屬 M 個相異循環」應還原為 candidateLifecycleCount（5）').toBe(5);
     });
+  });
+});
+
+/**
+ * 🔴🔴 F043 delta（2026-09-04，同日第四個真實需求）：候選之**分頁瀏覽**（累積式「載入更多」）
+ * ＋ 搜尋改為**伺服器端查詢**。
+ *
+ * 起因（使用者實機原話）：「抽屜一次只載入 20 份，如果該循環超過 20 份，需要使用者去背其他的
+ * 文件名才能搜尋到，不太合理。」查證後發現比使用者說的更嚴重：`getBusinessCategoryNodeDrawer()`
+ * 從未送出 `page`／`keyword`，搜尋只掃已載入之當前頁——第 21 筆之後**連搜尋都搜不到**。
+ *
+ * 權威：docs/ui-ux-design-overview.md §A.11（prototype 28 之分頁瀏覽設計）＋ team-lead mailbox
+ * 直接裁決（決 A／決 B／決 C，2026-09-04）。尚無正式 AC 編號（本輪與規格層平行進行，見
+ * docs/test-specs/features/F043-test.md §丁）。
+ *
+ * 🔴 呼叫簽章 additive 延伸（見上方共用之 `DrawerFetchOpts`）：新增第 4 個選填引數
+ * `{ keyword?, page? }`——僅於實際輸入關鍵字或按「載入更多」時才帶入，初載與循環別篩選（丙
+ * delta）之既有兩／三引數呼叫維持原樣、零漣漪。
+ *
+ * 🔴 新增 DOM 契約（本檔定義，team-lead 明文指定屬性名）：
+ * - `[data-candidate-pager]`：分頁區容器（比照既有 `[data-mounted-list]` 之容器＋屬性慣例），
+ *   帶 `data-candidate-loaded`／`data-candidate-total`／`data-candidate-remaining`。
+ * - 態①`[data-candidate-load-more]`／態②`[data-candidate-loading]`／態③`[data-candidate-all-loaded]`
+ *   ——**互斥且窮盡**，態③之按鈕**自 DOM 移除**（非 disabled）。
+ *
+ * 🔴 假綠防線（team-lead 明文提醒）：①③ 必須**成對**斷言（只驗其一，「永遠顯示按鈕」或「已全部
+ * 載入仍留一顆 disabled 按鈕」皆可能恆真）；搜尋語料之命中項**刻意不在已載入頁內**（否則客端
+ * 過濾與伺服器端查詢在該語料下輸出相同，斷言對「有沒有真的送到後端」無鑑別力）。
+ */
+describe('🔴🔴 F043 delta（2026-09-04）：候選之分頁瀏覽（累積式「載入更多」）＋ 伺服器端搜尋（決 A/B/C）', () => {
+  function candDoc(id: string, num: string, name: string): CandidateDoc {
+    return {
+      id,
+      documentNumber: num,
+      documentName: name,
+      lifecycleId: 'lc1',
+      lifecycleName: '銷售及收款循環',
+      otherMounts: [],
+    };
+  }
+
+  /** 🔴 後端每次只回「當前頁」（非累積）——與既有回歸鎖 describe（`DRAWER_PAGED`）之既定契約同源。 */
+  const PAGE1 = [
+    candDoc('p1', 'ICSOP-P1-1-00', '分頁候選一'),
+    candDoc('p2', 'ICSOP-P2-1-00', '分頁候選二'),
+    candDoc('p3', 'ICSOP-P3-1-00', '分頁候選三'),
+  ];
+  const PAGE2 = [candDoc('p4', 'ICSOP-P4-1-00', '分頁候選四'), candDoc('p5', 'ICSOP-P5-1-00', '分頁候選五')];
+
+  /** 態①：已載入 3／全集 5 → 尚有 2 份未載入。 */
+  const DRAWER_PAGE1: BcNodeDrawerData = {
+    node: { id: 'n1', name: '授信審查作業' },
+    mounted: [],
+    candidates: PAGE1,
+    candidateTotal: 5,
+    candidateLifecycleCount: 1,
+  };
+  /** 「載入更多」之第 2 次查詢回應：僅回第 2 頁本身（非累積）。 */
+  const DRAWER_PAGE2: BcNodeDrawerData = { ...DRAWER_PAGE1, candidates: PAGE2 };
+  /** 態③邊界：初載即恰好全部載入（candidates.length === candidateTotal），不須先按過「載入更多」。 */
+  const DRAWER_ALL_LOADED: BcNodeDrawerData = {
+    node: { id: 'n1', name: '授信審查作業' },
+    mounted: [],
+    candidates: PAGE1,
+    candidateTotal: 3,
+    candidateLifecycleCount: 1,
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(bcApi.mountBusinessCategoryDoc).mockResolvedValue(undefined);
+    vi.mocked(bcApi.unmountBusinessCategoryDoc).mockResolvedValue(undefined);
+    vi.mocked(bcApi.updateBusinessCategoryNode).mockResolvedValue({});
+  });
+
+  it('態①：尚有未載入時 [data-candidate-load-more] 存在，[data-candidate-all-loaded] 計數為 0（成對斷言之正向半句）', async () => {
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mockResolvedValue(DRAWER_PAGE1);
+    const { container } = renderDrawer();
+    await waitFor(() => expect(container.querySelector('[data-candidate-load-more]')).toBeInTheDocument());
+    expect(container.querySelectorAll('[data-candidate-all-loaded]')).toHaveLength(0);
+    const pager = container.querySelector('[data-candidate-pager]');
+    expect(pager?.getAttribute('data-candidate-loaded')).toBe('3');
+    expect(pager?.getAttribute('data-candidate-total')).toBe('5');
+    expect(pager?.getAttribute('data-candidate-remaining'), '剩餘數量須正確，不能只驗按鈕在不在').toBe('2');
+  });
+
+  it('態③邊界：初載即恰好全部載入時 [data-candidate-all-loaded] 存在，[data-candidate-load-more] 計數為 0（成對斷言之反向半句——「已全部載入仍留一顆 disabled 按鈕」在此會被抓到）', async () => {
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mockResolvedValue(DRAWER_ALL_LOADED);
+    const { container } = renderDrawer();
+    await waitFor(() => expect(container.querySelector('[data-candidate-all-loaded]')).toBeInTheDocument());
+    expect(container.querySelectorAll('[data-candidate-load-more]')).toHaveLength(0);
+    expect(container.querySelector('[data-candidate-pager]')?.getAttribute('data-candidate-remaining')).toBe('0');
+  });
+
+  it('①→②→③ 依序走過：點「載入更多」進入載入中（按鈕自 DOM 移除、清單未搶先長出新列）→ 解析後累積前頁並進入已全部載入', async () => {
+    const user = userEvent.setup();
+    let resolvePage2!: (v: BcNodeDrawerData) => void;
+    const pendingPage2 = new Promise<BcNodeDrawerData>((resolve) => {
+      resolvePage2 = resolve;
+    });
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer)
+      .mockResolvedValueOnce(DRAWER_PAGE1)
+      .mockReturnValueOnce(pendingPage2);
+    const { container } = renderDrawer();
+
+    await waitFor(() => expect(container.querySelector('[data-candidate-load-more]')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: '載入更多' }));
+
+    // 態②：載入中——按鈕自 DOM 移除（非 disabled），清單未搶先長出第 2 頁之新列。
+    await waitFor(() => expect(container.querySelector('[data-candidate-loading]')).toBeInTheDocument());
+    expect(container.querySelectorAll('[data-candidate-load-more]')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-candidate-all-loaded]')).toHaveLength(0);
+    expect(screen.queryByText('ICSOP-P4-1-00'), '載入中期間清單不得搶先長出新列').not.toBeInTheDocument();
+    expect(screen.getByText('ICSOP-P1-1-00'), '先前頁之列仍應在場').toBeInTheDocument();
+
+    resolvePage2(DRAWER_PAGE2);
+
+    // 態③：已全部載入——累積前頁 + 新頁，按鈕計數為 0（自 DOM 移除，非 disabled）。
+    await waitFor(() => expect(container.querySelector('[data-candidate-all-loaded]')).toBeInTheDocument());
+    expect(container.querySelectorAll('[data-candidate-load-more]')).toHaveLength(0);
+    for (const num of ['ICSOP-P1-1-00', 'ICSOP-P2-1-00', 'ICSOP-P3-1-00', 'ICSOP-P4-1-00', 'ICSOP-P5-1-00']) {
+      expect(screen.getByText(num), `累積後應仍可見 ${num}`).toBeInTheDocument();
+    }
+    const pager = container.querySelector('[data-candidate-pager]');
+    expect(pager?.getAttribute('data-candidate-loaded')).toBe('5');
+    expect(pager?.getAttribute('data-candidate-remaining')).toBe('0');
+  });
+
+  it('🔴 決 C：伺服器端搜尋——呼叫引數含 keyword，命中項刻意不在已載入頁內（客端過濾亦會「看似正確」，語料鑑別力核心）', async () => {
+    const HIT: BcNodeDrawerData = {
+      node: { id: 'n1', name: '授信審查作業' },
+      mounted: [],
+      candidates: [candDoc('hit1', 'ICSOP-HIT-999-1-00', '限定關鍵字命中項')],
+      candidateTotal: 1,
+      candidateLifecycleCount: 1,
+    };
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mockResolvedValueOnce(DRAWER_PAGE1).mockResolvedValueOnce(HIT);
+    renderDrawer();
+    await waitFor(() => expect(screen.getByText('ICSOP-P1-1-00')).toBeInTheDocument());
+    // 自證：命中項本來就不在第 1 頁已載入清單內。
+    expect(PAGE1.some((d) => d.documentNumber === 'ICSOP-HIT-999-1-00')).toBe(false);
+
+    fireEvent.change(screen.getByLabelText(/搜尋候選/), { target: { value: '限定關鍵字' } });
+
+    await waitFor(() => {
+      const calls = vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mock.calls;
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+      expect(calls[calls.length - 1][3], '呼叫引數應含 keyword').toMatchObject({ keyword: '限定關鍵字' });
+    });
+
+    await waitFor(() => expect(screen.getByText('ICSOP-HIT-999-1-00')).toBeInTheDocument());
+    // 先前非命中之已載入列不得殘留（伺服器端結果為新母體，非客端過濾疊加於舊清單之上）。
+    expect(screen.queryByText('ICSOP-P1-1-00')).not.toBeInTheDocument();
+    expect(screen.queryByText('ICSOP-P2-1-00')).not.toBeInTheDocument();
+  });
+
+  it('🔴 切換條件一律 page → 1：改關鍵字後之下一次查詢 page 為第一頁（1 或未帶頁碼），已載入計數同步重置（不得殘留切換前累積之筆數）', async () => {
+    const user = userEvent.setup();
+    const RESET_RESULT: BcNodeDrawerData = {
+      node: { id: 'n1', name: '授信審查作業' },
+      mounted: [],
+      candidates: [candDoc('r1', 'ICSOP-RESET-1-00', '重置後之候選')],
+      candidateTotal: 1,
+      candidateLifecycleCount: 1,
+    };
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer)
+      .mockResolvedValueOnce(DRAWER_PAGE1)
+      .mockResolvedValueOnce(DRAWER_PAGE2)
+      .mockResolvedValueOnce(RESET_RESULT);
+    const { container } = renderDrawer();
+    await waitFor(() => expect(screen.getByText('ICSOP-P1-1-00')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: '載入更多' }));
+    await waitFor(() => expect(screen.getByText('ICSOP-P4-1-00')).toBeInTheDocument()); // 累積至 5
+
+    fireEvent.change(screen.getByLabelText(/搜尋候選/), { target: { value: '重置測試' } });
+
+    await waitFor(() => expect(bcApi.getBusinessCategoryNodeDrawer).toHaveBeenCalledTimes(3));
+    const opts3 = vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mock.calls[2][3] as DrawerFetchOpts | undefined;
+    expect(
+      [1, undefined],
+      `切換條件後之下一次查詢 page 應為第一頁（1 或未帶頁碼），實際：${JSON.stringify(opts3)}`,
+    ).toContain(opts3?.page);
+
+    await waitFor(() => expect(screen.getByText('ICSOP-RESET-1-00')).toBeInTheDocument());
+    expect(screen.queryByText('ICSOP-P1-1-00'), '切換條件後不得殘留切換前之列').not.toBeInTheDocument();
+    const pager = container.querySelector('[data-candidate-pager]');
+    expect(pager?.getAttribute('data-candidate-loaded'), '已載入計數須重置，不得殘留切換前累積之 5').toBe('1');
+  });
+
+  it('⑦ 逐字：候選說明文字尾句更新為「請用上方搜尋縮小範圍，或按下方「載入更多」繼續瀏覽。」', async () => {
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mockResolvedValue(DRAWER_PAGE1);
+    const { container } = renderDrawer();
+    await waitFor(() => expect(screen.getByText('ICSOP-P1-1-00')).toBeInTheDocument());
+    expect(bodyHasPattern(container, /請用上方搜尋縮小範圍，或按下方「載入更多」繼續瀏覽。/)).toBe(true);
+  });
+
+  /**
+   * 🔴 決 B（team-lead mailbox 裁決）：唯讀角色（主管／系統管理員）開放搜尋、篩選、載入更多，
+   * 但不得掛載／移除。🔴 兩半都要——「開放搜尋」很容易在實作時悄悄擴大成「可寫」。
+   */
+  it('決 B：唯讀角色（canWrite=false）下，搜尋框／循環別下拉／載入更多鈕皆不得 disabled', async () => {
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mockResolvedValue(DRAWER_PAGE1);
+    renderDrawer(false);
+    const search = await screen.findByLabelText(/搜尋候選/);
+    expect(search).not.toBeDisabled();
+    const cycleSelect = await screen.findByLabelText('循環別篩選');
+    expect(cycleSelect).not.toBeDisabled();
+    const loadMoreBtn = await screen.findByRole('button', { name: '載入更多' });
+    expect(loadMoreBtn).not.toBeDisabled();
+  });
+
+  it('決 B：唯讀角色點候選列 → 掛載數與待送出提示皆不變，且無「儲存並關閉」鈕（仍不得掛載）', async () => {
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mockResolvedValue(DRAWER_PAGE1);
+    const user = userEvent.setup();
+    const { container } = renderDrawer(false);
+    await waitFor(() => expect(screen.getByText('ICSOP-P1-1-00')).toBeInTheDocument());
+    await user.click(screen.getByText('ICSOP-P1-1-00'));
+    expect(
+      bodyHasPattern(container, /新增掛載[1-9]\d*筆/),
+      '唯讀角色點候選列不得產生正數之待送出「新增掛載」提示',
+    ).toBe(false);
+    expect(screen.queryByRole('button', { name: '儲存並關閉' })).not.toBeInTheDocument();
   });
 });

@@ -1588,14 +1588,24 @@ export function deleteBusinessCategoryEdge(
  * 不一樣，故本引數刻意**不叫** `lifecycleId`。
  * 🔴 **未選任何循環時不得帶入**（連 `undefined` 亦不傳）：初載呼叫維持「恰兩個引數」，
  * `AC-20` 之結構性斷言因此一格未鬆動。
+ *
+ * 🔒 `opts`（2026-09-04 第四個 delta，`ui-ux-design-overview.md` §A.11）＝候選之**伺服器端**
+ * 查詢條件：`keyword`（決 C：搜尋不再只掃已載入的那一頁）與 `page`（累積式「載入更多」）。
+ * 🔴 **additive 且僅於實際互動時帶入**：未搜尋、未翻頁時完全不傳第 4 引數，初載仍是兩引數、
+ * 選了循環仍是三引數——`AC-20` 與丙 delta 之既有結構性斷言一格未鬆動。
+ * 🔴 `page` 僅於 `>= 2` 時送出：第一頁與「未帶頁碼」在後端語意相同（`toPositiveInt(page, 1)`），
+ * 不送出可讓「切換條件即回第一頁」在 query string 上表現為「回到未翻頁之原樣」。
  */
 export function getBusinessCategoryNodeDrawer(
   businessCategoryId: string,
   nodeId: string,
   userSelectedLifecycleId?: string,
+  opts?: { keyword?: string; page?: number },
 ): Promise<BusinessCategoryNodeDrawerData> {
   const qs = new URLSearchParams();
   if (userSelectedLifecycleId) qs.set('userSelectedLifecycleId', userSelectedLifecycleId);
+  if (opts?.keyword) qs.set('keyword', opts.keyword);
+  if (opts?.page !== undefined && opts.page > 1) qs.set('page', String(opts.page));
   const q = qs.toString();
   return apiFetch<BusinessCategoryNodeDrawerData>(
     `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/nodes/${encodeURIComponent(nodeId)}/candidates${q ? `?${q}` : ''}`,

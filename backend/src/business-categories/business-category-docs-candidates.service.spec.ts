@@ -174,6 +174,26 @@ class FakeStore implements BusinessCategoryDocsStore {
       if (g) g.count += 1;
       else groups.set(d.lifecycleId, { lifecycleId: d.lifecycleId, displayName: d.lifecycleDisplayName, count: 1 });
     }
+    /**
+     * 🔴🔴 2026-09-04 第四次契約修訂（決 A，team-lead mailbox 裁決）：「下拉恆含使用者已選之
+     * 循環」由**資料來源**保證（`count` 可為 0）——即使 `keyword` 把該循環之候選全數濾掉，
+     * 選項仍不得消失（否則 `<select>` 顯示空白、使用者連「全部循環」都選不回來）。
+     * 🔒 名稱解析**刻意忽略 `keyword`**（改查全部語料）——這正是本保證存在的理由：`base` 本身
+     * 已被 `keyword` 濾光，若名稱也只能從 `base` 取得，保證就無從實現。**仍套用 `excluded`**：
+     * 已排除之文件不代表整個循環不存在，但此處只用來解析顯示名稱，不影響 count（維持 0）。
+     */
+    if (query.userSelectedLifecycleId && !groups.has(query.userSelectedLifecycleId)) {
+      const anyDocOfSelected = this.docs.find(
+        (d) => d.lifecycleId === query.userSelectedLifecycleId && !excluded.has(d.id),
+      );
+      if (anyDocOfSelected) {
+        groups.set(query.userSelectedLifecycleId, {
+          lifecycleId: query.userSelectedLifecycleId,
+          displayName: anyDocOfSelected.lifecycleDisplayName,
+          count: 0,
+        });
+      }
+    }
     const candidateLifecycles = Array.from(groups.values());
 
     // 🔴 userSelectedLifecycleId 套用於 items／total／lifecycleCount（非 candidateLifecycles）。
@@ -486,6 +506,97 @@ describe('BusinessCategoryDocsService.listCandidates（F043 §丙 候選文件�
       store.doc('D2', 'D2', 'D2', 'lc-B');
       await svc.listCandidates('bc1', 'n1', queryWith({ userSelectedLifecycleId: 'lc-A' }));
       expect(store.candidateCalls).toHaveLength(1);
+    });
+  });
+
+  /**
+   * ## 第四次契約修訂（2026-09-04，同日第四個真實需求）：分頁瀏覽 + 伺服器端搜尋
+   *
+   * ### 背景
+   * 使用者實機回報：「抽屜一次只載入 20 份，如果該循環超過 20 份，需要使用者去背其他的文件名
+   * 才能搜尋到，不太合理。」查證後發現比使用者說的更嚴重：前端 `getBusinessCategoryNodeDrawer()`
+   * 從未送出 `page`／`keyword`，搜尋只掃已載入之當前頁——第 21 筆之後**連搜尋都搜不到**。
+   *
+   * ### 🔴 決 A（team-lead mailbox 直接裁決）：candidateLifecycles 恆含使用者已選之循環
+   * 「下拉恆含使用者已選之循環」**由後端資料來源保證**（`count` 可為 0），**不採前端補回**——
+   * 修在資料來源，選項清單只有一套規則；前端補回會讓「選項從哪來」變成兩處組合而成。
+   *
+   * 🔴🔴 **本描述區塊之定位（誠實揭露，非紅燈規避）**：下方「決 A 同源斷言」對本檔 FakeStore
+   * 而言為**綠燈**——FakeStore 已同步擴充（見上方 `listCandidateDocs` 新增之保證邏輯），本測試
+   * 之作用是**鎖住服務層之透傳契約**（`svc.listCandidates()` 不得在轉手途中把該保證濾掉）。
+   * **真正尚未實作、應為紅燈之處在 `typeorm-business-category-docs.store.ts` 之 SQL**（`groups`
+   * CTE 目前僅對 `base` 分組，沒有「若使用者已選之循環不在分組內就補一筆 count=0」之步驟）——
+   * 該缺口由 `backend/test/int/business-category-candidates.itest.ts` 對真 SOP DB 之新增案例
+   * 覆蓋（FakeStore 回傳的永遠是測試自己塞的資料，無法證明真實 SQL 是否已補上這個 UNION 分支）。
+   *
+   * ### 🔴 決 B：唯讀角色開放搜尋／篩選／翻頁，只是不能掛載／移除（前端範圍，見
+   * `BusinessCategoryNodeDrawer.test.tsx` 之對應 describe；本檔不重複）。
+   *
+   * ### 🔴 決 C：搜尋改為伺服器端查詢——`keyword`／`page`／`pageSize` 三者早已存在於本服務／
+   * store 之簽章與 SQL（2026-09-02/03 前兩輪即已落地），故下方之「組合」測試預期為**回歸鎖**
+   * （綠燈），非新紅燈——真正缺的是**前端**尚未送出這兩個參數，見前端測試檔之對應 describe。
+   */
+  describe('🔴🔴 2026-09-04 第四次契約修訂：候選之分頁瀏覽 + 伺服器端搜尋（決 A/B/C）', () => {
+    it('🔴 決 A 同源斷言：已選循環 X ＋ 該循環無命中之 keyword → candidateLifecycles 仍含 X（count 為 0），candidateTotal 與 items 皆為 0（回歸鎖：鎖住服務層透傳，真正紅燈見 int-test）', async () => {
+      store.doc('D1', 'D1', '融資作業一', 'lc-fc', '融資循環');
+      store.doc('D2', 'D2', '融資作業二', 'lc-fc', '融資循環');
+      store.doc('D3', 'D3', '投資評價作業', 'lc-ic', '投資循環');
+
+      const result = await svc.listCandidates('bc1', 'n1', {
+        keyword: '__NO_MATCH_KEYWORD__',
+        page: 1,
+        pageSize: 10,
+        userSelectedLifecycleId: 'lc-fc',
+      });
+
+      expect(result.items).toEqual([]);
+      expect(result.total).toBe(0);
+      const fc = result.candidateLifecycles.find((g) => g.lifecycleId === 'lc-fc');
+      // 已選循環須仍出現於 candidateLifecycles（count 可為 0），否則使用者連「全部循環」都選不回來。
+      expect(fc).toBeDefined();
+      expect(fc!.count).toBe(0);
+      expect(fc!.displayName).toBe('融資循環');
+    });
+
+    it('決 A 對照組：keyword 命中該循環時，candidateLifecycles 之 count 為真實命中數（非恆為 0——證明上一案不是「count 永遠回 0」之退化實作）', async () => {
+      store.doc('D1', 'D1', '融資作業一', 'lc-fc', '融資循環');
+      store.doc('D2', 'D2', '融資作業二', 'lc-fc', '融資循環');
+
+      const result = await svc.listCandidates('bc1', 'n1', {
+        keyword: '融資',
+        page: 1,
+        pageSize: 10,
+        userSelectedLifecycleId: 'lc-fc',
+      });
+
+      expect(result.total).toBe(2);
+      const fc = result.candidateLifecycles.find((g) => g.lifecycleId === 'lc-fc');
+      expect(fc!.count).toBe(2);
+    });
+
+    it('決 A：未選任何循環時不受影響（無預設值，回歸鎖）', async () => {
+      store.doc('D1', 'D1', 'D1', 'lc-A');
+      const result = await svc.listCandidates('bc1', 'n1', { keyword: '__NO_MATCH__', page: 1, pageSize: 10 });
+      expect(result.candidateLifecycles).toEqual([]);
+    });
+
+    it('決 C 組合（回歸鎖：page／keyword 早已可組合使用，前兩輪即已落地）：關鍵字命中數大於一頁時，第 2 頁回傳正確之下一批，candidateTotal 為過濾後之全集（非當前頁）', async () => {
+      for (let i = 1; i <= 5; i += 1) {
+        store.doc(`D${i}`, `ICSOP-KW-${String(i).padStart(2, '0')}`, `授信相關作業${i}`);
+      }
+      store.doc('DX', 'ICSOP-OTHER', '不含關鍵字之作業');
+
+      const page1 = await svc.listCandidates('bc1', 'n1', { keyword: '授信', page: 1, pageSize: 2 });
+      expect(page1.items.map((d) => d.id)).toEqual(['D1', 'D2']);
+      expect(page1.total).toBe(5);
+
+      const page2 = await svc.listCandidates('bc1', 'n1', { keyword: '授信', page: 2, pageSize: 2 });
+      expect(page2.items.map((d) => d.id)).toEqual(['D3', 'D4']);
+      expect(page2.total).toBe(5);
+
+      const page3 = await svc.listCandidates('bc1', 'n1', { keyword: '授信', page: 3, pageSize: 2 });
+      expect(page3.items.map((d) => d.id)).toEqual(['D5']);
+      expect(page3.total).toBe(5);
     });
   });
 

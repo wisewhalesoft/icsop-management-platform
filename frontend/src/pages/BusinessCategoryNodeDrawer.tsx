@@ -21,6 +21,60 @@ type CandidateLifecycleOption = NonNullable<
 >[number];
 
 /**
+ * 🔴 候選之**伺服器端**查詢條件（2026-09-04 第四個 delta，`ui-ux-design-overview.md` §A.11）。
+ * 三者一律**原子地**一起更新：循環別／關鍵字任一變動即 `page → 1`（§A.11.3）——它們都是
+ * 伺服器端條件，換條件＝**換一個母體**；沿用頁碼會讓「已載入 60 ／ 共 5 份」這種不自洽的
+ * 狀態（甚至「尚有 −55 份未載入」）出現，並直接跳過新查詢前 40 筆命中。
+ * 🔒 合成一個物件而非三個 state：分開持有時「改關鍵字」與「重置頁碼」是兩次 setState，
+ * 載入 effect 會先用舊頁碼送出一次多餘（且錯誤）的查詢。
+ */
+interface CandidateQuery {
+  /** `''`＝全部循環（不送出任何循環參數）。 */
+  lifecycleId: string;
+  /** 🔴 **已套用**之關鍵字（去抖動後才寫入），非搜尋框當下之值。 */
+  keyword: string;
+  /** 1 起算；🔴 只有「載入更多」會使它增加。 */
+  page: number;
+}
+
+const INITIAL_CANDIDATE_QUERY: CandidateQuery = { lifecycleId: '', keyword: '', page: 1 };
+
+/** 🔒 與後端 `DEFAULT_CANDIDATE_PAGE_SIZE`（`business-category-docs.controller.ts`）同值。 */
+const CANDIDATE_PAGE_SIZE = 20;
+
+/**
+ * 關鍵字去抖動（§A.11.3）：搜尋為**伺服器端**查詢，不去抖動則每敲一個字送一次 GET。
+ * 🔒 去抖動只延後「已套用之關鍵字」，不碰輸入框本身 ⇒ 游標不受影響。
+ */
+const CANDIDATE_KEYWORD_DEBOUNCE_MS = 300;
+
+/**
+ * 🔴 依查詢條件決定**送幾個引數**——本函式即 `AC-20` 與丙 delta 兩條結構性斷言之落點：
+ * 未互動 ⇒ 恰兩引數；只選了循環 ⇒ 恰三引數；有關鍵字或翻了頁 ⇒ 才帶第 4 個選填引數。
+ * 🔒 順序上刻意先判 `opts`：第 4 引數存在時，第 3 引數必須佔位（`undefined`＝未選循環），
+ * 否則 `keyword` 會被當成 `userSelectedLifecycleId` 送出。
+ */
+function fetchCandidatePage(
+  businessCategoryId: string,
+  nodeId: string,
+  q: CandidateQuery,
+): Promise<BusinessCategoryNodeDrawerData> {
+  const opts: { keyword?: string; page?: number } = {};
+  if (q.keyword) opts.keyword = q.keyword;
+  if (q.page > 1) opts.page = q.page;
+  if (opts.keyword !== undefined || opts.page !== undefined) {
+    return getBusinessCategoryNodeDrawer(
+      businessCategoryId,
+      nodeId,
+      q.lifecycleId || undefined,
+      opts,
+    );
+  }
+  if (q.lifecycleId) return getBusinessCategoryNodeDrawer(businessCategoryId, nodeId, q.lifecycleId);
+  return getBusinessCategoryNodeDrawer(businessCategoryId, nodeId);
+}
+
+/**
  * F043 §丙 業務/功能類別節點抽屜。版面權威＝`prototypes/28-business-category-node-drawer.html`
  * （鏡射 `12-node-drawer.html`）。
  *
@@ -117,7 +171,8 @@ export function BusinessCategoryNodeDrawer({
   const toast = useToast();
   const [name, setName] = useState('');
   const [originalName, setOriginalName] = useState('');
-  const [kw, setKw] = useState('');
+  /** 搜尋框之**當下輸入值**（受控）；🔴 送出與否由去抖動後之 `query.keyword` 決定。 */
+  const [keywordInput, setKeywordInput] = useState('');
   const [docs, setDocs] = useState<DDoc[]>([]);
   /**
    * 🔴 **已持久化之掛載集合**（載入當下後端回傳之 `mounted`）——`pending` 與送出之 diff **一律以它為基準**。
@@ -136,19 +191,23 @@ export function BusinessCategoryNodeDrawer({
    */
   const [candidateTotal, setCandidateTotal] = useState<number | null>(null);
   const [candidateLifecycleCount, setCandidateLifecycleCount] = useState<number | null>(null);
-  const [candidateLoaded, setCandidateLoaded] = useState(0);
   /**
-   * 🔒 **使用者主動選擇**之循環別（`''`＝全部循環）。
-   * `AC-20` 禁的是「系統靜默地只給同循環文件」；本狀態唯一的寫入者是使用者的下拉互動，
+   * 🔒 **使用者主動選擇**之三個伺服器端查詢條件（`''`＝全部循環）。
+   * `AC-20` 禁的是「系統靜默地只給同循環文件」；本狀態唯一的寫入者是使用者的互動，
    * **不得**由節點／類別推導初值——那會把 `AC-20` 從後門推翻。
    */
-  const [selectedLifecycleId, setSelectedLifecycleId] = useState('');
+  const [query, setQuery] = useState<CandidateQuery>(INITIAL_CANDIDATE_QUERY);
+  /** 🔴 候選查詢往返中（三態機之態②，§A.11.4）。 */
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
   /** 下拉選項來源：後端「未套用使用者篩選」之全集分組（🔴 不得由當前頁 `docs` 推導）。 */
   const [candidateLifecycles, setCandidateLifecycles] = useState<CandidateLifecycleOption[]>([]);
   /**
-   * 🔴 **當前回應**所回傳之候選 id（＝目前篩選條件下應可見者）。
-   * `docs` 是**累積**的（見載入 effect），故必須另外持有「這一次查到的是哪些」，
-   * 否則切換循環別時清單不會收斂。
+   * 🔴 目前查詢條件下**已載入**之候選 id（＝目前應可見者）。
+   * `docs` 是**累積**的（見載入 effect），故必須另外持有「目前這組條件查到的是哪些」，
+   * 否則切換循環別／關鍵字時清單不會收斂。
+   * 🔴 **跨頁累積、換條件即重置**：翻頁（`page >= 2`）之回應與前幾頁**聯集**（使用者「翻到第 3
+   * 頁勾 A、再翻到第 7 頁勾 B」時兩者都要在）；循環別或關鍵字一變即整份換掉（換母體）。
+   * 🔒 它同時是「目前已載入 N 份」之**唯一**數字來源——不另外算一次，兩處不可能分歧。
    */
   const [visibleCandidateIds, setVisibleCandidateIds] = useState<Set<string>>(new Set());
   const [entered, setEntered] = useState(false);
@@ -159,19 +218,33 @@ export function BusinessCategoryNodeDrawer({
   /** 已完成首次載入之 (類別, 節點)——用以區分「首載」與「循環別重新查詢」。 */
   const loadedKey = useRef<string | null>(null);
 
+  /**
+   * 🔴 關鍵字之去抖動（§A.11.3）：輸入框每次變動都重排一個計時器，靜止 300ms 後才**套用**
+   * （寫入 `query.keyword` 並 `page → 1`），由載入 effect 送出伺服器端查詢。
+   * 🔒 `keywordInput === query.keyword` 時直接跳過（含初載）——不排計時器、也不會空轉。
+   */
+  useEffect(() => {
+    if (keywordInput === query.keyword) return undefined;
+    const timer = setTimeout(() => {
+      setQuery((q) =>
+        q.keyword === keywordInput ? q : { ...q, keyword: keywordInput, page: 1 },
+      );
+    }, CANDIDATE_KEYWORD_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [keywordInput, query.keyword]);
+
   useEffect(() => {
     let alive = true;
+    setCandidatesLoading(true);
     void (async () => {
       try {
         /**
-         * 🔴 `AC-20`：未選任何循環時，引數**恰為** (businessCategoryId, nodeId)，
+         * 🔴 `AC-20`：未做任何互動時，引數**恰為** (businessCategoryId, nodeId)，
          * 連 `undefined` 都不傳——不得夾帶任何系統自行推導之循環鍵。
-         * 🔒 選了循環才帶第三引數：那是**使用者主動**縮小範圍，與 `AC-20` 所禁之
-         * 「系統靜默過濾」是兩件事，故鍵名逐字為 `userSelectedLifecycleId`。
+         * 🔒 選了循環才帶第三引數、有關鍵字或翻了頁才帶第四引數：那些都是**使用者主動**
+         * 縮小範圍或繼續瀏覽，與 `AC-20` 所禁之「系統靜默過濾」是兩件事。見 `fetchCandidatePage`。
          */
-        const d = selectedLifecycleId
-          ? await getBusinessCategoryNodeDrawer(businessCategoryId, nodeId, selectedLifecycleId)
-          : await getBusinessCategoryNodeDrawer(businessCategoryId, nodeId);
+        const d = await fetchCandidatePage(businessCategoryId, nodeId, query);
         if (!alive) return;
         const fresh = mergeDrawerDocs(d.mounted ?? [], d.candidates ?? []);
         const key = `${businessCategoryId}\0${nodeId}`;
@@ -183,14 +256,18 @@ export function BusinessCategoryNodeDrawer({
           setDocs(fresh);
           setBaseline(mountedIds);
           setDraft(new Set(mountedIds));
-          setSelectedLifecycleId(''); // 換節點 → 篩選歸零（首次載入時為 no-op）
+          // 換節點 → 循環別／關鍵字／頁碼全歸零（首次載入時回傳同一物件，React 直接 bail out）。
+          setKeywordInput('');
+          setQuery((q) =>
+            q.lifecycleId === '' && q.keyword === '' && q.page === 1 ? q : INITIAL_CANDIDATE_QUERY,
+          );
         } else {
           /**
-           * 🔴 循環別之重新查詢**只併入新認識的文件**，不動節點名稱／`baseline`／`draft`。
-           * 天真地整份取代會讓使用者「先選了幾份候選、再換循環別去找更多」時，**已選但不屬於
-           * 新循環的那幾份從 `docs` 消失** ⇒ 既不顯示於「目前掛載文件」、送出時也不在 `toMount`
-           * 內——一個沒有任何錯誤訊息的靜默資料遺失（同理，重新查詢若覆寫 `name`，使用者尚未
-           * 送出的改名也會被吞掉）。
+           * 🔴 重新查詢**只併入新認識的文件**，不動節點名稱／`baseline`／`draft`。
+           * 天真地整份取代會讓使用者「先選了幾份候選、再換循環別或翻頁去找更多」時，**已選但
+           * 不屬於新條件的那幾份從 `docs` 消失** ⇒ 既不顯示於「目前掛載文件」、送出時也不在
+           * `toMount` 內——一個沒有任何錯誤訊息的靜默資料遺失（同理，重新查詢若覆寫 `name`，
+           * 使用者尚未送出的改名也會被吞掉）。
            */
           setDocs((prev) => {
             const byId = new Map(prev.map((x) => [x.id, x]));
@@ -198,13 +275,21 @@ export function BusinessCategoryNodeDrawer({
             return [...byId.values()];
           });
         }
-        setVisibleCandidateIds(new Set((d.candidates ?? []).map((c) => c.id)));
+        /**
+         * 🔴 `page >= 2`（「載入更多」）⇒ 與前幾頁**聯集**；否則（換條件、回第一頁）⇒ 整份換掉。
+         * 後端每次只回**當前頁**（非累積），累積是前端的責任。
+         */
+        const pageIds = (d.candidates ?? []).map((c) => c.id);
+        setVisibleCandidateIds((prev) =>
+          query.page > 1 ? new Set([...prev, ...pageIds]) : new Set(pageIds),
+        );
         setCandidateTotal(d.candidateTotal ?? null);
         setCandidateLifecycleCount(d.candidateLifecycleCount ?? null);
-        setCandidateLoaded((d.candidates ?? []).length);
         setCandidateLifecycles(d.candidateLifecycles ?? []);
       } catch (e) {
         if (alive) toast.error(e instanceof ApiError ? e.code : '載入失敗');
+      } finally {
+        if (alive) setCandidatesLoading(false);
       }
     })();
     return () => {
@@ -212,7 +297,7 @@ export function BusinessCategoryNodeDrawer({
     };
     // toast 為 provider 之穩定 API，刻意不入依賴（比照既有 NodeDrawer）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessCategoryId, nodeId, selectedLifecycleId]);
+  }, [businessCategoryId, nodeId, query]);
 
   const cancel = useCallback(() => {
     onNodeRenamed(nodeId, originalName.trim() || '未命名節點'); // 還原畫布即時預覽
@@ -255,18 +340,46 @@ export function BusinessCategoryNodeDrawer({
   }, []);
 
   const mountedDocs = useMemo(() => docs.filter((d) => draft.has(d.id)), [docs, draft]);
-  const candidates = useMemo(() => {
-    const q = kw.trim().toLowerCase();
-    // `AC-28`：搜尋比對＝documentNumber ∪ documentName 之 contains（記憶體 includes 天然字面安全）。
-    return docs
-      .filter((d) => !draft.has(d.id))
-      /**
-       * 🔒 `baseline` 亦視為可見：載入當時已掛於本節點者不在候選回應內，但使用者把它移除後
-       * 必須看得到、也才回得去（＝新增本篩選前之既有行為，一格未變）。
-       */
-      .filter((d) => visibleCandidateIds.has(d.id) || baseline.has(d.id))
-      .filter((d) => !q || d.number.toLowerCase().includes(q) || d.name.toLowerCase().includes(q));
-  }, [docs, draft, kw, visibleCandidateIds, baseline]);
+  /**
+   * 🔴 決 C（2026-09-04）：`AC-28` 之搜尋比對（documentNumber ∪ documentName 之 contains）
+   * **已整份移交後端**——此處刻意**不再**做任何客端關鍵字過濾。
+   * 理由：客端過濾只掃「已載入的那 20 列」，真庫最大的循環有 346 份 ⇒ 第 21 筆之後連搜尋
+   * 都搜不到（使用者實機回報之根因）。留著它還會二次過濾掉後端已判定命中的列（例如關鍵字
+   * 命中書名以外的欄位時），使伺服器端結果被前端偷偷丟掉。
+   */
+  const candidates = useMemo(
+    () =>
+      docs
+        .filter((d) => !draft.has(d.id))
+        /**
+         * 🔒 `baseline` 亦視為可見：載入當時已掛於本節點者不在候選回應內，但使用者把它移除後
+         * 必須看得到、也才回得去（＝新增本篩選前之既有行為，一格未變）。
+         */
+        .filter((d) => visibleCandidateIds.has(d.id) || baseline.has(d.id)),
+    [docs, draft, visibleCandidateIds, baseline],
+  );
+
+  /**
+   * 🔴 分頁區之三個數字（§A.11.4）。`candidateLoaded` 與說明文字之「目前已載入 N 份」
+   * **同源**（同一個 `visibleCandidateIds.size`），不各自算一次。
+   */
+  const candidateLoaded = visibleCandidateIds.size;
+  const candidateRemaining = Math.max((candidateTotal ?? 0) - candidateLoaded, 0);
+  /** 是否有**使用者主動**施加之縮小條件（決定空狀態之第二行說哪一句，§A.11.4）。 */
+  const candidateFilterActive = query.keyword !== '' || query.lifecycleId !== '';
+  const selectedLifecycleName =
+    candidateLifecycles.find((lc) => lc.lifecycleId === query.lifecycleId)?.displayName ??
+    '所選循環';
+
+  /** 🔴 唯一使頁碼增加的動作（§A.11.3）；決 B：唯讀角色亦可使用，故**不看** `canWrite`。 */
+  const loadMoreCandidates = useCallback(() => {
+    setQuery((q) => ({ ...q, page: q.page + 1 }));
+  }, []);
+
+  /** 🔴 切換循環別 ⇒ 換一個母體 ⇒ 頁碼一律重置為 1（§A.11.3）。 */
+  const changeLifecycleFilter = useCallback((lifecycleId: string) => {
+    setQuery((q) => ({ ...q, lifecycleId, page: 1 }));
+  }, []);
 
   const pending = useMemo(() => {
     let added = 0;
@@ -403,7 +516,7 @@ export function BusinessCategoryNodeDrawer({
                 <span className="text-slate-600" data-candidate-loaded={candidateLoaded}>
                   {candidateLoaded}
                 </span>{' '}
-                份，請用上方搜尋縮小範圍。
+                份，請用上方搜尋縮小範圍，或按下方「載入更多」繼續瀏覽。
               </span>
             </div>
             {/*
@@ -420,9 +533,10 @@ export function BusinessCategoryNodeDrawer({
             <div className="relative mb-2">
               <Icon name="filter" className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <select
-                value={selectedLifecycleId}
-                onChange={(e) => setSelectedLifecycleId(e.target.value)}
+                value={query.lifecycleId}
+                onChange={(e) => changeLifecycleFilter(e.target.value)}
                 aria-label="循環別篩選"
+                data-candidate-cycle-filter=""
                 className="w-full pl-8 pr-3 py-1.5 rounded-md border border-slate-300 text-sm bg-white"
               >
                 <option value="">全部循環</option>
@@ -433,21 +547,56 @@ export function BusinessCategoryNodeDrawer({
                 ))}
               </select>
             </div>
+            {/*
+              🔵 §A.11.4：選了循環之後，上方說明文字那兩個數字變成「套用篩選後」之值，與同一句
+              的「不以循環過濾」字面相衝突。此處以**另一個元素**就地說明兩者之別（既有那句一字未動）。
+            */}
+            {query.lifecycleId && (
+              <div
+                data-candidate-filter-active=""
+                className="flex items-start gap-1 text-[11px] text-slate-500 mb-2"
+              >
+                <Icon name="filter" className="w-3 h-3 mt-0.5 shrink-0 text-slate-400" />
+                <span>
+                  目前僅列出
+                  <strong className="text-slate-600">{selectedLifecycleName}</strong>
+                  之文件——這是<strong className="text-slate-600">使用者主動</strong>
+                  縮小範圍，上方兩個數字亦為套用本篩選後之值；選回「全部循環」即回到全集。
+                </span>
+              </div>
+            )}
             <div className="relative mb-2">
               <Icon name="search" className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              {/*
+                🔴 決 C：本框之值是**伺服器端**查詢條件（去抖動後送出、並 `page → 1`），
+                不再是客端過濾器。🔒 決 B：唯讀角色亦可搜尋，故**不得** disable。
+              */}
               <input
-                value={kw}
-                onChange={(e) => setKw(e.target.value)}
+                value={keywordInput}
+                onChange={(e) => setKeywordInput(e.target.value)}
                 placeholder="搜尋候選文件…"
                 aria-label="搜尋候選文件"
                 className="w-full pl-8 pr-3 py-1.5 rounded-md border border-slate-300 text-sm"
               />
             </div>
             {candidates.length === 0 ? (
-              // `AC-28` 逐字空狀態（**非錯誤**）。
-              <div data-candidate-empty="" className="text-center border border-dashed border-slate-200 rounded-lg px-3 py-6">
+              /*
+                `AC-28` 逐字空狀態（**非錯誤**）。🔵 §A.11.4：主句兩種情境皆一字未動，
+                第二行改為**條件式**——語料一到 591 份，只要有關鍵字或循環別篩選造成清單為空，
+                「全部 ICSOP 文件皆已掛載於本節點」就是一句假話（空是因為篩選，不是因為全掛完）。
+              */
+              <div
+                data-candidate-empty=""
+                data-candidate-empty-reason={candidateFilterActive ? 'filtered' : 'all-mounted'}
+                className="text-center border border-dashed border-slate-200 rounded-lg px-3 py-6"
+              >
                 <Icon name="inbox" className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
                 <p className="text-sm text-slate-500">尚無可掛載文件</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {candidateFilterActive
+                    ? '目前的搜尋關鍵字或循環別篩選下沒有符合的文件——請調整關鍵字，或將循環別選回「全部循環」。'
+                    : '全部 ICSOP 文件皆已掛載於本節點'}
+                </p>
               </div>
             ) : (
               <ul className="space-y-2 list-none p-0 m-0">
@@ -482,6 +631,66 @@ export function BusinessCategoryNodeDrawer({
                   </li>
                 ))}
               </ul>
+            )}
+            {/*
+              🔵 2026-09-04：候選之**分頁瀏覽**（§A.11.2／§A.11.4）。形式＝**累積式「載入更多」**
+              （非上一頁/下一頁、非無限捲動）：挑選任務需要累積視野——使用者「翻到第 3 頁勾 A、
+              再翻到第 7 頁勾 B」時兩者都要留在「目前掛載文件」裡，且「目前已載入 N 份」這句話
+              只有累積式才成立。
+              🔴 三態**互斥且窮盡**（候選非空時恰有其一）：① 尚有未載入 ② 載入中 ③ 已全部載入。
+              🔴 態②③ 之按鈕**自 DOM 移除**，**不是 disabled**——「載完之後還留一顆按不動的
+                 按鈕」正是本輪要避免的形狀；且以 `queryBy…` 斷言時，disabled／CSS 隱藏會讓
+                 該斷言恆真＝假綠。
+              🔒 決 B：唯讀角色亦可翻頁，本區**不看** `canWrite`。
+            */}
+            {candidateTotal !== null && (
+              <div
+                data-candidate-pager=""
+                data-candidate-loaded={candidateLoaded}
+                data-candidate-total={candidateTotal}
+                data-candidate-remaining={candidateRemaining}
+                data-candidate-page={query.page}
+                data-candidate-page-size={CANDIDATE_PAGE_SIZE}
+                className="mt-2"
+              >
+                {/* 候選為空 ⇒ 分頁區無內容（空狀態由上方 `data-candidate-empty` 承載）。 */}
+                {candidateTotal > 0 && candidatesLoading && (
+                  <div
+                    data-candidate-loading=""
+                    className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500"
+                  >
+                    <Icon name="refresh-cw" className="w-4 h-4 animate-spin text-primary-600" />
+                    載入中…
+                  </div>
+                )}
+                {candidateTotal > 0 && !candidatesLoading && candidateRemaining <= 0 && (
+                  <div
+                    data-candidate-all-loaded=""
+                    className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-200 px-3 py-2.5 text-xs text-slate-400"
+                  >
+                    <Icon name="check" className="w-3.5 h-3.5 text-emerald-500" />
+                    已全部載入（共 {candidateTotal} 份）
+                  </div>
+                )}
+                {candidateTotal > 0 && !candidatesLoading && candidateRemaining > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      data-candidate-load-more=""
+                      onClick={loadMoreCandidates}
+                      className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-primary-300 bg-primary-50 px-3 py-2.5 text-sm font-medium text-primary-700 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-600"
+                    >
+                      <Icon name="chevron-down" className="w-4 h-4" />
+                      載入更多
+                    </button>
+                    <div className="mt-1 text-center text-[11px] text-slate-400">
+                      已載入 <span className="text-slate-500">{candidateLoaded}</span> ／{' '}
+                      {candidateTotal} 份 · 尚有{' '}
+                      <span className="text-slate-500">{candidateRemaining}</span> 份未載入
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
         </div>

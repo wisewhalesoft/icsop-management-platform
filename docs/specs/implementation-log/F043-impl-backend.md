@@ -3,7 +3,7 @@ type: implementation-log
 feature_id: F043
 feature_name: 業務/功能類別管理（後端）
 status: complete
-last_updated: 2026-09-03
+last_updated: 2026-09-04
 ---
 
 # F043: 業務/功能類別管理 — 後端實作紀錄
@@ -494,3 +494,90 @@ cd backend  && npm run test:int         → Test Suites: 24 passed, 24 total
 4. ⚠ **未處理「文件 `lifecycleId` 為 null」之邊界**——依 lead 裁定 #3，
    `icsop-document.entity.ts:35` 為 `lifecycleId!: string`（非 nullable），該情境結構上不可達。
 5. ⚠ **未動 `docs/specs/features/F043-*.md`**——依 lead 裁定 #4，本 delta 之正式 AC 條文由 lead 補。
+
+---
+
+# 2026-09-04 第五輪 delta（後端）：決 A — `candidateLifecycles` 恆含使用者已選之循環
+
+> 環由 `ring-paging` 於實作前撰寫，本 agent **僅寫產品程式碼，未新增／修改／弱化／刪除任何測試**。
+> 本輪**無申訴**。
+
+## 為何要修（失敗形狀）
+
+`candidateLifecycles`（循環別下拉之**唯一**選項來源）取自 `groups` CTE，而 `groups` 對 `base`
+分組——`base` 已套 `keyword`。於是：**選了「融資循環」再打一個該循環無命中之關鍵字** ⇒ `base` 被
+濾光 ⇒ 該循環從分組中消失 ⇒ 前端 `<select value={已選}>` 找不到對應 `option` 而顯示**空白**，
+使用者連「全部循環」都選不回來——被自己打的關鍵字鎖死在一個看不見的篩選裡。
+
+🔴 **使用者裁決（決 A）：修在資料來源，不在前端補回**。理由＝選項清單只有一套規則；前端補回會讓
+「選項從哪來」變成兩處組合而成。
+
+## 檔案異動
+
+| 檔案 | 類型 | 說明 |
+|---|---|---|
+| `backend/src/business-categories/typeorm-business-category-docs.store.ts` | modified | `listCandidateDocs` 之 SQL 加 `selectedGroup`／`allGroups` 兩段 CTE；排除條件另存一份 |
+
+🔒 **介面、服務層、controller 一格未動**——`keyword`／`page`／`pageSize`／`userSelectedLifecycleId`
+四個參數早在前兩輪即已從 query string 一路貫通到 SQL（決 C 之後端側本輪無事可做，缺的一直是前端）。
+
+## SQL 之作法
+
+```
+groups        （既有）＝ base（已套 keyword ＋ exclude）依 lifecycleId 分組
+selectedGroup （新增）＝ 使用者已選之循環，若**不在** groups 內則補一列、groupCount 恆為 0
+allGroups     （新增）＝ groups UNION ALL selectedGroup
+```
+
+1. 🔒 `selectedGroup` **刻意不套 `keyword`**（改查 `ICSOP_DOCUMENT` 全集）——那正是它存在的理由：
+   `base` 本身已被 keyword 濾光，若名稱也只能從 `base` 取得，這個保證就無從實現。
+   為此把排除條件另外單獨持有一份（`excludeConditions`）。
+2. 🔒 **仍套 `excluded`**：已排除之文件不代表整個循環不存在；此處只用來**解析顯示名稱**，
+   `groupCount` 恆為 0，不影響任何統計。
+3. 🔒 `NOT EXISTS (… groups …)` 而非無條件補：命中時 `groups` 本身已有正確筆數，
+   補一筆 0 會變成**重複選項**。
+4. 🔒 `DISTINCT` 而非 `TOP 1`：三個投影欄皆由 `lifecycleId` 函數決定（`LIFECYCLE.id` 為 PK），
+   故恰回一列且與資料列序無關（`TOP 1` 無 `ORDER BY` 則不具決定性）。
+5. 🔒 仍是**單一往返**（CTE 增為七段，`UNION ALL` 之列數仍為「頁筆數 ＋ 循環數」，非笛卡兒積）；
+   未選循環時 `selectedGroup`／`allGroups` 兩段 CTE **完全不生成**，SQL 逐字與從前相同。
+6. 🔒 `TRY_CONVERT` 沿用：非 GUID 之 query string 回 `NULL` ⇒ 條件恆不成立 ⇒ 不補列、不 500。
+
+## RED → GREEN 之獨立舉證（本棒次自行實跑，非採信交辦說明）
+
+`ring-paging` 明文指出：單元測試之 FakeStore 已同步擴充故**該檔恆綠**，真正的紅燈在 SQL。
+本棒次以 `git checkout HEAD -- typeorm-business-category-docs.store.ts` 還原舊 SQL 後單跑該 int 檔：
+
+```
+（舊 SQL）npx jest --config test/jest-int.json test/int/business-category-candidates.itest.ts
+  ● [int] F043 delta：決 A — candidateLifecycles 恆含使用者已選之循環（真 SOP DB）
+    expect(received).toBeDefined()   Received: undefined
+    at business-category-candidates.itest.ts:480   ← 已選循環被 keyword 擠出 candidateLifecycles
+  Tests: 1 failed, 8 passed, 9 total
+
+（新 SQL）同一指令 → Tests: 9 passed, 9 total
+```
+
+⇒ 該案例確實由本輪之 SQL 變更翻綠，不是本來就綠。
+
+## 閘門實跑輸出（2026-09-04）
+
+```
+cd backend && npx tsc --noEmit         → 0 error（exit 0）
+cd backend && npx jest --maxWorkers=4  → Test Suites: 218 passed, 218 total
+                                         Tests:       3423 passed, 3423 total
+cd backend && npm run test:int         → Test Suites:  24 passed,  24 total
+                                         Tests:        210 passed, 210 total
+```
+
+（基準 218 suites / 3419 tests 與 24 suites / 209 tests；+4／+1 為本輪環新增之案例，
+既有測試**零紅、零退化**。）
+
+## 未兌現項目（誠實列出）
+
+1. 🔴 **未做瀏覽器實機測試**（lead 表示將親自複驗）。
+2. （已補跑，非未兌現）`npm run deps:check` → `✔ no dependency violations found (398 modules, 1207 dependencies cruised)`。
+3. ⚠ **無 migration**——本輪不涉及任何 schema 變更。
+4. ⚠ **未動 `docs/specs/features/F043-*.md`**——本 delta 之正式 AC 條文（決 A／決 B／決 C）由 lead 補；
+   目前之權威為 mailbox 裁決 ＋ `docs/ui-ux-design-overview.md` §A.11.8。
+5. ⚠ **`selectedGroup` 之效能未於真庫量測**——它是一次 `DISTINCT` ＋ 索引可用之等值條件，
+   且**只在使用者已選循環時**生成；591 份文件之量級下不預期可觀成本，但未做 execution plan 檢查。

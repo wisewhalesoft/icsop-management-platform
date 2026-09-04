@@ -1378,3 +1378,17 @@ backend 實作完成、無異議後，team-lead 指出本端點已兩次只靠�
 | BC-NOASSERT-6 | 下拉選項是否於畫面上顯示 `candidateLifecycles[].count`（如「銷售及收款循環 (2)」） | 檢視既有循環篩選下拉之唯一先例（`ChangeHistoryPage.tsx:906`／`prototypes/23-change-history.html:524`）皆不於選項文字內附加筆數。🟢 **2026-09-03 已裁定：不顯示**——沿用本 repo 唯一先例之慣例；`count` 欄位本身仍須正確回傳（本環已鎖，且不因目前篩選而萎縮），只是 UI 層先不用，日後要加不需改契約（型別已含該欄）。 |
 | BC-NOASSERT-7 | 候選文件無 `lifecycleId`（`null`）時是否／如何併入 `candidateLifecycles` 分組 | 🔴 **2026-09-03 已裁定：不處理，因該情境結構上不可達**——lead 查證 `backend/src/database/entities/icsop-document.entity.ts:35`：`lifecycleId!: string; // → LIFECYCLE（建立時必填）`，非 nullable，故「候選文件無 `lifecycleId`」在目前資料模型下不存在真實個案。backend `business-category-docs-candidates.service.spec.ts` 之內部語料模型（`SeededDoc`）延續既有 FakeStore 設計、`lifecycleId` 為必填字串，正確反映此不可達性，非覆蓋率缺口。frontend fixture（`DRAWER` 之 `d6`，`lifecycleId: null`）屬 `CandidateDocRef`／`BusinessCategoryCandidateDoc` 型別層之防禦性可空設計（供 AC-20「純資訊 chip 不顯示」情境使用），與本欄位在 DB 層是否可能為 `null` 是兩件事，兩者不矛盾。 |
 
+### F043 §丁 delta（2026-09-04，同日第四個真實需求）：候選之分頁瀏覽 ＋ 伺服器端搜尋（決 A/B/C）
+
+> 起因（使用者實機原話）：「抽屜一次只載入 20 份，如果該循環超過 20 份，需要使用者去背其他的
+> 文件名才能搜尋到，不太合理。」查證後發現比使用者說的更嚴重：`getBusinessCategoryNodeDrawer()`
+> 從未送出 `page`／`keyword`，搜尋只掃已載入之當前頁（≤20 列），第 21 筆之後**連搜尋都搜不到**。
+> 權威：`docs/ui-ux-design-overview.md` §A.11（prototype 28 之分頁瀏覽設計）＋ team-lead mailbox
+> 直接裁決（決 A／決 B／決 C，2026-09-04，尚無正式 `AC-##`，同 `BC-NOASSERT-4` 之處置）。
+
+| # | 項目 | 理由 |
+|---|---|---|
+| BC-NOASSERT-8 | 決 A 之「唯一機器保證」實際落在 **int-test**，非 `business-category-docs-candidates.service.spec.ts`（unit） | 決 A 要求「`candidateLifecycles` 恆含使用者已選之循環（`count` 可為 0），即使 `keyword` 把該循環候選全數濾掉」。此保證之名稱解析需要**忽略 keyword、查詢全部語料**，這在架構上只有握有完整資料（真實 SQL 之 `groups` CTE 或等義結構）的**store 層**能做到；`business-category-docs.service.ts` 目前為純透傳（`return { ...r, candidateLifecycles: r.candidateLifecycles ?? [] }`），沒有可補的資料源。故本環之落地方式為：① unit 層 `FakeStore`（test-generator 自行維護之替身）已同步擴充實作決 A，該檔新增之「決 A 同源斷言」因而為**綠燈**，其作用僅為鎖住服務層透傳契約（回歸鎖，非紅燈）；② 真正之紅燈落在 `backend/test/int/business-category-candidates.itest.ts` 新增之 `[int] F043 delta：決 A` 案例——已對真 SOP DB 實跑，**確認為紅**（`typeorm-business-category-docs.store.ts` 之 `groups` CTE 目前僅對 `base` 分組，沒有「使用者已選循環若不在分組內就補一筆 count=0」之步驟）。⚠ 此為刻意之測試層級選擇，非覆蓋率缺口——team-lead 若要求 unit 層本身也需為紅燈，需改為在 `business-category-docs.service.ts` 增加一個獨立於 store 的名稱解析依賴（架構變更），本環認為不必要（int-test 已完整兌現）。<br>🔴🔴 **2026-09-04 team-lead 覆核後追加強調（維持本判斷，但代價須被看見）**：① **決 A 唯一之機器閘門是 `business-category-candidates.itest.ts` 之 `[int] F043 delta：決 A` 案例**——沒有 DB 連線時，這條回歸沒人守；② `business-category-docs-candidates.service.spec.ts` 之決 A 那 4 條（同源斷言＋對照組＋未選回歸鎖＋page/keyword 組合）是**回歸鎖**，鎖的是「服務層透傳不得把已由 store 正確回傳之 `candidateLifecycles` 濾掉／弄丟」——**這 4 條恆綠是預期行為，不是測試失效，日後不得僅因「從未紅過」就判定為無效測試而刪除**。若要驗證這幾條仍有鑑別力，應暫時把 `business-category-docs.service.ts` 之 `candidateLifecycles: r.candidateLifecycles ?? []` 改壞（例如硬回 `[]`）觀察是否翻紅，而非直接刪除。 |
+| BC-NOASSERT-9 | 搜尋輸入之去抖動（debounce）時序未建立單元測試 | `docs/ui-ux-design-overview.md` §A.11.3 之 prototype 明訂 300ms 去抖動（避免每敲一字送一次查詢），但本環之伺服器端搜尋測試刻意以 `fireEvent.change`（單次同步事件，非逐字元 `userEvent.type`）驅動輸入，僅約束「輸入完成後查詢引數含 keyword、結果正確」之**最終狀態**，不約束去抖動之確切毫秒數或「打字期間不得多次呼叫」之時序行為——以 `vi.useFakeTimers()` 精確鎖定去抖動時序，在本檔既有之非同步渲染（`waitFor`／`userEvent`）組合下容易造成假性逾時或死結（本 repo 過往踩過 fake timer 與 RTL async 併用之脆弱性），權衡後不納入本輪之機器閘門。若日後要補，屬新增測試、非本輪缺口。 |
+
+
