@@ -125,14 +125,54 @@ describe('DashboardHome — 最近活動（GAP-07-4）', () => {
     vi.mocked(endpoints.getDashboardActivity).mockResolvedValue(ACTIVITY);
   });
 
+  /**
+   * 🔴 2026-09-04 修正既有潛伏缺陷（team-lead 於 00:07 實跑抓到，非本 delta 引入）：
+   * `src/domain/activity-time.ts:28-32` 之「N 小時前」僅在與「now」**同一個日曆日**才成立
+   * （`dayDiff === 0` 分支），跨日則落入「昨日 hh:mm」。原寫法以模組載入當下（未凍結）之
+   * `Date.now()` 回推固定分鐘數建構 fixture——一旦模組載入時間落在 00:00～02:00（回推 2 小時後
+   * 跨過午夜），格式化結果變成「昨日 hh:mm」而非「2 小時前」，使本測試每天固定時段必紅、其餘
+   * 22 小時綠。
+   *
+   * 修法＝讓 now 變成確定的，而非讓期望值變模糊：凍結系統時間至遠離日曆日邊界之固定時點
+   * （任意日期之當地 12:00），並在凍結**之後**才建構 fixture（其 `occurredAt` 依凍結後之
+   * `Date.now()` 回推），使「2 小時前」（10:00）／「30 分鐘前」（11:30）在任何真實牆鐘時刻
+   * 執行本測試皆落在同一日曆日、恆為「N 小時前」。鎖的仍是「2 小時前之活動渲染為『2 小時前』」
+   * 本身——**不得**改為 `getByText(/小時前|昨日/)` 之類同時接受兩種輸出之寫法，那等於放棄了
+   * 這條測試原本要鎖的東西。同檔「30 分鐘前」不受影響（`< HOUR` 分支不看 `dayDiff`），本次
+   * 刻意不動它，範圍僅限本測試。
+   * `vi.useFakeTimers({ shouldAdvanceTime: true })` 比照既有慣例
+   * （見 `LifecycleTreePreviewPage.test.tsx` `TS-F036-D3-006`），使 `findByRole`／`waitFor`
+   * 之真實輪詢仍能運作；`try/finally` 還原比照 `useToast.test.tsx` 之 `afterEach` 慣例。
+   */
   it('渲染伺服端回傳之活動列（文字＋相對時間）', async () => {
-    mockAuth('ICSOPAdmin');
-    renderPage();
-    const list = await screen.findByRole('list', { name: '最近活動' });
-    expect(within(list).getByText('ICSOP-SRC-101-1-01 車輛分期進件作業 已建立')).toBeInTheDocument();
-    expect(within(list).getByText('每日組織同步完成，異動 12 筆')).toBeInTheDocument();
-    expect(within(list).getByText('2 小時前')).toBeInTheDocument();
-    expect(within(list).getByText('30 分鐘前')).toBeInTheDocument();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.setSystemTime(new Date('2026-06-15T12:00:00'));
+      const activity: DashboardActivityItem[] = [
+        {
+          id: 'doc:1',
+          kind: 'DOCUMENT_CREATED',
+          text: 'ICSOP-SRC-101-1-01 車輛分期進件作業 已建立',
+          occurredAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        },
+        {
+          id: 'sync:1',
+          kind: 'ORG_SYNC_COMPLETED',
+          text: '每日組織同步完成，異動 12 筆',
+          occurredAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+        },
+      ];
+      vi.mocked(endpoints.getDashboardActivity).mockResolvedValue(activity);
+      mockAuth('ICSOPAdmin');
+      renderPage();
+      const list = await screen.findByRole('list', { name: '最近活動' });
+      expect(within(list).getByText('ICSOP-SRC-101-1-01 車輛分期進件作業 已建立')).toBeInTheDocument();
+      expect(within(list).getByText('每日組織同步完成，異動 12 筆')).toBeInTheDocument();
+      expect(within(list).getByText('2 小時前')).toBeInTheDocument();
+      expect(within(list).getByText('30 分鐘前')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('伺服端回空（該角色無可見來源）→ 空狀態，不隱藏整個區塊', async () => {
