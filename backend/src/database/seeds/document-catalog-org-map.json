@@ -1,20 +1,21 @@
 {
   "$doc": [
-    "程序書目錄清單 → ORG_UNIT.orgCode 之人工對應表（seed-document-catalog.ts 讀取）。",
-    "Excel 使用的是 ICSOP 業務組織用語，ORG_UNIT 則來自上游人資（COMPID='AS'，見 docs/specs/upstream-hr-source-contract.md §10）；",
+    "程序書目錄清單 → 公司代碼／ORG_UNIT.orgCode 之人工對應表（seed-document-catalog.ts 讀取）。",
+    "Excel 使用的是 ICSOP 業務組織用語，ORG_UNIT 則來自上游人資（見 docs/specs/upstream-hr-source-contract.md §10）；",
     "兩套命名不一致，故無法機械推導，一律以本表為準。",
     "鍵一律為原文標籤：company=「公司」；dept=「公司|部門」；section=「公司|部門|室別」。",
+    "company 之值為 **公司代碼**（companyCode，寫入 ICSOP_DOCUMENT.companyCode）；dept／section 之值為該公司下之 orgCode。",
+    "🔴 2026-09-04 修正：本表 company 區塊原本存的是『該公司 ROOT 之 orgCode』，且僅和潤企業有值；",
+    "  2026-08-27 制定公司收斂為 companyCode 時，seed 未改讀本表而是逐列寫死 'AS'，使 591 筆中的 126 筆",
+    "  （和潤電能 61／和勁企業 41／和潤興業 24）公司別全錯。修補見 migration 1725580800000。",
     "orgCode 為 null ＝ 尚未對應，匯入時該欄留 NULL（不猜）。填好後重跑 npm run seed:doc-catalog 會就地補寫。",
     "note 僅供人閱讀，程式不使用。"
   ],
   "company": {
-    "和潤企業": {
-      "orgCode": "00000",
-      "note": "ORG_UNIT ROOT『和潤本部』（companyCode=AS）。目前系統僅同步 AS。"
-    },
-    "和潤電能": { "orgCode": null, "note": "非 AS，ORG_UNIT 無此公司（僅有 AS 的『借調電能』部門，語意不同）。" },
-    "和勁企業": { "orgCode": null, "note": "非 AS，ORG_UNIT 無此公司。" },
-    "和潤興業": { "orgCode": null, "note": "非 AS，ORG_UNIT 無此公司。" }
+    "和潤企業": { "companyCode": "AS", "note": "COMPANY_FULL_NAMES.AS＝和潤企業股份有限公司。" },
+    "和潤電能": { "companyCode": "AE", "note": "COMPANY_FULL_NAMES.AE＝和潤電能股份有限公司（2026-08-25 起已納入組織同步）。" },
+    "和勁企業": { "companyCode": "AJ", "note": "COMPANY_FULL_NAMES.AJ＝和勁企業股份有限公司（2026-08-25 起已納入組織同步）。" },
+    "和潤興業": { "companyCode": "AD", "note": "COMPANY_FULL_NAMES.AD＝和潤興業股份有限公司（2026-08-25 起已納入組織同步）。" }
   },
   "dept": {
     "和潤企業|企劃部": { "orgCode": "AI000", "note": "descFull『企劃部』命中 AB000/AI000；AB000 無在職者，取 AI000。" },
@@ -27,13 +28,13 @@
     "和潤企業|財務會計部": { "orgCode": "DA000", "note": "descFull 唯一命中。" },
     "和潤企業|資訊部": { "orgCode": "DD000", "note": "descFull 命中 AM000(4 人)/DD000(52 人)，取 DD000。" },
     "和潤企業|資金管理部": { "orgCode": "DB000", "note": "descFull 唯一命中。" },
-    "和潤企業|待訂": { "orgCode": null, "note": "來源即為『待訂』，尚未指定部門。" },
-    "和潤電能|工程維運部": { "orgCode": null, "note": "公司未納入 ORG_UNIT。" },
-    "和潤電能|經營企劃部": { "orgCode": null, "note": "公司未納入 ORG_UNIT。" },
-    "和勁企業|企劃管理部": { "orgCode": null, "note": "公司未納入 ORG_UNIT。" },
-    "和勁企業|信用審查部": { "orgCode": null, "note": "公司未納入 ORG_UNIT。" },
-    "和潤興業|企劃部": { "orgCode": null, "note": "公司未納入 ORG_UNIT。" },
-    "和潤興業|審查部": { "orgCode": null, "note": "公司未納入 ORG_UNIT。" }
+    "和潤企業|待訂": { "orgCode": null, "note": "來源即為『待訂』，尚未指定部門。公司欄亦空白，匯入時公司回退為 AS（見 seed 之 DEFAULT_COMPANY_CODE）。" },
+    "和潤電能|工程維運部": { "orgCode": "CA000", "note": "AE/CA000『工程維運部』全名相符。" },
+    "和潤電能|經營企劃部": { "orgCode": "AA000", "note": "AE/AA000『經營企劃部』全名相符。" },
+    "和勁企業|企劃管理部": { "orgCode": "AA000", "note": "AJ/AA000 descFull『企劃管理部』相符（name 為縮寫『企劃管理』）。" },
+    "和勁企業|信用審查部": { "orgCode": "AD000", "note": "AJ/AD000 descFull『信用審查部』相符（name 為縮寫『信用審查』）。" },
+    "和潤興業|企劃部": { "orgCode": "AA000", "note": "AD/AA000『企劃部』全名相符。" },
+    "和潤興業|審查部": { "orgCode": "AD000", "note": "AD/AD000『審查部』全名相符。" }
   },
   "section": {
     "和潤企業|企劃部|車輛行銷室": { "orgCode": "AIC00", "note": "AIC00『企劃/車輛行銷室』全名相符。" },
@@ -48,8 +49,8 @@
     "和潤企業|債權管理部|法務催收一室": { "orgCode": "CDB00", "note": "CDB00『債管/法催一室』。" },
     "和潤企業|債權管理部|法務催收二室": { "orgCode": "CDE00", "note": "CDE00『債管/法催二室』。" },
     "和潤企業|債權管理部|債管服務室": {
-      "orgCode": null,
-      "note": "⚠ 待人工確認：CD000 下有 CDC00『債管/債權室』與 CDD00『債管/債管室』兩個候選，無法判定。"
+      "orgCode": "CDD00",
+      "note": "🔴 2026-09-04 解除歧義：CDD00 descFull＝『債權管理部債管服務室』逐字相符且 isActive；CDC00 為『債權管理部債權回收室』且已停用。"
     },
     "和潤企業|營運管理部|營運發展室": { "orgCode": "JAB00", "note": "JAB00『營管部/營發室』。" },
     "和潤企業|營運管理部|客戶服務室": { "orgCode": "JAE00", "note": "JAE00『營管部/客服室』。" },
@@ -67,10 +68,16 @@
     "和潤企業|資訊部|創新研發室": { "orgCode": "DDC00", "note": "DDC00『資訊/創新研發室』全名相符。" },
     "和潤企業|資金管理部|資金管理室": { "orgCode": "DBA00", "note": "DBA00『資金/資金室』。" },
     "和潤企業|資金管理部|關聯資金室": { "orgCode": "DBC00", "note": "DBC00『資金/關金室』（關金＝關聯資金）。" },
-    "和勁企業|企劃管理部|企劃室": { "orgCode": null, "note": "公司未納入 ORG_UNIT。" },
-    "和勁企業|信用審查部|企金審查室": { "orgCode": null, "note": "公司未納入 ORG_UNIT。" },
-    "和勁企業|信用審查部|車輛審查室": { "orgCode": null, "note": "公司未納入 ORG_UNIT。" },
+    "和勁企業|企劃管理部|企劃室": { "orgCode": "AAA00", "note": "AJ/AAA00 descFull『企劃管理部企劃室』相符。" },
+    "和勁企業|信用審查部|企金審查室": {
+      "orgCode": "ADB00",
+      "note": "AJ/ADB00 descFull『信用審查部企金審查室』相符且 isActive；AAE00『企劃管理部企金審查室』隸屬他部且已停用。"
+    },
+    "和勁企業|信用審查部|車輛審查室": {
+      "orgCode": "ADA00",
+      "note": "AJ/ADA00 descFull『信用審查部車輛審查室』相符且 isActive；AAD00『企劃管理部車輛審查室』隸屬他部且已停用。"
+    },
     "和潤興業|企劃部|-": { "orgCode": null, "note": "來源為佔位字元『-』，非室別。" },
-    "和潤興業|審查部|北區一科": { "orgCode": null, "note": "公司未納入 ORG_UNIT。" }
+    "和潤興業|審查部|北區一科": { "orgCode": "ADA00", "note": "AD/ADA00 descFull『審查部/北區一科』相符。" }
   }
 }

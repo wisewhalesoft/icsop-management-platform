@@ -45,14 +45,34 @@ interface CatalogFile {
   records: CatalogRecord[];
 }
 
+/** `dept`／`section` 之項目：**該公司下**之 `ORG_UNIT.orgCode`（`null` ＝尚未對應）。 */
 type OrgMapEntry = { orgCode: string | null; note?: string };
+/**
+ * `company` 之項目：**公司代碼**（`ICSOP_DOCUMENT.companyCode`），不是 orgCode。
+ * 🔴 2026-09-04：本區塊原本存的是「該公司 ROOT 之 orgCode」且僅和潤企業有值；2026-08-27
+ *    制定公司收斂為 `companyCode` 時本 seed 改成逐列寫死 `'AS'`，Excel 公司欄的另外三家
+ *    （和潤電能／和勁企業／和潤興業，共 126 筆）因而全被記成和潤企業。
+ */
+type CompanyMapEntry = { companyCode: string; note?: string };
 interface OrgMapFile {
-  company: Record<string, OrgMapEntry>;
+  company: Record<string, CompanyMapEntry>;
   dept: Record<string, OrgMapEntry>;
   section: Record<string, OrgMapEntry>;
 }
 
 const SEEDS_DIR = join(__dirname, 'seeds');
+
+/**
+ * 公司欄空白時之回退值。來源之 10 筆「待訂」列（公司欄空白、部門欄字面即『待訂』）用之——
+ * `companyCode` 為 NOT NULL 且值域無「未指定」，故不可能留白。2026-09-04 人類裁決：
+ * 這 10 筆先落 `AS`，另由 ICSOP 管理員於編輯頁逐筆改正（制定公司自本日起開放編輯）。
+ */
+const DEFAULT_COMPANY_CODE = 'AS';
+
+/** `(companyCode, orgCode)` 之複合鍵——各公司之 orgCode 獨立編碼，不可扁平化為裸 orgCode。 */
+function orgKey(companyCode: string, orgCode: string): string {
+  return `${companyCode}\u0000${orgCode}`;
+}
 
 function readJson<T>(file: string): T {
   return JSON.parse(readFileSync(join(SEEDS_DIR, file), 'utf-8')) as T;
@@ -100,10 +120,39 @@ async function seedDocumentCatalog(): Promise<void> {
       );
     }
 
-    // --- 組織代碼：僅接受 ORG_UNIT 實際存在者（對應表填錯會被擋下）。 ---
-    const validOrgCodes = new Set((await orgRepo.find()).map((o) => o.orgCode));
     const badMapEntries: string[] = [];
-    const resolveOrg = (section: keyof OrgMapFile, key: string | null): string | null => {
+
+    /**
+     * --- 制定公司：Excel 之「公司」欄 → `companyCode`（NOT NULL）。 ---
+     * 公司欄空白（10 筆「待訂」列）→ `DEFAULT_COMPANY_CODE`；對應表缺鍵亦回退並留告警
+     * （`companyCode` 不可為 NULL，故此處不能像組織欄那樣「不猜就留白」）。
+     */
+    const resolveCompany = (label: string | null): string => {
+      if (!label) return DEFAULT_COMPANY_CODE;
+      const entry = orgMap.company[label];
+      if (!entry) {
+        badMapEntries.push(
+          `對應表缺 company 鍵：「${label}」（回退為 ${DEFAULT_COMPANY_CODE}，須人工確認）`,
+        );
+        return DEFAULT_COMPANY_CODE;
+      }
+      return entry.companyCode;
+    };
+
+    /**
+     * --- 組織代碼：僅接受 ORG_UNIT 實際存在之 **(companyCode, orgCode) 成對**者。 ---
+     * 🔴 不可扁平化為裸 orgCode 集合：各公司之 orgCode 各自從 `00000` 獨立編碼，
+     *    AS 的 `AA000` 與 AJ 的 `AA000` 字串相同、意義完全不同——以裸集合驗證，
+     *    對應表把某家公司的部門填成只存在於別家公司的代碼也會通過。
+     */
+    const validOrgKeys = new Set(
+      (await orgRepo.find()).map((o) => orgKey(o.companyCode, o.orgCode)),
+    );
+    const resolveOrg = (
+      section: 'dept' | 'section',
+      companyCode: string,
+      key: string | null,
+    ): string | null => {
       if (!key) return null;
       const entry = orgMap[section][key];
       if (!entry) {
@@ -111,34 +160,43 @@ async function seedDocumentCatalog(): Promise<void> {
         return null;
       }
       if (entry.orgCode === null) return null;
-      if (!validOrgCodes.has(entry.orgCode)) {
-        badMapEntries.push(`對應表 ${section}「${key}」→ ${entry.orgCode} 不存在於 ORG_UNIT`);
+      if (!validOrgKeys.has(orgKey(companyCode, entry.orgCode))) {
+        badMapEntries.push(
+          `對應表 ${section}「${key}」→ (${companyCode}, ${entry.orgCode}) 不存在於 ORG_UNIT`,
+        );
         return null;
       }
       return entry.orgCode;
     };
 
-    // --- 當責室長：姓名 → employeeNo。僅取「唯一命中」；同名多筆或查無 → NULL。 ---
+    /**
+     * --- 當責室長：姓名 → employeeNo。僅取**同一公司內**之「唯一命中」；同名多筆或查無 → NULL。 ---
+     * 🔴 比對必須以 `(companyCode, name)` 為鍵：員編各公司獨立、同名跨公司並非罕見，
+     *    以裸姓名比對會把別家公司的人指派為當責室長，且下游 `resolvePersonNames(companyCode, …)`
+     *    在該文件的公司裡查無此員編，畫面只會顯示一串裸員編（靜默、不報錯）。
+     */
     const accounts = await accRepo.find({
-      select: { name: true, employeeNo: true, status: true },
+      select: { companyCode: true, name: true, employeeNo: true, status: true },
     });
     const byName = new Map<string, Set<string>>();
     for (const a of accounts) {
       if (!a.name || !a.employeeNo || a.status !== 'active') continue;
-      const bucket = byName.get(a.name) ?? new Set<string>();
+      const k = orgKey(a.companyCode, a.name);
+      const bucket = byName.get(k) ?? new Set<string>();
       bucket.add(a.employeeNo);
-      byName.set(a.name, bucket);
+      byName.set(k, bucket);
     }
     const chiefUnresolved = new Map<string, string>();
-    const resolveChief = (name: string | null): string | null => {
+    const resolveChief = (companyCode: string, name: string | null): string | null => {
       if (!name) return null;
-      const hit = byName.get(name);
+      const label = `${name}（${companyCode}）`;
+      const hit = byName.get(orgKey(companyCode, name));
       if (!hit || hit.size === 0) {
-        chiefUnresolved.set(name, '查無在職帳號');
+        chiefUnresolved.set(label, '該公司查無在職帳號');
         return null;
       }
       if (hit.size > 1) {
-        chiefUnresolved.set(name, `同名多筆（${[...hit].join('/')}）`);
+        chiefUnresolved.set(label, `同名多筆（${[...hit].join('/')}）`);
         return null;
       }
       return [...hit][0];
@@ -163,18 +221,30 @@ async function seedDocumentCatalog(): Promise<void> {
     const now = new Date();
 
     for (const r of catalog.records) {
-      // 🔴 2026-08-27 裁定：制定公司＝`ICSOP_DOCUMENT.companyCode`（公司代碼，NOT NULL）。
-      //    原本解析為該公司 ROOT 之 orgCode 寫入 `draftingCompanyId`，該欄已移除。
-      //    catalog 之來源為 AS 一家（上線以來僅同步過該公司），故逐列固定為 'AS'。
-      const companyCode = 'AS';
-      const deptId = resolveOrg('dept', r.companyLabel && r.deptLabel ? `${r.companyLabel}|${r.deptLabel}` : null);
+      /**
+       * 🔴 2026-08-27 裁定：制定公司＝`ICSOP_DOCUMENT.companyCode`（公司代碼，NOT NULL）。
+       *    原本解析為該公司 ROOT 之 orgCode 寫入 `draftingCompanyId`，該欄已移除。
+       *
+       * 📝 已作廢（⚠ 不得復原）：OLD> `const companyCode = 'AS';`——理由寫的是「catalog 之
+       *    來源為 AS 一家（上線以來僅同步過該公司）」。該理由把兩件事混為一談：**當時 ORG_UNIT
+       *    只同步 AS**（組織面）不等於 **Excel 的公司欄只有 AS**（資料面）。來源 591 筆的公司欄
+       *    實為四家（和潤企業 455／和潤電能 61／和勁企業 41／和潤興業 24／空白 10），
+       *    寫死使其中 126 筆公司別全錯。既有資料之修補見 migration 1725580800000。
+       */
+      const companyCode = resolveCompany(r.companyLabel);
+      const deptId = resolveOrg(
+        'dept',
+        companyCode,
+        r.companyLabel && r.deptLabel ? `${r.companyLabel}|${r.deptLabel}` : null,
+      );
       const sectionId = resolveOrg(
         'section',
+        companyCode,
         r.companyLabel && r.deptLabel && r.sectionLabel
           ? `${r.companyLabel}|${r.deptLabel}|${r.sectionLabel}`
           : null,
       );
-      const chiefId = resolveChief(r.chiefName);
+      const chiefId = resolveChief(companyCode, r.chiefName);
 
       const found = existingByNumber.get(r.documentNumber);
       if (!found) {
@@ -200,7 +270,12 @@ async function seedDocumentCatalog(): Promise<void> {
         continue;
       }
 
-      // 已存在：只補 NULL，不覆寫既有值（保護人工編輯）。
+      /**
+       * 已存在：只補 NULL，不覆寫既有值（保護人工編輯）。
+       * ⚠ `companyCode` 刻意**不**在此列：它為 NOT NULL、永遠不是 NULL，所以「補 NULL」的規則
+       *   對它天然無效；而且制定公司自 2026-09-04 起是 ICSOP 管理員可編輯的欄位，就地覆寫等於
+       *   把人工改正洗掉。既有列之公司別修補由 migration 1725580800000 一次性完成。
+       */
       const patch: Partial<IcsopDocument> = {};
       if (found.draftingDeptId === null && deptId) patch.draftingDeptId = deptId;
       if (found.draftingSectionId === null && sectionId) patch.draftingSectionId = sectionId;
