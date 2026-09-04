@@ -15,6 +15,7 @@ import {
   BusinessCategoryDocsStore,
   BusinessCategoryNodeInfo,
   CandidateDocRef,
+  CandidateLifecycleGroup,
   CandidateOtherMount,
   CategoryMountedDoc,
   DocumentBusinessCategoryRef,
@@ -84,7 +85,13 @@ export class TypeOrmBusinessCategoryDocsStore implements BusinessCategoryDocsSto
     page: number;
     pageSize: number;
     excludeDocumentIds?: string[];
-  }): Promise<{ items: CandidateDocRef[]; total: number; lifecycleCount: number }> {
+    userSelectedLifecycleId?: string;
+  }): Promise<{
+    items: CandidateDocRef[];
+    total: number;
+    lifecycleCount: number;
+    candidateLifecycles: CandidateLifecycleGroup[];
+  }> {
     const ds = await this.init();
     const params: unknown[] = [];
     const conditions: string[] = [];
@@ -118,16 +125,50 @@ export class TypeOrmBusinessCategoryDocsStore implements BusinessCategoryDocsSto
       conditions.push(`d.[id] NOT IN (${placeholders.join(',')})`);
     }
 
+    /**
+     * 🔴 **使用者主動選擇之循環別**（2026-09-03 第三個 delta）——與上方 `conditions` 分開持有，
+     * 因為兩者**作用於不同的 CTE**：`conditions`（keyword／exclude）套在 `base`，本條件只套在
+     * `filtered`。`candidateLifecycles`（下拉選項）取自 `base`，故**不受**使用者已選之循環影響
+     * ——否則選了一個循環後下拉只剩它自己，使用者出不來。
+     * 🔒 `AC-20` 不受影響：這是**使用者明示**之縮小範圍，不是系統靜默施加的循環條件；
+     * `base` 依然是「全部 ICSOP 文件」，`WHERE` 上沒有任何系統自行推導之循環項目。
+     * ⚠ `TRY_CONVERT`：`lifecycleId` 為 `uniqueidentifier`，而本值來自 query string。非 GUID
+     * 字串直接比對會讓 MSSQL 拋轉型錯誤（500）；`TRY_CONVERT` 失敗回 `NULL` ⇒ 條件恆不成立
+     * ⇒ 該次查詢回 0 筆候選，而下拉選項仍完整，使用者可自行選回「全部循環」。
+     */
+    const selectedLifecycleId = query.userSelectedLifecycleId?.trim() || undefined;
+    let lifecycleWhereSql = '';
+    if (selectedLifecycleId) {
+      params.push(selectedLifecycleId);
+      lifecycleWhereSql = `WHERE [lifecycleId] = TRY_CONVERT(uniqueidentifier, @${params.length - 1})`;
+    }
+
     const offsetAt = params.length;
     params.push((Math.max(query.page, 1) - 1) * query.pageSize, query.pageSize);
-    // ⚠ `d.[lifecycleId]` 於下方僅被 **SELECT 出來**（純資訊回傳）與**聚合成統計**；
-    // 🔴 `WHERE` 子句由上方 `conditions` 組成，其中**沒有、也不得有**任何以它為條件之項目（`AC-20`）。
+    // ⚠ `d.[lifecycleId]` 於下方僅被 **SELECT 出來**（純資訊回傳）、**聚合成統計**，以及依
+    // **使用者明示之選擇**過濾；🔴 `base` 之 `WHERE` 由上方 `conditions` 組成，其中**沒有、
+    // 也不得有**任何系統自行推導之循環條件（`AC-20`）。
     const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    /**
+     * 🔴 **仍是單一往返**：五段 CTE ＋ 一次 `UNION ALL`。
+     * `rowKind = 0` 之列＝統計 ＋ 當前頁（沿用既有 `stats LEFT JOIN paged` 之作法，空頁時
+     * `stats` 仍恆回一列故統計不會消失）；`rowKind = 1` 之列＝下拉選項之分組計數。
+     * ⚠ 兩段刻意**不用 `LEFT JOIN` 相接**：`paged`（≤ pageSize 列）與 `groups`（相異循環數）
+     * 是兩個彼此無關的維度，join 起來是笛卡兒積；`UNION ALL` 讓兩者各佔各的列，總列數為
+     * 「頁筆數 ＋ 循環數」而非兩者相乘。
+     * ⚠ 兩分支之欄位型別以 `CAST(NULL AS ...)` 顯式對齊——裸 `NULL` 在 UNION 下會被 MSSQL 推
+     * 論為 `int`，撞上 `uniqueidentifier`／`nvarchar` 欄位即轉型錯誤。
+     */
     const rows = await ds.query(
-      `WITH filtered AS (
+      `WITH base AS (
          SELECT d.[id], d.[documentNumber], d.[documentName], d.[lifecycleId]
            FROM [ICSOP_DOCUMENT] d
            ${whereSql}
+       ),
+       filtered AS (
+         SELECT [id], [documentNumber], [documentName], [lifecycleId]
+           FROM base
+           ${lifecycleWhereSql}
        ),
        stats AS (
          SELECT COUNT(*) AS [total], COUNT(DISTINCT [lifecycleId]) AS [lifecycleCount]
@@ -138,28 +179,64 @@ export class TypeOrmBusinessCategoryDocsStore implements BusinessCategoryDocsSto
            FROM filtered
           ORDER BY [documentNumber] ASC
           OFFSET @${offsetAt} ROWS FETCH NEXT @${offsetAt + 1} ROWS ONLY
+       ),
+       groups AS (
+         SELECT b.[lifecycleId], l.[name] AS [lifecycleName], l.[subcategory] AS [lifecycleSubcategory],
+                COUNT(*) AS [groupCount]
+           FROM base b
+           LEFT JOIN [LIFECYCLE] l ON l.[id] = b.[lifecycleId]
+          GROUP BY b.[lifecycleId], l.[name], l.[subcategory]
        )
-       SELECT s.[total], s.[lifecycleCount],
-              p.[id], p.[documentNumber], p.[documentName], p.[lifecycleId]
+       SELECT 0 AS [rowKind], s.[total], s.[lifecycleCount],
+              p.[id], p.[documentNumber], p.[documentName], p.[lifecycleId],
+              CAST(NULL AS nvarchar(100)) AS [lifecycleName],
+              CAST(NULL AS nvarchar(100)) AS [lifecycleSubcategory],
+              CAST(NULL AS int) AS [groupCount]
          FROM stats s
          LEFT JOIN paged p ON 1 = 1
-        ORDER BY p.[documentNumber] ASC`,
+       UNION ALL
+       SELECT 1 AS [rowKind], CAST(NULL AS int), CAST(NULL AS int),
+              CAST(NULL AS uniqueidentifier), CAST(NULL AS varchar(100)), CAST(NULL AS nvarchar(200)),
+              g.[lifecycleId], g.[lifecycleName], g.[lifecycleSubcategory], g.[groupCount]
+         FROM groups g
+        ORDER BY [rowKind] ASC, [documentNumber] ASC,
+                 [lifecycleName] ASC, [lifecycleSubcategory] ASC, [lifecycleId] ASC`,
       params,
     );
 
     type Raw = {
-      total: number | string;
-      lifecycleCount: number | string;
+      rowKind: number | string;
+      total: number | string | null;
+      lifecycleCount: number | string | null;
       id: string | null;
       documentNumber: string | null;
       documentName: string | null;
       lifecycleId: string | null;
+      lifecycleName: string | null;
+      lifecycleSubcategory: string | null;
+      groupCount: number | string | null;
     };
     const raw = (rows ?? []) as Raw[];
-    // `stats` 恆回一列 ⇒ `raw[0]` 必存在；空頁時其 `id` 為 null（下方 filter 濾掉）。
-    const total = Number(raw[0]?.total ?? 0);
-    const lifecycleCount = Number(raw[0]?.lifecycleCount ?? 0);
-    const page = raw.filter((r): r is Raw & { id: string } => r.id !== null);
+    const statRows = raw.filter((r) => Number(r.rowKind) === 0);
+    // `stats` 恆回一列 ⇒ `statRows[0]` 必存在；空頁時其 `id` 為 null（下方 filter 濾掉）。
+    const total = Number(statRows[0]?.total ?? 0);
+    const lifecycleCount = Number(statRows[0]?.lifecycleCount ?? 0);
+    const page = statRows.filter((r): r is Raw & { id: string } => r.id !== null);
+    // 🔴 下拉選項：`base`（未套使用者篩選）之分組——與上面兩個統計刻意取自不同集合。
+    const candidateLifecycles: CandidateLifecycleGroup[] = raw
+      .filter(
+        (r): r is Raw & { lifecycleId: string } =>
+          Number(r.rowKind) === 1 && r.lifecycleId !== null,
+      )
+      .map((r) => ({
+        lifecycleId: r.lifecycleId,
+        displayName: lifecycleDisplayName(
+          r.lifecycleName === null
+            ? null
+            : { name: r.lifecycleName, subcategory: r.lifecycleSubcategory },
+        ),
+        count: Number(r.groupCount ?? 0),
+      }));
 
     // 🔴 兩段**純資訊**富化（`AC-20`：不參與過濾，只是讓抽屜能顯示「這份文件目前在哪裡」）。
     // 兩者皆為**固定次數之批次查詢**（往返數與候選筆數無關），非 N+1。
@@ -184,6 +261,7 @@ export class TypeOrmBusinessCategoryDocsStore implements BusinessCategoryDocsSto
       })),
       total,
       lifecycleCount,
+      candidateLifecycles,
     };
   }
 

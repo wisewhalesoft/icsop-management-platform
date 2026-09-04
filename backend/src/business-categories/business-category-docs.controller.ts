@@ -67,6 +67,14 @@ export class BusinessCategoryDocsController {
     @Query('keyword') keyword?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
+    /**
+     * 🔒 **使用者主動選擇**之循環別（2026-09-03 第三個 delta）。逐字鍵名 `userSelectedLifecycleId`
+     * ——刻意不叫 `lifecycleId`：`AC-20` 禁的是「系統靜默地只給同循環文件」，使用者自己縮小
+     * 範圍是另一回事，兩者必須在程式碼層面（含 query string）長得不一樣。
+     * 🔴 **無預設值**：未帶入 ⇒ 不過濾，回應與本鍵存在之前逐位元組相同；本 controller
+     * **不得**從節點／類別補值（那會把 `AC-20` 從後門推翻）。
+     */
+    @Query('userSelectedLifecycleId') userSelectedLifecycleId?: string,
   ) {
     const [drawer, candidates] = await Promise.all([
       this.svc.getDrawer(businessCategoryId, nodeId),
@@ -76,6 +84,7 @@ export class BusinessCategoryDocsController {
         keyword,
         page: toPositiveInt(page, 1),
         pageSize: toPositiveInt(pageSize, DEFAULT_CANDIDATE_PAGE_SIZE),
+        userSelectedLifecycleId,
       }),
     ]);
     return {
@@ -91,6 +100,12 @@ export class BusinessCategoryDocsController {
        */
       candidateTotal: candidates.total,
       candidateLifecycleCount: candidates.lifecycleCount,
+      /**
+       * 🔴 循環別下拉之選項來源：基準為「keyword／排除已套用、**使用者所選循環未套用**」之
+       * 全集分組——與上方兩個統計刻意取自不同集合。若改用已套篩選之集合，使用者選了一個循環
+       * 之後下拉就只剩它自己，再也選不回別的。
+       */
+      candidateLifecycles: candidates.candidateLifecycles,
     };
   }
 

@@ -14,6 +14,7 @@ import {
   BusinessCategoryDocsStore,
   BusinessCategoryNodeInfo,
   CandidateDocRef,
+  CandidateLifecycleGroup,
   CategoryMountedDoc,
 } from './business-category-docs.store';
 import {
@@ -143,16 +144,35 @@ export class BusinessCategoryDocsService {
   async listCandidates(
     businessCategoryId: string,
     nodeId: string,
-    query: { keyword?: string; page: number; pageSize: number },
-  ): Promise<{ items: CandidateDocRef[]; total: number; lifecycleCount: number }> {
+    query: {
+      keyword?: string;
+      page: number;
+      pageSize: number;
+      /**
+       * 🔒 使用者**主動選擇**之循環別（2026-09-03 第三個 delta）。刻意不叫 `lifecycleId`：
+       * `AC-20` 禁的是「系統靜默地只給同循環文件」，使用者自己縮小範圍是另一回事，兩者必須
+       * 在程式碼層面長得不一樣。無預設值、不得由節點／類別推導——本服務只是把呼叫端明示帶入
+       * 的值逐字轉交，任何「若未指定則取本節點所屬循環」之補值都會把 `AC-20` 從後門推翻。
+       */
+      userSelectedLifecycleId?: string;
+    },
+  ): Promise<{
+    items: CandidateDocRef[];
+    total: number;
+    lifecycleCount: number;
+    candidateLifecycles: CandidateLifecycleGroup[];
+  }> {
     const mountedHere = await this.store.listNodeMountedDocs(businessCategoryId, nodeId);
     // 🔴 逐鍵顯式重建，使「本服務未偷渡任何循環過濾條件」在呼叫參數上可被直接斷言。
-    return this.store.listCandidateDocs({
+    const r = await this.store.listCandidateDocs({
       keyword: query.keyword?.trim() || undefined,
       page: query.page,
       pageSize: query.pageSize,
       excludeDocumentIds: mountedHere.map((d) => d.id),
+      userSelectedLifecycleId: query.userSelectedLifecycleId?.trim() || undefined,
     });
+    // 未實作分組能力之 store（既有 fake）→ 降級為「無可選循環」，不另開第二趟查詢。
+    return { ...r, candidateLifecycles: r.candidateLifecycles ?? [] };
   }
 
   /** `AC-29`：節點抽屜（節點名稱 ＋ 該節點目前掛載之文件清單）。 */

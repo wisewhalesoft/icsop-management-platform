@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getBusinessCategoryNodeDrawer,
   mountBusinessCategoryDoc,
@@ -11,8 +11,14 @@ import { useToast } from '../components/useToast';
 import type {
   BusinessCategoryCandidateDoc,
   BusinessCategoryMountedDoc,
+  BusinessCategoryNodeDrawerData,
   BusinessCategoryOtherMount,
 } from '../api/types';
+
+/** 循環別篩選下拉之單一選項（後端 `candidateLifecycles` 之元素）。 */
+type CandidateLifecycleOption = NonNullable<
+  BusinessCategoryNodeDrawerData['candidateLifecycles']
+>[number];
 
 /**
  * F043 §丙 業務/功能類別節點抽屜。版面權威＝`prototypes/28-business-category-node-drawer.html`
@@ -131,27 +137,72 @@ export function BusinessCategoryNodeDrawer({
   const [candidateTotal, setCandidateTotal] = useState<number | null>(null);
   const [candidateLifecycleCount, setCandidateLifecycleCount] = useState<number | null>(null);
   const [candidateLoaded, setCandidateLoaded] = useState(0);
+  /**
+   * 🔒 **使用者主動選擇**之循環別（`''`＝全部循環）。
+   * `AC-20` 禁的是「系統靜默地只給同循環文件」；本狀態唯一的寫入者是使用者的下拉互動，
+   * **不得**由節點／類別推導初值——那會把 `AC-20` 從後門推翻。
+   */
+  const [selectedLifecycleId, setSelectedLifecycleId] = useState('');
+  /** 下拉選項來源：後端「未套用使用者篩選」之全集分組（🔴 不得由當前頁 `docs` 推導）。 */
+  const [candidateLifecycles, setCandidateLifecycles] = useState<CandidateLifecycleOption[]>([]);
+  /**
+   * 🔴 **當前回應**所回傳之候選 id（＝目前篩選條件下應可見者）。
+   * `docs` 是**累積**的（見載入 effect），故必須另外持有「這一次查到的是哪些」，
+   * 否則切換循環別時清單不會收斂。
+   */
+  const [visibleCandidateIds, setVisibleCandidateIds] = useState<Set<string>>(new Set());
   const [entered, setEntered] = useState(false);
   useEffect(() => {
     setEntered(true);
   }, []);
 
+  /** 已完成首次載入之 (類別, 節點)——用以區分「首載」與「循環別重新查詢」。 */
+  const loadedKey = useRef<string | null>(null);
+
   useEffect(() => {
     let alive = true;
     void (async () => {
       try {
-        // 🔴 `AC-20`：引數**恰為** (businessCategoryId, nodeId)，不得夾帶任何循環相關鍵。
-        const d = await getBusinessCategoryNodeDrawer(businessCategoryId, nodeId);
+        /**
+         * 🔴 `AC-20`：未選任何循環時，引數**恰為** (businessCategoryId, nodeId)，
+         * 連 `undefined` 都不傳——不得夾帶任何系統自行推導之循環鍵。
+         * 🔒 選了循環才帶第三引數：那是**使用者主動**縮小範圍，與 `AC-20` 所禁之
+         * 「系統靜默過濾」是兩件事，故鍵名逐字為 `userSelectedLifecycleId`。
+         */
+        const d = selectedLifecycleId
+          ? await getBusinessCategoryNodeDrawer(businessCategoryId, nodeId, selectedLifecycleId)
+          : await getBusinessCategoryNodeDrawer(businessCategoryId, nodeId);
         if (!alive) return;
-        setName(d.node.name ?? '');
-        setOriginalName(d.node.name ?? '');
-        const mountedIds = new Set((d.mounted ?? []).map((m) => m.id));
-        setDocs(mergeDrawerDocs(d.mounted ?? [], d.candidates ?? []));
-        setBaseline(mountedIds);
-        setDraft(new Set(mountedIds));
+        const fresh = mergeDrawerDocs(d.mounted ?? [], d.candidates ?? []);
+        const key = `${businessCategoryId} ${nodeId}`;
+        if (loadedKey.current !== key) {
+          loadedKey.current = key;
+          const mountedIds = new Set((d.mounted ?? []).map((m) => m.id));
+          setName(d.node.name ?? '');
+          setOriginalName(d.node.name ?? '');
+          setDocs(fresh);
+          setBaseline(mountedIds);
+          setDraft(new Set(mountedIds));
+          setSelectedLifecycleId(''); // 換節點 → 篩選歸零（首次載入時為 no-op）
+        } else {
+          /**
+           * 🔴 循環別之重新查詢**只併入新認識的文件**，不動節點名稱／`baseline`／`draft`。
+           * 天真地整份取代會讓使用者「先選了幾份候選、再換循環別去找更多」時，**已選但不屬於
+           * 新循環的那幾份從 `docs` 消失** ⇒ 既不顯示於「目前掛載文件」、送出時也不在 `toMount`
+           * 內——一個沒有任何錯誤訊息的靜默資料遺失（同理，重新查詢若覆寫 `name`，使用者尚未
+           * 送出的改名也會被吞掉）。
+           */
+          setDocs((prev) => {
+            const byId = new Map(prev.map((x) => [x.id, x]));
+            for (const x of fresh) if (!byId.has(x.id)) byId.set(x.id, x);
+            return [...byId.values()];
+          });
+        }
+        setVisibleCandidateIds(new Set((d.candidates ?? []).map((c) => c.id)));
         setCandidateTotal(d.candidateTotal ?? null);
         setCandidateLifecycleCount(d.candidateLifecycleCount ?? null);
         setCandidateLoaded((d.candidates ?? []).length);
+        setCandidateLifecycles(d.candidateLifecycles ?? []);
       } catch (e) {
         if (alive) toast.error(e instanceof ApiError ? e.code : '載入失敗');
       }
@@ -161,7 +212,7 @@ export function BusinessCategoryNodeDrawer({
     };
     // toast 為 provider 之穩定 API，刻意不入依賴（比照既有 NodeDrawer）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessCategoryId, nodeId]);
+  }, [businessCategoryId, nodeId, selectedLifecycleId]);
 
   const cancel = useCallback(() => {
     onNodeRenamed(nodeId, originalName.trim() || '未命名節點'); // 還原畫布即時預覽
@@ -209,8 +260,13 @@ export function BusinessCategoryNodeDrawer({
     // `AC-28`：搜尋比對＝documentNumber ∪ documentName 之 contains（記憶體 includes 天然字面安全）。
     return docs
       .filter((d) => !draft.has(d.id))
+      /**
+       * 🔒 `baseline` 亦視為可見：載入當時已掛於本節點者不在候選回應內，但使用者把它移除後
+       * 必須看得到、也才回得去（＝新增本篩選前之既有行為，一格未變）。
+       */
+      .filter((d) => visibleCandidateIds.has(d.id) || baseline.has(d.id))
       .filter((d) => !q || d.number.toLowerCase().includes(q) || d.name.toLowerCase().includes(q));
-  }, [docs, draft, kw]);
+  }, [docs, draft, kw, visibleCandidateIds, baseline]);
 
   const pending = useMemo(() => {
     let added = 0;
@@ -349,6 +405,33 @@ export function BusinessCategoryNodeDrawer({
                 </span>{' '}
                 份，請用上方搜尋縮小範圍。
               </span>
+            </div>
+            {/*
+              🔴 循環別篩選（2026-09-03 第三個 delta）。
+              候選依 `documentNumber` 排序，而文件編號第 2 段即循環代碼 ⇒ 依編號排序＝依循環分群；
+              真庫 591 份／14 個循環而本抽屜只取第一頁，第一頁幾乎全部落在同一個循環，其餘只能靠
+              關鍵字搜到 ⇒ 使用者需要能自己挑循環。
+              🔒 選項來自後端之 `candidateLifecycles`（未套用本篩選之全集分組），**不得**由當前頁
+              `candidates` 推導——那只會列出頁內僅有的那 1 個循環，恰好把本功能存在的理由消滅掉。
+              🔒 這是**使用者主動**縮小範圍，與 `AC-20` 所禁之「系統靜默只給同循環文件」是兩件事；
+              未選時（`''`）完全不送出任何循環參數，行為與本篩選存在之前逐位元組相同。
+              ⚠ 選項文字**不帶筆數**——比照本 repo 唯一先例 `ChangeHistoryPage.tsx` 之循環別下拉。
+            */}
+            <div className="relative mb-2">
+              <Icon name="filter" className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <select
+                value={selectedLifecycleId}
+                onChange={(e) => setSelectedLifecycleId(e.target.value)}
+                aria-label="循環別篩選"
+                className="w-full pl-8 pr-3 py-1.5 rounded-md border border-slate-300 text-sm bg-white"
+              >
+                <option value="">全部循環</option>
+                {candidateLifecycles.map((lc) => (
+                  <option key={lc.lifecycleId} value={lc.lifecycleId}>
+                    {lc.displayName}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="relative mb-2">
               <Icon name="search" className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />

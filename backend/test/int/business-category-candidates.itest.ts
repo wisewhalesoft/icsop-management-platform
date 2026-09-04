@@ -1,5 +1,6 @@
 import { bootIntApp, shutdownIntApp, IntCtx } from './harness';
 import { AppDataSource } from '../../src/database/data-source';
+import { lifecycleDisplayName } from '../../src/lifecycle/lifecycle-subcategory';
 
 /**
  * F043 業務/功能類別管理 — AC-20 之 **SQL 層**驗證（真 SOP DB）。
@@ -131,5 +132,266 @@ describe('[int] F043 AC-20 候選文件不以 lifecycleId 過濾 (SQL 層 vs SOP
       .set('Cookie', ctx.adminCookie);
     expect(r.status).toBe(200);
     expect(r.body.candidateTotal).toBe(Number(expectedTotal));
+  });
+});
+
+/**
+ * F043 §丙 delta（2026-09-04，同日第四個真實需求延伸）—— `candidateLifecycles` 分組／
+ * `userSelectedLifecycleId` 篩選之 **SQL 層**驗證（真 SOP DB）。
+ *
+ * 🔴 **為何需要獨立 int-test（impl-cyclefilter 誠實提報之缺口）**：本 delta 之落地非簡單查詢，
+ * 而是**五段 CTE（`base`／`filtered`／`stats`／`paged`／`groups`）＋一次 `UNION ALL`＋`rowKind`
+ * 判別欄**之單一往返——`base`（keyword／exclude 已套用、使用者篩選未套用）產出 `candidateLifecycles`
+ * 下拉選項，`filtered`（`base` 再套 `userSelectedLifecycleId`）產出 `candidateTotal`／
+ * `candidateLifecycleCount` 統計，兩者刻意取自**不同 CTE**。單元測試（`business-category-docs-
+ * candidates.service.spec.ts`）以 FakeStore 證明服務層之委派與型別正確，但 FakeStore 回傳的永遠是
+ * 測試自己塞的資料，無法證明 `UNION ALL` 的欄位對齊、`TRY_CONVERT` 之轉型防禦、`OFFSET/FETCH` 與
+ * `COUNT(DISTINCT ...)` 在 MSSQL 上的實際互動是否正確——這些只有真 SQL 執行才會暴露。
+ *
+ * ⚠ 對實作全盲：本檔斷言之期望值一律**動態查真庫**（`GROUP BY`／`COUNT`），不臆造或硬編循環
+ * id／筆數；SQL 之 CTE 結構、`TRY_CONVERT` 防禦等實作細節僅供理解「為何需要 int-test」，本檔
+ * 斷言與該 SQL 文字本身無關，換一種正確實作寫法仍應通過。
+ *
+ * 🔒 上方既有 `AC-20` 三條 int-test **逐字未動**——新增的是另一個維度（使用者主動篩選），
+ * 兩者並存，見該 describe 區塊頭之既有分界說明。
+ */
+describe('[int] F043 §丙 delta：candidateLifecycles／userSelectedLifecycleId 之 SQL 層（真 SOP DB）', () => {
+  let ctx: IntCtx;
+  let businessCategoryId: string;
+  let nodeId: string;
+  const BC_MARK_PREFIX = 'ZZINT_BC_LCFILTER_';
+  const categoryName = `${BC_MARK_PREFIX}${Date.now()}`;
+
+  beforeAll(async () => {
+    ctx = await bootIntApp();
+
+    const bcRes = await ctx
+      .http()
+      .post('/admin/business-categories')
+      .set('Cookie', ctx.adminCookie)
+      .send({ name: categoryName, subcategory: null, description: 'ZZINT F043 循環篩選 delta' });
+    expect([200, 201]).toContain(bcRes.status);
+    businessCategoryId = bcRes.body.id;
+    expect(businessCategoryId).toBeTruthy();
+
+    const nodeRes = await ctx
+      .http()
+      .post(`/admin/business-categories/${businessCategoryId}/nodes`)
+      .set('Cookie', ctx.adminCookie)
+      .send({ name: 'ZZINT 循環篩選測試節點' });
+    expect([200, 201]).toContain(nodeRes.status);
+    nodeId = nodeRes.body.id;
+    expect(nodeId).toBeTruthy();
+  }, 60000);
+
+  afterAll(async () => {
+    // BUSINESS_CATEGORY* 為本功能自有新表，非 harness.ts 之 cleanupMarkers() 涵蓋範圍（同上方
+    // 既有 describe 之慣例）；本區塊之⑤會掛載真實文件，須額外回收 BUSINESS_CATEGORY_DOC。
+    if (nodeId) {
+      await AppDataSource.query(
+        `DELETE FROM [BUSINESS_CATEGORY_DOC] WHERE [nodeId] = '${nodeId}'`,
+      ).catch(() => undefined);
+    }
+    if (businessCategoryId) {
+      await AppDataSource.query(
+        `DELETE FROM [BUSINESS_CATEGORY_NODE] WHERE [businessCategoryId] = '${businessCategoryId}'`,
+      ).catch(() => undefined);
+      await AppDataSource.query(
+        `DELETE FROM [BUSINESS_CATEGORY] WHERE [id] = '${businessCategoryId}'`,
+      ).catch(() => undefined);
+    }
+    await shutdownIntApp(ctx);
+  }, 60000);
+
+  it('① candidateLifecycles 之分組正確性：逐格相符真庫 GROUP BY，Σ group.count = COUNT(*)，displayName 比對既有共用 lifecycleDisplayName（獨立 oracle，非本 delta 新造邏輯）', async () => {
+    const groundTruth: Array<{ lifecycleId: string; c: number }> = await AppDataSource.query(`
+      SELECT [lifecycleId], COUNT(*) AS c
+        FROM [ICSOP_DOCUMENT]
+       WHERE [lifecycleId] IS NOT NULL
+       GROUP BY [lifecycleId]
+    `);
+    // 🔴 自證：語料鑑別力前提——真庫須至少有 2 個相異循環各有 ≥1 份文件，否則「分組是否正確」
+    // 在單一循環下無從辨別（1 組必然等於全部）。
+    expect(groundTruth.length).toBeGreaterThanOrEqual(2);
+
+    const r = await ctx
+      .http()
+      .get(`/admin/business-categories/${businessCategoryId}/nodes/${nodeId}/candidates`)
+      .query({ page: 1, pageSize: 1 }) // 僅需 candidateLifecycles，不需搬回候選全頁。
+      .set('Cookie', ctx.adminCookie);
+    expect(r.status).toBe(200);
+    const groups: Array<{ lifecycleId: string; displayName: string; count: number }> =
+      r.body.candidateLifecycles;
+
+    const gtMap = new Map(groundTruth.map((g) => [g.lifecycleId, Number(g.c)]));
+    const respMap = new Map(groups.map((g) => [g.lifecycleId, g.count]));
+    // 回應之相異循環組數應與真庫 GROUP BY 之組數相同。
+    expect(respMap.size).toBe(gtMap.size);
+    for (const [id, expectedCount] of gtMap) {
+      // 每個循環之候選數應與真庫 GROUP BY 相符。
+      expect(respMap.get(id)).toBe(expectedCount);
+    }
+
+    const sumOfCounts = groups.reduce((s, g) => s + g.count, 0);
+    const [{ total: expectedTotal }] = await AppDataSource.query(
+      `SELECT COUNT(*) AS total FROM [ICSOP_DOCUMENT] WHERE [lifecycleId] IS NOT NULL`,
+    );
+    // Σ group.count 應等於 ICSOP_DOCUMENT 之全部筆數（無遺漏、無重複計數）。
+    expect(sumOfCounts).toBe(Number(expectedTotal));
+
+    // displayName：以既有共用工具 lifecycleDisplayName 為獨立 oracle（F040 既有、非本 delta 新造），
+    // 直接查 LIFECYCLE 表算出期望值，逐格比對回應。
+    const lifecycleRows: Array<{ id: string; name: string; subcategory: string | null }> =
+      await AppDataSource.query(`SELECT [id], [name], [subcategory] FROM [LIFECYCLE]`);
+    const lifecycleById = new Map(lifecycleRows.map((l) => [l.id, l]));
+    for (const g of groups) {
+      const lc = lifecycleById.get(g.lifecycleId);
+      expect(g.displayName).toBe(
+        lifecycleDisplayName(lc ? { name: lc.name, subcategory: lc.subcategory } : null),
+      );
+    }
+  });
+
+  it('② 兩個基準刻意不同（本 delta 鑑別力核心）：套用 userSelectedLifecycleId 後 candidateTotal／candidateLifecycleCount 收斂為該循環之值，但 candidateLifecycles 仍列出全部相異循環（下拉選項不因目前篩選而萎縮）', async () => {
+    const groundTruth: Array<{ lifecycleId: string; c: number }> = await AppDataSource.query(`
+      SELECT [lifecycleId], COUNT(*) AS c
+        FROM [ICSOP_DOCUMENT]
+       WHERE [lifecycleId] IS NOT NULL
+       GROUP BY [lifecycleId]
+       ORDER BY c ASC
+    `);
+    expect(groundTruth.length).toBeGreaterThanOrEqual(2);
+    const smallest = groundTruth[0];
+    const [{ total: grandTotal }] = await AppDataSource.query(
+      `SELECT COUNT(*) AS total FROM [ICSOP_DOCUMENT] WHERE [lifecycleId] IS NOT NULL`,
+    );
+    // 🔴 自證：挑選之循環候選數須明顯小於總數，否則「收斂後」與「未收斂」在輸出上難以分辨
+    // （語料鑑別力要求，比照 team-lead 之明文提醒）。
+    expect(Number(smallest.c)).toBeLessThan(Number(grandTotal));
+
+    const r = await ctx
+      .http()
+      .get(`/admin/business-categories/${businessCategoryId}/nodes/${nodeId}/candidates`)
+      .query({ page: 1, pageSize: 1, userSelectedLifecycleId: smallest.lifecycleId })
+      .set('Cookie', ctx.adminCookie);
+    expect(r.status).toBe(200);
+    // 基準①：套用篩選後之統計（畫面上「候選＝...共 N 份，分屬 M 個相異循環」）收斂為該循環之值。
+    // candidateTotal 應收斂為所選循環之候選數。
+    expect(r.body.candidateTotal).toBe(Number(smallest.c));
+    // 選定單一循環後 candidateLifecycleCount 應為 1。
+    expect(r.body.candidateLifecycleCount).toBe(1);
+    // 基準②：candidateLifecycles（下拉選項）不受影響，仍是完整之全集分組——證明其計算基準
+    // 是 `base`（未套使用者篩選）而非 `filtered`（已套），這正是兩段 CTE 刻意分開的理由。
+    // candidateLifecycles 之組數不因目前已選單一循環而萎縮。
+    const groups: Array<{ lifecycleId: string; count: number }> = r.body.candidateLifecycles;
+    expect(groups).toHaveLength(groundTruth.length);
+    expect(groups.map((g) => g.lifecycleId).sort()).toEqual(
+      groundTruth.map((g) => g.lifecycleId).sort(),
+    );
+  });
+
+  it('③ 空頁不謊報：page 超出末頁時 candidates=0 筆，但 candidateTotal／candidateLifecycleCount／candidateLifecycles 依然正確（統計獨立於分頁切片，非 COUNT(*) OVER()）', async () => {
+    const [{ total: grandTotal }] = await AppDataSource.query(
+      `SELECT COUNT(*) AS total FROM [ICSOP_DOCUMENT] WHERE [lifecycleId] IS NOT NULL`,
+    );
+    const [{ c: lifecycleCount }] = await AppDataSource.query(
+      `SELECT COUNT(DISTINCT [lifecycleId]) AS c FROM [ICSOP_DOCUMENT] WHERE [lifecycleId] IS NOT NULL`,
+    );
+
+    const r = await ctx
+      .http()
+      .get(`/admin/business-categories/${businessCategoryId}/nodes/${nodeId}/candidates`)
+      .query({ page: 99999, pageSize: 20 })
+      .set('Cookie', ctx.adminCookie);
+    expect(r.status).toBe(200);
+    // 超出末頁之當前頁應為空陣列。
+    expect(r.body.candidates).toEqual([]);
+    // 超出末頁時 candidateTotal／candidateLifecycleCount／candidateLifecycles 之分組數皆不得跟著歸零。
+    expect(r.body.candidateTotal).toBe(Number(grandTotal));
+    expect(r.body.candidateLifecycleCount).toBe(Number(lifecycleCount));
+    expect((r.body.candidateLifecycles as unknown[]).length).toBe(Number(lifecycleCount));
+  });
+
+  it('④ 非 GUID 之 userSelectedLifecycleId 不炸 500（TRY_CONVERT 防禦；本 repo 既有前例：非 GUID 傳進 uniqueidentifier 比較曾是只有 int-test 才抓得到的真缺陷）：回 200 且候選 0 筆，candidateLifecycles 不受影響仍完整', async () => {
+    const [{ c: lifecycleCount }] = await AppDataSource.query(
+      `SELECT COUNT(DISTINCT [lifecycleId]) AS c FROM [ICSOP_DOCUMENT] WHERE [lifecycleId] IS NOT NULL`,
+    );
+
+    const r = await ctx
+      .http()
+      .get(`/admin/business-categories/${businessCategoryId}/nodes/${nodeId}/candidates`)
+      .query({ page: 1, pageSize: 20, userSelectedLifecycleId: 'not-a-real-guid' })
+      .set('Cookie', ctx.adminCookie);
+    // 非 GUID 篩選值不得使端點回 500。
+    expect(r.status).toBe(200);
+    expect(r.body.candidates).toEqual([]);
+    expect(r.body.candidateTotal).toBe(0);
+    expect(r.body.candidateLifecycleCount).toBe(0);
+    // 下拉選項不受一個「篩不到東西」之無效篩選值影響，使用者仍可從中選回一個真實循環。
+    expect((r.body.candidateLifecycles as unknown[]).length).toBe(Number(lifecycleCount));
+  });
+
+  it('⑤ 與 excludeDocumentIds（本節點已掛載排除）併用：掛載 2 筆真實文件後，candidateTotal 少 2、其所屬循環之 candidateLifecycles 分組 count 同步遞減，未受影響之循環維持不變', async () => {
+    const docsToMount: Array<{ id: string; lifecycleId: string }> = await AppDataSource.query(`
+      SELECT TOP 2 [id], [lifecycleId] FROM [ICSOP_DOCUMENT] WHERE [lifecycleId] IS NOT NULL ORDER BY [id]
+    `);
+    // 需要至少 2 份真實文件供掛載，語料前提。
+    expect(docsToMount.length).toBe(2);
+
+    const before = await ctx
+      .http()
+      .get(`/admin/business-categories/${businessCategoryId}/nodes/${nodeId}/candidates`)
+      .query({ page: 1, pageSize: 1 })
+      .set('Cookie', ctx.adminCookie);
+    expect(before.status).toBe(200);
+    const beforeTotal: number = before.body.candidateTotal;
+    const beforeGroups = new Map<string, number>(
+      (before.body.candidateLifecycles as Array<{ lifecycleId: string; count: number }>).map((g) => [
+        g.lifecycleId,
+        g.count,
+      ]),
+    );
+
+    for (const d of docsToMount) {
+      const mountRes = await ctx
+        .http()
+        .post(`/admin/business-categories/${businessCategoryId}/nodes/${nodeId}/documents`)
+        .set('Cookie', ctx.adminCookie)
+        .send({ documentId: d.id });
+      // 掛載應成功（204）。
+      expect(mountRes.status).toBe(204);
+    }
+
+    const after = await ctx
+      .http()
+      .get(`/admin/business-categories/${businessCategoryId}/nodes/${nodeId}/candidates`)
+      .query({ page: 1, pageSize: 1 })
+      .set('Cookie', ctx.adminCookie);
+    expect(after.status).toBe(200);
+    // candidateTotal 應減少掛載之 2 筆。
+    expect(after.body.candidateTotal).toBe(beforeTotal - 2);
+
+    // 每份被掛載文件所屬循環之分組數各減 1（若兩份恰同循環，該循環減 2）；未受影響之循環維持不變
+    // （成對佐證，非只驗證有變化的那幾格——比照本 repo「成對斷言」慣例）。
+    const perLifecycleDecrement = new Map<string, number>();
+    for (const d of docsToMount) {
+      perLifecycleDecrement.set(d.lifecycleId, (perLifecycleDecrement.get(d.lifecycleId) ?? 0) + 1);
+    }
+    const afterGroups = new Map<string, number>(
+      (after.body.candidateLifecycles as Array<{ lifecycleId: string; count: number }>).map((g) => [
+        g.lifecycleId,
+        g.count,
+      ]),
+    );
+    for (const [lc, dec] of perLifecycleDecrement) {
+      // 被掛載排除之循環，其 candidateLifecycles.count 應減少對應掛載筆數。
+      expect(afterGroups.get(lc)).toBe((beforeGroups.get(lc) ?? 0) - dec);
+    }
+    for (const [lc, cnt] of beforeGroups) {
+      if (!perLifecycleDecrement.has(lc)) {
+        // 未被掛載排除之循環，其分組數不得變動（成對佐證）。
+        expect(afterGroups.get(lc)).toBe(cnt);
+      }
+    }
   });
 });

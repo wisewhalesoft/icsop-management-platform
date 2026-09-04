@@ -1580,15 +1580,25 @@ export function deleteBusinessCategoryEdge(
 
 /**
  * GET .../nodes/:nodeId/candidates —— 抽屜完整載荷（節點／目前掛載／候選）。
- * 🔴 `AC-20`：候選＝**全部 ICSOP 文件**，引數**恰為兩段路徑參數**，不得夾帶任何
- * `lifecycleId`／`lifecycleIds`／`cycle` 之過濾鍵（本功能之候選不以循環過濾）。
+ * 🔴 `AC-20`：候選＝**全部 ICSOP 文件**，不得夾帶任何 `lifecycleId`／`lifecycleIds`／`cycle`
+ * 之**系統自行推導**的過濾鍵（本功能之候選不以循環過濾）。
+ *
+ * 🔒 `userSelectedLifecycleId`（2026-09-03 第三個 delta）＝**使用者主動選擇**之循環別。
+ * `AC-20` 禁的是「系統靜默地只給同循環文件」，使用者自己縮小範圍是另一回事——兩者必須長得
+ * 不一樣，故本引數刻意**不叫** `lifecycleId`。
+ * 🔴 **未選任何循環時不得帶入**（連 `undefined` 亦不傳）：初載呼叫維持「恰兩個引數」，
+ * `AC-20` 之結構性斷言因此一格未鬆動。
  */
 export function getBusinessCategoryNodeDrawer(
   businessCategoryId: string,
   nodeId: string,
+  userSelectedLifecycleId?: string,
 ): Promise<BusinessCategoryNodeDrawerData> {
+  const qs = new URLSearchParams();
+  if (userSelectedLifecycleId) qs.set('userSelectedLifecycleId', userSelectedLifecycleId);
+  const q = qs.toString();
   return apiFetch<BusinessCategoryNodeDrawerData>(
-    `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/nodes/${encodeURIComponent(nodeId)}/candidates`,
+    `/admin/business-categories/${encodeURIComponent(businessCategoryId)}/nodes/${encodeURIComponent(nodeId)}/candidates${q ? `?${q}` : ''}`,
   );
 }
 

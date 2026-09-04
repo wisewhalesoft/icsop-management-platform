@@ -1361,6 +1361,19 @@ export interface BusinessCategoryNodeDrawerData {
   candidateTotal: number;
   /** 候選集合（同上，未分頁）之 `COUNT(DISTINCT lifecycleId)`，由後端計算。 */
   candidateLifecycleCount: number;
+  /**
+   * 🔴 循環別篩選下拉之**選項來源**（2026-09-03 第三個 delta）：基準為「keyword／排除已套用、
+   * **使用者所選循環未套用**」之全集依循環分組，由後端計算。
+   *
+   * 🔒 **與 `candidateTotal`／`candidateLifecycleCount` 刻意取自不同集合**：後兩者是**已套用
+   * 使用者篩選後**之統計。若下拉也用已篩選集合，選了一個循環後選單就只剩它自己——使用者選錯
+   * 就再也回不去。
+   * 🔒 **明文禁止**由當前頁 `candidates` 推導選項：真庫 591 份／14 個循環而抽屜只取第一頁 20
+   * 筆，且候選依 `documentNumber` 排序＝依循環分群，第一頁幾乎全部同一循環——由當前頁推導只會
+   * 得到 1 個選項，正好把這個功能存在的理由（頁內看不到的循環也要選得到）消滅掉。
+   * 選填：未提供 ⇒ 無可選循環（僅「全部循環」）。
+   */
+  candidateLifecycles?: { lifecycleId: string; displayName: string; count: number }[];
 }
 
 /** F043 §丁 後台樹狀圖預覽（GET .../tree-preview；`AC-32`／`AC-33`）。 */

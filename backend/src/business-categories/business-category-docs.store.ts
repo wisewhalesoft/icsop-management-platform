@@ -66,6 +66,21 @@ export interface DocumentBusinessCategoryRef {
   displayName: string;
 }
 
+/**
+ * 候選之循環別分組（2026-09-03 第三個 delta：使用者可選之循環別篩選之**下拉選項來源**）。
+ *
+ * 🔴 **基準刻意與 `total`／`lifecycleCount` 不同**：本分組為「`keyword`／`excludeDocumentIds`
+ * 已套用、`userSelectedLifecycleId` **未**套用」之全集依循環分組；`total`／`lifecycleCount`
+ * 則是**已套用使用者篩選後**之統計。兩者若共用同一集合，使用者選了一個循環之後下拉就只剩它
+ * 自己——選錯了就再也出不來。
+ * ⚠ `displayName` 為 `lifecycleDisplayName()` 之輸出（名稱＋子分類），非裸 `name`。
+ */
+export interface CandidateLifecycleGroup {
+  lifecycleId: string;
+  displayName: string;
+  count: number;
+}
+
 export interface BusinessCategoryDocsStore {
   getNode(businessCategoryId: string, nodeId: string): Promise<BusinessCategoryNodeInfo | null>;
   /**
@@ -89,13 +104,31 @@ export interface BusinessCategoryDocsStore {
    * 分屬 M 個相異循環）」那句**反證候選未被循環過濾**的文案。它出現在**輸出**、不在**輸入**——
    * 本查詢型別依然**不接受**任何循環相關之過濾鍵（`AC-20` 不受影響）。
    * ⚠ 日後若有人把「後端會回報循環數」誤讀為「可以依循環篩選」，那是對本欄的誤讀。
+   *
+   * `userSelectedLifecycleId`（2026-09-03 第三個 delta）：**使用者主動選擇**之循環別。
+   * 🔴 **與 `AC-20` 之明文分界**：`AC-20` 禁的是「系統**靜默地**只給同循環文件」；使用者自己
+   * 縮小範圍是另一回事，兩者必須在程式碼層面長得不一樣——故本鍵刻意**不叫** `lifecycleId`
+   * （那個名字永遠不得存在於本查詢型別，`AC-20` 之結構性防線不因本鍵而鬆動一格）。
+   * 🔒 **無預設值**：未提供／`undefined` ⇒ 不過濾，行為與新增本鍵之前逐位元組相同。
+   * 🔒 **不得由節點／類別推導**——唯一來源是呼叫端（前端使用者互動）明示帶入。
+   * 提供時與 `keyword`／`excludeDocumentIds` **交集**生效，並套用於 `items`／`total`／
+   * `lifecycleCount`（畫面上那兩個數字描述的正是使用者當前看到的候選集合）。
+   *
+   * `candidateLifecycles`（同上 delta）：下拉選項來源，基準見 `CandidateLifecycleGroup`。
+   * **選填能力**——未提供之 store 一律降級為「無可選循環」，既有 fake store 零漣漪。
    */
   listCandidateDocs(query: {
     keyword?: string;
     page: number;
     pageSize: number;
     excludeDocumentIds?: string[];
-  }): Promise<{ items: CandidateDocRef[]; total: number; lifecycleCount: number }>;
+    userSelectedLifecycleId?: string;
+  }): Promise<{
+    items: CandidateDocRef[];
+    total: number;
+    lifecycleCount: number;
+    candidateLifecycles?: CandidateLifecycleGroup[];
+  }>;
   /**
    * 掛載一筆。INV-B6 由 DB 唯一鍵 ＋ 服務層之應用層預檢**雙保險**；底層唯一鍵違反時本方法
    * 拋出驅動層原始錯誤，由服務層轉譯為 `BUSINESS_CATEGORY_DOC_ALREADY_MOUNTED`。

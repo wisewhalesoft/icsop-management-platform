@@ -59,6 +59,42 @@
  * `svc.listCandidates` 時 `store.listCandidateDocs` 恰被呼叫一次」佐證服務層未另開查詢；SQL 本身
  * 是否真的單一往返（如以 window function 同時取 `total`／`lifecycleCount`）留待 impl-be 之
  * int-test／效能量測驗證，非本 FakeStore 單元測試層可證明之範圍。
+ *
+ * ## 第三次契約修訂（2026-09-03，同日第三個真實需求）：新增使用者可選之循環別篩選
+ *
+ * ### 為何要加（使用者實機發現，非美化）
+ * 候選依 `documentNumber` 遞增排序，而文件編號第 2 段即循環代碼（`ICSOP-CIPS-101-1-00` →
+ * 電腦化資訊系統控制作業循環），故依編號排序等同依循環分群。真庫 591 份文件、14 個循環，抽屜
+ * 無翻頁機制、前端只取第一頁 ⇒ 第一頁 20 筆幾乎全部集中在字母序最前之循環，其餘 569 筆只能靠
+ * 關鍵字搜尋才到得了。**使用者裁決**：加一個「循環別」下拉，讓使用者自己選要看哪個循環。
+ *
+ * ### 🔒 與 `AC-20` 之明文分界（本次修訂最重要之一句，測試須鎖住）
+ * `AC-20` 禁的是「系統靜默地只給同循環文件」；**使用者主動縮小範圍**是另一回事，兩者必須在
+ * 程式碼層面長得不一樣——新鍵刻意**不叫** `lifecycleId`，逐字為 **`userSelectedLifecycleId`**。
+ * 🔴🔴 **不變式**：上方兩條既有 `@ts-expect-error`（`AC-20 §推 1` 區塊、`candidateLifecycleCount`
+ * 區塊各一）**必須原樣保留、逐字未動、依然成立**——`lifecycleId` 這個鍵永遠不得存在於
+ * `listCandidateDocs` 之查詢型別。本次新增的是**另一個名字**的鍵，那道防線完全不需要、也不得
+ * 被削弱。下方新增之正向測試只證明 `userSelectedLifecycleId` 本身合法，不觸碰既有兩條負向測試。
+ *
+ * ### 語意約束（本次新增之三個可測形狀）
+ * - `userSelectedLifecycleId`：**無預設值**（未提供或 `undefined` ⇒ 不過濾，行為與新增本鍵之前
+ *   完全相同，回歸鎖）；**不得**由節點／類別推導，只能由呼叫端（前端使用者互動）主動帶入；
+ *   提供時套用於 `items`／`total`／`lifecycleCount`（與既有 `keyword`／`excludeDocumentIds`
+ *   三者皆同時生效，交集而非互斥）。
+ * - `candidateTotal`／`candidateLifecycleCount`（服務層透傳 `total`／`lifecycleCount`）之語意
+ *   **套用使用者篩選後**——畫面上那兩個數字描述的正是使用者當前看到的候選集合，選了某循環後，
+ *   `total` 降為該循環之候選數、`lifecycleCount` 變為 **1**。
+ * - 🔴 新增 `candidateLifecycles: {lifecycleId, displayName, count}[]`——供下拉選項，為**未套用
+ *   `userSelectedLifecycleId`**、但**已套用 `keyword`／`excludeDocumentIds`** 之全集依循環分組
+ *   計數。**鑑別力關鍵**：套用篩選後的統計（`total`／`lifecycleCount`）與下拉選項來源
+ *   （`candidateLifecycles`）必須是不同的集合——否則選了一個循環後下拉就只剩它自己，使用者
+ *   出不來。下方測試刻意讓兩者於同一次呼叫中不同，證明 `candidateLifecycles` 不是從已篩選結果
+ *   推導。
+ * - 🔴 **仍為單一往返**：新增這個維度不得多打一趟 DB——沿用既有「`svc.listCandidates` 一次呼叫，
+ *   `store.listCandidateDocs` 恰被呼叫一次」之佐證方式。
+ *
+ * ⚠ 若實作採不同鍵名／參數位置，請走 mailbox 申訴，附實際簽章，由 test-generator 覆核後修正
+ *   本檔（非實作端自行改測試）。
  */
 import 'reflect-metadata';
 import { BusinessCategoryDocsService } from './business-category-docs.service';
@@ -69,8 +105,12 @@ import {
   CategoryMountedDoc,
 } from './business-category-docs.store';
 
-/** 內部語料模型：`lifecycleId` 僅供 FakeStore 自身計算 `lifecycleCount` 之用，不對外回傳於 `CandidateDocRef`。 */
-type SeededDoc = CandidateDocRef & { lifecycleId: string };
+/**
+ * 內部語料模型：`lifecycleId`／`lifecycleDisplayName` 僅供 FakeStore 自身計算 `lifecycleCount`／
+ * `candidateLifecycles` 之用，不對外回傳於 `CandidateDocRef`（該型別本身另有選填之
+ * `lifecycleId`／`lifecycleName`，供「純資訊 chip」用途，與本內部模型互不相干）。
+ */
+type SeededDoc = CandidateDocRef & { lifecycleId: string; lifecycleDisplayName: string };
 
 class FakeStore implements BusinessCategoryDocsStore {
   nodes = new Map<string, BusinessCategoryNodeInfo>();
@@ -83,9 +123,13 @@ class FakeStore implements BusinessCategoryDocsStore {
     this.nodes.set(id, n);
     return n;
   }
-  /** `lifecycleId` 預設各自相異（每份文件獨立循環），需要語料集中於少數循環時請顯式指定。 */
-  doc(id: string, documentNumber = id, documentName = id, lifecycleId = `lc-${id}`): SeededDoc {
-    const d = { id, documentNumber, documentName, lifecycleId };
+  /**
+   * `lifecycleId` 預設各自相異（每份文件獨立循環），需要語料集中於少數循環時請顯式指定。
+   * `lifecycleDisplayName` 預設等於 `lifecycleId`（僅 `candidateLifecycles` 之語料需要真實中文
+   * 名稱時才顯式帶入第 5 參數，既有 4 參數呼叫全部相容、不受影響）。
+   */
+  doc(id: string, documentNumber = id, documentName = id, lifecycleId = `lc-${id}`, lifecycleDisplayName = lifecycleId): SeededDoc {
+    const d = { id, documentNumber, documentName, lifecycleId, lifecycleDisplayName };
     this.docs.push(d);
     return d;
   }
@@ -102,18 +146,42 @@ class FakeStore implements BusinessCategoryDocsStore {
     page: number;
     pageSize: number;
     excludeDocumentIds?: string[];
-  }): Promise<{ items: CandidateDocRef[]; total: number; lifecycleCount: number }> {
+    /** 2026-09-03 第三次契約修訂：使用者主動選擇之循環別，正交於 `keyword`／`excludeDocumentIds`。 */
+    userSelectedLifecycleId?: string;
+  }): Promise<{
+    items: CandidateDocRef[];
+    total: number;
+    lifecycleCount: number;
+    /** 未套用 `userSelectedLifecycleId`、已套用 `keyword`／`excludeDocumentIds` 之全集分組——下拉選項來源。 */
+    candidateLifecycles: { lifecycleId: string; displayName: string; count: number }[];
+  }> {
     this.candidateCalls.push(query as Record<string, unknown>);
     const kw = query.keyword?.trim();
     const excluded = new Set(query.excludeDocumentIds ?? []);
     // 依 documentNumber 排序，比照架構文件所示之 SQL 排序慣例（ORDER BY documentNumber ASC）——
     // 分頁切片之依據須為固定順序，否則「當前頁 vs 全集」之鑑別語料無從設計。
-    let full = kw
+    let base = kw
       ? this.docs.filter((d) => d.documentNumber.includes(kw) || d.documentName.includes(kw))
       : this.docs;
-    full = full.filter((d) => !excluded.has(d.id)).sort((a, b) => a.documentNumber.localeCompare(b.documentNumber));
+    base = base.filter((d) => !excluded.has(d.id)).sort((a, b) => a.documentNumber.localeCompare(b.documentNumber));
 
-    // 🔴 lifecycleCount 對「未分頁之全集」計算（過濾後、切片前）——這正是本次缺陷之修正核心。
+    // 🔴🔴 candidateLifecycles：對「keyword／exclude 已套用、userSelectedLifecycleId 未套用」之
+    // 全集分組——下拉選項之來源，刻意獨立於使用者目前選了哪個循環（否則選了一個循環後，下拉就
+    // 只剩它自己，使用者出不來）。
+    const groups = new Map<string, { lifecycleId: string; displayName: string; count: number }>();
+    for (const d of base) {
+      const g = groups.get(d.lifecycleId);
+      if (g) g.count += 1;
+      else groups.set(d.lifecycleId, { lifecycleId: d.lifecycleId, displayName: d.lifecycleDisplayName, count: 1 });
+    }
+    const candidateLifecycles = Array.from(groups.values());
+
+    // 🔴 userSelectedLifecycleId 套用於 items／total／lifecycleCount（非 candidateLifecycles）。
+    const full = query.userSelectedLifecycleId
+      ? base.filter((d) => d.lifecycleId === query.userSelectedLifecycleId)
+      : base;
+
+    // 🔴 lifecycleCount 對「未分頁之全集」計算（過濾後、切片前）——2026-09-03 第二次缺陷修正核心。
     const lifecycleCount = new Set(full.map((d) => d.lifecycleId)).size;
     const total = full.length;
 
@@ -122,7 +190,7 @@ class FakeStore implements BusinessCategoryDocsStore {
       .slice(start, start + query.pageSize)
       .map(({ id, documentNumber, documentName }) => ({ id, documentNumber, documentName }));
 
-    return Promise.resolve({ items: pageItems, total, lifecycleCount });
+    return Promise.resolve({ items: pageItems, total, lifecycleCount, candidateLifecycles });
   }
   mount(nodeId: string, documentId: string, mountedByAccountId: string, mountedAt: Date): Promise<void> {
     if (this.mounted.some((m) => m.nodeId === nodeId && m.documentId === documentId)) {
@@ -300,6 +368,123 @@ describe('BusinessCategoryDocsService.listCandidates（F043 §丙 候選文件�
       store.doc('D1', 'D1', 'D1', 'lc-A');
       store.doc('D2', 'D2', 'D2', 'lc-B');
       await svc.listCandidates('bc1', 'n1', { page: 1, pageSize: 10 });
+      expect(store.candidateCalls).toHaveLength(1);
+    });
+  });
+
+  describe('🔴🔴 2026-09-03 第三個真實需求：使用者可選之循環別篩選（userSelectedLifecycleId）', () => {
+    /**
+     * 🔴 `svc.listCandidates` 之查詢型別尚未接受 `userSelectedLifecycleId`——以變數（非行內物件
+     * 字面）傳入，繞過 TS 之 excess-property-check，使紅燈落在「執行期行為未過濾」而非整檔編譯
+     * 錯誤（比照既有 cast 慣例，避免拖累同檔其餘測試之編譯）。
+     */
+    function queryWith(extra: Record<string, unknown>) {
+      return { page: 1, pageSize: 10, ...extra };
+    }
+    /** 存取尚未存在於服務層回傳型別之 `candidateLifecycles` 欄位，用法比照既有 `as {...}` 慣例。 */
+    type ResultWithLifecycles = {
+      items: { id: string }[];
+      total: number;
+      lifecycleCount: number;
+      candidateLifecycles: { lifecycleId: string; displayName: string; count: number }[];
+    };
+
+    it('不傳 userSelectedLifecycleId → 候選為全部（回歸鎖：新增本鍵不改變既有無篩選行為）', async () => {
+      store.doc('D1', 'D1', 'D1', 'lc-A');
+      store.doc('D2', 'D2', 'D2', 'lc-B');
+      store.doc('D3', 'D3', 'D3', 'lc-C');
+      const result = await svc.listCandidates('bc1', 'n1', { page: 1, pageSize: 10 });
+      expect(result.items.map((d) => d.id).sort()).toEqual(['D1', 'D2', 'D3']);
+      expect(result.total).toBe(3);
+      expect(result.lifecycleCount).toBe(3);
+    });
+
+    it('userSelectedLifecycleId 為 undefined 時等同未提供（無預設值，非空字串或特殊哨兵）', async () => {
+      store.doc('D1', 'D1', 'D1', 'lc-A');
+      store.doc('D2', 'D2', 'D2', 'lc-B');
+      const result = await svc.listCandidates('bc1', 'n1', queryWith({ userSelectedLifecycleId: undefined }));
+      expect(result.items.map((d) => d.id).sort()).toEqual(['D1', 'D2']);
+      expect(result.lifecycleCount).toBe(2);
+    });
+
+    it('傳入 userSelectedLifecycleId → 僅回該循環之候選，且與 excludeDocumentIds（本節點已掛載排除）同時生效', async () => {
+      store.doc('D1', 'D1', 'D1', 'lc-A'); // 本節點已掛載 → 應被 exclude 排除（即使屬於 lc-A）
+      store.doc('D2', 'D2', 'D2', 'lc-A'); // lc-A、未掛載 → 應保留
+      store.doc('D3', 'D3', 'D3', 'lc-B'); // lc-B → 應被循環篩選排除
+      store.mount_('n1', 'D1');
+
+      const result = await svc.listCandidates('bc1', 'n1', queryWith({ userSelectedLifecycleId: 'lc-A' }));
+      expect(result.items.map((d) => d.id)).toEqual(['D2']);
+      // 🔴 candidateTotal／candidateLifecycleCount 之語意＝套用使用者篩選後之統計。
+      expect(result.total).toBe(1);
+      expect(result.lifecycleCount).toBe(1);
+    });
+
+    it('🔴🔴 語料鑑別力核心：candidateLifecycles 為「未套用使用者篩選」之全集分組——即使已選 lc-A，仍列出 lc-B／lc-C（否則使用者選錯後出不來）', async () => {
+      store.doc('D1', 'D1', 'D1', 'lc-A', '銷售及收款循環');
+      store.doc('D2', 'D2', 'D2', 'lc-A', '銷售及收款循環');
+      store.doc('D3', 'D3', 'D3', 'lc-B', '採購及付款循環');
+      store.doc('D4', 'D4', 'D4', 'lc-B', '採購及付款循環');
+      store.doc('D5', 'D5', 'D5', 'lc-C', '投資循環');
+
+      const result = (await svc.listCandidates(
+        'bc1',
+        'n1',
+        queryWith({ userSelectedLifecycleId: 'lc-A' }),
+      )) as unknown as ResultWithLifecycles;
+
+      // 自證：本次呼叫確實已套用循環篩選（items 只剩 lc-A 之 2 筆）——否則下方斷言對「有沒有
+      // 用已篩選集合推導 candidateLifecycles」無鑑別力。
+      expect(result.items.map((d) => d.id).sort()).toEqual(['D1', 'D2']);
+      expect(result.total).toBe(2);
+      expect(result.lifecycleCount).toBe(1);
+
+      // candidateLifecycles 卻仍是完整 3 組——證明其計算不依賴 userSelectedLifecycleId 篩選後的集合。
+      expect(result.candidateLifecycles).toHaveLength(3);
+      expect(result.candidateLifecycles).toEqual(
+        expect.arrayContaining([
+          { lifecycleId: 'lc-A', displayName: '銷售及收款循環', count: 2 },
+          { lifecycleId: 'lc-B', displayName: '採購及付款循環', count: 2 },
+          { lifecycleId: 'lc-C', displayName: '投資循環', count: 1 },
+        ]),
+      );
+    });
+
+    it('candidateLifecycles 已套用 keyword／excludeDocumentIds，但不受 userSelectedLifecycleId 影響', async () => {
+      store.doc('ICSOP-A', 'ICSOP-A', '授信作業', 'lc-A', '銷售及收款循環');
+      store.doc('ICSOP-B', 'ICSOP-B', '授信審查', 'lc-B', '採購及付款循環');
+      store.doc('ICSOP-C', 'ICSOP-C', '風管作業', 'lc-C', '投資循環'); // 不含關鍵字「授信」
+      store.mount_('n1', 'ICSOP-A'); // 已掛載本節點 → exclude 排除
+
+      const result = (await svc.listCandidates('bc1', 'n1', {
+        keyword: '授信',
+        page: 1,
+        pageSize: 10,
+      })) as unknown as ResultWithLifecycles;
+      // ICSOP-A 被 excludeDocumentIds 排除、ICSOP-C 被 keyword 排除 → candidateLifecycles 僅剩 lc-B。
+      expect(result.candidateLifecycles).toEqual([{ lifecycleId: 'lc-B', displayName: '採購及付款循環', count: 1 }]);
+    });
+
+    it('userSelectedLifecycleId 為合法之查詢鍵（不觸發編譯期錯誤）——與既有 lifecycleId／lifecycleIds／cycle 之結構性禁令並存，兩者互不影響', () => {
+      // 不需 @ts-expect-error：userSelectedLifecycleId 是本次新增之正交鍵，非循環過濾之破口
+      // （見上方兩條既有 `@ts-expect-error` 保持原樣、逐字未動）。
+      store.listCandidateDocs({ userSelectedLifecycleId: 'lc1', page: 1, pageSize: 10 });
+    });
+
+    it('服務層將 userSelectedLifecycleId 逐字透傳給 store 查詢（與 excludeDocumentIds 同一次呼叫參數物件內，接線可驗證）', async () => {
+      store.doc('D1', 'D1', 'D1', 'lc-A');
+      store.mount_('n1', 'D1');
+      await svc.listCandidates('bc1', 'n1', queryWith({ userSelectedLifecycleId: 'lc-A' }));
+      expect(store.candidateCalls).toHaveLength(1);
+      const call = store.candidateCalls[0] as { userSelectedLifecycleId?: string; excludeDocumentIds?: string[] };
+      expect(call.userSelectedLifecycleId).toBe('lc-A');
+      expect(call.excludeDocumentIds).toContain('D1');
+    });
+
+    it('🔴 防 N+1：帶 userSelectedLifecycleId 時，store.listCandidateDocs 仍恰被呼叫一次（不得為 candidateLifecycles 另開一趟）', async () => {
+      store.doc('D1', 'D1', 'D1', 'lc-A');
+      store.doc('D2', 'D2', 'D2', 'lc-B');
+      await svc.listCandidates('bc1', 'n1', queryWith({ userSelectedLifecycleId: 'lc-A' }));
       expect(store.candidateCalls).toHaveLength(1);
     });
   });

@@ -14,7 +14,7 @@
  *    比照既有 `NodeDrawer.tsx` 之命名風格延伸）本輪尚不存在。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BusinessCategoryNodeDrawer } from './BusinessCategoryNodeDrawer';
 import { ToastProvider } from '../components/useToast';
@@ -40,9 +40,21 @@ interface BcNodeDrawerData {
   candidateTotal: number;
   /** 🔴 2026-09-03 真實缺陷回歸鎖：候選集合（同上）之 `COUNT(DISTINCT lifecycleId)`，後端計算。 */
   candidateLifecycleCount: number;
+  /**
+   * 🔴🔴 2026-09-03 第三個 delta：循環別篩選下拉之選項來源——「keyword／exclude 已套用、
+   * `userSelectedLifecycleId` 未套用」之全集依循環分組，**不受**使用者目前已選之循環影響
+   * （否則選了一個循環後，下拉就只剩它自己，使用者出不來）。選填：既有 3 份 fixture（`DRAWER`／
+   * `DRAWER_OVERLAP`／`DRAWER_PAGED`）不測本делta，故不強制提供，零漣漪。
+   */
+  candidateLifecycles?: { lifecycleId: string; displayName: string; count: number }[];
 }
 interface BusinessCategoryNodeDrawerEndpoints {
-  getBusinessCategoryNodeDrawer: (bcId: string, nodeId: string) => Promise<BcNodeDrawerData>;
+  /**
+   * 🔴🔴 2026-09-03 第三個 delta：第三個選填引數 `userSelectedLifecycleId`——未選任何循環時
+   * **不得**帶入（維持既有 `AC-20` 初載呼叫「恰兩個引數」之結構性斷言不退化），選取後之重新查詢
+   * 才帶上（逐字鍵名對齊 backend 契約，見 `business-category-docs-candidates.service.spec.ts`）。
+   */
+  getBusinessCategoryNodeDrawer: (bcId: string, nodeId: string, userSelectedLifecycleId?: string) => Promise<BcNodeDrawerData>;
   mountBusinessCategoryDoc: (bcId: string, nodeId: string, documentId: string) => Promise<void>;
   unmountBusinessCategoryDoc: (bcId: string, nodeId: string, documentId: string) => Promise<void>;
   updateBusinessCategoryNode: (bcId: string, nodeId: string, patch: { name: string }) => Promise<unknown>;
@@ -450,5 +462,147 @@ describe('🔴 候選區之總數與相異循環數（真實缺陷回歸鎖，�
       /(?<!\d)20(?!\d)/.test(withoutTotalPhrase),
       `畫面須另外可辨識「目前已載入 20」之數字（591 之外）。移除總數片語後之全文：${withoutTotalPhrase.slice(0, 300)}`,
     ).toBe(true);
+  });
+});
+
+/**
+ * 🔴🔴 F043 丙 delta（2026-09-03，同日第三個真實需求）：候選之循環別篩選（`userSelectedLifecycleId`）。
+ *
+ * 背景：候選依 `documentNumber` 排序＝依循環分群（`ICSOP-CIPS-101-1-00` 之第 2 段即循環代碼），
+ * 真庫 591 份文件、14 個循環，抽屜無翻頁機制、前端只取第一頁 ⇒ 第一頁幾乎全部集中在字母序最前
+ * 之循環，其餘只能靠關鍵字搜尋才到得了。使用者裁決：加「循環別」下拉，讓使用者自己選要看哪個
+ * 循環。
+ *
+ * 🔒 與 `AC-20` 之明文分界：`AC-20` 禁的是「系統靜默地只依循環過濾」；使用者主動選擇是另一回事，
+ * 故新引數逐字為 `userSelectedLifecycleId`（比照 backend
+ * `business-category-docs-candidates.service.spec.ts` 之同名契約），不得誤讀為推翻 `AC-20`。
+ *
+ * 逐字文案來源（本檔作者決定，非既有 AC 明文規定，僅供實作端一致採用）：
+ * - 預設選項「全部循環」——比照既有 `ChangeHistoryPage.tsx:906`
+ *   （`<option value="">全部循環</option>`）與 `prototypes/23-change-history.html:524`
+ *   之既有循環篩選慣例，非本檔自創新詞。
+ * - 下拉之可存取標籤「循環別篩選」——本頁尚無同型篩選器可比照（既有僅「搜尋候選」關鍵字輸入
+ *   框），逐字由本檔選定；若 impl-fe 之自然設計採不同逐字，屬合法申訴。
+ */
+describe('🔴🔴 F043 丙 delta：候選之循環別篩選（userSelectedLifecycleId，2026-09-03 第三個真實需求）', () => {
+  /**
+   * 🔴🔴 語料鑑別力核心：當前頁（`candidates`）僅 2 筆、皆屬 `lc1`（僅 1 個相異循環）；
+   * `candidateLifecycles`（後端未套用使用者篩選之全集分組）卻橫跨 5 個相異循環、合計 12 份
+   * （2+3+1+4+2）。若下拉選項由當前頁 `candidates` 推導，只會看到 `lc1` 一個選項；必須是完整
+   * 5 個，才證明選項確實來自 `candidateLifecycles` 而非當前頁——這正是本功能存在的理由：
+   * 頁內看不到的循環，使用者也要選得到。
+   *
+   * `candidateTotal`／`candidateLifecycleCount` 為**未套用循環篩選**（尚未互動）之全域統計，
+   * 與 `candidateLifecycles` 分組之總和（2+3+1+4+2=12、5 組）一致，維持內部自洽。
+   */
+  const DRAWER_LIFECYCLE_FILTER: BcNodeDrawerData = {
+    node: { id: 'n1', name: '授信審查作業' },
+    mounted: [],
+    candidates: [
+      { id: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '對保作業', lifecycleId: 'lc1', lifecycleName: '銷售及收款循環', otherMounts: [] },
+      { id: 'd2', documentNumber: 'ICSOP-SRC-102-1-01', documentName: '進件作業', lifecycleId: 'lc1', lifecycleName: '銷售及收款循環', otherMounts: [] },
+    ],
+    candidateTotal: 12,
+    candidateLifecycleCount: 5,
+    candidateLifecycles: [
+      { lifecycleId: 'lc1', displayName: '銷售及收款循環', count: 2 },
+      { lifecycleId: 'lc2', displayName: '採購及付款循環', count: 3 },
+      { lifecycleId: 'lc3', displayName: '產品企劃循環', count: 1 },
+      { lifecycleId: 'lc4', displayName: '投資循環', count: 4 },
+      { lifecycleId: 'lc5', displayName: '薪工循環', count: 2 },
+    ],
+  };
+
+  /**
+   * 選取 `lc2`（3 份候選）後之後端回應：`candidateTotal`／`candidateLifecycleCount` 隨使用者篩選
+   * 收斂（3／1，比照 backend 契約之「套用篩選後之統計」語意）；`candidateLifecycles` 維持
+   * **原封不動**（供切回「全部循環」時，其餘 4 個選項仍在）。
+   */
+  const DRAWER_LIFECYCLE_FILTER_LC2: BcNodeDrawerData = {
+    ...DRAWER_LIFECYCLE_FILTER,
+    candidates: [
+      { id: 'd3', documentNumber: 'ICSOP-GCA-100-1-00', documentName: '法遵管理作業', lifecycleId: 'lc2', lifecycleName: '採購及付款循環', otherMounts: [] },
+    ],
+    candidateTotal: 3,
+    candidateLifecycleCount: 1,
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(bcApi.mountBusinessCategoryDoc).mockResolvedValue(undefined);
+    vi.mocked(bcApi.unmountBusinessCategoryDoc).mockResolvedValue(undefined);
+    vi.mocked(bcApi.updateBusinessCategoryNode).mockResolvedValue({});
+  });
+
+  it('候選區顯示循環別篩選下拉，預設選項為「全部循環」（未互動時之初值）', async () => {
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mockResolvedValue(DRAWER_LIFECYCLE_FILTER);
+    renderDrawer();
+    const select = (await screen.findByLabelText('循環別篩選')) as HTMLSelectElement;
+    expect(select.value).toBe('');
+    expect(within(select).getByRole('option', { name: '全部循環' })).toBeInTheDocument();
+  });
+
+  it('🔴🔴 語料鑑別力核心：下拉選項恰 6 個（「全部循環」＋ candidateLifecycles 之 5 個），逐一比對其顯示名稱與 value——不得由當前頁 candidates（僅 1 個相異循環）推導', async () => {
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mockResolvedValue(DRAWER_LIFECYCLE_FILTER);
+    renderDrawer();
+    const select = (await screen.findByLabelText('循環別篩選')) as HTMLSelectElement;
+    // 自證：當前頁（candidates）確實只有 1 個相異循環——否則本案對「有沒有用當前頁推導」無鑑別力。
+    expect(new Set(DRAWER_LIFECYCLE_FILTER.candidates.map((c) => c.lifecycleId)).size).toBe(1);
+
+    const options = within(select).getAllByRole('option') as HTMLOptionElement[];
+    expect(options).toHaveLength(1 + DRAWER_LIFECYCLE_FILTER.candidateLifecycles!.length);
+    for (const opt of DRAWER_LIFECYCLE_FILTER.candidateLifecycles!) {
+      const el = within(select).getByRole('option', { name: new RegExp(opt.displayName) }) as HTMLOptionElement;
+      expect(el.value, `選項「${opt.displayName}」之 value 應為其 lifecycleId「${opt.lifecycleId}」`).toBe(opt.lifecycleId);
+    }
+  });
+
+  it('選取某循環 → 觸發重新查詢並帶上 userSelectedLifecycleId，候選＝全部ICSOP文件之說明數字同步更新', async () => {
+    const user = userEvent.setup();
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer)
+      .mockResolvedValueOnce(DRAWER_LIFECYCLE_FILTER)
+      .mockResolvedValueOnce(DRAWER_LIFECYCLE_FILTER_LC2);
+    const { container } = renderDrawer();
+    const select = await screen.findByLabelText('循環別篩選');
+    await user.selectOptions(select, 'lc2');
+
+    await waitFor(() => expect(bcApi.getBusinessCategoryNodeDrawer).toHaveBeenCalledTimes(2));
+    // 第二次呼叫須帶上使用者所選之 userSelectedLifecycleId（第三引數）。
+    expect(vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mock.calls[1]).toEqual(['bc1', 'n1', 'lc2']);
+
+    await waitFor(() => {
+      const flat = (container.textContent ?? '').replace(/\s+/g, '');
+      const m = flat.match(/共(\d+)份，?分屬(\d+)個相異循環/);
+      expect(m, `找不到「共 N 份，分屬 M 個相異循環」之逐字模式。全文：${flat.slice(0, 300)}`).not.toBeNull();
+      expect(Number(m![1]), '選取 lc2 後，「共 N 份」應更新為 candidateTotal（3）').toBe(3);
+      expect(Number(m![2]), '選取 lc2 後，「分屬 M 個相異循環」應更新為 candidateLifecycleCount（1）').toBe(1);
+    });
+  });
+
+  it('選取某循環後再選回「全部循環」→ 重新查詢不帶 userSelectedLifecycleId（恢復為兩引數呼叫），數字還原、可雙向切換非單向', async () => {
+    const user = userEvent.setup();
+    vi.mocked(bcApi.getBusinessCategoryNodeDrawer)
+      .mockResolvedValueOnce(DRAWER_LIFECYCLE_FILTER)
+      .mockResolvedValueOnce(DRAWER_LIFECYCLE_FILTER_LC2)
+      .mockResolvedValueOnce(DRAWER_LIFECYCLE_FILTER);
+    const { container } = renderDrawer();
+    const select = await screen.findByLabelText('循環別篩選');
+
+    await user.selectOptions(select, 'lc2');
+    await waitFor(() => expect(bcApi.getBusinessCategoryNodeDrawer).toHaveBeenCalledTimes(2));
+
+    await user.selectOptions(select, '');
+    await waitFor(() => expect(bcApi.getBusinessCategoryNodeDrawer).toHaveBeenCalledTimes(3));
+    // 比照既有 AC-20 初載呼叫之結構性斷言：還原為「全部循環」時，呼叫引數須恰兩段路徑參數，
+    // 不含任何循環相關鍵——證明還原是真正的「不篩選」，非帶著空字串的偽還原。
+    expect(vi.mocked(bcApi.getBusinessCategoryNodeDrawer).mock.calls[2]).toEqual(['bc1', 'n1']);
+
+    await waitFor(() => {
+      const flat = (container.textContent ?? '').replace(/\s+/g, '');
+      const m = flat.match(/共(\d+)份，?分屬(\d+)個相異循環/);
+      expect(m, `找不到「共 N 份，分屬 M 個相異循環」之逐字模式。全文：${flat.slice(0, 300)}`).not.toBeNull();
+      expect(Number(m![1]), '選回「全部循環」後，「共 N 份」應還原為 candidateTotal（12）').toBe(12);
+      expect(Number(m![2]), '選回「全部循環」後，「分屬 M 個相異循環」應還原為 candidateLifecycleCount（5）').toBe(5);
+    });
   });
 });
