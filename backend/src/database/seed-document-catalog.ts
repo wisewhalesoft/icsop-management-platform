@@ -18,6 +18,8 @@ import { OrgUnit } from './entities/org-unit.entity';
  * 冪等策略：
  *  - 編號不存在 → INSERT。
  *  - 編號已存在 → **只回填目前為 NULL 之組織／室長欄**，其餘一律不動（不覆寫人工編輯結果）。
+ *  - 例外：「當責室長-主要之員編在**文件公司**查無帳號」者視為錯值（非人工編輯結果），
+ *    以來源姓名於該公司重解析後覆寫——見 `planPrimaryChiefWrite()`。
  * 前置：seed:lifecycle（lifecycleId 為 NOT NULL ＋ FK）。
  * 用法：
  *   npm run seed:doc-catalog            實際寫入（容器內為 seed:doc-catalog:prod）
@@ -61,6 +63,40 @@ interface OrgMapFile {
 }
 
 const SEEDS_DIR = join(__dirname, 'seeds');
+
+/**
+ * 既有列之「當責室長-主要」該寫入什麼值。回傳 `null` ＝**不動該欄**。
+ *
+ * 🔴 為何「只補 NULL」不夠（2026-09-07 實機缺陷）：`ICSOP-SRC-304-1-10 潤興撥款文件作業程序書`
+ *    之公司為 `AD`、室長員編卻是 `20781`——那是 **AS** 的周家宏（他在 AD 另有帳號 `70003`）。
+ *    成因是本 seed 舊版寫死 `companyCode='AS'`（見下方 📝 已作廢段），於是以 `(AS, 周家宏)`
+ *    解析；`1725580800000` 事後把公司修成 `AD`，卻刻意不動員編（不把在職狀態凍結進 migration），
+ *    而「只補 NULL」對這個**非 NULL 的錯值**天然無效 ⇒ 重跑一萬次也修不掉。
+ *    畫面症狀是靜默的：後台清單以文件公司解析（`documents.service.ts` `enrichNames`）→ 查無 →
+ *    退回印出裸員編 `20781`；編輯頁卻以**登入者公司**搜尋（`GET /persons/search`）→ 在 AS 找到
+ *    同一員編 → 顯示「周家宏」，反而把錯誤遮住。
+ *
+ * 三條規則（`current` 為既有值、`resolvedByName` 為以文件公司＋來源姓名解析所得）：
+ *  ① `current === null` → 回填 `resolvedByName`（既有語意，不變）。
+ *  ② `current` 在文件公司**查得到帳號**（含離職者）→ `null`，一律不動。人工編輯結果、
+ *     以及與來源 Excel 不同的正當改派，都落在這一條。
+ *  ③ `current` 在文件公司**查無帳號** → 以 `resolvedByName` 覆寫；連姓名都解析不出來（同名多筆／
+ *     該公司查無在職帳號）則回 `null` **保留錯值**——清成 NULL 會讓「有人指定過但指錯了」與
+ *     「從來沒填」變成同一種畫面，反而更難追。
+ *
+ * ⚠ 「查得到帳號」必須含**離職者**（`status='disabled'`）：下游 `resolvePersonNames()` 不篩狀態，
+ *    歷史文件之離職室長本來就顯示得出姓名，把他判成錯值會把正確資料改掉。
+ */
+export function planPrimaryChiefWrite(args: {
+  current: string | null;
+  resolvedByName: string | null;
+  currentExistsInDocCompany: boolean;
+}): string | null {
+  const { current, resolvedByName, currentExistsInDocCompany } = args;
+  if (current === null) return resolvedByName;
+  if (currentExistsInDocCompany) return null;
+  return resolvedByName;
+}
 
 /**
  * 公司欄空白時之回退值。來源之 10 筆「待訂」列（公司欄空白、部門欄字面即『待訂』）用之——
@@ -179,7 +215,15 @@ async function seedDocumentCatalog(): Promise<void> {
       select: { companyCode: true, name: true, employeeNo: true, status: true },
     });
     const byName = new Map<string, Set<string>>();
+    /**
+     * `(companyCode, employeeNo)` 之全集——**刻意含離職者**（`status='disabled'`）：
+     * 供 `planPrimaryChiefWrite()` 判斷既有員編在文件公司是不是真的查無此人。
+     * 下游 `NameResolutionService.resolvePersonNames()` 同樣不篩狀態（歷史文件之離職室長
+     * 仍顯示得出姓名），此處若只認在職者，會把「已離職但正確」誤判為錯值而改掉。
+     */
+    const accountKeys = new Set<string>();
     for (const a of accounts) {
+      if (a.employeeNo) accountKeys.add(orgKey(a.companyCode, a.employeeNo));
       if (!a.name || !a.employeeNo || a.status !== 'active') continue;
       const k = orgKey(a.companyCode, a.name);
       const bucket = byName.get(k) ?? new Set<string>();
@@ -208,6 +252,7 @@ async function seedDocumentCatalog(): Promise<void> {
         id: true,
         documentNumber: true,
         status: true,
+        companyCode: true,
         draftingDeptId: true,
         draftingSectionId: true,
         primaryChiefId: true,
@@ -218,6 +263,8 @@ async function seedDocumentCatalog(): Promise<void> {
     let inserted = 0;
     let backfilled = 0;
     let untouched = 0;
+    /** 跨公司錯值之室長修補（規則 ③）之逐筆紀錄，供執行後人工覆核。 */
+    const chiefRepairs: string[] = [];
     const now = new Date();
 
     for (const r of catalog.records) {
@@ -271,15 +318,40 @@ async function seedDocumentCatalog(): Promise<void> {
       }
 
       /**
-       * 已存在：只補 NULL，不覆寫既有值（保護人工編輯）。
+       * 已存在：只補 NULL，不覆寫既有值（保護人工編輯）；室長欄另有規則 ③ 之例外，
+       * 見 `planPrimaryChiefWrite()`。
        * ⚠ `companyCode` 刻意**不**在此列：它為 NOT NULL、永遠不是 NULL，所以「補 NULL」的規則
        *   對它天然無效；而且制定公司自 2026-09-04 起是 ICSOP 管理員可編輯的欄位，就地覆寫等於
        *   把人工改正洗掉。既有列之公司別修補由 migration 1725580800000 一次性完成。
        */
+
+      /**
+       * 🔴 既有列之室長一律以 **DB 現值之公司**判定，不是目錄清單那一欄的公司：制定公司
+       * 可由 ICSOP 管理員編輯而本 seed 刻意不覆寫它 ⇒ 兩者不必然相等。判定用錯公司，
+       * 修補本身就會寫進另一家公司的員編（正是本規則要修的那種錯）。
+       */
+      const docCompany = found.companyCode;
+      const chiefIdInDocCompany =
+        docCompany === companyCode ? chiefId : resolveChief(docCompany, r.chiefName);
+      const chiefWrite = planPrimaryChiefWrite({
+        current: found.primaryChiefId,
+        resolvedByName: chiefIdInDocCompany,
+        currentExistsInDocCompany:
+          found.primaryChiefId !== null &&
+          accountKeys.has(orgKey(docCompany, found.primaryChiefId)),
+      });
+
       const patch: Partial<IcsopDocument> = {};
       if (found.draftingDeptId === null && deptId) patch.draftingDeptId = deptId;
       if (found.draftingSectionId === null && sectionId) patch.draftingSectionId = sectionId;
-      if (found.primaryChiefId === null && chiefId) patch.primaryChiefId = chiefId;
+      if (chiefWrite !== null && chiefWrite !== found.primaryChiefId) {
+        patch.primaryChiefId = chiefWrite;
+        if (found.primaryChiefId !== null) {
+          chiefRepairs.push(
+            `${r.documentNumber}（${docCompany}）${found.primaryChiefId} → ${chiefWrite}（${r.chiefName ?? ''}）`,
+          );
+        }
+      }
       if (Object.keys(patch).length === 0) {
         untouched += 1;
         continue;
@@ -290,6 +362,12 @@ async function seedDocumentCatalog(): Promise<void> {
 
     log(`[doc-catalog]${dryRun ? '（試算）' : ''} 來源 ${catalog.source}：${catalog.count} 筆`);
     log(`[doc-catalog]   新增 ${inserted}、回填 ${backfilled}、無變更 ${untouched}`);
+    if (chiefRepairs.length > 0) {
+      log(
+        `[doc-catalog] ⚑ 當責室長跨公司錯值修補 ${chiefRepairs.length} 筆（原員編於該文件之公司查無帳號）：`,
+      );
+      for (const line of chiefRepairs) log(`[doc-catalog]     ${line}`);
+    }
     if (chiefUnresolved.size > 0) {
       log(`[doc-catalog] ⚠ 當責室長未解析 ${chiefUnresolved.size} 人（該欄留 NULL）：`);
       for (const [name, why] of chiefUnresolved) log(`[doc-catalog]     ${name} — ${why}`);
@@ -303,10 +381,13 @@ async function seedDocumentCatalog(): Promise<void> {
   }
 }
 
-seedDocumentCatalog()
-  .then(() => process.exit(0))
-  .catch((e) => {
-    // eslint-disable-next-line no-console
-    console.error('[doc-catalog] 失敗：', e instanceof Error ? e.message : e);
-    process.exit(1);
-  });
+// 被單元測試 import 時不自動執行（僅 CLI 直接執行才跑）；比照 repair-mojibake-filenames.ts。
+if (require.main === module) {
+  seedDocumentCatalog()
+    .then(() => process.exit(0))
+    .catch((e) => {
+      // eslint-disable-next-line no-console
+      console.error('[doc-catalog] 失敗：', e instanceof Error ? e.message : e);
+      process.exit(1);
+    });
+}
