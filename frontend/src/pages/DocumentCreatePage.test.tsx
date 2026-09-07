@@ -676,3 +676,58 @@ describe('DocumentCreatePage — 制定部門／制定室別之顯示名（上�
     );
   });
 });
+
+/**
+ * 🔴 回歸鎖（2026-09-07 dev 實機缺陷 `ICSOP-SRC-304-1-10`）：室長候選一律取自**已選之制定公司**。
+ *
+ * 不帶 `companyCode` 時後端 `/persons/search` 取的是**登入者自己的公司**
+ * （`org-directory.controller.ts` `effectiveCompany`）。員編僅在單一公司內唯一，於是 AS 的
+ * ICSOP 管理員替 AD 文件挑室長會挑到 AS 的人，存進去之後該文件的公司裡查無此員編，
+ * 後台清單「當責室長」欄即靜默退化為裸員編。
+ */
+describe('DocumentCreatePage — 室長候選依制定公司', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockAuth('ICSOPAdmin'); // 登入者公司＝AS
+    vi.mocked(endpoints.getLifecycles).mockResolvedValue(LCS);
+    vi.mocked(endpoints.getDocuments).mockResolvedValue(page([]));
+    vi.mocked(endpoints.getOrgUnits).mockResolvedValue(ORG);
+    vi.mocked(endpoints.getCompanies).mockResolvedValue(COMPANIES);
+    vi.mocked(endpoints.searchPersons).mockResolvedValue(PERSONS);
+    vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([]);
+    vi.mocked(endpoints.getAppendixPool).mockResolvedValue([]);
+  });
+
+  it('制定公司選 AD → 室長搜尋以 AD 為範圍（不是登入者之 AS）', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await selectLifecycle('lc1');
+    await userEvent.click(screen.getByLabelText(/制定公司/));
+    await userEvent.click(await screen.findByRole('option', { name: '和潤興業股份有限公司' }));
+    vi.mocked(endpoints.searchPersons).mockClear();
+
+    await userEvent.type(screen.getByLabelText(/當責室長-主要/), '周');
+
+    await waitFor(() => expect(endpoints.searchPersons).toHaveBeenCalledWith('周', 20, 'AD'));
+    // 🔒 不得退回登入者公司——那正是跨公司錯值的來源。
+    expect(endpoints.searchPersons).not.toHaveBeenCalledWith('周', 20, 'AS');
+    expect(endpoints.searchPersons).not.toHaveBeenCalledWith('周', 20, undefined);
+  });
+
+  it('改變制定公司後，室長搜尋範圍隨之改變（AS → AD）', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('option', { name: '銷售及收款循環' })).toBeInTheDocument());
+    await selectLifecycle('lc1');
+    await userEvent.click(screen.getByLabelText(/制定公司/));
+    await userEvent.click(await screen.findByRole('option', { name: '和潤企業股份有限公司' }));
+    await userEvent.type(screen.getByLabelText(/當責室長-主要/), '陳');
+    await waitFor(() => expect(endpoints.searchPersons).toHaveBeenCalledWith('陳', 20, 'AS'));
+
+    await userEvent.click(screen.getByLabelText(/制定公司/));
+    await userEvent.click(await screen.findByRole('option', { name: '和潤興業股份有限公司' }));
+    vi.mocked(endpoints.searchPersons).mockClear();
+    await userEvent.type(screen.getByLabelText(/當責室長-主要/), '陳');
+
+    await waitFor(() => expect(endpoints.searchPersons).toHaveBeenCalledWith('陳', 20, 'AD'));
+  });
+});

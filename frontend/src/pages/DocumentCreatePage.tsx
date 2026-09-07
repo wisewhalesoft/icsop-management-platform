@@ -289,12 +289,22 @@ export function DocumentCreatePage(): JSX.Element {
     setDraftingSectionId('');
   }, []);
 
-  // 人員搜尋（當責室長候選；後端 /persons/search 僅回在職）。
-  const runPersonSearch = useCallback((q: string) => {
-    void searchPersons(q)
-      .then((rs) => setPersonResults(rs.map(personOpt)))
-      .catch(() => setPersonResults([]));
-  }, []);
+  /**
+   * 人員搜尋（當責室長候選；後端 /persons/search 僅回在職）。
+   *
+   * 🔴 依**已選之制定公司**搜尋（2026-09-07）：不帶 `companyCode` 時後端取登入者自己的公司，
+   * AS 的 ICSOP 管理員替 AD 文件挑室長就會從 AS 的人裡挑——員編僅在單一公司內唯一，存進去
+   * 之後該文件的公司裡查無此人，清單「當責室長」欄即退化為裸員編（dev `ICSOP-SRC-304-1-10`
+   * 為既有實例）。與組織候選 `getOrgUnits(companyCode)` 同一決策。公司未選 → 不帶參數。
+   */
+  const runPersonSearch = useCallback(
+    (q: string) => {
+      void searchPersons(q, 20, companyCode || undefined)
+        .then((rs) => setPersonResults(rs.map(personOpt)))
+        .catch(() => setPersonResults([]));
+    },
+    [companyCode],
+  );
 
   // AC：選定制定室別後，以該單位 managerEmpNo 帶入「當責室長-主要」預設候選；
   // 離職者不在 searchActive 結果 → 不帶入（欄位維持空白）。僅在使用者尚未選擇時帶入。
@@ -304,14 +314,15 @@ export function DocumentCreatePage(): JSX.Element {
       const sec = orgByCode.get(v);
       if (!v || !sec?.managerEmpNo) return;
       const empNo = sec.managerEmpNo;
-      void searchPersons(empNo, 5)
+      // 公司別理由同 runPersonSearch：managerEmpNo 是該公司內之員編，須在同一公司解析。
+      void searchPersons(empNo, 5, companyCode || undefined)
         .then((rs) => {
           const match = rs.find((p) => p.employeeNo === empNo);
           if (match) setPrimaryChief((cur) => cur ?? personOpt(match));
         })
         .catch(() => undefined);
     },
-    [orgByCode],
+    [orgByCode, companyCode],
   );
 
   // 主要室長之候選需含目前已選（避免搜尋結果替換後 label 消失）。

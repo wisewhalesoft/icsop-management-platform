@@ -234,21 +234,29 @@ export function DocumentEditPage(): JSX.Element {
         .catch(() => undefined);
       void getDocumentAttachments(id).then(setAttachments).catch(() => undefined);
       void loadOjtCompletion(id, setOjtCompletedOrgs);
-      // 解析當責室長-主要之顯示名稱（單筆讀取僅回員編）。
+      /**
+       * 解析當責室長-主要之顯示名稱（單筆讀取僅回員編）。
+       *
+       * 🔴 一律以 **`v.companyCode`（文件現存之公司）** 搜尋，不是登入者的公司：員編僅在單一
+       * 公司內唯一，用登入者公司去解析，會把「別家公司剛好同員編的人」當成本文件的室長顯示
+       * 出來——後台清單以文件公司解析（`enrichNames`）而顯示裸員編時，這裡卻顯示得出姓名，
+       * 同一份文件兩個畫面各說各話（dev `ICSOP-SRC-304-1-10` 即此形狀）。查無 → 不設 label，
+       * 由 `ComboDiff` 之 `currentText` 退回顯示員編，與清單一致。
+       */
       if (v.primaryChiefId) {
-        void searchPersons(v.primaryChiefId, 5)
+        void searchPersons(v.primaryChiefId, 5, v.companyCode)
           .then((rs) => {
             const m = rs.find((p) => p.employeeNo === v.primaryChiefId);
             if (m) setPrimaryChiefOrig(personOpt(m));
           })
           .catch(() => undefined);
       }
-      // 解析已載入之次要室長顯示名稱（best-effort，查無→顯示員編）。
+      // 解析已載入之次要室長顯示名稱（best-effort，查無→顯示員編；公司別理由同上）。
       if (v.secondaryChiefIds.length) {
         void Promise.all(
           v.secondaryChiefIds.map(async (empNo): Promise<ComboOption> => {
             try {
-              const rs = await searchPersons(empNo, 5);
+              const rs = await searchPersons(empNo, 5, v.companyCode);
               const m = rs.find((p) => p.employeeNo === empNo);
               return m ? personOpt(m) : { value: empNo, label: empNo };
             } catch {
@@ -405,9 +413,21 @@ export function DocumentEditPage(): JSX.Element {
   const optionOf = (opts: ComboOption[], v: string): ComboOption =>
     opts.find((o) => o.value === v) ?? { value: v, label: v };
 
-  const runPersonSearch = useCallback((q: string) => {
-    void searchPersons(q).then((rs) => setPersonResults(rs.map(personOpt))).catch(() => setPersonResults([]));
-  }, []);
+  /**
+   * 室長候選搜尋。🔴 依 **draft 之制定公司**（不是登入者的公司、也不是 `view.companyCode`）——
+   * 與組織候選之載入（見上方 `getOrgUnits(draft.companyCode)`）同一決策：改了制定公司卻仍列
+   * 舊公司的人，挑到的員編在新公司根本不存在，存檔後清單那一欄就會退化成裸員編。
+   * 公司尚未載入（draft 為 null）→ 不帶參數之舊行為，交由後端以登入者公司回候選。
+   */
+  const chiefSearchCompany = draft?.companyCode;
+  const runPersonSearch = useCallback(
+    (q: string) => {
+      void searchPersons(q, 20, chiefSearchCompany)
+        .then((rs) => setPersonResults(rs.map(personOpt)))
+        .catch(() => setPersonResults([]));
+    },
+    [chiefSearchCompany],
+  );
 
   const set = useCallback(<K extends keyof Draft>(key: K, value: Draft[K]) => {
     setDraft((d) => (d ? { ...d, [key]: value } : d));

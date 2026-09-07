@@ -129,7 +129,13 @@ export function DocumentReadonlyPage(): JSX.Element {
       setView(v);
       setLinks(lk);
       void getLifecycles().then(setLifecycles).catch(() => undefined);
-      void getOrgUnits().then(setOrgUnits).catch(() => undefined);
+      /**
+       * 🔴 組織／人員一律以 **`v.companyCode`（本文件之公司）** 載入，不是登入者的公司
+       * （2026-09-07）：5 碼 orgCode 與員編都只在單一公司內唯一，以登入者公司解析會把
+       * 別家公司「碰巧同碼」的部門名與同員編的人顯示成本文件的值——而後台清單是以文件
+       * 公司解析的，同一份文件兩個畫面於是各說各話（dev `ICSOP-SRC-304-1-10`）。
+       */
+      void getOrgUnits(v.companyCode).then(setOrgUnits).catch(() => undefined);
       void getDocumentForms(id).then(setForms).catch(() => undefined);
       void getDocumentAttachments(id).then(setAttachments).catch(() => undefined);
       void getDocumentAppendices(id).then(setAppendices).catch(() => undefined);
@@ -140,7 +146,7 @@ export function DocumentReadonlyPage(): JSX.Element {
         void Promise.all(
           chiefIds.map(async (empNo) => {
             try {
-              const rs = await searchPersons(empNo, 5);
+              const rs = await searchPersons(empNo, 5, v.companyCode);
               const m = rs.find((p) => p.employeeNo === empNo);
               return [empNo, m?.name ?? empNo] as const;
             } catch {

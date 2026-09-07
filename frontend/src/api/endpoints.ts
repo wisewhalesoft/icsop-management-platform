@@ -897,11 +897,23 @@ export function getOrgUnits(companyCode?: string): Promise<OrgUnitRecord[]> {
 /**
  * GET /persons/search（當責室長候選，全 5 角色 READ；僅回在職者）。
  * F014：當責室長-主要/次要之可搜尋來源。空關鍵字＝回預設候選（後端限制筆數）。
+ *
+ * 🔴 `companyCode` 必須帶**該文件的公司**（2026-09-07）：不帶時後端取
+ * `effectiveCompany(req)` ＝**登入者自己的公司**，於是
+ *  ① 替他公司文件挑室長時，下拉列出的是自己公司的人（挑了就寫進一個該文件公司查無的員編）；
+ *  ② 顯示既有室長姓名時，會拿登入者公司同員編的人來充數——dev 實測 `ICSOP-SRC-304-1-10`
+ *     （AD 文件、員編 20781 實為 AS 的周家宏）即因此在編輯頁顯示正常姓名，把清單那一格的
+ *     裸員編錯值整整遮住。與 `getOrgUnits(companyCode)` 同一決策、同一理由。
  */
-export function searchPersons(q: string, limit = 20): Promise<PersonRecord[]> {
+export function searchPersons(
+  q: string,
+  limit = 20,
+  companyCode?: string,
+): Promise<PersonRecord[]> {
   const qs = new URLSearchParams();
   if (q.trim()) qs.set('q', q.trim());
   qs.set('limit', String(limit));
+  if (companyCode) qs.set('companyCode', companyCode);
   return apiFetch<PersonRecord[]>(`/persons/search?${qs.toString()}`);
 }
 

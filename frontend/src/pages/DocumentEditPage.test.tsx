@@ -882,3 +882,105 @@ describe('DocumentEditPage — 制定部門／制定室別之顯示名（上游 
     expect(screen.queryByRole('option', { name: '營管部/營發室' })).not.toBeInTheDocument();
   });
 });
+
+/**
+ * 🔴 回歸鎖（2026-09-07 dev 實機缺陷 `ICSOP-SRC-304-1-10 潤興撥款文件作業程序書`）：
+ * 室長姓名之解析與候選搜尋，一律以**該文件的公司**為範圍。
+ *
+ * 該筆文件公司為 AD、室長員編 `20781` 卻是 **AS** 的周家宏（seed 舊版寫死 `companyCode='AS'`
+ * 留下的錯值）。後台清單以文件公司解析 ⇒ 查無 ⇒ 顯示裸員編；編輯頁若以**登入者公司**搜尋，
+ * 就會在 AS 找到同員編的人而顯示「周家宏」——同一份文件兩個畫面各說各話，錯值被完全遮住。
+ */
+describe('DocumentEditPage — 室長解析／候選依文件之公司', () => {
+  const AD_VIEW: DocumentView = {
+    ...VIEW,
+    companyCode: 'AD',
+    companyName: '和潤興業股份有限公司',
+    primaryChiefId: '20781',
+    secondaryChiefIds: [],
+    draftingDeptId: null,
+    draftingSectionId: null,
+    usingDeptIds: [],
+  };
+
+  /**
+   * `/persons/search` 之替身，**依 `companyCode` 分流**——這正是真實後端的行為
+   * （`effectiveCompany(req, companyCode)`）。不分流的替身（`mockResolvedValue`）對本缺陷
+   * 零鑑別力：不論前端帶不帶公司別，回來的都是同一批人，錯與對的兩種寫法輸出相同。
+   *
+   * 語料取自 dev 實測：AS 20781 周家宏（借調和潤興業，orgCode A8000）／AD 70003 周家宏。
+   */
+  const PERSONS_BY_COMPANY: Record<string, PersonRecord[]> = {
+    AS: [{ employeeNo: '20781', name: '周家宏', orgCode: 'A8000', employmentStatus: 'active' }],
+    AD: [{ employeeNo: '70003', name: '周家宏', orgCode: 'AA000', employmentStatus: 'active' }],
+    AJ: [],
+  };
+  const mockPersonsByCompany = (): void => {
+    vi.mocked(endpoints.searchPersons).mockImplementation((q, _limit, companyCode) =>
+      Promise.resolve(
+        (PERSONS_BY_COMPANY[companyCode ?? 'AS'] ?? []).filter(
+          (p) => p.employeeNo === q.trim() || p.name.includes(q.trim()),
+        ),
+      ),
+    );
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    setupMocks();
+    vi.stubGlobal('open', openMock);
+    mockAuth('ICSOPAdmin'); // 登入者公司＝AS
+  });
+
+  it('以文件公司（AD）解析既有室長，不以登入者公司（AS）解析', async () => {
+    vi.mocked(endpoints.getDocument).mockResolvedValue(AD_VIEW);
+    vi.mocked(endpoints.searchPersons).mockResolvedValue([]); // AD 查無該員編
+    renderPage();
+
+    await waitFor(() => expect(endpoints.searchPersons).toHaveBeenCalledWith('20781', 5, 'AD'));
+    expect(endpoints.searchPersons).not.toHaveBeenCalledWith('20781', 5, 'AS');
+    expect(endpoints.searchPersons).not.toHaveBeenCalledWith('20781', 5, undefined);
+  });
+
+  it('文件公司查無該員編 → 目前值退回顯示員編（不借用他公司同員編者之姓名）', async () => {
+    vi.mocked(endpoints.getDocument).mockResolvedValue(AD_VIEW);
+    mockPersonsByCompany();
+    renderPage();
+
+    // ComboDiff 之對照列（`.grid.grid-cols-12`）：目前值那一格印的就是 currentText。
+    const row = (await screen.findAllByText('當責室長-主要'))[0].closest(
+      '.grid.grid-cols-12',
+    ) as HTMLElement;
+    expect(row).not.toBeNull();
+    await waitFor(() => expect(within(row).getByText('20781')).toBeInTheDocument());
+  });
+
+  it('文件公司查得到 → 顯示姓名（正確資料不受影響）', async () => {
+    // AD 的周家宏員編為 70003（AS 那個 20781 是同一個人的另一個帳號）。
+    vi.mocked(endpoints.getDocument).mockResolvedValue({ ...AD_VIEW, primaryChiefId: '70003' });
+    mockPersonsByCompany();
+    renderPage();
+
+    expect(await screen.findByText(/周家宏/)).toBeInTheDocument();
+  });
+
+  it('候選搜尋以 draft 之制定公司為範圍（改公司後隨之改變）', async () => {
+    vi.mocked(endpoints.getDocument).mockResolvedValue(AD_VIEW);
+    vi.mocked(endpoints.searchPersons).mockResolvedValue([]);
+    renderPage();
+    await waitFor(() => expect(endpoints.searchPersons).toHaveBeenCalledWith('20781', 5, 'AD'));
+
+    vi.mocked(endpoints.searchPersons).mockClear();
+    await userEvent.type(screen.getByLabelText('當責室長-主要'), '周');
+    await waitFor(() => expect(endpoints.searchPersons).toHaveBeenCalledWith('周', 20, 'AD'));
+
+    // 改制定公司 → 候選範圍改為新公司（否則只能從舊公司的人裡挑，挑了就是下一筆錯值）。
+    await userEvent.click(screen.getByLabelText('制定公司'));
+    await userEvent.click(await screen.findByRole('option', { name: '和勁企業股份有限公司' }));
+    vi.mocked(endpoints.searchPersons).mockClear();
+    await userEvent.type(screen.getByLabelText('當責室長-主要'), '周');
+
+    await waitFor(() => expect(endpoints.searchPersons).toHaveBeenCalledWith('周', 20, 'AJ'));
+    expect(endpoints.searchPersons).not.toHaveBeenCalledWith('周', 20, 'AD');
+  });
+});

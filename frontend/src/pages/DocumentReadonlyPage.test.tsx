@@ -634,3 +634,37 @@ describe('DocumentReadonlyPage — 制定部門／制定室別之顯示名（上
     expect(items[0].textContent).toContain('營管部/審查室');
   });
 });
+
+/**
+ * 🔴 回歸鎖（2026-09-07 dev 實機缺陷 `ICSOP-SRC-304-1-10`）：本頁之組織名與室長姓名
+ * 皆由前端以代碼查表組出，查表範圍必須是**該文件的公司**，不是登入者的公司——
+ * 5 碼 orgCode 與員編都只在單一公司內唯一（AS 的 `A2100` 與 AD 的 `A2100` 意義完全不同），
+ * 用登入者公司查，會把別家公司碰巧同碼的單位／同員編的人顯示成本文件的值。
+ */
+describe('DocumentReadonlyPage — 組織／室長查表依文件之公司', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    setupMocks();
+    vi.stubGlobal('open', openMock);
+  });
+
+  it('以文件公司（AD）載入組織與解析室長，不以登入者公司（AS）', async () => {
+    mockAuth('ICSOPAdmin'); // 登入者公司＝AS
+    vi.mocked(endpoints.getDocument).mockResolvedValue({
+      ...VIEW,
+      companyCode: 'AD',
+      companyName: '和潤興業股份有限公司',
+      primaryChiefId: '20781',
+      secondaryChiefIds: [],
+    });
+    vi.mocked(endpoints.searchPersons).mockResolvedValue([]); // AD 查無該員編
+    renderPage();
+
+    await waitFor(() => expect(endpoints.getOrgUnits).toHaveBeenCalledWith('AD'));
+    await waitFor(() => expect(endpoints.searchPersons).toHaveBeenCalledWith('20781', 5, 'AD'));
+    expect(endpoints.getOrgUnits).not.toHaveBeenCalledWith();
+    expect(endpoints.searchPersons).not.toHaveBeenCalledWith('20781', 5, 'AS');
+    // 查無 → 顯示員編（與後台清單同一結果，不借用他公司同員編者之姓名）。
+    expect(await screen.findByText('20781')).toBeInTheDocument();
+  });
+});
