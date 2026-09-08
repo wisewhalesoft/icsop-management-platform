@@ -25,7 +25,8 @@
      🔒 AC-B25：浮水印疊加層為本頁唯一浮水印載體（本頁渲染 HTML、無內容層可燒錄），格式權威＝NFR-007。
      🔒 AC-B26：進入本模式、切換類別、雙擊開抽屜**皆不寫稽核**；調閱稽核仍由既有之
         `GET /public/documents/:id/view` 觸發（點列進入檢視器時）。
-     🔒 AC-B27：三句空狀態逐字＝`此類別尚未建立節點`／`此節點沒有您可檢視的程序書`／`目前沒有可瀏覽的業務/功能類別`；
+     🔒 AC-B27：三句空狀態逐字＝`此類別尚未建立節點`／`此節點與其下游節點皆沒有您可檢視的程序書`／`目前沒有可瀏覽的業務/功能類別`；
+     　📝 已作廢（2026-09-08，⚠ 不得復原）：OLD> 第二句為 `此節點沒有您可檢視的程序書`；
         **明文禁止**改用 `文件清單` 模式之 `查無符合結果`（那句的語意是「你的篩選沒有命中」）。
      🔒 AC-B20：抽屜每列四欄＝`程序書編號`／`程序書書名`／`版次`／`公告日期`（⚠ **無「狀態」欄**——
         前台只看得到已公告文件，狀態欄恆為同一值；29 之後台抽屜為五欄，兩者刻意不同）；
@@ -117,7 +118,7 @@
     </div>
     <!-- 🔴 本區**刻意沒有**下載／列印鈕：人類裁決「前台樹狀圖模式不提供 PDF 下載／列印」。
          ⚠ 不得改以 disabled 或 CSS 隱藏保留——下游若以 `queryByLabelText('下載') === null` 斷言，隱藏會假綠。 -->
-    <p class="w-full text-sm text-slate-400">點節點＝醒目標示其所有下游節點；點空白處取消；<strong class="text-slate-500">雙擊節點＝檢視該節點掛載之程序書</strong>；圖寬超出畫面時可<strong class="text-slate-500">按住拖曳平移</strong>。</p>
+    <p class="w-full text-sm text-slate-400">點節點＝醒目標示其所有下游節點；點空白處取消；<strong class="text-slate-500">雙擊節點＝檢視該節點與其下游節點之程序書</strong>；圖寬超出畫面時可<strong class="text-slate-500">按住拖曳平移</strong>。</p>
   </div>
 </div>
 
@@ -181,9 +182,13 @@
 </main>
 
 <!-- ===== AC-B20：節點雙擊之**唯讀**側抽屜 =====
+     🔵 2026-09-08 使用者裁決：內容擴為**本節點與其全部下游節點**，依節點分組（比照 22／29）。
+        📝 已作廢（⚠ 不得復原）：OLD> 僅列**該節點**掛載之文件、不分組、副標題 `共 {N} 份程序書`。
      🔒 抽屜**不含任何寫入元件**（無新增／移除掛載／儲存／刪除，亦無 <input>／<select>）。
-     🔒 每列四欄：程序書編號／程序書書名／版次／公告日期；點列導向 **/public/documents/:id**。 -->
-<aside id="nodeDocDrawer" aria-hidden="true" aria-label="節點掛載之程序書清單（唯讀）"
+     🔒 每列四欄：程序書編號／程序書書名／版次／公告日期；點列導向 **/public/documents/:id**。
+     🔒 **刻意沒有** 29 之「在文件管理中檢視這 N 份程序書」導向鈕（AC-56 ⑦ 之前台負向半句）：
+        前台清單沒有節點子樹維度，也無後台文件管理可導向。 -->
+<aside id="nodeDocDrawer" aria-hidden="true" aria-label="節點與其下游節點之程序書清單（唯讀）"
        class="fixed right-0 top-0 bottom-0 z-40 w-full sm:w-[400px] bg-white border-l border-slate-200 shadow-2xl translate-x-full transition-transform duration-300 flex flex-col">
   <div class="h-14 shrink-0 flex items-center gap-2 px-4 border-b border-slate-200">
     <i data-lucide="file-stack" class="w-4 h-4 text-primary-600 shrink-0"></i>
@@ -530,7 +535,7 @@
     nodesLayer.innerHTML=cur.nodes.map(n=>{
       const p=cur.pos[n.id];
       const cnt=visibleDocsOf(n).length;
-      return `<div class="node${cnt?' hasdocs':''}" data-id="${n.id}" data-visible-doc-count="${cnt}" style="left:${p.x}px;top:${p.y}px;width:${NODE_W}px" onclick="onNodeClick(event,'${n.id}')" ondblclick="onNodeDblClick(event,'${n.id}')" role="button" tabindex="0" aria-label="節點 ${n.name}" title="單擊＝標示所有下游節點；雙擊＝檢視此節點掛載之程序書">
+      return `<div class="node${cnt?' hasdocs':''}" data-id="${n.id}" data-visible-doc-count="${cnt}" style="left:${p.x}px;top:${p.y}px;width:${NODE_W}px" onclick="onNodeClick(event,'${n.id}')" ondblclick="onNodeDblClick(event,'${n.id}')" role="button" tabindex="0" aria-label="節點 ${n.name}" title="單擊＝標示所有下游節點；雙擊＝檢視此節點與其下游節點之程序書清單">
         <div class="nbody">
           <div class="flex items-center gap-1.5">
             <i data-lucide="git-commit-vertical" class="w-3.5 h-3.5 text-slate-300 shrink-0"></i>
@@ -564,9 +569,10 @@
   function onNodeClick(ev,id){ ev.stopPropagation(); if(panMoved)return; if(selected===id){ clearSel(); } else { selected=id; applyHighlight(); } }
   function clearSel(){ selected=null; applyHighlight(); }
 
-  /* ---- AC-B20 雙擊：唯讀抽屜（**該節點**掛載且對當前 viewer 可見之程序書）----
-     ⚠ 與 29（後台）之刻意差異：後台抽屜為**子樹**範圍、五欄；前台為**該節點**範圍、四欄。
-       兩者範圍不同源自各自的 AC（AC-35 vs AC-B20），非疏漏。 */
+  /* ---- AC-B20 雙擊：唯讀抽屜（**本節點與其全部下游**、對當前 viewer 可見之程序書）----
+     🔵 2026-09-08 使用者裁決：範圍由「該節點」擴為「子樹」，與 29（後台）一致。
+     ⚠ 與 29 仍存之刻意差異：後台**五欄**（含狀態）、前台**四欄**（無狀態欄，§A.8.4 N9）。
+     🔴 子樹節點集合 ≡ 單擊醒目標示之集合（同一支 descendants()），不得各走訪一次。 */
   function onNodeDblClick(ev,id){
     ev.stopPropagation(); ev.preventDefault();
     if(!cur.nodes.some(x=>x.id===id)) return;
@@ -584,19 +590,43 @@
         </div>
       </button>`;
   }
+  /* 🔴 子樹分組（比照 22／29）：本節點恆第一組、標題帶「（本節點）」後綴；0 份可見之節點不產生分組。
+     🔴 **跨組不去重**（M:N）：同一份文件掛在子樹內多個節點時各組各出現一次；副標題之 N 為**去重後**
+        之相異份數 ⇒ 兩個數字可以不同，**不得互相對齊**（同 29 之 §A.8.5 ⑧）。 */
+  function subtreeGroups(rootId){
+    const set=descendants(rootId);
+    return cur.nodes.filter(n=>set.has(n.id)).sort((a,b)=>{
+      if(a.id===rootId) return -1; if(b.id===rootId) return 1; return 0;
+    }).map(n=>({id:n.id,name:n.name,self:n.id===rootId,
+      docs:visibleDocsOf(n).slice().sort((x,y)=>x.num.localeCompare(y.num))}))
+      .filter(g=>g.docs.length>0);
+  }
+  function groupHtml(g){
+    return `<section data-node-group="${g.id}" data-node-group-self="${g.self}" data-node-group-count="${g.docs.length}">
+      <div data-node-group-title class="sticky top-0 z-10 bg-slate-50 border-y border-slate-200 px-4 py-1.5 flex items-center gap-1.5">
+        <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+        <span data-node-group-name class="text-xs font-semibold text-slate-700 truncate">${g.name}${g.self?'（本節點）':''}</span>
+        <span data-node-group-count-text class="ml-auto shrink-0 mono text-[11px] text-slate-500">${g.docs.length} 份</span>
+      </div>
+      <div class="divide-y divide-slate-100">${g.docs.map(docRowHtml).join('')}</div>
+    </section>`;
+  }
   function openNodeDrawer(id){
     const n=cur.nodes.find(x=>x.id===id); if(!n) return;
-    const docs=visibleDocsOf(n).slice().sort((a,b)=>a.num.localeCompare(b.num));
+    const groups=subtreeGroups(id);
+    const distinct=new Set(groups.flatMap(g=>g.docs.map(d=>d.num))).size;
     document.getElementById('ndTitle').textContent=n.name;
     const cntEl=document.getElementById('ndCount');
-    cntEl.textContent=`共 ${docs.length} 份程序書`;
-    cntEl.setAttribute('data-visible-doc-count', String(docs.length));
-    /* 🔒 AC-B21／AC-B27 ②：0 份可見 → 逐字空狀態，且**不得**出現不可見文件之任何欄位
+    /* 🔒 副標題逐字＝22／29 之 `子樹共 {N} 份程序書`（全站同一語彙）。
+       📝 已作廢（⚠ 不得用於斷言）：OLD> `共 {N} 份程序書`（僅本節點之份數）。 */
+    cntEl.textContent=`子樹共 ${distinct} 份程序書`;
+    cntEl.setAttribute('data-subtree-total', String(distinct));
+    /* 🔒 AC-B21／AC-B27 ②：整個子樹 0 份可見 → 逐字空狀態，且**不得**出現不可見文件之任何欄位
        （編號、書名、版次一律不進 DOM——不是 CSS 隱藏）。 */
-    document.getElementById('ndBody').innerHTML = docs.length
-      ? `<div class="divide-y divide-slate-100">${docs.map(docRowHtml).join('')}</div>`
+    document.getElementById('ndBody').innerHTML = groups.length
+      ? groups.map(groupHtml).join('')
       : `<div data-node-doc-empty class="px-4 py-10 text-center text-sm text-slate-400">
-           <i data-lucide="file-x-2" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>此節點沒有您可檢視的程序書
+           <i data-lucide="file-x-2" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>此節點與其下游節點皆沒有您可檢視的程序書
          </div>`;
     const dr=document.getElementById('nodeDocDrawer');
     dr.classList.remove('translate-x-full'); dr.setAttribute('aria-hidden','false');

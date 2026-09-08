@@ -18,9 +18,14 @@
         而副標題之 N ＝**去重後之相異程序書數**。⇒ 兩個數字可以不同，**不得互相對齊**。
         22 之處置相反（以編號去重、首次出現者勝），因為循環模型下一份文件只屬一個節點、跨組本不會重複。
         📌 兩數不同時，抽屜另加一行**可見**說明（不是只寫在註解裡），否則下一個人會去「修」其中一邊。
-     ② **無「在文件管理中檢視這 N 份程序書」導向鈕**：13 之子樹 deep link 參數為
-        `lifecycleId` + `nodeSubtreeId`（循環專用），本功能在 13 上只有**類別層**的第 14 項篩選、
-        沒有節點子樹維度 ⇒ 沒有可導向的目標。**若人類要求此鈕，需先在 13 開一個類別節點子樹篩選參數**（見交付回報）。
+     ② 📝 **已由 2026-09-08 使用者裁決推翻（F043 AC-56；⚠ 不得復原）**：
+        OLD> **無「在文件管理中檢視這 N 份程序書」導向鈕**：13 之子樹 deep link 參數為
+        OLD> `lifecycleId` + `nodeSubtreeId`（循環專用），本功能在 13 上只有**類別層**的第 14 項篩選、
+        OLD> 沒有節點子樹維度 ⇒ 沒有可導向的目標。**若人類要求此鈕，需先在 13 開一個類別節點子樹篩選參數**。
+        🟢 **現行**：使用者要此鈕，而「先在 13 開一個類別節點子樹篩選參數」正是同一輪一併做的事——
+        13 新增 `businessCategoryId` + `bcNodeSubtreeId`（🔴 **刻意不與循環側同名**，兩種 deep link 並存），
+        以**獨立的第二條 chip** 呈現，且**不寫入**第 14 項篩選。
+        🔴 鈕上的 N ＝**相異**份數（沿用上方 ① 之 distinct），**不是**畫面列數。
      ③ 頁首**無循環代碼**（22 之 `titleCode`，如 SRC）：業務/功能類別沒有 ICSOP 編號段之對應代碼。
      ═════════════════════════════════════════════════════ -->
 <html lang="zh-Hant-TW">
@@ -158,6 +163,11 @@
        空字串時整條自 DOM 消失（empty:hidden），不留空白列。 -->
   <div id="ndDupNote" class="shrink-0 empty:hidden empty:py-0 empty:border-0 border-b border-amber-100 bg-amber-50 px-4 py-2 text-[11px] text-amber-800"></div>
   <div id="ndBody" class="flex-1 overflow-y-auto"></div>
+  <!-- 🔵 2026-09-08 使用者裁決（F043 AC-56）：抽屜 footer 新增唯一一顆導向鈕。
+       📝 已作廢（⚠ 不得復原）：OLD> §A.8.5 ⑦「29 刻意沒有 22 的『在文件管理中檢視這 N 份程序書』導向鈕」。
+       🔒 它是「唯讀孿生」之**明文唯一例外**：本身是導覽，不改任何資料、不寫稽核。
+       🔒 子樹**相異**份數為 0 時容器內容為空 ⇒ 整顆鈕不進 DOM（empty:hidden；非 disabled、非 CSS 隱藏）。 -->
+  <div id="ndFooterAction" class="shrink-0 border-t border-slate-200 px-4 py-3 empty:hidden empty:py-0 empty:px-0 empty:border-t-0"></div>
   <div class="shrink-0 border-t border-slate-200 px-4 py-2.5 text-[11px] text-slate-400 flex items-start gap-1.5">
     <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>
     <span>點任一列可另開該程序書之<strong>後台唯讀詳情</strong>。本抽屜為唯讀檢視，不提供任何 DAG 編輯互動；開啟本抽屜<strong>不另記稽核事件</strong>。</span>
@@ -526,6 +536,50 @@
       <div class="divide-y divide-slate-100">${g.docs.map(docRowHtml).join('')}</div>
     </section>`;
   }
+  /* ===== 🔵 AC-56 導向目標網址之**單一組字點** =====
+     DOC_LIST_ROUTE ＝ **實作端**路由；DOC_LIST_PROTOTYPE ＝ 原型端落地檔（**僅原型用，不得移植**）。
+     🔴 兩個參數名**刻意與循環側不同**（businessCategoryId／bcNodeSubtreeId，非 lifecycleId／nodeSubtreeId）：
+        13 上兩種子樹 deep link **並存**，共用鍵會互相覆蓋，而兩邊之節點 id 分屬不同的圖、無法互相解析。
+     🔴 兩參數**恆成對**：只帶其中一個時 13 不顯示 chip、不施加篩選（見 13 之 initBcSubtreeFromUrl()）。 */
+  const DOC_LIST_ROUTE='/admin/documents';
+  const DOC_LIST_PROTOTYPE='13-document-list.html';
+  function bcSubtreeJumpHref(bcId,nodeId){
+    return DOC_LIST_ROUTE+'?businessCategoryId='+encodeURIComponent(bcId)+'&bcNodeSubtreeId='+encodeURIComponent(nodeId);
+  }
+  /* 原型專用：把實作路由換成同參數的原型檔名。實作端直接用 bcSubtreeJumpHref() 之回傳值。 */
+  function prototypeHref(appHref){ return DOC_LIST_PROTOTYPE + appHref.slice(DOC_LIST_ROUTE.length); }
+
+  /* 🔴 AC-56 ①：N ＝**相異**份數（distinct），**不是**畫面列數（rows）——本頁恰恰是全站唯一
+        「兩數必然可以不同」之處（§A.8.5 ⑧）；用列數會讓鈕上的數字與導過去之後的清單筆數對不上。
+     🔒 可見文字／aria-label／title 三者逐字同值（只組一次字）。
+     ⚠ 刻意**不用** <a href>：主路徑需要改導 opener 並自關，且 <a> 的中鍵／Ctrl 點擊會用原型檔名
+        再開第三個分頁——正是 22 之同一裁決要消滅的行為。 */
+  function jumpBtnHtml(nodeId,distinct){
+    const label=`在文件管理中檢視這 ${distinct} 份程序書`;
+    return `<button type="button" data-bc-subtree-jump data-business-category-id="${CUR}" data-node-subtree-id="${nodeId}"
+              data-bc-subtree-jump-href="${bcSubtreeJumpHref(CUR,nodeId)}"
+              onclick="jumpToDocuments('${nodeId}')" aria-label="${label}" title="${label}"
+              class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-1">
+              <i data-lucide="list-filter" class="w-4 h-4"></i>${label}</button>`;
+  }
+  /* 🔴 AC-56 ②：派送逐字比照 22 之 jumpToDocuments()——主路徑導回**來源分頁**並關閉預覽頁；
+     退化路徑同分頁 navigate 且 🔒 **不得**呼叫 window.close()（被拒 ⇒ 使用者按了沒反應）。
+     🔒 分岔只讀 openedAsPopup()（全檔唯一之 opener 偵測），且於**點擊當下**取樣。
+     📌 可觀測 seam：比照 22 之 window.__subtreeJumpCalls（原型用；實作端改以模組級 seam）。 */
+  function jumpToDocuments(nodeId){
+    const appHref=bcSubtreeJumpHref(CUR,nodeId);
+    const href=prototypeHref(appHref);            // 實作端此行不需要，直接用 appHref
+    const asPopup=openedAsPopup();
+    window.__subtreeJumpCalls = window.__subtreeJumpCalls || [];
+    window.__subtreeJumpCalls.push({mode: asPopup?'opener':'self', href: href, appHref: appHref, closedSelf: asPopup});
+    if(asPopup){
+      window.opener.location.href = href;
+      window.opener.focus();
+      window.close();
+      return;
+    }
+    location.href = href;
+  }
   function openNodeDrawer(id){
     const n=cur.nodes.find(x=>x.id===id); if(!n) return;
     const groups=subtreeGroups(id);
@@ -548,6 +602,7 @@
       : `<div data-node-doc-empty class="px-4 py-10 text-center text-sm text-slate-400">
            <i data-lucide="file-x-2" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>此節點與其下游節點皆未掛載程序書
          </div>`;
+    document.getElementById('ndFooterAction').innerHTML = distinct ? jumpBtnHtml(id,distinct) : '';
     const dr=document.getElementById('nodeDocDrawer');
     dr.classList.remove('translate-x-full'); dr.setAttribute('aria-hidden','false');
     document.getElementById('ndBody').scrollTop=0;   // 換節點時回到第一組
@@ -619,7 +674,8 @@
   function resetView(){ zoom=1; applyZoom(); }
 
   /* ===== 🔒 全檔**唯一**的 opener 偵測（比照 22 之第二輪裁決：所有消費者共用同一判斷）=====
-     消費者恰為兩處：goBack()／initBackBtn()。**不得再寫第二套**。 */
+     消費者為三處：goBack()／initBackBtn()／jumpToDocuments()。**不得再寫第二套**。
+     🔵 2026-09-08：第三個消費者隨 AC-56 之導向鈕加入（比照 22 之同一形狀）。 */
   function openedAsPopup(){
     try{ return !!(window.opener && !window.opener.closed); }
     catch(e){ return false; }

@@ -27,6 +27,7 @@
        其精神改由 F019 AC-D5 承接（五項新下拉之選項來源必須先經 isDocVisibleToViewer 過濾）。 -->
 <!-- 🔴 2026-08-16 缺失／變更 delta（人類閘門已通過）——本檔已套用（規格權威＝F019 AC-D1～AC-D13）：
      ① 桌面篩選列改為**恰 6 項**、順序 制定公司／制定部門／制定室別／當責室長／狀態／循環別；
+        🔵 2026-09-08（AC-D16）**就地降為 5 項**：`循環別` 移除（不分角色），順序其餘不變；
         其中五項為**可搜尋下拉（combobox）**，`狀態` 維持原生 select（AC-D1／AC-D2）。
      ② **移除**「使用部門」篩選器與其預留選項文字（AC-D1）。
      ③ 行動版底部 sheet 呈現同一 6 項、同一順序（AC-D1）。
@@ -129,17 +130,22 @@
     /* 🔒 `AC-B14`：模式解析之**單一具名述詞**（本檔與 30 同名同語意；切換器與初始渲染共用，全檔不得出現第二套）。
        🔴 不可辨識分支必須以真的不在值域內的字串測（如 `?mode=grid`）；用空字串測不到值域檢查缺失。 */
     const BROWSE_MODES=['tree','list'];
-    function resolveBrowseMode(raw){ return BROWSE_MODES.includes(raw) ? raw : 'tree'; }
+    /* 🔵 2026-09-08 使用者裁決（AC-B13 改版）：**預設改為 `list`**。
+       📝 已作廢（⚠ 不得復原）：OLD> `return BROWSE_MODES.includes(raw) ? raw : 'tree';`
+       🔒 「不可辨識值靜默回退為預設」這條規則本身一字不動，改的只有「預設是誰」。 */
+    function resolveBrowseMode(raw){ return BROWSE_MODES.includes(raw) ? raw : 'list'; }
     const PROTOTYPE_TREE_HREF='30-public-category-tree.html?mode=tree';   // 實作端＝同一頁之 ?mode=tree
     function switchMode(mode){
       const m=resolveBrowseMode(mode);
       if(m==='list') return;                    // 已在文件清單模式：不動任何狀態
       location.href=PROTOTYPE_TREE_HREF;         // 🔒 `AC-B15`：不寫入任何儲存（不記憶模式）
     }
-    /* 🔒 `AC-B13`：以任何方式進入（側欄／登入後導向／不帶 mode 之網址）皆以樹狀圖為預設。
-       原型以 replace（非 push）轉址，使上一頁仍是使用者真正的來源頁。 */
+    /* 🔒 `AC-B13`（2026-09-08 改版）：以任何方式進入（側欄／登入後導向／不帶 mode 之網址）
+       皆以**文件清單**為預設 ⇒ 本檔即預設落點，**不再轉址**。
+       📝 已作廢（⚠ 不得復原）：OLD> 解析出 tree 時 `location.replace(PROTOTYPE_TREE_HREF)`。
+       🔒 顯式 `?mode=tree` 仍須進樹狀圖模式（AC-B14 之 tree 分支、AC-B19 之入口）。 */
     (function initMode(){
-      if(resolveBrowseMode(new URLSearchParams(location.search).get('mode'))==='tree'){
+      if(new URLSearchParams(location.search).get('mode')==='tree'){
         location.replace(PROTOTYPE_TREE_HREF);
       }
     })();
@@ -159,7 +165,8 @@
   </div>
 
   <!-- Desktop filter bar — 🔴 F019 AC-D1（2026-08-16 delta）：恰 6 項、順序由左至右／逐列換行為
-       制定公司／制定部門／制定室別／當責室長／狀態／循環別；六項之 aria-label ＝ 該逐字字串。
+       制定公司／制定部門／制定室別／當責室長／狀態；🔵 2026-09-08（AC-D16）`循環別` 已移除 ⇒ **五項**，
+       各項之 aria-label ＝ 該逐字字串。
        🔴 已移除「使用部門」篩選器與其「所有…」預留選項文字（AC-D1 之雙重斷言）。 -->
   <div class="hidden lg:block mb-4">
     <div id="filterBar" class="grid grid-cols-3 2xl:grid-cols-6 gap-3"></div>
@@ -376,22 +383,26 @@
                .filter(d=>isDocVisibleToViewer(d.use, VIEWER));
   }
 
-  /* 🔴 F019 AC-D1／AC-D2：篩選器**恰 6 項**，順序逐字為
-     制定公司／制定部門／制定室別／當責室長／狀態／循環別；各控制項之 aria-label ＝ 該逐字字串。
-     · 五項為**可搜尋下拉（combobox）**——輸入關鍵字即時縮小選項（比照後台 13 之既有慣例）。
+  /* 🔴 F019 AC-D1／AC-D2（🔵 2026-09-08 AC-D16 就地降為 **5 項**）：順序逐字為
+     制定公司／制定部門／制定室別／當責室長／狀態；各控制項之 aria-label ＝ 該逐字字串。
+     · 四項為**可搜尋下拉（combobox）**——輸入關鍵字即時縮小選項（比照後台 13 之既有慣例）。
      · `狀態` 維持既有**原生 select**、**不改為 combobox**（AC-D2 明文），且維持既有裝飾性 no-op
        （基底條件已鎖「已公告」，OQ-F019-04）。
      🔴 已移除「使用部門」篩選器；DOM 內不存在該控制項之 aria-label，亦無其「所有…」預留選項文字。 */
-  const FILTER={company:'',mkdept:'',section:'',chief:'',status:'有效',cyc:''};
+  /* 🔵 2026-09-08 使用者裁決（AC-D16）：`循環別` 整項移除 ⇒ 恰 5 項（不分角色）。
+     📝 已作廢（⚠ 不得復原）：OLD> `const FILTER={company:'',mkdept:'',section:'',chief:'',status:'有效',cyc:''};` */
+  const FILTER={company:'',mkdept:'',section:'',chief:'',status:'有效'};
   const FILTERS=[
     {key:'company',label:'制定公司',type:'combo', opts:()=>uniq(visibleDocs().map(d=>d.company))},
     {key:'mkdept', label:'制定部門',type:'combo', opts:()=>uniq(visibleDocs().map(d=>d.dept))},
     {key:'section',label:'制定室別',type:'combo', opts:()=>uniq(visibleDocs().map(d=>d.section))},
     // AC-D7：選項清單＝全體可見文件之 primaryChiefId ∪ secondaryChiefIds 之 distinct
     {key:'chief',  label:'當責室長',type:'combo', opts:()=>uniq(visibleDocs().flatMap(d=>[d.chief,...d.sec]).map(shortName))},
-    {key:'status', label:'狀態',    type:'select',opts:()=>['有效']},
-    // 循環別：選項值＝lifecycleId、顯示＝lifecycleDisplayName（F019 AC-S2）；同名不同子分類為相異選項
-    {key:'cyc',    label:'循環別',  type:'combo', opts:()=>uniq(visibleDocs().map(d=>d.lcId)), optLabel:id=>lcName(id)}
+    {key:'status', label:'狀態',    type:'select',opts:()=>['有效']}
+    /* 📝 已作廢（⚠ 不得復原，AC-D16）：
+       OLD> // 循環別：選項值＝lifecycleId、顯示＝lifecycleDisplayName（F019 AC-S2）；同名不同子分類為相異選項
+       OLD> {key:'cyc', label:'循環別', type:'combo', opts:()=>uniq(visibleDocs().map(d=>d.lcId)), optLabel:id=>lcName(id)}
+       ⚠ 後端 filter-options 仍回得出 `lifecycles`；「回得出來」不等於「畫面上還要有這個篩選」。 */
   ];
   const cbCfg=k=>FILTERS.find(f=>f.key===k);
   const optText=(key,v)=>{const c=cbCfg(key);return c&&c.optLabel?c.optLabel(v):v;};
@@ -485,7 +496,7 @@
     // 🔴 F041 AC-14／F019 AC-U1：於「已公告」基底條件之後、其餘篩選之前套用可見性過濾。
     // 不相符者不出現於清單、不計入總筆數；與六項篩選／關鍵字條件為 AND（AC-17／F019 AC-U3／AC-D6）。
     const scoped = visible.filter(d=>isDocVisibleToViewer(d.use, VIEWER));
-    /* AC-D4／AC-D6：制定公司／制定部門／制定室別／循環別皆為**等值比對**（比對鍵為 id，非顯示名稱）；
+    /* AC-D4／AC-D6：制定公司／制定部門／制定室別皆為**等值比對**（比對鍵為 id，非顯示名稱）；
        `狀態` 維持既有裝飾性 no-op；任一未提供即不施加該限制；多項並用為 AND。 */
     let rows = scoped.filter(d=>{
       if(FILTER.company && d.company!==FILTER.company) return false;
@@ -493,7 +504,7 @@
       if(FILTER.section && d.section!==FILTER.section) return false;
       // 🔴 AC-D7：當責室長之比對範圍＝**主要 ∪ 次要**（命中任一即納入）；與後台 F017 AC-D7 同語意
       if(FILTER.chief && ![d.chief,...d.sec].map(shortName).includes(FILTER.chief)) return false;
-      if(FILTER.cyc && d.lcId!==FILTER.cyc) return false;   // 以 lifecycleId 比對：同名另一子分類之文件不納入
+      /* 📝 已作廢（AC-D16，⚠ 不得復原）：OLD> `if(FILTER.cyc && d.lcId!==FILTER.cyc) return false;` */
       if(kw && !(d.n.toLowerCase().includes(kw) || d.name.toLowerCase().includes(kw))) return false;
       return true;
     });
@@ -516,7 +527,7 @@
     document.getElementById('hiddenNote').textContent = hiddenCount? `另有 ${hiddenCount} 筆（進度中/失效/作廢）文件已由後端隱藏` : '';
 
     // AC-D3：「清除篩選」之範圍擴及新增之四項；`狀態` 之預設值為既有 no-op，不計入 active
-    const anyFilter = ['company','mkdept','section','chief','cyc'].some(k=>FILTER[k]);
+    const anyFilter = ['company','mkdept','section','chief'].some(k=>FILTER[k]);   // 📝 AC-D16：原含 'cyc'
     document.getElementById('clearBtnD').classList.toggle('hidden', !(kw||anyFilter));
     document.getElementById('filterDot').classList.toggle('hidden', !anyFilter);
     lucide.createIcons();
