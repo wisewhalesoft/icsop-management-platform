@@ -7,6 +7,7 @@ import {
   downloadAttachment,
   getAppendixPool,
   getBusinessCategories,
+  getBusinessCategorySubtreeDocuments,
   getUsageFormPool,
   exportDocumentList,
 } from '../api/endpoints';
@@ -272,6 +273,41 @@ function subtreeChipText(f: SubtreeFilterDescriptor): string {
   return `循環：${f.lifecycleName} · 節點子樹：${f.nodeName ?? ''}`;
 }
 
+/**
+ * 🔵 F043 `AC-56`（2026-09-08）：**業務/功能類別**之節點子樹 deep link，恆成對之兩參數。
+ *
+ * 🔴 參數名刻意與循環側不同（`businessCategoryId`／`bcNodeSubtreeId`）：兩種子樹 deep link
+ * 在本頁**並存**，共用同一組鍵會讓兩者互相覆蓋，而兩邊之節點 id 分屬不同的圖、無法互相解析。
+ */
+interface BcSubtreeParams {
+  businessCategoryId: string;
+  bcNodeSubtreeId: string;
+}
+
+/** 自網址取兩參數；**任一缺席即視為未套用**（靜默 no-op、不回錯誤，比照 `AC-T41` ①②）。 */
+function readBcSubtreeParams(q: URLSearchParams): BcSubtreeParams | null {
+  const businessCategoryId = q.get('businessCategoryId') ?? '';
+  const bcNodeSubtreeId = q.get('bcNodeSubtreeId') ?? '';
+  return businessCategoryId && bcNodeSubtreeId ? { businessCategoryId, bcNodeSubtreeId } : null;
+}
+
+/** `AC-56` 之 chip 描述子：兩個代入值皆**取自後端回應**，前端不自行組字、不另行查名。 */
+interface BcSubtreeFilterDescriptor {
+  businessCategoryDisplayName: string;
+  nodeName: string;
+  /** 該子樹之**相異**文件 id 集合（＝導向鈕上那個 N 所指的那一組）。 */
+  documentIds: Set<string>;
+}
+
+/**
+ * `AC-56`：chip 之逐字文案。🔒 句型逐字比照循環側之 `subtreeChipText`（`：` 後無空白、
+ * `·` 兩側各一個半形空格），只換前綴——兩條 chip 可能同時出現在同一列，句型不一致會讓人
+ * 以為它們是兩種不同性質的東西。
+ */
+function bcSubtreeChipText(f: BcSubtreeFilterDescriptor): string {
+  return `業務/功能類別：${f.businessCategoryDisplayName} · 節點子樹：${f.nodeName}`;
+}
+
 export function DocumentListPage(): JSX.Element {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -281,15 +317,20 @@ export function DocumentListPage(): JSX.Element {
   const canWrite = canPerform(role, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'write');
   /**
    * 🔴 2026-09-02 人類裁決：「樹狀圖」欄**對主管／部門窗口隱藏**。
+   * 🔵 2026-09-08 人類裁決（`AC-D17`）：**「循環別」欄與「循環別」篩選一併隱藏**（同兩個角色）。
    *
-   * 🔒 判定刻意**不寫成角色清單**，而是讀該欄真正的閘門——`LIFECYCLE_MANAGEMENT read`
+   * 🔒 **三個載體共用同一個述詞**（樹狀圖欄／循環別欄／循環別篩選）：它們是同一個「循環維度」
+   * 的三種呈現，各寫一份判定是「其中一處日後漏改」的溫床——而漏改的那一處會讓被隱藏的角色
+   * 從另一個入口看見同一份資訊。📝 更名前之識別字：OLD> `canSeeTree`。
+   *
+   * 🔒 判定刻意**不寫成角色清單**，而是讀該維度真正的閘門——`LIFECYCLE_MANAGEMENT read`
    * （F036 之三個預覽端點皆以它把關）。兩者同源之後：
    *  · 主管本輪由 `READ` 改為 `NONE` ⇒ 欄位隨之消失，不需要在此重複裁決一次；
    *  · 部門窗口本來就是 `NONE`，先前卻看得到按鈕、點下去必 403（**既有死鏈**），一併修掉。
    * ⚠ 寫成 `role !== 'Supervisor' && role !== 'DeptContact'` 也能過測，但下次矩陣一動，
    * 這裡就會與真正的授權分家——那正是「畫面上有一顆一定會 403 的按鈕」的成因。
    */
-  const canSeeTree = canPerform(role, FunctionKey.LIFECYCLE_MANAGEMENT, 'read');
+  const canSeeLifecycleDimension = canPerform(role, FunctionKey.LIFECYCLE_MANAGEMENT, 'read');
   const toast = useToast();
   const today = useMemo(() => new Date(), []);
 
@@ -309,6 +350,20 @@ export function DocumentListPage(): JSX.Element {
    * 後端 no-op（`AC-T41` 四種情形）時為 `null` ⇒ chip 不渲染。
    */
   const [subtreeFilter, setSubtreeFilter] = useState<SubtreeFilterDescriptor | null>(null);
+  /**
+   * 🔵 `AC-56`：**業務/功能類別**之節點子樹 deep link（`29` 之導向鈕帶入）。
+   *
+   * 🔴 **與循環側之機制刻意不同、且不得對齊**：循環掛載是 `ICSOP_DOCUMENT.nodeId` 單一欄位，
+   * 後端得以一條 `IN` 下推；業務/功能類別是 **M:N**（`BUSINESS_CATEGORY_DOC`），文件列上沒有
+   * 節點維度可比對。故本頁沿用**同頁既有樣板**——`linkTargetId`／`appendixId`／`formId` 三項
+   * 都是「以一次後端查詢取得 id 集合、再與工作集交集」（見下方三個 `useEffect`）。
+   * 🔒 這**不是**「前端自己走訪子樹」（那是 `AC-T43` 明文禁止的）：子樹展開、可見性與排序全部
+   *    由後端 `subtree-documents` 端點完成，前端拿到的就是那 N 份文件的 id。
+   */
+  const [bcSubtreeParams, setBcSubtreeParams] = useState<BcSubtreeParams | null>(() =>
+    readBcSubtreeParams(searchParams),
+  );
+  const [bcSubtreeFilter, setBcSubtreeFilter] = useState<BcSubtreeFilterDescriptor | null>(null);
   const [filters, setFilters] = useState<Record<FilterKey, string>>({ ...EMPTY_FILTERS });
   /** `程序書書名內` 之「已輸入但未選取」查詢字（`AC-D3` 之 contains 行為；選取值優先）。 */
   const [nameQuery, setNameQuery] = useState('');
@@ -347,6 +402,43 @@ export function DocumentListPage(): JSX.Element {
   useEffect(() => {
     if (canRead) void load();
   }, [canRead, load]);
+
+  /**
+   * `AC-56`：解析類別節點子樹 deep link。
+   * 🔴 **失敗一律靜默 no-op**（403 無類別權限／404 類別或節點不存在／網路）：描述子留 `null`
+   * ⇒ chip 不渲染、篩選不施加，畫面等同於未帶該兩參數之請求。**不得**跳 toast——使用者
+   * 沒有做錯任何事，而一條「載入失敗」的紅字對他而言毫無可行動性。
+   */
+  useEffect(() => {
+    if (!canRead || !bcSubtreeParams) {
+      setBcSubtreeFilter(null);
+      return;
+    }
+    let alive = true;
+    void getBusinessCategorySubtreeDocuments(
+      bcSubtreeParams.businessCategoryId,
+      bcSubtreeParams.bcNodeSubtreeId,
+    )
+      .then((r) => {
+        if (!alive) return;
+        // 🔴 **去重後**之 id 集合：`groups` 跨組不去重（同一份文件可掛在子樹內多個節點），
+        //    Set 天然收斂為相異份數——與導向鈕上那個 N（後端 `totalCount`）同一組文件。
+        const documentIds = new Set<string>(
+          r.groups.flatMap((g) => g.documents.map((d) => d.id)),
+        );
+        setBcSubtreeFilter({
+          businessCategoryDisplayName: r.businessCategoryDisplayName ?? '',
+          nodeName: r.nodeName ?? '',
+          documentIds,
+        });
+      })
+      .catch(() => {
+        if (alive) setBcSubtreeFilter(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [canRead, bcSubtreeParams]);
 
   // 連結點篩選：以後端 linkTargetId 查詢取得指向目標之文件 id 集合（清單項不含連結明細）。
   useEffect(() => {
@@ -563,6 +655,18 @@ export function DocumentListPage(): JSX.Element {
    * `AC-T46` 之**一個方向**：chip 自己的 ✕ **只**清 chip——13 項篩選與關鍵字維持不動。
    * 一併把兩個參數自網址移除，否則使用者重新整理後篩選又回來（他已明示要清掉）。
    */
+  /** `AC-56`：類別子樹 chip 自己的 ✕ **只**清它自己——14 項篩選、關鍵字與循環側 chip 皆不動。 */
+  const clearBcSubtree = useCallback(() => {
+    if (!bcSubtreeParams) return;
+    setBcSubtreeParams(null);
+    setBcSubtreeFilter(null);
+    setPage(1);
+    const next = new URLSearchParams(searchParams);
+    next.delete('businessCategoryId');
+    next.delete('bcNodeSubtreeId');
+    setSearchParams(next, { replace: true });
+  }, [bcSubtreeParams, searchParams, setSearchParams]);
+
   const clearSubtree = useCallback(() => {
     if (!subtreeParams) return;
     setSubtreeParams(null);
@@ -584,11 +688,14 @@ export function DocumentListPage(): JSX.Element {
     setNameQuery('');
     setPage(1);
     clearSubtree();
-  }, [clearSubtree]);
+    // 🔵 `AC-56`：**連類別子樹 chip 一起清**——按鈕字面是「清除全部篩選」，清完卻仍有一條 chip
+    //    在縮小結果集，畫面與文字自相矛盾（與循環側同一條理由）。⚠ 反向不成立。
+    clearBcSubtree();
+  }, [clearSubtree, clearBcSubtree]);
   // `AC-T47`：子樹 chip 亦計入「已套用篩選」之判定（否則只套 chip 時清除鈕不出現）。
   const anyFilter = (Object.keys(filters) as FilterKey[]).some(
     (k) => filters[k] !== EMPTY_FILTERS[k],
-  ) || nameQuery !== '' || subtreeFilter !== null;
+  ) || nameQuery !== '' || subtreeFilter !== null || bcSubtreeFilter !== null;
 
   const toggleSort = useCallback((key: Exclude<SortBy, ''>) => {
     setSortBy((prevBy) => {
@@ -636,6 +743,8 @@ export function DocumentListPage(): JSX.Element {
       if (filters.form && (!formSet || !formSet.has(d.id))) return false;
       // `AC-B7` ④：**存在量詞**（該文件至少存在一筆掛載，其節點所屬類別＝所選 id），非等值。
       if (filters.bc && !(d.businessCategories ?? []).some((b) => b.id === filters.bc)) return false;
+      // 🔵 `AC-56`：類別節點子樹＝與後端回傳之 id 集合取交集（與既有 14 項為 AND，僅縮小結果集）。
+      if (bcSubtreeFilter && !bcSubtreeFilter.documentIds.has(d.id)) return false;
       return true;
     });
     if (sortBy) {
@@ -649,7 +758,7 @@ export function DocumentListPage(): JSX.Element {
     return rows;
   }, [
     all, filters, nameQuery, statusValue, chiefValues,
-    linkTargetSet, appendixSet, formSet, sortBy, sortDir,
+    linkTargetSet, appendixSet, formSet, bcSubtreeFilter, sortBy, sortDir,
   ]);
 
   const counts = useMemo(() => {
@@ -668,11 +777,23 @@ export function DocumentListPage(): JSX.Element {
     'w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-600';
 
   /**
-   * 依 `FILTERS` 產出 13 個控制項（桌面／行動 sheet 共用同一份順序與標籤）。
+   * 🔵 `AC-D17`（2026-09-08 人類裁決）：無循環管理讀取權者（主管／部門窗口）看不到 `循環別` 篩選。
+   *
+   * 🔒 以**過濾整個定義陣列**達成，而非在 `filterControls()` 內就地跳過某一項：`FILTERS` 是桌面與
+   * 行動 sheet 之**同一份**順序權威，在此收斂一次即兩處同時生效——就地跳過只會修好其中一處。
+   * 🔒 述詞與「循環別」欄、「樹狀圖」欄**同一個**（見 `canSeeLifecycleDimension`）。
+   */
+  const visibleFilters = useMemo(
+    () => (canSeeLifecycleDimension ? FILTERS : FILTERS.filter((f) => f.key !== 'cycle')),
+    [canSeeLifecycleDimension],
+  );
+
+  /**
+   * 依 `visibleFilters` 產出控制項（桌面／行動 sheet 共用同一份順序與標籤）。
    * 兩處各寫一份是「順序悄悄漂移」的溫床，而 `AC-D1` 對兩處各有一條逐字順序斷言。
    */
   const filterControls = (scope: string): JSX.Element[] =>
-    FILTERS.map((f) => {
+    visibleFilters.map((f) => {
       if (f.kind === 'select') {
         const opts = f.key === 'status' ? ['', '已公告', '進度中', '失效', '作廢'] : [...OJT_OPTIONS];
         return (
@@ -917,29 +1038,62 @@ export function DocumentListPage(): JSX.Element {
         `AC-T46` 之方向性不對稱不成立）。
         未套用（或後端 no-op）時**整段不渲染**——非 hidden、非 CSS 隱藏（`AC-T44` ③ 以 `=== null` 斷言）。
       */}
-      {subtreeFilter && (
+      {(subtreeFilter || bcSubtreeFilter) && (
         <div id="subtreeChipBar" className="mb-3 flex items-center gap-2 flex-wrap">
-          <span
-            data-subtree-chip
-            className="inline-flex items-center gap-2 max-w-full pl-3 pr-1.5 py-1.5 rounded-full border border-primary-200 bg-primary-50 text-primary-700 text-sm"
-          >
-            <Icon name="git-fork" className="w-3.5 h-3.5 shrink-0" />
-            {/* 🔴 兩個代入值分別取自回應之 subtreeFilter.lifecycleName／nodeName——前端不得自行組字或另行查名。 */}
-            <span data-subtree-chip-text className="min-w-0">
-              {subtreeChipText(subtreeFilter)}
-            </span>
-            <button
-              type="button"
-              data-subtree-chip-clear
-              onClick={clearSubtree}
-              aria-label="清除節點子樹篩選"
-              title="清除節點子樹篩選"
-              className="w-5 h-5 rounded-full hover:bg-primary-200/60 focus:outline-none focus:ring-2 focus:ring-primary-600 flex items-center justify-center shrink-0"
-            >
-              <Icon name="x" className="w-3.5 h-3.5" />
-            </button>
-          </span>
-          <span className="text-xs text-slate-400">由循環樹狀圖預覽帶入</span>
+          {subtreeFilter && (
+            <>
+              <span
+                data-subtree-chip
+                className="inline-flex items-center gap-2 max-w-full pl-3 pr-1.5 py-1.5 rounded-full border border-primary-200 bg-primary-50 text-primary-700 text-sm"
+              >
+                <Icon name="git-fork" className="w-3.5 h-3.5 shrink-0" />
+                {/* 🔴 兩個代入值分別取自回應之 subtreeFilter.lifecycleName／nodeName——前端不得自行組字或另行查名。 */}
+                <span data-subtree-chip-text className="min-w-0">
+                  {subtreeChipText(subtreeFilter)}
+                </span>
+                <button
+                  type="button"
+                  data-subtree-chip-clear
+                  onClick={clearSubtree}
+                  aria-label="清除節點子樹篩選"
+                  title="清除節點子樹篩選"
+                  className="w-5 h-5 rounded-full hover:bg-primary-200/60 focus:outline-none focus:ring-2 focus:ring-primary-600 flex items-center justify-center shrink-0"
+                >
+                  <Icon name="x" className="w-3.5 h-3.5" />
+                </button>
+              </span>
+              <span className="text-xs text-slate-400">由循環樹狀圖預覽帶入</span>
+            </>
+          )}
+          {/*
+            🔵 `AC-56`：**業務/功能類別**之子樹 chip。與循環側**兩條各自獨立**（可同時存在、
+            各有各的 ✕）——合併成一條會讓「只清掉其中一個維度」變成做不到的事。
+          */}
+          {bcSubtreeFilter && (
+            <>
+              <span
+                data-bc-subtree-chip=""
+                className="inline-flex items-center gap-2 max-w-full pl-3 pr-1.5 py-1.5 rounded-full border border-primary-200 bg-primary-50 text-primary-700 text-sm"
+              >
+                <Icon name="shapes" className="w-3.5 h-3.5 shrink-0" />
+                {/* 🔴 兩個代入值取自回應之 businessCategoryDisplayName／nodeName——前端不自行組字或另行查名。 */}
+                <span data-bc-subtree-chip-text="" className="min-w-0">
+                  {bcSubtreeChipText(bcSubtreeFilter)}
+                </span>
+                <button
+                  type="button"
+                  data-bc-subtree-chip-clear=""
+                  onClick={clearBcSubtree}
+                  aria-label="清除業務/功能類別節點子樹篩選"
+                  title="清除業務/功能類別節點子樹篩選"
+                  className="w-5 h-5 rounded-full hover:bg-primary-200/60 focus:outline-none focus:ring-2 focus:ring-primary-600 flex items-center justify-center shrink-0"
+                >
+                  <Icon name="x" className="w-3.5 h-3.5" />
+                </button>
+              </span>
+              <span className="text-xs text-slate-400">由業務/功能類別樹狀圖預覽帶入</span>
+            </>
+          )}
         </div>
       )}
 
@@ -962,14 +1116,18 @@ export function DocumentListPage(): JSX.Element {
                 <th className="text-left font-medium px-3 py-2.5 min-w-[160px]">檔案</th>
                 {/* 🔴 無循環管理讀取權者（主管／部門窗口）：本欄**完全不進 DOM**——
                     非 CSS 隱藏，且 `<th>` 與每列之 `<td>` 必須同進退，否則整張表會錯位一格。 */}
-                {canSeeTree && <th className="text-left font-medium px-3 py-2.5 min-w-[62px]">樹狀圖</th>}
+                {canSeeLifecycleDimension && <th className="text-left font-medium px-3 py-2.5 min-w-[62px]">樹狀圖</th>}
                 <SortHeader label="程序書編號" active={sortBy === 'documentNumber'} dir={sortDir} onClick={() => toggleSort('documentNumber')} className="min-w-[152px]" />
                 <th className="text-left font-medium px-3 py-2.5 min-w-[176px]">程序書書名</th>
                 <th className="text-left font-medium px-3 py-2.5 min-w-[74px]">版次</th>
                 <th className="text-left font-medium px-3 py-2.5 min-w-[210px]">內容摘要</th>
                 <th className="text-left font-medium px-3 py-2.5 min-w-[108px]">連結點程序書</th>
                 <SortHeader label="公告日期" active={sortBy === 'announcedDate'} dir={sortDir} onClick={() => toggleSort('announcedDate')} className="min-w-[112px]" />
-                <th className="text-left font-medium px-3 py-2.5 min-w-[140px]">循環別</th>
+                {/* 🔵 `AC-D17`：無循環管理讀取權者（主管／部門窗口）——本欄**完全不進 DOM**
+                    （非 CSS 隱藏），且 `<th>` 與每列之 `<td>` 必須同進退，否則整張表會錯位一格。 */}
+                {canSeeLifecycleDimension && (
+                  <th className="text-left font-medium px-3 py-2.5 min-w-[140px]">循環別</th>
+                )}
                 {/* 🔵 `AC-B1`：畫面 15 → **16 欄**，新欄置於**最末**；表頭逐字 `業務/功能類別`
                     （半形斜線、前後無空白）。🔒 既有第 0～14 欄之集合、相對順序與顯示規則逐項不變。 */}
                 <th className="text-left font-medium px-3 py-2.5 min-w-[168px]">業務/功能類別</th>
@@ -1020,7 +1178,7 @@ export function DocumentListPage(): JSX.Element {
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    {canSeeTree && (
+                    {canSeeLifecycleDimension && (
                     <td className="px-3 py-3">
                       <button
                         /**
@@ -1091,10 +1249,13 @@ export function DocumentListPage(): JSX.Element {
                     <td className="px-3 py-3 text-slate-500 mono text-xs whitespace-nowrap">
                       {d.announcedDate ? formatDateTime(d.announcedDate).slice(0, 10) : '—'}
                     </td>
-                    {/* F017 AC-S1：lifecycleName 為後端已組合之顯示字串（含子分類），前端不再自行串接。 */}
-                    <td className="px-3 py-3 text-slate-600 whitespace-nowrap" data-cycle-cell="">
-                      {d.lifecycleName ?? '—'}
-                    </td>
+                    {/* F017 AC-S1：lifecycleName 為後端已組合之顯示字串（含子分類），前端不再自行串接。
+                        🔵 `AC-D17`：與上方 `<th>` 同一個述詞、同進退。 */}
+                    {canSeeLifecycleDimension && (
+                      <td className="px-3 py-3 text-slate-600 whitespace-nowrap" data-cycle-cell="">
+                        {d.lifecycleName ?? '—'}
+                      </td>
+                    )}
                     <td className="px-3 py-3">
                       <BcCell
                         doc={d}

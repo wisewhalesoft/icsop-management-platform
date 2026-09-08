@@ -373,6 +373,8 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
 
   /**
    * 🔴 2026-09-02 人類裁決：**「樹狀圖」欄對主管／部門窗口隱藏**。
+   * 🔵 2026-09-08 人類裁決（`AC-D17`）：**「循環別」欄與「循環別」篩選一併隱藏**（同兩個角色、
+   *    同一個閘門 `LIFECYCLE_MANAGEMENT read`）——兩欄同時消失，故下方之「欄數恰差」由 1 改為 **2**。
    *
    * 🔒 判定源自 `LIFECYCLE_MANAGEMENT read`（該欄之真正閘門，F036 預覽端點所用）——
    * 主管本輪由 `READ` 改為 `NONE`；部門窗口本來就是 `NONE`，先前卻看得到按鈕、點下去必 403
@@ -384,7 +386,7 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
    *  (b) 負向斷言之前先有正向半句（清單確實有列出文件），否則整頁 403 時亦恆真。
    *  (c) 可見角色之對偶案必須**同時**存在，防「乾脆全部拿掉」之過度修正。
    */
-  describe('樹狀圖欄之角色可見性（2026-09-02 人類裁決）', () => {
+  describe('樹狀圖欄／循環別欄／循環別篩選之角色可見性（2026-09-02 ＋ 2026-09-08 人類裁決）', () => {
     const treeBtn = () =>
       screen.queryByRole('button', { name: '車輛分期進件作業 循環樹狀圖預覽' });
     const headerCount = () => document.querySelectorAll('table thead th').length;
@@ -397,36 +399,62 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
       await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
       expect(treeBtn()).toBeInTheDocument();
       expect(document.querySelectorAll('table thead th')[7]!.textContent).toBe('樹狀圖');
+      // 🔵 `AC-D17` 之正向半句：有權者仍看得到「循環別」欄與篩選（防「乾脆全部拿掉」之過度修正）。
+      expect(
+        [...document.querySelectorAll('table thead th')].map((th) => th.textContent),
+      ).toContain('循環別');
+      expect(document.querySelector('[data-cycle-cell]')).not.toBeNull();
+      expect(screen.getAllByLabelText('循環別').length).toBeGreaterThan(0);
       expect(headerCount()).toBe(firstRowCellCount());
     });
 
     it.each(['Supervisor', 'DeptContact'])(
-      '%s：樹狀圖欄**完全不進 DOM**（表頭與列同步少一格，不錯位）',
+      '%s：樹狀圖欄與循環別欄**完全不進 DOM**（表頭與列同步少兩格，不錯位）',
       async (role) => {
         mockAuth(role);
         renderPage();
         // (b) 正向半句：清單確實有列出文件。
         await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
         expect(treeBtn()).toBeNull();
-        expect(
-          [...document.querySelectorAll('table thead th')].map((th) => th.textContent),
-        ).not.toContain('樹狀圖');
+        const headers = [...document.querySelectorAll('table thead th')].map((th) => th.textContent);
+        expect(headers).not.toContain('樹狀圖');
+        // 🔵 `AC-D17`：`循環別` 表頭、每列之 `[data-cycle-cell]`、以及篩選控制項三者皆須消失。
+        expect(headers).not.toContain('循環別');
+        expect(document.querySelector('[data-cycle-cell]')).toBeNull();
+        expect(screen.queryAllByLabelText('循環別')).toHaveLength(0);
         // (a) 表頭與列同進退。
         expect(headerCount()).toBe(firstRowCellCount());
       },
     );
 
-    it('可見與不可見角色之欄數恰差 1（不是整欄群組被砍掉）', async () => {
+    /**
+     * 🔵 `AC-D17`：欄數差由 1 改為 **2**（樹狀圖 ＋ 循環別）。
+     * 📝 已作廢（⚠ 不得復原）：OLD> `expect(headerCount()).toBe(withTree - 1);`
+     * 🔒 斷言的是**精確差值**而非「變少了」——「乾脆把整個欄群組砍掉」也會讓欄數變少。
+     */
+    it('可見與不可見角色之欄數恰差 2（不是整欄群組被砍掉）', async () => {
       mockAuth('ICSOPAdmin');
       const { unmount } = renderPage();
       await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
-      const withTree = headerCount();
+      const withLifecycle = headerCount();
       unmount();
 
       mockAuth('Supervisor');
       renderPage();
       await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
-      expect(headerCount()).toBe(withTree - 1);
+      expect(headerCount()).toBe(withLifecycle - 2);
+    });
+
+    /**
+     * 🔴 行動底部 sheet 與桌機篩選列共用同一份 `FILTERS` 定義，但**兩處各驗一次**：
+     * 只驗桌機時，「只改了桌機那一段」之半套實作照樣全綠，而使用者在手機上仍看得到該篩選。
+     */
+    it('AC-D17 主管之行動底部 sheet 亦查無「循環別」篩選', async () => {
+      mockAuth('Supervisor');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: '篩選' }));
+      expect(screen.queryAllByLabelText('循環別')).toHaveLength(0);
     });
   });
 
