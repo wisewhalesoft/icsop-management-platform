@@ -25,10 +25,21 @@ import { BusinessCategoryTreePreviewPage } from './BusinessCategoryTreePreviewPa
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import type { SessionUser } from '../api/types';
+import { getSubtreeJumpCalls, resetSubtreeJumpCalls } from './subtree-jump-seam';
 
 interface SubtreeDoc { id: string; documentNumber: string; documentName: string; edition: string; status: 'active'; announcedDate: string }
 interface SubtreeGroup { nodeId: string; nodeName: string; documents: SubtreeDoc[] }
-interface SubtreeResult { nodeId: string; totalCount: number; groups: SubtreeGroup[] }
+/**
+ * 🔵 2026-09-08（`AC-56`）：回應新增 `nodeName`／`businessCategoryDisplayName` 兩個描述子欄位
+ * ——導向鈕與 `13` 之 chip 逐字取用，前端不自行組字、不另行查名。
+ */
+interface SubtreeResult {
+  nodeId: string;
+  nodeName: string | null;
+  businessCategoryDisplayName: string | null;
+  totalCount: number;
+  groups: SubtreeGroup[];
+}
 interface BcTreePreview {
   businessCategory: { id: string; name: string; subcategory: string | null };
   graph: { nodes: { id: string; businessCategoryId: string; name: string; positionX: number; positionY: number; mountedDocCount: number }[]; edges: { id: string; sourceNodeId: string; targetNodeId: string }[] };
@@ -73,6 +84,8 @@ const doc = (id: string, num: string): SubtreeDoc => ({
 /** 🔴 D1 刻意掛在 r **與** c1 兩個節點（跨節點重複），g1 掛 D2 —— rows=3、distinct=2，兩數不同。 */
 const SUBTREE_DUP: SubtreeResult = {
   nodeId: 'r',
+  nodeName: '進件收件作業',
+  businessCategoryDisplayName: '授信（消金）',
   totalCount: 2,
   groups: [
     { nodeId: 'r', nodeName: '進件收件作業', documents: [doc('d1', 'ICSOP-A')] },
@@ -83,6 +96,8 @@ const SUBTREE_DUP: SubtreeResult = {
 /** 對照組：無跨節點重複，rows===distinct===3，用以偵測「恆顯示說明行」之過度實作。 */
 const SUBTREE_NO_DUP: SubtreeResult = {
   nodeId: 'r',
+  nodeName: '進件收件作業',
+  businessCategoryDisplayName: '授信（消金）',
   totalCount: 3,
   groups: [
     { nodeId: 'r', nodeName: '進件收件作業', documents: [doc('d1', 'ICSOP-A')] },
@@ -177,5 +192,86 @@ describe('AC-35 抽屜內容＝整個子樹，依節點分組（不跨節點去�
     await waitFor(() => expect(drawerEl(container)!.querySelectorAll('[data-node-group]')).toHaveLength(3));
     const drawer = drawerEl(container)!;
     expect(drawer.querySelectorAll('input, select, textarea')).toHaveLength(0);
+  });
+});
+
+/**
+ * 🔵 F043 `AC-56`（2026-09-08 使用者裁決）：`29` 之子樹抽屜新增「在文件管理中檢視這 N 份程序書」
+ * 導向鈕（原 §A.8.5 ⑦ 明文「刻意沒有」之前提已被推翻——`13` 現已有類別節點子樹 deep link）。
+ *
+ * 🔴 斷言紀律（逐條比照 F036 `AC-T17`／`AC-T18` 之既有形狀）：
+ *  ① N ＝**相異**份數（`totalCount`＝2），**不是**畫面列數（3）——語料刻意讓兩數不同，
+ *     否則「用錯數字」這個缺陷在斷言上完全看不出來；
+ *  ② 可見文字＝`aria-label`＝`title` 三者同值；
+ *  ③ 子樹為 0 時整顆鈕**自 DOM 移除**（非 disabled、非 CSS 隱藏）；
+ *  ④ 目標網址之兩個參數逐字為 `businessCategoryId`／`bcNodeSubtreeId`（**不得**沿用循環側之
+ *     `lifecycleId`／`nodeSubtreeId`——兩種子樹在 `13` 上並存，共用鍵會互相覆蓋）。
+ */
+describe('AC-56 子樹抽屜之「在文件管理中檢視這 N 份程序書」導向鈕', () => {
+  it('① N 取自 totalCount（相異 2），非畫面列數（3）；② 可見文字＝aria-label＝title', async () => {
+    vi.mocked(bcApi.getBusinessCategorySubtreeDocuments).mockResolvedValue(SUBTREE_DUP);
+    const { container } = renderAt();
+    await openDrawer('r');
+    await waitFor(() =>
+      expect(drawerEl(container)!.querySelector('[data-bc-subtree-jump]')).not.toBeNull(),
+    );
+    const btn = drawerEl(container)!.querySelector('[data-bc-subtree-jump]')!;
+    const label = '在文件管理中檢視這 2 份程序書';
+    expect(btn.textContent).toContain(label);
+    expect(btn.getAttribute('aria-label')).toBe(label);
+    expect(btn.getAttribute('title')).toBe(label);
+    // 🔴 列數為 3——若實作誤用列數，上列三條會一起變成「這 3 份」而翻紅。
+    expect(drawerEl(container)!.querySelectorAll('[data-node-doc-row]')).toHaveLength(3);
+  });
+
+  it('④ 目標網址逐字為 /admin/documents?businessCategoryId=…&bcNodeSubtreeId=…', async () => {
+    vi.mocked(bcApi.getBusinessCategorySubtreeDocuments).mockResolvedValue(SUBTREE_DUP);
+    const { container } = renderAt();
+    await openDrawer('r');
+    await waitFor(() =>
+      expect(drawerEl(container)!.querySelector('[data-bc-subtree-jump]')).not.toBeNull(),
+    );
+    const href = drawerEl(container)!
+      .querySelector('[data-bc-subtree-jump]')!
+      .getAttribute('data-bc-subtree-jump-href');
+    expect(href).toBe('/admin/documents?businessCategoryId=bc1&bcNodeSubtreeId=r');
+    // 🔒 不得沿用循環側之鍵名（兩種子樹在 13 上並存）。
+    expect(href).not.toContain('lifecycleId=');
+    expect(href).not.toContain('nodeSubtreeId=r&');
+  });
+
+  it('③ 子樹相異份數為 0 → 整顆鈕自 DOM 移除（非 disabled、非 CSS 隱藏）', async () => {
+    vi.mocked(bcApi.getBusinessCategorySubtreeDocuments).mockResolvedValue({
+      nodeId: 'r', nodeName: '進件收件作業', businessCategoryDisplayName: '授信（消金）',
+      totalCount: 0, groups: [],
+    });
+    const { container } = renderAt();
+    await openDrawer('r');
+    await waitFor(() =>
+      expect(drawerEl(container)!.querySelector('[data-node-doc-empty]')).not.toBeNull(),
+    );
+    expect(drawerEl(container)!.querySelector('[data-bc-subtree-jump]')).toBeNull();
+    expect(screen.queryByLabelText(/在文件管理中檢視這 \d+ 份程序書/)).toBeNull();
+  });
+
+  it('退化路徑（非 popup）：點擊 → 同分頁導覽至目標網址，且**不**呼叫 window.close()', async () => {
+    vi.mocked(bcApi.getBusinessCategorySubtreeDocuments).mockResolvedValue(SUBTREE_DUP);
+    resetSubtreeJumpCalls();
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
+    const { container } = renderAt();
+    await openDrawer('r');
+    await waitFor(() =>
+      expect(drawerEl(container)!.querySelector('[data-bc-subtree-jump]')).not.toBeNull(),
+    );
+    await userEvent.click(drawerEl(container)!.querySelector('[data-bc-subtree-jump]') as HTMLElement);
+    const calls = getSubtreeJumpCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      mode: 'self',
+      appHref: '/admin/documents?businessCategoryId=bc1&bcNodeSubtreeId=r',
+      closedSelf: false,
+    });
+    expect(closeSpy).not.toHaveBeenCalled();
+    closeSpy.mockRestore();
   });
 });

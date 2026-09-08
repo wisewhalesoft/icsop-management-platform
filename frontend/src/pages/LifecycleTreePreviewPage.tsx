@@ -140,8 +140,14 @@ function groupTitleOf(name: string | null, isSelf: boolean): string {
 /**
  * F036 `AC-T15` #6：導向鈕之標籤——**可見文字＝`aria-label`＝`title` 三者同值**，
  * 故只在此組一次字（`{N}` ＝子樹合計，與 `#ndCount` 同數且皆取自回應之 `totalCount`）。
+ *
+ * 🔵 2026-09-08（F043 `AC-56`）：**業務/功能類別預覽頁之同一顆鈕共用本函式**（`export`）。
+ * 🔒 這**不是**「碰巧撞字」（架構 §14.8 之命名碰撞警示不適用）：兩處講的是同一件事——
+ *    「把這一組程序書帶到文件管理去看」。字面若各寫一份，兩個預覽頁的同一顆鈕遲早長成兩種說法。
+ *    ⚠ 對比：`業務/功能類別樹狀圖` 那串字在前台與變更歷程 tab 是兩個不相干的載體，
+ *    **明文禁止**共用常數——差別在於「是不是同一個業務概念」，不在於字面像不像。
  */
-function jumpLabel(n: number): string {
+export function formatSubtreeJumpLabel(n: number): string {
   return `在文件管理中檢視這 ${n} 份程序書`;
 }
 
@@ -992,12 +998,12 @@ export function LifecycleTreePreviewPage(): JSX.Element {
               data-node-subtree-id={drawerNodeId}
               data-subtree-jump-href={subtreeJumpHref(id, drawerNodeId)}
               onClick={onSubtreeJump}
-              aria-label={jumpLabel(subtreeTotal)}
-              title={jumpLabel(subtreeTotal)}
+              aria-label={formatSubtreeJumpLabel(subtreeTotal)}
+              title={formatSubtreeJumpLabel(subtreeTotal)}
               className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-1"
             >
               <Icon name="list-filter" className="w-4 h-4" />
-              {jumpLabel(subtreeTotal)}
+              {formatSubtreeJumpLabel(subtreeTotal)}
             </button>
           )}
         </div>

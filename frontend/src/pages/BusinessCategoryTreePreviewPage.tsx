@@ -25,7 +25,8 @@ import {
 import { openedAsPopup } from './opened-as-popup';
 import { beginPan, panExceeded, panScroll, type PanOrigin } from './tree-pan';
 import { DISPLAY_LABEL, deriveDisplayStatus, type DisplayStatus } from './document-display';
-import { formatMountedCount } from './LifecycleTreePreviewPage';
+import { formatMountedCount, formatSubtreeJumpLabel } from './LifecycleTreePreviewPage';
+import { recordSubtreeJump } from './subtree-jump-seam';
 import { buildTreeLayout, descendants, buildEdgeRoutes, routePath, NODE_W } from './lifecycle-tree-layout';
 import type {
   BusinessCategoryView,
@@ -42,8 +43,10 @@ import type {
  *    （`buildTreeLayout`／`buildEdgeRoutes`／`descendants`／浮水印幾何）——共用的是演算法。
  * 🔴 `AC-33`：本頁渲染 HTML、無 PDF 內容層可燒錄 ⇒ 疊加層是其**唯一**浮水印載體，明文禁止移除。
  * 🔴 `AC-53` ①：本頁**有**下載與列印；前台樹狀圖模式**沒有**（該對半句必須成對存在）。
- * 🔴 §A.8.5 ⑦：本頁**刻意沒有** `22` 的「在文件管理中檢視這 N 份程序書」導向鈕——`13` 上只有
- *    **類別層**篩選、沒有節點子樹維度，沒有可導向的目標。
+ * 🔵 2026-09-08 使用者裁決（`AC-56`）：本頁**新增** `22` 的「在文件管理中檢視這 N 份程序書」導向鈕。
+ * 📝 已作廢（⚠ 不得復原）：OLD> 「§A.8.5 ⑦：本頁**刻意沒有**該鈕——`13` 上只有**類別層**篩選、
+ *    沒有節點子樹維度，沒有可導向的目標。」——該前提自本 delta 起**不再成立**：`13` 已新增
+ *    `businessCategoryId` + `bcNodeSubtreeId` 之節點子樹 deep link（見 `DocumentListPage`）。
  */
 
 const msgOf = (e: unknown): string =>
@@ -70,6 +73,18 @@ export const BC_TREE_PREVIEW_WINDOW_NAME = 'icsopBusinessCategoryTreePreview';
 
 /** 關閉被拒時之退路延遲（ms）。 */
 const CLOSE_FALLBACK_MS = 200;
+
+/**
+ * 🔵 `AC-56`：導向目標網址之**單一組字點**——`data-bc-subtree-jump-href` 與實際導覽共用它，
+ * 專案中不存在第二份組字邏輯（比照 F036 `AC-T17` ⑤ 之既有紀律）。
+ *
+ * 🔴 兩個參數名**刻意與循環側不同**（`businessCategoryId`／`bcNodeSubtreeId`，而非
+ * `lifecycleId`／`nodeSubtreeId`）：`13` 上兩種子樹 deep link 並存，共用同一組鍵會讓
+ * 「循環節點子樹」與「類別節點子樹」互相覆蓋，而兩者之節點 id 分屬不同的圖、無法互相解析。
+ */
+export function bcSubtreeJumpHref(businessCategoryId: string, nodeId: string): string {
+  return `/admin/documents?businessCategoryId=${encodeURIComponent(businessCategoryId)}&bcNodeSubtreeId=${encodeURIComponent(nodeId)}`;
+}
 
 /** `AC-35` 抽屜副標題之子樹合計文字（唯一消費者＝抽屜副標題）。 */
 export function formatBcSubtreeCount(n: number): string {
@@ -285,6 +300,34 @@ export function BusinessCategoryTreePreviewPage(): JSX.Element {
     setDrawerNodeId(nodeId);
   }, []);
   const closeDrawer = useCallback(() => setDrawerNodeId(null), []);
+
+  /**
+   * 🔵 `AC-56`：導向鈕之派送——**逐字比照 F036 `AC-T20`／`AC-T21`／`AC-T22`**（本頁與 `22` 同為
+   * 以 `window.open` 具名 target 開出之預覽分頁，離開語意完全相同）：
+   *  - 主路徑（`openedAsPopup()` 為真）：`opener.location.href` → `opener.focus()` → `window.close()`；
+   *    本分頁**不自行導覽**（否則會多出一個內容重複的清單分頁）。
+   *  - 退化路徑：同分頁 `navigate()`，🔒 **不得**呼叫 `window.close()`（會被瀏覽器拒絕 ⇒ 按了沒反應）。
+   * 判定於**點擊當下**取樣（非渲染時之投影），派送後記錄同一支 seam。
+   */
+  const onSubtreeJump = useCallback(() => {
+    if (!drawerNodeId) return;
+    const appHref = bcSubtreeJumpHref(id, drawerNodeId);
+    const asPopup = openedAsPopup();
+    recordSubtreeJump({
+      mode: asPopup ? 'opener' : 'self',
+      href: appHref,
+      appHref,
+      closedSelf: asPopup,
+    });
+    if (asPopup) {
+      const opener = window.opener as { location: { href: string }; focus: () => void };
+      opener.location.href = appHref;
+      opener.focus();
+      window.close();
+      return;
+    }
+    navigate(appHref);
+  }, [id, drawerNodeId, navigate]);
 
   useEffect(() => {
     if (!drawerNodeId) return;
@@ -655,7 +698,8 @@ export function BusinessCategoryTreePreviewPage(): JSX.Element {
         `AC-35` 子樹唯讀抽屜（雙擊節點開啟）。
         🔒 **唯讀孿生**：本區塊內不得出現任何寫入元件，亦不得有 `<input>`／`<select>`／`<textarea>`；
            **不得**復用 §丙 之可寫抽屜。
-        🔒 §A.8.5 ⑦：刻意**沒有** `22` 之「在文件管理中檢視這 N 份程序書」導向鈕（無可導向之目標）。
+        🔵 `AC-56`：footer 新增唯一一顆導向鈕——它是「唯讀孿生」之**明文唯一例外**（本身是導覽，
+           不改任何資料、不寫稽核）。📝 已作廢：OLD> 「§A.8.5 ⑦：刻意**沒有**該鈕（無可導向之目標）」。
       */}
       <aside
         id="bcNodeDocDrawer"
@@ -777,6 +821,34 @@ export function BusinessCategoryTreePreviewPage(): JSX.Element {
               <Icon name="file-x-2" className="w-8 h-8 mx-auto mb-2 text-slate-300" />
               此節點與其下游節點皆未掛載程序書
             </div>
+          )}
+        </div>
+        {/*
+          🔵 `AC-56`：導向鈕之容器。子樹**相異份數**為 0 時整顆鈕自 DOM 移除（容器內容為空），
+          非 disabled、非 CSS 隱藏——下游以 `queryByLabelText(...) === null` 斷言時，CSS 隱藏會假綠。
+          🔴 標籤之 N ＝ `subtreeTotal`（**相異**份數），**不是** `subtreeRows`（畫面列數）：
+             點過去之後 `13` 篩出來的正是那 N 份相異程序書；用列數會讓鈕上的數字與清單筆數對不上，
+             而本頁恰恰是全站唯一「兩個數字必然不同」的地方（見上方 `subtreeRowCount` 之註解）。
+        */}
+        <div
+          id="bcNdFooterAction"
+          className="shrink-0 border-t border-slate-200 px-4 py-3 empty:hidden empty:py-0 empty:px-0 empty:border-t-0"
+        >
+          {drawerNodeId && !nodeDocsError && subtreeTotal > 0 && (
+            <button
+              type="button"
+              data-bc-subtree-jump=""
+              data-business-category-id={id}
+              data-node-subtree-id={drawerNodeId}
+              data-bc-subtree-jump-href={bcSubtreeJumpHref(id, drawerNodeId)}
+              onClick={onSubtreeJump}
+              aria-label={formatSubtreeJumpLabel(subtreeTotal)}
+              title={formatSubtreeJumpLabel(subtreeTotal)}
+              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-1"
+            >
+              <Icon name="list-filter" className="w-4 h-4" />
+              {formatSubtreeJumpLabel(subtreeTotal)}
+            </button>
           )}
         </div>
         <div className="shrink-0 border-t border-slate-200 px-4 py-2.5 text-[11px] text-slate-400 flex items-start gap-1.5">
