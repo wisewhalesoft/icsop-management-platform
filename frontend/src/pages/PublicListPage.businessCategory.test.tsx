@@ -123,11 +123,19 @@ describe('PublicListPage — F043 己：模式切換器（additive，AC-B12～AC
     expect(pressed).toHaveLength(1);
   });
 
-  it('AC-B13 未帶 mode 進入 → 業務/功能類別樹狀圖為預設選中態，畫面呈現樹狀圖', async () => {
+  /**
+   * 🔵 2026-09-08 使用者裁決（`AC-B13` 改版）：**預設模式改為 `文件清單`**。
+   * 📝 已作廢（⚠ 不得復原）：OLD> `AC-B13 未帶 mode 進入 → 業務/功能類別樹狀圖為預設選中態`。
+   * 🔴 斷言**成對**（選中 list ∧ 未選中 tree）：只驗 list 選中，對「兩個都選中」無感。
+   * 🔒 一併斷言**未取樹狀圖端點**——只看 aria-pressed 的話，「畫面選在清單、卻仍白跑一趟
+   *    樹狀圖查詢」這種半套實作照樣全綠。
+   */
+  it('AC-B13 未帶 mode 進入 → 文件清單為預設選中態，畫面呈現清單', async () => {
     renderAt();
-    await waitFor(() => expect(document.querySelector('[data-browse-mode="tree"]')).toHaveAttribute('aria-pressed', 'true'));
-    expect(document.querySelector('[data-browse-mode="list"]')).toHaveAttribute('aria-pressed', 'false');
-    await waitFor(() => expect(pubApi.getPublicBusinessCategoryGraph).toHaveBeenCalled());
+    await waitFor(() => expect(document.querySelector('[data-browse-mode="list"]')).toHaveAttribute('aria-pressed', 'true'));
+    expect(document.querySelector('[data-browse-mode="tree"]')).toHaveAttribute('aria-pressed', 'false');
+    await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+    expect(pubApi.getPublicBusinessCategoryGraph).not.toHaveBeenCalled();
   });
 
   it('AC-B14 `?mode=list` → 選中文件清單，渲染既有清單內容', async () => {
@@ -144,32 +152,35 @@ describe('PublicListPage — F043 己：模式切換器（additive，AC-B12～AC
   /**
    * 🔴 不可辨識分支須用一個真的不在值域內的字串（`grid`），空字串測不到值域檢查缺失。
    */
-  it('AC-B14 不可辨識值 `?mode=grid` → 一律視同 tree（不得回錯誤、不得空白畫面）', async () => {
+  it('AC-B14 不可辨識值 `?mode=grid` → 一律視同預設之 list（不得回錯誤、不得空白畫面）', async () => {
     renderAt('?mode=grid');
-    await waitFor(() => expect(document.querySelector('[data-browse-mode="tree"]')).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() => expect(document.querySelector('[data-browse-mode="list"]')).toHaveAttribute('aria-pressed', 'true'));
+    expect(await screen.findByText('車輛分期進件作業')).toBeInTheDocument();
   });
 
   /**
-   * AC-B15：模式不跨 session 記憶——切到清單模式後，模擬「新的 session」（重新掛載、不帶 mode）
-   * 仍應回到樹狀圖模式。
+   * AC-B15：模式不跨 session 記憶——切到**樹狀圖**模式後，模擬「新的 session」（重新掛載、
+   * 不帶 mode）仍應回到**預設之文件清單**。
+   * 🔵 2026-09-08：方向隨 `AC-B13` 反轉（原為「切到清單後仍回樹狀圖」）；規則本身一字不動。
    */
-  it('AC-B15 切至清單模式後，重新掛載（新 session，不帶 mode）→ 仍為樹狀圖模式', async () => {
+  it('AC-B15 切至樹狀圖模式後，重新掛載（新 session，不帶 mode）→ 仍為文件清單模式', async () => {
     const { unmount } = renderAt();
-    await waitFor(() => expect(document.querySelector('[data-browse-mode="tree"]')).toHaveAttribute('aria-pressed', 'true'));
-    await userEvent.click(screen.getByRole('button', { name: '文件清單' }));
     await waitFor(() => expect(document.querySelector('[data-browse-mode="list"]')).toHaveAttribute('aria-pressed', 'true'));
+    await userEvent.click(screen.getByRole('button', { name: '業務/功能類別樹狀圖' }));
+    await waitFor(() => expect(document.querySelector('[data-browse-mode="tree"]')).toHaveAttribute('aria-pressed', 'true'));
     unmount();
 
     renderAt();
-    await waitFor(() => expect(document.querySelector('[data-browse-mode="tree"]')).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() => expect(document.querySelector('[data-browse-mode="list"]')).toHaveAttribute('aria-pressed', 'true'));
   });
 
   /**
-   * AC-B19：無可用類別時樹狀圖模式顯示空狀態，但**模式切換器仍可用**，不自動切至清單模式。
+   * AC-B19：無可用類別時樹狀圖模式顯示空狀態，但**模式切換器仍可用**，不自動切走。
+   * 🔵 2026-09-08：入口改為 `?mode=tree`（預設已是清單，不帶 mode 進不了樹狀圖模式）。
    */
-  it('AC-B19 無可用類別 → 模式切換器仍可用且仍選中樹狀圖，未自動切換至文件清單', async () => {
+  it('AC-B19 無可用類別 → 模式切換器仍可用且仍停在樹狀圖，未自動切換至文件清單', async () => {
     vi.mocked(pubApi.getPublicBusinessCategories).mockResolvedValue([]);
-    renderAt();
+    renderAt('?mode=tree');
     await waitFor(() => expect(screen.getByText('目前沒有可瀏覽的業務/功能類別')).toBeInTheDocument());
     expect(document.querySelector('[data-browse-mode="tree"]')).toHaveAttribute('aria-pressed', 'true');
     const listSwitch = screen.getByRole('button', { name: '文件清單' });

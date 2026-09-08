@@ -36,10 +36,17 @@ vi.mock('react-router-dom', async (orig) => {
   return { ...actual, useNavigate: () => vi.fn() };
 });
 
-/** `AC-D1`：桌面與行動 sheet 皆為此六項、此順序（逐字）。 */
-const FILTER_LABELS = ['制定公司', '制定部門', '制定室別', '當責室長', '狀態', '循環別'] as const;
-/** `AC-D2`：其中五項為可搜尋下拉（combobox）；`狀態` 維持既有原生 select。 */
-const COMBO_LABELS = ['制定公司', '制定部門', '制定室別', '當責室長', '循環別'] as const;
+/**
+ * `AC-D1`：桌面與行動 sheet 皆為此**五項**、此順序（逐字）。
+ * 🔵 2026-09-08 使用者裁決（`AC-D16`）：`循環別` 整項移除（不分角色），六項 → 五項。
+ * 📝 已作廢（⚠ 不得復原）：OLD> `['制定公司', '制定部門', '制定室別', '當責室長', '狀態', '循環別']`
+ */
+const FILTER_LABELS = ['制定公司', '制定部門', '制定室別', '當責室長', '狀態'] as const;
+/**
+ * `AC-D2`：其中**四項**為可搜尋下拉（combobox）；`狀態` 維持既有原生 select。
+ * 📝 已作廢（⚠ 不得復原）：OLD> `['制定公司', '制定部門', '制定室別', '當責室長', '循環別']`
+ */
+const COMBO_LABELS = ['制定公司', '制定部門', '制定室別', '當責室長'] as const;
 /**
  * `AC-D8`：`<dl>` 區塊之標籤順序（逐字，含全形冒號）。
  * 🔴 2026-08-27 `AC-Y5` 就地改寫為**五列**——內容摘要已改為書名副標題、不再是 `<dl>` 之一列。
@@ -177,19 +184,19 @@ describe('F019 AC-D5：前台 filter-options 端點之前端契約', () => {
   });
 });
 
-describe('F019 AC-D1：篩選器恰 6 項、順序與無障礙名稱逐字', () => {
-  it('TS-F019-D1-001 桌面篩選列之篩選控制項恰為 6 個，且由左至右順序逐字為六項標籤', async () => {
+describe('F019 AC-D1／AC-D16：篩選器恰 5 項、順序與無障礙名稱逐字', () => {
+  it('TS-F019-D1-001 桌面篩選列之篩選控制項恰為 5 個，且由左至右順序逐字為五項標籤', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
-    // 篩選控制項＝ input[role=combobox]（五項）＋ select（一項「狀態」）；以 DOM 出現順序取其 aria-label。
+    // 篩選控制項＝ input[role=combobox]（四項）＋ select（一項「狀態」）；以 DOM 出現順序取其 aria-label。
     const controls = Array.from(
       desktopBar().querySelectorAll<HTMLElement>('input[role="combobox"], select'),
     );
-    expect(controls).toHaveLength(6);
+    expect(controls).toHaveLength(5);
     expect(controls.map((el) => el.getAttribute('aria-label'))).toEqual([...FILTER_LABELS]);
   });
 
-  it('TS-F019-D1-002 六項之無障礙名稱逐字可查（getByLabelText 皆命中）', async () => {
+  it('TS-F019-D1-002 五項之無障礙名稱逐字可查（getByLabelText 皆命中）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     for (const label of FILTER_LABELS) {
@@ -206,7 +213,21 @@ describe('F019 AC-D1：篩選器恰 6 項、順序與無障礙名稱逐字', () 
     expect(screen.queryByText('所有使用部門')).toBeNull();
   });
 
-  it('TS-F019-D1-004 行動底部 sheet 呈現同一 6 項、同一順序', async () => {
+  /**
+   * 🔵 `AC-D16` 之負向半句：`循環別` 篩選器須**自 DOM 移除**（非 disabled、非 CSS 隱藏）——
+   * 以 `queryAllByLabelText` 斷言，CSS 隱藏會假綠。桌機與行動 sheet **兩處都要查**：
+   * 兩處共用同一份 `FILTERS` 定義，但只驗其一時「其中一處漏改」完全無感。
+   */
+  it('TS-F019-D16-001 🔴 桌機與行動 sheet 皆查無「循環別」篩選控制項', async () => {
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    expect(screen.queryAllByLabelText('循環別')).toHaveLength(0);
+    await userEvent.click(screen.getByTestId('mobile-filter-trigger'));
+    const sheet = screen.getByRole('dialog', { name: '篩選' });
+    expect(within(sheet).queryByText('循環別')).toBeNull();
+  });
+
+  it('TS-F019-D1-004 行動底部 sheet 呈現同一 5 項、同一順序', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     await userEvent.click(screen.getByTestId('mobile-filter-trigger'));
@@ -216,7 +237,7 @@ describe('F019 AC-D1：篩選器恰 6 項、順序與無障礙名稱逐字', () 
   });
 });
 
-describe('F019 AC-D2：五項為可搜尋下拉、`狀態` 維持原生下拉', () => {
+describe('F019 AC-D2：四項為可搜尋下拉、`狀態` 維持原生下拉', () => {
   it.each(COMBO_LABELS)('TS-F019-D2-001 %s 為 combobox（role=combobox）', async (label) => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
@@ -273,32 +294,18 @@ describe('F019 AC-D2：五項為可搜尋下拉、`狀態` 維持原生下拉', 
     expect(within(desktopBar()).getByText('林建宏')).toBeInTheDocument();
   });
 
-  it('TS-F019-D2-004b 循環別可**以循環名稱**搜尋（非 lifecycleId）', async () => {
-    renderPage();
-    await screen.findByText('車輛分期進件作業');
-    const input = control('循環別');
-    await userEvent.click(input);
-    expect(await within(desktopBar()).findByText('產品企劃循環')).toBeInTheDocument();
-    await userEvent.type(input, '銷售');
-    await waitFor(() => expect(within(desktopBar()).queryByText('產品企劃循環')).toBeNull());
-    expect(within(desktopBar()).getByText('銷售及收款循環（消金）')).toBeInTheDocument();
-  });
-
+  /*
+   * 📝 已作廢（⚠ 不得復原）——`AC-D16` 移除 `循環別` 篩選器後，下列兩案已無載體：
+   *   OLD> it('TS-F019-D2-004b 循環別可**以循環名稱**搜尋（非 lifecycleId）')
+   *   OLD> it('TS-F019-D2-006 循環別以 lifecycleId 送出（同名不同子分類為相異選項）')
+   * 🔒 「以 value（id）而非 label 送出」這條規則本身仍有載體＝下方之 `TS-F019-D2-005`（當責室長）。
+   */
   it('TS-F019-D2-005 選定選項 → 以其 value（id）而非 label 送出查詢', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     await pick('當責室長', '林建宏');
     await waitFor(() =>
       expect(api.getPublicDocuments).toHaveBeenLastCalledWith(expect.objectContaining({ chiefId: 'E002' })),
-    );
-  });
-
-  it('TS-F019-D2-006 循環別以 lifecycleId 送出（同名不同子分類為相異選項）', async () => {
-    renderPage();
-    await screen.findByText('車輛分期進件作業');
-    await pick('循環別', '銷售及收款循環（消金）');
-    await waitFor(() =>
-      expect(api.getPublicDocuments).toHaveBeenLastCalledWith(expect.objectContaining({ lifecycleId: 'lc1' })),
     );
   });
 
@@ -352,107 +359,17 @@ describe('F019 AC-D2：五項為可搜尋下拉、`狀態` 維持原生下拉', 
  *    本 delta 後前台**不再自組**顯示字串——改由後端 `filterOptions()` 於 label 內提供（`AC-D5` 之直接後果，
  *    非能力遺失）；本組因此斷言的是「前端逐字呈現後端給的 label、且以 `lifecycleId` 為值」。
  */
-describe('F040 循環子分類 × F019 AC-D5：循環別下拉之選項（自 subcategory.test.tsx 遷移）', () => {
-  /** 同名兩子分類 ＋ 一個無子分類者；模擬後端 `filterOptions()` 已套 `lifecycleDisplayName` 之回傳。 */
-  const LIFECYCLE_OPTIONS = {
-    ...FILTER_OPTIONS,
-    lifecycles: [
-      { value: 'lc1', label: '銷售及收款循環（消金）' },
-      { value: 'lc10', label: '銷售及收款循環（企金）' },
-      { value: 'lc2', label: '採購及付款循環' },
-    ],
-  };
+/*
+ * 📝 已作廢（⚠ 不得復原）——`AC-D16`（2026-09-08）移除前台之 `循環別` 篩選器後，原
+ * `describe('F040 循環子分類 × F019 AC-D5：循環別下拉之選項（自 subcategory.test.tsx 遷移）')`
+ * 之四案（`TS-F040-D-001`～`-004`：同名兩子分類產生相異選項／以各自 lifecycleId 送出／
+ * 不得出現裸名稱選項／無子分類不加括號）在**前台**已無載體。
+ * 🔒 F040 之同一組規則於**後台**仍受完整拘束——見 `DocumentListPage.subcategory.test.tsx`
+ *    之「循環別」篩選案；**不得**因本檔刪除而一併移除那一份。
+ */
 
-  /**
-   * 展開「循環別」combobox，回傳其 listbox 內之逐項 label。
-   * 📌 **刻意只回 label、不回 value**：combobox 的選項 DOM 未必帶 `value` 屬性（`AC-D2` 只規範
-   *    combobox 語意），臆造一個 `data-value` 掛鉤等於發明契約。「選項值＝`lifecycleId`」改由
-   *    `TS-F040-D-002`／`-004` 以**實際送出之 API 參數**斷言——那是 `AC-D4` 真正規範的可觀測事實。
-   */
-  async function openCycleOptions(): Promise<string[]> {
-    await userEvent.click(control('循環別'));
-    const list = await within(desktopBar()).findByRole('listbox');
-    return within(list)
-      .getAllByRole('option')
-      .map((o) => o.textContent?.trim() ?? '');
-  }
-
-  beforeEach(() => {
-    setFilterOptions(LIFECYCLE_OPTIONS);
-  });
-
-  /**
-   * 原案：`**核心**：同名兩子分類產生兩個**相異**選項（直接用 .name 會產生兩個相同字串而變紅）`
-   * 原斷言（逐字保留）：
-   *   OLD> `const labels = cycleOptions().map((o) => o.label).filter((l) => l.startsWith('銷售及收款循環'));`
-   *   OLD> `expect(labels).toEqual(['銷售及收款循環（消金）', '銷售及收款循環（企金）']);`
-   *   OLD> `expect(new Set(labels).size).toBe(2);`
-   */
-  it('TS-F040-D-001 同名兩子分類產生兩個**相異**選項（直接用 name 會得到兩個相同字串而紅）', async () => {
-    renderPage();
-    await screen.findByText('車輛分期進件作業');
-    const labels = (await openCycleOptions()).filter((l) => l.startsWith('銷售及收款循環'));
-    expect(labels).toEqual(['銷售及收款循環（消金）', '銷售及收款循環（企金）']);
-    expect(new Set(labels).size).toBe(2);
-  });
-
-  /**
-   * 原案：`AC-31 選項值為各自 lifecycleId（非名稱字串、非循環代碼）`
-   * 原斷言（逐字保留）：
-   *   OLD> `const byLabel = new Map(cycleOptions().map((o) => [o.label, o.value]));`
-   *   OLD> `expect(byLabel.get('銷售及收款循環（消金）')).toBe('lc1');`
-   *   OLD> `expect(byLabel.get('銷售及收款循環（企金）')).toBe('lc10');`
-   *   OLD> `for (const v of byLabel.values()) { expect(v).not.toBe('銷售及收款循環'); expect(v).not.toBe('SRC'); }`
-   */
-  it('TS-F040-D-002 AC-31 選定後以各自 lifecycleId 送出查詢（非名稱字串、非循環代碼）', async () => {
-    renderPage();
-    await screen.findByText('車輛分期進件作業');
-
-    await pick('循環別', '銷售及收款循環（企金）');
-    await waitFor(() =>
-      expect(api.getPublicDocuments).toHaveBeenLastCalledWith(
-        expect.objectContaining({ lifecycleId: 'lc10' }),
-      ),
-    );
-    const sent = vi.mocked(api.getPublicDocuments).mock.lastCall?.[0] as Record<string, unknown>;
-    expect(sent.lifecycleId).not.toBe('銷售及收款循環'); // 不得退化為名稱字串
-    expect(sent.lifecycleId).not.toBe('SRC'); // 亦不得為循環代碼
-  });
-
-  /**
-   * 原案：`不得出現未組合子分類之裸名稱選項`
-   * 原斷言（逐字保留）：
-   *   OLD> `expect(cycleOptions().map((o) => o.label)).not.toContain('銷售及收款循環');`
-   */
-  it('TS-F040-D-003 不得出現未組合子分類之裸名稱選項', async () => {
-    renderPage();
-    await screen.findByText('車輛分期進件作業');
-    expect(await openCycleOptions()).not.toContain('銷售及收款循環');
-  });
-
-  /**
-   * 原案：`AC-33 無子分類之循環其選項不含括號（向後相容）`
-   * 原斷言（逐字保留）：
-   *   OLD> `const purchase = cycleOptions().find((o) => o.label.startsWith('採購及付款循環'));`
-   *   OLD> `expect(purchase?.label).toBe('採購及付款循環');`
-   *   OLD> `expect(purchase?.value).toBe('lc2');`
-   */
-  it('TS-F040-D-004 AC-33 無子分類之循環其選項不含括號（向後相容）', async () => {
-    renderPage();
-    await screen.findByText('車輛分期進件作業');
-    const purchase = (await openCycleOptions()).find((l) => l.startsWith('採購及付款循環'));
-    expect(purchase).toBe('採購及付款循環'); // 逐字，不得帶空括號如「採購及付款循環（）」
-    await pick('循環別', '採購及付款循環');
-    await waitFor(() =>
-      expect(api.getPublicDocuments).toHaveBeenLastCalledWith(
-        expect.objectContaining({ lifecycleId: 'lc2' }),
-      ),
-    );
-  });
-});
-
-describe('F019 AC-D3：清除篩選涵蓋 6 項與關鍵字', () => {
-  it('TS-F019-D3-001 點擊「清除篩選」→ 六項篩選與關鍵字同時清空、重新查詢未篩選清單', async () => {
+describe('F019 AC-D3：清除篩選涵蓋 5 項與關鍵字', () => {
+  it('TS-F019-D3-001 點擊「清除篩選」→ 五項篩選與關鍵字同時清空、重新查詢未篩選清單', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     await userEvent.type(screen.getByLabelText('搜尋文件編號或名稱'), '進件');
@@ -472,7 +389,6 @@ describe('F019 AC-D3：清除篩選涵蓋 6 項與關鍵字', () => {
           draftingDeptId: undefined,
           draftingSectionId: undefined,
           chiefId: undefined,
-          lifecycleId: undefined,
         }),
       ),
     );

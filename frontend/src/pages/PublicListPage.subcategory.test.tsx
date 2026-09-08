@@ -10,8 +10,7 @@
  *   故一律用 `getAllByRole` 後去重，不可用 `getByRole`（會 Found multiple elements）。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { PublicListPage } from './PublicListPage';
 import * as authHook from '../auth/useAuth';
@@ -148,25 +147,26 @@ function stubFilterOptions(): void {
  */
 describe('PublicListPage — F040 AC-S1 之存活半段（顯示字串前後台一致）', () => {
   /**
-   * 唯一保留於本檔之案：本頁**逐字呈現**後端 `filterOptions()` 給的 label，前端不自行改寫。
-   * 這正是 `AC-S1`「前台顯示字串與後台（F017）一致」在 delta 後的載體——兩端同一份
-   * `lifecycleDisplayName` 產物，前端只負責原樣顯示。
-   * ⚠ 與新落點之四案**不重複**：四案驗的是選項集合／值／括號規則，本案驗的是「不改寫」。
+   * 🔵 2026-09-08 使用者裁決（F019 `AC-D16`）：前台清單之 `循環別` 篩選器**整項移除**（不分角色）。
+   * 📝 已作廢（⚠ 不得復原）：OLD> `AC-S1 循環別下拉逐字呈現後端提供之 lifecycleDisplayName`
+   *    ——該案曾是「前端不改寫後端 label」在前台之唯一載體；欄位不存在後該規則於前台已無載體，
+   *    其後台半句仍由 `DocumentListPage.subcategory.test.tsx` 之同名案承擔（🔒 不得一併刪除）。
+   * 🔴 本案改為**負向半句**：載體必須**自 DOM 移除**（非 disabled、非 CSS 隱藏）——
+   *    以 `queryByLabelText` 斷言，CSS 隱藏會假綠。
    */
-  it('AC-S1 循環別下拉逐字呈現後端提供之 lifecycleDisplayName（前端不自行改寫）', async () => {
+  it('AC-D16 循環別篩選器已自前台清單移除（桌機與行動 sheet 皆查無）', async () => {
     vi.mocked(api.getPublicFilterOptions).mockResolvedValue({
       draftingCompanies: [],
       draftingDepts: [],
       draftingSections: [],
       chiefs: [],
+      // 🔴 後端仍回得出選項——正因如此，本案才有鑑別力：畫面上不得因此長出篩選器。
       lifecycles: [{ value: 'lc1', label: '銷售及收款循環（消金）' }],
     });
     renderPage();
     await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
 
-    const bar = screen.getByTestId('filter-bar');
-    await userEvent.click(within(bar).getByLabelText('循環別'));
-    const list = await within(bar).findByRole('listbox');
-    expect(within(list).getByText('銷售及收款循環（消金）')).toBeInTheDocument();
+    expect(screen.queryAllByLabelText('循環別')).toHaveLength(0);
+    expect(screen.queryByText('銷售及收款循環（消金）')).toBeNull();
   });
 });

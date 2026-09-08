@@ -32,6 +32,9 @@ const EMPTY_FILTER_OPTIONS: PublicFilterOptions = {
  * 🔴 2026-08-16 delta（F019 `AC-D1`／`AC-D2`／`AC-D8`）：篩選器恰六項——制定公司／制定部門／
  * 制定室別／當責室長／狀態／循環別（前五項中的五個可搜尋下拉，`狀態` 維持原生 select 且為
  * 裝飾性 no-op）；「使用部門」篩選器與卡片之「使用部門」「循環別」兩列**一併移除**。
+ * 🔵 2026-09-08 使用者裁決（`AC-D16`）：**`循環別` 篩選器整項移除 ⇒ 恰五項**（不分角色）。
+ *    循環是後台的組織維度，前台讀者不以它找文件；🔒 網址上的 `cycle` 參數一併停用
+ *    （見下方 `lifecycleId` 之落點註解），已分享出去的舊網址靜默忽略該鍵、**不回錯誤**。
  * 置頂判定仍以使用部門為據（後端 `pinned` 旗標）——「不顯示 ≠ 不判定」。
  *
  * 🔴 2026-08-27 前台瀏覽 UX delta（F019 `AC-Y1`～`AC-Y6`；使用者裁決）：
@@ -51,8 +54,13 @@ const EMPTY_FILTER_OPTIONS: PublicFilterOptions = {
  */
 export type BrowseMode = 'tree' | 'list';
 const BROWSE_MODES: readonly BrowseMode[] = ['tree', 'list'];
+/**
+ * 🔵 2026-09-08 使用者裁決（`AC-B13` 改版）：**預設改為 `文件清單`**。
+ * 📝 已作廢（⚠ 不得用於斷言、不得復原）：OLD> 未帶／不可辨識 → `'tree'`。
+ * 🔒 「不可辨識值靜默回退為預設」這條規則本身一字不動（`AC-B14`），改變的只有「預設是誰」。
+ */
 export function resolveBrowseMode(raw: string | null | undefined): BrowseMode {
-  return BROWSE_MODES.includes(raw as BrowseMode) ? (raw as BrowseMode) : 'tree';
+  return BROWSE_MODES.includes(raw as BrowseMode) ? (raw as BrowseMode) : 'list';
 }
 
 /**
@@ -94,7 +102,12 @@ export function PublicListPage(): JSX.Element {
   const draftingDeptId = searchParams.get('mkdept') ?? '';
   const draftingSectionId = searchParams.get('section') ?? '';
   const chiefId = searchParams.get('chief') ?? '';
-  const lifecycleId = searchParams.get('cycle') ?? '';
+  /**
+   * 🔵 2026-09-08 `AC-D16`：舊 `cycle` 參數**一律忽略**（不讀、不送、不顯示）。
+   * 🔴 刻意**不**在此保留一個「讀了但不顯示」的值：那會讓已分享出去的網址仍在**靜默**縮小
+   * 結果集，而畫面上沒有任何一處說得出為什麼少了文件——正是本 repo 反覆修過的死參數形狀。
+   * 📝 已作廢（⚠ 不得復原）：OLD> `const lifecycleId = searchParams.get('cycle') ?? '';`
+   */
   const page = Math.max(1, Number(searchParams.get('page')) || 1);
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -134,7 +147,6 @@ export function PublicListPage(): JSX.Element {
       draftingDeptId: draftingDeptId || undefined,
       draftingSectionId: draftingSectionId || undefined,
       chiefId: chiefId || undefined,
-      lifecycleId: lifecycleId || undefined,
       page,
     })
       .then((d) => {
@@ -152,14 +164,14 @@ export function PublicListPage(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [mode, keyword, companyCode, draftingDeptId, draftingSectionId, chiefId, lifecycleId, page]);
+  }, [mode, keyword, companyCode, draftingDeptId, draftingSectionId, chiefId, page]);
 
   const items = data?.items ?? [];
   const pinned = items.filter((i) => i.pinned);
   const rest = items.filter((i) => !i.pinned);
   const total = data?.total ?? 0;
   const hiddenCount = data?.hiddenCount ?? 0;
-  const selected = { companyCode, draftingDeptId, draftingSectionId, chiefId, lifecycleId };
+  const selected = { companyCode, draftingDeptId, draftingSectionId, chiefId };
   const hasSelectFilters = Object.values(selected).some(Boolean);
   const hasFilters = Boolean(keyword) || hasSelectFilters;
 
@@ -231,8 +243,8 @@ export function PublicListPage(): JSX.Element {
    */
   const clearFilters = useCallback(() => {
     setKwInput('');
-    // 查詢狀態（q／co／mkdept／section／chief／cycle／page）＝**整組清空**。逐鍵刪除會在日後新增
-    // 第七項篩選時漏刪，且會留下已停用之舊參數（例如已被忽略的 `dept`）使網址看起來仍帶著條件。
+    // 查詢狀態（q／co／mkdept／section／chief／page）＝**整組清空**。逐鍵刪除會在日後新增
+    // 第六項篩選時漏刪，且會留下已停用之舊參數（例如已被忽略的 `dept`／`cycle`）使網址看起來仍帶著條件。
     //
     // 🔵 F043 delta（2026-09-02）：🔴 **`mode` 例外——它不是查詢條件，是瀏覽模式**。
     // 原本「本頁之網址參數全部都是查詢狀態」之前提自本 delta 起不再成立；整組清空會把正在看
@@ -313,7 +325,13 @@ export function PublicListPage(): JSX.Element {
     { kind: 'combo', key: 'section', label: '制定室別', value: draftingSectionId, options: filterOptions.draftingSections },
     { kind: 'combo', key: 'chief', label: '當責室長', value: chiefId, options: filterOptions.chiefs },
     { kind: 'select', key: 'status', label: '狀態' },
-    { kind: 'combo', key: 'cycle', label: '循環別', value: lifecycleId, options: filterOptions.lifecycles },
+    /**
+     * 🔵 2026-09-08 `AC-D16`：**已移除**第六項 `循環別`（不分角色）。
+     * 📝 已作廢（⚠ 不得復原）：
+     *    OLD> `{ kind: 'combo', key: 'cycle', label: '循環別', value: lifecycleId, options: filterOptions.lifecycles },`
+     * ⚠ `getPublicFilterOptions()` 之回應仍帶 `lifecycles`（後端契約未變、其他呼叫端可能用得到）；
+     *    本頁**不再消費它**——「後端還回得出來」不等於「畫面上還要有這個篩選」。
+     */
   ];
 
   /**

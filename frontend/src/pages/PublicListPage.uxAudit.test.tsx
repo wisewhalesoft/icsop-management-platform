@@ -105,10 +105,12 @@ function LocationProbe(): JSX.Element {
 
 /**
  * 🔴 2026-09-02 F043 delta（`AC-B13`）連坐修正（tdd-implementation 申訴）：進入 `/public`
- * 不帶 `mode` 現在預設為樹狀圖模式（`AC-B13`）。本檔全數案例測的是「文件清單模式」既有之
- * URL-查詢狀態單一真相行為（B-1），與 `mode` 為**正交**之兩件事——顯式附加 `mode=list`
- * 使本檔維持在清單模式下運作，既有斷言之期望值一律不改；唯一連帶調整見下方「清除篩選」案
- * （見該案之就地註記，`mode` 不屬於「篩選」範疇，清除篩選不應連帶清掉它）。
+ * 不帶 `mode` 曾預設為樹狀圖模式。本檔全數案例測的是「文件清單模式」既有之 URL-查詢狀態
+ * 單一真相行為（B-1），與 `mode` 為**正交**之兩件事——顯式附加 `mode=list` 使本檔維持在
+ * 清單模式下運作，既有斷言之期望值一律不改。
+ * 🔵 2026-09-08（`AC-B13` 改版）：預設已改為 `list`，本 helper 因此不再是「必要」的；
+ *    🔒 **仍刻意保留**——本檔測的是清單模式之行為，顯式宣告模式使這些案例**不依賴**
+ *    「當下的預設剛好是清單」這個會變的事實（預設值曾經反轉過一次，就可能再反轉一次）。
  */
 function withMode(entry: string): string {
   return entry.includes('mode=') ? entry : `${entry}${entry.includes('?') ? '&' : '?'}mode=list`;
@@ -141,17 +143,20 @@ describe('前台清單 · UX 稽核回歸', () => {
      *
      * 📌 **本輪之 URL 參數契約**（由 test-generator 定；spec 未規定）：
      *   `q`／`co`（制定公司）／`mkdept`（制定部門）／`section`（制定室別）／`chief`（當責室長）／
-     *   `cycle`（循環別）／`page`。
+     *   `page`。
+     * 🔵 2026-09-08（`AC-D16`）：`cycle`（循環別）自契約移除——篩選器已整項移除，該鍵一律忽略。
+     *   📝 已作廢（⚠ 不得復原）：OLD> 入口 `...&cycle=lc1&page=2`、期望 `lifecycleId: 'lc1'`。
      *   🔴 刻意**不沿用** `dept` 一名——舊名語意為「使用部門」，沿用會讓既有已分享之網址被
      *   靜默改讀為「制定部門」，是使用者無從察覺的結果變化。
      */
-    it('自網址還原關鍵字/制定部門/循環/頁碼並據以查詢（可分享、重整不歸零）', async () => {
+    it('自網址還原關鍵字/制定部門/頁碼並據以查詢（可分享、重整不歸零）', async () => {
+      // 🔴 `cycle=lc1` 仍留在入口網址：本案因此同時是 `AC-D16` 之「舊網址靜默忽略該鍵」之
+      //    正向證據——若實作仍偷偷讀它，下方 `toHaveBeenCalledWith` 之**精確物件比對**會翻紅。
       renderPage('/public?q=%E8%BB%8A%E8%BC%9B&mkdept=JA000&cycle=lc1&page=2');
       await waitFor(() =>
         expect(api.getPublicDocuments).toHaveBeenCalledWith({
           keyword: '車輛',
           draftingDeptId: 'JA000',
-          lifecycleId: 'lc1',
           page: 2,
         }),
       );
@@ -230,7 +235,9 @@ describe('前台清單 · UX 稽核回歸', () => {
      */
     it('清除篩選同時清空篩選相關網址參數（不含 mode，見上方就地註記）', async () => {
       const user = userEvent.setup();
-      renderPage('/public?dept=JA000&cycle=lc1');
+      // 🔵 2026-09-08：入口改用**現行有效**之篩選鍵——`dept`／`cycle` 皆已停用，只帶它們時
+      //    畫面上根本不會出現「清除篩選」鈕（本案會因查無按鈕而紅，那不是它要測的事）。
+      renderPage('/public?mkdept=JA000&q=%E8%BB%8A%E8%BC%9B');
       await screen.findByText('車輛分期進件作業');
 
       await user.click(screen.getByRole('button', { name: '清除篩選' }));

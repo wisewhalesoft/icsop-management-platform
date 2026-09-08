@@ -176,34 +176,35 @@ describe('PublicListPage — 2026-08-27 前台瀏覽 UX delta（AC-Y3／AC-Y5／
   });
 
   /**
-   * `AC-Y3`：六項篩選（五 combobox ＋ 原生 select `狀態`）之字級**必須同值**。
+   * `AC-Y3`：五項篩選（四 combobox ＋ 原生 select `狀態`）之字級**必須同值**。
    * 🔴 斷言形狀刻意為「集合大小為 1 且該值逐字為前台一階」——只斷言 `狀態` 是 text-sm 的話，
-   *    把五項 combobox 一起縮小成 text-[11px] 的實作也會綠（那正是使用者回報的相反解法）。
+   *    把四項 combobox 一起縮小成 text-[11px] 的實作也會綠（那正是使用者回報的相反解法）。
+   * 🔵 2026-09-08 `AC-D16`：`循環別` 已自本列移除（六項 → 五項）；字級規則本身一字不動。
    */
-  it('AC-Y3 桌機篩選列六項之 label 字級同值，且逐字為前台一階 text-sm（非後台 text-[11px]）', async () => {
+  it('AC-Y3 桌機篩選列五項之 label 字級同值，且逐字為前台一階 text-sm（非後台 text-[11px]）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     const bar = screen.getByTestId('filter-bar');
     const labels = Array.from(bar.querySelectorAll('label'));
     expect(labels.map((l) => l.textContent?.trim())).toEqual([
-      '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '循環別',
+      '制定公司', '制定部門', '制定室別', '當責室長', '狀態',
     ]);
     const sizes = new Set(
       labels.map((l) => (l.className.match(/text-(?:\[[^\]]+\]|[a-z]+)/) ?? ['(無)'])[0]),
     );
-    expect(sizes, `六項 label 字級不一致：${[...sizes].join('／')}`).toEqual(new Set(['text-sm']));
+    expect(sizes, `五項 label 字級不一致：${[...sizes].join('／')}`).toEqual(new Set(['text-sm']));
   });
 
-  it('AC-Y3 桌機篩選列六項之控制項本體字級同值，且逐字為前台一階 text-base', async () => {
+  it('AC-Y3 桌機篩選列五項之控制項本體字級同值，且逐字為前台一階 text-base', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     const bar = screen.getByTestId('filter-bar');
     const controls = Array.from(bar.querySelectorAll('input[role="combobox"], select'));
-    expect(controls).toHaveLength(6);
+    expect(controls).toHaveLength(5);
     const sizes = new Set(
       controls.map((c) => (c.className.match(/text-(?:\[[^\]]+\]|[a-z]+)/) ?? ['(無)'])[0]),
     );
-    expect(sizes, `六項控制項字級不一致：${[...sizes].join('／')}`).toEqual(new Set(['text-base']));
+    expect(sizes, `五項控制項字級不一致：${[...sizes].join('／')}`).toEqual(new Set(['text-base']));
   });
 
   it('AC-Y5 內容摘要為書名之副標題：位於 <h3> 之後、<dl> 之外，且無「內容摘要：」標籤', async () => {
