@@ -138,14 +138,24 @@ import { TypeOrmPublicBusinessCategoryStore } from './typeorm-public-business-ca
         pub: BusinessCategoryChangePublisher,
         identity: AuditIdentityService,
         dag: BusinessCategoryDagStore,
+        categories: BusinessCategoryStore,
       ): BusinessCategoryDocsService =>
-        new BusinessCategoryDocsService(store, audit, pub, () => new Date(), identity, dag),
+        new BusinessCategoryDocsService(
+          store,
+          audit,
+          pub,
+          () => new Date(),
+          identity,
+          dag,
+          categories,
+        ),
       inject: [
         BUSINESS_CATEGORY_DOCS_STORE,
         AuditWriterService,
         BUSINESS_CATEGORY_CHANGE_PUBLISHER,
         AuditIdentityService,
         BUSINESS_CATEGORY_DAG_STORE,
+        BUSINESS_CATEGORY_STORE,
       ],
     },
     // ── §丁 樹狀圖預覽／下載／列印 ──

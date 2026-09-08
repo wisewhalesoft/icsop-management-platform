@@ -2,7 +2,7 @@ import { ConflictException, Inject, Injectable, NotFoundException, Optional } fr
 import { AuditWriter } from '../audit/audit.types';
 import { AuditIdentityService } from '../audit/audit-identity.service';
 import { isUniqueConstraintViolation } from '../documents/db-error';
-import { buildTreeLayout, descendants } from '../lifecycle/lifecycle-tree-layout';
+import { descendants } from '../lifecycle/lifecycle-tree-layout';
 import {
   BUSINESS_CATEGORY_DAG_STORE,
   BusinessCategoryDagStore,
@@ -25,6 +25,12 @@ import {
   NoopBusinessCategoryChangePublisher,
 } from './business-category-change-event';
 import { BusinessCategoryDocsStructuralTx } from './business-category-structural-change';
+import { orderSubtreeNodes } from './business-category-subtree-order';
+import {
+  BUSINESS_CATEGORY_STORE,
+  BusinessCategoryStore,
+} from './business-category.store';
+import { businessCategoryDisplayName } from './business-category-subcategory';
 
 /** 掛載／移除之操作者身分快照（來自 request context `SessionUser`）。 */
 export interface BusinessCategoryMountActor {
@@ -54,6 +60,20 @@ export interface BusinessCategorySubtreeDocumentsResponse {
   /** 回顯請求之根節點 id。 */
   nodeId: string;
   /**
+   * 🔵 2026-09-08 delta（F043 `AC-56`）：根節點名稱。
+   * 🔴 **不得**改由呼叫端「自 `groups` 找出 `nodeId` 那一組」推導——根節點掛載 0 份時**不產生分組**
+   * （見下方 `groups` 之註解），那條路徑在「本節點空、下游有」這個真實情境下必然取不到名字，
+   * 而導向鈕正是在該情境下仍要出現的。
+   */
+  nodeName: string | null;
+  /**
+   * 🔵 2026-09-08 delta（F043 `AC-56`）：類別之顯示名稱（`businessCategoryDisplayName()` 之輸出，
+   * 含子分類）。供 `13` 之子樹 chip 逐字組句——🔒 chip 的每一個代入值都來自後端描述子，
+   * 前端不自行組字、不另行查名（比照 F017 `AC-T45` 對循環側之既有紀律）。
+   * 類別池未注入之純單元 fake → `null`（降級為不呈現，既有測試零漣漪）。
+   */
+  businessCategoryDisplayName: string | null;
+  /**
    * 🔴 `AC-35`：子樹之**相異文件總數**（依 `documentId` **去重後**之值）——副標題之 N。
    * **不等於** `Σ groups[].documents.length`（＝下方 `groupedCount`，含跨節點重複）：
    * **兩個數字不同是事實，不得互相對齊**。
@@ -65,12 +85,6 @@ export interface BusinessCategorySubtreeDocumentsResponse {
   groupedCount: number;
   /** 本節點恆 `groups[0]`；掛載 0 份之節點不產生分組。 */
   groups: BusinessCategorySubtreeGroup[];
-}
-
-/** 子樹分組排序之最小節點身分。 */
-interface SubtreeNodeRef {
-  nodeId: string;
-  nodeName: string | null;
 }
 
 /** 掛載寫入之最小操作面（store 與交易內 Tx 皆滿足）。 */
@@ -116,6 +130,13 @@ export class BusinessCategoryDocsService {
     @Optional()
     @Inject(BUSINESS_CATEGORY_DAG_STORE)
     private readonly dagStore?: BusinessCategoryDagStore,
+    /**
+     * 🔵 2026-09-08 delta（`AC-56`）：子樹回應之 `businessCategoryDisplayName` 之唯一來源。
+     * 選填以免打爆既有純 store 單測（無 → 該欄為 `null`，其餘欄位一字不變）。
+     */
+    @Optional()
+    @Inject(BUSINESS_CATEGORY_STORE)
+    private readonly categoryStore?: BusinessCategoryStore,
   ) {
     this.publisher = publisher ?? new NoopBusinessCategoryChangePublisher();
   }
@@ -227,8 +248,11 @@ export class BusinessCategoryDocsService {
         groups.push({ nodeId: ref.nodeId, nodeName: ref.nodeName, documents });
       }
     }
+    const category = this.categoryStore ? await this.categoryStore.findById(businessCategoryId) : null;
     return {
       nodeId,
+      nodeName: node.name,
+      businessCategoryDisplayName: category ? businessCategoryDisplayName(category) : null,
       totalCount: distinct.size,
       groupedCount: groups.reduce((sum, g) => sum + g.documents.length, 0),
       groups,
@@ -407,48 +431,6 @@ export class BusinessCategoryDocsService {
       // 稽核寫入失敗不阻斷掛載／移除（比照 F023 補償佇列）。
     }
   }
-}
-
-type NodePos = { x: number; y: number };
-
-/**
- * `AC-35` 之三層 tie-break（逐字比照 F036 `AC-T11` 之既有規則）：① 本節點恆第一 →
- * ② `pos.y` 遞增（由上而下）→ ③ 同 y 則 `pos.x` 遞增 → ④ 皆同則以節點 id 字典序打破平手
- * （防禦性，確保無隨機性）。
- */
-function compareSubtreeNodes(
-  a: string,
-  b: string,
-  rootId: string,
-  pos: Map<string, NodePos>,
-): number {
-  if (a === rootId || b === rootId) return a === b ? 0 : a === rootId ? -1 : 1;
-  const pa = pos.get(a) ?? { x: 0, y: 0 };
-  const pb = pos.get(b) ?? { x: 0, y: 0 };
-  if (pa.y !== pb.y) return pa.y - pb.y;
-  if (pa.x !== pb.x) return pa.x - pb.x;
-  return a.localeCompare(b);
-}
-
-/**
- * 子樹節點之分組順序。座標取自**同一次** `buildTreeLayout()` 呼叫（確定性純函式，決策 E2 之
- * 直接重用——前後端與 prototype 三方座標一致之既有理由對本功能同樣成立）。
- */
-function orderSubtreeNodes(
-  nodes: BusinessCategoryNodeView[],
-  edges: BusinessCategoryEdgeRow[],
-  subtree: Set<string>,
-  rootId: string,
-): SubtreeNodeRef[] {
-  const layout = buildTreeLayout(
-    nodes.map((n) => ({ id: n.id, name: n.name })),
-    edges.map((e) => ({ sourceNodeId: e.sourceNodeId, targetNodeId: e.targetNodeId })),
-  );
-  const pos = new Map<string, NodePos>(layout.nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
-  return nodes
-    .filter((n) => subtree.has(n.id))
-    .map((n) => ({ nodeId: n.id, nodeName: n.name }))
-    .sort((a, b) => compareSubtreeNodes(a.nodeId, b.nodeId, rootId, pos));
 }
 
 /**

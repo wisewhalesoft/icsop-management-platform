@@ -15,6 +15,7 @@
 import 'reflect-metadata';
 import { AuditAccessEvent, AuditWriter } from '../audit/audit.types';
 import { BusinessCategoryDocsService } from './business-category-docs.service';
+import { businessCategoryDisplayName } from './business-category-subcategory';
 import {
   BusinessCategoryDocsStore,
   BusinessCategoryNodeInfo,
@@ -319,5 +320,45 @@ describe('BusinessCategoryDocsService（F043 §丙 節點掛載）', () => {
       }[];
       expect(deps.some((d) => /^Documents?Store$/i.test(d?.name ?? ''))).toBe(false);
     });
+  });
+});
+
+
+/**
+ * 🔵 2026-09-08 delta（F043 `AC-56`）：子樹回應新增 `nodeName` 與 `businessCategoryDisplayName`
+ * ——`29` 之導向鈕與 `13` 之子樹 chip 皆逐字取自這兩欄，前端不自行組字、不另行查名。
+ */
+describe('BusinessCategoryDocsService.listSubtreeDocuments（AC-56：導向鈕／chip 之描述子欄位）', () => {
+  let store: FakeStore;
+  beforeEach(() => {
+    store = new FakeStore();
+    store.node('n1', 'bc1', '授信申請作業');
+  });
+
+  it('回應帶 nodeName（根節點名稱）與 businessCategoryDisplayName（含子分類之顯示名）', async () => {
+    const categories = {
+      findById: (id: string) =>
+        Promise.resolve(id === 'bc1' ? { id, name: '授信', subcategory: '消金' } : null),
+    } as unknown as import('./business-category.store').BusinessCategoryStore;
+    const svc = new BusinessCategoryDocsService(
+      store,
+      undefined,
+      undefined,
+      () => new Date(),
+      undefined,
+      undefined,
+      categories,
+    );
+    const r = await svc.listSubtreeDocuments('bc1', 'n1');
+    expect(r.nodeId).toBe('n1');
+    expect(r.nodeName).toBe('授信申請作業');
+    expect(r.businessCategoryDisplayName).toBe(businessCategoryDisplayName({ name: '授信', subcategory: '消金' }));
+  });
+
+  it('🔒 未注入類別池之純 store 單測 → businessCategoryDisplayName 為 null（降級，其餘欄位一字不變）', async () => {
+    const svc = new BusinessCategoryDocsService(store);
+    const r = await svc.listSubtreeDocuments('bc1', 'n1');
+    expect(r.businessCategoryDisplayName).toBeNull();
+    expect(r.nodeName).toBe('授信申請作業');
   });
 });
