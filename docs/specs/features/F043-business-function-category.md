@@ -286,6 +286,17 @@ Epic/Story: E12 / [US-106](../../stories/epics/E12-business-function-category/US
   - 📌 **前台之浮水印義務不受本條影響**：`AC-B25` 之疊加層仍為前台樹狀圖之**必要**載體（該頁渲染 HTML、無內容層可燒錄）——**「不提供 PDF」不等於「不需要浮水印」**，兩者是不同的事。
   - 📝 **本條由 `[ASSUMPTION]` A4 升格**（2026-09-02 人類裁決確認）；若日後要開放前台下載，須回答上述三個問題並新增 2 個端點、2 種稽核動作與其 AC。
 
+- **AC-56**（🔵 **2026-09-08 使用者裁決——子樹抽屜之「在文件管理中檢視這 N 份程序書」導向鈕**）：Given 後台類別樹狀圖預覽頁之子樹抽屜已開啟且該子樹之**相異**文件數 `N > 0`, When 檢視抽屜底部, Then 存在**恰一顆**導向鈕，其**可見文字＝`aria-label`＝`title` 三者同值**且逐字為 **`在文件管理中檢視這 {N} 份程序書`**；When 點擊, Then 導向 **`/admin/documents?businessCategoryId={類別 id}&bcNodeSubtreeId={節點 id}`**；Given `N = 0`, Then 該鈕**整顆自 DOM 移除**（**非** `disabled`、**非** CSS 隱藏——下游以 `queryByLabelText(...) === null` 斷言時，CSS 隱藏會恆真＝假綠）。<br>
+  📝 **推翻既有條款（⚠ 不得復原）**：`OLD>` [ui-ux-design-overview](../ui-ux-design-overview.md) §A.8.5 ⑦「`29` **刻意沒有** `22` 的『在文件管理中檢視這 N 份程序書』導向鈕——`13` 上只有**類別層**篩選、沒有節點子樹維度，沒有可導向的目標。」該理由之**前提已由本裁決一併消除**：`13` 於本 delta 新增了類別節點子樹之 deep link（見下方 ③）。<br>
+  🔴 **① `N` 取自「相異」文件數**（後端 `totalCount`），**不是**抽屜之畫面列數（`AC-35` 之跨組不去重使兩數可以不同）——本頁恰恰是全站唯一「兩個數字必然可以不同」的地方；用列數會讓鈕上的數字與導過去之後的清單筆數對不上。📌 語料鑑別力要求：測試語料須讓**兩數確實不同**（如列數 3、相異 2）。<br>
+  🔴 **② 派送行為逐字比照 [F036](F036-lifecycle-tree-preview.md) `AC-T20`～`AC-T22`**：主路徑（本頁為 `window.open` 具名 target 開出之預覽分頁）＝`opener.location.href` → `opener.focus()` → `window.close()`，本分頁**不自行導覽**（否則會多出一個內容重複的清單分頁）；退化路徑＝同分頁導覽且 🔒 **不得**呼叫 `window.close()`（會被瀏覽器拒絕 ⇒ 使用者按了沒反應）。判定於**點擊當下**取樣（非渲染時之投影），並記錄於既有之同一支可觀測 seam。<br>
+  🔴 **③ `13` 之 deep link 參數逐字為 `businessCategoryId` ＋ `bcNodeSubtreeId`，恆成對**；🔒 **不得**沿用循環側之 `lifecycleId`／`nodeSubtreeId`——兩種子樹 deep link 在 `13` 上**並存**，共用鍵會互相覆蓋，而兩邊之節點 id 分屬不同的圖、無法互相解析。任一缺席 ⇒ **靜默 no-op**（不篩選、不顯示 chip、**不回錯誤**）。<br>
+  🔴 **④ `13` 之呈現＝一條可清除的 chip**，其文案逐字為 **`業務/功能類別：{類別顯示名} · 節點子樹：{節點名}`**（`：` 後無空白、`·` 兩側各一個半形空格，句型逐字比照 [F017](F017-backend-document-list.md) `AC-T44` 之循環側）；兩個代入值**皆取自後端回應**（前端不自行組字、不另行查名）。與循環側之 chip **兩條各自獨立**（可同時存在、各有各的 ✕）；chip 自己的 ✕ **只**清它自己，「清除全部篩選」則**連它一起清**。🔒 deep link **不得**寫入第 14 項「業務/功能類別」篩選（比照 `AC-T42`：兩個來源糾纏後，chip 的 ✕ 與篩選的清除會互相打架）。<br>
+  🔴 **⑤ 篩選之落地形狀**：`13` 以**一次後端查詢取得該子樹之相異文件 id 集合、再與工作集交集**——沿用同頁既有之 `linkTargetId`／`appendixId`／`formId` 樣板。🔒 這**不是**「前端自行走訪子樹」（[F017](F017-backend-document-list.md) `AC-T43` 明文禁止之事）：子樹展開、排序與分組**全部**由後端 `subtree-documents` 端點完成。<br>
+  ⚠ **與循環側之機制刻意不同構、不得對齊**：循環掛載是 `ICSOP_DOCUMENT.nodeId` 單一欄位（後端得以一條 `IN` 下推、回頂層 `subtreeFilter` 描述子）；業務/功能類別是 **M:N**（`BUSINESS_CATEGORY_DOC`），文件列上**沒有節點維度可比對**。<br>
+  🔵 **⑥ 端點之 additive 欄位**：`GET /admin/business-categories/:id/nodes/:nodeId/subtree-documents` 之回應新增 **`nodeName`** 與 **`businessCategoryDisplayName`** 兩欄（供 ①④ 逐字組句）。🔴 **`nodeName` 不得改由 `groups` 反推**——根節點自身掛載 0 份時**不產生分組**（`AC-35`），而導向鈕正是在「本節點空、下游有」這個情境下仍要出現的。<br>
+  🔒 **⑦ 前台之負向半句**：[F019](F019-public-list-browsing.md#business-category-browse-delta) `AC-B20` 之**前台**抽屜**仍然沒有**這顆鈕（前台清單沒有節點子樹維度，也無後台文件管理可導向）——🔴 兩半必須成對存在，只寫其一時「兩邊都做了／兩邊都沒做」皆會全綠。
+
 ### 戊、結構變更歷程與快照（比照 [F038](F038-lifecycle-tree-change-history.md)） {#history-section}
 
 - **AC-38**（append-only 事件＋同交易快照）：Given 對某類別執行任一結構變更（新增／刪除節點、新增／刪除邊、節點改名、掛載／移除文件），When 該動作於後端完成，Then **於同一交易內**寫入一筆變更事件（含 `businessCategoryId`／`changeType`／`entityType`／`entityId`／`beforeValue`／`afterValue`／操作者帳號與身分快照／`changedAt`）與其配對之**完整結構快照**（節點集合＋邊集合＋各節點之掛載文件清單）；Then 該事件列**不可被修改或刪除**（append-only，DB 層撤銷應用帳號之 UPDATE／DELETE 權限，比照 `AUDIT_LOG`／`LIFECYCLE_CHANGE_LOG`）。

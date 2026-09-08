@@ -1027,7 +1027,7 @@ prototype 產出後，逐檔以下列方式驗證：
 
 ⑥ **`26` 之「說明」欄為 lead 指定之新增欄**（`10` 沒有這一欄）——`AC-01`～`AC-14` 未提及該欄之顯示規則。原型以 `max-w-[300px] truncate` ＋ `title` 呈現、掛鉤 `data-business-category-desc`。
 
-⑦ **`29` 刻意沒有 `22` 的「在文件管理中檢視這 N 份程序書」導向鈕**：`13` 之子樹 deep link 參數為 `lifecycleId` + `nodeSubtreeId`（循環專用），本功能在 `13` 上只有**類別層**的第 14 項篩選、沒有節點子樹維度 ⇒ 沒有可導向的目標。若人類要此鈕，須先在 `13` 開一個類別節點子樹篩選參數（並連帶決定它與第 14 項篩選之關係）。
+⑦ 📝 **已由 2026-09-08 使用者裁決推翻（⚠ 不得復原）**：`OLD>` 「**`29` 刻意沒有 `22` 的「在文件管理中檢視這 N 份程序書」導向鈕**：`13` 之子樹 deep link 參數為 `lifecycleId` + `nodeSubtreeId`（循環專用），本功能在 `13` 上只有**類別層**的第 14 項篩選、沒有節點子樹維度 ⇒ 沒有可導向的目標。若人類要此鈕，須先在 `13` 開一個類別節點子樹篩選參數（並連帶決定它與第 14 項篩選之關係）。」<br>🟢 **現行**：使用者要此鈕，且「先在 `13` 開一個類別節點子樹篩選參數」正是本輪一併做的事——`13` 新增 `businessCategoryId` + `bcNodeSubtreeId`（🔴 **刻意不與循環側同名**，兩種 deep link 並存），以獨立之第二條 chip 呈現，且**不寫入**第 14 項篩選。規則權威＝[F043](specs/features/F043-business-function-category.md) `AC-56`。
 
 ⑧ **`29` 之子樹抽屜刻意不做跨節點去重**（`AC-35` 明文），與 `22` 之處置（以編號去重、首次出現者勝）相反。⇒ 同一份程序書可在多個分組中各出現一次，副標題之 N 為**去重後**之相異數。兩數不同時另出一行**可見**說明（`[data-subtree-dup-note]`），避免下一個人把其中一邊「修」掉。
 
@@ -1426,3 +1426,22 @@ jsdom（`runScripts:'dangerously'`，CDN 以 stub 代替）逐項檢查：**125 
 | 決 B ×3 | 唯讀角色之搜尋框 `disabled === false`／點候選列**掛載數不變**（仍不得掛載）／無儲存鈕 |
 
 📝 **期望值更新之審計**：`唯讀角色之搜尋框仍為 disabled`（old：`true`）→ `決 B：唯讀角色之搜尋框不再 disabled`（new：`false`）。依據＝lead 轉達之使用者裁決 決 B。⚠ 這是**測試過期**（裁決翻轉了規則），不是頁面回歸。
+
+### A.10 2026-09-08 使用者裁決之 prototype 傳播（五項）
+
+> **使用者原文（逐字）**：① 前台-ICSOP 文件瀏覽：雙擊樹狀圖的節點時，應如同後台-循環樹狀圖預覽，列出包含該節點及子節點的所有文件；② 前台-ICSOP 文件瀏覽：landing 頁籤預設改為「文件清單」（目前是預設樹狀圖）；③ 後台-業務/功能類別樹狀圖預覽：雙擊某個節點出現文件清單抽屜後，缺少如循環樹狀圖預覽的「在文件管理中檢視這 N 份程序書」的按鈕；④ 後台-ICSOP 文件管理：角色「主管」及「部門窗口」，隱藏「循環別」清單欄位與篩選欄位；⑤ 前台-ICSOP 文件瀏覽：文件清單不分角色隱藏「循環別」在清單的篩選欄位與文件詳情內的欄位顯示。
+
+| 檔案 | 改動 | 規則權威 |
+|---|---|---|
+| `30-public-category-tree.html` | 抽屜改為**子樹分組**（本節點＋全部下游、`（本節點）` 後綴、副標題 `子樹共 N 份程序書`）；空狀態改逐字 `此節點與其下游節點皆沒有您可檢視的程序書`；節點 `title` 與提示句同步 | [F019](specs/features/F019-public-list-browsing.md) `AC-B20`／`AC-B27②` |
+| `03-public-list.html` | 預設模式 `tree` → **`list`**（不帶 `mode` 時不再 `location.replace()` 到 `30`）；篩選列 6 → **5 項**（移除 `循環別`，桌機與行動 sheet 兩處） | `AC-B13`／`AC-B14`／`AC-B15`／`AC-D16` |
+| `04-public-document-detail.html` | 欄位清單移除 `循環別` 列（17 → **16 列**） | `AC-D16` |
+| `29-business-category-tree-preview.html` | 抽屜 footer 新增導向鈕（`data-bc-subtree-jump`，N＝**相異**份數）＋ opener／self 兩條派送路徑 | [F043](specs/features/F043-business-function-category.md) `AC-56` |
+| `13-document-list.html` | 新增**第二條** chip（`data-bc-subtree-chip`，來源 `businessCategoryId`+`bcNodeSubtreeId`）；`循環別` 欄與篩選依 `循環管理 read` 隱藏 | `AC-56`／[F017](specs/features/F017-backend-document-list.md) `AC-D17` |
+
+🔴 **三個「不得對齊」之處**（本輪最容易被下一個人「整理」掉的地方）：
+1. **前台無條件移除 `循環別`（`AC-D16`）vs 後台依權限隱藏（`AC-D17`）**——兩者不同構，不得合併為同一個判定。
+2. **兩種子樹 deep link 之參數名不同**（`lifecycleId`/`nodeSubtreeId` vs `businessCategoryId`/`bcNodeSubtreeId`）——並存於 `13`，共用鍵會互相覆蓋。
+3. **`29` 之導向鈕用「相異份數」而非「畫面列數」**——本頁是全站唯一兩數必然可以不同之處（§A.8.5 ⑧）。
+
+🔒 **`30` 之抽屜仍然沒有**導向鈕（與 `29` 成對之負向半句）：前台清單沒有節點子樹維度，也無後台文件管理可導向。
