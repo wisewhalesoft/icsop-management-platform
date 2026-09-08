@@ -486,7 +486,14 @@ function DetailBody({
           <Field label="版次">
             <span className="mono">{detail.edition ?? DASH}</span>
           </Field>
-          <Field label="循環別">{detail.lifecycleName ?? DASH}</Field>
+          {/*
+            🔵 2026-09-08 使用者裁決（F019 `AC-D16`）：**「循環別」欄已移除**（不分角色）——
+            與同一裁決下前台清單移除 `循環別` 篩選器成對；循環是後台的組織維度，前台讀者
+            不以它認識一份程序書。
+            📝 已作廢（⚠ 不得復原）：OLD> `<Field label="循環別">{detail.lifecycleName ?? DASH}</Field>`
+            ⚠ 後端 DTO 之 `lifecycleName` 未移除（其他呼叫端仍在用），故此處是「取得了但不呈現」；
+              下游之反向斷言請鎖 `queryByText('循環別')`，不要鎖欄位值（值可能與別的欄位撞字）。
+          */}
           <Field label="所屬節點">
             {detail.nodeName ? (
               <span className="inline-flex items-center gap-1">

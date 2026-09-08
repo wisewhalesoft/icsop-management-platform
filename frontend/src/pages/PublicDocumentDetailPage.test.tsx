@@ -152,7 +152,7 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
    * 原斷言（供追溯）：OLD> `expect(fields.getByText('營運管理部審查室')).toBeInTheDocument(); // 使用部門 chip`
    * 其餘欄位列之集合、順序與逐字標籤**一律不變**（逐項順序斷言見下一案）。
    */
-  it('唯讀欄位清單逐項呈現（系統 UUID、制定三級、當責室長、版次、循環、節點、公告日期）', async () => {
+  it('唯讀欄位清單逐項呈現（系統 UUID、制定三級、當責室長、版次、節點、公告日期）', async () => {
     renderDetail();
     await screen.findByRole('heading', { name: '車輛分期進件作業' });
     const fields = within(screen.getByTestId('field-list'));
@@ -165,7 +165,9 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
     // 🔴 2026-08-17 delta（F019 `AC-D15`）：次要室長 chip 已移除。
     // 原斷言（供追溯）：OLD> `expect(fields.getByText('林建宏（信用審查部 企金室 室長）')).toBeInTheDocument(); // 次要 chip`
     expect(fields.getByText("26'01")).toBeInTheDocument(); // 版次
-    expect(fields.getByText('銷售及收款循環')).toBeInTheDocument(); // 循環別
+    // 🔵 2026-09-08 `AC-D16`：`循環別` 欄已移除（前台不分角色）。
+    // 📝 已作廢（⚠ 不得復原）：OLD> `expect(fields.getByText('銷售及收款循環')).toBeInTheDocument(); // 循環別`
+    expect(fields.queryByText('循環別')).toBeNull();
     expect(fields.getByText('進件作業')).toBeInTheDocument(); // 所屬節點名（非 nodeId）
     expect(fields.getByText('2026-01-01')).toBeInTheDocument(); // 公告日期
   });
@@ -189,10 +191,15 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
      * 補一個新 label，屬合理仲裁項。
      * 📝 被移除之原陣列項逐字保留供追溯：OLD> 'OJT 實體簽到表',（原列於 '附錄' 之後）
      */
+    /**
+     * 🔵 2026-09-08 使用者裁決（`AC-D16`）：`循環別` 列自本清單移除（17 列 → **16 列**）。
+     * 📝 被移除之原陣列項逐字保留供追溯：OLD> `'循環別',`（原列於 `'版次'` 與 `'所屬節點'` 之間）
+     * 🔒 其餘 16 列之集合、順序與逐字標籤一律不變。
+     */
     const DETAIL_FIELD_LABELS = [
       '系統 UUID', '文件狀態', '制定公司', '制定部門', '制定室別',
       '程序書編號', '程序書書名', '當責室長-主要',
-      '版次', '循環別', '所屬節點', '內容摘要', '公告日期',
+      '版次', '所屬節點', '內容摘要', '公告日期',
       '檔案（ICSOP PDF）', '使用表單', '附錄', '連結點程序書',
     ];
 
@@ -209,7 +216,7 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
       expect(screen.queryByText(/選上層自動涵蓋其下所有單位/)).toBeNull();
     });
 
-    it('TS-F019-D9-003 其餘欄位列之集合與順序逐字不變（AC-J26 起 17 列，OJT 已移出本清單）', async () => {
+    it('TS-F019-D9-003 其餘欄位列之集合與順序逐字不變（AC-D16 起 16 列，循環別已移出本清單）', async () => {
       renderDetail();
       await screen.findByRole('heading', { name: '車輛分期進件作業' });
       const dts = Array.from(screen.getByTestId('field-list').querySelectorAll('dt')).map(

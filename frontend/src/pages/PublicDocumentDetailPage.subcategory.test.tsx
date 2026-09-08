@@ -83,51 +83,22 @@ beforeEach(() => {
   mockAuth();
 });
 
-describe('PublicDocumentDetailPage — F019 AC-S2「循環別」列', () => {
-  it('有子分類 → 逐字呈現「銷售及收款循環（消金）」（全形括號、前後無空白）', async () => {
+/**
+ * 🔵 2026-09-08 使用者裁決（F019 `AC-D16`）：前台文件詳情之**「循環別」欄整列移除**（不分角色）。
+ * 📝 已作廢（⚠ 不得復原）：OLD> 本 describe 原有四案，驗的是該列之顯示規則
+ *    （有子分類逐字括號／同名兩子分類必相異／不得裸 id 或裸 name／無子分類不加括號）。
+ *    欄位不存在後，那四條規則於**前台詳情**已無載體；🔒 其後台半句仍分別由
+ *    `DocumentReadonlyPage`／`DocumentListPage` 之同名案承擔，**不得**一併刪除。
+ * 🔴 保留一條**負向半句**：載體須自 DOM 移除（非 CSS 隱藏），且**後端仍回得出 `lifecycleName`**
+ *    ——正因如此本案才有鑑別力（把欄位改回來就會立刻翻紅）。
+ */
+describe('PublicDocumentDetailPage — F019 AC-D16「循環別」列已移除', () => {
+  it('回應仍帶 lifecycleName，但畫面查無「循環別」欄位標籤與其值', async () => {
     vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(detailOf());
     renderPage();
-    await waitFor(() =>
-      expect(screen.getAllByText('銷售及收款循環（消金）').length).toBeGreaterThan(0),
-    );
-  });
-
-  it('**核心**：同名不同子分類之兩份文件呈現必須相異（不得截去括號段）', async () => {
-    vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(detailOf());
-    const { unmount } = renderPage();
-    await waitFor(() =>
-      expect(screen.getAllByText('銷售及收款循環（消金）').length).toBeGreaterThan(0),
-    );
-    unmount();
-
-    vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(
-      detailOf({ lifecycleId: 'lc10', lifecycleName: '銷售及收款循環（企金）' }),
-    );
-    renderPage();
-    await waitFor(() =>
-      expect(screen.getAllByText('銷售及收款循環（企金）').length).toBeGreaterThan(0),
-    );
-    expect(screen.queryByText('銷售及收款循環（消金）')).not.toBeInTheDocument();
-  });
-
-  it('不得以裸 lifecycleId 或裸 name 呈現循環別', async () => {
-    vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(detailOf());
-    renderPage();
-    await waitFor(() =>
-      expect(screen.getAllByText('銷售及收款循環（消金）').length).toBeGreaterThan(0),
-    );
-    expect(screen.queryByText('lc1')).not.toBeInTheDocument();
-    expect(screen.queryByText('銷售及收款循環')).not.toBeInTheDocument();
-  });
-
-  it('AC-33 無子分類 → 呈現恰為名稱、不含括號（向後相容）', async () => {
-    vi.mocked(api.getPublicDocumentDetail).mockResolvedValue(
-      detailOf({ lifecycleId: 'lc2', lifecycleName: '採購及付款循環' }),
-    );
-    renderPage();
-    await waitFor(() =>
-      expect(screen.getAllByText('採購及付款循環').length).toBeGreaterThan(0),
-    );
-    expect(screen.queryByText(/採購及付款循環（/)).not.toBeInTheDocument();
+    // 先等頁面確實渲染出文件資訊（否則下列反向斷言在「什麼都還沒畫」時恆真＝假綠）。
+    await waitFor(() => expect(screen.getByTestId('field-list')).toBeInTheDocument());
+    expect(screen.queryByText('循環別')).toBeNull();
+    expect(screen.queryByText('銷售及收款循環（消金）')).toBeNull();
   });
 });
