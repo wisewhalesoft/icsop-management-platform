@@ -34,7 +34,7 @@ describe('PublicBusinessCategoryController — 路由/RBAC metadata（F043 §己
   const P = PublicBusinessCategoryController.prototype as unknown as Record<string, unknown>;
 
   it('三端點皆掛 RequirePermission(PUBLIC_BROWSING, read)（前台瀏覽列，非後台功能列）', () => {
-    for (const m of ['listCategories', 'getGraph', 'listNodeDocuments']) {
+    for (const m of ['listCategories', 'getGraph', 'listSubtreeDocuments']) {
       const meta = reflector.get<RequiredPermission>(REQUIRE_PERMISSION_KEY, P[m] as never);
       expect(meta.functionKey).toBe(FunctionKey.PUBLIC_BROWSING);
       expect(meta.action).toBe('read');
@@ -49,7 +49,7 @@ describe('PublicBusinessCategoryController — 五種角色皆可（前台瀏覽
   it.each(['SysAdmin', 'ICSOPAdmin', 'Supervisor', 'DeptContact', 'User'])(
     '%s → 前台三端點皆放行',
     (roleCode) => {
-      for (const m of ['listCategories', 'getGraph', 'listNodeDocuments']) {
+      for (const m of ['listCategories', 'getGraph', 'listSubtreeDocuments']) {
         expect(guard.canActivate(ctxFor(PublicBusinessCategoryController, P[m], { roleCode }))).toBe(true);
       }
     },

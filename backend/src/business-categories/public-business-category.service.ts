@@ -1,6 +1,8 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { descendants } from '../lifecycle/lifecycle-tree-layout';
 import { ViewerScope, isDocVisibleToViewer } from '../rbac/viewer-scope';
 import { businessCategoryDisplayName } from './business-category-subcategory';
+import { orderSubtreeNodes } from './business-category-subtree-order';
 import {
   PUBLIC_BUSINESS_CATEGORY_STORE,
   CategoryMountVisibilityRow,
@@ -44,6 +46,35 @@ export interface PublicCategoryGraphNode {
 export interface PublicCategoryGraph {
   nodes: PublicCategoryGraphNode[];
   edges: PublicCategoryEdgeInfo[];
+}
+
+/**
+ * 🔵 2026-09-08 delta（F019 `AC-B20`）：前台節點雙擊抽屜之**單一分組**（依節點）。
+ * 🔴 分組之次序＝**與後台完全同一支** `orderSubtreeNodes()`（`./business-category-subtree-order`）——
+ * 同一棵樹在後台預覽與前台瀏覽不得長出兩種順序。
+ */
+export interface PublicCategorySubtreeGroup {
+  nodeId: string;
+  nodeName: string | null;
+  /** 組內依 `documentNumber` 遞增。🔴 **跨組不去重**（M:N，比照後台 `AC-35`）。 */
+  documents: PublicMountedDoc[];
+}
+
+export interface PublicCategorySubtreeDocuments {
+  /** 回顯請求之根節點 id。 */
+  nodeId: string;
+  /** 根節點名稱（根節點自身 0 份可見文件時**不產生分組**，故不得自 `groups` 反推）。 */
+  nodeName: string | null;
+  /**
+   * 🔴 子樹之**相異可見文件總數**（依 `documentId` 去重後）——抽屜副標題之 N。
+   * **不等於** `groupedCount`（＝Σ 各組列數，含同一份文件掛在子樹內多個節點之重複）：
+   * 兩個數字不同是 M:N 之事實，不得互相對齊（比照後台 `AC-35`）。
+   */
+  totalCount: number;
+  /** 分組總筆數（＝Σ 各組 `documents.length`，含跨節點重複）。純資訊，供對帳用。 */
+  groupedCount: number;
+  /** 本節點恆 `groups[0]`；可見文件 0 份之節點不產生分組。 */
+  groups: PublicCategorySubtreeGroup[];
 }
 
 /**
@@ -134,27 +165,84 @@ export class PublicBusinessCategoryService {
   }
 
   /**
-   * `AC-B20`／`AC-B22`：節點雙擊抽屜之文件清單——**僅含對該 viewer 可見者**。
-   * 🔴 不可見文件之**任何欄位**（編號／書名）皆不得出現於回應之任一處——故對不可見之
-   * `documentId` 連查都不查，而非查了再過濾。
+   * `AC-B20`／`AC-B22`：節點雙擊抽屜之文件清單——**該節點與其全部下游節點**所掛載、
+   * 且**僅含對該 viewer 可見者**，依節點分組。
+   *
+   * 🔵 2026-09-08 使用者裁決：由「僅本節點」擴為「整個子樹」，行為對齊**後台**循環樹狀圖預覽
+   * （F036 `AC-T10`）與後台類別樹狀圖預覽（F043 `AC-35`）。
+   * 📝 已作廢（⚠ 不得用於斷言）：OLD> 回傳扁平之 `PublicMountedDoc[]`（僅 `m.nodeId === nodeId`）。
+   *
+   * 🔴 **子樹節點集合 ≡ 單擊醒目標示之集合**：兩者共用同一支既有純函式 `descendants()`，
+   *    故「標示了 7 個節點、抽屜只列了 6 個節點的文件」這種分家不可能發生。
+   * 🔴 **可見性判定仍是本服務唯一那一支** `isMountVisible()`（`AC-B22`）——擴大的是節點集合，
+   *    不是可見範圍；不可見文件之任何欄位仍不得出現於回應之任一處，故對不可見之 `documentId`
+   *    連查都不查。
+   * 🔴 **跨組不去重**（M:N）：同一份文件掛在子樹內多個節點時各組各出現一次；`totalCount` 才是
+   *    去重後之值。
    */
-  async listNodeDocuments(
+  async listSubtreeDocuments(
     businessCategoryId: string,
     nodeId: string,
     viewer: ViewerScope,
-  ): Promise<PublicMountedDoc[]> {
+  ): Promise<PublicCategorySubtreeDocuments> {
     await this.requireCategory(businessCategoryId);
-    const mounts = await this.store.listCategoryMountsForVisibility(businessCategoryId);
-    const visibleIds = mounts
-      .filter((m) => m.nodeId === nodeId && isMountVisible(m, viewer))
-      .map((m) => m.documentId);
+    const [nodes, mounts, edges] = await Promise.all([
+      this.store.listNodes(businessCategoryId),
+      this.store.listCategoryMountsForVisibility(businessCategoryId),
+      this.store.listEdges
+        ? this.store.listEdges(businessCategoryId)
+        : Promise.resolve([] as PublicCategoryEdgeInfo[]),
+    ]);
 
-    const out: PublicMountedDoc[] = [];
-    for (const id of visibleIds) {
-      const doc = await this.store.getMountedDoc(id);
-      if (doc) out.push(doc);
+    const subtree = descendants(edges, nodeId);
+    const ordered = orderSubtreeNodes(
+      nodes.map((n) => ({ id: n.id, name: n.name })),
+      edges,
+      subtree,
+      nodeId,
+    );
+
+    // 🔴 先過濾可見性、再取文件明細（而非先取再濾）：不可見者連一次查詢都不發出。
+    const visibleIdsByNode = new Map<string, string[]>();
+    for (const m of mounts) {
+      if (!subtree.has(m.nodeId)) continue;
+      if (!isMountVisible(m, viewer)) continue;
+      const bucket = visibleIdsByNode.get(m.nodeId);
+      if (bucket) bucket.push(m.documentId);
+      else visibleIdsByNode.set(m.nodeId, [m.documentId]);
     }
-    return out;
+
+    /** 同一份文件可掛在子樹內多個節點 ⇒ 明細以 id 快取，避免對同一份文件重複查詢。 */
+    const cache = new Map<string, PublicMountedDoc | null>();
+    const loadDoc = async (id: string): Promise<PublicMountedDoc | null> => {
+      if (!cache.has(id)) cache.set(id, await this.store.getMountedDoc(id));
+      return cache.get(id) ?? null;
+    };
+
+    const groups: PublicCategorySubtreeGroup[] = [];
+    const distinct = new Set<string>();
+    for (const ref of ordered) {
+      const documents: PublicMountedDoc[] = [];
+      for (const id of visibleIdsByNode.get(ref.nodeId) ?? []) {
+        const doc = await loadDoc(id);
+        if (doc) {
+          documents.push(doc);
+          distinct.add(doc.id);
+        }
+      }
+      documents.sort((a, b) => a.documentNumber.localeCompare(b.documentNumber));
+      if (documents.length > 0) {
+        groups.push({ nodeId: ref.nodeId, nodeName: ref.nodeName, documents });
+      }
+    }
+
+    return {
+      nodeId,
+      nodeName: nodes.find((n) => n.id === nodeId)?.name ?? null,
+      totalCount: distinct.size,
+      groupedCount: groups.reduce((sum, g) => sum + g.documents.length, 0),
+      groups,
+    };
   }
 
   /** 類別不存在 → 404（不洩漏存在性；比照全站「查無視為 404」）。 */

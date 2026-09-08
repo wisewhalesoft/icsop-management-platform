@@ -53,7 +53,7 @@ import type {
   BusinessCategoryTreeDiff,
   PublicBusinessCategoryListItem,
   PublicBusinessCategoryGraph,
-  PublicBusinessCategoryNodeDoc,
+  PublicBusinessCategorySubtreeDocuments,
 } from './types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -1713,12 +1713,17 @@ export function getPublicBusinessCategoryGraph(
     `/public/business-categories/${encodeURIComponent(businessCategoryId)}/graph`,
   );
 }
-export function getPublicBusinessCategoryNodeDocuments(
+/**
+ * 🔵 2026-09-08 delta（`AC-B20`）：節點雙擊抽屜之文件＝**本節點與其全部下游**，依節點分組
+ * （分組／排序／計數全部由後端做，前端不再排一次、不再過濾一次）。
+ * 📝 已作廢（⚠ 已無呼叫端）：OLD> `getPublicBusinessCategoryNodeDocuments()` → `.../nodes/:id/documents`。
+ */
+export function getPublicBusinessCategorySubtreeDocuments(
   businessCategoryId: string,
   nodeId: string,
-): Promise<PublicBusinessCategoryNodeDoc[]> {
-  return apiFetch<PublicBusinessCategoryNodeDoc[]>(
-    `/public/business-categories/${encodeURIComponent(businessCategoryId)}/nodes/${encodeURIComponent(nodeId)}/documents`,
+): Promise<PublicBusinessCategorySubtreeDocuments> {
+  return apiFetch<PublicBusinessCategorySubtreeDocuments>(
+    `/public/business-categories/${encodeURIComponent(businessCategoryId)}/nodes/${encodeURIComponent(nodeId)}/subtree-documents`,
   );
 }
 

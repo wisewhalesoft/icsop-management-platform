@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   getPublicBusinessCategories,
   getPublicBusinessCategoryGraph,
-  getPublicBusinessCategoryNodeDocuments,
+  getPublicBusinessCategorySubtreeDocuments,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { businessCategoryDisplayName } from '../domain/business-category';
@@ -18,12 +18,12 @@ import {
   watermarkOverlayGeometry,
 } from '../domain/watermark-style';
 import { beginPan, panExceeded, panScroll, type PanOrigin } from './tree-pan';
-import { formatMountedCount } from './LifecycleTreePreviewPage';
+import { formatMountedCount, formatSubtreeCount } from './LifecycleTreePreviewPage';
 import { buildTreeLayout, descendants, buildEdgeRoutes, routePath, NODE_W } from './lifecycle-tree-layout';
 import type {
   PublicBusinessCategoryGraph,
   PublicBusinessCategoryListItem,
-  PublicBusinessCategoryNodeDoc,
+  PublicBusinessCategorySubtreeGroup,
 } from '../api/types';
 
 /**
@@ -45,7 +45,19 @@ const dateOnly = (iso: string | null): string => (iso ? iso.slice(0, 10) : '—'
 
 const WM_TILE_PAD = { x: 60, y: 140 } as const;
 
-const NODE_TITLE = '單擊＝標示所有下游節點；雙擊＝檢視此節點掛載之程序書';
+/**
+ * 🔵 2026-09-08 delta：雙擊之語意由「本節點」擴為「本節點與其下游節點」——
+ * 🔒 逐字＝後台預覽頁之同一句（`LifecycleTreePreviewPage`／`BusinessCategoryTreePreviewPage`），
+ * 兩處說的是同一件事，字面不同會讓使用者以為前後台的雙擊行為不一樣。
+ * 📝 已作廢（⚠ 不得用於斷言）：OLD> `單擊＝標示所有下游節點；雙擊＝檢視此節點掛載之程序書`。
+ */
+const NODE_TITLE = '單擊＝標示所有下游節點；雙擊＝檢視此節點與其下游節點之程序書清單';
+
+/** 分組標題：本節點帶全形括號後綴，其餘不加任何後綴（逐字比照後台 `22`／`29`）。 */
+function groupTitleOf(name: string | null, isSelf: boolean): string {
+  const base = name ?? '未命名節點';
+  return isSelf ? `${base}（本節點）` : base;
+}
 
 export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.ReactNode } = {}): JSX.Element {
   const navigate = useNavigate();
@@ -65,7 +77,8 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
   const [selected, setSelected] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [drawerNodeId, setDrawerNodeId] = useState<string | null>(null);
-  const [nodeDocs, setNodeDocs] = useState<PublicBusinessCategoryNodeDoc[]>([]);
+  const [subtreeGroups, setSubtreeGroups] = useState<PublicBusinessCategorySubtreeGroup[]>([]);
+  const [subtreeTotal, setSubtreeTotal] = useState(0);
   const [nodeDocsLoaded, setNodeDocsLoaded] = useState(false);
   const [nodeDocsError, setNodeDocsError] = useState<string | null>(null);
 
@@ -140,7 +153,7 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
   }, []);
   const clearSel = useCallback(() => setSelected(null), []);
 
-  /** `AC-B20`：雙擊 → 唯讀抽屜（單擊之標示行為仍先發生並保留）。 */
+  /** `AC-B20`：雙擊 → 唯讀抽屜（**本節點與其全部下游**；單擊之標示行為仍先發生並保留）。 */
   const onNodeDblClick = useCallback((nodeId: string, ev: React.MouseEvent) => {
     ev.stopPropagation();
     setSelected(nodeId);
@@ -151,14 +164,18 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
   useEffect(() => {
     if (!drawerNodeId || !currentId) return;
     let alive = true;
-    setNodeDocs([]);
+    setSubtreeGroups([]);
+    setSubtreeTotal(0);
     setNodeDocsLoaded(false);
     setNodeDocsError(null);
     void (async () => {
       try {
-        const rows = await getPublicBusinessCategoryNodeDocuments(currentId, drawerNodeId);
+        const r = await getPublicBusinessCategorySubtreeDocuments(currentId, drawerNodeId);
         if (!alive) return;
-        setNodeDocs(Array.isArray(rows) ? rows : []);
+        // 🔴 **照抄**後端之 groups 順序與內容——前端不得再排一次、不得再過濾一次（`AC-B22`：
+        // 可見性過濾全部在後端查詢層；前端再濾一次會使後端的漏過濾永遠無法顯形）。
+        setSubtreeGroups(Array.isArray(r?.groups) ? r.groups : []);
+        setSubtreeTotal(r?.totalCount ?? 0);
       } catch (e) {
         if (alive) setNodeDocsError(msgOf(e));
       } finally {
@@ -276,7 +293,8 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
           </div>
           <p className="w-full text-sm text-slate-400">
             點節點＝醒目標示其所有下游節點；點空白處取消；
-            <strong className="text-slate-500">雙擊節點＝檢視該節點掛載之程序書</strong>
+            {/* 🔵 2026-09-08 delta：語意由「該節點掛載」擴為「該節點與其下游節點」。 */}
+            <strong className="text-slate-500">雙擊節點＝檢視該節點與其下游節點之程序書</strong>
             ；圖寬超出畫面時可<strong className="text-slate-500">按住拖曳平移</strong>。
           </p>
         </div>
@@ -484,14 +502,18 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
 
       {/*
         `AC-B20` 節點雙擊之唯讀抽屜（**四欄**：程序書編號／書名／版次／公告日期）。
+        🔵 2026-09-08 delta：內容為**整個子樹**（本節點＋全部下游），依節點分組；
+           分組／排序／計數皆由後端完成（比照後台 `22`／`29`）。
         🔒 §A.8.4 N9：**無「狀態」欄**——與後台 `29` 之五欄刻意不同（前台只看得到已公告文件，
         狀態徽章在此無資訊量，且會洩漏「還有你看不到的其他狀態」）。
         🔒 抽屜不含任何寫入元件；點列導向**前台**文件詳情。
+        🔴 `AC-53` ②之延伸：本抽屜**刻意沒有**後台 `22`／`29` 之「在文件管理中檢視這 N 份程序書」
+           導向鈕——前台文件清單沒有節點子樹這個維度，也沒有後台文件管理可導向。
       */}
       <aside
         id="publicNodeDocDrawer"
         aria-hidden={drawerNodeId ? 'false' : 'true'}
-        aria-label="節點之程序書清單（唯讀）"
+        aria-label="節點與其下游節點之程序書清單（唯讀）"
         className={`fixed right-0 top-0 bottom-0 z-40 w-full sm:w-[400px] bg-white border-l border-slate-200 shadow-2xl transition-transform duration-300 flex flex-col ${
           drawerNodeId ? '' : 'translate-x-full'
         }`}
@@ -500,7 +522,17 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
           <Icon name="file-stack" className="w-4 h-4 text-primary-600 shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-slate-900 text-sm truncate">{drawerNode?.name ?? ''}</div>
-            <div className="text-[11px] text-slate-400">{drawerNodeId ? `${nodeDocs.length} 份程序書` : ''}</div>
+            {/*
+              🔒 副標題＝**子樹之相異份數**，逐字共用後台之 `formatSubtreeCount()`（`子樹共 N 份程序書`）
+              ——同一句話在前後台不得長成兩種字面。數字取自後端之 `totalCount`，前端不自行加總。
+              📝 已作廢（⚠ 不得用於斷言）：OLD> `{nodeDocs.length} 份程序書`（僅本節點之份數）。
+            */}
+            <div
+              data-subtree-total={drawerNodeId ? String(subtreeTotal) : undefined}
+              className="text-[11px] text-slate-400"
+            >
+              {drawerNodeId ? formatSubtreeCount(subtreeTotal) : ''}
+            </div>
           </div>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">唯讀</span>
           <button
@@ -519,33 +551,71 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
               程序書清單載入失敗 · <span className="mono">{nodeDocsError}</span>
             </div>
           )}
+          {/*
+            🔴 DOM 順序＝回應 `groups` 之陣列順序（前端不再排一次）；`data-node-group-self` 由
+            `group.nodeId === 請求之 nodeId` 推導（**不得**改以「取陣列第 0 個」判定——那依賴
+            「陣列順序恰好正確」之隱性假設，後端排序一旦出錯會跟著錯到同一個地方而互相掩蓋）。
+          */}
           {!nodeDocsError &&
-            nodeDocs.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                data-node-doc-row=""
-                data-doc-num={d.documentNumber}
-                onClick={() => navigate(`/public/documents/${d.id}`)}
-                className="w-full text-left px-4 py-3 hover:bg-primary-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600"
-              >
-                <div className="mono text-xs text-slate-500">{d.documentNumber}</div>
-                <div className="text-sm text-slate-800 mt-0.5">{d.documentName}</div>
-                <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-400">
-                  <span>
-                    版次 <span className="mono text-slate-600">{d.edition ?? '—'}</span>
-                  </span>
-                  <span>
-                    公告日期 <span className="mono text-slate-600">{dateOnly(d.announcedDate)}</span>
-                  </span>
-                </div>
-              </button>
-            ))}
-          {/* `AC-B27` ②：無任何對該 viewer 可見之文件 → 逐字空狀態（**非錯誤**）。 */}
-          {drawerNodeId && nodeDocsLoaded && !nodeDocsError && nodeDocs.length === 0 && (
+            subtreeGroups.map((g) => {
+              const isSelf = g.nodeId === drawerNodeId;
+              return (
+                <section
+                  key={g.nodeId}
+                  data-node-group={g.nodeId}
+                  data-node-group-self={String(isSelf)}
+                  data-node-group-count={String(g.documents.length)}
+                >
+                  {/* 🔒 標題列為**純顯示** <div>（非 button／details／summary）；chevron 僅視覺標記。 */}
+                  <div
+                    data-node-group-title=""
+                    className="sticky top-0 z-10 bg-slate-50 border-y border-slate-200 px-4 py-1.5 flex items-center gap-1.5"
+                  >
+                    <Icon name="chevron-right" className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span data-node-group-name="" className="text-xs font-semibold text-slate-700 truncate">
+                      {groupTitleOf(g.nodeName, isSelf)}
+                    </span>
+                    <span
+                      data-node-group-count-text=""
+                      className="ml-auto shrink-0 mono text-[11px] text-slate-500"
+                    >
+                      {`${g.documents.length} 份`}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {g.documents.map((d) => (
+                      <button
+                        key={`${g.nodeId}:${d.id}`}
+                        type="button"
+                        data-node-doc-row=""
+                        data-doc-num={d.documentNumber}
+                        onClick={() => navigate(`/public/documents/${d.id}`)}
+                        className="w-full text-left px-4 py-3 hover:bg-primary-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600"
+                      >
+                        <div className="mono text-xs text-slate-500">{d.documentNumber}</div>
+                        <div className="text-sm text-slate-800 mt-0.5">{d.documentName}</div>
+                        <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-400">
+                          <span>
+                            版次 <span className="mono text-slate-600">{d.edition ?? '—'}</span>
+                          </span>
+                          <span>
+                            公告日期 <span className="mono text-slate-600">{dateOnly(d.announcedDate)}</span>
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+          {/*
+            `AC-B27` ②：**整個子樹**皆無對該 viewer 可見之文件 → 逐字空狀態（**非錯誤**）。
+            📝 已作廢（⚠ 不得用於斷言）：OLD> `此節點沒有您可檢視的程序書`（僅本節點之語意）。
+          */}
+          {drawerNodeId && nodeDocsLoaded && !nodeDocsError && subtreeGroups.length === 0 && (
             <div data-node-doc-empty="" className="px-4 py-10 text-center text-sm text-slate-400">
               <Icon name="file-x-2" className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-              此節點沒有您可檢視的程序書
+              此節點與其下游節點皆沒有您可檢視的程序書
             </div>
           )}
         </div>

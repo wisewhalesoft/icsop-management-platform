@@ -74,15 +74,22 @@ export class PublicBusinessCategoryController {
     };
   }
 
-  /** `AC-B20`：節點雙擊抽屜之文件（已套已公告＋F041 過濾；不可見者連欄位都不外洩）。 */
-  @Get(':businessCategoryId/nodes/:nodeId/documents')
+  /**
+   * `AC-B20`：節點雙擊抽屜之文件——**該節點與其全部下游節點**，依節點分組
+   * （已套已公告＋F041 過濾；不可見者連欄位都不外洩）。
+   *
+   * 🔵 2026-09-08 使用者裁決：路徑由 `.../documents` 改為 `.../subtree-documents`，
+   * 與**後台**類別預覽之同名端點逐字對齊——路徑上看得出「這一份清單是整個子樹」。
+   * 📝 已作廢（⚠ 已無任何呼叫端）：OLD> `@Get(':businessCategoryId/nodes/:nodeId/documents')`。
+   */
+  @Get(':businessCategoryId/nodes/:nodeId/subtree-documents')
   @RequirePermission(FunctionKey.PUBLIC_BROWSING, 'read')
-  listNodeDocuments(
+  listSubtreeDocuments(
     @Req() req: RequestWithSession,
     @Param('businessCategoryId') businessCategoryId: string,
     @Param('nodeId') nodeId: string,
   ) {
-    return this.svc.listNodeDocuments(
+    return this.svc.listSubtreeDocuments(
       businessCategoryId,
       nodeId,
       toViewerScope(req.sessionUser),

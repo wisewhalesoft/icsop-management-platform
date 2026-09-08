@@ -1413,6 +1413,13 @@ export interface BusinessCategorySubtreeGroup {
 }
 export interface BusinessCategorySubtreeDocuments {
   nodeId: string;
+  /**
+   * 🔵 2026-09-08 delta（`AC-56`）：根節點名稱與類別顯示名——`29` 之導向鈕與 `13` 之子樹 chip
+   * 逐字取用。🔴 **不得**改由 `groups` 反推 nodeName：根節點掛載 0 份時不產生分組，
+   * 而導向鈕正是在「本節點空、下游有」這個情境下仍要出現的。
+   */
+  nodeName: string | null;
+  businessCategoryDisplayName: string | null;
   /** 🔴 去重後之相異文件總數（副標題之 N），**非** Σ documents.length。 */
   totalCount: number;
   groups: BusinessCategorySubtreeGroup[];
@@ -1445,6 +1452,25 @@ export interface PublicBusinessCategoryNodeDoc {
   documentName: string;
   edition: string | null;
   announcedDate: string | null;
+}
+/**
+ * 🔵 2026-09-08 delta（F019 `AC-B20`）：前台節點雙擊抽屜改為**本節點＋全部下游**、依節點分組
+ * （行為對齊後台預覽頁）。
+ * 📝 已作廢（⚠ 不得用於斷言）：OLD> 端點回傳扁平之 `PublicBusinessCategoryNodeDoc[]`。
+ * 🔴 **跨組不去重**（M:N）：`totalCount` 為去重後之相異份數，`groupedCount` 為畫面實際列數，
+ *    兩數不同是事實，不得互相對齊。
+ */
+export interface PublicBusinessCategorySubtreeGroup {
+  nodeId: string;
+  nodeName: string | null;
+  documents: PublicBusinessCategoryNodeDoc[];
+}
+export interface PublicBusinessCategorySubtreeDocuments {
+  nodeId: string;
+  nodeName: string | null;
+  totalCount: number;
+  groupedCount: number;
+  groups: PublicBusinessCategorySubtreeGroup[];
 }
 
 /** F043 §戊 結構變更歷程事件（第三個 tab；`AC-38`～`AC-42`）。 */

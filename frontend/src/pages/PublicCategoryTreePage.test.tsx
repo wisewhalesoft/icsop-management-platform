@@ -31,10 +31,12 @@ interface PublicEdge { id: string; sourceNodeId: string; targetNodeId: string }
 interface PublicBcGraph { businessCategory: { id: string; name: string; subcategory: string | null }; graph: { nodes: PublicNode[]; edges: PublicEdge[] }; watermark: string }
 interface PublicBcListItem { id: string; name: string; subcategory: string | null }
 interface PublicNodeDoc { id: string; documentNumber: string; documentName: string; edition: string; announcedDate: string }
+interface PublicSubtreeGroup { nodeId: string; nodeName: string | null; documents: PublicNodeDoc[] }
+interface PublicSubtreeDocs { nodeId: string; nodeName: string | null; totalCount: number; groupedCount: number; groups: PublicSubtreeGroup[] }
 interface PublicBcEndpoints {
   getPublicBusinessCategories: () => Promise<PublicBcListItem[]>;
   getPublicBusinessCategoryGraph: (id: string) => Promise<PublicBcGraph>;
-  getPublicBusinessCategoryNodeDocuments: (bcId: string, nodeId: string) => Promise<PublicNodeDoc[]>;
+  getPublicBusinessCategorySubtreeDocuments: (bcId: string, nodeId: string) => Promise<PublicSubtreeDocs>;
 }
 const pubApi = endpoints as unknown as PublicBcEndpoints;
 
@@ -61,10 +63,34 @@ const CATEGORIES: PublicBcListItem[] = [
   { id: 'bc1', name: '授信', subcategory: '消金' },
   { id: 'bc2', name: '授信', subcategory: '企金' },
 ];
-const NODE_DOCS: PublicNodeDoc[] = [
-  { id: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業', edition: "26'01", announcedDate: '2026-01-01T00:00:00.000Z' },
-  { id: 'd2', documentNumber: 'ICSOP-SRC-102-1-01', documentName: '對保作業', edition: "26'01", announcedDate: '2026-01-01T00:00:00.000Z' },
-];
+/**
+ * 🔵 2026-09-08 delta（`AC-B20`）：抽屜之內容＝**本節點＋全部下游**，依節點分組。
+ * 🔴 語料之鑑別力要求：`p4` 是 `p1` 的**下游**且掛著一份**只有它有**的文件（`對保作業`）——
+ *    若實作只列本節點，該份文件就不會出現，斷言立刻翻紅。fixture 若把兩份文件都放在 `p1` 組，
+ *    「只列本節點」與「列整個子樹」兩種實作輸出完全相同（本 repo 之「語料無鑑別力」形狀）。
+ */
+const SUBTREE_DOCS: PublicSubtreeDocs = {
+  nodeId: 'p1',
+  nodeName: '進件收件作業',
+  totalCount: 2,
+  groupedCount: 2,
+  groups: [
+    {
+      nodeId: 'p1',
+      nodeName: '進件收件作業',
+      documents: [
+        { id: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業', edition: "26'01", announcedDate: '2026-01-01T00:00:00.000Z' },
+      ],
+    },
+    {
+      nodeId: 'p4',
+      nodeName: '徵審作業',
+      documents: [
+        { id: 'd2', documentNumber: 'ICSOP-SRC-102-1-01', documentName: '對保作業', edition: "26'01", announcedDate: '2026-01-01T00:00:00.000Z' },
+      ],
+    },
+  ],
+};
 
 function renderAt(search = '') {
   return render(
@@ -81,7 +107,7 @@ beforeEach(() => {
   mockAuth();
   vi.mocked(pubApi.getPublicBusinessCategories).mockResolvedValue(CATEGORIES);
   vi.mocked(pubApi.getPublicBusinessCategoryGraph).mockResolvedValue(GRAPH);
-  vi.mocked(pubApi.getPublicBusinessCategoryNodeDocuments).mockResolvedValue(NODE_DOCS);
+  vi.mocked(pubApi.getPublicBusinessCategorySubtreeDocuments).mockResolvedValue(SUBTREE_DOCS);
 });
 
 describe('PublicCategoryTreePage — F043 己：前台樹狀圖瀏覽模式', () => {
@@ -121,16 +147,48 @@ describe('PublicCategoryTreePage — F043 己：前台樹狀圖瀏覽模式', ()
     expect(opt2?.textContent).toBe('授信（企金）');
   });
 
-  it('AC-B20 雙擊節點 → 唯讀抽屜列出對該 viewer 可見之程序書（四欄，無狀態欄）', async () => {
+  it('AC-B20 雙擊節點 → 唯讀抽屜列出**本節點與其下游節點**之可見程序書（四欄，無狀態欄）', async () => {
     renderAt();
     await waitFor(() => expect(screen.getByTestId('tree-node-p1')).toBeInTheDocument());
     await userEvent.dblClick(screen.getByTestId('tree-node-p1'));
-    await waitFor(() => expect(pubApi.getPublicBusinessCategoryNodeDocuments).toHaveBeenCalledWith('bc1', 'p1'));
+    await waitFor(() => expect(pubApi.getPublicBusinessCategorySubtreeDocuments).toHaveBeenCalledWith('bc1', 'p1'));
     expect(await screen.findByText('車輛分期進件作業')).toBeInTheDocument();
+    // 🔴 `對保作業` 只掛在**下游** p4：只列本節點之實作在此翻紅。
     expect(screen.getByText('對保作業')).toBeInTheDocument();
     // 四欄無「狀態」欄：抽屜不含任何狀態徽章字樣（比照 `29` 之五欄刻意不同，見 N9）。
     expect(screen.queryByText('有效')).not.toBeInTheDocument();
     expect(screen.queryByText('失效')).not.toBeInTheDocument();
+  });
+
+  it('AC-B20 §分組：DOM 順序＝回應 groups 之順序；本節點帶「（本節點）」後綴，其餘不加；副標題＝子樹合計', async () => {
+    renderAt();
+    await waitFor(() => expect(screen.getByTestId('tree-node-p1')).toBeInTheDocument());
+    await userEvent.dblClick(screen.getByTestId('tree-node-p1'));
+    await screen.findByText('車輛分期進件作業');
+    const groups = document.querySelectorAll('[data-node-group]');
+    expect([...groups].map((g) => g.getAttribute('data-node-group'))).toEqual(['p1', 'p4']);
+    expect([...groups].map((g) => g.getAttribute('data-node-group-self'))).toEqual(['true', 'false']);
+    // 🔴 以分組標題之具名掛鉤取值——`徵審作業` 這串字同時也是畫布上 p4 節點之名稱，
+    //    用 getByText 會撞到兩個載體（測試會因「找到多個」而紅，而不是因為行為錯了）。
+    expect([...document.querySelectorAll('[data-node-group-name]')].map((e) => e.textContent))
+      .toEqual(['進件收件作業（本節點）', '徵審作業']);
+    // 副標題＝子樹之相異份數（取自回應之 totalCount，前端不自行加總）。
+    expect(screen.getByText('子樹共 2 份程序書')).toBeInTheDocument();
+    expect(document.querySelector('[data-subtree-total]')?.getAttribute('data-subtree-total')).toBe('2');
+  });
+
+  /**
+   * 🔴 §A.8.5 ⑦ 之前台半句：**前台抽屜沒有**後台之「在文件管理中檢視這 N 份程序書」導向鈕
+   * ——前台清單沒有節點子樹維度，也無後台文件管理可導向（與 `BusinessCategoryTreePreviewPage`
+   * 之正向半句成對存在）。
+   */
+  it('前台抽屜沒有「在文件管理中檢視這 N 份程序書」導向鈕（與後台成對之負向半句）', async () => {
+    renderAt();
+    await waitFor(() => expect(screen.getByTestId('tree-node-p1')).toBeInTheDocument());
+    await userEvent.dblClick(screen.getByTestId('tree-node-p1'));
+    await screen.findByText('車輛分期進件作業');
+    expect(document.querySelector('[data-subtree-jump]')).toBeNull();
+    expect(screen.queryByLabelText('在文件管理中檢視這 2 份程序書')).toBeNull();
   });
 
   function LocationProbe() {
@@ -192,12 +250,14 @@ describe('PublicCategoryTreePage — F043 己：前台樹狀圖瀏覽模式', ()
     expect(sel.querySelector('option[value="bc7"]')).toBeNull();
   });
 
-  it('AC-B27② 節點抽屜無可見文件 → 逐字「此節點沒有您可檢視的程序書」', async () => {
-    vi.mocked(pubApi.getPublicBusinessCategoryNodeDocuments).mockResolvedValue([]);
+  it('AC-B27② 整個子樹無可見文件 → 逐字「此節點與其下游節點皆沒有您可檢視的程序書」', async () => {
+    vi.mocked(pubApi.getPublicBusinessCategorySubtreeDocuments).mockResolvedValue({
+      nodeId: 'p4', nodeName: '徵審作業', totalCount: 0, groupedCount: 0, groups: [],
+    });
     renderAt();
     await waitFor(() => expect(screen.getByTestId('tree-node-p4')).toBeInTheDocument());
     await userEvent.dblClick(screen.getByTestId('tree-node-p4'));
-    expect(await screen.findByText('此節點沒有您可檢視的程序書')).toBeInTheDocument();
+    expect(await screen.findByText('此節點與其下游節點皆沒有您可檢視的程序書')).toBeInTheDocument();
   });
 
   it('AC-B27③ 無任何可用類別 → 逐字「目前沒有可瀏覽的業務/功能類別」，模式切換器仍可用、不自動切換', async () => {
