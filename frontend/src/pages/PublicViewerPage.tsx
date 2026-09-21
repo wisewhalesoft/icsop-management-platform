@@ -10,7 +10,7 @@ import {
   downloadDocumentFront,
   printDocumentFront,
 } from '../api/endpoints';
-import { ApiError } from '../api/client';
+import { ApiError, extractError } from '../api/client';
 import { Icon } from '../components/Icon';
 import { buildOrgPath } from '../domain/org-path';
 import { printErrorMessage } from '../domain/print-error';
@@ -195,7 +195,16 @@ export function PublicViewerPage(): JSX.Element {
     void (async () => {
       try {
         const res = await fetch(documentPdfUrl(id), { credentials: 'include' });
-        if (!res.ok) throw new ApiError(res.status, 'DOCUMENT_PDF_NOT_FOUND', '無法載入文件預覽');
+        /**
+         * 🔴 錯誤碼一律取自**伺服器回應本身**，不得在此寫死。
+         * 📝 已作廢（⚠ 不得復原）：
+         *   OLD> if (!res.ok) throw new ApiError(res.status, 'DOCUMENT_PDF_NOT_FOUND', ...);
+         * 那一行把**任何**非 2xx 都改寫成「查無文件」。2026-09-21 實際代價：dev 容器對
+         * Azure Blob 之 TLS 握手失敗（`SELF_SIGNED_CERT_IN_CHAIN`，後端回 500），畫面卻
+         * 顯示 `DOCUMENT_PDF_NOT_FOUND` ⇒ 診斷被帶往「這份文件沒有附件」的錯誤方向，
+         * 真正的死因只在後端日誌裡。
+         */
+        if (!res.ok) throw await extractError(res);
         const bytes = await res.arrayBuffer();
         const doc = (await getDocument({
           data: bytes,

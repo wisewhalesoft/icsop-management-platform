@@ -22,7 +22,12 @@ export function isUnauthorized(err: unknown): boolean {
   return err instanceof ApiError && err.status === 401;
 }
 
-async function extractError(res: Response): Promise<ApiError> {
+/**
+ * 由**伺服器回應本身**萃取錯誤碼（Nest 之 `message` 為穩定錯誤碼）。
+ * 🔴 匯出供不走 `apiFetch` 的呼叫端共用（如檢視器之 PDF 位元組代理）——它們若自行
+ *    寫死一個錯誤碼，會把伺服器的真正死因改寫成別的東西（見 `PublicViewerPage`）。
+ */
+export async function extractError(res: Response): Promise<ApiError> {
   let code = res.statusText || 'HTTP_ERROR';
   let message: string | undefined;
   try {

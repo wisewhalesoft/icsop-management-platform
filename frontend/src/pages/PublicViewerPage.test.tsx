@@ -284,6 +284,41 @@ describe('PublicViewerPage — F020 D9 delta：canvas 化檢視器（AC-N4〜AC-
   });
 
   /**
+   * 🔴 2026-09-21：預覽端點之錯誤碼必須**是伺服器說的那個**。
+   * 原實作對任何非 2xx 一律丟 `DOCUMENT_PDF_NOT_FOUND`，於是「伺服器 500」被說成「查無文件」。
+   * 實際代價：dev 容器對 Azure Blob 之 TLS 握手失敗（後端日誌為 `SELF_SIGNED_CERT_IN_CHAIN`、
+   * HTTP 500），畫面卻指控該文件沒有附件——而該文件的附件列其實好好地在庫裡。
+   */
+  describe('預覽端點錯誤碼不得改寫', () => {
+    const stubPdfFetch = (status: number, body: unknown): void => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status,
+          statusText: String(status),
+          json: () => Promise.resolve(body),
+        }),
+      );
+    };
+
+    it('回 500 → 顯示伺服器實際錯誤碼，不得冠上「查無文件」', async () => {
+      stubPdfFetch(500, { statusCode: 500, message: 'SELF_SIGNED_CERT_IN_CHAIN' });
+      renderViewer();
+      const alert = await screen.findByRole('alert');
+      // 正向半句先確立載體存在，負向半句才有意義。
+      expect(alert).toHaveTextContent('SELF_SIGNED_CERT_IN_CHAIN');
+      expect(alert).not.toHaveTextContent('DOCUMENT_PDF_NOT_FOUND');
+    });
+
+    it('回 404 → 仍顯示 DOCUMENT_PDF_NOT_FOUND（該碼來自伺服器回應，不是前端補的）', async () => {
+      stubPdfFetch(404, { statusCode: 404, message: 'DOCUMENT_PDF_NOT_FOUND' });
+      renderViewer();
+      expect(await screen.findByRole('alert')).toHaveTextContent('DOCUMENT_PDF_NOT_FOUND');
+    });
+  });
+
+  /**
    * 🔵 2026-09-04 寬螢幕版面寬度 delta（使用者裁決）——「符合寬度」之初始倍率。
    * 權威＝`prototypes/05-public-viewer-watermark.html` 之 `fitToWidth()`（上限已由 1 改為 ZOOM_MAX）。
    *
