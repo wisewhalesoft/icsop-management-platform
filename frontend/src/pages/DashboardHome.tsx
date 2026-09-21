@@ -23,7 +23,6 @@ import type { OjtOnTimeSummaryResponse } from '../api/dashboard-analytics-types'
 import { DISPLAY_LABEL } from './document-display';
 import {
   EDITION_NONE_TEXT,
-  canViewDashboard,
   excludedUnitCount,
   ojtOnTimeNoteSegments,
 } from './ojt-progress-view';
@@ -36,10 +35,12 @@ import {
   DONUT_PALETTE,
   DONUT_RADIUS,
   DONUT_TOP_N,
+  OJT_DONUT_RADIUS,
   SEG_OTHER,
   barWidths,
   donutSegments,
   normalizeDefaultDimension,
+  ojtOnTimeArc,
   topNWithOther,
   type OrgDimension,
 } from './dashboard-analytics-view';
@@ -250,8 +251,20 @@ function EmptyState({ text, hint }: { text: string; hint?: string }): JSX.Elemen
 export function DashboardHome(): JSX.Element {
   const { user } = useAuth();
   const role = user?.roleCode;
-  /** 🔒 `AC-G17`／`AC-G80`：卡④ 之可見性沿用 F042 既有述詞，**不改寫、不擴充其值域**。 */
-  const mayViewOjtDashboard = canViewDashboard(role);
+  /**
+   * 🔒 `AC-G17`（2026-09-21 第七輪就地改寫）：卡④ 之閘門改為**讀功能矩陣**，
+   * 與卡內 `查看明細` **同一個**閘門 ⇒ 四種後台角色皆顯示。
+   *
+   * 📝 已作廢（⚠ 不得復原）：`OLD>` `const mayViewOjtDashboard = canViewDashboard(role);`
+   * 🔴 **為何改**：`canViewDashboard` 回答的是「誰看得到**那一個分頁**」，卡④ 問的是
+   *    「誰看得到**這一個數字**」——兩個不同的問題綁在同一個答案上，就是不一致的來源。
+   *    後果是一個**反轉的權限梯度**：SysAdmin 只有 `READ` 卻看得到，主管／部門窗口有
+   *    `RESTRICTED_CRUD`（權限更大）反而看不到。
+   * 🔒 `canViewDashboard` 於 F042 之 OJT 進度管理頁**一行未改**（`AC-G80` 回歸鎖續存）——
+   *    本裁決限縮的是**本檔的重用**，不是推翻 2026-09-02 那條裁決。
+   * 🔴 明文禁止改寫成四角色清單：在當前矩陣值下兩者畫面同值，但「只撤銷主管一人」時清單不會有反應。
+   */
+  const mayViewOjtOnTime = canPerform(role, FunctionKey.OJT_PROGRESS_MANAGEMENT, 'read');
   /** 🔒 `AC-G66`：閘門**讀功能矩陣**，明文禁止寫成 `role !== 'DeptContact'` 之角色清單。 */
   const mayViewCategories = canPerform(role, FunctionKey.BUSINESS_CATEGORY_MANAGEMENT, 'read');
   /** 🔒 `AC-G58`：`查看更多` 之閘門同樣讀矩陣（部門窗口對文件管理為 `READ` ⇒ 仍然呈現）。 */
@@ -301,7 +314,7 @@ export function DashboardHome(): JSX.Element {
         });
     }
 
-    if (mayViewOjtDashboard) {
+    if (mayViewOjtOnTime) {
       void Promise.resolve()
         .then(() => getOjtOnTimeSummary())
         .then((data) => {
@@ -324,7 +337,7 @@ export function DashboardHome(): JSX.Element {
     return () => {
       alive = false;
     };
-  }, [mayViewCategories, mayViewOjtDashboard]);
+  }, [mayViewCategories, mayViewOjtOnTime]);
 
   const cards = analytics?.cards;
   const donuts = analytics?.donuts;
@@ -400,7 +413,9 @@ export function DashboardHome(): JSX.Element {
             />
           </div>
         )}
-        {mayViewOjtDashboard ? <OjtOnTimeCard summary={ontime} mayViewDetail={role !== undefined && canPerform(role, FunctionKey.OJT_PROGRESS_MANAGEMENT, 'read')} /> : null}
+        {/* 🔒 `AC-G17`／`AC-G18`：卡④ 與其 `查看明細` **同進同出**——卡片本身的閘門即連結的閘門，
+            故卡內不再重複判定一次（兩處各判一次，遲早會有一處被單獨改掉）。 */}
+        {mayViewOjtOnTime ? <OjtOnTimeCard summary={ontime} /> : null}
       </div>
 
       {/* ═══ F044 ③ · 兩張環圖（`AC-G29`～`AC-G50`）═══
@@ -514,19 +529,31 @@ function StatCard(props: {
 /**
  * 卡④「OJT 準時完成率(1個月內)」。
  *
- * 🔒 `AC-G13`：數值句逐字 `已完成 {X} / 應完成 {Y}（{Z}%）`——`/` 兩側各恰一個半形空格、
- *   括號為全形、`%` 為半形；`stat-value` 與 `ojt-ontime-value` 為**巢狀**且 `textContent` 完全相同
- *   （外層不得再加任何文字）⇒ `AC-G24` 與 `AC-G13` 同時成立。
- * 🔒 `AC-G14`：分母為 0（後端**省略 `rate` 鍵**）⇒ 呈現空狀態，且兩個數值節點**一併不存在**；
- *   🔴 明文禁止 `NaN%`／`0%`／`100%`／空白（`0%` 與「全部未完成」無從分辨，`100%` 是謊報）。
- * 🔒 `AC-G15`：排除註記**恆顯示**（含排除 0 筆時之明確說明），且與數值節點為**兩個**節點。
+ * 🔒 `AC-G13`／`AC-G97`（2026-09-21 第七輪就地改寫）：數值拆為**兩個可獨立斷言之節點**——
+ *   環**中央** `[data-ojt-ontime-rate]` ＝ `{Z}%`；環**旁** `ojt-ontime-value` ＝ `已完成 {X} / 應完成 {Y}`
+ *   （`/` 兩側各恰一個半形空格、`%` 半形）。`stat-value` 仍為**外層**並同時含住兩者（`AC-G24`，三者不得缺一）。
+ *   📝 已作廢（⚠ 不得復原）：`OLD>` 單一節點 `已完成 {X} / 應完成 {Y}（{Z}%）`（全形括號），
+ *      且「`stat-value` 與 `ojt-ontime-value` 之 textContent **完全相同**」——後者已隨拆節點作廢。
+ *   🔴 明文禁止把 `{Z}%` 串回 `ojt-ontime-value`（那等於沒拆，且會讓環中央斷言失去唯一載體）。
+ *   🔴 「已完成 X / 應完成 Y」**不得消失**——那是使用者最初需求的逐字要求（「顯示實際單位數量與比率」）；
+ *      本次改的是**排版**，不是資訊量。
+ * 🔒 `AC-G97`：`{Z}%` 疊在 `<svg>` **之外**、`<svg>` 一律 `aria-hidden` ⇒ `AC-G71` 不需放寬
+ *   （數字仍是可讀的 DOM 文字，不是圖形）。`data-testid` 刻意不與兩張大環圖撞名。
+ * 🔒 `AC-G14`／`AC-G97`：分母為 0（後端**省略 `rate` 鍵**）⇒ 環圖**本身不繪**，
+ *   三個節點（`ojt-ontime-donut`／`[data-ojt-ontime-rate]`／`ojt-ontime-value`）**全部不進 DOM**，
+ *   改以 empty-state 取代整個數值區。
+ *   🔴 **為何不繪空環**：一個 0% 的環與「全部未完成」在畫面上**完全一樣**——那正是 `AC-G14` 禁止
+ *      `0%` 的同一個理由，只是換成了圖形形式。
+ *   ⚠ 拆節點時務必 grep 該 `data-testid` 的**所有**出現處，特別是空狀態／錯誤態分支：舊版的空狀態
+ *      提示文字上曾掛著 `ojt-ontime-value`（當時只有一個數值節點、共用無妨），拆開後那個殘留會讓
+ *      「該節點不得存在」的負向斷言直接失效（恆真）。
+ * 🔒 `AC-G15`：排除註記恆在 DOM（`a+b === 0` 時套 `hidden`、無可見文字）。
+ * 🔒 `AC-G97`：卡④ **只有一個 ⓘ**——環圖若需說明一律併入該 ⓘ，不得再加第二個。
  */
-function OjtOnTimeCard(props: {
-  summary: OjtOnTimeSummaryResponse | null;
-  mayViewDetail: boolean;
-}): JSX.Element {
-  const { summary, mayViewDetail } = props;
+function OjtOnTimeCard(props: { summary: OjtOnTimeSummaryResponse | null }): JSX.Element {
+  const { summary } = props;
   const hasRate = summary != null && summary.rate !== undefined && summary.denominator > 0;
+  const arc = hasRate ? ojtOnTimeArc(summary.numerator, summary.denominator) : null;
   return (
     <div data-testid="stat-card-ojt-ontime" className="bg-white border border-slate-200 rounded-xl p-4">
       <div className="flex items-center gap-2">
@@ -541,10 +568,35 @@ function OjtOnTimeCard(props: {
         {/* 🔒 §癸四 第 1 列：口徑說明與「為什麼兩邊數字不同」移入 ⓘ；可見層只留「排除了幾個單位」。 */}
         {summary ? <InfoNote infoKey="ojt-ontime" paragraphs={ojtOnTimeNoteSegments(summary)} /> : null}
       </div>
-      {hasRate ? (
-        <div data-testid="stat-value" className="mt-2 text-xl font-bold text-slate-900">
-          <span data-testid="ojt-ontime-value" className="mono">
-            {`已完成 ${summary.numerator} / 應完成 ${summary.denominator}（${summary.rate}%）`}
+      {hasRate && arc ? (
+        <div data-testid="stat-value" className="mt-2 flex items-center gap-3">
+          <div data-testid="ojt-ontime-donut" className="relative w-16 h-16 shrink-0">
+            <svg viewBox="0 0 64 64" className="w-16 h-16" aria-hidden="true" focusable="false">
+              <circle cx="32" cy="32" r={OJT_DONUT_RADIUS} fill="none" stroke="#F1F5F9" strokeWidth="8" />
+              <circle
+                cx="32"
+                cy="32"
+                r={OJT_DONUT_RADIUS}
+                fill="none"
+                stroke={COLOR_ANNOUNCED}
+                strokeWidth="8"
+                strokeLinecap="butt"
+                strokeDasharray={`${arc.length.toFixed(3)} ${arc.rest.toFixed(3)}`}
+                transform="rotate(-90 32 32)"
+              />
+            </svg>
+            {/* 🔒 百分比為 `<svg>` **之外**之 HTML 文字節點（沿用兩張大環圖 `[data-donut-total]` 之手法）。 */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span data-ojt-ontime-rate className="text-sm font-bold text-slate-900 mono">
+                {`${summary.rate}%`}
+              </span>
+            </div>
+          </div>
+          <span
+            data-testid="ojt-ontime-value"
+            className="mono text-base font-semibold text-slate-900"
+          >
+            {`已完成 ${summary.numerator} / 應完成 ${summary.denominator}`}
           </span>
         </div>
       ) : (
@@ -566,16 +618,17 @@ function OjtOnTimeCard(props: {
           {excludedUnitCount(summary) > 0 ? `已排除 ${excludedUnitCount(summary)} 個單位` : ''}
         </p>
       ) : null}
-      {mayViewDetail ? (
-        <Link
-          role="link"
-          to="/admin/ojt-progress?tab=sessions&sort=incomplete-first"
-          className="mt-2 inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline"
-        >
-          查看明細
-          <Icon name="arrow-right" className="w-3.5 h-3.5" />
-        </Link>
-      ) : null}
+      {/* 🔒 `AC-G18`：本連結之閘門**即卡片本身的閘門**（`canPerform(role, OJT_PROGRESS_MANAGEMENT, 'read')`）。
+          🔴 刻意**不在此再判定一次**：兩處各判一次，遲早會有一處被單獨改掉，而那正是第七輪要修掉的
+             「同一個問題兩個答案」。卡片進得了 DOM，就代表這個閘門已經為真。 */}
+      <Link
+        role="link"
+        to="/admin/ojt-progress?tab=sessions&sort=incomplete-first"
+        className="mt-2 inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline"
+      >
+        查看明細
+        <Icon name="arrow-right" className="w-3.5 h-3.5" />
+      </Link>
     </div>
   );
 }

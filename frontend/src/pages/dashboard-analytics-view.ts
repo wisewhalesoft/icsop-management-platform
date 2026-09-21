@@ -133,6 +133,41 @@ export function donutSegments(
 }
 
 /**
+ * 🔒 `AC-G97`：卡④ 小環之半徑（prototype `OJT_DONUT_R`）。
+ * 🔴 **刻意不等於兩張大環圖之 `DONUT_RADIUS`（54）**——卡④ 是一個 64×64 的小環。
+ *    誤用大環常數時，比例會全對而弧長全錯（那是最難用眼睛看出來的一種錯）。
+ */
+export const OJT_DONUT_RADIUS = 26;
+export const OJT_DONUT_CIRCUMFERENCE = 2 * Math.PI * OJT_DONUT_RADIUS;
+
+/**
+ * `AC-G97` — 卡④ 環圖之弧長（已完成比例）。
+ *
+ * 🔴 **為何這一層非有不可**：本輪之簡化環**無視覺回歸** ⇒ 弧長畫得對不對，機器**只在這一層**驗得到；
+ * 元件層驗得到「有沒有畫」，驗不到「畫多長」。
+ *
+ * 🔴 **弧長採未四捨五入之比值，與環中央文字之 `coveragePercent()` 整數刻意不同源**：
+ *   · 文字要**可讀** ⇒ 整數（`33%`）；
+ *   · 弧長要**準** ⇒ `1/3` 應畫 33.33% 而非 33%。
+ *   差距恆 < 周長的 1%，不影響判讀。
+ * 🔒 **這是刻意的，不要「修」成同源。** ⚠ 常見向量（`0`／`3/4`／`4/4`）之整數百分比與真比值**恰好相等**
+ *   ⇒ 對這個改動零鑑別力；唯一分得出來的是像 `1/3` 這種除不盡的分數。
+ *
+ * 🔴 比值兩端皆夾在 `[0, 1]`：`denominator <= 0` ⇒ 空環（**不得 `NaN`**，`NaN` 會讓整個 `<circle>` 消失，
+ *   畫面上看起來像「這裡本來就沒有東西」）；`X > Y` 亦不得溢出周長。
+ */
+export function ojtOnTimeArc(
+  numerator: number,
+  denominator: number,
+): { length: number; rest: number } {
+  const ratio =
+    denominator > 0 ? Math.max(0, Math.min(1, numerator / denominator)) : 0;
+  const length = ratio * OJT_DONUT_CIRCUMFERENCE;
+  // 🔒 `rest` 由周長減出來，使 `length + rest` 在**任何**輸入下恆等於周長（不另算一次比例）。
+  return { length, rest: OJT_DONUT_CIRCUMFERENCE - length };
+}
+
+/**
  * `AC-G67` — 雙色長條之寬度（百分比；`max` ＝ 全部類別中最大之總數）。
  * 🔴 `max === 0` ⇒ 兩段皆 0（不得 `NaN`／`Infinity`）。
  */

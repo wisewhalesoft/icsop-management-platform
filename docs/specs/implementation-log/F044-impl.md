@@ -13,6 +13,60 @@ last_updated: 2026-09-21
 > 逐項覆核狀態見 [§盲區](#blindspots)。🔴 其中 **#8（`副本部長`／`副總經理`）永遠無法覆核，
 > 本檔與任何交付報告中皆不得列為「已驗證」**。
 
+## 〇之二、第七輪增量（2026-09-21，人類裁決：卡④ 閘門與環圖） {#round7}
+
+### 閘門（四道，全量實跑）
+
+| # | 閘門 | 結果 |
+|---|---|---|
+| 1 | backend `npx jest --maxWorkers=4` | ✅ **230 suites / 3664 tests 全綠** |
+| 2 | frontend `npx vitest run` | ✅ **141 files / 2468 tests 全綠** |
+| 3a | backend `npx tsc --noEmit` | ✅ exit 0 |
+| 3b | frontend `npx vite build` | ✅ exit 0 |
+| 4 | backend `npm run deps:check` | ✅ 零違規（409 modules / 1236 deps） |
+
+### ① 卡④ 閘門改為讀矩陣（`AC-G17` 就地改寫）
+
+`canViewDashboard(role)` → `canPerform(role, FunctionKey.OJT_PROGRESS_MANAGEMENT, 'read')`
+⇒ 四種後台角色皆顯示卡④。🔒 `canViewDashboard` 本身**一行未動**（F042 之 TAB1 仍對主管／窗口隱藏，
+`AC-G80` 回歸鎖續存）——本輪限縮的是**本檔之重用**。
+
+🔴 **根因（值得記住的形狀）**：舊寫法重用了一個**答錯問題**的述詞——`canViewDashboard` 答「誰看得到
+**那一個分頁**」，卡④ 問「誰看得到**這一個數字**」。兩個問題在某些角色上碰巧同值，不代表可以共用；
+後果是**反轉的權限梯度**（`READ` 的 SysAdmin 看得到，`RESTRICTED_CRUD` 的主管／窗口反而看不到）。
+
+🔒 **`查看明細` 不再自行判定一次閘門**：卡片的閘門**即**連結的閘門
+⇒ 「同進同出」是**結構性**的，不是靠兩處 `canPerform` 保持同步。
+
+### ② 卡④ 環圖（`AC-G97`）
+
+- 新增純函式 `ojtOnTimeArc(numerator, denominator)`（`dashboard-analytics-view.ts`）：半徑 **26**
+  （🔴 刻意不等於大環圖之 54）、比值兩端夾 `[0, 1]`、`rest` 由周長**減**出使 `length + rest` 恆等周長。
+- 數值拆為**兩個**節點：環中央 `[data-ojt-ontime-rate]` ＝ `{Z}%`（🔴 `<svg>` **之外**之 HTML 文字）、
+  環旁 `ojt-ontime-value` ＝ `已完成 {X} / 應完成 {Y}`（🔴 不含 `%`）；外層 `stat-value` 同時含住兩者。
+  🔴 `AC-G24` 原本之「兩者 `textContent` 完全相同」已隨之作廢。
+- `denominator === 0` ⇒ 三個節點**全部不進 DOM**，改 `empty-state`。
+
+🔴 **一個刻意的不同源，不得「修」它**：**弧長採未捨入比值、環中央文字採 `coveragePercent()` 之整數**
+——文字要可讀、弧長要準（`1/3` 應畫 33.33% 而非 33%），差距恆 < 周長 1%。
+⚠ 常見向量（`0`／`3/4`／`4/4`）之整數百分比與真比值**恰好相等** ⇒ 對這個改動零鑑別力；
+唯一的防線是環那條 `1/3`。
+
+### 爭議與裁決（1 件，已解）
+
+`AC-G97` 空狀態那條之末句 `expect(card.querySelectorAll('svg')).toHaveLength(0)` **不可滿足**：
+`lucide-react` 把每一顆圖示都渲染成 `<svg>`，而卡④ 在空狀態下仍有四顆**各自被別的 AC／prototype
+要求**的圖示（卡頭 `graduation-cap`／ⓘ 之 `info`／共用 `EmptyState` 之 `info`／`查看明細` 之
+`arrow-right`），**沒有一顆是環**。🔴 **prototype 自己也過不了那一行。**
+⇒ `ring-f044` 查證後認定量尺錯誤，改為只咬弧的兩條（`svg[viewBox="0 0 64 64"]` 與
+`[stroke-dasharray]`），並各自補上正向孿生與「空狀態下卡內仍須有圖示」之自我守護。
+🔒 實作端一行測試未動。
+
+> 📌 **通則（`G44-34`）**：選一個「更嚴格」的代理量尺時，**先拿 prototype 自己跑一遍**；
+> **prototype 過不了的量尺，一定是量尺錯。**
+
+---
+
 ## 〇、第六輪增量（2026-09-21，人類裁決第二輪：實作理由退出畫面） {#round6}
 
 > 本節為 `AC-G94`／`AC-G95`／`AC-G96` 與 [§癸四](../features/F044-admin-dashboard-analytics.md#rationale-sites)
