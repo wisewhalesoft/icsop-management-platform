@@ -112,6 +112,7 @@
       <select id="demoSel" onchange="setDemoScenario(this.value)" title="示範語料切換（原型專用）" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
         <option value="full">示範語料：完整</option>
         <option value="ojtZero">示範語料：OJT 母體為 0</option>
+        <option value="loadError">示範語料：統計卡載入失敗</option>
         <option value="empty">示範語料：全站尚無文件</option>
       </select>
     </div>
@@ -549,7 +550,15 @@
   ];
 
   /* ───── 原型專用之狀態（🔒 皆**不跨 session 記憶**，`AC-G44`／`AC-G65`）───── */
-  let demoScenario='full';                 /* full ｜ ojtZero ｜ empty */
+  let demoScenario='full';                 /* full ｜ ojtZero ｜ loadError ｜ empty */
+  /* 🔵 `AC-G23`／§癸四 第 7 項之**載入失敗降級態**（2026-09-21 第六輪補）。
+     🔴 存在理由與其餘原型專用控制項相同：**該態在完整語料下結構上不可達，而它在正式站是常態**
+        （聚合端點失敗）。四張統計卡恆有數字可顯示（值可為 0）⇒ 本頁**沒有**「統計卡空資料」這個態，
+        §癸四 第 7 項要的是**失敗態**，先前因此在原型上沒有載體。
+     🔴 **刻意只讓統計卡列失敗、其餘三區照常**——`AC-G23` 要求「單一聚合失敗**僅該區塊**降級」，
+        若四區一起空白，那條 AC 在畫面上就無從分辨「各自獨立降級」與「整頁一起垮」。
+     ⚠ 正式站四區由不同端點供應；本原型以單一旗標模擬「其中一個端點失敗」。 */
+  function statsLoadFailed(){ return demoScenario==='loadError'; }
   let defaultDim='department';             /* 端點回傳之 defaultDimension（示意值；預設＝依制定部門） */
   let categoryExpanded=false;              /* 類別長條圖是否已展開全部 */
   let categoryDemoPool=false;              /* 是否啟用擴充示範類別池 */
@@ -739,8 +748,77 @@
     if(out.denominator>0) out.rate=coveragePercent(numerator,out.denominator);
     return out;
   }
+  /* 🔒 **可見排除數之單一推導點**（2026-09-21 第二次就地更正，`ring-f044` 提報之口徑錯誤）：
+     `excludedUnitCount(stats)` ＝ `excludedInactive + excludedOrphaned` —— **恰前兩項**。
+     🔴 **可見文字一律委派本函式**，明文禁止在渲染處再寫一次加法：否則日後有人把第三項加回去，
+        而「有一份加法」與「有兩份加法」在畫面上完全相同 ⇒ **兩處都會綠**。
+     🔴 **為什麼第三項不能加進來**（缺一不可的兩個理由）：
+        ① **單位不同**——前兩項數的是「單位」，第三項數的是「文件」；相加得到一個沒有意義的數。
+        ② **語意不同**——前兩項是「進了母體又被拿掉」，第三項是「**從來沒進過母體**」
+           （無公告日 ⇒ 無從推算應完成日 ⇒ 根本不會落進這張卡的時間窗口，`OQ-D44-12b`）。
+           ⇒ 把它叫「排除」本身就是錯的，所以它在 ⓘ 內**獨立成句**、不串入上一句的加總。 */
+  function excludedUnitCount(stats){
+    return stats.excludedInactive + stats.excludedOrphaned;
+  }
 
   /* ═════════════════ F044 · 渲染 ═════════════════ */
+
+  /* ═════ ⓘ 說明（`AC-G94`／`AC-G95`；2026-09-21 人類裁決第二輪）═════
+     🔴 **人類原話**：「實作邏輯和技術細節不需要出現在 UI 上給使用者看，如果要留也應該用 hover 的方式保留」。
+     🔒 `LESSON-G2`：**「不變式需要可驗證的載體」≠「不變式需要可見的文案」**——載體可以是
+        `data-*`／`aria-label`／popover 內的文字；把不變式的**理由**寫成畫面上的常駐說明，
+        等於把驗收標準洩漏給使用者。
+     🔒 分工判準＝**「這句話在回答使用者的哪一個問題」**，不是「技術性與否」：
+        · 「我接下來該做什麼／這裡為什麼是空的」⇒ 🟢 可見（🔴 **空狀態尤其必須可見**，收進 ⓘ 等於把空狀態變成死路）
+        · 「這個數字為什麼這樣算／為什麼兩處對不起來」⇒ ⓘ popover
+        · 「這條驗收標準是什麼」⇒ 🔴 刪除
+     🔴 **`AC-G71` 不放寬、且更嚴**：改的是**理由**的位置，不是**數字**的位置。
+        每一個圖表數值仍須留在**可見**文字中——使用者不應該要展開說明才看得到數字。
+     ── DOM 契約（🔒 鎖定）──
+     · 觸發器：`<button type="button">` ＋ `data-testid="info-trigger"` ＋ `data-info-for="{key}"`
+       ＋ `aria-label` 逐字 `說明` ＋ `aria-expanded` ＋ `aria-describedby`；**本身不承載任何資訊**。
+     · 內容：`data-testid="info-content"` ＋ 穩定 `id`；🔴 **恆在 DOM**（未展開時僅以視覺方式隱藏），
+       故 `getByTestId('info-content')` 可直接讀取、不需先觸發 hover。
+     🔴 **明文禁止以 `title` 屬性實作**——`title` 在觸控裝置不可達、螢幕閱讀器支援不一致、RTL 難以穩定斷言。
+     🔴 hover／focus／點擊三種皆可展開；`Esc` 收合。
+     ⚠ **全頁多個 ⓘ 共用 `aria-label="說明"`** ⇒ 斷言**必須先限定容器或以 `data-info-for` 區辨**，
+        明文禁止全域 `getByRole('button', { name: '說明' })`（會命中多個）。
+     📌 點擊刻意是「開啟」而非「切換」：`user-event.click()` 會先 focus，若 focus 開啟、click 再切換，
+        `aria-expanded` 會在一次點擊後回到 `false`，使「`false` → `true`」那條斷言恆紅。
+        收合路徑＝移開游標／`Tab` 離開／`Esc`。 */
+  const INFO_LABEL='說明';
+  const infoState={};
+  function infoStateOf(k){ return infoState[k]||(infoState[k]={hover:false,focus:false,pinned:false}); }
+  function applyInfo(k){
+    const s=infoStateOf(k), on=s.hover||s.focus||s.pinned;
+    const btn=document.querySelector('[data-info-for="'+k+'"]');
+    const box=document.querySelector('[data-info-content="'+k+'"]');
+    if(!btn||!box) return;
+    btn.setAttribute('aria-expanded', on?'true':'false');
+    box.classList.toggle('hidden',!on);
+  }
+  function infoHover(k,on){ infoStateOf(k).hover=on; applyInfo(k); }
+  function infoFocus(k,on){ const s=infoStateOf(k); s.focus=on; if(!on) s.pinned=false; applyInfo(k); }
+  function infoOpen(k){ infoStateOf(k).pinned=true; applyInfo(k); }
+  function closeAllInfo(){
+    Object.keys(infoState).forEach(function(k){ infoState[k]={hover:false,focus:false,pinned:false}; applyInfo(k); });
+    const a=document.activeElement; if(a&&a.getAttribute&&a.getAttribute('data-info-for')) a.blur();
+  }
+  /* 重繪會換掉 popover 的 DOM ⇒ 同步把狀態歸零，避免「狀態說開著、畫面已關閉」。 */
+  function infoReset(){ Object.keys(infoState).forEach(function(k){ delete infoState[k]; }); }
+  /* paragraphs ＝ 🔒 逐字鎖定之段落（見 F044 §癸四 逐處處置表），**不得自行潤飾**。 */
+  function infoNote(key,paragraphs){
+    const id='info-'+key;
+    return `<span class="relative inline-flex align-middle shrink-0" onmouseenter="infoHover('${key}',true)" onmouseleave="infoHover('${key}',false)"
+      ><button type="button" data-testid="info-trigger" data-info-for="${key}" aria-label="${INFO_LABEL}" aria-expanded="false" aria-describedby="${id}"
+        onclick="infoOpen('${key}')" onfocus="infoFocus('${key}',true)" onblur="infoFocus('${key}',false)"
+        class="w-4 h-4 rounded-full border border-slate-300 text-slate-400 hover:text-primary-600 hover:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-600 flex items-center justify-center shrink-0"
+        ><i data-lucide="info" class="w-3 h-3" aria-hidden="true"></i></button
+      ><span id="${id}" data-testid="info-content" data-info-content="${key}" role="note"
+        class="hidden absolute left-0 top-full mt-1 z-50 w-64 max-w-[16rem] rounded-lg border border-slate-200 bg-white shadow-lg p-3 text-[11px] leading-relaxed text-slate-600 text-left font-normal whitespace-normal"
+        >${paragraphs.map(function(p,i){ return '<span class="block'+(i?' mt-1.5':'')+'">'+p+'</span>'; }).join('')}</span></span>`;
+  }
+
 
   function emptyState(text,hint){
     return `<div data-testid="empty-state" class="text-center py-8 px-4">
@@ -753,6 +831,16 @@
   /* ───── ① 四張統計卡 ───── */
   function renderStatCards(){
     const role=document.body.dataset.role, docs=scenarioDocs();
+    /* 🔒 §癸四 第 7 項：**可見、但重寫**（🔴 空／失敗狀態是使用者最需要引導的時刻，不得收進 ⓘ）。
+       📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> 四張卡之數字為即時聚合…（含「即時聚合」＝實作詞彙，`AC-G94` ④）。
+       🔒 主文字沿用已上線 `DashboardHome.tsx` 之逐字 `統計數字暫時無法取得`，不另立第二種說法。 */
+    if(statsLoadFailed()){
+      document.getElementById('statCards').innerHTML =
+        '<div class="col-span-full bg-white border border-slate-200 rounded-xl">'
+        + emptyState('統計數字暫時無法取得','這些數字來自「ICSOP 文件管理」。重新整理後仍未顯示時，請通知系統管理員。')
+        + '</div>';
+      return;
+    }
     const announced=docsByDisplayStatus(docs,'announced').length;
     const inProgress=docsByDisplayStatus(docs,'in_progress').length;
     const monthly=monthlyAnnouncedDocs(docs).length;
@@ -793,29 +881,51 @@
     const value = r.denominator>0
       ? `<div data-testid="stat-value" class="mt-2 text-xl font-bold text-slate-900"><span data-testid="ojt-ontime-value" class="mono">已完成 ${r.numerator} / 應完成 ${r.denominator}（${r.rate}%）</span></div>`
       : `<div data-testid="empty-state" class="mt-2 flex items-start gap-1.5 text-sm text-slate-500"><i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0 text-slate-400"></i><span data-testid="ojt-ontime-value">近 1 個月內無應完成之 OJT 單位</span></div>`;
-    const exTotal=r.excludedInactive+r.excludedOrphaned+r.excludedNoAnnouncedDate;
-    const head = r.denominator>0
-      ? `母體＝應完成訓練日期落在 <span class="mono">${r.windowFrom}</span> ～ <span class="mono">${r.windowTo}</span> 之使用單位，共 <span class="mono">${r.denominator}</span> 個，其中 <span class="mono">${r.numerator}</span> 個已全部完成`
-      : `母體＝應完成訓練日期落在 <span class="mono">${r.windowFrom}</span> ～ <span class="mono">${r.windowTo}</span> 之使用單位，目前為 <span class="mono">0</span> 個，故<strong class="text-slate-600">不計算比率</strong>`;
-    const exPart = exTotal>0
-      ? `；本次共排除 <span class="mono">${exTotal}</span> 列——<strong class="text-slate-600">已裁撤單位</strong> ${r.excludedInactive} 列、<strong class="text-slate-600">單位已移出使用部門</strong> ${r.excludedOrphaned} 列、<strong class="text-slate-600">無公告日期</strong> ${r.excludedNoAnnouncedDate} 列`
-      : `；已裁撤單位、已移出使用部門與無公告日期之列皆不計入，目前無任何進度列因此被排除`;
+    /* 🔒 §癸四 第 1 項（2026-09-21 **第二次**就地更正）：可見層只留「排除了幾個**單位**」，
+       🔴 **恰加總前兩項**，且一律委派 `excludedUnitCount()`（單一推導點，理由見該函式註解）。
+       📝 已作廢（僅供追溯，⚠ 不得復原）：
+          OLD> 可見＝`已排除 {n} 個單位`，{n} ＝ **三項相加**（含「{c} 份文件尚未設定公告日期」）
+               ⇒ 把**文件**加總成**單位**，該數字在語意上是錯的（`ring-f044` 提報，口徑錯誤非文案偏好）。
+          OLD> ⓘ 第二段＝其中 {a} 個單位已裁撤、{b} 個單位已不再使用該文件、{c} 份文件尚未設定公告日期，不列入計算。
+          OLD>（更早一版）母體＝… 本次共排除 … 屬正常（含「母體＝」「進度列」「屬正常」）。
+       🔒 `a+b === 0` 時**無可見排除文字**（ⓘ 仍在）；節點本身仍保留於 DOM（套 `hidden`）。 */
+    const exUnits = excludedUnitCount(r);
+    const exVisible = exUnits>0 ? ('已排除 '+exUnits+' 個單位') : '';
+    const ojtInfo = infoNote('ojt-ontime',[
+      '這張卡只看最近一個月內應完成訓練的單位；應完成日為文件公告日再加一個月。',
+      '其中 '+r.excludedInactive+' 個單位已裁撤、'+r.excludedOrphaned+' 個單位已不再使用該文件，不列入計算。',
+      /* 🔴 獨立成句，不得串入上一句的加總（單位不同＋語意不同，見 excludedUnitCount 之註解）。 */
+      '另有 '+r.excludedNoAnnouncedDate+' 份文件尚未設定公告日期，無法推算應完成日，因此從一開始就不在這張卡的範圍內。',
+      '「OJT 進度管理」頁不限期限，也會列出這裡不計入的單位，因此兩邊的數字不同。'
+    ]);
     return `<div data-testid="stat-card-ojt-ontime" class="bg-white border border-slate-200 rounded-xl p-4">
       <div class="flex items-center gap-2">
         <span class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style="background:#FEF3C7"><i data-lucide="graduation-cap" class="w-4 h-4" style="color:#B45309"></i></span>
-        <span class="text-sm font-medium text-slate-700">OJT 準時完成率</span><span class="text-xs text-slate-400">(1個月內)</span>
+        <span class="text-sm font-medium text-slate-700">OJT 準時完成率</span><span class="text-xs text-slate-400">(1個月內)</span>${ojtInfo}
       </div>
       ${value}
-      <p data-testid="ojt-ontime-exclusion-note" class="mt-2 text-[11px] leading-relaxed text-slate-500">${head}${exPart}。被排除之進度列於「OJT 資料清單」分頁<strong class="text-slate-600">仍然呈現</strong>，故兩處數字不相等屬正常。</p>
+      <p data-testid="ojt-ontime-exclusion-note" class="${exVisible?'mt-2 text-[11px] text-slate-500':'hidden'}">${exVisible}</p>
       ${showLink?`<a role="link" href="25-ojt-progress.html?tab=sessions&amp;sort=incomplete-first" class="mt-2 inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline">查看明細<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>`:''}
     </div>`;
   }
 
   /* ───── ③ 兩張環圖 ───── */
   const ORG_DIMS=[{k:'company',label:'依制定公司'},{k:'division',label:'依制定本部'},{k:'department',label:'依制定部門'}];
+  /* 🔒 §癸四 第 5 項：`desc` 之可見段落**刪除**，內容移入區塊標題旁之 ⓘ；
+        第 3 項：「進度中」說明之可見段落**刪除**，內容併入**同一個** ⓘ 之第二段。
+     ⚠ **本檔唯一一處「把表上兩列併入同一個 ⓘ」**：第 3 項之可見載體依裁決已刪除 ⇒ 它沒有自己的錨點，
+        而兩段回答的是同一個問題（「這張圖怎麼讀」）；兩個 ⓘ 並排在標題旁是更糟的版面。
+        🔴 已回報 lead／spec-writer；若裁為必須各自獨立之 ⓘ，改法＝拆成兩個 `data-info-for` 鍵。
+     📝 已作廢（僅供追溯，⚠ 不得復原）：
+        OLD> desc（當月）＝統計公告日落在本月（{月}）之已公告文件；環的**每一段＝一個組織**。
+        OLD> desc（累積）＝統計全部已公告文件，**不限時間**；環的每一段＝一個組織。
+        OLD> 進度中說明＝「進度中」不分時間（＝當下尚未到公告日）⇒ 同一個組織在「當月已公告」與
+        OLD>   「累積已公告」兩張圖上的「進度中」必為同值，這是同一個事實，不是重複貼上。
+        ⇒ 後者含「不是重複貼上」（為實作辯護之語氣，`AC-G94` ②）。 */
+  const DONUT_INPROGRESS_INFO='「進度中」指目前還沒到公告日的文件，與月份無關，所以兩張圖上同一個組織的「進度中」數字相同。';
   const DONUT_META={
-    month:     {tid:'donut-month',     title:'當月已公告', desc:'統計公告日落在本月（'+CURRENT_MONTH+'）之已公告文件；環的**每一段＝一個組織**。'},
-    cumulative:{tid:'donut-cumulative',title:'累積已公告', desc:'統計全部已公告文件，**不限時間**；環的每一段＝一個組織。'}
+    month:     {tid:'donut-month',     title:'當月已公告', info:'公告日落在本月、且已到公告日的文件。環上每一段代表一個組織。'},
+    cumulative:{tid:'donut-cumulative',title:'累積已公告', info:'所有已到公告日的文件，不限時間。環上每一段代表一個組織。'}
   };
   function renderDonutRegion(key){
     const meta=DONUT_META[key], dim=donutDim[key];
@@ -826,11 +936,20 @@
       return `<button type="button" role="tab" id="tab-${key}-${d.k}" aria-selected="${on}" aria-controls="panel-${key}" tabindex="${on?0:-1}" onclick="setDonutDim('${key}','${d.k}')" onkeydown="onOrgDimKey(event,'${key}','${d.k}')" class="px-2.5 py-1.5 text-xs rounded-md border transition ${on?'bg-primary-50 border-primary-300 text-primary-700 font-medium':'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}">${d.label}</button>`;
     }).join('');
     const merged=arcs.length&&arcs[arcs.length-1].label===SEG_OTHER? arcs[arcs.length-1] : null;
-    /* 🔴 「靜默 top-N 才是缺陷」：截斷時必須說清楚**被合併幾個組織／合計幾份／憑什麼是這 8 段**，
-       並指出完整清單在哪。未截斷時本行仍在，但明說「未達合併上限」，使其負向斷言有鑑別力。 */
+    /* 🔒 §癸四 第 2 項：可見層只留**數字**，規則與「圖例仍列出全部」移入 ⓘ。
+       🔴 **「沒有任何數字只存在於圖形裡」整句刪除**——那是 `AC-G71` 本文，不是給人看的（`AC-G94` ③）。
+       🔒 `AC-G71` 仍然成立且更嚴：三個數字（前 N 個／合併 m 個／共 v 份）**全部留在可見層**，未移入 popover。
+       ⚠ 逐字表之 `{N}` 在兩個分支指不同的量（合併時＝Top N；未合併時＝本維度組織總數），已依語境代入。
+       📝 已作廢（僅供追溯，⚠ 不得復原）：
+          OLD> 圖形僅繪出份數最多的 {N} 個組織（排序＝已公告份數由多至少），其餘 {m} 個組織合併為「其他」，
+          OLD>   已公告合計 {v} 份。下方圖例仍逐列列出全部 {T} 個組織，沒有任何數字只存在於圖形裡。
+          OLD> 本維度共 {T} 個組織，未達 {N} 段之合併上限，圖形已繪出全部組織（無「其他」段）。 */
     const trunc = merged
-      ? `圖形僅繪出份數最多的 <span class="mono">${DONUT_TOP_N}</span> 個組織（排序＝已公告份數由多至少），其餘 <span class="mono">${merged.merged}</span> 個組織合併為「<strong class="text-slate-600">${SEG_OTHER}</strong>」，已公告合計 <span class="mono">${merged.value}</span> 份。<strong class="text-slate-600">下方圖例仍逐列列出全部 ${rows.length} 個組織</strong>，沒有任何數字只存在於圖形裡。`
-      : `本維度共 <span class="mono">${rows.length}</span> 個組織，未達 <span class="mono">${DONUT_TOP_N}</span> 段之合併上限，圖形已繪出全部組織（無「${SEG_OTHER}」段）。`;
+      ? `圖形顯示前 <span class="mono">${DONUT_TOP_N}</span> 個，其餘 <span class="mono">${merged.merged}</span> 個合併為「${SEG_OTHER}」（共 <span class="mono">${merged.value}</span> 份）。`
+      : `本維度共 <span class="mono">${rows.length}</span> 個組織，已全部繪出。`;
+    const truncInfo = infoNote('donut-'+key+'-truncation',[
+      '圖形最多畫 '+DONUT_TOP_N+' 段，其餘合併為「'+SEG_OTHER+'」。下方圖例仍逐列列出全部 '+rows.length+' 個組織。'
+    ]);
     const body = total===0
       ? emptyState(key==='month'?('本月（'+CURRENT_MONTH+'）尚無已公告之 ICSOP 文件'):'目前尚無已公告之 ICSOP 文件',
                    '文件於「ICSOP 文件管理」建立並設定公告日期後，公告日一到即會出現在此。')
@@ -848,8 +967,10 @@
             </div>
           </div>
           <div class="min-w-0 flex-1">
-            <p data-donut-truncation class="text-[11px] leading-relaxed text-slate-500">${trunc}</p>
-            <p class="mt-2 text-[11px] leading-relaxed text-slate-400 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>「進度中」不分時間（＝當下尚未到公告日）⇒ <strong class="text-slate-500">同一個組織在「當月已公告」與「累積已公告」兩張圖上的「進度中」必為同值</strong>，這是同一個事實，不是重複貼上。</span></p>
+            <div class="flex items-start gap-1.5">
+              <p data-donut-truncation class="flex-1 text-[11px] leading-relaxed text-slate-500">${trunc}</p>
+              ${truncInfo}
+            </div>
           </div>
         </div>
         <ul role="list" data-testid="donut-legend" class="mt-3 max-h-[184px] overflow-y-auto pr-1 border-t border-slate-100 divide-y divide-slate-100">
@@ -864,8 +985,7 @@
           }).join('')}
         </ul>`;
     document.getElementById(key==='month'?'donutMonth':'donutCumulative').innerHTML=
-      `<div class="flex items-center gap-2 mb-1"><i data-lucide="target" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">${meta.title}</h2></div>
-       <p class="text-xs text-slate-400 mb-3">${meta.desc.replace(/\*\*(.+?)\*\*/g,'<strong class="text-slate-500">$1</strong>')}</p>
+      `<div class="flex items-center gap-2 mb-3"><i data-lucide="target" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">${meta.title}</h2>${infoNote('donut-'+key,[meta.info,DONUT_INPROGRESS_INFO])}</div>
        <div role="tablist" aria-label="制定組織維度" data-testid="org-dimension-tabs" class="flex flex-wrap gap-1.5 mb-3">${tabs}</div>
        <div role="tabpanel" id="panel-${key}" data-testid="donut-panel" aria-labelledby="tab-${key}-${dim}" tabindex="0">${body}</div>`;
   }
@@ -898,11 +1018,18 @@
     const rows=latestAnnouncements(scenarioDocs(),LATEST_LIMIT);
     /* 🔒 `AC-G58`：閘門**讀矩陣**（`ICSOP_DOCUMENT_MANAGEMENT` / read），禁止寫成角色清單。
        🔴 導向**不帶狀態篩選**——連結叫「查看更多」，帶篩選會看到更少。 */
+    /* ⚠ 表外第 10 處之 ⓘ（§癸四 九列未涵蓋；designer 擬定、尚未鎖定，已回報 spec-writer）。 */
+    const latestInfo = infoNote('latest-announcements',[
+      '依公告日由新到舊排列。尚未到公告日的文件（狀態為「進度中」）因為日期在後面，會排在最前面。'
+    ]);
     const more=canPerform(role,'ICSOP_DOCUMENT_MANAGEMENT','read')
       ? `<a role="link" href="13-document-list.html?sortBy=announcedDate&amp;sortDir=desc" class="ml-auto inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline">查看更多<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>`
       : '';
     const body = rows.length===0
-      ? emptyState('目前沒有可呈現的 ICSOP 版本更新','清單來源＝「ICSOP 文件管理」中儲存狀態為有效、且已設定公告日期之文件；依公告日降冪排列。')
+      /* 🔒 §癸四 第 8 項：**可見、但重寫**（🔴 空狀態是使用者最需要引導的時刻，不得收進 ⓘ）。
+         📝 已作廢：OLD> 清單來源＝「ICSOP 文件管理」中儲存狀態為有效、且已設定公告日期之文件；依公告日降冪排列。
+            ⇒ 含「儲存狀態為有效」「降冪排列」（內部欄位語言，`AC-G94` ④）。 */
+      ? emptyState('目前沒有可呈現的 ICSOP 版本更新','這裡列出「ICSOP 文件管理」中已設定公告日期、且未失效或作廢的文件，最新公告的排在最前面。')
       : `<div class="overflow-x-auto">
           <table role="table" class="w-full text-sm">
             <thead class="text-xs text-slate-500 border-b border-slate-200">
@@ -929,7 +1056,16 @@
             </tbody>
           </table>
         </div>
-        <p class="mt-2 text-[11px] text-slate-400">依公告日降冪排列，共 <span class="mono">${pool.length}</span> 份符合條件，此處呈現最新 <span class="mono">${rows.length}</span> 份。⚠ 公告日在未來者（狀態為「進度中」）依降冪排在最上方，屬正常。</p>`;
+        <!-- 表外第 10 處（§癸四 九列未涵蓋；依 AC-G94 通則處理，文案 designer 擬定、尚未鎖定）：
+             已作廢 OLD＞「依公告日降冪排列，共 {n} 份符合條件，此處呈現最新 {m} 份。公告日在未來者
+             （狀態為「進度中」）依降冪排在最上方，屬正常。」⇒ 含「屬正常」（②）與「降冪」（④）。
+             兩個數字留在可見層；排序規則與「為什麼未來日期排最前面」移入 ⓘ。 -->
+        <!-- 🔒 AC-G96：正式站之 {n} 來自端點 additive 欄位 latestAnnouncementsTotal
+             （由 latestAnnouncements() 在**截斷前**自同一個 pool 取 pool.length，成本為零）。
+             🔴 本原型算得出 {n} 是因為瀏覽器裡握有全部文件陣列——**正式站前端沒有那個陣列**，
+                移植時不得據此以為前端也該持有全部文件。
+             🔒 {m} 為實際顯示筆數（rows.length），不得寫死 10——小語料下 {n} 會小於 10。 -->
+        <div class="mt-2 flex items-start gap-1.5"><p class="flex-1 text-[11px] text-slate-400">共 <span class="mono">${pool.length}</span> 份，這裡顯示最新的 <span class="mono">${rows.length}</span> 份。</p>${latestInfo}</div>`;
     document.getElementById('latestAnnouncements').innerHTML=
       `<div class="flex items-center gap-2 mb-3"><i data-lucide="megaphone" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">最新公告（ICSOP 版本更新）</h2>${more}</div>${body}`;
   }
@@ -946,8 +1082,20 @@
     const max=all.reduce(function(m,r){ return r.total>m?r.total:m; },0);
     const poolBtn=`<button type="button" onclick="toggleCategoryDemoPool()" class="ml-auto text-[11px] px-2 py-1 rounded border border-slate-200 text-slate-500 hover:bg-slate-50">${categoryDemoPool?'示範語料：完整類別池（14 類）':'示範語料：預設類別池（4 類）'}</button>`;
     const body = all.length===0
-      ? emptyState('目前沒有可呈現的業務/功能類別','長條來源＝「業務/功能類別管理」中狀態為啟用、且掛有有效文件之類別；停用之類別與掛載數為 0 者不列出。')
-      : `<p class="text-xs text-slate-400 mb-3 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>統計單位＝<strong class="text-slate-500">類別</strong>（非節點），同一份文件在同一類別內只計一次；僅計入儲存狀態為<strong class="text-slate-500">有效</strong>之文件。⚠ 一份文件可掛多個類別（會各計一次），未掛任何類別之文件不出現 ⇒ <strong class="text-slate-500">各類別合計與上方卡片刻意不相等</strong>。</span></p>
+      /* 🔒 §癸四 第 9 項：**可見、但重寫**。
+         📝 已作廢：OLD> 長條來源＝「業務/功能類別管理」中狀態為啟用、且掛有有效文件之類別；停用之類別與掛載數為 0 者不列出。
+            ⇒ 含「長條來源＝」「掛載數為 0」（內部詞彙，`AC-G94` ④）。 */
+      ? emptyState('目前沒有可呈現的業務/功能類別','這裡列出「業務/功能類別管理」中啟用中、且底下已掛上文件的類別。還沒掛上文件的類別不會出現在這裡。')
+      /* 🔒 §癸四 第 4 項：統計單位說明之**可見段落整段刪除**，內容移入區塊標題旁之 ⓘ。
+         📝 **2026-09-21 就地更正（G44-15；本 agent 提報後 spec-writer 統一）**：鎖定文案之末句
+            OLD> 只計入儲存狀態為有效的文件。  ⇒  NEW> 已失效或作廢的文件不列入計算。
+            🔴 舊句本身即違反 `AC-G94` ④（「儲存狀態為有效」是內部欄位語言），且與 §癸四 第 8 列
+               把同一個詞列為「必須重寫」**自相矛盾**；新句改用**狀態欄上使用者實際看得到的詞**。
+         📝 已作廢（⚠ 不得復原其措辭）：OLD> 統計單位＝類別（非節點），同一份文件在同一類別內只計一次；
+            OLD> 僅計入儲存狀態為有效之文件。⚠ 一份文件可掛多個類別（會各計一次），未掛任何類別之文件
+            OLD> 不出現 ⇒ 各類別合計與上方卡片刻意不相等。
+            ⇒ 含以「節點」對比「類別」之內部模型詞彙（`AC-G94` ④）與「刻意」（②）。 */
+      : `
         <div class="flex items-center gap-3 mb-2 text-xs">
           <span class="inline-flex items-center gap-1"><span aria-hidden="true" class="w-2.5 h-2.5 rounded-sm" style="background:${C_ANNOUNCED}"></span><span class="text-slate-500">已公告</span></span>
           <span class="inline-flex items-center gap-1"><span aria-hidden="true" class="w-2.5 h-2.5 rounded-sm" style="background:${C_IN_PROGRESS}"></span><span class="text-slate-500">進度中</span></span>
@@ -972,10 +1120,10 @@
         ${all.length>CATEGORY_LIMIT
           ? (categoryExpanded
               ? `<div class="mt-3"><button type="button" onclick="toggleCategoryExpand()" class="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline">僅顯示前 ${CATEGORY_LIMIT} 類<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></button></div>`
-              : `<div class="mt-3"><p class="text-[11px] text-slate-500">目前顯示總數最多的前 <span class="mono">${CATEGORY_LIMIT}</span> 類（排序＝已公告＋進度中之總數由多至少），另有 <span class="mono">${all.length-CATEGORY_LIMIT}</span> 類未列出。</p><button type="button" onclick="toggleCategoryExpand()" class="mt-1 inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline">顯示全部類別<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></button></div>`)
-          : `<p class="mt-3 text-[11px] text-slate-400">共 <span class="mono">${all.length}</span> 類，未達 <span class="mono">${CATEGORY_LIMIT}</span> 類之顯示上限，已全部列出。</p>`}`;
+              : `<div class="mt-3"><div class="flex items-start gap-1.5"><p class="flex-1 text-[11px] text-slate-500">顯示前 <span class="mono">${CATEGORY_LIMIT}</span> 類，另有 <span class="mono">${all.length-CATEGORY_LIMIT}</span> 類未顯示。</p>${infoNote('category-truncation',['依「已公告」與「進度中」的文件數合計，由多到少排列；點「顯示全部類別」可看到全部 '+all.length+' 類。'])}</div><button type="button" onclick="toggleCategoryExpand()" class="mt-1 inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline">顯示全部類別<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></button></div>`)
+          : `<p class="mt-3 text-[11px] text-slate-400">共 <span class="mono">${all.length}</span> 類，已全部顯示。</p>`}`;
     host.innerHTML=`<section role="region" aria-label="依業務/功能類別分布" data-testid="category-distribution" class="bg-white border border-slate-200 rounded-xl p-5">
-      <div class="flex items-center gap-2 mb-1"><i data-lucide="shapes" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">依業務/功能類別分布</h2>${poolBtn}</div>
+      <div class="flex items-center gap-2 mb-1"><i data-lucide="shapes" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">依業務/功能類別分布</h2>${infoNote('category-distribution',['每個類別各自計算掛在它底下的文件；同一份文件若掛在多個類別，每個類別都會算到它，所以各類別加總會多於上方卡片的文件總數。已失效或作廢的文件不列入計算。'])}${poolBtn}</div>
       <div class="mt-2">${body}</div>
     </section>`;
   }
@@ -998,6 +1146,7 @@
     /* 🔒 `AC-G42`／`AC-G44`：每次完整重繪一律回到**端點回傳之 `defaultDimension`**，不記憶上次的選擇。 */
     const def=normalizeDefaultDimension(defaultDim);
     donutDim.month=def; donutDim.cumulative=def;
+    infoReset();
     renderStatCards();
     renderDonutRegion('month');
     renderDonutRegion('cumulative');
@@ -1031,6 +1180,9 @@
     document.getElementById('toastWrap').appendChild(el);lucide.createIcons();
     setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},4000);
   }
+
+  /* 🔒 `AC-G95`：`Esc` 收合全部 ⓘ（鍵盤可達之收合路徑）。 */
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAllInfo(); });
 
   renderSidebar(); renderDash(); lucide.createIcons();
 </script>
