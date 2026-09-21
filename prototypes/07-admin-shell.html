@@ -334,6 +334,19 @@
     });
   }
   /* 📌 `AC-G67` 之可測形狀：條寬計算抽為純函式。固定向量：max===0／單邊為 0／兩邊皆為 0。 */
+  /* 📌 `AC-G97` 之可測形狀：卡④ 環圖之弧長**抽為純函式**——本輪無視覺回歸，
+     **弧長對不對機器驗不到**，只有純函式那一層驗得到（比照 `donutSegments`）。
+     固定向量：`X===0`（空環，length 0）／`X===Y`（滿環，length ＝ 周長）／中間值（`3/4` ⇒ 0.75×周長）。
+     ⚠ 弧長採**未四捨五入之比值**，中央文字採 `coveragePercent()` 之整數——兩者刻意不同源：
+        文字要可讀（整數），弧長要準（例如 1/3 應畫 33.33% 而非 33%）。差距恆 < 1%，不影響判讀。 */
+  const OJT_DONUT_R=26, OJT_DONUT_C=2*Math.PI*OJT_DONUT_R;
+  function ojtOnTimeArc(numerator,denominator){
+    if(!(denominator>0)) return {length:0,rest:OJT_DONUT_C};
+    const ratio=Math.max(0,Math.min(1,numerator/denominator));
+    const length=ratio*OJT_DONUT_C;
+    return {length:length,rest:OJT_DONUT_C-length};
+  }
+
   function barWidths(announced,inProgress,max){
     if(!(max>0)) return {announced:0,inProgress:0};
     return {announced:(announced/max)*100,inProgress:(inProgress/max)*100};
@@ -441,11 +454,20 @@
     if(action==='read') return MATRIX_READABLE.indexOf(acc)>=0;
     return acc==='CRUD'||acc==='RESTRICTED_CRUD';
   }
-  /* 🔒 `AC-G17`／`AC-G80`：卡④ 之可見性沿用 F042 既有述詞 `canViewDashboard`（2026-09-02 人類裁決），
-     **不改寫、不擴充其值域**，明文禁止在本頁另寫 `role==='ICSOPAdmin'||role==='SysAdmin'`。
-     ⚠ 這是全檔唯一以角色為判準者——它是**既有**的共用述詞，不是新寫的角色清單；它回答的問題
-        （「誰看得到全公司的 OJT 統計」）與 OJT 頁 TAB1 完全相同，寫成兩份必有一邊日後被靜默遺漏。 */
-  function canViewDashboard(role){ return role==='icsop_admin'||role==='sysadmin'; }
+  /* 🔒 `AC-G17`（🔴 **2026-09-21 第七輪人類裁決就地改寫**）：卡④ 之可見閘門改為
+     **`canPerform(role, 'OJT_PROGRESS_MANAGEMENT', 'read')`** —— 與「查看明細」同一個閘門，
+     🔴 禁止寫成角色清單、🔴 **亦禁止再重用 `canViewDashboard`**。
+     📝 已作廢（僅供追溯，⚠ 不得復原）：
+        OLD> function canViewDashboard(role){ return role==='icsop_admin'||role==='sysadmin'; }
+        OLD> if(canViewDashboard(role)) html+=ojtCardHtml(role);
+        OLD> 註解：「卡④ 之可見性沿用 F042 既有述詞 canViewDashboard（2026-09-02 人類裁決），不改寫、不擴充其值域」
+     🔴 **為何改**：矩陣值為 `row('READ','CRUD','RESTRICTED_CRUD','RESTRICTED_CRUD','NONE')`
+        ⇒ 舊寫法造成**反轉的權限梯度**——SysAdmin 只有 `READ` 卻看得到，主管／部門窗口有
+        `RESTRICTED_CRUD`（權限更大）反而看不到。
+     🔴 **根因是重用了一個答錯問題的述詞**：`canViewDashboard` 答的是「誰看得到那一個**分頁**」，
+        卡④ 問的是「誰看得到這一個**數字**」。兩個問題碰巧在某些角色上答案相同，不代表可以共用。
+     🔒 `canViewDashboard` 於 [F042](F042 之 OJT 進度管理頁) **一行不動**，其 TAB1 仍對主管／窗口隱藏
+        ——本裁決是**限縮本檔之重用**，不是推翻 2026-09-02 那條裁決。 */
 
   /* ───── 業務/功能類別池（與 `26-business-category-list.html` 之類別池逐列一致）───── */
   const BUSINESS_CATEGORIES=[
@@ -864,23 +886,58 @@
         <p class="text-xs text-slate-400 mt-1">${esc(c.hint)}</p>
       </div>`;
     }).join('');
-    if(canViewDashboard(role)) html+=ojtCardHtml(role);
+    if(canPerform(role,'OJT_PROGRESS_MANAGEMENT','read')) html+=ojtCardHtml(role);
     document.getElementById('statCards').innerHTML=html;
   }
 
   /* 卡④：OJT 準時完成率(1個月內)
-     🔒 `AC-G17`：**僅** ICSOPAdmin／SysAdmin 進 DOM（不是 hidden、不是 disabled）——主管與部門窗口
-        連同「查看明細」連結一起看不到。述詞＝既有之 `canViewDashboard`。
-     🔒 `AC-G13`：數值句逐字 `已完成 {X} / 應完成 {Y}（{Z}%）`——`/` 兩側各恰一個半形空格、括號為全形、% 為半形。
-     🔒 `AC-G14`：分母為 0 ⇒ 省略比率並顯示明確空狀態；🔴 明文禁止 `NaN%`／`0%`／`100%`／空白
-        （`0%` 與「全部未完成」無從分辨，`100%` 是謊報）。
-     🔒 `AC-G15`：排除註記**恆顯示**（含排除 0 筆時之明確說明），比照 25-ojt-progress 之 `#inactiveNote`。 */
+     🔒 `AC-G17`（🔴 **2026-09-21 第七輪就地改寫**）：**四種後台角色皆顯示**；閘門＝
+        `canPerform(role,'OJT_PROGRESS_MANAGEMENT','read')`，與「查看明細」**同一個閘門**。
+        📝 已作廢（⚠ 不得復原）：OLD> 「**僅** ICSOPAdmin／SysAdmin 進 DOM——主管與部門窗口連同
+           「查看明細」連結一起看不到。述詞＝既有之 `canViewDashboard`。」
+           ⇒ 該寫法造成**反轉的權限梯度**（理由見 `canPerform` 上方之閘門註解）。
+     🔒 `AC-G13`／`AC-G97`（第七輪）：數值拆為**兩個獨立節點**——環中央 `[data-ojt-ontime-rate]` ＝ `{Z}%`；
+        環旁 `ojt-ontime-value` ＝ `已完成 {X} / 應完成 {Y}`（`/` 兩側各恰一個半形空格、`%` 半形）。
+        📝 已作廢：OLD> 單一字串 `已完成 {X} / 應完成 {Y}（{Z}%）`（全形括號）。
+        🔒 `{Z}` 一律委派 `coveragePercent()`，禁止另打一份 `Math.round`（該要求未隨改版蒸發）。
+     🔒 `AC-G14`／`AC-G97`：分母為 0 ⇒ 省略比率、**環圖不繪**（`ojt-ontime-donut` 不進 DOM）、
+        `[data-ojt-ontime-rate]` 與 `ojt-ontime-value` **亦不進 DOM**，改以 empty-state 取代整個數值區；
+        🔴 明文禁止 `NaN%`／`0%`／`100%`／空白（`0%` 與「全部未完成」無從分辨，`100%` 是謊報）。
+     🔒 `AC-G15`：排除註記恆在 DOM（`a+b === 0` 時套 `hidden`、無可見文字）。
+     🔒 `AC-G97`：卡④ **只有一個 ⓘ**（`AC-G89`）——環圖若需說明一律併入該 ⓘ，不得再加第二個。 */
   function ojtCardHtml(role){
     const r=ojtOnTimeRate(scenarioOjtRows(),TODAY);
     const showLink=canPerform(role,'OJT_PROGRESS_MANAGEMENT','read');
     const value = r.denominator>0
-      ? `<div data-testid="stat-value" class="mt-2 text-xl font-bold text-slate-900"><span data-testid="ojt-ontime-value" class="mono">已完成 ${r.numerator} / 應完成 ${r.denominator}（${r.rate}%）</span></div>`
-      : `<div data-testid="empty-state" class="mt-2 flex items-start gap-1.5 text-sm text-slate-500"><i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0 text-slate-400"></i><span data-testid="ojt-ontime-value">近 1 個月內無應完成之 OJT 單位</span></div>`;
+      /* 🔒 `AC-G13`／`AC-G97`（2026-09-21 第七輪）：數值拆為**兩個可獨立斷言的節點**——
+         環**中央** `[data-ojt-ontime-rate]` ＝ `{Z}%`；環**旁** `ojt-ontime-value` ＝ `已完成 {X} / 應完成 {Y}`。
+         🔴 「已完成 X / 應完成 Y」**不得消失**——那是使用者最初需求的逐字要求（「顯示實際單位數量與比率」）；
+            本次改的是**排版**，不是資訊量，拿掉的只是原本括號裡的 `（Z%）`，它移到了環中央。
+         🔴 明文禁止把 `{Z}%` 串回 `ojt-ontime-value`（那等於沒拆，且會讓環中央斷言失去唯一載體）。
+         🔒 `stat-value` 仍為**外層**，其 textContent 同時含住兩者（`AC-G24` 之巢狀約定，三者不得缺一）。
+         🔒 百分比文字疊在 `<svg>` **之外**、`<svg>` 一律 `aria-hidden`（沿用兩張大環圖之 `[data-donut-total]` 手法）
+            ⇒ `AC-G71` 不需放寬。
+         🔒 `data-testid` 刻意**不與兩張大環圖撞名**（`ojt-ontime-donut`／`[data-ojt-ontime-rate]`）。
+         📝 已作廢（僅供追溯，⚠ 不得復原）：
+            OLD> 單一字串 `已完成 {X} / 應完成 {Y}（{Z}%）`（全形括號）掛在 ojt-ontime-value 上。 */
+      ? `<div data-testid="stat-value" class="mt-2 flex items-center gap-3">
+          <div data-testid="ojt-ontime-donut" class="relative w-16 h-16 shrink-0">
+            <svg viewBox="0 0 64 64" class="w-16 h-16" aria-hidden="true" focusable="false">
+              <circle cx="32" cy="32" r="${OJT_DONUT_R}" fill="none" stroke="#F1F5F9" stroke-width="8"></circle>
+              <circle cx="32" cy="32" r="${OJT_DONUT_R}" fill="none" stroke="${C_ANNOUNCED}" stroke-width="8" stroke-linecap="butt" stroke-dasharray="${ojtOnTimeArc(r.numerator,r.denominator).length.toFixed(3)} ${ojtOnTimeArc(r.numerator,r.denominator).rest.toFixed(3)}" transform="rotate(-90 32 32)"></circle>
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span data-ojt-ontime-rate class="text-sm font-bold text-slate-900 mono">${r.rate}%</span>
+            </div>
+          </div>
+          <span data-testid="ojt-ontime-value" class="mono text-base font-semibold text-slate-900">已完成 ${r.numerator} / 應完成 ${r.denominator}</span>
+        </div>`
+      /* 🔴 `AC-G97`：`denominator === 0` ⇒ **環圖本身不繪**（`ojt-ontime-donut` 不進 DOM），
+         `[data-ojt-ontime-rate]` 與 `ojt-ontime-value` **亦不進 DOM**，整個數值區改以 empty-state 取代。
+         🔴 **為何不繪空環**：一個 0% 的環與「全部未完成」在畫面上**完全一樣**——那正是 `AC-G14`
+            禁止 `0%` 的同一個理由，只是換成了圖形形式。
+         📝 已作廢：OLD> 空狀態之提示文字上掛著 data-testid="ojt-ontime-value"（該節點此時**不得存在**）。 */
+      : `<div data-testid="empty-state" class="mt-2 flex items-start gap-1.5 text-sm text-slate-500"><i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0 text-slate-400"></i><span>近 1 個月內無應完成之 OJT 單位</span></div>`;
     /* 🔒 §癸四 第 1 項（2026-09-21 **第二次**就地更正）：可見層只留「排除了幾個**單位**」，
        🔴 **恰加總前兩項**，且一律委派 `excludedUnitCount()`（單一推導點，理由見該函式註解）。
        📝 已作廢（僅供追溯，⚠ 不得復原）：
