@@ -19,10 +19,10 @@
 
 | Metric | Count |
 |--------|-------|
-| Total Epics | 10 |
-| Total Stories | 53 |
+| Total Epics | 13 |
+| Total Stories | 64 |
 | Total NFRs | 10 |
-| Phase 1（優先交付） | 47 |
+| Phase 1（優先交付） | 58 |
 | Phase 2（次階段強化） | 2 |
 | Phase 3（智慧化） | 4（E09 智慧問答／RAG 前台功能，見下方） |
 
@@ -33,6 +33,12 @@
 > **2026-07-17 增量（二）**：E07 新增 US-062「ICSOP 程序書變更歷程」與 US-063「循環樹狀圖變更歷程」，Total Stories 48→50，Phase 1 由 42→44（皆為 P1 story，仍屬 Phase 1 優先交付範圍）。
 >
 > **2026-08-06 增量**：新增 **E10 附錄管理**（US-100 附錄上傳管理／US-101 附錄與文件關聯維護／US-102 附錄池管理，共 3 個 P1 story），模型/權限/稽核義務比照 [E05 文件使用表單管理](epics/E05-usage-form/epic-brief.md)。Total Epics 9→10，Total Stories 50→53，Phase 1 由 44→47（皆為 P1 story，仍屬 Phase 1 優先交付範圍）。
+>
+> **🔴 2026-09-21 增量（含既有漏登之補登）**：本檔之 Quick Stats 與 Epic Index 先前**停留在 E10**，**E11／E12 兩個已交付之 Epic 從未登錄於本導覽頁**（其目錄、epic-brief 與 story 檔皆早已存在於 `epics/` 之下）——本次一併補登，並新增本輪之 E13。
+> · **E11 OJT 進度管理**（US-103 場次管理／US-104 進度儀表板／US-105 文件層 OJT 衍生欄，共 3 個 P1 story，[F042](../specs/features/F042-ojt-progress-management.md)，🟢 已上線）
+> · **E12 業務/功能類別管理**（US-106 類別池與 DAG／US-107 多對多掛載／US-108 前台兩種瀏覽模式，共 3 個 P1 story，[F043](../specs/features/F043-business-function-category.md)，🟢 已上線）
+> · **E13 後台首頁儀表板**（US-109 四張統計卡／US-110 移除快速進入功能區／US-111 雙環圖／US-112 最新公告清單／US-113 類別分布長條圖，共 5 個 story，[F044](F044-admin-dashboard-analytics.md)，🟢 **APPROVED — 2026-09-21 人類閘門通過，30 題 `OQ-D44-*` 全數裁決**；⚠ 核准的是「需求與口徑」，spec／prototype／AC／程式碼**尚未存在**）
+> ⇒ Total Epics 10→**13**，Total Stories 53→**64**，Phase 1 由 47→**58**。
 
 ## Epic Index
 
@@ -48,6 +54,9 @@
 | E08 | 權限矩陣 | 1 | 2 | [epic-brief.md](epics/E08-permission-matrix/epic-brief.md) |
 | E09 | 智慧問答（本地開源 LLM + RAG） | 1/3 | 9 | [epic-brief.md](epics/E09-rag-qa/epic-brief.md) |
 | E10 | 附錄管理 | 1 | 3 | [epic-brief.md](epics/E10-appendix/epic-brief.md) |
+| E11 | OJT 進度管理 | 1 | 3 | [epic-brief.md](epics/E11-ojt-progress/epic-brief.md) |
+| E12 | 業務/功能類別管理 | 1 | 3 | [epic-brief.md](epics/E12-business-function-category/epic-brief.md) |
+| E13 | 後台首頁儀表板 | 1 | 5 | [epic-brief.md](epics/E13-admin-dashboard/epic-brief.md) |
 
 ## Phase Breakdown
 
