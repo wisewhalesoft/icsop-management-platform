@@ -23,8 +23,24 @@ http fetch GET https://registry.npmjs.org/... failed with SELF_SIGNED_CERT_IN_CH
 ## 🔴 只裝進 OS 信任存放區沒有用
 
 `apk add ca-certificates && update-ca-certificates` **不會**解決這件事——
-**Node.js 用的是自己內建的根憑證清單，不看 OS 的信任存放區**。必須走 `NODE_EXTRA_CA_CERTS`，
-兩支 Dockerfile 已據此設定。
+**Node.js 用的是自己內建的根憑證清單，不看 OS 的信任存放區**（已實測，無效）。
+
+## 🔴 為什麼不用行程層環境變數（`NODE_EXTRA_CA_CERTS`）
+
+第一版曾以 `ENV NODE_EXTRA_CA_CERTS=...` 實作，**那是錯的**，且被既有的安全 AC 擋下：
+
+- **F001 `AC-E8`「TLS 憑證驗證不得以任何方式關閉」把該環境變數列入禁用清單**，其合成違規樣本
+  逐字即 `ENV NODE_EXTRA_CA_CERTS=/tmp/mitm.pem` —— 作者**明確預想過**注入 MITM 根 CA 這個情境。
+- 🔴 **它擋對了。** 該 `ENV` 會留在**執行中的容器**裡 ⇒ 本服務對 **Azure Blob／AAD／MSSQL 的
+  每一條對外 TLS** 都會信任該攔截 CA。那是真的削弱，不是形式問題。
+- ⇒ 現行作法改為 **`npm_config_cafile`**，且**只在安裝那一行的 shell 內生效**（不寫進 image、
+  不設任何行程層環境變數）⇒ 信任範圍收窄為「**build 時的 npm registry 連線**」，
+  執行中的容器不帶任何額外信任錨點。實測 `npm ci` 成功、容器內該環境變數未設定。
+- 🔒 **不得改回行程層環境變數**；兩支 Dockerfile 的註解刻意**不複述**那個字面
+  （`AC-E8` 的掃描不剝註解，複述會讓那條安全斷言對一段「解釋為何不用它」的註解誤報）。
+
+⚠ 上一行本身就是這輪的教訓之一：**用法禁令若以裸字面掃描實作，會對「記錄該禁令的註解」誤報**
+—— 所以字面只留在本檔（不在 `AC-E8` 的掃描範圍內），Dockerfile 只留指標。
 
 ## 怎麼匯出（Windows / PowerShell）
 
