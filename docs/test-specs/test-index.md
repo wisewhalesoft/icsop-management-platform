@@ -56,6 +56,8 @@
 
 | 🔵 **F043 業務/功能類別管理（E12）——與循環管理平行之第二套 DAG 分類骨架，本輪 frontend 線已交環** | **[features/F043-test.md](features/F043-test.md)**（frontend／vitest 線）← 2026-09-02 新增。52 條主 AC ＋ 三份跨檔 delta（`AC-B1`～`AC-B29`，跨 [F017-test.md](features/F017-test.md)／[F019-test.md](features/F019-test.md)／[F025-test.md](features/F025-test.md) 之欄位）。14 個 frontend 測試檔（4 個既有檔 additive 擴充：`function-matrix.test.ts`／`menu.test.ts`／`PermissionMatrixPage.test.tsx`／`PublicListPage.businessCategory.test.tsx`；10 個全新頁面／純函式檔）。🔴🔴 兩項本批最高風險已建成對正負斷言：`AC-54`（主管看不到「文件變更歷程」第三個 tab，容器限定於 `[data-testid="change-history-tabs"]`，明文禁止全域 `getByText`）、`PREVIEW_KIND` 分派（Tab2/Tab3 下載須分別落在 `downloadLifecycleTreeDiff`／`downloadBusinessCategoryTreeDiff`，兩條斷言同檔成對）。詳見 [risks-and-gaps.md #f043-frontend](risks-and-gaps.md#f043-frontend)（含端點命名等自訂契約、CSV 位元組內容等留給 backend 線之缺口）。backend 線另章建置中，見該線回報。 |
 
+| 🔵 **F044 後台首頁儀表板改版（E13）——簡化環（僅 backend jest ／ frontend vitest），環已交、待實作轉綠** | **無獨立 `features/F044-test.md`**：93 條 AC 已於 [F044 規格](../specs/features/F044-admin-dashboard-analytics.md) 逐條以 Given/When/Then ＋ 指名載體（`role`／`aria-label`／`data-testid`／逐字文案／純函式名）寫成，另抄一份只會製造分歧起點。<br>**建環產物＝10 個 backend spec ＋ 6 個 frontend test**（清單與 AC 對照見 test-generator 交件報告）。<br>🔴 **13 項缺口與偏離見 [risks-and-gaps.md #f044](risks-and-gaps.md#f044)**——其中 `G44-01`（`AC-G90` ③ 之識別子掃描已被 F003 既有實作違反）與 `G44-04`（`AC-G28` 低估漣漪：`DashboardHome.test.tsx` 有三處而非兩處）**需人類／spec-writer 裁決**。 |
+
 ## 自動化就緒度
 
 | 約束層 | 狀態 |
