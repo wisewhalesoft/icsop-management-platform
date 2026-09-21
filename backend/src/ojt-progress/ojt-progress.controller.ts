@@ -66,6 +66,20 @@ export class OjtProgressController {
   }
 
   /**
+   * F044 卡④「OJT 準時完成率(1個月內)」（`AC-G86`）。
+   *
+   * 🔒 **掛在 OJT 模組而不是 dashboard 模組**（`ARCH-G3`）：資料屬 OJT 領域、閘門為
+   * `OJT_PROGRESS_MANAGEMENT`，且其與儀表板其餘區塊之間**沒有任何恆等式**
+   * （`AC-G9` 明訂其口徑與別處刻意不同）⇒ 不需要與它們共用同一次請求。
+   * 🔴 **無查詢參數**——`today` 明文不得由 client 傳入，否則使用者可自行改「今天」而使統計失真。
+   */
+  @Get('admin/ojt-progress/ontime-summary')
+  @RequirePermission(FunctionKey.OJT_PROGRESS_MANAGEMENT, 'read')
+  getOnTimeSummary(@Req() req: RequestWithSession) {
+    return this.svc.getOnTimeUnitStats(req.sessionUser);
+  }
+
+  /**
    * TAB2 進度列（`AC-11`）＋**恰兩項**篩選（`AC-13`）。
    *
    * 🔴 **回應為信封 `{ items, total }`，非裸陣列**——§架構設計 一之端點表「回應形狀」欄為

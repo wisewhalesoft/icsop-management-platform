@@ -23,6 +23,11 @@ import {
  * `DocumentsModule` 或其任何 store／service。若日後有人把 IO 加進該檔，本行才會變成問題。
  */
 import { deriveOjtStatus } from '../documents/ojt-completion.reader';
+/**
+ * F044 卡④ 之口徑純函式（🟢 同模組內之零 IO 葉節點；`ARCH-G1` 裁定聚合落後端）。
+ * 🔒 `addMonthsClamped` 為前後端孿生實作，兩側由同一張 8 列固定向量表雙鎖。
+ */
+import { OjtOnTimeStats, ojtOnTimeRate } from './ojt-ontime';
 import {
   OJT_AUDIT_RECORDER,
   OJT_BLOB_STORE,
@@ -195,6 +200,18 @@ export interface OjtDocCoverageSlice {
    * ⚠ 原式在上一輪為真只是因為當時語料無任何 `totalUnits === 0` 之文件，不是普遍關係。
    */
   incompleteTotal: number;
+}
+
+/**
+ * F044 `AC-G14`／`architecture-spec` §15.5 ③ — `GET /admin/ojt-progress/ontime-summary` 之回應。
+ *
+ * 🔒 `rate` 於 `denominator === 0` 時**由後端省略本鍵**（不是前端判斷後不渲染）：
+ * `0%`／`100%`／`NaN%` 三種謊報都是「有一個數字可以渲染」才發生的；鍵不存在時 TypeScript
+ * 會逼呼叫端處理 `undefined` 分支。⚠ 逐字沿用既有 `coverage.rate` 之紀律。
+ */
+export interface OjtOnTimeSummary extends OjtOnTimeStats {
+  /** `YYYY-MM-DD`（UTC；＝ `serverToday(now)`）。 */
+  today: string;
 }
 
 export interface OjtSummary {
@@ -718,6 +735,46 @@ export class OjtProgressService {
       deptRollup,
       recentSessions: await this.recentSessions(),
     };
+  }
+
+  // ══════════ F044 卡④ · OJT 準時完成率(1個月內)（`AC-G7`～`AC-G15`） ══════════
+
+  /**
+   * 後台首頁卡④ 之聚合（🔒 **同一份 `aggregate()` 的第二個鏡頭**，不是一份新資料）。
+   *
+   * 🔴 **為何聚合落後端而不是前端**（`ARCH-G1` ①，功能性阻斷，非成本考量）：
+   * `excludedOrphaned` 在前端**結構上算不出來**——孤兒依定義已不在 `DOC_USING_DEPT` 集合內，
+   * 故 `GET /admin/ojt-progress/rows` 回傳之列裡**結構性地不含孤兒**；該數字之唯一來源是
+   * 既有之 `countOrphanedRows()`（比對 `OJT_SESSION` 與 `DOC_USING_DEPT` 兩個集合）。
+   *
+   * 🔒 口徑與 TAB1 `getSummary()` 之 `coverage` **刻意不同，不得互相對齊**（NFR-F044-3 #4）：
+   *   · TAB1 分母＝**進度列**（文件 × 單位）、不限時間；
+   *   · 本卡分母＝窗口內之**相異使用單位**（`(companyCode, orgCode)`，`AC-G9`）。
+   * ⇒ 兩個數字在畫面上必須可分辨，故前端之註記文案亦刻意不共用
+   *   （`ojtOnTimeNote` vs `exclusionNote`，`ARCH-G6`）。
+   *
+   * 🔒 完成判定沿用 F042 `AC-03`（版次相符之場次存在）、`isActive` 過濾沿用 `AC-17`
+   *   ——兩者皆已在 `aggregate()` 裡，本方法不再重寫一份。
+   */
+  async getOnTimeUnitStats(
+    session: OjtSessionContext | undefined,
+  ): Promise<OjtOnTimeSummary> {
+    this.assertCanRead(session?.roleCode);
+    const aggregated = await this.aggregate();
+    const today = serverToday(this.now());
+    const stats = ojtOnTimeRate(
+      aggregated.map((a) => ({
+        companyCode: a.companyCode,
+        orgCode: a.orgCode,
+        documentId: a.documentId,
+        announcedDate: a.announcedDate,
+        completed: a.completed,
+        isActive: a.active,
+      })),
+      today,
+      await this.countOrphanedRows(),
+    );
+    return { today, ...stats };
   }
 
   /**
