@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { DashboardHome } from './DashboardHome';
@@ -480,6 +480,12 @@ const BRANCH_PROBES: readonly BranchProbe[] = [
     },
   },
   { branch: '卡④・有比率（分母 > 0）', present: (r) => tid(r, 'ojt-ontime-value') > 0 },
+  /**
+   * 🔴 **第七輪新增分支（`AC-G97`）**：卡④ 環圖**有繪／不繪**。
+   * ⚠ 分母 0 時環圖**本身不繪**（不得繪空環、不得繪 0% 環）⇒ 這是一個
+   *   **真的會兩種值都出現**的述詞，不是恒為真的常數。
+   */
+  { branch: '卡④・環圖有繪', present: (r) => tid(r, 'ojt-ontime-donut') > 0 },
   {
     branch: '卡④・空狀態（分母 = 0）',
     present: (r) => {
@@ -714,7 +720,14 @@ describe('🔒 AC-G71／AC-G94 — 數字一律留在**可見**文字，不得�
     await screen.findByTestId('dashboard-stat-cards');
     const visible = norm(visibleText(container));
     for (const n of ['9', '3', '6']) expect(visible).toContain(n);
-    expect(visible).toContain(norm('已完成 3 / 應完成 4（75%）'));
+    /**
+     * 🔴 **第七輪（`AC-G13` 就地改寫）**：卡④ 拆成**兩個**數值節點。
+     * `OLD>` 原為單一字串 `已完成 3 / 應完成 4（75%）`（全形括號）。
+     * 🔒 **`AC-G71` 不放寬**：百分比雖然視覺上在環中央，它仍是疊在 `<svg>` **之外**
+     *    的 HTML 文字節點 ⇒ 🔴 **兩個數字都必須仍在可見層**，一個都不得掉進 popover。
+     */
+    expect(visible).toContain(norm('已完成 3 / 應完成 4'));
+    expect(visible).toContain('75%');
   });
 
   it('環圖圖例之每一個數字仍在可見層', async () => {

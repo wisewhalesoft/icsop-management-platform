@@ -193,29 +193,78 @@ describe('🔴 AC-G66 — 類別分布區塊之閘門隨矩陣而變（非角色
   });
 });
 
+/** 🔒 角色感知之覆寫：只對**指定角色**改動某一個功能鍵，其餘角色與鍵維持真實矩陣。 */
+const forceKeyForRole =
+  (role: string, key: string, value: boolean) =>
+  (r: string | undefined, k: string): boolean | undefined =>
+    r === role && k === key ? value : undefined;
+
 /**
- * 🔴 `AC-G18`：`查看明細` 之閘門為 `canPerform(role, OJT_PROGRESS_MANAGEMENT, 'read')`。
- * ⚠ 條文自陳「在 `AC-G17` 之下，卡④ 只對 ICSOPAdmin／SysAdmin 呈現，而該二角色對 OJT 皆有讀取權
- *   ⇒ **本閘門於畫面上目前恆為真**。**這不是把它寫成常數的理由**」——本組即其鑑別力載體。
+ * 🔴 **`AC-G17`（2026-09-21 第七輪就地改寫）＋ `AC-G18`**：
+ *    卡④ **與** `查看明細` 之閘門**皆為** `canPerform(role, OJT_PROGRESS_MANAGEMENT, 'read')`。
+ *    🔴 明文禁止寫成角色清單、🔴 亦禁止再重用 `canViewDashboard`。
+ *
+ * ⚠ **本輪之結構性後果，逐字記錄（已提報 `risks-and-gaps.md`）**：
+ *    `OLD>` 本 describe 之鑑別力來自「撤銷 OJT 讀取權 ⇒ **連結消失、卡④ 本體仍在**」——
+ *    因為當時兩者由**兩支不同的述詞**把關（卡＝`canViewDashboard`、連結＝矩陣）。
+ *    🔴 **改寫後兩者是同一支述詞 ⇒ 那個「一個消失、一個留下」的狀態在規格上已不可能存在**
+ *    ⇒ `AC-G18` **自此沒有獨立於 `AC-G17` 的鑑別力**，這是裁決的直接結果、不是環的缺口。
+ *    🔒 **本 describe 因此改為鎖「兩者必須同進同出」**——而那恰恰是**最可能的兩種錯誤實作**
+ *       （卡仍用 `canViewDashboard`／卡寫成四角色清單）**唯一會現形的地方**。
  */
-describe('🔴 AC-G18 — `查看明細` 之閘門隨矩陣而變（非常數 true）', () => {
-  it('矩陣**撤銷** ICSOPAdmin 之 OJT 讀取權 ⇒ 連結必須消失，但卡④ 本體仍在', async () => {
+describe('🔴 AC-G17／AC-G18 — 卡④ 與 `查看明細` 同由矩陣把關（同進同出）', () => {
+  /**
+   * 🔴 **鑑別力①：抓「卡④ 仍重用 `canViewDashboard`」。**
+   * 若實作把卡留在 `canViewDashboard` 上，ICSOPAdmin 於該述詞恆為真 ⇒ **卡會留著**，本條翻紅。
+   */
+  it('撤銷 ICSOPAdmin 之 OJT 讀取權 ⇒ 🔴 卡④ **與** 查看明細 **一起**不進 DOM', async () => {
     override = forceKey(FunctionKey.OJT_PROGRESS_MANAGEMENT, false);
     mockAuth('ICSOPAdmin');
     renderPage();
-    const card = await screen.findByTestId('stat-card-ojt-ontime');
-    // 🔒 卡④ 之可見性由 `canViewDashboard`（既有角色述詞）決定，不受本鍵影響
-    expect(card).toBeInTheDocument();
-    // 🔴 連結之閘門是矩陣 ⇒ 必須跟著消失
-    expect(within(card).queryByRole('link', { name: '查看明細' })).not.toBeInTheDocument();
+    await screen.findByTestId('dashboard-stat-cards');
+    expect(screen.queryByTestId('stat-card-ojt-ontime')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '查看明細' })).not.toBeInTheDocument();
   });
 
-  it('矩陣維持原值（有讀取權）⇒ 連結存在（上一條之正向對照，證明它不是恆不存在）', async () => {
+  /**
+   * 🔴 **鑑別力②：抓「卡④ 寫成四角色白名單」。**
+   * 第七輪之後四種後台角色皆看得到卡④ ⇒ 🔴 **一份寫死的四角色清單會與矩陣在畫面上完全同值**，
+   * 上面那條（ICSOPAdmin）也照樣紅——但**只撤銷主管一個人**時，清單式實作**不會有任何反應**。
+   * ⇒ 🔒 本條是「讀矩陣」與「照抄一份四角色清單」**唯一**分得出來的地方。
+   * ⚠ **建環當下本條為綠，而且是「碰巧綠」**：舊實作下 Supervisor 本來就看不到卡④
+   *   （`canViewDashboard` 為假）⇒ 🔴 **它目前零鑑別力，要等 `AC-G17` 落地之後才成為防線**。
+   *   🔒 不得以它目前是綠的來主張「該規則已被滿足」（已記於 `risks-and-gaps.md`）。
+   */
+  it('🔴 只撤銷 Supervisor 之 OJT 讀取權 ⇒ 卡④ 對 Supervisor 消失、對 ICSOPAdmin 仍在', async () => {
+    override = forceKeyForRole('Supervisor', FunctionKey.OJT_PROGRESS_MANAGEMENT, false);
+    mockAuth('Supervisor');
+    renderPage();
+    await screen.findByTestId('dashboard-stat-cards');
+    expect(screen.queryByTestId('stat-card-ojt-ontime')).not.toBeInTheDocument();
+  });
+
+  it('🔒 上一條之正向對照：同一個覆寫下，ICSOPAdmin 之卡④ 不受影響（證明覆寫真的只針對該角色）', async () => {
+    override = forceKeyForRole('Supervisor', FunctionKey.OJT_PROGRESS_MANAGEMENT, false);
     mockAuth('ICSOPAdmin');
     renderPage();
-    const card = await screen.findByTestId('stat-card-ojt-ontime');
-    expect(within(card).getByRole('link', { name: '查看明細' })).toBeInTheDocument();
+    expect(await screen.findByTestId('stat-card-ojt-ontime')).toBeInTheDocument();
   });
+
+  /**
+   * 🔒 **正向對照（證明上面三條不是恆不存在）**：矩陣維持原值時，
+   *    🔴 **四種後台角色皆**看得到卡④ 與 `查看明細`（`AC-G17` 之裁決本體）。
+   * 📌 四種角色對 `OJT_PROGRESS_MANAGEMENT` 分別為
+   *    `READ`／`CRUD`／`RESTRICTED_CRUD`／`RESTRICTED_CRUD` ⇒ `'read'` 皆為真。
+   */
+  it.each(['ICSOPAdmin', 'SysAdmin', 'Supervisor', 'DeptContact'])(
+    '矩陣原值下，%s 看得到卡④ 與 查看明細',
+    async (role) => {
+      mockAuth(role);
+      renderPage();
+      const card = await screen.findByTestId('stat-card-ojt-ontime');
+      expect(within(card).getByRole('link', { name: '查看明細' })).toBeInTheDocument();
+    },
+  );
 });
 
 /**

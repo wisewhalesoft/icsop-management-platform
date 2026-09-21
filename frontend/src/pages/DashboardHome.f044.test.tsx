@@ -196,8 +196,19 @@ describe('AC-G1／AC-G16／AC-G17 — 統計卡集合、逐字標題、順序與
     expect(ojt.textContent).toContain('(1個月內)');
   });
 
-  it.each(['Supervisor', 'DeptContact'])(
-    '🔴 AC-G17：%s 恰 3 張卡——卡④**完全不進 DOM**（不是 hidden、不是 disabled）',
+  /**
+   * 🔴 **`AC-G17` 於 2026-09-21 第七輪就地改寫：四種後台角色皆顯示卡④。**
+   * `OLD>` 本組原為「`Supervisor`／`DeptContact` 恰 3 張卡、卡④ 完全不進 DOM」，
+   *        其閘門為 `canViewDashboard`。🔒 該條文之 `OLD>` 已逐字保留於規格。
+   * 🔴 **改的理由（規格逐字）**：`canViewDashboard` 回答的是「誰看得到**那一個分頁**」，
+   *    卡④ 問的是「誰看得到**這一個數字**」——把兩個不同的問題綁在同一個答案上，就是不一致的來源；
+   *    後果是一個**反轉的權限梯度**：SysAdmin 只有 `READ` 卻看得到，主管／部門窗口有
+   *    `RESTRICTED_CRUD` **反而看不到**。
+   * 🔒 **閘門之鑑別力（讀矩陣 vs 四角色清單）不在本檔**——它需要被改動的矩陣，
+   *    見 `DashboardHome.f044.matrix.test.tsx` 之 `AC-G17／AC-G18` 組。
+   */
+  it.each(['ICSOPAdmin', 'SysAdmin', 'Supervisor', 'DeptContact'])(
+    '🔴 AC-G17：%s 恰 4 張卡——卡④ 對四種後台角色**皆進 DOM**',
     async (role) => {
       mockAuth(role);
       renderPage();
@@ -205,10 +216,9 @@ describe('AC-G1／AC-G16／AC-G17 — 統計卡集合、逐字標題、順序與
       expect(within(row).getByTestId('stat-card-announced')).toBeInTheDocument();
       expect(within(row).getByTestId('stat-card-in-progress')).toBeInTheDocument();
       expect(within(row).getByTestId('stat-card-monthly-announced')).toBeInTheDocument();
-      expect(within(row).queryByTestId('stat-card-ojt-ontime')).not.toBeInTheDocument();
-      expect(screen.queryByText('查看明細')).not.toBeInTheDocument();
-      // 🔴 端點亦不得被呼叫（閘門在發起請求之前）
-      expect(ep.getOjtOnTimeSummary).not.toHaveBeenCalled();
+      expect(within(row).getByTestId('stat-card-ojt-ontime')).toBeInTheDocument();
+      // 🔴 卡④ 既然要顯示，端點就**必須**被呼叫（否則卡片畫得出來卻沒有數字）
+      expect(ep.getOjtOnTimeSummary).toHaveBeenCalled();
     },
   );
 
@@ -245,42 +255,116 @@ describe('AC-G1／AC-G16／AC-G17 — 統計卡集合、逐字標題、順序與
 });
 
 describe('AC-G24／AC-G13／AC-G14／AC-G15 — 卡面數值與卡④ 之巢狀節點', () => {
+  /**
+   * 🔴 **`AC-G24` 於第七輪就地改寫**：卡④ 自此有**兩個**數值節點。
+   * `OLD>` 本條原以逐一相等之陣列鎖住四張卡之 `stat-value`，第四格為
+   *        `已完成 3 / 應完成 4（75%）`（單一字串、全形括號）。
+   * 🔒 改寫後 `stat-value` 仍為**外層**，但其 `textContent` 須**同時含住**環中央之 `{Z}%`
+   *    與環旁之 `已完成 {X} / 應完成 {Y}`。
+   * 🔴 **刻意不鎖兩者之串接順序**：那是版面決定（環在左、數字在右），`AC-G24` 只要求「同時含住」。
+   *    鎖順序等於把版面凍結在今天的樣子，而規格沒有這樣要求。
+   */
   it('AC-G24：四張卡之每一個數字皆可由 stat-value 之 textContent 取得', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     const row = await screen.findByTestId('dashboard-stat-cards');
     const values = within(row).getAllByTestId('stat-value');
     expect(values).toHaveLength(4);
-    expect(values.map((v) => v.textContent)).toEqual([
-      '9',
-      '3',
-      '6',
-      '已完成 3 / 應完成 4（75%）',
-    ]);
+    expect(values.slice(0, 3).map((v) => v.textContent)).toEqual(['9', '3', '6']);
+    // 🔒 卡④：外層同時含住兩個內層數值節點之逐字
+    const ojtValue = values[3].textContent ?? '';
+    expect(ojtValue).toContain('75%');
+    expect(ojtValue).toContain('已完成 3 / 應完成 4');
+    /**
+     * 🔴 **本條缺了這一句就會「碰巧綠」**：`OLD>` 之單一字串 `已完成 3 / 應完成 4（75%）`
+     *    **同時含有**上面兩段 ⇒ 🔴 **只用 `toContain` 的話，完全沒拆節點的舊實作照樣全綠**。
+     * 🔒 `AC-G24` 之「三者不得缺一」因此必須鎖**結構**：外層裡面真的要有那兩個內層節點。
+     */
+    expect(values[3].querySelector('[data-ojt-ontime-rate]')).not.toBeNull();
+    expect(within(values[3]).getByTestId('ojt-ontime-value')).toBeInTheDocument();
   });
 
   /**
-   * 🔴 `AC-G13`／DOM 契約表：`stat-value` 與 `ojt-ontime-value` 為**巢狀**，且兩者之
-   * `textContent` **完全相同**（外層不得再加任何文字）。
-   * 🔴 逐字：`/` 兩側各恰一個半形空格；括號為**全形**；`%` 為半形。
+   * 🔴 **`AC-G13`（第七輪就地改寫）＋ `AC-G24` 之巢狀約定**：
+   * `OLD>` 原為單一節點 `已完成 3 / 應完成 4（75%）`（全形括號），且
+   *        「`stat-value` 與 `ojt-ontime-value` 兩者 `textContent` **完全相同**」。
+   * 🔴 **「完全相同」那半句已作廢**（規格明寫）——拆成兩個節點後外層必然更長。
+   *    🔒 巢狀本身仍然成立，且**三者不得缺一**。
+   * 🔒 逐字：`/` 兩側各恰一個半形空格；`%` 為半形；🔴 **兩節點皆不再含全形括號**。
    */
-  it('AC-G13：ojt-ontime-value 之逐字句，且與外層 stat-value 之 textContent 完全相同', async () => {
+  it('AC-G13：環中央 `{Z}%` 與環旁 `已完成 X / 應完成 Y` 為兩個可獨立斷言之節點', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     const card = await screen.findByTestId('stat-card-ojt-ontime');
-    const inner = within(card).getByTestId('ojt-ontime-value');
     const outer = within(card).getByTestId('stat-value');
-    expect(inner.textContent).toBe('已完成 3 / 應完成 4（75%）');
-    expect(outer.textContent).toBe(inner.textContent);
-    expect(outer.contains(inner)).toBe(true);
+    const rate = card.querySelector('[data-ojt-ontime-rate]') as HTMLElement;
+    const value = within(card).getByTestId('ojt-ontime-value');
+
+    expect(rate).not.toBeNull();
+    expect(rate.textContent).toBe('75%');
+    expect(value.textContent).toBe('已完成 3 / 應完成 4');
+
+    // 🔒 `AC-G24`：三者不得缺一，且兩個內層皆巢狀於外層
+    expect(outer.contains(rate)).toBe(true);
+    expect(outer.contains(value)).toBe(true);
+
+    /**
+     * 🔴 **負向鎖（`AC-G13` 逐字：明文禁止把 `{Z}%` 串回 `ojt-ontime-value`）**。
+     * ⚠ 沒有這兩條，「根本沒拆、只是多掛一個 testid 在同一段文字上」會**照樣綠**。
+     */
+    expect(value.textContent).not.toContain('%');
+    expect(rate.textContent).not.toContain('已完成');
+    // 🔴 全形括號隨舊句型一併作廢
+    expect(outer.textContent ?? '').not.toMatch(/[（）]/);
   });
 
   /**
-   * 🔴 `AC-G14`：分母為 0 ⇒ 後端省略 `rate` 鍵 ⇒ 卡面呈現 `empty-state`，
-   * 且 `stat-value`／`ojt-ontime-value` **一併不存在**（DOM 契約表末段刻意如此）。
-   * 🔴 明文禁止 `NaN%`／`undefined%`／`0%`／`100%`／空白。
+   * 🔴 **`AC-G97`：環圖本體之 DOM 契約**（`denominator > 0`）。
+   * 🔒 `<svg>` 一律 `aria-hidden="true"`，🔴 百分比文字疊在 `<svg>` **之外**
+   *    ⇒ 🔒 **`AC-G71` 因此不需放寬**（數字仍是可讀的 DOM 文字，不是圖形）。
+   * 🔒 `data-testid` 刻意**不與兩張大環圖撞名**。
    */
-  it('AC-G14：denominator === 0（rate 鍵缺席）⇒ empty-state，且不得出現 0%／100%／NaN', async () => {
+  it('AC-G97：環容器存在、svg 為 aria-hidden，且百分比文字在 svg **之外**', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    const card = await screen.findByTestId('stat-card-ojt-ontime');
+    const donut = within(card).getByTestId('ojt-ontime-donut');
+    const svg = donut.querySelector('svg') as SVGElement;
+    expect(svg).not.toBeNull();
+    expect(svg.getAttribute('aria-hidden')).toBe('true');
+
+    /**
+     * 🔒 **正向孿生**（`AC-G97` 空狀態那兩行負向鎖的鑑別力來源）：
+     * 🔴 少了這一對，空狀態的 `toBeNull()` 對「環根本不是用 `stroke-dasharray` 畫的」**零鑑別力**
+     *    ——一條永遠為 null 的查詢當然永遠是 null。
+     * 🔒 型樣逐字取自 prototype `:927`。
+     * 📝 `OLD>` 本處原另鎖 `viewBox === '0 0 64 64'`，經 lead 裁定移除（綁死可被改的常數）
+     *    ⇒ ⚠ **本輪因此不再有任何斷言鎖住環的畫布尺寸**，逐字記錄於 `risks-and-gaps.md` `G44-35`。
+     */
+    expect(donut.querySelector('[stroke-dasharray]')).not.toBeNull();
+
+    // 🔴 `AC-G71` 之關鍵：百分比節點**不得**在 `<svg>` 內（否則它就只是圖形）
+    const rate = card.querySelector('[data-ojt-ontime-rate]') as HTMLElement;
+    expect(svg.contains(rate)).toBe(false);
+    expect(donut.contains(rate)).toBe(true);
+
+    // 🔒 不得與兩張大環圖撞名：卡內不得重用 `[data-donut-total]`
+    expect(card.querySelector('[data-donut-total]')).toBeNull();
+    // 🔒 `[data-ojt-ontime-rate]` 全頁恰一個
+    expect(document.querySelectorAll('[data-ojt-ontime-rate]')).toHaveLength(1);
+  });
+
+  /**
+   * 🔴 **`AC-G97` 之 `denominator === 0`：環圖本身不繪**（本輪最容易被漏掉的一態）。
+   * > 🔴 **為何不繪空環**（規格逐字）：一個 0% 的環與「全部未完成」在畫面上**完全一樣**
+   * >    ——那正是 `AC-G14` 禁止 `0%` 的同一個理由，只是換成了圖形形式。
+   *
+   * ⚠ **designer 已踩過並修好的陷阱，逐字記錄**：空狀態之提示文字上原本**還掛著**
+   *    `data-testid="ojt-ontime-value"`（當時只有一個數值節點、共用無妨）。
+   *    🔴 拆成兩個節點後，那個殘留會讓下面「該節點不得存在」的負向斷言**直接失效（恆真）**。
+   *    🔒 通則：**拆節點時要 grep 該 testid 的所有出現處，特別是空狀態／錯誤態分支。**
+   */
+  it('AC-G97／AC-G14：denominator === 0 ⇒ 環圖與兩個數值節點**全部**不進 DOM，改 empty-state', async () => {
     ep.getOjtOnTimeSummary.mockResolvedValue({
       today: '2026-03-15',
       numerator: 0,
@@ -292,10 +376,44 @@ describe('AC-G24／AC-G13／AC-G14／AC-G15 — 卡面數值與卡④ 之巢狀�
     mockAuth('ICSOPAdmin');
     renderPage();
     const card = await screen.findByTestId('stat-card-ojt-ontime');
+
     expect(within(card).getByTestId('empty-state')).toBeInTheDocument();
     expect(within(card).getByText('近 1 個月內無應完成之 OJT 單位')).toBeInTheDocument();
-    expect(within(card).queryByTestId('stat-value')).not.toBeInTheDocument();
+
+    // 🔴 三個節點逐一不得存在
+    expect(within(card).queryByTestId('ojt-ontime-donut')).not.toBeInTheDocument();
+    expect(card.querySelector('[data-ojt-ontime-rate]')).toBeNull();
     expect(within(card).queryByTestId('ojt-ontime-value')).not.toBeInTheDocument();
+    expect(within(card).queryByTestId('stat-value')).not.toBeInTheDocument();
+
+    /**
+     * 🔴 **「不得繪空環」之量尺**（🔴 2026-09-21 就地修正，`impl-f044` 提報後查證 prototype 成立）：
+     *
+     * `OLD>` 本行原為 `expect(card.querySelectorAll('svg')).toHaveLength(0)`。
+     * 🔴 **那個量尺對任何忠於 prototype 的實作都不可滿足**——`lucide` 的每一顆圖示都渲染成
+     *    `<svg>`，而卡④ 在**空狀態下仍有四顆各自被別的 AC／prototype 要求**的圖示：
+     *    卡頭 `graduation-cap`（`:960`）、ⓘ 觸發器之 `info`（`AC-G95`）、
+     *    `EmptyState` 共用版型之 `info`（`:940`）、`查看明細` 之 `arrow-right`（`:965`）。
+     *    ⇒ 🔴 **prototype 自己也過不了那一行**；要讓它變 0，只能違反另外三條 AC。
+     * 🔒 **意圖不變、量尺換掉**：要鎖的是「有沒有畫出一段弧」，不是「卡內有沒有圖形」。
+     * 🔒 **裁定（lead，2026-09-21）＝只鎖 `[stroke-dasharray]`**：它是**弧獨有**的屬性
+     *    （prototype `:927`），卡內那四顆圖示皆無 ⇒ 🔴 **即使有人換掉 `data-testid`、改了
+     *    `viewBox`，只要他畫了一段弧就會被咬到**。
+     * ⚠ **`svg[viewBox="0 0 64 64"]` 經裁定不採用**——那是綁死一個**可被改的常數**，
+     *    而規格從未要求那個 viewBox。
+     * 🔴 **不要「改回」數 `svg`**：`svg` 這把尺**分不出「環」與「圖示」**，而卡④ 在空狀態下
+     *    仍有四顆各自被別的 AC 要求的 lucide 圖示 ⇒ prototype 自己也過不了那一行。
+     * 🔒 **本行有正向孿生**（見上一個 it）——否則它對「環根本不用 dasharray 畫」零鑑別力。
+     */
+    expect(card.querySelector('[stroke-dasharray]')).toBeNull();
+
+    /**
+     * 🔒 **自我守護：證明上面兩行不是因為「卡片整個空了」才過。**
+     * 🔴 空狀態下卡內**仍必須有圖示**（卡頭／ⓘ／空狀態／連結）——若哪天有人為了讓
+     *    `OLD>` 那個 `svg` 數為 0 的舊量尺變綠而把圖示拿掉，本行會翻紅。
+     */
+    expect(card.querySelectorAll('svg').length).toBeGreaterThan(0);
+
     expect(card.textContent ?? '').not.toMatch(/NaN|undefined|\b0%|\b100%/);
   });
 

@@ -7,8 +7,10 @@ import {
   barWidths,
   donutSegments,
   normalizeDefaultDimension,
+  ojtOnTimeArc,
   topNWithOther,
 } from './dashboard-analytics-view';
+import { coveragePercent } from './ojt-progress-view';
 
 /**
  * F044 — 前端**版面純函式**建環（`frontend/src/pages/dashboard-analytics-view.ts`）。
@@ -193,5 +195,123 @@ describe('CATEGORY_LIMIT — AC-G65 之單一定義點', () => {
    */
   it('🔒 CATEGORY_LIMIT ＝ 10（ui-ux-designer 定案）', () => {
     expect(CATEGORY_LIMIT).toBe(10);
+  });
+});
+
+// ══════════════════ AC-G97 · ojtOnTimeArc（卡④ 環圖之幾何純函式）══════════════════
+
+/**
+ * 🔒 **權威**：`prototypes/07-admin-shell.html:342-348`（`OJT_DONUT_R` ／ `ojtOnTimeArc`）
+ *    ＋ `docs/ui-ux-design-overview.md` §A.16 之「幾何純函式」段。
+ *
+ * 🔴 **為何這一層非有不可**（`AC-G97` 逐字）：本輪之簡化環**無視覺回歸**
+ *    ⇒ **弧長畫得對不對，機器只在這一層驗得到**。元件層只驗得到「有沒有畫」，驗不到「畫多長」。
+ *
+ * 🔒 **契約**（比照 `AC-G49` 之 `donutSegments`）：
+ * ```
+ * export function ojtOnTimeArc(numerator: number, denominator: number): { length: number; rest: number };
+ * ```
+ */
+describe('ojtOnTimeArc — AC-G97 之固定向量', () => {
+  /**
+   * 🔒 周長**由函式自己導出**（`length + rest`），不從模組 import 任何 OJT 常數。
+   * 🔴 理由：若改成 import 一個常數再拿它當期望值，該常數寫錯時**兩邊會一起錯、斷言恆真**。
+   *    半徑本身另以一條獨立的 `it` 鎖住（見下），紅燈才分得出「半徑錯」與「比例算錯」。
+   */
+  const circumference = () => {
+    const a = ojtOnTimeArc(1, 2);
+    return a.length + a.rest;
+  };
+
+  it('🔒 length + rest 恆等於周長（與 X／Y 無關）', () => {
+    const C = circumference();
+    for (const [x, y] of [[0, 4], [1, 4], [3, 4], [4, 4], [1, 3], [0, 0], [7, 3]]) {
+      const a = ojtOnTimeArc(x, y);
+      expect(a.length + a.rest).toBeCloseTo(C, 9);
+    }
+  });
+
+  it('① X === 0 ⇒ 空環（length 0、rest 為整個周長）', () => {
+    const C = circumference();
+    const a = ojtOnTimeArc(0, 4);
+    expect(a.length).toBe(0);
+    expect(a.rest).toBeCloseTo(C, 9);
+  });
+
+  it('② X === Y ⇒ 滿環（length ＝ 周長、rest 0）', () => {
+    const C = circumference();
+    const a = ojtOnTimeArc(4, 4);
+    expect(a.length).toBeCloseTo(C, 9);
+    expect(a.rest).toBeCloseTo(0, 9);
+  });
+
+  it('③ 中間值 3/4 ⇒ 0.75 × 周長', () => {
+    const C = circumference();
+    expect(ojtOnTimeArc(3, 4).length).toBeCloseTo(0.75 * C, 9);
+  });
+
+  it('④ denominator === 0 ⇒ length 0（🔴 不得 NaN、不得負數）', () => {
+    const C = circumference();
+    const a = ojtOnTimeArc(0, 0);
+    expect(a.length).toBe(0);
+    expect(a.rest).toBeCloseTo(C, 9);
+    expect(Number.isNaN(a.length)).toBe(false);
+    expect(Number.isNaN(a.rest)).toBe(false);
+  });
+
+  /** 🔒 prototype `:345` 之 `Math.max(0, Math.min(1, …))`——兩端皆夾。 */
+  it('⑤ 比值夾在 [0, 1]：X > Y ⇒ 滿環（不得溢出周長）；X < 0 ⇒ 空環', () => {
+    const C = circumference();
+    const over = ojtOnTimeArc(7, 3);
+    expect(over.length).toBeCloseTo(C, 9);
+    expect(over.rest).toBeCloseTo(0, 9);
+    expect(ojtOnTimeArc(-2, 4).length).toBe(0);
+  });
+
+  /**
+   * 🔒 `prototypes/07-admin-shell.html:342` 逐字：`const OJT_DONUT_R = 26`。
+   * 🔴 **刻意與兩張大環圖之 `DONUT_RADIUS`（54）不同**——卡④ 之環是 64×64 的小環。
+   *    ⇒ 本條若紅而上面幾條綠，代表**比例算對了、半徑取錯了**（很可能誤用了大環的常數）。
+   */
+  it('🔒 半徑 ＝ 26（prototype `OJT_DONUT_R`），刻意不等於大環圖之 54', () => {
+    expect(circumference()).toBeCloseTo(2 * Math.PI * 26, 9);
+    expect(circumference()).not.toBeCloseTo(DONUT_CIRCUMFERENCE, 3);
+  });
+
+  /**
+   * 🔴 **本 describe 最重要的一條**（`G44-30` 之同型應用：裁決的**理由**要有載體）：
+   *
+   * 設計裁決逐字：「**弧長採未四捨五入之比值，中央文字採 `coveragePercent()` 之整數
+   * ——兩者刻意不同源**：文字要可讀（整數），弧長要準（`1/3` 應畫 33.33% 而非 33%）。
+   * 差距恆 < 1%，不影響判讀；**這是刻意的，不要『修』成同源**。」
+   *
+   * ⚠ **沒有這一條，那句話只是一行註解、沒有任何防線**——下一個人「順手統一」成同源時，
+   *    上面五條向量**全部照樣綠**（`0`／`3/4`／`4/4` 的整數百分比與未捨入比值恰好相等，
+   *    🔴 **既有向量對這個改動零鑑別力**）。本條刻意挑一個**會讓兩者不等**的分數。
+   */
+  it('🔴 弧長採未捨入比值、與 coveragePercent() 之整數刻意不同源（1/3）', () => {
+    const C = circumference();
+    // 🔒 自證：語料真的能鑑別——`coveragePercent(1,3)` 為整數 33，而真比值為 0.3333…
+    expect(coveragePercent(1, 3)).toBe(33);
+
+    const arc = ojtOnTimeArc(1, 3);
+    // ① 弧長 ＝ **未捨入**比值 × 周長
+    expect(arc.length).toBeCloseTo((1 / 3) * C, 9);
+    // ② 🔴 因此**不得**等於「整數百分比之弧長」（若被改成同源，本行翻紅）
+    const roundedArcLength = (33 / 100) * C;
+    expect(Math.abs(arc.length - roundedArcLength)).toBeGreaterThan(1e-6);
+    // ③ 🔒 但差距恆 < 1% 之周長（設計裁決逐字）——證明它是「更準」而不是「算錯」
+    expect(Math.abs(arc.length - roundedArcLength)).toBeLessThan(C * 0.01);
+  });
+
+  /**
+   * 🔒 **反向對照**：在整數百分比與真比值**相等**的向量下，兩者本來就該相等。
+   * 🔴 用意＝證明上一條的不等**來自 1/3 這個分數**，而不是來自「弧長恆不等於百分比弧長」
+   *    這種寫壞的實作（那種實作在本條會翻紅）。
+   */
+  it('🔒 反向對照：3/4（整數百分比恰等於真比值）⇒ 兩者必須相等', () => {
+    const C = circumference();
+    expect(coveragePercent(3, 4)).toBe(75);
+    expect(ojtOnTimeArc(3, 4).length).toBeCloseTo((75 / 100) * C, 9);
   });
 });

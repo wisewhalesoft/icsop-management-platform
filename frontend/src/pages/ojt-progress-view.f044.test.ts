@@ -271,7 +271,9 @@ describe('ojtOnTimeNote — AC-G89 之四列固定向量（🔴 不共用 exclus
       norm('其中 2 個單位已裁撤、5 個單位已不再使用該文件、7 份文件尚未設定公告日期，不列入計算。'),
     );
     // ② regex 真的抓得到百分比（含有無空白兩形）
-    expect('已完成 3 / 應完成 4（75%）').toMatch(/\d+\s*%/);
+    // 📝 第七輪起卡面已拆為兩個節點（`AC-G13`），百分比單獨住在 `[data-ojt-ontime-rate]`。
+    //    本行只是證明 regex 拓得到百分比，樣本隨之更新為現行文案。
+    expect('75%').toMatch(/\d+\s*%/);
     expect('比率 75 %').toMatch(/\d+\s*%/);
     // ③ 禁用詞連結仍活著
     expect(NO_STATISTICS_TEXT).toContain('進度列');
