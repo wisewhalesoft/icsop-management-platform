@@ -220,6 +220,49 @@ export function exclusionNote(
   return `${head}；已裁撤單位與單位已移出使用部門之列皆不計入，目前無任何進度列因此被排除。`;
 }
 
+/** F044 卡④ 之排除註記所需之統計（＝ `GET /admin/ojt-progress/ontime-summary` 之回應形狀）。 */
+export interface OjtOnTimeNoteStats {
+  numerator: number;
+  denominator: number;
+  /** 🔒 `denominator === 0` 時**後端省略本鍵**（禁 `NaN%`／`0%`／`100%`）。 */
+  rate?: number;
+  excludedInactive: number;
+  excludedOrphaned: number;
+  excludedNoAnnouncedDate: number;
+}
+
+/**
+ * F044 `AC-G15`／`AC-G89` — 後台首頁卡④ 之排除註記（恆顯示，含排除 0 筆時之明確說明）。
+ *
+ * 🔴 **與上方 `exclusionNote()` 刻意不合流**（`ARCH-G6`，architecture-spec §15.8）——
+ * 兩者緊鄰而立、互相指名，是為了讓下一個人看見這個決定，而不是把它們合併：
+ *   · 頭句：`exclusionNote` ＝「覆蓋率為 n / d」（分母＝**進度列**，不限時間）；
+ *     本函式 ＝ 母體敘述（分母＝窗口內之**相異使用單位**，`AC-G9`）。
+ *   · 排除列舉：`exclusionNote` 恰**兩**個原因；本函式**三**個（多一個「無公告日期」，`AC-G12` ③）。
+ *   · 尾句：兩者指向之後果不同（TAB1 之裁撤單位仍可新增場次 vs 本卡之被排除者於清單仍呈現）。
+ * ⇒ 「共用並擴充」在實作上等於把頭、列舉、尾句三者都變成參數，共用的只剩一個 `join`，
+ *   而代價是 F042 TAB1 與 F044 卡④ 的文案從此綁在同一支函式上，任一邊調整措辭都會靜默改寫另一邊。
+ * 🔴 這正是 NFR-F044-3 #4 要防的事：**兩個口徑不同的數字必須在畫面上可分辨**，
+ *   而「標籤不同」是唯一的分辨手段。
+ *
+ * 🔒 百分比一律委派既有 `coveragePercent()`（`AC-G13`），🔴 禁止另打一份 `Math.round`。
+ * 🔒 分母為 0 時沿用既有 `NO_STATISTICS_TEXT`，🔴 明文禁止 `0%`／`100%`／`NaN`。
+ */
+export function ojtOnTimeNote(stats: OjtOnTimeNoteStats): string {
+  const pct = coveragePercent(stats.numerator, stats.denominator);
+  const head =
+    pct === null
+      ? `母體＝應完成訓練日期落在近 1 個月內之使用單位，目前${NO_STATISTICS_TEXT}，故不計算比率`
+      : `母體＝應完成訓練日期落在近 1 個月內之使用單位，共 ${stats.denominator} 個，其中 ${stats.numerator} 個已全部完成（${pct}%）`;
+  const excluded =
+    stats.excludedInactive + stats.excludedOrphaned + stats.excludedNoAnnouncedDate;
+  const detail =
+    excluded > 0
+      ? `；本次共排除 ${excluded} 列——已裁撤單位 ${stats.excludedInactive} 列、單位已移出使用部門 ${stats.excludedOrphaned} 列、無公告日期 ${stats.excludedNoAnnouncedDate} 列`
+      : '；已裁撤單位、已移出使用部門與無公告日期之列皆不計入，目前無任何進度列因此被排除';
+  return `${head}${detail}。被排除之進度列於「${TAB_SESSIONS_TEXT}」分頁仍然呈現，故兩處數字不相等屬正常。`;
+}
+
 /**
  * `AC-15` 之不變式敘述（畫面載體）：**列數不因彙總而改變**——彙總是統計階段的行為，
  * 不得回頭把 `AC-01` 之列展開。
@@ -656,16 +699,65 @@ export const DUE_DATE_UNKNOWN_TITLE = '此文件尚未設定公告日期，無�
  * 用本地時區方法拆會使 UTC+8 開發機與 UTC 容器在 00:00–08:00 得出差一天的日期。
  */
 export function trainingDueDate(announcedDate: string | null | undefined): string | null {
-  if (!announcedDate) return null;
-  const d = new Date(announcedDate);
-  if (Number.isNaN(d.getTime())) return null;
-  const y = d.getUTCFullYear();
-  const m = d.getUTCMonth();
-  const day = d.getUTCDate();
-  // 目標月之最後一日（`Date.UTC(y, m + 2, 0)` ＝下下個月的第 0 天 ＝下個月的最後一天）。
-  const lastDayOfTargetMonth = new Date(Date.UTC(y, m + 2, 0)).getUTCDate();
-  const due = new Date(Date.UTC(y, m + 1, Math.min(day, lastDayOfTargetMonth)));
-  return due.toISOString().slice(0, 10);
+  /**
+   * 🔵 F044 `AC-G8`：本函式改為 `addMonthsClamped(announcedDate, +1)` 之**委派**。
+   * 對外行為、簽章與上方逐字註解**一字不改**——月底夾回、UTC 拆解、不可解析回 `null` 皆由
+   * 被委派者承接，只是那個演算法自此有一個具名、可被前後端同一張向量表雙鎖的住處。
+   * 📝 被取代之原實作逐字保留供追溯（⚠ 不得復原）：
+   *    OLD> const d = new Date(announcedDate);
+   *    OLD> if (Number.isNaN(d.getTime())) return null;
+   *    OLD> const y = d.getUTCFullYear(); const m = d.getUTCMonth(); const day = d.getUTCDate();
+   *    OLD> const lastDayOfTargetMonth = new Date(Date.UTC(y, m + 2, 0)).getUTCDate();
+   *    OLD> const due = new Date(Date.UTC(y, m + 1, Math.min(day, lastDayOfTargetMonth)));
+   *    OLD> return due.toISOString().slice(0, 10);
+   */
+  return addMonthsClamped(announcedDate, 1);
+}
+
+/**
+ * F044 `AC-G8` — 月份位移（月底溢位夾回當月最後一日、一律以 `Date.UTC` 拆組）。
+ *
+ * 🔴 **與 `backend/src/ojt-progress/add-months-clamped.ts` 為同一演算法之兩份實作**
+ * （跨 package 無法共用原始碼，比照 `org-path.ts` 檔頭之既有紀律）。兩側之測試逐列引用
+ * **同一張 8 列固定向量表**：
+ *   · 前端 `frontend/src/pages/ojt-progress-view.f044.test.ts`
+ *   · 後端 `backend/src/ojt-progress/add-months-clamped.spec.ts`
+ * ⚠ 任一側調整演算法或向量表，另一側必須同步。
+ * 🔴 前端側即使**本功能不呼叫** `delta = −1`（窗口計算全在後端），仍以 ⑤～⑧ 鎖住反向夾回——
+ *   否則兩份實作只有一半被比對，反向可以在後端漂移而前端全綠。
+ *
+ * 🔴 **明文禁止** `setMonth(...)`／`getMonth() ± 1` 之就地運算：天真作法在來源日超過目標月天數時
+ * 會自動跨到下個月（`2026-01-31 + 1 月` 得 `2026-03-03`），而那個錯誤一年只有月底那幾天看得出來。
+ */
+export function addMonthsClamped(
+  isoDate: string | null | undefined,
+  delta: number,
+): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(isoDate ?? ''));
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  // 不存在之日期（`2026-02-30`）一律 null——比照被委派前之 `Invalid Date` 分支。
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (
+    probe.getUTCFullYear() !== year ||
+    probe.getUTCMonth() !== month - 1 ||
+    probe.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  const totalMonths = year * 12 + (month - 1) + delta;
+  const targetYear = Math.floor(totalMonths / 12);
+  const targetMonth = ((totalMonths % 12) + 12) % 12;
+  // 目標月之最後一日（下個月的第 0 天 ＝ 本月最後一天）。
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  const targetDay = day < lastDay ? day : lastDay;
+  return (
+    `${String(targetYear).padStart(4, '0')}-` +
+    `${String(targetMonth + 1).padStart(2, '0')}-` +
+    `${String(targetDay).padStart(2, '0')}`
+  );
 }
 
 /** 應完成訓練日期之顯示字串（無公告日期 → `—`）。 */
@@ -778,3 +870,77 @@ export function editionGroupCountText(count: number): string {
 
 /** 當下版次群組之空狀態（🔒 與既有 `EMPTY_SESSIONS_TEXT` 刻意不同句：那句說的是「整列一場都沒有」）。 */
 export const EMPTY_CURRENT_EDITION_TEXT = '此版次尚未登記任何教育訓練場次';
+
+// ══════════════════════════ F044 · deep link 與群組排序（`AC-G19`～`AC-G21`／`AC-G88`～`AC-G93`） ══════════════════════════
+
+/**
+ * 🔒 §命名鎖定第 20 列（`ARCH-G4` 定案）：`?tab=sessions&sort=incomplete-first`。
+ *
+ * 🔴 **命名為 `sort` 而非 `sortBy`／`sortDir`**：後者是 [F017] 文件清單之「欄位＋方向」詞彙；
+ * OJT 這一個不是欄位也沒有方向，它是一個**具名排序模式**。沿用 `sortBy` 會邀請下一個人補上
+ * `sortDir=asc`，然後這裡就有了第三套排序詞彙。
+ */
+export const SORT_INCOMPLETE_FIRST = 'incomplete-first';
+
+/**
+ * 🔴 **兩個參數各自獨立解析，刻意不採本頁既有之「恰成對」紀律**（`AC-G88`）。
+ *
+ * 理由：`readSubtreeParams`／`readBcSubtreeParams` 成對，是因為 `nodeSubtreeId` 離開
+ * `lifecycleId` **無法解析**（兩張不同的圖、id 不可互相定位）；此處 `tab` 與 `sort`
+ * **各自獨立可解釋**（只換分頁不排序、只排序不換分頁都是合法意圖），硬綁成對會製造一條
+ * 「只想排序卻被整組忽略」的無聲失敗路徑。
+ *
+ * 🔴 值域**封閉**且逐字取自既有 `TabKey`——URL 與程式碼內部型別用同一組字面，是「不可辨識之值」
+ * 這件事唯一能被靜態確認的形狀；🔴 不另造 `tab=list`／`tab=2` 之第二套詞彙。
+ * 🔴 參數缺席或值不可辨識 ⇒ **靜默 no-op、退回既有預設**（不回錯誤、不 toast）。
+ */
+export function readTabParam(q: URLSearchParams): 'dashboard' | 'sessions' | null {
+  const v = q.get('tab');
+  return v === 'dashboard' || v === 'sessions' ? v : null;
+}
+
+/** 值域恰一值（見 `readTabParam` 之同段理由）。 */
+export function readSortParam(q: URLSearchParams): typeof SORT_INCOMPLETE_FIRST | null {
+  return q.get('sort') === SORT_INCOMPLETE_FIRST ? SORT_INCOMPLETE_FIRST : null;
+}
+
+/**
+ * `AC-G20`／`AC-G93` — `incomplete-first`：未全部完成之群組排在上方。
+ *
+ * 🔴 **是排序，不是篩選**：已全部完成之群組**仍然呈現**（只是排在下面）——`OQ-D44-14` 之
+ * 丙案「把已完成的藏起來」已被否決（藏起來使用者就無法確認「其他都完成了」）。
+ * ⇒ 輸出之群組集合與輸入**完全相同**（元素恆等、僅順序改變）。
+ *
+ * 🔴 **段內維持「該頁原本之次序」**，不得打亂，且**不寫死排序鍵**（`AC-G93`）：
+ * prototype 25 之群組次序為 `orgCode` 昇冪，正式站 `listRows` 之伺服端次序為
+ * `orgName.localeCompare` → `documentNumber.localeCompare`——兩者之分歧是**既有**落差，
+ * 🔒 本輪刻意不對齊（對齊會改變未帶參數時的既有次序，違反 `AC-G21`／`AC-G79` 之零漣漪鎖定）。
+ * 📌 以「兩次過濾後串接」達成分段，**不倚賴 `Array.prototype.sort` 之穩定性**——段內次序是一條
+ *    AC，不該建立在引擎實作細節上。
+ *
+ * 🔴 空群組（`rows` 為空）**不得**被視為「全部完成」——`every()` 對空陣列恆真，直接用它會把
+ * 一個什麼都還沒做的單位推到最下方。
+ */
+export function sortGroupsIncompleteFirst(groups: OjtRowGroup[]): OjtRowGroup[] {
+  const allDone = (g: OjtRowGroup): boolean =>
+    g.rows.length > 0 && g.rows.every((r) => r.completed);
+  return [...groups.filter((g) => !allDone(g)), ...groups.filter((g) => allDone(g))];
+}
+
+/**
+ * `AC-G91` — deep link 帶入之排序指示 chip 之逐字文案。
+ *
+ * 🔴 **刻意不放進上方篩選列**，也**不影響**「清除」鈕之顯示條件與「共 N 列」之計數
+ * ——它是排序，不過濾任何一列（`AC-G81`：篩選恰兩項、分組模式恰二態，一格不動）。
+ * 🔒 未帶 `sort=incomplete-first` 時 `[data-ojt-sort-notice]` **完全不進 DOM**（非 CSS 隱藏），
+ *   使「未帶參數時本頁一格不動」在 DOM 層可被驗證。
+ * 🔒 文案以具名常數分段承載（非 JSX 內嵌長句）：跨行之 JSX 文字會被編譯器補入空白，
+ *   而本文案有逐字斷言——本 repo 已踩過該形狀。
+ */
+export const SORT_NOTICE_HEAD = '已依「';
+export const SORT_NOTICE_TITLE = '未全部完成之單位優先';
+export const SORT_NOTICE_MIDDLE = '」排序（自後台首頁之「查看明細」帶入）。此為';
+export const SORT_NOTICE_EMPHASIS = '排序，不是篩選';
+export const SORT_NOTICE_TAIL = '——已全部完成之單位仍然呈現於下方。';
+/** 取消入口（與篩選列之「清除」對稱）——沒有它，經 deep link 進來的人只能改網址才能回到既有次序。 */
+export const SORT_NOTICE_CLEAR_TEXT = '取消排序';

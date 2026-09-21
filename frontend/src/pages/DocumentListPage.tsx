@@ -258,6 +258,28 @@ interface SubtreeParams {
   nodeSubtreeId: string;
 }
 
+/**
+ * 🔵 F044 `AC-G59`：自網址取**排序**參數（後台首頁「查看更多」之接收端）。
+ *
+ * 🔒 參數名與值域**逐字沿用既有型別**（§命名鎖定第 21 列）：`sortBy ∈ {documentNumber, announcedDate}`、
+ *   `sortDir ∈ {asc, desc}`——否則本頁會出現第二套排序詞彙。
+ * 🔴 **本頁之「恰成對」紀律只適用於子樹 deep link，不適用於排序**：`sortDir` **缺席**時退回既有
+ *   預設 `asc`（只指定欄位是合法意圖）；但 `sortDir` **出現卻不可辨識**時整組 no-op
+ *   ——那是一個打錯字的請求，照半套套用會給出一個使用者沒要求的次序。
+ * 🔴 `AC-G59` ④：**排序仍在客端執行、仍不送後端**——本函式只決定「初始值從哪裡來」。
+ * ⚠ 客端排序對 `null` 之處置（`?? ''`，故降冪最後、昇冪最前）與後端 `applyDocumentQuery`
+ *   （`null` 一律最後、不受方向影響）**語意不同**；🔒 該落差為既有，**本輪明文不對齊**
+ *   （對齊會改動 F017 之既有行為與測試期望值）。
+ */
+function readSortParams(q: URLSearchParams): { sortBy: SortBy; sortDir: 'asc' | 'desc' } {
+  const NONE = { sortBy: '' as SortBy, sortDir: 'asc' as const };
+  const by = q.get('sortBy');
+  if (by !== 'documentNumber' && by !== 'announcedDate') return NONE;
+  const dir = q.get('sortDir');
+  if (dir !== null && dir !== 'asc' && dir !== 'desc') return NONE;
+  return { sortBy: by, sortDir: dir === 'desc' ? 'desc' : 'asc' };
+}
+
 /** 自網址取兩參數；**任一缺席即視為未套用**（`AC-T41` ①②之前端半，靜默 no-op、不回錯誤）。 */
 function readSubtreeParams(q: URLSearchParams): SubtreeParams | null {
   const lifecycleId = q.get('lifecycleId') ?? '';
@@ -381,8 +403,15 @@ export function DocumentListPage(): JSX.Element {
   const [bcPool, setBcPool] = useState<BusinessCategoryView[]>([]);
   const [formPool, setFormPool] = useState<UsageFormRecord[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sortBy, setSortBy] = useState<SortBy>('');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  /**
+   * 🔵 F044 `AC-G59`：初始值自網址取樣（🔴 於 `useState` 之**初始化函式**內，照抄同頁
+   * `readSubtreeParams`／`readBcSubtreeParams` 之既有紀律——否則首屏會先閃一次未排序之清單）。
+   * 🔒 不帶參數時兩者之預設值（`''`／`'asc'`）與本功能導入前逐字相同（`AC-G82` 零漣漪）。
+   */
+  const [sortBy, setSortBy] = useState<SortBy>(() => readSortParams(searchParams).sortBy);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
+    () => readSortParams(searchParams).sortDir,
+  );
   const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {

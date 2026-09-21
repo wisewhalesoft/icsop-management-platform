@@ -1286,6 +1286,38 @@ export function getDashboardActivity(
   return apiFetch(`/admin/dashboard/activity${qs}`);
 }
 
+/**
+ * F044 後台首頁統計（卡①②③ ＋ 兩張環圖 ＋ 最新公告 ＋ 預設維度）。
+ *
+ * 🔒 **一個端點、一次請求**：卡①③ 與環圖之間有跨區塊恆等式（卡③ ＝ 當月環圖各段總和、
+ * 卡① ＝ 累積環圖各段總和），分成兩次請求就是兩份快照，恆等式會在正式站破掉。
+ * 🔴 **無查詢參數**——`today` 由伺服器決定，不得由 client 傳入。
+ * ⚠ 既有 `getDashboardSummary()` 保留不動，但首頁自本輪起不再呼叫它。
+ */
+export function getDashboardAnalytics(): Promise<
+  import('./dashboard-analytics-types').DashboardAnalyticsResponse
+> {
+  return apiFetch('/admin/dashboard/analytics');
+}
+
+/**
+ * F044 依業務/功能類別分布（🔴 **獨立端點**）。
+ * 🔴 呼叫端須先以功能矩陣（`BUSINESS_CATEGORY_MANAGEMENT` / read）守門後才發出——
+ * 部門窗口對該功能鍵為 `NONE`，其首頁**連這個請求都不得出現在網路層**。
+ */
+export function getCategoryDistribution(): Promise<
+  import('./dashboard-analytics-types').CategoryDistributionResponse
+> {
+  return apiFetch('/admin/dashboard/category-distribution');
+}
+
+/** F044 卡④「OJT 準時完成率(1個月內)」（口徑與 TAB1 之 `coverage` 刻意不同，不得互相對齊）。 */
+export function getOjtOnTimeSummary(): Promise<
+  import('./dashboard-analytics-types').OjtOnTimeSummaryResponse
+> {
+  return apiFetch('/admin/ojt-progress/ontime-summary');
+}
+
 export function getDocIndexOverview(
   f: { state?: string; page?: number } = {},
 ): Promise<import('./types').DocIndexOverview> {

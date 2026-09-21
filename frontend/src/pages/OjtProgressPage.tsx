@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { ApiError } from '../api/client';
 import {
@@ -115,6 +116,17 @@ import {
   rowKeyOf,
   sliceRecentSessions,
   todayIsoDate,
+  // ── 🔵 F044 deep link 與群組排序（`AC-G19`～`AC-G21`／`AC-G88`～`AC-G93`）──
+  SORT_NOTICE_CLEAR_TEXT,
+  SORT_NOTICE_EMPHASIS,
+  SORT_NOTICE_HEAD,
+  SORT_NOTICE_MIDDLE,
+  SORT_NOTICE_TAIL,
+  SORT_NOTICE_TITLE,
+  SORT_INCOMPLETE_FIRST,
+  readSortParam,
+  readTabParam,
+  sortGroupsIncompleteFirst,
   type OjtDocGroup,
   type OjtGroupMode,
 } from './ojt-progress-view';
@@ -175,8 +187,28 @@ export function OjtProgressPage(): JSX.Element {
    * 🔒 判定集中於 `canViewDashboard()`（純函式），本檔不散落角色字面。
    */
   const mayViewDashboard = canViewDashboard(role);
+  /**
+   * 🔵 F044 `AC-G19`／`AC-G88`：後台首頁「查看明細」之 deep link（`?tab=sessions&sort=incomplete-first`）。
+   *
+   * 🔴 **於 `useState` 之初始化函式內取樣**（不是首屏之後才讀）——照抄 `DocumentListPage` 之
+   * `readSubtreeParams` 既有紀律，否則首屏會先閃一次預設分頁。
+   * 🔴 **兩個參數各自獨立解析**（非成對）：只帶 `sort` 而不帶 `tab` 時，排序仍然生效。
+   * 🔒 `AC-G21`：參數缺席或值不可辨識 ⇒ **靜默 no-op、退回既有預設**，本頁行為一格不動。
+   * 🔒 既有 `gotoSessionsPending()`（同頁 React state 之另一條入口）**一行未改**。
+   */
+  const [searchParams] = useSearchParams();
   /** 🔴 看不到儀表板者之初始分頁即 `sessions`——否則他們會落在一個不存在的分頁上而看到空白。 */
-  const [tab, setTab] = useState<TabKey>(mayViewDashboard ? 'dashboard' : 'sessions');
+  const [tab, setTab] = useState<TabKey>(() => {
+    const requested = readTabParam(searchParams);
+    // ⚠ `tab=dashboard` 對主管／部門窗口無效（`canViewDashboard` 為偽）⇒ 退回 `sessions`。
+    // 這不是新規則，是既有 `useState` 初值邏輯的延續。
+    if (requested === 'sessions') return 'sessions';
+    if (requested === 'dashboard' && mayViewDashboard) return 'dashboard';
+    return mayViewDashboard ? 'dashboard' : 'sessions';
+  });
+  const [sortIncompleteFirst, setSortIncompleteFirst] = useState(
+    () => readSortParam(searchParams) === SORT_INCOMPLETE_FIRST,
+  );
   const [summary, setSummary] = useState<OjtProgressSummary | null>(null);
   /**
    * `AC-28`⑯ 區一逐筆表之顯示範圍（預設「僅未全部完成」）。
@@ -431,10 +463,18 @@ export function OjtProgressPage(): JSX.Element {
    * 🔒 `AC-31` 兩種群組容器**互斥渲染**：非當前模式者連推導都不做（回空陣列）⇒ 另一種
    * `[data-*-group]` 恰 0 個在結構上成立，而不是靠渲染端多寫一個條件。
    */
-  const groups = useMemo(
-    () => (groupMode === 'org' ? groupRowsByOrg(displayedRows) : []),
-    [groupMode, displayedRows],
-  );
+  const groups = useMemo(() => {
+    if (groupMode !== 'org') return [];
+    const byOrg = groupRowsByOrg(displayedRows);
+    /**
+     * 🔵 F044 `AC-G20`／`AC-G92`：`sort=incomplete-first` ⇒ 未全部完成之群組排在上方。
+     * 🔴 **僅於「以使用單位分組」生效**——`以文件分組` 之群組是**文件**而不是**單位**，
+     * 「未全部完成的單位」在該模式下沒有載體（`AC-G92`；prototype 25 只實作了一種模式，
+     * 🔴 明文禁止以「原型沒有這個分支」作為不實作本條的理由）。
+     * 🔴 **是排序不是篩選**：已全部完成之群組仍然呈現，`共 N 列`、「清除」鈕與兩項篩選不受影響。
+     */
+    return sortIncompleteFirst ? sortGroupsIncompleteFirst(byOrg) : byOrg;
+  }, [groupMode, displayedRows, sortIncompleteFirst]);
   const docGroups = useMemo<OjtDocGroup[]>(
     () => (groupMode === 'document' ? docGroupsOf(displayedRows) : []),
     [groupMode, displayedRows],
@@ -651,6 +691,35 @@ export function OjtProgressPage(): JSX.Element {
             留一個永久的空框會讓人以為系統壞了或還有待辦。 */}
         {pending.length > 0 && (
           <PendingBlock items={pending} mayAssign={mayManage} onAssign={(item) => setAssign({ item, orgCode: '', trainingDate: '', error: null })} />
+        )}
+
+        {/* 🔵 F044 `AC-G91`：deep link 帶入之**排序**指示。
+            🔴 刻意**不放進上方篩選列**，也**不影響**「清除」鈕之顯示條件與「共 N 列」之計數
+               ——它是排序，不過濾任何一列（`OQ-D44-14` 之丙案「把已完成的藏起來」已被否決：
+               藏起來使用者就無法確認「其他都完成了」）。
+            🔒 未帶 `sort=incomplete-first`（或點了「取消排序」）時整個 chip **自 DOM 移除**，
+               非 CSS 隱藏——使「未帶參數時本頁一格不動」在 DOM 層可被驗證。 */}
+        {sortIncompleteFirst && (
+          <div
+            data-ojt-sort-notice={SORT_INCOMPLETE_FIRST}
+            className="flex items-start gap-2 px-3 py-2 rounded-lg bg-primary-50 border border-primary-200 text-xs text-primary-800"
+          >
+            <Icon name="list-tree" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            <span className="flex-1">
+              {SORT_NOTICE_HEAD}
+              <strong>{SORT_NOTICE_TITLE}</strong>
+              {SORT_NOTICE_MIDDLE}
+              <strong>{SORT_NOTICE_EMPHASIS}</strong>
+              {SORT_NOTICE_TAIL}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSortIncompleteFirst(false)}
+              className="shrink-0 px-2 py-0.5 rounded text-primary-700 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-600"
+            >
+              {SORT_NOTICE_CLEAR_TEXT}
+            </button>
+          </div>
         )}
 
         {groups.map((g) => (
