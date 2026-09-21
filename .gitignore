@@ -46,3 +46,8 @@ frontend/public/pdfjs/
 
 # 浮水印燒錄之本機除錯輸出（burn-probe / burn-if-pdf 手動探針產生），非原始碼。
 backend/burn-probe-out.pdf
+
+# 公司 TLS 攔截之根 CA（逐機器設定，見 infra/certs/README.md）——憑證本身不進 git
+infra/certs/*
+!infra/certs/.gitkeep
+!infra/certs/README.md

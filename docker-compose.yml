@@ -43,7 +43,11 @@ services:
 
   # 後端 NestJS
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      # 🔵 公司 TLS 攔截之根 CA（可選；見 infra/certs/README.md）——目錄恒存在（.gitkeep），无憑證時為 no-op。
+      additional_contexts:
+        corpcerts: ./infra/certs
     container_name: icsop-backend
     restart: unless-stopped
     env_file: .env
@@ -67,7 +71,11 @@ services:
 
   # 前端 React（nginx 靜態伺服 + 反代後端）
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      # 🔵 同 backend：公司 TLS 攔截之根 CA（可選；見 infra/certs/README.md）。
+      additional_contexts:
+        corpcerts: ./infra/certs
     container_name: icsop-frontend
     restart: unless-stopped
     ports:
