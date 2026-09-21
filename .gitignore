@@ -51,3 +51,9 @@ backend/burn-probe-out.pdf
 infra/certs/*
 !infra/certs/.gitkeep
 !infra/certs/README.md
+
+# 本機 dev 專用之 compose 覆寫（公司 TLS 攔截之根 CA 注入等逐機器設定）——絕不進版控。
+# 🔒 內容不得搬進 docker-compose.yml／Dockerfile：那會把 MITM 根 CA 烘進發佈的 image
+#    並解除 F001 AC-E8。理由見該檔檔頭與 infra/certs/README.md。
+docker-compose.override.yml
+docker-compose.override.*.yml

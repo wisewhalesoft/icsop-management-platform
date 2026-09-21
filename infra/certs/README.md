@@ -66,3 +66,50 @@ $b64 = [Convert]::ToBase64String($c.RawData, 'InsertLineBreaks')
 
 bundle 會是空檔，`NODE_EXTRA_CA_CERTS` 指向空檔時 **Node 靜默忽略、不噴警告**（已實測）。
 ⇒ 不在公司網路的機器不受本設定影響，不必做任何事。
+
+## 🔵 執行期（不只 build）也被攔時——本機 dev 專用之逃生口
+
+上面那套 `npm_config_cafile` **只解決 build 時的 npm registry 連線**。2026-09-21 發現攔截範圍
+不只 registry：**`*.blob.core.windows.net` 也被攔**，於是**執行中的容器**連 Azure Blob 直接死在
+`SELF_SIGNED_CERT_IN_CHAIN`，後端回 500，前台檢視器顯示「載入失敗」（當時還被前端改寫成
+`DOCUMENT_PDF_NOT_FOUND`，把診斷帶往「這份文件沒有附件」的錯誤方向，見 `PublicViewerPage.tsx`）。
+
+實測憑證鏈（容器內）：
+
+```
+ 0 s:C=US, ST=WA, L=Redmond, O=Microsoft Corporation, CN=*.blob.core.windows.net
+ 1 s:O=AO Kaspersky Lab, CN=Kaspersky Endpoint Security Personal Certification Authority
+ Verify return code: 19 (self-signed certificate in certificate chain)
+```
+
+⇒ 與 npm 那件事是**同一個攔截者**，本目錄下的 `corp-ca.crt` 就是解藥。
+
+**作法（2026-09-21 使用者裁決）**：寫在 **`docker-compose.override.yml`**，該檔**已列入
+`.gitignore`**，且**不在** `backend/src/auth/aad-hardening-scan.spec.ts` 的掃描清單內：
+
+```yaml
+services:
+  backend:
+    volumes:
+      - ./infra/certs/corp-ca.crt:/etc/ssl/corp-ca.crt:ro
+    environment:
+      NODE_EXTRA_CA_CERTS: /etc/ssl/corp-ca.crt
+```
+
+### 🔒 這**不是**把上面那條禁令解除
+
+- 禁令的標的是**發佈出去的 image**（`backend/Dockerfile` 的 `ENV`）與 **`docker-compose.yml`**——
+  那會讓**測試站／正式站**的服務對 Azure Blob／AAD／MSSQL 之全部對外 TLS 都信任一個 MITM 根 CA。
+  **那仍然禁止，`AC-E8` 的掃描仍然守著那六個檔案。**
+- 本逃生口的信任範圍是「**這台開發筆電的 dev 容器**」，而這台筆電的每一條 HTTPS 本來就已被
+  同一個 MITM 攔截並由 Windows 憑證存放區信任 ⇒ 不新增任何這台機器上原本沒有的暴露面。
+- 🔒 **不得**把那段 YAML 搬進 `docker-compose.yml`、任何 Dockerfile、或 `.env.sample`／
+  `.env.deploy.example`。一搬就等於對正式環境解除 `AC-E8`。
+- 遠端主機（DTTHFC01／DTGHFC01）**沒有**這個攔截，clone 出來也**不會有**這個檔案（gitignore）
+  ⇒ 部署路徑完全不受影響。
+
+### 更乾淨但需要權限的替代方案
+
+在 Kaspersky「網路設定 → 加密連線掃描 → 信任位址」加入 `*.blob.core.windows.net`，
+MITM 直接消失、容器看到的是真正的 Microsoft 憑證，連上面那個逃生口都不需要。
+若 KES 被 KSC 集中策略鎖住則做不到，此時才退回逃生口。
