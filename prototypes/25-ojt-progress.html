@@ -478,6 +478,13 @@
             會讓人以為系統壞了或還有待辦。 -->
     <div id="pendingBlock" data-ojt-pending-block class="hidden"></div>
 
+    <!-- 🔵 F044 `AC-G19`／`AC-G20`：deep link 帶入之**排序**指示。
+         🔴 刻意**不放進上方篩選列**，也**不影響**「清除」鈕之顯示條件與「共 N 列」之計數
+            ——它是排序，不過濾任何一列（`OQ-D44-14` 之丙案「把已完成的藏起來」已被否決：
+            藏起來使用者就無法確認「其他都完成了」）。
+         🔒 未帶 `sort=incomplete-first` 時 `[data-ojt-sort-notice]` **完全不進 DOM**（非 CSS 隱藏），
+            使 `AC-G21`「未帶參數時本頁一格不動」在 DOM 層可被驗證。 -->
+    <div id="sortNoticeHost"></div>
     <div id="groupList" class="space-y-3"></div>
 
     <div id="rowsEmpty" data-ojt-state="empty" class="hidden text-center py-14 bg-white border border-slate-200 rounded-xl">
@@ -1103,6 +1110,51 @@
         不看操作者 orgCode 與目標列之關係，亦**不得**於此新增任何子樹範圍檢查。 */
   function canAddSession(){ return ['icsop_admin','supervisor','deptcontact'].includes(document.body.dataset.role); }
 
+  /* ============ 🔵 F044 deep link（`AC-G19`／`AC-G20`／`AC-G21`；2026-09-21）============ */
+  /* 🔒 自 `location.search` 讀 `tab` 與 `sort`，**兩者各自獨立解析**（`ARCH-G4` 定案）。
+     🔴 **刻意不採本 repo 既有的「恰成對、任一缺席即視為未套用」紀律**
+        （`13-document-list.html` 之 `lifecycleId`+`nodeSubtreeId`／`businessCategoryId`+`bcNodeSubtreeId`）：
+        那條紀律的存在理由是「兩個參數合起來才指得出一個子樹，單獨一個無從解釋」；
+        此處 `tab` 與 `sort` **各自獨立可解釋**（只換分頁不排序、只排序不換分頁都是合法意圖），
+        硬綁成對只會製造一條無聲失敗路徑。
+     🔴 參數缺席或值不可辨識 ⇒ **靜默 no-op、退回既有預設**（不回錯誤、不 toast），
+        比照 F017 `AC-T41` ①②。
+     🔒 `AC-G21`（人類裁決 `OQ-D44-14` 之硬約束）：**未帶任何參數時本頁行為一格不動**
+        ——預設分頁、兩項篩選、兩種完成狀態值、群組與列之次序、全部逐字文案與本功能導入前逐項相同。
+        本區塊之全部效果都只由「參數確實出現且值可辨識」觸發。
+     🔒 既有之 `gotoSessionsPending()`（同頁 state 之另一條入口）**一行未改**。 */
+  const SORT_INCOMPLETE_FIRST='incomplete-first';
+  const DEEPLINK_TAB_VALUES=['dashboard','sessions'];   /* ＝本頁 [data-ojt-tab] 之值域，不另立第二套詞彙 */
+  function readOjtDeepLink(){
+    let sp;
+    try { sp=new URLSearchParams(location.search||''); } catch(e) { return {tab:null,sort:null}; }
+    const tab=sp.get('tab'), sort=sp.get('sort');
+    return {
+      tab:  DEEPLINK_TAB_VALUES.indexOf(tab)>=0 ? tab : null,
+      sort: sort===SORT_INCOMPLETE_FIRST ? SORT_INCOMPLETE_FIRST : null
+    };
+  }
+  /* 🔴 **於初始化當下即取樣**（不是首屏之後才讀）——照抄 `13-document-list.html` 之
+     `readSubtreeParams`／`readBcSubtreeParams` 既有紀律，否則首屏會先閃一次預設分頁。 */
+  const OJT_DEEPLINK=readOjtDeepLink();
+  let sortIncompleteFirst = OJT_DEEPLINK.sort===SORT_INCOMPLETE_FIRST;
+  /* 🔵 取消入口（designer 補；⚠ 尚未入任何 AC，見交付提報）：與篩選列之「清除」對稱——
+     沒有它，經 deep link 進來的人只能改網址才能回到既有次序。取消後 chip 自 DOM 移除。 */
+  const SORT_NOTICE_TITLE='未全部完成之單位優先';
+  const SORT_NOTICE_CLEAR='取消排序';
+  function clearIncompleteFirst(){ sortIncompleteFirst=false; renderRows(); lucide.createIcons(); }
+  function renderSortNotice(){
+    const host=document.getElementById('sortNoticeHost');
+    if(!host) return;
+    host.innerHTML = sortIncompleteFirst
+      ? `<div data-ojt-sort-notice="${SORT_INCOMPLETE_FIRST}" class="mb-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-primary-50 border border-primary-200 text-xs text-primary-800">
+           <i data-lucide="list-tree" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>
+           <span class="flex-1">已依「<strong>${SORT_NOTICE_TITLE}</strong>」排序（自後台首頁之「查看明細」帶入）。此為<strong>排序，不是篩選</strong>——已全部完成之單位仍然呈現於下方。</span>
+           <button onclick="clearIncompleteFirst()" class="shrink-0 px-2 py-0.5 rounded text-primary-700 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-600">${SORT_NOTICE_CLEAR}</button>
+         </div>`
+      : '';
+  }
+
   /* ===================== 分頁切換 ===================== */
   let currentTab='dashboard';
   function switchTab(t){
@@ -1421,6 +1473,7 @@
     document.getElementById('clearBtn').classList.toggle('hidden',!(kw||st));
     document.getElementById('rowCountText').textContent=`共 ${rows.length} 列進度列 · ${rows.filter(r=>r.completed).length} 列${BADGE_COMPLETED_TEXT}`;
 
+    renderSortNotice();
     const emptyBox=document.getElementById('rowsEmpty');
     emptyBox.classList.toggle('hidden',rows.length>0);
     if(!rows.length){
@@ -1440,7 +1493,28 @@
       rows:byOrg.get(code).slice().sort((a,b)=>a.number.localeCompare(b.number))
     }));
 
-    document.getElementById('groupList').innerHTML=groups.map(g=>{
+    /* 🔵 F044 `AC-G20`：`sort=incomplete-first` ⇒ 群組先依「該群組是否**全部**進度列皆已完成」
+       分兩段，**未全部完成之群組在上**；🔴 **段內維持「該頁原本的」次序**，不得打亂。
+       📌 以「兩次過濾後串接」達成分段，**不倚賴 `Array.prototype.sort` 之穩定性**——
+          段內次序是一條 AC，不該建立在引擎實作細節上。
+       🔴 **「既有次序」是什麼，兩邊不一樣，移植時不要照抄本檔的答案**：
+          · 本原型之群組次序 ＝ **`orgCode` 昇冪**（上一段 `Array.from(byOrg.keys()).sort()`）；
+          · 正式站 `listRows` 之伺服端次序 ＝ **`orgName.localeCompare` → `documentNumber.localeCompare`**
+            （F042 `AC-G79`，一行未改、無排序參數）。
+          ⇒ 本條的規則是「**維持該頁原本的次序**」，不是「改成 orgCode」也不是「改成 orgName」。
+          ⚠ 這個原型與已上線程式碼之落差是**既有**的、與本需求無關；🔴 **本輪刻意不對齊**——
+            對齊會改變未帶參數時的既有次序，違反 `AC-G21`／`AC-G79` 之零漣漪鎖定（需另行授權）。
+       🔴 **是排序、不是篩選**：已全部完成之群組**仍然呈現**（只是排在下面），
+          且 `共 N 列`、「清除」鈕、兩項篩選之行為完全不受影響。
+       ⚠ 正式站之 TAB2 另有「以文件分組」模式，本排序**於該模式不生效**（其群組不是單位，
+          「未全部完成的單位」在該模式下無載體）。本原型目前**只有「以使用單位分組」一種模式**，
+          故此處無分支；🔴 移植時必須補上該分支，不得讓它在文件分組下也生效。 */
+    const groupAllDone=g=>g.rows.length>0 && g.rows.every(r=>r.completed);
+    const orderedGroups = sortIncompleteFirst
+      ? groups.filter(g=>!groupAllDone(g)).concat(groups.filter(g=>groupAllDone(g)))
+      : groups;
+
+    document.getElementById('groupList').innerHTML=orderedGroups.map(g=>{
       const done=g.rows.filter(r=>r.completed).length, open=!collapsedGroups.has(g.code);
       return `
       <section data-progress-group="${g.code}" class="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -1833,7 +1907,7 @@
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeAdd(); closeAssign(); closeConfirm(); } });
 
   // init
-  setRole('icsop_admin'); switchTab('dashboard'); lucide.createIcons();
+  setRole('icsop_admin'); switchTab(OJT_DEEPLINK.tab||'dashboard'); lucide.createIcons();   /* 🔵 F044 `AC-G19`：`?tab=` 缺席或不可辨識 ⇒ 既有預設 'dashboard'（📝 OLD> switchTab('dashboard')） */
 </script>
 </body>
 </html>

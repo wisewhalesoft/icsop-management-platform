@@ -60,6 +60,26 @@
           <option value="user">一般使用者</option>
         </select>
       </div>
+      <!-- 🔵 F044 `AC-G42`／`AC-G43`（2026-09-21 架構定案後就地更新）：環圖之**預設維度頁籤**
+           由**後端端點直接回傳 `defaultDimension`**——職位名之解析與逐字白名單整份落在後端。
+           🔴 故 prototype **刻意不複製第二份白名單**（複製出來的那份遲早與後端漂移，而兩份初始
+              碰巧相同 ⇒ 漂移前兩份都會綠）。本控制項只是「假裝端點回了哪一個值」的示意開關，
+              與左側角色模擬器同性質，皆為 **原型專用**；正式站畫面上沒有這個下拉。
+           🔵 括號內為「會產生該預設值的職位」，僅供閱讀；其判定載體在**後端純函式層**：
+              · `本處長（和潤興業）⇒ 依制定部門` 是「禁以 code 直接比對」之關鍵向量（`B01` 於 AS/AE
+                ＝本部長、於 AD ＝本處長；AD 沒有本部層，落到「依制定部門」是**正確**，不是將就）；
+              · `副本部長` 為人工 fixture（上游已記錄之 75 列職位名稱中無此值）——🔴 不得宣稱實機驗過。
+           📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> <select id="jobSel" onchange="setJobPosition(this.value)"> 之
+              七個 `{公司}|{職位代碼}` 選項；連帶移除檔尾 JOB_POSITIONS／resolveJobPositionName／
+              DIM_COMPANY_TITLES／DIM_DIVISION_TITLES／defaultOrgDimension 五個前端白名單常數與函式。 -->
+      <div class="flex items-center gap-1.5 mr-1">
+        <i data-lucide="contact" class="w-4 h-4 text-slate-400"></i>
+        <select id="defaultDimSel" onchange="setDefaultDimension(this.value)" title="端點回傳之 defaultDimension（原型專用示意開關）" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
+          <option value="company">預設維度：依制定公司（董事長／總經理）</option>
+          <option value="division">預設維度：依制定本部（本部長／副本部長）</option>
+          <option value="department" selected>預設維度：依制定部門（部長／處長／和潤興業之本處長／查無職位）</option>
+        </select>
+      </div>
       <div class="hidden xl:flex items-center gap-1.5 text-sm text-slate-500 pl-2 border-l border-slate-200"><i data-lucide="user-circle" class="w-4 h-4"></i><span id="userName">李慧玲</span></div>
       <button title="登出" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
     </div>
@@ -83,14 +103,64 @@
       <h1 class="text-2xl font-bold text-slate-900">歡迎回來，李慧玲</h1>
       <p class="text-sm text-slate-500 mt-1">目前角色：<span id="roleBadge"></span> · <span class="mono">2026-07-16（週四）</span></p>
     </div>
+    <!-- 🔵 示範情境切換（原型專用，比照 `25-ojt-progress.html` 之 `setDemoState`）。
+         🔴 **存在理由**：`AC-G14`（OJT 分母為 0）／`AC-G46`（環圖空）／`AC-G57`（清單空）／`AC-G68`（類別空）
+            四個空狀態，在完整示範語料之下**完全不可達**；沒有這個切換器，那四條 AC 在本頁就沒有任何
+            可觀察的路徑，而它們在正式站是常態（`AC-G7` 之已接受代價、每月 1 日之必然狀態）。 -->
+    <div class="flex items-center gap-1.5">
+      <i data-lucide="database" class="w-4 h-4 text-slate-400"></i>
+      <select id="demoSel" onchange="setDemoScenario(this.value)" title="示範語料切換（原型專用）" class="text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white">
+        <option value="full">示範語料：完整</option>
+        <option value="ojtZero">示範語料：OJT 母體為 0</option>
+        <option value="empty">示範語料：全站尚無文件</option>
+      </select>
+    </div>
   </div>
 
-  <!-- todo badges -->
-  <div id="todoRow" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6"></div>
+  <!-- ═══ F044 ① · 上方四張統計卡（`AC-G1`～`AC-G24`）═══
+       🔴 2026-09-21 人類裁決 `OQ-D44-03`＝甲：舊 5 張 KPI 待辦卡**完全取代**為本列 4 張。
+          📝 已作廢（僅供追溯，⚠ 不得復原）：
+             OLD> <div id="todoRow" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6"></div>
+             OLD> 其逐字標題＝待確認組織異動／未指派節點文件／停用帳號待覆核／調閱紀錄（近7日）／待公布的文件
+          ⚠ 明確後果（人類已授權）：系統管理員失去「停用帳號待覆核」之首頁入口、
+            系統管理員與 ICSOP 管理員失去「待確認組織異動」之首頁入口；🔒 該兩項之**側欄入口一字不動**。
+       🔒 容器語意鎖定（`AC-G1`）：`role="group"` ＋ `aria-label="統計資訊"`（取代既有 `aria-label="待辦提示"`）。 -->
+  <div id="statCards" role="group" aria-label="統計資訊" data-testid="dashboard-stat-cards" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-6"></div>
 
-  <!-- quick access cards -->
-  <h2 class="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5"><i data-lucide="layout-grid" class="w-4 h-4 text-slate-400"></i>快速進入功能區</h2>
-  <div id="cardGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8"></div>
+  <!-- ═══ F044 ② · 「快速進入功能區」整區移除（`AC-G25`／`AC-G27`）═══
+       📝 已作廢（僅供追溯，⚠ 不得復原）：
+          OLD> <h2 class="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5"><i data-lucide="layout-grid" ...></i>快速進入功能區</h2>
+          OLD> <div id="cardGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8"></div>
+       🔒 移除理由＝與左側邊選單重複；故側欄 `MENU` 常數**一行未改**（`AC-G27`）。
+       🔒 `受限CRUD` 徽章之載體不因此消失——它在側欄 `renderSidebar()` 另有一份（`AC-G26`）。 -->
+
+  <!-- ═══ F044 ③ · 兩張環圖（`AC-G29`～`AC-G50`）═══
+       🔴 環之**每一段＝一個組織**（隨頁籤為公司／本部／部門），**不是**「已公告 vs 進度中」兩段
+          ——後者不隨頁籤改變，三個維度頁籤會整個失去意義（`AC-G30`）。
+       🔴 `AC-G45`／`A-G2` 之裁量結果＝**兩個區塊各自獨立切換**（各有一組 `role="tablist"`，
+          `data-testid` 同為 `org-dimension-tabs`）。理由：兩區回答的是不同問題（「這個月」vs「到目前為止」），
+          使用者常需要一邊看公司、一邊看部門；連動會強迫兩邊同維度而少掉一半資訊。
+          ⚠ 後果（規格已明載）：下游斷言**必須先以 `within(getByTestId('donut-month'))` 限定容器**，
+             全域 `getByRole('tab', {name:'依制定公司'})` 會命中兩個元素。
+       🔴 `AC-G71`（本輪之簡化環無 e2e、無視覺回歸）：SVG 一律 `aria-hidden="true"`，
+          每一段之組織名與兩個數字皆由**圖例之文字節點**承載；被 Top N 合併之「其他」段，其份數與
+          被合併之組織數由**圖形下方之說明行**承載 ⇒ 沒有任何數字之唯一載體是弧長。 -->
+  <div class="grid lg:grid-cols-2 gap-4 mb-4">
+    <section id="donutMonth" role="region" aria-label="當月已公告" data-testid="donut-month" class="bg-white border border-slate-200 rounded-xl p-5"></section>
+    <section id="donutCumulative" role="region" aria-label="累積已公告" data-testid="donut-cumulative" class="bg-white border border-slate-200 rounded-xl p-5"></section>
+  </div>
+
+  <!-- ═══ F044 ④ · 最新公告（ICSOP 版本更新）（`AC-G51`～`AC-G58`）═══
+       🔴 恰四欄（公告日／版次／程序書書名／狀態），**不得**順手加第五欄。
+       ⚠ 母體含「公告日在未來」之進度中文件（`AC-G52`）：依公告日降冪 ⇒ 未來公告日排在最上方。
+          這是刻意的——若只含已公告，`狀態` 欄將恆為同一值、零資訊量。 -->
+  <section id="latestAnnouncements" role="region" aria-label="最新公告（ICSOP 版本更新）" data-testid="latest-announcements" class="bg-white border border-slate-200 rounded-xl p-5 mb-4"></section>
+
+  <!-- ═══ F044 ⑤ · 依業務/功能類別分布（`AC-G60`～`AC-G68`）═══
+       🔴 本區塊之可見性閘門**直接讀功能矩陣**（`canPerform(role,'BUSINESS_CATEGORY_MANAGEMENT','read')`），
+          明文禁止寫成角色清單。部門窗口在該功能鍵為 `NONE` ⇒ 整個 `<section>` **完全不進 DOM**
+          （不是 `hidden`、不是 `disabled`）⇒ 故以 host 容器承載，由 `renderCategory()` 決定是否產生。 -->
+  <div id="categoryHost" class="mb-8"></div>
 
   <!-- recent activity -->
   <h2 class="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5"><i data-lucide="activity" class="w-4 h-4 text-slate-400"></i>最近活動</h2>
@@ -150,30 +220,351 @@
     sysadmin:['系統管理員','#4338CA','shield-check'], icsop_admin:['ICSOP 管理員','#7C3AED','file-cog'],
     supervisor:['主管','#0891B2','user-cog'], deptcontact:['部門窗口','#475569','contact'], user:['一般使用者','#64748B','user']
   };
-  const CARDS=[
-    /* 🔴 2026-09-02 同一裁決之連帶：CARDS 亦移除 supervisor 鍵。
-       側欄不再對主管呈現「循環管理」，儀表板快速進入卡片若仍呈現，主管會看到一張點進去必 403 的卡片（死鏈）。
-       📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> supervisor:'唯讀' */
-    {id:'lifecycle',label:'循環管理',desc:'循環池與節點連線維護',icon:'workflow',href:'10-lifecycle-list.html',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
-    /* 🔵 2026-09-02 F043 AC-43：新功能區卡片（順序比照 MENU：循環管理之後、ICSOP 文件管理之前）。 */
-    {id:'businesscategory',label:'業務/功能類別管理',desc:'業務/功能類別池與節點連線維護、文件掛載（多對多）',icon:'shapes',href:'26-business-category-list.html',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀'}},
-    {id:'document',label:'ICSOP 文件管理',desc:'文件新增與維護、狀態、附件、連結點',icon:'file-text',href:'13-document-list.html',roles:{sysadmin:'唯讀',icsop_admin:'CRUD',supervisor:'唯讀',deptcontact:'唯讀'}},
-    {id:'usageform',label:'使用表單管理',desc:'excel/pdf 表單上傳與文件關聯',icon:'files',href:'19-usage-form-management.html',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
-    {id:'appendix',label:'附錄管理',desc:'excel/pdf 附錄上傳與文件關聯（可排序）',icon:'paperclip',href:'24-appendix-management.html',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
-    {id:'docindex',label:'文件索引管理',desc:'AI 提取結果預覽、索引狀態與重新索引',icon:'database',href:'21-document-index-management.html',roles:{sysadmin:'唯讀',icsop_admin:'CRUD'}},
-    {id:'audit',label:'文件調閱歷程',desc:'查看/下載/列印稽核查詢',icon:'history',href:'17-access-history.html',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
-    {id:'changehistory',label:'文件變更歷程',desc:'欄位 before/after diff、循環樹狀圖新舊對照',icon:'git-compare',href:'23-change-history.html',roles:{sysadmin:'唯讀',icsop_admin:'唯讀'}},
-    {id:'account',label:'帳號管理',desc:'建立/停用帳號、指派角色',icon:'users',href:'08-account-management.html',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
-    {id:'orgsync',label:'組織人員異動管理',desc:'每日組織同步、異動待確認',icon:'refresh-cw',href:'09-org-sync-management.html',roles:{sysadmin:'CRUD',icsop_admin:'唯讀'}},
-    {id:'settings',label:'系統參數 / 權限矩陣',desc:'角色×功能 / 角色×欄位矩陣',icon:'settings',href:'18-permission-matrix.html',roles:{sysadmin:'CRUD'}}
+  /* ═════════════════════════════════════════════════════════════════════════════════════
+     F044 · 後台首頁儀表板改版（2026-09-21）
+     規格＝docs/specs/features/F044-admin-dashboard-analytics.md（`AC-G1`～`AC-G84`）
+     ─────────────────────────────────────────────────────────────────────────────────────
+     📝 本輪移除之常數（已作廢，僅供追溯，⚠ 不得復原）：
+        OLD> const CARDS=[ {id:'lifecycle'…},{id:'businesscategory'…},{id:'document'…},{id:'usageform'…},
+        OLD>               {id:'appendix'…},{id:'docindex'…},{id:'audit'…},{id:'changehistory'…},
+        OLD>               {id:'account'…},{id:'orgsync'…},{id:'settings'…} ];   ← 快速進入功能區（`AC-G25`）
+        OLD> const TODOS=[ {label:'待確認組織異動',n:3…},{label:'未指派節點文件',n:1…},
+        OLD>               {label:'停用帳號待覆核',n:1…},{label:'調閱紀錄（近7日）',n:48…},
+        OLD>               {label:'待公布的文件',n:2…} ];                         ← 舊 5 張 KPI 卡（`AC-G1`）
+     🔒 `ACTIVITY` 與「最近活動」區塊**一字不動**（人類裁決 `OQ-D44-05`）；側欄 `MENU` 一行未改（`AC-G27`）。
+
+     🔴 **本輪之約束環為簡化環：只有 vitest／jest，沒有 Playwright、沒有視覺回歸、沒有 fidelity 測試。**
+        ⇒ `OQ-D44-29`＝甲：**自繪 SVG，不引入任何第三方圖表庫**。
+        ⇒ `AC-G71` 為負向鎖定：**沒有任何數值之唯一載體**是 SVG 的 `d`／`stroke-dasharray`／
+           `stroke-dashoffset`／矩形寬高／`transform`／`<canvas>`／tooltip。
+        ⇒ 本檔之自我檢查題：「把這張圖的數字改錯，有沒有任何一個文字節點會跟著變？」
+           環段 ⇒ 圖例列之 `legend-announced`／`legend-in-progress`；
+           被合併的「其他」段 ⇒ 圖形下方 `[data-donut-truncation]` 之說明行；
+           合計 ⇒ 環中央之 `[data-donut-total]`（HTML 文字，**不在 `<svg>` 內**）；
+           長條 ⇒ `bar-announced`／`bar-in-progress`。全部 `<svg>` 一律 `aria-hidden="true"`。
+        ⇒ 幾何本身（弧長、條寬）之正確性本輪無法端到端驗證 ⇒ 已抽為純函式
+           `donutSegments()`／`barWidths()`，由固定向量斷言（`AC-G49`／`AC-G67`／`OQ-D44-34`）。
+     ═════════════════════════════════════════════════════════════════════════════════════ */
+
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+  /* 🔒 `AC-G69`／INV-G8：「今日」「當月」「近 1 個月」之**單一推導點**，全檔唯一。
+     🔴 明文禁止 `new Date()`／`getFullYear()`／`getMonth()`／`getDate()`——正式站一律以 UTC 取得
+        （後端 `serverToday(now)`／前端 `todayIsoDate(now)`）。此處刻意寫死，等同測試之凍結時鐘。
+     值刻意等於上方歡迎列既有之日期字串，使「本月」＝ `2026-07`。 */
+  const TODAY='2026-07-16';
+  const CURRENT_MONTH=TODAY.slice(0,7);
+
+  /* 🔒 `AC-G8`：「＋1 個月／−1 個月」之**唯一**月份位移演算法（月底溢位夾回當月最後一日、一律 UTC 拆解）。
+     🔴 明文禁止在本功能中出現任何 `setMonth(...)`／`getMonth() ± 1` 之就地運算。
+     固定向量（規格 `AC-G8` 之表）：
+       2026-01-15 +1 ⇒ 2026-02-15 ／ 2026-01-31 +1 ⇒ 2026-02-28 ／ 2024-01-31 +1 ⇒ 2024-02-29
+       2026-12-31 +1 ⇒ 2027-01-31 ／ 2026-03-31 −1 ⇒ 2026-02-28 ／ 2024-03-31 −1 ⇒ 2024-02-29
+       2026-01-01 −1 ⇒ 2025-12-01 ／ 2026-05-31 −1 ⇒ 2026-04-30 */
+  function addMonthsClamped(iso,delta){
+    const p=String(iso).split('-'), y=Number(p[0]), m=Number(p[1]), d=Number(p[2]);
+    const t=y*12+(m-1)+delta, ny=Math.floor(t/12), nm=((t%12)+12)%12;
+    const last=new Date(Date.UTC(ny,nm+1,0)).getUTCDate();
+    const nd=d<last?d:last;
+    return String(ny).padStart(4,'0')+'-'+String(nm+1).padStart(2,'0')+'-'+String(nd).padStart(2,'0');
+  }
+
+  /* 🔒 `AC-G13`：百分比一律委派本函式，明文禁止另打一份 `Math.round`（沿用 F042 `coveragePercent`）。 */
+  function coveragePercent(done,total){ return total? Math.round(done/total*100) : 0; }
+
+  /* 🔒 INV-G7／`AC-G70`：卡片、兩張環圖、最新公告清單、類別長條圖**五處**之「已公告／進度中」
+     判定皆來自本函式，不得各算一份（正式站＝backend/src/documents/display-status.ts）。 */
+  const DISPLAY_LABEL={announced:'已公告',in_progress:'進度中',inactive:'失效',void:'作廢'};
+  function deriveDisplayStatus(status,announcedDate,today){
+    if(status==='inactive') return 'inactive';
+    if(status==='void') return 'void';
+    if(!announcedDate) return 'in_progress';
+    return announcedDate<=today ? 'announced' : 'in_progress';
+  }
+
+  /* 🔒 `AC-G36`：沿用既有 `ORG_PATH_SEPARATOR` 與 `resolveCompanyShortName`，禁止寫死第二份 `' / '`。 */
+  const ORG_PATH_SEPARATOR=' / ';
+  const COMPANY_SHORT_NAMES={AS:'和潤企業',AD:'和潤興業',AE:'和潤電能',AJ:'和勁企業'};
+  function resolveCompanyShortName(code){ const c=String(code||'').trim(); return c? (COMPANY_SHORT_NAMES[c]||null) : null; }
+  /* 🔴 `AC-G32`：查無簡稱 ⇒ 退回 `companyCode` **原字串**（不得顯示 null／undefined／—／空白），
+     且**不得**歸入 `未指定` 段——「查不到簡稱」與「沒有制定公司」是兩件不同的事。 */
+  function companyLabel(code){ return resolveCompanyShortName(code) || String(code||''); }
+
+  /* 🔒 `AC-G34`：三個逐字段名。前二者刻意分開、不得合併、**明文禁止排除**
+     ——排除會使環圖各段總和 ≠ 卡片數字（INV-G1／INV-G2），而畫面上沒有任何線索說明差額從哪來。 */
+  /* 🔒 `data-org-key` 之 sentinel 值（2026-09-21 架構定案，逐字鎖定）：**key 與 label 刻意分離**。
+     🔴 為何不能直接拿中文段名當 key：`data-org-key` 是下游定位單一環段／圖例列的鉤子，若等於
+        可見文案，任何一次文案調整都會同時打斷定位；而 `__unspecified__`／`__no_division__` 之
+        雙底線形狀也使它們**不可能**與真實分組鍵（`AS`／`AS|B0000`）相撞。
+     📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> data-org-key 直接使用 `未指定`／`無本部` 兩個中文字面。 */
+  const SEG_UNSPECIFIED_KEY='__unspecified__';
+  const SEG_UNSPECIFIED='未指定';   /* draftingDeptId 為 null 或查無該 orgCode ⇒ **三個維度皆**歸此段 */
+  const SEG_NO_DIVISION_KEY='__no_division__';
+  const SEG_NO_DIVISION='無本部';   /* 有部、但上溯不到 DIVISION 祖先 ⇒ **僅「依制定本部」**維度歸此段 */
+  const SEG_OTHER='其他';           /* Top N 之合併段：只存在於**圖形**，不是圖例的一列（`AC-G41` 之刻意不對稱） */
+
+  /* 🔵 `AC-G40`／`A-G6` — **Top N 之 N ＝ 8**（ui-ux-designer 裁量，理由如下，請回填 §命名鎖定）：
+       ① 本環之半徑 54、描邊 18px，周長約 339px；一段若不足周長的 3%（≈10px）在此描邊寬下已無法與
+          相鄰段區分，而部門維度在正式站可達 40+ 段（平均每段 2.5%）⇒ 不設上限等於畫一圈毛邊。
+       ② 色彩才是真正的上限：本頁採用之類別色票在色覺缺陷模擬下**兩兩可分者恰為 8 色**，第 9 色開始
+          與既有色相撞；第 9 段固定保留給中性灰之 `其他`，使「被合併」在視覺上自成一類。
+       ③ 圖例每列高約 28px，8 列 ≈ 224px，與 140px 之環在同一張卡內高度相稱；`其他` 不佔圖例列。
+     🔴 上限**只保護圖形版面、不得隱藏任何資料**：圖例恆列出全部組織（`AC-G41`），且圖形下方之
+        `[data-donut-truncation]` 說明行明載「被合併幾個組織／其已公告合計幾份／排序規則」。
+        （本 repo 已記錄「靜默 top-N 才是缺陷」之血訓。） */
+  const DONUT_TOP_N=8;
+  const DONUT_R=54, DONUT_C=2*Math.PI*DONUT_R;
+  const DONUT_PALETTE=['#365C97','#0891B2','#7C3AED','#047857','#B45309','#BE185D','#4338CA','#0F766E'];
+  const DONUT_OTHER_COLOR='#94A3B8';
+  /* 🔒 `AC-G50`：顏色不得為唯一區分手段——兩個狀態之色票沿用 `13-document-list.html` 之 `statusPill`，
+     但畫面上**恆有逐字標籤**（`已公告 {n}`／`進度中 {n}`）。 */
+  const C_ANNOUNCED='#047857', C_IN_PROGRESS='#365C97';
+
+  /* 📌 `AC-G49` 之可測形狀：弧長計算**抽為純函式**（本輪唯一能把幾何正確性拉回可測範圍的途徑）。
+     固定向量：總和恆為周長／單一值佔滿整圈／零值不產生可見段。 */
+  function donutSegments(values){
+    const total=values.reduce(function(a,b){return a+b;},0);
+    let acc=0;
+    return values.map(function(v){
+      const length = total>0 ? (v/total)*DONUT_C : 0;
+      const seg={offset:acc,length:length};
+      acc+=length;
+      return seg;
+    });
+  }
+  /* 📌 `AC-G67` 之可測形狀：條寬計算抽為純函式。固定向量：max===0／單邊為 0／兩邊皆為 0。 */
+  function barWidths(announced,inProgress,max){
+    if(!(max>0)) return {announced:0,inProgress:0};
+    return {announced:(announced/max)*100,inProgress:(inProgress/max)*100};
+  }
+
+  /* ───── 組織示範語料（`ORG_UNIT`）─────
+     🔴 **`無本部` 之真實成因（2026-09-21 架構更正）**：不是「該部直掛 ROOT」，而是
+        **該公司之 `X0000` 列根本不存在於 `ORG_UNIT`**。
+        · `parentCode` 由**代碼前綴機械推導**（`X####` ⇒ `X0000`），**不是資料裡的一個欄位**；
+        · `deriveTier` 對 `X0000` **恆判為 `DIVISION`**。
+        ⇒ 上溯時查的是一個「推導得出、但可能沒有那一列」的代碼；查無 ⇒ 無 DIVISION 祖先 ⇒ `無本部`。
+     📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> 每列帶 `tier` 與 `parent` 兩欄，AD 兩個部寫 `parent:null`（＝直掛 ROOT）。
+        那個形狀會誤導下游以為「`parentCode` 為 null 就是無本部」，而真實資料之 `parentCode` **永遠有值**，
+        缺的是**被指向的那一列**——照舊形狀實作，正式站一筆 `無本部` 都算不出來。
+     🔴 和潤興業（AD）刻意**沒有 `B0000` 列** ⇒ 其 `B1000`／`B3000` 上溯 `B0000` 查無 ⇒ 落 `無本部` 段。
+        **這是該段唯一的可達載體**；補上 `B0000` 這一列，`AC-G34` 就變成恆真、零鑑別力。
+     🔴 唯一鍵仍為 `(companyCode, orgCode)`：AD 之 `B1000`（業務部）與 AS 之 `B1000`（消費分期營業部）
+        **刻意同碼不同公司**——單以 `orgCode` 查表會把兩個部併成一段（dev 實測四家間有 42 個重複碼）。 */
+  function divisionCodeOf(orgCode){ return String(orgCode||'').charAt(0)+'0000'; }
+  function deriveTier(orgCode){ return String(orgCode||'').slice(1)==='0000' ? 'DIVISION' : 'DEPT'; }
+  const ORG_UNITS=[
+    {co:'AS',code:'B0000',name:'業務本部'},
+    {co:'AS',code:'C0000',name:'管理本部'},
+    {co:'AS',code:'D0000',name:'風險本部'},
+    {co:'AS',code:'B1000',name:'消費分期營業部'},
+    {co:'AS',code:'B2000',name:'企劃部'},
+    {co:'AS',code:'C1000',name:'財會部'},
+    {co:'AS',code:'C2000',name:'管理部'},
+    {co:'AS',code:'C3000',name:'經企公關部'},
+    {co:'AS',code:'C4000',name:'資訊部'},
+    {co:'AS',code:'C5000',name:'法務部'},
+    {co:'AS',code:'D1000',name:'信用審查部'},
+    /* 🔴 和潤興業：下列兩個部之 parentCode 機械推導皆為 `B0000`，而 **AD 沒有 `B0000` 這一列** ⇒ `無本部`。 */
+    {co:'AD',code:'B1000',name:'業務部'},
+    {co:'AD',code:'B3000',name:'營運管理部'},
+    {co:'AE',code:'E0000',name:'能源本部'},
+    {co:'AE',code:'E1000',name:'電能事業部'}
   ];
-  const TODOS=[
-    {label:'待確認組織異動',n:3,icon:'alert-triangle',color:'#B45309',bg:'#FEF3C7',roles:['sysadmin','icsop_admin']},
-    {label:'未指派節點文件',n:1,icon:'git-commit-vertical',color:'#B45309',bg:'#FEF3C7',roles:['icsop_admin']},
-    {label:'停用帳號待覆核',n:1,icon:'user-x',color:'#B91C1C',bg:'#FEE2E2',roles:['sysadmin']},
-    {label:'調閱紀錄（近7日）',n:48,icon:'history',color:'#365C97',bg:'#EAF1FA',roles:['sysadmin','icsop_admin']},
-    {label:'待公布的文件',n:2,icon:'file-clock',color:'#047857',bg:'#D1FAE5',roles:['icsop_admin','supervisor']}
+  /* 🔒 `(companyCode, orgCode)` 複合鍵之**單一組裝點**，逐字鏡射已上線之 `orgGroupKeyOf()`
+     （`frontend/src/pages/ojt-progress-view.ts:162` ＝ `${companyCode}__${orgCode}`）。
+     🔴 分隔符 `__` **不是任選的**：F044 規格明文「逐字沿用既有 `orgGroupKeyOf()`，**不另立第二種**」。
+     📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> co+'|'+code —— 本原型自創之第二種分隔符。
+     ⚠ 這是「prototype 落後於已上線程式碼，而規格**已經指名正確答案**」的形狀，直接對齊即可、不需授權；
+        🔴 **與「群組次序 orgCode vs orgName」那一處刻意不同**——那一處兩邊都是**既有行為**，
+        對齊會改掉未帶參數時的既有次序（零漣漪鎖定），故需另行授權。兩種形狀不要混為一談。
+     🔴 全部五個用點（ORG_INDEX 建表／查表、本部段鍵、部門段鍵、OJT 單位去重鍵）一律經本函式，
+        **不得任何一處自己串字串**——那正是「第二種分隔符」重新長出來的路徑。
+     ⚠ 與兩個 sentinel 鍵（`__unspecified__`／`__no_division__`）**不可能相撞**：真實鍵恆以公司代碼開頭。 */
+  function orgGroupKeyOf(companyCode,orgCode){ return String(companyCode)+'__'+String(orgCode); }
+  const ORG_INDEX={};
+  ORG_UNITS.forEach(function(u){ ORG_INDEX[orgGroupKeyOf(u.co,u.code)]=u; });
+  function orgUnit(co,code){ return ORG_INDEX[orgGroupKeyOf(co,code)]||null; }
+  /* 🔒 `AC-G36`：正式站為 `orgUnitDisplayName(unit, lookupDepartment)`（處理 SECTION／SUBSECTION 之
+     `descFull` 前綴切除）；本原型只有 DEPT／DIVISION 兩層，其輸出即 `name`。禁止另寫第二套組裝。 */
+  function orgUnitDisplayName(u){ return u? String(u.name||'').trim() : ''; }
+  /* 🔒 `AC-G33`：沿**機械推導之** `parentCode` 上溯至第一個 `DIVISION`。
+     🔴 查表範圍**限於該文件之 companyCode**（禁跨公司；本 repo 2026-09-07 已記錄「以登入者公司解析
+        他公司資料、把錯值用正確的人名遮住」之缺陷）；以已訪集合為**循環守衛**。
+     🔴 **查無該列即回 `null`**（⇒ `無本部`）——這一行就是 `無本部` 的全部成因，
+        🔴 不得改成「找不到就再往上推一層」，那會讓 `無本部` 永遠不產生。 */
+  function divisionOf(co,code){
+    const seen={};
+    let cur=String(code||'');
+    while(cur){
+      const u=orgUnit(co,cur);
+      if(!u) return null;                       /* 推導出的祖先代碼在 ORG_UNIT 查無 ⇒ 無本部 */
+      if(deriveTier(u.code)==='DIVISION') return u;
+      if(seen[u.code]) return null;
+      seen[u.code]=1;
+      const next=divisionCodeOf(u.code);
+      if(next===u.code) return null;
+      cur=next;
+    }
+    return null;
+  }
+
+  /* ───── 預設維度（`AC-G42`／`AC-G43`）─────
+     🔴 **2026-09-21 架構定案：`defaultDimension` 由後端端點直接回傳**（職位名之解析與逐字白名單
+        整份住在後端）。⇒ 本檔**刻意不實作第二份白名單**，只保留一個「端點回了哪個值」的示意開關
+        （topbar 之 `#defaultDimSel`），使三種預設值都看得到會發生。
+     📝 已作廢（僅供追溯，⚠ 不得復原）：
+        OLD> const JOB_POSITIONS={'AS|A01':'董事長',…,'AD|B01':'本處長',…};
+        OLD> function resolveJobPositionName(co,code){ … }        ← 單段精確比對、禁跨公司 fallback
+        OLD> const DIM_COMPANY_TITLES=['董事長','總經理'];
+        OLD> const DIM_DIVISION_TITLES=['本部長','副本部長'];
+        OLD> function defaultOrgDimension(jobPositionName){ … }    ← trim 後完整字串相等、禁 includes
+     🔒 上述規則**並未取消**，只是換了住處；其斷言載體改為後端之純函式。 */
+  const ORG_DIM_KEYS=['company','division','department'];
+  function normalizeDefaultDimension(v){
+    return ORG_DIM_KEYS.indexOf(String(v||''))>=0 ? String(v) : 'department';   /* 值不可辨識 ⇒ 靜默退回預設 */
+  }
+
+  /* ───── 角色閘門：一律**讀功能矩陣**，禁止寫成角色清單（`AC-G18`／`AC-G58`／`AC-G66`）─────
+     理由逐字比照既有 `canSeeLifecycleDimension` 之註解：「寫成角色清單也能過測，但下次矩陣一動，
+     這裡就會與真正的授權分家」。權威＝backend/src/rbac/function-matrix.ts（全表恰 15 鍵，
+     此處只複寫本頁消費到的 3 鍵，**不新增任何功能列**——`AC-G77`）。 */
+  const FUNCTION_MATRIX={
+    ICSOP_DOCUMENT_MANAGEMENT:    {sysadmin:'READ',icsop_admin:'CRUD',supervisor:'READ',deptcontact:'READ',user:'NONE'},
+    OJT_PROGRESS_MANAGEMENT:      {sysadmin:'READ',icsop_admin:'CRUD',supervisor:'RESTRICTED_CRUD',deptcontact:'RESTRICTED_CRUD',user:'NONE'},
+    BUSINESS_CATEGORY_MANAGEMENT: {sysadmin:'READ',icsop_admin:'CRUD',supervisor:'READ',deptcontact:'NONE',user:'NONE'}
+  };
+  const MATRIX_READABLE=['READ','CRUD','RESTRICTED_CRUD'];
+  function canPerform(role,functionKey,action){
+    const acc=(FUNCTION_MATRIX[functionKey]||{})[role]||'NONE';
+    if(action==='read') return MATRIX_READABLE.indexOf(acc)>=0;
+    return acc==='CRUD'||acc==='RESTRICTED_CRUD';
+  }
+  /* 🔒 `AC-G17`／`AC-G80`：卡④ 之可見性沿用 F042 既有述詞 `canViewDashboard`（2026-09-02 人類裁決），
+     **不改寫、不擴充其值域**，明文禁止在本頁另寫 `role==='ICSOPAdmin'||role==='SysAdmin'`。
+     ⚠ 這是全檔唯一以角色為判準者——它是**既有**的共用述詞，不是新寫的角色清單；它回答的問題
+        （「誰看得到全公司的 OJT 統計」）與 OJT 頁 TAB1 完全相同，寫成兩份必有一邊日後被靜默遺漏。 */
+  function canViewDashboard(role){ return role==='icsop_admin'||role==='sysadmin'; }
+
+  /* ───── 業務/功能類別池（與 `26-business-category-list.html` 之類別池逐列一致）───── */
+  const BUSINESS_CATEGORIES=[
+    {id:'bc1',name:'授信',    subcategory:'消金',  status:'active'},
+    {id:'bc2',name:'授信',    subcategory:'企金',  status:'active'},
+    {id:'bc3',name:'風險管理',subcategory:null,    status:'active'},
+    {id:'bc4',name:'帳務處理',subcategory:'子公司',status:'active'},
+    {id:'bc5',name:'帳務處理',subcategory:'消金',  status:'inactive'},
+    {id:'bc6',name:'授信',    subcategory:'子公司',status:'inactive'}
   ];
+  /* 🔒 沿用既有組合規則（有子分類 ⇒ `名稱（子分類）`，**全形括號、無空白**；無 ⇒ `名稱`）。 */
+  function businessCategoryDisplayName(c){ return c.subcategory? (c.name+'（'+c.subcategory+'）') : c.name; }
+
+  /* 🔵 **示範用之擴充類別池（原型專用，預設不啟用）**。
+     🔴 存在理由：`AC-G65` 之「預設前 10 條 ＋ `顯示全部類別`」在預設的 4 個有效類別之下**完全不可達**
+        ——展開入口、截斷提示、展開後之完整列數三者皆畫不出來，該 AC 會恆真。
+     🔒 預設關閉，使本頁之類別列與 `26-business-category-list.html` 之類別池保持一致；
+        擴充項**不新增任何文件**，只是把既有文件多掛幾個類別 ⇒ 連帶讓 INV-G4（一份文件掛多個類別
+        會被重複計入）之不等更明顯。 */
+  const EXTRA_BUSINESS_CATEGORIES=[
+    {id:'bc7', name:'作業風險',subcategory:null,    status:'active',demoDocs:['d01','d04','d06','d09','d17']},
+    {id:'bc8', name:'資訊安全',subcategory:null,    status:'active',demoDocs:['d07','d20','d22']},
+    {id:'bc9', name:'法令遵循',subcategory:null,    status:'active',demoDocs:['d06','d25']},
+    {id:'bc10',name:'人力資源',subcategory:null,    status:'active',demoDocs:['d05']},
+    {id:'bc11',name:'採購與資產',subcategory:null,  status:'active',demoDocs:['d04','d08']},
+    {id:'bc12',name:'資金調度',subcategory:'企金',  status:'active',demoDocs:['d08','d22','d23']},
+    {id:'bc13',name:'通路管理',subcategory:'消金',  status:'active',demoDocs:['d02','d15','d21']},
+    {id:'bc14',name:'教育訓練',subcategory:null,    status:'active',demoDocs:['d09','d11','d12','d18']},
+    {id:'bc15',name:'客訴處理',subcategory:null,    status:'active',demoDocs:['d13']},
+    {id:'bc16',name:'委外管理',subcategory:null,    status:'active',demoDocs:['d24']}
+  ];
+
+  /* ───── ICSOP 文件示範語料 ─────
+     欄位：id／co 制定公司／dept 制定部門 orgCode（null ＝ 完全沒填）／status 儲存狀態／
+           date 公告日期（null ＝ 未設）／num 程序書編號／name 程序書書名／ed 版次（null ＝ 未設版次）／
+           cats 類別掛載 `[類別id, 節點名]`（同一類別可有多個節點）
+     🔴 本語料刻意覆蓋規格 §癸 所列之鑑別力要求（少一種，對應的 AC 就恆真）：
+       (a) 卡③「本月新版公告」：① 上月公告 d02/d05 ② 本月已公告 d15～d20 ③ **本月但公告日在未來** d25
+           ④ 公告日為 null d24 ⑤ **本月公告但已改 inactive** d29 ⇒ 少了 ③⑤，「只算已公告」半句恆真。
+       (b) 本部上溯：① 有 DIVISION 祖先（AS 全部）② **無 DIVISION 祖先**（AD 兩個部）⇒ `無本部` 段
+           ③ dept 為 null（d14／d20）⇒ `未指定` 段 ④ **不同公司之相同 orgCode**（AS/B1000 與 AD/B1000）。
+       (c) 類別長條圖：① **同一份文件掛在同一類別之兩個節點**（d01 之 bc1）⇒ 驗去重
+           ② 同一份文件掛在**不同**類別（d03 之 bc1＋bc3）⇒ INV-G4 成因①
+           ③ 完全未掛任何類別之文件（d05／d07／d10／d12／d13／d15／d17／d19／d20／d24／d26／d28／d29）⇒ INV-G4 成因②
+           ④ 掛有 `inactive` 文件之類別（bc1 掛 d27）⇒ INV-G5 取到**嚴格小於**
+           ⑤ 停用之類別（bc6 掛 d16 ⇒ 整列不顯示）
+           ⑥ 兩組總數相同之類別（bc1／bc3 皆 4；bc2／bc4 皆 3）⇒ 驗 tie-break 之決定性。
+       INV-G3：**AS/C5000 法務部只有進度中文件 d26、沒有任何已公告** ⇒ 它不產生環段、也不產生圖例列
+               ⇒ 卡②（6）＞ Σ圖例進度中（5）。這個不等是「環圖統計的是已公告」之必然結果，不是漏算。 */
+  const DOCS=[
+    {id:'d01',co:'AS',dept:'D1000',status:'active',  date:'2025-12-01',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',                  ed:"25'12",cats:[['bc1','授信受理作業'],['bc1','覆審作業']]},
+    {id:'d02',co:'AS',dept:'B1000',status:'active',  date:'2025-10-01',num:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',          ed:"25'10",cats:[['bc1','通路管理作業']]},
+    {id:'d03',co:'AS',dept:'B2000',status:'active',  date:'2026-01-01',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',              ed:"26'01",cats:[['bc1','進件作業'],['bc3','風險辨識作業']]},
+    {id:'d04',co:'AS',dept:'C1000',status:'active',  date:'2026-05-01',num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',             ed:"26'02",cats:[['bc4','費用帳務作業']]},
+    {id:'d05',co:'AS',dept:'C2000',status:'active',  date:'2025-10-01',num:'ICSOP-LWC-101-1-02',name:'招募管理作業',                  ed:"25'09",cats:[]},
+    {id:'d06',co:'AS',dept:'C3000',status:'active',  date:'2026-03-01',num:'ICSOP-GCA-100-2-00',name:'法遵作業',                      ed:"26'01",cats:[['bc3','法遵監控作業']]},
+    {id:'d07',co:'AS',dept:'C4000',status:'active',  date:'2026-04-01',num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',         ed:"26'01",cats:[]},
+    {id:'d08',co:'AS',dept:'C1000',status:'active',  date:'2026-02-01',num:'ICSOP-FC-101-1-00', name:'銀行融資作業',                  ed:"26'01",cats:[['bc4','資金調度作業']]},
+    {id:'d09',co:'AS',dept:'D1000',status:'active',  date:'2026-06-01',num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',              ed:"26'02",cats:[['bc2','企金受理作業']]},
+    {id:'d10',co:'AD',dept:'B1000',status:'active',  date:'2026-04-15',num:'ICSOP-AD-201-1-01', name:'興業-車輛租賃進件作業',         ed:"26'02",cats:[]},
+    {id:'d11',co:'AD',dept:'B1000',status:'active',  date:'2026-06-10',num:'ICSOP-AD-201-1-02', name:'興業-租賃案件對保作業',         ed:"26'03",cats:[['bc2','企金受理作業']]},
+    {id:'d12',co:'AE',dept:'E1000',status:'active',  date:'2026-05-20',num:'ICSOP-AE-301-1-01', name:'電能-太陽能案場開發作業',       ed:"26'01",cats:[]},
+    {id:'d13',co:'AS',dept:'B2000',status:'active',  date:'2026-02-10',num:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',       ed:"26'04",cats:[]},
+    {id:'d14',co:'AS',dept:null,   status:'active',  date:'2026-03-20',num:'ICSOP-MISC-100-1-01',name:'集團共用-文件管理作業',        ed:"26'01",cats:[]},
+    {id:'d15',co:'AS',dept:'B1000',status:'active',  date:'2026-07-01',num:'ICSOP-SRC-101-1-07',name:'消費分期線上申請作業',          ed:"26'07",cats:[]},
+    {id:'d16',co:'AS',dept:'D1000',status:'active',  date:'2026-07-05',num:'ICSOP-SRC-101-2-01',name:'消金審核作業-線上核決',         ed:"26'07",cats:[['bc6','子公司授信作業']]},
+    {id:'d17',co:'AS',dept:'C1000',status:'active',  date:'2026-07-10',num:'ICSOP-PUC-101-1-02',name:'費用預算管理作業',              ed:"26'07",cats:[]},
+    {id:'d18',co:'AD',dept:'B3000',status:'active',  date:'2026-07-12',num:'ICSOP-AD-202-1-01', name:'興業-營運風險自評作業',         ed:"26'07",cats:[['bc3','風險自評作業']]},
+    {id:'d19',co:'AE',dept:'E1000',status:'active',  date:'2026-07-16',num:'ICSOP-AE-301-1-02', name:'電能-案場運維作業',             ed:"26'07",cats:[]},
+    {id:'d20',co:'AS',dept:null,   status:'active',  date:'2026-07-08',num:'ICSOP-MISC-100-1-02',name:'集團共用-資安通報作業',        ed:"26'07",cats:[]},
+    {id:'d21',co:'AS',dept:'B1000',status:'active',  date:'2026-09-01',num:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',    ed:"26'03",cats:[['bc1','產品政策作業']]},
+    {id:'d22',co:'AS',dept:'C1000',status:'active',  date:'2026-10-01',num:'ICSOP-IC-102-1-00', name:'短期投資買賣、保管及會計作業',  ed:"26'05",cats:[['bc4','投資帳務作業']]},
+    {id:'d23',co:'AS',dept:'D1000',status:'active',  date:'2026-08-01',num:'ICSOP-SRC-103-1-02',name:'企業金融覆審作業',              ed:"26'06",cats:[['bc2','覆審作業']]},
+    {id:'d24',co:'AD',dept:'B3000',status:'active',  date:null,        num:'ICSOP-AD-202-1-02', name:'興業-委外管理作業',             ed:null,   cats:[]},
+    {id:'d25',co:'AS',dept:'C3000',status:'active',  date:'2026-07-31',num:'ICSOP-GCA-100-2-01',name:'法遵作業-申報時程調整',         ed:null,   cats:[['bc3','法遵監控作業']]},
+    {id:'d26',co:'AS',dept:'C5000',status:'active',  date:'2026-08-15',num:'ICSOP-LGL-101-1-01',name:'契約審閱作業',                  ed:"26'06",cats:[]},
+    {id:'d27',co:'AS',dept:'B1000',status:'inactive',date:'2025-05-01',num:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',ed:"24'03",cats:[['bc1','通路管理作業']]},
+    {id:'d28',co:'AS',dept:'C2000',status:'void',    date:'2025-04-01',num:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',          ed:"24'01",cats:[]},
+    {id:'d29',co:'AS',dept:'B2000',status:'inactive',date:'2026-07-03',num:'ICSOP-PPC-101-1-04',name:'月目標設定作業（已停用）',      ed:"26'07",cats:[]}
+  ];
+  const DOC_INDEX={};
+  DOCS.forEach(function(d){ DOC_INDEX[d.id]=d; });
+
+  /* ───── OJT 進度示範語料（卡④ 之輸入；`AC-G7`～`AC-G15`）─────
+     每一列＝一份文件 × 一個使用單位（沿用 F042 之最小追蹤單位）。
+     應完成訓練日期 ＝ `announcedDate` ＋ 1 個月；窗口 ＝ 應完成日落在 [今日 − 1 個月, 今日]
+     ＝ [2026-06-16, 2026-07-16] ⇒ 公告日須落在 [2026-05-16, 2026-06-16]。
+     🔴 三類列**自分子與分母同時排除**，且其計數各自可取得（供排除註記）：
+        裁撤單位（isActive=false）／孤兒列（單位已移出使用部門）／公告日為 null。
+     🔴 分母＝**相異 `(companyCode, orgCode)`**（複合鍵，禁單以 orgCode 分組）；
+        分子＝該單位在窗口內之**全部**應完成文件皆已完成者（部分完成不算）。
+     ⇒ 本語料下：窗口內 4 個單位（AS/D1000、AS/B2000、AE/E1000、AD/B1000），
+        其中 AS/B2000 未完成 ⇒ 3 / 4（75%）；排除 3 列（裁撤 1、孤兒 1、無公告日 1）。 */
+  const OJT_ROWS=[
+    {docId:'d09',co:'AS',org:'D1000',orgName:'和潤企業 / 風險本部 / 信用審查部',announcedDate:'2026-06-01',completed:true, isActive:true, orphaned:false},
+    {docId:'d09',co:'AS',org:'B2000',orgName:'和潤企業 / 業務本部 / 企劃部',    announcedDate:'2026-06-01',completed:false,isActive:true, orphaned:false},
+    {docId:'d09',co:'AS',org:'C9000',orgName:'和潤企業 / 管理本部 / 客服部（已裁撤）',announcedDate:'2026-06-01',completed:false,isActive:false,orphaned:false},
+    {docId:'d12',co:'AE',org:'E1000',orgName:'和潤電能 / 能源本部 / 電能事業部',announcedDate:'2026-05-20',completed:true, isActive:true, orphaned:false},
+    {docId:'d11',co:'AD',org:'B1000',orgName:'和潤興業 / 業務部',              announcedDate:'2026-06-10',completed:true, isActive:true, orphaned:false},
+    {docId:'d11',co:'AD',org:'B9000',orgName:'和潤興業 / 稽核室（已移出使用部門）',announcedDate:'2026-06-10',completed:false,isActive:true, orphaned:true},
+    {docId:'d24',co:'AD',org:'B3000',orgName:'和潤興業 / 營運管理部',          announcedDate:null,        completed:false,isActive:true, orphaned:false}
+  ];
+
+  /* ───── 原型專用之狀態（🔒 皆**不跨 session 記憶**，`AC-G44`／`AC-G65`）───── */
+  let demoScenario='full';                 /* full ｜ ojtZero ｜ empty */
+  let defaultDim='department';             /* 端點回傳之 defaultDimension（示意值；預設＝依制定部門） */
+  let categoryExpanded=false;              /* 類別長條圖是否已展開全部 */
+  let categoryDemoPool=false;              /* 是否啟用擴充示範類別池 */
+  const donutDim={month:'department',cumulative:'department'};  /* 由 renderDash() 依職位重設 */
+
+  function scenarioDocs(){ return demoScenario==='empty' ? [] : DOCS; }
+  function scenarioCategories(){
+    return demoScenario==='empty' ? [] : BUSINESS_CATEGORIES.concat(categoryDemoPool?EXTRA_BUSINESS_CATEGORIES:[]);
+  }
+  function scenarioOjtRows(){
+    if(demoScenario==='empty') return [];
+    /* 「OJT 母體為 0」＝窗口內只剩**全數被排除**之列 ⇒ 分母 0、比率省略、排除註記仍有數字。 */
+    if(demoScenario==='ojtZero') return OJT_ROWS.filter(function(r){ return !r.isActive||r.orphaned||!r.announcedDate; });
+    return OJT_ROWS;
+  }
   const ACTIVITY=[
     ['file-plus','ICSOP-SRC-101-1-01 車輛分期進件作業 已建立','2 小時前','#365C97'],
     ['refresh-cw','每日組織同步完成，異動 12 筆','今日 06:00','#047857'],
@@ -182,32 +573,437 @@
     ['download','ICSOP-SRC-101-1-01 車輛分期進件作業 被下載（王小明）','昨日 11:40','#475569']
   ];
 
+  /* ═════════════════ F044 · 聚合（一律純函式，輸入集合 → 輸出數字）═════════════════
+     🔴 四個區塊之數字**全部由同一份 `DOCS` 導出**，沒有任何一處是寫死的數字——
+        INV-G1（卡③ ＝ 當月環圖各段總和）與 INV-G2（卡① ＝ 累積環圖各段總和）因而在結構上恆成立；
+        任何「順手排除掉解析不出來的那幾筆」都會立刻讓兩個數字對不上（`AC-G6`／`AC-G35`）。 */
+
+  function docsByDisplayStatus(docs,st){
+    return docs.filter(function(d){ return deriveDisplayStatus(d.status,d.date,TODAY)===st; });
+  }
+  /* 🔒 `AC-G4`／`AC-G5`：「當月」＝半開區間 [當月 1 日, 次月 1 日)；`announced` 條件**已同時涵蓋**
+     「status='active'」與「公告日 ≤ 今日」，故此處**不得**再寫一次 `date <= TODAY` 之比較。 */
+  function monthlyAnnouncedDocs(docs){
+    return docsByDisplayStatus(docs,'announced').filter(function(d){ return d.date.slice(0,7)===CURRENT_MONTH; });
+  }
+
+  /* 分組鍵與圖例標籤（`AC-G32`／`AC-G33`／`AC-G34`／`AC-G36`）。
+     🔴 `未指定`／`無本部` 兩段之標籤為該逐字值本身，**不加公司前綴**——它們是「解析不出來」的桶，
+        不屬於任何一家公司。
+     🔴 `依制定部門` 維度下若該部無 DIVISION 祖先 ⇒ 標籤為 `{公司簡稱} / {部名}`（本部段**收合**，
+        沿用 `buildOrgPath` 之既有紀律「空欄自動收合、不產生連續或尾綴分隔符」），**不插入 `無本部` 字樣**
+        （`[ASSUMPTION] A-G1`）。 */
+  function orgSegmentOf(doc,dim){
+    if(!doc.dept) return {key:SEG_UNSPECIFIED_KEY,label:SEG_UNSPECIFIED};
+    const unit=orgUnit(doc.co,doc.dept);
+    if(!unit) return {key:SEG_UNSPECIFIED_KEY,label:SEG_UNSPECIFIED};
+    const co=companyLabel(doc.co);
+    if(dim==='company') return {key:doc.co,label:co};
+    const div=divisionOf(doc.co,doc.dept);
+    if(dim==='division'){
+      if(!div) return {key:SEG_NO_DIVISION_KEY,label:SEG_NO_DIVISION};
+      return {key:orgGroupKeyOf(doc.co,div.code),label:[co,orgUnitDisplayName(div)].join(ORG_PATH_SEPARATOR)};
+    }
+    const parts=[co];
+    if(div) parts.push(orgUnitDisplayName(div));
+    parts.push(orgUnitDisplayName(unit));
+    return {key:orgGroupKeyOf(doc.co,unit.code),label:parts.join(ORG_PATH_SEPARATOR)};
+  }
+
+  /* 環圖之列（＝環段＝圖例列，兩者恰等，`AC-G38`）。
+     🔴 排序＝已公告份數降冪，同值以分組鍵**序數比較**收尾（`a<b?-1:a>b?1:0`）。
+        明文禁止 `localeCompare`——本 repo 已記錄「同一份資料在不同機器排出不同順序、測試一邊綠一邊紅」
+        之 ICU 定序漂移缺陷。 */
+  function donutRows(scope,dim){
+    const docs=scenarioDocs();
+    const announced=(scope==='month')? monthlyAnnouncedDocs(docs) : docsByDisplayStatus(docs,'announced');
+    const inProgress=docsByDisplayStatus(docs,'in_progress');
+    const map={}, order=[];
+    announced.forEach(function(d){
+      const s=orgSegmentOf(d,dim);
+      if(!map[s.key]){ map[s.key]={key:s.key,label:s.label,announced:0,inProgress:0}; order.push(s.key); }
+      map[s.key].announced++;
+    });
+    /* 🔴 `AC-G39`／INV-G3：「進度中」**只加在已有環段的組織上**。只有進度中、沒有任何已公告之組織
+       （示範語料＝和潤企業 / 管理本部 / 法務部）因而**不產生環段、也不產生圖例列** ⇒
+       卡②「進度中」＞ Σ圖例進度中。**這個不等式是刻意的，不得為了讓兩個數字相等而把它補上**——
+       補上會產生 0 度的環段並破壞 `AC-G30`。 */
+    inProgress.forEach(function(d){
+      const s=orgSegmentOf(d,dim);
+      if(map[s.key]) map[s.key].inProgress++;
+    });
+    /* 🔒 **排序規則（2026-09-21 架構定案；此前沒有任何 AC 定義它）**：
+         `announced` 降冪 → `label` **序數**昇冪 → `key` 昇冪。
+       🔴 **序數比較（`a<b?-1:a>b?1:0`），不是 `localeCompare`**——中文定序隨執行環境之 ICU 版本漂移，
+          本 repo 已記錄「同一份資料在不同機器排出不同順序、測試一邊綠一邊紅」之缺陷。
+          📌 示範語料**刻意**安排兩組「改用 locale 比較就會換位」之並列，使這條規則有鑑別力：
+             · 部門維度、`announced` 同為 3：`和潤企業 / 管理本部 / 財會部` 與 `和潤企業 / 風險本部 / 信用審查部`
+               —— 序數：財會部在前（管 U+7BA1 ＜ 風 U+98A8）；zh-TW locale：信用審查部在前（feng ＜ guan）。
+             · 本部維度、`announced` 同為 2：`和潤電能 / 能源本部` 與 `未指定`
+               —— 序數：能源本部在前（和 U+548C ＜ 未 U+672A）；zh-TW locale：未指定在前。
+       🔴 **`未指定`／`無本部` 兩個 sentinel 段參與同一排序，刻意 _不_ 置底**——依 `announced` 數量落在
+          該落的位置（本語料：部門維度之 `未指定` 排第 7／共 11，後面還有四個真實組織；本部維度之
+          `無本部` 排第 4／共 6）。這與直覺相反，但釘在最後會讓「它們也是一筆資料」這件事消失，
+          且下游會據以寫出一條與規則相反的斷言。
+       ⚠ **第三段（`key` 序數）在本語料下從不觸發**：`label` 逐段唯一，比較在第二段就分出勝負。
+          ⇒ sentinel 段的位置由 **`label`**（`未指定`／`無本部`）決定，**不是**由 `__unspecified__`／
+            `__no_division__` 的低序數決定；上面兩張表列的位置即實際渲染結果（已由煙霧測試逐列斷言）。
+          🔴 日後若出現兩個 `label` 相同的段，第三段才會生效，屆時 `__` 開頭之鍵會排在中日文字之前。 */
+    return order.map(function(k){ return map[k]; }).sort(function(a,b){
+      if(b.announced!==a.announced) return b.announced-a.announced;
+      if(a.label!==b.label) return a.label<b.label?-1:1;
+      return a.key<b.key?-1:a.key>b.key?1:0;
+    });
+  }
+  /* 圖形上之弧（Top N ＋ `其他`）。🔴 `其他` 之值＝被合併各組織已公告數之**總和**，不四捨五入、不省略。 */
+  function donutArcs(rows){
+    const arcs=rows.slice(0,DONUT_TOP_N).map(function(r,i){
+      return {label:r.label,value:r.announced,color:DONUT_PALETTE[i%DONUT_PALETTE.length],merged:0};
+    });
+    const rest=rows.slice(DONUT_TOP_N);
+    if(rest.length){
+      arcs.push({label:SEG_OTHER,color:DONUT_OTHER_COLOR,merged:rest.length,
+        value:rest.reduce(function(a,r){ return a+r.announced; },0)});
+    }
+    return arcs;
+  }
+
+  /* 🔒 `AC-G53`／`AC-G54`：依 `announcedDate` 降冪；同日以 `documentNumber` 昇冪、仍同值以 id 昇冪收尾
+     （完全決定性）。🔴 比較子為**序數比較**，明文禁止 `localeCompare`。**先排序、再截斷**。 */
+  function latestAnnouncements(docs,limit){
+    const pool=docs.filter(function(d){ return d.status==='active' && d.date; });
+    const sorted=pool.slice().sort(function(a,b){
+      if(a.date!==b.date) return a.date<b.date?1:-1;
+      if(a.num!==b.num) return a.num<b.num?-1:1;
+      return a.id<b.id?-1:a.id>b.id?1:0;
+    });
+    return sorted.slice(0,limit);
+  }
+
+  /* 🔒 `AC-G61`：統計單位＝**類別**（非節點），同一份文件在同一類別內**只計一次**（相異 documentId）。
+     🔒 `AC-G62`：僅 `status==='active'` 之文件計入，並依 `deriveDisplayStatus` 分兩色；
+        `inactive`／`void` **完全不計入**（雙色既然逐字就是那兩種，第三、四種狀態沒有可落之色）。
+     🔒 `AC-G63`：停用之類別不顯示；掛載文件數為 0 之類別不顯示。
+     🔒 `AC-G64`：總數降冪 → 顯示名昇冪（序數）→ categoryId 昇冪（絕對決定性），**禁 localeCompare**。 */
+  function categoryDistribution(docs,cats){
+    const byCat={};
+    cats.forEach(function(c){ byCat[c.id]={}; });
+    docs.forEach(function(d){
+      if(d.status!=='active') return;
+      (d.cats||[]).forEach(function(m){ if(byCat[m[0]]) byCat[m[0]][d.id]=1; });
+    });
+    cats.forEach(function(c){
+      (c.demoDocs||[]).forEach(function(id){ const d=DOC_INDEX[id]; if(d&&d.status==='active') byCat[c.id][id]=1; });
+    });
+    const rows=[];
+    cats.forEach(function(c){
+      if(c.status!=='active') return;
+      let a=0,p=0;
+      Object.keys(byCat[c.id]).forEach(function(id){
+        const d=DOC_INDEX[id];
+        if(deriveDisplayStatus(d.status,d.date,TODAY)==='announced') a++; else p++;
+      });
+      if(a+p===0) return;
+      rows.push({id:c.id,label:businessCategoryDisplayName(c),announced:a,inProgress:p,total:a+p});
+    });
+    return rows.sort(function(x,y){
+      if(y.total!==x.total) return y.total-x.total;
+      if(x.label!==y.label) return x.label<y.label?-1:1;
+      return x.id<y.id?-1:x.id>y.id?1:0;
+    });
+  }
+
+  /* 📌 `AC-G9`～`AC-G15` 之可測形狀：純函式 `ojtOnTimeRate(rows, today)`。
+     🔴 分母＝相異 `(companyCode, orgCode)` **複合鍵**（單以 orgCode 分組會把不同公司的兩個部併成一組）；
+        分子＝該單位在窗口內之**全部**應完成文件皆已完成者（部分完成不算）。
+     🔴 `denominator === 0` 時**省略 `rate` 鍵**（比照 F042 `coverage.rate` 之既有紀律）。 */
+  function ojtOnTimeRate(rows,today){
+    const from=addMonthsClamped(today,-1);
+    const ex={inactive:0,orphaned:0,noDate:0};
+    const units={}, keys=[];
+    rows.forEach(function(r){
+      if(r.isActive===false){ ex.inactive++; return; }
+      if(r.orphaned){ ex.orphaned++; return; }
+      if(!r.announcedDate){ ex.noDate++; return; }
+      const due=addMonthsClamped(r.announcedDate,1);
+      if(due<from||due>today) return;                 /* 窗口外：不排除、也不計入（不是「被排除」） */
+      const k=orgGroupKeyOf(r.co,r.org);
+      if(!units[k]){ units[k]={total:0,done:0}; keys.push(k); }
+      units[k].total++;
+      if(r.completed) units[k].done++;
+    });
+    let numerator=0;
+    keys.forEach(function(k){ if(units[k].total>0&&units[k].done===units[k].total) numerator++; });
+    const out={numerator:numerator,denominator:keys.length,windowFrom:from,windowTo:today,
+      excludedInactive:ex.inactive,excludedOrphaned:ex.orphaned,excludedNoAnnouncedDate:ex.noDate};
+    if(out.denominator>0) out.rate=coveragePercent(numerator,out.denominator);
+    return out;
+  }
+
+  /* ═════════════════ F044 · 渲染 ═════════════════ */
+
+  function emptyState(text,hint){
+    return `<div data-testid="empty-state" class="text-center py-8 px-4">
+      <div class="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-2"><i data-lucide="info" class="w-6 h-6 text-slate-300"></i></div>
+      <p class="text-sm text-slate-500">${esc(text)}</p>
+      ${hint?`<p class="text-xs text-slate-400 mt-1">${esc(hint)}</p>`:''}
+    </div>`;
+  }
+
+  /* ───── ① 四張統計卡 ───── */
+  function renderStatCards(){
+    const role=document.body.dataset.role, docs=scenarioDocs();
+    const announced=docsByDisplayStatus(docs,'announced').length;
+    const inProgress=docsByDisplayStatus(docs,'in_progress').length;
+    const monthly=monthlyAnnouncedDocs(docs).length;
+    /* 🔒 `AC-G16`：前三張卡**四種後台角色一律呈現**，明文禁止為它們寫任何角色白名單
+       ——四種角色對「ICSOP 文件管理」皆有 READ 以上，看得到清單卻看不到其總數會是說不通的不對稱。 */
+    const cards=[
+      {tid:'stat-card-announced',        title:'已公告',      n:announced, icon:'megaphone', color:C_ANNOUNCED,  bg:'#D1FAE5',hint:'累積、不限時間'},
+      {tid:'stat-card-in-progress',      title:'進度中',      n:inProgress,icon:'clock',     color:C_IN_PROGRESS,bg:'#EAF1FA',hint:'公告日未到或尚未設定公告日'},
+      {tid:'stat-card-monthly-announced',title:'本月新版公告',n:monthly,   icon:'file-plus', color:'#7C3AED',    bg:'#EDE9FE',hint:'公告日落在 '+CURRENT_MONTH+' 且已公告'}
+    ];
+    let html=cards.map(function(c){
+      return `<div data-testid="${c.tid}" class="bg-white border border-slate-200 rounded-xl p-4">
+        <div class="flex items-center gap-2">
+          <span class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style="background:${c.bg}"><i data-lucide="${c.icon}" class="w-4 h-4" style="color:${c.color}"></i></span>
+          <span class="text-sm font-medium text-slate-700">${c.title}</span>
+        </div>
+        <div class="mt-2 flex items-baseline gap-1">
+          <span data-testid="stat-value" class="text-3xl font-bold text-slate-900 mono">${c.n}</span>
+          <span class="text-xs text-slate-400">份</span>
+        </div>
+        <p class="text-xs text-slate-400 mt-1">${esc(c.hint)}</p>
+      </div>`;
+    }).join('');
+    if(canViewDashboard(role)) html+=ojtCardHtml(role);
+    document.getElementById('statCards').innerHTML=html;
+  }
+
+  /* 卡④：OJT 準時完成率(1個月內)
+     🔒 `AC-G17`：**僅** ICSOPAdmin／SysAdmin 進 DOM（不是 hidden、不是 disabled）——主管與部門窗口
+        連同「查看明細」連結一起看不到。述詞＝既有之 `canViewDashboard`。
+     🔒 `AC-G13`：數值句逐字 `已完成 {X} / 應完成 {Y}（{Z}%）`——`/` 兩側各恰一個半形空格、括號為全形、% 為半形。
+     🔒 `AC-G14`：分母為 0 ⇒ 省略比率並顯示明確空狀態；🔴 明文禁止 `NaN%`／`0%`／`100%`／空白
+        （`0%` 與「全部未完成」無從分辨，`100%` 是謊報）。
+     🔒 `AC-G15`：排除註記**恆顯示**（含排除 0 筆時之明確說明），比照 25-ojt-progress 之 `#inactiveNote`。 */
+  function ojtCardHtml(role){
+    const r=ojtOnTimeRate(scenarioOjtRows(),TODAY);
+    const showLink=canPerform(role,'OJT_PROGRESS_MANAGEMENT','read');
+    const value = r.denominator>0
+      ? `<div data-testid="stat-value" class="mt-2 text-xl font-bold text-slate-900"><span data-testid="ojt-ontime-value" class="mono">已完成 ${r.numerator} / 應完成 ${r.denominator}（${r.rate}%）</span></div>`
+      : `<div data-testid="empty-state" class="mt-2 flex items-start gap-1.5 text-sm text-slate-500"><i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0 text-slate-400"></i><span data-testid="ojt-ontime-value">近 1 個月內無應完成之 OJT 單位</span></div>`;
+    const exTotal=r.excludedInactive+r.excludedOrphaned+r.excludedNoAnnouncedDate;
+    const head = r.denominator>0
+      ? `母體＝應完成訓練日期落在 <span class="mono">${r.windowFrom}</span> ～ <span class="mono">${r.windowTo}</span> 之使用單位，共 <span class="mono">${r.denominator}</span> 個，其中 <span class="mono">${r.numerator}</span> 個已全部完成`
+      : `母體＝應完成訓練日期落在 <span class="mono">${r.windowFrom}</span> ～ <span class="mono">${r.windowTo}</span> 之使用單位，目前為 <span class="mono">0</span> 個，故<strong class="text-slate-600">不計算比率</strong>`;
+    const exPart = exTotal>0
+      ? `；本次共排除 <span class="mono">${exTotal}</span> 列——<strong class="text-slate-600">已裁撤單位</strong> ${r.excludedInactive} 列、<strong class="text-slate-600">單位已移出使用部門</strong> ${r.excludedOrphaned} 列、<strong class="text-slate-600">無公告日期</strong> ${r.excludedNoAnnouncedDate} 列`
+      : `；已裁撤單位、已移出使用部門與無公告日期之列皆不計入，目前無任何進度列因此被排除`;
+    return `<div data-testid="stat-card-ojt-ontime" class="bg-white border border-slate-200 rounded-xl p-4">
+      <div class="flex items-center gap-2">
+        <span class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style="background:#FEF3C7"><i data-lucide="graduation-cap" class="w-4 h-4" style="color:#B45309"></i></span>
+        <span class="text-sm font-medium text-slate-700">OJT 準時完成率</span><span class="text-xs text-slate-400">(1個月內)</span>
+      </div>
+      ${value}
+      <p data-testid="ojt-ontime-exclusion-note" class="mt-2 text-[11px] leading-relaxed text-slate-500">${head}${exPart}。被排除之進度列於「OJT 資料清單」分頁<strong class="text-slate-600">仍然呈現</strong>，故兩處數字不相等屬正常。</p>
+      ${showLink?`<a role="link" href="25-ojt-progress.html?tab=sessions&amp;sort=incomplete-first" class="mt-2 inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline">查看明細<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>`:''}
+    </div>`;
+  }
+
+  /* ───── ③ 兩張環圖 ───── */
+  const ORG_DIMS=[{k:'company',label:'依制定公司'},{k:'division',label:'依制定本部'},{k:'department',label:'依制定部門'}];
+  const DONUT_META={
+    month:     {tid:'donut-month',     title:'當月已公告', desc:'統計公告日落在本月（'+CURRENT_MONTH+'）之已公告文件；環的**每一段＝一個組織**。'},
+    cumulative:{tid:'donut-cumulative',title:'累積已公告', desc:'統計全部已公告文件，**不限時間**；環的每一段＝一個組織。'}
+  };
+  function renderDonutRegion(key){
+    const meta=DONUT_META[key], dim=donutDim[key];
+    const rows=donutRows(key,dim), arcs=donutArcs(rows), segs=donutSegments(arcs.map(function(a){return a.value;}));
+    const total=rows.reduce(function(a,r){ return a+r.announced; },0);
+    const tabs=ORG_DIMS.map(function(d){
+      const on=d.k===dim;
+      return `<button type="button" role="tab" id="tab-${key}-${d.k}" aria-selected="${on}" aria-controls="panel-${key}" tabindex="${on?0:-1}" onclick="setDonutDim('${key}','${d.k}')" onkeydown="onOrgDimKey(event,'${key}','${d.k}')" class="px-2.5 py-1.5 text-xs rounded-md border transition ${on?'bg-primary-50 border-primary-300 text-primary-700 font-medium':'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}">${d.label}</button>`;
+    }).join('');
+    const merged=arcs.length&&arcs[arcs.length-1].label===SEG_OTHER? arcs[arcs.length-1] : null;
+    /* 🔴 「靜默 top-N 才是缺陷」：截斷時必須說清楚**被合併幾個組織／合計幾份／憑什麼是這 8 段**，
+       並指出完整清單在哪。未截斷時本行仍在，但明說「未達合併上限」，使其負向斷言有鑑別力。 */
+    const trunc = merged
+      ? `圖形僅繪出份數最多的 <span class="mono">${DONUT_TOP_N}</span> 個組織（排序＝已公告份數由多至少），其餘 <span class="mono">${merged.merged}</span> 個組織合併為「<strong class="text-slate-600">${SEG_OTHER}</strong>」，已公告合計 <span class="mono">${merged.value}</span> 份。<strong class="text-slate-600">下方圖例仍逐列列出全部 ${rows.length} 個組織</strong>，沒有任何數字只存在於圖形裡。`
+      : `本維度共 <span class="mono">${rows.length}</span> 個組織，未達 <span class="mono">${DONUT_TOP_N}</span> 段之合併上限，圖形已繪出全部組織（無「${SEG_OTHER}」段）。`;
+    const body = total===0
+      ? emptyState(key==='month'?('本月（'+CURRENT_MONTH+'）尚無已公告之 ICSOP 文件'):'目前尚無已公告之 ICSOP 文件',
+                   '文件於「ICSOP 文件管理」建立並設定公告日期後，公告日一到即會出現在此。')
+      : `<div class="flex items-start gap-4">
+          <div class="relative shrink-0 w-[140px] h-[140px]">
+            <svg viewBox="0 0 140 140" class="w-[140px] h-[140px]" aria-hidden="true" focusable="false">
+              <circle cx="70" cy="70" r="${DONUT_R}" fill="none" stroke="#F1F5F9" stroke-width="18"></circle>
+              ${arcs.map(function(a,i){
+                return `<circle cx="70" cy="70" r="${DONUT_R}" fill="none" stroke="${a.color}" stroke-width="18" stroke-dasharray="${segs[i].length.toFixed(3)} ${(DONUT_C-segs[i].length).toFixed(3)}" stroke-dashoffset="${(-segs[i].offset).toFixed(3)}" transform="rotate(-90 70 70)"></circle>`;
+              }).join('')}
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span data-donut-total class="text-2xl font-bold text-slate-900 mono">${total}</span>
+              <span class="text-[10px] text-slate-400">已公告合計（份）</span>
+            </div>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p data-donut-truncation class="text-[11px] leading-relaxed text-slate-500">${trunc}</p>
+            <p class="mt-2 text-[11px] leading-relaxed text-slate-400 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>「進度中」不分時間（＝當下尚未到公告日）⇒ <strong class="text-slate-500">同一個組織在「當月已公告」與「累積已公告」兩張圖上的「進度中」必為同值</strong>，這是同一個事實，不是重複貼上。</span></p>
+          </div>
+        </div>
+        <ul role="list" data-testid="donut-legend" class="mt-3 max-h-[184px] overflow-y-auto pr-1 border-t border-slate-100 divide-y divide-slate-100">
+          ${rows.map(function(r,i){
+            const dot=i<DONUT_TOP_N?DONUT_PALETTE[i%DONUT_PALETTE.length]:DONUT_OTHER_COLOR;
+            return `<li role="listitem" data-testid="donut-legend-row" data-org-key="${esc(r.key)}" class="flex items-center gap-2 py-1.5">
+              <span aria-hidden="true" class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${dot}"></span>
+              <span data-testid="legend-org-name" class="text-xs text-slate-700 flex-1 truncate" title="${esc(r.label)}">${esc(r.label)}</span>
+              <span data-testid="legend-announced" class="text-xs mono whitespace-nowrap" style="color:${C_ANNOUNCED}">已公告 ${r.announced}</span>
+              <span data-testid="legend-in-progress" class="text-xs mono whitespace-nowrap" style="color:${C_IN_PROGRESS}">進度中 ${r.inProgress}</span>
+            </li>`;
+          }).join('')}
+        </ul>`;
+    document.getElementById(key==='month'?'donutMonth':'donutCumulative').innerHTML=
+      `<div class="flex items-center gap-2 mb-1"><i data-lucide="target" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">${meta.title}</h2></div>
+       <p class="text-xs text-slate-400 mb-3">${meta.desc.replace(/\*\*(.+?)\*\*/g,'<strong class="text-slate-500">$1</strong>')}</p>
+       <div role="tablist" aria-label="制定組織維度" data-testid="org-dimension-tabs" class="flex flex-wrap gap-1.5 mb-3">${tabs}</div>
+       <div role="tabpanel" id="panel-${key}" data-testid="donut-panel" aria-labelledby="tab-${key}-${dim}" tabindex="0">${body}</div>`;
+  }
+  /* 🔒 `AC-G44`：可手動切換、**不記憶**（不寫 localStorage／sessionStorage／偏好表）；
+     重新整理或重新進入首頁一律回到**職位預設值**。 */
+  function setDonutDim(key,dim){
+    donutDim[key]=dim;
+    renderDonutRegion(key);
+    lucide.createIcons();
+    const el=document.getElementById('tab-'+key+'-'+dim);
+    if(el) el.focus();
+  }
+  /* `AC-G31`：←／→ 切換；Enter／Space 由 `<button>` 原生觸發 click。 */
+  function onOrgDimKey(e,key,dim){
+    const i=ORG_DIMS.map(function(d){return d.k;}).indexOf(dim);
+    let j=-1;
+    if(e.key==='ArrowRight'||e.key==='Right') j=(i+1)%ORG_DIMS.length;
+    else if(e.key==='ArrowLeft'||e.key==='Left') j=(i-1+ORG_DIMS.length)%ORG_DIMS.length;
+    else return;
+    e.preventDefault();
+    setDonutDim(key,ORG_DIMS[j].k);
+  }
+
+  /* ───── ④ 最新公告（ICSOP 版本更新）───── */
+  const LATEST_LIMIT=10;
+  const EDITION_NONE_TEXT='未設版次';   /* 🔒 沿用 F042 既有常數，禁止新增第二個 */
+  function renderLatest(){
+    const role=document.body.dataset.role;
+    const pool=scenarioDocs().filter(function(d){ return d.status==='active'&&d.date; });
+    const rows=latestAnnouncements(scenarioDocs(),LATEST_LIMIT);
+    /* 🔒 `AC-G58`：閘門**讀矩陣**（`ICSOP_DOCUMENT_MANAGEMENT` / read），禁止寫成角色清單。
+       🔴 導向**不帶狀態篩選**——連結叫「查看更多」，帶篩選會看到更少。 */
+    const more=canPerform(role,'ICSOP_DOCUMENT_MANAGEMENT','read')
+      ? `<a role="link" href="13-document-list.html?sortBy=announcedDate&amp;sortDir=desc" class="ml-auto inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline">查看更多<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>`
+      : '';
+    const body = rows.length===0
+      ? emptyState('目前沒有可呈現的 ICSOP 版本更新','清單來源＝「ICSOP 文件管理」中儲存狀態為有效、且已設定公告日期之文件；依公告日降冪排列。')
+      : `<div class="overflow-x-auto">
+          <table role="table" class="w-full text-sm">
+            <thead class="text-xs text-slate-500 border-b border-slate-200">
+              <tr>
+                <th role="columnheader" scope="col" class="text-left font-medium px-3 py-2 whitespace-nowrap">公告日</th>
+                <th role="columnheader" scope="col" class="text-left font-medium px-3 py-2 whitespace-nowrap">版次</th>
+                <th role="columnheader" scope="col" class="text-left font-medium px-3 py-2">程序書書名</th>
+                <th role="columnheader" scope="col" class="text-left font-medium px-3 py-2 whitespace-nowrap">狀態</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              ${rows.map(function(d){
+                const st=deriveDisplayStatus(d.status,d.date,TODAY);
+                const pill=st==='announced'
+                  ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style="color:${C_ANNOUNCED};background:#D1FAE5"><i data-lucide="megaphone" class="w-3 h-3"></i>${DISPLAY_LABEL[st]}</span>`
+                  : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style="color:${C_IN_PROGRESS};background:#EAF1FA"><i data-lucide="clock" class="w-3 h-3"></i>${DISPLAY_LABEL[st]}</span>`;
+                return `<tr data-doc-id="${d.id}">
+                  <td class="px-3 py-2 mono text-slate-600 whitespace-nowrap">${d.date}</td>
+                  <td class="px-3 py-2 mono text-slate-600 whitespace-nowrap">${d.ed? esc(d.ed) : EDITION_NONE_TEXT}</td>
+                  <td class="px-3 py-2 text-slate-700 max-w-[340px] truncate" title="${esc(d.name)}">${esc(d.name)}</td>
+                  <td class="px-3 py-2">${pill}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+        <p class="mt-2 text-[11px] text-slate-400">依公告日降冪排列，共 <span class="mono">${pool.length}</span> 份符合條件，此處呈現最新 <span class="mono">${rows.length}</span> 份。⚠ 公告日在未來者（狀態為「進度中」）依降冪排在最上方，屬正常。</p>`;
+    document.getElementById('latestAnnouncements').innerHTML=
+      `<div class="flex items-center gap-2 mb-3"><i data-lucide="megaphone" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">最新公告（ICSOP 版本更新）</h2>${more}</div>${body}`;
+  }
+
+  /* ───── ⑤ 依業務/功能類別分布 ───── */
+  const CATEGORY_LIMIT=10;
+  function renderCategory(){
+    const role=document.body.dataset.role, host=document.getElementById('categoryHost');
+    /* 🔒 `AC-G66`：閘門**讀矩陣值**（`BUSINESS_CATEGORY_MANAGEMENT` / read），明文禁止寫成
+       `role !== 'deptcontact'` 之角色清單。部門窗口在該功能鍵為 `NONE` ⇒ 整個 `<section>` 不進 DOM。 */
+    if(!canPerform(role,'BUSINESS_CATEGORY_MANAGEMENT','read')){ host.innerHTML=''; return; }
+    const all=categoryDistribution(scenarioDocs(),scenarioCategories());
+    const shown=categoryExpanded? all : all.slice(0,CATEGORY_LIMIT);
+    const max=all.reduce(function(m,r){ return r.total>m?r.total:m; },0);
+    const poolBtn=`<button type="button" onclick="toggleCategoryDemoPool()" class="ml-auto text-[11px] px-2 py-1 rounded border border-slate-200 text-slate-500 hover:bg-slate-50">${categoryDemoPool?'示範語料：完整類別池（14 類）':'示範語料：預設類別池（4 類）'}</button>`;
+    const body = all.length===0
+      ? emptyState('目前沒有可呈現的業務/功能類別','長條來源＝「業務/功能類別管理」中狀態為啟用、且掛有有效文件之類別；停用之類別與掛載數為 0 者不列出。')
+      : `<p class="text-xs text-slate-400 mb-3 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>統計單位＝<strong class="text-slate-500">類別</strong>（非節點），同一份文件在同一類別內只計一次；僅計入儲存狀態為<strong class="text-slate-500">有效</strong>之文件。⚠ 一份文件可掛多個類別（會各計一次），未掛任何類別之文件不出現 ⇒ <strong class="text-slate-500">各類別合計與上方卡片刻意不相等</strong>。</span></p>
+        <div class="flex items-center gap-3 mb-2 text-xs">
+          <span class="inline-flex items-center gap-1"><span aria-hidden="true" class="w-2.5 h-2.5 rounded-sm" style="background:${C_ANNOUNCED}"></span><span class="text-slate-500">已公告</span></span>
+          <span class="inline-flex items-center gap-1"><span aria-hidden="true" class="w-2.5 h-2.5 rounded-sm" style="background:${C_IN_PROGRESS}"></span><span class="text-slate-500">進度中</span></span>
+        </div>
+        <ul role="list" class="divide-y divide-slate-100 border-t border-slate-100">
+          ${shown.map(function(r){
+            const w=barWidths(r.announced,r.inProgress,max);
+            return `<li role="listitem" data-testid="category-bar-row" data-category-id="${esc(r.id)}" class="py-2">
+              <div class="flex items-center gap-2">
+                <span data-testid="bar-category-name" class="text-sm text-slate-700 flex-1 truncate" title="${esc(r.label)}">${esc(r.label)}</span>
+                <span data-testid="bar-announced" class="text-xs mono whitespace-nowrap" style="color:${C_ANNOUNCED}">已公告 ${r.announced}</span>
+                <span data-testid="bar-in-progress" class="text-xs mono whitespace-nowrap" style="color:${C_IN_PROGRESS}">進度中 ${r.inProgress}</span>
+              </div>
+              <svg viewBox="0 0 100 8" preserveAspectRatio="none" class="mt-1.5 w-full h-2" aria-hidden="true" focusable="false">
+                <rect x="0" y="0" width="100" height="8" fill="#F1F5F9"></rect>
+                <rect x="0" y="0" width="${w.announced.toFixed(3)}" height="8" fill="${C_ANNOUNCED}"></rect>
+                <rect x="${w.announced.toFixed(3)}" y="0" width="${w.inProgress.toFixed(3)}" height="8" fill="${C_IN_PROGRESS}"></rect>
+              </svg>
+            </li>`;
+          }).join('')}
+        </ul>
+        ${all.length>CATEGORY_LIMIT
+          ? (categoryExpanded
+              ? `<div class="mt-3"><button type="button" onclick="toggleCategoryExpand()" class="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline">僅顯示前 ${CATEGORY_LIMIT} 類<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></button></div>`
+              : `<div class="mt-3"><p class="text-[11px] text-slate-500">目前顯示總數最多的前 <span class="mono">${CATEGORY_LIMIT}</span> 類（排序＝已公告＋進度中之總數由多至少），另有 <span class="mono">${all.length-CATEGORY_LIMIT}</span> 類未列出。</p><button type="button" onclick="toggleCategoryExpand()" class="mt-1 inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline">顯示全部類別<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></button></div>`)
+          : `<p class="mt-3 text-[11px] text-slate-400">共 <span class="mono">${all.length}</span> 類，未達 <span class="mono">${CATEGORY_LIMIT}</span> 類之顯示上限，已全部列出。</p>`}`;
+    host.innerHTML=`<section role="region" aria-label="依業務/功能類別分布" data-testid="category-distribution" class="bg-white border border-slate-200 rounded-xl p-5">
+      <div class="flex items-center gap-2 mb-1"><i data-lucide="shapes" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">依業務/功能類別分布</h2>${poolBtn}</div>
+      <div class="mt-2">${body}</div>
+    </section>`;
+  }
+  /* 🔒 `AC-G65`：展開狀態**不跨 session 記憶**（與 `AC-G44` 同紀律）。 */
+  function toggleCategoryExpand(){ categoryExpanded=!categoryExpanded; renderCategory(); lucide.createIcons(); }
+  function toggleCategoryDemoPool(){ categoryDemoPool=!categoryDemoPool; categoryExpanded=false; renderCategory(); lucide.createIcons(); }
+
+  /* ───── 原型專用之模擬器 ───── */
+  function setDefaultDimension(v){
+    defaultDim=normalizeDefaultDimension(v);
+    renderDash();
+  }
+  function setDemoScenario(v){ demoScenario=v; categoryExpanded=false; renderDash(); }
+
+  /* ───── 儀表板總繪 ───── */
   function renderDash(){
     const role=document.body.dataset.role;
     const [label,color,icon]=ROLE_META[role];
     document.getElementById('roleBadge').innerHTML=`<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white" style="background:${color}"><i data-lucide="${icon}" class="w-3 h-3"></i>${label}</span>`;
-    // todos
-    document.getElementById('todoRow').innerHTML=TODOS.filter(t=>t.roles.includes(role)).map(t=>`
-      <div class="bg-white border border-slate-200 rounded-xl p-3.5">
-        <div class="flex items-center gap-2"><span class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:${t.bg}"><i data-lucide="${t.icon}" class="w-4 h-4" style="color:${t.color}"></i></span>
-          <span class="text-2xl font-bold text-slate-900">${t.n}</span></div>
-        <div class="text-xs text-slate-500 mt-1.5">${t.label}</div>
-      </div>`).join('') || `<div class="col-span-full text-sm text-slate-400 bg-white border border-dashed border-slate-200 rounded-xl px-4 py-4 text-center">此角色無待辦提示</div>`;
-    // cards
-    const cards=CARDS.filter(c=>c.roles[role]);
-    document.getElementById('cardGrid').innerHTML=cards.length? cards.map(c=>{
-      const acc=c.roles[role], ro=acc!=='CRUD';
-      return `<a href="${c.href}" class="group bg-white border border-slate-200 rounded-xl p-4 hover:border-primary-300 hover:shadow-sm transition block">
-        <div class="flex items-start justify-between">
-          <span class="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center"><i data-lucide="${c.icon}" class="w-5 h-5 text-primary-600"></i></span>
-          ${ro?`<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">${acc}</span>`:`<span class="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">可編輯</span>`}
-        </div>
-        <h3 class="font-semibold text-slate-900 mt-3 group-hover:text-primary-700">${c.label}</h3>
-        <p class="text-xs text-slate-500 mt-1">${c.desc}</p>
-        <div class="mt-3 text-xs text-primary-600 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">進入<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></div>
-      </a>`;
-    }).join('') : `<div class="col-span-full text-sm text-slate-400 bg-white border border-dashed border-slate-200 rounded-xl px-4 py-8 text-center">此角色無可用功能區</div>`;
-    // activity
+    /* 🔒 `AC-G42`／`AC-G44`：每次完整重繪一律回到**端點回傳之 `defaultDimension`**，不記憶上次的選擇。 */
+    const def=normalizeDefaultDimension(defaultDim);
+    donutDim.month=def; donutDim.cumulative=def;
+    renderStatCards();
+    renderDonutRegion('month');
+    renderDonutRegion('cumulative');
+    renderLatest();
+    renderCategory();
+    /* 🔒 `AC-G22`／`OQ-D44-05`：「最近活動」區塊**一字不動**。 */
     document.getElementById('activityList').innerHTML=ACTIVITY.map(([ic,txt,time,col])=>`
       <div class="flex items-center gap-3 px-4 py-3">
         <span class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center shrink-0"><i data-lucide="${ic}" class="w-4 h-4" style="color:${col}"></i></span>
