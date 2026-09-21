@@ -685,6 +685,120 @@ status: Draft（🟢 v2.2 之 [§B 業務/功能類別管理](#b-2026-09-02) 一
 
 **🟢 交 system-architect 之 8 項——已於 2026-09-02 全數裁定**（[architecture-spec 第 14 章](architecture-spec.md#ch14-f043)，決策 E1～E9；🔴 **逐字內容之權威在該章，本節與 [F043 §待 system-architect](features/F043-business-function-category.md#for-architect) 皆僅為指標**）。⏳ **架構師交回 spec-writer 一項待回填**（[F017](features/F017-backend-document-list.md#business-category-column-delta)／[F019](features/F019-public-list-browsing.md#business-category-browse-delta) 兩處 delta 之端點形狀細節），**本輪未做**。原 8 項題目——變更歷程表落點（`OQ-B-01`）｜防環演算法之共用形狀（**演算法可共用、錯誤碼不共用**）｜稽核類型落點（`OQ-B-09`）｜前台端點之可見性過濾下推（🔴 **不得 N+1**）｜[F017](features/F017-backend-document-list.md#business-category-column-delta) 第 16 欄之取值路徑（🔴 **匯出端點 body 維持恰兩鍵**）｜`businessCategoryDisplayName` 是否與 `lifecycleDisplayName` 收斂為單一共用純函式｜前台樹狀圖渲染元件是否與 `LifecycleTreePreviewPage` 共用及其差異點｜`BUSINESS_CATEGORY_DOC` 之刪除連動（CASCADE vs 服務層同交易）。
 
+## D44 — 2026-09-21 後台首頁儀表板改版（E13／[F044](features/F044-admin-dashboard-analytics.md)）🟢 **APPROVED（2026-09-21 人類閘門通過）——`OQ-D44-01`～`34` 全數結案、`A-G1`～`A-G6` 全數結案、已核准進入建環** {#d44-2026-09-21}
+
+> 🔴 **核准的是「規格與 prototype」，不是任何已完成之實作**——截至 2026-09-21，F044 之測試與程式碼**尚未寫一行**。下一棒為 test-generator（建環），再下一棒才是 tdd-implementation。
+> 🔴 **2026-09-21 建環階段回填四項事實更正**（ring-f044 實查、lead 裁決；逐項見 [F044](features/F044-admin-dashboard-analytics.md) 之 `AC-G28`／[`AC-G28`附](features/F044-admin-dashboard-analytics.md#automock-ripple)／`AC-G90`③／[§癸 (e)](features/F044-admin-dashboard-analytics.md#corpus)）：① `DashboardHome.test.tsx` 之漣漪是 **`:77`／`:92`／`:190` 三處**而非兩處（其中 KPI 卡 describe 整個刪除，授權＝`OQ-D44-03`＝甲；🔒 五個被刪之舊卡標題已**反轉為負向鎖**，不得靜默消失）｜② 🔴 **一項三份文件皆未涵蓋之漣漪**：既有測試檔的 **automock** 在被測元件新增 API 呼叫的當下會**整檔死亡、死因與各案例主題無關**——這種漣漪不在「哪些 AC 受影響」的清單裡，它是**測試基礎設施層**的問題；🔒 漣漪盤點需加問一句「哪些測試檔 mock 了我即將改動的模組」｜③ `AC-G90`③ 之識別子掃描在本輪之前就已被 F003 職位欄違反 ⇒ 改為**具名例外四檔 ＋ 三道守門**（清單自我守護／軸向守門／型樣①維持零例外）｜④ 🟢 **好消息**：`AC-G18`／`AC-G58`／`AC-G66` 之「元件層零鑑別力」**結論已被推翻**——注入點是 **`canPerform` 本身**而非 `FUNCTION_MATRIX`；🔒 紀律：「某常數無注入點」**不蕴含**「靠它判定的行為無法驗證」。
+> 🟢 **使用者裁決兩項（2026-09-21）**：① `A-G3` ＝ **接受**（圖例前綴採 `已公告 {n}`／`進度中 {n}`）——該項為全檔唯一一處未逐字沿用使用者措辭者，**已依規格之「不得藏起來」要求原樣呈報**，由使用者直接選定；② **核准進入建環**。
+
+> 來源＝[stories/epics/E13-admin-dashboard/](../stories/epics/E13-admin-dashboard/epic-brief.md)（US-109～US-113）＋[stories/F044-admin-dashboard-analytics.md](../stories/F044-admin-dashboard-analytics.md)。
+> 🔴 **逐題之完整敘述、選項、代價與建議依據，其單一真相來源＝[stories/F044-admin-dashboard-analytics.md §Open Questions](../stories/F044-admin-dashboard-analytics.md)**；**裁決結果**之權威＝[F044 §人類裁決](features/F044-admin-dashboard-analytics.md#human-decisions)。本節為索引，**不得與該兩處分歧**。
+> **本批之 AC 編號採 `AC-G#`**（`AC-G1`～`AC-G84`，🟢 已 grep 全 repo 確認未被使用）。🔴 **禁止續編 `AC-N83`／`AC-J27`／`AC-B30` 以後**。
+> 🔴 **本輪之約束環為簡化環（只有 vitest／jest，無 e2e／fidelity／mutation）** ⇒ 凡「只能用眼睛看」之需求在本輪等於沒有防線。F044 之全部 AC 已降轉為 RTL／純函式可斷言之形狀，鑑別語料要求見 [F044 §癸](features/F044-admin-dashboard-analytics.md#corpus)。
+
+| ID | 問題 | 🟢 裁決（2026-09-21 人類閘門） | 落點 |
+|---|---|---|---|
+| ~~`OQ-D44-01`~~ | 🔴 「本月新版公告」之判定口徑（甲＝`announcedDate` 落在當月｜乙＝`DOCUMENT_CHANGE_LOG` 之 `edition` 變更 ∪ 當月新建｜丙＝甲∩乙）＋子題：是否只算已公告 | 🟢 **甲**；子題＝**只算已公告**（`announcedDate ≤ 今日`）。🔴 **明文禁止讀取 `DOCUMENT_CHANGE_LOG`**（該日誌自 [F037](features/F037-document-change-history.md) 起才有、無 backfill，乙案下 F037 前公告之文件會永久算不到，且在乾淨語料下完全看不出來）。🔴 **由此產生一條回歸鎖**：本卡數字與 `當月已公告` 環圖各段總和**恆等**（INV-G1）。⚠ **已接受之代價**：每月 1 號此卡接近 0、月內逐日爬升——**這是正確行為，不是 bug** | `AC-G4`／`AC-G5`／`AC-G6` |
+| ~~`OQ-D44-02`~~ | 「進度中」卡與既有 `pendingPublish` provider 之關係（甲＝重用｜乙＝新寫一份） | 🟢 **甲（重用），且明文禁止乙**。理由＝兩份實作遲早會在某個邊界（null 公告日、當日 00:00、時區）分岔，而畫面上兩張卡早已合併為一張，**沒有人會發現分岔** | `AC-G3` |
+| ~~`OQ-D44-03`~~ | 🔴 既有 5 張 KPI 待辦卡之去留（甲＝取代｜乙＝並存｜丙＝保留若干） | 🟢 **甲（完全取代）**。⚠ **這是刪別人的東西**——`SysAdmin` 失去 `停用帳號待覆核` 之首頁入口、`SysAdmin`／`ICSOPAdmin` 失去 `待確認組織異動` 之首頁入口；**人類已明示授權**。該兩項功能之側欄入口一字不動 | `AC-G1`／`AC-G76` |
+| ~~`OQ-D44-04`~~ | `GET /admin/dashboard/summary` 之既有 5 個計數鍵是否保留 | 🟢 **甲（保留，additive 擴充）**。⚠ 其中四鍵在取代後已無畫面消費者，**仍不得移除**；日後清理另立追蹤項。🔴 **建環注意**：任何 `Object.keys(summary).length === 5` 之既有絕對值斷言都會翻紅，須先 grep 找出並改為回歸鎖 | `AC-G75`／[§癸 (f)](features/F044-admin-dashboard-analytics.md#corpus) |
+| ~~`OQ-D44-05`~~ | 「最近活動」區塊之去留（使用者原文完全未提及） | 🟢 **保留、一字不動**。理由＝未被要求移除的東西不應被順手移除；且它與新增的四個區塊資訊性質不同（事件流 vs 統計），不重複 | `AC-G22` |
+| ~~`OQ-D44-06`~~ | 新 4 張卡是否逐張角色過濾 | 🟢 **甲（前三張對四種後台角色一律顯示）**。🔴 明文禁止為這三張卡寫任何角色白名單——四種後台角色對 `ICSOP文件管理` 皆有 `READ` 以上，看得到清單卻看不到其總數會是一個說不通的不對稱 | `AC-G16` |
+| ~~`OQ-D44-07`~~ | 🔴 OJT 完成率卡對主管／部門窗口是否顯示（甲＝僅 ICSOPAdmin／SysAdmin｜乙＝四種皆顯示並推翻 2026-09-02 裁決｜丙＝限縮範圍） | 🟢 **甲（僅 ICSOPAdmin／SysAdmin，與既有 `canViewDashboard` 對齊）**。🔴 **2026-09-02「OJT TAB1 儀表板對主管／部門窗口隱藏」之人類裁決不被推翻。** 🔴 **述詞必須是 [F042](features/F042-ojt-progress-management.md) 既有之 `canViewDashboard(roleCode)` 這一支**，明文禁止在首頁複製 `role === ... || role === ...` | `AC-G17`／`AC-G80`／[F042 delta](features/F042-ojt-progress-management.md#dashboard-deeplink-delta) |
+| ~~`OQ-D44-08`~~ | 🔴 「OJT 準時完成率」之分子分母方向與卡面呈現（原文字面之分數式分子分母是反的） | 🟢 **甲**：`rate = 已完成 ÷ 應完成`；卡面逐字 `已完成 X / 應完成 Y（Z%）`（原文之 `/` 為併列符、非除號）。分母為 0 時**省略比率**並顯示明確空狀態——🔴 **明文禁止 `NaN%`／`0%`／`100%`**（`0%` 與「全部未完成」無從分辨，`100%` 是謊報）。百分比**必須委派既有 `coveragePercent`**，禁止另打一份 `Math.round` | `AC-G13`／`AC-G14` |
+| ~~`OQ-D44-09`~~ | 🔴 「近 1 個月應完成」之時間窗口（甲＝應完成日 ∈ [今日−1月, 今日]｜乙＝應完成日 ≤ 今日｜丙＝公告日 ∈ 近一個月） | 🟢 **甲**。⚠ **已明確接受之代價**：母體＝公告日落在「2 個月前～1 個月前」之文件的使用單位，**可能非常小甚至為 0**，卡片會長期顯示空狀態——**這是正確行為，不是 bug**。丙案已否決（那批多半尚未到期，其「未完成」是假警訊） | `AC-G7`／`AC-G8`／`AC-G14` |
+| ~~`OQ-D44-10`~~ | 🔴 「準時」是否引入第二種完成判定（`trainingDate ≤ 應完成日`） | 🟢 **甲（不引入）**。完成判定沿用 [F042](features/F042-ojt-progress-management.md) `AC-03`（版次相符之場次存在即完成，**不依訓練日期是否已過**）；「準時」由**時間窗口**承載。理由＝乙案會使首頁完成率恆 ≤ OJT 頁完成率，兩個數字都正確卻不相等，而畫面上沒有任何線索說明為什麼 | `AC-G11` |
+| ~~`OQ-D44-11`~~ | 🔴 「單位」之定義（甲＝進度列數｜乙＝相異使用單位數｜丙＝並陳） | 🟢 **乙**：分母＝**相異 `(companyCode, orgCode)` 數**；「已完成」＝該單位在窗口內**全部**應完成文件皆已完成（部分完成不算）。🔴 **分組鍵必須是複合鍵**——5 碼部門代碼各公司獨立編碼（dev 實測四家間 42 個重複碼），單以 `orgCode` 分組會把不同公司的兩個部併成一組（F042 2026-09-01 已修過同型缺陷）。⚠ 與 F042 `coverage.denominator`（進度列數）**刻意不同**，兩者標籤不同，不得對齊 | `AC-G9`／`AC-G10` |
+| ~~`OQ-D44-12`~~ | 分母之排除規則與邊界資料（a 裁撤／孤兒｜b 公告日為 null｜c 與 TAB2 列數不同之處置） | 🟢 **a＝沿用 [F042](features/F042-ojt-progress-management.md) 既有排除**（裁撤單位 `isActive=false`、孤兒列依集合成員關係判定、**不讀 `orphanedAt` 旗標**）｜**b＝公告日為 `null` 者完全不進母體**（既無期限就不可能「準時」）｜**c＝接受卡片數字與 TAB2 列數可不同，但卡片須提供排除註記**（比照 F042 `AC-28`⑭ 之雙原因列舉，本卡為**三**原因） | `AC-G12`／`AC-G15` |
+| ~~`OQ-D44-13`~~ | `查看明細` 之導向形態（甲＝URL 參數｜乙＝router state） | 🟢 **甲（URL 參數）**，可重整、可分享。🔴 `OjtProgressPage` 現況**完全沒有 `useSearchParams`**，須新增；🔴 **於 `useState` 初始化函式即自網址取樣**（照抄同 repo `readSubtreeParams` 紀律，否則首屏會先閃一次預設分頁）。參數命名交 system-architect（`ARCH-G4`） | `AC-G19` |
+| ~~`OQ-D44-14`~~ | 🔴 「未全部完成 OJT 的單位排在上方」之語意與作用範圍（三重歧義：排序 vs 篩選｜哪一種分組｜deep link 專屬 vs 新預設） | 🟢 **甲**：**排序**（非篩選）、作用於 **`以使用單位分組`** 之群組、**deep link 專屬**；群組先依「是否全部完成」分兩段（未全部完成在上），**段內維持既有 `orgName` 昇冪**；**未帶參數時 TAB2 行為一格不動**。排序位置＝**客端**（後端端點與其伺服端排序一格不動）。丙案（改套 `completionStatus=pending`）已否決——那是「只顯示未完成」，不是「排在上方」 | `AC-G20`／`AC-G21`／`AC-G79` |
+| ~~`OQ-D44-15`~~ | 移除「快速進入功能區」之漣漪確認 | 🟢 **採建議**（analyst 之漣漪清單經 spec-writer 覆核無誤）。🟢 **已查證 `docs/specs/features/` 全域零命中 ⇒ 不作廢任何一條既有編號 AC**；🟢 [F042](features/F042-ojt-progress-management.md) `AC-28`⑮（`受限CRUD` 徽章）之載體不只儀表板卡片——側欄 `AppShell.tsx` 亦呼叫 `accessLabelFor`、`menu.test.ts` 直接測該純函式 ⇒ **不會失去載體**。🔴 `DashboardHome.test.tsx` 之「快速進入卡片仍在」案例須**改寫載體、不得整案刪除**（它真正要證明的是降級不阻斷） | `AC-G25`／`AC-G26`／`AC-G27`／`AC-G28`／`AC-G84` |
+| ~~`OQ-D44-16`~~ | 環之 slice 語意與圖例格式；段數過多之處置 | 🟢 **採建議釋清**：環之每段＝一個組織（隨當前頁籤），圖例每列＝色塊＋組織名＋「已公告」與「進度中」兩數字。🔴 若環改成「已公告 vs 進度中」兩段，三個組織維度頁籤就完全失去意義——那讀法與原文自相矛盾。段數＝**Top N ＋ 逐字 `其他` 合併段**（N 交 ui-ux-designer），🔒 **圖例保留完整可捲動列表、不受 N 限制**（上限只保護圖形版面，不得隱藏資料） | `AC-G30`／`AC-G37`／`AC-G40`／`AC-G41` |
+| ~~`OQ-D44-17`~~ | 「累積已公告」環之「進度中」數字（甲＝兩處同值｜乙＝區塊 2 不顯示｜丙＝另定義） | 🟢 **甲（接受兩處同值）**。「進度中」**沒有時間維度**（它是「當下尚未到公告日」之狀態）⇒ 同一組織於兩區塊恆等——這是同一個事實，不是複製貼上的錯誤。🔴 **INV-G6 就是為了讓日後有人發現兩處一樣時不會把它「修好」**。丙案在現有資料模型下**不可能實作**（無狀態變遷歷史可回推） | `AC-G38` |
+| ~~`OQ-D44-18`~~ | 制定組織無法解析之文件的歸屬（甲＝`未指定` 獨立分段｜乙＝排除｜丙＝歸 ROOT） | 🟢 **甲（逐字 `未指定` 獨立分段），明文禁止排除**。🔴 排除會使環圖各段總和 ≠ 卡片數字（INV-G1／INV-G2），而畫面上沒有任何線索說明差額從哪來——那是最難查的一種不一致；甲案同時讓資料缺漏**變得可見** | `AC-G34`／`AC-G35` |
+| ~~`OQ-D44-19`~~ | 「制定本部」之推導與無 `DIVISION` 祖先之處置；圖例文字格式 | 🟢 **採建議**：本部＝自 `draftingDeptId` 沿 `ORG_UNIT.parentCode` 上溯第一個 `tier='DIVISION'`；找不到歸 `未指定`／`無本部` 段，**明文禁止排除**。圖例文字＝本部維度 `公司簡稱 / 本部名`、部門維度 `公司簡稱 / 本部名 / 部名`；🔴 **必須沿用既有 `orgUnitDisplayName` 與 `ORG_PATH_SEPARATOR`，禁止另寫第二套組裝、禁止寫死 ' / '**。🔵 **spec-writer 就上述授權範圍取 `無本部` 為獨立段名**（與 `未指定` 分開）——理由＝「完全沒填制定部門」與「填了但組織樹結構特殊」是兩個不同的資料品質問題，合併會讓它們變成同一個數字 | `AC-G33`／`AC-G34`／`AC-G36` |
+| ~~`OQ-D44-20`~~ | 預設頁籤之判定鍵、「副本部長」缺席、可否切換、是否記憶 | 🟢 **a＝先以 `(companyCode, jobPositionCode)` 解析 `JOB_POSITION.name`（🔴 明文禁止跨公司 fallback、🔴 明文禁止以 `code` 直接比對如 `code === 'B01'`），再以 name 白名單比對**：`董事長`／`總經理` → 制定公司；`本部長`／`副本部長` → 制定本部；其餘 → 制定部門｜**b＝白名單逐字保留 `副本部長`**（🟢 已查證該值不存在於上游已記錄之 75 列職位名稱、全 repo grep 零命中 ⇒ 目前不命中任何人，屬無害前瞻條目）｜**c＝可手動切換**｜**d＝不記憶**。🔴 **比對為 trim 後之完整字串相等，禁止 `includes`**（`副總經理` 在 `includes` 之下會被誤判為制定公司） | `AC-G42`／`AC-G43`／`AC-G44` |
+| ~~`OQ-D44-21`~~ | 圖表與清單之資料可見範圍（甲＝全量｜乙＝限縮） | 🟢 **甲（四種後台角色皆看全公司全量）**。🔴 **後台不引入任何可見範圍過濾**——[F041](features/F041-user-subtype-business-scope.md) 之使用部門可見性**只作用於前台**，不得搬到後台 | `AC-G47` |
+| ~~`OQ-D44-22`~~ | 最新公告清單之筆數上限、狀態欄語意、母體、null 公告日、版次無值 | 🟢 **採建議**：a＝**10 筆**（🔴 先排序再截斷）｜b＝狀態欄顯示**衍生顯示狀態**（`DISPLAY_LABEL` 之逐字值），不是原始 `status`｜c＝母體為 `status='active'`（即 `已公告` ∪ `進度中`），排除 `inactive`／`void`——⚠ 若只含已公告，狀態欄將恆為同一值、零資訊量｜d＝`announcedDate` 為 `null` 者**排除**｜e＝版次無值沿用 [F042](features/F042-ojt-progress-management.md) 既有逐字 `未設版次`（🔴 禁止新增第二個常數） | `AC-G52`～`AC-G56` |
+| ~~`OQ-D44-23`~~ | 「查看更多」之導向與排序參數；是否帶狀態篩選；null 排序落差是否對齊 | 🟢 **甲**：導向 `/admin/documents?sortBy=announcedDate&sortDir=desc`（🔴 現況 `sortBy`／`sortDir` 為純前端 `useState`、不讀 URL，須新增取樣）｜**不帶狀態篩選**（連結叫「查看更多」，帶篩選會看到更少）｜**null 排序落差本輪不動**（客端 `?? ''` vs 後端「null 一律排最後」為既有落差，🔴 **明文禁止順手對齊**——對齊會改動 [F017](features/F017-backend-document-list.md) 既有行為與測試期望值，需另行授權） | `AC-G58`／`AC-G59`／[F017 delta](features/F017-backend-document-list.md#dashboard-sort-deeplink-delta) |
+| ~~`OQ-D44-24`~~ | 類別長條圖之統計單位與去重 | 🟢 **統計單位＝類別；同一份文件在同一類別內只計一次（相異 `documentId`）**。🔴 **必須沿用 [F043](features/F043-business-function-category.md) `AC-01` 之既有口徑「掛載文件數（去重後之相異文件數）」，禁止另寫第二份去重邏輯**；🔴 類別層文件集合**必經 `BUSINESS_CATEGORY_DOC` → `BUSINESS_CATEGORY_NODE` join**（F043 決策 E9 刻意不放冗餘欄） | `AC-G61` |
+| ~~`OQ-D44-25`~~ | 類別之取捨（停用／零掛載）、排序、筆數上限 | 🟢 **採建議**：a＝`status='inactive'` 之類別**不顯示**（⚠ 🔴 **與 [F043](features/F043-business-function-category.md) `OQ-B-04`〔第 16 欄仍顯示停用類別之掛載〕刻意不同——那一處講「掛過什麼」，這一處講「目前有哪些」，不得為了一致而對齊**）｜b＝零掛載**不顯示**｜c＝依 `已公告 + 進度中` 總數降冪、同值依 `businessCategoryDisplayName` 昇冪、仍同值依 `categoryId` 昇冪收尾；🔴 **比較子須為序數比較，明文禁止 `localeCompare`**（本 repo 已記錄 ICU 定序隨環境漂移之缺陷）｜d＝**Top 10 ＋ 可展開全部**（🔒 上限只保護版面，不得隱藏資料） | `AC-G63`／`AC-G64`／`AC-G65` |
+| ~~`OQ-D44-26`~~ | 類別長條圖計入之文件狀態 | 🟢 **僅 `status='active'`，分 `已公告`／`進度中` 兩色；`inactive`／`void` 完全不計入**（雙色既然逐字就是那兩種，第三、四種狀態沒有可落之色） | `AC-G62` |
+| ~~`OQ-D44-27`~~ | 類別長條圖對部門窗口之可見性（甲＝依矩陣閘門｜乙＝皆顯示） | 🟢 **甲（依 `FunctionKey.BUSINESS_CATEGORY_MANAGEMENT` 之矩陣值；部門窗口＝`NONE` ⇒ 本區塊完全不進 DOM，其資料端點亦不得被呼叫）**。🔴 **閘門須直接讀矩陣、明文禁止寫成角色清單**（比照 `canSeeLifecycleDimension` 之既有紀律，其註解逐字：「寫成角色清單也能過測，但下次矩陣一動，這裡就會與真正的授權分家」） | `AC-G66` |
+| ~~`OQ-D44-28`~~ | 「本月」「近 1 個月」「今日」之時區基準（甲＝UTC｜乙＝Asia/Taipei） | 🟢 **甲（沿用全站 UTC，不另立一套）**。⚠ **已明確接受之代價**：使用者位於 UTC+8 ⇒ 每月 1 日台北時間 00:00–08:00 這段窗口內「本月」仍會算成上個月——**這是既有行為之延伸，不是本功能新增的缺陷**；🔴 **明文禁止日後有人「順手改成 Asia/Taipei」**（那會讓首頁的「今天」與 OJT 頁的「今天」在每日 00:00–08:00 得出不同答案） | `AC-G69` |
+| ~~`OQ-D44-29`~~ | 🔴 圖表之技術路線（甲＝自繪 SVG｜乙＝引入第三方圖表庫） | 🟢 **甲（自繪 SVG，不引入第三方圖表庫）**。🔒 **`frontend/package.json` 之 dependencies 不得新增任何項目**（回歸鎖）；🔴 **明文禁止 `<canvas>`**——canvas 內容無法被任何 RTL 斷言取得，在本輪之簡化環下等於整個圖表不可驗證。⚠ **代價**：本輪無法端到端驗證「弧長／長條寬度是否與數字成比例」⇒ 🔴 **幾何計算必須抽為純函式並以固定向量斷言**，這是把幾何正確性拉回可測範圍的唯一途徑 | `AC-G48`／`AC-G49`／`AC-G67`／`AC-G83` |
+| ~~`OQ-D44-30`~~ | 端點形狀、快取與稽核（a 端點數｜b 快取｜c 稽核） | 🟢 **a＝交 system-architect 裁定**（analyst 傾向「獨立端點」列為建議，理由＝既有 `safe()` 降級紀律天然符合，且類別分布為最重之聚合，單一端點會拖慢整張卡片列）｜**b＝本輪不做快取**（過早最佳化會引入「數字為什麼不即時更新」這個新問題）｜**c＝不寫 `AUDIT_LOG`**（🔴 不得為此新增 `targetType`／`actionType`，那屬 schema 變更） | `ARCH-G3`／`AC-G72`／`AC-G73` |
+
+### spec-writer 撰寫本輪規格時新提報之 4 題（`OQ-D44-31`～`OQ-D44-34`）——🟢 **兩項 BLOCKING 已於 2026-09-21 結案（system-architect）** {#d44-followups}
+
+> 🔵 下列為 30 題裁決單**未涵蓋**者，spec-writer 已以最佳解讀寫入 AC 並標註。逐項之完整敘述見 [F044 §開放問題](features/F044-admin-dashboard-analytics.md#open-questions)。
+
+| ID | 問題 | spec-writer 之處置 | 標記 |
+|---|---|---|---|
+| ~~`OQ-D44-31`~~ | **環圖預設頁籤所需之「職位名」目前前端拿不到**——🟢 spec-writer 已查證 `SessionUser`（`GET /auth/me`）恰含 8 欄，**不含 `jobPositionCode`、亦不含職位名**。⚠ 上游 product-analyst 未指出此缺口 | 🟢 **已裁定＝乙案**（2026-09-21，**system-architect**，[architecture-spec §15.3](architecture-spec.md#ch15-g2) 決策 G2）——**聚合端點直接回傳 `defaultDimension`；`SessionUser` 一欄未加**。🔴 **決定性理由**：禁跨公司 fallback 之紀律（`buildJobPositionResolver`）**只存在於後端**，走甲案等於把解析點與白名單比對點拆到兩個 package，而前端不可能有那張對照表——正是 `OQ-D44-20` 明文要防的事；且甲案須加寬 `AccountRepository.findCurrentByLogin`（**每一個請求都會跑**）。🟢 **使用者原文「董事長、總經理預設／本部長、副本部長預設」因此保住了載體**，不需退化為「一律預設依制定部門」 | 🟢 **已定案 ✅**（阻塞解除）——落點＝[F044](features/F044-admin-dashboard-analytics.md) **`AC-G87`**（新增） |
+| ~~`OQ-D44-32`~~ | **「＋1 個月」是否會產生第二個定義點**——[F042](features/F042-ojt-progress-management.md) 明文把 `trainingDueDate()` 宣告為「全站唯一之推導點」，而它**只存在於前端** | 🟢 **已裁定＝聚合落後端**（2026-09-21，**system-architect**，[architecture-spec §15.2](architecture-spec.md#ch15-g1) 決策 G1）。🔴 **功能性理由（不只是成本）**：`excludedOrphaned` 在前端**結構上算不出來**——孤兒依定義已不在 `DOC_USING_DEPT` 集合內，故 `rows` 端點結構性地不含孤兒 ⇒ 前端方案**無法滿足 `AC-G15`**。⇒ `addMonthsClamped` 為前後端**孫生實作**，由 `AC-G8` 之 **8 列固定向量表雙鎖**（三條執行要求：兩份測試檔之向量陣列逐字相同、檔頭互指；前端即使不呼叫 `delta = -1` 仍須以 ⑤～⑧ 鎖住；兩側禁 `setMonth`）。<br>🔴 **並明文否決一個捷徑**：把窗口反推成 `announcedDate ∈ [今日−2月, 今日−1月]`——月底夾擠使 `addMonthsClamped` **不可逆**（`1/29`、`1/30`、`1/31` 皆 → `2/28`），該等價不成立 | 🟢 **已定案 ✅**（阻塞解除）——落點＝[F044](features/F044-admin-dashboard-analytics.md) `AC-G8`（就地改寫＋負向鎖定）＋[§癸 (g)](features/F044-admin-dashboard-analytics.md#corpus)（新增之鑑別語料要求） |
+| ⚠ `OQ-D44-33` | **NFR-F044-1 之 P95 ≤ 2 秒在本輪沒有機器閘門**（簡化環無效能測試） | 明記於 F044 NFR-F044-1 之「本輪之現實限制」，須由人類實機覆核。🔴 **可由單元測試驗證者（禁 N+1、本部上溯不得逐筆回查 DB）已列為必做** | 🟡 已知限制 |
+| ⚠ `OQ-D44-34` | **環圖弧長／長條寬度之幾何正確性在本輪無法端到端驗證** | `AC-G49`／`AC-G67`：把幾何計算抽為純函式（`donutSegments`／`barWidths`）並以固定向量斷言。🔴 若人類要求端到端視覺驗證，須引入 Playwright 或視覺回歸——**本輪明示不做** | 🟡 已知限制 |
+
+### 6 項 `[ASSUMPTION]`（`A-G1`～`A-G6`）——**已寫入 AC 並標註，待覆核** {#d44-assumptions}
+
+`A-G1` 部門維度下無 `DIVISION` 祖先時之標籤**收合**本部段（`公司簡稱 / 部名`，不插入 `無本部` 佔位；依據＝`buildOrgPath` 之既有「空欄自動收合」紀律）｜`A-G2` 兩個環圖區塊之頁籤**各自獨立**切換（交 ui-ux-designer）｜🔴 **`A-G3` 圖例數字前綴採 `DISPLAY_LABEL` 之 `已公告`／`進度中`，而非使用者原文之「公告數量」——這是本檔唯一一處未逐字沿用使用者措辭者**，理由＝同畫面上「已公告」已是四處共用之狀態詞，圖例另用「公告」會被問這兩者差在哪｜`A-G4` 卡④ 空狀態逐字 `近 1 個月內無應完成之 OJT 單位`｜`A-G5` 長條圖展開入口逐字 `顯示全部類別`｜`A-G6` 環圖 Top N 之 N 值（交 ui-ux-designer）。
+
+### 🟢 2026-09-21 第二輪：system-architect 交件後之規格修訂 {#d44-arch-reconcile}
+
+> 權威＝[architecture-spec 第 15 章](architecture-spec.md#ch15-f044)——`ARCH-G0`～`ARCH-G6` 全數定案，**兩項 BLOCKING（`ARCH-G1`／`ARCH-G2`）已解除**；另 architect 自行補提 `ARCH-G0`（總體切分原則：SQL 只做投影／join／DISTINCT，分類與聚合一律純函式——理由＝本輪無整合測試，凡落在 SQL 內之邏輯**一條測試都碰不到**）。
+> 🔴 architect 提報 **4 項與既有 AC 之牴觸** 與 **6 項待新增／回填**；lead 已逐項裁示，spec-writer 已就地修訂（🔒 **原措辭一律逐字保留於各自原處**）。
+
+| # | 牴觸 | 🟢 裁示與修訂結果 |
+|---|---|---|
+| **A**（🔴 BLOCKING） | `AC-G3` 第 2 句「其值**必須來自該同一個 provider**」 vs `AC-G70`／INV-G7「卡片…之判定皆來自 `deriveDisplayStatus`」——卡② 不可能同時來自一支 SQL COUNT 與一支純函式 | 🟢 **採 architect 解讀**：卡② 由**同一次 `deriveDisplayStatus` 分類**取得（與卡①③ 同一份投影、同一個 `now`）；`pendingPublish` 與 `/admin/dashboard/summary` **一行不改**，由回歸鎖釘住。<br>🔴 **決定性理由（已逐字寫入 `AC-G3`）**：**若卡② 字面上就是 `pendingPublish()` 的回傳值，`AC-G3` 第 3 句要求的「一條斷言同時取兩者比較」會退化成 `x === x`，恆真、零鑑別力**。<br>⚠ **`OQ-D44-02` 之意圖被完整兌現、機制被取代**：該裁決要防的是「進度中有兩個定義點」，而本解法把唯一定義點收斂到 `deriveDisplayStatus`（INV-G7 五處全走它），**比原本的「重用一支 SQL COUNT」更彻底**——此因果已寫入檔案，免日後只讀到裁決單的人誤判為違規。<br>⚠ **代價已明文記載**：`pendingPublish` 之 SQL 與 `deriveDisplayStatus` **是否真的等價，本輪沒有任何機器闘門驗得到**（回歸鎖由 fake provider 驅動，它比較的是兩支 JS）⇒ 已列入 [§15.10](architecture-spec.md#ch15-blindspots) 人工覆核清單第 5 項 |
+| **B** | `AC-G23` 之降級行為允許「或沿用既有 `safe()` 之 `0`」 | 🟢 **採 architect 裁定**：三個新端點一律**省略鍵（`undefined`）＋前端 `empty-state`**，🔴 **禁止降為 `0` 或空陣列**。理由＝若環圖降為空陣列（總和 0）而卡片仍是真實數字，INV-G1／INV-G2 就會在畫面上呈現為**一組對不起來的數字**，而且看起來完全像一個計算錯誤——那正是 `AC-G6`／`AC-G35` 整條 AC 要防的形狀。🔒 `summary` 之既有 `safe()` → `0` **語意不變**（那 5 個鍵之間沒有恆等式） |
+| **C** | `AC-G75`「新鍵一律 additive，置於既有 5 鍵之後」之措辭 | 🟢 **修正**：`ARCH-G3` 裁定改走三個新端點 ⇒ 本輪 **一鍵未加**；原措辭會誤導下游以為**必須**加鍵。已改寫為回歸鎖形狀（既有 5 鍵皆存在且值不變，**不是「鍵數恰為 N」之絕對值鎖**）。🟢 [F044 §癸 (f)](features/F044-admin-dashboard-analytics.md#corpus) 之 `Object.keys(summary).length === 5` 風險**因本裁定歸零**；🔒 **但該段文字刻意保留**，作為日後有人想 additive 擴充 `summary` 時的警語 |
+| **D**（🔴 事實更正） | [F044 §癸 (b)②](features/F044-admin-dashboard-analytics.md#corpus) 原寫「無 `DIVISION` 祖先之部（**直挂 ROOT 或組織樹結構特殊**）」 | 🟢 **已就地更正**。architect 查證 `backend/src/org-sync/org-hierarchy.ts`：`parentCode` 由代碼前綴**機械推導**（`AN000` → `A0000`）、`deriveTier` 對 `X0000` 形狀**恆**判為 `DIVISION` ⇒ **`無本部` 之唯一成因＝該公司之 `X0000` 列不存在於 `ORG_UNIT`**（上游 `VW_DEPT_SQL` 未提供該列）。<br>🔴 照原字面造語料（直挂 ROOT，`parentCode = '00000'`）在真實資料裡**不可能出現** ⇒ `無本部` 那一段永遠不會產生，`AC-G34` 仍然恆真——**正是 §癸 開頭自己警告的那種形狀**。已改寫為「語料須含一個部，其對應之 `X0000` 列**不存在於 `ORG_UNIT`**」 |
+
+**新增 5 條 AC（`AC-G85`～`AC-G89`，全數落於 [F044 §癸二](features/F044-admin-dashboard-analytics.md#arch-backfill)）**：
+
+| AC | 內容 | 為何非有不可 |
+|---|---|---|
+| 🔴 **`AC-G85`** | `DonutSlice[]` 之排序：`announced` 降冪 → `label` **序數**昇冪（🔴 禁 `localeCompare`） → `key` 昇冪；兩個 sentinel 段**參與同一排序、不強制置底** | 🔴 **本批最重要之一條**——原稿 84 條 AC **完全未定義環圖切片之次序**，沒有它，排序在任何實作下都「正確」而畫面順序會隨環境漂移（本 repo 已有 `localeCompare` 定序漂移之踩雷紀錄）。不置底之理由＝強制置底等於把資料品質問題推到看不見的地方，與 `AC-G34`「禁止排除」之意旨相反 |
+| **`AC-G86`** | 端點契約：**恰 3 個新端點**（`/admin/dashboard/analytics`｜`/admin/dashboard/category-distribution`｜`/admin/ojt-progress/ontime-summary`）；三者皆無查詢參數、🔴 `today` 不得由 client 傳入 | 🔴 **INV-G1／INV-G2 是跨區塊之恆等式** ⇒ 被它們綁住的區塊必須來自**同一次請求、同一個 `now`、同一份投影**；分端點＝兩份快照，恆等式可在正式站破掉而**測試永遠不會紅**（回歸鎖是單一語料驅動兩支純函式）。類別分布**必須獨立**，因 `AC-G66` 要求 `DeptContact` **不得呼叫**，合併形狀無法滿足 |
+| **`AC-G87`** | `defaultDimension` 由端點回傳；🔒 `SessionUser` 8 欄**逐欄不變**，`SessionGuard`／`AccountRepository` 介面一行未改 | 見 `OQ-D44-31` 之裁定理由；回查 `ACCOUNT.jobPositionCode` 採**窄 adapter 直讀實體**（比照 `dashboard-counts.ts` 之反循環作法） |
+| **`AC-G88`** | deep link 兩參數**各自獨立解析**（`readTabParam`／`readSortParam`，各自封閉值域，不可辯識→靜默忽略） | 🔴 **刻意不採**本頁既有之「恰成對」紀律（`readSubtreeParams`）——那兩處成對是因為 `nodeSubtreeId` 離開 `lifecycleId` **無法解析**；此處 `tab` 與 `sort` **各自獨立可解釋**，硬綁成對會製造一條「**只想開 TAB2 卻被整組忽略**」的無聲失敗路徑 |
+| **`AC-G89`** | `ojtOnTimeNote`（同檔妹妹純函式）——**不共用** `exclusionNote()`；只共用 `coveragePercent()` 與 `NO_STATISTICS_TEXT` | `ARCH-G6` 查證：頭（`覆蓋率為…` vs 🔒 `已完成 X / 應完成 Y（Z%）`）、排除列舉（**兩**個原因 vs **三**個）、尾句**三段皆不同** ⇒ 「共用並擴充」等於把三段都變成參數，共用的只剩一個 `join`，代價是兩處文案從此綁死（與 NFR-F044-3 #4 往反方向走） |
+
+**就地回填（不另給新編號）**：`AC-G8`（三條執行要求 ＋ 🔴 反推捷徑之負向鎖定）｜`AC-G14`（`rate` 由**後端**省略，而非前端判斷）｜`AC-G15`（fallback 條款生效 → 指向 `AC-G89`）｜`AC-G19`（參數 🔵 建議 → 🔒 鎖定）｜`AC-G66`（前後端**兩道**閘門，後端回 403）｜[DOM 契約表](features/F044-admin-dashboard-analytics.md#dom-contract)（新增 `data-org-key` 值域表，sentinel 逐字 `__unspecified__`／`__no_division__`）｜[命名鎖定](features/F044-admin-dashboard-analytics.md#naming-lock) 第 20 列（🔵→🔒）與新增第 20b 列（三個端點路徑）｜[§癸](features/F044-admin-dashboard-analytics.md#corpus) 新增第 (g) 項鑑別語料。
+
+### 🟢 2026-09-21 第三輪：ui-ux-designer 交件後之規格修訂 {#d44-ux-reconcile}
+
+> designer 另提報 5 項（四項 DOM／文案＋一項🔴 **載體失效**），lead 裁示後 spec-writer 已一併合入同一輪修訂。
+> 🔒 `[ASSUMPTION]` **`A-G1`／`A-G2`／`A-G4`／`A-G5`／`A-G6` 五項已全數落地結案**（Top N ＝ **8**、`CATEGORY_LIMIT` ＝ **10**）；🟢 **`A-G3` 亦已於同日經**人類閘門**核准＝接受**（已依「不得藏起來」要求原樣呈報，由使用者直接選定） ⇒ **6 項 `[ASSUMPTION]` 全數結案**；🔒 `A-G3`（圖例前綴採 `DISPLAY_LABEL` 而非原文「公告數量」）為**全檔唯一一處未逐字沿用使用者措辭者**，將於**人類閘門一併呈報，不得藏起來**。
+
+| # | 項目 | 修訂結果 |
+|---|---|---|
+| 1 | DOM 契約表缺兩個載體 | 新增 🔒 `[data-donut-total]`（環之已公告合計，🔴 **必須是 `<svg>` 之外的 HTML 文字節點**）與 🔒 `[data-donut-truncation]`（Top N 截斷說明行，**恆存在**，合併發生時載明被合併組織數與該段已公告合計份數）。🔴 **理由**：它們是「其他」段份數與合計的**唯一文字出處**，不入契約表等於 `AC-G71` 在那兩處沒有載體 |
+| 2 | `AC-G24` × 契約表對卡④ 之張力 | 明文採**嵢狀**解法：`<div data-testid="stat-value"><span data-testid="ojt-ontime-value">已完成 3 / 應完成 4（75%）</span></div>`，兩者 `textContent` 完全相同 ⇒ `AC-G24`（四張卡皆可由 `stat-value` 取得）與 `AC-G13`（逐字句鎖在 `ojt-ontime-value`）**同時成立**。🔴 已寫死「兩者為嵢狀而非二選一」 |
+| 3 | 🔴 `AC-G64` tie-break 向量無載體 | 主向量改為**「兩個總數相同、顯示名不同之類別」**。<br>⚠ **spec-writer 獨立覆核結果：designer 的結論對、理由須修正**。INV-B1 確實存在（`checkBusinessCategoryUniqueness()` 之 `BUSINESS_CATEGORY_DUPLICATE`），但它鎖的是 `(name, subcategory)` **配對**、不是 displayName 字串。🔴 **反例**：`{name: '授信（消金）', subcategory: null}` 與 `{name: '授信', subcategory: '消金'}` 之配對不同（INV-B1 不擋）、`name` 也不同（INV-B2 不擋），但**兩者 displayName 都是 `授信（消金）`**。⇒ 碰撞**非「結構上不可能」，而是「僅在名稱自帶全形括號這種病態輸入下可達」**。<br>⇒ **三項處置**：① 主向量改為總數相同；② 🔒 **第 3 層 `categoryId` 收尾之條文保留不動**（上述反例證明它不是多餘的保險）；③ 若仍要為第 3 層寫向量，須以該反例建構並明記為**人工 fixture、不得宣稱實機驗過** |
+| 4 | `AC-G65` 未鎖收合態按鈕 | 鎖入兩個逐字文案與**互斥存在**：未展開態僅 🔒 `顯示全部類別`、已展開態僅 🔒 `僅顯示前 10 類`，另一顆**不得存在於 DOM**。🔴 **互斥存在本身是一條可驗性質，必須斷言**（`queryByText(...)` 為 `null`），且**明文禁止**以 `hidden`／`display:none`／`disabled` 切換——兩顆同時在 DOM 裡會使存在性斷言在兩種狀態下都通過，整條 AC 退化為恆真。⚠ 測試須由 `CATEGORY_LIMIT` 推導該字串，不得寫死字面 |
+| 🔴 **5** | **`AC-G42`／`AC-G43` 之載體已歸零** | **因果**：`ARCH-G2` 裁定 `defaultDimension` 由端點回傳、`SessionUser` 一欄未加 ⇒ 前端不再持有職位白名單 ⇒ designer 已自 prototype 移除 `JOB_POSITIONS`／`resolveJobPositionName`／`DIM_COMPANY_TITLES`／`DIM_DIVISION_TITLES`／`defaultOrgDimension` 五項（原文以 `OLD>` 逐字保留）⇒ 原本指望的「`AD\|B01 本處長` 選項」這個畫面載體**不存在了**。<br>**四項修訂**：① `AC-G42`／`AC-G43` 之載體欄改寫為**後端純函式**（`backend/src/dashboard/default-org-dimension.ts`），自此是**純函式層 AC、不是元件層 AC**；② [§癸 (d)](features/F044-admin-dashboard-analytics.md#corpus) 七個向量**全數移至後端 jest**（前端 vitest 不承擔），含關鍵向量 `AD|B01 ＝ 本處長 ⇒ 'department'` 與 `副總經理 ⇒ 'department'`；③ **新增 `AC-G90`** 承載前端真正可驗的部分（`normalizeDefaultDimension` 之五個向量 ＋ 🔴 **「前端不得自行從職位推導」之負向鎖定**，以原始碼層 grep 斷言承載）；④ `副本部長` 之「人工 fixture、不得宣稱實機驗過」註記隨向量搬至後端 |
+
+🔴 **已寫入檔案之教訓（`LESSON-G1`）**：**一個架構決策（把判定搬到後端）可以讓一條 AC 的載體在無人察覺之下蒸發。** `AC-G42` 的條文一個字都沒變、既有測試也沒翻紅，它只是**沒有任何東西再驗它了**——本輪之機器闘門抓不到這種事，是 ui-ux-designer 主動提報才發現。🔒 **凡日後再有「把某段判定換一層執行」之決策，必須逐條回頭問：那條 AC 的載體還在嗎。**
+
+### 🟢 2026-09-21 第四輪：ui-ux-designer 補完接收端（prototype 25）後之規格修訂 {#d44-ux-receiver}
+
+> lead 已獨立驗證 designer 之零漣漪宣稱（未帶參數渲染逐項相同、四種畸形參數靜默 no-op、群組集合前後相同證明是排序非篩選）。
+> 新增 **`AC-G91`～`AC-G93`** 三條，另於 [§癸](features/F044-admin-dashboard-analytics.md#corpus) 新增 (h)／(i) 兩項。
+
+| # | 項目 | 修訂結果 |
+|---|---|---|
+| 1 | `取消排序` 未被任何 AC 鎖住 | 新增 **`AC-G91`**：鎖 chip 本文逐字、🔒 `取消排序` 逐字、點擊後**自 DOM 移除**（非 CSS 隱藏）、次序回到 `AC-G79` 預設。<br>🔴 **錨點紀律（designer 提報之陷阱，已逐字鎖住）**：負向斷言必須釘在屬性選擇子 `[data-ojt-sort-notice]`，**不得釘在 host `#sortNoticeHost`**——host 是**恆存在的空容器**，釘 host 的斷言在任何實作下都不會紅，是一條恆真的空斷言 |
+| 2 | 🔴 「以文件分組」模式下之行為 | 新增 **`AC-G92`**：`sort=incomplete-first` 於該模式**不施加**，次序維持該模式既有規則。<br>🔴 **本條在本輪之唯一載體是純函式與元件層測試，不是 prototype**——原型只實作了一種分組模式，**結構上無法承載這個分支**；已明文禁止以「prototype 沒有就是不用做」略過 |
+| 3 | 🔴 原型與正式站之群組次序**不一致** | 新增 **`AC-G93`**：原型＝`orgCode` 昇冪（`Array.from(byOrg.keys()).sort()`）、正式站＝`orgName.localeCompare → documentNumber.localeCompare`（`AC-G79`）。段內次序規則逐字寫成 🔒 **「段內維持該頁／該端點原本之次序」**，🔴 **不得寫成 `orgCode` 昇冪、也不得寫成 `orgName` 昇冪**（兩者都會在其中一邊造成漣漪）；🔴 負向鎖定：**移植時不得照抄原型之群組次序**。<br>📌 可測形狀：斷言「排序後之序列，在只看每一段內部時，逐項等於未帶參數時序列之對應**子序列**」——該形狀**同時適用於兩種既有次序**，是唯一不會綁死其中一邊的寫法 |
+| 4 | 段內次序之向量長度為 1 | [§癸 (h)](features/F044-admin-dashboard-analytics.md#corpus)：🟢 designer 誠實提報示範語料中「全部完成」群組**只有 1 個** ⇒ 無法區分「穩定分段」與「任意次序丟到最後」。🟢 **它刻意不改語料，這個取捨是對的**（改了會連帶動到 TAB1 KPI、`#inactiveNote`、區二 rollup 與 F042 既有期望值——`AC-G21`／`AC-G79` 明文禁止）。⇒ 要求 test-generator 在**純函式層以人工 fixture** 補齊：**≥ 2 個全完成 ＋ ≥ 2 個未完成、且輸入中交錯排列**，斷言兩段段內次序逐項等於輸入之相對次序。<br>🔒 並鎖住 designer 之實作紀律：分段以 `filter(未完成).concat(filter(全完成))` 達成，**刻意不倫賴 `Array.prototype.sort` 之穩定性**——段內次序是一條 AC，不該建立在引擎實作細節上 |
+
+🔴 **兩個「人類／agent 覆核抓到、機器抓不到」之實例已記於 [§癸 (i)](features/F044-admin-dashboard-analytics.md#corpus)**：① `AC-G42`／`AC-G43` 之載體蒸發（`LESSON-G1`）；② 原型與正式站之群組次序分歧（`AC-G93`）。**兩次都是 ui-ux-designer 主動提報才發現的。** 衍生之兩條紀律：① 凡「把某段判定換一層執行」之決策，必須逐條回頭問載體還在嗎；② 凡 prototype 與已上線程式碼就同一件事給出不同答案，**不得默認原型是權威**。
+
+🔴 **architect 另交回 lead 之三項（非 spec-writer 所有）**：① [§15.10](architecture-spec.md#ch15-blindspots) 共 **12 項單元測試盲區**，其中 #1～#5、#9 為**原理上本輪測不到**（無整合測試），建議併入部署 smoke 清單逐項登記覆核結果｜② 🔴 #8（`副本部長`／`副總經理`）**永遠無法實機覆核**，交付報告中勿列為「已驗證」｜③ `GET /admin/dashboard/summary` 自本輪起成為**無執行期消費者**之端點（`AC-G75` 明令保留），建議另立追蹤項。
+
 ## 非功能相關
 
 | ID | 問題 | 分類 | 相關 | 草案/選項 |

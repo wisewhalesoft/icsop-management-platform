@@ -551,3 +551,32 @@ Epic/Story: E04 / US-037
   - **🔴 待 lead 核准**：`backend/src/main.ts` 之 body-parser JSON 上限 100 KB → 1 MB（`OQ-X-04`）——**不核准則 `AC-X12` 之上限錯誤路徑成為不可達程式碼，而兩端單元測試都會綠**。
 - **2026-09-02 人類裁決（業務/功能類別欄）**：規則權威＝[F043](F043-business-function-category.md)；本頁之落點＝[§業務/功能類別欄 delta](#business-category-column-delta)（`AC-B1`～`AC-B11`）。畫面 **15 → 16 欄**、篩選 **13 → 14 項**、CSV **14 → 15 欄**，三者之新項**一律置於最末**。🔒 **零新增錯誤碼**（本欄與本篩選無任何專屬錯誤情境：未掛載＝`—`／空儲存格，非錯誤）。<br>**⚠ 待 ui-ux-designer**：`prototypes/13-document-list.html` 表頭最末新增 `業務/功能類別` 欄並依 `AC-B3`／`AC-B4` 逐字實作 pill＋`+N` 摺疊與 DOM 掛鉤；篩選區最末新增第 14 項可搜尋下拉。<br>**⚠ 待 system-architect**：第 16 欄之取值路徑（`GET /admin/documents` 是否 additive 新增 `businessCategories: {id, displayName}[]`）——見 [F043 §待 system-architect](F043-business-function-category.md#for-architect) 第 5 項；🔴 **匯出端點 body 維持恰兩鍵不變**（`AC-B10`）。
 - **待 system-architect（本 delta 新增）**：① 13 項篩選之後端下推策略（現況為前端於完整工作集上客端篩選＋`linkTargetId` 例外查詢；新增之附錄／使用表單／OJT／日期區間是否一併下推至 SQL，關乎 [NFR-001](../nfr.md#performance)）；② 「當責室長」主要∪次要之 `DOC_SECONDARY_CHIEF` join 策略（須與 [F019](F019-public-list-browsing.md) `AC-D7` 共用同一實作）；③ 篩選選項來源端點（後台無可見性過濾義務，與前台 [F019](F019-public-list-browsing.md) `AC-D5` 之端點是否共用）。
+
+---
+
+## F044 後台首頁「查看更多」排序 deep link delta（2026-09-21，`AC-G#` 批） {#dashboard-sort-deeplink-delta}
+
+> 🔵 **本節為 [F044](F044-admin-dashboard-analytics.md) 對本頁之 delta，規則權威在 F044，本節僅為指標與零漣漪鎖。**
+> 🔴 **本 delta 不推翻、不改寫本檔之任何一條既有 AC。** 欄位集合、篩選項數、CSV 欄數、匯出 body 之鍵集合、預設排序**一格不動**。
+> **AC 編號一律採 `AC-G#`**（F044 批）；🔴 **禁止續編 `AC-N83`／`AC-J27`／`AC-B30` 以後**。
+
+### 一、本頁唯一之新增行為
+
+| F044 AC | 內容 |
+|---|---|
+| [`AC-G59`](F044-admin-dashboard-analytics.md#latest) | `DocumentListPage` 之 `sortBy`／`sortDir` **新增自 `useSearchParams` 取樣之初始值**。🔴 **於 `useState` 之初始化函式即取樣**——照抄同頁 `readSubtreeParams`／`readBcSubtreeParams` 之既有紀律，否則首屏會先閃一次未排序之清單。🔒 參數名與值域**逐字沿用既有型別**：`sortBy ∈ {'documentNumber', 'announcedDate'}`、`sortDir ∈ {'asc', 'desc'}`。🔴 **參數缺席或值不可辨識 ⇒ 靜默 no-op、退回既有預設**（`sortBy=''`／`sortDir='asc'`），不回錯誤、不 toast（比照 `AC-T41` ①②）。🔴 **排序仍在客端執行、仍不送後端**——本條只新增「初始值從哪裡來」，**不改變排序的執行位置** |
+| [`AC-G58`](F044-admin-dashboard-analytics.md#latest) | 後台首頁「最新公告」區塊之逐字 `查看更多` 連結導向 `/admin/documents?sortBy=announcedDate&sortDir=desc`。🔴 **不帶狀態篩選**（連結叫「查看更多」，帶篩選會看到更少）。🔴 其顯示閘門為 `canPerform(role, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')`——**直接讀矩陣、禁止寫成角色清單** |
+
+### 二、🔒 零漣漪回歸鎖（F044 之 `AC-G82`）
+
+[`AC-G82`](F044-admin-dashboard-analytics.md#regression-lock)：本頁之 **16 欄畫面欄位**、**14 項篩選**、**CSV 15 欄**、匯出端點 body 之**恰兩鍵**、預設排序（`sortBy=''`）、全部逐字文案與 DOM 掛鉤，**與 F044 導入前逐項相同**；**不帶新參數**進入 `/admin/documents` 時之行為**一格不動**。
+
+> 🔴 **驗證方式**：本檔之既有測試**全數維持綠燈且期望值未經修改**。若任何一條既有斷言需要改期望值，即表示本 delta 被違反，必須停下來回報，不得改測試。
+
+### 三、⚠ 一項既有落差：**本輪明文不動**
+
+客端排序對 `announcedDate` 為 `null` 之處置（`?? ''` ⇒ 空字串參與比較，**受方向影響**）與後端 `applyDocumentQuery`（**`null` 一律排最後、不受方向影響**）**語意不同**。
+
+- 🟢 **已查證為既有落差**，與本需求無關（`document-list-query.ts` 之該行為自始如此）。
+- 🔴 **`OQ-D44-23` 第三題已裁決＝本輪不動。** **明文禁止**順手對齊——對齊會改動本檔之既有行為與測試期望值，需另行授權。
+- 📌 F044 之「最新公告」清單已於 [`AC-G52`](F044-admin-dashboard-analytics.md#latest) 把 `announcedDate` 為 `null` 者**排除於母體之外**，故該落差不會在首頁上顯現。

@@ -920,3 +920,49 @@ CSS 規則 `body:not([data-role="icsop_admin"]) .write-only{display:none !import
 - **⚠ 待 ui-ux-designer（棒 4）**：`prototypes/25-ojt-progress.html`（＋視需要 `25a`）之建立；`13`／`14`／`15`／`16` 之 OJT 區塊改版（移除上傳入口、改唯讀衍生清單、依 `OQ-E11-06` 調整清單第 1 欄與篩選）；`AC-28` 之逐字文案與 DOM 掛鉤定稿後**回寫本檔**。
 - **✅ 棒 4 已完成（2026-08-27）**：`prototypes/25-ojt-progress.html` 已建立（**未另建 `25a`**——新增場次採**就地 modal**，理由：該表單只有兩個欄位且必須帶著「哪一列」的脈絡，另開一頁會使該脈絡需要以 query string 重新傳遞一次）；`14`／`15`／`16` 之 OJT 區塊已改版，`13` **版面一字未動**（僅補檔頭註記，`OQ-E11-06` (A) 案下外觀不變）。逐字文案與 DOM 掛鉤已回寫於 [§prototype 25 DOM 掛鉤對照](#prototype-25-dom-contract)，`AC-28` 之「TBD by prototype 25」自此有落點。⚠ **仍為 Phase A 草案**：該節 §7 列出 12 項「未裁決、不得建環」之排除清單。
 - **⚠ 待 system-architect（棒 3）**：場次實體之資料模型與刪除策略（依 `OQ-E11-02`）｜`hasOjt` 衍生值之計算落點與**批次查詢策略**（🔴 **不得引入 N+1**——清單頁 15 欄之 `hasOjt` 現為既有批次查詢之一部分，改為跨 `DOC_USING_DEPT` × 場次之聚合後，最容易在此處退化，與 [F017](F017-backend-document-list.md) `AC-N40` 之效能紅線同源）｜稽核之使用單位維度承載方式（依 `OQ-E11-13`）｜既有 `OJT_SIGNIN` 資料之遷移腳本（依 `OQ-E11-01`）｜[data-model](../data-model.md) 之第 17 欄與 `DOCUMENT_ATTACHMENT` 本體修改。
+
+---
+
+## F044 後台首頁儀表板 delta（2026-09-21，`AC-G#` 批） {#dashboard-deeplink-delta}
+
+> 🔵 **本節為 [F044](F044-admin-dashboard-analytics.md) 對本頁之 delta，規則權威在 F044，本節僅為指標與零漣漪鎖。**
+> 🔴 **本 delta 不推翻、不改寫本檔之任何一條既有 AC。** 本檔之條文、期望值與逐字文案**一字不改**；F044 之新行為全部掛在「帶特定 URL 參數時」這個既有行為不存在的分支上。
+> **AC 編號一律採 `AC-G#`**（F044 批，`AC-G1`～`AC-G84`）；🔴 **禁止續編 `AC-J27` 以後**（`AC-J#` 為 E11 保留區間）。
+
+### 一、本頁新增之行為（皆為 deep link 專屬）
+
+| F044 AC | 內容 | 對本檔既有條文之影響 |
+|---|---|---|
+| [`AC-G19`](F044-admin-dashboard-analytics.md#cards) | `OjtProgressPage` 新增 `useSearchParams` 讀取，使後台首頁之 `查看明細` 可跨頁導向本頁之 `OJT 資料清單` 分頁。🔴 **須於 `useState` 初始化函式即自網址取樣**（照抄 `DocumentListPage` 之 `readSubtreeParams` 紀律，否則首屏會先閃一次預設分頁）；🔴 **參數缺席或值不可辨識 ⇒ 靜默 no-op、退回既有預設** | **無**。既有 `tab` 之預設值運算式（`mayViewDashboard ? 'dashboard' : 'sessions'`）與既有同頁入口 `gotoSessionsPending()` **一行未改** |
+| [`AC-G20`](F044-admin-dashboard-analytics.md#cards)／[`AC-G92`](F044-admin-dashboard-analytics.md#ux-backfill)／[`AC-G93`](F044-admin-dashboard-analytics.md#ux-backfill) | `sort=incomplete-first`：於 `以使用單位分組` 模式下，群組先依「是否全部完成」分兩段（未全部完成在上），🔴 **段內維持該頁／該端點原本之次序**。🔴 **客端**排序、🔴 **是排序不是篩選**（已完成之群組仍然呈現）。🔴 於 `以文件分組` 模式下**不生效**（`AC-G92`；該模式之群組是文件不是單位）。另有 🔒 `取消排序` chip（`AC-G91`，定位掛鉤 `[data-ojt-sort-notice="incomplete-first"]`，點擊後**自 DOM 移除**） | **無**。純函式 `sortGroupsIncompleteFirst(groups)` 之輸入輸出皆為既有 `OjtRowGroup[]`，**元素恆等、僅順序改變**。<br>🔴 **段內次序之措辭刻意不寫死排序鍵**（`AC-G93`）：已查證 `prototypes/25-ojt-progress.html` 為 **`orgCode` 昇冪**、本檔 `listRows` 為 **`orgName.localeCompare` → `documentNumber.localeCompare`**（`AC-G79`）——**兩者不同是原型落後於已上線程式碼之既有落差，本輪不修正**；🔴 移植時**不得照抄原型之群組次序** |
+| [`AC-G17`](F044-admin-dashboard-analytics.md#cards) | 後台首頁第 4 張卡（`OJT 準時完成率`）之可見性**重用本檔既有之 `canViewDashboard(roleCode)`** | **無**。🔴 F044 **不改寫、不擴充**該述詞之值域；2026-09-02「TAB1 儀表板對主管／部門窗口隱藏」之人類裁決**不被推翻**（`OQ-D44-07` ＝ 甲） |
+| [`AC-G15`](F044-admin-dashboard-analytics.md#cards)／[`AC-G89`](F044-admin-dashboard-analytics.md#arch-backfill) | 首頁卡④ 之排除註記 ⇒ 🟢 **`ARCH-G6` 已裁定＝不共用**；新增同檔妹妹純函式 `ojtOnTimeNote`，緊鄰 `exclusionNote()`，共用點僅限 `coveragePercent()` 與 `NO_STATISTICS_TEXT` | 🔒 **既有 `exclusionNote()` 一行未改**，其呼叫端與既有測試期望值**逐字不變**（`AC-G80`）。<br>📝 `OLD>` 原列逐字：「🔵 **建議直接委派本檔既有之 `exclusionNote()`** 並以第三種排除原因（無公告日期）擴充；若 system-architect 裁定不可共用，兩者句型須由固定向量鎖住一致」＋「⚠ **若採「擴充既有函式」**，其既有呼叫端之輸出**必須逐字不變**…」——兩句皆因裁定而作廢 |
+
+### 二、🔒 零漣漪回歸鎖（F044 之 `AC-G21`／`AC-G79`／`AC-G80`／`AC-G81`）
+
+| F044 AC | 鎖定內容 |
+|---|---|
+| [`AC-G21`](F044-admin-dashboard-analytics.md#cards) | **不帶任何新參數**進入 `/admin/ojt-progress` 時，預設分頁、兩項篩選、兩種分組模式、群組與列之次序、全部逐字文案**與 F044 導入前逐項相同** |
+| [`AC-G79`](F044-admin-dashboard-analytics.md#regression-lock) | `listRows` 之伺服端排序恆為 `orgName.localeCompare` → `documentNumber.localeCompare`，**一行未改、無排序參數**；`以使用單位分組` 之群組次序（`(companyCode, orgCode)` 複合鍵昇冪）與組內次序（程序書編號昇冪）**一格不動** |
+| [`AC-G80`](F044-admin-dashboard-analytics.md#regression-lock) | `canViewDashboard` 之定義與其在本頁之既有用途**行為不變** |
+| [`AC-G81`](F044-admin-dashboard-analytics.md#regression-lock) | 篩選**恰兩項**（`AC-13`）、完成狀態**恰三值**、分組模式**恰二態**（`AC-30`～`AC-36`）——🔴 **`sort=incomplete-first` 是 deep link 之排序參數，不是第三項篩選**，不得因它而讓任一「恰 N 項」之既有斷言改期望值 |
+
+> 🔴 **驗證方式**：本檔之既有測試**全數維持綠燈且期望值未經修改**。
+> 🔴 **若任何一條既有斷言需要改期望值，即表示本 delta 被違反，必須停下來回報，不得改測試。**
+
+### 三、🟢 system-architect 裁定（2026-09-21 全數定案）
+
+> 權威＝[architecture-spec 第 15 章](../architecture-spec.md#ch15-f044)。本節僅為指標。
+
+| ID | 🟢 裁定 | 對本檔之影響 |
+|---|---|---|
+| **`ARCH-G1`**（原 🔴 BLOCKING） | 卡④ 聚合**落後端**：`OjtProgressService` 新增公開方法 `getOnTimeUnitStats(session, now)`，**重用既有 `private aggregate()`**；口徑純函式落 `backend/src/ojt-progress/ojt-ontime.ts`。<br>🔴 **功能性理由（不只是成本）**：`excludedOrphaned` 在前端**結構上算不出來**——孤兒依定義已不在 `DOC_USING_DEPT` 集合內，故 `GET /admin/ojt-progress/rows` 回傳之列**結構性地不含孤兒**；該數字之唯一來源是後端既有之 `countOrphanedRows()` | 🔴 **本檔之 `trainingDueDate()`（「全站唯一推導點」）改為 `addMonthsClamped(announcedDate, +1)` 之委派**——其**對外行為、簽章與逐字註解一字不改**（`AC-G80`）。後端另有孫生實作 `backend/src/ojt-progress/add-months-clamped.ts`，兩份由 [F044 `AC-G8`](F044-admin-dashboard-analytics.md#cards) 之 **8 列固定向量表雙鎖**（三條執行要求：兩份測試檔之向量陣列**逐字相同**、檔頭互指；🔴 **前端即使不呼叫 `delta = -1` 仍須以 ⑤～⑧ 鎖住**，否則反向夾回可在後端漂移而前端全綠；兩側禁 `setMonth`） |
+| **`ARCH-G3`** | 卡④ 自成一個端點：🔒 **`GET /admin/ojt-progress/ontime-summary`，掛在本模組**（不是 dashboard 模組）；Guard 為既有 `SessionGuard` ＋服務層既有 `assertCanRead()`；無查詢參數 | 🔒 `OjtProgressController` 既有 **8 個路由一行未改**；`getSummary`／`listRows` 一行未改（`AC-G79`）。回應含 `numerator`／`denominator`／`rate?`／三個排除計數；🔴 **`denominator === 0` 時 `rate` 鍵由後端省略**（[F044 `AC-G14`](F044-admin-dashboard-analytics.md#cards)，比照本檔 `coverage.rate` 之既有紀律） |
+| **`ARCH-G4`** | 🔒 `?tab=sessions&sort=incomplete-first`；**兩參數各自獨立解析**（非成對）。`tab` 之值域逐字取自既有 `type TabKey = 'dashboard' \| 'sessions'`；`sort` 恰一值 | 見 [F044 `AC-G88`](F044-admin-dashboard-analytics.md#arch-backfill)。🔴 **刻意不採 `DocumentListPage` 之「恰成對」紀律**——那兩處成對是因為 `nodeSubtreeId` 離開 `lifecycleId` 無法解析；此處 `tab` 與 `sort` 各自獨立可解釋，硬綁成對會製造一條「只想開 TAB2 卻被整組忽略」的無聲失敗路徑。🔒 `gotoSessionsPending()` 不移除、不改寫 |
+| **`ARCH-G6`** | 🔴 **不共用 `exclusionNote()`**（與 F044 原 🔵 建議相反）。新增同檔妹妹純函式 `ojtOnTimeNote`，置於 `frontend/src/pages/ojt-progress-view.ts` **緊鄰 `exclusionNote()`**；共用點僅限 `coveragePercent()` 與 `NO_STATISTICS_TEXT` | 🔒 **既有 `exclusionNote()` 一行未改**，其既有測試全數綠燈、期望值未修改（`AC-G80`）。<br>🔴 **理由**：兩者之頭（`覆蓋率為…` vs 🔒 `已完成 X / 應完成 Y（Z%）`）、排除列舉（**兩**個原因 vs **三**個）、尾句**三段皆不同** ⇒ 「共用並擴充」等於把三段都變成參數，共用的只剩一個 `join`，而代價是本檔 TAB1 與 F044 卡④ 的文案**從此綁在同一支函式上，任一邊調整措辭都會靜默改寫另一邊**。<br>🔴 **兩支函式必須以逐字註解互相指向、寫明「刻意不合流」之理由**（比照本檔 `deptCodeOf` 與 `isWithinSubtree` 之既有處置），否則下一個人會把它們合併 |
+
+📝 **本節於 2026-09-21 由「交 system-architect」改寫為「裁定結果」**；`OLD>` 原三條待裁項逐字為：
+
+- `OLD>` **`ARCH-G1`（🔴 BLOCKING）**：本檔之 `trainingDueDate()`（公告日＋1 個月）明文為**全站唯一之推導點**，且**只存在於前端**。F044 卡④ 之窗口需要同一套月份位移（含反向「−1 個月」）——🔴 **若其聚合落在後端，就會長出第二個定義點**。
+- `OLD>` **`ARCH-G4`**：deep link 參數命名（🔵 建議 `?tab=sessions&sort=incomplete-first`）。
+- `OLD>` **`ARCH-G6`**：`exclusionNote()` 是否共用。
