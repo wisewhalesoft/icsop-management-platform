@@ -158,27 +158,13 @@ const slicesOf = (
 const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0);
 
 /**
- * 🔴 **`AC-G96` 之型別橋接（刻意用 cast，不直接改 import 之型別）。**
- *
- * `latestAnnouncements()` 之回傳型別將由 `LatestAnnouncementRow[]` 改為 `{ rows, total }`。
- * 在實作改完之前，直接寫 `.rows` 會是**編譯錯誤** ⇒ 整份檔案「Test suite failed to run」，
- * 連同本檔另外約 50 條與本題無關的斷言一起被蓋掉，紅燈訊息也看不出真正原因。
- * ⇒ 以 `as unknown as` 橋接，使紅燈**逐條落在真正相關的案例上**（`.rows` 為 `undefined`），
- *   其餘斷言維持可讀的綠。實作落地後本 cast 即成為恆等轉換，可留可刪。
+ * 🟢 **`AC-G96` 之型別橋接已於 2026-09-21 移除**（實作落地後該 `as unknown as` 即成恒等轉換）。
+ * 📌 建環期間曾以一支 `as unknown as` 橋接 helper 控制**紅燈粒度**：
+ *    `latestAnnouncements()` 之回傳型別由 `LatestAnnouncementRow[]` 改為 `{ rows, total }`，
+ *    在實作改完之前直接寫 `.rows` 會是**編譯錯誤** ⇒ 整份檔案「Test suite failed to run」，
+ *    連同另外約 50 條無關斷言一起被蓋掉。詳見 `risks-and-gaps.md` `G44-23`。
+ * ⚠ 本段保留為紀錄：下一次有 AC 要改**既有共用符號的型別**時，這是可以再用的手法。
  */
-type LatestRow = {
-  documentId: string;
-  announcedDate: string;
-  edition: string | null;
-  documentName: string;
-  displayStatus: 'announced' | 'in_progress';
-};
-const latest = (
-  docs: readonly AnalyticsDocRow[],
-  limit: number,
-  today: Date,
-): { rows: LatestRow[]; total: number } =>
-  latestAnnouncements(docs, limit, today) as unknown as { rows: LatestRow[]; total: number };
 
 
 // ══════════════════════════ §甲 · 卡片口徑 ══════════════════════════
@@ -616,7 +602,7 @@ describe('latestAnnouncements — 母體、排序、tie-break、筆數上限（A
   });
 
   it('AC-G52：母體恰為 active ∧ announcedDate 非 null（inactive／void／null 皆排除）', () => {
-    const ids = latest(POOL, 100, TODAY).rows.map((r) => r.documentId);
+    const ids = latestAnnouncements(POOL, 100, TODAY).rows.map((r) => r.documentId);
     expect(ids).not.toContain('p11');
     expect(ids).not.toContain('p12');
     expect(ids).not.toContain('p13');
@@ -624,7 +610,7 @@ describe('latestAnnouncements — 母體、排序、tie-break、筆數上限（A
   });
 
   it('AC-G53／AC-G54：先依公告日降冪排序、再截斷為 10 筆', () => {
-    const { rows } = latest(POOL, 10, TODAY);
+    const { rows } = latestAnnouncements(POOL, 10, TODAY);
     expect(rows).toHaveLength(10);
     expect(rows.map((r) => r.documentId)).toEqual([
       'p16', // 2026-03-31（未來公告日 ⇒ 進度中，依降冪在最上方）
@@ -641,7 +627,7 @@ describe('latestAnnouncements — 母體、排序、tie-break、筆數上限（A
   });
 
   it('AC-G53：同日者以 documentNumber **昇冪**為 tie-break（序數比較）', () => {
-    const rows = latest(POOL, 100, TODAY).rows.filter(
+    const rows = latestAnnouncements(POOL, 100, TODAY).rows.filter(
       (r) => r.announcedDate === '2026-03-14',
     );
     expect(rows.map((r) => r.documentId)).toEqual(['p15', 'p14']);
@@ -657,7 +643,7 @@ describe('latestAnnouncements — 母體、排序、tie-break、筆數上限（A
       doc('q1', 'Xa-001', '甲', null, 'active', '2026-03-14', 'AS', 'B1000'),
       doc('q2', 'XB-001', '乙', null, 'active', '2026-03-14', 'AS', 'B1000'),
     ];
-    expect(latest(pair, 10, TODAY).rows.map((r) => r.documentId)).toEqual(['q2', 'q1']);
+    expect(latestAnnouncements(pair, 10, TODAY).rows.map((r) => r.documentId)).toEqual(['q2', 'q1']);
   });
 
   it('AC-G53：documentNumber 亦相同時以 documentId 昇冪收尾（絕對決定性）', () => {
@@ -665,11 +651,11 @@ describe('latestAnnouncements — 母體、排序、tie-break、筆數上限（A
       doc('z2', 'SAME-1', '乙', null, 'active', '2026-03-14', 'AS', 'B1000'),
       doc('z1', 'SAME-1', '甲', null, 'active', '2026-03-14', 'AS', 'B1000'),
     ];
-    expect(latest(pair, 10, TODAY).rows.map((r) => r.documentId)).toEqual(['z1', 'z2']);
+    expect(latestAnnouncements(pair, 10, TODAY).rows.map((r) => r.documentId)).toEqual(['z1', 'z2']);
   });
 
   it('AC-G55：displayStatus 為衍生顯示狀態（announced／in_progress），不是原始 status', () => {
-    const { rows } = latest(POOL, 100, TODAY);
+    const { rows } = latestAnnouncements(POOL, 100, TODAY);
     expect(rows.find((r) => r.documentId === 'p16')?.displayStatus).toBe('in_progress');
     expect(rows.find((r) => r.documentId === 'p10')?.displayStatus).toBe('announced');
     // 🔒 映射表不得因「母體下只會出現兩值」而裁減；DISPLAY_LABEL 仍為四值。
@@ -677,20 +663,20 @@ describe('latestAnnouncements — 母體、排序、tie-break、筆數上限（A
   });
 
   it('AC-G56：edition 原樣送出（null 不在後端代換為文字；前端以 EDITION_NONE_TEXT 呈現）', () => {
-    const { rows } = latest(POOL, 100, TODAY);
+    const { rows } = latestAnnouncements(POOL, 100, TODAY);
     expect(rows.find((r) => r.documentId === 'p15')?.edition).toBeNull();
     expect(rows.find((r) => r.documentId === 'p14')?.edition).toBe("26'01");
   });
 
   it('AC-G56：announcedDate 為 YYYY-MM-DD（UTC 拆解）', () => {
-    for (const r of latest(POOL, 100, TODAY).rows) {
+    for (const r of latestAnnouncements(POOL, 100, TODAY).rows) {
       expect(r.announcedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }
   });
 
   it('AC-G57：母體為空 ⇒ 回空陣列（由前端呈現 empty-state）', () => {
-    expect(latest([], 10, TODAY).rows).toEqual([]);
-    expect(latest([POOL[12]], 10, TODAY).rows).toEqual([]); // p13：無公告日
+    expect(latestAnnouncements([], 10, TODAY).rows).toEqual([]);
+    expect(latestAnnouncements([POOL[12]], 10, TODAY).rows).toEqual([]); // p13：無公告日
   });
 });
 
@@ -706,17 +692,17 @@ describe('latestAnnouncements — 母體、排序、tie-break、筆數上限（A
  */
 describe('AC-G96 — latestAnnouncementsTotal ＝ 截斷前之 pool.length', () => {
   it('total ＝ 母體總數（status active ∧ announcedDate 非 null），與 limit 無關', () => {
-    expect(latest(POOL, 10, TODAY).total).toBe(13);
-    expect(latest(POOL, 100, TODAY).total).toBe(13);
-    expect(latest(POOL, 3, TODAY).total).toBe(13);
+    expect(latestAnnouncements(POOL, 10, TODAY).total).toBe(13);
+    expect(latestAnnouncements(POOL, 100, TODAY).total).toBe(13);
+    expect(latestAnnouncements(POOL, 3, TODAY).total).toBe(13);
   });
 
   it('🔴 兩種規模：超過上限時 total > rows.length；未達上限時兩者相等', () => {
-    const over = latest(POOL, 10, TODAY);
+    const over = latestAnnouncements(POOL, 10, TODAY);
     expect(over.rows).toHaveLength(10);
     expect(over.total).toBeGreaterThan(over.rows.length);
 
-    const under = latest(POOL.slice(0, 3), 10, TODAY);
+    const under = latestAnnouncements(POOL.slice(0, 3), 10, TODAY);
     expect(under.total).toBe(under.rows.length);
   });
 
@@ -732,7 +718,7 @@ describe('AC-G96 — latestAnnouncementsTotal ＝ 截斷前之 pool.length', () 
     expect(POOL).toHaveLength(16);
     const missNullCheck = POOL.filter((d) => d.status === 'active').length;
     const missStatusCheck = POOL.filter((d) => d.announcedDate !== null).length;
-    const correct = latest(POOL, 100, TODAY).total;
+    const correct = latestAnnouncements(POOL, 100, TODAY).total;
     expect(correct).toBe(13);
     expect(missNullCheck).not.toBe(correct);
     expect(missStatusCheck).not.toBe(correct);
@@ -740,13 +726,13 @@ describe('AC-G96 — latestAnnouncementsTotal ＝ 截斷前之 pool.length', () 
   });
 
   it('🔒 total 與 rows 之母體為同一個（rows 之全量 ＝ total）', () => {
-    const all = latest(POOL, Number.MAX_SAFE_INTEGER, TODAY);
+    const all = latestAnnouncements(POOL, Number.MAX_SAFE_INTEGER, TODAY);
     expect(all.rows).toHaveLength(all.total);
   });
 
   it('母體為空 ⇒ total 為 0（不得為 undefined）', () => {
-    expect(latest([], 10, TODAY).total).toBe(0);
-    expect(latest([POOL[12]], 10, TODAY).total).toBe(0); // p13：無公告日
+    expect(latestAnnouncements([], 10, TODAY).total).toBe(0);
+    expect(latestAnnouncements([POOL[12]], 10, TODAY).total).toBe(0); // p13：無公告日
   });
 });
 
@@ -772,7 +758,7 @@ describe('🔒 AC-G70／INV-G7：五處「已公告／進度中」判定逐筆�
       expect(sum(slicesOf(dim, 'cumulative').map((s) => s.announced))).toBe(expectedAnnounced.size);
     }
     // ④ 最新公告清單之狀態欄
-    for (const r of latest(DOCS, 100, TODAY).rows) {
+    for (const r of latestAnnouncements(DOCS, 100, TODAY).rows) {
       expect(r.displayStatus).toBe(expectedAnnounced.has(r.documentId) ? 'announced' : 'in_progress');
     }
     // 自我守護：語料中兩種判定皆有代表，否則上面全部退化為恆真
