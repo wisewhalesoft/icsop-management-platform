@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { PublicViewerPage } from './PublicViewerPage';
@@ -30,9 +30,35 @@ import * as authHook from '../auth/useAuth';
  *  換上下方之 fake（屆時該相依已由實作方之 `npm install` 落地於 `node_modules`，無序問題）。
  */
 
-/** `vi.mock` 工廠之可觀測狀態（`AC-N73` 之測試側載體：可 `vi.mock` 之模組級 seam）。 */
+/**
+ * `vi.mock` 工廠之可觀測狀態（`AC-N73` 之測試側載體：可 `vi.mock` 之模組級 seam）。
+ *
+ * 🔴 2026-09-21 缺陷（使用者實機回報）：本假替身原本之 `render()` **立即 resolve**，
+ * 於是「被呼叫過的倍率」與「真正畫完的倍率」永遠相等，整組環對「渲染被 pdf.js 拒絕」
+ * 這件事零鑑別力——`AC-N8`／`AC-N9` 的三條 fit 斷言全綠，而畫面上根本沒放大。
+ * 故新增兩項**真實 pdf.js 行為**之模擬（`slowRender` 開啟時才生效，既有案例行為不變）：
+ *   ① 渲染需時間 ⇒ 由 `pending` 手動結束，期間 `inFlight === 1`；
+ *   ② 同一張 canvas 上第二個 `render()` **被拒而非排隊**（真實訊息逐字照抄）。
+ *      權威＝`pdfjs-dist@4.10.38` `build/pdf.mjs:13118` 之 `InternalRenderTask.#canvasInUse`
+ *      WeakSet：命中即 throw，該旗標只在 `cancel()`／畫完時移除（同檔 13155／13199）。
+ *      ⚠ 真實時序上這個 throw 落在 `initializeGraphics()`（render() 回傳後才發生），本替身
+ *      為求簡潔改為呼叫當下就回拒絕之 promise——**可觀測結果相同**（task.promise 被拒、
+ *      該倍率一個像素也沒畫上去），而本案要鎖的正是那個結果。
+ * 並把「畫完」與「被呼叫」拆成兩本帳：`completedCalls` vs `renderCalls`。
+ */
 const pdfjsState = vi.hoisted(() => ({
   renderCalls: [] as { page: number; scale: number }[],
+  /** 真正**畫完**的渲染（被取消或被拒者不計入）。 */
+  completedCalls: [] as { page: number; scale: number }[],
+  /** 進行中之渲染數；真實 pdf.js 對同一張 canvas 只容得下 1。 */
+  inFlight: 0,
+  /** 第二個 render 撞上進行中渲染而被拒的次數。 */
+  overlaps: 0,
+  /** 開啟後渲染不再立即完成，改由測試呼叫 `pending` 中之函式結束。 */
+  slowRender: false,
+  /** 設定後，`render()` 一律以此錯誤拒絕（模擬**非取消**之真正繪製失敗）。 */
+  renderFailure: null as Error | null,
+  pending: [] as Array<() => void>,
   numPages: 3,
   destroyCalls: 0,
 }));
@@ -41,8 +67,48 @@ vi.mock('pdfjs-dist', () => {
   const makePage = (pageNumber: number) => ({
     getViewport: ({ scale }: { scale: number }) => ({ width: 600 * scale, height: 800 * scale, scale }),
     render: (opts: { viewport: { scale: number } }) => {
-      pdfjsState.renderCalls.push({ page: pageNumber, scale: opts.viewport.scale });
-      return { promise: Promise.resolve() };
+      const call = { page: pageNumber, scale: opts.viewport.scale };
+      pdfjsState.renderCalls.push(call);
+      if (pdfjsState.renderFailure) {
+        const failed = Promise.reject(pdfjsState.renderFailure);
+        failed.catch(() => undefined);
+        return { promise: failed, cancel: () => undefined };
+      }
+      if (!pdfjsState.slowRender) {
+        pdfjsState.completedCalls.push(call);
+        return { promise: Promise.resolve(), cancel: () => undefined };
+      }
+      if (pdfjsState.inFlight > 0) {
+        pdfjsState.overlaps += 1;
+        const rejected = Promise.reject(
+          new Error('Cannot use the same canvas during multiple render() operations'),
+        );
+        // 先掛一個吞掉的 handler：消費端若真的沒接，仍應由斷言判定紅燈，而非讓
+        // unhandled rejection 蓋掉真正的失敗訊息。
+        rejected.catch(() => undefined);
+        return { promise: rejected, cancel: () => undefined };
+      }
+      pdfjsState.inFlight += 1;
+      let settled = false;
+      let settle!: (outcome: 'done' | 'cancelled') => void;
+      const promise = new Promise<void>((resolve, reject) => {
+        settle = (outcome) => {
+          if (settled) return;
+          settled = true;
+          pdfjsState.inFlight -= 1;
+          if (outcome === 'done') {
+            pdfjsState.completedCalls.push(call);
+            resolve();
+          } else {
+            // 逐字照抄 pdf.js：識別依據是 **name**，訊息只是人看的。
+            const cancelled = new Error(`Rendering cancelled, page ${pageNumber}`);
+            cancelled.name = 'RenderingCancelledException';
+            reject(cancelled);
+          }
+        };
+      });
+      pdfjsState.pending.push(() => settle('done'));
+      return { promise, cancel: () => settle('cancelled') };
     },
   });
   const pdfDoc = {
@@ -101,6 +167,12 @@ describe('PublicViewerPage — F020 D9 delta：canvas 化檢視器（AC-N4〜AC-
   beforeEach(() => {
     vi.clearAllMocks();
     pdfjsState.renderCalls = [];
+    pdfjsState.completedCalls = [];
+    pdfjsState.inFlight = 0;
+    pdfjsState.overlaps = 0;
+    pdfjsState.slowRender = false;
+    pdfjsState.renderFailure = null;
+    pdfjsState.pending = [];
     pdfjsState.destroyCalls = 0;
     mockAuth();
     vi.mocked(api.getDocumentWatermark).mockResolvedValue({ watermark: WM });
@@ -380,6 +452,64 @@ describe('PublicViewerPage — F020 D9 delta：canvas 化檢視器（AC-N4〜AC-
       } finally {
         restore();
       }
+    });
+
+    /**
+     * 🔴 2026-09-21 缺陷（使用者實機回報：「工具列顯示 200%，PDF 仍是 100%，切到第 2 頁才正確」）。
+     *
+     * 開場時**兩次渲染必然相撞**：首次渲染（`zoom=1`）送進 pdf.js 之後，「符合寬度」才算完
+     * 並 `setZoom(fit)`，於是第二次渲染在第一次還沒畫完時就發動。真實 pdf.js 對同一張 canvas
+     * **不排隊、直接拒絕**第二個 ⇒ 新倍率那次繪製整個被丟掉，畫面停在舊倍率；翻頁時因為沒有
+     * 競爭對手，才「突然變正確」。修法＝發動新渲染前先 `cancel()` 前一個並等它落地。
+     *
+     * 🔒 本案之鑑別力來自斷言 `completedCalls`（真正**畫完**者）而非 `renderCalls`（被**呼叫過**者）：
+     *    上方三條 fit 斷言鎖的都是後者，對本缺陷恆綠——那正是它一路綠燈上線的原因。
+     * 🔒 本案鎖的是**結果**（最後畫完的是 fit 倍率、且不曾相撞），不是機制：實作要用「取消前者」
+     *    或「排在前者之後」由實作方決定，兩者都能滿足它。⚠ 2026-09-21 實機已證實**取消不可行**
+     *    （見 `PublicViewerPage.tsx` 之 `renderTaskRef` 註解），此處刻意不把機制寫死。
+     */
+    it('初始 fit 之倍率必須真的畫完，且過程中不得有兩次渲染搶同一張 canvas', async () => {
+      pdfjsState.slowRender = true;
+      const restore = withStageWidth(3000);
+      try {
+        renderViewer();
+        await screen.findByTestId('watermark-format');
+        // ① 首次渲染（100%）已在飛。
+        await waitFor(() => expect(pdfjsState.inFlight).toBe(1));
+        expect(pdfjsState.renderCalls[0]).toEqual({ page: 1, scale: 1 });
+        /**
+         * ② 等倍率狀態真的變成 fit 值——這代表第二輪**已被觸發**。
+         * ⚠ 這一步之前**絕不可放行 pending**：提早讓首次渲染畫完，等於替不排隊的實作
+         *    把相撞的機會抹掉，本案就會失去牙齒（2026-09-21 實測：flush 放前面 ⇒ 突變版照樣全綠）。
+         */
+        await waitFor(() => expect(screen.getByTestId('zoom-label')).toHaveTextContent('200%'));
+        // ③ 現在才逐一放行，直到 fit 倍率那次真的畫完（排隊式實作需要放行不只一次）。
+        const lastCompleted = (): number | undefined =>
+          pdfjsState.completedCalls[pdfjsState.completedCalls.length - 1]?.scale;
+        for (let i = 0; i < 8 && lastCompleted() !== 2; i += 1) {
+          await act(async () => {
+            pdfjsState.pending.splice(0).forEach((finish) => finish());
+          });
+        }
+        const completed = pdfjsState.completedCalls;
+        expect(completed[completed.length - 1]).toEqual({ page: 1, scale: 2 });
+        expect(pdfjsState.overlaps).toBe(0);
+        // 🔒 正常的接手流程不得被當成渲染失敗報給使用者。
+        expect(screen.queryByRole('alert')).toBeNull();
+      } finally {
+        restore();
+      }
+    });
+
+    /**
+     * 🔴 2026-09-21：與上一案同批。既然渲染失敗被 `catch` 接住，就必須**分辨取消與真失敗**——
+     * 一律吞掉會讓「整張白的 canvas」查無死因（追查本缺陷時已實際踩到：畫面全白、
+     * console 乾淨、無從得知 pdf.js 回報了什麼）。
+     */
+    it('渲染失敗（非取消）不得靜默留下空白 canvas——須顯示錯誤', async () => {
+      pdfjsState.renderFailure = new Error('RENDER_BOOM');
+      renderViewer();
+      expect(await screen.findByRole('alert')).toHaveTextContent('RENDER_BOOM');
     });
 
     it('使用者手動縮放後，resize 不得把倍率蓋回 fit 值', async () => {

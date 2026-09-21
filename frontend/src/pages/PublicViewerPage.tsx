@@ -108,6 +108,31 @@ export function PublicViewerPage(): JSX.Element {
   /** 目前文件第 1 頁在 `scale: 1` 下之寬度（CSS px）；fit 之分母。 */
   const basePageWidthRef = useRef(0);
   const pdfRef = useRef<LoadedPdf | null>(null);
+  /**
+   * 目前進行中之 pdf.js `RenderTask`；新一輪渲染**排在它後面**，不與它並行。
+   *
+   * 🔴 2026-09-21 缺陷（使用者實機回報：「工具列顯示 200%，PDF 仍是 100%，切到第 2 頁才正確」）：
+   * pdf.js **不允許兩次 `render()` 同時寫同一張 canvas**——第二次會以
+   * 「Cannot use the same canvas during multiple render() operations」**被拒，而非排隊等待**
+   * （`pdfjs-dist@4.10.38` `build/pdf.mjs:13118` 之 `InternalRenderTask.#canvasInUse` WeakSet；
+   * 該旗標只在 `cancel()`／畫完時移除，見同檔 13155／13199）。
+   * 開場時這兩次必然相撞：首次渲染（`zoom=1`）送出後，「符合寬度」才算完並 `setZoom(fit)`，
+   * 於是新倍率那次在前一次還沒畫完時發動。誰被拒取決於誰先拿到 operator list ⇒ **時好時壞**，
+   * 這正是「有時停在 100%、翻一頁就正確」的成因。
+   * 🔴 effect 的 `active` 旗標擋不住這件事：它只能讓 await 之後的續行提早返回，
+   *    **已經交給 pdf.js 的那次繪製不會因此停下**。
+   *
+   * 🔴 **為何是「等」而不是 `cancel()`**：兩者都能解掉相撞，但「等」不依賴 pdf.js 的取消／
+   * abort 內部行為——`cancel()` 之後 pdf.js 會排一個延遲的 operator list abort
+   * （`build/pdf.mjs:12137` `_abortOperatorList`，`RENDERING_CANCELLED_TIMEOUT = 100`），
+   * 而**兩次渲染共用同一個 `PDFPageProxy` 的 intent state**；緊接著重新 `render()` 是否踩到
+   * 那個善後流程，取決於時序。等前一輪自然畫完則沒有這層不確定：canvas 佔用旗標
+   * （`#canvasInUse`）由 pdf.js 自己釋放，串流完整，代價只是慢一拍。
+   * ⚠ 本頁之渲染由 `requestAnimationFrame` 推進 ⇒ **分頁在背景時渲染不會前進**，
+   *   自動化量測務必先把分頁帶到前景，否則會量到一張永遠空白的 canvas 而誤判。
+   * 📝 已作廢（⚠ 不得復原）：OLD> `prev.cancel?.(); await prev.promise.catch(...)`。
+   */
+  const renderTaskRef = useRef<{ promise: Promise<void> } | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [page, setPage] = useState(1);
   /** 目前頁之旋轉角（未旋轉過即 0）。⚠ 必須宣告於渲染 effect 之前——它是依賴陣列之成員。 */
@@ -249,6 +274,14 @@ export function PublicViewerPage(): JSX.Element {
       const doc = pdfRef.current;
       const canvas = canvasRef.current;
       if (!doc || !canvas) return;
+      // 排在上一輪之後（見 `renderTaskRef`）：等它畫完，canvas 佔用旗標才會釋放。
+      // 它若以錯誤收場，那是它自己的事，這裡只關心「輪到我了沒」。
+      const prev = renderTaskRef.current;
+      if (prev) {
+        await prev.promise.catch(() => undefined);
+        if (renderTaskRef.current === prev) renderTaskRef.current = null;
+      }
+      if (!active) return;
       const p = await doc.getPage(page);
       if (!active) return;
       const dpr = window.devicePixelRatio || 1;
@@ -269,7 +302,24 @@ export function PublicViewerPage(): JSX.Element {
       // jsdom 之 getContext('2d') 回 null（無 canvas 套件）；真實瀏覽器對 '2d' 恆非 null。
       // 這裡不做 null 短路——短路會讓渲染在測試環境完全不發生，使 AC-N9 失去載體。
       const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
-      await p.render({ canvasContext: ctx, viewport }).promise;
+      const task = p.render({ canvasContext: ctx, viewport });
+      renderTaskRef.current = task;
+      try {
+        await task.promise;
+      } catch (e) {
+        /**
+         * 🔴 **只吞取消**：pdf.js 於文件卸載（`destroy()`）時會以
+         * `RenderingCancelledException` 拒絕仍在飛的渲染，那是正常收場。
+         * 其餘是真正的繪製失敗，**必須現形**——一律吞掉會讓「整張白的 canvas」查無死因，
+         * 那正是本次 2026-09-21 追查時一度把自己鎖在門外的原因。
+         */
+        const name = (e as { name?: string } | null)?.name;
+        if (name !== 'RenderingCancelledException' && active) {
+          setError((prev) => prev ?? msgOf(e));
+        }
+      } finally {
+        if (renderTaskRef.current === task) renderTaskRef.current = null;
+      }
     })();
     return () => {
       active = false;
