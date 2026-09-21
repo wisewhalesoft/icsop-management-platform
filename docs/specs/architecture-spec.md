@@ -1,9 +1,9 @@
 ---
 type: architecture-spec
-version: 1.12
-status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；**v1.7 新增之 §10.17 決策 A15（AAD authority host 覆寫，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）已實作並併入 main（commit `3448679`）；`AC-E4`（遠端端到端登入成功）已於 2026-08-18 由真人於遠端環境（DTTHFC01）實測兌現，證據見 §10 changelog v1.7a 與 §10.17（`OLD>` v1.7 原登錄：「唯 `AC-E4`（遠端端到端登入成功）尚待真人於遠端環境驗證，如實登錄為未兌現項」）**；**v1.8 新增之 §10.18 決策 A16（F024 匯出稽核與訊息共用之四項裁決，對應 [F024](features/F024-access-history-query.md#export-fix-delta) `AC-F13`／`AC-F5`／`AC-F9`／`AC-F7`～`AC-F8` 之提報事項 A1～A4）為 draft，待 tdd-implementation 落地**；**v1.10 新增之第 12 章「2026-08-21 三項裁決架構決策」為 draft，待 spec-writer 覆核 `AC-T14` 措辭範圍界定（§12.6）與 lead 核准舊端點退休（§12.2／§12.6）後方可交 tdd-implementation**；**v1.11 新增之第 13 章「2026-08-31 F017 清單匯出（CSV）架構決策」為 draft，待 spec-writer 覆核 `AC-X7` 之「今日」基準措辭（§13.7 ①，有 8 小時偏移之誤讀風險）後方可交 tdd-implementation；`main.ts` body-parser 已依 lead 2026-08-31 之退回**改裁為路由範圍**（§13.2 ⑦，無全域變更）、body 鍵名定案為 `documentIds`；本章已與 `AC-X1`～`AC-X16` 逐條對帳，初稿三處相衝者已依 AC 就地改正；畸形 body 之處置已依 lead 第三輪裁決改用**既有**碼 `VALIDATION_ERROR`（零新增碼，`AC-X16` ⑨ 不動）**；**v1.12（2026-09-02）新增第 14 章「F043 業務/功能類別管理架構決策」為 draft——`OQ-B-01`（🔴 唯一 BLOCKING）已裁定採乙案（新增 `BUSINESS_CATEGORY_CHANGE_LOG`／`BUSINESS_CATEGORY_SNAPSHOT` 兩張平行表，反漂移處置＝沿用既有「兩份逐字相同＋固定向量綁定」模式），F043 §待 system-architect 之其餘 8 項與 lead 直接指派之 1 項（`BUSINESS_CATEGORY_DOC` 不加冗餘 `businessCategoryId` 欄）已逐項裁定；新增一個模組 `BusinessCategoriesModule`，`LifecycleModule` 全部既有檔案零修改（僅 `dag-cycle.ts`／`lifecycle-tree-layout.ts`／`lifecycle-subcategory.ts` 三支純函式檔被唯讀重用）；待人類閘門核准 F043 全檔後方可交 tdd-implementation**；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
-last_updated: 2026-09-02
-covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038, F039, F040, F041, F043]
+version: 1.13
+status: draft（v1.5 之 F041 一般使用者子分類架構擴充［§3.7／§4.10／§5.11］為 🟢 APPROVED，2026-08-11 人類閘門通過；**v1.6／v1.6a 之第 10 章「2026-08-16 缺失／變更 Delta 架構決策」為 draft，其上游 25 題 `OQ-D18-*` 已於 2026-08-16 兩次人類閘門全數定案，本章原提報之 4 項爭議與 1 項待決（`OQ-D18-A1`）亦已全數裁示結案**；**v1.7 新增之 §10.17 決策 A15（AAD authority host 覆寫，對應 [F001](features/F001-auth-login-session.md) `AC-E1`～`AC-E15`）已實作並併入 main（commit `3448679`）；`AC-E4`（遠端端到端登入成功）已於 2026-08-18 由真人於遠端環境（DTTHFC01）實測兌現，證據見 §10 changelog v1.7a 與 §10.17（`OLD>` v1.7 原登錄：「唯 `AC-E4`（遠端端到端登入成功）尚待真人於遠端環境驗證，如實登錄為未兌現項」）**；**v1.8 新增之 §10.18 決策 A16（F024 匯出稽核與訊息共用之四項裁決，對應 [F024](features/F024-access-history-query.md#export-fix-delta) `AC-F13`／`AC-F5`／`AC-F9`／`AC-F7`～`AC-F8` 之提報事項 A1～A4）為 draft，待 tdd-implementation 落地**；**v1.10 新增之第 12 章「2026-08-21 三項裁決架構決策」為 draft，待 spec-writer 覆核 `AC-T14` 措辭範圍界定（§12.6）與 lead 核准舊端點退休（§12.2／§12.6）後方可交 tdd-implementation**；**v1.11 新增之第 13 章「2026-08-31 F017 清單匯出（CSV）架構決策」為 draft，待 spec-writer 覆核 `AC-X7` 之「今日」基準措辭（§13.7 ①，有 8 小時偏移之誤讀風險）後方可交 tdd-implementation；`main.ts` body-parser 已依 lead 2026-08-31 之退回**改裁為路由範圍**（§13.2 ⑦，無全域變更）、body 鍵名定案為 `documentIds`；本章已與 `AC-X1`～`AC-X16` 逐條對帳，初稿三處相衝者已依 AC 就地改正；畸形 body 之處置已依 lead 第三輪裁決改用**既有**碼 `VALIDATION_ERROR`（零新增碼，`AC-X16` ⑨ 不動）**；**v1.12（2026-09-02）新增第 14 章「F043 業務/功能類別管理架構決策」為 draft——`OQ-B-01`（🔴 唯一 BLOCKING）已裁定採乙案（新增 `BUSINESS_CATEGORY_CHANGE_LOG`／`BUSINESS_CATEGORY_SNAPSHOT` 兩張平行表，反漂移處置＝沿用既有「兩份逐字相同＋固定向量綁定」模式），F043 §待 system-architect 之其餘 8 項與 lead 直接指派之 1 項（`BUSINESS_CATEGORY_DOC` 不加冗餘 `businessCategoryId` 欄）已逐項裁定；新增一個模組 `BusinessCategoriesModule`，`LifecycleModule` 全部既有檔案零修改（僅 `dag-cycle.ts`／`lifecycle-tree-layout.ts`／`lifecycle-subcategory.ts` 三支純函式檔被唯讀重用）；待人類閘門核准 F043 全檔後方可交 tdd-implementation**；**v1.13（2026-09-21）新增第 15 章「F044 後台首頁儀表板改版架構決策」為 draft**——本輪之約束環為**簡化環（只有 vitest／jest，無 e2e、無 mutation、無整合測試）**，故本章以「SQL 只做投影、分類與聚合一律純函式」為總體切分原則（`ARCH-G0`）；兩項 BLOCKING 已裁定（`ARCH-G1` ＝ 卡④ 聚合落後端＋`addMonthsClamped` 孿生實作雙鎖、`ARCH-G2` ＝ 端點直接回 `defaultDimension`，`SessionUser` 一欄未加），其餘四項（端點切法、deep link 參數、本部上溯、排除註記）亦逐項裁定；**不新增模組、不新增模組間相依、不新增資料表欄位或 migration、不動兩份代理白名單**；🔴 本章提報 4 項與既有 AC 之牴觸或事實更正（見 §15.12 一），其中 `AC-G3` vs `AC-G70`（卡②「進度中」之來源）為 BLOCKING 級措辭問題，待 lead 裁示後交 spec-writer 改寫；🔴 §15.10 列 12 項本輪機器不可驗證、須人工實機覆核之項目；其餘章節仍有待決 OQ，見第 9 章與 §10.16）
+last_updated: 2026-09-21
+covers: [F001, F002, F003, F004, F005, F006, F007, F008, F009, F010, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F025, F026, F027, F028, F029, F030, F031, F032, F033, F034, F035, F036, F037, F038, F039, F040, F041, F043, F044]
 ---
 
 # System Architecture Specification — ICSOP 文件管理平台
@@ -5123,5 +5123,660 @@ graph TD
 | ② | §14.10 之 7 項單元測試盲區需於部署前 smoke 一併驗證，其中 #1／#2／#5 為原理上測不到之部署面缺口，建議與既有部署 smoke 併跑 |
 | ③ | 🔴 **`AC-26` 之可達性疑慮**（見「交回 spec-writer」③）：若確認無可達路徑，本章之 FK CASCADE 仍建議保留（零風險、面向未來），但 F043 該條之測試斷言形狀應調整為「以 store fake 模擬文件刪除事件」而非期待一個今日打不通的真實 API 路徑 |
 | ④ | 本章之 3 支 migration（§14.4）與既有兩條血訓完全對齊：① 皆待人類閘門核准後方可對真庫實跑；② Entity 白名單已逐一列出（§14.4 表格），供 tdd-implementation 逐項核對，避免「NOT NULL 欄漏列於 controller DTO 白名單 → 值人間蒸發」重演 |
+
+---
+
+## 15. 2026-09-21 F044 後台首頁儀表板改版架構決策 {#ch15-f044}
+
+> **本章對應**：[F044](features/F044-admin-dashboard-analytics.md)（`AC-G1`～`AC-G84`）、[stories/F044](../stories/F044-admin-dashboard-analytics.md)（30 題人類裁決）、[open-questions §D44](open-questions.md#d44-2026-09-21)（含 `OQ-D44-31`～`34`）。
+> **本章裁定** F044 §壬 明文交付之 6 項（`ARCH-G1`～`ARCH-G6`，前二項為 BLOCKING），並補上一項上游未提之總體切分原則（`ARCH-G0`）。
+> **本章不撰寫 AC**。凡本章之裁定需要新的或修改過的 AC 者，一律列於 [§15.12](#ch15-handback)，交 spec-writer 執行。
+
+### 15.0 本章範圍與閱讀指引
+
+| 讀者 | 應讀章節 |
+|---|---|
+| test-generator | §15.1（哪些邏輯必須是純函式）、§15.5（端點契約）、§15.10（🔴 本輪測不到的清單） |
+| tdd-implementation | §15.1～§15.9 全部 |
+| ui-ux-designer | §15.5（回應形狀決定畫面上拿得到什麼）、§15.9（Top N／幾何在前端） |
+| lead／人類閘門 | §15.10（人工覆核清單）、§15.12（與既有 AC 之牴觸） |
+
+**本輪之特殊前提（會改變每一項裁定）**：約束環為**簡化環——只有 vitest（前端）／jest（後端）**。沒有 Playwright e2e、沒有 fidelity、沒有 mutation testing、**沒有對真庫之整合測試**。
+⇒ 🔴 **凡落在 SQL 內之邏輯，本輪一條測試都碰不到它。** 本章之全部切分決策皆以此為第一原則。
+
+| ID | 議題 | 裁定 |
+|---|---|---|
+| `ARCH-G0` | 總體切分原則（本章自行補提） | **SQL 只做投影／join／DISTINCT；分類、分組、上溯、排序、截斷、算術一律純函式** |
+| 🔴 `ARCH-G1` | 卡④ 聚合落前端或後端 | **後端**；`addMonthsClamped` 為前後端孿生實作，由同一份 8 列固定向量表雙鎖 |
+| 🔴 `ARCH-G2` | 預設頁籤之判定輸入來源 | **乙案**：端點直接回 `defaultDimension`；`SessionUser` 一欄未加 |
+| `ARCH-G3` | 端點切法 | **新增 2 個端點 ＋ OJT 模組新增 1 個端點；`/admin/dashboard/summary` 一行未改且不再被前端呼叫** |
+| `ARCH-G4` | OJT deep link 參數 | `?tab=sessions&sort=incomplete-first`，**兩參數各自獨立解析**（非成對） |
+| `ARCH-G5` | 本部上溯之查詢策略 | **應用層每公司一次索引 ＋ 純函式上溯**；否決遞迴 CTE、否決 `codePrefix` LIKE |
+| `ARCH-G6` | 是否共用 `exclusionNote()` | **不共用整支**；只共用 `coveragePercent()` 與 `NO_STATISTICS_TEXT`，新增同檔姊妹純函式 |
+
+---
+
+### 15.1 決策 G0：總體切分原則——SQL 只做投影，分類與聚合一律純函式 {#ch15-g0}
+
+**問題**：本輪沒有整合測試。若把「已公告 vs 進度中」之判定、「當月」之窗口、本部上溯、排序與去重寫進 SQL，這些邏輯在本輪將**完全沒有防線**——而它們正是 F044 全部 84 條 AC 中鑑別力最高的部分。
+
+**裁定**：本功能之後端聚合一律採下列兩段式，**不得**把分類條件下推 SQL。
+
+```mermaid
+graph LR
+  subgraph SQL["SQL 層（本輪不可驗證 ⇒ 盡可能簡單）"]
+    Q1["投影：status='active' 之 ICSOP_DOCUMENT（6 欄）"]
+    Q2["投影：ORG_UNIT 全表（每公司分群）"]
+    Q3["join ＋ DISTINCT：BUSINESS_CATEGORY_DOC → _NODE → _CATEGORY"]
+    Q4["投影：DOC_USING_DEPT ／ OJT_SESSION"]
+  end
+  subgraph PURE["純函式層（本輪唯一之防線 ⇒ 全部邏輯集中於此）"]
+    P1["deriveDisplayStatus（唯一之已公告／進度中判定）"]
+    P2["monthWindow ／ addMonthsClamped"]
+    P3["divisionOf（本部上溯）＋ 標籤組裝"]
+    P4["donutSlices ／ latestAnnouncements ／ categoryDistribution ／ ojtOnTimeRate"]
+  end
+  Q1 --> P1 --> P4
+  Q2 --> P3 --> P4
+  Q3 --> P4
+  Q4 --> P4
+  P2 --> P4
+  P4 --> API["HTTP 回應（已是最終數字與標籤）"]
+  style SQL fill:#fde8e8,stroke:#c53030
+  style PURE fill:#e6fffa,stroke:#2c7a7b
+```
+
+**三條具體禁令**：
+
+1. 🔴 **禁止** `WHERE announcedDate <= GETUTCDATE()` 或任何 SQL `CASE` 形式之狀態分類——那是 `deriveDisplayStatus` 之第二個定義點（`AC-G2`／`AC-G70`／INV-G7）。
+2. 🔴 **禁止**在 SQL 內做本部上溯（遞迴 CTE）——見 [§15.7](#ch15-g5)。
+3. 🔴 **禁止**在 SQL 內做排序與截斷（`TOP 10`／`ORDER BY`）——`AC-G53`／`AC-G64` 明訂序數比較與三層 tie-break，SQL 定序受 collation 影響且本輪測不到。
+
+**唯一之例外（刻意保留於 SQL）**：類別掛載之**去重語意**。理由＝`AC-G61` 明文要求沿用 [F043](features/F043-business-function-category.md) `AC-01` 之既有口徑，而該口徑之單一真相來源就是 `typeorm-business-category.store.ts` 之 `COUNT(DISTINCT d.[documentId])` 下推。⇒ 本功能之查詢**只 DISTINCT 到 `(businessCategoryId, documentId)` 這一層**（不 COUNT），把「相異文件」留在 SQL、把「這份文件是已公告還是進度中」留給純函式。⚠ 該 DISTINCT 之正確性本輪測不到，已列入 [§15.10](#ch15-blindspots) #1。
+
+**資料量前提（已查證）**：ICSOP 文件約 591 份、`ORG_UNIT` 約 139 筆 active 部／處室（四家合計數百列）、`BUSINESS_CATEGORY_DOC` 之相異 `(類別, 文件)` 對為千位數以下。⇒「全量投影進記憶體再算」在本專案規模下之成本遠低於逐筆回查，且與既有 `TypeOrmOjtOrgDirectory`（整表載入 ＋ 每公司分群 ＋ 60 秒 TTL）之紀律一致。
+
+---
+
+### 15.2 決策 G1（`ARCH-G1`，🔴 BLOCKING）：卡④ 之聚合落**後端** {#ch15-g1}
+
+**裁定：聚合落後端。** 與 lead 之傾向相同，但理由不只是成本——有一項**功能性**理由使前端方案不可能正確。
+
+| # | 理由 | 性質 |
+|---|---|---|
+| ① | 🔴 **`excludedOrphaned` 在前端不可能算得出來。** `AC-G12`②／`AC-G15`② 要求卡片註記載明「因單位已移出使用部門而被排除」之筆數；孤兒依定義**已不在 `DOC_USING_DEPT` 集合內**，故 `GET /admin/ojt-progress/rows` 回傳之列裡**結構性地不含孤兒**。該數字之唯一來源是後端既有之 `countOrphanedRows()`（比對 `OJT_SESSION` 與 `DOC_USING_DEPT` 兩個集合）。⇒ 前端方案無法滿足 `AC-G15` | **功能性阻斷** |
+| ② | 前端方案須為了一張卡把全量進度列（文件 × 使用單位）載進瀏覽器。既有 `GET /admin/ojt-progress/rows` 為該頁之全池回應，正是 F042 第五輪才剛用 `docScope` 節流掉的東西（`OQ-E11-21`）；在首頁把它整份拉回來，是把已經解掉的問題搬到另一頁重演 | 效能／一致性 |
+| ③ | `AC-G11` 要求完成判定完全沿用 F042 `AC-03`（`sessionMatchesEdition`），`AC-G12`① 要求 `isActive` 過濾沿用 `AC-17`。這三件事都已經在後端 `OjtProgressService.aggregate()` 裡了。卡④ 是**同一份聚合的第二個鏡頭**，不是一份新資料 | 重用 |
+
+**落點**：`OjtProgressService` 新增公開方法 `getOnTimeUnitStats(session, now)`，內部重用既有 `private aggregate()`；口徑邏輯抽為新純函式檔 `backend/src/ojt-progress/ojt-ontime.ts` 之 `ojtOnTimeRate(rows, today)`。
+🔴 **明文不採**「在 `DashboardModule` 自建一份 OJT 讀取 provider」：那會讓「孤兒＝不在集合內」「完成＝版次相符之場次存在」這兩條不變式各存在兩份，而它們正是 F042 反覆修正過的地方。
+
+#### `addMonthsClamped` 之孿生實作與 8 列固定向量表
+
+聚合落後端 ⇒「＋1 個月」必然在後端出現第二個定義點。處置比照 `org-path.ts` 檔頭之既有紀律（跨 package 無法共用原始碼，兩份實作明文互為孿生）。
+
+| 側 | 檔案 | 內容 |
+|---|---|---|
+| 後端 | `backend/src/ojt-progress/add-months-clamped.ts` | `addMonthsClamped(isoDate: string, delta: number): string \| null` |
+| 前端 | `frontend/src/pages/ojt-progress-view.ts` | 同名同簽章之孿生；既有 `trainingDueDate()` 改為 `addMonthsClamped(announcedDate, +1)` 之**委派**（對外行為、簽章與逐字註解一字不改） |
+
+🔴 **兩側之測試必須逐列引用下列同一張表**（`AC-G8` 之 8 列，本章逐列確認並鎖定其內容；`delta` 為 `+1` 或 `−1`，輸入輸出皆為 `YYYY-MM-DD`）：
+
+| # | 輸入 | `delta` | 期望輸出 | 這一列在防什麼 |
+|---|---|---|---|---|
+| ① | `2026-01-15` | `+1` | `2026-02-15` | 一般情形 |
+| ② | `2026-01-31` | `+1` | `2026-02-28` | 🔴 月底溢位未夾回（天真 `setMonth` 得 `2026-03-03`） |
+| ③ | `2024-01-31` | `+1` | `2024-02-29` | 閏年之夾回點 |
+| ④ | `2026-12-31` | `+1` | `2027-01-31` | 跨年 |
+| ⑤ | `2026-03-31` | `−1` | `2026-02-28` | 🔴 反向之月底夾回 |
+| ⑥ | `2024-03-31` | `−1` | `2024-02-29` | 反向＋閏年 |
+| ⑦ | `2026-01-01` | `−1` | `2025-12-01` | 反向跨年 |
+| ⑧ | `2026-05-31` | `−1` | `2026-04-30` | 反向 31→30 |
+
+**執行要求（缺一則此表形同虛設）**：
+
+1. 🔴 兩份測試檔（`backend/src/ojt-progress/add-months-clamped.spec.ts`、`frontend/src/pages/ojt-progress-view.test.ts` 之新增 describe）之**向量陣列逐字相同**，且各自檔頭以逐字註解指向對方路徑（比照 `org-path.ts` 檔頭之「兩份實作須同步維護」寫法）。
+2. 🔴 前端側即使**本功能不呼叫** `delta = −1`（窗口計算全在後端），仍須以⑤～⑧鎖住——否則兩份實作只有一半被比對，反向夾回可以在後端漂移而前端全綠。
+3. 🔴 兩側皆**禁止** `setMonth(...)`／`getMonth() ± 1` 之就地運算（`AC-G8` 末段），且一律以 `Date.UTC` 拆組（沿用既有 `trainingDueDate()` 之作法）。
+
+#### 🔴 被否決之「聰明」替代方案：把窗口反推成 `announcedDate` 之區間
+
+有一種看起來可以完全免除後端月份位移的作法：既然應完成日 ＝ `announcedDate + 1 月`，而窗口是 `[今日 − 1 月, 今日]`，那麼母體似乎等價於 `announcedDate ∈ [今日 − 2 月, 今日 − 1 月]`，如此後端只需比較日期字串。
+
+🔴 **此等價不成立，明文否決。** `addMonthsClamped` 因月底夾擠而**不可逆**：`2026-01-29`、`2026-01-30`、`2026-01-31` 三個不同的公告日在 `+1` 之後**同為** `2026-02-28`。反推所得之區間端點無法同時涵蓋這三者而不誤納其他日期。⇒ 每年只有月底那幾天會錯、且在乾淨語料下完全看不出來，正是本 repo 反覆記錄的那一類缺陷。**必須正向計算每一列之應完成日再做區間比對。**
+
+---
+
+### 15.3 決策 G2（`ARCH-G2`，🔴 BLOCKING）：`defaultDimension` 由端點回傳 {#ch15-g2}
+
+**裁定：採乙案——聚合端點直接回傳 `defaultDimension: 'company' | 'division' | 'department'`。`SessionUser` 一欄未加。**
+與 lead 之傾向相同；本章再補一項 lead 未提之理由。
+
+| # | 理由 | 說明 |
+|---|---|---|
+| ① | 🔴 **禁跨公司 fallback 之紀律只存在於後端。** `buildJobPositionResolver` 之「公司缺失即 `null`、明文無 fallback」住在 `backend/src/org-directory/job-position-directory.ts`；`JOB_POSITION` 亦只有後端讀得到。走甲案（`SessionUser` 加 `jobPositionCode`）等於要求前端自行解析，而前端不可能有那張對照表，只能改送 `jobPositionName`——那又把解析點與白名單比對點拆到兩個 package | 安全性紀律 |
+| ② | `defaultDimension` 是**三值列舉**，判定純函式 `defaultOrgDimension(jobPositionName)` 可在後端以人工 fixture 完整驗證；前端只消費一個字串，載點單一 | 可測性 |
+| ③ | `SessionUser` 是全站共用型別（`auth/session-token.service.ts` ＋ `api/types.ts` 兩份鏡射），且 `SessionGuard` 每請求以 DB 現行值覆寫其 PII 欄位。為一張首頁卡片擴大它的用途，漣漪面遠大於本功能 | 漣漪面 |
+| ④ | 🔵 **本章補提**：甲案還需要 `AccountRepository.findCurrentByLogin` 之投影多回一欄。該方法**每一個請求都會跑**（`SessionGuard`），且其 in-memory 測試替身（`account-repository.ts:103`）目前只回 `{status, roleCode}`。為首頁一張卡加寬全站每請求都走的那條路，是本輪最不划算的一個改動 | 本章查證所得 |
+
+**落點**：`backend/src/dashboard/default-org-dimension.ts`
+
+```
+export type OrgDimension = 'company' | 'division' | 'department';
+export function defaultOrgDimension(jobPositionName: string | null): OrgDimension;
+```
+
+**判定鏈（三段，各自可測）**：
+
+```mermaid
+sequenceDiagram
+  participant FE as DashboardHome
+  participant API as GET /admin/dashboard/analytics
+  participant JP as JOB_POSITION 對照（buildJobPositionResolver）
+  participant PF as defaultOrgDimension（純函式）
+  FE->>API: 帶 session cookie
+  API->>API: 自 sessionUser 取 companyCode 與 loginId
+  API->>JP: resolve(companyCode, ACCOUNT.jobPositionCode)
+  Note over JP: 🔴 公司缺失／查無 ⇒ null（無跨公司 fallback）
+  JP-->>API: jobPositionName 或 null
+  API->>PF: defaultOrgDimension(jobPositionName)
+  PF-->>API: company ／ division ／ department
+  API-->>FE: 回應含 defaultDimension
+  Note over FE: 兩個環圖區塊之初始頁籤皆取此值（AC-G45 各自獨立切換）
+```
+
+⚠ **取 `jobPositionCode` 之路徑**：`SessionUser` 不含它，故聚合服務須以 `sessionUser.companyCode` ＋ `loginId` 回查 `ACCOUNT.jobPositionCode`。這是**本端點自己的一次查詢**，不動 `SessionGuard`、不動 `AccountRepository` 介面（新增之窄 adapter 直讀 `ACCOUNT` 實體，比照 `dashboard-counts.ts` 之既有反循環作法）。
+
+#### `副本部長` 落在哪一層（lead 明文要求指明）
+
+- **落點**：`defaultOrgDimension` 之逐字白名單內（後端純函式），與 `董事長`／`總經理`／`本部長` 並列。
+- **比對方式**：🔴 trim 後**完整字串相等**，禁止 `includes`／`startsWith`／正則（`AC-G42`）。
+- 🔴 **其測試只能是人工 fixture 之純函式斷言**：已查證 `副本部長` 不存在於上游已記錄之 `VW_JOB_FUN` 名稱清單（正式環境四家共 75 列），全 repo grep 零命中 ⇒ 它**不會命中任何真實帳號**。
+  ⇒ **明文禁止**在測試註解、實作日誌或交付報告中宣稱該條目「在實機上被驗過」。同理適用於 `副總經理`（`AC-G42` 之 `includes` 反例）。
+- 📌 這一條與 `AC-G43` 之「禁以 `code` 直接比對」是同一件事的兩面：`B01` 於 AS／AE ＝ `本部長`、於 **AD ＝ `本處長`**；AD 沒有本部層，其 `B01` 落到 `'department'` 是**正確**的，不是將就。
+
+---
+
+### 15.4 決策 G3（`ARCH-G3`）：端點切法 {#ch15-g3}
+
+**裁定：三個端點——`/admin/dashboard/analytics`（新）、`/admin/dashboard/category-distribution`（新）、`/admin/ojt-progress/ontime-summary`（新，掛在 OJT 模組）。`/admin/dashboard/summary` 一行未改。**
+
+🔴 **明文不採 analyst 之「每個區塊一個端點」**（卡片／環圖／最新公告／類別分布各一）。該傾向之理由（`safe()` 降級紀律）成立，但它漏了一件更重要的事：
+
+> **INV-G1／INV-G2 是跨區塊之恆等式。** `AC-G6` 要求「卡③ ＝ 當月環圖各段總和」、`AC-G35` 要求「卡① ＝ 累積環圖各段總和」，且**三個維度各自成立**。若卡片與環圖來自兩個端點，就是**兩次查詢、兩個時間點、兩份快照**——一份文件在兩次請求之間被公告或改為 `inactive`，恆等式就在正式站上破掉了。而本輪之回歸鎖是以**單一語料驅動兩支純函式**，它**永遠不會紅**。
+> ⇒ 🔴 **凡被恆等式綁在一起的區塊，必須來自同一次請求、同一個 `now`、同一份投影。**
+
+**依此原則之切法**：
+
+| 端點 | 服務之區塊 | 為何獨立／為何合併 |
+|---|---|---|
+| `GET /admin/dashboard/analytics` | 卡①②③ ＋ 兩張環圖（各 3 維度）＋ 最新公告清單 ＋ `defaultDimension` | 🔒 **必須合併**：卡①③ 與環圖受 INV-G1／INV-G2 綁定；最新公告與卡片同源於同一份 `status='active'` 投影（`AC-G52` 之母體 ⊂ 卡①②之母體），合併後**零額外查詢成本** |
+| `GET /admin/dashboard/category-distribution` | 類別長條圖 | **必須獨立**（三個理由，見下） |
+| `GET /admin/ojt-progress/ontime-summary` | 卡④ | **必須獨立**：資料屬 OJT 領域、閘門為 `OJT_PROGRESS_MANAGEMENT`、且其與其餘區塊之間**沒有任何恆等式**（`AC-G9` 明訂其口徑與別處刻意不同） |
+| `GET /admin/dashboard/summary` | 無（已無畫面消費者） | 🔒 `AC-G75`：端點、5 個鍵、型別、語意、既有測試**一行未改** |
+
+**類別長條圖為何必須獨立**：
+
+1. 🔴 **`AC-G66` 要求「對 `DeptContact` 而言，本區塊之資料端點也不得被呼叫」。** 若它與卡片同一個端點，`DeptContact` 進首頁就必然呼叫到它——這個要求在合併的形狀下**無法滿足**。
+2. NFR-F044-1 #3 明訂它是最重之聚合（兩段 join ＋ DISTINCT）。獨立之後，它慢或失敗都只影響最下方一個區塊，其餘照常（`AC-G23`）。
+3. 它與其餘區塊之關係是 INV-G4／INV-G5 這兩條**刻意不等**，不存在需要同一快照才成立的恆等式。
+
+#### 為何不擴充 `GET /admin/dashboard/summary`（additive 加鍵）
+
+`AC-G75` 允許 additive 加鍵，但本章**選擇不加**，理由有三：
+
+1. 🔴 **回應形狀不同構**。`DashboardCounts` 是 5 個 `number`；F044 需要巢狀陣列（環圖切片、最新公告列）。硬塞進去會讓 `DashboardSummaryService.safe()` 之「非有限值 → 0」收斂語意對新鍵完全失效，而那道收斂正是該服務存在的理由。
+2. 🔴 **不擴充 ⇒ F044 §癸 (f) 之整個風險類別消失。** 該節警示「任何 `Object.keys(summary).length === 5` 之既有絕對值斷言都會翻紅」。本裁定之下 `DashboardCounts` 之鍵集合**一個未動**，該風險歸零。
+3. 新端點之路由前綴仍為 `/admin`（🟢 已查證 `frontend/vite.config.ts:44` 與 `frontend/nginx.conf` 皆已代理 `/admin`），⇒ **兩份代理白名單零修改**，`proxy-coverage.test.ts` 不受影響。本 repo 已三次踩過「新增路由前綴忘記同步代理 ⇒ fetch 拿到 SPA 的 `index.html`、畫面靜默壞掉」，本裁定結構性地避開它。
+
+⚠ **本裁定之可見後果**：`DashboardHome.tsx` 將**不再呼叫** `getDashboardSummary()`。端點與其 5 個鍵依 `AC-G75` 全部保留、測試全綠，但**執行期無任何消費者**。這是 `OQ-D44-03`（新卡完全取代舊卡）與 `OQ-D44-04`（既有鍵保留不動）兩項裁決並存之必然結果，不是遺漏。
+
+---
+
+### 15.5 端點契約（本章之核心交付，供 tdd-implementation 直接落地） {#ch15-contracts}
+
+```mermaid
+sequenceDiagram
+  participant U as 後台使用者
+  participant P as DashboardHome
+  participant A as GET /admin/dashboard/analytics
+  participant C as GET /admin/dashboard/category-distribution
+  participant O as GET /admin/ojt-progress/ontime-summary
+  participant V as GET /admin/dashboard/activity（既有，不動）
+  U->>P: 進入 /admin
+  par 四個區塊各自獨立載入、各自獨立降級（AC-G23）
+    P->>A: 無條件呼叫（四種後台角色皆可）
+    A-->>P: cards ／ donuts ／ latestAnnouncements ／ defaultDimension
+  and
+    P->>C: 🔴 僅當 canPerform(role, BUSINESS_CATEGORY_MANAGEMENT, read) 為真才發出
+    C-->>P: items（全量、已排序）
+  and
+    P->>O: 🔴 僅當 canViewDashboard(role) 為真才發出
+    O-->>P: numerator ／ denominator ／ rate? ／ 三個排除計數
+  and
+    P->>V: 既有呼叫，一行未改
+    V-->>P: 最近活動列
+  end
+  Note over P: 任一 promise reject ⇒ 只有該區塊顯示 empty-state，其餘照常
+```
+
+#### ① `GET /admin/dashboard/analytics`
+
+| 項目 | 值 |
+|---|---|
+| 擁有者 | `DashboardController`（既有 controller，additive 新增一個 `@Get`） |
+| Guard | `SessionGuard`（比照既有兩個 dashboard 端點） |
+| 權限鍵 | **無額外功能鍵**——`AC-G16` 明訂卡①②③ 對四種後台角色一律顯示，`AC-G47` 明訂後台不引入可見範圍過濾。前端 `AdminGuard` 已擋 `User` |
+| 查詢參數 | **無**（🔴 刻意：`today` 不得由 client 傳入，否則使用者可以自己改「今天」而使全部統計失真） |
+| 稽核 | 🔴 不寫 `AUDIT_LOG`（`AC-G72`） |
+| 快取 | 🔴 無（`AC-G73`） |
+
+```
+interface DashboardAnalytics {
+  today: string;                       // YYYY-MM-DD（UTC；= serverToday(now)）。顯示與除錯用，不作為前端之判定輸入
+  cards: {
+    announced: number;                 // 卡① 累積已公告
+    inProgress: number;                // 卡② 進度中
+    monthlyAnnounced: number;          // 卡③ 本月新版公告
+  };
+  donuts: {
+    month:      DonutDimensions;       // 當月已公告
+    cumulative: DonutDimensions;       // 累積已公告
+  };
+  defaultDimension: 'company' | 'division' | 'department';
+  latestAnnouncements: LatestAnnouncementRow[];   // 已排序、已截斷為 ≤ 10（AC-G53／AC-G54）
+}
+
+interface DonutDimensions {
+  company:    DonutSlice[];
+  division:   DonutSlice[];
+  department: DonutSlice[];
+}
+
+interface DonutSlice {
+  key: string;        // 分組鍵（見下表）。前端逐字填入 data-org-key（AC-G37）
+  label: string;      // 圖例顯示名（後端組裝，前端不拼字）
+  announced: number;  // ≥ 1（AC-G30：分段來自已公告集合）
+  inProgress: number; // ≥ 0
+}
+
+interface LatestAnnouncementRow {
+  documentId: string;
+  announcedDate: string;              // YYYY-MM-DD（UTC 拆解，AC-G56）
+  edition: string | null;             // null ⇒ 前端以既有 EDITION_NONE_TEXT 呈現
+  documentName: string;
+  displayStatus: 'announced' | 'in_progress';   // deriveDisplayStatus 之輸出（AC-G55）
+}
+```
+
+**`DonutSlice.key` 之值域（🔒 本章鎖定，交 spec-writer 回填 DOM 契約表）**：
+
+| 維度 | 一般段之 `key` | `label` |
+|---|---|---|
+| `company` | `companyCode`（如 `AS`） | `resolveCompanyShortName(companyCode)`；查無簡稱 ⇒ `companyCode` 原字串（`AC-G32`） |
+| `division` | `` `${companyCode}__${divisionOrgCode}` `` | `[公司簡稱, orgUnitDisplayName(division)].join(ORG_PATH_SEPARATOR)` |
+| `department` | `` `${companyCode}__${deptOrgCode}` `` | `[公司簡稱, orgUnitDisplayName(division), orgUnitDisplayName(dept)].join(ORG_PATH_SEPARATOR)`；無 DIVISION 祖先時本部段收合（`[ASSUMPTION] A-G1`） |
+| 兩個 sentinel 段 | `__unspecified__` ／ `__no_division__` | 逐字 `未指定` ／ `無本部`（不加公司前綴，`AC-G36` 末段） |
+
+> 🔒 sentinel 之 `key` 採雙底線包夾：`companyCode` 為 2 碼、`orgCode` 為 5 碼英數，**結構上不可能與真實鍵碰撞**。複合鍵之分隔符 `__` 逐字沿用既有 `orgGroupKeyOf()`（`frontend/src/pages/ojt-progress-view.ts`）之形式，不另立第二種。
+
+**`DonutSlice[]` 之排序（🔴 F044 全 84 條 AC 未定義，本章補上，交 spec-writer 立 AC）**：
+依 `announced` **降冪** → 同值依 `label` **序數昇冪**（`<`／`>`，🔴 禁 `localeCompare`，理由同 `AC-G64`） → 仍同值依 `key` 昇冪收尾。
+兩個 sentinel 段**參與同一排序、不強制置底**——強制置底等於在版面上把資料品質問題推到看不見的地方，與 `AC-G34`「禁止排除」之意旨相反。
+
+**Top N 合併不在本端點**：端點恆回**全量**切片。`AC-G41` 要求圖例列出全部組織，`AC-G40` 之 Top N 只保護**圖形**版面且 N 由 ui-ux-designer 裁量 ⇒ 屬前端版面參數，合併由前端純函式 `topNWithOther(slices, n)` 執行（見 [§15.9](#ch15-modules)）。
+
+#### ② `GET /admin/dashboard/category-distribution`
+
+| 項目 | 值 |
+|---|---|
+| 擁有者 | `DashboardController` |
+| Guard | `SessionGuard` ＋ **服務層** `canPerform(roleCode, FunctionKey.BUSINESS_CATEGORY_MANAGEMENT, 'read')`，不通過丟 `ForbiddenException`（比照 `appendices.service.ts:596` 之既有作法；`dashboard-activity.ts:68` 亦已在本模組內使用 `canPerform`） |
+| 權限鍵 | `BUSINESS_CATEGORY_MANAGEMENT` `read` ⇒ `DeptContact` ＝ `NONE` ⇒ **403** |
+| 查詢參數 | 無 |
+
+```
+interface CategoryDistribution {
+  today: string;
+  items: CategoryBar[];               // 已排序、🔴 全量（Top 10 截斷與展開屬前端版面，AC-G65）
+}
+interface CategoryBar {
+  categoryId: string;
+  displayName: string;                // = businessCategoryDisplayName（沿用 F043 既有組裝）
+  announced: number;
+  inProgress: number;                 // announced + inProgress > 0（零掛載者已濾除，AC-G63）
+}
+```
+
+🔴 **前端閘門與後端閘門都要有**：`AC-G66` 要求區塊不進 DOM **且**端點不被呼叫（前端閘門），但只靠前端不呼叫等於沒有授權邊界（後端閘門）。兩者缺一不可，且**兩者都必須讀矩陣、不得寫成角色清單**。
+
+#### ③ `GET /admin/ojt-progress/ontime-summary`
+
+| 項目 | 值 |
+|---|---|
+| 擁有者 | `OjtProgressController`／`OjtProgressService`（**不是** dashboard 模組） |
+| Guard | 既有 `SessionGuard` ＋ 服務層既有 `assertCanRead()`（`OJT_PROGRESS_MANAGEMENT` `read`） |
+| 查詢參數 | 無 |
+
+```
+interface OjtOnTimeSummary {
+  today: string;
+  numerator: number;                  // 窗口內全部應完成文件皆已完成之相異單位數（AC-G10）
+  denominator: number;                // 窗口內之相異 (companyCode, orgCode) 數（AC-G9）
+  rate?: number;                      // 🔒 denominator === 0 時**省略本鍵**（AC-G14，比照既有 coverage）
+  excludedInactive: number;
+  excludedOrphaned: number;
+  excludedNoAnnouncedDate: number;
+}
+```
+
+⚠ **為何 `rate` 在後端就要省略、而不是交給前端判斷**：`AC-G14` 之 `0%`／`100%`／`NaN%` 三種謊報都是「有一個數字可以渲染」才發生的。鍵不存在時 TypeScript 會逼呼叫端處理 `undefined` 分支——這是本 repo 既有 `coverage.rate` 之紀律，逐字沿用。
+
+#### ④ `GET /admin/dashboard/summary`（既有，🔒 一行未改）
+
+`DashboardCounts` 之 5 個鍵、型別、語意、`safe()` 收斂、既有測試之期望值**全部不動**（`AC-G75`）。本輪**不新增任何鍵**（理由見 [§15.4](#ch15-g3)）。
+
+---
+
+### 15.6 決策 G4（`ARCH-G4`）：OJT deep link 之參數命名與值域 {#ch15-g4}
+
+**裁定**：`/admin/ojt-progress?tab=sessions&sort=incomplete-first`
+
+| 參數 | 值域（🔒 封閉） | 語意 | 不可辨識之值 |
+|---|---|---|---|
+| `tab` | `dashboard` ／ `sessions` | 初始分頁 | 靜默忽略該參數，退回既有預設 |
+| `sort` | `incomplete-first` | 群組排序模式（deep link 專屬） | 靜默忽略該參數，退回既有次序 |
+
+**四項裁定理由**：
+
+1. **`tab` 之值域逐字取自既有 `type TabKey = 'dashboard' | 'sessions'`**（`OjtProgressPage.tsx:142`）。🔴 不另造 `tab=list`／`tab=2` 之第二套詞彙——URL 與程式碼內部型別用同一組字面，是「不可辨識之值」這件事唯一能被靜態確認的形狀。
+   ⚠ `tab=dashboard` 對 `Supervisor`／`DeptContact` 無效（`canViewDashboard` 為偽）⇒ 退回 `sessions`。這不是新規則，是既有 `useState` 初值邏輯的延續。
+2. **兩個參數各自獨立解析，🔴 刻意不採本頁既有之「恰成對」紀律**（`readSubtreeParams`／`readBcSubtreeParams`）。理由：那兩處成對，是因為 `nodeSubtreeId` 離開 `lifecycleId` **無法解析**（兩張不同的圖、id 不可互相定位）；此處 `tab` 與 `sort` **各自獨立可解釋**，硬綁成對會製造一條「只想開 TAB2 卻被整組忽略」的無聲失敗路徑。
+   📌 **可測形狀**：兩支純函式 `readTabParam(q): TabKey | null`、`readSortParam(q): 'incomplete-first' | null`，各自以封閉值域斷言（含空字串、大小寫不符、未知值三個向量）。
+3. **命名為 `sort` 而非 `sortBy`／`sortDir`**：`sortBy`／`sortDir` 是 [F017](features/F017-backend-document-list.md) 文件清單之**欄位＋方向**詞彙（值域 `documentNumber`／`announcedDate` × `asc`／`desc`，🔒 命名鎖定第 21 列）。OJT 這一個不是欄位、也沒有方向，它是一個**具名排序模式**。沿用 `sortBy` 會邀請下一個人補上 `sortDir=asc`，然後這裡就有了第三套排序詞彙。
+4. **取樣點**：🔴 於 `useState` 之**初始化函式**內取樣（`useState<TabKey>(() => readTabParam(q) ?? (mayViewDashboard ? 'dashboard' : 'sessions'))`），照抄 `DocumentListPage` 之既有紀律，否則首屏會先閃一次預設分頁。
+   🔒 既有 `gotoSessionsPending()`（同頁 React state 入口）**不移除、不改寫**（`AC-G19` 末段）。
+
+**`incomplete-first` 之作用面（🔒 客端，`AC-G20`）**：純函式 `sortGroupsIncompleteFirst(groups: OjtRowGroup[]): OjtRowGroup[]`，輸入輸出皆為既有 `OjtRowGroup[]`，**元素恆等、僅順序改變**。段內維持既有 `orgName` 昇冪（既有 `groupRowsByOrg` 已依 `key` 排序，其上游列已由後端依 `orgName` 排序）。
+🔒 `GET /admin/ojt-progress/rows` 之回應形狀與其伺服端排序（`orgName.localeCompare` → `documentNumber.localeCompare`）**一格不動**，`ojt-progress.rows.spec.ts` 期望值不得修改（`AC-G79`）。
+
+---
+
+### 15.7 決策 G5（`ARCH-G5`）：本部上溯——應用層每公司索引 ＋ 純函式 {#ch15-g5}
+
+**裁定：在服務層以「每公司建一次 `orgCode → OrgUnit` 索引」＋ 純函式沿 `parentCode` 上溯。🔴 明文否決遞迴 CTE，🔴 明文否決 `codePrefix` LIKE。**
+
+| 候選 | 裁定 | 理由 |
+|---|---|---|
+| 遞迴 CTE 下推 SQL | 🔴 **否決** | ① 本輪**沒有整合測試** ⇒ 整段上溯（含 `無本部` 之判定、跨公司防護、循環守衛）一條測試都碰不到；而 F044 §癸 (b) 正把它列為五個必須具鑑別力的語料之一。② MSSQL 遞迴 CTE 之 `MAXRECURSION` 與 collation 行為在本輪無從驗證。 |
+| `codePrefix` 之 `LIKE 'prefix%'` | 🔴 **否決** | **方向相反**。`isWithinSubtree()`／`codePrefix` 回答的是「X 是否在 Y 的**子樹**內」（往下），本題是「X 的最近 DIVISION **祖先**是誰」（往上）。用 LIKE 做上溯必須反過來枚舉候選前綴，那其實就是本裁定的純字串推導，卻多繞一次 DB。 |
+| 預先展開對照表（新欄／新表） | 🔴 **否決** | `AC-G74` 明文禁止新增欄位與 migration；且展開表需要同步維護，是一個全新的漂移面。 |
+| **應用層每公司索引 ＋ 純函式上溯** | ✅ **採用** | 見下。 |
+
+**採用理由**：
+
+1. 🔴 **可測性**：上溯成為零 IO 之純函式 `divisionOf(byCode, orgCode)`，本輪之 jest 可以完整鎖住 §癸 (b) 之四種語料（正常路徑／無 DIVISION 祖先／`draftingDeptId` 為 null／跨公司同碼）。
+2. **既有先例**：`TypeOrmOjtOrgDirectory` 已是「整表載入 ＋ **每公司分群** ＋ 60 秒 TTL」，且其檔頭逐字記載 2026-09-01 那次「鍵少了 `companyCode` ⇒ 同碼不同公司互相覆蓋、42 個重複 `orgCode`、畫面顯示他公司部門」的真實缺陷。本功能直接沿用同一形狀。
+3. **成本**：`ORG_UNIT` 為有界集合（四家合計數百列），一次全表投影遠低於逐筆回查；滿足 NFR-F044-1 #4「不得逐筆回查 DB」。
+
+**演算法（🔒 純函式，`backend/src/dashboard/division-resolver.ts`）**：
+
+```
+// byCode 為**單一公司**之索引（Map<orgCode, OrgUnit>）——呼叫端須先依 companyCode 分群
+function divisionOf(byCode, orgCode): OrgUnit | null {
+  const seen = new Set<string>();          // 🔴 循環守衛，比照 orgAncestorPathLabel 之既有作法
+  let cur = byCode.get(orgCode);
+  while (cur && !seen.has(cur.orgCode)) {
+    if (cur.tier === 'DIVISION') return cur;
+    seen.add(cur.orgCode);
+    cur = cur.parentCode ? byCode.get(cur.parentCode) : undefined;
+  }
+  return null;                              // ⇒ 落 `無本部` 段
+}
+```
+
+🔴 **跨公司防護是結構性的，不是紀律性的**：`divisionOf` 之 `byCode` 參數只含**一家公司**之列，因此「以他公司之同碼單位解析本公司文件」在型別與資料結構上**不可能發生**。⚠ **明文禁止**把索引攤平成單一 `Map<orgCode, OrgUnit>` 再「小心地只查本公司」——本 repo 2026-09-01 與 2026-09-07 兩次都是這樣壞的。
+
+#### ⚠ 對 F044 §癸 (b)② 之更正（本章查證所得，須轉知 test-generator）
+
+F044 §癸 (b)② 把「無 `DIVISION` 祖先之部」描述為「直掛 ROOT 或組織樹結構特殊」。🔴 **這個描述會讓語料造不出來。**
+
+已查證 `backend/src/org-sync/org-hierarchy.ts`：`parentCode` 由代碼前綴**機械推導**（`deriveParentCode`：`AN000` → `A0000`），而 `deriveTier` 對 `X0000` 形狀**恆**判為 `DIVISION`。⇒ 任一 `DEPARTMENT`／`SECTION` 之上溯鏈**必然**經過一個 `X0000`。
+
+⇒ **`無本部` 只有一種成因：該公司之 `X0000` 列在 `ORG_UNIT` 中不存在**（上游 `VW_DEPT_SQL` 未提供該本部層列，或該列因 `isActive` 以外之原因未落地）。語料必須以「**缺少 `A0000` 那一列**」來構造，而不是以「奇怪的樹形」構造。⚠ 若語料照字面造成「直掛 ROOT」（`parentCode = '00000'`），那在真實資料裡不可能出現，該條 AC 仍將是恆真。
+
+📌 附帶結論：上溯深度由代碼結構決定，**最多 4 跳**（`SUBSECTION` → `SECTION` → `DEPARTMENT` → `DIVISION`），循環守衛在正常資料下永不觸發——它是對「有人手改過 `parentCode`」的防禦，`AC-G33` 要求保留是對的。
+
+---
+
+### 15.8 決策 G6（`ARCH-G6`）：排除註記**不共用** `exclusionNote()` {#ch15-g6}
+
+**裁定：不共用整支 `exclusionNote()`。** 新增同檔之姊妹純函式 `ojtOnTimeNote(...)`；共用點僅限 `coveragePercent()` 與 `NO_STATISTICS_TEXT` 兩個既有符號。
+
+**查證所得（與 F044 §壬 之 🔵 建議相反）**：既有 `exclusionNote(numerator, denominator, inactiveCount, orphanedCount)` 住在 `frontend/src/pages/ojt-progress-view.ts:199-221`，其輸出由**三段**組成，而三段**沒有一段**能原封不動用在卡④：
+
+| 段 | F042 TAB1 之現值 | F044 卡④ 之需求（`AC-G13`／`AC-G15`） | 可否共用 |
+|---|---|---|---|
+| 頭 | `覆蓋率為 {n} / {d}（{p}%）` | 🔒 `已完成 {X} / 應完成 {Y}（{Z}%）`（逐字鎖定） | ❌ 不同 |
+| 排除列舉 | 兩個原因 | **三個**原因（多 `無公告日期`） | ❌ 不同 |
+| 尾句 | 「裁撤單位仍可新增場次；已移出者不可…」 | `AC-G15`③ 之「被排除者於 `OJT 資料清單` 分頁仍可能呈現…」 | ❌ 不同 |
+
+⇒ 「共用並擴充」在實作上等於把頭、列舉、尾句**三者都變成參數**，共用的只剩一個 `join`——而代價是 F042 TAB1 與 F044 卡④ 的文案從此綁在同一支函式上，任一邊調整措辭都會靜默改寫另一邊。🔴 **這正是 NFR-F044-3 #4 要防的事**：兩個口徑不同的數字（分母＝進度列 vs 分母＝單位）必須在畫面上可分辨，而「標籤不同」是唯一的分辨手段。把它們塞進同一個文案產生器，是往反方向走。
+
+**執行要求（`AC-G15` 之 fallback 條款已預留）**：
+
+1. 🔒 `exclusionNote()` **一行未改**，其既有測試全數綠燈且期望值未修改。
+2. 新增 `ojtOnTimeNote(stats: OjtOnTimeSummary): string` 於**同一個檔案**（`frontend/src/pages/ojt-progress-view.ts`），緊鄰 `exclusionNote()`，並以逐字註解互相指向——「兩支刻意不合流」之理由必須寫在程式碼裡，否則下一個人會把它們合併。
+3. 🔴 其輸出以**固定向量表**鎖住，至少含四列：`denominator = 0`（空狀態）／三種排除皆為 0／三種排除皆 > 0／只有 `excludedNoAnnouncedDate` > 0。
+4. 🔒 百分比一律委派既有 `coveragePercent()`（`AC-G13` 明文），🔴 禁止另打一份 `Math.round`。
+5. 卡④ 之**數值節點**（`data-testid="ojt-ontime-value"`）與**註記節點**（`ojt-ontime-exclusion-note`）為兩個節點，`AC-G13` 之逐字句只鎖前者；`ojtOnTimeNote` 產生後者。
+
+---
+
+### 15.9 模組結構、檔案清單與前後端職責切分 {#ch15-modules}
+
+```mermaid
+graph TD
+  subgraph FE["frontend（vitest）"]
+    DH["DashboardHome.tsx<br/>（移除快速進入區；4 卡＋2 環＋清單＋長條）"]
+    DAV["pages/dashboard-analytics-view.ts<br/>topNWithOther ／ donutSegments ／ barWidths"]
+    OPV["pages/ojt-progress-view.ts（既有）<br/>＋addMonthsClamped ＋ojtOnTimeNote<br/>＋sortGroupsIncompleteFirst ＋readTabParam/readSortParam"]
+    OPP["OjtProgressPage.tsx<br/>＋useSearchParams"]
+    DLP["DocumentListPage.tsx<br/>＋readSortParams"]
+    FM["domain/function-matrix.ts（既有，一行未改）"]
+    EP["api/endpoints.ts ＋ api/types.ts"]
+  end
+  subgraph BE["backend（jest）"]
+    DC["dashboard.controller.ts（＋2 個 @Get）"]
+    DAS["dashboard-analytics.service.ts<br/>（編排，無 IO）"]
+    DAP["dashboard-analytics.ts（純）<br/>cards ／ donutSlices ／ latestAnnouncements"]
+    CAT["category-distribution.ts（純）"]
+    DIV["division-resolver.ts（純）"]
+    DOD["default-org-dimension.ts（純）"]
+    SRC["dashboard-analytics.sources.ts<br/>（TypeORM 唯讀 provider）"]
+    OJC["ojt-progress.controller.ts（＋1 個 @Get）"]
+    OJS["ojt-progress.service.ts<br/>＋getOnTimeUnitStats（重用既有 aggregate）"]
+    OJO["ojt-ontime.ts（純）＋add-months-clamped.ts（純）"]
+    DS["documents/display-status.ts（既有，一行未改）"]
+    OP["org-directory/org-path.ts ／ company-name.ts ／<br/>job-position-directory.ts（既有，一行未改）"]
+  end
+  DH --> DAV
+  DH --> OPV
+  DH --> FM
+  DH --> EP
+  EP -.HTTP.-> DC
+  EP -.HTTP.-> OJC
+  DC --> DAS --> DAP
+  DAS --> CAT
+  DAS --> DOD
+  DAP --> DIV --> OP
+  DAP --> DS
+  CAT --> DS
+  DAS --> SRC
+  OJC --> OJS --> OJO
+  OJO --> DS
+  OPP --> OPV
+  DLP --> FM
+  style DAP fill:#e6fffa,stroke:#2c7a7b
+  style CAT fill:#e6fffa,stroke:#2c7a7b
+  style DIV fill:#e6fffa,stroke:#2c7a7b
+  style DOD fill:#e6fffa,stroke:#2c7a7b
+  style OJO fill:#e6fffa,stroke:#2c7a7b
+  style DAV fill:#e6fffa,stroke:#2c7a7b
+```
+
+> 🟢 綠色＝**零 IO 之純函式檔**，本輪之全部鑑別力集中於此。
+> 🔒 **模組相依方向零變更**：`DashboardModule` 依既有紀律**不 import 任何功能模組**，以自建之窄 adapter（`dashboard-analytics.sources.ts`）直讀實體，比照 `dashboard-counts.ts`／`dashboard-activity.sources.ts`。卡④ 走 OJT 自己的端點，故 `DashboardModule` **不需要** import `OjtProgressModule` ⇒ **不新增任何模組、不新增任何模組間相依**。
+
+#### 新增檔案
+
+| 側 | 檔案 | 內容 |
+|---|---|---|
+| BE | `dashboard/dashboard-analytics.service.ts` | 編排；每個子聚合各自 try/catch（見下） |
+| BE | `dashboard/dashboard-analytics.sources.ts` | 4 個唯讀 provider（文件投影／ORG_UNIT 全表／`ACCOUNT.jobPositionCode`／`JOB_POSITION` 全表） |
+| BE | `dashboard/dashboard-analytics.ts` | 🟢 `countCards` ／ `monthWindow` ／ `donutSlices` ／ `latestAnnouncements` |
+| BE | `dashboard/division-resolver.ts` | 🟢 `divisionOf` ＋ 三個維度之 `label` 組裝 |
+| BE | `dashboard/default-org-dimension.ts` | 🟢 `defaultOrgDimension` |
+| BE | `dashboard/category-distribution.ts` | 🟢 `categoryDistribution(pairs, today)` |
+| BE | `dashboard/category-distribution.source.ts` | 一次 join ＋ DISTINCT 之唯讀查詢（🔴 禁 N+1） |
+| BE | `ojt-progress/add-months-clamped.ts` | 🟢 孿生實作（見 §15.2） |
+| BE | `ojt-progress/ojt-ontime.ts` | 🟢 `ojtOnTimeRate(rows, today)` |
+| FE | `pages/dashboard-analytics-view.ts` | 🟢 `topNWithOther` ／ `donutSegments` ／ `barWidths` ／ 圖例文字組裝 |
+
+#### 修改既有檔案（全部為 additive）
+
+| 側 | 檔案 | 改動 | 回歸鎖 |
+|---|---|---|---|
+| BE | `dashboard/dashboard.controller.ts` | ＋2 個 `@Get`；建構子 ＋1 個注入 | 既有 2 個路由一行未改 |
+| BE | `dashboard/dashboard.module.ts` | ＋2 個 `useFactory` provider | 既有 2 個 provider 一行未改 |
+| BE | `ojt-progress/ojt-progress.controller.ts` | ＋1 個 `@Get('admin/ojt-progress/ontime-summary')` | 既有 8 個路由一行未改 |
+| BE | `ojt-progress/ojt-progress.service.ts` | ＋1 個公開方法；`aggregate()` 由 `private` 改為可被該方法呼叫（本就是同一個 class，**簽章不變**） | `AC-G79`／`AC-G81`；`getSummary`／`listRows` 一行未改 |
+| FE | `pages/DashboardHome.tsx` | 移除 `快速進入功能區`（標題＋`CARD_DESC`＋`visibleMenu`／`accessLabelFor` 之 import）＋舊 5 張 KPI 卡；新增 4 個區塊 | `AC-G22` 最近活動一字不動 |
+| FE | `pages/ojt-progress-view.ts` | ＋`addMonthsClamped`（`trainingDueDate` 改委派）、`ojtOnTimeNote`、`sortGroupsIncompleteFirst`、`readTabParam`／`readSortParam` | `AC-G80`：`canViewDashboard`／`coveragePercent`／`exclusionNote`／`EDITION_NONE_TEXT` **一行未改** |
+| FE | `pages/OjtProgressPage.tsx` | ＋`useSearchParams`；`tab` 之 `useState` 改為初始化函式取樣 | `AC-G21`：未帶參數時逐格相同；`gotoSessionsPending()` 不動 |
+| FE | `pages/DocumentListPage.tsx` | ＋`readSortParams`（`sortBy`／`sortDir` 之 `useState` 改初始化函式取樣） | `AC-G82`：16 欄／14 項篩選／CSV 15 欄不動 |
+| FE | `api/endpoints.ts`／`api/types.ts` | ＋3 個函式與其鏡射型別 | 既有 `getDashboardSummary` 保留（`AC-G75`），僅 `DashboardHome` 不再呼叫 |
+
+📌 `DashboardHome.tsx` 直接自 `pages/ojt-progress-view.ts` import `canViewDashboard`／`coveragePercent` 等符號——🟢 **已查證該檔已被 `frontend/src/api/types.ts` 跨層 import**，故此為既有慣例，**不另做搬家＋re-export**（搬家買到的是整潔，付出的是在零漣漪鎖最密集的一輪動一個被 5 個檔案 import 的模組）。
+
+#### 前後端職責切分（🔒 一格一責，不得兩邊各算一份）
+
+| 職責 | 落點 | 依據 |
+|---|---|---|
+| `已公告`／`進度中` 之判定 | **後端** `deriveDisplayStatus` | INV-G7／`AC-G70` |
+| 「當月」窗口、「近 1 個月」窗口、`±1 個月` | **後端** | `AC-G5`／`AC-G7`／`AC-G69` |
+| 分組鍵與組織標籤組裝 | **後端** | `AC-G36`；⚠ `orgUnitDisplayName` 前後端**皆有**孿生，但 `ORG_UNIT` 索引只在後端，把整棵組織樹送到瀏覽器只為組一個標籤不合理 |
+| 本部上溯 | **後端** | `AC-G33`／§15.7 |
+| 最新公告之排序與截斷 10 筆 | **後端** | `AC-G53`／`AC-G54` |
+| 類別去重、分色、排序、濾除零掛載與停用類別 | **後端** | `AC-G61`～`AC-G64` |
+| 卡④ 之分子／分母／三個排除計數 | **後端** | §15.2 |
+| `defaultDimension` | **後端** | §15.3 |
+| Top N 合併為 `其他` 段 | **前端** | N 為版面參數（`AC-G40` 交 ui-ux-designer），且 `AC-G41` 要求圖例仍列全量 |
+| 環之弧長（`donutSegments`）、長條寬度（`barWidths`） | **前端** | `AC-G49`／`AC-G67` |
+| 百分比字串、排除註記句 | **前端** | `AC-G13`／`AC-G15`；`coveragePercent` 既有於前端 |
+| 可見性閘門（`canPerform`／`canViewDashboard`） | **前端 ＋ 後端各一道** | 前端決定進不進 DOM／發不發請求，後端決定授權（`AC-G18`／`AC-G58`／`AC-G66`） |
+| 頁籤切換、展開全部類別 | **前端**（不持久化） | `AC-G44`／`AC-G65` |
+
+#### 🔴 降級語意：省略鍵，不得降為 `0`
+
+`AC-G23` 允許降級顯示 `0`（沿用 `safe()`）。**本章對新端點裁定更嚴的形狀**：
+
+> `dashboard-analytics.service.ts` 對 `cards`／`donuts`／`latestAnnouncements` **各自** try/catch；任一失敗 ⇒ **省略該鍵**（`undefined`），前端據以呈現 `data-testid="empty-state"`。
+> 🔴 **明文禁止降級為 `0` 或空陣列。** 理由：INV-G1／INV-G2 要求「卡③ ＝ 環圖各段總和」。若環圖降級為空陣列（總和 0）而卡片仍是真實數字，畫面上就會出現一組**對不起來的數字**，而且看起來完全像一個計算錯誤——那正是 `AC-G6` 整條 AC 想要防止的形狀。省略鍵 ＋ 空狀態，使「算不出來」與「真的是 0」在畫面上可分辨。
+> ⚠ `/admin/dashboard/summary` 之既有 `safe()` → `0` 語意**不變**（`AC-G75`）；兩者不同是刻意的，因為那 5 個鍵之間沒有恆等式。
+
+---
+
+### 15.10 單元測試盲區（🔴 本輪機器不可驗證、須人工實機覆核） {#ch15-blindspots}
+
+> 比照 §10.15／§11.11／§12.4／§13.5／§14.10 之格式。🔴 **本輪沒有整合測試、沒有 e2e、沒有效能閘門**，故本表比歷次都長——這是簡化環的直接代價，不是本功能的缺陷。
+
+| # | 盲區 | 為何測不到 | 覆核方式（部署後） |
+|---|---|---|---|
+| 1 | `category-distribution.source.ts` 之 join ＋ `DISTINCT (businessCategoryId, documentId)` 是否正確 | 本輪無整合測試；純函式層只驗「給定 pairs → 正確分布」，不驗 pairs 本身是否來自正確的 join | 於實機任取一個類別，比對首頁長條圖之（已公告＋進度中）**≤** 類別池清單同一列之掛載文件數（INV-G5），並抽一個掛 `inactive` 文件之類別確認取到嚴格小於 |
+| 2 | 文件投影查詢（`status='active'` 之 6 欄）是否漏欄／漏列 | 同上 | 比對卡① 與 `/admin/documents` 不套篩選之已公告計數（`AC-G47` 之回歸鎖，實機版） |
+| 3 | `ORG_UNIT` 全表載入與**每公司分群**索引 | 同上；純函式收到的已經是分好群的 Map | 🔴 **最高優先**：實機確認 `依制定本部`／`依制定部門` 兩個維度下，同一個 5 碼代碼在不同公司底下顯示的是**各自公司**的名稱（dev 實測四家間有 42 個重複 `orgCode`） |
+| 4 | `ACCOUNT.jobPositionCode` 之回查與 `JOB_POSITION` 解析 | 同上 | 以不同職位之帳號各登入一次，確認預設頁籤；🔴 特別確認 **AD 公司之 `B01`（本處長）落在 `依制定部門`**，而非 `依制定本部` |
+| 5 | 🔴 `pendingPublish` 之 SQL 與 `deriveDisplayStatus` 是否**真的**等價 | `AC-G3` 之回歸鎖在本輪由 **fake provider** 驅動 ⇒ 它比較的是兩支 JS，從未比較真實 SQL | 實機比對 `GET /admin/dashboard/summary` 之 `pendingPublish` 與首頁卡② 之數字；🔴 建議在**公告日恰為今日**的文件存在時做這個比對 |
+| 6 | NFR-F044-1 之 P95 ≤ 2 秒（`OQ-D44-33`） | 簡化環無效能閘門 | 實機以正式站資料量量測三個端點；🔴 若不達標，依 `AC-G73` **由 system-architect 另行決定策略**，不得由實作者自行加快取 |
+| 7 | 環之弧長／長條寬度是否與數字成比例（`OQ-D44-34`） | 無視覺回歸；純函式只驗幾何計算之輸出，不驗它有沒有被接到 `<svg>` 上 | 實機目視：任取一段明顯較大的組織，確認其弧長明顯較大 |
+| 8 | `副本部長`／`副總經理` 之白名單條目 | 🔴 **真實語料中無載體**（上游 75 列職位名皆不含此二值） | ❌ **無法覆核，且不得宣稱已覆核** |
+| 9 | 新端點之 HTTP 層（Guard 順序、403 之實際狀態碼、JSON 而非 SPA `index.html`） | 單元測試只驗服務層 | 🔴 以 `DeptContact` 登入後在瀏覽器 DevTools 確認 `category-distribution` **根本沒有被發出**；再以 curl 直打該端點確認回 403 |
+| 10 | `DashboardHome` 不再呼叫 `/admin/dashboard/summary` 之後果 | 移除呼叫不會使任何測試翻紅 | 實機確認首頁無殘留 loading、無 console error，且 `/admin/dashboard/summary` 直打仍回 5 個鍵 |
+| 11 | 部門維度在正式站之實際段數（可達 40+）與圖例可捲動性 | 語料規模不同 | 實機目視三個頁籤，確認 `其他` 段存在且圖例可捲到底 |
+| 12 | 月界行為（每月 1 日 UTC 00:00 起卡③ 歸零、環圖 `當月已公告` 空狀態） | 凍結時鐘之單元測試可驗邏輯，但無法驗「使用者在台北時間 08:00 前看到的是上個月」 | 🔴 `AC-G69` 已明文接受此代價；覆核時**只需確認沒有人順手改成 Asia/Taipei** |
+
+---
+
+### 15.11 被否決之替代方案（彙整） {#ch15-rejected}
+
+| # | 替代方案 | 否決理由 |
+|---|---|---|
+| ① | 卡④ 聚合落前端（載全量進度列後在瀏覽器算） | `excludedOrphaned` 在前端**結構上算不出來**（`AC-G15` 無法滿足）；且重演 F042 才剛節流掉的全池載入 |
+| ② | 把窗口反推成 `announcedDate ∈ [今日−2月, 今日−1月]` 以免除後端月份位移 | `addMonthsClamped` 因月底夾擠而**不可逆**（1/29、1/30、1/31 皆映射到 2/28），等價不成立 |
+| ③ | `SessionUser` additive 新增 `jobPositionCode`／`jobPositionName` | 會在前端長出第二條職位解析路徑（`OQ-D44-20` 明文要防）；且須加寬全站每請求都走的 `findCurrentByLogin` |
+| ④ | 另立 `/admin/dashboard/preferences` 端點 | `AC-G44` 明訂**不記憶** ⇒ 沒有偏好可存；為一個三值列舉多一次往返 |
+| ⑤ | 每個區塊一個端點（analyst 傾向） | INV-G1／INV-G2 是**跨區塊恆等式**，分端點＝兩份快照，恆等式可在正式站破掉而測試永遠不紅 |
+| ⑥ | 全部區塊一個端點 | `AC-G66` 要求 `DeptContact` **不得呼叫**類別分布之端點，合併形狀下無法滿足；且最重之聚合會拖慢整張卡片列 |
+| ⑦ | additive 擴充 `GET /admin/dashboard/summary` | 回應形狀不同構（巢狀 vs 5 個 `number`），`safe()` 收斂語意對新鍵失效；且會引爆 §癸 (f) 之「`Object.keys().length === 5`」絕對值鎖風險 |
+| ⑧ | 本部上溯以遞迴 CTE 下推 SQL | 本輪無整合測試 ⇒ 鑑別力最高的那段邏輯一條測試都碰不到 |
+| ⑨ | 本部上溯以 `codePrefix` LIKE | 方向相反（`codePrefix` 是**子樹**比對，本題是**祖先**查找） |
+| ⑩ | 新增 `draftingDivisionId` 冗餘欄或預先展開對照表 | `AC-G74` 明文禁止；且展開表需同步維護，是新的漂移面 |
+| ⑪ | 共用並擴充 `exclusionNote()` | 頭、排除列舉、尾句三段皆不同 ⇒ 共用的只剩一個 `join`，代價是兩處文案從此互相綁死 |
+| ⑫ | 新端點降級為 `0`／空陣列 | 會讓 INV-G1／INV-G2 在畫面上呈現為「對不起來的數字」，與真正的計算錯誤無從分辨 |
+| ⑬ | 在 `DashboardModule` 自建 OJT 讀取 provider | 會讓「孤兒＝不在集合內」「完成＝版次相符之場次存在」兩條不變式各存在兩份 |
+| ⑭ | 把 `canViewDashboard` 等符號搬到 `frontend/src/domain/` 再 re-export | 該檔已被 5 個檔案 import；在零漣漪鎖最密集的一輪動它，買到的只是整潔 |
+
+---
+
+### 15.12 與既有 AC 之牴觸、零漣漪確認與交回之事項 {#ch15-handback}
+
+#### 一、🔴 與既有 AC 之牴觸（**本章不自行修改 AC**，交 spec-writer）
+
+| # | AC | 牴觸內容 | 本章之裁定與理由 |
+|---|---|---|---|
+| **A** | 🔴 `AC-G3` 第 2 句「其值**必須來自該同一個 provider**」 vs `AC-G70`／INV-G7「卡片…之判定皆來自 `deriveDisplayStatus`」 | 卡② 不可能同時「來自 `pendingPublish()` 這支 SQL COUNT」與「來自 `deriveDisplayStatus` 這支純函式」。且 `AC-G2` 明文禁止「以 `status='active' AND announcedDate <= @today` 之裸 SQL 另表達一次該語意」——而 `pendingPublish` 正是該語意的 SQL 形式 | **裁定：卡② 由 `deriveDisplayStatus` 之同一次分類取得**（與卡①③ 同一份投影、同一個 `now`）。`pendingPublish` 與 `/admin/dashboard/summary` 一行未改，並由 `AC-G3` 第 3 句之回歸鎖把兩者釘在一起。<br/>📌 **關鍵論據**：`AC-G3` 第 3 句自己要求「一條斷言同時取兩者比較」——**若卡② 字面上就是 `pendingPublish()` 的回傳值，這條斷言會退化成 `x === x`，恆真、零鑑別力**，正是 F044 §癸 通篇在防的形狀。⇒ 第 2 句之正確意旨應為「不得新增第二份**實作**」，而非「必須讀取那支 provider 的回傳值」。<br/>**建議措辭**：把第 2 句改為「進度中之判定**僅存在一份實作**（`deriveDisplayStatus`）；既有 `pendingPublish` provider 保留不動，並以第 3 句之回歸鎖確保兩者恆等」 |
+| **B** | `AC-G23`「顯示 `empty-state`，**或沿用既有 `safe()` 之 `0`**」 | 對新端點而言，降級為 `0` 會使 INV-G1／INV-G2 在畫面上呈現為對不起來的數字 | **裁定：新端點一律「省略鍵 ＋ 前端空狀態」，禁止降為 `0`**（§15.9 末）。`/admin/dashboard/summary` 之既有 `safe()` → `0` 不變。<br/>**建議措辭**：把「或沿用既有 `safe()` 之 `0`」限定為「僅適用於既有 `/admin/dashboard/summary`」 |
+| **C** | `AC-G75`「新鍵一律 additive，置於既有 5 鍵之後」 | 本章裁定**不新增任何鍵**（改走新端點） | 不構成實質牴觸，但該句會誤導下游以為必須加鍵。**建議措辭**：「本輪不新增任何鍵；日後若需 additive 擴充，一律置於既有 5 鍵之後」 |
+| **D** | F044 §癸 (b)② 之語料描述「直掛 ROOT 或組織樹結構特殊」 | 🔴 **事實更正**：`parentCode` 由代碼前綴機械推導、`deriveTier` 對 `X0000` 恆判為 `DIVISION` ⇒ `無本部` 之**唯一**成因是「該公司之 `X0000` 列不存在於 `ORG_UNIT`」。照字面造語料會造出真實資料裡不可能出現的形狀，該條 AC 仍將恆真 | **建議改寫**為「語料須含一個部，其對應之本部層列（`X0000`）**不存在於 `ORG_UNIT`**」（§15.7 末） |
+
+#### 二、須新增／回填之 AC（本章產生，spec-writer 執行）
+
+| # | 事項 | 落點建議 |
+|---|---|---|
+| ① | 🔴 **`DonutSlice[]` 之排序規則未被任何 AC 定義**：本章裁定為 `announced` 降冪 → `label` 序數昇冪 → `key` 昇冪；sentinel 段參與同一排序、不強制置底 | 新增一條 AC（形狀比照 `AC-G64`），或併入 `AC-G40` |
+| ② | `data-org-key` 之 sentinel 值 `__unspecified__`／`__no_division__` 須進 🔒 DOM 契約表 | [§子 DOM 契約](features/F044-admin-dashboard-analytics.md#dom-contract) 圖例列那一格 |
+| ③ | 命名鎖定第 20 列（deep link 參數）由 🔵 建議升為 🔒 鎖定：`tab=sessions`／`sort=incomplete-first`，且**兩參數各自獨立解析**（非成對） | [§命名鎖定](features/F044-admin-dashboard-analytics.md#naming-lock) ＋ `AC-G19` |
+| ④ | `AC-G15` 之 fallback 條款生效（本章裁定不共用 `exclusionNote()`）⇒ 該條之 🔵 建議句應改為裁定結果，並要求 `ojtOnTimeNote` 以固定向量鎖住 | `AC-G15` |
+| ⑤ | `AC-G8` 之 8 列向量表已由本章逐列確認並鎖定；請把「兩份測試檔逐列引用同一張表、且各自檔頭互指」寫成 AC 之可驗條款 | `AC-G8` |
+| ⑥ | `rate` 鍵在 `denominator === 0` 時**由後端省略**（而非前端判斷）——`AC-G14` 目前未指明省略發生在哪一層 | `AC-G14` |
+
+#### 三、零漣漪確認
+
+| 保護對象 | 是否觸及 | 說明 |
+|---|---|---|
+| `DashboardCounts` 5 個鍵／`dashboard-summary.service.ts`／`dashboard-counts.ts` | ❌ 未動 | 本章不加鍵、不改實作（`AC-G75`）；§癸 (f) 之絕對值鎖風險歸零 |
+| `deriveDisplayStatus`／`DISPLAY_LABEL` | ❌ 未動 | 唯讀重用（INV-G7） |
+| `org-path.ts`／`company-name.ts`／`job-position-directory.ts` | ❌ 未動 | 唯讀重用（`AC-G36`／`AC-G43`） |
+| `FUNCTION_MATRIX`／`FunctionKey`（恰 15 鍵） | ❌ 未動 | 不新增功能列（`AC-G77`） |
+| `MENU`／`visibleMenu()`／`accessLabelFor()` | ❌ 未動 | 僅 `DashboardHome.tsx` 移除其 **import**，函式本身一行未改（`AC-G76`／`AC-G78`） |
+| `canViewDashboard`／`coveragePercent`／`exclusionNote`／`EDITION_NONE_TEXT` | ❌ 未動 | 唯讀重用（`AC-G80`） |
+| `GET /admin/ojt-progress/rows` 與其伺服端排序 | ❌ 未動 | 新增之 `ontime-summary` 為並列之新方法（`AC-G79`） |
+| `OjtProgressService.getSummary()`／`listRows()` | ❌ 未動 | 新方法重用既有 `private aggregate()`，不改其行為 |
+| `ICSOP_DOCUMENT`／`ORG_UNIT`／`BUSINESS_CATEGORY_*` 之欄位與 migration | ❌ 未動 | 🔒 **本功能零 migration**（`AC-G74`）；`backend/src/database/migrations/` 檔案數與內容完全相同 |
+| `frontend/package.json` dependencies／devDependencies | ❌ 未動 | 自繪 SVG（`AC-G48`／`AC-G83`） |
+| `frontend/vite.config.ts`／`frontend/nginx.conf` 代理白名單 | ❌ 未動 | 三個新端點皆在既有 `/admin` 前綴下 ⇒ `proxy-coverage.test.ts` 不受影響 |
+| `AUDIT_LOG`／`targetType`／`actionType` | ❌ 未動 | 不寫稽核（`AC-G72`） |
+| 模組相依圖 | ❌ 未動 | **不新增模組、不新增模組間 import**（對照 §14 F043 新增一個模組） |
+
+#### 四、交回 lead
+
+| # | 事項 |
+|---|---|
+| ① | 🔴 **牴觸 A（`AC-G3` vs `AC-G70`）為 BLOCKING 級的措辭問題**：兩種讀法會導出兩套測試。請裁示是否採本章之解讀並轉知 spec-writer 改寫。若 lead 堅持字面（卡② 直接讀 `pendingPublish()`），本章之替代路徑為「把 `pendingPublish` 改為委派共用投影 ＋ `deriveDisplayStatus`」——但那會讓 `/admin/dashboard/summary` 為了一個鍵而載入全量文件，且觸及 `AC-G75` 保護的檔案。 |
+| ② | §15.10 共 **12 項**盲區，其中 #1～#5、#9 為**原理上本輪測不到**（無整合測試）。🔴 建議把它們併入部署 smoke 清單，並在實作日誌中逐項登記覆核結果——本 repo 已三次發生「migration 跑了但寫入路徑沒接線／少數功能 500」這類只有實機才看得到的缺陷。 |
+| ③ | 🔴 **#8（`副本部長`／`副總經理`）永遠無法實機覆核**。交付報告中請勿把它列為「已驗證」。 |
+| ④ | 本章之裁定使 `GET /admin/dashboard/summary` 成為**無執行期消費者**之端點（`AC-G75` 明令保留）。建議另立一個追蹤項（非本輪），待 `OQ-D44-04` 之保留理由失效時再清理。 |
+| ⑤ | ui-ux-designer 尚須回填三項：環圖 Top N 之 N（`[ASSUMPTION] A-G6`）、兩區塊頁籤是否連動（`A-G2`）、兩處建議文案（`A-G4`／`A-G5`）。本章之端點契約對三者皆為中立（端點恆回全量、`defaultDimension` 只回一個值），**不需因其裁量而改動後端**。 |
 
 ---
