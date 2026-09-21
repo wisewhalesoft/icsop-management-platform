@@ -74,6 +74,13 @@ export interface DashboardAnalytics {
   defaultDimension?: OrgDimension;
   /** 已排序、已截斷為 ≤ 10（`AC-G53`／`AC-G54`）。 */
   latestAnnouncements?: LatestAnnouncementRow[];
+  /**
+   * 🔒 `AC-G96`（additive）：**截斷前**之母體總數（`status='active'` ∧ `announcedDate` 非 null）。
+   * 🔴 取自 `latestAnnouncements()` 手上的**同一個** `pool`，不得另寫一次過濾條件。
+   * 📌 存在理由：前端只收到截斷後的 ≤ 10 列，`{n} > 10` 時**結構上算不出總數**。
+   * 🔒 不牴觸 `AC-G86`——該條鎖的是**端點數**（恰 3 個），不是回應形狀。
+   */
+  latestAnnouncementsTotal?: number;
 }
 
 export interface CategoryDistributionResponse {
@@ -121,13 +128,12 @@ export class DashboardAnalyticsService {
         /* 🔴 省略該鍵，不得降為 0 */
       }
       try {
-        out.latestAnnouncements = latestAnnouncements(
-          projection,
-          LATEST_ANNOUNCEMENT_LIMIT,
-          now,
-        );
+        // 🔒 `AC-G96`：兩個鍵取自**同一次**呼叫之同一個 `pool` ⇒ 不可能漂移。
+        const latest = latestAnnouncements(projection, LATEST_ANNOUNCEMENT_LIMIT, now);
+        out.latestAnnouncements = latest.rows;
+        out.latestAnnouncementsTotal = latest.total;
       } catch {
-        /* 🔴 省略該鍵，不得降為空陣列 */
+        /* 🔴 兩個鍵一併省略，不得降為空陣列或 0 */
       }
       try {
         const orgUnits = await this.sources.listOrgUnits();

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { RoleBadge } from '../components/RoleBadge';
@@ -20,7 +21,12 @@ import type {
 } from '../api/dashboard-analytics-types';
 import type { OjtOnTimeSummaryResponse } from '../api/dashboard-analytics-types';
 import { DISPLAY_LABEL } from './document-display';
-import { EDITION_NONE_TEXT, canViewDashboard, ojtOnTimeNote } from './ojt-progress-view';
+import {
+  EDITION_NONE_TEXT,
+  canViewDashboard,
+  excludedUnitCount,
+  ojtOnTimeNoteSegments,
+} from './ojt-progress-view';
 import {
   CATEGORY_LIMIT,
   COLOR_ANNOUNCED,
@@ -95,19 +101,138 @@ const ORG_DIMS: readonly { key: OrgDimension; label: string }[] = [
 
 type DonutScope = 'month' | 'cumulative';
 
-/** 🔒 §命名鎖定第 6 列：兩個環圖區塊之逐字標題（＝其 `aria-label`）。 */
-const DONUT_META: Record<DonutScope, { testId: string; title: string; desc: string }> = {
+/**
+ * 🔒 §命名鎖定第 6 列：兩個環圖區塊之逐字標題（＝其 `aria-label`）。
+ *
+ * 🔵 §癸四 第 5 列：原可見之 `desc` 段落**刪除**，內容移入標題旁之 ⓘ；
+ *    §癸四 第 3 列：原可見之「進度中」說明段落**刪除**，內容併入**同一個** ⓘ 之第二段。
+ * ⚠ 兩列併入同一個 ⓘ 是刻意的：第 3 列之可見載體已依裁決刪除 ⇒ 它沒有自己的錨點，
+ *   而兩段回答的是同一個問題（「這張圖怎麼讀」）；兩個 ⓘ 並排在標題旁是更糟的版面。
+ * 📝 已作廢（僅供追溯，⚠ 不得復原）：
+ *    OLD> desc（當月）＝`統計公告日落在本月之已公告文件；環的每一段＝一個組織。`
+ *    OLD> desc（累積）＝`統計全部已公告文件，不限時間；環的每一段＝一個組織。`
+ *    OLD> 進度中說明＝`「進度中」不分時間（＝當下尚未到公告日），故同一個組織在兩張圖上的
+ *    OLD>   「進度中」必為同值，這是同一個事實，不是重複貼上。`
+ *    ⇒ 後者含「不是重複貼上」（為實作辯護之語氣，`AC-G94` ②）。
+ */
+const DONUT_META: Record<DonutScope, { testId: string; title: string; info: string }> = {
   month: {
     testId: 'donut-month',
     title: '當月已公告',
-    desc: '統計公告日落在本月之已公告文件；環的每一段＝一個組織。',
+    info: '公告日落在本月、且已到公告日的文件。環上每一段代表一個組織。',
   },
   cumulative: {
     testId: 'donut-cumulative',
     title: '累積已公告',
-    desc: '統計全部已公告文件，不限時間；環的每一段＝一個組織。',
+    info: '所有已到公告日的文件，不限時間。環上每一段代表一個組織。',
   },
 };
+
+/** 🔒 §癸四 第 3 列之逐字文案（兩個區塊共用同一句——它描述的正是「兩張圖上相同」這件事）。 */
+const DONUT_IN_PROGRESS_INFO =
+  '「進度中」指目前還沒到公告日的文件，與月份無關，所以兩張圖上同一個組織的「進度中」數字相同。';
+
+/** 🔒 §命名鎖定第 17 前列：ⓘ 觸發器之無障礙名稱（全頁多個 ⓘ 共用，以 `data-info-for` 區辨）。 */
+const INFO_LABEL = '說明';
+
+/**
+ * ⓘ 說明（`AC-G95`）—— 把「這個數字為什麼這樣算」移出常駐文案。
+ *
+ * 🔴 `LESSON-G2`：**「不變式需要可驗證的載體」≠「不變式需要可見的文案」**。載體可以是 `data-*`、
+ * `aria-label` 或 popover 內的文字；把不變式的**理由**寫成畫面上的常駐說明，
+ * 等於**把驗收標準洩漏給使用者**。
+ *
+ * 🔴 **內容恆在 DOM**（未展開時僅以視覺方式隱藏），🔴 **明文禁止以 `title` 屬性實作**
+ * ——`title` 在觸控裝置不可達、螢幕閱讀器支援不一致、且難以穩定斷言。
+ * 🔒 觸發器本身**不承載任何資訊**（只是一個 ⓘ），資訊全數在內容裡。
+ *
+ * 🔴 **hover／focus／點擊三者皆為「開啟」，不是「切換」**：`user-event.click()` 會**先 focus
+ * 再點擊**；若 focus 開啟、click 再切換，一次點擊後就會回到收合狀態——看起來完全合理，
+ * 卻讓「`false` → `true`」永遠不成立。
+ * 🔒 **收合路徑恰三條**：移開游標／`Tab` 離開／`Esc`。
+ */
+function InfoNote({
+  infoKey,
+  paragraphs,
+}: {
+  infoKey: string;
+  paragraphs: readonly string[];
+}): JSX.Element {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const id = `info-${infoKey}`;
+  const open = hovered || focused || pinned;
+  return (
+    <span
+      className="relative inline-flex align-middle shrink-0"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <button
+        ref={btnRef}
+        type="button"
+        data-testid="info-trigger"
+        data-info-for={infoKey}
+        aria-label={INFO_LABEL}
+        aria-expanded={open}
+        aria-describedby={id}
+        onClick={() => setPinned(true)}
+        /**
+         * 🔴 **`flushSync` 守的是「可見狀態與 ARIA 狀態必須同一拍落地」——不是為了讓某條測試過。**
+         * ⚠ **它的防線很薄，動它之前請先讀完下面三句**：目前有一條**同步**斷言守著它
+         *   （`DashboardHome.f044.rationale.test.tsx` 之「`Tab` 進入（focus）⇒ 開啟」，
+         *   `trigger.focus()` 後**不經 `waitFor`／`await`** 直接讀 `aria-expanded`）。
+         * 🔴 **那條斷言一旦被放寬成 `waitFor`，本修正就完全失去測試防護**——`waitFor` 會等到下一拍，
+         *   屆時「同步正確」與「慢一拍」兩種實作**都會綠**。⇒ 🔒 **若哪天看到那條變成 `waitFor`，
+         *   本段註解就是唯一還站著的東西；此時要拿掉 `flushSync`，請先回答下面三句。**
+         *
+         * ① 焦點可以**完全不經過任何 React 事件**而改變：瀏覽器原生 `Tab`、程式碼直接呼叫
+         *    `element.focus()`、以及輔助技術移動焦點，走的都是原生路徑。
+         * ② React 18 把 focus 歸在 **continuous** 車道、**非同步**排程。
+         * ③ ⇒ popover 的可見性由 CSS **立刻**改變，`aria-expanded` 卻**慢一拍**：那一拍之間，
+         *    焦點已經在按鈕上、畫面已經展開，屬性卻還說 `"false"`
+         *    ——對螢幕閱讀器與任何同步讀取屬性的程式來說，那是一個**說謊的中間狀態**。
+         *
+         * 🔒 其餘三條路徑（hover／click／`Esc`）**不需要** `flushSync`：它們必定經由 React 事件，
+         *   且不存在「原生已改變、React 還沒跟上」的中間狀態。
+         */
+        onFocus={() => flushSync(() => setFocused(true))}
+        onBlur={() =>
+          flushSync(() => {
+            setFocused(false);
+            setPinned(false);
+          })
+        }
+        onKeyDown={(e) => {
+          if (e.key !== 'Escape') return;
+          e.preventDefault();
+          setHovered(false);
+          setFocused(false);
+          setPinned(false);
+          btnRef.current?.blur();
+        }}
+        className="w-4 h-4 rounded-full border border-slate-300 text-slate-400 hover:text-primary-600 hover:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-600 flex items-center justify-center shrink-0"
+      >
+        <Icon name="info" className="w-3 h-3" />
+      </button>
+      <span
+        id={id}
+        data-testid="info-content"
+        data-info-content={infoKey}
+        role="note"
+        className={`${open ? '' : 'hidden '}absolute left-0 top-full mt-1 z-50 w-64 max-w-[16rem] rounded-lg border border-slate-200 bg-white shadow-lg p-3 text-[11px] leading-relaxed text-slate-600 text-left font-normal whitespace-normal`}
+      >
+        {paragraphs.map((p, i) => (
+          <span key={p} className={i > 0 ? 'block mt-1.5' : 'block'}>
+            {p}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
 
 /** 全站既有之空狀態載體（🔒 沿用 `data-testid="empty-state"`，不新增第二個）。 */
 function EmptyState({ text, hint }: { text: string; hint?: string }): JSX.Element {
@@ -265,9 +390,13 @@ export function DashboardHome(): JSX.Element {
           </>
         ) : (
           <div className="sm:col-span-2 xl:col-span-3">
+            {/* 🔒 §癸四 第 7 列：本區為 `AC-G23` 之**載入失敗降級態**（端點省略鍵），不是「資料為空」態。
+                🔒 主文字沿用已上線之逐字，不另立第二種說法；hint **可見、但重寫**。
+                📝 已作廢（⚠ 不得復原）：`OLD>` `本區之數字來自「ICSOP 文件管理」之即時聚合；
+                   重新整理後仍未恢復時請通知系統管理員。` ⇒ 含「即時聚合」（實作詞彙，`AC-G94` ④）。 */}
             <EmptyState
               text="統計數字暫時無法取得"
-              hint="本區之數字來自「ICSOP 文件管理」之即時聚合；重新整理後仍未恢復時請通知系統管理員。"
+              hint="這些數字來自「ICSOP 文件管理」。重新整理後仍未顯示時，請通知系統管理員。"
             />
           </div>
         )}
@@ -295,7 +424,11 @@ export function DashboardHome(): JSX.Element {
       </div>
 
       {/* ═══ F044 ④ · 最新公告（ICSOP 版本更新）（`AC-G51`～`AC-G58`）═══ */}
-      <LatestAnnouncements rows={analytics?.latestAnnouncements} mayViewMore={mayViewDocuments} />
+      <LatestAnnouncements
+        rows={analytics?.latestAnnouncements}
+        total={analytics?.latestAnnouncementsTotal}
+        mayViewMore={mayViewDocuments}
+      />
 
       {/* ═══ F044 ⑤ · 依業務/功能類別分布（`AC-G60`～`AC-G68`）═══
           🔴 部門窗口在 `BUSINESS_CATEGORY_MANAGEMENT` 為 `NONE` ⇒ 整個區塊**完全不進 DOM**
@@ -405,6 +538,8 @@ function OjtOnTimeCard(props: {
         </span>
         <span className="text-sm font-medium text-slate-700">OJT 準時完成率</span>
         <span className="text-xs text-slate-400">(1個月內)</span>
+        {/* 🔒 §癸四 第 1 列：口徑說明與「為什麼兩邊數字不同」移入 ⓘ；可見層只留「排除了幾個單位」。 */}
+        {summary ? <InfoNote infoKey="ojt-ontime" paragraphs={ojtOnTimeNoteSegments(summary)} /> : null}
       </div>
       {hasRate ? (
         <div data-testid="stat-value" className="mt-2 text-xl font-bold text-slate-900">
@@ -417,12 +552,18 @@ function OjtOnTimeCard(props: {
           <EmptyState text="近 1 個月內無應完成之 OJT 單位" />
         </div>
       )}
+      {/* 🔒 §癸四 第 1 列：可見層**恰加總前兩項**（`excludedUnitCount`，單一推導點）。
+          🔴 `excludedNoAnnouncedDate` 數的是**文件**、且依 `OQ-D44-12b` **根本不進母體**
+             ⇒ 加進來會得到一個沒有意義的數，且「排除」這個說法本身就是錯的。
+          🔒 `a+b === 0` ⇒ **無可見排除文字**，但節點仍保留於 DOM（`AC-G15` 之掛鉤恆存在）。 */}
       {summary ? (
         <p
           data-testid="ojt-ontime-exclusion-note"
-          className="mt-2 text-[11px] leading-relaxed text-slate-500"
+          className={
+            excludedUnitCount(summary) > 0 ? 'mt-2 text-[11px] leading-relaxed text-slate-500' : 'hidden'
+          }
         >
-          {ojtOnTimeNote(summary)}
+          {excludedUnitCount(summary) > 0 ? `已排除 ${excludedUnitCount(summary)} 個單位` : ''}
         </p>
       ) : null}
       {mayViewDetail ? (
@@ -476,11 +617,11 @@ function DonutRegion(props: {
       data-testid={meta.testId}
       className="bg-white border border-slate-200 rounded-xl p-5"
     >
-      <div className="flex items-center gap-2 mb-1">
+      <div className="flex items-center gap-2 mb-3">
         <Icon name="target" className="w-4 h-4 text-primary-600" />
         <h2 className="font-semibold text-slate-900">{meta.title}</h2>
+        <InfoNote infoKey={meta.testId} paragraphs={[meta.info, DONUT_IN_PROGRESS_INFO]} />
       </div>
-      <p className="text-xs text-slate-400 mb-3">{meta.desc}</p>
       <div
         role="tablist"
         aria-label="制定組織維度"
@@ -559,20 +700,28 @@ function DonutRegion(props: {
                 </div>
               </div>
               <div className="min-w-0 flex-1">
-                {/* 🔴 「靜默 top-N 才是缺陷」：截斷時必須說清楚**被合併幾個組織／合計幾份／
-                    憑什麼是這 8 段**，並指出完整清單在哪；未截斷時本行仍在（文案不同），
-                    使其負向斷言有鑑別力。 */}
-                <p data-donut-truncation className="text-[11px] leading-relaxed text-slate-500">
-                  {merged
-                    ? `圖形僅繪出份數最多的 ${DONUT_TOP_N} 個組織（排序＝已公告份數由多至少），其餘 ${merged.merged} 個組織合併為「${SEG_OTHER}」，已公告合計 ${merged.value} 份。下方圖例仍逐列列出全部 ${rows.length} 個組織，沒有任何數字只存在於圖形裡。`
-                    : `本維度共 ${rows.length} 個組織，未達 ${DONUT_TOP_N} 段之合併上限，圖形已繪出全部組織（無「${SEG_OTHER}」段）。`}
-                </p>
-                <p className="mt-2 text-[11px] leading-relaxed text-slate-400 flex items-start gap-1.5">
-                  <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  <span>
-                    「進度中」不分時間（＝當下尚未到公告日），故同一個組織在兩張圖上的「進度中」必為同值，這是同一個事實，不是重複貼上。
-                  </span>
-                </p>
+                {/* 🔒 §癸四 第 2 列：三個數字（前 N 個／合併 m 個／共 v 份）**全部留在可見層**，
+                    未移入 popover（`AC-G71` 不放寬、且更嚴）；排序規則與「完整清單在哪」移入 ⓘ。
+                    ⚠ 兩個分支之 `{TOP_N}`（圖形最多畫幾段）與 `{TOTAL}`（本維度組織總數）
+                       是**兩個不同的量**，不得共用一個代入值。
+                    📝 已作廢（⚠ 不得復原）：`OLD>` 含「排序＝…」（內部詞彙，`AC-G94` ④）與
+                       「沒有任何數字只存在於圖形裡」（`AC-G71` 本文，③）。 */}
+                <div className="flex items-start gap-1.5">
+                  <p
+                    data-donut-truncation
+                    className="flex-1 text-[11px] leading-relaxed text-slate-500"
+                  >
+                    {merged
+                      ? `圖形顯示前 ${DONUT_TOP_N} 個，其餘 ${merged.merged} 個合併為「${SEG_OTHER}」（共 ${merged.value} 份）。`
+                      : `本維度共 ${rows.length} 個組織，已全部繪出。`}
+                  </p>
+                  <InfoNote
+                    infoKey={`${meta.testId}-truncation`}
+                    paragraphs={[
+                      `圖形最多畫 ${DONUT_TOP_N} 段，其餘合併為「${SEG_OTHER}」。下方圖例仍逐列列出全部 ${rows.length} 個組織。`,
+                    ]}
+                  />
+                </div>
               </div>
             </div>
             {/* 🔴 `AC-G41`：圖例**逐列列出全部組織**，不受 Top N 限制。 */}
@@ -636,6 +785,8 @@ function DonutRegion(props: {
  */
 function LatestAnnouncements(props: {
   rows: { documentId: string; announcedDate: string; edition: string | null; documentName: string; displayStatus: 'announced' | 'in_progress' }[] | undefined;
+  /** 🔒 `AC-G96`：母體總數（截斷前）。🔴 不得由 `rows.length` 推導——前端只收到截斷後的 ≤ 10 列。 */
+  total: number | undefined;
   mayViewMore: boolean;
 }): JSX.Element {
   const rows = props.rows ?? [];
@@ -662,9 +813,12 @@ function LatestAnnouncements(props: {
         ) : null}
       </div>
       {rows.length === 0 ? (
+        /* 🔒 §癸四 第 8 列：**可見、但重寫**（🔴 空狀態是使用者最需要引導的時刻，不得收進 ⓘ）。
+           📝 已作廢（⚠ 不得復原）：`OLD>` `清單來源＝「ICSOP 文件管理」中儲存狀態為有效、
+              且已設定公告日期之文件；依公告日降冪排列。` ⇒ 含內部欄位語言（`AC-G94` ④）。 */
         <EmptyState
           text="目前沒有可呈現的 ICSOP 版本更新"
-          hint="清單來源＝「ICSOP 文件管理」中儲存狀態為有效、且已設定公告日期之文件；依公告日降冪排列。"
+          hint="這裡列出「ICSOP 文件管理」中已設定公告日期、且未失效或作廢的文件，最新公告的排在最前面。"
         />
       ) : (
         <div className="overflow-x-auto">
@@ -716,6 +870,23 @@ function LatestAnnouncements(props: {
               ))}
             </tbody>
           </table>
+          {/* 🔒 §癸四 第 10 列：兩個數字留在可見層；排序規則與「為什麼未來日期排最前面」移入 ⓘ。
+              🔒 `{n}` ＝ `latestAnnouncementsTotal`（`AC-G96`），🔴 **不得**由列數推導；
+                 `{m}` ＝ 實際顯示筆數，🔴 不得寫死 10（小語料下總數會小於 10）。
+              📝 已作廢（⚠ 不得復原）：`OLD>` `依公告日降冪排列，共 {n} 份符合條件，此處呈現最新
+                 {m} 份。⚠ 公告日在未來者（狀態為「進度中」）依降冪排在最上方，屬正常。`
+                 ⇒ 含「屬正常」（②）與「降冪」（④）。 */}
+          <div className="mt-2 flex items-start gap-1.5">
+            <p className="flex-1 text-[11px] text-slate-400">
+              {`共 ${props.total ?? rows.length} 份，這裡顯示最新的 ${rows.length} 份。`}
+            </p>
+            <InfoNote
+              infoKey="latest-announcements"
+              paragraphs={[
+                '依公告日由新到舊排列。尚未到公告日的文件（狀態為「進度中」）因為日期在後面，會排在最前面。',
+              ]}
+            />
+          </div>
         </div>
       )}
     </section>
@@ -746,22 +917,29 @@ function CategoryDistribution(props: {
       <div className="flex items-center gap-2 mb-1">
         <Icon name="shapes" className="w-4 h-4 text-primary-600" />
         <h2 className="font-semibold text-slate-900">依業務/功能類別分布</h2>
+        {/* 🔒 §癸四 第 4 列：原可見之統計單位說明**整段刪除**，內容移入本 ⓘ。
+            📝 已作廢（⚠ 不得復原）：`OLD>` `統計單位＝類別（非節點），…僅計入儲存狀態為有效之文件。
+               …故各類別合計與上方卡片刻意不相等。` ⇒ 含對比句型「（非節點）」與「統計單位＝」
+               （`AC-G94` ④）、內部欄位語言「儲存狀態為有效」（④）與「刻意」（②）。 */}
+        <InfoNote
+          infoKey="category-distribution"
+          paragraphs={[
+            '每個類別各自計算掛在它底下的文件；同一份文件若掛在多個類別，每個類別都會算到它，所以各類別加總會多於上方卡片的文件總數。',
+            '已失效或作廢的文件不列入計算。',
+          ]}
+        />
       </div>
       {all.length === 0 ? (
         <div className="mt-2">
+          {/* 🔒 §癸四 第 9 列：**可見、但重寫**（空狀態不得收進 ⓘ）。
+              📝 已作廢（⚠ 不得復原）：`OLD>` `長條來源＝…掛載數為 0 者不列出。` ⇒ 含內部詞彙。 */}
           <EmptyState
             text="目前沒有可呈現的業務/功能類別"
-            hint="長條來源＝「業務/功能類別管理」中狀態為啟用、且掛有有效文件之類別；停用之類別與掛載數為 0 者不列出。"
+            hint="這裡列出「業務/功能類別管理」中啟用中、且底下已掛上文件的類別。還沒掛上文件的類別不會出現在這裡。"
           />
         </div>
       ) : (
         <div className="mt-2">
-          <p className="text-xs text-slate-400 mb-3 flex items-start gap-1.5">
-            <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            <span>
-              統計單位＝類別（非節點），同一份文件在同一類別內只計一次；僅計入儲存狀態為有效之文件。一份文件可掛多個類別（會各計一次），未掛任何類別之文件不出現，故各類別合計與上方卡片刻意不相等。
-            </span>
-          </p>
           <ul role="list" className="divide-y divide-slate-100 border-t border-slate-100">
             {shown.map((r) => {
               const w = barWidths(r.announced, r.inProgress, max);
@@ -830,9 +1008,20 @@ function CategoryDistribution(props: {
                 </button>
               ) : (
                 <>
-                  <p className="text-[11px] text-slate-500">
-                    {`目前顯示總數最多的前 ${CATEGORY_LIMIT} 類（排序＝已公告＋進度中之總數由多至少），另有 ${all.length - CATEGORY_LIMIT} 類未列出。`}
-                  </p>
+                  {/* 🔒 §癸四 第 11 列：兩個數字留在可見層；排序規則與「怎麼看到全部」移入 ⓘ。
+                      📝 已作廢（⚠ 不得復原）：`OLD>` `目前顯示總數最多的前 {N} 類（排序＝已公告＋
+                         進度中之總數由多至少），另有 {k} 類未列出。` ⇒ 含「排序＝」（`AC-G94` ④）。 */}
+                  <div className="flex items-start gap-1.5">
+                    <p className="flex-1 text-[11px] text-slate-500">
+                      {`顯示前 ${CATEGORY_LIMIT} 類，另有 ${all.length - CATEGORY_LIMIT} 類未顯示。`}
+                    </p>
+                    <InfoNote
+                      infoKey="category-truncation"
+                      paragraphs={[
+                        `依「已公告」與「進度中」的文件數合計，由多到少排列；點「顯示全部類別」可看到全部 ${all.length} 類。`,
+                      ]}
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={props.onToggleExpand}
@@ -845,8 +1034,9 @@ function CategoryDistribution(props: {
               )}
             </div>
           ) : (
+            /* 🔒 §癸四 第 11 列之未截斷分支（🔴 此分支只有在類別數 ≤ 上限時才可達）。 */
             <p className="mt-3 text-[11px] text-slate-400">
-              {`共 ${all.length} 類，未達 ${CATEGORY_LIMIT} 類之顯示上限，已全部列出。`}
+              {`共 ${all.length} 類，已全部顯示。`}
             </p>
           )}
         </div>

@@ -13,7 +13,72 @@ last_updated: 2026-09-21
 > 逐項覆核狀態見 [§盲區](#blindspots)。🔴 其中 **#8（`副本部長`／`副總經理`）永遠無法覆核，
 > 本檔與任何交付報告中皆不得列為「已驗證」**。
 
-## 一、閘門實跑結果（2026-09-21）
+## 〇、第六輪增量（2026-09-21，人類裁決第二輪：實作理由退出畫面） {#round6}
+
+> 本節為 `AC-G94`／`AC-G95`／`AC-G96` 與 [§癸四](../features/F044-admin-dashboard-analytics.md#rationale-sites)
+> 11 處逐字處置之增量紀錄；第一輪之內容一律保留於下方各節。
+
+### 閘門（四道，全量實跑）
+
+| # | 閘門 | 結果 |
+|---|---|---|
+| 1 | backend `npx jest --maxWorkers=4` | ✅ **230 suites / 3664 tests 全綠** |
+| 2 | frontend `npx vitest run` | ✅ **141 files / 2451 tests 全綠** |
+| 3a | backend `npx tsc --noEmit` | ✅ exit 0 |
+| 3b | frontend `npx vite build` | ✅ exit 0 |
+| 4 | backend `npm run deps:check` | ✅ 零違規（409 modules / 1236 deps） |
+
+> ⚠ **本節之閘門 1 曾於同日稍早兩度為紅**（`src/auth/aad-hardening-scan.spec.ts` › `AC-E8`），
+> 根因為當時 HEAD 之 `ca17a1d` 於兩支 `Dockerfile` 設了 `ENV NODE_EXTRA_CA_CERTS`。
+> 🟢 **該衝突已由 lead 於同日修正**（改為只在 `RUN` 內設 `npm_config_cafile`，把信任範圍收窄到
+> 「build 時的 npm registry 連線」，**不留行程層信任錨點**）⇒ 上表為修正落地後之實跑結果。
+> 🔒 該紅燈**與 F044 無關**，本功能未觸及任何 `Dockerfile`；原始追蹤紀錄保留於 §六。
+
+### 改動
+
+| 側 | 檔案 | 改動 |
+|---|---|---|
+| BE | `dashboard/dashboard-analytics.ts` | `latestAnnouncements()` 回傳型別改為 `{ rows, total }`（`AC-G96`）；`total` ＝ **截斷前**同一個 `pool` 之長度 |
+| BE | `dashboard/dashboard-analytics.service.ts` | additive `latestAnnouncementsTotal`；與 `latestAnnouncements` 於**同一次呼叫**內一起設、一起省略 |
+| FE | `api/dashboard-analytics-types.ts` | additive `latestAnnouncementsTotal?` |
+| FE | `pages/ojt-progress-view.ts` | ＋`excludedUnitCount()`（單一推導點）；`ojtOnTimeNote()`／`ojtOnTimeNoteSegments()` 改為 §癸四 第 1 列之鎖定四段；`OjtOnTimeNoteStats` 三個 `excluded*` 逐欄註明計數單位 |
+| FE | `pages/DashboardHome.tsx` | ＋`InfoNote` 元件（`AC-G95`）；§癸四 11 處逐條處置 |
+
+### 🔒 逐處處置對照（§癸四 11 列）
+
+| # | 處置 | 落點 |
+|---|---|---|
+| 1 | 可見只留 `已排除 {a+b} 個單位`（🔴 恰前兩項）；口徑說明四段移入 ⓘ `ojt-ontime` | `OjtOnTimeCard` |
+| 2 | 兩分支文案重寫，三個數字留可見；排序規則移入 ⓘ `{scope}-truncation` | `DonutRegion` |
+| 3／5 | 可見 `desc` 與「進度中」說明**整段刪除**，併入同一個 ⓘ `donut-month`／`donut-cumulative` | `DONUT_META`／`DonutRegion` |
+| 4 | 統計單位說明**整段刪除**，移入 ⓘ `category-distribution` | `CategoryDistribution` |
+| 6 | 🟢 可見、原樣不改 | 環圖空狀態 `hint` |
+| 7／8／9 | 🟢 可見、但重寫（去除 `即時聚合`／`儲存狀態為有效`／`降冪`／`掛載數為 0`） | 三處空狀態 `hint` |
+| 10 | 可見 `共 {n} 份，這裡顯示最新的 {m} 份。`（`{n}` 取自 `latestAnnouncementsTotal`）；排序規則移入 ⓘ `latest-announcements` | `LatestAnnouncements` |
+| 11 | 兩分支文案重寫；排序規則移入 ⓘ `category-truncation` | `CategoryDistribution` |
+
+🔒 全部逐字照表、**未自行潤飾**；每一處皆留 `OLD>` 追溯註記。
+
+### 爭議與裁決（1 件，已解）
+
+`ojt-progress-view.f044.test.ts` 之 `AC-G89` 四列向量本輪未被加上第六輪指標，與 `AC-G94` 之禁用詞掃描
+**互斥**：`NO_STATISTICS_TEXT` 逐字為 `尚無可統計之進度列`，**本身即含被禁字面 `進度列`**，而
+`ojtOnTimeNote()` 之輸出自本輪起只進 ⓘ、ⓘ **恆在 DOM** ⇒ 必被掃描命中。
+以**探針**證明（施加滿足 `AC-G89` ① 之唯一改法 → `AC-G94` 之 `ojtZero` 態翻紅 → 還原），
+並附四種改法之窮舉。⇒ lead 裁定 **(b)**：`ojtOnTimeNote` 即 ⓘ 之產生者，`AC-G89` 就地改寫；
+`ring-f044` 已改測試（🔒 實作端一行測試未動），現 198/198 全綠。
+
+### 🔴 一項**無測試防護**之修正（下一個人最可能誤刪）
+
+`InfoNote` 之 `onFocus`／`onBlur` 以 `flushSync` 包覆。**拿掉它不會讓任何測試翻紅**
+（環已改用 `waitFor`，會等到下一拍）⇒ 該段註解是這個修正目前**唯一的防線**。
+它守的不是測試，是「**可見狀態與 ARIA 狀態必須同一拍落地**」：焦點可完全不經 React 事件而改變
+（原生 `Tab`／`element.focus()`／輔助技術），而 React 18 把 focus 歸在 continuous 車道、非同步排程
+⇒ popover 已由 CSS 展開、`aria-expanded` 卻還停在 `"false"`，對螢幕閱讀器是**說謊的中間狀態**。
+
+---
+
+## 一、閘門實跑結果（2026-09-21，第一輪）
 
 | # | 閘門 | 指令 | 結果 |
 |---|---|---|---|
@@ -117,6 +182,22 @@ last_updated: 2026-09-21
 | 12 | 月界行為（每月 1 日 UTC 00:00 起卡③ 歸零） | ⬜ `AC-G69` 已明文接受此代價；覆核時只需確認沒有人改成 `Asia/Taipei` |
 
 ## 六、已知之非本輪問題（不修，供追蹤）
+
+- 🟢 **已解決（2026-09-21 當日）**：`src/auth/aad-hardening-scan.spec.ts` › `AC-E8` ›
+  `NODE_EXTRA_CA_CERTS 未出現於任何生產原始碼或部署檔` 之紅燈（**非 F044 引入**）。
+  lead 之修正未放寬 `AC-E8`，而是**收窄信任範圍**：兩支 `Dockerfile` 改為在 `RUN` 內設
+  `npm_config_cafile`（npm 自己的 CA 檔、只作用於該行 shell），🔴 **不再留任何行程層信任錨點**
+  ——後者會讓執行中的容器對 Azure Blob／AAD／MSSQL 之**全部對外 TLS** 都信任該 MITM CA。
+  🔒 兩支 Dockerfile 皆已加上「**不得改回行程層環境變數**」之逐字禁令。
+  📌 原始追蹤紀錄（供追溯）：
+  根因＝已推送之 `ca17a1d build(docker): 支援公司 TLS 攔截之根 CA` 在
+  `backend/Dockerfile:18`／`backend/Dockerfile:34`／`frontend/Dockerfile:18` 加了
+  `ENV NODE_EXTRA_CA_CERTS=...`，而 `AC-E8` 明文禁止該字面出現於部署檔。
+  🔒 **本輪工作區之兩支 Dockerfile 與 HEAD 逐字相同**（`git status --porcelain` 零輸出）⇒ 該紅燈在 HEAD 即存在。
+  ⚠ **失敗訊息會誤導**：它以 `findIndex` 取**第一個**命中行，故印出 `backend/Dockerfile:9`
+  ——那一行是**註解**（`…必須走 NODE_EXTRA_CA_CERTS。`），真正的違規是第 18／34 行的 `ENV`。
+  ⇒ 這是一個**安全 AC 與部署需求之衝突**，需 lead／system-architect 裁決（放寬 `AC-E8`、
+  或改用不觸及該環境變數的作法），🔴 **不在本功能之授權範圍**。
 
 - `frontend/tsconfig.json` 未納入 `@types/node`，使 12 個以 node 內建模組做原始碼掃描的
   **測試檔**與 `vite.config.ts` 在 `npx tsc --noEmit` 下恆紅（既有 32 行）。本輪之環新增之

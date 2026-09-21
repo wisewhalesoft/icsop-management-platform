@@ -191,7 +191,7 @@ export function latestAnnouncements(
   docs: readonly AnalyticsDocRow[],
   limit: number,
   today: Date,
-): LatestAnnouncementRow[] {
+): { rows: LatestAnnouncementRow[]; total: number } {
   const pool = docs.filter((d) => d.status === 'active' && d.announcedDate !== null);
   const sorted = [...pool].sort((a, b) => {
     const da = isoDay(a.announcedDate as string);
@@ -200,7 +200,7 @@ export function latestAnnouncements(
     if (a.documentNumber !== b.documentNumber) return ordinal(a.documentNumber, b.documentNumber);
     return ordinal(a.documentId, b.documentId);
   });
-  return sorted.slice(0, limit).map((d) => {
+  const rows = sorted.slice(0, limit).map((d) => {
     const status = deriveDisplayStatus(d.status, d.announcedDate, today);
     return {
       documentId: d.documentId,
@@ -209,6 +209,14 @@ export function latestAnnouncements(
       documentName: d.documentName,
       // 母體已限定 `status='active'` ⇒ 值域恰二值；`inactive`／`void` 結構上不可達。
       displayStatus: status === 'announced' ? 'announced' : 'in_progress',
-    };
+    } as LatestAnnouncementRow;
   });
+  /**
+   * 🔒 `AC-G96`：`total` ＝ **截斷前**之母體總數，取自**同一個** `pool`。
+   * 🔴 **明文禁止另寫一次過濾條件、禁止第二次查詢、禁止新增端點**——另寫一次就是 `AC-G3` 那個
+   * 「同一件事兩個定義點」的形狀重演：**兩份初始碰巧相同，漂移前兩份都會綠**。
+   * 且本例之成本為**零**：`pool` 已經在手上。
+   * 📌 前端據此渲染頁尾之 `共 {n} 份，這裡顯示最新的 {m} 份。`——`{m}` 為實際列數，🔴 不得寫死 10。
+   */
+  return { rows, total: pool.length };
 }

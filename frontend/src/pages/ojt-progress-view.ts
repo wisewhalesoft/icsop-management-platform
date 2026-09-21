@@ -220,15 +220,43 @@ export function exclusionNote(
   return `${head}；已裁撤單位與單位已移出使用部門之列皆不計入，目前無任何進度列因此被排除。`;
 }
 
-/** F044 卡④ 之排除註記所需之統計（＝ `GET /admin/ojt-progress/ontime-summary` 之回應形狀）。 */
+/**
+ * F044 卡④ 之統計（＝ `GET /admin/ojt-progress/ontime-summary` 之回應形狀）。
+ *
+ * 🔴 **三個 `excluded*` 同前綴卻不是同一種東西**——這是下一個人必然會把它們相加的形狀，
+ * 故逐欄註明計數單位（`AC-G94` §癸四之明文要求）。
+ */
 export interface OjtOnTimeNoteStats {
+  /** 已全部完成之**單位**數。 */
   numerator: number;
+  /** 窗口內之相異**單位**數。 */
   denominator: number;
   /** 🔒 `denominator === 0` 時**後端省略本鍵**（禁 `NaN%`／`0%`／`100%`）。 */
   rate?: number;
+  /** 計數單位＝**單位**。該單位已裁撤——**曾在母體內、被排除** ⇒ ✅ 計入可見之「已排除 N 個單位」。 */
   excludedInactive: number;
+  /** 計數單位＝**單位**。該單位已移出使用部門——**曾在母體內、被排除** ⇒ ✅ 計入。 */
   excludedOrphaned: number;
+  /**
+   * 🔴 計數單位＝**文件**（不是單位！）。無公告日 ⇒ 無從推算應完成日 ⇒ 依 `OQ-D44-12b`
+   * **根本不進母體** ⇒ 🔴 **不計入**可見之「已排除 N 個單位」。
+   * ⚠ 把它加進去會得到一個**沒有意義的數**（把文件加總成單位），且「排除」這個說法本身就是錯的
+   * ——它從來沒進過母體。單一推導點見 `excludedUnitCount()`。
+   */
   excludedNoAnnouncedDate: number;
+}
+
+/**
+ * F044 §癸四 第 1 列 — 可見之「已排除 N 個**單位**」之**單一推導點**。
+ *
+ * 🔴 **恰加總前兩項**（`excludedInactive + excludedOrphaned`），🔴 **第三項完全不計入**：
+ *   · **計數單位不同**——前兩項數的是**單位**、第三項數的是**文件**，相加得到的是一個沒有意義的數；
+ *   · **語意不同**——前兩項是「進了母體又被拿掉」，第三項是「從來沒進過母體」（`OQ-D44-12b`）。
+ * 🔒 **可見文字一律委派本函式**，🔴 明文禁止在元件層再寫一次加法——否則日後有人把第三項加回去，
+ *   而**兩處都會綠**。
+ */
+export function excludedUnitCount(stats: OjtOnTimeNoteStats): number {
+  return stats.excludedInactive + stats.excludedOrphaned;
 }
 
 /**
@@ -245,22 +273,29 @@ export interface OjtOnTimeNoteStats {
  * 🔴 這正是 NFR-F044-3 #4 要防的事：**兩個口徑不同的數字必須在畫面上可分辨**，
  *   而「標籤不同」是唯一的分辨手段。
  *
- * 🔒 百分比一律委派既有 `coveragePercent()`（`AC-G13`），🔴 禁止另打一份 `Math.round`。
- * 🔒 分母為 0 時沿用既有 `NO_STATISTICS_TEXT`，🔴 明文禁止 `0%`／`100%`／`NaN`。
+ * 🔵 **2026-09-21 第六輪（人類裁決第二輪：實作理由退出畫面）就地改寫**，依 §癸四 第 1 列之鎖定逐字。
+ * 🔴 本函式之輸出自本輪起**只供 ⓘ popover**（`AC-G95`），可見層只留 `已排除 {a+b} 個單位`。
+ * 📝 已作廢（僅供追溯，⚠ 不得復原）——三段皆違反 `AC-G94`：
+ *    OLD> `母體＝應完成訓練日期落在近 1 個月內之使用單位，共 {d} 個，其中 {n} 個已全部完成（{p}%）`
+ *    OLD> `；本次共排除 {a+b+c} 列——已裁撤單位 {a} 列、單位已移出使用部門 {b} 列、無公告日期 {c} 列`
+ *    OLD> `。被排除之進度列於「OJT 資料清單」分頁仍然呈現，故兩處數字不相等屬正常。`
+ *    ⇒ 含 `母體＝`／`進度列`（內部詞彙，④）與 `屬正常`（為實作辯護之語氣，②）；
+ *      且把 `{c} 份文件` 併進 `{a+b} 個單位` 的加總（口徑錯誤，見 `excludedUnitCount()`）。
+ * 🔒 百分比**不再**出現於本文（它已由可見之 `已完成 X / 應完成 Y（Z%）` 承載，`AC-G13`）。
  */
+export function ojtOnTimeNoteSegments(stats: OjtOnTimeNoteStats): string[] {
+  return [
+    '這張卡只看最近一個月內應完成訓練的單位；應完成日為文件公告日再加一個月。',
+    `其中 ${stats.excludedInactive} 個單位已裁撤、${stats.excludedOrphaned} 個單位已不再使用該文件，不列入計算。`,
+    // 🔴 **獨立成句，不得串入上一句的加總**：單位不同（份／個）＋語意不同（從未進入母體 vs 被排除）。
+    `另有 ${stats.excludedNoAnnouncedDate} 份文件尚未設定公告日期，無法推算應完成日，因此從一開始就不在這張卡的範圍內。`,
+    '「OJT 進度管理」頁不限期限，也會列出這裡不計入的單位，因此兩邊的數字不同。',
+  ];
+}
+
+/** 🔒 單一字串形式（＝上列各段之串接）；兩者共用同一份來源，不可能漂移。 */
 export function ojtOnTimeNote(stats: OjtOnTimeNoteStats): string {
-  const pct = coveragePercent(stats.numerator, stats.denominator);
-  const head =
-    pct === null
-      ? `母體＝應完成訓練日期落在近 1 個月內之使用單位，目前${NO_STATISTICS_TEXT}，故不計算比率`
-      : `母體＝應完成訓練日期落在近 1 個月內之使用單位，共 ${stats.denominator} 個，其中 ${stats.numerator} 個已全部完成（${pct}%）`;
-  const excluded =
-    stats.excludedInactive + stats.excludedOrphaned + stats.excludedNoAnnouncedDate;
-  const detail =
-    excluded > 0
-      ? `；本次共排除 ${excluded} 列——已裁撤單位 ${stats.excludedInactive} 列、單位已移出使用部門 ${stats.excludedOrphaned} 列、無公告日期 ${stats.excludedNoAnnouncedDate} 列`
-      : '；已裁撤單位、已移出使用部門與無公告日期之列皆不計入，目前無任何進度列因此被排除';
-  return `${head}${detail}。被排除之進度列於「${TAB_SESSIONS_TEXT}」分頁仍然呈現，故兩處數字不相等屬正常。`;
+  return ojtOnTimeNoteSegments(stats).join('');
 }
 
 /**

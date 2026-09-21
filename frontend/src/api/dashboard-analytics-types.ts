@@ -53,6 +53,12 @@ export interface DashboardAnalyticsResponse {
   defaultDimension?: string;
   /** 已排序、已截斷為 ≤ 10。 */
   latestAnnouncements?: DashboardLatestAnnouncement[];
+  /**
+   * 🔒 additive：**截斷前**之母體總數（由後端同一支純函式自同一個 `pool` 取得）。
+   * 🔴 頁尾之「共 {n} 份」**必須**取自本欄，不得由 `latestAnnouncements.length` 推導
+   * ——前端只收到截斷後的 ≤ 10 列，總數超過上限時**結構上算不出來**。
+   */
+  latestAnnouncementsTotal?: number;
 }
 
 export interface CategoryDistributionBar {
