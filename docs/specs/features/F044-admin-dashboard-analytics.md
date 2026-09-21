@@ -85,7 +85,7 @@ Epic/Story: E13 / [US-109](../../stories/epics/E13-admin-dashboard/US-109-dashbo
 |---|---|---|---|---|
 | 1 | 卡片標題（恰 4，順序固定） | `已公告`／`進度中`／`本月新版公告`／`OJT 準時完成率` | 🔒 **鎖定** | 使用者原文逐字 |
 | 2 | 第 4 張卡之期間補述 | `(1個月內)` | 🔒 **鎖定** | 使用者原文逐字（**半形括號、無空白**） |
-| 3 | 第 4 張卡之數值句 | `已完成 {X} / 應完成 {Y}（{Z}%）` | 🔒 **鎖定** | `OQ-D44-08` 甲；全形括號、`/` 兩側各一半形空格 |
+| 3 | 第 4 張卡之數值（🔴 2026-09-21 第七輪拆為**兩個節點**） | 環中央 **`{Z}%`**；環旁 **`已完成 {X} / 應完成 {Y}`** | 🔒 **鎖定** | `OQ-D44-08` ＋ 2026-09-21 第七輪人類裁決（`AC-G13`／`AC-G97`）。`/` 兩側各一半形空格；`%` 半形；🔴 **不再含全形括號**。<br>📝 `OLD>` 原為單一字串 `已完成 {X} / 應完成 {Y}（{Z}%）`（全形括號）——使用者要求改成環圖後，該單一字串已不存在；🔒 **惟「顯示實際單位數量與比率」這個要求未變**，兩個數字都還在 |
 | 4 | 第 4 張卡之分母為 0 空狀態 | `近 1 個月內無應完成之 OJT 單位` | 🔒 **鎖定（2026-09-21 ui-ux-designer 落地，🔵 → 🔒）** | `OQ-D44-08`；🔴 **禁止** `NaN%`／`0%`／`100%`／空白 ⇒ `[ASSUMPTION] A-G4` 結案 |
 | 5 | OJT 明細連結 | `查看明細` | 🔒 **鎖定** | 使用者原文逐字 |
 | 6 | 環圖區塊標題（恰 2） | `當月已公告`／`累積已公告` | 🔒 **鎖定** | 使用者原文逐字 |
@@ -173,6 +173,8 @@ Epic/Story: E13 / [US-109](../../stories/epics/E13-admin-dashboard/US-109-dashbo
 | 卡②進度中 | — | `stat-card-in-progress` | 同上，標題逐字 `進度中` |
 | 卡③本月新版公告 | — | `stat-card-monthly-announced` | 同上，標題逐字 `本月新版公告` |
 | 卡④OJT 準時完成率 | — | `stat-card-ojt-ontime` | 標題逐字 `OJT 準時完成率`＋`(1個月內)`；數值節點 🔴 **`stat-value` 與 `ojt-ontime-value` 為巢狀**（見下方）；排除註記節點 `ojt-ontime-exclusion-note`；連結 `role="link"` 逐字 `查看明細` |
+| **卡④ 之環圖**（`AC-G97`） | — | `ojt-ontime-donut` | `<svg>` 一律 `aria-hidden="true"`；🔴 **`denominator === 0` 時整個不進 DOM** |
+| **卡④ 之百分比**（`AC-G97`） | — | 🔒 **屬性選擇子 `[data-ojt-ontime-rate]`** | 🔴 **必須是 `<svg>` 之外的 HTML 文字節點**（疊於環中央，比照 `[data-donut-total]`）；逐字 `{Z}%`；🔴 **不得與 `donut-month`／`donut-cumulative` 系列擞名** |
 | 環圖區塊（當月） | `role="region"` | `donut-month` | `aria-label="當月已公告"` |
 | 環圖區塊（累積） | `role="region"` | `donut-cumulative` | `aria-label="累積已公告"` |
 | 維度頁籤列 | `role="tablist"` | `org-dimension-tabs` | `aria-label="制定組織維度"`；三個 `role="tab"`，逐字 `依制定公司`／`依制定本部`／`依制定部門`；選取者 `aria-selected="true"` |
@@ -350,11 +352,29 @@ Epic/Story: E13 / [US-109](../../stories/epics/E13-admin-dashboard/US-109-dashbo
 3. **`announcedDate` 為 `null` 之文件**（`OQ-D44-12` b）——無公告日即無從推算期限，不可能「準時」或「逾期」。
 **And** 🔴 上述三類之**計數各自可取得**（`excludedInactive`／`excludedOrphaned`／`excludedNoAnnouncedDate`），供 `AC-G15` 之排除註記使用。
 
-#### `AC-G13` — 卡④ 之逐字數值句
+#### `AC-G13` — 卡④ 之數值呈現：🔴 **百分比在環中央、實際數量在環旁**（2026-09-21 第七輪就地改寫）
+
+> 🔴 **人類原話（2026-09-21，逐字）**：
+> > OJT 準時完成率能加上圓餅圖來強化達成率的視覺效果嗎？就不需要 XX %
+> 🔒 **裁定＝環中央放百分比文字**（**不是**完全不顯示百分比）——視覺上是環圖，而百分比**仍是 DOM 文字節點**。
+
+**Given** `denominator > 0`
+**Then** 🔒 環**中央**之 `[data-ojt-ontime-rate]` 之 `textContent` 逐字為 `{Z}%`
+**And** 🔒 環**旁（或下方）**之 `data-testid="ojt-ontime-value"` 之 `textContent` 逐字為 `已完成 {X} / 應完成 {Y}`
+> 🔴 **「顯示實際單位數量與比率」是使用者最初需求之逐字要求（`OQ-D44-08`）——🔒 **`已完成 X / 應完成 Y` 那半句不得因本次改動而消失**。**本次改的是排版，不是資訊量。**
+**And** `Z` 🔴 **必須委派既有 `coveragePercent`**，明文禁止另打一份 `Math.round`（[F042](F042-ojt-progress-management.md) 已記錄「兩份會各自漂移」之真實缺陷）
+**And** 🔒 `/` 兩側各恰一個半形空格；`%` 為半形；🔴 **拆分後兩個節點皆不再含全形括號**（原全形 `（）` 隨舊句型一併作廢）
+**And** 🔴 **兩個節點必須各自可獨立斷言**；明文禁止把 `{Z}%` 串回 `ojt-ontime-value`（那等於沒拆，且會讓 `AC-G97` 之環中央斷言失去唯一載體）
+
+<details><summary>📝 `OLD>` 原條文逐字保留（單一字串 `已完成 X / 應完成 Y（Z%）`）</summary>
+
 **Given** `denominator > 0`
 **Then** 卡面數值節點（`data-testid="ojt-ontime-value"`）之 `textContent` 逐字為 `已完成 {X} / 應完成 {Y}（{Z}%）`
 **And** `Z = Math.round(X / Y * 100)`（🔴 **必須委派既有 `coveragePercent`，明文禁止另打一份 `Math.round`**——[F042](F042-ojt-progress-management.md) 已記錄「兩份會各自漂移」之真實缺陷）
 **And** 🔒 `/` 兩側各恰一個半形空格；括號為**全形** `（）`；`%` 為半形。
+
+
+</details>
 
 #### `AC-G14` — 卡④ 之分母為 0：省略比率、明確空狀態
 **Given** `denominator === 0`
@@ -365,6 +385,24 @@ Epic/Story: E13 / [US-109](../../stories/epics/E13-admin-dashboard/US-109-dashbo
 **And** 卡面顯示 `data-testid="empty-state"` 之明確提示（建議逐字 `近 1 個月內無應完成之 OJT 單位`）
 **And** 🔴 **明文禁止**出現 `NaN%`／`undefined%`／`0%`／`100%`／空白——`0%` 與「全部未完成」無從分辨，`100%` 是謊報
 **And** 📌 該分支在正式站**會是常態**（`AC-G7` 之代價），不是邊角案例。
+
+#### `AC-G97` — 卡④ 之環圖（🔴 2026-09-21 第七輪人類裁決新增）
+
+**Given** `denominator > 0`
+**Then** 卡④ 以**自繪 SVG 環圖**呈現完成率（🔒 `AC-G48` 不放寬：不引入圖表庫、禁 `<canvas>`）
+**And** 🔒 **汿圖法沿用兩張大環圖已用之手法**：`<svg>` 一律 `aria-hidden="true"`，🔴 **百分比文字疊在 `<svg>` 之外**（比照 `[data-donut-total]`）——⇒ 🔒 **`AC-G71` 不需放寬**
+**And** 🔒 環容器 `data-testid="ojt-ontime-donut"`；中央百分比節點 `[data-ojt-ontime-rate]`（🔴 **刻意不與兩張大環圖之 `donut-month`／`donut-cumulative`／`donut-legend`／`[data-donut-total]` 擞名**）
+**And** 🔴 **環之幾何必須抽為純函式並以固定向量斷言**（比照 `AC-G49` 之 `donutSegments`）：本輪無視覺回歸，**弧長對不對機器驗不到**，只有純函式那一層驗得到；向量至少含 `X === 0`（空環）、`X === Y`（滿環）與一個中間值
+
+**And** 🔴 **`denominator === 0` 時之處置（逐字鎖定）**：
+  · 🔴 **環圖本身不繪**（`ojt-ontime-donut` **不進 DOM**）——不得繪空環、不得繪 0% 環；
+  · 🔴 `[data-ojt-ontime-rate]` 與 `ojt-ontime-value` **亦不進 DOM**；
+  · 🔒 改以 `data-testid="empty-state"` 之明確提示取代整個數值區，逐字為 [§命名鎖定](#naming-lock) 第 4 列之 `近 1 個月內無應完成之 OJT 單位`；
+  · 🔴 **明文禁止** `NaN%`／`0%`／`100%`／空白（`AC-G14` 之既有紀律一字未改）
+> 🔴 **為何不繪空環**：一個 0% 的環與「全部未完成」在畫面上**完全一樣**——那正是 `AC-G14` 禁止 `0%` 的同一個理由，只是換成了圖形形式。
+
+**And** 🔒 **`AC-G94`／`AC-G95` 之通則續存**：本次新增之任何說明性文字一律適用（可見只說「這是什麼、數字多少」，理由進 ⓘ）；🔴 卡④ 已有一個 ⓘ（`AC-G89`），**不得再加第二個**——環圖需要說明時一律併入該 ⓘ
+**And** 🔒 **範圍**：只改 F044 新版面；[F042](F042-ojt-progress-management.md) OJT 進度管理頁**一格不動**
 
 #### `AC-G15` — 卡④ 之排除註記
 **Then** 卡內存在 `data-testid="ojt-ontime-exclusion-note"` 之註記節點，**恆顯示**（含排除 0 筆時之明確說明），內容至少載明：① 當前分子／分母（或空狀態）；② 本次共排除幾列、分別因裁撤單位／已移出使用部門／無公告日期；③ 一句說明「被排除者於 `OJT 資料清單` 分頁仍可能呈現，故兩處數字不相等屬正常」
@@ -381,12 +419,35 @@ Epic/Story: E13 / [US-109](../../stories/epics/E13-admin-dashboard/US-109-dashbo
 **And** 🔴 **明文禁止**為這三張卡寫任何角色白名單——四種後台角色對 `ICSOP文件管理` 皆有 `READ` 以上（[事實 #18](#verified-facts)），看得到清單卻看不到其總數會是一個說不通的不對稱
 **And** `User`（一般使用者）不在此列——其無後台（[F002](F002-role-based-routing.md)），本條不適用。
 
-#### `AC-G17` — 卡④ 之可見性：與 `canViewDashboard` 對齊
+#### `AC-G17` — 卡④ 之可見性：🔴 **四種後台角色皆顯示（讀矩陣）**（2026-09-21 第七輪人類裁決）
+
+**Given** `FUNCTION_MATRIX[OJT_PROGRESS_MANAGEMENT]` ＝ `row('READ', 'CRUD', 'RESTRICTED_CRUD', 'RESTRICTED_CRUD', 'NONE')`（SysAdmin `READ`／ICSOPAdmin `CRUD`／主管 `RESTRICTED_CRUD`／部門窗口 `RESTRICTED_CRUD`／一般使用者 `NONE`）
+**Then** 卡④（`data-testid="stat-card-ojt-ontime"`）對**四種後台角色皆進 DOM**
+**And** 🔴 **閘門必須是 `canPerform(role, FunctionKey.OJT_PROGRESS_MANAGEMENT, 'read')`**——**讀矩陣**，🔴 **明文禁止**寫成角色清單、🔴 **亦禁止再重用 `canViewDashboard`**
+**And** 🔒 `查看明細` 連結之閘門同一支述詞（`AC-G18` 本來就是這樣寫的，本輪一致）
+**And** `User`（一般使用者）為 `NONE` 且無後台（[F002](F002-role-based-routing.md)）⇒ 不在此列
+
+> 🔴 **本裁決是「限縮」而非「推翻」2026-09-02 之裁決，三件事必須同時成立**：
+> ① 🔒 **`canViewDashboard` 一行未改**；② 🔒 **OJT 進度管理頁之 TAB1 仍對主管／部門窗口隱藏**；③ 改變的**只是「卡④ 不再重用該述詞」**。
+>
+> 🔴 **為何當初那樣裁、現在為何改**（不寫清楚，兩處會永遠互相矛盾）：
+> · **當初**：`OQ-D44-07` 裁為甲，理由是「使用者原文未表態、而既有裁決已表態 ⇒ 沿用既有裁決是唯一不需推翻任何人的選項」。那個推理在當時是對的。
+> · 🔴 **問題在於重用了一個答錯問題的述詞**：`canViewDashboard` 回答的是「誰看得到**那一個分頁**」，卡④ 問的是「誰看得到**這一個數字**」——**把兩個不同的問題綁在同一個答案上，就是這次不一致的來源**。
+> · 🔴 **後果是一個反轉的權限梯度**：SysAdmin 只有 `READ` 卻看得到，主管／部門窗口有 `RESTRICTED_CRUD` **反而看不到**——**權限更多的角色看到更少**。
+> · 🟢 **決定性論據來自 2026-09-02 那條裁決自己的註解**（`ojt-progress-view.ts`，逐字）：
+>   > 🔒 **前端可見性、不是授權邊界**：主管／部門窗口**本就看得到 TAB2 的全部列**，儀表板**不多揭露任何一列資料**。此處隱藏的是一個**對他們沒有用處的分頁**，不是一道防線。
+>   ⇒ 讓他們看到卡④ **不是安全性改動**，純粹是「有沒有用」的判斷；而當初隱藏的是**一整個分頁**，不是這一個數字。
+
+<details><summary>📝 `OLD>` 原條文逐字保留</summary>
+
 **Given** `OQ-D44-07` ＝ 甲，且**2026-09-02 之裁決不被推翻**
 **Then** 卡④（`data-testid="stat-card-ojt-ontime"`）**僅對 `ICSOPAdmin` 與 `SysAdmin` 進 DOM**；對 `Supervisor` 與 `DeptContact` **完全不進 DOM**（不是 `hidden`、不是 `disabled`）
 **And** 🔴 **述詞必須是 [F042](F042-ojt-progress-management.md) 既有之 `canViewDashboard(roleCode)` 這一支**，**明文禁止**在本頁複製 `role === 'ICSOPAdmin' || role === 'SysAdmin'`
 **And** 🔒 **回歸鎖**（`AC-G80`）：`canViewDashboard` 之行為與其在 `OjtProgressPage` 之既有用途**一字不改**
 **And** 📌 **為何是同一支而不是兩支**：這兩處回答的是同一個問題——「誰看得到全公司的 OJT 統計」。寫成兩份，下次任一邊調整時另一邊會被靜默遺漏。
+
+
+</details>
 
 #### `AC-G18` — `查看明細` 連結之逐字與閘門
 **Given** 卡④ 已呈現
@@ -441,6 +502,11 @@ Epic/Story: E13 / [US-109](../../stories/epics/E13-admin-dashboard/US-109-dashbo
 
 #### `AC-G24` — 統計卡之數值必須以文字形式存在
 **Then** 四張卡之每一個數字皆可由 `getByTestId('stat-value')` 之 `textContent` 取得
+**And** 🔴 **卡④ 自 2026-09-21 第七輪起有**兩個**數值節點**（`AC-G13`），其嵢狀約定隨之改寫：
+  · `stat-value` 仍為**外層**，其 `textContent` 須**同時含住**環中央之 `{Z}%` 與環旁之 `已完成 {X} / 應完成 {Y}`；
+  · 🔴 **兩個內層節點（`[data-ojt-ontime-rate]` 與 `ojt-ontime-value`）仍各自可獨立斷言**；
+  · 🔒 **三者皆不得缺一**——只有 `stat-value` ⇒ `AC-G13` 之逐字斷言失去載體；只有內層 ⇒ 本條之「四張卡」在卡④ 落空
+📝 `OLD>` 原句為「卡④ 之 `stat-value` 與 `ojt-ontime-value` 為**嵢狀**，兩者 `textContent` **完全相同**」——**「完全相同」該半句因拆成兩個數值節點而作廢**；嵢狀本身仍然成立。
 **And** 🔴 **明文禁止**以圖形、進度條寬度、`aria-valuenow` 等**非文字**方式作為某個數值之**唯一**載體。
 
 ---
@@ -900,9 +966,20 @@ Epic/Story: E13 / [US-109](../../stories/epics/E13-admin-dashboard/US-109-dashbo
 **And** `以使用單位分組` 之群組次序（`(companyCode, orgCode)` 複合鍵昇冪）與組內次序（程序書編號昇冪）**一格不動**
 **And** 🔒 `backend/src/ojt-progress/ojt-progress.rows.spec.ts`（及同族 spec）全綠且期望值未改。
 
-#### `AC-G80` — F042 `canViewDashboard` 之角色隱藏
+#### `AC-G80` — 🔒 F042 `canViewDashboard` 之回歸鎖（本功能自第七輪起**不再重用它**）
+
+**Then** `canViewDashboard(roleCode)` ＝ `ICSOPAdmin ∣ SysAdmin` 🔒 **一行未改**，其在 `OjtProgressPage` 之既有用途（TAB1 對主管／部門窗口隱藏）**行為不變**
+**And** 🔴 **本功能自 2026-09-21 第七輪起不再重用該述詞**（`AC-G17` 改為讀矩陣）——🔒 **但本條之回歸鎖不隨之廢止**：它鎖的是「那支函式沒被我們改到」，而非「我們還在用它」
+> 🔴 **為何不重用了還要繼續鎖**：`AC-G25` 已自 `DashboardHome` 移除對它的 import；若連回歸鎖一併拿掉，就沒有任何斷言在看「本輪有沒有順手改到 F042 那一側」了。
+**And** 🔴 明文禁止改寫或擴充 `canViewDashboard` 之值域
+
+<details><summary>📝 `OLD>` 原條文逐字保留</summary>
+
 **Then** `canViewDashboard(roleCode)` ＝ `ICSOPAdmin ∣ SysAdmin` **一行未改**，其在 `OjtProgressPage` 之既有用途（TAB1 對主管／部門窗口隱藏）**行為不變**
 **And** 🔴 本功能**重用**該述詞（`AC-G17`），**不改寫、不擴充其值域**。
+
+
+</details>
 
 #### `AC-G81` — F042 之篩選項數、完成狀態值數與分組模式態數
 **Then** OJT 進度管理之篩選**恰兩項**（單位搜尋、完成狀態）、完成狀態**恰三值**、分組模式**恰二態**
