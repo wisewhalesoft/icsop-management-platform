@@ -299,6 +299,20 @@ describe('AC-G24／AC-G13／AC-G14／AC-G15 — 卡面數值與卡④ 之巢狀�
     expect(card.textContent ?? '').not.toMatch(/NaN|undefined|\b0%|\b100%/);
   });
 
+  /**
+   * 📝 **2026-09-21 第六輪就地改寫（人類裁決第二輪：實作理由退出畫面）。**
+   * 依據＝`AC-G15` 新增之指標 ＋ [§癸四 逐處處置表](../../../docs/specs/features/F044-admin-dashboard-analytics.md#rationale-sites) **第 1 列**。
+   *
+   * `OLD>` `expect(note.textContent).toContain('OJT 資料清單');`
+   * `OLD>` `for (const n of ['1', '2', '5']) expect(note.textContent).toContain(n);`
+   *
+   * 🔴 **為何期望值改變是合法的**：`OQ-D44-*` 第二輪裁決把三種排除之明細與
+   *    「兩邊數字為何不同」之說明**移入 ⓘ popover**，可見層只留 `已排除 {n} 個單位`。
+   *    ⇒ 上述兩句所斷言的內容**已不在這個節點上**，不是實作退化。
+   * 🔒 **本條真正要鎖的東西一格未改**：該節點**恆存在**（`AC-G15` 之掛鉤）、且與數值節點
+   *    **為兩個節點**（`AC-G13` 之逐字鎖只作用於數值節點）。
+   * 🔒 逐字文案與 ⓘ 三段內容之鎖定改由 `DashboardHome.f044.rationale.test.tsx` 承接。
+   */
   it('AC-G15：排除註記節點**恆顯示**（含排除 0 筆時），且與數值節點為兩個節點', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
@@ -306,9 +320,6 @@ describe('AC-G24／AC-G13／AC-G14／AC-G15 — 卡面數值與卡④ 之巢狀�
     const note = within(card).getByTestId('ojt-ontime-exclusion-note');
     expect(note).toBeInTheDocument();
     expect(note).not.toBe(within(card).getByTestId('ojt-ontime-value'));
-    expect(note.textContent).toContain('OJT 資料清單');
-    // ② 三種排除之列數各自載明
-    for (const n of ['1', '2', '5']) expect(note.textContent).toContain(n);
   });
 
   it('AC-G15：排除皆為 0 時註記仍存在（恆顯示，不是有排除才出現）', async () => {
