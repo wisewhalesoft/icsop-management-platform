@@ -80,7 +80,7 @@ export class OjtProgressController {
   }
 
   /**
-   * TAB2 進度列（`AC-11`）＋**恰兩項**篩選（`AC-13`）。
+   * TAB2 進度列（`AC-11`）＋**恰三項**篩選（`AC-13`／🔵 UX16 `AC-UX49`）。
    *
    * 🔴 **回應為信封 `{ items, total }`，非裸陣列**——§架構設計 一之端點表「回應形狀」欄為
    * HTTP 契約之權威。服務層回陣列（其單元測試據此撰寫、不受影響），信封在本層組裝：
@@ -100,9 +100,50 @@ export class OjtProgressController {
         q.completionStatus === 'completed' || q.completionStatus === 'pending'
           ? q.completionStatus
           : '',
+      // 🔵 `AC-UX49`：第三項篩選（等值）；空字串／缺值＝不施加限制。
+      divisionCode: q.divisionCode || undefined,
     });
     // `total` 為**篩選後**之列數（前端據以顯示「共 N 筆」）；本輪 MVP 未分頁，故等同 items.length。
     return { items, total: items.length };
+  }
+
+  /**
+   * 🔵 UX16 delta（`AC-UX51`～`AC-UX53`；`ARCH-UX8` ④）：TAB2 進度列匯出 CSV。
+   *
+   * 🔴 **`GET` ＋ query，不是 `POST` ＋ body**（`ARCH-UX8` 之裁定）：`main.ts` 之 1 MB body
+   * parser **只**註冊在字面路徑 `/admin/documents/export`，本路徑送大 body 會在真實環境 413
+   * 而所有 controller 單元測試照樣全綠。且 OJT 之三項篩選**從第一天就是後端參數**
+   * （`OjtRowFilters`），不需要比照 F017 送 `documentIds`。
+   *
+   * 🔴 **三項篩選以外之任何前端狀態（`docQuery`／分組模式）一律不接**（`AC-UX53`）——
+   * 型別上就沒有它們的位置，故「偷渡進匯出範圍」在結構上不可能發生。
+   *
+   * 🔒 閘門為 `read`：匯出屬讀取類動作（比照附錄池匯出），SysAdmin（唯讀）允許；**不寫稽核**。
+   * 🔵 `X-Export-Row-Count`：匯出筆數（`AC-UX55` ① 之 `{N}` 來源）。🔴 **必須是匯出筆數而非
+   * 畫面列數**——畫面另受「搜尋文件」收斂，跟著畫面說就從「沒說清楚」惡化為「說了假話」。
+   */
+  @Get('admin/ojt-progress/export')
+  @RequirePermission(FunctionKey.OJT_PROGRESS_MANAGEMENT, 'read')
+  async exportRows(
+    @Req() req: RequestWithSession,
+    @Query() q: Record<string, string | undefined>,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { csv, fileName, count } = await this.svc.exportRows(req.sessionUser, {
+      orgQuery: q.orgQuery || undefined,
+      completionStatus:
+        q.completionStatus === 'completed' || q.completionStatus === 'pending'
+          ? q.completionStatus
+          : '',
+      divisionCode: q.divisionCode || undefined,
+    });
+    // 🔴 送 Buffer 而非 string：送字串會讓 Express 自行決定編碼，BOM 可能悄悄壞掉。
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', attachmentDisposition(fileName));
+    res.setHeader('X-Export-Row-Count', String(count));
+    // 🔴 CORS 之下瀏覽器預設只讀得到六個「安全」標頭 ⇒ 自訂標頭須顯式曝光，否則前端恆讀到 null。
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Export-Row-Count');
+    res.send(csv);
   }
 
   /** 展開單一進度列之場次明細（`AC-12`；0 筆為合法空狀態，非錯誤）。 */

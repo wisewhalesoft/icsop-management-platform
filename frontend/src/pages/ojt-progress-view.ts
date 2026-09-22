@@ -979,3 +979,137 @@ export const SORT_NOTICE_EMPHASIS = '排序，不是篩選';
 export const SORT_NOTICE_TAIL = '——已全部完成之單位仍然呈現於下方。';
 /** 取消入口（與篩選列之「清除」對稱）——沒有它，經 deep link 進來的人只能改網址才能回到既有次序。 */
 export const SORT_NOTICE_CLEAR_TEXT = '取消排序';
+
+// ══════════ 🔵 UX16 delta（項 15／16）：制定本部篩選與匯出（`AC-UX49`／`AC-UX51`～`AC-UX55`） ══════════
+
+/**
+ * 🔒 `AC-UX54` ⑦：TAB2 **既有**兩項篩選之逐字可見文案，**值一個位元組未改**——此處只是把原先
+ * 散在 `OjtProgressPage.tsx` 的字面**抽成具名常數**，使 `AC-UX55` ③ 之「toast 引用的名字須與
+ * 控制項 `aria-label` 逐字相同」成為**結構性**保證而非紀律。
+ *
+ * 🔴 **明文警語**：條文通篇以「單位搜尋」稱呼第一項，但畫面上那個控制項的 `aria-label` 實際是
+ * `搜尋使用單位`。🔴 **不得**為了對齊條文措辭而把它改名——那會讓 `AC-UX49` 與 `AC-UX55` ③
+ * 同時「看起來變得更一致」，而實際改掉了既有可見文案。
+ */
+export const ORG_FILTER_ARIA_TEXT = '搜尋使用單位';
+export const ORG_FILTER_PLACEHOLDER_TEXT = '搜尋使用單位（名稱或代碼）…';
+export const STATUS_FILTER_ARIA_TEXT = '完成狀態';
+
+/**
+ * `AC-UX49`：新增之第三項篩選「制定本部」之逐字文案（權威＝`prototypes/25-ojt-progress.html`）。
+ *
+ * 🔴 `DIVISION_FILTER_ARIA_TEXT` 同時是 `AC-UX55` ③ 之引號內名字——兩處**必須是同一個常數**：
+ * 該條要求 toast 引用「使用者在畫面上看到的那個名字」，各打一份字面就會在其中一處改名時靜默分歧。
+ * 🔒 `DIVISION_FILTER_ALL_TEXT` 之句型比照同列既有之 `所有完成狀態`；🔴 **不得**寫成
+ * `全部`／`全部本部`／`— 制定本部 —`。其 `value` 為**空字串**＝不施加限制。
+ */
+export const DIVISION_FILTER_ARIA_TEXT = '制定本部';
+export const DIVISION_FILTER_ALL_TEXT = '所有制定本部';
+
+/** 制定本部下拉之單一選項（`value` ＝ 送往後端之 `divisionCode`，`label` ＝ 可見文字）。 */
+export interface OjtDivisionOption {
+  code: string;
+  label: string;
+}
+
+/**
+ * `AC-UX49`：選項來源＝**當前語料之 distinct 本部**（依本部代碼昇冪，順序具決定性）。
+ *
+ * 🔴 **推導不出本部之單位不產生選項**（`divisionCode` 為 `null`／空字串者直接略過），且該單位之
+ * 列在**未選定任何本部**時照常呈現——🔴 明文**不加** sentinel 選項（如「無本部」）：沒有選項就是
+ * 篩不到，與 F019 `AC-UX24` 同構。加一個 sentinel 等於把一個內部分類概念變成使用者的篩選條件。
+ * 🔒 `label` 缺值時退回代碼本身（後端之 `divisionName` 為選填欄）——**不留白**，比照
+ * `OjtOrgDirectory.nameOf` 查無時退回代碼之既有 fail-open 紀律。
+ */
+export function divisionOptionsOf(rows: readonly OjtProgressRow[]): OjtDivisionOption[] {
+  const byCode = new Map<string, string>();
+  for (const r of rows) {
+    const code = (r.divisionCode ?? '').trim();
+    if (!code || byCode.has(code)) continue;
+    byCode.set(code, (r.divisionName ?? '').trim() || code);
+  }
+  return [...byCode.entries()]
+    .map(([code, label]) => ({ code, label }))
+    .sort((a, b) => a.code.localeCompare(b.code));
+}
+
+/** `AC-UX51`：匯出鈕之無障礙名稱（逐字）。 */
+export const OJT_EXPORT_ARIA_TEXT = '匯出';
+
+/**
+ * `AC-UX55` 第 1 句（恆出現）。
+ *
+ * 🔴 `{N}` **必須是匯出的筆數，不是畫面上看得到的列數**——這是本句存在的全部理由。使用者回報之
+ * 情境正是「畫面剩 12 列、檔案 340 列」；若跟著畫面說 12，就從「沒說清楚」惡化為「說了假話」。
+ * 🔒 **明文禁止與 F017 清單頁共用常數**：該頁之範圍語意是 13／14 項篩選之結果，本頁是三項條件
+ * 且另有一個**不納入**的搜尋框——抽成同一個常數，其中一頁的範圍說明會在下一次改動時靜默變成
+ * 另一頁的。句型可參照，字串各自一份。
+ */
+export function ojtExportToastText(exportedCount: number): string {
+  return `已匯出 OJT 進度清單（CSV，UTF-8 BOM）：共 ${exportedCount} 筆`;
+}
+
+/**
+ * `AC-UX55` 第 1 句之**降級形式**（🔵 2026-09-22，lead 核准）：伺服器未回報匯出筆數時使用。
+ *
+ * 🔴 **不捏造數字、更不回退為畫面列數**——後者正是上方 `ojtExportToastText` 註解所禁止的
+ * 「說了假話」。取不到筆數時唯一誠實的說法是「我現在說不出這個數字」，而不是換一個來源硬湊。
+ * 🔴 **不含任何內部詞彙**（`標頭`／`header`／`X-Export-Row-Count`）：使用者不需要知道是哪一層
+ * 把標頭吃掉了，他只需要知道「檔案下載好了，筆數以檔案為準」（`AC-UX55` ④ 之使用者語言判準）。
+ * 🔒 兩種根因（標頭缺席／值不可解析）**共用本句**，刻意不對使用者區分。
+ * 🔒 逐字與 `ojtExportToastText` 共享同一個前綴 `已匯出 OJT 進度清單（CSV，UTF-8 BOM）`——
+ *    兩種情形下「我拿到的是什麼」這件事本身沒有改變，改變的只有「能不能告訴你幾筆」。
+ */
+export const OJT_EXPORT_COUNT_UNKNOWN_TEXT =
+  '已匯出 OJT 進度清單（CSV，UTF-8 BOM）；系統暫時無法確認筆數，請以下載檔案為準。';
+
+/**
+ * `AC-UX55` 第 2 句（恆出現）：說明匯出**依哪三項條件**。
+ * 🔒 三個引號內的名字取自各控制項之 `aria-label` 常數 ⇒ 任一控制項改名，本句自動跟著改，
+ * 不可能出現「畫面叫 A、toast 說 B」。
+ */
+export const OJT_EXPORT_SCOPE_TEXT = `匯出內容依「${DIVISION_FILTER_ARIA_TEXT}」「${ORG_FILTER_ARIA_TEXT}」「${STATUS_FILTER_ARIA_TEXT}」三項條件。`;
+
+/**
+ * `AC-UX55` 第 3 句（🔴 **僅當「搜尋文件」目前有值時**出現）。
+ *
+ * 🔴 出現條件綁「搜尋文件有值」而**不是**綁分組模式：`org` 模式下該控制項完全不進 DOM
+ * （`AC-33` ②）、切回時關鍵字會被清空 ⇒ 兩種情形都沒有落差可言，講它只會讓使用者去找一個
+ * 畫面上沒有的東西。
+ * ⚠ 本句依狀態出現或不出現，**不牴觸** `AC-UX53`——該條鎖的是 **CSV 之位元組**、不是畫面回饋；
+ * 🔴 明文禁止為了「讓兩種模式完全一樣」而把本句改成恆顯示或恆不顯示。
+ */
+export const OJT_EXPORT_DOC_SEARCH_NOTE_TEXT = `「${DOC_SEARCH_ARIA_TEXT}」只縮小畫面上顯示的內容，不影響匯出。`;
+
+/**
+ * `AC-UX55`：匯出成功之 toast 文字（**恰兩句或三句**，順序即回傳陣列之順序）。
+ *
+ * @param exportedCount 🔴 **匯出筆數**（伺服器所回報者），非畫面列數。
+ *   🔵 2026-09-22：型別擴為 `number | null`——伺服器未回報筆數時為 `null`（見
+ *   `endpoints.exportOjtProgress`）。
+ * @param docQueryActive 「搜尋文件」目前是否有值。
+ *
+ * 🔒 `AC-UX55` ④：全為使用者語言——🔴 **明文禁止**出現任何 `data-*` 屬性名、AC 或不變式編號、
+ * 以及「篩選項」「不計入篩選」這類只對實作者有意義的措辭。本函式之四個字串常數即為該禁令之落點。
+ *
+ * 🔴 **只有第 1 句降級**（`AC-UX55` ⑦）：第 2 句（三項條件）與第 3 句（搜尋文件不影響匯出）
+ * 之出現條件**完全不受影響**——降級的是「有沒有告訴使用者筆數」，不是「匯出了什麼」。
+ */
+export function ojtExportToastSentences(
+  exportedCount: number | null,
+  docQueryActive: boolean,
+): string[] {
+  /**
+   * 🔴 判準必須是 `Number.isFinite()`，**明文禁止** `if (!exportedCount)` 之類的 falsy 判斷：
+   * `0` 是 falsy 但**是一個合法的匯出結果**（真的匯出了 0 筆），天真寫法會把它誤送進降級分支，
+   * 讓使用者在「確實沒有資料」與「系統說不出筆數」之間永遠分不清楚。
+   * 🔒 本式同時涵蓋 `null`（標頭缺席）與 `NaN`（標頭存在但不可解析），兩者共用同一句降級文案。
+   */
+  const first =
+    exportedCount !== null && Number.isFinite(exportedCount)
+      ? ojtExportToastText(exportedCount)
+      : OJT_EXPORT_COUNT_UNKNOWN_TEXT;
+  const sentences = [first, OJT_EXPORT_SCOPE_TEXT];
+  if (docQueryActive) sentences.push(OJT_EXPORT_DOC_SEARCH_NOTE_TEXT);
+  return sentences;
+}

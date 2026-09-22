@@ -132,7 +132,14 @@ export const OJT_ORG_DIRECTORY = Symbol('OJT_ORG_DIRECTORY');
 export interface OjtOrgDirectory {
   isActive(companyCode: string, orgCode: string): Promise<boolean>;
   /**
-   * 單位之顯示全名：**`公司簡稱 / 部 / 處室`**（例：`和潤企業 / 財務會計部 / 財管室`）。
+   * 單位之顯示全名：**`公司簡稱 / 本部 / 部 / 處室`**
+   * （例：`和潤企業 / 經營企劃管理本部 / 財務會計部 / 財管室`）。
+   *
+   * 🔵 UX16 delta（`AC-UX45`）：第二段（本部）為 2026-09-22 新增，取自
+   * `org-directory/org-division.ts#createOrgPathResolverWithDivision`（🔴 與 F017 `AC-UX43` ④
+   * **共用同一份實作**，不得於本模組另寫一套）。🔒 既有三段之取值規則一字不改。
+   * 🔴 **空段自動收合**：上溯不到本部之單位**仍為既有三段**，不插入空字串或任何 sentinel。
+   * 🔴 `AC-UX57`：`orgCode` 本身即本部代碼時本部段與部段為同一個單位 ⇒ **只輸出一次**（恰兩段）。
    *
    * 🔴 後兩段**必須**取自全站唯一之組織路徑演算法 `org-directory/org-path.ts#buildOrgPath`
    * （部層取 `descFull` 全名、處室取 `DESC_CHI` 末段），**不得**改用 `ORG_UNIT.name` 簡稱自組
@@ -141,6 +148,22 @@ export interface OjtOrgDirectory {
    * 公司」在群組標題會擠掉真正要看的部室名。
    */
   nameOf(companyCode: string, orgCode: string): Promise<string>;
+  /**
+   * 🔵 UX16 delta（`AC-UX49`／`ARCH-UX8` ③）：該單位沿 `parentCode` 上溯所抵達之**本部**
+   * `orgCode`；查無本部祖先 → `null`（🔴 **不得**回傳 sentinel 字串如 `'無本部'`——那是 F044
+   * 儀表板之分組語彙，落進本 port 會被當成一個真實存在的單位代碼拿去做等值比對）。
+   */
+  divisionCodeOf(companyCode: string, orgCode: string): Promise<string | null>;
+  /**
+   * 🔵 UX16 delta（`AC-UX49` 之選項標籤）：該單位所屬**本部之顯示名**（不含公司段）。
+   *
+   * 🔴 **刻意為選填**：`divisionCode` 已足以完成「等值比對」這件事（`ARCH-UX8` ③ 只要求代碼），
+   * 本方法只服務下拉選項之**可見文字**。未實作之 adapter（記憶體假體）由服務層退化為 `null`，
+   * 前端即以代碼為標籤——退化後仍可用，不會讓篩選本身失效。
+   * ⚠ **不得**改以「把 `nameOf(companyCode, divisionCode)` 的字串切段」取得：那會在公司代碼
+   * 未登錄（`resolveCompanyShortName` 落空、公司段整段消失）時**靜默取到部層的名字**。
+   */
+  divisionNameOf?(companyCode: string, orgCode: string): Promise<string | null>;
 }
 
 export const OJT_AUDIT_RECORDER = Symbol('OJT_AUDIT_RECORDER');

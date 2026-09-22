@@ -9,10 +9,17 @@ import {
 import { randomUUID } from 'crypto';
 import { canPerform, FunctionKey } from '../rbac/function-matrix';
 import {
+  assertExportRowLimit,
+  exportFileName,
+  toCsvBuffer,
+} from '../storage/csv-export';
+import {
   assertFormatAllowed,
   assertSizeWithinLimit,
   extensionOf,
 } from '../storage/file-rules';
+/** 🔵 UX16 `AC-UX52`：匯出欄位之單一組裝點（🟢 同模組內之零 IO 純函式葉節點）。 */
+import { buildOjtExportColumns } from './ojt-progress-export-columns';
 /**
  * 🔒 `AC-04` 明文：文件層三值狀態與「已完成單位清單」**必須共用同一套規則，不得各自實作**。
  * TAB1 區一之逐筆表（`AC-14`）是該規則之第三個消費端，故此處**匯入**而非複製那兩行判定。
@@ -68,7 +75,7 @@ export interface AddOjtSessionInput {
   file?: { fileName: string; contentType: string; size: number; buffer?: Buffer };
 }
 
-/** TAB2 之**恰兩項**篩選（`AC-13`）。 */
+/** TAB2 之**恰三項**篩選（`AC-13`／🔵 UX16 `AC-UX49` 就地擴為三項）。 */
 export interface OjtRowFilters {
   /**
    * ① 單位搜尋：比對使用單位**全名**或代碼（不分大小寫之子字串）。
@@ -83,6 +90,14 @@ export interface OjtRowFilters {
    * （文件層三態＋全部）刻意不同，兩軸不得互相對齊。
    */
   completionStatus?: '' | 'completed' | 'pending';
+  /**
+   * ③ 🔵 UX16 delta（`AC-UX49`／`ARCH-UX8` ①）：**制定本部**（等值比對，語意為「該進度列之
+   * 使用單位沿 `parentCode` 上溯所抵達之本部 ＝ 所選值」）；未提供不施加限制，與前兩項並用為 AND。
+   *
+   * 🔴 命名為 `divisionCode`（非 `draftingDivisionId`）是刻意的：F042 之組織維度是**使用單位**，
+   * 不是 F017／F019 之**制定組織**；且本模組既有欄位一律 `Code` 後綴（`companyCode`／`orgCode`）。
+   */
+  divisionCode?: string;
 }
 
 /** TAB2 之單一進度列（`documentId × orgCode`）。 */
@@ -98,8 +113,23 @@ export interface OjtProgressRow {
    */
   companyCode: string;
   orgCode: string;
-  /** 單位全名：**`公司簡稱 / 部 / 處室`**（`OjtOrgDirectory.nameOf` 之單一組裝點）。 */
+  /**
+   * 單位全名：**`公司簡稱 / 本部 / 部 / 處室`**（`OjtOrgDirectory.nameOf` 之單一組裝點）。
+   * 🔵 UX16 `AC-UX45`：自 2026-09-22 起含本部段；上溯不到本部者仍為既有三段（空段收合）。
+   */
   orgName: string;
+  /**
+   * 🔵 UX16 delta（`AC-UX49`，additive）：該列使用單位沿 `parentCode` 上溯所抵達之本部
+   * `orgCode`；查無本部祖先 → `null`。🔒 `null` **不產生下拉選項**，且該列在未選定任何本部時
+   * **照常呈現**（不加 sentinel，與 F019 `AC-UX24` 同構）。
+   */
+  divisionCode: string | null;
+  /**
+   * 🔵 UX16 delta（`AC-UX49`，additive）：上欄之**顯示名**，供前端下拉之可見文字。
+   * ⚠ 值來自 `OjtOrgDirectory.divisionNameOf`（選填方法）；未實作之 adapter 回 `null`，
+   * 前端退化為以代碼為標籤——篩選本身不受影響。
+   */
+  divisionName: string | null;
   /** 該單位已被組織同步標記為裁撤（`AC-17`）。⚠ **僅供呈現**——本頁不因此隱藏列或禁止新增。 */
   inactive: boolean;
   /**
@@ -405,6 +435,9 @@ interface AggregatedRow {
   /** 文件所屬公司；與 `orgCode` 成對才足以識別一個單位（見 `OjtOrgDirectory`）。 */
   companyCode: string;
   orgCode: string;
+  /** 🔵 UX16（`AC-UX49`）：使用單位上溯所抵達之本部代碼／顯示名（查無 → `null`）。 */
+  divisionCode: string | null;
+  divisionName: string | null;
   sessionCount: number;
   /** 🔴 F042 第五輪：符合當下訓練基準版次之場次數（`completed` 之唯一來源）。 */
   currentEditionSessionCount: number;
@@ -596,6 +629,8 @@ export class OjtProgressService {
         companyCode: a.companyCode,
         orgCode: a.orgCode,
         orgName: await this.orgDirectory.nameOf(a.companyCode, a.orgCode),
+        divisionCode: a.divisionCode,
+        divisionName: a.divisionName,
         inactive: !a.active,
         // 列來自使用部門集合 ⇒ 依集合成員關係判定，恆為非孤兒（**不讀 `orphanedAt` 旗標**）。
         orphaned: false,
@@ -610,20 +645,55 @@ export class OjtProgressService {
 
     const orgQuery = (filters.orgQuery ?? '').trim();
     const status = filters.completionStatus ?? '';
+    // 🔵 `AC-UX49`：第三項篩選，與既有兩項並用為 AND；未提供（空字串）不施加限制。
+    const divisionCode = (filters.divisionCode ?? '').trim();
     const filtered = rows.filter((r) => {
       if (orgQuery && !includesCi(r.orgName, orgQuery) && !includesCi(r.orgCode, orgQuery)) {
         return false;
       }
       if (status === 'completed' && !r.completed) return false;
       if (status === 'pending' && r.completed) return false;
+      // 🔴 等值比對；`divisionCode === null`（推導不出本部）之列在選定任一本部時恆不命中。
+      if (divisionCode && r.divisionCode !== divisionCode) return false;
       return true;
     });
 
     // 以使用單位為群組呈現（`AC-11`）⇒ 先依單位名、再依文件編號，使同一單位之列相鄰且順序穩定。
+    // 🔵 `AC-UX47`：`orgName` 改為四段後，本鍵之排序結果**連帶**變為「先公司、再本部、再部、
+    //    再處室」——這是排序鍵字串本身多了一段所致之必然後果，本條明文承認並鎖定之，
+    //    🔒 第二排序鍵（`documentNumber`）一字不改。
     return filtered.sort(
       (a, b) =>
         a.orgName.localeCompare(b.orgName) || a.documentNumber.localeCompare(b.documentNumber),
     );
+  }
+
+  /**
+   * 🔵 UX16 delta（`AC-UX51`／`AC-UX52`／`AC-UX53`；`ARCH-UX8` ④）：TAB2 進度列之 CSV 匯出。
+   *
+   * 🔴 **委派既有 `listRows()`，不另寫一份過濾／排序**：匯出之列集合與列序因此**在結構上**
+   * 等同畫面（不是「兩套邏輯測起來一致」，是同一段程式碼）。⇒ `AC-UX51` 之「資料列集合恰等於
+   * 三項篩選套用後之進度列集合、列序恰等於畫面當前排序」由委派本身保證。
+   *
+   * 🔴 **`docQuery`（搜尋文件）與分組模式刻意不是本方法的參數，這不是遺漏**（`AC-UX53`）：
+   * 兩者皆為**前端呈現決策**（前者只縮小畫面、後者只改列裝進哪種盒子），把它們寫進資料落地的
+   * 產物，使用者下次打開檔案時完全看不出當時是哪個狀態。⇒ 服務層連接收它們的型別都沒有，
+   * 「兩種分組模式之 CSV 位元組相同」因而是結構性保證而非紀律。
+   *
+   * 🔒 檔案層規則（BOM／CRLF／RFC 4180／注入前綴／0 筆僅表頭）全部沿用共用之 `toCsvBuffer`，
+   * **不新增第二份**；筆數上限於組檔**之前**單點檢查（超限即不產生任何檔案）。
+   */
+  async exportRows(
+    session: OjtSessionContext | undefined,
+    filters: OjtRowFilters,
+  ): Promise<{ csv: Buffer; fileName: string; count: number }> {
+    const rows = await this.listRows(session, filters);
+    assertExportRowLimit(rows.length);
+    return {
+      csv: toCsvBuffer(rows, buildOjtExportColumns()),
+      fileName: exportFileName('ojt-progress', this.now()),
+      count: rows.length,
+    };
   }
 
   // ══════════ B. TAB1 儀表板三區（AC-14／AC-15／AC-16／AC-17） ══════════
@@ -1025,6 +1095,9 @@ export class OjtProgressService {
           documentName: d.documentName,
           companyCode: d.companyCode,
           orgCode,
+          // 🔵 `AC-UX49`：本部上溯之單一取得點（與 `orgName` 之本部段共用同一份組織索引）。
+          divisionCode: await this.orgDirectory.divisionCodeOf(d.companyCode, orgCode),
+          divisionName: (await this.orgDirectory.divisionNameOf?.(d.companyCode, orgCode)) ?? null,
           sessionCount,
           currentEditionSessionCount,
           // 🔴 判定改讀**當下版次之場次數**（原為 `sessionCount > 0`）：改版並要求重訓後，

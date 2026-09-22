@@ -11,6 +11,7 @@ import {
   getOjtProgressRowSessions,
   getOjtProgressRows,
   getOjtProgressSummary,
+  exportOjtProgress,
 } from '../api/endpoints';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { ojtStatusView } from '../domain/ojt-status-view';
@@ -65,6 +66,14 @@ import {
   GROUP_MODE_ARIA_TEXT,
   GROUP_MODE_DOC_TEXT,
   GROUP_MODE_ORG_TEXT,
+  DIVISION_FILTER_ALL_TEXT,
+  DIVISION_FILTER_ARIA_TEXT,
+  ORG_FILTER_ARIA_TEXT,
+  ORG_FILTER_PLACEHOLDER_TEXT,
+  STATUS_FILTER_ARIA_TEXT,
+  OJT_EXPORT_ARIA_TEXT,
+  divisionOptionsOf,
+  ojtExportToastSentences,
   NO_STATISTICS_TEXT,
   ORG_INACTIVE_TEXT,
   ORPHAN_NOTE_TEXT,
@@ -153,6 +162,16 @@ import {
  */
 type TabKey = 'dashboard' | 'sessions';
 
+/**
+ * 🔵 `AC-UX55`：匯出回饋之自動消失時間。
+ * 🔒 刻意長於設計系統 toast 之 4 秒（§6.5 之 3–5 秒區間）——本回饋是**兩到三句**完整句子，
+ * 4 秒讀不完；它回答的是「我拿到的是什麼」，讀不完等於沒說。
+ */
+const EXPORT_TOAST_DURATION_MS = 8000;
+
+/** 成功語意色（逐字同設計系統 §3.3／`useToast.tsx` 之 `success`，非另訂一套）。 */
+const EXPORT_TOAST_ACCENT_COLOR = '#059669';
+
 interface AddTarget {
   documentId: string;
   orgCode: string;
@@ -221,6 +240,26 @@ export function OjtProgressPage(): JSX.Element {
   const [orgQuery, setOrgQuery] = useState('');
   const [status, setStatus] = useState<'' | 'completed' | 'pending'>('');
   /**
+   * 🔵 UX16 `AC-UX49`：第三項篩選「制定本部」之當前值（空字串＝未選定＝不施加限制）。
+   * 🔒 **伺服器端比對**（與既有 `orgQuery`／`completionStatus` 同一條路徑、同一個 `listRows()`）
+   * ——🔴 明文不做客端過濾：匯出走伺服器，畫面若另打一份客端篩選，兩者遲早漂移。
+   */
+  const [division, setDivision] = useState('');
+  /**
+   * 制定本部下拉之選項。
+   *
+   * 🔴 **只在「未選定本部」之回應上更新**：伺服器回的是**已套用**三項篩選之列，若選定本部後仍
+   * 依回應重建選項，清單會塌成只剩當前這一個本部，使用者從此**換不回去**（本 repo「畫面說謊」
+   * 之另一種形狀）。選定期間凍結上一次的完整清單，即可自由切換與清除。
+   */
+  const [divisionOptions, setDivisionOptions] = useState<ReturnType<typeof divisionOptionsOf>>([]);
+  /**
+   * 🔵 UX16 `AC-UX55`：匯出成功之回饋（恰兩句或三句可見文字）。
+   * 🔴 **`count` 為伺服器回報之匯出筆數**，不是畫面列數——`exportOjtProgress` 之回傳即其唯一來源。
+   */
+  const [exportToast, setExportToast] = useState<string[] | null>(null);
+  const [exporting, setExporting] = useState(false);
+  /**
    * `AC-30` 分組模式（🔒 預設 `org` ＝現況一格不改）與 `AC-33`② 之文件搜尋關鍵字。
    * 🔴 兩者**刻意不進 `loadRows` 之相依**——`GET /admin/ojt-progress/rows` 已回傳完整、未分頁
    * 之進度列（見 §架構設計 一），分組與文件搜尋純為前端呈現決策；為它們再打一次 API，等於把
@@ -250,12 +289,19 @@ export function OjtProgressPage(): JSX.Element {
 
   const loadRows = useCallback(async () => {
     try {
-      const res = await getOjtProgressRows({ orgQuery: orgQuery || undefined, completionStatus: status });
+      const res = await getOjtProgressRows({
+        orgQuery: orgQuery || undefined,
+        completionStatus: status,
+        // 🔵 `AC-UX49`：第三項篩選走伺服器，與匯出共用同一份參數組裝（`ojtRowFilterQuery`）。
+        divisionCode: division || undefined,
+      });
       setRows(res.items);
+      // 🔴 見 `divisionOptions` 之宣告註解：選定本部期間不重建選項，否則使用者換不回去。
+      if (!division) setDivisionOptions(divisionOptionsOf(res.items));
     } catch {
       setRows([]);
     }
-  }, [orgQuery, status]);
+  }, [orgQuery, status, division]);
 
   const loadPending = useCallback(async () => {
     try {
@@ -479,7 +525,50 @@ export function OjtProgressPage(): JSX.Element {
     () => (groupMode === 'document' ? docGroupsOf(displayedRows) : []),
     [groupMode, displayedRows],
   );
-  const filtered = Boolean(orgQuery || status || (groupMode === 'document' && docQuery.trim()));
+  const filtered = Boolean(
+    division || orgQuery || status || (groupMode === 'document' && docQuery.trim()),
+  );
+
+  /**
+   * 🔵 UX16 `AC-UX51`／`AC-UX55`：匯出當前**三項篩選**之結果為 CSV。
+   *
+   * 🔴 **只送三項篩選**——`docQuery` 與 `groupMode` 一格都不帶（`AC-UX53`）：前者只縮小畫面、
+   * 後者只改列裝進哪種盒子，把任一者寫進資料落地的產物，使用者下次打開檔案時完全看不出當時
+   * 是哪個狀態。⇒ 兩種分組模式下之 CSV 位元組必然相同。
+   * 🔴 **toast 之 `{N}` 取伺服器回報之筆數**（`res.count`），🔴 **不是** `rows.length`／
+   * `displayedRows.length`——畫面另受 `docQuery` 收斂（使用者回報之情境正是「畫面剩 12 列、
+   * 檔案 340 列」），跟著畫面說就從「沒說清楚」惡化為「說了假話」。
+   * 🔒 第 3 句之出現條件綁「搜尋文件目前有值」，**不是**綁分組模式（`AC-UX55` ②）。
+   */
+  const onExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const res = await exportOjtProgress({
+        orgQuery: orgQuery || undefined,
+        completionStatus: status,
+        divisionCode: division || undefined,
+      });
+      const docQueryActive = groupMode === 'document' && docQuery.trim() !== '';
+      setExportToast(ojtExportToastSentences(res.count, docQueryActive));
+    } catch (e) {
+      setExportToast(null);
+      // 🔒 錯誤碼與訊息須同時可見（`error-handling.md#export`）——它是使用者回報問題時唯一
+      //    可靠之定位資訊；🔴 明文不得由前端改寫為自己的猜測（本 repo 已記錄之既有缺陷形狀）。
+      toast.error(
+        e instanceof ApiError ? `匯出失敗：${e.code}` : '匯出失敗',
+        e instanceof ApiError ? { code: `${e.code} · ${e.status}` } : undefined,
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [division, orgQuery, status, groupMode, docQuery, toast]);
+
+  /** 匯出回饋於 8 秒後自動消失（三句話比一般 toast 長，4 秒讀不完）。 */
+  useEffect(() => {
+    if (!exportToast) return undefined;
+    const timer = setTimeout(() => setExportToast(null), EXPORT_TOAST_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [exportToast]);
 
   /**
    * 一列進度列之渲染（兩種分組模式**共用同一份**）。
@@ -519,6 +608,9 @@ export function OjtProgressPage(): JSX.Element {
     setTab('sessions');
     setStatus('pending');
     setOrgQuery('');
+    // 🔵 `AC-UX54` ⑤：新增之「制定本部」於本 deep link 落地時**亦須為未選定**——否則落地集合
+    //    會小於入口所宣稱者（理由與上面「清空單位關鍵字」逐字相同）。
+    setDivision('');
   }, []);
 
   // AC-07：一般使用者全頁 403（側選單亦不呈現本項）。
@@ -615,9 +707,29 @@ export function OjtProgressPage(): JSX.Element {
           </p>
         </div>
 
-        {/* AC-13：篩選恰兩項（單位搜尋＋完成狀態）。完成狀態恰三選項——列層級恆為二態，
+        {/* AC-13 ／🔵 UX16 `AC-UX49`：篩選**恰三項**，順序由左至右＝制定本部 → 單位搜尋 →
+            完成狀態（新項置於**最前**）。完成狀態恰三選項——列層級恆為二態，
             清單頁之「部分完成」在此會是永遠回 0 筆的死選項，刻意不放。 */}
         <div data-ojt-filter-bar className="flex flex-wrap items-center gap-2">
+          {/* 🔵 `AC-UX49`：制定本部（新增，最前）。
+              🔴 **必須掛 `data-ojt-filter`**——該屬性的語意是「這個控制項會移除列」；為了規避
+                 既有絕對值鎖而不掛，會讓「篩選恰三項」這件事本身無法被機器驗證，比翻紅更糟。
+              🔒 選項＝當前語料之 distinct 本部；推導不出本部之單位**不產生選項**（不加 sentinel），
+                 其列在未選定任何本部時**照常呈現**。 */}
+          <select
+            data-ojt-filter="division"
+            aria-label={DIVISION_FILTER_ARIA_TEXT}
+            value={division}
+            onChange={(e) => setDivision(e.target.value)}
+            className="px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"
+          >
+            <option value="">{DIVISION_FILTER_ALL_TEXT}</option>
+            {divisionOptions.map((o) => (
+              <option key={o.code} value={o.code}>
+                {o.label}
+              </option>
+            ))}
+          </select>
           <div className="relative flex-1 min-w-[220px]">
             <Icon name="search" className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -625,14 +737,14 @@ export function OjtProgressPage(): JSX.Element {
               type="search"
               value={orgQuery}
               onChange={(e) => setOrgQuery(e.target.value)}
-              placeholder="搜尋使用單位（名稱或代碼）…"
-              aria-label="搜尋使用單位"
+              placeholder={ORG_FILTER_PLACEHOLDER_TEXT}
+              aria-label={ORG_FILTER_ARIA_TEXT}
               className="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
             />
           </div>
           <select
             data-ojt-filter="status"
-            aria-label="完成狀態"
+            aria-label={STATUS_FILTER_ARIA_TEXT}
             value={status}
             onChange={(e) => setStatus(e.target.value as '' | 'completed' | 'pending')}
             className="px-3 py-2 rounded-md border border-slate-300 text-sm bg-white"
@@ -673,6 +785,7 @@ export function OjtProgressPage(): JSX.Element {
           {filtered && (
             <button
               onClick={() => {
+                setDivision('');
                 setOrgQuery('');
                 setStatus('');
                 setDocQuery('');
@@ -682,10 +795,55 @@ export function OjtProgressPage(): JSX.Element {
               清除
             </button>
           )}
+          {/* 🔵 `AC-UX51`：**恰一顆**匯出鈕，`aria-label` 與 DOM 掛鉤皆為逐字鎖定值。 */}
+          <button
+            data-ojt-export
+            type="button"
+            onClick={() => void onExport()}
+            disabled={exporting}
+            aria-label={OJT_EXPORT_ARIA_TEXT}
+            title={OJT_EXPORT_ARIA_TEXT}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-slate-300 bg-white text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary-600"
+          >
+            <Icon name="download" className="w-4 h-4" />
+            {OJT_EXPORT_ARIA_TEXT}
+          </button>
           <span data-ojt-row-count className="ml-auto text-sm text-slate-500">
             {`共 ${rows.length} 列進度列 · ${rows.filter((r) => r.completed).length} 列${BADGE_COMPLETED_TEXT}`}
           </span>
         </div>
+
+        {/* 🔵 `AC-UX55`：匯出成功之回饋（恰兩句或三句可見文字）。
+            🔴 **`data-ojt-export-toast` 是本條全部斷言的定位點**：三句話都是可見文字，而本頁同時
+               存在匯出鈕、`[data-ojt-row-count]` 與群組標題等多處帶數字的文字，沒有容器掛鉤就
+               只能用全頁比對而必然撞在一起。
+            🔒 視覺沿用設計系統 §6.5 之 toast 卡片（白底、左側 4px 語意色條、右上角浮動）；
+               🔴 **不走共用 `useToast()`** 是因為其 `message` 為純字串、無法承載本條要求的
+               容器掛鉤與逐句分行——已回報 lead，若日後 `ToastProvider` 開放掛鉤即可收斂為一份。 */}
+        {exportToast && (
+          <div
+            role="status"
+            aria-live="polite"
+            data-ojt-export-toast
+            className="fixed top-4 right-4 z-50 flex items-start gap-2 bg-white border border-slate-200 shadow-lg rounded-lg px-4 py-3 text-sm max-w-sm"
+            style={{
+              borderLeftWidth: '4px',
+              borderLeftStyle: 'solid',
+              borderLeftColor: EXPORT_TOAST_ACCENT_COLOR,
+            }}
+          >
+            <span className="mt-0.5 shrink-0 inline-flex" style={{ color: EXPORT_TOAST_ACCENT_COLOR }}>
+              <Icon name="check-circle-2" className="w-4 h-4" />
+            </span>
+            <span className="text-slate-700">
+              {exportToast.map((sentence) => (
+                <span key={sentence} className="block">
+                  {sentence}
+                </span>
+              ))}
+            </span>
+          </div>
+        )}
 
         {/* AC-26 待歸位區：歸位完畢後**整區消失**（非空狀態）——遷移是一次性工作，
             留一個永久的空框會讓人以為系統壞了或還有待辦。 */}

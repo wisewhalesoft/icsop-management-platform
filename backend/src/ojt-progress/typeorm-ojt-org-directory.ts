@@ -1,7 +1,11 @@
 import { DataSource } from 'typeorm';
 import { OrgUnit } from '../database/entities/org-unit.entity';
 import { resolveCompanyShortName } from '../org-directory/company-name';
-import { ORG_PATH_SEPARATOR, createOrgPathResolver } from '../org-directory/org-path';
+import {
+  createOrgPathResolverWithDivision,
+  divisionOf,
+} from '../org-directory/org-division';
+import { ORG_PATH_SEPARATOR, orgUnitDisplayName } from '../org-directory/org-path';
 import { OjtOrgDirectory } from './ojt-progress.store';
 
 /** 名冊快取存活時間（毫秒）。組織資料每日 02:00 同步一次，60 秒之陳舊窗口遠小於其變更頻率。 */
@@ -11,8 +15,18 @@ export const ORG_CACHE_TTL_MS = 60_000;
 interface CompanyDirectory {
   /** `orgCode` → `isActive`。 */
   active: Map<string, boolean>;
-  /** `orgCode` → `部 / 處室`（`createOrgPathResolver` 之 O(1) 查表版）。 */
-  pathOf: (orgCode: string | null | undefined) => string | null;
+  /**
+   * `orgCode` → `本部 / 部 / 處室`（`createOrgPathResolverWithDivision` 之 O(1) 查表版）。
+   *
+   * 🔵 UX16 delta（`AC-UX45`／`ARCH-UX7`）：由三段之 `createOrgPathResolver` 就地改為四段版。
+   * 🔴 **同一份 `list`、零額外查詢**——本部段來自已載入之同一批列之 `parentCode` 上溯。
+   */
+  pathOfWithDivision: (orgCode: string | null | undefined) => string | null;
+  /**
+   * 🔵 UX16 delta（`ARCH-UX8` ③）：**本公司**之 `orgCode` → 列索引（本部上溯與名稱查表共用）。
+   * 🔒 只含一家公司之列 ⇒ 跨公司誤取在資料結構上不可能發生（理由見 `org-division.ts` 檔頭）。
+   */
+  byCode: Map<string, OrgUnit>;
 }
 
 /**
@@ -86,10 +100,12 @@ export class TypeOrmOjtOrgDirectory implements OjtOrgDirectory {
 
     const next = new Map<string, CompanyDirectory>();
     for (const [companyCode, list] of byCompany) {
+      // 🔴 每家公司各自建索引 ⇒ 部層 fallback 鏈與本部上溯皆不會跨公司取到他家的列。
+      const byCode = new Map(list.map((u) => [u.orgCode, u]));
       next.set(companyCode, {
         active: new Map(list.map((u) => [u.orgCode, u.isActive])),
-        // 🔴 每家公司各自建索引 ⇒ `buildOrgPath` 之部層 fallback 鏈不會跨公司取到他家的 descFull。
-        pathOf: createOrgPathResolver(list),
+        pathOfWithDivision: createOrgPathResolverWithDivision(list),
+        byCode,
       });
     }
 
@@ -104,11 +120,30 @@ export class TypeOrmOjtOrgDirectory implements OjtOrgDirectory {
 
   async nameOf(companyCode: string, orgCode: string): Promise<string> {
     const dir = (await this.directory()).get(companyCode);
-    const orgPath = dir?.pathOf(orgCode);
+    // 🔵 UX16 delta（`AC-UX45`）：唯一改動＝`pathOf` → `pathOfWithDivision`（對外簽章一字不改）。
+    const orgPath = dir?.pathOfWithDivision(orgCode);
     const companyName = resolveCompanyShortName(companyCode);
-    // 查無公司（未登錄之 COMPID）→ 只呈現組織路徑；查無單位 → `pathOf` 已退回代碼本身。
+    // 查無公司（未登錄之 COMPID）→ 只呈現組織路徑；查無單位 → 解析器已退回代碼本身。
     return [companyName, orgPath ?? orgCode]
       .filter((s): s is string => s != null && s.trim() !== '')
       .join(ORG_PATH_SEPARATOR);
+  }
+
+  /** 🔵 `AC-UX49`／`ARCH-UX8` ③：本部 `orgCode`；查無本部祖先 → `null`（不加 sentinel）。 */
+  async divisionCodeOf(companyCode: string, orgCode: string): Promise<string | null> {
+    const dir = (await this.directory()).get(companyCode);
+    return dir ? (divisionOf(dir.byCode, orgCode)?.orgCode ?? null) : null;
+  }
+
+  /**
+   * 🔵 `AC-UX49` 之下拉選項標籤：本部之顯示名（**不含公司段**）。
+   * 🔒 取名規則與 `pathOfWithDivision` 之本部段**同一個函式**（`orgUnitDisplayName`）⇒
+   * 選項文字與列上看到的那一段永遠是同一個字串。
+   */
+  async divisionNameOf(companyCode: string, orgCode: string): Promise<string | null> {
+    const dir = (await this.directory()).get(companyCode);
+    if (!dir) return null;
+    const unit = divisionOf(dir.byCode, orgCode);
+    return unit ? orgUnitDisplayName(unit, (c) => dir.byCode.get(c) ?? null) : null;
   }
 }

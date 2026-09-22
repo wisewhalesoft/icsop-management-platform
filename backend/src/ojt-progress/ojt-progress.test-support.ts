@@ -58,6 +58,12 @@ export interface OjtRowFilters {
   orgQuery?: string;
   /** 恰三值（AC-13，`OQ-E11-18` 覆核定案＝比對列自身），空字串＝不施加限制。 */
   completionStatus?: '' | 'completed' | 'pending';
+  /**
+   * UX16 delta（`AC-UX49`，`ARCH-UX8`①）：制定本部 orgCode（等值，沿 parentCode 上溯所抵達之
+   * 本部）；未提供不施加限制。🔴 命名為 `divisionCode`（非 `draftingDivisionId`）——OJT 之組織
+   * 維度是**使用單位**，非 F017／F019 之**制定組織**，沿用該前綴會暗示一個本功能沒有的語意。
+   */
+  divisionCode?: string;
 }
 
 export interface OjtProgressRow {
@@ -68,8 +74,10 @@ export interface OjtProgressRow {
   /** 該列所屬公司（＝文件之 companyCode）；與 orgCode 成對才足以識別一個單位。 */
   companyCode: string;
   orgCode: string;
-  /** `公司簡稱 / 部 / 處室`。 */
+  /** `公司簡稱 / 本部 / 部 / 處室`（UX16 `AC-UX45` 起四段；查無本部祖先仍為既有三段）。 */
   orgName: string;
+  /** UX16 delta（`AC-UX49`，additive）：該列使用單位沿 parentCode 上溯所抵達之本部 orgCode。 */
+  divisionCode?: string | null;
   inactive: boolean;
   orphaned: boolean;
   sessionCount: number;
@@ -200,6 +208,11 @@ export interface FixtureOrg {
   orgCode: string;
   name: string;
   isActive: boolean;
+  /**
+   * UX16 delta（`AC-UX49`，additive、選填）：該單位沿 parentCode 上溯所抵達之本部 orgCode；
+   * 未提供或 `null` ＝查無本部祖先（既有 seed 呼叫點一格未動，皆退化為 `null`）。
+   */
+  divisionCode?: string | null;
 }
 
 /** 既有 fixture 之預設公司（全部 seedDoc 皆為 'AS'，與之對齊）。 */
@@ -299,6 +312,11 @@ export class FakeOrgDirectory {
 
   nameOf(companyCode: string, orgCode: string): Promise<string> {
     return Promise.resolve(this.orgs.get(FakeOrgDirectory.key(companyCode, orgCode))?.name ?? orgCode);
+  }
+
+  /** UX16 delta（`AC-UX49`，`ARCH-UX8`③）：該單位沿 parentCode 上溯所抵達之本部 orgCode。 */
+  divisionCodeOf(companyCode: string, orgCode: string): Promise<string | null> {
+    return Promise.resolve(this.orgs.get(FakeOrgDirectory.key(companyCode, orgCode))?.divisionCode ?? null);
   }
 }
 

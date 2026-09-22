@@ -142,6 +142,98 @@ describe('TypeOrmOjtOrgDirectory 以 (companyCode, orgCode) 複合鍵索引', ()
   });
 });
 
+// ══════════════════════════ ①-b UX16 delta：AC-UX45／AC-UX46（本部四段 orgName） ══════════════════════════
+
+/**
+ * 🔴 本區塊之全部鑑別力所在（`AC-UX46`）：兩組語料成對備妥，且兩組之預期 `orgName` 必須不同——
+ *  ⓐ 含本部層那一列（DIVISION 祖先，經 parentCode 鏈可及）⇒ 預期為四段。
+ *  ⓑ 不含本部層那一列（同一組織但 DIVISION 祖先缺席）⇒ 預期為既有三段（AC-UX45 之空段收合）。
+ * 語料設計獨立於 `COLLIDING_UNITS`（不共用、不污染既有跨公司測試）。
+ */
+function unitDiv(over: Partial<OrgUnit>): OrgUnit {
+  return {
+    id: `${over.companyCode}-${over.orgCode}`,
+    companyCode: 'AS',
+    orgCode: '00000',
+    codePrefix: '',
+    parentCode: null,
+    tier: 'DEPARTMENT',
+    name: '',
+    descFull: null,
+    managerEmpNo: null,
+    isActive: true,
+    ...over,
+  } as OrgUnit;
+}
+
+// ⓐ 含本部層：D0000（DIVISION）─ DA000（DEPARTMENT，parentCode=D0000）─ DAA00（SECTION，parentCode=DA000）。
+const WITH_DIVISION_UNITS: OrgUnit[] = [
+  unitDiv({ companyCode: 'AS', orgCode: 'D0000', tier: 'DIVISION', name: '財會本部', descFull: '財會本部' }),
+  unitDiv({ companyCode: 'AS', orgCode: 'DA000', tier: 'DEPARTMENT', name: '財會部', descFull: '財務會計部', parentCode: 'D0000' }),
+  unitDiv({ companyCode: 'AS', orgCode: 'DAA00', tier: 'SECTION', name: '財會/財管室', descFull: '財務會計部財管室', parentCode: 'DA000' }),
+];
+
+// ⓑ 不含本部層：同一組部/處室，但 DA000 之 parentCode 缺席（查無 DIVISION 祖先）。
+const NO_DIVISION_UNITS: OrgUnit[] = [
+  unitDiv({ companyCode: 'AS', orgCode: 'DA000', tier: 'DEPARTMENT', name: '財會部', descFull: '財務會計部', parentCode: null }),
+  unitDiv({ companyCode: 'AS', orgCode: 'DAA00', tier: 'SECTION', name: '財會/財管室', descFull: '財務會計部財管室', parentCode: 'DA000' }),
+];
+
+describe('TypeOrmOjtOrgDirectory — UX16 delta AC-UX45／AC-UX46（本部四段 orgName，pathOf → pathOfWithDivision）', () => {
+  it('ⓐ 含本部層祖先 → orgName 為四段「公司簡稱 / 本部全名 / 部全名 / 處室簡稱」', async () => {
+    const { ds } = fakeDataSource(WITH_DIVISION_UNITS);
+    const dir = new TypeOrmOjtOrgDirectory(ds);
+    await expect(dir.nameOf('AS', 'DAA00')).resolves.toBe('和潤企業 / 財會本部 / 財務會計部 / 財管室');
+  });
+
+  it('ⓑ 不含本部層祖先（同一組織，DIVISION 祖先缺席）→ orgName 仍為既有三段（空段收合，AC-UX45 明文禁止插入空字串或 sentinel）', async () => {
+    const { ds } = fakeDataSource(NO_DIVISION_UNITS);
+    const dir = new TypeOrmOjtOrgDirectory(ds);
+    await expect(dir.nameOf('AS', 'DAA00')).resolves.toBe('和潤企業 / 財務會計部 / 財管室');
+  });
+
+  it('🔴 ⓐⓑ 兩組之 orgName 確實不同——證明本部段真的被組進字串，而非語料收合掉了差異', async () => {
+    const withDiv = new TypeOrmOjtOrgDirectory(fakeDataSource(WITH_DIVISION_UNITS).ds);
+    const noDiv = new TypeOrmOjtOrgDirectory(fakeDataSource(NO_DIVISION_UNITS).ds);
+    const a = await withDiv.nameOf('AS', 'DAA00');
+    const b = await noDiv.nameOf('AS', 'DAA00');
+    expect(a).not.toBe(b);
+    expect(a).toBe(`${b.split(' / ')[0]} / 財會本部 / ${b.split(' / ').slice(1).join(' / ')}`);
+  });
+
+  it('AC-UX45：nameOf() 對外簽章一字不改——呼叫端（ojt-progress.service.ts）零改動', async () => {
+    const { ds } = fakeDataSource(WITH_DIVISION_UNITS);
+    const dir = new TypeOrmOjtOrgDirectory(ds);
+    const result = dir.nameOf('AS', 'DAA00');
+    expect(result).toBeInstanceOf(Promise);
+    await expect(result).resolves.toEqual(expect.any(String));
+  });
+
+  /**
+   * `AC-UX57`（2026-09-22 第七輪補訂，lead 查證後確認可達）：OJT 之使用部門候選不依層級過濾
+   * （`DocumentEditPage.tsx:291,410`），使用者可把使用部門設為本部層單位本身 ⇒ `nameOf()` 會
+   * 以 `X0000` 呼叫。🔴 三條向量必須成組（純函式層已於 `org-division.spec.ts` 驗證核心規則，
+   * 此處補 OJT adapter 層之公司前綴版，證明 `nameOf()` 確實把該規則接上）。
+   */
+  it('🔴 AC-UX57 ⓐ：orgCode 本身即本部代碼 → 恰兩段「公司簡稱 / 本部全名」，不得為三段（本部段與部段重複）', async () => {
+    const { ds } = fakeDataSource(WITH_DIVISION_UNITS);
+    const dir = new TypeOrmOjtOrgDirectory(ds);
+    await expect(dir.nameOf('AS', 'D0000')).resolves.toBe('和潤企業 / 財會本部');
+  });
+
+  it('AC-UX57 ⓑ：本部底下之部（DA000）→ 恰三段「公司簡稱 / 本部全名 / 部全名」', async () => {
+    const { ds } = fakeDataSource(WITH_DIVISION_UNITS);
+    const dir = new TypeOrmOjtOrgDirectory(ds);
+    await expect(dir.nameOf('AS', 'DA000')).resolves.toBe('和潤企業 / 財會本部 / 財務會計部');
+  });
+
+  it('AC-UX57 ⓒ：部底下之處室（DAA00）→ 恰四段（同 AC-UX45 ⓐ 案，此處為成組向量之收尾，不重複斷言內容）', async () => {
+    const { ds } = fakeDataSource(WITH_DIVISION_UNITS);
+    const dir = new TypeOrmOjtOrgDirectory(ds);
+    await expect(dir.nameOf('AS', 'DAA00')).resolves.toBe('和潤企業 / 財會本部 / 財務會計部 / 財管室');
+  });
+});
+
 // ══════════════════════════ ② service 層（companyCode 有無一路帶到底） ══════════════════════════
 
 function makeService() {
@@ -156,20 +248,29 @@ function makeService() {
   return { svc, sessionStore, usingDept, orgDirectory };
 }
 
-/** AS／AJ 各一份文件，使用部門皆為同一個字面 `BA000`（兩個不同的部）。 */
+/**
+ * AS／AJ 各一份文件，使用部門皆為同一個字面 `BA000`（兩個不同的部）。
+ *
+ * 🔴 UX16 delta（`AC-UX46`，就地改寫，非回歸）：兩家之 `orgName` 就地改為含本部之四段字串
+ * （`FakeOrgDirectory.nameOf()` 為單純 pass-through，其值即測試作者宣告之「組織目錄應回傳
+ * 什麼」，非本函式自行組裝——四段組裝之真正演算法驗證見上方
+ * `describe('TypeOrmOjtOrgDirectory — UX16 delta AC-UX45／AC-UX46 ...')`，本區塊測的是
+ * `companyCode` 有沒有沿服務層一路帶到底，非組裝演算法本身）。
+ * 📝 已作廢（⚠ 不得復原）：`OLD>` `和潤企業 / 車輛分期營業一部` ／ `和勁企業 / 商用車輛一部`（三段）。
+ */
 function seedTwoCompanies(
   usingDept: FakeUsingDeptChecker,
   orgDirectory: FakeOrgDirectory,
 ): void {
   usingDept.seedDoc({ id: 'd-as', documentNumber: 'N-AS', documentName: 'AS 文件', companyCode: 'AS', usingDeptIds: ['BA000'] });
   usingDept.seedDoc({ id: 'd-aj', documentNumber: 'N-AJ', documentName: 'AJ 文件', companyCode: 'AJ', usingDeptIds: ['BA000'] });
-  orgDirectory.seedOrg({ companyCode: 'AS', orgCode: 'BA000', name: '和潤企業 / 車輛分期營業一部', isActive: true });
-  orgDirectory.seedOrg({ companyCode: 'AJ', orgCode: 'BA000', name: '和勁企業 / 商用車輛一部', isActive: true });
+  orgDirectory.seedOrg({ companyCode: 'AS', orgCode: 'BA000', name: '和潤企業 / 營業一本部 / 車輛分期營業一部', isActive: true, divisionCode: 'DIV-AS-1' });
+  orgDirectory.seedOrg({ companyCode: 'AJ', orgCode: 'BA000', name: '和勁企業 / 商用車輛本部 / 商用車輛一部', isActive: true, divisionCode: 'DIV-AJ-1' });
   // rollup 之部層代碼 `deptCodeOf('BA000') === 'BA000'`（本身即部層）⇒ 上面兩筆同時服務兩處，不另 seed。
 }
 
 describe('listRows 之 companyCode 與單位全名', () => {
-  it('每列帶出自己公司之單位全名，兩家之同碼列各自獨立（不合流、不互相覆蓋）', async () => {
+  it('每列帶出自己公司之單位全名（UX16：四段格式），兩家之同碼列各自獨立（不合流、不互相覆蓋）', async () => {
     const { svc, usingDept, orgDirectory } = makeService();
     seedTwoCompanies(usingDept, orgDirectory);
 
@@ -181,8 +282,8 @@ describe('listRows 之 companyCode 與單位全名', () => {
 
     const as = rows.find((r) => r.companyCode === 'AS');
     const aj = rows.find((r) => r.companyCode === 'AJ');
-    expect(as?.orgName).toBe('和潤企業 / 車輛分期營業一部');
-    expect(aj?.orgName).toBe('和勁企業 / 商用車輛一部');
+    expect(as?.orgName).toBe('和潤企業 / 營業一本部 / 車輛分期營業一部');
+    expect(aj?.orgName).toBe('和勁企業 / 商用車輛本部 / 商用車輛一部');
   });
 
   it('單位搜尋比對全名 ⇒ 打公司簡稱即可只篩出該公司之列（AC-13 仍為恰兩項篩選）', async () => {
@@ -210,8 +311,8 @@ describe('getSummary 之公司維度', () => {
     expect(deptRollup.map((g) => `${g.companyCode}:${g.deptOrgCode}`)).toEqual(['AJ:BA000', 'AS:BA000']);
     expect(deptRollup.map((g) => g.totalUnits)).toEqual([1, 1]);
     expect(deptRollup.map((g) => g.deptName)).toEqual([
-      '和勁企業 / 商用車輛一部',
-      '和潤企業 / 車輛分期營業一部',
+      '和勁企業 / 商用車輛本部 / 商用車輛一部',
+      '和潤企業 / 營業一本部 / 車輛分期營業一部',
     ]);
   });
 
@@ -226,5 +327,61 @@ describe('getSummary 之公司維度', () => {
 
     expect(coverage.denominator).toBe(1);
     expect(coverage.excludedInactive).toBe(0);
+  });
+});
+
+// ══════════════════════════ ③ UX16 delta：AC-UX47（排序連帶依本部分群）／AC-UX48（單位搜尋涵蓋本部） ══════════════════════════
+
+describe('listRows — UX16 delta AC-UX47（排序連帶變成先依本部分群，四段格式之必然後果）', () => {
+  /**
+   * 🔴 比較器鑑別力設計（規避 `localeCompare` 之 CJK 定序隨環境漂移血訓，
+   * 見 F043 `AC-UX29` ④ 之「甲/乙/丙」教訓）：本部段與部段之差異點**皆為 ASCII 字母**
+   * （`A`／`B`、`X`／`Y`／`Z`），使字串分歧處的比較結果在任何 locale／ICU 版本下皆一致
+   * ——本條之鑑別力來自「本部段先分歧」這個**位置**，不依賴 CJK 字元之相對定序。
+   */
+  it('🔴 同一公司、不同本部、但部段字母序交錯 → 輸出序為「先本部後部」，非單純部段字母序', async () => {
+    const { svc, usingDept, orgDirectory } = makeService();
+    // 本部 A 下之「部 Y」、本部 B 下之「部 X」、本部 A 下之「部 Z」
+    // ——若僅依部段排序會是 X→Y→Z；四段格式下先依本部分群，故為 (A/Y)→(A/Z)→(B/X)。
+    usingDept.seedDoc({ id: 'd-b', documentNumber: 'N-B', documentName: '文件B', companyCode: 'AS', usingDeptIds: ['ORG-B'] });
+    usingDept.seedDoc({ id: 'd-a', documentNumber: 'N-A', documentName: '文件A', companyCode: 'AS', usingDeptIds: ['ORG-A'] });
+    usingDept.seedDoc({ id: 'd-c', documentNumber: 'N-C', documentName: '文件C', companyCode: 'AS', usingDeptIds: ['ORG-C'] });
+    orgDirectory.seedOrg({ companyCode: 'AS', orgCode: 'ORG-A', name: '和潤企業 / 本部A / 部Y', isActive: true });
+    orgDirectory.seedOrg({ companyCode: 'AS', orgCode: 'ORG-B', name: '和潤企業 / 本部B / 部X', isActive: true });
+    orgDirectory.seedOrg({ companyCode: 'AS', orgCode: 'ORG-C', name: '和潤企業 / 本部A / 部Z', isActive: true });
+
+    const rows = await svc.listRows(ICSOP_ADMIN, {});
+    // 依 orgName.localeCompare 排序：本部A/部Y < 本部A/部Z < 本部B/部X（先本部後部）。
+    expect(rows.map((r) => r.documentNumber)).toEqual(['N-A', 'N-C', 'N-B']);
+  });
+
+  it('🔒 documentNumber 為第二排序鍵，一字不改（本條僅驗第一鍵之後果）', async () => {
+    const { svc, usingDept, orgDirectory } = makeService();
+    usingDept.seedDoc({ id: 'd1', documentNumber: 'N-Z', documentName: '文件Z', companyCode: 'AS', usingDeptIds: ['SAME'] });
+    usingDept.seedDoc({ id: 'd2', documentNumber: 'N-A', documentName: '文件A', companyCode: 'AS', usingDeptIds: ['SAME'] });
+    orgDirectory.seedOrg({ companyCode: 'AS', orgCode: 'SAME', name: '和潤企業 / 本部甲 / 部甲', isActive: true });
+    const rows = await svc.listRows(ICSOP_ADMIN, {});
+    expect(rows.map((r) => r.documentNumber)).toEqual(['N-A', 'N-Z']);
+  });
+});
+
+describe('listRows — UX16 delta AC-UX48（單位搜尋自動涵蓋本部，比對實作零改動）', () => {
+  it('🔴 輸入本部名稱之關鍵字 → 該本部下轄之全部單位之列皆被篩出', async () => {
+    const { svc, usingDept, orgDirectory } = makeService();
+    usingDept.seedDoc({ id: 'd1', documentNumber: 'N1', documentName: '文件一', companyCode: 'AS', usingDeptIds: ['ORG-A'] });
+    usingDept.seedDoc({ id: 'd2', documentNumber: 'N2', documentName: '文件二', companyCode: 'AS', usingDeptIds: ['ORG-B'] });
+    orgDirectory.seedOrg({ companyCode: 'AS', orgCode: 'ORG-A', name: '和潤企業 / 財會本部 / 財會部', isActive: true });
+    orgDirectory.seedOrg({ companyCode: 'AS', orgCode: 'ORG-B', name: '和潤企業 / 業務本部 / 業務部', isActive: true });
+
+    const rows = await svc.listRows(ICSOP_ADMIN, { orgQuery: '財會本部' });
+    expect(rows.map((r) => r.documentNumber)).toEqual(['N1']);
+  });
+
+  it('🔴 成對（負向）：不含本部層之語料，輸入同一本部名稱關鍵字 → 篩出 0 列（證明比對邏輯沒有被改成什麼都命中）', async () => {
+    const { svc, usingDept, orgDirectory } = makeService();
+    usingDept.seedDoc({ id: 'd1', documentNumber: 'N1', documentName: '文件一', companyCode: 'AS', usingDeptIds: ['ORG-Z'] });
+    orgDirectory.seedOrg({ companyCode: 'AS', orgCode: 'ORG-Z', name: '和潤企業 / 某部門', isActive: true }); // 無本部段
+    const rows = await svc.listRows(ICSOP_ADMIN, { orgQuery: '財會本部' });
+    expect(rows).toHaveLength(0);
   });
 });

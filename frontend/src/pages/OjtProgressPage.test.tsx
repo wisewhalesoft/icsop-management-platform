@@ -627,7 +627,15 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       expect(document.querySelector('[data-doc-coverage-empty="no-docs"]')).toBeNull();
     });
 
-    it('導向 TAB2 入口：恆存在（未截斷案）；點擊 ⇒ 切至 TAB2、完成狀態設為「尚未完成」、單位關鍵字清空；TAB2 篩選項仍恰兩項', async () => {
+    /**
+     * UX16 delta `AC-UX50` ④／`AC-UX54` ⑤：既有絕對值鎖之就地改寫（預期轉紅，非回歸）——
+     * TAB2 篩選由「恰兩項」擴為「恰三項」（新增「制定本部」，`AC-UX49`）。改寫方向＝回歸鎖：
+     * ⓐ `[data-ojt-filter="org"]` 仍存在 ＋ ⓑ `[data-ojt-filter="status"]` 仍存在 ＋
+     * ⓒ `[data-ojt-filter="division"]` 存在 ＋ ⓓ 總數恰 3。另補 `AC-UX54` ⑤ 之要求：本 deep link
+     * 落地時「制定本部」篩選亦須為未選定（否則落地集合會小於入口所宣稱者，`AC-14` ⑦ 之既有理由）。
+     * 📝 已作廢（⚠ 不得復原）：`OLD>` `expect(document.querySelectorAll('[data-ojt-filter]')).toHaveLength(2);`
+     */
+    it('導向 TAB2 入口：恆存在（未截斷案）；點擊 ⇒ 切至 TAB2、完成狀態設為「尚未完成」、單位關鍵字清空、制定本部未選定；TAB2 篩選項為恰三項（AC-UX49／AC-UX50④／AC-UX54⑤）', async () => {
       const user = userEvent.setup();
       vi.mocked(endpoints.getOjtProgressSummary).mockResolvedValue(
         summaryFixture({ docCoverage: docCoverageSlice(manyRows(2)) }), // 未截斷（母體=2 < 15）
@@ -642,10 +650,15 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       await waitFor(() => expect(document.querySelector('[data-ojt-tab="sessions"]')?.getAttribute('aria-selected')).toBe('true'));
       const statusSelect = document.querySelector('[data-ojt-filter="status"]') as HTMLSelectElement;
       const orgInput = document.querySelector('[data-ojt-filter="org"]') as HTMLInputElement;
+      const divisionSelect = document.querySelector('[data-ojt-filter="division"]') as HTMLSelectElement;
       expect(statusSelect.value).toBe('pending'); // 「尚未完成」選項之底層值，比照 AC-13 之既有三值
       expect(orgInput.value).toBe('');
-      // 🔒 未新增任何 TAB2 篩選項。
-      expect(document.querySelectorAll('[data-ojt-filter]')).toHaveLength(2);
+      expect(divisionSelect).not.toBeNull();
+      expect(divisionSelect.value).toBe(''); // AC-UX54⑤：制定本部亦須為未選定
+      // 🔴 回歸鎖（非只把 2 改成 3）：既有兩項逐一仍在 ＋ 新項存在 ＋ 總數恰 3。
+      expect(document.querySelector('[data-ojt-filter="org"]')).not.toBeNull();
+      expect(document.querySelector('[data-ojt-filter="status"]')).not.toBeNull();
+      expect(document.querySelectorAll('[data-ojt-filter]')).toHaveLength(3);
       expect([...statusSelect.options]).toHaveLength(3);
     });
 
@@ -1034,14 +1047,28 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       await waitFor(() => expect(document.querySelector('[data-ojt-filter-bar]')).toBeInTheDocument());
     }
 
-    it('AC-13 篩選恰兩項；完成狀態恰三選項（所有完成狀態／已完成／尚未完成，不含「部分完成」）', async () => {
+    /**
+     * UX16 delta `AC-UX50` ①（本檔 `AC-13`／[§Main Flow] 步驟 8 之既有絕對值鎖）：就地改為
+     * 恰三項，順序制定本部→單位搜尋→完成狀態（`AC-UX49`）。🔒 完成狀態恰三值、不含「部分完成」
+     * 之既有裁決一字不動。
+     * 📝 已作廢（⚠ 不得復原）：`OLD>` 標題「AC-13 篩選恰兩項」，僅驗 org／status 兩項存在。
+     */
+    it('AC-13／AC-UX49：TAB2 篩選恰三項（制定本部／單位搜尋／完成狀態），完成狀態恰三選項', async () => {
       await gotoSessionsTab();
+      expect(document.querySelector('[data-ojt-filter="division"]')).not.toBeNull();
       expect(document.querySelector('[data-ojt-filter="org"]')).not.toBeNull();
       const statusSelect = document.querySelector('[data-ojt-filter="status"]') as HTMLSelectElement;
       expect(statusSelect).not.toBeNull();
       const options = [...statusSelect.options].map((o) => o.textContent);
       expect(options).toEqual(['所有完成狀態', '已完成', '尚未完成']);
       expect(options).not.toContain('部分完成');
+      expect(document.querySelectorAll('[data-ojt-filter]')).toHaveLength(3);
+    });
+
+    it('AC-UX49：制定本部置於最前（DOM 順序：division → org → status）', async () => {
+      await gotoSessionsTab();
+      const filters = [...document.querySelectorAll('[data-ojt-filter]')].map((el) => el.getAttribute('data-ojt-filter'));
+      expect(filters).toEqual(['division', 'org', 'status']);
     });
 
     it('AC-11 群組容器帶單位名稱／代碼；裁撤單位帶 [data-org-inactive]=「已裁撤」', async () => {
@@ -1537,7 +1564,12 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
 
     // ---------- F-1. 分組模式切換（AC-30／AC-36） ----------
 
-    it('AC-30 分組模式控制項：恰兩個 option（逐字＝具名常數）、預設 org；🔴 不得掛 data-ojt-filter（AC-13「篩選恰兩項」為既有鎖）', async () => {
+    /**
+     * UX16 delta `AC-UX50` ②：既有絕對值鎖就地改寫（恆為 2 → 恆為 3）。🔒 其真正在守的事
+     * （分組模式切換不是篩選、不得計入）一字不動。
+     * 📝 已作廢：`OLD>` `expect(document.querySelectorAll('[data-ojt-filter]')).toHaveLength(2);`
+     */
+    it('AC-30 分組模式控制項：恰兩個 option（逐字＝具名常數）、預設 org；🔴 不得掛 data-ojt-filter（AC-UX49「篩選恰三項」為既有鎖）', async () => {
       await gotoSessionsTab();
       const sel = groupMode();
       expect(sel).not.toBeNull();
@@ -1547,9 +1579,12 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
         { value: 'document', text: GROUP_MODE_DOC_TEXT },
       ]);
       expect(sel.value).toBe('org');
-      // 🔴 它不是篩選：不移除任何列，只改列的組織方式；算成第三個篩選會直接推翻 OQ-E11-15→A。
+      // 🔴 它不是篩選：不移除任何列，只改列的組織方式；算成第四個篩選會直接推翻 OQ-E11-15→A。
       expect(sel.hasAttribute('data-ojt-filter')).toBe(false);
-      expect(document.querySelectorAll('[data-ojt-filter]')).toHaveLength(2);
+      expect(document.querySelector('[data-ojt-filter="division"]')).not.toBeNull();
+      expect(document.querySelector('[data-ojt-filter="org"]')).not.toBeNull();
+      expect(document.querySelector('[data-ojt-filter="status"]')).not.toBeNull();
+      expect(document.querySelectorAll('[data-ojt-filter]')).toHaveLength(3);
     });
 
     it('AC-30／AC-31 兩種群組容器互斥渲染（各自先以正向斷言確立當下模式之群組存在）', async () => {
@@ -1731,6 +1766,11 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
 
     // ---------- F-4. 規模收斂之硬需求 ②：文件搜尋（AC-33②） ----------
 
+    /**
+     * UX16 delta `AC-UX50` ③（`AC-33` ② 之既有絕對值鎖）：就地改寫恆為 2 → 恆為 3。🔒 其
+     * `hasAttribute(...) === false` 一句一字不動。
+     * 📝 已作廢：`OLD>` `expect(document.querySelectorAll('[data-ojt-filter]')).toHaveLength(2);`
+     */
     it('AC-33② 文件搜尋：🔒 僅 document 模式進 DOM；aria-label／placeholder 逐字＝常數；🔴 不得掛 data-ojt-filter', async () => {
       await gotoSessionsTab();
       await waitFor(() => expect(document.querySelector('[data-ojt-filter="org"]')).not.toBeNull());
@@ -1740,7 +1780,10 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       expect(docSearch().getAttribute('aria-label')).toBe(DOC_SEARCH_ARIA_TEXT);
       expect(docSearch().getAttribute('placeholder')).toBe(DOC_SEARCH_PLACEHOLDER_TEXT);
       expect(docSearch().hasAttribute('data-ojt-filter')).toBe(false);
-      expect(document.querySelectorAll('[data-ojt-filter]')).toHaveLength(2);
+      expect(document.querySelector('[data-ojt-filter="division"]')).not.toBeNull();
+      expect(document.querySelector('[data-ojt-filter="org"]')).not.toBeNull();
+      expect(document.querySelector('[data-ojt-filter="status"]')).not.toBeNull();
+      expect(document.querySelectorAll('[data-ojt-filter]')).toHaveLength(3);
     });
 
     it('AC-33② 比對文件編號之不分大小寫子字串（先正向確立兩組皆在）', async () => {
