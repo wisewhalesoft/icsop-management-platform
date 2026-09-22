@@ -1,6 +1,6 @@
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/useAuth';
-import { visibleMenu } from './domain/menu';
+import { hasAdminAccess } from './domain/menu';
 import { Icon } from './components/Icon';
 import { AppShell } from './components/AppShell';
 import { ToastProvider } from './components/useToast';
@@ -66,10 +66,15 @@ function FullPageError({ message, onRetry }: { message: string | null; onRetry: 
   );
 }
 
-/** 後台守衛：無任何後台功能權限（如一般使用者）→ 導回角色分流頁。 */
+/**
+ * 後台守衛：無任何後台功能權限（如一般使用者）→ 導回角色分流頁。
+ *
+ * 🔴 判準走 `hasAdminAccess()` 之單一述詞（F002 `AC-UX7`），與分流頁、前台 header 之
+ * 「前往後台」鈕**三處共用同一份實作**——語意逐字未變（原為 `visibleMenu(...).length === 0`）。
+ */
 function AdminGuard(): JSX.Element {
   const { user } = useAuth();
-  if (visibleMenu(user?.roleCode).length === 0) {
+  if (!hasAdminAccess(user?.roleCode)) {
     return <Navigate to="/" replace />;
   }
   return <Outlet />;

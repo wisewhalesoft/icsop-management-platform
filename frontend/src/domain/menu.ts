@@ -49,6 +49,21 @@ export function visibleMenu(roleCode: string | undefined): MenuItem[] {
 }
 
 /**
+ * 該角色是否具備任一後台功能之可見權限（F002 `AC-UX7`／架構 §16.3 `ARCH-UX3`）。
+ *
+ * 🔴 **本述詞只能有一份實作**——分流頁（`RoleLanding`）、`AdminGuard`、前台 header 之
+ * 「前往後台」鈕（F019 `AC-UX20`）**三處共用**。三處若各寫一套（例如在前台頁寫
+ * `roleCode !== 'User'`），日後調整 F025 矩陣就會出現「分流頁放行、後台守衛擋掉」的死鏈；
+ * `RoleLanding.tsx` 之既有註解已為此警示過一次，本 delta 新增第三個消費者，
+ * 述詞出現第二份的機率因此上升、而不是下降。
+ *
+ * 🔒 判準恆為 `visibleMenu(role).length > 0`（`OQ-UX16-09`＝選項 A），`visibleMenu` 本體不變。
+ */
+export function hasAdminAccess(roleCode: string | undefined): boolean {
+  return visibleMenu(roleCode).length > 0;
+}
+
+/**
  * 側欄/卡片存取徽章：受限可寫→'受限CRUD'、可寫→'CRUD'、僅讀→'唯讀'、無權→null。
  *
  * 🔴 F042 AC-28⑮：`RESTRICTED_CRUD` 於 `canPerform(...,'write')` 恆為 true，若不先行判別
