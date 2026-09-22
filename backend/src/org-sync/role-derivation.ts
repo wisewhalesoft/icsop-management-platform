@@ -222,10 +222,23 @@ export function deriveRoles(input: {
 
     // --- 規則 A：業務子分類（直接寫，不適用只升不降）---
     // ⚠ 與 roleCode 完全分離：即使角色本身無異動（或屬待審之降級），子分類仍照推導寫入。
-    const titleName = acc.jobTitleCode
-      ? (titleNames.get(titleKey(acc.companyCode, acc.jobTitleCode)) ?? null)
-      : null;
-    const targetSubtype = isBusinessJobTitleName(titleName) ? 'business' : 'other';
+    //
+    // 🔴 **UX16 delta `AC-UX8`（2026-09-22 人類已裁決，不得再翻案）：自動判定已停用**——
+    // 本規則不再消費 `isBusinessJobTitleName()` 之回傳值，目標子分類**恆為 `'other'`**
+    // ⇒ 本函式輸出之 `subtypeChanges` 中 `to === 'business'` 之列數恆為 0。
+    // 🔒 `isBusinessJobTitleName()` 本體與其既有單元測試**一律保留**（它作為純函式的行為沒有
+    //    改變——改變的是「有沒有人聽它的」）；復原只需把下方 `OLD>` 那一行放回來，但**須經
+    //    人類再裁決**。
+    // 🔒 `userSubtype` 欄位與 `'business'` 列舉值亦一律保留（`AC-UX11` ②）：帳號管理之
+    //    **手動指派**仍可指定 `business`，F019 之限縮管線一行未改——本 delta 只停「值從哪裡
+    //    來」，不動「值代表什麼」。🔴 順手拆掉限縮邏輯會讓手動指派靜默失效。
+    // 📝 已作廢（`role-derivation.ts` 原第 230 行）：
+    //    OLD> const targetSubtype = isBusinessJobTitleName(titleName) ? 'business' : 'other';
+    // ⚠ 既有 `business` 帳號之回填**不經本函式、不經同步門檻**，走獨立一次性 migration
+    //    （`AC-UX9`／`ARCH-UX9`：`<ts>-account-user-subtype-derived-backfill.ts`）。不先跑它，
+    //    正式環境 699 筆 `business→other` 會一次湧進同一份計畫，`roleChangeRatioExceeded()`
+    //    為 true ⇒ 整批被擋、一筆不寫（`AC-UX10`）。
+    const targetSubtype = 'other';
     if (acc.userSubtype !== targetSubtype) {
       subtypeChanges.push({
         accountId: acc.id,
