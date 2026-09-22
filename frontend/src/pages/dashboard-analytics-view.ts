@@ -42,18 +42,44 @@ export const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
 
 /** 🔒 `AC-G50`：顏色不得為唯一區分手段——畫面上恆有逐字標籤（`已公告 {n}`／`進度中 {n}`）。 */
 export const DONUT_PALETTE: readonly string[] = [
-  '#365C97',
   '#0891B2',
-  '#7C3AED',
-  '#047857',
-  '#B45309',
-  '#BE185D',
+  '#F43F5E',
+  '#65A30D',
+  '#A855F7',
+  '#EA580C',
+  '#15803D',
+  '#C026D3',
   '#4338CA',
-  '#0F766E',
 ];
-export const DONUT_OTHER_COLOR = '#94A3B8';
-export const COLOR_ANNOUNCED = '#047857';
-export const COLOR_IN_PROGRESS = '#365C97';
+/** 🔒 `其他` 維持中性灰（無可感知色相）——它是「被合併」之視覺類別，不與任何真實組織競爭注意力。 */
+export const DONUT_OTHER_COLOR = '#64748B';
+
+/**
+ * ═══ 語意色：`已公告`／`進度中`（填色與文字色**分家**）═══
+ *
+ * 🔴 **為何要拆**：`4.5:1` 是**文字**之義務、不是圖形之義務。綁成同一個常數，等於讓
+ *   「小字在淺色膠囊底上的對比」這個全頁最嚴之約束，去封死所有圖形（環、柱、圖示）之彩度上限。
+ *   SVG 之 `rect`／環段是色塊、`aria-hidden`，每一段旁恆有逐字標籤 ⇒ 只需對白底可辨識（3:1）。
+ *
+ * 🔒 四條規則：
+ *   ① 同一語意之 `*_FILL` 與 `*_TEXT` 必須同色相家族（色相差 ≤ 15°）——色相一飄就是兩個不同狀態色。
+ *   ② `*_FILL` 用於**全頁所有圖形處**（統計卡圖示、OJT 卡之環、類別區之色塊圖例、長條之柱）；
+ *      `*_TEXT` 用於**全頁所有文字處**（兩張環圖圖例之兩個數字、長條之兩個數字、最新公告之狀態膠囊）。
+ *      ⚠ 環圖圖例左側之圓點**不是**語意色，那是 `DONUT_PALETTE`（一點＝一個組織）。
+ *   ③ `*_FILL` 對白底 ≥ 3:1；`*_TEXT` 對其實際底色（`*_BG`）≥ 4.5:1。
+ *   ④ 綠藍**兩組都拆**（只拆一邊會讓結構不對稱，日後改色的人必踩）。
+ *
+ * 🔴 **明文禁止**把 `*_FILL` 與 `*_TEXT` 再合併回單一常數、或為舊名留下別名：留著別名的話，
+ *   漏改處會靜默拿到舊語意而 TypeScript 不報，那正是本次分家最容易失敗的方式。讓舊名消失，
+ *   編譯器才會把每一個使用點指出來。
+ */
+export const COLOR_ANNOUNCED_FILL = '#059669';
+export const COLOR_ANNOUNCED_TEXT = '#047857';
+export const COLOR_IN_PROGRESS_FILL = '#3B82F6';
+export const COLOR_IN_PROGRESS_TEXT = '#1D4ED8';
+/** 🔴 兩個淺底由 **TEXT** 之 AA 反推、不是由 FILL：膠囊裡是小字。 */
+export const COLOR_ANNOUNCED_BG = '#D1FAE5';
+export const COLOR_IN_PROGRESS_BG = '#DBEAFE';
 
 /**
  * `AC-G90` ① — 端點回傳之 `defaultDimension` 之收斂。

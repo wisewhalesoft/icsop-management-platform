@@ -28,8 +28,12 @@ import {
 } from './ojt-progress-view';
 import {
   CATEGORY_LIMIT,
-  COLOR_ANNOUNCED,
-  COLOR_IN_PROGRESS,
+  COLOR_ANNOUNCED_BG,
+  COLOR_ANNOUNCED_FILL,
+  COLOR_ANNOUNCED_TEXT,
+  COLOR_IN_PROGRESS_BG,
+  COLOR_IN_PROGRESS_FILL,
+  COLOR_IN_PROGRESS_TEXT,
   DONUT_CIRCUMFERENCE,
   DONUT_OTHER_COLOR,
   DONUT_PALETTE,
@@ -343,7 +347,10 @@ export function DashboardHome(): JSX.Element {
   const donuts = analytics?.donuts;
 
   return (
-    <div className="max-w-6xl mx-auto">
+    /* 🟣 本頁滿版（充分利用螢幕寬度）：原 `max-w-6xl mx-auto` 已移除。
+       🔴 對應點**不是** `AppShell`——其 `<main className="px-4 py-6">` 本來就沒有寬度上限，
+          改它會連帶放寬其餘 20 餘個後台頁面。左右留白由 `AppShell` 之 `px-4` 承擔。 */
+    <div>
       <PageHeader breadcrumb={[{ label: 'ICSOP 管理後台' }, { label: '首頁' }]} title="後台首頁 / 儀表板" />
       <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
         <div>
@@ -378,8 +385,8 @@ export function DashboardHome(): JSX.Element {
               title="已公告"
               value={cards.announced}
               icon="megaphone"
-              color={COLOR_ANNOUNCED}
-              background="#D1FAE5"
+              color={COLOR_ANNOUNCED_FILL}
+              background={COLOR_ANNOUNCED_BG}
               hint="累積、不限時間"
             />
             <StatCard
@@ -387,8 +394,8 @@ export function DashboardHome(): JSX.Element {
               title="進度中"
               value={cards.inProgress}
               icon="clock"
-              color={COLOR_IN_PROGRESS}
-              background="#EAF1FA"
+              color={COLOR_IN_PROGRESS_FILL}
+              background={COLOR_IN_PROGRESS_BG}
               hint="公告日未到或尚未設定公告日"
             />
             <StatCard
@@ -423,7 +430,11 @@ export function DashboardHome(): JSX.Element {
              ——後者不隨頁籤改變，三個維度頁籤會整個失去意義。
           🔴 `AC-G45`：兩個區塊**各自獨立切換**（各有一組 `role="tablist"`）。理由：兩區回答的是
              不同問題（「這個月」vs「到目前為止」），使用者常需要一邊看公司、一邊看部門。 */}
-      <div className="grid lg:grid-cols-2 gap-4 mb-4">
+      {/* 🔴 `grid-cols-1` 不是裝飾：未指定欄數時是隱含的 `auto` 軌，其最小尺寸＝項目 min-content；
+          圖例列那兩個 `whitespace-nowrap` 數字使 min-content 達 ≈ 497px ⇒ 768px 下環圖卡片會比
+          同列其他區塊寬出 66px。Tailwind 之 `grid-cols-1` 展開為 `repeat(1, minmax(0,1fr))`，min 才是 0。
+          ⚠ `min-w-0` 只治 flex 項目之自動最小尺寸，治不了 grid 軌之 auto 最小值。 */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
         <DonutRegion
           scope="month"
           dimension={monthDim}
@@ -438,13 +449,10 @@ export function DashboardHome(): JSX.Element {
         />
       </div>
 
-      {/* ═══ F044 ④ · 最新公告（ICSOP 版本更新）（`AC-G51`～`AC-G58`）═══ */}
-      <LatestAnnouncements
-        rows={analytics?.latestAnnouncements}
-        total={analytics?.latestAnnouncementsTotal}
-        mayViewMore={mayViewDocuments}
-      />
-
+      {/* 🟣 ⑤（類別分布）刻意排在 ④（最新公告）**之前**：④／⑤ 是規格區塊編號（AC 區段身分），
+          不是畫面順序，對調後編號不重排，否則規格與本檔之間會失去對照關係。
+          🔴 外距掛在各自的 `<section>` 上（不另設 host 容器）——類別區為條件渲染，
+             區塊不進 DOM 時其外距必須一併消失。 */}
       {/* ═══ F044 ⑤ · 依業務/功能類別分布（`AC-G60`～`AC-G68`）═══
           🔴 部門窗口在 `BUSINESS_CATEGORY_MANAGEMENT` 為 `NONE` ⇒ 整個區塊**完全不進 DOM**
              （不是 hidden、不是 disabled），且其資料端點亦不被呼叫。 */}
@@ -455,6 +463,13 @@ export function DashboardHome(): JSX.Element {
           onToggleExpand={() => setCategoryExpanded((v) => !v)}
         />
       ) : null}
+
+      {/* ═══ F044 ④ · 最新公告（ICSOP 版本更新）（`AC-G51`～`AC-G58`）═══ */}
+      <LatestAnnouncements
+        rows={analytics?.latestAnnouncements}
+        total={analytics?.latestAnnouncementsTotal}
+        mayViewMore={mayViewDocuments}
+      />
 
       {/* 最近活動（prototype 07 ACTIVITY 區塊）；來源與可見範圍由伺服端依 F025 逐類過濾。
           🔒 `OQ-D44-05`：本區塊保留、一字不動。 */}
@@ -578,7 +593,7 @@ function OjtOnTimeCard(props: { summary: OjtOnTimeSummaryResponse | null }): JSX
                 cy="32"
                 r={OJT_DONUT_RADIUS}
                 fill="none"
-                stroke={COLOR_ANNOUNCED}
+                stroke={COLOR_ANNOUNCED_FILL}
                 strokeWidth="8"
                 strokeLinecap="butt"
                 strokeDasharray={`${arc.length.toFixed(3)} ${arc.rest.toFixed(3)}`}
@@ -723,8 +738,12 @@ function DonutRegion(props: {
           />
         ) : (
           <>
-            <div className="flex items-start gap-4">
-              <div className="relative shrink-0 w-[140px] h-[140px]">
+            {/* 🟣 「左環、右圖例」兩欄；窄螢幕（< `md`）回落為上下堆疊、環置中。
+                🔴 斷點是 `md` 不是 `sm`：側欄固定 240px 不隨螢幕收合，`sm`(640px) 之下可用內容寬只剩
+                   320px，扣掉環 140 ＋ gap 16 後給圖例 164px，而圖例右側兩個數字自身就要 ≈ 144px
+                   ⇒ 組織名歸零。`md`(768px) 之下為 448px，圖例得 292px。 */}
+            <div className="flex flex-col md:flex-row items-start gap-4">
+              <div className="relative shrink-0 w-[140px] h-[140px] mx-auto md:mx-0">
                 {/* 🔒 `AC-G49`：環之 `<svg>` 為裝飾層，語意一律由文字承載。 */}
                 <svg viewBox="0 0 140 140" className="w-[140px] h-[140px]" aria-hidden="true" focusable="false">
                   <circle cx="70" cy="70" r={DONUT_RADIUS} fill="none" stroke="#F1F5F9" strokeWidth="18" />
@@ -752,77 +771,78 @@ function DonutRegion(props: {
                   <span className="text-[10px] text-slate-400">已公告合計（份）</span>
                 </div>
               </div>
-              <div className="min-w-0 flex-1">
-                {/* 🔒 §癸四 第 2 列：三個數字（前 N 個／合併 m 個／共 v 份）**全部留在可見層**，
-                    未移入 popover（`AC-G71` 不放寬、且更嚴）；排序規則與「完整清單在哪」移入 ⓘ。
-                    ⚠ 兩個分支之 `{TOP_N}`（圖形最多畫幾段）與 `{TOTAL}`（本維度組織總數）
-                       是**兩個不同的量**，不得共用一個代入值。
-                    📝 已作廢（⚠ 不得復原）：`OLD>` 含「排序＝…」（內部詞彙，`AC-G94` ④）與
-                       「沒有任何數字只存在於圖形裡」（`AC-G71` 本文，③）。 */}
-                <div className="flex items-start gap-1.5">
-                  <p
-                    data-donut-truncation
-                    className="flex-1 text-[11px] leading-relaxed text-slate-500"
+              {/* 🔴 `AC-G41`：圖例**逐列列出全部組織**，不受 Top N 限制 ⇒ 右欄必須可捲動
+                  （正式站部門維度可達 40+ 列，否則整張卡會被撐到數千 px）。 */}
+              <ul
+                role="list"
+                data-testid="donut-legend"
+                className="w-full md:flex-1 min-w-0 max-h-[196px] overflow-y-auto pr-1 border-t border-slate-100 md:border-t-0 divide-y divide-slate-100"
+              >
+                {rows.map((r, i) => (
+                  <li
+                    key={r.key}
+                    role="listitem"
+                    data-testid="donut-legend-row"
+                    data-org-key={r.key}
+                    className="flex items-center gap-2 py-1.5"
                   >
-                    {merged
-                      ? `圖形顯示前 ${DONUT_TOP_N} 個，其餘 ${merged.merged} 個合併為「${SEG_OTHER}」（共 ${merged.value} 份）。`
-                      : `本維度共 ${rows.length} 個組織，已全部繪出。`}
-                  </p>
-                  <InfoNote
-                    infoKey={`${meta.testId}-truncation`}
-                    paragraphs={[
-                      `圖形最多畫 ${DONUT_TOP_N} 段，其餘合併為「${SEG_OTHER}」。下方圖例仍逐列列出全部 ${rows.length} 個組織。`,
-                    ]}
-                  />
-                </div>
-              </div>
+                    <span
+                      aria-hidden="true"
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{
+                        background:
+                          i < DONUT_TOP_N ? DONUT_PALETTE[i % DONUT_PALETTE.length] : DONUT_OTHER_COLOR,
+                      }}
+                    />
+                    <span
+                      data-testid="legend-org-name"
+                      className="text-xs text-slate-700 flex-1 truncate"
+                      title={r.label}
+                    >
+                      {r.label}
+                    </span>
+                    <span
+                      data-testid="legend-announced"
+                      className="text-xs mono whitespace-nowrap"
+                      style={{ color: COLOR_ANNOUNCED_TEXT }}
+                    >
+                      {`已公告 ${r.announced}`}
+                    </span>
+                    <span
+                      data-testid="legend-in-progress"
+                      className="text-xs mono whitespace-nowrap"
+                      style={{ color: COLOR_IN_PROGRESS_TEXT }}
+                    >
+                      {`進度中 ${r.inProgress}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            {/* 🔴 `AC-G41`：圖例**逐列列出全部組織**，不受 Top N 限制。 */}
-            <ul
-              role="list"
-              data-testid="donut-legend"
-              className="mt-3 max-h-[184px] overflow-y-auto pr-1 border-t border-slate-100 divide-y divide-slate-100"
-            >
-              {rows.map((r, i) => (
-                <li
-                  key={r.key}
-                  role="listitem"
-                  data-testid="donut-legend-row"
-                  data-org-key={r.key}
-                  className="flex items-center gap-2 py-1.5"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{
-                      background:
-                        i < DONUT_TOP_N ? DONUT_PALETTE[i % DONUT_PALETTE.length] : DONUT_OTHER_COLOR,
-                    }}
-                  />
-                  <span
-                    data-testid="legend-org-name"
-                    className="text-xs text-slate-700 flex-1 truncate"
-                    title={r.label}
-                  >
-                    {r.label}
-                  </span>
-                  <span
-                    data-testid="legend-announced"
-                    className="text-xs mono whitespace-nowrap"
-                    style={{ color: COLOR_ANNOUNCED }}
-                  >
-                    {`已公告 ${r.announced}`}
-                  </span>
-                  <span
-                    data-testid="legend-in-progress"
-                    className="text-xs mono whitespace-nowrap"
-                    style={{ color: COLOR_IN_PROGRESS }}
-                  >
-                    {`進度中 ${r.inProgress}`}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            {/* 🔒 §癸四 第 2 列：三個數字（前 N 個／合併 m 個／共 v 份）**全部留在可見層**，
+                未移入 popover（`AC-G71` 不放寬、且更嚴）；排序規則與「完整清單在哪」移入 ⓘ。
+                ⚠ 兩個分支之 `{TOP_N}`（圖形最多畫幾段）與 `{TOTAL}`（本維度組織總數）
+                   是**兩個不同的量**，不得共用一個代入值。
+                🟣 本行自「環右側之窄欄」移至「兩欄之下、橫跨整寬」——在 140px 窄欄裡它會折成五六行，
+                   正是舊版整區偏高的原因之一。
+                📝 已作廢（⚠ 不得復原）：`OLD>` 含「排序＝…」（內部詞彙，`AC-G94` ④）與
+                   「沒有任何數字只存在於圖形裡」（`AC-G71` 本文，③）。 */}
+            <div className="mt-3 pt-2 border-t border-slate-100 flex items-start gap-1.5">
+              <p
+                data-donut-truncation
+                className="flex-1 text-[11px] leading-relaxed text-slate-500"
+              >
+                {merged
+                  ? `圖形顯示前 ${DONUT_TOP_N} 個，其餘 ${merged.merged} 個合併為「${SEG_OTHER}」（共 ${merged.value} 份）。`
+                  : `本維度共 ${rows.length} 個組織，已全部繪出。`}
+              </p>
+              <InfoNote
+                infoKey={`${meta.testId}-truncation`}
+                paragraphs={[
+                  `圖形最多畫 ${DONUT_TOP_N} 段，其餘合併為「${SEG_OTHER}」。下方圖例仍逐列列出全部 ${rows.length} 個組織。`,
+                ]}
+              />
+            </div>
           </>
         )}
       </div>
@@ -848,7 +868,7 @@ function LatestAnnouncements(props: {
       role="region"
       aria-label="最新公告（ICSOP 版本更新）"
       data-testid="latest-announcements"
-      className="bg-white border border-slate-200 rounded-xl p-5 mb-4"
+      className="bg-white border border-slate-200 rounded-xl p-5 mb-8"
     >
       <div className="flex items-center gap-2 mb-3">
         <Icon name="megaphone" className="w-4 h-4 text-primary-600" />
@@ -908,8 +928,8 @@ function LatestAnnouncements(props: {
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
                       style={
                         d.displayStatus === 'announced'
-                          ? { color: COLOR_ANNOUNCED, background: '#D1FAE5' }
-                          : { color: COLOR_IN_PROGRESS, background: '#EAF1FA' }
+                          ? { color: COLOR_ANNOUNCED_TEXT, background: COLOR_ANNOUNCED_BG }
+                          : { color: COLOR_IN_PROGRESS_TEXT, background: COLOR_IN_PROGRESS_BG }
                       }
                     >
                       <Icon
@@ -965,7 +985,7 @@ function CategoryDistribution(props: {
       role="region"
       aria-label="依業務/功能類別分布"
       data-testid="category-distribution"
-      className="bg-white border border-slate-200 rounded-xl p-5 mb-8"
+      className="bg-white border border-slate-200 rounded-xl p-5 mb-4"
     >
       <div className="flex items-center gap-2 mb-1">
         <Icon name="shapes" className="w-4 h-4 text-primary-600" />
@@ -993,7 +1013,39 @@ function CategoryDistribution(props: {
         </div>
       ) : (
         <div className="mt-2">
-          <ul role="list" className="divide-y divide-slate-100 border-t border-slate-100">
+          {/* 🔒 雙色圖例（逐字還原自 prototype 07 之同一列）：柱子的兩個顏色各代表什麼，
+              **唯一的說明就在這裡**——柱下那兩個 11px 彩色數字是佐證、不是圖例。
+              🔒 只出現在**有資料**的分支（空狀態不掛圖例，那時沒有任何柱子可對照）。
+              🔒 色塊以 `style={{ background: COLOR_*_FILL }}` 取色，🔴 明文禁止改用 `bg-emerald-600`
+                 之類的 class——那會在色票之外另開第二份出處。
+              🔒 色塊 `aria-hidden`：它是純裝飾，意義由緊鄰的文字承載。 */}
+          <div className="flex items-center gap-3 mb-3 text-xs">
+            <span className="inline-flex items-center gap-1">
+              <span
+                aria-hidden="true"
+                className="w-2.5 h-2.5 rounded-sm"
+                style={{ background: COLOR_ANNOUNCED_FILL }}
+              />
+              <span className="text-slate-500">已公告</span>
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span
+                aria-hidden="true"
+                className="w-2.5 h-2.5 rounded-sm"
+                style={{ background: COLOR_IN_PROGRESS_FILL }}
+              />
+              <span className="text-slate-500">進度中</span>
+            </span>
+          </div>
+          {/* 🟣 每個類別由「一列橫條」改為「一根直條」，整列類別成為一條水平帶。
+              🔒 `barWidths(announced, inProgress, max)` **函式名一字不改**——它回傳的是**百分比**，
+                 與方向無關；直式只是把同一組百分比套到 `height`／`y` 而不是 `width`／`x`。
+                 🔴 明文禁止改名為 `barHeights`。
+              🔵 固定條寬 ＋ 水平捲動（非自適應寬度）：`bar-announced`／`bar-in-progress` 是
+                 `AC-G71` 之唯一文字載體，一旦寬度自適應，類別一多這兩個數字就會被壓到看不見；
+                 「數字必須可見」之優先序高於「不要出現捲軸」。
+              🔒 堆疊方向：`已公告` 貼底（基線側）、`進度中` 疊在其上——與橫式時 `已公告` 貼 `x=0` 同義。 */}
+          <ul role="list" className="flex items-start gap-2 overflow-x-auto pb-1">
             {shown.map((r) => {
               const w = barWidths(r.announced, r.inProgress, max);
               return (
@@ -1002,48 +1054,54 @@ function CategoryDistribution(props: {
                   role="listitem"
                   data-testid="category-bar-row"
                   data-category-id={r.categoryId}
-                  className="py-2"
+                  className="shrink-0 w-24 flex flex-col items-center"
                 >
-                  <div className="flex items-center gap-2">
-                    <span
-                      data-testid="bar-category-name"
-                      className="text-sm text-slate-700 flex-1 truncate"
-                      title={r.displayName}
-                    >
-                      {r.displayName}
-                    </span>
-                    <span
-                      data-testid="bar-announced"
-                      className="text-xs mono whitespace-nowrap"
-                      style={{ color: COLOR_ANNOUNCED }}
-                    >
-                      {`已公告 ${r.announced}`}
-                    </span>
-                    <span
-                      data-testid="bar-in-progress"
-                      className="text-xs mono whitespace-nowrap"
-                      style={{ color: COLOR_IN_PROGRESS }}
-                    >
-                      {`進度中 ${r.inProgress}`}
-                    </span>
-                  </div>
                   <svg
-                    viewBox="0 0 100 8"
+                    viewBox="0 0 8 100"
                     preserveAspectRatio="none"
-                    className="mt-1.5 w-full h-2"
+                    className="w-7 h-32"
                     aria-hidden="true"
                     focusable="false"
                   >
-                    <rect x="0" y="0" width="100" height="8" fill="#F1F5F9" />
-                    <rect x="0" y="0" width={w.announced.toFixed(3)} height="8" fill={COLOR_ANNOUNCED} />
+                    <rect x="0" y="0" width="8" height="100" fill="#F1F5F9" />
                     <rect
-                      x={w.announced.toFixed(3)}
-                      y="0"
-                      width={w.inProgress.toFixed(3)}
-                      height="8"
-                      fill={COLOR_IN_PROGRESS}
+                      x="0"
+                      y={(100 - w.announced - w.inProgress).toFixed(3)}
+                      width="8"
+                      height={w.inProgress.toFixed(3)}
+                      fill={COLOR_IN_PROGRESS_FILL}
+                    />
+                    <rect
+                      x="0"
+                      y={(100 - w.announced).toFixed(3)}
+                      width="8"
+                      height={w.announced.toFixed(3)}
+                      fill={COLOR_ANNOUNCED_FILL}
                     />
                   </svg>
+                  {/* 🔵 長類別名：兩行截斷 ＋ `title`，不旋轉（中文旋轉 90° 後可讀性極差）。
+                      名稱框固定 `h-7`（兩行）使各根柱子之兩個數字仍在同一水平線上。 */}
+                  <span
+                    data-testid="bar-category-name"
+                    className="mt-1.5 h-7 w-full text-center text-[11px] leading-tight text-slate-700 line-clamp-2"
+                    title={r.displayName}
+                  >
+                    {r.displayName}
+                  </span>
+                  <span
+                    data-testid="bar-announced"
+                    className="mt-1 text-[11px] mono whitespace-nowrap"
+                    style={{ color: COLOR_ANNOUNCED_TEXT }}
+                  >
+                    {`已公告 ${r.announced}`}
+                  </span>
+                  <span
+                    data-testid="bar-in-progress"
+                    className="text-[11px] mono whitespace-nowrap"
+                    style={{ color: COLOR_IN_PROGRESS_TEXT }}
+                  >
+                    {`進度中 ${r.inProgress}`}
+                  </span>
                 </li>
               );
             })}
