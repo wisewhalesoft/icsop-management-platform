@@ -244,6 +244,14 @@ export interface DocumentListItem {
   draftingSectionId: string | null;
   /** F017 名稱解析（org-foundation NameResolutionService；查無→null，前端顯示「—」）。 */
   draftingCompanyName: string | null;
+  /**
+   * 🔵 2026-09-22 UX16 delta（F017 `AC-UX41`，項 11）：制定本部，**additive**、伺服器端富化。
+   * `draftingDivisionId`＝複合篩選鍵 `` `${公司代碼}__{本部代碼}` ``（跨公司同碼之唯一防線）、
+   * `draftingDivisionName`＝人類可讀之本部名稱；推導不出本部 ⇒ 兩欄皆 `null`。
+   * 🔒 `AC-UX44` ①②：**畫面 16 欄與 CSV 15 欄一格未動**——本欄只餵篩選器，不是第 17 欄。
+   */
+  draftingDivisionId?: string | null;
+  draftingDivisionName?: string | null;
   draftingDeptName: string | null;
   draftingSectionName: string | null;
   primaryChiefId: string | null;
@@ -572,6 +580,15 @@ export interface PublicListItem {
    * 未解析之名稱一律為 `null`（前端渲染為「—」），不 fallback 為 code。
    */
   draftingCompanyName: string | null;
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX22`，項 10）：制定本部，**additive**。
+   * `draftingDivisionId`＝複合篩選鍵 `` `${公司代碼}__{本部代碼}` ``、`draftingDivisionName`＝
+   * 人類可讀之本部名稱；推導不出本部 ⇒ 兩欄皆 `null`。
+   * 🔒 `AC-UX26` ③：清單卡之八項標籤欄位與 `<dl>` 五列順序**一字不改**——本欄是**篩選維度**，
+   * 不是卡片上的第九個欄位。選填宣告：既有 fixture 缺鍵時視同未解析。
+   */
+  draftingDivisionId?: string | null;
+  draftingDivisionName?: string | null;
   draftingDeptId: string | null;
   draftingDeptName: string | null;
   draftingSectionName: string | null;
@@ -593,6 +610,19 @@ export interface PublicListPage {
   hasNext: boolean;
   /** G-PUB-012：被基底條件隱藏之候選數（進度中/失效/作廢）。供「另有 N 筆…已由後端隱藏」。 */
   hiddenCount?: number;
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX15` ③，項 5）：節點子樹 chip 之兩個顯示值。
+   * 🔴 **兩值皆取自後端回應**——前端**不得**自行組字、不得另行查名（`AC-UX15` ③ 明文）。
+   * 未套用子樹篩選 ⇒ `null`（🔴 非空字串、非缺席：省略時前端無法區分「沒套用」與
+   * 「後端忘了回」）。
+   */
+  subtreeChip?: PublicSubtreeChip | null;
+}
+
+/** F019 `AC-UX15` ③：chip 文案之兩個代入值（後端權威）。 */
+export interface PublicSubtreeChip {
+  businessCategoryDisplayName: string;
+  nodeName: string;
 }
 
 // ===== E06 F019 前台文件詳情（G-PUB-020） =====
@@ -636,6 +666,16 @@ export interface PublicDetailLink {
 }
 
 /**
+ * F019 `AC-UX18`：前台詳情「業務/功能類別」欄之單一類別（鏡射後端
+ * `PublicDocumentBusinessCategory`）。`displayName` 含子分類時為 `名稱（子分類）`，
+ * 🔴 由後端組字，前端不自行組。
+ */
+export interface PublicDocumentBusinessCategory {
+  id: string;
+  displayName: string;
+}
+
+/**
  * 前台文件詳情（GET /public/documents/:id；鏡射後端 PublicDocumentDetailDto）。
  * 登入員工可讀；非「已公告」文件 → 404（視同不存在）。
  */
@@ -670,6 +710,16 @@ export interface PublicDocumentDetail {
   usageForms: PublicDetailUsageForm[];
   links: PublicDetailLink[];
   /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX18`／`AC-UX19`，項 9）：該文件掛載之**相異**業務/功能
+   * 類別（後端已依 `businessCategoryId` 去重、依 `displayName` 碼位序遞增排序）。
+   *
+   * 🔴 **概念置換，不是改名**：本欄取代畫面上原本的「所屬節點」列（`nodeName`＝循環 DAG 節點名）。
+   * `nodeName` **仍留在本型別**——後端仍回得出來，只是前台不呈現；**正因如此**，
+   * 「查無『所屬節點』」之反向斷言才有鑑別力（把欄位改回來就會立刻翻紅）。
+   * additive 選填以免打爆既有 fixture（缺鍵＝0 筆，畫面顯示 `—`）。
+   */
+  businessCategories?: PublicDocumentBusinessCategory[];
+  /**
    * 🔴 F042 `AC-24`（`OQ-E11-14`→A）：前台文件詳情頁唯讀顯示已完成 OJT 之**使用單位名稱**清單，
    * 與後台 `AC-21` 之判定同源（單位／日期層級，**不揭個人**）。
    * 🔴 前台**不提供**任何 OJT 場次檔之下載或檢視入口——簽到表載有個別受訓人員之簽名，與
@@ -690,6 +740,12 @@ export interface PublicListFilters {
    */
   /** 制定公司＝公司代碼（等值）。 */
   companyCode?: string;
+  /**
+   * 🔵 2026-09-22 UX16 delta（`AC-UX22`，項 10）：制定本部之複合鍵
+   * `` `${公司代碼}__{本部代碼}` ``。語意為「該文件之制定組織沿 `parentCode` 上溯所抵達之
+   * 本部 ＝ 所選值」⇒ 該本部下轄之全部部與處室之文件皆納入。
+   */
+  draftingDivisionId?: string;
   draftingDeptId?: string;
   draftingSectionId?: string;
   /** 當責室長員編（後端比對主要 ∪ 次要）。 */
@@ -698,6 +754,13 @@ export interface PublicListFilters {
   status?: string;
   page?: number;
   pageSize?: number;
+  /**
+   * 🔵 2026-09-22 UX16 delta（`AC-UX15`，項 5）：節點子樹之 deep link 兩參數。
+   * 🔴 **恆成對**，任一缺席即靜默 no-op（後端不篩選、不回 chip、不回錯誤）。
+   * 🔴 展開／去重／可見性過濾**全部由後端完成**，前端不得自行走訪子樹（`AC-UX15` ④）。
+   */
+  bcSubtreeId?: string;
+  bcSubtreeNodeId?: string;
 }
 
 /** 可搜尋下拉之單一選項（`value` 恆為 id／code）。 */
@@ -706,9 +769,26 @@ export interface PublicFilterOption {
   label: string;
 }
 
-/** F019 `AC-D5`：五組前台篩選選項（GET /public/documents/filter-options，單一端點）。 */
+/**
+ * F019 `AC-D5`：前台篩選選項（GET /public/documents/filter-options，單一端點）。
+ * 🔵 2026-09-22 UX16 delta（`AC-UX23`，項 10）：五 → **六組**，新增 `draftingDivisions`。
+ * 🔒 `lifecycles` **維持存在**（`AC-D16`：後端契約不變、前台不消費它）——本 delta 不得順手移除。
+ */
 export interface PublicFilterOptions {
   draftingCompanies: PublicFilterOption[];
+  /**
+   * `AC-UX22`：`value` 逐字為 `` `${公司代碼}__{本部代碼}` ``、`label` 為本部名稱。
+   *
+   * 🔒 **additive 選填**，沿用本檔既有慣例（`hiddenCount?`／`businessCategories?`／
+   * `secondaryChiefIds?` 皆同）——宣告為必要會把一個 additive 欄位變成既有 fixture
+   * （`PublicListPage.subcategory.test.tsx`／`PublicListPage.uxAudit.test.tsx` 之物件字面量）
+   * 的編譯錯誤。
+   * 🔴 **鑑別力零損失**：`AC-UX23` 之「回應恰含六組選項鍵」是**後端回應契約**，其回歸鎖住在
+   * `backend/src/public/public-filter-options.controller.spec.ts`（`TS-F019-D5-206`，ⓐ 既有五鍵
+   * 逐一仍在 ＋ ⓑ 新鍵存在 ＋ ⓒ 總數恰 6）——本處只是前端之鏡射型別，放寬它並不會讓後端
+   * 少回一個鍵而不被發現。
+   */
+  draftingDivisions?: PublicFilterOption[];
   draftingDepts: PublicFilterOption[];
   draftingSections: PublicFilterOption[];
   chiefs: PublicFilterOption[];
@@ -1071,9 +1151,15 @@ export interface DashboardActivityItem {
 
 // ===== E11 F042 OJT 進度管理 =====
 
-/** TAB2 之**恰兩項**篩選（`AC-13`）。`completionStatus` 省略＝所有完成狀態，不施加限制。 */
+/** TAB2 之**恰三項**篩選（`AC-13`／🔵 UX16 `AC-UX49`）。省略之項目＝不施加限制。 */
 export interface OjtRowFilters {
   orgQuery?: string;
+  /**
+   * 🔵 UX16 delta（`AC-UX49`）：制定本部 `orgCode`（**等值**比對，語意為「該進度列之使用單位
+   * 沿 `parentCode` 上溯所抵達之本部 ＝ 所選值」）；未選定＝空字串／省略，不施加限制，
+   * 與既有兩項並用為 **AND**。
+   */
+  divisionCode?: string;
   /**
    * 🔴 恰二態（`AC-03`：列層級恆為二態），明文**不含** `'partial'`——列層級沒有那個狀態，
    * 放進來會是一個永遠選不出任何結果的死選項。與清單頁之四值（文件層）刻意不同，不得對齊。
@@ -1093,8 +1179,21 @@ export interface OjtProgressRow {
    */
   companyCode: string;
   orgCode: string;
-  /** 使用單位**全名**：`公司簡稱 / 部 / 處室`（後端 `OjtOrgDirectory.nameOf` 之單一組裝點）。 */
+  /**
+   * 使用單位**全名**：`公司簡稱 / 本部 / 部 / 處室`（後端 `OjtOrgDirectory.nameOf` 之單一組裝點）。
+   * 🔵 UX16 `AC-UX45`：自 2026-09-22 起含**本部**段；上溯不到本部者仍為既有三段（空段收合）。
+   * 🔴 前端**原樣顯示**，不得重新切段或重新格式化——組裝規則只有後端那一份。
+   */
   orgName: string;
+  /**
+   * 🔵 UX16 delta（`AC-UX49`，additive）：該列使用單位所屬之本部 `orgCode`／其顯示名；
+   * 推導不出本部 → `null`（🔒 **不產生下拉選項**，該列在未選定任何本部時照常呈現）。
+   *
+   * ⚠ **選填是刻意的**：既有測試之手寫列 fixture 不帶這兩欄，宣告為必填會把它們全部打成
+   * 編譯錯誤，而那些案例與本 delta 無關（本 repo 已記錄之「shared type 加必填欄打爆 mocks」形狀）。
+   */
+  divisionCode?: string | null;
+  divisionName?: string | null;
   /** 該列**全部版次**之場次總數（含舊版次；「N 場次」之來源）。 */
   sessionCount: number;
   /**
@@ -1286,6 +1385,12 @@ export interface BusinessCategoryView {
   /** 🔴 **去重後之相異文件數**（同一份文件掛在本類別多個節點只算一份），非掛載列數。 */
   mountedDocCount: number;
   updatedAt: string;
+  /**
+   * 🔵 F043 UX16 delta `AC-UX29`：排序值（整數）。
+   * 🔒 鎖定之識別子為 `sortOrder`（🔴 明文禁止 `order`／`seq`／`displayOrder` 等變體）。
+   * ⚠ 不保證唯一、不保證連續——它是排序鍵而非識別碼；平手時之次要鍵為 `name` 之 UTF-16 碼位序。
+   */
+  sortOrder: number;
 }
 
 /** F043 建立／編輯之 payload（🔴 `subcategory` 之 trim 責任在服務層，`AC-05`）。 */
@@ -1376,6 +1481,18 @@ export interface BusinessCategoryNodeDrawerData {
   candidateLifecycles?: { lifecycleId: string; displayName: string; count: number }[];
 }
 
+/**
+ * 🔵 F043 UX16 delta `AC-UX33`～`AC-UX35`：節點之「各制定公司計數」一列。
+ *
+ * 🔒 **已於後端排序**（`companyCode` 昇冪、`__unspecified__` 殿後）⇒ 前端**不再排一次**。
+ * 🔒 `companyCode` 可為 sentinel `__unspecified__`（`companyCode` 為 NULL／空字串之歷史掛載，
+ * 🔴 明文禁止靜默丟棄——丟棄會讓 `INV-UX1` 之總和短少而徽章仍然正確）。
+ */
+export interface BusinessCategoryNodeCompanyCount {
+  companyCode: string;
+  count: number;
+}
+
 /** F043 §丁 後台樹狀圖預覽（GET .../tree-preview；`AC-32`／`AC-33`）。 */
 export interface BusinessCategoryPreviewNode {
   id: string;
@@ -1385,6 +1502,11 @@ export interface BusinessCategoryPreviewNode {
   positionY: number;
   /** 🔴 後台為**全部**掛載數（前台之 `visibleDocCount` 語意不同，明文禁止共用同一屬性名）。 */
   mountedDocCount: number;
+  /**
+   * 🔵 `AC-UX33`：各制定公司之計數（🔒 Σ 恆等於 `mountedDocCount`＝`INV-UX1`）。
+   * 🔒 `AC-UX36`：**僅後台**有此欄，前台樹狀圖刻意不提供。
+   */
+  companyCounts?: BusinessCategoryNodeCompanyCount[];
 }
 export interface BusinessCategoryTreePreview {
   businessCategory: { id: string; name: string; subcategory: string | null };

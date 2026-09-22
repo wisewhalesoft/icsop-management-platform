@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import { downloadViaBlob, openPdfViaBlob } from './download-blob';
+import { downloadViaBlob, downloadViaBlobDetailed, openPdfViaBlob } from './download-blob';
 import type {
   SessionUser,
   SelectAccountResponse,
@@ -850,6 +850,8 @@ export function getPublicDocuments(f: PublicListFilters = {}): Promise<PublicLis
   if (f.keyword) qs.set('keyword', f.keyword);
   // 🔴 2026-08-16 delta（架構 A9 §10.9 之三處第 3 處）：`deptCode` 已不再送出。
   if (f.companyCode) qs.set('companyCode', f.companyCode);
+  // 🔵 2026-09-22 UX16 delta（F019 `AC-UX22`，項 10）：制定本部（複合鍵 `{公司代碼}__{本部代碼}`）。
+  if (f.draftingDivisionId) qs.set('draftingDivisionId', f.draftingDivisionId);
   if (f.draftingDeptId) qs.set('draftingDeptId', f.draftingDeptId);
   if (f.draftingSectionId) qs.set('draftingSectionId', f.draftingSectionId);
   if (f.chiefId) qs.set('chiefId', f.chiefId);
@@ -857,6 +859,15 @@ export function getPublicDocuments(f: PublicListFilters = {}): Promise<PublicLis
   if (f.status) qs.set('status', f.status);
   if (f.page) qs.set('page', String(f.page));
   if (f.pageSize) qs.set('pageSize', String(f.pageSize));
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX15`，項 5）：節點子樹之 deep link 兩參數。
+   * 🔴 **恆成對才送**：任一缺席即整組不送——後端亦有同一項檢查（縱深），但在這裡就攔住
+   * 可以讓「半套參數」連網路請求都不會帶上一個註定被忽略的鍵。
+   */
+  if (f.bcSubtreeId && f.bcSubtreeNodeId) {
+    qs.set('bcSubtreeId', f.bcSubtreeId);
+    qs.set('bcSubtreeNodeId', f.bcSubtreeNodeId);
+  }
   const q = qs.toString();
   return apiFetch<PublicListPage>(`/public/documents${q ? `?${q}` : ''}`);
 }
@@ -1379,17 +1390,70 @@ export function getOjtProgressSummary(docScope?: OjtDocScope): Promise<OjtProgre
 }
 
 /**
- * GET /admin/ojt-progress/rows（TAB2 進度列＋**恰兩項**篩選；`AC-11`／`AC-13`）。
+ * GET /admin/ojt-progress/rows（TAB2 進度列＋**恰三項**篩選；`AC-11`／`AC-13`／🔵 `AC-UX49`）。
  * `completionStatus` 比對「列自身」之二態（`AC-03`）；省略即「所有完成狀態」，不施加限制。
  */
 export function getOjtProgressRows(
   f: OjtRowFilters = {},
 ): Promise<{ items: OjtProgressRow[]; total: number }> {
+  const q = ojtRowFilterQuery(f);
+  return apiFetch(`/admin/ojt-progress/rows${q ? `?${q}` : ''}`);
+}
+
+/**
+ * 🔵 UX16 delta（`AC-UX51`～`AC-UX53`）：TAB2 三項篩選之 query 組裝——**匯出與清單共用同一份**。
+ *
+ * 🔴 共用是本功能之核心保證：`GET /rows` 與 `GET /export` 在後端已委派同一個 `listRows()`
+ * （`ARCH-UX8`），前端再共用同一份參數組裝，「畫面看到的」與「檔案裡的」才是**結構上**
+ * 同一個集合，而不是兩份測起來剛好一致的邏輯。
+ * 🔴 **`docQuery`（搜尋文件）與分組模式一律不進本函式**：兩者皆為前端呈現決策，`AC-UX53` 明訂
+ * 匯出恆與之無關；偷渡進來會讓「兩種分組模式之 CSV 位元組相等」靜默失效。
+ */
+function ojtRowFilterQuery(f: OjtRowFilters): string {
   const qs = new URLSearchParams();
+  if (f.divisionCode) qs.set('divisionCode', f.divisionCode);
   if (f.orgQuery) qs.set('orgQuery', f.orgQuery);
   if (f.completionStatus) qs.set('completionStatus', f.completionStatus);
-  const q = qs.toString();
-  return apiFetch(`/admin/ojt-progress/rows${q ? `?${q}` : ''}`);
+  return qs.toString();
+}
+
+/**
+ * 🔵 GET /admin/ojt-progress/export（F042 UX16 項 16；`AC-UX51`～`AC-UX53`）。
+ *
+ * 🔴 **`GET` ＋ query，不是 F017 之 `POST` ＋ `documentIds`**（`ARCH-UX8`）：OJT 之三項篩選
+ * 從第一天就是後端參數，伺服器重算之列與畫面列**是同一段程式碼**；且 `main.ts` 之 1 MB body
+ * parser 只掛在字面路徑 `/admin/documents/export`，送大 body 會在真實環境 413 而測試全綠。
+ *
+ * 🔴 回傳 `count` ＝**伺服器實際匯出的筆數**（`X-Export-Row-Count`），供 `AC-UX55` ① 之 `{N}`。
+ * 明文**不得**改用畫面列數：畫面另受「搜尋文件」收斂（`AC-33` ②），使用者回報之情境正是
+ * 「畫面剩 12 列、檔案 340 列」——跟著畫面說就從「沒說清楚」惡化為「說了假話」。
+ *
+ * 🔴 **取不到筆數時回 `null`，不回 `0`**（`AC-UX55` 降級向量，lead 2026-09-22 核准）：
+ * `0` 是一個**合法且有意義的匯出結果**（真的匯出了 0 筆）。拿它當「不知道」的哨兵，等於在
+ * 標頭被代理吃掉時對使用者說「共 0 筆」——那正是本函式註解上一段所禁止的「說了假話」，
+ * 而且是最糟的一種：使用者會以為匯出失敗而重跑，或以為資料真的沒了。
+ * 🔒 兩種根因（標頭缺席／值不可解析）**一律收斂為 `null`**，不對使用者區分（對他無意義）。
+ * 📝 已作廢（⚠ 不得復原）：OLD> `🔒 標頭缺席（舊版後端／代理過濾）時退回 `0`，不猜測…`
+ * 　　OLD> `const raw = Number(headers.get('x-export-row-count'));`
+ * 　　OLD> `return { count: Number.isFinite(raw) ? raw : 0 };`
+ * 　　🔴 該寫法另有一個**沉默的型別陷阱**：`headers.get()` 未命中時回 `null`，而
+ * 　　`Number(null) === 0` 且 `Number.isFinite(0) === true` ⇒ 標頭缺席這條路徑**根本走不到**
+ * 　　那個三元運算子的 `: 0` 分支，它一路帶著一個看似正常的 `0` 回到畫面上。
+ * 　　（`Number('')` 同為 `0`，故空字串標頭亦然。）
+ */
+export async function exportOjtProgress(
+  f: OjtRowFilters = {},
+): Promise<{ count: number | null }> {
+  const q = ojtRowFilterQuery(f);
+  const { headers } = await downloadViaBlobDetailed(
+    `/admin/ojt-progress/export${q ? `?${q}` : ''}`,
+    'ojt-progress.csv',
+  );
+  // 🔴 先判「有沒有這個標頭」再判「值能不能解析」——不得把兩者合併成一次 `Number()`（見上）。
+  const raw = headers.get('x-export-row-count');
+  if (raw === null || raw.trim() === '') return { count: null };
+  const parsed = Number(raw);
+  return { count: Number.isFinite(parsed) ? parsed : null };
 }
 
 /** GET /admin/ojt-progress/rows/:documentId/:orgCode/sessions（展開列之場次明細；`AC-12`）。 */
@@ -1542,6 +1606,27 @@ export function setBusinessCategoryStatus(
     method: 'PATCH',
     headers: JSON_HEADERS,
     body: JSON.stringify({ status }),
+  });
+}
+
+/**
+ * 🔵 PATCH /admin/business-categories/:id（`AC-UX29`：設定排序值）。
+ *
+ * 🔒 **與數值輸入框、上下移動鈕共用同一支端點**（`AC-UX29` ⑤：兩套入口必須產生相同的資料
+ * 狀態，🔴 明文禁止為鈕另開一條旁路）。
+ * 🔴 `0` 為合法序位 ⇒ 呼叫端不得以 truthy 判定是否送出本欄；非整數由後端回 400
+ * `VALIDATION_ERROR`。
+ * 🔒 `sortOrder` 之調整**不落入變更歷程、亦不單獨記稽核**（`AC-UX39` ⑦）——類別之名稱／說明／
+ * 狀態編輯本來就沒有稽核，只為排序開一條會做出「改順序有紀錄、改名沒紀錄」的不對稱。
+ */
+export function setBusinessCategorySortOrder(
+  id: string,
+  sortOrder: number,
+): Promise<BusinessCategoryView> {
+  return apiFetch<BusinessCategoryView>(`/admin/business-categories/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ sortOrder }),
   });
 }
 
