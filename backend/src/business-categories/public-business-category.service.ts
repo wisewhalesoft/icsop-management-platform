@@ -1,11 +1,11 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { descendants } from '../lifecycle/lifecycle-tree-layout';
-import { ViewerScope, isDocVisibleToViewer } from '../rbac/viewer-scope';
+import { ViewerScope } from '../rbac/viewer-scope';
 import { businessCategoryDisplayName } from './business-category-subcategory';
 import { orderSubtreeNodes } from './business-category-subtree-order';
+import { isMountVisible, visibleSubtreeMountsByNode } from './public-business-category-subtree';
 import {
   PUBLIC_BUSINESS_CATEGORY_STORE,
-  CategoryMountVisibilityRow,
   PublicBusinessCategoryStore,
   PublicCategoryEdgeInfo,
   PublicMountedDoc,
@@ -202,15 +202,15 @@ export class PublicBusinessCategoryService {
       nodeId,
     );
 
-    // 🔴 先過濾可見性、再取文件明細（而非先取再濾）：不可見者連一次查詢都不發出。
-    const visibleIdsByNode = new Map<string, string[]>();
-    for (const m of mounts) {
-      if (!subtree.has(m.nodeId)) continue;
-      if (!isMountVisible(m, viewer)) continue;
-      const bucket = visibleIdsByNode.get(m.nodeId);
-      if (bucket) bucket.push(m.documentId);
-      else visibleIdsByNode.set(m.nodeId, [m.documentId]);
-    }
+    /**
+     * 🔵 2026-09-22 UX16 delta（`ARCH-UX4`，§16.4）：展開＋可見性過濾**改呼叫共用純函式**
+     * （`./public-business-category-subtree`），使本抽屜與 F019 前台清單之子樹篩選
+     * （`AC-UX15` ②）共用同一份實作——🔒 **重構、行為零改變**，`AC-B20`／`AC-B21`／`AC-B23`
+     * 之期望值不動。
+     * 📝 已作廢（⚠ 僅為落點搬遷，規則本身一字未改）：`OLD>` 本處就地之
+     *    `for (const m of mounts) { if (!subtree.has(...)) continue; if (!isMountVisible(...)) continue; … }`。
+     */
+    const visibleIdsByNode = visibleSubtreeMountsByNode(nodes, edges, mounts, nodeId, viewer);
 
     /** 同一份文件可掛在子樹內多個節點 ⇒ 明細以 id 快取，避免對同一份文件重複查詢。 */
     const cache = new Map<string, PublicMountedDoc | null>();
@@ -254,11 +254,7 @@ export class PublicBusinessCategoryService {
 }
 
 /**
- * 單一掛載列對該 viewer 是否可見＝**已公告 ∧ F041 使用部門可見**。
- *
- * 🔒 本函式是本服務內**唯一**的可見性判定點——兩個端點與清單過濾皆呼叫它，
- * 故「切換器列得出的類別」與「抽屜列得出的文件」不可能採用不同的判準。
+ * 📝 `isMountVisible()` 已**搬至** `./public-business-category-subtree`（`ARCH-UX4`，§16.4）——
+ * 🔒 規則一字未改，搬家之理由是 F019 `AC-UX15` 之前台清單子樹篩選必須與本服務共用**同一支**
+ * 可見性判定（兩處各寫一份就是「兩套判定各自宣稱一致」）。本檔改為 import 該符號。
  */
-function isMountVisible(row: CategoryMountVisibilityRow, viewer: ViewerScope): boolean {
-  return row.announced && isDocVisibleToViewer(row.usingDepts, viewer);
-}

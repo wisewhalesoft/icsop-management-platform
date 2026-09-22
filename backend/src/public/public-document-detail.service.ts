@@ -14,6 +14,11 @@ import {
   PublicDetailLink,
 } from './public-documents.store';
 import { ViewerScope, isDocVisibleToViewer } from '../rbac/viewer-scope';
+import {
+  PUBLIC_BUSINESS_CATEGORY_STORE,
+  PublicBusinessCategoryStore,
+  PublicDocumentBusinessCategory,
+} from '../business-categories/public-business-category.store';
 import { formatOfFileName, supportsWatermark } from './watermark';
 
 /**
@@ -95,6 +100,17 @@ export interface PublicDocumentDetailDto {
   ojtCompletedUnits: string[];
   /** `AC-24`：該文件使用單位總數，供前台呈現「N / M 個單位已完成」之分母。 */
   ojtUsingUnitCount: number;
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX18`／`AC-UX19`，項 9）：該文件掛載之**相異**業務/功能
+   * 類別（依 `businessCategoryId` 去重、依 `displayName` 碼位序遞增）。
+   *
+   * 🔴 **概念置換，不是改名**：本欄取代前台詳情原本呈現之「所屬節點」（`nodeName`＝循環 DAG
+   * 節點名）。🔒 `nodeName` **仍留在本 DTO**——其存廢由其他消費者決定（`AC-UX18` 末段），
+   * 且**正因後端仍回得出來**，前端「查無『所屬節點』」之反向斷言才有鑑別力。
+   * 🔴 無掛載 ⇒ **空陣列**（非 `null`、非缺席）：前端據此渲染 `—` 並填
+   * `data-business-category-count="0"`，那句話裡沒有數字，屬性是 `N` 在 DOM 層唯一的載體。
+   */
+  businessCategories: PublicDocumentBusinessCategory[];
 }
 
 /**
@@ -120,6 +136,20 @@ export class PublicDocumentDetailService {
     @Optional()
     @Inject(OJT_COMPLETION_READER)
     private readonly ojtCompletion?: OjtCompletionReader,
+    /**
+     * 🔵 2026-09-22 UX16 delta（F019 `AC-UX18`／架構 §16.10 `ARCH-UX10`，項 9）：該文件掛載之
+     * 業務/功能類別之唯讀窄 port。
+     *
+     * 🔴 **反循環 DI**：走**既有**之 `PUBLIC_BUSINESS_CATEGORY_STORE` token（`public` 模組對
+     * `business-categories` 模組唯一合法之依賴面）——🔴 **明文不得**注入後台之
+     * `BUSINESS_CATEGORY_DOCS_STORE`／`BusinessCategoryDocsStore`：那是兩個**後台**模組之間的
+     * 窄埠，借給前台用會讓它多一個信任等級完全不同（F041 可見性）的消費者。
+     * 🔴 **選填且置於末位**：本服務已有多處既有測試以位置參數建構；未注入時
+     * `businessCategories` 一律為空陣列，行為與既有欄位缺省慣例一致。
+     */
+    @Optional()
+    @Inject(PUBLIC_BUSINESS_CATEGORY_STORE)
+    private readonly categories?: Pick<PublicBusinessCategoryStore, 'listCategoriesForDocument'>,
   ) {}
 
   /**
@@ -184,6 +214,13 @@ export class PublicDocumentDetailService {
       );
     }
 
+    /**
+     * `AC-UX18`：該文件掛載之相異業務/功能類別（store 已去重並依 `displayName` 碼位序排序）。
+     * 🔴 未注入 store／store 未實作本能力 → **空陣列**（前台顯示 `—`），非錯誤、非缺席。
+     */
+    const businessCategories: PublicDocumentBusinessCategory[] =
+      (await this.categories?.listCategoriesForDocument?.(raw.id)) ?? [];
+
     return {
       id: raw.id,
       status: raw.status,
@@ -219,6 +256,7 @@ export class PublicDocumentDetailService {
       links: raw.links,
       ojtCompletedUnits,
       ojtUsingUnitCount: raw.usingDepts.length,
+      businessCategories,
     };
   }
 

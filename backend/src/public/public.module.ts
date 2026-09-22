@@ -11,6 +11,7 @@ import { BLOB_STORE, BlobStore } from '../storage/blob-store';
 import { AuditModule } from '../audit/audit.module';
 import { AuditWriterService } from '../audit/audit-writer.service';
 import { TypeOrmOjtCompletionReader } from '../documents/typeorm-ojt-completion.reader';
+import { TypeOrmPublicBusinessCategoryStore } from '../business-categories/typeorm-public-business-category.store';
 import { PUBLIC_DOCUMENT_STORE, PublicDocumentStore } from './public-documents.store';
 import { TypeOrmPublicDocumentStore } from './typeorm-public-documents.store';
 import {
@@ -71,8 +72,26 @@ import { AttachmentPdfSource } from './typeorm-watermark.sources';
     { provide: ORG_NAME_RESOLVER, useExisting: NameResolutionService },
     {
       provide: PublicDocumentsService,
+      /**
+       * 🔵 2026-09-22 UX16 delta（F019 `AC-UX15`／架構 §16.4，項 5）：第 4 個引數為前台類別
+       * 子樹解析之唯讀窄 store。
+       *
+       * 🔴 **反循環——自建而非 import `BusinessCategoriesModule`**：該模組已
+       * `import { PublicModule }`（`business-categories.module.ts:8`），反向 import 會是一條
+       * 真實的 Nest 模組循環。比照本模組既有之 `TypeOrmOjtCompletionReader` 窄 adapter 慣例，
+       * 直接以同一個 `AppDataSource` 單例自建。
+       * ⚠ **漏掉這個引數不會有任何單元測試轉紅**：service 對它是 `@Optional()`，而
+       * `useFactory` 之注入**完全不看建構子上的 `@Inject()` 裝飾子** ⇒ 缺之即靜默降級為
+       * 「子樹篩選永遠 no-op」——帶著 deep link 進來的使用者會看到**全部**文件而沒有任何
+       * 錯誤訊息（本 repo 已記錄之「宣告了欄位卻沒接線、值人間蒸發」同型缺陷）。
+       */
       useFactory: (store: PublicDocumentStore, names: OrgNameResolver) =>
-        new PublicDocumentsService(store, names, () => new Date()),
+        new PublicDocumentsService(
+          store,
+          names,
+          () => new Date(),
+          new TypeOrmPublicBusinessCategoryStore(AppDataSource),
+        ),
       inject: [PUBLIC_DOCUMENT_STORE, ORG_NAME_RESOLVER],
     },
     // ── G-PUB-020 前台文件詳情 ──（名稱解析重用 NameResolutionService：org + person）。
@@ -93,6 +112,12 @@ import { AttachmentPdfSource } from './typeorm-watermark.sources';
           names,
           () => new Date(),
           new TypeOrmOjtCompletionReader(AppDataSource),
+          /**
+           * 🔵 2026-09-22 UX16 delta（F019 `AC-UX18`，項 9）：第 5 個引數為業務/功能類別之
+           * 唯讀窄 store（反循環：自建，理由同 `PublicDocumentsService` 之同一引數）。
+           * ⚠ 漏掉它同樣零測試轉紅：詳情頁之「業務/功能類別」欄會永遠顯示 `—`。
+           */
+          new TypeOrmPublicBusinessCategoryStore(AppDataSource),
         ),
       inject: [PUBLIC_DOCUMENT_STORE, DETAIL_NAME_RESOLVER],
     },

@@ -36,6 +36,11 @@ import { missingRequired, isNumberAvailable } from './document-rules';
 import { isValidStatus, DocumentStatus } from './document-status';
 import { classifyFields } from './document-field-write';
 import { normalizeIdList } from './document-org-fields';
+import {
+  indexOrgUnitsForRows,
+  resolveDraftingDivision,
+  type OrgUnitRecord,
+} from './drafting-division';
 import { isUniqueConstraintViolation } from './db-error';
 import { normalizeReason } from './status-reason';
 import { assertLifecycleSelectable } from './lifecycle-selection';
@@ -609,6 +614,28 @@ export class DocumentsService {
       );
     }
 
+    /**
+     * 🔵 2026-09-22 UX16 delta（F017 `AC-UX40`～`AC-UX43`，項 11）：制定本部之組裝。
+     *
+     * 🔴 **為何必須另外取一次「整家公司」的組織列**（`ARCH-UX2`）：上方之 `orgKeys` 是**逐代碼
+     * 點查**（只問手上這幾個代碼叫什麼名字），而本部要沿 `parentCode` **上溯**——中繼祖先
+     * （`DAA00 → DA000 → D0000` 之中間那層）不一定落在 `orgKeys` 裡。兩者是不同形狀的查詢，
+     * 靠「手上已有的索引」兌現不了。
+     * 🔒 分組是**跨公司防護之結構性載體**：`indexOrgUnitsForRows` 依 `companyCode` 分群後才建索引，
+     * 故「以他公司之同碼單位解析本公司文件」在資料結構上不可能發生（dev 實測四家間有 42 個
+     * 重複 `orgCode`）。
+     */
+    /**
+     * 🔒 **降級而非崩潰**：既有多個測試替身（`documents.service.spec.ts`／
+     * `documents.export.service.spec.ts` 之 `FakeNames`）只實作了既有兩個方法——沿用本 repo
+     * 「既有解析器 port 加方法一律可降級」之慣例，缺此方法時三個本部欄一律留 `null`，
+     * 既有行為完全不變（**不得**讓一個 additive 欄位把既有測試打成 TypeError）。
+     */
+    const listUnits = resolver.listOrgUnitsByCompany?.bind(resolver);
+    const byCompany = listUnits
+      ? await indexOrgUnitsForRows(items, listUnits)
+      : new Map<string, Map<string, OrgUnitRecord>>();
+
     for (const it of items) {
       const orgName = (c: string | null): string | null =>
         c ? (orgNames.get(key(it.companyCode, c)) ?? null) : null;
@@ -617,6 +644,11 @@ export class DocumentsService {
       it.draftingCompanyName = resolveCompanyName(it.companyCode);
       it.draftingDeptName = orgName(it.draftingDeptId);
       it.draftingSectionName = orgName(it.draftingSectionId);
+      // 🔒 `AC-UX43` ②：上面三個既有三級顯示欄之輸出**一格未動**；本部為第四個、additive 之欄。
+      const division = resolveDraftingDivision(byCompany, it.companyCode, it.draftingDeptId);
+      it.draftingDivisionId = division?.id ?? null;
+      it.draftingDivisionCode = division?.code ?? null;
+      it.draftingDivisionName = division?.name ?? null;
       it.primaryChiefName = it.primaryChiefId
         ? (chiefNamesByCompany.get(it.companyCode)?.get(it.primaryChiefId) ?? null)
         : null;

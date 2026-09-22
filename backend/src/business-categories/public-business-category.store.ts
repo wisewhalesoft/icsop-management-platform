@@ -48,6 +48,19 @@ export interface CategoryMountVisibilityRow {
   usingDepts: UsingDeptRef[];
 }
 
+/**
+ * 🔵 2026-09-22 UX16 delta（F019 `AC-UX18`，項 9）：前台詳情頁「業務/功能類別」欄之對外形狀。
+ *
+ * 🔴 **刻意不含 `nodeId`**：後台之同型查詢（`listCategoriesByDocumentIds()`）回傳掛載列層級
+ * （含 `nodeId`）供欄位富化再去重；本方法回傳的**已經是**去重後之對外 DTO 形狀。兩者若共用
+ * 一支函式，那支函式就得同時滿足兩種回傳形狀——那才是真正會漂移的介面（架構 §16.10 ②）。
+ */
+export interface PublicDocumentBusinessCategory {
+  id: string;
+  /** `businessCategoryDisplayName()` 之輸出（含子分類時為 `名稱（子分類）`）；前端不自行組字。 */
+  displayName: string;
+}
+
 /** 前台節點抽屜之文件列（🔴 不含 `status`——前台只呈現已公告文件）。 */
 export interface PublicMountedDoc {
   id: string;
@@ -74,4 +87,18 @@ export interface PublicBusinessCategoryStore {
    * （既有純單元測試只驗證節點與掛載數之過濾，不驗證連線）。
    */
   listEdges?(businessCategoryId: string): Promise<PublicCategoryEdgeInfo[]>;
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX18`／架構 §16.10 `ARCH-UX10`，項 9）：
+   * 單一文件掛載之**相異**業務/功能類別（依 `businessCategoryId` 去重，去重規則逐字同
+   * [F017] `AC-B3`）。
+   *
+   * 🔴 **`status` 不過濾**：停用（`inactive`）類別之**既有掛載仍顯示**——逐字比照 F017 `AC-B7`
+   * ⚠ 段之既有裁決（顯示歷史事實 vs 不引導新篩選是兩件事）。後台之
+   * `listCategoriesByDocumentIds()` 之 SQL 亦無 `WHERE c.status = 'active'`，兩者同構。
+   *
+   * 🔴 **選填能力**：既有測試替身（`public-business-category.service.spec.ts` 之 `FakeStore`）
+   * 以 `implements PublicBusinessCategoryStore` 宣告，加必要方法會把一個 additive 欄位變成
+   * 那些檔案的編譯錯誤。未提供者 ⇒ 消費端一律降級為空陣列（`AC-UX19` ① 之 `—`），不拋錯。
+   */
+  listCategoriesForDocument?(documentId: string): Promise<PublicDocumentBusinessCategory[]>;
 }

@@ -39,14 +39,19 @@ vi.mock('react-router-dom', async (orig) => {
 /**
  * `AC-D1`：桌面與行動 sheet 皆為此**五項**、此順序（逐字）。
  * 🔵 2026-09-08 使用者裁決（`AC-D16`）：`循環別` 整項移除（不分角色），六項 → 五項。
+ * 🔴 UX16 delta（`AC-UX22`／`AC-UX25`①，2026-09-22）：五→**六項**，就地改寫（預期轉紅、非回歸）
+ * ——「制定本部」插入於制定公司後、制定部門前（`OQ-UX16-19`／`20` 已核准回歸本部維度）。
  * 📝 已作廢（⚠ 不得復原）：OLD> `['制定公司', '制定部門', '制定室別', '當責室長', '狀態', '循環別']`
+ * 📝 已作廢（⚠ 不得復原）：OLD> `['制定公司', '制定部門', '制定室別', '當責室長', '狀態']`（五項，本 delta 導入前）
  */
-const FILTER_LABELS = ['制定公司', '制定部門', '制定室別', '當責室長', '狀態'] as const;
+const FILTER_LABELS = ['制定公司', '制定本部', '制定部門', '制定室別', '當責室長', '狀態'] as const;
 /**
- * `AC-D2`：其中**四項**為可搜尋下拉（combobox）；`狀態` 維持既有原生 select。
+ * `AC-D2`／`AC-UX22`：其中**五項**為可搜尋下拉（combobox，🔴 UX16 delta：四→五，含「制定本部」）；
+ * `狀態` 維持既有原生 select。
  * 📝 已作廢（⚠ 不得復原）：OLD> `['制定公司', '制定部門', '制定室別', '當責室長', '循環別']`
+ * 📝 已作廢（⚠ 不得復原）：OLD> `['制定公司', '制定部門', '制定室別', '當責室長']`（四項，本 delta 導入前）
  */
-const COMBO_LABELS = ['制定公司', '制定部門', '制定室別', '當責室長'] as const;
+const COMBO_LABELS = ['制定公司', '制定本部', '制定部門', '制定室別', '當責室長'] as const;
 /**
  * `AC-D8`：`<dl>` 區塊之標籤順序（逐字，含全形冒號）。
  * 🔴 2026-08-27 `AC-Y5` 就地改寫為**五列**——內容摘要已改為書名副標題、不再是 `<dl>` 之一列。
@@ -56,6 +61,8 @@ const DL_LABELS = ['制定公司：', '制定部門：', '制定室別：', '版
 
 const FILTER_OPTIONS = {
   draftingCompanies: [{ value: 'CO-1', label: '和潤企業股份有限公司' }],
+  // UX16 delta（AC-UX23）：additive 第六組。
+  draftingDivisions: [{ value: 'AS__A0000', label: '營運本部' }],
   draftingDepts: [
     { value: 'JA000', label: '營運管理部' },
     { value: 'JB000', label: '信用審查部' },
@@ -184,19 +191,27 @@ describe('F019 AC-D5：前台 filter-options 端點之前端契約', () => {
   });
 });
 
-describe('F019 AC-D1／AC-D16：篩選器恰 5 項、順序與無障礙名稱逐字', () => {
-  it('TS-F019-D1-001 桌面篩選列之篩選控制項恰為 5 個，且由左至右順序逐字為五項標籤', async () => {
+describe('F019 AC-D1／AC-UX22：篩選器恰 6 項、順序與無障礙名稱逐字', () => {
+  /**
+   * 🔴 test-dispute 修正（`impl-front2` 提報，2026-09-22）：`AC-UX25` ⑦ 已將本檔 `FILTER_LABELS`
+   * 就地改寫為六元（`:47`），但本案之 `toHaveLength(5)` 漏改，與同一 `controls` 變數上之
+   * `toEqual([...FILTER_LABELS])`（六元）字面互斥——任何實作皆不可能同時滿足兩者。
+   * 依 `AC-UX25` 通則（不得只改數字）：本案之 `toEqual` 半句本即為完整之回歸鎖形狀
+   * （逐一斷言六項之existence／值／相對順序，非僅斷言總數），`AC-UX25` ⑦ 註記
+   * 「`:202` 隨之涵蓋第六項」即指此——故只需訂正 `toHaveLength` 之數字，無需另立三段式斷言。
+   */
+  it('TS-F019-D1-001 桌面篩選列之篩選控制項恰為 6 個，且由左至右順序逐字為六項標籤', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
-    // 篩選控制項＝ input[role=combobox]（四項）＋ select（一項「狀態」）；以 DOM 出現順序取其 aria-label。
+    // 篩選控制項＝ input[role=combobox]（五項，含 UX16 新增「制定本部」）＋ select（一項「狀態」）；以 DOM 出現順序取其 aria-label。
     const controls = Array.from(
       desktopBar().querySelectorAll<HTMLElement>('input[role="combobox"], select'),
     );
-    expect(controls).toHaveLength(5);
+    expect(controls).toHaveLength(6);
     expect(controls.map((el) => el.getAttribute('aria-label'))).toEqual([...FILTER_LABELS]);
   });
 
-  it('TS-F019-D1-002 五項之無障礙名稱逐字可查（getByLabelText 皆命中）', async () => {
+  it('TS-F019-D1-002 六項之無障礙名稱逐字可查（getByLabelText 皆命中）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     for (const label of FILTER_LABELS) {
@@ -227,7 +242,7 @@ describe('F019 AC-D1／AC-D16：篩選器恰 5 項、順序與無障礙名稱逐
     expect(within(sheet).queryByText('循環別')).toBeNull();
   });
 
-  it('TS-F019-D1-004 行動底部 sheet 呈現同一 5 項、同一順序', async () => {
+  it('TS-F019-D1-004 行動底部 sheet 呈現同一 6 項、同一順序', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     await userEvent.click(screen.getByTestId('mobile-filter-trigger'));

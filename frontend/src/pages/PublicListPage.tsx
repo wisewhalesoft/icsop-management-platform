@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
+import { hasAdminAccess } from '../domain/menu';
 import { getPublicDocuments, getOrgUnits, getPublicFilterOptions } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
@@ -11,6 +12,7 @@ import { buildOrgPath } from '../domain/org-path';
 import type {
   PublicListItem,
   PublicListPage as PublicPage,
+  PublicFilterOption,
   PublicFilterOptions,
   OrgUnitRecord,
 } from '../api/types';
@@ -18,11 +20,32 @@ import type {
 /** 空選項（filter-options 尚未載入時之初值；不影響其餘篩選之可用性）。 */
 const EMPTY_FILTER_OPTIONS: PublicFilterOptions = {
   draftingCompanies: [],
+  // 🔵 2026-09-22 UX16 delta（`AC-UX23`，項 10）：五 → 六組，新增制定本部。
+  draftingDivisions: [],
   draftingDepts: [],
   draftingSections: [],
   chiefs: [],
   lifecycles: [],
 };
+
+/**
+ * 🔵 2026-09-22 UX16 delta（`AC-UX15` ③，項 5）：節點子樹 chip 之逐字句型。
+ * 🔒 `：` 後**無**空白、`·` 兩側**各一個半形空格**（句型逐字比照後台側之 `AC-56` ④）。
+ * 🔴 兩個代入值**皆取自後端回應**（`PublicListPage.subtreeChip`）——前端不自行組字、不另行查名。
+ */
+function formatPublicSubtreeChipLabel(categoryDisplayName: string, nodeName: string): string {
+  return `業務/功能類別：${categoryDisplayName} · 節點子樹：${nodeName}`;
+}
+
+/**
+ * 🔵 `AC-UX16`：chip ✕ 鈕之 `aria-label` 與 `title` 逐字值。
+ * 🔒 **與後台同類鈕逐字相同**（後台既有鎖＝`DocumentListPage.tsx` 之 `清除節點子樹篩選`）：
+ * 「清除」這個動作在前後台沒有任何差異，憑空製造一個只差兩個字的孿生字串本身就是成本
+ * （2026-09-22 第三輪裁決，推翻原 `清除節點子樹`——它是後台字串的嚴格前綴）。
+ * 🔴 **但明文不得共用常數**：前後台跨 package、無法共用同一份原始碼；比照 `org-path.ts:19-22`
+ * 之「兩份實作須同步維護」慣例——任一側改字必須同批改另一側。
+ */
+const CLEAR_SUBTREE_CHIP_LABEL = '清除節點子樹篩選';
 
 /**
  * 前台文件清單（E06 / F019）。版面權威來源：prototypes/03-public-list.html。
@@ -99,9 +122,25 @@ export function PublicListPage(): JSX.Element {
    * 改為「制定部門」——沿用舊名會讓既有已分享出去的網址（`/public?dept=JA000`）在使用者
    * 毫無察覺的情況下回傳完全不同的一組文件。舊 `dept` 一律忽略。
    */
+  /**
+   * 🔵 2026-09-22 UX16 delta（`AC-UX22`，項 10）：制定本部。鍵名沿用本頁既有之短名慣例
+   * （`co`／`mkdept`／`section`／`chief`），值為複合鍵 `` `${公司代碼}__{本部代碼}` ``。
+   * 🔒 `_` 為 RFC 3986 之 unreserved 字元 ⇒ 進網址不需 encode、不可能與分隔符混淆。
+   */
+  const draftingDivisionId = searchParams.get('mkdiv') ?? '';
   const draftingDeptId = searchParams.get('mkdept') ?? '';
   const draftingSectionId = searchParams.get('section') ?? '';
   const chiefId = searchParams.get('chief') ?? '';
+  /**
+   * 🔵 2026-09-22 UX16 delta（`AC-UX15` ⑤／架構 §16.4，項 5）：節點子樹之 deep link 兩參數。
+   * 🔴 鍵名為 `bcSubtreeId`／`bcSubtreeNodeId`——刻意**不沿用**本頁自身既有之
+   * `businessCategoryId`（那把鍵回答的是「樹狀圖目前顯示哪個類別」），亦不沿用後台之
+   * `bcNodeSubtreeId`（後台之可見性口徑無 F041 限縮，貼錯環境的 URL 會產生一個外觀成功
+   * 卻略過可見性檢查的請求形狀）。
+   * 🔴 **恆成對**：任一缺席即靜默 no-op——不送查詢參數、不顯示 chip、**不回錯誤**。
+   */
+  const bcSubtreeId = searchParams.get('bcSubtreeId') ?? '';
+  const bcSubtreeNodeId = searchParams.get('bcSubtreeNodeId') ?? '';
   /**
    * 🔵 2026-09-08 `AC-D16`：舊 `cycle` 參數**一律忽略**（不讀、不送、不顯示）。
    * 🔴 刻意**不**在此保留一個「讀了但不顯示」的值：那會讓已分享出去的網址仍在**靜默**縮小
@@ -144,10 +183,14 @@ export function PublicListPage(): JSX.Element {
     getPublicDocuments({
       keyword: keyword.trim() || undefined,
       companyCode: companyCode || undefined,
+      draftingDivisionId: draftingDivisionId || undefined,
       draftingDeptId: draftingDeptId || undefined,
       draftingSectionId: draftingSectionId || undefined,
       chiefId: chiefId || undefined,
       page,
+      // 🔴 `AC-UX15` ④：原樣帶上、不自行走訪子樹；展開／去重／可見性過濾全部在後端。
+      bcSubtreeId: bcSubtreeId || undefined,
+      bcSubtreeNodeId: bcSubtreeNodeId || undefined,
     })
       .then((d) => {
         if (active) {
@@ -164,16 +207,35 @@ export function PublicListPage(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [mode, keyword, companyCode, draftingDeptId, draftingSectionId, chiefId, page]);
+  }, [
+    mode, keyword, companyCode, draftingDivisionId, draftingDeptId, draftingSectionId, chiefId,
+    page, bcSubtreeId, bcSubtreeNodeId,
+  ]);
 
   const items = data?.items ?? [];
   const pinned = items.filter((i) => i.pinned);
   const rest = items.filter((i) => !i.pinned);
   const total = data?.total ?? 0;
   const hiddenCount = data?.hiddenCount ?? 0;
-  const selected = { companyCode, draftingDeptId, draftingSectionId, chiefId };
+  /**
+   * `AC-UX15` ③：chip 之兩個代入值**取自後端回應**（前端不自行組字、不另行查名）。
+   *
+   * 🔴 **兩個條件都要成立才畫**，缺一即整顆不進 DOM（非 hidden、非 CSS 隱藏）：
+   *  ① 網址**當下**仍帶著那兩個參數——否則按下 ✕ 或「清除篩選」後，尚未回來的那一次查詢
+   *    之舊回應會讓一條已經被清掉的 chip 繼續掛在畫面上；
+   *  ② 後端**確實回了** `subtreeChip`——否則「參數帶了但類別或節點查無」（`AC-UX15` ⑤ 之
+   *    靜默 no-op）會畫出一條說不出名字的 chip，而結果集其實一份都沒被篩掉。
+   */
+  const subtreeChip =
+    bcSubtreeId && bcSubtreeNodeId ? (data?.subtreeChip ?? null) : null;
+  const selected = { companyCode, draftingDivisionId, draftingDeptId, draftingSectionId, chiefId };
   const hasSelectFilters = Object.values(selected).some(Boolean);
-  const hasFilters = Boolean(keyword) || hasSelectFilters;
+  /**
+   * 🔵 `AC-UX16`：子樹 chip **算一項篩選**——它正在縮小結果集，「清除篩選」若清不到它，
+   * 按鈕字面與畫面就自相矛盾（那正是 `AC-UX16` 方向性不對稱之另一半所要求的）。
+   * 🔒 `hasSelectFilters` **不含**它（那個布林只餵手機篩選鈕的紅點，而 chip 不在該面板裡）。
+   */
+  const hasFilters = Boolean(keyword) || hasSelectFilters || subtreeChip !== null;
 
   /**
    * 局部更新 URL query。空字串＝自網址移除該參數（保持可分享網址簡潔）。
@@ -250,6 +312,10 @@ export function PublicListPage(): JSX.Element {
     // 原本「本頁之網址參數全部都是查詢狀態」之前提自本 delta 起不再成立；整組清空會把正在看
     // 文件清單的使用者**當場踢回樹狀圖模式**（`mode` 消失 ⇒ `resolveBrowseMode` 回預設 tree），
     // 清單連同他剛按下的那顆「清除篩選」一起消失。🔒 `AC-B24`：清單模式之行為逐字不變。
+    //
+    // 🔵 `AC-UX16`（2026-09-22 UX16 delta）：**連子樹 chip 一起清**——整組清空天然涵蓋
+    //    `bcSubtreeId`／`bcSubtreeNodeId` 兩鍵，無須逐鍵列舉（列舉才是日後漏刪的溫床）。
+    //    ⚠ **反向不成立**：chip 自己的 ✕ 只清它自己，見 `clearSubtreeChip`。
     setSearchParams((prev) => {
       const kept = new URLSearchParams();
       const m = prev.get('mode');
@@ -257,6 +323,16 @@ export function PublicListPage(): JSX.Element {
       return kept;
     });
   }, [setSearchParams]);
+
+  /**
+   * 🔵 `AC-UX16` 之**另一個方向**：chip 自己的 ✕ **只清 chip**——六項篩選與關鍵字**一格未動**。
+   * 🔴 方向性不對稱是刻意的：按鈕字面是「清除篩選」，清完卻仍有一條 chip 在縮小結果集，
+   * 畫面與文字自相矛盾；反向則不然（chip 的 ✕ 只講它自己）。
+   * 🔒 一併自網址移除該兩參數，否則使用者重新整理後篩選又回來（他已明示要清掉）。
+   */
+  const clearSubtreeChip = useCallback(() => {
+    patchParams({ bcSubtreeId: '', bcSubtreeNodeId: '', page: '' });
+  }, [patchParams]);
 
   const sheetRef = useRef<HTMLDivElement>(null);
   const sheetTriggerRef = useRef<HTMLButtonElement>(null);
@@ -317,10 +393,25 @@ export function PublicListPage(): JSX.Element {
    * 兩處各寫一份是「順序悄悄漂移」的溫床，而 AC 對兩處各有一條逐字順序斷言。
    */
   const FILTERS: Array<
-    | { kind: 'combo'; key: string; label: string; value: string; options: PublicFilterOptions[keyof PublicFilterOptions] }
+    /**
+     * 🔵 UX16 delta：`options` 之型別由 `PublicFilterOptions[keyof PublicFilterOptions]` 收窄為
+     * `PublicFilterOption[]`——`draftingDivisions` 為 additive **選填**鍵，索引型別因此會含
+     * `undefined`，而各項在此處都已各自以 `?? []` 保證有值。收窄在宣告處，不散在使用處。
+     */
+    | { kind: 'combo'; key: string; label: string; value: string; options: readonly PublicFilterOption[] }
     | { kind: 'select'; key: string; label: string }
   > = [
     { kind: 'combo', key: 'co', label: '制定公司', value: companyCode, options: filterOptions.draftingCompanies },
+    /**
+     * 🔵 2026-09-22 UX16 delta（`AC-UX22`，項 10）：五 → **六項**，`制定本部` **插入中段**
+     * （制定公司之後、制定部門之前）——🔴 與 2026-09-02 那一批「附加於最末」之手法不同，
+     * 其後各項之相對位置全部後移一格，屬預期轉紅而非回歸（`OQ-UX16-22` 人類確認）。
+     * 🔒 型態＝可搜尋下拉（combobox），比照其左右兩側；`狀態` 仍維持原生 select。
+     * 🔒 選項來源＝後端 `draftingDivisions`（全域 distinct ＋ 已過可見性），
+     *    `value` 為複合鍵 `` `${公司代碼}__{本部代碼}` ``、`label` 為人類可讀之本部名稱；
+     *    🔴 `AC-UX24`：**不含**任何 `無本部` sentinel——推導不出本部的文件自然沒有 distinct 值。
+     */
+    { kind: 'combo', key: 'mkdiv', label: '制定本部', value: draftingDivisionId, options: filterOptions.draftingDivisions ?? [] },
     { kind: 'combo', key: 'mkdept', label: '制定部門', value: draftingDeptId, options: filterOptions.draftingDepts },
     { kind: 'combo', key: 'section', label: '制定室別', value: draftingSectionId, options: filterOptions.draftingSections },
     { kind: 'combo', key: 'chief', label: '當責室長', value: chiefId, options: filterOptions.chiefs },
@@ -419,9 +510,19 @@ export function PublicListPage(): JSX.Element {
   );
 
   return (
-    <div className="min-h-screen bg-white text-slate-700">
-      {/* App bar */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200">
+    /*
+      🔵 2026-09-22 UX16 delta（`AC-UX17`，項 7）：**樹狀圖模式**之外殼改為
+      `h-screen flex flex-col` ＝ 以**視窗可視高度為界**之 flex 直向容器（權威＝prototype 30
+      之 `<body class="h-screen flex flex-col">`，📝 OLD> `min-h-screen flex flex-col`）。
+      🔴 `min-h-screen` → `h-screen` 不可省：`min-h-screen` 只給**下界**、不給**上界**，
+         flex 容器沒有上界時 `flex-1` 之子項一樣會被內容撐開，畫布底部的原生水平捲軸仍要
+         捲到最下方才看得到——原封不動重現使用者回報的那個 bug。
+      🔒 **文件清單模式維持 `min-h-screen`、一格未動**：該模式靠整頁捲動＋sticky header，
+         套上 `h-screen` 會把清單的捲動容器換掉（`AC-UX26` 之零漣漪要求）。
+    */
+    <div className={`${mode === 'tree' ? 'h-screen flex flex-col' : 'min-h-screen'} bg-white text-slate-700`}>
+      {/* App bar（樹狀圖模式下為 flex 直向容器之固定高度子項 ⇒ `shrink-0`，不得被壓扁） */}
+      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shrink-0">
         <div className={`${PUBLIC_SHELL_WIDTH} mx-auto px-4 h-14 flex items-center gap-3`}>
           <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shrink-0">
             <Icon name="file-text" className="w-5 h-5" />
@@ -441,6 +542,27 @@ export function PublicListPage(): JSX.Element {
                 </>
               )}
             </div>
+            {/*
+              🔵 2026-09-22 UX16 delta（`AC-UX20`，項 6）：前台 header 之後台入口。
+              🔴 判準**必須是** `hasAdminAccess()` 之那一支述詞（`AC-UX7`）——分流頁
+                 （`RoleLanding.tsx`）與 `AdminGuard`（`App.tsx`）用的是同一支。🔴 **明文禁止**
+                 在本頁另寫 `roleCode !== 'User'` 或任何角色清單：分流頁放行、前台連結卻擋掉
+                 （或反過來）就是一條死鏈，而三處各判一次正是它的溫床。
+              🔴 無後台權限之角色 ⇒ **整顆不進 DOM**（非 `disabled`、非 CSS 隱藏）。
+              🔒 `AC-UX21`：詳情頁與檢視器頁**刻意不加**此鈕（閱讀情境）——本鈕只掛在
+                 樹狀圖／文件清單兩模式共用之這一個 header 上。
+            */}
+            {hasAdminAccess(user?.roleCode) && (
+              <Link
+                to="/admin"
+                aria-label="前往後台"
+                title="前往後台"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-base text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600"
+              >
+                <Icon name="layout-dashboard" className="w-4 h-4 shrink-0" />
+                前往後台
+              </Link>
+            )}
             <button
               onClick={logout}
               aria-label="登出"
@@ -523,6 +645,38 @@ export function PublicListPage(): JSX.Element {
             </span>
           </div>
         </div>
+
+        {/*
+          🔵 2026-09-22 UX16 delta（`AC-UX15` ③，項 5）：節點子樹之可清除 chip。
+          🔴 **刻意不在篩選列裡**——它不是第七個篩選器（逐字比照 prototype 03 之同一註記）。
+          🔒 DOM 掛鉤逐字為 `data-public-subtree-chip`；🔴 不得沿用後台之掛鉤名。
+          🔴 兩個代入值皆來自後端之 `subtreeChip`；後端沒回（含四種 no-op 成因）⇒ 整顆不進 DOM。
+        */}
+        {subtreeChip && (
+          <div className="mb-3">
+            <span
+              data-public-subtree-chip=""
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary-200 bg-primary-50 text-primary-700 text-base"
+            >
+              <Icon name="git-fork" className="w-4 h-4 shrink-0" />
+              <span>
+                {formatPublicSubtreeChipLabel(
+                  subtreeChip.businessCategoryDisplayName,
+                  subtreeChip.nodeName,
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={clearSubtreeChip}
+                aria-label={CLEAR_SUBTREE_CHIP_LABEL}
+                title={CLEAR_SUBTREE_CHIP_LABEL}
+                className="tap-target w-4 h-4 rounded-full hover:bg-primary-100 flex items-center justify-center text-primary-500"
+              >
+                <Icon name="x" className="w-3 h-3" />
+              </button>
+            </span>
+          </div>
+        )}
 
         {/* 📝 已移除：頂部藍色 info note（`data-testid="scope-notice"`）——F019 `AC-Y1`。
             OLD> <div className="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-sm text-primary-700 mb-4">

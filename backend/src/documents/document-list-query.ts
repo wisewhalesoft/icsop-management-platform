@@ -55,6 +55,19 @@ export function applyDocumentQuery(
     if (filters.companyCode && r.companyCode !== filters.companyCode) return false;
     if (filters.draftingDeptId && r.draftingDeptId !== filters.draftingDeptId) return false;
     if (filters.draftingSectionId && r.draftingSectionId !== filters.draftingSectionId) return false;
+    /**
+     * 🔵 F017 `AC-UX41`（2026-09-22 UX16 delta，項 11）：制定本部——**等值比對**，比對鍵為
+     * 列上已組裝完成之 `draftingDivisionId`（複合鍵，見 `drafting-division.ts`）。
+     *
+     * 🔴 **上溯發生在服務層、不在這裡**（`ARCH-G0`／`ARCH-UX2`）：本函式是零 IO 純函式，列上
+     * 拿到的已是解析完成之本部識別 ⇒ 「該本部下轄之全部部與處室皆納入」這個語意由**同一個
+     * 本部識別**自然成立，本層不需要、也不得再走一次組織樹。
+     * 🔒 既有 `draftingDeptId`／`draftingSectionId` 之比對語意**一字不改**——本項是**新增第四個
+     * 組織維度**，不是把既有三項改成階層式連動（`AC-UX41` 末段）。
+     */
+    if (filters.draftingDivisionId && r.draftingDivisionId !== filters.draftingDivisionId) {
+      return false;
+    }
     // 🔴 F017 `AC-J14`（2026-08-28 E11 delta）：OJT 篩選由三值改**四值**。
     // 「全部」＝不提供本鍵／空字串 ⇒ 不施加限制；其餘三值對**文件層三態**逐字等值比對。
     // 📝 被推翻之原語意逐字保留供追溯：OLD> 「存在／不存在 `DOCUMENT_ATTACHMENT.type='OJT_SIGNIN'`」

@@ -34,6 +34,22 @@ export interface PublicDocItem {
   /** 🔴 B 階段（多公司）：文件所屬公司（← ICSOP_DOCUMENT.companyCode）。 */
   companyCode: string;
   draftingDeptId: string | null;
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX22`～`AC-UX24`，項 10）：制定本部，**additive**。
+   * 由服務層（`public-documents.service.ts`）以 `divisionOf()` 於取回列後組裝完成——本檔為零 IO
+   * 純函式層，拿到的已是解析完成之值，**不在此即時查表**（與既有 `draftingDeptId` 之比對模式同構：
+   * items 已帶好欲比對之欄，filters 只做等值）。
+   *
+   * · `draftingDivisionId`＝**篩選鍵**（複合 `` `${公司代碼}__{本部代碼}` ``，見
+   *   `documents/drafting-division.ts`；跨公司同碼之唯一防線，`AC-UX22` 🔒）
+   * · `draftingDivisionName`＝人類可讀之本部名稱（下拉 `label` 之來源，`AC-D5` 之 label 解析義務）
+   *
+   * 🔴 推導不出本部 ⇒ 兩欄皆 `null`，該文件**不產生**任何下拉選項、且在未選定任何本部時
+   * **照常出現於清單**（`AC-UX24`：前台**不加** `無本部` sentinel——與 F044 儀表板之**分組**維度
+   * 刻意不同，兩者不得互相對齊）。
+   */
+  draftingDivisionId?: string | null;
+  draftingDivisionName?: string | null;
   /** 2026-08-16 delta（§10.6）：以下四欄 additive 新增，供新五項篩選與卡片欄位。 */
   draftingSectionId: string | null;
   primaryChiefId: string | null;
@@ -60,6 +76,15 @@ export interface PublicListFilters {
    * 拿它當篩選鍵根本分不出公司；且該欄除了 `'00000'` 就是 NULL，零資訊量，已整個移除。
    */
   companyCode?: string;
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX22`，項 10）：制定本部——**等值比對**，比對鍵為列上
+   * 已組裝完成之 `draftingDivisionId`（複合鍵，**非顯示名稱字串**）。
+   *
+   * 🔒 語意為「該文件之制定組織沿 `parentCode` 上溯所抵達之本部 ＝ 所選值」⇒ **該本部下轄之
+   * 全部部與處室之文件皆納入**（同一本部下的兩個不同部各一份文件，選定該本部時兩份皆回傳）；
+   * 未提供者不施加限制，與其餘五項並用為 **AND**（`AC-D6` 之既有規則擴及第六項）。
+   */
+  draftingDivisionId?: string;
   /** 制定部門 orgCode（等值，非子樹展開）。 */
   draftingDeptId?: string;
   /** 制定室別 orgCode（等值）。 */
@@ -85,6 +110,20 @@ export interface PublicListPage<T> {
    * paginate 單獨使用時不設（undefined）；buildPublicList 一律設值。
    */
   hiddenCount?: number;
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX15` ③，項 5）：節點子樹 chip 之兩個顯示值。
+   *
+   * 🔴 **兩值皆由後端提供**——`AC-UX15` ③ 明文「前端不自行組字、不另行查名」。
+   * 未套用子樹篩選 ⇒ `null`（🔴 非空字串、非省略：省略時前端無法區分「沒套用」與
+   * 「後端忘了回」）。
+   */
+  subtreeChip?: PublicSubtreeChip | null;
+}
+
+/** 節點子樹 chip 之代入值（`業務/功能類別：{類別顯示名} · 節點子樹：{節點名}`）。 */
+export interface PublicSubtreeChip {
+  businessCategoryDisplayName: string;
+  nodeName: string;
 }
 
 export const DEFAULT_PAGE_SIZE = 50;
@@ -165,6 +204,9 @@ export function visibleCandidates(
 export function matchesPublicFilters(item: PublicDocItem, filters: PublicListFilters): boolean {
   return (
     (!filters.companyCode || item.companyCode === filters.companyCode) &&
+    // 🔵 `AC-UX22`（UX16 項 10）：第六項——制定本部之等值比對（第四個組織維度，非把既有三項
+    // 改成階層式連動；既有三項之比對語意一字不改）。
+    (!filters.draftingDivisionId || item.draftingDivisionId === filters.draftingDivisionId) &&
     (!filters.draftingDeptId || item.draftingDeptId === filters.draftingDeptId) &&
     (!filters.draftingSectionId || item.draftingSectionId === filters.draftingSectionId) &&
     matchesChiefFilter(item, filters.chiefId) &&
@@ -180,12 +222,21 @@ export interface FilterOption {
 }
 
 /**
- * 五組前台篩選選項（單一端點一次回傳，確保五組來自同一次可見性計算）。
+ * **六組**前台篩選選項（單一端點一次回傳，確保六組來自同一次可見性計算）。
  * 以 type alias 而非 interface 宣告——回應形狀需可與 `Record<string, unknown>` 互換
- * （契約測試以逐鍵列舉驗證「恰含五組」），interface 無隱含索引簽章。
+ * （契約測試以逐鍵列舉驗證「恰含六組」），interface 無隱含索引簽章；🔒 採 type alias 之
+ * **既有理由不變**。
+ *
+ * 🔵 2026-09-22 UX16 delta（`AC-UX23`，項 10）：五 → **六組**，新增 `draftingDivisions`。
+ * 📝 已作廢（⚠ 不得復原、不得用於斷言）：`OLD>` 「**五組**前台篩選選項（單一端點一次回傳，
+ *    確保五組來自同一次可見性計算）…契約測試以逐鍵列舉驗證『恰含五組』」；
+ *    `OLD>` 五鍵清單＝`draftingCompanies`／`draftingDepts`／`draftingSections`／`chiefs`／`lifecycles`。
+ * 🔒 `lifecycles` 鍵**維持存在**（`AC-D16` 已明文「後端契約不變」）——正因後端仍回得出來，
+ *    前台「循環別篩選不進 DOM」之反向斷言才有鑑別力；本 delta 不得順手移除它。
  */
 export type PublicFilterOptions = {
   draftingCompanies: FilterOption[];
+  draftingDivisions: FilterOption[];
   draftingDepts: FilterOption[];
   draftingSections: FilterOption[];
   chiefs: FilterOption[];
@@ -205,11 +256,17 @@ function distinctOptions(
 }
 
 /**
- * 五組可搜尋下拉之選項（`AC-D5`）。
+ * **六組**可搜尋下拉之選項（`AC-D5`／`AC-UX23`）。
  *
  * 🔴 選項為**全域 distinct**（不隨已套用之其他篩選收斂）——否則會出現「篩了就選不回來」；
  * 其唯一收斂維度是 `visibleCandidates()`（已公告 ＋ F041 可見性），故不可見文件之衍生值
  * 不會洩漏至選項。`label` 於本層 fallback 為 code，由服務層以名稱解析器覆寫。
+ *
+ * 🔴 `AC-UX24`：第六組之來源與其餘五組**同一條規則**——對可見語料取 distinct。推導不出本部
+ * 的文件自然沒有對應的 distinct 值（`draftingDivisionId` 為 `null` ⇒ 被 `distinctOptions` 之
+ * 空值過濾丟棄），因此它在下拉裡沒有選項，**這與「未指定制定公司」之既有處置同構，不是遺漏**。
+ * 🔴 **明文不得**補一個 `__no_division__`／`無本部` sentinel：那等於憑空發明一個不在 distinct
+ * 結果裡的值，並讓前台使用者看見一個內部分類概念（F044 之兩個 sentinel 常數**不在前台使用**）。
  */
 export function buildFilterOptions(
   items: readonly PublicDocItem[],
@@ -220,6 +277,8 @@ export function buildFilterOptions(
   return {
     // 制定公司之選項值＝公司代碼；label 由服務層以公司主檔全稱覆寫（見 distinctOptions 之 fallback 註記）。
     draftingCompanies: distinctOptions(cands, (d) => [d.companyCode]),
+    // 🔵 `AC-UX23`（UX16 項 10）：第六組——值＝本部之複合識別鍵，label 由服務層以本部名稱覆寫。
+    draftingDivisions: distinctOptions(cands, (d) => [d.draftingDivisionId ?? null]),
     draftingDepts: distinctOptions(cands, (d) => [d.draftingDeptId]),
     draftingSections: distinctOptions(cands, (d) => [d.draftingSectionId]),
     chiefs: distinctOptions(cands, (d) => [d.primaryChiefId, ...d.secondaryChiefIds]),
@@ -278,11 +337,34 @@ export function buildPublicList(
   today: Date,
   page = 1,
   pageSize = DEFAULT_PAGE_SIZE,
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX15`／架構 §16.4 `ARCH-UX4`，項 5）：節點子樹篩選之
+   * 相異可見文件 id 集合——管線之**第七個獨立步驟**，插入於 `filtered` 與 `sorted` 之間。
+   *
+   * 🔴 **刻意不併入 `matchesPublicFilters()`／不擴充 `PublicListFilters`**：`AC-UX16` 要求 chip 之
+   * 清除與既有六項篩選之清除語意**互不干涉**（chip 的 ✕ 只清 chip；「清除篩選」則三者同清）。
+   * 塞進同一個篩選物件會讓兩種清除語意糾纏在同一份資料結構裡；作為獨立步驟，兩者在程式碼
+   * 層面天然互不干涉。
+   *
+   * 🔴 **`undefined` 與空 `Set` 語意不同**（`AC-UX15` ⑤ 之靜默 no-op）：兩參數恆成對，任一缺席
+   * 或子樹解析查無 ⇒ 呼叫端須傳 **`undefined`**（不施加限制）；傳空 `Set` 會把結果篩成 0 筆，
+   * 語意完全相反。
+   */
+  subtreeDocumentIds?: ReadonlySet<string>,
 ): PublicListPage<PublicDocItem> {
   const base = items.filter((i) => isAnnounced(i, today));
   // F041 AC-14～AC-17：業務子分類之資料列層級可見性（非受限 viewer 恆全數通過）。
   const visible = visibleCandidates(items, viewer, today);
-  const filtered = visible.filter((i) => matchesPublicFilters(i, filters));
+  const filtered = visible
+    .filter((i) => matchesPublicFilters(i, filters))
+    /**
+     * 🔴 **縱深防禦**（§16.4／`AC-B23`）：`subtreeDocumentIds` 本身**已經**是「已公告 ∧
+     * `isDocVisibleToViewer`」之子集（由 `resolveVisibleSubtreeDocumentIds` 產生），而它在此
+     * 是套在 `visible`（同樣已套 `isDocVisibleToViewer`）**之後**的第二層 AND 交集 ⇒ 兩層各自
+     * 獨立計算、結果只會更小。即使其中一層被誤刪，另一層仍是完整防線——子樹篩選**絕不可**
+     * 成為繞過 F041 限縮之側門。
+     */
+    .filter((i) => !subtreeDocumentIds || subtreeDocumentIds.has(i.id));
   const sorted = splitAndSort(filtered, viewer.orgCode, viewer.companyCode);
   // G-PUB-012：被基底條件隱藏之候選數＝全候選 − 已公告候選（與使用者篩選無關）。
   const hiddenCount = items.length - base.length;

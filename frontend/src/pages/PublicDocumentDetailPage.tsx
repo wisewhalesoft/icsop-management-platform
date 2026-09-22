@@ -20,6 +20,7 @@ import { printErrorMessage } from '../domain/print-error';
 import { buildOrgPath } from '../domain/org-path';
 import type {
   PublicDocumentDetail,
+  PublicDocumentBusinessCategory,
   PublicDetailAttachment,
   DocumentStatus,
   OrgUnitRecord,
@@ -95,6 +96,50 @@ function Field({ label, children }: { label: string; children: ReactNode }): JSX
 }
 
 const DASH = '—';
+
+/**
+ * 🔵 2026-09-22 UX16 delta（F019 `AC-UX18`／`AC-UX19`，項 9）：「業務/功能類別」欄之值容器。
+ * 版面權威＝`prototypes/04-public-document-detail.html` 之 `businessCategoryFieldHtml()`。
+ *
+ * 🔒 **DOM 契約**：值容器帶 `data-business-categories` 與 `data-business-category-count="{N}"`
+ * （整數之字串，🔴 **`N = 0` 亦不得省略**）；其內每一個類別各為一個帶
+ * `data-business-category-item` 之節點。
+ * 🔴 **`data-business-category-count` 是 `N` 在 DOM 層唯一的機器可讀載體**——`N = 0` 時可見文字
+ * 為 `—`，**那句話裡沒有數字**，屬性與可見文字必須成對斷言才有鑑別力。
+ *
+ * 🔴 `N ≥ 2` ⇒ **逐列全部列出、不摺疊**：明文禁止採用後台清單第 16 欄之 `+{N−1}` 摺疊徽章、
+ * 亦禁止以逗號或頓號併為一串。📌 理由（人類指定）：詳情頁不是清單，沒有「一行高」之版面約束；
+ * 摺疊會讓使用者必須多按一次才知道這份文件歸在哪些類別。
+ *
+ * 🔒 **排序由後端決定**（`displayName` 之 UTF-16 碼位序遞增，🔴 明文禁止 `localeCompare()`
+ * ——中文定序隨環境漂移，本 repo 已踩過）；前端**不再排一次**，否則同一份清單會有兩個定序點。
+ */
+function BusinessCategoryField({
+  categories,
+}: {
+  categories: PublicDocumentBusinessCategory[];
+}): JSX.Element {
+  if (categories.length === 0) {
+    return (
+      <span data-business-categories="" data-business-category-count="0">
+        {DASH}
+      </span>
+    );
+  }
+  return (
+    <span
+      data-business-categories=""
+      data-business-category-count={String(categories.length)}
+      className="block space-y-0.5"
+    >
+      {categories.map((c) => (
+        <span key={c.id} data-business-category-item="" className="block">
+          {c.displayName}
+        </span>
+      ))}
+    </span>
+  );
+}
 const findAttachment = (
   atts: PublicDetailAttachment[],
   type: string,
@@ -494,15 +539,28 @@ function DetailBody({
             ⚠ 後端 DTO 之 `lifecycleName` 未移除（其他呼叫端仍在用），故此處是「取得了但不呈現」；
               下游之反向斷言請鎖 `queryByText('循環別')`，不要鎖欄位值（值可能與別的欄位撞字）。
           */}
-          <Field label="所屬節點">
-            {detail.nodeName ? (
-              <span className="inline-flex items-center gap-1">
-                <Icon name="git-commit-vertical" className="w-3.5 h-3.5 text-slate-400" />
-                {detail.nodeName}
-              </span>
-            ) : (
-              DASH
-            )}
+          {/*
+            🔵 2026-09-22 UX16 delta（F019 `AC-UX18`／`AC-UX19`，項 9）：**概念置換，不是改名**。
+            本列**就地取代**原「所屬節點」列（介於 `版次` 與 `內容摘要` 之間，位置一格未移），
+            欄位列總數維持 16 列（一換一、不增不減）。
+            📝 **已作廢（⚠ 不得復原、不得用於斷言）**：
+              OLD> <Field label="所屬節點">
+              OLD>   {detail.nodeName ? (
+              OLD>     <span className="inline-flex items-center gap-1">
+              OLD>       <Icon name="git-commit-vertical" className="w-3.5 h-3.5 text-slate-400" />
+              OLD>       {detail.nodeName}
+              OLD>     </span>
+              OLD>   ) : DASH}
+              OLD> </Field>
+            ⚠ 循環節點與業務/功能類別是**兩個不同概念**（一份文件可同時有循環節點與 0～多個類別
+              掛載）。後端 DTO 之 `nodeName` **未移除**（其他消費者仍可能用得到）⇒ 此處是
+              「取得了但不呈現」；**正因如此**，下游之 `queryByText('所屬節點') === null`
+              才有鑑別力（把欄位改回來就會立刻翻紅）。
+            🔴 反向斷言請鎖**標籤**，不要鎖欄位值：本頁示範語料中節點名 `進件作業` 是書名
+              `車輛分期進件作業` 的**子字串** ⇒ 對整頁做裸字面掃描是一條**恆真**的假綠。
+          */}
+          <Field label="業務/功能類別">
+            <BusinessCategoryField categories={detail.businessCategories ?? []} />
           </Field>
           <Field label="內容摘要">{detail.contentSummary ?? DASH}</Field>
           <Field label="公告日期">

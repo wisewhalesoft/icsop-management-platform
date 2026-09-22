@@ -417,17 +417,21 @@ describe('🔒 F017 AC-X16：零漣漪回歸鎖定（本 delta 只在 topbar 加
   /**
    * 🔴 2026-09-02 F043 delta（`AC-B6`）連坐修正（tdd-implementation 申訴）：13→14 項篩選，
    * 「業務/功能類別」為新增之最末項。
+   * 🔴 UX16 delta（`AC-UX42`⑦，2026-09-22）：14→15 項，就地改寫（預期轉紅、非回歸）——
+   * 「制定本部」插入於制定公司後、制定部門前。🔴 **本處住在 export delta 檔裡、與「匯出」主題
+   * 無關，是本批最容易漏掉的一處**——漏改即整檔紅，且紅的原因與該檔各案主題無關。
+   * 📝 已作廢（⚠ 不得復原）：`OLD>` 14 項陣列（制定公司 後直接是 制定部門）。
    */
-  it('AC-X16 ② 14 項篩選之組成與順序逐字不變——F017 匯出 delta 本身不新增任何篩選控制項', async () => {
+  it('AC-X16 ② 15 項篩選之組成與順序逐字不變（UX16：14→15）——F017 匯出 delta 本身不新增任何篩選控制項', async () => {
     mockAuth('ICSOPAdmin');
     renderWithTopbar();
     await waitLoaded();
     const controls = Array.from(
       filterBar().querySelectorAll<HTMLElement>('input[role="combobox"], select, [role="group"]'),
     );
-    expect(controls).toHaveLength(14);
+    expect(controls).toHaveLength(15);
     expect(controls.map((el) => el.getAttribute('aria-label'))).toEqual([
-      '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '程序書編號', '程序書書名內',
+      '制定公司', '制定本部', '制定部門', '制定室別', '當責室長', '狀態', '程序書編號', '程序書書名內',
       '公告日期', '連結點程序書', '附錄', '使用表單', 'OJT', '循環別', '業務/功能類別',
     ]);
   });

@@ -53,6 +53,23 @@ const WM_TILE_PAD = { x: 60, y: 140 } as const;
  */
 const NODE_TITLE = '單擊＝標示所有下游節點；雙擊＝檢視此節點與其下游節點之程序書清單';
 
+/**
+ * 🔵 2026-09-22 UX16 delta（F019 `AC-UX13` ①，項 5）：前台抽屜導向鈕之逐字文案。
+ *
+ * 🔴 **必須另立新常數，明文禁止改動或共用 `formatSubtreeJumpLabel`**（後台側，住在
+ * `LifecycleTreePreviewPage.tsx`）：該函式**被兩個後台頁共用**（`LifecycleTreePreviewPage`
+ * 自身與 `BusinessCategoryTreePreviewPage`），就地改字會連帶改掉後台兩處之文字並使
+ * F043 `AC-56` 與 F036 之逐字鎖翻紅——而那是**別的檔的測試**，改的人不一定同批跑到。
+ *
+ * 🔒 **兩句話刻意不同、不得互相對齊**：後台為 `在文件管理中檢視這 {N} 份程序書`、
+ * 前台為 `在文件清單中檢視這 {N} 份文件`——目標頁籤名在前後台本來就不同（文件管理／文件清單），
+ * 且前台通篇稱「文件」而非「程序書」。**那個差異有實質內容**（對比 `AC-UX16` 之「清除」動作：
+ * 該動作在兩邊沒有任何差異，故逐字相同）。
+ */
+export function formatPublicSubtreeJumpLabel(n: number): string {
+  return `在文件清單中檢視這 ${n} 份文件`;
+}
+
 /** 分組標題：本節點帶全形括號後綴，其餘不加任何後綴（逐字比照後台 `22`／`29`）。 */
 function groupTitleOf(name: string | null, isSelf: boolean): string {
   const base = name ?? '未命名節點';
@@ -161,6 +178,27 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
   }, []);
   const closeDrawer = useCallback(() => setDrawerNodeId(null), []);
 
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX15` ①⑤，項 5）：切換至**文件清單**模式並套用
+   * 節點子樹篩選。
+   *
+   * 🔴 **兩個參數恆成對**寫進網址（`bcSubtreeId`＋`bcSubtreeNodeId`）；子樹之展開、去重與
+   * 可見性過濾**全部由後端完成**（`AC-UX15` ④）——本頁**不得**把已載入的 `subtreeGroups`
+   * 之 id 集合塞進網址或狀態，那會開出第二條可見性判定路徑（`AC-B23` 之側門）。
+   * 🔒 `mode=list` 一併寫入：`AC-UX15` ① 要求瀏覽模式同步切換（切換器選中態隨之改變）。
+   */
+  const goSubtreeList = useCallback(
+    (businessCategoryId: string, nodeId: string) => {
+      const q = new URLSearchParams({
+        mode: 'list',
+        bcSubtreeId: businessCategoryId,
+        bcSubtreeNodeId: nodeId,
+      });
+      navigate(`/public?${q.toString()}`);
+    },
+    [navigate],
+  );
+
   useEffect(() => {
     if (!drawerNodeId || !currentId) return;
     let alive = true;
@@ -238,14 +276,22 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
   const noCategories = categoriesLoaded && categories.length === 0 && !currentId;
 
   return (
-    <section>
+    /*
+      🔵 2026-09-22 UX16 delta（F019 `AC-UX17`，項 7）：本元件是 `PublicListPage` 之
+      `h-screen flex flex-col` 外殼與畫布之間**唯一的中間層** ⇒ 它自己也必須是
+      `flex-1 min-h-0 flex flex-col`，否則外殼的高度上界傳不下去，`<main>` 的 `flex-1` 就沒有
+      可分配的剩餘高度可言（prototype 30 沒有這一層，因為那裡 `<main id="stage">` 直接是
+      `<body>` 的子項）。
+    */
+    <section className="flex-1 min-h-0 flex flex-col">
       {/*
         🔵 2026-09-04 寬螢幕版面寬度 delta（權威＝prototype 30 之同名 delta）：
         橫幅（控制列／info note／空狀態）維持可讀行寬並置中——`PUBLIC_SHELL_WIDTH`，2xl 起 1280px；
         🔴 但**畫布不套任何 max-w**（見下方 `<main>`）：prototype 30 之 `<main id="stage">`
         本來就是全寬，寬樹一旦被夾住就只能靠拖曳平移找回被切掉的部分。
       */}
-      <div className={`${PUBLIC_SHELL_WIDTH} mx-auto w-full px-4 py-5 space-y-3`}>
+      {/* 橫幅區為固定高度子項（`shrink-0`）：它被壓扁時控制列會疊在一起，而畫布才是該伸縮的那個。 */}
+      <div className={`${PUBLIC_SHELL_WIDTH} mx-auto w-full px-4 py-5 space-y-3 shrink-0`}>
         {/*
           控制列（版面逐字取自 prototype 30 之同一列）：模式切換器（由 `PublicListPage` 以
           `modeSwitch` 傳入，`AC-B12`）＋ 類別下拉（`AC-B17`）＋ 縮放。
@@ -334,10 +380,21 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
         🔴 畫布**全寬、不套 `PUBLIC_SHELL_WIDTH`**（prototype 30 之 `<main id="stage">` 逐字如此）。
         自帶 `px-4 pb-5`：本元件不再被 `PublicListPage` 之 `<main>` 包住，內距須由自己給。
       */}
+      {/*
+        🔵 2026-09-22 UX16 delta（F019 `AC-UX17`，項 7）：`flex-1` ＋ **`min-h-0`** ＋
+        `overflow-auto` **三者同時具備**（權威＝prototype 30 之 `<main id="stage">`；
+        📝 OLD> `overflow-auto px-4 pb-5 …`）。
+        🔴 **`min-h-0` 是本項的全部重點，不是湊數**：flex 子項之 `min-height` 預設為 `auto`、
+           **不肯縮到內容高度以下** ⇒ 只加 `flex-1` 而不加 `min-h-0` 時，容器仍會被內容撐高到
+           超出視窗，原生水平捲軸仍然貼在內容底部、仍要捲到最下方才看得到——**原封不動重現
+           使用者回報的那個 bug，而所有測試全綠**。
+        ⚠ **jsdom 不計算版面**（`offsetHeight`／`scrollHeight` 恆為 0）⇒ 自動化只鎖得住
+           class 契約，「水平捲軸是否固定在畫面上」必須由人以真實瀏覽器覆核。
+      */}
       <main
         ref={stageRef}
         data-testid="public-tree-stage"
-        className="overflow-auto px-4 pb-5 select-none cursor-grab active:cursor-grabbing"
+        className="flex-1 min-h-0 overflow-auto px-4 pb-5 select-none cursor-grab active:cursor-grabbing"
         onClick={onStageClick}
         onPointerDown={onStagePointerDown}
       >
@@ -506,9 +563,15 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
            分組／排序／計數皆由後端完成（比照後台 `22`／`29`）。
         🔒 §A.8.4 N9：**無「狀態」欄**——與後台 `29` 之五欄刻意不同（前台只看得到已公告文件，
         狀態徽章在此無資訊量，且會洩漏「還有你看不到的其他狀態」）。
-        🔒 抽屜不含任何寫入元件；點列導向**前台**文件詳情。
-        🔴 `AC-53` ②之延伸：本抽屜**刻意沒有**後台 `22`／`29` 之「在文件管理中檢視這 N 份程序書」
-           導向鈕——前台文件清單沒有節點子樹這個維度，也沒有後台文件管理可導向。
+        🔒 抽屜不含任何寫入元件；點列導向**前台**文件詳情。（⚠ **這半句仍然有效**。）
+        📝 **已作廢（⚠ 不得復原、不得用於斷言）**——`AC-UX14` ①③（`OQ-UX16-06`＝選項 A，
+           人類 2026-09-22 確認推翻）：
+           OLD> 🔴 `AC-53` ②之延伸：本抽屜**刻意沒有**後台 `22`／`29` 之
+           OLD>    「在文件管理中檢視這 N 份程序書」導向鈕——前台文件清單沒有節點子樹這個維度，
+           OLD>    也沒有後台文件管理可導向。
+           ⇒ 前台清單**自本 delta 起有**節點子樹這個維度（`AC-UX15` 是一整套能力，不是一顆按鈕），
+             抽屜底部改為**有**一顆前台專屬措辭之導向鈕（見本 `<aside>` 末端之
+             `data-public-subtree-jump`）。🔒 其**成對之後台正向半句一字不動**。
       */}
       <aside
         id="publicNodeDocDrawer"
@@ -619,6 +682,34 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
             </div>
           )}
         </div>
+        {/*
+          🔵 2026-09-22 UX16 delta（F019 `AC-UX13`／`AC-UX14`，項 5）：抽屜底部之導向鈕。
+          🔴 **推翻既有負向設計**：原 🔒 註解「本抽屜**刻意沒有**後台 `22`／`29` 之
+             『在文件管理中檢視這 N 份程序書』導向鈕——前台文件清單沒有節點子樹這個維度，
+             也沒有後台文件管理可導向」已於 `AC-UX14` ①③ 逐字作廢（`OQ-UX16-06`＝選項 A，
+             人類 2026-09-22 確認推翻）；📝 OLD> 該兩句保留於上方 `<aside>` 註解供追溯。
+          🔒 `N` 取自**相異可見文件數**（＝副標題 `子樹共 {N} 份程序書` 之同一個 `subtreeTotal`），
+             🔴 **不是**抽屜之畫面列數——跨組不去重使兩數必然可以不同。
+          🔴 `N = 0` ⇒ **整顆自 DOM 移除**（非 `disabled`、非 CSS 隱藏：CSS 隱藏會讓下游之
+             `queryByLabelText(...) === null` 恆真＝假綠）。
+          🔒 DOM 掛鉤逐字為 `data-public-subtree-jump`；🔴 **明文禁止**沿用 `data-subtree-jump`
+             （循環側）或 `data-bc-subtree-jump`（後台類別側）——三顆鈕行為不同、目標不同。
+        */}
+        {drawerNodeId && currentId && subtreeTotal > 0 && (
+          <div className="border-t border-slate-200 px-4 py-3 shrink-0">
+            <button
+              type="button"
+              data-public-subtree-jump=""
+              onClick={() => goSubtreeList(currentId, drawerNodeId)}
+              aria-label={formatPublicSubtreeJumpLabel(subtreeTotal)}
+              title={formatPublicSubtreeJumpLabel(subtreeTotal)}
+              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-1"
+            >
+              <Icon name="list" className="w-4 h-4 shrink-0" />
+              {formatPublicSubtreeJumpLabel(subtreeTotal)}
+            </button>
+          </div>
+        )}
       </aside>
     </section>
   );

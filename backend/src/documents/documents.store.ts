@@ -110,6 +110,16 @@ export interface DocumentListFilters {
   companyCode?: string;
   draftingDeptId?: string;
   draftingSectionId?: string;
+  /**
+   * 🔵 2026-09-22 UX16 delta（F017 `AC-UX40`／`AC-UX41`，項 11）：制定本部（**第四個組織維度**，
+   * 非把既有三項改成階層式連動）。
+   *
+   * 🔒 值之形狀＝`` `${公司代碼}__{本部代碼}` ``（見 `drafting-division.ts#draftingDivisionKey`），
+   * 與列上之 `draftingDivisionId` 等值比對。語意為「該文件之制定組織沿 `parentCode` 上溯所抵達
+   * 之本部 ＝ 所選值」⇒ **該本部下轄之全部部與處室之文件皆納入**；未提供者不施加限制，
+   * 與其餘各項並用為 AND（`AC-D2` 之既有規則擴及本項）。
+   */
+  draftingDivisionId?: string;
   primaryChiefId?: string;
   /** 連結點程序書篩選（F015 依賴：擁有指向此目標之連結者）。 */
   linkTargetId?: string;
@@ -175,6 +185,23 @@ export interface DocumentListItem {
   draftingCompanyName: string | null;
   draftingDeptName: string | null;
   draftingSectionName: string | null;
+  /**
+   * 🔵 2026-09-22 UX16 delta（F017 `AC-UX40`～`AC-UX43`，項 11）：制定本部三欄，**additive**。
+   * 由 `documents.service.ts#enrichNames()` 於服務層組裝（SQL 只投影，`ARCH-G0`／`ARCH-UX2`）；
+   * 推導不出本部（無制定部門／上溯查無 `DIVISION` 祖先）⇒ 三欄皆 `null`。
+   *
+   * · `draftingDivisionId`＝**篩選鍵**（複合 `` `${公司代碼}__{本部代碼}` ``；跨公司同碼之唯一防線）
+   * · `draftingDivisionCode`＝**裸**本部代碼（`D0000`）
+   * · `draftingDivisionName`＝人類可讀之本部名稱（`orgUnitDisplayName`）
+   *
+   * 🔒 `AC-UX43` ②：既有 `draftingCompanyName`／`draftingDeptName`／`draftingSectionName`
+   * 三級顯示欄**一格未動**——本 delta 只放寬「本部可作為篩選／分組維度」這個原則的適用範圍，
+   * 不改變任何既有欄位的輸出。🔴 `AC-UX44` ②：`制定本部` **不進 CSV**。
+   * 🔒 選填宣告沿用本 repo「既有共享型別加欄一律 additive optional」之慣例。
+   */
+  draftingDivisionId?: string | null;
+  draftingDivisionCode?: string | null;
+  draftingDivisionName?: string | null;
   primaryChiefId: string | null;
   /** F017 當責室長姓名（resolvePersonName；查無→null，前端 fallback 顯示員編）。 */
   primaryChiefName: string | null;

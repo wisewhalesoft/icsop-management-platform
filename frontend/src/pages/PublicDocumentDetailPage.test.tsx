@@ -152,10 +152,11 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
    * 原斷言（供追溯）：OLD> `expect(fields.getByText('營運管理部審查室')).toBeInTheDocument(); // 使用部門 chip`
    * 其餘欄位列之集合、順序與逐字標籤**一律不變**（逐項順序斷言見下一案）。
    */
-  it('唯讀欄位清單逐項呈現（系統 UUID、制定三級、當責室長、版次、節點、公告日期）', async () => {
+  it('唯讀欄位清單逐項呈現（系統 UUID、制定三級、當責室長、版次、業務/功能類別、公告日期）', async () => {
     renderDetail();
     await screen.findByRole('heading', { name: '車輛分期進件作業' });
-    const fields = within(screen.getByTestId('field-list'));
+    const container = screen.getByTestId('field-list');
+    const fields = within(container);
     expect(fields.getByText('系統 UUID')).toBeInTheDocument();
     expect(fields.getByText('a3f81c22-9e04-4b7a-8f2d-e2c9d1748e2f')).toBeInTheDocument();
     expect(fields.getByText('和潤企業股份有限公司')).toBeInTheDocument(); // 制定公司
@@ -168,7 +169,23 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
     // 🔵 2026-09-08 `AC-D16`：`循環別` 欄已移除（前台不分角色）。
     // 📝 已作廢（⚠ 不得復原）：OLD> `expect(fields.getByText('銷售及收款循環')).toBeInTheDocument(); // 循環別`
     expect(fields.queryByText('循環別')).toBeNull();
-    expect(fields.getByText('進件作業')).toBeInTheDocument(); // 所屬節點名（非 nodeId）
+    /**
+     * 🔴 test-dispute 修正（`impl-front2` 提報，2026-09-22）：`AC-UX18` ①②（概念置換，非改名）
+     * 已把「所屬節點」欄換成「業務/功能類別」——舊斷言（下方 OLD>）與 `PublicDocumentDetailPage.
+     * ux16.test.tsx` 之 `queryByText('所屬節點') === null`（①）同輪互斥，任何實作都不可能同時
+     * 滿足兩者。
+     * 📝 已作廢（⚠ 不得復原）：OLD> `expect(fields.getByText('進件作業')).toBeInTheDocument(); // 所屬節點名（非 nodeId）`
+     * 🔴 `AC-UX18` 📌 明文禁止改用更長字面掃描（節點名「進件作業」是書名「車輛分期進件作業」之
+     * 子字串，裸 `getByText` 恆命中、恆為真）——處置是換斷言之**形狀**（限定容器＋結構性斷言），
+     * 不是換字串。本案 fixture 未設定 `businessCategories`（＝ 0 筆），依 `AC-UX19`① 可見文字
+     * 為「—」；N=1／N≥2 之完整語意已由 `PublicDocumentDetailPage.ux16.test.tsx` 之
+     * `AC-UX18`／`AC-UX19` describe 區塊覆蓋，本案只需確認「業務/功能類別」列存在且未殘留節點名。
+     */
+    const bcWrapper = container.querySelector('[data-business-categories]');
+    expect(bcWrapper).not.toBeNull();
+    expect(bcWrapper!.getAttribute('data-business-category-count')).toBe('0');
+    expect(bcWrapper!.textContent?.trim()).toBe('—');
+    expect(within(container).queryByText('進件作業')).toBeNull();
     expect(fields.getByText('2026-01-01')).toBeInTheDocument(); // 公告日期
   });
 
@@ -195,11 +212,15 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
      * 🔵 2026-09-08 使用者裁決（`AC-D16`）：`循環別` 列自本清單移除（17 列 → **16 列**）。
      * 📝 被移除之原陣列項逐字保留供追溯：OLD> `'循環別',`（原列於 `'版次'` 與 `'所屬節點'` 之間）
      * 🔒 其餘 16 列之集合、順序與逐字標籤一律不變。
+     *
+     * 🔴 test-dispute 修正（`impl-front2` 提報，2026-09-22，`AC-UX18`①②）：`所屬節點` 就地改為
+     * `業務/功能類別`（**一換一、位置不變**——仍介於 `版次` 與 `內容摘要` 之間，總數維持 16 列）。
+     * 📝 已作廢（⚠ 不得復原）：OLD> `'版次', '所屬節點', '內容摘要', '公告日期',`
      */
     const DETAIL_FIELD_LABELS = [
       '系統 UUID', '文件狀態', '制定公司', '制定部門', '制定室別',
       '程序書編號', '程序書書名', '當責室長-主要',
-      '版次', '所屬節點', '內容摘要', '公告日期',
+      '版次', '業務/功能類別', '內容摘要', '公告日期',
       '檔案（ICSOP PDF）', '使用表單', '附錄', '連結點程序書',
     ];
 

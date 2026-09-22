@@ -9,12 +9,15 @@ import { chunkByParamBudget } from '../org-sync/param-batching';
 import { deriveDisplayStatus } from '../documents/display-status';
 import { DocumentStatus } from '../documents/document-status';
 import { UsingDeptRef } from '../rbac/viewer-scope';
+import { sortByOrderThenName } from './business-category-sort';
+import { businessCategoryDisplayName } from './business-category-subcategory';
 import {
   BusinessCategoryOption,
   CategoryMountVisibilityRow,
   PublicBusinessCategoryStore,
   PublicCategoryEdgeInfo,
   PublicCategoryNodeInfo,
+  PublicDocumentBusinessCategory,
   PublicMountedDoc,
 } from './public-business-category.store';
 
@@ -47,11 +50,22 @@ export class TypeOrmPublicBusinessCategoryStore implements PublicBusinessCategor
     return this.ds;
   }
 
+  /**
+   * `AC-UX32` ②：前台類別切換下拉改依 **`sortOrder` 昇冪、同值時 `name` 昇冪**
+   * （📝 已作廢、⚠ 不得復原：`OLD>` `order: { name: 'ASC' }`）。
+   *
+   * 🔴 **SQL 只排 `sortOrder`**：`name` 留在 `ORDER BY` 裡得到的是資料庫預設 collation
+   * `Chinese_Taiwan_Stroke_BIN` 之**筆畫序**，不是 `AC-UX31` ③ 要求之 UTF-16 碼位序；次鍵一律
+   * 由**與後台清單同一支**之 `sortByOrderThenName()` 於應用層施加（三處消費者單一口徑）。
+   * 🔒 `AC-B18` 之**納入條件一字不改**（仍僅 `status='active'`）——本條改的是次序、不是成員。
+   */
   async listActiveCategories(): Promise<BusinessCategoryOption[]> {
     const ds = await this.init();
-    const rows = await ds
-      .getRepository(BusinessCategory)
-      .find({ where: { status: 'active' }, order: { name: 'ASC' } });
+    const rows = sortByOrderThenName(
+      await ds
+        .getRepository(BusinessCategory)
+        .find({ where: { status: 'active' }, order: { sortOrder: 'ASC' } }),
+    );
     return rows.map((c) => ({
       id: c.id,
       name: c.name,
@@ -162,5 +176,43 @@ export class TypeOrmPublicBusinessCategoryStore implements PublicBusinessCategor
       edition: d.edition ?? null,
       announcedDate: toIsoDate(d.announcedDate),
     };
+  }
+
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX18`／架構 §16.10 `ARCH-UX10`，項 9）：單一文件掛載之
+   * 相異業務/功能類別。
+   *
+   * 🔴 **無 `WHERE c.status = 'active'`**：停用類別之既有掛載仍須顯示（`AC-UX18` 末段）。
+   * 🔴 **依 `businessCategoryId` 去重**（`AC-B3` 之同一句規則）：一份文件掛在同一類別之多個
+   * 節點時 SQL 會回多列，`Map` 之首見者勝即為去重。
+   * 🔒 **依 `displayName` 之 UTF-16 碼位序遞增**（`AC-UX19` 📌）——🔴 明文禁止 `localeCompare()`
+   * （中文定序隨環境漂移，本 repo 已踩過；理由逐字同 F017 `AC-B9` ②）。
+   */
+  async listCategoriesForDocument(
+    documentId: string,
+  ): Promise<PublicDocumentBusinessCategory[]> {
+    const ds = await this.init();
+    const rows = await ds
+      .getRepository(BusinessCategoryDoc)
+      .createQueryBuilder('m')
+      .innerJoin(BusinessCategoryNode, 'n', 'n.id = m.nodeId')
+      .innerJoin(BusinessCategory, 'c', 'c.id = n.businessCategoryId')
+      .select('c.id', 'id')
+      .addSelect('c.name', 'name')
+      .addSelect('c.subcategory', 'subcategory')
+      .where('m.documentId = :documentId', { documentId })
+      .getRawMany<{ id: string; name: string; subcategory: string | null }>();
+
+    const seen = new Map<string, PublicDocumentBusinessCategory>();
+    for (const r of rows) {
+      if (seen.has(r.id)) continue;
+      seen.set(r.id, {
+        id: r.id,
+        displayName: businessCategoryDisplayName({ name: r.name, subcategory: r.subcategory }),
+      });
+    }
+    return [...seen.values()].sort((a, b) =>
+      a.displayName < b.displayName ? -1 : a.displayName > b.displayName ? 1 : 0,
+    );
   }
 }

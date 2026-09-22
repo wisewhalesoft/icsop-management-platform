@@ -116,7 +116,7 @@ beforeEach(() => {
   vi.mocked(endpoints.exportDocumentList).mockResolvedValue(undefined);
 });
 
-describe('AC-B1／AC-B6：欄數與篩選項數擴充（16 欄／14 項）', () => {
+describe('AC-B1／AC-B6：欄數與篩選項數擴充（16 欄／15 項，UX16：14→15 含制定本部）', () => {
   it('AC-B1 16 欄，第 16 欄（最末欄）表頭逐字「業務/功能類別」；既有 0～14 欄集合不變', async () => {
     renderPage();
     await screen.findByText('零類別文件');
@@ -125,7 +125,7 @@ describe('AC-B1／AC-B6：欄數與篩選項數擴充（16 欄／14 項）', () 
     expect(headers[headers.length - 1]).toBe('業務/功能類別');
   });
 
-  it('AC-B6 篩選恰 14 項，第 14 項（最末）無障礙名稱逐字「業務/功能類別」', async () => {
+  it('AC-B6 篩選恰 15 項（UX16：14→15），業務/功能類別仍為最末項，無障礙名稱逐字「業務/功能類別」', async () => {
     renderPage();
     await screen.findByText('零類別文件');
     expect(within(filterBar()).getByLabelText('業務/功能類別')).toBeInTheDocument();
@@ -174,7 +174,7 @@ describe('AC-B2／AC-B3／AC-B4：欄值呈現（空值／去重摺疊／pill �
   });
 });
 
-describe('AC-B7：第 14 項篩選之控制項型態與選項', () => {
+describe('AC-B7：業務/功能類別篩選之控制項型態與選項（UX16 後為第 15 項）', () => {
   it('AC-B7① 可搜尋下拉（combobox）；②選項值＝businessCategoryId、顯示＝businessCategoryDisplayName；③預設僅 active', async () => {
     renderPage();
     await screen.findByText('零類別文件');
@@ -202,10 +202,10 @@ describe('AC-B7：第 14 項篩選之控制項型態與選項', () => {
  * 詳見 risks-and-gaps。
  */
 describe('AC-B10：匯出呼叫端仍恰傳兩個引數（documentIds ＋ 選填 linkTargetId）', () => {
-  it('AC-B10 第 16 欄／第 14 項篩選存在下，匯出呼叫仍恰兩引數，不夾帶 businessCategoryId', async () => {
+  it('AC-B10 第 16 欄/業務/功能類別篩選存在下，匯出呼叫仍恰兩引數，不夾帶 businessCategoryId', async () => {
     renderPage();
     await screen.findByText('零類別文件');
-    // 套用第 14 項篩選後仍匯出，驗證新篩選狀態不會被一併塞進呼叫引數。
+    // 套用業務/功能類別篩選後仍匯出，驗證新篩選狀態不會被一併塞進呼叫引數。
     await userEvent.click(within(filterBar()).getByLabelText('業務/功能類別'));
     const list = await within(filterBar()).findByRole('listbox');
     await userEvent.click(within(list).getByText('風險管理'));

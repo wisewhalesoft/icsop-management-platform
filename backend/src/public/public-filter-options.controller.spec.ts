@@ -20,8 +20,13 @@ import { SessionGuard } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { ROLE_CODES } from '../rbac/function-matrix';
 
+/**
+ * UX16 delta `AC-UX23`：additive 新增 `draftingDivisions`（六組鍵）——`EMPTY_OPTIONS` 就地
+ * 補上第六鍵，非另立第二份 fixture。
+ */
 const EMPTY_OPTIONS = {
   draftingCompanies: [],
+  draftingDivisions: [],
   draftingDepts: [],
   draftingSections: [],
   chiefs: [],
@@ -85,15 +90,33 @@ describe('F019 AC-D5：viewer 取自 session，不接受任何客戶端傳入之
     expect(handler.length).toBe(1);
   });
 
-  it('TS-F019-D5-206 回應恰含五組選項鍵（draftingCompanies／draftingDepts／draftingSections／chiefs／lifecycles）', async () => {
+  /**
+   * UX16 delta `AC-UX23`：既有絕對值鎖就地改寫為回歸鎖（預期轉紅，非回歸）——五組 → 六組。
+   * 🔴 改寫方向＝回歸鎖，不是把 5 改成 6：新斷言須**同時**滿足 ⓐ 既有五鍵逐一仍在、
+   * ⓑ 新鍵 `draftingDivisions` 存在、ⓒ 鍵總數恰 6。只寫 ⓒ 時，「把 `lifecycles` 換成
+   * `draftingDivisions`」照樣綠。
+   * 📝 已作廢（⚠ 不得復原）：`OLD>` 五鍵清單 ['chiefs','draftingCompanies','draftingDepts',
+   * 'draftingSections','lifecycles']（`Object.keys(res).sort()` 恰五組）。
+   */
+  it('TS-F019-D5-206 回應恰含六組選項鍵（AC-UX23：新增 draftingDivisions，既有五組逐一仍在）', async () => {
     const svc = fakeSvc();
     const req = { sessionUser: { roleCode: 'User', orgCode: 'JAC00' } } as never;
     const res = (await new PublicDocumentsController(svc, fakeDetailSvc()).filterOptions(req)) as Record<
       string,
       unknown
     >;
-    expect(Object.keys(res).sort()).toEqual(
-      ['chiefs', 'draftingCompanies', 'draftingDepts', 'draftingSections', 'lifecycles'].sort(),
+    const keys = Object.keys(res);
+    // ⓐ 既有五鍵逐一仍在。
+    for (const oldKey of ['chiefs', 'draftingCompanies', 'draftingDepts', 'draftingSections', 'lifecycles']) {
+      expect(keys).toContain(oldKey);
+    }
+    // ⓑ 新鍵存在。
+    expect(keys).toContain('draftingDivisions');
+    // ⓒ 鍵總數恰 6。
+    expect(keys).toHaveLength(6);
+    // 完整逐字集合（雙重保險，防止「其中一鍵被改名成別的字」這種 ⓐⓑⓒ 皆可能漏抓的形狀）。
+    expect(keys.sort()).toEqual(
+      ['chiefs', 'draftingCompanies', 'draftingDepts', 'draftingDivisions', 'draftingSections', 'lifecycles'].sort(),
     );
   });
 });

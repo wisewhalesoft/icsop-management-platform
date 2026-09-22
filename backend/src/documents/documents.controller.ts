@@ -56,6 +56,11 @@ export class DocumentsController {
       documentNumber: q.documentNumber || undefined,
       documentName: q.documentName || undefined,
       companyCode: q.companyCode || undefined,
+      // 🔵 2026-09-22 UX16 delta（F017 `AC-UX41`，項 11）：制定本部。複合鍵
+      // `${公司代碼}__{本部代碼}`（非顯示名稱、非裸代碼——各公司之 5 碼組織代碼獨立編碼）。
+      // ⚠ 漏掉本行＝`applyDocumentQuery()` 那條比對永遠收不到值、篩選端到端靜默無作用
+      //   （與上方 `appendixId`／`formId` 自立條起就漏了一年之同型缺陷）。
+      draftingDivisionId: q.draftingDivisionId || undefined,
       draftingDeptId: q.draftingDeptId || undefined,
       draftingSectionId: q.draftingSectionId || undefined,
       primaryChiefId: q.primaryChiefId || undefined,

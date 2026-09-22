@@ -178,17 +178,48 @@ describe('PublicCategoryTreePage — F043 己：前台樹狀圖瀏覽模式', ()
   });
 
   /**
-   * 🔴 §A.8.5 ⑦ 之前台半句：**前台抽屜沒有**後台之「在文件管理中檢視這 N 份程序書」導向鈕
-   * ——前台清單沒有節點子樹維度，也無後台文件管理可導向（與 `BusinessCategoryTreePreviewPage`
-   * 之正向半句成對存在）。
+   * UX16 delta `AC-UX14` ⑤（`AC-UX13`／`OQ-UX16-06`＝選項 A，人類 2026-09-22 確認推翻）：
+   * 既有負向鎖定為預期轉紅、就地改寫（非回歸）——原「前台刻意沒有導向鈕」之設計已被推翻。
+   * 🔴 改寫方向＝反轉為正向，並保留兩句負向半句（它們現在鎖的是「別把後台那顆鈕搬過來」）：
+   *  ⓐ `[data-public-subtree-jump]` 存在恰一個，文字逐字為「在文件清單中檢視這 {N} 份文件」；
+   *  ⓑ `[data-subtree-jump]`（循環側）與 `[data-bc-subtree-jump]`（後台類別側）於前台頁皆為 null；
+   *  ⓒ `queryByLabelText('在文件管理中檢視這 {N} 份程序書')`（後台措辭）仍為 null。
+   * 📝 已作廢（⚠ 不得復原、不得用於斷言）：`OLD>` 標題「前台抽屜沒有…導向鈕（與後台成對之負向
+   * 半句）」，僅斷言 `[data-subtree-jump]` 與 `getByLabelText('在文件管理中檢視這 2 份程序書')`
+   * 為 null（未提供任何前台鈕存在性之正向載體）。
    */
-  it('前台抽屜沒有「在文件管理中檢視這 N 份程序書」導向鈕（與後台成對之負向半句）', async () => {
+  it('AC-UX13／AC-UX14：抽屜新增「在文件清單中檢視這 N 份文件」導向鈕（ⓐ正向 ＋ ⓑⓒ負向半句保留）', async () => {
     renderAt();
     await waitFor(() => expect(screen.getByTestId('tree-node-p1')).toBeInTheDocument());
     await userEvent.dblClick(screen.getByTestId('tree-node-p1'));
     await screen.findByText('車輛分期進件作業');
+
+    // ⓐ 正向：新鈕存在恰一個，可見文字＝aria-label＝title 三者同值，逐字含 N=2（相異份數，非畫面列數）。
+    const jumpButtons = document.querySelectorAll('[data-public-subtree-jump]');
+    expect(jumpButtons).toHaveLength(1);
+    const jumpBtn = jumpButtons[0] as HTMLElement;
+    const label = '在文件清單中檢視這 2 份文件';
+    expect(jumpBtn.textContent).toContain(label);
+    expect(jumpBtn.getAttribute('aria-label')).toBe(label);
+    expect(jumpBtn.getAttribute('title')).toBe(label);
+
+    // ⓑ 負向：不得沿用循環側或後台類別側之掛鉤（三顆鈕行為不同、目標不同，共用掛鉤會污染負向鎖）。
     expect(document.querySelector('[data-subtree-jump]')).toBeNull();
+    expect(document.querySelector('[data-bc-subtree-jump]')).toBeNull();
+
+    // ⓒ 負向：後台措辭不得出現在前台頁。
     expect(screen.queryByLabelText('在文件管理中檢視這 2 份程序書')).toBeNull();
+  });
+
+  it('AC-UX13：N=0（子樹無相異可見文件）時，導向鈕整顆自 DOM 移除（非 disabled、非 CSS 隱藏）', async () => {
+    vi.mocked(pubApi.getPublicBusinessCategorySubtreeDocuments).mockResolvedValue({
+      nodeId: 'p4', nodeName: '徵審作業', totalCount: 0, groupedCount: 0, groups: [],
+    });
+    renderAt();
+    await waitFor(() => expect(screen.getByTestId('tree-node-p4')).toBeInTheDocument());
+    await userEvent.dblClick(screen.getByTestId('tree-node-p4'));
+    await waitFor(() => expect(pubApi.getPublicBusinessCategorySubtreeDocuments).toHaveBeenCalled());
+    expect(document.querySelector('[data-public-subtree-jump]')).toBeNull();
   });
 
   function LocationProbe() {
@@ -264,5 +295,66 @@ describe('PublicCategoryTreePage — F043 己：前台樹狀圖瀏覽模式', ()
     vi.mocked(pubApi.getPublicBusinessCategories).mockResolvedValue([]);
     renderAt();
     expect(await screen.findByText('目前沒有可瀏覽的業務/功能類別')).toBeInTheDocument();
+  });
+});
+
+/**
+ * UX16 delta — `AC-UX17`（樹狀圖水平捲軸，項 7；`OQ-UX16-12`＝選項 A、`OQ-UX16-13`＝選項 B）。
+ *
+ * 🔴 本檔不證明視覺結果：jsdom 不計算版面（`offsetHeight`／`scrollHeight` 恆為 0），此處鎖定的
+ * 是 class 契約而非捲軸位置；「水平捲軸是否固定在畫面上」必須由人以真實瀏覽器覆核。
+ * 🔴 明文禁止撰寫任何讀取 `offsetHeight`／`scrollHeight`／`getBoundingClientRect()` 並據以
+ * 斷言的案例——本檔亦不得新增此類斷言。
+ */
+describe('PublicCategoryTreePage — UX16 delta AC-UX17（畫布容器 class 契約，非視覺結果之證明）', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockAuth();
+    vi.mocked(pubApi.getPublicBusinessCategories).mockResolvedValue(CATEGORIES);
+    vi.mocked(pubApi.getPublicBusinessCategoryGraph).mockResolvedValue(GRAPH);
+    vi.mocked(pubApi.getPublicBusinessCategorySubtreeDocuments).mockResolvedValue(SUBTREE_DOCS);
+  });
+
+  it('🔴 畫布容器 class 同時含 overflow-auto、flex-1、min-h-0（三者缺一即重現原 bug）', async () => {
+    renderAt();
+    await waitFor(() => expect(screen.getByTestId('tree-node-p1')).toBeInTheDocument());
+    const stage = screen.getByTestId('public-tree-stage');
+    expect(stage.className).toMatch(/\boverflow-auto\b/);
+    expect(stage.className).toMatch(/\bflex-1\b/);
+    // 🔴 min-h-0 是本條的全部重點：flex 子項之 min-height 預設為 auto，不肯縮到內容以下 ⇒
+    // 只加 flex-1 而不加 min-h-0 時，容器仍會被內容撐高到超出視窗——原封不動重現原 bug。
+    expect(stage.className).toMatch(/\bmin-h-0\b/);
+  });
+});
+
+/**
+ * UX16 delta — `AC-UX36`（不套用於前台，項 12 之前台負向半句；`OQ-UX16-25`）。
+ *
+ * 🔒 前台之 `docCount` 語意為「該 viewer 可見數」，與後台「全部掛載數」已由 `AC-B16`③ 明文禁止
+ * 共用屬性名。本檔為此規則之前台負向半句，其**成對之後台正向半句**見
+ * `BusinessCategoryTreePreviewPage.companyCounts.ux16.test.tsx`。
+ */
+describe('PublicCategoryTreePage — UX16 delta AC-UX36（不套用公司別統計，前台負向半句）', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockAuth();
+    vi.mocked(pubApi.getPublicBusinessCategories).mockResolvedValue(CATEGORIES);
+    vi.mocked(pubApi.getPublicBusinessCategoryGraph).mockResolvedValue(GRAPH);
+    vi.mocked(pubApi.getPublicBusinessCategorySubtreeDocuments).mockResolvedValue(SUBTREE_DOCS);
+  });
+
+  it('🔴 前台節點不存在 node-company-counts 容器、不存在任何 data-company-doc-count 屬性（成對正向半句見後台測試檔）', async () => {
+    renderAt();
+    await waitFor(() => expect(screen.getByTestId('tree-node-p1')).toBeInTheDocument());
+    expect(screen.getByTestId('tree-node-p1').querySelector('[data-testid="node-company-counts"]')).toBeNull();
+    expect(document.querySelector('[data-company-doc-count]')).toBeNull();
+  });
+
+  it('🔒 既有節點徽章仍為 data-visible-doc-count／掛載 N 份程序書，一字不改', async () => {
+    renderAt();
+    await waitFor(() => expect(screen.getByTestId('tree-node-p1')).toBeInTheDocument());
+    expect(screen.getByText('掛載 2 份程序書')).toBeInTheDocument();
+    const badge = screen.getByTestId('tree-node-p1').querySelector('[data-visible-doc-count]');
+    expect(badge?.getAttribute('data-visible-doc-count')).toBe('2');
   });
 });

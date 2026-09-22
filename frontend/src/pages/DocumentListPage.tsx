@@ -154,6 +154,25 @@ function bcOptionsFromRows(rows: readonly DocumentListItem[]): ComboOption[] {
   return [...seen].map(([value, label]) => ({ value, label }));
 }
 
+/**
+ * 🔵 `AC-UX41` ④（2026-09-22 UX16 delta，項 11）：自當前工作集衍生「制定本部」之下拉選項。
+ *
+ * 🔴 **以 `draftingDivisionId`（複合鍵）為去重鍵、而非以本部名稱**：不同公司可能有同名本部
+ * （例：兩家都有「管理本部」），以名稱去重會把它們併成一個選項，選了其中一個就會連帶篩出
+ * 另一家的文件。形狀逐字比照上方 `bcOptionsFromRows()`（以 id 去重、取首見之顯示名）。
+ * 🔒 兩欄任一為空之列**整列略過**——推導不出本部者在下拉裡沒有選項，這與「未指定制定公司」
+ * 之既有處置同構，不是遺漏，🔴 **不加 sentinel**（`AC-UX24` 之同一條裁決）。
+ */
+function divisionOptions(rows: readonly DocumentListItem[]): ComboOption[] {
+  const seen = new Map<string, string>();
+  for (const d of rows) {
+    const value = d.draftingDivisionId;
+    const label = d.draftingDivisionName;
+    if (value && label && !seen.has(value)) seen.set(value, label);
+  }
+  return [...seen].map(([value, label]) => ({ value, label }));
+}
+
 /** `AC-E11` ②：無檔案態之 tooltip（與 prototype 13 之 ⑩ 逐字相同）。 */
 const linkNoPdfTitle = (l: DocumentLinkView): string =>
   `連結點程序書：${linkLabel(l)}（尚未上傳 ICSOP PDF，無法下載）`;
@@ -176,7 +195,15 @@ const LINK_BADGE_CLS =
 type ComboKey =
   | 'company' | 'dept' | 'section' | 'chief' | 'num' | 'name' | 'link' | 'appendix' | 'form' | 'cycle'
   // 🔵 F017 `AC-B6`（2026-09-02 F043 delta）：第 14 項篩選（值＝`businessCategoryId`）。
-  | 'bc';
+  | 'bc'
+  /**
+   * 🔵 F017 `AC-UX40`／`AC-UX41`（2026-09-22 UX16 delta，項 11）：制定本部。
+   * 值＝複合鍵 `` `${公司代碼}__{本部代碼}` ``（🔴 非顯示名稱字串——與同頁其他三個組織維度
+   * 之「值即顯示名」慣例刻意不同：`ORG_UNIT` 之唯一鍵為 `(companyCode, orgCode)`，5 碼組織
+   * 代碼各公司獨立編碼，單用本部代碼或本部名稱會把不同公司的同碼／同名本部併成同一個選項）。
+   * 🔒 與前台同一形狀、同一分隔符（F019 `AC-UX22`），兩頁共用同一份本部推導實作之輸出。
+   */
+  | 'division';
 type FilterKey = ComboKey | 'status' | 'ojt' | 'dateFrom' | 'dateTo';
 type SortBy = '' | 'documentNumber' | 'announcedDate';
 
@@ -192,6 +219,17 @@ type FilterDef =
 
 const FILTERS: FilterDef[] = [
   { kind: 'combo', key: 'company', label: '制定公司' },
+  /**
+   * 🔵 `AC-UX40`（2026-09-22 UX16 delta，項 11）：篩選 14 → **15 項**，`制定本部` **插入中段**
+   * （制定公司之後、制定部門之前）。
+   * 🔴 **與 2026-09-02 那一批（`AC-B6`／`AC-B7`）之手法不同**：那一批明文「附加於最末、既有
+   *    順序一字不動」；本項使用者原文明確指定插入中段 ⇒ 其後 13 項之相對位置全部後移一格。
+   *    **此為預期之轉紅、須就地改寫，非回歸**（`OQ-UX16-22`，人類確認）。
+   * 🔒 型態＝可搜尋下拉（combobox），比照其左右兩側之 `制定公司` 與 `制定部門`。
+   * 🔒 `AC-UX44`：本 delta **只動篩選、不動欄位**——畫面 16 欄與 CSV 15 欄一格未動，
+   *    `制定本部` **不進 CSV**。
+   */
+  { kind: 'combo', key: 'division', label: '制定本部' },
   { kind: 'combo', key: 'dept', label: '制定部門' },
   { kind: 'combo', key: 'section', label: '制定室別' },
   { kind: 'combo', key: 'chief', label: '當責室長' },
@@ -216,7 +254,8 @@ const FILTERS: FilterDef[] = [
 ];
 
 const EMPTY_FILTERS: Record<FilterKey, string> = {
-  company: '', dept: '', section: '', chief: '', status: '', num: '', name: '',
+  // 🔵 UX16 delta（`AC-UX42` ⑤）：`division` 與 `FILTERS`／`FilterKey` 同步新增。
+  company: '', division: '', dept: '', section: '', chief: '', status: '', num: '', name: '',
   dateFrom: '', dateTo: '', link: '', appendix: '', form: '', ojt: OJT_ALL, cycle: '', bc: '',
 };
 
@@ -663,6 +702,16 @@ export function DocumentListPage(): JSX.Element {
       section: opt(uniq(all.map((d) => d.draftingSectionName))),
       chief: opt(uniq(all.flatMap(chiefValues))),
       company: opt(uniq(all.map((d) => d.draftingCompanyName))),
+      /**
+       * 🔵 `AC-UX41` ④（UX16 delta，項 11）：`value`＝複合鍵 `` `${公司代碼}__{本部代碼}` ``、
+       * `label`＝人類可讀之本部名稱。🔴 **兩欄皆由伺服器端富化後隨列帶回**（架構 §16.2）——
+       * 前端**不得**在 mount 時新增一次 API 呼叫自行推導本部：本頁有 8 個測試檔以裸
+       * `vi.mock('../api/endpoints')` automock，新增 mount 期呼叫會讓它們在 `beforeEach`
+       * 因 `undefined.then()` **整檔死亡**，而死因與各案主題完全無關。
+       * 🔒 推導不出本部之列（兩欄為 `null`）自然沒有對應的 distinct 值 ⇒ 下拉裡沒有它的選項；
+       *    🔴 **不加任何 `無本部` sentinel**（那是 F044 儀表板之**分組**語彙，兩者不得互相對齊）。
+       */
+      division: divisionOptions(all),
       link: all.map((d) => ({ value: d.id, label: `${d.documentNumber} ${d.documentName}` })),
       appendix: appendixPool.map((a) => ({ value: a.id, label: a.name })),
       // `AC-D8`（F018）：label ＝ `{編號} {名稱}`；無編號者僅名稱（共用純函式，不在此就地組字）。
@@ -756,6 +805,15 @@ export function DocumentListPage(): JSX.Element {
       if (filters.section && d.draftingSectionName !== filters.section) return false;
       if (filters.chief && !chiefValues(d).includes(filters.chief)) return false;
       if (filters.company && d.draftingCompanyName !== filters.company) return false;
+      /**
+       * 🔵 `AC-UX41` ①②（UX16 delta，項 11）：**等值比對**，比對鍵為本部之組織識別
+       * （複合鍵，**非顯示名稱字串**）。語意為「該文件之制定組織沿 `parentCode` 上溯所抵達
+       * 之本部 ＝ 所選值」⇒ **該本部下轄之全部部與處室之文件皆納入**——上溯本身在伺服器端
+       * 完成（`documents.service.ts#enrichNames()`），此處只做等值。
+       * 🔒 `AC-UX41` 末段：`制定公司`／`制定部門`／`制定室別` 三項之比對鍵與語意**一字不改**
+       *    ——本項是**新增第四個組織維度**，不是把既有三項改成階層式連動。
+       */
+      if (filters.division && d.draftingDivisionId !== filters.division) return false;
       // `AC-D4` 閉區間（兩端皆含）；`announcedDate` 為 null 者於任一端有值時一律排除。
       if (filters.dateFrom || filters.dateTo) {
         const day = dayOf(d.announcedDate);

@@ -42,24 +42,51 @@ export class PublicDocumentsController {
     @Query('lifecycleId') lifecycleId?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
+    /**
+     * 🔵 2026-09-22 UX16 delta（`AC-UX22`，項 10）：制定本部。複合鍵
+     * `` `${公司代碼}__{本部代碼}` ``（🔴 非顯示名稱字串、非裸本部代碼——5 碼組織代碼各公司
+     * 獨立編碼，單用本部代碼會把不同公司的同碼本部併成同一個值）。
+     *
+     * 🔴 **三個新參數一律附加於參數列最末、不插入中段**：`AC-UX22`／`AC-UX40` 所指定之
+     * 「插入中段」是**畫面篩選列由左至右之順序**，與本方法之 TypeScript 參數位置無關
+     * （`@Query()` 依**名稱**繫結）。插入中段會把其後每一個既有參數的位置往後推一格，
+     * 使既有以位置引數直呼本方法之測試（`public-documents.controller.spec.ts:71`）整組錯位
+     * ——那是一次純粹自傷的轉紅，與本 delta 的驗收意圖毫無關係。
+     */
+    @Query('draftingDivisionId') draftingDivisionId?: string,
+    /**
+     * 🔵 2026-09-22 UX16 delta（`AC-UX15` ⑤／架構 §16.4，項 5）：節點子樹之 deep link 兩參數。
+     * 🔴 **恆成對**，任一缺席即靜默 no-op（不篩選、不顯示 chip、**不回錯誤**）。
+     * 🔴 刻意**不併入 `filters`**（§16.4）：chip 之清除與既有六項篩選之清除語意互不干涉，
+     * 塞進同一份資料結構就會糾纏在一起。
+     */
+    @Query('bcSubtreeId') bcSubtreeId?: string,
+    @Query('bcSubtreeNodeId') bcSubtreeNodeId?: string,
   ) {
     // F041：viewer 之唯一合法來源＝req.sessionUser（SessionGuard 每請求以 DB 現行值填入）。
     const viewer = toViewerScope(req.sessionUser);
     const filters: PublicListFilters = {
       keyword: keyword?.trim() || undefined,
       companyCode: companyCode?.trim() || undefined,
+      draftingDivisionId: draftingDivisionId?.trim() || undefined,
       draftingDeptId: draftingDeptId?.trim() || undefined,
       draftingSectionId: draftingSectionId?.trim() || undefined,
       chiefId: chiefId?.trim() || undefined,
       status: status?.trim() || undefined,
       lifecycleId: lifecycleId?.trim() || undefined,
     };
-    return this.svc.list(
-      viewer,
-      filters,
-      parsePositiveInt(page, 1),
-      parsePositiveInt(pageSize, DEFAULT_PAGE_SIZE),
-    );
+    const pageNo = parsePositiveInt(page, 1);
+    const size = parsePositiveInt(pageSize, DEFAULT_PAGE_SIZE);
+    /**
+     * `AC-UX15` ⑤ 之**成對性在邊界就兌現**：任一參數缺席 ⇒ **完全不帶第五引數**，呼叫形狀與
+     * 本 delta 導入前逐字相同（additive 之字面意義——未帶新參數之既有請求行為完全不變）。
+     * 🔒 服務層之同一項檢查**刻意保留**（`resolveSubtree()` 之四個 no-op 成因）：兩層各自獨立
+     * 判定，任一層被誤刪另一層仍是完整防線。
+     */
+    const businessCategoryId = bcSubtreeId?.trim();
+    const nodeId = bcSubtreeNodeId?.trim();
+    if (!businessCategoryId || !nodeId) return this.svc.list(viewer, filters, pageNo, size);
+    return this.svc.list(viewer, filters, pageNo, size, { businessCategoryId, nodeId });
   }
 
   /**

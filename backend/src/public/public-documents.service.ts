@@ -1,5 +1,17 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { resolveCompanyName } from '../org-directory/company-name';
+import {
+  indexOrgUnitsForRows,
+  resolveDraftingDivision,
+  type OrgUnitRecord,
+} from '../documents/drafting-division';
+import { businessCategoryDisplayName } from '../business-categories/business-category-subcategory';
+import { resolveVisibleSubtreeDocumentIds } from '../business-categories/public-business-category-subtree';
+import {
+  PUBLIC_BUSINESS_CATEGORY_STORE,
+  PublicBusinessCategoryStore,
+  PublicCategoryEdgeInfo,
+} from '../business-categories/public-business-category.store';
 import { DocumentStatus } from '../documents/document-status';
 import { DisplayStatus, deriveDisplayStatus } from '../documents/display-status';
 import {
@@ -7,6 +19,7 @@ import {
   PublicFilterOptions,
   PublicListFilters,
   PublicListPage,
+  PublicSubtreeChip,
   buildFilterOptions,
   buildPublicList,
   isPinned,
@@ -47,6 +60,20 @@ export interface OrgNameResolver {
     companyCode: string,
     employeeNos: string[],
   ): Promise<Map<string, string>>;
+  /**
+   * 🔵 2026-09-22 UX16 delta（`ARCH-UX2`，§16.2）：該公司之**全部**組織單位——制定本部之
+   * 上溯所需（`AC-UX22`）。
+   *
+   * 🔴 **為何不是既有之逐代碼點查**：本部要沿 `parentCode` **上溯**，中繼祖先不一定落在
+   * 手上那批代碼之內（`DAA00 → DA000 → D0000` 之中間那層可能沒有任何文件用到）。
+   * 🔒 **選填**：沿用本 repo「既有解析器 port 加方法一律可降級」之慣例——既有多個測試替身
+   * （`public-documents.service.spec.ts`／`public-list-dto.spec.ts`／`public-list-filter-options.spec.ts`）
+   * 以物件字面量實作本 port，宣告為必要會讓一個 additive 欄位把既有測試打成編譯錯誤。
+   * 缺此方法時本部兩欄一律 `null`、`draftingDivisions` 為空陣列（**不拋錯**）。
+   * ⚠ 正式綁定為 `public.module.ts` 之 `useExisting: NameResolutionService`，該類別已實作本方法，
+   * 且 `org-directory/name-resolver-port.contract.spec.ts` 以編譯期可指派性鎖住兩者不分家。
+   */
+  listOrgUnitsByCompany?(companyCode: string): Promise<OrgUnitRecord[]>;
 }
 
 /**
@@ -101,6 +128,15 @@ export interface PublicListItemDto {
   /** 2026-08-16 delta（AC-D12）：additive 新增三欄。 */
   draftingCompanyName: string | null;
   draftingSectionName: string | null;
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX22`，項 10）：制定本部，**additive**。
+   * `draftingDivisionId`＝複合篩選鍵（`` `${公司代碼}__{本部代碼}` ``）、`draftingDivisionName`＝
+   * 人類可讀之本部名稱；推導不出本部 ⇒ 兩欄皆 `null`。
+   * 🔒 `AC-UX26` ③：清單卡之**八項標籤欄位與 `<dl>` 五列順序一字不改**——本欄是篩選維度，
+   * **不是**卡片上的第九個欄位（`AC-UX22` 之範圍逐字只到篩選列）。
+   */
+  draftingDivisionId: string | null;
+  draftingDivisionName: string | null;
   edition: string | null;
   status: DocumentStatus;
   /** 衍生顯示狀態（前台恆為 announced）。 */
@@ -122,6 +158,20 @@ export class PublicDocumentsService {
     @Inject(PUBLIC_DOCUMENT_STORE) private readonly store: PublicDocumentStore,
     @Inject(ORG_NAME_RESOLVER) private readonly names: OrgNameResolver,
     private readonly clock: () => Date = () => new Date(),
+    /**
+     * 🔵 2026-09-22 UX16 delta（F019 `AC-UX15`／架構 §16.4 `ARCH-UX4`，項 5）：前台節點子樹篩選
+     * 之解析來源。
+     *
+     * 🔴 **反循環——注入 store token，不注入 `PublicBusinessCategoryService`**（§16.4）：
+     * service 對 service 會在 `public` 模組內部造出一條新的模組間相依，且會把「子樹解析」與
+     * 「類別身分／浮水印」等該服務之其他職責捆在一起。比照 `documents.service.ts` 注入
+     * `BUSINESS_CATEGORY_DOCS_STORE` 之既有慣例（**store token 對 store token**）。
+     * 🔴 **選填且置於末位**：本服務已有多處既有測試以位置參數建構（2～3 個引數），新增必填
+     * 參數會全數打爆；未注入時子樹篩選一律降級為**不施加限制**（`AC-UX15` ⑤ 之靜默 no-op）。
+     */
+    @Optional()
+    @Inject(PUBLIC_BUSINESS_CATEGORY_STORE)
+    private readonly categories?: PublicBusinessCategoryStore,
   ) {}
 
   /**
@@ -133,10 +183,31 @@ export class PublicDocumentsService {
     filters: PublicListFilters,
     page = 1,
     pageSize = DEFAULT_PAGE_SIZE,
+    /**
+     * 🔵 `AC-UX15`（UX16 項 5）：節點子樹之 deep link 兩參數。🔴 **恆成對**，任一缺席即靜默
+     * no-op（不篩選、不顯示 chip、**不回錯誤**）。
+     * 🔴 刻意**不併入 `filters`**（§16.4）：`AC-UX16` 要求 chip 之清除與既有六項篩選之清除語意
+     * 互不干涉，兩者塞進同一份資料結構就會糾纏在一起。
+     */
+    subtree?: { businessCategoryId?: string | null; nodeId?: string | null },
   ): Promise<PublicListPage<PublicListItemDto>> {
     const items = await this.store.listCandidates();
     const today = this.clock();
-    const result = buildPublicList(items, viewer, filters, today, page, pageSize);
+    /**
+     * 🔴 富化**必須在 `buildPublicList` 之前**：制定本部是一個**篩選維度**（`AC-UX22`），
+     * 而篩選發生在分頁之前 ⇒ 只富化當頁項目會讓「選了本部卻篩不到第二頁的文件」。
+     */
+    const enriched = await this.withDraftingDivisions(items);
+    const resolved = await this.resolveSubtree(viewer, subtree);
+    const result = buildPublicList(
+      enriched,
+      viewer,
+      filters,
+      today,
+      page,
+      pageSize,
+      resolved?.documentIds,
+    );
 
     // 僅解析當頁項目之制定三級組織代碼（去重、單次查詢）。
     // AC-D12：`usingDeptIds` 已自對外 DTO 移除 ⇒ 不再為其解析名稱。
@@ -156,7 +227,12 @@ export class PublicDocumentsService {
     const dtos: PublicListItemDto[] = result.items.map((it) =>
       this.toDto(it, viewer, resolve, today),
     );
-    return { ...result, items: dtos };
+    /**
+     * 🔒 `AC-UX15` ③：chip 之兩個代入值**皆取自後端回應**（前端不自行組字、不另行查名）。
+     * 未套用子樹篩選 ⇒ `null`（前端據此**不渲染** chip；🔴 非空字串、非省略——省略時前端
+     * 無法區分「沒套用」與「後端忘了回」）。
+     */
+    return { ...result, items: dtos, subtreeChip: resolved?.chip ?? null };
   }
 
   /**
@@ -167,7 +243,14 @@ export class PublicDocumentsService {
    * ＋`orgCode`），漏一維即跨帳號洩漏，而 unit 每次新建實例、測不出跨請求行為。
    */
   async filterOptions(viewer: ViewerScope): Promise<PublicFilterOptions> {
-    const items = await this.store.listCandidates();
+    const rawItems = await this.store.listCandidates();
+    /**
+     * 🔴 `AC-UX23`：本部之富化**必須在 `buildFilterOptions` 之前**——服務層若忘了把富化後的列
+     * 交給純函式，`draftingDivisions` 會是空陣列而**零錯誤訊息**，症狀與本 repo 三次代理漏設
+     * 事故（fetch 收到 index.html → 解析失敗 → 被 `.catch` 收斂為空陣列 → 下拉永遠沒有選項）
+     * 逐字相同。
+     */
+    const items = await this.withDraftingDivisions(rawItems);
     const opts = buildFilterOptions(items, viewer, this.clock());
 
     /**
@@ -235,13 +318,101 @@ export class PublicDocumentsService {
       opts.draftingCompanies.map((o) => [o.value, resolveCompanyName(o.value)]),
     );
 
+    /**
+     * 🔵 `AC-UX23`（UX16 項 10）：第六組之 `label`＝**人類可讀之本部名稱**（`AC-D5` 之 label
+     * 解析義務擴及第六組）。名稱由候選項自身攜帶（服務層已於 `withDraftingDivisions()` 解析
+     * 完成），**不另打一次查詢**——比照 `lifecycles` 之既有作法。
+     * 🔒 `AC-UX24`：此處不新增任何 sentinel——`draftingDivisionId` 為 `null` 之列在純函式層即
+     * 已被丟棄，這裡看不到它們。
+     */
+    const divisionNames = new Map<string, string>();
+    for (const it of items) {
+      if (it.draftingDivisionId && it.draftingDivisionName && !divisionNames.has(it.draftingDivisionId)) {
+        divisionNames.set(it.draftingDivisionId, it.draftingDivisionName);
+      }
+    }
+
     return {
       ...opts,
       draftingCompanies: label(opts.draftingCompanies, companyNames),
+      draftingDivisions: label(opts.draftingDivisions, divisionNames),
       draftingDepts: label(opts.draftingDepts, nameMap),
       draftingSections: label(opts.draftingSections, nameMap),
       chiefs: label(opts.chiefs, chiefNames),
       lifecycles: label(opts.lifecycles, lifecycleNames),
+    };
+  }
+
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX22`／架構 §16.2 `ARCH-UX2`，項 10）：以組織索引之
+   * 真實上溯，替每一列補上 `draftingDivisionId`／`draftingDivisionName`。
+   *
+   * 🔴 **與 F017 側（`documents.service.ts#enrichNames()`）共用同一份推導**
+   * （`documents/drafting-division.ts`）——`AC-UX41` ④ 明文「全系統只能有一份本部推導實作」，
+   * 且兩頁之**值的形狀也必須共用**，否則同一個本部在前後台會有兩個不同的識別字串。
+   * 🔒 **新陣列、不就地改寫輸入**：`store.listCandidates()` 之回傳在某些 store 實作下可能被
+   * 快取共用，就地改寫會讓富化結果跨請求外溢。
+   * 🔒 解析器未提供 `listOrgUnitsByCompany`（既有測試替身）⇒ 原樣回傳、兩欄留 `null`，
+   * 既有行為完全不變。
+   */
+  private async withDraftingDivisions(items: PublicDocItem[]): Promise<PublicDocItem[]> {
+    const listUnits = this.names.listOrgUnitsByCompany?.bind(this.names);
+    if (!listUnits || items.length === 0) return items;
+    const byCompany: ReadonlyMap<string, ReadonlyMap<string, OrgUnitRecord>> =
+      await indexOrgUnitsForRows(items, listUnits);
+    return items.map((it) => {
+      const division = resolveDraftingDivision(byCompany, it.companyCode, it.draftingDeptId);
+      return {
+        ...it,
+        draftingDivisionId: division?.id ?? null,
+        draftingDivisionName: division?.name ?? null,
+      };
+    });
+  }
+
+  /**
+   * 🔵 2026-09-22 UX16 delta（F019 `AC-UX15`／架構 §16.4 `ARCH-UX4`，項 5）：把 deep link 之
+   * 兩個參數解析為「相異可見文件 id 集合」與 chip 之兩個顯示值。
+   *
+   * 🔴 **靜默 no-op 之四個成因**（`AC-UX15` ⑤：不篩選、不顯示 chip、**不回錯誤**）：
+   * ① 未注入類別 store；② 兩參數任一缺席；③ 類別查無；④ 節點查無。
+   * 🔴 四者一律回 `null` ⇒ 呼叫端傳給 `buildPublicList` 的是 **`undefined`**，**不是空 `Set`**
+   * （空 `Set` 會把結果篩成 0 筆，語意完全相反）。
+   * ⚠ **「子樹內確實沒有可見文件」不屬於 no-op**：那是一次成功套用、結果為 0 筆的篩選，
+   * chip 照常顯示——否則畫面會在沒有任何說明的情況下呈現全部文件。
+   *
+   * 🔴 **展開／去重／可見性過濾全部在後端**（`AC-UX15` ④），且回傳集合本身已是
+   * 「已公告 ∧ `isDocVisibleToViewer`」之子集 ⇒ 本能力**不得**成為繞過 F041 限縮之側門
+   * （`AC-B23`；第二層交集由 `buildPublicList` 施加，見該處之縱深防禦註解）。
+   */
+  private async resolveSubtree(
+    viewer: ViewerScope,
+    subtree?: { businessCategoryId?: string | null; nodeId?: string | null },
+  ): Promise<{ documentIds: Set<string>; chip: PublicSubtreeChip } | null> {
+    const store = this.categories;
+    const businessCategoryId = subtree?.businessCategoryId;
+    const nodeId = subtree?.nodeId;
+    if (!store || !businessCategoryId || !nodeId) return null;
+
+    const category = (await store.listActiveCategories()).find((c) => c.id === businessCategoryId);
+    if (!category) return null;
+
+    const [nodes, mounts, edges] = await Promise.all([
+      store.listNodes(businessCategoryId),
+      store.listCategoryMountsForVisibility(businessCategoryId),
+      store.listEdges
+        ? store.listEdges(businessCategoryId)
+        : Promise.resolve([] as PublicCategoryEdgeInfo[]),
+    ]);
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return null;
+
+    return {
+      documentIds: resolveVisibleSubtreeDocumentIds(nodes, edges, mounts, nodeId, viewer),
+      chip: {
+        businessCategoryDisplayName: businessCategoryDisplayName(category),
+        nodeName: node.name ?? '',
+      },
     };
   }
 
@@ -308,6 +479,9 @@ export class PublicDocumentsService {
       //    （和潤企業股份有限公司），不再是該公司 ROOT 之 ORG_UNIT 名（和潤本部）。
       draftingCompanyName: resolveCompanyName(it.companyCode),
       draftingSectionName: resolve(it.companyCode, it.draftingSectionId),
+      // 🔵 `AC-UX22`（UX16 項 10）：本部已於 `withDraftingDivisions()` 解析完成，此處僅轉出。
+      draftingDivisionId: it.draftingDivisionId ?? null,
+      draftingDivisionName: it.draftingDivisionName ?? null,
       edition: it.edition,
       status: it.status,
       displayStatus: deriveDisplayStatus(it.status, it.announcedDate, today),

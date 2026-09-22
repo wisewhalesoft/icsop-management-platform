@@ -41,17 +41,25 @@ vi.mock('../api/endpoints');
 vi.mock('../auth/useAuth');
 
 /**
- * `AC-D1`：13 項之逐字順序（桌面由左至右逐列換行；行動 sheet 由上而下）。
+ * `AC-D1`：14 項之逐字順序（桌面由左至右逐列換行；行動 sheet 由上而下）。
  * 🔴 2026-09-02 F043 delta（`AC-B6`）連坐修正（tdd-implementation 申訴）：13→14 項，
  * 「業務/功能類別」為新增之最末項（比照 `循環別` 之可搜尋 combobox 型態，`AC-B7`①）。
+ * 🔴 UX16 delta（`AC-UX40`／`AC-UX42`⑧，項 11）：14→15 項，就地改寫（預期轉紅、非回歸）——
+ * 「制定本部」插入於**中段**（`制定公司` 之後、`制定部門` 之前），與上一次「附加於最末」之
+ * 擴充手法不同（`OQ-UX16-22` 人類確認）。
+ * 📝 已作廢（⚠ 不得復原）：`OLD>` 14 項陣列（`制定公司` 後直接是 `制定部門`）。
  */
 const FILTER_LABELS = [
-  '制定公司', '制定部門', '制定室別', '當責室長', '狀態', '程序書編號', '程序書書名內',
+  '制定公司', '制定本部', '制定部門', '制定室別', '當責室長', '狀態', '程序書編號', '程序書書名內',
   '公告日期', '連結點程序書', '附錄', '使用表單', 'OJT', '循環別', '業務/功能類別',
 ] as const;
-/** `AC-D2`／`AC-B7`①：具 combobox 語意之 11 項（`狀態`／`OJT` 為固定值下拉、`公告日期` 為區間輸入）。 */
+/**
+ * `AC-D2`／`AC-B7`①／`AC-UX41`①：具 combobox 語意之 12 項（🔴 UX16 delta：11→12，「制定本部」
+ * 亦為可搜尋 combobox，比照其左右兩側之 `制定公司`／`制定部門`）。`狀態`／`OJT` 為固定值下拉、
+ * `公告日期` 為區間輸入，不計入。
+ */
 const COMBO_LABELS = [
-  '制定公司', '制定部門', '制定室別', '當責室長', '程序書編號', '程序書書名內',
+  '制定公司', '制定本部', '制定部門', '制定室別', '當責室長', '程序書編號', '程序書書名內',
   '連結點程序書', '附錄', '使用表單', '循環別', '業務/功能類別',
 ] as const;
 
@@ -173,22 +181,34 @@ beforeEach(() => {
 
 /**
  * 🔴 2026-09-02 F043 delta（`AC-B6`）連坐修正（tdd-implementation 申訴）：13→14 項。
- * 本 describe 之標的（恰 N 個、逐字順序、無障礙名稱）之鑑別力一格未減，僅 N 與陣列內容
- * 就地同步為新基準（`FILTER_LABELS` 已於檔頭更新，本處引用之亦隨之更新）。
+ * 🔴 UX16 delta（`AC-UX42`⑥，2026-09-22）：14→15 項，就地改寫（預期轉紅、非回歸）——
+ * 「制定公司」／「制定部門」相鄰之既有斷言語意反轉（兩者自此不相鄰），須改為「制定公司之後
+ * 恰為制定本部、其後恰為制定部門」。本 describe 之標的（恰 N 個、逐字順序、無障礙名稱）之
+ * 鑑別力一格未減，僅 N 與陣列內容就地同步為新基準（`FILTER_LABELS` 已於檔頭更新）。
+ * 🔴 通則（本 repo 血訓）：新斷言要 N+1、既有他處斷言鎖死 N ⇒ 同一份環不可能全綠——本處改為
+ * 回歸鎖（既有各項逐一仍在、含其相對順序 ＋ 新項存在且位於制定公司與制定部門之間 ＋ 總數恰 15）。
  */
-describe('F017 AC-D1：篩選控制項恰 14 個、順序與無障礙名稱逐字', () => {
-  it('TS-F017-D1-001 桌面篩選區之控制項恰 14 個，由左至右順序逐字為 14 項標籤', async () => {
+describe('F017 AC-D1：篩選控制項恰 15 個、順序與無障礙名稱逐字（UX16：新增制定本部）', () => {
+  it('TS-F017-D1-001 桌面篩選區之控制項恰 15 個，由左至右順序逐字為 15 項標籤', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
-    // 14 項＝11 個 combobox ＋ 2 個固定值 select ＋ 1 個 role=group 之日期區間
+    // 15 項＝12 個 combobox ＋ 2 個固定值 select ＋ 1 個 role=group 之日期區間
     const controls = Array.from(
       filterBar().querySelectorAll<HTMLElement>('input[role="combobox"], select, [role="group"]'),
     );
-    expect(controls).toHaveLength(14);
+    expect(controls).toHaveLength(15);
     expect(controls.map((el) => el.getAttribute('aria-label'))).toEqual([...FILTER_LABELS]);
   });
 
-  it('TS-F017-D1-002 14 項之無障礙名稱逐字可查', async () => {
+  it('🔴 制定公司之後恰為制定本部、其後恰為制定部門（AC-UX42⑥：相鄰斷言之語意反轉）', async () => {
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    const idxCompany = FILTER_LABELS.indexOf('制定公司');
+    expect(FILTER_LABELS[idxCompany + 1]).toBe('制定本部');
+    expect(FILTER_LABELS[idxCompany + 2]).toBe('制定部門');
+  });
+
+  it('TS-F017-D1-002 15 項之無障礙名稱逐字可查', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     for (const label of FILTER_LABELS) {
@@ -196,7 +216,7 @@ describe('F017 AC-D1：篩選控制項恰 14 個、順序與無障礙名稱逐�
     }
   });
 
-  it('TS-F017-D1-003 行動 sheet 呈現同 14 項、同順序（由上而下）', async () => {
+  it('TS-F017-D1-003 行動 sheet 呈現同 15 項、同順序（由上而下）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     await userEvent.click(mobileTrigger());
@@ -237,7 +257,7 @@ describe('F017 AC-D10：篩選區之逐字文案與選擇器契約', () => {
   it('TS-F017-D10-003b 清除鈕**僅於該篩選有值時可見**（無值時不得出現於無障礙樹）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
-    // 未選任何值 → 十一個 combobox 之清除鈕皆不可見（🔴 F043 delta：10→11，含「業務/功能類別」）
+    // 未選任何值 → 十二個 combobox 之清除鈕皆不可見（🔴 F043 delta：10→11；UX16 delta：11→12，含「制定本部」）
     for (const label of COMBO_LABELS) {
       expect(within(filterBar()).queryByLabelText(`清除${label}`)).toBeNull();
     }
@@ -574,7 +594,7 @@ describe('F017 AC-D7：當責室長篩選＝主要 ∪ 次要（與前台同一�
 });
 
 describe('F017 AC-D8：清除全部篩選', () => {
-  it('TS-F017-D8-001 點擊後 14 項篩選與關鍵字同時清空、回復未篩選狀態與第 1 頁', async () => {
+  it('TS-F017-D8-001 點擊後 15 項篩選與關鍵字同時清空、回復未篩選狀態與第 1 頁（UX16：14→15，含制定本部）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
     await pick('制定部門', '企劃部');
