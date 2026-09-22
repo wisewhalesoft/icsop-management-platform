@@ -1,5 +1,5 @@
 # F002: 登入後角色分流導向
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-08-16
+Priority: P0-MVP | Status: Draft | Last Updated: 2026-08-16 <br>🔵 **2026-09-22 UX16 delta（項 1／2／3／6）：見 [§UX16 delta](#ux16-delta)（`AC-UX1～AC-UX7`；🟢 裁決全數 APPROVED，見 [open-questions §UX16](../open-questions.md#ux16-2026-09-22)）。**
 Epic/Story: E01 / US-003
 
 > **🔵 2026-08-16 additive delta（使用者裁決；缺失／變更 delta 第 1／10 項）——後台返回首頁之手段與麵包屑導覽**：① 後台新增三種回到首頁（`/admin`）之手段（側欄「首頁」項＋側欄 logo 可點＋麵包屑首段可點）；② `PageHeader` 之麵包屑由純文字改為**可點導覽**（型別 `string[]` → `{ label, to? }[]`，末段恆不可點）。**本 delta 之 AC 編號採 `AC-D#`**（D＝2026-08-16 defect delta）。
@@ -102,3 +102,60 @@ Epic/Story: E01 / US-003
 - Next: [F019 前台清單](F019-public-list-browsing.md)
 - **2026-08-16 使用者裁決**: OQ-D18-20（返回首頁之手段、不新增矩陣列；**手段數於同日經 system-architect 查證後由三收斂為二**，見 `AC-D3` 之改寫註）、OQ-D18-21（麵包屑可點規則與型別）。編輯頁之「返回」鈕另立於 [F011](F011-edit-with-comparison.md) `AC-D1`。
 - **待 system-architect（本 delta 新增）**：`breadcrumb` 型別遷移之落點與相容策略（一次性 breaking change vs 過渡期 union 型別）；本規格要求最終狀態為單一 `{ label, to? }[]`、不保留 `string[]` 相容路徑。
+
+---
+
+## UX16 delta — 2026-09-22 使用者體驗優化（項 1／2／3／6；`AC-UX#` 批） {#ux16-delta}
+
+> **來源**＝[stories/2026-09-22-ux-delta-16.md](../../stories/2026-09-22-ux-delta-16.md) 第 1／2／3／6 項；裁決紀錄＝[open-questions §UX16](../open-questions.md#ux16-2026-09-22)（`OQ-UX16-01`～`04`／`09`／`11`，🟢 全數 APPROVED）。
+> **本 delta 之 AC 編號採 `AC-UX#`**（跨 [F002](F002-role-based-routing.md)／[F004](F004-org-sync.md)／[F017](F017-backend-document-list.md)／[F019](F019-public-list-browsing.md)／[F041](F041-user-subtype-business-scope.md)／[F042](F042-ojt-progress-management.md)／[F043](F043-business-function-category.md) 七檔為 `AC-UX1`～`AC-UX52`，不重號）。🔴 **明文不沿用 `AC-U#`**——該批次已由 [F041](F041-user-subtype-business-scope.md) 之既有 delta 佔用且跨 9 個 feature 檔在用。
+> 🔴 **本輪之約束環為簡化版：只有 `backend jest` ＋ `frontend vitest`**，無 Playwright／無 mutation testing／無整合測試 ⇒ **AC 是唯一防線**。未寫入本節之選擇器與逐字文案，下游要嘛不建約束、要嘛自行臆造（[F041 §F2](F041-user-subtype-business-scope.md#f2-fidelity-gap) 已吃過這個虧）。
+> 🔒 **本 delta 不動**：`AC1`～`AC-D7` 之任一條、`AdminGuard` 之守門條件、`visibleMenu()` 之回傳、[F025](F025-role-function-matrix.md) 矩陣之任一格、後台麵包屑之任一段文字（`AC-UX3`）。
+
+### 一、分流頁兩張卡片之逐字文案與順序（項 1／2／3）
+
+- **AC-UX1**（🔴 前台卡片之標題與說明逐字改寫）：Given 任一具後台功能權限之角色（`SysAdmin`／`ICSOPAdmin`／`Supervisor`／`DeptContact`）進入分流頁, When 檢視前台入口卡片, Then 其標題**逐字**為 **`ICSOP 文件`**、說明**逐字**為 **`作業程序書瀏覽、搜尋、下載、列印`**。<br>
+  🔒 **說明字串末尾無句號**（使用者原文即無）——`OLD>` 之 `以您的身分與部門瀏覽、搜尋、下載、列印 ICSOP 文件（含浮水印）。` 有句號，若下游「順手補回」即與本條逐字不符。<br>
+  📝 **已作廢（⚠ 不得復原、不得用於斷言）**：`OLD>` 標題 `前台瀏覽`、說明 `以您的身分與部門瀏覽、搜尋、下載、列印 ICSOP 文件（含浮水印）。`（`RoleLanding.tsx:83`／`:84-86`）。<br>
+  🔒 **卡內行動文字 `前往前台` 一字不改**（不在使用者原文之範圍內）。<br>
+  📌 **本條之範圍逐字限於本卡片**（`OQ-UX16-01`）：[F019](F019-public-list-browsing.md) 前台清單頁 header 之 `ICSOP 文件瀏覽`（`PublicListPage.tsx:429`）**不動**，🔒 兩處字樣自此並存且刻意不同——分流頁卡片是「入口的名字」，清單頁 header 是「那一頁的名字」。
+
+- **AC-UX2**（🔴 後台卡片之標題與說明逐字改寫；**取消依角色差異化說明**）：Given 上述四種角色之**任一**進入分流頁, When 檢視後台入口卡片, Then 其標題**逐字**為 **`管理平台`**、說明**逐字**為 **`儀表板、OJT進度、相關維護作業(依權限顯示)`**——**四種角色所見之說明文字完全相同**。<br>
+  🔒 **括號為半形 `(` `)`、`OJT進度` 中間無空白、末尾無句號**（逐字採用使用者原文，`OQ-UX16-02`＝選項 A）。⚠ 既有四段 `ADMIN_DESC` 皆以全形句號結尾，下游最可能的偏差就是「補上句號、把半形括號改全形」。<br>
+  🔴 **`ADMIN_DESC` 查表機制整個刪除**（`RoleLanding.tsx:20-26` 之 `Record<RoleCode, string>` 與 `:31` 之 `adminDesc` 查表），改為單一常數字串。<br>
+  　🔴 **可測形狀（成對，缺一即假綠）**：① **正向**——以四種角色逐一渲染，斷言說明節點之 `textContent` **四次皆逐字相同**且等於上列字串（形狀＝「集合大小為 1」，不得退化為「ICSOPAdmin 那次是對的」）；② **負向**——四段舊文字（`帳號/角色管理、組織同步、系統參數、調閱歷程（依權限顯示）。`／`維護循環 DAG、ICSOP 文件、使用表單、調閱歷程（依權限顯示）。`／`循環／ICSOP 文件全公司唯讀（無使用表單管理與調閱歷程）。`／`ICSOP 文件唯讀檢視。`）於**四種角色之任一**渲染結果中**零命中**。<br>
+  　🔴 **① 單獨不夠**：一個「四段 `ADMIN_DESC` 全部改成同一句、查表留著」的實作會讓 ① 全綠——② 才鎖得住「舊文字不得復活」，而 `AC-UX5` ③ 才鎖得住「常數只有一份」。<br>
+  📝 **已作廢（⚠ 不得復原）**：`OLD>` 四段依角色差異化之 `ADMIN_DESC`。⚠ **代價已知並接受**：四種角色之說明不再反映各自實際可用之功能範圍（如 `Supervisor` 對「相關維護作業」中的多數項目其實無寫權）；使用者原文之 `(依權限顯示)` 即為此代價之承接方式。<br>
+  🔒 **卡內行動文字 `進入後台` 一字不改**。
+
+- **AC-UX3**（🔴 **「管理平台」與「ICSOP 管理後台」兩個名字並存是刻意的**）：Given `AC-UX2` 實作完成, When 檢視後台各頁之麵包屑首段, Then 其**仍逐字為 `ICSOP 管理後台`**（`DashboardHome.tsx`；[§後台返回首頁與麵包屑導覽 delta](#home-breadcrumb-delta) `AC-D3` B 類第 1 列），`AC-D6`／`AC-D7` 之全部既有測試**維持綠燈且期望值未經修改**。<br>
+  🔴 **為何兩個名字必須並存（理由逐字，不得刪節；否則下一個人會順手統一而破壞 `AC-D6`／`AC-D7`）**：<br>
+  　① **它們指的不是同一個東西**——卡片上的 `管理平台` 是**分流頁上的一個入口名稱**（回答「我要去哪裡」）；麵包屑上的 `ICSOP 管理後台` 是**後台這棵導覽樹的根節點名稱**（回答「我現在在哪裡」）。<br>
+  　② **使用者裁決之字面範圍就是這一張卡片**（`OQ-UX16-03`，人類 2026-09-22 直接裁決「只改卡片標題」）。把麵包屑一併改名不是「保持一致」，是**擴大了一個沒有人下過的裁決**。<br>
+  　③ **麵包屑首段是 `AC-D3` B 類與 `AC-D7`（「各頁麵包屑之可見文字逐字與改動前相同」）雙重鎖定之字串**；改它會讓 F002 既有測試翻紅，而那個紅**不是預期變更之背書**，是違反。<br>
+  🔒 **可測形狀（本條之全部鑑別力所在）**：同一輪測試中**成對斷言**——分流頁 `getByRole('link', { name: '管理平台' })` 非 null **且** 後台首頁之麵包屑首段 `getByText('ICSOP 管理後台')` 非 null。⚠ **只寫其中一句沒有意義**：只鎖前者，改麵包屑不翻紅；只鎖後者，改卡片不翻紅。
+
+- **AC-UX4**（🔴 兩張卡片左右對調；**以 DOM 順序斷言**）：Given 分流頁渲染完成, When 取得 `grid` 容器內之**全部** `role="link"` 元素並依 DOM 順序列出其無障礙名稱, Then 該陣列**恰為** `['管理平台', 'ICSOP 文件']`（管理平台在前＝左，ICSOP 文件在後＝右）。<br>
+  🔴 **必須斷言「有序陣列且長度恰 2」，不得退化為兩句 `toBeInTheDocument()`**——存在性斷言對「順序沒換」與「多冒出第三張卡」**完全無感**，而本項要的就是順序。<br>
+  📝 **已作廢**：`OLD>` DOM 順序＝前台瀏覽卡片在前（`RoleLanding.tsx:76-91`）、管理後台卡片在後（`:93-108`）。<br>
+  ⚠ **視覺上的左右由 `grid sm:grid-cols-2` 之 DOM 順序決定**；🔴 **明文禁止**以 CSS `order`／`flex-direction: row-reverse` 達成——那會讓 DOM 順序與視覺順序分歧，使本條之斷言與畫面脫鉤（且鍵盤 Tab 順序會與視覺相反）。
+
+- **AC-UX5**（🔒 **DOM 契約 ＋ 既有逐字鎖之就地改寫**）：Given `AC-UX1`～`AC-UX4` 實作完成, Then ——
+  - ① 🔒 **兩張卡片各自帶 `aria-label`，其值逐字等於該卡之標題**（`管理平台`／`ICSOP 文件`）。<br>　🔴 **理由（非美化）**：分流頁 header 之既有可見文字為 `ICSOP 文件管理平台`，它**同時包含** `ICSOP 文件` 與 `管理平台` 兩個子字串 ⇒ 任何以 `getByText`／正規表示式為基礎之斷言在本頁**結構上失去鑑別力**。`aria-label` 使 `getByRole('link', { name: '管理平台' })` 之**精確比對**成為可用的定位點。
+  - ② 🔴 **既有兩處逐字卡片名稱鎖為預期轉紅、須就地改寫（非回歸）**——`frontend/src/pages/RoleLanding.test.tsx:38`（案例標題與其 `/管理後台/`／`/前台瀏覽/` 兩句）與 `frontend/src/app-routes.test.tsx:49`（`/管理後台/`）。改寫方向＝**精確名稱比對**（`{ name: '管理平台' }`／`{ name: 'ICSOP 文件' }`），**不得**沿用正規表示式（理由同 ①）。
+  - ③ 🔒 **兩段新文案各自只有一個定義點**：卡片標題與說明之字面**不得**在 `RoleLanding.tsx` 以外再出現第二份（prototype 除外）。
+  - ④ 🔒 **零漣漪**：`visibleMenu()` 之回傳、`AdminGuard` 之守門條件、`Navigate to="/public" replace` 之直達行為（`AC1`）、[F025](F025-role-function-matrix.md) 矩陣之任一格，**一律不變**；F002 除 ② 所列兩處外之全部既有測試**維持綠燈且期望值未經修改**。
+
+- **AC-UX6**（📌 prototype 同步義務）：Given 本 delta 進入 ui-ux-designer 之工作範圍, When 交付, Then `prototypes/02-role-landing.html` 之卡片**文案與順序與 `AC-UX1`～`AC-UX4` 逐字一致**，且舊文案與舊卡片次序以 **`OLD>` 已作廢註記逐字保留**於該檔檔頭。<br>
+  🔴 **本 repo 已兩度發生「prototype ↔ 已上線實作分歧」且兩次都不是機器發現的**（[F044 §癸 (i)](F044-admin-dashboard-analytics.md#human-caught)）⇒ 本條之存在是為了讓下一個對照 prototype 覆核本頁的人不會把「已裁決的改動」誤判為缺陷。<br>
+  ⚠ **本條非本輪（spec-writer）之交付項**，spec-writer 不碰 `prototypes/`。
+
+### 二、後台入口之權限述詞（項 6 之判準；載體在 [F019](F019-public-list-browsing.md#ux16-delta)）
+
+- **AC-UX7**（🔴 **「具有後台權限」＝單一述詞，三處共用**）：Given 系統需判斷某角色是否具備後台入口, When 任一處施行該判斷, Then 其判準**恆為** `visibleMenu(role).length > 0`（`OQ-UX16-09`＝選項 A），且該判斷**抽為單一具名述詞**（🔵 建議 `hasAdminAccess(role: RoleCode | undefined): boolean`，落點由 system-architect 定案），由下列**恰三處**共用——
+  - ① 分流頁是否顯示選擇畫面（`RoleLanding.tsx:34` 之既有判定，語意一字不改，只換成呼叫該述詞）；
+  - ② `AdminGuard` 之守門條件（既有，同上）；
+  - ③ 前台 header 之「前往後台」鈕之顯示與否（[F019](F019-public-list-browsing.md#ux16-delta) `AC-UX20`）。
+  - 🔴 **只能有一份實作（理由逐字，不得省略）**：`RoleLanding.tsx:17-18` 之既有註解已明文警示——「兩邊若各寫一套，日後調整角色權限矩陣就會出現『分流頁放行、後台守衛擋掉』的死鏈」。本 delta 新增第三個消費者，**述詞出現第二份的機率因此上升，而不是下降**。
+  - 🔴 **可測形狀（防「抽了但沒接線」）**：斷言**該述詞被三處共用**之方式，是以**同一組角色向量**驅動三處並斷言**三者結論一致**——對五種角色（`SysAdmin`／`ICSOPAdmin`／`Supervisor`／`DeptContact`／`User`）逐一取得 ①②③ 之布林結果，斷言三個長度為 5 的布林陣列**完全相等**，且其值為 `[true, true, true, true, false]`。<br>　⚠ **只斷言「③ 對 `User` 不顯示」是不夠的**：一個把 ③ 寫死成 `roleCode !== 'User'` 的實作照樣全綠，而那正是第二份實作。
+  - 🔒 **`User`（一般使用者，含 [F041](F041-user-subtype-business-scope.md) 業務子分類）恆為 `false`** ⇒ 其不經分流頁（`AC1` 一字不改）、亦不見前台之後台連結鈕。

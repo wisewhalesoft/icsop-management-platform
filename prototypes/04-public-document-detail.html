@@ -1,4 +1,29 @@
 <!DOCTYPE html>
+<!-- 🔵 2026-09-22 UX16 delta（項 9）——規格權威＝docs/specs/features/F019-public-list-browsing.md §UX16 delta
+     （AC-UX18／AC-UX19；裁決＝open-questions.md#ux16-2026-09-22，OQ-UX16-17＝選項 A、OQ-UX16-18 人類直接裁決）。
+
+     🔴 **概念置換，不是改名**：「所屬節點」（＝循環 DAG 節點名，來源 nodeId）整列移除，
+        其**原位置**（介於 `版次` 與 `內容摘要` 之間）改為新列 `業務/功能類別`（半形斜線、前後無空白），
+        內容＝該文件掛載之業務/功能類別（來源 BUSINESS_CATEGORY_DOC，依 businessCategoryId 去重、
+        以 businessCategoryDisplayName 顯示）。其餘各列之集合、順序與逐字標籤一律不變。
+     📝 已作廢（⚠ 不得復原、不得用於斷言）：
+        OLD> ['所屬節點', '…進件作業']（循環節點名；後端 DTO 之 nodeName 未必移除＝「取得了但不呈現」）
+
+     🔒 AC-UX19 之三個分支（本檔以「示範筆數」切換器讓三者皆可達）：
+        · N = 0 → 逐字 `—`（U+2014，與既有無值佔位符同一個字元）；🔴 不得顯示 `0`／空白／任何空狀態句子
+        · N = 1 → 單一 businessCategoryDisplayName
+        · N ≥ 2 → **逐列全部列出、不摺疊**；🔴 明文禁止 `+{N−1}` 摺疊徽章、亦禁止以逗號或頓號併為一串
+     🔒 次序＝依 businessCategoryDisplayName 之 **UTF-16 碼位序遞增**（Array.prototype.sort() 不帶 comparator）；
+        🔴 明文禁止 localeCompare()（中文定序隨執行環境 ICU 漂移，本 repo 已踩過）。
+     🔒 停用（status='inactive'）之類別其**既有掛載仍顯示**（顯示歷史事實 vs 不引導新篩選是兩件事）
+        ⇒ 預設語料之四筆含 bc6（授信（子公司），inactive）。
+
+     ⚠ **本檔與已上線實作之既有落差（非本批造成、本輪刻意不處理，已回報 lead）**：
+        · 本檔 FIELDS 共 **17 列**（含 `OJT 實體簽到表` 一列），而 PublicDocumentDetailPage.tsx 為 **16 列**
+          ——該頁已把 OJT 衍生清單移出欄位清單、成為獨立區塊（其 `<Field label="OJT 實體簽到表">` 已註記作廢）。
+          ⇒ 本 delta 為「一換一」，換完本檔仍是 17 列、實作仍是 16 列；AC-UX18 ② 之「維持 16 列」對齊的是實作那一側。
+        · AC-UX18 之負向可測形狀（「該文件之循環節點名於整頁 DOM 零命中」）在本頁**結構上無鑑別力**：
+          節點名 `進件作業` 是本頁書名 `車輛分期進件作業` 的子字串 ⇒ 裸字面掃描恆命中。已回報 lead。 -->
 <!-- 🟢 2026-08-28 E11 delta（人類閘門已裁決 `OQ-E11-14`＝(A)）——本檔已套用。
      規格權威＝docs/specs/features/F042-ojt-progress-management.md `AC-24`（＋`AC-21` 之同一套判定規則）。
      ① 🔴 **「OJT 實體簽到表」欄位列改為唯讀衍生**：不再顯示一份文件層的簽到表檔名，
@@ -95,6 +120,24 @@
     <div class="flex-1 min-w-0">
       <div><b>🟢 已定案（F041 · 2026-08-11 人類閘門通過）</b>：業務子分類使用者直連「使用部門不相符」文件之拒絕回應碼＝<b>404 <span class="mono text-sm">DOCUMENT_NOT_FOUND</span></b>（OQ-E06-03 裁決 A）。</div>
       <button onclick="openReject()" class="mt-2 inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-emerald-300 bg-white text-base text-emerald-800 hover:bg-emerald-100"><i data-lucide="shield-alert" class="w-4 h-4"></i>示範：業務使用者直連不相符文件</button>
+    </div>
+  </div>
+
+  <!-- 🔵 UX16 項 9 · 原型示範控制（非正式 UI；實作時不得移植此區塊）
+       目的＝讓 AC-UX19 之三個分支（N ≥ 2／N = 1／N = 0）在同一份原型裡**皆為可達狀態**，
+       否則「0 筆顯示 —」與「不得出現 +N」兩條負向要求在預設語料下無從被觀察。 -->
+  <div data-prototype-demo="true" class="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-base text-slate-600 mb-4">
+    <i data-lucide="flask-conical" class="w-4 h-4 shrink-0 mt-0.5"></i>
+    <div class="flex-1 min-w-0">
+      <div>「<b>業務/功能類別</b>」欄之示範筆數（<b>僅供原型示範</b>不同掛載數之呈現，非正式 UI）。</div>
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <label for="demoBcScope" class="text-sm shrink-0">示範筆數</label>
+        <select id="demoBcScope" onchange="setBcDemoScope(this.value)" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-base text-slate-700">
+          <option value="all">4 筆（預設，含 1 筆已停用類別之既有掛載）</option>
+          <option value="one">1 筆</option>
+          <option value="none">0 筆（顯示 —）</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -243,6 +286,42 @@
       + '<span data-ojt-completed-list class="mt-1 block space-y-0.5">' + items + '</span>'
       + '</span>';
   }
+  /* ===== 🔵 UX16 項 9：本文件之業務/功能類別掛載（AC-UX18／AC-UX19）=====
+     🔒 語料與 26／27／28／29／30／13 之類別語料同源：`ICSOP-SRC-101-1-01 車輛分期進件作業` 掛載於
+        bc1 之 p2／p4（同一類別兩個節點 ⇒ **依 businessCategoryId 去重後仍只算一筆**）、bc2 之 q3、
+        bc3 之 r4、bc6 之 u1 ⇒ **相異類別 4 筆**。
+     🔴 語料鑑別力：① 4 ≥ 2 ⇒ 「逐列全部列出」與「第一顆＋`+3`」輸出不同；
+        ② bc1 之兩個節點掛同一份文件 ⇒ 「依 id 去重」與「不去重」輸出不同（不去重會變 5 筆）；
+        ③ 含一筆 inactive（bc6）⇒ 「停用類別之既有掛載仍顯示」與「濾掉 inactive」輸出不同。 */
+  function normalizeSubcategory(v){ const t=(v==null?'':String(v)).trim(); return t?t:null; }
+  function businessCategoryDisplayName(bc){ if(!bc) return ''; const t=normalizeSubcategory(bc.subcategory); return t?`${bc.name}（${t}）`:bc.name; }
+  /* 掛載列（nodeId 層級，刻意保留重複之 businessCategoryId 以示範去重）。 */
+  const BC_MOUNTS = [
+    { businessCategoryId:'bc1', nodeId:'p2', name:'授信',     subcategory:'消金',   status:'active'   },
+    { businessCategoryId:'bc1', nodeId:'p4', name:'授信',     subcategory:'消金',   status:'active'   },
+    { businessCategoryId:'bc2', nodeId:'q3', name:'授信',     subcategory:'企金',   status:'active'   },
+    { businessCategoryId:'bc3', nodeId:'r4', name:'風險管理', subcategory:null,     status:'active'   },
+    { businessCategoryId:'bc6', nodeId:'u1', name:'授信',     subcategory:'子公司', status:'inactive' }
+  ];
+  /* 原型示範用之筆數切換（非正式 UI，實作時不得移植）：讓 AC-UX19 之三個分支皆可達。 */
+  let BC_DEMO_SCOPE = 'all';
+  function bcDemoMounts(){ if(BC_DEMO_SCOPE==='none') return []; if(BC_DEMO_SCOPE==='one') return BC_MOUNTS.filter(m=>m.businessCategoryId==='bc3'); return BC_MOUNTS; }
+  /* 🔒 依 businessCategoryId 去重（去重規則逐字同 F017 AC-B3），再依 displayName 之 **UTF-16 碼位序**遞增。
+     🔴 sort() 不帶 comparator ＝ 碼位序；**明文禁止** localeCompare()。 */
+  function documentBusinessCategories(){
+    const seen={}, out=[];
+    bcDemoMounts().forEach(function(m){ if(!seen[m.businessCategoryId]){ seen[m.businessCategoryId]=1; out.push(businessCategoryDisplayName(m)); } });
+    return out.sort();
+  }
+  /* 🔒 AC-UX19：0 筆 → 逐字 `—`；1 筆 → 單一名稱；N ≥ 2 → 逐列全部列出，**不摺疊**（無 `+N`、無逗號串接）。 */
+  function businessCategoryFieldHtml(){
+    const names = documentBusinessCategories();
+    if(!names.length) return '<span data-business-categories data-business-category-count="0">—</span>';
+    return '<span data-business-categories data-business-category-count="'+names.length+'" class="block space-y-0.5">'
+      + names.map(function(n){ return '<span data-business-category-item class="block">'+n+'</span>'; }).join('')
+      + '</span>';
+  }
+
   const FIELDS = [
     ['系統 UUID', '<span class="mono text-slate-500">a3f81c22-9e04-4b7a-8f2d-e2c9d1748e2f</span>'],
     ['文件狀態', '<span class="px-2 py-0.5 rounded-full text-sm font-medium" style="color:#047857;background:#D1FAE5">有效</span>'],
@@ -268,7 +347,13 @@
        📝 已作廢（⚠ 不得復原）：OLD> ['循環別', lifecycleDisplayName(LIFECYCLE)],
        ⚠ 後端 DTO 之 `lifecycleName` 未移除（其他呼叫端仍在用）⇒ 這是「取得了但不呈現」；
          下游之反向斷言請鎖 queryByText('循環別')，不要鎖欄位值（值可能與別的欄位撞字）。 */
-    ['所屬節點', '<span class="inline-flex items-center gap-1"><i data-lucide="git-commit-vertical" class="w-3.5 h-3.5 text-slate-400"></i>進件作業</span>'],
+    /* 🔵 2026-09-22 UX16 項 9（AC-UX18／AC-UX19）：**「所屬節點」列已移除**，本列**就地**取代它
+       （位置恰為原列之位置：介於 `版次` 與 `內容摘要` 之間）。
+       📝 已作廢（⚠ 不得復原、不得用於斷言）：
+       OLD> ['所屬節點', '<span class="inline-flex items-center gap-1"><i data-lucide="git-commit-vertical" class="w-3.5 h-3.5 text-slate-400"></i>進件作業</span>'],
+       ⚠ 循環節點與業務/功能類別是**兩個不同概念**（一份文件可同時有循環節點與 0～多個類別掛載）；
+         下游之反向斷言請鎖 queryByText('所屬節點')，不要鎖欄位值。 */
+    ['業務/功能類別', businessCategoryFieldHtml()],
     ['內容摘要', '規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。'],
     ['公告日期', '<span class="mono">2026-01-01</span>'],
     ['檔案（ICSOP PDF）', '車輛分期進件作業_v1.3.pdf <span class="text-slate-400 text-sm">（見附件）</span>'],
@@ -279,11 +364,18 @@
     ['OJT 實體簽到表', ojtDerivedHtml()],
     ['連結點程序書', '2 筆 <span class="text-slate-400 text-sm">（見下方）</span>']
   ];
-  document.getElementById('fields').innerHTML = FIELDS.map(([k,v])=>`
+  function renderFields(){
+    document.getElementById('fields').innerHTML = FIELDS.map(function(kv){ const k=kv[0]; const v=(k==='業務/功能類別')?businessCategoryFieldHtml():kv[1]; return fieldRowHtml(k,v); }).join('');
+    lucide.createIcons();
+  }
+  function setBcDemoScope(v){ BC_DEMO_SCOPE=v; renderFields(); }
+  function fieldRowHtml(k,v){ return `
     <div class="px-5 py-3 grid grid-cols-1 sm:grid-cols-3 gap-1 sm:gap-4">
       <dt class="text-base text-slate-400">${k}</dt>
       <dd class="sm:col-span-2 text-base text-slate-800">${v}</dd>
-    </div>`).join('');
+    </div>`;
+  }
+  renderFields();
 
   /* 🔴 前台燒錄標示（2026-08-16 delta；三類附屬檔案共用同一規則、同一文案）
      權威＝F020 AC-D2（策略 A）＋ F039 AC-D1／AC-D2（附錄）＋ F018 AC-D11／AC-D12（使用表單）。

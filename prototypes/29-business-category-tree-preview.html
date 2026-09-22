@@ -1,4 +1,33 @@
 <!DOCTYPE html>
+<!-- 🔵 2026-09-22 UX16 delta（項 12）——規格權威＝docs/specs/features/F043-business-function-category.md §UX16 delta
+     （AC-UX33／AC-UX34／AC-UX35／AC-UX36；人類裁決 D＝節點內以小字逐列列出各制定公司計數）。
+
+     🔒 既有徽章 `掛載 {N} 份程序書`／`尚未掛載程序書` 與 `data-mounted-doc-count` **一字一位元未動**；
+        公司別計數列**掛在它下方**，是新增的呈現維度。
+     🔒 DOM 契約（AC-UX33）：容器 role="list" + data-testid="node-company-counts"；
+        每列 role="listitem" + data-company-code="{companyCode}" + data-company-doc-count="{n}"；
+        可見文字逐字 `{公司簡稱} {n}`（恰一個半形空格）——🔴 數字**必須是可見文字**，不得只存在於屬性中。
+     🔴 **INV-UX1**：Σ 各 data-company-doc-count ＝ 該節點之 data-mounted-doc-count，對**每一個**節點皆成立。
+     🔒 N = 0 之節點：徽章維持 `尚未掛載程序書`／`data-mounted-doc-count="0"`，
+        計數列容器**整個不進 DOM**（不得渲染一個空的 role="list"）。
+     🔒 順序恆依 companyCode **昇冪**（AD → AE → AJ → AS）；計數 0 之公司**不顯示**；
+        `__unspecified__` 那一列固定**排最後、不參與昇冪比較**（AC-UX35）。
+        📝 已作廢（⚠ 不得復原、不得用於斷言）：OLD> 依 COMPANY_FULL_NAMES 之固定登錄順序（AS → AD → AE → AJ）
+           ——2026-09-22 第二輪由 lead 推翻，理由＝全站單一順序（GET /companies 亦為 companyCode 昇冪）。
+     🔒 **前台樹狀圖（30）刻意不套用**（AC-UX36）：該頁之 docCount 語意為「該 viewer 可見數」、
+        屬性名為 data-visible-doc-count，與本頁之「全部掛載數」明文禁止共用。
+
+     🔴 **語料：本檔之掛載文件新增 `co`（制定公司代碼）欄——這是本批唯一一處刻意偏離「語料與 26／27／28／30／13 逐筆一致」**：
+        · AC-UX33／AC-UX34／AC-UX35 之鑑別力**要求**跨多家公司之掛載、且須含 `AS`（昇冪之末、登錄序之首）
+          與一筆 `companyCode` 為空者；而 13-document-list 之語料**全部 15 筆皆為 AS 一家**。
+        · 節點與文件之**集合、筆數、掛載關係一筆未動**（只加了 co 欄）⇒ `掛載 N` 與 26 之 `docs` 皆不變。
+        · ⚠ 已回報 lead：13 之單一公司語料是否要一併補上多公司，屬本批以外之決定。
+     🔴 **同一節點同時具備三種鑑別力是不可能的**（本檔節點最多只掛 2 份文件）⇒ 分散於兩個節點：
+        · `p4`（bc1 預設檢視）＝`AD 1`／`和潤企業 1` ⇒ **AS 排最後**＝「昇冪 vs 登錄順序」之唯一鑑別點；
+        · `s2`（bc4）＝`和潤企業 1`／`未指定 1` ⇒ sentinel 排最後、且 INV-UX1 在有空公司別時仍成立；
+        · `p1` 只掛 1 份（AS）⇒ 「計數 0 之公司不顯示」之正向／負向成對載體（恰一列，無 `和勁企業 0`）。
+        ⚠ AC-UX34 之「語料須含至少三家公司之掛載（含 AS 與 AD）」在**同一個節點**上不可達（已回報 lead）：
+          本檔全部節點之掛載數上限為 2；跨節點則四家俱全（AD／AE／AJ／AS）＋未指定。 -->
 <!-- 🔵 F043 業務/功能類別管理（DRAFT — 2026-09-02）：**後台類別樹狀圖預覽**，鏡射 22-lifecycle-tree-preview.html
      之版面、結構、文案、浮水印疊加層、dagre 佈局、直角繞線、單擊標示下游、雙擊子樹唯讀抽屜、縮放與拖曳平移。
      規格權威＝docs/specs/features/F043-business-function-category.md（§丁 AC-32～AC-37）。
@@ -193,8 +222,13 @@
 
 <script>
   /* ===== 浮水印（格式、色值、字級、內距、行高與 22／05 完全一致；權威＝NFR-007／F020）===== */
-  const COMPANY_FULL_NAMES  = { AS:'和潤企業股份有限公司', AE:'和潤電能' };
-  const COMPANY_SHORT_NAMES = { AS:'和潤企業',             AE:'和潤電能' };
+  /* 🔵 UX16 項 12：公司主檔補齊四家（權威＝backend/src/org-directory/company-name.ts）。
+     📝 已作廢（⚠ 不得復原）：OLD> 僅含 AS／AE 兩家，且 AE 全稱誤植為 `和潤電能`（缺「股份有限公司」）。
+     ⚠ 本檔只消費**簡稱**（浮水印公司欄與計數列標籤）；全稱表僅為對照留存，畫面上無載體。 */
+  const COMPANY_FULL_NAMES  = { AS:'和潤企業股份有限公司', AD:'和潤興業股份有限公司', AE:'和潤電能股份有限公司', AJ:'和勁企業股份有限公司' };
+  const COMPANY_SHORT_NAMES = { AS:'和潤企業',             AD:'和潤興業',             AE:'和潤電能',             AJ:'和勁企業' };
+  const SEG_UNSPECIFIED_KEY   = '__unspecified__';
+  const SEG_UNSPECIFIED_LABEL = '未指定';
   const WM_COMPANY = COMPANY_SHORT_NAMES.AS;
   const WM_DATA   = `20233-李慧玲-${WM_COMPANY}-債權管理部-法催一室`;
   const WM_NOTICE = '僅供內部使用非經許可不得複製翻印或轉製成其他形式呈現';
@@ -236,29 +270,31 @@
        · ICSOP-GCA-100-2-00 出現於 bc1/p3、bc2/q2、bc3/r3、bc4/s2（四個相異類別）
        ⇒ bc1 自 p1 起之子樹：掛載列 6 筆、**相異程序書 5 份**（差異 ① 之示範語料，兩數刻意不同）。
      🔴 bc7 刻意 **0 個節點**：AC-32 空狀態之唯一載體（新建立、尚未拉節點）。 */
+  /* 🔵 UX16 項 12：每筆掛載列新增 `co`（制定公司代碼）。空字串＝上游未填 ⇒ 歸 `__unspecified__` 桶（AC-UX35）。
+     🔒 節點、文件、掛載關係之集合與筆數**一筆未動**（僅新增欄位）⇒ 既有 data-mounted-doc-count 全數不變。 */
   const CATS={
     bc1:{name:'授信', subcategory:'消金', nodes:[
-      {id:'p1',name:'授信政策與額度管理',docs:[{num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",status:'有效',date:'2025-12-01'}]},
-      {id:'p2',name:'徵信調查作業',docs:[{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]},
-      {id:'p3',name:'擔保品管理作業',docs:[{num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01'}]},
-      {id:'p4',name:'授信審核作業',docs:[{num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",status:'有效',date:'2026-06-01'},{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]},
-      {id:'p5',name:'撥貸與帳務作業',docs:[{num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",status:'有效',date:'2026-05-01'}]}],
+      {id:'p1',name:'授信政策與額度管理',docs:[{co:'AS',num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",status:'有效',date:'2025-12-01'}]},
+      {id:'p2',name:'徵信調查作業',docs:[{co:'AD',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]},
+      {id:'p3',name:'擔保品管理作業',docs:[{co:'',num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01'}]},
+      {id:'p4',name:'授信審核作業',docs:[{co:'AS',num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",status:'有效',date:'2026-06-01'},{co:'AD',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]},
+      {id:'p5',name:'撥貸與帳務作業',docs:[{co:'AJ',num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",status:'有效',date:'2026-05-01'}]}],
       edges:[['p1','p2'],['p1','p3'],['p2','p4'],['p3','p4'],['p4','p5']]},
     bc2:{name:'授信', subcategory:'企金', nodes:[
-      {id:'q1',name:'企金授信受理作業',docs:[{num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",status:'有效',date:'2026-06-01'}]},
-      {id:'q2',name:'企業徵信作業',docs:[{num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01'}]},
-      {id:'q3',name:'授信核決作業',docs:[{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]},
+      {id:'q1',name:'企金授信受理作業',docs:[{co:'AS',num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",status:'有效',date:'2026-06-01'}]},
+      {id:'q2',name:'企業徵信作業',docs:[{co:'',num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01'}]},
+      {id:'q3',name:'授信核決作業',docs:[{co:'AD',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]},
       {id:'q4',name:'額度撥貸作業',docs:[]}],
       edges:[['q1','q2'],['q1','q3'],['q2','q4'],['q3','q4']]},
     bc3:{name:'風險管理', subcategory:null, nodes:[
-      {id:'r1',name:'風險辨識作業',docs:[{num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',edition:"26'01",status:'有效',date:'2026-04-01'}]},
-      {id:'r2',name:'風險評估作業',docs:[{num:'ICSOP-FC-101-1-00',name:'銀行融資作業',edition:"26'01",status:'有效',date:'2026-02-01'}]},
-      {id:'r3',name:'風險監控作業',docs:[{num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01'}]},
-      {id:'r4',name:'風險報告作業',docs:[{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]}],
+      {id:'r1',name:'風險辨識作業',docs:[{co:'AE',num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',edition:"26'01",status:'有效',date:'2026-04-01'}]},
+      {id:'r2',name:'風險評估作業',docs:[{co:'AE',num:'ICSOP-FC-101-1-00',name:'銀行融資作業',edition:"26'01",status:'有效',date:'2026-02-01'}]},
+      {id:'r3',name:'風險監控作業',docs:[{co:'',num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01'}]},
+      {id:'r4',name:'風險報告作業',docs:[{co:'AD',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]}],
       edges:[['r1','r2'],['r2','r3'],['r1','r3'],['r3','r4']]},
     bc4:{name:'帳務處理', subcategory:'子公司', nodes:[
-      {id:'s1',name:'子公司帳務結算作業',docs:[{num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",status:'有效',date:'2026-05-01'}]},
-      {id:'s2',name:'子公司入帳覆核作業',docs:[{num:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',edition:"26'05",status:'有效',date:'2026-10-01'},{num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01'}]},
+      {id:'s1',name:'子公司帳務結算作業',docs:[{co:'AJ',num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",status:'有效',date:'2026-05-01'}]},
+      {id:'s2',name:'子公司入帳覆核作業',docs:[{co:'AS',num:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',edition:"26'05",status:'有效',date:'2026-10-01'},{co:'',num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01'}]},
       {id:'s3',name:'子公司報表產出作業',docs:[]}],
       edges:[['s1','s2'],['s2','s3']]},
     bc5:{name:'帳務處理', subcategory:'消金', nodes:[
@@ -266,11 +302,48 @@
       {id:'t2',name:'消金帳務覆核作業',docs:[]}],
       edges:[['t1','t2']]},
     bc6:{name:'授信', subcategory:'子公司', nodes:[
-      {id:'u1',name:'子公司授信受理作業',docs:[{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]},
+      {id:'u1',name:'子公司授信受理作業',docs:[{co:'AD',num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01'}]},
       {id:'u2',name:'子公司授信核決作業',docs:[]}],
       edges:[['u1','u2']]},
     bc7:{name:'帳務處理', subcategory:'企金', nodes:[], edges:[]}
   };
+  /* ===== 🔵 UX16 項 12：每節點每公司計數（AC-UX33～AC-UX35）=====
+     🔒 形狀鏡射 architecture-spec §16.6（ARCH-UX6）之 `classifyCompanyCounts`：
+        後端 SQL 只做 `GROUP BY nodeId, companyCode`（NULL 自然收斂成同一組），
+        **分類、排序與 sentinel 注入一律純函式**。本原型以同一形狀在前端重現。
+     🔒 回應形狀為**陣列**（非 map）：物件鍵序非規格保證之行為，把排序契約押在它上面等於押在引擎實作細節上。 */
+  function classifyCompanyCounts(raw){
+    const real = raw.filter(function(r){ return !!r.companyCode; })
+      .sort(function(a,b){ return a.companyCode.localeCompare(b.companyCode); });   /* 🔒 companyCode 昇冪 */
+    const unspecifiedCount = raw.filter(function(r){ return !r.companyCode; })
+      .reduce(function(n,r){ return n + r.count; }, 0);
+    /* 🔴 sentinel **不參與昇冪比較**、固定殿後：它不是一個 companyCode。 */
+    return unspecifiedCount > 0
+      ? real.concat([{ companyCode: SEG_UNSPECIFIED_KEY, count: unspecifiedCount }])
+      : real;
+  }
+  /* 🔒 計數 0 之公司**不產生列**（AC-UX34 ②）——本函式只走訪實際掛載，結構上不可能生出 0。 */
+  function nodeCompanyCounts(n){
+    const bucket = {};
+    (n.docs||[]).forEach(function(d){ const k = d.co || ''; bucket[k] = (bucket[k]||0) + 1; });
+    return classifyCompanyCounts(Object.keys(bucket).map(function(k){ return { companyCode:k, count:bucket[k] }; }));
+  }
+  function companyCountLabel(code){
+    return code === SEG_UNSPECIFIED_KEY ? SEG_UNSPECIFIED_LABEL : (COMPANY_SHORT_NAMES[code] || code);
+  }
+  /* 🔒 AC-UX33 ③：可見文字逐字 `{公司簡稱} {n}`（恰一個半形空格）；數字同時是可見文字與屬性值。 */
+  function companyCountsHtml(n){
+    const rows = nodeCompanyCounts(n);
+    if(!rows.length) return '';                       /* 🔒 0 份 ⇒ 容器整個不進 DOM（不得渲染空 role="list"） */
+    return '<div role="list" data-testid="node-company-counts" class="mt-0.5 space-y-px">'
+      + rows.map(function(r){
+          return '<div role="listitem" data-company-code="' + r.companyCode + '" data-company-doc-count="' + r.count + '"'
+            + ' class="text-[10px] leading-tight text-slate-500 truncate">'
+            + companyCountLabel(r.companyCode) + ' ' + r.count + '</div>';
+        }).join('')
+      + '</div>';
+  }
+
   const ORDER=['bc1','bc2','bc6','bc3','bc4','bc5','bc7'];
   const DEFAULT_ID='bc1';
 
@@ -446,6 +519,8 @@
           <div class="mt-1 flex items-center gap-1 text-[11px] ${cnt?'text-emerald-600':'text-slate-400'}">
             <i data-lucide="${cnt?'file-check-2':'file-x-2'}" class="w-3.5 h-3.5"></i>${cnt?('掛載 '+cnt+' 份程序書'):'尚未掛載程序書'}
           </div>
+          <!-- 🔵 UX16 項 12（AC-UX33）：各制定公司計數，小字逐列；總和恆等於上方徽章之 N（INV-UX1）。 -->
+          ${companyCountsHtml(n)}
         </div>
       </div>`;
     }).join('');

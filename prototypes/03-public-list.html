@@ -77,6 +77,53 @@
      🔴 30-public-category-tree 之樹狀圖畫布（#stage）**本就是全寬**（無 max-w）；實作端曾將其嵌入本檔之
         `max-w-5xl` <main> 而被夾成 1024px（樹寬 1742px 被切掉 750px 須拖曳）——那是**實作偏離原型**，
         修在前端，不在本檔。 -->
+<!-- 🔵 2026-09-22 UX16 delta（項 5 落地端／項 6／項 10）——規格權威＝F019 §UX16 delta
+     （AC-UX15／AC-UX16＝子樹 chip；AC-UX20／AC-UX21＝前往後台；AC-UX22～AC-UX26＝制定本部篩選）
+     ＋ F002 §UX16 delta（AC-UX7＝hasAdminAccess 單一述詞）。
+
+     ═══ 項 10：篩選 五 → **六項**，插入中段 ═══
+     🔒 順序由左至右逐字＝`制定公司`／**`制定本部`**／`制定部門`／`制定室別`／`當責室長`／`狀態`；
+        🔒 行動裝置底部 sheet 呈現**同一 6 項、同一順序**（兩處共用同一份 FILTERS 定義）。
+     📝 已作廢（⚠ 不得復原、不得用於斷言）：OLD> 恰 5 項＝`制定公司`／`制定部門`／`制定室別`／`當責室長`／`狀態`。
+     🔒 `制定本部` 之型態＝**可搜尋下拉（combobox）**（比照其左右兩側）；`狀態` **仍維持原生 select**。
+     🔒 比對語意＝等值比對，比對鍵為**本部之組織識別**（非顯示名稱字串）；語意為「該文件之**制定組織沿
+        `parentCode` 上溯所抵達之本部** ＝ 所選值」⇒ **該本部下轄之全部部與處室之文件皆納入**。
+        📌 語料鑑別力：`管理本部` 下有 `財會部`（3 份）與 `管理部`（3 份）等**多個不同的部**
+           ⇒ 選定該本部時多份皆回傳；語料若該本部下只有一個部，「上溯到本部」與「直接比對部」輸出相同、本條恆真。
+     🔒 選項來源沿用 AC-D5 之既有兩條紀律：① **全域 distinct**（自全體文件衍生，非當前結果集）；
+        ② **必須先經 isDocVisibleToViewer 過濾**（下拉選項本身不得洩漏他部門文件之存在）。
+     🔴 **前台不加「無本部」sentinel（AC-UX24）**：推導不出本部的文件**自然沒有對應的 distinct 值**，
+        因此它在下拉裡沒有選項——這與「未指定制定公司」之既有處置同構，不是遺漏。
+        🔒 與 F044 儀表板刻意不同：那裡是**分組**維度（每份文件都要落進某一段），這裡是**篩選**維度（沒有選項就是篩不到）。
+
+     ═══ 項 6：前台 header 之「前往後台」（AC-UX20／AC-UX21）═══
+     🔒 恰一顆連結，`role="link"`、`aria-label` 逐字 `前往後台`、導向 `/admin`（原型＝07-admin-shell.html）。
+     🔴 判準**必須**是 F002 AC-UX7 之那一支述詞 `hasAdminAccess(role) = visibleMenu(role).length > 0`；
+        🔴 **明文禁止**在本頁另寫 `roleCode !== 'User'` 或任何角色清單——那正是「分流頁放行、前台連結卻擋掉」之死鏈入口。
+     🔒 `User`（含 F041 業務子分類）⇒ 該連結**整顆不進 DOM**（**非** disabled、**非** CSS 隱藏）。
+     🔒 **詳情頁（04）與檢視器頁（05）刻意不加**（AC-UX21）：那是閱讀情境，不在任何人下過的裁決裡。
+     🔒 header 其餘一切不變：標題逐字 `ICSOP 文件瀏覽`（本輪**不動**它）、使用者資訊與部門路徑、登出鈕。
+
+     ═══ 項 5 之落地端：節點子樹 chip（AC-UX15／AC-UX16）═══
+     🔒 chip 文案逐字＝**`業務/功能類別：{類別顯示名} · 節點子樹：{節點名}`**（`：` 後無空白、`·` 兩側各一個半形空格）。
+     🔒 DOM 掛鉤逐字為 **`data-public-subtree-chip`**；🔴 不得沿用後台之掛鉤名。
+     🔒 **chip ✕ 鈕之 `aria-label` 與 `title` 皆逐字為 `清除節點子樹篩選`**（2026-09-22 第三輪定案，AC-UX16）
+        ——🔒 **與後台同類鈕逐字相同**（後台既有鎖＝`DocumentListPage.tsx:1087-1088`／`TS-T44-002`）；
+        🔒 任一側改字必須同批改另一側（跨 package 無法共用常數，比照 `org-path.ts:19-22` 之「兩份實作須同步維護」）。
+     📝 已作廢（⚠ 不得復原、不得用於斷言）：`OLD>` `aria-label`／`title` 皆為 `清除節點子樹`（本棒第一輪自造）。
+        🔴 **作廢理由（不得刪節）**：它是後台字串的**嚴格前綴** ⇒ 斷言的鑑別力取決於下游用的是精確比對還是子字串比對，
+        而那是測試作者的自由選擇、不是規格能鎖住的東西。⚠ 與導向鈕之情況**刻意不同**：那裡前後台不同字
+        （`在文件清單中檢視這 {N} 份文件` vs `在文件管理中檢視這 {N} 份程序書`）是因為目標頁與名詞在前後台本來就不同，
+        差異有實質內容；而「清除」這個動作兩邊沒有任何差異。
+     🔴 **chip 不進篩選列**（它不是第七個篩選器）；🔒 兩個參數 `bcSubtreeId`＋`bcSubtreeNodeId` **恆成對**，
+        任一缺席 ⇒ **靜默 no-op**（不篩選、不顯示 chip、不回錯誤）。
+     🔴 **清除之方向性刻意不對稱**（AC-UX16）：點 chip 自己的 ✕ ⇒ **只清 chip**，六項篩選與關鍵字一格未動；
+        點「清除篩選」⇒ **六項篩選、關鍵字與 chip 三者同時清空**。
+        📌 理由：按鈕字面是「清除篩選」，清完卻仍有一條 chip 在縮小結果集，畫面與文字自相矛盾；反向則不然。
+     🔒 結果集＝該抽屜之**相異可見文件集合**；🔴 可見性過濾**先於**子樹交集（縱深防禦：兩層各自獨立，
+        任一層被誤刪另一層仍是完整防線）⇒ 本能力**不得**成為繞過 F041 限縮之側門。
+        📌 tripwire：`ICSOP-SRC-103-1-01` 掛在 bc1/p4 但使用部門為「風險管理服務本部 / 信用審查部」
+           ⇒ 業務視角下它**既不在抽屜、也不在導過去的清單**。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -110,7 +157,9 @@
         <i data-lucide="user" class="w-4 h-4"></i><span>王小明</span>
         <span class="text-slate-300">·</span><span id="hdrDept">營運管理部 / 審查室</span>
       </div>
-      <button class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+      <!-- 🔵 UX16 項 6（AC-UX20）：無寫入語意之導覽連結；無後台權限之角色**整顆不進 DOM**。 -->
+      <span id="adminLinkHost"></span>
+      <button aria-label="登出" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
     </div>
   </div>
 </header>
@@ -192,6 +241,36 @@
       <div id="viewerNote" class="mt-1.5 text-sm"></div>
     </div>
   </div>
+
+  <!-- 🔵 UX16 · 原型示範控制（非正式 UI；實作時不得移植此區塊）
+       ① 角色切換＝AC-UX20 之**五角色向量**（SysAdmin／ICSOPAdmin／Supervisor／DeptContact 皆見「前往後台」，
+          `User` 不見）之涵蓋面來源——只驗 ICSOPAdmin 與 User 兩端時，中間三種角色任一被漏掉都不會紅。
+       ② 子樹情境＝AC-UX15／AC-UX16 之涵蓋面來源（deep link 恆成對；缺一 ⇒ 靜默 no-op）。 -->
+  <div data-prototype-demo="true" class="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-base text-slate-600 mb-3">
+    <i data-lucide="flask-conical" class="w-4 h-4 shrink-0 mt-0.5"></i>
+    <div class="flex-1 min-w-0">
+      <div class="flex flex-wrap items-center gap-2">
+        <label for="demoRole" class="text-sm shrink-0">示範角色</label>
+        <select id="demoRole" onchange="setDemoRole(this.value)" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-base text-slate-700">
+          <option value="User">一般使用者（預設 · 無後台權限）</option>
+          <option value="SysAdmin">系統管理員</option>
+          <option value="ICSOPAdmin">ICSOP 管理員</option>
+          <option value="Supervisor">主管</option>
+          <option value="DeptContact">部門窗口</option>
+        </select>
+        <label for="demoSubtree" class="text-sm shrink-0 ml-2">示範子樹情境</label>
+        <select id="demoSubtree" onchange="setDemoSubtree(this.value)" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-base text-slate-700">
+          <option value="">未帶參數（預設）</option>
+          <option value="bc1|p1">授信（消金） · 授信政策與額度管理（整棵子樹）</option>
+          <option value="bc1|p5">授信（消金） · 撥貸與帳務作業（葉節點）</option>
+          <option value="half">只帶一個參數（靜默 no-op）</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🔵 UX16 項 5 落地端（AC-UX15 ③）：可清除之 chip。🔴 **刻意不在篩選列裡**（它不是第七個篩選器）。 -->
+  <div id="subtreeChipHost" class="mb-3"></div>
 
   <!-- 📝 已移除：info note（#scopeNotice）——🔴 2026-08-27 使用者裁決，F019 AC-Y1。
        OLD> <div class="flex items-start gap-2 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-sm text-primary-700 mb-4">
@@ -344,28 +423,83 @@
      為 2026-08-16 delta 新增之顯示／篩選欄位，取值與後台 13 之同一批文件逐筆一致。
      🔒 `use`（使用部門）**保留於資料層**：它已不顯示於卡片、亦無對應篩選器，但置頂排序與
         F041 業務子分類可見性判定仍依賴它（F019 AC-D11／AC-D13：**不顯示 ≠ 不判定**）。 */
+  /* ===== 🔵 UX16 項 10：組織目錄與**本部推導**（AC-UX22）=====
+     🔒 三個純函式之形狀逐字鏡射 07-admin-shell.html 之同名函式（其權威＝backend divisionOf）：
+        · `parentCode` 由**代碼前綴機械推導**（`X####` ⇒ `X0000`），**不是資料裡的一個欄位**；
+        · `deriveTier` 對 `X0000` 恆判為 `DIVISION`；
+        · 上溯時查的是一個「推導得出、但可能沒有那一列」的代碼；**查無 ⇒ 沒有本部**。
+     🔴 `B0000` 刻意缺席（機制逐字比照 07 對 AD 之處置）：`B1000 消費分期營業部` 與 `B2000 企劃部`
+        上溯 `B0000` 查無 ⇒ 推導不出本部 ⇒ 其文件在「制定本部」下拉中**沒有對應選項**，
+        且在**未選定任何本部**時**照常出現於清單**——這是 AC-UX24（前台不加 sentinel）之**唯一可達載體**。
+        補上這一列，AC-UX24 就變成恆真、零鑑別力。
+     ⚠ 與 07-admin-shell 之 AS 語料落差：該檔有 `B0000 業務本部` 一列。本檔刻意缺席之理由如上；已回報 lead。
+     🔒 查表範圍限於該文件之 companyCode（禁跨公司）；以已訪集合為循環守衛。 */
+  function divisionCodeOf(orgCode){ return String(orgCode||'').charAt(0)+'0000'; }
+  function deriveTier(orgCode){ return String(orgCode||'').slice(1)==='0000' ? 'DIVISION' : 'DEPT'; }
+  const ORG_UNITS=[
+    {co:'AS',code:'C0000',name:'管理本部'},
+    {co:'AS',code:'D0000',name:'風險本部'},
+    /* 🔴 `B0000` 於此刻意缺席（見上）。 */
+    {co:'AS',code:'B1000',name:'消費分期營業部'},
+    {co:'AS',code:'B2000',name:'企劃部'},
+    {co:'AS',code:'C1000',name:'財會部'},
+    {co:'AS',code:'C2000',name:'管理部'},
+    {co:'AS',code:'C3000',name:'經企公關部'},
+    {co:'AS',code:'C4000',name:'資訊部'},
+    {co:'AS',code:'D1000',name:'信用審查部'}
+  ];
+  function orgGroupKeyOf(companyCode,orgCode){ return String(companyCode)+'__'+String(orgCode); }
+  const ORG_INDEX={};
+  ORG_UNITS.forEach(function(u){ ORG_INDEX[orgGroupKeyOf(u.co,u.code)]=u; });
+  function orgUnit(co,code){ return ORG_INDEX[orgGroupKeyOf(co,code)]||null; }
+  function divisionOf(co,code){
+    const seen={};
+    let cur=String(code||'');
+    while(cur){
+      const u=orgUnit(co,cur);
+      if(!u) return null;                       /* 推導出的祖先代碼查無 ⇒ 沒有本部 */
+      if(deriveTier(u.code)==='DIVISION') return u;
+      if(seen[u.code]) return null;
+      seen[u.code]=1;
+      const next=divisionCodeOf(u.code);
+      if(next===u.code) return null;
+      cur=next;
+    }
+    return null;
+  }
+  /* 🔒 比對鍵為**本部之組織識別**（此處＝`{公司}__{本部代碼}`），**非顯示名稱字串**。 */
+  function docDivisionKey(d){ const u=divisionOf(d.co,d.orgCode); return u?orgGroupKeyOf(d.co,u.code):null; }
+  function docDivisionLabel(d){ const u=divisionOf(d.co,d.orgCode); return u?u.name:null; }
+  /* 本部識別 → 人類可讀名稱（下拉之 label 解析義務，AC-D5 擴及第六組）。 */
+  const DIVISION_LABELS={};
+  ORG_UNITS.filter(function(u){ return deriveTier(u.code)==='DIVISION'; })
+    .forEach(function(u){ DIVISION_LABELS[orgGroupKeyOf(u.co,u.code)]=u.name; });
+
+  /* 🔵 UX16 項 10：每筆文件新增 `co`（制定公司代碼）與 `orgCode`（制定組織代碼）——
+     既有 `company`／`dept`／`section` 三個**顯示欄位一字未動**（AC-UX43 ②：本裁決只放寬原則的適用範圍，
+     不改變任何既有欄位的輸出）。 */
   const DOCS = [
     // use（使用部門）刻意涵蓋不同層級（全公司／本部／部／處室／課），示範「任意層級皆可指定」
-    {n:'ICSOP-SRC-101-2-00',name:'消金審核作業',company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],edition:"25'12",use:['營業二本部'],status:'有效',lcId:'lc1',date:'2025-12-01',summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。'},
-    {n:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',company:'和潤企業股份有限公司',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],edition:"26'02",use:['風險管理服務本部 / 信用審查部'],status:'有效',lcId:'lc10',date:'2026-06-01',summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。'},
-    {n:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],edition:"25'10",use:['營業二本部 / 營運管理部'],status:'有效',lcId:'lc1',date:'2025-10-01',summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。'},
+    {n:'ICSOP-SRC-101-2-00',name:'消金審核作業',company:'和潤企業股份有限公司',co:'AS',orgCode:'D1000',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],edition:"25'12",use:['營業二本部'],status:'有效',lcId:'lc1',date:'2025-12-01',summary:'規範消費金融案件之信用審核政策、額度核定權限與例外簽核程序。'},
+    {n:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',company:'和潤企業股份有限公司',co:'AS',orgCode:'D1000',dept:'信用審查部',section:'企金室',chief:'林建宏（信用審查部 企金室 室長）',sec:[],edition:"26'02",use:['風險管理服務本部 / 信用審查部'],status:'有效',lcId:'lc10',date:'2026-06-01',summary:'規範企業金融客戶之授信申請、額度核定與擔保品管理之控制程序。'},
+    {n:'ICSOP-SRC-101-1-06',name:'消費分期特約通路作業',company:'和潤企業股份有限公司',co:'AS',orgCode:'B1000',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],edition:"25'10",use:['營業二本部 / 營運管理部'],status:'有效',lcId:'lc1',date:'2025-10-01',summary:'說明特約商店通路之合作建立、案件收件與拆帳對帳作業流程。'},
     // section 為空＝此部之下無處/室，制定組織掛於部層（卡片以「—」呈現）
-    {n:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],edition:"26'03",use:['營業二本部 / 營運管理部 / 審查室','營業二本部 / 消費分期營業部'],status:'有效',lcId:'lc3',date:'2026-03-01',summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。'},
-    {n:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],edition:"26'04",use:['營業二本部 / 消費分期營業部 / 商品北一處'],status:'有效',lcId:'lc3',date:'2026-04-01',summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。'},
+    {n:'ICSOP-PPC-101-2-02',name:'消費分期產品政策及規範作業',company:'和潤企業股份有限公司',co:'AS',orgCode:'B1000',dept:'消費分期營業部',section:'',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],edition:"26'03",use:['營業二本部 / 營運管理部 / 審查室','營業二本部 / 消費分期營業部'],status:'有效',lcId:'lc3',date:'2026-03-01',summary:'訂定消費分期產品之定價策略、風險胃納與上下架審議機制。'},
+    {n:'ICSOP-PPC-101-1-03',name:'消費分期-月目標設定作業',company:'和潤企業股份有限公司',co:'AS',orgCode:'B1000',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],edition:"26'04",use:['營業二本部 / 消費分期營業部 / 商品北一處'],status:'有效',lcId:'lc3',date:'2026-04-01',summary:'規範各業務單位月度目標之擬定、彙總與核定流程與績效追蹤節點。'},
     // 🔴 F019 AC-D7：本筆之「當責室長」次要為 林建宏 → 以「當責室長＝林建宏」篩選必須命中本筆（主要∪次要）
-    {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],edition:"26'01",use:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部','營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課'],status:'有效',lcId:'lc1',date:'2026-01-01',summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。'},
-    {n:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],edition:"26'02",use:['全公司'],status:'有效',lcId:'lc2',date:'2026-05-01',summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。'},
-    {n:'ICSOP-LWC-101-1-02',name:'招募管理作業',company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],edition:"25'09",use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'有效',lcId:'lc4',date:'2025-10-01',summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。'},
-    {n:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],edition:"26'05",use:['財務資訊本部 / 財會部'],status:'有效',lcId:'lc7',date:'2026-05-01',summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。'},
-    {n:'ICSOP-GCA-100-2-00',name:'法遵作業',company:'和潤企業股份有限公司',dept:'經企公關部',section:'法遵及公司治理室',chief:'劉家瑋（經企公關部 法遵及公司治理室 室長）',sec:[],edition:"26'01",use:['經營企劃管理本部 / 經企公關部 / 法遵及公司治理室'],status:'有效',lcId:'lc9',date:'2026-03-01',summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。'},
-    {n:'ICSOP-FC-101-1-00',name:'銀行融資作業',company:'和潤企業股份有限公司',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],edition:"26'01",use:['財務資訊本部 / 財會部'],status:'有效',lcId:'lc5',date:'2026-02-01',summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。'},
-    {n:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',company:'和潤企業股份有限公司',dept:'管理部',section:'總務室',chief:'蔡明哲（管理部 總務室 室長）',sec:[],edition:"25'08",use:['經營企劃管理本部 / 管理部 / 總務室'],status:'有效',lcId:'lc6',date:'2025-10-01',summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。'},
-    {n:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',company:'和潤企業股份有限公司',dept:'資訊部',section:'應用發展室',chief:'許志偉（資訊部 應用發展室 室長）',sec:[],edition:"26'01",use:['財務資訊本部 / 資訊部 / 應用發展室'],status:'有效',lcId:'lc8',date:'2026-04-01',summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。'},
+    {n:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',company:'和潤企業股份有限公司',co:'AS',orgCode:'B2000',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:['林建宏（信用審查部 企金室 室長）'],edition:"26'01",use:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部','營業一本部 / 供應商金融部 / 北區綜合處 / 醫療一課'],status:'有效',lcId:'lc1',date:'2026-01-01',summary:'規範車輛分期案件之進件收件、資格初審與建檔流程，明確各關卡負責人與檢核事項。'},
+    {n:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',company:'和潤企業股份有限公司',co:'AS',orgCode:'C1000',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],edition:"26'02",use:['全公司'],status:'有效',lcId:'lc2',date:'2026-05-01',summary:'說明各類營運費用之請款申請、單據審核與付款排程之控制程序。'},
+    {n:'ICSOP-LWC-101-1-02',name:'招募管理作業',company:'和潤企業股份有限公司',co:'AS',orgCode:'C2000',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],edition:"25'09",use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'有效',lcId:'lc4',date:'2025-10-01',summary:'規範職缺申請、招募甄選、任用核定與到職報到之作業與權責。'},
+    {n:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',company:'和潤企業股份有限公司',co:'AS',orgCode:'C1000',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],edition:"26'05",use:['財務資訊本部 / 財會部'],status:'有效',lcId:'lc7',date:'2026-05-01',summary:'訂定短期投資之交易授權、部位保管與會計入帳之控制與覆核機制。'},
+    {n:'ICSOP-GCA-100-2-00',name:'法遵作業',company:'和潤企業股份有限公司',co:'AS',orgCode:'C3000',dept:'經企公關部',section:'法遵及公司治理室',chief:'劉家瑋（經企公關部 法遵及公司治理室 室長）',sec:[],edition:"26'01",use:['經營企劃管理本部 / 經企公關部 / 法遵及公司治理室'],status:'有效',lcId:'lc9',date:'2026-03-01',summary:'建立法令遵循之辨識、評估、宣導與缺失追蹤之管理性控制流程。'},
+    {n:'ICSOP-FC-101-1-00',name:'銀行融資作業',company:'和潤企業股份有限公司',co:'AS',orgCode:'C1000',dept:'財會部',section:'',chief:'吳佩珊（財會部 室長）',sec:[],edition:"26'01",use:['財務資訊本部 / 財會部'],status:'有效',lcId:'lc5',date:'2026-02-01',summary:'說明銀行額度申請、動撥與還款之作業流程及資金部位控管。'},
+    {n:'ICSOP-FAC-101-1-01',name:'不動產請購/採購/驗收',company:'和潤企業股份有限公司',co:'AS',orgCode:'C2000',dept:'管理部',section:'總務室',chief:'蔡明哲（管理部 總務室 室長）',sec:[],edition:"25'08",use:['經營企劃管理本部 / 管理部 / 總務室'],status:'有效',lcId:'lc6',date:'2025-10-01',summary:'規範不動產及設備之請購申請、採購比議價與驗收入帳之控制程序。'},
+    {n:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',company:'和潤企業股份有限公司',co:'AS',orgCode:'C4000',dept:'資訊部',section:'應用發展室',chief:'許志偉（資訊部 應用發展室 室長）',sec:[],edition:"26'01",use:['財務資訊本部 / 資訊部 / 應用發展室'],status:'有效',lcId:'lc8',date:'2026-04-01',summary:'規範資訊系統帳號權限之申請、核准、定期覆核與離職註銷程序。'},
     // 進度中（有效但公告日期未到 today）→ 前台隱藏、僅後台可見
-    {n:'ICSOP-SRC-102-1-00',name:'車輛分期對保作業（新制）',company:'和潤企業股份有限公司',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:[],edition:"26'02",use:['營業二本部 / 營運管理部 / 審查室'],status:'有效',lcId:'lc1',date:'2026-09-01',summary:'（將於 2026-09-01 公告生效）規範車輛分期對保程序之新制作業。'},
+    {n:'ICSOP-SRC-102-1-00',name:'車輛分期對保作業（新制）',company:'和潤企業股份有限公司',co:'AS',orgCode:'B2000',dept:'企劃部',section:'車輛行銷室',chief:'陳彥廷（企劃部 車輛行銷室 室長）',sec:[],edition:"26'02",use:['營業二本部 / 營運管理部 / 審查室'],status:'有效',lcId:'lc1',date:'2026-09-01',summary:'（將於 2026-09-01 公告生效）規範車輛分期對保程序之新制作業。'},
     // 以下為失效/作廢，將由「後端」強制過濾，不顯示於前台
-    {n:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',company:'和潤企業股份有限公司',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],edition:"24'03",use:['營業二本部 / 消費分期營業部'],status:'失效',lcId:'lc1',date:'2025-05-01',summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。'},
-    {n:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',company:'和潤企業股份有限公司',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],edition:"24'01",use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'作廢',lcId:'lc4',date:'2025-04-01',summary:'（作廢）任用管理作業，因組織調整不再適用。'}
+    {n:'ICSOP-SRC-101-1-05',name:'進件作業-消費分期進件作業（舊版）',company:'和潤企業股份有限公司',co:'AS',orgCode:'B1000',dept:'消費分期營業部',section:'商品北一處',chief:'黃雅琪（消費分期營業部 商品北一處 室長）',sec:[],edition:"24'03",use:['營業二本部 / 消費分期營業部'],status:'失效',lcId:'lc1',date:'2025-05-01',summary:'（舊版）消費分期進件作業，已由新版特約通路作業取代。'},
+    {n:'ICSOP-LWC-101-1-03',name:'任用管理作業（作廢）',company:'和潤企業股份有限公司',co:'AS',orgCode:'C2000',dept:'管理部',section:'人力資源室',chief:'周淑芬（管理部 人力資源室 室長）',sec:[],edition:"24'01",use:['經營企劃管理本部 / 管理部 / 人力資源室'],status:'作廢',lcId:'lc4',date:'2025-04-01',summary:'（作廢）任用管理作業，因組織調整不再適用。'}
   ];
 
   const TODAY='2026-07-17';
@@ -391,9 +525,14 @@
      🔴 已移除「使用部門」篩選器；DOM 內不存在該控制項之 aria-label，亦無其「所有…」預留選項文字。 */
   /* 🔵 2026-09-08 使用者裁決（AC-D16）：`循環別` 整項移除 ⇒ 恰 5 項（不分角色）。
      📝 已作廢（⚠ 不得復原）：OLD> `const FILTER={company:'',mkdept:'',section:'',chief:'',status:'有效',cyc:''};` */
-  const FILTER={company:'',mkdept:'',section:'',chief:'',status:'有效'};
+  const FILTER={company:'',division:'',mkdept:'',section:'',chief:'',status:'有效'};   // 🔵 UX16 項 10：新鍵 `division` 插於 company 之後
   const FILTERS=[
     {key:'company',label:'制定公司',type:'combo', opts:()=>uniq(visibleDocs().map(d=>d.company))},
+    /* 🔵 UX16 項 10（AC-UX22）：**插入中段**——制定公司之後、制定部門之前。
+       🔒 選項值＝本部之組織識別（`{公司}__{本部代碼}`）、顯示 label ＝人類可讀之本部名稱；
+       🔒 選項來源＝**全域 distinct**、且**先經 isDocVisibleToViewer 過濾**（visibleDocs() 即此兩條紀律之落點）；
+       🔴 推導不出本部者**不產生選項**（AC-UX24：不加 `無本部` sentinel、不加 `__no_division__`）。 */
+    {key:'division',label:'制定本部',type:'combo', opts:()=>uniq(visibleDocs().map(docDivisionKey)), optLabel:k=>DIVISION_LABELS[k]||k},
     {key:'mkdept', label:'制定部門',type:'combo', opts:()=>uniq(visibleDocs().map(d=>d.dept))},
     {key:'section',label:'制定室別',type:'combo', opts:()=>uniq(visibleDocs().map(d=>d.section))},
     // AC-D7：選項清單＝全體可見文件之 primaryChiefId ∪ secondaryChiefIds 之 distinct
@@ -500,6 +639,8 @@
        `狀態` 維持既有裝飾性 no-op；任一未提供即不施加該限制；多項並用為 AND。 */
     let rows = scoped.filter(d=>{
       if(FILTER.company && d.company!==FILTER.company) return false;
+      // 🔵 UX16 項 10（AC-UX22）：等值比對；比對鍵為**上溯所抵達之本部**⇒ 其下轄全部部與處室之文件皆納入。
+      if(FILTER.division && docDivisionKey(d)!==FILTER.division) return false;
       if(FILTER.mkdept  && d.dept!==FILTER.mkdept) return false;
       if(FILTER.section && d.section!==FILTER.section) return false;
       // 🔴 AC-D7：當責室長之比對範圍＝**主要 ∪ 次要**（命中任一即納入）；與後台 F017 AC-D7 同語意
@@ -508,6 +649,12 @@
       if(kw && !(d.n.toLowerCase().includes(kw) || d.name.toLowerCase().includes(kw))) return false;
       return true;
     });
+    /* 🔵 UX16 項 5 落地端（AC-UX15 ②④）：節點子樹之交集是管線的**第七個獨立步驟**，
+       🔴 **刻意不併入上方之篩選判斷式**——chip 之清除不影響六項篩選、六項篩選之清除才連帶清 chip；
+       把子樹集合塞進同一個條件式，兩種清除語意就會糾纏在一起。
+       🔒 它套在 `scoped`（已套 isDocVisibleToViewer）**之後**＝第二層 AND 交集：兩層可見性判定各自獨立計算、
+          結果集只會更小不會更大（縱深防禦）。 */
+    if(SUBTREE.ids){ rows = rows.filter(d=>SUBTREE.ids.has(d.n)); }
     // sort by number desc
     // 🔴 OQ-E08-07 4a 選項 A：置頂／其餘兩區塊之拆分邏輯完全不變、無子分類特判。
     // 業務視角下 rest 必為空（AC-10 等價之數學推論），空區塊由既有「空則隱藏」通則收合。
@@ -527,18 +674,24 @@
     document.getElementById('hiddenNote').textContent = hiddenCount? `另有 ${hiddenCount} 筆（進度中/失效/作廢）文件已由後端隱藏` : '';
 
     // AC-D3：「清除篩選」之範圍擴及新增之四項；`狀態` 之預設值為既有 no-op，不計入 active
-    const anyFilter = ['company','mkdept','section','chief'].some(k=>FILTER[k]);   // 📝 AC-D16：原含 'cyc'
+    const anyFilter = ['company','division','mkdept','section','chief'].some(k=>FILTER[k]);   // 🔵 UX16 項 10：新增 'division'；📝 AC-D16：原含 'cyc'
     document.getElementById('clearBtnD').classList.toggle('hidden', !(kw||anyFilter));
     document.getElementById('filterDot').classList.toggle('hidden', !anyFilter);
+    // 🔵 UX16：chip 與 header 之後台連結皆隨每次渲染重建（狀態只有一份，不做增量更新）。
+    renderSubtreeChip();
+    renderAdminLink();
     lucide.createIcons();
   }
 
   /* 🔴 F019 AC-D3：清除篩選＝**6 項篩選與關鍵字同時清空**、清單回復未篩選狀態與預設排序。
      （`狀態` 回到既有預設值「有效」——其為裝飾性 no-op，基底條件已鎖「已公告」。） */
+  /* 🔴 UX16 項 5（AC-UX16）：「清除篩選」＝**六項篩選、關鍵字與 chip 三者同時清空**。
+     🔒 與 chip 自己的 ✕ **方向性不對稱**——那顆只清 chip（見 clearSubtreeChip）。 */
   function clearFilters(){
     document.getElementById('kw').value='';
     Object.keys(FILTER).forEach(k=>{FILTER[k]='';});
     FILTER.status='有效';
+    clearSubtree();          // 🔵 只有這個方向會連帶清 chip
     buildFilters(); render();
   }
   function openSheet(){document.getElementById('sheetOverlay').classList.remove('hidden');document.getElementById('sheet').classList.remove('translate-y-full');}
@@ -546,6 +699,116 @@
   function openDoc(n){alert('進入文件詳情 / 檢視器（04 / 05）：'+n+'\n（本輪未產出，僅示意導向）');}
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
 
+  /* ===== 🔵 UX16 項 6（F002 AC-UX7）：「具有後台權限」＝**單一具名述詞** =====
+     🔒 判準恆為 `visibleMenu(role).length > 0`；分流頁（02）、AdminGuard、本頁 header 之連結**三處共用**。
+     🔴 **只能有一份實作**：兩邊各寫一套，日後調整角色權限矩陣就會出現「分流頁放行、後台守衛擋掉」的死鏈。
+     🔒 roles 表逐筆取自後台 shell 之 MENU（26／07 等檔），此處只保留判斷所需之 id 與 roles 兩欄
+        ——本頁是前台，標籤與圖示在此無載體；權威仍是 F025 功能矩陣。 */
+  const ADMIN_MENU=[
+    {id:'account',          roles:{SysAdmin:1,ICSOPAdmin:1}},
+    {id:'lifecycle',        roles:{SysAdmin:1,ICSOPAdmin:1}},
+    {id:'businesscategory', roles:{SysAdmin:1,ICSOPAdmin:1,Supervisor:1}},
+    {id:'document',         roles:{SysAdmin:1,ICSOPAdmin:1,Supervisor:1,DeptContact:1}},
+    {id:'usageform',        roles:{SysAdmin:1,ICSOPAdmin:1}},
+    {id:'appendix',         roles:{SysAdmin:1,ICSOPAdmin:1}},
+    {id:'docindex',         roles:{SysAdmin:1,ICSOPAdmin:1}},
+    {id:'ojtprogress',      roles:{SysAdmin:1,ICSOPAdmin:1,Supervisor:1,DeptContact:1}},
+    {id:'audit',            roles:{SysAdmin:1,ICSOPAdmin:1}},
+    {id:'changehistory',    roles:{SysAdmin:1,ICSOPAdmin:1}},
+    {id:'orgsync',          roles:{SysAdmin:1,ICSOPAdmin:1}},
+    {id:'settings',         roles:{SysAdmin:1}}
+  ];
+  function visibleMenu(role){ return ADMIN_MENU.filter(function(m){ return !!m.roles[role]; }); }
+  function hasAdminAccess(role){ return visibleMenu(role).length > 0; }
+  let DEMO_ROLE='User';
+  /* 🔒 AC-UX20：無後台權限 ⇒ **整顆不進 DOM**（非 disabled、非 CSS 隱藏）。 */
+  function renderAdminLink(){
+    const host=document.getElementById('adminLinkHost');
+    if(!hasAdminAccess(DEMO_ROLE)){ host.innerHTML=''; return; }
+    host.innerHTML=`<a href="07-admin-shell.html" data-to="/admin" aria-label="前往後台" title="前往後台"
+      class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-base text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
+      <i data-lucide="layout-dashboard" class="w-4 h-4 shrink-0"></i>前往後台</a>`;
+    lucide.createIcons();
+  }
+  function setDemoRole(r){ DEMO_ROLE=r; renderAdminLink(); }
+
+  /* ===== 🔵 UX16 項 5 落地端：節點子樹之語料與解析（AC-UX15）=====
+     🔒 語料逐筆取自 30／29 之 bc1（授信（消金））；本頁只需要「哪些文件在這個子樹裡」，
+        故僅保留 nodes／edges／docs 三者，不複製版次與公告日期（那些以本頁 DOCS 為準，避免兩份語料互相矛盾）。
+     🔴 子樹展開由**後端**完成（AC-UX15 ④）；本原型之走訪只是那件事的原型層對應物，
+        其結果在**套完 isDocVisibleToViewer 之後**才與清單母體交集。 */
+  const BC_TREES={
+    bc1:{name:'授信', subcategory:'消金',
+      nodes:[
+        {id:'p1',name:'授信政策與額度管理',docs:['ICSOP-SRC-101-2-00']},
+        {id:'p2',name:'徵信調查作業',      docs:['ICSOP-SRC-101-1-01']},
+        {id:'p3',name:'擔保品管理作業',    docs:['ICSOP-GCA-100-2-00']},
+        {id:'p4',name:'授信審核作業',      docs:['ICSOP-SRC-103-1-01','ICSOP-SRC-101-1-01']},
+        {id:'p5',name:'撥貸與帳務作業',    docs:['ICSOP-PUC-101-1-01']}
+      ],
+      edges:[['p1','p2'],['p1','p3'],['p2','p4'],['p3','p4'],['p4','p5']]}
+  };
+  function normalizeSubcategory(v){ const t=(v==null?'':String(v)).trim(); return t?t:null; }
+  function businessCategoryDisplayName(bc){ if(!bc) return ''; const t=normalizeSubcategory(bc.subcategory); return t?`${bc.name}（${t}）`:bc.name; }
+  function subtreeNodeIds(cat,rootId){
+    const adj={}; cat.nodes.forEach(function(n){ adj[n.id]=[]; });
+    cat.edges.forEach(function(e){ if(adj[e[0]]) adj[e[0]].push(e[1]); });
+    const set=new Set([rootId]), stack=[rootId];
+    while(stack.length){ const u=stack.pop(); (adj[u]||[]).forEach(function(v){ if(!set.has(v)){ set.add(v); stack.push(v); } }); }
+    return set;
+  }
+
+  /* 🔒 AC-UX15 ⑤：兩參數**恆成對**，任一缺席 ⇒ **靜默 no-op**（不篩選、不顯示 chip、不回錯誤）。
+     🔒 `ids` 為 null ＝未套用；空集合與 null **語意不同**（空集合會把結果篩成 0 筆）。 */
+  const SUBTREE={ catId:null, nodeId:null, ids:null, catLabel:null, nodeLabel:null };
+  function applySubtree(catId,nodeId){
+    SUBTREE.catId=null; SUBTREE.nodeId=null; SUBTREE.ids=null; SUBTREE.catLabel=null; SUBTREE.nodeLabel=null;
+    if(!catId || !nodeId) return;                       // 🔒 恆成對；缺一即 no-op
+    const cat=BC_TREES[catId]; if(!cat) return;         // 🔒 查無類別 ⇒ 同樣靜默 no-op
+    const node=cat.nodes.find(function(n){ return n.id===nodeId; }); if(!node) return;
+    const ids=subtreeNodeIds(cat,nodeId);
+    const nums=new Set();
+    cat.nodes.filter(function(n){ return ids.has(n.id); })
+      .forEach(function(n){ n.docs.forEach(function(num){ nums.add(num); }); });
+    SUBTREE.catId=catId; SUBTREE.nodeId=nodeId; SUBTREE.ids=nums;
+    SUBTREE.catLabel=businessCategoryDisplayName(cat); SUBTREE.nodeLabel=node.name;
+  }
+  function clearSubtree(){ SUBTREE.catId=null; SUBTREE.nodeId=null; SUBTREE.ids=null; SUBTREE.catLabel=null; SUBTREE.nodeLabel=null; }
+  /* 🔴 AC-UX16：chip 自己的 ✕ ⇒ **只清 chip**（含自網址移除該兩個參數）；六項篩選與關鍵字**一格未動**。 */
+  function clearSubtreeChip(){
+    clearSubtree();
+    const u=new URL(location.href); u.searchParams.delete('bcSubtreeId'); u.searchParams.delete('bcSubtreeNodeId');
+    history.replaceState(null,'',u.pathname+u.search+u.hash);
+    const sel=document.getElementById('demoSubtree'); if(sel) sel.value='';
+    render();
+  }
+  /* 🔒 AC-UX15 ③：逐字 `業務/功能類別：{類別顯示名} · 節點子樹：{節點名}`（`：` 後無空白、`·` 兩側各一個半形空格）。 */
+  function renderSubtreeChip(){
+    const host=document.getElementById('subtreeChipHost');
+    if(!SUBTREE.ids){ host.innerHTML=''; return; }
+    host.innerHTML=`<span data-public-subtree-chip class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary-200 bg-primary-50 text-primary-700 text-base">
+      <i data-lucide="git-fork" class="w-4 h-4 shrink-0"></i>
+      <span>業務/功能類別：${esc(SUBTREE.catLabel)} · 節點子樹：${esc(SUBTREE.nodeLabel)}</span>
+      <button type="button" onclick="clearSubtreeChip()" aria-label="清除節點子樹篩選" title="清除節點子樹篩選"
+              class="w-4 h-4 rounded-full hover:bg-primary-100 flex items-center justify-center text-primary-500"><i data-lucide="x" class="w-3 h-3"></i></button>
+    </span>`;
+    lucide.createIcons();
+  }
+  /* 原型示範用之情境切換（非正式 UI）：同時改寫網址，讓「參數驅動」這件事可被觀察。 */
+  function setDemoSubtree(v){
+    const u=new URL(location.href);
+    u.searchParams.delete('bcSubtreeId'); u.searchParams.delete('bcSubtreeNodeId');
+    if(v==='half'){ u.searchParams.set('bcSubtreeId','bc1'); }
+    else if(v){ const parts=v.split('|'); u.searchParams.set('bcSubtreeId',parts[0]); u.searchParams.set('bcSubtreeNodeId',parts[1]); }
+    history.replaceState(null,'',u.pathname+u.search+u.hash);
+    initSubtreeFromUrl(); render();
+  }
+  function initSubtreeFromUrl(){
+    const q=new URLSearchParams(location.search);
+    applySubtree(q.get('bcSubtreeId'),q.get('bcSubtreeNodeId'));
+  }
+
+  initSubtreeFromUrl();
   setViewer('other');   // 🔴 F041：預設＝其他子分類＝本 delta 導入前之行為（內部呼叫 render()）
 </script>
 </body>

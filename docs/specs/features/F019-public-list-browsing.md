@@ -1,5 +1,5 @@
 # F019: 前台清單瀏覽（排序/搜尋/篩選）
-Priority: P0-MVP | Status: 部分（unit 綠；**`DOC_USING_DEPT` 讀取端已接線**（public-seams：分離查詢＋JS 分組，置頂/部門篩選端到端可用）；**置頂語意定案改為子樹祖先鏈**（取代 OQ-F019-03 精確比對暫定假設）；前台頁首/置頂標題已補使用者部門路徑；int 已備未跑（test/int/public-documents.itest.ts）。見 implementation-logs/public-seams-impl.md）｜**業務/功能類別瀏覽模式 delta：🟢 APPROVED（2026-09-02 人類閘門通過）（`AC-B12`～`AC-B27`；前台拆為兩種瀏覽模式、預設樹狀圖；權威＝[F043](F043-business-function-category.md)）** | Last Updated: 2026-09-02
+Priority: P0-MVP | Status: 部分（unit 綠；**`DOC_USING_DEPT` 讀取端已接線**（public-seams：分離查詢＋JS 分組，置頂/部門篩選端到端可用）；**置頂語意定案改為子樹祖先鏈**（取代 OQ-F019-03 精確比對暫定假設）；前台頁首/置頂標題已補使用者部門路徑；int 已備未跑（test/int/public-documents.itest.ts）。見 implementation-logs/public-seams-impl.md）｜**業務/功能類別瀏覽模式 delta：🟢 APPROVED（2026-09-02 人類閘門通過）（`AC-B12`～`AC-B27`；前台拆為兩種瀏覽模式、預設樹狀圖；權威＝[F043](F043-business-function-category.md)）** | Last Updated: 2026-09-02 <br>🔵 **2026-09-22 UX16 delta（項 5／6／7／9／10）：見 [§UX16 delta](#ux16-delta)（`AC-UX13～AC-UX26`；🟢 裁決全數 APPROVED，見 [open-questions §UX16](../open-questions.md#ux16-2026-09-22)）。**
 Epic/Story: E06 / US-050, US-051, US-052
 
 > 合併理由：排序（US-050）、關鍵字搜尋（US-051）、篩選（US-052）為同一前台清單畫面之組合行為，合為單一 feature。排序管線見 [F019-public-list-sorting.mmd](../diagrams/F019-public-list-sorting.mmd)。
@@ -224,3 +224,149 @@ Epic/Story: E06 / US-050, US-051, US-052
 - **2026-08-16 使用者裁決**: OQ-D18-05／06／07／08／09（見 [§前台篩選器與顯示欄位改版 delta](#filter-column-delta)）。
 - **2026-09-02 人類裁決（業務/功能類別瀏覽模式，🔵 DRAFT）**: 規則權威＝[F043](F043-business-function-category.md)；本頁之落點＝[§業務/功能類別瀏覽模式 delta](#business-category-browse-delta)（`AC-B12`～`AC-B27`）。前台拆為 `業務/功能類別樹狀圖`（**預設**）／`文件清單`（＝現行行為一字不改）兩種模式；樹狀圖呈現比照 [F036](F036-lifecycle-tree-preview.md)。🔒 **零新增錯誤碼、零判定邏輯變更**（`AC-B24`）。<br>**⚠ 🟢 **ui-ux-designer 已交付（2026-09-02）**：前台樹狀圖之 prototype 為 **`prototypes/30-public-category-tree.html`**（📝 `OLD>` spec-writer 原保留之編號為 `28-public-category-tree.html`，實際交付落在 `30`——**保留編號是預估、不是契約**），並於 `prototypes/03-public-list.html` 頂部新增模式切換器（逐字標籤見 `AC-B12`）。<br>**⚠ 待 system-architect**：① 三個前台端點之可見性過濾下推形狀（🔴 **效能紅線：節點掛載數不得 N+1**）；② 前台樹狀圖渲染元件是否與 `LifecycleTreePreviewPage` 共用及其差異點——見 [F043 §待 system-architect](F043-business-function-category.md#for-architect) 第 4／7 項。
 - **待 system-architect（本 delta 新增）**：① 五項篩選選項之端點形狀（建議單一 `GET /public/documents/filter-options` 一次回傳五組，含可見性過濾）；② 「當責室長」主要∪次要之查詢下推方式（`DOC_SECONDARY_CHIEF` join vs 兩段查詢），須與 [F017](F017-backend-document-list.md) `AC-D7` 共用同一實作；③ 對外 DTO 之欄位裁剪落點（store 層 vs controller 層序列化）。
+
+---
+
+## UX16 delta — 2026-09-22 前台瀏覽五項（項 5／6／7／9／10；`AC-UX#` 批） {#ux16-delta}
+
+> **來源**＝[stories/2026-09-22-ux-delta-16.md](../../stories/2026-09-22-ux-delta-16.md) 第 5／6／7／9／10 項；裁決紀錄＝[open-questions §UX16](../open-questions.md#ux16-2026-09-22)（`OQ-UX16-01`／`06`～`13`／`17`～`21`，🟢 全數 APPROVED）。
+> **本 delta 之 AC 編號採 `AC-UX#`**（編號規則與跨檔範圍見 [F002 §UX16 delta](F002-role-based-routing.md#ux16-delta) 檔頭）。🔴 **明文不沿用 `AC-U#`／`AC-D#`／`AC-Y#`／`AC-B#`**。
+> 🔴 **本輪之約束環為簡化版（只有 `backend jest` ＋ `frontend vitest`）** ⇒ **AC 是唯一防線**；未寫入本節之選擇器與逐字文案，下游要嘛不建約束、要嘛自行臆造。
+
+### 一、前台子樹抽屜之「在文件清單中檢視」導向鈕（項 5）
+
+- **AC-UX13**（🔴 導向鈕之存在、逐字文案與 DOM 契約）：Given 前台 `業務/功能類別樹狀圖` 模式已雙擊某節點開啟子樹抽屜，且該子樹之**相異可見文件數** `N > 0`, When 檢視抽屜底部, Then 存在**恰一顆**導向鈕，其**可見文字＝`aria-label`＝`title` 三者同值**且**逐字**為 **`在文件清單中檢視這 {N} 份文件`**；Given `N = 0`, Then 該鈕**整顆自 DOM 移除**（**非** `disabled`、**非** CSS 隱藏——下游以 `queryByLabelText(...) === null` 斷言時，CSS 隱藏會恆真＝假綠）。<br>
+  🔴 **① 必須另立新常數，明文禁止改動或共用 `formatSubtreeJumpLabel`**（`LifecycleTreePreviewPage.tsx:150-152`）：該函式**被兩個後台頁共用**（`LifecycleTreePreviewPage` 自身 `:1001-1006` 與 `BusinessCategoryTreePreviewPage.tsx:845-850`），改它會連帶改掉後台兩處之文字並使 [F043](F043-business-function-category.md) `AC-56` 與 [F036](F036-lifecycle-tree-preview.md) 之逐字鎖翻紅。🔵 建議新常數名 `formatPublicSubtreeJumpLabel`，落點由 system-architect 定案。<br>
+  　🔒 **兩句話刻意不同、不得互相對齊**：後台為 `在文件管理中檢視這 {N} 份程序書`、前台為 `在文件清單中檢視這 {N} 份文件`——目標頁籤名不同（後台是「文件管理」、前台是「文件清單」），且前台通篇稱「文件」而非「程序書」。<br>
+  　🔴 **可測形狀（防「共用了同一支函式」）**：同一輪測試中**成對斷言**——前台鈕之文字逐字為 `在文件清單中檢視這 2 份文件` **且**後台鈕之文字逐字為 `在文件管理中檢視這 2 份程序書`。⚠ **只斷言前台那一句**時，一個「把 `formatSubtreeJumpLabel` 就地改字」的實作會讓前台綠、後台紅——而後台紅是**別的檔的測試**，建環者不一定同批跑到。<br>
+  🔴 **② `N` 取自「相異」可見文件數**（＝`AC-B20` 抽屜副標題 `子樹共 {N} 份程序書` 之同一個 `N`），**不是**抽屜之畫面列數（`AC-B20` 之「跨組不去重」使兩數必然可以不同）。<br>
+  　📌 **語料鑑別力要求**：測試語料須讓**兩數確實不同**（如列數 3、相異 2）——兩數相等時，「數了列數」與「數了相異數」輸出相同，本條恆真。<br>
+  🔒 **③ DOM 掛鉤逐字為 `data-public-subtree-jump`**（無值屬性）；🔴 **明文禁止**沿用 `data-subtree-jump`（循環側）或 `data-bc-subtree-jump`（後台類別側）——三顆鈕行為不同、目標不同，共用掛鉤會使 `AC-UX14` 之負向鎖與後台之正向鎖互相污染。<br>
+  🔒 **④ 抽屜其餘一切不變**：`AC-B20` 之欄位集合（`程序書編號`／`程序書書名`／`版次`／`公告日期`）、依節點分組、本節點恆為第一組且帶 `（本節點）` 後綴、副標題逐字 `子樹共 {N} 份程序書`、點列導向 `/public/documents/:id`、`AC-B21` 之可見性過濾與空狀態文案（`AC-B27` ②）——**一律逐字不變**；🔒 抽屜**仍不含任何寫入元件**。
+
+- **AC-UX14**（🔴 **推翻既有 🔒 負向設計——連動作廢清單，逐處列明**）：Given `AC-UX13` 實作完成, Then 下列既有條文與載體**一律作廢**（`OQ-UX16-06`＝選項 A，人類 2026-09-22 確認推翻）——
+  - ① 🔴 **本檔 `AC-B20` 之末段**：`OLD>` 「🔒 抽屜**不含任何寫入元件**，且**刻意沒有**後台之『在文件管理中檢視這 N 份程序書』導向鈕（[F043](F043-business-function-category.md) `AC-56` 之前台負向半句：前台清單沒有節點子樹維度，也無後台文件管理可導向）」——⚠ **前半句（不含寫入元件）仍然有效**，作廢的**只有**「刻意沒有導向鈕」那一句（`AC-UX13` ④ 已重述有效部分）。
+  - ② 🔴 **[F043](F043-business-function-category.md) `AC-56` 之前台負向半句**同批作廢（該條之**後台正向半句一字不動**）；落點見 [F043 §UX16 delta](F043-business-function-category.md#ux16-delta) `AC-UX27`。
+  - ③ 🔴 **`frontend/src/pages/PublicCategoryTreePage.tsx:510-511` 之明文 🔒 註解**（「本抽屜**刻意沒有**後台 `22`／`29` 之『在文件管理中檢視這 N 份程序書』導向鈕——前台文件清單沒有節點子樹這個維度，也沒有後台文件管理可導向」）須就地改寫為指向本條之 `OLD>` 已作廢註記。
+  - ④ 🔴 **`prototypes/30-public-category-tree.html:189-190` 之 🔒 負向設計原文**同批改寫，舊文以 `OLD>` 逐字保留（**執行者＝ui-ux-designer，非本輪**）。
+  - ⑤ 🔴 **負向鎖定測試 `frontend/src/pages/PublicCategoryTreePage.test.tsx:185`～`:191` 為預期轉紅、須就地改寫（非回歸）**：該案例現行斷言 `document.querySelector('[data-subtree-jump]') === null` 且 `queryByLabelText('在文件管理中檢視這 2 份程序書') === null`。<br>　🔒 **改寫方向＝反轉為正向，並保留兩句負向半句**（它們現在鎖的是「別把後台那顆鈕搬過來」）：新案例須同時斷言 ⓐ `[data-public-subtree-jump]` **存在恰一個**、其文字逐字為 `在文件清單中檢視這 {N} 份文件`；ⓑ `[data-subtree-jump]` 與 `[data-bc-subtree-jump]` 於前台頁**皆為 `null`**；ⓒ `queryByLabelText('在文件管理中檢視這 {N} 份程序書') === null`。<br>　🔴 **不得整案刪除**：刪掉之後，「前台長出了一顆後台措辭的鈕」這件事就沒有任何東西擋得住。
+  - ⑥ 🔴 **成對之正向半句須同批更新其註解**：`frontend/src/pages/BusinessCategoryTreePreviewPage.subtreeDrawer.test.tsx:200` 之註解（「原 §A.8.5 ⑦ 明文『刻意沒有』之前提已被推翻」）須改為指向本條——**兩邊註解互指是本 repo 讓「成對斷言」不會被單邊拆掉的唯一手段**（任一邊被動手腳，從另一邊看得出來）。
+  - ⑦ 📝 **[ui-ux-design-overview](../../ui-ux-design-overview.md) §A.8.5 ⑦ 之殘餘前台半句**同批以 `OLD>` 標註作廢（該節之後台半句已於 2026-09-08 由 `AC-56` 作廢，本次作廢的是它在前台的最後一個載體）。<br>　⚠ **順帶記下一處既有壞連結**（本輪**不修**，避免動到已核准之條文）：[F043](F043-business-function-category.md) `AC-56` 之 📝 段落寫作 `../ui-ux-design-overview.md`，而該檔實際位於 `docs/ui-ux-design-overview.md` ⇒ 自 `docs/specs/features/` 出發之正確相對路徑為 **`../../ui-ux-design-overview.md`**。
+
+- **AC-UX15**（🔴 **前台清單新增「節點子樹」篩選能力——這是一整套能力，不是一顆按鈕**；`OQ-UX16-07` 確認）：Given 使用者按下 `AC-UX13` 之鈕, When 系統回應, Then ——
+  - ① **瀏覽模式切換為 `文件清單`**（`AC-B12` 之切換器選中態隨之改變、`AC-B14` 之 `mode` 語意為 `list`）；
+  - ② **清單之結果集恰為該抽屜之相異可見文件集合**——🔴 **可測形狀＝集合相等**：以 `documentId` 之集合比對（`new Set(清單各列之 id)` 與 `new Set(抽屜各列之 id)` **相等**），**不得**只比對筆數（筆數相同而內容不同時完全無感），亦**不得**只斷言「筆數 > 0」。
+  - ③ **畫面上出現一條可清除之 chip**，其文案**逐字**為 **`業務/功能類別：{類別顯示名} · 節點子樹：{節點名}`**（`：` 後無空白、`·` 兩側各一個半形空格；句型逐字比照 [F043](F043-business-function-category.md) `AC-56` ④ 之後台側）；兩個代入值**皆取自後端回應**（前端不自行組字、不另行查名）。<br>　🔒 chip 之 DOM 掛鉤逐字為 **`data-public-subtree-chip`**（🔴 不得沿用後台之掛鉤名）。
+  - ④ 🔴 **子樹展開、去重與可見性過濾全部由後端完成**——前端**不得**自行走訪子樹（逐字比照 [F017](F017-backend-document-list.md) `AC-T43` 之既有禁令）；🔴 **可見性過濾於查詢層施加**（`AC-B22` 之既有紀律一字不改）⇒ 本能力**不得**成為繞過 [F041](F041-user-subtype-business-scope.md) 限縮之側門。<br>　📌 **可測形狀**：以一位**業務子分類**使用者為 viewer、語料含一份「掛在該子樹節點上但使用部門不相符」之已公告文件 ⇒ 斷言該文件**既不在抽屜、也不在導過去之清單**。🔴 語料若不含這樣一份文件，本條恆真（＝`AC-B23` 之同一形狀）。
+  - ⑤ 📌 **URL 參數之鍵名、端點形狀與查詢下推方式由 system-architect 定案**（本節只鎖使用者可觀測之行為）；🔴 惟**兩個參數恆成對**、任一缺席 ⇒ **靜默 no-op**（不篩選、不顯示 chip、**不回錯誤**；逐字比照 `AC-56` ③ 與本檔 `AC-D16` 之死參數處置）。
+
+- **AC-UX16**（🔴 chip 之清除方向性**不對稱**；比照 [F017](F017-backend-document-list.md) `AC-D8` 與 `AC-T46` 之既有紀律）：Given 前台清單同時套用了 `AC-UX15` 之 chip 與任意數量之既有篩選, When 點擊 chip 自己的 **✕**, Then **只清 chip**（含自網址移除該兩個參數），既有六項篩選（`AC-UX22`）與關鍵字**一格未動**；When 改為點擊「清除篩選」, Then **六項篩選、關鍵字與 chip 三者同時清空**。<br>
+  🔴 **方向性不對稱是刻意的**：按鈕字面是「清除篩選」，清完卻仍有一條 chip 在縮小結果集，**畫面與文字自相矛盾**；反向則不然（chip 的 ✕ 只講它自己）。<br>
+  📌 **可測形狀（成對）**：兩個方向各一條案例，各自斷言**另一邊沒被動到**（只驗「點了 ✕ 之後 chip 不見了」對「順手把六項篩選也清光」完全無感）。<br>
+  🔒 **chip ✕ 鈕之 DOM 契約（2026-09-22 第三輪定案）**：`<button type="button">`，其 **`aria-label` 與 `title` 皆逐字為 `清除節點子樹篩選`**——🔒 **與後台同類鈕逐字相同**（後台既有鎖＝`frontend/src/pages/DocumentListPage.tsx:1087-1088`，測試 `TS-T44-002`＝`frontend/src/pages/DocumentListPage.subtreeChip.test.tsx:151,154`）。<br>
+  　🔒 **任一側變更必須同批改另一側**：本字串與後台 `TS-T44-002` **共用同一逐字值**，🔴 任一方改字而另一方沒跟，畫面上同一個動作就會有兩種說法。<br>
+  　🔒 **但明文不得共用常數**：前後台跨 package、無法共用同一份原始碼；比照本 repo 既有之「**兩份實作須同步維護**」慣例處理（同 `org-path.ts:19-22` 之處置）。<br>
+  　📌 **可測形狀**：前台 `getByLabelText('清除節點子樹篩選')` 非 `null` 且其 `title` 同值；🔒 後台 `TS-T44-002` **維持綠燈、期望值未經修改**。<br>
+  　📝 **已作廢（⚠ 不得復原、不得用於斷言）**：`OLD>` 「其 **`aria-label` 與 `title` 皆逐字為 `清除節點子樹`**。🔴 **與後台之逐字刻意不同、明文禁止統一**…🔴 **可測形狀（成對，缺一即無鑑別力）**：同一輪中斷言 ⓐ 前台 `getByLabelText('清除節點子樹')` 非 `null` ∧ ⓑ 前台 `queryByLabelText('清除節點子樹篩選') === null`…」<br>
+  　🔴 **推翻理由（lead 裁決，2026-09-22 第三輪；逐字落檔，不得刪節）**：<br>
+  　　**① 它是後台字串的嚴格前綴**——這正是本輪剛花力氣修掉的 `AC-UX18`／`D-4` **同一種形狀**：🔴 **前綴關係讓斷言的鑑別力取決於比對器是精確還是子字串，而那是測試作者的自由選擇、不是規格能鎖住的東西。規格不該把自己的正確性押在下游選了哪一種 matcher 上。**<br>
+  　　**② 兩者是同一個概念、同一個動作**（清掉那個子樹 chip）。⚠ **與導向鈕之情況刻意不同**：導向鈕之所以前後台不同字（`在文件清單中檢視這 {N} 份文件` vs `在文件管理中檢視這 {N} 份程序書`，`AC-UX13` ①），是因為**目標頁與名詞在前後台本來就不同**（文件清單／文件管理、文件／程序書）——**那個差異有實質內容**；而「清除」這個動作在兩邊沒有任何差異。<br>
+  　　**③ 沒有人要求它不同**：`清除節點子樹` 係 ui-ux-designer 於 prototype 這一棒自造，**非使用者要求、非任何 AC 指名、亦非 lead 之裁決**（lead 將其列入「9 項待補 AC」是**請 spec-writer 覆核**，不是核准）。🔴 **憑空製造一個只差兩個字的孿生字串，本身就是日後「這兩個為什麼不一樣」的成本。**<br>
+  　⚠ **`prototypes/03-public-list.html:784` 之兩個屬性值須同批改為 `清除節點子樹篩選`**（執行者＝ui-ux-designer，非本輪）。
+
+### 二、前台樹狀圖之水平捲軸（項 7）
+
+- **AC-UX17**（🔴 **class 契約；本條明文不證明視覺結果**；`OQ-UX16-12`＝選項 A、`OQ-UX16-13`＝選項 B）：Given 前台 `業務/功能類別樹狀圖` 模式渲染完成, When 檢視畫布容器（`PublicCategoryTreePage.tsx` 之 `<main data-testid="public-tree-stage">`）, Then 其 `className` **同時含** `overflow-auto`、**`flex-1`** 與 **`min-h-0`** 三者，且其**外層祖先鏈上存在一個以視窗可視高度為界之 flex 直向容器**（🔵 落地形狀由 ui-ux-designer 與 system-architect 定案）。<br>
+  🔴 **`min-h-0` 是本條的全部重點，不是湊數（理由逐字，不得省略）**：flex 子項之 `min-height` 預設為 `auto`，**不肯縮到內容高度以下** ⇒ 只加 `flex-1` 而不加 `min-h-0` 時，容器仍會被內容撐高到超出視窗，原生水平捲軸仍然貼在內容底部、仍要捲到最下方才看得到——**原封不動重現使用者回報的那個 bug，而所有測試全綠**。<br>
+  🔴 **本條明文不證明視覺結果**：jsdom **不計算版面**（`offsetHeight`／`scrollHeight` 恆為 0），任何「捲軸固定在畫面上」「內容超出螢幕高度」之斷言在本輪環境中都是**永久假綠**，且日後會被引用為「這個行為已被鎖住」的證據。<br>
+  　🔴 **對 test-generator 之明文要求**：本條之測試檔**檔頭須逐字寫明**——`本檔不證明視覺結果：jsdom 不計算版面，此處鎖定的是 class 契約而非捲軸位置；「水平捲軸是否固定在畫面上」必須由人以真實瀏覽器覆核。`<br>
+  　🔴 **明文禁止**撰寫任何讀取 `offsetHeight`／`scrollHeight`／`getBoundingClientRect()` 並據以斷言的案例。<br>
+  🔒 **人工覆核項（不進自動化閘門）**：樹狀圖內容高於視窗時，水平捲軸不需捲到最底即可看見並操作。<br>
+  🔒 **零漣漪**：`AC-B16` 之平移縮放、`AC-B25` 之浮水印疊加層幾何要求（旋轉後矩形須涵蓋畫板四角）、`AC-B20` 抽屜之開闔——**一律不變**。
+
+### 三、詳情頁「所屬節點」→「業務/功能類別」（項 9）
+
+- **AC-UX18**（🔴 **概念置換，非改名**；`OQ-UX16-17`＝選項 A）：Given 前台文件詳情頁渲染完成, When 檢視欄位清單, Then ——
+  - ① **不存在**標籤為 **`所屬節點`** 之欄位列（`queryByText('所屬節點') === null`；🔴 載體須自 DOM 移除，**非** CSS 隱藏——比照 `AC-D16` 之既有處置）；
+  - ② **新增**一列標籤**逐字**為 **`業務/功能類別`**（**半形斜線 `/`，前後無空白**），其位置**恰為原「所屬節點」列之位置**（介於 `版次` 與 `內容摘要` 之間），其餘各列之集合、順序與逐字標籤**一律不變**；欄位列總數維持 **16 列**（`AC-D16` 之既有值，本 delta 為**一換一**、不增不減）。
+  - 🔴 **內容為「該文件掛載之業務/功能類別」，不是循環節點名稱**：來源＝`BUSINESS_CATEGORY_DOC`（[F043](F043-business-function-category.md) `INV-B4`），**依 `businessCategoryId` 去重**後以 `businessCategoryDisplayName` 顯示（去重規則逐字同 [F017](F017-backend-document-list.md) `AC-B3`）。<br>
+  - 🔒 **DOM 契約（2026-09-22 第三輪補訂，權威＝`prototypes/04-public-document-detail.html`）**：該欄之值容器帶 **`data-business-categories`** 與 **`data-business-category-count="{N}"`**（整數之字串，`N = 0` 亦不得省略）；其內每一個類別各為一個帶 **`data-business-category-item`** 之節點。<br>
+  　🔴 **`data-business-category-count` 是 `N` 在 DOM 層唯一的機器可讀載體**——`N = 0` 時可見文字為 `—`（`AC-UX19` ①），**那句話裡沒有數字**（與 [F043](F043-business-function-category.md) `AC-32` 之 `尚未掛載程序書` 同型）⇒ 屬性與可見文字**必須成對斷言**。
+  - 　📌 **可測形狀（🔴 2026-09-22 第三輪就地改寫；原條文之負向半句經查證為恆真＝假綠）**：語料須含一份**同時有 `nodeId`（循環節點）與 ≥1 個業務/功能類別掛載，且兩者名稱不同**之文件 ⇒ 斷言 ——<br>
+  　　ⓐ **`queryByText('所屬節點') === null`**（①，標籤已消失）；<br>
+  　　ⓑ 🔴 **有鑑別力之正向斷言**：`[data-business-categories]` 容器內全部 `[data-business-category-item]` 之文字集合，**恰等於**（集合相等，非「包含」）該文件之相異類別顯示名集合 ⇒ 實作若把**循環節點名**塞進該欄，集合立刻不相等而翻紅。<br>
+  　　ⓒ `data-business-category-count` 之值 **等於** ⓑ 之集合大小。<br>
+  　🔴 **明文禁止「對整頁做 `queryByText(循環節點名) === null` 之裸字面掃描」（理由逐字，不得省略）**：本頁之示範語料中，節點名 **`進件作業`** 是書名 **`車輛分期進件作業`** 的**子字串**（lead 2026-09-22 實查：`grep -c 進件作業 prototypes/04-*.html` ＝ **11**）⇒ 該掃描**恆命中、恆為真**，是一條**已經存在的假綠**。這正是本輪明文列過之「全文掃描類斷言三個失敗形狀」的**第二形（恆真）**。<br>
+  　🔴 **並且：不得只把掃描字串換成更長的字面而不證明它有鑑別力**。改用更長字串只是把碰撞往後推一次；🔒 **本條之處置是換斷言的形狀（ⓑ 之限定容器＋集合相等），不是換字串**。<br>
+  　📝 **已作廢（⚠ 不得用於斷言）**：`OLD>` 「⇒ 斷言新列之內容為**類別名**、且該文件之**循環節點名於整頁 DOM 中零命中**。」——後半句即上述之恆真掃描。🔴 語料若讓類別名與節點名同名（或該文件沒有 `nodeId`），ⓑ 亦會失去鑑別力，**該語料要求仍然有效**。
+  - 📌 **對外 DTO**：前台詳情之回應**新增**業務/功能類別欄位（🔵 建議 `businessCategories: { id: string; displayName: string }[]`，形狀由 system-architect 定案）；`nodeName` 是否自 DTO 移除**由其他消費者決定**（比照 `AC-D16` 之「後端仍回得出來、前台不呈現」既有處置），🔴 惟**不得呈現**。⚠ **正因後端仍回得出 `nodeName`，① 之反向斷言才有鑑別力**（把欄位改回來就會立刻翻紅）。
+  - 🔒 **可見性與停用類別**：該欄之類別集合須經與清單相同之可見性口徑——🔴 **不得**因此欄而洩漏該 viewer 看不到的任何資訊；**停用（`status='inactive'`）之類別其既有掛載仍顯示**（逐字比照 [F017](F017-backend-document-list.md) `AC-B7` ⚠ 段之既有裁決：顯示歷史事實 vs 不引導新篩選是兩件事）。
+
+- **AC-UX19**（🔴 **多筆逐列全部列出、不摺疊；0 筆為 `—`**；`OQ-UX16-18`，人類 2026-09-22 直接裁決）：Given `AC-UX18` ② 之欄位, When 該文件之相異類別數為 `N`, Then ——
+  - ① `N = 0` → 顯示**逐字 `—`**（U+2014 em dash，與既有「所屬節點」無值時之 `DASH` 一致）；🔴 **不得**顯示 `0`、空白、`null` 或任何空狀態句子；
+  - ② `N = 1` → 顯示該類別之 `businessCategoryDisplayName`；
+  - ③ `N ≥ 2` → **逐列全部列出**（每個類別各佔一列或各為一顆 pill，**不得摺疊**）——🔴 **明文禁止**採用 [F017](F017-backend-document-list.md) `AC-B3` ③ 之 `+{N−1}` 摺疊徽章、亦**禁止**以逗號或頓號併為一串。<br>　📌 **理由（人類指定）**：詳情頁不是清單，沒有「一行高」之版面約束；摺疊會讓使用者必須多按一次才知道這份文件歸在哪些類別。
+  - 🔴 **可測形狀（成對）**：`N = 3` 之語料下，斷言 ⓐ **三個類別名各自可見**（🔴 **以 `[data-business-category-item]` 之節點數 `=== 3` ＋其文字集合相等**斷言，**不得**用三句裸 `getByText`——裸比對會被書名或其他欄位之子字串碰撞，形狀同 `AC-UX18` 之 D-4）**且** ⓑ 頁面上 **`+2` 零命中**（`queryByText('+2') === null`）**且** ⓒ `data-business-category-count === "3"`。⚠ **只寫 ⓐ** 時，一個「印出第一顆＋`+2`」的實作在第一顆那格照樣綠。
+  - 📌 **順序**：依 `businessCategoryDisplayName` 之 **UTF-16 碼位序遞增**（＝`Array.prototype.sort()` 不帶 comparator 之預設行為）；🔴 **明文禁止 `localeCompare()`**——理由逐字同 [F017](F017-backend-document-list.md) `AC-B9` ②（中文定序隨環境漂移，本 repo 已踩過）。
+
+### 四、前台之「前往後台」連結鈕（項 6）
+
+- **AC-UX20**（🔴 前台 header 之後台入口）：Given 使用者之角色使 [F002](F002-role-based-routing.md#ux16-delta) `AC-UX7` 之述詞為 `true`（`SysAdmin`／`ICSOPAdmin`／`Supervisor`／`DeptContact`）, When 進入前台瀏覽頁（**樹狀圖／文件清單兩模式共用之同一個 header**，`PublicListPage.tsx:424-453`）, Then 該 header 內存在**恰一顆**連往後台之連結，其 `role="link"`、`aria-label` **逐字**為 **`前往後台`**，點擊後導向 **`/admin`**（`OQ-UX16-11`＝選項 A，與 [F002](F002-role-based-routing.md) 分流頁後台卡片之連結目標一致）；<br>
+  Given 角色為 `User`（一般使用者，含 [F041](F041-user-subtype-business-scope.md) 業務子分類）, Then 該連結**整顆不進 DOM**（`queryByLabelText('前往後台') === null`；🔴 **非** `disabled`、**非** CSS 隱藏）。<br>
+  🔴 **判準必須是 [F002](F002-role-based-routing.md#ux16-delta) `AC-UX7` 之那一支述詞**，🔴 **明文禁止**在本頁另寫 `roleCode !== 'User'` 或任何角色清單——理由逐字見 `AC-UX7`（分流頁放行、前台連結卻擋掉之死鏈，`RoleLanding.tsx:17-18` 已明文警示）。<br>
+  📌 **可測形狀**：以五種角色逐一渲染前台頁，斷言連結存在與否之布林陣列為 `[true, true, true, true, false]`（🔴 **五種都要驗**——只驗 `ICSOPAdmin` 與 `User` 兩端時，中間三種角色任一被漏掉都不會紅）。<br>
+  🔒 **header 其餘一切不變**：標題逐字 `ICSOP 文件瀏覽`（`OQ-UX16-01`：本輪**不動**它）、`data-testid="topbar-user"` 之使用者資訊與部門路徑、`aria-label="登出"` 之登出鈕——**一格未動**。
+
+- **AC-UX21**（🔒 **詳情頁與檢視器頁刻意不加**；`OQ-UX16-10`）：Given 前台文件詳情頁（`PublicDocumentDetailPage`）或前台檢視器頁（`PublicViewerPage`）渲染完成, When 檢視整頁 DOM, Then **不存在** `aria-label="前往後台"` 之元素（`queryByLabelText('前往後台') === null`），**縱使 viewer 為 `ICSOPAdmin` 亦然**。<br>
+  🔴 **本條必須明文寫成 AC，否則下一個人會以為是漏做而補上**。<br>
+  📌 **理由**：使用者原文之範圍逐字為「ICSOP 文件瀏覽」＝該清單／樹狀圖頁；詳情頁與檢視器頁是**閱讀情境**（且檢視器頁另有浮水印與調閱稽核之語境），在其上放一顆通往後台的鈕不在任何人下過的裁決裡。<br>
+  📌 **可測形狀**：以 `ICSOPAdmin` 為 viewer 渲染該兩頁各一條負向案例；🔴 並須在**同一輪**中以同一角色渲染清單頁斷言該鈕**存在**——否則「三頁都沒有」也會讓兩條負向案例全綠。
+
+### 五、前台清單新增「制定本部」篩選（項 10）
+
+- **AC-UX22**（🔴 篩選器組成與順序：五 → **六項**，插入中段）：Given 前台清單頁桌面版渲染完成, When 檢視篩選列（`data-testid="filter-bar"`）, Then 其可見篩選控制項**恰為 6 項**，順序由左至右**逐字**為 **`制定公司`／`制定本部`／`制定部門`／`制定室別`／`當責室長`／`狀態`**（各以該逐字字串為其 `aria-label`）；**行動裝置之底部 sheet 呈現同一 6 項、同一順序**（🔴 兩處皆須斷言——兩處共用同一份定義，只驗其一時「其中一處漏改」完全無感，`AC-D16` 已立此紀律）。<br>
+  🔒 **`制定本部` 之控制項型態＝可搜尋下拉（combobox）**，比照其左右兩側之 `制定公司` 與 `制定部門`（`AC-D2`）；`狀態` **仍維持原生 `select`、不改為 combobox**。<br>
+  🔴 **比對語意＝等值比對**，比對鍵為**本部之組織識別**（🔵 建議 `draftingDivisionId`，形狀由 system-architect 定案，**非顯示名稱字串**）；🔴 語意為「該文件之**制定組織沿 `parentCode` 上溯所抵達之本部** ＝ 所選值」⇒ **該本部下轄之全部部與處室之文件皆納入**；未提供者不施加限制；與其餘五項並用為 **AND**（`AC-D6` 之既有規則擴及第六項）。<br>
+  　📌 **可測形狀（防「只比對了部層」）**：語料須含**同一本部下之兩個不同部**各一份文件 ⇒ 選定該本部時**兩份皆回傳**。🔴 語料若該本部下只有一個部，「上溯到本部」與「直接比對部」輸出相同，本條恆真。<br>
+  🔒 **選項之 `value` 形狀（2026-09-22 第三輪補訂，權威＝`prototypes/03-public-list.html:463`／`13-document-list.html`）**：**逐字為 `` `${公司代碼}__{本部代碼}` ``**（例：`AS__A0000`；分隔符為**兩個半形底線**）。<br>
+  　🔴 **為何必須是複合鍵、不能只用本部代碼**：`ORG_UNIT` 之唯一鍵為 **`(companyCode, orgCode)`**，5 碼組織代碼**各公司獨立編碼** ⇒ 單用本部代碼會把不同公司的同碼本部併成同一個選項（`ojt-progress.service.ts:95-99` 已明文記過同一件事）。<br>
+  　🔒 **分隔符 `__` 逐字沿用全站既有慣例、不另立第二種**：`orgGroupKeyOf()`（`frontend/src/pages/ojt-progress-view.ts:162`）與 [F044](F044-admin-dashboard-analytics.md) 之 `data-org-key` 皆用它。<br>
+  　🔒 **URL 相容性（本項之值會進網址，`AC-UX15` ⑤／本頁為 URL 參數驅動）**：`_` 為 RFC 3986 之 unreserved 字元、公司代碼 2 碼、組織代碼 5 碼英數 ⇒ **不需 encode、不可能與分隔符混淆**。🔴 **參數鍵名**由 system-architect 定案（⚠ 本頁既有鍵名為短名 `dept`／`section`／`chief`／`cycle`，宜與之同構）。<br>
+  　🔒 **不會與 sentinel 碰撞**：`AC-UX24` 明訂前台**不產生** `__no_division__` 選項；且真實鍵恆為 `2 碼 + __ + 5 碼`，結構上不可能撞上雙底線包夾之 sentinel（理由逐字同 [F044](F044-admin-dashboard-analytics.md) 之 `data-org-key` 值域表）。<br>
+  🔒 **選項來源沿用 `AC-D5` 之既有兩條紀律，一字不改**：① **全域 distinct**（自全體文件衍生，非當前結果集衍生）；② **必須先經 `isDocVisibleToViewer` 過濾**（下拉選項本身不得洩漏他部門文件之存在）。其 `label` 為**人類可讀之本部名稱**、`value` 為 id 或 code（`AC-D5` 之 `label` 解析義務擴及第六組）。
+
+- **AC-UX23**（🔴 `PublicFilterOptions` 五 → **六組**；契約測試就地改寫）：Given 前台篩選選項端點回應, When 逐鍵檢視, Then 其**恰含六組選項鍵**——`draftingCompanies`／**`draftingDivisions`**／`draftingDepts`／`draftingSections`／`chiefs`／`lifecycles`。<br>
+  🔴 **`backend/src/public/public-list.ts:187-193` 之 `PublicFilterOptions` type alias 與其註解（「五組前台篩選選項…契約測試以逐鍵列舉驗證『恰含五組』」）為預期轉紅、須就地改寫（非回歸）**；🔒 採 `type alias` 而非 `interface` 之既有理由**不變**。<br>
+  🔴 **契約測試 `TS-F019-D5-206`（`backend/src/public/public-filter-options.controller.spec.ts:88`）就地改寫為六組**；🔒 **舊五鍵清單以 `OLD>` 註記逐字保留**於該案例上方（`OQ-UX16-20`）。<br>
+  　🔴 **改寫方向＝回歸鎖，不是把 5 改成 6**：新斷言須**同時**滿足 ⓐ 既有五鍵**逐一仍在**、ⓑ 新鍵 `draftingDivisions` **存在**、ⓒ 鍵總數恰 6。⚠ 只寫 ⓒ 時，「把 `lifecycles` 換成 `draftingDivisions`」照樣綠。<br>
+  🔒 **`TS-F019-D5-205`（handler arity 為 1、結構上不可能以結果集衍生選項）一格未動**。<br>
+  🔒 **`lifecycles` 鍵維持存在**：`AC-D16` 已明文「後端契約不變——回應仍帶 `lifecycles`」，**本 delta 不得順手移除它**（正因後端仍回得出來，`AC-D16` 之前台反向斷言才有鑑別力）。
+
+- **AC-UX24**（🔴 **前台不加「無本部」sentinel——此決定必須寫成明文 AC，否則下一個人會以為是漏做而補上**；`OQ-UX16-21`）：Given 語料中存在一份「其制定組織上溯不到任何本部」之已公告可見文件, When 組裝 `draftingDivisions` 選項, Then 其中**不含**任何 sentinel 選項——`queryByText('無本部') === null`，且選項陣列中**不存在** `value === '__no_division__'` 之項（[F044](F044-admin-dashboard-analytics.md) 之 `SEG_NO_DIVISION_KEY` 與 `SEG_NO_DIVISION_LABEL` 兩個既有常數**不在前台使用**）；Then 該文件在**未選定任何本部**時**照常出現於清單**。<br>
+  🔴 **理由（不得省略）**：五組選項之既有規則是「**對可見語料取 distinct**」（`AC-D5`）——推導不出本部的文件**自然沒有對應的 distinct 值**，因此它在下拉裡沒有選項，這與「未指定制定公司」之既有處置**同構**，不是遺漏。加一個 sentinel 選項等於憑空發明一個不在 distinct 結果裡的值，並讓前台使用者看見一個內部分類概念。<br>
+  🔒 **與 [F044](F044-admin-dashboard-analytics.md) 之刻意不同**：儀表板之 `無本部` 段是**分組維度**（每份文件都必須落進某一段，否則合計對不上）；前台是**篩選維度**（沒有對應選項就是篩不到）。**兩者不得互相對齊。**
+
+- **AC-UX25**（🔴 **既有絕對值鎖之就地改寫清單；一律改為回歸鎖，不得只把數字加一**）：Given `AC-UX22` 與 `AC-UX23` 實作完成, Then 下列**每一處**皆為預期轉紅、須就地改寫（非回歸）——
+
+  | # | 位置 | 現行內容 | 改寫方向 |
+  |---|---|---|---|
+  | ① | 本檔 `AC-D16` | 「可見篩選控制項**恰為 5 項**且順序由左至右為 `制定公司`／`制定部門`／`制定室別`／`當責室長`／`狀態`」 | 就地改為 `AC-UX22` 之**六項順序**；🔒 其「`循環別` 不進 DOM、`cycle` 參數靜默忽略」之**兩條負向鎖一字不動** |
+  | ② | 本檔 `AC-D1`／`AC-D2`／`AC-D3` | 「恰為 6 項…／`循環別`」（已由 `AC-D16` 降為 5 項）、「五項為可搜尋下拉」、「6 項篩選與關鍵字同時清空」 | 逐處改為 **6 項（新組成）**；`AC-D3` 之清除範圍另由 `AC-UX16` 擴及 chip |
+  | ③ | 本檔 `AC-Y3` | 「**六項**篩選之字級必須同值」（已由 `AC-D16` 降為五項） | 改為 **6 項**；🔒 其「**斷言形狀必須是『集合大小為 1』**」之既有要求**一字不動** |
+  | ④ | 本檔 `AC-N63` ③ | 「前台清單之篩選組成仍為 **6 項**，不因使用表單新增制定部門而增加任何篩選器」 | 就地改為 **6 項（新組成）**；🔒 其真正在守的事（**使用表單之制定部門不得接進前台判定**）一字不動 |
+  | ⑤ | 本檔 `AC-B24` ① | 「六項篩選（`制定公司`／`制定部門`／`制定室別`／`當責室長`／`狀態`／`循環別`）之組成與比對語意…一律不變」 | 就地改為 `AC-UX22` 之六項；🔒 其餘六款（置頂排序、編號降冪、八項標籤、分頁、DTO 欄位集合、四項判定邏輯）**一字不動** |
+  | ⑥ | `frontend/src/pages/PublicListPage.test.tsx:189-190` 與 `:203` | 逐字五標籤陣列 ＋ `expect(controls).toHaveLength(5)` | 改為**六標籤陣列 ＋ 6**；🔒 兩條 `AC-Y3` 案例之「集合大小為 1」形狀不得退化 |
+  | ⑦ | `frontend/src/pages/PublicListPage.filterDelta.test.tsx:44`（`FILTER_LABELS`）與 `:195-196` | 五元常數陣列 ＋ `toHaveLength(5)` | 改為**六元**；🔒 `:202` 與 `:236` 之逐字可查與順序案例隨之涵蓋第六項 |
+  | ⑧ | `backend/src/public/public-filter-options.controller.spec.ts:88`（`TS-F019-D5-206`） | 「回應恰含五組選項鍵」 | 見 `AC-UX23`（回歸鎖形狀 ⓐⓑⓒ；舊五鍵以 `OLD>` 保留） |
+
+  - 🔴 **通則（本 repo 血訓，2026-09-02 一天重演三次）**：**新斷言要 N+1、既有他處斷言鎖死 N ⇒ 同一份環不可能全綠。** 因此每一處都必須改為**回歸鎖**——「列舉既有項目**逐一仍在** ＋ 新項目**存在** ＋ 總數恰 N+1」三句並存，🔴 **不得只把數字從 5 改成 6**（只改數字時，「把 `當責室長` 換成 `制定本部`」照樣綠）。
+  - 🔴 **grep 時須以「值的字面」為鍵，不得以函式或常數名為鍵**：上表 ⑥⑦ 兩處之載體不同（一處是就地字面、一處是 `FILTER_LABELS` 常數），以常數名搜尋必漏其一。
+
+- **AC-UX26**（🔒 **F019 之零漣漪回歸鎖定**）：Given 本 delta 全數實作完成, When 逐項檢視, Then 下列**一律與本 delta 導入前逐字相同**——
+  - ① **四項判定邏輯**：`isDocVisibleToViewer`（[F041](F041-user-subtype-business-scope.md)）、`isPinned` 與 `isWithinSubtree`、已公告基底條件（`status = 有效 AND 公告日期 ≤ 今日`）、空狀態文案 **`查無符合結果`**（`AC-B24` ②、`AC-D13`）；
+  - ② **置頂與其餘兩區塊之標題**（`您部門相關文件`／`其他文件`）與 `AC-D10` 之三條逐字鎖；
+  - ③ **清單卡之八項標籤欄位、`<dl>` 五列順序、書名副標題**（`AC-D8`／`AC-Y5`／`AC-Y6`）；
+  - ④ **瀏覽模式切換器之組成、順序、逐字標籤與預設值**（`AC-B12`～`AC-B15`，預設仍為 `文件清單`）；
+  - ⑤ **樹狀圖之節點徽章逐字與 `data-visible-doc-count` 屬性名**（`AC-B16` ③／`AC-B21`）——🔴 **明文禁止**因 [F043 §UX16 delta](F043-business-function-category.md#ux16-delta) `AC-UX33` 之後台公司別統計而順手把它改名或共用（`AC-UX36` 之前台負向半句）；
+  - ⑥ **稽核**：樹狀圖瀏覽、切換類別、開抽屜、**按下 `AC-UX13` 之導向鈕**——**皆不產生任何 `AUDIT_LOG` 列**（`AC-B26` 之既有規則擴及本 delta 之新互動；瀏覽清單本即不記稽核）；
+  - ⑦ **零新增錯誤碼**（`AC-B22` 與 `AC-B24` 之既有紀律）。

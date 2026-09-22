@@ -142,6 +142,65 @@
        ⇒ `querySelectorAll('[data-session-edit]').length === 0` 對**全部五角色**成立。
      · ✅ **舊資料「待歸位」已開放**（`AC-26`／`OQ-E11-01`＝(C)）：見 TAB2 之待歸位區。
      🔒 後台字級逐字沿用既有後台頁（F021 AC-N61 ①：僅前台三頁放大，後台一律不改）。 -->
+<!-- 🔵 2026-09-22 UX16 delta（項 14／15／16）——規格權威＝F042 §UX16 delta（AC-UX45～AC-UX55）；
+     人類裁決 C＝新增獨立的「制定本部」下拉篩選（與項 10／11 一致）。
+
+     ═══ 項 14：TAB2 單位名稱由三段改**四段**（AC-UX45～AC-UX48）═══
+     🔒 `orgName` 逐字為 `{公司簡稱} / {本部全名} / {部全名} / {處室簡稱}`，分隔符沿用 ` / `（前後各一個半形空格）。
+     🔒 **既有三段之取值規則一字不改**——新增的只有第二段（本部）。
+     🔴 **空段自動收合、不產生連續分隔符**：上溯不到本部之單位**仍為三段**，
+        🔴 **不得**插入空字串或任何 sentinel 文字（如 `無本部`）——那會讓一個內部分類概念出現在使用者看得到的單位名稱裡。
+     🔴 **本項之假綠形狀（AC-UX46）**：語料裡若沒有「有本部」與「沒有本部」兩組，測試會綠而功能沒動。
+        ⇒ 本檔之 DIVISIONS 表**刻意缺少 `A0000`**：`ABA00`（資訊部 / 應用發展室）因此**仍是三段**，
+          其餘單位為四段。兩組之預期字串不同，是本項唯一的鑑別點。補上 `A0000`，AC-UX46 即恆真。
+     ⚠ **本檔與已上線實作之既有落差（非本批造成）**：實作端 `OjtOrgDirectory.nameOf()` 早已輸出
+        **三段**（`公司簡稱 / 部 / 處室`），而本檔原本只有**兩段**（`部 / 處室`、無公司）。
+        本 delta 直接落在四段，連帶補齊了那個缺席的公司段。已回報 lead。
+     ⚠ **AC-UX47（排序連帶先依本部分群）在本檔無載體**：本檔之群組次序是 `orgCode` 昇冪，
+        實作端是 `orgName.localeCompare`——這是**既有**且**明文刻意不對齊**之落差（見 renderRows 之註解，
+        對齊會改掉未帶參數時的既有次序、違反 AC-G21／AC-G79 之零漣漪鎖定）。已回報 lead。
+
+     ═══ 項 15：TAB2 篩選 二 → **三項**（AC-UX49／AC-UX50）═══
+     🔒 順序由左至右＝**制定本部** → **單位搜尋** → **完成狀態**（新項置於**最前**）。
+     🔴 三者之 `aria-label` **逐字**為 `制定本部`／`搜尋使用單位`／`完成狀態`
+        ——🔴 條文中稱第二項為「單位搜尋」，但畫面上那個控制項的 `aria-label` 實際是 `搜尋使用單位`；
+          把條文措辭當成逐字值會鎖住一個畫面上不存在的字串，並在「修正」它時改掉既有可見文案。
+     🔒 新控制項掛 **`data-ojt-filter="division"`**（值域自 `org|status` 擴為 `division|org|status`）。
+        🔴 **明文禁止**「把新篩選做成不掛 `data-ojt-filter` 以規避既有絕對值鎖」——那會使
+           「TAB2 篩選恰三項」這件事本身無法被機器驗證，比翻紅更糟。
+     🔒 `[data-ojt-group-mode]`（分組模式）與 `[data-ojt-doc-search]`（文件搜尋）**仍不得掛 `data-ojt-filter`**
+        ——它們不是篩選：一個不移除任何列、一個只在 `document` 模式存在。
+     🔒 比對語意＝等值比對（該進度列之使用單位上溯所抵達之本部 ＝ 所選值）；未選定時不施加限制；三項並用為 AND。
+     🔒 選項來源＝當前語料之 distinct 本部；🔴 推導不出本部之單位**不產生選項**，其列在**未選定任何本部**時
+        **照常呈現**（與前台 AC-UX24 同構：沒有選項就是篩不到，**不加 sentinel**）。
+     🔒 F044 deep link（`?tab=sessions&sort=incomplete-first`）落地時「制定本部」**須為未選定**，
+        否則落地集合會小於入口所宣稱者。
+
+     ═══ 項 16：TAB2 匯出（AC-UX51～AC-UX53／AC-UX55）═══
+     🔒 **恰一顆**匯出鈕，`aria-label` 逐字 `匯出`、DOM 掛鉤逐字 `data-ojt-export`。
+     🔒 CSV **11 欄**，表頭逐字＝
+        `使用單位全名,單位代碼,程序書編號,程序書書名,文件版次,訓練版次,公告日期,應完成日,場次數,完成狀態,備註`。
+        · `單位代碼` **不併入全名欄**（代碼是給人回查上游用的，併進去就無法以欄為單位比對）；
+        · `完成狀態` 之值逐字為 `已完成`／`尚未完成`（與徽章同源；不得輸出 true/false/1/0）；
+        · `備註` 承載裁撤與孤兒兩種註記（`已裁撤`／`已移出使用部門`／兩者以**全形頓號 `、`** 相接／皆非時為**空儲存格**）；
+          🔴 **明文禁止**改以 `0`／`—` 表示「無註記」——`—` 是畫面之空值佔位符而非資料。
+        · 檔案層規則沿用既有匯出規則：UTF-8 BOM／CRLF／RFC 4180 逸出／CSV 注入前綴。
+     🔒 匯出範圍＝當前**三項篩選**套用後之進度列集合，列序＝畫面當前之排序；**不含 TAB1 三區統計**。
+     🔴 **`搜尋文件` 不參與匯出**（它只縮小畫面），⇒ 畫面列數可能少於匯出列數；這正是 AC-UX55 第 3 句存在的理由。
+     🔒 匯出**恆為逐列進度資料、與分組模式無關**：兩種模式下之 CSV **位元組完全相同**。
+
+     ⚠ **本批以外之既有落差，本輪因 AC-UX55 之載體需求而一併補上（已回報 lead，若判定超範圍可拆除）**：
+        本檔原本**沒有** `[data-ojt-group-mode]`（分組模式）與 `[data-ojt-doc-search]`（文件搜尋）兩個控制項，
+        而它們是 2026-09-01 已上線之 F042 `AC-30`／`AC-33` 功能。**沒有它們，AC-UX55 第 3 句與 AC-UX53
+        （兩種模式匯出位元組相等）在本原型中都不存在任何可達狀態。** 逐字常數取自已上線之
+        `frontend/src/pages/ojt-progress-view.ts`（`GROUP_MODE_ORG_TEXT` 等），非本棒自創。
+     ⚠ **另一處既有落差（本輪不補，已回報 lead）**：F042 第五輪之版次追蹤（`AC-37`～`AC-40`）在本檔**沒有畫面載體**
+        （既無「文件版次／訓練版次」欄、也無「公告日期／應完成日」）。AC-UX52 之 CSV 需要這四個值，
+        故本輪**只補資料層**（見 `DOC_META`），**不新增任何畫面欄位**——畫面欄位屬 AC-37～AC-40 之範圍，不是本批。
+     ⚠ **AC-UX52 之「一列同時為 已裁撤 ∧ 孤兒 ∧ 尚未完成 ∧ 無公告日」在本檔之模型中不可構造**：
+        孤兒列依定義**必有場次**（由 SESSIONS 推導），而本檔之 `completed` ＝ `場次數 ≥ 1`
+        （實作端因 AC-37 改以「當下訓練基準版次之場次數」判定，本檔無版次追蹤 ⇒ 孤兒恆為已完成）。
+        ⇒ 本檔以**分開的兩列**覆蓋 `已裁撤` 與 `已移出使用部門`；`、` 相接之分支只由純函式覆蓋。已回報 lead。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -438,12 +497,22 @@
       <p>以<strong class="text-slate-600">使用單位</strong>為群組，列出該單位涉及之各份 ICSOP 文件之進度列。每列可累積多筆教育訓練場次（<strong class="text-slate-600">累加、非覆蓋</strong>）；同一文件之上下層單位<strong class="text-slate-600">各自為獨立一列、完成狀態互不影響</strong>。</p>
     </div>
 
-    <!-- 篩選（AC-13）-->
-    <!-- 🟢 `OQ-E11-15`＝(A) 已裁決：篩選項目集合**恰兩項**＝「單位搜尋」＋「完成狀態」。
+    <!-- 篩選（AC-13 → 🔵 2026-09-22 AC-UX49 就地擴為**三項**）-->
+    <!-- 🔵 UX16 項 15（AC-UX49，人類裁決 C）：篩選**恰三項**＝`制定本部`（新，最前）＋`搜尋使用單位`＋`完成狀態`。
+         🔒 三者皆掛 `data-ojt-filter`（值域 `division|org|status`）；
+         🔒 分組模式與文件搜尋**不掛** `data-ojt-filter`——它們不是篩選。
+         📝 已作廢（⚠ 不得復原、不得用於斷言）：
+         OLD> 🟢 `OQ-E11-15`＝(A) 已裁決：篩選項目集合**恰兩項**＝「單位搜尋」＋「完成狀態」。
          🔴 **完成狀態維持二值（`已完成`／`尚未完成`），刻意不採用 `13` 的四值**——理由見 script 區
             `STATUS_FILTER` 之註解（本頁一列＝一個「文件×單位」，其完成與否由場次數決定，**本質二值**；
             塞一個「部分完成」選項進來會產生一個永遠回 0 筆的死選項）。 -->
     <div data-ojt-filter-bar class="flex flex-wrap items-center gap-2">
+      <!-- 🔵 UX16 項 15（AC-UX49）：新項置於**最前**。🔒 `aria-label` 逐字 `制定本部`。
+           🔒 選項＝當前語料之 distinct 本部；推導不出本部之單位**不產生選項**（不加 sentinel），
+              其列在未選定任何本部時**照常呈現**。 -->
+      <select id="fDivision" data-ojt-filter="division" onchange="renderRows()" aria-label="制定本部" class="px-3 py-2 rounded-md border border-slate-300 text-sm bg-white">
+        <option value="">所有制定本部</option>
+      </select>
       <div class="relative flex-1 min-w-[220px]">
         <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
         <input id="fOrg" data-ojt-filter="org" oninput="renderRows()" type="search" placeholder="搜尋使用單位（名稱或代碼）…" aria-label="搜尋使用單位" class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600" />
@@ -462,9 +531,24 @@
         <option value="completed">已完成</option>
         <option value="pending">尚未完成</option>
       </select>
+      <!-- 🔵 分組模式（F042 `AC-30`，2026-09-01 已上線；本檔於 2026-09-22 補上，理由見檔頭）。
+           🔴 **不掛 `data-ojt-filter`**——它不移除任何列，只改變列裝進哪一種盒子；
+              算成第三個篩選會直接推翻既有裁決並弄破「篩選恰三項」之鎖。
+           🔒 兩個 option 之逐字取自已上線之 GROUP_MODE_ORG_TEXT／GROUP_MODE_DOC_TEXT；
+              `aria-label` 逐字取自 GROUP_MODE_ARIA_TEXT（`資料清單之分組方式`）。 -->
+      <select id="fGroupMode" data-ojt-group-mode onchange="setGroupMode(this.value)" aria-label="資料清單之分組方式" class="px-3 py-2 rounded-md border border-slate-300 text-sm bg-white">
+        <option value="org">以使用單位分組</option>
+        <option value="document">以文件分組</option>
+      </select>
+      <!-- 🔵 文件搜尋（F042 `AC-33` ②）：🔒 **僅 `document` 模式進 DOM**（`org` 模式完全不進，非 CSS 隱藏），
+           🔴 同樣不掛 `data-ojt-filter`；🔴 它**只縮小畫面**，**不影響匯出**（AC-UX55 第 3 句即為此而存在）。 -->
+      <span id="docSearchHost" class="contents"></span>
       <button id="clearBtn" onclick="clearFilters()" class="hidden px-3 py-2 rounded-md text-sm text-primary-600 hover:bg-primary-50">清除</button>
+      <!-- 🔵 UX16 項 16（AC-UX51）：**恰一顆**匯出鈕。 -->
+      <button data-ojt-export onclick="exportRows()" aria-label="匯出" title="匯出" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-slate-300 bg-white text-sm text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600"><i data-lucide="download" class="w-4 h-4"></i>匯出</button>
       <span id="rowCountText" data-ojt-row-count class="ml-auto text-sm text-slate-500"></span>
-      <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">OQ-E11-15 已裁決 (A)</span>
+      <!-- 📝 已作廢（⚠ 不得復原）：OLD> 徽章文字 `OQ-E11-15 已裁決 (A)`（＝「篩選恰兩項」，已由 AC-UX49 就地擴為三項）。 -->
+      <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">UX16 項 15 已裁決 (C)</span>
     </div>
 
     <!-- ===== 🟢 待歸位（`AC-26`／`OQ-E11-01`＝(C)）=====
@@ -823,7 +907,37 @@
     'JAC00':{path:'營運管理部 / 審查室'}
   };
   const DEPT_NAME={'AB000':'資訊部','BA000':'企劃部','BJ000':'供應商金融部','CA000':'信用審查部','CD000':'債權管理部','DA000':'作業服務部','JA000':'營運管理部'};
-  function orgName(code){ return (ORGS[code]&&ORGS[code].path)||code; }
+
+  /* ===== 🔵 UX16 項 14：本部（DIVISION）層 =====
+     🔒 本部代碼由**代碼前綴機械推導**（`X####` ⇒ `X0000`），**不是資料裡的一個欄位**；
+        查表查的是一個「推導得出、但可能沒有那一列」的代碼 ⇒ **查無即沒有本部**。
+     🔴 **`A0000` 刻意缺席**：`ABA00`（資訊部 / 應用發展室）因此上溯不到本部、其 `orgName` **仍是三段**
+        ——這是 AC-UX46 ⓑ 之唯一可達載體。補上這一列，「三段 vs 四段」兩組語料就會變成同一組，本項恆真。
+     🔒 本部名稱逐字取自本 repo 既有之組織詞彙（03-public-list 之使用部門字串），不自創新名。 */
+  const OJT_COMPANY_CODE='AS';
+  const COMPANY_SHORT_NAMES={AS:'和潤企業',AD:'和潤興業',AE:'和潤電能',AJ:'和勁企業'};
+  const ORG_PATH_SEPARATOR=' / ';
+  const DIVISIONS={
+    'B0000':'營業一本部',
+    'C0000':'風險管理服務本部',
+    'D0000':'經營企劃管理本部',
+    'J0000':'營業二本部'
+    /* 🔴 `A0000` 於此刻意缺席（見上）。 */
+  };
+  function divisionCodeOf(orgCode){ return String(orgCode||'').charAt(0)+'0000'; }
+  /* 🔒 回傳本部代碼或 null；null ＝「上溯不到本部」，**不是**一個 sentinel 值。 */
+  function divisionOf(orgCode){ const c=divisionCodeOf(orgCode); return DIVISIONS[c]?c:null; }
+  function divisionName(orgCode){ const c=divisionOf(orgCode); return c?DIVISIONS[c]:null; }
+  /* 🔒 **單一組裝點**（實作端＝`OjtOrgDirectory.nameOf(companyCode, orgCode)`）：
+     `{公司簡稱} / {本部全名} / {部全名} / {處室簡稱}`；空段以 filter 收合，不產生連續分隔符。
+     📝 已作廢（⚠ 不得復原、不得用於斷言）：OLD> function orgName(code){ return (ORGS[code]&&ORGS[code].path)||code; }
+        （兩段：`部 / 處室`，既無公司段亦無本部段）。 */
+  function orgName(code){
+    const path=(ORGS[code]&&ORGS[code].path)||code;
+    return [COMPANY_SHORT_NAMES[OJT_COMPANY_CODE], divisionName(code), path]
+      .filter(function(x){ return x!=null && String(x).trim()!==''; })
+      .join(ORG_PATH_SEPARATOR);
+  }
   function orgInactive(code){ return !!(ORGS[code]&&ORGS[code].inactive); }
   /* 🔴 原型專用之部層推導（5 碼代碼之前兩碼＋'000'）。
      **刻意不呼叫、也不暗示重用 `isWithinSubtree`**——該判定式服務的是權限與置頂，
@@ -998,6 +1112,36 @@
     {id:'lg2', docId:'d1', file:'車輛分期進件作業_OJT簽到表.pdf',  fmt:'pdf', uploadedBy:'陳彥廷', uploadedAt:'2026-02-03 16:05'}
   ];
 
+  /* ===== 🔵 UX16 項 16：文件層之版次與日期（AC-UX52 之 CSV 原料）=====
+     🔴 **只補資料層、不新增任何畫面欄位**：畫面上的「文件版次／訓練版次／公告日期／應完成日」屬
+        F042 第五輪 `AC-37`～`AC-40` 之範圍，本檔尚無該批之載體（既有落差，見檔頭）。
+     🔒 `應完成日` ＝ **公告日 +1 月**（`AC-40` 之單一推導點）；公告日為 null ⇒ 應完成日亦為 null。
+     🔴 `d5` 刻意**無公告日期**：AC-UX52 ④ 要求「無值時為**空儲存格**」，語料若每欄都有值，
+        「空儲存格」與「`—`」之分歧無從暴露。
+     📌 其餘文件以決定性規則產生（不逐筆手寫），d1～d34 之既有欄位因此**一個位元組都沒有動**。 */
+  const DOC_META_OVERRIDE={
+    d1:{docEdition:"26'01", trainEdition:"26'01", announcedDate:'2026-01-01'},
+    d2:{docEdition:"25'12", trainEdition:"25'12", announcedDate:'2025-12-01'},
+    d3:{docEdition:"26'02", trainEdition:"26'01", announcedDate:'2026-02-01'},
+    d4:{docEdition:"26'03", trainEdition:"26'03", announcedDate:'2026-03-01'},
+    d5:{docEdition:"26'01", trainEdition:"26'01", announcedDate:null},
+    d6:{docEdition:"26'04", trainEdition:"26'04", announcedDate:'2026-04-01'}
+  };
+  /* 公告日 +1 月（跨年進位；日期維持同一日）。 */
+  function plusOneMonth(iso){
+    if(!iso) return null;
+    const p=iso.split('-'); let y=+p[0], m=+p[1]+1; const d=p[2];
+    if(m>12){ m=1; y+=1; }
+    return y+'-'+String(m).padStart(2,'0')+'-'+d;
+  }
+  DOCS.forEach(function(doc,i){
+    const o=DOC_META_OVERRIDE[doc.id]||{};
+    doc.docEdition   = o.docEdition   !== undefined ? o.docEdition   : "26'"+String((i%12)+1).padStart(2,'0');
+    doc.trainEdition = o.trainEdition !== undefined ? o.trainEdition : doc.docEdition;
+    doc.announcedDate= o.announcedDate!== undefined ? o.announcedDate: '2026-'+String((i%12)+1).padStart(2,'0')+'-01';
+    doc.dueDate      = plusOneMonth(doc.announcedDate);
+  });
+
   /* ===================== 衍生（AC-01／AC-03／AC-04）=====================
      🔴 進度列**不物化**（棒 3 已裁定）：由 DOC_USING_DEPT × OJT_SESSION 於查詢時衍生。
      🔴 列產生**原樣採用** doc.using，**不展開子樹**（AC-01 之負向鎖定）。 */
@@ -1012,6 +1156,8 @@
         const ss=sessionsOf(d.id,org);
         out.push({key:d.id+'__'+org, docId:d.id, number:d.number, docName:d.name, org,
                   orgLabel:orgName(org), inactive:orgInactive(org), orphaned:false,
+                  docEdition:d.docEdition, trainEdition:d.trainEdition,
+                  announcedDate:d.announcedDate, dueDate:d.dueDate,   // 🔵 UX16 項 16：CSV 原料（無畫面欄位）
                   sessions:ss, count:ss.length, completed:ss.length>=1});
       });
       /* 🟢 `AC-25`／`OQ-E11-02`＝(C) 已裁決：使用部門被移出後，其場次**軟標記保留**
@@ -1026,6 +1172,8 @@
         const ss=sessionsOf(d.id,org);
         out.push({key:d.id+'__'+org, docId:d.id, number:d.number, docName:d.name, org,
                   orgLabel:orgName(org), inactive:orgInactive(org), orphaned:true,
+                  docEdition:d.docEdition, trainEdition:d.trainEdition,
+                  announcedDate:d.announcedDate, dueDate:d.dueDate,   // 🔵 UX16 項 16
                   sessions:ss, count:ss.length, completed:ss.length>=1});
       });
     });
@@ -1258,6 +1406,9 @@
      ⚠ **兩處粒度不同**：本表一列＝一份文件，TAB2 一列＝「文件 × 使用單位」⇒ 列數本就不相等
         （區一 `#inactiveNote` 已有一句說明兩處列數不等屬正常，此處不重複打第二份）。 */
   function gotoSessionsPending(){
+    /* 🔵 UX16 項 15（AC-UX54 ⑤）：**新增之「制定本部」於本 deep link 落地時須為未選定**，
+       否則落地集合會小於入口所宣稱者（理由與下方「刻意清空單位關鍵字」逐字相同）。 */
+    const dv=document.getElementById('fDivision'); if(dv) dv.value='';
     document.getElementById('fOrg').value='';
     document.getElementById('fStatus').value='pending';
     switchTab('sessions');
@@ -1442,18 +1593,122 @@
   const expanded=new Set();      // 已展開之進度列 key
   const collapsedGroups=new Set(); // 已收合之群組 orgCode
 
+  /* 🔴 **兩個口徑刻意分開，這是本輪最容易被合併回去的一處**：
+     · `filteredRows()` ＝ **三項篩選**（制定本部／搜尋使用單位／完成狀態）之結果 ＝ **匯出範圍**（AC-UX51）；
+     · `displayedRows()` ＝ 再套用「搜尋文件」之結果 ＝ **畫面所見**（AC-33 ②）。
+     🔴 合併成一個函式，`搜尋文件` 就會悄悄縮小匯出範圍，AC-UX51 與 AC-UX55 ① 會同時失效，
+        而畫面看起來完全正常（使用者回報之情境正是「畫面剩 12 列、檔案 340 列」）。 */
   function filteredRows(){
     if(isEmptyDemo()) return [];
+    const dv=(document.getElementById('fDivision')||{}).value||'';
     const kw=(document.getElementById('fOrg').value||'').trim().toLowerCase();
     const st=document.getElementById('fStatus').value;
     return allRows().filter(r=>{
+      // 🔵 UX16 項 15（AC-UX49）：等值比對；推導不出本部者在未選定時照常呈現。
+      if(dv && divisionOf(r.org)!==dv) return false;
       if(kw && !(r.orgLabel.toLowerCase().includes(kw) || r.org.toLowerCase().includes(kw))) return false;
       if(st==='completed' && !r.completed) return false;
       if(st==='pending'   &&  r.completed) return false;
       return true;
     });
   }
-  function clearFilters(){ document.getElementById('fOrg').value=''; document.getElementById('fStatus').value=''; renderRows(); }
+  /* 🔒 AC-33 ②：`搜尋文件` **只在 `document` 模式存在**，且**只縮小畫面**。 */
+  function docQueryValue(){
+    const el=document.getElementById('fDocSearch');
+    return (GROUP_MODE==='document' && el) ? (el.value||'').trim() : '';
+  }
+  function displayedRows(){
+    const q=docQueryValue().toLowerCase();
+    const base=filteredRows();
+    if(!q) return base;
+    return base.filter(r=> r.number.toLowerCase().includes(q) || r.docName.toLowerCase().includes(q));
+  }
+  /* 🔒 選項＝當前語料之 distinct 本部，依本部代碼昇冪；推導不出本部者不產生選項（不加 sentinel）。 */
+  function buildDivisionOptions(){
+    const sel=document.getElementById('fDivision'); if(!sel) return;
+    const keep=sel.value;
+    const codes=[...new Set(allRows().map(r=>divisionOf(r.org)).filter(c=>!!c))].sort();
+    sel.innerHTML='<option value="">所有制定本部</option>'+codes.map(c=>`<option value="${c}">${DIVISIONS[c]}</option>`).join('');
+    sel.value = codes.includes(keep) ? keep : '';
+  }
+  /* 🔴 清除＝**三項篩選 ＋ 文件搜尋**一併歸零（「清除」鈕字面涵蓋畫面上所有縮小結果的控制項）。 */
+  function clearFilters(){
+    const dv=document.getElementById('fDivision'); if(dv) dv.value='';
+    document.getElementById('fOrg').value='';
+    document.getElementById('fStatus').value='';
+    const dq=document.getElementById('fDocSearch'); if(dq) dq.value='';
+    renderRows();
+  }
+
+  /* ===== 🔵 分組模式（F042 AC-30；恰二值，`org` 為預設）===== */
+  let GROUP_MODE='org';
+  function setGroupMode(v){
+    GROUP_MODE = (v==='document') ? 'document' : 'org';
+    /* 🔒 切回 `org` 時關鍵字被清空（既有行為）——該控制項整個不進 DOM，留著值會變成隱形狀態。 */
+    renderRows();
+  }
+  /* 🔒 AC-33 ②：`org` 模式下本控制項**完全不進 DOM**（非 CSS 隱藏）。 */
+  function renderDocSearch(){
+    const host=document.getElementById('docSearchHost'); if(!host) return;
+    if(GROUP_MODE!=='document'){ host.innerHTML=''; return; }
+    if(host.querySelector('#fDocSearch')) return;      // 已在 DOM ⇒ 不重建（重建會清掉使用者輸入與游標）
+    host.innerHTML=`<span class="relative flex-1 min-w-[220px] inline-block">
+      <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+      <input id="fDocSearch" data-ojt-doc-search type="search" oninput="renderRows()" placeholder="搜尋文件（編號或書名）…" aria-label="搜尋文件"
+             class="w-full pl-9 pr-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600" />
+    </span>`;
+    lucide.createIcons();
+  }
+
+  /* ===== 🔵 UX16 項 16：匯出（AC-UX51～AC-UX53、AC-UX55）=====
+     🔒 檔案層規則逐字沿用既有匯出規則（error-handling.md#export／F017 AC-X1～AC-X2）：
+        UTF-8 BOM、表頭與每一資料列（含最末一列）皆以 CRLF 終止、RFC 4180 逸出、CSV 注入前綴。
+     ⚠ **注入前綴與 RFC 4180 包覆是兩件事，且前綴必須先加**（Tab 不觸發包覆，只觸發前綴）。 */
+    const OJT_EXPORT_HEADER=['使用單位全名','單位代碼','程序書編號','程序書書名','文件版次','訓練版次','公告日期','應完成日','場次數','完成狀態','備註'];
+  const CSV_INJECTION_PREFIX_CHARS=['=','+','-','@','\t','\r'];
+  function csvCell(v){
+    if(v==null) return '';
+    let t=String(v);
+    if(t==='—') return '';
+    if(t && CSV_INJECTION_PREFIX_CHARS.includes(t[0])) t="'"+t;
+    return /[",\r\n]/.test(t) ? '"'+t.replace(/"/g,'""')+'"' : t;
+  }
+  /* 🔒 `備註`：`已裁撤`／`已移出使用部門`／兩者以**全形頓號**相接（前後無空白）／皆非時為**空儲存格**。
+     🔴 **明文禁止**改以 `0`／`—` 表示「無註記」——`—` 是畫面之空值佔位符而非資料。 */
+  function exportNoteValue(r){
+    const parts=[];
+    if(r.inactive) parts.push('已裁撤');
+    if(r.orphaned) parts.push('已移出使用部門');
+    return parts.join('、');
+  }
+  /* 🔒 `完成狀態` 之值**與徽章同源**（BADGE_COMPLETED_TEXT／BADGE_PENDING_TEXT），不另行重打字面。 */
+  function exportRow(r){
+    return [ r.orgLabel, r.org, r.number, r.docName, r.docEdition, r.trainEdition,
+             r.announcedDate||'', r.dueDate||'', r.count,
+             r.completed?BADGE_COMPLETED_TEXT:BADGE_PENDING_TEXT, exportNoteValue(r) ];
+  }
+  function buildOjtExportCsv(rows){
+    const lines=[OJT_EXPORT_HEADER.join(',')].concat(rows.map(r=>exportRow(r).map(csvCell).join(',')));
+    return '\uFEFF'+lines.join('\r\n')+'\r\n';
+  }
+  /* 🔒 AC-UX55 之三句（逐字；第 3 句僅當「搜尋文件」目前有值時出現）。
+     🔴 三個引號內的名字是**使用者在畫面上看到的那個名字**（＝控制項之 aria-label），
+        不得改用條文中的稱呼（如「單位搜尋」）——那個字串畫面上不存在。 */
+  function ojtExportToastText(n){ return '已匯出 OJT 進度清單（CSV，UTF-8 BOM）：共 '+n+' 筆'; }
+  const OJT_EXPORT_SCOPE_TEXT='匯出內容依「制定本部」「搜尋使用單位」「完成狀態」三項條件。';
+  const OJT_EXPORT_DOC_SEARCH_NOTE_TEXT='「搜尋文件」只縮小畫面上顯示的內容，不影響匯出。';
+  /* 🔴 匯出範圍＝**三項篩選**之結果（`filteredRows()`），**與分組模式無關**、**不套用搜尋文件**
+     ⇒ 兩種分組模式下之 CSV 位元組完全相同（AC-UX53）。 */
+  function exportRows(){
+    const rows=filteredRows();
+    const csv=buildOjtExportCsv(rows);
+    /* 📌 prototype 之「產生」止於**位元組本身**：印到 console 供逐位元組核對，刻意不觸發實際下載
+       （比照 13／19／24 三處同型匯出之 prototype 行為）。 */
+    console.log(csv);
+    const sentences=[ojtExportToastText(rows.length), OJT_EXPORT_SCOPE_TEXT];
+    if(docQueryValue()) sentences.push(OJT_EXPORT_DOC_SEARCH_NOTE_TEXT);
+    toast('success','<span data-ojt-export-toast>'+sentences.map(function(t){return '<span class="block">'+t+'</span>';}).join('')+'</span>');
+  }
 
   function completionBadge(completed){
     return completed
@@ -1467,22 +1722,58 @@
   }
 
   function renderRows(){
-    const rows=filteredRows();
+    buildDivisionOptions();
+    renderDocSearch();
+    const gm=document.getElementById('fGroupMode'); if(gm) gm.value=GROUP_MODE;
+    const rows=displayedRows();                       // 🔵 畫面所見＝三項篩選 ＋ 搜尋文件
+    const dv=(document.getElementById('fDivision')||{}).value||'';
     const kw=(document.getElementById('fOrg').value||'').trim();
     const st=document.getElementById('fStatus').value;
-    document.getElementById('clearBtn').classList.toggle('hidden',!(kw||st));
+    const dq=docQueryValue();
+    document.getElementById('clearBtn').classList.toggle('hidden',!(dv||kw||st||dq));
     document.getElementById('rowCountText').textContent=`共 ${rows.length} 列進度列 · ${rows.filter(r=>r.completed).length} 列${BADGE_COMPLETED_TEXT}`;
 
     renderSortNotice();
     const emptyBox=document.getElementById('rowsEmpty');
     emptyBox.classList.toggle('hidden',rows.length>0);
     if(!rows.length){
-      const filtered=!!(kw||st);
+      const filtered=!!(dv||kw||st||dq);
       document.getElementById('rowsEmptyText').textContent = filtered?EMPTY_ROWS_TEXT:EMPTY_ALL_TEXT;
       /* 🔴 未套用篩選卻無列 ⇒ 補上「進度列從哪裡來」之提示（見 EMPTY_ALL_HINT 之註解）。 */
       document.getElementById('rowsEmptyHint').textContent = filtered?'':EMPTY_ALL_HINT;
       document.getElementById('groupList').innerHTML='';
       lucide.createIcons(); return;
+    }
+
+    /* 🔵 以**文件**分組（F042 AC-31）：分組鍵＝`documentId`。
+       🔴 **不是書名**——書名非唯一，以書名分組會把兩份不同文件併成一組而憑空少掉一份文件。
+       🔒 群組標題之 X／Y 取自**本清單當下呈現之進度列**（含已裁撤與已移出使用部門之單位），
+          與儀表板「文件-訓練覆蓋率」之口徑**刻意不同**——故另有一行可見說明（見下）。 */
+    if(GROUP_MODE==='document'){
+      const byDoc=new Map();
+      rows.forEach(r=>{ if(!byDoc.has(r.docId)) byDoc.set(r.docId,[]); byDoc.get(r.docId).push(r); });
+      const dgroups=Array.from(byDoc.keys())
+        .sort((a,b)=> byDoc.get(a)[0].number.localeCompare(byDoc.get(b)[0].number))
+        .map(id=>({ id, number:byDoc.get(id)[0].number, name:byDoc.get(id)[0].docName,
+                    rows:byDoc.get(id).slice().sort((x,y)=>x.orgLabel.localeCompare(y.orgLabel)) }));
+      document.getElementById('groupList').innerHTML =
+        `<p data-doc-group-basis-note class="text-xs text-slate-400 leading-snug">本區各文件之「已完成 X / 共 Y 單位」取自本清單當下呈現之進度列（含已裁撤單位與已移出使用部門之單位），與儀表板「文件-訓練覆蓋率」之口徑刻意不同；兩處數字不相等屬正常，請勿互相對帳。</p>`
+        + dgroups.map(g=>{
+          const done=g.rows.filter(r=>r.completed).length, open=!collapsedGroups.has(g.id);
+          return `
+      <section data-progress-group="${g.id}" class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <button onclick="toggleGroup('${g.id}')" aria-expanded="${open}" class="w-full flex items-center gap-2 px-4 py-3 bg-slate-50/70 hover:bg-slate-100/70 text-left">
+          <i data-lucide="chevron-${open?'down':'right'}" class="w-4 h-4 text-slate-400 shrink-0"></i>
+          <i data-lucide="file-text" class="w-4 h-4 text-primary-600 shrink-0"></i>
+          <span data-progress-group-code class="mono text-xs text-slate-400 shrink-0">${g.number}</span>
+          <span data-progress-group-name class="font-medium text-slate-800 truncate">${g.name}</span>
+          <span class="ml-auto text-xs text-slate-500 shrink-0">已完成 <span class="mono">${done}</span> / 共 <span class="mono">${g.rows.length}</span> 單位</span>
+        </button>
+        ${open?`<div class="divide-y divide-slate-100">${g.rows.map(r=>progressRow(r)).join('')}</div>`:''}
+      </section>`;
+        }).join('');
+      lucide.createIcons();
+      return;
     }
 
     // 以使用單位分組（AC-11）；群組依 orgCode 昇冪，組內依程序書編號昇冪 → 順序具決定性

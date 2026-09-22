@@ -1,4 +1,73 @@
 <!DOCTYPE html>
+<!-- 🔵 2026-09-22 UX16 delta（項 8／項 13）——規格權威＝docs/specs/features/F043-business-function-category.md §UX16 delta
+     （AC-UX29～AC-UX32＝排序欄位；AC-UX37／AC-UX38＝「DAG 畫布」依寫權門控）。
+     人類裁決 B＝新增真正的排序欄位 `BUSINESS_CATEGORY.sortOrder`（需 migration）；
+     人類裁決 E＝「DAG 畫布」依 canPerform(role, BUSINESS_CATEGORY_MANAGEMENT, 'write') 門控（主管**與系統管理員**皆不顯示）。
+
+     ═══ 項 8（排序欄位）═══
+     🔒 鎖定之識別子為 **`sortOrder`**（🔴 明文禁止 order／seq／displayOrder 等變體）。
+     🔒 DOM 契約（AC-UX29）：**清單列帶 `data-sort-order="{值}"`**（整數之字串，`0` 亦不得省略）
+        ——它是「這一列的序位是多少」在 DOM 層**唯一**的機器可讀載體；畫面上的輸入框不承載值之語意。
+     🔴 **調序介面＝數值輸入框 ＋ 上下移動鈕，兩者皆提供**（`OQ-UX16-34`，使用者 2026-09-22 第三輪裁定；
+        明文**不含拖曳**）。三個載體之契約：
+        · 輸入框：`aria-label` 逐字 `排序值（{類別顯示名}）`、掛鉤 `data-sort-order-input`；
+        · 上移／下移鈕：`aria-label` 逐字 `上移（{類別顯示名}）`／`下移（{類別顯示名}）`、
+          掛鉤 `data-sort-up`／`data-sort-down`，皆為 `<button type="button">`。
+     🔒 **`AC-UX31` ③（值相同時以 `name` 昇冪）維持原條文、不放寬**：本棒第一輪曾指出「上下鈕若實作為互換值，
+        結構上生不出重複值 ⇒ ③ 在畫面上永遠不可達」——該推理成立，但本裁決**保留了數值輸入框**，
+        使用者仍可把兩列打成同值 ⇒ ③ 仍然可達、仍然必要。⚠ 日後若有人拿掉輸入框只留上下鈕，
+        要重新裁決的是「要不要拿掉輸入框」，不是「要不要刪掉 ③」。
+     📝 已作廢（⚠ 不得復原）：`OLD>` 「互動形式由本棒定稿＝**每列一個數值輸入框**（另兩個候選為上下移動鈕與拖曳）」。
+
+     🔴 **上下鈕之寫入規則（三步，明文禁止「單純互換兩列的 `sortOrder`」）**：在**完整清單之排序**
+        （`sortOrder` 昇冪、同值時 `name` 昇冪）中，設目標列為 `T`、其前一列為 `P`、`P` 的前一列為 `PP`——
+        (a) `P` 不存在 ⇒ 鈕 `disabled`、**不寫入**；(b) `PP` 不存在 ⇒ `T = P − 10`；
+        (c) 否則 `T = ⌊(PP + P) / 2⌋`，🔴 **若結果等於 `PP` 或 `P`（間距用盡，含 `PP` 與 `P` 平手）
+        ⇒ 先對全表依當前排序重編號為 10, 20, 30, …，再重跑本規則一次**。下移為其鏡像（(b) 為 `T = N + 10`）。
+        🔴 **為何不能用互換**：兩列 `sortOrder` 相等時互換是 **no-op** ⇒ 使用者連按無反應、畫面毫無說明；
+        而平手是**可達狀態**（輸入框允許），這不是理論情形。
+     🔴 **上下鈕在任何篩選或搜尋生效時一律 `disabled`**（關鍵字或狀態任一有值），清除後恢復。
+        📌 理由：在**被篩過**的檢視裡，「上移一位」指的是「畫面上的前一列」還是「完整清單裡的前一列」——
+        兩種答案都說得通，不裁定就會變成實作者各自解讀，而兩種解讀會產生不同的資料狀態。
+        🔒 停用在**兩處**都做：按鈕的 `disabled` ＋ 處理函式開頭的 early return（鍵盤／程式化路徑仍到得了 setter）。
+     🔒 **`data-sort-order`（在 `<tr>` 上）是唯一的值載體**；🔴 輸入框與上下鈕**皆不承載值**
+        ——輸入框之 `value` 是編輯中的草稿，不是已持久化的事實。
+     🔒 **兩套寫入路徑必須產生相同的資料狀態**：以上下鈕達成某次序 ≡ 使用者自行把數值改成同樣次序；
+        `AC-UX31` 之三條邊界規則對兩套路徑**一體適用**，🔴 上下鈕**沒有**自己的旁路規則。
+     🔒 寫權沿用既有閘門：僅 ICSOPAdmin 可調序；SysAdmin 與 Supervisor 為唯讀 ⇒
+        🔒 **三個調序載體一律不進 DOM**（比照 AC-UX37 之處置，非 `disabled`、非 CSS 隱藏），該格改呈現唯讀數值。
+     🔒 排序口徑＝**`sortOrder ASC, name ASC`**（AC-UX32），後台清單、前台類別下拉（30）與
+        13 之「業務/功能類別」篩選下拉**三處同一口徑**。
+     🔒 新增類別之預設值＝`max(sortOrder) + 10`，`max()` **涵蓋全部列、不分 status**（AC-UX31 ②）；
+        表中無任何類別時首筆為 `10`。停用**不改變任何列之 sortOrder**（AC-UX31 ①）。
+     📌 **示範值刻意不等於 migration 之初始值**：AC-UX30 之初始值為 `ROW_NUMBER() OVER (ORDER BY name) * 10`
+        （day-0 前台次序不變）；本檔之示範值代表**管理員調過序之後**的狀態，
+        🔴 這是必要的——若示範值恰等於 name 字典序，「有沒有依 sortOrder 排」與「依 name 排」輸出相同，
+        AC-UX32 之斷言就恆真（本 repo「建環語料無鑑別力」之第五形狀）。
+        本檔示範值之次序（授信（消金）→授信（企金）→授信（子公司）→風險管理→帳務處理（子公司）→帳務處理（消金））
+        **同時不同於** name 字典序（帳務處理 在前）**與** updatedAt DESC（bc3 在前）。
+
+     ═══ 項 13（DAG 畫布門控）═══
+     🔴 `DAG 畫布` 鈕對**無寫權**之角色（現行矩陣＝Supervisor 主管 **與** SysAdmin 系統管理員）
+        **整顆自 DOM 移除**——🔴 **非** disabled、**非** CSS 隱藏（下游以 queryByText('DAG 畫布') === null 斷言，
+        CSS 隱藏會恆真＝假綠）。⇒ 本鈕**刻意不使用**本頁其他三個動作所用的 `.write-only` class（那是 CSS 隱藏）。
+     🔒 判準取自**功能矩陣那一格**（本檔之 MENU `businesscategory` 列），不是角色清單
+        ——刪掉該列之 `icsop_admin` 鍵，述詞即翻面，兩者同源在結構上成立。
+     🔒 **「檢視樹狀圖預覽」鈕維持現狀、不受本次變更影響**（AC-UX38）：其 aria-label／title／
+        window.open 之固定視窗名稱與目標路由**一格未動**——它本身是唯讀功能，對唯讀角色隱藏會減損既有能力。
+        ⚠ 兩顆鈕不在同一格（預覽鈕在「狀態」欄、DAG 畫布在「操作」欄），但下一個人最可能的動作仍是
+          「順手把整個操作欄包進 canWrite」——AC-UX38 就是為了擋這個。
+
+     ═══ AC-UX56（2026-09-22 第三輪補訂）：唯讀角色下「操作」欄之空儲存格呈現 ═══
+     🔒 該儲存格**恆有內容**，其可見文字**逐字為 `—`**（U+2014）——🔴 不得是空白格、`null`、`0`，
+        🔴 **亦不得整個 `<td>` 消失**：只拿掉 `<td>` 會讓整張表**錯位一格**，而「按鈕不存在」那條斷言對錯位完全無感。
+     🔴 **本條要求 `textContent.trim()` 逐字為 `—`** ⇒ 唯讀角色下 `編輯`／`停用`／`刪除` 三顆鈕也必須**不進 DOM**，
+        **不能**只靠 `.write-only` 的 CSS 隱藏（CSS 隱藏的節點仍留在 `textContent` 裡）。
+        ⚠ 這是本輪對既有寫法的一處**行為外觀不變、DOM 改變**之調整：畫面與改動前逐像素相同，
+        但那三顆鈕自此以條件渲染取代 CSS 隱藏。🔒 `.write-only` 這條 class **仍有其他使用者**
+        （topbar 的「新增業務/功能類別」鈕），故其集合**不會退化為空**、互斥型斷言不會變成假綠。
+     🔒 本條**不涵蓋**「檢視樹狀圖預覽」那一格：該鈕不在「操作」欄內（與狀態同格），且依 AC-UX38
+        對所有角色恆存在 ⇒ 那一格永遠不會變空。 -->
 <!-- 🔵 F043 業務/功能類別管理（DRAFT — 2026-09-02，spec 尚待人類閘門核准；prototype 為下游 fidelity 斷言之視覺權威）
      本頁＝**類別池清單**，鏡射 10-lifecycle-list.html 之版面、結構、文案與欄寬。
      規格權威＝docs/specs/features/F043-business-function-category.md（§甲 AC-01～AC-14、AC-32、AC-43～AC-46）。
@@ -113,9 +182,11 @@
 
   <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
-    <table class="w-full text-sm min-w-[900px]">
+    <table class="w-full text-sm min-w-[1040px]">
       <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
         <tr>
+          <!-- 🔵 UX16 項 8（AC-UX29）：排序值。置於最左＝「這份清單的次序由這一欄決定」。 -->
+          <th class="text-left font-medium px-4 py-2.5 w-[120px]">排序</th>
           <th class="text-left font-medium px-4 py-2.5">業務/功能類別名稱</th>
           <th class="text-left font-medium px-4 py-2.5">說明</th>
           <th class="text-left font-medium px-4 py-2.5">狀態</th>
@@ -247,14 +318,70 @@
      📌 docs ＝ **去重後之相異文件數**（非掛載列數）：bc1 於 27／28 之語料中有 6 筆掛載列、
         但其中 ICSOP-SRC-101-1-01 掛在 p2 與 p4 兩個節點 ⇒ 相異文件數為 5。 */
   let seq=6;
+  /* 🔵 UX16 項 8：每列新增 `sortOrder`（整數）。示範值之次序＝bc1 → bc2 → bc6 → bc3 → bc4 → bc5，
+     與 30（前台類別下拉）之既有呈現次序**逐筆相同** ⇒ 前台畫面零變動、但次序自此由 sortOrder 驅動。
+     🔴 最大值 60 刻意落在**已停用**之 bc5 上：AC-UX31 ② 之「max() 不分 status」若語料把最大值放在啟用列上，
+        「分不分 status」輸出相同、該條恆真。 */
   let CATEGORIES=[
-    {id:'bc1',name:'授信',      subcategory:'消金',  desc:'消費金融授信相關之作業程序書歸類',       status:'active',  nodes:5,updated:'2026-08-28 14:20',docs:5},
-    {id:'bc2',name:'授信',      subcategory:'企金',  desc:'企業金融授信相關之作業程序書歸類',       status:'active',  nodes:4,updated:'2026-08-30 09:05',docs:3},
-    {id:'bc3',name:'風險管理',  subcategory:null,    desc:'風險辨識、評估與監控相關之作業程序書',   status:'active',  nodes:4,updated:'2026-09-01 16:40',docs:4},
-    {id:'bc4',name:'帳務處理',  subcategory:'子公司',desc:'子公司帳務結算與入帳相關之作業程序書',   status:'active',  nodes:3,updated:'2026-08-25 11:12',docs:3},
-    {id:'bc5',name:'帳務處理',  subcategory:'消金',  desc:'消金帳務處理（籌備中，尚未啟用）',       status:'inactive',nodes:2,updated:'2026-07-30 10:00',docs:0},
-    {id:'bc6',name:'授信',      subcategory:'子公司',desc:'子公司授信（籌備中，尚未啟用）',         status:'inactive',nodes:2,updated:'2026-07-22 15:35',docs:1}
+    {id:'bc1',name:'授信',      subcategory:'消金',  desc:'消費金融授信相關之作業程序書歸類',       status:'active',  nodes:5,updated:'2026-08-28 14:20',docs:5,sortOrder:10},
+    {id:'bc2',name:'授信',      subcategory:'企金',  desc:'企業金融授信相關之作業程序書歸類',       status:'active',  nodes:4,updated:'2026-08-30 09:05',docs:3,sortOrder:20},
+    {id:'bc3',name:'風險管理',  subcategory:null,    desc:'風險辨識、評估與監控相關之作業程序書',   status:'active',  nodes:4,updated:'2026-09-01 16:40',docs:4,sortOrder:40},
+    {id:'bc4',name:'帳務處理',  subcategory:'子公司',desc:'子公司帳務結算與入帳相關之作業程序書',   status:'active',  nodes:3,updated:'2026-08-25 11:12',docs:3,sortOrder:50},
+    {id:'bc5',name:'帳務處理',  subcategory:'消金',  desc:'消金帳務處理（籌備中，尚未啟用）',       status:'inactive',nodes:2,updated:'2026-07-30 10:00',docs:0,sortOrder:60},
+    {id:'bc6',name:'授信',      subcategory:'子公司',desc:'子公司授信（籌備中，尚未啟用）',         status:'inactive',nodes:2,updated:'2026-07-22 15:35',docs:1,sortOrder:30}
   ];
+
+  /* 🔒 AC-UX32：**唯一排序口徑** `sortOrder ASC, name ASC`。
+     🔴 次要鍵 `name` 升冪不是裝飾：AC-UX31 ③ 明訂 sortOrder **不保證唯一**，同值列若無次要鍵，
+        其相對次序會隨查詢計畫漂移 ⇒ 變成「有人看到的順序和別人不一樣」。
+     📝 已作廢（⚠ 不得復原、不得用於斷言）：OLD> 後台清單依 `updatedAt DESC` 排序。 */
+  function compareBySortOrder(a,b){
+    if(a.sortOrder!==b.sortOrder) return a.sortOrder-b.sortOrder;
+    return a.name<b.name ? -1 : (a.name>b.name ? 1 : 0);
+  }
+  /* 🔒 **完整清單之排序**（不套任何篩選）——上下鈕之語意基準恆為它，不是被篩過的檢視。 */
+  function sortedAll(rows){ return rows.slice().sort(compareBySortOrder); }
+  /* 🔒 依當前排序重編號為 10, 20, 30, …（`AC-UX29` ④ (c) 之 🔴 分支）。 */
+  function renumberAll(rows){
+    const ordered=sortedAll(rows);
+    const next={};
+    ordered.forEach(function(r,i){ next[r.id]=(i+1)*10; });
+    return rows.map(function(r){ return Object.assign({},r,{sortOrder:next[r.id]}); });
+  }
+  /* 🔴 **`AC-UX29` ④ 之純函式**（`dir = -1` 上移／`+1` 下移）：三步規則，**明文不是互換值**。
+     🔴 互換在「兩列 sortOrder 相等」時是 **no-op** ⇒ 使用者連按無反應；而平手是可達狀態（輸入框允許）。
+     🔒 只改目標列一欄；唯有 (c) 之「間距用盡」分支會重編號全表（該分支保持相對次序不變）。 */
+  function moveByOne(rows,id,dir,retried){
+    const ordered=sortedAll(rows);
+    const i=ordered.findIndex(function(r){ return r.id===id; });
+    if(i<0) return rows.map(function(r){ return Object.assign({},r); });
+    const pIdx=i+dir, ppIdx=i+dir*2;
+    if(pIdx<0 || pIdx>=ordered.length) return rows.map(function(r){ return Object.assign({},r); });   // (a) 無 P ⇒ 不寫入
+    const P=ordered[pIdx];
+    const PP=(ppIdx>=0 && ppIdx<ordered.length) ? ordered[ppIdx] : null;
+    let next;
+    if(!PP){ next=P.sortOrder+dir*10; }                                   // (b)
+    else {
+      next=Math.floor((PP.sortOrder+P.sortOrder)/2);                      // (c)
+      if(next===PP.sortOrder || next===P.sortOrder){
+        if(retried) return rows.map(function(r){ return Object.assign({},r); });   // 重編號後不可能再用盡；此行僅為終止保證
+        return moveByOne(renumberAll(rows),id,dir,true);                  // 🔴 間距用盡（含平手）⇒ 全表重編號後重跑一次
+      }
+    }
+    return rows.map(function(r){ return r.id===id ? Object.assign({},r,{sortOrder:next}) : Object.assign({},r); });
+  }
+  function moveUp(rows,id){ return moveByOne(rows,id,-1,false); }
+  function moveDown(rows,id){ return moveByOne(rows,id,1,false); }
+
+  /* 🔒 AC-UX31 ②：`max()` 涵蓋**全部列、不分 status**（停用者仍佔序位，排除它會產生重複序位）。 */
+  function nextSortOrder(){
+    return CATEGORIES.length ? Math.max.apply(null,CATEGORIES.map(function(b){return b.sortOrder;}))+10 : 10;
+  }
+  /* 🔒 AC-UX37：寫權判準取自**功能矩陣那一格**，不是角色清單。 */
+  function canWriteBusinessCategory(){
+    const row=MENU.find(function(m){return m.id==='businesscategory';});
+    return !!row && row.roles[document.body.dataset.role]==='CRUD';
+  }
   let editingId=null;
 
   function statusPill(s){
@@ -267,11 +394,23 @@
     const kw=(document.getElementById('kw').value||'').trim().toLowerCase();
     const st=document.getElementById('fStatus').value;
     // AC-14：關鍵字比對對象＝businessCategoryDisplayName 之**輸出**（名稱＋子分類），非僅 name
-    const rows=CATEGORIES.filter(b=> (!kw||businessCategoryDisplayName(b).toLowerCase().includes(kw)) && (!st||b.status===st));
+    // 🔵 UX16 項 8（AC-UX32 ①）：清單依 `sortOrder ASC, name ASC` 排序（篩選條件本身一字未改）。
+    const rows=CATEGORIES.filter(b=> (!kw||businessCategoryDisplayName(b).toLowerCase().includes(kw)) && (!st||b.status===st))
+      .slice().sort(compareBySortOrder);
     document.getElementById('countText').textContent=`共 ${rows.length} 個業務/功能類別`;
     document.getElementById('emptyState').classList.toggle('hidden',rows.length>0);
+    const canWrite=canWriteBusinessCategory();
     document.getElementById('tbody').innerHTML=rows.map(b=>`
-      <tr class="hover:bg-slate-50" data-business-category-id="${b.id}">
+      <tr class="hover:bg-slate-50" data-business-category-id="${b.id}" data-sort-order="${b.sortOrder}">
+        <td class="px-4 py-3">${canWrite
+          ? `<div class="flex items-center gap-1">
+               <div class="flex flex-col">
+                 <button type="button" data-sort-up onclick="bumpSortOrder('${b.id}',-1)" aria-label="上移（${businessCategoryDisplayName(b)}）" title="上移（${businessCategoryDisplayName(b)}）" ${sortMoveDisabled(b,-1)?'disabled aria-disabled="true"':''} class="w-6 h-5 rounded border border-slate-300 flex items-center justify-center text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"><i data-lucide="chevron-up" class="w-3 h-3"></i></button>
+                 <button type="button" data-sort-down onclick="bumpSortOrder('${b.id}',1)" aria-label="下移（${businessCategoryDisplayName(b)}）" title="下移（${businessCategoryDisplayName(b)}）" ${sortMoveDisabled(b,1)?'disabled aria-disabled="true"':''} class="w-6 h-5 -mt-px rounded border border-slate-300 flex items-center justify-center text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"><i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+               </div>
+               <input type="number" step="10" data-sort-order-input value="${b.sortOrder}" onchange="setSortOrder('${b.id}',this.value)" aria-label="排序值（${businessCategoryDisplayName(b)}）" class="w-[64px] px-2 py-1 rounded-md border border-slate-300 text-sm mono focus:outline-none focus:ring-2 focus:ring-primary-600" />
+             </div>`
+          : `<span class="mono text-sm text-slate-500">${b.sortOrder}</span>`}</td>
         <td class="px-4 py-3"><div class="font-medium text-slate-800" data-business-category-name>${businessCategoryDisplayName(b)}</div></td>
         <td class="px-4 py-3"><span class="block max-w-[300px] truncate text-slate-600" data-business-category-desc title="${b.desc}">${b.desc}</span></td>
         <td class="px-4 py-3">
@@ -285,14 +424,54 @@
         <td class="px-4 py-3 text-slate-500 mono text-xs">${b.updated}</td>
         <td class="px-4 py-3">
           <div class="flex items-center justify-start gap-3 text-sm whitespace-nowrap">
-            <button onclick="enterCanvas('${b.id}')" class="text-primary-600 hover:text-primary-700 hover:underline font-medium">DAG 畫布</button>
-            <button onclick="openEdit('${b.id}')" class="write-only text-slate-600 hover:text-primary-700 hover:underline">編輯</button>
-            <button onclick="toggleStatus('${b.id}')" class="write-only text-slate-600 hover:text-primary-700 hover:underline">${b.status==='active'?'停用':'啟用'}</button>
-            <button onclick="delBc('${b.id}')" class="write-only text-red-600 hover:text-red-700 hover:underline">刪除</button>
+            <!-- 🔵 UX16 項 13（AC-UX37）＋ AC-UX56：無寫權 ⇒ 本格四個動作**全部不進 DOM**，只留一個破折號。
+                 🔴 三顆 write-only 鈕也必須條件渲染、不能只靠 CSS 隱藏——AC-UX56 ⓑ 斷言的是
+                    該儲存格之 textContent.trim() **逐字為破折號**，而 CSS 隱藏的節點仍留在 textContent 裡。
+                 🔒 儲存格與表頭欄位**一律保留**（只拿掉儲存格會整表錯位，而「按鈕不存在」的斷言對錯位無感）。
+                 ⚠ 本註解刻意不用反引號：它位於 template literal 之內，一對反引號會就地終止該 template。 -->
+            ${canWrite?`<button onclick="enterCanvas('${b.id}')" class="text-primary-600 hover:text-primary-700 hover:underline font-medium">DAG 畫布</button>`:''}
+            ${canWrite?`<button onclick="openEdit('${b.id}')" class="write-only text-slate-600 hover:text-primary-700 hover:underline">編輯</button>`:''}
+            ${canWrite?`<button onclick="toggleStatus('${b.id}')" class="write-only text-slate-600 hover:text-primary-700 hover:underline">${b.status==='active'?'停用':'啟用'}</button>`:''}
+            ${canWrite?`<button onclick="delBc('${b.id}')" class="write-only text-red-600 hover:text-red-700 hover:underline">刪除</button>`:''}
+            ${canWrite?'':'<span class="text-slate-400">—</span>'}
           </div>
         </td>
       </tr>`).join('');
     lucide.createIcons();
+  }
+
+  /* 🔴 **任何篩選或搜尋生效時上下鈕一律停用**（關鍵字或狀態任一有值）。
+     📌 理由：在被篩過的檢視裡「上移一位」指的是「畫面上的前一列」還是「完整清單裡的前一列」，
+        兩種答案都說得通；不裁定就會變成兩種解讀、產生不同的資料狀態。 */
+  function sortFiltersActive(){
+    return !!((document.getElementById('kw').value||'').trim()) || !!document.getElementById('fStatus').value;
+  }
+  /* 🔒 邊界（首列不可上移、末列不可下移）恆以**完整清單**為準，不是被篩過的檢視。 */
+  function sortMoveDisabled(b,dir){
+    if(sortFiltersActive()) return true;
+    const ordered=sortedAll(CATEGORIES);
+    const i=ordered.findIndex(function(r){ return r.id===b.id; });
+    return dir<0 ? i<=0 : i>=ordered.length-1;
+  }
+  /* 🔒 停用做在**兩處**：按鈕的 `disabled` ＋ 本函式開頭的 early return
+     （鍵盤與程式化路徑仍到得了 setter，光靠屬性擋不住）。 */
+  function bumpSortOrder(id,dir){
+    const b=CATEGORIES.find(function(x){ return x.id===id; }); if(!b) return;
+    if(sortMoveDisabled(b,dir)) return;
+    CATEGORIES = dir<0 ? moveUp(CATEGORIES,id) : moveDown(CATEGORIES,id);
+    renderTable();
+    const nb=CATEGORIES.find(function(x){ return x.id===id; });
+    toast('info','已將「'+businessCategoryDisplayName(nb)+'」'+(dir<0?'上移':'下移')+'一位（排序值 '+nb.sortOrder+'）；前台類別下拉與文件清單之類別篩選皆依同一順序呈現。');
+  }
+
+  /* 🔵 UX16 項 8：調序。🔒 只動 `sortOrder` 一欄；不整表重編號（間距 10 即為了讓插入不必重寫整張表）。
+     🔒 空白／非數字一律收斂為 0（`0` 是合法序位，AC-UX29 明訂「`0` 亦不得省略」）。 */
+  function setSortOrder(id,raw){
+    const b=CATEGORIES.find(x=>x.id===id); if(!b) return;
+    const v=parseInt(String(raw).trim(),10);
+    b.sortOrder=Number.isFinite(v)?v:0;
+    renderTable();
+    toast('info','已將「'+businessCategoryDisplayName(b)+'」之排序值設為 '+b.sortOrder+'；前台類別下拉與文件清單之類別篩選皆依同一順序呈現。');
   }
 
   /* AC-01：建立成功後**導向該類別 DAG 畫布編輯頁**；列上之「DAG 畫布」為同一個入口。
@@ -337,8 +516,10 @@
       toast('error','同一業務/功能類別名稱不可同時存在「無子分類」與「有子分類」之設定；請先處理既有該筆','BUSINESS_CATEGORY_SUBCATEGORY_CONFLICT · 409'); return;
     }
     const now='2026-09-02 '+new Date().toTimeString().slice(0,5);
+    /* 🔵 UX16 項 8（AC-UX31 ②）：新增類別之預設 sortOrder ＝ max(sortOrder) + 10（不分 status）⇒ 排在最後；
+       表中無任何類別時首筆為 10。 */
     if(editingId){ const b=CATEGORIES.find(x=>x.id===editingId); b.name=name; b.subcategory=subcategory; b.desc=desc; b.updated=now; closeBc(); renderTable(); toast('success','已更新業務/功能類別「'+businessCategoryDisplayName(b)+'」，updatedAt 已更新'); }
-    else { const nb={id:'bc'+(++seq),name,subcategory,desc,status:'active',nodes:0,updated:now,docs:0}; CATEGORIES.unshift(nb); closeBc(); renderTable(); toast('success','已建立業務/功能類別「'+businessCategoryDisplayName(nb)+'」（配發 UUID），導向 DAG 畫布編輯頁'); }
+    else { const nb={id:'bc'+(++seq),name,subcategory,desc,status:'active',nodes:0,updated:now,docs:0,sortOrder:nextSortOrder()}; CATEGORIES.push(nb); closeBc(); renderTable(); toast('success','已建立業務/功能類別「'+businessCategoryDisplayName(nb)+'」（配發 UUID），導向 DAG 畫布編輯頁'); }
   }
 
   // AC-12 後半：停用**不受掛載限制**，既有節點／邊／掛載關係完全不受影響
@@ -370,6 +551,9 @@
     document.getElementById('roBanner').classList.toggle('hidden',!ro);
     document.getElementById('roBanner').classList.toggle('flex',ro);
     if(blocked)document.getElementById('blockMsg').textContent={deptcontact:'部門窗口對「業務/功能類別管理」為「無」。',user:'一般使用者無後台存取權。'}[r];
+    /* 🔵 UX16 項 13：角色切換必須**重繪清單**——「DAG 畫布」鈕是依 canWrite 條件渲染的，
+       不重繪的話該門控在畫面上根本切不出來（本 repo 既有血訓：role 切換器不重繪 ⇒ 門控無法以點擊驗證）。 */
+    renderTable();
     renderSidebar(); lucide.createIcons();
   }
 

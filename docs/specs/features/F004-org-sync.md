@@ -1,5 +1,5 @@
 # F004: 組織資料同步（每日排程＋手動觸發）
-Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-20
+Priority: P0-MVP | Status: Draft | Last Updated: 2026-07-20 <br>🔵 **2026-09-22 UX16 delta（項 4 之同步端回指）：見 [§UX16 delta](#ux16-delta)（`AC-UX12`；🟢 裁決全數 APPROVED，見 [open-questions §UX16](../open-questions.md#ux16-2026-09-22)）。**
 Epic/Story: E02 / US-010, US-011
 
 > 合併理由：排程與手動觸發共用同一同步服務核心，僅觸發來源不同（`trigger_type`）。
@@ -154,3 +154,17 @@ Epic/Story: E02 / US-010, US-011
 - 定案: OQ-E02-01（View schema → 見來源契約）, OQ-E02-02（排程 02:00 UTC+8、失敗 3 次遞增間隔重試）
 - OQ: OQ-E02-05（通知管道）；消失筆數閾值已於 2026-08-31 依實際觀測由草案 5% 校準為 **10%**（契約 §7.3）
 - OQ-RA-01（首次全量套用之閾值放寬）自 2026-08-31 起**不再只能走 CLI**：系統管理員可於「組織人員異動管理」自助放行（`AC-RD3`）。角色變更閾值本身**維持 5%、不得永久調高**（`Q4.6`）
+
+---
+
+## UX16 delta — 2026-09-22 停用「業務」自動判定之同步端回指（項 4；`AC-UX#` 批） {#ux16-delta}
+
+> **來源**＝[stories/2026-09-22-ux-delta-16.md](../../stories/2026-09-22-ux-delta-16.md) 第 4 項；🔴 **規則權威＝[F041 §UX16 delta](F041-user-subtype-business-scope.md#ux16-delta)**（`AC-UX8`～`AC-UX11`）。本節**僅立同步端之回歸鎖，不重複任何條文**。
+> 裁決紀錄＝[open-questions §UX16](../open-questions.md#ux16-2026-09-22)（`OQ-UX16-05`＝選項 B，🟢 APPROVED）。
+
+- **AC-UX12**（🔒 **同步端之門檻與流程一格未動**）：Given [F041](F041-user-subtype-business-scope.md#ux16-delta) `AC-UX8`／`AC-UX9` 實作完成, When 檢視組織同步之寫入路徑, Then ——
+  - ① 🔒 **`DEFAULT_ROLE_CHANGE_THRESHOLD`（`0.05`）與 `ROLE_CHANGE_MIN_ABSOLUTE`（`10`）兩個常數之值一格未動**，`roleChangeRatioExceeded()` 之簽章與語意逐字未變，其既有測試**維持綠燈且期望值未經修改**；
+  - ② 🔴 **不得**為本次回填新增任何「跳過門檻」之旗標、環境變數或參數（`OQ-UX16-05` 明文否決選項 A；理由見 [F041](F041-user-subtype-business-scope.md#ux16-delta) `AC-UX9`）——既有之 `OQ-RA-01` 放寬機制（`AC-RD3`，系統管理員於「組織人員異動管理」自助放行）**維持現況、不因本 delta 擴充其適用情境**；
+  - ③ 🔒 **消失筆數閾值（10%，契約 §7.3）、排程、`SYNC_RUN` 之欄位與 `trigger_type` 值域**一律不變；
+  - ④ 🔒 **本 delta 不新增任何同步範圍、不新增任何上游欄位**——`AC-UX9` 之回填是一支**獨立 migration**，它不是同步的一部分，🔴 **不得**把它掛進 `SYNC_RUN` 的任何統計或告警裡。
+  - 📌 **本條之存在理由**：`OQ-RA-01`（2026-08-25）之前例會讓下一個讀者以為「全量回填就是要放寬閾值跑一次同步」；本 delta 之裁決**明確不同**，此處立鎖以免前例被誤用。

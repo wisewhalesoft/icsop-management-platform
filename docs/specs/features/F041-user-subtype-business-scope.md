@@ -1,5 +1,5 @@
 # F041: 一般使用者子分類——業務／其他（業務限縮於使用部門）
-Priority: P0-MVP | Status: 規格 🟢 **APPROVED（2026-08-11 人類閘門通過，12 項全數裁決）＋ AC-41～AC-46 缺口修補（2026-08-11）** · 實作 🟡 部分（AC-01～AC-40 已實作且 unit-green；**AC-41～AC-46 為新增條文、尚未實作**，見 [feature-status.md §F041 升 ✅ 待辦](../feature-status.md#f041-to-done)） | Last Updated: 2026-08-11
+Priority: P0-MVP | Status: 規格 🟢 **APPROVED（2026-08-11 人類閘門通過，12 項全數裁決）＋ AC-41～AC-46 缺口修補（2026-08-11）** · 實作 🟡 部分（AC-01～AC-40 已實作且 unit-green；**AC-41～AC-46 為新增條文、尚未實作**，見 [feature-status.md §F041 升 ✅ 待辦](../feature-status.md#f041-to-done)） | Last Updated: 2026-08-11 <br>🔵 **2026-09-22 UX16 delta（項 4）：見 [§UX16 delta](#ux16-delta)（`AC-UX8～AC-UX11`；🟢 裁決全數 APPROVED，見 [open-questions §UX16](../open-questions.md#ux16-2026-09-22)）。**
 
 Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user-subtype-business-dept-restriction.md)（主）＋ E06 / [US-057](../../stories/epics/E06-public-browsing/US-057-business-user-dept-scoped-browsing.md)（從）
 
@@ -363,3 +363,37 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
   | `prototypes/08-account-management.html` | ①指派角色 modal 子分類選擇器（含預選與說明文字）②清單「角色」欄子分類徽章 ③編輯帳號 modal「目前角色」顯示子分類；建立帳號預設 `'other'`；`20088 陳彥廷` 保留值 persona | AC-31／AC-32、AC-35／AC-36、**AC-41～AC-44** |
   | `prototypes/18-permission-matrix.html` | F041 註記橫幅（子分類非第 6 種角色）；兩份矩陣 5 欄逐格不變 | AC-37／AC-38、**AC-45** |
 - **逐字文案權威**：~~`SCOPE_NOTICE_OTHER`／`SCOPE_NOTICE_BUSINESS` 定義於 `prototypes/03-public-list.html`（AC-40）~~ 📝 **已移除（2026-08-27，`AC-Y1`）**；`SUBTYPE_DESC` 定義於 `prototypes/08-account-management.html`（AC-44）；404 畫面文案定義於 `prototypes/04-public-document-detail.html`（AC-46）
+
+---
+
+## UX16 delta — 2026-09-22 停用「業務」自動判定並回填（項 4；`AC-UX#` 批） {#ux16-delta}
+
+> **來源**＝[stories/2026-09-22-ux-delta-16.md](../../stories/2026-09-22-ux-delta-16.md) 第 4 項（使用者原文：「帳號管理(組織人員同步)：註解掉『一般使用者(業務)』的判定，將原先判定為業務也視為『一般使用者(其他)』」）；裁決紀錄＝[open-questions §UX16](../open-questions.md#ux16-2026-09-22)（`OQ-UX16-05`，🟢 APPROVED）。
+> **本 delta 之 AC 編號採 `AC-UX#`**（編號規則與跨檔範圍見 [F002 §UX16 delta](F002-role-based-routing.md#ux16-delta) 檔頭）。🔴 **明文不沿用本檔既有之 `AC-R#`／`AC-U#`**。
+> 🔴 **人類已裁決之方向（2026-09-22，不得再翻案）**：停判定 ＋ 回填既有 `business`→`other`；判定式以註解保留（可復原）。<br>⚠ **後果已知並接受**：這些人（正式環境實測 **699 人／51.1%**）之前台可見範圍由「僅使用部門」**放寬**為「全部已公告文件」。
+> 🔒 **本檔既有內容一律不變**：`INV-1`／`INV-2`、`userSubtype` 列舉值與欄位、`normalizeUserSubtype`／`isSubtypeApplicable`／`isDeptScopedViewer`／`isUsingDeptMatched`／`isDocVisibleToViewer` 之判定契約、可見範圍定義、帳號管理之手動指派選項、5 種固定角色——**全數維持原狀**（`AC-UX11`）。**本 delta 只改「值從哪裡來」，不改「值代表什麼」。**
+
+- **AC-UX8**（🔴 停用自動判定：目標子分類恆為 `other`）：Given 上游任一帳號之職稱名稱**含「業務」二字**（如 `業務專員`）, When 執行 `deriveRoles()`, Then 其 `subtypeChanges` 之目標值（`to`）**恆為 `'other'`**；Given 職稱不含「業務」二字, Then 目標值**亦為 `'other'`** ⇒ 🔒 **`deriveRoles()` 之輸出中，`to === 'business'` 之列數恆為 0**。<br>
+  🔴 **`isBusinessJobTitleName()` 以註解保留、可復原**（`role-derivation.ts:135-137`）：函式本體**不刪除**，僅其唯一呼叫點（`:223-237` 之規則 A）停止消費其回傳值；🔒 該函式既有之全部單元測試**維持綠燈且期望值未經修改**（它作為純函式的行為沒有改變——改變的是「有沒有人聽它的」）。<br>
+  🔴 **可測形狀（成對，缺一即假綠）**：① **正向**——語料須含**至少一個職稱含「業務」二字之帳號**，斷言其 `to === 'other'`；② **負向**——斷言整份 `subtypeChanges` 中 `to === 'business'` 之列數 `=== 0`。<br>
+  　🔴 **① 單獨不夠、② 單獨也不夠**：只寫 ② 時，一個「`subtypeChanges` 整個回空陣列」的實作照樣全綠（既有已為 `business` 的帳號就永遠不會被改回 `other`）；只寫 ① 時，一個「只對這個 fixture 的職稱寫死例外」的實作照樣全綠。<br>
+  　🔴 **語料鑑別力（本條之核心）**：語料須含**一個 `userSubtype` 現值為 `'business'` 的既有帳號**——否則「停判定」與「停判定＋不回填」在 `deriveRoles()` 的輸出上**完全相同**（兩者的 `subtypeChanges` 都是空的），本條恆真。<br>
+  📝 **已作廢（⚠ 可復原，但復原須經人類再裁決）**：`OLD>` `const targetSubtype = isBusinessJobTitleName(titleName) ? 'business' : 'other';`（`role-derivation.ts:230`）。
+
+- **AC-UX9**（🔴 **回填走獨立的一次性 migration，完全不經既有同步門檻**；`OQ-UX16-05`＝選項 B）：Given 本 delta 上線, When 執行既有 `business`→`other` 之回填, Then 其載體為**一支獨立之 migration**，語意等同 `UPDATE ACCOUNT SET userSubtype='other' WHERE roleSource='derived' AND userSubtype='business'`（實際語法與落點由 system-architect 定案），**不經 `deriveRoles()`、不經 `roleChangeRatioExceeded()`、不經任何同步流程**。<br>
+  🔴 **明文否決選項 A（以環境變數一次性放寬既有門檻；理由不得省略）**：`roleChangeRatioExceeded()` 收的是**整份計畫之 `writeCount`**（`role-derivation.ts:244`＝`roleUpgrades.length + subtypeChanges.length`），它**分不出**哪些變更是本次回填、哪些是同一次同步裡的其他變更 ⇒ 放寬閾值等於**連同該次同步的角色升級與其他子分類變更一起放行**。本 repo 已於 `OQ-RA-01`（2026-08-25 首次全量套用）用過該手法，當時全站只有那一個變更來源；**本次不是**。<br>
+  🔒 **`DEFAULT_ROLE_CHANGE_THRESHOLD`（5%）與 `ROLE_CHANGE_MIN_ABSOLUTE`（10）兩個常數一格未動**，亦**不得**為本次回填臨時調整（[F004](F004-org-sync.md#ux16-delta) `AC-UX12`）。<br>
+  🔒 **回填範圍限於 `roleSource='derived'` 之帳號**：以帳號管理**手動指派**為 `business` 者（`roleSource` 非 `derived`）**不在回填範圍內**——手動指派是人做的決定，自動判定的停用不構成推翻它的理由。<br>
+  📌 **可測形狀**：以「三筆列（derived+business／derived+other／manual+business）」之語料驅動該 migration 之選取述詞（純函式或 SQL 之 WHERE 子句投影），斷言**恰選中第一筆**。🔴 語料若不含 `manual+business` 那一筆，「有沒有限縮 `roleSource`」輸出相同，本條恆真。
+
+- **AC-UX10**（🔴 **不跑此 migration 之後果，必須寫進 AC**）：Given `AC-UX8` 已上線但 `AC-UX9` 之 migration **未執行**, When 下一次例行組織同步執行 `deriveRoles()`, Then 正式環境約 **699 筆** `subtypeChanges`（`business` → `other`）進入同一份計畫 ⇒ `writeCount` 遠超 `1,368 × 5% = 68` 亦遠超絕對下限 10 ⇒ `roleChangeRatioExceeded()` 為 `true` ⇒ **整批被擋、一筆不寫**。<br>
+  🔴 **且此時前後端全部單元測試照樣全綠**——門檻機制本身運作正確，被擋下不是缺陷；缺陷是「有人以為改完判定式、同步照跑即可」。<br>
+  📌 **可測形狀（本條唯一能在簡化環下兌現的部分）**：以「699 筆 `subtypeChanges` ＋ `consideredAccountCount = 1368`」之純函式向量驅動 `roleChangeRatioExceeded()`，斷言回傳 `true`；另以「10 筆／1368」斷言 `false`（邊界：`writeCount <= minAbsolute` 放行）。<br>
+  ⚠ **本條之真正驗收在真庫**，不在任何測試裡：🔴 **migration 必須對 dev 真庫實跑、以 `SELECT COUNT(*) FROM ACCOUNT WHERE roleSource='derived' AND userSubtype='business'` 覆核其結果為 0**。本 repo 已**三度**重演「migration 寫了但沒對真庫跑」之形狀（[F043 檔頭實作前置警語](F043-business-function-category.md)）。
+
+- **AC-UX11**（🔒 **零漣漪回歸鎖定：只停來源，不動語意**）：Given 本 delta 實作完成, When 逐項檢視, Then 下列**一律與本 delta 導入前逐字相同**——
+  - ① **五支純函式之簽章與回傳語意**：`normalizeUserSubtype`／`isSubtypeApplicable`／`isDeptScopedViewer`／`isUsingDeptMatched`／`isDocVisibleToViewer`；`AC-05`～`AC-19`／`AC-33` 之全部既有測試**維持綠燈且期望值未經修改**。
+  - ② **`userSubtype` 欄位與其列舉值（`business`／`other`）皆保留**——🔴 **不得**順手移除列舉值或欄位：帳號管理之**手動指派**選項仍在（人類裁決明示保留），而移除列舉值會讓手動指派無值可選。
+  - ③ **帳號管理之手動指派 UI、其寫入路徑與 `roleSource` 之語意**一格未動。
+  - ④ **[F019](F019-public-list-browsing.md) 前台之可見性管線一行未改**：改變的是「有多少人落在 `business` 這一桶」，不是「落在這一桶的人看得到什麼」。
+  - 🔴 **本條偵測之失誤形狀**：把「業務子分類這個功能不再自動啟用」誤讀為「業務子分類這個功能不要了」而順手拆掉限縮邏輯——那會讓日後任何人手動指派一個 `business` 帳號時，限縮**靜默失效**。

@@ -38,6 +38,46 @@
         這是本檔與 03 之刻意差異：橫幅維持可讀行寬並置中，畫布吃滿螢幕，否則寬樹必被切掉而只能拖曳。
         實作端（PublicCategoryTreePage）原本被嵌進 PublicListPage 的 `max-w-5xl` <main> 而夾成 1024px，
         1742px 寬的樹被切掉 750px——**那是實作偏離本檔**，修在前端。 -->
+<!-- 🔵 2026-09-22 UX16 delta（項 5／7／8）——規格權威＝F019 §UX16 delta（AC-UX13～AC-UX17）
+     ＋ F043 §UX16 delta（AC-UX27＝資料面、AC-UX32 ②＝前台下拉排序）；裁決見 open-questions.md#ux16-2026-09-22。
+
+     ═══ 項 5：抽屜之「在文件清單中檢視」導向鈕（AC-UX13～AC-UX16）═══
+     🔴 **本項推翻本檔原有之 🔒 負向設計**（原文以 `OLD>` 逐字保留於抽屜區之註解）。
+     🔒 逐字文案＝**`在文件清單中檢視這 {N} 份文件`**（可見文字＝aria-label＝title 三者同值）。
+        🔴 **與後台之 `在文件管理中檢視這 {N} 份程序書` 刻意不同、不得互相對齊**：
+           目標頁籤名不同（後台是「文件管理」、前台是「文件清單」），且前台通篇稱「文件」而非「程序書」。
+           ⇒ 本檔另立常數 `formatPublicSubtreeJumpLabel`，**明文禁止**共用／改動 22／29 之 `formatSubtreeJumpLabel`。
+     🔒 `{N}` ＝子樹之**相異可見文件數**（＝副標題 `子樹共 {N} 份程序書` 之同一個 N），**不是抽屜之畫面列數**。
+        📌 語料鑑別力：預設檢視（bc1 / p1）之抽屜畫面列數為 **6**、相異數為 **5**
+           （`ICSOP-SRC-101-1-01` 同時掛在 p2 與 p4）⇒ 兩數確實不同，「數了列數」與「數了相異數」輸出不同。
+     🔒 `N = 0` ⇒ 該鈕**整顆自 DOM 移除**（**非** disabled、**非** CSS 隱藏）。
+     🔒 DOM 掛鉤逐字為 **`data-public-subtree-jump`**（無值屬性）；🔴 明文禁止沿用 `data-subtree-jump`（循環側）
+        或 `data-bc-subtree-jump`（後台類別側）——三顆鈕行為不同、目標不同。
+     🔒 deep link 參數＝**`bcSubtreeId`＋`bcSubtreeNodeId`**（architecture-spec §16.4 定案）；兩參數**恆成對**，
+        任一缺席 ⇒ 靜默 no-op（不篩選、不顯示 chip、不回錯誤）。落地端之 chip 見 03-public-list。
+     🔒 抽屜其餘一切不變：四欄、依節點分組、本節點恆第一組且帶 `（本節點）`、副標題逐字、點列導向、空狀態文案
+        ——一律逐字不變；抽屜**仍不含任何寫入元件**。
+
+     ═══ 項 7：樹狀圖之水平捲軸（AC-UX17）═══
+     🔒 畫布容器 `<main id="stage" data-testid="public-tree-stage">` 之 className **同時含**
+        `overflow-auto`、**`flex-1`** 與 **`min-h-0`**，且其祖先鏈上有一個**以視窗可視高度為界**之 flex 直向容器
+        （本檔＝`<body class="h-screen flex flex-col">`；📝 OLD> `min-h-screen flex flex-col`）。
+     🔴 **`min-h-0` 是本項的全部重點，不是湊數**：flex 子項之 `min-height` 預設為 `auto`、不肯縮到內容高度以下
+        ⇒ 只加 `flex-1` 而不加 `min-h-0` 時，容器仍會被內容撐高到超出視窗，原生水平捲軸仍貼在內容底部、
+        仍要捲到最下方才看得到——**原封不動重現使用者回報的那個 bug，而所有測試全綠**。
+     🔴 `min-h-screen` → `h-screen` 同樣不可省：`min-h-screen` 只給下界、不給**上界**，
+        flex 容器沒有上界時 `flex-1` 之子項一樣會被內容撐開。
+     🔒 **人工覆核項（不進自動化閘門）**：樹狀圖內容高於視窗時，水平捲軸不需捲到最底即可看見並操作。
+        jsdom 不計算版面（offsetHeight／scrollHeight 恆為 0），本項之視覺結果**無法**以本輪環境驗證。
+     🔒 零漣漪：平移縮放、浮水印疊加層幾何、抽屜開闔——一律不變。
+     🔒 **後台兩個預覽頁（22／29）之版面 class 與捲動行為刻意不動**（AC-UX28）：使用者原文範圍逐字為前台。
+
+     ═══ 項 8：類別下拉之排序（AC-UX32 ②）═══
+     🔒 前台類別切換下拉自此依 **`sortOrder ASC, name ASC`**（📝 OLD> `name ASC`），與後台類別池清單（26）
+        及 13 之「業務/功能類別」篩選下拉**三處同一口徑**。
+     📌 示範值與 26 逐筆相同，且其次序**恰等於本檔原有之 ORDER 陣列** ⇒ 畫面呈現零變動、驅動來源改為 sortOrder。
+        🔴 該次序**同時不同於** name 字典序與 updatedAt 次序——否則「有沒有依 sortOrder 排」恆真。
+     🔒 `AC-B18` 之納入條件一字不改（仍僅 status='active' 且對該 viewer 至少一份可見文件）：本項改的是**次序**，不是成員。 -->
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8" />
@@ -79,7 +119,9 @@
   path.edge.dim{opacity:.18;}
 </style>
 </head>
-<body class="min-h-screen flex flex-col">
+<!-- 🔵 UX16 項 7（AC-UX17）：`min-h-screen` → **`h-screen`** ＝ 以視窗可視高度為界之 flex 直向容器。
+     📝 已作廢（⚠ 不得復原）：OLD> <body class="min-h-screen flex flex-col"> -->
+<body class="h-screen flex flex-col">
 
 <!-- App bar（逐項鏡射 03-public-list） -->
 <header class="sticky top-0 z-30 bg-white border-b border-slate-200 shrink-0">
@@ -159,7 +201,10 @@
 </div>
 
 <!-- viewer stage（不得用 flex justify-center 置中畫板，理由見 22 之同段註解） -->
-<main id="stage" class="flex-1 overflow-auto p-4 mt-3">
+<!-- 🔵 UX16 項 7（AC-UX17）：**`flex-1` ＋ `min-h-0` ＋ `overflow-auto` 三者同時具備**；
+     `data-testid="public-tree-stage"` 逐字沿用實作端之既有定位點。
+     📝 已作廢（⚠ 不得復原）：OLD> <main id="stage" class="flex-1 overflow-auto p-4 mt-3"> -->
+<main id="stage" data-testid="public-tree-stage" class="flex-1 min-h-0 overflow-auto p-4 mt-3">
   <div id="boardSizer">
   <div id="board">
     <svg id="edges" style="position:absolute;inset:0;pointer-events:none;z-index:1;">
@@ -186,8 +231,13 @@
         📝 已作廢（⚠ 不得復原）：OLD> 僅列**該節點**掛載之文件、不分組、副標題 `共 {N} 份程序書`。
      🔒 抽屜**不含任何寫入元件**（無新增／移除掛載／儲存／刪除，亦無 <input>／<select>）。
      🔒 每列四欄：程序書編號／程序書書名／版次／公告日期；點列導向 **/public/documents/:id**。
-     🔒 **刻意沒有** 29 之「在文件管理中檢視這 N 份程序書」導向鈕（AC-56 ⑦ 之前台負向半句）：
-        前台清單沒有節點子樹維度，也無後台文件管理可導向。 -->
+     🔵 2026-09-22 UX16 項 5（AC-UX13／AC-UX14，OQ-UX16-06＝選項 A，人類確認推翻）：
+        抽屜底部**有一顆**導向鈕，逐字為 `在文件清單中檢視這 {N} 份文件`，按下後切換至「文件清單」模式
+        並把清單限縮為本子樹之相異可見文件集合；前台清單自此**有**節點子樹這個維度。
+     📝 已作廢（⚠ 不得復原、不得用於斷言）：
+        OLD> 🔒 **刻意沒有** 29 之「在文件管理中檢視這 N 份程序書」導向鈕（AC-56 ⑦ 之前台負向半句）：
+        OLD>    前台清單沒有節點子樹維度，也無後台文件管理可導向。
+     🔒 「抽屜不含任何寫入元件」那一句**仍然有效**（作廢的只有「刻意沒有導向鈕」）——本鈕是導覽、不是寫入。 -->
 <aside id="nodeDocDrawer" aria-hidden="true" aria-label="節點與其下游節點之程序書清單（唯讀）"
        class="fixed right-0 top-0 bottom-0 z-40 w-full sm:w-[400px] bg-white border-l border-slate-200 shadow-2xl translate-x-full transition-transform duration-300 flex flex-col">
   <div class="h-14 shrink-0 flex items-center gap-2 px-4 border-b border-slate-200">
@@ -200,6 +250,8 @@
     <button onclick="closeNodeDrawer()" aria-label="關閉" title="關閉（Esc）" class="w-8 h-8 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400 shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
   </div>
   <div id="ndBody" class="flex-1 overflow-y-auto"></div>
+  <!-- 🔵 UX16 項 5：導向鈕之宿主。N = 0 時**內部完全空**（鈕整顆不進 DOM，不留任何隱藏元素）。 -->
+  <div id="ndJump" class="shrink-0"></div>
   <div class="shrink-0 border-t border-slate-200 px-4 py-2.5 text-[11px] text-slate-400 flex items-start gap-1.5">
     <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>
     <span>點任一列可開啟該程序書之<strong>文件詳情</strong>。本清單僅列出您可檢視之程序書。</span>
@@ -322,7 +374,7 @@
      🔴 bc5／bc6 為 status='inactive' ⇒ 一律不入下拉（AC-B18 ①）；
         bc7 為 active 但 **0 個節點**（⇒ 0 份可見文件）⇒ 亦不入下拉（AC-B18 ②）。 */
   const CATS={
-    bc1:{name:'授信', subcategory:'消金', status:'active', nodes:[
+    bc1:{name:'授信', subcategory:'消金', status:'active', sortOrder:10, nodes:[
       {id:'p1',name:'授信政策與額度管理',docs:[{num:'ICSOP-SRC-101-2-00',name:'消金審核作業',edition:"25'12",status:'有效',date:'2025-12-01',use:['營業二本部']}]},
       {id:'p2',name:'徵信調查作業',docs:[{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01',use:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部']}]},
       {id:'p3',name:'擔保品管理作業',docs:[{num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01',use:['經營企劃管理本部 / 經企公關部 / 法遵及公司治理室']}]},
@@ -331,35 +383,43 @@
         {num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01',use:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部']}]},
       {id:'p5',name:'撥貸與帳務作業',docs:[{num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",status:'有效',date:'2026-05-01',use:['全公司']}]}],
       edges:[['p1','p2'],['p1','p3'],['p2','p4'],['p3','p4'],['p4','p5']]},
-    bc2:{name:'授信', subcategory:'企金', status:'active', nodes:[
+    bc2:{name:'授信', subcategory:'企金', status:'active', sortOrder:20, nodes:[
       {id:'q1',name:'企金授信受理作業',docs:[{num:'ICSOP-SRC-103-1-01',name:'企業金融授信作業',edition:"26'02",status:'有效',date:'2026-06-01',use:['風險管理服務本部 / 信用審查部']}]},
       {id:'q2',name:'企業徵信作業',docs:[{num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01',use:['經營企劃管理本部 / 經企公關部 / 法遵及公司治理室']}]},
       {id:'q3',name:'授信核決作業',docs:[{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01',use:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部']}]},
       {id:'q4',name:'額度撥貸作業',docs:[]}],
       edges:[['q1','q2'],['q1','q3'],['q2','q4'],['q3','q4']]},
-    bc3:{name:'風險管理', subcategory:null, status:'active', nodes:[
+    bc3:{name:'風險管理', subcategory:null, status:'active', sortOrder:40, nodes:[
       {id:'r1',name:'風險辨識作業',docs:[{num:'ICSOP-CIPS-104-1-01',name:'使用者權限管理與覆核',edition:"26'01",status:'有效',date:'2026-04-01',use:['財務資訊本部 / 資訊部 / 應用發展室']}]},
       {id:'r2',name:'風險評估作業',docs:[{num:'ICSOP-FC-101-1-00',name:'銀行融資作業',edition:"26'01",status:'有效',date:'2026-02-01',use:['財務資訊本部 / 財會部']}]},
       {id:'r3',name:'風險監控作業',docs:[{num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01',use:['經營企劃管理本部 / 經企公關部 / 法遵及公司治理室']}]},
       {id:'r4',name:'風險報告作業',docs:[{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01',use:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部']}]}],
       edges:[['r1','r2'],['r2','r3'],['r1','r3'],['r3','r4']]},
-    bc4:{name:'帳務處理', subcategory:'子公司', status:'active', nodes:[
+    bc4:{name:'帳務處理', subcategory:'子公司', status:'active', sortOrder:50, nodes:[
       {id:'s1',name:'子公司帳務結算作業',docs:[{num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',edition:"26'02",status:'有效',date:'2026-05-01',use:['全公司']}]},
       {id:'s2',name:'子公司入帳覆核作業',docs:[
         {num:'ICSOP-IC-102-1-00',name:'短期投資買賣、保管及會計作業',edition:"26'05",status:'有效',date:'2026-10-01',use:['財務資訊本部 / 財會部']},
         {num:'ICSOP-GCA-100-2-00',name:'法遵作業',edition:"26'01",status:'有效',date:'2026-03-01',use:['經營企劃管理本部 / 經企公關部 / 法遵及公司治理室']}]},
       {id:'s3',name:'子公司報表產出作業',docs:[]}],
       edges:[['s1','s2'],['s2','s3']]},
-    bc5:{name:'帳務處理', subcategory:'消金', status:'inactive', nodes:[
+    bc5:{name:'帳務處理', subcategory:'消金', status:'inactive', sortOrder:60, nodes:[
       {id:'t1',name:'消金帳務結算作業',docs:[]},{id:'t2',name:'消金帳務覆核作業',docs:[]}],
       edges:[['t1','t2']]},
-    bc6:{name:'授信', subcategory:'子公司', status:'inactive', nodes:[
+    bc6:{name:'授信', subcategory:'子公司', status:'inactive', sortOrder:30, nodes:[
       {id:'u1',name:'子公司授信受理作業',docs:[{num:'ICSOP-SRC-101-1-01',name:'車輛分期進件作業',edition:"26'01",status:'有效',date:'2026-01-01',use:['營業二本部 / 營運管理部 / 審查室','風險管理服務本部 / 信用審查部']}]},
       {id:'u2',name:'子公司授信核決作業',docs:[]}],
       edges:[['u1','u2']]},
-    bc7:{name:'帳務處理', subcategory:'企金', status:'active', nodes:[], edges:[]}
+    bc7:{name:'帳務處理', subcategory:'企金', status:'active', sortOrder:70, nodes:[], edges:[]}
   };
-  const ORDER=['bc1','bc2','bc6','bc3','bc4','bc5','bc7'];
+  /* 🔵 UX16 項 8（AC-UX32 ②）：類別之呈現次序由 `sortOrder ASC, name ASC` **推導**，不再是一個手寫陣列。
+     🔒 次要鍵 `name` 升冪＝AC-UX31 ③（sortOrder 不保證唯一；無次要鍵時同值列之次序會隨執行環境漂移）。
+     📝 已作廢（⚠ 不得復原、不得用於斷言）：OLD> const ORDER=['bc1','bc2','bc6','bc3','bc4','bc5','bc7'];
+        ——舊陣列之次序與本推導之輸出**逐筆相同**（畫面零變動），差別在於它自此有一個可維護的來源（26）。 */
+  function compareBySortOrder(a,b){
+    if(CATS[a].sortOrder!==CATS[b].sortOrder) return CATS[a].sortOrder-CATS[b].sortOrder;
+    return CATS[a].name<CATS[b].name ? -1 : (CATS[a].name>CATS[b].name ? 1 : 0);
+  }
+  const ORDER=Object.keys(CATS).sort(compareBySortOrder);
 
   /* 已公告基底條件（🔒 AC-B24 ②：逐字沿用既有判定，不得放寬）：status = 有效 AND 公告日期 ≤ 今日 */
   const TODAY='2026-09-02';
@@ -611,6 +671,30 @@
       <div class="divide-y divide-slate-100">${g.docs.map(docRowHtml).join('')}</div>
     </section>`;
   }
+  /* ===== 🔵 UX16 項 5（AC-UX13）：前台子樹導向鈕之逐字文案 =====
+     🔴 **另立之常數，明文禁止改動或共用後台之 `formatSubtreeJumpLabel`**（那支被 22／29 兩個後台頁共用，
+        改它會連帶改掉後台兩處之文字並使 F043 AC-56 與 F036 之逐字鎖翻紅）。
+     🔒 前台＝`在文件清單中檢視這 {N} 份文件`；後台＝`在文件管理中檢視這 {N} 份程序書`——兩句刻意不同。 */
+  function formatPublicSubtreeJumpLabel(n){ return `在文件清單中檢視這 ${n} 份文件`; }
+  /* 🔒 deep link 之兩個參數**恆成對**（architecture-spec §16.4）；任一缺席 ⇒ 落地端靜默 no-op。
+     🔴 **明文禁止**沿用後台之 `businessCategoryId`＋`bcNodeSubtreeId`：兩邊之路由與可見性口徑不同，
+        共用鍵名會讓「後台網址貼到前台」產生一個看似成功卻略過可見性檢查的請求形狀。 */
+  function gotoSubtreeList(catId,nodeId){
+    location.href='03-public-list.html?mode=list&bcSubtreeId='+encodeURIComponent(catId)+'&bcSubtreeNodeId='+encodeURIComponent(nodeId);
+  }
+  /* 🔒 AC-UX13：可見文字＝aria-label＝title 三者同值；N = 0 ⇒ **整顆不進 DOM**（非 disabled、非 CSS 隱藏）。 */
+  function renderSubtreeJump(catId,nodeId,distinct){
+    const host=document.getElementById('ndJump');
+    if(!distinct){ host.innerHTML=''; return; }
+    const label=formatPublicSubtreeJumpLabel(distinct);
+    host.innerHTML=`<div class="border-t border-slate-200 px-4 py-3">
+      <button type="button" data-public-subtree-jump onclick="gotoSubtreeList('${catId}','${nodeId}')"
+              aria-label="${label}" title="${label}"
+              class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-1">
+        <i data-lucide="list" class="w-4 h-4 shrink-0"></i>${label}</button>
+    </div>`;
+  }
+
   function openNodeDrawer(id){
     const n=cur.nodes.find(x=>x.id===id); if(!n) return;
     const groups=subtreeGroups(id);
@@ -628,6 +712,8 @@
       : `<div data-node-doc-empty class="px-4 py-10 text-center text-sm text-slate-400">
            <i data-lucide="file-x-2" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>此節點與其下游節點皆沒有您可檢視的程序書
          </div>`;
+    /* 🔵 UX16 項 5：`distinct` 即副標題之同一個 N（相異可見文件數），**不是**畫面列數。 */
+    renderSubtreeJump(CUR,id,distinct);
     const dr=document.getElementById('nodeDocDrawer');
     dr.classList.remove('translate-x-full'); dr.setAttribute('aria-hidden','false');
     document.getElementById('ndBody').scrollTop=0;

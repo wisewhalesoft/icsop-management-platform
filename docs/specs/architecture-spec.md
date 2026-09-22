@@ -5780,3 +5780,737 @@ graph TD
 | ⑤ | ui-ux-designer 尚須回填三項：環圖 Top N 之 N（`[ASSUMPTION] A-G6`）、兩區塊頁籤是否連動（`A-G2`）、兩處建議文案（`A-G4`／`A-G5`）。本章之端點契約對三者皆為中立（端點恆回全量、`defaultDimension` 只回一個值），**不需因其裁量而改動後端**。 |
 
 ---
+
+## 16. 2026-09-22 使用者體驗優化 16 項架構決策 {#ch16-ux16}
+
+> **本章對應**：[stories/2026-09-22-ux-delta-16.md](../stories/2026-09-22-ux-delta-16.md)（16 項逐項分析）、[open-questions §UX16](open-questions.md#ux16-2026-09-22)（`OQ-UX16-01`～`32`，🟢 全數 APPROVED）、七檔之 `## UX16 delta` 節（[F002](features/F002-role-based-routing.md#ux16-delta) `AC-UX1`～`7`／[F004](features/F004-org-sync.md#ux16-delta) `AC-UX12`／[F041](features/F041-user-subtype-business-scope.md#ux16-delta) `AC-UX8`～`11`／[F019](features/F019-public-list-browsing.md#ux16-delta) `AC-UX13`～`26`／[F043](features/F043-business-function-category.md#ux16-delta) `AC-UX27`～`39`／[F017](features/F017-backend-document-list.md#ux16-delta) `AC-UX40`～`44`／[F042](features/F042-ojt-progress-management.md#ux16-delta) `AC-UX45`～`54`）。
+> **與 §15 之差異**：F044（§15）之架構裁定發生在 AC 定稿**之前**；本批 `AC-UX1`～`AC-UX54` 已由 spec-writer 撰畢並經人類核准，多處明文寫著「🔵 建議…形狀由 system-architect 定案」。**本章之交付是把這些 🔵 佔位逐一釘為 🔒 定案**，而非產出新 AC 草案。本章**不改寫任何 AC 文字**；若發現 AC 與可行架構之間有真正衝突（本章查證結果：**無**），仍依 §15 之慣例列於 [§16.14](#ch16-handback) 交回 lead。
+> **人類已核准之實作計畫（D-1／D-2／D-3）**：本章對三者逐一查證後**全數確認可行、無需修正**，理由見 [§16.1](#ch16-ux-d1)～[§16.3](#ch16-ux-d3)。
+
+### 16.0 本章範圍與閱讀指引
+
+| 讀者 | 應讀章節 |
+|---|---|
+| test-generator | §16.4（子樹篩選之安全次序）、§16.6（per-company 計數之語料鑑別力要求）、§16.12（🔴 本輪測不到的清單） |
+| tdd-implementation | §16.1～§16.11 全部 |
+| ui-ux-designer | §16.4（chip／DOM 掛鉤命名）、§16.6（`data-company-doc-count` 之資料來源形狀）、§16.8（匯出鈕之 query 形狀） |
+| lead／人類閘門 | §16.12（人工覆核清單）、§16.14（交回事項） |
+
+**本輪之特殊前提（與 §15 相同、更嚴）**：約束環為**簡化環——只有 backend jest／frontend vitest**，無 Playwright、無 mutation testing、無整合測試。⇒ 🔴 **凡落在 SQL 內之邏輯，本輪一條測試都碰不到它**；本章之切分決策延續 §15.1（`ARCH-G0`）之總體原則：SQL 只投影／join／GROUP BY，分類與計算一律純函式。
+
+| ID | 議題（技術路線項次／story 項次） | 裁定 |
+|---|---|---|
+| `ARCH-UX1` | D-1 確認：本部解析器落點 | **確認可行**：`divisionOf`／`indexOrgUnitsByCompany` 搬至新檔 `org-directory/org-division.ts`，`dashboard/division-resolver.ts` 一行 re-export；理由不只是「不搬家」，更是**避免一個真實的循環相依**（見 §16.1） |
+| `ARCH-UX2` | D-2 確認：本部推導之資料來源 | **確認可行**：`NameResolutionService` 新增 `listOrgUnitsByCompany()`（passthrough `ORG_UNIT_READ_STORE.listByCompany`），`enrichNames()`／`public-documents.service.ts` 各自在**服務層**以 `indexOrgUnitsByCompany`＋`divisionOf`＋`orgUnitDisplayName` 組裝——資料存取與純計算分屬兩層，零額外快取 |
+| `ARCH-UX3` | D-3 確認：`hasAdminAccess` 落點 | **確認可行**：`frontend/src/domain/menu.ts`（`visibleMenu` 之既有家）新增一行函式，三處呼叫端改呼叫它 |
+| `ARCH-UX4` | 技術路線 1（story #5／#10）：前台子樹篩選 | 子樹→文件集合**在服務層以既有記憶體走訪（`descendants()`＋`isMountVisible`）解析**，抽為**跨模組純函式**；套用次序為**視覺性子集**（先 `visibleCandidates` 全套 F041 可見性、後交子樹集合）；deep link 鍵名 `bcSubtreeId`／`bcSubtreeNodeId` |
+| `ARCH-UX5` | 技術路線 2（story #8）：`sortOrder` | `int NOT NULL DEFAULT 0`；不建索引（表僅數十列）；🔴 **2026-09-22 第二輪修正**——次鍵 `name` 之碼位序**不得**假手 SQL（`BUSINESS_CATEGORY.name` 無 `COLLATE` 覆寫，資料庫預設 `Chinese_Taiwan_Stroke_BIN` 非碼位序），三處消費者一律 `SQL: ORDER BY sortOrder ASC` ＋ **應用層共用純函式** `sortByOrderThenName()` |
+| `ARCH-UX6` | 技術路線 3（story #12）：per-company 計數 | 回應為**陣列**（非 map）；SQL 新增一支 `docCountsByNodeAndCompany()`（三表 join，`GROUP BY nodeId, companyCode`，`NULL` 自然收斂為 `未指定` 桶）；分類／排序／sentinel 注入一律純函式 |
+| `ARCH-UX7` | 技術路線 4（story #14）：`createOrgPathResolverWithDivision` | 新函式**與 `divisionOf` 同檔**（`org-directory/org-division.ts`），單向 import `org-path.ts` 之既有原語（避免循環）；`typeorm-ojt-org-directory.ts` 之 `pathOf` 換源，`nameOf()` 簽章不變。🔴 **2026-09-22 第七輪修正**：`AC-UX57` 要求「本部段與部段同一單位」以 `orgCode` 相等判定（非顯示名）——`org-path.ts` 因此需一處 additive 擴充（`resolveDepartmentUnit<T>()`，`resolveDepartmentFullName` 改為其投影，行為位元等價），原「一行不改」之字面承諾讓位於此條後補之 AC |
+| `ARCH-UX8` | 技術路線 5（story #16）：OJT 匯出 | **不新增 body 大小顧慮**：改走 `GET admin/ojt-progress/export?…`（比照 `AppendicesService.exportPool()` 之既有樣板，非 F017 之 `POST + documentIds`），伺服器以與 `/rows` **同一個** `OjtRowFilters` 重算列；`docQuery`（文件搜尋）**刻意不參與**匯出（`AC-UX51`／`AC-UX53` 字面已鎖） |
+| `ARCH-UX9` | 技術路線 6（story #4）：一次性 migration 歸屬 | 放 `backend/src/database/migrations/`（本 repo 對純資料回填已有明文先例），非獨立 script；冪等由 `AC-UX9` 之 `WHERE` 子句結構性保證（第二次執行恆為 0 rows） |
+| `ARCH-UX10` | 技術路線 7（story #9）：前台詳情業務類別資料流 | `PublicBusinessCategoryStore`（既有 port）新增 `listCategoriesForDocument()`，走**同一個** `PUBLIC_BUSINESS_CATEGORY_STORE` token；**不**注入 `BUSINESS_CATEGORY_DOCS_STORE`；SQL 形狀與 `listCategoriesByDocumentIds` 相近但**獨立一份**，理由見 §16.10 |
+
+---
+
+### 16.1 D-1 確認：本部解析器向下抽出、不搬家 {#ch16-ux-d1}
+
+**查證結果：可行，且比計畫所寫的理由更硬——不只是「不動 `architecture-spec`／F044 逐字釘住的路徑」，而是**若不這樣切，item 4（`ARCH-UX7`）會撞出一個真實的循環相依**。
+
+**現狀**（已讀原始碼確認）：`backend/src/dashboard/division-resolver.ts` 匯出 `divisionOf`／`indexOrgUnitsByCompany`（純上溯與分群）＋ `orgSegmentOf`／`companyLabel`／兩個 sentinel 常數（F044 專用之分組標籤組裝），並 `import { ORG_PATH_SEPARATOR, orgUnitDisplayName } from '../org-directory/org-path'`。`dashboard-analytics.ts:5` 是目前唯一之消費端。
+
+**裁定**：新建 `backend/src/org-directory/org-division.ts`，逐字搬入 `divisionOf`／`indexOrgUnitsByCompany`（含其 JSDoc 之循環守衛與跨公司防護說明）。`orgSegmentOf`／`companyLabel`／`SEG_UNSPECIFIED_*`／`SEG_NO_DIVISION_*` **留在** `dashboard/division-resolver.ts`（它們是 F044 儀表板之分組標籤語彙，非本批四個新消費者所需——F017／F019／F042 要的是「本部之組織識別」與「本部之顯示標籤」，不是儀表板的分組鍵格式）。`division-resolver.ts` 加：
+
+```ts
+export { divisionOf, indexOrgUnitsByCompany } from '../org-directory/org-division';
+```
+
+`dashboard-analytics.ts:5` 之 `import { indexOrgUnitsByCompany, orgSegmentOf } from './division-resolver'` **一行不改**仍解析得到兩個名字；`division-resolver.spec.ts` 對 `divisionOf`／`indexOrgUnitsByCompany` 之既有測試維持綠燈（re-export 不改變執行語意）。
+
+**為何必須是「向下抽出」而非兩個其他選項**：
+
+| 候選 | 裁定 | 理由 |
+|---|---|---|
+| 保持 `divisionOf` 留在 `dashboard/`，`org-path.ts` 或 F017／F019／F042 改為 `import … from '../dashboard/division-resolver'` | 🔴 **否決** | `.dependency-cruiser.cjs` 唯一規則為 `no-circular`。`org-directory` 是本專案明文之「地基模組」（`org-path.ts` 檔頭：「accounts／org-sync／public 共同消費之地基模組，演算法放這裡才不會讓地基反向依賴其消費者」）。若 `ARCH-UX7`（`createOrgPathResolverWithDivision`，住在 `org-directory`）要用到 `divisionOf`，而 `divisionOf` 留在 `dashboard/`，就會是**地基模組匯入其消費者**——方向性錯誤，且一旦 `dashboard` 未來因任何理由（哪怕只是型別）匯入 `org-directory` 之其他檔案（它已經匯入 `org-path.ts`／`company-name.ts` 了），dependency-cruiser 之 `no-circular` 會**立即真實觸發**，而不是理論風險 |
+| 整支 `division-resolver.ts`（含 `orgSegmentOf` 等 F044 專用符號）一併搬到 `org-directory/` | 🔴 **否決** | `orgSegmentOf`／sentinel 常數是**分組維度**語彙（每份文件必須落進某一段，供環圖加總），F017／F019／F042 要的是**篩選／顯示**語彙（沒有選項就是篩不到、或收合為既有三段）——`AC-UX24` 與 `AC-UX35` 已明文「兩者不得互相對齊」。把分組語彙一併搬進地基模組，會讓 `org-directory` 承載一個它不該知道的「F044 儀表板怎麼分組」決策 |
+| **只搬 `divisionOf`／`indexOrgUnitsByCompany`，原檔 re-export** | ✅ **採用** | 上述兩難之交集：地基模組只拿走真正屬於地基層的兩支純函式（上溯與分群，與任何消費者之呈現決策無關），F044 既有路徑與測試零改動 |
+
+🔒 **零漣漪確認**：`dashboard/division-resolver.ts` 之對外符號集合、`ARCH-G5` 釘住之演算法本體、其 JSDoc 全部逐字搬遷（不重寫、不精簡）——F044 §癸 (b) 之四種既有語料（正常路徑／無 `DIVISION` 祖先／`draftingDeptId` 為 null／跨公司同碼）與其覆核方式對新檔案**同樣成立**，`division-resolver.spec.ts` 不需要新增或修改任何案例即可維持鑑別力（測的是行為，不是檔案路徑）。
+
+---
+
+### 16.2 D-2 確認：本部一律走 row DTO 伺服器端推導 {#ch16-ux-d2}
+
+**查證結果：可行。計畫原文「documents.service.ts#enrichNames() 額外建一次索引」需要補一個資料存取層——`enrichNames()` 目前透過 `NameResolutionService`（`documents.service.ts:34,119`）做的是**逐代碼點查**（`resolveOrgUnitDisplayName(companyCode, orgCode)`，`Promise.all` 批次），而 `divisionOf()` 需要**整家公司之 `orgCode → OrgUnit` 索引**（沿 `parentCode` 上溯，中繼祖先不一定在既有 `orgKeys` 批次點查集合內）。兩者是不同形狀的查詢，不能靠「手上已有的索引」直接兌現——必須新增一個「整家公司列表」的存取點。**
+
+**裁定**：
+
+1. `NameResolutionService`（`org-directory/name-resolution.service.ts`）新增：
+   ```ts
+   listOrgUnitsByCompany(companyCode: string): Promise<OrgUnitRecord[]>
+   ```
+   單純 passthrough 至既有 `this.orgUnits.listByCompany(companyCode)`（`ORG_UNIT_READ_STORE` 介面本已具備此方法，只是至今無消費者）。**不新增快取**——理由與 `ARCH-G5` 一致：`ORG_UNIT` 為有界集合（四家合計數百列），F017／F019 每次清單請求最多命中 4 家公司，一次全表投影遠低於逐筆回查；且 `documents.service.ts` 與 `public-documents.service.ts` 皆為**單次請求即結束**之路徑（非 F042 那種需要跨請求存活的名冊快取），加 TTL 快取只是多一個要驗證「快取何時失效」的維度，本輪測不到、也不需要。
+2. `documents.service.ts#enrichNames()`（F017 側）與 `public-documents.service.ts#list()`（F019 側，緊鄰既有 `resolveNames` 呼叫點）各自：
+   - 依頁面項目之 `companyCode` 分組（**沿用既有 `chiefsByCompany` 之分組寫法**，`enrichNames()` 已有這個 pattern，不必新發明）；
+   - 對每個相異公司呼叫一次 `listOrgUnitsByCompany(companyCode)`；
+   - 以 `indexOrgUnitsByCompany`（`org-division.ts`，§16.1）之單公司版本（即 `new Map(units.map(u => [u.orgCode, u]))`，或直接呼叫該檔匯出之單公司索引原語）建 `byCode`；
+   - 對每個項目呼叫 `divisionOf(byCode, it.draftingDeptId)`，非 `null` 則以 `orgUnitDisplayName(division, lookup)` 產生標籤；
+   - 輸出 `it.draftingDivisionCode = division?.orgCode ?? null`、`it.draftingDivisionName = division ? orgUnitDisplayName(...) : null`。
+3. `public-documents.service.ts` 之 `OrgNameResolver`（`public-documents.service.ts` 內宣告之結構化介面）**同步新增** `listOrgUnitsByCompany` 簽章——`public.module.ts` 既有 `{ provide: ORG_NAME_RESOLVER, useExisting: NameResolutionService }` 綁定不必修改，`NameResolutionService` 實作了介面新增的方法即自動滿足。
+
+**為何是「服務層組裝」而非「NameResolutionService 自己算 division」**：延續 `ARCH-G0` 之總體原則——`NameResolutionService` 之既有職責是**資料存取**（點查／批次查），`divisionOf`／`orgUnitDisplayName` 是**零 IO 純函式**。若把上溯計算塞進 `NameResolutionService`，會讓一個 IO 服務背上一份分類邏輯，且該邏輯的固定向量測試（§16.7 沿用 F044 §癸 (b) 之四種語料）將被迫寫成需要 mock DB 的整合式測試，而非目前可用的裸函式輸入輸出斷言。
+
+**為何確認、且與 D-2 原文相符**：D-2 原文的核心訴求——「`DocumentListPage` 不新增一次 `getOrgUnits()` API 呼叫、10 個裸 `vi.mock('../api/endpoints')` 測試檔不會因 `beforeEach` 之 `undefined.then()` 整檔死亡」——**完全不受本章補的存取層影響**：本部名稱是**既有 `GET /admin/documents` 回應之新增欄位**（`draftingDivisionCode`／`draftingDivisionName` 為 additive），前端**零新增 API 呼叫**，威脅模型未變。
+
+⚠ **精確覆核既有 automock 檔案數**：本章實測 `frontend/src/pages/DocumentListPage*.test.tsx` 中裸 `vi.mock('../api/endpoints')` 者為 **8 個**（`DocumentListPage.test.tsx`／`.bcSubtreeChip`／`.businessCategory`／`.f044`／`.filterDelta`／`.linkCell`／`.subcategory`／`.subtreeChip`），非交辦文字所稱之 10 個——**數字落差不影響裁定**（本裁定之防線是「零新增 API 呼叫」這個結構性事實，不是檔案計數），但下游若要逐檔核對，請以此 8 個檔名為準。
+
+---
+
+### 16.3 D-3 確認：`hasAdminAccess(roleCode)` 收成一份 {#ch16-ux-d3}
+
+**查證結果：可行，落點即計畫所指定之 `frontend/src/domain/menu.ts`**——該檔已是 `visibleMenu()`／`MENU`／`accessLabelFor()` 之既有家，`RoleLanding.tsx` 與 `App.tsx`（`AdminGuard`）皆已 `import { visibleMenu } from '../domain/menu'`。
+
+**裁定**：
+
+```ts
+// frontend/src/domain/menu.ts（緊鄰既有 visibleMenu，附近新增）
+/** 該角色是否具備任一後台功能之可見權限（分流頁／AdminGuard／前台「前往後台」鈕三處共用之單一述詞）。 */
+export function hasAdminAccess(roleCode: string | undefined): boolean {
+  return visibleMenu(roleCode).length > 0;
+}
+```
+
+三處呼叫端改寫（皆為既有邏輯之**委派**，語意逐字不變）：
+- `RoleLanding.tsx:34`：`if (visibleMenu(role).length === 0)` → `if (!hasAdminAccess(role))`；
+- `App.tsx`（`AdminGuard`）：`if (visibleMenu(user?.roleCode).length === 0)` → `if (!hasAdminAccess(user?.roleCode))`；
+- `PublicListPage.tsx`（新增之「前往後台」鈕，[F019](features/F019-public-list-browsing.md#ux16-delta) `AC-UX20`）：`hasAdminAccess(user?.roleCode)` 直接作為渲染條件。
+
+🔴 **`visibleMenu` 本體不變**（`AC-UX7` 之可測形狀要求「三處以同一組角色向量驅動、斷言三個布林陣列完全相等」——`hasAdminAccess` 是三處**唯一**的判斷點，故三個陣列結構上不可能分歧，該形狀的測試因此是對「有沒有接錯線」的回歸鎖，而非對演算法本身的重複驗證）。
+
+**為何不做成一個新的 `AuthGuard` hook 或 context**：三個呼叫端目前分屬三種渲染時機（`RoleLanding` 之路由層 early-return、`AdminGuard` 之路由元件、`PublicListPage` 之條件渲染），皆已直接讀 `useAuth()` 取得 `role`／`user`；一個純函式（純輸入輸出、無 hook 語意）足以滿足「單一述詞」之要求，引入 hook／context 只是多一層無謂的間接。
+
+---
+
+### 16.4 決策 `ARCH-UX4`：前台子樹篩選——解析層、URL 參數與安全次序 {#ch16-ux4}
+
+**問題**：`AC-UX15` 要求「在文件清單中檢視這 N 份文件」鈕落地後，前台清單僅顯示該子樹之相異可見文件；`AC-B23`（既有）要求此能力**不得**成為繞過 [F041](features/F041-user-subtype-business-scope.md) 限縮之側門，兩種瀏覽路徑（抽屜／導過去的清單）可觸及之文件集合須完全相同。
+
+**查證所得（決定設計之關鍵事實）**：`PublicBusinessCategoryService.listSubtreeDocuments()`（`business-categories/public-business-category.service.ts:183-213`）**已經是**這一批四個裁決要重用的形狀——它把 `listNodes`／`listCategoryMountsForVisibility`／`listEdges` 三份資料**整批載入記憶體**，以既有 `descendants(edges, nodeId)`（純函式）算子樹，再以 `isMountVisible(m, viewer) = m.announced && isDocVisibleToViewer(m.usingDepts, viewer)` 過濾——**這正是 F041 可見性判定之同一支函式**（`isDocVisibleToViewer`，與 `public-list.ts#visibleCandidates()` 呼叫的是同一個符號），故子樹集合與清單母體之可見性口徑**結構上保證一致**，不是兩套判定各自宣稱一致。
+
+**裁定（服務層記憶體解析，非 SQL 下推、非前端二次交集）**：
+
+1. **抽出純函式**：把 `listSubtreeDocuments()` 內「子樹展開 → 依節點分組 → 過濾可見性 → 相異文件 id 集合」之運算，抽為新檔 `backend/src/business-categories/public-business-category-subtree.ts` 之 `resolveVisibleSubtreeDocumentIds(nodes, edges, mounts, nodeId, viewer): Set<string>`（純函式、零 IO）。`PublicBusinessCategoryService.listSubtreeDocuments()` 改為呼叫此函式（**重構、行為零改變**，既有 `AC-B20`／`AC-B21`／`AC-B23` 之測試不改期望值仍應全綠）。
+2. **`PublicDocumentsService`（F019 清單服務）新增依賴**：以**既有** `PUBLIC_BUSINESS_CATEGORY_STORE` token 注入（**store token 對 store token**，比照 `documents.service.ts` 注入 `BUSINESS_CATEGORY_DOCS_STORE` 之既有反循環慣例；🔴 **不注入** `PublicBusinessCategoryService`——服務對服務會在 `public` 模組內部造出一條新的模組間相依，且會把「子樹解析」與「類別身分／浮水印」等該服務之其他職責捆在一起）。當請求帶有 `bcSubtreeId`＋`bcSubtreeNodeId`（見下）時：
+   - 呼叫 `store.listNodes(bcSubtreeId)`／`listCategoryMountsForVisibility(bcSubtreeId)`／`listEdges?.(bcSubtreeId)`（與 `listSubtreeDocuments()` 完全相同的三個查詢）；
+   - 呼叫 `resolveVisibleSubtreeDocumentIds(...)` 取得 `Set<string>`；
+   - 傳入 `buildPublicList()`（見下）。
+3. **`buildPublicList()` 新增一個選填參數**（`public-list.ts`），插入於既有管線之 `filtered` 與 `sorted` 之間：
+   ```ts
+   export function buildPublicList(
+     items, viewer, filters, today, page = 1, pageSize = DEFAULT_PAGE_SIZE,
+     subtreeDocumentIds?: ReadonlySet<string>,   // 新增，選填
+   ): PublicListPage<PublicDocItem> {
+     const base = items.filter((i) => isAnnounced(i, today));
+     const visible = visibleCandidates(items, viewer, today);
+     const filtered = visible
+       .filter((i) => matchesPublicFilters(i, filters))
+       .filter((i) => !subtreeDocumentIds || subtreeDocumentIds.has(i.id));   // 新增這一行
+     const sorted = splitAndSort(filtered, viewer.orgCode, viewer.companyCode);
+     ...
+   }
+   ```
+   🔴 **不併入 `matchesPublicFilters()`**（不擴充 `PublicListFilters` 型別）——`AC-UX16` 要求 chip 之清除**不影響**既有六項篩選、亦不被既有六項篩選之「清除篩選」以外的動作清空；把子樹集合塞進同一個篩選物件，會讓兩種清除語意糾纏在同一個資料結構裡。作為管線的**第七個獨立步驟**，兩者在程式碼層面天然互不干涉。
+
+**安全次序（`AC-B23` 之結構性保證）**：`subtreeDocumentIds` 這個 `Set` 本身**已經**是「已公告 ＋ F041 可見」之子集（`resolveVisibleSubtreeDocumentIds` 內部呼叫的 `isMountVisible` 即 `isDocVisibleToViewer`），而它在 `buildPublicList` 內是套在 `visible`（同樣已套 `isDocVisibleToViewer`）**之後**的第二層 AND 交集。⇒ 兩層可見性判定各自獨立計算、結果集**只會更小、不會更大**——即使其中一層被誤刪，另一層仍是完整的防線（**縱深防禦**，非「只信任子樹集合那一層」）。🔒 **可測形狀**（比照 `AC-UX15` ④ 已明訂）：以一位業務子分類使用者為 viewer，語料含一份「掛在該子樹節點上但使用部門不相符」之已公告文件 ⇒ 斷言該文件**既不在抽屜、也不在導過去的清單**——因為 `resolveVisibleSubtreeDocumentIds` 本身就不會把它算進 `Set`。
+
+**deep link 參數命名**：`bcSubtreeId`（類別 id）＋ `bcSubtreeNodeId`（節點 id）。
+
+| 候選鍵名 | 裁定 | 理由 |
+|---|---|---|
+| 沿用後台 `businessCategoryId`／`bcNodeSubtreeId`（[F017](features/F017-backend-document-list.md) 既有） | 🔴 **否決** | `AC-UX27` ③ 已明文禁止；且後台之可見性口徑（無限制）與前台（F041）不同，貼錯環境的 URL 會產生一個外觀成功卻略過可見性檢查的請求形狀 |
+| 沿用前台**自身**既有之 `businessCategoryId`（`PublicCategoryTreePage.tsx:70`，用於「目前檢視中的類別」） | 🔴 **否決** | 語意衝突：該鍵回答的是「樹狀圖目前顯示哪個類別」，本功能要表達的是「清單被限縮到哪個類別的哪個節點子樹」——兩者共存於同一個 `/public?...` URL 空間（`PublicCategoryTreePage` 由 `PublicListPage` 依 `mode` 參數渲染，非獨立路由），重名會讓同一個查詢字串鍵在兩種情境下語意漂移 |
+| **`bcSubtreeId`／`bcSubtreeNodeId`（新命名）** | ✅ **採用** | 與現有三組鍵（循環側 `lifecycleId`＋`nodeSubtreeId`；後台類別側 `businessCategoryId`＋`bcNodeSubtreeId`；前台樹狀圖之 `businessCategoryId`）**結構上不可能碰撞**，且字面本身就說明「這是子樹篩選」 |
+
+🔒 **靜默 no-op**（`AC-UX15` ⑤ 已鎖）：兩參數恆成對，任一缺席／`resolveVisibleSubtreeDocumentIds` 因類別或節點查無而回空 ⇒ 不施加限制、不顯示 chip、不回錯誤——`buildPublicList` 之 `subtreeDocumentIds` 引數在這些情形下傳 `undefined`（而非空 `Set`；空 `Set` 會把結果篩成 0 筆，語意錯誤）。
+
+---
+
+### 16.5 決策 `ARCH-UX5`：`sortOrder` 之型別、migration 與排序口徑 {#ch16-ux5}
+
+**背景**：人類已裁決 B（新增 `sortOrder`，`int NOT NULL DEFAULT 0`）與 `OQ-UX16-14`（`name ASC` 逐一編號、間距 10）。本節定案 migration 之確切語法、次鍵與索引，以及「前後台單一排序口徑」之落地點。
+
+**Entity 變更**（`backend/src/database/entities/business-category.entity.ts`，additive）：
+
+```ts
+@Column({ type: 'int', default: 0 })
+sortOrder!: number;
+```
+
+**Migration**（新檔，比照既有 `1725321600000-business-category.ts` 之命名與風格）：
+
+```sql
+-- up
+ALTER TABLE [BUSINESS_CATEGORY] ADD [sortOrder] int NOT NULL DEFAULT 0;
+
+UPDATE bc
+   SET bc.[sortOrder] = ranked.rn * 10
+  FROM [BUSINESS_CATEGORY] bc
+  JOIN (
+    SELECT [id], ROW_NUMBER() OVER (ORDER BY [name] ASC) AS rn
+      FROM [BUSINESS_CATEGORY]
+  ) ranked ON ranked.[id] = bc.[id];
+
+-- down
+ALTER TABLE [BUSINESS_CATEGORY] DROP COLUMN [sortOrder];
+```
+
+🔒 **`ROW_NUMBER() OVER (ORDER BY name ASC)` 於 SQL Server 2016+ 皆為標準語法**（上游 HR 源庫已知為 SQL Server 2016 Standard 13.0.6300.2；`UPDATE … FROM` 亦為 2016 相容語法），無版本地雷。🔴 **`DEFAULT 0` 只服務「加欄當下」之交易安全，不是最終值**——同一支 migration 的第二段立刻以 `ROW_NUMBER()` 覆寫全部列，故無任何列會停留在 `0`（`0` 只在極端的「加欄與回填分兩支 migration」情境才會被外界觀察到，本裁定刻意合併為一支以避免這個窗口）。
+
+#### 🔴 修正（2026-09-22 第二輪）：SQL 之 `ORDER BY name` 不等於本規格要求的次序——單一來源機制改為應用層純函式
+
+**事實更正（本輪查證）**：`backend/src/database/migrations/1723939200000-usage-form-number.ts:17` 之註解「`_CI_` collation（`Chinese_Taiwan_Stroke_CI_AS`）」是該支 migration 當下之**假設**，已被**同一目錄**之 `1724025600000-usage-form-number-collation.ts:43` 逐字推翻——「實測 `DATABASEPROPERTYEX(DB_NAME(),'Collation')` 為 `Chinese_Taiwan_Stroke_BIN`」。`Chinese_Taiwan_Stroke_CI_AS` 是該支 migration 對 `USAGE_FORM_POOL.formNumber` **這一欄**之欄位級 `COLLATE` 覆寫，**不是資料庫預設值**。`BUSINESS_CATEGORY.name`（`business-category.entity.ts`）**無任何 `COLLATE` 覆寫**，故其 `ORDER BY name` 遵循之是資料庫預設 ── **`Chinese_Taiwan_Stroke_BIN`**，非 `_CI_AS`。
+
+**但這個更正不改變結論**：`_BIN`（非 `_BIN2`）collation 之官方文件行為——比較之**第一個字元**採**該 locale 之排序權重**（`Chinese_Taiwan_Stroke_BIN` 之 locale 名稱即表明其權重表為**筆畫序**），僅其餘字元退回純位元組比較；只有 `_BIN2` 才是 Microsoft 保證的「100% 依 Unicode code point」。⇒ **`Chinese_Taiwan_Stroke_BIN` 與 `Chinese_Taiwan_Stroke_CI_AS` 同樣不是碼位序**（兩者之 locale 皆為 `Stroke`），SQL 之 `ORDER BY name`（無論套用哪一種既有 collation）與 `OQ-UX16-35` 裁決之 UTF-16 碼位序**依然是兩種不同的順序**——`lead` 指出之落差**成立**，僅出處引用需就地更正如上。
+
+**裁定：SQL 側之 `ORDER BY` 只保留 `sortOrder`（數值鍵，與 collation 無關）；`name` 之次序改由單一純函式於取回列後施加，三處消費者共用同一支函式（路線 (b)）。**
+
+```ts
+// backend/src/business-categories/business-category-sort.ts（新檔，🟢 零 IO 純函式）
+/**
+ * `sortOrder` 相同時之次要排序鍵（`AC-UX31` ③／`OQ-UX16-35`：UTF-16 碼位序，
+ * 逐字比照 F017 `AC-B9` ②／F019 `AC-UX19` 之既有禁令——不得使用 `localeCompare()`）。
+ *
+ * 🔴 **為何 SQL 之 `ORDER BY name` 不能替代本函式**：`BUSINESS_CATEGORY.name` 無欄位級
+ * `COLLATE` 覆寫，故 SQL 排序遵循資料庫預設 `Chinese_Taiwan_Stroke_BIN`——`_BIN`（非
+ * `_BIN2`）之第一字元比較採 locale 排序權重（本 locale＝筆畫序），並非碼位序；SQL 端
+ * 若讓 `name` 參與 `ORDER BY`，得到的會是筆畫序，與本函式之輸出**不保證一致**。
+ */
+export function sortByOrderThenName<T extends { sortOrder: number; name: string }>(
+  rows: readonly T[],
+): T[] {
+  return [...rows].sort(
+    (a, b) => a.sortOrder - b.sortOrder || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+  );
+}
+```
+
+三處消費者之接線點——**SQL 只依 `sortOrder` 排序，取回後套用 `sortByOrderThenName`**：
+
+| 消費者 | SQL 端 | 應用層 |
+|---|---|---|
+| 後台類別池清單 | `typeorm-business-category.store.ts#list()`：`.find({ order: { sortOrder: 'ASC' } })`（**不含 `name`**） | `list()` 回傳前套 `sortByOrderThenName(rows)` |
+| 前台類別切換下拉 | `typeorm-public-business-category.store.ts`：`.find({ where: { status: 'active' }, order: { sortOrder: 'ASC' } })`（**不含 `name`**） | 同上，回傳前套 `sortByOrderThenName(rows)` |
+| [F017](features/F017-backend-document-list.md) 第 14 項篩選下拉 | 其既有查詢之 `ORDER BY` 同步移除 `name` | 取回後套 `sortByOrderThenName`（或等價之 `businessCategoryId → sortOrder/name` 對照後排序，視其既有查詢形狀由 tdd-implementation 選用最小改動處） |
+
+🔴 **本裁定與本 repo 既有先例同構、非新發明**：`public-list.ts#distinctOptions()`（[F019](features/F019-public-list-browsing.md)）之既有寫法即 `[...seen].sort()`（**不帶 comparator**、在**應用層**排序，從不假手 SQL 的 `ORDER BY` 求碼位序）；`AC-B9` ②／`AC-UX19` 亦皆要求 `businessCategoryDisplayName` 之排序落在應用層、明文禁止 `localeCompare()`。本裁定只是把同一條已存在的紀律，套用到 `sortOrder` 之次鍵。
+
+**次鍵、索引**：
+
+| 議題 | 裁定 | 理由 |
+|---|---|---|
+| 值相同時之次要排序鍵 | `name` 升冪、**UTF-16 碼位序**（`AC-UX31` ③／`OQ-UX16-35` 已鎖；**非** SQL collation、**非** `localeCompare`） | 見上——三種候選各自給出不同順序，規格須指名比較器 |
+| 是否建索引 | 🔴 **不建** | `BUSINESS_CATEGORY` 為**數十列等級**之小表；`sortOrder` 單欄排序對一次全表掃描的成本可忽略 |
+| 新增類別之預設值 | `SELECT ISNULL(MAX(sortOrder), 0) + 10 FROM BUSINESS_CATEGORY`（`AC-UX31` ②，`max()` 涵蓋全部列、不分 `status`） | 表空時 `MAX` 回 `NULL`，`ISNULL(...,0)+10 = 10`，與「首筆為 10」之裁決一致，不需另寫特判分支 |
+
+**Migration 之 `ROW_NUMBER() OVER (ORDER BY name ASC)`（上方 up 區塊）維持不變、不套用本次修正**——🔴 **這是刻意的，理由須明文（否則下一個人會「順手」把它也改成碼位序而破壞 `AC-UX30` 之另一半要求）**：`AC-UX30` 要求的是「**day-0 前台次序與上線前逐字相同**」，而上線前之前台次序就是 `typeorm-public-business-category.store.ts:54` 當下之 `.find({ order: { name: 'ASC' } })`——即**未經修正之 SQL 筆畫序**。migration 之 `ROW_NUMBER()` 若改用碼位序求初始值，會讓 day-0 之新次序**偏離**上線前之實際畫面（正是 `AC-UX30` 要防止的事）。⇒ **兩處「ORDER BY name」意圖不同、不得統一**：migration 之一次性初始化要**複製現況**（碼位序或筆畫序皆非重點，重點是與 `typeorm-public-business-category.store.ts` 修正前之查詢**完全同一段邏輯**，兩者天然一致）；三處消費者之**未來**排序要**碼位序**（`OQ-UX16-35`，前瞻性、可斷言、不受 collation 影響）。migration 執行完的那一刻，兩者的職責就此分岔。
+
+🔴 **本通則寫入本節、供全篇引用**：**凡規格文字寫「依某欄位排序」／「昇冪」，必須指名比較器**——本專案內至少存在三種彼此不同之候選（SQL 未覆寫 collation＝視資料庫預設而定，本案為筆畫序；`localeCompare()`＝ICU 版本相依；`<`／`Array.prototype.sort()` 不帶 comparator＝UTF-16 碼位序），「昇冪」在本專案從來不是一個唯一的答案。
+
+**🔴 驗收條件（缺一不可，`AC-UX30` 末段已鎖）**：① migration 對 dev 真庫實跑 COMMIT；② `SELECT id, name, sortOrder FROM BUSINESS_CATEGORY ORDER BY sortOrder` 覆核值確為 `10, 20, 30, …`，且該次序與**修正前**之 `typeorm-public-business-category.store.ts` 查詢結果逐列相同（驗的是「與現況一致」，不是「是不是碼位序」）；③ 重建 image 後實際開一次後台類別清單與前台下拉，確認三處次序彼此相同。**本輪單元測試全綠證明不了欄位存在，亦證明不了 SQL 端是否誤把 `name` 留在 `ORDER BY` 裡**（見 [§16.12](#ch16-blindspots) 新增之盲區列）。
+
+---
+
+### 16.6 決策 `ARCH-UX6`：每節點每公司計數——SQL 與回應形狀 {#ch16-ux6}
+
+**問題**：既有 `docCountsByNode()`（`typeorm-business-category-dag.store.ts:69-88`）為 `GROUP BY nodeId` 之單一計數，且包在 `try { … } catch { return new Map(); }` 裡；`AC-UX33` 要求新增依制定公司拆分之明細，且明文警告「照抄這個吞錯形狀 ＝ 欄名寫錯就永遠沒有明細，而既有徽章仍正確、存在性斷言仍綠」。
+
+**裁定：回應為陣列，不是 map；新增獨立方法 `docCountsByNodeAndCompany()`（不修改既有 `docCountsByNode()`）。**
+
+```ts
+/** 各節點依制定公司拆分之相異掛載文件數（單次 GROUP BY，NULL/空字串公司自然收斂為一組）。 */
+private async docCountsByNodeAndCompany(
+  m: EntityManager,
+  businessCategoryId: string,
+): Promise<Map<string, Array<{ companyCode: string | null; count: number }>>> {
+  try {
+    const raw = await m.query(
+      `SELECT d.[nodeId] AS nodeId, doc.[companyCode] AS companyCode,
+              COUNT(DISTINCT d.[documentId]) AS cnt
+         FROM [BUSINESS_CATEGORY_DOC] d
+         JOIN [BUSINESS_CATEGORY_NODE] n ON n.[id] = d.[nodeId]
+         JOIN [ICSOP_DOCUMENT] doc ON doc.[id] = d.[documentId]
+        WHERE n.[businessCategoryId] = @0
+        GROUP BY d.[nodeId], doc.[companyCode]`,
+      [businessCategoryId],
+    );
+    const out = new Map<string, Array<{ companyCode: string | null; count: number }>>();
+    for (const r of raw as { nodeId: string; companyCode: string | null; cnt: string | number }[]) {
+      const bucket = out.get(r.nodeId) ?? [];
+      bucket.push({ companyCode: r.companyCode, count: Number(r.cnt) });
+      out.set(r.nodeId, bucket);
+    }
+    return out;
+  } catch {
+    return new Map();
+  }
+}
+```
+
+🔴 **三表 join 是必要的**：`BUSINESS_CATEGORY_DOC` 只有 `documentId`／`nodeId`，制定公司住在 `ICSOP_DOCUMENT.companyCode`——比既有 `docCountsByNode()` 多一次 join。`GROUP BY … doc.companyCode` 對 `companyCode IS NULL`（或空字串）之列，MSSQL 會把它們**自然收斂成同一組**（GROUP BY 視 NULL 為相等）——這正是 `AC-UX35` 要求之 `__unspecified__` 桶的來源，**SQL 不需要任何 `ISNULL`／`CASE` 特判**（延續 `ARCH-G0`：分類判斷留給下一層純函式，SQL 只投影分組）。
+
+**回應形狀為陣列、且已排序**（不由前端再排一次）：
+
+```ts
+/** 分類、排序、sentinel 注入（純函式，backend/src/business-categories/node-company-counts.ts）。 */
+export interface NodeCompanyCount { companyCode: string; count: number }
+
+export function classifyCompanyCounts(
+  raw: ReadonlyArray<{ companyCode: string | null; count: number }>,
+): NodeCompanyCount[] {
+  const real = raw
+    .filter((r): r is { companyCode: string; count: number } => !!r.companyCode)
+    .sort((a, b) => (a.companyCode < b.companyCode ? -1 : a.companyCode > b.companyCode ? 1 : 0));
+  const unspecified = raw.filter((r) => !r.companyCode);
+  const unspecifiedCount = unspecified.reduce((sum, r) => sum + r.count, 0);
+  return unspecifiedCount > 0
+    ? [...real, { companyCode: SEG_UNSPECIFIED_KEY, count: unspecifiedCount }]
+    : real;
+}
+```
+
+| 議題 | 裁定 | 理由 |
+|---|---|---|
+| Map 還是陣列 | ✅ **陣列**（`NodeCompanyCount[]`），`sortOrder` 已在後端排定 | 計畫已提出之理由成立且查證屬實：JSON 物件鍵序非規格保證之行為（`AC-UX34` 要求之 `companyCode` 昇冪順序若靠物件鍵序表達，等同把排序契約押在一個 JS 引擎實作細節上）；TypeORM raw 查詢之 `COUNT` 回傳為字串，任何消費端忘記 `Number()` 轉型會產生字串串接（`'3'+'2'='32'`）而非加總，陣列形狀在 `classifyCompanyCounts` 這一個單點完成轉型，杜絕散落各處的二次轉型 |
+| `Number(r.cnt)` 轉型時機 | 於 store 層（原始 `raw` 組裝時），非留到 pure function | 與既有 `docCountsByNode()` 之既有寫法一致（`Number(r.cnt)`），維持「SQL 邊界之後全是型別正確之值」的一貫紀律 |
+| `INV-UX1`（Σ 明細 ＝ `data-mounted-doc-count`）由誰保證 | **不由程式碼保證，由測試保證**——`docCountsByNodeAndCompany` 與 `docCountsByNode` 是**兩支獨立查詢**，語意上應恆等但結構上無法互相引用對方保證正確 | `AC-UX33` 本身已言明這正是本條「唯一能抓到查錯欄位」的原因：兩支查詢若不獨立，一支寫錯就會被另一支的錯誤「抵銷」成看似一致 |
+| 節點視圖如何承載 | `BusinessCategoryNodeView` 新增 `companyCounts: NodeCompanyCount[]`（additive），`listNodesWith()` 並行呼叫 `docCountsByNode` 與 `docCountsByNodeAndCompany`（`Promise.all`），各自獨立 try/catch，互不影響對方成功與否 | 既有 `docCount` 徽章之正確性**不得**因新查詢失敗而連坐（`AC-UX33` 明文兩者獨立） |
+
+🔴 **本輪機器不可驗證之處**（詳見 §16.12）：`classifyCompanyCounts` 之分類/排序邏輯可用固定向量完整鎖住；但 `docCountsByNodeAndCompany()` 之 SQL 本身（join 是否正確、`GROUP BY` 之欄名是否寫對）**本輪一條測試都碰不到**——`try/catch` 吞掉的正是這種缺陷的訊號。
+
+---
+
+### 16.7 決策 `ARCH-UX7`：`createOrgPathResolverWithDivision` 之簽章與接線點 {#ch16-ux7}
+
+**問題**：F042 `AC-UX45` 要求 OJT 進度清單之 `orgName` 由既有三段（`公司簡稱 / 部 / 處室`）改為四段（插入本部），且**明文禁止**給既有 `buildOrgPath`／`createOrgPathResolver` 加旗標（那有 ~12 個呼叫端，是規格要求之三段式輸出，加旗標即讓第四段行為從全部呼叫端意外可達）。
+
+**查證所得（決定放置檔案的關鍵事實）**：`createOrgPathResolver(units)`（`org-directory/org-path.ts:202-206`）回傳一個以 `byCode = new Map(units.map(u => [u.orgCode, u]))` 為閉包之查表函式；其內部之 `resolveOrgPathFromIndex` 只用得到部層 `descFull`（`resolveDepartmentFullName`）與處/室段（`deriveSectionName`）——兩者皆 `org-path.ts` 既有匯出。若把「帶本部之版本」直接加進 `org-path.ts`，而它需要呼叫 `divisionOf()`（住在 `org-division.ts`，該檔本身 `import … from './org-path'`），**`org-path.ts` 就會反過來 import `org-division.ts`——一個真實的循環相依，`no-circular` 閘門會失敗**。
+
+**裁定（🔴 2026-09-22 第七輪修正——見下方「`org-path.ts` 之 additive 擴充」）：新函式住 `org-directory/org-division.ts`（單向依賴 `org-path.ts`，符合既有依賴方向）；`org-path.ts` 需要一處 additive 擴充，理由與範圍見下。**
+
+📝 **`OLD>` 已被推翻之原始裁定（逐字保留，供追溯）**：「`org-path.ts` 本身一行不改。」——此句成立於 `AC-UX57` 尚未存在之時，與該條**不可兼得**，理由與處置見下。
+
+```ts
+// backend/src/org-directory/org-division.ts（緊鄰 divisionOf；單向 import org-path 之既有原語）
+import {
+  ORG_PATH_SEPARATOR, orgUnitDisplayName, resolveDepartmentUnit, deriveSectionName,
+} from './org-path';
+
+/**
+ * 建立單一公司之「本部 / 部 / 處室」路徑解析器（`createOrgPathResolver` 之本部感知版）。
+ * 🔴 與 `createOrgPathResolver` 共用內部原語（`resolveDepartmentUnit`／`deriveSectionName`／
+ * `orgUnitDisplayName`），**不複製規則**——差異只在多插入一段 `divisionOf()` 之上溯結果。
+ */
+export function createOrgPathResolverWithDivision(
+  units: readonly OrgUnitRecord[],
+): (orgCode: string | null | undefined) => string | null {
+  const byCode = new Map(units.map((u) => [u.orgCode, u]));
+  const lookup = (code: string) => byCode.get(code) ?? null;
+  return (orgCode) => {
+    if (!orgCode) return null;
+    const self = byCode.get(orgCode);
+    const division = divisionOf(byCode, orgCode);
+    const departmentUnit = resolveDepartmentUnit(orgCode, lookup);
+    // 🔴 AC-UX57：本部段所解析出的單位與部段為同一個單位 ⇒ 該段只輸出一次（以 orgCode 判定，非顯示名）。
+    const divisionLabel =
+      division && division.orgCode !== departmentUnit?.orgCode
+        ? orgUnitDisplayName(division, lookup)
+        : '';
+    const departmentFullName = departmentUnit?.descFull ?? '';
+    const sectionName = self ? deriveSectionName(self.tier, self.name) : '';
+    const segments = [divisionLabel, departmentFullName, sectionName].filter((s) => s !== '');
+    if (segments.length > 0) return segments.join(ORG_PATH_SEPARATOR);
+    return self?.name?.trim() || orgCode;
+  };
+}
+```
+
+🔒 **空段收合行為與 `createOrgPathResolver` 逐字一致**（`AC-UX45` 已鎖：查無本部祖先 ⇒ 仍為既有三段，不插入空字串或 sentinel 文字）——`divisionLabel` 為空字串時 `.filter((s) => s !== '')` 天然收合，無需額外分支。
+
+#### 🔴 `org-path.ts` 之 additive 擴充：`resolveDepartmentUnit<T>()`（第七輪，`AC-UX57`）
+
+**問題**：`AC-UX57`（本裁定書寫**之後**才新增之 AC）要求「本部段與部段解析為同一單位時只輸出一次」，且 🔴 **判準明文為 `orgCode` 相等，禁止以顯示名相等為準**（不同層級之兩個單位理論上可能同名，以名稱去重會把兩個**真的不同**的單位誤併為一個）。上方原始參考實作只呼叫 `resolveDepartmentFullName()` 取得**名稱**——名稱答不了「是不是同一個 `orgCode`」這個問題，`AC-UX57` 在原設計下**兌現不了**。
+
+**裁定：`org-path.ts` 新增 `resolveDepartmentUnit<T extends { descFull: string | null }>(orgCode, lookup): T | null`，把既有 fallback 鏈（部層→本部層→Root）之**結果列**（非僅名稱）對外；既有 `resolveDepartmentFullName()` 改寫為它的投影（`resolveDepartmentUnit(orgCode, lookup)?.descFull ?? null`）。**
+
+```ts
+// org-directory/org-path.ts（additive；departmentCodeCandidates 之既有 fallback 鏈邏輯原樣保留，只是回傳形狀變寬）
+export function resolveDepartmentUnit<T extends { descFull: string | null }>(
+  orgCode: string,
+  lookup: (code: string) => T | null,
+): T | null {
+  for (const code of departmentCodeCandidates(orgCode)) {
+    const row = lookup(code);
+    if (row && present(row.descFull)) return row;
+  }
+  return null;
+}
+
+/** 依 fallback 鏈解析部門 DESC_FULL；皆查無/皆無 descFull → null（組裝端收合為空）。 */
+export function resolveDepartmentFullName(
+  orgCode: string,
+  lookup: (code: string) => { descFull: string | null } | null,
+): string | null {
+  return resolveDepartmentUnit(orgCode, lookup)?.descFull ?? null;
+}
+```
+
+🔒 **行為位元等價，非新規則**：`resolveDepartmentFullName` 除了「多繞一層取 `.descFull`」之外，對外輸入輸出**逐一相同**——`departmentCodeCandidates` 之候選鏈、`present(row.descFull)` 之篩選條件、fallback 之終止條件，一個字元都沒有變動。以既有 `watermark.spec.ts` 之 fallback 鏈案例（`JAC00 → 營業二本部`）實測維持綠燈，即為此等價之回歸鎖。**既有全部消費端**（`resolveOrgPathFromIndex`／F020 浮水印／帳號清單部門欄等）**零改動**——它們呼叫的仍是 `resolveDepartmentFullName`，該函式簽章一字未變。
+
+**為何不在 `org-division.ts` 內複製一份候選鏈（`departmentCodeCandidates` 的邏輯）以避免碰 `org-path.ts`**：
+
+| 候選 | 裁定 | 理由 |
+|---|---|---|
+| 在 `org-division.ts` 內另寫一份 fallback 候選鏈（部層→本部層→Root），繞過對 `org-path.ts` 的任何修改 | 🔴 **否決** | `org-path.ts` 檔頭明文（`AC-P17`）：本演算法為**全站唯一之組織路徑算法，不得另建第二套**。若為了不碰 `org-path.ts` 而在 `org-division.ts` 重寫候選鏈，等於讓「部門欄怎麼 fallback」這條規則長出第二個定義點——**正是 `org-path.ts` 這份檔案自己開宗明義要防止的事**。守住「一行不改」這個字面承諾，反而會違反這份檔案自身的不變式 |
+| `org-path.ts` 新增 `resolveDepartmentUnit<T>()`，`resolveDepartmentFullName` 改為其投影 | ✅ **採用** | 規則仍只有一份（候選鏈邏輯完全不變、只是回傳形狀從「名稱」加寬為「整列」）；`AC-P17` 之單一演算法不變式因此**結構性成立**，而非靠紀律 |
+
+📌 **方法論（本節之核心教訓，供全篇引用）**：🔒 **「某檔一行不改」是一句關於改動範圍的承諾，不是一句關於正確性的約束。** 當它與一條**後來才新增**的 AC 衝突時（本例：`AC-UX57` 寫於本節裁定之後），該讓步的是承諾，不是正確性——但 ⚠ **讓步必須被明文記下來**（本節之 `OLD>`＋本段之完整論證），否則下一個讀這份文件的人會把「範圍擴大了」誤判為「有人沒讀架構就自己加了東西」。本節之 additive 擴充正是這個教訓的落地示範：`impl-core` 在偏離 §16.7 字面之前，先把「不偏離會違反哪一條不變式」與「被否決的替代方案」寫清楚，而非靜默照做（會兌現不了 `AC-UX57`）或靜默偏離（會讓下一個讀者無法分辨這是設計決策還是失誤）。
+
+**`typeorm-ojt-org-directory.ts` 之接線點**（`CompanyDirectory` 介面新增一欄，`nameOf()` 簽章與行為對外不變）：
+
+```ts
+interface CompanyDirectory {
+  active: Map<string, boolean>;
+  pathOf: (orgCode) => string | null;             // 既有，三段
+  pathOfWithDivision: (orgCode) => string | null;  // 新增，四段
+}
+// directory() 之組裝點：
+next.set(companyCode, {
+  active: new Map(list.map((u) => [u.orgCode, u.isActive])),
+  pathOf: createOrgPathResolver(list),
+  pathOfWithDivision: createOrgPathResolverWithDivision(list),   // 同一份 list，零額外查詢
+});
+
+async nameOf(companyCode: string, orgCode: string): Promise<string> {
+  const dir = (await this.directory()).get(companyCode);
+  const orgPath = dir?.pathOfWithDivision(orgCode);   // 唯一改動：pathOf → pathOfWithDivision
+  ...
+}
+```
+
+🔴 **`nameOf()` 之對外簽章一字不改**（`(companyCode, orgCode) => Promise<string>`）——[F042](features/F042-ojt-progress-management.md) 之呼叫端（`ojt-progress.service.ts:598`）**零改動**；`companyName` 前綴之組裝邏輯（`[companyName, orgPath ?? orgCode].filter(...).join(...)`）亦不變。零額外查詢——`pathOfWithDivision` 與既有 `pathOf` 共用同一份 `list`（`directory()` 每公司整表載入一次之既有紀律，§ARCH-G5 之既有先例）。
+
+**F017／F019 為何不使用 `createOrgPathResolverWithDivision`**：`AC-UX41`／`AC-UX22`（[F017](features/F017-backend-document-list.md)／[F019](features/F019-public-list-browsing.md) 之篩選比對鍵）要求的是「本部之組織識別」（一個 id，供等值比對），而 `documents.service.ts#enrichNames()`（§16.2）需要的是**獨立欄位**（`draftingDivisionCode`／`draftingDivisionName`），不是一個把本部併進既有部門欄位的合併字串——這兩種需求都不吃「四段合併路徑」這個形狀。只有 F042 之 `orgName` 是「歷史上就是單一合併字串、且被排序/搜尋/分組共用」（`AC-UX45`～`48`），才需要本函式。
+
+---
+
+### 16.8 決策 `ARCH-UX8`：OJT 匯出——`GET + query`，非 `POST + body` {#ch16-ux8}
+
+**問題**：計畫已定「送篩選值不送 key」，避開 [F017](features/F017-backend-document-list.md) 之 `POST /admin/documents/export` 需要放寬 body 上限之既有教訓（`main.ts:19,34` 之 1 MB parser **只**掛在字面路徑 `/admin/documents/export`）。本節定案端點形狀、欄位組裝點，以及「伺服器重算列與畫面列一致」之論證。
+
+**查證所得**：本 repo 已有**恰好對應本題**的既有樣板——`AppendicesService.exportPool()`（`appendices.service.ts:232-245`）：`GET admin/appendices/export?...`，服務層**重新查一次全池、重新套用 filters、`assertExportRowLimit`、產 CSV**，**不接受任何 id 陣列**。這與 [F017](features/F017-backend-document-list.md) 之 `documentIds` 模式是兩種並存的既有慣例，選用哪一種取決於「篩選是否可在伺服器端以等值/子字串比對完整重現」——F017 選 `documentIds` 是因為它的篩選部分在**顯示名稱**上比對（前端專屬語言，後端沒有對應參數，見 `documents.service.ts#exportDocuments` 之 JSDoc）；OJT 的三項篩選（制定本部／單位搜尋／完成狀態）**從第一天就是後端參數**（`OjtRowFilters`，`ojt-progress.controller.ts:89-104` 之 `GET admin/ojt-progress/rows` 早已如此），故 OJT 應走 `exportPool` 模式，不是 F017 模式。
+
+**裁定**：
+
+1. `OjtRowFilters`（`ojt-progress.service.ts:72`）新增一個選填欄位：
+   ```ts
+   /** 制定本部 orgCode（等值，沿 parentCode 上溯所抵達之本部）；未提供不施加限制。 */
+   divisionCode?: string;
+   ```
+   🔴 **命名為 `divisionCode`（非 `draftingDivisionId`）是刻意的**：F042 之組織維度是**使用單位**（誰在用這份文件），不是 F017／F019 之**制定組織**（誰寫的這份文件）——沿用 `draftingDivisionId` 這個前綴會暗示一個本功能沒有的語意。OJT 模組自身既有欄位亦一律用 `Code` 後綴（`companyCode`／`orgCode`），非 `Id`——`divisionCode` 與模組既有慣例一致，`draftingDivisionId`（F017／F019）與**它們的**模組既有慣例一致，兩者不同是延續各自既有命名系統、非隨意分歧。
+2. `OjtProgressService.listRows()` 之既有過濾鏈（`orgQuery`／`completionStatus` 之 `rows.filter(...)`）新增第三個 AND 條件：
+   ```ts
+   const divisionCode = (filters.divisionCode ?? '').trim();
+   const filtered = rows.filter((r) => {
+     ...既有兩條...
+     if (divisionCode && r.divisionCode !== divisionCode) return false;
+     return true;
+   });
+   ```
+   其中 `r.divisionCode` 由 `aggregate()` 組列時一併算出（呼叫 `this.orgDirectory.divisionCodeOf(a.companyCode, a.orgCode)`，見下）。
+3. `OjtOrgDirectory` 介面（`ojt-progress.store.ts:132`）新增：
+   ```ts
+   /** 該單位沿 parentCode 上溯所抵達之本部 orgCode；查無本部祖先 → null。 */
+   divisionCodeOf(companyCode: string, orgCode: string): Promise<string | null>;
+   ```
+   `TypeOrmOjtOrgDirectory` 之 `CompanyDirectory` 介面（§16.7 已加 `pathOfWithDivision`）**再加一個欄位**：`divisionOf: (orgCode) => string | null`（直接呼叫 `org-division.ts` 之 `divisionOf(byCode, orgCode)?.orgCode ?? null`，與 `pathOfWithDivision` 共用同一份已載入之 `list`，零額外查詢）。
+4. **新端點** `GET admin/ojt-progress/export`（比照 `AppendicesController.exportPool` 之路由與參數映射風格，緊鄰既有 `/rows`）：
+   ```ts
+   @Get('admin/ojt-progress/export')
+   @RequirePermission(FunctionKey.OJT_PROGRESS_MANAGEMENT, 'read')
+   async exportRows(
+     @Req() req: RequestWithSession,
+     @Query() q: Record<string, string | undefined>,
+     @Res() res: Response,
+   ): Promise<void> {
+     const { csv, fileName } = await this.svc.exportRows(req.sessionUser, {
+       orgQuery: q.orgQuery || undefined,
+       completionStatus: q.completionStatus === 'completed' || q.completionStatus === 'pending' ? q.completionStatus : '',
+       divisionCode: q.divisionCode || undefined,
+     });
+     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+     res.send(csv);
+   }
+   ```
+   `OjtProgressService.exportRows(session, filters)`：呼叫**既有** `this.listRows(session, filters)`（零邏輯重複——過濾／排序規則只有一份），`assertExportRowLimit(rows.length)`，`toCsvBuffer(rows, buildOjtExportColumns())`。
+5. **欄位組裝點**：新檔 `backend/src/ojt-progress/ojt-progress-export-columns.ts`（比照 `document-export-columns.ts` 之風格），輸出 `AC-UX52` 之 11 欄 `CsvColumn<OjtProgressRow>[]`（`使用單位全名`＝`r.orgName`／`單位代碼`＝`r.orgCode`／`完成狀態`＝依 `r.completed` 之逐字標籤，**不得**輸出布林／數字／…），共用 `csv-export.ts` 之 `toCsvBuffer`／`cell`（BOM／CRLF／RFC 4180／注入前綴一律沿用，不新增第二份）。
+
+**「伺服器重算列與畫面列一致」之論證（`AC-UX54` ⑥ 之核心訴求）**：`GET /export` 與 `GET /rows` 呼叫**同一個** `OjtProgressService.listRows()`（前者透過 `exportRows` 委派、後者直接呼叫），輸入同一個 `OjtRowFilters` 形狀——只要前端把當下三個 `[data-ojt-filter]` 之值原樣帶入兩次請求（畫面渲染一次、匯出再送一次），兩者之結果集**結構上不可能分歧**（不是「兩套邏輯測起來一致」，是「同一段程式碼」）。
+
+🔴 **`docQuery`（文件搜尋）與分組模式刻意不參與匯出——這不是遺漏，是 `AC-UX51`／`AC-UX53` 字面本身的要求**：`AC-UX51` 逐字為「CSV 之資料列集合恰等於當前畫面**三項篩選（`AC-UX49`）**套用後之進度列集合」——`AC-UX49` 明訂的三項篩選是制定本部／單位搜尋／完成狀態，`docQuery`（`[data-ojt-doc-search]`）與分組模式（`[data-ojt-group-mode]`）依 `AC-30`／`AC-33` ② 之既有規則**明文不算入 `[data-ojt-filter]`**。`AC-UX53` 進一步要求匯出**恆為**逐列進度資料、與分組模式無關（同語料同篩選下兩種模式匯出之 CSV 位元組須嚴格相等）。⇒ 匯出按鈕**不讀取** `docQuery` 之目前值：
+
+| 使用者情境 | `[data-ojt-row-count]`（畫面，`document` 分組模式且 `docQuery` 非空） | 匯出之列數 | 是否一致 | 依據 |
+|---|---|---|---|---|
+| 未輸入 `docQuery`（或 `org` 分組模式） | 三項篩選後之列數 | 三項篩選後之列數 | ✅ 相等 | `AC-UX51` 之測試範例本即此情境 |
+| `document` 分組模式 ＋ 已輸入 `docQuery` | 三項篩選後**再經 `docQuery` 收斂**之列數（更少） | 三項篩選後之列數（不收斂） | ⚠ **刻意不相等** | `AC-UX53`：分組是呈現決策，不得寫進資料落地產物；此為設計後果，非缺陷 |
+
+🔴 **此表須明文交付 test-generator 與 ui-ux-designer**——若無此表，下游極可能把「`docQuery` 存在時匯出列數與畫面不符」誤判為缺陷而自行「修正」（例如偷渡 `docQuery` 進匯出參數），那將**違反** `AC-UX53` 之「匯出恆與分組模式無關」。
+
+---
+
+### 16.9 決策 `ARCH-UX9`：一次性 migration 之歸屬與冪等性 {#ch16-ux9}
+
+**問題**：[F041](features/F041-user-subtype-business-scope.md) `AC-UX9` 要求 `business`→`other` 之回填為**獨立一次性 migration，完全不經同步門檻**（`OQ-UX16-05`＝選項 B）。放在 `migrations/` 還是獨立 script？
+
+**查證所得（本 repo 已有明文先例，非本章新創）**：`backend/src/database/migrations/1725580800000-document-catalog-company-fix.ts` 檔頭第 27 行逐字寫著「migration 是唯一保證各站執行一次且僅一次的機制（前例：`1724371200000` 本身即含 UPDATE 回填，本專案之『migration 只放 DDL』慣例對一次性資料修補已有例外）」——本 repo 之 `migrations/` 目錄**已經**是純資料回填之既有容器，`1724198400000`／`1724284800000`／`1724371200000`／`1724544000000`／`1725235200000` 等多支既有 migration 皆含純 `UPDATE`（部分甚至不含任何 DDL）。
+
+**裁定：放 `backend/src/database/migrations/`，比照 `1725580800000-document-catalog-company-fix.ts` 之結構（純 UPDATE、無 DDL、安全閥式 WHERE、不寫變更歷程）。不建獨立 script。**
+
+```sql
+-- up（單一陳述句即完整，AC-UX9 之 WHERE 子句即安全閥）
+UPDATE [ACCOUNT]
+   SET [userSubtype] = 'other'
+ WHERE [roleSource] = 'derived' AND [userSubtype] = 'business';
+
+-- down（無法還原——已裁決 A 之「後果已知並接受」，見 F041 delta 檔頭）
+-- 本 migration 不可逆：down() 為 no-op（比照既有純資料修補 migration 對不可逆變更之慣例，
+-- 如 1725580800000 之 companyCode 回填同樣無 down）。
+```
+
+| 候選 | 裁定 | 理由 |
+|---|---|---|
+| 獨立於 `migrations/` 之 script（如 `scripts/backfill-user-subtype.ts`） | 🔴 **否決** | 需要另外的「各站是否已跑過」追蹤機制（migration 系統本身已內建 `migrations` 表之已執行紀錄，重造一份等於重造 migration runner 的輪子）；且與本 repo 既有先例（`1725580800000` 同型態問題）之解法不一致，會讓同一種問題在同一個 repo 有兩種處置方式 |
+| 併入既有 `deriveRoles()`／同步流程，以環境變數放寬門檻 | 🔴 **否決**（`OQ-UX16-05` 已明文否決選項 A） | `roleChangeRatioExceeded()` 收的是整份計畫之 `writeCount`，分不出本次回填與同一次同步之其他變更；`OQ-RA-01` 前例全站只有一個變更來源，本次不是——見 [F041](features/F041-user-subtype-business-scope.md#ux16-delta) `AC-UX9` 之既有理由 |
+| **獨立一次性 migration，置於 `migrations/`** | ✅ **採用** | 與 `1725580800000` 同構之既有先例；migration runner 天然保證「各站執行一次且僅一次」 |
+
+**冪等性**：由 `WHERE` 子句結構性保證——`AC-UX9` 已明文「`WHERE roleSource='derived' AND userSubtype='business'`」，第二次執行時第一次已把符合條件的列全數改為 `'other'`，`WHERE` 恆匹配 0 列，`UPDATE` 為 no-op。**不需要**額外的「是否已跑過」旗標或哨兵列——TypeORM migration runner 本身已透過 `migrations` 表保證同一支不會重跑，這一層 `WHERE` 安全閥是**第二道**防線（比照 `1725580800000` 之「安全閥：公司只改 `companyCode='AS'` 者…任何一欄若已被人工改過，本 migration 一律不動它」之既有紀律），防的是「有人在 migration 系統之外手動跑過這段 SQL」之情形。
+
+🔴 **本 migration 不寫 `AUDIT_LOG`／任何變更歷程**（比照 `1725580800000` 之「這是資料修補、不是使用者編輯」既有處置）——[F041](features/F041-user-subtype-business-scope.md) 本身無變更歷程機制可掛，本裁定純粹是「不無中生有」。
+
+🔴 **驗收條件**（`AC-UX10` 已鎖）：① 對 dev 真庫實跑 COMMIT；② `SELECT COUNT(*) FROM ACCOUNT WHERE roleSource='derived' AND userSubtype='business'` 覆核結果為 `0`。**本 repo 已三度重演「migration 寫了但沒對真庫跑」之形狀**——本項與 `ARCH-UX5`（`sortOrder`）共用同一條紀律，兩支 migration 皆須實跑＋覆核，缺一不可。
+
+---
+
+### 16.10 決策 `ARCH-UX10`：前台詳情之業務類別資料流 {#ch16-ux10}
+
+**問題**：[F019](features/F019-public-list-browsing.md) `AC-UX18` 要求前台詳情頁新增「業務/功能類別」欄，內容為該文件掛載之類別（依 `businessCategoryId` 去重）。禁令：`public-document-detail.service.ts` **不得**直接 import 後台之 `BUSINESS_CATEGORY_DOCS_STORE`／`BusinessCategoryDocsStore`（違反本模組之反循環 DI／窄埠模式）。
+
+**查證所得**：`PublicBusinessCategoryStore`（`business-categories/public-business-category.store.ts`）是**既有**之前台專用 port（`PUBLIC_BUSINESS_CATEGORY_STORE` token），已被 `PublicBusinessCategoryService` 使用（`listCategories`／`getGraph`／`listSubtreeDocuments`）；其既有型別 `PublicBusinessCategoryOption`（`{id, name, subcategory, displayName}`）與 `AC-UX18` 之對外 DTO 訴求（`{id, displayName}`）**形狀已相容**，不需新型別。後台 `listCategoriesByDocumentIds()`（`typeorm-business-category-docs.store.ts:496-540`）之 SQL **未過濾類別 `status`**（`join` 鏈中無 `WHERE c.status = 'active'`）——與 `AC-UX18` 末段「停用類別之既有掛載仍顯示」之要求**恰好同構**，這是設計新方法時的重要依據：新方法**同樣不過濾 status**。
+
+**裁定：`PublicBusinessCategoryStore` 新增方法，走既有 `PUBLIC_BUSINESS_CATEGORY_STORE` token；不新增 port，不注入 `BusinessCategoryDocsStore`。**
+
+```ts
+// business-categories/public-business-category.store.ts（既有介面新增一個方法）
+export interface PublicBusinessCategoryStore {
+  listActiveCategories(): Promise<...>;
+  listCategoryMountsForVisibility(businessCategoryId: string): Promise<...>;
+  listNodes(businessCategoryId: string): Promise<PublicCategoryNodeInfo[]>;
+  listEdges?(businessCategoryId: string): Promise<PublicCategoryEdgeInfo[]>;
+  /**
+   * `AC-UX18`：單一文件掛載之相異業務/功能類別（依 businessCategoryId 去重、status 不過濾——
+   * 停用類別之既有掛載仍顯示，逐字比照 F017 AC-B7 ⚠ 段之既有裁決）。
+   */
+  listCategoriesForDocument(documentId: string): Promise<PublicBusinessCategoryOption[]>;
+}
+```
+
+```ts
+// typeorm-public-business-category.store.ts（實作；SQL 形狀與 listCategoriesByDocumentIds 相近，獨立一份）
+async listCategoriesForDocument(documentId: string): Promise<PublicBusinessCategoryOption[]> {
+  const ds = await this.init();
+  const rows = await ds.getRepository(BusinessCategoryDoc)
+    .createQueryBuilder('m')
+    .innerJoin(BusinessCategoryNode, 'n', 'n.id = m.nodeId')
+    .innerJoin(BusinessCategory, 'c', 'c.id = n.businessCategoryId')
+    .select('c.id', 'id').addSelect('c.name', 'name').addSelect('c.subcategory', 'subcategory')
+    .where('m.documentId = :documentId', { documentId })
+    .getRawMany<{ id: string; name: string; subcategory: string | null }>();
+  const seen = new Map<string, PublicBusinessCategoryOption>();
+  for (const r of rows) {
+    if (!seen.has(r.id)) {
+      seen.set(r.id, { id: r.id, name: r.name, subcategory: r.subcategory,
+        displayName: businessCategoryDisplayName({ name: r.name, subcategory: r.subcategory }) });
+    }
+  }
+  return [...seen.values()];
+}
+```
+
+`public.module.ts` **零新增 provider**（`PUBLIC_BUSINESS_CATEGORY_STORE` 已由既有 `useFactory` 提供）；`public-document-detail.service.ts` 建構子新增 `@Optional() @Inject(PUBLIC_BUSINESS_CATEGORY_STORE) private readonly categories?: Pick<PublicBusinessCategoryStore, 'listCategoriesForDocument'>`（比照該檔既有 `@Optional()` 注入慣例，如 `OJT_COMPLETION_READER`）；未注入時（既有純建構子單測）該欄位保持 `undefined`，`businessCategories` 一律留空陣列，行為與既有欄位缺省慣例一致。
+
+**為何不共用 `listCategoriesByDocumentIds`（SQL 相近卻獨立一份）——論證其正確性，而非只論證合規性**：
+
+| # | 理由 | 性質 |
+|---|---|---|
+| ① | **模組邊界是結構性的，不是巧合**：`public` 模組對 `business-categories` 模組唯一合法的依賴面是 `PUBLIC_BUSINESS_CATEGORY_STORE`（既有、已被三個方法驗證過的窄埠）；`BUSINESS_CATEGORY_DOCS_STORE` 是 `documents`／`business-categories` 兩個**後台**模組之間的窄埠，把它借給 `public` 模組用，會讓一個原本只服務兩個後台模組的 token 多一個完全不同信任等級（前台、F041 可見性）的消費者，這是介面污染，不是省了一次查詢 | 邊界完整性 |
+| ② | **兩支查詢的「相似」只到 join 鏈為止，去重後之下游用途完全不同**：後台版回傳 `DocumentBusinessCategoryRef[]`（含 `nodeId`，供 `documents.service.ts` 之欄位富化，最終走 `groupBusinessCategoriesByDocument()` 之陣列去重）；前台版回傳 `PublicBusinessCategoryOption[]`（無 `nodeId`，直接是對外 DTO 形狀）。若共用，勢必要讓一支函式同時滿足兩種回傳形狀——那才是真正會漂移的介面 | 型別不同構 |
+| ③ | **查詢本身已經很薄**（單次 `join` + `WHERE documentId = :id`，無迴圈、無批次分片邏輯），共用省下的程式碼量遠小於因此引入的跨模組耦合成本；相較之下 `enrichNames()`／`enrichBusinessCategories()` 之批次去重邏輯（`chunkByParamBudget`）**複雜得多**，那類邏輯若要共用才真正划算——本項不是那類邏輯 | 成本效益 |
+| ④ | **`AC-B3` 之「依 businessCategoryId 去重」規則本身是一句話規則**（`Map<id, …>` 之天然去重），不是一段需要被單一定義點保護的複雜演算法（比對 `orderSubtreeNodes`／`descendants` 那種真正該共用的圖演算法）——兩處各自實作同一句話規則，不構成「同一不變式兩個定義點」之風險 | 規則複雜度 |
+
+🔒 **回歸鎖**：`documents.service.ts#enrichBusinessCategories()`（後台）與 `typeorm-business-category-docs.store.ts#listCategoriesByDocumentIds()` **一行不改**；本裁定新增之方法為 additive，不觸及既有任何檔案之既有行為。
+
+---
+
+### 16.11 模組結構與檔案清單
+
+```mermaid
+graph TD
+  subgraph OD["org-directory（地基層，單向被依賴）"]
+    OP["org-path.ts<br/>createOrgPathResolver／orgUnitDisplayName（既有）<br/>＋resolveDepartmentUnit（additive，第七輪）"]
+    ODIV["org-division.ts（新）<br/>divisionOf／indexOrgUnitsByCompany（搬遷）<br/>createOrgPathResolverWithDivision（新）"]
+    NRS["name-resolution.service.ts<br/>＋listOrgUnitsByCompany（新）"]
+  end
+  subgraph DASH["dashboard（F044，既有）"]
+    DR["division-resolver.ts<br/>orgSegmentOf 等留下；divisionOf/indexOrgUnitsByCompany 改 re-export"]
+  end
+  subgraph DOCS["documents（F017）"]
+    DS2["documents.service.ts<br/>enrichNames()＋division 組裝"]
+  end
+  subgraph PUB["public（F019）"]
+    PDS["public-documents.service.ts<br/>list()＋division 組裝＋子樹交集"]
+    PDD["public-document-detail.service.ts<br/>＋categories?（新，@Optional）"]
+  end
+  subgraph BC["business-categories（F043）"]
+    PBCS["public-business-category.store.ts<br/>＋listCategoriesForDocument（新）"]
+    SUBTREE["public-business-category-subtree.ts（新）<br/>resolveVisibleSubtreeDocumentIds（純）"]
+    DAG["typeorm-business-category-dag.store.ts<br/>＋docCountsByNodeAndCompany（新）"]
+    NCC["node-company-counts.ts（新）<br/>classifyCompanyCounts（純）"]
+    BCS["business-category-sort.ts（新）<br/>sortByOrderThenName（純）"]
+  end
+  subgraph OJT["ojt-progress（F042）"]
+    OOD["typeorm-ojt-org-directory.ts<br/>＋pathOfWithDivision／divisionOf（本 orgCode）"]
+    OJS["ojt-progress.service.ts<br/>listRows()＋divisionCode 過濾；exportRows（新）"]
+    OJEC["ojt-progress-export-columns.ts（新）"]
+  end
+  ODIV --> OP
+  DR -. re-export .-> ODIV
+  NRS --> OP
+  DS2 --> NRS
+  DS2 --> ODIV
+  PDS --> NRS
+  PDS --> ODIV
+  PDS --> PBCS
+  PDS --> SUBTREE
+  PBCS --> SUBTREE
+  PDD --> PBCS
+  DAG --> NCC
+  PBCS --> BCS
+  OOD --> ODIV
+  OJS --> OOD
+  OJS --> OJEC
+  style ODIV fill:#e6fffa,stroke:#2c7a7b
+  style SUBTREE fill:#e6fffa,stroke:#2c7a7b
+  style NCC fill:#e6fffa,stroke:#2c7a7b
+  style OJEC fill:#e6fffa,stroke:#2c7a7b
+  style BCS fill:#e6fffa,stroke:#2c7a7b
+```
+
+> ⚠ `business-category-sort.ts`（`BCS`）之實際消費端為**三處**（後台 `typeorm-business-category.store.ts`、前台 `typeorm-public-business-category.store.ts`、[F017](features/F017-backend-document-list.md) 第 14 項篩選下拉之既有查詢）——圖上僅以 `PBCS → BCS` 代表，其餘兩處未各自成節點以維持圖面可讀，落點詳見下方檔案表與 [§16.5](#ch16-ux5)。
+
+> 🟢 綠色＝零 IO 純函式檔。虛線＝re-export（非執行期相依）。
+> 🔒 **相依方向皆為單向、皆指向 `org-directory` 或既有 store token**：`documents`／`public`／`ojt-progress`／`dashboard` 四個功能模組**互不 import 彼此**（`public` 對 `business-categories` 之依賴走既有 `PUBLIC_BUSINESS_CATEGORY_STORE` token，非 service-to-service），符合 `.dependency-cruiser.cjs` 之 `no-circular` 唯一規則。**本批不新增任何 `@Module` 層級之模組間 import**（比照 §15.9 F044 之「零新增模組相依」，本批新增之依賴一律是 store-token 注入或同層純函式 import）。
+
+#### 新增檔案
+
+| 側 | 檔案 | 內容 |
+|---|---|---|
+| BE | `org-directory/org-division.ts` | 🟢 `divisionOf`／`indexOrgUnitsByCompany`（自 dashboard 搬遷）＋ `createOrgPathResolverWithDivision`（新） |
+| BE | `business-categories/public-business-category-subtree.ts` | 🟢 `resolveVisibleSubtreeDocumentIds`（自既有服務方法抽出） |
+| BE | `business-categories/node-company-counts.ts` | 🟢 `classifyCompanyCounts` |
+| BE | `business-categories/business-category-sort.ts` | 🟢 `sortByOrderThenName`（`sortOrder` 相同時之 `name` 碼位序次鍵；§16.5 修正，供三處消費者共用） |
+| BE | `ojt-progress/ojt-progress-export-columns.ts` | `buildOjtExportColumns`（11 欄） |
+| BE | `database/migrations/<ts>-business-category-sort-order.ts` | `sortOrder` 加欄＋回填 |
+| BE | `database/migrations/<ts>-account-user-subtype-derived-backfill.ts` | `business`→`other` 回填（純 UPDATE） |
+| FE | 無新增檔案（本批後端交付為主；deep link 鍵名／`data-*` 掛鉤由 ui-ux-designer／test-generator 依本章裁定之名稱落地） |
+
+#### 修改既有檔案（全部為 additive）
+
+| 側 | 檔案 | 改動 | 回歸鎖 |
+|---|---|---|---|
+| BE | `dashboard/division-resolver.ts` | `divisionOf`／`indexOrgUnitsByCompany` 改為 re-export | `dashboard-analytics.ts` 既有 import 零改動；既有測試零改動 |
+| BE | `org-directory/org-path.ts` | 🔴 **第七輪追加**：＋`resolveDepartmentUnit<T>()`（additive）；`resolveDepartmentFullName` 改寫為其投影 | 行為位元等價（`watermark.spec.ts` 之 fallback 鏈案例 `JAC00 → 營業二本部` 維持綠）；既有全部消費端（`resolveOrgPathFromIndex`／F020 浮水印／帳號清單部門欄）零改動；`AC-P17`（全站唯一組織路徑算法）由此結構性維持——規則仍只有一份 |
+| BE | `org-directory/name-resolution.service.ts` | ＋`listOrgUnitsByCompany`（passthrough） | 既有三個方法一行未改 |
+| BE | `documents/documents.store.ts` | `DocumentListFilters` ＋`draftingDivisionId?: string`；`DocumentListItem` ＋`draftingDivisionCode`／`draftingDivisionName` | 既有欄位與比對語意一字不改（additive） |
+| BE | `documents/documents.service.ts` | `enrichNames()` ＋本部組裝 | `AC-UX43` ②：既有三級顯示欄輸出不變 |
+| BE | `public/public-list.ts` | `PublicListFilters` ＋`draftingDivisionId?`；`PublicFilterOptions` ＋`draftingDivisions`；`buildPublicList` ＋`subtreeDocumentIds?` 參數 | `matchesPublicFilters`／`visibleCandidates` 既有簽章與既有測試零改動 |
+| BE | `public/public-documents.service.ts` | ＋division 組裝、＋子樹解析呼叫、`OrgNameResolver` 介面 ＋`listOrgUnitsByCompany` | 既有 `list()`／`filterOptions()` 既有路徑零改動（純 additive 分支） |
+| BE | `public/public-document-detail.service.ts` | ＋`@Optional()` 注入、＋`businessCategories` 欄位組裝 | 既有 19 欄與既有名稱解析零改動 |
+| BE | `business-categories/public-business-category.store.ts`／`typeorm-public-business-category.store.ts` | ＋`listCategoriesForDocument` | 既有三方法零改動 |
+| BE | `business-categories/public-business-category.service.ts` | `listSubtreeDocuments()` 內部改呼叫 `resolveVisibleSubtreeDocumentIds`（重構） | 既有 `AC-B20`／`AC-B21`／`AC-B23` 測試期望值不變 |
+| BE | `business-categories/typeorm-business-category-dag.store.ts` | ＋`docCountsByNodeAndCompany`；`BusinessCategoryNodeView` ＋`companyCounts` | 既有 `docCountsByNode`／`docCount` 欄位零改動 |
+| BE | `business-categories/business-category.entity.ts` | ＋`sortOrder` | — |
+| BE | `business-categories/typeorm-business-category.store.ts`／`typeorm-public-business-category.store.ts`／[F017](features/F017-backend-document-list.md) 第 14 項篩選下拉之既有查詢 | SQL 之 `ORDER BY` 只留 `sortOrder`（**移除 `name`**）；取回後各自套用新增之 `sortByOrderThenName()` | `AC-UX32`；🔴 2026-09-22 第二輪修正——`name` 之次序不得假手 SQL collation（§16.5） |
+| BE | `ojt-progress/ojt-progress.store.ts` | `OjtRowFilters` ＋`divisionCode?`；`OjtOrgDirectory` ＋`divisionCodeOf` | 既有兩個過濾條件零改動 |
+| BE | `ojt-progress/typeorm-ojt-org-directory.ts` | `CompanyDirectory` ＋`pathOfWithDivision`／`divisionOf`；`nameOf()` 內部換源 | `nameOf()` 對外簽章不變；`isActive()` 零改動 |
+| BE | `ojt-progress/ojt-progress.service.ts` | `listRows()` ＋第三條件；＋`exportRows()`（委派 `listRows`） | 既有 `getSummary`／既有兩項篩選零改動 |
+| BE | `ojt-progress/ojt-progress.controller.ts` | ＋`GET admin/ojt-progress/export` | 既有 8 個路由零改動 |
+| BE | `main.ts` | **零改動** | 本批唯一之匯出（OJT）走 `GET + query`，不需要放寬 body 上限 |
+| FE | `frontend/src/domain/menu.ts` | ＋`hasAdminAccess` | `visibleMenu`／`MENU`／`accessLabelFor` 零改動 |
+
+---
+
+### 16.12 單元測試盲區（🔴 本輪機器不可驗證、須人工實機覆核） {#ch16-blindspots}
+
+> 比照 §10.15／§11.11／§12.4／§13.5／§14.10／§15.10 之格式。
+
+| # | 盲區 | 為何測不到 | 覆核方式（部署後） |
+|---|---|---|---|
+| 1 | `docCountsByNodeAndCompany()` 之三表 join 與 `GROUP BY nodeId, companyCode` 是否正確 | 本輪無整合測試；`classifyCompanyCounts` 只驗「給定分組後的原始列 → 正確排序與 sentinel」，不驗原始列是否來自正確 SQL | 實機任取一個跨 ≥2 家公司掛載之節點，人工加總各公司計數列，比對是否等於既有 `掛載 N 份程序書` 徽章（`INV-UX1`） |
+| 2 | `sortOrder` migration 之 `ROW_NUMBER() OVER (ORDER BY name)` 回填是否對真庫正確落地 | 純函式層只驗「給定 sortOrder 值 → 正確排序」，不驗欄位本身是否存在／值是否正確 | `AC-UX30` 已鎖：實跑 COMMIT ＋ `SELECT ... ORDER BY sortOrder` 覆核 ＋ 重建 image 後實際開一次前後台頁面 |
+| 3 | F041 業務→其他回填 migration 是否對真庫正確落地（699 筆量級） | 同上；`AC-UX9` 之選取述詞只以 3 筆語料驗證邏輯，不驗真庫執行結果 | `AC-UX10` 已鎖：`SELECT COUNT(*) FROM ACCOUNT WHERE roleSource='derived' AND userSubtype='business'` 覆核為 `0` |
+| 4 | 前台子樹篩選之 `listNodes`／`listCategoryMountsForVisibility`／`listEdges` 三次查詢本身（非新查詢，但新增了一個新呼叫端） | 沿用既有查詢，既有查詢本身即無整合測試覆蓋（F043 既有盲區之延伸，非本批新增風險） | 實機以一位業務子分類使用者，比對抽屜文件集合與導向清單集合之 `documentId` 是否逐一相同 |
+| 5 | `NameResolutionService#listOrgUnitsByCompany()` 之新查詢（`ORG_UNIT_READ_STORE.listByCompany`） | 同上；為既有 store 方法之首次消費，該方法本身之 SQL 未被任何既有測試對真庫驗證過 | 實機比對某文件之「制定本部」欄與該文件制定部門在組織圖上手動回溯之本部是否相符 |
+| 6 | OJT `divisionCode` 過濾與 `pathOfWithDivision`／`divisionOf` 之四段組裝，是否與真實 `ORG_UNIT.parentCode` 鏈一致 | 純函式層以固定向量（`AC-UX46` 之 ⓐⓑ 兩組語料）驗證邏輯；`TypeOrmOjtOrgDirectory` 之真實查詢與快取本身無整合測試 | 實機挑一個已知本部歸屬的部門，比對 TAB2 該單位之四段 `orgName` 是否正確、`制定本部` 篩選是否篩得到 |
+| 7 | OJT 匯出 CSV 之 HTTP 層（`Content-Disposition` 檔名、瀏覽器實際下載行為、Guard 順序） | 單元測試只驗服務層之 CSV 內容，不驗 HTTP 回應與瀏覽器下載 | 實機以無寫權角色（`DeptContact`）登入，確認匯出鈕依權限矩陣正確顯示／隱藏，並實際下載一次確認檔案可開啟 |
+| 8 | `bcSubtreeId`／`bcSubtreeNodeId` 兩參數在真實瀏覽器網址列與 React Router 之互動（含 chip 清除後網址是否乾淨移除該兩參數） | vitest 以 `MemoryRouter` 模擬，非真實瀏覽器歷史堆疊行為 | 實機點擊導向鈕、清除 chip、瀏覽器「上一頁」，確認網址與畫面狀態符合預期 |
+| 9 | `sortOrder`／`draftingDivisions` 等新增排序／篩選在正式站資料量下之效能 | 簡化環無效能閘門 | 實機以正式站資料量（591 份文件、四家組織）量測前台清單套用「制定本部」篩選之回應時間 |
+| 10 | OJT 匯出之「三項篩選一致性」表（§16.8）在真實使用者操作序列下是否如預期呈現 | 純函式測試可鎖住「給定 filters → 給定 rows」，不驗使用者實際切換分組模式、輸入 `docQuery`、再按匯出之完整操作序列 | 實機依 §16.8 之表逐列操作一次，確認「`document` 模式 ＋ 已輸入文件搜尋」情境下匯出列數確實**大於**畫面列數（非缺陷） |
+| 11 | 🔴 **三處消費者之 SQL 是否真的移除了 `name` 之 `ORDER BY`**（§16.5 第二輪修正） | 本輪 jest 以記憶體假 store／fixture 驅動，不連真庫，**偵測不到「TypeORM `order` 物件裡多留了一個 `name` 鍵」這種缺陷**——`sortByOrderThenName()` 之單元測試只驗「給定未排序輸入 → 正確輸出」，對「SQL 已經先用筆畫序排過一次，函式只是在一個已排序好的陣列上再穩定排一次」完全無感（`sortOrder` 唯一時兩種排法結果相同，語料若不含 `sortOrder` 相同之列，本項恆真） | 實機以 `Chinese_Taiwan_Stroke_BIN` 之筆畫序與碼位序**確保不同**的兩個類別名稱建語料（如刻意選一組筆畫序與碼位序相反的中文名），比對三處畫面呈現之次序彼此相同、且與碼位序（`String.prototype <` 之結果）一致，而非與 SQL 之 `ORDER BY name` 筆畫序一致 |
+
+---
+
+### 16.13 被否決之替代方案（彙整） {#ch16-rejected}
+
+| # | 替代方案 | 否決理由 |
+|---|---|---|
+| ① | `divisionOf` 留在 `dashboard/`，`org-directory` 反向 import | 地基模組反向依賴消費者；一旦 `dashboard` 之其他匯入方向稍有變化即真實觸發 `no-circular` |
+| ② | 整支 `division-resolver.ts`（含 F044 分組語彙）一併搬到 `org-directory` | 讓地基模組承載儀表板特有之分組決策；F017／F019／F042 用不到那些符號 |
+| ③ | `createOrgPathResolverWithDivision` 直接加進 `org-path.ts` | `org-path.ts` 需要 `divisionOf`（住 `org-division.ts`），而 `org-division.ts` 已 `import … from './org-path'` ⇒ 真實循環相依 |
+| ④ | 給 `buildOrgPath`／`createOrgPathResolver` 加 `includeDivision` 旗標 | 已由計畫明文禁止；~12 個既有呼叫端會意外可達第四段行為 |
+| ⑤ | `PublicListPage` 前台子樹篩選比照後台，前端二次呼叫 `getBusinessCategorySubtreeDocuments` 後在瀏覽器交集 | 後台之手法成立是因為 `DocumentListPage` 載入整份 `LOAD_SIZE=2000` 工作集到瀏覽器；前台清單為**真正之伺服器分頁**（每頁 50 筆），瀏覽器手上從未有完整候選集合可供交集 |
+| ⑥ | 子樹篩選併入 `PublicListFilters`／`matchesPublicFilters` | `AC-UX16` 要求 chip 清除與既有六項篩選之清除語意互不干涉；併入同一資料結構會讓兩種清除邏輯糾纏 |
+| ⑦ | 前台子樹 deep link 沿用後台 `businessCategoryId`／`bcNodeSubtreeId` | `AC-UX27` ③ 明文禁止；可見性口徑不同，共用鍵名會讓後台網址貼到前台產生外觀成功卻略過 F041 檢查的請求 |
+| ⑧ | 每節點每公司計數之回應用 map（`Record<companyCode, count>`） | JSON 物件鍵序非規格保證；把「呈現順序」隱含地押在物件鍵序上，不如顯式陣列＋伺服器端排序 |
+| ⑨ | 每節點每公司計數沿用既有 `docCountsByNode()` 加一個參數切換 GROUP BY 粒度 | 兩者回傳形狀（`Map<nodeId,number>` vs `Map<nodeId,Array<...>>`）不同構，改參數等於改回傳型別，既有呼叫端需連帶改動；獨立方法讓既有徽章邏輯完全不受新查詢失敗影響 |
+| ⑩ | OJT 匯出比照 F017 之 `POST + documentIds` | OJT 之篩選（制定本部／單位搜尋／完成狀態）從第一天就是後端可表達之等值/子字串參數，沒有 F017 那種「篩選語言只存在於前端顯示層」的理由；`POST+body` 只會平白引入 F017 已踩過的 body-size 教訓 |
+| ⑪ | OJT 匯出把 `docQuery`（文件搜尋）也送到後端，讓匯出列數在任何情境都與畫面相符 | 違反 `AC-UX53`「匯出恆與分組模式無關」之明文要求；且需要把一支目前僅存在於前端的純函式（`matchesDocKeyword`）搬到後端維護第二份 |
+| ⑫ | 前台詳情之業務類別直接 import 後台 `BUSINESS_CATEGORY_DOCS_STORE` | 違反模組邊界（該 token 是兩個後台模組之間的窄埠，非前台可用）；回傳形狀（含 `nodeId`）亦不是前台 DTO 需要的形狀 |
+| ⑬ | F041 回填以獨立 script（非 migration）執行 | 需另建「各站是否已跑過」追蹤機制；與本 repo 既有同型態問題（`1725580800000`）之解法不一致 |
+| ⑭ | F041 回填沿用既有同步門檻，以環境變數一次性放寬 | `OQ-UX16-05` 已明文否決；`roleChangeRatioExceeded()` 之 `writeCount` 無法區分回填與同批次之其他變更 |
+| ⑮ | `sortOrder` 次鍵以 SQL 端 `COLLATE` 覆寫達成碼位序（如對 `name` 欄改用 `_BIN2` 類 collation） | 會**同時**改變 `BUSINESS_CATEGORY.name` 之**比較**語意（含 `INV-B1` 唯一鍵 `(name, subcategory)` 所倚賴之相等判定），而本題只需要**排序**；為一個排序需求動一個影響唯一性約束的欄位屬性，代價與風險遠超所求，且本專案目前**無任何先例**曾為「純排序目的」加 `COLLATE`（既有唯一先例 `1724025600000` 是為了**大小寫不敏感之唯一性**這個功能性理由，非排序） |
+
+---
+
+### 16.14 交回 lead 事項 {#ch16-handback}
+
+| # | 事項 |
+|---|---|
+| ① | 本章對 D-1／D-2／D-3 **全數查證為可行**，且 D-1／D-2 各補了一個計畫原文未寫明的必要細節（D-1：向下抽出不只是「不搬家」，是避開一個真實的循環相依；D-2：需要在 `NameResolutionService` 新增一個「整公司列表」存取點，光靠既有點查方法無法兌現「額外建一次索引」）。三項皆**無需修正**，可直接進入 test-generator／tdd-implementation。 |
+| ② | 本章逐一查證後**未發現任何 AC 與可行架構之間的真正衝突**（不同於 §15，本批架構裁定晚於 AC 定稿，衝突風險本應更低）；§16.4／§16.7／§16.8／§16.10 之設計皆在既有 AC 之 🔵 佔位範圍內完成，未觸及任何 🔒 鎖定條文之文字。 |
+| ③ | 🔴 **唯一須請 lead 特別注意之處**：§16.8 表格所列「`document` 分組模式 ＋ 已輸入文件搜尋時，匯出列數大於畫面列數」是**依 `AC-UX51`／`AC-UX53` 字面推導之必然設計後果**，非本章自行決定的取捨。建議此表隨交付報告一併轉知 ui-ux-designer 與 test-generator，避免下游把它誤判為缺陷而自行「修正」（那樣做反而會違反 `AC-UX53`）。 |
+| ④ | §16.2 已查證既有 `vi.mock('../api/endpoints')` 之 `DocumentListPage*.test.tsx` 檔案數為 **8**，非交辦文字所稱之 10；本裁定之防線（零新增 API 呼叫）不受此數字影響，僅供下游逐檔核對時使用正確數字。 |
+| ⑤ | §16.12 共 **11 項**盲區，其中 #1／#2／#3／#4／#5／#6／#11 為**原理上本輪測不到**（無整合測試，延續 §15 交回事項②之既有建議：併入部署 smoke 清單）。`ARCH-UX5`（`sortOrder`）與 `ARCH-UX9`（F041 回填）兩支 migration 之真庫驗收條件已直接寫入各自章節，並與既有 [F043](features/F043-business-function-category.md) 檔頭「migration 寫了但沒對真庫跑」之三次前例並列，提請部署前逐項執行。 |
+| ⑥ | 本章之全部裁定共新增 **5 個純函式檔**（`org-division.ts` 之新增部分、`public-business-category-subtree.ts`、`node-company-counts.ts`、`business-category-sort.ts`、`ojt-progress-export-columns.ts` 之欄位組裝邏輯）與 **2 支 migration**，**零新增 `@Module`**、**零新增模組間 import**——`npm run deps:check` 之 `no-circular` 閘門於本批風險最高之處（`org-path.ts` ↔ `org-division.ts` 之潛在互指）已於 §16.1／§16.7 以單向依賴結構性排除。 |
+| ⑦ | 🔴 **2026-09-22 第二輪修正（本輪新增）**：§16.5 原裁定之 `ORDER BY sortOrder ASC, name ASC` 有 collation 缺口——`BUSINESS_CATEGORY.name` 無 `COLLATE` 覆寫，資料庫預設為 `Chinese_Taiwan_Stroke_BIN`（🔴 **更正 lead 原訊息之出處引用**：`Chinese_Taiwan_Stroke_CI_AS` 是 `1724025600000-usage-form-number-collation.ts` 對 `USAGE_FORM_POOL.formNumber` **單一欄位**之覆寫，非資料庫預設值；資料庫預設實為同檔第 43 行實測之 `Chinese_Taiwan_Stroke_BIN`——但兩者皆非碼位序，**落差本身之結論不變**）。已改為**路線 (b)**：SQL 只留 `ORDER BY sortOrder`，`name` 次鍵改由新增之共用純函式 `sortByOrderThenName()`（`business-categories/business-category-sort.ts`）於應用層施加 UTF-16 碼位序，三處消費者共用同一支函式；**否決**路線 (a)（SQL 側 `COLLATE` 覆寫），理由見 [§16.13](#ch16-rejected) ⑮——會連帶改變 `INV-B1` 唯一鍵所倚賴之比較語意，代價遠超排序本身之所求。migration 之 `ROW_NUMBER() OVER (ORDER BY name ASC)`（一次性回填、故意複製上線前現況）**不受影響、維持原樣**，理由已寫入 §16.5——避免下游誤以為兩處「`ORDER BY name`」要一併修正。 |
+
+---
