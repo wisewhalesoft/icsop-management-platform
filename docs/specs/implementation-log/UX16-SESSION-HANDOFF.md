@@ -193,7 +193,7 @@ J 項 16＝匯出維持三項篩選，**文件搜尋不納入**，但須在 toas
 `車輛` 類別之樹**同時**比視窗高且比視窗寬：stage `clientH 634 / scrollH 1255`（垂直捲動）、水平捲軸固定於視窗底部，而 `documentElement.scrollHeight === innerHeight`（**整頁不捲動**）。⇒ 原抱怨「要捲到最下方才看得到左右捲軸」確認消除。
 
 ### 🟢 其餘逐項
-項 4：1464 帳號中 `upstream/other` 1458、`manual/business` 2（正確未動）、`upstream/business` **1**——該筆職稱為 **`副理`**，**不含「業務」二字**，舊規則不可能產生此值（F041 明列副課長／課長／副理／襄理／經理為中性管理序列），故只能是**人工指派**，正是 `AC-UX11` 要保護者。⚠ **此為強推論非直接證據**，蓋棺需一條 SQL：`SELECT roleSource, source, userSubtype FROM ACCOUNT WHERE userSubtype='business'`（預期 3 筆皆 `roleSource='manual'`）。
+項 4：1464 帳號中 `upstream/other` 1458、`manual/business` 2（正確未動）、`upstream/business` **1**——該筆職稱為 **`副理`**，**不含「業務」二字**，舊規則不可能產生此值（F041 明列副課長／課長／副理／襄理／經理為中性管理序列），故只能是**人工指派**，正是 `AC-UX11` 要保護者。🟢 **已由使用者以 SQL 蓋棺（2026-09-22）**：`SELECT roleSource, source, userSubtype FROM ACCOUNT WHERE userSubtype='business'` ⇒ **3 筆全部 `roleSource='manual'`**（其中一筆為 `source=upstream` ＋ `roleSource=manual`，即上游來源帳號但子分類由人指派）。⇒ 🔒 **`AC-UX10` ② 於正式站完整成立：`roleSource='derived' AND userSubtype='business'` 之計數為 0**，選取述詞把三筆手動指派全部正確排除。<br>　📌 **並印證 `source` ≠ `roleSource` 之必要性**：清單 API 只回 `source`（帳號來源），而 migration 判的是 `roleSource`（角色/子分類是推導還是人指派）；兩者在該筆上**恰好相反**（upstream／manual）——🔴 若當初 migration 誤寫成 `WHERE source='upstream'`，這筆會被靜默改掉，而所有單元測試照樣全綠。
 項 5：抽屜「子樹共 5 份」→ 點鈕 → 清單**共 5 筆**（未篩選 48 筆），chip 正確。
 項 8：`sortOrder` 10／20／30（間距 10）；三處消費者順序一致（前台少的「機車」為節點 0／文件 0，被既有「至少 1 份可見文件」規則正確排除）。⚠ **「day-0 次序與改版前逐筆相同」事後無法驗證**——改版前的次序已不存在。
 項 9：「所屬節點」全頁零命中；「業務/功能類別 ＝ 車輛」有真實值，16 欄、位置正確。
