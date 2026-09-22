@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PERSON_STORE, PersonStore } from './person-directory';
-import { ORG_UNIT_READ_STORE, OrgUnitReadStore } from './org-unit-read';
+import { ORG_UNIT_READ_STORE, OrgUnitReadStore, OrgUnitRecord } from './org-unit-read';
 import { departmentCodeOf, orgUnitDisplayName } from './org-path';
 
 /** 組織路徑分隔符（OQ-NAMERES-1 暫定 '/'；與契約 §8.2 浮水印「處/室」切分一致）。 */
@@ -90,6 +90,24 @@ export class NameResolutionService {
         ? await this.orgUnits.findByOrgCode(companyCode, deptCode)
         : null;
     return orgUnitDisplayName(u, (code) => (code === deptCode ? dept : null));
+  }
+
+  /**
+   * 該公司之**全部**組織單位（`ARCH-UX2`／architecture-spec §16.2）。
+   *
+   * 🔴 **為何需要「整家公司」而非既有之逐代碼點查**：本部之解析要沿 `parentCode` **上溯**
+   * （`org-division.ts#divisionOf`），中繼祖先不一定落在呼叫端手上那批 `orgKeys` 之內——
+   * 兩者是不同形狀的查詢，既有 `resolveOrgUnitDisplayName()` 之批次點查兌現不了。
+   *
+   * 🔒 單純 passthrough 至既有 `ORG_UNIT_READ_STORE.listByCompany()`，**不新增快取**：
+   * `ORG_UNIT` 為有界集合（四家合計數百列），清單請求最多命中 4 家公司；加 TTL 快取只是
+   * 多一個「何時失效」的維度，本輪測不到也不需要。
+   *
+   * 🔴 上溯與顯示名之組裝**一律留在服務層**（純函式），不搬進本服務——本服務之既有職責是
+   * **資料存取**；把分類邏輯塞進 IO 服務，會讓其固定向量測試被迫改寫成需要 mock DB 的形式。
+   */
+  async listOrgUnitsByCompany(companyCode: string): Promise<OrgUnitRecord[]> {
+    return this.orgUnits.listByCompany(companyCode);
   }
 
   /**

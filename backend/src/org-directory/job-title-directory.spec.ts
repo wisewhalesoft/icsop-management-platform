@@ -19,6 +19,24 @@ describe('jobTitleKey', () => {
   it('以 | 分隔公司與代碼', () => {
     expect(jobTitleKey('AS', 'J01')).toBe('AS|J01');
   });
+
+  /**
+   * 🔴 UX16 delta `AC-UX8` 之接生（team-lead 裁決，2026-09-22）：原本住在
+   * `org-sync/role-derivation.spec.ts` 之「職稱以 (companyCode, code) 複合鍵解析」不變式
+   * （AD 之 D04＝科長，不得誤用 AS 之 D04＝營業經理），因 `deriveRoles()` 停止消費
+   * `isBusinessJobTitleName()` 之回傳值而**在該檔喪失載體**（無論複合鍵解析對或錯，
+   * `subtypeChanges` 恆為空，該檔已無法再斷言此事）。
+   * 🔒 **移到本檔（唯一仍真正執行複合鍵解析之處）**：`deriveRoles()` 之 `jobTitles` 參數
+   * 即以 `jobTitleKey(companyCode, code)` 為鍵，本函式本身才是複合鍵組裝之唯一權威來源，
+   * 「同代碼跨公司不得互相覆蓋」之不變式合該釘在這裡，而非透過另一函式間接驗證。
+   */
+  it('🔴 同代碼跨公司不得互相覆蓋（AC-UX8 接生；原載體見 role-derivation.spec.ts 仲裁 #3）', () => {
+    const asKey = jobTitleKey('AS', 'D04');
+    const adKey = jobTitleKey('AD', 'D04');
+    expect(asKey).not.toBe(adKey);
+    expect(asKey).toBe('AS|D04');
+    expect(adKey).toBe('AD|D04');
+  });
 });
 
 describe('buildJobTitleResolver — 第 1 段：本公司優先', () => {

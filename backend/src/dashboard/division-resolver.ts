@@ -1,6 +1,7 @@
 import { ORG_PATH_SEPARATOR, orgUnitDisplayName } from '../org-directory/org-path';
 import { resolveCompanyShortName } from '../org-directory/company-name';
 import { OrgUnitRecord } from '../org-directory/org-unit-read';
+import { divisionOf } from '../org-directory/org-division';
 import { OrgDimension } from './default-org-dimension';
 
 /**
@@ -22,6 +23,15 @@ import { OrgDimension } from './default-org-dimension';
  * 資料裡不可能出現。`無本部` ＝ **該公司之 `X0000` 那一列不存在於 `ORG_UNIT`**。
  */
 
+/**
+ * 🔒 `ARCH-UX1`（architecture-spec §16.1，2026-09-22）：`divisionOf`／`indexOrgUnitsByCompany`
+ * 已**逐字搬至**地基模組 `org-directory/org-division.ts`（該檔檔頭載明理由——避免地基模組反向
+ * 依賴其消費者所造成之真實循環相依）。本檔改為 re-export：`dashboard-analytics.ts` 等既有
+ * 消費端之 `from './division-resolver'` **一行未改**，既有測試亦維持綠燈（re-export 不改變
+ * 執行語意）。`orgSegmentOf`／`companyLabel`／`SEG_*` 為 F044 儀表板之分組語彙，**留在本檔**。
+ */
+export { divisionOf, indexOrgUnitsByCompany } from '../org-directory/org-division';
+
 /** 🔒 sentinel 段之鍵（雙底線包夾；`companyCode` 2 碼、`orgCode` 5 碼英數 ⇒ 結構上不可能碰撞）。 */
 export const SEG_UNSPECIFIED_KEY = '__unspecified__';
 export const SEG_NO_DIVISION_KEY = '__no_division__';
@@ -31,31 +41,6 @@ export const SEG_NO_DIVISION_LABEL = '無本部';
 
 /** 複合鍵之分隔符，逐字沿用既有 `orgGroupKeyOf()`（`frontend/src/pages/ojt-progress-view.ts`）。 */
 const ORG_KEY_SEPARATOR = '__';
-
-/**
- * 沿 `parentCode` 上溯至第一個 `tier === 'DIVISION'` 之單位。
- *
- * @param byCode **單一公司**之 `orgCode → OrgUnit` 索引（呼叫端須先依 `companyCode` 分群）。
- * @returns 該本部層之列；推導出之祖先代碼於 `ORG_UNIT` 查無、或 `orgCode` 本身查無 ⇒ `null`
- *          （⇒ 落 `無本部` 段）。
- *
- * 🔴 **查無那一列即回 `null`，不得「再往上推一層」**——那會讓 `無本部` 段永遠不產生。
- * 🔴 循環守衛（`AC-G33`）比照既有 `orgAncestorPathLabel()` 之 `seen` 集合。⚠ 上溯深度由代碼
- *   結構決定、最多 4 跳，正常資料下永不觸發；它防的是「有人手改過 `parentCode`」。
- */
-export function divisionOf(
-  byCode: ReadonlyMap<string, OrgUnitRecord>,
-  orgCode: string,
-): OrgUnitRecord | null {
-  const seen = new Set<string>();
-  let cur = byCode.get(orgCode);
-  while (cur && !seen.has(cur.orgCode)) {
-    if (cur.tier === 'DIVISION') return cur;
-    seen.add(cur.orgCode);
-    cur = cur.parentCode ? byCode.get(cur.parentCode) : undefined;
-  }
-  return null;
-}
 
 /** 環圖之一段（分組鍵 ＋ 圖例顯示名）。 */
 export interface OrgSegment {
@@ -113,17 +98,4 @@ export function orgSegmentOf(
     key: `${companyCode}${ORG_KEY_SEPARATOR}${unit.orgCode}`,
     label: parts.join(ORG_PATH_SEPARATOR),
   };
-}
-
-/** `ORG_UNIT` 全表 → 每公司一個索引（🔴 分群是跨公司防護之結構性載體，不可省略）。 */
-export function indexOrgUnitsByCompany(
-  units: readonly OrgUnitRecord[],
-): Map<string, Map<string, OrgUnitRecord>> {
-  const out = new Map<string, Map<string, OrgUnitRecord>>();
-  for (const u of units) {
-    const byCode = out.get(u.companyCode) ?? new Map<string, OrgUnitRecord>();
-    byCode.set(u.orgCode, u);
-    out.set(u.companyCode, byCode);
-  }
-  return out;
 }

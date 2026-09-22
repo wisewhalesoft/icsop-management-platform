@@ -130,16 +130,32 @@ export function departmentCodeCandidates(orgCode: string): string[] {
   return [dept, division, '00000'];
 }
 
+/**
+ * 依 fallback 鏈解析出「部門」欄實際採用的**那一列**；皆查無/皆無 descFull → null。
+ *
+ * 🔴 **為何需要「列」而不只是「名稱」**（2026-09-22 `AC-UX57`）：`org-division.ts` 之
+ * `createOrgPathResolverWithDivision` 必須判斷「本部段與部段是不是同一個單位」，而該判準
+ * **以 `orgCode` 相等為準、明文禁止以顯示名相等為準**（不同層級之兩個單位可能同名）。
+ * 名稱本身答不了這個問題，故把 fallback 鏈之結果以列的形式一併對外——
+ * `resolveDepartmentFullName` 即為本函式之投影，**規則只有一份**。
+ */
+export function resolveDepartmentUnit<T extends { descFull: string | null }>(
+  orgCode: string,
+  lookup: (code: string) => T | null,
+): T | null {
+  for (const code of departmentCodeCandidates(orgCode)) {
+    const row = lookup(code);
+    if (row && present(row.descFull)) return row;
+  }
+  return null;
+}
+
 /** 依 fallback 鏈解析部門 DESC_FULL；皆查無/皆無 descFull → null（組裝端收合為空）。 */
 export function resolveDepartmentFullName(
   orgCode: string,
   lookup: (code: string) => { descFull: string | null } | null,
 ): string | null {
-  for (const code of departmentCodeCandidates(orgCode)) {
-    const row = lookup(code);
-    if (row && present(row.descFull)) return row.descFull;
-  }
-  return null;
+  return resolveDepartmentUnit(orgCode, lookup)?.descFull ?? null;
 }
 
 /**
