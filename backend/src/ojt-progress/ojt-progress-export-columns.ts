@@ -11,7 +11,7 @@
  * 🔒 **恰 11 欄、順序即 `AC-UX52` 之逐字順序**；🔴 **不含任何操作類欄位**（新增場次／下載／
  * 展開鈕）——那些是畫面上的按鈕，不是資料。
  */
-import { CsvColumn } from '../storage/csv-export';
+import { CsvColumn, formatExportTimestamp } from '../storage/csv-export';
 import { addMonthsClamped } from './add-months-clamped';
 /**
  * 🔴 **`import type` 是刻意的**：`ojt-progress.service.ts` 反過來 import 本檔之
@@ -51,6 +51,28 @@ export function ojtExportNoteValue(row: Pick<OjtProgressRow, 'inactive' | 'orpha
 }
 
 /**
+ * 🔵 `AC-UX52` ④-b（2026-09-22 lead 實機覆核後就地改寫）：**兩個日期欄之單一正規化推導點**。
+ *
+ * 回傳 `YYYY-MM-DD`（**UTC+8**），無值／不可解析 → `''`。
+ *
+ * 🔴 **為何必須是「一個共用的推導點」，而不是兩欄各自格式化**（理由逐字，不得省略）：
+ * 修正前 `公告日期` 逐字透傳原始 `announcedDate`（測試站實測為 `2026-03-23T00:00:00.000Z`），
+ * `應完成日` 則由 `addMonthsClamped()` 對**同一個原始值**取其 UTC 日期前綴。兩者各自解析 ⇒
+ * 🔴 **靠近 UTC 午夜的時間戳會讓兩欄各差一天**：`2026-06-10T16:00:00.000Z` 之台北日期為
+ * `06-11`，但直接切 ISO 前綴得 `06-10` ⇒ 應完成日會算成 `07-10` 而非 `07-11`。
+ * ⇒ **只修 `公告日期` 的格式會更糟**：做出一個「平常看起來對、跨日時錯一天」的版本，
+ * 而那種錯誤一個月只有幾個小時看得出來。
+ *
+ * 🔒 逐字比照 F017 `AC-X8` 之既有樣板（`YYYY-MM-DD`、UTC+8、**不附時分秒**），且與匯出檔名
+ * 之時間戳共用同一個 `formatExportTimestamp()` ⇒ 同一份檔案裡不會出現兩種時區口徑。
+ * 🔒 `formatExportTimestamp(null)` 回 `''`，`.slice(0, 10)` 仍為 `''` ⇒ 「無值時兩欄皆為空
+ * 儲存格」之既有行為原封不動（`addMonthsClamped('')` 之正規表示式不匹配 ⇒ `null` ⇒ 空儲存格）。
+ */
+function normalizedAnnouncedDate(row: Pick<OjtProgressRow, 'announcedDate'>): string {
+  return formatExportTimestamp(row.announcedDate).slice(0, 10);
+}
+
+/**
  * `AC-UX52` 之 11 欄（由左至右逐字）：
  * `使用單位全名,單位代碼,程序書編號,程序書書名,文件版次,訓練版次,公告日期,應完成日,場次數,完成狀態,備註`
  *
@@ -69,8 +91,15 @@ export function buildOjtExportColumns(): CsvColumn<OjtProgressRow>[] {
     { header: '程序書書名', value: (r) => r.documentName },
     { header: '文件版次', value: (r) => r.documentEdition },
     { header: '訓練版次', value: (r) => r.trainingEdition },
-    { header: '公告日期', value: (r) => r.announcedDate },
-    { header: '應完成日', value: (r) => addMonthsClamped(r.announcedDate, 1) },
+    /**
+     * 🔴 **兩欄皆自 `normalizedAnnouncedDate(r)` 推導，明文禁止任一欄回頭吃 `r.announcedDate`**
+     * （`AC-UX52` ④-b）——那正是本次實機缺陷的形狀：兩欄各自對原始值解析，跨日時各說各話。
+     * 📝 已作廢（⚠ 不得復原）：
+     *    OLD> `{ header: '公告日期', value: (r) => r.announcedDate },`
+     *    OLD> `{ header: '應完成日', value: (r) => addMonthsClamped(r.announcedDate, 1) },`
+     */
+    { header: '公告日期', value: (r) => normalizedAnnouncedDate(r) },
+    { header: '應完成日', value: (r) => addMonthsClamped(normalizedAnnouncedDate(r), 1) },
     { header: '場次數', value: (r) => r.sessionCount },
     { header: '完成狀態', value: (r) => (r.completed ? EXPORT_COMPLETED_TEXT : EXPORT_PENDING_TEXT) },
     { header: '備註', value: (r) => ojtExportNoteValue(r) },

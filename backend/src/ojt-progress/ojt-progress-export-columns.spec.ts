@@ -11,8 +11,18 @@
  * 🔴 「應完成日」欄不在既有 `OjtProgressRow`（`ojt-progress.test-support.ts`）之欄位表內——
  * 依既有 F042 第五輪「應完成訓練日期＝公告日 +1 月之單一推導點」（`AC-37`～`AC-40`），本欄應
  * 由既有 `addMonthsClamped(announcedDate, 1)` 於欄位組裝時計算，**不得**另立第二個推導點。
+ *
+ * 🔴 **2026-09-22 lead 實機覆核追加（本環之血訓再現一次，`feedback-clean-fixtures-blind-to-
+ * display-defects`）**：測試站實測匯出之同一列、同一檔案內，`公告日期` 欄逐字為
+ * `2026-03-23T00:00:00.000Z`（原始 ISO 時間戳，未正規化），`應完成日` 欄逐字為 `2026-04-23`
+ * （乾淨 `YYYY-MM-DD`）——同一份 CSV 兩個日期欄格式不一致，Excel 對前者不辨識為日期。
+ * 本檔原有向量之 `row()` 預設值 `announcedDate: '2026-01-15'` 為**乾淨字串**，而正式環境經
+ * DB→JSON 回來的是 **ISO 時間戳**（型別宣告 `string | null` 對兩者皆合法）⇒ 在乾淨語料下，
+ * 「原樣透傳」與「正確格式化（`.slice(0,10)`）」輸出**逐字相同**，斷言因而恆綠、對此缺陷零
+ * 鑑別力。下方 `AC-UX52 ④-b` describe 區塊以**真實 ISO 形狀**語料補向量，見該區塊之裁決與
+ * 鑑別力設計。
  */
-import { toCsvBuffer, CsvColumn } from '../storage/csv-export';
+import { toCsvBuffer, CsvColumn, formatExportTimestamp } from '../storage/csv-export';
 import { addMonthsClamped } from './add-months-clamped';
 import { buildOjtExportColumns as buildOjtExportColumnsImpl } from './ojt-progress-export-columns';
 import type { OjtProgressRow } from './ojt-progress.test-support';
@@ -91,6 +101,61 @@ describe('buildOjtExportColumns — AC-UX52 欄位集合與順序（11 欄，逐
     const r = row({ announcedDate: null });
     expect(announceCol.value(r) ?? '').toBe('');
     expect(dueCol.value(r) ?? '').toBe('');
+  });
+});
+
+/**
+ * 🔴 **AC-UX52 ④-b（lead 2026-09-22 實機覆核裁決，非本檔原有向量）**：`公告日期`／`應完成日`
+ * 兩欄皆為 `YYYY-MM-DD`（UTC+8），且**共用單一正規化推導點**——`公告日期` 直接取
+ * `formatExportTimestamp(announcedDate).slice(0, 10)`（逐字比照 [F017](../documents/
+ * documents.export.service.spec.ts) `AC-X8` 之既有等式、[F024](../audit/access-history)
+ * `AC-F6` 同一函式），`應完成日` 取 `addMonthsClamped(` 上述**已正規化之值** `, 1)`——
+ * **不得**各自對原始 `announcedDate` 獨立解析。
+ *
+ * 理由（裁決三點，逐字保留）：
+ *   ① 與既有樣板一致：F017 `AC-X8` 明訂公告日期欄為 `YYYY-MM-DD`（UTC+8）、不附時分秒，本
+ *      delta 之檔頭本就寫「比照 F017 匯出樣板」。
+ *   ② 不只是格式問題、是正確性問題：`formatExportTimestamp()` 帶明確 +8 位移，原樣透傳沒有
+ *      ⇒ 接近 UTC 午夜的時間戳會顯示錯一天。
+ *   ③ 兩欄必須自同一個已正規化的值推導——若 `公告日期` 改套 +8 而 `應完成日` 仍吃原始 ISO，
+ *      兩欄會在跨日邊界各說各話，比現在更糟（看起來是對的）。
+ *
+ * 🔴 語料鑑別力設計（不得只用 `T00:00:00.000Z`——加不加 +8 都同一天，對「是否套了 +8」零鑑別
+ * 力）：向量 A 為 lead 實機量到之真實值（`2026-03-23T00:00:00.000Z`），驗證「完全未格式化」
+ * 這個已發生的缺陷本身；向量 B 為**跨日邊界**（`2026-06-10T16:00:00.000Z`＝ UTC 16:00 之後即
+ * 台北隔日 00:00，逐字沿用 F017 `AC-X8` 既有之同一組邊界值，全庫同型邊界一致，非另立新邊界），
+ * 若 +8 位移未真的套用，`.slice(0,10)` 直接切 UTC 值會得 `2026-06-10`（差一天）。
+ */
+describe('buildOjtExportColumns — AC-UX52 ④-b：公告日期／應完成日皆為 YYYY-MM-DD（UTC+8），單一正規化推導點', () => {
+  it('向量 A（lead 實機量到之真實缺陷值）：公告日期欄＝2026-03-23（不得逐字透傳原始 ISO 時間戳）', () => {
+    const cols = buildOjtExportColumns();
+    const announceCol = cols.find((c) => c.header === '公告日期')!;
+    const r = row({ announcedDate: '2026-03-23T00:00:00.000Z' });
+    expect(announceCol.value(r)).toBe('2026-03-23');
+    // 🔴 正向半句之對照：只驗「不等於原始 ISO」對「印出別的錯誤格式」零鑑別力，故上一行已鎖定
+    // 正確之逐字值；本行僅作為雙重保險，防止實作把時分秒黏在後面。
+    expect(announceCol.value(r)).not.toMatch(/T\d{2}:\d{2}:\d{2}/);
+  });
+
+  it('向量 B（跨日邊界，UTC 16:00 之後即台北隔日）：公告日期欄＝2026-06-11，非「對 ISO 字串直接 slice(0,10)」之 2026-06-10', () => {
+    const cols = buildOjtExportColumns();
+    const announceCol = cols.find((c) => c.header === '公告日期')!;
+    const r = row({ announcedDate: '2026-06-10T16:00:00.000Z' });
+    expect(announceCol.value(r)).toBe(formatExportTimestamp(r.announcedDate).slice(0, 10));
+    expect(announceCol.value(r)).toBe('2026-06-11');
+  });
+
+  it('🔴 向量 B：應完成日欄自「已正規化之公告日期」推導，非自原始 ISO 各自解析——咬住「公告日期套 +8、應完成日沒套」之錯誤實作', () => {
+    const cols = buildOjtExportColumns();
+    const dueCol = cols.find((c) => c.header === '應完成日')!;
+    const r = row({ announcedDate: '2026-06-10T16:00:00.000Z' });
+    const normalizedAnnounced = formatExportTimestamp(r.announcedDate).slice(0, 10); // '2026-06-11'
+    expect(dueCol.value(r)).toBe(addMonthsClamped(normalizedAnnounced, 1));
+    expect(dueCol.value(r)).toBe('2026-07-11');
+    // 🔴 有鑑別力之反例：若「應完成日」誤自未正規化之原始值（UTC 切片 '2026-06-10'）推導，
+    // 會得 '2026-07-10'——與正確值恰差一天，非同義反覆。
+    expect(dueCol.value(r)).not.toBe(addMonthsClamped('2026-06-10', 1));
+    expect(addMonthsClamped('2026-06-10', 1)).toBe('2026-07-10'); // 自證：上一行的反例本身不是空話
   });
 });
 
