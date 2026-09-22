@@ -24,6 +24,18 @@ export class BusinessCategory {
   @Column({ type: 'varchar', length: 10, default: 'active' })
   status!: string; // active / inactive
 
+  /**
+   * 排序值（F043 `AC-UX29`／`ARCH-UX5`，migration `1725667200000`）。
+   *
+   * 🔒 鎖定之識別子為 `sortOrder`（🔴 明文禁止 `order`／`seq`／`displayOrder` 等變體）。
+   * ⚠ **不保證唯一、不保證連續**——它是排序鍵而非識別碼；平手時之次要鍵為 `name` 之
+   * **UTF-16 碼位序**，由應用層之 `sortByOrderThenName()` 施加（SQL 之 `ORDER BY name` 走的是
+   * 資料庫預設 collation `Chinese_Taiwan_Stroke_BIN`＝筆畫序，**不是**碼位序）。
+   * 🔒 停用**不改變任何列之 `sortOrder`**（`AC-UX31` ①：停用者仍佔序位，重新啟用時次序不跳）。
+   */
+  @Column({ type: 'int', default: 0 })
+  sortOrder!: number;
+
   @Column({ type: 'datetime2' })
   createdAt!: Date;
 

@@ -12,6 +12,7 @@ import {
   BusinessCategoryGraph,
 } from './business-category-dag.store';
 import { BusinessCategoryStore } from './business-category.store';
+import { NodeCompanyCount } from './node-company-counts';
 import { businessCategoryDisplayName } from './business-category-subcategory';
 
 /**
@@ -51,6 +52,12 @@ export interface BusinessCategoryPreviewNode {
   positionX: number;
   positionY: number;
   mountedDocCount: number;
+  /**
+   * 依制定公司拆分之計數列（`AC-UX33`；**已於後端排序**，前端不再排一次）。
+   * 🔒 `AC-UX36`：**不套用於前台樹狀圖**——前台之 `docCount` 語意為「該 viewer 可見數」，
+   * 公司別統計同樣須逐列套可見性，複雜度與洩漏風險都不同，本輪刻意不做。
+   */
+  companyCounts?: NodeCompanyCount[];
 }
 
 export interface BusinessCategoryTreePreviewResult {
@@ -60,7 +67,12 @@ export interface BusinessCategoryTreePreviewResult {
   watermark: string;
 }
 
-/** `BusinessCategoryNodeView` → 預覽節點（`docCount` → `mountedDocCount`，缺值收斂為 0）。 */
+/**
+ * `BusinessCategoryNodeView` → 預覽節點（`docCount` → `mountedDocCount`，缺值收斂為 0）。
+ *
+ * 🔒 `companyCounts` **僅在 store 有提供時才進入回應**：不把缺值補成 `[]`，讓「store 根本沒
+ * 算」與「算了但這個節點沒有任何掛載」在回應上仍是兩種可區分的形狀。
+ */
 export function toPreviewNodes(
   nodes: BusinessCategoryGraph['nodes'],
 ): BusinessCategoryPreviewNode[] {
@@ -71,6 +83,7 @@ export function toPreviewNodes(
     positionX: n.positionX,
     positionY: n.positionY,
     mountedDocCount: n.docCount ?? 0,
+    ...(n.companyCounts ? { companyCounts: n.companyCounts } : {}),
   }));
 }
 

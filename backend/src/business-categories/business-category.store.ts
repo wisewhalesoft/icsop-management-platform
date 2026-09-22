@@ -21,6 +21,15 @@ export interface BusinessCategoryView {
    */
   mountedDocCount: number;
   updatedAt: Date;
+  /**
+   * 排序值（`AC-UX29`；TypeORM store 恆填入）。
+   *
+   * ⚠ **型別為選填、值不是**：本欄自 UX16 delta 起才存在，既有（本 delta 導入前撰寫之）測試替身
+   * 所建的 view 沒有它；宣告為必填會讓那些**不可修改之既有測試檔**編譯失敗。真實 store 一律
+   * 填值，消費端以 `?? 0` 收斂。
+   * 🔒 停用**不改變任何列之值**（`AC-UX31` ①）；不保證唯一、不保證連續（排序鍵而非識別碼）。
+   */
+  sortOrder?: number;
 }
 
 export interface CreateBusinessCategoryInput {
@@ -36,6 +45,8 @@ export interface UpdateBusinessCategoryPatch {
   subcategory?: string | null;
   description?: string | null;
   status?: BusinessCategoryStatus;
+  /** `AC-UX29`：排序值（整數）。`undefined`＝不修改；`0` 為合法值，不得被當成「沒帶」。 */
+  sortOrder?: number;
 }
 
 export interface BusinessCategoryStore {

@@ -11,6 +11,7 @@ import {
   BusinessCategoryNodeView,
   CreateBusinessCategoryNodeInput,
 } from './business-category-dag.store';
+import { classifyCompanyCounts, RawCompanyCount } from './node-company-counts';
 import { BusinessCategoryDagStructuralTx } from './business-category-structural-change';
 import { recordBusinessCategoryStructuralChange } from './business-category-structural-recorder';
 
@@ -53,10 +54,16 @@ export class TypeOrmBusinessCategoryDagStore implements BusinessCategoryDagStore
     businessCategoryId: string,
   ): Promise<BusinessCategoryNodeView[]> {
     const rows = await m.getRepository(BusinessCategoryNode).find({ where: { businessCategoryId } });
-    const counts = await this.docCountsByNode(m, businessCategoryId);
+    // 🔴 兩支查詢**各自獨立**（`AC-UX33`）：新增之公司別明細若失敗，既有 `掛載 N 份程序書`
+    // 徽章之正確性不得連坐——兩者各有自己的 try/catch，`Promise.all` 只是省一個來回。
+    const [counts, byCompany] = await Promise.all([
+      this.docCountsByNode(m, businessCategoryId),
+      this.docCountsByNodeAndCompany(m, businessCategoryId),
+    ]);
     return rows.map((n) => ({
       ...TypeOrmBusinessCategoryDagStore.toNode(n),
       docCount: counts.get(n.id) ?? 0,
+      companyCounts: classifyCompanyCounts(byCompany.get(n.id) ?? []),
     }));
   }
 
@@ -82,6 +89,52 @@ export class TypeOrmBusinessCategoryDagStore implements BusinessCategoryDagStore
       return new Map(
         (raw as { nodeId: string; cnt: string | number }[]).map((r) => [r.nodeId, Number(r.cnt)]),
       );
+    } catch {
+      return new Map();
+    }
+  }
+
+  /**
+   * 各節點**依制定公司拆分**之相異掛載文件數（`AC-UX33`；單次 `GROUP BY nodeId, companyCode`）。
+   *
+   * 🔴 **三表 join 是必要的**：`BUSINESS_CATEGORY_DOC` 只有 `documentId`／`nodeId`，制定公司住在
+   * `ICSOP_DOCUMENT.companyCode` ⇒ 比 `docCountsByNode()` 多一次 join。
+   * 🔒 `companyCode IS NULL`（或空字串）之列由 `GROUP BY` **自然收斂成同一組**（MSSQL 之
+   * `GROUP BY` 視 NULL 為相等）——這正是 `AC-UX35` 之 `__unspecified__` 桶的來源，SQL 端
+   * **不需要任何 `ISNULL`／`CASE` 特判**（分類判斷留給下一層純函式 `classifyCompanyCounts`）。
+   *
+   * ⚠ **本方法之 SQL 本身（join 是否正確、`GROUP BY` 之欄名是否寫對）本輪一條單元測試都碰不到**
+   * ——下方 `catch` 吞掉的正是這種缺陷的訊號，而既有徽章仍然正確、存在性斷言仍然綠。
+   * 🔴 唯一的防線是部署後以 `INV-UX1` 人工覆核：**Σ 各公司計數 ＝ `data-mounted-doc-count`**。
+   */
+  private async docCountsByNodeAndCompany(
+    m: EntityManager,
+    businessCategoryId: string,
+  ): Promise<Map<string, RawCompanyCount[]>> {
+    try {
+      const raw = await m.query(
+        `SELECT d.[nodeId] AS nodeId, doc.[companyCode] AS companyCode,
+                COUNT(DISTINCT d.[documentId]) AS cnt
+           FROM [BUSINESS_CATEGORY_DOC] d
+           JOIN [BUSINESS_CATEGORY_NODE] n ON n.[id] = d.[nodeId]
+           JOIN [ICSOP_DOCUMENT] doc ON doc.[id] = d.[documentId]
+          WHERE n.[businessCategoryId] = @0
+          GROUP BY d.[nodeId], doc.[companyCode]`,
+        [businessCategoryId],
+      );
+      const out = new Map<string, RawCompanyCount[]>();
+      for (const r of raw as {
+        nodeId: string;
+        companyCode: string | null;
+        cnt: string | number;
+      }[]) {
+        const bucket = out.get(r.nodeId) ?? [];
+        // 🔒 `Number()` 於 SQL 邊界一次轉型（raw `COUNT` 回字串）——維持「邊界之後全是型別
+        // 正確之值」的既有紀律，不把轉型留給下游散落各處。
+        bucket.push({ companyCode: r.companyCode, count: Number(r.cnt) });
+        out.set(r.nodeId, bucket);
+      }
+      return out;
     } catch {
       return new Map();
     }

@@ -96,12 +96,23 @@ export class BusinessCategoryController {
       subcategory?: string | null;
       description?: string | null;
       status?: string;
+      /** `AC-UX29` 排序值（整數）。🔒 識別子鎖定為 `sortOrder`，不接受 `order`／`seq` 等變體。 */
+      sortOrder?: number;
     },
   ) {
     const { status, ...patch } = body ?? {};
+    // 🔴 `sortOrder` 必須列入本 DTO 白名單：漏列會讓 HTTP 200 與「順序其實沒變」同時發生
+    // （值人間蒸發——兩端單元測試在整個過程中都是綠的，本 repo 已數度付出代價之形狀）。
+    // 非整數一律 400（沿用本 controller 既有之 `VALIDATION_ERROR`，不新增錯誤碼）。
+    if (patch.sortOrder !== undefined && !Number.isInteger(patch.sortOrder)) {
+      throw new BadRequestException('VALIDATION_ERROR');
+    }
     // 三態：body 未帶 `subcategory` 鍵＝不修改；帶 null／空白＝清空。
     const touchesFields =
-      patch.name !== undefined || patch.subcategory !== undefined || patch.description !== undefined;
+      patch.name !== undefined ||
+      patch.subcategory !== undefined ||
+      patch.description !== undefined ||
+      patch.sortOrder !== undefined;
     const afterPatch = touchesFields
       ? await this.svc.updateBusinessCategory(id, patch)
       : undefined;

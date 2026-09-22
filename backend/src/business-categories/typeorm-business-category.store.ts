@@ -1,6 +1,7 @@
 import { DataSource } from 'typeorm';
 import { BusinessCategory } from '../database/entities/business-category.entity';
 import { BusinessCategoryNode } from '../database/entities/business-category-node.entity';
+import { sortByOrderThenName } from './business-category-sort';
 import {
   BusinessCategoryStore,
   BusinessCategoryStatus,
@@ -33,6 +34,7 @@ export class TypeOrmBusinessCategoryStore implements BusinessCategoryStore {
       nodeCount,
       mountedDocCount,
       updatedAt: c.updatedAt,
+      sortOrder: c.sortOrder,
     };
   }
 
@@ -47,9 +49,22 @@ export class TypeOrmBusinessCategoryStore implements BusinessCategoryStore {
     return new Map(raw.map((r) => [r.businessCategoryId, Number(r.cnt)]));
   }
 
+  /**
+   * `AC-UX32` ①：類別池清單改依 **`sortOrder` 昇冪、同值時 `name` 昇冪**
+   * （📝 已作廢、⚠ 不得復原：`OLD>` `order: { updatedAt: 'DESC' }`）。
+   *
+   * 🔴 **SQL 只排 `sortOrder`，`name` 次鍵一律留給應用層**（`ARCH-UX5` 路線 (b)）：
+   * `BUSINESS_CATEGORY.name` 無欄位級 `COLLATE` 覆寫 ⇒ SQL 之 `ORDER BY name` 走資料庫預設
+   * `Chinese_Taiwan_Stroke_BIN`——`_BIN`（非 `_BIN2`）之第一字元採 locale 排序權重（本 locale
+   * ＝**筆畫序**），**不是** `AC-UX31` ③ 要求之 UTF-16 碼位序。⚠ collation 名字裡的 `BIN`
+   * 會誘使下一個人推論「那不就是碼位序嗎」而把應用層定序拿掉，故此處明文留檔。
+   * 🔒 本頁與前台類別下拉、F017 第 14 項篩選下拉**共用同一支** `sortByOrderThenName()`。
+   */
   async list(): Promise<BusinessCategoryView[]> {
     const ds = await this.init();
-    const rows = await ds.getRepository(BusinessCategory).find({ order: { updatedAt: 'DESC' } });
+    const rows = sortByOrderThenName(
+      await ds.getRepository(BusinessCategory).find({ order: { sortOrder: 'ASC' } }),
+    );
     const [counts, mounted] = await Promise.all([
       this.nodeCounts(ds),
       this.countMountedByCategory(),
@@ -69,19 +84,33 @@ export class TypeOrmBusinessCategoryStore implements BusinessCategoryStore {
     return TypeOrmBusinessCategoryStore.toView(c, cnt, await this.countMountedDocuments(id));
   }
 
+  /**
+   * `AC-UX31` ②：新增類別之預設排序值 ＝ `max(sortOrder) + 10` ⇒ 排在最後；表空時首筆為 `10`。
+   * 🔴 `max()` **涵蓋全部列、不分 `status`**——停用者仍佔序位（`AC-UX31` ①），排除它會產生
+   * 重複序位。`ISNULL(MAX(...), 0) + 10` 讓「表空」不需另寫特判分支。
+   */
+  private async nextSortOrder(ds: DataSource): Promise<number> {
+    const rows = await ds.query(
+      `SELECT ISNULL(MAX([sortOrder]), 0) + 10 AS nextValue FROM [BUSINESS_CATEGORY]`,
+    );
+    return Number(rows?.[0]?.nextValue ?? 10);
+  }
+
   async create(input: CreateBusinessCategoryInput): Promise<BusinessCategoryView> {
     const ds = await this.init();
     const repo = ds.getRepository(BusinessCategory);
     const now = new Date();
+    const sortOrder = await this.nextSortOrder(ds);
     // 🔴 白名單逐欄對帳（architecture-spec §14.4）：`name`／`subcategory`／`description`／
-    // `status`／`createdAt`／`updatedAt` 六欄缺一不可——`repo.create()` 會靜默丟掉非 entity
-    // property 名之鍵，NOT NULL 欄漏列即「值人間蒸發」→ 建立時必 500。
+    // `status`／`sortOrder`／`createdAt`／`updatedAt` 七欄缺一不可——`repo.create()` 會靜默丟掉
+    // 非 entity property 名之鍵，NOT NULL 欄漏列即「值人間蒸發」→ 建立時必 500。
     const saved = await repo.save(
       repo.create({
         name: input.name,
         subcategory: input.subcategory ?? null,
         description: input.description,
         status: 'active',
+        sortOrder,
         createdAt: now,
         updatedAt: now,
       }),
@@ -89,9 +118,18 @@ export class TypeOrmBusinessCategoryStore implements BusinessCategoryStore {
     return TypeOrmBusinessCategoryStore.toView(saved, 0, 0);
   }
 
+  /**
+   * 🔒 **純調序不動 `updatedAt`**（權威＝`prototypes/26-business-category-list.html` 之
+   * `setSortOrder`／`bumpSortOrder`，兩者皆未觸及 `updated` 欄）：清單之「最後更新」欄回答的是
+   * 「這個類別的內容什麼時候被改過」，調序既不進變更歷程、也不記稽核（`AC-UX39` ⑦），
+   * 讓它把每一次按上下鈕都印成一次「更新」會使該欄失去原本的意義。
+   */
   async update(id: string, patch: UpdateBusinessCategoryPatch): Promise<BusinessCategoryView> {
     const ds = await this.init();
-    await ds.getRepository(BusinessCategory).update({ id }, { ...patch, updatedAt: new Date() });
+    const touchesContent = Object.keys(patch).some((k) => k !== 'sortOrder');
+    await ds
+      .getRepository(BusinessCategory)
+      .update({ id }, { ...patch, ...(touchesContent ? { updatedAt: new Date() } : {}) });
     const view = await this.findById(id);
     return view!;
   }

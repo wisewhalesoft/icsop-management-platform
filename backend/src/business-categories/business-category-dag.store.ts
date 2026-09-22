@@ -5,6 +5,8 @@
  * `isReachable` 直接 import 既有 `../lifecycle/dag-cycle`，**不複製第二份**；錯誤碼之對映
  * 完全在 `BusinessCategoryDagService` 內部完成（共用的是演算法、不是錯誤碼，`AC-16`）。
  */
+import { NodeCompanyCount } from './node-company-counts';
+
 export const BUSINESS_CATEGORY_DAG_STORE = Symbol('BUSINESS_CATEGORY_DAG_STORE');
 
 export interface BusinessCategoryNodeView {
@@ -15,6 +17,15 @@ export interface BusinessCategoryNodeView {
   positionY: number;
   /** 掛載於此節點之**相異文件數**（`listNodes` 填入；比照 `NodeView.docCount`）。 */
   docCount?: number;
+  /**
+   * 依**制定公司**拆分之相異掛載文件數（F043 `AC-UX33`；`listNodes` 填入，已排序）。
+   *
+   * 🔴 與 `docCount` 走**兩支獨立查詢**：語意上 Σ `companyCounts[].count` 應恆等於 `docCount`
+   * （`INV-UX1`），但結構上無法互相引用保證——那正是「查錯欄位」唯一抓得到的地方；兩支若不
+   * 獨立，一支寫錯會被另一支的錯誤抵銷成看似一致。
+   * 🔒 新查詢失敗**不得連坐**既有徽章（各自獨立 try/catch）。
+   */
+  companyCounts?: NodeCompanyCount[];
 }
 
 export interface BusinessCategoryEdgeRow {

@@ -6,6 +6,7 @@ import {
   createBusinessCategory,
   updateBusinessCategory,
   setBusinessCategoryStatus,
+  setBusinessCategorySortOrder,
   deleteBusinessCategory,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
@@ -16,6 +17,12 @@ import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
 import { formatDateTime } from './org-sync-view';
 import { BC_TREE_PREVIEW_WINDOW_NAME } from './BusinessCategoryTreePreviewPage';
+import {
+  atReorderBoundary,
+  moveDown,
+  moveUp,
+  sortByOrderThenName,
+} from './business-category-reorder';
 import type { BusinessCategoryView } from '../api/types';
 
 /**
@@ -64,7 +71,9 @@ export function BusinessCategoryListPage(): JSX.Element {
     setLoading(true);
     try {
       const res = await getBusinessCategories();
-      setRows(Array.isArray(res) ? res : []);
+      // 🔒 `sortOrder` 之讀取端保險：後端恆填值，`?? 0` 只是讓缺值永遠不會以字串 `undefined`
+      // 進到 `data-sort-order`（`0` 本身就是合法序位，`AC-UX29` 明訂不得省略）。
+      setRows(Array.isArray(res) ? res.map((b) => ({ ...b, sortOrder: b.sortOrder ?? 0 })) : []);
     } catch (e) {
       toast.error(msgOf(e));
     } finally {
@@ -76,15 +85,91 @@ export function BusinessCategoryListPage(): JSX.Element {
     if (canRead) void load();
   }, [canRead, load]);
 
+  /**
+   * 🔵 `AC-UX32` ①：清單依 **`sortOrder` 昇冪、同值時 `name` 昇冪**（碼位序）排列
+   * （📝 已作廢、⚠ 不得復原：`OLD>` 後端之 `updatedAt DESC`）。
+   * 🔒 **上下鈕之邊界語意恆以本「完整清單」為準**，不是被篩過的檢視。
+   */
+  const ordered = useMemo(() => sortByOrderThenName(rows), [rows]);
+
+  /**
+   * 🔴 `AC-UX29` ③：任何篩選或搜尋生效時上下鈕一律停用。
+   * 📌 理由：在**被篩過**的檢視裡，「上移一位」指的是「畫面上的前一列」還是「完整清單裡的
+   * 前一列」——兩種答案都說得通，不裁定就會變成兩種解讀、產生不同的資料狀態。
+   */
+  const filtersActive = keyword.trim() !== '' || fStatus !== '';
+
   /** `AC-14`：關鍵字比對對象＝`businessCategoryDisplayName` 之**輸出**（名稱＋子分類），非僅 `name`。 */
   const shown = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
-    return rows.filter(
+    return ordered.filter(
       (b) =>
         (!kw || businessCategoryDisplayName(b).toLowerCase().includes(kw)) &&
         (!fStatus || b.status === fStatus),
     );
-  }, [rows, keyword, fStatus]);
+  }, [ordered, keyword, fStatus]);
+
+  /**
+   * 🔵 `AC-UX29`：把一批 `sortOrder` 寫回後端（🔒 與數值輸入框共用同一支端點與同一套值域規則，
+   * 🔴 明文禁止為上下鈕另開旁路）。寫入成功後重載，次序一律以伺服器回應為準。
+   */
+  const persistSortOrders = useCallback(
+    async (changed: { id: string; sortOrder: number }[], okText: string) => {
+      if (changed.length === 0) return;
+      try {
+        for (const c of changed) await setBusinessCategorySortOrder(c.id, c.sortOrder);
+        toast.success(okText);
+        await load();
+      } catch (e) {
+        toast.error(msgOf(e));
+        await load();
+      }
+    },
+    [load, toast],
+  );
+
+  /**
+   * 🔵 `AC-UX29` ②-b：上移／下移一位。
+   * 🔒 停用做在**兩處**——按鈕的 `disabled` ＋ 本函式開頭之 early return（鍵盤與程式化路徑仍
+   * 到得了這裡，光靠屬性擋不住）。
+   * 🔴 `{n}` 取自**寫入後之實際值**（重編號分支下即為重編號後之新值），不是「使用者以為的位置」。
+   */
+  const bumpSortOrder = useCallback(
+    (target: BusinessCategoryView, dir: -1 | 1) => {
+      if (!canWrite || filtersActive || atReorderBoundary(rows, target.id, dir)) return;
+      const next = dir < 0 ? moveUp(rows, target.id) : moveDown(rows, target.id);
+      const before = new Map(rows.map((r) => [r.id, r.sortOrder]));
+      const changed = next
+        .filter((r) => before.get(r.id) !== r.sortOrder)
+        .map((r) => ({ id: r.id, sortOrder: r.sortOrder }));
+      const moved = next.find((r) => r.id === target.id);
+      if (!moved || changed.length === 0) return;
+      void persistSortOrders(
+        changed,
+        `已將「${businessCategoryDisplayName(target)}」${dir < 0 ? '上移' : '下移'}一位（排序值 ${moved.sortOrder}）；前台類別下拉與文件清單之類別篩選皆依同一順序呈現。`,
+      );
+    },
+    [canWrite, filtersActive, persistSortOrders, rows],
+  );
+
+  /**
+   * 🔵 `AC-UX29` ①：數值輸入框之提交。
+   * 🔒 空白／非數字一律收斂為 `0`（`0` 是合法序位）；🔒 只動 `sortOrder` 一欄、**不**整表重編號
+   * （間距 10 即為了讓插入不必重寫整張表）。
+   */
+  const commitSortOrder = useCallback(
+    (target: BusinessCategoryView, raw: string) => {
+      if (!canWrite) return;
+      const parsed = Number.parseInt(raw.trim(), 10);
+      const value = Number.isFinite(parsed) ? parsed : 0;
+      if (value === target.sortOrder) return;
+      void persistSortOrders(
+        [{ id: target.id, sortOrder: value }],
+        `已將「${businessCategoryDisplayName(target)}」之排序值設為 ${value}；前台類別下拉與文件清單之類別篩選皆依同一順序呈現。`,
+      );
+    },
+    [canWrite, persistSortOrders],
+  );
 
   const act = useCallback(
     async (fn: () => Promise<unknown>, okText: string) => {
@@ -162,12 +247,14 @@ export function BusinessCategoryListPage(): JSX.Element {
         <span className="ml-auto text-sm text-slate-500">共 {shown.length} 個業務/功能類別</span>
       </div>
 
-      {/* table：7 欄，欄序與欄名逐字取自 prototype 26 */}
+      {/* table：8 欄，欄序與欄名逐字取自 prototype 26 */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[900px]">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
               <tr>
+                {/* 🔵 UX16 項 8（`AC-UX29`）：排序值。置於最左＝「這份清單的次序由這一欄決定」。 */}
+                <th className="text-left font-medium px-4 py-2.5 w-[120px]">排序</th>
                 <th className="text-left font-medium px-4 py-2.5">業務/功能類別名稱</th>
                 <th className="text-left font-medium px-4 py-2.5">說明</th>
                 <th className="text-left font-medium px-4 py-2.5">狀態</th>
@@ -180,8 +267,65 @@ export function BusinessCategoryListPage(): JSX.Element {
             <tbody className="divide-y divide-slate-100">
               {shown.map((b) => {
                 const label = businessCategoryDisplayName(b);
+                const upLabel = `上移（${label}）`;
+                const downLabel = `下移（${label}）`;
+                const sortValue = b.sortOrder ?? 0;
                 return (
-                  <tr key={b.id} className="hover:bg-slate-50" data-business-category-id={b.id}>
+                  <tr
+                    key={b.id}
+                    className="hover:bg-slate-50"
+                    data-business-category-id={b.id}
+                    /* 🔒 `AC-UX29` DOM 契約：`data-sort-order` 是「這一列的序位是多少」在 DOM 層
+                       **唯一**的機器可讀載體（`0` 亦不得省略）——🔴 輸入框與上下鈕皆不承載值，
+                       輸入框的 `value` 是編輯中的草稿，不是已持久化的事實。 */
+                    data-sort-order={String(sortValue)}
+                  >
+                    {/* 🔵 UX16 項 8：調序載體。🔒 唯讀角色下三者**一律不進 DOM**（非 disabled、
+                        非 CSS 隱藏，比照 `AC-UX37` 之處置）；該格改印純文字序位以保留欄位對齊。 */}
+                    <td className="px-4 py-3">
+                      {canWrite ? (
+                        <div className="flex items-center gap-1">
+                          <div className="flex flex-col">
+                            <button
+                              type="button"
+                              data-sort-up=""
+                              onClick={() => bumpSortOrder(b, -1)}
+                              aria-label={upLabel}
+                              title={upLabel}
+                              disabled={filtersActive || atReorderBoundary(rows, b.id, -1)}
+                              className="w-6 h-5 rounded border border-slate-300 flex items-center justify-center text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <Icon name="chevron-up" className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              data-sort-down=""
+                              onClick={() => bumpSortOrder(b, 1)}
+                              aria-label={downLabel}
+                              title={downLabel}
+                              disabled={filtersActive || atReorderBoundary(rows, b.id, 1)}
+                              className="w-6 h-5 -mt-px rounded border border-slate-300 flex items-center justify-center text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <Icon name="chevron-down" className="w-3 h-3" />
+                            </button>
+                          </div>
+                          {/* 🔒 非受控＋以值入 key：提交點為 blur（比照 prototype 之 `onchange`），
+                              重載後 key 改變使草稿被伺服器的權威值取代。 */}
+                          <input
+                            key={`bc-sort-${b.id}-${sortValue}`}
+                            type="number"
+                            step={10}
+                            data-sort-order-input=""
+                            defaultValue={sortValue}
+                            onBlur={(e) => commitSortOrder(b, e.target.value)}
+                            aria-label={`排序值（${label}）`}
+                            className="w-[64px] px-2 py-1 rounded-md border border-slate-300 text-sm mono focus:outline-none focus:ring-2 focus:ring-primary-600"
+                          />
+                        </div>
+                      ) : (
+                        <span className="mono text-sm text-slate-500">{sortValue}</span>
+                      )}
+                    </td>
                     {/* AC-01／AC-02：顯示字串一律經 businessCategoryDisplayName（無子分類不含括號）。 */}
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-800" data-business-category-name="">
@@ -237,16 +381,25 @@ export function BusinessCategoryListPage(): JSX.Element {
                       )}
                     </td>
                     <td className="px-4 py-3 text-slate-500 mono text-xs">{formatDateTime(b.updatedAt)}</td>
+                    {/* 🔵 UX16 項 13（`AC-UX37`）＋`AC-UX56`：本格四個動作一律以**同一道既有閘門**
+                        （`canPerform(..., 'write')`）門控——🔴 判準是那道閘門本身、不是角色清單。
+                        🔴 無寫權時四者**全部不進 DOM**（非 `disabled`、非 CSS 隱藏：CSS 隱藏的
+                           節點仍留在 `textContent` 裡，`AC-UX56` ⓑ 之逐字斷言會因此不可滿足），
+                           只留一個破折號。
+                        🔒 `<th>` 與 `<td>` 一律保留——只拿掉 `<td>` 會整表錯位一格，而「按鈕不
+                           存在」的斷言對錯位完全無感。
+                        ⚠ 同格之外的「檢視樹狀圖預覽」鈕不受本條影響（`AC-UX38`：它本身即唯讀
+                           功能，對唯讀角色隱藏它會減損其既有可用能力）。 */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3 text-sm whitespace-nowrap">
-                        <button
-                          onClick={() => navigate(`/admin/business-categories/${b.id}/canvas`)}
-                          className="text-primary-600 hover:text-primary-700 hover:underline font-medium"
-                        >
-                          DAG 畫布
-                        </button>
-                        {canWrite && (
+                        {canWrite ? (
                           <>
+                            <button
+                              onClick={() => navigate(`/admin/business-categories/${b.id}/canvas`)}
+                              className="text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                            >
+                              DAG 畫布
+                            </button>
                             <button
                               onClick={() => setEditTarget(b)}
                               className="text-slate-600 hover:text-primary-700 hover:underline"
@@ -286,6 +439,8 @@ export function BusinessCategoryListPage(): JSX.Element {
                               刪除
                             </button>
                           </>
+                        ) : (
+                          <span className="text-slate-400">—</span>
                         )}
                       </div>
                     </td>

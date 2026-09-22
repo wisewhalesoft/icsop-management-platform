@@ -115,10 +115,21 @@ export class BusinessCategoryService {
     return this.store.create({ name, subcategory, description: input.description ?? null });
   }
 
-  /** `AC-11`：編輯名稱／子分類／說明（唯一性比對**排除自身列**）。 */
+  /**
+   * `AC-11`：編輯名稱／子分類／說明**／排序值**（唯一性比對**排除自身列**）。
+   *
+   * 🔵 `AC-UX29`：`sortOrder` 與身分欄位無關 ⇒ **不觸發**唯一性重驗；且刻意與上下移動鈕
+   * **共用同一條寫入路徑**（`AC-UX29` ⑤：兩套入口必須產生相同的資料狀態，🔴 明文禁止為鈕另
+   * 開一套旁路規則）。
+   */
   async updateBusinessCategory(
     id: string,
-    patch: { name?: string; subcategory?: string | null; description?: string | null },
+    patch: {
+      name?: string;
+      subcategory?: string | null;
+      description?: string | null;
+      sortOrder?: number;
+    },
   ): Promise<BusinessCategoryView> {
     const existing = await this.store.findById(id);
     if (!existing) throw new NotFoundException('BUSINESS_CATEGORY_NOT_FOUND');
@@ -142,6 +153,9 @@ export class BusinessCategoryService {
       // 三態：未帶鍵＝不修改；帶鍵（含 null／空白字串）＝設定為正規化後之值。
       ...(subcategoryTouched ? { subcategory: nextSubcategory } : {}),
       ...(patch.description !== undefined ? { description: patch.description } : {}),
+      // 🔒 `0` 為合法序位（`AC-UX29` 明訂「`0` 亦不得省略」）⇒ 必須以 `!== undefined` 判定，
+      // 用 truthy 判定會讓「把某列設為 0」靜默失敗（值人間蒸發之典型形狀）。
+      ...(patch.sortOrder !== undefined ? { sortOrder: patch.sortOrder } : {}),
     });
   }
 

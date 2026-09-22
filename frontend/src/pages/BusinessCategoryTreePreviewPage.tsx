@@ -30,6 +30,7 @@ import { recordSubtreeJump } from './subtree-jump-seam';
 import { buildTreeLayout, descendants, buildEdgeRoutes, routePath, NODE_W } from './lifecycle-tree-layout';
 import type {
   BusinessCategoryView,
+  BusinessCategoryNodeCompanyCount,
   BusinessCategorySubtreeGroup,
   BusinessCategoryTreePreview,
 } from '../api/types';
@@ -51,6 +52,67 @@ import type {
 
 const msgOf = (e: unknown): string =>
   e instanceof ApiError ? e.code : e instanceof Error ? e.message : '載入失敗';
+
+/**
+ * 🔵 UX16 項 12（`AC-UX33`～`AC-UX35`）：計數列之標籤詞彙。
+ *
+ * 🔒 公司**簡稱**逐字取自後端之唯一來源 `backend/src/org-directory/company-name.ts`
+ * （`COMPANY_SHORT_NAMES`，即全稱去尾「股份有限公司」）；`__unspecified__`／`未指定` 逐字沿用
+ * F044 既有之 `SEG_UNSPECIFIED_KEY`／`SEG_UNSPECIFIED_LABEL`——🔴 **不另立第二套詞彙**。
+ * ⚠ 查無代碼時**原樣顯示該代碼**（不回退為空字串）：漏登一家公司要在畫面上看得出來。
+ */
+const COMPANY_SHORT_NAMES: Readonly<Record<string, string>> = {
+  AS: '和潤企業',
+  AD: '和潤興業',
+  AE: '和潤電能',
+  AJ: '和勁企業',
+};
+const SEG_UNSPECIFIED_KEY = '__unspecified__';
+const SEG_UNSPECIFIED_LABEL = '未指定';
+
+/** `companyCode`（或 sentinel）→ 計數列之可見標籤。 */
+function companyCountLabel(companyCode: string): string {
+  if (companyCode === SEG_UNSPECIFIED_KEY) return SEG_UNSPECIFIED_LABEL;
+  return COMPANY_SHORT_NAMES[companyCode] ?? companyCode;
+}
+
+/**
+ * 節點內之「各制定公司計數」（`AC-UX33`）。
+ *
+ * 🔒 **既有 `AC-32` 徽章一字不改**：本區塊只在其**下方**新增，`data-mounted-doc-count` 與
+ * `formatMountedCount()` 一格未動；新屬性 `data-company-doc-count` 刻意與之同層級、不覆載。
+ * 🔒 **排序權威在後端**（`companyCode` 昇冪、`__unspecified__` 殿後）⇒ 此處**不再排一次**，
+ * 否則同一條排序契約會有兩個定義點。
+ * 🔒 **0 個公司 ⇒ 整個容器不進 DOM**（`AC-UX33` 末段）：不得渲染一個空的 `role="list"`，
+ * 那會讓 `AC-UX34` ②「0 不顯示」失去對照。
+ * 🔴 **`INV-UX1`（Σ 各公司計數 ＝ `data-mounted-doc-count`）本輪沒有任何自動化斷言守得住**
+ * ——兩者走兩支獨立查詢，後端之 join／`GROUP BY` 欄名寫錯時明細會整個為空而徽章仍然正確；
+ * 須於部署後人工逐節點覆核。
+ */
+function NodeCompanyCounts({
+  rows,
+}: {
+  rows: readonly BusinessCategoryNodeCompanyCount[] | undefined;
+}): JSX.Element | null {
+  if (!rows || rows.length === 0) return null;
+  return (
+    <div role="list" data-testid="node-company-counts" className="mt-0.5 space-y-px">
+      {rows.map((r) => (
+        <div
+          key={r.companyCode}
+          role="listitem"
+          data-company-code={r.companyCode}
+          data-company-doc-count={String(r.count)}
+          className="text-[10px] leading-tight text-slate-500 truncate"
+        >
+          {/* 🔒 可見文字逐字為 `{公司簡稱} {n}`（恰一個半形空格）；🔴 數字**必須是可見文字**，
+              不得只存在於屬性中。⚠ 兩個插值刻意寫在同一行——跨行會讓 JSX 補進額外空白。 */}
+          {companyCountLabel(r.companyCode)} {r.count}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /** 狀態徽章配色（與後台清單同一組衍生狀態）。 */
 const STATUS_PILL: Record<DisplayStatus, string> = {
@@ -167,13 +229,18 @@ export function BusinessCategoryTreePreviewPage(): JSX.Element {
   useEffect(() => {
     if (!canRead) return;
     let active = true;
-    getBusinessCategories()
-      .then((r) => {
+    // 🔴 「切換器清單失敗不阻斷主檢視」必須連**同步**拋出也一併涵蓋：`.then().catch()` 之
+    // `catch` 是在取得回傳值**之後**才掛上的，呼叫本身同步拋出（或回了非 Promise）時那個
+    // `catch` 還不存在 ⇒ 例外會逸出 effect、把整頁（含主檢視）一起打掉，恰好與本區塊的意圖
+    // 相反。改以 `try/await` 承接，兩種失敗形狀才走同一條降級路徑。
+    void (async () => {
+      try {
+        const r = await getBusinessCategories();
         if (active) setCategories(Array.isArray(r) ? r : []);
-      })
-      .catch(() => {
+      } catch {
         /* 切換器清單失敗不阻斷主檢視 */
-      });
+      }
+    })();
     return () => {
       active = false;
     };
@@ -191,6 +258,19 @@ export function BusinessCategoryTreePreviewPage(): JSX.Element {
             data.graph.edges,
           )
         : null,
+    [data],
+  );
+  /**
+   * 🔵 `AC-UX33`：`nodeId` → 各制定公司計數。
+   * 🔒 刻意**不**把 `companyCounts` 灌進 `buildTreeLayout` 之輸入形狀——該佈局函式為本頁與
+   * 循環樹狀圖**共用**之純函式，其語彙只有座標與 `docCount`；為一個只有後台類別樹用得到的
+   * 欄位去撐大它，會把本 delta 的影響面擴散到循環側。
+   */
+  const companyCountsByNode = useMemo(
+    () =>
+      new Map(
+        (data?.graph.nodes ?? []).map((n) => [n.id, n.companyCounts] as const),
+      ),
     [data],
   );
   const highlightSet = useMemo(
@@ -646,6 +726,9 @@ export function BusinessCategoryTreePreviewPage(): JSX.Element {
                           <Icon name={n.docCount > 0 ? 'file-check-2' : 'file-x-2'} className="w-3.5 h-3.5" />
                           {formatMountedCount(n.docCount)}
                         </div>
+                        {/* 🔵 UX16 項 12（`AC-UX33`）：各制定公司計數，小字逐列於徽章**下方**；
+                            總和恆等於上方徽章之 N（`INV-UX1`）。 */}
+                        <NodeCompanyCounts rows={companyCountsByNode.get(n.id)} />
                       </div>
                     </div>
                   );
