@@ -19,7 +19,35 @@ export interface DownloadInit {
 }
 
 /**
- * 以 `fetch → Blob → object URL → 程式化 <a download>` 觸發下載。
+ * `downloadViaBlobDetailed()` 之回傳（🔵 2026-09-22 UX16 `AC-UX55` ①，additive）。
+ *
+ * 🔴 **為何需要它**：F042 之匯出 toast 必須說出**伺服器實際匯出的筆數**（畫面另受「搜尋文件」
+ * 收斂，跟著畫面說就是說假話），而該筆數只存在於回應標頭裡。
+ */
+export interface DownloadOutcome {
+  /** 實際落地之檔名（優先取自 `Content-Disposition`，解析失敗則為呼叫端之 fallback）。 */
+  fileName: string;
+  /** 回應標頭（唯讀）。⚠ 自訂標頭須由伺服器以 `Access-Control-Expose-Headers` 曝光才讀得到。 */
+  headers: Headers;
+}
+
+/**
+ * 以 `fetch → Blob → object URL → 程式化 <a download>` 觸發下載（**既有簽章一字不改**）。
+ *
+ * 🔴 **本函式是 `downloadViaBlobDetailed()` 之投影，不是第二份實作**：其 ~20 個既有呼叫端皆
+ * 宣告 `Promise<void>`，把回傳型別就地改掉會讓每一處都編譯失敗——而那些呼叫端一個都不需要
+ * 標頭。⇒ 需要標頭者改呼叫 `downloadViaBlobDetailed()`，**規則仍只有一份**。
+ */
+export async function downloadViaBlob(
+  path: string,
+  fallbackName: string,
+  init?: DownloadInit,
+): Promise<void> {
+  await downloadViaBlobDetailed(path, fallbackName, init);
+}
+
+/**
+ * 以 `fetch → Blob → object URL → 程式化 <a download>` 觸發下載，並回傳檔名與回應標頭。
  *
  * 🔴 為何**不得**用 `window.open(url)` 或 `<a href>`（architecture-spec §10.1 之明文禁令）：
  * top-level navigation 會送出 `Accept: text/html,...`，而本專案 2026-07-25 之瀏覽器煙霧測試
@@ -29,11 +57,11 @@ export interface DownloadInit {
  *
  * 檔名優先取 `Content-Disposition`；解析失敗才用呼叫端提供之 fallback。
  */
-export async function downloadViaBlob(
+export async function downloadViaBlobDetailed(
   path: string,
   fallbackName: string,
   init?: DownloadInit,
-): Promise<void> {
+): Promise<DownloadOutcome> {
   let res: Response;
   const hasBody = init?.body !== undefined;
   try {
@@ -66,6 +94,7 @@ export async function downloadViaBlob(
   } finally {
     URL.revokeObjectURL(url);
   }
+  return { fileName: name, headers: res.headers };
 }
 
 /**
