@@ -96,7 +96,14 @@
   </div>
 </div>
 
-<main class="max-w-6xl mx-auto px-5 py-6">
+<!-- 🟣 2026-09-22 第八輪（純版面／配色；使用者需求 ①「排版應充分利用螢幕解析度，寬度設為 100%」）：
+     `max-w-6xl mx-auto` **移除**，本頁改為滿版（左右仍留 `px-5` 之側邊留白）。
+     🔴 移植對應點**不是** AppShell——src 之 `AppShell` `<main className="px-4 py-6">` 本來就沒有寬度上限；
+        本檔這個 `<main>` 同時扮演 shell 與頁面兩個角色，其中「夾寬度」那一半在 src 住在
+        `DashboardHome.tsx` 最外層 `<div className="max-w-6xl mx-auto">`。移植端**只改那一行**（改成無 class 之 `<div>`），
+        改到 AppShell 會連帶放寬其餘 20 餘個後台頁面，那不在本輪範圍。
+     📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> <main class="max-w-6xl mx-auto px-5 py-6"> -->
+<main class="px-5 py-6">
   <!-- welcome -->
   <div class="flex items-start justify-between flex-wrap gap-3 mb-5">
     <div>
@@ -146,22 +153,44 @@
        🔴 `AC-G71`（本輪之簡化環無 e2e、無視覺回歸）：SVG 一律 `aria-hidden="true"`，
           每一段之組織名與兩個數字皆由**圖例之文字節點**承載；被 Top N 合併之「其他」段，其份數與
           被合併之組織數由**圖形下方之說明行**承載 ⇒ 沒有任何數字之唯一載體是弧長。 -->
-  <div class="grid lg:grid-cols-2 gap-4 mb-4">
+  <!-- 🟣 第八輪（需求 ②）：斷點由 `lg`（1024px）上調為 `xl`（1280px）。
+       🔴 **理由是算出來的、不是偏好**：圖例移到環右側後，單卡可用寬度 ＝ (viewport − 側欄 240 − 頁面 px-5×2 − gap 16) / 2 − 卡片 p-5×2。
+          在 `lg`（1024px）下該值 ≈ 324px，扣掉環 140 ＋ gap 16 之後只剩 168px 給圖例，而圖例右側兩個數字
+          （`已公告 nn`／`進度中 nn`）本身就佔 ≈ 118px ⇒ 組織名會被 `truncate` 壓到剩一兩個字。
+          在 `xl`（1280px）下單卡 ≈ 452px，圖例得 296px、組織名約 144px，可讀。
+          1024–1280 這一段改為**單欄滿版**：一張卡拿到 ≈ 704px，是比「兩張各 324px」更好的資訊密度。
+       📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> <div class="grid lg:grid-cols-2 gap-4 mb-4"> -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
     <section id="donutMonth" role="region" aria-label="當月已公告" data-testid="donut-month" class="bg-white border border-slate-200 rounded-xl p-5"></section>
     <section id="donutCumulative" role="region" aria-label="累積已公告" data-testid="donut-cumulative" class="bg-white border border-slate-200 rounded-xl p-5"></section>
   </div>
+
+  <!-- 🟣 2026-09-22 第八輪（需求 ⑤「排版對調位置：依業務/功能類別區塊與最新公告區塊（或視情況並排）」）
+       ⇒ **裁量結果＝對調，不並排**（使用者已明確授權 designer 判斷）。理由：
+       ① 需求 ④ 把類別長條改為直式之後，該區塊需要的是**寬度**（每多 104px 就多看到一個類別，
+          在預設 10 類之下滿版剛好不必水平捲動）；並排等於把它砍半，直接讓需求 ④ 在預設語料下就開始捲動。
+       ② 「最新公告」有一欄 `程序書書名`（`max-w-[340px] truncate`），半寬之下截斷會從例外變成常態。
+       ③ 兩區高度差很大（清單 10 列 ≈ 400px、直式長條 ≈ 210px），並排必留一塊死白。
+       🔴 `④`／`⑤` 是**規格區塊編號（AC 區段身分）**，不是畫面順序；對調後編號刻意不重排，
+          否則規格與本檔之間會失去對照關係。
+       🔴 連帶：兩區之下外距互換（類別區 `mb-8` → `mb-4`；最新公告 `mb-4` → `mb-8`），
+          使「與下一區的間距」跟著區塊走，而不是跟著位置走。 -->
+
+  <!-- ═══ F044 ⑤ · 依業務/功能類別分布（`AC-G60`～`AC-G68`）═══
+       🔴 本區塊之可見性閘門**直接讀功能矩陣**（`canPerform(role,'BUSINESS_CATEGORY_MANAGEMENT','read')`），
+          明文禁止寫成角色清單。部門窗口在該功能鍵為 `NONE` ⇒ 整個 `<section>` **完全不進 DOM**
+          （不是 `hidden`、不是 `disabled`）⇒ 故以 host 容器承載，由 `renderCategory()` 決定是否產生。
+       ⚠ 部門窗口看不到本區 ⇒ 對他而言「兩張環圖」之後直接接「最新公告」，中間不得留空白間距。
+          本檔以 host `<div>` 承載 `mb-4`，該 div 在 `renderCategory()` 清空時仍佔 16px——
+          🔴 **移植端不得照抄這個 host div**：src 是 `{mayViewCategories ? <CategoryDistribution/> : null}`，
+             外距必須掛在 `<section>` 自己身上（區塊不進 DOM 時外距一併消失），本檔之 host 只是原型的權宜。 -->
+  <div id="categoryHost" class="mb-4"></div>
 
   <!-- ═══ F044 ④ · 最新公告（ICSOP 版本更新）（`AC-G51`～`AC-G58`）═══
        🔴 恰四欄（公告日／版次／程序書書名／狀態），**不得**順手加第五欄。
        ⚠ 母體含「公告日在未來」之進度中文件（`AC-G52`）：依公告日降冪 ⇒ 未來公告日排在最上方。
           這是刻意的——若只含已公告，`狀態` 欄將恆為同一值、零資訊量。 -->
-  <section id="latestAnnouncements" role="region" aria-label="最新公告（ICSOP 版本更新）" data-testid="latest-announcements" class="bg-white border border-slate-200 rounded-xl p-5 mb-4"></section>
-
-  <!-- ═══ F044 ⑤ · 依業務/功能類別分布（`AC-G60`～`AC-G68`）═══
-       🔴 本區塊之可見性閘門**直接讀功能矩陣**（`canPerform(role,'BUSINESS_CATEGORY_MANAGEMENT','read')`），
-          明文禁止寫成角色清單。部門窗口在該功能鍵為 `NONE` ⇒ 整個 `<section>` **完全不進 DOM**
-          （不是 `hidden`、不是 `disabled`）⇒ 故以 host 容器承載，由 `renderCategory()` 決定是否產生。 -->
-  <div id="categoryHost" class="mb-8"></div>
+  <section id="latestAnnouncements" role="region" aria-label="最新公告（ICSOP 版本更新）" data-testid="latest-announcements" class="bg-white border border-slate-200 rounded-xl p-5 mb-8"></section>
 
   <!-- recent activity -->
   <h2 class="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5"><i data-lucide="activity" class="w-4 h-4 text-slate-400"></i>最近活動</h2>
@@ -315,11 +344,78 @@
         （本 repo 已記錄「靜默 top-N 才是缺陷」之血訓。） */
   const DONUT_TOP_N=8;
   const DONUT_R=54, DONUT_C=2*Math.PI*DONUT_R;
-  const DONUT_PALETTE=['#365C97','#0891B2','#7C3AED','#047857','#B45309','#BE185D','#4338CA','#0F766E'];
-  const DONUT_OTHER_COLOR='#94A3B8';
-  /* 🔒 `AC-G50`：顏色不得為唯一區分手段——兩個狀態之色票沿用 `13-document-list.html` 之 `statusPill`，
-     但畫面上**恆有逐字標籤**（`已公告 {n}`／`進度中 {n}`）。 */
-  const C_ANNOUNCED='#047857', C_IN_PROGRESS='#365C97';
+  /* 🟣 2026-09-22 第八輪（需求 ③；使用者看過第一版後回饋「希望用更活潑的顏色」⇒ 整組色彩方案**第二次重做**）。
+     🔒 段數上限仍為 8（`DONUT_TOP_N` 未動），第 9 段以後固定中性灰之「其他」。
+     🔵 八色皆為高彩、對白底 **全數 ≥ 3:1**（上一版的 `#CA8A04` 為 2.94:1，本版已換掉，不再有例外）。
+     🔒 **色相禁區**（不得與語意色家族混淆）：`已公告` 家族 ≈ 161–163°、`進度中` 家族 ≈ 217–224°；
+        本色盤任一色與該二家族之色相差皆 ≥ 18.9°（最接近者＝ FILL 綠 161.3° ↔ palette[5] green-700 142.4°），且**無任何一色等於**四個語意色值。
+        （上一版之前的舊色盤第 1 色 `#365C97` **正好等於**當時的 `C_IN_PROGRESS`，於是圖例每一列
+          左邊的組織圓點與右邊的「進度中 n」同色，讀起來像有關聯——這是本禁區規則的由來。）
+     🔒 排序即相鄰順序：色盤是**依序**套到「已公告份數由多至少」的環段與圖例列上，因此真正要拉開的是
+        **相鄰索引**之色相差（本序列最小 48.9°，多數 > 100°）；全集合最接近的一對
+        （purple-500 270.7° / fuchsia-600 293.4° ＝ 22.7°）刻意排在索引 3 與 6，永遠不相鄰，
+        且兩者亮度亦不同（3.96:1 vs 4.71:1；但彼此之亮度對比僅 1.19:1 ⇒ 這一對**只靠色相與形狀區分**，
+        這是本色盤已知最弱的一處，故不得讓它們相鄰）。
+     📌 色相／對比（實算，依索引）：
+        0 `#0891B2` cyan-600    191.6°  3.68:1
+        1 `#F43F5E` rose-500    349.7°  3.67:1
+        2 `#65A30D` lime-600     84.8°  3.09:1
+        3 `#A855F7` purple-500  270.7°  3.96:1
+        4 `#EA580C` orange-600   20.5°  3.56:1
+        5 `#15803D` green-700   142.4°  5.02:1
+        6 `#C026D3` fuchsia-600 293.4°  4.71:1
+        7 `#4338CA` indigo-700  244.5°  7.90:1
+     📝 已作廢（僅供追溯，⚠ 不得復原）：
+        OLD> const DONUT_PALETTE=['#365C97','#0891B2','#7C3AED','#047857','#B45309','#BE185D','#4338CA','#0F766E'];
+        OLD> const DONUT_PALETTE=['#0284C7','#7C3AED','#EA580C','#0D9488','#DB2777','#65A30D','#4338CA','#CA8A04'];
+             ⇒ 其 `#0D9488`（teal-600, 174.7°）距 `已公告` 家族僅 11.8°，`#CA8A04` 又只有 2.94:1。
+        OLD> const DONUT_OTHER_COLOR='#94A3B8';   ← 對白底僅 2.0:1，在高彩鄰居旁會淡到看不出是一段 */
+  const DONUT_PALETTE=['#0891B2','#F43F5E','#65A30D','#A855F7','#EA580C','#15803D','#C026D3','#4338CA'];
+  /* 🔒 `其他` 維持中性灰（不得使用色相）——它是「被合併」的視覺類別，不該與任何真實組織競爭注意力；
+     由 slate-400 調深為 slate-500，僅為在高彩鄰居旁仍看得出是一段（對白底 4.76:1）。
+     ⚠ `#64748B` 之色相值為 215.4°，數字上落在「進度中」家族的禁區內，但其 **HSL 飽和度只有 0.16**
+        ⇒ 沒有可感知的色相，不構成撞色；且語意色之 FILL **不會出現在環上**（環上只有組織色盤），
+        兩者唯一同時出現的地方是圖例列（灰點 vs 藍色數字），形式不同。 */
+  const DONUT_OTHER_COLOR='#64748B';
+
+  /* ═══ 語意色：`已公告`／`進度中`（2026-09-22 第八輪·第二次，lead 裁決：**填色與文字色分家**）═══
+     🔒 `AC-G50`：顏色不得為唯一區分手段——畫面上**恆有逐字標籤**（`已公告 {n}`／`進度中 {n}`）。
+
+     🔴 **為何要拆**：`4.5:1` 是**文字**的義務，不是圖形的。把兩者綁成同一個常數，等於讓「小字在
+        淺色膠囊底上的對比」這個全頁最嚴的約束，去封死所有圖形（環、柱、圖示）的彩度上限。
+        SVG 的 `rect`／環段是色塊、`aria-hidden`，每一段旁邊恆有逐字標籤 ⇒ 只需對白底可辨識（3:1）。
+     🔒 **拆分後的四條規則**（lead 裁決，取代原本的「三處同色」）：
+        ① 同一語意的 FILL 與 TEXT **必須同色相家族，色相差 ≤ 15°**
+           ——實際值：已公告 161.3° vs 162.9° ＝ **1.6°**；進度中 217.2° vs 224.3° ＝ **7.1°**。
+           🔴 色相一飄就不是提高彩度，是變成兩個不同的狀態色。
+        ② FILL 在**全頁所有圖形處**一致：統計卡圖示、OJT 卡的環、類別區的色塊圖例、長條圖的柱。
+           TEXT 在**全頁所有文字處**一致：兩張環圖圖例的兩個數字、長條圖的兩個數字、最新公告的狀態膠囊。
+           🔴 不得出現「長條圖用 A 綠、環圖圖例用 B 綠」。
+           ⚠ 兩張環圖**圖例左側的圓點不是語意色**——那是 `DONUT_PALETTE`（一點＝一個組織）。
+        ③ FILL 對白底 ≥ 3:1；TEXT 對其實際底色（`*_BG`）≥ 4.5:1。
+        ④ 綠藍**兩組都拆**（只拆一邊會讓結構不對稱，日後改色的人必踩）。
+     📌 實算：
+        FILL 已公告 `#059669` emerald-600 → 白底 3.77:1；於 `#D1FAE5` 上 3.32:1（圖示，非文字）
+        FILL 進度中 `#3B82F6` blue-500    → 白底 3.68:1；於 `#DBEAFE` 上 3.01:1（圖示，非文字）← 全頁最差之非文字對比
+        TEXT 已公告 `#047857` emerald-700 → 白底 5.48:1；於 `#D1FAE5` 上 4.84:1 ← 全頁最差之文字對比
+        TEXT 進度中 `#1D4ED8` blue-700    → 白底 6.70:1；於 `#DBEAFE` 上 5.49:1
+     🔴 TEXT 綠**已到頂、不是漏改**：`#047857` HSL 飽和度 0.94；綠色在 4.5:1 之下亮度天花板約 L≈0.183，
+        再提亮（`#00855F`）雖過白底 4.65:1，卻會在 `#D1FAE5` 上掉到 4.10:1 而破 AA。
+        （更亮的 emerald-500 `#10B981` 對白底只有 2.54:1，連 FILL 的 3:1 都不過，故 FILL 綠取 emerald-600。）
+        活潑度由 FILL 承擔——使用者看的是圖表，不是膠囊裡那行小字。
+     ⚠ 跨頁後果（已回報 lead，本輪不處理）：`13-document-list.html` 之 `statusPill` 仍為 `#365C97`／`#EAF1FA`
+        （src 對應 `StatusPill` 元件）；同頁一致性優先，若要收斂需另一輪同步改 statusPill。
+     📝 已作廢（僅供追溯，⚠ 不得復原）：
+        OLD> 兩個狀態之色票沿用 `13-document-list.html` 之 `statusPill`
+        OLD> const C_ANNOUNCED='#047857', C_IN_PROGRESS='#365C97';
+        OLD> const C_ANNOUNCED='#047857', C_IN_PROGRESS='#1D4ED8';   ← 單一常數同時當填色與文字色 */
+  const C_ANNOUNCED_FILL='#059669', C_IN_PROGRESS_FILL='#3B82F6';
+  const C_ANNOUNCED_TEXT='#047857', C_IN_PROGRESS_TEXT='#1D4ED8';
+  /* 🟣 第八輪：兩個語意色之**淺色底**（統計卡圖示底、最新公告狀態膠囊底）之單一出處。
+     🔴 這兩個值由 **TEXT** 的 AA 反推，不是由 FILL：膠囊裡是小字。
+        `C_IN_PROGRESS_BG` 由 `#EAF1FA` 換為 `#DBEAFE`（blue-100）以跟上 TEXT 的彩度；
+        `C_ANNOUNCED_BG` 維持 `#D1FAE5`——換成彩度更高的 `#A7F3D0` 會讓 `#047857` 掉到 4.28:1 而破 AA。 */
+  const C_ANNOUNCED_BG='#D1FAE5', C_IN_PROGRESS_BG='#DBEAFE';
 
   /* 📌 `AC-G49` 之可測形狀：弧長計算**抽為純函式**（本輪唯一能把幾何正確性拉回可測範圍的途徑）。
      固定向量：總和恆為周長／單一值佔滿整圈／零值不產生可見段。 */
@@ -869,8 +965,10 @@
     /* 🔒 `AC-G16`：前三張卡**四種後台角色一律呈現**，明文禁止為它們寫任何角色白名單
        ——四種角色對「ICSOP 文件管理」皆有 READ 以上，看得到清單卻看不到其總數會是說不通的不對稱。 */
     const cards=[
-      {tid:'stat-card-announced',        title:'已公告',      n:announced, icon:'megaphone', color:C_ANNOUNCED,  bg:'#D1FAE5',hint:'累積、不限時間'},
-      {tid:'stat-card-in-progress',      title:'進度中',      n:inProgress,icon:'clock',     color:C_IN_PROGRESS,bg:'#EAF1FA',hint:'公告日未到或尚未設定公告日'},
+      /* 🟣 第八輪（需求 ③）：淺底改引用 `C_*_BG` 常數（單一出處），不再各寫一份字面。
+         📝 已作廢：OLD> bg:'#D1FAE5' ／ OLD> bg:'#EAF1FA'（後者已換為 `#DBEAFE`）。 */
+      {tid:'stat-card-announced',        title:'已公告',      n:announced, icon:'megaphone', color:C_ANNOUNCED_FILL,  bg:C_ANNOUNCED_BG,  hint:'累積、不限時間'},
+      {tid:'stat-card-in-progress',      title:'進度中',      n:inProgress,icon:'clock',     color:C_IN_PROGRESS_FILL,bg:C_IN_PROGRESS_BG,hint:'公告日未到或尚未設定公告日'},
       {tid:'stat-card-monthly-announced',title:'本月新版公告',n:monthly,   icon:'file-plus', color:'#7C3AED',    bg:'#EDE9FE',hint:'公告日落在 '+CURRENT_MONTH+' 且已公告'}
     ];
     let html=cards.map(function(c){
@@ -924,7 +1022,7 @@
           <div data-testid="ojt-ontime-donut" class="relative w-16 h-16 shrink-0">
             <svg viewBox="0 0 64 64" class="w-16 h-16" aria-hidden="true" focusable="false">
               <circle cx="32" cy="32" r="${OJT_DONUT_R}" fill="none" stroke="#F1F5F9" stroke-width="8"></circle>
-              <circle cx="32" cy="32" r="${OJT_DONUT_R}" fill="none" stroke="${C_ANNOUNCED}" stroke-width="8" stroke-linecap="butt" stroke-dasharray="${ojtOnTimeArc(r.numerator,r.denominator).length.toFixed(3)} ${ojtOnTimeArc(r.numerator,r.denominator).rest.toFixed(3)}" transform="rotate(-90 32 32)"></circle>
+              <circle cx="32" cy="32" r="${OJT_DONUT_R}" fill="none" stroke="${C_ANNOUNCED_FILL}" stroke-width="8" stroke-linecap="butt" stroke-dasharray="${ojtOnTimeArc(r.numerator,r.denominator).length.toFixed(3)} ${ojtOnTimeArc(r.numerator,r.denominator).rest.toFixed(3)}" transform="rotate(-90 32 32)"></circle>
             </svg>
             <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
               <span data-ojt-ontime-rate class="text-sm font-bold text-slate-900 mono">${r.rate}%</span>
@@ -1010,8 +1108,28 @@
     const body = total===0
       ? emptyState(key==='month'?('本月（'+CURRENT_MONTH+'）尚無已公告之 ICSOP 文件'):'目前尚無已公告之 ICSOP 文件',
                    '文件於「ICSOP 文件管理」建立並設定公告日期後，公告日一到即會出現在此。')
-      : `<div class="flex items-start gap-4">
-          <div class="relative shrink-0 w-[140px] h-[140px]">
+      /* 🟣 2026-09-22 第八輪（需求 ②「將各公司/本部/部門明細排版調整至圓環圖右側，減少上下高度」）：
+         版面由「環在上、圖例在下」改為「左環、右圖例」兩欄；截斷說明行下移至兩欄之下、橫跨整寬。
+         🔴 **DOM 順序一字未動**：`<ul data-testid="donut-legend">` 之列序仍逐項對應 `DonutSlice[]` 之 key 序列
+            （`AC-G85`）——本次只搬容器與 CSS，沒有重排任何一列。
+         🔵 高度帳（單卡）：舊 ＝ 環 140 ＋ 12 ＋ 圖例 184 ≈ 336px；新 ＝ max(環 140, 圖例 196) ＋ 12 ＋ 說明行 ≈ 240px。
+         🔵 圖例上限由 `max-h-[184px]`（6.5 列）放寬為 `max-h-[196px]`（7 列）——右欄現在不再與環搶垂直空間，
+            多給一列仍不會讓整卡變高（環才 140px）。🔴 圖例**恆列出全部組織**（`AC-G41`），不是 N+1 列，
+            正式站部門維度可達 40+ 列 ⇒ 右欄必須可捲動，否則卡片會被撐到數千 px。
+         🔵 窄螢幕（< `md`，768px）回落為上下堆疊，環以 `mx-auto` 置中（flex-col 下 margin:auto 走交叉軸）。
+            🔴 斷點是 `md` 不是 `sm`：本 shell 的側欄**固定 240px 且不隨螢幕收合**，所以
+               可用內容寬 ＝ viewport − 240 − 頁面 px-5×2 − 卡片 p-5×2。在 `sm`（640px）之下只剩 320px，
+               扣掉環 140 ＋ gap 16 後給圖例 164px，而圖例右側兩個數字自身就要 ≈ 144px ⇒ 組織名歸零。
+               `md`（768px）之下為 448px，圖例得 292px，與 `xl` 兩欄時同級。
+         🔴 外層 grid 補 `grid-cols-1`（Tailwind 展開為 `repeat(1, minmax(0,1fr))`）：未指定時是隱含的
+            `auto` 軌，其最小尺寸 ＝ 項目 min-content；圖例列的兩個 `whitespace-nowrap` 數字使
+            min-content 達 ≈ 497px，於是 768px 下環圖卡片會比同列其他區塊寬出 66px（實測，已修）。
+            🔴 `min-w-0` 只治 flex 項目的自動最小尺寸，治不了 grid 軌的 auto 最小值。
+         📝 已作廢（僅供追溯，⚠ 不得復原）：
+            OLD> <div class="flex items-start gap-4"> … 右欄只放 [data-donut-truncation] … </div>
+            OLD> <ul data-testid="donut-legend" class="mt-3 max-h-[184px] … border-t border-slate-100 …"> */
+      : `<div class="flex flex-col md:flex-row items-start gap-4">
+          <div class="relative shrink-0 w-[140px] h-[140px] mx-auto md:mx-0">
             <svg viewBox="0 0 140 140" class="w-[140px] h-[140px]" aria-hidden="true" focusable="false">
               <circle cx="70" cy="70" r="${DONUT_R}" fill="none" stroke="#F1F5F9" stroke-width="18"></circle>
               ${arcs.map(function(a,i){
@@ -1023,24 +1141,25 @@
               <span class="text-[10px] text-slate-400">已公告合計（份）</span>
             </div>
           </div>
-          <div class="min-w-0 flex-1">
-            <div class="flex items-start gap-1.5">
-              <p data-donut-truncation class="flex-1 text-[11px] leading-relaxed text-slate-500">${trunc}</p>
-              ${truncInfo}
-            </div>
-          </div>
-        </div>
-        <ul role="list" data-testid="donut-legend" class="mt-3 max-h-[184px] overflow-y-auto pr-1 border-t border-slate-100 divide-y divide-slate-100">
+          <ul role="list" data-testid="donut-legend" class="w-full md:flex-1 min-w-0 max-h-[196px] overflow-y-auto pr-1 border-t border-slate-100 md:border-t-0 divide-y divide-slate-100">
           ${rows.map(function(r,i){
             const dot=i<DONUT_TOP_N?DONUT_PALETTE[i%DONUT_PALETTE.length]:DONUT_OTHER_COLOR;
             return `<li role="listitem" data-testid="donut-legend-row" data-org-key="${esc(r.key)}" class="flex items-center gap-2 py-1.5">
               <span aria-hidden="true" class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${dot}"></span>
               <span data-testid="legend-org-name" class="text-xs text-slate-700 flex-1 truncate" title="${esc(r.label)}">${esc(r.label)}</span>
-              <span data-testid="legend-announced" class="text-xs mono whitespace-nowrap" style="color:${C_ANNOUNCED}">已公告 ${r.announced}</span>
-              <span data-testid="legend-in-progress" class="text-xs mono whitespace-nowrap" style="color:${C_IN_PROGRESS}">進度中 ${r.inProgress}</span>
+              <span data-testid="legend-announced" class="text-xs mono whitespace-nowrap" style="color:${C_ANNOUNCED_TEXT}">已公告 ${r.announced}</span>
+              <span data-testid="legend-in-progress" class="text-xs mono whitespace-nowrap" style="color:${C_IN_PROGRESS_TEXT}">進度中 ${r.inProgress}</span>
             </li>`;
           }).join('')}
-        </ul>`;
+          </ul>
+        </div>
+        <!-- 🔒 AC-G71（此處為 template literal 內，🔴 禁用反引號，否則會提前結束樣板字串）：
+             本次只是把這一行從「環右側的窄欄」搬到「兩欄之下、橫跨整寬」——在 140px 窄欄裡它會折成五六行，
+             正是舊版整區偏高的原因之一。 -->
+        <div class="mt-3 pt-2 border-t border-slate-100 flex items-start gap-1.5">
+          <p data-donut-truncation class="flex-1 text-[11px] leading-relaxed text-slate-500">${trunc}</p>
+          ${truncInfo}
+        </div>`;
     document.getElementById(key==='month'?'donutMonth':'donutCumulative').innerHTML=
       `<div class="flex items-center gap-2 mb-3"><i data-lucide="target" class="w-4 h-4 text-primary-600"></i><h2 class="font-semibold text-slate-900">${meta.title}</h2>${infoNote('donut-'+key,[meta.info,DONUT_INPROGRESS_INFO])}</div>
        <div role="tablist" aria-label="制定組織維度" data-testid="org-dimension-tabs" class="flex flex-wrap gap-1.5 mb-3">${tabs}</div>
@@ -1101,8 +1220,10 @@
               ${rows.map(function(d){
                 const st=deriveDisplayStatus(d.status,d.date,TODAY);
                 const pill=st==='announced'
-                  ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style="color:${C_ANNOUNCED};background:#D1FAE5"><i data-lucide="megaphone" class="w-3 h-3"></i>${DISPLAY_LABEL[st]}</span>`
-                  : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style="color:${C_IN_PROGRESS};background:#EAF1FA"><i data-lucide="clock" class="w-3 h-3"></i>${DISPLAY_LABEL[st]}</span>`;
+                  /* 🟣 第八輪（需求 ③）：膠囊底改引用 `C_*_BG`（與統計卡同一出處）。
+                     📝 已作廢：OLD> background:#D1FAE5 ／ OLD> background:#EAF1FA。 */
+                  ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style="color:${C_ANNOUNCED_TEXT};background:${C_ANNOUNCED_BG}"><i data-lucide="megaphone" class="w-3 h-3"></i>${DISPLAY_LABEL[st]}</span>`
+                  : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style="color:${C_IN_PROGRESS_TEXT};background:${C_IN_PROGRESS_BG}"><i data-lucide="clock" class="w-3 h-3"></i>${DISPLAY_LABEL[st]}</span>`;
                 return `<tr data-doc-id="${d.id}">
                   <td class="px-3 py-2 mono text-slate-600 whitespace-nowrap">${d.date}</td>
                   <td class="px-3 py-2 mono text-slate-600 whitespace-nowrap">${d.ed? esc(d.ed) : EDITION_NONE_TEXT}</td>
@@ -1152,25 +1273,45 @@
             OLD> 僅計入儲存狀態為有效之文件。⚠ 一份文件可掛多個類別（會各計一次），未掛任何類別之文件
             OLD> 不出現 ⇒ 各類別合計與上方卡片刻意不相等。
             ⇒ 含以「節點」對比「類別」之內部模型詞彙（`AC-G94` ④）與「刻意」（②）。 */
+      /* 🟣 2026-09-22 第八輪（需求 ④「依業務/功能類別區塊：長條圖改為直式」）：
+         每個類別由「一列橫條」改為「一根直條」，整列類別成為一條水平帶。
+         🔒 `barWidths(announced, inProgress, max)` **函式名一字不改**（環有靜態掃描）——它回傳的是
+            **百分比**，與方向無關；直式只是把同一組百分比套到 `height`／`y` 而不是 `width`／`x`。
+            🔴 明文禁止改名為 `barHeights`。
+         🔒 `data-testid` 四個掛鉤原封不動（`category-bar-row`／`bar-category-name`／`bar-announced`／`bar-in-progress`），
+            `data-category-id` 亦然；`bar-announced`／`bar-in-progress` 之逐字（`已公告 {n}`／`進度中 {n}`）未改。
+            ⚠ 三個文字節點只是在 `<li>` 內**改為直向排列**，`within(row).getByTestId(...)` 不受影響。
+         🔵 **固定條寬 96px ＋ 水平捲動**（非自適應寬度）。理由：
+            ① `bar-announced`／`bar-in-progress` 是 `AC-G71` 的**唯一文字載體**，一旦寬度自適應，
+               類別一多（本頁可展開到全部類別，正式站可達數十類）這兩個數字就會被壓到看不見或被裁切；
+               「數字必須可見」的優先序高於「不要出現捲軸」。
+            ② 預設 `CATEGORY_LIMIT` ＝ 10 類 ⇒ 10×96 ＋ 9×8 ＝ 1032px，在滿版（需求 ①）之下
+               1366px 筆電即可完整容納、不出現捲軸；捲軸只在「顯示全部類別」或窄螢幕時出現。
+         🔵 **長類別名：兩行截斷 ＋ `title`，不旋轉**。中文旋轉 90° 後可讀性極差（不像拉丁字母只是換方向），
+            且旋轉標籤要預留 ≈ 120px 的垂直空間，等於把「減少高度」的成果吐回去。
+            名稱框固定 `h-7`（兩行）使各根柱子的兩個數字仍在同一水平線上。
+         🔒 堆疊方向：`已公告` 貼底（基線側）、`進度中` 疊在其上——與橫式時 `已公告` 貼 `x=0`（原點側）同義。
+         📝 已作廢（僅供追溯，⚠ 不得復原）：
+            OLD> <ul class="divide-y divide-slate-100 border-t border-slate-100"> 之每列 `<li class="py-2">`，
+            OLD> 內含 `<div class="flex items-center gap-2">`（名稱 flex-1 truncate ＋ 兩個數字）
+            OLD> 與 `<svg viewBox="0 0 100 8" class="mt-1.5 w-full h-2">`（水平條，rect 以 width 表示比例）。 */
       : `
-        <div class="flex items-center gap-3 mb-2 text-xs">
-          <span class="inline-flex items-center gap-1"><span aria-hidden="true" class="w-2.5 h-2.5 rounded-sm" style="background:${C_ANNOUNCED}"></span><span class="text-slate-500">已公告</span></span>
-          <span class="inline-flex items-center gap-1"><span aria-hidden="true" class="w-2.5 h-2.5 rounded-sm" style="background:${C_IN_PROGRESS}"></span><span class="text-slate-500">進度中</span></span>
+        <div class="flex items-center gap-3 mb-3 text-xs">
+          <span class="inline-flex items-center gap-1"><span aria-hidden="true" class="w-2.5 h-2.5 rounded-sm" style="background:${C_ANNOUNCED_FILL}"></span><span class="text-slate-500">已公告</span></span>
+          <span class="inline-flex items-center gap-1"><span aria-hidden="true" class="w-2.5 h-2.5 rounded-sm" style="background:${C_IN_PROGRESS_FILL}"></span><span class="text-slate-500">進度中</span></span>
         </div>
-        <ul role="list" class="divide-y divide-slate-100 border-t border-slate-100">
+        <ul role="list" class="flex items-start gap-2 overflow-x-auto pb-1">
           ${shown.map(function(r){
             const w=barWidths(r.announced,r.inProgress,max);
-            return `<li role="listitem" data-testid="category-bar-row" data-category-id="${esc(r.id)}" class="py-2">
-              <div class="flex items-center gap-2">
-                <span data-testid="bar-category-name" class="text-sm text-slate-700 flex-1 truncate" title="${esc(r.label)}">${esc(r.label)}</span>
-                <span data-testid="bar-announced" class="text-xs mono whitespace-nowrap" style="color:${C_ANNOUNCED}">已公告 ${r.announced}</span>
-                <span data-testid="bar-in-progress" class="text-xs mono whitespace-nowrap" style="color:${C_IN_PROGRESS}">進度中 ${r.inProgress}</span>
-              </div>
-              <svg viewBox="0 0 100 8" preserveAspectRatio="none" class="mt-1.5 w-full h-2" aria-hidden="true" focusable="false">
-                <rect x="0" y="0" width="100" height="8" fill="#F1F5F9"></rect>
-                <rect x="0" y="0" width="${w.announced.toFixed(3)}" height="8" fill="${C_ANNOUNCED}"></rect>
-                <rect x="${w.announced.toFixed(3)}" y="0" width="${w.inProgress.toFixed(3)}" height="8" fill="${C_IN_PROGRESS}"></rect>
+            return `<li role="listitem" data-testid="category-bar-row" data-category-id="${esc(r.id)}" class="shrink-0 w-24 flex flex-col items-center">
+              <svg viewBox="0 0 8 100" preserveAspectRatio="none" class="w-7 h-32" aria-hidden="true" focusable="false">
+                <rect x="0" y="0" width="8" height="100" fill="#F1F5F9"></rect>
+                <rect x="0" y="${(100-w.announced-w.inProgress).toFixed(3)}" width="8" height="${w.inProgress.toFixed(3)}" fill="${C_IN_PROGRESS_FILL}"></rect>
+                <rect x="0" y="${(100-w.announced).toFixed(3)}" width="8" height="${w.announced.toFixed(3)}" fill="${C_ANNOUNCED_FILL}"></rect>
               </svg>
+              <span data-testid="bar-category-name" class="mt-1.5 h-7 w-full text-center text-[11px] leading-tight text-slate-700 line-clamp-2" title="${esc(r.label)}">${esc(r.label)}</span>
+              <span data-testid="bar-announced" class="mt-1 text-[11px] mono whitespace-nowrap" style="color:${C_ANNOUNCED_TEXT}">已公告 ${r.announced}</span>
+              <span data-testid="bar-in-progress" class="text-[11px] mono whitespace-nowrap" style="color:${C_IN_PROGRESS_TEXT}">進度中 ${r.inProgress}</span>
             </li>`;
           }).join('')}
         </ul>
