@@ -919,7 +919,10 @@ describe('DocumentEditPage — 室長解析／候選依文件之公司', () => {
     vi.mocked(endpoints.searchPersons).mockImplementation((q, _limit, companyCode) =>
       Promise.resolve(
         (PERSONS_BY_COMPANY[companyCode ?? 'AS'] ?? []).filter(
-          (p) => p.employeeNo === q.trim() || p.name.includes(q.trim()),
+          // 🔴 型別安全收斂（team-lead 指派，2026-09-22，與本輪 UX16 環無關）：`PersonRecord.name`
+          // 為 `string | null`；本檔語料之 `name` 恆為非空字串字面值，`?? false` 純粹是型別窄化，
+          // 不改變本測試對任何一列語料之判定結果（沒有 `name: null` 之語料列）。
+          (p) => p.employeeNo === q.trim() || (p.name?.includes(q.trim()) ?? false),
         ),
       ),
     );
