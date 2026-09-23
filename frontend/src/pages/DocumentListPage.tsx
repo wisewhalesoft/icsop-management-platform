@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import {
@@ -43,6 +43,7 @@ import type {
   UsageFormRecord,
 } from '../api/types';
 import { byDraftingProximity } from './document-list-sort';
+import { StickyHorizontalScrollbar } from '../components/StickyHorizontalScrollbar';
 
 /**
  * 後台 ICSOP 程序書清單（F017）。版面權威來源：prototypes/13-document-list.html。
@@ -399,6 +400,8 @@ export function DocumentListPage(): JSX.Element {
   const today = useMemo(() => new Date(), []);
 
   const [all, setAll] = useState<DocumentListItem[]>([]);
+  /** 🔵 2026-09-23：表格水平捲動容器（固定於畫面下方之代理捲軸以此同步）。 */
+  const tableScrollRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   /**
    * F017 `AC-T43`／`AC-T48` ⑤：兩個 deep link 參數。**於首次渲染前（state 初始化函式）即自網址取樣**
@@ -1193,8 +1196,19 @@ export function DocumentListPage(): JSX.Element {
       )}
 
       {/* 14 欄表格 */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
+      {/* 🔵 2026-09-23 使用者裁定：水平捲軸比照前台樹狀圖**固定在當前畫面下方**
+          （`StickyHorizontalScrollbar`：sticky 代理捲軸、與表格容器雙向同步）。
+          🔴 外框由 `overflow-hidden` 改 `overflow-clip`：前者會建立捲動容器、成為 sticky 之參考框，
+             捲軸就只會貼在外框底（＝表格最底下），等於沒改；後者只裁切圓角、不建立捲動容器。
+          🔒 表格容器之原生水平捲軸隱藏（代理捲軸即其替身，並存會在捲到底時疊成兩條）。
+          📝 已作廢（⚠ 不得復原）：OLD> 外框 `overflow-hidden`、表格容器 `overflow-x-auto`
+             且顯示原生捲軸（捲軸在表格最底下，列多時須捲到頁尾才找得到）。 */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-clip">
+        <div
+          ref={tableScrollRef}
+          data-testid="document-table-scroll"
+          className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           <table className="w-full text-sm min-w-[1724px]">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
               <tr>
@@ -1365,6 +1379,7 @@ export function DocumentListPage(): JSX.Element {
             </tbody>
           </table>
         </div>
+        <StickyHorizontalScrollbar targetRef={tableScrollRef} testId="document-table-hscroll" />
         {!loading && filtered.length === 0 && (
           <div className="text-center py-14">
             <Icon name="inbox" className="w-10 h-10 text-slate-300 mx-auto mb-2" />
@@ -1418,7 +1433,7 @@ export function DocumentListPage(): JSX.Element {
  * 🔴 `+N` 必須是真 `<button>`（`AC-E3`）：這些 pill **是動作**（點擊＝下載該連結點程序書之 PDF），
  *    若只用 `…`＋hover，被摺疊者無法點擊／鍵盤到不了／觸控看不到 ＝ 功能消失。
  * 🔴 展開為**就地展開**（`AC-E4`），**不得**改用 popover／dropdown 浮層：表格外層為
- *    `overflow-x-auto` ＋ `rounded-xl overflow-hidden`，絕對定位浮層會被裁切。
+ *    `overflow-x-auto` ＋ `rounded-xl overflow-clip`，絕對定位浮層會被裁切。
  *
  * 🔴 **2026-08-27 delta（`AC-E10`～`AC-E14`）：pill／下載鈕兩態**。
  * 缺失回報＝「點擊下載連結點程序書時，出現無法下載」。實測查證：下載端點本身正常，壞的是

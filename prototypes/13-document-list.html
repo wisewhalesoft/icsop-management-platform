@@ -138,7 +138,7 @@
           無法點擊、鍵盤到不了、觸控裝置看不到 ⇒ 功能消失。
           `+N` 之 `title` 逐字＝`其餘 {N−1} 個：{編號}、{編號}…`（僅編號、以「、」分隔，順序同展開後第 2 列起）。
        ⑦ 點 `+N` → **該列就地展開**（in-place expand）。**不得**改用 popover／dropdown 浮層：表格外層為
-          `overflow-x-auto` ＋ `rounded-xl overflow-hidden`，絕對定位浮層會被裁切。
+          `overflow-x-auto` ＋ `rounded-xl overflow-clip`，絕對定位浮層會被裁切。
           展開後本格改為逐列列出**全部**連結（含第一顆），每列逐字＝`編號 · 書名 · 下載鈕`；
           第一列尾端之「收合」鈕與 `+N` 為**同一顆 toggle**，再點一次即收合。
        ⑧ 展開狀態**逐列獨立**、可同時存在於多列；未展開之列一律維持一行高。
@@ -429,8 +429,12 @@
   </div>
 
   <!-- ===== 表格 ===== -->
-  <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
-    <div class="overflow-x-auto">
+  <!-- 🔵 2026-09-23 使用者裁定：水平捲軸比照前台樹狀圖**固定在當前畫面下方**——
+       sticky 代理捲軸 #tableHScroll 與表格容器 #tableScroll 雙向同步 scrollLeft；原生捲軸隱藏。
+       🔴 外框 overflow-hidden → overflow-clip：前者會成為 sticky 之參考框，捲軸只會貼在外框底（＝表格最底下）。
+       📝 已作廢（⚠ 不得復原）：OLD> 外框 overflow-hidden、表格容器 overflow-x-auto 顯示原生捲軸。 -->
+  <div class="bg-white border border-slate-200 rounded-xl overflow-clip">
+    <div id="tableScroll" class="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <table class="doctbl w-full text-sm min-w-[1892px]">
         <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
           <tr>
@@ -464,6 +468,19 @@
         <tbody id="tbody" class="divide-y divide-slate-100"></tbody>
       </table>
     </div>
+    <div id="tableHScroll" aria-hidden="true" class="sticky bottom-0 z-10 overflow-x-auto overflow-y-hidden bg-white/95 border-t border-slate-200"><div id="tableHScrollInner" style="height:1px"></div></div>
+    <script>
+      /* 代理捲軸之同步（對應實作 components/StickyHorizontalScrollbar.tsx）：只在值不同時寫回，避免互相彈跳。 */
+      (function(){
+        const t=document.getElementById('tableScroll'), bar=document.getElementById('tableHScroll'), inner=document.getElementById('tableHScrollInner');
+        function measure(){ inner.style.width=t.scrollWidth+'px'; bar.hidden = t.scrollWidth<=t.clientWidth; }
+        t.addEventListener('scroll',()=>{ if(bar.scrollLeft!==t.scrollLeft) bar.scrollLeft=t.scrollLeft; },{passive:true});
+        bar.addEventListener('scroll',()=>{ if(t.scrollLeft!==bar.scrollLeft) t.scrollLeft=bar.scrollLeft; },{passive:true});
+        window.addEventListener('resize',measure);
+        if(window.ResizeObserver){ const ro=new ResizeObserver(measure); ro.observe(t); ro.observe(t.firstElementChild); }
+        measure();
+      })();
+    </script>
     <div id="emptyState" class="hidden text-center py-14">
       <i data-lucide="inbox" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
       <p class="text-slate-500 text-sm">查無符合結果</p>

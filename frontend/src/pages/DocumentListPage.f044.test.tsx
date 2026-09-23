@@ -203,3 +203,24 @@ describe('AC-G59 — 自 URL 取樣 sortBy／sortDir（客端排序之初始值�
     expect((await rowOrder())[0]).toBe('N-D');
   });
 });
+
+/**
+ * 🔵 2026-09-23 使用者裁定：水平捲軸比照前台樹狀圖**固定在當前畫面下方**。
+ * 🔴 jsdom 無版面——此處只鎖接線（代理捲軸存在、sticky 貼底、位於表格捲動容器之後、外框不建立捲動容器），
+ *    「捲軸真的貼在視窗底」須以真實瀏覽器覆核。
+ */
+describe('2026-09-23 — 表格水平捲軸固定於畫面下方（接線契約）', () => {
+  it('代理捲軸緊接在表格捲動容器之後，sticky 貼底；外框為 overflow-clip（非 overflow-hidden）', async () => {
+    renderAt('');
+    await rowOrder();
+    const scroller = screen.getByTestId('document-table-scroll');
+    const bar = screen.getByTestId('document-table-hscroll');
+    expect(scroller.nextElementSibling).toBe(bar);
+    expect(bar.className).toMatch(/\bsticky\b/);
+    expect(bar.className).toMatch(/\bbottom-0\b/);
+    const card = scroller.parentElement!;
+    expect(card.className).toMatch(/\boverflow-clip\b/);
+    // 🔴 overflow-hidden 會成為 sticky 之參考框 ⇒ 捲軸只貼在外框底（＝原 bug）。
+    expect(card.className).not.toMatch(/\boverflow-hidden\b/);
+  });
+});
