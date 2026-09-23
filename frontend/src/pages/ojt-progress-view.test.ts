@@ -10,6 +10,7 @@ import {
   GROUP_MODE_ARIA_TEXT,
   DOC_SEARCH_ARIA_TEXT,
   DOC_SEARCH_PLACEHOLDER_TEXT,
+  DOC_GROUP_BASIS_NOTE_DETAIL,
   DOC_GROUP_BASIS_NOTE_TEXT,
   // ── 既有（本輪只沿用、不改寫）──────────────────────────────────────────────
   coveragePercent,
@@ -77,10 +78,29 @@ describe('ojt-progress-view — TAB2「以文件分組」之純函式層（F042 
       expect(DOC_SEARCH_PLACEHOLDER_TEXT).toBe('搜尋文件（編號或書名）…');
     });
 
-    it('口徑說明行之逐字（AC-32 之必要載體）', () => {
+    /**
+     * 🔵 2026-09-23 全站文案稽核（使用者裁決 D）：「刻意不同」「屬正常」「請勿互相對帳」
+     * 與 F044 儀表板被打回的原句同型——為實作辯護的語氣、不是使用者語言。
+     * 📝 已作廢（⚠ 不得復原）：
+     *   OLD> '本區各文件之「已完成 X / 共 Y 單位」取自本清單當下呈現之進度列（含已裁撤單位與
+     *   OLD>  已移出使用部門之單位），與儀表板「文件-訓練覆蓋率」之口徑刻意不同；兩處數字不相等
+     *   OLD>  屬正常，請勿互相對帳。'
+     * 🔴 `AC-32` 所要的「口徑差異必須有載體」**沒有放寬**：可見句 ＋ ⓘ 兩者合起來仍須把差異
+     *    講完，故本案同時鎖住 ⓘ 內容——只鎖可見句等於默許把差異整段刪掉。
+     */
+    it('口徑說明行之逐字（AC-32 之必要載體：可見句 + ⓘ 內容）', () => {
       expect(DOC_GROUP_BASIS_NOTE_TEXT).toBe(
-        '本區各文件之「已完成 X / 共 Y 單位」取自本清單當下呈現之進度列（含已裁撤單位與已移出使用部門之單位），與儀表板「文件-訓練覆蓋率」之口徑刻意不同；兩處數字不相等屬正常，請勿互相對帳。',
+        '本區各文件之「已完成 X / 共 Y 單位」取自本清單當下呈現的進度列。',
       );
+      expect(DOC_GROUP_BASIS_NOTE_DETAIL).toEqual([
+        '這裡的分母含已裁撤單位與已移出使用部門的單位，儀表板「文件-訓練覆蓋率」則不含，因此兩處數字通常不會相同。',
+      ]);
+      // 🔴 語氣鎖：被使用者點名的三個詞不得回流到任何一段。
+      for (const t of [DOC_GROUP_BASIS_NOTE_TEXT, ...DOC_GROUP_BASIS_NOTE_DETAIL]) {
+        for (const w of ['刻意', '屬正常', '請勿互相對帳']) {
+          expect(t, `口徑說明不得含「${w}」`).not.toContain(w);
+        }
+      }
     });
 
     /**

@@ -171,7 +171,7 @@ describe('OjtProgressPage — UX16 delta AC-UX55（匯出成功之 toast，三�
     setupMocks();
   });
 
-  it('① 第 1 句恆出現：已匯出 OJT 進度清單（CSV，UTF-8 BOM）：共 {N} 筆——N 為匯出筆數，非畫面列數', async () => {
+  it('① 第 1 句恆出現：已匯出 OJT 進度清單（CSV）：共 {N} 筆——N 為匯出筆數，非畫面列數', async () => {
     const user = userEvent.setup();
     // 🔴 語料鑑別力（AC-UX55①）：畫面僅 1 列，但 exportOjtProgress 之回應宣稱匯出 340 筆。
     exportOjtProgressMock.mockResolvedValue({ count: 340 } as never);
@@ -199,7 +199,7 @@ describe('OjtProgressPage — UX16 delta AC-UX55（匯出成功之 toast，三�
    * 「使用者語言」判準）。若實際落點不同（如另包一層 `{ count, source }`），屬合理 test-dispute。
    *
    * 🔒 降級文案（test-generator 定案，逐字）：
-   * `已匯出 OJT 進度清單（CSV，UTF-8 BOM）；系統暫時無法確認筆數，請以下載檔案為準。`
+   * `已匯出 OJT 進度清單（CSV）；系統暫時無法確認筆數，請以下載檔案為準。`
    * ——不含任何數字（不捏造、不回退畫面列數）、不含內部詞彙（無「標頭」「header」「X-Export-Row-Count」），
    * 回答的是「我拿到的是什麼」之同一個使用者問題（AC-UX55④ 之判準）。第 2、3 句之出現條件不受影響
    * （AC-UX55⑦：本條改的是「有沒有告訴使用者」，不是「匯出什麼」）。
@@ -212,7 +212,7 @@ describe('OjtProgressPage — UX16 delta AC-UX55（匯出成功之 toast，三�
     await user.click(screen.getByRole('button', { name: '匯出' }));
     const toast = await findExportToast();
     expect(toast.textContent).not.toMatch(/共\s*\d+\s*筆/);
-    expect(toast.textContent).toContain('已匯出 OJT 進度清單（CSV，UTF-8 BOM）');
+    expect(toast.textContent).toContain('已匯出 OJT 進度清單（CSV）');
     expect(toast.textContent).toContain('請以下載檔案為準');
     // 第 2 句仍在（AC-UX55⑦）：降級的是「有沒有告訴使用者筆數」，不是整段範圍說明。
     expect(toast.textContent).toContain('匯出內容依「制定本部」「搜尋使用單位」「完成狀態」三項條件。');

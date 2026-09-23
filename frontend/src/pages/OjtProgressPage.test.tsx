@@ -19,6 +19,7 @@ import {
   GROUP_MODE_ARIA_TEXT,
   DOC_SEARCH_ARIA_TEXT,
   DOC_SEARCH_PLACEHOLDER_TEXT,
+  DOC_GROUP_BASIS_NOTE_DETAIL,
   DOC_GROUP_BASIS_NOTE_TEXT,
   docGroupRatioText,
   docGroupPercentText,
@@ -395,7 +396,7 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       renderPage();
       await waitFor(() => {
         expect(screen.getByText(
-          '唯讀模式 · 系統管理員可檢視儀表板與 OJT 資料清單之全部內容，並下載簽到表；無法新增教育訓練場次（PERMISSION_DENIED）。',
+          '唯讀模式 · 系統管理員可檢視儀表板與 OJT 資料清單之全部內容，並下載簽到表；無法新增教育訓練場次。',
         )).toBeInTheDocument();
       });
     });
@@ -673,9 +674,20 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       renderPage();
       await waitFor(() => expect(document.querySelector('[data-doc-coverage-basis-note]')).not.toBeNull());
       const note = document.querySelector('[data-doc-coverage-basis-note]') as HTMLElement;
-      expect(note.textContent).toBe(
-        '本表之「已完成 / 使用單位」以該文件之全部使用單位為分母（含已裁撤單位），與上方覆蓋率之分母刻意不同：上方是「還追得動的部分」，本表是「這份文件的實際訓練狀況」。',
+      /**
+       * 🔵 2026-09-23 全站文案稽核：口徑差異之理由移入 ⓘ（內容恆在 DOM），可見句只留計算基準。
+       * 📝 已作廢（⚠ 不得復原）：
+       *   OLD> expect(note.textContent).toBe('本表之「已完成 / 使用單位」以該文件之全部使用單位
+       *   OLD>  為分母（含已裁撤單位），與上方覆蓋率之分母刻意不同：上方是「還追得動的部分」，
+       *   OLD>  本表是「這份文件的實際訓練狀況」。');
+       * 🔴 仍以 `toBe` 鎖**可見句**（扣掉 ⓘ 內容後逐字），不放寬為 `toContain`。
+       */
+      const info = note.querySelector('[data-info-content="doc-coverage-basis"]') as HTMLElement;
+      expect(info, '口徑說明行缺少 ⓘ 內容節點').not.toBeNull();
+      expect((note.textContent ?? '').replace(info.textContent ?? '', '')).toBe(
+        '本表之「已完成 / 使用單位」以該文件的全部使用單位為分母。',
       );
+      expect(info.textContent).toContain('本表的分母含已裁撤單位');
       expect(note.querySelector('[data-doc-ojt-state-chip]')).toBeNull();
       // 位置順序：summary → basis-note → 表格捲軸容器。
       const summaryEl = document.querySelector('[data-doc-coverage-summary]') as HTMLElement;
@@ -1657,7 +1669,14 @@ describe('OjtProgressPage — F042 OJT 進度管理（移植 prototype 25）', (
       await switchTo('document');
       await waitFor(() => expect(document.querySelector('[data-doc-group-basis-note]')).not.toBeNull());
       expect(document.querySelectorAll('[data-doc-group-basis-note]')).toHaveLength(1);
-      expect(document.querySelector('[data-doc-group-basis-note]')?.textContent).toBe(DOC_GROUP_BASIS_NOTE_TEXT);
+      // 🔵 2026-09-23：可見句＝常數（逐字）；差異理由在 ⓘ 內容節點裡（同時鎖住，防整段被刪）。
+      const groupNote = document.querySelector('[data-doc-group-basis-note]') as HTMLElement;
+      const groupInfo = groupNote.querySelector('[data-info-content="doc-group-basis"]') as HTMLElement;
+      expect(groupInfo, '分組口徑說明缺少 ⓘ 內容節點').not.toBeNull();
+      expect((groupNote.textContent ?? '').replace(groupInfo.textContent ?? '', '')).toBe(
+        DOC_GROUP_BASIS_NOTE_TEXT,
+      );
+      expect(groupInfo.textContent).toBe(DOC_GROUP_BASIS_NOTE_DETAIL.join(''));
     });
 
     /**

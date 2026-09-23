@@ -6,6 +6,7 @@ import {
   NO_STATISTICS_TEXT,
   canViewDashboard,
   coveragePercent,
+  EXCLUSION_NOTE_DETAIL,
   exclusionNote,
   groupRowsByOrg,
   trainingDueDate,
@@ -541,5 +542,20 @@ describe('🔒 AC-G80 — 既有四個共用符號之行為未被本功能改動
   it('exclusionNote 之既有三段句型逐字未改', () => {
     expect(exclusionNote(2, 3, 0, 0)).toContain('覆蓋率為 2 / 3（67%）');
     expect(exclusionNote(2, 3, 1, 1)).toContain('本次共排除 2 列');
+  });
+
+  /**
+   * 🔵 2026-09-23 全站文案稽核（使用者裁決 D）：`exclusionNote()` 之尾句「故兩處列數不相等屬正常」
+   * 與 F044 同輪被打回的語氣同型（本函式之儀表板版本當時已改，F042 版本漏網）。
+   * 🔴 兩半句：理由**必須仍存在**（移入 ⓘ，不是被刪掉）＋語氣詞不得留在可見句。
+   *    只寫負向半句的話，把整段理由刪光的實作也會綠。
+   */
+  it('🔵 exclusionNote 之可見句不含為實作辯護之語氣，理由完整移入 ⓘ 內容', () => {
+    const visible = exclusionNote(2, 3, 1, 1);
+    for (const w of ['屬正常', '刻意', '請勿']) {
+      expect(visible, `可見句不得含「${w}」`).not.toContain(w);
+    }
+    expect(EXCLUSION_NOTE_DETAIL.join('')).toContain('「OJT 資料清單」分頁仍然看得到');
+    expect(EXCLUSION_NOTE_DETAIL.join('')).toContain('已裁撤單位仍可補登場次');
   });
 });

@@ -16,6 +16,8 @@ import {
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { ojtStatusView } from '../domain/ojt-status-view';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { BelowTopbar, PageHeader, TopbarBanner } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
 import type {
@@ -37,6 +39,7 @@ import {
   DEL_CONFIRM_OK_TEXT,
   DEL_CONFIRM_TITLE,
   DOC_COVERAGE_BASIS_NOTE,
+  DOC_COVERAGE_BASIS_NOTE_DETAIL,
   DOC_COVERAGE_BREAKDOWN_LABEL,
   DOC_COVERAGE_EMPTY_BY_SCOPE,
   DOC_COVERAGE_EMPTY_HINT,
@@ -48,6 +51,7 @@ import {
   DOC_COVERAGE_SCOPE_LABEL,
   DOC_COVERAGE_SCOPE_OPTIONS,
   DOC_COVERAGE_TRACKED_LABEL,
+  DOC_GROUP_BASIS_NOTE_DETAIL,
   DOC_GROUP_BASIS_NOTE_TEXT,
   DOC_SEARCH_ARIA_TEXT,
   DOC_SEARCH_PLACEHOLDER_TEXT,
@@ -117,10 +121,12 @@ import {
   docGroupToggleAria,
   docGroupsOf,
   downloadSessionAria,
+  EXCLUSION_NOTE_DETAIL,
   exclusionNote,
   groupRowsByOrg,
   matchesDocKeyword,
   recentTruncationText,
+  rollupInvariantNote,
   rollupInvariantText,
   rowKeyOf,
   sliceRecentSessions,
@@ -379,7 +385,7 @@ export function OjtProgressPage(): JSX.Element {
       try {
         await downloadOjtSession(s.id, s.fileName);
       } catch (e) {
-        toast.error(e instanceof ApiError ? `下載失敗：${e.code}` : '下載失敗');
+        toast.error('下載失敗，請稍後再試。', e instanceof ApiError ? { code: e.code } : undefined);
       }
     },
     [toast],
@@ -404,10 +410,10 @@ export function OjtProgressPage(): JSX.Element {
       await deleteOjtSession(confirm.sessionId);
       setConfirm(null);
       await Promise.all([loadRows(), loadSummary()]);
-      toast.success('已刪除該筆教育訓練場次；此操作已寫入稽核。');
+      toast.success('已刪除該筆教育訓練場次；此操作已留下紀錄。');
     } catch (e) {
       setConfirm(null);
-      toast.error(e instanceof ApiError ? `刪除失敗：${e.code}` : '刪除失敗');
+      toast.error('刪除失敗，請稍後再試。', e instanceof ApiError ? { code: e.code } : undefined);
     }
   }, [confirm, loadRows, loadSummary, toast]);
 
@@ -456,10 +462,10 @@ export function OjtProgressPage(): JSX.Element {
         await reloadRowSessions(target.documentId, target.orgCode).catch(() => undefined);
       }
       toast.success(
-        `已為「${target.orgName}」新增 1 筆教育訓練場次（${addDate}）；既有場次未被取代。已寫入稽核。`,
+        `已為「${target.orgName}」新增 1 筆教育訓練場次（${addDate}）；既有場次未被取代。此操作已留下紀錄。`,
       );
     } catch (e) {
-      setAddError(e instanceof ApiError ? `登記失敗：${e.code}` : '登記失敗');
+      setAddError('登記失敗，請稍後再試。');
     }
   }, [addDate, addFile, addTarget, expanded, loadRows, loadSummary, reloadRowSessions, toast]);
 
@@ -482,7 +488,7 @@ export function OjtProgressPage(): JSX.Element {
       await Promise.all([loadRows(), loadSummary(), loadPending()]);
       toast.success('已歸位：此筆舊資料已成為該「文件 × 使用單位」之正式場次。');
     } catch (e) {
-      setAssign({ ...assign, error: e instanceof ApiError ? `歸位失敗：${e.code}` : '歸位失敗' });
+      setAssign({ ...assign, error: '歸位失敗，請稍後再試。' });
     }
   }, [assign, loadPending, loadRows, loadSummary, toast]);
 
@@ -555,7 +561,7 @@ export function OjtProgressPage(): JSX.Element {
       // 🔒 錯誤碼與訊息須同時可見（`error-handling.md#export`）——它是使用者回報問題時唯一
       //    可靠之定位資訊；🔴 明文不得由前端改寫為自己的猜測（本 repo 已記錄之既有缺陷形狀）。
       toast.error(
-        e instanceof ApiError ? `匯出失敗：${e.code}` : '匯出失敗',
+        '匯出失敗，請稍後再試。',
         e instanceof ApiError ? { code: `${e.code} · ${e.status}` } : undefined,
       );
     } finally {
@@ -622,7 +628,10 @@ export function OjtProgressPage(): JSX.Element {
         </div>
         <h1 className="font-semibold text-slate-900">{BLOCKED_TITLE}</h1>
         <p className="text-sm text-slate-500 mt-1">{BLOCKED_MSG}</p>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }
@@ -905,7 +914,10 @@ export function OjtProgressPage(): JSX.Element {
         {groupMode === 'document' && (
           <p data-doc-group-basis-note className="text-xs text-slate-400 flex items-start gap-1.5">
             <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            <span>{DOC_GROUP_BASIS_NOTE_TEXT}</span>
+            <span className="flex items-center gap-1 flex-wrap">
+              {DOC_GROUP_BASIS_NOTE_TEXT}
+              <InfoNote infoKey="doc-group-basis" paragraphs={DOC_GROUP_BASIS_NOTE_DETAIL} />
+            </span>
           </p>
         )}
 
@@ -1113,13 +1125,14 @@ function CoverageSection({
       </div>
       <p className="mt-3 text-xs text-slate-500 flex items-start gap-1.5">
         <Icon name="alert-triangle" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-500" />
-        <span data-coverage-exclusion-note>
+        <span data-coverage-exclusion-note className="flex items-center gap-1 flex-wrap">
           {exclusionNote(
             numerator,
             denominator,
             summary?.coverage.excludedInactive ?? 0,
             summary?.coverage.excludedOrphaned ?? 0,
           )}
+          <InfoNote infoKey="coverage-exclusion" paragraphs={EXCLUSION_NOTE_DETAIL} />
         </span>
       </p>
 
@@ -1209,7 +1222,10 @@ function CoverageSection({
 
         <p data-doc-coverage-basis-note className="text-xs text-slate-400 mb-2 flex items-start gap-1.5">
           <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-          <span>{DOC_COVERAGE_BASIS_NOTE}</span>
+          <span className="flex items-center gap-1 flex-wrap">
+            {DOC_COVERAGE_BASIS_NOTE}
+            <InfoNote infoKey="doc-coverage-basis" paragraphs={DOC_COVERAGE_BASIS_NOTE_DETAIL} />
+          </span>
         </p>
 
         {/*
@@ -1404,7 +1420,10 @@ function RollupSection({ summary }: { summary: OjtProgressSummary | null }): JSX
       </div>
       <p className="mt-3 text-xs text-slate-500 flex items-start gap-1.5">
         <Icon name="shield-check" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-500" />
-        <span data-rollup-invariant>{rollupInvariantText(list.length, summed)}</span>
+        <span data-rollup-invariant className="flex items-center gap-1 flex-wrap">
+          {rollupInvariantText(list.length, summed)}
+          <InfoNote infoKey="rollup-invariant" paragraphs={rollupInvariantNote(summed)} />
+        </span>
       </p>
     </section>
   );
@@ -2009,7 +2028,7 @@ function AssignModal({
               className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
             />
             <p className="mt-1 text-[10px] text-slate-400">
-              只接受本文件之「文件使用部門」；指派到非使用部門之單位會被後端擋下（OJT_ORG_NOT_USING_DEPT）。
+              只接受本文件之「文件使用部門」；指派到非使用部門之單位會被擋下。
             </p>
           </div>
           <div>
@@ -2025,7 +2044,7 @@ function AssignModal({
               className="w-full px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
             />
             <p className="mt-1 text-[10px] text-slate-400">
-              舊資料未記錄訓練日期（舊模型只存檔案上傳時間），故須由您補填；原上傳時間僅供參考，不會自動帶入。
+              舊資料未記錄訓練日期，故須由您補填；原上傳時間僅供參考，不會自動帶入。
             </p>
           </div>
           {state.error && (

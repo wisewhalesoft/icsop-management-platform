@@ -59,7 +59,7 @@ export const EMPTY_ALL_HINT =
 
 /** `AC-06`：SysAdmin 唯讀橫幅。 */
 export const RO_NOTICE_SYSADMIN =
-  '唯讀模式 · 系統管理員可檢視儀表板與 OJT 資料清單之全部內容，並下載簽到表；無法新增教育訓練場次（PERMISSION_DENIED）。';
+  '唯讀模式 · 系統管理員可檢視儀表板與 OJT 資料清單之全部內容，並下載簽到表；無法新增教育訓練場次。';
 
 /** `AC-07`：一般使用者之全頁封鎖說明（側選單亦不呈現本項）。 */
 export const BLOCKED_TITLE = '無 OJT 進度管理權限';
@@ -90,14 +90,14 @@ export function delConfirmBody(isLast: boolean, isOrphan: boolean): string {
   if (isOrphan && isLast) {
     return (
       '刪除後此場次紀錄與其簽到表檔案將無法復原。此為該列最後一筆場次，且該使用單位已移出本文件之使用部門，' +
-      '刪除後此列將自清單中消失、無法再重新登記（該單位已非使用部門）。此操作會寫入稽核。'
+      '刪除後此列將自清單中消失、無法再重新登記（該單位已非使用部門）。此操作會留下紀錄。'
     );
   }
   return (
     (isLast
       ? `刪除後此場次紀錄與其簽到表檔案將無法復原。此為該列最後一筆場次，刪除後該使用單位對本文件之狀態將退回「${BADGE_PENDING_TEXT}」。`
       : `刪除後此場次紀錄與其簽到表檔案將無法復原。該列尚有其他場次，刪除後仍為「${BADGE_COMPLETED_TEXT}」。`) +
-    '此操作會寫入稽核。場次不提供編輯，如需更正請刪除後重新登記。'
+    '此操作會留下紀錄。場次不提供編輯，如需更正請刪除後重新登記。'
   );
 }
 
@@ -212,13 +212,25 @@ export function exclusionNote(
       : `覆蓋率為 ${numerator} / ${denominator}（${pct}%）`;
   const excluded = inactiveCount + orphanedCount;
   if (excluded > 0) {
-    return (
-      `${head}；本次共排除 ${excluded} 列——已裁撤單位 ${inactiveCount} 列、單位已移出使用部門 ${orphanedCount} 列。` +
-      '被排除之進度列於「OJT 資料清單」分頁仍然呈現（裁撤單位仍可新增場次；已移出者不可），故兩處列數不相等屬正常。'
-    );
+    /**
+     * 🔵 2026-09-23 全站文案稽核：句尾「故兩處列數不相等屬正常」是為實作辯護的語氣
+     * （與 F044 儀表板同輪被打回的 `屬正常` 同型；本函式之儀表板版本已於該輪改掉，
+     *  本頁版本漏網）。
+     * 📝 已作廢（⚠ 不得復原）：
+     *   OLD> '被排除之進度列於「OJT 資料清單」分頁仍然呈現（裁撤單位仍可新增場次；已移出者不可），
+     *   OLD>  故兩處列數不相等屬正常。'
+     * 🔴 **數字全部留在可見句**；移入 ⓘ 的只有「為什麼兩處對不起來」這個理由。
+     */
+    return `${head}；本次共排除 ${excluded} 列——已裁撤單位 ${inactiveCount} 列、單位已移出使用部門 ${orphanedCount} 列。`;
   }
   return `${head}；已裁撤單位與單位已移出使用部門之列皆不計入，目前無任何進度列因此被排除。`;
 }
+
+/** 上句之 ⓘ 內容：回答「被排除的列去哪了／為什麼兩處列數對不起來」。 */
+export const EXCLUSION_NOTE_DETAIL = [
+  '被排除的進度列在「OJT 資料清單」分頁仍然看得到，所以兩處的列數不會相同。',
+  '已裁撤單位仍可補登場次；已移出使用部門的單位則不行。',
+] as const;
 
 /**
  * F044 卡④ 之統計（＝ `GET /admin/ojt-progress/ontime-summary` 之回應形狀）。
@@ -299,14 +311,24 @@ export function ojtOnTimeNote(stats: OjtOnTimeNoteStats): string {
 }
 
 /**
- * `AC-15` 之不變式敘述（畫面載體）：**列數不因彙總而改變**——彙總是統計階段的行為，
- * 不得回頭把 `AC-01` 之列展開。
+ * `AC-15` 之不變式**可驗證載體**（🔵 2026-09-23 全站文案稽核改寫）。
+ *
+ * 🔴 `LESSON-G2` 重演：原文案把不變式本身逐字唸給使用者聽
+ * （「列數不因彙總而改變（彙總只發生於統計階段，不回頭展開清單之列）」＝ `AC-15` 條文）。
+ * 📝 已作廢（⚠ 不得復原）：
+ *   OLD> `彙總自 ${summedUnits} 列進度列（已排除裁撤單位），分入 ${deptCount} 個部；` +
+ *   OLD> `各部列數合計 ${summedUnits} — 列數不因彙總而改變（彙總只發生於統計階段，不回頭展開清單之列）。`
+ *
+ * 🔴 **數字一律留在可見文字、不得移入 popover**——使用者不該展開說明才看得到數字；
+ *    移入 ⓘ 的只有「為什麼這兩個數字會相同」這個理由。
  */
 export function rollupInvariantText(deptCount: number, summedUnits: number): string {
-  return (
-    `彙總自 ${summedUnits} 列進度列（已排除裁撤單位），分入 ${deptCount} 個部；` +
-    `各部列數合計 ${summedUnits} — 列數不因彙總而改變（彙總只發生於統計階段，不回頭展開清單之列）。`
-  );
+  return `彙總自 ${summedUnits} 列進度列（已排除裁撤單位），分入 ${deptCount} 個部。`;
+}
+
+/** 上句之 ⓘ 內容：回答「這兩個數字為什麼會一樣」。 */
+export function rollupInvariantNote(summedUnits: number): readonly string[] {
+  return [`各部的列數合計為 ${summedUnits} 列，與上表相同；彙總只改變統計方式，不會增減清單的列數。`];
 }
 
 /** 伺服器當日（`YYYY-MM-DD`，UTC）——與後端 `serverToday()` 同一基準，見其註解之時區血訓。 */
@@ -501,8 +523,20 @@ export function docCoverageTruncationText(
  * 少了這一行，使用者把各文件分母加起來會對不上 KPI 的進度列數，而那個差額正是被裁撤的單位
  * ——沒有說明就會被讀成 bug。
  */
-export const DOC_COVERAGE_BASIS_NOTE =
-  '本表之「已完成 / 使用單位」以該文件之全部使用單位為分母（含已裁撤單位），與上方覆蓋率之分母刻意不同：上方是「還追得動的部分」，本表是「這份文件的實際訓練狀況」。';
+/**
+ * 🔵 2026-09-23 全站文案稽核：「刻意不同」是**寫給驗收者看的語氣**（為實作辯護），不是使用者語言。
+ * 📝 已作廢（⚠ 不得復原）：
+ *   OLD> '本表之「已完成 / 使用單位」以該文件之全部使用單位為分母（含已裁撤單位），與上方覆蓋率之
+ *   OLD>  分母刻意不同：上方是「還追得動的部分」，本表是「這份文件的實際訓練狀況」。'
+ * 🔒 口徑差異本身**必須留下**（少了它，使用者一對帳就把正常現象讀成 bug），但移入 ⓘ。
+ */
+export const DOC_COVERAGE_BASIS_NOTE = '本表之「已完成 / 使用單位」以該文件的全部使用單位為分母。';
+
+/** 上句之 ⓘ 內容：回答「為什麼這裡和上面的覆蓋率對不起來」。 */
+export const DOC_COVERAGE_BASIS_NOTE_DETAIL = [
+  '本表的分母含已裁撤單位，上方覆蓋率則只算還追得動的單位，兩者算法不同。',
+  '上方回答「目前還能追到多少」，本表回答「這份文件實際的訓練狀況」。',
+] as const;
 
 /** 導向 TAB2 之入口（**恆存在**，不只在截斷時才出現）。 */
 export const DOC_COVERAGE_MORE_TEXT = '至「OJT 資料清單」檢視尚未完成之進度列';
@@ -584,8 +618,22 @@ export const DOC_SEARCH_PLACEHOLDER_TEXT = '搜尋文件（編號或書名）…
  * 📌 差異之來源**不是**裁撤單位（`docCoverage` 同樣不套 `isActive` 過濾，兩邊會剛好相等），
  * 而是**孤兒列**：`docCoverage` 之列由 `DOC_USING_DEPT` 驅動 ⇒ 孤兒天然不成列，TAB2 則另行呈現。
  */
+/**
+ * 🔵 2026-09-23 全站文案稽核：「刻意不同」「屬正常」「請勿互相對帳」與 F044 儀表板被使用者
+ * 打回的原句同型——那是把驗收標準與實作辯護唸給使用者聽。
+ * 📝 已作廢（⚠ 不得復原）：
+ *   OLD> '本區各文件之「已完成 X / 共 Y 單位」取自本清單當下呈現之進度列（含已裁撤單位與已移出
+ *   OLD>  使用部門之單位），與儀表板「文件-訓練覆蓋率」之口徑刻意不同；兩處數字不相等屬正常，
+ *   OLD>  請勿互相對帳。'
+ * 🔒 差異之**事實**仍完整保留於 ⓘ；刪掉的是語氣與 AC 條文。
+ */
 export const DOC_GROUP_BASIS_NOTE_TEXT =
-  '本區各文件之「已完成 X / 共 Y 單位」取自本清單當下呈現之進度列（含已裁撤單位與已移出使用部門之單位），與儀表板「文件-訓練覆蓋率」之口徑刻意不同；兩處數字不相等屬正常，請勿互相對帳。';
+  '本區各文件之「已完成 X / 共 Y 單位」取自本清單當下呈現的進度列。';
+
+/** 上句之 ⓘ 內容：回答「為什麼這裡和儀表板的覆蓋率對不起來」。 */
+export const DOC_GROUP_BASIS_NOTE_DETAIL = [
+  '這裡的分母含已裁撤單位與已移出使用部門的單位，儀表板「文件-訓練覆蓋率」則不含，因此兩處數字通常不會相同。',
+] as const;
 
 /** 以文件分組之一個群組（`AC-31`）。 */
 export interface OjtDocGroup {
@@ -1046,7 +1094,7 @@ export const OJT_EXPORT_ARIA_TEXT = '匯出';
  * 另一頁的。句型可參照，字串各自一份。
  */
 export function ojtExportToastText(exportedCount: number): string {
-  return `已匯出 OJT 進度清單（CSV，UTF-8 BOM）：共 ${exportedCount} 筆`;
+  return `已匯出 OJT 進度清單（CSV）：共 ${exportedCount} 筆`;
 }
 
 /**
@@ -1057,11 +1105,11 @@ export function ojtExportToastText(exportedCount: number): string {
  * 🔴 **不含任何內部詞彙**（`標頭`／`header`／`X-Export-Row-Count`）：使用者不需要知道是哪一層
  * 把標頭吃掉了，他只需要知道「檔案下載好了，筆數以檔案為準」（`AC-UX55` ④ 之使用者語言判準）。
  * 🔒 兩種根因（標頭缺席／值不可解析）**共用本句**，刻意不對使用者區分。
- * 🔒 逐字與 `ojtExportToastText` 共享同一個前綴 `已匯出 OJT 進度清單（CSV，UTF-8 BOM）`——
+ * 🔒 逐字與 `ojtExportToastText` 共享同一個前綴 `已匯出 OJT 進度清單（CSV）`——
  *    兩種情形下「我拿到的是什麼」這件事本身沒有改變，改變的只有「能不能告訴你幾筆」。
  */
 export const OJT_EXPORT_COUNT_UNKNOWN_TEXT =
-  '已匯出 OJT 進度清單（CSV，UTF-8 BOM）；系統暫時無法確認筆數，請以下載檔案為準。';
+  '已匯出 OJT 進度清單（CSV）；系統暫時無法確認筆數，請以下載檔案為準。';
 
 /**
  * `AC-UX55` 第 2 句（恆出現）：說明匯出**依哪三項條件**。
