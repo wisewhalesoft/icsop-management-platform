@@ -604,6 +604,28 @@ export class UsageFormsService {
   }
 
   /** 後台表單池清單（功能 read gate）。 */
+  /**
+   * 🔵 2026-09-23 使用者裁定：後台「ICSOP 文件管理」清單之「使用表單」**篩選選項**（只含 id＋顯示所需欄）。
+   *
+   * 🔴 **閘門為 `ICSOP_DOCUMENT_MANAGEMENT read`，不是 `USAGE_FORM_MANAGEMENT`**：主管／部門窗口對清單頁有 READ、
+   *    對使用表單管理為 NONE——原本選項取自使用表單池端點（USAGE_FORM_MANAGEMENT read），兩者閘門不同 ⇒ 對這兩個角色
+   *    回 403、前端靜默降級為空選項，篩選下拉永遠是空的。本端點之可見範圍必須**等同清單頁之進入條件**。
+   * 🔒 只回傳選項所需欄位（不含 blobPath／上傳者等管理資訊）——開放的是「能篩選」，不是「能看使用表單池」。
+   * 📝 推翻架構 §10.13「後台不新增選項端點」（2026-09-23 使用者裁定）。
+   */
+  async listFilterOptions(
+    session: SessionContext | undefined,
+  ): Promise<{ id: string; name: string; formNumber: string | null }[]> {
+    if (!canPerform(session?.roleCode, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')) {
+      throw new ForbiddenException('PERMISSION_DENIED');
+    }
+    return (await this.store.list()).map((f) => ({
+      id: f.id,
+      name: f.name,
+      formNumber: f.formNumber ?? null,
+    }));
+  }
+
   async listPool(session: SessionContext | undefined): Promise<UsageFormRecord[]> {
     this.assertCanRead(session?.roleCode);
     return this.store.list();

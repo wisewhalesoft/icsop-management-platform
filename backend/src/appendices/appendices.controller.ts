@@ -49,6 +49,13 @@ export class AppendicesController {
   constructor(private readonly svc: AppendicesService) {}
 
   // ── 附錄池管理（後台）──
+  /** 🔵 2026-09-23：文件管理清單之「附錄」篩選選項（閘門＝清單頁之進入條件，見 service）。 */
+  @Get('admin/appendices/filter-options')
+  @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
+  listFilterOptions(@Req() req: RequestWithSession) {
+    return this.svc.listFilterOptions(req.sessionUser);
+  }
+
   @Get('admin/appendices')
   @RequirePermission(FunctionKey.APPENDIX_MANAGEMENT, 'read')
   listPool(@Req() req: RequestWithSession) {

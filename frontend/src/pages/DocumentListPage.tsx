@@ -5,12 +5,13 @@ import {
   getDocuments,
   getDocumentAttachments,
   downloadAttachment,
-  getAppendixPool,
+  getAppendixFilterOptions,
   getBusinessCategories,
   getBusinessCategorySubtreeDocuments,
-  getUsageFormPool,
+  getUsageFormFilterOptions,
   exportDocumentList,
 } from '../api/endpoints';
+import type { FilterOptionAppendix, FilterOptionForm } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import {
   EXPORT_LIMIT_BADGE,
@@ -33,14 +34,12 @@ import { useToast } from '../components/useToast';
 import { formatDateTime } from './org-sync-view';
 import { deriveDisplayStatus, DISPLAY_LABEL, type DisplayStatus } from './document-display';
 import type {
-  AppendixRecord,
   BusinessCategoryRef,
   BusinessCategoryView,
   DocumentListItem,
   DocumentLinkView,
   OjtDocumentStatus,
   SubtreeFilterDescriptor,
-  UsageFormRecord,
 } from '../api/types';
 import { byDraftingProximity } from './document-list-sort';
 import { StickyHorizontalScrollbar } from '../components/StickyHorizontalScrollbar';
@@ -437,7 +436,7 @@ export function DocumentListPage(): JSX.Element {
   const [linkTargetSet, setLinkTargetSet] = useState<Set<string> | null>(null);
   const [appendixSet, setAppendixSet] = useState<Set<string> | null>(null);
   const [formSet, setFormSet] = useState<Set<string> | null>(null);
-  const [appendixPool, setAppendixPool] = useState<AppendixRecord[]>([]);
+  const [appendixPool, setAppendixPool] = useState<FilterOptionAppendix[]>([]);
   /**
    * 🔵 `AC-B7` ③：第 14 項篩選之**預設選項集僅含 `status='active'` 之類別**。
    * ⚠ 這件事**只有類別池端點知道**——`GET /admin/documents` 之 additive 欄位（決策 E5）
@@ -446,7 +445,7 @@ export function DocumentListPage(): JSX.Element {
    * `loadPool` 之降級紀律）；⚠ 該降級路徑無法施加 ③ 之 active 過濾，見 implementation-log。
    */
   const [bcPool, setBcPool] = useState<BusinessCategoryView[]>([]);
-  const [formPool, setFormPool] = useState<UsageFormRecord[]>([]);
+  const [formPool, setFormPool] = useState<FilterOptionForm[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   /**
    * 🔵 F044 `AC-G59`：初始值自網址取樣（🔴 於 `useState` 之**初始化函式**內，照抄同頁
@@ -575,8 +574,11 @@ export function DocumentListPage(): JSX.Element {
   }, [filters.form]);
 
   /**
-   * `附錄`／`使用表單` 之選項來自**各自既有的池清單端點**（架構 §10.13：後台不新增選項端點）。
-   * 池為空／取用失敗 → 空選項清單（非錯誤，不阻擋其他篩選）。
+   * `附錄`／`使用表單` 之選項來自**專用之篩選選項端點**（`/admin/{appendices,usage-forms}/filter-options`，
+   * 閘門＝ICSOP_DOCUMENT_MANAGEMENT read＝本頁之進入條件）。池為空／取用失敗 → 空選項清單（非錯誤，不阻擋其他篩選）。
+   * 🔵 2026-09-23 使用者回報「主管無法以附錄、使用表單篩選」：原本取自附錄／使用表單**管理**端點，主管／部門窗口
+   *    對兩者為 NONE ⇒ 403 被下方之降級吞成空選項、下拉永遠是空的。架構 §10.13「後台不新增選項端點」據此推翻。
+   * 📝 已作廢（⚠ 不得復原）：OLD> `loadPool(getAppendixPool, …)`／`loadPool(getUsageFormPool, …)`。
    */
   useEffect(() => {
     if (!canRead) return;
@@ -590,9 +592,9 @@ export function DocumentListPage(): JSX.Element {
         set([]);
       }
     };
-    void loadPool(getAppendixPool, setAppendixPool);
+    void loadPool(getAppendixFilterOptions, setAppendixPool);
     void loadPool(getBusinessCategories, setBcPool);
-    void loadPool(getUsageFormPool, setFormPool);
+    void loadPool(getUsageFormFilterOptions, setFormPool);
   }, [canRead]);
 
   /**

@@ -18,7 +18,9 @@
  * 📌 **本檔所釘住之新前端契約**（spec 未規定者，由 test-generator 定）：
  *   · `附錄`／`使用表單` 之後端查詢參數為 `DocumentFilters.appendixId`／`formId`
  *     （比照既有 `linkTargetId` 之樣板，同樣帶 `pageSize: LOAD_SIZE`）
- *   · 選項來源：`getAppendixPool()`／`getUsageFormPool()`（§10.13 之既有池端點，不新增端點）
+ *   · 選項來源：`getAppendixFilterOptions()`／`getUsageFormFilterOptions()`（🔵 2026-09-23 起；閘門＝本頁進入條件）
+ *     📝 已作廢（⚠ 不得復原）：OLD> `getAppendixPool()`／`getUsageFormPool()`（§10.13 之既有池端點，不新增端點）
+ *        ——主管／部門窗口對兩個管理端點為 NONE，選項永遠是空的（2026-09-23 使用者回報）。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
@@ -175,8 +177,10 @@ beforeEach(() => {
   vi.mocked(endpoints.getDocuments).mockResolvedValue(pageOf(DOCS));
   vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([]);
   vi.mocked(endpoints.downloadAttachment).mockResolvedValue(undefined);
-  vi.mocked(endpoints.getAppendixPool).mockResolvedValue(APPENDICES);
-  vi.mocked(endpoints.getUsageFormPool).mockResolvedValue(FORMS);
+  vi.mocked(endpoints.getAppendixFilterOptions).mockResolvedValue(APPENDICES);
+  vi.mocked(endpoints.getUsageFormFilterOptions).mockResolvedValue(
+    FORMS.map((f) => ({ id: f.id, name: f.name, formNumber: f.formNumber ?? null })),
+  );
 });
 
 /**
@@ -552,8 +556,8 @@ describe('F017 AC-D6：附錄／使用表單選具體一份（比照 linkTargetI
    * ② **其他篩選不受阻擋**（改選制定部門後清單確實收斂）。
    */
   it('TS-F017-D6-004 池中無任何附錄／表單 → 下拉呈現空選項清單，非錯誤且不阻擋其他篩選', async () => {
-    vi.mocked(endpoints.getAppendixPool).mockResolvedValue([]);
-    vi.mocked(endpoints.getUsageFormPool).mockResolvedValue([]);
+    vi.mocked(endpoints.getAppendixFilterOptions).mockResolvedValue([]);
+    vi.mocked(endpoints.getUsageFormFilterOptions).mockResolvedValue([]);
     renderPage();
     await screen.findByText('車輛分期進件作業');
 
@@ -565,6 +569,31 @@ describe('F017 AC-D6：附錄／使用表單選具體一份（比照 linkTargetI
     // ② 不得因此阻擋其他篩選：制定部門仍可正常選取並使清單收斂
     await pick('制定部門', '企劃部');
     await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
+  });
+});
+
+/**
+ * 🔵 2026-09-23 使用者回報：「主管角色無法以附錄、使用表單篩選文件」。
+ * 🔴 語料刻意讓**管理端點 403**（主管／部門窗口之真實回應）、選項端點正常——
+ *    若實作仍取自管理端點，選項為空、本案翻紅。
+ */
+describe('2026-09-23：主管／部門窗口可以附錄、使用表單篩選', () => {
+  it.each(['Supervisor', 'DeptContact'])('%s：兩個下拉皆有選項，且可選定後篩選', async (role) => {
+    mockAuth(role);
+    const denied = Object.assign(new Error('PERMISSION_DENIED'), { status: 403 });
+    vi.mocked(endpoints.getAppendixPool).mockRejectedValue(denied);
+    vi.mocked(endpoints.getUsageFormPool).mockRejectedValue(denied);
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    vi.mocked(endpoints.getDocuments).mockResolvedValue(pageOf([DOCS[0], DOCS[1]]));
+    await pick('附錄', '附錄A.xlsx');
+    await waitFor(() =>
+      expect(endpoints.getDocuments).toHaveBeenCalledWith(expect.objectContaining({ appendixId: 'apx1' })),
+    );
+    await pick('使用表單', 'FM-001 進件申請書.xlsx');
+    await waitFor(() =>
+      expect(endpoints.getDocuments).toHaveBeenCalledWith(expect.objectContaining({ formId: 'uf1' })),
+    );
   });
 });
 

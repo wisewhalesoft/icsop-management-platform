@@ -70,6 +70,13 @@ export class UsageFormsController {
   constructor(private readonly svc: UsageFormsService) {}
 
   // ── 表單池管理（後台）──
+  /** 🔵 2026-09-23：文件管理清單之「使用表單」篩選選項（閘門＝清單頁之進入條件，見 service）。 */
+  @Get('admin/usage-forms/filter-options')
+  @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
+  listFilterOptions(@Req() req: RequestWithSession) {
+    return this.svc.listFilterOptions(req.sessionUser);
+  }
+
   @Get('admin/usage-forms')
   @RequirePermission(FunctionKey.USAGE_FORM_MANAGEMENT, 'read')
   listPool(@Req() req: RequestWithSession) {

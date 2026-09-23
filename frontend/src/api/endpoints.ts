@@ -595,6 +595,14 @@ export function downloadAttachment(blobPath: string, fallbackName: string): Prom
   );
 }
 
+/**
+ * 🔵 2026-09-23：GET /admin/usage-forms/filter-options——ICSOP 文件管理清單之「使用表單」篩選選項
+ * （閘門＝ICSOP_DOCUMENT_MANAGEMENT read，主管／部門窗口亦可取得；只含 id／名稱／編號）。
+ */
+export function getUsageFormFilterOptions(): Promise<FilterOptionForm[]> {
+  return apiFetch<FilterOptionForm[]>('/admin/usage-forms/filter-options');
+}
+
 /** GET /admin/usage-forms（F018 表單池清單，USAGE_FORM_MANAGEMENT read）。 */
 export function getUsageFormPool(): Promise<UsageFormRecord[]> {
   return apiFetch<UsageFormRecord[]>('/admin/usage-forms');
@@ -1082,6 +1090,14 @@ export function downloadPoolForm(formId: string, fallbackName: string): Promise<
 }
 
 // ===== E10 F039 附錄管理（附錄池 ＋ 文件關聯與 sortOrder） =====
+
+/**
+ * 🔵 2026-09-23：GET /admin/appendices/filter-options——ICSOP 文件管理清單之「附錄」篩選選項
+ * （閘門＝ICSOP_DOCUMENT_MANAGEMENT read，主管／部門窗口亦可取得；只含 id／名稱）。
+ */
+export function getAppendixFilterOptions(): Promise<FilterOptionAppendix[]> {
+  return apiFetch<FilterOptionAppendix[]>('/admin/appendices/filter-options');
+}
 
 /** GET /admin/appendices（附錄池清單，APPENDIX_MANAGEMENT read；供建立/編輯畫面之候選）。 */
 export function getAppendixPool(): Promise<import('./types').AppendixRecord[]> {
@@ -1916,4 +1932,15 @@ export function downloadBusinessCategoryTreeDiff(
     businessCategoryTreeDiffDownloadUrl(businessCategoryId, changeLogId),
     fallbackName,
   );
+}
+
+/** 🔵 2026-09-23：文件管理清單篩選選項之形狀（只含選項所需欄位）。 */
+export interface FilterOptionAppendix {
+  id: string;
+  name: string;
+}
+export interface FilterOptionForm {
+  id: string;
+  name: string;
+  formNumber: string | null;
 }

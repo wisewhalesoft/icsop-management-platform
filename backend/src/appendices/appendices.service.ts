@@ -362,6 +362,24 @@ export class AppendicesService {
   }
 
   /** 後台附錄池清單（功能 read gate，AC-16 之資料前提）。 */
+  /**
+   * 🔵 2026-09-23 使用者裁定：後台「ICSOP 文件管理」清單之「附錄」**篩選選項**（只含 id＋顯示所需欄）。
+   *
+   * 🔴 **閘門為 `ICSOP_DOCUMENT_MANAGEMENT read`，不是 `APPENDIX_MANAGEMENT`**：主管／部門窗口對清單頁有 READ、
+   *    對附錄管理為 NONE——原本選項取自附錄池端點（APPENDIX_MANAGEMENT read），兩者閘門不同 ⇒ 對這兩個角色
+   *    回 403、前端靜默降級為空選項，篩選下拉永遠是空的。本端點之可見範圍必須**等同清單頁之進入條件**。
+   * 🔒 只回傳選項所需欄位（不含 blobPath／上傳者等管理資訊）——開放的是「能篩選」，不是「能看附錄池」。
+   * 📝 推翻架構 §10.13「後台不新增選項端點」（2026-09-23 使用者裁定）。
+   */
+  async listFilterOptions(
+    session: SessionContext | undefined,
+  ): Promise<{ id: string; name: string }[]> {
+    if (!canPerform(session?.roleCode, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')) {
+      throw new ForbiddenException('PERMISSION_DENIED');
+    }
+    return (await this.store.list()).map((a) => ({ id: a.id, name: a.name }));
+  }
+
   async listPool(session: SessionContext | undefined): Promise<AppendixRecord[]> {
     this.assertCanRead(session?.roleCode);
     return this.store.list();
