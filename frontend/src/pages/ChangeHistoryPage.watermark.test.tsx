@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChangeHistoryPage } from './ChangeHistoryPage';
+import { watermarkOverlayGeometry } from '../domain/watermark-style';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import type {
@@ -198,6 +199,57 @@ describe('ChangeHistoryPage · DiffBoard 三層式浮水印（F038 #17）', () =
       expect(color, '📝 已作廢之 slate-600 不得殘留').not.toBe('rgb(71, 85, 105)');
     },
   );
+
+  /**
+   * 🔴 **2026-09-23：本頁是最後一個未遷移到共用幾何的浮水印載體**（使用者回報「畫面正中間的
+   * 浮水印字是互相重疊的」之同型）。舊寫法 `inset:-40%` ＋ `flexWrap:'wrap'` ＋
+   * `alignContent:'center'` 同時帶著兩個已在別處修掉的缺陷：
+   *   ① 長寬比拉開時旋轉後退化成一條斜向細帶（蓋不到畫板兩端）；
+   *   ② 整疊 tile 上下置中 ⇒ 中央那行是否壓在字帶上**取決於列數奇偶**。
+   *
+   * ⚠ **jsdom 不計算版面**（`offsetHeight`／`getBoundingClientRect` 恆 0）⇒ 本檔無法斷言
+   *   「畫面上有沒有疊在一起」。唯一誠實的形狀是**斷言本頁把相位交給共用純函式決定**：
+   *   把畫板自己 inline 宣告的寬高餵回 `watermarkOverlayGeometry()`，其 `tileOffsetY`
+   *   必須與 DOM 上真正掛著的 `marginTop` 逐值相等。真正的「不重疊」由
+   *   `watermark-overlay-geometry.test.ts` 對該純函式證明。
+   */
+  it.each(['before', 'after'])(
+    '🔴 %s 欄之 tile 方格相位由共用 watermarkOverlayGeometry() 決定（不是本頁自己算的）',
+    async (side) => {
+      await openTreePreview();
+      const overlay = screen.getByTestId(`watermark-overlay-${side}`);
+      const board = overlay.parentElement as HTMLElement;
+      const boardW = Number.parseFloat(board.style.width);
+      const boardH = Number.parseFloat(board.style.height);
+      expect(Number.isFinite(boardW) && boardW > 0, '畫板未以 inline 寬高宣告 ⇒ 本斷言失去語料').toBe(true);
+      expect(Number.isFinite(boardH) && boardH > 0).toBe(true);
+
+      const g = watermarkOverlayGeometry(boardW, boardH, [IDENTITY, TIME], { x: 60, y: 140 });
+      // 疊加層本體＝以畫板中心為中心之正方形，並自行裁切。
+      expect(overlay.style.width).toBe(`${g.size}px`);
+      expect(overlay.style.height).toBe(`${g.size}px`);
+      expect(overlay.style.overflow).toBe('hidden');
+
+      // 相位：掛在第一列的負 marginTop，且逐值等於純函式之輸出。
+      const firstRow = overlay.querySelector('div') as HTMLElement;
+      expect(firstRow).not.toBeNull();
+      expect(firstRow.style.marginTop).toBe(`${g.tileOffsetY}px`);
+      expect(g.tileOffsetY).toBeLessThan(0);
+    },
+  );
+
+  /**
+   * 🔴 負向回歸鎖：已作廢之舊版面屬性不得殘留。少了這一條，上面那條在「新舊兩套同時掛著」
+   * 時照樣全綠（`inset` 與 `left/top/width/height` 在 CSS 上可以並存）。
+   */
+  it.each(['before', 'after'])('🔴 %s 欄不得殘留已作廢之 inset:-40% ／ flex-wrap 置中寫法', async (side) => {
+    await openTreePreview();
+    const overlay = screen.getByTestId(`watermark-overlay-${side}`);
+    expect(overlay.style.inset, '📝 已作廢之 inset:-40% 仍在').toBe('');
+    expect(overlay.style.alignContent, '📝 已作廢之 alignContent:center 仍在').toBe('');
+    expect(overlay.style.flexWrap).not.toBe('wrap');
+    expect(overlay.style.display).not.toBe('flex');
+  });
 
   it('🔒 F038 AC-D3 diff 樹狀圖**不支援節點雙擊**（F036 之能力刻意不擴及本 feature）', async () => {
     await openTreePreview();

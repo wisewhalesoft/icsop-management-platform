@@ -36,6 +36,7 @@ import {
   WATERMARK_FONT_SIZE,
   WATERMARK_LINE_HEIGHT,
   WATERMARK_OPACITY,
+  watermarkOverlayGeometry,
 } from '../domain/watermark-style';
 import {
   EXPORT_LIMIT_BADGE,
@@ -1368,6 +1369,16 @@ const NODE_STYLE: Record<'add' | 'remove' | 'amber' | 'normal', { border: string
   normal: { border: '#E2E8F0', bg: '#fff' },
 };
 
+/**
+ * 🔵 2026-09-23：`DiffBoard` 之 tile 內距——與 `LifecycleTreePreviewPage`／
+ * `BusinessCategoryTreePreviewPage`／`PublicCategoryTreePage` 之 `WM_TILE_PAD` **同值**。
+ * 🔴 它同時是 `watermarkOverlayGeometry()` 推算 tile 尺寸與相位的輸入 ⇒ **不得**再以字面值
+ * `padding: '140px 60px'` 散落於 JSX：兩處一旦不同值，方格的相位就算錯，而畫面上只看得到
+ * 「中央又疊在一起了」這個結果，看不到成因。
+ * 📝 已作廢（⚠ 不得復原）：OLD> `padding: '140px 60px'` 之字面值｜OLD> `'20px 26px'`｜OLD> `'40px 52px'`。
+ */
+const DIFF_WM_TILE_PAD = { x: 60, y: 140 } as const;
+
 /** 單側樹狀圖板（各自佈局、各自 diff 標示、各自浮水印）。 */
 function DiffBoard({
   side,
@@ -1390,7 +1401,23 @@ function DiffBoard({
 }): JSX.Element {
   const layout = useMemo(() => miniLayout(graph.nodes, graph.edges), [graph]);
   const posById = useMemo(() => new Map(layout.nodes.map((n) => [n.id, n])), [layout]);
-  const wmCount = Math.min(120, Math.max(24, Math.round((layout.w * layout.h) / 16000)));
+  /**
+   * 🔵 **2026-09-23：疊加層改走共用幾何 `watermarkOverlayGeometry()`**（與三個樹狀圖頁同一支）。
+   *
+   * 📝 已作廢（⚠ 不得復原、不得用於斷言）：
+   *   OLD> `const wmCount = Math.min(120, Math.max(24, Math.round((layout.w * layout.h) / 16000)));`
+   *   OLD> `style={{ inset: '-40%', display:'flex', flexWrap:'wrap', alignContent:'center', justifyContent:'center' }}`
+   *
+   * 🔴 舊寫法同時帶著**兩個**已在別處修掉的缺陷，本頁是最後一個未遷移的載體：
+   *   ① `inset: -40%` 在長寬比拉開時旋轉後退化成一條斜向細帶，畫板兩端根本蓋不到
+   *      （2026-08-27 使用者回報之形狀，推導見 `watermarkOverlayGeometry` 檔內註解）；
+   *   ② `alignContent: 'center'` 把整疊 tile 上下置中 ⇒ **中央那行機密聲明是否壓在字帶上，
+   *      取決於列數的奇偶**——奇數列時正中央正好是中間那列的字帶（2026-09-23 使用者回報
+   *      「畫面正中間的浮水印字是互相重疊的」之同型）。兩者都不是密度問題，是版面規則問題。
+   */
+  const wmLines = watermarkPresentation(watermark).tiled;
+  const wmCentre = watermarkPresentation(watermark).centre;
+  const wmGeom = watermarkOverlayGeometry(layout.w, layout.h, wmLines, DIFF_WM_TILE_PAD);
 
   if (graph.nodes.length === 0) {
     return (
@@ -1410,7 +1437,9 @@ function DiffBoard({
   return (
     <div
       data-testid={testId}
-      className="relative bg-white rounded-lg border border-slate-200 mx-auto"
+      /* 🔵 2026-09-23：`overflow-hidden` 為新疊加層之必要條件——它是邊長 (W+H)×cos45° 的
+         正方形、必然大於畫板；不裁切就會溢出到畫板之外（舊 `inset:-40%` 同樣溢出，只是沒人看見）。 */
+      className="relative bg-white rounded-lg border border-slate-200 mx-auto overflow-hidden"
       style={{ width: layout.w, height: layout.h, backgroundImage: 'radial-gradient(#EEF2F7 1px, transparent 1px)', backgroundSize: '20px 20px' }}
     >
       <svg width={layout.w} height={layout.h} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}>
@@ -1479,40 +1508,47 @@ function DiffBoard({
       <div
         data-testid={`watermark-overlay-${side}`}
         aria-hidden="true"
-        style={{ position: 'absolute', inset: '-40%', pointerEvents: 'none', display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', transform: 'rotate(-45deg)', opacity: WATERMARK_OPACITY, zIndex: 5 }}
+        style={{ position: 'absolute', left: wmGeom.offsetX, top: wmGeom.offsetY, width: wmGeom.size, height: wmGeom.size, overflow: 'hidden', pointerEvents: 'none', transform: 'rotate(-45deg)', opacity: WATERMARK_OPACITY, zIndex: 5 }}
       >
         {/*
           F038 #17：三層式（①身分列 ②機密聲明 ③時間戳）。
-          🔴 **必須同時移除 `whiteSpace: 'nowrap'`**——它**主動禁止換行**，即使拆成三行
-          也會在該 span 內被壓成一行或溢出（architecture-spec §10.14）。
+          🔴 §10.14 之「**必須移除 `whiteSpace: 'nowrap'`**」針對的是**單一 span 直接承載多行文字**
+          的舊形狀——那時 nowrap 會把三行壓成一行。本處三行已各自為 `display:block` 的子元素，
+          換行由子元素邊界決定、不再靠 `white-space` ⇒ nowrap 在此**不再禁止換行**，而是
+          `flexShrink: 0` 的搭檔：兩者一起保證每枚 tile 都是 max-content 寬、彼此等寬，
+          `watermarkOverlayGeometry()` 算出的 `cols` 才對得上實際鋪法（與三個樹狀圖頁逐字同形）。
         */}
-        {Array.from({ length: wmCount }).map((_, i) => (
-          <span
-            key={i}
-            data-testid="watermark-text"
-            className="mono"
-            /* 內距隨字級同倍放大（`y` 於第三輪再放大，與 `LifecycleTreePreviewPage` 之 WM_TILE_PAD 同比例）。
-               📝 已作廢：OLD> `padding: '20px 26px'`（字級 16px）｜OLD> `'40px 52px'`。 */
-            style={{ color: WATERMARK_COLOR, fontSize: WATERMARK_FONT_SIZE, padding: '140px 60px', textAlign: 'center', lineHeight: WATERMARK_LINE_HEIGHT }}
-          >
-            {watermarkPresentation(watermark).tiled.map((line, j) => (
-              <span key={j} style={{ display: 'block' }}>
-                {line}
+        {Array.from({ length: wmGeom.rows }).map((_, r) => (
+          /* 🔵 2026-09-23：整個方格的垂直相位位移掛在第一列（負 `marginTop`），
+             使疊加層正中央落在兩條字帶之間的空白帶 ⇒ 中央的機密聲明不再與 tile 字重疊。 */
+          <div key={r} style={{ display: 'flex', flexWrap: 'nowrap', marginTop: r === 0 ? wmGeom.tileOffsetY : 0 }}>
+            {Array.from({ length: wmGeom.cols }).map((_, c) => (
+              <span
+                key={c}
+                data-testid="watermark-text"
+                className="mono"
+                style={{ color: WATERMARK_COLOR, fontSize: WATERMARK_FONT_SIZE, flexShrink: 0, whiteSpace: 'nowrap', padding: `${DIFF_WM_TILE_PAD.y}px ${DIFF_WM_TILE_PAD.x}px`, textAlign: 'center', lineHeight: WATERMARK_LINE_HEIGHT }}
+              >
+                {wmLines.map((line, j) => (
+                  <span key={j} style={{ display: 'block' }}>
+                    {line}
+                  </span>
+                ))}
               </span>
             ))}
-          </span>
+          </div>
         ))}
         {/*
           🔴 UX（2026-08-27 第三輪）：固定機密聲明**只在正中央出現一次**，不隨 tile 重複。
           置於疊加層內 ⇒ 繼承同一個 `rotate(-45deg)` 與 `opacity`。
         */}
-        {watermarkPresentation(watermark).centre && (
+        {wmCentre && (
           <span
             data-testid={`watermark-confidentiality-${side}`}
             className="mono"
             style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', color: WATERMARK_COLOR, fontSize: WATERMARK_FONT_SIZE, whiteSpace: 'nowrap', textAlign: 'center', lineHeight: WATERMARK_LINE_HEIGHT }}
           >
-            {watermarkPresentation(watermark).centre}
+            {wmCentre}
           </span>
         )}
       </div>
