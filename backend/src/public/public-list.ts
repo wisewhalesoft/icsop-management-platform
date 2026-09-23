@@ -14,6 +14,11 @@ import { DocumentStatus } from '../documents/document-status';
 import { deriveDisplayStatus } from '../documents/display-status';
 import { isWithinSubtree } from '../org-sync/org-hierarchy';
 import { matchesChiefFilter } from '../documents/chief-match';
+import {
+  DraftingUnits,
+  divisionCodeOfKey,
+  draftingProximity,
+} from '../documents/drafting-proximity';
 import { ViewerScope, UsingDeptRef, isDocVisibleToViewer } from '../rbac/viewer-scope';
 
 /** 前台清單項（含使用部門代碼集合，供置頂/部門篩選）。名稱解析由服務層另補。 */
@@ -164,19 +169,38 @@ export function byNumberDesc(a: PublicDocItem, b: PublicDocItem): number {
   return 0;
 }
 
-/** 置頂區在前、其餘在後，各自依編號降冪合併。 */
+/**
+ * 置頂區在前（依編號降冪）；其餘依**制定單位相近程度**、同層再依編號降冪。
+ *
+ * 🔵 2026-09-23 使用者裁定：「其他文件」原本只依編號降冪、與檢視者單位毫無關係；改依
+ * `draftingProximity()`（同室別→同部門→同本部→同公司→其他公司）。🔒 置頂區（使用部門）
+ * **保留且不改排序**——兩區回答的是不同問題（「要我用的」vs「離我近的」），不得合併。
+ * 🔒 相近程度之唯一實作住 `documents/drafting-proximity.ts`，與後台 F017 預設排序共用。
+ */
 export function splitAndSort(
   items: readonly PublicDocItem[],
   userOrgCode: string | null | undefined,
   userCompanyCode: string | null | undefined,
 ): PublicDocItem[] {
+  const viewer = { orgCode: userOrgCode ?? null, companyCode: userCompanyCode ?? null };
   const pinned = items
     .filter((i) => isPinned(i, userOrgCode, userCompanyCode))
     .sort(byNumberDesc);
   const rest = items
     .filter((i) => !isPinned(i, userOrgCode, userCompanyCode))
-    .sort(byNumberDesc);
+    .map((i) => ({ i, rank: draftingProximity(proximityUnits(i), viewer) }))
+    .sort((a, b) => a.rank - b.rank || byNumberDesc(a.i, b.i))
+    .map((x) => x.i);
   return [...pinned, ...rest];
+}
+
+function proximityUnits(i: PublicDocItem): DraftingUnits {
+  return {
+    companyCode: i.companyCode,
+    draftingSectionId: i.draftingSectionId,
+    draftingDeptId: i.draftingDeptId,
+    draftingDivisionCode: divisionCodeOfKey(i.draftingDivisionId),
+  };
 }
 
 /**

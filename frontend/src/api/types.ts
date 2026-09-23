@@ -252,6 +252,11 @@ export interface DocumentListItem {
    */
   draftingDivisionId?: string | null;
   draftingDivisionName?: string | null;
+  /**
+   * 🔵 2026-09-23：制定單位與**登入者**單位之相近程度（0 同室別／1 同部門／2 同本部／
+   * 3 同公司／4 其他公司），伺服器端以 session 計算；本頁未指定排序欄時之預設排序依據。
+   */
+  draftingProximity?: number;
   draftingDeptName: string | null;
   draftingSectionName: string | null;
   primaryChiefId: string | null;

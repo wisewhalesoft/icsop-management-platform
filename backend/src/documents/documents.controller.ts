@@ -18,6 +18,7 @@ import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
 import { RequirePermission } from '../rbac/require-permission.decorator';
 import { FunctionKey } from '../rbac/function-matrix';
+import { ProximityViewer } from './drafting-proximity';
 
 /**
  * ICSOP 文件（E04）。守門鏈 SessionGuard→RolePermissionGuard。
@@ -43,7 +44,7 @@ export class DocumentsController {
 
   @Get()
   @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
-  list(@Query() q: Record<string, string | undefined>) {
+  list(@Query() q: Record<string, string | undefined>, @Req() req?: RequestWithSession) {
     const num = (v: string | undefined): number | undefined => {
       if (v === undefined || v.trim() === '') return undefined;
       const n = Number(v);
@@ -86,7 +87,7 @@ export class DocumentsController {
       sortDir: q.sortDir === 'asc' || q.sortDir === 'desc' ? q.sortDir : undefined,
       page: num(q.page),
       pageSize: num(q.pageSize),
-    });
+    }, viewerOf(req));
   }
 
   @Get(':id')
@@ -195,4 +196,13 @@ export class DocumentsController {
     // F012：切換原因（選填）一併傳遞；缺鍵→undefined（不阻擋）。F037：帶入操作者快照。
     return this.svc.setStatus(id, body.status, body.reason, actorOf(req));
   }
+}
+
+/**
+ * 🔵 2026-09-23：清單預設排序（制定單位相近程度）之檢視者。唯一合法來源＝`req.sessionUser`
+ * （SessionGuard 每請求以 DB 現行值填入）；無 session（單元測試直呼）⇒ `undefined`，不賦相近程度。
+ */
+function viewerOf(req: RequestWithSession | undefined): ProximityViewer | undefined {
+  const u = req?.sessionUser;
+  return u ? { orgCode: u.orgCode ?? null, companyCode: u.companyCode ?? null } : undefined;
 }

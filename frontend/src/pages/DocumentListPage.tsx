@@ -42,6 +42,7 @@ import type {
   SubtreeFilterDescriptor,
   UsageFormRecord,
 } from '../api/types';
+import { byDraftingProximity } from './document-list-sort';
 
 /**
  * 後台 ICSOP 程序書清單（F017）。版面權威來源：prototypes/13-document-list.html。
@@ -843,6 +844,8 @@ export function DocumentListPage(): JSX.Element {
         const bv = (b[sortBy] ?? '') as string;
         return av < bv ? -dir : av > bv ? dir : 0;
       });
+    } else {
+      rows.sort(byDraftingProximity);
     }
     return rows;
   }, [

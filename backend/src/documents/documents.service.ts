@@ -57,6 +57,7 @@ import {
   toCsvBuffer,
 } from '../storage/csv-export';
 import { buildDocumentExportColumns } from './document-export-columns';
+import { ProximityViewer, draftingProximity } from './drafting-proximity';
 import {
   BUSINESS_CATEGORY_DOCS_STORE,
   BusinessCategoryDocsStore,
@@ -331,7 +332,10 @@ export class DocumentsService {
    * 回 `null`（`AC-T41` 四種殘缺情形）⇒ 兩者同時不設定，回應等同於未帶該兩參數之請求（HTTP 仍 200）。
    * `subtreeFilter` 為 **additive 第 6 個頂層欄位且恆為顯式 key**（不適用時 `null`，`AC-T45`／`AC-T48` ⑥）。
    */
-  async listDocuments(filters: DocumentListFilters): Promise<DocumentListPage> {
+  async listDocuments(
+    filters: DocumentListFilters,
+    viewer?: ProximityViewer,
+  ): Promise<DocumentListPage> {
     const subtree = await resolveSubtreeFilter(
       filters.lifecycleId,
       filters.nodeSubtreeId,
@@ -342,6 +346,20 @@ export class DocumentsService {
       subtree ? { ...filters, nodeIdIn: subtree.nodeIds } : filters,
     );
     await this.enrichListItems(page.items);
+    // 🔵 2026-09-23：預設排序之依據（前端於未指定排序欄時據以排序）；須在本部富化之後。
+    if (viewer) {
+      for (const it of page.items) {
+        it.draftingProximity = draftingProximity(
+          {
+            companyCode: it.companyCode,
+            draftingSectionId: it.draftingSectionId,
+            draftingDeptId: it.draftingDeptId,
+            draftingDivisionCode: it.draftingDivisionCode ?? null,
+          },
+          viewer,
+        );
+      }
+    }
     return { ...page, subtreeFilter: subtree?.descriptor ?? null };
   }
 

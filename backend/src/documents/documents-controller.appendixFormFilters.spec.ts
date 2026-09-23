@@ -34,6 +34,7 @@ describe('DocumentsController.list — appendixId／formId 之 query→filters �
     await ctrl.list({ appendixId: 'apx1' });
     expect(svc.listDocuments).toHaveBeenCalledWith(
       expect.objectContaining({ appendixId: 'apx1' }),
+      undefined, // 2026-09-23：第二參數＝相近程度之 viewer（無 session 時為 undefined）
     );
   });
 
@@ -41,6 +42,7 @@ describe('DocumentsController.list — appendixId／formId 之 query→filters �
     await ctrl.list({ formId: 'uf1' });
     expect(svc.listDocuments).toHaveBeenCalledWith(
       expect.objectContaining({ formId: 'uf1' }),
+      undefined, // 2026-09-23：第二參數＝相近程度之 viewer（無 session 時為 undefined）
     );
   });
 
@@ -55,6 +57,7 @@ describe('DocumentsController.list — appendixId／formId 之 query→filters �
     await ctrl.list({ appendixId: 'apx1', draftingDeptId: 'd1' });
     expect(svc.listDocuments).toHaveBeenCalledWith(
       expect.objectContaining({ appendixId: 'apx1', draftingDeptId: 'd1' }),
+      undefined, // 2026-09-23：第二參數＝相近程度之 viewer（無 session 時為 undefined）
     );
   });
 });

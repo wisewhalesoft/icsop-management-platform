@@ -3,6 +3,7 @@ import { DocumentStatus } from './document-status';
 import { DocumentLinkView } from './document-link.store';
 import { LifecycleIdentity } from '../lifecycle/lifecycle-subcategory';
 import { OjtCompletionStatus } from './ojt-completion.reader';
+import { DraftingProximity } from './drafting-proximity';
 
 /** 文件資料存取邊界（可注入 mock/TypeORM）。E04-1 僅需建立與編號唯一性查詢。 */
 export const DOCUMENT_STORE = Symbol('DOCUMENT_STORE');
@@ -202,6 +203,12 @@ export interface DocumentListItem {
   draftingDivisionId?: string | null;
   draftingDivisionCode?: string | null;
   draftingDivisionName?: string | null;
+  /**
+   * 🔵 2026-09-23：制定單位與**檢視者**單位之相近程度（0 同室別～4 其他公司，見
+   * `drafting-proximity.ts`），供後台清單之預設排序。只在帶 viewer 之清單查詢時賦值；
+   * 匯出等不帶 viewer 之路徑留 `undefined`。additive optional。
+   */
+  draftingProximity?: DraftingProximity;
   primaryChiefId: string | null;
   /** F017 當責室長姓名（resolvePersonName；查無→null，前端 fallback 顯示員編）。 */
   primaryChiefName: string | null;

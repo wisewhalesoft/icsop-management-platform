@@ -767,7 +767,7 @@ export function PublicListPage(): JSX.Element {
                 <div className="flex items-center gap-2 mb-2">
                   <Icon name="list" className="w-4 h-4 text-slate-400" />
                   <h2 className="text-base font-semibold text-slate-700">
-                    其他文件 · <span className="text-slate-400 font-normal">依編號降冪</span>
+                    其他文件 · <span className="text-slate-400 font-normal">依制定單位由近到遠</span>
                   </h2>
                 </div>
                 <div className="space-y-2.5" data-testid="rest-list">

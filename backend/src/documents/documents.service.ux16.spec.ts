@@ -188,3 +188,34 @@ describe('DocumentsService#enrichNames — UX16 delta AC-UX43②（本部組裝�
     expect(item.draftingDivisionCode ?? null).toBeNull();
   });
 });
+
+/**
+ * 🔵 2026-09-23：後台清單預設排序之依據 `draftingProximity`。
+ * 🔴 接縫：相近程度之「同本部」層**只能**由本部富化之結果得出——語料刻意讓部門與室別都不中、
+ *    只有本部中（期望 2）；若在本部富化之前計算，會得到 3。
+ */
+describe('DocumentsService#listDocuments — 制定單位相近程度（2026-09-23）', () => {
+  function seeded() {
+    const store = makeStore();
+    store.seedDoc({ id: 'd1', companyCode: 'AS', ...({ draftingDeptId: 'DB000' } as Partial<DocumentView>) });
+    store.seedDoc({ id: 'd2', companyCode: 'AJ', ...({ draftingDeptId: 'DB000' } as Partial<DocumentView>) });
+    const resolver = new FakeNameResolverUx16();
+    resolver.orgUnitsByCompany.set('AS', [
+      unit({ companyCode: 'AS', orgCode: 'D0000', tier: 'DIVISION', name: '財會本部', descFull: '財會本部' }),
+      unit({ companyCode: 'AS', orgCode: 'DB000', tier: 'DEPARTMENT', name: '會計部', descFull: '會計部', parentCode: 'D0000' }),
+    ]);
+    return makeService(resolver, store);
+  }
+
+  it('帶 viewer ⇒ 每列賦相近程度（同本部 2、他公司 4）', async () => {
+    const page = await seeded().listDocuments({}, { orgCode: 'DAA00', companyCode: 'AS' });
+    const rank = (id: string) => page.items.find((i) => i.id === id)?.draftingProximity;
+    expect(rank('d1')).toBe(2);
+    expect(rank('d2')).toBe(4);
+  });
+
+  it('不帶 viewer（匯出等路徑）⇒ 不賦值', async () => {
+    const page = await seeded().listDocuments({});
+    expect(page.items.every((i) => i.draftingProximity === undefined)).toBe(true);
+  });
+});

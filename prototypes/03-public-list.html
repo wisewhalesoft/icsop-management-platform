@@ -292,7 +292,7 @@
   <section>
     <div class="flex items-center gap-2 mb-2">
       <i data-lucide="list" class="w-4 h-4 text-slate-400"></i>
-      <h2 class="text-base font-semibold text-slate-700">其他文件 · <span class="text-slate-400 font-normal">依編號降冪</span></h2>
+      <h2 class="text-base font-semibold text-slate-700">其他文件 · <span class="text-slate-400 font-normal">依制定單位由近到遠</span></h2>
     </div>
     <div id="restList" class="space-y-2.5"></div>
   </section>
@@ -660,7 +660,20 @@
     // 業務視角下 rest 必為空（AC-10 等價之數學推論），空區塊由既有「空則隱藏」通則收合。
     const byNumDesc=(a,b)=> a.n<b.n?1:a.n>b.n?-1:0;
     const pinned = rows.filter(d=>inScope(d.use)).sort(byNumDesc);
-    const rest = rows.filter(d=>!inScope(d.use)).sort(byNumDesc);
+    /* 🔵 2026-09-23 使用者裁定：「其他文件」依**制定單位與登入者單位之相近程度**排序
+       （0 同室別→1 同部門→2 同本部→3 同公司→4 其他公司），同層再依編號降冪；置頂區不變。
+       正式實作之唯一規則住 backend/src/documents/drafting-proximity.ts（前後台共用）；
+       本原型以顯示名比對（王小明＝AS／營業二本部／營運管理部／審查室）。
+       總經理（公司層）：室別／部門／本部皆不中 ⇒ 本公司文件全落第 3 層＝「本公司優先」。 */
+    const VIEWER_UNITS={co:'AS', division:'營業二本部', dept:'營運管理部', section:'審查室'};
+    const proximity=d=>{
+      if(d.co!==VIEWER_UNITS.co) return 4;
+      if(d.section && d.dept===VIEWER_UNITS.dept && d.section===VIEWER_UNITS.section) return 0;
+      if(d.dept===VIEWER_UNITS.dept) return 1;
+      if(docDivisionLabel(d)===VIEWER_UNITS.division) return 2;
+      return 3;
+    };
+    const rest = rows.filter(d=>!inScope(d.use)).sort((a,b)=>proximity(a)-proximity(b)||byNumDesc(a,b));
 
     document.getElementById('pinnedList').innerHTML = pinned.map(card).join('');
     document.getElementById('restList').innerHTML = rest.map(card).join('');

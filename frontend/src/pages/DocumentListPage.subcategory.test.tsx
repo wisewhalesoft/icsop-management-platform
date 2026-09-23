@@ -96,14 +96,20 @@ describe('DocumentListPage — F017 AC-S1「循環別」欄顯示', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
 
-    const cells = Array.from(document.querySelectorAll('[data-cycle-cell]')).map((el) =>
-      el.textContent?.trim(),
+    // 🔵 2026-09-23：列序改由預設排序（制定單位相近程度、同層編號降冪）決定、非載入次序——
+    // 本條鎖的是**每列之顯示字串**，故以「文件 → 該列循環別」對照斷言，不依賴列序。
+    // 📝 已作廢（⚠ 不得復原）：OLD> 依載入次序比對 cells 陣列。
+    const byDoc = Object.fromEntries(
+      Array.from(document.querySelectorAll('[data-cycle-cell]')).map((el) => [
+        el.closest('tr')!.textContent!.match(/ICSOP-[A-Z]+-\d+-\d-\d+/)![0],
+        el.textContent?.trim(),
+      ]),
     );
-    expect(cells).toEqual([
-      '銷售及收款循環（消金）',
-      '銷售及收款循環（企金）',
-      '採購及付款循環',
-    ]);
+    expect(byDoc).toEqual({
+      'ICSOP-SRC-101-1-01': '銷售及收款循環（消金）',
+      'ICSOP-SRC-201-1-01': '銷售及收款循環（企金）',
+      'ICSOP-PUC-101-1-01': '採購及付款循環',
+    });
   });
 
   it('AC-S1 無子分類之文件顯示恰為名稱（不含括號）', async () => {

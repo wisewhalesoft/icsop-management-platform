@@ -448,3 +448,42 @@ describe('F041 AC-14～AC-19：buildPublicList 業務子分類可見性過濾', 
     expect({ ...a, items: a.items.map((d) => d.id) }).toEqual({ ...b, items: b.items.map((d) => d.id) });
   });
 });
+
+/**
+ * 🔵 2026-09-23 使用者裁定：「其他文件」改依制定單位相近程度排序（同層再依編號降冪）；
+ * 置頂區（使用部門）保留、區內仍純編號降冪。
+ * 語料：編號刻意與相近程度**反向**——若實作仍只依編號降冪，第一案之期望整個倒過來。
+ */
+describe('F019 其他文件：依制定單位相近程度排序', () => {
+  const near = (over: Partial<PublicDocItem>): PublicDocItem =>
+    doc({ usingDepts: depts(['ZZ000']), ...over });
+
+  it('同室別 → 同部門 → 同本部 → 同公司 → 其他公司，同層依編號降冪', () => {
+    const other = near({ id: 'other', documentNumber: 'Z9', companyCode: 'AD', draftingSectionId: 'JAC00' });
+    const company = near({ id: 'company', documentNumber: 'Z8' });
+    const division = near({ id: 'division', documentNumber: 'Z7', draftingDeptId: 'JB000', draftingDivisionId: 'AS__J0000' });
+    const dept = near({ id: 'dept', documentNumber: 'Z6', draftingDeptId: 'JA000', draftingSectionId: 'JAB00' });
+    const sectionLow = near({ id: 'sectionLow', documentNumber: 'A1', draftingSectionId: 'JAC00' });
+    const sectionHigh = near({ id: 'sectionHigh', documentNumber: 'A2', draftingSectionId: 'JAC00' });
+    const out = splitAndSort([other, company, division, dept, sectionLow, sectionHigh], 'JAC00', 'AS');
+    expect(out.map((d) => d.id)).toEqual([
+      'sectionHigh', 'sectionLow', 'dept', 'division', 'company', 'other',
+    ]);
+  });
+
+  it('置頂區仍在最前且區內純編號降冪（不受制定單位影響）', () => {
+    const pinFar = doc({ id: 'pinFar', usingDepts: depts(['JAC00']), documentNumber: 'B2', companyCode: 'AS' });
+    const pinNear = doc({ id: 'pinNear', usingDepts: depts(['JAC00']), documentNumber: 'B1', draftingSectionId: 'JAC00' });
+    const restNear = near({ id: 'restNear', documentNumber: 'Z9', draftingSectionId: 'JAC00' });
+    const out = splitAndSort([restNear, pinNear, pinFar], 'JAC00', 'AS');
+    expect(out.map((d) => d.id)).toEqual(['pinFar', 'pinNear', 'restNear']);
+  });
+
+  it('總經理（00000）：本公司文件在前、他公司在後，同層依編號降冪', () => {
+    const ad = near({ id: 'ad', documentNumber: 'Z9', companyCode: 'AD' });
+    const as1 = near({ id: 'as1', documentNumber: 'A1', draftingSectionId: 'JAC00' });
+    const as2 = near({ id: 'as2', documentNumber: 'A2', draftingDeptId: 'KA000' });
+    const out = splitAndSort([ad, as1, as2], '00000', 'AS');
+    expect(out.map((d) => d.id)).toEqual(['as2', 'as1', 'ad']);
+  });
+});

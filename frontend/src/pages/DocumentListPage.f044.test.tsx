@@ -76,12 +76,18 @@ const doc = (over: Partial<DocumentListItem>): DocumentListItem => ({
  * 語料刻意讓「載入次序」與「公告日降冪」**不同**——否則本檔每一條斷言在
  * 「參數完全沒被讀到」之下也會通過，整份恆真。
  * 🔴 另含一筆 `announcedDate` 為 `null` 者，用以鎖住 `AC-G59` 明文「本輪不動」之既有落差。
+ *
+ * 🔵 2026-09-23：未指定排序時之**預設次序**由「沿用載入次序」改為「制定單位相近程度」
+ * （`draftingProximity` 昇冪、同層編號降冪）。語料因此改為：相近程度 N-A 0／N-B 1／N-C 2／N-D 3，
+ * 且**載入次序刻意打亂**（C, A, D, B）⇒ 預設次序 A,B,C,D 與載入次序、編號降冪（D,C,B,A）、
+ * 公告日降冪（B,C,A,D）四者兩兩相異——下方「no-op ⇒ A,B,C,D」只能由相近程度排序產生。
+ * 📝 已作廢（⚠ 不得復原）：OLD> 載入次序 A,B,C,D 且無 `draftingProximity`（預設＝載入次序）。
  */
 const DOCS: DocumentListItem[] = [
-  doc({ id: 'x1', documentNumber: 'N-A', announcedDate: '2026-01-10T00:00:00.000Z' }),
-  doc({ id: 'x2', documentNumber: 'N-B', announcedDate: '2026-03-20T00:00:00.000Z' }),
-  doc({ id: 'x3', documentNumber: 'N-C', announcedDate: '2026-02-05T00:00:00.000Z' }),
-  doc({ id: 'x4', documentNumber: 'N-D', announcedDate: null }),
+  doc({ id: 'x3', documentNumber: 'N-C', announcedDate: '2026-02-05T00:00:00.000Z', draftingProximity: 2 }),
+  doc({ id: 'x1', documentNumber: 'N-A', announcedDate: '2026-01-10T00:00:00.000Z', draftingProximity: 0 }),
+  doc({ id: 'x4', documentNumber: 'N-D', announcedDate: null, draftingProximity: 3 }),
+  doc({ id: 'x2', documentNumber: 'N-B', announcedDate: '2026-03-20T00:00:00.000Z', draftingProximity: 1 }),
 ];
 
 const pageOf = (items: DocumentListItem[]): DocPage => ({
@@ -125,7 +131,7 @@ beforeEach(() => {
 });
 
 describe('AC-G59 — 自 URL 取樣 sortBy／sortDir（客端排序之初始值）', () => {
-  it('語料自我守護：載入次序 ≠ 公告日降冪（否則本檔每一條皆恆真）', async () => {
+  it('語料自我守護：預設次序（制定單位相近程度）≠ 公告日降冪（否則本檔每一條皆恆真）', async () => {
     renderAt('');
     expect(await rowOrder()).toEqual(['N-A', 'N-B', 'N-C', 'N-D']);
   });

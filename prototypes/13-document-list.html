@@ -1319,7 +1319,21 @@
          🔴 與循環側之判定形狀刻意不同（M:N ⇒ 集合交集，而非「文件的節點欄位落在集合內」）。 */
       if(BC_SUBTREE.docs && !BC_SUBTREE.docs.has(d.num)) return false;
       return true;
-    });
+    }).sort((a,b)=>proximity(a)-proximity(b)||(a.num<b.num?1:a.num>b.num?-1:0));
+  }
+  /* 🔵 2026-09-23 使用者裁定：**預設排序**＝制定單位與登入者單位之相近程度
+     （0 同室別→1 同部門→2 同本部→3 同公司→4 其他公司），同層再依程序書編號降冪；
+     取代原本之「最後更新時間降冪」。點欄位標題之排序仍照舊覆蓋本預設。
+     正式實作之唯一規則住 backend/src/documents/drafting-proximity.ts（前後台共用，伺服器以 session 計算）；
+     本原型以顯示名比對，並**假設**登入者單位＝AS／管理本部／管理部／人力資源室（僅供示範各層次序）。
+     總經理（公司層）：室別／部門／本部皆不中 ⇒ 本公司文件全落第 3 層＝「本公司優先」。 */
+  const VIEWER_UNITS={co:'AS', divisionKey:'AS__C0000', dept:'管理部', section:'人力資源室'};
+  function proximity(d){
+    if(d.co!==VIEWER_UNITS.co) return 4;
+    if(d.section && d.dept===VIEWER_UNITS.dept && d.section===VIEWER_UNITS.section) return 0;
+    if(d.dept===VIEWER_UNITS.dept) return 1;
+    if(docDivisionKey(d)===VIEWER_UNITS.divisionKey) return 2;
+    return 3;
   }
 
   function renderTable(){
