@@ -177,12 +177,14 @@ describe('UsageFormCreatePage — F018 D9 delta（AC-N41〜AC-N45、AC-N77、AC-
       expect(endpoints.uploadUsageForms).not.toHaveBeenCalled();
     });
 
-    it('上傳 .docx → 顯示 FILE_FORMAT_NOT_ALLOWED，不呼叫上傳（原 TS-F018-005）', async () => {
+    it('上傳 .docx → 顯示格式不支援提示（不含錯誤代碼），不呼叫上傳（原 TS-F018-005）', async () => {
       renderPage();
       await userEvent.upload(screen.getByLabelText('選擇檔案'), new File(['x'], '作業說明.docx'), {
         applyAccept: false,
       });
-      expect(screen.getByText(/FILE_FORMAT_NOT_ALLOWED/)).toBeInTheDocument();
+      const err = screen.getByText(/格式不支援/);
+      expect(err.textContent).toContain('僅允許 excel');
+      expect(err.textContent).not.toContain('FILE_FORMAT_NOT_ALLOWED');
       await userEvent.click(screen.getByRole('button', { name: '儲存' }));
       expect(endpoints.uploadUsageForms).not.toHaveBeenCalled();
     });

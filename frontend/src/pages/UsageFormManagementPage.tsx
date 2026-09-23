@@ -18,6 +18,8 @@ import {
   isExportLimitError,
 } from '../domain/export-feedback';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT, isWatermarkSupportedFormat } from '../domain/watermark-note';
 import { PageHeader } from '../components/PageHeader';
 import { FormatBadge } from '../components/UsageFormFormatBadge';
@@ -113,7 +115,7 @@ export function UsageFormManagementPage(): JSX.Element {
     try {
       setItems(await getUsageFormOverview());
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.code : '載入表單池失敗');
+      toast.error('載入表單池失敗', e instanceof ApiError ? { code: e.code } : undefined);
     } finally {
       setLoading(false);
     }
@@ -176,7 +178,7 @@ export function UsageFormManagementPage(): JSX.Element {
         await downloadPoolForm(form.id, form.name);
         toast.success(`已下載表單「${form.name}」`);
       } catch (e) {
-        toast.error(e instanceof ApiError ? `下載失敗：${e.code}` : '下載失敗');
+        toast.error('下載失敗，請稍後再試。', e instanceof ApiError ? { code: e.code } : undefined);
       }
     },
     [toast],
@@ -190,7 +192,7 @@ export function UsageFormManagementPage(): JSX.Element {
   const onExport = useCallback(async () => {
     try {
       await exportUsageFormPool({ q: keyword.trim() || undefined, format: fmtFilter || undefined });
-      toast.success('已匯出表單清單（CSV，UTF-8 BOM）');
+      toast.success('已匯出表單清單（CSV）');
     } catch (e) {
       if (isExportLimitError(e)) {
         toast.error(
@@ -199,7 +201,7 @@ export function UsageFormManagementPage(): JSX.Element {
         );
         return;
       }
-      toast.error(e instanceof ApiError ? `匯出失敗：${e.code}` : '匯出失敗');
+      toast.error('匯出失敗，請稍後再試。', e instanceof ApiError ? { code: e.code } : undefined);
     }
   }, [keyword, fmtFilter, toast]);
 
@@ -214,7 +216,7 @@ export function UsageFormManagementPage(): JSX.Element {
     const form = overwriteTarget;
     if (!file || !form) return;
     if (!detectAllowedFmt(file.name)) {
-      toast.error('檔案格式不支援，僅允許 excel（.xlsx / .xls）與 pdf（FILE_FORMAT_NOT_ALLOWED）');
+      toast.error('檔案格式不支援，僅允許 excel（.xlsx / .xls）與 pdf');
       setOverwriteTarget(null);
       return;
     }
@@ -268,7 +270,7 @@ export function UsageFormManagementPage(): JSX.Element {
       await load();
     };
     if (form.docCount >= 1) {
-      toast.error(`此表單已被 ${form.docCount} 份文件使用，無法直接移除（USAGE_FORM_IN_USE）`);
+      toast.error(`此表單已被 ${form.docCount} 份文件使用，無法直接移除`);
       setConfirm({
         title: `確認移除「${form.name}」？`,
         body: `此表單已被 ${form.docCount} 份文件使用，移除將一併解除這 ${form.docCount} 份文件的關聯，且無法復原。此操作將記錄稽核。`,
@@ -294,7 +296,7 @@ export function UsageFormManagementPage(): JSX.Element {
       await confirm.onConfirm();
       setConfirm(null);
     } catch (e) {
-      toast.error(e instanceof ApiError ? `操作失敗：${e.code}` : '操作失敗');
+      toast.error('操作失敗，請稍後再試。', e instanceof ApiError ? { code: e.code } : undefined);
       setConfirm(null);
     } finally {
       setConfirmBusy(false);
@@ -312,7 +314,10 @@ export function UsageFormManagementPage(): JSX.Element {
         <p className="text-sm text-slate-500 mt-1">
           僅 ICSOP 管理員（可維護）與系統管理員（唯讀）可存取表單池。
         </p>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }
@@ -360,7 +365,7 @@ export function UsageFormManagementPage(): JSX.Element {
       {canRead && !canWrite && (
         <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm border bg-cyan-50 border-cyan-200 text-cyan-800">
           <Icon name="eye" className="w-4 h-4" />
-          唯讀模式 · 系統管理員僅可查詢與下載表單、檢視關聯文件，無法上傳或移除（FIELD_WRITE_FORBIDDEN）。
+          唯讀模式 · 系統管理員僅可查詢與下載表單、檢視關聯文件，無法上傳或移除。
         </div>
       )}
 

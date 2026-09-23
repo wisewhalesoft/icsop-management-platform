@@ -17,6 +17,12 @@ import {
   isWatermarkSupportedFormat,
 } from '../domain/watermark-note';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import {
+  BLOCKED_ACTION_HINT,
+  BLOCKED_CODE_NOTE,
+  FIELD_WRITE_CODE_NOTE,
+} from '../domain/error-code-note';
 import { PageHeader } from '../components/PageHeader';
 import { FormatBadge } from '../components/UsageFormFormatBadge';
 import {
@@ -203,8 +209,12 @@ export function UsageFormEditPage(): JSX.Element {
         </div>
         <h1 className="font-semibold text-slate-900">無編輯使用表單權限</h1>
         <p className="text-sm text-slate-500 mt-1">{BLOCK_MESSAGE[role ?? ''] ?? ''}</p>
-        <p className="text-xs mono text-slate-400 mt-2">
-          {role === 'SysAdmin' ? 'FIELD_WRITE_FORBIDDEN · 403' : 'PERMISSION_DENIED · 403'}
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote
+            infoKey="blocked-403"
+            paragraphs={[role === 'SysAdmin' ? FIELD_WRITE_CODE_NOTE : BLOCKED_CODE_NOTE]}
+          />
         </p>
       </div>
     );
@@ -350,17 +360,27 @@ export function UsageFormEditPage(): JSX.Element {
                 可指定<strong className="text-slate-700">任意層級</strong>
                 （本部／部／處室／課），各筆層級可不同。
                 <strong className="text-slate-700">未勾選任何部門為合法</strong>（0 筆，非錯誤）。
-                重新開啟本頁時原選取項完整回填，順序穩定（實作依 <span className="mono">orgCode</span>{' '}
-                昇冪）。
+                {/*
+                  🔵 2026-09-23 全站文案稽核：`實作依 orgCode 昇冪` 為實作細節（連欄位名都印出來了）。
+                  📝 已作廢（⚠ 不得復原）：
+                    OLD> 重新開啟本頁時原選取項完整回填，順序穩定（實作依 `orgCode` 昇冪）。
+                  🔒 使用者要的保證是「回來看順序不會亂跳」，不是它依哪個欄位排序。
+                */}
+                重新開啟本頁時原選取項完整回填，且顯示順序固定不變。
               </span>
             </p>
             <p className="text-xs text-amber-700 mb-2 flex items-start gap-1.5">
               <Icon name="alert-triangle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
               <span>
-                ⚠ 本欄為<strong>純顯示與清單篩選用之 metadata</strong>，
-                <strong>不影響任何可見性或權限判定</strong>（AC-N46）
-                ——與「文件使用部門」結構同構但用途完全不同，
-                <strong>不得</strong>接進同一套子樹判定。
+                {/*
+                  🔵 2026-09-23 全站文案稽核：比照建立頁，移除 `metadata`、AC 編號與內部結構敘述。
+                  📝 已作廢（⚠ 不得復原）：
+                    OLD> ⚠ 本欄為**純顯示與清單篩選用之 metadata**，**不影響任何可見性或權限判定**
+                    OLD> （AC-N46）——與「文件使用部門」結構同構但用途完全不同，**不得**接進同一套子樹判定。
+                */}
+                ⚠ 本欄僅供顯示與清單篩選，
+                <strong>不會影響誰看得到或能不能使用這張表單</strong>
+                ；與 ICSOP 文件的「文件使用部門」名稱相近但用途不同。
               </span>
             </p>
             <DraftingDeptPicker

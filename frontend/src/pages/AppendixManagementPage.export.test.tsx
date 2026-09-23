@@ -17,7 +17,7 @@ import type { AppendixPoolItem, SessionUser } from '../api/types';
  *  - `prototypes/24-appendix-management.html:61-65`（topbar 動作區之「匯出」鈕；`aria-label="匯出"`、
  *    icon 鍵 `download`；📌「匯出為讀取類動作：SysAdmin 唯讀角色**允許**匯出，故本鈕**非** write-only」）
  *  - `prototypes/24-appendix-management.html:360-368`（成功／超限之逐字回饋與錯誤碼標記）
- *  - F039 `AC-D4`（匯出鈕存在與權限）／`AC-D12`（成功片段 `已匯出附錄清單（CSV，UTF-8 BOM）`；
+ *  - F039 `AC-D4`（匯出鈕存在與權限）／`AC-D12`（成功片段 `已匯出附錄清單（CSV）`；
  *    超限逐字 `符合條件之筆數為 {N} 筆，超過匯出上限 10000 筆，請縮小篩選條件` ＋ `EXPORT_ROW_LIMIT_EXCEEDED · 400`；
  *    ⚠「與 F037 `AC-D10`／F038 `AC-D6` 之句式差異為**刻意**」——本頁量詞為「筆數」、限定詞為「篩選條件」）
  *  - F039 `AC-D3`（🔒 個別下載仍走後台專屬 helper `downloadAppendixFromPool`，非前台燒錄端點
@@ -47,10 +47,10 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => navigateMock };
 });
 
-const SUCCESS = '已匯出附錄清單（CSV，UTF-8 BOM）';
+const SUCCESS = '已匯出附錄清單（CSV）';
 const OVER_LIMIT = (n: number) => `符合條件之筆數為 ${n} 筆，超過匯出上限 10000 筆，請縮小篩選條件`;
 const ERROR_BADGE = 'EXPORT_ROW_LIMIT_EXCEEDED · 400';
-const BURN_TEXT = '檢視/下載將燒錄浮水印';
+const BURN_TEXT = '檢視／下載會帶您的身分浮水印';
 const UNSUPPORTED_TEXT = '此格式不支援浮水印';
 
 function mockAuth(roleCode: string) {
@@ -171,7 +171,7 @@ describe('AppendixManagementPage 匯出之使用者可見回饋（F039 AC-D12 �
     document.querySelectorAll('[data-testid^="topbar-"]').forEach((n) => n.remove());
   });
 
-  it('AC-D12 成功 → 回饋以逐字片段 `已匯出附錄清單（CSV，UTF-8 BOM）` 起始', async () => {
+  it('AC-D12 成功 → 回饋以逐字片段 `已匯出附錄清單（CSV）` 起始', async () => {
     vi.mocked(endpoints.exportAppendixPool).mockResolvedValue(undefined);
     mockAuth('ICSOPAdmin');
     const { actionsEl } = renderWithTopbar();
@@ -250,7 +250,7 @@ describe('F039 AC-D3 個別下載沿用既有 helper；F020 AC-N20 後台頁面�
    *   OLD>   expect(screen.queryByText(UNSUPPORTED_TEXT)).toBeNull();
    *   OLD> });
    */
-  it('AC-N20 後台頁面亦渲染 data-wm-note（pdf 格式列逐字為「檢視/下載將燒錄浮水印」）', async () => {
+  it('AC-N20 後台頁面亦渲染 data-wm-note（pdf 格式列逐字為「檢視／下載會帶您的身分浮水印」）', async () => {
     mockAuth('ICSOPAdmin');
     renderWithTopbar();
     await waitFor(() => expect(screen.getByText('名詞定義說明.pdf')).toBeInTheDocument());

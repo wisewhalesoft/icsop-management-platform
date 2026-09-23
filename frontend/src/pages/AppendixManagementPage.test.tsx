@@ -80,7 +80,7 @@ describe('AppendixManagementPage — 附錄（附錄池）管理（F039，移植
    * 權威：`docs/specs/features/F020-watermark.md#backend-burn-delta` `AC-N20`。
    * 🛑 就地推翻 `AC-D7` ④（原禁止後台出現該兩條文案）——本頁列亦適用。
    */
-  it('AC-N20 每一列帶 data-wm-note，pdf 格式逐字為「檢視/下載將燒錄浮水印」', async () => {
+  it('AC-N20 每一列帶 data-wm-note，pdf 格式逐字為「檢視／下載會帶您的身分浮水印」', async () => {
     mockAuth('ICSOPAdmin');
     vi.mocked(endpoints.getAppendixPoolOverview).mockResolvedValue([
       { ...POOL[0], format: 'pdf' },
@@ -90,7 +90,7 @@ describe('AppendixManagementPage — 附錄（附錄池）管理（F039，移植
     const row = screen.getByText('作業流程對照表.xlsx').closest('tr') as HTMLElement;
     const note = row.querySelector('[data-wm-note]');
     expect(note, '找不到 data-wm-note').not.toBeNull();
-    expect(note!.textContent).toBe('檢視/下載將燒錄浮水印');
+    expect(note!.textContent).toBe('檢視／下載會帶您的身分浮水印');
   });
 
   it('AC-N20 非 pdf 格式列之 data-wm-note 逐字為「此格式不支援浮水印」', async () => {
@@ -126,12 +126,19 @@ describe('AppendixManagementPage — 附錄（附錄池）管理（F039，移植
     expect(screen.getByText('共 3 個附錄')).toBeInTheDocument();
   });
 
-  it('AC-32 SysAdmin → 唯讀提示（FIELD_WRITE_FORBIDDEN）、無上傳/覆蓋/移除，下載仍可用', async () => {
+  it('AC-32 SysAdmin → 唯讀提示、無上傳/覆蓋/移除，下載仍可用', async () => {
     mockAuth('SysAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
-    expect(screen.getByText(/唯讀模式/)).toBeInTheDocument();
-    expect(screen.getByText(/FIELD_WRITE_FORBIDDEN/)).toBeInTheDocument();
+    /**
+      * 🔵 2026-09-23 全站文案稽核：唯讀橫幅不再印錯誤代碼（該代碼此刻並未發生任何錯誤）。
+      * 📝 已作廢（⚠ 不得復原）：OLD> expect(screen.getByText(/FIELD_WRITE_FORBIDDEN/)).toBeInTheDocument();
+      * 🔒 橫幅仍須說明**這個角色不能做什麼**，故正向鎖由「唯讀模式」升為連同限制句一起鎖。
+      */
+    const banner = screen.getByText(/唯讀模式/);
+    expect(banner).toBeInTheDocument();
+    expect(banner.textContent).toContain('無法上傳、更新或移除');
+    expect(banner.textContent).not.toContain('FIELD_WRITE_FORBIDDEN');
     expect(screen.queryByRole('button', { name: /上傳附錄/ })).toBeNull();
     expect(screen.queryByRole('button', { name: '更新／覆蓋上傳' })).toBeNull();
     expect(screen.queryByRole('button', { name: '移除' })).toBeNull();
@@ -223,7 +230,7 @@ describe('AppendixManagementPage — 附錄（附錄池）管理（F039，移植
     await waitFor(() => expect(endpoints.uploadAppendix).toHaveBeenCalledWith([file], '作業對照表'));
   });
 
-  it('AC-03 上傳 .docx → 顯示 FILE_FORMAT_NOT_ALLOWED，不呼叫上傳', async () => {
+  it('AC-03 上傳 .docx → 顯示格式不支援提示（不含錯誤代碼），不呼叫上傳', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
@@ -232,7 +239,10 @@ describe('AppendixManagementPage — 附錄（附錄池）管理（F039，移植
     await userEvent.upload(within(dialog).getByLabelText('選擇檔案'), new File(['x'], '補充說明.docx'), {
       applyAccept: false,
     });
-    expect(within(dialog).getByText(/FILE_FORMAT_NOT_ALLOWED/)).toBeInTheDocument();
+    // 🔵 2026-09-23：代碼移出可見文字；🔴 正向半句改鎖使用者看得懂的限制句，否則刪掉提示也會綠。
+    const err = within(dialog).getByText(/格式不支援/);
+    expect(err.textContent).toContain('僅允許 excel');
+    expect(err.textContent).not.toContain('FILE_FORMAT_NOT_ALLOWED');
     await userEvent.click(within(dialog).getByRole('button', { name: '上傳' }));
     expect(endpoints.uploadAppendix).not.toHaveBeenCalled();
   });
@@ -286,7 +296,9 @@ describe('AppendixManagementPage — 附錄（附錄池）管理（F039，移植
     await userEvent.upload(screen.getByLabelText('覆蓋檔案'), new File(['x'], '修訂說明.docx'), {
       applyAccept: false,
     });
-    expect(screen.getByText(/FILE_FORMAT_NOT_ALLOWED/)).toBeInTheDocument();
+    const err = screen.getByText(/原檔不變/);
+    expect(err.textContent).toContain('格式不支援');
+    expect(err.textContent).not.toContain('FILE_FORMAT_NOT_ALLOWED');
     expect(screen.queryByText(/APPENDIX_OVERWRITE_SHARED/)).toBeNull();
     expect(endpoints.overwriteAppendix).not.toHaveBeenCalled();
   });

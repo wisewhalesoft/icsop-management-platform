@@ -16,6 +16,12 @@ import {
   FORM_NUMBER_PLACEHOLDER,
 } from '../domain/usage-form-number';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import {
+  BLOCKED_ACTION_HINT,
+  BLOCKED_CODE_NOTE,
+  FIELD_WRITE_CODE_NOTE,
+} from '../domain/error-code-note';
 import { PageHeader } from '../components/PageHeader';
 import { FormatBadge } from '../components/UsageFormFormatBadge';
 import {
@@ -180,8 +186,12 @@ export function UsageFormCreatePage(): JSX.Element {
         </div>
         <h1 className="font-semibold text-slate-900">無新增使用表單權限</h1>
         <p className="text-sm text-slate-500 mt-1">{BLOCK_MESSAGE[role ?? ''] ?? ''}</p>
-        <p className="text-xs mono text-slate-400 mt-2">
-          {role === 'SysAdmin' ? 'FIELD_WRITE_FORBIDDEN · 403' : 'PERMISSION_DENIED · 403'}
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote
+            infoKey="blocked-403"
+            paragraphs={[role === 'SysAdmin' ? FIELD_WRITE_CODE_NOTE : BLOCKED_CODE_NOTE]}
+          />
         </p>
       </div>
     );
@@ -214,15 +224,23 @@ export function UsageFormCreatePage(): JSX.Element {
         </button>
       </PageHeader>
 
-      {/* 單一動作一次送出之明示（`AC-N43` 回歸鎖定；純版面搬遷、後端契約不變）。 */}
+      {/*
+        單一動作一次送出之明示（`AC-N43` 回歸鎖定）。
+        🔵 2026-09-23 全站文案稽核：整段原本是**改版說明（changelog）**，不是操作說明——
+           「純版面搬遷（彈窗 → 獨立整頁）」「後端建立端點之語意、欄位名與錯誤碼逐字不變」
+           回答的是「這次改了什麼」，使用者沒有問這個問題。
+        📝 已作廢（⚠ 不得復原）：
+          OLD> 本頁為**純版面搬遷**（彈窗 → 獨立整頁）：仍是**單一動作一次送出**——按「儲存」時
+          OLD> 檔案、名稱、編號與制定部門一併建立，**不會**先建立一筆無檔案的空殼記錄。
+          OLD> 後端建立端點之語意、欄位名與錯誤碼逐字不變。
+        🔒 `AC-N43` 所要鎖的**行為**（一次送出、不留空殼）仍以使用者語言完整保留。
+      */}
       <div className="flex items-start gap-2 rounded-lg border border-primary-200 bg-primary-50/50 px-3 py-2.5 text-xs text-slate-600">
         <Icon name="info" className="w-4 h-4 mt-0.5 shrink-0 text-primary-600" />
         <span>
-          本頁為<strong className="text-slate-800">純版面搬遷</strong>（彈窗 → 獨立整頁）：仍是
-          <strong className="text-slate-800">單一動作一次送出</strong>
-          ——按「儲存」時檔案、名稱、編號與制定部門一併建立，
-          <strong className="text-slate-800">不會</strong>
-          先建立一筆無檔案的空殼記錄。後端建立端點之語意、欄位名與錯誤碼逐字不變。
+          按一次「儲存」即完成建立——檔案、名稱、編號與制定部門會
+          <strong className="text-slate-800">一併送出</strong>；中途離開
+          <strong className="text-slate-800">不會</strong>留下任何半成品記錄。
         </span>
       </div>
 
@@ -344,10 +362,17 @@ export function UsageFormCreatePage(): JSX.Element {
         <p className="text-xs text-amber-700 mb-2 flex items-start gap-1.5">
           <Icon name="alert-triangle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           <span>
-            ⚠ 本欄為<strong>純顯示與清單篩選用之 metadata</strong>，
-            <strong>不影響任何可見性或權限判定</strong>
-            ——與「文件使用部門」（DOC_USING_DEPT，會展開子樹判權限）結構同構但用途完全不同，
-            <strong>不得</strong>接進同一套子樹判定（AC-N46）。
+            {/*
+              🔵 2026-09-23 全站文案稽核：`metadata`、內部欄位名與 AC 編號移出可見文字。
+              📝 已作廢（⚠ 不得復原）：
+                OLD> ⚠ 本欄為**純顯示與清單篩選用之 metadata**，**不影響任何可見性或權限判定**
+                OLD> ——與「文件使用部門」（DOC_USING_DEPT，會展開子樹判權限）結構同構但用途完全不同，
+                OLD> **不得**接進同一套子樹判定（AC-N46）。
+              🔒 使用者真正需要知道的是：**填了也不會改變誰看得到這張表單**（否則會誤用本欄當權限）。
+            */}
+            ⚠ 本欄僅供顯示與清單篩選，
+            <strong>不會影響誰看得到或能不能使用這張表單</strong>
+            ；與 ICSOP 文件的「文件使用部門」名稱相近但用途不同。
           </span>
         </p>
         <DraftingDeptPicker

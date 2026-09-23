@@ -17,7 +17,7 @@ import type { SessionUser, UsageFormPoolItem } from '../api/types';
  *  - `AC-X6`（topbar 動作區之「匯出」鈕；`aria-label="匯出"`、icon 鍵 `download`；
  *    📌 **匯出為讀取類動作**：SysAdmin 唯讀角色**允許**匯出，故本鈕**非** write-only）
  *  - `AC-X7`（匯出帶入與清單查詢**相同**之篩選 ⇒ 範圍＝當前篩選之全部結果，非當前頁）
- *  - `AC-X10`（成功片段 `已匯出表單清單（CSV，UTF-8 BOM）`；超限逐字
+ *  - `AC-X10`（成功片段 `已匯出表單清單（CSV）`；超限逐字
  *    `符合條件之筆數為 {N} 筆，超過匯出上限 10000 筆，請縮小篩選條件` ＋ `EXPORT_ROW_LIMIT_EXCEEDED · 400`；
  *    ⚠ 與 F037／F038 之句式差異為**刻意**——本頁量詞為「筆數」、限定詞為「篩選條件」，
  *    與 F039 附錄匯出同型）
@@ -37,7 +37,7 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => navigateMock };
 });
 
-const SUCCESS = '已匯出表單清單（CSV，UTF-8 BOM）';
+const SUCCESS = '已匯出表單清單（CSV）';
 const OVER_LIMIT = (n: number) => `符合條件之筆數為 ${n} 筆，超過匯出上限 10000 筆，請縮小篩選條件`;
 const ERROR_BADGE = 'EXPORT_ROW_LIMIT_EXCEEDED · 400';
 
@@ -204,7 +204,7 @@ describe('UsageFormManagementPage 匯出之使用者可見回饋（AC-X10 逐字
     document.querySelectorAll('[data-testid^="topbar-"]').forEach((n) => n.remove());
   });
 
-  it('AC-X10 成功 → 回饋以逐字片段 `已匯出表單清單（CSV，UTF-8 BOM）` 起始', async () => {
+  it('AC-X10 成功 → 回饋以逐字片段 `已匯出表單清單（CSV）` 起始', async () => {
     vi.mocked(endpoints.exportUsageFormPool).mockResolvedValue(undefined);
     mockAuth('ICSOPAdmin');
     const { actionsEl } = renderWithTopbar();
@@ -233,7 +233,7 @@ describe('UsageFormManagementPage 匯出之使用者可見回饋（AC-X10 逐字
     expect(msg.textContent).not.toContain('請縮小查詢條件');
   });
 
-  it('其他錯誤 → 以 `匯出失敗：{code}` 呈現（不吞錯、不顯示成功）', async () => {
+  it('其他錯誤 → 訊息本文為使用者語言、代碼走 code 小字欄（不吞錯、不顯示成功）', async () => {
     vi.mocked(endpoints.exportUsageFormPool).mockRejectedValue(
       new ApiError(500, 'INTERNAL_ERROR'),
     );
@@ -241,7 +241,11 @@ describe('UsageFormManagementPage 匯出之使用者可見回饋（AC-X10 逐字
     const { actionsEl } = renderWithTopbar();
     await waitFor(() => expect(endpoints.getUsageFormOverview).toHaveBeenCalled());
     await userEvent.click(within(actionsEl).getByRole('button', { name: '匯出' }));
-    expect(await screen.findByText('匯出失敗：INTERNAL_ERROR')).toBeInTheDocument();
+    expect(await screen.findByText('匯出失敗，請稍後再試。')).toBeInTheDocument();
+    // 🔴 代碼仍在，但住在自己的 `toast.code` 小字節點裡，不串進訊息本文。
+    const code = screen.getByText('INTERNAL_ERROR');
+    expect(code.textContent).toBe('INTERNAL_ERROR');
+    expect(code.className).toContain('mono');
     expect(screen.queryByText(startsWith(SUCCESS))).toBeNull();
   });
 });
