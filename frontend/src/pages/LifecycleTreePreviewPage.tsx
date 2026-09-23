@@ -541,7 +541,12 @@ export function LifecycleTreePreviewPage(): JSX.Element {
   const today = new Date();
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-700">
+    <div className="h-screen flex flex-col bg-slate-50 text-slate-700">
+      {/* 🔵 2026-09-23 使用者裁定：橫向捲軸比照前台樹狀圖（F019 `AC-UX17`）**固定在當前畫面下方**。
+          外層鎖視窗高（`h-screen`）＋畫布 `flex-1 min-h-0 overflow-auto` ⇒ 捲軸屬於畫布、恆在視窗底部；
+          `min-h-screen` 只給下限，畫布會隨樹長高、捲軸掉到內容最底下。
+          🔴 `min-h-0` 不可省：flex 項目之自動最小高＝內容高，沒有它 `h-screen` 也鎖不住畫布。
+          📝 已作廢（⚠ 不得復原）：OLD> 外層 `min-h-screen flex flex-col`、畫布 `flex-1 overflow-auto ...`。 */}
       {/* ===== viewer app bar（不套後台側選單）===== */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shrink-0">
         <div className="px-4 h-14 flex items-center gap-3">
@@ -697,7 +702,7 @@ export function LifecycleTreePreviewPage(): JSX.Element {
       <main
         ref={stageRef}
         data-testid="tree-stage"
-        className="flex-1 overflow-auto p-4 sm:p-8 select-none cursor-grab active:cursor-grabbing"
+        className="flex-1 min-h-0 overflow-auto p-4 sm:p-8 select-none cursor-grab active:cursor-grabbing"
         onClick={onStageClick}
         onPointerDown={onStagePointerDown}
       >

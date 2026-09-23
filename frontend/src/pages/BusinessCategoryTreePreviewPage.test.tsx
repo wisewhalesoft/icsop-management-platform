@@ -190,3 +190,28 @@ describe('BusinessCategoryTreePreviewPage — F043 丁：後台樹狀圖預覽',
     expect(screen.getByRole('button', { name: '下載' })).toBeInTheDocument();
   });
 });
+
+/**
+ * 🔵 2026-09-23 使用者裁定：橫向捲軸比照前台樹狀圖（`AC-UX17`）固定在當前畫面下方。
+ * 🔴 jsdom 不計算版面——此處只鎖 class 契約（外層 `h-screen`＋畫布 `flex-1 min-h-0 overflow-auto`），
+ *    「捲軸是否真的固定在畫面下方」須以真實瀏覽器覆核。明文禁止讀取 offsetHeight 等版面值斷言。
+ */
+describe('BusinessCategoryTreePreviewPage — 橫向捲軸固定於畫面下方（class 契約，2026-09-23）', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockAuth('ICSOPAdmin');
+    vi.mocked(bcApi.getBusinessCategoryTreePreview).mockResolvedValue(PREVIEW);
+    vi.mocked(bcApi.getBusinessCategories).mockResolvedValue(CATEGORIES);
+  });
+
+  it('🔴 外層鎖視窗高（h-screen、非 min-h-screen），畫布同時含 flex-1、min-h-0、overflow-auto', async () => {
+    renderAt();
+    const stage = await screen.findByTestId('tree-stage');
+    expect(stage.className).toMatch(/\bflex-1\b/);
+    expect(stage.className).toMatch(/\bmin-h-0\b/);
+    expect(stage.className).toMatch(/\boverflow-auto\b/);
+    const shell = stage.parentElement!;
+    expect(shell.className).toMatch(/(^|\s)h-screen(\s|$)/);
+    expect(shell.className).not.toMatch(/\bmin-h-screen\b/);
+  });
+});

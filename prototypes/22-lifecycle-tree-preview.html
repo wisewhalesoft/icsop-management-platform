@@ -120,7 +120,10 @@
   path.edge.dim{opacity:.18;}
 </style>
 </head>
-<body class="min-h-screen flex flex-col">
+<!-- 🔵 2026-09-23 使用者裁定：橫向捲軸比照前台樹狀圖（30-public-category-tree.html）固定在畫面下方——
+     外層鎖視窗高＋畫布 flex-1 min-h-0 overflow-auto。
+     📝 已作廢（⚠ 不得復原）：OLD> <body class="min-h-screen flex flex-col">、<main id="stage" class="flex-1 overflow-auto p-4 sm:p-8"> -->
+<body class="h-screen flex flex-col">
 
 <!-- ===== App bar (viewer 樣式，不套後台側選單) ===== -->
 <header class="sticky top-0 z-30 bg-white border-b border-slate-200 shrink-0">
@@ -167,7 +170,7 @@
      左緣推成負座標，而 scrollLeft 不能為負 ⇒ 左半邊的節點永遠捲不回來（05-public-viewer 踩過同一個坑）。
      改 block ＋ #boardSizer 的 margin:0 auto：空間夠時置中、不夠時 auto 解析為 0 ⇒ 只往右溢出、左緣恆可達。
      📝 已作廢（⚠ 不得復原）：OLD> class="... flex justify-center items-start" -->
-<main id="stage" class="flex-1 overflow-auto p-4 sm:p-8">
+<main id="stage" class="flex-1 min-h-0 overflow-auto p-4 sm:p-8">
   <div id="boardSizer">
   <div id="board">
     <svg id="edges" style="position:absolute;inset:0;pointer-events:none;z-index:1;">
