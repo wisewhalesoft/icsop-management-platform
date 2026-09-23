@@ -110,22 +110,27 @@ describe('PermissionMatrixPage — RBAC 矩陣唯讀顯示（F025/F026）', () =
     expect(within(node).getByText('僅F009')).toBeInTheDocument();
   });
 
-  it('G-ADM-015 列註記：角色指派→經帳號管理 modal 執行', () => {
+  it('G-ADM-015 列註記：角色指派→於「帳號管理」中執行', () => {
     mockAuth('SysAdmin');
     renderPage();
     // 🔴 2026-08-25 角色自動化 delta：註記追加 ICSOPAdmin 之受限範圍說明。
     expect(
       screen.getByText(
-        '經帳號管理 modal 執行、非獨立側選單頁；ICSOP管理員不得指派系統管理員／ICSOP管理員',
+        // 🔵 2026-09-23 全站文案稽核：`modal` 為內部詞彙，改以功能名稱陳述。
+        '於「帳號管理」中執行、非獨立側選單頁；ICSOP管理員不得指派系統管理員／ICSOP管理員',
       ),
     ).toBeInTheDocument();
   });
 
-  it('G-ADM-017/018 banner：已定案（badge-check + 共 20 欄，F039 附錄（多）併入已定案）＋草案待審（clock + 分析師草案）', () => {
+  /**
+   * 🔵 2026-09-23 全站文案稽核：草案橫幅不再提「分析師草案」與裁決編號（內部流程角色）。
+   * 📝 已作廢（⚠ 不得復原）：OLD> expect(screen.getByText(/分析師草案/)).toBeInTheDocument();
+   */
+  it('G-ADM-017/018 banner：已定案（badge-check + 共 20 欄）＋草案待審（clock + 待審核定案）', () => {
     mockAuth('SysAdmin');
     const { container } = renderPage();
     expect(screen.getByText(/共 20 欄/)).toBeInTheDocument();
-    expect(screen.getByText(/分析師草案/)).toBeInTheDocument();
+    expect(screen.getByText(/尚待相關單位審核定案/)).toBeInTheDocument();
     expect(container.querySelector('.lucide-badge-check')).not.toBeNull();
     expect(container.querySelector('.lucide-clock')).not.toBeNull();
   });
@@ -150,7 +155,14 @@ describe('PermissionMatrixPage — RBAC 矩陣唯讀顯示（F025/F026）', () =
     const btn = screen.getByRole('button', { name: '編輯' });
     expect(btn.className).toContain('text-slate-400');
     await userEvent.click(btn);
-    expect(await screen.findByText(/程式碼層級/)).toBeInTheDocument();
+    /**
+     * 🔵 2026-09-23：toast 不再敘述實作層級（RBAC 中介層／版本控制）與裁決編號。
+     * 📝 已作廢（⚠ 不得復原）：OLD> expect(await screen.findByText(/程式碼層級/)).toBeInTheDocument();
+     */
+    const tip = await screen.findByText(/本頁為唯讀參照/);
+    expect(tip.textContent).toContain('需要變更請提出申請');
+    expect(tip.textContent).not.toContain('RBAC');
+    expect(tip.textContent).not.toContain('OQ-E08-02');
   });
 
   /**
@@ -236,10 +248,17 @@ describe('PermissionMatrixPage — RBAC 矩陣唯讀顯示（F025/F026）', () =
     const { container } = renderPage();
 
     const EXPECTED =
-      '🟢 已定案（F041 · OQ-E08-04 裁決 B，2026-08-11 人類閘門通過）：一般使用者再細分之子分類「業務／其他」為 ACCOUNT 之獨立欄位，' +
-      '非第 6 種角色——本頁兩份矩陣維持 5 欄、逐格不變（F041 AC-37／AC-38），權限解析函式亦不接受子分類參數。' +
-      '子分類僅影響前台可見之文件範圍（資料列層級：業務者僅見「使用部門相符」之已公告文件），不參與功能授權與欄位授權判定；' +
-      '指派入口見「帳號管理」之指派角色 modal（08）。';
+      /**
+       * 🔵 2026-09-23 全站文案稽核：定案徽章不再附規格代號／裁決編號／人類閘門日期。
+       * 📝 已作廢（⚠ 不得復原）：
+       *   OLD> '🟢 已定案（F041 · OQ-E08-04 裁決 B，2026-08-11 人類閘門通過）：一般使用者再細分…'
+       */
+      '🟢 已定案：一般使用者再細分之子分類「業務／其他」是帳號上的獨立欄位，' +
+      // 🔵 2026-09-23：`ACCOUNT`（資料表欄位名）與 `（F041 AC-37／AC-38）`（規格代號）已移出 UI。
+      '非第 6 種角色——本頁兩份矩陣維持 5 欄、逐格不變，權限解析函式亦不接受子分類參數。' +
+      // 🔵 2026-09-23：`資料列層級`／`modal（08）` 為內部詞彙與 prototype 編號，已改寫。
+      '子分類僅影響前台可見之文件範圍（業務者僅見「使用部門相符」之已公告文件），不參與功能授權與欄位授權判定；' +
+      '指派入口見「帳號管理」之指派角色視窗。';
     const normalize = (el: Element) => el.textContent!.replace(/\s+/g, ' ').trim();
 
     const banner = Array.from(container.querySelectorAll<HTMLElement>('*')).find(
@@ -249,7 +268,7 @@ describe('PermissionMatrixPage — RBAC 矩陣唯讀顯示（F025/F026）', () =
 
     // 既有兩則橫幅仍在（文案不變、未被翻轉為已定案）
     const settledBanner = screen.getByText(/共 20 欄/).closest('div')!;
-    const draftBanner = screen.getByText(/分析師草案/).closest('div')!;
+    const draftBanner = screen.getByText(/尚待相關單位審核定案/).closest('div')!;
     expect(settledBanner).toBeInTheDocument();
     expect(draftBanner).toBeInTheDocument();
 

@@ -13,6 +13,8 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { roleMeta } from '../domain/roles';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
 import type {
@@ -93,7 +95,7 @@ export function OrgSyncPage(): JSX.Element {
       const data = await getOrgSyncRuns();
       setRuns(data);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.code : '載入同步紀錄失敗');
+      toast.error('載入同步紀錄失敗', e instanceof ApiError ? { code: e.code } : undefined);
     } finally {
       setLoading(false);
     }
@@ -174,7 +176,7 @@ export function OrgSyncPage(): JSX.Element {
           toast.error(`${companyLabel(run.compid)} 角色推導未套用，請查看同步歷程`);
         }
       } catch (e) {
-        toast.error(e instanceof ApiError ? `套用失敗：${e.code}` : '套用失敗');
+        toast.error('套用失敗，請稍後再試。', e instanceof ApiError ? { code: e.code } : undefined);
       } finally {
         setTriggering(false);
         await load();
@@ -187,7 +189,7 @@ export function OrgSyncPage(): JSX.Element {
 
   const onTrigger = useCallback(async () => {
     setTriggering(true);
-    toast.info('已啟動手動同步…（互斥鎖已取得）');
+    toast.info('已啟動手動同步…');
     try {
       const results = await triggerOrgSync();
       const totalChange = results.reduce((sum, r) => sum + r.changeCount, 0);
@@ -197,7 +199,7 @@ export function OrgSyncPage(): JSX.Element {
       );
       if (busy.length > 0) {
         toast.info(
-          `${busy.map((r) => companyLabel(r.compid)).join('、')} 同步進行中，本次略過（SYNC_IN_PROGRESS）`,
+          `${busy.map((r) => companyLabel(r.compid)).join('、')} 同步進行中，本次略過`,
         );
       }
       if (otherFailed.length > 0) {
@@ -209,7 +211,7 @@ export function OrgSyncPage(): JSX.Element {
         toast.success(`同步完成，異動 ${totalChange} 筆（頁面已自動更新，無需重新整理）`);
       }
     } catch (e) {
-      toast.error(e instanceof ApiError ? `同步失敗：${e.code}` : '同步失敗');
+      toast.error('同步失敗，請稍後再試。', e instanceof ApiError ? { code: e.code } : undefined);
     } finally {
       setTriggering(false);
       await load();
@@ -225,7 +227,7 @@ export function OrgSyncPage(): JSX.Element {
         setAlerts((list) => list.filter((a) => a.id !== id));
         toast.success('已標記處理完成（記錄處理者/時間）');
       } catch (e) {
-        toast.error(e instanceof ApiError ? `處理失敗：${e.code}` : '處理失敗');
+        toast.error('處理失敗，請稍後再試。', e instanceof ApiError ? { code: e.code } : undefined);
       }
     },
     [toast],
@@ -239,7 +241,10 @@ export function OrgSyncPage(): JSX.Element {
         </div>
         <h1 className="font-semibold text-slate-900">無組織同步管理權限</h1>
         <p className="text-sm text-slate-500 mt-1">{blockedMessage(role)}</p>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }
@@ -330,7 +335,7 @@ export function OrgSyncPage(): JSX.Element {
         </div>
         <p className="text-xs text-slate-400 mt-3 flex items-center gap-1.5">
           <Icon name="info" className="w-3.5 h-3.5" />
-          來源＝外部 MSSQL View（唯讀）；每日排程並可手動觸發。手動觸發後本頁自動更新結果，無需重新整理。
+          資料來源為人資系統（唯讀）；每日自動同步，亦可手動觸發。手動觸發後本頁會自動更新結果，無需重新整理。
         </p>
       </section>
 
@@ -388,7 +393,7 @@ export function OrgSyncPage(): JSX.Element {
                   ))}
                 </div>
                 <p className="text-xs text-slate-400 mt-4">
-                  {`本月（${summary.month}）累計異動分類統計。離職類異動已連動自動停用對應帳號（F005）。`}
+                  {`本月（${summary.month}）累計異動分類統計。離職類異動已連動自動停用對應帳號。`}
                 </p>
               </>
             ) : summaryFailed ? (

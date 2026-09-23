@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { OrgSyncPage } from './OrgSyncPage';
 import { ToastProvider } from '../components/useToast';
 import * as endpoints from '../api/endpoints';
+import { BLOCKED_ACTION_HINT } from '../domain/error-code-note';
 import * as authHook from '../auth/useAuth';
 import { ApiError } from '../api/client';
 import type {
@@ -431,7 +432,7 @@ describe('OrgSyncPage — 頁籤列與總覽 KPI（F006）', () => {
     expect(screen.getByText('4')).toBeInTheDocument();
     expect(screen.getByText('當責待確認')).toBeInTheDocument();
     expect(
-      screen.getByText('本月（2026-07）累計異動分類統計。離職類異動已連動自動停用對應帳號（F005）。'),
+      screen.getByText('本月（2026-07）累計異動分類統計。離職類異動已連動自動停用對應帳號。'),
     ).toBeInTheDocument();
   });
 
@@ -607,7 +608,17 @@ describe('OrgSyncPage — RBAC 前端守門（F006）', () => {
 
       expect(await screen.findByText('無組織同步管理權限')).toBeInTheDocument();
       expect(screen.getByText(message)).toBeInTheDocument();
-      expect(screen.getByText(/PERMISSION_DENIED · 403/)).toBeInTheDocument();
+      /**
+       * 🔵 2026-09-23 全站文案稽核：無權限遮罩之可見小字由錯誤代碼改為引導句，
+       * 代碼移入 ⓘ（內容恆在 DOM、未展開時僅視覺隱藏）。
+       * 📝 已作廢（⚠ 不得復原）：OLD> expect(screen.getByText(/PERMISSION_DENIED · 403/)).toBeInTheDocument();
+       * 🔴 兩半句都要：可見句在（否則遮罩根本沒渲染也會綠）＋代碼**只**在 ⓘ 內容節點裡。
+       */
+      expect(screen.getByText(BLOCKED_ACTION_HINT)).toBeInTheDocument();
+      const info = document.querySelector('[data-info-content="blocked-403"]') as HTMLElement;
+      expect(info, '無權限遮罩缺少 ⓘ 說明節點').not.toBeNull();
+      expect(info.textContent).toContain('PERMISSION_DENIED · 403');
+      expect(info.className).toMatch(/hidden/);
       expect(screen.queryByRole('button', { name: '總覽' })).not.toBeInTheDocument();
       expect(endpoints.getOrgChangeAlerts).not.toHaveBeenCalled();
       expect(endpoints.getOrgSyncMonthlySummary).not.toHaveBeenCalled();

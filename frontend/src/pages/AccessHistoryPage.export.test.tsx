@@ -61,7 +61,7 @@ function pageOf(items: object[], over: Partial<AccessHistoryPageResult> = {}): A
   };
 }
 
-const SUCCESS = '已匯出文件調閱歷程（CSV，UTF-8 BOM）';
+const SUCCESS = '已匯出文件調閱歷程（CSV）';
 const OLD_SUCCESS = '已匯出查詢結果（CSV，草案格式）';
 
 /** CSV 位元組（UTF-8 BOM ＋ 一列表頭 ＋ 一列資料），供 fetch stub 回傳 2xx。 */

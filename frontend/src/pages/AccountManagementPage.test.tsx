@@ -297,7 +297,16 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
     await userEvent.click(screen.getByRole('button', { name: /建立帳號/ }));
     const dialog = screen.getByRole('dialog', { name: /建立手動帳號/ });
     // G-ADM-008 文案
-    expect(within(dialog).getByText('手動帳號密碼將以加鹽雜湊儲存（source=manual）。')).toBeInTheDocument();
+    /**
+     * 🔵 2026-09-23 全站文案稽核：密碼儲存方式（加鹽雜湊）與來源欄位值（`source=manual`）
+     * 都是實作細節——使用者不會因此改變任何操作。
+     * 📝 已作廢（⚠ 不得復原）：OLD> '手動帳號密碼將以加鹽雜湊儲存（source=manual）。'
+     * 🔒 這句話真正要回答的是「這種帳號跟公司帳號有什麼不一樣」，改以此為可見內容。
+     */
+    const hint = within(dialog).getByText('手動建立之帳號由本系統自行驗證密碼，不經公司帳號登入。');
+    expect(hint).toBeInTheDocument();
+    expect(hint.textContent).not.toContain('雜湊');
+    expect(hint.textContent).not.toContain('source=manual');
     expect(within(dialog).getByPlaceholderText('例：20500（5 位數帳號）')).toBeInTheDocument();
     expect(within(dialog).getByText('僅 5 種固定角色，不可新增/刪除角色種類。')).toBeInTheDocument();
     // G-ADM-007 密碼顯示切換

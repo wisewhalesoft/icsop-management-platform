@@ -162,15 +162,28 @@ describe('DocIndexPage — 文件索引管理（F031）', () => {
     expect(btn).toBeDisabled();
   });
 
-  it('G-ADM-033 intro 完整文案 + 表格 min-w-[920px]', async () => {
+  /**
+   * 🔵 2026-09-23 全站文案稽核：intro 之管線架構敘述（ingestion／向量索引／過濾於檢索層）
+   * 與規格代號移入 ⓘ；可見句只說「這頁是做什麼的」。
+   * 📝 已作廢（⚠ 不得復原）：OLD> expect(screen.getByText(/各自獨立手動上傳、系統不自動轉檔/)).toBeInTheDocument();
+   * 🔴 三半句：可見句在、實作詞彙不在可見句、細節確實仍在 ⓘ 內容節點裡（不是被刪掉）。
+   */
+  it('G-ADM-033 intro 可見句不含實作詞彙、細節移入 ⓘ + 表格 min-w-[920px]', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
-    expect(screen.getByText(/各自獨立手動上傳、系統不自動轉檔/)).toBeInTheDocument();
+    const intro = screen.getByText(/本頁檢視各份程序書供 AI 智慧問答使用的內容抽取結果/);
+    const note = document.querySelector('[data-info-content="doc-index-intro"]') as HTMLElement;
+    expect(note, 'intro 缺少 ⓘ 說明節點').not.toBeNull();
+    const visibleOnly = (intro.textContent ?? '').replace(note.textContent ?? '', '');
+    for (const w of ['ingestion', '向量索引', 'metadata', '檢索層', 'OQ-E09-10', 'F033']) {
+      expect(visibleOnly, `intro 可見句不得含「${w}」`).not.toContain(w);
+    }
+    expect(note.textContent).toContain('系統不會自動轉檔');
     expect(screen.getByRole('table').className).toContain('min-w-[920px]');
   });
 
-  it('G-ADM-034 chunk 預覽：循環名 pill + chunk-id chip + 清洗語句', async () => {
+  it('G-ADM-034 抽取結果預覽：循環名 pill + 段序徽章（無內部 chunk id）+ 清洗語句', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
@@ -179,10 +192,15 @@ describe('DocIndexPage — 文件索引管理（F031）', () => {
     const dialog = screen.getByRole('dialog', { name: '提取結果預覽' });
     // 循環名（lifecycleName）取代 documentNumber
     expect(within(dialog).getByText('銷售及收款循環')).toBeInTheDocument();
-    // chunk-id chip
-    expect(within(dialog).getByText('ICSOP-SRC-101-1-01#c01')).toBeInTheDocument();
+    /**
+     * 🔵 2026-09-23 全站文案稽核：chunk 內部識別碼已自畫面移除（管理員判斷抽取品質用不到）。
+     * 📝 已作廢（⚠ 不得復原）：OLD> expect(within(dialog).getByText('ICSOP-SRC-101-1-01#c01')).toBeInTheDocument();
+     */
+    expect(within(dialog).queryByText('ICSOP-SRC-101-1-01#c01')).toBeNull();
+    // 段序徽章仍在（它是管理員逐段核對的依據）
+    expect(within(dialog).getByText('第 1 段')).toBeInTheDocument();
     // 清洗語句（prototype 完整版）
-    expect(within(dialog).getByText(/已清洗頁首頁尾/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/已去除頁首頁尾/)).toBeInTheDocument();
   });
 
   it('TS-F031-009 ICSOPAdmin 重新索引 → 確認後呼叫 reindexDocument', async () => {

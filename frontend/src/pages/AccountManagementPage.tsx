@@ -36,6 +36,8 @@ import {
 import { buildOrgPath } from '../domain/org-path';
 import { RoleBadge } from '../components/RoleBadge';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
 import type {
@@ -584,7 +586,10 @@ export function AccountManagementPage(): JSX.Element {
         </div>
         <h1 className="font-semibold text-slate-900">無帳號管理權限</h1>
         <p className="text-sm text-slate-500 mt-1">{blockedMessage(role)}</p>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }
@@ -782,7 +787,7 @@ export function AccountManagementPage(): JSX.Element {
           onClose={() => setCreateOpen(false)}
           onCreated={async () => {
             setCreateOpen(false);
-            toast.success('已建立帳號（密碼加鹽雜湊儲存）');
+            toast.success('已建立帳號');
             await load();
           }}
           onError={(e) => toast.error(msgOf(e))}
@@ -809,7 +814,7 @@ export function AccountManagementPage(): JSX.Element {
           onClose={() => setRoleTarget(null)}
           onAssigned={async () => {
             setRoleTarget(null);
-            toast.success('角色已更新（下次請求即生效）');
+            toast.success('角色已更新，立即生效');
             await load();
           }}
           onError={(e) => toast.error(msgOf(e))}
@@ -907,7 +912,7 @@ function CreateModal({
     <Overlay>
       <div role="dialog" aria-labelledby="createTitle" className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto">
         <h3 id="createTitle" className="font-semibold text-slate-900 mb-1">建立手動帳號</h3>
-        <p className="text-xs text-slate-400 mb-4">手動帳號密碼將以加鹽雜湊儲存（source=manual）。</p>
+        <p className="text-xs text-slate-400 mb-4">手動建立之帳號由本系統自行驗證密碼，不經公司帳號登入。</p>
         <div className="space-y-3">
           <div>
             <label htmlFor="cLoginId" className="block text-sm font-medium text-slate-700 mb-1">
@@ -1074,7 +1079,7 @@ function EditModal({
               value={password}
               onChange={setPassword}
               placeholder="輸入新密碼以重設"
-              helper="重設後以加鹽雜湊儲存，使用者須以新密碼登入；留空則不變更。"
+              helper="重設後使用者須以新密碼登入；留空則不變更。"
             />
           )}
         </div>

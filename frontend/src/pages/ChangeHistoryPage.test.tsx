@@ -131,7 +131,7 @@ describe('ChangeHistoryPage — F037/F038', () => {
     await userEvent.click(screen.getByText(/程序書書名：舊書名 → 新書名/));
 
     await waitFor(() => expect(endpoints.viewDocumentChanges).toHaveBeenCalledWith('d1'));
-    expect(screen.getByText(/展開檢視已寫入/)).toBeInTheDocument();
+    expect(screen.getByText(/本次展開已記錄/)).toBeInTheDocument(); // 🔵 2026-09-23：稽核事件代碼移出可見文字
   });
 
   it('主管無權 → 顯示封鎖畫面、不呼叫任何端點', () => {
@@ -294,13 +294,22 @@ describe('ChangeHistoryPage — F037/F038', () => {
     );
   });
 
-  it('TS-LCC-D-011 頁尾說明文案含「架構決策」與「變更前＝前一筆快照」', async () => {
+  /**
+   * 🔵 2026-09-23 全站文案稽核：「架構決策」四個字是講給工程師聽的。
+   * 📝 已作廢（⚠ 不得復原）：
+   *   OLD> expect(screen.getByText(/架構決策/)).toBeInTheDocument();
+   *   OLD> expect(screen.getByText(/變更前＝前一筆快照/)).toBeInTheDocument();
+   * 🔒 使用者要知道的事實（看得到變更前後的完整對照）仍以使用者語言保留並鎖住。
+   */
+  it('TS-LCC-D-011 頁尾說明以使用者語言陳述前後對照（不含「架構決策」「快照」）', async () => {
     mockAuth('SysAdmin');
     render(<ChangeHistoryPage />);
     await userEvent.click(screen.getByRole('button', { name: /循環樹狀圖/ }));
     await waitFor(() => expect(screen.getByText('新增節點『撥款核准作業』')).toBeInTheDocument());
-    expect(screen.getByText(/架構決策/)).toBeInTheDocument();
-    expect(screen.getByText(/變更前＝前一筆快照/)).toBeInTheDocument();
+    const note = screen.getByText(/每筆事件呈現變更前後的完整樹狀圖對照/);
+    expect(note).toBeInTheDocument();
+    expect(note.textContent).not.toContain('架構決策');
+    expect(note.textContent).not.toContain('快照');
   });
 
   it('TS-LCC-D-012 getLifecycleTreeDiff 失敗（404）→ 顯示錯誤、不開啟 modal', async () => {
@@ -313,7 +322,8 @@ describe('ChangeHistoryPage — F037/F038', () => {
     await waitFor(() => expect(screen.getByText('新增節點『撥款核准作業』')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /預覽/ }));
     await waitFor(() =>
-      expect(screen.getByText(/LIFECYCLE_CHANGE_LOG_NOT_FOUND/)).toBeInTheDocument(),
+      // 🔵 2026-09-23：訊息本文改為使用者語言，代碼改走 ⓘ（內容恆在 DOM）。
+      expect(screen.getByText(/載入失敗，請稍後再試/)).toBeInTheDocument(),
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -428,7 +438,7 @@ describe('ChangeHistoryPage — F037/F038', () => {
     render(<ChangeHistoryPage />);
     await waitFor(() => expect(screen.getByText(/文件狀態：有效 → 失效/)).toBeInTheDocument());
     await userEvent.click(screen.getByText(/文件狀態：有效 → 失效/));
-    expect(await screen.findByText(/展開檢視已寫入/)).toBeInTheDocument();
+    expect(await screen.findByText(/本次展開已記錄/)).toBeInTheDocument(); // 🔵 2026-09-23：同上
     expect(screen.queryByText(/切換原因：/)).not.toBeInTheDocument();
   });
 });
@@ -525,20 +535,35 @@ describe('ChangeHistoryPage — prototype-alignment G-LC-022..032', () => {
     await waitFor(() => expect(screen.getByText('同儲存/60 秒內')).toBeInTheDocument());
   });
 
-  it('G-LC-027 scope note 含 OQ-E07-04 定案、下載、LIFECYCLE_CHANGELOG_*', async () => {
+  /**
+   * 🔵 2026-09-23 全站文案稽核：裁決編號（`OQ-E07-04 定案`）與稽核事件代碼
+   * （`CHANGE_LOG_VIEW` / `LIFECYCLE_CHANGELOG_*` / `BUSINESS_CATEGORY_CHANGELOG_*`）移出 UI。
+   * 📝 已作廢（⚠ 不得復原）：
+   *   OLD> expect(screen.getByText(/OQ-E07-04 定案/)).toBeInTheDocument();
+   *   OLD> expect(screen.getByText(/查詢\/展開\/預覽\/下載均寫入/)).toBeInTheDocument();
+   *   OLD> expect(screen.getByText('LIFECYCLE_CHANGELOG_*')).toBeInTheDocument();
+   * 🔒 scope note 仍須同時說明**查詢範圍**與**行為會被記錄**兩件事。
+   */
+  it('G-LC-027 scope note 說明查詢範圍與「操作會留下紀錄」，且不含裁決編號與事件代碼', async () => {
     mockAuth('SysAdmin');
     vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [DOC_CHANGE], total: 1 });
     render(<ChangeHistoryPage />);
-    expect(screen.getByText(/OQ-E07-04 定案/)).toBeInTheDocument();
-    expect(screen.getByText(/查詢\/展開\/預覽\/下載均寫入/)).toBeInTheDocument();
-    expect(screen.getByText('LIFECYCLE_CHANGELOG_*')).toBeInTheDocument();
+    const note = screen.getByText(/查詢範圍/);
+    expect(note.textContent).toContain('全公司');
+    expect(note.textContent).toContain('都會留下紀錄');
+    for (const w of ['OQ-E07-04', 'CHANGE_LOG_VIEW', 'LIFECYCLE_CHANGELOG_', 'BUSINESS_CATEGORY_CHANGELOG_']) {
+      expect(note.textContent, `scope note 不得含「${w}」`).not.toContain(w);
+    }
   });
 
   it('G-LC-028 DocTab 頁尾含附件「已替換」不保留舊檔說明', async () => {
     mockAuth('SysAdmin');
     vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [DOC_CHANGE], total: 1 });
     render(<ChangeHistoryPage />);
-    expect(screen.getByText(/附件僅記「已替換」事件、不保留舊檔/)).toBeInTheDocument();
+    // 🔵 2026-09-23：`append-only 欄位層事件日誌` 已改寫為使用者語言；限制本身仍鎖住。
+    const note = screen.getByText(/附件僅記錄「已替換」/);
+    expect(note.textContent).toContain('舊檔不再保留');
+    expect(note.textContent).not.toContain('append-only');
   });
 
   it('G-LC-030 diff 板採 mini 佈局（節點寬 142px）', async () => {

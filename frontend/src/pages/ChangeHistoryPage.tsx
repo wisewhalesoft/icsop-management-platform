@@ -22,6 +22,13 @@ import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { lifecycleDisplayName } from '../domain/lifecycle-subcategory';
 import { businessCategoryDisplayName } from '../domain/business-category';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import {
+  BLOCKED_ACTION_HINT,
+  BLOCKED_CODE_NOTE,
+  errorCodeNote,
+  LOAD_FAILED_TEXT,
+} from '../domain/error-code-note';
 import { PageHeader, TopbarActions } from '../components/PageHeader';
 import { watermarkPresentation } from '../domain/watermark-lines';
 import {
@@ -37,7 +44,16 @@ import {
   isExportLimitError,
 } from '../domain/export-feedback';
 
-const msgOf = (e: unknown): string => (e instanceof ApiError ? e.code : '載入失敗');
+/**
+ * 🔵 2026-09-23 全站文案稽核：原本把 `e.code` 當成**訊息本文**直接顯示給使用者。
+ * 📝 已作廢（⚠ 不得復原）：OLD> const msgOf = (e) => (e instanceof ApiError ? e.code : '載入失敗');
+ * 🔒 代碼並未消失——它改走本頁既有的 `feedback.code` 小字欄（見 `FeedbackBanner`），
+ *    或 ⓘ；訊息本文一律是使用者看得懂的句子。
+ */
+const msgOf = (_e: unknown): string => '請稍後再試';
+
+/** 取回報用之錯誤代碼（僅供 `feedback.code` 小字欄，不進訊息本文）。 */
+const codeOf = (e: unknown): string | undefined => (e instanceof ApiError ? e.code : undefined);
 
 /**
  * 🔴🔴 §A.10.3 **`PREVIEW_KIND` 分派契約**（下游必須實作之分派點，非實作註解）。
@@ -121,7 +137,7 @@ function exportFailureFeedback(e: unknown): ExportFeedback {
       code: EXPORT_LIMIT_BADGE,
     };
   }
-  return { tone: 'error', message: `匯出失敗：${msgOf(e)}` };
+  return { tone: 'error', message: `匯出失敗，${msgOf(e)}`, code: codeOf(e) };
 }
 
 /** 匯出回饋之呈現（`role="status"`／`role="alert"`；訊息與碼為兩個獨立元素）。 */
@@ -441,9 +457,12 @@ export function ChangeHistoryPage(): JSX.Element {
         </div>
         <h1 className="font-semibold text-slate-900">無變更歷程查詢權限</h1>
         <p className="text-sm text-slate-500 mt-1">
-          僅系統管理員／ICSOP 管理員可存取本功能（主管／部門窗口／一般使用者無權，OQ-E07-04 定案）。
+          僅系統管理員／ICSOP 管理員可存取本功能。
         </p>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }
@@ -456,9 +475,15 @@ export function ChangeHistoryPage(): JSX.Element {
       <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-sm border bg-primary-50 border-primary-100 text-primary-700">
         <Icon name="globe" className="w-4 h-4 mt-0.5 shrink-0" />
         <span>
-          查詢範圍：<b>全公司</b>（僅系統管理員 / ICSOP 管理員可查；主管／部門窗口／一般使用者無權，OQ-E07-04 定案）。查詢/展開/預覽/下載均寫入{' '}
-          <span className="mono">CHANGE_LOG_VIEW</span> / <span className="mono">LIFECYCLE_CHANGELOG_*</span> /{' '}
-          <span className="mono">BUSINESS_CATEGORY_CHANGELOG_*</span> 稽核。
+          {/*
+            🔵 2026-09-23 全站文案稽核：裁決編號與稽核事件代碼一律移出可見文字。
+            📝 已作廢（⚠ 不得復原）：
+              OLD> 查詢範圍：**全公司**（僅系統管理員 / ICSOP 管理員可查；主管／部門窗口／一般使用者無權，
+              OLD> OQ-E07-04 定案）。查詢/展開/預覽/下載均寫入 `CHANGE_LOG_VIEW` / `LIFECYCLE_CHANGELOG_*`
+              OLD> / `BUSINESS_CATEGORY_CHANGELOG_*` 稽核。
+            🔒「您的操作會被記錄」對使用者有意義故保留；**哪一個事件代碼**沒有意義故刪除。
+          */}
+          查詢範圍：<b>全公司</b>（僅系統管理員／ICSOP 管理員可查）。您在本頁的查詢、展開、預覽與下載都會留下紀錄。
         </span>
       </div>
 
@@ -544,7 +569,7 @@ function DocTab(): JSX.Element {
   const onExport = useCallback(async () => {
     try {
       await exportDocumentChanges(filters);
-      setFeedback({ tone: 'success', message: '已匯出 ICSOP 程序書變更歷程（CSV，UTF-8 BOM）' });
+      setFeedback({ tone: 'success', message: '已匯出 ICSOP 程序書變更歷程（CSV）' });
     } catch (e) {
       setFeedback(exportFailureFeedback(e));
     }
@@ -648,7 +673,8 @@ function DocTab(): JSX.Element {
 
       {error && (
         <div role="alert" className="mb-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
-          載入失敗 · <span className="mono">{error}</span>
+          {LOAD_FAILED_TEXT}
+          <InfoNote infoKey="load-error" paragraphs={[errorCodeNote(error)]} />
         </div>
       )}
 
@@ -744,7 +770,7 @@ function DocTab(): JSX.Element {
                             </div>
                             <p className="text-[11px] text-slate-400 mt-3 flex items-center gap-1.5">
                               <Icon name="info" className="w-3.5 h-3.5" />
-                              展開檢視已寫入 <span className="mono">CHANGE_LOG_VIEW</span> 稽核；僅呈現舊/新值對照，非還原或下載整份舊文件。
+                              本次展開已記錄；此處僅呈現變動欄位的新舊值，不是還原或下載整份舊文件。
                             </p>
                           </div>
                         </td>
@@ -765,7 +791,14 @@ function DocTab(): JSX.Element {
       </div>
       <p className="mt-3 text-xs text-slate-400 flex items-start gap-1.5">
         <Icon name="shield-check" className="w-3.5 h-3.5 mt-0.5" />
-        變更歷程為 append-only 欄位層事件日誌（僅記變動欄位之舊/新值），非整份歷史版本檔；附件僅記「已替換」事件、不保留舊檔（F037）。
+        {/*
+          🔵 2026-09-23 全站文案稽核：`append-only 欄位層事件日誌` 為實作詞彙。
+          📝 已作廢（⚠ 不得復原）：
+            OLD> 變更歷程為 append-only 欄位層事件日誌（僅記變動欄位之舊/新值），非整份歷史版本檔；
+            OLD> 附件僅記「已替換」事件、不保留舊檔（F037）。
+          🔒 保留的是**使用者會踩到的限制**（不能在這裡取回舊版），不是資料結構。
+        */}
+        本頁只記錄每次變動的欄位新舊值，不保留整份舊版文件；附件僅記錄「已替換」，舊檔不再保留。
       </p>
     </section>
   );
@@ -822,7 +855,7 @@ function TreeTab(): JSX.Element {
   const onExport = useCallback(async () => {
     try {
       await exportLifecycleChanges(filters);
-      setFeedback({ tone: 'success', message: '已匯出循環樹狀圖變更歷程（CSV，UTF-8 BOM）' });
+      setFeedback({ tone: 'success', message: '已匯出循環樹狀圖變更歷程（CSV）' });
     } catch (e) {
       setFeedback(exportFailureFeedback(e));
     }
@@ -847,7 +880,7 @@ function TreeTab(): JSX.Element {
         // 🔴 §A.10.3：經**唯一**分派點送出（Tab 2 之旗標為 `PREVIEW_KIND_LIFECYCLE`）。
         await downloadFromModal(PREVIEW_KIND_LIFECYCLE, lifecycleId, changeLogId);
       } catch (e) {
-        setFeedback({ tone: 'error', message: `下載失敗：${msgOf(e)}` });
+        setFeedback({ tone: 'error', message: `下載失敗，${msgOf(e)}`, code: codeOf(e) });
       } finally {
         setDownloadingId(null);
       }
@@ -936,7 +969,8 @@ function TreeTab(): JSX.Element {
 
       {error && (
         <div role="alert" className="mb-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
-          載入失敗 · <span className="mono">{error}</span>
+          {LOAD_FAILED_TEXT}
+          <InfoNote infoKey="load-error" paragraphs={[errorCodeNote(error)]} />
         </div>
       )}
 
@@ -1010,7 +1044,7 @@ function TreeTab(): JSX.Element {
       </div>
       <p className="mt-3 text-xs text-slate-400 flex items-start gap-1.5">
         <Icon name="shield-check" className="w-3.5 h-3.5 mt-0.5" />
-        「變更後 DAG＝本筆完整快照、變更前＝前一筆快照」（架構決策）；預覽/下載疊加或燒錄浮水印並寫入稽核（F038）。
+        每筆事件呈現變更前後的完整樹狀圖對照；預覽與下載都會留下紀錄，取得的檔案帶有您的身分浮水印。
       </p>
 
       {preview && (
@@ -1090,7 +1124,7 @@ function BusinessTab(): JSX.Element {
   const onExport = useCallback(async () => {
     try {
       await exportBusinessCategoryChanges(filters);
-      setFeedback({ tone: 'success', message: '已匯出業務/功能類別樹狀圖變更歷程（CSV，UTF-8 BOM）' });
+      setFeedback({ tone: 'success', message: '已匯出業務/功能類別樹狀圖變更歷程（CSV）' });
     } catch (e) {
       setFeedback(exportFailureFeedback(e));
     }
@@ -1120,7 +1154,7 @@ function BusinessTab(): JSX.Element {
         // 少了它，本鈕會去查循環側事件、查不到就靜默無反應。
         await downloadFromModal(PREVIEW_KIND_BUSINESS, businessCategoryId, changeLogId);
       } catch (e) {
-        setFeedback({ tone: 'error', message: `下載失敗：${msgOf(e)}` });
+        setFeedback({ tone: 'error', message: `下載失敗，${msgOf(e)}`, code: codeOf(e) });
       } finally {
         setDownloadingId(null);
       }
@@ -1215,7 +1249,8 @@ function BusinessTab(): JSX.Element {
 
       {error && (
         <div role="alert" className="mb-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
-          載入失敗 · <span className="mono">{error}</span>
+          {LOAD_FAILED_TEXT}
+          <InfoNote infoKey="load-error" paragraphs={[errorCodeNote(error)]} />
         </div>
       )}
 
@@ -1294,8 +1329,7 @@ function BusinessTab(): JSX.Element {
       </div>
       <p className="mt-3 text-xs text-slate-400 flex items-start gap-1.5">
         <Icon name="shield-check" className="w-3.5 h-3.5 mt-0.5" />
-        「變更後 DAG＝本筆完整快照、變更前＝前一筆快照」；預覽/下載疊加或燒錄浮水印並寫入
-        <span className="mono">BUSINESS_CATEGORY_CHANGELOG_*</span> 稽核（F043 AC-41）。
+        每筆事件呈現變更前後的完整樹狀圖對照；預覽與下載都會留下紀錄，取得的檔案帶有您的身分浮水印。
       </p>
 
       {preview && (
@@ -1304,7 +1338,6 @@ function BusinessTab(): JSX.Element {
           event={preview.event}
           data={preview.data}
           ownerNoun="業務/功能類別"
-          auditFamily="BUSINESS_CATEGORY_CHANGELOG_VIEW"
           onClose={() => setPreview(null)}
           onDownload={() => void onDownloadDiff(preview.event.businessCategoryId, preview.event.id)}
           downloading={downloadingId === preview.event.id}
@@ -1499,7 +1532,6 @@ function TreeDiffModal({
   onDownload,
   downloading,
   ownerNoun = '循環',
-  auditFamily = 'LIFECYCLE_CHANGELOG_VIEW',
 }: {
   title: string;
   /** 🔵 §A.10.3：Tab 2／Tab 3 **共用同一個 modal**，故以結構最小集承接兩種事件。 */
@@ -1515,8 +1547,11 @@ function TreeDiffModal({
   downloading: boolean;
   /** 空 DAG 說明句之擁有者名詞（預設 `循環` ⇒ 循環側逐字不變）。 */
   ownerNoun?: string;
-  /** 稽核家族徽章（預設循環側之既有值 ⇒ 逐字不變；Tab 3 傳 `BUSINESS_CATEGORY_CHANGELOG_VIEW`）。 */
-  auditFamily?: string;
+  /**
+   * 🔵 2026-09-23 全站文案稽核：`auditFamily` 之唯一用途是把稽核事件代碼印在徽章上，
+   * 該代碼對使用者無意義 ⇒ 整個 prop 隨文案一併移除（徽章本身保留，改為「本次預覽已記錄」）。
+   * 📝 已作廢（⚠ 不得復原）：OLD> auditFamily?: string;（預設 `LIFECYCLE_CHANGELOG_VIEW`）
+   */
 }): JSX.Element {
   return (
     <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-900/45 p-4" role="dialog" aria-label="新舊樹狀圖對照預覽">
@@ -1547,7 +1582,7 @@ function TreeDiffModal({
           </span>
           <span className="ml-auto inline-flex items-center gap-1 text-primary-600">
             <Icon name="shield-check" className="w-3.5 h-3.5" />
-            本預覽已寫入 <span className="mono">{auditFamily}</span> 稽核
+            本次預覽已記錄
           </span>
         </div>
 

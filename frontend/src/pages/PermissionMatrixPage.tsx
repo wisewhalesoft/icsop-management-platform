@@ -7,6 +7,8 @@ import {
 } from '../domain/function-matrix';
 import { RoleBadge } from '../components/RoleBadge';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
 
@@ -31,23 +33,33 @@ import { useToast } from '../components/useToast';
  * （AC-45 以空白正規化後之 `textContent` 逐字比對）。
  */
 const F041_NOTICE: readonly { text: string; style?: 'b' | 'mono' }[] = [
-  { text: '🟢 已定案（F041 · OQ-E08-04 裁決 B，2026-08-11 人類閘門通過）', style: 'b' },
+  /**
+   * 🔵 2026-09-23 全站文案稽核（使用者裁決 A）：規格代號／裁決編號／閘門日期**不得出現在 UI**。
+   * 📝 已作廢（⚠ 不得復原）：OLD> '🟢 已定案（F041 · OQ-E08-04 裁決 B，2026-08-11 人類閘門通過）'
+   */
+  { text: '🟢 已定案', style: 'b' },
   { text: '：一般使用者再細分之子分類「' },
   { text: '業務', style: 'b' },
   { text: '／' },
   { text: '其他', style: 'b' },
-  { text: '」為 ' },
-  { text: 'ACCOUNT', style: 'mono' },
-  { text: ' 之獨立欄位，' },
+  /**
+   * 🔵 2026-09-23 全站文案稽核：`ACCOUNT` 是資料表欄位名，對使用者無意義。
+   * 📝 已作廢（⚠ 不得復原）：OLD> { text: '」為 ' }, { text: 'ACCOUNT', style: 'mono' }, { text: ' 之獨立欄位，' },
+   */
+  { text: '」是帳號上的獨立欄位，' },
   { text: '非第 6 種角色', style: 'b' },
   { text: '——本頁兩份矩陣維持 ' },
   { text: '5 欄、逐格不變', style: 'b' },
-  { text: '（F041 AC-37／AC-38），權限解析函式亦不接受子分類參數。子分類僅影響' },
+  /**
+   * 🔵 2026-09-23 全站文案稽核：段落內之規格代號一併移除（首段已於本輪移除）。
+   * 📝 已作廢（⚠ 不得復原）：OLD> '（F041 AC-37／AC-38），權限解析函式亦不接受子分類參數。子分類僅影響'
+   */
+  { text: '，權限解析函式亦不接受子分類參數。子分類僅影響' },
   { text: '前台可見之文件範圍', style: 'b' },
   {
     text:
-      '（資料列層級：業務者僅見「使用部門相符」之已公告文件），不參與功能授權與欄位授權判定；' +
-      '指派入口見「帳號管理」之指派角色 modal（08）。',
+      '（業務者僅見「使用部門相符」之已公告文件），不參與功能授權與欄位授權判定；' +
+      '指派入口見「帳號管理」之指派角色視窗。',
   },
 ];
 
@@ -63,7 +75,7 @@ export const FUNC_DISPLAY: MatrixDisplayRow[] = [
   { label: '帳號管理', cells: ['CRUD', 'CRUD', '無', '無', '無'] },
   {
     label: '角色指派',
-    note: '經帳號管理 modal 執行、非獨立側選單頁；ICSOP管理員不得指派系統管理員／ICSOP管理員',
+    note: '於「帳號管理」中執行、非獨立側選單頁；ICSOP管理員不得指派系統管理員／ICSOP管理員',
     cells: ['CRUD', '受限CRUD', '無', '無', '無'],
   },
   // 🔴 2026-09-02 人類裁決：主管由「唯讀」改為「無」（權威＝ backend rbac/function-matrix.ts）。
@@ -79,7 +91,7 @@ export const FUNC_DISPLAY: MatrixDisplayRow[] = [
    */
   {
     label: 'OJT 進度管理',
-    note: '主管／部門窗口可新增場次但不可刪除；刪除限 ICSOP管理員（端點層把關，非矩陣格值）',
+    note: '主管／部門窗口可新增場次但不可刪除；刪除限 ICSOP管理員',
     cells: ['唯讀', 'CRUD', '受限CRUD', '受限CRUD', '無'],
   },
   { label: '文件索引管理', cells: ['唯讀', 'CRUD', '無', '無', '無'] },
@@ -98,7 +110,7 @@ export const FUNC_DISPLAY: MatrixDisplayRow[] = [
    */
   {
     label: '業務/功能類別管理',
-    note: '主管為「唯讀」，與「循環管理（DAG）」之「無」刻意不同（2026-09-02 同日兩項人類裁決）',
+    note: '主管為「唯讀」，與「循環管理」之「無」不同',
     cells: ['唯讀', 'CRUD', '唯讀', '無', '無'],
   },
 ];
@@ -218,7 +230,10 @@ export function PermissionMatrixPage(): JSX.Element {
         <p className="text-sm text-slate-500 mt-1">
           系統參數設定僅系統管理員可存取。
         </p>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }
@@ -234,14 +249,19 @@ export function PermissionMatrixPage(): JSX.Element {
 
   return (
     <div className="space-y-4 max-w-6xl">
-      <PageHeader breadcrumb={[{ label: '系統參數設定' }, { label: '權限矩陣' }]} title="角色權限矩陣（RBAC）">
+      <PageHeader breadcrumb={[{ label: '系統參數設定' }, { label: '權限矩陣' }]} title="角色權限矩陣">
         <button
           onClick={() =>
             toast.info(
-              '權限矩陣以程式碼層級（RBAC 中介層）定義並版本控制；此頁為唯讀參照。變更須經審核（OQ-E08-02）',
+              /**
+               * 🔵 2026-09-23 全站文案稽核：移除實作層級敘述與裁決編號。
+               * 📝 已作廢（⚠ 不得復原）：
+               *   OLD> '權限矩陣以程式碼層級（RBAC 中介層）定義並版本控制；此頁為唯讀參照。變更須經審核（OQ-E08-02）'
+               */
+              '本頁為唯讀參照，權限矩陣不在此處調整；需要變更請提出申請並經審核。',
             )
           }
-          title="矩陣以程式碼層級定義"
+          title="本頁為唯讀參照"
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-400"
         >
           <Icon name="pencil" className="w-4 h-4" />
@@ -254,13 +274,13 @@ export function PermissionMatrixPage(): JSX.Element {
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 flex items-start gap-2">
           <Icon name="badge-check" className="w-4 h-4 mt-0.5 shrink-0" />
           <div>
-            <b>已定案</b>：系統管理員、主管、部門窗口對 ICSOP 文件全欄位皆<b>唯讀</b>（可檢視、無寫入，與功能矩陣一致）。共 20 欄，含新增之「制定公司／制定部門／制定室別／內容摘要」（制定組織三級＝公司／部／處室，由上而下相依連動）與「附錄（多）」（F039，比照「使用表單（多）」）。
+            <b>已定案</b>：系統管理員、主管、部門窗口對 ICSOP 文件全欄位皆<b>唯讀</b>（可檢視、無寫入，與功能矩陣一致）。共 20 欄，含新增之「制定公司／制定部門／制定室別／內容摘要」（制定組織三級＝公司／部／處室，由上而下相依連動）與「附錄（多）」（比照「使用表單（多）」）。
           </div>
         </div>
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 flex items-start gap-2">
           <Icon name="clock" className="w-4 h-4 mt-0.5 shrink-0" />
           <div>
-            <b>草案待審（OQ-E08-02）</b>：矩陣其餘部分為分析師草案，待利害關係人審核定案；矩陣以 RBAC 中介層於 API 層落實。
+            <b>草案待審</b>：矩陣其餘部分尚待相關單位審核定案。
           </div>
         </div>
         {/* F041 AC-45／F025 AC-U4：子分類非第 6 種角色，兩份矩陣逐格不變、不新增欄（AC-37／AC-38）。
@@ -280,10 +300,10 @@ export function PermissionMatrixPage(): JSX.Element {
       {/* tabs */}
       <div className="flex items-center gap-1 border-b border-slate-200">
         <button onClick={() => setTab('func')} className={tabCls(tab === 'func')}>
-          角色 × 功能（F025）
+          角色 × 功能
         </button>
         <button onClick={() => setTab('field')} className={tabCls(tab === 'field')}>
-          角色 × 欄位（F026）
+          角色 × 欄位
         </button>
       </div>
 
@@ -345,8 +365,14 @@ export function PermissionMatrixPage(): JSX.Element {
 
       <p className="text-xs text-slate-400 flex items-start gap-1.5">
         <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-        前端隱藏選單/唯讀顯示僅為 UX；權限以後端 RBAC 中介層為唯一防線，越權一律 403
-        （PERMISSION_DENIED / FIELD_WRITE_FORBIDDEN）。
+        {/*
+          🔵 2026-09-23 全站文案稽核：實作層之防線敘述不得常駐於 UI。
+          📝 已作廢（⚠ 不得復原）：
+            OLD> 前端隱藏選單/唯讀顯示僅為 UX；權限以後端 RBAC 中介層為唯一防線，越權一律 403
+            OLD> （PERMISSION_DENIED / FIELD_WRITE_FORBIDDEN）。
+          🔒 保留下來的可見句改為回答使用者的問題：「這張表和我實際能做的事一致嗎？」
+        */}
+        本表為實際生效之權限；畫面上看不到或不可編輯的項目，代表該角色確實沒有該項權限。
       </p>
     </div>
   );

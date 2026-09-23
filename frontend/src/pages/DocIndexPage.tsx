@@ -9,6 +9,8 @@ import {
 import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
 import type {
@@ -28,6 +30,17 @@ import type {
 
 type StateFilter = '' | 'success' | 'running' | 'failed' | 'not_built';
 
+
+/**
+ * 🔵 2026-09-23 全站文案稽核：原導言段之機制敘述移入 ⓘ（hover 才看得到）。
+ * 🔒 保留的是**管理員判斷得上的事實**（兩個檔各自獨立上傳、抽取如何切分、權限如何生效），
+ *    刪除的是實作詞彙（ingestion 管線／向量索引／過濾於檢索層而非生成後）與規格代號。
+ */
+const DOC_INDEX_INTRO_NOTE = [
+  'AI 智慧問答的內容來源是 .xls 原件，與呈現／下載用的 ICSOP PDF 各自獨立上傳，系統不會自動轉檔；兩者內容是否一致由 ICSOP 管理員維護。',
+  '抽取時依「章／節」將內容切分成段落，並為每一段標記使用部門、狀態與公告日期；使用者查詢時，只會取得他有權檢視的段落。',
+] as const;
+
 const STATE_META: Record<
   IndexStatusState,
   { label: string; tone: string; icon: string }
@@ -40,8 +53,8 @@ const STATE_META: Record<
 
 const STAGE_LABEL: Record<string, string> = {
   extract: '抽取失敗',
-  chunk: '切 chunk 失敗',
-  embed: '向量化失敗',
+  chunk: '切分段落失敗',
+  embed: '建立索引失敗',
 };
 
 function rowLabel(r: DocIndexOverviewRow): string {
@@ -83,7 +96,7 @@ export function DocIndexPage(): JSX.Element {
         const res = await getDocIndexOverview(state ? { state } : {});
         setOverview(res);
       } catch (e) {
-        toast.error(e instanceof ApiError ? e.code : '載入索引總覽失敗');
+        toast.error('載入索引總覽失敗', e instanceof ApiError ? { code: e.code } : undefined);
       } finally {
         setLoading(false);
       }
@@ -125,7 +138,7 @@ export function DocIndexPage(): JSX.Element {
           setPreviewChunks(await getDocIndexChunks(r.documentId));
         }
       } catch (e) {
-        toast.error(e instanceof ApiError ? e.code : '載入提取結果失敗');
+        toast.error('載入提取結果失敗', e instanceof ApiError ? { code: e.code } : undefined);
       } finally {
         setPreviewLoading(false);
       }
@@ -148,7 +161,7 @@ export function DocIndexPage(): JSX.Element {
       setConfirmRow(null);
       await load(stateFilter);
     } catch (e) {
-      toast.error(e instanceof ApiError ? `重新索引失敗：${e.code}` : '重新索引失敗');
+      toast.error('重新索引失敗，請稍後再試。', e instanceof ApiError ? { code: e.code } : undefined);
     } finally {
       setReindexing(false);
     }
@@ -164,7 +177,10 @@ export function DocIndexPage(): JSX.Element {
         <p className="text-sm text-slate-500 mt-1">
           僅 ICSOP 管理員（可維護）與系統管理員（唯讀）可存取本功能。
         </p>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }
@@ -184,18 +200,24 @@ export function DocIndexPage(): JSX.Element {
       {canRead && !canWrite && (
         <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm border bg-cyan-50 border-cyan-200 text-cyan-800">
           <Icon name="eye" className="w-4 h-4" />
-          唯讀模式 · 系統管理員僅可檢視索引狀態與提取結果，無法觸發重新索引（FIELD_WRITE_FORBIDDEN）。
+          唯讀模式 · 系統管理員僅可檢視索引狀態與提取結果，無法觸發重新索引。
         </div>
       )}
 
       <div className="flex items-start gap-2 text-sm text-slate-500">
         <Icon name="info" className="w-4 h-4 mt-0.5 text-slate-400 shrink-0" />
-        <p>
-          管理端獨立驗證 ingestion 管線品質：由 <strong>.xls 原件</strong>（AI 檢索內容來源；與呈現／下載用
-          ICSOP PDF <strong>各自獨立手動上傳、系統不自動轉檔</strong>，OQ-E09-10 定案）經模板感知抽取／清洗，
-          依「章／節」切為 chunk 並掛 metadata 建立向量索引。每個 chunk 的{' '}
-          <strong>使用部門／狀態／公告日期</strong> metadata 驅動前台{' '}
-          <strong>權限感知檢索</strong>（F033，過濾於檢索層而非生成後）。
+        {/*
+          🔵 2026-09-23 全站文案稽核：管線架構敘述（ingestion／向量索引／過濾於檢索層）與規格代號
+             不得常駐於 UI；本頁讀者是管理員，但他要判斷的是「這份文件抽得對不對」，不是管線怎麼接。
+          📝 已作廢（⚠ 不得復原）：
+            OLD> 管理端獨立驗證 ingestion 管線品質：由 **.xls 原件**（AI 檢索內容來源；與呈現／下載用
+            OLD> ICSOP PDF **各自獨立手動上傳、系統不自動轉檔**，OQ-E09-10 定案）經模板感知抽取／清洗，
+            OLD> 依「章／節」切為 chunk 並掛 metadata 建立向量索引。每個 chunk 的
+            OLD> **使用部門／狀態／公告日期** metadata 驅動前台 **權限感知檢索**（F033，過濾於檢索層而非生成後）。
+        */}
+        <p className="flex items-start gap-1 flex-wrap">
+          本頁檢視各份程序書供 AI 智慧問答使用的內容抽取結果，用以確認抽得完整、抽得正確。
+          <InfoNote infoKey="doc-index-intro" paragraphs={DOC_INDEX_INTRO_NOTE} />
         </p>
       </div>
 
@@ -255,7 +277,7 @@ export function DocIndexPage(): JSX.Element {
                 <th className="text-left font-medium px-4 py-2.5">文件編號 / 名稱</th>
                 <th className="text-left font-medium px-4 py-2.5">.xls 原件</th>
                 <th className="text-left font-medium px-4 py-2.5">索引狀態</th>
-                <th className="text-left font-medium px-4 py-2.5">chunk 數</th>
+                <th className="text-left font-medium px-4 py-2.5">段落數</th>
                 <th className="text-left font-medium px-4 py-2.5">最後索引時間</th>
                 <th className="text-left font-medium px-4 py-2.5">操作</th>
               </tr>
@@ -356,7 +378,7 @@ export function DocIndexPage(): JSX.Element {
 
       <p className="text-xs text-slate-400 flex items-center gap-1.5">
         <Icon name="shield-check" className="w-3.5 h-3.5" />
-        chunk 提取結果僅供管理員檢視，不對一般使用者開放；提取時已清洗頁首頁尾／簽核區／合併空白／流程圖繪製格。
+        抽取結果僅供管理員檢視，不對一般使用者開放；抽取時已自動去除頁首頁尾、簽核區、多餘空白與流程圖繪製格。
       </p>
 
       {/* 提取結果 / 失敗詳情 modal */}
@@ -397,7 +419,7 @@ export function DocIndexPage(): JSX.Element {
                   </dl>
                   <p className="text-xs text-slate-500 mt-3 flex items-start gap-1.5">
                     <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    失敗不留部分／不完整索引殘留；若先前已有索引，將保留舊版繼續服務檢索直到重抽成功（REINDEX_FAILED）。
+                    抽取失敗時不會留下不完整的結果；若先前已建立過，AI 智慧問答會繼續沿用舊版，直到重新抽取成功為止。
                   </p>
                   {canWrite && (
                     <div className="mt-4">
@@ -420,18 +442,18 @@ export function DocIndexPage(): JSX.Element {
                   <div className="flex items-start gap-2 rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500">
                     <Icon name="sparkles" className="w-3.5 h-3.5 mt-0.5 text-primary-500 shrink-0" />
                     <span>
-                      共 <strong className="text-slate-700">{previewChunks?.length ?? 0}</strong> 個 chunk（依「節」切分，每 chunk 對應一個完整作業步驟）。已清洗頁首頁尾／簽核區／合併儲存格空白／流程圖繪製格；「作業內容」跨列合併已接合為完整段落。
+                      共 <strong className="text-slate-700">{previewChunks?.length ?? 0}</strong> 段（依「節」切分，每一段對應一個完整作業步驟）。已去除頁首頁尾、簽核區、多餘空白與流程圖繪製格；「作業內容」跨列合併已接回完整段落。
                     </span>
                   </div>
                   {(previewChunks ?? []).map((ck) => (
                     <div key={ck.chunkSeq} className="rounded-lg border border-slate-200 p-3.5">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 mono">chunk {ck.chunkSeq}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 mono">第 {ck.chunkSeq} 段</span>
                         <span className="text-sm font-semibold text-slate-800">{ck.chapterSection}</span>
                       </div>
                       <p className="text-sm text-slate-600 leading-6 mt-1.5">{ck.content}</p>
                       <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t border-slate-100 text-[10px]">
-                        <span className="text-slate-400">metadata：</span>
+                        <span className="text-slate-400">標記：</span>
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">狀態 {ck.status}</span>
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">{ck.lifecycleName ?? ck.documentNumber}</span>
                         <span className="text-slate-400">使用部門</span>
@@ -441,9 +463,12 @@ export function DocIndexPage(): JSX.Element {
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 mono">版次 {ck.edition}</span>
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 mono">公告 {ck.announcedDate ?? '—'}</span>
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 mono">頁次 p.{ck.pageNumber}</span>
-                        {ck.chunkId && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 mono">{ck.chunkId}</span>
-                        )}
+                        {/*
+                          🔵 2026-09-23 全站文案稽核：`chunkId` 為內部識別碼，管理員判斷「抽得對不對」
+                             完全用不到它（段序、章節、內容與標記才是判準）。
+                          📝 已作廢（⚠ 不得復原）：
+                            OLD> {ck.chunkId && (<span className="…mono">{ck.chunkId}</span>)}
+                        */}
                       </div>
                     </div>
                   ))}
@@ -465,7 +490,7 @@ export function DocIndexPage(): JSX.Element {
               <div className="min-w-0">
                 <h3 className="font-semibold text-slate-900">重新索引「{rowLabel(confirmRow)}」？</h3>
                 <p className="text-sm text-slate-500 mt-1">
-                  將重新讀取 .xls 原件，重跑模板感知抽取、依章/節切 chunk 並重建向量索引；成功後以新版取代舊版。此操作記錄於 INDEX_RUN（triggerType=manual）。
+                  將重新讀取 .xls 原件、重新抽取並重建索引；成功後以新版取代舊版。此操作會留下紀錄。
                 </p>
               </div>
             </div>

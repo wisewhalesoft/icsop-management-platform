@@ -381,7 +381,7 @@ describe('AccessHistoryPage — 文件調閱歷程查詢（F024）', () => {
     const exportArgs = vi.mocked(endpoints.exportAccessHistory).mock.calls[0]?.[0] ?? {};
     expect(exportArgs).toMatchObject({ person: '王小明' });
     expect(
-      await screen.findByText(/^已匯出文件調閱歷程（CSV，UTF-8 BOM）/),
+      await screen.findByText(/^已匯出文件調閱歷程（CSV）/),
     ).toBeInTheDocument();
   });
 

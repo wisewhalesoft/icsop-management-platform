@@ -15,9 +15,9 @@ import type { DocumentChangeView, LifecycleChangeView, LifecycleView, SessionUse
  *    兩者 `aria-label="匯出"`、icon 鍵 `download`；`:544-545` 切 tab 時各自顯示）
  *  - `prototypes/23-change-history.html:567-578`（成功／超限之逐字回饋文案與錯誤碼標記）
  *  - F037 `AC-D10`（DOM id `exportDoc`；成功回饋以逐字片段
- *    `已匯出 ICSOP 程序書變更歷程（CSV，UTF-8 BOM）` **起始**；超限錯誤逐字
+ *    `已匯出 ICSOP 程序書變更歷程（CSV）` **起始**；超限錯誤逐字
  *    `符合條件之事件為 {N} 筆，超過匯出上限 10000 筆，請縮小查詢條件` ＋ 標記 `EXPORT_ROW_LIMIT_EXCEEDED · 400`）
- *  - F038 `AC-D6`（DOM id `exportTree`；成功片段 `已匯出循環樹狀圖變更歷程（CSV，UTF-8 BOM）`；
+ *  - F038 `AC-D6`（DOM id `exportTree`；成功片段 `已匯出循環樹狀圖變更歷程（CSV）`；
  *    超限句式與錯誤碼與 F037 共用）
  *  - F037 `AC-D5`（權限沿用既有閘門：主管／部門窗口／一般使用者無權，頁面已封鎖）
  *
@@ -32,8 +32,8 @@ import type { DocumentChangeView, LifecycleChangeView, LifecycleView, SessionUse
 vi.mock('../api/endpoints');
 vi.mock('../auth/useAuth');
 
-const DOC_SUCCESS = '已匯出 ICSOP 程序書變更歷程（CSV，UTF-8 BOM）';
-const TREE_SUCCESS = '已匯出循環樹狀圖變更歷程（CSV，UTF-8 BOM）';
+const DOC_SUCCESS = '已匯出 ICSOP 程序書變更歷程（CSV）';
+const TREE_SUCCESS = '已匯出循環樹狀圖變更歷程（CSV）';
 const OVER_LIMIT = (n: number) => `符合條件之事件為 ${n} 筆，超過匯出上限 10000 筆，請縮小查詢條件`;
 const ERROR_BADGE = 'EXPORT_ROW_LIMIT_EXCEEDED · 400';
 
@@ -142,7 +142,7 @@ describe('ChangeHistoryPage 匯出之使用者可見回饋（F037 AC-D10／F038 
     vi.mocked(endpoints.getLifecycles).mockResolvedValue([CYCLE]);
   });
 
-  it('F037 AC-D10 成功 → 回饋以逐字片段 `已匯出 ICSOP 程序書變更歷程（CSV，UTF-8 BOM）` 起始', async () => {
+  it('F037 AC-D10 成功 → 回饋以逐字片段 `已匯出 ICSOP 程序書變更歷程（CSV）` 起始', async () => {
     vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [DOC_CHANGE], total: 1 });
     vi.mocked(endpoints.getLifecycleChanges).mockResolvedValue({ items: [LC_CHANGE], total: 1 });
     vi.mocked(endpoints.exportDocumentChanges).mockResolvedValue(undefined);
@@ -151,7 +151,7 @@ describe('ChangeHistoryPage 匯出之使用者可見回饋（F037 AC-D10／F038 
     expect(await screen.findByText(startsWith(DOC_SUCCESS))).toBeInTheDocument();
   });
 
-  it('F038 AC-D6 成功 → 回饋以逐字片段 `已匯出循環樹狀圖變更歷程（CSV，UTF-8 BOM）` 起始', async () => {
+  it('F038 AC-D6 成功 → 回饋以逐字片段 `已匯出循環樹狀圖變更歷程（CSV）` 起始', async () => {
     vi.mocked(endpoints.getDocumentChanges).mockResolvedValue({ items: [DOC_CHANGE], total: 1 });
     vi.mocked(endpoints.getLifecycleChanges).mockResolvedValue({ items: [LC_CHANGE], total: 1 });
     vi.mocked(endpoints.exportLifecycleChanges).mockResolvedValue(undefined);

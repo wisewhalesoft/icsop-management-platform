@@ -11,6 +11,8 @@ import {
   isExportLimitError,
 } from '../domain/export-feedback';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { PageHeader } from '../components/PageHeader';
 import type {
   AccessHistoryFilters,
@@ -127,7 +129,11 @@ const TONE_BADGE: Record<string, string> = {
 };
 
 /** 匯出成功之逐字回饋（`AC-F9` ①）。 */
-const EXPORT_SUCCESS_TEXT = '已匯出文件調閱歷程（CSV，UTF-8 BOM）';
+/**
+ * 🔵 2026-09-23 全站文案稽核：`CSV，UTF-8 BOM` 之編碼細節對使用者無意義。
+ * 📝 已作廢（⚠ 不得復原）：OLD> '已匯出文件調閱歷程（CSV，UTF-8 BOM）'
+ */
+const EXPORT_SUCCESS_TEXT = '已匯出文件調閱歷程（CSV）';
 
 /**
  * 匯出失敗之回饋（`AC-F9` ②）。
@@ -146,7 +152,8 @@ function exportFailureNotice(e: unknown): Notice {
   }
   return {
     tone: 'danger',
-    text: e instanceof ApiError ? `匯出失敗：${e.code}` : '匯出失敗',
+    text: '匯出失敗，請稍後再試。',
+    code: e instanceof ApiError ? e.code : undefined,
   };
 }
 
@@ -189,7 +196,8 @@ export function AccessHistoryPage(): JSX.Element {
     } catch (e) {
       setNotice({
         tone: 'danger',
-        text: e instanceof ApiError ? e.code : '載入調閱歷程失敗',
+        text: '載入調閱歷程失敗，請稍後再試。',
+        code: e instanceof ApiError ? e.code : undefined,
       });
     } finally {
       setLoading(false);
@@ -276,7 +284,10 @@ export function AccessHistoryPage(): JSX.Element {
         <p className="text-sm text-slate-500 mt-1">
           僅系統管理員／ICSOP 管理員可存取本功能。
         </p>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }
@@ -606,7 +617,7 @@ export function AccessHistoryPage(): JSX.Element {
                             <div className="mt-3 pt-3 border-t border-slate-100">
                               <div className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-1.5">
                                 <Icon name="stamp" className="w-4 h-4 text-primary-600" />
-                                當次浮水印快照（與稽核內容完全一致）
+                                當次浮水印（與本筆紀錄一致）
                               </div>
                               {/*
                                 `AC-N80`：本欄恆帶 `data-wm-snapshot`。留空時**不得**渲染為空字串或 `—`——
@@ -685,7 +696,13 @@ export function AccessHistoryPage(): JSX.Element {
 
       <p className="text-xs text-slate-400 flex items-start gap-1.5">
         <Icon name="shield-check" className="w-3.5 h-3.5 mt-0.5" />
-        稽核紀錄為 append-only、不可竄改（AUDIT_IMMUTABLE）；每筆之身分/時間快照與該次浮水印完全一致（F023）。
+        {/*
+          🔵 2026-09-23 全站文案稽核：`append-only`／`AUDIT_IMMUTABLE`／`F023` 皆為實作與規格詞彙。
+          📝 已作廢（⚠ 不得復原）：
+            OLD> 稽核紀錄為 append-only、不可竄改（AUDIT_IMMUTABLE）；每筆之身分/時間快照與該次浮水印完全一致（F023）。
+          🔒「不可竄改」是**對使用者的承諾**（這份紀錄可以拿來當證據）故以中文保留，代碼刪除。
+        */}
+        紀錄一經寫入即不可修改或刪除；每筆紀錄的身分與時間，與當次檔案上的浮水印完全一致。
       </p>
     </div>
   );
