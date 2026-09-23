@@ -133,7 +133,7 @@
           ⚠ 明確後果（人類已授權）：系統管理員失去「停用帳號待覆核」之首頁入口、
             系統管理員與 ICSOP 管理員失去「待確認組織異動」之首頁入口；🔒 該兩項之**側欄入口一字不動**。
        🔒 容器語意鎖定（`AC-G1`）：`role="group"` ＋ `aria-label="統計資訊"`（取代既有 `aria-label="待辦提示"`）。 -->
-  <div id="statCards" role="group" aria-label="統計資訊" data-testid="dashboard-stat-cards" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-6"></div>
+  <div id="statCards" role="group" aria-label="統計資訊" data-testid="dashboard-stat-cards" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-none xl:grid-flow-col xl:auto-cols-fr xl:w-max xl:max-w-full gap-3 mb-6"></div>
 
   <!-- ═══ F044 ② · 「快速進入功能區」整區移除（`AC-G25`／`AC-G27`）═══
        📝 已作廢（僅供追溯，⚠ 不得復原）：
@@ -158,6 +158,8 @@
           在 `lg`（1024px）下該值 ≈ 324px，扣掉環 140 ＋ gap 16 之後只剩 168px 給圖例，而圖例右側兩個數字
           （`已公告 nn`／`進度中 nn`）本身就佔 ≈ 118px ⇒ 組織名會被 `truncate` 壓到剩一兩個字。
           在 `xl`（1280px）下單卡 ≈ 452px，圖例得 296px、組織名約 144px，可讀。
+       🟣 2026-09-23 補記：環已改為依斷點放大（xl＝160、2xl＝224，見 `renderDonutRegion`），上面兩行之「環 140」為當時之值；
+          斷點 `xl` 本身之理由不變——xl 時名稱欄現為 ≈ 106px 仍可讀，`lg` 若並排只會更窄。
           1024–1280 這一段改為**單欄滿版**：一張卡拿到 ≈ 704px，是比「兩張各 324px」更好的資訊密度。
        📝 已作廢（僅供追溯，⚠ 不得復原）：OLD> <div class="grid lg:grid-cols-2 gap-4 mb-4"> -->
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
@@ -971,17 +973,36 @@
       {tid:'stat-card-in-progress',      title:'進度中',      n:inProgress,icon:'clock',     color:C_IN_PROGRESS_FILL,bg:C_IN_PROGRESS_BG,hint:'公告日未到或尚未設定公告日'},
       {tid:'stat-card-monthly-announced',title:'本月新版公告',n:monthly,   icon:'file-plus', color:'#7C3AED',    bg:'#EDE9FE',hint:'公告日落在 '+CURRENT_MONTH+' 且已公告'}
     ];
+    /* 🟣 2026-09-23 第三版（使用者提供參考圖：左側圓形淡底大圖示；右側「大數字在上、灰色標籤在下」）：
+       右欄**視覺**順序＝數字 → 標題 → 說明；🔴 **DOM 順序仍為 標題 → 數字 → 說明**（數字以 order-first 上移）
+       ⇒ 讀屏先讀到卡名再讀到數字。右欄 min-w-0 flex-1：避免長說明句撐破卡片。
+       🔒 說明句保留可見（參考圖沒有，但那是本卡口徑之唯一可見載體）；外框維持 border（與本頁其他區塊一致）。
+       🔵 dataviz：次要文字 slate-500（slate-400 對白僅 2.56:1）；大數字用比例字型（非 mono）。
+       🟣 同日第四版（「字體大小佔卡片的比例、padding 都要盡量一致」）：尺寸逐項取自參考圖實測——卡 256×120、左內距 32、
+          圓形圖示 56、圖示→文字 24、數字 ≈20px 粗體、標籤 ≈15px。xl（1280）卡寬 ≈243 ⇒ 直接採用；2xl（≥1536）整組 ×1.25。
+          🔒 數字字級因此較第三版小（36/48 → 20/25px）——本輪比例要求取代上一輪「再放大一點」。
+          🔴 說明句移入標題旁 ⓘ（使用者裁定）：xl 卡寬 241、文字欄 ≈97px，說明句必折兩行、卡高 187（參考比例 ≈113）。
+             📝 已作廢（⚠ 不得復原）：OLD> 說明句以 <p> 常駐可見於卡片最下方。
+       🟣 同日第六版（「字放大 1 級」）：數字 20px、中文標題與「份」13px；卡④ 數值改「{X} 已完成 / {Y} 應完成」
+          ——數字黑 20px 粗體、單位詞灰 13px（與「585 份」同構），推翻 AC-G13 原逐字「已完成 {X} / 應完成 {Y}」（使用者裁定）。
+          📝 已作廢（⚠ 不得復原）：OLD> 第五版數字 18px、標題與「份」12px；卡④ 整句 18px 粗體黑字。
+       🟣 同日第五版（「整體再小一點」「卡片應依內容動態調整」）：字級各寬度一致——數字 18px、標題 12px
+          （第四版照英文參考圖量得 15px，但中文字面幾乎佔滿字級方框，看起來大一截；2xl ×1.25 更放大到 25／19px）；
+          圖示 44px、內距 16／20 ⇒ 卡高 ≈78px；容器 xl 起 grid-flow-col auto-cols-fr w-max max-w-full ⇒ 四張等寬、寬度由內容決定。
+          📝 已作廢（⚠ 不得復原）：OLD> 第四版 px-8 py-8 2xl:px-10 2xl:py-10 gap-6、圖示 56／70、數字 20／25、標題 15／19。
+       📝 已作廢（⚠ 不得復原）：OLD> 第三版 p-4 gap-4、圖示 w-16、數字 text-4xl 2xl:text-5xl font-semibold、標題 text-sm；
+          OLD> 第二版「左文右圖」（文字欄在左、方形圖示在右）；
+          OLD> 第一版方案 B「左文右數」（兩欄 grid、右欄大數字跨兩列，text-3xl 2xl:text-4xl font-bold mono、次要文字 slate-400）。 */
     let html=cards.map(function(c){
-      return `<div data-testid="${c.tid}" class="bg-white border border-slate-200 rounded-xl p-4">
-        <div class="flex items-center gap-2">
-          <span class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style="background:${c.bg}"><i data-lucide="${c.icon}" class="w-4 h-4" style="color:${c.color}"></i></span>
-          <span class="text-sm font-medium text-slate-700">${c.title}</span>
+      return `<div data-testid="${c.tid}" class="bg-white border border-slate-200 rounded-xl px-5 py-4 flex items-center gap-4">
+        <span data-stat-icon aria-hidden="true" class="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style="background:${c.bg}"><i data-lucide="${c.icon}" class="w-5 h-5" style="color:${c.color}"></i></span>
+        <div data-stat-text class="min-w-0 flex-1 flex flex-col">
+          <span class="mt-0.5 flex items-center gap-1 whitespace-nowrap text-[13px] leading-tight text-slate-500">${c.title}${infoNote('stat-'+c.tid,[c.hint])}</span>
+          <div data-stat-figure class="order-first flex items-baseline gap-1">
+            <span data-testid="stat-value" class="text-xl font-bold leading-tight text-slate-900">${c.n}</span>
+            <span class="text-[13px] text-slate-500">份</span>
+          </div>
         </div>
-        <div class="mt-2 flex items-baseline gap-1">
-          <span data-testid="stat-value" class="text-3xl font-bold text-slate-900 mono">${c.n}</span>
-          <span class="text-xs text-slate-400">份</span>
-        </div>
-        <p class="text-xs text-slate-400 mt-1">${esc(c.hint)}</p>
       </div>`;
     }).join('');
     if(canPerform(role,'OJT_PROGRESS_MANAGEMENT','read')) html+=ojtCardHtml(role);
@@ -1002,7 +1023,12 @@
         `[data-ojt-ontime-rate]` 與 `ojt-ontime-value` **亦不進 DOM**，改以 empty-state 取代整個數值區；
         🔴 明文禁止 `NaN%`／`0%`／`100%`／空白（`0%` 與「全部未完成」無從分辨，`100%` 是謊報）。
      🔒 `AC-G15`：排除註記恆在 DOM（`a+b === 0` 時套 `hidden`、無可見文字）。
-     🔒 `AC-G97`：卡④ **只有一個 ⓘ**（`AC-G89`）——環圖若需說明一律併入該 ⓘ，不得再加第二個。 */
+     🔒 `AC-G97`：卡④ **只有一個 ⓘ**（`AC-G89`）——環圖若需說明一律併入該 ⓘ，不得再加第二個。
+     🟣 2026-09-23（方案 B「左文右數」，與卡①②③ 一致＝「大數字／環恆在右」）：
+        `stat-value` 內改為 justify-between——`已完成 X / 應完成 Y` 在左、小環以 order-last 移到右。
+        🔴 **只改視覺順序、不搬 DOM**：環仍是 `stat-value` 之第一個子節點，巢狀（`AC-G24`）不變。
+        排除註記與「查看明細」併為同一列（justify-between，連結 ml-auto ⇒ 註記 hidden 時連結仍靠右）。
+        📝 已作廢（⚠ 不得復原）：OLD> 環在左、文字在右（gap-3）；排除註記與連結各佔一列（各 mt-2）。 */
   function ojtCardHtml(role){
     const r=ojtOnTimeRate(scenarioOjtRows(),TODAY);
     const showLink=canPerform(role,'OJT_PROGRESS_MANAGEMENT','read');
@@ -1018,24 +1044,24 @@
          🔒 `data-testid` 刻意**不與兩張大環圖撞名**（`ojt-ontime-donut`／`[data-ojt-ontime-rate]`）。
          📝 已作廢（僅供追溯，⚠ 不得復原）：
             OLD> 單一字串 `已完成 {X} / 應完成 {Y}（{Z}%）`（全形括號）掛在 ojt-ontime-value 上。 */
-      ? `<div data-testid="stat-value" class="mt-2 flex items-center gap-3">
-          <div data-testid="ojt-ontime-donut" class="relative w-16 h-16 shrink-0">
-            <svg viewBox="0 0 64 64" class="w-16 h-16" aria-hidden="true" focusable="false">
+      ? `<div data-testid="stat-value" class="contents">
+          <div data-testid="ojt-ontime-donut" class="relative w-11 h-11 shrink-0 col-start-1 row-start-1 row-span-2">
+            <svg viewBox="0 0 64 64" class="w-full h-full" aria-hidden="true" focusable="false">
               <circle cx="32" cy="32" r="${OJT_DONUT_R}" fill="none" stroke="#F1F5F9" stroke-width="8"></circle>
               <circle cx="32" cy="32" r="${OJT_DONUT_R}" fill="none" stroke="${C_ANNOUNCED_FILL}" stroke-width="8" stroke-linecap="butt" stroke-dasharray="${ojtOnTimeArc(r.numerator,r.denominator).length.toFixed(3)} ${ojtOnTimeArc(r.numerator,r.denominator).rest.toFixed(3)}" transform="rotate(-90 32 32)"></circle>
             </svg>
             <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span data-ojt-ontime-rate class="text-sm font-bold text-slate-900 mono">${r.rate}%</span>
+              <span data-ojt-ontime-rate class="text-[10px] font-semibold text-slate-900">${r.rate}%</span>
             </div>
           </div>
-          <span data-testid="ojt-ontime-value" class="mono text-base font-semibold text-slate-900">已完成 ${r.numerator} / 應完成 ${r.denominator}</span>
+          <span data-testid="ojt-ontime-value" class="col-start-2 row-start-1 self-end 2xl:whitespace-nowrap text-[13px] leading-tight text-slate-500"><span data-ojt-count class="text-xl font-bold text-slate-900">${r.numerator}</span> 已完成 <span aria-hidden="true" class="text-slate-400">/</span> <span data-ojt-count class="text-xl font-bold text-slate-900">${r.denominator}</span> 應完成</span>
         </div>`
       /* 🔴 `AC-G97`：`denominator === 0` ⇒ **環圖本身不繪**（`ojt-ontime-donut` 不進 DOM），
          `[data-ojt-ontime-rate]` 與 `ojt-ontime-value` **亦不進 DOM**，整個數值區改以 empty-state 取代。
          🔴 **為何不繪空環**：一個 0% 的環與「全部未完成」在畫面上**完全一樣**——那正是 `AC-G14`
             禁止 `0%` 的同一個理由，只是換成了圖形形式。
          📝 已作廢：OLD> 空狀態之提示文字上掛著 data-testid="ojt-ontime-value"（該節點此時**不得存在**）。 */
-      : `<div data-testid="empty-state" class="mt-2 flex items-start gap-1.5 text-sm text-slate-500"><i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0 text-slate-400"></i><span>近 1 個月內無應完成之 OJT 單位</span></div>`;
+      : `<div data-testid="empty-state" class="col-span-3 row-start-2 mt-2 flex items-start gap-1.5 text-sm text-slate-500"><i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0 text-slate-400"></i><span>近 1 個月內無應完成之 OJT 單位</span></div>`;
     /* 🔒 §癸四 第 1 項（2026-09-21 **第二次**就地更正）：可見層只留「排除了幾個**單位**」，
        🔴 **恰加總前兩項**，且一律委派 `excludedUnitCount()`（單一推導點，理由見該函式註解）。
        📝 已作廢（僅供追溯，⚠ 不得復原）：
@@ -1053,14 +1079,20 @@
       '另有 '+r.excludedNoAnnouncedDate+' 份文件尚未設定公告日期，無法推算應完成日，因此從一開始就不在這張卡的範圍內。',
       '「OJT 進度管理」頁不限期限，也會列出這裡不計入的單位，因此兩邊的數字不同。'
     ]);
-    return `<div data-testid="stat-card-ojt-ontime" class="bg-white border border-slate-200 rounded-xl p-4">
-      <div class="flex items-center gap-2">
-        <span class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style="background:#FEF3C7"><i data-lucide="graduation-cap" class="w-4 h-4" style="color:#B45309"></i></span>
-        <span class="text-sm font-medium text-slate-700">OJT 準時完成率</span><span class="text-xs text-slate-400">(1個月內)</span>${ojtInfo}
+    return `<div data-testid="stat-card-ojt-ontime" class="bg-white border border-slate-200 rounded-xl px-5 py-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4">
+      <!-- 🟣 2026-09-23 第三版（參考圖：左圖右文、數字在上標籤在下）：兩欄 grid——左欄＝小環跨第 1、2 列；
+           右欄第 1 列＝已完成 X / 應完成 Y、第 2 列＝標題列（含 ⓘ）；第 3 列跨兩欄＝排除註記＋查看明細。
+           🔴 stat-value 為 display:contents ⇒ 巢狀不變（AC-G24），只改擺放位置；DOM 順序維持 標題 → 數值 → 頁尾。
+           🔵 空狀態：標題列佔第 1 列跨兩欄、空狀態第 2 列。
+           📝 已作廢（⚠ 不得復原）：OLD> 環 order-last（環在右）；OLD> 標題列左側 graduation-cap 圖示方塊（#FEF3C7 底）。 -->
+      <div data-ojt-title class="${r.denominator>0?'col-start-2 row-start-2 self-start mt-0.5':'col-span-2 row-start-1'} flex flex-wrap items-center gap-x-2 min-w-0">
+        <span class="whitespace-nowrap text-[13px] leading-tight text-slate-500">OJT 準時完成率</span><span class="inline-flex items-center gap-1 whitespace-nowrap"><span class="text-xs text-slate-500">(1個月內)</span>${ojtInfo}</span>
       </div>
       ${value}
-      <p data-testid="ojt-ontime-exclusion-note" class="${exVisible?'mt-2 text-[11px] text-slate-500':'hidden'}">${exVisible}</p>
-      ${showLink?`<a role="link" href="25-ojt-progress.html?tab=sessions&amp;sort=incomplete-first" class="mt-2 inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline">查看明細<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>`:''}
+      <!-- 🟣 2026-09-23 第四版之二（使用者裁定）：排除註記改 sr-only（明細已在 ⓘ 第二段）；查看明細移卡片右上角（不佔列）。
+           📝 已作廢（⚠ 不得復原）：OLD> 兩者同在卡底一列 data-ojt-footer（註記可見 text-[11px]）。 -->
+      <p data-testid="ojt-ontime-exclusion-note" class="sr-only">${exVisible}</p>
+      ${showLink?`<a role="link" data-ojt-detail-link href="25-ojt-progress.html?tab=sessions&amp;sort=incomplete-first" title="查看明細" class="col-start-3 row-start-1 self-start justify-self-end -mt-1 -mr-2 w-7 h-7 rounded-md inline-flex items-center justify-center text-primary-600 hover:text-primary-700 hover:bg-primary-50"><span class="sr-only">查看明細</span><i data-lucide="arrow-right" class="w-4 h-4"></i></a>`:''}
     </div>`;
   }
 
@@ -1127,28 +1159,44 @@
             🔴 `min-w-0` 只治 flex 項目的自動最小尺寸，治不了 grid 軌的 auto 最小值。
          📝 已作廢（僅供追溯，⚠ 不得復原）：
             OLD> <div class="flex items-start gap-4"> … 右欄只放 [data-donut-truncation] … </div>
-            OLD> <ul data-testid="donut-legend" class="mt-3 max-h-[184px] … border-t border-slate-100 …"> */
-      : `<div class="flex flex-col md:flex-row items-start gap-4">
-          <div class="relative shrink-0 w-[140px] h-[140px] mx-auto md:mx-0">
-            <svg viewBox="0 0 140 140" class="w-[140px] h-[140px]" aria-hidden="true" focusable="false">
+            OLD> <ul data-testid="donut-legend" class="mt-3 max-h-[184px] … border-t border-slate-100 …">
+         🟣 2026-09-23（使用者：「環放大」「圖例右側一大片空白」「已公告／進度中要各自靠左對成欄」）：
+            ⚠ 上面高度帳與 sm／md 算式中之「環 140」為第八輪當時之值；本輪起環依斷點放大如下。
+            ① 環只改 CSS 寬高、svg 改 w-full h-full 等比縮放——🔴 viewBox（140）／DONUT_R（54）／描邊 18 **一律不動**。
+               尺寸表（卡片內寬 ⇒ 環）：< md 堆疊 176｜md 雙欄前 ≈ 456 ⇒ 160｜lg 單欄滿版 ≥ 712 ⇒ 208｜
+               xl 兩張並排 ≈ 456–583 ⇒ 160｜2xl ≥ 583 ⇒ 224。
+               🔴 xl 只放到 160 是算出來的：「依制定部門」之名稱是「公司 / 本部 / 部門」長路徑，環每大 16px
+                  名稱欄就少 16px；160 時名稱欄 ≈ 106px（舊 140 環時 ≈ 136px）。
+            ② 圖例寬度上限 md:max-w-[28rem]，環與圖例**成組置中**（md:justify-center）、垂直置中（items-center）
+               ⇒ 寬螢幕之空白平均落在兩側，不再全部堆在圖例右邊。
+               捲動上限：md／xl 維持 196px（≈ 7 列）；lg／2xl 環變大後改與環同高（208／224）。
+            ③ 每列改為**同一份**四欄 grid 樣板（色點／組織名／已公告／進度中）：兩個數字欄固定 4.25rem
+               （68px，mono 12px 下「已公告 999」≈ 65px）、靠左 ⇒ 各列之標籤落在同一條直線上。
+               🔴 刻意**不用** subgrid／display:contents：後者在部分瀏覽器會吃掉 role="listitem" 之語意。
+               🔴 組織名欄是 minmax(0,1fr) 而非 1fr：後者之最小值＝min-content，truncate 會失效並把數字欄擠出卡外。
+            📝 已作廢（⚠ 不得復原）：OLD> 環固定 w-[140px] h-[140px]、容器 items-start gap-4、圖例 md:flex-1 無上限、
+               列 flex items-center gap-2＋組織名 flex-1（寬螢幕下兩個數字被推到最右緣、數字欄寬隨位數浮動對不齊）。 */
+      : `<div class="flex flex-col md:flex-row items-center md:justify-center gap-5">
+          <div data-donut-ring class="relative shrink-0 w-44 h-44 md:w-40 md:h-40 lg:w-52 lg:h-52 xl:w-40 xl:h-40 2xl:w-56 2xl:h-56">
+            <svg viewBox="0 0 140 140" class="w-full h-full" aria-hidden="true" focusable="false">
               <circle cx="70" cy="70" r="${DONUT_R}" fill="none" stroke="#F1F5F9" stroke-width="18"></circle>
               ${arcs.map(function(a,i){
                 return `<circle cx="70" cy="70" r="${DONUT_R}" fill="none" stroke="${a.color}" stroke-width="18" stroke-dasharray="${segs[i].length.toFixed(3)} ${(DONUT_C-segs[i].length).toFixed(3)}" stroke-dashoffset="${(-segs[i].offset).toFixed(3)}" transform="rotate(-90 70 70)"></circle>`;
               }).join('')}
             </svg>
             <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span data-donut-total class="text-2xl font-bold text-slate-900 mono">${total}</span>
-              <span class="text-[10px] text-slate-400">已公告合計（份）</span>
+              <span data-donut-total class="text-3xl 2xl:text-4xl font-bold text-slate-900 mono">${total}</span>
+              <span class="text-[11px] text-slate-400">已公告合計（份）</span>
             </div>
           </div>
-          <ul role="list" data-testid="donut-legend" class="w-full md:flex-1 min-w-0 max-h-[196px] overflow-y-auto pr-1 border-t border-slate-100 md:border-t-0 divide-y divide-slate-100">
+          <ul role="list" data-testid="donut-legend" class="w-full md:w-auto md:flex-1 md:max-w-[28rem] min-w-0 max-h-[196px] lg:max-h-52 xl:max-h-[196px] 2xl:max-h-56 overflow-y-auto pr-1 border-t border-slate-100 md:border-t-0 divide-y divide-slate-100">
           ${rows.map(function(r,i){
             const dot=i<DONUT_TOP_N?DONUT_PALETTE[i%DONUT_PALETTE.length]:DONUT_OTHER_COLOR;
-            return `<li role="listitem" data-testid="donut-legend-row" data-org-key="${esc(r.key)}" class="flex items-center gap-2 py-1.5">
-              <span aria-hidden="true" class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${dot}"></span>
-              <span data-testid="legend-org-name" class="text-xs text-slate-700 flex-1 truncate" title="${esc(r.label)}">${esc(r.label)}</span>
-              <span data-testid="legend-announced" class="text-xs mono whitespace-nowrap" style="color:${C_ANNOUNCED_TEXT}">已公告 ${r.announced}</span>
-              <span data-testid="legend-in-progress" class="text-xs mono whitespace-nowrap" style="color:${C_IN_PROGRESS_TEXT}">進度中 ${r.inProgress}</span>
+            return `<li role="listitem" data-testid="donut-legend-row" data-org-key="${esc(r.key)}" class="grid grid-cols-[0.625rem_minmax(0,1fr)_4.25rem_4.25rem] items-center gap-x-2 py-1.5">
+              <span aria-hidden="true" class="w-2.5 h-2.5 rounded-full" style="background:${dot}"></span>
+              <span data-testid="legend-org-name" class="text-xs text-slate-700 truncate" title="${esc(r.label)}">${esc(r.label)}</span>
+              <span data-testid="legend-announced" class="text-xs mono whitespace-nowrap text-left" style="color:${C_ANNOUNCED_TEXT}">已公告 ${r.announced}</span>
+              <span data-testid="legend-in-progress" class="text-xs mono whitespace-nowrap text-left" style="color:${C_IN_PROGRESS_TEXT}">進度中 ${r.inProgress}</span>
             </li>`;
           }).join('')}
           </ul>

@@ -269,11 +269,15 @@ export function DashboardHome(): JSX.Element {
 
       {/* ═══ F044 ① · 上方四張統計卡（`AC-G1`～`AC-G24`）═══
           🔒 容器語意鎖定：`role="group"` ＋ `aria-label="統計資訊"`（取代既有 `aria-label="待辦提示"`）。 */}
+      {/* 🟣 2026-09-23 第五版（「卡片應依內容動態調整」）：xl 起四張卡**等寬、寬度由內容最寬者決定**——
+          `grid-flow-col auto-cols-fr` 讓每欄一樣寬、`w-max` 讓容器只有內容那麼寬（fr 之最小值＝該欄內容寬
+          ⇒ 各欄取最寬者），`max-w-full` 在放不下時（1280 寬）退回平分整排、不溢出。
+          📝 已作廢（⚠ 不得復原）：OLD> `xl:grid-cols-4`（四欄恆撐滿整排，卡片隨螢幕變寬而內部留白）。 */}
       <div
         role="group"
         aria-label="統計資訊"
         data-testid="dashboard-stat-cards"
-        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-6"
+        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-none xl:grid-flow-col xl:auto-cols-fr xl:w-max xl:max-w-full gap-3 mb-6"
       >
         {cards ? (
           <>
@@ -408,7 +412,37 @@ export function DashboardHome(): JSX.Element {
   );
 }
 
-/** 卡①②③ 之共用版型；🔒 數值節點恆為 `data-testid="stat-value"`（`AC-G24`）。 */
+/**
+ * 卡①②③ 之共用版型；🔒 數值節點恆為 `data-testid="stat-value"`（`AC-G24`）。
+ *
+ * 🟣 2026-09-23 第三版（使用者提供參考圖：左側圓形淡底大圖示；右側「大數字在上、灰色標籤在下」）：
+ *   右欄**視覺**順序＝數字 → 標題 → 說明；🔴 **DOM 順序仍為 標題 → 數字 → 說明**（數字以 `order-first` 上移）
+ *   ⇒ 讀屏先讀到「已公告」再讀到「9 份」，不會先聽到一個沒有主詞的數字。
+ *   🔴 右欄 `min-w-0 flex-1` 不是裝飾：flex 項目之自動最小寬＝內容寬，長說明句會把卡片撐破。
+ *   🔒 說明句保留可見（參考圖沒有，但那是本卡口徑之唯一可見載體；移入 ⓘ 須另經裁定）。
+ *   🔒 卡片外框維持 `border`（與本頁其他區塊一致），不照搬參考圖之無框陰影。
+ *   🔵 dataviz：次要文字 slate-500（slate-400 對白僅 2.56:1）；大數字用比例字型（非 `mono`）。
+ *   🟣 同日第四版（使用者：「字體大小佔卡片的比例、padding 都要盡量一致」）——**尺寸逐項取自參考圖實測**
+ *      （以像素量測參考圖：卡 256×120、左內距 32、圓形圖示 56〔卡高之 47%〕、圖示→文字 24、
+ *      數字 ≈20px 粗體、標籤 ≈15px，文字塊垂直置中）。本頁 xl（1280）四欄時卡寬 ≈243px，與參考圖 256 幾乎相同
+ *      ⇒ **直接採用實測值**；2xl（≥1536）卡寬 307～403px ⇒ **整組等比放大 1.25 倍**，比例不變。
+ *      🔒 數字字級因此**較第二版小**（36/48px → 20/25px）——使用者本輪之比例要求取代上一輪之「再放大一點」。
+ *      🔴 **說明句移入標題旁 ⓘ**（使用者裁定）：實測 xl 卡寬 241、文字欄僅 ≈97px，說明句必折兩行、卡高 187
+ *         （參考比例應 ≈113）；移入後卡片只剩「數字＋標題」，與參考圖同構。說明內容一字未改，只換載體。
+ *         📝 已作廢（⚠ 不得復原）：OLD> 說明句以 `<p>` 常駐可見於卡片最下方。
+ *   🟣 同日第六版（使用者：「字放大 1 級」）：數字 20px（`text-xl`）、中文標題與單位 13px。
+ *      📝 已作廢（⚠ 不得復原）：OLD> 第五版數字 18px（`text-lg`）、標題與「份」12px（`text-xs`）。
+ *   🟣 同日第五版（使用者：「整體再小一點」「卡片不需要那麼大，應依內容動態調整」）：
+ *      ① 字級各寬度一致、不再隨斷點放大：數字 18px（`text-lg`）、標題 12px（`text-xs`）。
+ *         第四版照參考圖（英文）量得標籤 15px，但中文字面幾乎佔滿整個字級方框、英文大寫只佔約 7 成
+ *         ⇒ 同字級之中文看起來大一截；2xl 之 ×1.25 更放大到 25／19px（高於本站內文 14px）。
+ *      ② 卡片尺寸由內容決定：圖示 44px、內距 16／20 ⇒ 卡高 ≈78px；寬度見外層容器之註解。
+ *      📝 已作廢（⚠ 不得復原）：OLD> 第四版 `px-8 py-8 2xl:px-10 2xl:py-10 gap-6`、圖示 56／70px、
+ *         數字 20／25px、標題 15／19px（「字體大小佔卡片的比例」照參考圖實測）。
+ *   📝 已作廢（⚠ 不得復原）：OLD> 第三版尺寸 `p-4 gap-4`、圖示 `w-16 h-16`、數字 `text-4xl 2xl:text-5xl font-semibold`、標題 `text-sm`；
+ *      OLD> 第二版「左文右圖」（文字欄在左、方形圖示在右）；
+ *      OLD> 第一版方案 B「左文右數」（兩欄 grid、右欄大數字跨兩列，`text-3xl 2xl:text-4xl font-bold mono`、次要文字 slate-400）。
+ */
 function StatCard(props: {
   testId: string;
   title: string;
@@ -419,23 +453,33 @@ function StatCard(props: {
   hint: string;
 }): JSX.Element {
   return (
-    <div data-testid={props.testId} className="bg-white border border-slate-200 rounded-xl p-4">
-      <div className="flex items-center gap-2">
-        <span
-          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-          style={{ background: props.background, color: props.color }}
-        >
-          <Icon name={props.icon} className="w-4 h-4" />
+    <div
+      data-testid={props.testId}
+      className="bg-white border border-slate-200 rounded-xl px-5 py-4 flex items-center gap-4"
+    >
+      <span
+        data-stat-icon
+        aria-hidden="true"
+        className="w-11 h-11 rounded-full flex items-center justify-center shrink-0"
+        style={{ background: props.background, color: props.color }}
+      >
+        <Icon name={props.icon} className="w-5 h-5" />
+      </span>
+      <div data-stat-text className="min-w-0 flex-1 flex flex-col">
+        <span className="mt-0.5 flex items-center gap-1 whitespace-nowrap text-[13px] leading-tight text-slate-500">
+          {props.title}
+          <InfoNote infoKey={`stat-${props.testId}`} paragraphs={[props.hint]} />
         </span>
-        <span className="text-sm font-medium text-slate-700">{props.title}</span>
+        <div data-stat-figure className="order-first flex items-baseline gap-1">
+          <span
+            data-testid="stat-value"
+            className="text-xl font-bold leading-tight text-slate-900"
+          >
+            {props.value}
+          </span>
+          <span className="text-[13px] text-slate-500">份</span>
+        </div>
       </div>
-      <div className="mt-2 flex items-baseline gap-1">
-        <span data-testid="stat-value" className="text-3xl font-bold text-slate-900 mono">
-          {props.value}
-        </span>
-        <span className="text-xs text-slate-400">份</span>
-      </div>
-      <p className="text-xs text-slate-400 mt-1">{props.hint}</p>
     </div>
   );
 }
@@ -463,29 +507,62 @@ function StatCard(props: {
  *      「該節點不得存在」的負向斷言直接失效（恆真）。
  * 🔒 `AC-G15`：排除註記恆在 DOM（`a+b === 0` 時套 `hidden`、無可見文字）。
  * 🔒 `AC-G97`：卡④ **只有一個 ⓘ**——環圖若需說明一律併入該 ⓘ，不得再加第二個。
+ * 🟣 2026-09-23（方案 B「左文右數」，與卡①②③ 一致＝「大數字／環恆在右」）：
+ *   `stat-value` 內改為 `justify-between`——`已完成 X / 應完成 Y` 在左、小環以 `order-last` 移到右。
+ *   🔴 **只改視覺順序、不搬 DOM**：環仍是 `stat-value` 之第一個子節點，巢狀（`AC-G24`）不變。
+ *   排除註記與「查看明細」併為同一列（`justify-between`，連結 `ml-auto` ⇒ 註記 `hidden` 時連結仍靠右）。
+ *   📝 已作廢（⚠ 不得復原）：OLD> 環在左、文字在右（`gap-3`）；排除註記與連結各佔一列（各 `mt-2`）。
+ * 🟣 2026-09-23 第三版（參考圖：左圖右文、數字在上標籤在下，與卡①②③ 同構）：
+ *   卡片為兩欄 grid——左欄＝小環（跨第 1、2 列，對應卡①②③ 之圓形圖示）；右欄第 1 列＝`已完成 X / 應完成 Y`、
+ *   第 2 列＝標題列（含 ⓘ）；第 3 列跨兩欄＝排除註記＋查看明細。
+ *   🔴 `stat-value` 改為 `display: contents`：它自己不產生盒子，其子節點（環、數值）直接成為卡片 grid 之格子
+ *      ⇒ **巢狀一格未動**（`AC-G24`：外層仍同時含住環中央 `{Z}%` 與 `ojt-ontime-value`），只改了擺放位置。
+ *   🔴 DOM 順序維持 標題 → 數值 → 頁尾（讀屏先聽到卡名），視覺位置全由 `col-start`／`row-start` 指定。
+ *   🔵 空狀態（無環）：標題列改佔第 1 列跨兩欄、空狀態第 2 列 ⇒ 不會留下一個空的左欄。
+ *   🟣 同日第四版之二（使用者裁定）：「查看明細」移至卡片右上角（absolute）、排除註記改 `sr-only`（明細已在 ⓘ）
+ *      ⇒ 卡片回到兩列（數值／標題），環跨兩列；實測 1280 寬時本卡由 208 降至接近另三張之 122。
+ *   🟣 同日第四版（參考圖比例；已被上一條取代）：環改**跨三列**、頁尾（排除註記＋查看明細）收進右欄第 3 列——本卡原本比另三張多出
+ *      一整列，同列 grid 會把四張卡都拉到它的高度（實測 1920 寬：卡高 214 vs 參考比例應 ≈155）。
+ *      數值 `已完成 X / 應完成 Y` 改 17/21px、2xl 起不折行（xl 卡寬僅 ≈241、文字欄 ≈97px，強制不折行會溢出卡外——實測）：它比另三張的數字長一倍，用同一字級必折成兩行（實測）。
+ *      📝 已作廢（⚠ 不得復原）：OLD> 環 `row-span-2`、頁尾 `col-span-2`、數值 20/25px 可折行。
+ *   📝 已作廢（⚠ 不得復原）：OLD> 第一版方案 B 之 `justify-between`＋環 `order-last`（環在右）。
+ * 🟣 2026-09-23 第二版（「左文右圖」，與卡①②③ 同構）：標題列**移除左側圖示方塊**——本卡之「圖」即右側小環，
+ *   左側再放一個圖示會違反「文在左、圖在右」。數值文字放大（`text-lg 2xl:text-xl`）並改比例字型、
+ *   「(1個月內)」改 slate-500（dataviz 檢查：slate-400 對白僅 2.56:1）。
+ *   📝 已作廢（⚠ 不得復原）：OLD> 標題列左側 `graduation-cap` 圖示方塊；數值 `mono text-base`；環中央 `font-bold mono`。
  */
 function OjtOnTimeCard(props: { summary: OjtOnTimeSummaryResponse | null }): JSX.Element {
   const { summary } = props;
   const hasRate = summary != null && summary.rate !== undefined && summary.denominator > 0;
   const arc = hasRate ? ojtOnTimeArc(summary.numerator, summary.denominator) : null;
   return (
-    <div data-testid="stat-card-ojt-ontime" className="bg-white border border-slate-200 rounded-xl p-4">
-      <div className="flex items-center gap-2">
-        <span
-          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-          style={{ background: '#FEF3C7', color: '#B45309' }}
-        >
-          <Icon name="graduation-cap" className="w-4 h-4" />
+    <div
+      data-testid="stat-card-ojt-ontime"
+      className="bg-white border border-slate-200 rounded-xl px-5 py-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4"
+    >
+      <div
+        data-ojt-title
+        className={
+          hasRate
+            ? 'col-start-2 row-start-2 self-start mt-0.5 flex flex-wrap items-center gap-x-1.5 min-w-0'
+            : 'col-span-2 row-start-1 flex flex-wrap items-center gap-x-2 min-w-0'
+        }
+      >
+        <span className="whitespace-nowrap text-[13px] leading-tight text-slate-500">OJT 準時完成率</span>
+        {/* 🟣 2026-09-23：「(1個月內)」與 ⓘ 綁成不可拆之一組——否則 ⓘ 會單獨折到下一行（1920 實測）。 */}
+        <span className="inline-flex items-center gap-1 whitespace-nowrap">
+          <span className="text-xs text-slate-500">(1個月內)</span>
+          {/* 🔒 §癸四 第 1 列：口徑說明與「為什麼兩邊數字不同」移入 ⓘ；可見層只留「排除了幾個單位」。 */}
+          {summary ? <InfoNote infoKey="ojt-ontime" paragraphs={ojtOnTimeNoteSegments(summary)} /> : null}
         </span>
-        <span className="text-sm font-medium text-slate-700">OJT 準時完成率</span>
-        <span className="text-xs text-slate-400">(1個月內)</span>
-        {/* 🔒 §癸四 第 1 列：口徑說明與「為什麼兩邊數字不同」移入 ⓘ；可見層只留「排除了幾個單位」。 */}
-        {summary ? <InfoNote infoKey="ojt-ontime" paragraphs={ojtOnTimeNoteSegments(summary)} /> : null}
       </div>
       {hasRate && arc ? (
-        <div data-testid="stat-value" className="mt-2 flex items-center gap-3">
-          <div data-testid="ojt-ontime-donut" className="relative w-16 h-16 shrink-0">
-            <svg viewBox="0 0 64 64" className="w-16 h-16" aria-hidden="true" focusable="false">
+        <div data-testid="stat-value" className="contents">
+          <div
+            data-testid="ojt-ontime-donut"
+            className="relative w-11 h-11 shrink-0 col-start-1 row-start-1 row-span-2"
+          >
+            <svg viewBox="0 0 64 64" className="w-full h-full" aria-hidden="true" focusable="false">
               <circle cx="32" cy="32" r={OJT_DONUT_RADIUS} fill="none" stroke="#F1F5F9" strokeWidth="8" />
               <circle
                 cx="32"
@@ -501,47 +578,66 @@ function OjtOnTimeCard(props: { summary: OjtOnTimeSummaryResponse | null }): JSX
             </svg>
             {/* 🔒 百分比為 `<svg>` **之外**之 HTML 文字節點（沿用兩張大環圖 `[data-donut-total]` 之手法）。 */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span data-ojt-ontime-rate className="text-sm font-bold text-slate-900 mono">
+              <span data-ojt-ontime-rate className="text-[10px] font-semibold text-slate-900">
                 {`${summary.rate}%`}
               </span>
             </div>
           </div>
           <span
             data-testid="ojt-ontime-value"
-            className="mono text-base font-semibold text-slate-900"
+            className="col-start-2 row-start-1 self-end 2xl:whitespace-nowrap text-[13px] leading-tight text-slate-500"
           >
-            {`已完成 ${summary.numerator} / 應完成 ${summary.denominator}`}
+            {/* 🟣 2026-09-23 第六版（使用者裁定）：改為「數字（黑 20px）＋ 單位詞（灰 13px）」，與卡①②③ 之「585 份」同構。
+                逐字（textContent）＝`{X} 已完成 / {Y} 應完成`——🔴 **推翻** `AC-G13` 原逐字 `已完成 {X} / 應完成 {Y}`
+                （該逐字只為可讀，使用者覺得「已完成 0 / 應完成 10」讀起來怪）。資訊量不變：兩個數字仍皆可見。
+                🔒 以行內 span＋真空白串接（非 flex）：空白字元需真的渲染，textContent 才與畫面一致。
+                📝 已作廢（⚠ 不得復原）：OLD> 單一字串 `已完成 {X} / 應完成 {Y}`（整句 18px 粗體黑字）。 */}
+            <span data-ojt-count className="text-xl font-bold text-slate-900">{summary.numerator}</span>{' '}
+            已完成{' '}
+            <span aria-hidden="true" className="text-slate-400">/</span>{' '}
+            <span data-ojt-count className="text-xl font-bold text-slate-900">{summary.denominator}</span>{' '}
+            應完成
           </span>
         </div>
       ) : (
-        <div className="mt-2">
+        <div className="col-span-3 row-start-2 mt-2">
           <EmptyState text="近 1 個月內無應完成之 OJT 單位" />
         </div>
       )}
-      {/* 🔒 §癸四 第 1 列：可見層**恰加總前兩項**（`excludedUnitCount`，單一推導點）。
+      {/* 🔒 §癸四 第 1 列：排除數**恰加總前兩項**（`excludedUnitCount`，單一推導點）。
           🔴 `excludedNoAnnouncedDate` 數的是**文件**、且依 `OQ-D44-12b` **根本不進母體**
              ⇒ 加進來會得到一個沒有意義的數，且「排除」這個說法本身就是錯的。
-          🔒 `a+b === 0` ⇒ **無可見排除文字**，但節點仍保留於 DOM（`AC-G15` 之掛鉤恆存在）。 */}
+          🔒 `a+b === 0` ⇒ 無排除文字，但節點仍保留於 DOM（`AC-G15` 之掛鉤恆存在）。
+          🟣 2026-09-23 第四版（使用者裁定「排除註記移入 ⓘ」）：節點改 `sr-only`——視覺上不再佔一列，
+             明細數字（{a} 個已裁撤、{b} 個不再使用）本就在上方 ⓘ 第二段；讀屏仍可讀到總數。
+             ⚠ 此裁定**推翻**本檔「數字一律留在可見文字、不得移入 popover」之既有原則於本卡之適用（1280 寬時
+             文字欄僅 ≈95px，該列使四張卡被撐到 208px；使用者以參考圖比例為優先）。
+             📝 已作廢（⚠ 不得復原）：OLD> 可見 `text-[11px] text-slate-500`，與「查看明細」同在卡底一列（`data-ojt-footer`）。 */}
       {summary ? (
-        <p
-          data-testid="ojt-ontime-exclusion-note"
-          className={
-            excludedUnitCount(summary) > 0 ? 'mt-2 text-[11px] leading-relaxed text-slate-500' : 'hidden'
-          }
-        >
+        <p data-testid="ojt-ontime-exclusion-note" className="sr-only">
           {excludedUnitCount(summary) > 0 ? `已排除 ${excludedUnitCount(summary)} 個單位` : ''}
         </p>
       ) : null}
       {/* 🔒 `AC-G18`：本連結之閘門**即卡片本身的閘門**（`canPerform(role, OJT_PROGRESS_MANAGEMENT, 'read')`）。
           🔴 刻意**不在此再判定一次**：兩處各判一次，遲早會有一處被單獨改掉，而那正是第七輪要修掉的
-             「同一個問題兩個答案」。卡片進得了 DOM，就代表這個閘門已經為真。 */}
+             「同一個問題兩個答案」。卡片進得了 DOM，就代表這個閘門已經為真。
+          🟣 2026-09-23 第五版：仍在右上角，但改為**格線第 3 欄**（非 absolute）——卡寬改由內容決定後，
+             浮動之連結不佔寬度、會壓到數值文字；放進格線才會把它的寬度算進卡片。
+             📝 已作廢（⚠ 不得復原）：OLD> 第四版 `absolute top-2.5 right-3`（卡片 `relative`）。
+          🟣 2026-09-23 第四版：移到卡片**右上角**（參考圖「…」選單之位置），落在上內距之內、不佔版面列。
+             📝 已作廢（⚠ 不得復原）：OLD> 卡底一列、`ml-auto` 靠右。 */}
       <Link
         role="link"
+        data-ojt-detail-link
         to="/admin/ojt-progress?tab=sessions&sort=incomplete-first"
-        className="mt-2 inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline"
+        title="查看明細"
+        className="col-start-3 row-start-1 self-start justify-self-end -mt-1 -mr-2 w-7 h-7 rounded-md inline-flex items-center justify-center text-primary-600 hover:text-primary-700 hover:bg-primary-50"
       >
-        查看明細
-        <Icon name="arrow-right" className="w-3.5 h-3.5" />
+        {/* 🟣 第五版：可見層只留箭頭（省下約 60px 卡寬，1280 寬時數值不再折成三行）；
+            無障礙名稱仍逐字為「查看明細」（`AC-G18`），滑鼠停留以 `title` 顯示。
+            📝 已作廢（⚠ 不得復原）：OLD> 可見文字「查看明細」＋ `arrow-right`。 */}
+        <span className="sr-only">查看明細</span>
+        <Icon name="arrow-right" className="w-4 h-4" />
       </Link>
     </div>
   );
@@ -639,12 +735,26 @@ function DonutRegion(props: {
           <>
             {/* 🟣 「左環、右圖例」兩欄；窄螢幕（< `md`）回落為上下堆疊、環置中。
                 🔴 斷點是 `md` 不是 `sm`：側欄固定 240px 不隨螢幕收合，`sm`(640px) 之下可用內容寬只剩
-                   320px，扣掉環 140 ＋ gap 16 後給圖例 164px，而圖例右側兩個數字自身就要 ≈ 144px
-                   ⇒ 組織名歸零。`md`(768px) 之下為 448px，圖例得 292px。 */}
-            <div className="flex flex-col md:flex-row items-start gap-4">
-              <div className="relative shrink-0 w-[140px] h-[140px] mx-auto md:mx-0">
+                   320px，扣掉環 ＋ gap 後圖例所剩無幾，而圖例右側兩個數字欄自身就要 136px
+                   ⇒ 組織名歸零。`md`(768px) 之下卡片內寬 ≈ 456px。
+                🟣 2026-09-23（使用者：「環放大」「圖例右側一大片空白」）：
+                   ① 環改為**依斷點放大**，只改 CSS 寬高、`<svg>` 改 `w-full h-full` 等比縮放——
+                      🔴 `viewBox`（140）／`DONUT_RADIUS`（54）／描邊 18 **一律不動**（半徑常數有測試鎖定）。
+                      尺寸表（卡片內寬 ⇒ 環）：< md 堆疊 176｜md 雙欄前 ≈ 456 ⇒ 160｜lg 單欄滿版 ≥ 712 ⇒ 208｜
+                      xl 兩張並排 ≈ 456–583 ⇒ 160｜2xl ≥ 583 ⇒ 224。
+                      🔴 xl 只放到 160 是算出來的：「依制定部門」之名稱是「公司 / 本部 / 部門」長路徑，
+                         環每大 16px 名稱欄就少 16px；160 時名稱欄 ≈ 106px（舊 140 環時 ≈ 136px）。
+                   ② 圖例寬度上限 `md:max-w-[28rem]`，環與圖例**成組置中**（`md:justify-center`）、垂直置中
+                      （`items-center`）⇒ 寬螢幕之空白平均落在兩側，不再全部堆在圖例右邊。
+                   📝 已作廢（⚠ 不得復原）：OLD> 環固定 `w-[140px] h-[140px]`、容器 `items-start gap-4`、
+                      圖例 `md:flex-1` 無上限（寬螢幕下兩個數字被推到最右緣，與組織名之間一大段空白）。 */}
+            <div className="flex flex-col md:flex-row items-center md:justify-center gap-5">
+              <div
+                data-donut-ring
+                className="relative shrink-0 w-44 h-44 md:w-40 md:h-40 lg:w-52 lg:h-52 xl:w-40 xl:h-40 2xl:w-56 2xl:h-56"
+              >
                 {/* 🔒 `AC-G49`：環之 `<svg>` 為裝飾層，語意一律由文字承載。 */}
-                <svg viewBox="0 0 140 140" className="w-[140px] h-[140px]" aria-hidden="true" focusable="false">
+                <svg viewBox="0 0 140 140" className="w-full h-full" aria-hidden="true" focusable="false">
                   <circle cx="70" cy="70" r={DONUT_RADIUS} fill="none" stroke="#F1F5F9" strokeWidth="18" />
                   {arcs.map((a, i) => (
                     <circle
@@ -664,18 +774,20 @@ function DonutRegion(props: {
                 {/* 🔒 DOM 契約：`[data-donut-total]` **必須是 `<svg>` 之外的 HTML 文字節點**
                     ——它是「本維度已公告合計」之唯一文字出處。 */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span data-donut-total className="text-2xl font-bold text-slate-900 mono">
+                  <span data-donut-total className="text-3xl 2xl:text-4xl font-bold text-slate-900 mono">
                     {total}
                   </span>
-                  <span className="text-[10px] text-slate-400">已公告合計（份）</span>
+                  <span className="text-[11px] text-slate-400">已公告合計（份）</span>
                 </div>
               </div>
               {/* 🔴 `AC-G41`：圖例**逐列列出全部組織**，不受 Top N 限制 ⇒ 右欄必須可捲動
-                  （正式站部門維度可達 40+ 列，否則整張卡會被撐到數千 px）。 */}
+                  （正式站部門維度可達 40+ 列，否則整張卡會被撐到數千 px）。
+                  🔵 捲動上限：md／xl 維持 196px（≈ 7 列，比 160 環略高無妨，兩欄垂直置中）；
+                     lg／2xl 環變大後改與環同高（208／224）。 */}
               <ul
                 role="list"
                 data-testid="donut-legend"
-                className="w-full md:flex-1 min-w-0 max-h-[196px] overflow-y-auto pr-1 border-t border-slate-100 md:border-t-0 divide-y divide-slate-100"
+                className="w-full md:w-auto md:flex-1 md:max-w-[28rem] min-w-0 max-h-[196px] lg:max-h-52 xl:max-h-[196px] 2xl:max-h-56 overflow-y-auto pr-1 border-t border-slate-100 md:border-t-0 divide-y divide-slate-100"
               >
                 {rows.map((r, i) => (
                   <li
@@ -683,11 +795,19 @@ function DonutRegion(props: {
                     role="listitem"
                     data-testid="donut-legend-row"
                     data-org-key={r.key}
-                    className="flex items-center gap-2 py-1.5"
+                    className="grid grid-cols-[0.625rem_minmax(0,1fr)_4.25rem_4.25rem] items-center gap-x-2 py-1.5"
                   >
+                    {/* 🟣 2026-09-23（使用者：「已公告」「進度中」要各自靠左、上下對成欄）：
+                        每列改為**同一份**四欄 grid 樣板（色點／組織名／已公告／進度中）——兩個數字欄固定
+                        4.25rem（68px，mono 12px 下「已公告 999」≈ 65px），靠左 ⇒ 各列之標籤落在同一條直線上。
+                        🔴 刻意**不用** subgrid／`display:contents`：後者在部分瀏覽器會吃掉 `role="listitem"` 之語意；
+                           固定欄寬已足以對齊，不需要跨列共享軌道。
+                        🔴 組織名欄是 `minmax(0,1fr)` 而非 `1fr`：後者之最小值＝min-content，長路徑名稱不會截斷、
+                           反而把兩個數字欄擠出卡外（`truncate` 需要軌道能縮到 0）。
+                        📝 已作廢（⚠ 不得復原）：OLD> `flex items-center gap-2`＋組織名 `flex-1`（數字欄寬隨位數浮動、對不齊）。 */}
                     <span
                       aria-hidden="true"
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      className="w-2.5 h-2.5 rounded-full"
                       style={{
                         background:
                           i < DONUT_TOP_N ? DONUT_PALETTE[i % DONUT_PALETTE.length] : DONUT_OTHER_COLOR,
@@ -695,21 +815,21 @@ function DonutRegion(props: {
                     />
                     <span
                       data-testid="legend-org-name"
-                      className="text-xs text-slate-700 flex-1 truncate"
+                      className="text-xs text-slate-700 truncate"
                       title={r.label}
                     >
                       {r.label}
                     </span>
                     <span
                       data-testid="legend-announced"
-                      className="text-xs mono whitespace-nowrap"
+                      className="text-xs mono whitespace-nowrap text-left"
                       style={{ color: COLOR_ANNOUNCED_TEXT }}
                     >
                       {`已公告 ${r.announced}`}
                     </span>
                     <span
                       data-testid="legend-in-progress"
-                      className="text-xs mono whitespace-nowrap"
+                      className="text-xs mono whitespace-nowrap text-left"
                       style={{ color: COLOR_IN_PROGRESS_TEXT }}
                     >
                       {`進度中 ${r.inProgress}`}

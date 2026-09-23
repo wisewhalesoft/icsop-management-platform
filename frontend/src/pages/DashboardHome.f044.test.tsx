@@ -274,7 +274,9 @@ describe('AC-G24／AC-G13／AC-G14／AC-G15 — 卡面數值與卡④ 之巢狀�
     // 🔒 卡④：外層同時含住兩個內層數值節點之逐字
     const ojtValue = values[3].textContent ?? '';
     expect(ojtValue).toContain('75%');
-    expect(ojtValue).toContain('已完成 3 / 應完成 4');
+    // 🟣 2026-09-23 第六版（使用者裁定）：逐字改為 `{X} 已完成 / {Y} 應完成`（數字在前、單位詞在後）。
+    // 📝 已作廢（⚠ 不得復原）：OLD> `已完成 3 / 應完成 4`。
+    expect(ojtValue).toContain('3 已完成 / 4 應完成');
     /**
      * 🔴 **本條缺了這一句就會「碰巧綠」**：`OLD>` 之單一字串 `已完成 3 / 應完成 4（75%）`
      *    **同時含有**上面兩段 ⇒ 🔴 **只用 `toContain` 的話，完全沒拆節點的舊實作照樣全綠**。
@@ -302,7 +304,9 @@ describe('AC-G24／AC-G13／AC-G14／AC-G15 — 卡面數值與卡④ 之巢狀�
 
     expect(rate).not.toBeNull();
     expect(rate.textContent).toBe('75%');
-    expect(value.textContent).toBe('已完成 3 / 應完成 4');
+    // 🟣 2026-09-23 第六版（使用者裁定）：逐字改為 `{X} 已完成 / {Y} 應完成`（數字在前、單位詞在後）。
+    // 📝 已作廢（⚠ 不得復原）：OLD> `已完成 3 / 應完成 4`。
+    expect(value.textContent).toBe('3 已完成 / 4 應完成');
 
     // 🔒 `AC-G24`：三者不得缺一，且兩個內層皆巢狀於外層
     expect(outer.contains(rate)).toBe(true);
