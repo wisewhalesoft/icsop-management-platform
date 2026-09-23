@@ -28,7 +28,7 @@ export function formatSize(bytes: number): string {
 
 /** 格式白名單被拒之逐字訊息（prototype 19／19a 同一句）。 */
 export const FILE_FORMAT_NOT_ALLOWED_MESSAGE =
-  '檔案格式不支援，僅允許 excel（.xlsx / .xls）與 pdf（FILE_FORMAT_NOT_ALLOWED）。';
+  '檔案格式不支援，僅允許 excel（.xlsx / .xls）與 pdf。';
 
 /** 未選檔即送出之逐字訊息（prototype 19a `submitForm()`）。 */
 export const FILE_REQUIRED_MESSAGE = '請先選擇檔案（excel / pdf）。';

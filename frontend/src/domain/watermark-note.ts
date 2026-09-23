@@ -10,7 +10,13 @@
  * 唯一必須一致的是**文案本身**，故共用點落在字串常數而非元件。
  * 權威＝`docs/specs/features/F020-watermark.md#backend-burn-delta`。
  */
-export const WM_BURN_TEXT = '檢視/下載將燒錄浮水印';
+/**
+ * 🔵 2026-09-23 全站文案稽核（使用者裁決）：「燒錄」是實作動詞（伺服器端把浮水印寫進 PDF
+ * 內容層），使用者要知道的是**「我拿到的檔案上會有我的名字」**這個事實。
+ * 📝 已作廢（⚠ 不得復原）：OLD> export const WM_BURN_TEXT = '檢視/下載將燒錄浮水印';
+ * 🔒 「共用同一組逐字文案、六頁不得分歧」之約束不變——改的是字面，不是共用點。
+ */
+export const WM_BURN_TEXT = '檢視／下載會帶您的身分浮水印';
 export const WM_UNSUPPORTED_TEXT = '此格式不支援浮水印';
 
 /**

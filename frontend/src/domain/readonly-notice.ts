@@ -12,7 +12,7 @@ import { canWriteField, FieldKey } from './field-matrix';
 
 /** 僅 `SysAdmin`：全欄位唯讀、無任何寫入項。 */
 export const RO_NOTICE_FULL =
-  '唯讀模式 · 此角色對 ICSOP 文件全欄位皆唯讀；附件可下載（燒錄浮水印），但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。';
+  '唯讀模式 · 此角色對 ICSOP 文件全欄位皆唯讀；附件可下載，但不可上傳或取代。';
 
 /**
  * 📝 **`RO_NOTICE_OJT_EXCEPTION` 已於 2026-08-28 隨 F042 `AC-J4`② 整條作廢**（任何角色皆不應
@@ -35,7 +35,7 @@ export const RO_NOTICE_FULL =
  * `'此區 19 個欄位對本角色一律唯讀（FIELD_WRITE_FORBIDDEN）；本頁唯一可寫項為下方附件區之「OJT 實體簽到表」。'`
  */
 export const FIELD_RO_NOTE =
-  '此區全部 20 個欄位對本角色一律唯讀（FIELD_WRITE_FORBIDDEN）；本頁無任何可寫項。';
+  '此區全部 20 個欄位對本角色一律唯讀；本頁無任何可寫項。';
 
 /**
  * 附件區說明（自 F042 起唯一之一份——`ATTACH_NOTE_OJT` 隨 OJT 破例收回而作廢）。
@@ -43,7 +43,7 @@ export const FIELD_RO_NOTE =
  * `'下載/列印時伺服器端燒錄浮水印並寫入稽核。本角色僅「OJT 實體簽到表」一項可上傳/覆蓋，其餘各列皆為唯讀（見各列標記）。'`
  */
 export const ATTACH_NOTE_RO =
-  '下載/列印時伺服器端燒錄浮水印並寫入稽核；本角色無任何上傳/取代入口。';
+  '下載或列印取得的檔案會帶有您的身分浮水印，並留下紀錄；本角色沒有任何上傳或取代入口。';
 
 /**
  * 該角色對「OJT 簽到表」是否可寫。
