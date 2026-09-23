@@ -30,6 +30,8 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { businessCategoryDisplayName } from '../domain/business-category';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
 import { BusinessCategoryNodeDrawer } from './BusinessCategoryNodeDrawer';
@@ -267,7 +269,10 @@ export function BusinessCategoryDagCanvasPage(): JSX.Element {
           <Icon name="lock" className="w-7 h-7 text-red-500" />
         </div>
         <h1 className="font-semibold text-slate-900">無業務/功能類別管理權限</h1>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }

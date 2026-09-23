@@ -206,7 +206,7 @@ describe('LifecycleListPage — F040 唯一性錯誤提示（F007 AC-S3～AC-S5�
     await userEvent.click(within(dialog).getByRole('button', { name: '儲存' }));
   }
 
-  it('AC-S3 後端回 409 LIFECYCLE_DUPLICATE → 顯示 #lcDupErr 及 prototype 逐字文案', async () => {
+  it('AC-S3 後端回 409 LIFECYCLE_DUPLICATE → 顯示 #lcDupErr 逐字文案（不含錯誤代碼）', async () => {
     mockAuth('ICSOPAdmin');
     vi.mocked(endpoints.createLifecycle).mockRejectedValue(
       new ApiError(409, 'LIFECYCLE_DUPLICATE'),
@@ -218,7 +218,9 @@ describe('LifecycleListPage — F040 唯一性錯誤提示（F007 AC-S3～AC-S5�
     await waitFor(() => expect(document.getElementById('lcDupErr')).not.toBeNull());
     const err = document.getElementById('lcDupErr')!;
     expect(err.textContent).toContain('此循環名稱與子分類之組合已存在');
-    expect(err.textContent).toContain('LIFECYCLE_DUPLICATE');
+    // 🔵 2026-09-23 全站文案稽核：代碼移出可見文字。
+    // 📝 已作廢（⚠ 不得復原）：OLD> expect(err.textContent).toContain('LIFECYCLE_DUPLICATE');
+    expect(err.textContent).not.toContain('LIFECYCLE_DUPLICATE');
     expect(document.getElementById('lcConflictErr')).toBeNull();
   });
 
@@ -235,7 +237,8 @@ describe('LifecycleListPage — F040 唯一性錯誤提示（F007 AC-S3～AC-S5�
     const err = document.getElementById('lcConflictErr')!;
     expect(err.textContent).toContain('同一循環名稱不可同時存在');
     expect(err.textContent).toContain('請先處理既有該筆');
-    expect(err.textContent).toContain('LIFECYCLE_SUBCATEGORY_CONFLICT');
+    // 📝 已作廢（⚠ 不得復原）：OLD> expect(err.textContent).toContain('LIFECYCLE_SUBCATEGORY_CONFLICT');
+    expect(err.textContent).not.toContain('LIFECYCLE_SUBCATEGORY_CONFLICT');
     expect(document.getElementById('lcDupErr')).toBeNull();
   });
 });

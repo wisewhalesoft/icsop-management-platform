@@ -179,7 +179,10 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
     const num = screen.getByLabelText(/ICSOP 文件編號/);
     await userEvent.clear(num);
     await userEvent.type(num, '101-2-00'); // → ICSOP-SRC-101-2-00 = 既有 d2（有效）
-    expect(await screen.findByText(/DOCUMENT_NUMBER_DUPLICATE/)).toBeInTheDocument();
+    // 🔵 2026-09-23 全站文案稽核：代碼移出可見文字；改鎖使用者語言之內嵌提示。
+    const dup = await screen.findByText(/此編號已被/);
+    expect(dup.textContent).toContain('佔用');
+    expect(dup.textContent).not.toContain('DOCUMENT_NUMBER_DUPLICATE');
     await userEvent.click(screen.getByRole('button', { name: '儲存' }));
     expect(endpoints.updateDocument).not.toHaveBeenCalled();
   });
@@ -454,7 +457,7 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
      * 🔴 2026-08-20 D9 delta（`OQ-D9-08`／`OQ-D9-33`）—— 編輯頁附件卡片亦渲染浮水印註記。
      * 權威：`docs/specs/features/F020-watermark.md#backend-burn-delta` `AC-N20`。
      */
-    it('AC-N20 ICSOP PDF 卡片帶 data-wm-note，逐字為「檢視/下載將燒錄浮水印」', async () => {
+    it('AC-N20 ICSOP PDF 卡片帶 data-wm-note，逐字為「檢視／下載會帶您的身分浮水印」', async () => {
       mockAuth('ICSOPAdmin');
       vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue([ICSOP_PDF]);
       renderPage();
@@ -462,7 +465,7 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
       const card = attachCard('ICSOP PDF（呈現用，1 份，覆蓋式）');
       const note = card.querySelector('[data-wm-note]');
       expect(note, '找不到 data-wm-note').not.toBeNull();
-      expect(note!.textContent).toBe('檢視/下載將燒錄浮水印');
+      expect(note!.textContent).toBe('檢視／下載會帶您的身分浮水印');
     });
 
     it('TS-D-010 Supervisor（唯讀）→ 僅顯示檔名與下載，無「取代」入口', async () => {
@@ -729,9 +732,13 @@ describe('DocumentEditPage — F011 編輯與版本對照（移植 prototype 15�
       renderPage();
       await waitFor(() => expect(screen.getByLabelText(/文件名稱/)).toBeInTheDocument());
       expect(screen.getByText('上傳 ICSOP 原始檔（.xls，1 份）')).toBeInTheDocument();
-      expect(screen.getByText('待 AI 索引管線就緒（F027/F029）')).toBeInTheDocument();
+      // 🔵 2026-09-23：規格代號移出 UI（原逐字含「（F027/F029）」）。
+      expect(screen.getByText('AI 智慧問答功能尚未開放')).toBeInTheDocument();
       expect(screen.getByText(/ICSOP 原始檔＝\.xls/)).toBeInTheDocument();
-      expect(screen.getByText(/OQ-E04-06 定案/)).toBeInTheDocument();
+      // 🔵 2026-09-23：裁決編號移出 UI；改鎖使用者真正需要的那半句（單檔上限）。
+      const fmt = screen.getByText(/ICSOP 原始檔＝\.xls/);
+      expect(fmt.textContent).toContain('單檔上限 50MB');
+      expect(fmt.textContent).not.toContain('OQ-E04-06');
     });
   });
 });

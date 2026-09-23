@@ -12,6 +12,8 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { lifecycleDisplayName, normalizeSubcategory } from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { TREE_PREVIEW_WINDOW_NAME } from './LifecycleTreePreviewPage';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
@@ -103,7 +105,10 @@ export function LifecycleListPage(): JSX.Element {
           <Icon name="alert-circle" className="w-7 h-7 text-red-500" />
         </div>
         <h1 className="font-semibold text-slate-900">無循環管理權限</h1>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }
@@ -231,7 +236,7 @@ export function LifecycleListPage(): JSX.Element {
                                 title: `刪除循環「${lifecycleDisplayName(l)}」？`,
                                 body:
                                   mounted > 0
-                                    ? `此循環仍有 ${mounted} 份文件掛載，需先解除全部掛載才能刪除（LIFECYCLE_HAS_DOCUMENTS）；亦可改用「停用」保留此循環。`
+                                    ? `此循環仍有 ${mounted} 份文件掛載，需先解除全部掛載才能刪除；亦可改用「停用」保留此循環。`
                                     : '此循環已無文件掛載，刪除後將記錄稽核（不可復原）。',
                                 onConfirm: () => void act(() => deleteLifecycle(l.id), '循環已刪除'),
                               });
@@ -381,7 +386,7 @@ function LifecycleModal({
             {nameErr && (
               <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
                 <Icon name="alert-circle" className="w-3.5 h-3.5 shrink-0" />
-                循環名稱不可為空（LIFECYCLE_NAME_REQUIRED）
+                循環名稱不可為空
               </p>
             )}
           </div>
@@ -398,17 +403,23 @@ function LifecycleModal({
               className={`w-full px-3 py-2 rounded-md border text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 ${uniqErr ? 'border-red-500' : 'border-slate-300'}`}
             />
             <p className="text-[10px] text-slate-400 mt-1">
-              循環之身分＝<span className="mono">名稱＋子分類</span>之組合：同名之不同子分類為
+              {/*
+                🔵 2026-09-23 全站文案稽核：`UUID`／`DAG`／`null` 為內部詞彙（比照業務/功能類別頁）。
+                📝 已作廢（⚠ 不得復原）：
+                  OLD> …**彼此獨立的循環**（各有 UUID／DAG／文件掛載）。同一名稱不可同時存在
+                  OLD> 「無子分類」與「有子分類」。留白（或僅空白）一律存為 `null`。
+              */}
+              循環之身分＝「名稱＋子分類」之組合：同名之不同子分類為
               <strong className="text-slate-500">彼此獨立的循環</strong>
-              （各有 UUID／DAG／文件掛載）。同一名稱不可同時存在「無子分類」與「有子分類」。留白（或僅空白）一律存為
-              <span className="mono">null</span>。
+              （各自擁有自己的樹狀圖與文件掛載）。同一名稱不可同時存在「無子分類」與「有子分類」。
+              子分類留白（或僅輸入空白）一律視為未填。
             </p>
             {uniqErr === 'LIFECYCLE_DUPLICATE' && (
               <p id="lcDupErr" className="mt-1 text-xs text-red-600 flex items-start gap-1">
                 <Icon name="alert-circle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 <span>
                   此循環名稱與子分類之組合已存在（<span className="mono">subcategory</span> 為 null
-                  之「無子分類」亦視為一種具體組合）（LIFECYCLE_DUPLICATE）
+                  之「無子分類」亦視為一種具體組合）
                 </span>
               </p>
             )}
@@ -416,7 +427,7 @@ function LifecycleModal({
               <p id="lcConflictErr" className="mt-1 text-xs text-red-600 flex items-start gap-1">
                 <Icon name="alert-circle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 <span>
-                  同一循環名稱不可同時存在「無子分類」與「有子分類」之設定（雙向皆適用）；請先處理既有該筆（LIFECYCLE_SUBCATEGORY_CONFLICT）
+                  同一循環名稱不可同時存在「無子分類」與「有子分類」之設定（雙向皆適用）；請先處理既有該筆
                 </span>
               </p>
             )}

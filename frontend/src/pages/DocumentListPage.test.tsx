@@ -525,13 +525,13 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
      * 🔴 2026-08-20 D9 delta（`OQ-D9-08`／`OQ-D9-33`）—— 後台清單頁「檔案」欄亦渲染浮水印註記。
      * 權威：`docs/specs/features/F020-watermark.md#backend-burn-delta` `AC-N20`。
      */
-    it('AC-N20 「檔案」欄之 ICSOP PDF（pdf）列帶 data-wm-note，逐字為「檢視/下載將燒錄浮水印」', async () => {
+    it('AC-N20 「檔案」欄之 ICSOP PDF（pdf）列帶 data-wm-note，逐字為「檢視／下載會帶您的身分浮水印」', async () => {
       mockAuth('ICSOPAdmin');
       renderPage();
       await waitFor(() => expect(screen.getByText('車輛分期進件作業')).toBeInTheDocument());
       const note = rowOf('車輛分期進件作業').querySelector('[data-wm-note]');
       expect(note, '找不到 data-wm-note').not.toBeNull();
-      expect(note!.textContent).toBe('檢視/下載將燒錄浮水印');
+      expect(note!.textContent).toBe('檢視／下載會帶您的身分浮水印');
     });
 
       /**

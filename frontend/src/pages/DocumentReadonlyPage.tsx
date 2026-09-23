@@ -18,6 +18,8 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { orgUnitDisplayName } from '../domain/org-path';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT, isWatermarkSupportedFormat } from '../domain/watermark-note';
 import {
   ATTACH_NOTE_RO,
@@ -239,7 +241,7 @@ export function DocumentReadonlyPage(): JSX.Element {
     async (appendixId: string, name: string) => {
       try {
         await downloadAppendixFromPool(appendixId, name);
-        toast.success(`下載附錄「${name}」（不燒錄浮水印；後台管理端存取不寫調閱稽核）`);
+        toast.success(`下載附錄「${name}」（管理端下載，不加浮水印、不留調閱紀錄）`);
       } catch {
         toast.error(`無法下載「${name}」`);
       }
@@ -274,7 +276,10 @@ export function DocumentReadonlyPage(): JSX.Element {
         </div>
         <h1 className="font-semibold text-slate-900">無文件檢視權限</h1>
         <p className="text-sm text-slate-500 mt-1">一般使用者無後台存取權（前台可瀏覽有效文件）。</p>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }

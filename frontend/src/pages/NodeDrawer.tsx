@@ -84,7 +84,7 @@ export function NodeDrawer({
         }));
         setDocs([...mounted, ...cands]);
       } catch (e) {
-        if (alive) toast.error(e instanceof ApiError ? e.code : '載入失敗');
+        if (alive) toast.error('載入失敗', e instanceof ApiError ? { code: e.code } : undefined);
       }
     })();
     return () => {
@@ -168,7 +168,7 @@ export function NodeDrawer({
       onChanged();
       onClose();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.code : '儲存失敗');
+      toast.error('儲存失敗', e instanceof ApiError ? { code: e.code } : undefined);
       setSaving(false);
     }
   }, [canWrite, unresolved, docs, nodeId, name, originalName, lifecycleId, onChanged, onClose, toast]);
@@ -254,7 +254,7 @@ export function NodeDrawer({
               <Icon name="filter" className="w-3.5 h-3.5 mt-0.5" />
               <span>
                 {/* prototype 12 行 137：循環名稱掛 [data-lifecycle-title]，逐字呈現父層傳入之顯示名稱（含子分類），不自行截斷或改寫。 */}
-                僅顯示所屬循環＝<span className="text-slate-600" data-lifecycle-title="">{cycleName ?? '當前循環'}</span> 之文件（後端過濾，已排除其他循環 {excludedCount} 筆）。
+                僅顯示所屬循環＝<span className="text-slate-600" data-lifecycle-title="">{cycleName ?? '當前循環'}</span> 之文件（已排除其他循環 {excludedCount} 筆）。
               </span>
             </div>
             <div className="relative mb-2">

@@ -20,6 +20,8 @@ import {
 } from '../domain/export-feedback';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT } from '../domain/watermark-note';
 import { OJT_FILTER_OPTIONS, ojtStatusValue, ojtStatusView } from '../domain/ojt-status-view';
 import { TREE_PREVIEW_WINDOW_NAME } from './LifecycleTreePreviewPage';
@@ -974,7 +976,7 @@ export function DocumentListPage(): JSX.Element {
     try {
       // 第二引數僅供第 12 欄之欄內排序（命中者排第一顆），不參與任何篩選判定。
       await exportDocumentList(documentIds, filters.link || undefined);
-      toast.success(`已匯出程序書清單（CSV，UTF-8 BOM）：共 ${documentIds.length} 筆`);
+      toast.success(`已匯出程序書清單（CSV）：共 ${documentIds.length} 筆`);
     } catch (e) {
       if (isExportLimitError(e)) {
         toast.error(
@@ -983,7 +985,7 @@ export function DocumentListPage(): JSX.Element {
         );
         return;
       }
-      toast.error(e instanceof ApiError ? `匯出失敗：${e.code}` : '匯出失敗');
+      toast.error('匯出失敗，請稍後再試。', e instanceof ApiError ? { code: e.code } : undefined);
     }
   }, [filtered, filters.link, toast]);
 
@@ -994,7 +996,10 @@ export function DocumentListPage(): JSX.Element {
           <Icon name="lock" className="w-7 h-7 text-red-500" />
         </div>
         <h1 className="font-semibold text-slate-900">無程序書管理權限</h1>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }
@@ -1041,7 +1046,7 @@ export function DocumentListPage(): JSX.Element {
       {canRead && !canWrite && (
         <div role="note" className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2">
           <Icon name="eye" className="w-4 h-4 shrink-0" />
-          唯讀模式 · 此角色對 ICSOP 程序書僅可檢視/下載，無法建立或編輯（FIELD_WRITE_FORBIDDEN）。
+          唯讀模式 · 此角色對 ICSOP 程序書僅可檢視/下載，無法建立或編輯。
         </div>
       )}
 

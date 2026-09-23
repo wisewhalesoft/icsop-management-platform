@@ -14,6 +14,19 @@ import { printErrorMessage } from '../domain/print-error';
 import { lifecycleDisplayName } from '../domain/lifecycle-subcategory';
 import { roleMeta } from '../domain/roles';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import {
+  BLOCKED_ACTION_HINT,
+  BLOCKED_CODE_NOTE,
+  DOWNLOAD_FAILED_TEXT,
+  errorCodeNote,
+  LOAD_FAILED_TEXT,
+} from '../domain/error-code-note';
+import {
+  TREE_PREVIEW_SECURITY_NOTE,
+  TREE_PREVIEW_SECURITY_TEXT,
+  WATERMARK_SAMPLE_LABEL,
+} from '../domain/viewer-security-note';
 import { watermarkPresentation } from '../domain/watermark-lines';
 import {
   WATERMARK_COLOR,
@@ -318,7 +331,7 @@ export function LifecycleTreePreviewPage(): JSX.Element {
     try {
       await downloadLifecycleTree(id, `lifecycle-${id}.pdf`);
     } catch (e) {
-      setActionError(`下載失敗：${e instanceof ApiError ? e.code : String(e)}`);
+      setActionError(DOWNLOAD_FAILED_TEXT);
     } finally {
       setActionBusy(null);
     }
@@ -494,7 +507,10 @@ export function LifecycleTreePreviewPage(): JSX.Element {
           <Icon name="alert-circle" className="w-7 h-7 text-red-500" />
         </div>
         <h1 className="font-semibold text-slate-900">無循環樹狀圖檢視權限</h1>
-        <p className="text-xs mono text-slate-400">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
         <button onClick={() => navigate('/')} className="mt-2 px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700">
           返回首頁
         </button>
@@ -641,13 +657,20 @@ export function LifecycleTreePreviewPage(): JSX.Element {
         </div>
       </header>
 
-      {/* info note（比照 05：檢視已記錄稽核）*/}
+      {/*
+        安全資訊帶（2026-09-23 全站文案稽核改版）。
+        🔴 使用者裁決：**實作邏輯與技術細節不得常駐於 UI；如需保留一律以 hover（ⓘ）承載。**
+        📝 原逐字文案已作廢，⚠ 不得復原——它把稽核事件名與浮水印產生機制唸給使用者聽：
+           OLD> 本預覽已**寫入調閱稽核（VIEW）**；畫面疊加之浮水印由**伺服器端**依當下登入身分
+           OLD> 與時間動態產生，格式與稽核快照一致。**下載／列印**時將把浮水印
+           OLD> **燒錄進 PDF 內容層**並各自記錄稽核。
+        🔒 「本次已記錄調閱」仍**可見**——使用者有權知道自己的行為被記錄，那不是實作細節。
+      */}
       <div className="px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700 flex items-start gap-2 shrink-0">
         <Icon name="shield-check" className="w-4 h-4 shrink-0 mt-0.5" />
-        <span>
-          本預覽已<strong>寫入調閱稽核（VIEW）</strong>；畫面疊加之浮水印由<strong>伺服器端</strong>
-          依當下登入身分與時間動態產生，格式與稽核快照一致。<strong>下載／列印</strong>時將把浮水印
-          <strong>燒錄進 PDF 內容層</strong>並各自記錄稽核。
+        <span className="flex items-center gap-1 flex-wrap">
+          {TREE_PREVIEW_SECURITY_TEXT}
+          <InfoNote infoKey="tree-security" paragraphs={TREE_PREVIEW_SECURITY_NOTE} />
         </span>
       </div>
 
@@ -680,7 +703,8 @@ export function LifecycleTreePreviewPage(): JSX.Element {
       >
         {error && (
           <div role="alert" className="mx-auto w-fit text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-4 py-3">
-            載入失敗 · <span className="mono">{error}</span>
+            {LOAD_FAILED_TEXT}
+            <InfoNote infoKey="load-error" paragraphs={[errorCodeNote(error)]} />
           </div>
         )}
         {!error && data && layout && layout.nodes.length === 0 && (
@@ -900,7 +924,8 @@ export function LifecycleTreePreviewPage(): JSX.Element {
               role="alert"
               className="m-4 text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2"
             >
-              節點文件清單載入失敗 · <span className="mono">{nodeDocsError}</span>
+              {LOAD_FAILED_TEXT}
+              <InfoNote infoKey="node-docs-error" paragraphs={[errorCodeNote(nodeDocsError)]} />
             </div>
           )}
           {/*
@@ -1011,7 +1036,7 @@ export function LifecycleTreePreviewPage(): JSX.Element {
           <Icon name="info" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           <span>
             點任一列可另開該程序書之<strong>後台唯讀詳情</strong>
-            。本抽屜為唯讀檢視，不提供任何 DAG 編輯互動；開啟本抽屜<strong>不另記稽核事件</strong>。
+            。本抽屜為唯讀檢視，不提供任何編輯互動。
           </span>
         </div>
       </aside>
@@ -1031,7 +1056,7 @@ export function LifecycleTreePreviewPage(): JSX.Element {
       {/* watermark format caption */}
       <footer className="shrink-0 bg-white border-t border-slate-200 px-4 py-2.5">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
-          <span className="text-xs text-slate-400 shrink-0">浮水印格式（與稽核快照一致）：</span>
+          <span className="text-xs text-slate-400 shrink-0">{WATERMARK_SAMPLE_LABEL}</span>
           <code className="mono text-xs text-slate-600 truncate">{data?.watermark ?? ''}</code>
         </div>
       </footer>

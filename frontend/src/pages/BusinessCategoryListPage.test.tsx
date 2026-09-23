@@ -194,7 +194,12 @@ describe('BusinessCategoryListPage — F043 甲：類別池（比照 F007）', (
     expect(within(dialog).getByText(/名稱不可為空/)).toBeInTheDocument();
   });
 
-  it('AC-03 建立重複組合 → 顯示 BUSINESS_CATEGORY_DUPLICATE 提示', async () => {
+  /**
+   * 🔵 2026-09-23 全站文案稽核：錯誤提示不再於句尾附錯誤代碼。
+   * 📝 已作廢（⚠ 不得復原）：OLD> await within(dialog).findByText(/BUSINESS_CATEGORY_DUPLICATE/)
+   * 🔴 改鎖使用者看得懂的那一句；同時負向鎖代碼不得回流（兩半句缺一不可）。
+   */
+  it('AC-03 建立重複組合 → 顯示重複提示（不含錯誤代碼）', async () => {
     mockAuth('ICSOPAdmin');
     vi.mocked(bcApi.createBusinessCategory).mockRejectedValue(
       new ApiError(409, 'BUSINESS_CATEGORY_DUPLICATE'),
@@ -206,12 +211,14 @@ describe('BusinessCategoryListPage — F043 甲：類別池（比照 F007）', (
     await userEvent.type(within(dialog).getByLabelText(/類別名稱/), '授信');
     await userEvent.type(within(dialog).getByLabelText(/子分類/), '消金');
     await userEvent.click(within(dialog).getByRole('button', { name: '儲存' }));
-    expect(await within(dialog).findByText(/BUSINESS_CATEGORY_DUPLICATE/)).toBeInTheDocument();
+    const err = await within(dialog).findByText(/組合已存在/);
+    expect(err).toBeInTheDocument();
+    expect(err.textContent).not.toContain('BUSINESS_CATEGORY_DUPLICATE');
   });
 
   it.each([
     ['授信', '', 'BUSINESS_CATEGORY_SUBCATEGORY_CONFLICT'],
-  ])('AC-07/08 SUBCATEGORY_CONFLICT → 顯示衝突提示（%s）', async (name, sub, code) => {
+  ])('AC-07/08 子分類衝突 → 顯示衝突提示（%s），且不含錯誤代碼', async (name, sub, code) => {
     mockAuth('ICSOPAdmin');
     vi.mocked(bcApi.createBusinessCategory).mockRejectedValue(new ApiError(409, code));
     renderPage();
@@ -221,7 +228,9 @@ describe('BusinessCategoryListPage — F043 甲：類別池（比照 F007）', (
     await userEvent.type(within(dialog).getByLabelText(/類別名稱/), name);
     if (sub) await userEvent.type(within(dialog).getByLabelText(/子分類/), sub);
     await userEvent.click(within(dialog).getByRole('button', { name: '儲存' }));
-    expect(await within(dialog).findByText(new RegExp(code))).toBeInTheDocument();
+    const err = await within(dialog).findByText(/請先處理既有該筆/);
+    expect(err).toBeInTheDocument();
+    expect(err.textContent).not.toContain(code);
   });
 
   it('AC-12 刪除仍有掛載 → 顯示 BUSINESS_CATEGORY_HAS_DOCUMENTS＋「需先解除全部」提示', async () => {

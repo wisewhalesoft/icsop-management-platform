@@ -29,6 +29,8 @@ import {
   subcategoriesOf,
 } from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { PageHeader } from '../components/PageHeader';
 import { EditionInput } from '../components/EditionInput';
 import { SearchCombobox, MultiSearchCombobox, type ComboOption } from '../components/SearchCombobox';
@@ -409,7 +411,7 @@ export function DocumentCreatePage(): JSX.Element {
       return;
     }
     if (dupHit) {
-      toast.error(`此編號已被「${STATUS_ZH[dupHit.status]}」文件（${dupHit.documentName}）佔用（DOCUMENT_NUMBER_DUPLICATE）`);
+      toast.error(`此編號已被「${STATUS_ZH[dupHit.status]}」文件（${dupHit.documentName}）佔用`);
       return;
     }
     setBusy(true);
@@ -484,7 +486,10 @@ export function DocumentCreatePage(): JSX.Element {
         </div>
         <h1 className="font-semibold text-slate-900">無建立文件權限</h1>
         <p className="text-sm text-slate-500 mt-1">僅 ICSOP 管理員可建立文件。</p>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }
@@ -588,7 +593,7 @@ export function DocumentCreatePage(): JSX.Element {
               <p id="subErr" className="mt-1 text-xs text-red-600 flex items-start gap-1">
                 <Icon name="alert-circle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 <span>
-                  此循環名稱底下設有子分類，請選擇具體子分類後再送出（LIFECYCLE_SUBCATEGORY_REQUIRED）
+                  此循環名稱底下設有子分類，請選擇具體子分類後再送出
                 </span>
               </p>
             )}
@@ -603,7 +608,7 @@ export function DocumentCreatePage(): JSX.Element {
         </div>
         <p className="text-xs text-slate-400 mt-3 flex items-start gap-1.5">
           <Icon name="info" className="w-3.5 h-3.5 mt-0.5" />
-          「所屬節點」不在建立表單設定；稍後於 DAG 節點抽屜（F009）掛載/指派，為唯一權威寫入路徑。
+          「所屬節點」不在此處設定；建立完成後，請至「循環管理」的節點抽屜指派——那是唯一可以指派的地方。
         </p>
       </section>
 
@@ -665,7 +670,7 @@ export function DocumentCreatePage(): JSX.Element {
             {dupHit && (
               <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
                 <Icon name="alert-circle" className="w-3.5 h-3.5" />
-                <span>此編號已被「{STATUS_ZH[dupHit.status]}」文件（{dupHit.documentName}）佔用（DOCUMENT_NUMBER_DUPLICATE）</span>
+                <span>此編號已被「{STATUS_ZH[dupHit.status]}」文件（{dupHit.documentName}）佔用</span>
               </p>
             )}
           </div>
@@ -841,13 +846,13 @@ export function DocumentCreatePage(): JSX.Element {
         </div>
         <p className="text-xs text-slate-400 mb-3 flex items-center gap-1.5">
           <Icon name="info" className="w-3.5 h-3.5" />
-          允許格式：ICSOP PDF＝.pdf/.jpg/.png、ICSOP 原始檔＝.xls、使用表單＝.xlsx/.xls/.pdf；單檔上限 50MB（OQ-E04-06 定案）。
+          允許格式：ICSOP PDF＝.pdf/.jpg/.png、ICSOP 原始檔＝.xls、使用表單＝.xlsx/.xls/.pdf；單檔上限 50MB。
         </p>
         <div className="flex items-start gap-2 rounded-lg border border-primary-200 bg-primary-50/40 px-3 py-2.5 mb-4 text-[11px] text-slate-600">
           <Icon name="info" className="w-4 h-4 mt-0.5 shrink-0 text-primary-600" />
           <span>
             <strong className="text-slate-800">ICSOP PDF（呈現／下載用）與 ICSOP 原始檔 .xls（AI 智慧問答檢索來源）為兩個各自獨立的上傳</strong>，系統
-            <strong className="text-slate-800">不自動轉檔</strong>（OQ-E09-10 定案）；兩者內容一致性由 ICSOP 管理員負責維護。
+            <strong className="text-slate-800">不自動轉檔</strong>；兩者內容一致性由 ICSOP 管理員負責維護。
           </span>
         </div>
         <div className="grid sm:grid-cols-3 gap-4">
@@ -863,11 +868,11 @@ export function DocumentCreatePage(): JSX.Element {
           {/* ICSOP 原始檔 .xls：保存需 AI 索引管線之模板解析（F027/F029，[integration]），非單純 multipart；本頁暫不提供。 */}
           <div
             className="border border-dashed border-primary-200 rounded-lg p-4 text-center bg-primary-50/20 opacity-60"
-            title="ICSOP 原始檔 .xls 之保存待 AI 索引管線（F027/F029）就緒"
+            title="AI 智慧問答功能尚未開放，暫不提供此上傳"
           >
             <Icon name="file-spreadsheet" className="w-6 h-6 text-primary-400 mx-auto mb-1.5" />
             <div className="text-sm font-medium text-slate-500">上傳 ICSOP 原始檔（.xls，1 份）</div>
-            <div className="text-xs text-slate-400 mt-1">待 AI 索引管線就緒（F027/F029）</div>
+            <div className="text-xs text-slate-400 mt-1">AI 智慧問答功能尚未開放</div>
           </div>
           {/*
             🔴 F042 `AC-23`（`OQ-E11-08`→A）：原「上傳 OJT 簽到表（1 份）」上傳卡已移除，改為
@@ -895,8 +900,14 @@ export function DocumentCreatePage(): JSX.Element {
         </div>
         <p className="text-[11px] text-slate-500 mt-2 flex items-start gap-1.5">
           <Icon name="sparkles" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary-500" />
-          .xls 供 AI <strong>chunk 提取／索引</strong>（F028/F029）；不符 ICSOP 標準五表模板將於抽取階段阻擋並提示（
-          <span className="mono">XLS_TEMPLATE_INVALID</span>）。
+          {/*
+            🔵 2026-09-23 全站文案稽核：`chunk 提取／索引`、規格代號與錯誤碼皆移出可見文字。
+            📝 已作廢（⚠ 不得復原）：
+              OLD> .xls 供 AI **chunk 提取／索引**（F028/F029）；不符 ICSOP 標準五表模板將於抽取階段
+              OLD> 阻擋並提示（`XLS_TEMPLATE_INVALID`）。
+            🔒「不符模板會被擋下」是使用者**會踩到**的規則，必須維持可見。
+          */}
+          .xls 供 AI 智慧問答檢索使用；若不符 ICSOP 標準五表模板，系統會擋下並提示。
         </p>
 
         {/* 使用表單（自「使用表單管理」表單池選取，可搜尋多選） */}

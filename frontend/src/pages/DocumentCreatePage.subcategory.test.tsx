@@ -164,7 +164,15 @@ describe('DocumentCreatePage — F010 AC-S1 未選子分類即送出被擋（AC-
 
     await waitFor(() => expect(document.getElementById('subErr')).not.toBeNull());
     expect(endpoints.createDocument).not.toHaveBeenCalled();
+    /**
+     * 🔵 2026-09-23 全站文案稽核：錯誤代碼移出可見文字。
+     * 📝 已作廢（⚠ 不得復原）：OLD> toContain('LIFECYCLE_SUBCATEGORY_REQUIRED')
+     * 🔴 正向半句改鎖使用者語言之逐字提示，否則「#subErr 存在但內容空白」也會綠。
+     */
     expect(document.getElementById('subErr')!.textContent).toContain(
+      '此循環名稱底下設有子分類，請選擇具體子分類後再送出',
+    );
+    expect(document.getElementById('subErr')!.textContent).not.toContain(
       'LIFECYCLE_SUBCATEGORY_REQUIRED',
     );
   });

@@ -35,6 +35,8 @@ import {
   subcategoriesOf,
 } from '../domain/lifecycle-subcategory';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT } from '../domain/watermark-note';
 import {
   OjtDerivedBlock,
@@ -655,7 +657,7 @@ export function DocumentEditPage(): JSX.Element {
       return false;
     }
     if (dupHit) {
-      toast.error(`此編號已被「${STATUS_LABEL[dupHit.status]}」文件（${dupHit.documentName}）佔用（DOCUMENT_NUMBER_DUPLICATE）`);
+      toast.error(`此編號已被「${STATUS_LABEL[dupHit.status]}」文件（${dupHit.documentName}）佔用`);
       return false;
     }
     return true;
@@ -726,7 +728,12 @@ export function DocumentEditPage(): JSX.Element {
       }
       // 切換原因已隨 PATCH 送出並記入變更歷程 → 清空（比照 prototype 15 saveAll 之 reasonEl.value=''）。
       setStatusReason('');
-      toast.success('已儲存：以新值覆蓋，UUID 不變、不留歷史版本');
+      /**
+        * 🔵 2026-09-23 全站文案稽核：`UUID 不變` 是內部識別碼之實作保證，使用者看不懂也用不到。
+        * 📝 已作廢（⚠ 不得復原）：OLD> '已儲存：以新值覆蓋，UUID 不變、不留歷史版本'
+        * 🔒「不留歷史版本」必須維持可見——它是**不可逆**的警告，屬使用者會踩到的規則。
+        */
+      toast.success('已儲存：以新值覆蓋，不保留修改前的版本');
     } catch (e) {
       toast.error(msgOf(e));
     } finally {
@@ -862,13 +869,13 @@ export function DocumentEditPage(): JSX.Element {
           <Icon name="git-compare" className="w-3.5 h-3.5" />
           <span>已變更 {changeCount} 個欄位</span>
           <span className="text-primary-400">·</span>
-          <span className="text-primary-500">儲存後將以新值覆蓋，UUID 不變、不留歷史版本</span>
+          <span className="text-primary-500">儲存後將以新值覆蓋，不保留修改前的版本</span>
         </div>
       )}
       {ro && (
         <div role="note" className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2">
           <Icon name="eye" className="w-4 h-4 shrink-0" />
-          唯讀模式 · 此角色對所有文件欄位皆唯讀，附件可下載但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。
+          唯讀模式 · 此角色對所有文件欄位皆唯讀，附件可下載但不可上傳/取代。
         </div>
       )}
       {/* 基本資訊 */}
@@ -927,7 +934,7 @@ export function DocumentEditPage(): JSX.Element {
                   placeholder="例：內容已過時、依法規更新、由新版取代…"
                   className="w-full sm:max-w-md px-3 py-2 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">非必填；若填寫將一併記入變更歷程（F037「文件狀態」事件）。</p>
+                <p className="text-[10px] text-slate-400 mt-1">非必填；若填寫將一併記入「文件變更歷程」。</p>
               </div>
             )}
           </div>
@@ -946,7 +953,7 @@ export function DocumentEditPage(): JSX.Element {
           {dupHit && (
             <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
               <Icon name="alert-circle" className="w-3.5 h-3.5" />
-              <span>此編號已被「{STATUS_LABEL[dupHit.status]}」文件（{dupHit.documentName}）佔用（DOCUMENT_NUMBER_DUPLICATE）</span>
+              <span>此編號已被「{STATUS_LABEL[dupHit.status]}」文件（{dupHit.documentName}）佔用</span>
             </p>
           )}
         </DiffRow>
@@ -1126,7 +1133,7 @@ export function DocumentEditPage(): JSX.Element {
             <p id="lc_subErr" className="mt-1 text-xs text-red-600 flex items-start gap-1">
               <Icon name="alert-circle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
               <span>
-                此循環名稱底下設有子分類，請選擇具體子分類後再送出（LIFECYCLE_SUBCATEGORY_REQUIRED）
+                此循環名稱底下設有子分類，請選擇具體子分類後再送出
               </span>
             </p>
           )}
@@ -1148,11 +1155,11 @@ export function DocumentEditPage(): JSX.Element {
           </div>
         </div>
         <p className="text-xs text-slate-400 -mt-1 flex items-start gap-1.5">
-          <Icon name="info" className="w-3.5 h-3.5 mt-0.5" />「所屬節點」為唯讀顯示；變更節點須至 DAG 畫布，透過節點抽屜改派（唯一權威寫入路徑）。
+          <Icon name="info" className="w-3.5 h-3.5 mt-0.5" />「所屬節點」在此處唯讀；要改派節點請至「循環管理」的節點抽屜——那是唯一可以改派的地方。
         </p>
       </section>
 
-      {/* 連結點（F015） */}
+      {/* 連結點 */}
       <section className="bg-white border border-slate-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-3">
           <Icon name="link" className="w-4 h-4 text-primary-600" />
@@ -1188,14 +1195,14 @@ export function DocumentEditPage(): JSX.Element {
           <h2 className="font-semibold text-slate-900">附件</h2>
         </div>
         <p className="text-xs text-slate-400 mb-3 flex items-center gap-1.5">
-          <Icon name="info" className="w-3.5 h-3.5" />允許格式：ICSOP PDF／OJT＝.pdf/.jpg/.png、ICSOP 原始檔＝.xls；單檔上限 50MB（OQ-E04-06 定案）。上傳為覆蓋式（舊檔不再可存取）。
+          <Icon name="info" className="w-3.5 h-3.5" />允許格式：ICSOP PDF／OJT＝.pdf/.jpg/.png、ICSOP 原始檔＝.xls；單檔上限 50MB。上傳為覆蓋式（舊檔不再可存取）。
         </p>
         {/* OQ-E09-10：ICSOP PDF（呈現用）與 ICSOP 原始檔 .xls（AI 檢索來源）各自獨立上傳、不自動轉檔（比照建立頁）。 */}
         <div className="flex items-start gap-2 rounded-lg border border-primary-200 bg-primary-50/40 px-3 py-2.5 mb-4 text-[11px] text-slate-600">
           <Icon name="info" className="w-4 h-4 mt-0.5 shrink-0 text-primary-600" />
           <span>
             <strong className="text-slate-800">ICSOP PDF（呈現／下載用）與 ICSOP 原始檔 .xls（AI 智慧問答檢索來源）為兩個各自獨立的上傳</strong>，系統
-            <strong className="text-slate-800">不自動轉檔</strong>（OQ-E09-10 定案）；兩者內容一致性由 ICSOP 管理員負責維護。
+            <strong className="text-slate-800">不自動轉檔</strong>；兩者內容一致性由 ICSOP 管理員負責維護。
           </span>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -1233,7 +1240,7 @@ export function DocumentEditPage(): JSX.Element {
             }
           />
           {/*
-            ICSOP 原始檔 .xls：保存待 AI 索引管線（F027/F029）就緒；本輪停用（比照建立頁佔位卡，copy 一致）。
+            ICSOP 原始檔 .xls：AI 智慧問答功能尚未開放，本輪停用。
             🔴 上傳鈕**已停用但仍存在**（`disabled`），理由：F026 `AC-N76` ④ 之逐元素掛鉤
                `data-attachment-write="xls"` 必須有載體——它擋的是「有人把 `.xls` 上傳鈕的
                `.write-only` 整個刪掉」這一形狀；控制項若不存在，該防護日後恢復本功能時就沒了。
@@ -1243,17 +1250,17 @@ export function DocumentEditPage(): JSX.Element {
           */}
           <div
             className="border border-dashed border-primary-200 rounded-lg p-4 text-center bg-primary-50/20 opacity-60 sm:col-span-2"
-            title="ICSOP 原始檔 .xls 之保存待 AI 索引管線（F027/F029）就緒"
+            title="AI 智慧問答功能尚未開放，暫不提供此上傳"
           >
             <Icon name="file-spreadsheet" className="w-6 h-6 text-primary-400 mx-auto mb-1.5" />
             <div className="text-sm font-medium text-slate-500">上傳 ICSOP 原始檔（.xls，1 份）</div>
-            <div className="text-xs text-slate-400 mt-1">待 AI 索引管線就緒（F027/F029）</div>
+            <div className="text-xs text-slate-400 mt-1">AI 智慧問答功能尚未開放</div>
             {!ro && (
               <button
                 type="button"
                 disabled
                 data-attachment-write="xls"
-                title="待 AI 索引管線就緒（F027/F029）"
+                title="AI 智慧問答功能尚未開放"
                 className="write-only mt-2 inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-primary-300 text-primary-700 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Icon name="upload" className="w-3.5 h-3.5" />上傳新版 .xls（取代）
@@ -1263,7 +1270,7 @@ export function DocumentEditPage(): JSX.Element {
         </div>
       </section>
 
-      {/* 使用表單（F018） */}
+      {/* 使用表單 */}
       <section className="bg-white border border-slate-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-1">
           <Icon name="files" className="w-4 h-4 text-primary-600" />
@@ -1272,7 +1279,7 @@ export function DocumentEditPage(): JSX.Element {
           {formsChanged && <ChangedPill />}
         </div>
         <p className="text-xs text-slate-400 mb-3 flex items-center gap-1.5">
-          <Icon name="info" className="w-3.5 h-3.5" />此處為「選取關聯」而非上傳；表單本體於「使用表單管理」維護。可多選、允許為空；前台詳情頁可個別下載（下載寫入稽核）。
+          <Icon name="info" className="w-3.5 h-3.5" />此處為「選取關聯」而非上傳；表單本體於「使用表單管理」維護。可多選、允許為空；前台詳情頁可個別下載（下載會留下紀錄）。
         </p>
         {canWrite ? (
           <MultiSearchCombobox
@@ -1305,7 +1312,7 @@ export function DocumentEditPage(): JSX.Element {
             <strong className="text-slate-500">新選取者一律加入末位</strong>
             ，以「上移／下移」調整顯示順序（<strong className="text-slate-500">不支援拖曳</strong>
             ），解除其中一筆後其餘相對順序不變、重新編號為連續 1..N；前台與後台詳情頁一律依此順序呈現，
-            可個別下載（下載寫入稽核）。
+            可個別下載（下載會留下紀錄）。
           </span>
         </p>
         {canWrite ? (
@@ -1633,7 +1640,10 @@ function Blocked({ message }: { message: string }): JSX.Element {
       </div>
       <h1 className="font-semibold text-slate-900">無文件管理權限</h1>
       <p className="text-sm text-slate-500 mt-1">{message}</p>
-      <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+      <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+        {BLOCKED_ACTION_HINT}
+        <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+      </p>
     </div>
   );
 }

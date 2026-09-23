@@ -287,7 +287,7 @@ export function BusinessCategoryNodeDrawer({
         setCandidateLifecycleCount(d.candidateLifecycleCount ?? null);
         setCandidateLifecycles(d.candidateLifecycles ?? []);
       } catch (e) {
-        if (alive) toast.error(e instanceof ApiError ? e.code : '載入失敗');
+        if (alive) toast.error('載入失敗', e instanceof ApiError ? { code: e.code } : undefined);
       } finally {
         if (alive) setCandidatesLoading(false);
       }
@@ -407,7 +407,7 @@ export function BusinessCategoryNodeDrawer({
       onChanged();
       onClose();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.code : '儲存失敗');
+      toast.error('儲存失敗', e instanceof ApiError ? { code: e.code } : undefined);
       setSaving(false);
     }
   }, [canWrite, docs, draft, baseline, name, originalName, businessCategoryId, nodeId, onChanged, onClose, toast]);

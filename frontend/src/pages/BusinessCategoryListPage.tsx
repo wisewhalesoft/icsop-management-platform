@@ -13,6 +13,8 @@ import { ApiError } from '../api/client';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { businessCategoryDisplayName } from '../domain/business-category';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { BLOCKED_ACTION_HINT, BLOCKED_CODE_NOTE } from '../domain/error-code-note';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/useToast';
 import { formatDateTime } from './org-sync-view';
@@ -192,7 +194,10 @@ export function BusinessCategoryListPage(): JSX.Element {
           <Icon name="lock" className="w-7 h-7 text-red-500" />
         </div>
         <h1 className="font-semibold text-slate-900">無業務/功能類別管理權限</h1>
-        <p className="text-xs mono text-slate-400 mt-2">PERMISSION_DENIED · 403</p>
+        <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+          {BLOCKED_ACTION_HINT}
+          <InfoNote infoKey="blocked-403" paragraphs={[BLOCKED_CODE_NOTE]} />
+        </p>
       </div>
     );
   }
@@ -577,7 +582,7 @@ function BusinessCategoryModal({
             {nameErr && (
               <p id="bcNameErr" className="mt-1 text-xs text-red-600 flex items-center gap-1">
                 <Icon name="alert-circle" className="w-3.5 h-3.5 shrink-0" />
-                業務/功能類別名稱不可為空（BUSINESS_CATEGORY_NAME_REQUIRED）
+                業務/功能類別名稱不可為空
               </p>
             )}
           </div>
@@ -596,18 +601,24 @@ function BusinessCategoryModal({
               className={`w-full px-3 py-2 rounded-md border text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 ${uniqErr ? 'border-red-500' : 'border-slate-300'}`}
             />
             <p className="text-[10px] text-slate-400 mt-1">
-              業務/功能類別之身分＝<span className="mono">名稱＋子分類</span>
-              之組合：同名之不同子分類為
+              {/*
+                🔵 2026-09-23 全站文案稽核：`UUID`／`DAG`／`null` 為內部詞彙。
+                📝 已作廢（⚠ 不得復原）：
+                  OLD> …**彼此獨立的類別**（各有 UUID／DAG／文件掛載）。同一名稱不可同時存在
+                  OLD> 「無子分類」與「有子分類」。留白（或僅空白）一律存為 `null`。
+                🔒「同名不同子分類＝兩個獨立類別」是使用者**會踩到**的規則，必須維持可見。
+              */}
+              業務/功能類別之身分＝「名稱＋子分類」之組合：同名之不同子分類為
               <strong className="text-slate-500">彼此獨立的類別</strong>
-              （各有 UUID／DAG／文件掛載）。同一名稱不可同時存在「無子分類」與「有子分類」。留白（或僅空白）一律存為
-              <span className="mono">null</span>。
+              （各自擁有自己的樹狀圖與文件掛載）。同一名稱不可同時存在「無子分類」與「有子分類」。
+              子分類留白（或僅輸入空白）一律視為未填。
             </p>
             {uniqErr === 'BUSINESS_CATEGORY_DUPLICATE' && (
               <p id="bcDupErr" className="mt-1 text-xs text-red-600 flex items-start gap-1">
                 <Icon name="alert-circle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 <span>
                   此業務/功能類別名稱與子分類之組合已存在（<span className="mono">subcategory</span>{' '}
-                  為 null 之「無子分類」亦視為一種具體組合）（BUSINESS_CATEGORY_DUPLICATE）
+                  為 null 之「無子分類」亦視為一種具體組合）
                 </span>
               </p>
             )}
@@ -615,7 +626,7 @@ function BusinessCategoryModal({
               <p id="bcConflictErr" className="mt-1 text-xs text-red-600 flex items-start gap-1">
                 <Icon name="alert-circle" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 <span>
-                  同一業務/功能類別名稱不可同時存在「無子分類」與「有子分類」之設定（雙向皆適用）；請先處理既有該筆（BUSINESS_CATEGORY_SUBCATEGORY_CONFLICT）
+                  同一業務/功能類別名稱不可同時存在「無子分類」與「有子分類」之設定（雙向皆適用）；請先處理既有該筆
                 </span>
               </p>
             )}

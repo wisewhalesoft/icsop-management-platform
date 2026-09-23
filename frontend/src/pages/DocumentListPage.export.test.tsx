@@ -6,6 +6,7 @@ import { DocumentListPage } from './DocumentListPage';
 import { ToastProvider } from '../components/useToast';
 import { TopbarSlotsContext } from '../components/PageHeader';
 import { ApiError } from '../api/client';
+import { BLOCKED_ACTION_HINT } from '../domain/error-code-note';
 import * as endpoints from '../api/endpoints';
 import * as authHook from '../auth/useAuth';
 import type {
@@ -63,10 +64,14 @@ vi.mock('react-router-dom', async (orig) => {
 });
 
 /** `AC-X14` 逐字片段。 */
-const SUCCESS = '已匯出程序書清單（CSV，UTF-8 BOM）';
+const SUCCESS = '已匯出程序書清單（CSV）';
 const OVER_LIMIT = (n: number) => `符合條件之筆數為 ${n} 筆，超過匯出上限 10000 筆，請縮小篩選條件`;
 const ERROR_BADGE = 'EXPORT_ROW_LIMIT_EXCEEDED · 400';
-const FAILURE = (code: string) => `匯出失敗：${code}`;
+/**
+ * 🔵 2026-09-23 全站文案稽核：錯誤代碼不再進入訊息本文，改走 toast 既有之 `code` 小字欄。
+ * 📝 已作廢（⚠ 不得復原）：OLD> const FAILURE = (code: string) => `匯出失敗：${code}`;
+ */
+const FAILURE = '匯出失敗，請稍後再試。';
 
 /**
  * `AC-X16` ①：畫面欄之逐字集合與由左至右順序（樹狀圖仍在畫面上，只是不匯出）。
@@ -248,7 +253,7 @@ describe('F017 AC-X9：匯出鈕之位置、逐字文案與選擇器', () => {
   it('AC-X10 一般使用者（User）本頁本就被擋下 → 無匯出鈕、不呼叫匯出端點', async () => {
     mockAuth('User');
     const { actionsEl } = renderWithTopbar();
-    await screen.findByText('PERMISSION_DENIED · 403');
+    await screen.findByText(BLOCKED_ACTION_HINT); // 🔵 2026-09-23：代碼已移入 ⓘ，遮罩之可見句改為引導句
     expect(within(actionsEl).queryByRole('button', { name: '匯出' })).toBeNull();
     expect(exportDocumentListMock).not.toHaveBeenCalled();
   });
@@ -349,7 +354,7 @@ describe('🔴 F017 AC-X11 ①／§13.4 (i)：documentIds ＝ `filtered`，不�
 });
 
 describe('F017 AC-X14：匯出之使用者可見回饋（逐字文案）', () => {
-  it('AC-X14 成功 → 回饋以逐字片段 `已匯出程序書清單（CSV，UTF-8 BOM）` 起始', async () => {
+  it('AC-X14 成功 → 回饋以逐字片段 `已匯出程序書清單（CSV）` 起始', async () => {
     mockAuth('ICSOPAdmin');
     const { actionsEl } = renderWithTopbar();
     await waitLoaded();
@@ -374,13 +379,20 @@ describe('F017 AC-X14：匯出之使用者可見回饋（逐字文案）', () =>
     expect(screen.queryByText(startsWith(SUCCESS))).toBeNull();
   });
 
-  it('AC-X14 其他錯誤 → 回饋逐字為 `匯出失敗：{code}`', async () => {
+  it('AC-X14 其他錯誤 → 訊息本文為使用者語言，錯誤代碼只出現在 toast 之 code 小字欄', async () => {
     exportDocumentListMock.mockRejectedValue(new ApiError(500, 'INTERNAL_ERROR'));
     mockAuth('ICSOPAdmin');
     const { actionsEl } = renderWithTopbar();
     await waitLoaded();
     await userEvent.click(exportButton(actionsEl));
-    expect(await screen.findByText(startsWith(FAILURE('INTERNAL_ERROR')))).toBeInTheDocument();
+    expect(await screen.findByText(startsWith(FAILURE))).toBeInTheDocument();
+    /**
+     * 🔴 正向半句：代碼**仍必須存在**（刪掉代碼的實作不得通過）；
+     * 🔴 負向半句：它必須住在**自己的節點**裡（`toast.code` 小字欄），不得串進訊息本文。
+     */
+    const code = screen.getByText('INTERNAL_ERROR');
+    expect(code.textContent).toBe('INTERNAL_ERROR');
+    expect(code.className).toContain('mono');
     expect(screen.queryByText(startsWith(SUCCESS))).toBeNull();
   });
 

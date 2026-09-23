@@ -231,16 +231,21 @@ describe('DocumentEditPage — F011 AC-S1 未選子分類即儲存被擋（AC-21
     expect(endpoints.updateDocument).not.toHaveBeenCalled();
   });
 
-  it('錯誤提示含錯誤碼 LIFECYCLE_SUBCATEGORY_REQUIRED（prototype 15 文案）', async () => {
+  /**
+   * 🔵 2026-09-23 全站文案稽核：錯誤代碼移出可見文字（原標題即「含錯誤碼」）。
+   * 📝 已作廢（⚠ 不得復原）：OLD> screen.getAllByText(/LIFECYCLE_SUBCATEGORY_REQUIRED/).length > 0
+   */
+  it('錯誤提示以使用者語言呈現、內嵌與 toast 皆有（不含錯誤碼）', async () => {
     await ready('lc2');
     await userEvent.selectOptions(screen.getByLabelText(NAME_LABEL), '銷售及收款循環');
     await screen.findByLabelText(SUB_LABEL);
     await userEvent.click(screen.getByRole('button', { name: '儲存' }));
 
-    // 同上：內嵌提示與 toast 皆帶錯誤碼，複數命中為 prototype 之預期形狀。
+    // 內嵌提示與 toast 共用同一句，複數命中為預期形狀。
     await waitFor(() =>
-      expect(screen.getAllByText(/LIFECYCLE_SUBCATEGORY_REQUIRED/).length).toBeGreaterThan(0),
+      expect(screen.getAllByText(/此循環名稱底下設有子分類/).length).toBeGreaterThan(0),
     );
+    expect(document.body.textContent).not.toContain('LIFECYCLE_SUBCATEGORY_REQUIRED');
   });
 
   it('prototype 15 逐字：內嵌提示與 toast **共用同一句**（兩者皆須帶，防文案漂移）', async () => {

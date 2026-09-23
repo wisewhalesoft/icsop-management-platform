@@ -171,7 +171,7 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
       // 容忍文案被拆成多個行內元素（`getByText` 對完整字串之精確比對會被標籤切割影響）。
       const notice = screen.getByText(/此角色對 ICSOP 文件全欄位皆唯讀/).closest('div, p') as HTMLElement;
       expect((notice.textContent ?? '').replace(/\s+/g, '')).toBe(
-        '唯讀模式·此角色對ICSOP文件全欄位皆唯讀；附件可下載（燒錄浮水印），但不可上傳/取代（FIELD_WRITE_FORBIDDEN）。',
+        '唯讀模式·此角色對ICSOP文件全欄位皆唯讀；附件可下載，但不可上傳或取代。',
       );
       expect(screen.queryByRole('button', { name: /前往編輯/ })).not.toBeInTheDocument();
       // AC-J4②：RO_NOTICE_OJT_EXCEPTION（「唯一例外為『OJT 實體簽到表』，可上傳或覆蓋」）整條作廢。
@@ -392,7 +392,7 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
       const note = document.querySelector('[data-field-readonly-note]');
       expect(note, '找不到 data-field-readonly-note 節點').not.toBeNull();
       expect(note!.textContent).toBe(
-        '此區全部 20 個欄位對本角色一律唯讀（FIELD_WRITE_FORBIDDEN）；本頁無任何可寫項。',
+        '此區全部 20 個欄位對本角色一律唯讀；本頁無任何可寫項。',
       );
       expect(note!.textContent).not.toContain('19 個欄位');
       expect(note!.textContent).not.toContain('OJT 實體簽到表');
@@ -423,13 +423,13 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
      * 🔴 2026-08-20 D9 delta（`OQ-D9-08`／`OQ-D9-33`）—— 唯讀詳情頁各檔案列亦渲染浮水印註記。
      * 權威：`docs/specs/features/F020-watermark.md#backend-burn-delta` `AC-N20`。
      */
-    it('AC-N20 各附件列帶 data-wm-note：ICSOP PDF（pdf）為「檢視/下載將燒錄浮水印」', async () => {
+    it('AC-N20 各附件列帶 data-wm-note：ICSOP PDF（pdf）為「檢視／下載會帶您的身分浮水印」', async () => {
       mockAuth('Supervisor');
       renderPage();
       await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
       const note = attachRow('車輛分期進件作業_v1.3.pdf').querySelector('[data-wm-note]');
       expect(note, '找不到 data-wm-note').not.toBeNull();
-      expect(note!.textContent).toBe('檢視/下載將燒錄浮水印');
+      expect(note!.textContent).toBe('檢視／下載會帶您的身分浮水印');
     });
 
     it('AC-N20 使用表單（xlsx）之 data-wm-note 逐字為「此格式不支援浮水印」', async () => {

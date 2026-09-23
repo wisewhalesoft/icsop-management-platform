@@ -218,7 +218,10 @@ describe('DocumentCreatePage — F010 建立文件（移植 prototype 14）', ()
     await selectLifecycle('lc1');
     await userEvent.type(screen.getByLabelText(/ICSOP 文件編號/), '101-1-01');
     await userEvent.type(screen.getByLabelText(/文件名稱/), '名');
-    expect(screen.getByText(/DOCUMENT_NUMBER_DUPLICATE/)).toBeInTheDocument(); // 即時內嵌提示
+    // 🔵 2026-09-23 全站文案稽核：代碼移出可見文字；改鎖使用者語言之即時內嵌提示。
+    const dup = screen.getByText(/此編號已被/);
+    expect(dup.textContent).toContain('佔用');
+    expect(dup.textContent).not.toContain('DOCUMENT_NUMBER_DUPLICATE');
     await userEvent.click(screen.getByRole('button', { name: '建立' }));
     expect(endpoints.createDocument).not.toHaveBeenCalled();
   });
