@@ -157,6 +157,6 @@ describe('PublicViewerPage — 逐頁旋轉（2026-08-26 UX ①）', () => {
 
     const canvas = container.querySelector('[data-pdf-canvas]') as HTMLElement;
     await waitFor(() => expect(canvas.getAttribute('aria-label') ?? '').toContain('已旋轉 90°'));
-    expect(canvas.getAttribute('aria-label') ?? '').toContain('浮水印已燒錄於內容層');
+    expect(canvas.getAttribute('aria-label') ?? '').toContain('含您的身分浮水印');
   });
 });

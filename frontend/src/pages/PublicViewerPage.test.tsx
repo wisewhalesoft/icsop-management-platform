@@ -298,13 +298,13 @@ describe('PublicViewerPage — F020 D9 delta：canvas 化檢視器（AC-N4〜AC-
     expect(last.scale).not.toBe(z1);
   });
 
-  it('AC-N71 canvas 之 aria-label 以「文件預覽（第 」起始並含「浮水印已燒錄於內容層」；role="img"', async () => {
+  it('AC-N71 canvas 之 aria-label 以「文件預覽（第 」起始並含「含您的身分浮水印」；role="img"', async () => {
     const { container } = renderViewer();
     await screen.findByTestId('watermark-format');
     const canvas = container.querySelector('[data-pdf-canvas]') as HTMLElement;
     expect(canvas.getAttribute('role')).toBe('img');
     expect(canvas.getAttribute('aria-label') ?? '').toMatch(/^文件預覽（第 /);
-    expect(canvas.getAttribute('aria-label') ?? '').toContain('浮水印已燒錄於內容層');
+    expect(canvas.getAttribute('aria-label') ?? '').toContain('含您的身分浮水印');
   });
 
   it('AC-N71 翻頁控制項之 DOM 契約：prevBtn／nextBtn／pageInput／pageTotal', async () => {

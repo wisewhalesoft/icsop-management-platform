@@ -564,7 +564,7 @@ export function BusinessCategoryTreePreviewPage(): JSX.Element {
             disabled={actionBusy !== null}
             aria-busy={actionBusy === 'download'}
             aria-label="下載"
-            title="下載此業務/功能類別樹狀圖（PDF，燒錄浮水印）"
+            title="下載此業務/功能類別樹狀圖（PDF，會帶您的身分浮水印）"
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
             <Icon
@@ -579,7 +579,7 @@ export function BusinessCategoryTreePreviewPage(): JSX.Element {
             disabled={actionBusy !== null}
             aria-busy={actionBusy === 'print'}
             aria-label="列印"
-            title="列印此業務/功能類別樹狀圖（燒錄浮水印）"
+            title="列印此業務/功能類別樹狀圖（會帶您的身分浮水印）"
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
             <Icon

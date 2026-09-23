@@ -231,7 +231,7 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
      * 整條移除），OJT 一列改為由 `getDocumentOjtCompletion` 衍生內容，**列本身不消失**。
      * 已將本區塊之斷言改回貼合 prototype 之原始版本（曾被本環自己標為 `OLD>` 而誤刪）。
      */
-    it('TS-D-011 ICSOP PDF／OJT 唯讀衍生／使用表單依序渲染，僅 ICSOP PDF 有「下載燒錄浮水印」徽章（OJT 列刻意不帶 data-wm-note）', async () => {
+    it('TS-D-011 ICSOP PDF／OJT 唯讀衍生／使用表單依序渲染，僅 ICSOP PDF 有「下載會帶浮水印」徽章（OJT 列刻意不帶 data-wm-note）', async () => {
       mockAuth('Supervisor');
       vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue(ATTACHMENTS);
       vi.mocked(endpoints.getDocumentForms).mockResolvedValue(FORMS2);
@@ -246,9 +246,9 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
       expect(screen.getByText('支票託收登記表.xlsx')).toBeInTheDocument();
 
       // 徽章僅出現於 ICSOP PDF 那列——OJT 唯讀衍生列刻意不帶 data-wm-note（無檔案可下載、無浮水印可言）。
-      expect(screen.getAllByText('下載燒錄浮水印')).toHaveLength(1);
+      expect(screen.getAllByText('下載會帶浮水印')).toHaveLength(1);
       expect(
-        within(attachRow('車輛分期進件作業_v1.3.pdf')).getByText('下載燒錄浮水印'),
+        within(attachRow('車輛分期進件作業_v1.3.pdf')).getByText('下載會帶浮水印'),
       ).toBeInTheDocument();
 
       // 三個「有檔案」之列皆有下載鈕；OJT 唯讀衍生列無下載鈕（改為 [data-ojt-progress-link] 導覽連結，逐場次下載在 TAB2）。

@@ -430,7 +430,7 @@ export function PublicViewerPage(): JSX.Element {
 
   const canvasLabel = `文件預覽（第 ${page} 頁${pageCount > 0 ? `，共 ${pageCount} 頁` : ''}${
     rotation !== 0 ? `，已旋轉 ${rotation}°` : ''
-  }，浮水印已燒錄於內容層）`;
+  }，含您的身分浮水印）`;
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-700 flex flex-col">

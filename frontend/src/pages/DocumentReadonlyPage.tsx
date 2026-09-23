@@ -541,7 +541,7 @@ export function DocumentReadonlyPage(): JSX.Element {
                     </span>
                   )}
                   {a.watermark && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0">下載燒錄浮水印</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0">下載會帶浮水印</span>
                   )}
                   {writable ? (
                     <span
