@@ -102,7 +102,9 @@ describe('watermarkOverlayGeometry — UX ② 疊加層滿版', () => {
     const tileW = worstCaseTileWidth(LINES, WATERMARK_FONT_SIZE, PAD.x);
     const tileH = LINES.length * WATERMARK_FONT_SIZE * WATERMARK_LINE_HEIGHT + PAD.y * 2;
     expect(g.cols * tileW).toBeGreaterThanOrEqual(g.size);
-    expect(g.rows * tileH).toBeGreaterThanOrEqual(g.size);
+    // 🔵 2026-09-23：方格起點自 0 移為 `tileOffsetY`（恆 ≤ 0）⇒ 覆蓋判定必須把它算進來。
+    expect(g.tileOffsetY).toBeLessThanOrEqual(0);
+    expect(g.tileOffsetY + g.rows * tileH).toBeGreaterThanOrEqual(g.size);
   });
 
   it('疊加層為正方形且以畫板中心為中心（旋轉原點即中心）', () => {
@@ -122,8 +124,92 @@ describe('watermarkOverlayGeometry — UX ② 疊加層滿版', () => {
     expect(g.rows).toBeGreaterThanOrEqual(1);
   });
 
+  it('空拆行時 tileOffsetY 仍為有限值且 ≤ 0', () => {
+    const g = watermarkOverlayGeometry(600, 400, [], PAD);
+    expect(Number.isFinite(g.tileOffsetY)).toBe(true);
+    expect(g.tileOffsetY).toBeLessThanOrEqual(0);
+  });
+
   it('tile 總數有上限（極端巨圖不得炸出無上限之 DOM 節點）', () => {
     const g = watermarkOverlayGeometry(60000, 40000, LINES, PAD);
     expect(g.cols * g.rows).toBeLessThanOrEqual(2000);
+  });
+});
+
+/**
+ * 🔴 **2026-09-23 使用者回報：「畫面正中間的浮水印字是互相重疊的」**（正式站 `?mode=tree`／商品）。
+ *
+ * 📌 **這是一條「跨兩個元素」的關係，不屬於任何單一元素**——所以既有的覆蓋率、枚數、行數、
+ *   文案逐字四類斷言全綠，卻沒有任何一條在看它。缺陷形狀與 `feedback-ring-missing-assertion-dimension`
+ *   同型：鎖了「元素在不在、內容對不對」，沒鎖「兩個載體會不會疊在一起」。
+ *
+ * 📌 版面事實（本檔之斷言前提，改任一條都要回頭重算）：
+ *   · 機密聲明釘在疊加層正中央（`top:50%` ＋ `translate(-50%,-50%)`），**2026-08-27 第三輪使用者
+ *     裁決，位置不可動** ⇒ 只能動方格的相位；
+ *   · tile 之字帶在每枚 tile 內垂直置中，上下各 `pad.y`；方格自 `tileOffsetY` 起鋪。
+ */
+describe('watermarkOverlayGeometry — 中央機密聲明不得壓在 tile 字帶上', () => {
+  /** tile 內之字帶高（不含 padding）。 */
+  const TEXT_H = LINES.length * WATERMARK_FONT_SIZE * WATERMARK_LINE_HEIGHT;
+  const TILE_H = TEXT_H + PAD.y * 2;
+  /** 中央那一行只有一行 ⇒ 高度為單行行高。 */
+  const CENTRE_H = WATERMARK_FONT_SIZE * WATERMARK_LINE_HEIGHT;
+
+  /** 第 `r` 列之字帶在疊加層座標系中的垂直區間（`gridTop` 即 `tileOffsetY`）。 */
+  function textBand(gridTop: number, r: number): [number, number] {
+    const top = gridTop + r * TILE_H + PAD.y;
+    return [top, top + TEXT_H];
+  }
+
+  function centreBand(size: number): [number, number] {
+    return [size / 2 - CENTRE_H / 2, size / 2 + CENTRE_H / 2];
+  }
+
+  function overlaps(a: [number, number], b: [number, number]): boolean {
+    return a[0] < b[1] && b[0] < a[1];
+  }
+
+  /** 與 BOARDS 同一組畫板，外加使用者實際踩到的那一塊（正式站「商品」實測值）。 */
+  const CASES: [string, number, number][] = [
+    ['🔴 正式站「商品」（使用者回報之實測值）', 692, 950],
+    ['正方形小圖', 600, 600],
+    ['一般圖', 1200, 800],
+    ['極寬圖', 4000, 600],
+    ['更寬更淺', 8000, 420],
+    ['窄而高（直向長鏈）', 500, 4000],
+  ];
+
+  it.each(CASES)('%s（%i×%i）：沒有任何一列字帶與中央那一行相交', (_label, w, h) => {
+    const g = watermarkOverlayGeometry(w, h, LINES, PAD);
+    const centre = centreBand(g.size);
+    for (let r = 0; r < g.rows; r += 1) {
+      const band = textBand(g.tileOffsetY, r);
+      expect(
+        overlaps(band, centre),
+        `第 ${r} 列字帶 [${band[0]}, ${band[1]}] 壓在中央 [${centre[0]}, ${centre[1]}] 上`,
+      ).toBe(false);
+    }
+  });
+
+  /**
+   * 🔴 **證明上面那條有牙齒**（[[feedback-assertion-satisfiable-vs-has-teeth]]）：把 `tileOffsetY`
+   * 換回已作廢的 `0`（＝修正前的行為）餵進同一套判定，正式站「商品」那塊**必須**相交。
+   * 沒有這一條，上面那條在「修法其實沒生效」時照樣全綠。
+   */
+  it('🔴 已作廢之 tileOffsetY = 0 在「商品」上必定相交（本次缺陷之形狀）', () => {
+    const g = watermarkOverlayGeometry(692, 950, LINES, PAD);
+    const centre = centreBand(g.size);
+    const hit = Array.from({ length: g.rows }, (_, r) => textBand(0, r)).some((b) =>
+      overlaps(b, centre),
+    );
+    expect(hit, 'tileOffsetY = 0 竟然不相交——則本次修正之前提有誤').toBe(true);
+  });
+
+  /**
+   * 🔴 修法之成立條件寫成可執行的形式：淨空高度＝單側 `pad.y`，必須容得下中央那一行的半高。
+   * `pad.y` 現值 140、需求 32；若日後把 `pad.y` 縮到 32 以下，本條會紅，而不是靜默退回重疊。
+   */
+  it('🔴 修法之前提：單側淨空 pad.y 必須 ≥ 中央那一行的半高', () => {
+    expect(PAD.y).toBeGreaterThanOrEqual(CENTRE_H / 2);
   });
 });

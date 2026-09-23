@@ -840,7 +840,9 @@ export function LifecycleTreePreviewPage(): JSX.Element {
               style={{ position: 'absolute', left: wmGeom.offsetX, top: wmGeom.offsetY, width: wmGeom.size, height: wmGeom.size, overflow: 'hidden', pointerEvents: 'none', transform: 'rotate(-45deg)', opacity: WATERMARK_OPACITY, userSelect: 'none', zIndex: 5 }}
             >
               {Array.from({ length: wmGeom.rows }).map((_, r) => (
-                <div key={r} style={{ display: 'flex', flexWrap: 'nowrap' }}>
+                /* 🔵 2026-09-23：整個方格的垂直相位位移掛在第一列（負 `marginTop`），
+                   使疊加層正中央落在兩條字帶之間的空白帶 ⇒ 中央的機密聲明不再與 tile 字重疊。 */
+                <div key={r} style={{ display: 'flex', flexWrap: 'nowrap', marginTop: r === 0 ? wmGeom.tileOffsetY : 0 }}>
                   {Array.from({ length: wmGeom.cols }).map((_, c) => (
                     <span
                       key={c}
