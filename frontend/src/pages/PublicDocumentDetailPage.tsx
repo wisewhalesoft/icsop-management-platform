@@ -14,6 +14,12 @@ import {
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import {
+  DOWNLOAD_FAILED_TEXT,
+  errorCodeNote,
+  LOAD_FAILED_TEXT,
+} from '../domain/error-code-note';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT } from '../domain/watermark-note';
 import { OjtDerivedBlock } from '../components/OjtDerivedBlock';
 import { printErrorMessage } from '../domain/print-error';
@@ -29,7 +35,7 @@ import type {
 
 /**
  * 前台文件詳情（E06 / F019；G-PUB-020）。版面權威來源：prototypes/04-public-document-detail.html。
- * 19 欄唯讀清單（含系統 UUID，登入員工可見）＋附件＋使用表單＋文件連結點跨連結。
+ * 18 欄唯讀清單（🔴 2026-09-23 起**不含**系統 UUID——前台不呈現內部識別碼）＋附件＋使用表單＋文件連結點跨連結。
  * 清單（03）→ 本詳情（04）→ 檢視器（05）之導覽鏈；下載/列印走後端受控端點（寫入稽核、燒錄浮水印）。
  */
 const msgOf = (e: unknown): string =>
@@ -56,7 +62,12 @@ const LINK_STATUS: Record<DocumentStatus, { label: string; color: string; bg: st
  */
 const NOT_FOUND_TITLE = '查無此文件';
 const NOT_FOUND_DESC = '查無此文件，或該文件尚未公告。';
-const NOT_FOUND_CODE = 'DOCUMENT_NOT_FOUND · 404';
+/**
+ * 🔴 2026-09-23 全站文案稽核：**前台不得出現錯誤代碼**（使用者裁決）。
+ * 📝 已作廢（⚠ 不得復原）：`OLD> const NOT_FOUND_CODE = 'DOCUMENT_NOT_FOUND · 404';`
+ * 🔒 `AC-46` 之「唯一拒絕畫面」載體仍是 {@link NOT_FOUND_TITLE}／{@link NOT_FOUND_DESC}，
+ *    不因移除代碼而消失。
+ */
 
 /**
  * F041 AC-46：404 `DOCUMENT_NOT_FOUND` 之唯一拒絕畫面。
@@ -74,7 +85,6 @@ function NotFoundPanel({ onBack }: { onBack: () => void }): JSX.Element {
       </div>
       <h3 className="font-semibold text-slate-900">{NOT_FOUND_TITLE}</h3>
       <p className="text-base text-slate-500 mt-1">{NOT_FOUND_DESC}</p>
-      <p className="text-sm mono text-slate-400 mt-2">{NOT_FOUND_CODE}</p>
       <button
         onClick={onBack}
         className="mt-4 px-4 py-2 rounded-md border border-slate-300 text-base hover:bg-slate-50"
@@ -220,9 +230,9 @@ export function PublicDocumentDetailPage(): JSX.Element {
       setDownloadKey(key);
       try {
         await download();
-        toast.success(`已開始下載「${label}」，並寫入調閱稽核。`);
+        toast.success(`已開始下載「${label}」，本次調閱已記錄。`);
       } catch (e) {
-        toast.error(`下載失敗：${msgOf(e)}`);
+        toast.error(DOWNLOAD_FAILED_TEXT, { code: msgOf(e) });
       } finally {
         setDownloadKey(null);
       }
@@ -244,7 +254,7 @@ export function PublicDocumentDetailPage(): JSX.Element {
       const win = window.open('', '_blank');
       try {
         await printDocumentFront(documentId, win);
-        toast.success('已於新分頁開啟列印用文件，並寫入調閱稽核。');
+        toast.success('已於新分頁開啟列印用文件，本次調閱已記錄。');
       } catch (e) {
         toast.error(printErrorMessage(e));
       } finally {
@@ -311,7 +321,8 @@ export function PublicDocumentDetailPage(): JSX.Element {
 
         {!loading && error && !notFound && (
           <div role="alert" className="text-base text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
-            載入失敗 · <span className="mono">{error}</span>
+            {LOAD_FAILED_TEXT}
+            <InfoNote infoKey="load-error" paragraphs={[errorCodeNote(error)]} />
           </div>
         )}
 
@@ -511,9 +522,13 @@ function DetailBody({
           <span className="ml-auto text-sm text-slate-400">唯讀</span>
         </div>
         <dl className="divide-y divide-slate-100" data-testid="field-list">
-          <Field label="系統 UUID">
-            <span className="mono text-slate-500">{detail.id}</span>
-          </Field>
+          {/*
+            🔴 2026-09-23 全站文案稽核：**前台移除「系統 UUID」欄**（使用者裁決 E）。
+            📝 已作廢（⚠ 不得復原）：
+               OLD> <Field label="系統 UUID"><span className="mono text-slate-500">{detail.id}</span></Field>
+            🔒 後台（建立／編輯／唯讀詳情／權限矩陣）之同名欄**刻意保留**——那是管理者的識別需求；
+               一般使用者沒有任何情境需要這串內部識別碼。
+          */}
           <Field label="文件狀態">
             <StatusPill displayStatus={detail.displayStatus} />
           </Field>
@@ -659,7 +674,7 @@ function DetailBody({
         <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
           <Icon name="files" className="w-4 h-4 text-primary-600" />
           <h2 className="font-semibold text-slate-900 text-base">使用表單</h2>
-          <span className="ml-auto text-sm text-slate-400">下載將寫入稽核</span>
+          <span className="ml-auto text-sm text-slate-400">下載會留下紀錄</span>
         </div>
         {detail.usageForms.length > 0 ? (
           <div className="divide-y divide-slate-100" data-testid="usage-form-list">
@@ -687,12 +702,12 @@ function DetailBody({
         )}
       </section>
 
-      {/* 附錄（F039）：依 sortOrder 遞增，與後台詳情/編輯畫面順序一致（AC-25） */}
+      {/* 附錄：依 sortOrder 遞增，與後台詳情/編輯畫面順序一致（AC-25） */}
       <section className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">
         <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
           <Icon name="paperclip" className="w-4 h-4 text-primary-600" />
           <h2 className="font-semibold text-slate-900 text-base">附錄</h2>
-          <span className="ml-auto text-sm text-slate-400">下載將寫入稽核</span>
+          <span className="ml-auto text-sm text-slate-400">下載會留下紀錄</span>
         </div>
         {appendices.length > 0 ? (
           <div className="divide-y divide-slate-100" data-testid="appendix-list">
@@ -780,7 +795,7 @@ function DetailBody({
       </section>
 
       <p className="text-center text-sm text-slate-400 mb-4">
-        查看/下載/列印皆留下稽核軌跡，內容與檢視器浮水印一致。
+        查看、下載與列印都會留下紀錄，取得的檔案帶有您的身分浮水印。
       </p>
     </>
   );

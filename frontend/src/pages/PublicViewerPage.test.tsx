@@ -132,11 +132,29 @@ const IDENTITY = 'E001-王小明-和潤企業股份有限公司-營運管理部-
 const TIME = '2026-08-16 10:00:00 (UTC+8)';
 const WM = `${IDENTITY}-${CONF}-${TIME}`;
 
-/** `AC-N72` 之逐字安全資訊帶文案（空白正規化比對）。 */
-const SECURITY_BAND_TEXT =
-  '浮水印由伺服器端依當下登入身分與時間動態產生，並燒錄進 PDF 內容層；您正在檢視的預覽即是已燒錄的位元組，' +
-  '與下載／列印所得完全一致，脫離系統仍存在。本檢視器由頁面自繪 canvas 呈現，不使用瀏覽器內建 PDF 工具列；' +
-  '縮放為依倍率重新渲染而非放大點陣圖。未登入存取本檢視器將被拒並導回登入頁。';
+/**
+ * 🔵 2026-09-23 全站文案稽核（使用者裁決）：`AC-N72` 之逐字文案**整條作廢**——
+ * 它把實作機制（伺服器端產生、燒錄位元組、自繪 canvas、依倍率重新渲染）常駐於畫面。
+ * 📝 已作廢（⚠ 不得復原）：
+ *   OLD> '浮水印由伺服器端依當下登入身分與時間動態產生，並燒錄進 PDF 內容層；您正在檢視的預覽即是已燒錄的位元組，' +
+ *   OLD> '與下載／列印所得完全一致，脫離系統仍存在。本檢視器由頁面自繪 canvas 呈現，不使用瀏覽器內建 PDF 工具列；' +
+ *   OLD> '縮放為依倍率重新渲染而非放大點陣圖。未登入存取本檢視器將被拒並導回登入頁。'
+ */
+
+/** 改版後之**常駐可見**句（只回答「這份文件上為什麼有我的名字」）。 */
+const SECURITY_BAND_VISIBLE_TEXT = '本文件已標記您的身分浮水印。';
+
+/** 移入 ⓘ 之兩段內容（恆在 DOM、未展開時不可見）。 */
+const SECURITY_BAND_NOTE_TEXTS = [
+  '浮水印包含您的身分與開啟時間，於您每次開啟時產生。',
+  '下載或列印所得的檔案與此畫面完全一致，浮水印在離開本系統後仍然存在。',
+];
+
+/**
+ * 🔴 **禁止回流之實作詞彙**——本清單是這次裁決的牙齒：沒有它，任何把機制說明搬回可見句的
+ * 實作都會綠（可見句仍在、ⓘ 仍在，只是旁邊多了一整段）。
+ */
+const FORBIDDEN_IMPL_WORDS = ['伺服器端', '位元組', 'canvas', '點陣圖', '重新渲染', 'PDF 工具列', '內容層'];
 
 function normalizeWs(s: string): string {
   return s.replace(/\s+/g, '');
@@ -310,12 +328,43 @@ describe('PublicViewerPage — F020 D9 delta：canvas 化檢視器（AC-N4〜AC-
     expect(container.querySelector('#prevBtn')).toBeDisabled();
   });
 
-  it('AC-N72 安全資訊帶（#securityBand）逐字文案（空白正規化）', async () => {
+  it('AC-N72（2026-09-23 改版）安全資訊帶之**可見**句只剩事實陳述，機制說明一律不在可見文字內', async () => {
     const { container } = renderViewer();
     await screen.findByTestId('watermark-format');
     const band = container.querySelector('#securityBand') as HTMLElement | null;
     expect(band, '找不到 #securityBand（prototypes/05-public-viewer-watermark.html:95）').not.toBeNull();
-    expect(normalizeWs(band!.textContent ?? '')).toBe(normalizeWs(SECURITY_BAND_TEXT));
+
+    // 正向半句：可見句必須真的在（沒有它，下面的負向斷言在「整條帶子被刪掉」時同樣會綠）。
+    const note = band!.querySelector('[data-info-content="viewer-security"]') as HTMLElement | null;
+    expect(note, 'ⓘ 內容節點不存在').not.toBeNull();
+    const visibleOnly = normalizeWs((band!.textContent ?? '').replace(note!.textContent ?? '', ''));
+    expect(visibleOnly).toBe(normalizeWs(SECURITY_BAND_VISIBLE_TEXT));
+
+    // 負向半句：實作詞彙不得出現在**可見**文字中（ⓘ 內容已被排除在 visibleOnly 之外）。
+    for (const w of FORBIDDEN_IMPL_WORDS) {
+      expect(visibleOnly, `可見句不得含實作詞彙「${w}」`).not.toContain(normalizeWs(w));
+    }
+  });
+
+  it('AC-N72（2026-09-23 改版）機制說明移入 ⓘ：內容恆在 DOM、未展開時不可見、hover 後展開', async () => {
+    const user = userEvent.setup();
+    const { container } = renderViewer();
+    await screen.findByTestId('watermark-format');
+    const band = container.querySelector('#securityBand') as HTMLElement;
+    const trigger = band.querySelector('[data-info-for="viewer-security"]') as HTMLElement | null;
+    const note = band.querySelector('[data-info-content="viewer-security"]') as HTMLElement | null;
+    expect(trigger, 'ⓘ 觸發器不存在').not.toBeNull();
+    expect(note, 'ⓘ 內容不在 DOM（禁以 title 屬性實作）').not.toBeNull();
+
+    for (const t of SECURITY_BAND_NOTE_TEXTS) {
+      expect(normalizeWs(note!.textContent ?? '')).toContain(normalizeWs(t));
+    }
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(note!.className).toMatch(/\bhidden\b/);
+    await user.hover(trigger!);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(note!.className).not.toMatch(/\bhidden\b/);
   });
 
   it('AC-N67 ① 頁尾格式字幕（watermark-format）逐字等於伺服器回傳之線性浮水印快照', async () => {

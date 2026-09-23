@@ -381,7 +381,12 @@ describe('PublicListPage（F019 前台清單）', () => {
     expect(screen.getByTestId('count-text')).toHaveTextContent('共 12 筆');
   });
 
-  it('G-PUB-012 後端隱藏筆數提示（分頁左側「另有 N 筆…已由後端隱藏」）', async () => {
+  /**
+   * 🔵 2026-09-23 全站文案稽核：可見句不得以「後端」陳述（使用者裁決）。
+   * 📝 已作廢（⚠ 不得復原）：OLD> expect(note).toHaveTextContent('已由後端隱藏');
+   * 🔴 **筆數仍鎖在可見文字**（不得移入 popover），且新增負向鎖防止「後端」二字回流。
+   */
+  it('G-PUB-012 未公告筆數提示（分頁左側「另有 N 筆文件未公告…」）', async () => {
     vi.mocked(api.getPublicDocuments).mockResolvedValue(
       pageOf([docItem({})], { total: 1, hiddenCount: 3 }),
     );
@@ -389,7 +394,8 @@ describe('PublicListPage（F019 前台清單）', () => {
     await screen.findByText('車輛分期進件作業');
     const note = screen.getByTestId('hidden-note');
     expect(note).toHaveTextContent('另有 3 筆');
-    expect(note).toHaveTextContent('已由後端隱藏');
+    expect(note).toHaveTextContent('未公告');
+    expect(note.textContent).not.toContain('後端');
   });
 
   it('G-PUB-012 無隱藏筆數 → 提示為空', async () => {

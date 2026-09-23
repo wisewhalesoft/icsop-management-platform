@@ -8,6 +8,12 @@ import {
 import { ApiError } from '../api/client';
 import { businessCategoryDisplayName } from '../domain/business-category';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { errorCodeNote, LOAD_FAILED_TEXT } from '../domain/error-code-note';
+import {
+  PUBLIC_TREE_SECURITY_NOTE,
+  PUBLIC_TREE_SECURITY_TEXT,
+} from '../domain/viewer-security-note';
 import { PUBLIC_SHELL_WIDTH } from './public-shell-width';
 import { watermarkPresentation } from '../domain/watermark-lines';
 import {
@@ -346,21 +352,26 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
         </div>
 
         {/*
-          info note：🔴 本頁**不寫稽核**（`AC-B26`），故文案與後台 `22`／`29` 之「已寫入調閱稽核（VIEW）」
-          刻意不同——瀏覽樹狀圖、切換類別與開啟節點清單皆不記錄，點入程序書開檢視器時才寫一筆。
+          安全資訊帶（2026-09-23 全站文案稽核改版）。
+          🔴 使用者裁決：**實作邏輯與技術細節不得常駐於 UI；如需保留一律以 hover（ⓘ）承載。**
+          📝 原逐字文案已作廢，⚠ 不得復原：
+             OLD> 本頁疊加之浮水印由**伺服器端**依當下登入身分與時間動態產生。瀏覽樹狀圖、
+             OLD> 切換類別與開啟節點清單**不記錄調閱稽核**；點入程序書開啟檢視器時才寫入一筆調閱稽核。
+          🔒 `AC-B26`（本頁不寫稽核）之**可驗證載體**仍在——它現在住在 ⓘ 的內容裡（恆在 DOM），
+             不再需要一段常駐於畫面的系統事件說明。
         */}
         <div className="rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-sm text-primary-700 flex items-start gap-2">
           <Icon name="shield-check" className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>
-            本頁疊加之浮水印由<strong>伺服器端</strong>
-            依當下登入身分與時間動態產生。瀏覽樹狀圖、切換類別與開啟節點清單
-            <strong>不記錄調閱稽核</strong>；點入程序書開啟檢視器時才寫入一筆調閱稽核。
+          <span className="flex items-center gap-1 flex-wrap">
+            {PUBLIC_TREE_SECURITY_TEXT}
+            <InfoNote infoKey="public-tree-security" paragraphs={PUBLIC_TREE_SECURITY_NOTE} />
           </span>
         </div>
 
         {error && (
           <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-4 py-3">
-            載入失敗 · <span className="mono">{error}</span>
+            {LOAD_FAILED_TEXT}
+            <InfoNote infoKey="load-error" paragraphs={[errorCodeNote(error)]} />
           </div>
         )}
 
@@ -611,7 +622,8 @@ export function PublicCategoryTreePage({ modeSwitch }: { modeSwitch?: React.Reac
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
           {nodeDocsError && (
             <div role="alert" className="m-4 text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
-              程序書清單載入失敗 · <span className="mono">{nodeDocsError}</span>
+              {LOAD_FAILED_TEXT}
+              <InfoNote infoKey="node-docs-error" paragraphs={[errorCodeNote(nodeDocsError)]} />
             </div>
           )}
           {/*

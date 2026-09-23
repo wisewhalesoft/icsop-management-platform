@@ -5,6 +5,8 @@ import { hasAdminAccess } from '../domain/menu';
 import { getPublicDocuments, getOrgUnits, getPublicFilterOptions } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import { errorCodeNote, LOAD_FAILED_TEXT } from '../domain/error-code-note';
 import { PublicCategoryTreePage } from './PublicCategoryTreePage';
 import { PUBLIC_SHELL_WIDTH } from './public-shell-width';
 import { SearchCombobox } from '../components/SearchCombobox';
@@ -715,7 +717,8 @@ export function PublicListPage(): JSX.Element {
 
         {error && !loading && (
           <div role="alert" className="text-base text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
-            載入失敗 · <span className="mono">{error}</span>
+            {LOAD_FAILED_TEXT}
+            <InfoNote infoKey="load-error" paragraphs={[errorCodeNote(error)]} />
           </div>
         )}
 
@@ -775,11 +778,16 @@ export function PublicListPage(): JSX.Element {
               </section>
             )}
 
-            {/* pagination：左＝後端隱藏筆數提示（G-PUB-012/014），右＝頁碼 */}
+            {/*
+              pagination：左＝未公告文件之筆數提示（G-PUB-012/014），右＝頁碼。
+              🔴 2026-09-23 全站文案稽核：可見句不再說「由後端隱藏」——使用者不需要知道是誰隱藏的，
+                 他需要知道的是「有東西沒列出來、以及為什麼」。
+              📝 已作廢（⚠ 不得復原）：`OLD> 另有 N 筆（進度中／失效／作廢）文件已由後端隱藏`
+            */}
             <div className="flex items-center justify-between mt-6 text-base text-slate-500">
               <span data-testid="hidden-note" className="text-sm text-slate-400">
                 {hiddenCount > 0
-                  ? `另有 ${hiddenCount} 筆（進度中／失效／作廢）文件已由後端隱藏`
+                  ? `另有 ${hiddenCount} 筆文件未公告（進度中／失效／作廢），不在此清單中`
                   : ''}
               </span>
               <div className="flex items-center gap-1">

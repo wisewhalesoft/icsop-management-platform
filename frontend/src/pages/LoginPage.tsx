@@ -121,15 +121,15 @@ export function LoginPage(): JSX.Element {
             <ul className="space-y-2.5 text-white/85 text-sm">
               <li className="flex items-center gap-2">
                 <Icon name="search" className="w-4 h-4" />
-                RWD 瀏覽 / 搜尋 / 下載 / 列印
+                電腦與手機皆可瀏覽、搜尋、下載、列印
               </li>
               <li className="flex items-center gap-2">
                 <Icon name="shield-check" className="w-4 h-4" />
-                身分浮水印與稽核追蹤
+                每份文件帶身分浮水印、全程留下紀錄
               </li>
               <li className="flex items-center gap-2">
                 <Icon name="workflow" className="w-4 h-4" />
-                循環 DAG 工作流程結構化管理
+                依循環與業務類別分層管理
               </li>
             </ul>
           </div>
@@ -175,7 +175,7 @@ export function LoginPage(): JSX.Element {
             <p className="mt-3 text-xs text-slate-500 leading-relaxed flex items-start gap-1.5">
               <Icon name="info" className="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-400" />
               <span>
-                已登入公司帳號者將自動完成驗證（靜默 SSO），無需再次輸入帳號密碼。
+                已登入公司帳號者將自動完成驗證，無需再次輸入帳號密碼。
               </span>
             </p>
 

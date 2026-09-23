@@ -152,13 +152,20 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
    * 原斷言（供追溯）：OLD> `expect(fields.getByText('營運管理部審查室')).toBeInTheDocument(); // 使用部門 chip`
    * 其餘欄位列之集合、順序與逐字標籤**一律不變**（逐項順序斷言見下一案）。
    */
-  it('唯讀欄位清單逐項呈現（系統 UUID、制定三級、當責室長、版次、業務/功能類別、公告日期）', async () => {
+  /**
+   * 🔵 2026-09-23 全站文案稽核（使用者裁決 E）：**前台移除「系統 UUID」欄**（後台刻意保留）。
+   * 📝 已作廢（⚠ 不得復原）：
+   *    OLD> expect(fields.getByText('系統 UUID')).toBeInTheDocument();
+   *    OLD> expect(fields.getByText('a3f81c22-9e04-4b7a-8f2d-e2c9d1748e2f')).toBeInTheDocument();
+   * 🔴 負向斷言連**值**一起鎖：只鎖標籤時，把 label 改名而值照印的實作仍會綠。
+   */
+  it('唯讀欄位清單逐項呈現（制定三級、當責室長、版次、業務/功能類別、公告日期；不含系統 UUID）', async () => {
     renderDetail();
     await screen.findByRole('heading', { name: '車輛分期進件作業' });
     const container = screen.getByTestId('field-list');
     const fields = within(container);
-    expect(fields.getByText('系統 UUID')).toBeInTheDocument();
-    expect(fields.getByText('a3f81c22-9e04-4b7a-8f2d-e2c9d1748e2f')).toBeInTheDocument();
+    expect(fields.queryByText('系統 UUID')).toBeNull();
+    expect(container.textContent).not.toContain('a3f81c22-9e04-4b7a-8f2d-e2c9d1748e2f');
     expect(fields.getByText('和潤企業股份有限公司')).toBeInTheDocument(); // 制定公司
     expect(fields.getByText('企劃部')).toBeInTheDocument(); // 制定部門
     expect(fields.getByText('車輛行銷室')).toBeInTheDocument(); // 制定室別
@@ -217,8 +224,13 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
      * `業務/功能類別`（**一換一、位置不變**——仍介於 `版次` 與 `內容摘要` 之間，總數維持 16 列）。
      * 📝 已作廢（⚠ 不得復原）：OLD> `'版次', '所屬節點', '內容摘要', '公告日期',`
      */
+    /**
+     * 🔵 2026-09-23 全站文案稽核（使用者裁決 E）：`系統 UUID` 列自**前台**移除（16 列 → **15 列**）。
+     * 📝 被移除之原陣列項逐字保留供追溯：OLD> `'系統 UUID',`（原為第 1 項）
+     * 🔒 其餘 15 列之集合、順序與逐字標籤一律不變。
+     */
     const DETAIL_FIELD_LABELS = [
-      '系統 UUID', '文件狀態', '制定公司', '制定部門', '制定室別',
+      '文件狀態', '制定公司', '制定部門', '制定室別',
       '程序書編號', '程序書書名', '當責室長-主要',
       '版次', '業務/功能類別', '內容摘要', '公告日期',
       '檔案（ICSOP PDF）', '使用表單', '附錄', '連結點程序書',
@@ -237,7 +249,7 @@ describe('PublicDocumentDetailPage（G-PUB-020 前台文件詳情）', () => {
       expect(screen.queryByText(/選上層自動涵蓋其下所有單位/)).toBeNull();
     });
 
-    it('TS-F019-D9-003 其餘欄位列之集合與順序逐字不變（AC-D16 起 16 列，循環別已移出本清單）', async () => {
+    it('TS-F019-D9-003 其餘欄位列之集合與順序逐字不變（2026-09-23 起 15 列，系統 UUID 已移出前台）', async () => {
       renderDetail();
       await screen.findByRole('heading', { name: '車輛分期進件作業' });
       const dts = Array.from(screen.getByTestId('field-list').querySelectorAll('dt')).map(

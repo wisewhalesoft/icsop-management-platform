@@ -12,6 +12,17 @@ import {
 } from '../api/endpoints';
 import { ApiError, extractError } from '../api/client';
 import { Icon } from '../components/Icon';
+import { InfoNote } from '../components/InfoNote';
+import {
+  DOWNLOAD_FAILED_TEXT,
+  errorCodeNote,
+  LOAD_FAILED_TEXT,
+} from '../domain/error-code-note';
+import {
+  VIEWER_SECURITY_NOTE,
+  VIEWER_SECURITY_TEXT,
+  WATERMARK_SAMPLE_LABEL,
+} from '../domain/viewer-security-note';
 import { buildOrgPath } from '../domain/org-path';
 import { printErrorMessage } from '../domain/print-error';
 import type { OrgUnitRecord } from '../api/types';
@@ -161,7 +172,7 @@ export function PublicViewerPage(): JSX.Element {
     try {
       await downloadDocumentFront(id, `${docNumber ?? id}.pdf`);
     } catch (e) {
-      setActionError(`下載失敗：${msgOf(e)}`);
+      setActionError(DOWNLOAD_FAILED_TEXT);
     } finally {
       setActionBusy(null);
     }
@@ -603,22 +614,25 @@ export function PublicViewerPage(): JSX.Element {
       )}
 
       {/*
-        安全資訊帶（`AC-N72` 逐字文案）。
-        🔴 原文案「**下載／列印時**將燒錄」隱含「檢視當下未燒錄」——那正是 `OQ-D9-03` 認定之
-           安全缺陷所在；`AC-N6` 之後檢視當下即為已燒錄位元組，不改文案會從「說得比做的多」
-           翻轉為「做得比說的多」，同樣是錯的。
+        安全資訊帶（2026-09-23 全站文案稽核改版）。
+        🔴 使用者裁決：**實作邏輯與技術細節不得常駐於 UI；如需保留一律以 hover（ⓘ）承載。**
+        📝 原逐字文案（`AC-N72`）已作廢，⚠ 不得復原——它把實作機制整段唸給使用者聽：
+           OLD> 浮水印由**伺服器端**依當下登入身分與時間動態產生，並**燒錄進 PDF 內容層**；
+           OLD> 您正在檢視的預覽**即是已燒錄的位元組**，與下載／列印所得完全一致，脫離系統仍存在。
+           OLD> 本檢視器由頁面**自繪 canvas** 呈現，不使用瀏覽器內建 PDF 工具列；
+           OLD> 縮放為**依倍率重新渲染**而非放大點陣圖。未登入存取本檢視器將被拒並導回登入頁。
+        🔒 可見句只回答使用者的問題（「這份文件帶著誰的名字？」），機制說明移入 ⓘ。
+        ⚠ `AC-N6` 之「檢視當下即為已燒錄位元組」仍是**事實承諾**，故 ⓘ 內保留「與下載／列印
+           所得完全一致」這句——它是使用者可驗證的保證，不是實作細節。
       */}
       <div
         id="securityBand"
         className="px-4 py-2 bg-primary-50 border-b border-primary-100 text-sm text-primary-700 flex items-start gap-2 shrink-0"
       >
         <Icon name="shield-check" className="w-4 h-4 shrink-0 mt-0.5" />
-        <span>
-          浮水印由<strong>伺服器端</strong>依當下登入身分與時間動態產生，並
-          <strong>燒錄進 PDF 內容層</strong>；您正在檢視的預覽<strong>即是已燒錄的位元組</strong>
-          ，與下載／列印所得完全一致，脫離系統仍存在。本檢視器由頁面<strong>自繪 canvas</strong>
-          呈現，不使用瀏覽器內建 PDF 工具列；縮放為<strong>依倍率重新渲染</strong>
-          而非放大點陣圖。未登入存取本檢視器將被拒並導回登入頁。
+        <span className="flex items-center gap-1 flex-wrap">
+          {VIEWER_SECURITY_TEXT}
+          <InfoNote infoKey="viewer-security" paragraphs={VIEWER_SECURITY_NOTE} />
         </span>
       </div>
 
@@ -637,7 +651,8 @@ export function PublicViewerPage(): JSX.Element {
 
         {error && (
           <div role="alert" className="text-base text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
-            載入失敗 · <span className="mono">{error}</span>
+            {LOAD_FAILED_TEXT}
+            <InfoNote infoKey="load-error" paragraphs={[errorCodeNote(error)]} />
           </div>
         )}
 
@@ -673,7 +688,7 @@ export function PublicViewerPage(): JSX.Element {
       */}
       <footer className="shrink-0 bg-white border-t border-slate-200 px-4 py-2.5">
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
-          <span className="text-sm text-slate-400 shrink-0">浮水印格式（與稽核快照一致）：</span>
+          <span className="text-sm text-slate-400 shrink-0">{WATERMARK_SAMPLE_LABEL}</span>
           <code className="mono text-sm text-slate-600 truncate" data-testid="watermark-format">
             {watermark ?? '—'}
           </code>

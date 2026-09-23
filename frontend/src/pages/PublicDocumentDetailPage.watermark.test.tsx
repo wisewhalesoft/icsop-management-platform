@@ -13,7 +13,7 @@ import type { PublicDocumentDetail, DocumentAppendixRecord } from '../api/types'
  *
  * 權威：
  *  - `prototypes/04-public-document-detail.html:231-236`（`WM_UNSUPPORTED_TEXT='此格式不支援浮水印'`、
- *    `WM_BURN_TEXT='檢視/下載將燒錄浮水印'`、`wmNote()` 產生帶 `data-wm-note` 之元素）
+ *    `WM_BURN_TEXT='檢視／下載會帶您的身分浮水印'`、`wmNote()` 產生帶 `data-wm-note` 之元素）
  *    ＋ `:251`（`data-attachment-item`）／`:267`（`data-usage-form-item`）／`:282`（`data-appendix-item`）
  *  - F020 `AC-D7`（①每列一個 `data-wm-note`、二擇一逐字文案；②正向文案為既有字串之擴用；
  *    ③三類列選擇器；④後台不得出現該兩條文案）
@@ -35,7 +35,7 @@ import type { PublicDocumentDetail, DocumentAppendixRecord } from '../api/types'
 vi.mock('../api/endpoints');
 vi.mock('../auth/useAuth');
 
-const BURN_TEXT = '檢視/下載將燒錄浮水印';
+const BURN_TEXT = '檢視／下載會帶您的身分浮水印';
 const UNSUPPORTED_TEXT = '此格式不支援浮水印';
 
 function mockAuth(): void {
@@ -167,7 +167,7 @@ describe('PublicDocumentDetailPage — 三類附屬檔案之浮水印標示（F0
     }
   });
 
-  it('AC-D7 ①② PDF 列顯示逐字正向文案 `檢視/下載將燒錄浮水印`，且**不得**出現負向文案', async () => {
+  it('AC-D7 ①② PDF 列顯示逐字正向文案 `檢視／下載會帶您的身分浮水印`，且**不得**出現負向文案', async () => {
     renderDetail();
     // 🔴 AC-J26：attachments 已收斂為僅 ICSOP_PDF 一筆（OJT 已移出附件區），計數 2→1。
     await waitFor(() => expect(rows('[data-attachment-item]').length).toBe(1));

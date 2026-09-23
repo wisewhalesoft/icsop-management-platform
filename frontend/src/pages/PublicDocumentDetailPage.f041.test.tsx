@@ -109,14 +109,24 @@ beforeEach(() => {
 });
 
 describe('PublicDocumentDetailPage — F041 AC-46（404 拒絕畫面逐字文案＋單一成因不可辨＋不殘留文件欄位）', () => {
-  it('逐字呈現 file-x 圖示、標題「查無此文件」、說明「查無此文件，或該文件尚未公告。」、錯誤碼列「DOCUMENT_NOT_FOUND · 404」', async () => {
+  /**
+   * 🔵 2026-09-23 全站文案稽核：**前台不得出現錯誤代碼**（使用者裁決）。
+   * 📝 原條文逐字保留供追溯（⚠ 不得復原）：
+   *    OLD> …、錯誤碼列「DOCUMENT_NOT_FOUND · 404」
+   *    OLD> expect(screen.getByText('DOCUMENT_NOT_FOUND · 404')).toBeInTheDocument();
+   * 🔴 本條之**正向半句**（標題／說明／圖示）刻意保留於同一條斷言內——沒有它，
+   *    下面那句 `queryByText(...) === null` 在「整個拒絕畫面根本沒渲染」時同樣會綠（恆真負向斷言）。
+   */
+  it('逐字呈現 file-x 圖示、標題「查無此文件」、說明「查無此文件，或該文件尚未公告。」，且**不得**出現錯誤代碼', async () => {
     vi.mocked(api.getPublicDocumentDetail).mockRejectedValue(new ApiError(404, 'DOCUMENT_NOT_FOUND'));
     const { container } = renderAt('doc-missing');
 
     expect(await screen.findByText('查無此文件')).toBeInTheDocument();
     expect(screen.getByText('查無此文件，或該文件尚未公告。')).toBeInTheDocument();
-    expect(screen.getByText('DOCUMENT_NOT_FOUND · 404')).toBeInTheDocument();
     expect(container.querySelector('.lucide-file-x')).not.toBeNull();
+    expect(screen.queryByText('DOCUMENT_NOT_FOUND · 404')).toBeNull();
+    expect(container.textContent).not.toContain('DOCUMENT_NOT_FOUND');
+    expect(container.textContent).not.toContain('404');
   });
 
   it('拒絕畫面之 DOM 不得殘留任何文件欄位值', async () => {
