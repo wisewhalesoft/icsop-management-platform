@@ -55,16 +55,16 @@ export function unitsOf(
 }
 
 /**
- * 部門下拉之候選（AC-P13／AC-P16）：該公司之 `ORG_UNIT` 中 `tier ≠ 'ROOT'` 之**全部**列，
- * 依 `orgCode` 昇冪。⚠ **不得**再限縮 tier——上游帳號之 `orgCode` 實測分布於
- * DIVISION／DEPARTMENT／SECTION／SUBSECTION 多層，限縮將使手動帳號無法與上游帳號同層對齊。
+ * 部門下拉之候選（AC-P13／AC-P16）：該公司之 `ORG_UNIT` **全部**列（含最上層 ROOT），
+ * 依 `orgCode` 昇冪。⚠ **不得**限縮 tier——上游帳號之 `orgCode` 實測分布於
+ * ROOT／DIVISION／DEPARTMENT／SECTION／SUBSECTION 各層（2026-09-24 dev 實查：AS 2／AD 3／AJ 3
+ * 個上游帳號掛在 ROOT，即公司最高主管層級），限縮將使手動帳號無法與上游帳號同層對齊。
  */
 export function orgOptionsFor(
   units: readonly OrgUnitRecord[],
   companyCode: string | null | undefined,
 ): OrgUnitRecord[] {
   return unitsOf(units, companyCode)
-    .filter((u) => u.tier !== 'ROOT')
     .sort((a, b) => a.orgCode.localeCompare(b.orgCode));
 }
 

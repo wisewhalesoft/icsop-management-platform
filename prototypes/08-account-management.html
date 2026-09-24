@@ -23,7 +23,7 @@
      本檔已套用：①「建立手動帳號」modal 新增 姓名（必填）／公司／部門／職位（皆為主檔下拉、後三者選填）；
      ②「編輯帳號」modal 依 AC-P19 加上同三欄並以現值預填，source='upstream' 者連同姓名一律唯讀；
      ③ 建立流程之 `（待同步姓名）`／`（待同步）` 佔位字串**已作廢移除**，留空者於清單顯示「—」（AC-P18）。
-     部門候選＝GET /org-units 之 tier≠'ROOT' 全列、顯示字串一律經 buildOrgPath（AC-P13／AC-P17）；
+     部門候選＝GET /org-units 之全列（含 ROOT，2026-09-24 修訂）、顯示字串一律經 buildOrgPath（AC-P13／AC-P17）；
      職位候選＝GET /job-titles（AC-P14）。
      🔵 2026-08-14 第二次裁決（使用者看過本 prototype 後）——**公司別可跨公司選擇**，本檔已套用：
      ④ 建立與編輯之公司欄改為完整下拉（候選＝SELECTABLE_COMPANIES，AC-P5／AC-P10／AC-P15），
@@ -344,8 +344,8 @@
   /* ===== 🔴 F003 手動帳號基本資料 delta（2026-08-14）：公司／部門／職位主檔 =====
      規格權威＝docs/specs/features/F003-account-role-management.md#manual-account-profile
        公司（AC-P15）＝GET /companies，候選＝SELECTABLE_COMPANIES（**全部有效公司，不限操作者所屬公司**）。
-       部門（AC-P13）＝GET /org-units?companyCode= 之回應中 tier≠'ROOT' 之全部列，依 orgCode 昇冪；
-                      **不得再限縮 tier**（上游實測分布於 DIVISION/DEPARTMENT/SECTION/SUBSECTION 多層）。
+       部門（AC-P13）＝GET /org-units?companyCode= 之回應中全部列（含 ROOT），依 orgCode 昇冪；
+                      **不得再限縮 tier**（上游實測分布於 ROOT/DIVISION/DEPARTMENT/SECTION/SUBSECTION 各層）。
        職位（AC-P14）＝GET /job-titles?companyCode=，依 code 昇冪。
      ⚠ 三者於畫面上一律以「代碼 → 主檔解析」取得顯示字串，不得另建第二套組字邏輯（AC-P17）。
      ⚠ 部門與職位之解析鍵一律為 **(companyCode, code) 複合鍵**（AC-P23d／AC-P23e）——不同公司可有
@@ -499,7 +499,7 @@
 
   /* 下拉候選（AC-P13／AC-P14／AC-P16：候選集合為 companyCode 之純函式） */
   function orgOptionsFor(companyCode){
-    return unitsOf(companyCode).filter(u=>u.tier!=='ROOT').slice().sort((a,b)=>a.orgCode.localeCompare(b.orgCode));
+    return unitsOf(companyCode).slice().sort((a,b)=>a.orgCode.localeCompare(b.orgCode));
   }
   function jobOptionsFor(companyCode){
     return JOB_TITLES.filter(j=>j.companyCode===companyCode).slice().sort((a,b)=>a.code.localeCompare(b.code));

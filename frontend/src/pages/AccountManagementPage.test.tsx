@@ -621,6 +621,27 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
       expect(optionTexts).toContain(expected);
     });
 
+    /**
+     * AC-P13（2026-09-24 修訂）：最上層（`tier='ROOT'`，如 AS 之 `00000` 和潤本部）亦為候選。
+     * 原規定排除 ROOT，但 dev 真庫實測上游帳號確有掛在 ROOT 者（AS 2／AD 3／AJ 3，總經理層級），
+     * 排除即使手動帳號無法與之同層對齊（無法模擬總經理帳號）。
+     */
+    it('AC-P13 部門候選含最上層（ROOT）：和潤本部可選，且排在 orgCode 昇冪首位', async () => {
+      const root: OrgUnitRecord = { companyCode: 'AS', orgCode: '00000', codePrefix: '00000', parentCode: null, tier: 'ROOT', name: '和潤本部', descFull: '和潤本部', managerEmpNo: null, isActive: true };
+      vi.mocked(endpoints.getOrgUnits).mockResolvedValue([...AS_UNITS, root]);
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: /建立帳號/ }));
+      const dialog = screen.getByRole('dialog', { name: /建立手動帳號/ });
+      const orgSel = within(dialog).getByLabelText(/部門/) as HTMLSelectElement;
+      await waitFor(() => expect(within(orgSel).getByRole('option', { name: '和潤本部' })).toBeInTheDocument());
+      const values = Array.from(orgSel.options).map((o) => o.value).filter((v) => v !== '');
+      expect(values).toEqual(['00000', 'JA000', 'JAC00']);
+      await userEvent.selectOptions(orgSel, '00000');
+      expect(orgSel.value).toBe('00000');
+    });
+
     it('AC-P18 留空之清單顯示：姓名／公司／部門／職位皆為 null → 皆顯示「—」，且全頁不出現「（待同步）」字樣', async () => {
       mockAuth('SysAdmin');
       const blank = {
