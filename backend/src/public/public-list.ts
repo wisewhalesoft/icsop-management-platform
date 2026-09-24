@@ -4,7 +4,7 @@
  * 權威來源：docs/specs/features/F019-public-list-browsing.md、docs/test-specs/features/F019-test.md。
  * 設計：所有規則為純函式，服務層（public-documents.service）以 FakeStore/TypeOrmStore 提供資料後套用。
  *  - 強制基底條件：僅「已公告」（status=有效 AND 公告日期≤今日），不可由呼叫端傳入條件繞過（AC9）。
- *  - 置頂：文件使用部門為使用者部門之**祖先或自身**（子樹涵蓋，含全公司 Root；2026-07-24 定案，
+ *  - 置頂：文件使用部門為使用者部門之**祖先或自身或子孫**（2026-09-24 下推，見 isPinned；原 2026-07-24 定案為祖先或自身，
  *    取代 OQ-F019-03 之精確比對暫定假設，見 isPinned 註解）。
  *  - 篩選（2026-08-16 delta）：制定公司/部門/室別/循環別為 **id 等值比對**、當責室長為主要∪次要；
  *    「使用部門」篩選已隨 F019 AC-D1 移除（連同 matchesDeptFilter 本體，見架構 §10.9）。
@@ -19,7 +19,12 @@ import {
   divisionCodeOfKey,
   draftingProximity,
 } from '../documents/drafting-proximity';
-import { ViewerScope, UsingDeptRef, isDocVisibleToViewer } from '../rbac/viewer-scope';
+import {
+  ViewerScope,
+  UsingDeptRef,
+  isDocVisibleToViewer,
+  isUsingDeptMatched,
+} from '../rbac/viewer-scope';
 
 /** 前台清單項（含使用部門代碼集合，供置頂/部門篩選）。名稱解析由服務層另補。 */
 export interface PublicDocItem {
@@ -139,7 +144,7 @@ export function isAnnounced(item: PublicDocItem, today: Date): boolean {
 }
 
 /**
- * 置頂判定：文件之任一使用部門為使用者所屬部門之**祖先或自身**（子樹涵蓋）。無部門 → 一律非置頂。
+ * 置頂判定：文件之任一使用部門為使用者所屬部門之**祖先或自身或子孫**（子樹涵蓋，雙向）。無部門 → 一律非置頂。
  *
  * 定案（2026-07-24，取代 OQ-F019-03 之「精確集合成員比對」暫定假設）：
  * 使用部門可指定任意層級，選上層自動涵蓋其下所有單位——文件掛部層 `JA000` 者，
@@ -148,17 +153,26 @@ export function isAnnounced(item: PublicDocItem, today: Date): boolean {
  *       F026-role-field-matrix.md AC（JA000 + JAC00 → 相符；同部兄弟處室 → 不相符）。
  * 呼叫方向為 scope＝文件使用部門、target＝使用者部門（與 isUsingDeptMatched 同向）。
  *
- * 🔴 B 階段（多公司）：加上公司過濾，與 `isUsingDeptMatched` 保持逐字等價（INV-4／AC-10）。
- * 兩者若只改其一，該不變式即破——置頂與可見性會對同一份文件給出不同答案。
+ * 🔴 B 階段（多公司）：加上公司過濾。
+ *
+ * 🔴 2026-09-24 使用者裁決（F019 `AC-PD1`～`AC-PD9`）：**下推至轄下單位**——使用部門為使用者單位之
+ * **子孫**者亦置頂（每一層級皆下推到底、含課；公司層 `00000` 使用者＝同公司全部有使用部門之文件）。
+ * 置頂 ＝ `isUsingDeptMatched`（祖先或自身，**直接呼叫、不另寫一份**）∪ 子孫。
+ * 🔒 INV-4 由「逐案相等」改為**包含**：`isUsingDeptMatched ⇒ isPinned`（`AC-PD7`）。可見性判定一字未改——
+ *    業務子分類之母體已先經 `isDocVisibleToViewer` 過濾，子孫文件不在其中，故其置頂區不變。
+ *    📝 OLD> return item.usingDepts.some((d) => d.companyCode === userCompanyCode && isWithinSubtree(d.orgCode, userOrgCode));
  */
 export function isPinned(
   item: PublicDocItem,
   userOrgCode: string | null | undefined,
   userCompanyCode: string | null | undefined,
 ): boolean {
+  if (isUsingDeptMatched(item.usingDepts, userOrgCode, userCompanyCode)) return true;
   if (!userOrgCode || !userCompanyCode) return false;
+  // `isWithinSubtree` 會對 scope（此處＝使用者單位）斷言 5 碼；該值來自 session，拋錯＝整頁 500（`AC-PD9`）。
+  if (userOrgCode.length !== 5) return false;
   return item.usingDepts.some(
-    (d) => d.companyCode === userCompanyCode && isWithinSubtree(d.orgCode, userOrgCode),
+    (d) => d.companyCode === userCompanyCode && isWithinSubtree(userOrgCode, d.orgCode),
   );
 }
 

@@ -118,9 +118,13 @@ describe('F019 排序：使用部門置頂 + 編號降冪', () => {
     expect(isPinned(doc({ usingDepts: depts(['JAC00']) }), 'JAC00', 'AS')).toBe(true);
   });
 
-  it('TS-PS-F019-003 文件使用部門為使用者所屬部門之下層（更細單位）→ 不置頂', () => {
-    // 使用者掛部層 JA000；文件使用部門為其下處室 JAC00 → 不涵蓋使用者
-    expect(isPinned(doc({ usingDepts: depts(['JAC00']) }), 'JA000', 'AS')).toBe(false);
+  /**
+   * 🔴 2026-09-24 使用者裁決反轉（F019 `AC-PD1`）：置頂下推至轄下單位。
+   * 📝 OLD> it('TS-PS-F019-003 … → 不置頂', …) 期望 `false`。可見性（viewer-scope.spec `AC-06`）不隨之反轉。
+   */
+  it('TS-PS-F019-003 文件使用部門為使用者所屬部門之下層（更細單位）→ 置頂（AC-PD1）', () => {
+    // 使用者掛部層 JA000；文件使用部門為其下處室 JAC00 → 屬「您部門相關」
+    expect(isPinned(doc({ usingDepts: depts(['JAC00']) }), 'JA000', 'AS')).toBe(true);
   });
 
   it('TS-PS-F019-004 多筆使用部門其一為使用者之上層 → 仍置頂（OR 語意不變）', () => {
@@ -140,6 +144,73 @@ describe('F019 排序：使用部門置頂 + 編號降冪', () => {
 
   it('TS-PS-F019-007 兄弟處室之使用部門 → 不置頂（回歸：子樹展開不放寬至兄弟）', () => {
     expect(isPinned(doc({ usingDepts: depts(['JAD00']) }), 'JAC00', 'AS')).toBe(false);
+  });
+});
+
+/**
+ * 🔴 2026-09-24 置頂區下推 delta（F019 `AC-PD1`～`AC-PD9`；使用者裁決：只改置頂、每一層級下推到底含課、
+ * 不影響「其他文件」）。置頂＝祖先或自身 ∪ 子孫；可見性判定一字不改。
+ */
+describe('F019 置頂下推：使用部門為使用者單位之子孫亦置頂（AC-PD#）', () => {
+  const pinnedFor = (orgCode: string, userOrg: string, co = 'AS', userCo = 'AS'): boolean =>
+    isPinned(doc({ usingDepts: depts([orgCode], co) }), userOrg, userCo);
+
+  it('AC-PD2 下推到底含課：部級對其下之課、處室級對其下之課 → 置頂', () => {
+    expect(pinnedFor('JACA0', 'JA000')).toBe(true);
+    expect(pinnedFor('JACA0', 'JAC00')).toBe(true);
+  });
+
+  it('AC-PD3 本部級：其下之部、處室、課 → 皆置頂', () => {
+    expect(pinnedFor('JA000', 'J0000')).toBe(true);
+    expect(pinnedFor('JAC00', 'J0000')).toBe(true);
+    expect(pinnedFor('JCHA0', 'J0000')).toBe(true);
+  });
+
+  it('AC-PD4 公司級（00000）：同公司任一單位 → 置頂', () => {
+    expect(pinnedFor('JCHA0', '00000')).toBe(true);
+    expect(pinnedFor('K0000', '00000')).toBe(true);
+  });
+
+  it('AC-PD5 不跨枝：兄弟處室、同本部之另一部 → 不置頂', () => {
+    expect(pinnedFor('JAD00', 'JAC00')).toBe(false);
+    expect(pinnedFor('JCH00', 'JA000')).toBe(false);
+    // 下推不得把「上層的兄弟」帶進來：課級使用者對同處室另一課仍不置頂
+    expect(pinnedFor('JCHB0', 'JCHA0')).toBe(false);
+  });
+
+  it('AC-PD6 不跨公司：代碼落在子樹內但公司不同 → 不置頂（含公司級使用者）', () => {
+    expect(pinnedFor('JAC00', 'JA000', 'AD')).toBe(false);
+    expect(pinnedFor('JAC00', '00000', 'AD')).toBe(false);
+    // 對照：同公司 → 置頂（確認上兩條不是因為整體失效而過）
+    expect(pinnedFor('JAC00', '00000', 'AS')).toBe(true);
+  });
+
+  it('AC-PD9 使用者單位非 5 碼 → 子孫判定為 false，不拋錯（該值來自 session，拋錯＝整頁 500）', () => {
+    expect(() => pinnedFor('JAC00', 'JA')).not.toThrow();
+    expect(pinnedFor('JAC00', 'JA')).toBe(false);
+  });
+
+  it('AC-PD7 業務子分類：子孫文件不在可見母體中 ⇒ 結果集與置頂區皆與下推前相同', () => {
+    const items = [
+      doc({ id: 'anc', usingDepts: depts(['J0000']) }),
+      doc({ id: 'desc', usingDepts: depts(['JAC00']) }),
+    ];
+    const page = buildPublicList(items, bizViewer('JA000'), {}, TODAY);
+    expect(page.items.map((d) => d.id)).toEqual(['anc']);
+    expect(page.total).toBe(1);
+  });
+
+  it('AC-PD8 其他文件零漣漪：子孫文件移入置頂區，其餘仍依制定單位相近程度、同層編號降冪', () => {
+    const items = [
+      doc({ id: 'desc-low', usingDepts: depts(['JAC00']), documentNumber: 'A001' }),
+      doc({ id: 'desc-high', usingDepts: depts(['JACA0']), documentNumber: 'A009' }),
+      // 其他文件：同部門制定（相近）但編號小 vs 他本部制定（遠）但編號大
+      doc({ id: 'near', usingDepts: depts(['JAD00']), documentNumber: 'B001', draftingDeptId: 'JA000' }),
+      doc({ id: 'far', usingDepts: depts(['K0000']), documentNumber: 'B009', draftingDeptId: 'KA000' }),
+    ];
+    const out = splitAndSort(items, 'JAC00', 'AS');
+    // JAC00 使用者：desc-low（自身）、desc-high（子孫）置頂且編號降冪；JAD00 兄弟不置頂
+    expect(out.map((d) => d.id)).toEqual(['desc-high', 'desc-low', 'near', 'far']);
   });
 });
 
@@ -479,10 +550,16 @@ describe('F019 其他文件：依制定單位相近程度排序', () => {
     expect(out.map((d) => d.id)).toEqual(['pinFar', 'pinNear', 'restNear']);
   });
 
+  /**
+   * 🔴 2026-09-24（F019 `AC-PD4`）：公司層使用者之置頂已下推到底——`near()` 之同公司使用部門 `ZZ000`
+   * 對 `00000` 而言是子孫，三份會全數移入置頂區，本案要驗的「其他文件」區就空了。
+   * 故改為**無使用部門**（公司層使用者之「其他文件」區在新規則下唯一可能的成員形狀），排序期望值不動。
+   * 📝 OLD> const ad = near({ … }); const as1 = near({ … }); const as2 = near({ … });（`usingDepts: ['ZZ000']`）
+   */
   it('總經理（00000）：本公司文件在前、他公司在後，同層依編號降冪', () => {
-    const ad = near({ id: 'ad', documentNumber: 'Z9', companyCode: 'AD' });
-    const as1 = near({ id: 'as1', documentNumber: 'A1', draftingSectionId: 'JAC00' });
-    const as2 = near({ id: 'as2', documentNumber: 'A2', draftingDeptId: 'KA000' });
+    const ad = near({ id: 'ad', documentNumber: 'Z9', companyCode: 'AD', usingDepts: [] });
+    const as1 = near({ id: 'as1', documentNumber: 'A1', draftingSectionId: 'JAC00', usingDepts: [] });
+    const as2 = near({ id: 'as2', documentNumber: 'A2', draftingDeptId: 'KA000', usingDepts: [] });
     const out = splitAndSort([ad, as1, as2], '00000', 'AS');
     expect(out.map((d) => d.id)).toEqual(['as2', 'as1', 'ad']);
   });

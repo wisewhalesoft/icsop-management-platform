@@ -143,29 +143,36 @@ describe('isDocVisibleToViewer（AC-05～AC-13，重用 isWithinSubtree 之子�
  * 輸入組合取自 public-seams-test-design.md §1.2 TS-PS-ORG-001～006（單一 usingDept）＋ AC-11 之多筆 OR 案例
  * ＋ AC-12 之孤兒帳號案例——涵蓋祖先/自身/下層/兄弟/Root/最細課層/OR/缺值共 8 類，任一類不等價即視為
  * 「存在第二套比對邏輯」而違反 INV-4。
+ *
+ * 🔴 2026-09-24 使用者裁決改寫（F019 `AC-PD7`）：置頂下推至子孫後，兩者由「逐案相等」改為**包含**——
+ *    `isUsingDeptMatched ⇒ isPinned`；僅「使用部門為使用者單位之子孫」一類不同（matched=false、pinned=true）。
+ *    每案分別鎖兩個期望值，另鎖包含關係；可見性之期望值（`matched` 欄）一字未改。
+ *    📝 OLD> expect(viaIsUsingDeptMatched).toBe(viaIsPinned); // 逐案相等，INV-4 之機器可驗證核心斷言
  */
-describe('AC-10：isUsingDeptMatched 與既有 isPinned 逐案相等（INV-4，唯一部門比對邏輯）', () => {
-  const cases: Array<{ label: string; usingDeptIds: string[]; orgCode: string | null; expected: boolean }> = [
-    { label: 'TS-PS-ORG-001 自身相同', usingDeptIds: ['JAC00'], orgCode: 'JAC00', expected: true },
-    { label: 'TS-PS-ORG-002 使用部門為使用者之上層', usingDeptIds: ['JA000'], orgCode: 'JAC00', expected: true },
-    { label: 'TS-PS-ORG-003 使用部門為使用者之下層', usingDeptIds: ['JAC00'], orgCode: 'JA000', expected: false },
-    { label: 'TS-PS-ORG-004 同層兄弟', usingDeptIds: ['JAC00'], orgCode: 'JAD00', expected: false },
-    { label: 'TS-PS-ORG-005 Root 全域涵蓋', usingDeptIds: ['00000'], orgCode: 'JCHA0', expected: true },
-    { label: 'TS-PS-ORG-006 最細課層兄弟', usingDeptIds: ['JCHA0'], orgCode: 'JCHB0', expected: false },
-    { label: 'AC-11 多筆 OR：其一相符', usingDeptIds: ['JCHA0', 'JA000'], orgCode: 'JAC00', expected: true },
-    { label: 'AC-11 多筆 OR：全不相符', usingDeptIds: ['JCHA0', 'JAD00'], orgCode: 'JAC00', expected: false },
-    { label: 'AC-12 orgCode=null', usingDeptIds: ['JA000'], orgCode: null, expected: false },
-    { label: 'AC-12 orgCode=空字串', usingDeptIds: ['JA000'], orgCode: '', expected: false },
+describe('AC-10：isUsingDeptMatched ⇒ isPinned（INV-4 包含關係；僅子孫案例不同，F019 AC-PD7）', () => {
+  const cases: Array<{ label: string; usingDeptIds: string[]; orgCode: string | null; matched: boolean; pinned: boolean }> = [
+    { label: 'TS-PS-ORG-001 自身相同', usingDeptIds: ['JAC00'], orgCode: 'JAC00', matched: true, pinned: true },
+    { label: 'TS-PS-ORG-002 使用部門為使用者之上層', usingDeptIds: ['JA000'], orgCode: 'JAC00', matched: true, pinned: true },
+    { label: 'TS-PS-ORG-003 使用部門為使用者之下層（子孫：唯一不同類）', usingDeptIds: ['JAC00'], orgCode: 'JA000', matched: false, pinned: true },
+    { label: 'AC-PD4 公司級使用者、使用部門為課（子孫）', usingDeptIds: ['JCHA0'], orgCode: '00000', matched: false, pinned: true },
+    { label: 'TS-PS-ORG-004 同層兄弟', usingDeptIds: ['JAC00'], orgCode: 'JAD00', matched: false, pinned: false },
+    { label: 'TS-PS-ORG-005 Root 全域涵蓋', usingDeptIds: ['00000'], orgCode: 'JCHA0', matched: true, pinned: true },
+    { label: 'TS-PS-ORG-006 最細課層兄弟', usingDeptIds: ['JCHA0'], orgCode: 'JCHB0', matched: false, pinned: false },
+    { label: 'AC-11 多筆 OR：其一相符', usingDeptIds: ['JCHA0', 'JA000'], orgCode: 'JAC00', matched: true, pinned: true },
+    { label: 'AC-11 多筆 OR：全不相符', usingDeptIds: ['JCHA0', 'JAD00'], orgCode: 'JAC00', matched: false, pinned: false },
+    { label: 'AC-12 orgCode=null', usingDeptIds: ['JA000'], orgCode: null, matched: false, pinned: false },
+    { label: 'AC-12 orgCode=空字串', usingDeptIds: ['JA000'], orgCode: '', matched: false, pinned: false },
   ];
 
-  it.each(cases)('$label（usingDeptIds=$usingDeptIds, orgCode=$orgCode）→ $expected', ({ usingDeptIds, orgCode, expected }) => {
+  it.each(cases)('$label（usingDeptIds=$usingDeptIds, orgCode=$orgCode）→ matched=$matched, pinned=$pinned', ({ usingDeptIds, orgCode, matched, pinned }) => {
     // 同公司（AS）情境：本組案例驗證公司維度加入後，既有之部門子樹語意逐案不變。
     const refs = depts(usingDeptIds);
     const viaIsUsingDeptMatched = isUsingDeptMatched(refs, orgCode, 'AS');
     const viaIsPinned = isPinned(doc(refs), orgCode, 'AS');
-    expect(viaIsUsingDeptMatched).toBe(expected);
-    expect(viaIsPinned).toBe(expected);
-    expect(viaIsUsingDeptMatched).toBe(viaIsPinned); // 逐案相等，INV-4 之機器可驗證核心斷言
+    expect(viaIsUsingDeptMatched).toBe(matched);
+    expect(viaIsPinned).toBe(pinned);
+    // 包含關係（INV-4 改寫後之機器可驗證核心斷言）：可見性相符者必置頂
+    if (viaIsUsingDeptMatched) expect(viaIsPinned).toBe(true);
   });
 });
 
