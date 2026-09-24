@@ -256,6 +256,9 @@ const FILTERS: FilterDef[] = [
   { kind: 'combo', key: 'bc', label: '業務/功能類別' },
 ];
 
+/** 🔵 2026-09-24：桌面篩選區展開狀態之 localStorage 鍵（值 `'1'`／`'0'`；無紀錄＝收合）。 */
+export const FILTERS_EXPANDED_KEY = 'icsop.adminDocumentList.filtersExpanded';
+
 const EMPTY_FILTERS: Record<FilterKey, string> = {
   // 🔵 UX16 delta（`AC-UX42` ⑤）：`division` 與 `FILTERS`／`FilterKey` 同步新增。
   company: '', division: '', dept: '', section: '', chief: '', status: '', num: '', name: '',
@@ -447,6 +450,28 @@ export function DocumentListPage(): JSX.Element {
   const [bcPool, setBcPool] = useState<BusinessCategoryView[]>([]);
   const [formPool, setFormPool] = useState<FilterOptionForm[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
+  /**
+   * 🔵 2026-09-24：桌面篩選區可收合、**預設收合**；只記「展開與否」於 localStorage（不記篩選值）。
+   * 無紀錄／讀寫失敗（隱私視窗、封鎖站台資料）一律視同收合。
+   */
+  const [filtersExpanded, setFiltersExpanded] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(FILTERS_EXPANDED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleFiltersExpanded = useCallback(() => {
+    setFiltersExpanded((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(FILTERS_EXPANDED_KEY, next ? '1' : '0');
+      } catch {
+        /* 記不住就算了：下次進頁回到預設收合 */
+      }
+      return next;
+    });
+  }, []);
   /**
    * 🔵 F044 `AC-G59`：初始值自網址取樣（🔴 於 `useState` 之**初始化函式**內，照抄同頁
    * `readSubtreeParams`／`readBcSubtreeParams` 之既有紀律——否則首屏會先閃一次未排序之清單）。
@@ -778,10 +803,7 @@ export function DocumentListPage(): JSX.Element {
     //    在縮小結果集，畫面與文字自相矛盾（與循環側同一條理由）。⚠ 反向不成立。
     clearBcSubtree();
   }, [clearSubtree, clearBcSubtree]);
-  // `AC-T47`：子樹 chip 亦計入「已套用篩選」之判定（否則只套 chip 時清除鈕不出現）。
-  const anyFilter = (Object.keys(filters) as FilterKey[]).some(
-    (k) => filters[k] !== EMPTY_FILTERS[k],
-  ) || nameQuery !== '' || subtreeFilter !== null || bcSubtreeFilter !== null;
+  // 「已套用篩選」之判定（anyFilter）見下方 appliedChips——chip、徽章、清除鈕同一來源。
 
   const toggleSort = useCallback((key: Exclude<SortBy, ''>) => {
     setSortBy((prevBy) => {
@@ -886,6 +908,73 @@ export function DocumentListPage(): JSX.Element {
   );
 
   /**
+   * 🔵 2026-09-24（prototype 13「篩選區可收合」）：已套用條件 chip。
+   * 🔒 **單一真相**：同時決定 ① chip 列 ② 「已套用 N 項」 ③ 「清除全部篩選」可見性 ④ 「未套用任何篩選」——
+   *    四處各自判斷就是「徽章說 0 項、chip 卻還在」之入口。
+   * 🔒 次序＝`visibleFilters`（AC-D1 逐字順序），一項至多一顆（公告日期起迄合一）。
+   * 🔒 文字為**單一文字節點**「{標籤}：{值}」——拆成兩個節點會讓表格之 `getByText('企劃部')` 多中一個。
+   */
+  const appliedChips = useMemo(() => {
+    const out: { key: FilterDef['key']; label: string; text: string }[] = [];
+    for (const f of visibleFilters) {
+      if (f.kind === 'range') {
+        const { dateFrom: a, dateTo: b } = filters;
+        const v = a && b ? `${a} ～ ${b}` : a ? `${a} 起` : b ? `${b} 止` : '';
+        if (v) out.push({ key: f.key, label: f.label, text: `${f.label}：${v}` });
+      } else if (f.kind === 'select') {
+        const v = filters[f.key];
+        if (v !== EMPTY_FILTERS[f.key]) out.push({ key: f.key, label: f.label, text: `${f.label}：${v}` });
+      } else if (filters[f.key]) {
+        const v = filters[f.key];
+        const shown = filterOptions[f.key].find((o) => o.value === v)?.label ?? v;
+        out.push({ key: f.key, label: f.label, text: `${f.label}：${shown}` });
+      } else if (f.key === 'name' && nameQuery.trim()) {
+        // 「選取＝等值」與「輸入＝包含」須一眼可分（AC-D3 之雙行為）
+        out.push({ key: f.key, label: f.label, text: `${f.label}：包含「${nameQuery.trim()}」` });
+      }
+    }
+    return out;
+  }, [visibleFilters, filters, filterOptions, nameQuery]);
+  /**
+   * N ＝ chip 數 ＋ 兩條節點子樹 chip ＝「清除全部篩選」一鍵會清掉的條件數。子樹 chip 位置不動
+   * （AC-T44：卡片與表格之間），但**計入** N——否則只帶子樹進來時標題列寫「未套用任何篩選」，自相矛盾。
+   * `AC-T47`：子樹 chip 亦計入「已套用篩選」之判定（否則只套 chip 時清除鈕不出現）。
+   */
+  const appliedCount = appliedChips.length + (subtreeFilter ? 1 : 0) + (bcSubtreeFilter ? 1 : 0);
+  const anyFilter = appliedCount > 0;
+
+  /** 焦點：移到同位置（或前一顆）chip 之 ✕；已無 chip ⇒ 桌機切換鈕／行動「篩選」鈕。 */
+  const pendingChipFocus = useRef<number | null>(null);
+  const filterToggleRef = useRef<HTMLButtonElement>(null);
+  const mobileFilterBtnRef = useRef<HTMLButtonElement>(null);
+  const chipListRef = useRef<HTMLUListElement>(null);
+  /** chip ✕：只清**該一項**（書名內之選取與輸入一併清、公告日期起迄一併清、OJT 回「全部」）。 */
+  const removeChip = (key: FilterDef['key']): void => {
+    const keys = appliedChips.map((c) => c.key);
+    pendingChipFocus.current = keys.indexOf(key);
+    if (key === 'date') {
+      setFilters((prev) => ({ ...prev, dateFrom: '', dateTo: '' }));
+      setPage(1);
+    } else {
+      if (key === 'name') setNameQuery('');
+      setFilter(key, EMPTY_FILTERS[key]);
+    }
+  };
+  useEffect(() => {
+    const idx = pendingChipFocus.current;
+    if (idx === null) return;
+    pendingChipFocus.current = null;
+    const btns = chipListRef.current?.querySelectorAll<HTMLButtonElement>('[data-filter-chip-remove]') ?? [];
+    const target = btns[Math.min(idx, btns.length - 1)];
+    if (target) {
+      target.focus();
+      return;
+    }
+    const desktop = typeof window.matchMedia === 'function' ? window.matchMedia('(min-width: 1024px)').matches : true;
+    (desktop ? filterToggleRef.current : mobileFilterBtnRef.current)?.focus();
+  }, [appliedChips]);
+
+  /**
    * 依 `visibleFilters` 產出控制項（桌面／行動 sheet 共用同一份順序與標籤）。
    * 兩處各寫一份是「順序悄悄漂移」的溫床，而 `AC-D1` 對兩處各有一條逐字順序斷言。
    */
@@ -916,8 +1005,13 @@ export function DocumentListPage(): JSX.Element {
       }
       if (f.kind === 'range') {
         // `AC-D10`：role=group（aria-label `公告日期`）＋ 兩個 type=date 輸入（起日／迄日）。
+        // 🔒 版面：原生 date 輸入之最小寬（文字＋日曆圖示）約 140px，兩個併排約需 300px，
+        // 而 xl 五欄時一格僅約 180–250px（視窗 1280–1600）。flex 子項預設 min-width:auto 不肯縮，
+        // 迄日因而溢出、蓋到右側欄位。故桌面篩選列佔兩欄（lg:col-span-2），輸入框再以
+        // min-w-0 flex-1 平分，確保極窄時亦只縮不溢。
+        const dateCls = `min-w-0 flex-1 ${selectCls.replace('w-full ', '')}`;
         return (
-          <div key={f.key}>
+          <div key={f.key} className="lg:col-span-2">
             <span className={labelCls}>{f.label}</span>
             <div role="group" aria-label={f.label} className="flex items-center gap-1">
               <input
@@ -926,7 +1020,7 @@ export function DocumentListPage(): JSX.Element {
                 aria-label={`${f.label} 起日`}
                 value={filters.dateFrom}
                 onChange={(e) => setFilter('dateFrom', e.target.value)}
-                className={selectCls}
+                className={dateCls}
               />
               <span className="text-slate-400 text-xs shrink-0">～</span>
               <input
@@ -935,7 +1029,7 @@ export function DocumentListPage(): JSX.Element {
                 aria-label={`${f.label} 迄日`}
                 value={filters.dateTo}
                 onChange={(e) => setFilter('dateTo', e.target.value)}
-                className={selectCls}
+                className={dateCls}
               />
             </div>
           </div>
@@ -1058,37 +1152,105 @@ export function DocumentListPage(): JSX.Element {
         </div>
       )}
 
-      {/* 13 項篩選（AC-D1；桌面 filterBar ＋ 行動 sheet 共用同一份 FILTERS 定義） */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Icon name="filter" className="w-4 h-4 text-slate-400" />
+      {/*
+        15／14 項篩選（AC-D1；桌面 filterBar ＋ 行動 sheet 共用同一份 FILTERS 定義）。
+        🔵 2026-09-24（prototype 13）：桌面**可收合、預設收合**；收合時以 chip 列顯示已套用條件。
+        🔒 `#filterBar` **恆掛載**、收合只切 class——不可改 `hidden` 屬性或條件渲染：`within(#filterBar)`
+           之 ByRole 查詢會排除 inaccessible 元素，且 `aria-controls` 需要目標存在。
+        🔒 lg 3 欄／xl 4 欄（人類裁決）：xl 以上 15 項中公告日期佔 2 格＝16 格，4 欄恰 4 列；
+           lg 若用 4 欄一格僅約 160px，較長選項值會被截斷。
+      */}
+      <section id="filterCard" aria-label="篩選條件" className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+        <div id="filterHead" className="flex flex-wrap items-center gap-x-2 gap-y-2 min-h-[2rem]">
+          <Icon name="filter" className="w-4 h-4 text-slate-400 shrink-0" />
           <span className="text-sm font-medium text-slate-600">篩選條件</span>
-          <span className="text-xs text-slate-400">（可輸入關鍵字過濾）</span>
+          {anyFilter ? (
+            <span
+              data-filter-count=""
+              className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-600 text-white text-[11px] font-semibold leading-4"
+            >
+              已套用 {appliedCount} 項
+            </span>
+          ) : (
+            <span className="text-xs text-slate-400">未套用任何篩選</span>
+          )}
+          <span className={`hidden text-xs text-slate-400 ${filtersExpanded ? 'lg:inline' : ''}`}>（可輸入關鍵字過濾）</span>
           <button
+            ref={filterToggleRef}
+            type="button"
+            id="filterToggle"
+            aria-expanded={filtersExpanded}
+            aria-controls="filterBar"
+            onClick={toggleFiltersExpanded}
+            className="hidden lg:inline-flex items-center gap-1 ml-1 px-2.5 py-1 rounded-md border border-slate-300 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-600"
+          >
+            <span className={`inline-flex transition-transform duration-150 ${filtersExpanded ? 'rotate-180' : ''}`}>
+              <Icon name="chevron-down" className="w-3.5 h-3.5" />
+            </span>
+            <span>{filtersExpanded ? '收合篩選' : '展開篩選'}</span>
+          </button>
+          {/* 行動（< lg）：沿用底部 sheet。🔒 無障礙名稱逐字＝`篩選`（AC-D10），故鈕內不放數字。 */}
+          <button
+            ref={mobileFilterBtnRef}
+            type="button"
             onClick={() => setSheetOpen(true)}
-            className="lg:hidden ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-sm"
+            className="lg:hidden inline-flex items-center gap-1.5 ml-1 px-3 py-1.5 rounded-md border border-slate-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
           >
             <Icon name="sliders-horizontal" className="w-4 h-4" />
             篩選
           </button>
-          {anyFilter && (
-            <button
-              onClick={clearFilters}
-              className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-primary-600 hover:bg-primary-50"
-            >
-              <Icon name="x" className="w-3.5 h-3.5" />
-              清除全部篩選
-            </button>
-          )}
-          <span className={`text-sm text-slate-500 ${anyFilter ? '' : 'ml-auto'}`}>共 {filtered.length} 筆</span>
+          <div className="ml-auto flex items-center gap-2">
+            {anyFilter && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-primary-600 hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-600"
+              >
+                <Icon name="x" className="w-3.5 h-3.5" />
+                清除全部篩選
+              </button>
+            )}
+            <span className="text-sm text-slate-500 whitespace-nowrap">共 {filtered.length} 筆</span>
+          </div>
         </div>
+        {/* 已套用條件：收合時顯示；桌機展開時隱藏（控制項本身已顯示值，不給同一值兩個移除入口）；行動一律顯示。 */}
+        {appliedChips.length > 0 && (
+          <ul
+            ref={chipListRef}
+            id="filterChips"
+            aria-label="已套用的篩選條件"
+            className={`mt-2 flex flex-wrap items-center gap-1.5 ${filtersExpanded ? 'lg:hidden' : ''}`}
+          >
+            {appliedChips.map((c) => (
+              <li
+                key={c.key}
+                data-filter-chip={c.key}
+                className="inline-flex items-center gap-1 max-w-full pl-2.5 pr-1 py-0.5 rounded-full border border-primary-200 bg-primary-50 text-primary-700 text-xs"
+              >
+                <span data-filter-chip-text="" className="truncate max-w-[20rem]" title={c.text}>
+                  {c.text}
+                </span>
+                <button
+                  type="button"
+                  data-filter-chip-remove={c.key}
+                  onClick={() => removeChip(c.key)}
+                  aria-label={`移除篩選 ${c.label}`}
+                  title={`移除篩選 ${c.label}`}
+                  className="w-5 h-5 rounded-full hover:bg-primary-200/60 focus:outline-none focus:ring-2 focus:ring-primary-600 flex items-center justify-center shrink-0"
+                >
+                  <Icon name="x" className="w-3 h-3" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         <div
           id="filterBar"
-          className="hidden lg:grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3"
+          className={`hidden grid-cols-3 xl:grid-cols-4 gap-3 mt-3 pt-3 border-t border-slate-100 ${filtersExpanded ? 'lg:grid' : ''}`}
         >
           {filterControls('cbD')}
         </div>
-      </div>
+      </section>
 
       {/* 行動底部篩選 sheet（AC-D10：標題 `篩選條件`、`關閉篩選`、`清除全部篩選`、`套用`） */}
       {sheetOpen && (

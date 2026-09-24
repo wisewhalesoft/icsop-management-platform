@@ -320,6 +320,23 @@ describe('F017 AC-D10：篩選區之逐字文案與選擇器契約', () => {
     expect(to.type).toBe('date');
   });
 
+  it('TS-F017-D10-007b（版面契約）`公告日期` 桌面佔兩欄、日期輸入可縮——防迄日溢出蓋到右側欄位', async () => {
+    // 實機：視窗 1280／1366 時 xl 五欄一格僅 182／199px，兩個原生 date 輸入（各約 140px、flex 預設
+    // min-width:auto 不縮）併排溢出 104／87px，蓋到「連結點程序書」。jsdom 無版面，故鎖其成因之 class。
+    renderPage();
+    await screen.findByText('車輛分期進件作業');
+    const group = control('公告日期');
+    const cell = group.parentElement as HTMLElement;
+    expect(cell.parentElement?.id).toBe('filterBar');
+    expect(cell.className.split(/\s+/)).toContain('lg:col-span-2');
+    for (const input of [within(group).getByLabelText('公告日期 起日'), within(group).getByLabelText('公告日期 迄日')]) {
+      const cls = input.className.split(/\s+/);
+      expect(cls).toContain('min-w-0');
+      expect(cls).toContain('flex-1');
+      expect(cls).not.toContain('w-full');
+    }
+  });
+
   it('TS-F017-D10-008 清除全部篩選鈕之可見文字逐字為 `清除全部篩選`（桌面與行動 sheet 各一）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
