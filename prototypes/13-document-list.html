@@ -376,27 +376,56 @@
        版面收納方式（多列 grid／行動底部 sheet／清除全部篩選）＝ OQ-D18-13 明文授權 ui-ux-designer 定稿：
        · 桌面（≥ md）：卡片內多列 grid 自動換行（md 2 欄／lg 3 欄／xl 4 欄），13 項佔 4 列。
        · 行動（< md）：改以「篩選」觸發之**底部 sheet**（比照前台 03 之既有慣例），同 13 項、同順序。
+       🔵 2026-09-24：上兩行之欄數與斷點**已由下方「可收合」區塊取代**（桌機 lg 以上 4 欄、預設收合；行動 < lg 維持 sheet）。
        🔒 清單 14 欄之欄位集合、順序與顯示規則一律不變（AC-D9 回歸鎖定，本 delta 僅動篩選）。
        🔴 2026-08-18 delta 之補充：AC-D9 之「顯示規則不變」自該日起**排除第 12 欄「連結點程序書」**
           （改為恆一行高＋第一顆可見＋可點的 `+N`＋就地展開，見檔頭 2026-08-18 區塊）；
           其餘 13 欄仍逐項鎖定。此外，`連結點程序書` 篩選（FILTER.link）自該日起除了過濾之外
           **另決定第 12 欄之顯示順序**（命中者排第一顆）；其**比對語意本身不變**。 -->
-  <div class="flex items-center gap-2 mb-3 md:hidden">
-    <button onclick="openSheet()" class="relative px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm flex items-center gap-1.5">
-      <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>篩選<span id="filterDot" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary-600"></span>
-    </button>
-    <span id="countTextM" class="ml-auto text-sm text-slate-500"></span>
-  </div>
-  <div class="hidden md:block bg-white border border-slate-200 rounded-xl p-4 mb-4">
-    <div class="flex items-center gap-2 mb-3">
-      <i data-lucide="filter" class="w-4 h-4 text-slate-400"></i>
+  <!-- ===== 🔵 2026-09-24 使用者回報「篩選欄位太多導致畫面被占據」⇒ 篩選區改為**可收合、預設收合** =====
+       版面收納方式仍屬 OQ-D18-13 之授權範圍（ui-ux-designer 定稿）；15／14 項之**組成、順序、標籤、型態、比對語意一字未動**。
+       ▍ 結構（一張卡片，桌機與行動共用；由上而下）
+         ① 標題列 `#filterHead`：漏斗 icon／`篩選條件`／狀態槽（`#filterCount`「已套用 N 項」或 `#filterNone`「未套用任何篩選」）／
+            `#filterHint`「（可輸入關鍵字過濾）」（僅桌機展開時）／切換鈕 `#filterToggle`（僅 ≥ lg）／行動「篩選」觸發鈕（僅 < lg）／
+            右側 `#clearBtn`「清除全部篩選」（有任何條件時）＋ `#countText`「共 N 筆」。
+         ② 已套用條件 chip 列 `#filterChips`（`<ul>`）：**有 chip 且（收合 或 < lg）**時顯示；桌機展開時隱藏（控制項本身已顯示值，
+            同一個值不在畫面上出現兩個移除入口）。
+         ③ 控制項 grid `#filterBar`：**僅 ≥ lg 且展開**時顯示；🔒 **恆掛載於 DOM**（收合只切 class，不卸載——
+            下游 AC-D1／D10 之 `within(#filterBar)` 斷言、`aria-controls` 目標皆需要它存在）。
+       ▍ 欄數定案（2026-09-24 人類裁決 OQ-3）：lg **3 欄**、xl 以上 **4 欄**（`grid-cols-3 xl:grid-cols-4`，展開時再加 `lg:grid`）。
+         理由：xl 以上 15 項中「公告日期」佔 2 格 ⇒ 16 格 ＝ 4 欄恰 4 列、無空洞；1280px 視窗＋側欄 240px 時一格約 230px。
+         lg（1024–1279px）若用 4 欄一格僅約 160px，較長選項值會被截斷 ⇒ 人類選擇 3 欄（代價：6 列、第 3 列留一個洞）。
+         📝 OLD> `lg:grid-cols-4`（lg 與 xl 以上同一值，不再分 xl）。
+       ▍ 斷點：行動／桌機之分界由 md 改為 **lg**，對齊已上線實作（DocumentListPage.tsx 之 `lg:hidden`／`hidden lg:grid`）。
+       ▍ 展開狀態記憶：localStorage 鍵 `icsop.adminDocumentList.filtersExpanded`（值 `'1'`／`'0'`）；**無紀錄＝收合**；
+         讀寫一律 try/catch，失敗視同收合。只記「展開與否」，**不記篩選值**。
+       📝 已作廢（⚠ 不得復原）：
+          OLD> 行動版另起一列 `.md:hidden`（「篩選」鈕＋紅點 `#filterDot`＋`#countTextM`），桌機卡片 `hidden md:block … p-4`；
+          OLD> `#filterBar` 恆展開，class `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3`。 -->
+  <section id="filterCard" aria-label="篩選條件" class="bg-white border border-slate-200 rounded-xl px-4 py-3 mb-4">
+    <div id="filterHead" class="flex flex-wrap items-center gap-x-2 gap-y-2 min-h-[2rem]">
+      <i data-lucide="filter" class="w-4 h-4 text-slate-400 shrink-0"></i>
       <span class="text-sm font-medium text-slate-600">篩選條件</span>
-      <span class="text-xs text-slate-400">（可輸入關鍵字過濾）</span>
-      <button id="clearBtn" onclick="clearFilters()" class="hidden ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-primary-600 hover:bg-primary-50"><i data-lucide="x" class="w-3.5 h-3.5"></i>清除全部篩選</button>
-      <span id="countText" class="ml-auto text-sm text-slate-500"></span>
+      <span id="filterCount" data-filter-count class="hidden items-center px-2 py-0.5 rounded-full bg-primary-600 text-white text-[11px] font-semibold leading-4"></span>
+      <span id="filterNone" class="text-xs text-slate-400">未套用任何篩選</span>
+      <span id="filterHint" class="hidden text-xs text-slate-400">（可輸入關鍵字過濾）</span>
+      <button type="button" id="filterToggle" aria-expanded="false" aria-controls="filterBar" onclick="toggleFilterPanel()"
+              class="hidden lg:inline-flex items-center gap-1 ml-1 px-2.5 py-1 rounded-md border border-slate-300 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-600">
+        <span data-filter-toggle-icon class="inline-flex transition-transform duration-150"><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i></span>
+        <span data-filter-toggle-text>展開篩選</span>
+      </button>
+      <!-- 行動（< lg）：沿用底部 sheet。🔒 無障礙名稱逐字＝`篩選`（既有 AC-D10 斷言），故鈕內不放數字。 -->
+      <button type="button" onclick="openSheet()" class="lg:hidden inline-flex items-center gap-1.5 ml-1 px-3 py-1.5 rounded-md border border-slate-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-600">
+        <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>篩選
+      </button>
+      <div class="ml-auto flex items-center gap-2">
+        <button type="button" id="clearBtn" onclick="clearFilters()" class="hidden inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-primary-600 hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-600"><i data-lucide="x" class="w-3.5 h-3.5"></i>清除全部篩選</button>
+        <span id="countText" class="text-sm text-slate-500 whitespace-nowrap"></span>
+      </div>
     </div>
-    <div id="filterBar" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"></div>
-  </div>
+    <ul id="filterChips" aria-label="已套用的篩選條件" class="hidden mt-2 flex-wrap items-center gap-1.5"></ul>
+    <div id="filterBar" class="hidden grid-cols-3 xl:grid-cols-4 gap-3 mt-3 pt-3 border-t border-slate-100"></div>
+  </section>
 
   <!-- ===== 🔴 2026-08-21 裁決 3：節點子樹篩選 chip（由 22 之抽屜 deep link 帶入）=====
        位置＝「篩選條件」卡片與表格之間，桌機／行動**皆顯示**（不隨 md 斷點切換）——它是當前清單為何被縮小的
@@ -1006,7 +1035,8 @@
     }
     if(f.type==='range'){
       // AC-D4：閉區間（含起日、含迄日）、兩端皆可留空；announcedDate 為 null 者於任一端有值時一律排除
-      return `<div>
+      // 🔵 2026-09-24：桌面佔兩欄（lg:col-span-2）——兩個原生 date 輸入併排約需 300px，一格放不下會溢出蓋到右欄
+      return `<div class="lg:col-span-2">
         <span class="block text-[11px] font-medium text-slate-500 mb-1">${f.label}</span>
         <div role="group" aria-label="${f.label}" class="flex items-center gap-1.5">
           <input id="${id}_from" type="date" aria-label="${f.label} 起日" value="${esc(FILTER.dateFrom)}" onchange="pickDate('from',this.value)" class="min-w-0 flex-1 px-2 py-2 rounded-md border border-slate-300 text-sm mono focus:outline-none focus:ring-2 focus:ring-primary-600" />
@@ -1075,6 +1105,101 @@
   }
   function openSheet(){document.getElementById('sheetOverlay').classList.remove('hidden');document.getElementById('sheet').classList.remove('translate-y-full');}
   function closeSheet(){document.getElementById('sheetOverlay').classList.add('hidden');document.getElementById('sheet').classList.add('translate-y-full');}
+
+  /* ===== 🔵 2026-09-24 篩選區可收合（預設收合）＋ 已套用條件 chip =====
+     🔒 **單一真相**：appliedFilterChips() 同時決定 ① chip 列內容 ② 「已套用 N 項」之 N ③ 「清除全部篩選」之可見性
+        ④「未套用任何篩選」之可見性——四者各自判斷就是「徽章說 0 項、chip 卻還在」之入口。
+     🔒 chip 次序＝visibleFilters() 之次序（＝ AC-D1 逐字順序）；一個篩選項至多一顆 chip（公告日期起迄合為一顆）。
+     🔒 chip 可見文字為**單一文字節點**「{標籤}：{值}」（全形冒號、其後無空白）——拆成兩個節點會讓既有
+        `getByText('企劃部')`／`getByText('車輛分期進件作業')` 之表格斷言多中一個而轉紅。 */
+  const FILTER_EXPANDED_KEY='icsop.adminDocumentList.filtersExpanded';
+  let FILTERS_EXPANDED=false;
+  try{ FILTERS_EXPANDED = localStorage.getItem(FILTER_EXPANDED_KEY)==='1'; }catch(e){ FILTERS_EXPANDED=false; }   // 無紀錄／讀取失敗＝收合
+
+  /* 值格式（逐字）：
+     一般 combobox       → `{label}：{選項顯示字串}`（附錄／使用表單／循環別／業務/功能類別／制定本部 取顯示名，非 id）
+     程序書書名內（選取）→ `程序書書名內：{書名}`
+     程序書書名內（輸入）→ `程序書書名內：包含「{輸入文字（trim 後）}」`——與「選取＝等值」一眼可分
+     狀態／OJT          → `{label}：{選項文字}`；「全部」不產生 chip
+     公告日期           → 起迄皆有 `公告日期：{起} ～ {迄}`（～ 兩側各一個半形空格）／僅起 `公告日期：{起} 起`／僅迄 `公告日期：{迄} 止` */
+  function appliedFilterChips(){
+    const out=[];
+    visibleFilters().forEach(f=>{
+      if(f.type==='range'){
+        const a=FILTER.dateFrom, b=FILTER.dateTo;
+        if(a&&b) out.push({key:f.key,label:f.label,text:`${f.label}：${a} ～ ${b}`});
+        else if(a) out.push({key:f.key,label:f.label,text:`${f.label}：${a} 起`});
+        else if(b) out.push({key:f.key,label:f.label,text:`${f.label}：${b} 止`});
+        return;
+      }
+      if(f.type==='select'){
+        const v=FILTER[f.key];
+        if(v && !(f.key==='ojt'&&v==='全部')) out.push({key:f.key,label:f.label,text:`${f.label}：${(f.opts().find(o=>o.v===v)||{t:v}).t}`});
+        return;
+      }
+      if(FILTER[f.key]) out.push({key:f.key,label:f.label,text:`${f.label}：${optText(f.key,FILTER[f.key])}`});
+      else if(f.free && NAME_TEXT.trim()) out.push({key:f.key,label:f.label,text:`${f.label}：包含「${NAME_TEXT.trim()}」`});
+    });
+    return out;
+  }
+  /* 已套用數 N ＝ chip 數 ＋ 兩條節點子樹 chip（各 1）＝「清除全部篩選」一鍵會清掉的條件數。
+     📌 子樹 chip 維持在卡片下方之獨立列（AC-T44 位置不動），但**計入** N——否則只帶子樹進來時標題列會顯示
+        「未套用任何篩選」，與正下方那條 chip 及表格筆數自相矛盾。 */
+  function appliedFilterCount(chips){ return chips.length + (SUBTREE.names?1:0) + (BC_SUBTREE.docs?1:0); }
+
+  function renderFilterChrome(){
+    const chips=appliedFilterChips(), n=appliedFilterCount(chips), any=n>0;
+    const cnt=document.getElementById('filterCount');
+    cnt.textContent=`已套用 ${n} 項`;
+    cnt.classList.toggle('hidden',!any); cnt.classList.toggle('inline-flex',any);
+    document.getElementById('filterNone').classList.toggle('hidden',any);
+    document.getElementById('clearBtn').classList.toggle('hidden',!any);
+    const ul=document.getElementById('filterChips');
+    ul.innerHTML=chips.map(c=>`<li data-filter-chip="${esc(c.key)}" class="inline-flex items-center gap-1 max-w-full pl-2.5 pr-1 py-0.5 rounded-full border border-primary-200 bg-primary-50 text-primary-700 text-xs">
+        <span data-filter-chip-text class="truncate max-w-[20rem]" title="${esc(c.text)}">${esc(c.text)}</span>
+        <button type="button" data-filter-chip-remove="${esc(c.key)}" onclick="removeFilterChip('${c.key}')" aria-label="移除篩選 ${esc(c.label)}" title="移除篩選 ${esc(c.label)}"
+                class="w-5 h-5 rounded-full hover:bg-primary-200/60 focus:outline-none focus:ring-2 focus:ring-primary-600 flex items-center justify-center shrink-0"><i data-lucide="x" class="w-3 h-3"></i></button>
+      </li>`).join('');
+    applyFilterPanelState(chips.length>0);
+    lucide.createIcons();
+  }
+  /* 展開／收合只切 class，**不重建控制項**（保住輸入框焦點與游標）。
+     chip 列：有 chip 時，收合 ⇒ 顯示；展開 ⇒ 僅 < lg 顯示（`lg:hidden`，因行動版沒有行內 grid）。 */
+  function applyFilterPanelState(hasChips){
+    if(hasChips===undefined) hasChips=!!document.querySelector('#filterChips [data-filter-chip]');
+    const ex=FILTERS_EXPANDED;
+    const bar=document.getElementById('filterBar');
+    bar.classList.toggle('lg:grid',ex);
+    const ul=document.getElementById('filterChips');
+    ul.classList.toggle('hidden',!hasChips); ul.classList.toggle('flex',hasChips); ul.classList.toggle('lg:hidden',hasChips&&ex);
+    const hint=document.getElementById('filterHint');
+    hint.classList.toggle('lg:inline',ex);
+    const btn=document.getElementById('filterToggle');
+    btn.setAttribute('aria-expanded',ex?'true':'false');
+    btn.querySelector('[data-filter-toggle-text]').textContent=ex?'收合篩選':'展開篩選';
+    btn.querySelector('[data-filter-toggle-icon]').classList.toggle('rotate-180',ex);
+  }
+  function toggleFilterPanel(){
+    FILTERS_EXPANDED=!FILTERS_EXPANDED;
+    try{ localStorage.setItem(FILTER_EXPANDED_KEY,FILTERS_EXPANDED?'1':'0'); }catch(e){}
+    applyFilterPanelState();
+  }
+  /* chip ✕：只清**該一項**（與子樹 chip 之方向性不對稱原則一致：單項 ✕ 不動其他條件）。
+     程序書書名內：選取值與輸入文字**一併**清（chip 代表整個條件）；公告日期：起迄一併清；OJT 回「全部」。
+     焦點：移到同位置（或前一顆）chip 之 ✕；已無 chip ⇒ 移到切換鈕（≥ lg）或行動「篩選」鈕（< lg）。 */
+  function removeFilterChip(key){
+    const before=[...document.querySelectorAll('#filterChips [data-filter-chip-remove]')].map(b=>b.dataset.filterChipRemove);
+    const idx=before.indexOf(key);
+    if(key==='date'){ FILTER.dateFrom=''; FILTER.dateTo=''; }
+    else if(key==='ojt'){ FILTER.ojt='全部'; }
+    else if(key==='name'){ FILTER.name=''; NAME_TEXT=''; }
+    else { FILTER[key]=''; }
+    buildFilters(); renderTable();
+    const after=[...document.querySelectorAll('#filterChips [data-filter-chip-remove]')];
+    const target = after[Math.min(idx,after.length-1)]
+      || (window.matchMedia('(min-width: 1024px)').matches ? document.getElementById('filterToggle') : document.querySelector('#filterHead button[onclick="openSheet()"]'));
+    if(target) target.focus();
+  }
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
 
   /* ===== 表格 ===== */
@@ -1367,10 +1492,9 @@
     document.getElementById('pager').style.display=rows.length>0?'flex':'none';
     // `OJT` 之預設值「全部」＝不施加限制，故不計入「已套用篩選」之判定
     // 🔴 2026-08-21：節點子樹 chip 也算「已套用篩選」⇒ 清除鈕與行動版紅點會出現
-    const anyFilter=Object.entries(FILTER).some(([k,v])=>v && !(k==='ojt'&&v==='全部')) || !!NAME_TEXT.trim() || !!SUBTREE.names || !!BC_SUBTREE.docs;
-    document.getElementById('clearBtn').classList.toggle('hidden',!anyFilter);
-    document.getElementById('countTextM').textContent=`共 ${rows.length} 筆`;
-    document.getElementById('filterDot').classList.toggle('hidden',!anyFilter);
+    /* 🔵 2026-09-24：「已套用」之判定、清除鈕、chip 列、數量徽章改由 renderFilterChrome() 單點處理。
+       📝 已作廢（⚠ 不得復原）：OLD> 此處就地計算 anyFilter 並切換 #clearBtn／#countTextM／#filterDot（後兩者已移除）。 */
+    renderFilterChrome();
 
     document.getElementById('tbody').innerHTML=rows.map((d,i)=>{
       const nodeWarn = d.node?'':`<span title="尚未指派節點" class="inline-flex items-center"><i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-amber-500"></i></span>`;
@@ -1558,7 +1682,11 @@
     document.getElementById('roBanner').classList.toggle('hidden',!ro);
     document.getElementById('roBanner').classList.toggle('flex',ro);
     if(blocked)document.getElementById('blockMsg').textContent={user:'一般使用者無後台存取權。'}[r];
-    renderTable();             // 🔴 「樹狀圖」欄依角色增刪 ⇒ 換角色必須重繪（否則欄位停在前一個角色的狀態）
+    /* 🔵 2026-09-24（原型示範縫專用，實作無此情境——角色不會在同一頁面內切換）：
+       切到看不到「循環別」的角色時一併清掉其值。否則 filteredRows() 仍套用該值、而 chip 列（依 visibleFilters()）
+       不再顯示它 ⇒ 正是本次要杜絕的「清單被縮小卻看不出原因」。 */
+    if(!canSeeTree()) FILTER.cycle='';
+    renderTable();            // 🔴 「樹狀圖」欄依角色增刪 ⇒ 換角色必須重繪（否則欄位停在前一個角色的狀態）
     /* 🔵 2026-09-22 UX16：**換角色亦必須重建篩選列**。
        🔴 這是既有缺陷（非本批造成）：`visibleFilters()` 早已依 canSeeTree() 濾掉 `循環別`（AC-D17），
           但 setRole() 從來沒有呼叫 buildFilters() ⇒ 切角色時篩選列停在前一個角色的狀態，
