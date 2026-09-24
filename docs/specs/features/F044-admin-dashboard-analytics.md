@@ -744,6 +744,7 @@ Epic/Story: E13 / [US-109](../../stories/epics/E13-admin-dashboard/US-109-dashbo
 **Then** 存在 `role="region"`、`aria-label="最新公告（ICSOP 版本更新）"`、`data-testid="latest-announcements"` 之區塊
 **And** 其內表格之 `role="columnheader"` **恰 4 個**，`textContent` 依序逐字為 `公告日`、`版次`、`程序書書名`、`狀態`
 **And** 🔴 **恰四欄**（使用者原文明訂）——**明文禁止**順手加上「文件編號」「制定部門」等第五欄。
+**And** 📝 **2026-09-24**：書名欄加入連往檢視頁之連結與進入圖示 ⇒ 見 **[`AC-G98`](#ac-g98)**；🔴 **仍恰四欄**（圖示在書名欄內，不另開「操作」欄）。
 
 #### `AC-G52` — 母體
 **Then** 母體 ＝ `{ d : d.status === 'active' ∧ d.announcedDate !== null }`（`OQ-D44-22` c＋d）
@@ -770,6 +771,7 @@ Epic/Story: E13 / [US-109](../../stories/epics/E13-admin-dashboard/US-109-dashbo
 **Then** `版次` 欄於 `edition === null` 時顯示逐字 `未設版次`（🔒 沿用 [F042](F042-ojt-progress-management.md) 之 `EDITION_NONE_TEXT`，**禁止新增第二個常數**），**不留白、不假造版次字串**
 **And** `公告日` 欄格式為 `YYYY-MM-DD`，**以 UTC 拆解**（比照 `todayIsoDate`／`trainingDueDate` 之既有紀律）
 **And** `程序書書名` 欄顯示 `documentName`；過長時可截斷顯示，但 🔴 **完整值必須仍可由 `title` 屬性或 `aria-label` 取得**（不得成為不可取得之資訊）。
+**And** 📝 **2026-09-24**：有讀取權時書名渲染為連結（`AC-G98`）；🔒 截斷只截文字、**不得截掉進入圖示**，完整書名之載體仍為 `<td title>`（位置不變）。
 
 #### `AC-G57` — 空狀態
 **Given** 母體為空
@@ -784,6 +786,19 @@ Epic/Story: E13 / [US-109](../../stories/epics/E13-admin-dashboard/US-109-dashbo
 **And** **When** 我點擊它，**Then** 導向 `/admin/documents?sortBy=announcedDate&sortDir=desc`
 **And** 🔴 **不帶狀態篩選**（`OQ-D44-23`）：連結叫「查看更多」，帶篩選會看到**更少**
 **And** ⚠ 對 `DeptContact`（`ICSOP文件管理` ＝ `READ`）本連結**仍然呈現**——四種後台角色皆有讀取權，故本閘門於畫面上目前恆為真；其鑑別力載體為純函式層之直接斷言（同 `AC-G18` 之附註）。
+
+#### `AC-G98` — 書名連往 ICSOP 文件檢視頁（🟣 2026-09-24 需求新增） {#ac-g98}
+> 使用者原文：「優化首頁儀表板最新公告區塊，加入連結或是進入的圖示，連結到 ICSOP 文件管理 該文件的 檢視頁」。原型權威＝`prototypes/07-admin-shell.html` `renderLatest()`。
+
+**Given** 我的角色 `canPerform(role, FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')` 為真
+**Then** 每一列之 `程序書書名` 儲存格內存在**恰一個** `role="link"`、`data-testid="latest-doc-link"` 之連結，其 `textContent` 逐字為完整 `documentName`（＝ accessible name），尾端帶 lucide `chevron-right` 圖示（`aria-hidden="true"`）
+**And** **When** 我點擊它（或鍵盤 focus 後按 Enter），**Then** 同分頁導向 **`/admin/documents/{documentId}`**（`DocumentReadonlyPage`）；原型導向 `16-document-readonly.html?id={id}`
+**And** 🔴 閘門**必須**與 `查看更多`（`AC-G58`）**同一個值**——同一次 `canPerform` 結果，**禁止**另寫第二個述詞或角色清單
+**And** 🔴 閘門為假時：書名維持**純文字**（儲存格 DOM 與 2026-09-24 前逐字相同）、**無圖示、非連結**；🔴 **明文禁止** disabled／灰色死連結
+**And** 🔴 **`AC-G51` 恰四欄不變**：圖示放在書名欄內，**不得**新增「操作」或任何第五欄
+**And** 🔒 截斷不得吃掉圖示：寬度上限 `max-w-[340px]` 掛在 `<a>`（`inline-flex`），文字 `<span class="min-w-0 truncate">`、圖示 `shrink-0`；完整書名仍由 `<td title>` 承載（`AC-G56`）
+**And** 🔒 只有 `<a>` 可點，**不做整列可點**；樣式：文字 `text-slate-700`、hover `text-primary-700`＋underline，圖示 `text-primary-600`／hover `primary-700`，`focus-visible:ring-2 ring-primary-600`
+**And** ⚠ 四種後台角色對 `ICSOP文件管理` 皆有讀取權 ⇒ 本閘門於畫面上目前恆為真；負向分支之鑑別力載體為純函式／元件層以 mock `canPerform` 回 false 之直接斷言（同 `AC-G58` 附註）
 
 #### `AC-G59` — `DocumentListPage` 新增 URL 排序參數之讀取
 **Given** 現況 `sortBy`／`sortDir` 為純前端 `useState`、不讀 URL（[事實 #16](#verified-facts)）

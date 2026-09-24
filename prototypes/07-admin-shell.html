@@ -1246,7 +1246,10 @@
     const latestInfo = infoNote('latest-announcements',[
       '依公告日由新到舊排列。尚未到公告日的文件（狀態為「進度中」）因為日期在後面，會排在最前面。'
     ]);
-    const more=canPerform(role,'ICSOP_DOCUMENT_MANAGEMENT','read')
+    /* 🟣 2026-09-24 `AC-G98`（需求「最新公告加入連結或進入圖示，連到 ICSOP 文件管理該文件之檢視頁」）：
+       書名列連結與 `查看更多` **共用同一個閘門值**（同一次 canPerform 呼叫，🔴 不得另寫第二個述詞）。 */
+    const mayOpenDoc=canPerform(role,'ICSOP_DOCUMENT_MANAGEMENT','read');
+    const more=mayOpenDoc
       ? `<a role="link" href="13-document-list.html?sortBy=announcedDate&amp;sortDir=desc" class="ml-auto inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline">查看更多<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>`
       : '';
     const body = rows.length===0
@@ -1275,7 +1278,19 @@
                 return `<tr data-doc-id="${d.id}">
                   <td class="px-3 py-2 mono text-slate-600 whitespace-nowrap">${d.date}</td>
                   <td class="px-3 py-2 mono text-slate-600 whitespace-nowrap">${d.ed? esc(d.ed) : EDITION_NONE_TEXT}</td>
-                  <td class="px-3 py-2 text-slate-700 max-w-[340px] truncate" title="${esc(d.name)}">${esc(d.name)}</td>
+                  ${mayOpenDoc
+                    /* 🟣 2026-09-24 `AC-G98`：書名本身即為連結（accessible name ＝ 完整書名），尾端帶 `chevron-right` 進入圖示。
+                       🔴 `AC-G51` 恰四欄不變——圖示放在書名欄內，**不得**另開「操作」第五欄。
+                       🔒 截斷不得吃掉圖示：寬度上限改掛在 `<a>`（`max-w-[340px]`，表格儲存格上的 max-width 瀏覽器不保證遵守），
+                          文字 `<span>` 為 `min-w-0 truncate`、圖示為 `shrink-0` ⇒ 書名再長，圖示仍在可見範圍內。
+                       🔒 `AC-G56`：完整書名仍由 `<td title>` 承載（與無權限分支同一個載體，未搬家）。
+                       🔒 圖示 `aria-hidden="true"`；書名文字 `text-slate-700`（比照 13 程序書清單之書名連結），hover 轉 primary-700 ＋ underline；圖示恆為 primary-600、hover 轉 primary-700（`group-hover`）；focus-visible 為 primary-600 ring。
+                       🔒 只有 `<a>` 可點，**不做整列可點**（避免整列 hover 暗示與列內其他欄之語意混淆；鍵盤／讀屏載體唯一）。
+                       🔒 導向：正式站 `/admin/documents/${documentId}`（DocumentReadonlyPage，同分頁開啟，比照其他頁之 navigate）；
+                          原型導向 `16-document-readonly.html?id=`（16 為靜態單份示範、不讀 id，query 只為對應關係）。 */
+                    ? `<td class="px-3 py-2" title="${esc(d.name)}"><a role="link" href="16-document-readonly.html?id=${encodeURIComponent(d.id)}" data-to="/admin/documents/${esc(d.id)}" data-testid="latest-doc-link" class="group inline-flex max-w-[340px] items-center gap-1 align-middle text-slate-700 hover:text-primary-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 rounded"><span class="min-w-0 truncate">${esc(d.name)}</span><i data-lucide="chevron-right" class="w-3.5 h-3.5 shrink-0 text-primary-600 group-hover:text-primary-700" aria-hidden="true"></i></a></td>`
+                    /* 🔒 `AC-G98` 無讀取權分支：**逐字維持 2026-09-24 前之原樣**——純文字、無圖示、非連結（🔴 不得畫成 disabled／灰色死連結）。 */
+                    : `<td class="px-3 py-2 text-slate-700 max-w-[340px] truncate" title="${esc(d.name)}">${esc(d.name)}</td>`}
                   <td class="px-3 py-2">${pill}</td>
                 </tr>`;
               }).join('')}
