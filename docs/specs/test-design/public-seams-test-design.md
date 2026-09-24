@@ -161,9 +161,10 @@ export function isPinned(item, userOrgCode) {
 - Given：user=`JAC00`, D1.usingDeptIds=`['JAC00']`
 - Then：pinned=`true`
 
-#### TS-PS-F019-003（新邊界）文件使用部門為使用者所屬部門之下層（更細單位）→ 不置頂
+#### TS-PS-F019-003（新邊界）文件使用部門為使用者所屬部門之下層（更細單位）→ ~~不置頂~~ **置頂**（2026-09-24 反轉）
 - Given：user=`JA000`（部層本身）, D1.usingDeptIds=`['JAC00']`（其下處室）
-- Then：pinned=`false`
+- Then：pinned=`true`
+- 🔴 **2026-09-24 使用者裁決反轉**（[F019 `AC-PD1`](../features/F019-public-list-browsing.md#pin-descendant-delta)）：置頂下推至轄下單位。📝 `OLD>` Then：pinned=`false`。⚠ 可見性（`TS-PS-ORG-003`／F041 `AC-06`）**不隨之反轉**。
 - 對應：TS-PS-ORG-003 之衍生應用；同標記為需架構師覆核之衍生假設
 
 #### TS-PS-F019-004 文件使用部門為多筆，其一為使用者之上層 → 仍置頂（既有 `TS-F019-004` 精神延伸）

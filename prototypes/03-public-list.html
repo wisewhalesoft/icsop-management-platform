@@ -364,7 +364,16 @@
 
   // 目前示範之 viewer（預設＝其他子分類＝本 delta 導入前之行為，F019 AC-U5 回歸鎖定）
   const VIEWER = { roleCode:'User', userSubtype:'other', scope: USER_SCOPE };
-  const inScope = use => isUsingDeptMatched(use, VIEWER.scope);   // 置頂判定＝與可見性判定同一份實作（AC-10）
+  /* 🔴 2026-09-24 使用者裁決（F019 AC-PD1～AC-PD9）：置頂下推至轄下單位（含課、每一層級皆下推到底）。
+     置頂＝可見性相符（祖先或自身）∪ 使用部門為登入者單位之子孫；🔒 可見性判定（isDocVisibleToViewer）一字不改，
+     故業務視角下子孫文件根本不在母體中、置頂區不變（AC-PD7）。「其他文件」之相近程度排序不變（AC-PD8）。
+     原型以組織路徑字串表示：子孫＝路徑以「登入者路徑 + ' / '」開頭。
+     📝 OLD> const inScope = use => isUsingDeptMatched(use, VIEWER.scope);   // 置頂判定＝與可見性判定同一份實作（AC-10） */
+  const isDescendantDept = (use, scope) => {
+    const own = Array.isArray(scope) && scope.length ? scope[scope.length-1] : null;   // scope 末項＝登入者自身單位
+    return !!own && use.some(u => u.startsWith(own + ' / '));
+  };
+  const inScope = use => isUsingDeptMatched(use, VIEWER.scope) || isDescendantDept(use, VIEWER.scope);
 
   /* ===== 📝 已推翻：頂部說明句（依子分類切換）——2026-08-11 人類閘門裁決，2026-08-27 使用者裁決整條移除 =====
      🔴 F019 AC-Y1：說明列已無載體，兩條常數一併移除；下方 VIEWER_MODES 之 notice 欄亦隨之刪除。

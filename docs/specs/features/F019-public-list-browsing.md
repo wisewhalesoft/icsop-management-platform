@@ -370,3 +370,23 @@ Epic/Story: E06 / US-050, US-051, US-052
   - ⑤ **樹狀圖之節點徽章逐字與 `data-visible-doc-count` 屬性名**（`AC-B16` ③／`AC-B21`）——🔴 **明文禁止**因 [F043 §UX16 delta](F043-business-function-category.md#ux16-delta) `AC-UX33` 之後台公司別統計而順手把它改名或共用（`AC-UX36` 之前台負向半句）；
   - ⑥ **稽核**：樹狀圖瀏覽、切換類別、開抽屜、**按下 `AC-UX13` 之導向鈕**——**皆不產生任何 `AUDIT_LOG` 列**（`AC-B26` 之既有規則擴及本 delta 之新互動；瀏覽清單本即不記稽核）；
   - ⑦ **零新增錯誤碼**（`AC-B22` 與 `AC-B24` 之既有紀律）。
+
+---
+
+## 2026-09-24 置頂區下推 delta — 「您部門相關文件」納入轄下單位（`AC-PD#` 批） {#pin-descendant-delta}
+
+> 🔴 **2026-09-24 使用者裁決**（三題）：① **只改置頂，不動可見範圍**（選項 A）；② **每一層級都下推到底**——部、本部、公司（`00000`）層使用者一律下推，**含課層**；③ **不影響「其他文件」之邏輯**（依制定單位相近程度排序、同層編號降冪，2026-09-23 裁定一字不改）。
+>
+> **語意轉變**：置頂原為「文件使用部門是使用者單位之**祖先或自身**」；自本日起為「……之祖先或自身 **∪ 子孫**」——部級使用者轄下各處室／課之文件，亦屬「您部門相關」。
+>
+> 📌 **推翻**：`TS-PS-F019-003`（「下層不置頂」，期望值反轉為 `true`）、[F041](F041-user-subtype-business-scope.md) `INV-4`／`AC-10` 之「`isPinned` 與 `isUsingDeptMatched` 逐案相等」（改為**包含關係**，見 `AC-PD7`）、`AC-B24` ② 對 `isPinned` 之「逐字不變」鎖（該鎖之適用範圍為 2026-09-02 delta，本 delta 明文解除）。
+
+- **AC-PD1**（部級下推）：Given 使用者 `AS@JA000`（部）、文件使用部門 `AS/JAC00`（其下處室）, When 判定置頂, Then `pinned === true`。📝 `OLD>` 本案原為 `TS-PS-F019-003`，期望 `false`。
+- **AC-PD2**（下推到底，含課）：Given 使用者 `AS@JA000`、文件使用部門 `AS/JACA0`（其下處室之課）, Then `true`；Given 使用者 `AS@JAC00`（處室）、文件使用部門 `AS/JACA0`, Then `true`。
+- **AC-PD3**（本部級下推）：Given 使用者 `AS@J0000`（本部）、文件使用部門分別為 `AS/JA000`、`AS/JAC00`、`AS/JCHA0`, Then 三者皆 `true`。
+- **AC-PD4**（公司級下推）：Given 使用者 `AS@00000`（公司）、文件使用部門為同公司任一單位（`JCHA0`／`K0000`）, Then `true`。🔒 **這是裁決之預期結果**：公司層使用者之置頂區＝該公司所有設有使用部門之文件，「其他文件」僅剩無使用部門或他公司之文件。
+- **AC-PD5**（不跨枝）：Given 使用者 `AS@JAC00`、文件使用部門 `AS/JAD00`（同部兄弟處室）, Then `false`；Given 使用者 `AS@JA000`、文件使用部門 `AS/JCH00`（同本部、不同部）, Then `false`。
+- **AC-PD6**（不跨公司）：Given 使用者 `AS@JA000`、文件使用部門 `AD/JAC00`（代碼落在子樹內、但公司不同）, Then `false`；Given 使用者 `AS@00000`、文件使用部門 `AD/JAC00`, Then `false`。孤兒帳號（`orgCode` 為 `null`／`undefined`／`''`）一律 `false`（既有 `TS-PS-F019-005` 不變）。
+- **AC-PD7**（🔒 **可見範圍零漣漪**）：Given 使用者 `業務@JA000`、文件使用部門 `AS/JAC00`, When 呼叫 `isUsingDeptMatched`／`isDocVisibleToViewer`, Then **仍為 `false`**（F041 `AC-06` 期望值一字不改）⇒ 該文件**不出現於業務使用者之清單、詳情、檢視器、樹狀圖**。<br>🔒 **新不變式（取代 INV-4 之「逐案相等」）**：對任意輸入，`isPinned = isUsingDeptMatched ∨ 使用部門為使用者單位之子孫`——① `isUsingDeptMatched ⇒ isPinned`（包含）；② 兩者僅在「子孫」案例上不同。實作以**結構**保證①：`isPinned` 內部呼叫 `isUsingDeptMatched`，不另寫一份祖先判定。<br>📌 **推論**：業務使用者之結果集已先經可見性過濾，子孫文件根本不在母體中 ⇒ 其置頂區**與本 delta 前完全相同**（`AC-U2`／F041 `AC-15`「全部 `pinned === true`」不變）。
+- **AC-PD8**（🔒 **「其他文件」零漣漪**）：Given 任一 viewer, When `splitAndSort`, Then 未置頂之文件仍依 `draftingProximity()` 排序、同層依編號降冪；置頂區仍僅依編號降冪。本 delta 唯一可觀察之變化＝**某些文件由「其他文件」移入「您部門相關文件」**；兩區標題、空則隱藏、分頁、對外 DTO 欄位集合一字不改。
+- **AC-PD9**（實作約束）：子孫判定沿用 `isWithinSubtree`（參數角色互換：`isWithinSubtree(使用者單位, 文件使用部門)`），**不得**改用遞迴 CTE／closure table（`AC-D13` 之約束延續）；使用者單位非 5 碼時子孫判定一律 `false`、不得拋錯（該值自 session 取得，拋錯＝整頁 500）。

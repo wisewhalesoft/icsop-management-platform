@@ -109,7 +109,7 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
 | **INV-1** | 任一 `ACCOUNT.userSubtype` 恆為 `'business'` 或 `'other'`；**不得**為 `null`／空字串／其他字串。DB 欄位為 `NOT NULL DEFAULT 'other'` ＋ `CHECK` 約束；服務層入口一律經 `normalizeUserSubtype` | 讀取端由 `normalizeUserSubtype` 防禦性收斂為 `'other'`（AC-02）；寫入端由 DB 約束拒絕 |
 | **INV-2** | `userSubtype` **僅在 `roleCode = 'User'` 時具效力**。其餘 4 種角色之該欄值恆被忽略，不影響任何判定、不影響任何顯示 | `isDeptScopedViewer` 對非 `'User'` 角色一律回 `false`（AC-03） |
 | **INV-3** | 對 `isDeptScopedViewer(viewer) === true` 之 viewer，**任何**回傳文件內容或中繼資料之路徑（清單／詳情／檢視器／PDF 代理／下載／列印）皆須先通過 `isDocVisibleToViewer`；**deny-by-default**——無法判定（如 `orgCode` 缺值）即不可見 | 該路徑之回應依 OQ-E06-03 裁決（404 或 403），且**不得回傳任何欄位或位元組**（AC-20、AC-25、AC-26） |
-| **INV-4** | 「使用部門相符」之判定一律經 `isWithinSubtree`；全系統**不得存在第二套部門比對邏輯** | `isUsingDeptMatched` 之輸出對任意輸入恆等於既有 `isPinned` 之語意（AC-10） |
+| **INV-4** | 「使用部門相符」之判定一律經 `isWithinSubtree`；全系統**不得存在第二套部門比對邏輯** | `isUsingDeptMatched` 之輸出對任意輸入恆等於既有 `isPinned` 之語意（AC-10）<br>🔴 **2026-09-24 使用者裁決改寫**（[F019 `AC-PD7`](F019-public-list-browsing.md#pin-descendant-delta)）：置頂下推至子孫後，兩者由「逐案相等」改為**包含**——`isUsingDeptMatched ⇒ isPinned`，僅「使用部門為使用者單位之子孫」一類案例不同。「全系統不得存在第二套**祖先**比對邏輯」不變：`isPinned` 內部呼叫 `isUsingDeptMatched`。**可見性語意一字不改。** |
 | **INV-5** | 業務限制**疊加**於既有「已公告」基底條件之上（AND，非 OR、非取代）。使用部門相符但非已公告之文件仍不可見 | AC-24 |
 
 - **INV-2 之設計理由**：使子分類成為**單純的 additive 欄位**——角色升降級不需清理該欄（AC-36），F025／F026 矩陣不需新增欄位（AC-37／AC-38），既有 RBAC 中介層完全不動。
@@ -180,7 +180,7 @@ Epic/Story: E08 / [US-072](../../stories/epics/E08-permission-matrix/US-072-user
 - **AC-07**：Given viewer＝`業務@JAC00`、`usingDeptIds = ['JAD00']`（同部另一處室），When 判定，Then 回傳 `false`。
 - **AC-08**：Given viewer＝`業務@JCHA0`、`usingDeptIds = ['00000']`（全公司 Root），When 判定，Then 回傳 `true`。
 - **AC-09**：Given viewer＝`業務@JCHA0`、`usingDeptIds = ['JCHB0']`（同處室另一課），When 判定，Then 回傳 `false`。
-- **AC-10**（**重用宣示，可機器驗證**）：Given AC-05～AC-09 及 [public-seams-test-design.md](../test-design/public-seams-test-design.md) `TS-PS-ORG-001`～`TS-PS-ORG-006` 之全部輸入組合，When 對每一組同時呼叫 `isUsingDeptMatched(usingDeptIds, orgCode)` 與既有 `isPinned({ usingDeptIds }, orgCode)`，Then **兩者回傳值逐案相等**；且 `isUsingDeptMatched` 之實作內部呼叫既有 `isWithinSubtree`（INV-4：不得存在第二套部門比對邏輯）。
+- **AC-10**（**重用宣示，可機器驗證**）：Given AC-05～AC-09 及 [public-seams-test-design.md](../test-design/public-seams-test-design.md) `TS-PS-ORG-001`～`TS-PS-ORG-006` 之全部輸入組合，When 對每一組同時呼叫 `isUsingDeptMatched(usingDeptIds, orgCode)` 與既有 `isPinned({ usingDeptIds }, orgCode)`，Then **兩者回傳值逐案相等**；且 `isUsingDeptMatched` 之實作內部呼叫既有 `isWithinSubtree`（INV-4：不得存在第二套部門比對邏輯）。<br>🔴 **2026-09-24 改寫**（[F019 `AC-PD7`](F019-public-list-browsing.md#pin-descendant-delta)）：「逐案相等」限縮為**非子孫案例**；子孫案例（如 `TS-PS-ORG-003`：使用者 `JA000`、使用部門 `JAC00`）`isUsingDeptMatched === false`（本檔 `AC-06` 不變）而 `isPinned === true`。對全部案例恆成立者改為：`isUsingDeptMatched ⇒ isPinned`。
 - **AC-11**：Given viewer＝`業務@JAC00`、`usingDeptIds = ['JCHA0', 'JA000']`（多使用部門，其一相符），When 判定，Then 回傳 `true`（OR 語意）。
 - **AC-12**：Given viewer 之 `orgCode` 分別為 `null`、`undefined`、`''`，`usingDeptIds = ['JA000']`（任意），When 判定，Then **三者皆回傳 `false`**（孤兒帳號 deny-by-default，**不得**放寬為全可見）。
 - **AC-13**（**對照組**）：Given viewer 為 `{ roleCode: 'User', userSubtype: 'other', orgCode: 'JAC00' }`、`{ roleCode: 'User', userSubtype: 'other', orgCode: null }`、`{ roleCode: 'Supervisor', userSubtype: 'business', orgCode: null }`，`usingDeptIds = ['JCHB0']`（不相符），When 判定，Then **三者皆回傳 `true`**（不受限者恆可見，含 `orgCode` 為 `null` 之情形）。
