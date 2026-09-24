@@ -806,6 +806,14 @@
   const AUDIT_SESSION_DELETE = 'OJT_SESSION_DELETE';
   const WM_BURN_TEXT        = '檢視/下載將燒錄浮水印';
   const WM_UNSUPPORTED_TEXT = '此格式不支援浮水印';
+  /* 🔵 2026-09-24 簽到表線上檢視 delta（F042 `AC-OV1`～`AC-OV8`）：檢視鈕逐字文案。
+     🔒 可檢視之副檔名＝`OJT_SIGNIN` 白名單（`AC-OV1` ④）；白名單外（僅可能來自遷移前舊資料）不產生檢視鈕。 */
+  const VIEW_BTN_TEXT       = '檢視';
+  const VIEW_TITLE_TEXT     = '檢視簽到表';
+  const VIEW_FAILED_TEXT    = '檢視失敗，請稍後再試。';
+  const POPUP_BLOCKED_TEXT  = '新視窗被瀏覽器封鎖，請允許彈出視窗後再試。';
+  const VIEWABLE_EXT        = ['pdf','jpg','jpeg','png'];
+  function isViewable(file){ const m=/\.([^.]+)$/.exec(file||''); return !!m && VIEWABLE_EXT.includes(m[1].toLowerCase()); }
 
   /* ===================== 檔案規則（依 OQ-E11-10 建議案 (A)；沿用既有值 ===================== */
   const MAX_BYTES = 52428800;                       // 50 MB（OQ-E04-06 定案值，恰 50MB 通過）
@@ -1109,7 +1117,9 @@
         L2 之文件目前 2/3（歸位到唯一未完成的 BJAA0 後會變 3/3）。 */
   let LEGACY=[
     {id:'lg1', docId:'d4', file:'作服撥款作業_OJT簽到表.pdf',      fmt:'pdf', uploadedBy:'張家豪', uploadedAt:'2025-11-14 09:32'},
-    {id:'lg2', docId:'d1', file:'車輛分期進件作業_OJT簽到表.pdf',  fmt:'pdf', uploadedBy:'陳彥廷', uploadedAt:'2026-02-03 16:05'}
+    {id:'lg2', docId:'d1', file:'車輛分期進件作業_OJT簽到表.pdf',  fmt:'pdf', uploadedBy:'陳彥廷', uploadedAt:'2026-02-03 16:05'},
+    /* 🔵 `AC-OV1` ④ 之示範：白名單外副檔名（僅可能來自遷移前舊資料）⇒ 無「檢視」鈕、仍可下載 */
+    {id:'lg3', docId:'d2', file:'消金審核作業_OJT簽到表_舊檔.doc',  fmt:'doc', uploadedBy:'林建宏', uploadedAt:'2025-09-30 11:20'}
   ];
 
   /* ===== 🔵 UX16 項 16：文件層之版次與日期（AC-UX52 之 CSV 原料）=====
@@ -1870,6 +1880,7 @@
           <span data-session-uploader class="text-xs text-slate-500 shrink-0">${s.uploader}</span>
           <span data-session-file class="text-sm text-slate-700 truncate flex-1">${s.file}</span>
           ${wmNote(s.fmt)}
+          ${isViewable(s.file)?`<button data-session-view="${s.id}" onclick="viewSession('${s.id}')" aria-label="檢視簽到表（${s.date} · ${s.file}）" title="${VIEW_TITLE_TEXT}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"><i data-lucide="eye" class="w-3.5 h-3.5"></i>${VIEW_BTN_TEXT}</button>`:''}
           <button data-session-download="${s.id}" onclick="downloadSession('${s.id}')" aria-label="下載簽到表（${s.date} · ${s.file}）" title="下載簽到表" class="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
           ${deleteBtn(s)}
         </div>`).join('')}
@@ -1955,6 +1966,40 @@
     if(!s){ toast('error','找不到指定的教育訓練場次（可能已被移除），請重新整理','OJT_SESSION_NOT_FOUND · 404'); return; }
     if(s.fmt==='pdf') toast('success','已下載「'+s.file+'」（伺服器端已將浮水印燒錄進 PDF 內容層，身分為您本人；並寫入稽核 DOWNLOAD）');
     else              toast('success','已下載「'+s.file+'」（此格式不支援浮水印，回傳原始檔位元組；仍寫入稽核 DOWNLOAD）');
+  }
+
+  /* ===================== 🔵 簽到表線上檢視（F042 `AC-OV2`～`AC-OV5`）=====================
+     🔴 **於 click handler 內同步開新分頁**，取回位元組後才導向（實作：`openPdfViaBlob` 之 fetch → blob: URL）；
+        明文禁止 `window.open(端點網址)`——頂層導覽會送 `Accept: text/html` 而撞 SPA fallback。
+     🔒 後端 `GET /admin/ojt-progress/sessions/:id/view`：`Content-Disposition: inline`、`Content-Type` 依副檔名推導
+        （**不讀**上傳時瀏覽器自報之 contentType）；PDF 燒錄浮水印＝操作者本人、寫稽核 **VIEW**（下載則為 DOWNLOAD）。
+     📝 prototype 無真檔案：新分頁以一張示意簽到表代替；PDF 疊一層浮水印字樣以示「已燒錄」，圖片則維持原樣（策略 A）。 */
+  const DEMO_VIEWER = {empNo:'A12345', name:'王小明', company:'和潤企業', dept:'營運管理部', section:'審查室'};
+  function openViewTab(file, fmt, meta){
+    const win = window.open('', '_blank');
+    if(!win){ toast('error', POPUP_BLOCKED_TEXT, 'POPUP_BLOCKED'); return false; }
+    const wm = `${DEMO_VIEWER.empNo} ${DEMO_VIEWER.name} ${DEMO_VIEWER.company} ${DEMO_VIEWER.dept} ${DEMO_VIEWER.section} ${new Date().toISOString().slice(0,16).replace('T',' ')}`;
+    const esc = t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const rows = Array.from({length:10},(_,i)=>`<tr><td>${i+1}</td><td>員工 ${String.fromCharCode(65+i)}</td><td></td><td></td></tr>`).join('');
+    const wmLayer = fmt==='pdf'
+      ? `<div style="position:fixed;inset:0;pointer-events:none;display:flex;flex-wrap:wrap;align-content:space-around;justify-content:space-around;transform:rotate(-30deg);opacity:.30;color:#334155;font-size:14px">${Array.from({length:12},()=>`<span style="padding:40px">${esc(wm)}</span>`).join('')}</div>`
+      : '';
+    win.document.write(`<!doctype html><meta charset="utf-8"><title>${esc(file)}</title>
+      <body style="margin:0;background:#525659;font-family:system-ui,'Noto Sans TC',sans-serif">
+      <div style="max-width:720px;margin:24px auto;background:#fff;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,.4);position:relative">
+        <h2 style="text-align:center;margin:0 0 4px">教育訓練簽到表</h2>
+        <p style="text-align:center;color:#475569;margin:0 0 20px;font-size:13px">${esc(meta)}</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px" border="1" cellpadding="8"><tr style="background:#f1f5f9"><th>#</th><th>姓名</th><th>簽名</th><th>備註</th></tr>${rows}</table>
+        <p style="margin-top:24px;font-size:11px;color:#94a3b8">prototype 示意：實際為上傳之簽到表${fmt==='pdf'?'（伺服器端已燒錄浮水印，身分為檢視者本人）':'（圖片格式不支援浮水印，為原始檔）'}</p>
+      </div>${wmLayer}</body>`);
+    win.document.close();
+    return true;
+  }
+  function viewSession(id){
+    const s=SESSIONS.find(x=>x.id===id);
+    if(!s){ toast('error', VIEW_FAILED_TEXT, 'OJT_SESSION_NOT_FOUND · 404'); return; }
+    if(openViewTab(s.file, s.fmt, `${s.date} · ${s.file}`))
+      toast('info','已於新分頁開啟「'+s.file+'」'+(s.fmt==='pdf'?'（已燒錄浮水印；寫入稽核 VIEW）':'（此格式不支援浮水印；寫入稽核 VIEW）'));
   }
 
   /* ===================== 新增場次 modal ===================== */
@@ -2104,6 +2149,7 @@
           <div data-pending-uploaded-at class="mono text-[10px] text-slate-400">${l.uploadedAt}</div>
         </div>
         ${wmNote(l.fmt)}
+        ${isViewable(l.file)?`<button data-pending-view="${l.id}" onclick="viewPending('${l.id}')" aria-label="檢視舊資料簽到表（${l.file}）" title="${VIEW_TITLE_TEXT}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"><i data-lucide="eye" class="w-3.5 h-3.5"></i>${VIEW_BTN_TEXT}</button>`:''}
         <button data-pending-download="${l.id}" onclick="downloadPending('${l.id}')" aria-label="下載舊資料簽到表（${l.file}）" title="下載簽到表" class="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
         ${btn}
       </div>`;
@@ -2112,6 +2158,12 @@
     // 🔒 下載路徑維持 404：這裡問的是「這筆紀錄還在不在」，與「是否已歸位」是兩件事
     const l=LEGACY.find(x=>x.id===id); if(!l){ toast('error','找不到指定的待歸位資料','OJT_SESSION_NOT_FOUND · 404'); return; }
     toast('success','已下載「'+l.file+'」（伺服器端已將浮水印燒錄進 PDF 內容層，身分為您本人；並寫入稽核 DOWNLOAD）');
+  }
+  function viewPending(id){
+    const l=LEGACY.find(x=>x.id===id);
+    if(!l){ toast('error', VIEW_FAILED_TEXT, 'OJT_SESSION_NOT_FOUND · 404'); return; }
+    if(openViewTab(l.file, l.fmt, `舊資料（待歸位） · ${l.file}`))
+      toast('info','已於新分頁開啟「'+l.file+'」'+(l.fmt==='pdf'?'（已燒錄浮水印；寫入稽核 VIEW）':'（此格式不支援浮水印；寫入稽核 VIEW）'));
   }
 
   let assignTargetId=null;

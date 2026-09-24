@@ -1,5 +1,5 @@
 # F042: OJT 進度管理
-Priority: P1 | Status: 🟢 **規格定稿（2026-08-28 人類閘門對 `OQ-E11-01`～`OQ-E11-16` 全數裁決）；Phase A+B 完成並提交，另含 2026-08-28 實機修正兩輪、2026-09-01 TAB2 文件分組模式一輪、2026-09-02 「列身分維度」就地修訂一輪與 **2026-09-02 第五輪（版次追蹤／應完成訓練日期／儀表板可見性，`AC-37`～`AC-40`）**（[`OQ-E11-21`](../open-questions.md#e11-post-impl)）** | Last Updated: 2026-09-02 <br>🔵 **2026-09-22 UX16 delta（項 14／15／16）：見 [§UX16 delta](#ux16-delta)（`AC-UX45～AC-UX55、AC-UX57`；🟢 裁決全數 APPROVED，見 [open-questions §UX16](../open-questions.md#ux16-2026-09-22)）。**
+Priority: P1 | Status: 🟢 **規格定稿（2026-08-28 人類閘門對 `OQ-E11-01`～`OQ-E11-16` 全數裁決）；Phase A+B 完成並提交，另含 2026-08-28 實機修正兩輪、2026-09-01 TAB2 文件分組模式一輪、2026-09-02 「列身分維度」就地修訂一輪與 **2026-09-02 第五輪（版次追蹤／應完成訓練日期／儀表板可見性，`AC-37`～`AC-40`）**（[`OQ-E11-21`](../open-questions.md#e11-post-impl)）** | Last Updated: 2026-09-02 <br>🔵 **2026-09-22 UX16 delta（項 14／15／16）：見 [§UX16 delta](#ux16-delta)（`AC-UX45～AC-UX55、AC-UX57`；🟢 裁決全數 APPROVED，見 [open-questions §UX16](../open-questions.md#ux16-2026-09-22)）。** <br>🔵 **2026-09-24 簽到表線上檢視 delta：見 [§簽到表線上檢視 delta](#session-view-delta)（`AC-OV1`～`AC-OV8`；含補齊下載燒錄與稽核之既有落差）。**
 
 > 🔴 **2026-08-28 · Phase A+B 後之實機修正（[`OQ-E11-21`](../open-questions.md#e11-post-impl)）已寫入本檔**——使用者實機檢視回報：TAB1 區一「依文件逐筆」表**無筆數上限**，dev 環境近 600 份 ICSOP 文件時變成 600 列巨長表（**真實資料才暴露、假資料整個藏住**之規模缺陷）。定稿＝「**預設僅未全部完成 ＋ 上限 15 ＋ 三值顯示範圍 ＋ 截斷告知（三要素）**」。同批另修**區三「最近完成」之同型缺陷**（同樣無筆數上限，僅靠 30 天窗口收斂）與**版面貼齊**。**條文落點恰五處**：[`AC-14`](#acceptance-criteria)（就地改寫；區一逐筆表之節流七項 ＋ 四道負向鎖定 ＋ 母體口徑鎖）／[`AC-16`](#acceptance-criteria)（就地改寫；區三之節流八項）／`AC-28` **⑯**（區一 **9 組**新掛鉤與全部新逐字）·**⑰**（版面契約：唯讀 bar 與分頁列之 full-bleed 插槽）·**⑱**（區三 1 組新掛鉤與逐字）／[§架構設計 一-2](#architecture)（`docScope` 參數與 `docCoverage` 受限切片之明文契約）／[§6](#prototype-25-dom-contract)（⑯·⑱ 兩群逐字）。<br>🔴 **區一與區三為同一形狀之缺陷，但定值刻意不同、不得互相對齊**：上限 **15 vs 8**／**有 vs 無**捲軸／**有 vs 無**顯示範圍控制項／截斷句**有 vs 無**名詞變體（四點對照見 `AC-28` ⑱）。<br>🔒 **本輪只增行為原則**：既有掛鉤一格未動、統計口徑一格未動、TAB2 篩選項一格未動、`AC-16` 之四條既有規則（30 天窗口／PII 硬防線／孤兒排除／不排除裁撤）一字未改；`AC-J#` **未消耗任何編號**。<br>✅ **本輪無待補項**——[§7-B](#prototype-25-dom-contract) 之「不得建環」清單同批再解除 1 項，現僅存「側選單新項之位置」。
 > 🔴 **2026-08-28 · 第二輪實機修正（[`OQ-E11-22`](../open-questions.md#e11-post-impl)）：「未指定使用部門」拆為區一逐筆表之第四種呈現態**——backend 對 dev **真庫實打**揭露：**591 份 ICSOP 文件中僅 4 份設定了「使用部門」**，其餘 **587 份 `totalUnits = 0`** ⇒ 依 `AC-04` 判為 `none`、覆蓋率退化為 `0 / 0`⇒`0%`，**與「有使用部門卻一列都沒完成」共用同一個排序鍵**，數量又壓倒性 ⇒ 依上一輪之「覆蓋率由低至高」升冪，**全部並列第一、占滿逐筆表前 15 名**，唯一一份真有進度落差的文件排到第 591 名、**在預設範圍下永遠看不到**。⚠ **上一輪之節流本身沒有錯，是它與一個退化值相遇後失效**——排序規則仍照著跑，只是它排的東西不再是「最需要關注的」。🔒 **使用者裁決＝「未指定使用部門」拆成獨立一態 ＋ 排序沉底 ＋ 不計入未完成合計**。**條文落點恰四處**：[`AC-14`](#acceptance-criteria)（增列第四態 ⑧～⑮ ＋ 三道負向鎖定，🔒 **上一輪之節流七項與四道負向鎖定原文一字未動**）／`AC-28` **⑲**（3 組新掛鉤與全部新逐字）／[§架構設計 一-2](#architecture)（`docScope` 增為**四值**、`byState` 增第四鍵 `unassigned`、🔴 **不變式 ③ 就地更正**）／[§6](#prototype-25-dom-contract) ⑲ 群列。<br>🔴 **本輪之核心負向鎖定**：`data-doc-ojt-state` 之值域**維持 `all｜partial｜none` 三值不變**，第四態另以 **`[data-doc-no-using-dept]`（無值屬性）** 表達——⚠ **同一列可同時是 `data-doc-ojt-state="none"` 且帶 `[data-doc-no-using-dept]`，這正是事實**（`AC-04` 說它是 `none`，區一說它沒有訓練義務），兩者不衝突、**亦不得互相對齊**。<br>🔴 **既有不變式 ③（`incompleteTotal === byState.partial + byState.none`）自本輪起不成立**，已就地更正為 **`incompleteTotal === byState.partial + byState.none − byState.unassigned`**（見 [§架構設計 一-2](#architecture)）。🔒 **本輪同樣未消耗任何 `AC-J#`**（全部條文落於 F042 本檔）。
@@ -1140,3 +1140,64 @@ CSS 規則 `body:not([data-role="icsop_admin"]) .write-only{display:none !import
   - ⑤ **[F044](F044-admin-dashboard-analytics.md) deep link delta**（`AC-G21`／`AC-G79`～`AC-G81`）之全部回歸鎖——🔴 特別是 `?tab=sessions&sort=incomplete-first` 落地後之既有篩選狀態（把「完成狀態」設為 `尚未完成` ＋ **清空單位關鍵字**）：🔴 **新增之「制定本部」篩選於該 deep link 落地時亦須為未選定**，否則落地集合會小於入口所宣稱者（`AC-14` ⑦ 之既有理由逐字適用）；
   - ⑥ **`GET /admin/ojt-progress/rows` 之回應形狀為 additive 變更**——🔴 `orgName` 之**值**改變（三段→四段）但**欄位集合不變**；⚠ **這正是 `AC-UX46` 要防的那件事**：欄位還在、值變了，任何「欄位存在嗎」之斷言完全無感。
   - ⑦ **TAB2 既有兩項篩選與文件搜尋之逐字可見文案**：`aria-label` `搜尋使用單位`／`完成狀態`／`搜尋文件`（`DOC_SEARCH_ARIA_TEXT`）、`placeholder` `搜尋使用單位（名稱或代碼）…`／`搜尋文件（編號或書名）…`、`完成狀態` 之三個 `option`（`所有完成狀態`／`已完成`／`尚未完成`）——**一律一字不動**。<br>　🔴 **本款是 `AC-UX49` 與 `AC-UX55` ③ 之對偶鎖**：兩條都要求「引用畫面上那個名字」，若實作為了對齊條文措辭而把 `搜尋使用單位` 改名為 `單位搜尋`，兩條會同時「看起來變得更一致」而實際改掉了既有可見文案。
+
+## 2026-09-24 簽到表線上檢視 delta — 「檢視」鈕＋補齊下載燒錄與稽核（`AC-OV#` 批） {#session-view-delta}
+
+> **來源**＝使用者提出（2026-09-24）：「OJT 資料清單的簽到表 PDF，是否應在上傳後規劃『檢視』的按鈕於下載旁邊，避免每次需下載才能閱讀」。
+> **人類裁決（同日）**：① **採納**，以**新分頁**開啟（不做頁內 modal 預覽——PDF 需另接 pdf.js，成本與既有渲染風險皆不成比例）；② 🔴 **一併補齊既有落差**：檢視與下載走**同一套**燒錄／稽核政策。
+> **既有落差實況（2026-09-24 讀碼確認）**：[§架構設計 一](#architecture)「下載端點燒錄浮水印」（延伸 `OQ-D9-08`／[F020](F020-watermark.md) `AC-N14`～`AC-N17`）與 [§prototype 25](#prototype-25-dom-contract) 之 `[data-wm-note]` 皆**自 2026-08-28 起即未實作**——`ojt-progress.module.ts` 自註「本輪之下載端點……**尚未接上燒錄**——登記於實作日誌之『未涵蓋範圍』節，供 lead 裁決」，之後**無人裁決**。現況：`downloadSession()` 回 Blob 原始位元組、不呼叫燒錄、**不寫任何稽核**；前端場次列無 `[data-wm-note]`；待歸位區**無下載鈕**（prototype 25 有 `[data-pending-download]`）。
+> **lead 預設（可推翻）**：ⓐ 檢視之稽核 `actionType` ＝ **`VIEW`**（既有列舉，[F024](F024-access-history-query.md) 標籤 `檢視`），與下載之 `DOWNLOAD` 分開——「看過」與「拿走一份」在稽核上是兩件事；ⓑ 待歸位區一併補上檢視與下載（ICSOPAdmin 歸位前必須先看得到簽到表內容，才知道該歸到哪個單位）。
+> **本 delta 之 AC 編號採 `AC-OV#`**。🔒 既有 `AC-01`～`AC-40`／`AC-UX#` 一字未改。
+
+- **AC-OV1**（🔴 場次列之「檢視」鈕）：Given 展開任一進度列之場次明細, Then 每一場次列 `[data-session-row]` 內存在 **`[data-session-view="{sessionId}"]`**——
+  - ① 可見文字逐字 **`檢視`**、icon `eye`；`aria-label` 逐字 **`檢視簽到表（{trainingDate} · {fileName}）`**、`title` 逐字 **`檢視簽到表`**（句型比照既有 `downloadSessionAria`）；
+  - ② 🔴 **DOM 順序**：`[data-wm-note]` → `[data-session-view]` → `[data-session-download]` → `[data-session-delete]`（後者僅 ICSOPAdmin）。只驗「兩顆鈕都存在」之斷言對「檢視放在刪除後面」完全無感；
+  - ③ **可見角色＝看得到下載鈕者**：ICSOPAdmin／SysAdmin／Supervisor／DeptContact **四者皆有**（`read` 權限即可，檢視屬讀取類動作）；
+  - ④ 🔒 **僅副檔名屬 `pdf`／`jpg`／`jpeg`／`png` 者產生本元素**（`OJT_SIGNIN` 白名單，[file-rules](../../../backend/src/storage/file-rules.ts)；判定不分大小寫）；其他副檔名（理論上只可能來自遷移前舊資料）**不進 DOM**（非 `disabled`），下載鈕照舊。
+  - 📌 可測形狀：四角色各渲染一次，`[data-session-view]` 數量 **> 0**；並以一筆 `fileName='舊檔.doc'` 之場次斷言該列 `[data-session-view]` **恰 0**、`[data-session-download]` **恰 1**（對偶鎖）。
+
+- **AC-OV2**（🔴 開啟方式：先開分頁、取回位元組、再導向）：When 點擊 `[data-session-view]`, Then ——
+  - ① **於 click handler 內同步**開啟新分頁（`window.open('', '_blank')`），再以 `fetch` 取回位元組、導向 `blob:` URL；🔴 **明文禁止** `window.open(端點網址)` 或 `<a href target="_blank">`：頂層導覽會送 `Accept: text/html`，撞 SPA fallback 後新分頁呈現 app shell 而非簽到表（2026-07-25 瀏覽器煙霧測試之同型真實缺陷），錯誤時則把 JSON 錯誤整頁畫出來（2026-08-26 真人回報）。🔒 沿用既有 `openPdfViaBlob()` 之機制（`frontend/src/api/download-blob.ts`），**不另寫第二份**；該函式若需擴充以支援圖片，改為 additive（既有三處呼叫端行為逐字不變）；
+  - ② 請求之 `Accept` **不得含 `text/html`**；
+  - ③ 🔴 **前端第二道型別防線**：回應之 `Content-Type` 不屬 `application/pdf`／`image/jpeg`／`image/png` 者**不得導向**——關閉該分頁並以錯誤處理（見 ⑤）；
+  - ④ 分頁被封鎖（`window.open` 回 `null`）⇒ toast 逐字沿用全站常數 `POPUP_BLOCKED_TEXT`（`新視窗被瀏覽器封鎖，請允許彈出視窗後再試。`），🔴 不得另寫一版；
+  - ⑤ 其他失敗 ⇒ **關閉已開之空白分頁**（不留 `about:blank` 給使用者）、toast 逐字 **`檢視失敗，請稍後再試。`**（附錯誤碼，比照既有下載失敗之 `下載失敗，請稍後再試。`）；session 逾時走既有 `notifySessionLost` 路徑。
+  - 📌 可測形狀：以 `fetch` 回 404 斷言 `win.close` **被呼叫**且 toast 文字逐字相符；以回應 `Content-Type: text/html`（狀態 200）斷言**未導向**（`win.location.href` 未被設為 `blob:`）且 `win.close` 被呼叫——🔴 缺這一案則 ③ 恆真。
+
+- **AC-OV3**（🔴 後端檢視端點）：新增 **`GET /admin/ojt-progress/sessions/:sessionId/view`**，閘門 `canPerform(role, OJT_PROGRESS_MANAGEMENT, 'read')`（與 `/download` 相同）——
+  - ① 回應 `Content-Disposition` 為 **`inline`**（檔名以 RFC 5987 `filename*` 帶出，沿用既有 `content-disposition.ts`，新增 `inline` 變體而非另寫一份組字）；
+  - ② 🔴 **`Content-Type` 由伺服器依 `fileName` 之副檔名推導**（`pdf`→`application/pdf`、`jpg`／`jpeg`→`image/jpeg`、`png`→`image/png`），**不得**使用 `OJT_SESSION.contentType`——該值是上傳時**瀏覽器自報**的 `mimetype`，可被竄改為 `text/html`；下載時無害，改為在新分頁直接渲染後，`blob:` URL **繼承本站 origin** ⇒ 構成儲存型 XSS。另加 **`X-Content-Type-Options: nosniff`**；
+  - ③ 副檔名不在白名單 ⇒ **400 `FILE_FORMAT_NOT_ALLOWED`**（既有錯誤碼，[error-handling.md#file](../error-handling.md#file)）、不讀 Blob、不寫稽核；
+  - ④ 場次不存在 ⇒ `OJT_SESSION_NOT_FOUND`（404）；Blob 缺檔 ⇒ `FILE_ACCESS_DENIED`（沿用 `/download` 之既有語意）；
+  - ⑤ 🔒 **待歸位場次（`orgCode IS NULL`）同樣可檢視**——端點以 `sessionId` 定位，不依歸位狀態分岔（與 `/download` 相同）。
+  - 📌 可測形狀：store 內一筆 `fileName='a.pdf'`、`contentType='text/html'` 之場次 ⇒ 回應 `Content-Type` 為 `application/pdf`。🔴 fixture 若 `contentType` 與副檔名一致（乾淨 fixture），「讀欄位」與「推導」輸出相同，本條恆真。
+
+- **AC-OV4**（🔴 燒錄：下載與檢視同一政策；補齊 `OQ-D9-08` 於本功能之落地）：Given 任一後台角色（四者皆然，**無例外角色**，比照 [F020](F020-watermark.md) `AC-N16`）呼叫 `/download` 或 `/view`, Then ——
+  - ① 副檔名 `pdf` ⇒ 回應位元組**已燒錄浮水印**（`WatermarkBurner.burnIfPdf` 燒錄路徑呼叫 **1** 次）、浮水印身分＝**操作者本人**（[F020](F020-watermark.md) `AC-N18`），格式與前台路徑完全一致；
+  - ② 非 PDF（`jpg`／`jpeg`／`png`）⇒ 回應與 Blob 原始檔**逐位元組相同**（策略 A，`AC-N15`）；
+  - ③ 格式判定以**伺服器端副檔名**為準、不以 `contentType`（`AC-N15` 之既有邊界）；🔒 **`/download` 與 `/view` 共用同一個取檔＋燒錄之服務方法**，兩端點只差 `Content-Disposition` 與稽核 `actionType`——🔴 不得各寫一份 `if (pdf) burn`；
+  - ④ 🔴 **燒錄失敗不得退回原檔**：燒錄拋錯 ⇒ 該請求失敗（5xx），**不得**以原始位元組回應（否則等於一條「燒錄出錯就拿得到原件」的旁路，違反 `AC-N16`）；
+  - ⑤ 🔴 **接線必須是硬相依、不可選**：`OjtProgressModule` 須 import `WatermarkBurnerModule`，燒錄器之注入**不得**標 `@Optional()` 或以 `burner ? … : raw` 形式降級——本 repo 已發生過「`useFactory` 不看 `@Optional()`，全部單元測試綠、正式環境永遠靜默失效」之真實缺陷（UX16）。
+  - 📌 可測形狀：ⓐ 服務層以燒錄器替身斷言 PDF ⇒ 回應位元組**等於替身之輸出**（不只驗「被呼叫過」——替身須回傳與原檔不同之位元組，否則「呼叫了但忽略回傳值」照樣綠）；ⓑ 🔴 **模組接線測試**：以真實 `OjtProgressModule` 之 provider 組態建立 Nest 測試模組，斷言服務實例上之燒錄器**非 `undefined`**——缺這一案，ⓐ 全綠而正式站仍回原檔。
+
+- **AC-OV5**（🔴 稽核：下載 `DOWNLOAD`、檢視 `VIEW`）：Given `/download` 或 `/view` **成功**, Then `AUDIT_LOG` **恰新增一筆**——
+  - `actionType`：`/download` ＝ **`DOWNLOAD`**、`/view` ＝ **`VIEW`**；
+  - `targetType` ＝ **`DOCUMENT`**、`documentId` ＝ 該場次之 `documentId`（沿用 [F020](F020-watermark.md) `AC-N17` 對 OJT 之既有落值，**不新增任何 `targetType`／`actionType` 列舉值**）；
+  - 身分快照六欄取自**操作者本人**（經既有 `AuditIdentityService`，不自行組裝）；
+  - `watermarkSnapshot`：PDF ＝ 該次燒錄之浮水印字串（與位元組內之浮水印**逐字相同**）；非 PDF ＝ `null`；
+  - 🔒 失敗路徑（404／`FILE_ACCESS_DENIED`／`FILE_FORMAT_NOT_ALLOWED`／燒錄失敗）**寫 0 筆**。
+  - 📌 [F024](F024-access-history-query.md) 調閱歷程之呈現沿用既有標籤（`VIEW`→`檢視`、`DOWNLOAD`→`下載`），本 delta 不改 F024。
+
+- **AC-OV6**（浮水印註記補上；**既有 DOM 契約之落地，非新文案**）：Given 場次列或待歸位列渲染完成, Then 每列帶一個 `[data-wm-note]`，可見文字**二擇一**逐字沿用 [F020](F020-watermark.md) `AC-N20` 之同一組常數——副檔名 `pdf` ⇒ **`檢視/下載將燒錄浮水印`**；其他 ⇒ **`此格式不支援浮水印`**。🔴 不得另寫一份字串常數（全站兩處以上各寫一版必漂移）。
+
+- **AC-OV7**（待歸位區補上檢視與下載）：Given 待歸位區 `[data-ojt-pending-block]` 有列, Then 每一 `[data-pending-row]` 內依序為 `[data-wm-note]` → **`[data-pending-view="{id}"]`** → **`[data-pending-download="{id}"]`** → `[data-assign-org]`（後者僅 ICSOPAdmin，既有）——
+  - `[data-pending-view]`：可見文字 `檢視`、`aria-label` 逐字 **`檢視舊資料簽到表（{fileName}）`**、`title` `檢視簽到表`；
+  - `[data-pending-download]`：逐字沿用 prototype 25 既有之 `aria-label` **`下載舊資料簽到表（{fileName}）`**、`title` `下載簽到表`、可見文字 `下載`；
+  - 可見角色＝看得到待歸位區者（全部後台角色，含 SysAdmin）；行為與 `AC-OV2`／`AC-OV4`／`AC-OV5` 相同（同一組端點）；`AC-OV1` ④ 之副檔名規則同樣適用。
+
+- **AC-OV8**（🔒 零漣漪）：下列一律與本 delta 導入前相同——
+  - ① `AC-20`（場次**不可編輯**、無 `PATCH`／`PUT` 路由）、`AC-19`／`AC-26`（刪除與歸位僅 ICSOPAdmin）；
+  - ② `/download` 之**路徑、閘門與錯誤碼**不變（改變的只有回應位元組〔PDF 燒錄〕與新增之稽核）；前端下載仍走 `downloadViaBlob()`、檔名仍優先取 `Content-Disposition`；
+  - ③ **前台**不得出現任何 OJT 場次檔之下載或檢視入口（[F020](F020-watermark.md) `AC-J26` 之負向案不變）；
+  - ④ SysAdmin 唯讀橫幅（`AC-06`／§6 ⑥）逐字不變；
+  - ⑤ TAB1 三區、TAB2 列集合／篩選／匯出（`AC-UX51`～`AC-UX55`）、完成判定與版次追蹤不變——🔴 **檔案可否開啟與完成判定為兩個正交維度**（`AC-03`）：檢視失敗不得使該列退回未完成。
