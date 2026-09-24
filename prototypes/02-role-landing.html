@@ -3,7 +3,8 @@
      （AC-UX1～AC-UX6；裁決＝docs/specs/open-questions.md#ux16-2026-09-22，OQ-UX16-01～04，🟢 全數 APPROVED）。
 
      ① 項 1（AC-UX1）前台卡片：標題逐字 `ICSOP 文件`、說明逐字 `作業程序書瀏覽、搜尋、下載、列印`。
-        🔒 說明字串**末尾無句號**（使用者原文即無）；🔒 卡內行動文字 `前往前台` 一字不改。
+        🔒 說明字串**末尾無句號**（使用者原文即無）；卡內行動文字逐字 `進入瀏覽文件`。
+        📝 2026-09-24 人類裁決推翻：原 OLD> 🔒 卡內行動文字 `前往前台` 一字不改。
         📝 已作廢（⚠ 不得復原、不得用於斷言）：
            OLD> 標題 `前台瀏覽`
            OLD> 說明 `以您的身分與部門瀏覽、搜尋、下載、列印 ICSOP 文件（含浮水印）。`
@@ -13,15 +14,19 @@
      ② 項 2（AC-UX2）後台卡片：標題逐字 `管理平台`、說明逐字 `儀表板、OJT進度、相關維護作業(依權限顯示)`
         ——**四種角色所見之說明文字完全相同**。🔒 括號為半形 `(` `)`、`OJT進度` 中間無空白、末尾無句號。
         🔴 **逐角色說明之查表機制整個刪除**（本檔為 ROLE_META 各列之 `admin` 欄與 setRole() 之寫入點），
-           改為單一常數 ADMIN_CARD_DESC。🔒 卡內行動文字 `進入後台` 一字不改。
+           改為單一常數 ADMIN_CARD_DESC。卡內行動文字逐字 `進入管理`。
+        📝 2026-09-24 人類裁決推翻：原 OLD> 🔒 卡內行動文字 `進入後台` 一字不改。
         📝 已作廢（⚠ 不得復原、不得用於斷言）——本檔原有之四段逐角色說明：
            OLD> SysAdmin    `帳號/角色管理、組織同步、系統參數、調閱歷程（依權限顯示）。`
            OLD> ICSOPAdmin  `維護循環 DAG、ICSOP 文件、使用表單、附錄、調閱歷程（依權限顯示）。`
            OLD> Supervisor  `循環／ICSOP 文件全公司唯讀（無使用表單管理、附錄管理與調閱歷程）。`
            OLD> DeptContact `ICSOP 文件唯讀檢視。`
            OLD> 卡片內預設說明 `維護循環 DAG、ICSOP 文件、帳號權限、組織同步與調閱歷程（依權限顯示）。`
-        🔒 **`管理平台` 與 `ICSOP 管理後台` 兩個名字並存是刻意的**（AC-UX3）：卡片上的是**分流頁上的入口名稱**，
-           後台各頁麵包屑首段的 `ICSOP 管理後台` 是**後台導覽樹的根節點名稱**——🔴 不得順手統一（那會推翻 AC-D6／AC-D7）。
+        📌 `管理平台`（分流頁上的入口名稱）與 `ICSOP 管理`（後台首頁麵包屑首段＝後台導覽樹的根節點名稱；
+           側選單 logo 區字樣亦同為 `ICSOP 管理`）自 2026-09-24 起之字樣。
+        📝 2026-09-24 人類裁決推翻：原 OLD> 🔒 **`管理平台` 與 `ICSOP 管理後台` 兩個名字並存是刻意的**（AC-UX3）：卡片上的是**分流頁上的入口名稱**，
+           OLD> 後台各頁麵包屑首段的 `ICSOP 管理後台` 是**後台導覽樹的根節點名稱**——🔴 不得順手統一（那會推翻 AC-D6／AC-D7）。
+           （麵包屑首段改 `ICSOP 管理`、側選單 logo `ICSOP 後台` 改 `ICSOP 管理`；`管理平台` 卡片標題不動。）
 
      ③ 項 3（AC-UX4）兩張卡片左右對調：DOM 順序＝管理平台（左）→ ICSOP 文件（右）。
         📝 已作廢（⚠ 不得復原）：OLD> DOM 順序＝前台瀏覽卡片在前、管理後台卡片在後。
@@ -93,7 +98,7 @@
         </div>
         <h2 class="font-bold text-slate-900 text-lg">管理平台</h2>
         <p class="text-sm text-slate-500 mt-1 leading-relaxed" id="adminDesc"></p>
-        <span class="inline-flex items-center gap-1 text-sm text-primary-600 font-medium mt-4">進入後台<i data-lucide="arrow-right" class="w-4 h-4"></i></span>
+        <span class="inline-flex items-center gap-1 text-sm text-primary-600 font-medium mt-4">進入管理<i data-lucide="arrow-right" class="w-4 h-4"></i></span>
       </a>
 
       <!-- 🔵 AC-UX4：**ICSOP 文件在後（右）**；AC-UX1：標題／說明逐字，說明末尾無句號。 -->
@@ -103,7 +108,7 @@
         </div>
         <h2 class="font-bold text-slate-900 text-lg">ICSOP 文件</h2>
         <p class="text-sm text-slate-500 mt-1 leading-relaxed">作業程序書瀏覽、搜尋、下載、列印</p>
-        <span class="inline-flex items-center gap-1 text-sm text-primary-600 font-medium mt-4">前往前台<i data-lucide="arrow-right" class="w-4 h-4"></i></span>
+        <span class="inline-flex items-center gap-1 text-sm text-primary-600 font-medium mt-4">進入瀏覽文件<i data-lucide="arrow-right" class="w-4 h-4"></i></span>
       </a>
     </div>
 

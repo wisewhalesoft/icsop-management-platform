@@ -78,7 +78,7 @@
         `max-w-5xl` <main> 而被夾成 1024px（樹寬 1742px 被切掉 750px 須拖曳）——那是**實作偏離原型**，
         修在前端，不在本檔。 -->
 <!-- 🔵 2026-09-22 UX16 delta（項 5 落地端／項 6／項 10）——規格權威＝F019 §UX16 delta
-     （AC-UX15／AC-UX16＝子樹 chip；AC-UX20／AC-UX21＝前往後台；AC-UX22～AC-UX26＝制定本部篩選）
+     （AC-UX15／AC-UX16＝子樹 chip；AC-UX20／AC-UX21＝前往管理（📝 2026-09-24 人類裁決：OLD> 前往後台）；AC-UX22～AC-UX26＝制定本部篩選）
      ＋ F002 §UX16 delta（AC-UX7＝hasAdminAccess 單一述詞）。
 
      ═══ 項 10：篩選 五 → **六項**，插入中段 ═══
@@ -96,8 +96,8 @@
         因此它在下拉裡沒有選項——這與「未指定制定公司」之既有處置同構，不是遺漏。
         🔒 與 F044 儀表板刻意不同：那裡是**分組**維度（每份文件都要落進某一段），這裡是**篩選**維度（沒有選項就是篩不到）。
 
-     ═══ 項 6：前台 header 之「前往後台」（AC-UX20／AC-UX21）═══
-     🔒 恰一顆連結，`role="link"`、`aria-label` 逐字 `前往後台`、導向 `/admin`（原型＝07-admin-shell.html）。
+     ═══ 項 6：前台 header 之「前往管理」（AC-UX20／AC-UX21）═══  📝 2026-09-24 人類裁決：OLD> 前往後台
+     🔒 恰一顆連結，`role="link"`、`aria-label` 逐字 `前往管理`（📝 2026-09-24 人類裁決：OLD> 前往後台）、導向 `/admin`（原型＝07-admin-shell.html）。
      🔴 判準**必須**是 F002 AC-UX7 之那一支述詞 `hasAdminAccess(role) = visibleMenu(role).length > 0`；
         🔴 **明文禁止**在本頁另寫 `roleCode !== 'User'` 或任何角色清單——那正是「分流頁放行、前台連結卻擋掉」之死鏈入口。
      🔒 `User`（含 F041 業務子分類）⇒ 該連結**整顆不進 DOM**（**非** disabled、**非** CSS 隱藏）。
@@ -243,7 +243,7 @@
   </div>
 
   <!-- 🔵 UX16 · 原型示範控制（非正式 UI；實作時不得移植此區塊）
-       ① 角色切換＝AC-UX20 之**五角色向量**（SysAdmin／ICSOPAdmin／Supervisor／DeptContact 皆見「前往後台」，
+       ① 角色切換＝AC-UX20 之**五角色向量**（SysAdmin／ICSOPAdmin／Supervisor／DeptContact 皆見「前往管理」（📝 2026-09-24 人類裁決：OLD> 前往後台），
           `User` 不見）之涵蓋面來源——只驗 ICSOPAdmin 與 User 兩端時，中間三種角色任一被漏掉都不會紅。
        ② 子樹情境＝AC-UX15／AC-UX16 之涵蓋面來源（deep link 恆成對；缺一 ⇒ 靜默 no-op）。 -->
   <div data-prototype-demo="true" class="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-base text-slate-600 mb-3">
@@ -738,9 +738,9 @@
   function renderAdminLink(){
     const host=document.getElementById('adminLinkHost');
     if(!hasAdminAccess(DEMO_ROLE)){ host.innerHTML=''; return; }
-    host.innerHTML=`<a href="07-admin-shell.html" data-to="/admin" aria-label="前往後台" title="前往後台"
+    host.innerHTML=`<a href="07-admin-shell.html" data-to="/admin" aria-label="前往管理" title="前往管理"
       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-base text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
-      <i data-lucide="layout-dashboard" class="w-4 h-4 shrink-0"></i>前往後台</a>`;
+      <i data-lucide="layout-dashboard" class="w-4 h-4 shrink-0"></i>前往管理</a>`;
     lucide.createIcons();
   }
   function setDemoRole(r){ DEMO_ROLE=r; renderAdminLink(); }

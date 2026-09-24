@@ -311,7 +311,7 @@ Epic/Story: E06 / US-050, US-051, US-052
 
 ### 四、前台之「前往後台」連結鈕（項 6）
 
-- **AC-UX20**（🔴 前台 header 之後台入口）：Given 使用者之角色使 [F002](F002-role-based-routing.md#ux16-delta) `AC-UX7` 之述詞為 `true`（`SysAdmin`／`ICSOPAdmin`／`Supervisor`／`DeptContact`）, When 進入前台瀏覽頁（**樹狀圖／文件清單兩模式共用之同一個 header**，`PublicListPage.tsx:424-453`）, Then 該 header 內存在**恰一顆**連往後台之連結，其 `role="link"`、`aria-label` **逐字**為 **`前往後台`**，點擊後導向 **`/admin`**（`OQ-UX16-11`＝選項 A，與 [F002](F002-role-based-routing.md) 分流頁後台卡片之連結目標一致）；<br>
+- **AC-UX20**（🔴 前台 header 之後台入口）：Given 使用者之角色使 [F002](F002-role-based-routing.md#ux16-delta) `AC-UX7` 之述詞為 `true`（`SysAdmin`／`ICSOPAdmin`／`Supervisor`／`DeptContact`）, When 進入前台瀏覽頁（**樹狀圖／文件清單兩模式共用之同一個 header**，`PublicListPage.tsx:424-453`）, Then 該 header 內存在**恰一顆**連往後台之連結，其 `role="link"`、`aria-label` **逐字**為 **`前往管理`**（📝 2026-09-24 人類裁決：OLD> `前往後台`），點擊後導向 **`/admin`**（`OQ-UX16-11`＝選項 A，與 [F002](F002-role-based-routing.md) 分流頁後台卡片之連結目標一致）；<br>
   Given 角色為 `User`（一般使用者，含 [F041](F041-user-subtype-business-scope.md) 業務子分類）, Then 該連結**整顆不進 DOM**（`queryByLabelText('前往後台') === null`；🔴 **非** `disabled`、**非** CSS 隱藏）。<br>
   🔴 **判準必須是 [F002](F002-role-based-routing.md#ux16-delta) `AC-UX7` 之那一支述詞**，🔴 **明文禁止**在本頁另寫 `roleCode !== 'User'` 或任何角色清單——理由逐字見 `AC-UX7`（分流頁放行、前台連結卻擋掉之死鏈，`RoleLanding.tsx:17-18` 已明文警示）。<br>
   📌 **可測形狀**：以五種角色逐一渲染前台頁，斷言連結存在與否之布林陣列為 `[true, true, true, true, false]`（🔴 **五種都要驗**——只驗 `ICSOPAdmin` 與 `User` 兩端時，中間三種角色任一被漏掉都不會紅）。<br>

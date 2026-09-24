@@ -112,6 +112,8 @@ Epic/Story: E01 / US-003
 > 🔴 **本輪之約束環為簡化版：只有 `backend jest` ＋ `frontend vitest`**，無 Playwright／無 mutation testing／無整合測試 ⇒ **AC 是唯一防線**。未寫入本節之選擇器與逐字文案，下游要嘛不建約束、要嘛自行臆造（[F041 §F2](F041-user-subtype-business-scope.md#f2-fidelity-gap) 已吃過這個虧）。
 > 🔒 **本 delta 不動**：`AC1`～`AC-D7` 之任一條、`AdminGuard` 之守門條件、`visibleMenu()` 之回傳、[F025](F025-role-function-matrix.md) 矩陣之任一格、後台麵包屑之任一段文字（`AC-UX3`）。
 
+> 🔵 **2026-09-24 人類裁決文案調整（就地推翻本節三處鎖；不另立 AC 編號）**：① 前台卡行動文字 `進入瀏覽文件`（OLD> `前往前台`，推翻 `AC-UX1` 末之「一字不改」）；② 後台卡行動文字 `進入管理`（OLD> `進入後台`，推翻 `AC-UX2` 末之「一字不改」）；③ 後台首頁麵包屑首段 `ICSOP 管理`（OLD> `ICSOP 管理後台`；`AC-UX3` 之成對斷言與 `AC-D3` B 類第 1 列、`AC-D7` 之逐字值隨之改為 `ICSOP 管理`，「與卡片 `管理平台` 並存」之結構不變）；④ 後台側欄 logo 文字 `ICSOP 管理`（OLD> `ICSOP 後台`）；⑤ 後台首頁標題 `首頁 / 儀表板`（OLD> `後台首頁 / 儀表板`）。下方條文中之舊字串為原文保留、以本註為準。
+
 ### 一、分流頁兩張卡片之逐字文案與順序（項 1／2／3）
 
 - **AC-UX1**（🔴 前台卡片之標題與說明逐字改寫）：Given 任一具後台功能權限之角色（`SysAdmin`／`ICSOPAdmin`／`Supervisor`／`DeptContact`）進入分流頁, When 檢視前台入口卡片, Then 其標題**逐字**為 **`ICSOP 文件`**、說明**逐字**為 **`作業程序書瀏覽、搜尋、下載、列印`**。<br>
