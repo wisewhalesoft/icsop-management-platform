@@ -12,7 +12,10 @@ import {
   getOjtProgressRows,
   getOjtProgressSummary,
   exportOjtProgress,
+  viewOjtSession,
 } from '../api/endpoints';
+import { POPUP_BLOCKED_TEXT } from '../domain/print-error';
+import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT } from '../domain/watermark-note';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { ojtStatusView } from '../domain/ojt-status-view';
 import { Icon } from '../components/Icon';
@@ -28,6 +31,14 @@ import type {
   OjtSessionView,
 } from '../api/types';
 import {
+  VIEW_BTN_TEXT,
+  VIEW_FAILED_TEXT,
+  VIEW_TITLE_TEXT,
+  downloadPendingAria,
+  isPdfFileName,
+  isViewableSignin,
+  viewPendingAria,
+  viewSessionAria,
   ADD_SESSION_TEXT,
   ASSIGN_ACTION_TEXT,
   BADGE_COMPLETED_ICON,
@@ -381,12 +392,33 @@ export function OjtProgressPage(): JSX.Element {
   }, []);
 
   const onDownload = useCallback(
-    async (s: OjtSessionView) => {
+    // 🔵 `AC-OV7`：待歸位列亦經此下載，故只要求兩個欄位（不偽造一個完整的場次物件）。
+    async (s: Pick<OjtSessionView, 'id' | 'fileName'>) => {
       try {
         await downloadOjtSession(s.id, s.fileName);
       } catch (e) {
         toast.error('下載失敗，請稍後再試。', e instanceof ApiError ? { code: e.code } : undefined);
       }
+    },
+    [toast],
+  );
+
+  /**
+   * 🔵 F042 `AC-OV2`：於新分頁檢視簽到表（場次列與待歸位列共用）。
+   * 🔴 **分頁必須在 click handler 內同步開好**：伺服器端 PDF 燒錄可能超過瀏覽器之
+   * user-activation 視窗，`await` 之後才開會被彈出視窗封鎖器擋掉。
+   * 🔴 **分頁沒開成就不發請求**：否則後端會寫下一筆使用者根本沒看到的 `VIEW` 稽核。
+   */
+  const onView = useCallback(
+    (sessionId: string) => {
+      const win = window.open('', '_blank');
+      if (!win) {
+        toast.error(POPUP_BLOCKED_TEXT);
+        return;
+      }
+      void viewOjtSession(sessionId, win).catch((e: unknown) => {
+        toast.error(VIEW_FAILED_TEXT, e instanceof ApiError ? { code: e.code } : undefined);
+      });
     },
     [toast],
   );
@@ -598,6 +630,7 @@ export function OjtProgressPage(): JSX.Element {
         onToggle={() => void onToggleRow(r)}
         onAdd={() => openAdd(r)}
         onDownload={(s) => void onDownload(s)}
+        onView={(s) => onView(s.id)}
         onDelete={(s) => askDelete(r, s)}
       />
     );
@@ -857,7 +890,13 @@ export function OjtProgressPage(): JSX.Element {
         {/* AC-26 待歸位區：歸位完畢後**整區消失**（非空狀態）——遷移是一次性工作，
             留一個永久的空框會讓人以為系統壞了或還有待辦。 */}
         {pending.length > 0 && (
-          <PendingBlock items={pending} mayAssign={mayManage} onAssign={(item) => setAssign({ item, orgCode: '', trainingDate: '', error: null })} />
+          <PendingBlock
+            items={pending}
+            mayAssign={mayManage}
+            onAssign={(item) => setAssign({ item, orgCode: '', trainingDate: '', error: null })}
+            onView={(item) => onView(item.id)}
+            onDownload={(item) => void onDownload(item)}
+          />
         )}
 
         {/* 🔵 F044 `AC-G91`：deep link 帶入之**排序**指示。
@@ -1537,6 +1576,7 @@ function ProgressRow({
   onToggle,
   onAdd,
   onDownload,
+  onView,
   onDelete,
 }: {
   row: OjtProgressRow;
@@ -1548,6 +1588,7 @@ function ProgressRow({
   onToggle: () => void;
   onAdd: () => void;
   onDownload: (s: OjtSessionView) => void;
+  onView: (s: OjtSessionView) => void;
   onDelete: (s: OjtSessionView) => void;
 }): JSX.Element {
   const key = rowKeyOf(row.documentId, row.orgCode);
@@ -1656,6 +1697,7 @@ function ProgressRow({
               trainingEdition={row.trainingEdition}
               mayDelete={mayDelete}
               onDownload={onDownload}
+              onView={onView}
               onDelete={onDelete}
             />
           )}
@@ -1681,12 +1723,14 @@ function SessionsByEdition({
   trainingEdition,
   mayDelete,
   onDownload,
+  onView,
   onDelete,
 }: {
   sessions: OjtSessionView[];
   trainingEdition: string | null;
   mayDelete: boolean;
   onDownload: (s: OjtSessionView) => void;
+  onView: (s: OjtSessionView) => void;
   onDelete: (s: OjtSessionView) => void;
 }): JSX.Element {
   const groups = useMemo(
@@ -1750,6 +1794,7 @@ function SessionsByEdition({
                       session={s}
                       mayDelete={mayDelete}
                       onDownload={onDownload}
+                      onView={onView}
                       onDelete={onDelete}
                     />
                   ))}
@@ -1762,16 +1807,35 @@ function SessionsByEdition({
   );
 }
 
+/**
+ * 🔵 F042 `AC-OV6`：場次檔之浮水印註記（樣式逐字取自 prototype 25 `wmNote()`）。
+ * 🔴 文案取全站共用常數（`domain/watermark-note.ts`），不另寫一份。
+ */
+function WmNote({ fileName }: { fileName: string }): JSX.Element {
+  return isPdfFileName(fileName) ? (
+    <span data-wm-note className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 shrink-0 whitespace-nowrap">
+      {WM_BURN_TEXT}
+    </span>
+  ) : (
+    <span data-wm-note className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 shrink-0 whitespace-nowrap">
+      <Icon name="info" className="w-3 h-3" />
+      {WM_UNSUPPORTED_TEXT}
+    </span>
+  );
+}
+
 /** 單一場次列（🔒 兩種版次群組共用同一份，見 `SessionsByEdition` 之註）。 */
 function SessionRow({
   session: s,
   mayDelete,
   onDownload,
+  onView,
   onDelete,
 }: {
   session: OjtSessionView;
   mayDelete: boolean;
   onDownload: (s: OjtSessionView) => void;
+  onView: (s: OjtSessionView) => void;
   onDelete: (s: OjtSessionView) => void;
 }): JSX.Element {
   return (
@@ -1779,6 +1843,19 @@ function SessionRow({
       <span data-session-date className="mono text-xs text-slate-700 shrink-0">{s.trainingDate}</span>
       <span data-session-uploader className="text-xs text-slate-500 shrink-0">{s.uploadedByName ?? '—'}</span>
       <span data-session-file className="text-sm text-slate-700 truncate flex-1">{s.fileName}</span>
+      <WmNote fileName={s.fileName} />
+      {isViewableSignin(s.fileName) && (
+        <button
+          data-session-view={s.id}
+          onClick={() => onView(s)}
+          aria-label={viewSessionAria(s.trainingDate, s.fileName)}
+          title={VIEW_TITLE_TEXT}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"
+        >
+          <Icon name="eye" className="w-3.5 h-3.5" />
+          {VIEW_BTN_TEXT}
+        </button>
+      )}
       <button
         data-session-download={s.id}
         onClick={() => onDownload(s)}
@@ -1838,10 +1915,15 @@ function PendingBlock({
   items,
   mayAssign,
   onAssign,
+  onView,
+  onDownload,
 }: {
   items: OjtPendingItem[];
   mayAssign: boolean;
   onAssign: (item: OjtPendingItem) => void;
+  /** 🔵 `AC-OV7`：全部可見角色皆有（含 SysAdmin）；歸位前須先看得到內容才知道該歸到哪個單位。 */
+  onView: (item: OjtPendingItem) => void;
+  onDownload: (item: OjtPendingItem) => void;
 }): JSX.Element {
   return (
     <div data-ojt-pending-block className="bg-amber-50/60 border border-amber-200 rounded-xl overflow-hidden">
@@ -1871,6 +1953,29 @@ function PendingBlock({
                 <span data-pending-file className="truncate">{l.fileName}</span>
               </div>
             </div>
+            <WmNote fileName={l.fileName} />
+            {isViewableSignin(l.fileName) && (
+              <button
+                data-pending-view={l.id}
+                onClick={() => onView(l)}
+                aria-label={viewPendingAria(l.fileName)}
+                title={VIEW_TITLE_TEXT}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"
+              >
+                <Icon name="eye" className="w-3.5 h-3.5" />
+                {VIEW_BTN_TEXT}
+              </button>
+            )}
+            <button
+              data-pending-download={l.id}
+              onClick={() => onDownload(l)}
+              aria-label={downloadPendingAria(l.fileName)}
+              title="下載簽到表"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"
+            >
+              <Icon name="download" className="w-3.5 h-3.5" />
+              下載
+            </button>
             {mayAssign && (
               <button
                 data-assign-org={l.id}

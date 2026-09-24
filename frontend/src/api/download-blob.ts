@@ -138,12 +138,39 @@ async function parseDownloadError(res: Response): Promise<ApiError> {
  * 失敗時關閉該分頁（不留一個空白 about:blank 給使用者），並擲出 `ApiError`。
  */
 export async function openPdfViaBlob(path: string, win: Window | null): Promise<void> {
+  // 🔒 既有三處列印呼叫端之行為逐字不變：`Accept: application/pdf`、不檢查回應型別。
+  return openViaBlob(path, win, { accept: 'application/pdf' });
+}
+
+/**
+ * `openViaBlob()` 之選項（🔵 F042 `AC-OV2`，additive）。
+ */
+export interface OpenViaBlobOptions {
+  /** 🔴 不得含 `text/html`（否則撞 SPA fallback）。 */
+  accept: string;
+  /**
+   * 🔴 **前端第二道型別防線**：給定時，回應之 `Content-Type`（去掉參數後）不在清單內者
+   * **不導向**、關閉分頁並擲錯。理由：`blob:` URL 繼承本站 origin——一份被標成 `text/html`
+   * 的檔案若被導向，就能在本站執行腳本。伺服器端已依副檔名推導型別，本防線防的是那一層失守。
+   */
+  allowedTypes?: readonly string[];
+}
+
+/**
+ * `openPdfViaBlob()` 之一般化：於呼叫端**同步開好**之分頁中開啟一份檔案（機制與失敗處置同上）。
+ * 🔵 F042 `AC-OV2`：簽到表檢視（pdf／jpg／png）經本函式；**不另寫第二份**開分頁邏輯。
+ */
+export async function openViaBlob(
+  path: string,
+  win: Window | null,
+  opts: OpenViaBlobOptions,
+): Promise<void> {
   let res: Response;
   try {
     res = await fetch(path, {
       credentials: 'include',
       // 🔴 關鍵：不送 text/html，故不觸發 SPA fallback。
-      headers: { Accept: 'application/pdf' },
+      headers: { Accept: opts.accept },
     });
   } catch (e) {
     win?.close();
@@ -152,6 +179,13 @@ export async function openPdfViaBlob(path: string, win: Window | null): Promise<
   if (!res.ok) {
     win?.close();
     throw await extractDownloadError(res);
+  }
+  if (opts.allowedTypes) {
+    const type = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
+    if (!opts.allowedTypes.includes(type)) {
+      win?.close();
+      throw new ApiError(0, 'UNEXPECTED_CONTENT_TYPE', type || '(none)');
+    }
   }
   const url = URL.createObjectURL(await res.blob());
   if (!win) {

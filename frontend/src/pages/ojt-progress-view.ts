@@ -1,5 +1,6 @@
 import type { OjtDocScope, OjtDocumentStatus, OjtProgressRow } from '../api/types';
 import { ojtStatusView, type OjtStatusView } from '../domain/ojt-status-view';
+import { isWatermarkSupportedFormat } from '../domain/watermark-note';
 
 /**
  * F042 OJT 進度管理之**逐字文案常數與純規則**（自 `OjtProgressPage.tsx` 抽出，使頁面元件
@@ -126,6 +127,45 @@ export function rowKeyOf(documentId: string, orgCode: string): string {
 /** 可新增場次之角色（`AC-05`）。🔒 `AC-08`：**只看角色**，不看操作者 orgCode 與目標列之關係。 */
 export function canAddSession(roleCode: string | undefined): boolean {
   return roleCode === 'ICSOPAdmin' || roleCode === 'Supervisor' || roleCode === 'DeptContact';
+}
+
+/**
+ * 🔵 F042 簽到表線上檢視 delta（`AC-OV1`／`AC-OV2`／`AC-OV7`）之逐字文案。
+ * 🔒 句型比照既有 `downloadSessionAria`；逐字鎖於 `ojt-progress-view.session-view.test.ts`。
+ */
+export const VIEW_BTN_TEXT = '檢視';
+export const VIEW_TITLE_TEXT = '檢視簽到表';
+export const VIEW_FAILED_TEXT = '檢視失敗，請稍後再試。';
+
+export function viewSessionAria(trainingDate: string, fileName: string): string {
+  return `檢視簽到表（${trainingDate} · ${fileName}）`;
+}
+
+/** 待歸位列（舊資料）之檢視／下載（`AC-OV7`；下載句型逐字取自 prototype 25）。 */
+export function viewPendingAria(fileName: string): string {
+  return `檢視舊資料簽到表（${fileName}）`;
+}
+export function downloadPendingAria(fileName: string): string {
+  return `下載舊資料簽到表（${fileName}）`;
+}
+
+/** 副檔名（小寫；無副檔名或以點結尾 → 空字串）。 */
+function extOf(fileName: string): string {
+  const dot = fileName.lastIndexOf('.');
+  return dot < 0 || dot === fileName.length - 1 ? '' : fileName.slice(dot + 1).toLowerCase();
+}
+
+/**
+ * `AC-OV1` ④：可檢視＝副檔名屬 `OJT_SIGNIN` 白名單（與後端 `file-rules.ts` 同一組值）。
+ * 白名單外者（僅可能來自遷移前舊資料）不產生檢視鈕——後端對其 `/view` 回 400。
+ */
+export function isViewableSignin(fileName: string): boolean {
+  return ['pdf', 'jpg', 'jpeg', 'png'].includes(extOf(fileName));
+}
+
+/** `AC-OV6`：浮水印註記之判定（僅 PDF 燒錄，策略 A）；委派共用之 `isWatermarkSupportedFormat`。 */
+export function isPdfFileName(fileName: string): boolean {
+  return isWatermarkSupportedFormat(extOf(fileName));
 }
 
 /** 可刪除場次／可歸位之角色（`AC-19`／`AC-26`）：僅 ICSOPAdmin。 */

@@ -429,3 +429,12 @@ inline literal**，但未同步更新自己這 3 個舊呼叫點。該 inline li
 6. 🔵 **規格明文列為後續、但真人一點就會遇到**：切至 `unassigned` 範圍後
    `[data-doc-coverage-more]` 仍導向 TAB2，而該範圍之文件在 TAB2 **沒有列** ⇒ 會落在空清單。
    `AC-14` ⑮ 明訂本輪不處理（`OQ-E11-22` 之 🔵 後續），**驗收時不應判為 bug**。
+
+## 2026-09-24 簽到表線上檢視 delta（`AC-OV1`～`AC-OV8`）
+
+- **後端**：`OjtProgressService.downloadSession()`／新增 `viewSession()` 共用 `sessionFile()`（取檔 → PDF 燒錄 → 稽核）；新增 `GET /admin/ojt-progress/sessions/:sessionId/view`（`inline`＋`nosniff`、`Content-Type` 依副檔名推導）；`OjtProgressModule` import `WatermarkBurnerModule`，燒錄器硬相依（無 `@Optional()`）；稽核經 `OjtAuditRecorder.recordAccess()` 落 `targetType='DOCUMENT'`、`VIEW`／`DOWNLOAD`。
+- **前端**：`openPdfViaBlob()` 一般化為 `openViaBlob()`（additive，列印三處行為不變；新增回應型別白名單）；場次列與待歸位列新增 `[data-wm-note]`／`[data-session-view]`／`[data-pending-view]`／`[data-pending-download]`；分頁被封鎖時**不發請求**（否則會寫下使用者沒看到的 `VIEW` 稽核）。
+- **補齊之既有落差**：2026-08-28 起 OJT 簽到表下載未燒錄、不寫稽核（模組自註「供 lead 裁決」後無人裁決）。**上線後使用者可見之行為改變：PDF 下載由原檔變為帶浮水印、每次下載寫一筆稽核。**
+- **順帶發現**：prototype 25 之 `WM_BURN_TEXT` 停在 2026-09-23 全站文案稽核前之舊字面（上線版從未渲染此註記，故稽核時無載體可發現），已同步。
+- **閘門**：backend 250 suites／3831 綠、frontend 161 files／2684 綠、tsc 綠；突變抽驗 3 案（前端型別白名單、後端 `contentType` 讀欄位、後端忽略燒錄回傳值）皆翻紅；臨時 DI smoke（真實 `OjtProgressModule` 編譯、燒錄器已注入）通過。
+- **未做**：瀏覽器實機驗證（需登入 dev）；`test:int` 未跑（OJT 整合測試不涵蓋下載路徑）；測試站／正式站未部署。

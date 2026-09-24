@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import { downloadViaBlob, downloadViaBlobDetailed, openPdfViaBlob } from './download-blob';
+import { downloadViaBlob, downloadViaBlobDetailed, openPdfViaBlob, openViaBlob } from './download-blob';
 import type {
   SessionUser,
   SelectAccountResponse,
@@ -1511,6 +1511,21 @@ export function downloadOjtSession(sessionId: string, fallbackName: string): Pro
     `/admin/ojt-progress/sessions/${encodeURIComponent(sessionId)}/download`,
     fallbackName,
   );
+}
+
+/** 🔵 F042 `AC-OV2` ③：簽到表檢視允許導向之回應型別（`OJT_SIGNIN` 白名單之 MIME）。 */
+export const OJT_VIEWABLE_CONTENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png'] as const;
+
+/**
+ * GET /admin/ojt-progress/sessions/:sessionId/view（🔵 F042 `AC-OV2`／`AC-OV3`）：於新分頁檢視簽到表。
+ * 🔴 `win` 須由呼叫端**於 click handler 內同步開好**（見 `openPdfViaBlob`）；伺服器端 PDF 燒錄
+ * 可能超過瀏覽器之 user-activation 視窗，`await` 之後才開分頁會被封鎖。
+ */
+export function viewOjtSession(sessionId: string, win: Window | null): Promise<void> {
+  return openViaBlob(`/admin/ojt-progress/sessions/${encodeURIComponent(sessionId)}/view`, win, {
+    accept: OJT_VIEWABLE_CONTENT_TYPES.join(', '),
+    allowedTypes: OJT_VIEWABLE_CONTENT_TYPES,
+  });
 }
 
 /**
