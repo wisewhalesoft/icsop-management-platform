@@ -180,6 +180,20 @@ export interface OjtAuditEvent {
   watermarkSnapshot: null;
 }
 
+/** 🔵 2026-09-24 簽到表線上檢視 delta（`AC-OV5`）：場次檔之檢視／下載稽核事件。 */
+export interface OjtAccessAuditEvent {
+  actionType: 'VIEW' | 'DOWNLOAD';
+  documentId: string;
+  documentNumber: string;
+  accountId: string;
+  name?: string | null;
+  employeeNo?: string | null;
+  actorCompanyCode?: string | null;
+  actorOrgCode?: string | null;
+  actorRoleCode?: string | null;
+  watermarkSnapshot: string | null;
+}
+
 // ══════════════════════════ 使用單位固定資料（測試 fixture） ══════════════════════════
 
 export interface FixtureDoc {
@@ -395,6 +409,11 @@ export class FakeOjtAuditRecorder {
   events: OjtAuditEvent[] = [];
   record(event: OjtAuditEvent): void {
     this.events.push(event);
+  }
+  /** 🔵 `AC-OV5`：檢視／下載稽核走獨立通道（與登記／刪除之 `events` 分帳）。 */
+  accessEvents: OjtAccessAuditEvent[] = [];
+  recordAccess(event: OjtAccessAuditEvent): void {
+    this.accessEvents.push(event);
   }
 }
 

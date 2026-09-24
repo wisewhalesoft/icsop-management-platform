@@ -25,7 +25,7 @@ import {
   MULTIPART_OPTIONS,
   toUploadFile,
 } from '../storage/multipart';
-import { attachmentDisposition } from '../storage/content-disposition';
+import { attachmentDisposition, inlineDisposition } from '../storage/content-disposition';
 
 /**
  * F042 OJT 進度管理（架構 §一 端點契約）。守門鏈 `SessionGuard` → `RolePermissionGuard`。
@@ -192,6 +192,29 @@ export class OjtProgressController {
     );
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', attachmentDisposition(fileName));
+    res.send(bytes);
+  }
+
+  /**
+   * 🔵 F042 `AC-OV3`：場次簽到檔之**檢視**（前端以 fetch 取回後於新分頁 inline 呈現）。
+   * 🔴 `Content-Type` 為服務層依副檔名推導之值（不讀上傳時瀏覽器自報之型別）＋ `nosniff`：
+   * 兩者缺一，一份被標成 `text/html` 的「簽到表」就能在本站 origin 下執行腳本。
+   * 🔒 閘門與 `/download` 相同（`read`）；PDF 燒錄與稽核 `VIEW` 在服務層。
+   */
+  @Get('admin/ojt-progress/sessions/:sessionId/view')
+  @RequirePermission(FunctionKey.OJT_PROGRESS_MANAGEMENT, 'read')
+  async viewSession(
+    @Req() req: RequestWithSession,
+    @Param('sessionId') sessionId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { bytes, fileName, contentType } = await this.svc.viewSession(
+      req.sessionUser,
+      sessionId,
+    );
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', inlineDisposition(fileName));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(bytes);
   }
 

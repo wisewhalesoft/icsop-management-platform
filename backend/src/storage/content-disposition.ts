@@ -12,8 +12,20 @@
  *    `filenameFromContentDisposition()` **優先讀取本項**，故使用者存下的檔名為原始中文檔名。
  */
 export function attachmentDisposition(fileName: string): string {
+  return disposition('attachment', fileName);
+}
+
+/**
+ * 🔵 F042 `AC-OV3`：「檢視」用之 `inline` 變體——與 `attachmentDisposition` 共用同一份檔名組字，
+ * 只差 disposition-type。
+ */
+export function inlineDisposition(fileName: string): string {
+  return disposition('inline', fileName);
+}
+
+function disposition(type: 'attachment' | 'inline', fileName: string): string {
   const ascii = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
-  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+  return `${type}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }
 
 /**

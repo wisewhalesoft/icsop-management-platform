@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
@@ -14,10 +15,21 @@ import {
   toCsvBuffer,
 } from '../storage/csv-export';
 import {
+  ALLOWED_FORMATS,
   assertFormatAllowed,
   assertSizeWithinLimit,
   extensionOf,
 } from '../storage/file-rules';
+import { contentTypeOfFileName } from '../storage/content-disposition';
+/**
+ * 🔵 F042 `AC-OV4`：場次檔之後台下載／檢視燒錄（延伸 `OQ-D9-08`）。`WatermarkBurnerModule`
+ * 不 import 任何業務模組，單向匯入不構成循環（與 Attachments／Appendices／UsageForms 同一形狀）。
+ */
+import {
+  WATERMARK_BURNER,
+  WatermarkBurner,
+  WatermarkSession,
+} from '../public/watermark-burner.service';
 /** 🔵 UX16 `AC-UX52`：匯出欄位之單一組裝點（🟢 同模組內之零 IO 純函式葉節點）。 */
 import { buildOjtExportColumns } from './ojt-progress-export-columns';
 /**
@@ -492,6 +504,13 @@ export class OjtProgressService {
     @Inject(OJT_AUDIT_RECORDER) private readonly audit: OjtAuditRecorder,
     @Inject(OJT_BLOB_STORE) private readonly blob: OjtBlobStore,
     @Inject(OJT_CLOCK) private readonly now: OjtClock = () => new Date(),
+    /**
+     * 🔴 F042 `AC-OV4` ⑤：燒錄器為**硬相依**——**刻意不加 `@Optional()`**，缺 provider 必須讓
+     * 容器啟動失敗，而不是靜默回原檔（本 repo UX16 已踩過「全部單元測試綠、正式環境永遠
+     * 靜默失效」之同型缺陷）。TS 型別之 `?` 僅為既有 9 支 spec 之位置參數建構子保持編譯；
+     * 未注入時下載／檢視一律拒絕（`sessionFile()`），不降級。
+     */
+    @Inject(WATERMARK_BURNER) private readonly burner?: WatermarkBurner,
   ) {}
 
   // ══════════ D. 新增教育訓練場次（AC-02／AC-05／AC-08／AC-09／AC-10／AC-18） ══════════
@@ -1033,17 +1052,69 @@ export class OjtProgressService {
    * 場次簽到檔之下載（代理串流，比照 `attachments.service.ts` 之既有模式，**不核發 SAS**）。
    * 參照指向空氣（DB 有列、Blob 無檔）→ `FILE_ACCESS_DENIED`；🔒 **該場次紀錄不因此消失、
    * 該列亦不退回「未完成」**——場次紀錄與檔案可用性是兩個正交維度。
+   * 🔵 2026-09-24（`AC-OV4`／`AC-OV5`）：PDF 燒錄浮水印、寫稽核 `DOWNLOAD`。
    */
-  async downloadSession(
+  downloadSession(
     session: OjtSessionContext | undefined,
     sessionId: string,
+  ): Promise<{ bytes: Buffer; fileName: string; contentType: string }> {
+    return this.sessionFile(session, sessionId, 'DOWNLOAD');
+  }
+
+  /**
+   * 🔵 F042 `AC-OV3`：場次簽到檔之**檢視**（前端於新分頁 inline 呈現）。
+   * 與下載之差異**只有**兩處：副檔名須屬 `OJT_SIGNIN` 白名單（否則 400）、稽核為 `VIEW`。
+   */
+  viewSession(
+    session: OjtSessionContext | undefined,
+    sessionId: string,
+  ): Promise<{ bytes: Buffer; fileName: string; contentType: string }> {
+    return this.sessionFile(session, sessionId, 'VIEW');
+  }
+
+  /**
+   * 下載與檢視之**單一**取檔＋燒錄＋稽核點（`AC-OV4` ③：不得各寫一份 `if (pdf) burn`）。
+   *
+   * 🔴 `contentType` 依**檔名副檔名**推導，**不讀** `OJT_SESSION.contentType`——後者是上傳時
+   * 瀏覽器自報之 mimetype，可被竄改為 `text/html`；檢視以 inline 呈現時即構成儲存型 XSS
+   * （`AC-OV3` ②）。燒錄與否之格式判定取同一份事實。
+   * 🔴 燒錄器缺席或燒錄失敗 ⇒ 請求失敗，**絕不**以原檔回應（`AC-OV4` ④：否則等於一條旁路）。
+   * 🔒 失敗路徑一律不寫稽核：稽核在位元組確定可交付之後才寫。
+   */
+  private async sessionFile(
+    session: OjtSessionContext | undefined,
+    sessionId: string,
+    actionType: 'VIEW' | 'DOWNLOAD',
   ): Promise<{ bytes: Buffer; fileName: string; contentType: string }> {
     this.assertCanRead(session?.roleCode);
     const rec = await this.sessions.findById(sessionId);
     if (!rec) throw new NotFoundException('OJT_SESSION_NOT_FOUND');
-    const bytes = await this.blob.getBytes(rec.blobPath);
-    if (!bytes) throw new ForbiddenException('FILE_ACCESS_DENIED');
-    return { bytes, fileName: rec.fileName, contentType: rec.contentType };
+    const format = extensionOf(rec.fileName);
+    if (actionType === 'VIEW' && !ALLOWED_FORMATS.OJT_SIGNIN.includes(format)) {
+      throw new BadRequestException('FILE_FORMAT_NOT_ALLOWED');
+    }
+    const raw = await this.blob.getBytes(rec.blobPath);
+    if (!raw) throw new ForbiddenException('FILE_ACCESS_DENIED');
+    if (!this.burner) throw new InternalServerErrorException('WATERMARK_BURNER_UNAVAILABLE');
+    const burned = await this.burner.burnIfPdf(toWatermarkSession(session), raw, format);
+    const doc = await this.usingDept.getDocumentMeta(rec.documentId);
+    await this.audit.recordAccess({
+      actionType,
+      documentId: rec.documentId,
+      documentNumber: doc?.documentNumber ?? '',
+      accountId: session?.accountId ?? '',
+      name: session?.name ?? null,
+      employeeNo: session?.employeeNo ?? null,
+      actorCompanyCode: session?.companyCode ?? null,
+      actorOrgCode: session?.orgCode ?? null,
+      actorRoleCode: session?.roleCode ?? null,
+      watermarkSnapshot: burned.snapshot,
+    });
+    return {
+      bytes: burned.bytes,
+      fileName: rec.fileName,
+      contentType: contentTypeOfFileName(rec.fileName),
+    };
   }
 
   // ══════════ 內部共用 ══════════
@@ -1187,4 +1258,17 @@ export class OjtProgressService {
   private assertIcsopAdmin(roleCode: string | undefined): void {
     if (roleCode !== 'ICSOPAdmin') throw new ForbiddenException('PERMISSION_DENIED');
   }
+}
+
+/**
+ * 呼叫者 session → 浮水印身分（`AC-OV4` ①：身分＝操作者本人）。controller 傳入之是完整
+ * `SessionUser`，本層之 `OjtSessionContext` 只是其窄化視圖——故以展開保留其餘欄位
+ * （如 F041 `userSubtype`），只補齊 `WatermarkSession` 之兩個必填欄。
+ */
+function toWatermarkSession(session: OjtSessionContext | undefined): WatermarkSession {
+  return {
+    ...(session ?? {}),
+    accountId: session?.accountId ?? '',
+    companyCode: session?.companyCode ?? '',
+  } as WatermarkSession;
 }

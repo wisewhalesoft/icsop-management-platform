@@ -140,3 +140,49 @@ describe('OjtAuditWriterRecorder — 身分快照六欄', () => {
     });
   });
 });
+
+describe('OjtAuditWriterRecorder.recordAccess — 簽到表檢視／下載（`AC-OV5`）', () => {
+  let writer: FakeAuditWriter;
+  let recorder: OjtAuditWriterRecorder;
+  beforeEach(() => {
+    writer = new FakeAuditWriter();
+    recorder = new OjtAuditWriterRecorder(
+      writer as unknown as AuditWriterService,
+      identityService(),
+    );
+  });
+
+  it.each(['VIEW', 'DOWNLOAD'] as const)(
+    '🔴 %s：targetType=DOCUMENT、targetId=documentId、帶文件編號與浮水印快照、身分取操作者',
+    async (actionType) => {
+      await recorder.recordAccess({
+        actionType,
+        documentId: 'doc-1',
+        documentNumber: 'ICSOP-A-001',
+        accountId: 'acct-1',
+        name: '王小明',
+        employeeNo: 'E001',
+        actorCompanyCode: 'AS',
+        actorOrgCode: 'A1210',
+        actorRoleCode: 'Supervisor',
+        watermarkSnapshot: 'WM-1',
+      });
+
+      expect(writer.calls).toHaveLength(1);
+      expect(writer.calls[0]).toMatchObject({
+        targetType: 'DOCUMENT',
+        actionType,
+        targetId: 'doc-1',
+        targetNumber: 'ICSOP-A-001',
+        actorId: 'acct-1',
+        actorName: '王小明',
+        employeeNo: 'E001',
+        company: '和潤企業股份有限公司',
+        department: '營運管理部',
+        section: '審查室',
+        roleCode: 'Supervisor',
+        watermarkSnapshot: 'WM-1',
+      });
+    },
+  );
+});

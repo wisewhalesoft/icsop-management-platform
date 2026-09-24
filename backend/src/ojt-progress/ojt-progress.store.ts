@@ -196,14 +196,39 @@ export interface OjtAuditEvent {
   sessionId?: string;
 }
 
+/**
+ * 🔵 2026-09-24 簽到表線上檢視 delta（F042 `AC-OV5`）：場次檔之檢視／下載稽核。
+ *
+ * 🔴 **與 `OjtAuditEvent` 分開兩個型別、兩個方法**：登記／刪除落 `targetType='OJT_SESSION'`
+ * 且非浮水印動作（`watermarkSnapshot` 鎖為 null）；檢視／下載是**浮水印動作**，沿用
+ * F020 `AC-N17` 對 OJT 之既有落值 `targetType='DOCUMENT'`、帶當次浮水印快照。
+ * 併成一個型別會讓 `watermarkSnapshot: null` 之型別鎖失效。
+ */
+export interface OjtAccessAuditEvent {
+  actionType: 'VIEW' | 'DOWNLOAD';
+  documentId: string;
+  documentNumber: string;
+  accountId: string;
+  name?: string | null;
+  employeeNo?: string | null;
+  /** **操作者**身分快照之解析原料（語意同 `OjtAuditEvent` 之同名三欄）。 */
+  actorCompanyCode?: string | null;
+  actorOrgCode?: string | null;
+  actorRoleCode?: string | null;
+  /** PDF ＝ 當次燒錄之浮水印字串；非 PDF ＝ null。 */
+  watermarkSnapshot: string | null;
+}
+
 export interface OjtAuditRecorder {
   record(event: OjtAuditEvent): void | Promise<void>;
+  recordAccess(event: OjtAccessAuditEvent): void | Promise<void>;
 }
 
 export const OJT_BLOB_STORE = Symbol('OJT_BLOB_STORE');
 
 /**
  * 簽到表檔案之儲存邊界（本模組所需之最小子集，`BLOB_STORE` 之窄化視圖）。
+ * 📝 下載／檢視之 PDF 自 2026-09-24（`AC-OV4`）起經 `WatermarkBurner` 燒錄後才回應。
  * 🔴 刻意只宣告用得到的四個方法：本模組不核發 SAS（下載一律代理串流，比照
  * `attachments.service.ts` 之 `downloadAttachmentRaw` 既有模式），不需要 `getDownloadUrl`。
  */

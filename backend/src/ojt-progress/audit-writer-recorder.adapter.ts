@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AuditIdentityService } from '../audit/audit-identity.service';
 import { AuditWriterService } from '../audit/audit-writer.service';
-import { OjtAuditEvent, OjtAuditRecorder } from './ojt-progress.store';
+import { OjtAccessAuditEvent, OjtAuditEvent, OjtAuditRecorder } from './ojt-progress.store';
 
 /**
  * 場次稽核 → F023 共用契約 `AuditAccessEvent`（`OJT_SESSION` 變體）之轉接器
@@ -62,6 +62,36 @@ export class OjtAuditWriterRecorder implements OjtAuditRecorder {
       section: identity.section,
       roleCode: identity.roleCode,
       watermarkSnapshot: null,
+      occurredAt: new Date(),
+    });
+  }
+
+  /**
+   * 🔵 F042 `AC-OV5`：簽到表之檢視（`VIEW`）／下載（`DOWNLOAD`）。
+   * 🔴 `targetType='DOCUMENT'`、`targetId`＝文件 id——沿用 F020 `AC-N17` 對 OJT 之既有落值，
+   * **不新增任何列舉值**；F024 以既有標籤「檢視」／「下載」呈現。
+   */
+  async recordAccess(event: OjtAccessAuditEvent): Promise<void> {
+    const identity = await this.identity.resolve({
+      name: event.name,
+      employeeNo: event.employeeNo,
+      companyCode: event.actorCompanyCode,
+      orgCode: event.actorOrgCode,
+      roleCode: event.actorRoleCode,
+    });
+    await this.writer.recordAccess({
+      targetType: 'DOCUMENT',
+      actionType: event.actionType,
+      targetId: event.documentId,
+      targetNumber: event.documentNumber || null,
+      actorId: event.accountId,
+      actorName: identity.actorName,
+      employeeNo: identity.employeeNo,
+      company: identity.company,
+      department: identity.department,
+      section: identity.section,
+      roleCode: identity.roleCode,
+      watermarkSnapshot: event.watermarkSnapshot,
       occurredAt: new Date(),
     });
   }

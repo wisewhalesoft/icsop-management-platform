@@ -23,6 +23,7 @@ import { TypeOrmOjtSessionStore } from './typeorm-ojt-progress.store';
 import { TypeOrmOjtUsingDeptChecker } from './typeorm-ojt-using-dept.checker';
 import { TypeOrmOjtOrgDirectory } from './typeorm-ojt-org-directory';
 import { OjtAuditWriterRecorder } from './audit-writer-recorder.adapter';
+import { WatermarkBurnerModule } from '../public/watermark-burner.module';
 
 /**
  * F042 OJT 進度管理模組（架構 §二 模組落點）。
@@ -33,13 +34,14 @@ import { OjtAuditWriterRecorder } from './audit-writer-recorder.adapter';
  * 反方向亦然：`DocumentsModule` 自建 `TypeOrmOjtCompletionReader` 讀 `OJT_SESSION`，
  * **不 import 本模組**。兩邊皆不互相 import ⇒ 循環相依在結構上不可能發生。
  *
- * ⚠ **刻意不 import `WatermarkBurnerModule`**：場次登記非浮水印動作。場次簽到檔之後台
- * 下載雖依 D9 既有政策（`OQ-D9-08`）應燒錄 PDF 浮水印，本輪之下載端點沿用
- * `attachments.service.ts` 之代理串流形狀但**尚未接上燒錄**——登記於實作日誌之
- * 「未涵蓋範圍」節，供 lead 裁決是否納入本批。
+ * 🔵 **2026-09-24 起 import `WatermarkBurnerModule`**（F042 `AC-OV4`，人類裁決「一併補齊」）：
+ * 場次簽到檔之後台下載與檢視依 D9 既有政策（`OQ-D9-08`）燒錄 PDF 浮水印。
+ * 📝 原註（2026-08-28）：「刻意不 import……本輪之下載端點**尚未接上燒錄**——供 lead 裁決」，
+ * 其後無人裁決，落差存續近一個月；本 delta 即該裁決。🔴 燒錄器為硬相依（無 `@Optional()`），
+ * 缺 provider ＝ 容器啟動失敗，由 `ojt-progress.session-file.spec.ts` 鎖定。
  */
 @Module({
-  imports: [AuthModule, RbacModule, StorageModule, AuditModule],
+  imports: [AuthModule, RbacModule, StorageModule, AuditModule, WatermarkBurnerModule],
   controllers: [OjtProgressController],
   providers: [
     {
