@@ -279,6 +279,12 @@ describe('🔴 AC-G58 — `查看更多` 之閘門隨矩陣而變（非常數 tr
     const region = await screen.findByTestId('latest-announcements');
     expect(region).toBeInTheDocument();
     expect(within(region).queryByRole('link', { name: '查看更多' })).not.toBeInTheDocument();
+    // 🟣 2026-09-24 `AC-G98`：書名連結與 `查看更多` 同一閘門 ⇒ 一併消失，書名退回純文字（仍可見、非死連結）。
+    expect(within(region).queryAllByTestId('latest-doc-link')).toHaveLength(0);
+    expect(within(region).queryAllByRole('link')).toHaveLength(0);
+    const firstName = within(region).getAllByRole('row')[1]!.querySelectorAll('td')[2]!;
+    expect(firstName.textContent?.length ?? 0).toBeGreaterThan(0);
+    expect(firstName.querySelector('svg')).toBeNull();
   });
 
   it('矩陣維持原值 ⇒ 連結存在（正向對照）', async () => {

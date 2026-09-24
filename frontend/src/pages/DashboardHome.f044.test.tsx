@@ -785,10 +785,41 @@ describe('AC-G51／AC-G55～AC-G58 — 最新公告清單', () => {
     mockAuth('ICSOPAdmin');
     renderPage();
     const region = await screen.findByTestId('latest-announcements');
+    // 🟣 2026-09-24 `AC-G98`：書名文字包在連結內之 `<span>`，title 仍掛在 `<td>` ⇒ 找最近之承載者。
     const cell = within(region).getByText(long);
+    const holder = cell.closest('[title], [aria-label]');
     expect(
-      cell.getAttribute('title') === long || cell.getAttribute('aria-label') === long,
+      holder?.getAttribute('title') === long || holder?.getAttribute('aria-label') === long,
     ).toBe(true);
+  });
+
+  it('AC-G98：每列書名即連結（accessible name ＝ 完整書名），導向 /admin/documents/{documentId}，尾端帶進入圖示', async () => {
+    mockAuth('ICSOPAdmin');
+    renderPage();
+    const region = await screen.findByTestId('latest-announcements');
+    const links = within(region).getAllByTestId('latest-doc-link');
+    expect(links).toHaveLength(ANALYTICS.latestAnnouncements.length);
+    ANALYTICS.latestAnnouncements.forEach((row, i) => {
+      const link = links[i]!;
+      expect(link).toHaveAccessibleName(row.documentName);
+      expect(link).toHaveAttribute('href', `/admin/documents/${row.documentId}`);
+      expect(link.closest('tr')).toHaveAttribute('data-doc-id', row.documentId);
+      const svg = link.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg).toHaveAttribute('aria-hidden');
+    });
+    // 🔴 `AC-G51` 恰四欄不變：每列仍恰 4 格。
+    within(region)
+      .getAllByRole('row')
+      .slice(1)
+      .forEach((tr) => expect(tr.querySelectorAll('td')).toHaveLength(4));
+  });
+
+  it('AC-G98 ⚠：對 DeptContact（ICSOP文件管理 ＝ READ）書名連結**仍然呈現**', async () => {
+    mockAuth('DeptContact');
+    renderPage();
+    const region = await screen.findByTestId('latest-announcements');
+    expect(within(region).getAllByTestId('latest-doc-link').length).toBeGreaterThan(0);
   });
 
   it('AC-G57：母體為空 ⇒ empty-state（不得空白），且說明資料從何而來', async () => {

@@ -938,10 +938,32 @@ function LatestAnnouncements(props: {
                   <td className="px-3 py-2 mono text-slate-600 whitespace-nowrap">
                     {d.edition ?? EDITION_NONE_TEXT}
                   </td>
-                  {/* 🔒 `AC-G56`：截斷不得使資訊不可取得 ⇒ 完整書名由 `title` 承載。 */}
-                  <td className="px-3 py-2 text-slate-700 max-w-[340px] truncate" title={d.documentName}>
-                    {d.documentName}
-                  </td>
+                  {/* 🔒 `AC-G56`：截斷不得使資訊不可取得 ⇒ 完整書名由 `<td title>` 承載（兩分支同一載體）。
+                      🟣 2026-09-24 `AC-G98`：書名即連結，連往 ICSOP 文件檢視頁，尾端帶 `chevron-right`。
+                      🔴 閘門與 `查看更多` 同一個值（`mayViewMore`），不得另寫述詞；`AC-G51` 恰四欄不變。
+                      🔒 寬度上限掛在 `<a>`（儲存格上的 max-width 瀏覽器不保證遵守），文字 `min-w-0 truncate`、
+                         圖示 `shrink-0` ⇒ 書名再長圖示仍可見。只有 `<a>` 可點，不做整列可點。
+                      🔒 無讀取權：逐字維持原樣之純文字（不得畫成 disabled／灰色死連結）。 */}
+                  {props.mayViewMore ? (
+                    <td className="px-3 py-2" title={d.documentName}>
+                      <Link
+                        role="link"
+                        to={`/admin/documents/${d.documentId}`}
+                        data-testid="latest-doc-link"
+                        className="group inline-flex max-w-[340px] items-center gap-1 align-middle text-slate-700 hover:text-primary-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 rounded"
+                      >
+                        <span className="min-w-0 truncate">{d.documentName}</span>
+                        <Icon
+                          name="chevron-right"
+                          className="w-3.5 h-3.5 shrink-0 text-primary-600 group-hover:text-primary-700"
+                        />
+                      </Link>
+                    </td>
+                  ) : (
+                    <td className="px-3 py-2 text-slate-700 max-w-[340px] truncate" title={d.documentName}>
+                      {d.documentName}
+                    </td>
+                  )}
                   <td className="px-3 py-2">
                     <span
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
