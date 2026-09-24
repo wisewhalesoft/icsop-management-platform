@@ -50,9 +50,9 @@ const CALLERS: Record<string, Caller> = {
   'UsageFormManagementPage.tsx': { label: '使用表單管理', target: '/admin/usage-forms', ownRoute: '/admin/usage-forms' },
   'AppendixManagementPage.tsx': { label: '附錄管理', target: '/admin/appendices', ownRoute: '/admin/appendices' },
   'PermissionMatrixPage.tsx': { label: '系統參數設定', target: '/admin/settings', ownRoute: '/admin/settings' },
-  // ── B 類：首段為分類標籤。`ICSOP 管理後台` 之不可點**由同一條規則導出**（目標＝當前路由，
+  // ── B 類：首段為分類標籤。`ICSOP 管理`（2026-09-24 人類裁決，OLD> `ICSOP 管理後台`） 之不可點**由同一條規則導出**（目標＝當前路由，
   //    spec 逐字：「與 A 類 7 頁同一條」）；其餘三者系統中不存在對應頁面 ⇒ target 為 null。 ──
-  'DashboardHome.tsx': { label: 'ICSOP 管理後台', target: '/admin', ownRoute: '/admin' },
+  'DashboardHome.tsx': { label: 'ICSOP 管理', target: '/admin', ownRoute: '/admin' },
   'AccessHistoryPage.tsx': { label: '稽核與調閱歷程', target: null, ownRoute: '/admin/access-history' },
   'DocIndexPage.tsx': { label: 'AI 智慧問答', target: null, ownRoute: '/admin/doc-index' },
   'ChangeHistoryPage.tsx': { label: '稽核追溯', target: null, ownRoute: '/admin/change-history' },
@@ -160,11 +160,11 @@ describe('F002 AC-D3 — 自我連結與分類標籤之首段一律不得有 to'
     ).toEqual([]);
   });
 
-  it('TS-D10-014 🔴 明文禁止之解法：不得為湊出「首段可點回首頁」而於各頁補一段 ICSOP 管理後台', () => {
+  it('TS-D10-014 🔴 明文禁止之解法：不得為湊出「首段可點回首頁」而於各頁補一段 ICSOP 管理', () => {
     // AC-D3 末段之禁令：補段會改變各頁可見文字，違反 AC-D7。
     const offenders = Object.keys(CALLERS)
       .filter((f) => f !== 'DashboardHome.tsx')
-      .filter((file) => breadcrumbSegments(readPage(file))?.segments[0]?.label === 'ICSOP 管理後台');
-    expect(offenders, `下列頁面被補上了 ICSOP 管理後台 首段：${offenders.join('、')}`).toEqual([]);
+      .filter((file) => breadcrumbSegments(readPage(file))?.segments[0]?.label === 'ICSOP 管理');
+    expect(offenders, `下列頁面被補上了 ICSOP 管理 首段：${offenders.join('、')}`).toEqual([]);
   });
 });

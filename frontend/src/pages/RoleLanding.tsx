@@ -31,9 +31,11 @@ import { Icon } from '../components/Icon';
  *   `OLD>` 後台卡標題 `管理後台`；`ADMIN_DESC: Record<RoleCode, string>` 四段依角色差異化之說明
  *          （`帳號/角色管理、組織同步、系統參數、調閱歷程（依權限顯示）。` 等四句）與其 `adminDesc` 查表。
  *
- * 🔴 `AC-UX3`：本卡之 `管理平台` 與後台麵包屑首段之 `ICSOP 管理後台` **刻意並存**——前者是
- *   「入口的名字」（我要去哪裡），後者是「導覽樹根節點的名字」（我現在在哪裡）。順手統一會
- *   讓 F002 `AC-D6`／`AC-D7` 之既有逐字鎖翻紅，而那個紅不是背書、是違反。
+ * 🔴 `AC-UX3`：本卡之 `管理平台` 與後台麵包屑首段之 `ICSOP 管理` **刻意並存**——前者是
+ *   「入口的名字」（我要去哪裡），後者是「導覽樹根節點的名字」（我現在在哪裡）。
+ *
+ * 🔵 2026-09-24 人類裁決文案調整：卡內行動文字 `進入管理`（OLD> `進入後台`）、`進入瀏覽文件`
+ *   （OLD> `前往前台`）；麵包屑首段 `ICSOP 管理`（OLD> `ICSOP 管理後台`）。
  */
 const PUBLIC_CARD_TITLE = 'ICSOP 文件';
 const PUBLIC_CARD_DESC = '作業程序書瀏覽、搜尋、下載、列印';
@@ -110,7 +112,7 @@ export function RoleLanding(): JSX.Element {
                 {ADMIN_CARD_DESC}
               </p>
               <span className="inline-flex items-center gap-1 text-sm text-primary-600 font-medium mt-4">
-                進入後台
+                進入管理
                 <Icon name="arrow-right" className="w-4 h-4" />
               </span>
             </Link>
@@ -128,7 +130,7 @@ export function RoleLanding(): JSX.Element {
                 {PUBLIC_CARD_DESC}
               </p>
               <span className="inline-flex items-center gap-1 text-sm text-primary-600 font-medium mt-4">
-                前往前台
+                進入瀏覽文件
                 <Icon name="arrow-right" className="w-4 h-4" />
               </span>
             </Link>

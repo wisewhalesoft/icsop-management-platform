@@ -61,7 +61,7 @@ export function AppShell(): JSX.Element {
             <Icon name="file-text" className="w-5 h-5" />
           </div>
           {!collapsed && (
-            <span className="font-bold text-slate-900 text-sm truncate">ICSOP 後台</span>
+            <span className="font-bold text-slate-900 text-sm truncate">ICSOP 管理</span>
           )}
         </NavLink>
 

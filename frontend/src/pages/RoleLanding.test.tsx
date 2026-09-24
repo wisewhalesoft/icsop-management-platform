@@ -151,7 +151,7 @@ describe('RoleLanding — UX16 delta（AC-UX1～AC-UX7）', () => {
     });
   });
 
-  describe('AC-UX3 — 「管理平台」與「ICSOP 管理後台」並存（後台首頁麵包屑之成對斷言另見 DashboardHome.ux16.test.tsx）', () => {
+  describe('AC-UX3 — 「管理平台」與「ICSOP 管理」並存（後台首頁麵包屑之成對斷言另見 DashboardHome.ux16.test.tsx）', () => {
     it('本頁卡片標題為「管理平台」（麵包屑首段之成對斷言見 DashboardHome.ux16.test.tsx，避免本檔重複 mock 後台首頁端點）', () => {
       mockAuth('ICSOPAdmin');
       renderLanding();
@@ -182,11 +182,11 @@ describe('RoleLanding — UX16 delta（AC-UX1～AC-UX7）', () => {
       expect(screen.getByRole('link', { name: 'ICSOP 文件' }).getAttribute('aria-label')).toBe('ICSOP 文件');
     });
 
-    it('③ 卡內行動文字「前往前台」／「進入後台」一字不改（既有文案，零漣漪）', () => {
+    it('③ 卡內行動文字逐字為「進入瀏覽文件」／「進入管理」（2026-09-24 人類裁決；OLD> 前往前台／進入後台）', () => {
       mockAuth('ICSOPAdmin');
       renderLanding();
-      expect(screen.getByText('前往前台')).toBeInTheDocument();
-      expect(screen.getByText('進入後台')).toBeInTheDocument();
+      expect(screen.getByText('進入瀏覽文件')).toBeInTheDocument();
+      expect(screen.getByText('進入管理')).toBeInTheDocument();
     });
   });
 

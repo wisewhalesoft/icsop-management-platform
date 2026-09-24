@@ -1,6 +1,6 @@
 /**
- * F002 UX16 delta — `AC-UX3`：「管理平台」（分流頁卡片）與「ICSOP 管理後台」（後台首頁麵包屑）
- * 兩個名字並存是刻意的，須成對斷言（只鎖其中一句時，改掉另一句不會翻紅）。
+ * F002 UX16 delta — `AC-UX3`：「管理平台」（分流頁卡片）與「ICSOP 管理」（後台首頁麵包屑；2026-09-24
+ * 人類裁決由 OLD> `ICSOP 管理後台` 改名）兩個名字並存是刻意的，須成對斷言（只鎖其中一句時，改掉另一句不會翻紅）。
  *
  * 權威：docs/specs/features/F002-role-based-routing.md#ux16-delta `AC-UX3`。
  *
@@ -50,8 +50,8 @@ function stubOptionalEndpoints(): void {
   }
 }
 
-describe('AC-UX3 — 「管理平台」（分流頁）與「ICSOP 管理後台」（後台首頁麵包屑）並存，成對斷言', () => {
-  it('分流頁卡片為「管理平台」且後台首頁麵包屑首段仍為「ICSOP 管理後台」——只改其一，另一句必須仍能被抓到', async () => {
+describe('AC-UX3 — 「管理平台」（分流頁）與「ICSOP 管理」（後台首頁麵包屑）並存，成對斷言', () => {
+  it('分流頁卡片為「管理平台」且後台首頁麵包屑首段為「ICSOP 管理」——只改其一，另一句必須仍能被抓到', async () => {
     vi.resetAllMocks();
     vi.mocked(endpoints.getDashboardSummary).mockResolvedValue(SUMMARY);
     vi.mocked(endpoints.getDashboardActivity).mockResolvedValue(ACTIVITY);
@@ -62,6 +62,6 @@ describe('AC-UX3 — 「管理平台」（分流頁）與「ICSOP 管理後台�
     expect(screen.getByRole('link', { name: '管理平台' })).toBeInTheDocument();
 
     render(<MemoryRouter><DashboardHome /></MemoryRouter>);
-    expect(await screen.findByText('ICSOP 管理後台')).toBeInTheDocument();
+    expect(await screen.findByText('ICSOP 管理')).toBeInTheDocument();
   });
 });

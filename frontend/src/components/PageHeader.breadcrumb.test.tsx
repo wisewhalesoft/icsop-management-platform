@@ -77,7 +77,7 @@ describe('PageHeader — F002 AC-D6 麵包屑可點規則', () => {
 
   it('TS-D10-006 ④ 分隔圖示 chevron-right 之數量＝段數 − 1（位置不變）', () => {
     const { container } = renderHeader([
-      { label: 'ICSOP 管理後台' },
+      { label: 'ICSOP 管理' },
       { label: '循環管理', to: '/admin/lifecycles' },
       { label: '樹狀圖預覽' },
     ]);
@@ -86,10 +86,10 @@ describe('PageHeader — F002 AC-D6 麵包屑可點規則', () => {
 
   it('TS-D10-007 各段可見文字逐字呈現（AC-D7：僅新增連結行為，不改文案）', () => {
     renderHeader([
-      { label: 'ICSOP 管理後台' },
+      { label: 'ICSOP 管理' },
       { label: '首頁' },
     ]);
-    expect(screen.getByText('ICSOP 管理後台')).toBeInTheDocument();
+    expect(screen.getByText('ICSOP 管理')).toBeInTheDocument();
     expect(screen.getByText('首頁')).toBeInTheDocument();
   });
 });

@@ -557,12 +557,12 @@ export function PublicListPage(): JSX.Element {
             {hasAdminAccess(user?.roleCode) && (
               <Link
                 to="/admin"
-                aria-label="前往後台"
-                title="前往後台"
+                aria-label="前往管理"
+                title="前往管理"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-base text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600"
               >
                 <Icon name="layout-dashboard" className="w-4 h-4 shrink-0" />
-                前往後台
+                前往管理
               </Link>
             )}
             <button

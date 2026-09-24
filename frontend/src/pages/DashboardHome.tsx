@@ -50,7 +50,7 @@ import {
 } from './dashboard-analytics-view';
 
 /**
- * 後台首頁 / 儀表板。版面與卡片樣式權威來源：`prototypes/07-admin-shell.html`。
+ * 首頁 / 儀表板（2026-09-24 人類裁決：OLD> `後台首頁 / 儀表板`）。版面與卡片樣式權威來源：`prototypes/07-admin-shell.html`。
  *
  * 🔵 **F044（2026-09-21）改版**：
  *   · 上方統計列改為**四張卡**（已公告／進度中／本月新版公告／OJT 準時完成率），
@@ -250,7 +250,7 @@ export function DashboardHome(): JSX.Element {
        🔴 對應點**不是** `AppShell`——其 `<main className="px-4 py-6">` 本來就沒有寬度上限，
           改它會連帶放寬其餘 20 餘個後台頁面。左右留白由 `AppShell` 之 `px-4` 承擔。 */
     <div>
-      <PageHeader breadcrumb={[{ label: 'ICSOP 管理後台' }, { label: '首頁' }]} title="後台首頁 / 儀表板" />
+      <PageHeader breadcrumb={[{ label: 'ICSOP 管理' }, { label: '首頁' }]} title="首頁 / 儀表板" />
       <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
         <div>
           {/* 歡迎詞用**姓名**（prototype「歡迎回來，李慧玲」）；姓名缺漏（手動帳號未填）才退回帳號。 */}

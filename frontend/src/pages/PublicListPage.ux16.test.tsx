@@ -1,11 +1,11 @@
 /**
- * F019 UX16 delta — `AC-UX20`／`AC-UX21`（前台「前往後台」連結鈕，項 6）。
+ * F019 UX16 delta — `AC-UX20`／`AC-UX21`（前台「前往管理」（OLD> 前往後台）連結鈕，項 6）。
  *
  * 權威：docs/specs/features/F019-public-list-browsing.md#ux16-delta `AC-UX20`／`AC-UX21`；
  * docs/specs/features/F002-role-based-routing.md#ux16-delta `AC-UX7`（`hasAdminAccess` 之
  * 共用述詞，本檔為其三處消費者之一）。
  *
- * ⚠ 對實作全盲：前台 header 尚無此鈕——`queryByLabelText('前往後台')` 恆為 null 即本環之
+ * ⚠ 對實作全盲：前台 header 尚無此鈕——`queryByLabelText('前往管理')` 恆為 null 即本環之
  * 預期紅燈（正向案例）。
  *
  * 🔴 本檔與 `frontend/src/pages/RoleLanding.test.tsx`／`frontend/src/domain/menu.ux16.test.ts`
@@ -58,7 +58,7 @@ function renderPage() {
   );
 }
 
-describe('PublicListPage — UX16 delta AC-UX20（前往後台連結鈕，與 hasAdminAccess 共用向量）', () => {
+describe('PublicListPage — UX16 delta AC-UX20（前往管理連結鈕，與 hasAdminAccess 共用向量）', () => {
   it('🔴 五種角色之連結存在與否，恰為 [true,true,true,true,false]（與 RoleLanding／hasAdminAccess 之共用向量一致）', async () => {
     const results: boolean[] = [];
     for (const role of UX16_ADMIN_ACCESS_ROLES) {
@@ -67,19 +67,19 @@ describe('PublicListPage — UX16 delta AC-UX20（前往後台連結鈕，與 ha
       stubEndpoints();
       const { unmount } = renderPage();
       await waitFor(() => expect((api as unknown as { getPublicDocuments: ReturnType<typeof vi.fn> }).getPublicDocuments).toHaveBeenCalled());
-      results.push(screen.queryByLabelText('前往後台') !== null);
+      results.push(screen.queryByLabelText('前往管理') !== null);
       unmount();
     }
     expect(results).toEqual(EXPECTED_HAS_ADMIN_ACCESS);
   });
 
-  it('具後台權限角色（ICSOPAdmin）：連結之 role=link、可見文字／aria-label 逐字「前往後台」', async () => {
+  it('具後台權限角色（ICSOPAdmin）：連結之 role=link、可見文字／aria-label 逐字「前往管理」（2026-09-24 人類裁決；OLD> 前往後台）', async () => {
     mockAuth('ICSOPAdmin');
     stubEndpoints();
     renderPage();
     await waitFor(() => expect((api as unknown as { getPublicDocuments: ReturnType<typeof vi.fn> }).getPublicDocuments).toHaveBeenCalled());
-    const link = await screen.findByRole('link', { name: '前往後台' });
-    expect(link.getAttribute('aria-label')).toBe('前往後台');
+    const link = await screen.findByRole('link', { name: '前往管理' });
+    expect(link.getAttribute('aria-label')).toBe('前往管理');
   });
 
   it('🔒 header 其餘既有元素零漣漪：使用者資訊區與登出鈕仍在（本鈕為新增，非取代）', async () => {
