@@ -17,6 +17,8 @@ import { DisplayStatus, deriveDisplayStatus } from '../documents/display-status'
 import {
   PublicDocItem,
   PublicFilterOptions,
+  PublicFilterOptionsResponse,
+  PublicOrgUnitOption,
   PublicListFilters,
   PublicListPage,
   PublicSubtreeChip,
@@ -242,7 +244,7 @@ export class PublicDocumentsService {
    * 🔴 本輪**不做快取**（架構 §10.6）：快取鍵必須含 viewer 三維（`roleCode`＋`userSubtype`
    * ＋`orgCode`），漏一維即跨帳號洩漏，而 unit 每次新建實例、測不出跨請求行為。
    */
-  async filterOptions(viewer: ViewerScope): Promise<PublicFilterOptions> {
+  async filterOptions(viewer: ViewerScope): Promise<PublicFilterOptionsResponse> {
     const rawItems = await this.store.listCandidates();
     /**
      * 🔴 `AC-UX23`：本部之富化**必須在 `buildFilterOptions` 之前**——服務層若忘了把富化後的列
@@ -332,8 +334,31 @@ export class PublicDocumentsService {
       }
     }
 
+    /**
+     * 🔵 F019 `AC-OC7`：組織組合（可見候選項之 distinct）。名稱取 (公司,代碼) 配對之解析結果，
+     * 🔴 **不經** `collapseByCode`——後者為了單一 value 之選項而丟棄同碼異名者，這裡每筆組合已帶公司，
+     *    用不著收斂，收斂反而會讓他公司單位名稱變回代碼。
+     */
+    const orgUnits = new Map<string, PublicOrgUnitOption>();
+    const pairName = (companyCode: string, code: string | null): string | null =>
+      code ? orgPairNames.get(pairKey(companyCode, code)) || code : null;
+    for (const d of cands) {
+      const key = [d.companyCode, d.draftingDivisionId ?? '', d.draftingDeptId ?? '', d.draftingSectionId ?? ''].join('\u0000');
+      if (orgUnits.has(key)) continue;
+      orgUnits.set(key, {
+        companyCode: d.companyCode,
+        divisionId: d.draftingDivisionId ?? null,
+        divisionName: d.draftingDivisionName ?? null,
+        deptId: d.draftingDeptId,
+        deptName: pairName(d.companyCode, d.draftingDeptId),
+        sectionId: d.draftingSectionId,
+        sectionName: pairName(d.companyCode, d.draftingSectionId),
+      });
+    }
+
     return {
       ...opts,
+      draftingOrgUnits: [...orgUnits.values()],
       draftingCompanies: label(opts.draftingCompanies, companyNames),
       draftingDivisions: label(opts.draftingDivisions, divisionNames),
       draftingDepts: label(opts.draftingDepts, nameMap),

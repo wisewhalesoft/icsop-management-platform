@@ -68,6 +68,14 @@ const FILTER_OPTIONS = {
     { value: 'JB000', label: '信用審查部' },
   ],
   draftingSections: [{ value: 'JAC00', label: '車輛行銷室' }],
+  /**
+   * 🔵 2026-09-24 `AC-OC7`：組織組合（本部／部門／室別之選項改由此依公司收斂）。
+   * 本檔語料只有一家公司 ⇒ `制定公司` 自動帶入（`AC-OC5`），下級三欄開放。
+   */
+  draftingOrgUnits: [
+    { companyCode: 'CO-1', divisionId: 'AS__A0000', divisionName: '營運本部', deptId: 'JA000', deptName: '營運管理部', sectionId: 'JAC00', sectionName: '車輛行銷室' },
+    { companyCode: 'CO-1', divisionId: null, divisionName: null, deptId: 'JB000', deptName: '信用審查部', sectionId: null, sectionName: null },
+  ],
   chiefs: [
     { value: 'E001', label: '陳彥廷' },
     { value: 'E002', label: '林建宏' },
@@ -280,7 +288,12 @@ describe('F019 AC-D2：四項為可搜尋下拉、`狀態` 維持原生下拉', 
   });
 
   it('TS-F019-D2-004 過濾不分大小寫（label 含英數時）', async () => {
-    setFilterOptions({ ...FILTER_OPTIONS, draftingCompanies: [{ value: 'CO-1', label: 'AbC 公司' }] });
+    // 🔵 2026-09-24：補第二家公司——只有一家時 `AC-OC5` 會自動帶入，輸入框已有值，本案「輸入 abc 過濾」之前提不成立。
+    // 📝 OLD> `draftingCompanies: [{ value: 'CO-1', label: 'AbC 公司' }]`
+    setFilterOptions({
+      ...FILTER_OPTIONS,
+      draftingCompanies: [{ value: 'CO-1', label: 'AbC 公司' }, { value: 'CO-2', label: '和運租車' }],
+    });
     renderPage();
     await screen.findByText('車輛分期進件作業');
     const input = control('制定公司');
@@ -346,11 +359,14 @@ describe('F019 AC-D2：四項為可搜尋下拉、`狀態` 維持原生下拉', 
     expect(listbox === null ? [] : within(listbox).queryAllByRole('option')).toEqual([]);
     expect(screen.queryByRole('alert')).toBeNull();
 
-    // 不得因此阻擋其他篩選：制定部門仍可選取並確實送出查詢
-    await pick('制定部門', '營運管理部');
+    // 不得因此阻擋其他篩選：當責室長仍可選取並確實送出查詢
+    // 🔵 2026-09-24 `AC-OC1`：公司無選項 ⇒ 制定部門依規格**鎖定**，載體改為與組織無關之當責室長。
+    // 📝 OLD> `await pick('制定部門', '營運管理部')` ＋ 斷言 `draftingDeptId: 'JA000'`
+    expect((control('制定部門') as HTMLInputElement).disabled).toBe(true);
+    await pick('當責室長', '陳彥廷');
     await waitFor(() =>
       expect(api.getPublicDocuments).toHaveBeenLastCalledWith(
-        expect.objectContaining({ draftingDeptId: 'JA000' }),
+        expect.objectContaining({ chiefId: 'E001' }),
       ),
     );
   });
@@ -552,7 +568,9 @@ describe('F019 AC-D10：🔒 三條逐字文案回歸鎖定（OQ-D18-06；🔴 A
     for (const subtype of ['other', 'business']) {
       mockAuth(subtype);
       const { unmount } = renderPage();
-      expect(await screen.findByText('查無符合結果')).toBeInTheDocument();
+      // 🔵 2026-09-24 `AC-OC5`：單一公司自動帶入會觸發第二次查詢，第一次之空狀態可能在斷言前被載入態替換
+      //    ⇒ 改為等待穩定。📝 OLD> `expect(await screen.findByText('查無符合結果')).toBeInTheDocument();`
+      await waitFor(() => expect(screen.getByText('查無符合結果')).toBeInTheDocument());
       expect(screen.queryByRole('alert')).toBeNull();
       unmount();
     }

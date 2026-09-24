@@ -261,14 +261,17 @@ describe('F017 AC-D10：篩選區之逐字文案與選擇器契約', () => {
   it('TS-F017-D10-003b 清除鈕**僅於該篩選有值時可見**（無值時不得出現於無障礙樹）', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
-    // 未選任何值 → 十二個 combobox 之清除鈕皆不可見（🔴 F043 delta：10→11；UX16 delta：11→12，含「制定本部」）
-    for (const label of COMBO_LABELS) {
+    // 未選任何值 → 其餘十一個 combobox 之清除鈕皆不可見（🔴 F043 delta：10→11；UX16 delta：11→12，含「制定本部」）
+    // 🔵 2026-09-24 `AC-OC5`：本檔語料只有一家公司 ⇒ `制定公司` 自動帶入、其清除鈕**應可見**（預期轉紅之就地改寫）。
+    // 📝 OLD> 迴圈涵蓋全部 COMBO_LABELS（含制定公司）；末句斷言 `清除制定公司` 為 null。
+    expect(within(filterBar()).getByLabelText('清除制定公司')).toBeInTheDocument();
+    for (const label of COMBO_LABELS.filter((l) => l !== '制定公司')) {
       expect(within(filterBar()).queryByLabelText(`清除${label}`)).toBeNull();
     }
     await pick('制定部門', '企劃部');
     expect(within(filterBar()).getByLabelText('清除制定部門')).toBeInTheDocument();
     // 其他未設值者仍不可見（可見性為逐項判定，非整列一起顯示）
-    expect(within(filterBar()).queryByLabelText('清除制定公司')).toBeNull();
+    expect(within(filterBar()).queryByLabelText('清除制定室別')).toBeNull();
   });
 
   it('TS-F017-D10-004 一般 combobox 之 placeholder 為 `全部`；`程序書書名內` 為 `全部（或直接輸入部分書名）`', async () => {

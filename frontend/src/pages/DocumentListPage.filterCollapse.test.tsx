@@ -40,7 +40,17 @@ const DOCS: DocumentListItem[] = [
   doc({ id: 'd1', documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業' }),
   doc({
     id: 'd2', documentNumber: 'ICSOP-GCA-100-2-00', documentName: '法遵作業',
+    draftingDeptId: 'B1000', draftingSectionId: 'B1100',
     draftingDeptName: '法務部', draftingSectionName: '法遵室', announcedDate: '2026-03-01T00:00:00.000Z',
+  }),
+  /**
+   * 🔵 2026-09-24：第二家公司——兩家以上時 `制定公司` 不自動帶入（`AC-OC5`），本檔之「未套用任何篩選」
+   * 初始狀態才成立。組織連動本身由 `DocumentListPage.orgCascade.test.tsx` 負責。
+   */
+  doc({
+    id: 'd3', documentNumber: 'ICSOP-LSE-100-1-01', documentName: '租賃作業',
+    draftingCompanyName: '和運租車股份有限公司', draftingDeptId: 'C1000', draftingSectionId: 'C1100',
+    draftingDeptName: '業務部', draftingSectionName: '業務室',
   }),
 ];
 
@@ -148,9 +158,9 @@ describe('已套用條件 chip（單一真相：chip／徽章／清除鈕）', (
     renderPage();
     await screen.findByText('車輛分期進件作業');
     await pick('附錄', '附錄A.xlsx'); // 值＝apx1，chip 須顯示名稱而非 id
-    await pick('制定部門', '企劃部');
+    await pick('程序書編號', 'ICSOP-SRC-101-1-01');
     await userEvent.selectOptions(control('狀態'), '已公告');
-    expect(chipTexts()).toEqual(['制定部門：企劃部', '狀態：已公告', '附錄：附錄A.xlsx']);
+    expect(chipTexts()).toEqual(['狀態：已公告', '程序書編號：ICSOP-SRC-101-1-01', '附錄：附錄A.xlsx']);
     expect(badge()).toBe('已套用 3 項');
     expect(screen.queryByText('未套用任何篩選')).toBeNull();
     expect(screen.getByRole('button', { name: '清除全部篩選' })).toBeTruthy();
@@ -177,21 +187,22 @@ describe('已套用條件 chip（單一真相：chip／徽章／清除鈕）', (
     // ✕ 須連輸入文字一併清（chip 代表整個條件），否則 contains 仍在縮小清單
     await userEvent.click(screen.getByRole('button', { name: '移除篩選 程序書書名內' }));
     expect(document.getElementById('filterChips')).toBeNull();
-    await waitFor(() => expect(visibleNames()).toEqual(['車輛分期進件作業', '法遵作業']));
+    await waitFor(() => expect(visibleNames()).toEqual(['車輛分期進件作業', '法遵作業', '租賃作業']));
   });
 
   it('chip ✕ 只清該一項、清單回復；焦點移到剩下那顆之 ✕；最後一顆移除後焦點回切換鈕', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
-    await pick('制定部門', '法務部');
+    await pick('程序書編號', 'ICSOP-GCA-100-2-00');
     await userEvent.selectOptions(control('狀態'), '已公告');
     await waitFor(() => expect(visibleNames()).toEqual(['法遵作業']));
 
-    await userEvent.click(screen.getByRole('button', { name: '移除篩選 制定部門' }));
+    // chip 次序＝AC-D1（狀態在程序書編號之前）；移除後一顆 ⇒ 焦點移到前一顆
+    await userEvent.click(screen.getByRole('button', { name: '移除篩選 程序書編號' }));
     expect(chipTexts()).toEqual(['狀態：已公告']);
-    expect((control('制定部門') as HTMLInputElement).value).toBe('');
+    expect((control('程序書編號') as HTMLInputElement).value).toBe('');
     expect((control('狀態') as HTMLSelectElement).value).toBe('已公告');
-    await waitFor(() => expect(visibleNames()).toEqual(['車輛分期進件作業', '法遵作業']));
+    await waitFor(() => expect(visibleNames()).toEqual(['車輛分期進件作業', '法遵作業', '租賃作業']));
     expect(document.activeElement).toBe(screen.getByRole('button', { name: '移除篩選 狀態' }));
 
     await userEvent.click(screen.getByRole('button', { name: '移除篩選 狀態' }));
@@ -203,7 +214,7 @@ describe('已套用條件 chip（單一真相：chip／徽章／清除鈕）', (
   it('展開時桌機隱藏 chip 列（lg:hidden），收合時顯示', async () => {
     renderPage();
     await screen.findByText('車輛分期進件作業');
-    await pick('制定部門', '企劃部');
+    await pick('程序書編號', 'ICSOP-SRC-101-1-01');
     const chips = (): string[] => (document.getElementById('filterChips') as HTMLElement).className.split(/\s+/);
     expect(chips()).not.toContain('lg:hidden');
     await userEvent.click(toggle());

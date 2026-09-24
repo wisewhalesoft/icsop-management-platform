@@ -11,6 +11,7 @@ import { PublicCategoryTreePage } from './PublicCategoryTreePage';
 import { PUBLIC_SHELL_WIDTH } from './public-shell-width';
 import { SearchCombobox } from '../components/SearchCombobox';
 import { buildOrgPath } from '../domain/org-path';
+import { cascadeOrgOptions, lowerLevelsOf, ORG_LOCKED_PLACEHOLDER, type OrgLevel } from '../domain/org-cascade';
 import type {
   PublicListItem,
   PublicListPage as PublicPage,
@@ -18,6 +19,10 @@ import type {
   PublicFilterOptions,
   OrgUnitRecord,
 } from '../api/types';
+
+/** 🔵 2026-09-24 `AC-OC3`：網址參數鍵 ↔ 組織層級。 */
+const ORG_PARAM_LEVEL: Record<string, OrgLevel> = { co: 'company', mkdiv: 'division', mkdept: 'dept', section: 'section' };
+const ORG_LEVEL_PARAM: Record<OrgLevel, string> = { company: 'co', division: 'mkdiv', dept: 'mkdept', section: 'section' };
 
 /** 空選項（filter-options 尚未載入時之初值；不影響其餘篩選之可用性）。 */
 const EMPTY_FILTER_OPTIONS: PublicFilterOptions = {
@@ -28,6 +33,8 @@ const EMPTY_FILTER_OPTIONS: PublicFilterOptions = {
   draftingSections: [],
   chiefs: [],
   lifecycles: [],
+  // 🔵 2026-09-24 `AC-OC7`
+  draftingOrgUnits: [],
 };
 
 /**
@@ -129,9 +136,17 @@ export function PublicListPage(): JSX.Element {
    * （`co`／`mkdept`／`section`／`chief`），值為複合鍵 `` `${公司代碼}__{本部代碼}` ``。
    * 🔒 `_` 為 RFC 3986 之 unreserved 字元 ⇒ 進網址不需 encode、不可能與分隔符混淆。
    */
-  const draftingDivisionId = searchParams.get('mkdiv') ?? '';
-  const draftingDeptId = searchParams.get('mkdept') ?? '';
-  const draftingSectionId = searchParams.get('section') ?? '';
+  /**
+   * 🔵 2026-09-24 `AC-OC1`／`AC-OC8`：下級三參數**僅在帶有 `co` 時生效**——無公司即不可選下級，
+   * 網址若仍帶著（手動貼上之舊連結）一律不施加，否則畫面鎖著、清單卻被縮小。自網址移除見下方 effect。
+   * 📝 OLD> 三者直接取自 searchParams、不看 `co`。
+   */
+  const rawDivisionId = searchParams.get('mkdiv') ?? '';
+  const rawDeptId = searchParams.get('mkdept') ?? '';
+  const rawSectionId = searchParams.get('section') ?? '';
+  const draftingDivisionId = companyCode ? rawDivisionId : '';
+  const draftingDeptId = companyCode ? rawDeptId : '';
+  const draftingSectionId = companyCode ? rawSectionId : '';
   const chiefId = searchParams.get('chief') ?? '';
   /**
    * 🔵 2026-09-22 UX16 delta（`AC-UX15` ⑤／架構 §16.4，項 5）：節點子樹之 deep link 兩參數。
@@ -155,6 +170,12 @@ export function PublicListPage(): JSX.Element {
   const [data, setData] = useState<PublicPage | null>(null);
   const [orgUnits, setOrgUnits] = useState<OrgUnitRecord[]>([]);
   const [filterOptions, setFilterOptions] = useState<PublicFilterOptions>(EMPTY_FILTER_OPTIONS);
+  /** `AC-OC5`／`AC-OC8`：選項尚未載入前不得判定「只有一家公司」或清網址（會與載入競爭）。 */
+  const [optionsLoaded, setOptionsLoaded] = useState(false);
+  /** `AC-OC8` 補訂：選項載入**失敗**時不做「值不在選項內」之判定（一次網路錯誤不得清掉分享來的條件）。 */
+  const [optionsOk, setOptionsOk] = useState(false);
+  /** `AC-OC5`：使用者是否已對「制定公司」做過任何操作——做過就不再自動帶入。 */
+  const companyTouched = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -171,8 +192,12 @@ export function PublicListPage(): JSX.Element {
    */
   useEffect(() => {
     getPublicFilterOptions()
-      .then(setFilterOptions)
-      .catch(() => setFilterOptions(EMPTY_FILTER_OPTIONS));
+      .then((o) => {
+        setFilterOptions(o);
+        setOptionsOk(true);
+      })
+      .catch(() => setFilterOptions(EMPTY_FILTER_OPTIONS))
+      .finally(() => setOptionsLoaded(true));
   }, []);
 
   // 文件清單：篩選/分頁變更即重新查詢（後端權威排序/篩選）。
@@ -280,11 +305,39 @@ export function PublicListPage(): JSX.Element {
     return () => clearTimeout(timer);
   }, [kwInput, keyword, patchParams]);
 
-  /** 任一篩選變更一律回到第 1 頁（避免停在超出範圍之頁碼）。 */
+  /**
+   * 任一篩選變更一律回到第 1 頁（避免停在超出範圍之頁碼）。
+   * 🔵 `AC-OC3`：改上級（改值或清除）⇒ 下級一律清空，與上級同一次寫入網址（不留中間態）。
+   */
   const onFilter = useCallback(
-    (key: string, v: string) => patchParams({ [key]: v, page: '' }),
-    [patchParams],
+    (key: string, v: string) => {
+      const patch: Record<string, string> = { [key]: v, page: '' };
+      const level = ORG_PARAM_LEVEL[key];
+      if (key === 'co') companyTouched.current = true;
+      if (level && v !== (searchParams.get(key) ?? '')) {
+        for (const low of lowerLevelsOf(level)) patch[ORG_LEVEL_PARAM[low]] = '';
+      }
+      patchParams(patch);
+    },
+    [patchParams, searchParams],
   );
+
+  /**
+   * 🔵 `AC-OC5`／`AC-OC8`（選項載入後判定一次性狀態）：
+   *  ① 無 `co`、公司選項恰一個、使用者未動過 ⇒ 自動帶入（下級參數保留）；
+   *  ② 否則無 `co` 卻帶下級參數 ⇒ 自網址移除（replace，不堆歷史）。
+   */
+  useEffect(() => {
+    if (!optionsLoaded || companyCode) return;
+    const companies = filterOptions.draftingCompanies;
+    if (!companyTouched.current && companies.length === 1) {
+      patchParams({ co: companies[0].value }, { replace: true });
+      return;
+    }
+    if (rawDivisionId || rawDeptId || rawSectionId) {
+      patchParams({ mkdiv: '', mkdept: '', section: '' }, { replace: true });
+    }
+  }, [optionsLoaded, companyCode, filterOptions.draftingCompanies, rawDivisionId, rawDeptId, rawSectionId, patchParams]);
   const goPage = useCallback(
     (p: number) => patchParams({ page: p > 1 ? String(p) : '' }),
     [patchParams],
@@ -306,6 +359,7 @@ export function PublicListPage(): JSX.Element {
    * ——畫面已「清除」卻又自己把條件加回去。
    */
   const clearFilters = useCallback(() => {
+    companyTouched.current = true; // `AC-OC5`：清除後本次不再自動帶入
     setKwInput('');
     // 查詢狀態（q／co／mkdept／section／chief／page）＝**整組清空**。逐鍵刪除會在日後新增
     // 第六項篩選時漏刪，且會留下已停用之舊參數（例如已被忽略的 `dept`／`cycle`）使網址看起來仍帶著條件。
@@ -394,6 +448,37 @@ export function PublicListPage(): JSX.Element {
    * `AC-D1`：六項篩選之單一定義（桌面與行動 sheet **共用同一份順序與標籤**）——
    * 兩處各寫一份是「順序悄悄漂移」的溫床，而 AC 對兩處各有一條逐字順序斷言。
    */
+  const orgOptions = useMemo(
+    () =>
+      cascadeOrgOptions(
+        (filterOptions.draftingOrgUnits ?? []).map((u) => ({ ...u, companyKey: u.companyCode })),
+        { company: companyCode, division: draftingDivisionId, dept: draftingDeptId },
+      ),
+    [filterOptions.draftingOrgUnits, companyCode, draftingDivisionId, draftingDeptId],
+  );
+
+  /**
+   * 🔵 `AC-OC8` 補訂（2026-09-24 實機）：網址上之組織參數**值不在選項內**（他公司代碼、不可見單位）
+   * ⇒ 該參數及其全部下級自網址移除、不施加。否則下拉顯示「全部」、清單卻被縮小為 0 筆，
+   * 畫面上找不到任何原因。🔒 僅在選項成功載入且後端有回 `draftingOrgUnits` 時判定。
+   */
+  useEffect(() => {
+    if (!optionsOk || !companyCode || filterOptions.draftingOrgUnits === undefined) return;
+    const has = (opts: readonly { value: string }[], v: string): boolean => opts.some((o) => o.value === v);
+    let invalid: OrgLevel | null = null;
+    if (!has(filterOptions.draftingCompanies, companyCode)) invalid = 'company';
+    else if (draftingDivisionId && !has(orgOptions.division, draftingDivisionId)) invalid = 'division';
+    else if (draftingDeptId && !has(orgOptions.dept, draftingDeptId)) invalid = 'dept';
+    else if (draftingSectionId && !has(orgOptions.section, draftingSectionId)) invalid = 'section';
+    if (!invalid) return;
+    const patch: Record<string, string> = { [ORG_LEVEL_PARAM[invalid]]: '' };
+    for (const low of lowerLevelsOf(invalid)) patch[ORG_LEVEL_PARAM[low]] = '';
+    patchParams(patch, { replace: true });
+  }, [
+    optionsOk, companyCode, draftingDivisionId, draftingDeptId, draftingSectionId,
+    filterOptions.draftingCompanies, filterOptions.draftingOrgUnits, orgOptions, patchParams,
+  ]);
+
   const FILTERS: Array<
     /**
      * 🔵 UX16 delta：`options` 之型別由 `PublicFilterOptions[keyof PublicFilterOptions]` 收窄為
@@ -413,9 +498,11 @@ export function PublicListPage(): JSX.Element {
      *    `value` 為複合鍵 `` `${公司代碼}__{本部代碼}` ``、`label` 為人類可讀之本部名稱；
      *    🔴 `AC-UX24`：**不含**任何 `無本部` sentinel——推導不出本部的文件自然沒有 distinct 值。
      */
-    { kind: 'combo', key: 'mkdiv', label: '制定本部', value: draftingDivisionId, options: filterOptions.draftingDivisions ?? [] },
-    { kind: 'combo', key: 'mkdept', label: '制定部門', value: draftingDeptId, options: filterOptions.draftingDepts },
-    { kind: 'combo', key: 'section', label: '制定室別', value: draftingSectionId, options: filterOptions.draftingSections },
+    // 🔵 2026-09-24 `AC-OC2`：三者選項改依已選之上級收斂（取自 `draftingOrgUnits`）。
+    // 📝 OLD> options 依序為 `filterOptions.draftingDivisions ?? []`／`draftingDepts`／`draftingSections`（跨公司全域 distinct）。
+    { kind: 'combo', key: 'mkdiv', label: '制定本部', value: draftingDivisionId, options: orgOptions.division },
+    { kind: 'combo', key: 'mkdept', label: '制定部門', value: draftingDeptId, options: orgOptions.dept },
+    { kind: 'combo', key: 'section', label: '制定室別', value: draftingSectionId, options: orgOptions.section },
     { kind: 'combo', key: 'chief', label: '當責室長', value: chiefId, options: filterOptions.chiefs },
     { kind: 'select', key: 'status', label: '狀態' },
     /**
@@ -464,7 +551,9 @@ export function PublicListPage(): JSX.Element {
           label={f.label}
           ariaLabel={f.label}
           density="filter-public"
-          placeholder="全部"
+          // 🔵 `AC-OC1`：無公司時下級三欄鎖定（仍渲染於原位）。
+          disabled={!companyCode && f.key in ORG_PARAM_LEVEL && f.key !== 'co'}
+          placeholder={!companyCode && f.key in ORG_PARAM_LEVEL && f.key !== 'co' ? ORG_LOCKED_PLACEHOLDER : '全部'}
           options={[...f.options]}
           value={f.value}
           onChange={(v) => onFilter(f.key, v)}

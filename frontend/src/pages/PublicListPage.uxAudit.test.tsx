@@ -152,10 +152,14 @@ describe('前台清單 · UX 稽核回歸', () => {
     it('自網址還原關鍵字/制定部門/頁碼並據以查詢（可分享、重整不歸零）', async () => {
       // 🔴 `cycle=lc1` 仍留在入口網址：本案因此同時是 `AC-D16` 之「舊網址靜默忽略該鍵」之
       //    正向證據——若實作仍偷偷讀它，下方 `toHaveBeenCalledWith` 之**精確物件比對**會翻紅。
-      renderPage('/public?q=%E8%BB%8A%E8%BC%9B&mkdept=JA000&cycle=lc1&page=2');
+      // 🔵 2026-09-24 `AC-OC8`：下級參數僅在帶有 `co` 時生效 ⇒ 入口補 `co=AS`、期望補 `companyCode`。
+      // 📝 OLD> 入口 `...&mkdept=JA000&cycle=lc1&page=2`（無 co）、期望 `{ keyword, draftingDeptId, page }`。
+      //    無 co 之下級參數「不施加並自網址移除」由 `PublicListPage.orgCascade.test.tsx` 負責。
+      renderPage('/public?q=%E8%BB%8A%E8%BC%9B&co=AS&mkdept=JA000&cycle=lc1&page=2');
       await waitFor(() =>
         expect(api.getPublicDocuments).toHaveBeenCalledWith({
           keyword: '車輛',
+          companyCode: 'AS',
           draftingDeptId: 'JA000',
           page: 2,
         }),
@@ -189,12 +193,17 @@ describe('前台清單 · UX 稽核回歸', () => {
      */
     it('變更制定部門篩選寫回網址並重設頁碼', async () => {
       const user = userEvent.setup();
+      // 🔵 2026-09-24 `AC-OC1`／`AC-OC5`：部門須在公司之下 ⇒ 補一家公司與組織組合（單一公司自動帶入）。
+      // 📝 OLD> `draftingCompanies: []`、無 `draftingOrgUnits`
       vi.mocked(api.getPublicFilterOptions).mockResolvedValue({
-        draftingCompanies: [],
+        draftingCompanies: [{ value: 'AS', label: '和潤企業股份有限公司' }],
         draftingDepts: [{ value: 'JA000', label: '營運管理部' }],
         draftingSections: [],
         chiefs: [],
         lifecycles: [],
+        draftingOrgUnits: [
+          { companyCode: 'AS', divisionId: null, divisionName: null, deptId: 'JA000', deptName: '營運管理部', sectionId: null, sectionName: null },
+        ],
       });
       renderPage('/public?page=3');
       await screen.findByText('車輛分期進件作業');

@@ -63,7 +63,7 @@ const DOCS: DocumentListItem[] = [
     // F040 AC-31：循環別下拉之選項值與篩選鍵為 lifecycleId，故不同 lifecycleName 必須配不同
     // lifecycleId——後端之 lifecycleName 係由 lifecycleId 解析而來，同 id 異名為不可達狀態。
     id: 'd2', lifecycleId: 'lc2', documentNumber: 'ICSOP-PPC-101-2-02', documentName: '消費分期產品政策及規範作業',
-    lifecycleName: '產品企劃循環', draftingDeptName: '消費分期營業部', draftingSectionName: null,
+    lifecycleName: '產品企劃循環', draftingDeptName: '消費分期營業部', draftingDeptId: 'A4000', draftingSectionId: null, draftingSectionName: null,
     primaryChiefName: '黃雅琪', status: 'active', announcedDate: '2099-01-01T00:00:00.000Z', nodeId: null,
   }),
 ];

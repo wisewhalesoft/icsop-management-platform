@@ -71,15 +71,15 @@ const link = (n: number, target: DocumentListItem): DocumentLinkView => ({
 
 const D_ONE = doc({
   id: 'd2', documentNumber: 'ICSOP-SRC-101-2-00', documentName: '消金審核作業',
-  draftingDeptName: '信用審查部',
+  draftingDeptName: '信用審查部', draftingDeptId: 'A5000', // 🔵 `AC-OC4`：不同部門須有不同代碼
 });
 const D_ZERO = doc({
   id: 'd3', documentNumber: 'ICSOP-GCA-100-2-00', documentName: '法遵作業',
-  draftingDeptName: '經企公關部',
+  draftingDeptName: '經企公關部', draftingDeptId: 'A3000', // 🔵 2026-09-24 `AC-OC4`：部門改以代碼比對 ⇒ 不同部門須有不同代碼
 });
 const D_TWO = doc({
   id: 'd4', documentNumber: 'ICSOP-SRC-101-1-06', documentName: '消費分期特約通路作業',
-  draftingDeptName: '消費分期營業部',
+  draftingDeptName: '消費分期營業部', draftingDeptId: 'A4000', // 🔵 2026-09-24 `AC-OC4`：部門改以代碼比對 ⇒ 不同部門須有不同代碼
 });
 const T5 = doc({ id: 'd5', documentNumber: 'ICSOP-SRC-102-1-01', documentName: '車輛分期對保作業' });
 const T6 = doc({ id: 'd6', documentNumber: 'ICSOP-PPC-101-2-02', documentName: '消費分期產品政策及規範作業' });

@@ -774,6 +774,17 @@ export interface PublicFilterOption {
   label: string;
 }
 
+/** 🔵 2026-09-24 F019 `AC-OC7`：一份可見文件之組織組合；名稱以 (公司, 代碼) 配對解析，未命中為代碼。 */
+export interface PublicOrgUnitOption {
+  companyCode: string;
+  divisionId: string | null;
+  divisionName: string | null;
+  deptId: string | null;
+  deptName: string | null;
+  sectionId: string | null;
+  sectionName: string | null;
+}
+
 /**
  * F019 `AC-D5`：前台篩選選項（GET /public/documents/filter-options，單一端點）。
  * 🔵 2026-09-22 UX16 delta（`AC-UX23`，項 10）：五 → **六組**，新增 `draftingDivisions`。
@@ -794,6 +805,11 @@ export interface PublicFilterOptions {
    * 少回一個鍵而不被發現。
    */
   draftingDivisions?: PublicFilterOption[];
+  /**
+   * 🔵 2026-09-24 F019 `AC-OC7`：可見文件之組織組合（additive 選填，同上之慣例）。
+   * 前台以此依「制定公司 → 本部 → 部門 → 室別」收斂下級選項（`domain/org-cascade.ts`）。
+   */
+  draftingOrgUnits?: PublicOrgUnitOption[];
   draftingDepts: PublicFilterOption[];
   draftingSections: PublicFilterOption[];
   chiefs: PublicFilterOption[];

@@ -31,6 +31,8 @@ const EMPTY_OPTIONS = {
   draftingSections: [],
   chiefs: [],
   lifecycles: [],
+  // 🔵 2026-09-24 F019 `AC-OC7`：additive 第七鍵（組織組合）。
+  draftingOrgUnits: [],
 };
 
 function fakeSvc(): PublicDocumentsService {
@@ -98,7 +100,11 @@ describe('F019 AC-D5：viewer 取自 session，不接受任何客戶端傳入之
    * 📝 已作廢（⚠ 不得復原）：`OLD>` 五鍵清單 ['chiefs','draftingCompanies','draftingDepts',
    * 'draftingSections','lifecycles']（`Object.keys(res).sort()` 恰五組）。
    */
-  it('TS-F019-D5-206 回應恰含六組選項鍵（AC-UX23：新增 draftingDivisions，既有五組逐一仍在）', async () => {
+  /**
+   * 🔵 2026-09-24 F019 `AC-OC7`：六 → **七鍵**（additive `draftingOrgUnits`），同樣改寫為回歸鎖。
+   * 📝 已作廢（⚠ 不得復原）：`OLD>` ⓒ 鍵總數恰 6、逐字集合為六鍵。
+   */
+  it('TS-F019-D5-206 回應恰含七個鍵（AC-OC7：新增 draftingOrgUnits；AC-UX23 之六組逐一仍在）', async () => {
     const svc = fakeSvc();
     const req = { sessionUser: { roleCode: 'User', orgCode: 'JAC00' } } as never;
     const res = (await new PublicDocumentsController(svc, fakeDetailSvc()).filterOptions(req)) as Record<
@@ -110,13 +116,14 @@ describe('F019 AC-D5：viewer 取自 session，不接受任何客戶端傳入之
     for (const oldKey of ['chiefs', 'draftingCompanies', 'draftingDepts', 'draftingSections', 'lifecycles']) {
       expect(keys).toContain(oldKey);
     }
-    // ⓑ 新鍵存在。
+    // ⓑ 新鍵存在（UX16 之 draftingDivisions ＋ AC-OC7 之 draftingOrgUnits）。
     expect(keys).toContain('draftingDivisions');
-    // ⓒ 鍵總數恰 6。
-    expect(keys).toHaveLength(6);
+    expect(keys).toContain('draftingOrgUnits');
+    // ⓒ 鍵總數恰 7。
+    expect(keys).toHaveLength(7);
     // 完整逐字集合（雙重保險，防止「其中一鍵被改名成別的字」這種 ⓐⓑⓒ 皆可能漏抓的形狀）。
     expect(keys.sort()).toEqual(
-      ['chiefs', 'draftingCompanies', 'draftingDepts', 'draftingDivisions', 'draftingSections', 'lifecycles'].sort(),
+      ['chiefs', 'draftingCompanies', 'draftingDepts', 'draftingDivisions', 'draftingOrgUnits', 'draftingSections', 'lifecycles'].sort(),
     );
   });
 });

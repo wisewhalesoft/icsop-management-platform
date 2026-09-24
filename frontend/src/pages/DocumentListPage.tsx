@@ -42,6 +42,9 @@ import type {
   SubtreeFilterDescriptor,
 } from '../api/types';
 import { byDraftingProximity } from './document-list-sort';
+import {
+  cascadeOrgOptions, lowerLevelsOf, ORG_LOCKED_PLACEHOLDER, type OrgLevel, type OrgUnitTuple,
+} from '../domain/org-cascade';
 import { StickyHorizontalScrollbar } from '../components/StickyHorizontalScrollbar';
 
 /**
@@ -157,24 +160,7 @@ function bcOptionsFromRows(rows: readonly DocumentListItem[]): ComboOption[] {
   return [...seen].map(([value, label]) => ({ value, label }));
 }
 
-/**
- * 🔵 `AC-UX41` ④（2026-09-22 UX16 delta，項 11）：自當前工作集衍生「制定本部」之下拉選項。
- *
- * 🔴 **以 `draftingDivisionId`（複合鍵）為去重鍵、而非以本部名稱**：不同公司可能有同名本部
- * （例：兩家都有「管理本部」），以名稱去重會把它們併成一個選項，選了其中一個就會連帶篩出
- * 另一家的文件。形狀逐字比照上方 `bcOptionsFromRows()`（以 id 去重、取首見之顯示名）。
- * 🔒 兩欄任一為空之列**整列略過**——推導不出本部者在下拉裡沒有選項，這與「未指定制定公司」
- * 之既有處置同構，不是遺漏，🔴 **不加 sentinel**（`AC-UX24` 之同一條裁決）。
- */
-function divisionOptions(rows: readonly DocumentListItem[]): ComboOption[] {
-  const seen = new Map<string, string>();
-  for (const d of rows) {
-    const value = d.draftingDivisionId;
-    const label = d.draftingDivisionName;
-    if (value && label && !seen.has(value)) seen.set(value, label);
-  }
-  return [...seen].map(([value, label]) => ({ value, label }));
-}
+// 📝 2026-09-24：`divisionOptions()` 已由 `domain/org-cascade.ts` 之 `cascadeOrgOptions()` 取代（同一去重鍵、改依公司收斂）。
 
 /** `AC-E11` ②：無檔案態之 tooltip（與 prototype 13 之 ⑩ 逐字相同）。 */
 const linkNoPdfTitle = (l: DocumentLinkView): string =>
@@ -725,14 +711,39 @@ export function DocumentListPage(): JSX.Element {
    * 🔴 `當責室長` 之選項為**主要 ∪ 次要**之 distinct（`AC-D7`）——僅由 `primaryChiefId` 衍生
    * 會漏掉「只擔任次要室長」的人，使該人永遠無法被選為篩選條件。
    */
+  /** `AC-OC2`：每列之組織組合（公司以全稱為鍵——與「制定公司」篩選值同一形狀）。 */
+  const orgUnits = useMemo<OrgUnitTuple[]>(
+    () =>
+      all
+        .filter((d) => d.draftingCompanyName)
+        .map((d) => ({
+          companyKey: d.draftingCompanyName as string,
+          divisionId: d.draftingDivisionId ?? null,
+          divisionName: d.draftingDivisionName ?? null,
+          deptId: d.draftingDeptId,
+          deptName: d.draftingDeptName,
+          sectionId: d.draftingSectionId,
+          sectionName: d.draftingSectionName,
+        })),
+    [all],
+  );
+  const orgOptions = useMemo(
+    () => cascadeOrgOptions(orgUnits, { company: filters.company, division: filters.division, dept: filters.dept }),
+    [orgUnits, filters.company, filters.division, filters.dept],
+  );
+
   const filterOptions = useMemo<Record<ComboKey, ComboOption[]>>(() => {
     const opt = (vals: string[]): ComboOption[] => vals.map((v) => ({ value: v, label: v }));
     return {
       cycle: cycleFilterOptions(all),
       num: opt(uniq(all.map((d) => d.documentNumber))),
       name: opt(uniq(all.map((d) => d.documentName))),
-      dept: opt(uniq(all.map((d) => d.draftingDeptName))),
-      section: opt(uniq(all.map((d) => d.draftingSectionName))),
+      /**
+       * 🔵 `AC-OC2`／`AC-OC4`（2026-09-24 組織篩選連動）：本部／部門／室別之選項**依已選之上級收斂**，
+       * 值改為單位代碼（原為名稱字串——兩家公司各有「資訊部」時被併成一個選項、連帶篩出他公司文件）。
+       * 📝 OLD> `dept: opt(uniq(all.map((d) => d.draftingDeptName)))`（section 同形）。
+       */
+      ...orgOptions,
       chief: opt(uniq(all.flatMap(chiefValues))),
       company: opt(uniq(all.map((d) => d.draftingCompanyName))),
       /**
@@ -744,7 +755,7 @@ export function DocumentListPage(): JSX.Element {
        * 🔒 推導不出本部之列（兩欄為 `null`）自然沒有對應的 distinct 值 ⇒ 下拉裡沒有它的選項；
        *    🔴 **不加任何 `無本部` sentinel**（那是 F044 儀表板之**分組**語彙，兩者不得互相對齊）。
        */
-      division: divisionOptions(all),
+      // 📝 OLD> `division: divisionOptions(all)`——自 `AC-OC2` 起由 orgOptions 依公司收斂（值形狀不變）。
       link: all.map((d) => ({ value: d.id, label: `${d.documentNumber} ${d.documentName}` })),
       appendix: appendixPool.map((a) => ({ value: a.id, label: a.name })),
       // `AC-D8`（F018）：label ＝ `{編號} {名稱}`；無編號者僅名稱（共用純函式，不在此就地組字）。
@@ -756,10 +767,22 @@ export function DocumentListPage(): JSX.Element {
             .map((b) => ({ value: b.id, label: businessCategoryDisplayName(b) }))
         : bcOptionsFromRows(all),
     };
-  }, [all, chiefValues, appendixPool, formPool, bcPool]);
+  }, [all, chiefValues, appendixPool, formPool, bcPool, orgOptions]);
 
+  /**
+   * 🔵 `AC-OC5`：使用者是否已對「制定公司」做過任何操作——做過就不再自動帶入（否則清不掉）。
+   */
+  const companyTouched = useRef(false);
   const setFilter = useCallback((key: FilterKey, value: string) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
+    if (key === 'company') companyTouched.current = true;
+    setFilters((prev) => {
+      const next = { ...prev, [key]: value };
+      // 🔵 `AC-OC3`：改上級（改值或清除）⇒ 下級一律清空，不論是否仍相容（人類裁決原文）。
+      if (key === 'company' || key === 'division' || key === 'dept') {
+        if (prev[key] !== value) for (const low of lowerLevelsOf(key as OrgLevel)) next[low] = '';
+      }
+      return next;
+    });
     setPage(1);
   }, []);
   /**
@@ -795,6 +818,7 @@ export function DocumentListPage(): JSX.Element {
    * 「清除全部篩選」，清完卻仍有一條 chip 在縮小結果集，畫面與文字自相矛盾。⚠ 反向不成立。
    */
   const clearFilters = useCallback(() => {
+    companyTouched.current = true;
     setFilters({ ...EMPTY_FILTERS });
     setNameQuery('');
     setPage(1);
@@ -831,8 +855,10 @@ export function DocumentListPage(): JSX.Element {
       } else if (nameQuery.trim()) {
         if (!d.documentName.toLowerCase().includes(nameQuery.trim().toLowerCase())) return false;
       }
-      if (filters.dept && d.draftingDeptName !== filters.dept) return false;
-      if (filters.section && d.draftingSectionName !== filters.section) return false;
+      // 🔵 `AC-OC4` ①：比對鍵改為單位代碼（公司已由 `AC-OC1` 先定）。
+      // 📝 OLD> `d.draftingDeptName !== filters.dept`／`d.draftingSectionName !== filters.section`
+      if (filters.dept && d.draftingDeptId !== filters.dept) return false;
+      if (filters.section && d.draftingSectionId !== filters.section) return false;
       if (filters.chief && !chiefValues(d).includes(filters.chief)) return false;
       if (filters.company && d.draftingCompanyName !== filters.company) return false;
       /**
@@ -906,6 +932,21 @@ export function DocumentListPage(): JSX.Element {
     () => (canSeeLifecycleDimension ? FILTERS : FILTERS.filter((f) => f.key !== 'cycle')),
     [canSeeLifecycleDimension],
   );
+
+  /** 🔵 `AC-OC1`：制定公司未選時，本部／部門／室別 disabled（仍渲染於原位，控制項數不變）。 */
+  const orgLocked = (key: FilterDef['key']): boolean =>
+    !filters.company && (key === 'division' || key === 'dept' || key === 'section');
+
+  /**
+   * 🔵 `AC-OC5`：公司選項恰一個、且使用者尚未動過「制定公司」⇒ 自動帶入。
+   * 使用者清除過（combobox ✕、chip ✕、清除全部篩選）就不再帶入，否則清不掉。
+   */
+  const companyOptions = filterOptions.company;
+  useEffect(() => {
+    if (companyTouched.current || filters.company || companyOptions.length !== 1) return;
+    const only = companyOptions[0].value;
+    setFilters((prev) => (prev.company ? prev : { ...prev, company: only }));
+  }, [companyOptions, filters.company]);
 
   /**
    * 🔵 2026-09-24（prototype 13「篩選區可收合」）：已套用條件 chip。
@@ -1048,7 +1089,10 @@ export function DocumentListPage(): JSX.Element {
           onQueryChange={f.key === 'name' ? setNameQuery : undefined}
           clearLabel={`清除${f.label}`}
           clearId={`${scope}_${f.key}_clear`}
-          placeholder={f.key === 'name' ? '全部（或直接輸入部分書名）' : '全部'}
+          disabled={orgLocked(f.key)}
+          placeholder={
+            orgLocked(f.key) ? ORG_LOCKED_PLACEHOLDER : f.key === 'name' ? '全部（或直接輸入部分書名）' : '全部'
+          }
         />
       );
     });

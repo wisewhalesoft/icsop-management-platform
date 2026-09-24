@@ -281,6 +281,27 @@ export type PublicFilterOptions = {
   lifecycles: FilterOption[];
 };
 
+/**
+ * 🔵 F019 `AC-OC7`（2026-09-24 組織篩選連動）：一份可見文件所屬之組織組合（distinct）。
+ * 前台以此依「制定公司 → 本部 → 部門 → 室別」收斂下級選項；名稱以 (companyCode, 代碼) 配對解析、
+ * **不經** `collapseByCode`（同碼異名之他公司單位須各自保有正確名稱）。未命中名稱 ⇒ 代碼。
+ */
+export type PublicOrgUnitOption = {
+  companyCode: string;
+  divisionId: string | null;
+  divisionName: string | null;
+  deptId: string | null;
+  deptName: string | null;
+  sectionId: string | null;
+  sectionName: string | null;
+};
+
+/**
+ * `GET /public/documents/filter-options` 之回應＝六組選項 ＋ additive `draftingOrgUnits`。
+ * 🔒 以交集型別擴充、**不改** `PublicFilterOptions`——純函式 `buildFilterOptions` 與其回歸鎖一字不動。
+ */
+export type PublicFilterOptionsResponse = PublicFilterOptions & { draftingOrgUnits: PublicOrgUnitOption[] };
+
 /** 自候選集合取某欄之 distinct 值（去除 null／空字串），依字典序排序後組為 Option。 */
 function distinctOptions(
   items: readonly PublicDocItem[],
