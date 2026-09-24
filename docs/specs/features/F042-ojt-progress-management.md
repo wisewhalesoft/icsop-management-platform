@@ -1188,7 +1188,7 @@ CSS 規則 `body:not([data-role="icsop_admin"]) .write-only{display:none !import
   - 🔒 失敗路徑（404／`FILE_ACCESS_DENIED`／`FILE_FORMAT_NOT_ALLOWED`／燒錄失敗）**寫 0 筆**。
   - 📌 [F024](F024-access-history-query.md) 調閱歷程之呈現沿用既有標籤（`VIEW`→`檢視`、`DOWNLOAD`→`下載`），本 delta 不改 F024。
 
-- **AC-OV6**（浮水印註記補上；**既有 DOM 契約之落地，非新文案**）：Given 場次列或待歸位列渲染完成, Then 每列帶一個 `[data-wm-note]`，可見文字**二擇一**逐字沿用 [F020](F020-watermark.md) `AC-N20` 之同一組常數——副檔名 `pdf` ⇒ **`檢視/下載將燒錄浮水印`**；其他 ⇒ **`此格式不支援浮水印`**。🔴 不得另寫一份字串常數（全站兩處以上各寫一版必漂移）。
+- **AC-OV6**（浮水印註記補上；**既有 DOM 契約之落地，非新文案**）：Given 場次列或待歸位列渲染完成, Then 每列帶一個 `[data-wm-note]`，可見文字**二擇一**逐字沿用 [F020](F020-watermark.md) `AC-N20` 之同一組常數——副檔名 `pdf` ⇒ **`檢視／下載會帶您的身分浮水印`**；其他 ⇒ **`此格式不支援浮水印`**。🔴 一律取 `frontend/src/domain/watermark-note.ts` 之 `WM_BURN_TEXT`／`WM_UNSUPPORTED_TEXT`，不得另寫一份字串常數（全站兩處以上各寫一版必漂移）。<br>　📝 字面已於 2026-09-23 全站文案稽核自 `檢視/下載將燒錄浮水印` 改為現值；本頁之 [§prototype 25 DOM 掛鉤對照](#prototype-25-dom-contract) 與 prototype 25 當時漏改，2026-09-24 prototype 已同步。
 
 - **AC-OV7**（待歸位區補上檢視與下載）：Given 待歸位區 `[data-ojt-pending-block]` 有列, Then 每一 `[data-pending-row]` 內依序為 `[data-wm-note]` → **`[data-pending-view="{id}"]`** → **`[data-pending-download="{id}"]`** → `[data-assign-org]`（後者僅 ICSOPAdmin，既有）——
   - `[data-pending-view]`：可見文字 `檢視`、`aria-label` 逐字 **`檢視舊資料簽到表（{fileName}）`**、`title` `檢視簽到表`；
