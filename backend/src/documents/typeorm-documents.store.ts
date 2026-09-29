@@ -1,7 +1,8 @@
-import { DataSource, EntityManager, In, SelectQueryBuilder } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, SelectQueryBuilder } from 'typeorm';
 import { IcsopDocument } from '../database/entities/icsop-document.entity';
 import { DocSecondaryChief } from '../database/entities/doc-secondary-chief.entity';
 import { DocUsingDept } from '../database/entities/doc-using-dept.entity';
+import { OjtTrainingEdition } from '../database/entities/ojt-training-edition.entity';
 import { Lifecycle } from '../database/entities/lifecycle.entity';
 import { chunkByParamBudget } from '../org-sync/param-batching';
 import { normalizeIdList } from './document-org-fields';
@@ -163,6 +164,8 @@ export class TypeOrmDocumentStore implements DocumentStore {
           updatedAt: now,
         }),
       );
+      // 🔴 2026-09-29：建立時之訓練基準版次同交易記一列（F044 卡④ 不分版次統計之母體來源）。
+      await TypeOrmDocumentStore.recordTrainingEdition(m, doc.id, doc.ojtTrainingEdition, 'CREATE');
       if (secondaryChiefIds.length > 0) {
         await m.getRepository(DocSecondaryChief).save(
           secondaryChiefIds.map((employeeNo) =>
@@ -396,6 +399,25 @@ export class TypeOrmDocumentStore implements DocumentStore {
       .update({ id }, { status, updatedAt: new Date() });
   }
 
+  /**
+   * 記錄一個「要求訓練之版次」（`OJT_TRAINING_EDITION`）；該文件已有同一版次之紀錄則不重複寫入。
+   * 🔴 `NULL` 版次須以 `IsNull()` 查詢——`{ edition: null }` 在 TypeORM 之 `find` 條件裡會被忽略，
+   *   等於「查這份文件的任一列」，使 `NULL` 基準在已有其他版次時永遠記不進去。
+   */
+  private static async recordTrainingEdition(
+    m: EntityManager,
+    documentId: string,
+    edition: string | null,
+    source: 'CREATE' | 'RETRAIN',
+  ): Promise<void> {
+    const repo = m.getRepository(OjtTrainingEdition);
+    const existing = await repo.count({
+      where: { documentId, edition: edition === null ? IsNull() : edition },
+    });
+    if (existing > 0) return;
+    await repo.insert({ documentId, edition, source, requiredAt: new Date() });
+  }
+
   async update(id: string, patch: DocumentPatch): Promise<DocumentView> {
     const ds = await this.init();
     // 僅覆寫 patch 觸及之欄位（部分更新）；日期字串強制轉 Date；恆更新 updatedAt。
@@ -434,6 +456,13 @@ export class TypeOrmDocumentStore implements DocumentStore {
       // 第二次 findOne（同一交易內、同一列，值相同）。
       const row = await repo.findOne({ where: { id } });
       if (!row) throw new Error('DOCUMENT_NOT_FOUND');
+
+      // 🔴 2026-09-29：基準版次被推進（＝改版要求重訓，service 只在該情形才帶本鍵）⇒ 同交易記一列。
+      // ⚠ 與上方之 `repo.update` 同一交易：分開寫會出現「基準推進了、紀錄沒有」之半套狀態，
+      //   而那一版會從「不分版次統計」之母體無聲消失——正是本表要補的缺口。
+      if ('ojtTrainingEdition' in patch) {
+        await TypeOrmDocumentStore.recordTrainingEdition(m, id, row.ojtTrainingEdition, 'RETRAIN');
+      }
 
       // F014 編輯側多值持久化：帶鍵才動（未帶鍵＝不觸碰既有集合）。
       // 採 delete-then-insert 全量取代（非差集）：關聯列 id 為代理鍵、無下游 FK 參照，
