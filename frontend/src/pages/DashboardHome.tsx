@@ -485,7 +485,7 @@ function StatCard(props: {
 }
 
 /**
- * 卡④「OJT 準時完成率(1個月內)」。
+ * 卡④「OJT 準時完成率(訓練日已截止)」。
  *
  * 🔒 `AC-G13`／`AC-G97`（2026-09-21 第七輪就地改寫）：數值拆為**兩個可獨立斷言之節點**——
  *   環**中央** `[data-ojt-ontime-rate]` ＝ `{Z}%`；環**旁** `ojt-ontime-value` ＝ `已完成 {X} / 應完成 {Y}`
@@ -528,7 +528,7 @@ function StatCard(props: {
  *   📝 已作廢（⚠ 不得復原）：OLD> 第一版方案 B 之 `justify-between`＋環 `order-last`（環在右）。
  * 🟣 2026-09-23 第二版（「左文右圖」，與卡①②③ 同構）：標題列**移除左側圖示方塊**——本卡之「圖」即右側小環，
  *   左側再放一個圖示會違反「文在左、圖在右」。數值文字放大（`text-lg 2xl:text-xl`）並改比例字型、
- *   「(1個月內)」改 slate-500（dataviz 檢查：slate-400 對白僅 2.56:1）。
+ *   「(訓練日已截止)」改 slate-500（dataviz 檢查：slate-400 對白僅 2.56:1）。
  *   📝 已作廢（⚠ 不得復原）：OLD> 標題列左側 `graduation-cap` 圖示方塊；數值 `mono text-base`；環中央 `font-bold mono`。
  */
 function OjtOnTimeCard(props: { summary: OjtOnTimeSummaryResponse | null }): JSX.Element {
@@ -549,9 +549,9 @@ function OjtOnTimeCard(props: { summary: OjtOnTimeSummaryResponse | null }): JSX
         }
       >
         <span className="whitespace-nowrap text-[13px] leading-tight text-slate-500">OJT 準時完成率</span>
-        {/* 🟣 2026-09-23：「(1個月內)」與 ⓘ 綁成不可拆之一組——否則 ⓘ 會單獨折到下一行（1920 實測）。 */}
+        {/* 🟣 2026-09-23：「(訓練日已截止)」與 ⓘ 綁成不可拆之一組——否則 ⓘ 會單獨折到下一行（1920 實測）。 */}
         <span className="inline-flex items-center gap-1 whitespace-nowrap">
-          <span className="text-xs text-slate-500">(1個月內)</span>
+          <span className="text-xs text-slate-500">(訓練日已截止)</span>
           {/* 🔒 §癸四 第 1 列：口徑說明與「為什麼兩邊數字不同」移入 ⓘ；可見層只留「排除了幾個單位」。 */}
           {summary ? <InfoNote infoKey="ojt-ontime" paragraphs={ojtOnTimeNoteSegments(summary)} /> : null}
         </span>
@@ -601,7 +601,7 @@ function OjtOnTimeCard(props: { summary: OjtOnTimeSummaryResponse | null }): JSX
         </div>
       ) : (
         <div className="col-span-3 row-start-2 mt-2">
-          <EmptyState text="近 1 個月內無應完成之 OJT 單位" />
+          <EmptyState text="目前沒有訓練日已截止的 OJT 訓練" />
         </div>
       )}
       {/* 🔒 §癸四 第 1 列：排除數**恰加總前兩項**（`excludedUnitCount`，單一推導點）。

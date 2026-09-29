@@ -337,11 +337,11 @@ export function excludedUnitCount(stats: OjtOnTimeNoteStats): number {
  */
 export function ojtOnTimeNoteSegments(stats: OjtOnTimeNoteStats): string[] {
   return [
-    '這張卡只看最近一個月內應完成訓練的單位；應完成日為文件公告日再加一個月。',
+    '這張卡只計算訓練日已截止的項目：應完成日為文件公告日再加一個月，過了這一天才列入。每份文件的每個使用單位，在每一個要求訓練的版次各算一筆，該單位辦過那一版的訓練才算完成。',
     `其中 ${stats.excludedInactive} 個單位已裁撤、${stats.excludedOrphaned} 個單位已不再使用該文件，不列入計算。`,
     // 🔴 **獨立成句，不得串入上一句的加總**：單位不同（份／個）＋語意不同（從未進入母體 vs 被排除）。
     `另有 ${stats.excludedNoAnnouncedDate} 份文件尚未設定公告日期，無法推算應完成日，因此從一開始就不在這張卡的範圍內。`,
-    '「OJT 進度管理」頁不限期限，也會列出這裡不計入的單位，因此兩邊的數字不同。',
+    '「OJT 進度管理」頁只看目前的版次、也不限期限，因此兩邊的數字不同。',
   ];
 }
 

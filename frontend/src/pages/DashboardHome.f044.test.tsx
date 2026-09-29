@@ -193,7 +193,7 @@ describe('AC-G1／AC-G16／AC-G17 — 統計卡集合、逐字標題、順序與
     const ojt = within(row).getByTestId('stat-card-ojt-ontime');
     expect(ojt).toHaveTextContent('OJT 準時完成率');
     // 🔒 §命名鎖定第 2 列：半形括號、無空白
-    expect(ojt.textContent).toContain('(1個月內)');
+    expect(ojt.textContent).toContain('(訓練日已截止)');
   });
 
   /**
@@ -382,7 +382,7 @@ describe('AC-G24／AC-G13／AC-G14／AC-G15 — 卡面數值與卡④ 之巢狀�
     const card = await screen.findByTestId('stat-card-ojt-ontime');
 
     expect(within(card).getByTestId('empty-state')).toBeInTheDocument();
-    expect(within(card).getByText('近 1 個月內無應完成之 OJT 單位')).toBeInTheDocument();
+    expect(within(card).getByText('目前沒有訓練日已截止的 OJT 訓練')).toBeInTheDocument();
 
     // 🔴 三個節點逐一不得存在
     expect(within(card).queryByTestId('ojt-ontime-donut')).not.toBeInTheDocument();

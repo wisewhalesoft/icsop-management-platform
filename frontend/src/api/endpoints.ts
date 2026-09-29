@@ -1338,7 +1338,7 @@ export function getCategoryDistribution(): Promise<
   return apiFetch('/admin/dashboard/category-distribution');
 }
 
-/** F044 卡④「OJT 準時完成率(1個月內)」（口徑與 TAB1 之 `coverage` 刻意不同，不得互相對齊）。 */
+/** F044 卡④「OJT 準時完成率(訓練日已截止)」（口徑與 TAB1 之 `coverage` 刻意不同，不得互相對齊）。 */
 export function getOjtOnTimeSummary(): Promise<
   import('./dashboard-analytics-types').OjtOnTimeSummaryResponse
 > {

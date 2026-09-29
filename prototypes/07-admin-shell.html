@@ -651,17 +651,19 @@
 
   /* ───── OJT 進度示範語料（卡④ 之輸入；`AC-G7`～`AC-G15`）─────
      每一列＝一份文件 × 一個使用單位（沿用 F042 之最小追蹤單位）。
-     應完成訓練日期 ＝ `announcedDate` ＋ 1 個月；窗口 ＝ 應完成日落在 [今日 − 1 個月, 今日]
-     ＝ [2026-06-16, 2026-07-16] ⇒ 公告日須落在 [2026-05-16, 2026-06-16]。
+     🔵 2026-09-29 口徑改版（不分版次統計）：計數單位＝**文件 × 單位 × 每一個要求訓練之版次**；
+        母體＝應完成日（`announcedDate` ＋ 1 個月）**早於今日**者（訓練日已截止，不設下界）。
+        `requiredEditions`＝該文件曾要求訓練之版次；`trainedEditions`＝該單位辦過場次之版次
+        （未給者以 `completed` 推導為無版次概念之單一筆）。
      🔴 三類列**自分子與分母同時排除**，且其計數各自可取得（供排除註記）：
         裁撤單位（isActive=false）／孤兒列（單位已移出使用部門）／公告日為 null。
-     🔴 分母＝**相異 `(companyCode, orgCode)`**（複合鍵，禁單以 orgCode 分組）；
-        分子＝該單位在窗口內之**全部**應完成文件皆已完成者（部分完成不算）。
-     ⇒ 本語料下：窗口內 4 個單位（AS/D1000、AS/B2000、AE/E1000、AD/B1000），
-        其中 AS/B2000 未完成 ⇒ 3 / 4（75%）；排除 3 列（裁撤 1、孤兒 1、無公告日 1）。 */
+     ⇒ 本語料下（今日 2026-07-16）：d09 要求兩版（25'03、26'01）⇒ AS/D1000 2/2、AS/B2000 1/2；
+        AE/E1000 1/1、AD/B1000 1/1 ⇒ 5 / 6（83%）；排除 3 列（裁撤 1、孤兒 1、無公告日 1）。
+     📝 已作廢（⚠ 不得復原）：OLD> 窗口＝應完成日落在 [今日 − 1 個月, 今日]；分母＝相異單位、
+        分子＝窗口內全部完成之單位 ⇒ 3 / 4（75%）。 */
   const OJT_ROWS=[
-    {docId:'d09',co:'AS',org:'D1000',orgName:'和潤企業 / 風險本部 / 信用審查部',announcedDate:'2026-06-01',completed:true, isActive:true, orphaned:false},
-    {docId:'d09',co:'AS',org:'B2000',orgName:'和潤企業 / 業務本部 / 企劃部',    announcedDate:'2026-06-01',completed:false,isActive:true, orphaned:false},
+    {docId:'d09',co:'AS',org:'D1000',orgName:'和潤企業 / 風險本部 / 信用審查部',announcedDate:'2026-06-01',completed:true, isActive:true, orphaned:false,requiredEditions:["25'03","26'01"],trainedEditions:["25'03","26'01"]},
+    {docId:'d09',co:'AS',org:'B2000',orgName:'和潤企業 / 業務本部 / 企劃部',    announcedDate:'2026-06-01',completed:false,isActive:true, orphaned:false,requiredEditions:["25'03","26'01"],trainedEditions:["25'03"]},
     {docId:'d09',co:'AS',org:'C9000',orgName:'和潤企業 / 管理本部 / 客服部（已裁撤）',announcedDate:'2026-06-01',completed:false,isActive:false,orphaned:false},
     {docId:'d12',co:'AE',org:'E1000',orgName:'和潤電能 / 能源本部 / 電能事業部',announcedDate:'2026-05-20',completed:true, isActive:true, orphaned:false},
     {docId:'d11',co:'AD',org:'B1000',orgName:'和潤興業 / 業務部',              announcedDate:'2026-06-10',completed:true, isActive:true, orphaned:false},
@@ -842,28 +844,28 @@
     });
   }
 
-  /* 📌 `AC-G9`～`AC-G15` 之可測形狀：純函式 `ojtOnTimeRate(rows, today)`。
-     🔴 分母＝相異 `(companyCode, orgCode)` **複合鍵**（單以 orgCode 分組會把不同公司的兩個部併成一組）；
-        分子＝該單位在窗口內之**全部**應完成文件皆已完成者（部分完成不算）。
-     🔴 `denominator === 0` 時**省略 `rate` 鍵**（比照 F042 `coverage.rate` 之既有紀律）。 */
+  /* 📌 卡④ 之可測形狀：純函式 `ojtOnTimeRate(rows, today)`（🔵 2026-09-29 不分版次統計）。
+     🔴 計數單位＝文件 × 單位 × 每一個要求訓練之版次；分子＝該單位辦過那一版者。
+     🔴 母體＝應完成日**早於**今日（訓練日已截止；應完成日＝今日者當天仍可完成，不計入）。
+     🔴 `denominator === 0` 時**省略 `rate` 鍵**（比照 F042 `coverage.rate` 之既有紀律）。
+     📝 已作廢（⚠ 不得復原）：OLD> 窗口 [今日 − 1 個月, 今日]、分母＝相異單位、分子＝全部完成之單位。 */
   function ojtOnTimeRate(rows,today){
-    const from=addMonthsClamped(today,-1);
     const ex={inactive:0,orphaned:0,noDate:0};
-    const units={}, keys=[];
+    let numerator=0, denominator=0;
     rows.forEach(function(r){
       if(r.isActive===false){ ex.inactive++; return; }
       if(r.orphaned){ ex.orphaned++; return; }
       if(!r.announcedDate){ ex.noDate++; return; }
       const due=addMonthsClamped(r.announcedDate,1);
-      if(due<from||due>today) return;                 /* 窗口外：不排除、也不計入（不是「被排除」） */
-      const k=orgGroupKeyOf(r.co,r.org);
-      if(!units[k]){ units[k]={total:0,done:0}; keys.push(k); }
-      units[k].total++;
-      if(r.completed) units[k].done++;
+      if(!(due<today)) return;                        /* 訓練日未截止：不排除、也不計入（不是「被排除」） */
+      const required=r.requiredEditions||[null];
+      const trained=r.trainedEditions||(r.completed?[null]:[]);
+      required.forEach(function(ed){
+        denominator++;
+        if(trained.indexOf(ed)>=0) numerator++;
+      });
     });
-    let numerator=0;
-    keys.forEach(function(k){ if(units[k].total>0&&units[k].done===units[k].total) numerator++; });
-    const out={numerator:numerator,denominator:keys.length,windowFrom:from,windowTo:today,
+    const out={numerator:numerator,denominator:denominator,
       excludedInactive:ex.inactive,excludedOrphaned:ex.orphaned,excludedNoAnnouncedDate:ex.noDate};
     if(out.denominator>0) out.rate=coveragePercent(numerator,out.denominator);
     return out;
@@ -1009,7 +1011,7 @@
     document.getElementById('statCards').innerHTML=html;
   }
 
-  /* 卡④：OJT 準時完成率(1個月內)
+  /* 卡④：OJT 準時完成率(訓練日已截止)
      🔒 `AC-G17`（🔴 **2026-09-21 第七輪就地改寫**）：**四種後台角色皆顯示**；閘門＝
         `canPerform(role,'OJT_PROGRESS_MANAGEMENT','read')`，與「查看明細」**同一個閘門**。
         📝 已作廢（⚠ 不得復原）：OLD> 「**僅** ICSOPAdmin／SysAdmin 進 DOM——主管與部門窗口連同
@@ -1061,7 +1063,7 @@
          🔴 **為何不繪空環**：一個 0% 的環與「全部未完成」在畫面上**完全一樣**——那正是 `AC-G14`
             禁止 `0%` 的同一個理由，只是換成了圖形形式。
          📝 已作廢：OLD> 空狀態之提示文字上掛著 data-testid="ojt-ontime-value"（該節點此時**不得存在**）。 */
-      : `<div data-testid="empty-state" class="col-span-3 row-start-2 mt-2 flex items-start gap-1.5 text-sm text-slate-500"><i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0 text-slate-400"></i><span>近 1 個月內無應完成之 OJT 單位</span></div>`;
+      : `<div data-testid="empty-state" class="col-span-3 row-start-2 mt-2 flex items-start gap-1.5 text-sm text-slate-500"><i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0 text-slate-400"></i><span>目前沒有訓練日已截止的 OJT 訓練</span></div>`;
     /* 🔒 §癸四 第 1 項（2026-09-21 **第二次**就地更正）：可見層只留「排除了幾個**單位**」，
        🔴 **恰加總前兩項**，且一律委派 `excludedUnitCount()`（單一推導點，理由見該函式註解）。
        📝 已作廢（僅供追溯，⚠ 不得復原）：
@@ -1073,11 +1075,11 @@
     const exUnits = excludedUnitCount(r);
     const exVisible = exUnits>0 ? ('已排除 '+exUnits+' 個單位') : '';
     const ojtInfo = infoNote('ojt-ontime',[
-      '這張卡只看最近一個月內應完成訓練的單位；應完成日為文件公告日再加一個月。',
+      '這張卡只計算訓練日已截止的項目：應完成日為文件公告日再加一個月，過了這一天才列入。每份文件的每個使用單位，在每一個要求訓練的版次各算一筆，該單位辦過那一版的訓練才算完成。',
       '其中 '+r.excludedInactive+' 個單位已裁撤、'+r.excludedOrphaned+' 個單位已不再使用該文件，不列入計算。',
       /* 🔴 獨立成句，不得串入上一句的加總（單位不同＋語意不同，見 excludedUnitCount 之註解）。 */
       '另有 '+r.excludedNoAnnouncedDate+' 份文件尚未設定公告日期，無法推算應完成日，因此從一開始就不在這張卡的範圍內。',
-      '「OJT 進度管理」頁不限期限，也會列出這裡不計入的單位，因此兩邊的數字不同。'
+      '「OJT 進度管理」頁只看目前的版次、也不限期限，因此兩邊的數字不同。'
     ]);
     return `<div data-testid="stat-card-ojt-ontime" class="bg-white border border-slate-200 rounded-xl px-5 py-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4">
       <!-- 🟣 2026-09-23 第三版（參考圖：左圖右文、數字在上標籤在下）：兩欄 grid——左欄＝小環跨第 1、2 列；
@@ -1086,7 +1088,7 @@
            🔵 空狀態：標題列佔第 1 列跨兩欄、空狀態第 2 列。
            📝 已作廢（⚠ 不得復原）：OLD> 環 order-last（環在右）；OLD> 標題列左側 graduation-cap 圖示方塊（#FEF3C7 底）。 -->
       <div data-ojt-title class="${r.denominator>0?'col-start-2 row-start-2 self-start mt-0.5':'col-span-2 row-start-1'} flex flex-wrap items-center gap-x-2 min-w-0">
-        <span class="whitespace-nowrap text-[13px] leading-tight text-slate-500">OJT 準時完成率</span><span class="inline-flex items-center gap-1 whitespace-nowrap"><span class="text-xs text-slate-500">(1個月內)</span>${ojtInfo}</span>
+        <span class="whitespace-nowrap text-[13px] leading-tight text-slate-500">OJT 準時完成率</span><span class="inline-flex items-center gap-1 whitespace-nowrap"><span class="text-xs text-slate-500">(訓練日已截止)</span>${ojtInfo}</span>
       </div>
       ${value}
       <!-- 🟣 2026-09-23 第四版之二（使用者裁定）：排除註記改 sr-only（明細已在 ⓘ 第二段）；查看明細移卡片右上角（不佔列）。
