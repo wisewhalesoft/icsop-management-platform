@@ -210,6 +210,11 @@ export interface FixtureDoc {
   edition?: string | null;
   ojtTrainingEdition?: string | null;
   announcedDate?: string | null;
+  /**
+   * 2026-09-29：`OJT_TRAINING_EDITION` 之紀錄（選填；未給 ⇒ 無紀錄列，服務層仍會併入當下基準）。
+   * 需要建構「舊版次曾要求訓練」情境時**顯式給值**。
+   */
+  requiredEditions?: (string | null)[];
 }
 
 export interface FixtureOrg {
@@ -297,6 +302,14 @@ export class FakeUsingDeptChecker {
         ...FakeUsingDeptChecker.meta(d),
         usingDeptIds: d.usingDeptIds,
       })),
+    );
+  }
+
+  listRequiredEditions(): Promise<{ documentId: string; edition: string | null }[]> {
+    return Promise.resolve(
+      [...this.docs.values()].flatMap((d) =>
+        (d.requiredEditions ?? []).map((edition) => ({ documentId: d.id, edition })),
+      ),
     );
   }
 }

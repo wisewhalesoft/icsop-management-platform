@@ -58,7 +58,7 @@ type OnTimeCapable = {
   getOnTimeUnitStats(session: unknown): Promise<OjtOnTimeSummary>;
 };
 
-/** 🔒 凍結之「今日」。窗口 ＝ `[2026-01-28, 2026-02-28]`。 */
+/** 🔒 凍結之「今日」。2026-09-29 口徑：應完成日（公告日 + 1 個月）早於本日者計入母體。 */
 const TODAY = '2026-02-28';
 
 function makeService(today: string = TODAY): {
@@ -166,16 +166,16 @@ describe('getOnTimeUnitStats — 閘門（既有 assertCanRead）', () => {
 });
 
 describe('getOnTimeUnitStats — 口徑與排除（AC-G9～AC-G12）', () => {
-  it('分母＝窗口內相異單位、分子＝全部完成之單位；today 為 UTC 之 YYYY-MM-DD', async () => {
+  it('分母＝文件 × 單位 × 版次、分子＝已辦場次者；today 為 UTC 之 YYYY-MM-DD', async () => {
     const { svc, usingDept, orgDirectory, sessionStore } = makeService();
-    // 應完成日 ＝ 2026-01-29 + 1 月 ＝ 2026-02-28（落在窗口上界）
+    // 應完成日 ＝ 2026-01-15 + 1 月 ＝ 2026-02-15（早於今日 ⇒ 訓練日已截止）
     usingDept.seedDoc({
       id: 'd1',
       documentNumber: 'N1',
       documentName: '文件一',
       companyCode: 'AS',
       usingDeptIds: ['A1000', 'B1000'],
-      announcedDate: '2026-01-29',
+      announcedDate: '2026-01-15',
     });
     orgDirectory.seedOrg({ orgCode: 'A1000', name: '甲部', isActive: true });
     orgDirectory.seedOrg({ orgCode: 'B1000', name: '乙部', isActive: true });
@@ -201,7 +201,7 @@ describe('getOnTimeUnitStats — 口徑與排除（AC-G9～AC-G12）', () => {
       documentName: '文件一',
       companyCode: 'AS',
       usingDeptIds: ['A1000'],
-      announcedDate: '2026-01-29',
+      announcedDate: '2026-01-15',
     });
     orgDirectory.seedOrg({ orgCode: 'A1000', name: '甲部', isActive: true });
     seedSession(sessionStore, { documentId: 'd1', orgCode: 'A1000', trainingDate: '2026-05-01' });
@@ -219,7 +219,7 @@ describe('getOnTimeUnitStats — 口徑與排除（AC-G9～AC-G12）', () => {
       documentName: '文件一',
       companyCode: 'AS',
       usingDeptIds: ['A1000'],
-      announcedDate: '2026-01-29',
+      announcedDate: '2026-01-15',
       ojtTrainingEdition: "26'02",
     });
     orgDirectory.seedOrg({ orgCode: 'A1000', name: '甲部', isActive: true });
@@ -238,7 +238,7 @@ describe('getOnTimeUnitStats — 口徑與排除（AC-G9～AC-G12）', () => {
       documentName: '文件一',
       companyCode: 'AS',
       usingDeptIds: ['A1000', 'X9000'],
-      announcedDate: '2026-01-29',
+      announcedDate: '2026-01-15',
     });
     orgDirectory.seedOrg({ orgCode: 'A1000', name: '甲部', isActive: true });
     orgDirectory.seedOrg({ orgCode: 'X9000', name: '已裁撤部', isActive: false });
@@ -261,7 +261,7 @@ describe('getOnTimeUnitStats — 口徑與排除（AC-G9～AC-G12）', () => {
       documentName: '文件一',
       companyCode: 'AS',
       usingDeptIds: ['A1000'],
-      announcedDate: '2026-01-29',
+      announcedDate: '2026-01-15',
     });
     orgDirectory.seedOrg({ orgCode: 'A1000', name: '甲部', isActive: true });
     // 🔴 孤兒：場次之 orgCode 已不在該文件之使用部門集合內（不讀 orphanedAt 旗標）
@@ -280,7 +280,7 @@ describe('getOnTimeUnitStats — 口徑與排除（AC-G9～AC-G12）', () => {
       documentName: '有公告日',
       companyCode: 'AS',
       usingDeptIds: ['A1000'],
-      announcedDate: '2026-01-29',
+      announcedDate: '2026-01-15',
     });
     usingDept.seedDoc({
       id: 'd2',
@@ -296,6 +296,70 @@ describe('getOnTimeUnitStats — 口徑與排除（AC-G9～AC-G12）', () => {
     const s = await svc.getOnTimeUnitStats(ICSOP_ADMIN);
     expect(s.excludedNoAnnouncedDate).toBe(1);
     expect(s.denominator).toBe(1);
+  });
+});
+
+describe('2026-09-29 不分版次統計 — 要求版次＝紀錄表 ∪ 當下基準', () => {
+  function seedDocWithEditions(
+    usingDept: FakeUsingDeptChecker,
+    orgDirectory: FakeOrgDirectory,
+    over: { requiredEditions?: (string | null)[]; ojtTrainingEdition?: string | null; announcedDate?: string },
+  ): void {
+    usingDept.seedDoc({
+      id: 'd1',
+      documentNumber: 'N1',
+      documentName: '文件一',
+      companyCode: 'AS',
+      usingDeptIds: ['A1000', 'B1000'],
+      announcedDate: over.announcedDate ?? '2026-01-15',
+      ojtTrainingEdition: over.ojtTrainingEdition ?? "26'01",
+      requiredEditions: over.requiredEditions,
+    });
+    orgDirectory.seedOrg({ orgCode: 'A1000', name: '甲部', isActive: true });
+    orgDirectory.seedOrg({ orgCode: 'B1000', name: '乙部', isActive: true });
+  }
+
+  /**
+   * 🔴 核心：紀錄表中之舊版次進入母體，且只辦過舊版之單位在舊版那一筆算完成。
+   * ⚠ 只看當下基準之實作（原 TAB1 口徑）得 1/2；依單位聚合之實作得 0/2。
+   */
+  it('舊版次（紀錄表）與當下基準各算一筆；逐版次判定完成', async () => {
+    const { svc, usingDept, orgDirectory, sessionStore } = makeService();
+    seedDocWithEditions(usingDept, orgDirectory, { requiredEditions: ["25'01", "26'01"] });
+    seedSession(sessionStore, { documentId: 'd1', orgCode: 'A1000', edition: "25'01" });
+    seedSession(sessionStore, { documentId: 'd1', orgCode: 'A1000', edition: "26'01" });
+    seedSession(sessionStore, { documentId: 'd1', orgCode: 'B1000', edition: "25'01" });
+
+    const s = await svc.getOnTimeUnitStats(ICSOP_ADMIN);
+    expect(s.denominator).toBe(4);
+    expect(s.numerator).toBe(3);
+    expect(s.rate).toBe(75);
+  });
+
+  /**
+   * 🔴 防線：文件沒有任何紀錄列（未經 service 建立之 seed／直寫）時，當下基準仍須進母體——
+   * 少了併入這一步，該文件整份從母體消失且畫面上毫無跡象。
+   */
+  it('紀錄表無列時仍以當下基準計入', async () => {
+    const { svc, usingDept, orgDirectory } = makeService();
+    seedDocWithEditions(usingDept, orgDirectory, {});
+    const s = await svc.getOnTimeUnitStats(ICSOP_ADMIN);
+    expect(s.denominator).toBe(2);
+  });
+
+  it('待歸位場次（orgCode = null）不使任何單位完成', async () => {
+    const { svc, usingDept, orgDirectory, sessionStore } = makeService();
+    seedDocWithEditions(usingDept, orgDirectory, {});
+    seedSession(sessionStore, { documentId: 'd1', orgCode: null, edition: "26'01" });
+    const s = await svc.getOnTimeUnitStats(ICSOP_ADMIN);
+    expect(s.numerator).toBe(0);
+  });
+
+  it('應完成日未截止之文件不計入（公告日 2026-01-28 ⇒ 應完成日＝今日）', async () => {
+    const { svc, usingDept, orgDirectory } = makeService();
+    seedDocWithEditions(usingDept, orgDirectory, { announcedDate: '2026-01-28' });
+    const s = await svc.getOnTimeUnitStats(ICSOP_ADMIN);
+    expect(s.denominator).toBe(0);
   });
 });
 
@@ -317,7 +381,7 @@ describe('🔒 AC-G14 — `rate` 鍵由**後端**省略（不是前端判斷後�
       documentName: '文件一',
       companyCode: 'AS',
       usingDeptIds: ['A1000'],
-      announcedDate: '2026-01-29',
+      announcedDate: '2026-01-15',
     });
     orgDirectory.seedOrg({ orgCode: 'A1000', name: '甲部', isActive: true });
     seedSession(sessionStore, { documentId: 'd1', orgCode: 'A1000' });

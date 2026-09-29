@@ -826,7 +826,7 @@ export class OjtProgressService {
     };
   }
 
-  // ══════════ F044 卡④ · OJT 準時完成率(1個月內)（`AC-G7`～`AC-G15`） ══════════
+  // ══════════ F044 卡④ · OJT 準時完成率(訓練日已截止)（2026-09-29 不分版次統計） ══════════
 
   /**
    * 後台首頁卡④ 之聚合（🔒 **同一份 `aggregate()` 的第二個鏡頭**，不是一份新資料）。
@@ -837,13 +837,14 @@ export class OjtProgressService {
    * 既有之 `countOrphanedRows()`（比對 `OJT_SESSION` 與 `DOC_USING_DEPT` 兩個集合）。
    *
    * 🔒 口徑與 TAB1 `getSummary()` 之 `coverage` **刻意不同，不得互相對齊**（NFR-F044-3 #4）：
-   *   · TAB1 分母＝**進度列**（文件 × 單位）、不限時間；
-   *   · 本卡分母＝窗口內之**相異使用單位**（`(companyCode, orgCode)`，`AC-G9`）。
+   *   · TAB1 分母＝**進度列**（文件 × 單位）、只看當下基準版次、不限時間；
+   *   · 本卡分母＝**文件 × 單位 × 每一個要求訓練之版次**、只計訓練日已截止者（2026-09-29 改版，
+   *     口徑細節見 `ojt-ontime.ts` 檔頭）。
    * ⇒ 兩個數字在畫面上必須可分辨，故前端之註記文案亦刻意不共用
    *   （`ojtOnTimeNote` vs `exclusionNote`，`ARCH-G6`）。
    *
-   * 🔒 完成判定沿用 F042 `AC-03`（版次相符之場次存在）、`isActive` 過濾沿用 `AC-17`
-   *   ——兩者皆已在 `aggregate()` 裡，本方法不再重寫一份。
+   * 🔒 `isActive` 過濾沿用 `aggregate()`（`AC-17`）；完成判定改為**逐版次**比對
+   *   （該單位是否有場次快照為該版次；`null` 對 `null` 亦相符，同 `sessionMatchesEdition`）。
    */
   async getOnTimeUnitStats(
     session: OjtSessionContext | undefined,
@@ -851,14 +852,38 @@ export class OjtProgressService {
     this.assertCanRead(session?.roleCode);
     const aggregated = await this.aggregate();
     const today = serverToday(this.now());
+
+    // 🔴 2026-09-29 不分版次統計：各文件要求訓練之版次＝版次紀錄表 ∪ 當下基準。
+    // ⚠ 併入當下基準是必要的防線：未經 service 建立之文件（seed／直寫）沒有紀錄列，
+    //   少了這一步它們會整份從母體消失，而且畫面上沒有任何跡象。
+    const requiredByDoc = new Map<string, (string | null)[]>();
+    const pushEdition = (documentId: string, edition: string | null): void => {
+      const bucket = requiredByDoc.get(documentId);
+      if (bucket) bucket.push(edition);
+      else requiredByDoc.set(documentId, [edition]);
+    };
+    for (const r of await this.usingDept.listRequiredEditions()) pushEdition(r.documentId, r.edition);
+    for (const a of aggregated) pushEdition(a.documentId, a.trainingEdition);
+
+    // 各「文件 × 單位」辦過場次之版次（待歸位列 orgCode=null 不屬於任何單位）。
+    const trainedByRow = new Map<string, (string | null)[]>();
+    for (const s of await this.sessions.listAll()) {
+      if (s.orgCode === null) continue;
+      const k = rowKey(s.documentId, s.orgCode);
+      const bucket = trainedByRow.get(k);
+      if (bucket) bucket.push(s.edition ?? null);
+      else trainedByRow.set(k, [s.edition ?? null]);
+    }
+
     const stats = ojtOnTimeRate(
       aggregated.map((a) => ({
         companyCode: a.companyCode,
         orgCode: a.orgCode,
         documentId: a.documentId,
         announcedDate: a.announcedDate,
-        completed: a.completed,
         isActive: a.active,
+        requiredEditions: requiredByDoc.get(a.documentId) ?? [],
+        trainedEditions: trainedByRow.get(rowKey(a.documentId, a.orgCode)) ?? [],
       })),
       today,
       await this.countOrphanedRows(),

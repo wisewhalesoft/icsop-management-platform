@@ -108,6 +108,11 @@ export interface OjtUsingDeptChecker {
   getDocumentMeta(documentId: string): Promise<OjtDocumentMeta | null>;
   /** 全部文件（供 TAB1 之 docCoverage／rollup 與 TAB2 之列產生）。 */
   listAllDocs(): Promise<(OjtDocumentMeta & { usingDeptIds: string[] })[]>;
+  /**
+   * 全部文件之「曾要求訓練之版次」紀錄（`OJT_TRAINING_EDITION`；F044 卡④ 不分版次統計之母體）。
+   * ⚠ 不保證含當下基準（例：未經 service 建立之 seed 文件）——呼叫端須自行併入 `ojtTrainingEdition`。
+   */
+  listRequiredEditions(): Promise<{ documentId: string; edition: string | null }[]>;
 }
 
 export const OJT_ORG_DIRECTORY = Symbol('OJT_ORG_DIRECTORY');

@@ -1,6 +1,7 @@
 import { DataSource, In } from 'typeorm';
 import { IcsopDocument } from '../database/entities/icsop-document.entity';
 import { DocUsingDept } from '../database/entities/doc-using-dept.entity';
+import { OjtTrainingEdition } from '../database/entities/ojt-training-edition.entity';
 import { OjtDocumentMeta, OjtUsingDeptChecker } from './ojt-progress.store';
 
 /**
@@ -99,5 +100,14 @@ export class TypeOrmOjtUsingDeptChecker implements OjtUsingDeptChecker {
       else byDoc.set(l.documentId, [l.orgCode]);
     }
     return docs.map((d) => ({ ...toMeta(d), usingDeptIds: byDoc.get(d.id) ?? [] }));
+  }
+
+  /** `OJT_TRAINING_EDITION` 全表（一次查詢；列數＝文件數 × 平均要求版次數）。 */
+  async listRequiredEditions(): Promise<{ documentId: string; edition: string | null }[]> {
+    const ds = await this.init();
+    const rows = await ds
+      .getRepository(OjtTrainingEdition)
+      .find({ select: { documentId: true, edition: true } });
+    return rows.map((r) => ({ documentId: r.documentId, edition: r.edition }));
   }
 }

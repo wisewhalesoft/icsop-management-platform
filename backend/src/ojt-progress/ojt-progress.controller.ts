@@ -66,7 +66,7 @@ export class OjtProgressController {
   }
 
   /**
-   * F044 卡④「OJT 準時完成率(1個月內)」（`AC-G86`）。
+   * F044 卡④「OJT 準時完成率(訓練日已截止)」（`AC-G86`；2026-09-29 改為不分版次統計）。
    *
    * 🔒 **掛在 OJT 模組而不是 dashboard 模組**（`ARCH-G3`）：資料屬 OJT 領域、閘門為
    * `OJT_PROGRESS_MANAGEMENT`，且其與儀表板其餘區塊之間**沒有任何恆等式**
