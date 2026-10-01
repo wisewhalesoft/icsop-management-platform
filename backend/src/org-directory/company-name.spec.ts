@@ -55,6 +55,14 @@ describe('B 階段 — 四家公司全稱（AD／AE／AJ／AS）', () => {
     expect(COMPANY_FULL_NAMES.AE.endsWith('股份有限公司')).toBe(true);
   });
 
+  it('2026-10-01 新增 AL → 勁榮企業股份有限公司（VW_HRCOMF.COMPFULLNM 實測值）', () => {
+    expect(resolveCompanyName('AL')).toBe('勁榮企業股份有限公司');
+  });
+
+  it('2026-10-01 新增 AL 簡稱 → 勁榮企業（依既有慣例去尾，不取上游 COMPSIMPNM「勁榮」）', () => {
+    expect(resolveCompanyShortName('AL')).toBe('勁榮企業');
+  });
+
   it('ILS（上游 VW_HRCOMF 無此公司代碼）仍查無 → null，未被誤納入', () => {
     expect(resolveCompanyName('ILS')).toBeNull();
   });
@@ -152,7 +160,7 @@ describe('D9 delta — AC-N13（🔒 全稱三處消費點回歸鎖定，本檔�
     expect(resolveCompanyName('AS')).toBe('和潤企業股份有限公司');
   });
 
-  it('INV-C1（既有）維持成立：SELECTABLE_COMPANIES 等同 COMPANY_FULL_NAMES 鍵集合（B 階段：四家）', () => {
-    expect(Object.keys(COMPANY_FULL_NAMES).sort()).toEqual(['AD', 'AE', 'AJ', 'AS']);
+  it('INV-C1（既有）維持成立：SELECTABLE_COMPANIES 等同 COMPANY_FULL_NAMES 鍵集合（2026-10-01：加入 AL 共五家）', () => {
+    expect(Object.keys(COMPANY_FULL_NAMES).sort()).toEqual(['AD', 'AE', 'AJ', 'AL', 'AS']);
   });
 });

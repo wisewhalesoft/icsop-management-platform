@@ -79,6 +79,7 @@ const COMPANY_SHORT_NAMES: Readonly<Record<string, string>> = {
   AD: '和潤興業',
   AE: '和潤電能',
   AJ: '和勁企業',
+  AL: '勁榮企業',
 };
 const SEG_UNSPECIFIED_KEY = '__unspecified__';
 const SEG_UNSPECIFIED_LABEL = '未指定';

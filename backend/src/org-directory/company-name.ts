@@ -14,6 +14,8 @@
  *  - 新增 AD＝和潤興業、AJ＝和勁企業（皆取自 `VW_HRCOMF.COMPFULLNM` 實測值）。
  *  - 🔴 **修正 AE 全稱缺字**：v1.0 誤植為「和潤電能」，漏了「股份有限公司」；契約 §10.1
  *    實測值為「和潤電能股份有限公司」。此前所有以 AE 建立之手動帳號、浮水印皆顯示不完整全稱。
+ *  - 2026-10-01 新增 AL＝勁榮企業股份有限公司（`VW_HRCOMF.COMPFULLNM` 實測值；簡稱依既有慣例去尾，
+ *    不取上游 COMPSIMPNM「勁榮」）。
  *  - 刻意排除 **ILS**（`VW_HRCOMF` 無此公司代碼，來源不明，契約 §11 #5 待上游確認）。
  *    契約 v1.0 曾一併排除 AD／AJ（理由「部門主檔嚴重不完整」），該理由已於 v2.0 更正為
  *    「量到的是舊來源 `VW_HPMUSER` 之母體污染，非真實缺漏」，四家組織資料實測皆完整。
@@ -23,6 +25,7 @@ const COMPANY_FULL_NAME_ENTRIES = {
   AD: '和潤興業股份有限公司',
   AE: '和潤電能股份有限公司',
   AJ: '和勁企業股份有限公司',
+  AL: '勁榮企業股份有限公司',
 } as const;
 
 export const COMPANY_FULL_NAMES: Readonly<Record<string, string>> =
@@ -95,6 +98,7 @@ export const COMPANY_SHORT_NAMES: Readonly<Record<CompanyCode, string>> = {
   AD: '和潤興業',
   AE: '和潤電能',
   AJ: '和勁企業',
+  AL: '勁榮企業',
 };
 
 /** INV-C2 之執行期斷言（`AC-N11`）：鍵集合不相等即拋錯。型別層防護見上方 `Record<CompanyCode, …>`。 */

@@ -1,12 +1,12 @@
 import { UpstreamReaderConfig } from './mssql-upstream-reader';
 
 /**
- * 同步範圍（upstream-hr-source-contract.md §10，v2.0：AD／AE／AJ／AS 四家全數納入）。
+ * 同步範圍（upstream-hr-source-contract.md §10，v2.0：AD／AE／AJ／AS 四家全數納入；2026-10-01 加入 AL＝勁榮企業）。
  *
  * 🔴 v1.0 曾限單一 `SYNC_COMPID='AS'`。該常數與其全部引用點**已於 B 階段移除**——
  * 不保留向後相容之單值別名，避免新舊兩個常數並存造成「改了清單、漏改單值」的分裂風險。
  */
-export const SYNC_COMPIDS: readonly string[] = ['AS', 'AD', 'AE', 'AJ'];
+export const SYNC_COMPIDS: readonly string[] = ['AS', 'AD', 'AE', 'AJ', 'AL'];
 
 /**
  * 消失筆數閾值之**臨時覆寫**（`SYNC_DISAPPEARED_THRESHOLD`，0–1 之小數；未設 → `undefined`
