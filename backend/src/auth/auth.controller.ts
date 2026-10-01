@@ -155,9 +155,16 @@ export class AuthController {
     return user;
   }
 
-  /** 途徑 A 起點：導向 Azure AD（帶 state / nonce / PKCE）。tx 存於簽章 cookie。 */
+  /**
+   * 途徑 A 起點：導向 Azure AD（帶 state / nonce / PKCE）。tx 存於簽章 cookie。
+   *
+   * `?switch=1` → 帶 `prompt=select_account`，強制 Microsoft 顯示帳號選單。
+   * 理由（2026-10-01）：轉調換公司者換了新 AD 帳號、舊帳號已停用，但瀏覽器仍留有舊帳號之
+   * Microsoft 工作階段 ⇒ 不帶 prompt 時 Microsoft 靜默以舊帳號登入 ⇒ 停用錯誤頁 ⇒ 重試仍是舊帳號，
+   * 無路可出。一般登入**不帶**，避免每次多一步選帳號。
+   */
   @Get('login')
-  async login(@Res() res: Response): Promise<void> {
+  async login(@Res() res: Response, @Query('switch') switchAccount?: string): Promise<void> {
     const { verifier, challenge } = await this.crypto.generatePkceCodes();
     const tx: OidcTx = {
       state: this.crypto.createNewGuid(),
@@ -184,6 +191,7 @@ export class AuthController {
         codeChallengeMethod: 'S256',
         state: tx.state,
         nonce: tx.nonce,
+        ...(isSwitchAccountRequest(switchAccount) ? { prompt: 'select_account' } : {}),
       });
     } catch (e) {
       return this.renderError(
@@ -578,10 +586,34 @@ export class AuthController {
            <p style="font-family:monospace">${esc(code)}</p>
            <p style="color:#64748b">${esc(detail)}</p>
            <p style="color:#94a3b8;font-size:12px">參考碼 ${esc(correlationId)}</p>
-           <p style="margin-top:20px"><a href="/auth/login">↻ 重試登入</a></p>`,
+           ${failurePageActionsHtml(code)}`,
         ),
       );
   }
+}
+
+/** `/auth/login?switch=…` 是否要求強制選帳號（僅接受 `1`／`true`）。 */
+export function isSwitchAccountRequest(v: string | undefined): boolean {
+  return v != null && /^(1|true)$/i.test(v.trim());
+}
+
+/** 換帳號入口（`prompt=select_account`）。 */
+export const SWITCH_ACCOUNT_LOGIN_PATH = '/auth/login?switch=1';
+
+/**
+ * 登入失敗頁之動作連結。帳號比對拒絕（停用／查無）時，問題出在「Microsoft 給了哪個帳號」，
+ * 原樣重試只會拿回同一個帳號 ⇒ 另給「改用其他 Microsoft 帳號登入」作為出口（2026-10-01）。
+ * 其餘錯誤（state／交換／token）與帳號無關，維持只有重試。
+ */
+export function failurePageActionsHtml(code: string): string {
+  const retry = `<a href="/auth/login">↻ 重試登入</a>`;
+  if (code === 'AUTH_ACCOUNT_DISABLED' || code === 'AUTH_ACCOUNT_NOT_FOUND') {
+    return (
+      `<p style="margin-top:20px"><a href="${SWITCH_ACCOUNT_LOGIN_PATH}">⇄ 改用其他 Microsoft 帳號登入</a></p>` +
+      `<p style="margin-top:8px;font-size:13px">${retry}</p>`
+    );
+  }
+  return `<p style="margin-top:20px">${retry}</p>`;
 }
 
 /** 登入成功後導向目標。正式（同源反代）預設 '/'；dev 以 POST_LOGIN_REDIRECT_URL 指向 SPA 埠。 */
