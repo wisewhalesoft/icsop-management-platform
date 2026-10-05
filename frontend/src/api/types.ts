@@ -547,7 +547,25 @@ export interface DocumentChangeView {
   actorEmployeeNo: string | null;
   /** F012 切換原因（僅 STATUS 事件承載；其餘 changeType 為 null；供變更歷程檢視，F012 AC36）。 */
   reason?: string | null;
+  /**
+   * 🔴 2026-10-05 delta：舊值／新值之顯示字串（後端已把代碼轉名稱；與 CSV 同一份）。
+   * 選填：舊版後端無此欄時前端退回原始值。
+   */
+  oldDisplay?: string;
+  newDisplay?: string;
+  /** 清單型欄位（使用部門、次要室長）之增減；其餘欄位為 null。 */
+  listDiff?: ChangeListDiff | null;
   occurredAt: string;
+}
+/** 清單型欄位之一項（`code`＝原始代碼、`label`＝名稱，查無時＝代碼）。 */
+export interface ChangeListItem {
+  code: string;
+  label: string;
+}
+export interface ChangeListDiff {
+  added: ChangeListItem[];
+  removed: ChangeListItem[];
+  unchanged: ChangeListItem[];
 }
 export interface DocumentChangeFilters {
   doc?: string;

@@ -58,6 +58,11 @@
   path.dedge.e-rm{stroke:#DC2626;stroke-width:2;stroke-dasharray:5 4;}
   .oldv{background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA;text-decoration:line-through;}
   .newv{background:#ECFDF5;color:#047857;border:1px solid #A7F3D0;}
+  /* 🟢 2026-10-05：清單型欄位（使用部門、次要室長）之增減標籤 */
+  .chip{display:inline-flex;align-items:center;padding:1px 8px;border-radius:9999px;font-size:11px;border:1px solid;}
+  .chip-add{background:#ECFDF5;color:#047857;border-color:#A7F3D0;}
+  .chip-rm{background:#FEF2F2;color:#B91C1C;border-color:#FECACA;text-decoration:line-through;}
+  .chip-keep{background:#F8FAFC;color:#475569;border-color:#E2E8F0;}
 </style>
 </head>
 <body data-role="sysadmin" class="min-h-screen">
@@ -393,7 +398,16 @@
     {num:'ICSOP-LWC-101-1-02',name:'招募管理作業',operator:'李慧玲',emp:'20233',time:'2026-07-13 10:00:00',source:'狀態切換',field:'文件狀態',oldV:'有效',newV:'失效'},
     {num:'ICSOP-SRC-101-2-00',name:'消金審核作業',operator:'李慧玲',emp:'20233',time:'2026-07-12 11:05:00',source:'附件',field:'檔案（ICSOP PDF）',kind:'attachment'},
     {num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',operator:'李慧玲',emp:'20233',time:'2026-07-11 15:30:00',source:'編輯',field:'程序書書名',oldV:'和潤-費用請款作業',newV:'和潤企業-費用請款作業'},
-    {num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',operator:'李慧玲',emp:'20233',time:'2026-07-11 15:30:00',source:'使用部門',field:'文件使用部門',oldV:'全公司',newV:'全公司、財務資訊本部 / 財會部'}
+    {num:'ICSOP-PUC-101-1-01',name:'和潤-費用請款作業',operator:'李慧玲',emp:'20233',time:'2026-07-11 15:30:00',source:'使用部門',field:'文件使用部門',oldV:'全公司',newV:'全公司、財務資訊本部 / 財會部'},
+    /* 🟢 2026-10-05 delta：使用部門掛上大量部門（使用者實機回報摘要欄被原始代碼串撐爆）。
+       清單型欄位改以「增減」呈現：摘要列只寫數量、展開分三組標籤（新增／移除／未變動，未變動預設收合）；
+       標籤顯示部門名稱、滑鼠移上顯示代碼（title）。名稱一律以「文件之公司別＋代碼」查，查無維持代碼。 */
+    {num:'ICSOP-CIPS-109-1-02',name:'企業持續營運-落實ISMS(27001)作業程序書',operator:'李慧玲',emp:'20233',time:'2026-07-10 10:12:00',source:'使用部門',field:'文件使用部門',
+     list:{
+       added:[['AN000','法務部'],['AP000','經企公關部'],['JAB00','風險分析室']],
+       removed:[['CF000','作業服務部']],
+       unchanged:[['AI000','資訊部'],['DAA00','企劃部'],['DBA00','管理部'],['DD000','財會管理室/和潤暨海外事業'],['CBA00','資金管理室'],['CC000','債權管理部'],['CD000','信用審查部'],['AF000','稽核部']]
+     }}
   ];
   const SRC_STYLE={'編輯':'slate','狀態切換':'violet','狀態':'violet','公告日期':'blue','制定組織':'primary','當責室長':'primary','使用部門':'blue','附件':'amber'};
   function esc(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
@@ -410,7 +424,14 @@
     });
     return groups;
   }
-  function diffText(ev){ return ev.kind==='attachment' ? `${ev.field}：已替換` : `${ev.field}：${ev.oldV} → ${ev.newV}`; }
+  /* 🟢 2026-10-05：清單型欄位之摘要只寫增減數量（部門再多也不會變長）。 */
+  function listSummary(l){ const parts=[]; if(l.added.length) parts.push(`新增 ${l.added.length} 個`); if(l.removed.length) parts.push(`移除 ${l.removed.length} 個`); return `${parts.length?parts.join('、'):'無增減'}（共 ${l.added.length+l.unchanged.length} 個）`; }
+  function diffText(ev){ return ev.kind==='attachment' ? `${ev.field}：已替換` : ev.list ? `${ev.field}：${listSummary(ev.list)}` : `${ev.field}：${ev.oldV} → ${ev.newV}`; }
+  function chips(items,cls){ return items.map(([c,l])=>`<span class="chip ${cls}" title="${esc(c)}">${esc(l)}</span>`).join(''); }
+  function listDetail(l){
+    const row=(label,items,cls)=>items.length?`<div class="flex items-start gap-2"><span class="text-[11px] text-slate-500 w-14 shrink-0 pt-0.5">${label} ${items.length}</span><div class="flex flex-wrap gap-1">${chips(items,cls)}</div></div>`:'';
+    return `<div class="space-y-1.5 w-full">${row('新增',l.added,'chip-add')}${row('移除',l.removed,'chip-rm')}${l.unchanged.length?`<details class="text-[11px] text-slate-500"><summary class="cursor-pointer select-none">未變動 ${l.unchanged.length} 個</summary><div class="flex flex-wrap gap-1 mt-1">${chips(l.unchanged,'chip-keep')}</div></details>`:''}</div>`;
+  }
   function srcBadge(s){ const c=SRC_STYLE[s]||'slate'; return `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] bg-${c}-50 text-${c}-700 border border-${c}-100">${esc(s)}</span>`; }
 
   function filteredDocGroups(){
@@ -440,7 +461,7 @@
       const open=i===docExpanded;
       let html=`<tr class="hover:bg-slate-50 cursor-pointer align-top" onclick="toggleDoc(${i})">
         <td class="px-4 py-2.5"><div class="mono text-xs text-slate-600">${esc(g.num)}</div><div class="text-slate-800">${esc(g.name)}</div></td>
-        <td class="px-4 py-2.5 text-slate-700">${summary}</td>
+        <td class="px-4 py-2.5 text-slate-700 max-w-md break-words [overflow-wrap:anywhere]">${summary}</td>
         <td class="px-4 py-2.5"><div class="flex flex-wrap gap-1">${sources.map(srcBadge).join('')}</div></td>
         <td class="px-4 py-2.5 text-slate-700">${esc(g.operator)}<span class="text-slate-400 mono text-xs">（${esc(g.emp)}）</span></td>
         <td class="px-4 py-2.5 mono text-xs text-slate-500">${esc(g.time)}${g.events.length>1?'<div class="text-[10px] text-slate-400">同儲存/60 秒內</div>':''}</td>
@@ -452,7 +473,7 @@
             <div class="space-y-1">${g.events.map(ev=>`
               <div class="grid grid-cols-1 sm:grid-cols-[160px,1fr] gap-2 py-2 border-b border-slate-100 last:border-0">
                 <div class="text-xs text-slate-500 flex items-center gap-1.5">${srcBadge(ev.source)}<span class="font-medium text-slate-700">${esc(ev.field)}</span></div>
-                <div class="flex items-center gap-2 flex-wrap text-sm">${ev.kind==='attachment'
+                <div class="flex items-center gap-2 flex-wrap text-sm">${ev.list ? listDetail(ev.list) : ev.kind==='attachment'
                   ? `<span class="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100 text-xs inline-flex items-center gap-1"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>已替換（覆蓋式，不保留、不提供舊檔下載）</span>`
                   : `<span class="oldv px-2 py-0.5 rounded text-xs max-w-full break-all">${esc(ev.oldV)}</span><i data-lucide="arrow-right" class="w-4 h-4 text-slate-400 shrink-0"></i><span class="newv px-2 py-0.5 rounded text-xs font-medium max-w-full break-all">${esc(ev.newV)}</span>`}
                 </div>

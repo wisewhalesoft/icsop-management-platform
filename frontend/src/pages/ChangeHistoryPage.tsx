@@ -159,6 +159,8 @@ function ExportFeedbackBox({ feedback }: { feedback: ExportFeedback }): JSX.Elem
   );
 }
 import type {
+  ChangeListDiff,
+  ChangeListItem,
   BusinessCategoryChangeType,
   BusinessCategoryChangeView,
   BusinessCategoryTreeDiff,
@@ -219,6 +221,78 @@ function valLabel(field: string, v: string | null): string {
   if (v === null || v === '') return '（空）';
   if (field === 'status') return STATUS_LABEL[v] ?? v;
   return v;
+}
+
+/**
+ * 🔴 2026-10-05 delta：舊值／新值之顯示字串——以後端 `oldDisplay`／`newDisplay` 為準（代碼已轉名稱，
+ * 與 CSV 同一份）；舊版後端未提供時退回原始值。
+ */
+function oldText(ev: DocumentChangeView): string {
+  return ev.oldDisplay ?? valLabel(ev.field, ev.oldValue);
+}
+function newText(ev: DocumentChangeView): string {
+  return ev.newDisplay ?? valLabel(ev.field, ev.newValue);
+}
+
+/**
+ * 🔴 2026-10-05 delta：清單型欄位（使用部門、次要室長）之摘要只寫增減數量——使用者實機回報：
+ * 使用部門掛上大量部門後，原始代碼串（整串無空白之 JSON）撐爆「變更摘要」欄。
+ * 逐字比照 prototypes/23 `listSummary()`。
+ */
+function listSummary(d: ChangeListDiff): string {
+  const parts: string[] = [];
+  if (d.added.length > 0) parts.push(`新增 ${d.added.length} 個`);
+  if (d.removed.length > 0) parts.push(`移除 ${d.removed.length} 個`);
+  return `${parts.length > 0 ? parts.join('、') : '無增減'}（共 ${d.added.length + d.unchanged.length} 個）`;
+}
+
+const CHIP_CLASS = {
+  add: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  rm: 'bg-red-50 text-red-700 border-red-200 line-through',
+  keep: 'bg-slate-50 text-slate-600 border-slate-200',
+} as const;
+
+function Chips({ items, tone }: { items: ChangeListItem[]; tone: keyof typeof CHIP_CLASS }): JSX.Element {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {items.map((it) => (
+        <span
+          key={it.code}
+          title={it.code}
+          className={`inline-flex items-center px-2 py-px rounded-full text-[11px] border ${CHIP_CLASS[tone]}`}
+        >
+          {it.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** 清單型欄位之展開明細：新增／移除／未變動三組（未變動預設收合）。逐字比照 prototypes/23 `listDetail()`。 */
+function ListDiffDetail({ diff }: { diff: ChangeListDiff }): JSX.Element {
+  const row = (label: string, items: ChangeListItem[], tone: keyof typeof CHIP_CLASS) =>
+    items.length > 0 && (
+      <div className="flex items-start gap-2" data-testid={`list-diff-${tone}`}>
+        <span className="text-[11px] text-slate-500 w-14 shrink-0 pt-0.5">
+          {label} {items.length}
+        </span>
+        <Chips items={items} tone={tone} />
+      </div>
+    );
+  return (
+    <div className="space-y-1.5 w-full">
+      {row('新增', diff.added, 'add')}
+      {row('移除', diff.removed, 'rm')}
+      {diff.unchanged.length > 0 && (
+        <details className="text-[11px] text-slate-500" data-testid="list-diff-keep">
+          <summary className="cursor-pointer select-none">未變動 {diff.unchanged.length} 個</summary>
+          <div className="mt-1">
+            <Chips items={diff.unchanged} tone="keep" />
+          </div>
+        </details>
+      )}
+    </div>
+  );
 }
 
 // ── 來源分類（prototypes/23 SRC_STYLE）：由 per-row `field` 推導（G-LC-022/025）。──
@@ -696,9 +770,12 @@ function DocTab(): JSX.Element {
               {groups.map((g) => {
                 const groupKey = `${g.documentId}|${g.occurredAt}`;
                 const open = expanded === groupKey;
+                const one = g.events[0];
                 const summary =
                   g.events.length === 1
-                    ? `${fieldLabel(g.events[0].field)}：${valLabel(g.events[0].field, g.events[0].oldValue)} → ${valLabel(g.events[0].field, g.events[0].newValue)}`
+                    ? one.listDiff
+                      ? `${fieldLabel(one.field)}：${listSummary(one.listDiff)}`
+                      : `${fieldLabel(one.field)}：${oldText(one)} → ${newText(one)}`
                     : `${g.events.length} 項欄位變更：${g.events.map((e) => fieldLabel(e.field)).slice(0, 3).join('、')}${g.events.length > 3 ? '…' : ''}`;
                 const rowsForDetail = g.events;
                 return (
@@ -708,7 +785,8 @@ function DocTab(): JSX.Element {
                         <div className="mono text-xs text-slate-600">{g.documentNumber ?? '—'}</div>
                         {g.documentName && <div className="text-slate-800">{g.documentName}</div>}
                       </td>
-                      <td className="px-4 py-2.5 text-slate-700">
+                      {/* 🔴 2026-10-05：寬度上限＋任意處斷行之安全網——任何欄位之長值都不得再撐寬表格。 */}
+                      <td className="px-4 py-2.5 text-slate-700 max-w-md break-words [overflow-wrap:anywhere]" data-testid="change-summary-cell">
                         {g.events.length > 1 && (
                           <span className="px-1.5 py-0.5 mr-1 rounded bg-primary-100 text-primary-700 text-[10px] font-medium">
                             聚合 {g.events.length} 筆
@@ -751,13 +829,19 @@ function DocTab(): JSX.Element {
                                     <span className="font-medium text-slate-700">{fieldLabel(ev.field)}</span>
                                   </div>
                                   <div className="flex items-center gap-2 flex-wrap text-sm">
-                                    <span className="px-2 py-0.5 rounded text-xs max-w-full break-all" style={{ background: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA', textDecoration: 'line-through' }}>
-                                      {valLabel(ev.field, ev.oldValue)}
-                                    </span>
-                                    <Icon name="arrow-right" className="w-4 h-4 text-slate-400 shrink-0" />
-                                    <span className="px-2 py-0.5 rounded text-xs font-medium max-w-full break-all" style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0' }}>
-                                      {valLabel(ev.field, ev.newValue)}
-                                    </span>
+                                    {ev.listDiff ? (
+                                      <ListDiffDetail diff={ev.listDiff} />
+                                    ) : (
+                                      <>
+                                        <span className="px-2 py-0.5 rounded text-xs max-w-full break-all" style={{ background: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA', textDecoration: 'line-through' }}>
+                                          {oldText(ev)}
+                                        </span>
+                                        <Icon name="arrow-right" className="w-4 h-4 text-slate-400 shrink-0" />
+                                        <span className="px-2 py-0.5 rounded text-xs font-medium max-w-full break-all" style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0' }}>
+                                          {newText(ev)}
+                                        </span>
+                                      </>
+                                    )}
                                     {/* F012 AC36：切換原因（僅 STATUS 事件承載；未填＝不顯示此列，非「（空）」）。
                                         填補 prototype 23 缺口（原型無此顯示元素）——見 doc-changelog impl-log ruling 3。 */}
                                     {ev.reason && (
