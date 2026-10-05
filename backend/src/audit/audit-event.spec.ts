@@ -290,3 +290,60 @@ describe('buildAuditRow — F043 決策 E3：業務/功能類別（BUSINESS_CATE
     expect(row.nodeId ?? null).toBeNull();
   });
 });
+
+/**
+ * 🔴 2026-10-05 調閱歷程「對象空白」delta（D／F）。
+ *
+ * 正式站實測：`ORG_CHANGE_ALERT` 366／366 列、`BUSINESS_CATEGORY_DOC_MOUNTED/UNMOUNTED` 424／424 列
+ * 之對象編號皆為 null。前者呼叫端**有**傳 `targetNumber`，卻因本函式沒有對應分支而在落地時被丟掉
+ * （值人間蒸發）；後者呼叫端根本沒有可傳之欄位。
+ */
+describe('buildAuditRow — 調閱歷程對象編號（2026-10-05 delta）', () => {
+  it('🔴 D：ORG_CHANGE_ALERT 之 targetNumber 落至 documentNumber（不得於落地時被丟掉）', () => {
+    const row = buildAuditRow({
+      targetType: 'ORG_CHANGE_ALERT',
+      actionType: 'ALERT_RESOLVED',
+      actorId: 'acc-1',
+      targetId: 'alert-1',
+      targetNumber: 'ICSOP-SRC-101-1-01',
+      targetName: '制定部門',
+      occurredAt: OCCURRED,
+    });
+    expect(row.documentNumber).toBe('ICSOP-SRC-101-1-01');
+    expect(row.targetName).toBe('制定部門');
+    // 提示 id 仍不落任何參照欄（AUDIT_LOG 無 alertId 欄之既有定案不變）。
+    expect(row.documentId).toBeNull();
+    expect(row.lifecycleId).toBeNull();
+  });
+
+  it('🔴 F：BUSINESS_CATEGORY 掛載事件之 documentNumber（被掛載文件之編號）落至 documentNumber', () => {
+    const row = buildAuditRow({
+      targetType: 'BUSINESS_CATEGORY',
+      actionType: 'BUSINESS_CATEGORY_DOC_MOUNTED',
+      actorId: 'acc-1',
+      targetId: 'bc-1',
+      nodeId: 'n1',
+      documentId: 'd1',
+      documentNumber: 'ICSOP-SRC-101-1-01',
+      targetName: '授信（消金）',
+      occurredAt: OCCURRED,
+    });
+    expect(row.documentNumber).toBe('ICSOP-SRC-101-1-01');
+    expect(row.targetName).toBe('授信（消金）');
+    expect(row.documentId).toBe('d1');
+  });
+
+  it('🔒 E：BUSINESS_CATEGORY 之 targetNumber（類別顯示名稱）**不**落至 documentNumber——該欄為 varchar(100)、語意為文件編號；類別名稱由 targetName 承載', () => {
+    const row = buildAuditRow({
+      targetType: 'BUSINESS_CATEGORY',
+      actionType: 'BUSINESS_CATEGORY_VIEW',
+      actorId: 'acc-1',
+      targetId: 'bc-1',
+      targetNumber: '授信（消金）',
+      targetName: '授信（消金）',
+      occurredAt: OCCURRED,
+    });
+    expect(row.documentNumber).toBeNull();
+    expect(row.targetName).toBe('授信（消金）');
+  });
+});

@@ -89,6 +89,16 @@ export function buildAuditRow(event: AuditAccessEvent): AuditRow {
       businessCategoryId = event.targetId;
       nodeId = event.nodeId ?? null;
       documentId = event.documentId ?? null;
+      // 🔴 2026-10-05 delta（F）：掛載／移除事件之被掛載文件編號。刻意**不**取 `targetNumber`——
+      // 該值為類別顯示名稱（中文），而 `documentNumber` 為 varchar(100)、語意為文件編號；
+      // 類別名稱由 `targetName` 承載（E：畫面以 targetLabel 之 targetName 退路呈現）。
+      documentNumber = event.documentNumber ?? null;
+      break;
+    // 🔴 2026-10-05 delta（D）：呼叫端（`auditTarget()`）一直有傳 `targetNumber`（文件編號／
+    // 員編／登入帳號，依 alertKind），但本 switch 原本沒有這個分支 ⇒ 值在落地時被丟掉
+    // （正式站 366／366 列對象空白）。提示 id 仍不落任何參照欄（AUDIT_LOG 無 alertId 欄）。
+    case 'ORG_CHANGE_ALERT':
+      documentNumber = event.targetNumber ?? null;
       break;
     case 'BUSINESS_CATEGORY_CHANGE_LOG':
       businessCategoryId = event.targetId;

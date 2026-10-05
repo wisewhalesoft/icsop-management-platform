@@ -292,6 +292,11 @@ export interface BusinessCategoryAuditEvent extends AuditEventBase {
     | 'BUSINESS_CATEGORY_DOC_UNMOUNTED';
   nodeId?: string | null;
   documentId?: string | null;
+  /**
+   * 🔴 2026-10-05 delta（F）：掛載／移除事件之**被掛載文件編號**快照（落至 `AUDIT_LOG.documentNumber`）。
+   * 不沿用 `targetNumber`：本變體之 `targetNumber` 為類別顯示名稱，兩者語意不同。
+   */
+  documentNumber?: string | null;
 }
 
 /**
