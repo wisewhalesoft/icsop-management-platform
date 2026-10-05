@@ -81,6 +81,10 @@ const ACT_LABEL: Record<string, string> = {
   BUSINESS_CATEGORY_DOC_UNMOUNTED: '移除掛載',
   BUSINESS_CATEGORY_CHANGELOG_VIEW: '業務/功能類別變更歷程檢視',
   BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD: '業務/功能類別新舊樹狀圖下載',
+  // 🔴 2026-10-05 使用者裁定（`OQ-E07-13` 結案）：前後端兩份同時補齊。
+  LIFECYCLE_DELETE: '循環刪除',
+  ALERT_RESOLVED: '組織異動提示處理',
+  ROLE_ASSIGNED: '角色異動',
 };
 
 const KIND_TONE: Record<AuditKind, string> = {
@@ -124,6 +128,9 @@ const ACT_TONE: Record<string, string> = {
   BUSINESS_CATEGORY_DOC_UNMOUNTED: 'bg-teal-50 text-teal-700 border-teal-100',
   BUSINESS_CATEGORY_CHANGELOG_VIEW: 'bg-amber-50 text-amber-700 border-amber-100',
   BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD: 'bg-amber-50 text-amber-700 border-amber-100',
+  LIFECYCLE_DELETE: 'bg-rose-50 text-rose-700 border-rose-100',
+  ALERT_RESOLVED: 'bg-slate-50 text-slate-700 border-slate-100',
+  ROLE_ASSIGNED: 'bg-slate-50 text-slate-700 border-slate-100',
 };
 function actTone(actionType: string): string {
   return ACT_TONE[actionType] ?? ACT_TONE_SLATE;

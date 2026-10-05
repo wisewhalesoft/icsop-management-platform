@@ -68,16 +68,18 @@ describe('actionTypeLabel（AC-F5 ②：操作類型代碼 → 中文標籤，CS
   });
 
   /**
-   * ⚠ 既有缺口之承接（非本輪新增）：`LIFECYCLE_DELETE`（F007）與 `ALERT_RESOLVED`（F006）
-   * 於畫面之對照表中不存在，現況顯示裸代碼。CSV 沿用同一 fallback＝輸出原代碼
-   * （不留空、不臆造標籤）。登錄於 `OQ-E07-13`，本輪不補。
+   * 🔴 2026-10-05 使用者裁定補齊 `OQ-E07-13`：三個原本顯示裸代碼之動作自本輪起有中文標籤。
+   * 📝 被推翻之原斷言逐字保留供追溯：
+   *   OLD> it.each(['LIFECYCLE_DELETE', 'ALERT_RESOLVED'])('%s（既有缺口之 fallback）→ 原樣輸出代碼…',
+   *   OLD>   (code) => { expect(actionTypeLabel(code)).toBe(code); });
    */
-  it.each(['LIFECYCLE_DELETE', 'ALERT_RESOLVED'])(
-    '%s（既有缺口之 fallback）→ 原樣輸出代碼（不留空、不臆造標籤）',
-    (code) => {
-      expect(actionTypeLabel(code)).toBe(code);
-    },
-  );
+  it.each([
+    ['LIFECYCLE_DELETE', '循環刪除'],
+    ['ALERT_RESOLVED', '組織異動提示處理'],
+    ['ROLE_ASSIGNED', '角色異動'],
+  ])('%s → %s（2026-10-05 補齊，不再輸出裸代碼）', (code, label) => {
+    expect(actionTypeLabel(code)).toBe(label);
+  });
 
   it('未知代碼（非既有 11 種變體之一）→ 原樣輸出（fallback 與既有缺口一致，非崩潰）', () => {
     expect(actionTypeLabel('SOME_FUTURE_ACTION')).toBe('SOME_FUTURE_ACTION');

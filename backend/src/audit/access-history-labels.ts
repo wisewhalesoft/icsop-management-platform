@@ -43,9 +43,11 @@ export function roleLabel(roleCode: string | null): string {
  *    此為 `error-handling.md#export`「列舉／代碼欄一律輸出中文標籤」之通則優先於「逐字比照畫面」，
  *    已於 2026-08-18 人類閘門認可；日後不得以「CSV 與畫面不一致」為由改回輸出代碼。
  *
- * ⚠ fallback（既有缺口之承接，非本輪新增）：`LIFECYCLE_DELETE`（F007）與 `ALERT_RESOLVED`（F006）
- *    於畫面對照表中不存在、現況顯示裸代碼 ⇒ CSV 沿用同一 fallback＝**原樣輸出代碼**
- *    （不留空、不臆造標籤）。登錄於 `OQ-E07-13`，本輪不補。
+ * ⚠ fallback：未知代碼＝**原樣輸出代碼**（不留空、不臆造標籤）。
+ * 🔴 2026-10-05 使用者裁定補齊 `OQ-E07-13` 之既有缺口：`LIFECYCLE_DELETE`／`ALERT_RESOLVED`／
+ *    `ROLE_ASSIGNED` 三者原本顯示裸代碼，自本輪起有中文標籤（與前端 `ACT_LABEL` 同值）。
+ *    📝 OLD> 「`LIFECYCLE_DELETE`（F007）與 `ALERT_RESOLVED`（F006）於畫面對照表中不存在、現況顯示
+ *    裸代碼 ⇒ CSV 沿用同一 fallback＝原樣輸出代碼。登錄於 `OQ-E07-13`，本輪不補。」
  */
 const ACTION_TYPE_LABEL: Readonly<Record<string, string>> = {
   VIEW: '檢視',
@@ -79,6 +81,10 @@ const ACTION_TYPE_LABEL: Readonly<Record<string, string>> = {
   BUSINESS_CATEGORY_DOC_UNMOUNTED: '移除掛載',
   BUSINESS_CATEGORY_CHANGELOG_VIEW: '業務/功能類別變更歷程檢視',
   BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD: '業務/功能類別新舊樹狀圖下載',
+  // 🔴 2026-10-05 使用者裁定（`OQ-E07-13` 結案）：三個原本顯示裸代碼之動作。
+  LIFECYCLE_DELETE: '循環刪除',
+  ALERT_RESOLVED: '組織異動提示處理',
+  ROLE_ASSIGNED: '角色異動',
 };
 
 export function actionTypeLabel(actionType: string): string {

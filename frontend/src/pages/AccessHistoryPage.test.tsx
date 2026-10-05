@@ -521,6 +521,20 @@ describe('AccessHistoryPage — 2026-10-05 delta H（類型第六值／對象欄
     expect(within(row).getByText('ICSOP-SRC-777-1-01')).toBeInTheDocument();
   });
 
+  it.each([
+    ['LIFECYCLE_DELETE', '循環刪除'],
+    ['ALERT_RESOLVED', '組織異動提示處理'],
+    ['ROLE_ASSIGNED', '角色異動'],
+  ])('🔴 2026-10-05 OQ-E07-13 結案：%s 顯示中文標籤「%s」（不再是 `代碼 · 代碼`）', async (code, label) => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(
+      pageOf([{ ...DOC_ROW, id: `lbl-${code}`, name: '標籤測試', actionType: code }]),
+    );
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('標籤測試')).toBeInTheDocument());
+    const row = screen.getByText('標籤測試').closest('tr') as HTMLElement;
+    expect(within(row).getByText(`${code} · ${label}`)).toBeInTheDocument();
+  });
+
   it('targetLabel 為 null → 對象欄顯示「—」（不退回其他欄位臆造）', async () => {
     vi.mocked(endpoints.getAccessHistory).mockResolvedValue(
       pageOf([{ ...DOC_ROW, id: 'x1', name: '張匯出', targetLabel: null }]),
