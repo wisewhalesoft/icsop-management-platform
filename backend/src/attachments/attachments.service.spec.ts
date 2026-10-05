@@ -666,6 +666,34 @@ describe('AttachmentsService（F016 PDF/OJT 附件）', () => {
     });
 
     /**
+     * 🔴 2026-10-05 調閱歷程「對象空白」delta（A）：本路徑原本**不帶** `targetNumber`／`targetName`，
+     * 使 F024「對象」欄顯示「—」（正式站 DOCUMENT／DOWNLOAD 121 列中 60 列，今日仍在發生），
+     * 而前台浮水印下載（`watermark.service.ts`）同一種事件卻有帶——同一事件、兩個組裝點、一邊漏欄。
+     */
+    it('🔴 A：後台附件下載之稽核帶文件編號與名稱快照（F024 對象欄不得空白）', async () => {
+      const blobA = new FakeBlobStore();
+      const storeA = new FakeAttachmentStore();
+      const auditWriter = new FakeAuditWriterD9();
+      const docs = {
+        findById: (id: string) =>
+          Promise.resolve({
+            id,
+            documentNumber: 'ICSOP-SRC-101-1-01',
+            documentName: '車輛分期進件作業',
+          } as DocumentView),
+      } as unknown as DocumentStore;
+      const { watermark } = makeD9Harness();
+      const svc = new AttachmentsService(blobA, storeA, docs, undefined, watermark, auditWriter);
+      const rec = await svc.uploadSingle(ICSOP_ADMIN, DOC, 'ICSOP_PDF', pdf());
+
+      await svc.downloadAttachmentRaw(SUP_SESSION, rec.blobPath);
+
+      expect(auditWriter.events).toHaveLength(1);
+      expect(auditWriter.events[0].targetNumber).toBe('ICSOP-SRC-101-1-01');
+      expect(auditWriter.events[0].targetName).toBe('車輛分期進件作業');
+    });
+
+    /**
      * 🔴 F042 E11 delta（`AC-J1`／`AC-J2`）：原案以 'OJT_SIGNIN'（png）示範「非 PDF 下載仍寫稽核、
      * watermarkSnapshot 為 null」——'OJT_SIGNIN' 已非合法類型，本檔僅存類型（'ICSOP_PDF'）恆為
      * PDF、無法建構「非 PDF 之 ICSOP_PDF」情境。該不變式（非 PDF 下載仍寫稽核）之覆蓋率移交：

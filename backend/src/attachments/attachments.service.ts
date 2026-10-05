@@ -319,10 +319,15 @@ export class AttachmentsService {
   ): Promise<void> {
     if (!this.auditWriter) return;
     const identity = await resolveAuditIdentity(this.burner, session as WatermarkSession);
+    // 🔴 2026-10-05 delta（A）：對象快照。本路徑原本不帶這兩欄，使 F024「對象」欄顯示「—」，
+    // 而前台浮水印下載（watermark.service.ts）之同一種事件有帶。查無文件 → null（不阻斷下載）。
+    const doc = this.documentStore ? await this.documentStore.findById(documentId) : null;
     await this.auditWriter.recordAccess({
       targetType: 'DOCUMENT',
       actionType: 'DOWNLOAD',
       targetId: documentId,
+      targetNumber: doc?.documentNumber ?? null,
+      targetName: doc?.documentName ?? null,
       actorId: session?.accountId ?? '',
       actorName: session?.name ?? null,
       ...identity,
