@@ -291,7 +291,16 @@ export class BusinessCategoryDocsService {
         event: this.buildEvent(businessCategoryId, 'DOCUMENT_MOUNTED', nodeId, documentId, node, actor),
       };
     });
-    await this.audit('BUSINESS_CATEGORY_DOC_MOUNTED', businessCategoryId, nodeId, documentId, actor);
+    // 🔴 2026-10-05 delta（F）：掛載**之後**才查得到該文件於本節點之列（取其編號作對象快照）。
+    const docNumber = await this.mountedDocNumber(businessCategoryId, nodeId, documentId);
+    await this.audit(
+      'BUSINESS_CATEGORY_DOC_MOUNTED',
+      businessCategoryId,
+      nodeId,
+      documentId,
+      actor,
+      docNumber,
+    );
   }
 
   /**
@@ -307,6 +316,8 @@ export class BusinessCategoryDocsService {
     actor: BusinessCategoryMountActor,
   ): Promise<void> {
     const node = await this.requireNode(businessCategoryId, nodeId);
+    // 🔴 2026-10-05 delta（F）：移除**之前**先取編號（移除後該列已不在本節點）。
+    const docNumber = await this.mountedDocNumber(businessCategoryId, nodeId, documentId);
     await this.runChange<void>(async (m) => {
       const removed = await m.unmount(nodeId, documentId);
       if (!removed) throw new NotFoundException('BUSINESS_CATEGORY_MOUNT_NOT_FOUND');
@@ -328,7 +339,36 @@ export class BusinessCategoryDocsService {
       nodeId,
       documentId,
       actor,
+      docNumber,
     );
+  }
+
+  /**
+   * 🔴 2026-10-05 delta（F）：稽核對象快照所需之文件編號。查無或查詢失敗 ⇒ null（稽核為非阻斷，
+   * 對象快照不得使掛載／移除失敗）。沿用既有 `listNodeMountedDocs`，不為此擴張 store 介面。
+   */
+  private async mountedDocNumber(
+    businessCategoryId: string,
+    nodeId: string,
+    documentId: string,
+  ): Promise<string | null> {
+    try {
+      const docs = await this.store.listNodeMountedDocs(businessCategoryId, nodeId);
+      return docs.find((d) => d.id === documentId)?.documentNumber ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** 🔴 2026-10-05 delta（F）：類別顯示名稱快照（含子分類；未注入類別池或查無 ⇒ null）。 */
+  private async categoryDisplayName(businessCategoryId: string): Promise<string | null> {
+    if (!this.categoryStore) return null;
+    try {
+      const category = await this.categoryStore.findById(businessCategoryId);
+      return category ? businessCategoryDisplayName(category) : null;
+    } catch {
+      return null;
+    }
   }
 
   private async requireNode(
@@ -395,8 +435,10 @@ export class BusinessCategoryDocsService {
     nodeId: string,
     documentId: string,
     actor: BusinessCategoryMountActor,
+    documentNumber: string | null,
   ): Promise<void> {
     if (!this.auditWriter) return;
+    const targetName = await this.categoryDisplayName(businessCategoryId);
     const identity = (await this.auditIdentity?.resolve({
       name: actor.actorName,
       employeeNo: actor.employeeNo,
@@ -418,6 +460,8 @@ export class BusinessCategoryDocsService {
         targetId: businessCategoryId,
         nodeId,
         documentId,
+        documentNumber,
+        targetName,
         actorId: actor.actorId,
         actorName: identity.actorName,
         employeeNo: identity.employeeNo,

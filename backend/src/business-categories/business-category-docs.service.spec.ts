@@ -304,6 +304,37 @@ describe('BusinessCategoryDocsService（F043 §丙 節點掛載）', () => {
       ]);
     });
 
+    /**
+     * 🔴 2026-10-05 調閱歷程「對象空白」delta（F）：掛載／移除稽核原本只有 id——正式站 424／424 列
+     * 之編號與名稱皆空，F024 上看不出「哪份文件掛到哪個類別」。
+     */
+    it('🔴 F：掛載／移除稽核帶被掛載文件之編號（documentNumber）與類別顯示名稱（targetName）', async () => {
+      const categories = {
+        findById: (id: string) =>
+          Promise.resolve(id === 'bc1' ? { id, name: '授信', subcategory: '消金' } : null),
+      } as unknown as import('./business-category.store').BusinessCategoryStore;
+      const svcF = new BusinessCategoryDocsService(
+        store,
+        audit,
+        undefined,
+        () => new Date(),
+        undefined,
+        undefined,
+        categories,
+      );
+      store.doc('D1', 'ICSOP-SRC-101-1-01', '車輛分期進件作業');
+      const expectedName = businessCategoryDisplayName({ name: '授信', subcategory: '消金' });
+
+      await svcF.mount('bc1', 'n1', 'D1', ACTOR);
+      await svcF.unmount('bc1', 'n1', 'D1', ACTOR);
+
+      expect(audit.events).toHaveLength(2);
+      for (const e of audit.events as unknown as Array<{ documentNumber?: string | null; targetName?: string | null }>) {
+        expect(e.documentNumber).toBe('ICSOP-SRC-101-1-01');
+        expect(e.targetName).toBe(expectedName);
+      }
+    });
+
     it('失敗之掛載（重複）→ 不記稽核', async () => {
       store.doc('D1');
       await auditSvc.mount('bc1', 'n1', 'D1', ACTOR);
