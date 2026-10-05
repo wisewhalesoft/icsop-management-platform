@@ -515,6 +515,9 @@ describe('AppendicesService（F039 附錄池管理）', () => {
           documentId: 'doc-1',
           accountId: 'u1',
           watermarkSnapshot: null,
+          // 🔴 2026-10-05 delta：對象快照（池／無 loadDocMeta 之 harness ⇒ 編號 null；名稱恆為檔名）。
+          targetNumber: null,
+          targetName: f.name,
         },
       ]);
     });

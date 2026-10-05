@@ -21,6 +21,7 @@ import {
   WATERMARK_BURNER,
   WatermarkBurner,
   WatermarkSession,
+  resolveAuditDocumentNumber,
   resolveAuditIdentity,
 } from '../public/watermark-burner.service';
 import { supportsWatermark } from '../public/watermark';
@@ -536,7 +537,7 @@ export class AppendicesService {
       ? await this.burner.burnIfPdf(session as WatermarkSession, raw, appendix.format)
       : { bytes: raw, snapshot: null };
     // AC-N57：一律寫稽核；documentId 為 null（池管理頁脈絡無所屬文件）。
-    await this.recordDownload(session, appendixId, null, burned.snapshot);
+    await this.recordDownload(session, appendixId, appendix.name, null, burned.snapshot);
     return {
       bytes: burned.bytes,
       fileName: appendix.name,
@@ -554,6 +555,7 @@ export class AppendicesService {
   private async recordDownload(
     session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
     appendixId: string,
+    appendixName: string,
     documentId: string | null,
     watermarkSnapshot: string | null,
   ): Promise<void> {
@@ -563,6 +565,9 @@ export class AppendicesService {
       actionType: 'DOWNLOAD',
       appendixId,
       documentId,
+      // 🔴 2026-10-05 delta（B）：對象快照（原本未帶 ⇒ F024 對象欄「—」，正式站 40／40）。
+      targetNumber: await resolveAuditDocumentNumber(this.burner, documentId),
+      targetName: appendixName,
       accountId: session?.accountId ?? '',
       ...identity,
       watermarkSnapshot,
@@ -600,7 +605,7 @@ export class AppendicesService {
       ? await this.burner.burnIfPdf(session as WatermarkSession, raw, appendix.format)
       : { bytes: raw, snapshot: null };
 
-    await this.recordDownload(session, appendixId, documentId, burned.snapshot);
+    await this.recordDownload(session, appendixId, appendix.name, documentId, burned.snapshot);
     return {
       bytes: burned.bytes,
       fileName: appendix.name,

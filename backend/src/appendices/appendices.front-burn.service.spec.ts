@@ -445,3 +445,46 @@ describe('D9 delta — 後台附錄管理頁個別下載改為一律燒錄＋寫
     }
   });
 });
+
+/**
+ * 🔴 2026-10-05 調閱歷程「對象空白」delta（B）：稽核帶對象快照。原本兩欄皆未攜帶，
+ * F024「對象」欄顯示「—」（正式站 40／40）。
+ */
+describe('2026-10-05 delta B：附錄下載稽核之對象快照', () => {
+  function withDocMeta(watermark: WatermarkService): void {
+    (watermark as unknown as { loadDocMeta: (id: string) => Promise<unknown> }).loadDocMeta = (
+      id: string,
+    ) =>
+      Promise.resolve(
+        id === 'doc-1'
+          ? { documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業', usingDepts: [] }
+          : null,
+      );
+  }
+
+  it('前台（文件脈絡）→ targetNumber＝該文件編號、targetName＝附錄名稱', async () => {
+    const rec = recordOf();
+    const { svc, blob, audit, watermark } = makeHarness([rec]);
+    withDocMeta(watermark);
+    await blob.put(rec.blobPath, PDF_BYTES, 'application/pdf');
+
+    await svc.downloadAppendix(VIEWER, 'doc-1', 'ax-pdf');
+
+    expect(audit.events).toHaveLength(1);
+    expect(audit.events[0].targetNumber).toBe('ICSOP-SRC-101-1-01');
+    expect(audit.events[0].targetName).toBe('名詞定義說明.pdf');
+  });
+
+  it('附錄池管理頁（無文件脈絡）→ targetNumber＝null、targetName 仍為附錄名稱', async () => {
+    const rec = recordOf();
+    const { svc, blob, audit, watermark } = makeHarness([rec]);
+    withDocMeta(watermark);
+    await blob.put(rec.blobPath, PDF_BYTES, 'application/pdf');
+
+    await svc.downloadFromPool(ICSOP_ADMIN, 'ax-pdf');
+
+    expect(audit.events).toHaveLength(1);
+    expect(audit.events[0].targetNumber ?? null).toBeNull();
+    expect(audit.events[0].targetName).toBe('名詞定義說明.pdf');
+  });
+});

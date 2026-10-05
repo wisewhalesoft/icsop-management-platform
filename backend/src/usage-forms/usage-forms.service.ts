@@ -39,6 +39,7 @@ import {
   WATERMARK_BURNER,
   WatermarkBurner,
   WatermarkSession,
+  resolveAuditDocumentNumber,
   resolveAuditIdentity,
 } from '../public/watermark-burner.service';
 import {
@@ -755,7 +756,7 @@ export class UsageFormsService {
     const burned = this.burner
       ? await this.burner.burnIfPdf(session as WatermarkSession, raw, form.format)
       : { bytes: raw, snapshot: null };
-    await this.recordDownload(session, form.id, documentId, burned.snapshot);
+    await this.recordDownload(session, form.id, form.name, documentId, burned.snapshot);
     return {
       bytes: burned.bytes,
       fileName: form.name,
@@ -770,6 +771,7 @@ export class UsageFormsService {
   private async recordDownload(
     session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
     formId: string,
+    formName: string,
     documentId: string | null,
     watermarkSnapshot: string | null,
   ): Promise<void> {
@@ -779,6 +781,9 @@ export class UsageFormsService {
       actionType: 'DOWNLOAD',
       formId,
       documentId,
+      // 🔴 2026-10-05 delta（C）：對象快照（原本未帶 ⇒ F024 對象欄只剩裸 formId）。
+      targetNumber: await resolveAuditDocumentNumber(this.burner, documentId),
+      targetName: formName,
       accountId: session?.accountId ?? '',
       ...identity,
       watermarkSnapshot,
@@ -809,7 +814,7 @@ export class UsageFormsService {
       ? await this.burner.burnIfPdf(session as WatermarkSession, raw, form.format)
       : { bytes: raw, snapshot: null };
 
-    await this.recordDownload(session, formId, documentId, burned.snapshot);
+    await this.recordDownload(session, formId, form.name, documentId, burned.snapshot);
     return {
       bytes: burned.bytes,
       fileName: form.name,

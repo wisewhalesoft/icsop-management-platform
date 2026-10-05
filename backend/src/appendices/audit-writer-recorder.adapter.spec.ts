@@ -149,3 +149,21 @@ describe('AuditWriterRecorder（附錄稽核 → 真實 AuditWriter 轉接，F03
     expect(writer.calls[0].actorName).not.toBeNull();
   });
 });
+
+describe('🔴 2026-10-05 delta：對象快照之轉送（APPENDIX）', () => {
+  it('targetNumber／targetName 逐字轉送至 recordAccess（原本未轉送 ⇒ F024 對象欄空白）', async () => {
+    const writer = new FakeAuditWriter();
+    const recorder = new AuditWriterRecorder(writer as unknown as AuditWriterService);
+    await recorder.record({
+      targetType: 'APPENDIX',
+      actionType: 'DOWNLOAD',
+      appendixId: 'ax-42',
+      documentId: 'doc-7',
+      accountId: 'acct-9',
+      targetNumber: 'ICSOP-SRC-101-1-01',
+      targetName: '進件申請書.pdf',
+    });
+    expect(writer.calls[0].targetNumber).toBe('ICSOP-SRC-101-1-01');
+    expect(writer.calls[0].targetName).toBe('進件申請書.pdf');
+  });
+});

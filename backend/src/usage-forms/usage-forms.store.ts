@@ -194,6 +194,14 @@ export interface UsageFormAuditEvent {
   section?: string | null;
   roleCode?: string | null;
 
+  /**
+   * 🔴 2026-10-05 調閱歷程「對象空白」delta：對象快照。`targetNumber`＝下載脈絡之文件編號
+   * （池管理頁無文件脈絡 ⇒ null）；`targetName`＝被下載檔案本身之名稱。原本兩欄皆未攜帶，
+   * 使 F024「對象」欄顯示「—」或裸 id。
+   */
+  targetNumber?: string | null;
+  targetName?: string | null;
+
   /** F020 `AC-D5`：前台下載之浮水印快照（PDF 落值、非 PDF 為 `null`）。 */
   watermarkSnapshot?: string | null;
 }

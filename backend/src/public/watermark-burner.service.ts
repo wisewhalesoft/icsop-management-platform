@@ -116,6 +116,12 @@ export interface WatermarkBurner {
    * production 四個模組皆由 `WatermarkBurnerModule` 提供真實實作）。
    */
   assertDocumentVisible?(session: WatermarkSession, documentId: string): Promise<void>;
+  /**
+   * 🔴 2026-10-05 調閱歷程「對象空白」delta（B／C）：文件編號／名稱，供附錄與使用表單下載之稽核
+   * 帶對象快照。宣告為**選填**之理由同 `assertDocumentVisible`；未提供 ⇒ 快照為 null，
+   * F024 改由顯示端以 id 回查補位（不阻斷下載）。
+   */
+  loadDocMeta?(documentId: string): Promise<DocMeta | null>;
 }
 
 /** 燒錄邊界之窄口徑（結構相容 `PdfBurner`；此處刻意不 import 以維持零相依）。 */
@@ -305,4 +311,21 @@ export async function resolveAuditIdentity(
     section: fields.sectionName || null,
     roleCode: session.roleCode ?? null,
   };
+}
+
+/**
+ * 🔴 2026-10-05 調閱歷程「對象空白」delta（B／C）：下載脈絡之文件編號（稽核對象快照用）。
+ * 無文件脈絡（池管理頁）、burner 未提供 `loadDocMeta`、查無或查詢失敗 ⇒ null——
+ * 對象快照是輔助資訊，**不得**因它而使下載失敗。
+ */
+export async function resolveAuditDocumentNumber(
+  burner: WatermarkBurner | undefined,
+  documentId: string | null,
+): Promise<string | null> {
+  if (!documentId || !burner?.loadDocMeta) return null;
+  try {
+    return (await burner.loadDocMeta(documentId))?.documentNumber ?? null;
+  } catch {
+    return null;
+  }
 }

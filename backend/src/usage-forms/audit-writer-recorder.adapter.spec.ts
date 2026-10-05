@@ -132,3 +132,21 @@ describe('AuditWriterRecorder（使用表單稽核 → 真實 AuditWriter 轉接
     expect(writer.calls[0].actorName).not.toBeNull();
   });
 });
+
+describe('🔴 2026-10-05 delta：對象快照之轉送（USAGE_FORM）', () => {
+  it('targetNumber／targetName 逐字轉送至 recordAccess（原本未轉送 ⇒ F024 對象欄空白）', async () => {
+    const writer = new FakeAuditWriter();
+    const recorder = new AuditWriterRecorder(writer as unknown as AuditWriterService);
+    await recorder.record({
+      targetType: 'USAGE_FORM',
+      actionType: 'DOWNLOAD',
+      formId: 'form-42',
+      documentId: 'doc-7',
+      accountId: 'acct-9',
+      targetNumber: 'ICSOP-SRC-101-1-01',
+      targetName: '進件申請書.pdf',
+    });
+    expect(writer.calls[0].targetNumber).toBe('ICSOP-SRC-101-1-01');
+    expect(writer.calls[0].targetName).toBe('進件申請書.pdf');
+  });
+});

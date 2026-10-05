@@ -50,6 +50,9 @@ export class AuditWriterRecorder implements AuditRecorder {
       department: event.department ?? null,
       section: event.section ?? null,
       roleCode: event.roleCode ?? null,
+      // 🔴 2026-10-05 delta：對象快照（原本未轉送 ⇒ F024 對象欄空白）。
+      targetNumber: event.targetNumber ?? null,
+      targetName: event.targetName ?? null,
       watermarkSnapshot: event.watermarkSnapshot ?? null,
       occurredAt: new Date(),
     });

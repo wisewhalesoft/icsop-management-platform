@@ -410,3 +410,56 @@ describe('F018 AC-D14：失敗路徑不得留下稽核（既有語意不變）',
     expect(audit.events).toHaveLength(0);
   });
 });
+
+/**
+ * 🔴 2026-10-05 調閱歷程「對象空白」delta（C）：稽核帶對象快照。原本兩欄皆未攜帶，
+ * F024「對象」欄只剩裸 formId（正式站 3／3 無名稱）。
+ */
+describe('2026-10-05 delta C：使用表單下載稽核之對象快照', () => {
+  function withDocMeta(watermark: WatermarkService): void {
+    (watermark as unknown as { loadDocMeta: (id: string) => Promise<unknown> }).loadDocMeta = (
+      id: string,
+    ) =>
+      Promise.resolve(
+        id === 'doc-42'
+          ? { documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業', usingDepts: [] }
+          : null,
+      );
+  }
+
+  it('前台（文件脈絡）→ targetNumber＝該文件編號、targetName＝表單名稱', async () => {
+    const { svc, audit, watermark } = makeHarness();
+    withDocMeta(watermark);
+    const rec = await seed(svc, PDF_FILE(), 'doc-42');
+    audit.events.length = 0;
+
+    await svc.downloadForm(VIEWER, 'doc-42', rec.id);
+
+    expect(audit.events[0].targetNumber).toBe('ICSOP-SRC-101-1-01');
+    expect(audit.events[0].targetName).toBe(rec.name);
+  });
+
+  it('表單池管理頁（無文件脈絡）→ targetNumber＝null、targetName 仍為表單名稱', async () => {
+    const { svc, audit, watermark } = makeHarness();
+    withDocMeta(watermark);
+    const rec = await seed(svc, PDF_FILE(), 'doc-42');
+    audit.events.length = 0;
+
+    await svc.downloadFromPool(ICSOP_ADMIN, rec.id);
+
+    expect(audit.events[0].targetNumber ?? null).toBeNull();
+    expect(audit.events[0].targetName).toBe(rec.name);
+  });
+
+  it('查文件編號失敗 → 下載照常完成、targetNumber＝null（對象快照不得阻斷下載）', async () => {
+    const { svc, audit, watermark } = makeHarness();
+    (watermark as unknown as { loadDocMeta: () => Promise<unknown> }).loadDocMeta = () =>
+      Promise.reject(new Error('DB_DOWN'));
+    const rec = await seed(svc, PDF_FILE(), 'doc-42');
+    audit.events.length = 0;
+
+    await expect(svc.downloadForm(VIEWER, 'doc-42', rec.id)).resolves.toBeDefined();
+    expect(audit.events[0].targetNumber ?? null).toBeNull();
+    expect(audit.events[0].targetName).toBe(rec.name);
+  });
+});
