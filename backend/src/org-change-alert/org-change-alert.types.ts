@@ -10,6 +10,7 @@
 
 import { NormalizedOrgUnit, NormalizedAccount } from '../org-sync/normalization';
 import { ExistingOrgUnit, ExistingAccount } from '../org-sync/change-classification';
+import type { AuditIdentitySource } from '../audit/audit-identity.service';
 
 /**
  * 提示種類（判別欄）。
@@ -208,6 +209,12 @@ export interface OrgChangeAlertStore {
   listActiveAccounts(companyCode: string): Promise<ActiveAccountRef[]>;
   /** 文件關聯索引（全量）。 */
   listDocumentRefs(): Promise<DocumentAlertRef[]>;
+  /**
+   * 🔴 2026-10-05 delta（G）：Route A 自動解除之操作者身分來源（以帳號 id 取公司／組織／角色）。
+   * 文件變更事件只攜帶 id／姓名／員編三欄，缺此查詢則稽核之公司／部門／處室／角色四欄恆空
+   * （正式站 55 列）。選填以免打爆既有替身；未提供 ⇒ 維持事件攜帶之欄位。
+   */
+  findActorIdentitySource?(accountId: string): Promise<AuditIdentitySource | null>;
 }
 
 /** DI token。 */

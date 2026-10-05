@@ -4,6 +4,7 @@ import { AuthModule } from '../auth/auth.module';
 import { RbacModule } from '../rbac/rbac.module';
 import { AuditModule } from '../audit/audit.module';
 import { AuditWriterService } from '../audit/audit-writer.service';
+import { AuditIdentityService } from '../audit/audit-identity.service';
 import { OrgChangeAlertController } from './org-change-alert.controller';
 import { OrgChangeAlertService } from './org-change-alert.service';
 import { OrgChangeAlertAutoResolveSubscriber } from './document-change-subscriber';
@@ -31,8 +32,12 @@ import { OrgChangeAlertStore, ORG_CHANGE_ALERT_STORE } from './org-change-alert.
       useFactory: (
         store: OrgChangeAlertStore,
         audit: AuditWriterService,
-      ): OrgChangeAlertService => new OrgChangeAlertService(store, audit, () => new Date()),
-      inject: [ORG_CHANGE_ALERT_STORE, AuditWriterService],
+        identity: AuditIdentityService,
+      ): OrgChangeAlertService =>
+        new OrgChangeAlertService(store, audit, () => new Date(), identity),
+      // 🔴 2026-10-05 delta（G）：AuditIdentityService 必須列於此——useFactory 不看建構子之選填性，
+      // 漏列 ⇒ 第 4 參數恆 undefined、Route A 身分四欄照樣空白而單元測試全綠。
+      inject: [ORG_CHANGE_ALERT_STORE, AuditWriterService, AuditIdentityService],
     },
     OrgChangeAlertAutoResolveSubscriber,
   ],

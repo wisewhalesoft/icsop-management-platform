@@ -789,6 +789,88 @@ describe('OrgChangeAlertService.autoResolveFromDocumentChange（Route A 服務�
 
     expect(store.rows.every((r) => r.status === 'pending')).toBe(true);
   });
+
+  /**
+   * 🔴 2026-10-05 delta（G）：Route A 之操作者原本只有 id／姓名／員編 ⇒ 稽核之公司／部門／處室／角色
+   * 四欄恆空（正式站 55 列，roleCode 亦為 NULL）。Route B 經 AuditIdentityService 補齊，本路徑漏了。
+   */
+  it('🔴 G：Route A 稽核之身分快照以帳號查得之身分來源經 AuditIdentityService 補齊（六欄齊全）', async () => {
+    const store = new FakeAlertStore();
+    store.rows = [pending()];
+    const lookups: string[] = [];
+    (store as unknown as { findActorIdentitySource: (id: string) => Promise<unknown> }).findActorIdentitySource = (
+      id: string,
+    ) => {
+      lookups.push(id);
+      return Promise.resolve({
+        name: '李慧玲',
+        employeeNo: '20233',
+        companyCode: 'AS',
+        orgCode: 'JAC00',
+        roleCode: 'ICSOPAdmin',
+      });
+    };
+    const resolved: unknown[] = [];
+    const identity = {
+      resolve: (src: unknown) => {
+        resolved.push(src);
+        return Promise.resolve({
+          actorName: '李慧玲',
+          employeeNo: '20233',
+          company: '和潤企業股份有限公司',
+          department: '營運管理部',
+          section: '審查室',
+          roleCode: 'ICSOPAdmin',
+        });
+      },
+    };
+    const audit = new FakeAudit();
+    const service = new OrgChangeAlertService(store, audit, () => NOW, identity);
+
+    await service.autoResolveFromDocumentChange({
+      documentId: 'D1',
+      affectedFields: [FieldKey.CHIEF_PRIMARY],
+      actor: { accountId: 'acc-2', name: '李慧玲', employeeNo: '20233' },
+      occurredAt: NOW,
+    });
+
+    expect(lookups).toEqual(['acc-2']);
+    expect(resolved).toEqual([
+      { name: '李慧玲', employeeNo: '20233', companyCode: 'AS', orgCode: 'JAC00', roleCode: 'ICSOPAdmin' },
+    ]);
+    expect(audit.events).toHaveLength(1);
+    expect(audit.events[0]).toMatchObject({
+      actorId: 'acc-2',
+      actorName: '李慧玲',
+      employeeNo: '20233',
+      company: '和潤企業股份有限公司',
+      department: '營運管理部',
+      section: '審查室',
+      roleCode: 'ICSOPAdmin',
+    });
+  });
+
+  it('G：身分查詢失敗 → 自動解除照常完成、稽核仍寫入（沿用事件攜帶之欄位）', async () => {
+    const store = new FakeAlertStore();
+    store.rows = [pending()];
+    (store as unknown as { findActorIdentitySource: () => Promise<unknown> }).findActorIdentitySource = () =>
+      Promise.reject(new Error('DB_DOWN'));
+    const audit = new FakeAudit();
+    const service = new OrgChangeAlertService(store, audit, () => NOW, {
+      resolve: () => Promise.reject(new Error('unreachable')),
+    });
+
+    await service.autoResolveFromDocumentChange({
+      documentId: 'D1',
+      affectedFields: [FieldKey.CHIEF_PRIMARY],
+      actor: { accountId: 'acc-2', name: '李慧玲', employeeNo: '20233' },
+      occurredAt: NOW,
+    });
+
+    expect(store.rows[0].status).toBe('resolved');
+    expect(audit.events).toHaveLength(1);
+    expect(audit.events[0].actorName).toBe('李慧玲');
+  });
 });
 
 describe('OrgChangeAlertService.monthlySummary（KPI，D7）', () => {

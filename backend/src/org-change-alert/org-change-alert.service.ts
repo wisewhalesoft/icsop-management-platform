@@ -29,6 +29,7 @@ import {
 import { NormalizedOrgUnit } from '../org-sync/normalization';
 import { AuditWriter, OrgChangeAlertAuditEvent } from '../audit/audit.types';
 import { AuditWriterService } from '../audit/audit-writer.service';
+import type { AuditIdentityService } from '../audit/audit-identity.service';
 
 /** 提示處理者身分（Route B＝呼叫端 SessionUser；Route A＝原始文件編輯事件之操作者）。 */
 export interface AlertActor {
@@ -68,6 +69,10 @@ export class OrgChangeAlertService implements OrgChangeAlertGenerator {
     // 選填：無稽核時（純單元測試）解除流程仍完整運作。
     @Optional() private readonly audit?: AuditWriter | AuditWriterService,
     private readonly now: () => Date = () => new Date(),
+    // 🔴 2026-10-05 delta（G）：Route A 操作者身分之補齊（與 Route B／其餘寫入點同一組裝點）。
+    // 選填：未注入（純單元測試）⇒ 維持事件攜帶之欄位。⚠ 本 provider 為 useFactory，
+    // 注入與否由 module 之 inject 陣列決定（不看 @Optional），見 org-change-alert.module.ts。
+    private readonly identity?: Pick<AuditIdentityService, 'resolve'>,
   ) {}
 
   async generateFromSyncPlan(input: SyncAlertInput): Promise<void> {
@@ -190,6 +195,7 @@ export class OrgChangeAlertService implements OrgChangeAlertGenerator {
     if (input.affectedFields.length === 0) return;
     const fields = new Set(input.affectedFields);
     const pending = await this.store.findPendingByDocument(input.documentId);
+    let actor: AlertActor | null = null;
     for (const row of pending) {
       if (row.status !== 'pending') continue;
       if (!row.affectedField || !fields.has(row.affectedField)) continue;
@@ -198,7 +204,34 @@ export class OrgChangeAlertService implements OrgChangeAlertGenerator {
         resolvedAt: input.occurredAt,
         resolutionKind: 'FIELD_UPDATED',
       });
-      await this.writeAudit(row, input.actor, input.occurredAt);
+      actor ??= await this.completeActor(input.actor);
+      await this.writeAudit(row, actor, input.occurredAt);
+    }
+  }
+
+  /**
+   * 🔴 2026-10-05 delta（G）：Route A 之操作者只帶 id／姓名／員編（文件變更事件之形狀），
+   * 原本直接寫入稽核 ⇒ 公司／部門／處室／角色四欄恆空（正式站 55 列、roleCode 亦為 NULL）；
+   * Route B（controller）則經 `AuditIdentityService` 補齊——同一事件、兩個組裝點、一邊漏欄。
+   * 查詢失敗 ⇒ 維持原欄位（稽核為非阻斷，不得使自動解除失敗）。
+   */
+  private async completeActor(actor: AlertActor): Promise<AlertActor> {
+    if (!actor.accountId || !this.identity || !this.store.findActorIdentitySource) return actor;
+    try {
+      const source = await this.store.findActorIdentitySource(actor.accountId);
+      if (!source) return actor;
+      const snap = await this.identity.resolve(source);
+      return {
+        accountId: actor.accountId,
+        name: actor.name ?? snap.actorName,
+        employeeNo: actor.employeeNo ?? snap.employeeNo,
+        company: snap.company,
+        department: snap.department,
+        section: snap.section,
+        roleCode: snap.roleCode,
+      };
+    } catch {
+      return actor;
     }
   }
 

@@ -15,6 +15,7 @@ import { IcsopDocument } from '../database/entities/icsop-document.entity';
 import { DocSecondaryChief } from '../database/entities/doc-secondary-chief.entity';
 import { DocUsingDept } from '../database/entities/doc-using-dept.entity';
 import { Account } from '../database/entities/account.entity';
+import type { AuditIdentitySource } from '../audit/audit-identity.service';
 import { FieldKey } from '../rbac/field-matrix';
 
 /**
@@ -155,6 +156,24 @@ export class TypeOrmOrgChangeAlertStore implements OrgChangeAlertStore {
         affectedField: In([FieldKey.CHIEF_PRIMARY, FieldKey.CHIEF_SECONDARY]),
       },
     });
+  }
+
+  /** 🔴 2026-10-05 delta（G）：Route A 操作者之身分來源（白名單欄位）。查無 ⇒ null。 */
+  async findActorIdentitySource(accountId: string): Promise<AuditIdentitySource | null> {
+    const ds = await this.init();
+    const a = await ds.getRepository(Account).findOne({
+      where: { id: accountId },
+      select: { id: true, name: true, employeeNo: true, companyCode: true, orgCode: true, roleCode: true },
+    });
+    return a
+      ? {
+          name: a.name,
+          employeeNo: a.employeeNo,
+          companyCode: a.companyCode,
+          orgCode: a.orgCode,
+          roleCode: a.roleCode,
+        }
+      : null;
   }
 
   async listActiveAccounts(companyCode: string): Promise<ActiveAccountRef[]> {
