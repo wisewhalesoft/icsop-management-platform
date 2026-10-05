@@ -21,7 +21,14 @@ import {
   formatExportTimestamp,
   toCsvBuffer,
 } from '../storage/csv-export';
-import { actorLabel, changeValueLabel, fieldLabel, sourceLabel } from './change-labels';
+import { actorLabel, fieldLabel, sourceLabel } from './change-labels';
+import {
+  EMPTY_NAME_MAPS,
+  ListDiff,
+  collectNameRequests,
+  displayChange,
+} from './change-value-display';
+import { CHANGE_VALUE_NAMES, ChangeValueNames } from './change-value-names';
 
 /** 匯出結果（controller 據此設定 Content-Disposition 並 `res.send(buffer)`）。 */
 export interface ChangeExportResult {
@@ -37,8 +44,9 @@ const DOC_EXPORT_COLUMNS: CsvColumn<DocumentChangeView>[] = [
   { header: '程序書編號', value: (r) => r.documentNumber },
   { header: '程序書書名', value: (r) => r.documentName },
   { header: '變更欄位', value: (r) => fieldLabel(r.field) },
-  { header: '舊值', value: (r) => changeValueLabel(r.field, r.oldValue) },
-  { header: '新值', value: (r) => changeValueLabel(r.field, r.newValue) },
+  // 🔴 2026-10-05 delta：與畫面同一份顯示值（代碼已轉名稱；清單型以「、」相接、完整列出）。
+  { header: '舊值', value: (r) => r.oldDisplay },
+  { header: '新值', value: (r) => r.newDisplay },
   { header: '來源', value: (r) => sourceLabel(r.changeType, r.field) },
   { header: '操作人', value: (r) => actorLabel(r.actorName, r.actorEmployeeNo) },
   { header: '時間', value: (r) => formatExportTimestamp(r.occurredAt) },
@@ -50,6 +58,14 @@ const DOC_EXPORT_COLUMNS: CsvColumn<DocumentChangeView>[] = [
  */
 export interface DocumentChangeView extends DocumentChangeLogRow {
   documentName: string | null;
+  /**
+   * 🔴 2026-10-05 delta：舊值／新值之顯示字串（代碼 → 名稱；畫面與 CSV 共用，見 change-value-display）。
+   * 原始 `oldValue`／`newValue` 保留不動。
+   */
+  oldDisplay: string;
+  newDisplay: string;
+  /** 清單型欄位（使用部門、次要室長）之增減；其餘欄位為 null。 */
+  listDiff: ListDiff | null;
 }
 
 /** 檢視稽核所需之操作者身分快照（與浮水印/稽核同一來源；由 controller 自 SessionUser 帶入）。 */
@@ -81,6 +97,13 @@ export class DocumentChangeHistoryService {
     @Optional()
     @Inject(DOCUMENT_NAME_LOOKUP)
     private readonly docNames?: DocumentNameLookup,
+    /**
+     * 🔴 2026-10-05 delta：代碼 → 名稱之回查。選填（無 ⇒ 顯示原代碼，增減照算）。
+     * ⚠ 本 provider 為 useFactory，注入與否由 change-history.module 之 inject 陣列決定。
+     */
+    @Optional()
+    @Inject(CHANGE_VALUE_NAMES)
+    private readonly valueNames?: ChangeValueNames,
   ) {}
 
   async queryChanges(
@@ -99,12 +122,25 @@ export class DocumentChangeHistoryService {
   private async enrichNames(
     rows: DocumentChangeLogRow[],
   ): Promise<DocumentChangeView[]> {
-    if (!this.docNames || rows.length === 0) {
-      return rows.map((r) => ({ ...r, documentName: null }));
-    }
     const ids = [...new Set(rows.map((r) => r.documentId).filter(Boolean))];
-    const nameMap = await this.docNames.findNamesByIds(ids);
-    return rows.map((r) => ({ ...r, documentName: nameMap.get(r.documentId) ?? null }));
+    const nameMap =
+      this.docNames && rows.length > 0
+        ? await this.docNames.findNamesByIds(ids)
+        : new Map<string, string>();
+    // 🔴 2026-10-05 delta：代碼 → 名稱（以文件之公司別查；無回查 ⇒ 維持代碼）。
+    let companies = new Map<string, string>();
+    let maps = EMPTY_NAME_MAPS;
+    if (this.valueNames && rows.length > 0) {
+      companies = await this.valueNames.documentCompanies(ids);
+      maps = await this.valueNames.resolve(
+        collectNameRequests(rows, (id) => companies.get(id) ?? null),
+      );
+    }
+    return rows.map((r) => ({
+      ...r,
+      documentName: nameMap.get(r.documentId) ?? null,
+      ...displayChange(r, companies.get(r.documentId) ?? null, maps),
+    }));
   }
 
   /**

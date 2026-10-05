@@ -24,6 +24,7 @@ import {
   BUSINESS_CATEGORY_DISPLAY_NAMES,
   BusinessCategoryDisplayNames,
 } from './business-category-display-names';
+import { DOCUMENT_NAME_LOOKUP, DocumentNameLookup } from './document-name-lookup';
 
 /**
  * F043 `AC-42` 匯出之**五欄**（沿用循環樹狀圖 tab 之欄位結構，第三個 tab 同構）。
@@ -87,6 +88,45 @@ export function resolveCategoryDisplayName(
   return `已刪除之類別（${businessCategoryId.slice(0, 8)}）`;
 }
 
+/**
+ * 🔴 2026-10-05 delta：掛載／移除事件之摘要原本寫入**裸 documentId**
+ * （`新增掛載『F7E525D6-…』於節點『…』`），使用者看不出是哪一份文件；循環側同型事件則一直
+ * 寫「文件編號 書名」。歷程表為 append-only、舊列不可改寫 ⇒ 於清單／明細／CSV 三處出口統一
+ * 以 documentId（存於 `newValue`／`oldValue`）回查**現值**替換摘要中之 id：
+ *  - 查得到 ⇒ `{文件編號} {書名}`（與循環側 `docLabel` 同格式）；
+ *  - 查不到（文件已不存在）⇒ `已刪除之文件（{id 前 8 碼}）`（比照本檔 `resolveCategoryDisplayName`
+ *    之使用者裁決格式——保留可追溯性、不顯示完整 UUID）。
+ * 只動 `『{documentId}』` 這一段，摘要其餘文字（動詞、節點名）逐字不變；非掛載事件原樣。
+ */
+export function relabelMountSummary(
+  row: Pick<BusinessCategoryChangeLogRow, 'changeType' | 'summary' | 'oldValue' | 'newValue'>,
+  docLabels: ReadonlyMap<string, { documentNumber: string; documentName: string }>,
+  lookedUp: boolean,
+): string {
+  if (row.changeType !== 'DOCUMENT_MOUNTED' && row.changeType !== 'DOCUMENT_UNMOUNTED') {
+    return row.summary;
+  }
+  const id = row.changeType === 'DOCUMENT_MOUNTED' ? row.newValue : row.oldValue;
+  if (!id || !row.summary.includes(`『${id}』`)) return row.summary;
+  const doc = docLabels.get(id);
+  // 未能回查（無 adapter）⇒ 維持原文，不把「沒查」說成「已刪除」。
+  if (!doc && !lookedUp) return row.summary;
+  const label = doc
+    ? `${doc.documentNumber} ${doc.documentName}`.trim()
+    : `已刪除之文件（${id.slice(0, 8)}）`;
+  return row.summary.replace(`『${id}』`, `『${label}』`);
+}
+
+/** 掛載／移除事件所指之 documentId 集合（去重）。 */
+function mountDocumentIds(rows: readonly BusinessCategoryChangeLogRow[]): string[] {
+  const ids = new Set<string>();
+  for (const r of rows) {
+    if (r.changeType === 'DOCUMENT_MOUNTED' && r.newValue) ids.add(r.newValue);
+    if (r.changeType === 'DOCUMENT_UNMOUNTED' && r.oldValue) ids.add(r.oldValue);
+  }
+  return [...ids];
+}
+
 const BC_EXPORT_COLUMNS: CsvColumn<BusinessCategoryExportRow>[] = [
   { header: '業務/功能類別', value: (r) => r.businessCategoryDisplayName },
   /**
@@ -126,7 +166,26 @@ export class BusinessCategoryChangeHistoryService {
     @Optional()
     @Inject(BUSINESS_CATEGORY_DISPLAY_NAMES)
     private readonly names?: BusinessCategoryDisplayNames,
+    /**
+     * 🔴 2026-10-05 delta：掛載摘要之文件編號＋書名回查（見 `relabelMountSummary`）。
+     * ⚠ 本 provider 為 useFactory，注入與否由 change-history.module 之 inject 陣列決定。
+     */
+    @Optional()
+    @Inject(DOCUMENT_NAME_LOOKUP)
+    private readonly docs?: DocumentNameLookup,
   ) {}
+
+  /** 批次回查掛載摘要所需之文件標籤（無 adapter／無掛載列 ⇒ 不查）。 */
+  private async mountDocLabels(rows: readonly BusinessCategoryChangeLogRow[]): Promise<{
+    labels: Map<string, { documentNumber: string; documentName: string }>;
+    lookedUp: boolean;
+  }> {
+    const ids = mountDocumentIds(rows);
+    if (ids.length === 0 || !this.docs?.findLabelsByIds) {
+      return { labels: new Map(), lookedUp: false };
+    }
+    return { labels: await this.docs.findLabelsByIds(ids), lookedUp: true };
+  }
 
   /**
    * `AC-42` 匯出符合當前查詢條件之全部事件為 CSV。
@@ -151,8 +210,10 @@ export class BusinessCategoryChangeHistoryService {
     const nameMap = this.names
       ? await this.names.findDisplayNamesByIds(ids)
       : new Map<string, string>();
+    const { labels, lookedUp } = await this.mountDocLabels(sorted);
     const items: BusinessCategoryExportRow[] = sorted.map((r) => ({
       ...r,
+      summary: relabelMountSummary(r, labels, lookedUp),
       // 🔴 匯出側與清單側**共用同一支解析**——CSV 是存查檔，裸 UUID 一旦匯出就永久留在
       // 使用者已下載的檔案裡，比畫面上錯更難補救。
       businessCategoryDisplayName: resolveCategoryDisplayName(r.businessCategoryId, nameMap),
@@ -220,8 +281,10 @@ export class BusinessCategoryChangeHistoryService {
       this.names && ids.length > 0
         ? await this.names.findDisplayNamesByIds(ids)
         : new Map<string, string>();
+    const { labels, lookedUp } = await this.mountDocLabels(rows);
     return rows.map((r) => ({
       ...r,
+      summary: relabelMountSummary(r, labels, lookedUp),
       businessCategoryDisplayName: resolveCategoryDisplayName(r.businessCategoryId, nameMap),
     }));
   }

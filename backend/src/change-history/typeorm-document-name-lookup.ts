@@ -34,4 +34,50 @@ export class TypeOrmDocumentNameLookup implements DocumentNameLookup {
       return new Map();
     }
   }
+
+  /** 🔴 2026-10-05 delta：文件目前公司別（同一批次切法；查詢失敗 → 空 Map ⇒ 維持代碼）。 */
+  async findCompanyCodesByIds(documentIds: string[]): Promise<Map<string, string>> {
+    const keys = [...new Set(documentIds.filter(Boolean))];
+    const out = new Map<string, string>();
+    if (keys.length === 0) return out;
+    try {
+      const ds = await this.init();
+      const repo = ds.getRepository(IcsopDocument);
+      for (const batch of chunkByParamBudget(keys, 1, 1000)) {
+        const rows = await repo.find({
+          where: { id: In(batch) },
+          select: { id: true, companyCode: true },
+        });
+        for (const r of rows) out.set(r.id, r.companyCode);
+      }
+      return out;
+    } catch {
+      return new Map();
+    }
+  }
+
+  /** 🔴 2026-10-05 delta：文件編號＋書名（同一批次切法；查詢失敗 → 空 Map，呼叫端維持原文）。 */
+  async findLabelsByIds(
+    documentIds: string[],
+  ): Promise<Map<string, { documentNumber: string; documentName: string }>> {
+    const keys = [...new Set(documentIds.filter(Boolean))];
+    const out = new Map<string, { documentNumber: string; documentName: string }>();
+    if (keys.length === 0) return out;
+    try {
+      const ds = await this.init();
+      const repo = ds.getRepository(IcsopDocument);
+      for (const batch of chunkByParamBudget(keys, 1, 1000)) {
+        const rows = await repo.find({
+          where: { id: In(batch) },
+          select: { id: true, documentNumber: true, documentName: true },
+        });
+        for (const r of rows) {
+          out.set(r.id, { documentNumber: r.documentNumber, documentName: r.documentName });
+        }
+      }
+      return out;
+    } catch {
+      return new Map();
+    }
+  }
 }

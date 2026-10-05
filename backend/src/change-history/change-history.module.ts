@@ -25,6 +25,10 @@ import { LifecycleChangeLogPublisher } from './lifecycle-change-log-publisher';
 import { DocumentChangeHistoryService } from './document-change-history.service';
 import { LifecycleChangeHistoryService } from './lifecycle-change-history.service';
 import { DOCUMENT_NAME_LOOKUP, DocumentNameLookup } from './document-name-lookup';
+import { CHANGE_VALUE_NAMES, ChangeValueNames, ChangeValueNamesService } from './change-value-names';
+import { OrgDirectoryModule } from '../org-directory/org-directory.module';
+import { NameResolutionService } from '../org-directory/name-resolution.service';
+import { ORG_UNIT_READ_STORE, OrgUnitReadStore } from '../org-directory/org-unit-read';
 import { TypeOrmDocumentNameLookup } from './typeorm-document-name-lookup';
 import { LIFECYCLE_DISPLAY_NAMES, LifecycleDisplayNames } from './lifecycle-display-names';
 import { TypeOrmLifecycleDisplayNames } from './typeorm-lifecycle-display-names';
@@ -55,7 +59,9 @@ import { TypeOrmBusinessCategoryDisplayNames } from './typeorm-business-category
  *  - store 以 useFactory 走 AppDataSource 單例（延遲連線）。
  */
 @Module({
-  imports: [AuthModule, RbacModule, AuditModule],
+  // 🔴 2026-10-05 delta：OrgDirectoryModule 供變更歷程代碼 → 名稱（ORG_UNIT／人員）。
+  //    OrgDirectoryModule 只 import Auth／Rbac，不構成模組循環。
+  imports: [AuthModule, RbacModule, AuditModule, OrgDirectoryModule],
   controllers: [ChangeHistoryController],
   providers: [
     {
@@ -81,19 +87,33 @@ import { TypeOrmBusinessCategoryDisplayNames } from './typeorm-business-category
         new TypeOrmDocumentNameLookup(AppDataSource),
     },
     {
+      // F038 匯出之「循環別」欄需當前顯示名稱；以獨立 token 自建 adapter，維持與 LifecycleModule 之單向依賴。
+      provide: LIFECYCLE_DISPLAY_NAMES,
+      useFactory: (): LifecycleDisplayNames => new TypeOrmLifecycleDisplayNames(AppDataSource),
+    },
+    {
+      // 🔴 2026-10-05 delta：文件變更歷程代碼 → 名稱（使用部門／室長／所屬循環／制定組織）。
+      provide: CHANGE_VALUE_NAMES,
+      useFactory: (
+        docs: DocumentNameLookup,
+        orgUnits: OrgUnitReadStore,
+        names: NameResolutionService,
+        lifecycles: LifecycleDisplayNames,
+      ): ChangeValueNames => new ChangeValueNamesService(docs, orgUnits, names, lifecycles),
+      inject: [DOCUMENT_NAME_LOOKUP, ORG_UNIT_READ_STORE, NameResolutionService, LIFECYCLE_DISPLAY_NAMES],
+    },
+    {
       provide: DocumentChangeHistoryService,
       useFactory: (
         store: DocumentChangeLogStore,
         audit: AuditWriterService,
         docNames: DocumentNameLookup,
+        valueNames: ChangeValueNames,
       ): DocumentChangeHistoryService =>
-        new DocumentChangeHistoryService(store, audit, () => new Date(), docNames),
-      inject: [DOCUMENT_CHANGE_LOG_STORE, AuditWriterService, DOCUMENT_NAME_LOOKUP],
-    },
-    {
-      // F038 匯出之「循環別」欄需當前顯示名稱；以獨立 token 自建 adapter，維持與 LifecycleModule 之單向依賴。
-      provide: LIFECYCLE_DISPLAY_NAMES,
-      useFactory: (): LifecycleDisplayNames => new TypeOrmLifecycleDisplayNames(AppDataSource),
+        new DocumentChangeHistoryService(store, audit, () => new Date(), docNames, valueNames),
+      // 🔴 2026-10-05 delta：CHANGE_VALUE_NAMES 必須列於此（useFactory 不看 @Optional；漏列 ⇒
+      // 畫面照樣顯示代碼而單元測試全綠）。
+      inject: [DOCUMENT_CHANGE_LOG_STORE, AuditWriterService, DOCUMENT_NAME_LOOKUP, CHANGE_VALUE_NAMES],
     },
     {
       provide: LifecycleChangeHistoryService,
@@ -130,12 +150,16 @@ import { TypeOrmBusinessCategoryDisplayNames } from './typeorm-business-category
         store: BusinessCategoryChangeLogStore,
         audit: AuditWriterService,
         names: BusinessCategoryDisplayNames,
+        docs: DocumentNameLookup,
       ): BusinessCategoryChangeHistoryService =>
-        new BusinessCategoryChangeHistoryService(store, audit, () => new Date(), names),
+        new BusinessCategoryChangeHistoryService(store, audit, () => new Date(), names, docs),
+      // 🔴 2026-10-05 delta：DOCUMENT_NAME_LOOKUP 必須列於此（useFactory 不看 @Optional；漏列 ⇒
+      // 掛載摘要照樣顯示裸 documentId 而單元測試全綠）。
       inject: [
         BUSINESS_CATEGORY_CHANGE_LOG_STORE,
         AuditWriterService,
         BUSINESS_CATEGORY_DISPLAY_NAMES,
+        DOCUMENT_NAME_LOOKUP,
       ],
     },
   ],
