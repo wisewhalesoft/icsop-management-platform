@@ -136,6 +136,9 @@
           <!-- 🟢 2026-08-28 E11 delta：第五種類型值（targetType=OJT_SESSION），同樣**置於既有四者之後**，
                既有四者之字面與相對順序一字不動。控制項自此共 6 個 option（含「全部類型」）。 -->
           <option value="OJT 場次">OJT 場次</option>
+          <!-- 🟢 2026-10-05 delta：第六種類型值（targetType=BUSINESS_CATEGORY，F043 決策 E3），置於既有五者之後；
+               控制項自此共 7 個 option。後端自 F043 起即為六值，本頁與前端原本漏跟進。 -->
+          <option value="業務/功能類別">業務/功能類別</option>
         </select>
       </div>
       <div>
@@ -307,10 +310,21 @@
        🔴 刪除刻意用 rose 色，與登記在視覺上就分得開——稽核頁最常被問的問題是
           「這筆到底是登記還是撤銷」，靠讀 8 個字元的英文常數分辨太慢。 */
     OJT_SESSION_UPLOAD:['sky','場次登記'],
-    OJT_SESSION_DELETE:['rose','場次刪除']
+    OJT_SESSION_DELETE:['rose','場次刪除'],
+    /* 🟢 2026-10-05：F043 之 8 個動作＋匯出（後端 ACTION_TYPE_LABEL 早已存在，本頁漏跟進）。 */
+    ACCESS_HISTORY_EXPORT:['slate','調閱歷程匯出'],
+    BUSINESS_CATEGORY_VIEW:['teal','業務/功能類別樹狀圖檢視'],
+    BUSINESS_CATEGORY_DOWNLOAD:['teal','業務/功能類別樹狀圖下載'],
+    BUSINESS_CATEGORY_PRINT:['teal','業務/功能類別樹狀圖列印'],
+    BUSINESS_CATEGORY_DELETE:['rose','業務/功能類別刪除'],
+    BUSINESS_CATEGORY_DOC_MOUNTED:['teal','新增掛載'],
+    BUSINESS_CATEGORY_DOC_UNMOUNTED:['teal','移除掛載'],
+    BUSINESS_CATEGORY_CHANGELOG_VIEW:['amber','業務/功能類別變更歷程檢視'],
+    BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD:['amber','業務/功能類別新舊樹狀圖下載']
   };
   // 🟢 2026-08-28：第五種類型值之色票（sky，與既有四者皆不同）
-  const KIND_STYLE={'文件':'slate','循環':'emerald','變更':'amber','上傳':'violet','OJT 場次':'sky'};
+  // 🟢 2026-10-05：第六種類型值之色票（teal）
+  const KIND_STYLE={'文件':'slate','循環':'emerald','變更':'amber','上傳':'violet','OJT 場次':'sky','業務/功能類別':'teal'};
   /* 🔴 F020 AC-N10～AC-N13（2026-08-20）：浮水印組字之「公司名稱」欄＝**簡稱**（AC-N12），
      🔒 而本頁「公司」欄與 CSV 匯出值**仍為全稱**（AC-N13 ③）——兩者刻意不同源，勿「統一」。
      INV-C2（AC-N11）：短稱表鍵集合 ≡ 全稱表鍵集合。 */

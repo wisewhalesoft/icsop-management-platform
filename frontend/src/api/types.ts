@@ -470,7 +470,13 @@ export interface UsageFormRecord {
  * 🔒 刻意**不**沿用既有之 `上傳`——場次事件含**刪除**，把刪除顯示成「上傳」是說謊。
  * 📝 原型別逐字保留供追溯：OLD> `export type AuditKind = '文件' | '循環' | '變更' | '上傳';`
  */
-export type AuditKind = '文件' | '循環' | '變更' | '上傳' | 'OJT 場次';
+/**
+ * 🔴 2026-10-05 delta（H）：第六值 `業務/功能類別`——F043 決策 E3（architecture-spec §14.6.2）
+ * 早已將後端 `AuditKind` 擴為六值，前端從未跟進 ⇒ 該類事件在類型欄顯示為「變更」、
+ * 選「變更」卻篩不出它、亦無任何篩選值可篩出它。
+ * 📝 OLD> `export type AuditKind = '文件' | '循環' | '變更' | '上傳' | 'OJT 場次';`
+ */
+export type AuditKind = '文件' | '循環' | '變更' | '上傳' | 'OJT 場次' | '業務/功能類別';
 
 /**
  * 稽核調閱列（GET /admin/access-history）。鏡射後端 audit.types AuditRow；
@@ -493,6 +499,11 @@ export interface AccessHistoryRow {
   lifecycleName: string | null;
   formId: string | null;
   targetName: string | null;
+  /**
+   * 🔴 2026-10-05 delta（H）：「對象」欄之顯示值，由後端計算（快照優先、缺漏者以 id 回查現值補位；
+   * 與 CSV 匯出同一份規則）。選填：舊版後端無此欄時前端退回既有取值順序。
+   */
+  targetLabel?: string | null;
   watermarkSnapshot: string | null;
   occurredAt: string;
   source: string;

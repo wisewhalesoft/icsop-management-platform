@@ -169,13 +169,17 @@ describe('AccessHistoryPage — D9 delta：上傳事件呈現與排除／篩出�
    * 📝 被反轉之原斷言逐字保留供追溯：
    *   OLD> expect(values).toEqual(['全部', '文件', '循環', '變更', '上傳']);
    */
-  it('AC-N69→AC-J23 🔴 篩選控制項之類型值恰為五種＋預設「全部」共 6 個 option，「OJT 場次」置於既有四者之後', async () => {
+  /**
+   * 🔴 2026-10-05 delta（H）：第六值 `業務/功能類別`（F043 決策 E3 早已於後端落地、前端漏跟進）。
+   *   OLD> expect(values).toEqual(['全部', '文件', '循環', '變更', '上傳', 'OJT 場次']);
+   */
+  it('AC-N69→AC-J23→F043 E3 🔴 篩選控制項之類型值恰為六種＋預設「全部」共 7 個 option，既有五者順序不變、「業務/功能類別」置於最末', async () => {
     vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([DOC_ROW]));
     render(<AccessHistoryPage />);
     await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
     const select = screen.getByLabelText('類型') as HTMLSelectElement;
     const values = Array.from(select.options).map((o) => o.value);
-    expect(values).toEqual(['全部', '文件', '循環', '變更', '上傳', 'OJT 場次']);
+    expect(values).toEqual(['全部', '文件', '循環', '變更', '上傳', 'OJT 場次', '業務/功能類別']);
   });
 
   /**
@@ -461,5 +465,70 @@ describe('AccessHistoryPage — 文件調閱歷程查詢（F024）', () => {
     // (3) 第 2 頁（末頁）：上一頁可點、下一頁停用。
     await waitFor(() => expect(screen.getByRole('button', { name: '上一頁' })).toBeEnabled());
     expect(screen.getByRole('button', { name: '下一頁' })).toBeDisabled();
+  });
+});
+
+/**
+ * 🔴 2026-10-05 調閱歷程「對象空白」delta（H）。
+ * 正式站：業務/功能類別事件 570 列在「類型」欄顯示為「變更」、操作類型顯示裸代碼；
+ * 多條下載路徑之「對象」欄為「—」。後端改回傳 `targetLabel`（快照優先、缺漏者回查補位）。
+ */
+describe('AccessHistoryPage — 2026-10-05 delta H（類型第六值／對象欄 targetLabel）', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockAuth('ICSOPAdmin');
+  });
+
+  const BC_MOUNT_ROW = {
+    ...DOC_ROW,
+    id: 'bc-r1',
+    name: '林窗口',
+    targetType: 'BUSINESS_CATEGORY',
+    actionType: 'BUSINESS_CATEGORY_DOC_MOUNTED',
+    documentNumber: null,
+    targetName: '授信（消金）',
+    targetLabel: 'ICSOP-SRC-777-1-01',
+    watermarkSnapshot: null,
+  };
+
+  it('BUSINESS_CATEGORY 之類型欄為「業務/功能類別」（不得落入「變更」），操作類型顯示中文標籤', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([BC_MOUNT_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('林窗口')).toBeInTheDocument());
+    const row = screen.getByText('林窗口').closest('tr') as HTMLElement;
+    expect(within(row).getByText('業務/功能類別')).toBeInTheDocument();
+    expect(within(row).queryByText('變更')).not.toBeInTheDocument();
+    expect(within(row).getByText(/BUSINESS_CATEGORY_DOC_MOUNTED · 新增掛載/)).toBeInTheDocument();
+  });
+
+  it('選「業務/功能類別」→ 以 kind=業務/功能類別 重新查詢', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([DOC_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('王小明')).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText('類型'), '業務/功能類別');
+    await waitFor(() =>
+      expect(endpoints.getAccessHistory).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: '業務/功能類別' }),
+      ),
+    );
+  });
+
+  it('對象欄以後端 targetLabel 為準（documentNumber 為 null 之列不再顯示「—」）', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(pageOf([BC_MOUNT_ROW]));
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('林窗口')).toBeInTheDocument());
+    const row = screen.getByText('林窗口').closest('tr') as HTMLElement;
+    expect(within(row).getByText('ICSOP-SRC-777-1-01')).toBeInTheDocument();
+  });
+
+  it('targetLabel 為 null → 對象欄顯示「—」（不退回其他欄位臆造）', async () => {
+    vi.mocked(endpoints.getAccessHistory).mockResolvedValue(
+      pageOf([{ ...DOC_ROW, id: 'x1', name: '張匯出', targetLabel: null }]),
+    );
+    render(<AccessHistoryPage />);
+    await waitFor(() => expect(screen.getByText('張匯出')).toBeInTheDocument());
+    const row = screen.getByText('張匯出').closest('tr') as HTMLElement;
+    expect(within(row).queryByText('ICSOP-SRC-101-1-01')).not.toBeInTheDocument();
+    expect(within(row).getByText('—')).toBeInTheDocument();
   });
 });

@@ -38,6 +38,9 @@ const KIND_ALL = '全部';
 function rowKind(targetType: string): AuditKind {
   if (targetType === 'DOCUMENT' || targetType === 'USAGE_FORM') return '文件';
   if (targetType === 'LIFECYCLE') return '循環';
+  // 🔴 2026-10-05 delta（H）：第六個類型值（F043 決策 E3；與後端 `auditKindLabel()` 同序）。
+  //    必須置於下方 `return '變更'` 之前；`BUSINESS_CATEGORY_CHANGE_LOG` 刻意落入通則 → 「變更」。
+  if (targetType === 'BUSINESS_CATEGORY') return '業務/功能類別';
   // 🔴 F042 `AC-J23`：第五個類型值。與 `DOCUMENT_ATTACHMENT` 同理，**必須**置於下方
   //    `return '變更'` 之前——落入通則會使場次事件在「類型」欄顯示為「變更」，與新增之
   //    「OJT 場次」篩選值自相矛盾。刻意**不**沿用「上傳」：刪除事件顯示為「上傳」是說謊。
@@ -67,6 +70,17 @@ const ACT_LABEL: Record<string, string> = {
   //    ⚠ **兩者必須互異**——把「登記」與「刪除」標成同一個詞，等於在畫面上抹掉兩者之差別。
   OJT_SESSION_UPLOAD: '場次登記',
   OJT_SESSION_DELETE: '場次刪除',
+  // 🔴 2026-10-05 delta（H）：以下 9 項後端 `ACTION_TYPE_LABEL` 早已存在、本表漏跟進 ⇒ 畫面原本顯示
+  //    `{代碼} · {代碼}`。逐字取自 backend/src/audit/access-history-labels.ts。
+  ACCESS_HISTORY_EXPORT: '調閱歷程匯出',
+  BUSINESS_CATEGORY_VIEW: '業務/功能類別樹狀圖檢視',
+  BUSINESS_CATEGORY_DOWNLOAD: '業務/功能類別樹狀圖下載',
+  BUSINESS_CATEGORY_PRINT: '業務/功能類別樹狀圖列印',
+  BUSINESS_CATEGORY_DELETE: '業務/功能類別刪除',
+  BUSINESS_CATEGORY_DOC_MOUNTED: '新增掛載',
+  BUSINESS_CATEGORY_DOC_UNMOUNTED: '移除掛載',
+  BUSINESS_CATEGORY_CHANGELOG_VIEW: '業務/功能類別變更歷程檢視',
+  BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD: '業務/功能類別新舊樹狀圖下載',
 };
 
 const KIND_TONE: Record<AuditKind, string> = {
@@ -77,6 +91,8 @@ const KIND_TONE: Record<AuditKind, string> = {
   上傳: 'bg-violet-50 text-violet-700 border-violet-100',
   // F042：第五類型之色票（設計裁量、不入 AC）。
   'OJT 場次': 'bg-sky-50 text-sky-700 border-sky-100',
+  // 2026-10-05：第六類型之色票（設計裁量、不入 AC；prototypes/17 KIND_STYLE 同步）。
+  '業務/功能類別': 'bg-teal-50 text-teal-700 border-teal-100',
 };
 
 /**
@@ -99,13 +115,26 @@ const ACT_TONE: Record<string, string> = {
   ATTACHMENT_UPLOAD: 'bg-violet-50 text-violet-700 border-violet-100',
   OJT_SESSION_UPLOAD: 'bg-sky-50 text-sky-700 border-sky-100',
   OJT_SESSION_DELETE: 'bg-rose-50 text-rose-700 border-rose-100',
+  // 2026-10-05：業務/功能類別系列比照循環系列（自有色）、其變更歷程系列比照 CHANGELOG（amber）。
+  BUSINESS_CATEGORY_VIEW: 'bg-teal-50 text-teal-700 border-teal-100',
+  BUSINESS_CATEGORY_DOWNLOAD: 'bg-teal-50 text-teal-700 border-teal-100',
+  BUSINESS_CATEGORY_PRINT: 'bg-teal-50 text-teal-700 border-teal-100',
+  BUSINESS_CATEGORY_DELETE: 'bg-rose-50 text-rose-700 border-rose-100',
+  BUSINESS_CATEGORY_DOC_MOUNTED: 'bg-teal-50 text-teal-700 border-teal-100',
+  BUSINESS_CATEGORY_DOC_UNMOUNTED: 'bg-teal-50 text-teal-700 border-teal-100',
+  BUSINESS_CATEGORY_CHANGELOG_VIEW: 'bg-amber-50 text-amber-700 border-amber-100',
+  BUSINESS_CATEGORY_CHANGELOG_DOWNLOAD: 'bg-amber-50 text-amber-700 border-amber-100',
 };
 function actTone(actionType: string): string {
   return ACT_TONE[actionType] ?? ACT_TONE_SLATE;
 }
 
-/** 對象欄主識別：文件編號 → 循環名稱 → 使用表單 id。 */
+/**
+ * 對象欄主識別。🔴 2026-10-05 delta（H）：以後端計算之 `targetLabel` 為準（與 CSV 匯出同一份規則，
+ * 缺漏之快照已以 id 回查補位）；後端未提供該欄時退回原取值順序（文件編號 → 循環名稱 → 使用表單 id）。
+ */
 function targetPrimary(r: AccessHistoryRow): string {
+  if (r.targetLabel !== undefined) return r.targetLabel || '—';
   return r.documentNumber || r.lifecycleName || r.formId || '—';
 }
 
@@ -369,6 +398,8 @@ export function AccessHistoryPage(): JSX.Element {
               <option value="變更">變更</option>
               <option value="上傳">上傳</option>
               <option value="OJT 場次">OJT 場次</option>
+              {/* 🔴 2026-10-05 delta（H）：第六值（F043 決策 E3；置於既有五者之後，既有順序不變）。 */}
+              <option value="業務/功能類別">業務/功能類別</option>
             </select>
           </div>
           <div>
