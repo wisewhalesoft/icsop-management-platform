@@ -922,3 +922,64 @@ describe('AccessHistoryController.exportHistory — 匯出稽核之身分快照�
     });
   });
 });
+
+/**
+ * 🔴 2026-10-05 調閱歷程「對象空白」delta（H）：查詢與匯出共用同一份 `targetLabel`，
+ * 缺漏之快照以注入之回查補位（不回寫稽核列）。
+ */
+describe('AccessHistoryController — 對象欄補位（2026-10-05 delta H）', () => {
+  const blankDownload = () =>
+    auditRow({ actionType: 'DOWNLOAD', documentId: 'd1', documentNumber: null, targetName: null });
+  const lookup = {
+    calls: 0,
+    lookup(req: { documentIds: string[] }) {
+      this.calls += 1;
+      return Promise.resolve({
+        documents: new Map(
+          req.documentIds.map((id) => [id, { documentNumber: 'ICSOP-SRC-101-1-01', documentName: '車輛分期進件作業' }]),
+        ),
+        appendices: new Map(),
+        usageForms: new Map(),
+        businessCategories: new Map(),
+        accounts: new Map(),
+      });
+    },
+  };
+
+  it('query → 每列帶 targetLabel，快照缺漏者以 documentId 回查補位；total 不變', async () => {
+    const queryHistory = jest.fn().mockResolvedValue(pageOf([blankDownload()], 7));
+    const svc = { queryHistory } as unknown as AuditWriterService;
+    const controller = new AccessHistoryController(svc, fakeIdentity(), lookup as never);
+
+    const page = await controller.query();
+
+    expect(page.total).toBe(7);
+    expect(page.items[0].targetLabel).toBe('ICSOP-SRC-101-1-01');
+    expect(page.items[0].targetName).toBe('車輛分期進件作業');
+  });
+
+  it('export → 對象欄取同一份 targetLabel（與畫面一致）', async () => {
+    const queryHistory = jest.fn().mockResolvedValue(pageOf([blankDownload()], 1));
+    const recordAccess = jest.fn().mockResolvedValue(undefined);
+    const svc = { queryHistory, recordAccess } as unknown as AuditWriterService;
+    const controller = new AccessHistoryController(svc, fakeIdentity(), lookup as never);
+    const res = fakeRes();
+
+    await controller.exportHistory('', '', '', '', '', res as unknown as never);
+
+    const cells = csvLines(res.send.mock.calls[0][0] as Buffer)[1].split(',');
+    expect(cells[7]).toBe('ICSOP-SRC-101-1-01');
+  });
+
+  it('🔒 回查失敗 → 查詢照常回傳（以快照呈現），不 500', async () => {
+    const queryHistory = jest.fn().mockResolvedValue(pageOf([blankDownload()], 1));
+    const svc = { queryHistory } as unknown as AuditWriterService;
+    const failing = { lookup: () => Promise.reject(new Error('DB_DOWN')) };
+    const controller = new AccessHistoryController(svc, fakeIdentity(), failing as never);
+
+    const page = await controller.query();
+
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0].targetLabel).toBeNull();
+  });
+});

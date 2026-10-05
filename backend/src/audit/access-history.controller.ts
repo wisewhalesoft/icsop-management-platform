@@ -1,4 +1,4 @@
-import { Controller, Get, Logger, Query, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Inject, Logger, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuditWriterService } from './audit-writer.service';
 import { SessionGuard, RequestWithSession } from '../auth/session.guard';
@@ -24,6 +24,12 @@ import {
 } from '../storage/csv-export';
 import { actionTypeLabel, auditKindLabel, roleLabel } from './access-history-labels';
 import { AuditIdentityService } from './audit-identity.service';
+import {
+  ACCESS_HISTORY_TARGET_LOOKUP,
+  AccessHistoryItem,
+  AccessHistoryTargetLookup,
+  labelWithLookup,
+} from './access-history-target-label';
 
 /**
  * F024 文件調閱歷程查詢（唯讀後台）。守門鏈 SessionGuard→RolePermissionGuard。
@@ -44,12 +50,13 @@ const SCOPE: AuditQueryScope = { company: 'ALL' };
 /**
  * 匯出之 10 欄（`AC-F4`：順序與畫面主表格由左至右一致；畫面第 11 欄「展開箭頭」不匯出）。
  *  - 列舉欄（角色／類型／操作類型）一律輸出中文標籤（`AC-F5`，見 access-history-labels）。
- *  - 「對象（文件／循環）」＝ documentNumber → lifecycleName → formId 依序第一個非空值；
- *    三者皆空 → **空儲存格**（不輸出畫面之視覺佔位符 `—`，`AC-F15` ③）。
+ *  - 「對象（文件／循環）」＝ `targetLabel`（🔴 2026-10-05 delta H：與畫面同一份取值規則，
+ *    見 access-history-target-label；快照優先、缺漏者以 id 回查現值補位）；
+ *    無值 → **空儲存格**（不輸出畫面之視覺佔位符 `—`，`AC-F15` ③）。
  *  - 「操作時間」以 `formatExportTimestamp()` 之顯式 +8 位移計算（`AC-F6`；不得用 toLocale*）。
  *  - 明細專屬之「浮水印快照」「對象名稱／說明」**不在欄集合內**（`AC-F14`）。
  */
-const EXPORT_COLUMNS: readonly CsvColumn<AuditRow>[] = [
+const EXPORT_COLUMNS: readonly CsvColumn<AccessHistoryItem>[] = [
   { header: '操作人員', value: (r) => r.name },
   { header: '員工編號', value: (r) => r.employeeNo },
   { header: '公司', value: (r) => r.company },
@@ -59,7 +66,7 @@ const EXPORT_COLUMNS: readonly CsvColumn<AuditRow>[] = [
   { header: '類型', value: (r) => auditKindLabel(r.targetType) },
   {
     header: '對象（文件／循環）',
-    value: (r) => r.documentNumber || r.lifecycleName || r.formId || '',
+    value: (r) => r.targetLabel ?? '',
   },
   { header: '操作類型', value: (r) => actionTypeLabel(r.actionType) },
   { header: '操作時間', value: (r) => formatExportTimestamp(r.occurredAt) },
@@ -109,11 +116,25 @@ export class AccessHistoryController {
   constructor(
     private readonly writer: AuditWriterService,
     private readonly identity: AuditIdentityService,
+    /**
+     * 🔴 2026-10-05 delta（H）：對象欄補位之回查。**刻意不加 `@Optional()`**——缺 provider 必須
+     * 讓容器啟動失敗，而非靜默退回「對象空白」。TS 型別之 `?` 保留，使既有兩參數之單元測試照常編譯
+     * （未注入 ⇒ 僅以快照計算，行為同修正前）。
+     */
+    @Inject(ACCESS_HISTORY_TARGET_LOOKUP)
+    private readonly targetLookup?: AccessHistoryTargetLookup,
   ) {}
+
+  /** 查詢結果補上 `targetLabel`（補位失敗不使整頁失敗）。 */
+  private async label(items: readonly AuditRow[]): Promise<AccessHistoryItem[]> {
+    return labelWithLookup(items, this.targetLookup, (err) =>
+      this.logger.error(`調閱歷程對象補位回查失敗（已吞，以快照呈現）: ${(err as Error)?.message}`),
+    );
+  }
 
   @Get()
   @RequirePermission(FunctionKey.DOCUMENT_ACCESS_HISTORY, 'read')
-  query(
+  async query(
     @Query('kind') kind?: string,
     @Query('person') person?: string,
     @Query('target') target?: string,
@@ -131,7 +152,8 @@ export class AccessHistoryController {
       parseIntOr(page, 1),
       parseIntOr(pageSize, 50),
     );
-    return this.writer.queryHistory(SCOPE, filters);
+    const result = await this.writer.queryHistory(SCOPE, filters);
+    return { ...result, items: await this.label(result.items) };
   }
 
   /**
@@ -166,7 +188,7 @@ export class AccessHistoryController {
     assertExportRowLimit(result.items.length);
 
     const now = new Date();
-    const csv = toCsvBuffer(result.items, EXPORT_COLUMNS);
+    const csv = toCsvBuffer(await this.label(result.items), EXPORT_COLUMNS);
     await this.recordExportAudit(res, now);
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');

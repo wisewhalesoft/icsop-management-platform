@@ -13,6 +13,11 @@ import { AuditWriterService } from './audit-writer.service';
 import { ScheduledAuditRetryService } from './scheduled-audit-retry.service';
 import { TypeOrmAuditStore } from './typeorm-audit.store';
 import { TypeOrmAuditOutboxStore } from './typeorm-audit-outbox.store';
+import { TypeOrmAccessHistoryTargetLookup } from './typeorm-access-history-target.lookup';
+import {
+  ACCESS_HISTORY_TARGET_LOOKUP,
+  AccessHistoryTargetLookup,
+} from './access-history-target-label';
 import {
   AUDIT_OUTBOX_STORE,
   AUDIT_STORE,
@@ -57,6 +62,12 @@ import {
       useFactory: (orgs: OrgUnitReadStore): AuditIdentityService =>
         new AuditIdentityService(orgs),
       inject: [ORG_UNIT_READ_STORE],
+    },
+    // 🔴 2026-10-05 delta（H）：F024 對象欄補位之回查（唯讀；不回寫 AUDIT_LOG）。
+    {
+      provide: ACCESS_HISTORY_TARGET_LOOKUP,
+      useFactory: (): AccessHistoryTargetLookup =>
+        new TypeOrmAccessHistoryTargetLookup(AppDataSource),
     },
     ScheduledAuditRetryService,
   ],
