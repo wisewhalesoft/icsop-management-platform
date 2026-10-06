@@ -621,8 +621,8 @@ describe('職稱對照主檔（planJobTitles）', () => {
 
   const rawTitle = (over: Partial<RawJobTitle> = {}): RawJobTitle => ({
     COMPID: 'AS',
-    JTITLE_ID: 'J01',
-    JTITLE_NM: '業務專員',
+    CODE: 'J01',
+    DESC_CHI: '業務專員',
     ...over,
   });
 
@@ -635,7 +635,7 @@ describe('職稱對照主檔（planJobTitles）', () => {
 
   it('本地無對照 → 全數進 jobTitleCreates', async () => {
     const { reader, store, svc } = setup();
-    reader.titles = [rawTitle(), rawTitle({ JTITLE_ID: 'F01', JTITLE_NM: '課長' })];
+    reader.titles = [rawTitle(), rawTitle({ CODE: 'F01', DESC_CHI: '課長' })];
     const res = await svc.run('manual');
     expect(res.status).toBe('success');
     expect(store.applied[0].jobTitleCreates).toEqual([
@@ -659,7 +659,7 @@ describe('職稱對照主檔（planJobTitles）', () => {
     });
     reader.titles = [
       rawTitle(), // 同名 → noop
-      rawTitle({ JTITLE_ID: 'F01', JTITLE_NM: '資深課長' }), // 改名 → update
+      rawTitle({ CODE: 'F01', DESC_CHI: '資深課長' }), // 改名 → update
     ];
     await svc.run('manual');
     expect(store.applied[0].jobTitleCreates).toEqual([]);
@@ -671,8 +671,8 @@ describe('職稱對照主檔（planJobTitles）', () => {
   it('🔴 同鍵重複列 → 去重取先到者（否則兩列皆 create 觸發 UQ 違反、整筆交易回滾）', async () => {
     const { reader, store, svc } = setup();
     reader.titles = [
-      rawTitle({ JTITLE_NM: '業務專員' }),
-      rawTitle({ JTITLE_NM: '高級業務專員' }), // 同 (COMPID, JTITLE_ID)
+      rawTitle({ DESC_CHI: '業務專員' }),
+      rawTitle({ DESC_CHI: '高級業務專員' }), // 同 (COMPID, CODE)
     ];
     const res = await svc.run('manual');
     expect(res.status).toBe('success');
@@ -683,7 +683,7 @@ describe('職稱對照主檔（planJobTitles）', () => {
 
   it('髒列（缺名稱）跳過並記警告，其餘照常寫入', async () => {
     const { reader, store, svc } = setup();
-    reader.titles = [rawTitle({ JTITLE_NM: null }), rawTitle({ JTITLE_ID: 'F01', JTITLE_NM: '課長' })];
+    reader.titles = [rawTitle({ DESC_CHI: null }), rawTitle({ CODE: 'F01', DESC_CHI: '課長' })];
     const res = await svc.run('manual');
     expect(res.status).toBe('success');
     expect(store.applied[0].jobTitleCreates).toEqual([
@@ -716,7 +716,7 @@ describe('職稱對照主檔（planJobTitles）', () => {
 
   it('對照異動不計入 changeCount（主檔維護非組織/帳號異動，避免扭曲 F006 KPI）', async () => {
     const { reader, svc } = setup();
-    reader.titles = [rawTitle(), rawTitle({ JTITLE_ID: 'F01', JTITLE_NM: '課長' })];
+    reader.titles = [rawTitle(), rawTitle({ CODE: 'F01', DESC_CHI: '課長' })];
     const res = await svc.run('manual');
     expect(res.changeCount).toBe(1); // 僅 orgCreates 之 JAC00
   });

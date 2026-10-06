@@ -35,7 +35,7 @@ export const WHITELIST_PERSONNEL_COLUMNS = [
   // 🔴 不是 HIRE_DATE —— 那是年資起算日（契約 §3.3）。
   'REHIRE_DATE',
   'DIRECT_BOSS',
-  // 職稱代碼（G-ADM-001「**資位**」欄）。刻意取代碼而非名稱：名稱由 VW_PERSONAL_JOB 對照主檔
+  // 職稱代碼（G-ADM-001「**資位**」欄）。刻意取代碼而非名稱：名稱由 VW_JOB_TITLE 對照主檔
   // 解析（見 JOB_TITLE_COLUMNS），使上游改名不需 backfill 帳號。實測空值率 0（四家 1,362 筆）。
   'TITLE_CODE',
   // 🔴 職位代碼（G-ADM-001「**職位**」欄，2026-08-31 加入）。名稱由 VW_JOB_FUN 對照主檔解析，
@@ -48,10 +48,12 @@ export const WHITELIST_PERSONNEL_COLUMNS = [
 ] as const;
 
 /**
- * VW_PERSONAL_JOB → JOB_TITLE 對照主檔僅取 3 欄（§5.4）。
- * ⚠ 該 view 另含 `ID_NUMBER`（身分證字號）等高敏感個資，一律不取；見 FORBIDDEN_PERSONAL_JOB_COLUMNS。
+ * VW_JOB_TITLE → JOB_TITLE 對照主檔僅取 3 欄（§5.4.1；2026-10-06 由 VW_PERSONAL_JOB 改來源）。
+ *
+ * 該 view ＝ `HRJTITLEMF`（人資資位主檔）之直接投影，**逐代碼一列**，與 VW_JOB_FUN 同形。
+ * 🔴 另含 `AVG_SALARY`（← `HRJTITLEMF.MIDPOINT`，薪資中位點）一律不取；見 FORBIDDEN_JOB_TITLE_COLUMNS。
  */
-export const JOB_TITLE_COLUMNS = ['COMPID', 'JTITLE_ID', 'JTITLE_NM'] as const;
+export const JOB_TITLE_COLUMNS = ['COMPID', 'CODE', 'DESC_CHI'] as const;
 
 /**
  * VW_JOB_FUN → JOB_POSITION 對照主檔僅取 3 欄（§5.4.2）。
@@ -143,7 +145,10 @@ export const FORBIDDEN_HPMUSER_COLUMNS = [
 
 /**
  * 🔴 VW_PERSONAL_JOB 之明確禁讀欄位。該 view 底層為 HREMPMF＋3 表 join，含身分證字號與
- * 姓名等個資；本系統僅需 (COMPID, JTITLE_ID, JTITLE_NM) 三欄之職稱對照。
+ * 姓名等個資。
+ *
+ * ⚠ 該 view 已於 2026-10-06 停用（資位對照改讀 VW_JOB_TITLE），本清單**保留為防再引入之守衛**
+ *   （比照 FORBIDDEN_HPMUSER_COLUMNS）。
  */
 export const FORBIDDEN_PERSONAL_JOB_COLUMNS = [
   'ID_NUMBER',
@@ -151,11 +156,18 @@ export const FORBIDDEN_PERSONAL_JOB_COLUMNS = [
   'BUSINESS_TYPE',
 ] as const;
 
+/**
+ * 🔴 VW_JOB_TITLE 之明確禁讀欄位：薪資資料。`AVG_SALARY` 為 view 上之欄名，`MIDPOINT` 為
+ * 其底層 `HRJTITLEMF` 之原欄名（防日後改讀底層表時漏擋）。
+ */
+export const FORBIDDEN_JOB_TITLE_COLUMNS = ['AVG_SALARY', 'MIDPOINT'] as const;
+
 /** 全部上游來源之禁讀欄位聯集（assertNoForbiddenColumns 之實際依據）。 */
 export const FORBIDDEN_UPSTREAM_COLUMNS = [
   ...FORBIDDEN_PERSONNEL_COLUMNS,
   ...FORBIDDEN_HPMUSER_COLUMNS,
   ...FORBIDDEN_PERSONAL_JOB_COLUMNS,
+  ...FORBIDDEN_JOB_TITLE_COLUMNS,
 ] as const;
 
 function assertCompid(compid: string): void {
@@ -246,18 +258,20 @@ export function buildDeptQuery(ref: UpstreamRef, compid: string): string {
 }
 
 /**
- * 職稱對照主檔全量取回（VW_PERSONAL_JOB 之 distinct 三欄；實測全公司 109 列，成本極低）。
+ * 資位（職稱）對照主檔全量取回（VW_JOB_TITLE 三欄；實測 2026-10-06 五家 204 列，成本極低）。
  *
- * ⚠ 刻意**不以 COMPID 過濾**：解析採「本公司優先、查無再跨公司 fallback」，需要其他公司之
- *   對照列才能補齊本公司主檔缺漏之代碼。實測（2026-08-12）AS 在職 1,115 筆中，
- *   `I10`(9 筆)／`G03`(1 筆) 兩碼不存在於 AS 之對照列，改以跨公司 fallback 後命中率 100%。
- * DISTINCT 於對端下推：該 view 逐「人」一列（數千列），不 DISTINCT 會整批拉回。
+ * 🔴 **為何改讀 VW_JOB_TITLE（2026-10-06，原為 VW_PERSONAL_JOB 之 DISTINCT）**：
+ *   VW_PERSONAL_JOB 逐「人」一列，從擔任者反推代碼集合 ⇒ **目前無人擔任之資位永遠不在主檔**，
+ *   手動帳號之資位下拉選不到（dev 實測漏 AS 18／AE 36／AJ 17／AL 9／AD 1 碼）。VW_JOB_TITLE
+ *   為 `HRJTITLEMF` 之直接投影，逐代碼一列。dev 實查：五家在職 1,384 人之 `TITLE_CODE` 以
+ *   本公司精確查表 100% 命中；VW_PERSONAL_JOB 之全部 (COMPID, 代碼, 名稱) 組合皆存在且名稱一致。
+ * ⚠ **無 DISTINCT**：`(COMPID, CODE)` 實測即為唯一鍵（五家 204 列 / 204 組鍵）。
+ * ⚠ **無有效期間可過濾**：該 view 不含停用註記，已不再使用之資位亦會取回。
+ * ⚠ 刻意**不以 COMPID 過濾**：解析端之跨公司 fallback 需要全表（見 job-title-directory.ts）。
  */
 export function buildJobTitleQuery(ref: UpstreamRef): string {
   const colList = JOB_TITLE_COLUMNS.join(', ');
-  const inner =
-    `SELECT DISTINCT ${colList} FROM [${ref.remoteDb}].[dbo].[VW_PERSONAL_JOB] ` +
-    `WHERE JTITLE_NM IS NOT NULL`;
+  const inner = `SELECT ${colList} FROM [${ref.remoteDb}].[dbo].[VW_JOB_TITLE]`;
   const escaped = inner.replace(/'/g, "''");
   const sql = `SELECT ${colList} FROM OPENQUERY([${ref.linkedServer}], '${escaped}') AS src`;
   assertNoForbiddenColumns(sql);
@@ -274,7 +288,7 @@ export function buildJobTitleQuery(ref: UpstreamRef): string {
  * ⚠ **無需 END_DT 過濾**：該 view 定義本身已內建 `END_DT >= GETDATE()`（契約 §2），
  *   取回者恆為有效列；view 本身亦無 `END_DT` 欄可過濾。
  *
- * 🔴 **解析端絕不得做跨公司 fallback**（與 `buildJobTitleQuery` 之職稱刻意不同）：
+ * 🔴 **解析端絕不得做跨公司 fallback**（與 `buildJobTitleQuery` 之資位刻意不同）：
  *   同一代碼跨公司語意可**相反**——實測 `D04` 在 AS＝營業經理、在 AD＝科長；
  *   `C04` 在 AD＝部長、他家＝處長（2026-08-31 實查共 7 碼歧義：
  *   B01／B03／C04／D04／D05／M03／N03）。fallback 會顯示出**錯誤職位**，
@@ -292,7 +306,7 @@ export function buildJobPositionQuery(ref: UpstreamRef): string {
 /**
  * 防禦性檢查：查詢字串不得含任何禁讀欄位（以字界比對，避免 EMAILADDR 誤中 ADDR）。
  * 涵蓋全部上游來源之禁欄聯集（VW_PERSONNEL_SQL 身分證/金融/第三人個資＋陷阱欄、
- * VW_PERSONAL_JOB 身分證字號、以及已停用之 VW_HPMUSER 密碼欄守衛）。
+ * VW_JOB_TITLE 薪資欄、以及已停用之 VW_PERSONAL_JOB 身分證字號／VW_HPMUSER 密碼欄守衛）。
  */
 export function assertNoForbiddenColumns(sql: string): void {
   const re = new RegExp(`\\b(${FORBIDDEN_UPSTREAM_COLUMNS.join('|')})\\b`);

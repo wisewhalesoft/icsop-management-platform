@@ -10,6 +10,7 @@ import {
   JOB_POSITION_COLUMNS,
   assertNoForbiddenColumns,
   FORBIDDEN_PERSONAL_JOB_COLUMNS,
+  FORBIDDEN_JOB_TITLE_COLUMNS,
   JOB_TITLE_COLUMNS,
   UpstreamRef,
 } from './upstream-queries';
@@ -206,43 +207,53 @@ describe('assertNoForbiddenColumns', () => {
 });
 
 
-describe('buildJobTitleQuery（職稱對照主檔，契約 §5.4）', () => {
-  it('包在 OPENQUERY、存取 VW_PERSONAL_JOB、無 SELECT *', () => {
+describe('buildJobTitleQuery（資位對照主檔，契約 §5.4.1；2026-10-06 改讀 VW_JOB_TITLE）', () => {
+  it('包在 OPENQUERY、存取 VW_JOB_TITLE、無 SELECT *', () => {
     const sql = buildJobTitleQuery(ref);
     expect(sql).toContain('OPENQUERY([APYHFC23]');
-    expect(sql).toContain('[HR2].[dbo].[VW_PERSONAL_JOB]');
+    expect(sql).toContain('[HR2].[dbo].[VW_JOB_TITLE]');
     expect(sql).not.toMatch(/SELECT\s+\*/i);
   });
 
-  it('僅取 COMPID / JTITLE_ID / JTITLE_NM 三欄', () => {
-    const sql = buildJobTitleQuery(ref);
-    for (const col of JOB_TITLE_COLUMNS) expect(sql).toContain(col);
-    expect(JOB_TITLE_COLUMNS).toHaveLength(3);
+  it('🔴 不再讀 VW_PERSONAL_JOB（逐人一列 ⇒ 無人擔任之資位永遠不在主檔）', () => {
+    expect(buildJobTitleQuery(ref)).not.toContain('VW_PERSONAL_JOB');
   });
 
-  it('🔴 絕不出現 ID_NUMBER（身分證字號）等該 view 之個資欄', () => {
+  it('僅取 COMPID / CODE / DESC_CHI 三欄', () => {
     const sql = buildJobTitleQuery(ref);
-    for (const forbidden of FORBIDDEN_PERSONAL_JOB_COLUMNS) {
-      expect(sql).not.toMatch(new RegExp(`\b${forbidden}\b`));
+    expect(JOB_TITLE_COLUMNS).toEqual(['COMPID', 'CODE', 'DESC_CHI']);
+    for (const col of JOB_TITLE_COLUMNS) expect(sql).toContain(col);
+  });
+
+  it('🔴 絕不出現 AVG_SALARY（薪資中位點）', () => {
+    const sql = buildJobTitleQuery(ref);
+    for (const forbidden of FORBIDDEN_JOB_TITLE_COLUMNS) {
+      expect(sql).not.toMatch(new RegExp(String.raw`\b${forbidden}\b`));
     }
     expect(() => assertNoForbiddenColumns(sql)).not.toThrow();
   });
 
-  it('DISTINCT 於對端下推（該 view 逐「人」一列，不 DISTINCT 會整批拉回）', () => {
-    expect(buildJobTitleQuery(ref)).toMatch(/SELECT DISTINCT/);
+  it('無 DISTINCT（該 view 逐代碼一列，(COMPID, CODE) 即唯一鍵）', () => {
+    expect(buildJobTitleQuery(ref)).not.toMatch(/DISTINCT/);
   });
 
   it('刻意不以 COMPID 過濾（跨公司 fallback 需要其他公司之對照列）', () => {
     expect(buildJobTitleQuery(ref)).not.toMatch(/COMPID=/);
   });
+});
 
-  it('排除名稱為 NULL 之列（正規化端會判為髒資料）', () => {
-    expect(buildJobTitleQuery(ref)).toContain('JTITLE_NM IS NOT NULL');
+describe('assertNoForbiddenColumns — VW_JOB_TITLE 薪資欄', () => {
+  it.each(['AVG_SALARY', 'MIDPOINT'])('偵測到 %s → 拋錯', (col) => {
+    expect(FORBIDDEN_JOB_TITLE_COLUMNS).toContain(col);
+    expect(() =>
+      assertNoForbiddenColumns(`SELECT CODE, ${col} FROM x`),
+    ).toThrow(`FORBIDDEN_COLUMN_IN_QUERY: ${col}`);
   });
 });
 
-describe('assertNoForbiddenColumns — VW_PERSONAL_JOB 個資欄', () => {
+describe('assertNoForbiddenColumns — VW_PERSONAL_JOB 個資欄（已停用 view 之防再引入守衛）', () => {
   it('偵測到 ID_NUMBER → 拋錯', () => {
+    expect(FORBIDDEN_PERSONAL_JOB_COLUMNS).toContain('ID_NUMBER');
     expect(() =>
       assertNoForbiddenColumns('SELECT JTITLE_ID, ID_NUMBER FROM x'),
     ).toThrow();

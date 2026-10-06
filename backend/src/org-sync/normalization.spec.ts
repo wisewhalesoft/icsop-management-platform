@@ -169,7 +169,7 @@ describe('normalizeAccount（v2.0：VW_PERSONNEL_SQL）', () => {
 
 /**
  * 職稱＝畫面「資位」欄（G-ADM-001 第 5 欄）。代碼取自 VW_PERSONNEL_SQL.TITLE_CODE；
- * 名稱另由 VW_PERSONAL_JOB 對照主檔攝入（契約 §5.4.1）。
+ * 名稱另由 VW_JOB_TITLE 對照主檔攝入（契約 §5.4.1）。
  */
 describe('normalizeAccount — jobTitleCode（← TITLE_CODE）', () => {
   const raw = (over: Partial<RawAccount> = {}): RawAccount => ({
@@ -271,11 +271,11 @@ describe('normalizeJobPosition（VW_JOB_FUN → JOB_POSITION 對照列）', () =
   });
 });
 
-describe('normalizeJobTitle（VW_PERSONAL_JOB → JOB_TITLE 對照列）', () => {
+describe('normalizeJobTitle（VW_JOB_TITLE → JOB_TITLE 對照列）', () => {
   const raw = (over: Partial<RawJobTitle> = {}): RawJobTitle => ({
     COMPID: 'AS',
-    JTITLE_ID: 'J01',
-    JTITLE_NM: '業務專員',
+    CODE: 'J01',
+    DESC_CHI: '業務專員',
     ...over,
   });
 
@@ -288,7 +288,7 @@ describe('normalizeJobTitle（VW_PERSONAL_JOB → JOB_TITLE 對照列）', () =>
   });
 
   it('修剪前後空白', () => {
-    expect(normalizeJobTitle(raw({ JTITLE_ID: ' J01 ', JTITLE_NM: ' 業務專員 ' }))).toEqual({
+    expect(normalizeJobTitle(raw({ CODE: ' J01 ', DESC_CHI: ' 業務專員 ' }))).toEqual({
       companyCode: 'AS',
       code: 'J01',
       name: '業務專員',
@@ -296,9 +296,9 @@ describe('normalizeJobTitle（VW_PERSONAL_JOB → JOB_TITLE 對照列）', () =>
   });
 
   it.each([
-    ['JTITLE_ID 缺漏', { JTITLE_ID: '' }],
+    ['CODE 缺漏', { CODE: '' }],
     ['COMPID 缺漏', { COMPID: '  ' }],
-    ['JTITLE_NM 缺漏', { JTITLE_NM: null }],
+    ['DESC_CHI 缺漏', { DESC_CHI: null }],
   ])('%s → DirtyRowError（該列跳過，不中斷整批）', (_l, over) => {
     expect(() => normalizeJobTitle(raw(over as Partial<RawJobTitle>))).toThrow(DirtyRowError);
   });

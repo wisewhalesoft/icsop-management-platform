@@ -1,6 +1,6 @@
 /**
  * 同步引擎之 IO 邊界介面（可注入 mock）。
- *  - UpstreamOrgReader：OPENQUERY 讀 VW_DEPT_SQL / VW_PERSONNEL_SQL / VW_PERSONAL_JOB（唯讀上游）。
+ *  - UpstreamOrgReader：OPENQUERY 讀 VW_DEPT_SQL / VW_PERSONNEL_SQL / VW_JOB_TITLE / VW_JOB_FUN（唯讀上游）。
  *  - OrgSyncStore：本地 ACCOUNT / ORG_UNIT / JOB_TITLE / SYNC_RUN 之交易性寫入 + 互斥鎖。
  * 純邏輯（推導/分類/閾值/正規化）不在此層，見同目錄各純模組。
  */
@@ -65,7 +65,7 @@ export interface UpstreamOrgReader {
   /** VW_PERSONNEL_SQL 白名單 11 欄（v2.0）；sinceMtdt=null 為首次全量。含離職者，供停用判定。 */
   readAccountChanges(compid: string, sinceMtdt: Date | null): Promise<RawAccount[]>;
   /**
-   * 職稱（資位）對照主檔（VW_PERSONAL_JOB distinct 三欄，全公司範圍、非增量；實測 109 列）。
+   * 職稱（資位）對照主檔（VW_JOB_TITLE 三欄，全公司範圍、非增量；實測 204 列）。
    * ⚠ 選填：未實作此方法之既有替身（手建測試 reader）仍可運作，同步時視為「無對照可更新」。
    */
   readJobTitles?(): Promise<RawJobTitle[]>;
@@ -153,7 +153,7 @@ export interface OrgSyncStore {
   findExistingAccounts(compid: string): Promise<Map<string, ExistingAccount>>;
   /**
    * 既有職稱（資位）對照列，key 由 jobTitleKey(companyCode, code) 產生（以 | 分隔；上游 COMPID／
-   * JTITLE_ID 皆為英數代碼，不含此字元，故無歧義）。⚠ 選填：未實作之替身視為「本地無對照」。
+   * CODE 皆為英數代碼，不含此字元，故無歧義）。⚠ 選填：未實作之替身視為「本地無對照」。
    */
   findJobTitles?(): Promise<Map<string, ExistingJobTitle>>;
   /** 既有職位對照列，key 由 jobPositionKey(companyCode, code) 產生。選填之處置同上。 */

@@ -39,7 +39,9 @@ export class CompanyReadController {
  * 既有提供，**不需新表、不需新 store**）。
  *
  * ⚠ 端點路徑與型別維持 `job-titles`／`JobTitleRecord`：識別子對齊上游 `TITLE_CODE`／
- * `JTITLE_NM`，僅**畫面文案**為「資位」（2026-08-31 更名裁決）。
+ * `VW_JOB_TITLE`，僅**畫面文案**為「資位」（2026-08-31 更名裁決）。
+ *
+ * 候選集合＝該公司資位主檔全部代碼（含目前無人擔任者；2026-10-06 改讀 VW_JOB_TITLE 起）。
  *
  * ⚠ 依 `companyCode` **精確過濾**、不做顯示端之兩段式跨公司 fallback——與 `AC-P7` 之寫入驗證
  * 必須是同一集合，否則會出現「下拉選得到但存檔被拒」。

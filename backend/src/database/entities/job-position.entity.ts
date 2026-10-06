@@ -4,7 +4,7 @@ import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
  * 職位對照主檔（← VW_JOB_FUN 之 `CODE` / `DESC_CHI`；契約 §5.4.2）。
  *
  * 與 JOB_TITLE（資位）為**兩個正交維度**，不可互相取代：
- *  - 資位（`JOB_TITLE` ← `VW_PERSONAL_JOB.JTITLE_NM`）＝職等，如 業務專員／辦事員／副理；
+ *  - 資位（`JOB_TITLE` ← `VW_JOB_TITLE.DESC_CHI`）＝職等，如 業務專員／辦事員／副理；
  *  - 職位（本表 ← `VW_JOB_FUN.DESC_CHI`）＝職務位置，如 營業一般職／事務一般職／室長／處長。
  *  實測 2026-08-31（AS 在職 1,051 人）：資位「副理」× 職位「室長」16 人、
  *  資位「課長」× 職位「處長」12 人——同資位對應多種職位，反之亦然。

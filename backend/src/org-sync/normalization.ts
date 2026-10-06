@@ -69,11 +69,11 @@ export interface RawAccount {
   MTDT: Date | string;
 }
 
-/** VW_PERSONAL_JOB 職稱（資位）對照原始列（僅三欄；絕不含 ID_NUMBER 等個資）。 */
+/** VW_JOB_TITLE 職稱（資位）對照原始列（僅三欄；絕不含 AVG_SALARY 薪資欄）。 */
 export interface RawJobTitle {
   COMPID: string;
-  JTITLE_ID: string;
-  JTITLE_NM?: string | null;
+  CODE: string;
+  DESC_CHI?: string | null;
 }
 
 export interface NormalizedJobTitle {
@@ -260,16 +260,17 @@ export function dedupeAccountsByStableKey(
 }
 
 /**
- * 職稱對照列正規化。缺 COMPID/JTITLE_ID/JTITLE_NM 任一 → DirtyRowError（該列跳過、記警告），
- * 與部門/帳號之髒資料處置一致：對照表缺一列只會使少數帳號之職位顯示為「—」，不應中斷整批同步。
+ * 職稱（資位）對照列正規化（← VW_JOB_TITLE）。缺 COMPID/CODE/DESC_CHI 任一 → DirtyRowError
+ * （該列跳過、記警告），與部門/帳號之髒資料處置一致：對照表缺一列只會使少數帳號之資位顯示為「—」，
+ * 不應中斷整批同步。
  */
 export function normalizeJobTitle(raw: RawJobTitle): NormalizedJobTitle {
-  const code = nullableStr(raw.JTITLE_ID);
-  if (code === null) throw new DirtyRowError('JTITLE_ID 缺漏（對照鍵不可缺）');
+  const code = nullableStr(raw.CODE);
+  if (code === null) throw new DirtyRowError('CODE 缺漏（對照鍵不可缺）');
   const companyCode = nullableStr(raw.COMPID);
   if (companyCode === null) throw new DirtyRowError('COMPID 缺漏', code);
-  const name = nullableStr(raw.JTITLE_NM);
-  if (name === null) throw new DirtyRowError('JTITLE_NM 缺漏', code);
+  const name = nullableStr(raw.DESC_CHI);
+  if (name === null) throw new DirtyRowError('DESC_CHI 缺漏', code);
   return { companyCode, code, name };
 }
 

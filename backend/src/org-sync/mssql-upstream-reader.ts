@@ -91,7 +91,7 @@ export class MssqlUpstreamOrgReader implements UpstreamOrgReader {
     );
   }
 
-  /** 職稱（資位）對照主檔（全公司 distinct 三欄；非增量，實測 109 列）。 */
+  /** 職稱（資位）對照主檔（VW_JOB_TITLE 全公司三欄；非增量，實測 204 列）。 */
   async readJobTitles(): Promise<RawJobTitle[]> {
     return this.query<RawJobTitle>(buildJobTitleQuery(this.cfg.ref));
   }

@@ -1,7 +1,8 @@
 import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 /**
- * 職稱對照主檔（← VW_PERSONAL_JOB 之 `JTITLE_ID` / `JTITLE_NM`；契約 §5.4）。
+ * 職稱（資位）對照主檔（← VW_JOB_TITLE 之 `CODE` / `DESC_CHI`；契約 §5.4.1）。
+ * 2026-10-06 前來源為 VW_PERSONAL_JOB 之 DISTINCT（僅含有人擔任之資位），兩者代碼與名稱實測一致。
  *
  * 為何獨立成表而非直接把名稱寫進 ACCOUNT（與 ORG_UNIT 同一模式）：
  *  - 上游職稱改名時只需更新本表 54~71 列，不必 backfill 數千筆帳號；
@@ -23,8 +24,8 @@ export class JobTitle {
   companyCode!: string; // ← COMPID
 
   @Column({ type: 'varchar', length: 10 })
-  code!: string; // ← JTITLE_ID（對應 ACCOUNT.jobTitleCode）
+  code!: string; // ← CODE（對應 ACCOUNT.jobTitleCode）
 
   @Column({ type: 'nvarchar', length: 100 })
-  name!: string; // ← JTITLE_NM（例：業務專員、課長、協理）
+  name!: string; // ← DESC_CHI（例：業務專員、課長、協理）
 }
