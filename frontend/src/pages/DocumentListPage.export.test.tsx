@@ -448,11 +448,17 @@ describe('🔒 F017 AC-X16：零漣漪回歸鎖定（本 delta 只在 topbar 加
     ]);
   });
 
-  it('AC-X16 ④ 3 張統計卡、分頁列與空狀態文案不變', async () => {
+  /**
+   * 🔴 2026-10-06 F017 `AC-SC1`：統計卡改為 4 張，首張由「程序書數量（總數）」改為「有效（已公告＋進度中）」。
+   * 📝 原案名（逐字保留）：OLD> `AC-X16 ④ 3 張統計卡、分頁列與空狀態文案不變`；
+   *    原首條斷言 OLD> `expect(screen.getByText('程序書數量（總數）')).toBeInTheDocument();`
+   */
+  it('AC-X16 ④ 統計卡（AC-SC1 四卡）、分頁列與空狀態文案不因匯出 delta 改變', async () => {
     mockAuth('ICSOPAdmin');
     renderWithTopbar();
     await waitLoaded();
-    expect(screen.getByText('程序書數量（總數）')).toBeInTheDocument();
+    expect(screen.getByText('有效（已公告＋進度中）')).toBeInTheDocument();
+    expect(screen.getByText('作廢', { selector: 'div' })).toBeInTheDocument();
     expect(screen.getByText('已公告（公告日期已到）')).toBeInTheDocument();
     expect(screen.getByText('進度中（公告日期未到）')).toBeInTheDocument();
     expect(screen.getByText('共 120 筆 · 每頁 50 筆')).toBeInTheDocument();

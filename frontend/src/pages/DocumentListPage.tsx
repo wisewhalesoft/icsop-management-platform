@@ -32,7 +32,7 @@ import { businessCategoryDisplayName } from '../domain/business-category';
 import { usageFormOptionLabel } from '../domain/usage-form-label';
 import { useToast } from '../components/useToast';
 import { formatDateTime } from './org-sync-view';
-import { deriveDisplayStatus, DISPLAY_LABEL, type DisplayStatus } from './document-display';
+import { deriveDisplayStatus, DISPLAY_LABEL, statusCounts, type DisplayStatus } from './document-display';
 import type {
   BusinessCategoryRef,
   BusinessCategoryView,
@@ -906,16 +906,8 @@ export function DocumentListPage(): JSX.Element {
     linkTargetSet, appendixSet, formSet, bcSubtreeFilter, sortBy, sortDir,
   ]);
 
-  const counts = useMemo(() => {
-    let announced = 0;
-    let inProgress = 0;
-    for (const d of filtered) {
-      const s = deriveDisplayStatus(d.status, d.announcedDate, today);
-      if (s === 'announced') announced++;
-      else if (s === 'in_progress') inProgress++;
-    }
-    return { total: filtered.length, announced, inProgress };
-  }, [filtered, today]);
+  // F017 `AC-SC2`：四卡計數（失效不計入任何卡）。
+  const counts = useMemo(() => statusCounts(filtered, today), [filtered, today]);
 
   const labelCls = 'block text-[11px] font-medium text-slate-500 mb-1';
   const selectCls =
@@ -1182,11 +1174,13 @@ export function DocumentListPage(): JSX.Element {
         )}
       </PageHeader>
 
-      {/* 統計卡（衍生數，依目前篩選結果） */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <StatCard icon="library" tone="text-primary-600 bg-primary-50" value={counts.total} label="程序書數量（總數）" valueClass="text-slate-900" />
+      {/* 統計卡（衍生數，依目前篩選結果）。🔴 2026-10-06 F017 `AC-SC1`：有效／已公告／進度中／作廢四卡。
+          📝 OLD> 首張為「程序書數量（總數）」＝列數（含失效與作廢）；外框 `sm:grid-cols-3`。 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard icon="library" tone="text-primary-600 bg-primary-50" value={counts.active} label="有效（已公告＋進度中）" valueClass="text-slate-900" />
         <StatCard icon="megaphone" tone="text-emerald-600 bg-emerald-50" value={counts.announced} label="已公告（公告日期已到）" valueClass="text-emerald-700" />
         <StatCard icon="clock" tone="text-primary-600 bg-primary-50" value={counts.inProgress} label="進度中（公告日期未到）" valueClass="text-primary-700" />
+        <StatCard icon="x-circle" tone="text-red-600 bg-red-50" value={counts.void} label="作廢" valueClass="text-red-700" />
       </div>
 
       {canRead && !canWrite && (

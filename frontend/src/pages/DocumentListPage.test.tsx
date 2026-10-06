@@ -69,6 +69,21 @@ const DOCS: DocumentListItem[] = [
 ];
 
 const rowOf = (name: string) => screen.getByText(name).closest('tr')!;
+
+/** F017 `AC-SC1`：統計卡標籤（逐字、由左至右）。 */
+const STAT_LABELS = ['有效（已公告＋進度中）', '已公告（公告日期已到）', '進度中（公告日期未到）', '作廢'];
+/** 統計卡之數字節點（與標籤同一張卡、緊鄰其前）。 */
+const statValue = (label: string): HTMLElement =>
+  screen.getByText(label, { selector: 'div' }).previousElementSibling as HTMLElement;
+/** `AC-SC2` 📌：四種狀態各至少一列（有效 3＝已公告 2＋進度中 1、失效 2、作廢 1）。 */
+const MIXED_STATUS_DOCS: DocumentListItem[] = [
+  doc({ id: 'm1', documentNumber: 'M-01', documentName: '已公告文件甲', status: 'active', announcedDate: '2020-01-01T00:00:00.000Z' }),
+  doc({ id: 'm2', documentNumber: 'M-02', documentName: '已公告文件乙', status: 'active', announcedDate: '2021-01-01T00:00:00.000Z' }),
+  doc({ id: 'm3', documentNumber: 'M-03', documentName: '進度中文件甲', status: 'active', announcedDate: '2099-01-01T00:00:00.000Z' }),
+  doc({ id: 'm4', documentNumber: 'M-04', documentName: '失效文件甲', status: 'inactive', announcedDate: '2020-01-01T00:00:00.000Z' }),
+  doc({ id: 'm5', documentNumber: 'M-05', documentName: '失效文件乙', status: 'inactive', announcedDate: null }),
+  doc({ id: 'm6', documentNumber: 'M-06', documentName: '作廢文件甲', status: 'void', announcedDate: '2020-01-01T00:00:00.000Z' }),
+];
 const attachment = (over: Partial<DocumentAttachmentRecord>): DocumentAttachmentRecord => ({
   id: 'a1', documentId: 'd2', type: 'ICSOP_PDF', fileName: '消費分期產品政策及規範作業_v1.0.pdf',
   blobPath: 'documents/d2/icsop_pdf/zzz.pdf', contentType: 'application/pdf', size: 1024,
@@ -333,19 +348,53 @@ describe('DocumentListPage — F017 後台程序書清單（移植 prototype 13�
    * 一條**假綠**被實作進度揭穿為**假紅**，兩者皆非實作缺陷。
    * 改以 prototype 之逐字完整標籤斷言，同時取得唯一性與正確性。
    */
-  it('AC-D9 3 張統計卡之標籤不變（回歸鎖定；排序另由既有案持有）', async () => {
+  /**
+   * 🔴 2026-10-06 F017 `AC-SC1`：統計卡 3 張 → 4 張（有效／已公告／進度中／作廢）。
+   * 📝 原案名（逐字保留）：OLD> `AC-D9 3 張統計卡之標籤不變（回歸鎖定；排序另由既有案持有）`，
+   *    其首條斷言 OLD> `expect(screen.getByText('程序書數量（總數）')).toBeInTheDocument();`
+   *    ——該卡已依裁決移除。`已公告`／`進度中` 兩標籤之逐字鎖定（AC-D9 之原意）原樣保留。
+   */
+  it('AC-SC1 4 張統計卡之標籤與順序逐字；總數卡移除、不設失效卡', async () => {
     mockAuth('ICSOPAdmin');
     renderPage();
-    await waitFor(() => expect(screen.getByText('程序書數量（總數）')).toBeInTheDocument());
-    expect(screen.getByText('已公告（公告日期已到）')).toBeInTheDocument();
-    expect(screen.getByText('進度中（公告日期未到）')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('有效（已公告＋進度中）')).toBeInTheDocument());
+    const labels = STAT_LABELS.map((l) => screen.getByText(l, { selector: 'div' }));
+    for (let i = 1; i < labels.length; i++) {
+      // DOCUMENT_POSITION_FOLLOWING：後一張在前一張之後。
+      expect(labels[i - 1].compareDocumentPosition(labels[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(screen.queryByText('程序書數量（總數）')).not.toBeInTheDocument();
+    expect(statValue('有效（已公告＋進度中）').parentElement!.parentElement!.parentElement!.children).toHaveLength(4);
   });
 
-  it('統計卡顯示總數＝2', async () => {
+  /**
+   * 🔴 2026-10-06 F017 `AC-SC2`。📝 原案（逐字保留）：OLD> `統計卡顯示總數＝2`
+   *    ——斷言 `getByText('2')`，對 2 列全有效之語料而言總數與有效無從區分。
+   * 🔒 語料四種狀態齊備：有效 3（已公告 2＋進度中 1）、失效 2、作廢 1。
+   */
+  it('AC-SC2 四卡計數：有效＝已公告＋進度中、作廢只計 void、失效不計入任何卡', async () => {
     mockAuth('ICSOPAdmin');
+    vi.mocked(endpoints.getDocuments).mockResolvedValue(page(MIXED_STATUS_DOCS));
     renderPage();
-    await waitFor(() => expect(screen.getByText('程序書數量（總數）')).toBeInTheDocument());
-    expect(screen.getByText('2')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('作廢文件甲')).toBeInTheDocument());
+    expect(statValue('有效（已公告＋進度中）').textContent).toBe('3');
+    expect(statValue('已公告（公告日期已到）').textContent).toBe('2');
+    expect(statValue('進度中（公告日期未到）').textContent).toBe('1');
+    expect(statValue('作廢').textContent).toBe('1');
+  });
+
+  it('AC-SC3 狀態篩選＝失效 → 四卡皆 0 而清單仍有列（預期行為）', async () => {
+    mockAuth('ICSOPAdmin');
+    vi.mocked(endpoints.getDocuments).mockResolvedValue(page(MIXED_STATUS_DOCS));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('作廢文件甲')).toBeInTheDocument());
+    await userEvent.selectOptions(
+      within(document.getElementById('filterBar') as HTMLElement).getByLabelText('狀態'),
+      '失效',
+    );
+    await waitFor(() => expect(screen.queryByText('作廢文件甲')).not.toBeInTheDocument());
+    expect(screen.getByText('失效文件甲')).toBeInTheDocument();
+    for (const l of STAT_LABELS) expect(statValue(l).textContent).toBe('0');
   });
 
   it('ICSOPAdmin 顯示建立程序書與每列編輯鈕', async () => {

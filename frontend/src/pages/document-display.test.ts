@@ -26,15 +26,23 @@ describe('document-display（前端衍生狀態，mirror 後端）', () => {
     expect(DISPLAY_LABEL.in_progress).toBe('進度中');
   });
 
-  it('statusCounts：總數/已公告/進度中', () => {
+  /**
+   * 🔴 2026-10-06 F017 `AC-SC2`：統計卡改為 有效／已公告／進度中／作廢；失效不計入任何卡。
+   * 📝 原案（逐字保留）：OLD> `statusCounts：總數/已公告/進度中`，斷言 `c.total === 3`（含失效）。
+   * 🔒 語料四種狀態各至少一列（`AC-SC2` 📌）——只有有效文件時「失效不計入」恆真。
+   */
+  it('AC-SC2 statusCounts：有效＝active 列數（≡ 已公告＋進度中）、作廢＝void 列數、失效不計入', () => {
     const docs = [
       doc({ status: 'active', announcedDate: '2026-07-01T00:00:00.000Z' }), // announced
+      doc({ status: 'active', announcedDate: '2026-07-02T00:00:00.000Z' }), // announced
       doc({ status: 'active', announcedDate: null }), // in_progress
+      doc({ status: 'inactive', announcedDate: '2026-07-01T00:00:00.000Z' }),
       doc({ status: 'inactive' }),
+      doc({ status: 'void', announcedDate: '2026-07-01T00:00:00.000Z' }),
     ];
     const c = statusCounts(docs, today);
-    expect(c.total).toBe(3);
-    expect(c.announced).toBe(1);
-    expect(c.inProgress).toBe(1);
+    expect(c).toEqual({ active: 3, announced: 2, inProgress: 1, void: 1 });
+    expect(c.active).toBe(c.announced + c.inProgress);
+    expect(c).not.toHaveProperty('total');
   });
 });

@@ -24,16 +24,23 @@ export function deriveDisplayStatus(
   return new Date(announcedDate).getTime() <= today.getTime() ? 'announced' : 'in_progress';
 }
 
+/**
+ * 統計卡計數（F017 `AC-SC2`，2026-10-06）：有效＝儲存狀態 active 之列數（≡ 已公告＋進度中）、
+ * 作廢＝void 之列數；🔴 失效（inactive）不計入任何一張卡。
+ * 📝 OLD> 回傳 `{ total, announced, inProgress }`，`total` 為列數（含失效與作廢）。
+ */
 export function statusCounts(
   docs: DocumentListItem[],
   today: Date,
-): { total: number; announced: number; inProgress: number } {
+): { active: number; announced: number; inProgress: number; void: number } {
   let announced = 0;
   let inProgress = 0;
+  let voided = 0;
   for (const d of docs) {
     const s = deriveDisplayStatus(d.status, d.announcedDate, today);
     if (s === 'announced') announced++;
     else if (s === 'in_progress') inProgress++;
+    else if (s === 'void') voided++;
   }
-  return { total: docs.length, announced, inProgress };
+  return { active: announced + inProgress, announced, inProgress, void: voided };
 }
