@@ -1,6 +1,7 @@
 # F016: PDF 與 OJT 附件上傳
 Priority: P0-MVP | Status: 🟡 實作（unit 綠；真 Azure Blob＋multipart 上傳＋受控下載；**附件列表端點 GET :id/attachments 與編輯頁/唯讀頁既有檔名＋下載已補**（doc-seams）；int 已寫未跑，見 implementation-logs/doc-seams-impl.md） | Last Updated: 2026-07-24
 Epic/Story: E04 / US-036
+<br>🔵 **2026-10-06 附件線上檢視＋主管／部門窗口下載 delta：見 [§附件線上檢視 delta](#attachment-view-delta)（`AC-AV1`～`AC-AV8`）。**
 
 > **🔴 2026-08-20 CHANGE delta（使用者裁決；缺失／變更 delta 第 8 項）——OJT 簽到表開放主管／部門窗口上傳**：後台文件管理內頁**維持唯讀**，但 **OJT 簽到表一欄**開放主管與部門窗口上傳（含覆蓋）。**此推翻 [F026](F026-role-field-matrix.md) 頂部之「主管、部門窗口、系統管理員對所有文件欄位皆唯讀」定案**（`OQ-E08-01` 之產物），推翻範圍**嚴格限於 OJT 一欄**。**本 delta 之 AC 編號採 `AC-N#`**（N＝2026-08-20 defect delta），與既有批次區隔、不重號。逐條見 [§OJT 上傳角色開放 delta](#ojt-role-open-delta)。
 > 📌 **本 delta 為本系統首次開放非管理角色之寫入路徑** ⇒ `OQ-D9-23` 裁定其**寫入 `AUDIT_LOG`**；⚠ 既有落差 `OQ-E01-09`（連 ICSOPAdmin 之附件上傳都不寫稽核）**本輪不一併償還**，故同一端點將出現**依角色而異之稽核行為**——此不一致已如實提報為 [open-questions](../open-questions.md) `OQ-D9-29` 交回 lead，**spec-writer 未自行擴大或縮小範圍**。
@@ -103,6 +104,25 @@ Epic/Story: E04 / US-036
 - **AC-J4**（🔴 唯讀提示文案之收斂——`AC-N74` 之語意改寫；`OQ-E11-12`→**A** 定值，**逐字值已由 ux-ojt 定稿**）：Given 後台文件唯讀頁（`16`）與編輯頁（`15`）, When 依角色渲染唯讀提示, Then ——<br>　① **`RO_NOTICE_FULL` 逐字一字未改**，惟其**適用範圍由「僅 `SysAdmin`」擴為三個唯讀角色**（`SysAdmin`／`Supervisor`／`DeptContact`）⇒ **唯讀提示自此不再依角色分支**；<br>　② **`RO_NOTICE_OJT_EXCEPTION` 整條作廢**（其「唯一例外為『OJT 實體簽到表』，可上傳或覆蓋」自 E11 起為假）；<br>　③ **`FIELD_RO_NOTE` 改為「此區**全部 20 個**欄位對本角色一律唯讀（`FIELD_WRITE_FORBIDDEN`）；**本頁無任何可寫項**。」**（欄位數 20 由 `OQ-E11-12`→A 之「欄位鍵集合維持 20」確定）；<br>　④ **`#attachTitle` 收斂為單一值 `附件（僅下載）`**、**`ATTACH_NOTE_RO` 自此不再依角色分支**。<br>🔒 **逐字值之權威＝[F042 §prototype 25 §6](F042-ojt-progress-management.md#prototype-25-dom-contract)**（`15`＝`16` 兩檔逐字相同，沿用 `AC-N76` ③ 之既有要求）；**本條不重打字面**——同一組文案在兩處各打一份即為分歧之起點。<br>🔴 **底線**：改寫後之文案**不得**再宣稱本頁有任何可寫項——「宣告與實際不符」為本 repo 反覆出現之同型缺陷（`AC-N28` 之 📝 即為前例）。<br>📌 **① 之可測形狀**：以 `SysAdmin`／`Supervisor`／`DeptContact` **三種角色**渲染 ⇒ 唯讀提示之文字**恰為同一字串**（`RO_NOTICE_FULL`）。⚠ **原 `AC-N74` ① 之「分支斷言」自此反轉為「無分支斷言」**——若實作保留分支，三角色會渲染出兩種文案而本斷言轉紅。
 - **AC-J5**（🔒 ICSOP PDF 上傳仍拒之回歸鎖定**續為有效**——`AC-N33` 之理由更新）：Given [F042](F042-ojt-progress-management.md) 實作完成, When 角色為 `Supervisor` 或 `DeptContact` 呼叫 `POST /admin/documents/:documentId/attachments/icsop-pdf`（或任何取代 ICSOP PDF 之路徑）, Then 一律回 **403 `FIELD_WRITE_FORBIDDEN`**、不寫入 Blob、不建立附件記錄、不寫稽核——**逐字與 `AC-N33` 相同**。<br>🔴 **本條之新理由（原理由已失效，故必須就地重述）**：`AC-N33` 原以「與 `AC-N28` 為相鄰路由、期望值相反」為存在理由；`AC-N28` 作廢後該對照消失，但**「主管／部門窗口不得寫 ICSOP PDF」本身從未被任何裁決推翻**。⚠ **不重述就會被下一位讀者判為「隨 D9 批一起作廢」而順手刪掉**——那是「鬆一片牆」之另一種形狀。
 - **AC-J6**（🔒 本 feature 之非 OJT 範圍零漣漪）：Given [F042](F042-ojt-progress-management.md) 實作完成, When 執行本 feature 之全部既有 AC（ICSOP PDF 上傳／格式驗證／覆蓋／`FILE_ACCESS_DENIED`）, Then **除 OJT 相關條文外全數維持綠燈**——ICSOP PDF 之「1 份、重傳即覆蓋」語意**逐字不變**（該欄位**未**改為場次制，兩者刻意不同構）。<br>⚠ **本條之存在理由**：本 feature 之 Description 與 Main Flow 把 ICSOP PDF 與 OJT 並列敘述（「各 1 份、覆蓋式」），E11 只動後者；**不明文鎖住前者，最可能的失誤是把兩者一起改成多份制**。
+
+### 2026-10-06 附件線上檢視＋主管／部門窗口下載 delta（`AC-AV#` 批） {#attachment-view-delta}
+
+> **使用者需求（2026-10-06，逐字）**：「後台-ICSOP 文件管理-檢視功能調整：1. 附件區塊：判斷如果是附件格式為 PDF 時，比照 OJT 進度管理的教育訓練場次簽到表檔案，提供"檢視"功能，一樣須稽核紀錄與浮水印 2. 附件區塊：開放角色為"部門窗口"與"主管"可以檢視/下載。因為這兩個角色在前台同樣有檢視與下載的權限。」
+> **範圍**＝後台文件唯讀頁（`/admin/documents/:id`，`prototypes/16-document-readonly.html`）之附件合併清單（ICSOP PDF／使用表單／附錄）。編輯頁（ICSOPAdmin 專屬）不在範圍。比照對象＝[F042](F042-ojt-progress-management.md#session-view-delta) `AC-OV1`～`AC-OV5`。
+> **既有缺陷（本 delta 一併修正）**：唯讀頁對主管／部門窗口顯示附錄下載鈕，但該鈕呼叫附錄池端點 `GET /admin/appendices/:id/download`（閘門 `附錄管理` read，兩角色＝無，[F039](F039-appendix-management.md) `AC-33`）⇒ **按下必 403**。ICSOP PDF（`ICSOP文件管理` read）與使用表單（[F018](F018-usage-form-management.md) `AC-D23` 早已改走 `下載列印文件` read）兩類本就可下載。既有單元測試曾把「主管下載附錄 → 呼叫附錄池端點」釘成預期行為。
+
+- **AC-AV1**（「檢視」鈕之存在與位置）：Given 後台四角色（`SysAdmin`／`ICSOPAdmin`／`Supervisor`／`DeptContact`）開啟唯讀頁, Then 附件合併清單中**每一 `format＝pdf` 之列**（ICSOP PDF、PDF 使用表單、PDF 附錄）於「下載」鈕**之前**有一枚 `[data-attachment-view]` 按鈕，可見文字逐字 **`檢視`**、`aria-label` 逐字 **`檢視「{檔名}」`**、eye 圖示；**xlsx／xls 列無檢視鈕**（只能下載）。OJT 唯讀衍生列不受影響（無檔案）。
+- **AC-AV2**（開啟方式；逐字比照 F042 `AC-OV2`）：When 點擊檢視鈕, Then 於 **click handler 內同步** `window.open('', '_blank')`，再以 fetch 取回位元組、導向 `blob:` URL；🔴 **分頁沒開成（封鎖）⇒ 不發請求**（否則寫下使用者沒看到的 `VIEW` 稽核），提示 `POPUP_BLOCKED_TEXT`；請求失敗 ⇒ 關閉分頁並提示 **`檢視失敗，請稍後再試。`**；前端第二道型別防線＝回應型別必為 `application/pdf`。
+- **AC-AV3**（後端檢視端點）：新增三支，皆回 `Content-Disposition: inline`（檔名以 `filename*` 帶出）、`Content-Type` **依伺服器端格式事實推導**（不讀上傳時客戶端自報值）＋ **`X-Content-Type-Options: nosniff`**——
+  - ICSOP PDF：`GET /documents/attachments/view?blobPath=`（與既有 `/download` 同形）；
+  - 使用表單：`GET /documents/:documentId/usage-forms/:formId/view`（表單須確實關聯該文件，否則 404 `USAGE_FORM_NOT_FOUND`）；
+  - 附錄：`GET /documents/:documentId/appendices/:appendixId/view`（附錄須確實關聯該文件，否則 404 `APPENDIX_NOT_FOUND`）。
+  - 格式非 `pdf` ⇒ **400 `FILE_FORMAT_NOT_ALLOWED`**；未登入 ⇒ `FILE_ACCESS_DENIED`。
+- **AC-AV4**（燒錄）：檢視之 PDF **一律燒錄浮水印**、身分＝**檢視者本人**、**無例外角色**（比照 [F020](F020-watermark.md) `AC-N16`／`AC-N18`）；🔴 燒錄器缺席 ⇒ 請求失敗（`WATERMARK_BURNER_UNAVAILABLE`），**絕不**以原檔回應。下載與檢視共用同一燒錄點（`burnIfPdf`），不得各寫一份。
+- **AC-AV5**（稽核）：檢視**成功**恰寫一筆 `AUDIT_LOG`，`actionType='VIEW'`；`targetType` 依類別為 `DOCUMENT`（ICSOP PDF，`targetId`＝文件）／`USAGE_FORM`（`documentId` 落該文件）／`APPENDIX`（`appendixId`＋`documentId` 皆落列）；`watermarkSnapshot` 落當次燒錄字串；身分快照六欄與對象快照同下載路徑。🔒 **拒絕路徑（未登入／未關聯／非 PDF／燒錄器缺席）一律不燒錄、不寫稽核**。下載仍寫 `DOWNLOAD`（對偶鎖）。
+- **AC-AV6**（浮水印註記）：附件列之 `[data-wm-note]` 沿用 [F020](F020-watermark.md) `AC-N20` 之同一組常數（`WM_BURN_TEXT`＝`檢視／下載會帶您的身分浮水印`）；prototype 16 之舊字面 `檢視/下載將燒錄浮水印`（2026-09-23 全站文案稽核漏改）於本 delta 同步。
+- **AC-AV7**（🔴 主管／部門窗口可檢視、可下載三類附件）：三支檢視端點之閘門皆為 **`ICSOP文件管理` read**（＝後台四角色；`User` 403）。唯讀頁之**附錄下載**改走文件脈絡端點 `GET /documents/:documentId/appendices/:appendixId/download`（`下載列印文件` read；PDF 燒錄＋寫 `DOWNLOAD` 稽核），**不得**再呼叫附錄池端點。<br>🔒 **[F039](F039-appendix-management.md) `AC-33` 逐字不變**：主管／部門窗口對 `/admin/appendices*`、`/admin/documents/:id/appendices*` 仍一律 403——新路徑刻意不在該兩組前綴下。**[F025](F025-role-function-matrix.md) 功能矩陣逐格不變**（端點綁既有功能列）。
+- **AC-AV8**（🔒 零漣漪）：既有三類下載之位元組、燒錄與稽核語意、附件區其餘 DOM 契約（[F026](F026-role-field-matrix.md) `AC-N75`：`data-attachment-kind` 四值、`data-readonly-attachment`、`唯讀` 徽章）、`ATTACH_NOTE_RO`、附錄管理頁之池下載**一律不變**。
 
 ## Error Scenarios
 - 格式/大小/未授權存取：見 [error-handling.md#file](../error-handling.md#file)。存取控管見 [NFR-002](../nfr.md#security)（短效期憑證）。

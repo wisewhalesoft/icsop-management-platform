@@ -1,4 +1,14 @@
 <!DOCTYPE html>
+<!-- 🔵 2026-10-06 附件線上檢視＋主管／部門窗口下載 delta（規格權威＝docs/specs/features/F016-pdf-ojt-attachment.md
+     §附件線上檢視 delta `AC-AV1`～`AC-AV8`）——本檔已套用：
+     ① 🔵 附件區每一 **PDF 列**（ICSOP PDF／PDF 使用表單／PDF 附錄）於「下載」鈕**之前**新增「檢視」鈕
+        `[data-attachment-view]`（eye 圖示、aria-label＝`檢視「{檔名}」`）；xlsx／xls 列**無**檢視鈕（只能下載）。
+        行為比照 25-ojt-progress 之簽到表檢視（F042 `AC-OV2`）：click 內同步開新分頁、伺服器端燒錄浮水印
+        （身分＝檢視者本人）、寫稽核 **VIEW**；分頁被封鎖 ⇒ 不發請求、提示 `POPUP_BLOCKED_TEXT`。
+     ② 🔵 主管／部門窗口之**附錄下載**改走文件脈絡端點（原附錄池端點對兩角色 403，F039 `AC-33`）——
+        本頁版面不變（兩角色本就看得到下載鈕，差在按下去會不會成功），示意上無差異。
+     ③ 浮水印註記 `WM_BURN_TEXT` 同步 2026-09-23 全站文案稽核之現值（本頁當時與 25 同樣漏改）。
+     🔒 其餘一律未動。 -->
 <!-- 🔴 2026-08-27 E11 delta（**Phase A DRAFT**；規格權威＝docs/specs/features/F042-ojt-progress-management.md
      `AC-21`／`AC-22`＋§既有行為反轉總表 甲·乙節；F026 `AC-J7`～`AC-J11`、F016 `AC-J4`）——本檔已套用：
      ① 🔴 **OJT 附件列改為唯讀衍生列**（`AC-21`）：該列不再是一份「本文件的 OJT 檔」，
@@ -337,7 +347,8 @@
   function ojtCompletedUnits(){ return ojtHasCompleted ? doc.using.filter((_,i)=>OJT_DEMO_COMPLETED_IDX.includes(i)) : []; }
 
   /* ===== 🔵 浮水印註記（F020 AC-N20；與前台 04 同一組逐字文案，不得分歧）===== */
-  const WM_BURN_TEXT        = '檢視/下載將燒錄浮水印';
+  /* 🔵 2026-10-06：隨 2026-09-23 全站文案稽核之字面（`domain/watermark-note.ts`）同步——本頁當時漏改。OLD> '檢視/下載將燒錄浮水印' */
+  const WM_BURN_TEXT        = '檢視／下載會帶您的身分浮水印';
   const WM_UNSUPPORTED_TEXT = '此格式不支援浮水印';
   function wmNote(fmt){
     return fmt==='pdf'
@@ -386,6 +397,7 @@
         <div class="min-w-0 flex-1"><div class="text-xs text-slate-400">${f.label}</div><div class="text-sm text-slate-700 truncate"${f.ord?` data-appendix-name`:``}>${f.name}</div></div>
         ${wmNote(f.fmt)}
         ${marker}
+        ${f.fmt==='pdf'?`<button data-attachment-view onclick="viewAttach('${f.name}','${f.label}')" aria-label="檢視「${f.name}」" title="檢視「${f.name}」" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"><i data-lucide="eye" class="w-3.5 h-3.5"></i>${VIEW_BTN_TEXT}</button>`:''}
         <button onclick="download('${f.name}','${f.label}','${f.fmt}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
       </div>`;
     });
@@ -443,6 +455,34 @@
      📝 被推翻之原文逐字保留供追溯（⚠ **不得用於斷言或照抄**；2026-08-21 補標 `OLD>` 前綴，
         使 `grep -rn "OLD>"` 可完整列出本檔全部已作廢字面）：
         OLD> 下載附錄「X」（不燒錄浮水印；後台管理端存取不寫調閱稽核） */
+  /* ===================== 🔵 附件線上檢視（F016 `AC-AV1`～`AC-AV5`；比照 25 之簽到表檢視）=====================
+     🔴 **於 click handler 內同步開新分頁**，取回位元組後才導向（實作：`openViaBlob` 之 fetch → blob: URL）；
+        明文禁止 `window.open(端點網址)`——頂層導覽會送 `Accept: text/html` 而撞 SPA fallback。
+     🔒 後端：ICSOP PDF＝`GET /documents/attachments/view?blobPath=`、使用表單＝`GET /documents/:id/usage-forms/:formId/view`、
+        附錄＝`GET /documents/:id/appendices/:appendixId/view`；閘門皆 `ICSOP文件管理` read（後台四角色）；
+        `Content-Disposition: inline`、`Content-Type` 依伺服器端格式推導＋`nosniff`；燒錄浮水印＝操作者本人、寫稽核 **VIEW**。
+     📝 prototype 無真檔案：新分頁以一張示意頁代替，疊一層浮水印字樣以示「已燒錄」。 */
+  const VIEW_BTN_TEXT      = '檢視';
+  const VIEW_FAILED_TEXT   = '檢視失敗，請稍後再試。';
+  const POPUP_BLOCKED_TEXT = '新視窗被瀏覽器封鎖，請允許彈出視窗後再試。';
+  function viewAttach(n,kind){
+    const win = window.open('', '_blank');
+    if(!win){ toast('error', POPUP_BLOCKED_TEXT, 'POPUP_BLOCKED'); return; }   // 🔴 分頁沒開成就不發請求（否則寫下沒人看到的 VIEW 稽核）
+    const tt = kind==='使用表單' ? 'USAGE_FORM' : (kind==='附錄' ? 'APPENDIX' : 'DOCUMENT');
+    const esc = t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const wm = `A12345 ${document.getElementById('userName').textContent} 和潤 企劃部 車輛行銷室 ${new Date().toISOString().slice(0,16).replace('T',' ')}`;
+    win.document.write(`<!doctype html><meta charset="utf-8"><title>${esc(n)}</title>
+      <body style="margin:0;background:#525659;font-family:system-ui,'Noto Sans TC',sans-serif">
+      <div style="max-width:720px;margin:24px auto;background:#fff;padding:40px;min-height:600px;box-shadow:0 2px 12px rgba(0,0,0,.4)">
+        <h2 style="text-align:center;margin:0 0 4px">${esc(kind)}</h2>
+        <p style="text-align:center;color:#475569;margin:0 0 20px;font-size:13px">${esc(n)}</p>
+        <p style="margin-top:24px;font-size:11px;color:#94a3b8">prototype 示意：實際為該 PDF 之內容（伺服器端已燒錄浮水印，身分為檢視者本人；寫入稽核 VIEW · ${tt}）</p>
+      </div>
+      <div style="position:fixed;inset:0;pointer-events:none;display:flex;flex-wrap:wrap;align-content:space-around;justify-content:space-around;transform:rotate(-30deg);opacity:.30;color:#334155;font-size:14px">${Array.from({length:12},()=>`<span style="padding:40px">${esc(wm)}</span>`).join('')}</div></body>`);
+    win.document.close();
+    toast('info','已於新分頁開啟「'+n+'」（已燒錄浮水印；寫入稽核 VIEW · '+tt+'）');
+  }
+
   function download(n,kind,fmt){
     const tt = kind==='使用表單' ? 'USAGE_FORM' : (kind==='附錄' ? 'APPENDIX' : 'DOCUMENT');
     if(fmt==='pdf'){

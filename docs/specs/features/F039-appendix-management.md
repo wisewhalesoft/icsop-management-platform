@@ -161,7 +161,7 @@ ICSOP 文件建立/編輯時，自附錄池**可搜尋多選**關聯附錄（**�
 
 - **AC-31**（US-102 AC5）：Given 角色為 ICSOPAdmin，When 存取附錄管理之查詢與寫入端點，Then 全數允許（CRUD）。
 - **AC-32**（US-102 AC5）：Given 角色為 SysAdmin，When 呼叫附錄池查詢／關聯檢視／後台下載端點，Then 允許；When 呼叫上傳／覆蓋／移除／關聯／解除關聯端點，Then 拒絕（欄位層 403 `FIELD_WRITE_FORBIDDEN`，與 F018 之守門鏈一致）。
-- **AC-33**（US-102 AC5）：Given 角色為 Supervisor／DeptContact／User，When 呼叫任一 `/admin/appendices*` 或 `/admin/documents/:documentId/appendices*` 端點，Then 路由層拒絕，回 403 `PERMISSION_DENIED`。
+- **AC-33**（US-102 AC5）：Given 角色為 Supervisor／DeptContact／User，When 呼叫任一 `/admin/appendices*` 或 `/admin/documents/:documentId/appendices*` 端點，Then 路由層拒絕，回 403 `PERMISSION_DENIED`。<br>📌 **2026-10-06**：本條逐字不變；後台唯讀頁（`16`）之附錄下載／檢視改走文件脈絡端點 `/documents/:documentId/appendices/:appendixId/{download,view}`（不在上述前綴下），使主管／部門窗口可下載與檢視——見 [F016](F016-pdf-ojt-attachment.md#attachment-view-delta) `AC-AV7`。原唯讀頁呼叫池端點 ⇒ 兩角色按下必 403，為既有缺陷。
 - **AC-34**：Given 任一已登入角色（含 User），When 開啟文件詳情之附錄清單或下載附錄，Then 允許（屬前台瀏覽／下載列印權限，不受「附錄管理」功能權限限制）。
 
 ### 前台燒錄與附錄池匯出 delta（🔴 2026-08-16 使用者裁決；缺失／變更 delta 第 5b／14 項） {#export-delta}
