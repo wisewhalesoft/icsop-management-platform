@@ -83,6 +83,15 @@ export function jobOptionsFor(
 }
 
 /**
+ * 資位下拉之選項文字＝`代碼 名稱`（2026-10-06）。
+ * 必須帶代碼：資位主檔（VW_JOB_TITLE）同公司內**多碼同名**屬常態（AS「課長」F01／G01／G02、
+ * 「課長代行」F03／F04／F07、「專員」I02／I09），只顯示名稱時使用者無從分辨。
+ */
+export function jobTitleOptionLabel(title: Pick<JobTitleRecord, 'code' | 'name'>): string {
+  return `${title.code} ${title.name}`;
+}
+
+/**
  * 累積多次 `GET /job-titles?companyCode=` 之結果（各公司一次），以 (companyCode, code) 複合鍵去重。
  * 去重為必要：重複列會使同一職稱在下拉出現兩次。
  */

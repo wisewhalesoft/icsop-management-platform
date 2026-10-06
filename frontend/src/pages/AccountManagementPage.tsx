@@ -27,6 +27,7 @@ import {
   PROFILE_UNSET_LABEL,
   jobOptionsFor,
   jobPositionOptionsFor,
+  jobTitleOptionLabel,
   mergeJobTitles,
   mergeJobPositions,
   normalizeProfileCode,
@@ -385,7 +386,7 @@ function ProfileFields({
           <option value="">{PROFILE_UNSET_LABEL}</option>
           {jobOptions.map((j) => (
             <option key={j.code} value={j.code}>
-              {j.name}
+              {jobTitleOptionLabel(j)}
             </option>
           ))}
         </select>

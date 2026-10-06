@@ -603,9 +603,27 @@ describe('AccountManagementPage — F003 帳號與角色管理', () => {
       expect(jobSel.value).toBe('');
       // AE 無 ORG_UNIT（AC-P26）→ 部門候選應重新計算為空，不得殘留 AS 之審查室選項
       expect(within(orgSel).queryByText('營運管理部 / 審查室')).not.toBeInTheDocument();
-      // 資位候選重新以 AE 計算：AS 之「經理」不應出現，AE 之「電能工程師」應出現
-      expect(within(jobSel).queryByText('經理')).not.toBeInTheDocument();
-      expect(within(jobSel).getByText('電能工程師')).toBeInTheDocument();
+      // 資位候選重新以 AE 計算：AS 之「經理」不應出現，AE 之「電能工程師」應出現（選項文字＝代碼＋名稱）
+      expect(within(jobSel).getByText('M01 電能工程師')).toBeInTheDocument();
+      expect(within(jobSel).queryByText('D01 經理')).not.toBeInTheDocument();
+    });
+
+    it('資位選項文字＝「代碼 名稱」：同公司多碼同名（上游實查 AS 課長 F01／G01）可分辨，value 仍為代碼', async () => {
+      vi.mocked(endpoints.getJobTitles).mockResolvedValue([
+        { companyCode: 'AS', code: 'G01', name: '課長' },
+        { companyCode: 'AS', code: 'F01', name: '課長' },
+      ]);
+      mockAuth('SysAdmin');
+      renderPage();
+      await waitFor(() => expect(screen.getByText('李慧玲')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: /建立帳號/ }));
+      const dialog = screen.getByRole('dialog', { name: /建立手動帳號/ });
+      const jobSel = within(dialog).getByLabelText(/資位/) as HTMLSelectElement;
+
+      await waitFor(() => expect(jobSel.options.length).toBe(3));
+      const options = Array.from(jobSel.options).slice(1); // 首列為「未設定」
+      expect(options.map((o) => o.textContent)).toEqual(['F01 課長', 'G01 課長']);
+      expect(options.map((o) => o.value)).toEqual(['F01', 'G01']);
     });
 
     it('AC-P17 部門選項文字＝buildOrgPath(該公司之 units, orgCode)（全站唯一組織路徑算法，不得另建第二套）', async () => {
