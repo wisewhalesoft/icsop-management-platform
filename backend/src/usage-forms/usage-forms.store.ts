@@ -168,7 +168,8 @@ export const AUDIT_RECORDER = Symbol('AUDIT_RECORDER');
 
 export interface UsageFormAuditEvent {
   targetType: 'USAGE_FORM';
-  actionType: 'DOWNLOAD';
+  /** 🔵 2026-10-06 F016 `AC-AV5`：後台唯讀頁之檢視寫 `VIEW`。 */
+  actionType: 'VIEW' | 'DOWNLOAD';
   formId: string;
   /** 🔴 D9 delta（`AC-N51`）：後台池管理頁下載無文件脈絡 ⇒ 允許 `null`（其餘路徑仍帶文件 id）。 */
   documentId: string | null;

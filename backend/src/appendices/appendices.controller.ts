@@ -27,7 +27,7 @@ import {
   MULTIPART_OPTIONS,
   toUploadFile,
 } from '../storage/multipart';
-import { attachmentDisposition } from '../storage/content-disposition';
+import { attachmentDisposition, inlineDisposition } from '../storage/content-disposition';
 
 const isTrue = (v?: string) => /^(true|1|yes)$/i.test(v ?? '');
 
@@ -241,6 +241,32 @@ export class AppendicesController {
     );
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', attachmentDisposition(fileName));
+    res.send(bytes);
+  }
+
+  /**
+   * 🔵 2026-10-06 F016 `AC-AV3`：後台唯讀頁之附錄**檢視**（僅 PDF；inline、燒錄、稽核 `VIEW`）。
+   * 閘門＝`ICSOP文件管理` read（後台四角色，含主管／部門窗口，`AC-AV7`）。
+   * 🔒 路徑刻意**不在** `/admin/appendices*`／`/admin/documents/:id/appendices*` 之下——F039 `AC-33`
+   * 鎖定該兩組前綴對主管／部門窗口一律 403。
+   * 🔴 `Content-Type` 依伺服器端 `format` 推導＋`nosniff`（防儲存型 XSS，比照 F042 `AC-OV3` ②）。
+   */
+  @Get('documents/:documentId/appendices/:appendixId/view')
+  @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
+  async view(
+    @Req() req: RequestWithSession,
+    @Param('documentId') documentId: string,
+    @Param('appendixId') appendixId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { bytes, fileName, contentType } = await this.svc.viewAppendixInDocument(
+      req.sessionUser,
+      documentId,
+      appendixId,
+    );
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', inlineDisposition(fileName));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(bytes);
   }
 }

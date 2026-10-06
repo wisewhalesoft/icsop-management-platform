@@ -4,9 +4,11 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { assertViewableFormat } from '../storage/viewable-format';
 import { randomUUID } from 'crypto';
 import { BLOB_STORE, BlobStore } from '../storage/blob-store';
 import { contentTypeOfFormat } from '../storage/content-disposition';
@@ -732,6 +734,35 @@ export class UsageFormsService {
   }
 
   /**
+   * 🔵 2026-10-06 F016 `AC-AV3`：後台唯讀頁之使用表單**檢視**（前端於新分頁 inline 呈現）。
+   * 與 `downloadFormRaw` 之差異：① 表單須確實關聯此文件（否則 404——`documentId` 落稽核列故須為真）；
+   * ② `format` 須為 `pdf`（否則 400）；③ 燒錄器缺席 ⇒ 請求失敗、絕不回原檔；④ 稽核為 `VIEW`。
+   * 🔒 拒絕路徑一律先於讀取位元組、燒錄與寫稽核。授權由 route 層 `ICSOP文件管理` read 承擔。
+   */
+  async viewFormInDocument(
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
+    documentId: string,
+    formId: string,
+  ): Promise<UsageFormDownloadBytes> {
+    if (!session?.accountId) {
+      throw new ForbiddenException('FILE_ACCESS_DENIED');
+    }
+    const form = (await this.store.listByDocument(documentId)).find((f) => f.id === formId);
+    if (!form) throw new NotFoundException('USAGE_FORM_NOT_FOUND');
+    assertViewableFormat(form.format);
+    if (!this.burner) throw new InternalServerErrorException('WATERMARK_BURNER_UNAVAILABLE');
+    const raw = await this.blob.getBytes(form.blobPath);
+    if (!raw) throw new NotFoundException('FILE_ACCESS_DENIED');
+    const burned = await this.burner.burnIfPdf(session as WatermarkSession, raw, form.format);
+    await this.recordDownload(session, form.id, form.name, documentId, burned.snapshot, 'VIEW');
+    return {
+      bytes: burned.bytes,
+      fileName: form.name,
+      contentType: usageFormContentType(form.format),
+    };
+  }
+
+  /**
    * 後台兩支下載之**共用出口**（差別僅在授權前提：池為功能閘門、詳情頁為 session 存在）。
    *
    * 🔴 **2026-08-17：由核發 SAS URL 改為代理串流**（F020 `AC-D3a` 之後台側修訂）。
@@ -774,11 +805,12 @@ export class UsageFormsService {
     formName: string,
     documentId: string | null,
     watermarkSnapshot: string | null,
+    actionType: 'VIEW' | 'DOWNLOAD' = 'DOWNLOAD',
   ): Promise<void> {
     const identity = await resolveAuditIdentity(this.burner, session as WatermarkSession);
     await this.audit.record({
       targetType: 'USAGE_FORM',
-      actionType: 'DOWNLOAD',
+      actionType,
       formId,
       documentId,
       // 🔴 2026-10-05 delta（C）：對象快照（原本未帶 ⇒ F024 對象欄只剩裸 formId）。

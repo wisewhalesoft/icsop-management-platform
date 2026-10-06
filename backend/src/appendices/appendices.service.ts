@@ -4,9 +4,11 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { assertViewableFormat } from '../storage/viewable-format';
 import { randomUUID } from 'crypto';
 import { BLOB_STORE, BlobStore } from '../storage/blob-store';
 import { contentTypeOfFormat } from '../storage/content-disposition';
@@ -558,11 +560,12 @@ export class AppendicesService {
     appendixName: string,
     documentId: string | null,
     watermarkSnapshot: string | null,
+    actionType: 'VIEW' | 'DOWNLOAD' = 'DOWNLOAD',
   ): Promise<void> {
     const identity = await resolveAuditIdentity(this.burner, session as WatermarkSession);
     await this.audit.record({
       targetType: 'APPENDIX',
-      actionType: 'DOWNLOAD',
+      actionType,
       appendixId,
       documentId,
       // 🔴 2026-10-05 delta（B）：對象快照（原本未帶 ⇒ F024 對象欄「—」，正式站 40／40）。
@@ -606,6 +609,37 @@ export class AppendicesService {
       : { bytes: raw, snapshot: null };
 
     await this.recordDownload(session, appendixId, appendix.name, documentId, burned.snapshot);
+    return {
+      bytes: burned.bytes,
+      fileName: appendix.name,
+      contentType: contentTypeOf(appendix.format),
+    };
+  }
+
+  /**
+   * 🔵 2026-10-06 F016 `AC-AV3`：後台唯讀頁之附錄**檢視**（前端於新分頁 inline 呈現）。
+   * 授權由 route 層 `ICSOP文件管理` read 承擔（主管／部門窗口亦可，`AC-AV7`）——**不得**改呼叫
+   * `downloadFromPool`（其閘門為 `附錄管理` read，兩角色無權，`AC-33`）。
+   * 與 `downloadAppendix` 之差異：`format` 須為 `pdf`（否則 400）、燒錄器缺席 ⇒ 請求失敗、稽核為 `VIEW`。
+   * 🔒 拒絕路徑一律先於讀取位元組、燒錄與寫稽核。
+   */
+  async viewAppendixInDocument(
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
+    documentId: string,
+    appendixId: string,
+  ): Promise<AppendixDownloadBytes> {
+    if (!session?.accountId) {
+      throw new ForbiddenException('FILE_ACCESS_DENIED');
+    }
+    await this.requireDocument(documentId);
+    const appendix = (await this.store.listByDocument(documentId)).find((a) => a.id === appendixId);
+    if (!appendix) throw new NotFoundException('APPENDIX_NOT_FOUND');
+    assertViewableFormat(appendix.format);
+    if (!this.burner) throw new InternalServerErrorException('WATERMARK_BURNER_UNAVAILABLE');
+    const raw = await this.blob.getBytes(appendix.blobPath);
+    if (!raw) throw new NotFoundException('APPENDIX_NOT_FOUND');
+    const burned = await this.burner.burnIfPdf(session as WatermarkSession, raw, appendix.format);
+    await this.recordDownload(session, appendixId, appendix.name, documentId, burned.snapshot, 'VIEW');
     return {
       bytes: burned.bytes,
       fileName: appendix.name,

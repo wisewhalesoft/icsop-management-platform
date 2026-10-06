@@ -190,7 +190,8 @@ export interface OrgChangeAlertAuditEvent extends AuditEventBase {
  */
 export interface AppendixAuditEvent extends AuditEventBase {
   targetType: 'APPENDIX';
-  actionType: 'DOWNLOAD';
+  /** 🔵 2026-10-06 F016 `AC-AV5`：後台唯讀頁之附錄檢視寫 `VIEW`。 */
+  actionType: 'VIEW' | 'DOWNLOAD';
   /**
    * 下載來源之文件 id（buildAuditRow 之 APPENDIX 分支直接落至 AUDIT_LOG.documentId）。
    * 🔴 D9 delta（`AC-N57`）：後台附錄池管理頁之個別下載自本輪起亦寫稽核，該脈絡**無所屬文件**

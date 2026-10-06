@@ -2,6 +2,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
   Optional,
@@ -9,6 +10,7 @@ import {
 import { randomUUID } from 'crypto';
 import { BLOB_STORE, BlobStore } from '../storage/blob-store';
 import { contentTypeOfFileName } from '../storage/content-disposition';
+import { assertViewableFormat } from '../storage/viewable-format';
 import {
   assertFormatAllowed,
   assertSizeWithinLimit,
@@ -283,6 +285,29 @@ export class AttachmentsService {
     session: AttachmentSession | undefined,
     blobPath: string,
   ): Promise<AttachmentDownloadBytes> {
+    return this.attachmentFile(session, blobPath, 'DOWNLOAD');
+  }
+
+  /**
+   * 🔵 2026-10-06 附件線上檢視（F016 `AC-AV3`）：後台唯讀頁附件區之「檢視」（前端於新分頁 inline 呈現）。
+   * 與下載之差異**只有**兩處（比照 F042 `AC-OV3`）：副檔名須為 `pdf`（否則 400）、稽核為 `VIEW`。
+   */
+  async viewAttachment(
+    session: AttachmentSession | undefined,
+    blobPath: string,
+  ): Promise<AttachmentDownloadBytes> {
+    return this.attachmentFile(session, blobPath, 'VIEW');
+  }
+
+  /**
+   * 下載與檢視之**單一**取檔＋燒錄＋稽核點（不得各寫一份 `if (pdf) burn`）。
+   * 🔒 拒絕路徑（未登入／參照失效／檢視非 PDF）一律先於讀取位元組、燒錄與寫稽核。
+   */
+  private async attachmentFile(
+    session: AttachmentSession | undefined,
+    blobPath: string,
+    actionType: 'VIEW' | 'DOWNLOAD',
+  ): Promise<AttachmentDownloadBytes> {
     if (!session?.accountId) {
       throw new ForbiddenException('FILE_ACCESS_DENIED');
     }
@@ -290,6 +315,7 @@ export class AttachmentsService {
     if (!rec) {
       throw new NotFoundException('FILE_ACCESS_DENIED');
     }
+    if (actionType === 'VIEW') assertViewableFormat(rec.fileName);
     const raw = await this.blob.getBytes(blobPath);
     // DB 有參照但 blob 不存在（人工刪檔／回收失誤）：與「參照不存在」同一對外錯誤碼，
     // 不以不同錯誤區分兩者（區分即洩漏「這筆參照確實存在」）。
@@ -299,11 +325,15 @@ export class AttachmentsService {
     // §10.3：以上傳時已驗證之**檔名副檔名**為事實，不採 `rec.contentType`
     // （該欄源自 multipart 之客戶端宣告）——燒錄與否之格式判定亦取同一份事實。
     const format = formatOfFileName(rec.fileName);
+    // 🔴 檢視絕不以原檔回應（燒錄器缺席 ⇒ 請求失敗、不寫稽核，比照 F042 `AC-OV4` ④）。
+    if (actionType === 'VIEW' && !this.burner) {
+      throw new InternalServerErrorException('WATERMARK_BURNER_UNAVAILABLE');
+    }
     const burned = this.burner
       ? await this.burner.burnIfPdf(session as WatermarkSession, raw, format)
       : { bytes: raw, snapshot: null };
     // `AC-N17`：燒錄與否**不改變稽核義務**——非 PDF 同樣寫入，僅 `watermarkSnapshot` 為 null。
-    await this.auditDownload(session, rec.documentId, burned.snapshot);
+    await this.auditAccess(session, rec.documentId, actionType, burned.snapshot);
     return {
       bytes: burned.bytes,
       fileName: rec.fileName,
@@ -311,10 +341,11 @@ export class AttachmentsService {
     };
   }
 
-  /** `AC-N17`：後台受控下載之調閱稽核（targetType=DOCUMENT，targetId＝該附件所屬文件）。 */
-  private async auditDownload(
+  /** `AC-N17`／`AC-AV5`：後台受控下載／檢視之調閱稽核（targetType=DOCUMENT，targetId＝該附件所屬文件）。 */
+  private async auditAccess(
     session: AttachmentSession | undefined,
     documentId: string,
+    actionType: 'VIEW' | 'DOWNLOAD',
     watermarkSnapshot: string | null,
   ): Promise<void> {
     if (!this.auditWriter) return;
@@ -324,7 +355,7 @@ export class AttachmentsService {
     const doc = this.documentStore ? await this.documentStore.findById(documentId) : null;
     await this.auditWriter.recordAccess({
       targetType: 'DOCUMENT',
-      actionType: 'DOWNLOAD',
+      actionType,
       targetId: documentId,
       targetNumber: doc?.documentNumber ?? null,
       targetName: doc?.documentName ?? null,

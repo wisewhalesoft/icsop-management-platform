@@ -110,7 +110,8 @@ export const AUDIT_RECORDER = Symbol('APPENDIX_AUDIT_RECORDER');
 
 export interface AppendixAuditEvent {
   targetType: 'APPENDIX';
-  actionType: 'DOWNLOAD';
+  /** 🔵 2026-10-06 F016 `AC-AV5`：後台唯讀頁之檢視寫 `VIEW`。 */
+  actionType: 'VIEW' | 'DOWNLOAD';
   appendixId: string;
   /** 🔴 D9 delta（`AC-N57`）：後台池管理頁下載無文件脈絡 ⇒ 允許 `null`（前台仍必填該文件 id）。 */
   documentId: string | null;

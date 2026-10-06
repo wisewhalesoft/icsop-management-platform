@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
-import { attachmentDisposition } from '../storage/content-disposition';
+import { attachmentDisposition, inlineDisposition } from '../storage/content-disposition';
 import { AttachmentsService } from './attachments.service';
 import { SessionGuard, RequestWithSession } from '../auth/session.guard';
 import { RolePermissionGuard } from '../rbac/role-permission.guard';
@@ -113,6 +113,28 @@ export class AttachmentsController {
     );
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', attachmentDisposition(fileName));
+    res.send(bytes);
+  }
+
+  /**
+   * 🔵 2026-10-06 F016 `AC-AV3`：附件之**檢視**（前端 fetch 取回後於新分頁 inline 呈現）。
+   * 閘門與 `/download` 相同（`ICSOP文件管理` read ⇒ SysAdmin／ICSOPAdmin／Supervisor／DeptContact）。
+   * 🔴 `Content-Type` 為服務層依副檔名推導之值＋`nosniff`（比照 F042 `AC-OV3` ②，防儲存型 XSS）。
+   */
+  @Get('documents/attachments/view')
+  @RequirePermission(FunctionKey.ICSOP_DOCUMENT_MANAGEMENT, 'read')
+  async view(
+    @Req() req: RequestWithSession,
+    @Query('blobPath') blobPath: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { bytes, fileName, contentType } = await this.svc.viewAttachment(
+      req.sessionUser,
+      blobPath,
+    );
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', inlineDisposition(fileName));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(bytes);
   }
 }
