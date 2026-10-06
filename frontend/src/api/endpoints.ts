@@ -595,6 +595,31 @@ export function downloadAttachment(blobPath: string, fallbackName: string): Prom
   );
 }
 
+/** 🔵 2026-10-06 F016 `AC-AV2`：後台唯讀頁附件「檢視」允許導向之回應型別（僅 PDF）。 */
+export const ATTACHMENT_VIEWABLE_CONTENT_TYPES = ['application/pdf'] as const;
+
+function openAttachmentView(path: string, win: Window | null): Promise<void> {
+  return openViaBlob(path, win, {
+    accept: ATTACHMENT_VIEWABLE_CONTENT_TYPES.join(', '),
+    allowedTypes: ATTACHMENT_VIEWABLE_CONTENT_TYPES,
+  });
+}
+
+/**
+ * 🔵 2026-10-06 F016 `AC-AV2`／`AC-AV3`：後台唯讀頁三類附件之**檢視**（新分頁 inline；PDF 燒錄、稽核 `VIEW`）。
+ * 🔴 `win` 須由呼叫端**於 click handler 內同步開好**（見 `openPdfViaBlob`），比照 `viewOjtSession`。
+ * 閘門皆為 `ICSOP文件管理` read（主管／部門窗口亦可，`AC-AV7`）。
+ */
+export function viewAttachment(blobPath: string, win: Window | null): Promise<void> {
+  return openAttachmentView(`/documents/attachments/view?blobPath=${encodeURIComponent(blobPath)}`, win);
+}
+export function viewDocumentUsageForm(documentId: string, formId: string, win: Window | null): Promise<void> {
+  return openAttachmentView(`/documents/${documentId}/usage-forms/${formId}/view`, win);
+}
+export function viewDocumentAppendix(documentId: string, appendixId: string, win: Window | null): Promise<void> {
+  return openAttachmentView(`/documents/${documentId}/appendices/${appendixId}/view`, win);
+}
+
 /**
  * 🔵 2026-09-23：GET /admin/usage-forms/filter-options——ICSOP 文件管理清單之「使用表單」篩選選項
  * （閘門＝ICSOP_DOCUMENT_MANAGEMENT read，主管／部門窗口亦可取得；只含 id／名稱／編號）。

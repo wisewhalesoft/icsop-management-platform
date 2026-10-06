@@ -558,19 +558,108 @@ describe('DocumentReadonlyPage — F016 唯讀檢視（移植 prototype 16）', 
       }
     });
 
-    it('後台個別下載附錄 → 呼叫 downloadAppendixFromPool（後台管理端存取，不寫稽核）', async () => {
-      mockAuth('Supervisor');
-      vi.mocked(endpoints.getDocumentAppendices).mockResolvedValue(APPX);
-      vi.mocked(endpoints.downloadAppendixFromPool).mockResolvedValue(undefined);
-      renderPage();
-      await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
-      await userEvent.click(
-        within(attachRow('作業流程對照表.xlsx')).getByRole('button', { name: /下載/ }),
+    /**
+     * 🔴 2026-10-06 F016 `AC-AV7`：本案原斷言「主管下載附錄 → 呼叫 `downloadAppendixFromPool`」——
+     * 那條端點之閘門為 `附錄管理` read，主管／部門窗口按下必 403（F039 `AC-33`），本案等於把缺陷
+     * 釘成預期行為。現改走文件脈絡之下載端點（`下載列印文件` read）。
+     * 📝 OLD> expect(endpoints.downloadAppendixFromPool).toHaveBeenCalledWith('ax1', '作業流程對照表.xlsx')
+     */
+    it.each(['Supervisor', 'DeptContact'])(
+      'AC-AV7 %s 下載附錄 → 走文件脈絡端點（documentId, appendixId），不呼叫附錄池端點',
+      async (role) => {
+        mockAuth(role);
+        vi.mocked(endpoints.getDocumentAppendices).mockResolvedValue(APPX);
+        vi.mocked(endpoints.downloadDocumentAppendixFront).mockResolvedValue(undefined);
+        renderPage();
+        await waitFor(() => expect(screen.getByText('作業流程對照表.xlsx')).toBeInTheDocument());
+        await userEvent.click(
+          within(attachRow('作業流程對照表.xlsx')).getByRole('button', { name: /下載/ }),
+        );
+        await waitFor(() =>
+          expect(endpoints.downloadDocumentAppendixFront).toHaveBeenCalledWith('d1', 'ax1', '作業流程對照表.xlsx'),
+        );
+        expect(endpoints.downloadAppendixFromPool).not.toHaveBeenCalled();
+        expect(openMock).not.toHaveBeenCalled();
+      },
+    );
+
+    describe('🔵 F016 AC-AV1／AC-AV2 附件「檢視」（僅 PDF）', () => {
+      const FORMS_PDF: UsageFormRecord[] = [
+        ...FORMS,
+        { id: 'f3', name: '核准單.pdf', blobPath: 'usage-forms/f3.pdf', format: 'pdf', size: 1024, uploadedBy: 'u', uploadedAt: '2026-06-01T00:00:00.000Z' },
+      ];
+      const viewBtns = () => Array.from(document.querySelectorAll('[data-attachment-view]'));
+
+      beforeEach(() => {
+        vi.mocked(endpoints.getDocumentAttachments).mockResolvedValue(ATTACHMENTS);
+        vi.mocked(endpoints.getDocumentForms).mockResolvedValue(FORMS_PDF);
+        vi.mocked(endpoints.getDocumentAppendices).mockResolvedValue(APPX);
+        vi.mocked(endpoints.viewAttachment).mockResolvedValue(undefined);
+        vi.mocked(endpoints.viewDocumentUsageForm).mockResolvedValue(undefined);
+        vi.mocked(endpoints.viewDocumentAppendix).mockResolvedValue(undefined);
+      });
+
+      it.each(['SysAdmin', 'ICSOPAdmin', 'Supervisor', 'DeptContact'])(
+        'AC-AV1 %s：恰 PDF 三列（ICSOP PDF／PDF 使用表單／PDF 附錄）有檢視鈕，xlsx 列無；檢視鈕在下載鈕之前',
+        async (role) => {
+          mockAuth(role);
+          renderPage();
+          await waitFor(() => expect(screen.getByText('名詞定義說明.pdf')).toBeInTheDocument());
+          expect(viewBtns().map((b) => b.closest('[data-attachment-kind]')?.getAttribute('data-attachment-kind'))).toEqual([
+            'icsop_pdf',
+            'usageform',
+            'appendix',
+          ]);
+          for (const n of ['進件申請書.xlsx', '作業流程對照表.xlsx', '共用名詞附錄.xlsx']) {
+            expect(within(attachRow(n)).queryByRole('button', { name: /檢視/ })).toBeNull();
+          }
+          const row = attachRow('名詞定義說明.pdf');
+          const btns = within(row).getAllByRole('button');
+          expect(btns.map((b) => b.textContent)).toEqual(['檢視', '下載']);
+          expect(btns[0]).toHaveAttribute('aria-label', '檢視「名詞定義說明.pdf」');
+        },
       );
-      await waitFor(() =>
-        expect(endpoints.downloadAppendixFromPool).toHaveBeenCalledWith('ax1', '作業流程對照表.xlsx'),
-      );
-      expect(openMock).not.toHaveBeenCalled();
+
+      it('AC-AV2 點擊檢視：click 內同步開新分頁，並以該分頁呼叫對應類別之檢視端點', async () => {
+        mockAuth('DeptContact');
+        const win = { close: vi.fn() } as unknown as Window;
+        openMock.mockReturnValue(win);
+        renderPage();
+        await waitFor(() => expect(screen.getByText('名詞定義說明.pdf')).toBeInTheDocument());
+
+        await userEvent.click(within(attachRow('車輛分期進件作業_v1.3.pdf')).getByRole('button', { name: /檢視/ }));
+        await userEvent.click(within(attachRow('核准單.pdf')).getByRole('button', { name: /檢視/ }));
+        await userEvent.click(within(attachRow('名詞定義說明.pdf')).getByRole('button', { name: /檢視/ }));
+
+        expect(openMock).toHaveBeenCalledTimes(3);
+        expect(openMock).toHaveBeenCalledWith('', '_blank');
+        expect(endpoints.viewAttachment).toHaveBeenCalledWith('documents/d1/icsop_pdf/abc.pdf', win);
+        expect(endpoints.viewDocumentUsageForm).toHaveBeenCalledWith('d1', 'f3', win);
+        expect(endpoints.viewDocumentAppendix).toHaveBeenCalledWith('d1', 'ax2', win);
+        // 檢視不得順手觸發下載
+        expect(endpoints.downloadAttachment).not.toHaveBeenCalled();
+        expect(endpoints.downloadUsageForm).not.toHaveBeenCalled();
+      });
+
+      it('🔴 分頁被封鎖 ⇒ 不發請求（否則寫下使用者沒看到的 VIEW 稽核），並提示', async () => {
+        mockAuth('Supervisor');
+        openMock.mockReturnValue(null);
+        renderPage();
+        await waitFor(() => expect(screen.getByText('名詞定義說明.pdf')).toBeInTheDocument());
+        await userEvent.click(within(attachRow('名詞定義說明.pdf')).getByRole('button', { name: /檢視/ }));
+        expect(endpoints.viewDocumentAppendix).not.toHaveBeenCalled();
+        expect(await screen.findByText(/新視窗被瀏覽器封鎖/)).toBeInTheDocument();
+      });
+
+      it('檢視失敗 ⇒ 顯示「檢視失敗，請稍後再試。」', async () => {
+        mockAuth('Supervisor');
+        openMock.mockReturnValue({ close: vi.fn() });
+        vi.mocked(endpoints.viewAttachment).mockRejectedValue(new Error('x'));
+        renderPage();
+        await waitFor(() => expect(screen.getByText('車輛分期進件作業_v1.3.pdf')).toBeInTheDocument());
+        await userEvent.click(within(attachRow('車輛分期進件作業_v1.3.pdf')).getByRole('button', { name: /檢視/ }));
+        expect(await screen.findByText('檢視失敗，請稍後再試。')).toBeInTheDocument();
+      });
     });
 
     it('AC-26 無關聯附錄 → 顯示「無附錄」，非錯誤、非空白區塊', async () => {

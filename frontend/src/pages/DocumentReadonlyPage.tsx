@@ -12,9 +12,13 @@ import {
   downloadUsageForm,
   downloadAttachment,
   getDocumentAppendices,
-  downloadAppendixFromPool,
+  downloadDocumentAppendixFront,
+  viewAttachment,
+  viewDocumentUsageForm,
+  viewDocumentAppendix,
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
+import { POPUP_BLOCKED_TEXT } from '../domain/print-error';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { orgUnitDisplayName } from '../domain/org-path';
 import { Icon } from '../components/Icon';
@@ -71,6 +75,15 @@ const ATTACH_LABEL: Record<DocumentAttachmentRecord['type'], string> = {
 const ATTACH_ORDER: Record<DocumentAttachmentRecord['type'], number> = {
   ICSOP_PDF: 0,
 };
+
+/**
+ * 🔵 2026-10-06 F016 `AC-AV1`／`AC-AV2`：附件列「檢視」鈕之逐字文案（權威＝prototype 16）。
+ * 🔒 僅 `format === 'pdf'` 之列產生檢視鈕；xlsx／xls 只能下載。
+ */
+export const ATTACH_VIEW_BTN_TEXT = '檢視';
+export const ATTACH_VIEW_FAILED_TEXT = '檢視失敗，請稍後再試。';
+export const attachViewAria = (name: string) => `檢視「${name}」`;
+export const isViewableAttachment = (format: string) => format.toLowerCase() === 'pdf';
 
 /**
  * 📝 **OJT 空狀態上傳入口（`OjtEmptyRow`／`OJT_EMPTY_TEXT`／`OJT_UPLOAD_FIRST_TEXT`／
@@ -234,17 +247,39 @@ export function DocumentReadonlyPage(): JSX.Element {
   );
 
   /**
-   * 附錄下載（後台管理端存取）：走附錄池下載端點核發短效 URL；
-   * **不燒錄浮水印、不寫前台調閱稽核**（F039／F026 OQ-FM-01 既有裁決）。
+   * 附錄下載：🔴 2026-10-06 F016 `AC-AV7`——改走**文件脈絡**之下載端點
+   * （`/documents/:id/appendices/:appendixId/download`，閘門 `下載列印文件` read；PDF 燒錄＋寫稽核）。
+   * 📝 原呼叫附錄池端點 `downloadAppendixFromPool`（`附錄管理` read）⇒ 主管／部門窗口按下必 403
+   * （F039 `AC-33`），與本頁對兩角色顯示下載鈕自相矛盾；使用表單早於 F018 `AC-D23` 以同一手法解決。
+   * 📝 原成功提示「管理端下載，不加浮水印、不留調閱紀錄」自 2026-08-20（`OQ-D9-08`）起即不實，一併移除。
    */
   const onDownloadAppendix = useCallback(
     async (appendixId: string, name: string) => {
       try {
-        await downloadAppendixFromPool(appendixId, name);
-        toast.success(`下載附錄「${name}」（管理端下載，不加浮水印、不留調閱紀錄）`);
+        await downloadDocumentAppendixFront(id, appendixId, name);
+        toast.success(`下載附錄「${name}」`);
       } catch {
         toast.error(`無法下載「${name}」`);
       }
+    },
+    [id, toast],
+  );
+
+  /**
+   * 🔵 2026-10-06 F016 `AC-AV2`：於新分頁檢視 PDF 附件（三類共用；比照 F042 `AC-OV2`）。
+   * 🔴 **分頁必須在 click handler 內同步開好**（伺服器端燒錄可能超過 user-activation 視窗）。
+   * 🔴 **分頁沒開成就不發請求**：否則後端會寫下一筆使用者根本沒看到的 `VIEW` 稽核。
+   */
+  const onView = useCallback(
+    (open: (win: Window) => Promise<void>) => {
+      const win = window.open('', '_blank');
+      if (!win) {
+        toast.error(POPUP_BLOCKED_TEXT);
+        return;
+      }
+      void open(win).catch((e: unknown) => {
+        toast.error(ATTACH_VIEW_FAILED_TEXT, e instanceof ApiError ? { code: e.code } : undefined);
+      });
     },
     [toast],
   );
@@ -319,6 +354,8 @@ export function DocumentReadonlyPage(): JSX.Element {
   const attachItems: {
     key: string; label: string; name: string; icon: string; iconClass: string;
     watermark: boolean; onDownload: () => void;
+    /** 🔵 F016 `AC-AV2`：檢視（僅 PDF 列呼叫）。 */
+    onView: () => void;
     /**
      * `AC-N75` ①：本列之附件類別，值域逐字為 `icsop_pdf`／`ojt`／`usageform`／`appendix`
      * （**不得**改寫為駝峰或連字號）。它是「哪一列可寫」在畫面上唯一可機器驗證之定位基礎。
@@ -342,6 +379,7 @@ export function DocumentReadonlyPage(): JSX.Element {
         kind: 'icsop_pdf' as const,
         format: (a.fileName.split('.').pop() ?? '').toLowerCase(),
         onDownload: () => void onDownloadAttachment(a.blobPath, a.fileName),
+        onView: () => onView((w) => viewAttachment(a.blobPath, w)),
       })),
     ...forms.map((f) => ({
       key: f.id,
@@ -353,6 +391,7 @@ export function DocumentReadonlyPage(): JSX.Element {
       kind: 'usageform' as const,
       format: f.format,
       onDownload: () => void onDownloadForm(f.id, f.name),
+      onView: () => onView((w) => viewDocumentUsageForm(id, f.id, w)),
     })),
     // F039：附錄依 sortOrder 遞增列於清單末段（與前台詳情 04 之順序完全一致）。
     ...appendices.map((a, i) => ({
@@ -365,6 +404,7 @@ export function DocumentReadonlyPage(): JSX.Element {
       kind: 'appendix' as const,
       format: a.format,
       onDownload: () => void onDownloadAppendix(a.id, a.name),
+      onView: () => onView((w) => viewDocumentAppendix(id, a.id, w)),
       order: i + 1,
     })),
   ];
@@ -562,6 +602,18 @@ export function DocumentReadonlyPage(): JSX.Element {
                     📝 **OJT 之「上傳／取代」`<label data-ojt-upload data-ojt-upload-mode="replace">`
                     已於 2026-08-28 隨 `AC-J11`③ 整段移除**——文件表單不再提供任何 OJT 寫入入口。
                   */}
+                  {/* 🔵 F016 `AC-AV1`：僅 PDF 列有「檢視」鈕，位於下載鈕之前。 */}
+                  {isViewableAttachment(a.format) && (
+                    <button
+                      data-attachment-view={a.key}
+                      onClick={a.onView}
+                      aria-label={attachViewAria(a.name)}
+                      title={attachViewAria(a.name)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0"
+                    >
+                      <Icon name="eye" className="w-3.5 h-3.5" />{ATTACH_VIEW_BTN_TEXT}
+                    </button>
+                  )}
                   <button onClick={a.onDownload} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs hover:bg-slate-50 shrink-0">
                     <Icon name="download" className="w-3.5 h-3.5" />下載
                   </button>
