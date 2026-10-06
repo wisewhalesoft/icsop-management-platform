@@ -1,6 +1,7 @@
 # F039: 附錄管理
 Priority: P1 | Status: Draft（規格已依 E10 stories 定稿；待 system-architect → ui-ux-designer → 人類閘門 → 實作）｜**檔名／匯出欄 delta：🟢 APPROVED（2026-08-27 使用者裁決，`AC-X1`～`AC-X3`；已實作）** | Last Updated: 2026-08-27
 Epic/Story: E10 / US-100, US-101, US-102
+<br>🔵 **2026-10-06 前台附錄／使用表單 PDF 檢視 delta：見 [§前台檢視 delta](#front-view-delta)（`AC-FV1`～`AC-FV4`）。**
 
 > **權威來源**：[E10 epic-brief](../../stories/epics/E10-appendix/epic-brief.md)、[US-100](../../stories/epics/E10-appendix/US-100-appendix-upload.md)、[US-101](../../stories/epics/E10-appendix/US-101-appendix-document-association.md)、[US-102](../../stories/epics/E10-appendix/US-102-appendix-pool-management.md)。
 > **與 [F018](F018-usage-form-management.md) 之關係**：生命週期、共用語意、權限與稽核義務與使用表單同構，故版型比照 F018；
@@ -212,6 +213,17 @@ ICSOP 文件建立/編輯時，自附錄池**可搜尋多選**關聯附錄（**�
 - **AC-X1**（附錄名稱之 fallback 去副檔名；**推翻 `AC-06` 之 fallback 字面**）：Given 上傳附錄, When 未提供 `name`／提供空字串／提供純空白, Then 落地之 `APPENDIX_POOL.name` ＝**檔名去除最後一個副檔名**之主體（`風險等級對照附表.xlsx` → `風險等級對照附表`）；**多檔批次路徑同此規則**（各檔各自去副檔名）。<br>邊界：無點（`報表`）／點在結尾（`報表.`）／點在首位（`.gitignore`）→ **一律回原字串**，不得產生空名稱。<br>🔒 **使用者自訂之名稱一律逐字採用**——即使其中含 `.xlsx`，系統**不得**代為去除（去副檔名只作用於 fallback 與自動帶入，不作用於人所輸入的字）。<br>📝 **被推翻之原字面保留供追溯**：`AC-06` 之「fallback 原始檔名（含副檔名）」。<br>📌 **上傳 modal 之自動帶入同步**（權威＝`prototypes/24-appendix-management.html`）：選檔後帶入之值亦為去副檔名之主體；相關逐字提示改為「留空則以檔名（不含副檔名）建檔」、「選檔後自動帶入檔名（已去除副檔名）…」、多檔提示「各檔一律以其檔名（不含副檔名）建檔」。
 - **AC-X2**（匯出新增第 7 欄「關聯文件編號」；**就地擴充 `AC-D6` ②**）：Given 附錄池匯出, When 檢視 CSV 第 1 列, Then 逐字為 `附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數,關聯文件編號`（**既有六欄之字面與相對順序一格不動**，新欄一律接在末尾）。Given 某附錄關聯 N 份文件, When 檢視其第 7 欄, Then 為該 N 份文件之 `documentNumber`，以**半形分號 `;`** 相接，**順序即管理頁展開列所見之順序**；N=0 → **空儲存格**（**非** `—`、**非** `0`——`—` 是畫面的空值符號，落到 CSV 會被試算表當成一個資料值）。<br>🔴 **分隔符刻意不用逗號**：逗號會觸發 RFC 4180 包覆逸出，使欄內逗號與欄間逗號在肉眼上無從分辨，而本欄的用途正是讓人一眼看出被哪幾份文件引用。分號在 CSV 中無特殊意義、不觸發任何逸出。<br>📝 **被取代之欄集保留供追溯**：六欄（`附錄名稱,格式,大小,上傳者,上傳時間,關聯文件數`）。
 - **AC-X3**（名稱長度上限之量測點）：Given fallback 之檔名主體長度恰為 400、其完整檔名含副檔名為 405, When 上傳, Then **通過**（副檔名不佔 `nvarchar(400)` 配額）；主體 401 → 仍為 `APPENDIX_NAME_TOO_LONG`（400）。<br>📌 本條為 `AC-X1` 之**真實行為區分點**：舊行為（含副檔名 fallback）必拒、新行為必收，量測點若被改回去除前，本條立刻證偽。
+
+### 前台附錄／使用表單 PDF 檢視 delta（🔵 2026-10-06 使用者裁決；`AC-FV#` 批，與 [F018](F018-usage-form-management.md#front-view-delta) 共用） {#front-view-delta}
+
+> **緣起**：同日後台唯讀頁已補上三類附件之「檢視」（[F016](F016-pdf-ojt-attachment.md#attachment-view-delta) `AC-AV#`）；使用者追問「前台的附錄是不是也缺少檢視的功能？」——查證前台詳情（`prototypes/04-public-document-detail.html`）：程序書本體有頁首「檢視」（開檢視器 05），但**使用表單與附錄之 PDF 列只有「下載」**。
+> **使用者裁決（2026-10-06）**：使用表單與附錄之 PDF 列補「檢視」；**附件區之 ICSOP PDF 列不加**（頁首已有「檢視」，兩顆語意不同之檢視鈕會混淆）。
+> 🔴 **不得**沿用後台之 `AC-AV3` 端點：其閘門 `ICSOP文件管理` read 對一般使用者為 403，且無 [F041](F041-user-subtype-business-scope.md) 可見性檢查。
+
+- **AC-FV1**（「檢視」鈕之存在與位置）：Given 任一角色開啟前台文件詳情, Then **使用表單區**與**附錄區**之每一 `format＝pdf` 列於「下載」鈕**之前**有一枚 `[data-attachment-view]` 按鈕，可見文字逐字 **`檢視`**、`aria-label` 逐字 **`檢視「{檔名}」`**、eye 圖示、觸控目標 ≥44px（同下載鈕）；**xlsx／xls 列無檢視鈕**；🔒 **附件區（`data-testid="attachment-list"`）內無任何檢視鈕**。判定與文案取前後台共用之 `frontend/src/domain/attachment-view.ts`，不得另寫一份。
+- **AC-FV2**（開啟方式；逐字比照 F016 `AC-AV2`）：click 內同步 `window.open('', '_blank')`，取回位元組後導向 `blob:` URL；🔴 **分頁沒開成 ⇒ 不發請求**、提示 `POPUP_BLOCKED_TEXT`；成功提示 **`已於新分頁開啟「{檔名}」，本次調閱已記錄。`**；失敗 ⇒ 關閉分頁並提示 **`檢視失敗，請稍後再試。`**；與下載／列印共用同一把併發鎖（每次檢視同樣寫一筆稽核）。
+- **AC-FV3**（後端前台檢視端點）：**`GET /public/documents/:documentId/usage-forms/:formId/view`**、**`GET /public/documents/:documentId/appendices/:appendixId/view`**；閘門 **`下載列印文件` read**（五角色，同前台下載）；回 `Content-Disposition: inline`、`Content-Type` 依伺服器端 `format` 推導＋`X-Content-Type-Options: nosniff`。<br>🔴 **F041 可見性檢查先於一切**：業務子分類 viewer 對使用部門不相符之文件 ⇒ 404 `DOCUMENT_NOT_FOUND`，**不查找、不讀位元組、不燒錄、不寫稽核**（比照前台下載 `AC-D22` ③／`downloadAppendix`）。其餘拒絕與後台版相同：未關聯此文件 404（`USAGE_FORM_NOT_FOUND`／`APPENDIX_NOT_FOUND`）、非 PDF 400 `FILE_FORMAT_NOT_ALLOWED`、未登入 `FILE_ACCESS_DENIED`、燒錄器缺席 `WATERMARK_BURNER_UNAVAILABLE`（絕不回原檔）。
+- **AC-FV4**（燒錄與稽核）：成功時 PDF 一律燒錄（身分＝檢視者本人）、恰寫一筆 `actionType='VIEW'`（`USAGE_FORM`：`formId`＋`documentId`；`APPENDIX`：`appendixId`＋`documentId`；`watermarkSnapshot` 落值）。🔒 **零漣漪**：前台下載、頁首檢視器（05）與列印、附件區、後台 `AC-AV#` 端點之行為一律不變；後台版**不**做 F041 檢查（後台角色不受其限制，有對偶鎖）。
 
 ### Story AC ↔ 本規格 AC 對照（完整性檢核）
 

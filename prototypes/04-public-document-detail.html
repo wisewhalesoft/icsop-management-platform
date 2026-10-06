@@ -1,4 +1,13 @@
 <!DOCTYPE html>
+<!-- 🔵 2026-10-06 前台附錄／使用表單 PDF 檢視 delta（規格權威＝F039 §前台附錄檢視 delta／F018 §前台使用表單檢視 delta，
+     `AC-FV1`～`AC-FV4`）——本檔已套用：
+     ① 🔵 **使用表單區**與**附錄區**之每一 **PDF 列**於「下載」鈕**之前**新增「檢視」鈕 `[data-attachment-view]`
+        （eye 圖示、aria-label＝`檢視「{檔名}」`、尺寸同下載鈕 min-h-[44px]）；xlsx／xls 列無檢視鈕。
+        行為比照後台 16（F016 `AC-AV2`）：click 內同步開新分頁、伺服器端燒錄浮水印（身分＝檢視者本人）、寫稽核 **VIEW**；
+        分頁被封鎖 ⇒ 不發請求、提示 `POPUP_BLOCKED_TEXT`。後端走 `/public/...`（含 F041 可見性檢查）。
+     ② 🔒 **附件區之 ICSOP PDF 列不加檢視鈕**（2026-10-06 使用者裁決）——頁首已有開啟檢視器（05）之「檢視」，同一份檔案放兩顆語意不同之檢視鈕會混淆。
+     ③ 浮水印註記 `WM_BURN_TEXT` 同步 2026-09-23 全站文案稽核之現值（本頁當時與 16／25 同樣漏改）。
+     🔒 其餘一律未動。 -->
 <!-- 🔵 2026-09-22 UX16 delta（項 9）——規格權威＝docs/specs/features/F019-public-list-browsing.md §UX16 delta
      （AC-UX18／AC-UX19；裁決＝open-questions.md#ux16-2026-09-22，OQ-UX16-17＝選項 A、OQ-UX16-18 人類直接裁決）。
 
@@ -386,7 +395,36 @@
         且漂移形式為「UI 說支援、實際沒燒」之靜默錯誤。本原型之 wmSupported 即代表該旗標。
      ⚠ 後台（13／16／15／19／24）恆 RAW，**不得**出現本標示（F020 AC-D4／§10.3）。 */
   const WM_UNSUPPORTED_TEXT = '此格式不支援浮水印';   // F020 AC-D2 逐字文案，不得改
-  const WM_BURN_TEXT        = '檢視/下載將燒錄浮水印'; // 本檔既有正向文案（附件區），一致化沿用
+  /* 🔵 2026-10-06：隨 2026-09-23 全站文案稽核之字面（`domain/watermark-note.ts`）同步——本頁當時漏改。OLD> '檢視/下載將燒錄浮水印' */
+  const WM_BURN_TEXT        = '檢視／下載會帶您的身分浮水印';
+
+  /* ===================== 🔵 使用表單／附錄 PDF 線上檢視（F018／F039 `AC-FV1`～`AC-FV3`）=====================
+     🔴 **於 click handler 內同步開新分頁**，取回位元組後才導向（實作：`openViaBlob`）；禁止 `window.open(端點網址)`。
+     🔒 後端：`GET /public/documents/:id/usage-forms/:formId/view`、`GET /public/documents/:id/appendices/:appendixId/view`；
+        閘門 `下載列印文件` read（五角色）＋ F041 可見性檢查；inline＋nosniff；燒錄浮水印＝操作者本人、寫稽核 **VIEW**。
+     📝 prototype 無真檔案：新分頁以一張示意頁代替，疊一層浮水印字樣以示「已燒錄」。 */
+  const VIEW_BTN_TEXT      = '檢視';
+  const POPUP_BLOCKED_TEXT = '新視窗被瀏覽器封鎖，請允許彈出視窗後再試。';
+  function viewBtn(name, kind){
+    return `<button data-attachment-view onclick="viewFile('${name}','${kind}')" aria-label="檢視「${name}」" title="檢視「${name}」" class="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-sm hover:bg-slate-50 min-h-[44px]"><i data-lucide="eye" class="w-3.5 h-3.5"></i>${VIEW_BTN_TEXT}</button>`;
+  }
+  function viewFile(name, kind){
+    const win = window.open('', '_blank');
+    if(!win){ toast('error', POPUP_BLOCKED_TEXT); return; }   // 🔴 分頁沒開成就不發請求（否則寫下沒人看到的 VIEW 稽核）
+    const tt = kind==='使用表單' ? 'USAGE_FORM' : 'APPENDIX';
+    const esc = t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const wm = `AS22455 王小明 和潤 營運管理部 審查室 ${new Date().toISOString().slice(0,16).replace('T',' ')}`;
+    win.document.write(`<!doctype html><meta charset="utf-8"><title>${esc(name)}</title>
+      <body style="margin:0;background:#525659;font-family:system-ui,'Noto Sans TC',sans-serif">
+      <div style="max-width:720px;margin:24px auto;background:#fff;padding:40px;min-height:600px;box-shadow:0 2px 12px rgba(0,0,0,.4)">
+        <h2 style="text-align:center;margin:0 0 4px">${esc(kind)}</h2>
+        <p style="text-align:center;color:#475569;margin:0 0 20px;font-size:13px">${esc(name)}</p>
+        <p style="margin-top:24px;font-size:11px;color:#94a3b8">prototype 示意：實際為該 PDF 之內容（伺服器端已燒錄浮水印，身分為檢視者本人；寫入稽核 VIEW · ${tt}）</p>
+      </div>
+      <div style="position:fixed;inset:0;pointer-events:none;display:flex;flex-wrap:wrap;align-content:space-around;justify-content:space-around;transform:rotate(-30deg);opacity:.30;color:#334155;font-size:14px">${Array.from({length:12},()=>`<span style="padding:40px">${esc(wm)}</span>`).join('')}</div></body>`);
+    win.document.close();
+    toast('success', '已於新分頁開啟「'+name+'」，本次調閱已記錄。');
+  }
   function wmNote(wmSupported){
     return wmSupported
       ? `<span data-wm-note class="text-sm text-slate-400">${WM_BURN_TEXT}</span>`
@@ -429,6 +467,7 @@
     <div data-usage-form-item class="px-5 py-3 flex items-center gap-3">
       <i data-lucide="${f.type==='excel'?'sheet':'file-text'}" class="w-5 h-5 ${f.type==='excel'?'text-emerald-600':'text-red-500'} shrink-0"></i>
       <div class="min-w-0 flex-1"><div class="text-base text-slate-800 truncate">${f.name}</div><div class="mt-0.5">${wmNote(f.wmSupported)}</div></div>
+      ${f.type==='pdf'?viewBtn(f.name,'使用表單'):''}
       <button onclick="doAction('DOWNLOAD','使用表單')" class="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-sm hover:bg-slate-50 min-h-[44px]"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
     </div>`).join('');
 
@@ -445,6 +484,7 @@
         <span class="w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-sm font-bold flex items-center justify-center shrink-0">${i+1}</span>
         <i data-lucide="${a.type==='excel'?'sheet':'file-text'}" class="w-5 h-5 ${a.type==='excel'?'text-emerald-600':'text-red-500'} shrink-0"></i>
         <div class="min-w-0 flex-1"><div data-appendix-name class="text-base text-slate-800 truncate">${a.name}</div><div class="mt-0.5">${wmNote(a.wmSupported)}</div></div>
+        ${a.type==='pdf'?viewBtn(a.name,'附錄'):''}
         <button onclick="downloadAppendix('${a.name}')" class="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-sm hover:bg-slate-50 min-h-[44px]"><i data-lucide="download" class="w-3.5 h-3.5"></i>下載</button>
       </div>`).join('')
       : `<div data-appendix-empty class="px-5 py-6 flex items-center justify-center gap-2 text-base text-slate-400"><i data-lucide="paperclip" class="w-4 h-4"></i>無附錄</div>`;

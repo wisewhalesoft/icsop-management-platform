@@ -1,6 +1,7 @@
 # F018: 使用表單管理
 Priority: P1 | Status: Implemented（unit-green；真 Azure Blob＋multipart＋下載稽核接真 AuditWriter；**前端管理頁已實作**（prototype 19 移植）；表單池總覽/個別下載端點（int 已備未跑）；**自訂表單名稱已接線**（public-seams：上傳 multipart 選填 `name`，trim／空值 fallback 檔名／上限 400 字＝`USAGE_FORM_NAME_TOO_LONG`；批次與覆蓋刻意不接受）；剩真 Azure 私有容器直存拒絕＝[integration]）｜**檔名／表單池匯出 delta：🟢 APPROVED（2026-08-27 使用者裁決，`AC-X1`～`AC-X10`；已實作）** | Last Updated: 2026-08-27
 Epic/Story: E05 / US-040, US-041, US-042
+<br>🔵 **2026-10-06 前台使用表單 PDF 檢視：見 [§前台檢視 delta](#front-view-delta)（條文權威＝F039 `AC-FV1`～`AC-FV4`）。**
 
 > 合併理由：表單池管理（US-042）、上傳/移除（US-040）與前/後台關聯清單呈現與下載（US-041）為同一表單生命週期，共用同一組 API。
 >
@@ -235,6 +236,11 @@ Epic/Story: E05 / US-040, US-041, US-042
 - **AC-X8**（筆數上限）：Given 符合條件之筆數 > 10,000, When 匯出, Then 回 400 `EXPORT_ROW_LIMIT_EXCEEDED` 且**不產生任何檔案**；恰 10,000 → 通過（邊界值含）。
 - **AC-X9**（空結果與檔名）：Given 0 筆, When 匯出, Then 產生**僅含表頭列**之 CSV（非錯誤、非空檔）。檔名形狀為 `usage-forms_{YYYYMMDD}_{HHmmss}.csv`（時間為 UTC+8）。CSV 注入前綴（`=`／`+`／`-`／`@`／Tab／CR 起始之值加單引號前綴）沿用共用產生器之既有規則，**表頭列不套用**。
 - **AC-X10**（使用者可見回饋之逐字文案）：Given 匯出成功, Then 回饋以逐字片段 `已匯出表單清單（CSV，UTF-8 BOM）` 起始。Given 超限, Then 回饋逐字為 `符合條件之筆數為 {N} 筆，超過匯出上限 10000 筆，請縮小篩選條件` ＋ 錯誤碼標記 `EXPORT_ROW_LIMIT_EXCEEDED · 400`。<br>⚠ 與 [F037](F037-document-change-history.md)／[F038](F038-lifecycle-tree-change-history.md) 之句式差異為**刻意**（該兩處量詞為「事件」、限定詞為「查詢條件」）；本頁與 [F039](F039-appendix-management.md) 同型（「筆數」＋「篩選條件」）。其他錯誤 → `匯出失敗：{code}`。
+
+### 前台使用表單 PDF 檢視 delta（🔵 2026-10-06） {#front-view-delta}
+
+- 前台文件詳情之使用表單 PDF 列新增「檢視」鈕，端點 **`GET /public/documents/:documentId/usage-forms/:formId/view`**（`下載列印文件` read、F041 可見性檢查先於一切、PDF 燒錄、稽核 `VIEW`）。**條文權威＝[F039 §前台檢視 delta](F039-appendix-management.md#front-view-delta) `AC-FV1`～`AC-FV4`**（附錄與使用表單共用同一批 AC，本處不重打）。
+- 後台唯讀頁之使用表單檢視（`GET /documents/:documentId/usage-forms/:formId/view`）見 [F016](F016-pdf-ojt-attachment.md#attachment-view-delta) `AC-AV3`。
 
 ## Interface Contract（端點） {#interface-contract}
 
