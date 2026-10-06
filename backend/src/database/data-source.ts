@@ -28,7 +28,10 @@ export const AppDataSource = new DataSource({
   // 與本設定搭配的另一半是把行程時區釘死為 UTC（Dockerfile／compose／jest 設定），兩者缺一不可。
   options: { trustServerCertificate: trust, encrypt: true, useUTC: true },
   entities: [join(__dirname, 'entities', '*.entity.{ts,js}')],
-  migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
+  // 僅收時間戳記開頭之檔：`migrations/` 內另有 `*.selection.spec.ts`（migration 之選取述詞測試），
+  // 舊 glob `*.{ts,js}` 會讓 ts-node 執行時 require 到它們 ⇒ `describe is not defined`，
+  // `sync:once`／`migration:run` 整支起不來（見 data-source.spec.ts）。dist 不含 spec，不受影響。
+  migrations: [join(__dirname, 'migrations', '[0-9]*.{ts,js}')],
   synchronize: false, // 一律以 migration 管理 schema，禁用自動同步
   logging: ['error', 'warn', 'migration'],
 });
