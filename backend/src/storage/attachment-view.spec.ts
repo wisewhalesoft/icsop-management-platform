@@ -274,3 +274,122 @@ describe('AC-AV4／AC-AV5 附錄檢視（AppendicesService.viewAppendixInDocumen
     expect(a.burner.calls).toEqual([]);
   });
 });
+
+/**
+ * 🔵 2026-10-06 前台檢視（F018／F039 `AC-FV1`～`AC-FV4`）：使用表單與附錄之 PDF，`/public/...` 命名空間、
+ * 閘門 `下載列印文件` read（五角色）；與後台版之差異只有 F041 可見性檢查，且先於一切讀取／燒錄／稽核。
+ */
+describe('AC-FV1～FV4 前台檢視（使用表單／附錄）', () => {
+  it.each([
+    ['使用表單', UsageFormsController.prototype, 'viewUsageFormPublic', 'public/documents/:documentId/usage-forms/:formId/view'],
+    ['附錄', AppendicesController.prototype, 'viewPublic', 'public/documents/:documentId/appendices/:appendixId/view'],
+  ] as [string, object, string, string][])('%s：GET %s，閘門 下載列印文件 read', (_l, proto, method, path) => {
+    const handler = (proto as Record<string, object>)[method];
+    expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe(path);
+    expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(RequestMethod.GET);
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, handler)).toEqual({
+      functionKey: FunctionKey.DOCUMENT_DOWNLOAD_PRINT,
+      action: 'read',
+    });
+  });
+
+  it('🔴 回應：inline＋nosniff＋燒錄後位元組', async () => {
+    const result = { bytes: BURNED, fileName: '附錄一.pdf', contentType: 'application/pdf' };
+    const runs: ((r: FakeRes) => Promise<void>)[] = [
+      (r) =>
+        new UsageFormsController({ viewFormPublic: async () => result } as unknown as UsageFormsService)
+          .viewUsageFormPublic({ sessionUser: SESSION } as never, 'd', 'f', r as never),
+      (r) =>
+        new AppendicesController({ viewAppendixPublic: async () => result } as unknown as AppendicesService)
+          .viewPublic({ sessionUser: SESSION } as never, 'd', 'a', r as never),
+    ];
+    for (const run of runs) {
+      const res = new FakeRes();
+      await run(res);
+      expect(res.headers['content-disposition']).toMatch(/^inline;/);
+      expect(res.headers['content-type']).toBe('application/pdf');
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+      expect(res.body).toBe(BURNED);
+    }
+  });
+
+  /** 可見性替身：`visible=false` ⇒ 拋 404 DOCUMENT_NOT_FOUND（比照 WatermarkBurnerService）。 */
+  function visBurner(visible: boolean) {
+    const b = makeBurner();
+    const visChecks: string[] = [];
+    return Object.assign(b, {
+      visChecks,
+      assertDocumentVisible: async (_s: unknown, documentId: string) => {
+        visChecks.push(documentId);
+        if (!visible) throw new Error('DOCUMENT_NOT_FOUND');
+      },
+    });
+  }
+
+  const form = { id: 'f-pdf', name: '申請書.pdf', format: 'pdf', blobPath: 'fp' };
+  const appx = { id: 'a-pdf', name: '附錄一.pdf', format: 'pdf', blobPath: 'ap', sortOrder: 1 };
+  function makeForms(visible: boolean) {
+    const audits: Record<string, unknown>[] = [];
+    const reads: string[] = [];
+    const burner = visBurner(visible);
+    const svc = new UsageFormsService(
+      { getBytes: async (k: string) => (reads.push(k), k === 'fp' ? RAW : null) } as never,
+      { listByDocument: async () => [form] } as never,
+      { record: async (e: Record<string, unknown>) => void audits.push(e) } as never,
+      undefined,
+      undefined,
+      burner as never,
+    );
+    return { svc, audits, reads, burner };
+  }
+  function makeAppx(visible: boolean) {
+    const audits: Record<string, unknown>[] = [];
+    const reads: string[] = [];
+    const burner = visBurner(visible);
+    const svc = new AppendicesService(
+      { getBytes: async (k: string) => (reads.push(k), k === 'ap' ? RAW : null) } as never,
+      { listByDocument: async () => [appx] } as never,
+      { record: async (e: Record<string, unknown>) => void audits.push(e) } as never,
+      { exists: async () => true } as never,
+      undefined,
+      undefined,
+      burner as never,
+    );
+    return { svc, audits, reads, burner };
+  }
+
+  it('使用表單：可見 ⇒ 檢查可見性（該文件）、燒錄、寫一筆 VIEW', async () => {
+    const { svc, audits, burner } = makeForms(true);
+    const out = await svc.viewFormPublic({ ...SESSION, roleCode: 'User' } as never, 'doc-1', 'f-pdf');
+    expect(out.bytes).toBe(BURNED);
+    expect(burner.visChecks).toEqual(['doc-1']);
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({ targetType: 'USAGE_FORM', actionType: 'VIEW', formId: 'f-pdf', documentId: 'doc-1' });
+  });
+
+  it('附錄：可見 ⇒ 檢查可見性（該文件）、燒錄、寫一筆 VIEW', async () => {
+    const { svc, audits, burner } = makeAppx(true);
+    const out = await svc.viewAppendixPublic({ ...SESSION, roleCode: 'User' } as never, 'doc-1', 'a-pdf');
+    expect(out.bytes).toBe(BURNED);
+    expect(burner.visChecks).toEqual(['doc-1']);
+    expect(audits[0]).toMatchObject({ targetType: 'APPENDIX', actionType: 'VIEW', appendixId: 'a-pdf', documentId: 'doc-1' });
+  });
+
+  it('🔴 F041 不可見 ⇒ 404 DOCUMENT_NOT_FOUND，且不讀位元組、不燒錄、不寫稽核', async () => {
+    const f = makeForms(false);
+    await expect(f.svc.viewFormPublic(SESSION as never, 'doc-1', 'f-pdf')).rejects.toThrow('DOCUMENT_NOT_FOUND');
+    const a = makeAppx(false);
+    await expect(a.svc.viewAppendixPublic(SESSION as never, 'doc-1', 'a-pdf')).rejects.toThrow('DOCUMENT_NOT_FOUND');
+    expect([...f.reads, ...a.reads]).toEqual([]);
+    expect([...f.burner.calls, ...a.burner.calls]).toEqual([]);
+    expect([...f.audits, ...a.audits]).toEqual([]);
+  });
+
+  it('對偶鎖：後台版不做可見性檢查（後台角色本就不受 F041 限制）', async () => {
+    const f = makeForms(false);
+    await expect(f.svc.viewFormInDocument(SESSION as never, 'doc-1', 'f-pdf')).resolves.toBeDefined();
+    const a = makeAppx(false);
+    await expect(a.svc.viewAppendixInDocument(SESSION as never, 'doc-1', 'a-pdf')).resolves.toBeDefined();
+    expect([...f.burner.visChecks, ...a.burner.visChecks]).toEqual([]);
+  });
+});

@@ -744,8 +744,33 @@ export class UsageFormsService {
     documentId: string,
     formId: string,
   ): Promise<UsageFormDownloadBytes> {
+    return this.viewForm(session, documentId, formId, false);
+  }
+
+  /**
+   * 🔵 2026-10-06 F018 `AC-FV1`：**前台**使用表單檢視（`/public/...`，五角色）。
+   * 與後台版之差異**只有**一道 F041 可見性檢查（業務子分類 viewer 對不相符文件 → 404
+   * `DOCUMENT_NOT_FOUND`），且**先於**任何查找、讀取、燒錄與寫稽核（比照 `downloadForm`）。
+   */
+  async viewFormPublic(
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
+    documentId: string,
+    formId: string,
+  ): Promise<UsageFormDownloadBytes> {
+    return this.viewForm(session, documentId, formId, true);
+  }
+
+  private async viewForm(
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
+    documentId: string,
+    formId: string,
+    checkVisibility: boolean,
+  ): Promise<UsageFormDownloadBytes> {
     if (!session?.accountId) {
       throw new ForbiddenException('FILE_ACCESS_DENIED');
+    }
+    if (checkVisibility) {
+      await this.burner?.assertDocumentVisible?.(session as WatermarkSession, documentId);
     }
     const form = (await this.store.listByDocument(documentId)).find((f) => f.id === formId);
     if (!form) throw new NotFoundException('USAGE_FORM_NOT_FOUND');

@@ -269,4 +269,28 @@ export class AppendicesController {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(bytes);
   }
+
+  /**
+   * 🔵 2026-10-06 F039 `AC-FV1`：**前台**附錄檢視（僅 PDF；inline、燒錄、稽核 `VIEW`）。
+   * 閘門與前台附錄下載相同（`下載列印文件` read，五角色）；F041 可見性檢查在服務層。
+   * 🔴 `Content-Type` 依伺服器端 `format` 推導＋`nosniff`（防儲存型 XSS，比照 F042 `AC-OV3` ②）。
+   */
+  @Get('public/documents/:documentId/appendices/:appendixId/view')
+  @RequirePermission(FunctionKey.DOCUMENT_DOWNLOAD_PRINT, 'read')
+  async viewPublic(
+    @Req() req: RequestWithSession,
+    @Param('documentId') documentId: string,
+    @Param('appendixId') appendixId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { bytes, fileName, contentType } = await this.svc.viewAppendixPublic(
+      req.sessionUser,
+      documentId,
+      appendixId,
+    );
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', inlineDisposition(fileName));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.send(bytes);
+  }
 }

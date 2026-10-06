@@ -628,10 +628,35 @@ export class AppendicesService {
     documentId: string,
     appendixId: string,
   ): Promise<AppendixDownloadBytes> {
+    return this.viewAppendix(session, documentId, appendixId, false);
+  }
+
+  /**
+   * 🔵 2026-10-06 F039 `AC-FV1`：**前台**附錄檢視（`/public/...`，五角色）。
+   * 與後台版之差異**只有**一道 F041 可見性檢查（業務子分類 viewer 對不相符文件 → 404
+   * `DOCUMENT_NOT_FOUND`），且**先於**附錄查找、讀取、燒錄與寫稽核（比照 `downloadAppendix`）。
+   */
+  async viewAppendixPublic(
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
+    documentId: string,
+    appendixId: string,
+  ): Promise<AppendixDownloadBytes> {
+    return this.viewAppendix(session, documentId, appendixId, true);
+  }
+
+  private async viewAppendix(
+    session: (SessionContext & Partial<Omit<WatermarkSession, 'accountId'>>) | undefined,
+    documentId: string,
+    appendixId: string,
+    checkVisibility: boolean,
+  ): Promise<AppendixDownloadBytes> {
     if (!session?.accountId) {
       throw new ForbiddenException('FILE_ACCESS_DENIED');
     }
     await this.requireDocument(documentId);
+    if (checkVisibility) {
+      await this.burner?.assertDocumentVisible?.(session as WatermarkSession, documentId);
+    }
     const appendix = (await this.store.listByDocument(documentId)).find((a) => a.id === appendixId);
     if (!appendix) throw new NotFoundException('APPENDIX_NOT_FOUND');
     assertViewableFormat(appendix.format);
