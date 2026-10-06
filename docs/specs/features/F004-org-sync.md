@@ -37,7 +37,7 @@ Epic/Story: E02 / US-010, US-011
 |---|---|---|
 | 組織階層 | `VW_DEPT_SQL` | AS 有效部門 114 筆；`isActive` ⇔ `CLOSE_DATE > GETDATE()`（哨兵 `9999-12-31`） |
 | 帳號／在職狀態 | `VW_HPMUSER` | **必須逐欄白名單（12 欄）**，絕不得 `SELECT *`；`USERPW`／`DEFAULTPW` 永不讀取、永不落地、永不記錄 |
-| 職稱（資位）對照 | `VW_PERSONAL_JOB` | **2026-08-12 新增**。僅取 `COMPID`／`JTITLE_ID`／`JTITLE_NM` 三欄之 DISTINCT → `JOB_TITLE` 對照主檔，供帳號清單「**資位**」欄；🔴 `ID_NUMBER`（身分證字號）等個資欄永不讀取。契約 §5.4.1 |
+| 職稱（資位）對照 | `VW_JOB_TITLE` | **2026-08-12 新增；2026-10-06 由 `VW_PERSONAL_JOB`（逐人一列之 DISTINCT，缺無人擔任之資位）改為資位主檔 `VW_JOB_TITLE`**（← `HRJTITLEMF`，逐代碼一列，五家 204 列）。取 `COMPID`／`CODE`／`DESC_CHI` 三欄 → `JOB_TITLE` 對照主檔，供帳號清單「**資位**」欄與手動帳號資位下拉；🔴 `AVG_SALARY`（薪資中位點）永不讀取。契約 §5.4.1 |
 | 職位對照 | `VW_JOB_FUN` | **2026-08-31 新增**。取 `COMPID`／`CODE`／`DESC_CHI` 三欄（四家共 73 列，逐代碼一列故不需 DISTINCT）→ `JOB_POSITION` 對照主檔，供帳號清單「**職位**」欄。🔴 解析須 `(COMPID, CODE)` 精確、**禁止跨公司 fallback**（同碼跨公司語意可相反）。契約 §5.4.2 |
 | 公司主檔 | `VW_HRCOMF` | `companyName` 取 `COMPFULLNM`（全稱） |
 
@@ -104,9 +104,9 @@ Epic/Story: E02 / US-010, US-011
 - Given 帳號之 `DEPTID` 於 `VW_DEPT_SQL` 查無（孤兒）, When 同步, Then 保留該帳號、記錄警告，不停用亦不中止同步。
 - Given 同步查詢執行, When 對上游進行彙總或過濾, Then 該述詞以 `OPENQUERY` 下推至對端執行（不得整表拉回本地端比對）。
 - Given 同步讀取 `VW_HPMUSER`, When 組裝查詢, Then 僅選取白名單 12 欄，`USERPW`／`DEFAULTPW` 不出現於查詢、回應或任何日誌。
-- Given 同步讀取 `VW_PERSONAL_JOB`, When 組裝查詢, Then 僅選取 `COMPID`／`JTITLE_ID`／`JTITLE_NM` 三欄，`ID_NUMBER` 等個資欄不出現於查詢、回應或任何日誌。
+- Given 同步讀取 `VW_JOB_TITLE`, When 組裝查詢, Then 僅選取 `COMPID`／`CODE`／`DESC_CHI` 三欄，`AVG_SALARY`（薪資）不出現於查詢、回應或任何日誌；且查詢不再讀取 `VW_PERSONAL_JOB`（2026-10-06）。
 - Given 職稱（資位）對照主檔取回失敗, When 同步進行, Then **不使本次同步失敗**——僅記錄警告，帳號／組織異動照常套用（資位為顯示欄位，不涉授權或身分）。
-- Given 上游回傳同一 `(COMPID, JTITLE_ID)` 之多列, When 規劃對照異動, Then 去重僅取先到者（避免同鍵雙插違反唯一索引，致整筆交易回滾）。
+- Given 上游回傳同一 `(COMPID, CODE)` 之多列, When 規劃對照異動, Then 去重僅取先到者（避免同鍵雙插違反唯一索引，致整筆交易回滾）。
 - Given 同步讀取 `VW_JOB_FUN`, When 組裝查詢, Then 僅選取 `COMPID`／`CODE`／`DESC_CHI` 三欄，**不加 `END_DT` 過濾**（view 已內建且無該欄），亦不以 `COMPID` 過濾（全量 73 列）。
 - Given 職位對照主檔取回失敗, When 同步進行, Then **不使本次同步失敗**——處置與資位對照完全相同（僅記錄警告）。
 - Given 上游回傳同一 `(COMPID, CODE)` 之多列, When 規劃職位對照異動, Then 去重僅取先到者（理由同資位；實測該鍵唯一，去重為防禦而非現況需要）。

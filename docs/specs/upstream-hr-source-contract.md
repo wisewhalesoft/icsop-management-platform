@@ -332,7 +332,38 @@ F018 制定部門之**祖鏈路徑** chip（`orgAncestorPathLabel`）、帳號�
   且其值為純數字（`003`／`004`／`10`）與 `VW_JOB_FUN.CODE`（`A03`／`N03`）**編碼體系不同**，無從對照。
   → §11 未結項 #6 據此結案，見該節。
 
-#### 5.4.1 `JOB_TITLE` ← `VW_PERSONAL_JOB`（職稱對照主檔，2026-08-12 定案並實作）
+#### 5.4.1 `JOB_TITLE` ← `VW_JOB_TITLE`（職稱／資位對照主檔；2026-08-12 定案，2026-10-06 改來源）
+
+> 🔵 **2026-10-06 來源更換：`VW_PERSONAL_JOB`（DISTINCT）→ `VW_JOB_TITLE`**。
+>
+> **緣由**：`VW_PERSONAL_JOB` 逐「人」一列，從擔任者反推代碼集合 ⇒ **目前無人擔任之資位永遠不在主檔**，
+> 手動帳號之資位下拉（F003 `AC-P14`）因而選不到（dev 實測漏 AS 18／AE 36／AJ 17／AL 9／AD 1 碼）。
+> 職位（§5.4.2，`VW_JOB_FUN` 逐代碼一列）無此問題。
+>
+> **`VW_JOB_TITLE` 之定義**（dev 實查 `OBJECT_DEFINITION`）：
+> `SELECT COMPID, JTITLE_ID AS CODE, JTITLE_NM AS DESC_CHI, JTITLE_ENM AS DESC_ENG, MIDPOINT AS AVG_SALARY, <六個異動軌跡欄> FROM HRJTITLEMF`
+> ——即人資**資位主檔**之直接投影，逐代碼一列。
+>
+> **dev 實查（2026-10-06）**：
+> | 檢查 | 結果 |
+> |---|---|
+> | 列數／唯一性 | AD 20／AE 52／AJ 37／AL 23／AS 72＝204 列；`(COMPID, CODE)` 204 組鍵，零重複 |
+> | 在職 `TITLE_CODE` 以**本公司**精確查表 | 五家 1,384 人 **100% 命中**（不需跨公司 fallback） |
+> | `VW_PERSONAL_JOB` 全部 `(COMPID, JTITLE_ID, JTITLE_NM)` | **全數存在**於 `VW_JOB_TITLE` 且名稱一致（證實為同一字典） |
+> | 同步後本地 `JOB_TITLE` | 123 → 204 列，與上游逐公司相符 |
+>
+> **取用方式**：`SELECT COMPID, CODE, DESC_CHI FROM VW_JOB_TITLE`，全公司全量、非增量、無 DISTINCT。
+> 🔴 **`AVG_SALARY`（← `MIDPOINT`，薪資中位點）明確禁讀**，二欄名皆列入 `FORBIDDEN_JOB_TITLE_COLUMNS`。
+> `VW_PERSONAL_JOB` 不再讀取，其禁讀欄位清單保留為防再引入之守衛。
+>
+> ⚠ **已知限制**：該 view **無有效期間／停用註記**，已不再使用之資位（如 AS「練習生」「司機」）亦會出現於下拉。
+> ⚠ **同公司多碼同名屬常態**（AS「課長」F01／G01／G02、「課長代行」F03／F04／F07、「專員」I02／I09），
+> 故下拉選項文字為 `代碼 名稱`（F003 `AC-P14`）。
+> ⚠ 跨公司 fallback（下方解析規則第 2 段）**保留為安全網**：dev 本地仍有 9 筆 AS 上游帳號掛 `I10`，
+> 其人員已不在上游 AS（消失閾值積壓），本公司查無，靠 fallback 顯示名稱。
+>
+> 以下為 2026-08-12 原始定案內容（欄名 `JTITLE_ID`／`JTITLE_NM` 為 `VW_PERSONAL_JOB` 之欄名，
+> 於 `VW_JOB_TITLE` 對應為 `CODE`／`DESC_CHI`）；鍵之選擇與解析規則仍然成立。
 
 > ⚠ **請勿將本節與 §11 #6「職級名稱主檔」混為一談。**「職稱」（`JTITLE_NM`，本節，**上游已具備**）
 > 與「職級」（`GRADECD`，§11 #6，**上游待交付**）是兩件事。二者曾一併掛在 `OQ-E02-07` 之下，
