@@ -11,7 +11,15 @@ import {
   printDocumentFront,
   getDocumentAppendices,
   downloadDocumentAppendixFront,
+  viewUsageFormFront,
+  viewDocumentAppendixFront,
 } from '../api/endpoints';
+import {
+  ATTACH_VIEW_BTN_TEXT,
+  ATTACH_VIEW_FAILED_TEXT,
+  attachViewAria,
+  isViewableAttachment,
+} from '../domain/attachment-view';
 import { ApiError } from '../api/client';
 import { Icon } from '../components/Icon';
 import { InfoNote } from '../components/InfoNote';
@@ -22,7 +30,7 @@ import {
 } from '../domain/error-code-note';
 import { WM_BURN_TEXT, WM_UNSUPPORTED_TEXT } from '../domain/watermark-note';
 import { OjtDerivedBlock } from '../components/OjtDerivedBlock';
-import { printErrorMessage } from '../domain/print-error';
+import { POPUP_BLOCKED_TEXT, printErrorMessage } from '../domain/print-error';
 import { buildOrgPath } from '../domain/org-path';
 import type {
   PublicDocumentDetail,
@@ -241,6 +249,33 @@ export function PublicDocumentDetailPage(): JSX.Element {
   );
 
   /**
+   * 🔵 2026-10-06 F018／F039 `AC-FV2`：前台使用表單／附錄之 PDF **檢視**（新分頁，伺服器端燒錄＋寫 `VIEW` 稽核）。
+   * 與下載／列印共用同一把併發鎖（每次檢視同樣寫一筆稽核，重複點擊＝重複稽核）。
+   * 🔴 `window.open` 必須在任何 `await` 之前同步呼叫（理由同 `runPrint`）。
+   * 🔴 **分頁沒開成就不發請求**：否則後端會寫下一筆使用者根本沒看到的 `VIEW` 稽核。
+   */
+  const runView = useCallback(
+    async (view: (win: Window) => Promise<void>, label: string, key: string): Promise<void> => {
+      if (downloadKey) return;
+      const win = window.open('', '_blank');
+      if (!win) {
+        toast.error(POPUP_BLOCKED_TEXT);
+        return;
+      }
+      setDownloadKey(key);
+      try {
+        await view(win);
+        toast.success(`已於新分頁開啟「${label}」，本次調閱已記錄。`);
+      } catch (e) {
+        toast.error(ATTACH_VIEW_FAILED_TEXT, { code: msgOf(e) });
+      } finally {
+        setDownloadKey(null);
+      }
+    },
+    [toast, downloadKey],
+  );
+
+  /**
    * 前台列印（F020）：`fetch → blob → 新分頁`，與下載共用同一把併發鎖（列印同樣寫一筆稽核）。
    *
    * 🔴 `window.open('', '_blank')` 必須在 **任何 `await` 之前**同步呼叫：它需要使用者手勢之
@@ -356,6 +391,12 @@ export function PublicDocumentDetailPage(): JSX.Element {
               )
             }
             onPrintDocument={() => void runPrint(detail.id)}
+            onViewUsageForm={(formId, name) =>
+              void runView((w) => viewUsageFormFront(detail.id, formId, w), name, `form-view:${formId}`)
+            }
+            onViewAppendix={(appendixId, name) =>
+              void runView((w) => viewDocumentAppendixFront(detail.id, appendixId, w), name, `appendix-view:${appendixId}`)
+            }
             appendices={appendices}
             onDownloadAppendix={(appendixId, name) =>
               void runDownload(
@@ -431,6 +472,36 @@ function DownloadButton({
   );
 }
 
+/**
+ * 🔵 2026-10-06 F018／F039 `AC-FV1`：列內「檢視」鈕（僅 PDF 之使用表單／附錄列；位於下載鈕之前）。
+ * 尺寸／邊框／字級與 `DownloadButton` 相同（前台觸控目標 ≥44px）；忙碌鎖同下載。
+ * 🔒 附件區之 ICSOP PDF 列**不加**（頁首已有開啟檢視器之「檢視」，2026-10-06 使用者裁決）。
+ */
+function ViewButton({
+  onClick,
+  label,
+  busy,
+}: {
+  onClick: () => void;
+  label: string;
+  busy: boolean;
+}): JSX.Element {
+  return (
+    <button
+      data-attachment-view=""
+      onClick={onClick}
+      disabled={busy}
+      aria-busy={busy}
+      aria-label={attachViewAria(label)}
+      title={attachViewAria(label)}
+      className="inline-flex items-center gap-1 px-2.5 py-2 rounded border border-slate-300 text-sm hover:bg-slate-50 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+    >
+      <Icon name={busy ? 'loader-2' : 'eye'} className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />
+      {ATTACH_VIEW_BTN_TEXT}
+    </button>
+  );
+}
+
 function DetailBody({
   detail,
   onOpenLink,
@@ -438,6 +509,8 @@ function DetailBody({
   onDownloadUsageForm,
   onDownloadDocument,
   onPrintDocument,
+  onViewUsageForm,
+  onViewAppendix,
   appendices,
   onDownloadAppendix,
   downloadKey,
@@ -448,6 +521,8 @@ function DetailBody({
   onDownloadUsageForm: (formId: string, name: string) => void;
   onDownloadDocument: () => void;
   onPrintDocument: () => void;
+  onViewUsageForm: (formId: string, name: string) => void;
+  onViewAppendix: (appendixId: string, name: string) => void;
   appendices: DocumentAppendixRecord[];
   onDownloadAppendix: (appendixId: string, name: string) => void;
   downloadKey: string | null;
@@ -688,6 +763,13 @@ function DetailBody({
                   />
                   <span className="text-base text-slate-800 flex-1 truncate">{f.name}</span>
                   <WatermarkNote supported={f.watermarkSupported} />
+                  {isViewableAttachment(f.format) && (
+                    <ViewButton
+                      onClick={() => onViewUsageForm(f.id, f.name)}
+                      label={f.name}
+                      busy={downloadKey === `form-view:${f.id}`}
+                    />
+                  )}
                   <DownloadButton
                     onClick={() => onDownloadUsageForm(f.id, f.name)}
                     label={f.name}
@@ -731,6 +813,13 @@ function DetailBody({
                     {a.name}
                   </span>
                   <WatermarkNote supported={a.watermarkSupported} />
+                  {isViewableAttachment(a.format) && (
+                    <ViewButton
+                      onClick={() => onViewAppendix(a.id, a.name)}
+                      label={a.name}
+                      busy={downloadKey === `appendix-view:${a.id}`}
+                    />
+                  )}
                   <DownloadButton
                     onClick={() => onDownloadAppendix(a.id, a.name)}
                     label={a.name}

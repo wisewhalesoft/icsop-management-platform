@@ -19,6 +19,13 @@ import {
 } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { POPUP_BLOCKED_TEXT } from '../domain/print-error';
+// 🔵 F016 `AC-AV1`：附件列「檢視」鈕之判定與逐字文案（前後台共用，權威＝prototype 16／04）。
+import {
+  ATTACH_VIEW_BTN_TEXT,
+  ATTACH_VIEW_FAILED_TEXT,
+  attachViewAria,
+  isViewableAttachment,
+} from '../domain/attachment-view';
 import { canPerform, FunctionKey } from '../domain/function-matrix';
 import { orgUnitDisplayName } from '../domain/org-path';
 import { Icon } from '../components/Icon';
@@ -76,14 +83,6 @@ const ATTACH_ORDER: Record<DocumentAttachmentRecord['type'], number> = {
   ICSOP_PDF: 0,
 };
 
-/**
- * 🔵 2026-10-06 F016 `AC-AV1`／`AC-AV2`：附件列「檢視」鈕之逐字文案（權威＝prototype 16）。
- * 🔒 僅 `format === 'pdf'` 之列產生檢視鈕；xlsx／xls 只能下載。
- */
-export const ATTACH_VIEW_BTN_TEXT = '檢視';
-export const ATTACH_VIEW_FAILED_TEXT = '檢視失敗，請稍後再試。';
-export const attachViewAria = (name: string) => `檢視「${name}」`;
-export const isViewableAttachment = (format: string) => format.toLowerCase() === 'pdf';
 
 /**
  * 📝 **OJT 空狀態上傳入口（`OjtEmptyRow`／`OJT_EMPTY_TEXT`／`OJT_UPLOAD_FIRST_TEXT`／

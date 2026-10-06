@@ -621,6 +621,17 @@ export function viewDocumentAppendix(documentId: string, appendixId: string, win
 }
 
 /**
+ * 🔵 2026-10-06 F018／F039 `AC-FV2`：**前台**使用表單／附錄之檢視（`/public/...`，五角色；含 F041 可見性檢查）。
+ * 🔴 不得改呼叫上方後台版（閘門 `ICSOP文件管理` read，一般使用者 403，且無 F041 檢查）。
+ */
+export function viewUsageFormFront(documentId: string, formId: string, win: Window | null): Promise<void> {
+  return openAttachmentView(`/public/documents/${documentId}/usage-forms/${formId}/view`, win);
+}
+export function viewDocumentAppendixFront(documentId: string, appendixId: string, win: Window | null): Promise<void> {
+  return openAttachmentView(`/public/documents/${documentId}/appendices/${appendixId}/view`, win);
+}
+
+/**
  * 🔵 2026-09-23：GET /admin/usage-forms/filter-options——ICSOP 文件管理清單之「使用表單」篩選選項
  * （閘門＝ICSOP_DOCUMENT_MANAGEMENT read，主管／部門窗口亦可取得；只含 id／名稱／編號）。
  */
