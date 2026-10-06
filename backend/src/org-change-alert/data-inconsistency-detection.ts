@@ -16,8 +16,12 @@ import {
   AlertCreateCommand,
   DataInconsistencyDetectionInput,
 } from './org-change-alert.types';
+import { taipeiYmd } from '../org-sync/employment-status';
 
-/** YYYY-MM-DD（UTC，決定性；resignDate 為日期非時間戳，UTC 切片不致跨日誤差）。 */
+/**
+ * YYYY-MM-DD（UTC 切片）——**僅用於上游日期欄**（resignDate＝台北日曆日、讀入為 00:00Z，
+ * UTC 切片即其台北年月日）。**時刻**（createdAt）一律用 `taipeiYmd`（F004 `AC-RS4`）。
+ */
 function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -41,7 +45,9 @@ export function detectDataInconsistencyAlerts(
     //
     // 以日比較後語意回正：僅「離職日已過、但本地 status 仍為 active」（即上游已離職而尚未
     // 同步到的落差窗）才告警，與 v1.0 之意圖一致。
-    if (ymd(resign) >= ymd(input.createdAt)) continue;
+    // 🔴 F004 AC-RS4：基準日＝告警時刻之**台北**日曆日（與 isEmploymentActive 同一基準）。
+    //    2026-10-06 前為 ymd(createdAt)（UTC 日期）——台北 02:00 排程時 UTC 仍為前一天，晚報一天。
+    if (ymd(resign) >= taipeiYmd(input.createdAt)) continue;
 
     const loginId = acc.loginId;
     if (input.existingPendingLoginIds.has(loginId) || emitted.has(loginId)) continue;

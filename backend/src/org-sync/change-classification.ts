@@ -9,6 +9,7 @@
  */
 
 import { NormalizedOrgUnit, NormalizedAccount } from './normalization';
+import { isEmploymentActive } from './employment-status';
 
 export type OrgChangeKind = 'create' | 'update' | 'noop';
 export type AccountChangeKind = 'create' | 'update' | 'disable' | 'noop';
@@ -113,6 +114,35 @@ export function classifyAccount(
   if (local === null) return 'noop'; // 不建立離職帳號
   if (local.status === 'active') return 'disable';
   return 'noop'; // 已停用，不重複停用
+}
+
+/**
+ * 🔴 F004 `AC-RS2`：本地已知離職日、卻仍在職之帳號（補停用掃描之對象）。
+ *
+ * **為何需要**：`classifyAccount` 只看得到**本次被增量取回**之帳號（上游 `MTDT` 前進者）。
+ * 人資預先輸入未來離職日時，取回當下確實在職、只寫入 `resignDate`；日期過後上游 `MTDT`
+ * 不再變動 ⇒ 該帳號永不再被取回 ⇒ 永不停用。本函式改以**本地已落地之 `resignDate`** 補判。
+ *
+ * - `fetchedLoginIds`＝本次自上游取回之全部穩定鍵（含髒資料略過者）——取回者一律以上游分類
+ *   為準（`AC-RS2` ①：上游若已改回在職，不得依本地舊值停用；亦避免同帳號兩筆停用）。
+ * - 判定與 `classifyAccount` 同一函式、同一基準時刻（`isEmploymentActive`，台北日曆日）。
+ * - 不以「來源消失」判定離職之原則不變：本函式只依**上游曾明確給過的離職日**，不依缺席。
+ * - 呼叫端傳入之 `existing` 須僅含 `source='upstream'` 帳號（`findExistingAccounts` 已保證；`AC-RS2` ③）。
+ */
+export function findLapsedResignations(
+  existing: Iterable<ExistingAccount>,
+  fetchedLoginIds: ReadonlySet<string>,
+  basis: Date,
+): ExistingAccount[] {
+  const out: ExistingAccount[] = [];
+  for (const a of existing) {
+    if (a.status !== 'active') continue;
+    if (a.resignDate === null) continue;
+    if (fetchedLoginIds.has(a.loginId)) continue;
+    if (isEmploymentActive(a.resignDate, basis)) continue;
+    out.push(a);
+  }
+  return out;
 }
 
 /**

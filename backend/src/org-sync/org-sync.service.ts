@@ -25,6 +25,7 @@ import {
 import {
   classifyOrgUnit,
   classifyAccount,
+  findLapsedResignations,
   classifyJobTitle,
   classifyJobPosition,
 } from './change-classification';
@@ -303,6 +304,19 @@ export class OrgSyncService {
             disabledAt: this.now(),
           });
         }
+      }
+      // 🔴 F004 AC-RS2：本地已知離職日、本次未被取回者之補停用（同一交易、同一基準時刻）。
+      //    閾值中止路徑已於上方提前 return，故中止時不會走到此處（AC-RS3）。
+      const fetchedLoginIds = new Set(
+        rawAccts.map((r) => String(r.NO ?? '').trim()).filter((id) => id !== ''),
+      );
+      for (const a of findLapsedResignations(existingAcc.values(), fetchedLoginIds, employmentBasis)) {
+        accountDisables.push({
+          companyCode: a.companyCode,
+          loginId: a.loginId,
+          reason: 'departed',
+          disabledAt: this.now(),
+        });
       }
       stats.accountsCreated = accountCreates.length;
       stats.accountsUpdated = accountUpdates.length;

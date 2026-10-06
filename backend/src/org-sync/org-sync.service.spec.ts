@@ -926,3 +926,121 @@ describe('fullResync（忽略 MTDT 水位）', () => {
     expect(res.warnings.some((w) => w.includes('全量重同步'))).toBe(true);
   });
 });
+
+/**
+ * 🔴 F004 離職停用補強 delta（`AC-RS1`～`AC-RS5`，2026-10-06）。
+ *
+ * 正式站實查：AJ 50002／AS 20541 最後在職日 2026-08-31，上游人資批次於台北 09-01 00:50 推進 MTDT，
+ * 台北 02:00 排程（＝UTC **08-31** 18:00）取回時以 UTC 日期為基準判「仍在職」、只寫入 resignDate；
+ * 此後 MTDT 不再變動 ⇒ 永不再被取回 ⇒ 永不停用。
+ */
+describe('🔴 F004 AC-RS：離職停用補強（台北基準日＋本地已知離職日補停用）', () => {
+  /** 台北 2026-09-01 02:00＝每日排程時刻（UTC 仍為 08-31）。 */
+  const SCHEDULED = new Date('2026-08-31T18:00:00Z');
+  const LAST_DAY = new Date('2026-08-31T00:00:00Z');
+
+  /** 足量在職母數，使少數幾筆「本地在職、來源不在職」之消失比例遠低於 10% 閾值。 */
+  function setup(at: Date = SCHEDULED): { reader: FakeReader; store: FakeStore; svc: OrgSyncService } {
+    const reader = new FakeReader();
+    reader.depts = [rawDept({ CODE: 'JAC00' })];
+    const store = new FakeStore();
+    for (let i = 0; i < 50; i++) seedActiveAccount(store, { loginId: `keep${i}` });
+    reader.activeIds = Array.from({ length: 50 }, (_, i) => `keep${i}`);
+    const svc = new OrgSyncService(reader, store, { compid: 'AS', now: () => at });
+    return { reader, store, svc };
+  }
+
+  it('AC-RS1 重現點：最後在職日 D、於台北 D+1 02:00 被增量取回 → 本次即停用（舊實作判在職、只寫 resignDate）', async () => {
+    const { reader, store, svc } = setup();
+    seedActiveAccount(store, { loginId: '20541' });
+    reader.changes = [rawAcc({ NO: '20541', RESIGN_DATE: '2026-08-31', MTDT: '2026-09-01T00:50:05Z' })];
+
+    const res = await svc.run('scheduled');
+
+    expect(res.status).toBe('success');
+    expect(store.accounts.get('20541')?.status).toBe('disabled');
+    expect(store.applied[0].accountDisables.map((d) => d.loginId)).toEqual(['20541']);
+  });
+
+  it('AC-RS2/RS5：本地 active、resignDate 已過、本次**未**被取回 → 同一交易補停用（reason=departed、計入 accountsDisabled）', async () => {
+    const { store, svc } = setup();
+    // 正式站卡住之形狀：resignDate 已寫入、status 仍 active，上游 MTDT 不再前進（本次 changes 為空）。
+    seedActiveAccount(store, { loginId: '50002', resignDate: LAST_DAY });
+
+    const res = await svc.run('scheduled');
+
+    expect(res.status).toBe('success');
+    expect(store.applied).toHaveLength(1);
+    const disables = store.applied[0].accountDisables;
+    expect(disables).toEqual([
+      { companyCode: 'AS', loginId: '50002', reason: 'departed', disabledAt: SCHEDULED },
+    ]);
+    expect(res.stats.accountsDisabled).toBe(1);
+    expect(store.accounts.get('50002')?.status).toBe('disabled');
+  });
+
+  it('AC-RS2：掃描之基準日亦為台北日曆日（UTC 日期＝D 時，D 離職者仍須停用）', async () => {
+    // 若掃描誤用 UTC 日期，SCHEDULED 之 UTC 日期＝08-31＝resignDate ⇒ 判在職而漏停。
+    const { store, svc } = setup(SCHEDULED);
+    seedActiveAccount(store, { loginId: 'lapsed', resignDate: LAST_DAY });
+    await svc.run('scheduled');
+    expect(store.accounts.get('lapsed')?.status).toBe('disabled');
+  });
+
+  it('AC-RS2②：resignDate＝台北今日 → 不停用；null → 不停用；已停用 → 不重複停用', async () => {
+    const { store, svc } = setup(SCHEDULED); // 台北今日＝09-01
+    seedActiveAccount(store, { loginId: 'today', resignDate: new Date('2026-09-01T00:00:00Z') });
+    seedActiveAccount(store, { loginId: 'none', resignDate: null });
+    seedActiveAccount(store, { loginId: 'gone', resignDate: LAST_DAY, status: 'disabled' });
+    // 正向半句：同批確有一筆應停用者，證明掃描確實執行（否則上列「不停用」恆真）。
+    seedActiveAccount(store, { loginId: 'lapsed', resignDate: LAST_DAY });
+
+    const res = await svc.run('scheduled');
+
+    const ids = store.applied[0].accountDisables.map((d) => d.loginId);
+    expect(ids).toEqual(['lapsed']);
+    expect(res.stats.accountsDisabled).toBe(1);
+    expect(store.accounts.get('today')?.status).toBe('active');
+    expect(store.accounts.get('none')?.status).toBe('active');
+  });
+
+  it('AC-RS2①：本次已取回且上游已改回在職（哨兵）→ 以上游為準 update，不得依本地舊 resignDate 停用', async () => {
+    const { reader, store, svc } = setup();
+    seedActiveAccount(store, { loginId: 'rehired', resignDate: LAST_DAY });
+    reader.activeIds.push('rehired');
+    reader.changes = [rawAcc({ NO: 'rehired', RESIGN_DATE: '9999-12-31' })];
+    // 正向半句：另一筆未取回者確實被掃描停用。
+    seedActiveAccount(store, { loginId: 'lapsed', resignDate: LAST_DAY });
+
+    const res = await svc.run('scheduled');
+
+    expect(store.applied[0].accountDisables.map((d) => d.loginId)).toEqual(['lapsed']);
+    expect(res.stats.accountsUpdated).toBe(1);
+    expect(store.accounts.get('rehired')?.status).toBe('active');
+    expect(store.accounts.get('rehired')?.resignDate).toBeNull();
+  });
+
+  it('AC-RS2①：本次已取回且上游判離職 → 只產生一筆停用（分類與掃描不重複）', async () => {
+    const { reader, store, svc } = setup();
+    seedActiveAccount(store, { loginId: 'both', resignDate: LAST_DAY });
+    reader.changes = [rawAcc({ NO: 'both', RESIGN_DATE: '2026-08-31' })];
+
+    const res = await svc.run('scheduled');
+
+    expect(store.applied[0].accountDisables.map((d) => d.loginId)).toEqual(['both']);
+    expect(res.stats.accountsDisabled).toBe(1);
+  });
+
+  it('AC-RS3：消失比例超過閾值而中止 → 不掃描、不停用任何帳號', async () => {
+    const { reader, store, svc } = setup();
+    seedActiveAccount(store, { loginId: 'lapsed', resignDate: LAST_DAY });
+    reader.activeIds = reader.activeIds.slice(0, 30); // 20/51 消失 ≫ 10%
+
+    const res = await svc.run('scheduled');
+
+    expect(res.status).toBe('failed');
+    expect(res.errorCode).toBe('DISAPPEARED_RATIO_EXCEEDED');
+    expect(store.applied).toHaveLength(0);
+    expect(store.accounts.get('lapsed')?.status).toBe('active');
+  });
+});

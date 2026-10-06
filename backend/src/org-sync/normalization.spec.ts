@@ -117,7 +117,9 @@ describe('normalizeAccount（v2.0：VW_PERSONNEL_SQL）', () => {
 
   it('🔴 最後在職日＝基準日當天 → empActive=true', () => {
     // 迴歸鎖定：以日比較（契約 §6）。若退回比時間戳，當天離職者會整批被誤停用。
-    const basis = new Date('2026-07-21T18:00:00Z');
+    // 台北 2026-07-21 18:00（當日稍晚）。⚠ 2026-10-06 前為 `T18:00:00Z`＝台北 **07-22** 02:00，
+    // 把「隔天凌晨仍判在職」之缺陷釘成預期（F004 AC-RS1）。
+    const basis = new Date('2026-07-21T10:00:00Z');
     expect(
       normalizeAccount(rawAccount({ RESIGN_DATE: '2026-07-21' }), basis).empActive,
     ).toBe(true);

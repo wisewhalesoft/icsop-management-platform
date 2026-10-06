@@ -198,3 +198,27 @@ describe('detectDataInconsistencyAlerts', () => {
     expect(out).toHaveLength(1);
   });
 });
+describe('🔴 F004 AC-RS4：離職日是否已過之基準＝台北日曆日（與 isEmploymentActive 一致）', () => {
+  const lastDay = new Date('2026-08-31T00:00:00.000Z'); // 最後在職日 D
+
+  it('告警時刻＝台北 D+1 02:00（UTC D 18:00，每日排程時刻）→ 命中', () => {
+    const out = detectDataInconsistencyAlerts(
+      input({
+        activeAccounts: [account({ resignDate: lastDay })],
+        createdAt: new Date('2026-08-31T18:00:00.000Z'),
+      }),
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].afterValue).toContain('2026-08-31');
+  });
+
+  it('告警時刻＝台北 D 23:00（UTC D 15:00）→ 不命中（最後在職日當天）', () => {
+    const out = detectDataInconsistencyAlerts(
+      input({
+        activeAccounts: [account({ resignDate: lastDay })],
+        createdAt: new Date('2026-08-31T15:00:00.000Z'),
+      }),
+    );
+    expect(out).toEqual([]);
+  });
+});
