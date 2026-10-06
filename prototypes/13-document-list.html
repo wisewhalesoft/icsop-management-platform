@@ -381,11 +381,15 @@
 
 <main class="px-4 py-6">
 
-  <!-- ===== 統計卡片（衍生數） ===== -->
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+  <!-- ===== 統計卡片（衍生數） =====
+       🔴 2026-10-06 使用者裁決（F017 `AC-SC1`～`AC-SC5`）：3 張 → 4 張「有效／已公告／進度中／作廢」。
+       ① `有效` ≡ 已公告 ＋ 進度中（恆等式）；② **不設「失效」卡，失效不計入任何卡**（仍列於清單、計入「共 N 筆」）；
+       ③ `作廢` 卡之圖示與色系與狀態徽章「作廢」同源（x-circle／紅）。
+       📝 已作廢（⚠ 不得復原）：OLD> 第一張為 `#statTotal`「程序書數量（總數）」＝rows.length（含失效與作廢）；外框 `sm:grid-cols-3`。 -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
     <div class="bg-white border border-slate-200 rounded-xl px-4 py-3.5 flex items-center gap-3">
       <div class="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center shrink-0"><i data-lucide="library" class="w-5 h-5 text-primary-600"></i></div>
-      <div><div class="text-2xl font-bold text-slate-900 leading-none" id="statTotal">0</div><div class="text-xs text-slate-500 mt-1">程序書數量（總數）</div></div>
+      <div><div class="text-2xl font-bold text-slate-900 leading-none" id="statActive">0</div><div class="text-xs text-slate-500 mt-1">有效（已公告＋進度中）</div></div>
     </div>
     <div class="bg-white border border-slate-200 rounded-xl px-4 py-3.5 flex items-center gap-3">
       <div class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0"><i data-lucide="megaphone" class="w-5 h-5 text-emerald-600"></i></div>
@@ -394,6 +398,10 @@
     <div class="bg-white border border-slate-200 rounded-xl px-4 py-3.5 flex items-center gap-3">
       <div class="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center shrink-0"><i data-lucide="clock" class="w-5 h-5 text-primary-600"></i></div>
       <div><div class="text-2xl font-bold text-primary-700 leading-none" id="statPending">0</div><div class="text-xs text-slate-500 mt-1">進度中（公告日期未到）</div></div>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-xl px-4 py-3.5 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center shrink-0"><i data-lucide="x-circle" class="w-5 h-5 text-red-600"></i></div>
+      <div><div class="text-2xl font-bold text-red-700 leading-none" id="statVoid">0</div><div class="text-xs text-slate-500 mt-1">作廢</div></div>
     </div>
   </div>
 
@@ -1623,9 +1631,12 @@
     syncTreeColumn();          // 🔴 表頭與資料列同進退（見 canSeeTree()）
     const rows=filteredRows();   // 🔵 AC-X11：與 doExport() 共用之**唯一**篩選落點
     // 統計卡片（衍生數，依目前篩選結果）
-    document.getElementById('statTotal').textContent=rows.length;
+    // 🔴 2026-10-06（F017 `AC-SC2`）：有效＝儲存狀態「有效」之列數（≡ 已公告＋進度中）；失效不計入任何卡。
+    // 📝 已作廢（⚠ 不得復原）：OLD> document.getElementById('statTotal').textContent=rows.length;
+    document.getElementById('statActive').textContent=rows.filter(d=>d.status==='有效').length;
     document.getElementById('statPub').textContent=rows.filter(d=>derived(d)==='已公告').length;
     document.getElementById('statPending').textContent=rows.filter(d=>derived(d)==='進度中').length;
+    document.getElementById('statVoid').textContent=rows.filter(d=>d.status==='作廢').length;
 
     document.getElementById('countText').textContent=`共 ${rows.length} 筆`;
     document.getElementById('pageInfo').textContent=`共 ${rows.length} 筆 · 每頁 50 筆`;
